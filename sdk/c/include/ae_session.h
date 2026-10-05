@@ -108,8 +108,11 @@ typedef enum {
     AE_FIELD_MSGBASE_FUNC   = 600,  /* GET_CUSTOM_MSGBASE_PARAM1 */
     AE_FIELD_MSGBASE_CONF   = 601,  /* GET_CUSTOM_MSGBASE_PARAM2 */
     /*
-     * THE BOARD'S CLOCK, in Unix seconds - express.e:3771,
-     * `StringF(tempstring,'\d',getSystemTime())`.
+     * THE BOARD'S CLOCK - express.e:3771-3772,
+     * `StringF(tempstring,'\d',getSystemTime())`. NOT Unix seconds:
+     * getSystemTime is the local wall clock counted from 1970 as if it were
+     * UTC, plus 21600 (MiscFuncs.e:463-469) - the form a HeaderFile's
+     * msgDate holds, which is what a door wants it for.
      *
      * A door that wrote a message header needs a date, and must not reach for
      * time() to get one: on AmigaOS the C library's epoch is not reliably the
@@ -163,7 +166,14 @@ typedef enum {
      *
      * Proposed upstream: Documentation/4-Door-Developers/PROPOSED_SETPOINTER.md
      */
-    AE_FIELD_SETPOINTER     = 10300  /* AEW_SETPOINTER */
+    AE_FIELD_SETPOINTER     = 10300, /* AEW_SETPOINTER */
+    /*
+     * ALSO THIS BOARD'S OWN: post a message through the board's own save, so
+     * it gets everything saveNewMSG does - access, post count, callers log,
+     * notifications, the board's copy of it. See ae_post_open. A board that
+     * does not know it answers nothing, and the door writes the base itself.
+     */
+    AE_FIELD_POSTMSG        = 10500  /* AEW_POSTMSG */
 } ae_field;
 
 /**
@@ -202,6 +212,12 @@ typedef int (*ae_transport_fn)(void *context, ae_field field, char *out, int cap
 typedef int (*ae_write_fn)(void *context, ae_field field, const char *value);
 
 /**
+ * Ask the board one ACS question (DT_QUERYBIT). Returns 1 or 0, or -1 when
+ * the carrier is gone. Optional, like the writer.
+ */
+typedef int (*ae_query_bit_fn)(void *context, int acs);
+
+/**
  * A session.
  *
  * The fields are visible so a caller can place one on its own stack; treat
@@ -211,6 +227,8 @@ typedef struct {
     ae_transport_fn transport;
     /** May be NULL: a read-only transport is a valid one. */
     ae_write_fn write;
+    /** May be NULL: then ae_check_security answers "would not say". */
+    ae_query_bit_fn query_bit;
     void *context;
     char *storage;
     long cap;
@@ -236,6 +254,9 @@ int ae_open(ae_session *s, ae_transport_fn transport, void *context,
  * to.
  */
 void ae_set_writer(ae_session *s, ae_write_fn write);
+
+/** Give a session a way to ask ACS questions. Optional, as ae_set_writer. */
+void ae_set_security_query(ae_session *s, ae_query_bit_fn query_bit);
 
 /** The AEDoor message size, which is the floor for `cap`. */
 #define AE_SESSION_MIN_STORAGE 264
@@ -349,7 +370,9 @@ int ae_msgbase_function(ae_session *s);
 int ae_msgbase_conference(ae_session *s);
 
 /**
- * The board's clock, in Unix seconds, or 0 where it will not say.
+ * The board's clock in express.e's getSystemTime() form (see
+ * AE_FIELD_CURR_TIME) - a message date, not Unix time - or 0 where it will
+ * not say.
  *
  * 0 rather than a guess: a message stamped with a wrong date is worse than one
  * the door refuses to write, and the caller can decide which.
@@ -373,8 +396,62 @@ long ae_now(ae_session *s);
  */
 int ae_set_last_read(ae_session *s, int msg_num);
 
-/** As ae_set_last_read, for the new-scan pointer (express.e lastNewReadConf). */
+/**
+ * As ae_set_last_read, for the new-scan pointer (express.e lastNewReadConf).
+ *
+ * That pointer is the NEXT number to scan, not the last one scanned: the
+ * board's scan starts AT it and leaves it at msgNum+1 (express.e:5103 prints
+ * it minus one). A door that read up to m passes m+1.
+ */
 int ae_set_last_scanned(ae_session *s, int msg_num);
+
+/**
+ * The caller opened message `msg_num`: the board marks it received when it is
+ * addressed to him, by its own rule (readit, express.e:8943-8949) - the
+ * sender's R then shows when it was read, and the board's scan stops offering
+ * it. AEW_SETPOINTER "RECV <n>". Returns 1 when the request went out; a board
+ * without the command ignores it, as it ignores the pointer verbs.
+ */
+int ae_set_received(ae_session *s, int msg_num);
+
+/* ACS indices a door asks about, from axcommon.e:12-16's enum. */
+#define AE_ACS_ENTER_MESSAGE   5
+#define AE_ACS_SYSOP_READ     23
+#define AE_ACS_EALL_MESSAGES  34
+#define AE_ACS_READ_PRIV_EALL 81
+#define AE_ACS_READ_PRIV_ALL  82
+
+/**
+ * Does the caller pass the board's ACS check `acs` (AE_ACS_*)? DT_QUERYBIT,
+ * which a real AmiExpress answers too. Returns 1 or 0, or -1 when the board
+ * would not say - which a door must treat as "no" for anything that shows
+ * somebody else's mail.
+ */
+int ae_check_security(ae_session *s, int acs);
+
+/* ae_post_open / ae_post_send answers. */
+#define AE_POST_READY      1   /* the board will take this post */
+#define AE_POST_REFUSED    0   /* the board said no; `why` says why */
+#define AE_POST_NO_BOARD  -1   /* the board does not post for doors: write it yourself */
+#define AE_POST_GONE      -2   /* the carrier dropped */
+
+/**
+ * Start a post through the board (AEW_POSTMSG): may this caller post to `to`
+ * (EALL or ALL) here? `status` is 'P' or 'R'. Asked BEFORE the caller types,
+ * as express.e asks at the To: prompt. The board applies its own access
+ * (ACS_ENTER_MESSAGE, ACS_EALL_MESSAGES); a refusal's sentence lands in
+ * `why`.
+ */
+int ae_post_open(ae_session *s, char status, const char *to, char *why, int why_cap);
+
+/**
+ * Send the post ae_post_open started. Returns the message number (>= 1), or
+ * AE_POST_REFUSED with `why` filled (a base another node holds locked says
+ * so), AE_POST_NO_BOARD, or AE_POST_GONE. The body is the caller's bytes,
+ * LF between lines; the board stores it in its own encoding.
+ */
+long ae_post_send(ae_session *s, const char *subject, const char *body,
+                  unsigned long body_len, char *why, int why_cap);
 
 /**
  * The caller's theme id ("classic", "uprough-neon", ...), or "" where the

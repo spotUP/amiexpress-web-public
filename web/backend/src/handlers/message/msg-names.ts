@@ -28,6 +28,7 @@ import { getACSConfig, ToggleFlags } from '../../utils/acs.util';
 import { userDatabaseManager } from '../../services/UserDatabaseManager';
 import type { UserStruct, UserKeysStruct, UserMiscStruct } from '../../services/UserDatabaseManager';
 import { getConfNameType, type ConfNameType } from './conf-mail-name';
+import { joinedConf } from '../../utils/joined-conf.util';
 
 /** express.e RESULT_SUCCESS / RESULT_FAILURE (axenums.e:23). */
 export const RESULT_SUCCESS = 0;
@@ -62,7 +63,8 @@ function ansiColour(session: BBSSession): boolean {
 
 /** The session's confNameType (set on join, express.e:5017-5024). */
 export function confNameTypeOf(session: BBSSession): ConfNameType {
-  return getConfNameType(session.currentConf || 1, session.currentMsgBase || 1);
+  const { conf, msgBase } = joinedConf(session);
+  return getConfNameType(conf, msgBase);
 }
 
 /**

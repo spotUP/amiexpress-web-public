@@ -1,14 +1,18 @@
 # SUBS - installing it, and what each choice costs you
 
-SUBS is a 68K door. It reads this conference's message base off the disk
-itself - `<conf>/MsgBase/HeaderFile`, `MailStats` and the numbered body files -
-through ordinary AmigaDOS and the ordinary AmiExpress door interface. It asks
-the board only for things a real AmiExpress answers: where the conference is
-(`BB_CONFLOCAL`, 127), where its message base is (`MSGBASE_LOC`, 604), who is
-calling, and how far this caller has been scanned (`LAST_SCANNED`, 603).
+SUBS is a second way into the board's OWN message bases - a list of the
+newest messages, a reader, and a way to post without leaving it. It is never a
+store or a set of rules of its own: it shows the board's messages, moves the
+board's pointers in express.e's meanings, and posts through the board.
 
-That is deliberate, and it is why the door works on a real Amiga running real
-AmiExpress and not only on amiexpress-web.
+It is a 68K door. It reads this conference's message base off the disk itself -
+`<conf>/MsgBase/HeaderFile`, `MailStats` and the numbered body files - through
+ordinary AmigaDOS and the ordinary AmiExpress door interface. For reading it
+asks the board only for things a real AmiExpress answers: where the conference
+is (`BB_CONFLOCAL`, 127), where its message base is (`MSGBASE_LOC`, 604), who
+is calling, how far this caller has been scanned (`LAST_SCANNED`, 603), and
+the caller's ACS (`DT_QUERYBIT`, 1002). That is why it runs on a real Amiga
+running real AmiExpress and not only on amiexpress-web.
 
 ## What it shows
 
@@ -16,15 +20,48 @@ Every message in the conference the caller may read, in plain number order:
 
 - public messages (`P`) and censored-public ones (`p`), to everybody
 - private messages (`R`) to their sender and their recipient
+- private messages between other people to a caller with `ACS.SYSOP_READ`,
+  and private mail to `EALL` / `ALL` to a caller with `ACS.READ_PRIV_EALL` /
+  `ACS.READ_PRIV_ALL` - the board's own rule (readit, express.e:12343-12355),
+  asked of the board with `DT_QUERYBIT`
 - deleted messages (`D`) to nobody, including the sysop
-- nothing else - there is no other rule, because express.e has no other rule
-  at the point of reading (express.e:8929-8933, 12343-12355)
 
-A caller at or above `SysopLevel` also sees private mail between other people.
-**That setting defaults to 255 and you should set it deliberately.** A door
-cannot read the board's ACS tables, so `ACS.SYSOP_READ` is not available to it;
-this setting is the one access rule SUBS has to be told rather than look up. On
-a board where nobody holds level 255, the default means nobody gets it.
+Bodies are shown as the board shows them: a body that is valid UTF-8 (the
+board writes UTF-8) is converted to Latin-1, anything else is already Latin-1.
+
+**New** means every post at or above the caller's scan pointer, worded as
+"6 new posts". The board's join scan counts mail addressed to the caller; the
+two are different numbers on purpose and are worded differently.
+
+## Reading counts on the board
+
+On the way out SUBS tells the board how far the caller got, with this port's
+`AEW_SETPOINTER` (10300) - a real AmiExpress ignores it and keeps its pointers:
+
+- `READ` = the highest message he opened (express.e's `lastMsgReadConf`)
+- `SCAN` = one past it, the next message to scan (`lastNewReadConf`;
+  express.e:5103 prints it minus one). Opening the newest message marks
+  everything below it read - express.e's high-water mark.
+- `RECV n` = he opened private mail addressed to him; the board marks it
+  received exactly as `R` does (express.e:8943-8949).
+
+## Posting
+
+`E` posts to everyone, `R` replies to the selected message (same subject, no
+quoting), and the caller stays in the door afterwards.
+
+On this board the post goes through the board's own save over `AEW_POSTMSG`
+(10500): the board's posting access is asked BEFORE the caller types
+(`ACS.ENTER_MESSAGE`, and `ACS.EALL_MESSAGES` for a post to everyone), and the
+saved message gets everything `E` gives one - the post count, the callers log,
+notifications, achievements, the board's own copy and UTF-8 body.
+
+On a board that does not answer `AEW_POSTMSG` - a real AmiExpress - the door
+appends the message itself, in express.e's order (lock, number from
+`MailStats`, body, header, `MailStats`, unlock), under express.e's own
+`MailLock`: an exclusive `Lock()` on the file, which is created when missing
+and never written or deleted. None of saveNewMSG's side effects happen there;
+no door can reach them on a real board.
 
 ## The two registrations
 
@@ -50,7 +87,7 @@ saying `Type SUBS to read them.` A caller who is caught up gets the count and
 nothing else; a conference with nothing he may read prints nothing at all.
 
 ```
-[INFO] Amiga Chat: 740 messages, 6 new for you.
+Amiga Chat  740 messages, 6 new posts
 
   #735  Spot           Re: the 060 board
   #736  Mahoney        DEMO party rules
@@ -66,26 +103,25 @@ is clipped rather than wrapped.
 
 ## Launching it when a caller joins a conference
 
-Nothing to add when the conference hands its message base to the door
-(a `Conf<n>/MSGBASE.DEF.info` icon naming this door). express.e's join runs the new-mail
-scan through that door itself (express.e:5121-5125, `customMsgbaseCmd
-(MAIL_SCAN)`), and that scan IS the SUBSCAN listing. A `~XISUBSCAN` line in the
-bulletin as well prints the listing twice on every join (the sysop, 2026-09-27:
-"the subs shows twice when i join a conference").
-
-Only a conference WITHOUT `MSGBASE.DEF` needs the bulletin line:
+Put this line in the conference's join bulletin (`Conf<n>/bull20.txt` on this
+board - see the first note below):
 
 ```
 ~XISUBSCAN
 ```
 
 `~XI` starts a door without announcing it and strips the token from the text.
-The join scan honours the caller's mail-scan flags for the conference; the
-bulletin line runs for everyone, every time.
+The line runs for everyone, every time; the listing never clears the screen and
+never waits for a key.
 
 `~XISUBS` there would open the FULL door on every join and hold the caller
 until they pressed Q. Do not do that - it is what the sysop asked to be rid of.
-The full door is for a caller who types `SUBS`.
+The full door is for a caller who types `SUBS`, and the conference menu
+(`Screens/Conf/Menu.*`) lists it as `[SUBS] Message Feed`.
+
+No conference hands its whole message base to SUBS any more (express.e's
+`CUSTOM` tooltype with `MSGBASE.DEF`): that was removed on 2026-09-30 and the
+door no longer answers message functions.
 
 Three things that will waste an afternoon if you do not know them:
 
@@ -114,27 +150,29 @@ conference, arrows through it, and reads without typing a message number.
 **What you lose:** express.e's own between-messages options. The board's `R`
 offers `A`gain, `D`elete, `M`ove, `F`orward, `R`eply, `L`ist, `K`eep unread,
 translation (`T`, `TS`, `T!`, `T*`), the header and body editors (`EH`, `EM`),
-and account editing (`U`). SUBS release 1 offers reading, navigating and
-handing a reply back to the board. **If your callers use `D`, `M`, `F` or the
-editors, do not install `R.info` yet.**
+and account editing (`U`). SUBS offers reading, navigating,
+posting and replying. **If your callers use `D`, `M`, `F` or the editors, do
+not install `R.info`.**
 
 Search order, if you want it in some conferences and not others:
 conference (`Conf<N>Cmd`), then node (`Node<N>Cmd`), then global (`BBSCmd`).
 
-`E` is deliberately not overridable yet: SUBS does not write messages. Pressing
-`P` or `R` in the door hands `EALL` back and the board runs its own message
-entry, which is the real express.e one.
+`E` is deliberately not overridden: the board's `E` writes to anybody, with
+quoting and attachments; SUBS posts to everyone only.
 
 ## Settings
 
 Set from the admin door settings page, or by hand in `SUBS.cfg` beside the
-binary. A missing `SUBS.cfg` is not an error - both settings have working
-defaults.
+binary. A missing `SUBS.cfg` is not an error - the setting has a working
+default.
 
 | Key          | Default | What it does                                        |
 |--------------|---------|-----------------------------------------------------|
 | `FeedWindow` | 100     | how many of the newest messages the door holds       |
-| `SysopLevel` | 255     | the level at or above which private mail is visible  |
+
+`SysopLevel` and `SysopName` are gone: who reads private mail is the board's
+ACS, and comments to the sysop went with `CUSTOM`. An old `SUBS.cfg` that still
+has them is read without complaint.
 
 `FeedWindow` is a memory budget, not a speed one: each row costs about 110
 bytes of the door's own storage on the Amiga, so 200 is the ceiling. The door

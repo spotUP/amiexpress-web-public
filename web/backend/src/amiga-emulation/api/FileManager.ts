@@ -434,6 +434,34 @@ console.log(`[FileManager] Opened file: ${fh.toString()}`);
     return bptr;
   }
 
+  /** Where `amiPath` lands on the host, from this door's current directory; null when it does not resolve. */
+  sysPathOf(amiPath: string): string | null {
+    return this.pathManager.amiToSysPath(amiPath, this.currentDirSysPath);
+  }
+
+  /**
+   * A read-only handle on a host file the door did not name directly - a
+   * pooled object materialised in the board's file cache. The handle keeps the
+   * door's own name; the fd is O_RDONLY, so the cache's copy cannot be written.
+   */
+  openReadOnly(amiPath: string, hostPath: string): number {
+    const fh = new FileHandle(amiPath, hostPath, {
+      needClose: true,
+      autoFlush: false,
+      isNil: false,
+      isConsole: false,
+    });
+    if (!fh.open('r')) {
+      this.lastErrorCode = this.ERROR_OBJECT_NOT_FOUND;
+      return 0;
+    }
+    const bptr = this.allocateBptr();
+    fh.bAddr = bptr;
+    this.handles.set(bptr, fh);
+    this.lastErrorCode = this.ERROR_NO_ERROR;
+    return bptr;
+  }
+
   /**
    * Close a file handle
    *

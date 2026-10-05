@@ -350,6 +350,15 @@ export enum XIMCommand {
    */
   AEW_SETPOINTER = 10300,
 
+  /**
+   * THIS BOARD'S OWN: a door posts a message through the board's own save
+   * (saveNewMSG's pipeline - access, post count, callers log, notifications,
+   * the database copy). express.e has no command for a door to post. A board
+   * that does not know it answers the read-back with an empty String, and the
+   * door writes the message base itself. See xim/postmsg.ts.
+   */
+  AEW_POSTMSG = 10500,
+
   NETUPLOAD = 10001,
   NETDOWNLOAD = 10002,
 }

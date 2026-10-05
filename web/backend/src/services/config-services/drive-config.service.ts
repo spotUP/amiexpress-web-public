@@ -39,7 +39,7 @@ import { loadFileAreasFromDisk } from '../file-areas-loader';
 import { loadConfConfig } from '../conf-config.service';
 import { VolumeSet } from '../../storage/volume-set';
 import { readFreeBytes } from '../../storage/free-space';
-import { refreshStorageContext } from '../../storage';
+import { measureVolumeBytes, refreshStorageContext } from '../../storage';
 
 /** `GET /api/config/drives` - a drive, decorated with the pool facts the page shows. */
 export interface DriveConfigView extends DriveConfig {
@@ -224,12 +224,6 @@ export class DriveConfigService {
     // cannot boot the pool from, and the sysop needs to see exactly which
     // line is wrong, not a page that silently fell back to a stale mirror.
     const volumes = parseVolumes(bbsRoot);
-    // Optional on purpose: a Database built without the file repository - the
-    // shape several config suites construct, and the shape during early boot -
-    // has no usedBytesByVolume. Calling it unguarded turned every Drives.info
-    // READ into a TypeError, and every write through it into a swallowed
-    // no-op. An unknown used figure is 0, not a crash.
-    const usedByVolume = this.database.usedBytesByVolume?.() ?? new Map<number, number>();
     const live = getStorageContext();
 
     return volumes.map((volume): DriveConfigView => {
@@ -244,7 +238,11 @@ export class DriveConfigService {
         updated_at: stats.mtime,
         kind: volume.kind,
         quotaBytes: volume.quotaBytes,
-        usedBytes: usedByVolume.get(volume.driveNumber) ?? 0,
+        // The live pool's figure - measured from the bucket and kept current
+        // by every write and delete - the same number QUOTA is enforced
+        // against. The SQL catalogue's SUM(size) missed every pooled file
+        // without a row. A drive not in the live pool has no measured figure.
+        usedBytes: liveState?.usedBytes ?? 0,
         volumeClass: volume.volumeClass,
         egress: volume.egress,
         retentionDays: volume.retentionDays,
@@ -637,11 +635,11 @@ console.error(
     const conferences = this.conferencesForAreaScan(bbsRoot);
     const areas = loadFileAreasFromDisk(bbsRoot, conferences).map(remoteAreaFromDisk);
     await refreshStorageContext(bbsRoot, areas, {
-      // Finding 2 of the whole-branch review: usedBytes is re-seeded from
-      // the catalog on every build now, not carried across a rebuild - see
-      // storage/index.ts#carryLiveState. Every Drives.info write goes
-      // through this same rebuild, so it must carry the seam too.
-      usedBytesByVolume: () => this.database.usedBytesByVolume(),
+      // QUOTA is measured against what each bucket holds, counted from the
+      // bucket - never the catalogue (see InitStorageOptions.usedBytesByVolume).
+      // Every Drives.info write goes through this same rebuild, so it must
+      // carry the seam too.
+      usedBytesByVolume: measureVolumeBytes,
     });
   }
 

@@ -127,6 +127,13 @@ const DECLARED_ALIASES = new Map<string, string>([
    * the SUBSCAN shape above, not the GWWALL one below.
    */
   ['j.info', 'B'],
+  /*
+   * TIPLOGIN is TIP run at login, on purpose (c578f1a1d, sysop 2026-09-29):
+   * the same Doors/tip-of-day under a second command, so the door can tell
+   * the login tip (which a caller may switch off) from a tip he asked for by
+   * typing TIP. One door, one manifest - the SUBSCAN shape, not GWWALL's.
+   */
+  ['tiplogin.info', 'TIP'],
 ]);
 
 function doorIsTypeScript(doorDir: string): boolean {

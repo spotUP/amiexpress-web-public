@@ -15,6 +15,7 @@ import type { TransferResult } from '../../services/transfer-protocol.service';
 import { checkSecurity } from '../../utils/acs.util';
 import { ACSPermission } from '../../constants/acs-permissions';
 import { AnsiUtil } from '../../utils/ansi.util';
+import { joinedConf } from '../../utils/joined-conf.util';
 import { sessionWantsPetscii, PETSCII_FONT_IS_FIXED } from '../../utils/petscii-session-model';
 import { fontMenuRows, fontForChoice, chooseTerminalFont } from '../../services/terminal-font.service';
 import { ErrorHandler } from '../../utils/error-handling.util';
@@ -29,7 +30,7 @@ import { flaggedFilesManager } from '../../services/FlaggedFilesManager';
 import { isFileRestricted } from '../../utils/file-restriction.util';
 import * as path from 'path';
 import { formatLongDateTime, formatLongDate } from '../../utils/date-time.util';
-import { loadMsgPointers, saveMsgPointers } from '../../utils/message-pointers.util';
+import { loadMsgPointers, saveMsgPointers, saveConferenceAccount } from '../../utils/message-pointers.util';
 import { endRawTransfer } from '../../utils/raw-transfer-teardown.util';
 import { emitText } from '../../utils/output.util';
 import { endUpload, awaitUploadEnd, type UploadStat } from '../../services/upload-end.service';
@@ -127,7 +128,7 @@ function uploadReturns(session: BBSSession, stat: UploadStat): void {
  * was never filed - logoff then parked it in PartUpload as "incompleted"
  * (the telnet regression suite, 2026-09-27).
  */
-async function fileReceivedUploads(
+export async function fileReceivedUploads(
   socket: any,
   session: BBSSession,
   received: string[],
@@ -162,7 +163,7 @@ async function fileReceivedUploads(
   let fileArea: any = (session.tempData as any)?.fileArea || null;
   if (!fileArea) {
     try {
-      const areas = await db.getFileAreas(session.currentConf);
+      const areas = await db.getFileAreas(joinedConf(session).conf);
       fileArea = Array.isArray(areas) && areas.length > 0 ? areas[0] : null;
     } catch (err: any) {
       console.error('[ZMODEM-UL] getFileAreas fallback failed:', err?.message || err);
@@ -396,7 +397,7 @@ console.error('[ZMODEM] Failed to ensure playpen:', err);
           const { config: appCfg } = require('../../config');
           return uploadIsDuplicate({
             filename: name,
-            conferenceId: session.currentConf,
+            conferenceId: joinedConf(session).conf,
             bbsRoot: appCfg.get('dataDir'),
             nodeId: session.nodeId || 0,
           });
@@ -464,30 +465,16 @@ console.error('[ZMODEM] Failed to ensure playpen:', err);
       transport,
       direction: 'upload',
       paths: [playpen],
-      onComplete: (ok, detail) => {
+      // zmodem.js is only the receive; what it received is filed exactly as
+      // lrzsz's is (uploadaFile 19400-19500), one path for every protocol.
+      onComplete: async (ok, detail) => {
         endRawTransfer(session);
         if (!ok) {
           socket.emit('ansi-output', '\r\nUpload aborted\r\n\r\n');
           uploadReturns(session, 'failure');
           return;
         }
-        socket.emit('ansi-output', '\r\n\r\nFile Uploading Complete...\r\n');
-        const received = detail?.received || [];
-        const ulFileCount = received.length;
-        let totalBytes = 0;
-        try {
-          const fsSync = require('fs');
-          for (const fp of received) { try { totalBytes += fsSync.statSync(fp).size; } catch (_) {} }
-        } catch (_) {}
-        const bytesKB = Math.floor(totalBytes / 1024);
-        const ulTTTM  = Math.max(1, Math.round((Date.now() - ulStartTime) / 1000));
-        const cps     = totalBytes > 0 ? Math.round(totalBytes / ulTTTM) : 0;
-        const baud    = Math.max(1, Math.floor(((session as any).baudRate || 115200) / 10));
-        const eff     = Math.floor((cps * 100) / baud);
-        socket.emit('ansi-output', ` ${ulFileCount} file(s), ${bytesKB}k bytes, ${Math.floor(ulTTTM/60)} minute(s). ${ulTTTM%60} second(s), ${cps} cps, ${eff}% efficiency.\r\n\r\n`);
-        let peff = (ulFileCount > 0 && ulTTTM > 0) ? Math.floor((ulTTTM * 3) / 2) + 60 : 0;
-        socket.emit('ansi-output', `Time increased by ${Math.floor(peff/60)} mins.\r\n\r\n`);
-        uploadReturns(session, 'success');
+        await fileReceivedUploads(socket, session, detail?.received || [], detail?.skipped || [], ulStartTime);
       },
     });
 
@@ -1088,6 +1075,7 @@ export async function handleJoinConferenceCommand(
   // saves pointers for the NEW conference after a mail scan.
   if (session.user && session.currentConf && session.currentMsgBase) {
     try {
+      saveConferenceAccount(session, session.currentConf);
       const confBase = await loadMsgPointers(session.user.id, session.currentConf, session.currentMsgBase);
       confBase.lastMsgReadConf = session.lastMsgReadConf || confBase.lastMsgReadConf;
       confBase.lastNewReadConf = session.lastNewReadConf || confBase.lastNewReadConf;
@@ -1441,6 +1429,7 @@ export async function handleJoinMsgBaseInput(socket: any, session: BBSSession, i
   // express.e:25121 - saveMsgPointers before switching (same guard as internalCommandJ)
   if (session.user && session.currentConf && session.currentMsgBase) {
     try {
+      saveConferenceAccount(session, session.currentConf);
       const confBase = await loadMsgPointers(session.user.id, session.currentConf, session.currentMsgBase);
       confBase.lastMsgReadConf = session.lastMsgReadConf || confBase.lastMsgReadConf;
       confBase.lastNewReadConf = session.lastNewReadConf || confBase.lastNewReadConf;

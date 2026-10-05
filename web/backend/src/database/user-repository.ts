@@ -10,6 +10,7 @@ import type { User } from './types';
 import { normalizeForComparison, sanitizeInput } from '../utils/input-normalizer.util';
 import { SysopDebugUtil, DebugSeverity } from '../utils/sysop-debug.util';
 import { BaseRepository } from './BaseRepository';
+import { loadAccount, RECORD_FIELDS } from '../services/load-account';
 
 // Helper function to map field names to column names
 function fieldToColumn(field: string): string {
@@ -89,6 +90,7 @@ const DISK_ONLY_FIELDS = [
   'invalidAttempts',
   'forcePwdReset',
   'pwdLastUpdated',
+  'newSinceDate',
 ] as const;
 
 export interface UpdateUserOptions {
@@ -351,6 +353,30 @@ console.error(`[Database] Failed to append BBS user to disk:`, error);
     } as User;
   }
 
+  /**
+   * A save of an account by someone other than the caller on it: the sysop's
+   * editors, the admin, a sysop tool, an erasure, an import. express.e's
+   * account editor loads the record from its slot, changes it and saves it
+   * back (loadAccount 21283, saveAccount 21293-21299); the record is the
+   * account, and the row only mirrors it.
+   *
+   * So the disk gets the RECORD at the slot with these fields changed - never
+   * the row. The row was the source here, and it is stale by design: the
+   * logon reads the record (load-account.ts), a call changes it in memory and
+   * saves it at logoff, a door saves it with SAVE_ACCOUNT, the sysop edits it
+   * by hand. Writing the whole row back put all of that back to the row's
+   * values on every save, from any field: a door's raised level, the time
+   * used today, the post count.
+   *
+   * A caller who is on holds his account in memory (express.e's loggedOnUser)
+   * and writes it at logoff (8207). A save of his account changes that copy
+   * too, as a door's SAVE_ACCOUNT does (4587-4597), or his logoff would put
+   * the old values back.
+   *
+   * The caller's OWN changes during his call do not come here: they go to his
+   * session (account.service changeAccount) and reach the slot where express.e
+   * calls saveAccount.
+   */
   async updateUser(id: string, updates: Partial<User>, options: UpdateUserOptions = {}): Promise<void> {
 
     const sanitizedUpdates = { ...updates };
@@ -370,6 +396,40 @@ console.error(`[Database] Failed to append BBS user to disk:`, error);
       !(DISK_ONLY_FIELDS as readonly string[]).includes(key)
     );
 
+    // The record's own fields in this save. Anything else (the password hash,
+    // the web preferences) lives only in the row.
+    const recordUpdates: Partial<User> = {};
+    for (const key of Object.keys(sanitizedUpdates)) {
+      if ((RECORD_FIELDS as readonly string[]).includes(key) || (DISK_ONLY_FIELDS as readonly string[]).includes(key)) {
+        (recordUpdates as Record<string, unknown>)[key] = (sanitizedUpdates as Record<string, unknown>)[key];
+      }
+    }
+    const savesRecord = options.syncDisk !== false && Object.keys(recordUpdates).length > 0;
+
+    if (savesRecord) {
+      // Before the row changes: the record is found by the row's slot and
+      // name, as they are now.
+      const row = await this.getUserById(id);
+      if (row && row.slotNumber) {
+        try {
+          const { user: account } = loadAccount(row);
+          userFileManager.updateUserDataFile({ ...account, ...recordUpdates }, row.slotNumber);
+console.log(`[Database] Saved account ${row.username} at slot ${row.slotNumber}: ${Object.keys(recordUpdates).join(', ')}`);
+        } catch (error) {
+console.error(`[Database] Failed to save the account to disk:`, error);
+          SysopDebugUtil.debug(
+            null,
+            null,
+            'Database',
+            `Failed to save account "${row.username}" to disk files`,
+            { error: error instanceof Error ? error.message : String(error), slotNumber: row.slotNumber },
+            DebugSeverity.WARNING
+          );
+          // Don't throw - the row update below still runs, file write is best-effort
+        }
+      }
+    }
+
     if (fields.length > 0) {
       const setClause = fields.map(f => `${fieldToColumn(f)} = ?`).join(', ');
       const values = fields.map(f => {
@@ -383,27 +443,10 @@ console.error(`[Database] Failed to append BBS user to disk:`, error);
       this.run(sql, [...values, id]);
     }
 
-    if (options.syncDisk === false) return;
-    if (fields.length === 0 && Object.keys(diskOnly).length === 0) return;
-
-    // CRITICAL: Sync to disk files for Amiga door compatibility
-    const updatedUser = await this.getUserById(id);
-    if (updatedUser && updatedUser.slotNumber) {
-      try {
-        userFileManager.updateUserDataFile({ ...updatedUser, ...diskOnly }, updatedUser.slotNumber);
-console.log(`[Database] Synced updated user ${updatedUser.username} to disk files (slot ${updatedUser.slotNumber})`);
-      } catch (error) {
-console.error(`[Database] Failed to sync user update to disk:`, error);
-        SysopDebugUtil.debug(
-          null,
-          null,
-          'Database',
-          `Failed to sync updated user "${updatedUser.username}" to disk files`,
-          { error: error instanceof Error ? error.message : String(error), slotNumber: updatedUser.slotNumber },
-          DebugSeverity.WARNING
-        );
-        // Don't throw - DB update succeeded, file write is best-effort
-      }
+    if (savesRecord) {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const { applyToOnlineAccount } = require('../services/account.service') as typeof import('../services/account.service');
+      applyToOnlineAccount(id, recordUpdates);
     }
   }
 

@@ -335,14 +335,11 @@ export async function deleteBytes(
     // Gate 2, blocker 3: a pooled delete has to give the quota back, in
     // BOTH places that hold it, or the two disagree at the next rebuild.
     //
-    //   - the CATALOG's location record, because `usedBytesByVolume` is
-    //     `SUM(size) WHERE storage_volume IS NOT NULL` and the boot seed
-    //     reads exactly that. Leave the record and the next rebuild
-    //     re-seeds `usedBytes` with the deleted object's bytes all over
-    //     again, undoing the in-process decrement below.
-    //   - the IN-PROCESS counter, because nothing re-reads the catalog
-    //     until that rebuild, and `roomOn` (`quota - usedBytes`) is what
-    //     the upload gate asks in the meantime.
+    //   - the CATALOG's location record, so `entriesOnVolume` stops
+    //     listing the object on that drive.
+    //   - the IN-PROCESS counter, because `roomOn` (`quota - usedBytes`) is
+    //     what the upload gate asks, and nothing re-measures the bucket
+    //     (`measureVolumeBytes`) until the next rebuild.
     //
     // Only reached on a delete that actually happened - a failed
     // DeleteObject throws above, because the bytes are still there and
@@ -502,9 +499,8 @@ export async function fileIntoPool(
   // (status 'hold'), so this UPDATE finds it by the exact
   // (filename, areaId) pair recordLocation matches on. Without this,
   // routes-setup.ts's by-id download route reads a NULL storage_volume
-  // for a file that IS in the bucket and 404s it, usedBytesByVolume
-  // under-counts this drive, and entriesOnVolume omits it from the
-  // per-volume contents report.
+  // for a file that IS in the bucket and 404s it, and entriesOnVolume
+  // omits it from the per-volume contents report.
   //
   // Best-effort, deliberately: the bytes are already safely in the pool
   // (putUploadIntoPool succeeded above), and an ordinary re-move between

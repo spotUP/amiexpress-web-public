@@ -155,3 +155,43 @@ int ae_dos_delete(const char *path)
     if (path == 0 || path[0] == '\0') return -1;
     return remove(path) == 0 ? 0 : -1;
 }
+
+/*
+ * Exclusive locks, the host's stand-in for AmigaDOS Lock(ACCESS_WRITE).
+ *
+ * A table of the paths held in this process: a second exclusive lock on a
+ * held path is refused, as AmigaOS refuses it (ERROR_OBJECT_IN_USE) even to
+ * the task that holds the first. That is what lets a test play "another node
+ * is posting" with one call.
+ */
+#define AE_DOS_MAX_LOCKS 4
+static char held_paths[AE_DOS_MAX_LOCKS][256];
+
+long ae_dos_lock(const char *path)
+{
+    FILE *fp;
+    int i;
+    int free_at = -1;
+
+    if (path == 0 || path[0] == '\0' || strlen(path) >= sizeof(held_paths[0])) return 0;
+
+    for (i = 0; i < AE_DOS_MAX_LOCKS; i++) {
+        if (held_paths[i][0] == '\0') { if (free_at < 0) free_at = i; continue; }
+        if (strcmp(held_paths[i], path) == 0) return 0;
+    }
+    if (free_at < 0) return 0;
+
+    /* createFile: made when missing, never truncated or written. */
+    fp = fopen(path, "ab");
+    if (fp == 0) return 0;
+    fclose(fp);
+
+    strcpy(held_paths[free_at], path);
+    return (long)(free_at + 1);
+}
+
+void ae_dos_unlock(long lock)
+{
+    if (lock < 1 || lock > AE_DOS_MAX_LOCKS) return;
+    held_paths[lock - 1][0] = '\0';
+}

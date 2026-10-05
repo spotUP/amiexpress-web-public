@@ -27,6 +27,7 @@ import { editKey, editorKeyCodes } from './line-editor';
 import { sessionWantsPetscii } from '../../utils/petscii-session-model';
 import { reportMessage } from '../../achievements/sites';
 import { fullEditOffered, editInFullScreen } from './message-full-editor';
+import { joinedConf } from '../../utils/joined-conf.util';
 
 
 // Dependencies (injected from index.ts)
@@ -73,7 +74,7 @@ export function captureRealAndInternetNames(
 }
 
 /** The test at the top of each half of captureRealAndInternetNames (28166, 28195). */
-function namesMissing(session: BBSSession, confId: number, msgBaseId: number): boolean {
+export function namesMissing(session: BBSSession, confId: number, msgBaseId: number): boolean {
   if (confId < 1 || msgBaseId < 1) return false;
   const { getConferenceToolFlags } = require('../../utils/conference-tooltypes.util');
   const flags = getConferenceToolFlags(confId);
@@ -777,7 +778,7 @@ export async function handleMessageQuoteReplyConfirm(socket: any, session: BBSSe
   //   IF(stat:=loadMsg(tempStr))
   // parentId is that msgNumb (the reader's message ids are message numbers).
   const parentId = Number(session.tempData.messageEntry.parentId);
-  const file = await readMessageFile(session.currentConf || 1, parentId, config.get('dataDir')).catch(() => null);
+  const file = await readMessageFile(joinedConf(session).conf, parentId, config.get('dataDir')).catch(() => null);
 
   if (!file) {
     await promptForMessageBody(socket, session);
@@ -831,42 +832,51 @@ async function askQuoteRange(socket: any, session: BBSSession): Promise<void> {
 }
 
 
+/** What a post has to say, wherever it was composed. */
+export interface NewMessageEntry {
+  toUser: string;
+  subject: string;
+  body: string[];
+  isPrivate: boolean;
+  /** The recipient's account slot, when enterMSG loaded one (slot 1 = sysop). */
+  toSlot?: number;
+  parentId?: number | null;
+  parentMsgStatus?: string | number;
+  attachedFiles?: string[];
+  isComment?: boolean;
+  transferFiles?: boolean;
+}
+
+export type SaveOutcome =
+  | { saved: true; msgNum: number }
+  | { saved: false; reason: 'locked' | 'failed' };
+
 /**
- * Save message to database - express.e:10909 saveNewMSG()
+ * saveNewMSG (express.e:10909) without the screen: the one place a message
+ * becomes a board message. The E command's editor and the SUBS door
+ * (AEW_POSTMSG, amiga-emulation/xim/postmsg.ts) both come through here, so a
+ * post counts, logs, notifies and is stored the same way whoever composed it.
+ *
+ * `onWritten` runs once the files are on disk and before the side effects,
+ * which is where saveNewMSG prints "Message Number N...done!" (10692-10705).
  */
-async function saveMessage(socket: any, session: BBSSession): Promise<void> {
-  const entry = session.tempData.messageEntry;
-
-  // edit() returned RESULT_SUCCESS to a caller that is not message entry -
-  // JH_EF saves the lines to its own file (express.e:1148-1150).
-  if (entry?.finishOutside) {
-    await entry.finishOutside(entry.body);
-    return;
-  }
-
+export async function saveNewMessage(
+  socket: any,
+  session: BBSSession,
+  entry: NewMessageEntry,
+  onWritten?: (msgNum: number) => void,
+): Promise<SaveOutcome> {
   // edit()'s S, X and full-screen save count the post as they return
   // (express.e:10558, 10564, 10127) - before saveNewMSG, so a save that
   // then fails has still been counted.
+  // In memory, as loggedOnUser's: the joined conference's count
+  // (loadMsgPointers 4909), into its Conf.DB record at the next
+  // saveMsgPointers (4943) and summed into user.data at logoff (8204-8207).
   session.user!.messagesPosted = (session.user!.messagesPosted || 0) + 1;
 
-  // DISK-BASED: Write updated user stats to user.data/keys/misc files
-  // This ensures messagesPosted is persisted immediately (safer than waiting for logoff)
-  if (session.user!.slotNumber) {
-    try {
-      const { userFileManager } = require('../../services/UserFileManager');
-      userFileManager.updateUserDataFile(session.user!, session.user!.slotNumber);
-console.log(`[Message] Updated user ${session.user!.username} disk files (messagesPosted=${session.user!.messagesPosted}, slot=${session.user!.slotNumber})`);
-    } catch (diskErr) {
-console.error('[Message] Error writing user disk files:', diskErr);
-      // Continue anyway - database has the stats, can sync later
-    }
-  }
-
-  let savedOk = false;
-  let savedMsgNum = 0;
-
-  // express.e:10972: aePuts('Saving...') — plain text, no newline after (saveNewMSG continues inline)
-  emitText(socket, '\r\nSaving...');
+  // express.e:10694 - the message goes to <msgBaseLocation><msgNumb>: the base
+  // joinConf loaded, which in a scan is the scanned one while currentConf is 0.
+  const { conf: msgConf, msgBase: msgBaseId } = joinedConf(session);
 
   try {
     // Create message object
@@ -907,8 +917,8 @@ console.error('[Message] Error writing user disk files:', diskErr);
       body: messageBody,
       author: fromName,
       timestamp: messageDate,
-      conferenceId: session.currentConf || 1,
-      messageBaseId: session.currentMsgBase || 1,
+      conferenceId: msgConf,
+      messageBaseId: msgBaseId,
       isPrivate: entry.isPrivate,
       toUser: entry.toUser,
       parentId: entry.parentId || null,
@@ -940,8 +950,8 @@ console.error('[Message] Error writing user disk files:', diskErr);
       }
     }
     const msgNum = await writeMessageFile(
-      session.currentConf || 1,
-      session.currentMsgBase || 1,
+      msgConf,
+      msgBaseId,
       {
         // express.e:10649 — fromName comes from confMailName, not the raw
         // login username (matters for REALNAME/INTERNETNAME conferences).
@@ -972,8 +982,8 @@ console.error('[Message] Error writing user disk files:', diskErr);
     try {
       const { writeExtSendDumpIfApplicable } = require('../../utils/message-file.util');
       await writeExtSendDumpIfApplicable(
-        session.currentConf || 1,
-        session.currentMsgBase || 1,
+        msgConf,
+        msgBaseId,
         {
           fromName,
           toName: entry.toUser,
@@ -989,9 +999,7 @@ console.error('[Message] EXTSEND dump failed (non-fatal):', extErr);
     }
 
     // express.e:10692-10705: aePuts('Message Number N...') + write + aePuts('done!\b\n\b\n')
-    emitText(socket, `Message Number ${msgNum}...done!\r\n\r\n`);
-    savedOk = true;
-    savedMsgNum = msgNum;
+    onWritten?.(msgNum);
 
     // Save to database (for web UI / search indexing only).
     // Body file + HeaderFile already written by writeMessageFile above —
@@ -1015,8 +1023,8 @@ console.log('[Message] About to trigger NEW_MESSAGE webhook');
     try {
       const { webhookService, WebhookTrigger } = await import('../../services/webhook.service');
 
-      const conference = await _db.getConferenceById(session.currentConf);
-      const messageBase = await _db.getMessageBaseById(session.currentMsgBase);
+      const conference = await _db.getConferenceById(msgConf);
+      const messageBase = await _db.getMessageBaseById(msgBaseId);
 
 console.log(`[Message] Calling webhook for message: subject="${entry.subject}", toUser="${entry.toUser}", isPrivate=${entry.isPrivate}`);
       await webhookService.sendWebhook(WebhookTrigger.NEW_MESSAGE, {
@@ -1080,7 +1088,7 @@ console.error('[Webhook] Error sending new message webhook:', error);
         {
           error: error instanceof Error ? error.message : String(error),
           subject: entry.subject,
-          conferenceId: session.currentConf
+          conferenceId: msgConf
         },
         DebugSeverity.WARNING
       );
@@ -1088,14 +1096,12 @@ console.error('[Webhook] Error sending new message webhook:', error);
 
     // Achievements (SP2): the message facts, beside the webhook and outside
     // its try. Non-throwing.
-    reportMessage(session as any, { body: entry.body, isPrivate: entry.isPrivate, parentId: entry.parentId || null, toUserIsSysop }, session.currentConf || 1);
+    reportMessage(session as any, { body: entry.body, isPrivate: entry.isPrivate, parentId: entry.parentId || null, toUserIsSysop }, msgConf);
 
     // A reply's "Delete original message" (express.e:9898-9903) is asked by
     // read-msg's replyToMSG once this save returns.
 
-    // express.e saves message and returns to main loop; main loop sets menuPause:=TRUE
-    session.menuPause = true;
-
+    return { saved: true, msgNum };
   } catch (error) {
 console.error('[saveMessage] Error:', error);
     SysopDebugUtil.debug(
@@ -1107,33 +1113,55 @@ console.error('[saveMessage] Error:', error);
         error: error instanceof Error ? error.message : String(error),
         subject: entry.subject,
         toUser: entry.toUser,
-        conferenceId: session.currentConf
+        conferenceId: msgConf
       },
       DebugSeverity.CRITICAL
     );
-    // express.e differentiates two failure modes here:
-    //   - lockMsgBase() returns 0 (express.e:10744): another task holds the lock.
-    //     Verbatim text: 'ERROR! Another task has the MsgBase locked!\b\n
-    //                     Message has not been saved!\b\n\b\n'
-    //   - saveMessageHeader / Open(<msgNum>, MODE_NEWFILE) fails (10696, 10713):
-    //     'Failed!\b\n\b\n'
-    //
     // writeMessageFile throws an Error with the prefix "MsgBase locked" when
-    // it exhausts retry attempts; everything else falls through to the
-    // generic "Failed!" text.
+    // lockMsgBase gives up (express.e:10744); everything else is "Failed!".
     const errMsg = error instanceof Error ? error.message : String(error);
-    if (errMsg.startsWith('MsgBase locked')) {
-      emitText(socket, '\r\nERROR! Another task has the MsgBase locked!\r\nMessage has not been saved!\r\n\r\n');
-    } else {
-      emitText(socket, 'Failed!\r\n\r\n');
-    }
+    return { saved: false, reason: errMsg.startsWith('MsgBase locked') ? 'locked' : 'failed' };
+  }
+}
+
+/**
+ * Save message to database - express.e:10909 saveNewMSG()
+ */
+async function saveMessage(socket: any, session: BBSSession): Promise<void> {
+  const entry = session.tempData.messageEntry;
+
+  // edit() returned RESULT_SUCCESS to a caller that is not message entry -
+  // JH_EF saves the lines to its own file (express.e:1148-1150).
+  if (entry?.finishOutside) {
+    await entry.finishOutside(entry.body);
+    return;
+  }
+
+  // express.e:10972: aePuts('Saving...') — plain text, no newline after (saveNewMSG continues inline)
+  emitText(socket, '\r\nSaving...');
+
+  const outcome = await saveNewMessage(socket, session, entry, (msgNum) => {
+    // express.e:10692-10705: aePuts('Message Number N...') + write + aePuts('done!\b\n\b\n')
+    emitText(socket, `Message Number ${msgNum}...done!\r\n\r\n`);
+  });
+  const savedOk = outcome.saved;
+  const savedMsgNum = outcome.saved ? outcome.msgNum : 0;
+  if (outcome.saved) {
+    // express.e saves message and returns to main loop; main loop sets menuPause:=TRUE
+    session.menuPause = true;
+  } else if (outcome.reason === 'locked') {
+    // express.e:10744 - lockMsgBase() returned 0.
+    emitText(socket, '\r\nERROR! Another task has the MsgBase locked!\r\nMessage has not been saved!\r\n\r\n');
+  } else {
+    // express.e:10696, 10713 - the header or the body could not be written.
+    emitText(socket, 'Failed!\r\n\r\n');
   }
 
   // express.e:10721-10740 - X: the files are uploaded into the message
   // before saveNewMSG returns to its caller. A goodbye after the transfer
   // ends the call there (RESULT_STANDARD_LOGOFF, 10733-10737).
   if (savedOk && entry.rzmsg) {
-    const stat = await sendMessageFiles(socket, session, session.currentConf || 1, savedMsgNum);
+    const stat = await sendMessageFiles(socket, session, joinedConf(session).conf, savedMsgNum);
     if (stat === 'goodbye') {
       session.tempData = undefined;
       const { handleGoodbyeCommand } = require('../commands/system-commands.handler');
@@ -1173,17 +1201,10 @@ async function sendMessageFiles(socket: any, session: BBSSession, conf: number, 
   // 10726-10727 setEnvStat(ENV_UPLOADING) and bgFileCheck:=FALSE have no home here.
   emitText(socket, '\r\n');
   session.rzmsg = { dir, msgNumb };
-  // The upload works in the message's conference. In the logon scan
-  // currentConf is 0 (express.e:28103) while joinConf has loaded the scanned
-  // conference's directories (4997-5016), and this board's upload reads its
-  // conference from currentConf alone.
-  const wasConf = session.currentConf;
-  session.currentConf = conf;
   try {
     const { uploadaFileAndWait } = require('../commands/user-commands.handler');
     return await uploadaFileAndWait(socket, session, true);
   } finally {
-    session.currentConf = wasConf;
     // 10730 rzmsg:=NIL; 10731-10733 SetProtection + DeleteFile(F<n>)
     session.rzmsg = undefined;
     try { amigafs.rmdirSync(dir); } catch { /* it holds the files */ }

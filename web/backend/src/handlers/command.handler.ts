@@ -1920,13 +1920,9 @@ function endPasswordMask(socket: any, session: BBSSession): void {
             // anything except a sysop editing the account by hand: a real gate
             // that nothing could trip, and a lockout a caller escaped by
             // hanging up.
-            try {
-              const { countWrongPassword } = require('../services/password-failures');
-              countWrongPassword(await getDatabase().getUserByUsername(username), 'AUTH');
-            } catch (err) {
-              // A failure to record must never block the login flow itself.
-              console.warn('[AUTH] Could not record password failure:', err);
-            }
+            // A failure to record must never block the login flow itself.
+            const { countWrongPasswordFor } = require('../services/password-failures');
+            await countWrongPasswordFor(() => getDatabase().getUserByUsername(username), 'AUTH');
             // express.e:29140-29156 - THREE tries per call, hard-coded
             // (`IF(tries>2)`), whatever MAX_PASSWORD_FAILS says: that tooltype
             // is the separate, persisted account lock recorded above

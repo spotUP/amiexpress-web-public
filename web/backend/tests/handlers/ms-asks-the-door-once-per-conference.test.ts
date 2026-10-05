@@ -65,6 +65,8 @@ jest.mock('../../src/services/CallersLogManager', () => ({
   },
 }));
 jest.mock('../../src/utils/message-pointers.util', () => ({
+  loadConferenceAccount: jest.fn(),
+  saveConferenceAccount: jest.fn(),
   getMailStatFile: jest.fn(() => null),
   loadMsgPointers: jest.fn(() => ({ lastReadMsg: 0, lastScanMsg: 0 })),
   saveMsgPointers: jest.fn(),

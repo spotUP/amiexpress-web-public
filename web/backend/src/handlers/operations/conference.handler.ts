@@ -10,7 +10,7 @@ import { emitText } from '../../utils/output.util';
 import { getBoardConfig } from '../../services/bbs-config-file.service';
 import { config as appConfig } from '../../config';
 import { displayMainMenu } from '../command-handler/menu';
-import { getMailStatFile, loadMsgPointers, saveMsgPointers, validatePointers } from '../../utils/message-pointers.util';
+import { getMailStatFile, loadMsgPointers, saveMsgPointers, validatePointers, loadConferenceAccount, saveConferenceAccount } from '../../utils/message-pointers.util';
 import { finalizeCommand } from '../../utils/command-response.util';
 import { SysopDebugUtil, DebugSeverity } from '../../utils/sysop-debug.util';
 import { checkConfAccess, checkMailConfScan } from '../message/message-scan.handler';
@@ -171,6 +171,9 @@ export async function joinConference(socket: any, session: BBSSession, confId: n
     session.currentConfName = conference.name;
     session.relConfNum = confId; // For simplicity, use absolute conf number as relative
   }
+  // express.e:5015 getMsgBaseLocation(conf,msgBaseNum,msgBaseLocation) - on
+  // every join, a scan's included: the scan's reply is saved here.
+  session.joinedConf = { conf: confId, msgBase: msgBaseId };
   // express.e:5130 - IF (auto=FALSE) AND (confScan=FALSE): save confRJoin
   // During confScan or auto-rejoin, confRJoin must NOT be overwritten.
   if (!auto && !confScan) {
@@ -191,16 +194,15 @@ export async function joinConference(socket: any, session: BBSSession, confId: n
       session.user.confRJoin = confId;
       session.user.autoRejoin = confId;
       session.user.msgBaseRJoin = msgBaseNum;
-      try {
-        const { db } = require('../../database');
-        await db.updateUser(session.user.id, { autoRejoin: confId, confRJoin: confId });
-      } catch (err) {
-console.warn('[joinConference] Failed to persist autoRejoin/confRJoin:', err);
-      }
     } else {
       session.user.msgBaseRJoin = msgBaseNum;
     }
   }
+
+  // express.e:5026 loadMsgPointers(conf,msgBaseNum), its account half: under
+  // conference accounting this conference's counters become the caller's,
+  // and its post count always does (4893-4911). CUSTOM or not.
+  loadConferenceAccount(session, confId);
 
   // express.e:5028 — IF checkToolTypeExists(TOOLTYPE_CONF,conf,'CUSTOM')=FALSE
   // The CUSTOM tooltype routes the conference through customMsgbaseCmd
@@ -520,6 +522,7 @@ async function runJoinMailScan(
           }
           // express.e:5126 - saveMsgPointers(conf, msgBaseNum)
           try {
+            saveConferenceAccount(session, confId);
             const confBase = await loadMsgPointers(session.user.id, confId, msgBaseId);
             confBase.lastNewReadConf = session.lastNewReadConf || confBase.lastNewReadConf;
             confBase.lastMsgReadConf = session.lastMsgReadConf || confBase.lastMsgReadConf;

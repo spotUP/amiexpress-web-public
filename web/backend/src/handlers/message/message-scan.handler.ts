@@ -4,6 +4,7 @@
  * 1:1 port from express.e:28066-28120 confScan()
  */
 
+import { isConfAccessAreaName as isAccessFieldAreaName } from '../../conferences/access-areas';
 import { checkSecurity } from '../../utils/acs.util';
 import { narrowMailRow } from '../../utils/table-format.util';
 import { ACSPermission } from '../../constants/acs-permissions';
@@ -85,17 +86,7 @@ export function buildMailScanRow(
  * @returns True if conferenceAccess contains area names (not just X/_)
  */
 function isConfAccessAreaName(user: any): boolean {
-  if (!user?.confAccess) return false;
-
-  // express.e:461-465 - Check if any character is not 'X' or '_'
-  let count = 0;
-  for (let i = 0; i < user.confAccess.length; i++) {
-    const c = user.confAccess[i];
-    if (c !== 'X' && c !== '_') {
-      count++;
-    }
-  }
-  return count !== 0;
+  return isAccessFieldAreaName(user?.confAccess);
 }
 
 /**

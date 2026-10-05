@@ -313,10 +313,13 @@ export async function updateDownloadStats(
   user: User,
   fileSize: number,
   isFree: boolean = false,
-  cps?: number
+  cps?: number,
+  options: { accounting?: boolean } = {}
 ): Promise<void> {
   const effectiveSize = Math.max(0, fileSize || 0);
-  const shouldTrack = creditAccountTrackDownloads(user) && !isFree;
+  // Under conference accounting the file's conference record takes the
+  // download, not the account (express.e:15440-15452 vs 15453-15460).
+  const shouldTrack = creditAccountTrackDownloads(user) && !isFree && !options.accounting;
 
   if (shouldTrack) {
     const currentDownloads = user.downloads || 0;

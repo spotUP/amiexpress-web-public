@@ -16,6 +16,7 @@ import { AnsiUtil } from '../../utils/ansi.util';
 import { emitText } from '../../utils/output.util';
 import { ErrorHandler } from '../../utils/error-handling.util';
 import { ParamsUtil } from '../../utils/params.util';
+import { changeAccount } from '../../services/account.service';
 import { displayMainMenu } from '../command-handler/menu';
 
 import type { BBSSession } from '../../index';
@@ -105,10 +106,9 @@ export async function handleExpertModeCommand(socket: any, session: BBSSession):
     socket.emit('ansi-output', '\r\nExpert mode enabled\r\n');
   }
 
-  // Save expert mode preference to database
-  if (_db) {
-    await _db.updateUser(session.user.id, { expert: session.user.expert });
-  }
+  // In memory, as express.e's X does (24595 / 26116); the record is saved
+  // with the account (logoff 8207, W 25893).
+  await changeAccount(session, { expert: session.user.expert });
 
   // Return directly to the menu (express.e does not add an extra pause here)
   session.menuPause = false;

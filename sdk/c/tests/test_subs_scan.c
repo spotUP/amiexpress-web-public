@@ -351,11 +351,58 @@ static void colour_does_not_cost_the_caller_a_second_message(void)
     printf("  [OK] a themed row still fits one XIM message\n");
 }
 
+/*
+ * "6 new posts", never "6 new for you": SUBS counts every post above the
+ * caller's scan pointer, the board's join scan counts mail addressed to him,
+ * and two screens must not seem to contradict each other (the sysop,
+ * 2026-10-04).
+ */
+static void new_is_worded_as_posts_not_for_you(void)
+{
+    ae_msg_stat stat;
+    ae_msg_row rows[1];
+    char out[SUBS_SCAN_LINES][SUBS_SCAN_LINE];
+    char line[80];
+
+    memset(&stat, 0, sizeof stat);
+    memset(rows, 0, sizeof rows);
+    stat.total = 740;
+    stat.unread = 6;
+    subs_scan_compose(&stat, rows, 0, "Amiga Chat", 80, 0, out, SUBS_SCAN_LINES);
+    assert(strstr(out[0], "6 new posts") != 0);
+    assert(strstr(out[0], "for you") == 0);
+
+    stat.unread = 1;
+    subs_scan_compose(&stat, rows, 0, "Amiga Chat", 80, 0, out, SUBS_SCAN_LINES);
+    assert(strstr(out[0], "1 new post") != 0 && strstr(out[0], "1 new posts") == 0);
+
+    subs_status_compose(line, (int)sizeof line, 1, 103, 6, 0);
+    assert(strcmp(line, "[INFO] 103 messages here, 6 new posts.") == 0);
+    subs_status_compose(line, (int)sizeof line, 1, 103, 0, 0);
+    assert(strcmp(line, "[INFO] 103 messages here, no new posts.") == 0);
+    printf("  [OK] new is counted in posts\n");
+}
+
+/*
+ * The scan pointer the door hands back is the NEXT number to scan: the
+ * board's searchNewMail leaves lastNewReadConf at msgNum+1 and starts AT it.
+ * Handing back the highest opened made the board's next scan report that
+ * message again (2026-10-04 SUBS proposal, conflict 2).
+ */
+static void the_scan_pointer_handed_back_is_one_past_the_highest_opened(void)
+{
+    assert(subs_scan_pointer_after(267) == 268);
+    assert(subs_scan_pointer_after(0) == 0);
+    printf("  [OK] scan pointer is the next to scan\n");
+}
+
 int main(void)
 {
     printf("subs join listing\n");
     a_caller_who_is_caught_up_gets_one_line();
     the_new_ones_are_listed_by_number_and_sender();
+    new_is_worded_as_posts_not_for_you();
+    the_scan_pointer_handed_back_is_one_past_the_highest_opened();
     a_message_already_read_is_not_in_the_list();
     a_month_away_does_not_print_a_month();
     an_empty_conference_says_nothing_at_all();

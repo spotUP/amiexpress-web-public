@@ -53,6 +53,16 @@ typedef struct {
     /** What a conference handing over its message base says it wants (600/601). */
     const char *msgbase_func;
     const char *msgbase_conf;
+    /* AEW_POSTMSG: 0 models a board that never heard of it. */
+    int knows_postmsg;
+    int refuse_eall;
+    char post_answer[64];
+    char post_subject[64];
+    char post_body[1024];
+    char last_recv[32];
+    /* DT_QUERYBIT answers: one bit per ACS index below 32, then two more. */
+    int grants_sysop_read;
+    int grants_priv_eall;
 } fake_board;
 
 static int fake_transport(void *context, ae_field field, char *out, int cap)
@@ -80,6 +90,7 @@ static int fake_transport(void *context, ae_field field, char *out, int cap)
         case AE_FIELD_MSGBASE_FUNC:  value = b->msgbase_func; break;
         case AE_FIELD_MSGBASE_CONF:  value = b->msgbase_conf; break;
         case AE_FIELD_THEME:         value = b->can_write ? b->theme : 0; break;
+        case AE_FIELD_POSTMSG:       value = b->knows_postmsg ? b->post_answer : 0; break;
         default: value = 0; break;
     }
 
@@ -96,9 +107,29 @@ static int fake_write(void *context, ae_field field, const char *value)
 
     if (!b->can_write) return -1;
 
+    if (field == AE_FIELD_POSTMSG) {
+        b->writes += 1;
+        if (!b->knows_postmsg) return 0;        /* taken, and nothing happens */
+        if (strncmp(value, "TO ", 3) == 0) {
+            b->post_body[0] = '\0';
+            if (b->refuse_eall && strstr(value, "EALL") != 0)
+                strcpy(b->post_answer, "NO You may not post to everyone in this conference.");
+            else
+                strcpy(b->post_answer, "READY");
+        } else if (strncmp(value, "SUBJECT ", 8) == 0) {
+            strcpy(b->post_subject, value + 8);
+        } else if (strncmp(value, "TEXT ", 5) == 0) {
+            strcat(b->post_body, value + 5);
+        } else if (strcmp(value, "SEND") == 0) {
+            strcpy(b->post_answer, "POSTED 42");
+        }
+        return 0;
+    }
+
     if (field == AE_FIELD_SETPOINTER) {
         int asked;
         b->writes += 1;
+        if (strncmp(value, "RECV ", 5) == 0) { strcpy(b->last_recv, value); return 0; }
         /* A board that never heard of it still ACCEPTS the write - that is
            what makes this worth testing rather than assuming. */
         if (!b->knows_setpointer) return 0;
@@ -119,6 +150,14 @@ static int fake_write(void *context, ae_field field, const char *value)
     } else {
         strcpy(b->theme, "classic");   /* what the board does with an unknown id */
     }
+    return 0;
+}
+
+static int fake_query_bit(void *context, int acs)
+{
+    fake_board *b = (fake_board *)context;
+    if (acs == AE_ACS_SYSOP_READ) return b->grants_sysop_read;
+    if (acs == AE_ACS_READ_PRIV_EALL) return b->grants_priv_eall;
     return 0;
 }
 
@@ -535,6 +574,100 @@ static void a_door_nobody_handed_a_message_base_gets_zero(void)
     printf("  [OK] no custom invocation reads as zero, not as an error\n");
 }
 
+/* ---- posting through the board, asking its ACS, marking received ---- */
+
+static void a_post_goes_to_the_board_in_pieces_and_comes_back_numbered(void)
+{
+    ae_session s;
+    char storage[AE_SESSION_MIN_STORAGE];
+    char why[80];
+    char body[600];
+    fake_board b = a_board();
+    int i;
+
+    b.can_write = 1;
+    b.knows_postmsg = 1;
+    assert(ae_open(&s, fake_transport, &b, storage, (long)sizeof(storage), 1) == 0);
+    ae_set_writer(&s, fake_write);
+
+    /* Longer than one XIM String, so it has to go in several TEXT steps. */
+    for (i = 0; i < 599; i++) body[i] = (char)('a' + (i % 26));
+    body[599] = '\0';
+    body[100] = '\n';
+
+    assert(ae_post_open(&s, 'P', "EALL", why, (int)sizeof why) == AE_POST_READY);
+    assert(ae_post_send(&s, "hej", body, 599, why, (int)sizeof why) == 42);
+    assert(strcmp(b.post_subject, "hej") == 0);
+    assert(strcmp(b.post_body, body) == 0);
+    printf("  [OK] a post reaches the board whole, and the board's number comes back\n");
+}
+
+static void the_board_refusing_a_post_says_why_before_anything_is_typed(void)
+{
+    ae_session s;
+    char storage[AE_SESSION_MIN_STORAGE];
+    char why[80];
+    fake_board b = a_board();
+
+    b.can_write = 1;
+    b.knows_postmsg = 1;
+    b.refuse_eall = 1;
+    assert(ae_open(&s, fake_transport, &b, storage, (long)sizeof(storage), 1) == 0);
+    ae_set_writer(&s, fake_write);
+
+    assert(ae_post_open(&s, 'P', "EALL", why, (int)sizeof why) == AE_POST_REFUSED);
+    assert(strcmp(why, "You may not post to everyone in this conference.") == 0);
+    printf("  [OK] the board's refusal, in the board's words\n");
+}
+
+static void a_board_that_will_not_post_for_a_door_says_so(void)
+{
+    /* A real AmiExpress: the write is taken and nothing answers. The door
+       then writes the base itself - that is the whole fallback. */
+    ae_session s;
+    char storage[AE_SESSION_MIN_STORAGE];
+    char why[80];
+    fake_board b = a_board();
+
+    b.can_write = 1;
+    assert(ae_open(&s, fake_transport, &b, storage, (long)sizeof(storage), 1) == 0);
+    ae_set_writer(&s, fake_write);
+
+    assert(ae_post_open(&s, 'P', "EALL", why, (int)sizeof why) == AE_POST_NO_BOARD);
+    printf("  [OK] a classic board is detected, not mistaken for a refusal\n");
+}
+
+static void the_boards_acs_answers_who_reads_private_mail(void)
+{
+    ae_session s;
+    char storage[AE_SESSION_MIN_STORAGE];
+    fake_board b = a_board();
+
+    b.grants_priv_eall = 1;
+    assert(ae_open(&s, fake_transport, &b, storage, (long)sizeof(storage), 1) == 0);
+    /* No query path: the board would not say, which is not a yes. */
+    assert(ae_check_security(&s, AE_ACS_SYSOP_READ) == -1);
+
+    ae_set_security_query(&s, fake_query_bit);
+    assert(ae_check_security(&s, AE_ACS_SYSOP_READ) == 0);
+    assert(ae_check_security(&s, AE_ACS_READ_PRIV_EALL) == 1);
+    printf("  [OK] ACS answers come from the board\n");
+}
+
+static void opening_ones_own_mail_asks_the_board_to_mark_it_received(void)
+{
+    ae_session s;
+    char storage[AE_SESSION_MIN_STORAGE];
+    fake_board b = a_board();
+
+    b.can_write = 1;
+    assert(ae_open(&s, fake_transport, &b, storage, (long)sizeof(storage), 1) == 0);
+    ae_set_writer(&s, fake_write);
+    assert(ae_set_received(&s, 17) == 1);
+    assert(strcmp(b.last_recv, "RECV 17") == 0);
+    printf("  [OK] RECV goes out on AEW_SETPOINTER\n");
+}
+
 int main(void)
 {
     printf("ae_session\n");
@@ -558,6 +691,11 @@ int main(void)
     a_board_that_cannot_mark_read_does_not_break_the_door();
     marking_read_needs_a_writer();
     marking_read_refuses_nonsense_without_asking_the_board();
+    a_post_goes_to_the_board_in_pieces_and_comes_back_numbered();
+    the_board_refusing_a_post_says_why_before_anything_is_typed();
+    a_board_that_will_not_post_for_a_door_says_so();
+    the_boards_acs_answers_who_reads_private_mail();
+    opening_ones_own_mail_asks_the_board_to_mark_it_received();
     printf("ae_session: all passed\n");
     return 0;
 }

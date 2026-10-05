@@ -84,14 +84,14 @@ describe('W row 22', () => {
     d.session.subState = LoggedOnSubState.W_OPTION_SELECT;
     await handleWOptionSelectInput(d.socket, d.session, '22');
     // Persisted like the palette beside it...
-    expect(mockUpdateUser).toHaveBeenCalledWith('u22', { petsciiCharset: 'swedish' });
+    expect(mockUpdateUser).toHaveBeenCalledWith('u22', { petsciiCharset: 'swedish' }, { syncDisk: false });
     expect(d.session.user.petsciiCharset).toBe('swedish');
     // ...and applied without making the caller reconnect.
     expect(d.events).toContainEqual(['petscii-charset', { charset: 'swedish' }]);
 
     // And back again.
     await handleWOptionSelectInput(d.socket, d.session, '22');
-    expect(mockUpdateUser).toHaveBeenLastCalledWith('u22', { petsciiCharset: 'standard' });
+    expect(mockUpdateUser).toHaveBeenLastCalledWith('u22', { petsciiCharset: 'standard' }, { syncDisk: false });
   });
 
   it('travels on the mode event, so a reconnecting caller keeps it', () => {

@@ -75,4 +75,23 @@ int subs_scan_compose(const ae_msg_stat *stat,
                       const subs_scan_palette *palette,
                       char out[][SUBS_SCAN_LINE], int cap);
 
+/**
+ * The SUBS list's status line: how many messages, how many new POSTS (not
+ * "new for you" - the board's join scan owns that phrase and counts something
+ * else). `wide` is 0 at forty columns. Empty when there is nothing here.
+ */
+void subs_status_compose(char *out, int cap, int wide,
+                         long total, long unread, long unreadable);
+
+/**
+ * The scan pointer to hand the board after the caller opened messages up to
+ * `highest_opened`: the board's lastNewReadConf is the NEXT number to scan
+ * (read-msg.ts searchNewMail sets msgNum+1; express.e:5103 prints it minus
+ * one), so one past it. 0 when nothing was opened.
+ */
+long subs_scan_pointer_after(long highest_opened);
+
+/** Names compared as the board compares them: ignoring case. */
+int subs_same_name(const char *a, const char *b);
+
 #endif

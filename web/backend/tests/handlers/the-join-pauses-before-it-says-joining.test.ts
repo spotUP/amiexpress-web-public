@@ -76,6 +76,8 @@ jest.mock('../../src/utils/conference-tooltypes.util', () => ({
 }));
 
 jest.mock('../../src/utils/message-pointers.util', () => ({
+  loadConferenceAccount: jest.fn(),
+  saveConferenceAccount: jest.fn(),
   getMailStatFile: jest.fn(() => ({ lowestKey: 1, highMsgNum: 0, lowestNotDel: 1 })),
   loadMsgPointers: jest.fn(async () => ({ lastNewReadConf: 0, lastMsgReadConf: 0 })),
   saveMsgPointers: jest.fn(async () => {}),

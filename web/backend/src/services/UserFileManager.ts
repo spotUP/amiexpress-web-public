@@ -203,7 +203,12 @@ export class UserFileManager {
       messagesPosted: user.messagesPosted ?? 0,
       // Every date field holds express.e's getSystemTime() value, not Unix
       // seconds (date-time.util.ts toAmigaTime).
-      newSinceDate: encodeAmigaDate(user.lastLogin ?? new Date()),
+      // Its own field, not the last logon. express.e moves it only at a
+      // logoff after N (8197 `IF(newSinceFlag) THEN loggedOnUser.newSinceDate:=
+      // getSystemTime()`) and, under conference accounting, from the joined
+      // conference's record (4906). A User that does not carry one keeps the
+      // record's (updateUserDataFile); a new account starts at 0.
+      newSinceDate: encodeAmigaDate(user.newSinceDate),
       pwdHash: 0, // Old hash format not used
       confRead2: 0,
       confRead3: 0,
@@ -1353,11 +1358,11 @@ console.error('[UserFileManager] Error reading user files:', error);
   }
 
   /**
-   * The two disk-only facts of one user.data record: its post count and
-   * whether it is deleted. null when the slot is past the end of the file or
+   * The disk-only facts of one user.data record: its post count, whether it
+   * is deleted, and its new-since date. null when the slot is past the end of the file or
    * has never held an account.
    */
-  private readRecordState(slotNumber: number): { messagesPosted: number; deleted: boolean } | null {
+  private readRecordState(slotNumber: number): { messagesPosted: number; deleted: boolean; newSinceDate: number } | null {
     try {
       if (!Number.isInteger(slotNumber) || slotNumber < 1 || !fs.existsSync(this.userDataPath)) return null;
       const offset = (slotNumber - 1) * this.USER_STRUCT_SIZE;
@@ -1369,7 +1374,7 @@ console.error('[UserFileManager] Error reading user files:', error);
       } finally { fs.closeSync(fd); }
       const record = this.deserializeUserStruct(buffer, 0);
       if (!record.name || record.name.trim().length === 0) return null;
-      return { messagesPosted: record.messagesPosted, deleted: record.slotNumber === 0 };
+      return { messagesPosted: record.messagesPosted, deleted: record.slotNumber === 0, newSinceDate: record.newSinceDate };
     } catch {
       return null;
     }
@@ -1407,6 +1412,9 @@ console.error('[UserFileManager] Error reading user files:', error);
       const current = this.readRecordState(slotNumber);
       if (current) {
         if (user.messagesPosted === undefined) userStruct.messagesPosted = current.messagesPosted;
+        // The table has no newSinceDate column either: a User from a row
+        // carries none, and the record's own date stands.
+        if (user.newSinceDate === undefined) userStruct.newSinceDate = current.newSinceDate;
         if (user.accountDeleted === undefined && current.deleted) {
           userStruct.slotNumber = 0;
           keysStruct.number = 0;

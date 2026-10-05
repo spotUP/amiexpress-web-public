@@ -27,6 +27,17 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { applyTooltypes, parseInfoFile } from '../utils/info-file.util';
 
+/**
+ * Does this access field hold an area NAME rather than per-conference flags?
+ *
+ * express.e:458-465 isConfAccessAreaName: any character that is neither `X`
+ * nor `_` makes the whole field a name. An empty field is flags (granting
+ * nothing).
+ */
+export function isConfAccessAreaName(access: string | null | undefined): boolean {
+  return /[^X_]/.test(access ?? '');
+}
+
 /** `AREA.<name>.info`, and `<name>` is what a user's access field holds. */
 const AREA_FILE = /^AREA\.(.+)\.info$/i;
 

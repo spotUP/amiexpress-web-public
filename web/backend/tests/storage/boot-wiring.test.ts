@@ -836,7 +836,21 @@ describe('refreshStorageContext', () => {
  *      boundary - so the deletion is ALSO a red test and not merely a red
  *      build, whatever the call site looks like.
  */
-describe('production actually supplies the catalog seeder', () => {
+/**
+ * A pool of one s3 drive whose bucket already holds `bytes` - put there by
+ * another node, an earlier run, or by hand - with no catalogue row for any of
+ * it. What DRIVE.n.QUOTA is measured against is what this bucket holds.
+ */
+async function bucketHolding(bytes: number): Promise<{ volumes: VolumeSet; fake: FakeBackend }> {
+  const root = boardWithDrivesInfo(['DRIVE.1=s3://bucket', 'DRIVE.1.KEYID=k']);
+  writeSecret(root, 1, 'sekrit');
+  const fake = new FakeBackend({ driveNumber: 1 });
+  await fake.put('Conf1/Files/ALREADY.LHA', Buffer.alloc(bytes));
+  const volumes = VolumeSet.fromBoard(root, { backendFactory: () => fake });
+  return { volumes, fake };
+}
+
+describe('production measures the bucket, not the catalogue', () => {
   /** Every refreshStorageContext call a production caller made. */
   const refreshes: Array<{ opts: any }> = [];
   const recordRefreshes = () => {
@@ -858,14 +872,15 @@ describe('production actually supplies the catalog seeder', () => {
     const { bootBoard } = require('../support/booted-board');
     const board = await bootBoard('boot-wiring-seeder-');
     try {
-      const { db } = require('../../src/database');
-      const seeded = await db.usedBytesByVolume();
       expect(refreshes).toHaveLength(1); // the boot
       await require('../../src/services/conference-change-bus').notifyConferencesChanged();
       expect(refreshes).toHaveLength(2); // and the conference bus
+      const { volumes } = await bucketHolding(3000);
       for (const { opts } of refreshes) {
         expect(typeof opts.usedBytesByVolume).toBe('function');
-        expect(await opts.usedBytesByVolume()).toEqual(seeded);
+        // The bucket holds 3000 bytes and the booted board's catalogue holds
+        // no row for them: the seeder must answer what is IN the bucket.
+        expect(await opts.usedBytesByVolume(volumes)).toEqual(new Map([[1, 3000]]));
       }
     } finally {
       board.cleanup();
@@ -879,8 +894,9 @@ describe('production actually supplies the catalog seeder', () => {
     refreshes.length = 0;
     const quiet = quietly();
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'boot-wiring-drives-'));
-    const seeded = new Map([[1, 5 * 1024 * 1024]]);
-    const database = { usedBytesByVolume: () => seeded, getConfigRepository: () => ({}) } as never;
+    // A catalogue that claims 5 MB the bucket does not hold - the seeder must
+    // not believe it.
+    const database = { usedBytesByVolume: () => new Map([[1, 5 * 1024 * 1024]]), getConfigRepository: () => ({}) } as never;
     let service: any;
     let appConfig: any;
     jest.isolateModules(() => {
@@ -895,7 +911,8 @@ describe('production actually supplies the catalog seeder', () => {
       await service.writeDriveSecret(1, 'sekrit');
       expect(refreshes).toHaveLength(1);
       expect(typeof refreshes[0].opts.usedBytesByVolume).toBe('function');
-      expect(await refreshes[0].opts.usedBytesByVolume()).toBe(seeded);
+      const { volumes } = await bucketHolding(3000);
+      expect(await refreshes[0].opts.usedBytesByVolume(volumes)).toEqual(new Map([[1, 3000]]));
     } finally {
       appConfig.set('dataDir', previousDataDir);
       jest.dontMock('../../src/storage');

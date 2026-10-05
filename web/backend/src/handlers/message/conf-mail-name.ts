@@ -4,6 +4,7 @@
  * message-entry.handler.ts, which re-exports them.
  */
 import type { BBSSession } from '../../index';
+import { joinedConf } from '../../utils/joined-conf.util';
 
 /**
  * express.e:10787-10788 — EXTSEND.<msgBase> tooltype on the conf icon marks
@@ -12,8 +13,7 @@ import type { BBSSession } from '../../index';
  *   - express.e:10860: Private prompt is skipped
  */
 export function isExtSendMsgBase(session: BBSSession): boolean {
-  const confId = session.currentConf || 1;
-  const msgBaseId = session.currentMsgBase || 1;
+  const { conf: confId, msgBase: msgBaseId } = joinedConf(session);
   const { getConferenceToolFlags } = require('../../utils/conference-tooltypes.util');
   const flags = getConferenceToolFlags(confId);
   return !!flags?.extSendMsgBases?.has?.(msgBaseId);
@@ -69,7 +69,8 @@ export function getConfNameType(confId: number, msgBaseId: number): ConfNameType
  * 11179, 11202, 11706, 11749, 11918-11919, 12087-12089, 12345-12348).
  */
 export function getConfMailName(session: BBSSession): string {
-  return getConfMailNameFor(session.user, session.currentConf || 1, session.currentMsgBase || 1);
+  const { conf, msgBase } = joinedConf(session);
+  return getConfMailNameFor(session.user, conf, msgBase);
 }
 
 /**

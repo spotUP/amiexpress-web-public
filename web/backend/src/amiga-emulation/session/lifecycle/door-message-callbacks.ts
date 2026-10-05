@@ -56,7 +56,13 @@ const BLOCKING_COMMANDS = [6, 0, 5, 15, 9]; // JH_HK=6, JH_LI=0, JH_PM=5, JH_Ext
  * Numbers must match XIMCommand enum (web/backend/src/amiga-emulation/xim/types.ts):
  *   JH_SG=7, JH_SF=8, JH_MCI=507, DISPLAY_FILE=617, CHECK_TO_DISPLAY=618
  */
-const ASYNC_OUTPUT_COMMANDS = [7, 8, 507, 617, 618];
+// 10300 AEW_SETPOINTER and 10500 AEW_POSTMSG write to disk and the
+// database before they answer, and the door READS BACK what they did. Replied
+// to early (the default below), the door's read-back raced the handler: SUBS
+// posted through the board, the board saved message 324, and the door read
+// "READY" - the answer from before SEND - and told the caller it was not
+// posted (headless harness, 2026-10-04).
+const ASYNC_OUTPUT_COMMANDS = [7, 8, 507, 617, 618, 10300, 10500];
 
 /** 5 s wall-clock deadline mirrors AEDoorLibrary.waitForReply. */
 const ASYNC_HANDLER_DEADLINE_MS = 5000;

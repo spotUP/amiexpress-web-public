@@ -23,6 +23,13 @@ import type { HostFacts } from '../utils/host-vars';
 import { amigaGaps, doorOf } from '../instrumentation/amiga-gaps';
 import { getLvoName } from '../constants/lvo-names.generated';
 import { matchAmigaPattern, parseAmigaPattern } from '../../utils/amiga-pattern';
+import { tryLockExclusive, unlockExclusive, releaseAllHeldBy } from '../../utils/mail-lock';
+import { getStorageContext } from '../../storage/storage-context';
+import { pooledPathOf, materialisePooledPath } from '../../storage/remote-download';
+import { isStorageUnavailable } from '../../storage/file-cache';
+
+/** dos/dos.i ERROR_DEVICE_NOT_MOUNTED (NDK 3.1): the volume holding the file cannot answer. */
+const IOERR_DEVICE_NOT_MOUNTED = 218;
 import {
   // Constants
   MODE_OLDFILE,
@@ -45,6 +52,7 @@ import {
   READARGS_DEFAULT_BUFFER_SIZE,
   READARGS_HEAP_BASE,
   DOS_ERRORS,
+  ACCESS_WRITE,
   ENV_VAR_STRUCT_BASE,
   ENV_STRING_BASE,
   ENV_VAR_STRUCT_SIZE,
@@ -675,6 +683,60 @@ debugLog(`[dos.library] queueInput: ${typeof data === 'string' ? JSON.stringify(
     data.copy(fileHandle.buffer, fileHandle.position);
     fileHandle.position += data.length;
     return { bytes: data.length };
+  }
+
+  /**
+   * Open() of a file that lives in a cloud bucket (the door bridge).
+   *
+   * A file uploaded into a pooled area is an object in the pool, not a file
+   * in the area's directory, so a door opening `BBS:Conf1/Files/X.LHA` finds
+   * nothing on disk. When the path is missing locally, MODE_OLDFILE, and inside
+   * a pooled area, the object is fetched into the board's file cache and opened
+   * read-only - the door reads the same bytes a download would send.
+   *
+   * The fetch is asynchronous and this is a trap: deasync cannot drain it here
+   * (under DOOR_ASYNC_WAIT the batch is a promise continuation, see
+   * FileCache.ensureLocalSync). So the door waits the way it waits for a key in
+   * DreamDoorLibrary.getKey: D0 is a placeholder, the emulator pauses, and the
+   * handle is written to D0 before it resumes. Only the -30 trap comes here -
+   * FOpen() calls Open() for a synchronous answer.
+   *
+   * true = this call answers the Open; false = not a pooled path, carry on.
+   */
+  private openFromPool(): boolean {
+    const storage = getStorageContext();
+    if (!storage || !this.useNewFileSystem || !this.fileManager) return false;
+    const mode = this.emulator.getRegister(CPURegister.D2);
+    if (mode !== MODE_OLDFILE) return false;
+    const filename = this.narrowArtFor(this.readString(this.emulator.getRegister(CPURegister.D1)), mode);
+    const sysPath = this.fileManager.sysPathOf(filename);
+    if (!sysPath || amigafs.existsSync(sysPath)) return false;
+    const pooled = pooledPathOf(sysPath, storage, this.bbsDataPath);
+    if (!pooled) return false;
+
+    const fileManager = this.fileManager;
+    this.logDoorFile(`OPEN pool ami="${filename}" -> fetching`);
+    this.emulator.setRegister(CPURegister.D0, 0);
+    this.emulator.pause();
+    const answer = (bptr: number, ioErr: number) => {
+      if (!this.emulator.isPaused()) return; // the door was torn down meanwhile
+      this.lastError = ioErr;
+      this.emulator.setRegister(CPURegister.D0, bptr);
+      this.logDoorFile(`OPEN pool ${bptr ? `ok handle=${bptr}` : `fail IoErr=${ioErr}`} ami="${filename}"`);
+      this.emulator.resume();
+    };
+    materialisePooledPath(pooled, storage).then(
+      (local) => {
+        const bptr = local ? fileManager.openReadOnly(filename, local) : 0;
+        answer(bptr, bptr ? DOS_ERRORS.ERROR_NO_ERROR : DOS_ERRORS.ERROR_OBJECT_NOT_FOUND);
+      },
+      (error: unknown) => {
+        console.warn(`[dos.library] Open("${filename}") from the pool failed:`, error);
+        // A volume that cannot answer is not a missing file (storage/remote-download.ts).
+        answer(0, isStorageUnavailable(error) ? IOERR_DEVICE_NOT_MOUNTED : DOS_ERRORS.ERROR_OBJECT_NOT_FOUND);
+      },
+    );
+    return true;
   }
 
   /**
@@ -2434,6 +2496,18 @@ debugLog(
       `[dos.library] 🔒 Lock("${name}") -> "${realPath}" - ✅ EXISTS`
     );
 
+    // An EXCLUSIVE lock is a claim other holders can see - express.e's
+    // lockMsgBase (express.e:11944-11964) is exactly this call on MailLock,
+    // and the board's own writer takes the same lock (utils/mail-lock.ts).
+    // AmigaOS refuses a second exclusive lock with ERROR_OBJECT_IN_USE.
+    const exclusive = (mode | 0) === ACCESS_WRITE;
+    if (exclusive && !tryLockExclusive(realPath, this)) {
+      this.lastError = DOS_ERRORS.ERROR_OBJECT_IN_USE;
+debugLog(`[dos.library] Lock("${name}") exclusive - held elsewhere [IoErr=${this.lastError}]`);
+      this.emulator.setRegister(CPURegister.D0, 0);
+      return;
+    }
+
     // Create lock with FileLock structure in memory
     const lockId = this.nextLockId++;
     const bptr = this.allocateFileLock(lockId, mode);
@@ -2474,6 +2548,7 @@ debugLog(`[dos.library] UnLock: BPTR 0 (no-op)`);
     for (const [lockId, lock] of this.locks.entries()) {
       if (lock.bptr === bptrIn) {
 debugLog(`[dos.library] UnLock: Released lock ${lockId} (BPTR ${bptrIn})`);
+        if ((lock.mode | 0) === ACCESS_WRITE) unlockExclusive(lock.path, this);
         this.locks.delete(lockId);
         // Note: We don't explicitly free the FileLock memory since allocateTemp()
         // allocations are temporary and will be reclaimed automatically
@@ -6728,6 +6803,7 @@ debugLog(
     switch (offset) {
       // File operations
       case -30:
+        if (this.openFromPool()) return true;
         this.emulator.setRegister(CPURegister.D0, this.Open());
         return true;
       case -36:
@@ -7693,6 +7769,9 @@ debugLog(`[dos.library] Allocated FileHandle struct at 0x${addr.toString(16)} (B
   cleanup(): void {
     // Clear all tracked state (file handles use buffered I/O, no FDs to close)
     this.openFiles.clear();
+    // AmigaOS drops a dead task's locks; so does this, or a door killed
+    // between lockMsgBase and UnLock would lock the base for ever.
+    releaseAllHeldBy(this);
     this.locks.clear();
     this.dirIterators.clear();
     this.envVarCache.clear();

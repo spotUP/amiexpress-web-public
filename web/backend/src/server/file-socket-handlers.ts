@@ -42,16 +42,13 @@ import { onCaller } from "./socket-guard";
 import { callersLog } from "./database-helpers";
 import { SysopDebugUtil } from "../utils/sysop-debug.util";
 import { emitUpload } from "../services/bbs-event-emitter";
-import { userFileManager } from "../services/UserFileManager";
 import { getSystemTime } from '../utils/date-time.util';
 import {
   getUploadContextById,
   deleteUploadContextById,
 } from "./upload-session-store";
 import { reportUpload } from '../achievements/sites';
-import { messagePointerFileManager } from '../services/MessagePointerFileManager';
-import { checkSecurity, getACSConfig, ToggleFlags } from '../utils/acs.util';
-import { ACSPermission } from '../constants/acs-permissions';
+import { getACSConfig, ToggleFlags } from '../utils/acs.util';
 
 
 /**
@@ -510,11 +507,14 @@ console.error(`[testFile] Error:`, error);
     fileStatus = filing.status;
     checkedMarker = filing.marker;
 
-    // Update user stats in users table (express.e:19379-19384)
-    // Express.e: Stats ONLY updated when status=RESULT_SUCCESS (not for duplicates/failures)
-    // Use SQL arithmetic to avoid JavaScript number overflow for bytesUpload (BIGINT)
+    // The upload is the caller's, in memory (express.e:19380-19382 uploads+1,
+    // 19442-19446 the bytes): loggedOnUser, which under ACS_CONFERENCE_
+    // ACCOUNTING holds the CURRENT conference's counters (loadMsgPointers
+    // 4893-4905) and goes back into that conference's Conf.DB record at the
+    // next saveMsgPointers (4929-4939). The record reaches user.data at
+    // logoff (8207) - not here, and not from the row.
     //
-    // Also gated on !quarantineFailed: when the pooled put AND the fallback
+    // Gated on !quarantineFailed too: when the pooled put AND the fallback
     // HOLD quarantine both failed the file exists nowhere but the playpen,
     // and crediting the caller's ratio/byte count for it would be paying out
     // for a file nobody can ever download.
@@ -523,15 +523,7 @@ console.error(`[testFile] Error:`, error);
       // A message's file earns the upload count (19377-19380) and nothing
       // else: no bytes (19442 `rzmsg=NIL`), no listing, no announcement.
       if (trackUploads && !foundDupe) {
-        await db.run("UPDATE users SET uploads = uploads + 1, updated = CURRENT_TIMESTAMP WHERE id = $1", [session.user!.id]);
         session.user!.uploads = (session.user!.uploads || 0) + 1;
-        if (session.user!.slotNumber) {
-          try {
-            userFileManager.updateUserDataFile(session.user!, session.user!.slotNumber);
-          } catch (diskErr) {
-console.error("[Upload] Error writing user disk files:", diskErr);
-          }
-        }
       }
     }
     if (trackUploads && !foundDupe && !quarantineFailed && !rzmsg) {
@@ -539,90 +531,17 @@ console.error("[Upload] Error writing user disk files:", diskErr);
       const realUploadCPS = session.tempData?.lastUploadCPS || undefined;
       await updateUploadStats(session.user!, data.size, realUploadCPS);
 
-      // Build SET clause conditionally - only update topuploadcps if we have a new high
-      const userTopCPS = session.user!.topUploadCPS || 0;
-      const updateTopCPS = userTopCPS > 0;
-
-      if (updateTopCPS) {
-        // Note: SQLite uses positional ? placeholders, so we need to provide
-        // the CPS value twice since it appears twice in the CASE expression
-        await db.run(
-          `
-          UPDATE users
-          SET uploads = uploads + 1,
-              bytesupload = bytesupload + $1,
-              topuploadcps = CASE WHEN topuploadcps < $3 THEN $4 ELSE topuploadcps END,
-              updated = CURRENT_TIMESTAMP
-          WHERE id = $2
-        `,
-          [data.size, session.user!.id, userTopCPS, userTopCPS]
-        );
-      } else {
-        await db.run(
-          `
-          UPDATE users
-          SET uploads = uploads + 1,
-              bytesupload = bytesupload + $1,
-              updated = CURRENT_TIMESTAMP
-          WHERE id = $2
-        `,
-          [data.size, session.user!.id]
-        );
-      }
-
       await db.run(
         "UPDATE user_stats SET bytes_uploaded = bytes_uploaded + $1, files_uploaded = files_uploaded + 1 WHERE user_id = $2",
         [data.size, session.user!.id]
       );
 
-      // Update session.user with new values BEFORE writing to disk
-      // This ensures User.Data gets the updated stats for mtop/bulletins
+      // express.e:19444 CREDITBYKB books kilobytes.
+      const booked = getACSConfig().toggles[ToggleFlags.CREDITBYKB] === true
+        ? Math.floor(data.size / 1024) & 0x003fffff
+        : data.size;
       session.user!.uploads = (session.user!.uploads || 0) + 1;
-      session.user!.bytesUpload = (session.user!.bytesUpload || 0) + data.size;
-
-      // DISK-BASED: Write updated upload stats to user.data/keys/misc files
-      if (session.user!.slotNumber) {
-        try {
-          userFileManager.updateUserDataFile(
-            session.user!,
-            session.user!.slotNumber
-          );
-console.log(
-            `[Upload] Updated user ${
-              session.user!.username
-            } disk files with upload stats (uploads=${
-              session.user!.uploads
-            }, bytes=${session.user!.bytesUpload}, slot=${
-              session.user!.slotNumber
-            })`
-          );
-        } catch (diskErr) {
-console.error("[Upload] Error writing user disk files:", diskErr);
-          // Continue anyway - database has the stats, sync can happen later
-        }
-      }
-    }
-
-    // Per-conference upload accounting. express.e:19382 / 19444-19446 add the
-    // upload to loggedOnUser, which under ACS_CONFERENCE_ACCOUNTING holds the
-    // CURRENT conference's record (loadMsgPointers 4893-4905) and goes back
-    // into the caller's Conf.DB slot at saveMsgPointers (4929-4939) - unless
-    // the conference's database is CONFDB_SHARED (4895). It is the caller's
-    // own record, never a row the whole board shares.
-    try {
-      const slot = Number(session.user!.slotNumber) || 0;
-      const conf = session.currentConf || 0;
-      if (trackUploads && !foundDupe && !quarantineFailed && !rzmsg && slot > 0 && conf > 0
-        && checkSecurity(session.user!, ACSPermission.CONFERENCE_ACCOUNTING)
-        && !messagePointerFileManager.isShared(conf)) {
-        // express.e:19444 CREDITBYKB books kilobytes.
-        const size = getACSConfig().toggles[ToggleFlags.CREDITBYKB] === true
-          ? Math.floor(data.size / 1024) & 0x003fffff
-          : data.size;
-        messagePointerFileManager.addUpload(conf, slot, size);
-      }
-    } catch (err) {
-console.error("[Upload] Failed to book the conference upload", err);
+      session.user!.bytesUpload = (session.user!.bytesUpload || 0) + booked;
     }
 
     // Log file upload (express.e:9493 callersLog)

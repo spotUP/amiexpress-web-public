@@ -100,7 +100,9 @@ async function onDiskById(id: string): Promise<any> {
 /** A value for `field` that differs from what the record holds now. */
 function changed(field: string, current: unknown): unknown {
   if (field === 'username') return `renamed${accounts}`;
-  if (field === 'confAccess') return String(current ?? '').startsWith('X') ? '-'.repeat(10) : 'X'.repeat(10);
+  // Nine flags: the field is nine characters and a NUL, as express.e's
+  // AstrCopy(..,10) writes it (848aa4329) - a tenth is not a value it holds.
+  if (field === 'confAccess') return String(current ?? '').startsWith('X') ? '-'.repeat(9) : 'X'.repeat(9);
   if (typeof current === 'boolean' || field === 'accountLocked' || field === 'expert') return !current;
   if (typeof current === 'number') return current === 42 ? 43 : 42;
   // Short: the record's fields are fixed width (phone holds 12).

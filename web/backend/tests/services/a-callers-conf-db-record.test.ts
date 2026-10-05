@@ -69,10 +69,11 @@ describe("a caller's Conf.DB record", () => {
     expect(recordOnDisk('Conf2', 1).confYM).toBe(77);
   });
 
-  test('a download is booked in BCD, LONG and count; an upload likewise', () => {
+  test('a download is booked in BCD, LONG and count; the swapped-out account likewise', () => {
     mgr.addDownload(1, 2, 1000);
     mgr.addDownload(1, 2, 24);
-    mgr.addUpload(1, 2, 500);
+    // saveMsgPointers' account half (express.e:4929-4939) after one upload.
+    mgr.putAccount(1, 2, { bytesDownload: 1024, bytesUpload: 500, uploads: 1, downloads: 2, ratioType: 0, ratio: 0 });
 
     const rec = recordOnDisk('Conf1', 2);
     expect(rec.downloads).toBe(2);

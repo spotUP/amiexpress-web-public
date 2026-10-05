@@ -155,13 +155,11 @@ export class FileRepository extends BaseRepository<any> {
   }
 
   /**
-   * Bytes each pooled volume actually holds, from the CATALOG - not
-   * `VolumeState.usedBytes`, the in-process counter that starts at 0 on every
-   * boot and is only ever incremented by `FileCache.writeBack`. Nothing
-   * reconciles that counter against reality, so it under-reports at boot and
-   * only ever drifts further from the truth; the catalog is what the pool
-   * actually contains, whether this process wrote every byte of it or not.
-   * This is the number Task 11's admin page shows as "used".
+   * The catalogue's SUM(size) per pooled volume - what the port's own rows
+   * claim, NOT what the bucket holds. A pooled file with no row is missing
+   * from it, so it is not what DRIVE.n.QUOTA is enforced against or what the
+   * admin shows as "used": both read `VolumeState.usedBytes`, which is
+   * measured from the bucket itself (`storage/index.ts#measureVolumeBytes`).
    */
   usedBytesByVolume(): Map<number, number> {
     const rows = this.all<{ storage_volume: number; total: number | null }>(

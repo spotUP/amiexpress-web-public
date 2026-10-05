@@ -16,6 +16,7 @@ import { callersLogManager } from '../../services/CallersLogManager';
 
 import type { BBSSession, UploadSessionContext } from '../../index';
 import { formatLongDate } from '../../utils/date-time.util';
+import { joinedConf } from '../../utils/joined-conf.util';
 import { isNarrow } from '../../utils/table-format.util';
 import { sessionColumns } from '../../utils/door-min-columns.util';
 import { storeUploadContext } from '../../server/upload-session-store';
@@ -311,6 +312,9 @@ console.log('[displayNewFiles] Search date:', searchDate);
     // FileListingHandler owns the DIR walk, the row painter and the pause,
     // which is why the scan lives beside `F` rather than in a second copy
     // here. express.e:27906-28023.
+    // express.e:27902 newSinceFlag:=1 - the logoff then moves the account's
+    // newSinceDate to now (8197), and the conference records theirs (4911).
+    session.newSinceFlag = true;
     const { FileListingHandler } = require('./file-listing.handler');
     await FileListingHandler.handleNewFileScan(socket, session, searchDate, nonStopDisplay);
   } catch (error) {
@@ -335,8 +339,10 @@ export function displayUploadInterface(socket: any, session: BBSSession, params:
   emitText(socket, AnsiUtil.clearScreen());
 
   // express.e:25646 internalCommandU -> uploadaFile()
-  // Check NDIRS (file areas exist in this conference)
-  const currentFileAreas = fileAreas.filter(area => area.conferenceId === session.currentConf);
+  // express.e:18974 IF(maxDirs=0): the joined conference's NDIRS, which in a
+  // scan (a reply's X) is the scanned conference while currentConf is 0.
+  const uploadConf = joinedConf(session).conf;
+  const currentFileAreas = fileAreas.filter(area => area.conferenceId === uploadConf);
 
   if (currentFileAreas.length === 0) {
     emitText(socket, '\r\nNo file directories available.\r\n');

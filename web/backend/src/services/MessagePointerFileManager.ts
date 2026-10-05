@@ -318,18 +318,22 @@ export class MessagePointerFileManager {
   }
 
   /**
-   * express.e:19382 / 19445-19446 with 4930-4937: under conference accounting
-   * the caller's live upload counters ARE the current conference's record,
-   * and saveMsgPointers writes them back to it. The port does not swap the
-   * account's counters per conference, so the record takes the upload here.
+   * saveMsgPointers' account half (express.e:4929-4939): under conference
+   * accounting the caller's live counters ARE this conference's, and go back
+   * into his record - the bytes as BCD and LONG, files, ratio type and ratio.
    */
-  addUpload(conferenceId: number, slotNumber: number, size: number): void {
-    const rec = this.readRecordOrZero(conferenceId, slotNumber);
-    const bcd = addBCD(accountedBytes(rec.bytesUpload, rec.uploadBytesBCD), Math.max(0, size));
+  putAccount(conferenceId: number, slotNumber: number, account: ConferenceAccountFields): void {
+    const down = BigInt(Math.max(0, Math.trunc(account.bytesDownload || 0)));
+    const up = BigInt(Math.max(0, Math.trunc(account.bytesUpload || 0)));
     this.patchRecord(conferenceId, slotNumber, {
-      uploadBytesBCD: writePackedBCD(bcd),
-      bytesUpload: toLong(bcd),
-      upload: (rec.upload + 1) & 0xffff,
+      downloadBytesBCD: writePackedBCD(down),
+      bytesDownload: toLong(down),
+      uploadBytesBCD: writePackedBCD(up),
+      bytesUpload: toLong(up),
+      upload: (account.uploads || 0) & 0xffff,
+      downloads: (account.downloads || 0) & 0xffff,
+      ratioType: (account.ratioType || 0) & 0xffff,
+      ratio: (account.ratio || 0) & 0xffff,
     });
   }
 
@@ -388,6 +392,16 @@ export function withScanFlags(rec: ConfBaseRecord, flags: number): Buffer {
   const handle = Buffer.from(rec.handle);
   handle[0] = flags & 0xff;
   return handle;
+}
+
+/** The counters loadMsgPointers / saveMsgPointers swap under conference accounting (express.e:4896-4905). */
+export interface ConferenceAccountFields {
+  bytesDownload: number;
+  bytesUpload: number;
+  uploads: number;
+  downloads: number;
+  ratioType: number;
+  ratio: number;
 }
 
 export const messagePointerFileManager = new MessagePointerFileManager();

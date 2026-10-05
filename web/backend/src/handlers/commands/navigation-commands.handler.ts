@@ -17,6 +17,7 @@ import { RESULT_NOT_ALLOWED, InternalCommandResult } from '../../constants/comma
 import { LoggedOnSubState } from '../../constants/bbs-states';
 import { finalizeCommand } from '../../utils/command-response.util';
 import { getSystemTime } from '../../utils/date-time.util';
+import { saveConferenceAccount } from '../../utils/message-pointers.util';
 
 import type { BBSSession } from '../../index';
 
@@ -133,8 +134,10 @@ export async function handlePreviousConferenceCommand(
     return RESULT_NOT_ALLOWED;
   }
 
-  // express.e:24531 - saveMsgPointers(currentConf, currentMsgBase)
-  // This is handled by joinConference function
+  // express.e:24531 - saveMsgPointers(currentConf, currentMsgBase): the
+  // conference's account half before the next join loads another's. The
+  // read pointers are already in the record (written as they move).
+  saveConferenceAccount(session, session.currentConf || 0);
 
   // express.e:24533 - setEnvStat(ENV_JOIN)
 console.log('[ENV] Join - Previous Conference');
@@ -184,8 +187,10 @@ export async function handleNextConferenceCommand(
     return RESULT_NOT_ALLOWED;
   }
 
-  // express.e:24550 - saveMsgPointers(currentConf, currentMsgBase)
-  // This is handled by joinConference function
+  // express.e:24550 - saveMsgPointers(currentConf, currentMsgBase): the
+  // conference's account half before the next join loads another's. The
+  // read pointers are already in the record (written as they move).
+  saveConferenceAccount(session, session.currentConf || 0);
 
   // express.e:24552 - setEnvStat(ENV_JOIN)
 console.log('[ENV] Join - Next Conference');
@@ -219,8 +224,10 @@ console.log('[ENV] Join - Next Conference');
  * 1:1 port from express.e:24566-24578 internalCommandLT2()
  */
 export async function handlePreviousMessageBaseCommand(socket: any, session: BBSSession): Promise<void> {
-  // express.e:24567 - saveMsgPointers(currentConf, currentMsgBase)
-  // This is handled by joinConference function
+  // express.e:24567 - saveMsgPointers(currentConf, currentMsgBase): the
+  // conference's account half before the next join loads another's. The
+  // read pointers are already in the record (written as they move).
+  saveConferenceAccount(session, session.currentConf || 0);
 
   // express.e:24569 - setEnvStat(ENV_JOIN)
 console.log('[ENV] Join - Previous Message Base');
@@ -251,8 +258,10 @@ console.log('[ENV] Join - Previous Message Base');
  * 1:1 port from express.e:24580-24592 internalCommandGT2()
  */
 export async function handleNextMessageBaseCommand(socket: any, session: BBSSession): Promise<void> {
-  // express.e:24581 - saveMsgPointers(currentConf, currentMsgBase)
-  // This is handled by joinConference function
+  // express.e:24581 - saveMsgPointers(currentConf, currentMsgBase): the
+  // conference's account half before the next join loads another's. The
+  // read pointers are already in the record (written as they move).
+  saveConferenceAccount(session, session.currentConf || 0);
 
   // express.e:24583 - setEnvStat(ENV_JOIN)
 console.log('[ENV] Join - Next Message Base');

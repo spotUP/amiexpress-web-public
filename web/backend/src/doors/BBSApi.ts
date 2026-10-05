@@ -25,6 +25,7 @@ import { LoggedOnSubState } from '../constants/bbs-states';
 import { PetsciiStreamConverter } from '../utils/petscii.util';
 import { db } from '../database';
 import { checkConfAccess } from '../handlers/message/message-scan.handler';
+import { changeAccount } from '../services/account.service';
 import { getSystemTime } from '../utils/date-time.util';
 import {
   enableGameMode as enableGameModeForSession,
@@ -1870,8 +1871,9 @@ console.log(`[BBSApi.executeCommand] Queued command for after door exit: ${comma
 
   /**
    * Achievements (SP3, S1): a caller with no address is not a player, and
-   * the ACHIEVE door is where one is asked for. Stored on the user record
-   * and on the live session, so the reporter sees it from now on. Returns
+   * the ACHIEVE door is where one is asked for. Changed on the caller's
+   * account in memory, so the reporter sees it from now on, and written to
+   * the user record with the account at logoff (express.e 8207). Returns
    * false (and changes nothing) for anything that is not shaped like an
    * address.
    */
@@ -1879,8 +1881,8 @@ console.log(`[BBSApi.executeCommand] Queued command for after door exit: ${comma
     const trimmed = String(email ?? '').trim();
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed) || trimmed.length > 254 || !this.session.user?.id) return false;
     try {
-      await db.updateUser(this.session.user.id, { email: trimmed } as any);
-      this.session.user.email = trimmed;
+      // The caller's own account, in memory; saved with it (express.e 8207).
+      await changeAccount(this.session, { email: trimmed });
       return true;
     } catch (error) {
       console.warn(`[WARN] achievements: could not store the address: ${(error as Error).message}`);

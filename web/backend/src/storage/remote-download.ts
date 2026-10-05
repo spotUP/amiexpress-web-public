@@ -17,6 +17,7 @@
 import * as path from 'path';
 import * as fs from 'fs';
 import {
+  areaByRealPath,
   objectPrefixFor,
   remoteLocationFor,
   type CatalogLocationRow,
@@ -270,6 +271,44 @@ async function materialise(driveNumber: number, key: string, storage: StorageCon
     driveNumber,
     key,
   };
+}
+
+/** A path a door opened, inside a usable pooled area: the area and the name within it. */
+export interface PooledPath {
+  area: RemoteArea;
+  relative: string;
+}
+
+/**
+ * The door bridge, first half: is this path one the pool serves?
+ *
+ * A 68K door opens files by path, and a pooled area keeps no local copy. When
+ * `realPath` (already resolved by the emulator) lies inside a pooled area this
+ * board can read from - the download side's own rule, `usable-areas.ts` - the
+ * answer is that area and the name within it; null leaves the path to local
+ * disk. Pure and synchronous, so a DOS trap can ask before deciding to wait.
+ */
+export function pooledPathOf(realPath: string, storage: StorageContext, dataDir: string): PooledPath | null {
+  const found = areaByRealPath(realPath, storage.areas, dataDir);
+  if (!found) return null;
+  if (!usableAreas(found.area.conferenceId, storage).includes(found.area)) return null;
+  return found;
+}
+
+/**
+ * The door bridge, second half: the object behind a door's path, fetched into
+ * the board's file cache. Resolves the cached local copy, or null when the area
+ * holds no such name (looked up case-insensitively, as AmigaDOS names are);
+ * rejects with StorageUnavailableError when the volume cannot answer. The copy
+ * belongs to the cache - the door gets it read-only.
+ */
+export async function materialisePooledPath(pooled: PooledPath, storage: StorageContext): Promise<string | null> {
+  const driveNumber = pooled.area.storageVolume;
+  if (driveNumber === undefined) return null;
+  const index = storage.names.forArea(driveNumber, objectPrefixFor(pooled.area));
+  const key = await index.resolve(pooled.relative.split(path.sep).join('/'));
+  if (key === null) return null;
+  return (await materialise(driveNumber, key, storage)).fullPath;
 }
 
 /**

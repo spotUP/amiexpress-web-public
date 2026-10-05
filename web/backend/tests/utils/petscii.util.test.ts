@@ -641,10 +641,13 @@ describe('petscii.util', () => {
     });
 
     it('should still drop CLR and other unmapped control bytes', () => {
-      // 0x93 CLR and 0x05 WHITE carry no ASCII meaning and go. 0x03 is NOT in
-      // this set any more - see the RUN/STOP case above - so it is not in the
-      // buffer here, or this test would be asserting two rules at once.
-      const buffer = Buffer.from([0x93, 0x05]);
+      // 0x93 CLR, 0x0A LF and the charset bytes 0x0E/0x8E carry no input
+      // meaning and go. 0x03 is NOT in this set any more - see the RUN/STOP
+      // case above - and neither is a colour byte such as 0x05 WHITE: since
+      // 84ccd0ffe a colour key is the pen and arrives as the board's colour
+      // marker. Neither is in the buffer here, or this test would be asserting
+      // two rules at once.
+      const buffer = Buffer.from([0x93, 0x0A, 0x0E, 0x8E]);
       const result = convertPetsciiInputToAscii(buffer);
 
       expect(result).toBe('');

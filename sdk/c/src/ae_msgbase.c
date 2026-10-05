@@ -56,7 +56,7 @@
  */
 static char base_dir[AE_MSG_PATH_MAX];
 static char caller_name[AE_MSG_NAME_MAX];
-static int  caller_is_sysop;
+static int  caller_access;   /* AE_MSG_SEE_* bits */
 static long caller_pointer;
 static int  base_open;
 
@@ -213,8 +213,12 @@ static void record_to_row(const unsigned char *record, int layout, ae_msg_row *o
     out->status = (char)record[0];
 
     /* 'N' beats '*' beats '-': a new censored message is reported new, since
-     * that is the fact the caller is looking for in a list. */
-    if (caller_pointer >= 0 && out->number > caller_pointer) out->flag = 'N';
+     * that is the fact the caller is looking for in a list.
+     *
+     * AT the pointer is new: the scan pointer is lastNewReadConf, the NEXT
+     * number to scan - searchNewMail starts AT it and leaves it at msgNum+1
+     * (express.e:5103 prints it minus one as "Last message auto scanned"). */
+    if (caller_pointer >= 0 && out->number >= caller_pointer) out->flag = 'N';
     else if (out->status == AE_MSG_CENSORED) out->flag = '*';
     else out->flag = '-';
 }
@@ -232,10 +236,14 @@ int ae_msg_may_read(const ae_msg_row *row)
      * not on reading. */
     if (row->status == AE_MSG_PUBLIC || row->status == AE_MSG_CENSORED) return 1;
 
-    /* Private: sender, recipient, or a sysop (express.e:12343-12355). */
-    if (caller_is_sysop) return 1;
+    /* Private: the board's own rule (readit, express.e:12343-12355; the
+     * port's read-msg.ts mayReadPrivateMail): ACS_SYSOP_READ, the sender or
+     * the recipient, or READ_PRIV_EALL / READ_PRIV_ALL for mail to everyone. */
+    if (caller_access & AE_MSG_SEE_ALL_PRIVATE) return 1;
     if (same_name(row->to, caller_name)) return 1;
     if (same_name(row->from, caller_name)) return 1;
+    if ((caller_access & AE_MSG_SEE_PRIV_EALL) && same_name(row->to, "eall")) return 1;
+    if ((caller_access & AE_MSG_SEE_PRIV_ALL) && same_name(row->to, "all")) return 1;
     return 0;
 }
 
@@ -418,7 +426,7 @@ static int walk(row_fn visit, void *context, long *unreadable_out)
 
 /* ---- the public calls -------------------------------------------------- */
 
-int ae_msg_open(const char *dir, const char *caller, int sysop, long scan_pointer)
+int ae_msg_open(const char *dir, const char *caller, int access, long scan_pointer)
 {
     char path[AE_MSG_PATH_MAX];
     ae_file *f;
@@ -426,7 +434,7 @@ int ae_msg_open(const char *dir, const char *caller, int sysop, long scan_pointe
     base_open = 0;
     base_dir[0] = '\0';
     caller_name[0] = '\0';
-    caller_is_sysop = 0;
+    caller_access = 0;
     caller_pointer = -1;
 
     if (dir == 0 || dir[0] == '\0') return AE_MSG_ERR_ARGS;
@@ -437,7 +445,7 @@ int ae_msg_open(const char *dir, const char *caller, int sysop, long scan_pointe
         strncpy(caller_name, caller, sizeof(caller_name) - 1);
         caller_name[sizeof(caller_name) - 1] = '\0';
     }
-    caller_is_sysop = sysop ? 1 : 0;
+    caller_access = access;
     caller_pointer = scan_pointer;
 
     /* Prove the base is there NOW rather than at the first listing, so a door
@@ -611,6 +619,8 @@ int ae_msg_header(long number, ae_msg_row *out)
     return fw.found ? AE_MSG_OK : AE_MSG_ERR_ARGS;
 }
 
+static long to_latin1(char *text, long len, int cut);
+
 long ae_msg_body(long number, char *out, unsigned long cap)
 {
     ae_msg_row row;
@@ -639,7 +649,75 @@ long ae_msg_body(long number, char *out, unsigned long cap)
     if (got < 0) return 0;
 
     out[got] = '\0';
-    return got;
+    /* A full buffer may have cut the last character in half. */
+    return to_latin1(out, got, got == (long)(cap - 1));
+}
+
+/*
+ * The board's decodeMessageBody (web/backend/src/utils/message-file.util.ts):
+ * UTF-8 when the bytes are valid UTF-8, Latin-1 otherwise. The board writes
+ * UTF-8; an Amiga door or an Amiga board writes Latin-1. This door's screen
+ * is Latin-1 - every byte it puts out is one character, and the board turns
+ * that into the caller's charset - so a UTF-8 body comes down to Latin-1
+ * here, and a character Latin-1 has no room for becomes '?'.
+ */
+static int utf8_sequence(const unsigned char *p, long left, unsigned long *cp)
+{
+    unsigned char c = p[0];
+    int n, i;
+    unsigned long v;
+
+    if (c < 0x80) { *cp = c; return 1; }
+    if (c >= 0xC2 && c <= 0xDF) { n = 2; v = c & 0x1F; }
+    else if (c >= 0xE0 && c <= 0xEF) { n = 3; v = c & 0x0F; }
+    else if (c >= 0xF0 && c <= 0xF4) { n = 4; v = c & 0x07; }
+    else return 0;
+    for (i = 1; i < n; i++) {
+        if (i >= left) return -1;      /* the text ends inside the character */
+        if ((p[i] & 0xC0) != 0x80) return 0;
+        v = (v << 6) | (unsigned long)(p[i] & 0x3F);
+    }
+    /* Overlong and out-of-range forms are not UTF-8 (TextDecoder fatal). */
+    if (n == 3 && v < 0x800) return 0;
+    if (n == 3 && v >= 0xD800 && v <= 0xDFFF) return 0;
+    if (n == 4 && (v < 0x10000 || v > 0x10FFFF)) return 0;
+    *cp = v;
+    return n;
+}
+
+static long to_latin1(char *text, long len, int cut)
+{
+    const unsigned char *in = (const unsigned char *)text;
+    long i = 0, o = 0;
+    unsigned long cp;
+    int high = 0;
+
+    if (text == 0 || len <= 0) return len < 0 ? 0 : len;
+
+    /* Valid UTF-8 as a whole, or it is Latin-1 and left alone. A character
+       cut off by the caller's buffer is the buffer's doing, not the file's. */
+    while (i < len) {
+        int n = utf8_sequence(in + i, len - i, &cp);
+        if (n < 0 && cut) { len = i; break; }
+        if (n <= 0) return len;
+        if (n > 1) high = 1;
+        i += n;
+    }
+    if (!high) { text[len] = '\0'; return len; }
+
+    i = 0;
+    while (i < len) {
+        int n = utf8_sequence(in + i, len - i, &cp);
+        text[o++] = (char)(cp <= 0xFF ? cp : '?');
+        i += n;
+    }
+    text[o] = '\0';
+    return o;
+}
+
+long ae_msg_utf8_to_latin1(char *text, long len)
+{
+    return to_latin1(text, len, 0);
 }
 
 /* ---- writing ------------------------------------------------------------
@@ -651,8 +729,8 @@ long ae_msg_body(long number, char *out, unsigned long cap)
  * every_record_is_amiga_shaped.
  */
 
-/** Whether this node currently holds MailLock, so unlock cannot free another's. */
-static int lock_held;
+/** The MailLock handle this node holds, or 0, so unlock cannot free another's. */
+static long held_lock;
 
 /**
  * Refuse to append where the file is not uniformly AmiExpress-shaped.
@@ -686,114 +764,30 @@ static int every_record_is_amiga_shaped(void)
     return clean;
 }
 
-/** A lock older than this is a dead holder's, not a live one's. */
-#define AE_MSG_LOCK_STALE_SECONDS 30
-
 /**
- * The seconds this lock was taken at, or 0 when the file says nothing.
- *
- * 0 covers all three ways a lock file can be uninformative: absent, empty, or
- * holding something that is not a number. Each means the same thing here -
- * nobody who is still running wrote it.
+ * Take MailLock the way express.e does: lockMsgBase (express.e:11944-11964),
+ * an exclusive Lock() on the file, which is created when missing and never
+ * written or deleted. See ae_dos_lock for why there is no timestamp in it -
+ * there used to be, on a different clock from the board's, and a lock either
+ * side left behind blocked the other for hours (2026-10-04 SUBS proposal,
+ * conflict 1). On this port the board and every emulated door share one
+ * handle table, so the door and the board's own E agree on who is writing.
  */
-static long lock_stamp(const char *path)
-{
-    char text[32];
-    ae_file *f;
-    long got, value = 0;
-    int i = 0;
-
-    f = ae_dos_open(path, AE_DOS_READ);
-    if (f == 0) return 0;
-    got = ae_dos_read(f, text, (long)sizeof(text) - 1);
-    ae_dos_close(f);
-    if (got <= 0) return 0;
-    text[got] = 0;
-
-    /*
-     * SECONDS, from a stamp that may be written in MILLISECONDS.
-     *
-     * The board's own writer (services/MessageIndexManager.ts) stamps
-     * `Date.now()`, which is 13 digits and does not fit in a 32-bit long on
-     * this machine at all. The first ten digits of a millisecond stamp ARE
-     * its second stamp, so read those and stop: the two writers then judge
-     * each other's locks on the same scale, and neither posts over a holder
-     * that is still alive.
-     */
-    while (text[i] >= '0' && text[i] <= '9') {
-        if (i < 10) value = (value * 10) + (text[i] - '0');
-        i++;
-    }
-    if (i == 0) return 0;
-    /* Fewer than ten digits is a small clock (the tests use one), not a
-       truncated stamp - take it as the seconds it is. */
-    return value;
-}
-
-/**
- * Take MailLock, or report that somebody else has it.
- *
- * File-based, because that is what express.e uses and what another NODE can
- * see - a flag in this door's memory would not stop the board itself posting.
- *
- * THE FILE EXISTING IS NOT THE LOCK, and reading it that way is what broke
- * posting on the live board. express.e holds an exclusive AmigaDOS `Lock()`
- * on MailLock (express.e:11944-11964) and CREATES the file when it is missing:
- * the file is the thing being locked, not the lock, and it is left on disk for
- * ever by design - AmigaOS drops the handle when the holder exits. This port
- * has no such handle, so it does what the board's own writer does
- * (services/MessageIndexManager.ts): the file carries the SECOND it was taken
- * at, and a stamp older than AE_MSG_LOCK_STALE_SECONDS belongs to a holder
- * that is gone.
- *
- * Without that, a door killed between take and unlock - the inactivity fuse,
- * a dropped carrier, a node restart - left a zero-byte MailLock that refused
- * every later post in that conference for ever. Three conferences on the live
- * board were in that state for up to eight days (Conf1 and Conf3 from
- * 2026-09-14, Conf5 from 2026-09-18), and the caller only ever saw
- * "Another task has the MsgBase locked".
- *
- * `now` is the board's clock in Unix seconds, the same value the caller is
- * about to stamp the message with. 0 means the board would not say what time
- * it is, and then a lock file can only be judged by its existence again -
- * refuse, rather than post over somebody.
- */
-static int take_lock(long now)
+static int take_lock(void)
 {
     char path[AE_MSG_PATH_MAX];
-    char stamp[16];
-    long held;
-    int len;
-    ae_file *f;
 
     if (!join_path(path, (int)sizeof(path), "MailLock")) return 0;
-
-    if (ae_dos_exists(path)) {
-        held = lock_stamp(path);
-        if (now <= 0) return 0;
-        /* A stamp from the future is a clock that moved, not a live holder;
-           only the window between `now` and `now - stale` is somebody's. */
-        if (held > 0 && held <= now && (now - held) < AE_MSG_LOCK_STALE_SECONDS) return 0;
-    }
-
-    f = ae_dos_open(path, AE_DOS_WRITE);
-    if (f == 0) return 0;
-    number_to_name(stamp, now > 0 ? now : 0);   /* decimal, same as a msg name */
-    len = 0;
-    while (stamp[len] != 0) len++;
-    if (len > 0) ae_dos_write(f, stamp, (long)len);
-    ae_dos_close(f);
-    lock_held = 1;
-    return 1;
+    held_lock = ae_dos_lock(path);
+    return held_lock != 0;
 }
 
 void ae_msg_unlock(void)
 {
-    char path[AE_MSG_PATH_MAX];
-
-    if (!lock_held) return;            /* never free a lock this node did not take */
-    if (join_path(path, (int)sizeof(path), "MailLock")) ae_dos_delete(path);
-    lock_held = 0;
+    /* UnLock(msgbaselock). The file stays, as it does under express.e. */
+    if (held_lock == 0) return;        /* never free a lock this node did not take */
+    ae_dos_unlock(held_lock);
+    held_lock = 0;
 }
 
 /** The next number, straight out of MailStats - express.e:10688. */
@@ -882,7 +876,7 @@ long ae_msg_write(const ae_msg_new *msg, const char *body, unsigned long body_le
     if (!body) { body = ""; body_len = 0; }
 
     if (!every_record_is_amiga_shaped()) return AE_MSG_ERR_MIXED;
-    if (!take_lock(msg->date)) return AE_MSG_ERR_LOCKED;
+    if (!take_lock()) return AE_MSG_ERR_LOCKED;
 
     number = next_number();
 

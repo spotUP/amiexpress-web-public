@@ -87,7 +87,7 @@ describe('the door-facing API', () => {
     expect((await off.profile('a@example.com')).error).toBe('not_configured');
   });
 
-  it('setUserEmail stores a real address on the user record and the live session, and refuses anything else', async () => {
+  it('setUserEmail changes the caller\'s account in memory, as express.e\'s loggedOnUser, and refuses anything else', async () => {
     db.prepare(`INSERT OR IGNORE INTO users (id, username, passwordhash, realname) VALUES ('u-mail', 'mailer', 'x', 'M')`).run();
     const session: any = { user: { id: 'u-mail', username: 'mailer' }, nodeId: 1 };
     const api = createBBSApi({ id: 's', emit: () => {}, on: () => {} } as any, session);
@@ -96,7 +96,10 @@ describe('the door-facing API', () => {
     expect(session.user.email).toBeUndefined();
     expect(await api.setUserEmail('  Mailer@Example.com ')).toBe(true);
     expect(session.user.email).toBe('Mailer@Example.com');
-    expect(db.prepare(`SELECT email FROM users WHERE id = 'u-mail'`).get()).toEqual({ email: 'Mailer@Example.com' });
+    // email is a field of the user record, so it goes to disk - and the row
+    // copies it - at the next saveAccount (logoff, express.e:8207), not
+    // mid-call: services/account.service.ts changeAccount.
+    expect(db.prepare(`SELECT email FROM users WHERE id = 'u-mail'`).get()).toEqual({ email: null });
     expect(typeof api.achievements().enabled).toBe('function');
   });
 });

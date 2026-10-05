@@ -292,10 +292,12 @@ TEST(new_is_measured_against_the_callers_scan_pointer)
     synth(records + 2 * AE_MSG_RECORD_SIZE, AE_MSG_PUBLIC, 3, "EALL", "sysop", "new");
     put_headers(records, sizeof records);
 
-    ae_msg_open(BASE_DIR, "anyone", 0, 2);
+    /* The scan pointer is lastNewReadConf: the NEXT number to scan. The
+       message AT it is new (2026-10-04 SUBS proposal, conflict 2). */
+    ae_msg_open(BASE_DIR, "anyone", 0, 3);
     ae_msg_stat_read(&st);
     ASSERT_EQ(st.total, 3, "three readable");
-    ASSERT_EQ(st.unread, 1, "one of them above the pointer");
+    ASSERT_EQ(st.unread, 1, "the one at the pointer is new");
 }
 
 TEST(a_board_that_would_not_say_reports_nothing_new_rather_than_everything)
@@ -441,6 +443,78 @@ TEST(a_body_is_read_from_the_file_named_after_the_message)
     got = ae_msg_body(2, body, sizeof body);
     ASSERT_EQ(got, 21L, "all of it");
     ASSERT_STR(body, "the body\nsecond line\n", "byte for byte");
+}
+
+/*
+ * The board writes bodies in UTF-8 (message-file.util.ts); SUBS printed them
+ * a byte at a time, so a board-written "a-ring" showed as two characters
+ * (2026-10-04 SUBS proposal, conflict 6). The board's own rule: UTF-8 when
+ * the bytes are valid UTF-8, Latin-1 otherwise.
+ */
+TEST(a_utf8_body_the_board_wrote_reads_as_latin1)
+{
+    unsigned char records[1 * AE_MSG_RECORD_SIZE];
+    char body[64];
+    ae_file *f;
+    long got;
+
+    synth(records, AE_MSG_PUBLIC, 2, "EALL", "sysop", "hej");
+    put_headers(records, sizeof records);
+    f = ae_dos_open("./2", AE_DOS_WRITE);
+    ae_dos_write(f, "f\xc3\xa5gel \xe2\x82\xac\n", 11);     /* "fågel €" in UTF-8 */
+    ae_dos_close(f);
+
+    ae_msg_open(BASE_DIR, "anyone", 0, -1);
+    got = ae_msg_body(2, body, sizeof body);
+    ASSERT_STR(body, "f\xe5gel ?\n", "a-ring is one Latin-1 byte, the euro has no room");
+    ASSERT_EQ(got, 8L, "eight Latin-1 bytes");
+}
+
+TEST(a_latin1_body_an_amiga_wrote_is_left_alone)
+{
+    unsigned char records[1 * AE_MSG_RECORD_SIZE];
+    char body[64];
+    ae_file *f;
+
+    synth(records, AE_MSG_PUBLIC, 2, "EALL", "sysop", "hej");
+    put_headers(records, sizeof records);
+    f = ae_dos_open("./2", AE_DOS_WRITE);
+    ae_dos_write(f, "f\xe5gel\n", 6);
+    ae_dos_close(f);
+
+    ae_msg_open(BASE_DIR, "anyone", 0, -1);
+    ASSERT_EQ(ae_msg_body(2, body, sizeof body), 6L, "six bytes");
+    ASSERT_STR(body, "f\xe5gel\n", "byte for byte");
+}
+
+/*
+ * Who reads other people's private mail is the board's ACS, the R reader's
+ * mayReadPrivateMail: ACS_SYSOP_READ for all of it, READ_PRIV_EALL /
+ * READ_PRIV_ALL for private mail to everyone - not a level threshold.
+ */
+TEST(private_mail_to_everyone_follows_the_read_priv_grants)
+{
+    unsigned char records[3 * AE_MSG_RECORD_SIZE];
+    ae_msg_row rows[4];
+
+    synth(records, AE_MSG_PRIVATE, 1, "EALL", "ann", "private to eall");
+    synth(records + AE_MSG_RECORD_SIZE, AE_MSG_PRIVATE, 2, "ALL", "ann", "private to all");
+    synth(records + 2 * AE_MSG_RECORD_SIZE, AE_MSG_PRIVATE, 3, "dino", "ann", "private to dino");
+    put_headers(records, sizeof records);
+
+    ae_msg_open(BASE_DIR, "spot", 0, -1);
+    ASSERT_EQ(ae_msg_list(0, rows, 4), 0, "no grants: none of them");
+
+    ae_msg_open(BASE_DIR, "spot", AE_MSG_SEE_PRIV_EALL, -1);
+    ASSERT_EQ(ae_msg_list(0, rows, 4), 1, "READ_PRIV_EALL: the one to EALL");
+    ASSERT_EQ(rows[0].number, 1, "message 1");
+
+    ae_msg_open(BASE_DIR, "spot", AE_MSG_SEE_PRIV_ALL, -1);
+    ASSERT_EQ(ae_msg_list(0, rows, 4), 1, "READ_PRIV_ALL: the one to ALL");
+    ASSERT_EQ(rows[0].number, 2, "message 2");
+
+    ae_msg_open(BASE_DIR, "spot", AE_MSG_SEE_ALL_PRIVATE, -1);
+    ASSERT_EQ(ae_msg_list(0, rows, 4), 3, "SYSOP_READ: all three");
 }
 
 TEST(a_header_with_no_body_file_is_not_an_error)
@@ -723,7 +797,7 @@ TEST(it_appends_to_a_real_amiexpress_base)
     ASSERT_EQ(st.unreadable, 0, "st.unreadable");
 }
 
-/** Write `text` into ./MailLock, as another node's lock file. */
+/** Write `text` into ./MailLock, as a writer that stamped it once did. */
 static void put_lock(const char *text)
 {
     ae_file *f = ae_dos_open("./MailLock", AE_DOS_WRITE);
@@ -735,40 +809,61 @@ static void put_lock(const char *text)
     }
 }
 
+/*
+ * THE LOCK IS express.e's: an exclusive Lock() on MailLock (lockMsgBase,
+ * express.e:11944-11964), not a stamp in the file. Another node holding it is
+ * played here with ae_dos_lock, which is exactly what that node would call.
+ */
 TEST(a_held_lock_stops_a_second_write)
+{
+    ae_msg_new msg;
+    long other;
+
+    empty_base();
+    ASSERT_EQ(ae_msg_open(BASE_DIR, "spot", 0, 0), AE_MSG_OK, "ae_msg_open(BASE_DIR, \"spot\", 0, 0)");
+
+    other = ae_dos_lock("./MailLock");
+    ASSERT_TRUE(other != 0, "the other node takes the lock");
+
+    msg.to = "EALL"; msg.from = "spot"; msg.subject = "s";
+    msg.status = AE_MSG_PUBLIC; msg.date = 1010L;
+    ASSERT_EQ(ae_msg_write(&msg, "x\n", 2), AE_MSG_ERR_LOCKED, "ae_msg_write while another node holds it");
+
+    /* And it did NOT free a lock it never took. */
+    ae_msg_unlock();
+    ASSERT_EQ(ae_dos_lock("./MailLock"), 0L, "still held by the other node");
+
+    ae_dos_unlock(other);
+    ASSERT_TRUE(ae_msg_write(&msg, "x\n", 2) > 0, "posts once the other node lets go");
+    ae_dos_delete("./MailLock");
+}
+
+/*
+ * 2026-10-04 (SUBS proposal, conflict 1): the door stamped MailLock with the
+ * board's DT_CURR_TIME - express.e's getSystemTime, local wall clock + 21600 -
+ * while the board stamped UTC milliseconds. A lock either side left behind
+ * read as hours in the future to the other, and blocked or was posted over.
+ * Under express.e's semantics the file says nothing at all: whatever a dead
+ * writer left in it, nobody holds it.
+ */
+TEST(a_stamp_left_in_mailLock_by_a_dead_writer_does_not_block)
 {
     ae_msg_new msg;
 
     empty_base();
     ASSERT_EQ(ae_msg_open(BASE_DIR, "spot", 0, 0), AE_MSG_OK, "ae_msg_open(BASE_DIR, \"spot\", 0, 0)");
 
-    /* Another node's lock, as a file - which is the only kind a different
-       process can see - carrying the second it was taken at, which is what
-       says the holder is still alive. */
-    put_lock("1000");
-
+    put_lock("1005");                                /* stamped five seconds ago */
     msg.to = "EALL"; msg.from = "spot"; msg.subject = "s";
-    msg.status = AE_MSG_PUBLIC; msg.date = 1010L;    /* ten seconds later */
-    ASSERT_EQ(ae_msg_write(&msg, "x\n", 2), AE_MSG_ERR_LOCKED, "ae_msg_write(&msg, \"x\n\", 2)");
+    msg.status = AE_MSG_PUBLIC; msg.date = 1010L;
+    ASSERT_TRUE(ae_msg_write(&msg, "x\n", 2) > 0, "a stamp is not a holder");
 
-    /* And it did NOT free a lock it never took. */
-    ae_msg_unlock();
-    ASSERT_TRUE(ae_dos_exists("./MailLock"), "ae_dos_exists(\"./MailLock\")");
+    put_lock("1759600000000");                       /* the board's millis */
+    ASSERT_TRUE(ae_msg_write(&msg, "y\n", 2) > 0, "nor is a stamp on the other clock");
     ae_dos_delete("./MailLock");
 }
 
-/*
- * The live board's bug, 2026-09-22: "[INFO] Another task has the MsgBase
- * locked. Not posted." in SUBS, with nothing holding anything. A door killed
- * between take and unlock - the inactivity fuse, a dropped carrier, a node
- * restart - leaves MailLock on disk, and a lock read by EXISTENCE never
- * expires. Three conferences were refusing every post that way, one of them
- * for eight days.
- *
- * express.e does not read it that way: it holds an exclusive AmigaDOS Lock()
- * on the file and CREATES the file when it is missing (express.e:11944-11964),
- * so the file outliving its holder is normal there and harmless.
- */
+/* An empty MailLock, as express.e leaves it on every base for ever. */
 TEST(a_lock_nobody_is_holding_does_not_block_for_ever)
 {
     ae_msg_new msg;
@@ -776,53 +871,20 @@ TEST(a_lock_nobody_is_holding_does_not_block_for_ever)
 
     empty_base();
     ASSERT_EQ(ae_msg_open(BASE_DIR, "spot", 0, 0), AE_MSG_OK, "ae_msg_open(BASE_DIR, \"spot\", 0, 0)");
-
-    /* Exactly what was on the live volume: a lock file with nothing in it. */
     put_lock("");
 
     msg.to = "EALL"; msg.from = "spot"; msg.subject = "s";
-    msg.status = AE_MSG_PUBLIC; msg.date = 1000L;
+    msg.status = AE_MSG_PUBLIC; msg.date = 0L;       /* no clock needed to post */
     ASSERT_TRUE(ae_msg_write(&msg, "x\n", 2) > 0, "ae_msg_write over an empty lock");
     ASSERT_EQ(ae_msg_stat_read(&st), AE_MSG_OK, "ae_msg_stat_read(&st)");
     ASSERT_EQ(st.total, 1, "st.total");
     ae_dos_delete("./MailLock");
 }
 
-TEST(a_lock_older_than_the_stale_window_is_taken)
+TEST(the_lock_is_released_after_a_write_and_the_file_stays)
 {
     ae_msg_new msg;
-
-    empty_base();
-    ASSERT_EQ(ae_msg_open(BASE_DIR, "spot", 0, 0), AE_MSG_OK, "ae_msg_open(BASE_DIR, \"spot\", 0, 0)");
-
-    put_lock("1000");                                /* taken at second 1000 */
-    msg.to = "EALL"; msg.from = "spot"; msg.subject = "s";
-    msg.status = AE_MSG_PUBLIC; msg.date = 1031L;    /* 31 s later: gone */
-    ASSERT_TRUE(ae_msg_write(&msg, "x\n", 2) > 0, "ae_msg_write over a stale lock");
-    ae_dos_delete("./MailLock");
-}
-
-/*
- * A door that cannot read the board's clock cannot tell a live lock from a
- * dead one, and posting over a live holder corrupts the base. Refuse instead.
- */
-TEST(without_a_clock_any_lock_is_respected)
-{
-    ae_msg_new msg;
-
-    empty_base();
-    ASSERT_EQ(ae_msg_open(BASE_DIR, "spot", 0, 0), AE_MSG_OK, "ae_msg_open(BASE_DIR, \"spot\", 0, 0)");
-
-    put_lock("1000");
-    msg.to = "EALL"; msg.from = "spot"; msg.subject = "s";
-    msg.status = AE_MSG_PUBLIC; msg.date = 0L;       /* ae_now() would not say */
-    ASSERT_EQ(ae_msg_write(&msg, "x\n", 2), AE_MSG_ERR_LOCKED, "ae_msg_write with no clock");
-    ae_dos_delete("./MailLock");
-}
-
-TEST(the_lock_is_released_after_a_write)
-{
-    ae_msg_new msg;
+    long probe;
 
     empty_base();
     ASSERT_EQ(ae_msg_open(BASE_DIR, "spot", 0, 0), AE_MSG_OK, "ae_msg_open(BASE_DIR, \"spot\", 0, 0)");
@@ -830,11 +892,14 @@ TEST(the_lock_is_released_after_a_write)
     msg.status = AE_MSG_PUBLIC; msg.date = 1L;
     ASSERT_EQ(ae_msg_write(&msg, "x\n", 2), 1, "ae_msg_write(&msg, \"x\n\", 2)");
 
-    /* A lock left behind bricks the base for every node until somebody
-       deletes it by hand. */
-    ASSERT_TRUE(!ae_dos_exists("./MailLock"), "!ae_dos_exists(\"./MailLock\")");
+    /* createFile made it; nobody deletes it (express.e never does). */
+    ASSERT_TRUE(ae_dos_exists("./MailLock"), "MailLock is still there");
+    probe = ae_dos_lock("./MailLock");
+    ASSERT_TRUE(probe != 0, "and nobody holds it");
+    ae_dos_unlock(probe);
     ASSERT_EQ(ae_msg_write(&msg, "y\n", 2), 2, "ae_msg_write(&msg, \"y\n\", 2)");
     ae_dos_delete("./2");
+    ae_dos_delete("./MailLock");
 }
 
 TEST(a_status_the_board_does_not_use_is_refused)
@@ -901,6 +966,9 @@ int main(void)
     RUN_TEST(listing_from_a_number_starts_there);
     RUN_TEST(a_listing_never_writes_past_the_callers_array);
     RUN_TEST(a_body_is_read_from_the_file_named_after_the_message);
+    RUN_TEST(a_utf8_body_the_board_wrote_reads_as_latin1);
+    RUN_TEST(a_latin1_body_an_amiga_wrote_is_left_alone);
+    RUN_TEST(private_mail_to_everyone_follows_the_read_priv_grants);
     RUN_TEST(a_header_with_no_body_file_is_not_an_error);
     RUN_TEST(a_body_the_caller_may_not_read_is_not_handed_over);
     RUN_TEST(a_body_stops_at_the_callers_buffer);
@@ -916,10 +984,9 @@ int main(void)
     RUN_TEST(it_refuses_a_base_holding_port_records);
     RUN_TEST(it_appends_to_a_real_amiexpress_base);
     RUN_TEST(a_held_lock_stops_a_second_write);
+    RUN_TEST(a_stamp_left_in_mailLock_by_a_dead_writer_does_not_block);
     RUN_TEST(a_lock_nobody_is_holding_does_not_block_for_ever);
-    RUN_TEST(a_lock_older_than_the_stale_window_is_taken);
-    RUN_TEST(without_a_clock_any_lock_is_respected);
-    RUN_TEST(the_lock_is_released_after_a_write);
+    RUN_TEST(the_lock_is_released_after_a_write_and_the_file_stays);
     RUN_TEST(a_status_the_board_does_not_use_is_refused);
     RUN_TEST(an_overlong_name_is_cut_not_overrun);
 

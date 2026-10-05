@@ -25,6 +25,9 @@ import {
 import { messageIndexManager } from '../services/MessageIndexManager';
 import { conferenceNumbers } from '../conferences/conference-paths';
 import { boardRoot } from './board-root.util';
+import { checkSecurity } from './acs.util';
+import { ACSPermission } from '../constants/acs-permissions';
+import type { User } from '../database/types';
 
 /**
  * The caller's slot: the record number in every Conf.DB (express.e:4835
@@ -234,17 +237,15 @@ export async function loadMsgPointers(
 }
 
 /**
- * express.e:4916-4973 saveMsgPointers: the pointers, scan flags,
- * messagesPosted and newSinceDate go into the caller's Conf.DB record
- * (`cb.confYM:=lastMsgReadConf`, `cb.confRead:=lastNewReadConf` 4971-4972),
- * then the `conf_base` mirror.
+ * express.e:4916-4973 saveMsgPointers, its pointer half: the pointers and the
+ * scan flags go into the caller's Conf.DB record (`cb.confYM:=
+ * lastMsgReadConf`, `cb.confRead:=lastNewReadConf` 4971-4972), then the
+ * `conf_base` mirror.
  *
- * The upload / download / ratio fields are NOT written from here. express.e
- * copies them from loggedOnUser (4929-4939) because under conference
- * accounting it swaps the account's live counters per conference; the port
- * keeps the account's totals whole and books each transfer straight into
- * the record (MessagePointerFileManager.addDownload / addUpload), so a
- * pointer save carrying a stale copy must not overwrite them.
+ * The account half - the counters, messagesPosted, newSinceDate (4927-4945) -
+ * is copied from loggedOnUser, not from a pointer record, and is
+ * saveConferenceAccount below. A ConfBase loaded earlier carries a stale copy
+ * of those, and must not write them back.
  */
 export async function saveMsgPointers(confBase: ConfBase): Promise<void> {
   // Validate pointers (express.e:4933-4945)
@@ -262,13 +263,154 @@ console.warn(`saveMsgPointers: lastNewReadConf is 0 for conf ${confBase.conferen
     confRead: confBase.lastNewReadConf | 0,
     confYM: confBase.lastMsgReadConf | 0,
     handle: withScanFlags(rec, confBase.scanFlags),
-    messagesPosted: confBase.messagesPosted & 0xffff,
-    newSinceDate: encodeAmigaDate(confBase.newSinceDate) | 0,
   });
   mirrorToSql(confBaseFromRecord(
     confBase.userId, confBase.conferenceId, confBase.messageBaseId,
     messagePointerFileManager.readRecordOrZero(confBase.conferenceId, slot),
   ));
+}
+
+/** The session a conference's account is swapped on. */
+interface AccountSwapSession {
+  user?: User;
+  newSinceFlag?: boolean;
+  accountSavedAtLogoff?: boolean;
+}
+
+/**
+ * Does this conference swap the caller's counters (express.e:4893-4895,
+ * 4927-4930)? Under ACS_CONFERENCE_ACCOUNTING, unless the conference's
+ * Conf.DB is shared (CONFDB_SHARED).
+ */
+function swapsAccount(user: User, conferenceId: number): boolean {
+  return checkSecurity(user, ACSPermission.CONFERENCE_ACCOUNTING)
+    && !messagePointerFileManager.isShared(conferenceId);
+}
+
+function slotOfSession(session: AccountSwapSession): number {
+  const slot = Number(session.user?.slotNumber) || 0;
+  return slot > 0 ? slot : 0;
+}
+
+/**
+ * express.e:4882-4914 loadMsgPointers, its account half: the joined
+ * conference's record becomes the caller's live account.
+ *
+ *   IF checkSecurity(ACS_CONFERENCE_ACCOUNTING)
+ *     IF readToolTypeInt(TOOLTYPE_CONF,conf,'CONFDB_SHARED')<=0
+ *       bytes, uploads, downloads, secBoard, secLibrary, newSinceDate := cb's
+ *   loggedOnUser.messagesPosted:=cb.messagesPosted
+ *   IF(newSinceFlag) THEN cb.newSinceDate:=getSystemTime()
+ *
+ * So for the rest of the call the caller's uploads, downloads, bytes and
+ * ratio are THIS conference's (the ratio check, FS, the stats MCI codes and a
+ * door's DT_UPLOADS all read them), and his post count is too.
+ */
+export function loadConferenceAccount(session: AccountSwapSession, conferenceId: number): void {
+  const user = session.user;
+  const slot = slotOfSession(session);
+  if (!user || !slot || conferenceId < 1 || session.accountSavedAtLogoff) return;
+  const rec = messagePointerFileManager.readRecordOrZero(conferenceId, slot);
+  if (swapsAccount(user, conferenceId)) {
+    user.bytesDownload = Number(accountedBytes(rec.bytesDownload, rec.downloadBytesBCD));
+    user.bytesUpload = Number(accountedBytes(rec.bytesUpload, rec.uploadBytesBCD));
+    user.uploads = rec.upload & 0xffff;
+    user.downloads = rec.downloads & 0xffff;
+    user.ratioType = rec.ratioType & 0xffff;
+    user.ratio = rec.ratio & 0xffff;
+    user.newSinceDate = decodeAmigaDate(rec.newSinceDate);
+  }
+  user.messagesPosted = rec.messagesPosted & 0xffff;
+  if (session.newSinceFlag) {
+    messagePointerFileManager.patchRecord(conferenceId, slot, { newSinceDate: encodeAmigaDate(getSystemTime()) });
+  }
+}
+
+/**
+ * express.e:4916-4945 saveMsgPointers, its account half: the caller's live
+ * account goes back into the conference's record - the counters under
+ * conference accounting, and always the post count.
+ */
+export function saveConferenceAccount(session: AccountSwapSession, conferenceId: number): void {
+  const user = session.user;
+  const slot = slotOfSession(session);
+  if (!user || !slot || conferenceId < 1 || session.accountSavedAtLogoff) return;
+  if (swapsAccount(user, conferenceId)) {
+    messagePointerFileManager.putAccount(conferenceId, slot, {
+      bytesDownload: user.bytesDownload || 0,
+      bytesUpload: user.bytesUpload || 0,
+      uploads: user.uploads || 0,
+      downloads: user.downloads || 0,
+      ratioType: user.ratioType || 0,
+      ratio: user.ratio || 0,
+    });
+  }
+  const patch: Partial<ConfBaseRecord> = { messagesPosted: (user.messagesPosted || 0) & 0xffff };
+  if (session.newSinceFlag) patch.newSinceDate = encodeAmigaDate(getSystemTime());
+  messagePointerFileManager.patchRecord(conferenceId, slot, patch);
+}
+
+/**
+ * express.e:8626-8659 addMsgPointers, at logoff: the account's totals are the
+ * sum of its conferences. Under conference accounting the counters are summed
+ * over every conference the caller may join whose Conf.DB is not shared; the
+ * post count over every conference, always.
+ *
+ * secBoard / secLibrary and newSinceDate are not reset, so the account keeps
+ * the last joined conference's ratio and date - as express.e does.
+ */
+export function addMsgPointers(session: AccountSwapSession): void {
+  const user = session.user;
+  const slot = slotOfSession(session);
+  if (!user || !slot) return;
+  const sums = conferenceSums(user, slot);
+  if (sums.accounting) {
+    user.bytesDownload = Number(sums.bytesDownload);
+    user.bytesUpload = Number(sums.bytesUpload);
+    user.uploads = sums.uploads;
+    user.downloads = sums.downloads;
+  }
+  user.messagesPosted = sums.messagesPosted;
+}
+
+/** What addMsgPointers makes of an account's conference records. */
+export interface ConferenceSums {
+  accounting: boolean;
+  bytesDownload: bigint;
+  bytesUpload: bigint;
+  uploads: number;
+  downloads: number;
+  messagesPosted: number;
+}
+
+/**
+ * The sums of express.e:8636-8657, without touching the account: the counters
+ * of every conference the caller may join whose Conf.DB is not shared (only
+ * under conference accounting), the post count of every conference.
+ */
+export function conferenceSums(
+  user: User,
+  slot: number,
+  root: string = boardRoot(),
+  records: Pick<typeof messagePointerFileManager, 'readRecordOrZero' | 'isShared'> = messagePointerFileManager,
+): ConferenceSums {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { checkConfAccess } = require('../handlers/message/message-scan.handler') as { checkConfAccess: (u: unknown, c: number) => boolean };
+  const sums: ConferenceSums = {
+    accounting: checkSecurity(user, ACSPermission.CONFERENCE_ACCOUNTING),
+    bytesDownload: 0n, bytesUpload: 0n, uploads: 0, downloads: 0, messagesPosted: 0,
+  };
+  for (const conf of conferenceNumbers(root)) {
+    const rec = records.readRecordOrZero(conf, slot);
+    if (sums.accounting && !records.isShared(conf) && checkConfAccess(user, conf)) {
+      sums.bytesDownload += accountedBytes(rec.bytesDownload, rec.downloadBytesBCD);
+      sums.bytesUpload += accountedBytes(rec.bytesUpload, rec.uploadBytesBCD);
+      sums.uploads += rec.upload & 0xffff;
+      sums.downloads += rec.downloads & 0xffff;
+    }
+    sums.messagesPosted += rec.messagesPosted & 0xffff;
+  }
+  return sums;
 }
 
 /**

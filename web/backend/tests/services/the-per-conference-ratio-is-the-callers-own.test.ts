@@ -22,6 +22,7 @@ process.env.SKIP_DB_INIT = '1';
 /* eslint-disable @typescript-eslint/no-var-requires */
 const { checkRatiosAndTime } = require('../../src/services/download-booking.service');
 const mpfm = require('../../src/services/MessagePointerFileManager');
+const { loadConferenceAccount } = require('../../src/utils/message-pointers.util');
 /* eslint-enable @typescript-eslint/no-var-requires */
 
 // ACSPermission.CONFERENCE_ACCOUNTING = 57; nothing else granted.
@@ -36,8 +37,9 @@ function writeMyRecord(fields: Record<string, number>) {
   fs.writeFileSync(path.join(board, 'Conf1', 'Conf.DB'), file);
 }
 
+/** A caller in conference 1: its join swapped his counters in (express.e:5026, 4893-4905). */
 function aCaller(): any {
-  return {
+  const session = {
     currentConf: 1,
     nodeId: 1,
     // The board-wide row: ratio 0, lots of uploads - nobody's own figures.
@@ -47,6 +49,8 @@ function aCaller(): any {
       securityFlags: flags.join(''), timeTotal: 3600, timeUsed: 0, byteLimit: 0,
     },
   };
+  loadConferenceAccount(session, 1);
+  return session;
 }
 
 afterAll(() => fs.rmSync(board, { recursive: true, force: true }));

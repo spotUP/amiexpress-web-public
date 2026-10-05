@@ -70,11 +70,15 @@ test('a screen drawn in the graphics bank is refused, and nothing is written', a
   expect(fs.existsSync(path.join(root, 'Node1', 'BBSTITLE.seq'))).toBe(false);
 });
 
-test('a screen that never says which bank it wants is refused too - a C64 powers on in the graphics one', async () => {
+test('a screen that never says which bank it wants is written - it starts in the board\'s lowercase bank', async () => {
+  // 0b52f8744 (sysop decision 2026-10-04): the board puts every caller in the
+  // lowercase bank before any screen and keeps the caller's CTRL+L choice
+  // after that, so a screen starts in the BOARD's bank, not a power-on C64's.
+  // A screen that selects $8E and draws in it is still refused (above).
   const res = await put('Node1/BBSTITLE.seq', 'hello\r');
 
-  expect(res.status).toBe(400);
-  expect(res.body.error).toMatch(/lowercase bank/);
+  expect(res.status).toBe(200);
+  expect(fs.readFileSync(path.join(root, 'Node1', 'BBSTITLE.seq'), 'latin1')).toBe('hello\r');
 });
 
 test('the same art in the lowercase bank is written', async () => {

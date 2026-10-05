@@ -58,6 +58,10 @@ const FROM_DISK = [
   'byteLimit',
   'userFlags',
   'accountDeleted',
+  // Its own field (express.e:96 in the record): N's default date (27855),
+  // moved only by a logoff after N (8197) or a conference's record under
+  // conference accounting (4906).
+  'newSinceDate',
 ] as const satisfies readonly (keyof User)[];
 
 /**
@@ -89,6 +93,29 @@ const TEXT_FROM_DISK: ReadonlyArray<readonly [keyof User, number]> = [
  *   pwdLastUpdated): read off user.misc by the logon gates themselves, and
  *   left undefined on the session so a later write keeps the disk's values.
  */
+
+/**
+ * Every User field the record holds - user.data, user.keys and user.misc as
+ * UserFileManager writes them. While the caller is on, these are express.e's
+ * loggedOnUser: changed in memory (changeAccount) and written to the slot only
+ * where express.e calls saveAccount (account.service). The row copies them
+ * from the record, never the other way round.
+ */
+export const RECORD_FIELDS: readonly (keyof User)[] = [
+  ...FROM_DISK,
+  ...TEXT_FROM_DISK.map(([field]) => field),
+  'username',
+  'expert',
+  'confRJoin',
+  'linesPerScreen',
+  'dailyBytesDld',
+  'creditDays',
+  'creditAmount',
+  'creditStartDate',
+  'creditTotalToDate',
+  'creditTotalDate',
+  'creditTracking',
+];
 
 /** The record at this account's slot, merged over its row. */
 export function loadAccount(row: User): { user: User; fromDisk: boolean } {
@@ -127,18 +154,18 @@ export function loadAccount(row: User): { user: User; fromDisk: boolean } {
 }
 
 /**
- * The row's copy of a record loaded at logon: every field the session took
- * from disk, so the mirror says what the board is acting on. Disk-only fields
- * are dropped by updateUser itself.
+ * The row's copy of an account's record: every record field, so the mirror
+ * says what the board is acting on. Taken at logon from the record loaded off
+ * the disk, and at every saveAccount from the record just written. Disk-only
+ * fields are dropped by updateUser itself.
  */
 export function rowFieldsFromAccount(user: User): Partial<User> {
   const fields: Partial<User> = {};
   const source = user as unknown as Record<string, unknown>;
   const target = fields as unknown as Record<string, unknown>;
-  for (const field of FROM_DISK) {
+  for (const field of RECORD_FIELDS) {
     if (source[field] !== undefined) target[field] = source[field];
   }
   for (const [field] of TEXT_FROM_DISK) target[field] = source[field];
-  target.expert = user.expert;
   return fields;
 }

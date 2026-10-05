@@ -80,11 +80,13 @@ describe('W command option 16 BGFILECHECK display + toggle (C-W, express.e:25872
     const d = driver(others);
     d.session.subState = LoggedOnSubState.W_OPTION_SELECT;
 
+    // user.keys userFlags: the account in memory, saved on leaving W
+    // (express.e:25893), so nothing is written per toggle.
     await handleWOptionSelectInput(d.socket, d.session, '16');
-    expect(mockUpdateUser).toHaveBeenLastCalledWith('u16', { userFlags: others | UserFlag.BGFILECHECK });
+    expect(d.session.user.userFlags).toBe(others | UserFlag.BGFILECHECK);
 
     await handleWOptionSelectInput(d.socket, d.session, '16');
-    expect(mockUpdateUser).toHaveBeenLastCalledWith('u16', { userFlags: others });
     expect(d.session.user.userFlags).toBe(others);
+    expect(mockUpdateUser).not.toHaveBeenCalled();
   });
 });

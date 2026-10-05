@@ -298,14 +298,16 @@ export function handleEditUserAccount(socket: any, session: BBSSession, username
     session.tempData = {
       accountEditing: true,
       editingUser: user,
-      editingSlot: user.id,
+      // express.e editInfo(which,...): `which` is the account's SLOT in
+      // user.data - what +/- walk (21263-21286) and the header shows.
+      editingSlot: user.slotNumber,
       page: 0,  // 0 = page 1, 1 = page 2
       changes: false,
       originalData: JSON.parse(JSON.stringify(user))  // Deep copy for change tracking
     };
 
     // Display first page
-    displayAccountPage0(socket, user, user.id);
+    displayAccountPage0(socket, user, user.slotNumber);
 
     // Set state to wait for edit commands
     session.subState = LoggedOnSubState.ACCOUNT_EDITOR_EDIT;

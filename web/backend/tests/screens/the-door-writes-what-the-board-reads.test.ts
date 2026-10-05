@@ -159,10 +159,15 @@ describeIfBuilt('a message the door wrote, read by the board', () => {
     expect(fs.readFileSync(path.join(dir, String(second)), 'latin1')).toBe('second\n');
   });
 
-  it('releases MailLock, so the base is not bricked for the next node', () => {
+  it('leaves MailLock as express.e does - there, empty, and not held', () => {
+    // lockMsgBase creates the file and never deletes or writes it
+    // (express.e:11944-11970); the lock is the handle, not the file.
     const dir = aRealBaseCopy();
-    doorWrites(dir);
-    expect(fs.existsSync(path.join(dir, 'MailLock'))).toBe(false);
+    const first = doorWrites(dir);
+    const lock = path.join(dir, 'MailLock');
+    expect(fs.existsSync(lock)).toBe(true);
+    expect(fs.readFileSync(lock).length).toBe(0);
+    expect(doorWrites(dir)).toBe(first + 1);
   });
 
   it('REFUSES to append to a base holding port-written records', () => {

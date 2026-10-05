@@ -27,6 +27,8 @@ import { XIMDataQueryHandler } from './xim/data-query';
 import { XIMBBSInfoHandler } from './xim/bbs-info';
 import { XIMSystemCommandsHandler } from './xim/system-commands';
 import { handleSetPointer } from './xim/msgpointer';
+import { handlePostMessage, postMessageAnswer } from './xim/postmsg';
+import type { BBSSession } from '../index';
 import { ximDebugLogger } from './xim/debug-logger';
 import { getDoorLogger, DoorLogger } from './DoorLogger';
 import { ximLogger } from '../utils/XIMLogger';
@@ -1008,6 +1010,24 @@ debugLog(`[XIMProtocol]   Wrote tooltype value="${tooltypeValue}", StringPtr not
           const stored = await handleSetPointer(String(msg.string || ''), this.bbsSession);
           debugLog(`[XIMProtocol] AEW_SETPOINTER "${msg.string}" -> ${stored}`);
           this.sendReply(msg, stored);
+        }
+        break;
+
+      /**
+       * AEW_POSTMSG (10500): a door posts through the board's own save - see
+       * xim/postmsg.ts. A WRITE carries one step of the post and is answered
+       * 1/0; a READ answers in String with what happened.
+       */
+      case XIMCommand.AEW_POSTMSG:
+        if (msg.data !== 0) {
+          const answer = postMessageAnswer(this.bbsSession);
+          this.messageParser.writeString(msg.msgAddr + DoorConstants.MESSAGE_STRING_OFFSET, answer, 200);
+          debugLog(`[XIMProtocol] AEW_POSTMSG read -> "${answer}"`);
+          this.sendReply(msg, answer.length);
+        } else {
+          const taken = await handlePostMessage(String(msg.string || ''), this.socket, this.bbsSession as unknown as BBSSession);
+          debugLog(`[XIMProtocol] AEW_POSTMSG "${String(msg.string || '').slice(0, 40)}" -> ${taken}`);
+          this.sendReply(msg, taken);
         }
         break;
 

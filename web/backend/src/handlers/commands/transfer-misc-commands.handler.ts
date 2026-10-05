@@ -12,11 +12,13 @@ import { EnvStat } from '../../constants/env-codes';
 import { AnsiUtil } from '../../utils/ansi.util';
 import { ErrorHandler } from '../../utils/error-handling.util';
 import { BBSPaths } from '../../utils/bbs-paths.util';
-import { ZmodemTransferManager, TransferTransport } from '../../services/zmodem-transfer.service';
+import type { TransferTransport } from '../../services/zmodem-transfer.service';
+import { endUpload } from '../../services/upload-end.service';
 import * as path from 'path';
 import { formatLongDateTime } from '../../utils/date-time.util';
 import { report } from '../../achievements/reporter';
 import { endRawTransfer } from '../../utils/raw-transfer-teardown.util';
+import { joinedConf } from '../../utils/joined-conf.util';
 
 // Dependencies (injected)
 let _setEnvStat: any;
@@ -131,6 +133,11 @@ console.error('[ZMODEM] Failed to ensure playpen:', err);
     ((buf: Buffer) => socket.emit('transfer-raw:data', buf));
 
   const ulStartTime = Date.now();
+  // Every way out of the upload: uploadaFile returns (upload-end.service).
+  const toMenu = () => {
+    session.subState = LoggedOnSubState.DISPLAY_MENU;
+    session.menuPause = true;
+  };
 
   // All transports — including web — go through lrzsz (canonical
   // Forsberg/Ohse). For web, the browser arms zmodem.js Sentry on
@@ -150,8 +157,7 @@ console.error('[ZMODEM] Failed to ensure playpen:', err);
     if (!lrzAvailable) {
       socket.emit('ansi-output', '\r\n\x1b[31mZMODEM unavailable: lrzsz (sz/rz) not installed on this BBS host.\x1b[0m\r\n');
       socket.emit('ansi-output', '\x1b[31mAsk the sysop to install lrzsz (brew install lrzsz / apk add lrzsz).\x1b[0m\r\n\r\n');
-      session.subState = LoggedOnSubState.DISPLAY_MENU;
-      session.menuPause = true;
+      endUpload(session, 'failure', toMenu);
       return;
     }
     // express.e:19018-19023 — resumeStuff() runs BEFORE the receive.
@@ -186,130 +192,24 @@ console.error('[ZMODEM] Failed to ensure playpen:', err);
         const { config: appCfg } = require('../../config');
         return uploadIsDuplicate({
           filename: name,
-          conferenceId: session.currentConf,
+          conferenceId: joinedConf(session).conf,
           bbsRoot: appCfg.get('dataDir'),
           nodeId: session.nodeId || 0,
         });
       },
+        // internalCommandRZ is uploadaFile(1,...) (express.e:25618), the U
+        // command's procedure: what rz received is filed through the same
+        // path (user-commands fileReceivedUploads -> upload-filing), and the
+        // upload ends through endUpload like every other upload.
         onComplete: async (ok: boolean, detail: any) => {
           endRawTransfer(session);
           if (!ok) {
             socket.emit('ansi-output', '\r\nUpload aborted\r\n\r\n');
-            session.subState = LoggedOnSubState.DISPLAY_MENU;
-            session.menuPause = true;
+            endUpload(session, 'failure', toMenu);
             return;
           }
-          // Route through the web upload pipeline so every per-file
-          // step (DIZ extraction, file integrity test, move to
-          // FILES/LCFILES, DIRn append, FILES.BBS, user stats,
-          // conference stats, callersLog, BBSEvent, webhook) runs
-          // exactly as it would for a web upload. We synthesize the
-          // uploadContext that the web file picker normally builds,
-          // populate it with the files rz actually wrote (from the
-          // snapshot diff in lrzsz-transfer.service), then iterate
-          // processBatchFile per file followed by handleUploadBatchComplete.
-          const received: string[] = detail?.received || [];
-          // express.e:15101 - every refused name goes to the CallersLog and
-          // the UD log, and nowhere else: the caller's own client has already
-          // told him the file was skipped.
-          for (const skippedName of (detail?.skipped || [])) {
-            try {
-              const { writeToUDLog, writeToCallersLog } = require('../../utils/download-logging.util');
-              void writeToCallersLog(`\tSkipped ${skippedName}`, session.nodeId || 0);
-              void writeToUDLog(`\tSkipped ${skippedName}`, session.nodeId || 0);
-            } catch (err) {
-              console.error('[UPLOAD] could not log a skipped file:', err);
-            }
-          }
-          const fsSync = require('fs');
-          const pathMod = require('path');
-          const { db } = require('../../database');
-          const { config: appConfig } = require('../../config');
-          const { handleDizExtractionAndDescription, handleUploadBatchComplete } =
-            require('../../server/file-socket-handlers');
-
-          // Determine target file area for this conference.
-          let fileArea: any = null;
-          try {
-            const areas = await db.getFileAreas(session.currentConf);
-            fileArea = Array.isArray(areas) && areas.length > 0 ? areas[0] : null;
-          } catch (err: any) {
-            console.error('[ZMODEM-UL-RZ] getFileAreas failed:', err?.message || err);
-          }
-          if (!fileArea) {
-            socket.emit('ansi-output', '\r\n\x1b[31mError: no upload area for this conference\x1b[0m\r\n\r\n');
-            session.subState = LoggedOnSubState.DISPLAY_MENU;
-            session.menuPause = true;
-            return;
-          }
-
-          if (received.length === 0) {
-            socket.emit('ansi-output', '\r\nNo files received.\r\n\r\n');
-            session.subState = LoggedOnSubState.DISPLAY_MENU;
-            session.menuPause = true;
-            return;
-          }
-
-          // Build the same uploadContext that processFileUpload installs
-          // for HTTP uploads, so the description-prompt state machine
-          // (FILE_ID.DIZ check → "Please enter a description, you only
-          // have N lines." → DIRn append + FILES.BBS) runs exactly as
-          // it would for the legacy HTTP path. webUploadMode=true is
-          // what routes processBatchFile -> handleDizExtractionAndDescription.
-          //
-          // Multi-file ZMODEM batches are queued in pendingZmodemFiles
-          // and walked one at a time after each description completes
-          // (state machine in command.handler.ts advances on Enter-Enter).
-          session.tempData = {
-            uploadMode: true,
-            fileArea,
-            uploadSessionId: `rz-${Date.now()}`,
-            uploadBatch: [],
-            uploadCount: received.length,
-            uploadStartTime: ulStartTime,
-            webUploadMode: true,
-            batchUpload: false,
-            currentUploadIndex: 0,
-            filesProcessedCount: 0,
-            uploadedFiles: 0,
-            uploadedBytes: 0,
-            skipDizExtraction: false,
-            // Queue for files 2..N — pop one after each description
-            // completes. The dispatch on UPLOAD_DESC_INPUT done state
-            // needs to look at this and re-invoke handleDizExtraction.
-            pendingZmodemFiles: received.slice(1).map((fp: string) => ({
-              path: fp,
-              name: pathMod.basename(fp),
-            })),
-          } as any;
-
-          const firstPath = received[0];
-          let firstSize = 0;
-          try { firstSize = fsSync.statSync(firstPath).size; } catch (_) { /* ignore */ }
-          const firstName = pathMod.basename(firstPath);
-          try {
-            await handleDizExtractionAndDescription(socket, session, {
-              filename: firstName,
-              originalname: firstName,
-              size: firstSize,
-              path: firstPath,
-            }, appConfig);
-            // Only set UPLOAD_DESC_INPUT if the batch is still active.
-            // When all files have FILE_ID.DIZ the recursive chain
-            // processBatchFile → handleDizExtractionAndDescription →
-            // processBatchFile → handleUploadBatchComplete clears tempData
-            // and sets subState=DISPLAY_MENU before returning here.
-            // Overwriting would put the session in UPLOAD_DESC_INPUT with
-            // tempData=undefined → TypeError on next keypress.
-            if (session.tempData) {
-              session.subState = LoggedOnSubState.UPLOAD_DESC_INPUT;
-            }
-          } catch (err: any) {
-            console.error('[ZMODEM-UL-RZ] handleDizExtractionAndDescription failed:', err?.message || err);
-            socket.emit('ansi-output', '\r\nUpload pipeline failed.\r\n\r\n');
-            session.subState = LoggedOnSubState.DISPLAY_MENU;
-            session.menuPause = true;
-          }
+          const { fileReceivedUploads } = require('./user-commands.handler');
+          await fileReceivedUploads(socket, session, detail?.received || [], detail?.skipped || [], ulStartTime);
         },
       });
       (session as any).transferRawActive = true;
@@ -362,16 +262,14 @@ console.error('[ZMODEM] Failed to ensure playpen:', err);
           (fireOnce as any)._fired = true;
           console.log('[ZMODEM-UL-RZ] client cancelled before pick — aborting');
           socket.emit('ansi-output', '\r\nUpload cancelled.\r\n\r\n');
-          session.subState = LoggedOnSubState.DISPLAY_MENU;
-          session.menuPause = true;
+          endUpload(session, 'failure', toMenu);
         });
         setTimeout(() => {
           if (!(fireOnce as any)._fired) {
             (fireOnce as any)._fired = true;
             console.log('[ZMODEM-UL-RZ] handshake timeout (120s) — abandoning rz spawn');
             socket.emit('ansi-output', '\r\nUpload timed out (no file picked).\r\n\r\n');
-            session.subState = LoggedOnSubState.DISPLAY_MENU;
-            session.menuPause = true;
+            endUpload(session, 'failure', toMenu);
           }
         }, 120000);
         console.log('[ZMODEM-UL-RZ] emitting transfer-raw:init { direction: upload }');
@@ -380,71 +278,7 @@ console.error('[ZMODEM] Failed to ensure playpen:', err);
         lrzManager.start();
       }
     }
-    return;
   }
-
-  const manager = new ZmodemTransferManager({
-    session,
-    transport: {
-      type: transportType,
-      send: sender,
-    },
-    direction: 'upload',
-    paths: [playpen],
-    onComplete: async (ok, detail) => {
-      endRawTransfer(session);
-      // Fallback path: zmodem.js JS implementation (used when lrzsz isn't
-      // installed AND for web's RZ entry point). Delegates to the same
-      // shared post-upload pipeline as the lrzsz onComplete above, so
-      // stats / callersLog / sysop notify / time credit stay identical
-      // across transports and implementations.
-      if (!ok) {
-        socket.emit('ansi-output', '\r\nUpload aborted\r\n\r\n');
-        session.subState = LoggedOnSubState.DISPLAY_MENU;
-        session.menuPause = true;
-        return;
-      }
-      const received: string[] = detail?.received || [];
-      let totalBytes = 0;
-      try {
-        const fsSync = require('fs');
-        for (const fp of received) {
-          try { totalBytes += fsSync.statSync(fp).size; } catch (_) {}
-        }
-      } catch (_) {}
-      const { runPostUpload } = require('../../services/post-upload.service');
-      const onlineBaud = (session as any).baudRate || 115200;
-      const ulTTTM     = Math.max(1, Math.round((Date.now() - ulStartTime) / 1000));
-      const cps        = totalBytes > 0 ? Math.round(totalBytes / ulTTTM) : 0;
-      const baudDiv10  = Math.max(1, Math.floor(onlineBaud / 10));
-      const eff        = Math.floor((cps * 100) / baudDiv10);
-      await runPostUpload(socket, session, {
-        uploadStartTime: ulStartTime,
-        uploadedFiles: received.length,
-        uploadedBytes: totalBytes,
-        efficiencyPct: eff,
-        goodbyeAfter: false,
-      });
-    },
-  });
-
-  (session as any).transferRawActive = true;
-  (session as any).transferRawSink = (buf: Buffer) => manager.handleInput(buf);
-  (session as any).transferRawSend = sender;
-  (session as any).transferManager = manager;
-
-  // Only the browser bridge needs telling; a byte transport's own client is
-  // already listening for the ZRQINIT. express.e:17795 prints two newlines
-  // after the Okay prompt and nothing else, and command.handler.ts:3050
-  // emits those - the banner that used to live here was ours.
-  if (transportType === 'web') {
-    socket.emit('transfer-raw:init', {
-      direction: 'upload',
-      paths: [playpen],
-    });
-  }
-
-  manager.start();
 }
 
 /**

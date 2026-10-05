@@ -20,6 +20,8 @@ jest.mock('../../src/handlers/screen.handler', () => ({
   runQueuedScreenCommands: jest.fn(async () => {}),
 }));
 jest.mock('../../src/utils/message-pointers.util', () => ({
+  loadConferenceAccount: jest.fn(),
+  saveConferenceAccount: jest.fn(),
   getMailStatFile: jest.fn(async () => ({ lowestKey: 1, highMsgNum: 11, lowestNotDel: 1 })),
   loadMsgPointers: jest.fn(async () => ({ lastNewReadConf: 1, lastMsgReadConf: 4, scanFlags: 0 })),
   saveMsgPointers: jest.fn(async () => {}),

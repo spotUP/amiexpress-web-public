@@ -6,6 +6,10 @@
 
 import { messagePointerFileManager, CONFBASE_RECORD_SIZE } from '../../services/MessagePointerFileManager';
 import { userFileManager } from '../../services/UserFileManager';
+import { RECORD_FIELDS } from '../../services/load-account';
+import type { AccountSession } from '../../services/account.service';
+import type { User } from '../../database/types';
+import { saveConferenceAccount, loadConferenceAccount } from '../../utils/message-pointers.util';
 import * as fs from 'fs';
 import * as amigafs from '../../utils/amigafs';
 import { conferenceAmigaPath } from '../../conferences/conference-paths';
@@ -1135,9 +1139,23 @@ debugLog(
     }
 
     const layout = userFileManager.recordLayout();
-    const userBuf = userPtr ? this.readSlot(this.userDataPath(), slot, layout.userSize) : null;
-    const keysBuf = keysPtr ? this.readSlot(this.userKeysPath(), slot, layout.keysSize) : null;
+    let userBuf = userPtr ? this.readSlot(this.userDataPath(), slot, layout.userSize) : null;
+    let keysBuf = keysPtr ? this.readSlot(this.userKeysPath(), slot, layout.keysSize) : null;
     const miscBuf = miscPtr ? this.readSlot(this.userMiscPath(), slot, layout.miscSize) : null;
+
+    // express.e:4556-4562 doorMsgLoadAccount: the caller's own slot is his
+    // account IN MEMORY (loggedOnUser), not the file - the file holds it as
+    // it was at logon until logoff saves it (8207). Around the copy,
+    // saveMsgPointers / loadMsgPointers of the current conference. The misc
+    // record stays the file's: 4560 copies loggedOnUserKeys into it, a
+    // 56-byte struct over a 248-byte one.
+    const caller = this.callerOnSlot(slot);
+    if (caller) {
+      saveConferenceAccount(caller, Number(caller.currentConf) || 0);
+      if (userPtr) userBuf = userFileManager.userRecord(caller.user, slot);
+      if (keysPtr) keysBuf = userFileManager.userKeysRecord(caller.user, slot);
+      loadConferenceAccount(caller, Number(caller.currentConf) || 0);
+    }
 
     // AQUASCAN_DEBUG: log loadAccount calls — AquaScan uses this to read user struct
     if (userBuf && userPtr) {
@@ -1198,7 +1216,32 @@ debugLog(
       this.writeSlot(this.userMiscPath(), slot, miscBuf, layout.miscSize);
     }
 
+    // express.e:4587-4597: a save of the caller's own slot is copied into
+    // loggedOnUser (CopyMem), and the current conference's pointers are
+    // loaded again - otherwise his logoff would write the old account back
+    // over what the door saved.
+    const caller = this.callerOnSlot(msg.data);
+    if (caller && userBuf) {
+      const saved = userFileManager.readUserBySlot(slot);
+      if (saved) {
+        const target = caller.user as unknown as Record<string, unknown>;
+        const source = saved as unknown as Record<string, unknown>;
+        for (const field of RECORD_FIELDS) {
+          if (source[field] !== undefined) target[field] = source[field];
+        }
+      }
+      loadConferenceAccount(caller, Number(caller.currentConf) || 0);
+    }
+
     this.reply(msg, 1);
+  }
+
+  /** This node's caller, when `slot` is his account (express.e `loggedOnUser.slotNumber=doorMsg.data`). */
+  private callerOnSlot(slot: number): (AccountSession & { user: User }) | null {
+    const session = this.bbsSession as unknown as AccountSession | undefined;
+    const user = session?.user;
+    if (!user || slot <= 0 || Number(user.slotNumber) !== slot) return null;
+    return session as AccountSession & { user: User };
   }
 
   private handleAppendAccountCommand(msg: XIMMessage): void {
@@ -1298,6 +1341,10 @@ debugLog(
       session.lastMsgReadConf = saved.confYM;
       session.lastNewReadConf = saved.confRead;
     }
+    // express.e:3939 `IF(loggedOnUser.slotNumber=msg.data) THEN
+    // loadMsgPointers(currentConf,1)` - its account half too.
+    const caller = this.callerOnSlot(msg.data);
+    if (caller) loadConferenceAccount(caller, Number(caller.currentConf) || 0);
     this.reply(msg, 1);
   }
 

@@ -43,8 +43,14 @@
  *
  * Wire format - `msg.string`:
  *
- *     READ <n>     set the manual read pointer   (express.e lastMsgReadConf)
- *     SCAN <n>     set the new-scan pointer      (express.e lastNewReadConf)
+ *     READ <n>     set the manual read pointer   (express.e lastMsgReadConf):
+ *                  the last message read
+ *     SCAN <n>     set the new-scan pointer      (express.e lastNewReadConf):
+ *                  the NEXT message to scan, so a door that read up to m sends
+ *                  m+1 (read-msg.ts searchNewMail sets msgNum+1; the join's
+ *                  "Last message auto scanned" prints it minus one, 5103)
+ *     RECV <n>     the caller opened message n: mark it received when it is
+ *                  addressed to him, as readit does (express.e:8943-8949)
  *
  * Reply in `msg.data`: 1 stored, 0 refused or unknown.
  *
@@ -85,7 +91,7 @@ export async function handleSetPointer(
   const verb = (words[0] || '').toUpperCase();
   const value = Number(words[1]);
 
-  if (verb !== 'READ' && verb !== 'SCAN') return 0;
+  if (verb !== 'READ' && verb !== 'SCAN' && verb !== 'RECV') return 0;
   // NaN, negative and fractional all fail this - a pointer is a message
   // number, and express.e stores it as a LONG.
   if (!Number.isInteger(value) || value < 0) return 0;
@@ -99,6 +105,8 @@ export async function handleSetPointer(
   const msgBaseId = Number(row?.msgBaseId ?? session?.currentMsgBase);
   if (!user?.id || !Number.isInteger(confId) || confId < 1) return 0;
   if (!Number.isInteger(msgBaseId) || msgBaseId < 1) return 0;
+
+  if (verb === 'RECV') return markReceivedByDoor(session, confId, value);
 
   try {
     const confBase = await loadMsgPointers(String(user.id), confId, msgBaseId);
@@ -125,6 +133,31 @@ export async function handleSetPointer(
     // pointer. Saying 0 leaves it in exactly the state it would be in on a
     // real AmiExpress, which the door already has to handle.
     console.warn('[AEW_SETPOINTER] could not store the pointer:', err);
+    return 0;
+  }
+}
+
+/**
+ * RECV: the board's own rule (read-msg.ts markReceived), on the header the
+ * door named. 1 when the message is now received by its addressee - marked
+ * here or before - and 0 when it is not his, or not there.
+ */
+function markReceivedByDoor(session: any, confId: number, msgNum: number): PointerAnswer {
+  if (msgNum < 1) return 0;
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { messageIndexManager } = require('../../services/MessageIndexManager');
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { markReceived, sameName } = require('../../handlers/message/read-msg');
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { getConfMailName } = require('../../handlers/message/conf-mail-name');
+    const headers = messageIndexManager.readHeaderFile(confId) as Array<{ msgNumb: number; toName: string; recv: number }>;
+    const h = headers.find((x) => x.msgNumb === msgNum);
+    if (!h) return 0;
+    if (markReceived(session, confId, h)) return 1;
+    return h.recv !== 0 && sameName(h.toName, getConfMailName(session)) ? 1 : 0;
+  } catch (err) {
+    console.warn('[AEW_SETPOINTER] could not mark received:', err);
     return 0;
   }
 }

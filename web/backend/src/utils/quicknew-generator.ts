@@ -1,13 +1,12 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import { db } from '../database';
 import { config } from '../config';
-import { loadConferenceFileAreas } from '../services/file-areas-loader';
 import { getSystemTime } from '../utils/date-time.util';
-import { AnsiUtil } from './ansi.util';
+// The board's one DIR reader - the same one F, N, FM and FTP list through.
+import { parseDirFile, getDirFilePath } from './dir-file-reader.util';
 import { wrapLineToWidth } from '@amiexpress/bbs-door-sdk/petscii';
 // A conference's directory is LOCATION.n, never a hand-built Conf<n>.
-import { conferenceSubdir } from '../conferences/conference-paths';
+import { conferenceDir } from '../conferences/conference-paths';
 
 /** The width every QuickNew line must fit: AmiExpress's own. */
 const SCREEN_COLUMNS = 80;
@@ -50,7 +49,6 @@ function foldAtSeam(line: string, width: number): string[] {
 }
 
 interface QuickNewSection {
-  title: string;
   files: string[];
   filesCount: number;
   megs: number;
@@ -77,109 +75,6 @@ function formatMegs(bytes: number): number {
 function padFileName(name: string): string {
   // reference-board layout uses 11-12 chars per filename column
   return name.padEnd(12, ' ');
-}
-
-function sectionHeader(section: QuickNewSection): string {
-  return `[32mLast 07 Days Files in [33m>> ${section.title} <<[34m :        [0m([35mFiles[33m: [36m${section.filesCount
-    .toString()
-    .padStart(2, '0')}[0m, [35mFakes[33m: [36m00, [35mMegs[33m: [36m${section.megs.toFixed(1)}[0m)`;
-}
-
-function sectionStats(section: QuickNewSection): string {
-  return `[35mYesterdays Statistics [0m: [32m${section.yesterdayCount
-    .toString()
-    .padStart(2, '0')} [36mFiles[33m, [32m00 [36mFakes[33m, [32m${section.yesterdayMegs.toFixed(
-    1
-  )} [36mMegs [33m![0m`;
-}
-
-function renderSection(section: QuickNewSection): string {
-  const lines: string[] = [];
-  lines.push(...foldAtSeam(sectionHeader(section), SCREEN_COLUMNS));
-  lines.push(...foldAtSeam(sectionStats(section), SCREEN_COLUMNS));
-  lines.push('');
-
-  if (section.files.length > 0) {
-    const rows = [];
-    for (let i = 0; i < section.files.length; i += 5) {
-      const row = section.files.slice(i, i + 5).map(padFileName).join('  ');
-      rows.push(`     [0m${row}  `);
-    }
-    lines.push(...rows);
-    lines.push(''); // blank line after file rows
-  }
-
-  return lines.join('\r\n');
-}
-
-export async function generateQuickNewScreen(confId: number, daysBack = 7): Promise<string> {
-  const now = getSystemTime();
-  const cutoff = new Date(now.getTime() - daysBack * 24 * 60 * 60 * 1000);
-  const yesterdayStart = new Date(now);
-  yesterdayStart.setHours(0, 0, 0, 0);
-  const yesterdayEnd = new Date(yesterdayStart.getTime() + 24 * 60 * 60 * 1000);
-
-  const sections: QuickNewSection[] = [];
-
-  try {
-    const areas = await db.getFileAreas(confId);
-    for (const area of areas) {
-      const files = await db.getFileEntries(area.id, { status: 'active', limit: 200 });
-      const recent = files.filter(f => f.uploadDate >= cutoff);
-      const yesterdayFiles = files.filter(
-        f => f.uploadDate >= yesterdayStart && f.uploadDate < yesterdayEnd
-      );
-
-      sections.push({
-        title: area.name,
-        files: recent.slice(0, 40).map(f => f.filename),
-        filesCount: recent.length,
-        megs: formatMegs(recent.reduce((sum, f) => sum + (f.size || 0), 0)),
-        yesterdayCount: yesterdayFiles.length,
-        yesterdayMegs: formatMegs(yesterdayFiles.reduce((sum, f) => sum + (f.size || 0), 0)),
-      });
-    }
-  } catch (error) {
-console.error('[QuickNew] Error generating QuickNew screen:', error);
-  }
-
-  const output: string[] = [];
-  // Clear the screen before rendering QuickNew (scrollback-preserving)
-  output.push(AnsiUtil.clearScreen());
-
-  if (sections.length === 0) {
-    output.push('No file areas available.');
-  } else {
-    for (const section of sections) {
-      output.push(renderSection(section));
-    }
-  }
-
-  const timePart = now.toTimeString().split(' ')[0];
-  const month = String(now.getMonth() + 1).padStart(2, '0');
-  const day = String(now.getDate()).padStart(2, '0');
-  const year = String(now.getFullYear()).slice(-2);
-  // Build footer content without ANSI codes to calculate padding
-  const footerText = `  QuickNew V2.2 (Web) Date : ${month}-${day}-${year}   Time : ${timePart}  `;
-  const paddedFooter = footerText.padEnd(80, ' ');
-  const footer = `[44;33m${paddedFooter}[0m`;
-
-  output.push(footer);
-  output.push('~SP.');
-
-  return output.join('\r\n');
-}
-
-export async function writeQuickNewScreen(confId: number, daysBack = 7): Promise<void> {
-  const content = await generateQuickNewScreen(confId, daysBack);
-  const baseDir = config.getConfig().dataDir;
-  const screenPath = path.join(baseDir, 'Screens', 'quicknew.txt');
-
-  try {
-    fs.writeFileSync(screenPath, content, 'utf-8');
-  } catch (error) {
-console.error('[QuickNew] Failed to write quicknew screen:', error);
-  }
 }
 
 /**
@@ -252,67 +147,6 @@ console.error('[QuickNew] Error parsing config:', error);
 }
 
 /**
- * Parse classic DIR1 file format
- * Format: filename     P sizeK  datestr  description
- */
-export function parseDirFile(dirPath: string): Array<{ filename: string; uploadDate: Date; size: number }> {
-  if (!fs.existsSync(dirPath)) return [];
-
-  const MONTHS: { [key: string]: number } = {
-    Jan: 0, Feb: 1, Mar: 2, Apr: 3, May: 4, Jun: 5,
-    Jul: 6, Aug: 7, Sep: 8, Oct: 9, Nov: 10, Dec: 11
-  };
-
-  try {
-    const content = fs.readFileSync(dirPath, 'latin1');
-    const lines = content.split('\n');
-    const entries: Array<{ filename: string; uploadDate: Date; size: number }> = [];
-
-    for (const line of lines) {
-      // Basic heuristic for a file line: starts with non-space and has a date pattern
-      // Example: "AQUASCAN.EXE  P   12K  07-Dec-92  Cool scanner"
-      // Example: "-Z-B&GE1.DMS P 549027  10-15-95  ..."
-      if (line.length > 30 && !line.startsWith(' ')) {
-        const filename = line.substring(0, 13).trim();
-        const rawSizeStr = line.substring(14, 22).trim();
-        const dateStr = line.substring(23, 32).trim(); // "07-Dec-92" or "10-15-95"
-
-        if (filename && dateStr.includes('-')) {
-          const isKB = rawSizeStr.toUpperCase().endsWith('K');
-          const sizeVal = parseInt(rawSizeStr.replace(/K$/i, ''), 10) || 0;
-          const size = isKB ? sizeVal * 1024 : sizeVal;
-
-          // Parse date DD-MMM-YY or MM-DD-YY (Amiga formats vary)
-          const dateParts = dateStr.split('-');
-          let day, month, year;
-
-          if (isNaN(parseInt(dateParts[1], 10))) {
-            // DD-MMM-YY
-            day = parseInt(dateParts[0], 10);
-            month = MONTHS[dateParts[1]] || 0;
-            year = parseInt(dateParts[2], 10);
-          } else {
-            // MM-DD-YY
-            month = parseInt(dateParts[0], 10) - 1;
-            day = parseInt(dateParts[1], 10);
-            year = parseInt(dateParts[2], 10);
-          }
-          
-          year += year < 80 ? 2000 : 1900; // Y2K heuristic
-          const uploadDate = new Date(year, month, day);
-
-          entries.push({ filename, uploadDate, size });
-        }
-      }
-    }
-    return entries;
-  } catch (error) {
-console.error(`[QuickNew] Error parsing DIR file ${dirPath}:`, error);
-    return [];
-  }
-}
-
-/**
  * Generate QuickNew screen from config file (68K compatible)
  */
 export async function generateQuickNewFromConfig(
@@ -348,71 +182,31 @@ console.warn(`[QuickNew] Invalid dir path: ${sectionCfg.dirPath}`);
     const dirNum = match[2] ? parseInt(match[2], 10) : 1;
 
     try {
-      // Get file areas for this conference (prefer database, fallback to disk)
-      let areas = await db.getFileAreas(confId);
+      /*
+       * THE DIR FILE IS THE WHOLE TRUTH.
+       *
+       * express.e keeps no file catalogue: N lists a conference's DIR files
+       * (displayFileList, express.e:27626, the date scan at 27840+), and the
+       * QuickNew door this stands in for opens the DIR file its config names
+       * and reads nothing else (QuickNew.asm processBlock -> loadfile). This
+       * used to ask the SQL file_entries table first and read the DIR only
+       * when that came back empty - and a catalogue row outlives its file, so
+       * the screen listed files FM had deleted and missed files moved in.
+       *
+       * A missing or empty DIR is zero files, not an error: the board's own
+       * readers treat it the same way.
+       */
       const bbsRoot = config.getConfig().dataDir;
-      let usingDiskAreas = false;
-
-      if (areas.length === 0) {
-        usingDiskAreas = true;
-        const diskAreas = loadConferenceFileAreas(bbsRoot, confId);
-        // Map disk areas to match the expected structure (only need id for lookup)
-        areas = diskAreas.map(a => ({
-          id: a.dirNumber, // Use dirNumber as ID for lookup
-          name: a.name,
-          description: a.description || '',
-          path: a.dlPath || a.ulPath || '',
-          conferenceId: confId,
-          maxFiles: 0,
-          uploadAccess: 0,
-          downloadAccess: 0,
-          created: getSystemTime(),
-          updated: getSystemTime()
-        }));
-      }
-
-      // Find area by name pattern "Conference X - Dir Y" or use array index
-      // Note: area.id is database auto-increment, NOT the dir number
-      const dirPattern = new RegExp(`(Conference\\s*${confId}|Conf\\s*${confId}).*Dir\\s*${dirNum}`, 'i');
-      let area = areas.find(a => dirPattern.test(a.name));
-      if (!area) {
-        // Fallback: use array index (assumes areas ordered by dir number within conference)
-        area = areas[dirNum - 1];
-      }
-
-      // No area is not a reason to drop the section. The 68K door never
-      // looks one up: the config names a DIR file and the template carries
-      // the title, so a section with no registered area still reads its
-      // DIR file from disk exactly as QuickNew.asm does.
-      if (!area) {
-console.warn(`[QuickNew] Area not found for ${sectionCfg.dirPath}; reading its DIR file directly`);
-      }
-
-      // Get file entries:
-      // - If areas came from database, query database for files
-      // - If areas came from disk, skip database (would match wrong area IDs) and parse DIR file
-      let files: any[] = [];
-
-      if (area && !usingDiskAreas) {
-        files = await db.getFileEntries(area.id, { status: 'active', limit: 200 });
-      }
-
-      if (files.length === 0) {
-        // Fallback to parsing DIR file from disk
-        const dirFilePath = conferenceSubdir(bbsRoot, confId, `DIR${dirNum}`);
-        const diskFiles = parseDirFile(dirFilePath);
-        files = diskFiles.map(f => ({
-          ...f,
-          id: 0,
-          description: '',
-          // A DIR line names no uploader; saying 'sysop' credited one.
-          uploader: '',
-          downloads: 0,
-          areaId: area ? area.id : 0,
-          status: 'active',
-          checked: 'P'
-        } as any));
-      }
+      const dirFilePath = getDirFilePath(conferenceDir(bbsRoot, confId), dirNum);
+      let content = '';
+      try {
+        content = fs.readFileSync(dirFilePath, 'latin1');
+      } catch { /* no DIR file: no files */ }
+      const files = parseDirFile(content).map(f => ({
+        filename: f.filename,
+        uploadDate: f.uploadDate,
+        size: f.fileSize,
+      }));
 
       const recent = files.filter(f => f.uploadDate >= cutoff);
       const yesterdayFiles = files.filter(
@@ -420,7 +214,6 @@ console.warn(`[QuickNew] Area not found for ${sectionCfg.dirPath}; reading its D
       );
 
       const section: QuickNewSection = {
-        title: area ? area.name : sectionCfg.dirPath,
         files: recent.slice(0, 40).map(f => f.filename),
         filesCount: recent.length,
         megs: formatMegs(recent.reduce((sum, f) => sum + (f.size || 0), 0)),

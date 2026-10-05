@@ -330,9 +330,29 @@ export interface BBSSession {
   currentConference?: number; // Current conference ID (GlobalStructures parity)
   conferenceId: number; // XIM doors read this property for current conference
   currentMsgBase: number;
+  /**
+   * The conference and message base joinConf last loaded: express.e's
+   * msgBaseLocation (getMsgBaseLocation, express.e:5015) and confNameType
+   * (5017-5024). joinConf sets them even when confScan=TRUE leaves
+   * currentConf at 0 (4997-5000, 28103), so a reply made in the mail scan is
+   * saved in the scanned base. Read it through utils/joined-conf.util.
+   */
+  joinedConf?: { conf: number; msgBase: number };
   timeRemaining: number;
   lastActivity: number;
   logonTime?: number; // Unix timestamp when user logged on (express.e:540)
+  /**
+   * express.e:136 newSinceFlag: N ran during this call (27902). Cleared at
+   * logon (28504); at logoff it moves the account's newSinceDate to now
+   * (8197), and each conference record's as its pointers load or save
+   * (4911, 4945).
+   */
+  newSinceFlag?: boolean;
+  /**
+   * The logoff's saveAccount ran (services/account.service): the account in
+   * memory is now every conference's sum, so no conference may take it back.
+   */
+  accountSavedAtLogoff?: boolean;
   lastTimeUpdate?: number; // Unix timestamp of last time update (express.e:541,552)
   /**
    * Which AmiExpress "day" this session's time accounting last belonged to.
@@ -922,6 +942,14 @@ process.on("SIGUSR1", () => {
 // This helps diagnose if crashes are due to health check timeouts
 process.on("SIGTERM", () => {
   console.log("[SHUTDOWN] SIGTERM received - container is being stopped");
+  // Every caller still on keeps his call: the account is in memory until
+  // logoff (express.e:8207), and a stopped container has no logoff.
+  try {
+    const { saveOnlineAccounts } = require("./services/account.service");
+    console.log(`[SHUTDOWN] Saved ${saveOnlineAccounts()} online account(s)`);
+  } catch (err) {
+    console.error("[SHUTDOWN] Saving the online accounts failed:", err);
+  }
   console.log("[SHUTDOWN] This is normal for deployments, but unexpected during operation");
   // Log memory state before shutdown
   const mem = process.memoryUsage();

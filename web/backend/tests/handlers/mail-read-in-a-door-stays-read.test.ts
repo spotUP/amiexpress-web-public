@@ -21,6 +21,8 @@ type Row = { lastMsgReadConf: number; lastNewReadConf: number };
 const rows = new Map<string, Row>();
 const key = (user: string, conf: number, base: number) => `${user}/${conf}/${base}`;
 jest.mock('../../src/utils/message-pointers.util', () => ({
+  loadConferenceAccount: jest.fn(),
+  saveConferenceAccount: jest.fn(),
   loadMsgPointers: async (user: string, conf: number, base: number) => ({
     userId: user, conferenceId: conf, messageBaseId: base,
     ...(rows.get(key(user, conf, base)) ?? { lastMsgReadConf: 0, lastNewReadConf: 0 }),

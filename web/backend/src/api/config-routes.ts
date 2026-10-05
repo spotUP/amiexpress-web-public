@@ -2298,10 +2298,7 @@ console.log(`[API] Deduplicated to ${users.length} unique users`);
               updatedUser.passwordHash = await bcrypt.hash(password, 10);
         }
 
-        // Write back to disk
-        userFileManager.updateUserDataFile(updatedUser, slotNumber);
-
-        // And to the database, which is what LOGIN reads.
+        // The database, which is what LOGIN reads - BEFORE the disk.
         //
         // db.authenticateUser compares against the users row
         // (database.ts:2830-2836); user.misc holds only the first 32
@@ -2313,10 +2310,27 @@ console.log(`[API] Deduplicated to ${users.length} unique users`);
         // Phantasm, whose disk fragment and database hash disagreed.
         // Same issue applies to secLevel: the admin page shows the DB value,
         // and login reads it, so the disk-only change was invisible.
+        //
+        // The row is found by the account's SLOT, which a rename does not
+        // change - not by the name, which a rename does. Looked up by the new
+        // name after the disk already had it, the row was never found: the
+        // old name went on logging in, and the row's next save wrote it back
+        // over the disk. And the row is written first, while its name still
+        // matches the record, so the save it makes to disk (updateUser ->
+        // loadAccount) merges over the real record instead of the row alone.
         try {
-          const dbUser = await database.getUserByUsername(updatedUser.username);
+          // A slot's row counts only when it is this record's account (the
+          // check loadAccount makes): a row that points at the wrong slot is
+          // someone else. Otherwise the row of the name as it was.
+          const sameName = (a: string | undefined) =>
+            String(a ?? '').trim().toLowerCase() === String(currentUser.username ?? '').trim().toLowerCase();
+          const bySlot = await database.getUserBySlotNumber(slotNumber);
+          const dbUser = bySlot && sameName(bySlot.username)
+            ? bySlot
+            : await database.getUserByUsername(currentUser.username);
           if (dbUser) {
             const dbUpdates: Record<string, unknown> = {};
+            if (updatedUser.username !== currentUser.username) dbUpdates.username = updatedUser.username;
             if (password) dbUpdates.passwordHash = updatedUser.passwordHash;
             if (updates.secLevel !== undefined) dbUpdates.secLevel = updates.secLevel;
             if (updates.realname !== undefined) dbUpdates.realname = updates.realname;
@@ -2336,6 +2350,9 @@ console.log(`[API] Deduplicated to ${users.length} unique users`);
         } catch (error) {
           return handleError(res, error);
         }
+
+        // Then the record itself, what the BBS reads.
+        userFileManager.updateUserDataFile(updatedUser, slotNumber);
 
         // Remove password hash from response
         const { passwordHash: _, ...userWithoutPassword } = updatedUser;

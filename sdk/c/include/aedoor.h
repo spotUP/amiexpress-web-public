@@ -185,6 +185,14 @@ void ae_shutdown(void);
 int ae_field_read(int field, char *out, int cap);
 int ae_field_write(int field, const char *value);
 
+/* DT_QUERYBIT (1002): does the caller pass this ACS check? express.e answers
+ * `msg.command:=checkSecurity(msg.data)` (express.e:3857-3858) - the ACS
+ * index goes OUT in Data and the answer comes back in Command, the one field
+ * read that answers there. Returns 1 or 0, or -1 on carrier loss. A real
+ * AmiExpress answers it, so this is how a door learns the board's own access
+ * rules rather than inventing a level threshold. */
+int ae_query_bit(int acs);
+
 /* One round trip that SENDS a string and READS one back.
  *
  * Neither of the two above can do it, and that is not an oversight in them:

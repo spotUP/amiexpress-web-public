@@ -22,6 +22,8 @@ process.env.SKIP_DB_INIT = '1';
 const loadMsgPointers = jest.fn();
 const saveMsgPointers = jest.fn();
 jest.mock('../../src/utils/message-pointers.util', () => ({
+  loadConferenceAccount: jest.fn(),
+  saveConferenceAccount: jest.fn(),
   loadMsgPointers: (...a: unknown[]) => loadMsgPointers(...a),
   saveMsgPointers: (...a: unknown[]) => saveMsgPointers(...a),
 }));

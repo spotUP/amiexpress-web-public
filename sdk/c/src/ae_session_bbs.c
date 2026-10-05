@@ -24,6 +24,13 @@ static int bbs_write(void *context, ae_field field, const char *value)
     return ae_field_write((int)field, value);
 }
 
+/** One ACS question, through DT_QUERYBIT. */
+static int bbs_query_bit(void *context, int acs)
+{
+    (void)context;
+    return ae_query_bit(acs);
+}
+
 /**
  * Open a session on the board this door is running under.
  *
@@ -37,5 +44,6 @@ int ae_open_bbs(ae_session *s, char *storage, long cap, int node)
     if (rc != 0) return rc;
 
     ae_set_writer(s, bbs_write);
+    ae_set_security_query(s, bbs_query_bit);
     return 0;
 }

@@ -610,6 +610,24 @@ int ae_field_write(int field, const char *value)
     return (msg->Data == -1) ? -1 : 0;
 }
 
+int ae_query_bit(int acs)
+{
+    if (msg == NULL || bbs_port == NULL || carrier_lost) {
+        return -1;
+    }
+
+    msg->Command = 1002;           /* DT_QUERYBIT, axcommon.e:362 */
+    msg->Data = acs;
+    msg->String[0] = '\0';
+    xim_call();
+
+    if (msg->Data == -1) {
+        return -1;
+    }
+    /* express.e's TRUE is -1; this port answers 1. Either is "yes". */
+    return msg->Command != 0 ? 1 : 0;
+}
+
 void ae_delay_ticks(int ticks)
 {
     if (ticks > 0) {

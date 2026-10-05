@@ -37,6 +37,7 @@ jest.mock('../../src/handlers/screen.handler', () => ({
 
 import { handleC64Detected } from '../../src/server/c64-detected-handler';
 import { BBSState } from '../../src/constants/bbs-states';
+import { convertAsciiToPetsciiOutput } from '../../src/utils/petscii.util';
 
 describe('c64-detected handler (Finding 1: TTYPE/dedicated-port C64s reach the shared connection emitter)', () => {
   // Same fixture shape as petscii-bytes-transport.test.ts - built in code,
@@ -110,8 +111,17 @@ describe('c64-detected handler (Finding 1: TTYPE/dedicated-port C64s reach the s
     // The connect banner BEFORE the title - a detected C64 takes the same
     // pre-login pipeline as every caller (web-vs-telnet audit item 10); it
     // used to skip straight to the title and never saw it.
+    // Matched as the PETSCII the C64 receives, not as lowercased latin1:
+    // "CONNECT" leaves as $C3 $CF ..., which a lowercase-bank C64 shows as
+    // capitals. (The "/X Native Telnet: Successful connection to node" line
+    // this used to look for is gone - express.e prints no such text, 1b48012c1.)
+    const banner = Buffer.concat(written.slice(0, title));
+    // Readable: the lowercase bank ($0E) is selected before the first letter.
+    const firstLetter = banner.indexOf(convertAsciiToPetsciiOutput('CONNECT'));
+    expect(banner.subarray(0, firstLetter).includes(0x0e)).toBe(true);
+    expect(banner.includes(convertAsciiToPetsciiOutput('CONNECT 19200'))).toBe(true);
+    expect(banner.includes(convertAsciiToPetsciiOutput('Welcome to '))).toBe(true);
     const text = (bs: Buffer[]) => Buffer.concat(bs).toString('latin1').toLowerCase();
-    expect(text(written.slice(0, title))).toContain('uccessful connection to node');
     // And the login prompt after it.
     expect(text(written.slice(title + 1))).toContain('nter your ');
   });

@@ -6,6 +6,7 @@ import { initializeContainer } from '../container';
 import { loadConfConfig } from '../services/conf-config.service';
 import { onConferencesChanged } from '../services/conference-change-bus';
 import { expandConferenceAccessTo } from '../services/conference-access-expansion';
+import { userFileManager } from '../services/UserFileManager';
 import { loadBBSConfig } from '../services/bbs-config-file.service';
 import { setACSConfig, ToggleFlags, togglesFromBoardConfig } from '../utils/acs.util';
 import { conferenceFileManager } from '../services/ConferenceFileManager';
@@ -14,7 +15,7 @@ import {
   ensureConferenceStructure,
   ensureScreensDirectory
 } from '../services/file-areas-loader';
-import { refreshStorageContext } from '../storage';
+import { measureVolumeBytes, refreshStorageContext } from '../storage';
 import { remoteAreaFromDisk } from '../storage/remote-areas';
 import { Door, DoorSession, ChatState } from '../types';
 import { LoggedOnSubState } from '../constants/bbs-states';
@@ -284,7 +285,10 @@ console.error('[Webhook Init] Error initializing default webhook:', error);
  * is idempotent.
  */
 /**
- * Grant every account access to the conferences the board has right now.
+ * Grant every flag-string account access to the conferences the board has
+ * right now - on user.data, with the SQL mirror following. WEB_: see
+ * conference-access-expansion.ts for why express.e has no such step and what
+ * it may touch.
  *
  * Boot did this and the refresh did not, so a conference created in the
  * admin was everywhere except in anyone's access string until the next
@@ -292,15 +296,13 @@ console.error('[Webhook Init] Error initializing default webhook:', error);
  * logged rather than allowed to fail a create.
  */
 function expandAccessForCurrentConferences(caller: string): void {
-  if (!db || conferences.length === 0) return;
+  if (conferences.length === 0) return;
   try {
-    const sqlite = (db as any).db;
-    if (!sqlite) return;
-    const result = expandConferenceAccessTo(sqlite, conferences.length);
-    if (result.usersExpanded > 0 || result.newUserDefaultExpanded) {
+    const sqlite = db ? (db as any).db : undefined;
+    const result = expandConferenceAccessTo({ users: userFileManager, sqlite }, conferences.length);
+    if (result.usersExpanded > 0) {
       process.stdout.write(
-        `[${caller}] Expanded conference access to ${conferences.length} conferences for ${result.usersExpanded} user(s)` +
-        `${result.newUserDefaultExpanded ? ' and the new-user default' : ''}\n`
+        `[${caller}] Expanded conference access to ${conferences.length} conferences for ${result.usersExpanded} user(s)\n`
       );
     }
   } catch (e) {
@@ -551,7 +553,7 @@ export async function initializeData(io?: SocketIOServer) {
       // live change reaches the pool exactly when it reaches everything
       // else, with no restart in between.
       await refreshStorageContext(bbsRoot, fileAreas.map(remoteAreaFromDisk), {
-        usedBytesByVolume: () => db.usedBytesByVolume(),
+        usedBytesByVolume: measureVolumeBytes,
       });
     });
 
@@ -575,7 +577,7 @@ export async function initializeData(io?: SocketIOServer) {
     // doc for why a hanging bucket must not be able to delay `setDatabase`,
     // dependency injection or `server.listen` below.
     await refreshStorageContext(bbsRoot, fileAreas.map(remoteAreaFromDisk), {
-      usedBytesByVolume: () => db.usedBytesByVolume(),
+      usedBytesByVolume: measureVolumeBytes,
     });
 
     setDatabase(db);

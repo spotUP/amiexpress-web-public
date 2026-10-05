@@ -28,10 +28,10 @@ import { updateDownloadStats, creditAccountTrackDownloads, checkDownloadRatios }
 import { getTimeRemainingMinutes } from '../utils/time-tracking.util';
 import { DEFAULT_CONNECTION_BAUD } from '../constants/modem';
 import { logDownload } from '../utils/download-logging.util';
-import { userFileManager } from './UserFileManager';
 import { doorDropFileManager } from './DoorDropFileManager';
 import { emitDownload } from './bbs-event-emitter';
 import { messagePointerFileManager, accountedBytes } from './MessagePointerFileManager';
+import { saveConferenceAccount, loadConferenceAccount } from '../utils/message-pointers.util';
 import type { ConferenceAccount } from '../utils/download-ratios.util';
 
 /** A file as either path carries it. */
@@ -106,6 +106,10 @@ export async function checkRatiosAndTime(
   }
 
   const accounting = !!user && checkSecurity(user, ACSPermission.CONFERENCE_ACCOUNTING);
+  // express.e:19846 saveMsgPointers(currentConf,currentMsgBase): the current
+  // conference's record takes the caller's live counters before the ratio
+  // reads the records.
+  if (accounting) saveConferenceAccount(session, session.currentConf);
   const requests = files.map(f => ({ size: f.size || 0, isFree: isFreeDownload(f), conference: f.confNum || session.currentConf }));
   const ratio = await checkDownloadRatios(
     user,
@@ -170,39 +174,6 @@ export async function bookConference(session: BBSSession, file: BookableFile, is
   messagePointerFileManager.addDownload(conf, slot, size);
 }
 
-/** The account, written where both the board and AmiExpress's own doors read it. */
-async function saveAccount(session: BBSSession): Promise<void> {
-  const user = session.user;
-  if (!user) return;
-  // Its own failure, not the file's: a database that cannot take the row
-  // must not stop the conference count, the node's bytes and the event.
-  try {
-    await saveAccountRow(user);
-  } catch (err) {
-    console.error('[download-booking] could not save the account row:', err);
-  }
-  if (user.slotNumber) {
-    try { userFileManager.updateUserDataFile(user, user.slotNumber); } catch { /* disk error: the DB copy stands */ }
-  }
-}
-
-/**
- * Only what the account keeps. Not bytesAvailableForDownload - that is
- * AmiExpress's bytesADL, a session figure worked out at logon from the day's
- * limit minus dailyBytesDld (express.e:28529-28535) - and not
- * lastDownloadTime, which express.e has no field for and nothing reads back.
- * Saving them asked for columns that do not exist, so every booked
- * download's row write failed ("no such column").
- */
-async function saveAccountRow(user: NonNullable<BBSSession['user']>): Promise<void> {
-  await db.updateUser(user.id, {
-    downloads: user.downloads,
-    bytesDownload: user.bytesDownload,
-    dailyBytesDld: user.dailyBytesDld,
-    topDownloadCPS: user.topDownloadCPS,
-  });
-}
-
 /**
  * What the board's own extras make of a download: the catalogue's per-file
  * count, the FILE_DOWNLOADED webhook and the achievement. They lived only in
@@ -250,9 +221,18 @@ export async function bookDownloads(session: BBSSession, files: readonly Bookabl
     const isFree = isFreeDownload(file);
     try {
       await logDownload(user, name, file.size, isFree, session.nodeId || 0);
-      await updateDownloadStats(user, file.size, isFree);
-      await saveAccount(session);
+      // express.e:15439-15461 updateDownloadStats. Under conference
+      // accounting the download goes into the FILE's conference record,
+      // between a saveMsgPointers and a loadMsgPointers of the current one
+      // (15441, 15452) - so the caller's live counters, which are the current
+      // conference's, show it when it is that conference. Otherwise into the
+      // account in memory. Either way the account reaches user.data at
+      // logoff (8207), not per file.
+      const accounting = checkSecurity(user, ACSPermission.CONFERENCE_ACCOUNTING);
+      if (accounting) saveConferenceAccount(session, session.currentConf);
+      await updateDownloadStats(user, file.size, isFree, undefined, { accounting });
       await bookConference(session, file, isFree);
+      if (accounting) loadConferenceAccount(session, session.currentConf);
       doorDropFileManager.updateDownloadBytesToday(session.nodeId || 0, file.size);
       await announceDownload(session, file, name);
       emitDownload({

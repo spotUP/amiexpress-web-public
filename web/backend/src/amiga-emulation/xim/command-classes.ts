@@ -43,6 +43,8 @@ export function isIOCommand(command: number): boolean {
     // saveMsgPointers, so it is asynchronous too and belongs here for the
     // same reason - and this is the line the comment above warns about.
     XIMCommand.AEW_SETPOINTER,
+    // AEW_POSTMSG saves a message, which is asynchronous for the same reason.
+    XIMCommand.AEW_POSTMSG,
     // Note: PG_SM, PG_UD, PG_US were removed - they don't exist in axcommon.e
     // and conflicted with JH_REGISTER (1), JH_FLAGFILE (13), JH_SHOWFLAGS (14)
   ];

@@ -26,6 +26,7 @@ import { DI_TOKENS } from '../../container';
 import { FileStatisticsUseCase } from '../../services/use-cases/file-statistics.use-case';
 import { formatBCD as formatBCDUtil } from '../../utils/bcd-math.util';
 import { messagePointerFileManager, accountedBytes, type ConfBaseRecord } from '../../services/MessagePointerFileManager';
+import { saveConferenceAccount, loadConferenceAccount } from '../../utils/message-pointers.util';
 
 /**
  * FS Command - File Status
@@ -111,6 +112,11 @@ console.log('[FileStatusHandler] Initialized with DI');
       }
       socket.emit('ansi-output', '\x1b[0m    ----  -------  -------------- -------  -------------- -----------  -----\x1b[0m\r\n');
     }
+
+    // express.e:24162 saveMsgPointers(currentConf,currentMsgBase): the
+    // current conference's record takes the caller's live counters, so its
+    // row below is what he has now.
+    saveConferenceAccount(session, currentConf);
 
     // Determine which conferences to show - express.e:24161
     const startConf = currentOnly ? currentConf : 1;
@@ -210,6 +216,8 @@ console.log('[FileStatusHandler] Initialized with DI');
     }
 
     socket.emit('ansi-output', '\x1b[0m\r\n');
+    // express.e:24189 loadMsgPointers(currentConf,currentMsgBase).
+    loadConferenceAccount(session, currentConf);
   }
 
   /**

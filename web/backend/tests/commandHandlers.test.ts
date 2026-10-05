@@ -58,7 +58,7 @@ jest.mock('../src/handlers/content/view-file.handler', () => ({
 jest.mock('../src/handlers/zippy-search.handler', () => ({
   ZippySearchHandler: { handleZippySearchCommand: jest.fn().mockResolvedValue(undefined), handle: jest.fn() },
 }), { virtual: true });
-jest.mock('../src/server/session-manager', () => ({ setSession: jest.fn(), userSessions: new Map() }));
+jest.mock('../src/server/session-manager', () => ({ setSession: jest.fn(), userSessions: new Map(), sessions: new Map() }));
 jest.mock('../src/handlers/commands/system-commands.handler', () => ({
   handleGoodbyeCommand: jest.fn(async (s: any) => { s.disconnect(); }),
   handleQuietModeCommand: jest.fn().mockResolvedValue(undefined),

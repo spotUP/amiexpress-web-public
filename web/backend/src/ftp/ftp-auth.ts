@@ -41,7 +41,7 @@ import {
   AccountRefusal,
   nodeReservedForAnother,
 } from '../services/logon-gates';
-import { countWrongPassword, clearWrongPasswords } from '../services/password-failures';
+import { countWrongPasswordFor, clearWrongPasswords } from '../services/password-failures';
 
 /**
  * What an FTP caller is told when the board refuses his account. 420 and the
@@ -443,12 +443,8 @@ console.log(`[FTP] no tagline for ${request.filename}: ${error instanceof Error 
        * this port persists it, as its BBS logon does.)
        */
       if (!row) {
-        try {
-          countWrongPassword(await db.getUserByUsername(username), 'FTP');
-        } catch (err) {
-          // A failure to look the name up must never turn a 430 into a crash.
-          console.warn('[FTP] Could not record password failure:', err);
-        }
+        // A failure to look the name up must never turn a 430 into a crash.
+        await countWrongPasswordFor(() => db.getUserByUsername(username), 'FTP');
         return null;
       }
       clearWrongPasswords(row, 'FTP');

@@ -83,13 +83,16 @@ describe('a C64 caller scanning a conference whose DIR file exists in two cases'
     expect(out.split('DEMO.LHA').length - 1).toBe(1);
   });
 
-  it('says it is waiting for a key, instead of holding in silence', async () => {
-    // "it gets stuck there as well ... i can exit with enter". The board does
-    // hold for a keypress after a listing - `F` does too - but `F` PRINTS the
-    // prompt first. This scan ended with a bare newline, so a caller with
-    // nothing to read saw a dead screen.
+  it('ends at the menu loop\'s pause, which is what says it is waiting', async () => {
+    // "it gets stuck there as well ... i can exit with enter". The fix was
+    // first a "Press any key" printed by the scan itself (4adf5a915); since
+    // 22dfb105c the scan ends the way `F` does and express.e's myNewFiles
+    // (27906-28023) does - no prompt of its own, menuPause set - and the
+    // menu loop takes it from there (the dispatcher takes every finished
+    // command round the menu loop, proven in
+    // a-command-returns-to-the-prompt.test.ts).
     const { out, session } = await run();
-    expect(out).toMatch(/Press any key to continue/);
+    expect(out).not.toMatch(/Press any key to continue/);
     expect(session.menuPause).toBe(true);
     expect(session.subState).toBe('display_menu');
   });

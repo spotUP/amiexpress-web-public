@@ -58,12 +58,13 @@ function driver(user: Record<string, unknown> = {}) {
 beforeEach(() => mockUpdateUser.mockClear());
 
 describe("the W command's editor setting", () => {
-  it('updates the editor column, never a field with no column', async () => {
+  it('changes the editor field of the account in memory, never a field with no column', async () => {
     const d = driver({ editor: 'Prompt' });
     d.session.subState = LoggedOnSubState.W_OPTION_SELECT;
     await handleWOptionSelectInput(d.socket, d.session, '12');
-    expect(mockUpdateUser).toHaveBeenCalledTimes(1);
-    expect(mockUpdateUser).toHaveBeenCalledWith('u12', { editor: 'Line' });
+    // The record's own field: in memory until W is left (express.e:25893).
+    expect(d.session.user.editor).toBe('Line');
+    expect(mockUpdateUser).not.toHaveBeenCalled();
   });
 
   it('cycles the three editors the record can hold', async () => {
@@ -72,7 +73,7 @@ describe("the W command's editor setting", () => {
     const written: unknown[] = [];
     for (let i = 0; i < 3; i++) {
       await handleWOptionSelectInput(d.socket, d.session, '12');
-      written.push((mockUpdateUser.mock.calls[i][1] as { editor: string }).editor);
+      written.push(d.session.user.editor);
     }
     expect(written).toEqual(['Line', 'Full', 'Prompt']);
   });

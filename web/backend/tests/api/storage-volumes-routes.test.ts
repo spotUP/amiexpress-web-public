@@ -112,13 +112,17 @@ describe('Drive Setup storage routes', () => {
       });
     });
 
-    it('reports the used bytes from the catalog, not zero, for a drive nothing in this process has written', async () => {
+    it("reports the pool's measured used bytes, never the catalog's sum", async () => {
+      // A catalogue row is what the port's own rows claim, not what the bucket
+      // holds (db-disk audit 2026-10-04 §6); the figure shown is the live
+      // pool's, measured from the bucket (tests/storage/quota-counts-what-the-
+      // bucket-holds.test.ts). This drive is not in a live pool here.
       const raw = (db as any).db;
       seedCatalogEntry(raw, { storageVolume: 2, filename: unique('DEMO') + '.LHA', size: 12345 });
 
       const res = await request(app).get('/api/config/drives');
       const s3Drive = res.body.data.find((d: any) => d.drive_number === 2);
-      expect(s3Drive.usedBytes).toBeGreaterThanOrEqual(12345);
+      expect(s3Drive.usedBytes).toBe(0);
     });
 
     it('never returns a secret, in any field', async () => {

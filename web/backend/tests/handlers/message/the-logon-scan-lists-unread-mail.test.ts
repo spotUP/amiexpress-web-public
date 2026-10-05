@@ -10,6 +10,8 @@
 process.env.SKIP_DB_INIT = '1';
 
 jest.mock('../../../src/utils/message-pointers.util', () => ({
+  loadConferenceAccount: jest.fn(),
+  saveConferenceAccount: jest.fn(),
   getMailStatFile: jest.fn(() => ({ lowestKey: 1, highMsgNum: 4, lowestNotDel: 1 })),
   loadMsgPointers: jest.fn(async () => ({ lastNewReadConf: 0, lastMsgReadConf: 0, scanFlags: 0xff })),
   saveMsgPointers: jest.fn(async () => {}),

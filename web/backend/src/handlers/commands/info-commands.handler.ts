@@ -29,6 +29,7 @@ import { DEFAULT_TERMINAL_FONT } from '../../constants/terminal-fonts';
 import { fontMenuRows, fontForChoice, chooseTerminalFont } from '../../services/terminal-font.service';
 import bcrypt from 'bcryptjs';
 import { finalizeCommand } from '../../utils/command-response.util';
+import { changeAccount, saveAccount } from '../../services/account.service';
 
 import type { BBSSession } from '../../index';
 
@@ -748,7 +749,9 @@ export async function handleWOptionSelectInput(socket: any, session: BBSSession,
   // CR/empty = quit (express.e:25836-25840)
   if (trimmed === '') {
     emitText(socket, '\r\n');
-    // Each option already saves immediately, no need to save again here
+    // express.e:25891-25893: leaving W saves the account. The options changed
+    // it in memory only.
+    if (session.user) await saveAccount(session.user);
     session.inputBuffer = '';
     session.menuPause = true;
     session.subState = LoggedOnSubState.DISPLAY_MENU;
@@ -876,7 +879,7 @@ export async function handleWOptionSelectInput(socket: any, session: BBSSession,
     case 10: // Toggle Screen Clear — express.e:25993: userFlags EOR USER_SCRNCLR (bit 8)
       { const SCRNCLR = 8;
         session.user.userFlags = (session.user.userFlags || 0) ^ SCRNCLR;
-        await db.updateUser(session.user.id, { userFlags: session.user.userFlags });
+        await changeAccount(session, { userFlags: session.user.userFlags });
         _displayWCommandMenu(socket, session); }
       break;
 
@@ -905,7 +908,7 @@ export async function handleWOptionSelectInput(socket: any, session: BBSSession,
       const nextEditor = EDITOR_ORDER[(EDITOR_ORDER.indexOf(editorValue(session.user)) + 1) % EDITOR_ORDER.length];
       session.user.editor = nextEditor;
       session.user.editorType = EDITOR_ORDER.indexOf(nextEditor);
-      await db.updateUser(session.user.id, { editor: nextEditor });
+      await changeAccount(session, { editor: nextEditor });
       _displayWCommandMenu(socket, session);
       break;
 
@@ -916,7 +919,7 @@ export async function handleWOptionSelectInput(socket: any, session: BBSSession,
       }
       const currentZoom = session.user.zoomType || 0;
       session.user.zoomType = (currentZoom + 1) & 1; // Toggle between 0 and 1
-      await db.updateUser(session.user.id, { zoomType: session.user.zoomType });
+      await changeAccount(session, { zoomType: session.user.zoomType });
       _displayWCommandMenu(socket, session);
       break;
 
@@ -926,7 +929,7 @@ export async function handleWOptionSelectInput(socket: any, session: BBSSession,
         return;
       }
       session.user.availableForChat = !session.user.availableForChat;
-      await db.updateUser(session.user.id, { availableForChat: session.user.availableForChat });
+      await changeAccount(session, { availableForChat: session.user.availableForChat });
       _displayWCommandMenu(socket, session);
       break;
 
@@ -951,7 +954,7 @@ export async function handleWOptionSelectInput(socket: any, session: BBSSession,
       {
         const { UserFlag } = require('../../constants/express-flags');
         session.user.userFlags = (session.user.userFlags || 0) ^ UserFlag.BGFILECHECK;
-        await db.updateUser(session.user.id, { userFlags: session.user.userFlags });
+        await changeAccount(session, { userFlags: session.user.userFlags });
         _displayWCommandMenu(socket, session);
       }
       break;
@@ -999,7 +1002,7 @@ export async function handleWOptionSelectInput(socket: any, session: BBSSession,
       const next = session.user?.petsciiPalette === 'vic' ? 'vdc' : 'vic';
       if (session.user) {
         try {
-          await db.updateUser(session.user.id, { petsciiPalette: next });
+          await changeAccount(session, { petsciiPalette: next });
           session.user.petsciiPalette = next;
         } catch (error) {
 console.error('[W] could not save the PETSCII palette:', error);
@@ -1016,7 +1019,7 @@ console.error('[W] could not save the PETSCII palette:', error);
       const next = session.user?.petsciiCharset === 'swedish' ? 'standard' : 'swedish';
       if (session.user) {
         try {
-          await db.updateUser(session.user.id, { petsciiCharset: next });
+          await changeAccount(session, { petsciiCharset: next });
           session.user.petsciiCharset = next;
         } catch (error) {
 console.error('[W] could not save the PETSCII character set:', error);
@@ -1076,8 +1079,10 @@ export async function handleWEditNameInput(socket: any, session: BBSSession, inp
   }
 
   emitText(socket, 'Ok!\r\n');
-  session.user.username = trimmed;
-  await db.updateUser(session.user.id, { username: trimmed });
+  // express.e:25926-25928: the new name, then saveAccount at once - the name
+  // is how the account is found again.
+  await changeAccount(session, { username: trimmed });
+  await saveAccount(session.user);
 
   _displayWCommandMenu(socket, session);
   session.subState = LoggedOnSubState.W_OPTION_SELECT;
@@ -1097,7 +1102,7 @@ export async function handleWEditEmailInput(socket: any, session: BBSSession, in
   }
 
   session.user.email = trimmed;
-  await db.updateUser(session.user.id, { email: trimmed });
+  await changeAccount(session, { email: trimmed });
 
   _displayWCommandMenu(socket, session);
   session.subState = LoggedOnSubState.W_OPTION_SELECT;
@@ -1132,7 +1137,7 @@ export async function handleWEditRealnameInput(socket: any, session: BBSSession,
 
   emitText(socket, '\r\nOk!\r\n');
   session.user.realname = trimmed;
-  await db.updateUser(session.user.id, { realname: trimmed });
+  await changeAccount(session, { realname: trimmed });
 
   _displayWCommandMenu(socket, session);
   session.subState = LoggedOnSubState.W_OPTION_SELECT;
@@ -1166,7 +1171,7 @@ export async function handleWEditInternetnameInput(socket: any, session: BBSSess
   }
 
   session.user.internetName = trimmed;
-  await db.updateUser(session.user.id, { internetName: trimmed });
+  await changeAccount(session, { internetName: trimmed });
   emitText(socket, '\r\nOk!\r\n');
   _displayWCommandMenu(socket, session);
   session.subState = LoggedOnSubState.W_OPTION_SELECT;
@@ -1186,7 +1191,7 @@ export async function handleWEditLocationInput(socket: any, session: BBSSession,
   }
 
   session.user.location = trimmed;
-  await db.updateUser(session.user.id, { location: trimmed });
+  await changeAccount(session, { location: trimmed });
 
   _displayWCommandMenu(socket, session);
   session.subState = LoggedOnSubState.W_OPTION_SELECT;
@@ -1206,7 +1211,7 @@ export async function handleWEditPhoneInput(socket: any, session: BBSSession, in
   }
 
   session.user.phone = trimmed;
-  await db.updateUser(session.user.id, { phone: trimmed });
+  await changeAccount(session, { phone: trimmed });
 
   _displayWCommandMenu(socket, session);
   session.subState = LoggedOnSubState.W_OPTION_SELECT;
@@ -1296,7 +1301,7 @@ export async function handleWEditPasswordConfirmInput(socket: any, session: BBSS
   // express.e:26025-26026: setNewPassword() + pwdLastUpdated:=getSystemTime() — no "success" message
   const hashedPassword = await bcrypt.hash(trimmed, 10);
   session.user.password = hashedPassword;
-  await db.updateUser(session.user.id, { passwordHash: hashedPassword });
+  await changeAccount(session, { passwordHash: hashedPassword });
 
   _displayWCommandMenu(socket, session);
   session.subState = LoggedOnSubState.W_OPTION_SELECT;
@@ -1328,7 +1333,7 @@ export async function handleWEditLinesInput(socket: any, session: BBSSession, in
   // short), so the runtime W command had the same off-by-one the signup Auto
   // did (the sysop, 2026-09-16). See auto-lines.util.
   session.user.linesPerScreen = lines > 0 ? lines : autoLinesFor(session);
-  await db.updateUser(session.user.id, { linesPerScreen: session.user.linesPerScreen });
+  await changeAccount(session, { linesPerScreen: session.user.linesPerScreen });
 
   _displayWCommandMenu(socket, session);
   session.subState = LoggedOnSubState.W_OPTION_SELECT;
@@ -1467,7 +1472,7 @@ export async function handleWEditComputerInput(socket: any, session: BBSSession,
   // express.e:11344 loggedOnUser.secBulletin:=stat-1
   const selectedName = choices[num - 1];
   session.user.computer = selectedName;
-  await db.updateUser(session.user.id, { computer: selectedName });
+  await changeAccount(session, { computer: selectedName });
 
   if (session.tempData) delete session.tempData.computerChoices;
 
@@ -1502,7 +1507,7 @@ export async function handleWEditScreentypeInput(socket: any, session: BBSSessio
   // express.e:11366 loggedOnUser.screenType:=stat-1
   const selectedName = choices[num - 1];
   session.user.screenType = selectedName;
-  await db.updateUser(session.user.id, { screenType: selectedName });
+  await changeAccount(session, { screenType: selectedName });
 
   if (session.tempData) delete session.tempData.screenTypeChoices;
 
@@ -1544,7 +1549,7 @@ export async function handleWEditProtocolInput(socket: any, session: BBSSession,
 
   // Update user protocol
   session.user.protocol = selectedProtocol;
-  await db.updateUser(session.user.id, { protocol: selectedProtocol });
+  await changeAccount(session, { protocol: selectedProtocol });
 
   const { PROTOCOL_DISPLAY_NAMES } = require('../../types');
   const protocolName = PROTOCOL_DISPLAY_NAMES[selectedProtocol] || selectedProtocol.toUpperCase();
@@ -1592,7 +1597,7 @@ export async function handleWEditModemSpeedInput(socket: any, session: BBSSessio
   const bps = MODEM_OPTIONS[choice].bps;
   session.modemBps = bps;
   session.modemEmulationEnabled = bps > 0;
-  await db.updateUser(session.user.id, { baud: bps });
+  await changeAccount(session, { baud: bps });
   session.user.baud = bps;
 
   // Update modem emulator with new baud rate

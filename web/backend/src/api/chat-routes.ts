@@ -13,7 +13,7 @@ import { jwtSecret } from '../utils/jwt-secrets';
 import { mintChatToken } from '../services/chat-token.service';
 import { loadAccount } from '../services/load-account';
 import { accountRefusal, tokenHolderRefusal } from '../services/logon-gates';
-import { countWrongPassword, clearWrongPasswords } from '../services/password-failures';
+import { countWrongPasswordFor, clearWrongPasswords } from '../services/password-failures';
 import jwt from 'jsonwebtoken';
 import { getSystemTime } from '../utils/date-time.util';
 import type { Database } from '../database';
@@ -98,7 +98,7 @@ console.error('[Chat API] Error:', error);
 console.log(`[Chat API] Failed login attempt for: ${safeUsername}`);
         // express.e:1008-1016 - the account counts it toward
         // MAX_PASSWORD_FAILS, as the BBS logon and FTP count theirs.
-        countWrongPassword(await database.getUserByUsername(safeUsername), 'CHAT');
+        await countWrongPasswordFor(() => database.getUserByUsername(safeUsername), 'CHAT');
         return handleError(res, new Error('Invalid username or password'), 401);
       }
 

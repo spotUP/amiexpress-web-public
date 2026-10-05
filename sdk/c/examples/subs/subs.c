@@ -9,12 +9,16 @@
  * place where the messages are the FIRST thing you see, with ONE key to add to
  * them.
  *
- * WHAT IT LISTS is everything this caller may read, by express.e's own rule -
- * the public traffic, plus private mail he sent or received, plus everything
- * if he is above SysopLevel. It was public-only when the board filtered the
- * feed down to EALL for it; reading the base itself means the filter is the
- * door's, and hiding a caller's own mail from a message reader would be a
- * strange thing to do on purpose.
+ * WHAT IT IS: a second way into the board's OWN message bases - "subs is just
+ * a new way of accessing the mail and making the messages more exposed" (the
+ * sysop, 2026-10-04). Never a store or rules of its own. It shows the board's
+ * messages, moves the board's pointers with the board's meanings, and posts
+ * through the board's own save.
+ *
+ * WHAT IT LISTS is everything this caller may read, by the board's own rule -
+ * the public traffic, plus private mail he sent or received, plus what
+ * ACS_SYSOP_READ / ACS_READ_PRIV_EALL / ACS_READ_PRIV_ALL give him, asked of
+ * the board with DT_QUERYBIT (the R reader's mayReadPrivateMail).
  *
  * That is this door, and its three constraints are deliberate:
  *
@@ -26,15 +30,24 @@
  *   is no quote buffer and nothing to build one from. Do not "improve" this
  *   later without the sysop asking.
  *
- * WHAT IT DOES NOT DO, and why:
+ * HOW IT WRITES. `E` and `R` compose here and the caller stays in the door
+ * (the sysop, 2026-09-14). The post goes to the BOARD over AEW_POSTMSG, which
+ * saves it the way the E command does: the board's posting access
+ * (ACS_ENTER_MESSAGE, ACS_EALL_MESSAGES), the post count, the callers log,
+ * notifications, the board's own copy and encoding. On a board that does not
+ * answer AEW_POSTMSG - a real AmiExpress - the door appends the message
+ * itself (ae_msg_write), under express.e's own MailLock.
  *
- *   It does not WRITE a message. `P` and `R` hand "EALL" back with
- *   ae_return_command and exit; the board then runs its own express.e message
- *   entry. Writing is release 2, and it waits until the 110-byte record round
- *   trip is proven - reading a base wrongly shows the wrong name, writing it
- *   wrongly destroys mail.
- *   It does not MOVE the read pointer. Reading here marks nothing read; the
- *   count clears when the caller reads through `R`. One owner for the pointer.
+ * HOW READING COUNTS. On the way out the door tells the board how far the
+ * caller got, in express.e's meanings (AEW_SETPOINTER): READ is the highest
+ * message he opened, SCAN is the next one to scan - the high-water mark, so
+ * opening the newest marks everything below it read (the sysop's answer,
+ * 2026-10-04). Private mail to him that he opens is marked received, as R
+ * marks it. A board without AEW_SETPOINTER keeps its pointers where they were.
+ *
+ * NO CONFERENCE HANDS SUBS ITS WHOLE MESSAGE BASE (express.e's CUSTOM). That
+ * was undone on 2026-09-30 and will not come back (the sysop, 2026-10-04), so
+ * the door answers no message function - only SUBS and SUBSCAN.
  *
  * IT DOES READ THE MESSAGE BASE ITSELF, off the disk, through ae_msgbase and
  * ae_dos. An earlier version asked the board instead, over AEW_MSGQUERY - a
@@ -118,27 +131,6 @@ static long feed_unreadable;            /* records no layout could explain */
  */
 static long marked_upto;
 static char conf_name[32];
-
-/*
- * The level at or above which a caller sees other people's private mail.
- *
- * The DOOR does not decide this and must not guess it. A door cannot evaluate
- * the board's ACS tables, so express.e's ACS_SYSOP_READ is not available to
- * it; what is available is the caller's level, and the sysop saying which
- * level counts. 255 is the default because on an unconfigured board nobody
- * reaches it, which fails towards showing too little rather than too much.
- */
-#define SYSOP_LEVEL_DEFAULT 255
-static int sysop_level = SYSOP_LEVEL_DEFAULT;
-
-/*
- * Who a comment to the sysop is addressed to.
- *
- * express.e reads it off ACCOUNT SLOT 1 (express.e:8765-8777) and a door
- * cannot load accounts, so this is the second access fact SUBS has to be told
- * rather than look up - SysopLevel being the first.
- */
-static char sysop_name[AE_MSG_NAME_MAX] = "SYSOP";
 
 static char body[BODY_MAX];
 static char status_line[80];
@@ -303,17 +295,12 @@ static void config_load(const char *path)
         value = eq + 1;
         while (*value == ' ' || *value == '\t') value++;
 
+        /* SysopLevel and SysopName are gone: who reads private mail is the
+           board's ACS answer now, and comments to the sysop went with
+           CUSTOM. A SUBS.cfg that still has them is read without complaint. */
         if (strcmp(line, "FeedWindow") == 0) {
             int n = atoi(value);
             if (n >= 10 && n <= ROWS_MAX) feed_window = n;
-        } else if (strcmp(line, "SysopLevel") == 0) {
-            int n = atoi(value);
-            if (n >= 1 && n <= 255) sysop_level = n;
-        } else if (strcmp(line, "SysopName") == 0) {
-            if (value[0] != '\0') {
-                strncpy(sysop_name, value, sizeof sysop_name - 1);
-                sysop_name[sizeof sysop_name - 1] = '\0';
-            }
         }
     }
     fclose(f);
@@ -394,10 +381,27 @@ static const char *feed_row(void *context, int index)
  */
 static char caller[AE_MSG_NAME_MAX];
 
+/**
+ * What this caller may see of other people's private mail, asked of the board
+ * once a session - the R reader's rule (mayReadPrivateMail). A board that will
+ * not say answers -1, and -1 is not a yes: failing towards showing less is the
+ * only safe direction for a rule that decides who reads other people's mail.
+ */
+static int caller_access = -1;
+
+static int private_access(void)
+{
+    if (caller_access >= 0) return caller_access;
+    caller_access = 0;
+    if (ae_check_security(&session, AE_ACS_SYSOP_READ) == 1) caller_access |= AE_MSG_SEE_ALL_PRIVATE;
+    if (ae_check_security(&session, AE_ACS_READ_PRIV_EALL) == 1) caller_access |= AE_MSG_SEE_PRIV_EALL;
+    if (ae_check_security(&session, AE_ACS_READ_PRIV_ALL) == 1) caller_access |= AE_MSG_SEE_PRIV_ALL;
+    return caller_access;
+}
+
 static int open_base(void)
 {
     char dir[256];
-    int level;
 
     dir[0] = '\0';
     if (ae_msgbase_path(&session, dir, (int)sizeof dir) <= 0 || dir[0] == '\0') {
@@ -412,12 +416,7 @@ static int open_base(void)
     caller[0] = '\0';
     ae_user_name(&session, caller, (int)sizeof caller);
 
-    /* A board that will not say the level answers -1, and -1 is not a sysop.
-       Failing towards showing less is the only safe direction for a rule that
-       decides who reads other people's mail. */
-    level = ae_user_level(&session);
-
-    return ae_msg_open(dir, caller, level >= sysop_level,
+    return ae_msg_open(dir, caller, private_access(),
                        ae_last_scanned(&session)) == AE_MSG_OK;
 }
 
@@ -451,41 +450,11 @@ static feed_state load_feed(void)
     return row_count > 0 ? FEED_OK : FEED_EMPTY;
 }
 
-/** The status line: what is here, what is new, and where to clear it. */
+/** The status line: what is here and what is new (subs_scan.c). */
 static void build_status(void)
 {
-    if (feed_total <= 0) {
-        status_line[0] = '\0';
-        return;
-    }
-    /* "public messages" was true when the board filtered the feed down to
-       EALL. The door reads the base itself now and lists private mail this
-       caller is party to as well, so the count is not a count of public
-       messages and saying so would be a lie the caller can check.
-       "press R at the prompt" is gone for the same kind of reason: R may BE
-       this door (Doors/SUBS/R.info.example), and a door advising a caller to
-       leave it and run itself is nonsense. */
-    if (wide) {
-        if (feed_unread > 0) {
-            sprintf(status_line, "[INFO] %ld messages here. %ld new for you.",
-                    feed_total, feed_unread);
-        } else {
-            sprintf(status_line, "[INFO] %ld messages here, none new for you.", feed_total);
-        }
-    } else {
-        sprintf(status_line, "[INFO] %ld msgs, %ld new", feed_total, feed_unread);
-    }
-
-    /* Records the layout pass could not explain. Never silently swallowed: a
-       door that quietly shows fewer messages than the board does is worse
-       than one that admits it could not read some. */
-    if (feed_unreadable > 0 && wide) {
-        char note[48];
-        sprintf(note, " %ld unreadable.", feed_unreadable);
-        if (strlen(status_line) + strlen(note) < sizeof status_line) {
-            strcat(status_line, note);
-        }
-    }
+    subs_status_compose(status_line, (int)sizeof status_line, wide,
+                        feed_total, feed_unread, feed_unreadable);
 }
 
 /**
@@ -608,31 +577,6 @@ static void scan_listing(void)
     for (i = 0; i < count; i++) ae_put(lines[i], 1);
 }
 
-/**
- * MAIL_STATS: the one line a join prints about the base, and nothing else.
- *
- * express.e:5092-5113 prints a message RANGE and the caller's two pointers at
- * this point for an ordinary conference. A custom base answers for itself
- * because the board's range comes out of a MailStats file a custom base has no
- * reason to keep.
- */
-static void stats_line(void)
-{
-    ae_msg_stat stat;
-    char line[200];
-
-    if (!open_base()) return;
-    if (ae_msg_stat_read(&stat) != AE_MSG_OK) return;
-
-    conf_name[0] = '\0';
-    ae_conf_name(&session, conf_name, (int)sizeof conf_name);
-
-    sprintf(line, "[INFO] %.30s: %ld messages, %ld new for you.",
-            conf_name[0] != '\0' ? conf_name : "This conference",
-            stat.total, stat.unread);
-    ae_put(line, 1);
-}
-
 /* --------------------------------------------------------------- one message */
 
 /** Read one message: a header block, then the body in the pager. */
@@ -654,6 +598,12 @@ static int read_message(int index)
        got everything the board still holds, and leaving it new for ever would
        mean a base whose bodies were lost could never be cleared. */
     if (rows[index].number > marked_upto) marked_upto = rows[index].number;
+
+    /* His own private mail, opened: received, by the board's rule (readit,
+       express.e:8943-8949). Only then is it worth the round trip. */
+    if (rows[index].recv == 0 && subs_same_name(rows[index].to, caller)) {
+        if (ae_set_received(&session, (int)rows[index].number)) rows[index].recv = 1;
+    }
 
     if (wide) {
         /* The recipient is read from the message, not assumed to be EALL:
@@ -700,11 +650,12 @@ static int read_message(int index)
 /**
  * Tell the board how far the caller got, once, on the way out.
  *
- * BOTH pointers move. express.e's reader advances lastMsgReadConf
- * (express.e:12370) and its scan advances lastNewReadConf; this door is both,
- * and its own "N new for you" is counted from the SCAN pointer
- * (ae_msg_open takes ae_last_scanned), so moving only the read pointer would
- * leave the number the caller is trying to clear exactly where it was.
+ * BOTH pointers move, each in express.e's meaning. READ is lastMsgReadConf,
+ * the last message read (express.e:12370). SCAN is lastNewReadConf, the NEXT
+ * number to scan - the board's scan starts AT it and leaves it at msgNum+1
+ * (read-msg.ts searchNewMail; express.e:5103 prints it minus one) - so it is
+ * one past the highest opened. Sending the highest itself made the board's
+ * next scan report that message again (2026-10-04 SUBS proposal, conflict 2).
  *
  * A board that does not implement AEW_SETPOINTER answers 0 and nothing here
  * changes - see Documentation/4-Door-Developers/PROPOSED_SETPOINTER.md. That
@@ -717,36 +668,94 @@ static void mark_read_on_the_way_out(void)
     if (!ae_carrier(&session)) return;      /* the line is gone anyway */
 
     ae_set_last_read(&session, (int)marked_upto);
-    ae_set_last_scanned(&session, (int)marked_upto);
+    ae_set_last_scanned(&session, (int)subs_scan_pointer_after(marked_upto));
 }
 
 /* ------------------------------------------------------------------ posting */
 
 /**
+ * The door's own writer, for a board that will not post for it - a real
+ * AmiExpress, where express.e is the only other writer. Same order and the
+ * same MailLock as express.e's saveNewMSG (ae_msg_write); none of saveNewMSG's
+ * side effects, which no door can reach there.
+ */
+static int post_on_this_door(const char *subj, const char *flat, unsigned long used)
+{
+    ae_msg_new msg;
+    long written;
+    int attempt;
+
+    msg.to = "EALL";
+    msg.from = caller;
+    msg.subject = subj;
+    msg.status = AE_MSG_PUBLIC;
+    /* The BOARD's clock in express.e's msgDate form, never time(): AmigaOS's
+       C epoch is not reliably the Unix one. */
+    msg.date = ae_now(&session);
+
+    /* ae_msg_write does disk, not time, so the WAIT for another node's lock
+       lives here: lockMsgBase's own loop is 30 tries with a Delay(120)
+       between them (express.e:11949-11957). */
+    written = AE_MSG_ERR_LOCKED;
+    for (attempt = 0; attempt < 30; attempt++) {
+        written = ae_msg_write(&msg, flat, used);
+        if (written != AE_MSG_ERR_LOCKED) break;
+        ae_delay_ticks(120);
+    }
+
+    if (written == AE_MSG_ERR_LOCKED) {
+        strcpy(status_line, "[INFO] Another task has the MsgBase locked. Not posted.");
+        return 0;
+    }
+    if (written == AE_MSG_ERR_MIXED) {
+        /* This base mixes record layouts and appending to it could make the
+           board misread its neighbours; say so rather than risk it. */
+        strcpy(status_line, "[INFO] This base needs the board's own editor. Not posted.");
+        return 0;
+    }
+    if (written < 0) {
+        strcpy(status_line, "[INFO] The message could not be written.");
+        return 0;
+    }
+
+    sprintf(status_line, "[INFO] Posted as message %ld.", written);
+    return 1;
+}
+
+/**
  * Write a message, here, without leaving the door.
  *
- * This used to hand `EALL` back to the board and exit - which is what the
- * sysop objected to on 2026-09-08 ("the subs door exits when i press P" -
- * that key is E now, see the main loop).
- * Now the caller types the subject and the body in the door's own chrome and
- * the door appends the message to the base itself.
+ * The caller types the subject and the body in the door's own chrome and
+ * stays in the door afterwards (the sysop, 2026-09-08 and 2026-10-04). The
+ * message itself is the BOARD's to save: ae_post_open asks the board, before
+ * he types a word, whether he may post here at all - its own ACS, as
+ * express.e asks at the To: prompt - and ae_post_send hands it to the board's
+ * saveNewMSG. Only a board that does not answer AEW_POSTMSG - a real
+ * AmiExpress - gets the message appended by the door itself.
  *
  * Returns 1 when something was posted, 0 when it was not, -1 for a lost
- * caller. It no longer returns "the door is finished" for a post: the whole
- * point is that the caller stays.
+ * caller.
  */
-static int post_flow(const char *question, const char *subject,
-                     const char *to, char status)
+static int post_flow(const char *question, const char *subject)
 {
     static ui_editor_text body;          /* static: ~15KB, too big for a door's stack */
+    static char flat[UI_EDITOR_MAX_LINES * (UI_EDITOR_WIDTH + 1)];
     ui_editor_style es;
     ui_input_style is;
-    ae_msg_new msg;
     char subj[64];
-    char flat[UI_EDITOR_MAX_LINES * (UI_EDITOR_WIDTH + 1)];
+    char why[120];
     unsigned long used = 0;
-    long now, written;
-    int yes, rc, i, attempt;
+    long written;
+    int yes, rc, i, board;
+
+    /* The board first: a caller it would refuse is told so now, not after
+       he has written the message. */
+    board = ae_post_open(&session, 'P', "EALL", why, (int)sizeof why);
+    if (board == AE_POST_GONE) return -1;
+    if (board == AE_POST_REFUSED) {
+        sprintf(status_line, "[INFO] %.70s", why[0] ? why : "Not allowed here.");
+        return 0;
+    }
 
     caller_is_typing = 1;
 
@@ -774,12 +783,13 @@ static int post_flow(const char *question, const char *subject,
             strncat(subj, subject, sizeof subj - 5);
         }
     }
+    subj[30] = '\0';                     /* enterMSG takes 30 (express.e:10847) */
 
     ansi_clear(&screen.buf);
     draw_masthead(wide ? "POST TO EVERYONE" : "POST");
     confirm_style(&is);
     is.row = 3;
-    rc = ui_input(&screen.buf, &keys, &pushback, &is, "Subject:", subj, (int) sizeof subj);
+    rc = ui_input(&screen.buf, &keys, &pushback, &is, "Subject:", subj, 31);
     if (rc < 0) { caller_is_typing = 0; return -1; }
     if (subj[0] == '\0') {
         caller_is_typing = 0;
@@ -795,7 +805,7 @@ static int post_flow(const char *question, const char *subject,
     es.fg = UI_TOKEN(UI_T_INK);
     es.bg = UI_TOKEN(UI_T_GROUND);
     es.ink = UI_TOKEN(UI_T_ACCENT);
-    es.to = to;
+    es.to = "EALL";
     es.subject = subj;
 
     ui_editor_text_init(&body);
@@ -817,45 +827,24 @@ static int post_flow(const char *question, const char *subject,
         flat[used++] = '\n';
     }
 
-    /* The BOARD's clock, never time(): AmigaOS's C epoch is not reliably the
-       Unix one, and a wrong date is invisible until somebody sorts the list. */
-    now = ae_now(&session);
-
-    msg.to = to;
-    msg.from = caller;
-    msg.subject = subj;
-    msg.status = status;
-    msg.date = now;
-
-    /* ae_msg_write does disk, not time, so the WAIT for another node's lock
-       lives here. express.e's own caller gives up after about five seconds and
-       says so (express.e:10744). */
-    written = AE_MSG_ERR_LOCKED;
-    for (attempt = 0; attempt < 25; attempt++) {
-        written = ae_msg_write(&msg, flat, used);
-        if (written != AE_MSG_ERR_LOCKED) break;
-        ae_delay_ticks(10);              /* a fifth of a second on PAL */
+    if (board == AE_POST_READY) {
+        why[0] = '\0';
+        written = ae_post_send(&session, subj, flat, used, why, (int)sizeof why);
+        if (written == AE_POST_GONE) return -1;
+        if (written >= 1) {
+            sprintf(status_line, "[INFO] Posted as message %ld.", written);
+            return 1;
+        }
+        if (written == AE_POST_REFUSED) {
+            sprintf(status_line, "[INFO] %.60s Not posted.", why[0] ? why : "The board refused it.");
+            return 0;
+        }
+        /* AE_POST_NO_BOARD after READY: the board stopped answering. The
+           door's own writer is still correct, so it is the fallback. */
     }
-
-    if (written == AE_MSG_ERR_LOCKED) {
-        strcpy(status_line, "[INFO] Another task has the MsgBase locked. Not posted.");
-        return 0;
-    }
-    if (written == AE_MSG_ERR_MIXED) {
-        /* The honest message. This base mixes record layouts and appending to
-           it could make the board misread its neighbours; say so rather than
-           risk it, and the caller can still post through the board's own E. */
-        strcpy(status_line, "[INFO] This base needs the board's own editor. Not posted.");
-        return 0;
-    }
-    if (written < 0) {
-        strcpy(status_line, "[INFO] The message could not be written.");
-        return 0;
-    }
-
-    sprintf(status_line, "[INFO] Posted as message %ld.", written);
-    return 1;
+    return post_on_this_door(subj, flat, used);
 }
+
 
 /* --------------------------------------------------------------------- door */
 
@@ -904,55 +893,17 @@ int main(int argc, char **argv)
     ae_menu_command(&session, launched_as, (int)sizeof launched_as);
 
     /*
-     * WHY THIS DOOR IS RUNNING. Two answers, and the first one is the real one.
-     *
-     * A conference can hand its whole message base to a door - the tooltype
-     * CUSTOM, express.e:12426-12437 - and then the board says which message
-     * function it wants (600) and which conference it is about (601). That is
-     * the mechanism a real AmiExpress has, so it is the one to branch on.
-     *
-     * The registration NAME is the older, weaker signal: this port answers 605
-     * with the command that launched the door, which is how SUBSCAN in a
-     * bulletin has worked. It is kept, but only for a launch the board did not
-     * label - because on a real Amiga 605 carries the command LINE and would
-     * never spell SUBSCAN at all.
+     * WHY THIS DOOR IS RUNNING: the name it was launched under. This port
+     * answers 605 with the command that launched the door, which is how
+     * SUBSCAN in a join bulletin works. No conference hands SUBS its message
+     * base (CUSTOM) any more, so the message functions express.e passes in
+     * 600/601 are not looked at.
      *
      * AN UNRECOGNISED LAUNCH DRAWS THE FULL DOOR, always. The inverse cost an
      * afternoon once: dev/scripts/door-probe/repaint-cost.ts passes doorCommand
      * 'PROBE', and a door that treated everything-but-SUBS as quiet printed a
      * listing and exited before a keypress could be measured.
      */
-    switch (ae_msgbase_function(&session)) {
-        case AE_MAIL_SCAN:
-            /* Inside joinConf, with the board's screen half-drawn around it:
-               no clear, no key wait, no screen at all. */
-            scan_listing();
-            ae_close(&session);
-            ae_shutdown();
-            return 0;
-
-        case AE_MAIL_STATS:
-            stats_line();
-            ae_close(&session);
-            ae_shutdown();
-            return 0;
-
-        case AE_MAIL_ZOOM:
-            /*
-             * DECLINED, deliberately (the sysop, 2026-09-14). ZOOM packs an
-             * offline mail archive - QWK or ASCII, then LHA or ZIP - which
-             * shares nothing with a list, a reader or a composer. Saying
-             * nothing and leaving is how a door declines a function it does
-             * not implement; the board keeps its own.
-             */
-            ae_close(&session);
-            ae_shutdown();
-            return 0;
-
-        default:
-            break;
-    }
-
     if (name_is_subscan(launched_as)) {
         scan_listing();
         ae_close(&session);
@@ -1008,44 +959,6 @@ int main(int argc, char **argv)
     list.selected_bg = UI_TOKEN(UI_T_SELECTION_BG);
     /* Open on the NEWEST message, which is where a discussion is. */
     ui_list_select(&list, row_count > 0 ? row_count - 1 : 0);
-
-    /*
-     * `E` AND `C` GO STRAIGHT TO THE COMPOSER.
-     *
-     * A caller who typed E asked to write a message, not to look at a list -
-     * express.e's MAIL_CREATE enters the editor and nothing else. But where he
-     * lands afterwards is the sysop's decision of 2026-09-14: he stays in the
-     * door, on the list, with his new message on it, and leaves with Q.
-     * Posting twice is the common case and this saves the second E.
-     *
-     * C is the same flow with the recipient fixed and the message PRIVATE -
-     * express.e:24664-24668 routes it here as MAIL_SYSOP_COMMENT. The name
-     * comes from SUBS.cfg because express.e reads it off account slot 1
-     * (:8765-8777) and a door cannot load accounts.
-     */
-    {
-        int fn = ae_msgbase_function(&session);
-        int rc = 0;
-
-        if (fn == AE_MAIL_CREATE) {
-            rc = post_flow(wide ? "Post to everyone in this conference?" : "Post to everyone?",
-                           0, "EALL", AE_MSG_PUBLIC);
-        } else if (fn == AE_MAIL_SYSOP_COMMENT) {
-            rc = post_flow(wide ? "Send a comment to the sysop?" : "Comment to the sysop?",
-                           0, sysop_name, AE_MSG_PRIVATE);
-        }
-
-        if (rc < 0) {
-            running = 0;                 /* carrier gone mid-message */
-        } else if (rc == 1) {
-            /* His own message is in the base now, so the list has to be read
-               again or it opens without it. */
-            state = load_feed();
-            build_status();
-            list.count = row_count;
-            ui_list_select(&list, row_count > 0 ? row_count - 1 : 0);
-        }
-    }
 
     while (running) {
         int key;
@@ -1170,8 +1083,7 @@ int main(int argc, char **argv)
            level, and Reply is what express.e's own between-messages prompt
            offers on R. */
         if (key == 'e' || key == 'E') {
-            int rc = post_flow(wide ? "Post to everyone in this conference?" : "Post to everyone?",
-                               0, "EALL", AE_MSG_PUBLIC);
+            int rc = post_flow(wide ? "Post to everyone in this conference?" : "Post to everyone?", 0);
             if (rc < 0) break;
             /* A post no longer ends the door. It used to hand EALL back and
                exit, which is the behaviour being removed; the caller now stays
@@ -1196,7 +1108,7 @@ int main(int argc, char **argv)
 
         if ((key == 'r' || key == 'R') && row_count > 0) {
             int rc = post_flow(wide ? "Reply to everyone in this conference?" : "Reply to everyone?",
-                               rows[list.selected].subject, "EALL", AE_MSG_PUBLIC);
+                               rows[list.selected].subject);
             if (rc < 0) break;
             /* A post no longer ends the door. It used to hand EALL back and
                exit, which is the behaviour being removed; the caller now stays

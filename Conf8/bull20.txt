@@ -17,3 +17,4 @@
 ~SP
 ~f
 ~SS_BBS:bulletins/bull9.txt
+~XISUBSCAN

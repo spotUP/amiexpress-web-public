@@ -22,19 +22,19 @@
  *      which is where it was worked out, and it streams: one record in hand
  *      and the previous number, so nothing allocates.
  *
- *   2. THE CALLER'S ACCESS. A door cannot evaluate the board's ACS tables, so
- *      it cannot reproduce READ_PRIV_EALL / READ_PRIV_ALL exactly. What it
- *      CAN do is what express.e itself does at the point of reading, which is
- *      not an ACS question at all: the STATUS BYTE decides
- *      (express.e:8929-8933), and a private message is shown only to its
- *      sender, its recipient, or a sysop (express.e:12343-12355). That is the
- *      rule implemented here. Sysop is a level threshold the sysop sets, not
- *      a guess - see ae_msg_open.
+ *   2. THE CALLER'S ACCESS. The STATUS BYTE decides public from private
+ *      (express.e:8929-8933), and a private message is shown to its sender,
+ *      its recipient, a caller with ACS_SYSOP_READ, and - for mail to EALL
+ *      or ALL - a caller with ACS_READ_PRIV_EALL / ACS_READ_PRIV_ALL
+ *      (readit, express.e:12343-12355). The door asks the board for those
+ *      three with DT_QUERYBIT (ae_check_security), which a real AmiExpress
+ *      answers too, and passes the answers to ae_msg_open.
  *
- * WHAT THIS MODULE DOES NOT DO: write. Not one byte. Reading a base wrongly
- * shows somebody the wrong name; writing it wrongly destroys mail, and the
- * writer waits until the 110-byte round trip is proven against real
- * Amiga-written files.
+ * IT ALSO WRITES, but only where the board will not: ae_msg_write appends a
+ * message itself, under express.e's own MailLock, for a board that does not
+ * answer AEW_POSTMSG - a real AmiExpress. On this port a door posts through
+ * the board (ae_post_message, ae_session.h) so the post gets everything the
+ * board's saveNewMSG does.
  *
  * Nothing allocates. Every buffer is the caller's or is this module's own,
  * bounded, and refuses to overflow.
@@ -63,6 +63,12 @@ extern "C" {
 /** The 110-byte on-disk record, AmiExpress layout. Named because the size is
  *  arithmetic every caller would otherwise repeat. */
 #define AE_MSG_RECORD_SIZE 110
+
+/* What a caller may see of other people's private mail - the `access` bits
+ * for ae_msg_open. Each is one of the board's ACS answers. */
+#define AE_MSG_SEE_ALL_PRIVATE 1   /* ACS_SYSOP_READ */
+#define AE_MSG_SEE_PRIV_EALL   2   /* ACS_READ_PRIV_EALL */
+#define AE_MSG_SEE_PRIV_ALL    4   /* ACS_READ_PRIV_ALL */
 
 /* The status byte, which is what decides public from private - never the
  * recipient's name. express.e:10790-10794, 10868, 11930. */
@@ -127,21 +133,20 @@ void ae_msg_to_label(const char *to, const char *reader, char *out, int cap);
  * use the caller's real name or internet name instead (express.e's
  * confMailName). Case is ignored, as it is on the board.
  *
- * `sysop` non-zero means private mail addressed to other people is visible.
- * The DOOR does not decide this - the caller of this function does, by
- * comparing the board's answer for the caller's level against a threshold the
- * sysop configured. A door that guessed would either leak mail or hide the
- * sysop's own.
+ * `access` is AE_MSG_SEE_* bits: which of other people's private mail this
+ * caller may read, as the BOARD answered for him (ae_check_security). A door
+ * that guessed would either leak mail or hide the sysop's own.
  *
- * `scan_pointer` is the caller's last-scanned message number, from
- * ae_last_scanned(). Anything above it counts as new. Pass -1 when the board
- * would not say, and nothing is reported as new rather than everything.
+ * `scan_pointer` is the caller's scan pointer, from ae_last_scanned() - the
+ * board's lastNewReadConf, which is the NEXT number to scan. That message and
+ * everything above it count as new. Pass -1 when the board would not say, and
+ * nothing is reported as new rather than everything.
  *
  * Returns AE_MSG_OK, or AE_MSG_ERR_NOBASE when there is no readable
  * HeaderFile there - which is a real answer for a brand-new conference and
  * must be told apart from "no messages you may read".
  */
-int ae_msg_open(const char *dir, const char *caller, int sysop, long scan_pointer);
+int ae_msg_open(const char *dir, const char *caller, int access, long scan_pointer);
 
 /**
  * The base's headline numbers for this caller. One pass over HeaderFile.
@@ -188,10 +193,22 @@ int ae_msg_header(long number, ae_msg_row *out);
  * whose body file is missing is not an error: express.e's own scan skips
  * those, and they occur on real boards.
  *
+ * The text comes back in Latin-1, which is what this door's screen speaks:
+ * a body that is valid UTF-8 (the board writes UTF-8) is converted, anything
+ * else is already Latin-1 (an Amiga wrote it) - the board's own
+ * decodeMessageBody rule. See ae_msg_utf8_to_latin1.
+ *
  * Returns the number of bytes written - 0 for an empty or missing body, or
  * for a message the caller may not read - or a negative AE_MSG_ERR_*.
  */
 long ae_msg_body(long number, char *out, unsigned long cap);
+
+/**
+ * Convert `text` (len bytes, NUL-terminated in place) from UTF-8 to Latin-1
+ * when it is valid UTF-8 with something above ASCII in it; otherwise leave it
+ * alone. A character Latin-1 cannot hold becomes '?'. Returns the new length.
+ */
+long ae_msg_utf8_to_latin1(char *text, long len);
 
 /**
  * Whether this caller may read this message. Exposed because it is the rule
@@ -207,7 +224,8 @@ typedef struct {
     const char *subject;
     /** AE_MSG_PUBLIC or AE_MSG_PRIVATE; anything else is refused. */
     int status;
-    /** Unix seconds. 0 asks the board's own clock via the door, so pass one. */
+    /** The header's msgDate: express.e's getSystemTime() form, which is what
+        ae_now() answers (DT_CURR_TIME). */
     long date;
 } ae_msg_new;
 
@@ -231,11 +249,15 @@ typedef struct {
  * the board reads with a different classifier is how mail becomes unreadable,
  * and a refusal the caller can explain beats a base nobody can open.
  *
- * DOES NOT RETRY THE LOCK. AE_MSG_ERR_LOCKED comes straight back so the door
- * can wait with its own clock - this module does disk, not time, and a sleep
- * in here would drag the whole door layer into it. express.e's own caller
- * prints "Another task has the MsgBase locked!" (express.e:10744) after
- * ~25 tries at 200ms.
+ * THE LOCK IS express.e's: an exclusive Lock() on MailLock (ae_dos_lock),
+ * not a stamp written into it. It is not retried here - AE_MSG_ERR_LOCKED
+ * comes straight back so the door can wait with its own clock; this module
+ * does disk, not time. express.e's own caller prints "Another task has the
+ * MsgBase locked!" (express.e:10744) when lockMsgBase gives up.
+ *
+ * FOR A BOARD THAT WILL NOT POST FOR THE DOOR. Where the board answers
+ * AEW_POSTMSG (ae_post_message), use that: this writer skips everything
+ * saveNewMSG does besides the files.
  */
 long ae_msg_write(const ae_msg_new *msg, const char *body, unsigned long body_len);
 

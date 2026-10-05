@@ -186,11 +186,19 @@ function showHeader(socket: any, session: BBSSession, r: Reader, h: MsgHeader): 
   session.tempData = session.tempData || {};
   session.tempData.lineCount = (session.tempData.lineCount || 0) + 5;
 
-  // 8943-8949: mail to this caller is marked received the first time.
-  if (sameName(h.toName, confMailName(session)) && h.recv === 0) {
-    h.recv = toAmigaTime(new Date()); // 8945 mailHeader.recv:=getSystemTime()
-    messageIndexManager.updateMessageHeader(r.conf, h.msgNumb, { recv: h.recv });
-  }
+  markReceived(session, r.conf, h);
+}
+
+/**
+ * express.e:8943-8949: mail to this caller is marked received the first time
+ * he reads it. Shared with a door that does the reading (AEW_SETPOINTER RECV,
+ * amiga-emulation/xim/msgpointer.ts). True when this call marked it.
+ */
+export function markReceived(session: BBSSession, conf: number, h: MsgHeader): boolean {
+  if (!sameName(h.toName, confMailName(session)) || h.recv !== 0) return false;
+  h.recv = toAmigaTime(new Date()); // 8945 mailHeader.recv:=getSystemTime()
+  messageIndexManager.updateMessageHeader(conf, h.msgNumb, { recv: h.recv });
+  return true;
 }
 
 /** 8951-8962: the body, paused (displayFile(..,TRUE,..)) unless non-stop. */

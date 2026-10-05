@@ -49,7 +49,12 @@ static char *unpen(char *at, const subs_scan_palette *p)
 }
 
 /**
- * `Amiga Chat  740 messages, 6 new for you`
+ * `Amiga Chat  740 messages, 6 new posts`
+ *
+ * "new posts", not "new for you": SUBS counts every post above the caller's
+ * scan pointer, the board's join scan counts mail addressed to him, and the
+ * two must not read as one number contradicting the other (the sysop,
+ * 2026-10-04).
  *
  * The conference's name is the board's to say and a message base does not know
  * it, so an empty name falls back to something true rather than to "SUBS". The
@@ -71,7 +76,7 @@ static void count_line(const ae_msg_stat *stat, const char *conf_name,
     at = pen(at, p->warn);
     at += sprintf(at, "%ld", stat->unread);
     at = pen(at, p->ink);
-    at += sprintf(at, " new for you");
+    at += sprintf(at, " new post%s", stat->unread == 1 ? "" : "s");
     at = unpen(at, p);
     *at = '\0';
 }
@@ -185,4 +190,54 @@ int subs_scan_compose(const ae_msg_stat *stat,
     }
 
     return used;
+}
+
+void subs_status_compose(char *out, int cap, int wide,
+                         long total, long unread, long unreadable)
+{
+    char line[160];
+
+    if (out == 0 || cap <= 0) return;
+    out[0] = '\0';
+    if (total <= 0) return;
+
+    /* Posts, not "for you" - see count_line. */
+    if (wide) {
+        if (unread > 0) {
+            sprintf(line, "[INFO] %ld messages here, %ld new post%s.",
+                    total, unread, unread == 1 ? "" : "s");
+        } else {
+            sprintf(line, "[INFO] %ld messages here, no new posts.", total);
+        }
+        /* Records the layout pass could not explain. Never silently
+           swallowed: a door that quietly shows fewer messages than the board
+           does is worse than one that admits it could not read some. */
+        if (unreadable > 0) {
+            sprintf(line + strlen(line), " %ld unreadable.", unreadable);
+        }
+    } else {
+        sprintf(line, "[INFO] %ld msgs, %ld new", total, unread);
+    }
+    strncpy(out, line, (size_t)(cap - 1));
+    out[cap - 1] = '\0';
+}
+
+long subs_scan_pointer_after(long highest_opened)
+{
+    return highest_opened >= 1 ? highest_opened + 1 : 0;
+}
+
+int subs_same_name(const char *a, const char *b)
+{
+    int i = 0;
+    if (a == 0 || b == 0) return 0;
+    for (;;) {
+        char x = a[i];
+        char y = b[i];
+        if (x >= 'A' && x <= 'Z') x = (char)(x - 'A' + 'a');
+        if (y >= 'A' && y <= 'Z') y = (char)(y - 'A' + 'a');
+        if (x != y) return 0;
+        if (x == '\0') return 1;
+        i++;
+    }
 }

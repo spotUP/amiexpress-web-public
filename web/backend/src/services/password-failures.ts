@@ -41,6 +41,26 @@ export function countWrongPassword(account: Account, where: string): boolean {
   }
 }
 
+/**
+ * A wrong password for the account `lookup` finds - the name was tried, the
+ * record is looked up here. The lookup sits inside the same guarantee as the
+ * count: a name that cannot be looked up is logged and the refusal stands, so
+ * a wrong password answers as one and never as a crash (chat's login turned
+ * it into a 500 when its lookup threw outside the guard the BBS logon and FTP
+ * each wrote by hand).
+ */
+export async function countWrongPasswordFor(
+  lookup: () => Account | Promise<Account>,
+  where: string,
+): Promise<boolean> {
+  try {
+    return countWrongPassword(await lookup(), where);
+  } catch (err) {
+    console.warn(`[${where}] Could not record password failure:`, err);
+    return false;
+  }
+}
+
 /** A right password for this account: the count goes back to 0 (express.e:1018). */
 export function clearWrongPasswords(account: Account, where: string): void {
   const slot = slotOf(account);

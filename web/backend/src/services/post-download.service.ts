@@ -30,7 +30,6 @@ import type { BBSSession } from '../index';
 import type { Socket } from 'socket.io';
 import { LoggedOnSubState } from '../constants/bbs-states';
 import { callersLog } from '../server/database-helpers';
-import { userFileManager } from '../services/UserFileManager';
 
 export interface PostDownloadEmitter {
   emit(event: string, ...args: unknown[]): unknown;
@@ -127,15 +126,8 @@ export async function runPostDownload(
     }
   }
 
-  // Persist any user-stat changes (top CPS, lastDlCPS) to disk.
-  // userDataFile updates user.data/keys/misc files.
-  if (session.user?.slotNumber) {
-    try {
-      userFileManager.updateUserDataFile(session.user, session.user.slotNumber);
-    } catch (err: any) {
-      console.error(`[postDownload] updateUserDataFile failed: ${err?.message || err}`);
-    }
-  }
+  // The account's changes (counts, top CPS) stay in memory; express.e writes
+  // the record at logoff (8207), not after a transfer.
 
   // express.e:20311 displayULStats(loggedOnUser, loggedOnUserMisc)
   // Same emit-shape as the pre-transfer banner in download.handler.ts:99

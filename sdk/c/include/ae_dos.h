@@ -126,6 +126,26 @@ int ae_dos_exists(const char *path);
 /** Delete `path`. Returns 0 on success, -1 on failure. */
 int ae_dos_delete(const char *path);
 
+/**
+ * Take an EXCLUSIVE lock on `path`, creating the file when it is missing -
+ * express.e's lockMsgBase (express.e:11944-11964), which is
+ * `Lock(<msgBase>MailLock, ACCESS_WRITE)` and `createFile` on IoErr 205.
+ *
+ * The file is only the thing being locked: nothing is written into it, and
+ * nobody deletes it. Whether the base is busy is whether somebody holds the
+ * handle, and AmigaOS drops a handle when its holder dies - so a killed door
+ * cannot leave the base locked, and two writers never have to agree on a
+ * clock (the timestamp this replaces did not: 2026-10-04 SUBS proposal,
+ * conflict 1).
+ *
+ * Returns a non-zero handle, or 0 when somebody else holds it (or the file
+ * cannot be made). One try: the caller owns the waiting.
+ */
+long ae_dos_lock(const char *path);
+
+/** Release a lock ae_dos_lock gave. 0 is accepted and ignored. */
+void ae_dos_unlock(long lock);
+
 /* ---- big-endian accessors ---------------------------------------------
  *
  * These take a byte pointer, not a struct, and shift. See the byte-order note

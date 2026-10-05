@@ -125,39 +125,118 @@ export interface InitStorageOptions {
   /** Forwarded to `FileCache` - tests use a short one. */
   syncTimeoutMs?: number;
   /**
-   * The catalog's bytes-per-drive figure - `Database.usedBytesByVolume()`
-   * (`file-repository.ts#usedBytesByVolume`), whose own doc explains why it,
-   * and not an in-process counter, is the number that can be trusted.
+   * What each s3 volume already holds - the figure DRIVE.n.QUOTA is enforced
+   * against (`VolumeSet#roomOn`).
    *
-   * REQUIRED, and required for the same reason `areas` above is. It was
-   * optional for exactly one round, and that round's gate found the defect
-   * class this whole branch keeps producing: `usedBytes` seeding was
-   * correct, well tested, and pinned by NOTHING to the fact that production
-   * supplies the seeder at all. Deleting `usedBytesByVolume:` from
-   * `server/initialization.ts` and `DriveConfigService` left every volume at
-   * 0 used bytes on every boot - QUOTA silently unenforced - with the whole
-   * storage suite green, because an omitted optional argument is
-   * indistinguishable from a deliberate one. It is not optional now, so that
-   * deletion is a compile error.
+   * Production passes `measureVolumeBytes` below: the bytes are counted from
+   * the bucket itself. It used to pass the SQL catalogue's SUM(size)
+   * (`file_entries.storage_volume`), and a pooled file without a row - put
+   * there by another node, filed outside the port, or orphaned by a lost
+   * `recordLocation` - occupied the bucket and was never counted, so the quota
+   * under-counted and a drive could overfill. express.e has no catalogue at
+   * all; what is on the volume is the truth (db-disk audit 2026-10-04, §6).
    *
-   *   - production passes `() => db.usedBytesByVolume()`
-   *   - a caller with no real SQLite database behind it (most of
-   *     `tests/storage/`) says `'assume-empty'` OUT LOUD, which means the
-   *     same thing the old omission meant - every volume starts at 0 - but
-   *     says it on purpose rather than by accident.
+   * REQUIRED, so that dropping it is a compile error rather than a board that
+   * starts every volume at 0 and enforces no QUOTA:
    *
-   * `initStorage` never reaches for the live database on its own; the seam
-   * is always the caller's to supply.
+   *   - production passes `measureVolumeBytes`, which answers a PROMISE: the
+   *     listing runs in the background, the way the pending-upload replay
+   *     does, so a hanging bucket never delays a boot or a rebuild. Until it
+   *     lands, a rebuilt context keeps the previous figure for an unchanged
+   *     drive (`carryLiveState`); only a fresh boot starts at 0.
+   *   - a test may pass a function answering a Map at once, applied before
+   *     `initStorage` returns;
+   *   - a caller with no pool to measure (most of `tests/storage/`) says
+   *     `'assume-empty'` OUT LOUD - every volume starts at 0, on purpose.
    */
   usedBytesByVolume: UsedBytesSeeder;
 }
 
 /**
- * Either the catalog seeder itself, or the explicit statement that this
- * caller has none and wants every volume to start at 0. See
- * `InitStorageOptions.usedBytesByVolume`.
+ * Bytes per drive number, for the s3 volumes it could measure. A volume left
+ * out of the answer keeps whatever figure it had.
  */
-export type UsedBytesSeeder = (() => ReadonlyMap<number, number>) | 'assume-empty';
+export type UsedBytesByVolume = ReadonlyMap<number, number>;
+
+/**
+ * Either a measurement of the volumes - at once or in the background - or the
+ * explicit statement that this caller has none and wants every volume to
+ * start at 0. See `InitStorageOptions.usedBytesByVolume`.
+ */
+export type UsedBytesSeeder =
+  | ((volumes: VolumeSet) => UsedBytesByVolume | Promise<UsedBytesByVolume>)
+  | 'assume-empty';
+
+/**
+ * How many bytes each s3 volume holds, counted from the volume: one listing
+ * of the whole bucket per drive, summed. A drive is a bare bucket
+ * (`s3-backend.ts` refuses `s3://bucket/prefix`), so the whole bucket is
+ * exactly what its QUOTA covers.
+ *
+ * Each listing is charged to the drive's request meter like any other call.
+ * A drive that cannot be listed is left out of the answer - it keeps the
+ * figure it had - and says so; one bucket being down must not zero another's.
+ */
+export async function measureVolumeBytes(volumes: VolumeSet): Promise<Map<number, number>> {
+  const measured = new Map<number, number>();
+  await Promise.all(
+    volumes.states
+      .filter((state) => state.volume.kind === 's3')
+      .map(async (state) => {
+        const driveNumber = state.volume.driveNumber;
+        try {
+          state.requestsThisMonth++;
+          const objects = await state.backend.list('');
+          measured.set(driveNumber, objects.reduce((sum, object) => sum + object.size, 0));
+        } catch (err) {
+          const detail = err instanceof Error ? err.message : String(err);
+          console.warn(
+            `[storage] could not measure DRIVE.${driveNumber} (${detail}); it keeps its previous used-bytes ` +
+              'figure until the next successful rebuild'
+          );
+        }
+      })
+  );
+  return measured;
+}
+
+/**
+ * A background measurement in flight, per VolumeSet, and the figure each
+ * volume had when the measurement's view of it began. Anything a volume gains
+ * or loses after that (`FileCache.writeBack`, `creditDeleted`) is a write the
+ * listing may not have seen, and is kept on top of the measured figure.
+ */
+const pendingMeasurements = new WeakMap<VolumeSet, Promise<void>>();
+const measurementBase = new WeakMap<VolumeState, number>();
+
+/**
+ * Resolves once the background measurement of this context's volumes, if any,
+ * has landed (or failed). For a caller that must see the measured figure - a
+ * test, or an admin action that wants it settled.
+ */
+export function usedBytesMeasured(storage: StorageContext): Promise<void> {
+  return pendingMeasurements.get(storage.volumes) ?? Promise.resolve();
+}
+
+function isThenable(value: UsedBytesByVolume | Promise<UsedBytesByVolume>): value is Promise<UsedBytesByVolume> {
+  return typeof (value as Promise<UsedBytesByVolume>).then === 'function';
+}
+
+/** Volumes whose measurement has landed - `carryLiveState` must not undo it. */
+const measuredStates = new WeakSet<VolumeState>();
+
+function applyUsedBytes(volumes: VolumeSet, used: UsedBytesByVolume): void {
+  for (const state of volumes.states) {
+    if (state.volume.kind !== 's3') continue;
+    const measured = used.get(state.volume.driveNumber);
+    if (measured === undefined) continue;
+    measuredStates.add(state);
+    const sinceMeasured = state.usedBytes - (measurementBase.get(state) ?? 0);
+    // Clamped: a miscount must never read as negative used bytes and so as
+    // infinite room - the one error the upload gate cannot survive.
+    state.usedBytes = Math.max(0, measured + sinceMeasured);
+  }
+}
 
 /**
  * Builds the board's storage subsystem, or answers `null` when there is
@@ -177,47 +256,49 @@ export async function initStorage(
   const volumes = VolumeSet.fromBoard(bbsRoot, { backendFactory: opts.backendFactory });
   if (!volumes.hasPool()) return null;
 
-  // Finding 2 (whole-branch review): `VolumeState.usedBytes` starts at 0 in
-  // `VolumeSet.blank()` and is otherwise only ever INCREMENTED by
-  // `FileCache.writeBack` - so after any restart a bucket already holding
-  // files reports itself as empty, and `place()`/`freeBytesOn()` (the upload
-  // gate) never refuse an upload no matter how full the catalog says the
-  // drive actually is. Seed every s3 volume's counter from the catalog - the
-  // number `usedBytesByVolume`'s own doc names as the one that can be
-  // trusted - before this VolumeSet is handed to anything.
+  // `VolumeState.usedBytes` starts at 0 in `VolumeSet.blank()` and is
+  // otherwise only moved by this process's own writes and deletes - so after
+  // any restart a bucket already holding files would report itself empty and
+  // the upload gate (`place()`/`freeBytesOn()`) would never refuse. Seed every
+  // s3 volume from the measurement before - or, for a background one, as soon
+  // as - anything uses the figure.
   //
-  // Best-effort: a database that is not ready yet (or, in a test, not wired
-  // up at all - see `usedBytesByVolume`'s own doc) must not take the whole
-  // pool down with it. Leaving the counter at 0 on failure is the same
-  // under-count this finding fixes, not a new failure mode.
-  //
-  // The absence of a seeder is LOUD, not silent - see
+  // Best-effort: a measurement that fails must not take the whole pool down
+  // with it. The absence of a seeder is LOUD, not silent - see
   // `InitStorageOptions.usedBytesByVolume`. TypeScript makes omission a
-  // compile error, but this module is reachable from untyped callers too, so
-  // the runtime says what the omission costs rather than quietly starting
-  // every volume at 0 the way it did before this was pinned.
+  // compile error, but this module is reachable from untyped callers too.
   if (opts.usedBytesByVolume === undefined) {
     console.warn(
       `[storage] a pool is configured but initStorage was given no usedBytesByVolume seeder, so every ` +
         `volume starts this process at 0 used bytes and DRIVE.n QUOTA is not enforced. This is a wiring ` +
-        `bug: production passes () => db.usedBytesByVolume(); a caller that genuinely wants zero passes ` +
+        `bug: production passes measureVolumeBytes; a caller that genuinely wants zero passes ` +
         `'assume-empty'.`
     );
   }
   if (typeof opts.usedBytesByVolume === 'function') {
     const seeder = opts.usedBytesByVolume;
-    try {
-      const usedByVolume = seeder();
-      for (const state of volumes.states) {
-        if (state.volume.kind !== 's3') continue;
-        state.usedBytes = usedByVolume.get(state.volume.driveNumber) ?? 0;
-      }
-    } catch (err) {
+    const failed = (err: unknown) => {
       const detail = err instanceof Error ? err.message : String(err);
       console.warn(
-        `[storage] could not seed used-bytes from the catalog (${detail}); every volume starts this ` +
-          `process at 0 until the next successful rebuild`
+        `[storage] could not measure used bytes (${detail}); every volume keeps its current figure ` +
+          'until the next successful rebuild'
       );
+    };
+    try {
+      for (const state of volumes.states) measurementBase.set(state, state.usedBytes);
+      const used = seeder(volumes);
+      // A thenable, not `instanceof Promise`: a promise from another realm
+      // (jest's sandbox, a vm context) is still a promise.
+      if (isThenable(used)) {
+        pendingMeasurements.set(
+          volumes,
+          Promise.resolve(used).then((map) => applyUsedBytes(volumes, map), failed)
+        );
+      } else {
+        applyUsedBytes(volumes, used);
+      }
+    } catch (err) {
+      failed(err);
     }
   }
 
@@ -257,15 +338,13 @@ export async function initStorage(
  * (`sameVolumeIdentity`) inherit anything; a drive that is new, removed, or
  * points at a genuinely different bucket starts clean.
  *
- * `usedBytes` is the one field this deliberately does NOT carry any more -
- * finding 2 of the whole-branch review. `initStorage` just RE-SEEDED it from
- * the catalog (`usedBytesByVolume`) for every s3 volume in `next`, which is
- * always at least as fresh as whatever `previous` was carrying (the catalog
- * only moves forward - every write that changes it goes through
- * `recordLocation`/`createFileEntry` before this rebuild ever runs), so
- * carrying the OLD in-process figure here would silently overwrite a
- * correct number with a stale one on every single rebuild. Re-seed, don't
- * carry: this is the fix, not an omission.
+ * `usedBytes` is carried only as a STAND-IN while `next`'s own measurement
+ * of the volumes is still in flight (`measureVolumeBytes` lists in the
+ * background): without it every admin save would leave each drive at 0 -
+ * QUOTA unenforced - until the listing landed. The measurement replaces the
+ * stand-in when it lands (`applyUsedBytes`, which keeps any write made since
+ * on top). A measurement that has already landed, or one applied at once, is
+ * never overwritten: it is fresher than anything `previous` was carrying.
  */
 function carryLiveState(previous: StorageContext | null, next: StorageContext): StorageContext {
   if (!previous) return next;
@@ -277,6 +356,10 @@ function carryLiveState(previous: StorageContext | null, next: StorageContext): 
     nextState.degraded = prevState.degraded;
     nextState.requestsThisMonth = prevState.requestsThisMonth;
     nextState.egressBytesThisMonth = prevState.egressBytesThisMonth;
+    if (pendingMeasurements.has(next.volumes) && !measuredStates.has(nextState)) {
+      nextState.usedBytes = prevState.usedBytes;
+      measurementBase.set(nextState, prevState.usedBytes);
+    }
     unchangedDrives.add(prevState.volume.driveNumber);
   }
   next.cache.importUploadedSizes(previous.cache.exportUploadedSizes(unchangedDrives));

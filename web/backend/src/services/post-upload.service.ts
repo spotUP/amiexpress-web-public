@@ -150,11 +150,8 @@ export async function runPostUpload(
       const { ACSPermission } = require('../constants/acs-permissions');
       if (checkSecurity(session.user, ACSPermission.KEEP_UPLOAD_CREDIT)) {
         const halfCredit = Math.floor(peff / 2);
+        // loggedOnUser's, saved with the account at logoff (8207).
         (session.user as any).timeTotal = ((session.user as any).timeTotal || 0) + halfCredit;
-        if (session.user.slotNumber) {
-          const { userFileManager } = require('../services/UserFileManager');
-          userFileManager.updateUserDataFile(session.user, session.user.slotNumber);
-        }
       }
     } catch (err: any) {
       console.error(`[postUpload] KEEP_UPLOAD_CREDIT persist failed: ${err?.message || err}`);

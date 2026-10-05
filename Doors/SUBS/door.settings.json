@@ -11,24 +11,6 @@
       "min": 10,
       "max": 200,
       "help": "How many of the newest messages the door keeps on screen at once. Each one costs about 110 bytes of the door's memory on the Amiga, so 200 is the ceiling."
-    },
-    {
-      "key": "sysopLevel",
-      "cfgKey": "SysopLevel",
-      "label": "Level that may read private mail",
-      "type": "number",
-      "default": 255,
-      "min": 1,
-      "max": 255,
-      "help": "A caller at or above this level sees private messages between other people, as a sysop does at the R prompt. The door cannot read the board's ACS tables, so this is the one access rule it must be told. At 255, nobody gets it unless you have level-255 callers."
-    },
-    {
-      "key": "sysopName",
-      "cfgKey": "SysopName",
-      "label": "Who a comment to the sysop is addressed to",
-      "type": "string",
-      "default": "SYSOP",
-      "help": "The name a C (comment to sysop) message is written TO when this conference hands its message base to the door. express.e reads it off account slot 1 (express.e:8765-8777); a door cannot load accounts, so it has to be told. Leave it at SYSOP unless the sysop's account is named something else."
     }
   ]
 }

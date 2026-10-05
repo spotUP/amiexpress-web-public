@@ -483,29 +483,64 @@ async function promptForRejoin(socket: any, session: BBSSession): Promise<void> 
 
 // ===== Helper Functions =====
 
-async function loadNextUser(socket: any, session: BBSSession, direction: number): Promise<void> {
+/**
+ * express.e loadAccount(which,...): the account in user.data slot `which`, or
+ * null past the last record (RESULT_FAILURE). The record is read from disk -
+ * it is what the board acts on - and merged over its database row, which the
+ * editor's save writes through. A slot's row counts only when it names the
+ * same account; otherwise the row is found by the record's name.
+ */
+async function loadAccountAt(slot: number): Promise<any | null> {
+  if (!Number.isInteger(slot) || slot < 1) return null;
   const { db } = require('../../database');
-  const currentSlot = session.tempData.editingSlot;
+  const { userFileManager } = require('../../services/UserFileManager');
+  const { loadAccount } = require('../../services/load-account');
+  const disk = userFileManager.readUserBySlot(slot);
+  if (!disk) return null;
+  const same = (name: unknown) => String(name ?? '').trim().toLowerCase() === String(disk.username ?? '').trim().toLowerCase();
+  const bySlot = await db.getUserBySlotNumber(slot);
+  const row = bySlot && same(bySlot.username) ? bySlot : await db.getUserByUsername(disk.username);
+  if (!row) return { ...disk, slotNumber: slot };
+  return { ...loadAccount({ ...row, slotNumber: slot }).user, slotNumber: slot };
+}
 
+/** express.e findLastAccount (21075-21083): user.data's size over SIZEOF user. */
+function lastAccountSlot(): number {
+  const { userDatabaseManager } = require('../../services/UserDatabaseManager');
+  return Math.max(1, Number(userDatabaseManager.getUserCount()) || 1);
+}
+
+/** The account at `slot` becomes the one being edited. */
+function editAccountAt(session: BBSSession, account: any, slot: number): void {
+  session.tempData.editingUser = account;
+  session.tempData.editingSlot = slot;
+  session.tempData.originalData = JSON.parse(JSON.stringify(account));
+}
+
+/**
+ * + and - (express.e:21263-21286): which:=which+1, and past the last record
+ * back to slot 1; which:=which-1, and below 1 to findLastAccount().
+ */
+async function loadNextUser(socket: any, session: BBSSession, direction: number): Promise<void> {
   try {
-    const nextSlot = currentSlot + direction;
-    if (nextSlot < 1) {
-      socket.emit('ansi-output', '\r\n\x1b[31mNo previous user.\x1b[0m\r\n');
+    let slot = Number(session.tempData.editingSlot) + direction;
+    if (direction < 0 && slot < 1) slot = lastAccountSlot();
+    let account = await loadAccountAt(slot);
+    if (!account && direction > 0) {
+      slot = 1;
+      account = await loadAccountAt(slot);
+    }
+    if (!account) {
+      socket.emit('ansi-output', '\r\n\x1b[31mError loading user.\x1b[0m\r\n');
       return;
     }
-
-    const nextUser = await db.getUserBySlot(nextSlot);
-    if (!nextUser) {
-      socket.emit('ansi-output', '\r\n\x1b[31mNo next user found.\x1b[0m\r\n');
-      return;
-    }
-
-    session.tempData.editingUser = nextUser;
-    session.tempData.editingSlot = nextUser.id;
+    editAccountAt(session, account, slot);
     session.tempData.changes = false;
-    session.tempData.page = 0;
-
-    displayAccountPage0(socket, nextUser, nextUser.id);
+    if (session.tempData.page === 1) {
+      displayAccountPage1(socket, account, slot);
+    } else {
+      displayAccountPage0(socket, account, slot);
+    }
   } catch (err) {
 console.error('Error loading next user:', err);
     socket.emit('ansi-output', '\r\n\x1b[31mError loading user.\x1b[0m\r\n');
@@ -527,9 +562,9 @@ async function saveAccount(socket: any, session: BBSSession): Promise<void> {
     // Refresh display
     const page = session.tempData.page;
     if (page === 0) {
-      displayAccountPage0(socket, user, user.id);
+      displayAccountPage0(socket, user, session.tempData.editingSlot);
     } else {
-      displayAccountPage1(socket, user, user.id);
+      displayAccountPage1(socket, user, session.tempData.editingSlot);
     }
   } catch (err) {
 console.error('Error saving account:', err);
@@ -683,63 +718,21 @@ export async function handleUserNotesLineInput(socket: any, session: BBSSession,
  * Load next/previous user for notes view
  */
 async function loadNextUserForNotes(socket: any, session: BBSSession, direction: number): Promise<void> {
-  const { db } = require('../../database');
-  const currentSlot = session.tempData.editingSlot;
-
   try {
-    let nextSlot = currentSlot + direction;
-
-    if (direction > 0) {
-      // Next user (express.e:21719-21723)
-      const nextUser = await db.getUserBySlot(nextSlot);
-      if (!nextUser) {
-        // Wrap to first user
-        nextSlot = 1;
-        const firstUser = await db.getUserBySlot(nextSlot);
-        if (firstUser) {
-          session.tempData.editingUser = firstUser;
-          session.tempData.editingSlot = firstUser.id;
-        }
-      } else {
-        session.tempData.editingUser = nextUser;
-        session.tempData.editingSlot = nextUser.id;
-      }
-    } else {
-      // Previous user (express.e:21726-21729)
-      if (nextSlot < 1) {
-        // Find last account
-        const lastSlot = await findLastAccountSlot();
-        nextSlot = lastSlot;
-      }
-      const prevUser = await db.getUserBySlot(nextSlot);
-      if (prevUser) {
-        session.tempData.editingUser = prevUser;
-        session.tempData.editingSlot = prevUser.id;
-      }
+    // express.e:21717-21730 - the same walk as the editor's +/-.
+    let slot = Number(session.tempData.editingSlot) + direction;
+    if (direction < 0 && slot < 1) slot = lastAccountSlot();
+    let account = await loadAccountAt(slot);
+    if (!account && direction > 0) {
+      slot = 1;
+      account = await loadAccountAt(slot);
     }
-
+    if (account) editAccountAt(session, account, slot);
     displayUserNotes(socket, session);
   } catch (err) {
     console.error('Error loading user for notes:', err);
     socket.emit('ansi-output', '\r\n\x1b[31mError loading user.\x1b[0m\r\n');
   }
-}
-
-/**
- * Find the last account slot number
- * express.e references findLastAccount()
- */
-async function findLastAccountSlot(): Promise<number> {
-  const { db } = require('../../database');
-  try {
-    const users = await db.getAllUsers();
-    if (users && users.length > 0) {
-      return Math.max(...users.map((u: any) => u.id || u.slotNumber || 1));
-    }
-  } catch (err) {
-    console.error('Error finding last account:', err);
-  }
-  return 1;
 }
 
 // ===== Conference Accounting Functions - express.e:22045-22250 =====

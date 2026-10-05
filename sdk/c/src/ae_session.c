@@ -21,6 +21,7 @@ int ae_open(ae_session *s, ae_transport_fn transport, void *context,
 
     s->transport = transport;
     s->write = 0;
+    s->query_bit = 0;
     s->context = context;
     s->storage = storage;
     s->cap = cap;
@@ -33,6 +34,12 @@ void ae_set_writer(ae_session *s, ae_write_fn write)
 {
     if (!s) return;
     s->write = write;
+}
+
+void ae_set_security_query(ae_session *s, ae_query_bit_fn query_bit)
+{
+    if (!s) return;
+    s->query_bit = query_bit;
 }
 
 void ae_close(ae_session *s)
@@ -229,6 +236,142 @@ int ae_set_last_read(ae_session *s, int msg_num)
 int ae_set_last_scanned(ae_session *s, int msg_num)
 {
     return set_pointer(s, "SCAN", msg_num, ae_last_scanned);
+}
+
+int ae_set_received(ae_session *s, int msg_num)
+{
+    char request[32];
+
+    if (!s || !s->transport || !s->carrier || !s->write || msg_num < 1) return 0;
+    sprintf(request, "RECV %d", msg_num);
+    if (s->write(s->context, AE_FIELD_SETPOINTER, request) < 0) {
+        s->carrier = 0;
+        return 0;
+    }
+    return 1;
+}
+
+int ae_check_security(ae_session *s, int acs)
+{
+    int answer;
+
+    if (!s || !s->carrier || !s->query_bit) return -1;
+    answer = s->query_bit(s->context, acs);
+    if (answer < 0) {
+        s->carrier = 0;
+        return -1;
+    }
+    return answer ? 1 : 0;
+}
+
+/* ---- AEW_POSTMSG ------------------------------------------------------- */
+
+/** One step of a post. 0 sent, -1 the carrier is gone, -2 no write path. */
+static int post_step(ae_session *s, const char *text)
+{
+    if (!s->write) return -2;
+    if (s->write(s->context, AE_FIELD_POSTMSG, text) < 0) {
+        s->carrier = 0;
+        return -1;
+    }
+    return 0;
+}
+
+/**
+ * What the board says about the post so far. "" is a board that has never
+ * heard of AEW_POSTMSG - the whole detection, as AEW_SETPOINTER's is.
+ */
+static int post_answer(ae_session *s, char *out, int cap)
+{
+    return ask(s, AE_FIELD_POSTMSG, out, cap);
+}
+
+/** The sentence after "NO ", or `fallback`, into `why`. */
+static void post_why(const char *answer, const char *fallback, char *why, int why_cap)
+{
+    const char *text = fallback;
+    int i;
+
+    if (!why || why_cap <= 0) return;
+    if (answer[0] == 'N' && answer[1] == 'O' && answer[2] == ' ') text = answer + 3;
+    for (i = 0; i < why_cap - 1 && text[i] != '\0'; i++) why[i] = text[i];
+    why[i] = '\0';
+}
+
+int ae_post_open(ae_session *s, char status, const char *to, char *why, int why_cap)
+{
+    char request[64];
+    char answer[200];
+    int got;
+
+    if (why && why_cap > 0) why[0] = '\0';
+    if (!s || !s->transport) return AE_POST_NO_BOARD;
+    if (!s->carrier) return AE_POST_GONE;
+    if (status != 'P' && status != 'R') return AE_POST_REFUSED;
+
+    sprintf(request, "TO %c %.40s", status, to ? to : "");
+    got = post_step(s, request);
+    if (got == -1) return AE_POST_GONE;
+    if (got == -2) return AE_POST_NO_BOARD;
+
+    got = post_answer(s, answer, (int)sizeof answer);
+    if (got < 0) return AE_POST_GONE;
+    if (got == 0 || answer[0] == '\0') return AE_POST_NO_BOARD;
+    if (strcmp(answer, "READY") == 0) return AE_POST_READY;
+    post_why(answer, "The board would not take this post.", why, why_cap);
+    return AE_POST_REFUSED;
+}
+
+/* Body bytes per TEXT step: "TEXT " plus this fits the 198-byte String. */
+#define POST_CHUNK 180
+
+long ae_post_send(ae_session *s, const char *subject, const char *body,
+                  unsigned long body_len, char *why, int why_cap)
+{
+    char request[200];
+    char answer[200];
+    unsigned long at = 0;
+    int got;
+
+    if (why && why_cap > 0) why[0] = '\0';
+    if (!s || !s->transport) return AE_POST_NO_BOARD;
+    if (!s->carrier) return AE_POST_GONE;
+
+    sprintf(request, "SUBJECT %.40s", subject ? subject : "");
+    if (post_step(s, request) != 0) return s->carrier ? AE_POST_NO_BOARD : AE_POST_GONE;
+
+    while (body && at < body_len) {
+        unsigned long n = body_len - at;
+        unsigned long i;
+        if (n > POST_CHUNK) n = POST_CHUNK;
+        memcpy(request, "TEXT ", 5);
+        for (i = 0; i < n; i++) {
+            /* A NUL would end the String early; the board never stores one. */
+            request[5 + i] = body[at + i] != '\0' ? body[at + i] : ' ';
+        }
+        request[5 + n] = '\0';
+        if (post_step(s, request) != 0) return s->carrier ? AE_POST_NO_BOARD : AE_POST_GONE;
+        at += n;
+    }
+
+    if (post_step(s, "SEND") != 0) return s->carrier ? AE_POST_NO_BOARD : AE_POST_GONE;
+
+    got = post_answer(s, answer, (int)sizeof answer);
+    if (got < 0) return AE_POST_GONE;
+    if (got == 0 || answer[0] == '\0') return AE_POST_NO_BOARD;
+    if (strncmp(answer, "POSTED ", 7) == 0) {
+        long n = atol(answer + 7);
+        if (n >= 1) return n;
+    }
+    if (strcmp(answer, "LOCKED") == 0) {
+        /* express.e:10744 */
+        post_why("", "Another task has the MsgBase locked!", why, why_cap);
+    } else if (strcmp(answer, "FAILED") == 0) {
+        post_why("", "The board could not save the message.", why, why_cap);
+    } else {
+        post_why(answer, "The board would not take this post.", why, why_cap);
+    }
+    return AE_POST_REFUSED;
 }
 
 long ae_now(ae_session *s)

@@ -315,6 +315,10 @@ export async function runPostAuthLogin(
   // DELETE the sysop made while the caller was on.
   const { accountDeleted: _deletedOnDisk, ...sessionUser } = user;
   session.user = { ...sessionUser, lastLoginBeforeUpdate };
+  // express.e:28504 newSinceFlag:=0 - a new call has not run N yet - and
+  // this call's account is not saved yet (account.service).
+  session.newSinceFlag = false;
+  session.accountSavedAtLogoff = false;
   session.ansiMode = user.ansi;
   installAnsiFilter(emitter, session);
 

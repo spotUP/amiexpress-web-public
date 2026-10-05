@@ -193,3 +193,24 @@ int ae_dos_delete(const char *path)
     if (path == 0 || path[0] == '\0') return -1;
     return DeleteFile((STRPTR)path) ? 0 : -1;
 }
+
+long ae_dos_lock(const char *path)
+{
+    BPTR lock;
+
+    if (path == 0 || path[0] == '\0') return 0;
+
+    lock = Lock((STRPTR)path, ACCESS_WRITE);
+    if (lock == 0 && IoErr() == ERROR_OBJECT_NOT_FOUND) {
+        /* express.e:11952 IF(error=205) THEN createFile(tempstr) */
+        BPTR fh = Open((STRPTR)path, MODE_NEWFILE);
+        if (fh != 0) Close(fh);
+        lock = Lock((STRPTR)path, ACCESS_WRITE);
+    }
+    return (long)lock;
+}
+
+void ae_dos_unlock(long lock)
+{
+    if (lock != 0) UnLock((BPTR)lock);
+}

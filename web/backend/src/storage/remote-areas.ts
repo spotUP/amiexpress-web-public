@@ -315,18 +315,16 @@ function containedIn(root: string, child: string): string | null {
 }
 
 /**
- * The drive and key behind a path that has already been resolved on disk.
- *
- * DosLibrary works in resolved local paths - by the time a door has opened
- * `BBS:Conf1/Files/DOOR.DAT` the emulator holds one - so Task 10 needs the
- * inverse of `objectPrefixFor`. The longest matching area wins, so an area
- * nested inside another's directory takes its own files with it.
+ * The pooled area a path that has already been resolved on disk lies in, and
+ * the path relative to that area's directory - or null when no pooled area
+ * holds it. The longest matching area wins, so an area nested inside
+ * another's directory takes its own files with it.
  */
-export function locateByRealPath(
+export function areaByRealPath(
   realPath: string,
   areas: readonly RemoteArea[],
   dataDir: string
-): RemoteLocation | null {
+): { area: RemoteArea; relative: string } | null {
   const resolved = path.resolve(realPath);
 
   let best: { area: RemoteArea; relative: string; rootLength: number } | null = null;
@@ -342,11 +340,27 @@ export function locateByRealPath(
     }
   }
 
-  if (!best) return null;
-  const driveNumber = best.area.storageVolume;
+  return best ? { area: best.area, relative: best.relative } : null;
+}
+
+/**
+ * The drive and key behind a path that has already been resolved on disk.
+ *
+ * DosLibrary works in resolved local paths - by the time a door has opened
+ * `BBS:Conf1/Files/DOOR.DAT` the emulator holds one - so Task 10 needs the
+ * inverse of `objectPrefixFor`.
+ */
+export function locateByRealPath(
+  realPath: string,
+  areas: readonly RemoteArea[],
+  dataDir: string
+): RemoteLocation | null {
+  const found = areaByRealPath(realPath, areas, dataDir);
+  if (!found) return null;
+  const driveNumber = found.area.storageVolume;
   if (driveNumber === undefined) return null;
   return {
     driveNumber,
-    key: `${objectPrefixFor(best.area)}${best.relative.split(path.sep).join('/')}`,
+    key: `${objectPrefixFor(found.area)}${found.relative.split(path.sep).join('/')}`,
   };
 }

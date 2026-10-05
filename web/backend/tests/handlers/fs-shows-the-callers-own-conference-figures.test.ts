@@ -89,6 +89,9 @@ describe('FS prints the caller\'s own Conf.DB record for each conference', () =>
       on() { return socket; },
     };
 
+    // He is in conference 1: its join swapped his counters in (express.e:5026,
+    // 4893-4905), and FS saves them back before it reads the records (24162).
+    require('../../src/utils/message-pointers.util').loadConferenceAccount(session, 1);
     await processBBSCommand(socket, session, 'FS', '');
     flushOutput(socket);
     const out = emitted.join('');
