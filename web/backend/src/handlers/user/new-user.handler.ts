@@ -926,11 +926,12 @@ async function promptForComputer(socket: Socket, session: any) {
   // express.e:11315 - FOR stat:=0 TO computerTypes.count()-1 STEP 2
   for (let i = 0; i < choices.length; i += 2) {
     // StringF(tempStr,'\d[2]> \l\s[34] ',stat+1,computerTypes.item(stat))
-    const left = `${String(i + 1).padStart(2, ' ')}> ${choices[i].padEnd(34, ' ')}`;
+    // \s[34] is a 34-column field - cut to it as well as padded - then a space.
+    const left = `${String(i + 1).padStart(2, ' ')}> ${choices[i].slice(0, 34).padEnd(34, ' ')} `;
     let right = '';
     if (i + 1 < choices.length) {
       // StringF(tempStr,'\d[2]> \l\s[34]\b\n',stat+2,computerTypes.item(stat+1))
-      right = `${String(i + 2).padStart(2, ' ')}> ${choices[i+1].padEnd(34, ' ')}\r\n`;
+      right = `${String(i + 2).padStart(2, ' ')}> ${choices[i+1].slice(0, 34).padEnd(34, ' ')}\r\n`;
     } else {
       right = '\r\n';
     }

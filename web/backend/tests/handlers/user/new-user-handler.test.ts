@@ -275,6 +275,12 @@ describe('New User Handler — registration steps', () => {
       // express.e:11335-11337: the list, a blank line, 'Choose computer type: '.
       const output = socket._emits.map((e: any) => String(e.payload)).join('');
       expect(output.endsWith('\r\n\r\nChoose computer type: ')).toBe(true);
+      // express.e:11321-11324 - two per row: '\d[2]> \l\s[34] ' then
+      // '\d[2]> \l\s[34]\b\n' - the left column ends in a space.
+      const row = output.split('\r\n').find((l: string) => l.startsWith(' 1> '));
+      expect(row).toBeDefined();
+      expect(row!.slice(4, 4 + 34 + 1)).toMatch(/^.{34} $/);
+      expect(row!.slice(39, 43)).toBe(' 2> ');
     });
 
     it('Auto (Enter) stores the measured terminal height minus the prompt row, never 0', async () => {
