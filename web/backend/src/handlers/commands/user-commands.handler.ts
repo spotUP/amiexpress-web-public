@@ -241,6 +241,7 @@ export async function fileReceivedUploads(
     }
   } catch (err: any) {
     console.error('[ZMODEM-UL] handleDizExtractionAndDescription failed:', err?.message || err);
+    // WEB_: a JS exception in the port's filing; express.e has no counterpart.
     socket.emit('ansi-output', '\r\nUpload pipeline failed.\r\n\r\n');
     uploadReturns(session, 'failure');
   }
@@ -555,6 +556,7 @@ export function startZmodemDownload(
   const missing = files.filter((f) => { try { return !fsSync.existsSync(f); } catch { return true; } });
   if (missing.length > 0) {
     console.warn(`[ZMODEM-DL ${ctxId}] missing files: ${JSON.stringify(missing)}`);
+    // WEB_: a pooled file evicted between resolve and send; express.e has no pool.
     socket.emit('ansi-output', `\r\nDownload error — files not found: ${missing.map((p) => path.basename(p)).join(', ')}\r\n`);
     if (transferOnly) { void handBack(false); return; }
     session.subState = LoggedOnSubState.DISPLAY_MENU;

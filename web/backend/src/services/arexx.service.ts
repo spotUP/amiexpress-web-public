@@ -1275,6 +1275,7 @@ console.error('BBSWRITEFILE error:', error);
       if (menuContent) {
         await this.BBSWRITE(menuContent);
       } else {
+        // WEB_: BBSSHOWMENU is the port's own ARexx call.
         await this.BBSWRITE(`Menu '${menuName}' not found`);
       }
     } catch (error) {
@@ -1290,6 +1291,7 @@ console.error('BBSSHOWMENU error:', error);
         },
         DebugSeverity.WARNING
       );
+      // WEB_: BBSSHOWMENU is the port's own ARexx call.
       await this.BBSWRITE(`Error loading menu: ${menuName}`);
     }
   }
@@ -1301,6 +1303,7 @@ console.error('BBSSHOWMENU error:', error);
     // NON-ZERO error and tell the user, rather than faking success — a script
     // that assumed the door ran on a 0 return would silently misbehave.
     await this.BBSLOG('warn', `BBSLAUNCHDOOR('${doorName}') not implemented — refusing (params: ${params.join(' ')})`);
+    // WEB_: BBSLAUNCHDOOR is the port's own ARexx call.
     await this.BBSWRITE(`\r\nBBSLAUNCHDOOR: launching doors from ARexx is not supported yet ('${doorName}').\r\n`);
     return 10; // non-zero: door did NOT launch
   }

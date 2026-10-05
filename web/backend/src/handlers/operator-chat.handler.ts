@@ -1096,6 +1096,7 @@ console.log(`[Operator Chat] Page ${pageId}: StartChat screen not shown (${(err 
     // and this line printed regardless - landing the hint on top of the menu
     // prompt the caller had just been returned to, and mutating a session
     // already deleted from activeChatSessions.
+    // WEB_: the bot co-sysop's send convention; express.e's chat() prints no hint.
     if (sysopId === 'bot' && chatIsLive(chatSession, pageId)) reach.emitter.emit('ansi-output', `${chatResetColourBytes(chatSession)}(type, then press return twice to send. /quit or CTRL-C leaves the chat.)\r\n\r\n`);
   }
 

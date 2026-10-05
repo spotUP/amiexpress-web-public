@@ -153,6 +153,7 @@ console.error('[ZMODEM] Failed to ensure playpen:', err);
     const lrzAvailable = isLrzszAvailable();
     console.log(`[ZMODEM-UL-RZ] lrzsz check: ${lrzAvailable}`);
     if (!lrzAvailable) {
+      // WEB_: a missing host tool (lrzsz); express.e has its own xpr libraries.
       socket.emit('ansi-output', '\r\n\x1b[31mZMODEM unavailable: lrzsz (sz/rz) not installed on this BBS host.\x1b[0m\r\n');
       socket.emit('ansi-output', '\x1b[31mAsk the sysop to install lrzsz (brew install lrzsz / apk add lrzsz).\x1b[0m\r\n\r\n');
       endUpload(session, 'failure', toMenu);

@@ -153,6 +153,7 @@ console.log('[displayNewFiles] Search date:', searchDate);
     await FileListingHandler.handleNewFileScan(socket, session, searchDate, nonStopDisplay);
   } catch (error) {
 console.error('[displayNewFiles] ERROR:', error);
+    // WEB_: a JS exception in the port's N; express.e has no counterpart.
     emitText(socket, `\r\n\x1b[31mError displaying new files: ${(error as Error).message}\x1b[0m\r\n`);
     session.subState = LoggedOnSubState.DISPLAY_MENU;
   }

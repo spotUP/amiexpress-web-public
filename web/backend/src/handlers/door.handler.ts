@@ -2555,6 +2555,7 @@ console.error(`[executeNativeGccDoor] Process error: ${err.message}`);
     delete session.doorInputHandler;
     session.subState = LoggedOnSubState.DISPLAY_MENU;
 
+    // WEB_: native GCC doors are a dev-only runtime express.e does not have.
     emitText(socket, `\r\nDoor execution failed: ${err.message}\r\n`);
   });
 }
