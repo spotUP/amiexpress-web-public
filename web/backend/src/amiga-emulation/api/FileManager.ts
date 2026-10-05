@@ -19,6 +19,7 @@ import { AmigaFileCache } from './AmigaFileCache';
 import type { FileShadowProvider } from './file-shadow';
 import * as path from 'path';
 import { getSystemTime } from '../../utils/date-time.util';
+import { DOS_ERRORS } from './dos/dos-types';
 
 // PERFORMANCE: Debug logging disabled by default - synchronous file I/O is slow
 const FILE_DEBUG_ENABLED = process.env.DEBUG_FILE === '1';
@@ -66,17 +67,17 @@ export class FileManager {
   /** Last error code (AmigaDOS ERROR_* constant) */
   private lastErrorCode: number = 0;
 
-  // AmigaDOS error constants (match DosLibrary.ts)
-  private readonly ERROR_NO_ERROR = 0;
-  private readonly ERROR_OBJECT_NOT_FOUND = 205;
-  private readonly ERROR_OBJECT_WRONG_TYPE = 212;
-  private readonly ERROR_WRITE_PROTECTED = 214;
-  private readonly ERROR_READ_PROTECTED = 216;
-  private readonly ERROR_DISK_FULL = 221;
-  private readonly ERROR_NO_FREE_STORE = 103;
-  private readonly ERROR_SEEK_ERROR = 219;
-  private readonly ERROR_OBJECT_IN_USE = 202;
-  private readonly ERROR_INVALID_LOCK = 211;
+  // AmigaDOS error constants: the one NDK table (dos-types.ts)
+  private readonly ERROR_NO_ERROR = DOS_ERRORS.ERROR_NO_ERROR;
+  private readonly ERROR_OBJECT_NOT_FOUND = DOS_ERRORS.ERROR_OBJECT_NOT_FOUND;
+  private readonly ERROR_OBJECT_WRONG_TYPE = DOS_ERRORS.ERROR_OBJECT_WRONG_TYPE;
+  private readonly ERROR_WRITE_PROTECTED = DOS_ERRORS.ERROR_WRITE_PROTECTED;
+  private readonly ERROR_READ_PROTECTED = DOS_ERRORS.ERROR_READ_PROTECTED;
+  private readonly ERROR_DISK_FULL = DOS_ERRORS.ERROR_DISK_FULL;
+  private readonly ERROR_NO_FREE_STORE = DOS_ERRORS.ERROR_NO_FREE_STORE;
+  private readonly ERROR_SEEK_ERROR = DOS_ERRORS.ERROR_SEEK_ERROR;
+  private readonly ERROR_OBJECT_IN_USE = DOS_ERRORS.ERROR_OBJECT_IN_USE;
+  private readonly ERROR_INVALID_LOCK = DOS_ERRORS.ERROR_INVALID_LOCK;
 
   constructor(baseDir: string, pathManager: PathManager, fileCache?: AmigaFileCache) {
     this.baseDir = baseDir;

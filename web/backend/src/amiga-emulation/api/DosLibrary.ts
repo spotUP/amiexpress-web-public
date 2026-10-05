@@ -28,8 +28,6 @@ import { getStorageContext } from '../../storage/storage-context';
 import { pooledPathOf, materialisePooledPath } from '../../storage/remote-download';
 import { isStorageUnavailable } from '../../storage/file-cache';
 
-/** dos/dos.i ERROR_DEVICE_NOT_MOUNTED (NDK 3.1): the volume holding the file cannot answer. */
-const IOERR_DEVICE_NOT_MOUNTED = 218;
 import {
   // Constants
   MODE_OLDFILE,
@@ -733,7 +731,7 @@ debugLog(`[dos.library] queueInput: ${typeof data === 'string' ? JSON.stringify(
       (error: unknown) => {
         console.warn(`[dos.library] Open("${filename}") from the pool failed:`, error);
         // A volume that cannot answer is not a missing file (storage/remote-download.ts).
-        answer(0, isStorageUnavailable(error) ? IOERR_DEVICE_NOT_MOUNTED : DOS_ERRORS.ERROR_OBJECT_NOT_FOUND);
+        answer(0, isStorageUnavailable(error) ? DOS_ERRORS.ERROR_DEVICE_NOT_MOUNTED : DOS_ERRORS.ERROR_OBJECT_NOT_FOUND);
       },
     );
     return true;
