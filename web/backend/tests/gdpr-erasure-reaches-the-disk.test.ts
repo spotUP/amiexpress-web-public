@@ -198,6 +198,18 @@ describe('GDPR erasure (W 20) reaches the disk R reads', () => {
     fs.writeFileSync(path.join(root, 'Node1', 'CallersLog'),
       `**************************************************************\n10-01-26 (12:00:00) [${slot}] ${ALICE} (CONNECT 19200) Zedtown\n`);
 
+    // The sysop's safety copies of the message base: a HeaderFile copy beside
+    // the live one, and a whole-conference copy with a body file of its own.
+    const msgBase = path.join(conf1, 'MsgBase');
+    const headerCopy = path.join(msgBase, 'HeaderFile.pre-date-migration-2026-10-04.backup');
+    fs.copyFileSync(path.join(msgBase, 'HeaderFile'), headerCopy);
+    const confCopy = path.join(root, 'Conf1.backup-2026-05-27', 'MsgBase');
+    fs.mkdirSync(confCopy, { recursive: true });
+    fs.copyFileSync(path.join(msgBase, 'HeaderFile'), path.join(confCopy, 'HeaderFile'));
+    fs.writeFileSync(path.join(confCopy, '1'), ALICE_TEXT + '\n', 'latin1');
+    fs.writeFileSync(path.join(confCopy, '4'), 'carol is untouched\n', 'latin1');
+    const carolRecord = fs.readFileSync(headerCopy).subarray(3 * 110, 4 * 110);
+
     // Before: R shows her (the fixture is what the board holds).
     const before = await reader('bobby').readAll();
     expect(before).toContain(ALICE);
@@ -228,6 +240,18 @@ describe('GDPR erasure (W 20) reaches the disk R reads', () => {
     // Sentinel: it was the erasure, through the board's HeaderFile writer.
     expect(updateHeader).toHaveBeenCalled();
     updateHeader.mockRestore();
+
+    // The safety copies: her name gone from both HeaderFile copies, the body
+    // she wrote gone from the whole-conference copy, Carol's record and body
+    // the bytes they were.
+    for (const copy of [headerCopy, path.join(confCopy, 'HeaderFile')]) {
+      const bytes = fs.readFileSync(copy);
+      expect(bytes.toString('latin1')).not.toMatch(new RegExp(ALICE, 'i'));
+      expect(bytes.toString('latin1')).toContain(erased);
+      expect(bytes.subarray(3 * 110, 4 * 110).equals(carolRecord)).toBe(true);
+    }
+    expect(fs.readFileSync(path.join(confCopy, '1'), 'latin1')).toBe('*** erased ***\n');
+    expect(fs.readFileSync(path.join(confCopy, '4'), 'latin1')).toBe('carol is untouched\n');
 
     // The message base is still the same base: same numbers, same statuses.
     const headers = mods.index.messageIndexManager.readHeaderFile(1);

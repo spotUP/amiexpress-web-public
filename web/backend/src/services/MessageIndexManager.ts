@@ -213,7 +213,7 @@ console.log(`[MessageIndexManager] Created MailLock for Conf${confNumber}`);
   /**
    * Serialize msgHeader struct to binary buffer (110 bytes)
    */
-  private serializeMsgHeader(header: MsgHeader): Buffer {
+  serializeMsgHeader(header: MsgHeader): Buffer {
     /*
      * Written in the layout AmiExpress uses, which is not the one this
      * method used to write.

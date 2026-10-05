@@ -16,6 +16,7 @@ import { getSystemTime } from '../utils/date-time.util';
 import { boardRoot } from '../utils/board-root.util';
 import { conferenceNumbers } from '../conferences/conference-paths';
 import { messageIndexManager } from './MessageIndexManager';
+import { AMIGA_MSGHEADER_SIZE } from './amiga-msgheader';
 import { overwriteMessageBody } from '../utils/message-file.util';
 import { userFileManager } from './UserFileManager';
 import { deleteConfAccess } from './delete-conf-access';
@@ -68,6 +69,8 @@ export interface ErasureResult {
   ctopFilesRenamed: number;
   /** Accounts records blanked in the sysop's safety copies of user.data/.keys/.misc. */
   backupRecordsBlanked: number;
+  /** HeaderFile records renamed in the sysop's safety copies of the message bases. */
+  backupHeadersRenamed: number;
 }
 
 /**
@@ -174,6 +177,10 @@ export async function eraseUserData(db: any, userId: string, options: ErasureOpt
   // 6. The sysop's safety copies of the account files keep the caller's
   //    whole record: it is blanked there (sysop decision 2026-10-05).
   const backupRecordsBlanked = blankAccountInBackups(originalUsername);
+  const backupHeadersRenamed = eraseFromMessageBaseBackups(
+    { username: originalUsername, realnames: [user.realname, sameAccount ? diskRecord!.realname : undefined] },
+    erasedHandle,
+  );
 
   return {
     userId,
@@ -190,6 +197,7 @@ export async function eraseUserData(db: any, userId: string, options: ErasureOpt
     sentByFilesRenamed,
     ctopFilesRenamed,
     backupRecordsBlanked,
+    backupHeadersRenamed,
   };
 }
 
@@ -334,6 +342,60 @@ export async function eraseFromMessageBases(
   }
 
   return { headersRenamed, bodiesScrubbed };
+}
+
+/**
+ * The erased caller in the sysop's safety copies of the message bases: each
+ * HeaderFile copy beside a conference's own (`HeaderFile.pre-date-migration-
+ * 2026-10-04.backup`) and the HeaderFile of a whole-conference copy
+ * (`Conf2.backup-2026-05-27/MsgBase/`). A matching record's From / To becomes
+ * the erased handle, as in the live base; only that record's 110 bytes are
+ * rewritten, so the rest of the copy stays the bytes it was saved as. In a
+ * whole-conference copy, the body file of a message the caller wrote is
+ * replaced too - a copy beside the live base shares the live bodies, which
+ * the live erasure already scrubbed.
+ */
+function eraseFromMessageBaseBackups(names: ErasedNames, erasedHandle: string): number {
+  const root = boardRoot();
+  const copies: Array<{ file: string; conf: number; ownBodies: boolean }> = [];
+  for (const conf of conferenceNumbers(root)) {
+    for (const file of backupCopiesOf(path.join(conferenceDir(root, conf), 'MsgBase', 'HeaderFile'))) {
+      copies.push({ file, conf, ownBodies: false });
+    }
+  }
+  for (const dir of conferenceBackupDirs(root)) {
+    const file = path.join(dir, 'MsgBase', 'HeaderFile');
+    if (amigafs.existsSync(file)) {
+      copies.push({ file, conf: Number(/^conf(\d+)/i.exec(path.basename(dir))![1]), ownBodies: true });
+    }
+  }
+
+  let renamed = 0;
+  for (const { file, conf, ownBodies } of copies) {
+    const realnameConference = isRealnameConference(conf);
+    const mine = (name: string) => headerNameIsTheCaller(name, names, realnameConference);
+    const buffer = amigafs.readFileSync(file) as Buffer;
+    const headers = messageIndexManager.parseHeaderFile(buffer);
+    let changed = false;
+    headers.forEach((h, i) => {
+      const fromMe = mine(h.fromName);
+      const toMe = mine(h.toName);
+      if (!fromMe && !toMe) return;
+      messageIndexManager.serializeMsgHeader({
+        ...h,
+        ...(fromMe ? { fromName: erasedHandle } : {}),
+        ...(toMe ? { toName: erasedHandle } : {}),
+      }).copy(buffer, i * AMIGA_MSGHEADER_SIZE);
+      renamed++;
+      changed = true;
+      const body = path.join(path.dirname(file), String(h.msgNumb));
+      if (fromMe && ownBodies && amigafs.existsSync(body)) {
+        amigafs.writeFileSync(body, `${ERASED_MESSAGE_BODY}\n`, 'utf-8');
+      }
+    });
+    if (changed) amigafs.writeFileSync(file, buffer);
+  }
+  return renamed;
 }
 
 /**
@@ -613,7 +675,7 @@ function renameInCtopData(originalUsername: string, erasedHandle: string): numbe
 }
 
 // Re-export for tests that need to stub timestamps via a wrapper layer.
-export const __test_only__ = { scrubAnswersFiles, redactRecentLogs, renameSentByLines, renameInCtopData, blankAccountInBackups };
+export const __test_only__ = { scrubAnswersFiles, redactRecentLogs, renameSentByLines, renameInCtopData, blankAccountInBackups, eraseFromMessageBaseBackups };
 
 // Unused but kept so tree-shakers don't complain about getSystemTime import
 // when the current implementation doesn't reference it yet (reserved for
