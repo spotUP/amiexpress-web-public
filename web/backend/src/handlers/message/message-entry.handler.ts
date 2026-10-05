@@ -253,7 +253,8 @@ export async function handleMessageSubjectInput(socket: any, session: BBSSession
   // A reply asks its subject in read-msg's replyToMSG, which returns into
   // the reader on a blank one (9890) and never gets here.
   if (subject === '') {
-    emitText(socket, '\r\n');
+    // lineInput's line break, then 10853's (C: 8787) aePuts('\b\n').
+    emitText(socket, '\r\n\r\n');
     session.subState = LoggedOnSubState.DISPLAY_MENU;
     session.tempData = undefined;
     return;

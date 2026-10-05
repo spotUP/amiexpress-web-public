@@ -228,6 +228,9 @@ export const LINE_PROMPT_SUBSTATES: ReadonlyMap<string, LineInputOptions> = new 
   [LoggedOnSubState.JM_INPUT, { maxLen: 5 }],
   [LoggedOnSubState.NM_INPUT, { maxLen: 2 }],
   [LoggedOnSubState.CALLERSLOG_NODE_INPUT, { maxLen: 5 }],
+  // express.e:25425 OLM's 'OLM to Which Node? ...' - two characters; the
+  // next text (25429, 25438, or the menu's) follows lineInput's break.
+  [LoggedOnSubState.OLM_NODE_INPUT, { maxLen: 2, echoNewline: true }],
 ]);
 
 /**

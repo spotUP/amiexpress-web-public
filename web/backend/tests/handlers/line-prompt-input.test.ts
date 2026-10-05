@@ -272,6 +272,7 @@ describe('the line-prompt table is the one declaration', () => {
         LoggedOnSubState.FILE_LIST_DIR_INPUT,
         LoggedOnSubState.JM_INPUT,
         LoggedOnSubState.NM_INPUT,
+        LoggedOnSubState.OLM_NODE_INPUT,
         LoggedOnSubState.UPLOAD_FILENAME_INPUT,
         LoggedOnSubState.VIEW_FILE_INPUT,
         LoggedOnSubState.ZIPPY_DIR_SPAN_INPUT,
@@ -321,4 +322,15 @@ describe('JM, NM and CL take a typed number, not one key', () => {
       expect(session.inputBuffer).toBe('1');
     });
   }
+});
+
+describe('the OLM node prompt is express.e\'s lineInput', () => {
+  // express.e:25425 lineInput(...,2,...), then 25429 '\b\nNo OLM has been
+  // received in this session\b\n'. The port printed no break of lineInput's.
+  it('R with no OLM received: the line break, then 25429\'s', async () => {
+    const socket = makeSocket();
+    const session = { ...c64Session(''), petsciiMode: false, terminalType: 'ansi', screenWidth: 80, subState: LoggedOnSubState.OLM_NODE_INPUT, inputBuffer: '' };
+    await type(socket, session, 'R\r');
+    expect(allOutput(socket)).toContain('R\r\n\r\nNo OLM has been received in this session\r\n');
+  });
 });

@@ -2412,37 +2412,12 @@ console.log(' [LIVECHAT] User responding to invitation with Y/n');
     return;
   }
 
-  // PRIORITY 5: Handle OLM node input
-  // When user is entering node number for OLM (line-buffered)
+  // PRIORITY 5: Handle OLM node input - express.e:25425 lineInput(...,2,...).
+  // A line prompt (LINE_PROMPT_SUBSTATES): the line arrives here whole, with
+  // lineInput's line break already printed.
   if (session.subState === LoggedOnSubState.OLM_NODE_INPUT) {
-console.log(' [OLM] User entering node number');
-
-    // Initialize inputBuffer if needed
-    if (!session.inputBuffer) {
-      session.inputBuffer = '';
-    }
-
-    // Buffer characters until Enter is pressed
-    if (data === '\r' || data === '\n') {
-      const input = session.inputBuffer || '';
-      session.inputBuffer = '';
-
-      const { handleOlmNodeInput } = require('./transfer/olm.handler');
-      await handleOlmNodeInput(socket, session, input);
-    } else if (data === '\x7f' || data === '\b') { // Backspace (express.e:2304-2320)
-      // express.e:2306 - IF curpos>0 THEN (only backspace if buffer has content)
-      if (session.inputBuffer.length > 0) {
-        session.inputBuffer = session.inputBuffer.slice(0, -1);
-        // express.e:2307-2319 - Send backspace sequence: BS + space + BS
-        // This moves cursor back, overwrites char with space, moves cursor back again
-        emitText(socket, '\b \b');
-      }
-      // If buffer is empty, ignore backspace (prevents erasing prompt)
-    } else if (data.length === 1 && data >= ' ' && data <= '~') {
-      session.inputBuffer += data;
-      // Echo character back to terminal (express.e:2342) - backend handles ALL echo
-      emitText(socket, session.maskInput ? '*' : data);
-    }
+    const { handleOlmNodeInput } = require('./transfer/olm.handler');
+    await handleOlmNodeInput(socket, session, data);
     return;
   }
 
