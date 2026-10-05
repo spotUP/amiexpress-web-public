@@ -29,7 +29,7 @@ import { runExecuteOn } from '../../services/batch-scheduler';
 import { mailOnNewUser } from '../../services/mail-notification.service';
 import { getSystemTime } from '../../utils/date-time.util';
 import { loadBBSConfig, getBoardConfig } from '../../services/bbs-config-file.service';
-import { parseInfoFile } from '../../utils/info-file.util';
+import { checkIfNameAllowed } from '../../utils/name-allowed.util';
 import { newUserConferenceAccess, newUserPreset } from '../../utils/new-user-preset';
 import { nodeFlag } from '../../utils/node-tooltypes.util';
 import { computerTypeChoices, computerTypeRows } from '../../utils/computer-types.util';
@@ -267,65 +267,11 @@ async function continueAfterGdprConsent(socket: Socket, session: any) {
 }
 
 /**
- * Load banned names from NamesNotAllowed.info tooltypes (NAME.1, NAME.2, ...).
- * express.e:11254-11266 — TOOLTYPE_NAMESNOTALLOWED, NAME.n tooltype entries.
- */
-function loadBannedNames(): string[] {
-  const banned: string[] = [];
-  try {
-    const baseDir = config.getConfig().dataDir;
-    const candidates = [
-      path.join(baseDir, 'NamesNotAllowed.info'),
-      path.join(baseDir, '..', 'NamesNotAllowed.info')
-    ];
-    let infoPath: string | null = null;
-    for (const p of candidates) {
-      if (amigafs.existsSync(p)) {
-        infoPath = p;
-        break;
-      }
-    }
-    if (!infoPath) return banned;
-    const info = parseInfoFile(infoPath);
-    for (const tt of info.tooltypes) {
-      if (tt.commented) continue;
-      if (/^NAME\.\d+$/i.test(tt.key) && tt.value) {
-        banned.push(tt.value.toLowerCase());
-      }
-    }
-  } catch (error) {
-    console.warn('[NEW USER] Unable to load NamesNotAllowed.info:', error);
-  }
-  return banned;
-}
-
-/**
  * Check if a name contains wildcards (express.e:11226-11232 checkForAst).
  * Returns true if the name contains '*' (wildcard).
  */
 function checkForAst(name: string): boolean {
   return name.includes('*');
-}
-
-/**
- * Check if a name is allowed (express.e:11234-11268 checkIfNameAllowed).
- * Returns null if allowed, or the rejection message string if disallowed.
- * Checks: empty, 'NEW', starts with 'ACS.', banned list.
- */
-function checkIfNameAllowed(name: string): string | null {
-  const upper = name.toUpperCase();
-  // express.e:11239-11241
-  if (name === '') return 'Username not allowed!!';
-  // express.e:11244-11246
-  if (upper === 'NEW') return 'Username not allowed!!';
-  // express.e:11249-11251
-  if (upper.startsWith('ACS.')) return 'Username not allowed!!';
-  // express.e:11254-11266 — banned names from NamesNotAllowed.info
-  const banned = loadBannedNames();
-  for (const b of banned) {
-    if (b === upper.toLowerCase()) return 'Username not allowed!!';
-  }
-  return null;
 }
 
 /**

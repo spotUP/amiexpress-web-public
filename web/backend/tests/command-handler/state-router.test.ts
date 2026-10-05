@@ -72,7 +72,7 @@ describe('State Router', () => {
     it('delegates to user-edit handler when isUserEditState returns true', async () => {
       (isUserEditState as jest.Mock).mockReturnValue(true);
       const socket = makeSocket();
-      const session = makeSession(LoggedOnSubState.W_EDIT_NAME);
+      const session = makeSession(LoggedOnSubState.W_EDIT_EMAIL);
 
       const result = await routeStateInput(socket, session, 'input');
 
@@ -136,7 +136,7 @@ describe('State Router', () => {
 
     it('returns true when any module claims the state', () => {
       (isUserEditState as jest.Mock).mockReturnValue(true);
-      expect(isRoutedState(LoggedOnSubState.W_EDIT_NAME)).toBe(true);
+      expect(isRoutedState(LoggedOnSubState.W_EDIT_EMAIL)).toBe(true);
     });
 
     it('returns false when no module claims the state', () => {

@@ -32,6 +32,7 @@ import { fontMenuRows, fontForChoice, chooseTerminalFont } from '../../services/
 import bcrypt from 'bcryptjs';
 import { finalizeCommand } from '../../utils/command-response.util';
 import { changeAccount, saveAccount } from '../../services/account.service';
+import { checkIfNameAllowed } from '../../utils/name-allowed.util';
 
 import type { BBSSession } from '../../index';
 
@@ -675,14 +676,14 @@ export async function handleWOptionSelectInput(socket: any, session: BBSSession,
 
   // Handle each option (express.e:25846-26028)
   switch (option) {
-    case 0: // Edit Username - express.e:25847-25873
+    case 0: // Edit Username - express.e:25903-25928
       if (!checkSecurity(session.user, ACSPermission.EDIT_USER_NAME)) {
         _displayWCommandMenu(socket, session);
         return;
       }
-      emitText(socket, 'Name: ');
-      session.subState = LoggedOnSubState.W_EDIT_NAME;
-      session.tempData = { originalUsername: session.user.username };
+      await wEditAName(socket, session, 0);
+      _displayWCommandMenu(socket, session);
+      session.subState = LoggedOnSubState.W_OPTION_SELECT;
       break;
 
     case 1: // Edit Email - express.e:25874-25882
@@ -694,22 +695,24 @@ export async function handleWOptionSelectInput(socket: any, session: BBSSession,
       session.subState = LoggedOnSubState.W_EDIT_EMAIL;
       break;
 
-    case 2: // Edit Real Name - express.e:25883-25904
+    case 2: // Edit Real Name - express.e:25938-25960
       if (!checkSecurity(session.user, ACSPermission.EDIT_REAL_NAME)) {
         _displayWCommandMenu(socket, session);
         return;
       }
-      emitText(socket, 'Real Name: (Alpha Numeric) ');
-      session.subState = LoggedOnSubState.W_EDIT_REALNAME;
+      await wEditAName(socket, session, 2);
+      _displayWCommandMenu(socket, session);
+      session.subState = LoggedOnSubState.W_OPTION_SELECT;
       break;
 
-    case 3: // Edit Internet Name - express.e:25905-25926
+    case 3: // Edit Internet Name - express.e:25961-25981
       if (!checkSecurity(session.user, ACSPermission.EDIT_INTERNET_NAME)) {
         _displayWCommandMenu(socket, session);
         return;
       }
-      emitText(socket, 'Internet Name: (Alpha Numeric No Spaces) ');
-      session.subState = LoggedOnSubState.W_EDIT_INTERNETNAME;
+      await wEditAName(socket, session, 3);
+      _displayWCommandMenu(socket, session);
+      session.subState = LoggedOnSubState.W_OPTION_SELECT;
       break;
 
     case 4: // Edit Location - express.e:25927-25935
@@ -919,49 +922,55 @@ console.error('[W] could not save the PETSCII character set:', error);
 }
 
 /**
- * Handle edit username input - express.e:25847-25873
+ * W rows 0, 2 and 3 - express.e:25903-25981. The field's current value is
+ * lineInput's default, so Enter alone keeps it (the name typed again is the
+ * `cant` jump back to the menu); anything else says "Checking for duplicate
+ * name...", and a wildcard or a name another account holds goes back to the
+ * row's own prompt. Only LOGIN NAME saves at once (25928): the name is how
+ * the account is found again. Row 3 compares with the REAL name, as express
+ * does (25967).
  */
-export async function handleWEditNameInput(socket: any, session: BBSSession, input: string): Promise<void> {
-  const trimmed = input.trim();
+const W_NAME_ROWS = {
+  0: { prompt: 'Name: ', keep: 31, maxLen: 30, type: 'username' },
+  2: { prompt: 'Real Name: (Alpha Numeric) ', keep: 26, maxLen: 25, type: 'realname' },
+  3: { prompt: 'Internet Name: (Alpha Numeric No Spaces) ', keep: 10, maxLen: 9, type: 'internetname' },
+} as const;
 
-  // Empty = cancel
-  if (trimmed === '') {
-    _displayWCommandMenu(socket, session);
-    session.subState = LoggedOnSubState.W_OPTION_SELECT;
+async function wEditAName(socket: any, session: BBSSession, row: keyof typeof W_NAME_ROWS): Promise<void> {
+  const { lineInput } = require('../../utils/await-input');
+  const { checkForAst, findUserFromName, useWildcards } = require('../message/msg-names');
+  const spec = W_NAME_ROWS[row];
+  const wildcards = useWildcards(session);
+  const current = row === 0 ? session.user.username : row === 2 ? session.user.realname : session.user.internetName;
+  for (;;) {
+    emitText(socket, spec.prompt);
+    const str: string = await lineInput(socket, session, spec.maxLen, String(current || '').slice(0, spec.keep));
+    const same = row === 0 ? session.user.username : session.user.realname;
+    if (str.toLowerCase() === String(same || '').toLowerCase()) return;
+    if (row === 0) {
+      const refused = checkIfNameAllowed(str);
+      if (refused) { emitText(socket, `${refused}\r\n\r\n`); continue; }
+    }
+    emitText(socket, '\r\nChecking for duplicate name...');
+    if (checkForAst(str, wildcards)) {
+      emitText(socket, 'No wildcards allowed in a name.\r\n\r\n');
+      continue;
+    }
+    if (findUserFromName(1, spec.type, str, wildcards) !== 0) {
+      emitText(socket, 'Already in use!, try another.\r\n\r\n');
+      continue;
+    }
+    emitText(socket, 'Ok!\r\n');
+    if (row === 0) {
+      await changeAccount(session, { username: str });
+      await saveAccount(session.user);
+    } else if (row === 2) {
+      await changeAccount(session, { realname: str });
+    } else {
+      await changeAccount(session, { internetName: str });
+    }
     return;
   }
-
-  // Check if same as current (express.e:25855)
-  if (trimmed.toUpperCase() === session.tempData.originalUsername.toUpperCase()) {
-    _displayWCommandMenu(socket, session);
-    session.subState = LoggedOnSubState.W_OPTION_SELECT;
-    return;
-  }
-
-  // express.e:25913-25918: "Checking..." first, then the wildcard test.
-  emitText(socket, '\r\nChecking for duplicate name...');
-  if (trimmed.includes('*') || trimmed.includes('?')) {
-    emitText(socket, 'No wildcards allowed in a name.\r\n\r\n');
-    emitText(socket, 'Name: ');
-    return;
-  }
-
-  // Check for duplicate (express.e:25919-25923)
-  const existing = await db.getUserByUsername(trimmed);
-  if (existing && existing.id !== session.user.id) {
-    emitText(socket, 'Already in use!, try another.\r\n\r\n');
-    emitText(socket, 'Name: ');
-    return;
-  }
-
-  emitText(socket, 'Ok!\r\n');
-  // express.e:25926-25928: the new name, then saveAccount at once - the name
-  // is how the account is found again.
-  await changeAccount(session, { username: trimmed });
-  await saveAccount(session.user);
-
-  _displayWCommandMenu(socket, session);
-  session.subState = LoggedOnSubState.W_OPTION_SELECT;
 }
 
 /**
@@ -980,82 +989,6 @@ export async function handleWEditEmailInput(socket: any, session: BBSSession, in
   session.user.email = trimmed;
   await changeAccount(session, { email: trimmed });
 
-  _displayWCommandMenu(socket, session);
-  session.subState = LoggedOnSubState.W_OPTION_SELECT;
-}
-
-/**
- * Handle edit real name input - express.e:25883-25904
- */
-export async function handleWEditRealnameInput(socket: any, session: BBSSession, input: string): Promise<void> {
-  const trimmed = input.trim();
-
-  // Empty = cancel
-  if (trimmed === '') {
-    _displayWCommandMenu(socket, session);
-    session.subState = LoggedOnSubState.W_OPTION_SELECT;
-    return;
-  }
-
-  // Check if same as current
-  if (trimmed === (session.user.realname || '')) {
-    _displayWCommandMenu(socket, session);
-    session.subState = LoggedOnSubState.W_OPTION_SELECT;
-    return;
-  }
-
-  // Check for wildcards
-  if (trimmed.includes('*') || trimmed.includes('?')) {
-    emitText(socket, 'No wildcards allowed in a name.\r\n\r\n');
-    emitText(socket, 'Real Name: (Alpha Numeric) ');
-    return;
-  }
-
-  emitText(socket, '\r\nOk!\r\n');
-  session.user.realname = trimmed;
-  await changeAccount(session, { realname: trimmed });
-
-  _displayWCommandMenu(socket, session);
-  session.subState = LoggedOnSubState.W_OPTION_SELECT;
-}
-
-/**
- * Handle edit internet name input - express.e:25905-25926
- */
-export async function handleWEditInternetnameInput(socket: any, session: BBSSession, input: string): Promise<void> {
-  const trimmed = input.trim();
-
-  // Empty = cancel
-  if (trimmed === '') {
-    _displayWCommandMenu(socket, session);
-    session.subState = LoggedOnSubState.W_OPTION_SELECT;
-    return;
-  }
-
-  // express.e:25967: the real name typed again changes nothing.
-  if (trimmed.toUpperCase() === (session.user.realname || '').toUpperCase()) {
-    _displayWCommandMenu(socket, session);
-    session.subState = LoggedOnSubState.W_OPTION_SELECT;
-    return;
-  }
-
-  // express.e:25968-25979. No space test: the prompt asks, nothing checks.
-  emitText(socket, '\r\nChecking for duplicate name...');
-  if (trimmed.includes('*') || trimmed.includes('?')) {
-    emitText(socket, 'No wildcards allowed in a name.\r\n\r\n');
-    emitText(socket, 'Internet Name: (Alpha Numeric No Spaces) ');
-    return;
-  }
-  const existing = await db.getUserByInternetname(trimmed);
-  if (existing && existing.id !== session.user.id) {
-    emitText(socket, 'Already in use!, try another.\r\n\r\n');
-    emitText(socket, 'Internet Name: (Alpha Numeric No Spaces) ');
-    return;
-  }
-
-  session.user.internetName = trimmed;
-  await changeAccount(session, { internetName: trimmed });
-  emitText(socket, 'Ok!\r\n');
   _displayWCommandMenu(socket, session);
   session.subState = LoggedOnSubState.W_OPTION_SELECT;
 }

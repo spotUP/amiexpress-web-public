@@ -52,7 +52,7 @@ export function loadAccount(slot: number): DiskAccount | null {
  * sopt.toggles[TOGGLES_USEWILDCARDS] - the board's toggle, read directly as
  * express.e reads it (11219), not through a caller's ACS flags.
  */
-function useWildcards(_session: BBSSession): boolean {
+export function useWildcards(_session: BBSSession): boolean {
   return getACSConfig().toggles[ToggleFlags.USEWILDCARDS] === true;
 }
 

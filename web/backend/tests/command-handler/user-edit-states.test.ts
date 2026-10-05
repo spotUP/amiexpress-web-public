@@ -11,10 +11,7 @@ jest.mock('../../src/index', () => {
 // Mock all the actual W_EDIT handlers so we only test routing/buffering
 jest.mock('../../src/handlers/commands/info-commands.handler', () => ({
   handleWOptionSelectInput: jest.fn().mockResolvedValue(undefined),
-  handleWEditNameInput: jest.fn().mockResolvedValue(undefined),
   handleWEditEmailInput: jest.fn().mockResolvedValue(undefined),
-  handleWEditRealnameInput: jest.fn().mockResolvedValue(undefined),
-  handleWEditInternetnameInput: jest.fn().mockResolvedValue(undefined),
   handleWEditLocationInput: jest.fn().mockResolvedValue(undefined),
   handleWEditPhoneInput: jest.fn().mockResolvedValue(undefined),
   handleWEditPasswordInput: jest.fn().mockResolvedValue(undefined),
@@ -45,7 +42,7 @@ import {
   handleUserEditInput,
   getUserEditStates,
 } from '../../src/handlers/command-handler/user-edit-states';
-import { handleWEditNameInput } from '../../src/handlers/commands/info-commands.handler';
+import { handleWEditEmailInput } from '../../src/handlers/commands/info-commands.handler';
 import { emitText } from '../../src/utils/output.util';
 
 function makeSocket() {
@@ -58,8 +55,8 @@ function makeSession(subState: LoggedOnSubState, inputBuffer = '') {
 
 describe('User Edit States', () => {
   describe('isUserEditState', () => {
-    it('returns true for W_EDIT_NAME', () => {
-      expect(isUserEditState(LoggedOnSubState.W_EDIT_NAME)).toBe(true);
+    it('returns true for W_EDIT_EMAIL', () => {
+      expect(isUserEditState(LoggedOnSubState.W_EDIT_EMAIL)).toBe(true);
     });
 
     it('returns true for W_EDIT_PASSWORD', () => {
@@ -86,9 +83,9 @@ describe('User Edit States', () => {
       expect(states.length).toBeGreaterThan(0);
     });
 
-    it('includes W_EDIT_NAME, W_EDIT_PASSWORD, W_OPTION_SELECT', () => {
+    it('includes W_EDIT_EMAIL, W_EDIT_PASSWORD, W_OPTION_SELECT', () => {
       const states = getUserEditStates();
-      expect(states).toContain(LoggedOnSubState.W_EDIT_NAME);
+      expect(states).toContain(LoggedOnSubState.W_EDIT_EMAIL);
       expect(states).toContain(LoggedOnSubState.W_EDIT_PASSWORD);
       expect(states).toContain(LoggedOnSubState.W_OPTION_SELECT);
     });
@@ -97,7 +94,7 @@ describe('User Edit States', () => {
   describe('handleUserEditInput — buffering', () => {
     it('printable character is appended to inputBuffer', async () => {
       const socket = makeSocket();
-      const session = makeSession(LoggedOnSubState.W_EDIT_NAME, '');
+      const session = makeSession(LoggedOnSubState.W_EDIT_EMAIL, '');
 
       const handled = await handleUserEditInput(socket, session, 'A');
 
@@ -107,7 +104,7 @@ describe('User Edit States', () => {
 
     it('multiple characters accumulate in buffer', async () => {
       const socket = makeSocket();
-      const session = makeSession(LoggedOnSubState.W_EDIT_NAME, '');
+      const session = makeSession(LoggedOnSubState.W_EDIT_EMAIL, '');
 
       await handleUserEditInput(socket, session, 'H');
       await handleUserEditInput(socket, session, 'i');
@@ -115,9 +112,9 @@ describe('User Edit States', () => {
       expect(session.inputBuffer).toBe('Hi');
     });
 
-    it('echo states echo printable chars (W_EDIT_NAME)', async () => {
+    it('echo states echo printable chars (W_EDIT_EMAIL)', async () => {
       const socket = makeSocket();
-      const session = makeSession(LoggedOnSubState.W_EDIT_NAME);
+      const session = makeSession(LoggedOnSubState.W_EDIT_EMAIL);
 
       await handleUserEditInput(socket, session, 'X');
 
@@ -136,7 +133,7 @@ describe('User Edit States', () => {
 
     it('backspace removes last character', async () => {
       const socket = makeSocket();
-      const session = makeSession(LoggedOnSubState.W_EDIT_NAME, 'AB');
+      const session = makeSession(LoggedOnSubState.W_EDIT_EMAIL, 'AB');
 
       await handleUserEditInput(socket, session, '\x7f');
 
@@ -145,7 +142,7 @@ describe('User Edit States', () => {
 
     it('backspace on empty buffer does nothing', async () => {
       const socket = makeSocket();
-      const session = makeSession(LoggedOnSubState.W_EDIT_NAME, '');
+      const session = makeSession(LoggedOnSubState.W_EDIT_EMAIL, '');
 
       const handled = await handleUserEditInput(socket, session, '\b');
 
@@ -154,25 +151,25 @@ describe('User Edit States', () => {
     });
 
     it('Enter commits buffer and calls handler', async () => {
-      (handleWEditNameInput as jest.Mock).mockClear();
+      (handleWEditEmailInput as jest.Mock).mockClear();
       const socket = makeSocket();
-      const session = makeSession(LoggedOnSubState.W_EDIT_NAME, 'NewName');
+      const session = makeSession(LoggedOnSubState.W_EDIT_EMAIL, 'NewName');
 
       const handled = await handleUserEditInput(socket, session, '\r');
 
       expect(handled).toBe(true);
-      expect(handleWEditNameInput).toHaveBeenCalledWith(socket, session, 'NewName');
+      expect(handleWEditEmailInput).toHaveBeenCalledWith(socket, session, 'NewName');
       expect(session.inputBuffer).toBe(''); // cleared after commit
     });
 
     it('newline also commits buffer', async () => {
-      (handleWEditNameInput as jest.Mock).mockClear();
+      (handleWEditEmailInput as jest.Mock).mockClear();
       const socket = makeSocket();
-      const session = makeSession(LoggedOnSubState.W_EDIT_NAME, 'Value');
+      const session = makeSession(LoggedOnSubState.W_EDIT_EMAIL, 'Value');
 
       await handleUserEditInput(socket, session, '\n');
 
-      expect(handleWEditNameInput).toHaveBeenCalledWith(socket, session, 'Value');
+      expect(handleWEditEmailInput).toHaveBeenCalledWith(socket, session, 'Value');
     });
 
     it('returns false for unregistered state', async () => {

@@ -11,10 +11,7 @@ import { LoggedOnSubState } from '../../constants/bbs-states';
 import { handleBufferedInput } from './input-helpers';
 import {
   handleWOptionSelectInput,
-  handleWEditNameInput,
   handleWEditEmailInput,
-  handleWEditRealnameInput,
-  handleWEditInternetnameInput,
   handleWEditLocationInput,
   handleWEditPhoneInput,
   handleWEditPasswordInput,
@@ -40,10 +37,7 @@ import { emitText } from '../../utils/output.util';
  */
 const W_EDIT_HANDLERS: Map<LoggedOnSubState, (socket: any, session: BBSSession, input: string) => void | Promise<void>> = new Map([
   [LoggedOnSubState.W_OPTION_SELECT, handleWOptionSelectInput],
-  [LoggedOnSubState.W_EDIT_NAME, handleWEditNameInput],
   [LoggedOnSubState.W_EDIT_EMAIL, handleWEditEmailInput],
-  [LoggedOnSubState.W_EDIT_REALNAME, handleWEditRealnameInput],
-  [LoggedOnSubState.W_EDIT_INTERNETNAME, handleWEditInternetnameInput],
   [LoggedOnSubState.W_EDIT_LOCATION, handleWEditLocationInput],
   [LoggedOnSubState.W_EDIT_PHONE, handleWEditPhoneInput],
   [LoggedOnSubState.W_EDIT_PASSWORD, handleWEditPasswordInput],
@@ -67,10 +61,7 @@ const W_EDIT_HANDLERS: Map<LoggedOnSubState, (socket: any, session: BBSSession, 
  */
 const ECHO_STATES = new Set<LoggedOnSubState>([
   LoggedOnSubState.W_OPTION_SELECT,
-  LoggedOnSubState.W_EDIT_NAME,
   LoggedOnSubState.W_EDIT_EMAIL,
-  LoggedOnSubState.W_EDIT_REALNAME,
-  LoggedOnSubState.W_EDIT_INTERNETNAME,
   LoggedOnSubState.W_EDIT_LOCATION,
   LoggedOnSubState.W_EDIT_PHONE,
   LoggedOnSubState.W_EDIT_LINES,
@@ -102,10 +93,7 @@ const NO_ECHO_STATES = new Set<LoggedOnSubState>([
  */
 const LINE_INPUT_STATES = new Set<LoggedOnSubState>([
   LoggedOnSubState.W_OPTION_SELECT,
-  LoggedOnSubState.W_EDIT_NAME,
   LoggedOnSubState.W_EDIT_EMAIL,
-  LoggedOnSubState.W_EDIT_REALNAME,
-  LoggedOnSubState.W_EDIT_INTERNETNAME,
   LoggedOnSubState.W_EDIT_LOCATION,
   LoggedOnSubState.W_EDIT_PHONE,
   LoggedOnSubState.W_EDIT_PASSWORD,
