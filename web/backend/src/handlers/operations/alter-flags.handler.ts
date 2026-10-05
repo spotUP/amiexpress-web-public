@@ -190,8 +190,8 @@ console.log('[ENV] Files');
         return 0; // Enter pressed, cancel
       }
 
-      socket.emit('ansi-output', '\r\n');
-
+      // "C name" typed at the flag prompt: express.e:12606 copies the name and
+      // clears it with nothing printed past lineInput's own break.
       const upperInput = clearInput.toUpperCase();
       if (upperInput[0] === '*') {
         // Clear all - express.e:12620
@@ -288,6 +288,9 @@ console.log('[ENV] Files');
       if (input.trim().length === 0) {
         return this.finish(socket, session);
       }
+
+      // express.e:12619 - aePuts('\b\n') after the Clear prompt's answer.
+      socket.emit('ansi-output', '\r\n');
 
       // Process clear
       const manager = session.flagManager;
