@@ -4,7 +4,6 @@
  */
 
 import { BBSSession } from '../../index';
-import { AnsiUtil } from '../../utils/ansi.util';
 import { LoggedOnSubState } from '../../constants/bbs-states';
 import { ACSPermission } from '../../constants/acs-permissions';
 import { checkSecurity } from '../../utils/security.util';
@@ -1442,7 +1441,8 @@ function showLineEditor(socket: any, session: BBSSession): void {
  * @param session - User session
  * @param dirPath - Directory path to list
  */
-async function displayDirectoryListing(socket: any, session: BBSSession, dirPath: string): Promise<void> {
+export async function displayDirectoryListing(socket: any, session: BBSSession, dirPath: string): Promise<void> {
+  // myDirAnyWhere (express.e:8402): '\b\n', the listing, '\b\n' (8427).
   emitText(socket, '\r\n');
 
   // An Amiga path (`BBS:Conf01`) through its assign; anything else relative to the BBS root.
@@ -1450,75 +1450,52 @@ async function displayDirectoryListing(socket: any, session: BBSSession, dirPath
   const assigned = resolveAssignPath(dirPath);
   const fullPath = path.isAbsolute(assigned) ? assigned : path.join(bbsRoot, assigned);
 
-  // Check if path exists (express.e:8353-8364)
-  if (!amigafs.existsSync(fullPath)) {
-    emitText(socket, AnsiUtil.errorLine(`${dirPath} does not exist`));
+  // myDirRecurse (8343-8387): a path that will not Lock returns silently.
+  let stats: any;
+  try {
+    stats = amigafs.statSync(fullPath);
+  } catch {
     emitText(socket, '\r\n');
     return;
   }
 
-  // Check if it's a directory (express.e:8367)
-  const stats = amigafs.statSync(fullPath);
   if (!stats.isDirectory()) {
-    // If it's a file, just display the file info (express.e:8382)
     displayFileInfo(socket, path.basename(fullPath), stats);
-    return;
-  }
-
-  // Display directory header (express.e:8368-8369)
-  emitText(socket, `${AnsiUtil.colorize('Directory of ', 'cyan')}${AnsiUtil.colorize(dirPath, 'white')}\r\n`);
-  emitText(socket, '\r\n');
-
-  // Read directory contents (express.e:8371-8380)
-  try {
-    const entries = amigafs.readdirSync(fullPath);
-
+  } else {
+    emitText(socket, `Directory of ${dirPath}\r\n`);
+    let entries: string[] = [];
+    try { entries = amigafs.readdirSync(fullPath); } catch { /* the ExNext loop just ends */ }
     for (const entry of entries) {
-      const entryPath = path.join(fullPath, entry);
       try {
-        const entryStats = amigafs.statSync(entryPath);
-        displayFileInfo(socket, entry, entryStats);
-      } catch (error) {
-        // Skip files that can't be stat'd
-console.warn(`[Directory Listing] Cannot stat ${entry}:`, error);
+        displayFileInfo(socket, entry, amigafs.statSync(path.join(fullPath, entry)));
+      } catch {
+        // A file that will not stat is skipped.
       }
     }
-  } catch (error) {
-    emitText(socket, AnsiUtil.errorLine(`Error reading directory: ${(error as Error).message}`));
-    emitText(socket, '\r\n');
   }
-
   emitText(socket, '\r\n');
 }
 
 /**
- * Display information for a single file
- * Port from express.e:8325-8341 myDirDisplay()
- *
- * @param socket - Socket connection
- * @param filename - File name
- * @param stats - File stats
+ * myDirProtect (express.e:8306-8318): the hsparwed letters, '-' where clear.
+ * rwed are active-low in AmigaDOS; a host file has its owner's r, w and x
+ * (delete follows write), and none of h, s, p or a.
+ */
+function amigaProtection(mode: number): string {
+  const r = mode & 0o400 ? 'r' : '-';
+  const w = mode & 0o200 ? 'w' : '-';
+  const e = mode & 0o100 ? 'e' : '-';
+  const d = mode & 0o200 ? 'd' : '-';
+  return `----${r}${w}${e}${d}`;
+}
+
+/**
+ * One entry - myDirDisplay (express.e:8320-8341):
+ *   ' \l\s[25] \s \s \s \r\z\d[2]:\r\z\d[2]:\r\z\d[2]\b\n'
+ * The trailing h:m:s are never assigned in express, so they read 00:00:00.
  */
 function displayFileInfo(socket: any, filename: string, stats: any): void {
-  // Format file size or "Dir" indicator (express.e:8333-8337)
-  const sizeStr = stats.isDirectory()
-    ? AnsiUtil.colorize('     Dir', 'blue')
-    : AnsiUtil.colorize(String(stats.size).padStart(8), 'white');
-
-  // Format modification date/time (express.e:8327-8332, 8339-8340)
-  const mtime = stats.mtime || getSystemTime();
-  const dateStr = `${String(mtime.getMonth() + 1).padStart(2, '0')}/${String(mtime.getDate()).padStart(2, '0')}/${String(mtime.getFullYear()).substring(2)}`;
-  const timeStr = `${String(mtime.getHours()).padStart(2, '0')}:${String(mtime.getMinutes()).padStart(2, '0')}:${String(mtime.getSeconds()).padStart(2, '0')}`;
-
-  // Display file info line (express.e:8339-8340)
-  // Format: filename (25 chars) size (8 chars) date time
-  emitText(socket, ' ');
-  emitText(socket, AnsiUtil.colorize(filename.padEnd(25).substring(0, 25), stats.isDirectory() ? 'yellow' : 'green'));
-  emitText(socket, ' ');
-  emitText(socket, sizeStr);
-  emitText(socket, ' ');
-  emitText(socket, AnsiUtil.colorize(dateStr, 'cyan'));
-  emitText(socket, ' ');
-  emitText(socket, AnsiUtil.colorize(timeStr, 'cyan'));
-  emitText(socket, '\r\n');
+  const size = stats.isDirectory() ? '     Dir' : String(stats.size).padStart(8);
+  const date = formatLongDateTime(stats.mtime || getSystemTime());
+  emitText(socket, ` ${filename.padEnd(25).slice(0, 25)} ${size} ${amigaProtection(stats.mode ?? 0)} ${date} 00:00:00\r\n`);
 }
