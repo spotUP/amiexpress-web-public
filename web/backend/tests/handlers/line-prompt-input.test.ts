@@ -268,7 +268,10 @@ describe('the line-prompt table is the one declaration', () => {
   it('lists the prompts express.e reads with lineInput()', () => {
     expect([...LINE_PROMPT_SUBSTATES.keys()].sort()).toEqual(
       [
+        LoggedOnSubState.CALLERSLOG_NODE_INPUT,
         LoggedOnSubState.FILE_LIST_DIR_INPUT,
+        LoggedOnSubState.JM_INPUT,
+        LoggedOnSubState.NM_INPUT,
         LoggedOnSubState.UPLOAD_FILENAME_INPUT,
         LoggedOnSubState.VIEW_FILE_INPUT,
         LoggedOnSubState.ZIPPY_DIR_SPAN_INPUT,
@@ -300,4 +303,22 @@ describe('the menu command line ends with lineInput\'s line break', () => {
     await new Promise((r) => setTimeout(r, 20));
     expect(allOutput(socket)).toContain('T\r\n\r\nIt is ');
   });
+});
+
+describe('JM, NM and CL take a typed number, not one key', () => {
+  // express.e reads all three with lineInput (25225, 25300, 24489). The port
+  // took the first key as the answer, so node 12 or base 10 could not be typed.
+  for (const [name, subState] of [
+    ['JM', LoggedOnSubState.JM_INPUT],
+    ['NM', LoggedOnSubState.NM_INPUT],
+    ['CL', LoggedOnSubState.CALLERSLOG_NODE_INPUT],
+  ] as const) {
+    it(`${name}: the first digit waits for the rest`, async () => {
+      const socket = makeSocket();
+      const session = { ...c64Session(''), petsciiMode: false, terminalType: 'ansi', screenWidth: 80, subState, inputBuffer: '' };
+      await type(socket, session, '1');
+      expect(session.subState).toBe(subState);
+      expect(session.inputBuffer).toBe('1');
+    });
+  }
 });

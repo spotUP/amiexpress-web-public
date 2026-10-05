@@ -220,6 +220,14 @@ export const LINE_PROMPT_SUBSTATES: ReadonlyMap<string, LineInputOptions> = new 
   // the telnet regression suite, 2026-09-27). The branch emits its own
   // newlines - the blank line's and the description block's.
   [LoggedOnSubState.UPLOAD_FILENAME_INPUT, { maxLen: 100 }],
+  // express.e:25225 JM's 'Message Base Number (1-n): ', 25300 NM's 'Which to
+  // change <Q>=QUIT ? ' and 24489 CL's 'Which node to view? ' are lineInput
+  // calls (5, 2 and 5 characters). Each took the first key as the whole
+  // answer, so node 12 or base 10 could not be typed. The handlers print
+  // lineInput's line break themselves.
+  [LoggedOnSubState.JM_INPUT, { maxLen: 5 }],
+  [LoggedOnSubState.NM_INPUT, { maxLen: 2 }],
+  [LoggedOnSubState.CALLERSLOG_NODE_INPUT, { maxLen: 5 }],
 ]);
 
 /**

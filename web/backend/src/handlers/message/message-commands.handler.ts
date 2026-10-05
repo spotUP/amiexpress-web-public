@@ -466,7 +466,8 @@ function displayNodeStatus(socket: any, session: BBSSession): void {
 export function handleNMInput(socket: any, session: BBSSession, input: string): void {
   const tempData = session.tempData || {};
 
-  emitText(socket, '\r\n');
+  // lineInput's line break (express.e:2378), then 25302's own.
+  emitText(socket, '\r\n\r\n');
 
   // Handle quit - express.e:25305
   if (input.toUpperCase() === 'Q' || input === '') {

@@ -426,8 +426,9 @@ export async function handleCallersLogNodeInput(
   const answer = input.trim();
   socket.emit('ansi-output', '\r\n');
 
-  // express.e:24491 - an empty answer just returns.
+  // express.e:24491 - an empty answer prints a line break and returns.
   if (answer.length === 0) {
+    socket.emit('ansi-output', '\r\n');
     session.subState = LoggedOnSubState.DISPLAY_MENU;
     session.menuPause = true;
     return;
