@@ -70,8 +70,8 @@ export async function runPostUpload(
   emitter.emit('ansi-output', '\r\n\r\nFile Uploading Complete...\r\n');
   // express.e:18857 stats line
   const statsLine = ` ${ctx.uploadedFiles} file(s), ${bytesKB}k bytes, ${minutes} minute(s). ${seconds} second(s), ${cps} cps, ${eff}% efficiency.`;
-  emitter.emit('ansi-output', statsLine + '\r\n');
-  // express.e:18860 trailing blank lines
+  // express.e:19073 aePuts(string) - no break of its own; 19089's two follow.
+  emitter.emit('ansi-output', statsLine);
   emitter.emit('ansi-output', '\r\n\r\n');
 
   // express.e:18862-18871 callersLog/udLog. express.e:19094 only logs

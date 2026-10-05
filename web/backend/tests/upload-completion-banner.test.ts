@@ -139,6 +139,8 @@ describe('Post-upload banner + stats + time bonus (E-15, express.e:19053/19072/1
     expect(complete).toBeGreaterThan(-1);
     expect(stats).toBeGreaterThan(complete);
     expect(bonus).toBeGreaterThan(stats);
+    // 19073 prints the stats with no break; 19089 adds exactly two.
+    expect(out).toContain(`${STATS}\r\n\r\nTime increased`);
   });
 
   test('credits (ulTTTM * 3 / 2) + 60 seconds to the session time limit (express.e:19109, 19130)', async () => {
