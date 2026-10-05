@@ -77,7 +77,7 @@ let handleCommand: typeof import('../../../src/handlers/command.handler').handle
 
 const users = new Map<string, any>();
 const db = {
-  createUser: jest.fn(async (data: any) => { users.set(data.username, { id: 7, secLevel: 10, ...data }); return 7; }),
+  createUser: jest.fn(async (data: any) => { users.set(data.username, { id: 7, secLevel: 10, slotNumber: 9, ...data }); return 7; }),
   getUserByUsername: jest.fn(async (name: string) => users.get(name) ?? null),
   appendUserToDisk: jest.fn(async () => undefined),
   // createAccountRecord reads back the slot the record landed in (dc500bb27).
@@ -198,4 +198,26 @@ test('the Screen Clears question carries no hint and still reads Y and Enter', a
   expect(s2.newUserData.screenClear).toBe(false);
   expect(text(enter)).toContain('No!');
   expect(s2.subState).toBe(LoggedOnSubState.NEW_USER_CONFIRM);
+});
+
+// express.e:30332-30340 - on a CENTRAL_ANSWERS node the answers go to the
+// board's Answers/<slot>, the account's own slot (here 9; the board holds one
+// account by count). The writer used the count, so every header named someone
+// else's slot.
+test('a CENTRAL_ANSWERS node files the answers under the account\'s own slot', async () => {
+  const { applyTooltypes } = require('../../../src/utils/info-file.util');
+  const { clearNodeTooltypeCache } = require('../../../src/utils/node-tooltypes.util');
+  applyTooltypes(path.join(root, 'Node1.info'), [['CENTRAL_ANSWERS', '']]);
+  clearNodeTooltypeCache();
+  const socket = makeSocket();
+  const session = makeSession();
+  await key(socket, session, 'Y');
+  await type(socket, session, 'Spot Up');
+  await type(socket, session, 'a friend');
+  await type(socket, session, 'Y');
+  clearNodeTooltypeCache();
+  const filed = path.join(root, 'Answers', '9');
+  expect(fs.existsSync(filed)).toBe(true);
+  expect(fs.readFileSync(filed, 'latin1')).toMatch(/\[9\] newbie/);
+  expect(fs.existsSync(path.join(root, 'Answers', '1'))).toBe(false);
 });

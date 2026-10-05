@@ -158,7 +158,7 @@ export async function eraseUserData(db: any, userId: string, options: ErasureOpt
   }
 
   // 3. Scrub Node*\/Answers + Node*\/TempAns blocks for this user.
-  const answersFilesScrubbed = scrubAnswersFiles(originalUsername, erasedHandle);
+  const answersFilesScrubbed = scrubAnswersFiles(originalUsername, erasedHandle, sameAccount ? slot : undefined);
 
   // 4. Best-effort log redaction within retention window.
   const callersLogFilesRedacted = redactRecentLogs(originalUsername, erasedHandle);
@@ -290,9 +290,23 @@ export async function eraseFromMessageBases(
  * header mentions the erased username. Blocks are separated by the
  * '**********' banner written by the new-user handler.
  */
-function scrubAnswersFiles(originalUsername: string, erasedHandle: string): number {
+function scrubAnswersFiles(originalUsername: string, erasedHandle: string, slot?: number): number {
   const baseDir = bbsConfig.getConfig().dataDir;
   let filesTouched = 0;
+
+  // The account's own Answers/<slot> (CENTRAL_ANSWERS, express.e:30332-30340)
+  // holds nothing but this caller's answers: it goes whole.
+  if (slot && slot > 0) {
+    const own = amigafs.resolvePath(path.join(baseDir, 'Answers', String(slot)));
+    if (own && amigafs.existsSync(own)) {
+      try {
+        amigafs.unlinkSync(own);
+        filesTouched++;
+      } catch (error) {
+        console.warn('[gdpr-erasure] Failed to remove', own, error);
+      }
+    }
+  }
 
   let entries: string[] = [];
   try {

@@ -14,9 +14,10 @@ import { TRACK_UPLOADS_BIT, TRACK_DOWNLOADS_BIT } from '../../utils/download-rat
 import { checkSecurity } from '../../utils/acs.util';
 import { ACSPermission } from '../../constants/acs-permissions';
 import { config } from '../../config';
-import { findUserAnswerBlocks } from '../../utils/user-answers.util';
+import { findUserAnswersFile } from '../../utils/user-answers.util';
 import { getUserNotesPath, readUserNotes, saveUserNotes } from '../../utils/user-notes.util';
 import * as amigafs from '../../utils/amigafs';
+import { emitText, clearTheScreen } from '../../utils/output.util';
 import * as path from 'path';
 import { readChar } from '../../utils/await-input';
 
@@ -161,8 +162,7 @@ export async function handleAccountEditInput(socket: any, session: BBSSession, k
   // ? - User Answers (express.e:21319-21326): show this user's new-user
   // questionnaire transcript, read-only.
   if (command === '?') {
-    session.subState = LoggedOnSubState.USER_ANSWERS_VIEW;
-    displayUserAnswers(socket, session);
+    if (displayUserAnswers(socket, session)) session.subState = LoggedOnSubState.USER_ANSWERS_VIEW;
     return;
   }
 
@@ -1237,27 +1237,30 @@ function exitCreditMaintenance(socket: any, session: BBSSession): void {
   }
 }
 
-// ===== User Answers (read-only) - express.e:21319-21326 showUserAnswers =====
+// ===== User Answers - express.e:21319-21326 =====
 
 /**
- * Display this user's new-user questionnaire answers - every Node<n>/Answers
- * block whose header names them. Read-only; any key returns to the editor.
+ * `?` - express.e:21319-21326: findUserAnswers for this account's slot; when
+ * there is a file, the screen is cleared, the file shown and the caller
+ * paused, then the account is drawn again. With no file, nothing happens.
+ * The port's own viewer searched every Node<n>/Answers for blocks naming the
+ * user (sysop decision 2026-10-05: express.e's, with CENTRAL_ANSWERS on).
  */
-export function displayUserAnswers(socket: any, session: BBSSession): void {
-  const user = session.tempData.editingUser;
-  const blocks = findUserAnswerBlocks(config.getConfig().dataDir, user.username || '');
-
-  socket.emit('ansi-output', '\x1b[2J\x1b[H');
-  socket.emit('ansi-output', `\x1b[33mQUESTIONNAIRE ANSWERS\x1b[0m - \x1b[32m${user.username || ''}\x1b[0m\r\n\r\n`);
-  if (blocks.length === 0) {
-    socket.emit('ansi-output', '\x1b[37mNo questionnaire answers on file for this user.\x1b[0m\r\n');
-  } else {
-    for (const b of blocks) {
-      socket.emit('ansi-output', `\x1b[36m[${b.node}]\x1b[0m\r\n`);
-      socket.emit('ansi-output', b.text.replace(/\r?\n/g, '\r\n') + '\r\n\r\n');
-    }
+export function displayUserAnswers(socket: any, session: BBSSession): boolean {
+  const slot = Number(session.tempData.editingSlot) || 0;
+  const file = slot > 0 ? findUserAnswersFile(config.getConfig().dataDir, slot) : null;
+  if (!file) return false;
+  let text = '';
+  try {
+    text = amigafs.readFileSync(file, 'latin1').toString();
+  } catch {
+    return false;
   }
-  socket.emit('ansi-output', '\x1b[32mPress any key to return...\x1b[0m');
+  emitText(socket, clearTheScreen(socket));
+  emitText(socket, text.replace(/\r?\n/g, '\r\n'));
+  const { doPause } = require('../screen.handler');
+  doPause(socket, session, () => handleUserAnswersInput(socket, session, ''));
+  return true;
 }
 
 /** Any key returns to the account editor (express.e:21326 displayAccount). */

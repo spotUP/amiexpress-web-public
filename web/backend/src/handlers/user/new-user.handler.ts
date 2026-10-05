@@ -1265,11 +1265,11 @@ export async function handleQuestionnaireConfirmInput(socket: Socket, session: a
   // order), so the slot number is already on the session.
   const savedQuestionnaire = questionnaire;
   const savedNewUserData = session.newUserData;
-  // The slot number is the user's position in USER.DATA, 1-indexed per
-  // express.e (the account was created before the questionnaire began, so
-  // the appended record sits at file position getUserCount(), i.e. slot
-  // getUserCount()).
-  const slotNumber = userDatabaseManager.getUserCount();
+  // The account's own slot - the record created before the questionnaire
+  // began, read back where it LANDED (createAccountRecord). The count of
+  // accounts is not it: a record can reuse a freed slot, and every answer
+  // header on the live board named someone else's slot until 2026-10-05.
+  const slotNumber = Number(session.user?.slotNumber) || userDatabaseManager.getUserCount();
   // Temporarily restore newUserData for persistQuestionnaireAnswers
   session.newUserData = savedNewUserData;
   await persistQuestionnaireAnswers(session, slotNumber);

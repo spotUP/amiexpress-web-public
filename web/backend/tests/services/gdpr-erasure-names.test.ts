@@ -102,3 +102,31 @@ describe('the erasure\'s Answers scrub', () => {
     }
   });
 });
+
+describe('the erasure and the central answers file', () => {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const fs = require('fs') as typeof import('fs');
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const path = require('path') as typeof import('path');
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { config } = require('../../src/config');
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { __test_only__ } = require('../../src/services/gdpr-erasure.service');
+
+  it('removes Answers/<slot> - the account\'s own file - and no other', () => {
+    const dir = path.join(config.getConfig().dataDir, 'Answers');
+    fs.mkdirSync(dir, { recursive: true });
+    const mine = path.join(dir, '9977');
+    const theirs = path.join(dir, '9978');
+    fs.writeFileSync(mine, 'my answers');
+    fs.writeFileSync(theirs, 'their answers');
+    try {
+      expect(__test_only__.scrubAnswersFiles('nobody-here', 'erased_1', 9977)).toBe(1);
+      expect(fs.existsSync(mine)).toBe(false);
+      expect(fs.readFileSync(theirs, 'latin1')).toBe('their answers');
+    } finally {
+      fs.rmSync(mine, { force: true });
+      fs.rmSync(theirs, { force: true });
+    }
+  });
+});
