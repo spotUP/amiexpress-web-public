@@ -109,7 +109,9 @@ describe('a stranger who does not know the password', () => {
     expect(socket.text()).toContain('Excessive Password Failure');
     expect(sysCommands).toEqual(['NUPFAIL']);
     expect(logged).toHaveLength(3);
-    expect(socket.text()).toContain('Too Many Errors, Goodbye!');
+    // express.e:30038-30041 - that line and NUPFAIL; "Too Many Errors,
+    // Goodbye!" is the name prompt's (29634), not this one's.
+    expect(socket.text()).not.toContain('Too Many Errors');
   });
 });
 

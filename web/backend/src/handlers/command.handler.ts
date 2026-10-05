@@ -2532,12 +2532,6 @@ console.log(' [REGISTRATION] Handling input for subState:', session.subState);
         case LoggedOnSubState.NEW_USER_CONFIRM:
           await newUserHandler.handleConfirmInput(socket, session, input);
           break;
-        case LoggedOnSubState.NEW_USER_REALNAME:
-          await newUserHandler.handleRealnameInput(socket, session, input);
-          break;
-        case LoggedOnSubState.NEW_USER_SEXAGE:
-          await newUserHandler.handleSexAgeInput(socket, session, input);
-          break;
         case LoggedOnSubState.NEW_USER_SCRIPT:
           await newUserHandler.handleQuestionnaireAnswer(socket, session, input);
           break;

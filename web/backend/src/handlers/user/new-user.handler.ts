@@ -152,13 +152,13 @@ console.log(' [NEW USER] Starting registration for:', username);
   // Missing is the common case, so suppress the "Screen not found" sysop alert.
   if (await showScreen(socket, session, screenConfig.NONEWUSERS, /* silent */ true)) {
     doPause(socket, session);
-    await abortNewUser(socket, session, '\r\n\x1b[31mNew user registrations are currently closed.\x1b[0m\r\n');
+    await abortNewUser(socket, session, ''); // express.e:30008 - the screen is the whole answer
     return;
   }
 
   if (await showScreen(socket, session, screenConfig.NONEWATBAUD, /* silent */ true)) {
     doPause(socket, session);
-    await abortNewUser(socket, session, '\r\n\x1b[31mNew user registrations are blocked at this connection speed.\x1b[0m\r\n');
+    await abortNewUser(socket, session, ''); // express.e:30010
     return;
   }
 
@@ -572,8 +572,9 @@ export async function handleAccessPasswordInput(socket: Socket, session: any, in
       } catch (error) {
         console.error('[NEW USER] NUPFAIL failed:', error);
       }
-      // express.e:29634: '\b\nToo Many Errors, Goodbye!\b\n' — plain text, no color
-      await abortNewUser(socket, session, '\r\nToo Many Errors, Goodbye!\r\n');
+      // express.e:30038-30041 - "Excessive Password Failure" above is all it
+      // says. "Too Many Errors, Goodbye!" is the name prompt's (29634).
+      await abortNewUser(socket, session, '');
       return;
     }
 
@@ -594,8 +595,6 @@ async function beginRegistrationPrompts(socket: Socket, session: any, username: 
   // Note: "Now, part one of our questioning" comes from SCRIPT questionnaire (join.txt), not core flow
 
   if (!session.newUserData.introShown) {
-    // Clear screen before showing intro screens (express.e clears before JOIN/GUESTLOGON)
-    socket.emit('ansi-output', '\x1b[2J\x1b[H');
     // Show GUESTLOGON screen if it exists
     const guestShown = await showScreen(socket, session, screenConfig.GUESTLOGON);
     if (guestShown) {
@@ -609,10 +608,8 @@ async function beginRegistrationPrompts(socket: Socket, session: any, username: 
       }
       return; // Wait for user to press space
     } else {
-      // Placeholder if missing
-      socket.emit('ansi-output', '\r\n\x1b[1;33mWelcome to AmiExpress!\x1b[0m\r\n');
-      socket.emit('ansi-output', 'Guest access is restricted to browsing only.\r\n');
-      doPause(socket, session, () => continueIntroFlow(socket, session, 'join'));
+      // express.e:30049 - no GUESTLOGON, no text and no pause.
+      continueIntroFlow(socket, session, 'join');
       return;
     }
   }
@@ -631,10 +628,8 @@ function continueIntroFlow(socket: Socket, session: any, phase: string) {
           doPause(socket, session, () => continueIntroFlow(socket, session, 'name'));
         }
       } else {
-        // Placeholder if missing
-        socket.emit('ansi-output', '\r\n\x1b[1;32mJoining AmiExpress...\x1b[0m\r\n');
-        socket.emit('ansi-output', 'Please answer the following questions to register.\r\n');
-        doPause(socket, session, () => continueIntroFlow(socket, session, 'name'));
+        // express.e:30057 - no JOIN, no text and no pause.
+        continueIntroFlow(socket, session, 'name');
       }
     });
     return;
@@ -1114,15 +1109,10 @@ console.error('[BBSEvent] Error emitting new user login event:', error);
     try {
       const { displayScreen, doPause } = require('../screen.handler');
       const shown = await displayScreen(socket, session, 'JOINED', true, /* silent */ true);
-      if (shown) {
-        if (typeof doPause === 'function') doPause(socket, session);
-      } else {
-        socket.emit('ansi-output', '\r\n\x1b[36mWelcome to the BBS!\x1b[0m\r\n\r\n');
-        socket.emit('ansi-output', '\x1b[32mPress any key to continue...\x1b[0m\r\n');
-      }
-    } catch (_) {
-      socket.emit('ansi-output', '\r\n\x1b[36mWelcome to the BBS!\x1b[0m\r\n\r\n');
-      socket.emit('ansi-output', '\x1b[32mPress any key to continue...\x1b[0m\r\n');
+      // express.e:30125 - JOINED and its pause, or nothing.
+      if (shown && typeof doPause === 'function') doPause(socket, session);
+    } catch (error) {
+      console.error('[NEW USER] JOINED screen failed:', error);
     }
 }
 
@@ -1170,25 +1160,6 @@ export async function handleConfirmInput(socket: Socket, session: any, input: st
   // The script file (e.g., Node1/script57600) contains realname/sexage/tricky prompts
   // We don't duplicate those prompts in code
   socket.emit('ansi-output', '\r\n');
-  await continueRegistrationFlow(socket, session);
-}
-
-export async function handleRealnameInput(socket: Socket, session: any, input: string) {
-  const realname = input.trim();
-  session.newUserData.realname = realname;
-  socket.emit('ansi-output', '\r\n');
-  socket.emit('ansi-output', 'What is your sex,age: ');
-  session.subState = LoggedOnSubState.NEW_USER_SEXAGE;
-  session.inputBuffer = '';
-}
-
-export async function handleSexAgeInput(socket: Socket, session: any, input: string) {
-  const sexAge = input.trim();
-  session.newUserData.sexAge = sexAge;
-  session.inputBuffer = '';
-  socket.emit('ansi-output', '\r\n\r\nNow to the tricky part... . .\r\n\r\n');
-
-  // After sex/age, proceed to questionnaire or account creation
   await continueRegistrationFlow(socket, session);
 }
 
@@ -1729,9 +1700,8 @@ console.error('[NewUser] Could not start the conference records:', err);
     // file (BBS:Screens/JOINED.txt) followed by doPause(). Audit A-13
     // flagged the previous shape (hardcoded "Welcome to the BBS!" emit)
     // as breaking customisation: every BBS got the same generic line
-    // instead of the sysop's screen. Falls back to the hardcoded text
-    // if no JOINED file exists, so a fresh install still gives the
-    // user *some* feedback.
+    // instead of the sysop's screen. With no JOINED file express.e says
+    // nothing, and neither does this.
     return true;
   } catch (error) {
 console.error(' [NEW USER] Account creation error:', error);

@@ -127,7 +127,7 @@ export async function handleGoodbyeCommand(socket: any, session: BBSSession, par
       session.tempData.pendingGoodbye = true;
       session.tempData.pendingGoodbyePartUpload = true;
       session.tempData.pendingGoodbyeParams = params;
-      socket.emit('ansi-output', '\r\nThere are some incompleted uploads of yours\r\n');
+      socket.emit('ansi-output', 'There are some incompleted uploads of yours\r\n');
       socket.emit('ansi-output', 'Would you like to leave anyway (Y/N)? ');
       session.subState = LoggedOnSubState.BATCH_DOWNLOAD_CONFIRM;
       return;

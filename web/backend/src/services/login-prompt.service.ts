@@ -166,6 +166,8 @@ export async function promptForcedPwdChange(
         console.error("[promptForcedPwdChange] updateUserPassword failed:", err);
         teardown();
         beginLogoff(emitter as any, session, {
+          // WEB_: express.e's setNewPassword cannot fail; a write the
+          // board could not make is this port's alone.
           message:
             "\r\n\x1b[31mPassword change error. Goodbye!\x1b[0m\r\n",
           finalState: BBSState.AWAIT,
@@ -188,10 +190,7 @@ export async function promptForcedPwdChange(
       }
 
       teardown();
-      emitText(
-        emitter as any,
-        "\r\n\x1b[32mPassword updated successfully.\x1b[0m\r\n",
-      );
+      // express.e:29827-29829 sets the password and says nothing.
       /**
        * The browser's cue that the forced change is done and the BBS session
        * is continuing (its listener leaves the login view). Its only emit site

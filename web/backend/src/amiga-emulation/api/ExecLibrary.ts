@@ -2517,7 +2517,7 @@ debugLog(`[ExecLibrary] Using fallback manual loader`);
       const libPath = candidates.find((p) => amigafs.existsSync(p));
 
       if (!libPath) {
-        const msg = `[ExecLibrary] ❌ ERROR: AEDoor.library not found`;
+        const msg = `[ExecLibrary] [ERROR] AEDoor.library not found`;
 debugLog(msg);
 debugLog(`[ExecLibrary] Searched: ${candidates.join(", ")}`);
         try {

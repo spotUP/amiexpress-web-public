@@ -271,7 +271,7 @@ console.error('[confScan] Failed to update AquaScan.UserData:', err);
  */
 export function partialUploadsNotice(): string[] {
   return [
-    '\r\nThere are some incompleted uploads of yours\r\n',
+    'There are some incompleted uploads of yours\r\n',
     'View them (Y/N)? ',
   ];
 }

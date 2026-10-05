@@ -47,7 +47,6 @@ import {
 // through the loader before it moved, and where a screen comes from is
 // genuinely part of what the loader answers.
 export { resolveNodeScreenDir } from '../screens/screen-resolution';
-import { notifySysop } from '../utils/sysop-alert.util';
 import { SysopDebugUtil, DebugSeverity } from '../utils/sysop-debug.util';
 import { DebugLogger } from '../utils/debug-logger.util';
 import { formatBytes as formatBytesUtil } from '../utils/byte-format.util';
@@ -3709,7 +3708,8 @@ console.error(`[displayScreen] ========================================`);
         { conferenceId: session.currentConf || 'none' },
         DebugSeverity.CRITICAL
       );
-      notifySysop(session, `Screen not found: ${screenName}`);
+      // No line on the caller's screen: express.e's displayScreen just
+      // answers FALSE (6539-6655). notifySysop wrote to the CALLER's socket.
     }
     session.lastScreenFilePath = undefined;
     return false;

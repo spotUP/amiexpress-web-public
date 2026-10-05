@@ -136,7 +136,7 @@ export async function joinConference(socket: any, session: BBSSession, confId: n
   const conference = conferences.find(c => c.id === confId);
   if (!conference) {
     // Should not happen after forward-walk, but guard anyway
-    if (!silent) socket.emit('ansi-output', '\r\n\x1b[31mInvalid conference!\x1b[0m\r\n');
+    // express.e has no such case after the access walk (4982-4993), and no text.
     return false;
   }
 
@@ -152,7 +152,7 @@ export async function joinConference(socket: any, session: BBSSession, confId: n
 
   const messageBase = messageBases.find(mb => mb.id === msgBaseId && mb.conferenceId === confId);
   if (!messageBase) {
-    if (!silent) socket.emit('ansi-output', '\r\n\x1b[31mInvalid message base for this conference!\x1b[0m\r\n');
+    // express.e:4995 clamps the base silently; nothing is printed.
     return false;
   }
 
