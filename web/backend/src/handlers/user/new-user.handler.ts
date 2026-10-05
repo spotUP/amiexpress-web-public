@@ -718,7 +718,9 @@ function promptForAutoValidation(socket: Socket, session: any) {
   data.autoValidationTries = data.autoValidationTries || 5;
   session.inputBuffer = '';
   setPasswordMask(socket, session, true);
-  socket.emit('ansi-output', '\r\nEnter the auto-validation password (if known): ');
+  // express.e:30068 - the prompt alone: "Yes..\b\n\b\n" (30319) or the
+  // "Incorrect password" lines (30084) already end in the break.
+  socket.emit('ansi-output', 'Enter the auto-validation password (if known): ');
 }
 
 async function getComputerChoices(): Promise<string[]> {
@@ -1238,7 +1240,9 @@ async function beginQuestionnaire(socket: Socket, session: any): Promise<boolean
     transcript: []
   };
 
-  socket.emit('ansi-output', '\r\n');
+  // express.e:30356-30366 prints the script's first line with nothing before
+  // it: what came last - "Yes..\b\n\b\n" or the auto-validation answer -
+  // already ended in a break.
   await advanceQuestionnaire(socket, session);
   return true;
 }

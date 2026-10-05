@@ -429,9 +429,10 @@ describe('New User Handler — registration steps', () => {
 
       await handleAutoValidationInput(socket, session, 'not-it');
 
-      const output = socket._emits.map((e: any) => String(e.payload)).join('');
+      const output = socket._emits.filter((e: any) => e.event === 'ansi-output').map((e: any) => String(e.payload)).join('');
+      // express.e:30084 then the prompt again (30068) with no break of its own.
       expect(output).toContain(
-        '\r\n\r\nIncorrect password, try again or leave blank if not known.\r\n\r\n');
+        '\r\n\r\nIncorrect password, try again or leave blank if not known.\r\n\r\nEnter the auto-validation password (if known): ');
       expect(output).not.toContain('\x1b[33m');
     });
   });

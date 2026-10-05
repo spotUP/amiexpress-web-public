@@ -129,7 +129,9 @@ describe('a caller who confirms the summary', () => {
 
     await handleConfirmInput(socket, session, 'Y');
 
-    expect(socket._text()).toContain('What is your real name');
+    // express.e:30319 then 30366: the script's first line follows "Yes.."'s
+    // two breaks with nothing between them.
+    expect(socket._text()).toContain('Yes..\r\n\r\nWhat is your real name');
     // The tricky-part LINE is text, not a prompt: only a trailing `~` asks.
     expect(socket._text()).not.toContain('What is your sex,age');
     expect(session.subState).toBe(LoggedOnSubState.NEW_USER_SCRIPT);
