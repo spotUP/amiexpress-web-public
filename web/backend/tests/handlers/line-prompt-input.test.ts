@@ -288,3 +288,16 @@ describe('the line-prompt table is the one declaration', () => {
     }
   });
 });
+
+describe('the menu command line ends with lineInput\'s line break', () => {
+  // express.e:28624 reads the command with lineInput, which ends every answer
+  // with a line break (2378); T then prints '\b\nIt is ' (25635). The port
+  // printed only T's own break, so every command's output sat one line high.
+  it('T shows a blank line between the typed command and its answer', async () => {
+    const socket = makeSocket();
+    const session = { ...c64Session(''), petsciiMode: false, terminalType: 'ansi', screenWidth: 80, subState: LoggedOnSubState.READ_COMMAND, inputBuffer: '' };
+    await type(socket, session, 'T\r');
+    await new Promise((r) => setTimeout(r, 20));
+    expect(allOutput(socket)).toContain('T\r\n\r\nIt is ');
+  });
+});

@@ -3751,6 +3751,13 @@ console.log('[CommandHistory] History cleared by user (Ctrl-B)');
 
       session.inputBuffer = '';
 
+      // express.e:28624 - the command is read with lineInput, which ends every
+      // answer with a line break (2378) before processCommand runs. Flushed
+      // now: commands write both through the buffer and straight to the
+      // socket, and the break has to land first.
+      emitText(socket, '\r\n');
+      flushOutput(socket);
+
       // Check for pending input handlers
       if (session.tempData?.waitingForJoinMsgBase) {
         const { handleJoinMsgBaseInput } = require('./commands/user-commands.handler');
@@ -3801,7 +3808,9 @@ console.log(' Command text stored:', session.commandText);
          * are internal callers, and they still go through it.
          */
 console.log(' Empty command, redisplaying menu');
-        session.menuPause = false;
+        // express.e:28646-28647 - processCommand('') returns at once and the
+        // menu is drawn with menuPause:=TRUE, as after any command.
+        session.menuPause = true;
         // Immediately display the menu/prompt instead of waiting for another key
         session.subState = LoggedOnSubState.DISPLAY_MENU;
         await menuDisplayMainMenu(socket, session, false, /* bypassDebounce */ true);
