@@ -762,7 +762,8 @@ export async function handleWOptionSelectInput(socket: any, session: BBSSession,
     return;
   }
 
-  const option = parseInt(trimmed, 10);
+  // express.e:25899 option:=Val(str) - a word is 0, LOGIN NAME.
+  const option = parseInt(trimmed, 10) || 0;
 
   // 18 = last express.e/web-extension option, 19/20 = GDPR, 21 = the PETSCII
   // palette, 22 = the PETSCII character set, and from
@@ -770,7 +771,9 @@ export async function handleWOptionSelectInput(socket: any, session: BBSSession,
   // registered themselves as settings.
   const settingsDoors = settingsDoorEntries(session);
   const lastOption = FIRST_SETTINGS_DOOR_OPTION + settingsDoors.length - 1;
-  if (isNaN(option) || option < 0 || option > lastOption) {
+  if (option < 0 || option > lastOption) {
+    // express.e:25897's line break, then the loop top's (25730).
+    emitText(socket, '\r\n');
     _displayWCommandMenu(socket, session);
     return;
   }
@@ -1225,7 +1228,8 @@ export function handleWEditPasswordInput(socket: any, session: BBSSession, input
 
   // Store password temporarily and ask for confirmation
   session.tempData = { newPassword: trimmed };
-  emitText(socket, '\r\nReenter New Password: ');
+  // express.e:26008 - straight after getPass2's own line break.
+  emitText(socket, 'Reenter New Password: ');
   session.subState = LoggedOnSubState.W_EDIT_PASSWORD_CONFIRM;
 }
 

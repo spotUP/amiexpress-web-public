@@ -94,6 +94,29 @@ const NO_ECHO_STATES = new Set<LoggedOnSubState>([
 ]);
 
 /**
+ * The W prompts express.e reads with lineInput or getPass2 (25889-26010,
+ * 11305, 11338, 11360). Both end every answer with a line break (2378,
+ * 1588/1603) before the caller's next text - the loop top's '\b\n' (25730),
+ * "Checking for duplicate name...", the next prompt. The port's own menus
+ * (protocol, modem speed, font) are not in it.
+ */
+const LINE_INPUT_STATES = new Set<LoggedOnSubState>([
+  LoggedOnSubState.W_OPTION_SELECT,
+  LoggedOnSubState.W_EDIT_NAME,
+  LoggedOnSubState.W_EDIT_EMAIL,
+  LoggedOnSubState.W_EDIT_REALNAME,
+  LoggedOnSubState.W_EDIT_INTERNETNAME,
+  LoggedOnSubState.W_EDIT_LOCATION,
+  LoggedOnSubState.W_EDIT_PHONE,
+  LoggedOnSubState.W_EDIT_PASSWORD,
+  LoggedOnSubState.W_EDIT_PASSWORD_CONFIRM,
+  LoggedOnSubState.W_EDIT_LINES,
+  LoggedOnSubState.W_EDIT_COMPUTER,
+  LoggedOnSubState.W_EDIT_SCREENTYPE,
+  LoggedOnSubState.W_EDIT_TRANSLATOR,
+]);
+
+/**
  * Check if a subState is a W_EDIT_* state
  */
 export function isUserEditState(subState: LoggedOnSubState | undefined): boolean {
@@ -130,6 +153,7 @@ export async function handleUserEditInput(
   if (data === '\r' || data === '\n') {
     const input = session.inputBuffer;
     session.inputBuffer = '';
+    if (LINE_INPUT_STATES.has(subState)) emitText(socket, '\r\n');
     await handler(socket, session, input);
     return true;
   }
@@ -166,7 +190,8 @@ export async function handleUserEditInput(
     if (shouldEcho) {
       emitText(socket, data);
     } else if (isPassword) {
-      // Don't echo password characters (express.e masks with nothing)
+      // getPass2 echoes a star per character (express.e:1504-1590).
+      emitText(socket, '*');
     }
     return true;
   }
