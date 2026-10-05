@@ -22,6 +22,7 @@ import { sessionColumns } from '../../utils/door-min-columns.util';
 import { wMenuPage, wMenuPrompt, wMenuPageStep } from './w-menu-pager';
 import { ErrorHandler } from '../../utils/error-handling.util';
 import { db } from '../../database';
+import { translationService } from '../../services/TranslationService';
 import { emitText, emitPrompt, emitLine, flushOutput } from '../../utils/output.util';
 import { releaseAnsiBuffer } from '../../utils/ansi-buffer.util';
 import { sessionWantsPetscii, PETSCII_FONT_IS_FIXED } from '../../utils/petscii-session-model';
@@ -345,6 +346,19 @@ function _collectWCommandMenu(socket: any, session: BBSSession): string[] {
   return rows;
 }
 
+/**
+ * One W menu row in express.e's bytes (25738-25877): the space after `]`
+ * is magenta and there are no resets until the end of the value.
+ */
+function wRow(num: string, label: string, value: string, valueColour = '\x1b[33m'): string {
+  return `\x1b[34m[\x1b[0m${num}\x1b[34m]\x1b[35m ${label} ${valueColour}${value}\x1b[0m\r\n`;
+}
+
+/** A YES/NO row: express.e's green YES, white NO (25809-25811, 25858-25860). */
+function wYesNo(num: string, label: string, yes: boolean): string {
+  return yes ? wRow(num, label, 'YES', '\x1b[32m') : wRow(num, label, 'NO', '\x1b[37m');
+}
+
 function _paintWCommandMenu(socket: any, session: BBSSession): void {
   const currentUser = session.user!;
   const modemLabel = (() => {
@@ -365,120 +379,64 @@ function _paintWCommandMenu(socket: any, session: BBSSession): void {
   if (!checkSecurity(session.user, ACSPermission.EDIT_USER_NAME)) {
     emitText(socket, '\x1b[34m[\x1b[0m  0\x1b[34m]\x1b[31m [DISABLED]\x1b[0m\r\n');
   } else {
-    emitText(socket, AnsiUtil.colorize('[', 'blue'));
-    emitText(socket, '  0');
-    emitText(socket, AnsiUtil.colorize('] ', 'blue'));
-    emitText(socket, AnsiUtil.colorize('LOGIN NAME.............. ', 'magenta'));
-    emitText(socket, AnsiUtil.colorize(currentUser.username, 'yellow'));
-    emitText(socket, '\r\n');
+    emitText(socket, wRow('  0', 'LOGIN NAME..............', currentUser.username));
   }
 
   // Option 1: Email - express.e:25729-25733
   if (!checkSecurity(session.user, ACSPermission.EDIT_EMAIL)) {
     emitText(socket, '\x1b[34m[\x1b[0m  1\x1b[34m]\x1b[31m [DISABLED]\x1b[0m\r\n');
   } else {
-    emitText(socket, AnsiUtil.colorize('[', 'blue'));
-    emitText(socket, '  1');
-    emitText(socket, AnsiUtil.colorize('] ', 'blue'));
-    emitText(socket, AnsiUtil.colorize('EMAIL ADDRESS........... ', 'magenta'));
-    emitText(socket, AnsiUtil.colorize(currentUser.email || 'Not set', 'yellow'));
-    emitText(socket, '\r\n');
+    emitText(socket, wRow('  1', 'EMAIL ADDRESS...........', currentUser.email || ''));
   }
 
   // Option 2: Real Name - express.e:25734-25738
   if (!checkSecurity(session.user, ACSPermission.EDIT_REAL_NAME)) {
     emitText(socket, '\x1b[34m[\x1b[0m  2\x1b[34m]\x1b[31m [DISABLED]\x1b[0m\r\n');
   } else {
-    emitText(socket, AnsiUtil.colorize('[', 'blue'));
-    emitText(socket, '  2');
-    emitText(socket, AnsiUtil.colorize('] ', 'blue'));
-    emitText(socket, AnsiUtil.colorize('REAL NAME............... ', 'magenta'));
-    emitText(socket, AnsiUtil.colorize(currentUser.realname || 'Not set', 'yellow'));
-    emitText(socket, '\r\n');
+    emitText(socket, wRow('  2', 'REAL NAME...............', currentUser.realname || ''));
   }
 
   // Option 3: Internet Name - express.e:25739-25743
   if (!checkSecurity(session.user, ACSPermission.EDIT_INTERNET_NAME)) {
     emitText(socket, '\x1b[34m[\x1b[0m  3\x1b[34m]\x1b[31m [DISABLED]\x1b[0m\r\n');
   } else {
-    emitText(socket, AnsiUtil.colorize('[', 'blue'));
-    emitText(socket, '  3');
-    emitText(socket, AnsiUtil.colorize('] ', 'blue'));
-    emitText(socket, AnsiUtil.colorize('INTERNET NAME........... ', 'magenta'));
-    emitText(socket, AnsiUtil.colorize(currentUser.username.toLowerCase(), 'yellow'));
-    emitText(socket, '\r\n');
+    emitText(socket, wRow('  3', 'INTERNET NAME...........', currentUser.internetName || ''));
   }
 
   // Option 4: Location - express.e:25744-25748
   if (!checkSecurity(session.user, ACSPermission.EDIT_USER_LOCATION)) {
     emitText(socket, '\x1b[34m[\x1b[0m  4\x1b[34m]\x1b[31m [DISABLED]\x1b[0m\r\n');
   } else {
-    emitText(socket, AnsiUtil.colorize('[', 'blue'));
-    emitText(socket, '  4');
-    emitText(socket, AnsiUtil.colorize('] ', 'blue'));
-    emitText(socket, AnsiUtil.colorize('LOCATION................ ', 'magenta'));
-    emitText(socket, AnsiUtil.colorize(currentUser.location || 'Not set', 'yellow'));
-    emitText(socket, '\r\n');
+    emitText(socket, wRow('  4', 'LOCATION................', currentUser.location || ''));
   }
 
   // Option 5: Phone - express.e:25749-25753
   if (!checkSecurity(session.user, ACSPermission.EDIT_PHONE_NUMBER)) {
     emitText(socket, '\x1b[34m[\x1b[0m  5\x1b[34m]\x1b[31m [DISABLED]\x1b[0m\r\n');
   } else {
-    emitText(socket, AnsiUtil.colorize('[', 'blue'));
-    emitText(socket, '  5');
-    emitText(socket, AnsiUtil.colorize('] ', 'blue'));
-    emitText(socket, AnsiUtil.colorize('PHONE NUMBER............ ', 'magenta'));
-    emitText(socket, AnsiUtil.colorize(currentUser.phone || 'Not set', 'yellow'));
-    emitText(socket, '\r\n');
+    emitText(socket, wRow('  5', 'PHONE NUMBER............', currentUser.phone || ''));
   }
 
   // Option 6: Password - express.e:25754-25758
   if (!checkSecurity(session.user, ACSPermission.EDIT_PASSWORD)) {
     emitText(socket, '\x1b[34m[\x1b[0m  6\x1b[34m]\x1b[31m [DISABLED]\x1b[0m\r\n');
   } else {
-    emitText(socket, AnsiUtil.colorize('[', 'blue'));
-    emitText(socket, '  6');
-    emitText(socket, AnsiUtil.colorize('] ', 'blue'));
-    emitText(socket, AnsiUtil.colorize('PASSWORD................ ', 'magenta'));
-    emitText(socket, AnsiUtil.colorize('ENCRYPTED', 'cyan'));
-    emitText(socket, '\r\n');
+    emitText(socket, wRow('  6', 'PASSWORD................', 'ENCRYPTED', '\x1b[36m'));
   }
 
   // Option 7: Lines Per Screen - express.e:25759-25760
   const linesPerScreen = currentUser.linesPerScreen || 'Auto';
-  emitText(socket, AnsiUtil.colorize('[', 'blue'));
-  emitText(socket, '  7');
-  emitText(socket, AnsiUtil.colorize('] ', 'blue'));
-  emitText(socket, AnsiUtil.colorize('LINES PER SCREEN........ ', 'magenta'));
-  emitText(socket, AnsiUtil.colorize(linesPerScreen.toString(), 'yellow'));
-  emitText(socket, '\r\n');
+  emitText(socket, wRow('  7', 'LINES PER SCREEN........', linesPerScreen.toString()));
 
   // Option 8: Computer - express.e:25761-25767
-  emitText(socket, AnsiUtil.colorize('[', 'blue'));
-  emitText(socket, '  8');
-  emitText(socket, AnsiUtil.colorize('] ', 'blue'));
-  emitText(socket, AnsiUtil.colorize('COMPUTER................ ', 'magenta'));
-  emitText(socket, AnsiUtil.colorize(currentUser.computer || 'Unknown', 'yellow'));
-  emitText(socket, '\r\n');
+  emitText(socket, wRow('  8', 'COMPUTER................', currentUser.computer || ''));
 
   // Option 9: Screen Type - express.e:25768-25774
-  emitText(socket, AnsiUtil.colorize('[', 'blue'));
-  emitText(socket, '  9');
-  emitText(socket, AnsiUtil.colorize('] ', 'blue'));
-  emitText(socket, AnsiUtil.colorize('SCREEN TYPE............. ', 'magenta'));
-  emitText(socket, AnsiUtil.colorize(currentUser.screenType || 'Web Terminal', 'yellow'));
-  emitText(socket, '\r\n');
+  emitText(socket, wRow('  9', 'SCREEN TYPE.............', currentUser.screenType || ''));
 
   // Option 10: Screen Clear - express.e:25775-25779
-  emitText(socket, AnsiUtil.colorize('[', 'blue'));
-  emitText(socket, ' 10');
-  emitText(socket, AnsiUtil.colorize('] ', 'blue'));
-  emitText(socket, AnsiUtil.colorize('SCREEN CLEAR............ ', 'magenta'));
-  // express.e:25808-25812 — checks userFlags AND USER_SCRNCLR (bit 8), [32m=YES, [37m=NO
-  { const scrnClr = (currentUser.userFlags || 0) & 8;
-    emitText(socket, scrnClr ? '\x1b[32mYES\x1b[0m' : '\x1b[37mNO\x1b[0m'); }
-  emitText(socket, '\r\n');
+  // express.e:25808-25812 — userFlags AND USER_SCRNCLR (bit 8)
+  emitText(socket, wYesNo(' 10', 'SCREEN CLEAR............', !!((currentUser.userFlags || 0) & 8)));
 
   // Option 11: Transfer Protocol - express.e:25780-25790
   if (!checkSecurity(session.user, ACSPermission.XPR_SEND) && !checkSecurity(session.user, ACSPermission.XPR_RECEIVE)) {
@@ -487,12 +445,7 @@ function _paintWCommandMenu(socket: any, session: BBSSession): void {
     const { PROTOCOL_DISPLAY_NAMES } = require('../../types');
     const userProtocol = currentUser.protocol || 'zmodem';
     const protocolName = PROTOCOL_DISPLAY_NAMES[userProtocol] || userProtocol.toUpperCase();
-    emitText(socket, AnsiUtil.colorize('[', 'blue'));
-    emitText(socket, ' 11');
-    emitText(socket, AnsiUtil.colorize('] ', 'blue'));
-    emitText(socket, AnsiUtil.colorize('TRANSFER PROTOCOL....... ', 'magenta'));
-    emitText(socket, AnsiUtil.colorize(protocolName, 'yellow'));
-    emitText(socket, '\r\n');
+    emitText(socket, wRow(' 11', 'TRANSFER PROTOCOL.......', protocolName));
   }
 
   // Option 12: Editor Type - express.e:25791-25800
@@ -509,12 +462,7 @@ function _paintWCommandMenu(socket: any, session: BBSSession): void {
     // everyone whatever they had chosen.
     const editorName = EDITOR_DISPLAY[editorValue(currentUser)] ?? 'PROMPT';
 
-    emitText(socket, AnsiUtil.colorize('[', 'blue'));
-    emitText(socket, ' 12');
-    emitText(socket, AnsiUtil.colorize('] ', 'blue'));
-    emitText(socket, AnsiUtil.colorize('EDITOR TYPE............. ', 'magenta'));
-    emitText(socket, AnsiUtil.colorize(editorName, 'yellow'));
-    emitText(socket, '\r\n');
+    emitText(socket, wRow(' 12', 'EDITOR TYPE.............', editorName));
   }
 
   // Option 13: Zoom Type - express.e:25801-25808
@@ -524,36 +472,19 @@ function _paintWCommandMenu(socket: any, session: BBSSession): void {
     const zoomType = currentUser.zoomType || 0;
     const zoomName = zoomType === 1 ? 'ASCII' : 'QWK';
 
-    emitText(socket, AnsiUtil.colorize('[', 'blue'));
-    emitText(socket, ' 13');
-    emitText(socket, AnsiUtil.colorize('] ', 'blue'));
-    emitText(socket, AnsiUtil.colorize('ZOOM TYPE............... ', 'magenta'));
-    emitText(socket, AnsiUtil.colorize(zoomName, 'yellow'));
-    emitText(socket, '\r\n');
+    emitText(socket, wRow(' 13', 'ZOOM TYPE...............', zoomName));
   }
 
   // Option 14: Available for Chat/OLM - express.e:25809-25816
   if (!checkSecurity(session.user, ACSPermission.OLM)) {
     emitText(socket, '\x1b[34m[\x1b[0m 14\x1b[34m]\x1b[31m [DISABLED]\x1b[0m\r\n');
   } else {
-    emitText(socket, AnsiUtil.colorize('[', 'blue'));
-    emitText(socket, ' 14');
-    emitText(socket, AnsiUtil.colorize('] ', 'blue'));
-    emitText(socket, AnsiUtil.colorize('AVAILABLE FOR CHAT/OLM.. ', 'magenta'));
-    emitText(socket, AnsiUtil.colorize(currentUser.availableForChat ? 'YES' : 'NO', currentUser.availableForChat ? 'green' : 'white'));
-    emitText(socket, '\r\n');
+    emitText(socket, wYesNo(' 14', 'AVAILABLE FOR CHAT/OLM..', !!currentUser.availableForChat));
   }
 
-  // Option 15: Translator - express.e:25817-25820
-  if (!checkSecurity(session.user, ACSPermission.TRANSLATION)) {
-    emitText(socket, '\x1b[34m[\x1b[0m 15\x1b[34m]\x1b[31m [DISABLED]\x1b[0m\r\n');
-  } else {
-    emitText(socket, AnsiUtil.colorize('[', 'blue'));
-    emitText(socket, ' 15');
-    emitText(socket, AnsiUtil.colorize('] ', 'blue'));
-    emitText(socket, AnsiUtil.colorize('TRANSLATOR.............. ', 'magenta'));
-    emitText(socket, AnsiUtil.colorize('English', 'yellow'));
-    emitText(socket, '\r\n');
+  // Option 15: Translator - express.e:25867-25870, no ELSE: nothing when denied
+  if (checkSecurity(session.user, ACSPermission.TRANSLATION)) {
+    emitText(socket, wRow(' 15', 'TRANSLATOR..............', translationService.getUserLanguage(currentUser.id)));
   }
 
   // Option 16: Background File Check — express.e:25872-25879
@@ -566,61 +497,31 @@ function _paintWCommandMenu(socket: any, session: BBSSession): void {
   {
     const { UserFlag } = require('../../constants/express-flags');
     const bgfc = (currentUser.userFlags || 0) & UserFlag.BGFILECHECK;
-    emitText(socket, AnsiUtil.colorize('[', 'blue'));
-    emitText(socket, ' 16');
-    emitText(socket, AnsiUtil.colorize('] ', 'blue'));
-    emitText(socket, AnsiUtil.colorize('BACKGROUND FILE CHECK... ', 'magenta'));
     // express.e:25875 [32mYES[0m / express.e:25877 [37mNO[0m
-    emitText(socket, bgfc ? '\x1b[32mYES\x1b[0m' : '\x1b[37mNO\x1b[0m');
-    emitText(socket, '\r\n');
+    emitText(socket, wYesNo(' 16', 'BACKGROUND FILE CHECK...', !!bgfc));
   }
 
   // WEB_: MODERN_* — option 17: modem emulation speed throttle, no express.e counterpart; web terminal setting
-  emitText(socket, AnsiUtil.colorize('[', 'blue'));
-  emitText(socket, ' 17');
-  emitText(socket, AnsiUtil.colorize('] ', 'blue'));
-  emitText(socket, AnsiUtil.colorize('MODEM EMULATION SPEED.. ', 'magenta'));
-  emitText(socket, AnsiUtil.colorize(modemLabel, 'yellow'));
-  emitText(socket, '\r\n');
+  emitText(socket, wRow(' 17', 'MODEM EMULATION SPEED..', modemLabel));
 
   // WEB_: MODERN_* — option 18: terminal font selection, no express.e counterpart; web terminal setting
   const userFont = sessionWantsPetscii(session)
     ? 'C64 CHARACTER SET'
     : currentUser.fontPreference || DEFAULT_TERMINAL_FONT;
-  emitText(socket, AnsiUtil.colorize('[', 'blue'));
-  emitText(socket, ' 18');
-  emitText(socket, AnsiUtil.colorize('] ', 'blue'));
-  emitText(socket, AnsiUtil.colorize('TERMINAL FONT.......... ', 'magenta'));
-  emitText(socket, AnsiUtil.colorize(userFont, 'yellow'));
-  emitText(socket, '\r\n');
+  emitText(socket, wRow(' 18', 'TERMINAL FONT..........', userFont));
 
   // WEB_: Phase 3 GDPR self-service — see thoughts/shared/plans/
   // 2026-04-24-gdpr-hobby-baseline.md. No express.e counterpart.
-  emitText(socket, AnsiUtil.colorize('[', 'blue'));
-  emitText(socket, ' 19');
-  emitText(socket, AnsiUtil.colorize('] ', 'blue'));
-  emitText(socket, AnsiUtil.colorize('VIEW MY DATA (GDPR).... ', 'magenta'));
-  emitText(socket, AnsiUtil.colorize('print a copy of your record', 'yellow'));
-  emitText(socket, '\r\n');
+  emitText(socket, wRow(' 19', 'VIEW MY DATA (GDPR)....', 'print a copy of your record'));
 
-  emitText(socket, AnsiUtil.colorize('[', 'blue'));
-  emitText(socket, ' 20');
-  emitText(socket, AnsiUtil.colorize('] ', 'blue'));
-  emitText(socket, AnsiUtil.colorize('DELETE MY ACCOUNT...... ', 'magenta'));
-  emitText(socket, AnsiUtil.colorize('erase your data (GDPR)', 'red'));
-  emitText(socket, '\r\n');
+  emitText(socket, wRow(' 20', 'DELETE MY ACCOUNT......', 'erase your data (GDPR)', '\x1b[31m'));
 
   // WEB_: the PETSCII palette. Only the 80-column screen has a choice - a C64
   // is a VIC-II by construction - but the row is shown either way so a caller
   // can set it before he next answers P8, and it says which screen it governs.
   {
     const vdc = session.user?.petsciiPalette !== 'vic';
-    emitText(socket, AnsiUtil.colorize('[', 'blue'));
-    emitText(socket, ' 21');
-    emitText(socket, AnsiUtil.colorize('] ', 'blue'));
-    emitText(socket, AnsiUtil.colorize('PETSCII 80 COLOURS..... ', 'magenta'));
-    emitText(socket, AnsiUtil.colorize(vdc ? 'C128 (VDC)' : 'C64 (VIC-II)', 'yellow'));
-    emitText(socket, '\r\n');
+    emitText(socket, wRow(' 21', 'PETSCII 80 COLOURS.....', vdc ? 'C128 (VDC)' : 'C64 (VIC-II)'));
   }
 
   // WEB_: the PETSCII CHARACTER SET. A C64 sold in Sweden shipped ROM
@@ -630,12 +531,7 @@ function _paintWCommandMenu(socket: any, session: BBSSession): void {
   // its column tab.
   {
     const swedish = session.user?.petsciiCharset === 'swedish';
-    emitText(socket, AnsiUtil.colorize('[', 'blue'));
-    emitText(socket, ' 22');
-    emitText(socket, AnsiUtil.colorize('] ', 'blue'));
-    emitText(socket, AnsiUtil.colorize('PETSCII CHARACTER SET.. ', 'magenta'));
-    emitText(socket, AnsiUtil.colorize(swedish ? 'SWEDISH' : 'STANDARD', 'yellow'));
-    emitText(socket, '\r\n');
+    emitText(socket, wRow(' 22', 'PETSCII CHARACTER SET..', swedish ? 'SWEDISH' : 'STANDARD'));
   }
 
   // WEB_: DOORS THAT REGISTER THEMSELVES AS SETTINGS. A door that exists to
@@ -645,12 +541,7 @@ function _paintWCommandMenu(socket: any, session: BBSSession): void {
   // door by name. See commands/w-settings-doors.ts.
   for (const [index, entry] of settingsDoorEntries(session).entries()) {
     const number = String(FIRST_SETTINGS_DOOR_OPTION + index).padStart(3, ' ');
-    emitText(socket, AnsiUtil.colorize('[', 'blue'));
-    emitText(socket, number);
-    emitText(socket, AnsiUtil.colorize('] ', 'blue'));
-    emitText(socket, AnsiUtil.colorize(`${entry.label.toUpperCase()}${'.'.repeat(Math.max(1, 23 - entry.label.length))} `, 'magenta'));
-    emitText(socket, AnsiUtil.colorize(entry.command, 'yellow'));
-    emitText(socket, '\r\n');
+    emitText(socket, wRow(number, `${entry.label.toUpperCase()}${'.'.repeat(Math.max(1, 23 - entry.label.length))}`, entry.command));
   }
 
   emitText(socket, '\r\n');
