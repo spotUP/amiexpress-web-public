@@ -137,7 +137,15 @@ export async function emitConnectBanner(
   const nodeId = session.nodeId;
   const bbsName = diskConfig.bbs_name || bbsConfig.bbsName;
   const location = diskConfig.location || bbsConfig.location;
-  const registeredTo = diskConfig.sysop_name || "NONE";
+  // express.e:31991 REGKEY - the same name VER prints.
+  const { registrationName } = require("./bbs-config-file.service");
+  const regKey: string = registrationName(bbsConfig.dataDir);
+  // express.e:7344 onlineBaud:=Val(connectString+7) - every caller here
+  // comes in on a socket, whose connect string is CONNECT 19200
+  // (CallersLogManager). The browser's emulated modem speed is a display
+  // effect, not the line, and the banner is the same on every transport.
+  const { SOCKET_CONNECT_STRING } = require("./CallersLogManager");
+  const onlineBaud = parseInt(SOCKET_CONNECT_STRING.slice(8), 10);
   const currentYear = getSystemTime().getFullYear();
   const dateStr = getSystemTime().toLocaleString("en-US", {
     weekday: "short", month: "short", day: "numeric", year: "numeric",
@@ -165,12 +173,11 @@ export async function emitConnectBanner(
   // express.e:29514-29515
   say(`\r\n\r\nRunning AmiExpress ${amiExpressVersion} Copyright (c) 2018-${currentYear} Darren Coles,\r\n`);
   say(`Web port ${webPortVersion} by Spot/Up Rough\r\n`);
-  // express.e:29516-29517. The line used to end "via web connection" on the
-  // one transport that prints it; naming the transport here would be the
-  // only byte that differed between them, so the node is what it names.
-  say(`\r\nRegistered to ${registeredTo}. You are connected to Node ${nodeId}`);
-  // express.e:29518-29522
-  say(`\r\nConnection occurred at ${dateStr}.`);
+  // express.e:29516-29517 (the copyright line above keeps this board's own
+  // year and the web port's credit - sysop decision 2026-10-05).
+  say(`\r\nRegistration ${regKey}. You are connected to Node ${nodeId} at ${onlineBaud} baud`);
+  // express.e:29518-29522, its own spelling.
+  say(`\r\nConnection occured at ${dateStr}.`);
   say("\r\n");
 
   if (postBannerDelayMs > 0) {

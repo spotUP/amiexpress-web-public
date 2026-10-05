@@ -127,7 +127,7 @@ describe('R13a - the /ws/terminal endpoint runs the pre-login', () => {
       // Before this fix a /ws/terminal caller saw none of them.
       expect(painted).toContain('You are connected to Node');
       expect(painted.split('You are connected to Node').length - 1).toBe(1);
-      expect(painted).toMatch(/Connection occurred at/);
+      expect(painted).toMatch(/Connection occured at/);
     } finally {
       client.close();
     }

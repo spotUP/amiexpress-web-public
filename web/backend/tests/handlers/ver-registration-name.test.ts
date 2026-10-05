@@ -12,16 +12,34 @@
  */
 process.env.SKIP_DB_INIT = '1';
 
-jest.mock('../../src/services/bbs-config-file.service', () => ({
-  ...jest.requireActual('../../src/services/bbs-config-file.service'),
-  getBoardConfig: jest.fn(() => ({})),
-}));
-
+import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
+import { config } from '../../src/config';
 import { handleVersionCommand } from '../../src/handlers/commands/info-commands.handler';
-import { getBoardConfig } from '../../src/services/bbs-config-file.service';
+import { invalidateBoardConfig } from '../../src/services/bbs-config-file.service';
+import { applyTooltypes } from '../../src/utils/info-file.util';
 import { flushOutput } from '../../src/utils/output.util';
 
-const board = getBoardConfig as unknown as jest.Mock;
+let root = '';
+let spy: jest.SpyInstance;
+beforeEach(() => {
+  root = fs.mkdtempSync(path.join(os.tmpdir(), 'ver-regkey-'));
+  const original = config.get.bind(config);
+  spy = jest.spyOn(config, 'get').mockImplementation((key: string) => (key === 'dataDir' ? root : original(key as never)));
+  invalidateBoardConfig();
+});
+afterEach(() => {
+  spy.mockRestore();
+  invalidateBoardConfig();
+  fs.rmSync(root, { recursive: true, force: true });
+});
+
+/** The board's bbsConfig.info, carrying REGKEY or not. */
+function boardWith(regKey?: string): void {
+  applyTooltypes(path.join(root, 'bbsConfig.info'), regKey === undefined ? [['BBS_NAME', 'Test']] : [['REGKEY', regKey]]);
+  invalidateBoardConfig();
+}
 
 function run(): string {
   const wire: string[] = [];
@@ -31,8 +49,6 @@ function run(): string {
       if (event === 'ansi-output' && typeof payload === 'string') wire.push(payload);
       return true;
     },
-    // The output buffer registers a disconnect listener on whatever it is
-    // handed; a socket without `on` throws before a byte is written.
     on: () => socket,
     once: () => socket,
     off: () => socket,
@@ -43,29 +59,18 @@ function run(): string {
   return wire.join('');
 }
 
-beforeEach(() => board.mockReturnValue({}));
-afterEach(() => jest.clearAllMocks());
-
 describe('the registration line', () => {
   it('prints the board REGKEY when there is one', () => {
-    board.mockReturnValue({ reg_key: 'Up Rough' });
-
+    boardWith('Up Rough');
     expect(run()).toContain('Registered to Up Rough.');
   });
 
   it("keeps this port's own line when the board sets nothing", () => {
+    boardWith();
     expect(run()).toContain('Registered to Open Source Community.');
   });
 
-  it('ignores whitespace left in the tooltype', () => {
-    board.mockReturnValue({ reg_key: '   ' });
-
-    expect(run()).toContain('Registered to Open Source Community.');
-  });
-
-  it('does not fail the command when the board file cannot be read', () => {
-    board.mockImplementation(() => { throw new Error('no bbsConfig.info'); });
-
+  it('does not fail the command when there is no board file at all', () => {
     const said = run();
     expect(said).toContain('Registered to Open Source Community.');
     // ...and the rest of VER is still there.

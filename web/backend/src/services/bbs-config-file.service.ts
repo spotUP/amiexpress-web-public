@@ -1308,3 +1308,18 @@ console.error('[BBSConfig] Failed to strip secrets:', error);
     };
   }
 }
+
+/**
+ * The name this board is registered to: REGKEY (express.e:31991), printed by
+ * VER (25696) and the connect banner (29516). express falls back to NONE - an
+ * unregistered shareware copy, which does not apply here - so the fallback is
+ * the line this port has always printed.
+ */
+export function registrationName(bbsRoot: string): string {
+  try {
+    const key = String(getBoardConfig(bbsRoot)?.reg_key ?? '').trim();
+    return key || 'Open Source Community';
+  } catch {
+    return 'Open Source Community';
+  }
+}

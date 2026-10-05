@@ -187,7 +187,7 @@ describe('step 01 - connect, to the graphics prompt', () => {
     // The clock, and the node each caller happened to get, are the only
     // things that cannot repeat between two connects.
     const stable = (t: string) =>
-      t.replace(/Connection occurred at [^.]+\./, 'Connection occurred at <time>.')
+      t.replace(/Connection occured at [^.]+\./, 'Connection occured at <time>.')
        .replace(/node \d+/g, 'node <n>')
        .replace(/Node \d+/g, 'Node <n>');
 
@@ -198,7 +198,7 @@ describe('step 01 - connect, to the graphics prompt', () => {
       expect(text).toContain('CONNECT 19200');
       expect(text).toContain('**EMSI_IRQ8E08');
       expect(text).toContain('Welcome to');
-      expect(text).toContain('Connection occurred at');
+      expect(text).toContain('Connection occured at');
       // ...and the prompt they precede.
       expect(text).toContain(STEP_01_SENTINEL);
     }

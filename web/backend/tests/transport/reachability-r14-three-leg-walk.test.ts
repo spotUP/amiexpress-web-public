@@ -16,7 +16,7 @@
  * THE THREE ALLOWED DIFFERENCES, and there are exactly three, each of which is
  * a fact about the caller rather than about the transport:
  *
- *   1. the clock          - "Connection occurred at <time>"
+ *   1. the clock          - "Connection occured at <time>"
  *   2. the node they got  - "node 3" / "Node 3"
  *   3. the transport's own framing - telnet IAC negotiation, which SSH and a
  *      socket.io frame have no equivalent of
@@ -54,7 +54,7 @@ function stripTelnetNegotiation(raw: Buffer): Buffer {
 
 /** Differences 1 and 2: the clock, and whichever node the caller was given. */
 const stable = (t: string): string =>
-  t.replace(/Connection occurred at [^.]+\./, 'Connection occurred at <time>.')
+  t.replace(/Connection occured at [^.]+\./, 'Connection occured at <time>.')
    .replace(/node \d+/g, 'node <n>')
    .replace(/Node \d+/g, 'Node <n>');
 
@@ -250,7 +250,7 @@ describe('R14 - three legs, one board', () => {
       // ~400 bytes; the two invented '/X Native Telnet' lines went 2026-10-04.
       expect(leg.step01.length).toBeGreaterThan(300);
       expect(leg.step01).toContain(STEP_01);
-      expect(leg.step01).toContain('Connection occurred at');
+      expect(leg.step01).toContain('Connection occured at');
     }
 
     // Step 02 - what answering the prompt paints. This is the step that could

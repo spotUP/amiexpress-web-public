@@ -67,20 +67,10 @@ export function handleVersionCommand(socket: any, session: BBSSession): void {
   emitText(socket, 'Original Version:\r\n');
   emitText(socket, '  (C)1989-91 Mike Thomas, Synthetic Technologies\r\n');
   emitText(socket, '  (C)1992-95 Joe Hodge, LightSpeed Technologies Inc.\r\n\r\n');
-  // express.e:25696-25697 'Registered to \s.\b\n'. The name comes from the
-  // board's REGKEY (express.e:31991); express falls back to `NONE`, which
-  // means an unregistered shareware copy and does not apply to this port, so
-  // the fallback is the line it has always printed.
-  const registeredTo = (() => {
-    try {
-      const { config } = require('../../config');
-      const { getBoardConfig } = require('../../services/bbs-config-file.service');
-      const key = String(getBoardConfig(config.get('dataDir'))?.reg_key ?? '').trim();
-      return key || 'Open Source Community';
-    } catch {
-      return 'Open Source Community';
-    }
-  })();
+  // express.e:25696-25697 'Registered to \s.\b\n' - REGKEY (registrationName).
+  const { config } = require('../../config');
+  const { registrationName } = require('../../services/bbs-config-file.service');
+  const registeredTo: string = registrationName(config.get('dataDir'));
   emitText(socket, `Registered to ${registeredTo}.\r\n`);
   // express.e:25698 ENDPROC RESULT_SUCCESS — no press-key, just return
   session.subState = LoggedOnSubState.DISPLAY_MENU;

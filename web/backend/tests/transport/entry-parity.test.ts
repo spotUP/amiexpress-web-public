@@ -39,7 +39,7 @@ describe('the connect banner', () => {
     await emitConnectBanner(ssh.emitter, sessionOn('ssh'), 0);
 
     // Byte for byte, apart from the clock the third line carries.
-    const withoutTime = (text: string) => text.replace(/Connection occurred at [^.]+\./, 'Connection occurred at <time>.');
+    const withoutTime = (text: string) => text.replace(/Connection occured at [^.]+\./, 'Connection occured at <time>.');
     expect(withoutTime(telnet.text())).toBe(withoutTime(web.text()));
     expect(withoutTime(ssh.text())).toBe(withoutTime(web.text()));
   });
@@ -56,8 +56,12 @@ describe('the connect banner', () => {
     expect(text).toContain('**EMSI_IRQ8E08');
     expect(text).toContain('Welcome to');
     expect(text).toContain('Running AmiExpress v5.6 Copyright');
-    expect(text).toContain('You are connected to Node 3');
-    expect(text).toContain('Connection occurred at');
+    // express.e:29516 'Registration \s. You are connected to Node \d at \d
+    // baud' - REGKEY, and a socket caller's CONNECT 19200 (7344).
+    expect(text).toMatch(/Registration [^.\r\n]+\. You are connected to Node 3 at 19200 baud/);
+    expect(text).not.toContain('Registered to');
+    // express.e:29518, its own spelling.
+    expect(text).toContain('Connection occured at');
     // The one line that used to name a transport - and named the wrong one
     // for everybody but the browser.
     expect(text).not.toContain('via web connection');
