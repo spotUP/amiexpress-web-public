@@ -1359,40 +1359,10 @@ function editorValue(user: { editor?: string; editorType?: number }): string {
 }
 
 async function _displayComputerList(socket: any, session: BBSSession): Promise<void> {
-  let choices: string[] = [];
-
-  // ComputerList.info first, through the service the admin uses. Asking the
-  // database directly offered a caller only the machines that happen to have a
-  // row - on this board the two the sysop had just added, while the file, the
-  // admin page and express.e all listed ten.
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const { ComputerConfigService } = require('../../services/config-services/computer-config.service');
-    const records = await new ComputerConfigService(db).getAllComputerTypes();
-    if (Array.isArray(records) && records.length > 0) {
-      choices = records
-        .filter((c: any) => c.enabled !== false)
-        .sort((a: any, b: any) => a.computer_number - b.computer_number)
-        .map((c: any) => c.computer_name);
-    }
-  } catch (_e) { /* fall through to defaults */ }
-
-  if (choices.length === 0) {
-    choices = [
-      'AMiGA 500', 'AMiGA 2000', 'AMiGA 3000', 'AMiGA 4000', 'AMiGA 1200',
-      'IBM PC/Compatible', 'Macintosh', 'C64/128', 'Atari ST', 'Other'
-    ];
-  }
-
-  // express.e:11323-11333 - FOR stat:=0 TO computerTypes.count()-1 STEP 2, two-column display
-  for (let i = 0; i < choices.length; i += 2) {
-    const left = `${String(i + 1).padStart(2, ' ')}> ${choices[i].padEnd(34, ' ')}`;
-    if (i + 1 < choices.length) {
-      emitText(socket, `${left}${String(i + 2).padStart(2, ' ')}> ${choices[i + 1]}\r\n`);
-    } else {
-      emitText(socket, `${left}\r\n`);
-    }
-  }
+  // The one list and layout sign-up uses too (utils/computer-types.util).
+  const { computerTypeChoices, computerTypeRows } = require('../../utils/computer-types.util');
+  const choices: string[] = await computerTypeChoices(db);
+  for (const row of computerTypeRows(choices, session)) emitText(socket, row);
   emitText(socket, '\r\n');
 
   // express.e:11337 - aePuts('Choose computer type: ')

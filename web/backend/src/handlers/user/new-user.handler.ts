@@ -13,7 +13,6 @@
  */
 
 import { Socket } from 'socket.io';
-import { isNarrow, narrowClip } from '../../utils/table-format.util';
 import { autoLinesFor } from '../../utils/auto-lines.util';
 import * as amigafs from '../../utils/amigafs';
 import * as path from 'path';
@@ -32,6 +31,7 @@ import { loadBBSConfig, getBoardConfig } from '../../services/bbs-config-file.se
 import { parseInfoFile } from '../../utils/info-file.util';
 import { newUserConferenceAccess, newUserPreset } from '../../utils/new-user-preset';
 import { nodeFlag } from '../../utils/node-tooltypes.util';
+import { computerTypeChoices, computerTypeRows } from '../../utils/computer-types.util';
 
 // WEB_: GDPR privacy notice version (bump when Screens/PRIVACY.TXT changes
 // materially, so re-consent can be forced for existing users).
@@ -72,7 +72,6 @@ function autoValidationPasswordNow(session?: { nodeId?: number }): string {
   return autoValidationPassword(session?.nodeId) || injectedAutoValidationPassword;
 }
 let autoValidationSecLevel = 50;
-let cachedComputerChoices: string[] | null = null;
 let configService: ConfigService | null = null;
 
 interface SecurityPolicy {
@@ -720,53 +719,8 @@ function promptForAutoValidation(socket: Socket, session: any) {
 }
 
 async function getComputerChoices(): Promise<string[]> {
-  if (cachedComputerChoices && cachedComputerChoices.length > 0) {
-    return cachedComputerChoices;
-  }
-
-  let choices: string[] = [];
-
-  // ComputerList.info FIRST - the file the sysop edits, the file the admin
-  // lists, and the file express.e reads (TOOLTYPE_COMPUTERLIST).
-  //
-  // This asked the database instead. A board whose ComputerList.info holds ten
-  // machines had two rows in computer_types - the two the sysop had added
-  // through the admin, which inserts a row as well as writing the file - so a
-  // caller signing up was offered "1> Commodore 64  2> Commodore 128" and
-  // nothing else, while the admin page and the board both showed ten. The
-  // service the admin uses reads the file and falls back to the table; this
-  // uses the same service, so there is one answer to the question rather than
-  // two.
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const { ComputerConfigService } = require('../../services/config-services/computer-config.service');
-    // The service takes the Database and asks it for the repository itself.
-    const records = await new ComputerConfigService(db).getAllComputerTypes();
-    if (Array.isArray(records) && records.length > 0) {
-      choices = records
-        .filter((c: any) => c.enabled !== false)
-        .sort((a: any, b: any) => a.computer_number - b.computer_number)
-        .map((c: any) => c.computer_name);
-    }
-  } catch (error) {
-console.warn('[NEW USER] Unable to load computer types:', error);
-  }
-
-  if (choices.length === 0) {
-    choices = [
-      'AMiGA 500',
-      'AMiGA 2000',
-      'AMiGA 3000',
-      'AMiGA 4000',
-      'AMiGA 1200',
-      'PC',
-      'mAC',
-      'OTHER!'
-    ];
-  }
-
-  cachedComputerChoices = choices;
-  return choices;
+  // The one list sign-up and W both offer (utils/computer-types.util).
+  return computerTypeChoices(db);
 }
 
 /**
@@ -915,34 +869,10 @@ export async function handleLinesInput(socket: Socket, session: any, input: stri
 async function promptForComputer(socket: Socket, session: any) {
   const choices = await getComputerChoices();
   session.newUserData.computerChoices = choices;
-
-  // C64/40-col Task 5d: a 40-column screen has room for ONE 34-column
-  // choice per row, so the express.e two-column loop becomes one column.
-  if (isNarrow(session)) {
-    for (let i = 0; i < choices.length; i++) {
-      socket.emit('ansi-output', narrowClip(`${String(i + 1).padStart(2, ' ')}> ${choices[i]}`) + '\r\n');
-    }
-    // express.e:11337 - 22 columns, fits a 40-column screen as it is.
-    socket.emit('ansi-output', '\r\nChoose computer type: ');
-    session.inputBuffer = '';
-    return;
-  }
-
-  // express.e:11315 - FOR stat:=0 TO computerTypes.count()-1 STEP 2
-  for (let i = 0; i < choices.length; i += 2) {
-    // StringF(tempStr,'\d[2]> \l\s[34] ',stat+1,computerTypes.item(stat))
-    // \s[34] is a 34-column field - cut to it as well as padded - then a space.
-    const left = `${String(i + 1).padStart(2, ' ')}> ${choices[i].slice(0, 34).padEnd(34, ' ')} `;
-    let right = '';
-    if (i + 1 < choices.length) {
-      // StringF(tempStr,'\d[2]> \l\s[34]\b\n',stat+2,computerTypes.item(stat+1))
-      right = `${String(i + 2).padStart(2, ' ')}> ${choices[i+1].slice(0, 34).padEnd(34, ' ')}\r\n`;
-    } else {
-      right = '\r\n';
-    }
-    socket.emit('ansi-output', `${left}${right}`);
-  }
-  socket.emit('ansi-output', '\r\nChoose computer type: '); // express.e:11337
+  // express.e:11318-11337 - the list (utils/computer-types.util), '\b\n',
+  // and the prompt.
+  for (const row of computerTypeRows(choices, session)) socket.emit('ansi-output', row);
+  socket.emit('ansi-output', '\r\nChoose computer type: ');
   session.inputBuffer = '';
 }
 
