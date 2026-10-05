@@ -730,16 +730,12 @@ function _displayBulletin(socket: any, session: BBSSession, bulletinNum: number,
   const bulletinBasePath = path.join(bulletins, `Bull${bulletinNum}`);
   const bulletinScreen = _findSecurityScreen(bulletinBasePath, session.user?.secLevel || 0, userScreenTypeExtension(session.user, config.get('dataDir')), session.ripMode);
 
-  socket.emit('ansi-output', '\r\n');
-
+  // express.e:24648-24655: displayFile, then straight back to the prompt -
+  // no line break of its own either side (lineInput's is the caller's).
   if (bulletinScreen) {
     _displayScreen(socket, session, bulletinScreen);
     // Achievements (SP2): every bulletin read is bull.read.all, once. Non-throwing.
     reportBulletinRead(session as any, bulletinNum, bulletins);
-
-    if (!nonStopDisplay) {
-      socket.emit('ansi-output', '\r\n');
-    }
   } else {
     // express.e:24652-24653: '\b\nSorry there is no bulletin #\d\b\n\b\n'
     socket.emit('ansi-output', `\r\nSorry there is no bulletin #${bulletinNum}\r\n\r\n`);
@@ -775,17 +771,9 @@ export function handleBulletinInput(socket: any, session: BBSSession, input: str
   const nonStopDisplay = ParamsUtil.hasFlag(parsedParams, 'NS');
   const bulletinNum = ParamsUtil.extractNumber(parsedParams);
 
-  if (bulletinNum !== null) {
-    _displayBulletin(socket, session, bulletinNum, nonStopDisplay);
-    session.bulletinContext = { nonStopDisplay };
-  } else {
-    socket.emit('ansi-output', '\r\n');
-    socket.emit('ansi-output', AnsiUtil.errorLine('Invalid bulletin number'));
-    socket.emit('ansi-output', '\r\n');
-    socket.emit('ansi-output', AnsiUtil.complexPrompt([
-      { text: 'Which Bulletin ', color: 'white' },
-      { text: '(?)=List, (Enter)=none', color: 'cyan' },
-      { text: '? ', color: 'white' }
-    ]));
-  }
+  // express.e:24646 stat:=Val(...) - a word that is not a number is 0, and
+  // bulletin 0 is looked for like any other (usually "Sorry there is no
+  // bulletin #0"). The port printed an invented "Invalid bulletin number".
+  _displayBulletin(socket, session, bulletinNum ?? 0, nonStopDisplay);
+  session.bulletinContext = { nonStopDisplay };
 }
