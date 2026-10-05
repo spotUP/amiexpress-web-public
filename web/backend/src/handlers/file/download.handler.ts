@@ -360,6 +360,10 @@ export class DownloadHandler {
     const numFiles = fileList.length;
     const user = session.user!;
 
+    // express.e:20124 - the filespec is read with lineInput, which ends every
+    // answer with a line break (2378) before what follows.
+    socket.emit('ansi-output', '\r\n');
+
     // express.e:20134-20137 IF(StrLen(tempStr)=0) AND (numFiles=0) → \b\n RETURN
     if (!input.trim()) {
       if (numFiles === 0) {
@@ -377,9 +381,8 @@ export class DownloadHandler {
 
     // express.e:20140-20143 Q or A alone → Aborting
     if (trimmed.length === 1 && (trimmed === 'q' || trimmed === 'Q' || trimmed === 'a' || trimmed === 'A')) {
-      // express.e:20141 'Aborting...\b\n\b\n'
-      // \r\n first: terminates the echoed 'A'/'Q' char (lineInput echoes Enter; we don't, so we add it)
-      socket.emit('ansi-output', '\r\nAborting...\r\n\r\n');
+      // express.e:20141 'Aborting...\b\n\b\n', after lineInput's break above.
+      socket.emit('ansi-output', 'Aborting...\r\n\r\n');
       session.subState = LoggedOnSubState.DISPLAY_MENU;
       session.tempData = undefined;
       return;
