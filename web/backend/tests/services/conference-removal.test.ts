@@ -430,3 +430,24 @@ describe('the access shift itself', () => {
     expect(removeAccessPosition('XXX', 40)).toBe('XXX_______');
   });
 });
+
+describe('an account whose access field names an area', () => {
+  let root: string;
+  beforeEach(() => { root = makeBoard(4); });
+  afterEach(() => fs.rmSync(root, { recursive: true, force: true }));
+
+  it('keeps its area name, and the area\'s grants move with the conferences', async () => {
+    const { writeAccessArea, readAccessArea } = require('../../src/conferences/access-areas');
+    fs.mkdirSync(path.join(root, 'Access'));
+    writeAccessArea(root, 'Elite', [1, 2, 4]);
+    const users = makeUsers(['Elite', 'XXXX']);
+    const sqlite = makeSqlite([{ id: 1, confaccess: 'Elite' }]);
+    await new ConferenceRemovalService(root, { users, sqlite }).remove(2);
+
+    expect(users.users[0].confAccess).toBe('Elite');
+    expect(sqlite.calls.filter(c => /UPDATE users SET confaccess/.test(c.sql))
+      .some(c => c.params.includes(1))).toBe(false);
+    // Conference 2 is gone; what was 4 is 3 now.
+    expect(readAccessArea(root, 'Elite').conferences).toEqual([1, 3]);
+  });
+});

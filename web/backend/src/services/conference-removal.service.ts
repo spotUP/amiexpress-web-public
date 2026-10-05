@@ -36,6 +36,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { readTooltypeMap, applyTooltypes } from '../utils/info-file.util';
+import { isConfAccessAreaName, listAccessAreas, writeAccessArea } from '../conferences/access-areas';
 
 export interface ConferenceRemovalOptions {
   /** Delete the conference's directory too - every message and upload in it. */
@@ -95,6 +96,11 @@ export interface ConferenceRemovalDeps {
  * have.
  */
 export function removeAccessPosition(access: string, conferenceId: number, width = 10): string {
+  // An area NAME is not per-conference flags (express.e:458-465): its grants
+  // live in Access/AREA.<name>.info and move there (shiftAccessAreas). Cutting
+  // a character out of it turned `Elite` into `Eite______`, an area that does
+  // not exist - every conference refused.
+  if (isConfAccessAreaName(access)) return access;
   const padded = (access ?? '').padEnd(width, '_');
   const index = conferenceId - 1;
   if (index < 0 || index >= padded.length) return padded.slice(0, width);
@@ -164,6 +170,7 @@ export class ConferenceRemovalService {
     this.shiftConfConfig(conferenceId, nconfs, toolTypes, confConfigPath);
     this.shiftConferenceIcons(conferenceId, nconfs);
     const usersMigrated = this.migrateUserAccess(conferenceId);
+    this.shiftAccessAreas(conferenceId);
     this.migrateMirrorTables(conferenceId);
     this.removeConfDbSlot(conferenceId);
 
@@ -210,6 +217,10 @@ console.warn(`[ConferenceRemoval] NOT deleting ${confDir}: ${removalPlan.reason}
     copy('user.misc');
     copy('Conf.DB');
     for (let i = 1; i <= nconfs; i += 1) copy(`Conf${i}.info`);
+    for (const area of listAccessAreas(this.bbsRoot)) {
+      fs.mkdirSync(path.join(backupDir, 'Access'), { recursive: true });
+      copy(path.join('Access', `AREA.${area.name}.info`));
+    }
 
     return backupDir;
   }
@@ -246,6 +257,25 @@ console.warn(`[ConferenceRemoval] NOT deleting ${confDir}: ${removalPlan.reason}
     if (fs.existsSync(icon(conferenceId))) fs.unlinkSync(icon(conferenceId));
     for (let i = conferenceId; i < nconfs; i += 1) {
       if (fs.existsSync(icon(i + 1))) fs.renameSync(icon(i + 1), icon(i));
+    }
+  }
+
+  /**
+   * The area grants move with the conferences: `Conf.<n>` of the removed
+   * conference goes, every one above it steps down by one - the same shift
+   * the flag strings get, for the accounts whose access field names an area.
+   */
+  private shiftAccessAreas(conferenceId: number): void {
+    for (const area of listAccessAreas(this.bbsRoot)) {
+      const next = area.conferences
+        .filter(n => n !== conferenceId)
+        .map(n => (n > conferenceId ? n - 1 : n));
+      if (next.join() === area.conferences.join()) continue;
+      try {
+        writeAccessArea(this.bbsRoot, area.name, next);
+      } catch (error) {
+console.error(`[ConferenceRemoval] area ${area.name} not shifted:`, error);
+      }
     }
   }
 
@@ -298,7 +328,7 @@ console.warn('[ConferenceRemoval] users mirror not migrated: statement has no al
         const update = sqlite.prepare('UPDATE users SET confaccess = ? WHERE id = ?');
         for (const row of rows) {
           const current = row.confaccess ?? '';
-          if (current.length < conferenceId) continue;
+          if (current.length < conferenceId || isConfAccessAreaName(current)) continue;
           const next = removeAccessPosition(current, conferenceId, current.length);
           if (next !== current) update.run(next, row.id);
         }
