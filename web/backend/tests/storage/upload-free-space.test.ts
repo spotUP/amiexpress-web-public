@@ -192,7 +192,7 @@ describe('the free-space figure a caller is shown', () => {
     displayUploadInterface(h.socket, h.session, '');
 
     expect(h.written()).not.toContain('0.0 MB available for uploading.');
-    expect(h.written()).not.toContain('Not enough free space for uploading!');
+    expect(h.written()).not.toContain('Not enough free space on Device for uploading.');
     expect(h.session.subState).toBe(LoggedOnSubState.UPLOAD_FILENAME_INPUT);
   });
 
@@ -232,10 +232,13 @@ describe('the upload gate', () => {
 
     displayUploadInterface(h.socket, h.session, '');
 
-    expect(h.written()).toContain('Not enough free space for uploading!');
+    expect(h.written()).toContain('Not enough free space on Device for uploading.');
     expect(h.session.subState).toBe(LoggedOnSubState.DISPLAY_MENU);
-    // express.e:19012 still prints freeDiskSpace() - the sum across drives.
-    expect(h.written()).toContain('10.0 GB available for uploading.');
+    // express.e refuses at 18993-18996, before the UPLOADING header and the
+    // "available" line (19003-19014): a refused upload shows neither.
+    expect(h.written()).not.toContain('available for uploading.');
+    expect(h.written()).toContain('\r\nNot enough free space on Device for uploading.\r\n\r\n');
+    expect(h.written()).not.toContain('Press any key');
   });
 
   it('calls a degraded drive an outage, not a full disk', () => {
@@ -246,7 +249,7 @@ describe('the upload gate', () => {
     displayUploadInterface(h.socket, h.session, '');
 
     expect(h.written()).toContain('DRIVE.2 is unavailable - try again later');
-    expect(h.written()).not.toContain('Not enough free space for uploading!');
+    expect(h.written()).not.toContain('Not enough free space on Device for uploading.');
     expect(h.session.subState).toBe(LoggedOnSubState.DISPLAY_MENU);
     expect(h.session.tempData).toBeUndefined();
   });
@@ -267,7 +270,7 @@ describe('the upload gate', () => {
     displayUploadInterface(h.socket, h.session, '');
 
     expect(h.written()).toContain('DRIVE.2 is unavailable - try again later');
-    expect(h.written()).not.toContain('Not enough free space for uploading!');
+    expect(h.written()).not.toContain('Not enough free space on Device for uploading.');
     expect(h.session.subState).toBe(LoggedOnSubState.DISPLAY_MENU);
     expect(h.session.tempData).toBeUndefined();
   });
@@ -289,7 +292,7 @@ describe('the upload gate', () => {
     statfs.mockRestore();
     expect(probed).toContain(path.join(h.dataDir, 'Node1', 'Playpen'));
     expect(probed).not.toContain(h.areaDir);
-    expect(h.written()).not.toContain('Not enough free space for uploading!');
+    expect(h.written()).not.toContain('Not enough free space on Device for uploading.');
     expect(h.session.subState).toBe(LoggedOnSubState.UPLOAD_FILENAME_INPUT);
   });
 
@@ -301,7 +304,7 @@ describe('the upload gate', () => {
 
     displayUploadInterface(h.socket, h.session, '');
 
-    expect(h.written()).not.toContain('Not enough free space for uploading!');
+    expect(h.written()).not.toContain('Not enough free space on Device for uploading.');
     expect(h.written()).not.toContain('0.0 MB at one time.');
     expect(h.session.subState).toBe(LoggedOnSubState.UPLOAD_FILENAME_INPUT);
   });
@@ -312,7 +315,7 @@ describe('the upload gate', () => {
     displayUploadInterface(h.socket, h.session, '');
 
     // express.e:18996 myError(9)
-    expect(h.written()).toContain('Not enough free space for uploading!');
+    expect(h.written()).toContain('Not enough free space on Device for uploading.');
     expect(h.session.subState).toBe(LoggedOnSubState.DISPLAY_MENU);
     expect(h.session.tempData).toBeUndefined();
   });
@@ -322,7 +325,7 @@ describe('the upload gate', () => {
 
     displayUploadInterface(h.socket, h.session, '');
 
-    expect(h.written()).not.toContain('Not enough free space for uploading!');
+    expect(h.written()).not.toContain('Not enough free space on Device for uploading.');
     expect(h.session.subState).toBe(LoggedOnSubState.UPLOAD_FILENAME_INPUT);
   });
 });

@@ -100,7 +100,7 @@ describe('the upload floor', () => {
   test('refuses the upload when less than 2 MB is free, in express.e own words', async () => {
     const { session, emitted } = await drive(1024 * 1024);
 
-    expect(emitted.text.join('')).toContain('Not enough free space for uploading!');
+    expect(emitted.text.join('')).toContain('Not enough free space on Device for uploading.');
     // Refused means sent back, not left in a half-started transfer.
     expect(session.tempData).toBeUndefined();
     expect(session.menuPause).toBe(true);

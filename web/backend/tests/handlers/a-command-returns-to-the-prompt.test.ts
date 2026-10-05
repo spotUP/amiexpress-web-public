@@ -154,7 +154,9 @@ describe('N and FI end at the menu loop, not a "Press any key" of their own', ()
       checkConfAccess: () => true, displayNewFiles,
     });
     const wire = await run('N');
-    expect(wire).toContain('Searching for files newer than');
+    // N ran its directory loop (express.e:27914) - and printed no heading of its own.
+    expect(wire).toContain('Scanning directory 1');
+    expect(wire).not.toContain('Searching for files newer than');
     expect(wire).not.toContain('Press any key');
     expect(wire).toMatch(/Menu \(/);
   });

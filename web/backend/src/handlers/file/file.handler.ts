@@ -136,9 +136,8 @@ console.log('[displayNewFiles] Search date:', searchDate);
       : formatLongDate(searchDate);
     callersLogManager.logActivity(session.nodeId || 1, `\tDirectory Scan for (${scanDate})`);
 
-    // Always show header during confScan (express.e doesn't suppress this)
-    emitText(socket, '\r\n');
-    emitText(socket, `Searching for files newer than: ${formatLongDate(searchDate)}\r\n\r\n`);
+    // express.e:27880-27906 goes from the CallersLog line straight into the
+    // directory loop: no "newer than" heading.
 
     // THE DIR FILES ARE THE ANSWER, not the SQL mirror. This used to query
     // `file_entries`, which only a web upload ever writes - so a conference
@@ -180,7 +179,8 @@ export function displayUploadInterface(socket: any, session: BBSSession, params:
   const currentFileAreas = fileAreas.filter(area => area.conferenceId === uploadConf);
 
   if (currentFileAreas.length === 0) {
-    emitText(socket, '\r\nNo file directories available.\r\n');
+    // express.e:18975-18976 aePuts('\b\n'); myError(5) - ERR_NOFILES (8528-8530).
+    emitText(socket, '\r\nNo files available in this conference.\r\n\r\n');
     endUpload(session, 'failure', () => { session.subState = LoggedOnSubState.DISPLAY_MENU; });
     return;
   }
@@ -204,14 +204,6 @@ export function displayUploadInterface(socket: any, session: BBSSession, params:
   const localDrives = freeDiskSpace(config.get('dataDir'));
   for (const target of localDrives?.unresolved ?? []) {
     emitText(socket, `\r\nCan not find free space for ${target}\r\n`);
-  }
-
-  const protocolTitle = (session.user as any)?.protocol || '/X Zmodem';
-  const customUlPath = uploadArea.ulPath && uploadArea.ulPath !== process.cwd();
-  if (customUlPath) {
-    emitText(socket, `\r\n${protocolTitle} UPLOADING to ${uploadArea.ulPath}..${eraseRestOfLine(socket)}\r\n`);
-  } else {
-    emitText(socket, `\r\n${protocolTitle} UPLOADING....${eraseRestOfLine(socket)}\r\n`);
   }
 
   // express.e:19012-19014: formatSpaceValue(tFShi,tFSlo) and formatSpaceValue(fSUploadingHi,fSUploadingLo)
@@ -239,7 +231,6 @@ export function displayUploadInterface(socket: any, session: BBSSession, params:
   const pool = poolSpaceFor(uploadArea, getStorageContext());
   const spaceStr = formatSpaceBytes(pool ? pool.total : localDrives ? localDrives.bytes : playpenFreeBytes);
   const atOnceStr = formatSpaceBytes(playpenFreeBytes);
-  emitText(socket, `${spaceStr} available for uploading.  ${atOnceStr} at one time.${eraseRestOfLine(socket)}\r\n`);
 
   // express.e:18989-19001 — refuse to start if there isn't room for the
   // express.e minimum-playpen budget (2 MB). Without this check the upload
@@ -248,11 +239,12 @@ export function displayUploadInterface(socket: any, session: BBSSession, params:
   // express.e has a RAMWORK tooltype to override the floor with a ramdisk
   // path; web has no such concept (single filesystem), so we keep the
   // floor unconditional.
+  // myError (express.e:8551-8553): '\b\n', the text, '\b\n\b\n'; then the
+  // main loop's own pause.
   const refuse = (message: string): void => {
-    emitText(socket, `\r\n\x1b[31m${message}\x1b[0m\r\n`);
+    emitText(socket, `\r\n${message}\r\n\r\n`);
     session.tempData = undefined;
     endUpload(session, 'success', () => {
-      emitText(socket, '\r\n\x1b[32mPress any key to continue...\x1b[0m');
       session.menuPause = true;
       session.subState = LoggedOnSubState.DISPLAY_MENU;
     });
@@ -282,11 +274,21 @@ export function displayUploadInterface(socket: any, session: BBSSession, params:
   const MIN_PLAYPEN_BYTES = 2 * 1024 * 1024;
   const freeBytes = Math.min(playpenFreeBytes, pool ? pool.driveFree : Number.POSITIVE_INFINITY);
   if (freeBytes < MIN_PLAYPEN_BYTES) {
-    // express.e:18996 — 'Not enough free space for uploading!\b\n'
-    refuse('Not enough free space for uploading!');
+    // express.e:18993-18996 myError(9), ERR_FREESPACE (8537-8538) - before
+    // the UPLOADING header (19003), which a refused upload never shows.
+    refuse('Not enough free space on Device for uploading.');
     return;
   }
 
+  const protocolTitle = (session.user as any)?.protocol || '/X Zmodem';
+  const customUlPath = uploadArea.ulPath && uploadArea.ulPath !== process.cwd();
+  if (customUlPath) {
+    emitText(socket, `\r\n${protocolTitle} UPLOADING to ${uploadArea.ulPath}..${eraseRestOfLine(socket)}\r\n`);
+  } else {
+    emitText(socket, `\r\n${protocolTitle} UPLOADING....${eraseRestOfLine(socket)}\r\n`);
+  }
+
+  emitText(socket, `${spaceStr} available for uploading.  ${atOnceStr} at one time.${eraseRestOfLine(socket)}\r\n`);
   // express.e:19016
   emitText(socket, `Filename lengths above 12 are not allowed.${eraseRestOfLine(socket)}\r\n${eraseRestOfLine(socket)}\r\n`);
 
