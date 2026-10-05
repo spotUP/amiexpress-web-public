@@ -98,7 +98,7 @@ export function parseDirSpan(
         startDir: 0,
         endDir: 0,
         success: false,
-        error: `No such directory (1-${maxDirs})`
+        error: 'No such directory.'
       };
     }
 
@@ -149,3 +149,9 @@ export function isValidDirNum(dirNum: number, maxDirs: number, hasHoldAccess: bo
   if (dirNum >= 1 && dirNum <= maxDirs) return true;
   return false;
 }
+
+/**
+ * express.e getDirSpan's answer to a span that names no directory (26905):
+ * '\b\nNo such directory.\b\n\b\n', plain. F, Z and FM all print it.
+ */
+export const NO_SUCH_DIRECTORY = '\r\nNo such directory.\r\n\r\n';

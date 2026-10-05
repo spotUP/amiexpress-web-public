@@ -140,7 +140,7 @@ describe('parseDirSpan', () => {
         startDir: 0,
         endDir: 0,
         success: false,
-        error: 'No such directory (1-10)'
+        error: 'No such directory.' // express.e:26905
       });
     });
 
@@ -150,7 +150,7 @@ describe('parseDirSpan', () => {
         startDir: 0,
         endDir: 0,
         success: false,
-        error: 'No such directory (1-10)'
+        error: 'No such directory.' // express.e:26905
       });
     });
 
@@ -160,7 +160,7 @@ describe('parseDirSpan', () => {
         startDir: 0,
         endDir: 0,
         success: false,
-        error: 'No such directory (1-10)'
+        error: 'No such directory.' // express.e:26905
       });
     });
 

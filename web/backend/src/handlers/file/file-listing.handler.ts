@@ -14,7 +14,7 @@ type Session = any;
 import { LoggedOnSubState } from '../../constants/bbs-states';
 import { displayScreen } from '../screen.handler';
 import { readDirFile, getDirFilePath, getHoldDirFilePath, DirFileEntry } from '../../utils/dir-file-reader.util';
-import { parseDirSpan, getDirSpanPrompt, getDirDisplayName, DirSpan } from '../../utils/dir-span.util';
+import { NO_SUCH_DIRECTORY, parseDirSpan, getDirSpanPrompt, getDirDisplayName, DirSpan } from '../../utils/dir-span.util';
 import { FileFlagManager } from '../../utils/file-flag.util';
 import { ParamsUtil } from '../../utils/params.util';
 import { AnsiUtil } from '../../utils/ansi.util';
@@ -50,7 +50,8 @@ export class FileListingHandler {
     const maxDirs = await getMaxDirs(session.currentConf, bbsDataPath);
 console.log(`[FileList] handleFileList: currentConf=${session.currentConf} relConfNum=${session.relConfNum} maxDirs=${maxDirs} reverse=${reverse} params="${params}"`);
     if (maxDirs === 0) {
-      socket.emit('ansi-output', '\x1b[31mSorry, No file areas available.\x1b[0m\r\n');
+      // express.e:27637-27638 myError(ERR_NOFILES=5).
+      socket.emit('ansi-output', 'No files available in this conference.\r\n\r\n');
       session.subState = LoggedOnSubState.DISPLAY_MENU;
       return;
     }
@@ -82,12 +83,9 @@ console.log(`[FileList] handleFileList: currentConf=${session.currentConf} relCo
       return;
     }
 
-    // Check if directory parse was successful
+    // Check if directory parse was successful - express.e:26905.
     if (!dirSpan.success) {
-      if (dirSpan.error) {
-        socket.emit('ansi-output', `\x1b[31m${dirSpan.error}\x1b[0m\r\n`);
-      }
-      socket.emit('ansi-output', '\r\n');
+      socket.emit('ansi-output', NO_SUCH_DIRECTORY);
       session.subState = LoggedOnSubState.DISPLAY_MENU;
       return;
     }
@@ -120,11 +118,12 @@ console.log(`[FileList] handleFileList: currentConf=${session.currentConf} relCo
     const bbsDataPath = config.get('dataDir');
     const maxDirs = await getMaxDirs(session.currentConf, bbsDataPath);
 
-    // Add line break after directory input
+    // lineInput's line break (express.e:2378) after the span is typed.
     socket.emit('ansi-output', '\r\n');
 
-    // express.e:26871-26874 Enter = none: a blank line and back to the menu.
+    // express.e:26871-26874 Enter = none: aePuts('\b\n') and back to the menu.
     if (!input.trim()) {
+      socket.emit('ansi-output', '\r\n');
       session.subState = LoggedOnSubState.DISPLAY_MENU;
       return;
     }
@@ -133,10 +132,7 @@ console.log(`[FileList] handleFileList: currentConf=${session.currentConf} relCo
     const dirSpan = parseDirSpan(input, maxDirs, this.canAccessHold(session));
 
     if (!dirSpan.success) {
-      if (dirSpan.error) {
-        socket.emit('ansi-output', `\r\n\x1b[31m${dirSpan.error}\x1b[0m\r\n`);
-      }
-      socket.emit('ansi-output', '\r\n');
+      socket.emit('ansi-output', NO_SUCH_DIRECTORY); // express.e:26905
       session.subState = LoggedOnSubState.DISPLAY_MENU;
       return;
     }
@@ -181,8 +177,8 @@ console.log(`[FileList] handleFileList: currentConf=${session.currentConf} relCo
     }
     session.menuPause = false;
 
-    // express.e:27626-27636 displayFileList - just newline, no header
-    socket.emit('ansi-output', '\r\n');
+    // express.e:27636's line break was printed when F began (handleFileList);
+    // the listing goes straight to "Scanning directory n" (27662).
 
     // ONE LAYOUT SNAPSHOT FOR THE WHOLE PASS, taken before the header: the two
     // render paths cannot then be handed different layouts for the same

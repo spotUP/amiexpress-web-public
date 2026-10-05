@@ -283,8 +283,19 @@ describe('FileListingHandler.handleFileList — with file areas', () => {
     socket.emit.mockClear();
     await FileListingHandler.handleFileListDirInput(socket, session, '');
     const said = socket.emit.mock.calls.map((c: any[]) => String(c[1] ?? '')).join('');
-    expect(said).toBe('\r\n');
+    // lineInput's line break, then getDirSpan's aePuts('\b\n') (express.e:26873).
+    expect(said).toBe('\r\n\r\n');
     expect(session.subState).toBe(LoggedOnSubState.DISPLAY_MENU);
+  });
+
+  test('a span that names no directory is express.e\'s plain "No such directory."', async () => {
+    const socket = makeSocket();
+    const session = makeFileListSession();
+    await FileListingHandler.handleFileList(socket, session, '');
+    socket.emit.mockClear();
+    await FileListingHandler.handleFileListDirInput(socket, session, '99');
+    const said = socket.emit.mock.calls.map((c: any[]) => String(c[1] ?? '')).join('');
+    expect(said).toBe('\r\n\r\nNo such directory.\r\n\r\n'); // express.e:26905
   });
 
   test('emits at least one ansi-output event', async () => {
