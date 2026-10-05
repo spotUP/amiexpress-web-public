@@ -183,6 +183,33 @@ describe('AuthHandler', () => {
       expect(jsonCall).toHaveProperty('user');
       expect(jsonCall.user.username).toBe(user.username);
     });
+
+    it('a web login is not a call: the account keeps its call count', async () => {
+      // express.e counts a call at the board's logon only. The admin app's
+      // login added one to the database copy's count and wrote it to disk.
+      const pw = 'NotACall123';
+      const userId = await db.createUser({
+        username: `auth_not_a_call_${Date.now()}`,
+        passwordHash: await db.hashPassword(pw),
+        realname: 'Not A Call', location: '', phone: '', email: '',
+        secLevel: 255,
+        uploads: 0, downloads: 0, bytesUpload: 0, bytesDownload: 0,
+        ratio: 0, ratioType: 0, timeTotal: 3600, timeLimit: 3600, timeUsed: 0,
+        chatLimit: 60, chatUsed: 0, lastLogin: null, firstLogin: new Date(),
+        calls: 7, callsToday: 2, newUser: false, expert: 'N', ansi: true,
+        linesPerScreen: 24, computer: 'Amiga', screenType: 'Amiga Ansi',
+        protocol: 'Z', editor: 'L', zoomType: 'QWK', availableForChat: false,
+        quietNode: false, autoRejoin: 1, confAccess: '', areaName: '',
+        uuCP: false, topUploadCPS: 0, topDownloadCPS: 0, byteLimit: 0, baud: 0,
+      });
+      const before = await db.getUserById(userId);
+      const res = makeRes();
+      await handler.login(makeReq({ username: before.username, password: pw }), res);
+      expect(res.json.mock.calls[0][0]).toHaveProperty('accessToken');
+      const after = await db.getUserById(userId);
+      expect(after.calls).toBe(7);
+      expect(after.callsToday).toBe(2);
+    });
   });
 
   describe('me', () => {

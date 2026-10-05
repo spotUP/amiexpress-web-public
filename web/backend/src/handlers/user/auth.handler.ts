@@ -67,12 +67,9 @@ export class AuthHandler {
         return;
       }
 
-      // Update last login
-      await this.db.updateUser(user.id, {
-        lastLogin: getSystemTime(),
-        calls: user.calls + 1,
-        callsToday: user.callsToday + 1
-      });
+      // A web login is not a call. express.e counts one at the board's logon
+      // (login-post.service), and this wrote the database copy's count + 1
+      // over the account on disk.
 
       // Generate tokens — longer refresh lifetime when rememberMe is set
       const accessToken = await this.db.generateAccessToken(user);
