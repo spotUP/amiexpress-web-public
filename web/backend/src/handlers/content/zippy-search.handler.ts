@@ -169,9 +169,9 @@ console.log('[ENV] Files');
     const nonStop = session.tempData?.zippyNonStop || false;
     const maxDirs = session.tempData?.zippyMaxDirs || 1;
 
-    // express.e:26871-26873: IF(StrLen(str)=0) RETURN RESULT_FAILURE (user pressed Enter = cancel)
+    // express.e:26871-26873: lineInput's break, aePuts('\b\n'), RETURN RESULT_FAILURE.
     if (!input.trim()) {
-      socket.emit('ansi-output', '\r\n');
+      socket.emit('ansi-output', '\r\n\r\n');
       // stat=RESULT_FAILURE -> express.e:26168 RETURN RESULT_SUCCESS (exits command cleanly)
       session.subState = LoggedOnSubState.DISPLAY_MENU;
       return;
@@ -209,14 +209,14 @@ console.log('[ENV] Files');
 
     // Parse dirSpanParam into startDir/endDir using parseDirSpan util
     // Mirrors getDirSpan() logic - express.e:26880-26910
-    const { parseDirSpan } = require('../../utils/dir-span.util');
+    const { parseDirSpan, NO_SUCH_DIRECTORY } = require('../../utils/dir-span.util');
     const { checkSecurity: cs } = require('../../utils/acs.util');
     const { ACSPermission: ACSP } = require('../../constants/acs-permissions');
     const hasHoldAccess = cs(session.user, ACSP.HOLD_ACCESS);
 
     const span = parseDirSpan(dirSpanParam, maxDirs, hasHoldAccess);
     if (!span.success) {
-      socket.emit('ansi-output', `\r\nNo such directory.\r\n\r\n`);
+      socket.emit('ansi-output', NO_SUCH_DIRECTORY);
       session.subState = LoggedOnSubState.DISPLAY_MENU;
       return;
     }

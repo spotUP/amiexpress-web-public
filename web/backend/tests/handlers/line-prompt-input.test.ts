@@ -147,6 +147,8 @@ describe('typing Z lets me type a search string', () => {
     // Enter is what ends it, and the next prompt is the directory span.
     expect(session.subState).toBe(LoggedOnSubState.ZIPPY_DIR_SPAN_INPUT);
     expect(allOutput(socket)).toContain('Directories:');
+    // lineInput's line break, then 26154's aePuts('\b\n') (express.e).
+    expect(allOutput(socket)).toContain('CHASE\r\n\r\n');
   });
 
   it('echoes what I type, so I can see the word I am searching for', async () => {

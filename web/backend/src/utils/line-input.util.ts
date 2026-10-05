@@ -202,8 +202,8 @@ export async function collectLine(
  */
 export const LINE_PROMPT_SUBSTATES: ReadonlyMap<string, LineInputOptions> = new Map<string, LineInputOptions>([
   // express.e:26151 - lineInput('','',78,...) "Enter string to search for: ".
-  // echoNewline is off: handleSearchInput emits express.e:26154's own \b\n.
-  [LoggedOnSubState.ZIPPY_SEARCH_INPUT, { maxLen: 78 }],
+  // lineInput's break here; handleSearchInput prints 26154's own after it.
+  [LoggedOnSubState.ZIPPY_SEARCH_INPUT, { maxLen: 78, echoNewline: true }],
   // express.e:26869 - lineInput('','',8,...) inside getDirSpan(). Answers are
   // spans ("1-3"), not single keys, and handleDirSpanInput emits its own
   // newline on both the cancel and the search path.
