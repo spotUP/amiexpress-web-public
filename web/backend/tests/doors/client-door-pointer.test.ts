@@ -158,6 +158,14 @@ describe('the backend passes the claim on', () => {
   // express.e:4293-4296 and 4529-4530: an MCI door shows its MCI_TEXT (or,
   // with none, ~SS_ of its own file) and ends with ESC[0m - no invented
   // "MCI door has no text to display." and no "Press any key to continue...".
+  // express.e:4257-4262: a typed command runs with privcmd TRUE (28250),
+  // so a door whose file is missing returns without a word.
+  it('an ARexx door whose script is missing says nothing invented', async () => {
+    const gone = { id: 'gone', name: 'gone', description: '', command: 'GONE', path: path.join(root, 'Doors', 'gone', 'GONE.REXX'), accessLevel: 0, enabled: true, type: 'AREXX' } as unknown as Door;
+    const wire = (await run(gone)).filter((e) => e.event === 'ansi-output').map((e) => String(e.data)).join('');
+    expect(wire).not.toMatch(/not found|contact the sysop|Press any key/i);
+  });
+
   it('an MCI door ends as express.e runDoor does', async () => {
     const withText = { ...install('mcihi', {}, 'MCI'), mciText: 'hello' } as Door;
     const wire = (await run(withText)).filter((e) => e.event === 'ansi-output').map((e) => String(e.data)).join('');

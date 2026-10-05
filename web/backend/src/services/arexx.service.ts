@@ -2225,6 +2225,7 @@ console.error('BBSCREATEDROPFILE error:', error);
       }
       const realRoot = await fs.realpath(bbsRoot).catch(() => bbsRoot);
       if (!realPath.startsWith(realRoot)) {
+        // WEB_: the board-root sandbox is this port's; express.e has none.
         await this.BBSWRITE(`[ERROR] Access denied: ${filename}\r\n`);
         return;
       }
@@ -2245,7 +2246,9 @@ console.error('BBSCREATEDROPFILE error:', error);
 
     } catch (error) {
 console.error('[Showfile] Error:', error);
-      await this.BBSWRITE(`[ERROR] File not found: ${filename}\r\n`);
+      // JH_SF's displayFile (express.e:6773, 6847): a file that will not
+      // open shows nothing but the colour reset.
+      await this.BBSWRITE('\x1b[0m');
     }
   }
 

@@ -706,448 +706,6 @@ function resolveDoorExecutionUser(session: BBSSession): { user: User; isGuest: b
 }
 
 /**
- * Launch an Amiga door using AmigaDoorSession
- */
-async function launchAmigaDoor(socket: any, session: BBSSession, doorInfo: any) {
-  try {
-console.log(`[launchAmigaDoor] Starting door: ${doorInfo.command}`);
-console.log(`[launchAmigaDoor] Location: ${doorInfo.location}`);
-console.log(`[launchAmigaDoor] Resolved path: ${doorInfo.resolvedPath}`);
-
-    // Check if door executable exists (use amigafs for case-insensitive matching)
-    if (!amigafs.existsSync(doorInfo.resolvedPath)) {
-      emitText(socket, `\r\n\x1b[31mDoor executable not found: ${doorInfo.resolvedPath}\x1b[0m\r\n`);
-      emitPrompt(socket, '\r\n\x1b[32mPress any key to continue...\x1b[0m');
-      session.menuPause = false;
-      session.subState = LoggedOnSubState.DISPLAY_MENU;
-      return;
-    }
-
-    disableShortcuts(session);
-
-    // Log door launch
-    DebugLogger.door(socket.id, `Launching door: ${doorInfo.name || doorInfo.command}`, {
-      command: doorInfo.command,
-      name: doorInfo.name,
-      path: doorInfo.resolvedPath,
-      type: doorInfo.type || 'Amiga 68K',
-      stack: doorInfo.stack
-    });
-
-    const pickPositiveNumber = (...candidates: Array<number | undefined>): number | undefined => {
-      for (const candidate of candidates) {
-        if (typeof candidate === 'number' && Number.isFinite(candidate) && candidate > 0) {
-          return candidate;
-        }
-      }
-      return undefined;
-    };
-
-    const terminalHeight =
-      pickPositiveNumber(
-        session.wireHeight,
-        session.screenHeight,
-        session.user?.linesPerScreen,
-        session.user?.pageLength
-      ) ?? 24;
-
-    const terminalWidth =
-      pickPositiveNumber(
-        session.wireWidth,
-        session.screenWidth,
-        session.user?.lineLength
-      ) ?? 80;
-
-    // Create AmigaDoorSession - interactive doors need guard disabled
-    // Read confAccess and user stats from disk files for 68K door compatibility
-    // 68K doors expect disk-based data, not SQLite database
-    let confAccess = '';
-    let userSlotNumber = -1; // 1-based slot number for AmiExpress doors
-    let diskUserStats: ReturnType<typeof userDatabaseManager.readUserStatsFromDisk> = null;
-    const username = session.user?.username;
-    if (username) {
-      // Prefer the DB-stored slot number (authoritative) over name search.
-      // findUserSlotByName returns the FIRST match, which can be wrong when
-      // user.data has duplicate entries (e.g. sysop appears at indices 1-7
-      // from prior appends).
-      const dbSlot = Number((session.user as any)?.slotnumber ?? (session.user as any)?.slotNumber ?? 0);
-      // 1-indexed Amiga slot throughout: the DB slotNumber, findUserSlotByName
-      // and the disk readers all speak slots now (slot 0 = deleted account).
-      let slotNumber = dbSlot > 0 ? dbSlot : userDatabaseManager.findUserSlotByName(username);
-
-      // Prefer the SQLite-loaded confAccess string over the binary
-      // user.data probe. Rationale (added 2026-05-20 after live JoinCnf
-      // showed only 4 confs to sysop while local showed 14):
-      //
-      //   readConfAccessFromDisk reads the user's BINARY confaccess
-      //   (10 bytes, indexed by SLOT) and pads positions 11..25 with
-      //   'X' unconditionally. The padding is a workaround for the
-      //   binary's 10-conf ceiling — but it FAILS when SQLite
-      //   slotNumber doesn't match the binary record position (which
-      //   can happen after a regen, an import, or a duplicate-name
-      //   append). The door then reads the wrong slot's 10-byte
-      //   pattern, sees zeros for confs 1..10, and the padding
-      //   silently grants confs 11..N — visible as "only confs 11-N
-      //   are accessible" in JoinCnf.
-      //
-      //   The SQLite confAccess is authoritative (the startup
-      //   migration at initialization.ts:660-685 keeps it expanded to
-      //   conferences.length). When present, use it. Fall back to the
-      //   binary probe only if SQLite has no string at all.
-      const sqlConfAccess: string =
-        (session.user?.confAccess as any) ||
-        (session.user?.conferenceAccess as any) ||
-        '';
-
-      // Same SQLite-first preference for stats as for confAccess
-      // above. Stats are eventually consistent (doors write back to
-      // binary during their run), but the INITIAL read can show wrong
-      // values to a door that renders stats on entry (e.g. mtop,
-      // displayULStats, AquaWho) when SQLite slot ≠ binary slot.
-      // Synthesize a stats record from session.user so the door sees
-      // the same numbers the BBS would.
-      const sqlUserStats = session.user ? {
-        messagesPosted: (session.user as any).messagesPosted ?? 0,
-        uploads: (session.user as any).uploads ?? 0,
-        downloads: (session.user as any).downloads ?? 0,
-        timesCalled: (session.user as any).timesCalled ?? (session.user as any).calls ?? 0,
-        timeUsed: (session.user as any).timeUsed ?? 0,
-        timeLimit: (session.user as any).timeLimit ?? 0,
-        timeTotal: (session.user as any).timeTotal ?? 0,
-        bytesDownload: (session.user as any).bytesDownload ?? 0,
-        bytesUpload: (session.user as any).bytesUpload ?? 0,
-        // The record's own value - express.e's getSystemTime() form, which
-        // is what DT_TIMELASTON hands a door (date-time.util.ts).
-        timeLastOn: (session.user as any).lastLogin
-          ? encodeAmigaDate(new Date((session.user as any).lastLogin))
-          : 0,
-      } : null;
-
-      if (slotNumber > 0) {
-        diskUserStats = sqlUserStats || userDatabaseManager.readUserStatsFromDisk(slotNumber);
-        userSlotNumber = slotNumber;
-        confAccess =
-          (sqlConfAccess && sqlConfAccess.length > 0)
-            ? sqlConfAccess
-            : userDatabaseManager.readConfAccessFromDisk(slotNumber);
-      } else {
-        // No matching binary slot at all — use SQLite as the only source.
-        confAccess = sqlConfAccess;
-        diskUserStats = sqlUserStats;
-      }
-    }
-console.log(`[launchAmigaDoor] Using confAccess = "${confAccess}" (len=${confAccess.length})`);
-
-    // Load BBS config from disk (bbsConfig.info) instead of hardcoding
-    const bbsRoot = config.get('dataDir');
-    const bbsConfig = loadBBSConfig(bbsRoot);
-    const bbsName = bbsConfig.bbs_name || 'AmiExpress-Web BBS';
-    const sysopName = bbsConfig.sysop_name || 'Sysop';
-console.log(`[launchAmigaDoor] Loaded from bbsConfig.info: bbsName="${bbsName}" sysopName="${sysopName}"`);
-
-    // Handle door-specific pagination (PAGINATION tooltype)
-    // 0 or undefined = door handles its own pagination (default, autoPauseEnabled=false)
-    // >0 = auto-pause after N lines (autoPauseEnabled=true, pauseLines=N)
-    // -1 = use user's screen height (autoPauseEnabled=true, pauseLines=terminalHeight)
-    let autoPauseEnabled = false;
-    let effectivePauseLines = terminalHeight;
-    if (doorInfo.pagination !== undefined && doorInfo.pagination !== 0) {
-      autoPauseEnabled = true;
-      if (doorInfo.pagination === -1) {
-        effectivePauseLines = terminalHeight;
-      } else if (doorInfo.pagination > 0) {
-        effectivePauseLines = doorInfo.pagination;
-      }
-console.log(`[launchAmigaDoor] PAGINATION=${doorInfo.pagination}: autoPause=${autoPauseEnabled}, pauseLines=${effectivePauseLines}`);
-    }
-
-    const amigaSession = new AmigaDoorSession(socket, {
-      executablePath: doorInfo.resolvedPath,
-      timeout: 600,
-      doorId: doorInfo.command || doorInfo.id,
-      stack: doorInfo.stack,
-      toolTypes: { LOOP_LIMIT: '10000000' },  // 10M iterations for interactive doors
-      bbsSession: {
-        user: session.user,
-        nodeNumber: session.nodeId || 0,
-        nonStopText: false,
-        bbsName: bbsName,
-        sysopName: sysopName,
-        timeRemaining: 60,
-        doorCommand: doorInfo.command,
-        doorName: doorInfo.name,
-        dataDir: bbsRoot,
-        doorId: doorInfo.command || doorInfo.id,
-        pauseLines: effectivePauseLines,
-        autoPauseEnabled: autoPauseEnabled,
-        // PETSCII and teletext callers wrap at their own width (40) whatever
-        // wireWidth still says from before the P/T answer; everyone
-        // else keeps terminalWidth. ONE helper, because a mode copied into
-        // this literal by hand is a mode that gets left out: texttvMode was,
-        // and the door then read 80 from BB_SCRWIDTH while lineWrap said 40.
-        ...doorSessionGeometry(session, terminalWidth),
-        lineCount: 0,
-        confAccess: confAccess,
-        userSlotNumber: userSlotNumber,
-        diskUserStats: diskUserStats,
-        // Pass currentConference for doors like AquaScan that scan the current conference
-        currentConference: (session as any).currentConference || 1,
-        conferenceId: (session as any).currentConference || session.conferenceId || 1
-      }
-    } as any);
-console.log(`[launchAmigaDoor] bbsSession.currentConference=${(session as any).currentConference || 1}`);
-
-    // Clear screen before launching 68K door.
-    // Amiga doors (RTW, dRE!WAll, etc.) assume a clean 25-row display starting
-    // at row 0. Without this, the cursor inherits the BBS menu position and
-    // scroll drift causes redraw misalignment (e.g., RTW node 01 shifting down
-    // every refresh cycle). Matches real AmiExpress behavior where the door
-    // gets a fresh terminal canvas.
-    // ESC[r resets scroll region, ESC[2J clears, ESC[H homes cursor.
-    emitText(socket, '\x1b[r\x1b[2J\x1b[H');
-
-    // Wire user input into the Amiga door while it runs
-    session.inDoorManager = true;
-    session.subState = LoggedOnSubState.DOOR_RUNNING;
-    socket.emit('door-active', true);
-
-    // DO NOT enable game mode for 68K doors - they use normal character input via door:input
-    // Game mode blocks terminal input and breaks traditional XIM doors like Bulls
-    // Only TypeScript doors that explicitly call bbs.enableGameMode() should use game mode
-    // const doorType = doorInfo.type || 'XIM';
-    // enableGameMode(socket, session, doorType);
-
-    session.doorInputHandler = (data: string) => {
-      try {
-        const shared: any = (amigaSession as any).sharedState || {};
-console.log(`[doorInputHandler] Received input: "${data}" hasXIM=${!!shared.ximProtocol} hasFIM=${!!shared.fimProtocol}`);
-        logDoorDebug(`KEY door=${doorInfo.command || doorInfo.id || 'UNK'} data=${JSON.stringify(data)}`);
-        routeAmigaDoorInput(shared, data);
-      } catch (err) {
-console.error('[launchAmigaDoor] Error routing door input:', err);
-        SysopDebugUtil.debugDoorError(
-          socket,
-          session,
-          doorInfo.command || doorInfo.id || 'Unknown',
-          'Error routing door input',
-          { error: (err as Error).message },
-          DebugSeverity.WARNING
-        );
-      }
-    };
-    // Persist session state so socket-handlers sees the door flags/handler
-    try {
-      const { setSession, userSessions } = require('../server/session-manager');
-      setSession(socket.id, session);
-      if ((session as any).user?.id) {
-        userSessions.set(String((session as any).user.id), session);
-      }
-    } catch (err) {
-console.error('[launchAmigaDoor] Unable to persist session for door input:', err);
-      SysopDebugUtil.debugDoorError(
-        socket,
-        session,
-        doorInfo.command || doorInfo.id || 'Unknown',
-        'Unable to persist session for door input',
-        { error: (err as Error).message },
-        DebugSeverity.WARNING
-      );
-    }
-
-    await amigaSession.start();
-
-    // Log door exit
-    DebugLogger.doorSuccess(socket.id, `Door exited: ${doorInfo.name || doorInfo.command}`);
-
-    // Disable game mode when door exits
-    disableGameMode(socket, session);
-
-    session.inDoorManager = false;
-    session.mouseEventsEnabled = false; // Reset mouse events when door exits
-    socket.emit('door-active', false);
-    delete session.doorInputHandler;
-    session.subState = LoggedOnSubState.DISPLAY_MENU;
-    try {
-      const { setSession, userSessions } = require('../server/session-manager');
-      setSession(socket.id, session);
-      if ((session as any).user?.id) {
-        userSessions.set(String((session as any).user.id), session);
-      }
-    } catch (_) {
-      /* ignore */
-    }
-
-console.log(`[launchAmigaDoor] Door session completed: ${doorInfo.command}`);
-
-    // Capture any return/chain/PRV/ACP requests from the door
-    if (typeof (amigaSession as any).getExitState === 'function') {
-      const exitState = (amigaSession as any).getExitState();
-      const ximState = exitState?.ximState || {};
-      if (ximState.returnCommand) {
-        (session as any).returnCommand = ximState.returnCommand;
-console.log(`[launchAmigaDoor] RETURNCOMMAND requested: ${ximState.returnCommand}`);
-      }
-      if (ximState.chainCommand) {
-        (session as any).chainCommand = ximState.chainCommand;
-console.log(`[launchAmigaDoor] CHAIN requested: ${ximState.chainCommand}`);
-      }
-      if (ximState.prvCommand) {
-        (session as any).prvCommand = ximState.prvCommand;
-console.log(`[launchAmigaDoor] PRV_COMMAND requested: ${ximState.prvCommand}`);
-      }
-      if ((exitState as any).bbsSession?.acpCommand) {
-        (session as any).acpCommand = (exitState as any).bbsSession.acpCommand;
-console.log(
-          `[launchAmigaDoor] ACP_COMMAND requested: ${
-            (exitState as any).bbsSession.acpCommand.command || ''
-          } (code=${(exitState as any).bbsSession.acpCommand.code}, target=${(exitState as any).bbsSession.acpCommand.targetNode})`
-        );
-      }
-
-      // Copy flagged files from door bbsSession back to main session.
-      // Doors flag via JH_FLAGFILE which stores in bbsSession.flaggedFiles.
-      // CAVEAT: in the XIM emulator the door's bbsSession proxy IS the
-      // main session (same object reference), so JH_FLAGFILE already
-      // wrote into session.flaggedFiles. A naive push here would
-      // double-flag everything (task #14: "F (flag) double-flags files"
-      // + download silently sends each file twice via the dedupe-by-path
-      // safety net in startZmodemDownload). Dedupe by filename+confNum
-      // before pushing.
-      if (Array.isArray((exitState as any).bbsSession?.flaggedFiles) && (exitState as any).bbsSession.flaggedFiles.length > 0) {
-        if (!Array.isArray((session as any).flaggedFiles)) {
-          (session as any).flaggedFiles = [];
-        }
-        const existing = (session as any).flaggedFiles as Array<{ filename?: string; fileName?: string; confNum?: number; conferenceId?: number }>;
-        const seen = new Set(existing.map((f) => {
-          const name = (f.filename || f.fileName || '').toString().toLowerCase();
-          const conf = (f.confNum ?? f.conferenceId ?? 0);
-          return `${conf}:${name}`;
-        }));
-        let added = 0;
-        for (const f of (exitState as any).bbsSession.flaggedFiles as Array<any>) {
-          const name = (f.filename || f.fileName || '').toString().toLowerCase();
-          const conf = (f.confNum ?? f.conferenceId ?? 0);
-          const key = `${conf}:${name}`;
-          if (seen.has(key)) continue;
-          seen.add(key);
-          existing.push(f);
-          added++;
-        }
-        if (added > 0) {
-          console.log(`[launchAmigaDoor] Merged ${added} new flagged file(s) from door (skipped ${(exitState as any).bbsSession.flaggedFiles.length - added} dupes)`);
-        }
-      }
-
-      // Execute requested commands immediately in priority order: CHAIN -> RETURN -> PRV -> ACP
-      try {
-        // CRITICAL: Use processCommand directly, NOT handleCommand!
-        // handleCommand is for character-by-character input with line buffering.
-        // processCommand executes a full command string immediately.
-        // Door RETURNCOMMAND is a system-initiated call (like express.e processSysCommand),
-        // so allowSyscmd=true — express.e:28249.
-        const { processCommand, runSysCommand, processBBSCommand } = require('./command.handler');
-        const invokingCommand = (doorInfo.command || '').toUpperCase();
-        const runCommand = async (cmd?: string, isReturn: boolean = false) => {
-          if (cmd && cmd.trim().length > 0) {
-            const trimmed = cmd.trim();
-            const parts = trimmed.toUpperCase().split(/\s+/);
-            const command = parts[0];
-            const params = parts.slice(1).join(' ');
-            // Recursion guard: when a door's RETURNCOMMAND matches the command
-            // that launched it (5D-LogOff bound to G sends RETURNCOMMAND="G"
-            // expecting built-in logoff to run after), BBSCmd lookup would
-            // re-launch the same door → infinite loop. Skip BBSCmd, route
-            // SysCmd → built-in only.
-            if (isReturn && command === invokingCommand && invokingCommand.length > 0) {
-              console.log(`[door.handler] RETURNCOMMAND "${command}" matches invoking command — bypassing BBSCmd to avoid door self-recursion`);
-              const sysResult = await runSysCommand(socket, session, command, params);
-              if (sysResult === 'SUCCESS' || sysResult === 'NOT_ALLOWED') return;
-              await processBBSCommand(socket, session, command, params);
-              return;
-            }
-            console.log(`[door.handler] Executing RETURNCOMMAND via processCommand: ${command} ${params}`);
-            await processCommand(socket, session, command, params, true);
-          }
-        };
-
-        if ((session as any).chainCommand) {
-          const cmd = (session as any).chainCommand;
-          (session as any).chainCommand = undefined;
-          (session as any).returnCommand = undefined;
-          (session as any).prvCommand = undefined;
-          (session as any).acpCommand = undefined;
-          await runCommand(cmd);
-        } else {
-          if ((session as any).returnCommand) {
-            const cmd = (session as any).returnCommand;
-            (session as any).returnCommand = undefined;
-            await runCommand(cmd, true);
-          }
-          if ((session as any).prvCommand) {
-            const cmd = (session as any).prvCommand;
-            (session as any).prvCommand = undefined;
-            await runCommand(cmd);
-          }
-          const acp = (session as any).acpCommand;
-          if (acp && acp.command) {
-            (session as any).acpCommand = undefined;
-            await runCommand(acp.command);
-            applyAcpSideEffect(session, acp);
-          }
-        }
-      } catch (err) {
-console.warn('[launchAmigaDoor] Failed to auto-run pending door commands:', err);
-      }
-    }
-
-    // Return to menu — UNLESS:
-    //  (a) RETURNCOMMAND parked the session in a transfer state
-    //      (FILES_UPLOAD / FILES_DOWNLOAD / UPLOAD_RESUME_*). Overwriting
-    //      those with DISPLAY_MENU triggered the menu prompt to render
-    //      mid-ZMODEM-transfer, corrupting the wire and aborting lrzsz.
-    //  (b) RETURNCOMMAND chained directly into another door — the
-    //      runCommand(cmd) above set inDoorManager=true again as the
-    //      next door took over. Falling through to DISPLAY_MENU here
-    //      would render "AmiExpress Web BBS [N:conf] Menu (M mins. left):"
-    //      between two chained doors (e.g. login-flow doors like
-    //      dRE!WAll declining → next door in the chain). express.e's
-    //      main loop doesn't render the menu prompt between auto-run
-    //      commands — only when the loop genuinely returns to idle.
-    const nextDoorActive =
-      !!(session as any).inDoorManager ||
-      session.subState === LoggedOnSubState.DOOR_RUNNING;
-    if (
-      !nextDoorActive &&
-      session.subState !== LoggedOnSubState.FILES_UPLOAD &&
-      session.subState !== LoggedOnSubState.FILES_DOWNLOAD &&
-      session.subState !== LoggedOnSubState.UPLOAD_RESUME_PROMPT &&
-      session.subState !== LoggedOnSubState.UPLOAD_RESUME_DELETE &&
-      session.subState !== LoggedOnSubState.UPLOAD_RENAME_PROMPT &&
-      session.subState !== LoggedOnSubState.DOWNLOAD_FILENAME_INPUT &&
-      session.subState !== LoggedOnSubState.DOWNLOAD_CONFIRM_INPUT
-    ) {
-      session.subState = LoggedOnSubState.DISPLAY_MENU;
-      session.menuPause = false;
-    }
-
-  } catch (error) {
-console.error(`[launchAmigaDoor] Error executing door:`, error);
-    SysopDebugUtil.debugDoorError(
-      socket,
-      session,
-      doorInfo.command || doorInfo.id || 'Unknown',
-      'Error executing 68K Amiga door',
-      { doorPath: doorInfo.location, error: (error as Error).message, stack: (error as Error).stack },
-      DebugSeverity.CRITICAL
-    );
-    emitText(socket, `\r\n\x1b[31mError executing door: ${(error as Error).message}\x1b[0m\r\n`);
-    emitPrompt(socket, '\r\n\x1b[32mPress any key to continue...\x1b[0m');
-    session.menuPause = false;
-    session.subState = LoggedOnSubState.DISPLAY_MENU;
-  }
-}
-
-/**
  * Display door games menu (DOORS command) - doorman-style UI with arrow keys
  */
 /**
@@ -3142,8 +2700,8 @@ console.error('[executeAmigaDoor] TS-redirect failed:', e);
         }
 console.error(`[executeAmigaDoor] Door executable not found: ${doorPath}`);
 console.error(`[executeAmigaDoor] Tried alternate paths:`, alternatePaths);
-        emitText(socket, '\r\n\x1b[31mDoor executable not found.\x1b[0m\r\n');
-        emitPrompt(socket, '\r\n\x1b[32mPress any key to continue...\x1b[0m');
+        // express.e:4257-4262: a typed command runs with privcmd TRUE
+        // (28250, 28253), and a missing file then returns without a word.
         return;
       }
     }
@@ -3751,7 +3309,7 @@ console.warn('[executeAmigaDoor] sysop page-wait flow failed:', err);
 
   } catch (error) {
 console.error(`[executeAmigaDoor] Error executing Amiga door:`, error);
-    emitText(socket, `\r\n\x1b[31mError executing door: ${(error as Error).message}\x1b[0m\r\n`);
+    // runDoor reports nothing when a door fails (express.e:4336-4343); logged above.
     session.inDoorManager = false;
     session.mouseEventsEnabled = false; // Reset mouse events when door exits
     socket.emit('door-active', false);
@@ -3964,6 +3522,7 @@ console.log(` [DOOR] Executing native door: ${door.name} (${door.path})`);
   const doorPath = path.isAbsolute(door.path) ? door.path : path.join(process.cwd(), door.path);
 
   if (!amigafs.existsSync(doorPath)) {
+    // WEB_: a port-only door runtime; express.e has no such door type.
     emitText(socket, `\r\n\x1b[31mError: Door file not found: ${door.path}\x1b[0m\r\n`);
     emitText(socket, '\x1b[33mPlease contact the sysop.\x1b[0m\r\n\r\n');
     doorSession.status = 'error';
@@ -4081,6 +3640,7 @@ console.log(` [DOOR] Executing script door: ${door.name} (${door.path})`);
   const doorPath = path.isAbsolute(door.path) ? door.path : path.join(process.cwd(), door.path);
 
   if (!amigafs.existsSync(doorPath)) {
+    // WEB_: a port-only door runtime; express.e has no such door type.
     emitText(socket, `\r\n\x1b[31mError: Script not found: ${door.path}\x1b[0m\r\n`);
     emitText(socket, '\x1b[33mPlease contact the sysop.\x1b[0m\r\n\r\n');
     doorSession.status = 'error';
@@ -4191,6 +3751,7 @@ console.log(`[executePythonDoor] Door path: ${door.path}`);
   const doorPath = path.isAbsolute(door.path) ? door.path : path.join(process.cwd(), door.path);
 
   if (!amigafs.existsSync(doorPath)) {
+    // WEB_: a port-only door runtime; express.e has no such door type.
     emitText(socket, `\r\n\x1b[31mError: Python script not found: ${door.path}\x1b[0m\r\n`);
     emitText(socket, '\x1b[33mPlease contact the sysop.\x1b[0m\r\n\r\n');
     doorSession.status = 'error';
@@ -4359,8 +3920,7 @@ console.log(`[executeARexxDoor] Door path: ${door.path}`);
   }
 
   if (!amigafs.existsSync(doorPath)) {
-    emitText(socket, `\r\n\x1b[31mError: ARexx script not found: ${door.path}\x1b[0m\r\n`);
-    emitText(socket, '\x1b[33mPlease contact the sysop.\x1b[0m\r\n\r\n');
+    // express.e:4257-4262, as for any door file a typed command cannot find.
     doorSession.status = 'error';
     return;
   }
@@ -4513,7 +4073,6 @@ console.log(`[executeARexxDoor] Door path: ${door.path}`);
       // identically (latin1 is a superset).
       scriptText = fs.readFileSync(doorPath, 'latin1');
     } catch (err) {
-      emitText(socket, `\r\n\x1b[31mError reading ARexx script: ${door.path}\x1b[0m\r\n`);
       doorSession.status = 'error';
       throw err;
     }
@@ -4542,7 +4101,7 @@ console.log(`[executeARexxDoor] Executing script: ${doorPath} (${scriptText.leng
 
   } catch (error: any) {
 console.error(`[ARexx Door ${door.id}] Execution error:`, error);
-    emitText(socket, `\r\n\x1b[31mError executing ARexx script: ${error.message}\x1b[0m\r\n`);
+    // runDoor reports nothing (express.e:4340-4343).
     doorSession.status = 'error';
   }
 
