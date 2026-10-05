@@ -257,6 +257,9 @@ describe('TP-9a - the server drives the login prompt for every transport', () =>
       await type(socket, session, 'wrong1\r');
       expect(session.tempData.loginPhase).toBe('password');
       expect(session.tempData.loginUsername).toBe('sysop');
+      // getPass2's two breaks (express.e:1599, 1603), then 29207's line, then
+      // the prompt - "Invalid PassWord" on a line of its own, below the ****.
+      expect(wire(socket)).toMatch(/\*+\r\n\r\nInvalid PassWord\r\nPassword: $/);
       await type(socket, session, 'wrong2\r');
       expect(session.tempData.loginPhase).toBe('password');
       expect(wire(socket)).not.toContain('Excessive Password Failure');

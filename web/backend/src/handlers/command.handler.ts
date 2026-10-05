@@ -1911,6 +1911,10 @@ function endPasswordMask(socket: any, session: BBSSession): void {
               ? `\tPassword Failure (${password})`
               : '\tPassword Failure (xxxx)';
             clm.logActivity(session.nodeId || 1, failureText);
+            // express.e: getPass2 ends a wrong attempt with two line breaks
+            // (1599, 1603), then 29207 prints the line. The port printed
+            // "Invalid PassWord" on the masked line and the breaks after it.
+            emitText(socket, '\r\n\r\nInvalid PassWord\r\n');
             session.loginRetryCount = (session.loginRetryCount || 0) + 1;
 
             // express.e:1008-1016 counts the failure on the ACCOUNT and locks
@@ -1977,10 +1981,12 @@ function endPasswordMask(socket: any, session: BBSSession): void {
 
             // express.e:29206-29211 - "Invalid PassWord" and the PASSWORD is
             // asked again, for the same name. It used to go back to Username:.
-            emitPrompt(socket, `Invalid PassWord\r\n\r\n${loginPasswordPrompt(session.nodeId ?? 0)}`);
+            emitPrompt(socket, loginPasswordPrompt(session.nodeId ?? 0));
             return;
           }
 
+          // express.e:1588 - getPass2 ends a correct password with a line break.
+          emitText(socket, '\r\n');
           const user = result.user;
           const db = getDatabase(); // For remaining database calls
 
