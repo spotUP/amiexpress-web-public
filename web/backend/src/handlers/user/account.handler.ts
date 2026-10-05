@@ -6,6 +6,7 @@
 
 import { BBSSession, LoggedOnSubState, BBSState } from '../../index';
 import { isNarrow, narrowClip, narrowRule } from '../../utils/table-format.util';
+import { getTodaysCalls } from '../../utils/time-tracking.util';
 
 // Dependencies (injected)
 let db: any;
@@ -215,7 +216,7 @@ export function displayAccountPage0(socket: any, user: any, slot: number) {
 
   // Line 7: K) Uploads, L) Messages Posted, %) Calls Today
   socket.emit('ansi-output', `\x1b[33mK>\x1b[32m Uploads.......:\x1b[36m${String(user.uploads || 0).padStart(5)}\x1b[33mL>\x1b[32m Msgs Posted:\x1b[36m${String(user.messagesPosted || 0).padStart(5)}`);
-  socket.emit('ansi-output', `  \x1b[33m%>\x1b[32m Calls Today:\x1b[36m${String(user.callsToday || 0).padStart(3)}\x1b[0m\r\n`);
+  socket.emit('ansi-output', `  \x1b[33m%>\x1b[32m Calls Today:\x1b[36m${String(getTodaysCalls(user)).padStart(3)}\x1b[0m\r\n`);
 
   // Line 8: M) Downloads, N) New User
   const newUser = user.newUser ? 'Yes' : 'No';
@@ -343,7 +344,7 @@ export function handleViewUserStats(socket: any, session: BBSSession, username: 
 
     socket.emit('ansi-output', `\x1b[32mActivity Statistics:\x1b[0m\r\n`);
     socket.emit('ansi-output', `Total Calls: ${user.calls}\r\n`);
-    socket.emit('ansi-output', `Calls Today: ${user.callsToday}\r\n`);
+    socket.emit('ansi-output', `Calls Today: ${getTodaysCalls(user)}\r\n`);
     socket.emit('ansi-output', `Time Total: ${user.timeTotal} minutes\r\n`);
     socket.emit('ansi-output', `Time Used: ${user.timeUsed} minutes\r\n`);
     // timeLimit is stored in SECONDS; this line printed the raw value and

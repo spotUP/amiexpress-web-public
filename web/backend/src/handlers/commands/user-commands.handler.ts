@@ -34,6 +34,7 @@ import { loadMsgPointers, saveMsgPointers, saveConferenceAccount } from '../../u
 import { endRawTransfer } from '../../utils/raw-transfer-teardown.util';
 import { emitText } from '../../utils/output.util';
 import { endUpload, awaitUploadEnd, type UploadStat } from '../../services/upload-end.service';
+import { getTodaysCalls } from '../../utils/time-tracking.util';
 
 interface Conference {
   id: number;
@@ -874,7 +875,9 @@ console.log('[ENV] User Statistics');
   socket.emit('ansi-output', `\x1b[32m# Times On \x1b[33m:\x1b[0m ${timesCalled}\r\n`);
 
   // Times Today (express.e:25567)
-  const timesToday = user.timesToday || 0;
+  // getTodaysCalls: 0 once the last call was on another day. `timesToday`
+  // was a field nothing sets, so this always printed 0.
+  const timesToday = getTodaysCalls(user);
   socket.emit('ansi-output', `\x1b[32mTimes Today\x1b[33m:\x1b[0m ${timesToday}\r\n`);
 
   // Messages Posted (express.e:25569) — messagesPosted AND $FFFF
