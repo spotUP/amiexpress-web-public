@@ -190,6 +190,11 @@ console.error('[Download] re-fetch before transfer failed:', error);
 
   // The browser's DOM download trigger, one event per file. `batchIndex` and
   // `batchTotal` are what the frontend shows as progress through a batch.
+  // The board times each file as its route streams it (download-ticket.ts):
+  // that, not the hand-off, is the transfer's cps.
+  const onServed = (bytes: number, ms: number) => {
+    require('../../services/post-download.service').bookDownloadCps(session, bytes, ms);
+  };
   files.forEach((file, index) => {
     const name = fileNameOf(file);
     const confNum = file.confNum ?? file.areaId ?? (session as any)?.currentConf ?? 1;
@@ -199,8 +204,8 @@ console.error('[Download] re-fetch before transfer failed:', error);
       filename: name,
       size: file.size,
       url: file.outsideFileAreas && hostPath
-        ? issueDownloadTicket(hostPath)
-        : issueAreaDownloadTicket(confNum, dirNum, name),
+        ? issueDownloadTicket(hostPath, onServed)
+        : issueAreaDownloadTicket(confNum, dirNum, name, onServed),
       path: filePathOf(file),
       batchIndex: index,
       batchTotal: files.length,

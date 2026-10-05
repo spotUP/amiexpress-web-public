@@ -17,9 +17,13 @@ import { randomBytes } from 'crypto';
 /** How long a ticket waits for the browser to fetch it. */
 const TICKET_LIFETIME_MS = 10 * 60 * 1000;
 
+/** Told how long the board took to stream the file: bytes sent, milliseconds. */
+export type OnServed = (bytes: number, ms: number) => void;
+
 interface Ticket {
   path: string;
   expires: number;
+  onServed?: OnServed;
 }
 
 const tickets = new Map<string, Ticket>();
@@ -31,22 +35,22 @@ function sweep(now: number): void {
 }
 
 /** The URL the browser fetches `hostPath` from - once. */
-export function issueDownloadTicket(hostPath: string): string {
+export function issueDownloadTicket(hostPath: string, onServed?: OnServed): string {
   const now = Date.now();
   sweep(now);
   const token = randomBytes(24).toString('hex');
-  tickets.set(token, { path: hostPath, expires: now + TICKET_LIFETIME_MS });
+  tickets.set(token, { path: hostPath, expires: now + TICKET_LIFETIME_MS, onServed });
   return `/api/download/ticket/${token}`;
 }
 
 /** The path a ticket was issued for, and the ticket is spent; null when there is none. */
-export function redeemDownloadTicket(token: string): string | null {
+export function redeemDownloadTicket(token: string): { path: string; onServed?: OnServed } | null {
   const now = Date.now();
   sweep(now);
   const ticket = tickets.get(token);
   if (!ticket) return null;
   tickets.delete(token);
-  return ticket.path;
+  return { path: ticket.path, onServed: ticket.onServed };
 }
 
 /**
@@ -59,26 +63,32 @@ export function redeemDownloadTicket(token: string): string | null {
  * exactly that conference, directory and name; the route serves the file
  * once for it and nothing else (open-surface audit, 2026-10-04).
  */
-const areaTickets = new Map<string, { confNum: number; dirNum: number; name: string; expires: number }>();
+const areaTickets = new Map<string, { confNum: number; dirNum: number; name: string; expires: number; onServed?: OnServed }>();
 
 /** The URL the caller's browser fetches one file-area file from - once. */
-export function issueAreaDownloadTicket(confNum: number, dirNum: number, name: string): string {
+export function issueAreaDownloadTicket(confNum: number, dirNum: number, name: string, onServed?: OnServed): string {
   const now = Date.now();
   for (const [token, t] of areaTickets) if (t.expires <= now) areaTickets.delete(token);
   const token = randomBytes(24).toString('hex');
-  areaTickets.set(token, { confNum: Number(confNum), dirNum: Number(dirNum), name, expires: now + TICKET_LIFETIME_MS });
+  areaTickets.set(token, { confNum: Number(confNum), dirNum: Number(dirNum), name, expires: now + TICKET_LIFETIME_MS, onServed });
   return `/api/download/${confNum}/${dirNum}/${encodeURIComponent(name)}?ticket=${token}`;
 }
 
-/** Whether the ticket was issued for this file; it is spent either way. */
-export function redeemAreaDownloadTicket(token: string, confNum: number, dirNum: number, name: string): boolean {
+/**
+ * The ticket, when it was issued for this file (null otherwise); it is spent
+ * either way.
+ */
+export function redeemAreaDownloadTicket(
+  token: string, confNum: number, dirNum: number, name: string,
+): { onServed?: OnServed } | null {
   const ticket = areaTickets.get(token);
-  if (!ticket) return false;
+  if (!ticket) return null;
   areaTickets.delete(token);
-  return ticket.expires > Date.now()
+  const good = ticket.expires > Date.now()
     && ticket.confNum === confNum
     && ticket.dirNum === dirNum
     && ticket.name === name;
+  return good ? { onServed: ticket.onServed } : null;
 }
 
 /**

@@ -25,7 +25,7 @@ import { AuthHandler } from '../handlers/user/auth.handler';
 import { SessionLogsHandler } from '../handlers/admin/session-logs.handler';
 import { authenticateToken, requireSysop, requireLevel, AuthRequest } from '../middleware/auth.middleware';
 import { isPlainFileName } from '../utils/plain-file-name.util';
-import { redeemUploadTicket, redeemAreaDownloadTicket } from '../handlers/file/download-ticket';
+import { redeemUploadTicket, redeemAreaDownloadTicket, type OnServed } from '../handlers/file/download-ticket';
 import { getSession } from './session-manager';
 import { createConfigRouter } from '../api/config-routes';
 import { createDoorArtRouter } from '../api/door-art-routes';
@@ -135,7 +135,7 @@ const STORAGE_UNAVAILABLE_BODY = 'File storage is unavailable - try again later'
  * the response are guarded: a client disconnect (EPIPE/ECONNRESET) or a
  * mid-read disk error must never crash the server.
  */
-function streamDownload(res: Response, filePath: string, filename: string, size: number): void {
+function streamDownload(res: Response, filePath: string, filename: string, size: number, onServed?: OnServed): void {
 console.log(`[Download] Serving file: ${filename} from ${filePath} (${size} bytes)`);
 
   res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
@@ -152,6 +152,11 @@ console.log(`[Download] Serving file: ${filename} from ${filePath} (${size} byte
     console.error('[Download] Response write error (client disconnect?):', err.message);
     fileStream.destroy();
   });
+  // The board's own measure of the transfer: the stream's start to the last
+  // byte handed to the connection (express.e times its own transfers,
+  // 15946-15953). A browser that hangs up early gets no figure.
+  const started = Date.now();
+  res.on('finish', () => onServed?.(size, Date.now() - started));
   fileStream.pipe(res);
 }
 
@@ -714,11 +719,12 @@ console.error('[Door Reload] Unexpected error:', error);
   // browser through the ticket the board issued for it (download-ticket.ts).
   app.get('/api/download/ticket/:token', (req: Request, res: Response) => {
     const { redeemDownloadTicket } = require('../handlers/file/download-ticket');
-    const filePath: string | null = redeemDownloadTicket(String(req.params.token));
-    if (!filePath) return res.status(404).json({ error: 'File not found on server' });
+    const ticket: { path: string; onServed?: OnServed } | null = redeemDownloadTicket(String(req.params.token));
+    if (!ticket) return res.status(404).json({ error: 'File not found on server' });
+    const filePath = ticket.path;
     try {
       const stats = amigafs.statSync(filePath);
-      return streamDownload(res, filePath, path.basename(filePath), stats.size);
+      return streamDownload(res, filePath, path.basename(filePath), stats.size, ticket.onServed);
     } catch {
       return res.status(404).json({ error: 'File not found on server' });
     }
@@ -745,7 +751,8 @@ console.error('[Door Reload] Unexpected error:', error);
       // Only a file the board delivered to a caller: the ticket came with
       // the download-file event for exactly this file (download-ticket.ts).
       // With none, any visitor could take any conference's files.
-      if (!redeemAreaDownloadTicket(String(req.query.ticket ?? ''), confNum, dirNum, filename)) {
+      const ticket = redeemAreaDownloadTicket(String(req.query.ticket ?? ''), confNum, dirNum, filename);
+      if (!ticket) {
         return res.status(403).json({ error: 'This download was not asked for' });
       }
 
@@ -766,7 +773,7 @@ console.error('[Door Reload] Unexpected error:', error);
       let storageError: unknown;
       try {
         const found = await resolveFile(dataDir, confNum, filename);
-        if (found) return streamDownload(res, found.fullPath, found.name, found.size);
+        if (found) return streamDownload(res, found.fullPath, found.name, found.size, ticket.onServed);
       } catch (error) {
         storageError = error;
       }
@@ -814,7 +821,7 @@ console.error(`[Download] File not found: ${filename} in conf ${confNum}`);
       }
 
       const stats = amigafs.statSync(filePath);
-      return streamDownload(res, filePath, path.basename(filePath), stats.size);
+      return streamDownload(res, filePath, path.basename(filePath), stats.size, ticket.onServed);
     } catch (error) {
 console.error('[Download] Error:', error);
       res.status(500).json({ error: 'Download failed' });

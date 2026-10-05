@@ -689,6 +689,8 @@ export class DownloadHandler {
       downloadStartTime: startTime,
       downloadedFiles: fileList.length,
       downloadedBytes: totalBytes,
+      // Handed to the browser, not timed: the route books the cps.
+      measured: false,
       goodbyeAfter,
       success: true,
     });

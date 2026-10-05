@@ -42,6 +42,12 @@ export interface PostDownloadContext {
   downloadedFiles: number;
   /** Total bytes sent. */
   downloadedBytes: number;
+  /**
+   * False when the board handed the files to a browser and has not timed
+   * the transfer: no cps is shown or booked here; the download route books
+   * its own measurement as each file finishes streaming (bookDownloadCps).
+   */
+  measured?: boolean;
   /** True if user picked "Goodbye after transfer" pre-transfer. */
   goodbyeAfter?: boolean;
   /**
@@ -50,6 +56,33 @@ export interface PostDownloadContext {
    * writes "Download Failed.." per express.e:20289.
    */
   success: boolean;
+}
+
+/**
+ * express.e:20259 lastDlCPS, and 20271-20275 the top download cps when this
+ * one beats it.
+ */
+function recordDownloadCps(session: BBSSession, cps: number): void {
+  if (!session.user || cps <= 0) return;
+  (session.user as any).lastDlCPS = cps;
+  const currentTopCps = (session.user as any).topDownloadCPS || (session.user as any).dnCPS2 || 0;
+  if (cps > currentTopCps) {
+    (session.user as any).topDownloadCPS = cps;
+    (session.user as any).dnCPS2 = cps;
+    (session.user as any).oldDnCPS = Math.min(cps, 65535);
+  }
+}
+
+/**
+ * A browser download the board timed itself (the download route's stream):
+ * express.e's cps, bytes over 1/50 s ticks (15946-15953) - and, as there,
+ * the byte count when the time rounds to no ticks at all.
+ */
+export function bookDownloadCps(session: BBSSession, bytes: number, ms: number): number {
+  const ticks = Math.round(ms / 20);
+  const cps = ticks > 0 ? Math.floor((bytes * 50) / ticks) : bytes;
+  recordDownloadCps(session, cps);
+  return cps;
 }
 
 export async function runPostDownload(
@@ -62,7 +95,7 @@ export async function runPostDownload(
   const minutes = Math.floor(elapsed / 60);
   const seconds = elapsed % 60;
   const totalKb = Math.floor(ctx.downloadedBytes / 1024);
-  const cps = ctx.downloadedBytes > 0 ? Math.round(ctx.downloadedBytes / elapsed) : 0;
+  const cps = ctx.measured !== false && ctx.downloadedBytes > 0 ? Math.round(ctx.downloadedBytes / elapsed) : 0;
   const onlineBaud = (session as any).onlineBaud || (session as any).baudRate || 38400;
   // express.e:413-420 calcEfficiency — overflow-safe form
   const baudDiv10 = Math.max(1, Math.floor(onlineBaud / 10));
@@ -78,21 +111,7 @@ export async function runPostDownload(
   emitter.emit('ansi-output', statsLine + '\r\n');
   emitter.emit('ansi-output', '\r\n');
 
-  // express.e:20259 loggedOnUserMisc.lastDlCPS:=pcps
-  if (session.user && cps > 0) {
-    (session.user as any).lastDlCPS = cps;
-  }
-
-  // express.e:20271-20275 top-CPS download persist
-  if (session.user && cps > 0) {
-    const currentTopCps = (session.user as any).topDownloadCPS || (session.user as any).dnCPS2 || 0;
-    if (cps > currentTopCps) {
-      (session.user as any).topDownloadCPS = cps;
-      (session.user as any).dnCPS2 = cps;
-      const clamped = Math.min(cps, 65535);
-      (session.user as any).oldDnCPS = clamped;
-    }
-  }
+  recordDownloadCps(session, cps);
 
   // express.e:20280-20289 — callersLog + udLog summary. Express writes
   // to BOTH disk logs with the same text. Our DB caller_activity insert

@@ -285,29 +285,13 @@ export async function checkDownloadRatios(
 }
 
 /**
- * Simulate modem CPS (characters per second) for download stats
- * Classic BBS modems: 2400bps=240cps, 9600bps=960cps, 14400bps=1440cps,
- * 28800bps=2880cps, 33600bps=3360cps, 56000bps=5600cps
- * We simulate a range from 14.4k to 56k modem with some variance
- */
-function simulateDownloadCPS(): number {
-  // Base speeds representing common modem speeds (in CPS)
-  const modemSpeeds = [1440, 2880, 3360, 5600];
-  const baseSpeed = modemSpeeds[Math.floor(Math.random() * modemSpeeds.length)];
-  // Add 10% variance to simulate real-world conditions
-  const variance = 0.1;
-  const factor = 1 - variance + (Math.random() * variance * 2);
-  return Math.floor(baseSpeed * factor);
-}
-
-/**
  * Update user download statistics after successful download
  * Port from express.e download tracking
  *
  * @param user User who downloaded
  * @param fileSize Size of file in bytes
  * @param isFree Whether file is marked as free download
- * @param cps Optional CPS value (if not provided, will be simulated)
+ * @param cps The measured cps; without one the top cps is left alone
  */
 export async function updateDownloadStats(
   user: User,
@@ -340,9 +324,10 @@ export async function updateDownloadStats(
   // Update last download time
   user.lastDownloadTime = getSystemTime();
 
-  // Update topDownloadCPS if this download achieved a higher CPS
-  // Use provided CPS or simulate modem speed
-  const downloadCPS = cps ?? simulateDownloadCPS();
+  // The top download cps, from a transfer the board timed. With no
+  // measurement nothing is booked: this used to book a random "modem speed"
+  // (1440-5600 cps) for every web and FTP download.
+  const downloadCPS = cps ?? 0;
   const currentTopCPS = user.topDownloadCPS || 0;
   if (downloadCPS > currentTopCPS) {
     user.topDownloadCPS = downloadCPS;
@@ -382,16 +367,16 @@ export function calculateAvailableBytes(user: User): number {
  *
  * @param user User who uploaded
  * @param fileSize Size of file in bytes
- * @param cps Optional CPS value (if not provided, will be simulated)
+ * @param cps The measured cps; without one the top cps is left alone
  */
 export async function updateUploadStats(
   user: User,
   fileSize: number,
   cps?: number
 ): Promise<void> {
-  // Update topUploadCPS if this upload achieved a higher CPS
-  // Use provided CPS or simulate modem speed
-  const uploadCPS = cps ?? simulateDownloadCPS(); // Same modem speeds for upload
+  // The top upload cps, from a transfer the board timed; none, nothing booked
+  // (this booked a random "modem speed" too).
+  const uploadCPS = cps ?? 0;
   const currentTopCPS = user.topUploadCPS || 0;
   if (uploadCPS > currentTopCPS) {
     user.topUploadCPS = uploadCPS;

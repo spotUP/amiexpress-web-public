@@ -580,7 +580,7 @@ describe('download-ratios.util', () => {
       expect(console.log).not.toHaveBeenCalled();
     });
 
-    it('should simulate CPS when not provided', async () => {
+    it('books no cps when none was measured', async () => {
       const user = {
         username: 'testuser',
         topUploadCPS: 0
@@ -588,7 +588,7 @@ describe('download-ratios.util', () => {
 
       await updateUploadStats(user, 1024);
 
-      expect(user.topUploadCPS).toBeGreaterThan(0);
+      expect(user.topUploadCPS).toBe(0);
     });
   });
 
