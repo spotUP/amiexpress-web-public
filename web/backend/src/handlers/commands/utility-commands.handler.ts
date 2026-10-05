@@ -175,14 +175,10 @@ export async function handleZippySearchInput(socket: any, session: BBSSession, i
  * prompt (express.e:26244).
  *
  * **WEB_**: divergence (audit C-ZOOM, P1).
- *   1. Transfer protocol is HTTP (download URL emitted at line ~390),
- *      not ZMODEM. The browser doesn't speak ZMODEM and recreating
- *      that experience over WebSocket adds no value over a click-to-
- *      download — sysops familiar with ZOOM still get a QWK packet.
- *   2. Pack method auto-selects ZIP (no LHA binary in the web stack).
- *      The express.e prompt is preserved as a status line so the
- *      user-visible flow still mirrors AmiExpress, but the interactive
- *      LHA / ZIP choice has been removed (the answer is always ZIP).
+ *   1. A browser caller gets the packet through a one-fetch HTTP ticket;
+ *      telnet and SSH get ZMODEM (file-delivery downloadFile).
+ *   2. The pack-method answer is read, but the packet is always ZIP (no
+ *      LHA binary in the web stack).
  *   3. CONTROL.DAT QWK packet completeness is checked by qwk.service.ts
  *      when generating the packet — see the QWK utility tests for
  *      coverage.
@@ -204,9 +200,9 @@ export async function handleZoomCommand(socket: any, session: BBSSession): Promi
   // express.e:26226 aePuts('\b\n')
   socket.emit('ansi-output', '\r\n');
 
+  // ENDPROC RESULT_SUCCESS (26344); the main loop's menuPause follows.
   const done = (): void => {
-    socket.emit('ansi-output', AnsiUtil.pressKeyPrompt());
-    session.menuPause = false;
+    session.menuPause = true;
     session.subState = LoggedOnSubState.DISPLAY_MENU;
   };
 
@@ -223,27 +219,46 @@ export async function handleZoomCommand(socket: any, session: BBSSession): Promi
       return;
     }
 
+    // express.e:26244-26255. WEB_: the answer is read but the packet is
+    // always ZIP - there is no LHA packer in the web stack.
+    socket.emit('ansi-output', '\r\n\x1b[32mPack Method \x1b[0m1) LHA, 2) ZIP ?>');
+    const { lineInput } = await import('../../utils/await-input');
+    await lineInput(socket, session as any, 1);
+
+    // express.e:26297-26312, the QWK packing lines.
+    socket.emit('ansi-output', '\r\n\x1b[32mPacking Control File\r\n');
+    socket.emit('ansi-output', '\r\n\x1b[32mPacking Messages\r\n');
+    socket.emit('ansi-output', '\r\n\x1b[32mPacking Index File\r\n');
+
     // express.e packs in Node<n>/PlayPen; the port's PlayPen is the upload
     // staging area cleanPlayPen sweeps, so the packet gets a directory of
     // its own, outside the board.
     const { QWKManager } = await import('../../services/qwk.service');
     const os = await import('os');
     const packetDir = fs.mkdtempSync(path.join(os.tmpdir(), 'zoom-'));
-    const packetPath = await new QWKManager(packetDir).generateOutgoingPacket(
-      session.user.username || '',
-      (session.user as any).slotNumber || 0,
-      zoom.conferences,
-      zoom.messages,
-    );
+    let packetPath: string;
+    try {
+      packetPath = await new QWKManager(packetDir).generateOutgoingPacket(
+        session.user.username || '',
+        (session.user as any).slotNumber || 0,
+        zoom.conferences,
+        zoom.messages,
+      );
+    } catch (error) {
+      // express.e:26342 - no packet came out of the packer.
+      console.error('[ZOOM] QWK generation error:', error);
+      socket.emit('ansi-output', '\x1b[33mZoom did not produce any output to download\r\n');
+      done();
+      return;
+    }
 
-    // express.e:26244: '\r\n[32mPack Method [0m1) LHA, 2) ZIP ?>'
-    // WEB_: auto-selects ZIP; no interactive prompt possible during transfer setup
-    socket.emit('ansi-output', '\r\n\x1b[32mPack Method \x1b[0m1) LHA, 2) ZIP ?>\r\n');
-
-    // express.e:26319-26340: the packet goes to the caller by downloadFile -
-    // over ZMODEM, or to a browser through a one-fetch ticket for exactly this
-    // path - and is deleted once a transfer has finished with it.
-    socket.emit('ansi-output', '\r\n\x1b[33mPrepare for ZoomMail Zmodem Download:\x1b[0m\r\n');
+    // express.e:26321, 26332-26339: the line break, the notice, doPause,
+    // then downloadFile - over ZMODEM, or to a browser through a one-fetch
+    // ticket for exactly this path - and the packet is deleted after.
+    socket.emit('ansi-output', '\r\n');
+    socket.emit('ansi-output', '\x1b[33mPrepare for ZoomMail Zmodem Download:\r\n');
+    const { doPause } = await import('../screen.handler');
+    await new Promise<void>((resolve) => doPause(socket, session, () => resolve()));
     const { downloadFile } = await import('../file/file-delivery');
     const route = await downloadFile(socket, session, [packetPath]);
     // A browser fetches its ticket after this returns; the packet stays for
@@ -253,10 +268,7 @@ export async function handleZoomCommand(socket: any, session: BBSSession): Promi
     }
     done();
   } catch (error) {
-    console.error('[ZOOM] QWK generation error:', error);
-    socket.emit('ansi-output', AnsiUtil.errorLine('Error generating QWK packet'));
-    socket.emit('ansi-output', (error as Error).message + '\r\n');
-    socket.emit('ansi-output', '\r\n');
+    console.error('[ZOOM] error:', error);
     done();
   }
 }
