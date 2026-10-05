@@ -162,9 +162,6 @@ import {
   handleSysopUploadCommand,
   handleNodeUptimeCommand,
   handleVotingBoothCommand,
-  handleVoteTopicSelect,
-  handleVoteAnswerInput,
-  handleVoteMenuChoice,
   handleDownloadWithStatusCommand,
   setTransferMiscCommandsDependencies
 } from './commands/transfer-misc-commands.handler';
@@ -4111,8 +4108,7 @@ console.error(' ERROR in handleLiveChatCommand:', error);
       return await ViewFileHandler2.handleViewFileCommand(socket, session, params, 'VS');
 
     case 'VO': // Voting Booth (internalCommandVO) - express.e:25700-25710
-      await handleVotingBoothCommand(socket, session);
-      return;
+      return await handleVotingBoothCommand(socket, session);
 
     case 'VER': // View ami-express version information (internalCommandVER) - express.e:25688-25699
       handleVersionCommand(socket, session);
