@@ -37,10 +37,12 @@ const repository = { name: 'the board\'s operator-chat repository' };
 
 let n = 0;
 function aCallerWaitingForTheSysop() {
+  const printed: string[] = [];
   const socket = {
     id: `op-cancel-${++n}`,
     server: {},
-    emit: () => true,
+    printed,
+    emit: (event: string, data: unknown) => { if (event === 'ansi-output') printed.push(String(data)); return true; },
     on: () => {}, off: () => {}, removeListener: () => {},
   } as any;
   const session: any = {
@@ -93,6 +95,17 @@ describe('OPERATOR_CHAT_WAITING cancel — repository resolution (regression for
     expect(session.subState).toBe(LoggedOnSubState.OPERATOR_CHAT_WAITING);
   });
 
+  // express.e:20362-20371 reads the key and drops it: no "Waiting for sysop"
+  // reminder, nothing at all.
+  test('any other key prints nothing while the page waits', async () => {
+    const { socket, session } = aCallerWaitingForTheSysop();
+
+    await handleCommand(socket, session, 'x');
+    await new Promise(r => setTimeout(r, 30));
+
+    expect(socket.printed.join('')).toBe('');
+  });
+
   test('with no repository to hand, the cancel still ends the wait (no silent crash)', async () => {
     setDatabase({ getOperatorChatRepository: () => undefined });
     const { socket, session } = aCallerWaitingForTheSysop();
@@ -101,5 +114,7 @@ describe('OPERATOR_CHAT_WAITING cancel — repository resolution (regression for
 
     expect(handleUserCancelPage).not.toHaveBeenCalled();
     expect(session.subState).toBe(LoggedOnSubState.DISPLAY_MENU);
+    await new Promise(r => setTimeout(r, 30));
+    expect(socket.printed.join('')).toBe('Aborted!\r\n\r\n'); // express.e:20369
   });
 });

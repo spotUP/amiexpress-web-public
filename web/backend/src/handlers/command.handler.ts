@@ -2203,13 +2203,11 @@ console.log(' [COMMAND] User in OPERATOR_CHAT_WAITING state');
       } else {
         // Database unavailable — fall back to clearing the session state so
         // the user isn't stuck in OPERATOR_CHAT_WAITING forever.
-        emitText(socket, '\r\n\x1b[33mAborted!\x1b[0m\r\n');
+        emitText(socket, 'Aborted!\r\n\r\n'); // express.e:20369
         session.subState = LoggedOnSubState.DISPLAY_MENU;
       }
-    } else if (input) {
-      // Any other input while waiting - remind user they're waiting
-      emitText(socket, '\r\n\x1b[33mWaiting for sysop... Press CTRL+C or Q to cancel.\x1b[0m\r\n');
     }
+    // Any other key is read and dropped (express.e:20362-20371).
     return;
   }
 
