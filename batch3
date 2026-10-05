@@ -15,6 +15,6 @@ doors:multitop/mtop doors:multitop/designs/mtopdlcps1.dsg bbs:bulletins/bull5.tx
 ; WORK:BBS/Doors/MultiTop/multitop doors:multitop/designs/mtopdlcps1.dsg bbs:bulletins/bull5.txt bbs:user.data
 ; copy bbs:bulletins/lastc.txt bbs:bulletins/bull6.txt
 ; doors:slicktop/slicktop bbs:bulletins/bull11.txt bbs:conf14/conf.db 20 3 "bAUD bOY bATTLE"
-doors:glc/glcupdater reference-board BBS:Node3/CallersLog IGNORESYSOP IGNORELOCAL
+doors:glc/glcupdater Uptown BBS:Node3/CallersLog IGNORESYSOP IGNORELOCAL
 ; TypeScript SAmiLog - generates last callers bulletin (replaces 68K binary)
 typescript:samilog -UC"3" -O"BBS:Bulletins/bull6.txt"15
