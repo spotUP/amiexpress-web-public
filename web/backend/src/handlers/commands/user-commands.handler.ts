@@ -168,7 +168,8 @@ export async function fileReceivedUploads(
     }
   }
   if (!fileArea) {
-    socket.emit('ansi-output', '\r\n\x1b[31mError: no upload area for this conference\x1b[0m\r\n\r\n');
+    // express.e:18974-18977 aePuts('\b\n'); myError(5) (8528-8530).
+    socket.emit('ansi-output', '\r\nNo files available in this conference.\r\n\r\n');
     uploadReturns(session, 'failure');
     return;
   }
@@ -365,7 +366,7 @@ console.error('[ZMODEM] Failed to ensure playpen:', err);
       // through the 'complete' event above.
       void protocolManager.start().catch((err: any) => {
         console.error('[TRANSFER] protocol transfer failed to start:', err);
-        socket.emit('ansi-output', '\r\nTransfer could not be started.\r\n\r\n');
+        socket.emit('ansi-output', '\r\nUnable to open the xpr library\r\n'); // express.e:17116 / 15750
         uploadReturns(session, 'failure');
       });
       return;
@@ -634,7 +635,7 @@ export function startZmodemDownload(
     // through the 'complete' event above.
     void protocolManager.start().catch((err: any) => {
       console.error('[TRANSFER] protocol transfer failed to start:', err);
-      socket.emit('ansi-output', '\r\nTransfer could not be started.\r\n\r\n');
+      socket.emit('ansi-output', '\r\nUnable to open the xpr library\r\n'); // express.e:17116 / 15750
       if (transferOnly) { void handBack(false); return; }
       session.subState = LoggedOnSubState.DISPLAY_MENU;
       (session as any).menuPause = true;
