@@ -52,9 +52,6 @@ jest.mock('../../src/utils/output.util', () => ({
 jest.mock('../../src/handlers/file/download.handler', () => ({
   DownloadHandler: { handleDownloadCommand: jest.fn().mockResolvedValue(undefined) },
 }));
-jest.mock('../../src/handlers/transfer/batch-download.handler', () => ({
-  BatchDownloadHandler: { handleBatchDownload: jest.fn().mockResolvedValue(undefined) },
-}));
 
 // ── Dynamic require mocks (lazy requires inside switch cases) ─────────────
 
@@ -206,7 +203,6 @@ jest.mock('../../src/handlers/file/file-maintenance.handler', () => ({
 import { processBBSCommand } from '../../src/handlers/command.handler';
 
 import { DownloadHandler } from '../../src/handlers/file/download.handler';
-import { BatchDownloadHandler } from '../../src/handlers/transfer/batch-download.handler';
 import { ViewFileHandler } from '../../src/handlers/content/view-file.handler';
 import { ZippySearchHandler } from '../../src/handlers/content/zippy-search.handler';
 import { FileMaintenanceHandler } from '../../src/handlers/file/file-maintenance.handler';
@@ -232,7 +228,6 @@ import * as doorHandler from '../../src/handlers/door.handler';
  */
 const EVERY_HANDLER = (): jest.Mock[] => [
   DownloadHandler.handleDownloadCommand,
-  BatchDownloadHandler.handleBatchDownload,
   ViewFileHandler.handleViewFileCommand,
   ZippySearchHandler.handleZippySearchCommand,
   FileMaintenanceHandler.handleFileMaintenanceCommand,
@@ -268,7 +263,6 @@ const DISPATCH: Array<[string, () => jest.Mock]> = [
   // File transfer
   ['D', () => DownloadHandler.handleDownloadCommand as unknown as jest.Mock],
   ['DS', () => transferMisc.handleDownloadWithStatusCommand as unknown as jest.Mock],
-  ['DB', () => BatchDownloadHandler.handleBatchDownload as unknown as jest.Mock],
   ['U', () => userCommands.handleUploadCommand as unknown as jest.Mock],
   ['UP', () => transferMisc.handleNodeUptimeCommand as unknown as jest.Mock],
   ['US', () => transferMisc.handleSysopUploadCommand as unknown as jest.Mock],

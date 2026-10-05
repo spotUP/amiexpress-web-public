@@ -187,7 +187,6 @@ const CONVERTED: Array<[command: string, expressE: string, invented: string]> = 
   ['A',   'express.e:24602 internalCommandA',     'Permission denied.'],
   ['<',   'express.e:24531 internalCommandLT',    'Permission denied.'],
   ['>',   'express.e:24550 internalCommandGT',    'Permission denied.'],
-  ['DB',  'no express.e original - shaped after express.e:24854 internalCommandD', 'Permission denied.'],
 ];
 
 describe('a command I lack access to tells me so', () => {
@@ -308,7 +307,7 @@ describe('a command I did not type stays silent', () => {
     // code still travels, which is what lets processCommand pause the menu
     // and what a future privileged caller would branch on.
     const socket = makeSocket();
-    for (const command of ['OLM', 'Q', 'V', 'Z', 'A', '<', '>', 'DB']) {
+    for (const command of ['OLM', 'Q', 'V', 'Z', 'A', '<', '>']) {
       const res = await processBBSCommand(
         socket as any, typedCommand(command), command, '', true
       );

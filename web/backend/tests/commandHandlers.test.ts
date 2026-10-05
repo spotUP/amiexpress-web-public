@@ -40,9 +40,6 @@ jest.mock('../src/utils/output.util', () => ({
 jest.mock('../src/handlers/file/download.handler', () => ({
   DownloadHandler: { handleDownloadCommand: jest.fn().mockResolvedValue(undefined) },
 }));
-jest.mock('../src/handlers/transfer/batch-download.handler', () => ({
-  BatchDownloadHandler: { handleBatchDownload: jest.fn().mockResolvedValue(undefined) },
-}));
 jest.mock('../src/handlers/command-execution.handler', () => ({
   commandCache: { bbscmd: new Map(), syscmd: new Map() },
   runBbsCommand: jest.fn().mockResolvedValue(undefined),

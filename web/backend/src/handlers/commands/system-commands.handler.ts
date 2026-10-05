@@ -129,7 +129,7 @@ export async function handleGoodbyeCommand(socket: any, session: BBSSession, par
       session.tempData.pendingGoodbyeParams = params;
       socket.emit('ansi-output', 'There are some incompleted uploads of yours\r\n');
       socket.emit('ansi-output', 'Would you like to leave anyway (Y/N)? ');
-      session.subState = LoggedOnSubState.BATCH_DOWNLOAD_CONFIRM;
+      session.subState = LoggedOnSubState.GOODBYE_CONFIRM;
       return;
     }
 
@@ -146,7 +146,7 @@ export async function handleGoodbyeCommand(socket: any, session: BBSSession, par
       session.tempData.pendingGoodbye = true;
       // yesNo(2)'s own bytes - the port's copy had lost the second ESC[32m.
       socket.emit('ansi-output', `\r\nYou have flagged files still not downloaded.\r\nDo you leave without them? ${YES_NO_PROMPT[2]}`);
-      session.subState = LoggedOnSubState.BATCH_DOWNLOAD_CONFIRM;
+      session.subState = LoggedOnSubState.GOODBYE_CONFIRM;
       return;
     }
   }
@@ -461,4 +461,33 @@ export async function handleReadMessagesCommand(socket: any, session: BBSSession
 export function handleEnterMessageCommand(socket: any, session: BBSSession, params: string = ''): void {
   const { handleEnterMessageFullCommand } = require('../message/messaging.handler');
   handleEnterMessageFullCommand(socket, session, params);
+}
+
+/**
+ * The answer to G's "Would you like to leave anyway" / "Do you leave without
+ * them?" (express.e:25050-25064, 12670). Y carries the logoff on; anything
+ * else stays on the board.
+ */
+export async function handleGoodbyeConfirm(socket: any, session: BBSSession, input: string): Promise<void> {
+  const answer = input.trim().toUpperCase();
+  const pendingParams = session.tempData?.pendingGoodbyeParams || 'Y';
+  const wasPartUpload = !!session.tempData?.pendingGoodbyePartUpload;
+  if (session.tempData) {
+    delete session.tempData.pendingGoodbye;
+    delete session.tempData.pendingGoodbyeParams;
+    delete session.tempData.pendingGoodbyePartUpload;
+  }
+  if (answer === 'Y') {
+    // express.e:25056 - partUploadOK returning SUCCESS falls through to
+    // checkFlagged, so a Y here resumes the SAME logoff and must not ask
+    // about the partial uploads a second time.
+    if (wasPartUpload) {
+      session.tempData = session.tempData || {};
+      session.tempData.partUploadAcknowledged = true;
+    }
+    await handleGoodbyeCommand(socket, session, pendingParams);
+    return;
+  }
+  socket.emit('ansi-output', '\r\n');
+  session.subState = LoggedOnSubState.DISPLAY_MENU;
 }

@@ -1,17 +1,7 @@
 /**
- * A BATCH DOWNLOAD SENDS BYTES, OR SAYS IT CANNOT.
- *
- * TP-11. `download.handler.ts` has routed telnet and SSH callers to ZMODEM
- * since the fix whose comment says the BBS "used to fake-complete the
- * transfer in 1 second without actually sending bytes". The BATCH path
- * never got that fix: it emitted the browser's `download-file` trigger per
- * file whatever the transport was, printed "Batch download complete! N
- * file(s) queued. / Check your browser downloads.", booked the download
- * statistics and cleared the caller's flags - with zero bytes sent.
- *
- * These drive `BatchDownloadHandler.handleBatchConfirm`, the method a
- * caller reaches by answering Y at "Start batch download?", on each
- * transport.
+ * The transfer route a caller's transport gets, and the IAC BINARY a telnet
+ * ZMODEM transfer starts with. (The DB command these once drove is gone:
+ * flagged files download through D, as in express.e.)
  */
 process.env.SKIP_DB_INIT = '1';
 
@@ -31,7 +21,6 @@ jest.mock('../../src/storage/remote-download', () => ({
   storageFailureText: (error: unknown) => String(error),
 }));
 
-import { BatchDownloadHandler } from '../../src/handlers/transfer/batch-download.handler';
 import {
   deliveryRouteFor,
   negotiateBinaryForTransfer,
@@ -63,127 +52,6 @@ function makeCaller(connectionType: string) {
 beforeEach(() => {
   startZmodemDownload.mockClear();
   bookDownloads.mockClear();
-});
-
-describe('a batch download, by transport', () => {
-  it('sends the bytes over ZMODEM on telnet, and never claims the browser has them', async () => {
-    const caller = makeCaller('telnet');
-
-    await BatchDownloadHandler.handleBatchConfirm(caller.socket, caller.session, 'Y');
-
-    expect(startZmodemDownload).toHaveBeenCalledTimes(1);
-    expect(startZmodemDownload.mock.calls[0][2]).toEqual([
-      '/board/Conf1/ART.LHA',
-      '/board/Conf1/DEMO.DMS',
-    ]);
-    expect(caller.said()).toContain('SENDING 2 FILE(S) VIA ZMODEM');
-    // The lie this task exists to delete.
-    expect(caller.said()).not.toContain('Check your browser downloads');
-    expect(caller.said()).not.toContain('Batch download complete');
-  });
-
-  /**
-   * R12 of the TP-16 reachability ledger - the three counts, in one place.
-   *
-   * The tests around this one assert the download's BEHAVIOUR. This row
-   * asserts the PATH: driving the real batch handler on a telnet caller must
-   * cross `deliverFilesToCaller` and `startZmodemDownload` once each, and a
-   * transport that can receive neither must book NO statistics.
-   *
-   * `deliverFilesToCaller` is counted by its observable output rather than a
-   * spy - SWC emits module exports as non-configurable getters, so
-   * `jest.spyOn` on a cross-module function throws (recorded on R2). Its
-   * output is unambiguous: it is the ONE place `download-file` is emitted and
-   * the only thing that picks the route, so the ZMODEM notice on the wire
-   * with zero browser triggers is its signature, and `deliveryRouteFor` is
-   * re-derived here to confirm the ruling it acted on.
-   *
-   * The refusal arm matters most. Before TP-11 the telnet path faked
-   * completion: it fired a browser trigger per file, printed "Check your
-   * browser downloads", booked the statistics and cleared the flags, having
-   * sent zero bytes. A caller was charged for a transfer that never happened.
-   */
-  it('R12: crosses deliverFilesToCaller and startZmodemDownload once each, and books nothing on a refusal', async () => {
-    const telnet = makeCaller('telnet');
-    await BatchDownloadHandler.handleBatchConfirm(telnet.socket, telnet.session, 'Y');
-
-    // startZmodemDownload: exactly once, with both flagged files.
-    expect(startZmodemDownload).toHaveBeenCalledTimes(1);
-    // deliverFilesToCaller: its route ruling, re-derived, and its output.
-    expect(deliveryRouteFor(telnet.session as any)).toBe('zmodem');
-    expect(telnet.said()).toContain('SENDING 2 FILE(S) VIA ZMODEM');
-    expect(telnet.downloadFileEvents()).toEqual([]);
-    // Booked when the transfer FINISHES, and only if it went - never at the
-    // handoff, which charged an aborted batch in full (web-vs-telnet audit
-    // item 19, 2026-09-28; express.e:15437 books behind `IF sentsize`).
-    expect(bookDownloads).not.toHaveBeenCalled();
-    const finished = startZmodemDownload.mock.calls[0][3] as (ok: boolean) => Promise<void>;
-    await finished(false);
-    expect(bookDownloads).not.toHaveBeenCalled();
-    await finished(true);
-    expect(bookDownloads).toHaveBeenCalledTimes(1);
-    expect((bookDownloads.mock.calls[0] as any[])[1]).toHaveLength(2);
-
-    // The refusal arm: nothing sent, nothing booked, nothing cleared.
-    startZmodemDownload.mockClear();
-    bookDownloads.mockClear();
-    const refused = makeCaller('carrier-pigeon');
-    await BatchDownloadHandler.handleBatchConfirm(refused.socket, refused.session, 'Y');
-
-    expect(deliveryRouteFor(refused.session as any)).toBe('refused');
-    expect(startZmodemDownload).toHaveBeenCalledTimes(0);
-    expect(bookDownloads).not.toHaveBeenCalled();
-    expect(refused.session.flagManager.clearAll).not.toHaveBeenCalled();
-    expect(refused.said()).toContain(NO_TRANSFER_NOTICE);
-  });
-
-  it('never sends the browser trigger to a byte transport', async () => {
-    for (const transport of ['telnet', 'ssh']) {
-      const caller = makeCaller(transport);
-      await BatchDownloadHandler.handleBatchConfirm(caller.socket, caller.session, 'Y');
-      expect(caller.downloadFileEvents()).toEqual([]);
-    }
-  });
-
-  it('books no statistics for a transfer it refused', async () => {
-    // A transport that can receive neither. Not reachable from today's
-    // three, and the point of the arm: a refusal books nothing, clears no
-    // flag, and says why.
-    const caller = makeCaller('carrier-pigeon');
-
-    await BatchDownloadHandler.handleBatchConfirm(caller.socket, caller.session, 'Y');
-
-    expect(bookDownloads).not.toHaveBeenCalled();
-    expect(startZmodemDownload).not.toHaveBeenCalled();
-    expect(caller.downloadFileEvents()).toEqual([]);
-    expect(caller.said()).toContain(NO_TRANSFER_NOTICE);
-    expect(caller.session.flagManager.clearAll).not.toHaveBeenCalled();
-    expect(caller.session.subState).toBe(LoggedOnSubState.DISPLAY_MENU);
-  });
-
-  it('is unchanged for a browser: one trigger per file, and the two lines', async () => {
-    const caller = makeCaller('web');
-
-    await BatchDownloadHandler.handleBatchConfirm(caller.socket, caller.session, 'Y');
-
-    const triggers = caller.downloadFileEvents().map((e) => e.payload);
-    expect(triggers).toHaveLength(2);
-    expect(triggers[0]).toMatchObject({
-      filename: 'ART.LHA',
-      size: 1024,
-      // A one-time ticket for exactly this file (download-ticket.ts).
-      url: expect.stringMatching(/^\/api\/download\/1\/1\/ART\.LHA\?ticket=[0-9a-f]{48}$/),
-      batchIndex: 0,
-      batchTotal: 2,
-    });
-    expect(caller.said()).toContain('-> Downloading: ART.LHA');
-    expect(caller.said()).toContain('[OK] Batch download complete! 2 file(s) queued.');
-    expect(caller.said()).toContain('Check your browser downloads.');
-    expect(startZmodemDownload).not.toHaveBeenCalled();
-    // The browser reports no completion: booked at handoff, both files at once.
-    expect(bookDownloads).toHaveBeenCalledTimes(1);
-    expect((bookDownloads.mock.calls[0] as any[])[1]).toHaveLength(2);
-  });
 });
 
 describe('the one route decision', () => {

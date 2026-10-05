@@ -3013,7 +3013,6 @@ console.log('[handleCommand] Display flow branch, subState=', session.subState);
     return;
   }
 
-  // Handle batch download confirmation
   // express.e:24490 - "Which node to view?" for the CL command.
   if (session.subState === LoggedOnSubState.CALLERSLOG_NODE_INPUT) {
     const { handleCallersLogNodeInput } = require('./commands/sysop-commands.handler');
@@ -3021,9 +3020,9 @@ console.log('[handleCommand] Display flow branch, subState=', session.subState);
     return;
   }
 
-  if (session.subState === LoggedOnSubState.BATCH_DOWNLOAD_CONFIRM) {
-    const { BatchDownloadHandler } = require('./transfer/batch-download.handler');
-    await BatchDownloadHandler.handleBatchConfirm(socket, session, data.trim());
+  if (session.subState === LoggedOnSubState.GOODBYE_CONFIRM) {
+    const { handleGoodbyeConfirm } = require('./commands/system-commands.handler');
+    await handleGoodbyeConfirm(socket, session, data.trim());
     return;
   }
 
@@ -3976,12 +3975,6 @@ async function dispatchInternalCommand(
 
     case 'DS': // Sysop Download (internalCommandD with cmdcode DS) - express.e:28302-28303, 20040
       return await handleDownloadWithStatusCommand(socket, session, params);
-
-    case 'DB': // Download Batch - Download all flagged files
-      const { BatchDownloadHandler } = require('./transfer/batch-download.handler');
-      // express.e's `res:=internalCommandXXX(...)` - the refusal travels out
-      // as a result code and processBBSCommand prints it once (28400).
-      return await BatchDownloadHandler.handleBatchDownload(socket, session);
 
     case 'U': // Upload File(s) (internalCommandU) - express.e:25646-25658
       // Awaited: it shows NoUploads/UploadMsg before the interface, and

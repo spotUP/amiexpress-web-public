@@ -16,7 +16,6 @@ export const INTERNAL_COMMAND_NAMES: readonly string[] = [
   'AG',
   'D',
   'DS',
-  'DB',
   'U',
   'UP',
   'US',

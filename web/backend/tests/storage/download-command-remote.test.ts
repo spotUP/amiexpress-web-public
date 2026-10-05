@@ -1,7 +1,7 @@
 /**
  * The `D` command - the one a caller actually types - reading from the pool.
  *
- * `DB` reaches BatchDownloadHandler; plain `D`, and F-flag-then-`D`, go to
+ * Plain `D`, and F-flag-then-`D`, go to
  * DownloadHandler and resolve through its own disk walk. A pooled area has no
  * such directory to walk, so without this branch `D DEMO.LHA` answers
  * "File not found" for a file the bucket is holding, and a flagged pooled file

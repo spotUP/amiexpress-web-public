@@ -1,6 +1,5 @@
 import { LoggedOnSubState, BBSState } from '../src/constants/bbs-states';
-import { handleGoodbyeCommand, setSystemCommandsDependencies } from '../src/handlers/commands/system-commands.handler';
-import { BatchDownloadHandler } from '../src/handlers/transfer/batch-download.handler';
+import { handleGoodbyeCommand, handleGoodbyeConfirm, setSystemCommandsDependencies } from '../src/handlers/commands/system-commands.handler';
 
 describe('system commands - goodbye flagged files', () => {
   test('prompts for flagged downloads when flagManager has entries', () => {
@@ -17,7 +16,7 @@ describe('system commands - goodbye flagged files', () => {
 
     handleGoodbyeCommand(socket, session, '');
 
-    expect(session.subState).toBe(LoggedOnSubState.BATCH_DOWNLOAD_CONFIRM);
+    expect(session.subState).toBe(LoggedOnSubState.GOODBYE_CONFIRM);
     // express.e:12670-12672 — "You have flagged files still not downloaded.
     // Do you leave without them?" (yesNo prompt). The earlier copy of this
     // test expected "Download them now?" which was never in express.e.
@@ -54,10 +53,10 @@ describe('system commands - goodbye flagged files', () => {
 
     handleGoodbyeCommand(socket, session, '');
     expect(session.tempData.pendingGoodbye).toBe(true);
-    expect(session.subState).toBe(LoggedOnSubState.BATCH_DOWNLOAD_CONFIRM);
+    expect(session.subState).toBe(LoggedOnSubState.GOODBYE_CONFIRM);
 
-    // Simulate confirming downloads with no actual files found (findFileInConference will fail)
-    await BatchDownloadHandler.handleBatchConfirm(socket, session, 'Y');
+    // Y at "Do you leave without them?" carries the logoff on (express.e:12670).
+    await handleGoodbyeConfirm(socket, session, 'Y');
     jest.runOnlyPendingTimers();
     jest.useRealTimers();
 

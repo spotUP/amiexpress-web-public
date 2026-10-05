@@ -17,7 +17,7 @@ import { VolumeSet, type VolumeState } from '../../src/storage/volume-set';
 import { materialiseRemoteFile } from '../../src/storage/remote-download';
 import type { StorageContext } from '../../src/storage/storage-context';
 import type { RemoteArea } from '../../src/storage/remote-areas';
-import { resolveFile, resolveFlaggedFile } from '../../src/handlers/transfer/batch-download.handler';
+import { resolveFile } from '../../src/handlers/transfer/batch-download.handler';
 import { FakeBackend } from './fake-backend';
 
 interface Fixture {
@@ -264,67 +264,5 @@ describe('resolveFile', () => {
     backend.down = true;
 
     await expect(resolveFile(dataDir, 1, 'demo.lha', ctx)).rejects.toBeInstanceOf(StorageUnavailableError);
-  });
-});
-
-describe('what the caller is told', () => {
-  function lines(): { emit: (line: string) => void; written: () => string } {
-    const out: string[] = [];
-    return { emit: (line: string) => out.push(line), written: () => out.join('') };
-  }
-
-  it('says the volume is unavailable, and never says the file is missing', async () => {
-    const { ctx, backend, dataDir } = remoteAreaFixture();
-    await backend.put('Conf1/Files/DEMO.LHA', Buffer.from('payload'));
-    backend.down = true;
-    const out = lines();
-
-    const found = await resolveFlaggedFile(out.emit, dataDir, 1, 'DEMO.LHA', ctx);
-
-    expect(found).toBeNull();
-    expect(out.written()).toContain('DEMO.LHA');
-    expect(out.written()).toContain('unavailable');
-    expect(out.written()).toContain('try again later');
-    expect(out.written()).toContain('DRIVE.2');
-    expect(out.written()).not.toContain('File not found');
-  });
-
-  it('says the file is not found when it genuinely is not there', async () => {
-    const { ctx, dataDir } = remoteAreaFixture();
-    const out = lines();
-
-    const found = await resolveFlaggedFile(out.emit, dataDir, 1, 'NOPE.LHA', ctx);
-
-    expect(found).toBeNull();
-    expect(out.written()).toContain('[X] File not found: NOPE.LHA');
-    expect(out.written()).not.toContain('unavailable');
-  });
-
-  it('says nothing at all when the file resolves', async () => {
-    const { ctx, backend, dataDir } = remoteAreaFixture();
-    await backend.put('Conf1/Files/DEMO.LHA', Buffer.from('payload'));
-    const out = lines();
-
-    const found = await resolveFlaggedFile(out.emit, dataDir, 1, 'DEMO.LHA', ctx);
-
-    expect(found).not.toBeNull();
-    expect(out.written()).toBe('');
-  });
-
-  it('reports an unexpected storage failure as a failure, still not as a missing file', async () => {
-    const { ctx, backend, dataDir } = remoteAreaFixture();
-    await backend.put('Conf1/Files/DEMO.LHA', Buffer.from('payload'));
-    // Resolvable by name, then gone from under the fetch: the bucket answers
-    // "no" to a key its own listing just offered.
-    await materialiseRemoteFile('DEMO.LHA', 1, ctx);
-    await backend.delete('Conf1/Files/DEMO.LHA');
-    ctx.cache.evictTo(0);
-    const out = lines();
-
-    const found = await resolveFlaggedFile(out.emit, dataDir, 1, 'DEMO.LHA', ctx);
-
-    expect(found).toBeNull();
-    expect(out.written()).toContain('DEMO.LHA');
-    expect(out.written()).not.toContain('File not found');
   });
 });
