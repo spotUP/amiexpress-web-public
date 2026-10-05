@@ -47,51 +47,62 @@ export function saveMsgText(lines: string[]): string | null {
   return lines.map((line) => `${line}\n`).join('');
 }
 
-/** Run edit() on `hostPath` for a door. Resolves true when the caller saved. */
-export function editFileForDoor(socket: any, session: BBSSession, hostPath: string): Promise<boolean> {
-  let text: string | null = null;
-  try {
-    text = (amigafs.readFileSync(hostPath) as Buffer).toString('latin1');
-  } catch {
-    text = null;
-  }
-  const body = loadMsgLines(text);
-
-  const doorSubState = session.subState;
-  const doorTempData = session.tempData;
-
-  return new Promise<boolean>((resolve) => {
+/**
+ * Run the line editor - express.e edit(FALSE, maxLineLen) - on `body` for a
+ * caller that is not message entry. Resolves with the lines when the caller
+ * saves (S), or null when he aborts (A, Y). The caller's sub-state and
+ * tempData come back either way.
+ */
+export function editLines(
+  socket: any,
+  session: BBSSession,
+  body: string[],
+  opts: { maxLineLen?: number } = {},
+): Promise<string[] | null> {
+  const callerSubState = session.subState;
+  const callerTempData = session.tempData;
+  return new Promise<string[] | null>((resolve) => {
     const finishOutside = async (saved: string[] | null): Promise<void> => {
-      let ok = false;
-      if (saved !== null) {
-        const out = saveMsgText(saved);
-        ok = true;
-        if (out !== null) {
-          try {
-            amigafs.writeFileSync(hostPath, Buffer.from(out, 'latin1'));
-          } catch (err) {
-            console.error(`[JH_EF] could not save ${hostPath}:`, err);
-          }
-        }
-      }
-      session.subState = doorSubState;
-      session.tempData = doorTempData;
-      session.doorLentTerminal = false;
-      // The editor's last words reach the caller before the door's next ones.
+      session.subState = callerSubState;
+      session.tempData = callerTempData;
+      // The editor's last words reach the caller before its next ones.
       flushOutput(socket);
-      resolve(ok);
+      resolve(saved);
     };
-
     session.tempData = {
       messageEntry: {
         body,
         currentLine: body.length + 1,
         fileAttach: false,
         lineEditorOnly: true,
+        maxLineLen: opts.maxLineLen,
         finishOutside,
       },
     };
-    session.doorLentTerminal = true;
     void promptForMessageBody(socket, session).then(() => flushOutput(socket));
   });
+}
+
+/** Run edit() on `hostPath` for a door. Resolves true when the caller saved. */
+export async function editFileForDoor(socket: any, session: BBSSession, hostPath: string): Promise<boolean> {
+  let text: string | null = null;
+  try {
+    text = (amigafs.readFileSync(hostPath) as Buffer).toString('latin1');
+  } catch {
+    text = null;
+  }
+  // The paused door lends the terminal: every key goes to the board.
+  session.doorLentTerminal = true;
+  const saved = await editLines(socket, session, loadMsgLines(text));
+  session.doorLentTerminal = false;
+  if (saved === null) return false;
+  const out = saveMsgText(saved);
+  if (out !== null) {
+    try {
+      amigafs.writeFileSync(hostPath, Buffer.from(out, 'latin1'));
+    } catch (err) {
+      console.error(`[JH_EF] could not save ${hostPath}:`, err);
+    }
+  }
+  return true;
 }

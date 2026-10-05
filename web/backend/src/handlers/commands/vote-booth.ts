@@ -128,6 +128,114 @@ async function showVoteTopics(socket: any, session: BBSSession): Promise<void> {
   await pause(socket, session);
 }
 
+/** edit(FALSE,50) on these lines: the lines saved, or null (abort / nothing typed). */
+async function edit50(socket: any, session: BBSSession, lines: string[]): Promise<string[] | null> {
+  const { editLines } = require('../message/door-edit-file');
+  return await editLines(socket, session, lines, { maxLineLen: 50 });
+}
+
+/** saveMsg (9952-9967): each line LF-ended; no lines, no write. */
+function saveMsg(file: string, lines: string[]): void {
+  if (lines.length === 0) return;
+  fs.writeFileSync(file, lines.map(l => `${l}\n`).join(''), 'latin1');
+}
+
+/** createVoteTopic (20567-20637). */
+async function createVoteTopic(socket: any, session: BBSSession): Promise<void> {
+  const dir = voteDir(session);
+  fs.mkdirSync(dir, { recursive: true });
+  const lock = path.join(dir, 'VoteLock');
+  if (!fs.existsSync(lock)) fs.writeFileSync(lock, 'DO NOT DELETE!\n', 'latin1');
+
+  emitText(socket, '\r\n\x1b[34mENTER TOPIC NUMBER \x1b[33m(\x1b[0m1-25\x1b[33m)\x1b[34m>:\x1b[0m ');
+  const topicNum = await numberInputNoDefault(socket, session);
+  if (topicNum < 1 || topicNum > 25) return;
+  if (fs.existsSync(defFile(dir, topicNum))) {
+    emitText(socket, '\r\n\x1b[0mTOPIC ALREADY EXISTS\r\n');
+    return;
+  }
+
+  emitText(socket, '\r\n\x1b[33mENTER TOPIC DESCRIPTION \x1b[0m\r\n');
+  const desc = await edit50(socket, session, []);
+  if (!desc || desc.length === 0) return;
+  saveMsg(defFile(dir, topicNum), desc);
+
+  for (let questNum = 1; questNum <= 99; questNum++) {
+    emitText(socket, `\r\n\x1b[33mENTER QUESTION ${questNum}\x1b[0m\r\n`);
+    const quest = (await edit50(socket, session, [])) ?? [];
+    if (quest.length === 0) return;
+    saveMsg(qstFile(dir, topicNum, questNum), quest);
+    // REPEAT ... UNTIL (ans>="Z") OR (ans=0): answers A to Y.
+    for (let a = 'A'; a < 'Z'; a = nextLetter(a)) {
+      emitText(socket, `\r\nANSWER \x1b[33m${a}\x1b[0m ]\r\n`);
+      const answer = (await edit50(socket, session, [])) ?? [];
+      if (answer.length === 0) break;
+      saveMsg(answerFile(dir, topicNum, questNum, a), answer);
+    }
+  }
+}
+
+/** editVoteTopic (20688-20782). */
+async function editVoteTopic(socket: any, session: BBSSession): Promise<void> {
+  emitText(socket, '\r\n\x1b[34mENTER TOPIC NUMBER \x1b[33m(\x1b[0m1-25\x1b[33m)\x1b[34m>:\x1b[0m ');
+  const topicNum = await numberInputNoDefault(socket, session);
+  if (topicNum < 1 || topicNum > 25) return;
+  const dir = voteDir(session);
+  if (!fs.existsSync(defFile(dir, topicNum))) {
+    emitText(socket, '\x1b[0mTHIS TOPIC DOES NOT EXIST\r\n');
+    return;
+  }
+  /** loadMsg, edit, and saveMsg when lines came back. */
+  const editFile = async (file: string) => {
+    const lines = await edit50(socket, session, loadMsg(file));
+    if (lines && lines.length > 0) saveMsg(file, lines);
+  };
+
+  emitText(socket, '\r\n');
+  for (;;) {
+    emitText(socket, '\x1b[0m   ENTER OPTION\r\n');
+    emitText(socket, '\x1b[0m1. EDIT DESCRIPTION\r\n');
+    emitText(socket, '\x1b[0m2. EDIT QUESTION\r\n');
+    emitText(socket, '\x1b[0m3. EDIT ANSWER\r\n');
+    emitText(socket, '\x1b[0m4. EXIT\r\n');
+    emitText(socket, '\x1b[0m>');
+    const n = await readChar(socket, session as any);
+    emitText(socket, n + '\r\n');
+    if (n === '1') {
+      emitText(socket, '\r\n\x1b[33mEDIT TOPIC DESCRIPTION \x1b[0m');
+      await editFile(defFile(dir, topicNum));
+      return;
+    }
+    if (n === '2' || n === '3') {
+      emitText(socket, '\r\n\x1b[34mEDIT QUESTION NUMBER\x1b[0m > ');
+      const questNum = await numberInputNoDefault(socket, session);
+      if (questNum > 0 && questNum < 100) {
+        if (!fs.existsSync(qstFile(dir, topicNum, questNum))) {
+          emitText(socket, '\r\nQUESTION DOES NOT EXIST\r\n');
+          await pause(socket, session);
+        } else if (n === '2') {
+          await editFile(qstFile(dir, topicNum, questNum));
+        } else {
+          emitText(socket, '\r\n\x1b[34mEDIT CHOICE \x1b[33m[\x1b[0mA-Z\x1b[33m]\x1b[0m > ');
+          const ans = (await readChar(socket, session as any)).toUpperCase();
+          emitText(socket, ans + '\r\n');
+          if (ans.length === 1 && ans >= 'A' && ans <= 'Z') {
+            // express.e:20750 names the choice with `\r\z\d[2]`, as written.
+            const choice = path.join(dir, `Vote${z2(topicNum, true)}.${z2(questNum, true)}.${ans}`);
+            if (fs.existsSync(choice)) await editFile(choice);
+            else {
+              emitText(socket, '\r\nCHOICE DOES NOT EXIST\r\n');
+              await pause(socket, session);
+            }
+          }
+        }
+      }
+      return;
+    }
+    if (n === '4') return;
+  }
+}
+
 /** deleteVoteTopic (20639-20686). */
 async function deleteVoteTopic(socket: any, session: BBSSession): Promise<void> {
   emitText(socket, '\r\n\x1b[34mENTER TOPIC NUMBER TO DELETE \x1b[33m>:\x1b[0m ');
@@ -262,7 +370,7 @@ async function showVoteStats(socket: any, session: BBSSession): Promise<void> {
   }
 }
 
-/** voteMenu (21037-21074). Create and edit wait on an awaitable edit(). */
+/** voteMenu (21037-21074). */
 async function voteMenu(socket: any, session: BBSSession): Promise<void> {
   for (;;) {
     emitText(socket, clearTheScreen(socket));
@@ -281,7 +389,9 @@ async function voteMenu(socket: any, session: BBSSession): Promise<void> {
     switch (ch) {
       case '1': await showVoteStats(socket, session); break;
       case '2': await showVoteTopics(socket, session); break;
+      case '3': await createVoteTopic(socket, session); break;
       case '4': await deleteVoteTopic(socket, session); break;
+      case '5': await editVoteTopic(socket, session); break;
       case '6': await vote(socket, session); ch = '\0'; break;
       default: break;
     }

@@ -349,7 +349,7 @@ function toggleWordWrap(socket: any, session: BBSSession): void {
  */
 export async function handleMessageBodyKeys(socket: any, session: BBSSession, data: string): Promise<void> {
   const s = session as EditorSession;
-  const maxLineLen = messageBodyLineLimit(session);
+  const maxLineLen = lineLimit(session);
   for (const c of editorKeyCodes(data)) {
     // A key after the one that ended entry is not the editor's to take.
     if (session.subState !== LoggedOnSubState.POST_MESSAGE_BODY) return;
@@ -458,6 +458,16 @@ function showOptionsMenu(socket: any, session: BBSSession, helpList: boolean): v
   if (xferShown(session)) menu += '\r\n\x1b[33mX\x1b[32m>\x1b[36mfer Files\x1b[0m';
   menu += '\r\n\x1b[0m >: ';
   emitText(socket, menu);
+}
+
+/**
+ * edit()'s maxLineLen: the screen's own limit, or a caller's smaller one
+ * (createVoteTopic asks edit(FALSE,50), express.e:20603).
+ */
+function lineLimit(session: BBSSession): number {
+  const screen = messageBodyLineLimit(session);
+  const own = session.tempData?.messageEntry?.maxLineLen;
+  return own ? Math.min(own, screen) : screen;
 }
 
 /** The ` N> ` a body line is typed behind - `\d[2]> `, `\d[3]> ` from line 100. */
@@ -671,7 +681,7 @@ export async function editMessageLine(socket: any, session: BBSSession, x: numbe
   emitText(socket, '\r\n    Edit Line');
   emitText(socket, `\r\n${messageRule(session, 'editLine')}`);
   emitText(socket, `\r\n${messageIndent(session, 'editLine')}`);
-  body[x - 1] = await lineInput(socket, session, messageBodyLineLimit(session), body[x - 1]);
+  body[x - 1] = await lineInput(socket, session, lineLimit(session), body[x - 1]);
 }
 
 /**
@@ -1381,10 +1391,15 @@ function showLineEditor(socket: any, session: BBSSession): void {
   // express.e:10146-10148: aePuts('\b\n') then
   //   StringF(tempstr,'   Enter your text. (Enter) alone to end. (\d chars/line)\b\n',maxLineLen)
   // - the length this caller's lines wrap at, not a fixed 75.
-  emitText(socket, `\r\n   Enter your text. (Enter) alone to end. (${messageBodyLineLimit(session)} chars/line)\r\n`);
+  emitText(socket, `\r\n   Enter your text. (Enter) alone to end. (${lineLimit(session)} chars/line)\r\n`);
   // express.e:10150-10152: StrCopy(str,'|-------...');SetStr(str,75);StringF(tempstr,'   (\s)\b\n',str)
   // SetStr to 75: 9 full |-------| groups (72 chars) + |-- (3 chars) = 75
-  emitText(socket, `${messageRule(session, 'bodyRuler')}\r\n`);
+  // edit(..,maxLineLen) cuts its rule to the line (10149-10152); a caller
+  // that names its own length (the voting booth's 50) gets that rule.
+  const ownLimit = session.tempData?.messageEntry?.maxLineLen;
+  emitText(socket, ownLimit
+    ? `   (${'|-------'.repeat(16).slice(0, lineLimit(session))})\r\n`
+    : `${messageRule(session, 'bodyRuler')}\r\n`);
 
   const entry = session.tempData.messageEntry;
 
