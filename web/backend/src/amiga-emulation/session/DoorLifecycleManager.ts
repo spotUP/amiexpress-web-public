@@ -61,6 +61,7 @@ const TRACE_PC_JUMPS = process.env.TRACE_PC_JUMPS === "1";
 // `from "../DoorLifecycleManager.js"` imports keep working.
 export type { ExecutionState, LifecycleConfig } from './lifecycle/lifecycle-types.js';
 import type { ExecutionState, LifecycleConfig } from './lifecycle/lifecycle-types.js';
+import { multicomManager } from '../../nodes/MulticomManager';
 
 export class DoorLifecycleManager {
   private emulator: MoiraEmulator;
@@ -1043,6 +1044,9 @@ console.error(`[DoorLifecycleManager] CRITICAL: Memory[0x4] became ZERO at iter 
         const batchStart = ENABLE_PROFILING ? Date.now() : 0;
         const result = this.emulator.executeUntilTrap(BATCH_SIZE);
         if (ENABLE_PROFILING) profileBatchExec += Date.now() - batchStart;
+        // The MULTICOM table is one shared block on the Amiga; pass on what
+        // this door wrote into it (throttled inside).
+        multicomManager.syncFromEmulator(this.emulator);
 
         // CRITICAL: If pause was set during batch execution (e.g., by doorMessageCallback
         // for a blocking XIM command like JH_LI/JH_HK), immediately yield to handlePausedState

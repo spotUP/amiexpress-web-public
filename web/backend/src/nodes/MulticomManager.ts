@@ -67,9 +67,92 @@ interface EmulatorRegistration {
   nodeId: number;
 }
 
+/**
+ * The bytes of the table every node shares on the Amiga - ACP's one block of
+ * public memory (ACP.e:2307-2354) - that this port keeps in step across its
+ * per-node emulators. Per nodeInfo: handle, netSocket, chatColor, offHook,
+ * private, stats[32] and t (0x00-0x73); the .s link and taskSignal are each
+ * emulator's own. Per singlePort: status, handle and location (0x52-0x93);
+ * the semaphore, list and port internals before them are each emulator's own.
+ */
+const SHARED_RANGES: ReadonlyArray<readonly [number, number]> = (() => {
+  const ranges: Array<[number, number]> = [];
+  for (let i = 0; i < MAX_NODES; i++) ranges.push([MY_NODE_ARRAY_BASE + i * MY_NODE_SIZE, 0x74]);
+  for (let i = 0; i < MAX_NODES; i++) ranges.push([SINGLE_PORTS_BASE + i * SINGLE_PORT_SIZE + 0x52, 0x94 - 0x52]);
+  return ranges;
+})();
+
+/** How often a running door's table writes are passed on (ms). */
+const SYNC_INTERVAL_MS = 100;
+
+/** The canonical copy: an "emulator" whose memory is one Buffer over the MULTICOM region. */
+function bufferEmulator(): MoiraEmulator {
+  const size = SINGLE_PORTS_BASE + MAX_NODES * SINGLE_PORT_SIZE - MASTER_NODE_BASE;
+  const mem = Buffer.alloc(size);
+  const at = (addr: number) => addr - MASTER_NODE_BASE;
+  return {
+    readMemory: (addr: number) => mem[at(addr)] ?? 0,
+    writeMemory: (addr: number, value: number) => { mem[at(addr)] = value & 0xff; },
+    readMemory16: (addr: number) => mem.readUInt16BE(at(addr)),
+    writeMemory16: (addr: number, value: number) => { mem.writeUInt16BE(value & 0xffff, at(addr)); },
+    readMemory32: (addr: number) => mem.readUInt32BE(at(addr)),
+    writeMemory32: (addr: number, value: number) => { mem.writeUInt32BE(value >>> 0, at(addr)); },
+  } as unknown as MoiraEmulator;
+}
+
+const CANONICAL_SESSION = '__multicom_canonical__';
+
 export class MulticomManager {
   private nodes: Map<number, NodeInfo> = new Map();
   private emulators: Map<string, EmulatorRegistration> = new Map();
+  /**
+   * The shared table itself. Registered like an emulator so every board-side
+   * write (updateNode, clearNode) lands in it too; doors' own writes reach it
+   * through syncFromEmulator.
+   */
+  private readonly canonical: MoiraEmulator = bufferEmulator();
+  private readonly lastSync = new WeakMap<object, number>();
+
+  constructor() {
+    this.initializeInEmulator(this.canonical, CANONICAL_SESSION, -1);
+  }
+
+  /**
+   * Pass on what a running door wrote into the shared table: every byte of
+   * SHARED_RANGES that differs from the canonical copy is this door's write
+   * (the others' writes already reached it), so it goes into the canonical
+   * copy and into every other live emulator. At most every SYNC_INTERVAL_MS
+   * per emulator; called from the door's run loop.
+   */
+  public syncFromEmulator(emulator: MoiraEmulator, now: number = Date.now()): void {
+    if (emulator === this.canonical) return;
+    const last = this.lastSync.get(emulator) ?? 0;
+    if (now - last < SYNC_INTERVAL_MS) return;
+    this.lastSync.set(emulator, now);
+    let source: EmulatorRegistration | undefined;
+    for (const reg of this.emulators.values()) if (reg.emulator === emulator) { source = reg; break; }
+    if (!source) return;
+
+    const changed: Array<[number, number]> = [];
+    for (const [start, len] of SHARED_RANGES) {
+      for (let addr = start; addr < start + len; addr++) {
+        const b = emulator.readMemory(addr);
+        if (b !== this.canonical.readMemory(addr)) {
+          this.canonical.writeMemory(addr, b);
+          changed.push([addr, b]);
+        }
+      }
+    }
+    if (changed.length === 0) return;
+    for (const reg of this.emulators.values()) {
+      if (reg === source || reg.emulator === this.canonical || !reg.initialized) continue;
+      try {
+        for (const [addr, b] of changed) reg.emulator.writeMemory(addr, b);
+      } catch (error) {
+        console.error(`[MulticomManager] sync into session ${reg.sessionId} failed:`, error);
+      }
+    }
+  }
 
   /**
    * Initialize MULTICOM structures in a session's emulator.
@@ -109,6 +192,15 @@ export class MulticomManager {
 
       // Write current status of ALL nodes to this emulator
       this.writeAllNodesToEmulator(emulator);
+
+      // And what the doors already running have written into the shared
+      // table (a node's time in chat, its chat requests), as on the Amiga,
+      // where a door that starts finds the table as the others left it.
+      if (this.canonical && emulator !== this.canonical) {
+        for (const [start, len] of SHARED_RANGES) {
+          for (let addr = start; addr < start + len; addr++) emulator.writeMemory(addr, this.canonical.readMemory(addr));
+        }
+      }
 
       // Register emulator for future updates
       this.emulators.set(sessionId, {
@@ -474,24 +566,14 @@ console.warn(
     // Use a positive value to indicate "connected" (RTW checks if >= 0)
     emulator.writeMemory32(addr + 0x20, 100);  // Connected (any positive value)
 
-    // Write chatColor at +0x24 (LONG)
-    emulator.writeMemory32(addr + 0x24, 0);
-
-    // Write offHook at +0x28 (LONG)
+    // offHook at +0x28: FALSE while a caller is on (express.e:828, 902).
     emulator.writeMemory32(addr + 0x28, 0);
 
-    // Write private at +0x2C (LONG)
-    emulator.writeMemory32(addr + 0x2C, 0);
-
-    // stats array is at +0x30 (64 bytes), leave as zeros
-
-    // Write t at +0x70 (LONG)
-    emulator.writeMemory32(addr + 0x70, 0);
-
-    // s pointer is written by linkNodeStructures() at +0x74, don't overwrite
-
-    // Write taskSignal at +0x78 (LONG)
-    emulator.writeMemory32(addr + 0x78, 0);
+    // chatColor (+0x24), private (+0x2C), stats (+0x30), t (+0x70) and
+    // taskSignal (+0x78) are ACP's and the doors': ACP sets them once
+    // (ACP.e:2311-2322) and a chat door keeps its state there. express.e
+    // never writes them for a caller, so a status change must not reset
+    // them - it wiped a chatting node's state in every other node.
   }
 
   /**

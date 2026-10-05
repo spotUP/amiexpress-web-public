@@ -35,15 +35,19 @@ const myNodeOf = (nodeId: number) => MY_NODE_ARRAY_BASE + nodeId * MY_NODE_SIZE;
 
 /** An emulator that records every byte written, so a wipe is visible. */
 function fakeEmulator() {
+  // Byte-addressed and big-endian, as the 68K's memory is: the node table is
+  // also copied a byte at a time (the shared-table sync).
   const mem = new Map<number, number>();
+  const rd = (a: number) => mem.get(a) ?? 0;
+  const wr = (a: number, v: number) => { mem.set(a, v & 0xff); };
   return {
     mem,
-    writeMemory: (addr: number, value: number) => { mem.set(addr, value); },
-    writeMemory16: (addr: number, value: number) => { mem.set(addr, value); },
-    writeMemory32: (addr: number, value: number) => { mem.set(addr, value); },
-    readMemory: (addr: number) => mem.get(addr) ?? 0,
-    readMemory16: (addr: number) => mem.get(addr) ?? 0,
-    readMemory32: (addr: number) => mem.get(addr) ?? 0,
+    writeMemory: wr,
+    writeMemory16: (a: number, v: number) => { wr(a, v >> 8); wr(a + 1, v); },
+    writeMemory32: (a: number, v: number) => { wr(a, v >>> 24); wr(a + 1, v >>> 16); wr(a + 2, v >>> 8); wr(a + 3, v); },
+    readMemory: rd,
+    readMemory16: (a: number) => (rd(a) << 8) | rd(a + 1),
+    readMemory32: (a: number) => ((rd(a) << 24) | (rd(a + 1) << 16) | (rd(a + 2) << 8) | rd(a + 3)) >>> 0,
     writeString: () => {},
     readString: () => '',
   } as any;
