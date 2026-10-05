@@ -3146,7 +3146,9 @@ console.log(' In file upload state - canceling upload');
       }
     } else if (data.length === 1 && data >= ' ' && data <= '~' && (session.inputBuffer?.length ?? 0) < MAX_DOOR_PASSWORD) {
       session.inputBuffer = (session.inputBuffer || '') + data;
-      emitText(socket, '*'); // Mask password characters
+      // WEB_: express.e's lineInput (4720) echoes a door password in clear;
+      // masked here on purpose (sysop decision 2026-10-05).
+      emitText(socket, '*');
     }
     return;
   }
