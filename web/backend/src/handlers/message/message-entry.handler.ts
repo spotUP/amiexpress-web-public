@@ -22,7 +22,7 @@ import { messageBodyLineLimit, messageIndent, messageRule } from '../../utils/ta
 import { lineInput, yesNo } from '../../utils/await-input';
 import { higherAccess } from '../../utils/error-handling.util';
 import { deviceMounted, resolveAssignPath } from '../../utils/path-util';
-import { isFileRestricted } from '../../utils/file-restriction.util';
+import { restricted } from '../../utils/file-restriction.util';
 import { editKey, editorKeyCodes } from './line-editor';
 import { sessionWantsPetscii } from '../../utils/petscii-session-model';
 import { reportMessage } from '../../achievements/sites';
@@ -703,7 +703,7 @@ async function attachFile(socket: any, session: BBSSession): Promise<void> {
       }
       // No ELSE in express: an unmounted path is examined too, fails its
       // Lock and is removed a second time - a no-op for the one path here.
-      if (await restricted(socket, session, file)) attachedFiles.splice(i, 1);
+      if (await restricted(socket, session, file, resolveAssignPath(file), config.get('dataDir'))) attachedFiles.splice(i, 1);
     }
   }
   entry.attachedFiles = attachedFiles;
@@ -712,30 +712,6 @@ async function attachFile(socket: any, session: BBSSession): Promise<void> {
     const yes = await yesNo(socket, session, 2);
     attachedFiles.unshift(yes ? 'Y' : 'N');
   }
-}
-
-/**
- * express.e:9579-9608 restricted(). TRUE unless the path can be examined:
- * a path that cannot be locked is refused without a word, and one whose
- * comment starts "Restricted" is reported and logged. This board keeps a
- * file's comment as its DIR description (utils/file-restriction.util).
- */
-async function restricted(socket: any, session: BBSSession, file: string): Promise<boolean> {
-  const hostPath = resolveAssignPath(file);
-  if (!amigafs.existsSync(hostPath)) return true;
-  const conf = session.currentConf ?? 1;
-  if (await isFileRestricted(conf, config.get('dataDir'), path.basename(hostPath))) {
-    emitText(socket, '\r\n ');
-    emitText(socket, file);
-    emitText(socket, '\r\n >>Restricted File<< Updating CallersLog\r\n');
-    await _callersLog?.(
-      session.user?.id ?? null,
-      session.user?.username ?? 'unknown',
-      `\tAttempt to examine RESTRICTED file ${file.slice(0, 100)}`,
-    );
-    return true;
-  }
-  return false;
 }
 
 /**

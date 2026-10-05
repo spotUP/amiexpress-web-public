@@ -14,8 +14,12 @@
  * DIR metadata, so the gate was dead everywhere and Restricted files were
  * downloadable by anyone.
  */
+import * as path from 'path';
+import type { Socket } from 'socket.io';
 import { getDirFiles } from './max-dirs.util';
 import { readDirFile } from './dir-file-reader.util';
+import * as amigafs from './amigafs';
+import { emitText } from './output.util';
 
 /**
  * True if a DIR description marks the file "Restricted".
@@ -60,4 +64,32 @@ export async function isFileRestricted(
   filename: string,
 ): Promise<boolean> {
   return isRestrictedComment(await resolveFileDescription(confNum, bbsDataPath, filename));
+}
+
+/**
+ * express.e:9579-9608 restricted(): TRUE unless the path can be examined. A
+ * path that cannot be locked is refused without a word; one whose comment
+ * starts "Restricted" is echoed, reported and written to the CallersLog.
+ * This board keeps a file's comment as its DIR description (above).
+ *
+ * `file` is the path as the board names it (an Amiga path such as
+ * `BBS:Conf1/Files/X.TXT`), which is what the caller is shown; `hostPath` is
+ * where it is on this machine.
+ */
+export async function restricted(
+  socket: Socket,
+  session: { currentConf?: number; nodeId?: number },
+  file: string,
+  hostPath: string,
+  bbsDataPath: string,
+): Promise<boolean> {
+  if (!amigafs.existsSync(hostPath)) return true;
+  if (!(await isFileRestricted(session.currentConf ?? 1, bbsDataPath, path.basename(hostPath)))) return false;
+  emitText(socket, '\r\n ');
+  emitText(socket, file);
+  emitText(socket, '\r\n >>Restricted File<< Updating CallersLog\r\n');
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  require('../services/CallersLogManager').callersLogManager.logActivity(
+    session.nodeId || 1, `\tAttempt to examine RESTRICTED file ${file.slice(0, 100)}`);
+  return true;
 }

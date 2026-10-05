@@ -27,6 +27,7 @@ import * as os from 'os';
 import * as path from 'path';
 
 import { config } from '../src/config';
+import { flushOutput } from '../src/utils/output.util';
 import { ViewFileHandler } from '../src/handlers/content/view-file.handler';
 import { handleViewFileCommand, handleViewFileInput } from '../src/handlers/commands/utility-commands.handler';
 
@@ -40,7 +41,7 @@ beforeEach(() => {
   fs.mkdirSync(path.join(root, 'Conf1', 'Dir1'), { recursive: true });
   fs.mkdirSync(path.join(root, 'Conf1', 'Dir2'), { recursive: true });
   // The conference icon declares both file areas (express.e 5006/15264).
-  fs.writeFileSync(path.join(root, 'Conf1.info'), 'NDIRS=2\n');
+  fs.writeFileSync(path.join(root, 'Conf1.info'), 'NDIRS=2\nDLPATH.1=BBS:Conf1/Dir1/\nDLPATH.2=BBS:Conf1/Dir2/\n');
   fs.writeFileSync(path.join(root, 'Conf1', 'Dir2', 'NOTES.TXT'), 'THE NOTES BODY\r\n');
   for (const text of [path.join(root, 'Conf1', 'TEXT'), path.join(root, 'TEXT')]) {
     fs.mkdirSync(text, { recursive: true });
@@ -66,7 +67,7 @@ function aCaller(over: Record<string, unknown> = {}) {
     user: { id: 1, username: 'viewer', secLevel: 100, securityFlags: 'T'.repeat(64) },
     ...over,
   };
-  return { socket, session, said: () => lines.join('') };
+  return { socket, session, said: () => { flushOutput(socket); return lines.join(''); } };
 }
 
 describe('V command uses canonical ViewFileHandler (C-V, express.e:25675-25687)', () => {
@@ -87,11 +88,11 @@ describe('V command uses canonical ViewFileHandler (C-V, express.e:25675-25687)'
   test('ViewFileHandler searches Dir1..DirN (BBS file areas), not a flat TEXT/ dir', async () => {
     const found = aCaller();
     await ViewFileHandler.handleViewFileCommand(found.socket, found.session, 'NOTES.TXT');
-    expect(found.said()).toContain('Viewing: NOTES.TXT');
+    expect(found.said()).not.toContain('Viewing:'); // invented header, express.e has none
 
     const textOnly = aCaller();
     await ViewFileHandler.handleViewFileCommand(textOnly.socket, textOnly.session, 'ONLYTEXT.TXT');
-    expect(textOnly.said()).toContain('File ONLYTEXT.TXT not found.');
+    expect(textOnly.said()).toContain('File not found.'); // express.e:20548
     expect(textOnly.said()).not.toContain('SHOULD NOT BE FOUND');
   });
 

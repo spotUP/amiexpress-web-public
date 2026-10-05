@@ -248,6 +248,23 @@ export function conferenceUploadDirs(bbsRoot: string, conferenceNumber: number):
  * stricter, never looser, and one resolver beats two.
  */
 function conferencePathDirs(bbsRoot: string, conferenceNumber: number, prefix: 'DLPATH' | 'ULPATH'): string[] {
+  const resolved: string[] = [];
+  for (const entry of conferencePathEntries(bbsRoot, conferenceNumber, prefix)) {
+    if (!resolved.includes(entry.host)) resolved.push(entry.host);
+  }
+  return resolved;
+}
+
+/**
+ * The conference's `DLPATH.n` (or `ULPATH.n`) in order, each as the icon
+ * writes it - the Amiga path express.e prints, slash-terminated as
+ * checkPathSlash leaves it - and the host directory it resolves to.
+ */
+export function conferencePathEntries(
+  bbsRoot: string,
+  conferenceNumber: number,
+  prefix: 'DLPATH' | 'ULPATH',
+): Array<{ amiga: string; host: string }> {
   const iconPath = `${conferenceDir(bbsRoot, conferenceNumber)}.info`;
 
   let tooltypes: Map<string, string>;
@@ -261,7 +278,7 @@ function conferencePathDirs(bbsRoot: string, conferenceNumber: number, prefix: '
     return [];
   }
 
-  const resolved: string[] = [];
+  const entries: Array<{ amiga: string; host: string }> = [];
   for (let index = 1; index <= 16; index++) {
     const value = tooltypes.get(`${prefix}.${index}`)?.trim();
     if (!value) continue;
@@ -270,10 +287,11 @@ function conferencePathDirs(bbsRoot: string, conferenceNumber: number, prefix: '
         ? new BBSPaths(bbsRoot).resolveAmigaPath(value.replace(/\/+$/, ''))
         : path.resolve(bbsRoot, value.replace(/\/+$/, ''));
       const settled = amigafs.resolveExistingAncestors(host);
-      if (settled && !resolved.includes(settled)) resolved.push(settled);
+      const amiga = /[:/]$/.test(value) ? value : `${value}/`;
+      if (settled) entries.push({ amiga, host: settled });
     } catch {
       // One bad tooltype does not spoil the rest.
     }
   }
-  return resolved;
+  return entries;
 }

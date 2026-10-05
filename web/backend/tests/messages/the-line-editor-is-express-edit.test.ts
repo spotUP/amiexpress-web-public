@@ -33,7 +33,7 @@ jest.mock('../../src/handlers/message/line-editor', () => {
 });
 jest.mock('../../src/utils/file-restriction.util', () => {
   const actual = jest.requireActual('../../src/utils/file-restriction.util');
-  return { ...actual, isFileRestricted: jest.fn(actual.isFileRestricted) };
+  return { ...actual, restricted: jest.fn(actual.restricted) };
 });
 import * as messageEntry from '../../src/handlers/message/message-entry.handler';
 
@@ -288,11 +288,13 @@ describe('Msg. Options (express.e 10373-10578)', () => {
       expect(d.session.tempData.messageEntry.attachedFiles).toEqual([]);
     });
 
-    it('O4: a Restricted file is refused and logged', async () => {
-      (restriction.isFileRestricted as jest.Mock).mockResolvedValueOnce(true);
+    it('O4: a Restricted file is refused', async () => {
+      // restricted() (file-restriction.util, express.e:9579) prints and logs;
+      // V's test proves its text. Here: the attach asks it, and drops the file.
+      (restriction.restricted as jest.Mock).mockResolvedValueOnce(true);
       const d = drive({ body: ['one'] });
       await d.type('\r', 'F\r', 'BBS:song.mod\r');
-      expect(d.screen()).toContain('\r\n BBS:song.mod\r\n >>Restricted File<< Updating CallersLog\r\n');
+      expect((restriction.restricted as jest.Mock).mock.calls.at(-1)?.[2]).toBe('BBS:song.mod');
       expect(d.session.tempData.messageEntry.attachedFiles).toEqual([]);
     });
 

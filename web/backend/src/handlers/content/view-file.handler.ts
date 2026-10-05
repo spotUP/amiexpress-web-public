@@ -16,12 +16,32 @@ import { ACSPermission } from '../../constants/acs-permissions';
 import * as fs from 'fs';
 import * as amigafs from '../../utils/amigafs';
 import * as path from 'path';
-import * as readline from 'readline';
 import { flagPause, initPauseState, setNonStopMode } from '../../utils/flag-pause.util';
 import { getMaxDirs } from '../../utils/max-dirs.util';
-import { getConferenceDir } from '../../utils/file-hold.util';
+import { conferencePathEntries } from '../../conferences/conference-paths';
+import { restricted } from '../../utils/file-restriction.util';
+import { emitText } from '../../utils/output.util';
+import { decodeUtf8Or } from '../../utils/wire-encoding.util';
 import { sessionColumns } from '../../utils/door-min-columns.util';
 import { deviceMounted, resolveAssignPath } from '../../utils/path-util';
+
+/**
+ * The lines E's ReadStr loop hands viewAFile (express.e:20481): split at each
+ * LF, the LF dropped and a CR kept; a last line with no LF still counts, and
+ * nothing after a final LF does.
+ */
+function splitReadStrLines(bytes: Buffer): Buffer[] {
+  const lines: Buffer[] = [];
+  let start = 0;
+  for (let i = 0; i < bytes.length; i++) {
+    if (bytes[i] === 0x0a) {
+      lines.push(bytes.subarray(start, i));
+      start = i + 1;
+    }
+  }
+  if (start < bytes.length) lines.push(bytes.subarray(start));
+  return lines;
+}
 
 /**
  * View File Handler
@@ -59,7 +79,7 @@ console.log('[ENV] Viewing');
     // [1! = Enter RIP graphics/pixel mode
     // [2! = Return to RIP text mode
     if (session.ripMode) {
-      socket.emit('ansi-output', '\x1b[1!'); // Enter RIP pixel mode
+      emitText(socket, '\x1b[1!'); // Enter RIP pixel mode
     }
 
     // Call viewAFile - express.e:25682
@@ -68,7 +88,7 @@ console.log('[ENV] Viewing');
 
     // RIP mode: Return to text mode after viewing
     if (session.ripMode) {
-      socket.emit('ansi-output', '\x1b[2!'); // Return to RIP text mode
+      emitText(socket, '\x1b[2!'); // Return to RIP text mode
     }
   }
 
@@ -84,12 +104,12 @@ console.log('[ENV] Viewing');
   ): Promise<void> {
 
     // express.e:20394-20395
-    socket.emit('ansi-output', '\r\n');
+    emitText(socket, '\r\n');
 
     // Check if conference has files - express.e:20399-20402
     const maxDirs = await getMaxDirs(session.currentConf || 1, config.get('dataDir'));
     if (maxDirs === 0) {
-      socket.emit('ansi-output', 'No files available in this conference.\r\n\r\n');
+      emitText(socket, 'No files available in this conference.\r\n\r\n');
       session.subState = LoggedOnSubState.DISPLAY_MENU;
       return;
     }
@@ -111,7 +131,7 @@ console.log('[ENV] Viewing');
         : paramParts[0];
     } else {
       // No filename provided - prompt user
-      socket.emit('ansi-output', '\x1b[36mEnter filename of file to view? \x1b[0m');
+      emitText(socket, 'Enter filename of file to view? ');
       session.subState = LoggedOnSubState.VIEW_FILE_INPUT;
       session.tempData = {
         waitingForViewFilename: true,
@@ -140,7 +160,7 @@ console.log('[ENV] Viewing');
 
       if (!input.trim()) {
         // Empty input - cancel - express.e:20417-20419
-        socket.emit('ansi-output', '\r\n');
+        emitText(socket, '\r\n');
         session.subState = LoggedOnSubState.DISPLAY_MENU;
         return;
       }
@@ -151,8 +171,8 @@ console.log('[ENV] Viewing');
   }
 
   /**
-   * Display file contents
-   * Port from express.e:20421-20550
+   * express.e:20421-20550 - find the file, refuse a restricted one, and show
+   * it line by line, giving up at the first line that is not text.
    */
   private static async displayFile(
     socket: Socket,
@@ -161,108 +181,94 @@ console.log('[ENV] Viewing');
     nonStop: boolean,
     cmdcode: string = 'V'
   ): Promise<void> {
+    const dataDir = config.get('dataDir');
+    const done = () => { session.subState = LoggedOnSubState.DISPLAY_MENU; };
 
-    let fileInfo: { fullPath: string } | null;
+    let found: { shown: string; hostPath: string } | null;
     if (this.isSysopView(session, cmdcode)) {
       // express.e:20435-20450 - the name IS the path, on any mounted device.
-      fileInfo = this.sysopViewFile(filename);
-      if (!fileInfo) {
+      const file = this.sysopViewFile(filename);
+      if (!file) {
         // express.e:20429-20431 skipToIt, with path:=fn
-        socket.emit('ansi-output', `File ${filename} not found.\r\n\r\n`);
-        session.subState = LoggedOnSubState.DISPLAY_MENU;
-        return;
+        emitText(socket, `File ${filename} not found.\r\n\r\n`);
+        return done();
       }
       // express.e:20447-20448
       require('../../services/CallersLogManager').callersLogManager.logActivity(
         session.nodeId || 1, `\tSysopView ${filename}`);
-      // express.e:20449-20450 StrCopy(final,fn); JUMP skipit - the shared
-      // restricted / text / display steps below.
+      found = { shown: filename, hostPath: file.fullPath };
     } else {
-      // Validate filename - no special symbols - express.e:20460-20467
-      if (!this.isValidFilename(filename)) {
-        socket.emit('ansi-output', '\r\n\x1b[31mYou may not include any special symbols\x1b[0m\r\n\r\n');
-        session.subState = LoggedOnSubState.DISPLAY_MENU;
-        return;
+      // express.e:20453-20458 - no device, path, wildcard or `@` in the name.
+      if (/[:/*@]/.test(filename)) {
+        emitText(socket, 'You may not include any special symbols\r\n\r\n');
+        return done();
       }
-
-      // Search for file in conference directories - express.e:20469-20475
-      fileInfo = await this.findFileInConference(
-        config.get('dataDir'),
-        session.currentConf || 1,
-        filename
-      );
-
-      if (!fileInfo) {
-        socket.emit('ansi-output', `\r\n\x1b[31mFile ${filename} not found.\x1b[0m\r\n\r\n`);
-        session.subState = LoggedOnSubState.DISPLAY_MENU;
-        return;
+      // express.e:20460-20470 - DLPATH.1, DLPATH.2, ... in order.
+      found = this.findOnDownloadPaths(dataDir, session.currentConf || 1, filename);
+      if (!found) {
+        emitText(socket, 'File not found.\r\n\r\n'); // express.e:20548
+        return done();
       }
     }
 
-    // Check if file is restricted - express.e:20477-20484
-    if (this.isRestrictedFile(fileInfo.fullPath)) {
-      socket.emit('ansi-output', '\r\n\x1b[31mAttempt to read RESTRICTED file denied\x1b[0m\r\n');
-      socket.emit('ansi-output', 'Updating Callerslog\r\n');
-console.log(`[SECURITY] User ${session.user?.username} attempted to read restricted file: ${filename}`);
-      session.subState = LoggedOnSubState.DISPLAY_MENU;
-      return;
+    // express.e:20473-20480
+    if (await restricted(socket, session, found.shown, found.hostPath, dataDir)) {
+      emitText(socket, '\r\nAttempt to read RESTRICTED file denied\r\n');
+      emitText(socket, 'Updating Callerslog\r\n');
+      require('../../services/CallersLogManager').callersLogManager.logActivity(
+        session.nodeId || 1, `\t\tAttempt to read RESTRICTED file [${filename}]`);
+      return done();
     }
 
-    // Check if file is text (not binary) - express.e:20486-20491
-    const isBinary = await this.isBinaryFile(fileInfo.fullPath);
-    if (isBinary) {
-      socket.emit('ansi-output', '\r\n\x1b[31mThis file is not a text file.\x1b[0m\r\n\r\n');
-      session.subState = LoggedOnSubState.DISPLAY_MENU;
-      return;
-    }
-
-    // Initialize pause state
-    initPauseState(session);
-    if (nonStop) {
-      setNonStopMode(session, true);
-    }
-
-    // Display file contents - express.e:20492-20541
-    socket.emit('ansi-output', `\r\n\x1b[32mViewing: ${filename}\x1b[0m\r\n\r\n`);
-
+    let bytes: Buffer;
     try {
-      // Read file content using amigafs (case-insensitive)
-      const fileContent = amigafs.readFileSync(fileInfo.fullPath, 'utf8').toString();
-      const lines = fileContent.split(/\r?\n/);
-
-      let lineCount = 0;
-      const linesPerPage = 20;
-
-      // express.e:20492-20516 wraps at 79 on an 80-column screen. The width
-      // is the caller's, not a constant: 79 for every ANSI session
-      // (byte-identical), 39 for a C64. sessionColumns() is the one width
-      // source (delegates to doorScreenWidth) - C64/40-col plan, Task 4.
-      const wrapWidth = Math.max(20, sessionColumns(session) - 1);
-
-      for (const line of lines) {
-        // Display line with wrapping at wrapWidth characters - express.e:20492-20516
-        await this.displayLineWithWrapping(socket, line, wrapWidth);
-
-        lineCount++;
-
-        // Check for pause - express.e:20517-20527
-        if (lineCount % linesPerPage === 0) {
-          const shouldContinue = await flagPause(socket, session, 0);
-          if (!shouldContinue) {
-            session.subState = LoggedOnSubState.DISPLAY_MENU;
-            return;
-          }
-        }
-      }
-
-      socket.emit('ansi-output', '\r\n');
-      session.subState = LoggedOnSubState.DISPLAY_MENU;
-
+      bytes = amigafs.readFileSync(found.hostPath) as Buffer;
     } catch (error) {
 console.error('[VIEW FILE] Error reading file:', error);
-      socket.emit('ansi-output', '\r\n\x1b[31mError reading file.\x1b[0m\r\n\r\n');
-      session.subState = LoggedOnSubState.DISPLAY_MENU;
+      emitText(socket, 'File not found.\r\n\r\n');
+      return done();
     }
+
+    initPauseState(session);
+    if (nonStop) setNonStopMode(session, true);
+
+    // express.e:20492-20516 wraps at 79 on an 80-column screen; the width is
+    // the caller's (sessionColumns), 39 for a C64.
+    const wrapWidth = Math.max(20, sessionColumns(session) - 1);
+    let lineCount = 0;
+    for (const raw of splitReadStrLines(bytes)) {
+      // express.e:20481-20485 - a line opening with a byte above 128 ends it.
+      if (raw[0] > 128 || raw[1] > 128 || raw[2] > 128) {
+        emitText(socket, '\r\nThis file is not a text file.\r\n\r\n');
+        return done();
+      }
+      await this.displayLineWithWrapping(socket, decodeUtf8Or(raw, 'iso-8859-1'), wrapWidth);
+      lineCount++;
+      if (lineCount % 20 === 0 && !(await flagPause(socket, session, 0))) return done();
+    }
+    emitText(socket, '\r\n\r\n'); // express.e:20540
+    done();
+  }
+
+  /**
+   * express.e:20460-20470: the first DLPATH.n holding the name. `shown` is
+   * that DLPATH with the name on it, as express.e builds `final`.
+   */
+  private static findOnDownloadPaths(
+    dataDir: string,
+    confNum: number,
+    filename: string,
+  ): { shown: string; hostPath: string } | null {
+    for (const dir of conferencePathEntries(dataDir, confNum, 'DLPATH')) {
+      const hostPath = amigafs.resolvePath(path.join(dir.host, filename));
+      if (!hostPath) continue;
+      try {
+        if (fs.statSync(hostPath).isFile()) return { shown: `${dir.amiga}${filename}`, hostPath };
+      } catch {
+        // Not there; the next path.
+      }
+    }
+    return null;
   }
 
   /**
@@ -280,7 +286,7 @@ console.error('[VIEW FILE] Error reading file:', error);
   ): Promise<void> {
     // If line has CR or is short, display as-is - express.e:20494-20495
     if (line.includes('\r') || line.length <= wrapWidth) {
-      socket.emit('ansi-output', line + '\r\n');
+      emitText(socket, line + '\r\n');
       return;
     }
 
@@ -289,18 +295,18 @@ console.error('[VIEW FILE] Error reading file:', error);
     while (remaining.length > 0) {
       if (remaining.length > wrapWidth) {
         const chunk = remaining.substring(0, wrapWidth);
-        socket.emit('ansi-output', chunk);
+        emitText(socket, chunk);
         remaining = remaining.substring(wrapWidth);
 
         if (remaining.length > 0) {
-          socket.emit('ansi-output', '\r\n');
+          emitText(socket, '\r\n');
         }
       } else {
-        socket.emit('ansi-output', remaining);
+        emitText(socket, remaining);
         remaining = '';
       }
     }
-    socket.emit('ansi-output', '\r\n');
+    emitText(socket, '\r\n');
   }
 
   /**
@@ -327,102 +333,6 @@ console.error('[VIEW FILE] Error reading file:', error);
     }
   }
 
-  /**
-   * Find file in conference directories
-   * Searches DLPATH.1, DLPATH.2, etc. - express.e:20469-20475
-   */
-  private static async findFileInConference(
-    dataDir: string,
-    confNum: number,
-    filename: string
-  ): Promise<any | null> {
-    const confPath = getConferenceDir(confNum, dataDir);
-
-    // Search through all DIR# directories
-    for (let dirNum = 1; dirNum <= 20; dirNum++) {
-      const dirPath = path.join(confPath, `Dir${dirNum}`);
-
-      if (!amigafs.existsSync(dirPath)) continue;
-
-      const filePath = path.join(dirPath, filename);
-
-      if (amigafs.existsSync(filePath)) {
-        const stats = amigafs.statSync(filePath);
-
-        return {
-          name: filename,
-          size: stats.size,
-          confNum: confNum,
-          dirNum: dirNum,
-          fullPath: filePath
-        };
-      }
-    }
-
-    return null;
-  }
-
-  /**
-   * Validate filename - no special symbols
-   * express.e:20460-20467
-   */
-  private static isValidFilename(filename: string): boolean {
-    // Check for special symbols: : / * @
-    if (filename.includes(':') ||
-        filename.includes('/') ||
-        filename.includes('*') ||
-        filename.includes('@') ||
-        filename.includes('\\')) {
-      return false;
-    }
-
-    return true;
-  }
-
-  /**
-   * Check if file is restricted
-   * express.e:20477-20484
-   */
-  private static isRestrictedFile(filePath: string): boolean {
-    // Check for restricted paths/files
-    const restrictedPaths = [
-      '/etc/',
-      '/usr/',
-      '/bin/',
-      '/sbin/',
-      'passwd',
-      'shadow',
-      '.conf',
-      '.env'
-    ];
-
-    const lowerPath = filePath.toLowerCase();
-    return restrictedPaths.some(restricted => lowerPath.includes(restricted));
-  }
-
-  /**
-   * Check if file is binary (not text)
-   * express.e:20486-20491
-   */
-  private static async isBinaryFile(filePath: string): Promise<boolean> {
-    try {
-      const buffer = Buffer.alloc(3);
-      const fd = amigafs.openSync(filePath, 'r');
-      fs.readSync(fd, buffer, 0, 3, 0);
-      fs.closeSync(fd);
-
-      // Check if first 3 bytes are > 128 (binary indicator)
-      // express.e:20486-20489
-      if (buffer[0] > 128 || buffer[1] > 128 || buffer[2] > 128) {
-        return true;
-      }
-
-      return false;
-    } catch (error) {
-console.error('[VIEW FILE] Error checking binary:', error);
-      return true; // Assume binary if error
-    }
-  }
 }
 
 /**
