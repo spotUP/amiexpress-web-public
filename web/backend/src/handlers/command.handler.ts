@@ -3099,72 +3099,6 @@ console.log(' In file upload state - canceling upload');
     return;
   }
 
-  // Handle message entry substates (E command flow)
-  // These states require LINE-BUFFERED input, not single-key hotkeys
-  // Initialize inputBuffer if needed
-  if (!session.inputBuffer && (
-    session.subState === LoggedOnSubState.POST_MESSAGE_TO ||
-    session.subState === LoggedOnSubState.POST_MESSAGE_SUBJECT ||
-    session.subState === LoggedOnSubState.POST_MESSAGE_PRIVATE
-  )) {
-    session.inputBuffer = '';
-  }
-
-  if (session.subState === LoggedOnSubState.POST_MESSAGE_TO) {
-    // Buffer characters until Enter is pressed
-    if (data === '\r' || data === '\n') {
-      const input = (session.inputBuffer || '').trim();
-      session.inputBuffer = '';
-      // handleMessageToInput is async (DB lookup for chooseAName + checkConfAccess).
-      void handleMessageToInput(socket, session, input);
-    } else if (data === '\x7f') { // Backspace
-      if (session.inputBuffer && session.inputBuffer.length > 0) {
-        session.inputBuffer = session.inputBuffer.slice(0, -1);
-        // Client handles backspace echo
-      }
-    } else if (data.length === 1 && data >= ' ' && data <= '~') {
-      session.inputBuffer = (session.inputBuffer || '') + data;
-      // Client handles character echo, don't send back
-    }
-    return;
-  }
-
-  if (session.subState === LoggedOnSubState.POST_MESSAGE_SUBJECT) {
-    // Buffer characters until Enter is pressed
-    if (data === '\r' || data === '\n') {
-      const input = (session.inputBuffer || '').trim();
-      session.inputBuffer = '';
-      handleMessageSubjectInput(socket, session, input);
-    } else if (data === '\x7f') { // Backspace
-      if (session.inputBuffer && session.inputBuffer.length > 0) {
-        session.inputBuffer = session.inputBuffer.slice(0, -1);
-        // Client handles backspace echo
-      }
-    } else if (data.length === 1 && data >= ' ' && data <= '~') {
-      session.inputBuffer = (session.inputBuffer || '') + data;
-      // Client handles character echo, don't send back
-    }
-    return;
-  }
-
-  if (session.subState === LoggedOnSubState.POST_MESSAGE_PRIVATE) {
-    // Buffer characters until Enter is pressed
-    if (data === '\r' || data === '\n') {
-      const input = (session.inputBuffer || '').trim();
-      session.inputBuffer = '';
-      handleMessagePrivateInput(socket, session, input);
-    } else if (data === '\x7f') { // Backspace
-      if (session.inputBuffer && session.inputBuffer.length > 0) {
-        session.inputBuffer = session.inputBuffer.slice(0, -1);
-        // Client handles backspace echo
-      }
-    } else if (data.length === 1 && data >= ' ' && data <= '~') {
-      session.inputBuffer = (session.inputBuffer || '') + data;
-      // Client handles character echo, don't send back
-    }
-    return;
-  }
-
   /*
    * POST_MESSAGE_BODY WAS HANDLED TWICE, AND THE SECOND ONE NEVER RAN.
    *
@@ -3179,7 +3113,9 @@ console.log(' In file upload state - canceling upload');
   /*
    * The editor's sub-prompts (D, E, F, the quote range) had dead copies
    * here too, all unreachable for the same reason. Removed 2026-09-30 when
-   * Msg. Options became express's own lineInput / yesNo calls.
+   * Msg. Options became express's own lineInput / yesNo calls. The To,
+   * Subject and Private prompts had two more copies each (a key buffer here
+   * and a debug-logging composer further down); removed 2026-10-05.
    */
 
   // The reader (message/read-msg) reads its own keys through lineInput and
@@ -3248,152 +3184,6 @@ console.log(' In RL confirmation state');
 
   // VO (Voting Booth) states are handled by state-router
   // See: command-handler/voting-states.ts
-
-  // Handle message posting workflow (line-based input like login system)
-console.log(' Checking if in POST_MESSAGE_SUBJECT state:', (session.subState as any) === LoggedOnSubState.POST_MESSAGE_SUBJECT);
-  if ((session.subState as any) === LoggedOnSubState.POST_MESSAGE_SUBJECT) {
-console.log(' ENTERED message subject input handler');
-console.log(' Data received:', JSON.stringify(data), 'type:', typeof data);
-console.log(' Data === "\\r":', data === '\r');
-console.log(' Data === "\\n":', data === '\n');
-console.log(' Data.charCodeAt(0):', data.charCodeAt ? data.charCodeAt(0) : 'no charCodeAt');
-
-    // Handle line-based input like the login system
-    if (data === '\r' || data === '\n') { // Handle both carriage return and newline
-console.log(' ENTER CONDITION MET!');
-      // Enter pressed - process the input
-      const input = session.inputBuffer.trim();
-console.log(' ENTER PRESSED - Processing input:', JSON.stringify(input), 'length:', input.length);
-
-      // Check if this is private message recipient input
-      if (session.tempData?.isPrivate && !session.messageRecipient) {
-        if (input.length === 0) {
-console.log(' Recipient is empty, aborting private message posting');
-          emitText(socket, '\r\nPrivate message posting aborted.\r\n');
-          emitPrompt(socket, '\r\n\x1b[32mPress any key to continue...\x1b[0m');
-          session.menuPause = false;
-          session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
-          session.inputBuffer = '';
-          session.tempData = undefined;
-          return;
-        }
-console.log(' Recipient accepted:', JSON.stringify(input), '- now prompting for subject');
-        session.messageRecipient = input;
-        emitPrompt(socket, '\r\nEnter your message subject (or press Enter to abort): ');
-        session.inputBuffer = '';
-        return;
-      }
-
-      // Check if this is comment to sysop (skip recipient, go directly to subject)
-      if (session.tempData?.isCommentToSysop && !session.messageRecipient) {
-console.log(' Comment to sysop - setting recipient to SYSOP');
-        session.messageRecipient = 'SYSOP';
-        // Continue with subject input
-      }
-
-      // Handle subject input
-      if (input.length === 0) {
-console.log(' Subject is empty, aborting message posting');
-        emitText(socket, '\r\nMessage posting aborted.\r\n');
-        emitPrompt(socket, '\r\n\x1b[32mPress any key to continue...\x1b[0m');
-        session.menuPause = false;
-        session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
-        session.inputBuffer = '';
-        session.tempData = undefined;
-        return;
-      }
-console.log(' Subject accepted:', JSON.stringify(input), '- moving to message body input');
-      session.messageSubject = input;
-      emitPrompt(socket, '\r\nEnter your message (press Enter twice to finish):\r\n> ');
-      session.subState = LoggedOnSubState.POST_MESSAGE_BODY;
-      session.inputBuffer = '';
-console.log(' Changed state to POST_MESSAGE_BODY');
-    } else if (data === '\x7f') { // Backspace
-      if (session.inputBuffer.length > 0) {
-        session.inputBuffer = session.inputBuffer.slice(0, -1);
-        emitText(socket, '\b \b'); // Erase character from terminal
-console.log(' Backspace - buffer now:', JSON.stringify(session.inputBuffer));
-      }
-    } else if (data.length === 1 && data >= ' ' && data <= '~') { // Only printable characters
-      // Regular character - add to buffer and echo
-      session.inputBuffer += data;
-      emitText(socket, data);
-console.log(' Added character to buffer, current buffer:', JSON.stringify(session.inputBuffer));
-    } else {
-console.log(' Ignoring non-printable character:', JSON.stringify(data), 'charCode:', data.charCodeAt ? data.charCodeAt(0) : 'N/A');
-    }
-console.log(' EXITING message subject handler');
-    return;
-  }
-
-  if ((session.subState as any) === LoggedOnSubState.POST_MESSAGE_BODY) {
-console.log(' In message body input state, received:', JSON.stringify(data));
-
-    // Handle line-based input for message body
-    if (data === '\r' || data === '\n') {
-      // Enter pressed - check if this is an empty line (end of message)
-      if (session.inputBuffer.trim().length === 0) {
-        // Empty line - end message posting
-        const body = (session.messageBody || '').trim();
-        if (body.length === 0) {
-          emitText(socket, '\r\nMessage posting aborted.\r\n');
-        } else {
-          // Store message in database
-          try {
-            const db = getDatabase();
-            await db.createMessage({
-              subject: session.messageSubject || 'No Subject',
-              body: body,
-              author: session.user?.username || 'Anonymous',
-              timestamp: getSystemTime(),
-              conferenceId: session.currentConf,
-              messageBaseId: session.currentMsgBase,
-              isPrivate: session.tempData?.isPrivate || false,
-              toUser: session.messageRecipient,
-              parentId: session.tempData?.parentId
-            });
-            emitText(socket, '\r\nMessage posted successfully!\r\n');
-
-            // Log message posting activity
-console.log(`[Message] Posted by ${session.user?.username} in conf ${session.currentConf}: ${session.messageSubject}`);
-          } catch (error) {
-console.error('[Message] Failed to store message:', error);
-            emitText(socket, '\r\n\x1b[31mError posting message.\x1b[0m\r\n');
-          }
-        }
-        emitPrompt(socket, '\r\n\x1b[32mPress any key to continue...\x1b[0m');
-        session.menuPause = false;
-        session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
-
-        // Clear message data
-        session.messageSubject = undefined;
-        session.messageBody = undefined;
-        session.messageRecipient = undefined;
-        session.inputBuffer = '';
-        session.tempData = undefined;
-        return;
-      } else {
-        // Non-empty line - add to message body
-        if (session.messageBody) {
-          session.messageBody += '\r\n' + session.inputBuffer;
-        } else {
-          session.messageBody = session.inputBuffer;
-        }
-        emitPrompt(socket, '\r\n> '); // New line prompt
-        session.inputBuffer = '';
-      }
-    } else if (data === '\x7f') { // Backspace
-      if (session.inputBuffer.length > 0) {
-        session.inputBuffer = session.inputBuffer.slice(0, -1);
-        emitText(socket, '\b \b'); // Erase character from terminal
-      }
-    } else {
-      // Regular character - add to buffer and echo
-      session.inputBuffer += data;
-      emitText(socket, data);
-    }
-    return;
-  }
 
   // FM Command (File Maintenance) states are handled by state-router
   // See: command-handler/file-maintenance-states.ts
