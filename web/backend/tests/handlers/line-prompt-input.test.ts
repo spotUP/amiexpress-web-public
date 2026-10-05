@@ -271,6 +271,7 @@ describe('the line-prompt table is the one declaration', () => {
         LoggedOnSubState.CALLERSLOG_NODE_INPUT,
         LoggedOnSubState.FILE_LIST_DIR_INPUT,
         LoggedOnSubState.JM_INPUT,
+        LoggedOnSubState.JOIN_CONF_INPUT,
         LoggedOnSubState.NM_INPUT,
         LoggedOnSubState.OLM_NODE_INPUT,
         LoggedOnSubState.UPLOAD_FILENAME_INPUT,
@@ -332,5 +333,17 @@ describe('the OLM node prompt is express.e\'s lineInput', () => {
     const session = { ...c64Session(''), petsciiMode: false, terminalType: 'ansi', screenWidth: 80, subState: LoggedOnSubState.OLM_NODE_INPUT, inputBuffer: '' };
     await type(socket, session, 'R\r');
     expect(allOutput(socket)).toContain('R\r\n\r\nNo OLM has been received in this session\r\n');
+  });
+});
+
+describe('J\'s conference prompt is express.e\'s lineInput', () => {
+  // express.e:25145-25148: an empty answer is lineInput's line break and a
+  // return - no "Conference join cancelled".
+  it('an empty answer says nothing and goes back to the menu', async () => {
+    const socket = makeSocket();
+    const session = { ...c64Session(''), petsciiMode: false, terminalType: 'ansi', screenWidth: 80, subState: LoggedOnSubState.JOIN_CONF_INPUT, inputBuffer: '' };
+    await type(socket, session, '\r');
+    expect(allOutput(socket)).toBe('\r\n');
+    expect(session.subState).toBe(LoggedOnSubState.DISPLAY_MENU);
   });
 });

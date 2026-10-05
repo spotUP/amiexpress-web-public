@@ -1395,39 +1395,24 @@ export async function handleJoinMsgBaseInput(socket: any, session: BBSSession, i
     return;
   }
 
-  const msgBaseNum = parseInt(input, 10);
-  const { newConf, msgBaseCount } = session.tempData;
+  const { newConf } = session.tempData;
 
   // Clear waiting flag
   session.tempData.waitingForJoinMsgBase = false;
 
-  // Validate message base number
-  if (isNaN(msgBaseNum) || msgBaseNum < 1 || msgBaseNum > msgBaseCount) {
-    socket.emit('ansi-output', '\r\n');
-    socket.emit('ansi-output', AnsiUtil.errorLine('Invalid message base number'));
-    socket.emit('ansi-output', '\r\n');
+  // express.e:25177 - an empty answer returns without a word.
+  if (input.trim() === '') {
     session.subState = LoggedOnSubState.DISPLAY_MENU;
     return;
   }
 
-  // Get conference message bases (use injected dependencies)
-  const targetConf = _conferences.find((c: Conference) => c.id === newConf);
-  if (!targetConf) {
-    socket.emit('ansi-output', '\r\n');
-    socket.emit('ansi-output', AnsiUtil.errorLine('Conference not found'));
-    socket.emit('ansi-output', '\r\n');
-    session.subState = LoggedOnSubState.DISPLAY_MENU;
-    return;
-  }
-
+  // express.e:25178 Val(), then joinConf's clamp (4995): a number that is no
+  // base of the conference - or no number at all - is base 1. The port
+  // answered with invented "Invalid message base number" / "Message base not
+  // found" lines and joined nothing.
   const confMessageBases = _messageBases.filter((mb: MessageBase) => mb.conferenceId === newConf);
-  if (msgBaseNum > confMessageBases.length) {
-    socket.emit('ansi-output', '\r\n');
-    socket.emit('ansi-output', AnsiUtil.errorLine('Message base not found'));
-    socket.emit('ansi-output', '\r\n');
-    session.subState = LoggedOnSubState.DISPLAY_MENU;
-    return;
-  }
+  let msgBaseNum = parseInt(input, 10) || 0;
+  if (msgBaseNum < 1 || msgBaseNum > confMessageBases.length) msgBaseNum = 1;
 
   // express.e:25121 - saveMsgPointers before switching (same guard as internalCommandJ)
   if (session.user && session.currentConf && session.currentMsgBase) {
@@ -1443,7 +1428,7 @@ export async function handleJoinMsgBaseInput(socket: any, session: BBSSession, i
   }
 
   // Join conference with selected message base (express.e:25181)
-  const msgBaseId = confMessageBases[msgBaseNum - 1].id;
+  const msgBaseId = confMessageBases[msgBaseNum - 1]?.id ?? 1;
   await _joinConference(socket, session, newConf, msgBaseId);
 
   session.subState = LoggedOnSubState.DISPLAY_MENU;

@@ -3368,41 +3368,27 @@ console.log(' In conference selection state');
   }
 
   // Handle J (Join Conference) input
+  // J's "Conference Number (1-n): " - express.e:25145 lineInput(...,5,...).
+  // A line prompt (LINE_PROMPT_SUBSTATES): the line arrives whole, after
+  // lineInput's line break.
   if (session.subState === LoggedOnSubState.JOIN_CONF_INPUT) {
-console.log(' In JOIN_CONF_INPUT state');
-    // Initialize inputBuffer if needed
-    if (!session.inputBuffer) {
-      session.inputBuffer = '';
+    const input = data.trim();
+    // express.e:25148 - an empty answer returns without a word. The port
+    // printed an invented "Conference join cancelled".
+    if (input.length === 0) {
+      session.menuPause = true;
+      session.subState = LoggedOnSubState.DISPLAY_MENU;
+      return;
     }
 
-    // Buffer characters until Enter is pressed
-    if (data === '\r' || data === '\n') {
-      const input = (session.inputBuffer || '').trim();
-      session.inputBuffer = '';
-console.log(' Conference number entered:', input);
-
-      if (input.length === 0) {
-        finalizeCommand(socket, session, 'Conference join cancelled');
-        return;
-      }
-
-      // express.e:25150 - newConf:=getInverse(Val(newStr))
-      // Delegate to handleJoinConferenceCommand which applies getInverse, validates access,
-      // and handles the JOINCONF re-prompt loop identically to express.e:25140-25183.
-      const { handleJoinConferenceCommand: joinCmd } = require('./commands/user-commands.handler');
-      await joinCmd(socket, session, input);
-      if (!isDisplayFlowState(session.subState)) {
-        session.menuPause = true;
-        session.subState = LoggedOnSubState.DISPLAY_MENU;
-      }
-    } else if (data === '\x7f') { // Backspace
-      if (session.inputBuffer && session.inputBuffer.length > 0) {
-        session.inputBuffer = session.inputBuffer.slice(0, -1);
-        emitText(socket, '\b \b');
-      }
-    } else if (data.length === 1 && data >= ' ' && data <= '~') {
-      session.inputBuffer = (session.inputBuffer || '') + data;
-      emitText(socket, data);
+    // express.e:25150 - newConf:=getInverse(Val(newStr))
+    // Delegate to handleJoinConferenceCommand which applies getInverse, validates access,
+    // and handles the JOINCONF re-prompt loop identically to express.e:25140-25183.
+    const { handleJoinConferenceCommand: joinCmd } = require('./commands/user-commands.handler');
+    await joinCmd(socket, session, input);
+    if (!isDisplayFlowState(session.subState)) {
+      session.menuPause = true;
+      session.subState = LoggedOnSubState.DISPLAY_MENU;
     }
     return;
   }
