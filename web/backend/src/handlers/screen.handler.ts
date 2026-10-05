@@ -2152,7 +2152,18 @@ console.error(`[loadScreenFile]     (error reading file: ${(error as Error).mess
    */
   const pathCandidates = paths.flatMap((candidate: string) => {
     const mirrored = themedPath(baseDir, callerThemeSlug, candidate);
-    return mirrored ? [mirrored, candidate] : [candidate];
+    if (!mirrored) return [candidate];
+    /*
+     * A theme owns art, and art it does not have in the caller's alphabet it
+     * does not own - the rule the search loop applies to screens by name.
+     * The candidate is already the board's .seq/.ttx twin when it has one;
+     * a theme mirror without that file would reach its ANSI copy through the
+     * security walk below and shadow it (sysop, 2026-10-05: the Up Rough logo
+     * in teletext came from Themes/h7/Files/Screens/uprough.txt).
+     */
+    const ownAlphabet = isPetsciiSeqFile(candidate) || isTeletextFile(candidate) || isNativeTtiName(candidate);
+    if (ownAlphabet && !findCaseInsensitive(path.dirname(mirrored), path.basename(mirrored))) return [candidate];
+    return [mirrored, candidate];
   });
 
   // If we have paths from Amiga-style handling, try those too

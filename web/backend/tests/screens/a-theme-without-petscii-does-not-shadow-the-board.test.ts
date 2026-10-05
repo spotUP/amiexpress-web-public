@@ -186,3 +186,31 @@ describe('a screen file named by path', () => {
     expect(String(ansi?.filePath)).toMatch(/uprough\.txt$/);
   });
 });
+
+/*
+ * The same for a file named by path through the theme's Files/ mirror
+ * (sysop, 2026-10-05: the Up Rough logo stayed ANSI in teletext - it came
+ * from Themes/h7/Files/Screens/uprough.txt).
+ */
+describe('a theme mirror with no teletext copy of a named file', () => {
+  it('does not shadow the board\'s .ttx', async () => {
+    root = board('no-seq');
+    fs.mkdirSync(path.join(root, 'Screens'), { recursive: true });
+    fs.writeFileSync(path.join(root, 'Screens', 'uprough.txt'), '\x1b[0;31mBOARD ANSI\r\n', 'latin1');
+    fs.writeFileSync(path.join(root, 'Screens', 'uprough.ttx'), '\x1b[0;33mBOARD TELETEXT\n', 'latin1');
+    fs.mkdirSync(path.join(root, 'Themes', 'live', 'Files', 'Screens'), { recursive: true });
+    fs.writeFileSync(path.join(root, 'Themes', 'live', 'Files', 'Screens', 'uprough.txt'), '\x1b[0;35mTHEME ANSI\r\n', 'latin1');
+    previousRoot = config.get('dataDir');
+    (config as any).set?.('dataDir', root);
+    invalidateScreenIndex();
+
+    const caller: any = { nodeId: 1, texttvMode: true, screenWidth: 40, screenHeight: 25, user: { secLevel: 255 }, currentConf: 1, screenThemeResolved: 'live' };
+    const result = await loadScreenFile('BBS:Screens/uprough.txt', 1, 1, caller);
+
+    expect(String(result?.content)).toContain('BOARD TELETEXT');
+
+    // An ANSI caller on the same theme still gets the theme's drawing.
+    const ansi = await loadScreenFile('BBS:Screens/uprough.txt', 1, 1, { ...caller, texttvMode: false });
+    expect(String(ansi?.content)).toContain('THEME ANSI');
+  });
+});
