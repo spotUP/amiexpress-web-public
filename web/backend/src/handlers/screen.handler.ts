@@ -1902,7 +1902,14 @@ console.log(`[SCREEN_DEBUG] Stripping leading 'bbs' component: ${(resolved || fs
     }
     if (session?.texttvMode === true) {
       const found = findSecurityScreen(path.join(dir, screenBaseNoExt), userSecLevel, null, false, false, false, true, { hollow });
-      return found && (isTeletextFile(found) || (isNativeTtiName(found) && tryNativeTtiFile(found) !== null)) ? found : null;
+      if (!found) return null;
+      if (isTeletextFile(found)) return found;
+      if (!isNativeTtiName(found)) return null;
+      if (tryNativeTtiFile(found) !== null) return found;
+      // A .tti that is not packets is passed over by the loader for its .ttx
+      // twin (tryNativeTtiFile's contract) - live's Screens/Node/BBSTITLE.tti
+      // is ANSI text - so the twin is what this location has.
+      return findCaseInsensitive(path.dirname(found), path.basename(found).replace(/\.tti$/i, '.ttx'));
     }
     return null;
   };

@@ -140,6 +140,19 @@ describe('a theme with no teletext copy', () => {
     expect(String(result?.filePath)).toMatch(/Conf1[\\/]Menu\.ttx$/);
   });
 
+  it('does not shadow it when the board\'s .tti is not packets and its .ttx twin is the copy', async () => {
+    root = teletextBoard(false);
+    // Live's Screens/Node/BBSTITLE.tti is ANSI text wearing the name.
+    fs.writeFileSync(path.join(root, 'Conf1', 'Menu.tti'), '~SMO1|\n\x1b[0;33m 100 UP ROUGH BBS\r\n', 'latin1');
+    previousRoot = config.get('dataDir');
+    (config as any).set?.('dataDir', root);
+    invalidateScreenIndex();
+
+    const result = await loadScreenFile('Menu', 1, 1, teletext());
+
+    expect(String(result?.filePath)).toMatch(/Conf1[\\/]Menu\.ttx$/);
+  });
+
   it('a theme WITH one still wins', async () => {
     root = teletextBoard(true);
     previousRoot = config.get('dataDir');
