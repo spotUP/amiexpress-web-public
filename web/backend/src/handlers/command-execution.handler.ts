@@ -466,6 +466,7 @@ async function runCommand(
     // (~CC_, ~XC_, ~XI MCI codes) were not typed by the user, so they fail
     // silently exactly as a privcmd invocation does.
     if (!session.executingScreenCommand) {
+      // WEB_: both lines below (switched-off door; no express.e state).
       // A door the admin SWITCHED OFF is a different answer from a door the
       // caller is too junior for, and express.e's one sentence cannot tell
       // them apart - it sent a level-255 sysop hunting a permission problem
