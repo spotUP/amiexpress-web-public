@@ -53,6 +53,23 @@ export const ID_TO_PROTOCOL: Record<number, TransferProtocol> = {
   6: 'punter'
 };
 
+/**
+ * The line express prints as a transfer starts. A send names the protocol by
+ * its internalName (express.e:15620-15650, printed at 15731-15737), a
+ * receive by fileReceive's own spelling (17977-17994) - "ZModem" going out,
+ * "Zmodem" coming in. Punter is no express protocol; it stands where an xpr
+ * library's title would (15737, 17994).
+ */
+export function readyToTransferLine(protocol: TransferProtocol, direction: TransferDirection): string {
+  const family = protocol.startsWith('xmodem') ? 'xmodem' : protocol;
+  if (direction === 'download') {
+    const sendName: Record<string, string> = { zmodem: 'ZModem', ymodem: 'YModem', xmodem: 'XModem', punter: 'Punter' };
+    return `${sendName[family]}: Ready to Send\r\n`;
+  }
+  const receiveName: Record<string, string> = { zmodem: 'Zmodem', ymodem: 'Ymodem', xmodem: 'Xmodem', punter: 'Punter' };
+  return `\r\n${receiveName[family]}: Ready to Receive\r\n`;
+}
+
 export interface TransferOptions {
   protocol?: TransferProtocol;
   direction: TransferDirection;

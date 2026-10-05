@@ -321,8 +321,11 @@ console.error('[ZMODEM] Failed to ensure playpen:', err);
      * the browser bridge. Everything else goes through TransferProtocolManager,
      * which already knew how to run all four and had simply never been called.
      */
-    const { getDefaultProtocol } = require('../../services/transfer-protocol.service');
+    const { getDefaultProtocol, readyToTransferLine } = require('../../services/transfer-protocol.service');
     const chosenProtocol = getDefaultProtocol(session);
+    // express.e:17977-17998 - fileReceive names the protocol before the
+    // receive starts (uLFType FALSE: U, not RZ).
+    socket.emit('ansi-output', readyToTransferLine(chosenProtocol, 'upload'));
     if (chosenProtocol !== 'zmodem') {
       /*
        * XMODEM CARRIES NO FILENAME, so it is received into the name the
@@ -422,9 +425,6 @@ console.error('[ZMODEM] Failed to ensure playpen:', err);
         // Park in FILES_UPLOAD; see transfer-misc-commands.handler.ts:RZ
         // path comment for rationale.
         session.subState = LoggedOnSubState.FILES_UPLOAD;
-        // express.e:17795 prints `\b\n\b\n` after the Okay prompt and
-        // nothing else - command.handler.ts:3050 already emits those two
-        // newlines. A "Ready to receive" banner was ours, not express's.
         // Divergence 20: this path sent NO IAC BINARY at all, while the
         // download path and the RZ path both did - so an upload started with
         // `U` on telnet ran under NVT rules and CRC-failed on any subpacket
@@ -601,9 +601,10 @@ export function startZmodemDownload(
    * the browser bridge. Everything else goes through TransferProtocolManager,
    * which already knew how to run all four and had simply never been called.
    */
-  const { getDefaultProtocol } = require('../../services/transfer-protocol.service');
+  const { getDefaultProtocol, readyToTransferLine } = require('../../services/transfer-protocol.service');
   const chosenProtocol = getDefaultProtocol(session);
   if (chosenProtocol !== 'zmodem') {
+    socket.emit('ansi-output', readyToTransferLine(chosenProtocol, 'download')); // express.e:15731-15740
     const { TransferProtocolManager } = require('../../services/transfer-protocol.service');
     const protocolManager = new TransferProtocolManager(
       session,
@@ -701,7 +702,7 @@ export function startZmodemDownload(
       // with text bytes between ZMODEM frames). onComplete restores
       // DISPLAY_MENU when sz exits.
       session.subState = LoggedOnSubState.FILES_DOWNLOAD;
-      socket.emit('ansi-output', 'ZModem: Ready to Send\r\n'); // express.e:15731-15740
+      socket.emit('ansi-output', readyToTransferLine('zmodem', 'download')); // express.e:15731-15740
       // express.e:15891-15896 — negotiate IAC BINARY transmission
       // before the ZMODEM transfer so the client doesn't apply NVT-
       // mode rules (CR→CRLF/CRNUL, NUL strip, etc.) to the binary
@@ -777,7 +778,7 @@ export function startZmodemDownload(
     });
   } else {
     console.log(`[ZMODEM-DL ${ctxId}] telnet/SSH: emitting Starting ZMODEM banner`);
-    socket.emit('ansi-output', 'ZModem: Ready to Send\r\n'); // express.e:15731-15740
+    socket.emit('ansi-output', readyToTransferLine('zmodem', 'download')); // express.e:15731-15740
   }
 
   console.log(`[ZMODEM-DL ${ctxId}] manager.start() — sending ZRQINIT next`);

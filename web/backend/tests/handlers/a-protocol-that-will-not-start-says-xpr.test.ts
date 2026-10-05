@@ -33,7 +33,7 @@ test('a send that will not start prints express.e\'s xpr line', async () => {
   startZmodemDownload(socket, session, [file]);
   await new Promise(r => setTimeout(r, 20));
 
-  expect(said.join('')).toContain('\r\nUnable to open the xpr library\r\n');
+  expect(said.join('')).toContain('XModem: Ready to Send\r\n\r\nUnable to open the xpr library\r\n'); // express.e:15737
   expect(said.join('')).not.toContain('Transfer could not be started');
   fs.rmSync(dir, { recursive: true, force: true });
 });

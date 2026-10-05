@@ -84,13 +84,13 @@ describe('starting an upload with U', () => {
 });
 
 /**
- * express prints no banner when the receiver starts.
+ * express names the protocol when the receiver starts, and nothing else.
  *
  * express.e:17795 answers the "Okay: (Enter) to Start" prompt with
- * `aePuts('\b\n\b\n')` - two newlines - and then starts the receiver. This
- * port added "Ready to receive via ZMODEM (lrzsz). Send with sz now." at four
- * sites, which no AmiExpress ever printed. A caller on a real Amiga terminal
- * sees the ZRQINIT and starts; the sentence was ours.
+ * `aePuts('\b\n\b\n')`, then fileReceive prints "Zmodem: Ready to Receive"
+ * (17979) before the receive. This port once added "Ready to receive via
+ * ZMODEM (lrzsz). Send with sz now." at four sites, then dropped every line,
+ * express's own included.
  *
  * These drive the real path with the transfer services stubbed, so what is
  * asserted is what reaches the caller's terminal.
@@ -174,12 +174,12 @@ describe('the bytes the caller sees when the receiver starts', () => {
     return textSentTo(s);
   }
 
-  it('says nothing at all to a telnet caller', () => {
-    expect(runUpload('telnet')).not.toContain('Ready to receive');
+  it("prints express's Ready to Receive line to a telnet caller", () => {
+    expect(runUpload('telnet')).toBe('\r\nZmodem: Ready to Receive\r\n');
   });
 
-  it('says nothing at all to a web caller', () => {
-    expect(runUpload('web')).not.toContain('Ready to receive');
+  it("prints express's Ready to Receive line to a web caller", () => {
+    expect(runUpload('web')).toBe('\r\nZmodem: Ready to Receive\r\n');
   });
 
   it('never mentions the tool that happens to be doing the receiving', () => {
