@@ -36,3 +36,29 @@ test('the new password is starred, and "Reenter" follows getPass2\'s one break',
   await type(c, 'abc\r');
   expect(c.said()).toBe('***\r\nReenter New Password: ');
 });
+
+test('W 7 is express\'s line test: count down, ask, and a bad answer runs it again silently', async () => {
+  const c = caller(LoggedOnSubState.W_OPTION_SELECT);
+  await type(c, '7\r');
+  const asked = c.said();
+  expect(asked).toContain(' 70\r\n 69\r\n');
+  expect(asked).toContain(' 2\r\n\r\nEnter the number you see at the top of your screen (or 0 for Auto): ');
+  expect(asked).not.toContain('Lines Per Screen (0=Auto)');
+
+  const before = asked.length;
+  await type(c, '300\r');
+  const again = c.said().slice(before);
+  expect(again).not.toContain('Invalid number');
+  expect(again).toContain(' 70\r\n');
+  expect(c.session.subState).toBe(LoggedOnSubState.W_EDIT_LINES);
+});
+
+test('W 3 says "Checking for duplicate name..." before the wildcard refusal, and has no space test', async () => {
+  const wild = caller(LoggedOnSubState.W_EDIT_INTERNETNAME);
+  await type(wild, 'a*\r');
+  expect(wild.said()).toContain('\r\nChecking for duplicate name...No wildcards allowed in a name.\r\n\r\nInternet Name: ');
+
+  const spaced = caller(LoggedOnSubState.W_EDIT_INTERNETNAME);
+  await type(spaced, 'a b\r');
+  expect(spaced.said()).not.toContain('No spaces allowed');
+});

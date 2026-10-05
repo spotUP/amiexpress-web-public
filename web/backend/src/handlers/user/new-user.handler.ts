@@ -12,6 +12,7 @@
  * - Summary and confirmation
  */
 
+import { linesCountdown, LINES_PROMPT } from '../../utils/lines-test.util';
 import { Socket } from 'socket.io';
 import { autoLinesFor } from '../../utils/auto-lines.util';
 import * as amigafs from '../../utils/amigafs';
@@ -840,12 +841,9 @@ export async function handlePasswordConfirm(socket: Socket, session: any, input:
 function promptForLines(socket: Socket, session: any) {
   if (!session.newUserData.linesCountdownShown) {
     session.newUserData.linesCountdownShown = true;
-    for (let count = 70; count >= 2; count--) {
-      socket.emit('ansi-output', ` ${count}\r\n`);
-    }
+    socket.emit('ansi-output', linesCountdown());
   }
-  // express.e:11307, verbatim.
-  socket.emit('ansi-output', '\r\nEnter the number you see at the top of your screen (or 0 for Auto): ');
+  socket.emit('ansi-output', LINES_PROMPT);
   session.inputBuffer = '';
 }
 

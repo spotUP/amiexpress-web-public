@@ -11,6 +11,7 @@
 import { LoggedOnSubState, BBSState } from '../../constants/bbs-states';
 import { settingsDoorsFor, type SettingsDoorEntry } from './w-settings-doors';
 import { autoLinesFor } from '../../utils/auto-lines.util';
+import { linesCountdown, LINES_PROMPT } from '../../utils/lines-test.util';
 import { getBoardConfig } from '../../services/bbs-config-file.service';
 import { config as appConfig } from '../../config';
 import { ACSPermission } from '../../constants/acs-permissions';
@@ -763,8 +764,8 @@ export async function handleWOptionSelectInput(socket: any, session: BBSSession,
       session.subState = LoggedOnSubState.W_EDIT_PASSWORD;
       break;
 
-    case 7: // Edit Lines Per Screen - express.e:25976-25980
-      emitText(socket, 'Lines Per Screen (0=Auto): ');
+    case 7: // Edit Lines Per Screen - express.e:26032-26037, numberOfLinesTest
+      emitText(socket, linesCountdown() + LINES_PROMPT);
       session.subState = LoggedOnSubState.W_EDIT_LINES;
       break;
 
@@ -962,15 +963,15 @@ export async function handleWEditNameInput(socket: any, session: BBSSession, inp
     return;
   }
 
-  // Check for wildcards (express.e:25859-25862)
+  // express.e:25913-25918: "Checking..." first, then the wildcard test.
+  emitText(socket, '\r\nChecking for duplicate name...');
   if (trimmed.includes('*') || trimmed.includes('?')) {
     emitText(socket, 'No wildcards allowed in a name.\r\n\r\n');
     emitText(socket, 'Name: ');
     return;
   }
 
-  // Check for duplicate (express.e:25863-25868)
-  emitText(socket, '\r\nChecking for duplicate name...');
+  // Check for duplicate (express.e:25919-25923)
   const existing = await db.getUserByUsername(trimmed);
   if (existing && existing.id !== session.user.id) {
     emitText(socket, 'Already in use!, try another.\r\n\r\n');
@@ -1056,23 +1057,30 @@ export async function handleWEditInternetnameInput(socket: any, session: BBSSess
     return;
   }
 
-  // Check for spaces
-  if (trimmed.includes(' ')) {
-    emitText(socket, '\r\nNo spaces allowed.\r\n\r\n');
-    emitText(socket, 'Internet Name: (Alpha Numeric No Spaces) ');
+  // express.e:25967: the real name typed again changes nothing.
+  if (trimmed.toUpperCase() === (session.user.realname || '').toUpperCase()) {
+    _displayWCommandMenu(socket, session);
+    session.subState = LoggedOnSubState.W_OPTION_SELECT;
     return;
   }
 
-  // Check for wildcards
+  // express.e:25968-25979. No space test: the prompt asks, nothing checks.
+  emitText(socket, '\r\nChecking for duplicate name...');
   if (trimmed.includes('*') || trimmed.includes('?')) {
     emitText(socket, 'No wildcards allowed in a name.\r\n\r\n');
+    emitText(socket, 'Internet Name: (Alpha Numeric No Spaces) ');
+    return;
+  }
+  const existing = await db.getUserByInternetname(trimmed);
+  if (existing && existing.id !== session.user.id) {
+    emitText(socket, 'Already in use!, try another.\r\n\r\n');
     emitText(socket, 'Internet Name: (Alpha Numeric No Spaces) ');
     return;
   }
 
   session.user.internetName = trimmed;
   await changeAccount(session, { internetName: trimmed });
-  emitText(socket, '\r\nOk!\r\n');
+  emitText(socket, 'Ok!\r\n');
   _displayWCommandMenu(socket, session);
   session.subState = LoggedOnSubState.W_OPTION_SELECT;
 }
@@ -1215,17 +1223,18 @@ export async function handleWEditPasswordConfirmInput(socket: any, session: BBSS
 export async function handleWEditLinesInput(socket: any, session: BBSSession, input: string): Promise<void> {
   const trimmed = input.trim();
 
-  // Empty = cancel
+  // express.e:11310: an empty answer changes nothing.
   if (trimmed === '') {
     _displayWCommandMenu(socket, session);
     session.subState = LoggedOnSubState.W_OPTION_SELECT;
     return;
   }
 
-  const lines = parseInt(trimmed, 10);
-  if (isNaN(lines) || lines < 0 || lines > 100) {
-    emitText(socket, '\r\nInvalid number. Please enter 0-100.\r\n');
-    emitText(socket, 'Lines Per Screen (0=Auto): ');
+  // Val (11311): leading digits, else 0. Out of 0-255 the test fails and
+  // case 7's REPEAT runs it again - no error text (11313, 26034-26037).
+  const lines = parseInt(trimmed, 10) || 0;
+  if (lines < 0 || lines > 255) {
+    emitText(socket, linesCountdown() + LINES_PROMPT);
     return;
   }
 
