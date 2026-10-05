@@ -333,8 +333,9 @@ console.error('[ZMODEM] Failed to ensure playpen:', err);
       if (String(chosenProtocol).startsWith('xmodem')) {
         const named = (session.tempData?.uploadBatch ?? [])[0]?.filename as string | undefined;
         if (!named) {
-          socket.emit('ansi-output', '\r\nXMODEM sends no filename - type one at FileName 1: before starting.\r\n\r\n');
-          uploadReturns(session, 'failure');
+          // express.e cannot name an XMODEM receive; it fails into the
+          // ordinary post-receive block (19053-19101), as here.
+          void fileReceivedUploads(socket, session, [], [], ulStartTime);
           return;
         }
         target = path.join(playpen, path.basename(named));
@@ -533,7 +534,7 @@ export function startZmodemDownload(
 
   if (!files || files.length === 0) {
     console.log(`[ZMODEM-DL ${ctxId}] no files, aborting`);
-    socket.emit('ansi-output', '\r\nNo files available for download.\r\n');
+    // express.e:15597-15599 returns with nothing to say.
     if (transferOnly) { void handBack(false); return; }
     session.subState = LoggedOnSubState.DISPLAY_MENU;
     return;
@@ -697,7 +698,7 @@ export function startZmodemDownload(
       // with text bytes between ZMODEM frames). onComplete restores
       // DISPLAY_MENU when sz exits.
       session.subState = LoggedOnSubState.FILES_DOWNLOAD;
-      socket.emit('ansi-output', `\r\nStarting ZMODEM send (lrzsz)...\r\n`);
+      socket.emit('ansi-output', 'ZModem: Ready to Send\r\n'); // express.e:15731-15740
       // express.e:15891-15896 — negotiate IAC BINARY transmission
       // before the ZMODEM transfer so the client doesn't apply NVT-
       // mode rules (CR→CRLF/CRNUL, NUL strip, etc.) to the binary
@@ -773,7 +774,7 @@ export function startZmodemDownload(
     });
   } else {
     console.log(`[ZMODEM-DL ${ctxId}] telnet/SSH: emitting Starting ZMODEM banner`);
-    socket.emit('ansi-output', `\r\nStarting ZMODEM send... (sz)\r\n`);
+    socket.emit('ansi-output', 'ZModem: Ready to Send\r\n'); // express.e:15731-15740
   }
 
   console.log(`[ZMODEM-DL ${ctxId}] manager.start() — sending ZRQINIT next`);

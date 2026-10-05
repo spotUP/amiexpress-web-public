@@ -177,7 +177,10 @@ describe('a ZMODEM upload', () => {
     expect(c.session.subState).toBe(LoggedOnSubState.READ_COMMAND);
   });
 
-  it('through RZ that the caller aborts ends through endUpload as a failure', async () => {
+  // A failed receive still runs uploadaFile's post-receive block and reaches
+  // its ENDPROC RESULT_SUCCESS (express.e:19053-19101, 19549); only the
+  // logs say "Upload Failed..". It still ends through endUpload.
+  it('through RZ that the caller aborts ends through endUpload, filing nothing', async () => {
     lrzszInstalled = true;
     const c = aTelnetCaller();
     c.session.subState = LoggedOnSubState.READ_COMMAND;
@@ -186,7 +189,7 @@ describe('a ZMODEM upload', () => {
     await settle();
 
     await receivers[0].opts.onComplete(false, {});
-    await expect(Promise.race([ended, settle(200).then(() => 'still waiting')])).resolves.toBe('failure');
+    await expect(Promise.race([ended, settle(200).then(() => 'still waiting')])).resolves.toBe('success');
     expect(createdEntries).toHaveLength(0);
   });
 });
