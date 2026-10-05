@@ -2485,6 +2485,14 @@ console.log(' [REGISTRATION] Handling input for subState:', session.subState);
       session.shortcuts.clear();
     }
 
+    // express.e:30311 - "Is the above Correct?" is answered with one key
+    // (readChar), not a typed line.
+    if (session.subState === LoggedOnSubState.NEW_USER_CONFIRM) {
+      const newUserHandler = require('./user/new-user.handler');
+      await newUserHandler.handleConfirmInput(socket, session, data);
+      return;
+    }
+
     // Buffer characters until Enter is pressed
     if (data === '\r' || data === '\n') {
       const input = session.inputBuffer || '';
@@ -2528,9 +2536,6 @@ console.log(' [REGISTRATION] Handling input for subState:', session.subState);
           break;
         case LoggedOnSubState.NEW_USER_SCREEN_CLEAR:
           await newUserHandler.handleScreenClearInput(socket, session, input);
-          break;
-        case LoggedOnSubState.NEW_USER_CONFIRM:
-          await newUserHandler.handleConfirmInput(socket, session, input);
           break;
         case LoggedOnSubState.NEW_USER_SCRIPT:
           await newUserHandler.handleQuestionnaireAnswer(socket, session, input);

@@ -1144,11 +1144,14 @@ async function scriptDoorRan(socket: Socket, session: any): Promise<boolean> {
  * (Audit A-21.)
  */
 export async function handleConfirmInput(socket: Socket, session: any, input: string) {
-  const response = input.trim().toUpperCase();
+  // express.e:30308-30318 - ONE key (readChar): N or Q is no, Y is yes, and
+  // any other key is read past. The port took a typed line and treated
+  // everything but N as yes.
+  const response = input.trim().toUpperCase().charAt(0);
 
   // express.e:30313-30316 - N or Q: aePuts('No!\b\n\b\n') and JUMP jLoop1,
   // back to the name prompt (30133).
-  if (response === 'N' || response === 'NO' || response === 'Q' || response === 'QUIT') {
+  if (response === 'N' || response === 'Q') {
     socket.emit('ansi-output', 'No!\r\n\r\n');
     session.subState = LoggedOnSubState.NEW_USER_NAME;
     session.newUserData.linesCountdownShown = false;
@@ -1156,10 +1159,10 @@ export async function handleConfirmInput(socket: Socket, session: any, input: st
     return;
   }
 
-  // express.e flow: after confirmation, go directly to questionnaire
-  // The script file (e.g., Node1/script57600) contains realname/sexage/tricky prompts
-  // We don't duplicate those prompts in code
-  socket.emit('ansi-output', '\r\n');
+  if (response !== 'Y') return;
+
+  // express.e:30319, then the questionnaire.
+  socket.emit('ansi-output', 'Yes..\r\n\r\n');
   await continueRegistrationFlow(socket, session);
 }
 

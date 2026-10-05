@@ -103,6 +103,10 @@ async function type(socket: any, session: any, line: string) {
   for (const ch of line) await handleCommand(socket, session, ch);
   await handleCommand(socket, session, '\r');
 }
+/** One key, no Enter: express.e reads "Is the above Correct?" with readChar (30311). */
+async function key(socket: any, session: any, k: string) {
+  await handleCommand(socket, session, k);
+}
 const text = (socket: any) => socket._emits.map((e: any) => String(e.payload)).join('');
 
 beforeAll(() => { ({ handleCommand } = require('../../../src/handlers/command.handler')); });
@@ -126,7 +130,8 @@ test('a caller who confirms, then answers the questions by typing, gets through 
   const socket = makeSocket();
   const session = makeSession();
 
-  await type(socket, session, 'Y');                       // "Is the above Correct?"
+  await key(socket, session, 'Y');                        // "Is the above Correct?"
+  expect(text(socket)).toMatch(/^Yes\.\.\r\n\r\n/); // express.e:30319
   expect(text(socket)).toContain('What is your real name:');
   expect(db.createUser).toHaveBeenCalledTimes(1);          // account made first
 
@@ -150,7 +155,7 @@ test('the browser is told it is logged on only once the questionnaire is over', 
   const socket = makeSocket();
   const session = makeSession();
 
-  await type(socket, session, 'Y');
+  await key(socket, session, 'Y');
 
   // Mid-questionnaire: an account, but not yet a logged-on caller.
   expect(session.user?.username).toBe('newbie');
@@ -164,7 +169,9 @@ test('N at the new-user confirm says No! and starts over at the name prompt', as
   const socket = makeSocket();
   const session = makeSession();
 
-  await type(socket, session, 'N');
+  await key(socket, session, 'X'); // any other key is read past (express.e:30317)
+  expect(session.subState).toBe(LoggedOnSubState.NEW_USER_CONFIRM);
+  await key(socket, session, 'N');
 
   expect(text(socket)).toContain('No!\r\n\r\n');
   expect(text(socket)).not.toContain('Starting over');
