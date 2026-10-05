@@ -291,6 +291,11 @@ app.get('/health', (req, res) => {
         username: session.user?.username ?? 'unknown',
         nodeId: session.nodeId ?? 0,
         transport: session.connectionType ?? 'web',
+        // When this session connected. A caller listed for hours after
+        // everyone left is a session the logoff never removed (2026-10-05:
+        // `regress` stayed listed for 50 minutes after its logoff and
+        // blocked every deploy); this is what tells the two apart.
+        since: session.connectionStart ? new Date(session.connectionStart).toISOString() : null,
       })),
       ...ftp.map((caller) => ({
         username: caller.username,

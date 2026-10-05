@@ -37,6 +37,7 @@ function addSession(nodeId: number, state: BBSState, username?: string): void {
     state,
     user: username ? { username } : undefined,
     connectionType: 'telnet',
+    connectionStart: Date.UTC(2026, 9, 5, 17, 33, 0),
   } as never);
 }
 
@@ -65,6 +66,14 @@ describe('what /health says about the board', () => {
 
     expect(body.callers).toBe(1);
     expect(body.online[0]).toMatchObject({ username: 'sysop', transport: 'telnet' });
+  });
+
+  it('says when each caller connected, so a session left behind shows its age', async () => {
+    addSession(3, BBSState.LOGGEDON, 'regress');
+
+    const body: any = await health();
+
+    expect(body.online[0].since).toBe('2026-10-05T17:33:00.000Z');
   });
 
   it('does NOT count a connection that has not logged in', async () => {
