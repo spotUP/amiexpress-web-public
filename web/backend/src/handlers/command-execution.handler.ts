@@ -595,7 +595,7 @@ console.error(`  Error executing door:`, error);
         },
         DebugSeverity.CRITICAL
       );
-      socket.emit('ansi-output', AnsiUtil.errorLine('Error executing command.'));
+      // runDoor (express.e:4336-4343) fails without a word.
       return RESULT_FAILURE;
     }
   } else {
@@ -608,7 +608,6 @@ console.warn(`  executeDoor not available - command execution skipped`);
       { cmdType, doorType: commandDef.type },
       DebugSeverity.CRITICAL
     );
-    socket.emit('ansi-output', AnsiUtil.errorLine('Command execution not available.'));
     return RESULT_FAILURE;
   }
 }
@@ -663,9 +662,6 @@ console.log(`[CommandPassword] Password correct, executing command: ${commandNam
   // Execute the door using the same pattern as runCommand (lines 283-357)
   if (!_executeDoor) {
 console.warn(`[CommandPassword] executeDoor not available - command execution skipped`);
-    socket.emit('ansi-output', '\r\n');
-    socket.emit('ansi-output', AnsiUtil.errorLine('Command execution not available.'));
-    socket.emit('ansi-output', '\r\n');
     session.subState = LoggedOnSubState.DISPLAY_MENU;
     return;
   }
@@ -710,9 +706,7 @@ console.warn(`[CommandPassword] executeDoor not available - command execution sk
     await _executeDoor(socket, session, doorConfig);
   } catch (error: any) {
 console.error(`[CommandPassword] Error executing command ${commandName}:`, error);
-    socket.emit('ansi-output', '\r\n');
-    socket.emit('ansi-output', AnsiUtil.errorLine(`Error executing command: ${error.message}`));
-    socket.emit('ansi-output', '\r\n');
+    // runDoor (express.e:4336-4343) fails without a word.
   }
 
   // Return to menu after command execution

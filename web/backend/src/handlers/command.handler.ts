@@ -845,11 +845,10 @@ try {
 } catch (e) {
   // ignore
 }
-    emitText(socket, '\r\n\x1b[31mAn error occurred. Returning to main menu...\x1b[0m\r\n');
-    emitPrompt(socket, '\r\n\x1b[32mPress any key to continue...\x1b[0m');
-    session.menuPause = false;
-    session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
+    // express.e has no such failure to report; back to the menu, silently,
+    // as handleCommand's own catch does.
     session.tempData = undefined;
+    returnToMenuAfterThrow(socket, session);
  }
 }
 
