@@ -121,7 +121,6 @@ export async function handleDizExtractionAndDescription(
       return await new Promise<boolean>((resolve) => {
         startRenamePrompt(socket, session, data.path!, async (result: any) => {
           if (result.aborted) {
-            socket.emit('ansi-output', '\r\n\x1b[31mRename aborted; upload cancelled.\x1b[0m\r\n');
             clearUploadContext(session, socket);
             endUpload(session, 'failure', () => {
               session.subState = LoggedOnSubState.DISPLAY_MENU;
@@ -150,14 +149,8 @@ export async function handleDizExtractionAndDescription(
       size: data.size,
     };
 
-    socket.emit(
-      "ansi-output",
-      `\r\n\x1b[32mFile selected: ${data.originalname}\x1b[0m\r\n`
-    );
-    socket.emit(
-      "ansi-output",
-      `\x1b[32mSize: ${Math.ceil(data.size / 1024)}KB\x1b[0m\r\n\r\n`
-    );
+    // express.e:19257-19300 examines the file without a word; its only
+    // text is the description prompt.
 
 console.log("[DIZ] File selected, checking for DIZ...");
 
@@ -169,7 +162,6 @@ console.log("[DIZ] File selected, checking for DIZ...");
         // Description and its kin write the description themselves); the
         // built-in FILE_ID.DIZ reader when there is none.
         const examined = await examineUpload(socket, session, data.path, path.basename(data.path), 10);
-        socket.emit("ansi-output", "Checking for FILE_ID.DIZ...\r\n");
 
         const dizPromise = examined
           ? Promise.resolve(examined)
@@ -181,16 +173,11 @@ console.log("[DIZ] File selected, checking for DIZ...");
 
         if (dizLines && dizLines.length > 0) {
           // Found FILE_ID.DIZ - use it as description
-          socket.emit(
-            "ansi-output",
-            "\x1b[36m[FILE_ID.DIZ found - using as description]\x1b[0m\r\n\r\n"
-          );
           uploadContext.hasDiz = true;
           uploadContext.skipDizExtraction = true;
           return fileWithDescription(socket, session, uploadContext, data, dizLines, config);
         } else {
           // No DIZ found (null from timeout or no file).
-          socket.emit("ansi-output", "No FILE_ID.DIZ found.\r\n");
           /*
            * DESCRIBED BEFORE THE TRANSFER: XMODEM's batch takes the name and
            * the description first (express.e:17666-17720), because the
@@ -206,11 +193,7 @@ console.log("[DIZ] File selected, checking for DIZ...");
         }
       } catch (error: any) {
 console.error("[DIZ] Extraction error:", error);
-        // On extraction error, show error message then prompt for description
-        socket.emit(
-          "ansi-output",
-          `\x1b[33mError extracting FILE_ID.DIZ: ${error.message}\x1b[0m\r\n`
-        );
+        // A file EXAMINE cannot read is described by the caller, silently.
         promptForDescription(socket, uploadContext, data);
         return false; // Waiting for description
       }
@@ -260,9 +243,10 @@ console.error("[UPLOAD] Error filing an upload with a known description:", error
     socket.emit("ansi-output", `\r\n\x1b[31mUpload failed: ${error.message}\x1b[0m\r\n`);
     clearUploadContext(session, socket);
     endUpload(session, 'failure', () => {
-      socket.emit("ansi-output", "\r\n\x1b[32mPress any key to continue...\x1b[0m");
-      session.menuPause = false;
-      session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
+      // WEB_: the error line above is the port's own (no express.e
+      // counterpart); the menu and its pause follow, as after any command.
+      session.menuPause = true;
+      session.subState = LoggedOnSubState.DISPLAY_MENU;
     });
     return true; // Handled (with error), don't wait for description
   }
@@ -316,12 +300,10 @@ export async function processBatchFile(
     );
     clearUploadContext(session, socket);
     endUpload(session, 'failure', () => {
-      socket.emit(
-        "ansi-output",
-        "\r\n\x1b[32mPress any key to continue...\x1b[0m"
-      );
-      session.menuPause = false;
-      session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
+      // WEB_: the error line above is the port's own (no express.e
+      // counterpart); the menu and its pause follow, as after any command.
+      session.menuPause = true;
+      session.subState = LoggedOnSubState.DISPLAY_MENU;
     });
     return;
   }
@@ -399,10 +381,6 @@ console.log(
 console.log(
               `[FILE_ID.DIZ] Using FILE_ID.DIZ content (${dizLines.length} lines)`
             );
-            socket.emit(
-              "ansi-output",
-              `\r\n\x1b[36m[FILE_ID.DIZ found and used for description]\x1b[0m\r\n`
-            );
           } else {
 console.log(
               `[FILE_ID.DIZ] No FILE_ID.DIZ found or timed out, using batch description`
@@ -436,22 +414,19 @@ console.log(`[testFile] Result: ${testStatus}`);
           ) {
             socket.emit("ansi-output", "\r\nTested Ok...\r\n");
           } else if (testStatus === TestResult.FAILURE) {
+            // express.e:19366-19367, one aePuts.
+            const { boardSysopName } = require("../utils/sysop-page-text.util");
             socket.emit(
               "ansi-output",
-              "\r\n\x1b[33mRequires review, possibly bad format\x1b[0m\r\n"
-            );
-            socket.emit(
-              "ansi-output",
-              `\r\n\x1b[33mMoving to ${config.get(
-                "sysopName"
-              )}'s private Directory.\x1b[0m\r\n\r\n`
+              `Requires review, possibly bad format\r\n\t  Moving to ${boardSysopName()}'s private Directory.\r\n\r\n`
             );
             fileStatus = "hold"; // Mark for HOLD directory (express.e:19364-19369)
           }
         } catch (error) {
 console.error(`[testFile] Error:`, error);
           testStatus = TestResult.NOT_TESTED;
-          socket.emit("ansi-output", "\r\nTest skipped (error)...\r\n");
+          // express.e:19351: a test that did not run is "Tested Ok".
+          socket.emit("ansi-output", "\r\nTested Ok...\r\n");
         }
       }
     }
@@ -699,12 +674,10 @@ console.error("File upload error:", error);
     );
     clearUploadContext(session, socket);
     endUpload(session, 'failure', () => {
-      socket.emit(
-        "ansi-output",
-        "\r\n\x1b[32mPress any key to continue...\x1b[0m"
-      );
-      session.menuPause = false;
-      session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
+      // WEB_: the error line above is the port's own (no express.e
+      // counterpart); the menu and its pause follow, as after any command.
+      session.menuPause = true;
+      session.subState = LoggedOnSubState.DISPLAY_MENU;
     });
   }
 }
