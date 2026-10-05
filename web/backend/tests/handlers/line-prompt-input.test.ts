@@ -36,6 +36,7 @@ jest.mock('../../src/services/CallersLogManager');
 
 import { handleCommand } from '../../src/handlers/command.handler';
 import { config } from '../../src/config';
+import { flushOutput } from '../../src/utils/output.util';
 import { LoggedOnSubState } from '../../src/constants/bbs-states';
 import { LINE_PROMPT_SUBSTATES } from '../../src/utils/line-input.util';
 
@@ -85,8 +86,12 @@ function makeSocket() {
   };
 }
 
-const allOutput = (socket: any) =>
-  socket.emitted.filter((e: any) => e.event === 'ansi-output').map((e: any) => e.data).join('');
+const allOutput = (socket: any) => {
+  // Text written through the buffered writer (emitText) reaches the socket
+  // on flush; read what the caller would have by now.
+  flushOutput(socket);
+  return socket.emitted.filter((e: any) => e.event === 'ansi-output').map((e: any) => e.data).join('');
+};
 
 /** A user the ACS answers yes for: 'T' in every flag position the handlers ask about. */
 const permissiveUser = {
@@ -221,8 +226,9 @@ describe('typing V lets me type a filename', () => {
     await type(socket, session, '\r');
 
     const out = allOutput(socket);
-    expect(out).toContain('File NOSUCH.TXT not found.');
-    expect(out).not.toContain('File N not found.');
+    // The whole name was taken, then lineInput's line break (express.e:2378)
+    // and viewAFile's answer (20548).
+    expect(out).toContain('NOSUCH.TXT\r\nFile not found.');
   });
 });
 

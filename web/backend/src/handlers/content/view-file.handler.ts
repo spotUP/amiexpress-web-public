@@ -157,6 +157,8 @@ console.log('[ENV] Viewing');
       session.tempData.waitingForViewFilename = false;
       const nonStop = session.tempData.nonStopDisplay || false;
       const cmdcode: string = session.tempData.viewCmdcode || 'V';
+      // express.e:2378 - lineInput ends every answer with a line break.
+      emitText(socket, '\r\n');
 
       if (!input.trim()) {
         // Empty input - cancel - express.e:20417-20419
