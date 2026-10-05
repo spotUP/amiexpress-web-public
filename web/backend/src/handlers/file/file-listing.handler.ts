@@ -244,17 +244,13 @@ console.log(`[FileList] dirsToShow after filter: ${dirsToShow.length} dirs`);
       } catch (error: any) {
         // Log error but continue to next directory instead of failing completely
 console.log(`[FileList] Could not read ${dirFilePath}: ${error.message}`);
-        socket.emit('ansi-output', `\x1b[33mCould not read directory ${dirDisplayName}\x1b[0m\r\n`);
+        // express.e:27722-27726 displayIt: myError(4), then the next directory.
+        FileListingHandler.fileListError(socket);
         continue;
       }
 
       if (entries.length === 0) {
-        socket.emit('ansi-output', '\x1b[33mNo files in this directory.\x1b[0m\r\n');
-        const shouldContinue2 = await flagPause(socket, session, 1);
-        if (!shouldContinue2) {
-          session.subState = LoggedOnSubState.DISPLAY_MENU;
-          return;
-        }
+        // express.e:27737 displayIt2's Fgets loop runs zero times: nothing.
       } else {
         // Display entries (sort by date when reverse, newest first)
         // For FR command (reverse=true), sort by uploadDate descending (newest first)
@@ -798,27 +794,13 @@ console.log(`[NewFiles] Could not read ${dirInfo.path}: ${error.message}`);
   }
 
   /**
-   * Handle failures reading a DIR file (missing or unreadable)
+   * express.e myError(ERR_FILELIST) (8526-8527, 8551-8553): a DIR file that
+   * will not open.
    */
-  private static handleDirFileReadError(
-    socket: Socket,
-    session: Session,
-    dirDisplayName: string,
-    error: any
-  ): void {
-console.error(`[FileListing] Failed to read ${dirDisplayName} directory file:`, error);
-    const sysopName = config.get('sysopName') || 'Sysop';
-    // 'ansi-output' was missing, so this emitted an EVENT NAMED after the
-    // message and the caller was told nothing at all - a listing that failed
-    // to read simply stopped.
-    socket.emit(
-      'ansi-output',
-      `\x1b[31mThere is a problem with File listings, please tell ${sysopName}\x1b[0m\r\n`
-    );
-    session.menuPause = true;
-    session.subState = LoggedOnSubState.DISPLAY_MENU;
+  private static fileListError(socket: Socket): void {
+    const { boardSysopName } = require('../../utils/sysop-page-text.util');
+    socket.emit('ansi-output', `\r\nThere is a problem with File listings, please tell ${boardSysopName()}\r\n\r\n`);
   }
-
 
   /**
    * Check if user can access HOLD directory
