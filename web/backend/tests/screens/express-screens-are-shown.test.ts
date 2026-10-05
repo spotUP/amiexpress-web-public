@@ -161,7 +161,6 @@ describe('the U command itself (express.e:25646-25658 -> 18981-18987)', () => {
       checkConfAccess: () => true,
       displayScreen,
       displayUploadInterface: () => { shown = true; },
-      displayDownloadInterface: () => undefined,
     });
     return { emits, interfaceShown: () => shown };
   }

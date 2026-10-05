@@ -86,7 +86,6 @@ import {
   setGetUserStats,
   setFileSearchDependencies,
   displayUploadInterface,
-  displayDownloadInterface,
   displayNewFiles
 } from '../handlers/file/file.handler';
 // The FM command lives in its OWN module and has its OWN setter (db/config/
@@ -783,8 +782,7 @@ export async function initializeData(io?: SocketIOServer) {
       joinConference,
       checkConfAccess,
       displayScreen: displayScreen as any,
-      displayUploadInterface: displayUploadInterface as any,
-      displayDownloadInterface: displayDownloadInterface as any
+      displayUploadInterface: displayUploadInterface as any
     });
 
     // Inject dependencies into system commands handler
@@ -866,7 +864,6 @@ export async function initializeData(io?: SocketIOServer) {
     setTransferMiscCommandsDependencies({
       setEnvStat,
       displayUploadInterface,
-      displayDownloadInterface,
       fileAreas,
       getActiveVoteTopics,
       getVoteTopic,

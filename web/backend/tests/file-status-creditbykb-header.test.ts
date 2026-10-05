@@ -26,7 +26,6 @@ jest.mock('../src/index', () => {
 
 import { flushOutput } from '../src/utils/output.util';
 import { getACSConfig, setACSConfig, ToggleFlags } from '../src/utils/acs.util';
-import { displayFileStatus, setGetUserStats } from '../src/handlers/file/file.handler';
 
 const KB_HEADER = 'Conf  Files    KBytes         Files    KBytes         KBytes Avail Ratio';
 const BYTES_HEADER = 'Conf  Files    Bytes          Files    Bytes          Bytes Avail  Ratio';
@@ -73,19 +72,6 @@ describe('fileStatus header switches on TOGGLES_CREDITBYKB (E-19, express.e:2415
   ])('FileStatusHandler with CREDITBYKB=%s shows the matching header only', async (on, shown, hidden) => {
     creditByKB(on);
     const out = await driveFileStatusHandler();
-    expect(out).toContain(shown);
-    expect(out).not.toContain(hidden);
-  });
-
-  test.each([
-    [true, KB_HEADER, BYTES_HEADER],
-    [false, BYTES_HEADER, KB_HEADER],
-  ])('displayFileStatus duplicate with CREDITBYKB=%s shows the matching header only', async (on, shown, hidden) => {
-    creditByKB(on);
-    setGetUserStats(async () => ({ bytes_uploaded: 10, bytes_downloaded: 1, files_uploaded: 1, files_downloaded: 1 }));
-    const caller = aCaller();
-    await displayFileStatus(caller.socket, caller.session, '');
-    const out = caller.output();
     expect(out).toContain(shown);
     expect(out).not.toContain(hidden);
   });

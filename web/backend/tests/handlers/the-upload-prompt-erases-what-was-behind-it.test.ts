@@ -114,7 +114,6 @@ describe('the upload path follows express.e, which never clears', () => {
       checkConfAccess: () => true,
       displayScreen: async (_s: any, _x: any, name: string) => { drawn.push(name); return false; },
       displayUploadInterface: () => { wireAtInterface = wire(); },
-      displayDownloadInterface: () => undefined,
     });
 
     await handleUploadCommand(socket, uploader());
@@ -263,7 +262,6 @@ describe('the upload screen\'s own pause', () => {
         return true;
       },
       displayUploadInterface: () => { interfaceDrawn++; },
-      displayDownloadInterface: () => undefined,
     });
 
     await handleUploadCommand(socket, session);
@@ -288,7 +286,6 @@ describe('the upload screen\'s own pause', () => {
       checkConfAccess: () => true,
       displayScreen: async () => false,
       displayUploadInterface: () => { interfaceDrawn++; },
-      displayDownloadInterface: () => undefined,
     });
 
     await handleUploadCommand(socket, uploader());

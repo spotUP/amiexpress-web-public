@@ -53,7 +53,6 @@ export enum LoggedOnSubState {
   FILES_SELECT_DIRECTORIES = 'files_select_directories',
   FILES_VIEW_AREA = 'files_view_area',
   FILES_DOWNLOAD = 'files_download',
-  FILES_DOWNLOAD_SELECT = 'files_download_select',  // Batch download file selection
   FILES_UPLOAD = 'files_upload',
   UPLOAD_FILENAME_INPUT = 'upload_filename_input',
   UPLOAD_DESC_INPUT = 'upload_desc_input',
@@ -173,7 +172,6 @@ export enum LoggedOnSubState {
   NEW_USER_SCRIPT_CONFIRM = 'new_user_script_confirm', // Confirm questionnaire answers
 
   // Conference operations
-  CONFERENCE_SELECT = 'conference_select',
   CONFERENCE_JOIN = 'conference_join',
   JOIN_CONF_INPUT = 'join_conf_input',                  // Conference join input
   CM_DISPLAY_MENU = 'cm_display_menu',                  // Conference mail display menu
@@ -213,7 +211,6 @@ export enum LoggedOnSubState {
   GDPR_BACKFILL = 'gdpr_backfill',
 
   // User Stats (S command) - Web-specific font selection
-  USER_STATS_MENU = 'user_stats_menu',                // User stats menu with font option
   FONT_SELECTION = 'font_selection',                  // Font selection menu
 
   // Voting Booth operations

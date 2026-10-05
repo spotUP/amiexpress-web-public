@@ -24,7 +24,6 @@ import type { InternalCommandResult } from '../../constants/command-results';
 // Dependencies (injected)
 let _setEnvStat: any;
 let _displayUploadInterface: any;
-let _displayDownloadInterface: any;
 let _fileAreas: any[] = [];
 let _getActiveVoteTopics: any;
 let _getVoteTopic: any;
@@ -45,7 +44,6 @@ let _getNextTopicNumber: any;
 export function setTransferMiscCommandsDependencies(deps: {
   setEnvStat: any;
   displayUploadInterface: any;
-  displayDownloadInterface: any;
   fileAreas: any[];
   getActiveVoteTopics: any;
   getVoteTopic: any;
@@ -62,7 +60,6 @@ export function setTransferMiscCommandsDependencies(deps: {
 }) {
   _setEnvStat = deps.setEnvStat;
   _displayUploadInterface = deps.displayUploadInterface;
-  _displayDownloadInterface = deps.displayDownloadInterface;
   _fileAreas = deps.fileAreas;
   _getActiveVoteTopics = deps.getActiveVoteTopics;
   _getVoteTopic = deps.getVoteTopic;

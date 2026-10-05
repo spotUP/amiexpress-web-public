@@ -33,11 +33,8 @@ import { displayModeOf } from '../amiga-emulation/xim/display-mode.util';
 import { displayDoorMenu, executeDoor, doorAvailableTo } from './door.handler';
 import { startSysopPage } from './chat/chat.handler';
 import {
-  displayFileStatus,
   displayNewFiles,
   displayUploadInterface,
-  displayDownloadInterface,
-  startFileDownload,
   matchesWildcard,
 } from './file/file.handler';
 import {
@@ -56,7 +53,6 @@ import {
   handleUserStatsCommand,
   handleJoinConferenceCommand,
   handleUploadCommand,
-  handleDownloadCommand,
   setUserCommandsDependencies
 } from './commands/user-commands.handler';
 import {
@@ -2648,107 +2644,6 @@ console.log('[handleCommand] Display flow branch, subState=', session.subState);
     return;
   }
 
-  // Handle batch download file selection (FILES_DOWNLOAD_SELECT)
-  // Supports: space-separated numbers, ranges (1-5), or filenames
-  if (session.subState === LoggedOnSubState.FILES_DOWNLOAD_SELECT) {
-    const input = data.trim();
-
-    // Empty input or Q/A to abort - express.e:20140-20142
-    if (input === '' || input.toUpperCase() === 'Q' || input.toUpperCase() === 'A') {
-      emitText(socket, '\r\n\x1b[33mDownload cancelled.\x1b[0m\r\n');
-      session.subState = LoggedOnSubState.DISPLAY_MENU;
-      session.tempData = undefined;
-      return;
-    }
-
-    const areaFiles = session.tempData?.areaFiles || [];
-    const selectedFiles: any[] = [];
-    const errors: string[] = [];
-
-    // Parse input: space-separated items which can be numbers, ranges (1-5), or filenames
-    const items = input.split(/\s+/).filter((s: string) => s.length > 0);
-
-    for (const item of items) {
-      // Check for range format (e.g., 1-5)
-      const rangeMatch = item.match(/^(\d+)-(\d+)$/);
-      if (rangeMatch) {
-        const start = parseInt(rangeMatch[1]);
-        const end = parseInt(rangeMatch[2]);
-        if (start >= 1 && end <= areaFiles.length && start <= end) {
-          for (let i = start; i <= end; i++) {
-            const file = areaFiles[i - 1];
-            if (file && !selectedFiles.includes(file)) {
-              selectedFiles.push(file);
-            }
-          }
-        } else {
-          errors.push(`Invalid range: ${item}`);
-        }
-        continue;
-      }
-
-      // Check for number
-      const num = parseInt(item);
-      if (!isNaN(num) && num >= 1 && num <= areaFiles.length) {
-        const file = areaFiles[num - 1];
-        if (file && !selectedFiles.includes(file)) {
-          selectedFiles.push(file);
-        }
-        continue;
-      }
-
-      // Treat as filename - search for matches (supports wildcards)
-      const matches = areaFiles.filter((f: any) => {
-        const name = f.filename || f.name;
-        if (item.includes('*') || item.includes('?')) {
-          return matchesWildcard(name, item);
-        }
-        return name.toLowerCase() === item.toLowerCase();
-      });
-
-      if (matches.length > 0) {
-        for (const match of matches) {
-          if (!selectedFiles.includes(match)) {
-            selectedFiles.push(match);
-          }
-        }
-      } else {
-        errors.push(`File not found: ${item}`);
-      }
-    }
-
-    // Report errors
-    for (const err of errors) {
-      emitText(socket, `\r\n\x1b[31m${err}\x1b[0m`);
-    }
-
-    if (selectedFiles.length === 0) {
-      emitText(socket, '\r\n\x1b[31mNo valid files selected.\x1b[0m\r\n');
-      emitPrompt(socket, '\x1b[32mSelect files to download: \x1b[0m');
-      return;
-    }
-
-    // Show selected files and confirm
-    emitText(socket, `\r\n\x1b[32mFiles selected for download (${selectedFiles.length}):\x1b[0m\r\n`);
-    selectedFiles.forEach((file: any, index: number) => {
-      const name = file.filename || file.name;
-      const size = file.size || 0;
-      emitText(socket, `  ${index + 1}. ${name} (${size} bytes)\r\n`);
-    });
-
-    const totalSize = selectedFiles.reduce((sum: number, f: any) => sum + (f.size || 0), 0);
-    emitText(socket, `\r\n\x1b[32mTotal size: ${totalSize} bytes\x1b[0m\r\n`);
-    emitPrompt(socket, '\r\n\x1b[36mDownload these files? (Y/N): \x1b[0m');
-
-    session.subState = LoggedOnSubState.BATCH_DOWNLOAD_CONFIRM;
-    session.tempData = {
-      ...session.tempData,
-      downloadFileList: selectedFiles,
-      downloadBatch: selectedFiles.length > 1
-    };
-    return;
-  }
-
   // Handle upload filename input (express.e:17658-17687)
   if (session.subState === LoggedOnSubState.UPLOAD_FILENAME_INPUT) {
     /*
@@ -3202,86 +3097,6 @@ console.log(' In file upload state - canceling upload');
 
   if (session.tempData?.changeSecLevel || session.tempData?.toggleUserFlags || session.tempData?.deleteUserAccount || session.tempData?.searchUsers) {
     await handleAccountEditingCommand(socket, session);
-    return;
-  }
-
-  // Handle conference selection
-  if (session.subState === LoggedOnSubState.CONFERENCE_SELECT) {
-console.log(' In conference selection state');
-    const input = data.trim();
-
-    // Check if this is message base selection (from JM command)
-    if (session.tempData?.messageBaseSelect) {
-      const msgBaseId = parseInt(input);
-      if (isNaN(msgBaseId) || msgBaseId === 0) {
-        // Empty input or invalid - return to menu
-        emitText(socket, '\r\nReturning to main menu...\r\n');
-        session.menuPause = true;
-        session.subState = LoggedOnSubState.DISPLAY_MENU;
-        session.tempData = undefined;
-        return;
-      }
-
-      const currentConfBases = session.tempData.currentConfBases;
-      const selectedBase = currentConfBases.find((mb: any) => mb.id === msgBaseId);
-      if (!selectedBase) {
-        emitText(socket, '\r\nInvalid message base number.\r\n');
-        emitPrompt(socket, '\r\n\x1b[32mPress any key to continue...\x1b[0m');
-        session.menuPause = false;
-        session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
-        session.tempData = undefined;
-        return;
-      }
-
-      // Join the selected message base
-      session.currentMsgBase = msgBaseId;
-      emitText(socket, `\r\n\x1b[32mJoined message base: ${selectedBase.name}\x1b[0m\r\n`);
-      emitPrompt(socket, '\r\n\x1b[32mPress any key to continue...\x1b[0m');
-      session.menuPause = false;
-      session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
-      session.tempData = undefined;
-      return;
-    }
-
-    // Regular conference selection
-    const relConfNum = parseInt(input); // Relative conference number (1-based)
-    if (isNaN(relConfNum) || relConfNum === 0) {
-      // Empty input or invalid - return to menu
-      emitText(socket, '\r\nReturning to main menu...\r\n');
-      session.menuPause = true;
-      session.subState = LoggedOnSubState.DISPLAY_MENU;
-      return;
-    }
-
-    // Validate relative conference number and convert to conference object
-    if (relConfNum < 1 || relConfNum > getConferences().length) {
-      emitText(socket, '\r\nInvalid conference number.\r\n');
-      emitPrompt(socket, '\r\n\x1b[32mPress any key to continue...\x1b[0m');
-      session.menuPause = false;
-      session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
-      return;
-    }
-
-    const selectedConf = getConferences()[relConfNum - 1]; // Convert to 0-based index
-    const confId = selectedConf.id; // Get actual database ID
-
-    // Find first message base for this conference (express.e uses first base as default)
-    const confMessageBases = getMessageBases().filter(mb => mb.conferenceId === confId);
-    if (confMessageBases.length === 0) {
-      emitText(socket, '\r\n\x1b[31mNo message bases available in this conference!\x1b[0m\r\n');
-      emitPrompt(socket, '\r\n\x1b[32mPress any key to continue...\x1b[0m');
-      session.menuPause = false;
-      session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
-      return;
-    }
-    const firstMsgBaseId = confMessageBases[0].id; // Use first message base
-
-    // Join the selected conference
-    if (await joinConference(socket, session, confId, firstMsgBaseId)) {
-      emitPrompt(socket, '\r\n\x1b[32mPress any key to continue...\x1b[0m');
-      session.menuPause = false;
-      session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
-    }
     return;
   }
 
@@ -4043,12 +3858,6 @@ console.error('Error processing command:', error);
     if (isDisplayFlowState(session.subState) && !session.paginatedScreen) {
       await advanceDisplayFlow(socket, session);
     }
-    return;
-  } else if (session.subState === LoggedOnSubState.USER_STATS_MENU) {
-    // Handle user stats menu input (F=Font, Q=Quit)
-console.log(' In USER_STATS_MENU state, processing input');
-    const { handleUserStatsMenuInput } = require('./commands/user-commands.handler');
-    handleUserStatsMenuInput(socket, session, data);
     return;
   } else if (session.subState === LoggedOnSubState.FONT_SELECTION) {
     // Handle font selection input (1-8 or Q)

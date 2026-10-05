@@ -4,15 +4,14 @@
  * The sysop, 2026-09-28: "i can break it by connecting in petscii mode and
  * change font to for example topaz" - "changing font should be gated in
  * petscii mode". A PETSCII screen is the C64 character ROM on the canvas; the
- * font pick reached the hidden xterm behind it. Both font menus - W row 18
- * and F in the user stats screen - now say so instead of offering a list.
+ * font pick reached the hidden xterm behind it. W row 18 now says so
+ * instead of offering a list.
  */
 process.env.SKIP_DB_INIT = '1';
 
 jest.mock('../../src/database', () => ({ db: { updateUser: jest.fn(), getUserById: jest.fn() } }));
 
 import { handleWOptionSelectInput } from '../../src/handlers/commands/info-commands.handler';
-import { handleUserStatsMenuInput } from '../../src/handlers/commands/user-commands.handler';
 import { flushOutput } from '../../src/utils/output.util';
 import { LoggedOnSubState } from '../../src/constants/bbs-states';
 import { PETSCII_FONT_IS_FIXED } from '../../src/utils/petscii-session-model';
@@ -51,15 +50,5 @@ describe('the terminal font menus', () => {
 
     expect(text()).toContain('Select Terminal Font');
     expect(session.subState).toBe(LoggedOnSubState.W_EDIT_FONT);
-  });
-
-  it('F in the user stats screen does the same for a PETSCII caller', () => {
-    const { socket, session, text } = aCaller(true);
-    session.subState = LoggedOnSubState.USER_STATS_MENU;
-
-    handleUserStatsMenuInput(socket, session, 'F');
-
-    expect(text()).toContain(PETSCII_FONT_IS_FIXED);
-    expect(session.subState).not.toBe(LoggedOnSubState.FONT_SELECTION);
   });
 });

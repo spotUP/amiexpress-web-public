@@ -69,7 +69,6 @@ let _displayScreen: (
   silent?: boolean,
 ) => Promise<boolean>;
 let _displayUploadInterface: (socket: any, session: BBSSession, params: string) => void;
-let _displayDownloadInterface: (socket: any, session: BBSSession, params: string) => void;
 
 // Injection functions
 export function setUserCommandsDependencies(deps: {
@@ -80,7 +79,6 @@ export function setUserCommandsDependencies(deps: {
   checkConfAccess: typeof _checkConfAccess;
   displayScreen: typeof _displayScreen;
   displayUploadInterface: typeof _displayUploadInterface;
-  displayDownloadInterface: typeof _displayDownloadInterface;
 }) {
   _conferences = deps.conferences;
   _messageBases = deps.messageBases;
@@ -89,7 +87,6 @@ export function setUserCommandsDependencies(deps: {
   _checkConfAccess = deps.checkConfAccess;
   _displayScreen = deps.displayScreen;
   _displayUploadInterface = deps.displayUploadInterface;
-  _displayDownloadInterface = deps.displayDownloadInterface;
 }
 
 function getTransferTransport(session: BBSSession): TransferTransport {
@@ -1287,87 +1284,6 @@ async function startUploadaFile(socket: any, session: BBSSession, attach: boolea
   // Out of the display flow while the pause is up, as the join does, so the
   // menu is not drawn under it; the interface sets its own state after.
   if (deferred) session.subState = LoggedOnSubState.READ_COMMAND;
-}
-
-/**
- * Handle D command - Download files
- * 1:1 port from express.e:24853-24857 internalCommandD()
- */
-export async function handleDownloadCommand(socket: any, session: BBSSession, params: string = ''): Promise<void> {
-  // express.e:24854 - Check ACS_DOWNLOAD permission
-  if (!checkSecurity(session.user, ACSPermission.DOWNLOAD)) {
-    ErrorHandler.permissionDenied(socket, 'download files', {
-      nextState: LoggedOnSubState.DISPLAY_MENU
-    });
-    return;
-  }
-
-  // express.e:24855 - setEnvStat(ENV_DOWNLOADING)
-console.log('[ENV] Downloading');
-
-  // If user has flagged files, send them via ZMODEM; otherwise fall back to
-  // download interface. D16 (express.e checkFIBForFileSize): filter out any
-  // flagged file whose DIR description begins "Restricted" before sending —
-  // same gate as the single-file and batch paths (file-restriction.util).
-  const userId = session.user?.id;
-  const flagged = userId ? flaggedFilesManager.getFiles(userId) : [];
-  if (flagged && flagged.length > 0) {
-    const { config } = require('../../config');
-    const dataDir = config.get('dataDir');
-    const allowed: string[] = [];
-    for (const f of flagged) {
-      const confNum = f.areaId ?? session.currentConf ?? 1;
-      if (await isFileRestricted(confNum, dataDir, f.fileName)) {
-        socket.emit('ansi-output', `\r\n\x1b[31m${f.fileName}: restricted file\x1b[0m\r\n`);
-        try {
-          const { callersLog } = require('../../server/database-helpers');
-          await callersLog(session.user?.id || null, session.user?.username || 'unknown',
-            `\t\tAttempt to download RESTRICTED file [${f.filePath || f.fileName}]`);
-          // express.e:12750-12751 - and the node's CallersLog.
-          require('../../services/CallersLogManager').callersLogManager.logActivity(session.nodeId ?? 1,
-            `\t\tAttempt to download RESTRICTED file [${f.filePath || f.fileName}]`);
-        } catch (_err) { /* non-critical */ }
-        continue;
-      }
-      allowed.push(f.filePath);
-    }
-    if (allowed.length > 0) {
-      startZmodemDownload(socket, session, allowed);
-    } else {
-      socket.emit('ansi-output', `\r\n\x1b[33mNo files available for download.\x1b[0m\r\n`);
-      session.subState = LoggedOnSubState.DISPLAY_MENU;
-    }
-    return;
-  }
-
-  // express.e:24856 - beginDLF(cmdcode,params)
-  _displayDownloadInterface(socket, session, params);
-}
-
-/**
- * Handle user stats menu input (F=Font, Q=Quit)
- * Web-specific extension to S command
- */
-export function handleUserStatsMenuInput(socket: any, session: BBSSession, input: string): void {
-  const choice = input.trim().toUpperCase();
-
-  if (choice === 'F') {
-    if (sessionWantsPetscii(session)) {
-      // The same gate as W row 18: a PETSCII screen's glyphs are the C64's.
-      socket.emit('ansi-output', `\r\n${PETSCII_FONT_IS_FIXED}\r\n`);
-      socket.emit('ansi-output', AnsiUtil.colorize('Selection: ', 'yellow'));
-      return;
-    }
-    // Show font selection menu
-    displayFontSelectionMenu(socket, session);
-  } else if (choice === 'Q' || choice === '') {
-    // Return to main menu
-    session.subState = LoggedOnSubState.DISPLAY_MENU;
-  } else {
-    // Invalid choice
-    socket.emit('ansi-output', AnsiUtil.errorLine('Invalid choice. Press F for fonts or Q to quit.'));
-    socket.emit('ansi-output', AnsiUtil.colorize('Selection: ', 'yellow'));
-  }
 }
 
 /**

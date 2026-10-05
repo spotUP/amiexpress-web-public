@@ -131,63 +131,6 @@ const SEARCH_FILE = {
   areaname: 'AMIGA/DEMOS',
 };
 
-describe('5a file search listing (file.handler.ts handleFileSearch)', () => {
-  function driveSearch(driver: Driver) {
-    const fileHandler = require('../../src/handlers/file/file.handler');
-    fileHandler.setFileSearchDependencies({
-      searchFilesByName: jest.fn(),
-      searchFilesAdvanced: jest.fn().mockResolvedValue([SEARCH_FILE]),
-      getFileEntry: jest.fn(),
-      deleteFileEntry: jest.fn(),
-      moveFileEntry: jest.fn(),
-      updateFileDescription: jest.fn(),
-      getFileAreas: jest.fn().mockResolvedValue([]),
-    });
-    return fileHandler.handleFileSearch(driver.socket, driver.session, ['ALKYS']);
-  }
-
-  test('80-col PIN: the historical single-line row, byte-identical', async () => {
-    const { formatLongDate } = require('../../src/utils/date-time.util');
-    const driver = wide();
-    await driveSearch(driver);
-
-    const dateStr = formatLongDate(new Date(SEARCH_FILE.uploaddate));
-    const expected =
-      'ALKYS241.LHA   ' + // filename.padEnd(15)
-      '   88' + // sizeKB.toString().padStart(5)
-      `K ${dateStr} SPOT\r\n` +
-      `  ${SEARCH_FILE.description}\r\n` +
-      '  Area: AMIGA/DEMOS\r\n\r\n';
-    expect(driver.output()).toContain(expected);
-  });
-
-  test('40-col: the record block, and nothing over 39 columns', async () => {
-    const driver = narrow();
-    await driveSearch(driver);
-
-    const out = driver.output();
-    expectNarrowScreen(out);
-
-    /*
-     * REPINNED 2026-09-07. This asserted `narrowFileLines`' exact block - the
-     * stacked two-line formatter this port invented before there was a
-     * layout. A search hit is a single record and now renders the RECORD
-     * BLOCK, the same template `FI <n>` draws, from Prompts/FILEVIEW.40
-     * (file.handler.ts:424-431): one shape for every 40-column record, which
-     * the sysop can re-columnise by editing one file.
-     *
-     * So the pin is on what a caller must be able to READ - the file, how big
-     * it is, where it lives, and its description - rather than on where the
-     * template happens to put them. The width is asserted above, which is the
-     * other half of what this suite is for.
-     */
-    expect(out).toContain('ALKYS241.LHA');
-    expect(out).toContain('88K');
-    expect(out).toContain('AMIGA/DEMOS');
-    expect(out).toMatch(/Fine Amiga release/);
-  });
-});
-
 describe('5a new files listing (file.handler.ts displayNewFiles)', () => {
   /**
    * REPINNED 2026-09-07. These two used to pin a colorized row this port
