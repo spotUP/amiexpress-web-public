@@ -2505,7 +2505,7 @@ export async function emitPetsciiScreenInline(
   session: BBSSession,
   buffer: Buffer,
   screenName: string = '',
-): Promise<void> {
+): Promise<{ commands: string[]; paused: boolean }> {
   const ctx = await petsciiRenderCtxFor(session);
 
   let plan;
@@ -2518,7 +2518,7 @@ export async function emitPetsciiScreenInline(
     console.error(`[PETSCII] .seq render failed, emitting raw bytes:`, error);
     emitRawPetscii(socket, session, ctx.machine, buffer);
     session.lastScreenHadPause = false;
-    return;
+    return { commands: [], paused: false };
   }
 
   if (!plan.gated) {
@@ -2526,7 +2526,7 @@ export async function emitPetsciiScreenInline(
     // file is art. Emit it exactly as the whole-file path would.
     emitRawPetscii(socket, session, ctx.machine, buffer);
     session.lastScreenHadPause = false;
-    return;
+    return { commands: [], paused: false };
   }
 
   const walk = await renderPetsciiWalk(socket, session, plan.text, plan.spans, ctx);
@@ -2550,6 +2550,9 @@ export async function emitPetsciiScreenInline(
     };
   }
   session.lastScreenHadPause = walk.hasPause;
+  // The pre-pass took the screen's `~XI`/`~XC_`/`~CC_` out of the text; they
+  // are the caller's to run, as the ANSI path's `commands` are.
+  return { commands: ctx.lastPrePass?.commandsToExecute ?? [], paused: !!walk.pending };
 }
 
 /**
@@ -2747,7 +2750,20 @@ export async function displayScreen(socket: any, session: BBSSession, screenName
       // run as side effects in document order; anything else is art and is
       // painted as one frame.
       if (rawPetscii && petsciiBuffer![0] === PETSCII_MCI_GATE) {
-        await emitPetsciiScreenInline(socket, session, petsciiBuffer!, screenName);
+        const { commands, paused } = await emitPetsciiScreenInline(socket, session, petsciiBuffer!, screenName);
+        // A `.seq`'s `~XI`/`~XC_` run as an ANSI screen's do (executeScreenCommands
+        // below): after a pause, or when the caller defers them, they wait in
+        // the queue; otherwise they start once this screen has returned. They
+        // were parsed out and dropped, so `~XISUBSCAN` did nothing on a C64.
+        if (commands.length > 0) {
+          if (!runCommands || paused) {
+            session.queuedScreenCommands = commands;
+          } else {
+            session.pendingScreenCommand = new Promise<void>(resolve => {
+              setImmediate(() => { void runScreenCommands(socket, session, commands).finally(resolve); });
+            });
+          }
+        }
       } else {
         await emitPetsciiScreen(socket, session, screenData);
       }
