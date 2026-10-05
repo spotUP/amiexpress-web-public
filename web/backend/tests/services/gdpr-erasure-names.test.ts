@@ -130,3 +130,62 @@ describe('the erasure and the central answers file', () => {
     }
   });
 });
+
+describe('the erasure and the sysop\'s safety copies', () => {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const fs = require('fs') as typeof import('fs');
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const os = require('os') as typeof import('os');
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const path = require('path') as typeof import('path');
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { __test_only__, backupCopiesOf } = require('../../src/services/gdpr-erasure.service');
+
+  const record = (name: string, size: number) => {
+    const b = Buffer.alloc(size, 0x41);
+    b.fill(0, 0, 31);
+    b.write(name, 0, 'latin1');
+    return b;
+  };
+
+  it('blanks the caller\'s record in a user.data copy, and the same slot in its .keys copy, by name', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'gdpr-backups-'));
+    const saved = process.env.BBS_DATA_DIR;
+    process.env.BBS_DATA_DIR = root;
+    try {
+      fs.writeFileSync(path.join(root, 'user.data'), record('live', 232));
+      const data = path.join(root, 'user.data.pre-swap-20261004.backup');
+      const keys = path.join(root, 'user.keys.pre-swap-20261004.backup');
+      fs.writeFileSync(data, Buffer.concat([record('other', 232), record('Zed', 232)]));
+      fs.writeFileSync(keys, Buffer.concat([record('other', 56), record('Zed', 56)]));
+      expect(backupCopiesOf(path.join(root, 'user.data'))).toEqual([data]);
+
+      expect(__test_only__.blankAccountInBackups('zed')).toBe(1);
+      const d = fs.readFileSync(data);
+      expect(d.subarray(0, 5).toString('latin1')).toBe('other');
+      expect(d.subarray(232).every((x: number) => x === 0)).toBe(true);
+      const k = fs.readFileSync(keys);
+      expect(k.subarray(0, 5).toString('latin1')).toBe('other');
+      expect(k.subarray(56).every((x: number) => x === 0)).toBe(true);
+    } finally {
+      if (saved === undefined) delete process.env.BBS_DATA_DIR; else process.env.BBS_DATA_DIR = saved;
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it('scrubs the caller\'s answers in a Node Answers safety copy too', () => {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { config } = require('../../src/config');
+    const nodeDir = path.join(config.getConfig().dataDir, 'Node979');
+    fs.mkdirSync(nodeDir, { recursive: true });
+    const copy = path.join(nodeDir, 'Answers.pre-central-20261005.backup');
+    const banner = '**************************************************************\n';
+    fs.writeFileSync(copy, `${banner}10-04-26 (17:37:02) [3] zedcaller (CONNECT 19200) Zedtown\nmine\n`, 'latin1');
+    try {
+      expect(__test_only__.scrubAnswersFiles('zedcaller', 'erased_1')).toBe(1);
+      expect(fs.readFileSync(copy, 'latin1')).not.toContain('zedcaller');
+    } finally {
+      fs.rmSync(nodeDir, { recursive: true, force: true });
+    }
+  });
+});

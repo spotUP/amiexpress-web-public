@@ -66,6 +66,8 @@ export interface ErasureResult {
   sentByFilesRenamed: number;
   /** Conferences whose ctop.data named the caller. */
   ctopFilesRenamed: number;
+  /** Accounts records blanked in the sysop's safety copies of user.data/.keys/.misc. */
+  backupRecordsBlanked: number;
 }
 
 /**
@@ -169,6 +171,10 @@ export async function eraseUserData(db: any, userId: string, options: ErasureOpt
   const sentByFilesRenamed = renameSentByLines(originalUsername, erasedHandle);
   const ctopFilesRenamed = renameInCtopData(originalUsername, erasedHandle);
 
+  // 6. The sysop's safety copies of the account files keep the caller's
+  //    whole record: it is blanked there (sysop decision 2026-10-05).
+  const backupRecordsBlanked = blankAccountInBackups(originalUsername);
+
   return {
     userId,
     erasedHandle,
@@ -183,7 +189,52 @@ export async function eraseUserData(db: any, userId: string, options: ErasureOpt
     callersLogFilesRedacted,
     sentByFilesRenamed,
     ctopFilesRenamed,
+    backupRecordsBlanked,
   };
+}
+
+/** user.data / user.keys / user.misc record sizes (UserFileManager). */
+const ACCOUNT_RECORD_SIZES = { data: 232, keys: 56, misc: 248 } as const;
+
+/**
+ * Every safety copy of user.data whose record names the caller: that record
+ * is zeroed, and the record at the same position in the copy of user.keys and
+ * user.misc taken with it (same suffix). A record in a copy is matched by
+ * NAME - slots move (a swap, a delete) and the copy may predate them.
+ */
+function blankAccountInBackups(originalUsername: string): number {
+  const root = boardRoot();
+  const want = originalUsername.toLowerCase();
+  let blanked = 0;
+  for (const copy of backupCopiesOf(path.join(root, 'user.data'))) {
+    try {
+      const buf = Buffer.from(amigafs.readFileSync(copy) as Buffer);
+      const suffix = path.basename(copy).slice('user.data'.length);
+      let touched = false;
+      for (let at = 0; at + ACCOUNT_RECORD_SIZES.data <= buf.length; at += ACCOUNT_RECORD_SIZES.data) {
+        const name = buf.subarray(at, at + 31).toString('latin1').split('\0')[0];
+        if (name.toLowerCase() !== want) continue;
+        const index = at / ACCOUNT_RECORD_SIZES.data;
+        buf.fill(0, at, at + ACCOUNT_RECORD_SIZES.data);
+        for (const kind of ['keys', 'misc'] as const) {
+          const sibling = path.join(root, `user.${kind}${suffix}`);
+          if (!amigafs.existsSync(sibling)) continue;
+          const sb = Buffer.from(amigafs.readFileSync(sibling) as Buffer);
+          const size = ACCOUNT_RECORD_SIZES[kind];
+          if ((index + 1) * size <= sb.length) {
+            sb.fill(0, index * size, (index + 1) * size);
+            amigafs.writeFileSync(sibling, sb);
+          }
+        }
+        blanked++;
+        touched = true;
+      }
+      if (touched) amigafs.writeFileSync(copy, buf);
+    } catch (error) {
+      console.warn('[gdpr-erasure] Failed to blank the account in', copy, error);
+    }
+  }
+  return blanked;
 }
 
 /** stringCompare: names are the same whatever the case (read-msg sameName). */
@@ -286,6 +337,46 @@ export async function eraseFromMessageBases(
 }
 
 /**
+ * The sysop's safety copies of `file`: siblings named after it with a backup
+ * suffix - `user.data.pre-swap-20261004.backup`, `DIR1.bak-padding`,
+ * `CallersLog.backup` (sysop decision 2026-10-05: an erasure reaches them).
+ */
+export function backupCopiesOf(file: string): string[] {
+  const dir = path.dirname(file);
+  const base = path.basename(file).toLowerCase();
+  let entries: string[] = [];
+  try { entries = amigafs.readdirSync(dir); } catch { return []; }
+  return entries
+    .filter((e) => {
+      const lower = e.toLowerCase();
+      return lower !== base && lower.startsWith(base) && /^[.\-_]/.test(lower.slice(base.length))
+        && /backup|\.bak|\.old\b/.test(lower.slice(base.length));
+    })
+    .map((e) => path.join(dir, e))
+    .filter((p) => { try { return amigafs.statSync(p).isFile(); } catch { return false; } });
+}
+
+/** A file and every safety copy of it. */
+function withBackups(files: Iterable<string>): string[] {
+  const out = new Set<string>();
+  for (const f of files) {
+    out.add(f);
+    for (const b of backupCopiesOf(f)) out.add(b);
+  }
+  return [...out];
+}
+
+/** Whole-conference safety copies at the board root, e.g. `Conf2.backup-2026-05-27/`. */
+function conferenceBackupDirs(root: string): string[] {
+  let entries: string[] = [];
+  try { entries = amigafs.readdirSync(root); } catch { return []; }
+  return entries
+    .filter((e) => /^conf\d+[.\-_].*(backup|bak)/i.test(e))
+    .map((e) => path.join(root, e))
+    .filter((p) => { try { return amigafs.statSync(p).isDirectory(); } catch { return false; } });
+}
+
+/**
  * Scrub Node*\/Answers + Node*\/TempAns files by removing any block whose
  * header mentions the erased username. Blocks are separated by the
  * '**********' banner written by the new-user handler.
@@ -318,8 +409,7 @@ function scrubAnswersFiles(originalUsername: string, erasedHandle: string, slot?
   for (const entry of entries) {
     if (!/^node\d+$/i.test(entry)) continue;
     const nodeDir = path.join(baseDir, entry);
-    for (const name of ['Answers', 'TempAns']) {
-      const filePath = path.join(nodeDir, name);
+    for (const filePath of withBackups(['Answers', 'TempAns'].map((n) => path.join(nodeDir, n)))) {
       if (!amigafs.existsSync(filePath)) continue;
 
       try {
@@ -408,7 +498,7 @@ function redactRecentLogs(originalUsername: string, erasedHandle: string): numbe
   const re = new RegExp(`(?<![A-Za-z0-9_])(?:${spellings.join('|')})(?![A-Za-z0-9_])`, 'g');
   const logonLocation = new RegExp(`^([^\\r\\n]*\\[\\d+\\] (?:${spellings.join('|')}) \\([^)\\r\\n]*\\)) ?[^\\r\\n]*`, 'gm');
 
-  for (const filePath of new Set(targets.map(t => amigafs.resolveExistingAncestors(t)))) {
+  for (const filePath of new Set(withBackups(targets).map(t => amigafs.resolveExistingAncestors(t)))) {
     try {
       const raw = (amigafs.readFileSync(filePath) as Buffer).toString('latin1');
       if (!re.test(raw)) continue;
@@ -453,9 +543,14 @@ function renameSentByLines(originalUsername: string, erasedHandle: string): numb
       listings.add(path.join(dir, 'FILES.BBS'));
     }
   }
+  for (const copy of conferenceBackupDirs(root)) {
+    let entries: string[] = [];
+    try { entries = amigafs.readdirSync(copy); } catch { continue; }
+    for (const e of entries) if (/^DIR\d+$/i.test(e) || /^(hold|held)$/i.test(e)) listings.add(path.join(copy, e));
+  }
 
   let filesTouched = 0;
-  for (const listing of listings) {
+  for (const listing of withBackups(listings)) {
     try {
       if (!amigafs.existsSync(listing)) continue;
       const raw = (amigafs.readFileSync(listing) as Buffer).toString('latin1');
@@ -482,8 +577,11 @@ function renameInCtopData(originalUsername: string, erasedHandle: string): numbe
   const name = Buffer.from(originalUsername, 'latin1').subarray(0, 32).toString('latin1');
   const isTheCaller = (n: string) => sameName(n, name);
   let filesTouched = 0;
-  for (const conf of conferenceNumbers(root)) {
-    const ctopPath = path.join(conferenceDir(root, conf), 'ctop.data');
+  const ctopFiles = withBackups([
+    ...conferenceNumbers(root).map((conf) => path.join(conferenceDir(root, conf), 'ctop.data')),
+    ...conferenceBackupDirs(root).map((dir) => path.join(dir, 'ctop.data')),
+  ]);
+  for (const ctopPath of ctopFiles) {
     try {
       if (!amigafs.existsSync(ctopPath)) continue;
       const buf = Buffer.from(amigafs.readFileSync(ctopPath) as Buffer);
@@ -515,7 +613,7 @@ function renameInCtopData(originalUsername: string, erasedHandle: string): numbe
 }
 
 // Re-export for tests that need to stub timestamps via a wrapper layer.
-export const __test_only__ = { scrubAnswersFiles, redactRecentLogs, renameSentByLines, renameInCtopData };
+export const __test_only__ = { scrubAnswersFiles, redactRecentLogs, renameSentByLines, renameInCtopData, blankAccountInBackups };
 
 // Unused but kept so tree-shakers don't complain about getSystemTime import
 // when the current implementation doesn't reference it yet (reserved for
