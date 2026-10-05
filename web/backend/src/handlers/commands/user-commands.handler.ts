@@ -178,6 +178,9 @@ export async function fileReceivedUploads(
     // runPostUpload so the user still gets the express.e-style
     // completion line and the menu prompt fires. Express.e:19127
     // emits "Time increased" then drops back to the main loop.
+    // The batch-complete step reads the upload context; RZ never set one,
+    // so without this an empty RZ receive printed nothing at all.
+    session.tempData = { ...(session.tempData as any), uploadStartTime: ulStartTime, uploadedFiles: 0, uploadedBytes: 0 } as any;
     await handleUploadBatchComplete(socket, session);
     return;
   }
@@ -275,9 +278,7 @@ console.error('[ZMODEM] Failed to ensure playpen:', err);
     const { startResumeStuff } = require('../../services/resume-stuff.service');
     const { config: appConfigForResume } = require('../../config');
     startResumeStuff(socket, session, playpen, appConfigForResume, (resumeResult: any) => {
-      if (resumeResult?.resumed > 0) {
-        socket.emit('ansi-output', `\r\n${resumeResult.resumed} partial file(s) restored to playpen.\r\n`);
-      }
+      // express.e resumeStuff (18119-18257) prints no count of restored files.
       continueUpload();
     });
     return;
@@ -356,12 +357,8 @@ console.error('[ZMODEM] Failed to ensure playpen:', err);
         // `filesTransferred`, which TransferResult has never had, so every
         // XMODEM/YMODEM/Punter upload reported "0 file(s)" and was filed as
         // incomplete in PartUpload (the telnet regression suite, 2026-09-27).
-        if (!result.success || result.files.length === 0) {
-          socket.emit('ansi-output', '\r\nUpload aborted\r\n\r\n');
-          uploadReturns(session, 'failure');
-          return;
-        }
-        await fileReceivedUploads(socket, session, result.files, [], ulStartTime);
+        // express.e:19051-19053 - see the lrzsz completion below.
+        await fileReceivedUploads(socket, session, result.success ? result.files : [], [], ulStartTime);
       });
       // These callers are not async; the transfer runs on its own and reports
       // through the 'complete' event above.
@@ -402,11 +399,9 @@ console.error('[ZMODEM] Failed to ensure playpen:', err);
         },
           onComplete: async (ok: boolean, detail: any) => {
             endRawTransfer(session);
-            if (!ok) {
-              socket.emit('ansi-output', '\r\nUpload aborted\r\n\r\n');
-              uploadReturns(session, 'failure');
-              return;
-            }
+            // express.e:19051-19053: whatever fileReceive delivered, "File Uploading
+            // Complete..." and the stats follow; a failed receive only logs "Upload
+            // Failed.." (19093-19096). runPostUpload does both for an empty list.
             // Route through the SAME post-upload pipeline as the RZ command
             // (transfer-misc-commands.handler.ts:177-279). Previously this
             // handler only emitted the stats banner and stopped — files
@@ -467,11 +462,9 @@ console.error('[ZMODEM] Failed to ensure playpen:', err);
       // lrzsz's is (uploadaFile 19400-19500), one path for every protocol.
       onComplete: async (ok, detail) => {
         endRawTransfer(session);
-        if (!ok) {
-          socket.emit('ansi-output', '\r\nUpload aborted\r\n\r\n');
-          uploadReturns(session, 'failure');
-          return;
-        }
+        // express.e:19051-19053: whatever fileReceive delivered, "File Uploading
+        // Complete..." and the stats follow; a failed receive only logs "Upload
+        // Failed.." (19093-19096). runPostUpload does both for an empty list.
         await fileReceivedUploads(socket, session, detail?.received || [], detail?.skipped || [], ulStartTime);
       },
     });

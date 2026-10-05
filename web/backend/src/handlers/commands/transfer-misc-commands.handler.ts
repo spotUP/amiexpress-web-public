@@ -170,9 +170,7 @@ console.error('[ZMODEM] Failed to ensure playpen:', err);
     console.log(`[ZMODEM-UL-RZ] startResumeStuff entry slot=${session.user?.slotNumber} conf=${session.currentConf}`);
     startResumeStuff(socket, session, playpen, appConfigForResume, (resumeResult: any) => {
       console.log(`[ZMODEM-UL-RZ] startResumeStuff onComplete resumed=${resumeResult.resumed} aborted=${resumeResult.aborted}`);
-      if (resumeResult.resumed > 0) {
-        socket.emit('ansi-output', `\r\n${resumeResult.resumed} partial file(s) restored to playpen.\r\n`);
-      }
+      // express.e resumeStuff (18119-18257) prints no count of restored files.
       spawnLrzszForUpload();
     });
     function spawnLrzszForUpload() {
@@ -201,11 +199,9 @@ console.error('[ZMODEM] Failed to ensure playpen:', err);
         // upload ends through endUpload like every other upload.
         onComplete: async (ok: boolean, detail: any) => {
           endRawTransfer(session);
-          if (!ok) {
-            socket.emit('ansi-output', '\r\nUpload aborted\r\n\r\n');
-            endUpload(session, 'failure', toMenu);
-            return;
-          }
+          // express.e:19051-19053: whatever fileReceive delivered, "File Uploading
+          // Complete..." and the stats follow; a failed receive only logs "Upload
+          // Failed.." (19093-19096). runPostUpload does both for an empty list.
           const { fileReceivedUploads } = require('./user-commands.handler');
           await fileReceivedUploads(socket, session, detail?.received || [], detail?.skipped || [], ulStartTime);
         },

@@ -238,4 +238,19 @@ describe('Telnet/SSH lrzsz onComplete routes through web pipeline (no duplicatio
     expect(count(c.said(), 'file(s),')).toBe(1);
     expect(c.session.subState).toBe(LoggedOnSubState.DISPLAY_MENU);
   });
+
+  // express.e:19051-19053: a receive that fails still prints "File Uploading
+  // Complete..." and the stats, and only the logs say "Upload Failed.."
+  // (19093-19096). The port printed an invented "Upload aborted" instead.
+  test('a failed RZ receive ends like express: banner, 0 file(s), "Upload Failed.." logged', async () => {
+    const c = aCaller({ connectionType: 'telnet', bbsPath: board, transferRawSend: jest.fn(), transferRawSendUnescaped: jest.fn() });
+    await handleZmodemUploadCommand(c.socket, c.session);
+    await lrzszManagers[0].opts.onComplete(false, { received: [], skipped: [] });
+
+    expect(c.said()).not.toContain('Upload aborted');
+    expect(count(c.said(), 'File Uploading Complete...')).toBe(1);
+    expect(c.said()).toContain(' 0 file(s),');
+    expect(callersLog.mock.calls.some(call => call[2] === '\tUpload Failed..')).toBe(true);
+    expect(c.session.subState).toBe(LoggedOnSubState.DISPLAY_MENU);
+  });
 });
