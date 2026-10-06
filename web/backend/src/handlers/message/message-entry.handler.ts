@@ -1357,11 +1357,18 @@ export async function handleFullEditConfirm(socket: any, session: BBSSession, in
  */
 async function runFullEdit(socket: any, session: BBSSession): Promise<void> {
   const entry = session.tempData.messageEntry;
-  let outcome: string[] | 'abandoned' | 'not-run';
+  let outcome: { lines: string[]; batchRequested: boolean } | 'abandoned' | 'not-run';
   // Several callers are synchronous and do not await this; a failure to run
   // the editor must end in the line editor, never in an unhandled rejection.
   try {
-    outcome = await editInFullScreen(socket, session, entry?.body ?? []);
+    // express.e:10122-10123 - the editor offers upload / attach when the
+    // caller may file into this message.
+    const attach = fileAttach(session);
+    outcome = await editInFullScreen(socket, session, entry?.body ?? [], {
+      batch: attach && (checkSecurity(session.user, ACSPermission.PRI_MSGFILES)
+        || checkSecurity(session.user, ACSPermission.PUB_MSGFILES)),
+      attach: attach && checkSecurity(session.user, ACSPermission.ATTACH_FILES),
+    });
   } catch (err) {
     console.error('[FULLEDIT] full-screen editor failed, falling back to the line editor:', err);
     outcome = 'not-run';
@@ -1379,7 +1386,10 @@ async function runFullEdit(socket: any, session: BBSSession): Promise<void> {
     session.tempData = undefined;
     return;
   }
-  entry.body = outcome;
+  entry.body = outcome.lines;
+  // express.e:10133 rzmsg:=1 - the editor asked for the batch upload, so the
+  // save takes the message's files (saveNewMSG 10721-10740), as X does.
+  if (outcome.batchRequested && entry) entry.rzmsg = true;
   await saveMessage(socket, session);
 }
 

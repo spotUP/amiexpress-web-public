@@ -45,14 +45,7 @@ export async function flagPause(
     session.tempData.lineCount = (session.tempData.lineCount || 0) + count;
   }
 
-  const rawLineLen =
-    session.wireHeight ||
-    session.screenHeight ||
-    session.user?.linesPerScreen ||
-    session.user?.lineLength ||
-    session.user?.pageLength ||
-    DEFAULT_PAUSE_LINES;
-  const userLineLen = Math.min(Math.max(rawLineLen, 10), 40);
+  const userLineLen = sessionLineLen(session);
 
   // Check if we need to pause
   // express.e:28031
@@ -203,14 +196,7 @@ export async function checkForPause(
     session.tempData.lineCount = (session.tempData.lineCount || 0) + 1;
   }
 
-  const rawLineLen =
-    session.wireHeight ||
-    session.screenHeight ||
-    session.user?.linesPerScreen ||
-    session.user?.lineLength ||
-    session.user?.pageLength ||
-    DEFAULT_PAUSE_LINES;
-  const userLineLen = Math.min(Math.max(rawLineLen, 10), 40);
+  const userLineLen = sessionLineLen(session);
 
   // Check if we need to pause (express.e:5191)
   if (!session.tempData.nonStopDisplayFlag &&
@@ -291,6 +277,21 @@ export async function checkForPause(
 /**
  * Initialize pause state for a session
  */
+
+/**
+ * express.e userLineLen (1327, 3659: loggedOnUser.lineLength; 2405-2408: the
+ * terminal's reported height, never under 10): the rows a page holds.
+ */
+export function sessionLineLen(session: Session): number {
+  const rawLineLen =
+    session.wireHeight ||
+    session.screenHeight ||
+    session.user?.linesPerScreen ||
+    session.user?.lineLength ||
+    session.user?.pageLength ||
+    DEFAULT_PAUSE_LINES;
+  return Math.min(Math.max(rawLineLen, 10), 40);
+}
 export function initPauseState(session: Session): void {
   if (!session.tempData) {
     session.tempData = {};

@@ -10,6 +10,7 @@ import { config as appConfig } from '../../config';
 import { MoiraEmulator } from "../cpu/MoiraEmulator.js";
 import { Socket } from "socket.io";
 import { ExecLibrary } from "../api/ExecLibrary.js";
+import { editorStructFromDoor, editorStructToDoor, EditorState, EditorStringPool } from "../xim/editor-struct.js";
 import { XIMProtocol, XIMCommand } from "../XIMProtocol.js";
 import { DoorConfig, DoorConstants, AEDoorCommand } from "../DoorTypes.js";
 import { doorScreenWidth, doorScreenHeight } from "../xim/screen-width.util";
@@ -62,6 +63,8 @@ export class DoorMessageHandler {
   private emulator: MoiraEmulator;
   private socket: Socket;
   private execLibrary: ExecLibrary;
+  /** The board's copies of the editor object's strings (EDITOR_STRUCT). */
+  private editorStrings: EditorStringPool = {};
   private ximProtocol: XIMProtocol | null = null;
   private config: DoorConfig;
 
@@ -2125,10 +2128,19 @@ debugLog(`[DoorMessageHandler]   BB_CONFACCOUNT SET: ignored (not implemented)`)
         break;
 
       case XIMCommand.EDITOR_STRUCT:
-        // express.e:3929-3934: Copy editor struct to/from door memory
-        // data=1: copy from door to BBS, data=0: copy from BBS to door
-debugLog(`[DoorMessageHandler]   EDITOR_STRUCT: ${data ? 'READ from door' : 'WRITE to door'} (not implemented)`);
-        amigaGaps.record('xim', `EDITOR_STRUCT ${data ? 'read' : 'write'}`, doorOf(this.emulator));
+        // express.e:3929-3934 - data set: the door's object at filler1
+        // becomes the board's; clear: the board's is copied to filler1.
+        {
+          const editorAddr = this.emulator.readMemory32(msgAddr + DoorConstants.MESSAGE_FILLER1_OFFSET);
+          const session = this.config.bbsSession as { editor?: EditorState } | undefined;
+          if (data !== 0) {
+            const fromDoor = editorStructFromDoor(this.emulator, editorAddr);
+            if (fromDoor && session) session.editor = fromDoor;
+          } else {
+            editorStructToDoor(this.emulator, this.execLibrary, session?.editor, editorAddr, this.editorStrings);
+          }
+debugLog(`[DoorMessageHandler]   EDITOR_STRUCT: ${data ? 'from door' : 'to door'} at ${editorAddr}`);
+        }
         break;
 
       case XIMCommand.LOAD_CONFDB:

@@ -407,6 +407,8 @@ export interface BBSSession {
   uploadReturn?: import('./services/upload-end.service').UploadReturn;
   /** express.e rzmsg (240): the upload is the X of a message - its files go into <msgBaseLocation>F<msgNumb>. */
   rzmsg?: { dir: string; msgNumb: number };
+  /** express.e `editor` (219): the full-screen editor's object, what FULLEDIT reads and writes back (XIM EDITOR_STRUCT). */
+  editor?: import('./amiga-emulation/xim/editor-struct').EditorState;
   pendingDisplayInputs?: string[];
   replayingDisplayInputs?: boolean;
   transferRawActive?: boolean; // When true, bypass cooked command handling for raw transfer (ZMODEM)

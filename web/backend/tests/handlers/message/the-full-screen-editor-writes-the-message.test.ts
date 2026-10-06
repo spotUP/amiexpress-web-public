@@ -19,11 +19,14 @@ import * as path from 'path';
 
 let registered = true;
 let editorWrites: string | null = null;
+// A FULLEDIT door's turn, when a test sets one: it runs between msg.i and msg.
+let asDoor: ((session: any) => void) | null = null;
 const seenInclude: Array<string | null> = [];
 const runSysCommand = jest.fn(async () => {
   const work = path.join(root, 'Node3', 'Work');
   seenInclude.push(fs.existsSync(path.join(work, 'msg.i')) ? fs.readFileSync(path.join(work, 'msg.i'), 'latin1') : null);
   if (editorWrites !== null) fs.writeFileSync(path.join(work, 'msg'), editorWrites);
+  if (asDoor) asDoor((runSysCommand.mock.calls[runSysCommand.mock.calls.length - 1] as unknown[])[1]);
   return 0;
 });
 jest.mock('../../../src/handlers/command-execution.handler', () => ({
@@ -38,6 +41,7 @@ import { config } from '../../../src/config';
 import { LoggedOnSubState } from '../../../src/constants/bbs-states';
 import { handleFullEditConfirm, promptForMessageBody } from '../../../src/handlers/message/message-entry.handler';
 import { flushOutput } from '../../../src/utils/output.util';
+import { editorStructFromDoor, editorStructToDoor } from '../../../src/amiga-emulation/xim/editor-struct';
 
 let root: string;
 let spy: jest.SpyInstance;
@@ -48,6 +52,7 @@ beforeEach(() => {
   spy = jest.spyOn(config, 'get').mockImplementation((key: string) => (key === 'dataDir' ? root : original(key as never)));
   registered = true;
   editorWrites = null;
+  asDoor = null;
   seenInclude.length = 0;
   runSysCommand.mockClear();
   saved.mockClear();
@@ -125,5 +130,41 @@ describe('the full-screen editor (express.e edit() 10093-10141)', () => {
     await promptForMessageBody(none.socket, none.session);
     expect(none.said()).toContain('Enter your text.');
     expect(runSysCommand).not.toHaveBeenCalled();
+  });
+
+  test("a FULLEDIT door that asks for the batch upload gets the message's files (EDITOR_STRUCT, 10133)", async () => {
+    // Door memory: the door's 26-byte buffer at 0x100, the board's strings
+    // wherever allocMem puts them.
+    const mem = new Uint8Array(0x4000);
+    const emulator: any = {
+      readMemory: (a: number) => mem[a],
+      writeMemoryBuffer: (a: number, b: Buffer) => { mem.set(b, a); },
+    };
+    const exec: any = { allocMem: () => 0x1000 };
+    let seenByDoor: any;
+    asDoor = (session) => {
+      editorStructToDoor(emulator, exec, session.editor, 0x100, {});   // GET (data=0)
+      seenByDoor = editorStructFromDoor(emulator, 0x100);
+      mem[0x100 + 8] |= 0x80;                                            // ED_BATCH_REQUESTED ($8000) in the flags LONG at +6
+      session.editor = editorStructFromDoor(emulator, 0x100);            // PUT (data=1)
+    };
+    const c = aCaller(2);
+    let rzmsgAtSave: unknown;
+    c.session.tempData.messageEntry.finishOutside = async (body: string[] | null) => {
+      rzmsgAtSave = c.session.tempData?.messageEntry?.rzmsg;
+      return saved(body);
+    };
+    editorWrites = 'with files';
+    await promptForMessageBody(c.socket, c.session);
+
+    expect(seenByDoor).toMatchObject({
+      maxFileLength: 100, editorTop: 1, editorMaxWidth: 76,
+      editorFile: 'BBS:Node3/Work/msg', editorIncludeFile: 'BBS:Node3/Work/msg.i',
+      editorPrependFile: null, editorPostPendFile: null,
+    });
+    expect(seenByDoor.editorFlags & (1 | 2 | 8)).toBe(1 | 2 | 8);   // ANSI, abort, upload offered
+    expect(saved).toHaveBeenCalledWith(['with files']);
+    expect(rzmsgAtSave).toBe(true);
+    expect(c.session.editor.editorFlags & 32768).toBe(0);           // cleared on the way out
   });
 });

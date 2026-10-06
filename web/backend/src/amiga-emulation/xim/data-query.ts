@@ -13,6 +13,7 @@ import { XIMMessage, XIMCommand, BBSSessionData, XIMState, ENVStatus } from './t
 import { XIMMessageParser } from './messages';
 import { displayModeOf } from './display-mode.util';
 import { ExecLibrary } from '../api/ExecLibrary';
+import { editorStructFromDoor, editorStructToDoor, EditorState, EditorStringPool } from './editor-struct';
 import * as bcrypt from 'bcryptjs';
 import { SysopDebugUtil, DebugSeverity } from '../../utils/sysop-debug.util';
 import { userDatabaseManager } from '../../services/UserDatabaseManager';
@@ -44,6 +45,8 @@ import { ACSPermission } from '../../constants/acs-permissions';
 export class XIMDataQueryHandler {
   private emulator: MoiraEmulator;
   private execLibrary: ExecLibrary;
+  /** The board's copies of the editor object's strings (EDITOR_STRUCT). */
+  private editorStrings: EditorStringPool = {};
   private messageParser: XIMMessageParser;
   private bbsSession: BBSSessionData;
   private state: XIMState;
@@ -937,9 +940,16 @@ debugLog(`  [WRITE] MOD_TYPE: ${modType}`);
         break;
 
       case XIMCommand.EDITOR_STRUCT:
-        // Editor structure pointer - return 0 (no editor struct)
-        replyData = 0;
-debugLog(`  EDITOR_STRUCT: 0 (no editor struct)`);
+        // express.e:3929-3934 - msg.data set: the door's object at filler1
+        // becomes the board's; clear: the board's is copied to filler1.
+        if (msg.data !== 0) {
+          const fromDoor = editorStructFromDoor(this.emulator, msg.filler1 ?? 0);
+          if (fromDoor && this.bbsSession) (this.bbsSession as { editor?: EditorState }).editor = fromDoor;
+        } else {
+          editorStructToDoor(this.emulator, this.execLibrary,
+            (this.bbsSession as { editor?: EditorState } | undefined)?.editor, msg.filler1 ?? 0, this.editorStrings);
+        }
+debugLog(`  EDITOR_STRUCT: ${msg.data !== 0 ? 'from door' : 'to door'} at ${msg.filler1}`);
         break;
 
       case XIMCommand.BYPASS_CSI_CHECK:
