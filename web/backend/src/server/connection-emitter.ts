@@ -95,9 +95,15 @@ export function buildConnectionEmitter(connection: TelnetConnection | SSHConnect
 
   // The line is up until the connection says it closed. Every connection this
   // emitter serves (telnet, SSH, the WebSocket terminal) emits 'close' when
-  // its transport dies.
+  // its transport dies. It then says 'disconnect', as a socket.io socket does:
+  // a running door listens for it (AmigaDoorSession, AREXX, Python) to drop
+  // carrier and stop. Without it a door outlived its caller's hang-up.
   let lineUp = true;
-  (connection as unknown as EventEmitter).on?.('close', () => { lineUp = false; });
+  (connection as unknown as EventEmitter).on?.('close', () => {
+    if (!lineUp) return;
+    lineUp = false;
+    eventBus.emit('disconnect', 'transport close');
+  });
 
   const emitter: any = {
     // socket.io's `.once / .removeListener / .removeAllListeners /

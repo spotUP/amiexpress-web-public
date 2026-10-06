@@ -47,7 +47,7 @@ jest.mock('../src/services/CallersLogManager');
 /** Everything the door exit touched, in the order it touched it. */
 const mockOrder: string[] = [];
 /** How the fake door behaves on this run. */
-const mockDoor = { crash: false };
+const mockDoor = { crash: false, hangUp: false };
 
 jest.mock('../src/amiga-emulation/AmigaDoorSession', () => ({
   AmigaDoorSession: class {
@@ -57,6 +57,13 @@ jest.mock('../src/amiga-emulation/AmigaDoorSession', () => ({
       // What notifySysopPage leaves behind when a FIM door pages mid-door.
       this.session.sysopPagePending = true;
       this.session.sysopPageChatSessionId = 'chat-1';
+      // The caller's line closes mid-door: the transport's teardown takes the
+      // session out of the maps (forgetSession) while the door still runs.
+      if (mockDoor.hangUp) {
+        const { sessions, userSessions } = require('../src/server/session-manager');
+        sessions.delete(String(this.session.nodeId));
+        userSessions.delete(String(this.session.user.id));
+      }
       if (mockDoor.crash) throw new Error('door crashed');
       mockOrder.push('door-exit');
     }
@@ -128,6 +135,7 @@ describe('executeAmigaDoor sysop page-wait sequencing (task 18, round 2)', () =>
     fs.writeFileSync(path.join(root, 'Doors', '5D_Page', '5D_Page'), Buffer.from([0x00, 0x00, 0x03, 0xf3]));
     mockOrder.length = 0;
     mockDoor.crash = false;
+    mockDoor.hangUp = false;
     (consumePendingSysopPage as jest.Mock).mockClear();
     (runSysopPageWait as jest.Mock).mockClear();
     (startSysopPage as jest.Mock).mockClear();
@@ -205,5 +213,18 @@ describe('executeAmigaDoor sysop page-wait sequencing (task 18, round 2)', () =>
     expect(session.sysopPagePending).toBe(false);
     expect(session.sysopPageChatSessionId).toBeUndefined();
     expect(runSysopPageWait).not.toHaveBeenCalled();
+  });
+
+  test('a caller who hangs up mid-door is not put back on the board when the door ends (ghost on /health)', async () => {
+    const { sessions, userSessions } = require('../src/server/session-manager');
+    for (const crash of [false, true]) {
+      mockDoor.hangUp = true;
+      mockDoor.crash = crash;
+      const err = jest.spyOn(console, 'error').mockImplementation(() => undefined);
+      await runPagingDoor();
+      err.mockRestore();
+      expect(sessions.has('1')).toBe(false);
+      expect(userSessions.has('1')).toBe(false);
+    }
   });
 });

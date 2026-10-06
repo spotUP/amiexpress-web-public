@@ -3076,20 +3076,11 @@ console.log(`[executeAmigaDoor] doorInputHandler received: "${data}" (len=${data
 console.error('[executeAmigaDoor] Error routing door input:', err);
       }
     };
-    // Persist session state so socket-handlers sees the door flags/handler
-    try {
-      const { setSession, userSessions, getSession } = require('../server/session-manager');
-console.log(`[executeAmigaDoor] Before setSession: inDoorManager=${session.inDoorManager}, handler=${!!session.doorInputHandler}`);
-      setSession(socket.id, session);
-      if ((session as any).user?.id) {
-        userSessions.set(String((session as any).user.id), session);
-      }
-      // Verify session was stored correctly
-      const verifySession = getSession(socket.id);
-console.log(`[executeAmigaDoor] After setSession: verify inDoorManager=${verifySession?.inDoorManager}, handler=${!!verifySession?.doorInputHandler}`);
-    } catch (err) {
-console.error('[executeAmigaDoor] Unable to persist session for door input:', err);
-    }
+    // The session maps are NOT written here or at the door's exit: this
+    // session is the object the transport stored at connect, so the door's
+    // flags are already visible through them. Writing it back put a caller
+    // who hung up mid-door back into `sessions` after the hang-up had taken
+    // the session out - a ghost /health listed until the next restart (2026-10-05).
 
     // Log door start to Node{N}/DoorLog (express.e:9392-9419)
     const doorTypeCode = doorLogTypeNumber(doorType);
@@ -3152,15 +3143,6 @@ console.log(`[executeAmigaDoor] Door execution completed`);
     socket.emit('door-active', false);
     delete session.doorInputHandler;
     session.subState = LoggedOnSubState.DISPLAY_MENU;
-    try {
-      const { setSession, userSessions } = require('../server/session-manager');
-      setSession(socket.id, session);
-      if ((session as any).user?.id) {
-        userSessions.set(String((session as any).user.id), session);
-      }
-    } catch {
-      /* ignore */
-    }
 
     // Capture any return/chain/PRV/ACP requests from the door
     if (typeof (amigaSession as any).getExitState === 'function') {
@@ -3322,15 +3304,6 @@ console.error(`[executeAmigaDoor] Error executing Amiga door:`, error);
     // Clear it here too so it can never survive into the next door's exit.
     session.sysopPagePending = false;
     delete session.sysopPageChatSessionId;
-    try {
-      const { setSession, userSessions } = require('../server/session-manager');
-      setSession(socket.id, session);
-      if ((session as any).user?.id) {
-        userSessions.set(String((session as any).user.id), session);
-      }
-    } catch {
-      /* ignore */
-    }
     if (!theCallerIsLeaving(session)) {
       session.subState = LoggedOnSubState.DISPLAY_MENU;
       if (session.state === BBSState.LOGGEDON && session.user) {

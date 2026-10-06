@@ -35,6 +35,18 @@ describe('a byte caller hanging up', () => {
     expect(emitter.connected).toBe(false);
   });
 
+  it("tells a running door the line dropped, once, as socket.io's 'disconnect' does", () => {
+    const connection = aConnection();
+    const emitter = buildConnectionEmitter(connection);
+    const doorHeard = jest.fn();
+    emitter.on('disconnect', doorHeard);   // AmigaDoorSession's carrier-drop listener
+
+    connection.emit('close');
+    connection.emit('close');
+
+    expect(doorHeard).toHaveBeenCalledTimes(1);
+  });
+
   it("sends the menu's carrier check to LOGOFF instead of drawing the prompt", async () => {
     const connection = aConnection();
     const emitter = buildConnectionEmitter(connection);
