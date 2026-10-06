@@ -398,6 +398,11 @@ function columnsOf(ctx) {
     const width = Number(session?.screenWidth ?? 80);
     return Number.isFinite(width) && width > 0 ? width : 80;
 }
+/** Whether the caller answered T at the graphics prompt: a teletext page, forty columns. */
+function teletextOf(ctx) {
+    const session = ctx.bbsSession;
+    return session?.texttvMode === true;
+}
 /**
  * `LINES=AUTO`, held until the caller's screen is known.
  *
@@ -486,7 +491,7 @@ const EMPTY_DATA = {
  * Returns the screen it drew from, so the caller can finish it with the same
  * style and the same columns once the scenewall answers.
  */
-function drawHeader(socket, config, showLocation, callerColumns, command) {
+function drawHeader(socket, config, showLocation, callerColumns, command, teletext) {
     const base = {
         style: config.style,
         screenClear: config.screenClear,
@@ -501,6 +506,7 @@ function drawHeader(socket, config, showLocation, callerColumns, command) {
             columns: callerColumns,
             values: settingValues(),
             command,
+            teletext,
         }),
         columns: callerColumns,
         animate: config.animate,
@@ -624,7 +630,7 @@ door.onStart(async (ctx) => {
          * decides. The placeholder rows below it hold the table's shape - in the
          * calls' own column widths - and the real rows are written over them.
          */
-        const base = drawHeader(socket, config, showLocation, columnsOf(ctx), commandOf(ctx));
+        const base = drawHeader(socket, config, showLocation, columnsOf(ctx), commandOf(ctx), teletextOf(ctx));
         /*
          * A FORTY-COLUMN LIST SIZES ITSELF.
          *

@@ -447,6 +447,12 @@ function columnsOf(ctx: DoorContext): number {
   return Number.isFinite(width) && width > 0 ? width : 80;
 }
 
+/** Whether the caller answered T at the graphics prompt: a teletext page, forty columns. */
+function teletextOf(ctx: DoorContext): boolean {
+  const session = (ctx as unknown as { bbsSession?: { texttvMode?: boolean } }).bbsSession;
+  return session?.texttvMode === true;
+}
+
 /**
  * `LINES=AUTO`, held until the caller's screen is known.
  *
@@ -558,6 +564,7 @@ function drawHeader(
   showLocation: boolean,
   callerColumns: number,
   command: string,
+  teletext: boolean,
 ): GlcScreenBase {
   const base: GlcScreenBase = {
     style: config.style,
@@ -573,6 +580,7 @@ function drawHeader(
       columns: callerColumns,
       values: settingValues(),
       command,
+      teletext,
     }),
     columns: callerColumns,
     animate: config.animate,
@@ -717,7 +725,7 @@ door.onStart(async (ctx: DoorContext) => {
      * decides. The placeholder rows below it hold the table's shape - in the
      * calls' own column widths - and the real rows are written over them.
      */
-    const base = drawHeader(socket, config, showLocation, columnsOf(ctx), commandOf(ctx));
+    const base = drawHeader(socket, config, showLocation, columnsOf(ctx), commandOf(ctx), teletextOf(ctx));
 
     /*
      * A FORTY-COLUMN LIST SIZES ITSELF.

@@ -155,3 +155,35 @@ describe('a forty-column caller and the wide drawing', () => {
     expect(ask({ columns: 80, values: { logo3: 'art/style3.ans' } })).toEqual(originalLogo(3));
   });
 });
+
+/*
+ * A teletext caller is forty columns as well, but reads a teletext page:
+ * the C64 placeholder's reverse-video blocks were what he got (sysop,
+ * 2026-10-06: "fix teletext versions of them").
+ */
+describe('a teletext caller', () => {
+  it('gets the door\'s teletext placeholder, not the C64 one', () => {
+    const drawn = ask({ columns: 40, teletext: true });
+    const shipped = fs.readFileSync(path.join(DOOR, 'art', 'style3.ttx.ans'), 'latin1')
+      .replace(/\r?\n$/, '').split(/\r?\n/);
+    expect(drawn).toEqual(shipped);
+    expect(drawn.join('')).toContain('\x1b#3');
+    for (const line of drawn) {
+      expect(line.replace(/\x1b\[[0-9;]*[A-Za-z]|\x1b#\d|[\x0e\x0f]/g, '').length).toBeLessThanOrEqual(40);
+    }
+  });
+
+  it('gets an artist\'s teletext drawing over the placeholder', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'glc-ttx-'));
+    const dir = path.join(root, 'Screens', 'doors', 'GLC');
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, `${artSettingSection('logo3').toLowerCase()}.ttx.ans`), '\x1b[33mTELETEXT LOGO\n', 'latin1');
+    expect(ask({ bbsRoot: root, columns: 40, teletext: true })).toEqual(['\x1b[33mTELETEXT LOGO']);
+  });
+
+  it('ships a teletext placeholder for every style', () => {
+    for (const style of [1, 2, 3, 4]) {
+      expect(fs.existsSync(path.join(DOOR, 'art', `style${style}.ttx.ans`))).toBe(true);
+    }
+  });
+});

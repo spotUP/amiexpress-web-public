@@ -87,6 +87,22 @@ function readLines(file) {
 /** The five lines to draw above the title bar. */
 function logoFor(request) {
     const key = `logo${request.style}`;
+    /*
+     * A TELETEXT CALLER READS HIS OWN DRAWING FIRST: the Studio's `.ttx`
+     * variant, then the door's shipped teletext placeholder. Only where neither
+     * exists does he fall to the C64 one below (sysop, 2026-10-06: "fix
+     * teletext versions of them").
+     */
+    if (request.teletext && request.columns <= exports.NARROW_COLUMNS) {
+        const drawn = request.bbsRoot
+            ? readLines(path.join(request.bbsRoot, 'Screens', 'doors', request.command.toUpperCase(), `${(0, exports.artSettingSection)(key).toLowerCase()}.ttx.ans`))
+            : null;
+        if (drawn)
+            return drawn;
+        const shipped = readLines(path.join(request.doorDir, 'art', `style${request.style}.ttx.ans`));
+        if (shipped)
+            return shipped;
+    }
     if (request.bbsRoot && request.columns <= exports.NARROW_COLUMNS) {
         const narrow = readLines(path.join(request.bbsRoot, 'Screens', 'doors', request.command.toUpperCase(), `${(0, exports.artSettingSection)(key).toLowerCase()}.c64.ans`));
         if (narrow)

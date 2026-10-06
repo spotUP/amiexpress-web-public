@@ -17,6 +17,11 @@ export interface LogoRequest {
     values: Record<string, unknown>;
     /** The command the variants are filed under. */
     command: string;
+    /**
+     * A teletext caller: forty columns too, but his drawing is a teletext page -
+     * double-height rows and mosaic blocks - not the C64's reverse-video one.
+     */
+    teletext?: boolean;
 }
 /** The five lines to draw above the title bar. */
 export declare function logoFor(request: LogoRequest): readonly string[];
