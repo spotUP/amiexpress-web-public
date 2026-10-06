@@ -88,3 +88,33 @@ describe('news bulletins', () => {
     expect(NEWS_BULLETIN_SOURCES.map((s) => s.file).sort()).toEqual(['bull7.txt', 'bull8.txt']);
   });
 });
+
+/*
+ * The board's bulletin menu is the list of its bulletins, in the one format
+ * the news tick also writes - so the tick finds its own lines and leaves the
+ * menu alone. It shipped as a Card Lobby leftover with the tick's two lines
+ * appended under it (sysop, 2026-10-06: "fix it").
+ */
+describe('the shipped BullHelp.txt', () => {
+  const shipped = require('path').join(__dirname, '..', '..', '..', '..', 'Bulletins', 'BullHelp.txt');
+
+  it('lists the board\'s bulletins, not the Card Lobby\'s', () => {
+    const text = require('fs').readFileSync(shipped, 'latin1');
+    expect(text).not.toContain('CARD LOBBY');
+    for (const n of [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]) expect(text).toMatch(new RegExp(`^#${n}\\b`, 'm'));
+  });
+
+  it('is left unchanged by the news tick', () => {
+    const fsMod = require('fs');
+    const os = require('os');
+    const pathMod = require('path');
+    const dir = fsMod.mkdtempSync(pathMod.join(os.tmpdir(), 'bullhelp-'));
+    fsMod.copyFileSync(shipped, pathMod.join(dir, 'BullHelp.txt'));
+    const before = fsMod.readFileSync(pathMod.join(dir, 'BullHelp.txt'), 'latin1');
+    const { ensureBullHelpLine, NEWS_BULLETIN_SOURCES } = require('../../src/services/news-bulletins');
+    NEWS_BULLETIN_SOURCES.forEach((src: { file: string; title: string }) => {
+      ensureBullHelpLine(dir, parseInt(/\d+/.exec(src.file)![0], 10), src.title);
+    });
+    expect(fsMod.readFileSync(pathMod.join(dir, 'BullHelp.txt'), 'latin1')).toBe(before);
+  });
+});

@@ -1,7 +1,14 @@
-CARD LOBBY BULLETINS
----------------------
+BULLETINS
+---------
 
-#20   Card Lobby Weekly Leaders
-     Top 10 chip winners from the lobby.
+#1    Top Uploaders
+#2    Top Downloaders
+#3    Top Message Writers
+#4    Top Upload CPS
+#5    Top Download CPS
+#6    Last Callers
+#7    SVT Text news headlines
+#8    SVT Text sports headlines
+#9    Requests
+#10   Board Changes
 
-Use the Card Lobby bulletin window to read bulletin numbers.
