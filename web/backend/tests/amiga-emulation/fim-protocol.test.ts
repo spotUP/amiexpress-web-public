@@ -22,7 +22,7 @@ import { FIMProtocol } from "../../src/amiga-emulation/fim/fim-protocol";
 import { FDOM, FIM_CMD, FIM_RC } from "../../src/amiga-emulation/fim/fim-constants";
 // reuse MemStub from fame-library.test.ts (extract to tests/amiga-emulation/helpers/mem-stub.ts in this task)
 import { MemStub } from "./helpers/mem-stub";
-import { formatLongDateTime } from "../../src/utils/date-time.util";
+import { formatLongDateTime, dateStampToDateTime } from "../../src/utils/date-time.util";
 import * as debugLogModule from "../../src/utils/debug-log";
 
 function buildMsg(emu: MemStub, addr: number, cmd: number) {
@@ -642,15 +642,14 @@ describe("FIMProtocol", () => {
     expect(emu.readMemory32(msg + FDOM.RETURNCODE)).toBe(FIM_RC.OK);
   });
 
-  it("NR_CurrTime returns seconds since the Amiga epoch (Jan 1 1978) in Data2", () => {
+  it("NR_CurrTime returns the board's wall clock as SAS/C time_t (seconds since 1970) in Data2", () => {
     const emu = new MemStub();
     const { proto } = makeWith(emu, {});
     const msg = buildMsg(emu, 0x8000, FIM_CMD.NR_CurrTime);
     proto.handleMessage(msg);
-    const amigaEpoch = new Date(1978, 0, 1).getTime();
-    const expected = Math.floor((MOCK_NOW.getTime() - amigaEpoch) / 1000) >>> 0;
-    expect(emu.readMemory32(msg + FDOM.DATA2)).toBe(expected);
-    expect(expected).toBeGreaterThan(0);
+    const wall = MOCK_NOW;   // local-time ctor: its wall fields are 2026-01-07 14:32:00
+    expect(emu.readMemory32(msg + FDOM.DATA2)).toBe(
+      Date.UTC(wall.getFullYear(), wall.getMonth(), wall.getDate(), wall.getHours(), wall.getMinutes()) / 1000);
   });
 
   it("NR_ThisConfAccess grants access by default (Data2=1) — no per-conference ACL modeled at this layer", () => {
@@ -765,15 +764,15 @@ describe("FIMProtocol", () => {
     expect(emu.readMemory32(msg + FDOM.DATA3)).toBe(17);
   });
 
-  it("NR_TimeLastOn returns user.lastLogin as seconds-since-Amiga-epoch in Data2, default 0", () => {
+  it("NR_TimeLastOn returns user.lastLogin as SAS/C time_t, not eight years late (FAME dates), default 0", () => {
     const emu = new MemStub();
-    const lastLogin = new Date(2026, 0, 1, 0, 0, 0);
+    // The moment the board's clock read 2026-01-01 00:00:00.
+    const days1978 = (Date.UTC(2026, 0, 1) - Date.UTC(1978, 0, 1)) / 86400000;
+    const lastLogin = dateStampToDateTime(days1978, 0, 0);
     const { proto } = makeWith(emu, { user: { lastLogin } });
     const msg = buildMsg(emu, 0x8000, FIM_CMD.NR_TimeLastOn);
     proto.handleMessage(msg);
-    const amigaEpoch = new Date(1978, 0, 1).getTime();
-    const expected = Math.floor((lastLogin.getTime() - amigaEpoch) / 1000) >>> 0;
-    expect(emu.readMemory32(msg + FDOM.DATA2)).toBe(expected);
+    expect(emu.readMemory32(msg + FDOM.DATA2)).toBe(1767225600);   // ctime(): "Thu Jan  1 00:00:00 2026"
 
     const emu2 = new MemStub();
     const { proto: proto2 } = makeWith(emu2, {});

@@ -20,26 +20,25 @@
 import { MoiraEmulator } from "../cpu/MoiraEmulator";
 import { FDOM, FIM_CMD, FIM_RC } from "./fim-constants";
 import { debugLog } from "../../utils/debug-log";
-import { getSystemTime, formatLongDateTime } from "../../utils/date-time.util";
+import { getSystemTime, formatLongDateTime, dateTimeToDateStamp } from "../../utils/date-time.util";
 import { writeToCallersLog, writeToUDLog } from "../../utils/download-logging.util";
 import { EscapeSequenceStripper } from "../utils/escape-sequence-stripper";
 import { amigaGaps, doorOf } from '../instrumentation/amiga-gaps';
 
 /**
- * Amiga epoch (January 1, 1978 00:00:00) — same reference point
- * date-time.util.ts's dateStampToDateTime/dateTimeToDateStamp use for
- * AmigaDOS DateStamp conversions. FAMEDoorCommands.h's NR_CurrTime comment
- * is truncated mid-sentence in the shipped header ("Retrieve the current
- * time in seconds since January" — no year given, and identical across all
- * three shipped copies of the header checked: FA_DE103, FA_DE100,
- * FAMECFPR). Rather than guess a Unix-epoch interpretation, this reuses the
- * codebase's own established Amiga-epoch convention for every "seconds"
- * time field in this command family (NR_CurrTime, NR_TimeLastOn).
+ * FAME's numeric times (NR_CurrTime, NR_TimeLastOn) are SAS/C `time_t`: the
+ * Amiga's wall clock in seconds since January 1, 1970. FAMEDoorCommands.h's
+ * NR_CurrTime comment is cut off at "seconds since January", but FAME's own
+ * FAMEMsgHeader door hands a FAME-written date straight to SAS/C ctime()
+ * (FAMEMsgHeader.c:232), whose gmtime counts from 1970 with no zone shift
+ * unless TZ is set; the binary carries no 1970->1978 offset. Answering
+ * seconds since 1978 put every FAME date eight years late.
+ *
+ * The wall clock is the board's (dateTimeToDateStamp), as the Amiga's was.
  */
-const AMIGA_EPOCH_MS = new Date(1978, 0, 1).getTime();
-
-function secondsSinceAmigaEpoch(date: Date): number {
-  return Math.floor((date.getTime() - AMIGA_EPOCH_MS) / 1000) >>> 0;
+function fameTime(date: Date): number {
+  const ds = dateTimeToDateStamp(date);
+  return ((ds.days + 2922) * 86400 + ds.minutes * 60 + Math.floor(ds.ticks / 50)) >>> 0;
 }
 
 const NT_REPLYMSG = 6;
@@ -363,9 +362,8 @@ export class FIMProtocol {
       case FIM_CMD.NR_CurrTime: {
         // FAMEDoorCommands.h: "Retrieve the current time in seconds since
         // January / Data2 -> Contains the current timevalue." (comment is
-        // truncated in the shipped header — see AMIGA_EPOCH_MS above for
-        // why Amiga epoch was chosen over guessing Unix epoch.)
-        const currTime = secondsSinceAmigaEpoch(getSystemTime());
+        // truncated in the shipped header — see fameTime above.)
+        const currTime = fameTime(getSystemTime());
         this.emulator.writeMemory32(msgAddr + FDOM.DATA2, currTime);
         this.reply(msgAddr, FIM_RC.OK);
         break;
@@ -567,12 +565,12 @@ export class FIMProtocol {
         // sits in the same NUMERIC-timestamp family as NR_CurrTime (29) —
         // and is paired with NR_StampLastOn (49) below exactly the way
         // NR_StampTime (28)/NR_CurrTime (29) are paired (string vs numeric
-        // form of the same timestamp) — so it uses the same
-        // seconds-since-Amiga-epoch convention. User.lastLogin absent ->
+        // form of the same timestamp) — so it is the same SAS/C time_t
+        // (fameTime) as FAME's user record LastTime. User.lastLogin absent ->
         // 0, never crash.
         const user = this.getUser();
         const lastLogin = user.lastLogin;
-        const timeLastOn = lastLogin instanceof Date ? secondsSinceAmigaEpoch(lastLogin) : 0;
+        const timeLastOn = lastLogin instanceof Date ? fameTime(lastLogin) : 0;
         this.emulator.writeMemory32(msgAddr + FDOM.DATA2, timeLastOn >>> 0);
         this.reply(msgAddr, FIM_RC.OK);
         break;
