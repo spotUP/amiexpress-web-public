@@ -321,7 +321,10 @@ describe('socket events ask who is calling', () => {
   });
 
   it('does not mint a chat token for an account the logon refuses', async () => {
-    const database = { authenticateUser: jest.fn(async () => ({ id: 41, username: 'Gone', secLevel: 20, slotNumber: 0 })) };
+    const database = {
+      getUserByUsername: jest.fn(async () => ({ id: 41, username: 'Gone', secLevel: 20, slotNumber: 0, passwordHash: 'pw' })),
+      verifyPassword: jest.fn(async () => true),
+    };
     const app = express();
     app.use(express.json());
     app.use('/api/chat', createChatRouter(database as never));

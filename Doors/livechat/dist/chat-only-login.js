@@ -1,5 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.verifyCredentials = verifyCredentials;
 exports.runChatOnlyLogin = runChatOnlyLogin;
 /**
  * Chat-Only Login Integration
@@ -23,11 +24,16 @@ async function verifyCredentials(credentials) {
         // "Cannot find module" -> swallowed -> generic "server error".
         const path = require('path');
         const { db } = require(path.resolve(process.cwd(), 'src/database'));
-        // Use the Database's authenticateUser method which handles password verification
-        const user = await db.authenticateUser(credentials.username, credentials.password);
-        if (!user) {
-            return { success: false, error: 'Invalid username or password' };
+        // The backend's chat login (services/chat-login), the one the HTTP login
+        // and the socket modal ask: it counts a wrong password toward
+        // MAX_PASSWORD_FAILS and refuses a deleted, locked or level-0 account.
+        // This door asked only the password, so those accounts got into chat here.
+        const { chatLogin } = require(path.resolve(process.cwd(), 'src/services/chat-login'));
+        const login = await chatLogin(db, credentials.username, credentials.password);
+        if (!login.ok) {
+            return { success: false, error: login.message };
         }
+        const user = login.user;
         // Success
         return {
             success: true,

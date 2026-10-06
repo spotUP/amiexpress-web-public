@@ -53,10 +53,11 @@ describe('a public route that fails', () => {
 
   it("does not send an unexpected failure's text from the chat login, and still says why it refuses", async () => {
     const database = {
-      authenticateUser: async (name: string) => {
+      getUserByUsername: async (name: string) => {
         if (name === 'boom') throw new Error(`ENOENT: no such file or directory, open '${root}/user.data'`);
         return null;
       },
+      verifyPassword: async () => false,
     };
     const app = express();
     app.use(express.json());

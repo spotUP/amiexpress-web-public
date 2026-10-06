@@ -9,7 +9,7 @@ import { createDisconnectionModal } from './ui/disconnection-modal';
 /**
  * Verify credentials using dynamic require (we're running inside the backend)
  */
-async function verifyCredentials(credentials: LoginCredentials): Promise<{ success: boolean; user?: any; error?: string }> {
+export async function verifyCredentials(credentials: LoginCredentials): Promise<{ success: boolean; user?: any; error?: string }> {
   try {
     // Resolve the backend database module via process.cwd(). The backend is
     // launched from `web/backend/` in both dev (start-servers.sh:676 cds
@@ -21,13 +21,17 @@ async function verifyCredentials(credentials: LoginCredentials): Promise<{ succe
     // "Cannot find module" -> swallowed -> generic "server error".
     const path = require('path');
     const { db } = require(path.resolve(process.cwd(), 'src/database'));
+    // The backend's chat login (services/chat-login), the one the HTTP login
+    // and the socket modal ask: it counts a wrong password toward
+    // MAX_PASSWORD_FAILS and refuses a deleted, locked or level-0 account.
+    // This door asked only the password, so those accounts got into chat here.
+    const { chatLogin } = require(path.resolve(process.cwd(), 'src/services/chat-login'));
 
-    // Use the Database's authenticateUser method which handles password verification
-    const user = await db.authenticateUser(credentials.username, credentials.password);
-
-    if (!user) {
-      return { success: false, error: 'Invalid username or password' };
+    const login = await chatLogin(db, credentials.username, credentials.password);
+    if (!login.ok) {
+      return { success: false, error: login.message };
     }
+    const user = login.user;
 
     // Success
     return {

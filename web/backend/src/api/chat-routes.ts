@@ -11,9 +11,8 @@
 import express, { Request, Response } from 'express';
 import { jwtSecret } from '../utils/jwt-secrets';
 import { mintChatToken } from '../services/chat-token.service';
-import { loadAccount } from '../services/load-account';
-import { accountRefusal, tokenHolderRefusal } from '../services/logon-gates';
-import { countWrongPasswordFor, clearWrongPasswords } from '../services/password-failures';
+import { tokenHolderRefusal } from '../services/logon-gates';
+import { chatLogin } from '../services/chat-login';
 import jwt from 'jsonwebtoken';
 import { getSystemTime } from '../utils/date-time.util';
 import type { Database } from '../database';
@@ -91,30 +90,17 @@ console.error('[Chat API] Error:', error);
         return handleError(res, new Error('Invalid username'), 400);
       }
 
-      // Authenticate user
-      const user = await database.authenticateUser(safeUsername, password);
-
-      if (!user) {
-console.log(`[Chat API] Failed login attempt for: ${safeUsername}`);
-        // express.e:1008-1016 - the account counts it toward
-        // MAX_PASSWORD_FAILS, as the BBS logon and FTP count theirs.
-        await countWrongPasswordFor(() => database.getUserByUsername(safeUsername), 'CHAT');
-        return handleError(res, new Error('Invalid username or password'), 401);
+      // services/chat-login: the password check, its failure count and the
+      // board's account gates, shared with the socket modal and the door.
+      const login = await chatLogin(database, safeUsername, password);
+      if (!login.ok) {
+console.log(`[Chat API] Login refused for: ${safeUsername} (${login.status})`);
+        return handleError(res, new Error(login.message), login.status);
       }
-
-      // The board's own account gates on the board's own record - the BBS
-      // logon's and FTP's (services/logon-gates). A deleted, locked or
-      // level-0 account was handed a chat token here (open-surface audit,
-      // 2026-10-04); a password that must be changed cannot be changed here.
-      if (accountRefusal(loadAccount(user).user) !== null) {
-console.log(`[Chat API] Account refused by the logon gates: ${safeUsername}`);
-        return handleError(res, new Error('That account cannot log on. Call the board to find out why.'), 403);
-      }
+      const user = login.user;
 
       // One minting implementation, shared with the door's login modal, so
       // the two cannot drift into different claims or lifetimes.
-      // express.e:1018 - a right password zeroes the count.
-      clearWrongPasswords(user, 'CHAT');
 
       const token = mintChatToken(
         { id: user.id, username: user.username, secLevel: user.secLevel },

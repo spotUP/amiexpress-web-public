@@ -75,6 +75,7 @@ describe('POST /api/chat/login', () => {
   app.use('/api/chat', createChatRouter({
     authenticateUser: (...args: unknown[]) => authenticateUser(...args),
     getUserByUsername: (...args: unknown[]) => getUserByUsername(...args),
+    verifyPassword: (...args: unknown[]) => verifyPassword(...args),
   } as any));
   const post = (username: string, password: string) =>
     request(app).post('/api/chat/login').send({ username, password });
