@@ -7,9 +7,10 @@
 # the checkout deploy.sh has just reset - the container has no git - so the
 # section is written here and handed to the board.
 #
-# Only what a caller would call a change goes in: `feat`, `fix` and `perf`
-# commits, with their conventional prefix (`fix(screens): `) taken off. Tests,
-# docs and chores are the board's business, not its callers'.
+# Every commit goes in except the board's own housekeeping - `test`, `docs`,
+# `chore`, `ci`, `build`, `style` and `refactor` - with a conventional prefix
+# (`fix(screens): `) taken off. An untagged commit is a change too: listing
+# only feat/fix/perf left those out (sysop, 2026-10-06, "fix it").
 #
 # Sourced by deploy.sh for `changelog_update`; `changelog_section` and
 # `changelog_merge` are pure (text in, text out) so they can be tested
@@ -21,7 +22,7 @@ CHANGELOG_FIRST_RUN_COMMITS=30
 
 # changelog_section <repo> <from-sha|""> <to-sha> <date-label>
 # One dated section for the commits after <from> up to <to>; nothing at all
-# when none of them is a feat/fix/perf.
+# when every one of them is housekeeping.
 changelog_section() {
   local repo="$1" from="$2" to="$3" when="$4" range subjects
   if [ -n "$from" ] && git -C "$repo" cat-file -e "${from}^{commit}" 2>/dev/null; then
@@ -31,7 +32,7 @@ changelog_section() {
   fi
   # shellcheck disable=SC2086
   subjects=$(git -C "$repo" log --no-merges --format='%s' $range \
-    | grep -E '^(feat|fix|perf)(\([^)]*\))?!?: ' \
+    | grep -vE '^(test|tests|docs|chore|ci|build|style|refactor)(\([^)]*\))?!?: ' \
     | sed -E 's/^[a-z]+(\([^)]*\))?!?: //' || true)
   [ -n "$subjects" ] || return 0
   printf ' %s  deploy %s\n' "$when" "$(git -C "$repo" rev-parse --short=9 "$to")"

@@ -72,3 +72,15 @@ test('a long subject is folded under its dash, inside 79 columns', () => {
   for (const line of out.split('\n')) expect(line.length).toBeLessThanOrEqual(79);
   expect(out.split('\n').filter((l) => l.startsWith('     word')).length).toBeGreaterThan(0);
 });
+
+test('an untagged commit is listed; housekeeping is not', () => {
+  const r = repo();
+  const a = r.commit('feat: start');
+  r.commit('Free Models Start Working Here');
+  r.commit('refactor(screens): move a helper');
+  const b = r.commit('ci: cache');
+  const out = run(`changelog_section "${r.dir}" "${a}" "${b}" "10-06-26"`);
+  expect(out).toContain('   - Free Models Start Working Here');
+  expect(out).not.toContain('move a helper');
+  expect(out).not.toContain('cache');
+});
