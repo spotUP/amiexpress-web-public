@@ -9,7 +9,6 @@
  */
 
 import { Server as SocketIOServer, Socket } from 'socket.io';
-import { emitterForUserId } from './session-emitter-registry';
 import { keyBytesFor } from './composed-key';
 import { db } from '../database';
 import { BBSState, LoggedOnSubState } from '../constants/bbs-states';
@@ -1013,32 +1012,17 @@ export async function endTransportSession(
 export async function finalizeDisconnectCleanup(socket: Socket, session: BBSSession, socketId: string): Promise<void> {
   const userId = session.user?.id ? String(session.user.id) : '';
 
-  if (userId) {
-    /**
-     * Is this user still on the board somewhere ELSE?
-     *
-     * TP-13b. This used to ask `socketToUser`, which holds WEB sockets only
-     * (login-post.service fills it for socket.io callers), so a caller
-     * logged in on both a browser and a telnet line had the telnet logoff
-     * silently skipped - no CallersLog line, no logoff batches, no node
-     * files written. The registry answers for every transport, and the
-     * session it finds has to be a DIFFERENT one from the session ending.
-     */
-    const elsewhere = emitterForUserId(userId);
-    const stillConnected = !!elsewhere && elsewhere.session !== session;
-console.log(`[DISCONNECT] finalizeDisconnectCleanup: userId=${userId}, stillConnected=${stillConnected}`);
-    if (stillConnected) {
-console.log(`[DISCONNECT] Cleanup skipped for user ${userId} - this user is live on another connection`);
-      pendingDisconnects.delete(userId);
-      // The paperwork waits for the account's last connection, but this
-      // node is over: off the board, or /health lists it until a restart.
-      forgetSession(session, socketId, userId);
-      return;
-    }
-  } else {
-console.log(`[DISCONNECT] finalizeDisconnectCleanup: no userId, session.nodeId=${session.nodeId}`);
-  }
-
+  /*
+   * EVERY NODE LOGS OFF. express.e runs one process per node, and a node's
+   * logoff - its CallersLog line, its logoff batches, its node files, the
+   * account save - runs whether or not the same account is on another node.
+   * This used to skip the whole cleanup while the account was live
+   * elsewhere (a browser and a telnet line): no paperwork, the node never
+   * released, and the session left in `sessions` for /health to list until
+   * a restart. forgetSession takes only this session's entries, so the
+   * other node is untouched.
+   */
+console.log(`[DISCONNECT] finalizeDisconnectCleanup: userId=${userId || '-'}, node=${session.nodeId}`);
   if (userId) {
     pendingDisconnects.delete(userId);
   }

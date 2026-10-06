@@ -140,4 +140,45 @@ describe('a dropped caller leaves the board', () => {
     }
     expect(stillSeated()).toBe(false);
   });
+
+  it('logs a node off even while the same account is on another node, as every express.e node does', async () => {
+    jest.resetModules();
+    const sessionManager = require('../../src/server/session-manager');
+    const web: any = {
+      user: { id: '88', username: 'Twice', secLevel: 30 },
+      nodeId: 8, socketId: 'sock-8', state: 'LOGGEDON', connectionType: 'web',
+    };
+    const telnet: any = { ...web, nodeId: 9, socketId: 'sock-9', connectionType: 'telnet' };
+    for (const s of [web, telnet]) {
+      sessionManager.setSession(s.socketId, s);
+      sessionManager.socketToNodeId.set(s.socketId, s.nodeId);
+    }
+    sessionManager.userSessions.set('88', web);
+
+    const callersLog = jest.fn(async () => undefined);
+    const runLogoffBatches = jest.fn(async () => undefined);
+    jest.doMock('../../src/server/session-emitter-registry', () => ({
+      ...jest.requireActual('../../src/server/session-emitter-registry'),
+      emitterForUserId: () => ({ session: web }),   // the account is live on node 8
+    }));
+    jest.doMock('../../src/server/database-helpers', () => ({
+      ...jest.requireActual('../../src/server/database-helpers'),
+      callersLog,
+    }));
+    jest.doMock('../../src/services/batch-scheduler', () => ({
+      ...jest.requireActual('../../src/services/batch-scheduler'),
+      logoffBatchesAlreadyRan: () => false,
+      runLogoffBatches,
+    }));
+
+    const handlers = require('../../src/server/socket-handlers');
+    const socket: any = { id: 'sock-9', emit: () => true, on: () => {}, off: () => {} };
+    await handlers.finalizeDisconnectCleanup(socket, telnet, 'sock-9');
+
+    expect(callersLog).toHaveBeenCalledWith('88', 'Twice', 'Logged off');
+    expect(runLogoffBatches).toHaveBeenCalledWith(9);
+    expect(sessionManager.sessions.has('9')).toBe(false);
+    expect(sessionManager.sessions.get('8')).toBe(web);
+    expect(sessionManager.userSessions.get('88')).toBe(web);
+  });
 });
