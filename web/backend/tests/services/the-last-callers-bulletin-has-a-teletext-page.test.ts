@@ -55,4 +55,9 @@ test('the logoff batch writes bull6.ttx beside bull6.txt, a forty-column page of
   const firstCaller = /\x1b\[32m(\S+)/.exec(ansi)?.[1];
   expect(firstCaller).toBeTruthy();
   expect(ttx).toContain(firstCaller!.slice(0, 12));
+  // Every column the ANSI table has: the actions and the traffic too, and
+  // the group as long as the ANSI table shows it (sysop, 2026-10-06, "fix it").
+  const plain = ttx.replace(/\x1b\[[0-9;]*m/g, '');
+  expect(plain).toMatch(/\d\d:\d\d +\d+:\d\d \([-HCPDdUuS]{6}\) +\d+ +\d+/);
+  expect(plain).toContain('Group / Location');
 });

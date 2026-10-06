@@ -1185,9 +1185,9 @@ const TELETEXT_ROWS = 25;
  * teletext versions of them").
  *
  * The heading is the sysop's `Utils/samilog/samilog.header.ttx` when there
- * is one, else a double-height LAST CALLERS between mosaic rules. The table
- * keeps what fits forty columns - node, name, group, time on, time used -
- * and as many callers as the page holds.
+ * is one, else a double-height LAST CALLERS over a mosaic rule. Each caller
+ * is two rows holding every column the ANSI table has, and the page lists
+ * as many callers as it holds.
  */
 export function generateTeletextBulletin(limit: number = 20): string {
   try {
@@ -1204,30 +1204,45 @@ export function generateTeletextBulletin(limit: number = 20): string {
       while (heading.length > 0 && heading[heading.length - 1].trim() === '') heading.pop();
     } else {
       const title = 'LAST CALLERS'.padStart(26).padEnd(TELETEXT_COLUMNS);
-      heading = [rule, `\x1b#3\x1b[0;33m${title}\x1b[0m`, `\x1b#4\x1b[0;33m${title}\x1b[0m`, rule];
+      heading = [`\x1b#3\x1b[0;33m${title}\x1b[0m`, `\x1b#4\x1b[0;33m${title}\x1b[0m`, rule];
     }
 
-    // ~f clears, as the ANSI bulletin's first line does; then the heading,
-    // the column titles, the callers, the day's numbers.
-    const top = ['~f', ...heading, '', `\x1b[0;36m${'Nd'} ${'Name'.padEnd(12)} ${'Group'.padEnd(12)} ${'On'.padEnd(5)} ${'Used'}\x1b[0m`];
+    /*
+     * Every column the ANSI table has, on two rows per caller (sysop,
+     * 2026-10-06, "fix it" - the first page dropped the actions and the
+     * traffic and cut the group at twelve). Row one is the ANSI table's own
+     * node, name (17) and group (20) - forty columns exactly; row two is
+     * time on, time used, the actions and the traffic.
+     */
+    const top = [
+      '~f', ...heading,
+      `\x1b[0;36mNd ${'Name'.padEnd(17)}${'Group / Location'.padEnd(20)}\x1b[0m`,
+      `\x1b[0;36m   ${'On'.padEnd(6)}${'H:MM'} ${'Actions '} ${'Up-K'} ${'Dn-K'}\x1b[0m`,
+    ];
     const daily = readDailyStats(buffer);
     const bottom = [
       rule,
       `\x1b[0;37m Calls today ${String(Math.min(daily.calls, 9999)).padStart(4)}   yesterday ${String(Math.min(daily.yesterdayCalls, 9999)).padStart(4)}\x1b[0m`,
     ];
-    // ~f prints no row of its own.
-    const room = Math.max(1, TELETEXT_ROWS - 1 - (top.length - 1) - bottom.length);
+    // ~f prints no row of its own; each caller is two.
+    const room = Math.max(1, Math.floor((TELETEXT_ROWS - 1 - (top.length - 1) - bottom.length) / 2));
 
     const rows: string[] = [];
-    for (let i = 0; i < USER_COUNT && rows.length < Math.min(limit, room); i++) {
+    let listed = 0;
+    for (let i = 0; i < USER_COUNT && listed < Math.min(limit, room); i++) {
       const e = readEntry(buffer, i);
       if (e.isDefault) continue;
       const node = e.node.padStart(2).slice(-2);
-      const name = e.name.slice(0, 12).padEnd(12);
-      const group = e.location.replace(/\[/g, '(').replace(/\]/g, ')').slice(0, 12).padEnd(12);
+      const name = e.name.padEnd(17).substring(0, 17);
+      const group = e.location.replace(/\[/g, '(').replace(/\]/g, ')').padEnd(20).substring(0, 20);
       const on = e.onTime.trim().slice(0, 5).padEnd(5);
       const used = formatDurationHMM(e.usage).padStart(4);
-      rows.push(`\x1b[0;31m${node} \x1b[0;32m${name} \x1b[0;33m${group} \x1b[0;34m${on} \x1b[0;36m${used}\x1b[0m`);
+      const actions = formatActions(e.flag1, e.flag2);
+      const up = formatTraffic(parseInt(e.upKb.trim(), 10) || 0).padStart(4);
+      const dn = formatTraffic(parseInt(e.dnKb.trim(), 10) || 0).padStart(4);
+      rows.push(`\x1b[0;31m${node} \x1b[0;32m${name}\x1b[0;33m${group}\x1b[0m`);
+      rows.push(`   \x1b[0;34m${on} \x1b[0;36m${used} \x1b[0;35m${actions} \x1b[0;31m${up} \x1b[0;32m${dn}\x1b[0m`);
+      listed++;
     }
 
     return [...top, ...rows, ...bottom].join('\n') + '\n';
