@@ -1030,6 +1030,9 @@ console.log(`[DISCONNECT] finalizeDisconnectCleanup: userId=${userId}, stillConn
     if (stillConnected) {
 console.log(`[DISCONNECT] Cleanup skipped for user ${userId} - this user is live on another connection`);
       pendingDisconnects.delete(userId);
+      // The paperwork waits for the account's last connection, but this
+      // node is over: off the board, or /health lists it until a restart.
+      forgetSession(session, socketId, userId);
       return;
     }
   } else {
@@ -1237,6 +1240,13 @@ console.error(`[LOGOFF] Error deleting node files:`, error);
  * is what a cross-session push resolves through, and the two socket maps are
  * how a socket finds either. A session left in any of them is a caller the
  * board believes is still here.
+ *
+ * Only THIS session's entries go. The same account can be on another node at
+ * the same time (a browser and a telnet line); that session's node, its
+ * sockets and its userSessions entry stay. This used to clear every entry for
+ * the account, so the disconnect cleanup could not call it while the account
+ * was live elsewhere - and skipped it, leaving the ended node in `sessions`
+ * for /health to list until the next restart.
  */
 export function forgetSession(session: BBSSession, socketId: string, userId: string): void {
   if (!userId) {
@@ -1244,19 +1254,34 @@ console.log(`[DISCONNECT] No userId, calling deleteSession for socket ${socketId
     deleteSession(socketId);
     return;
   }
+  const nodeKey = session.nodeId ? session.nodeId.toString() : '';
+  // The node is this session's unless another session has taken it since.
+  const ownsNode = !!nodeKey && (!sessions.has(nodeKey) || sessions.get(nodeKey) === session);
+  const onAnotherLiveNode = (id: string) => {
+    const nodeId = socketToNodeId.get(id);
+    return nodeId !== undefined && nodeId.toString() !== nodeKey && sessions.has(nodeId.toString());
+  };
+
   for (const [id, uid] of socketToUser.entries()) {
-    if (uid === userId) socketToUser.delete(id);
+    if (uid === userId && !onAnotherLiveNode(id)) socketToUser.delete(id);
   }
-  if (session.nodeId) {
+  if (ownsNode) {
     for (const [id, nodeId] of socketToNodeId.entries()) {
-      if (nodeId === session.nodeId) socketToNodeId.delete(id);
+      if (nodeId.toString() === nodeKey) socketToNodeId.delete(id);
     }
-  }
-  userSessions.delete(userId);
-  if (session.nodeId) {
-console.log(`[DISCONNECT] Deleting session for node ${session.nodeId} from sessions map`);
-    sessions.delete(session.nodeId.toString());
+console.log(`[DISCONNECT] Deleting session for node ${nodeKey} from sessions map`);
+    sessions.delete(nodeKey);
 console.log(`[DISCONNECT] Sessions map now has ${sessions.size} entries`);
+  }
+  if (userSessions.get(userId) === session || !userSessions.has(userId)) {
+    userSessions.delete(userId);
+    // The account's other live session, if it has one, is who a push reaches now.
+    for (const other of sessions.values()) {
+      if (other !== session && other.user?.id !== undefined && String(other.user.id) === userId) {
+        userSessions.set(userId, other);
+        break;
+      }
+    }
   }
 }
 

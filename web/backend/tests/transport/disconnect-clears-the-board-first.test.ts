@@ -58,6 +58,20 @@ describe('a dropped caller leaves the board', () => {
     expect(userSessions.get('u-stays')).toBe(stays);
   });
 
+  it('a node that ends while the same account is on another node leaves; the other stays (ghost on /health)', () => {
+    const telnet = seatCaller(2, 'u-twice', 'sock-2');
+    const web = seatCaller(3, 'u-twice', 'sock-3');   // userSessions now points at the web one
+
+    forgetSession(telnet, 'sock-2', 'u-twice');
+
+    expect(sessions.has('2')).toBe(false);
+    expect(socketToNodeId.has('sock-2')).toBe(false);
+    expect(sessions.get('3')).toBe(web);
+    expect(userSessions.get('u-twice')).toBe(web);
+    expect(socketToUser.get('sock-3')).toBe('u-twice');
+    expect(socketToNodeId.get('sock-3')).toBe(3);
+  });
+
   it('a session with no user is dropped by its socket', () => {
     const anon: any = { nodeId: 4, socketId: 'sock-4', state: 'CONNECTING' };
     setSession('sock-4', anon);
