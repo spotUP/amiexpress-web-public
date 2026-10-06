@@ -166,6 +166,11 @@ export interface Lock {
   mode: number;
   /** Original AmigaDOS path */
   amigaPath: string;
+  /**
+   * The name Examine reports, when `path` is not the door's own file: a
+   * pooled object's copy in the board's file cache keeps the door's name.
+   */
+  fileName?: string;
   /** Address of FileLockStruct in emulator memory */
   memAddr: number;
   /** BPTR (memAddr >> 2) returned to door */

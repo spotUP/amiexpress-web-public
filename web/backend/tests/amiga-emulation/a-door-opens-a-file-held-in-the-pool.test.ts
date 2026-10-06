@@ -177,4 +177,34 @@ describe('a door opening a file held in the pool', () => {
     expect(emulator.getRegister(CPURegister.D0)).toBeGreaterThan(0);
     expect(fetched).toEqual([]);
   });
+
+  it('a door can Lock and Examine a pooled file: its own name, the object\'s size', async () => {
+    const ACCESS_READ = -2;
+    const FIB = 0x6000;
+    emulator.writeString(NAME_ADDR, 'BBS:Conf1/Files/demo.lha');
+    emulator.setRegister(CPURegister.D1, NAME_ADDR);
+    emulator.setRegister(CPURegister.D2, ACCESS_READ);
+    expect(dos.handleCall(-84)).toBe(true); // Lock
+    expect(emulator.isPaused()).toBe(true);
+    await settle();
+    const lock = emulator.getRegister(CPURegister.D0);
+    expect(emulator.isPaused()).toBe(false);
+    expect(lock).toBeGreaterThan(0);
+
+    emulator.setRegister(CPURegister.D1, lock);
+    emulator.setRegister(CPURegister.D2, FIB);
+    dos.handleCall(-102); // Examine
+    expect(emulator.readString(FIB + 8)).toBe('demo.lha');
+    expect(emulator.readMemory32(FIB + 124)).toBe(BODY.length);
+  });
+
+  it('an exclusive Lock on a pooled file is not found: the cached copy is read-only', () => {
+    emulator.writeString(NAME_ADDR, 'BBS:Conf1/Files/DEMO.LHA');
+    emulator.setRegister(CPURegister.D1, NAME_ADDR);
+    emulator.setRegister(CPURegister.D2, -1); // ACCESS_WRITE
+    dos.handleCall(-84);
+    expect(emulator.isPaused()).toBe(false);
+    expect(emulator.getRegister(CPURegister.D0)).toBe(0);
+    expect(fetched).toEqual([]);
+  });
 });

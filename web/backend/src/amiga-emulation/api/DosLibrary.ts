@@ -702,34 +702,48 @@ debugLog(`[dos.library] queueInput: ${typeof data === 'string' ? JSON.stringify(
    * true = this call answers the Open; false = not a pooled path, carry on.
    */
   private openFromPool(): boolean {
-    const storage = getStorageContext();
-    if (!storage || !this.useNewFileSystem || !this.fileManager) return false;
+    if (!this.useNewFileSystem || !this.fileManager) return false;
     const mode = this.emulator.getRegister(CPURegister.D2);
     if (mode !== MODE_OLDFILE) return false;
     const filename = this.narrowArtFor(this.readString(this.emulator.getRegister(CPURegister.D1)), mode);
     const sysPath = this.fileManager.sysPathOf(filename);
-    if (!sysPath || amigafs.existsSync(sysPath)) return false;
+    if (!sysPath) return false;
+    const fileManager = this.fileManager;
+    return this.answerFromPool('OPEN', filename, sysPath, (local) => fileManager.openReadOnly(filename, local));
+  }
+
+  /**
+   * The door bridge's wait, for every call that can name a pooled file (Open,
+   * Lock): when `sysPath` is missing locally and inside a pooled area, D0 is a
+   * placeholder, the emulator pauses, and `use(localCopy)` answers D0 once the
+   * object is in the board's file cache. A name the area does not hold answers
+   * ERROR_OBJECT_NOT_FOUND; a volume that cannot answer, DEVICE_NOT_MOUNTED.
+   *
+   * true = this call is answered (now or after the fetch); false = not pooled.
+   */
+  private answerFromPool(what: string, amigaName: string, sysPath: string, use: (local: string) => number): boolean {
+    const storage = getStorageContext();
+    if (!storage || amigafs.existsSync(sysPath)) return false;
     const pooled = pooledPathOf(sysPath, storage, this.bbsDataPath);
     if (!pooled) return false;
 
-    const fileManager = this.fileManager;
-    this.logDoorFile(`OPEN pool ami="${filename}" -> fetching`);
+    this.logDoorFile(`${what} pool ami="${amigaName}" -> fetching`);
     this.emulator.setRegister(CPURegister.D0, 0);
     this.emulator.pause();
-    const answer = (bptr: number, ioErr: number) => {
+    const answer = (d0: number, ioErr: number) => {
       if (!this.emulator.isPaused()) return; // the door was torn down meanwhile
       this.lastError = ioErr;
-      this.emulator.setRegister(CPURegister.D0, bptr);
-      this.logDoorFile(`OPEN pool ${bptr ? `ok handle=${bptr}` : `fail IoErr=${ioErr}`} ami="${filename}"`);
+      this.emulator.setRegister(CPURegister.D0, d0);
+      this.logDoorFile(`${what} pool ${d0 ? `ok ${d0}` : `fail IoErr=${ioErr}`} ami="${amigaName}"`);
       this.emulator.resume();
     };
     materialisePooledPath(pooled, storage).then(
       (local) => {
-        const bptr = local ? fileManager.openReadOnly(filename, local) : 0;
-        answer(bptr, bptr ? DOS_ERRORS.ERROR_NO_ERROR : DOS_ERRORS.ERROR_OBJECT_NOT_FOUND);
+        const d0 = local ? use(local) : 0;
+        answer(d0, d0 ? DOS_ERRORS.ERROR_NO_ERROR : DOS_ERRORS.ERROR_OBJECT_NOT_FOUND);
       },
       (error: unknown) => {
-        console.warn(`[dos.library] Open("${filename}") from the pool failed:`, error);
+        console.warn(`[dos.library] ${what}("${amigaName}") from the pool failed:`, error);
         // A volume that cannot answer is not a missing file (storage/remote-download.ts).
         answer(0, isStorageUnavailable(error) ? DOS_ERRORS.ERROR_DEVICE_NOT_MOUNTED : DOS_ERRORS.ERROR_OBJECT_NOT_FOUND);
       },
@@ -2478,6 +2492,17 @@ debugLog(
       return;
     }
 
+    const exclusive = (mode | 0) === ACCESS_WRITE;
+
+    // A shared lock on a file held in a pooled area locks the board's cached
+    // copy, under the door's name - Examine and Open after it see the object
+    // a download would send. An exclusive lock is a claim to write, and the
+    // cache's copy is read-only: that stays not found.
+    if (!exclusive && this.answerFromPool('LOCK', originalName, realPath,
+      (local) => this.createLock(local, mode, originalName, path.basename(realPath)))) {
+      return;
+    }
+
     // Check if path exists
     if (!amigafs.existsSync(realPath)) {
       this.lastError = DOS_ERRORS.ERROR_OBJECT_NOT_FOUND;
@@ -2498,7 +2523,6 @@ debugLog(
     // lockMsgBase (express.e:11944-11964) is exactly this call on MailLock,
     // and the board's own writer takes the same lock (utils/mail-lock.ts).
     // AmigaOS refuses a second exclusive lock with ERROR_OBJECT_IN_USE.
-    const exclusive = (mode | 0) === ACCESS_WRITE;
     if (exclusive && !tryLockExclusive(realPath, this)) {
       this.lastError = DOS_ERRORS.ERROR_OBJECT_IN_USE;
 debugLog(`[dos.library] Lock("${name}") exclusive - held elsewhere [IoErr=${this.lastError}]`);
@@ -2506,26 +2530,28 @@ debugLog(`[dos.library] Lock("${name}") exclusive - held elsewhere [IoErr=${this
       return;
     }
 
-    // Create lock with FileLock structure in memory
+    this.emulator.setRegister(CPURegister.D0, this.createLock(realPath, mode, originalName)); // BPTR, not lockId!
+    this.lastError = DOS_ERRORS.ERROR_NO_ERROR;
+  }
+
+  /** A FileLock in memory for `realPath`; returns its BPTR. */
+  private createLock(realPath: string, mode: number, amigaPath: string, fileName?: string): number {
     const lockId = this.nextLockId++;
     const bptr = this.allocateFileLock(lockId, mode);
-    const memAddr = bptr << 2;
-
     this.locks.set(lockId, {
       id: lockId,
       path: realPath,
       mode: mode,
-      amigaPath: originalName,
-      memAddr: memAddr,
+      amigaPath,
+      fileName,
+      memAddr: bptr << 2,
       bptr: bptr,
     });
-
-    this.lastLockPath = originalName;
+    this.lastLockPath = amigaPath;
 debugLog(
       `[dos.library] Lock: Created lock ${lockId} (BPTR ${bptr}) for path ${realPath}`
     );
-    this.emulator.setRegister(CPURegister.D0, bptr); // Return BPTR, not lockId!
-    this.lastError = DOS_ERRORS.ERROR_NO_ERROR;
+    return bptr;
   }
 
   /**
@@ -2656,7 +2682,7 @@ console.error(`[dos.library] Examine: Invalid lock BPTR ${bptrIn}`);
 
     try {
       const stats = amigafs.statSync(lock.path);
-      const fileName = path.basename(lock.path);
+      const fileName = lock.fileName ?? path.basename(lock.path);
 
       // Targeted trace for AquaScan FR gating: only for Dir1 examines
       if (/^dir1$/i.test(fileName)) {
