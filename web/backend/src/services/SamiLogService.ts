@@ -1173,6 +1173,70 @@ console.error('[SamiLog] Error generating bulletin:', err);
   }
 }
 
+/** A teletext page's rows: forty columns, twenty-five rows (pre-login T). */
+const TELETEXT_COLUMNS = 40;
+const TELETEXT_ROWS = 25;
+
+/**
+ * The same Last Callers, as a teletext page - `bull6.ttx` beside
+ * `bull6.txt`, which a teletext caller reads in its place (screen.handler's
+ * twin rule). The ANSI bulletin is a 76-column picture; at forty columns it
+ * was folded into a mess under an ANSI logo (sysop, 2026-10-06: "fix
+ * teletext versions of them").
+ *
+ * The heading is the sysop's `Utils/samilog/samilog.header.ttx` when there
+ * is one, else a double-height LAST CALLERS between mosaic rules. The table
+ * keeps what fits forty columns - node, name, group, time on, time used -
+ * and as many callers as the page holds.
+ */
+export function generateTeletextBulletin(limit: number = 20): string {
+  try {
+    const storePath = getStorePath();
+    if (!fs.existsSync(storePath)) return '~f\nNo callers logged yet.\n';
+    const buffer = fs.readFileSync(storePath);
+    if (buffer.length < USERS_OFFSET + TOTAL_USER_BYTES) return '~f\nNo callers logged yet.\n';
+
+    const rule = `\x1b[0;36m\x0e${'s'.repeat(TELETEXT_COLUMNS)}\x0f\x1b[0m`;
+    let heading: string[];
+    const drawn = path.join(DATA_DIR, 'Utils', 'samilog', 'samilog.header.ttx');
+    if (fs.existsSync(drawn)) {
+      heading = fs.readFileSync(drawn, 'latin1').split(/\r?\n/);
+      while (heading.length > 0 && heading[heading.length - 1].trim() === '') heading.pop();
+    } else {
+      const title = 'LAST CALLERS'.padStart(26).padEnd(TELETEXT_COLUMNS);
+      heading = [rule, `\x1b#3\x1b[0;33m${title}\x1b[0m`, `\x1b#4\x1b[0;33m${title}\x1b[0m`, rule];
+    }
+
+    // ~f clears, as the ANSI bulletin's first line does; then the heading,
+    // the column titles, the callers, the day's numbers.
+    const top = ['~f', ...heading, '', `\x1b[0;36m${'Nd'} ${'Name'.padEnd(12)} ${'Group'.padEnd(12)} ${'On'.padEnd(5)} ${'Used'}\x1b[0m`];
+    const daily = readDailyStats(buffer);
+    const bottom = [
+      rule,
+      `\x1b[0;37m Calls today ${String(Math.min(daily.calls, 9999)).padStart(4)}   yesterday ${String(Math.min(daily.yesterdayCalls, 9999)).padStart(4)}\x1b[0m`,
+    ];
+    // ~f prints no row of its own.
+    const room = Math.max(1, TELETEXT_ROWS - 1 - (top.length - 1) - bottom.length);
+
+    const rows: string[] = [];
+    for (let i = 0; i < USER_COUNT && rows.length < Math.min(limit, room); i++) {
+      const e = readEntry(buffer, i);
+      if (e.isDefault) continue;
+      const node = e.node.padStart(2).slice(-2);
+      const name = e.name.slice(0, 12).padEnd(12);
+      const group = e.location.replace(/\[/g, '(').replace(/\]/g, ')').slice(0, 12).padEnd(12);
+      const on = e.onTime.trim().slice(0, 5).padEnd(5);
+      const used = formatDurationHMM(e.usage).padStart(4);
+      rows.push(`\x1b[0;31m${node} \x1b[0;32m${name} \x1b[0;33m${group} \x1b[0;34m${on} \x1b[0;36m${used}\x1b[0m`);
+    }
+
+    return [...top, ...rows, ...bottom].join('\n') + '\n';
+  } catch (err) {
+console.error('[SamiLog] Error generating teletext bulletin:', err);
+    return '~f\nError reading caller data.\n';
+  }
+}
+
 function formatDateAmiga(amigaDays: number): string {
   const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   const date = new Date(AMIGA_EPOCH + amigaDays * 24 * 60 * 60 * 1000);

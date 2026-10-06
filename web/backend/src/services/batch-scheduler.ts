@@ -615,6 +615,10 @@ console.log('[BatchScheduler] SAmiLog output to CONSOLE');
         amigafs.mkdirSync(path.dirname(fullPath), { recursive: true });
         amigafs.writeFileSync(fullPath, content, 'latin1');
 console.log(`[BatchScheduler] SAmiLog bulletin written to ${rawPath}`);
+        // Its teletext page beside it, rebuilt at the same moment so the two
+        // never disagree about who called (`bull6.txt` -> `bull6.ttx`).
+        const teletextPath = fullPath.replace(/\.[^./]*$/, '') + '.ttx';
+        amigafs.writeFileSync(teletextPath, samilog.generateTeletextBulletin(count), 'latin1');
         continue;
       }
     }
