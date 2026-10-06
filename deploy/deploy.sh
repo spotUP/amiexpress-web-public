@@ -887,4 +887,10 @@ if [ -n "$STALE" ]; then
 fi
 echo "OK: doors on the volume match the image"
 
+# The Board Changes bulletin, bull10 (deploy/changelog-bulletin.sh): this
+# deploy's feat/fix commits on top. A bulletin is never a reason to fail a
+# deploy that is already live.
+( . ./deploy/changelog-bulletin.sh && changelog_update "$(pwd)" "$ACTUAL_SHA" ) \
+  || echo "WARN: the Board Changes bulletin was not updated" >&2
+
 echo "Deploy complete: HEAD=$ACTUAL_SHA at $(date)"
