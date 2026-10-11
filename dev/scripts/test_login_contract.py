@@ -57,5 +57,19 @@ class DoorNotInstalled(unittest.TestCase):
         self.assertTrue(any("printed as text" in b for b in broken))
 
 
+class MailFoundAtLogon(unittest.TestCase):
+    # 2026-10-12: the regress account got mail and the live login stopped at
+    # express.e:11739's question as an "unknown prompt".
+    def test_the_read_it_now_question_is_answered_no(self):
+        from bbs_screen import KNOWN_PROMPTS
+        row = "Would you like to read it now (Y/n)?"
+        hits = [(keys, why) for pattern, keys, why in KNOWN_PROMPTS if pattern.search(row)]
+        self.assertEqual(hits, [("n", "mail found")])
+
+    def test_the_question_holds_the_mail_scan_like_a_pause(self):
+        scan_asked = "Scanning conferences for mail...\nType     From\nWould you like to read it now (Y/n)?"
+        self.assertEqual(login_contract(HEARD, [GLC_WHOLE, SAMI_WHOLE, scan_asked, TIP]), [])
+
+
 if __name__ == "__main__":
     unittest.main()

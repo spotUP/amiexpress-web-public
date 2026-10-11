@@ -55,6 +55,10 @@ KNOWN_PROMPTS = [
     (re.compile(r"more\(y/n/ns\)\?$", re.I), "\r", "more"),
     (re.compile(r"press (return|any key)[^:]*[.:]*$", re.I), "\r", "press a key"),
     (re.compile(r"privacy notice\. Accept now \(Y/n\)\?$", re.I), "Y\r", "privacy notice"),
+    # Mail found at logon asks instead of pausing (express.e:11739); the
+    # question holds the scan on screen the way the pause does when no mail.
+    # yesNo() is a hotkey: a trailing CR would answer the next conference Yes.
+    (re.compile(r"Would you like to read it now \(Y/n\)\?$", re.I), "n", "mail found"),
     # The tip of the day is a modal: its title holds the cursor, any key ends it.
     (re.compile(r"^\s*TIP OF THE DAY$"), "\r", "press a key"),
 ]
@@ -200,7 +204,7 @@ class Board:
                     continue
                 log.append(f"[STOP - unknown prompt] {here[-70:]!r}")
                 break
-            if why in ("pause", "more", "press a key"):
+            if why in ("pause", "more", "press a key", "mail found"):
                 with self.lock:
                     self.pauses.append("\n".join(line.rstrip() for line in self.screen.display))
             self.send(answer, secret="{password}" in keys)
