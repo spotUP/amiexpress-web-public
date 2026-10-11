@@ -331,3 +331,29 @@ describe('Task 8: ~b2 sets the C64 background (decision 8)', () => {
     expect(fullRepaint).toBe(true);
   });
 });
+
+describe('a .seq ~SP after art on the same line', () => {
+  /**
+   * Live Conf2/bull20.seq (2026-10-12): the art is one run of `$A0` and
+   * colour bytes with no space and no CR, and `~SP` follows it on the same
+   * line. The gate `~` read the whole run as one unknown cmd, and the strict
+   * fall-through swallowed the `~` of `~SP` with it: a C64 caller saw the
+   * letters `~SP` and no pause. express.e rescans an unknown cmd from its
+   * start (express.e:5754-5763 returns pos there; processMci 5783-5800 finds
+   * the next `~`), so the `~SP` is a pause.
+   */
+  const ART = [0x05, 0xa0, 0xa0, 0x12, 0xa4, 0x92, 0xa5, 0xa0, 0xa0];
+  const SAME_LINE_SEQ = seqBytes(0x7e, ART, '~SP', 0x0d, 'Z');
+
+  it('a .seq ~SP after art on the same line pauses instead of printing', async () => {
+    const session = petsciiSession();
+    const { emits } = await paintAndResume(writeSeq(SAME_LINE_SEQ), session);
+
+    const payloads = petsciiPayloads(emits);
+    expect(payloads).toHaveLength(2);
+    // The art reaches the wire whole, and no `~SP` letters are printed.
+    expect(Array.from(payloads[0])).toEqual(ART);
+    expect(payloads[1].includes(Buffer.from('SP', 'latin1'))).toBe(false);
+    expect(Array.from(payloads[1])).toEqual([0x0d, 0x5a]);
+  });
+});

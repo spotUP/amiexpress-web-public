@@ -310,11 +310,28 @@ export function processMci(
       out += '~' + widthDigits;
       // pos stays at cmd start.
     } else {
-      // Strict fall-through (express.e exact): consume `~` + width
-      // digits + cmd content (and terminator if it was a `|`). The cmd
-      // text emits as plain.
-      out += rawCmd;
-      pos = cmdEnd + (consumedTerminator ? 1 : 0);
+      // Strict fall-through: consume `~` + width digits + cmd content (and
+      // terminator if it was a `|`). The cmd text emits as plain.
+      //
+      // EXCEPT a `~` inside that span: it starts the next code. express.e's
+      // unknown-MCI branch (express.e:5754-5763) returns `pos` at the cmd's
+      // START, so processMci (express.e:5783-5800) rescans the cmd text and
+      // its next `InStr(mcidata,'~',pos)` finds the embedded `~`. A gated
+      // `.seq` whose art has no space or CR before a trailing `~SP` is one
+      // such span (live Conf2/bull20.seq, 2026-10-12): swallowing it printed
+      // the letters `~SP` instead of pausing.
+      //
+      // A cmd that STARTS with `~` (`~~...`) is not this case: express.e's
+      // `StrCmp(cmd,'~',1)` branch (express.e:5749-5751) prints the whole
+      // cmd and skips past it, which is what the plain emit below does.
+      const embeddedTilde = rawCmd.startsWith('~') ? -1 : rawCmd.indexOf('~');
+      if (embeddedTilde > 0) {
+        out += rawCmd.slice(0, embeddedTilde);
+        pos += embeddedTilde;
+      } else {
+        out += rawCmd;
+        pos = cmdEnd + (consumedTerminator ? 1 : 0);
+      }
     }
   }
 
