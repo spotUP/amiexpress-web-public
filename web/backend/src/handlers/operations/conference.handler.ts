@@ -208,6 +208,26 @@ console.warn('[joinConference] Failed to sync node user file:', err);
       // that reference the menu name don't render the prior conf's
       // stale value (express.e:5057 StrCopy(currentMenuName,'')).
       (session as any).currentMenuName = '';
+      /*
+       * LEAVE THE DISPLAY FLOW BEFORE ANYTHING HERE CAN WAIT FOR A KEY.
+       *
+       * express.e:28573-28580 runs joinConf to completion inside the
+       * SUBSTATE_DISPLAY_CONF_BULL branch: every pause in it (CONF_BULL's
+       * own, 5059's doPause) happens inside that one call, and the state is
+       * consumed by the time any key arrives. This port yields at each pause
+       * and a dismissed pause advances the display flow - so while subState
+       * still said AUTO_REJOIN, the caller's key ran the whole join again.
+       *
+       * The bulletin itself can pause, not only the doPause below: h7's
+       * conference bulletin pulls in `~SS_BBS:Bulletins/bull9.txt`, 26 lines
+       * against a 24-row terminal, and that include paginated while this
+       * call was still awaiting the bulletin's commands. Enter re-entered
+       * AUTO_REJOIN: the bulletin twice and the S SysCmd (zOOsTAtS) twice
+       * (2026-10-11). Parked here, OUTSIDE the display-flow loop, the key
+       * only pages the include; continueJoinAfterBull sets DISPLAY_MENU
+       * when the join is really over, on every path out of this block.
+       */
+      session.subState = LoggedOnSubState.READ_COMMAND;
       const shown = await displayScreen(socket, session, getConfScreenName(), true, /* silent */ true);
       /*
        * A DOOR THE BULLETIN LAUNCHED IS STILL RUNNING.
@@ -300,14 +320,9 @@ console.warn('[joinConference] Failed to sync node user file:', err);
         } else {
           doPause(socket, session, continuation);
         }
-        // CRITICAL: park subState OUTSIDE the display-flow loop so
-        // the outer `while (isDisplayFlowState(subState))` in
-        // advanceDisplayFlow exits cleanly and doesn't re-enter
-        // AUTO_REJOIN, which would re-invoke joinConference and
-        // reinstall a fresh BULL pause + onComplete — looping
-        // forever as the user dismisses each pause.
-        // continueJoinAfterBull restores DISPLAY_MENU on dismissal.
-        session.subState = LoggedOnSubState.READ_COMMAND;
+        // subState was parked outside the display-flow loop before the
+        // bulletin was drawn (above); continueJoinAfterBull restores
+        // DISPLAY_MENU on dismissal.
         return true; // yield until the user dismisses the pause
       }
     }
