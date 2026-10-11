@@ -834,6 +834,7 @@ console.log(`[DOOR Command] Found door, executing via BBS command: ${doorCommand
       await handleCommand(socket, session, doorCommand);
       return;
     } else {
+      // WEB_: no express.e equivalent. Belongs to DOORS, a custom web command.
       emitText(socket, `\r\n\x1b[31mDoor "${params}" not found.\x1b[0m\r\n`);
       // The board's own pause, as after every command (express.e:28647).
       session.menuPause = true;

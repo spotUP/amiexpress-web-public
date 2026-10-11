@@ -445,6 +445,7 @@ console.error('[ZMODEM] Failed to ensure playpen:', err);
           setTimeout(() => {
             if (!fired) {
               fired = true;
+              // WEB_: no express.e equivalent. This is the 120 s timeout on the browser file picker.
               socket.emit('ansi-output', '\r\nUpload timed out (no file picked).\r\n\r\n');
               uploadReturns(session, 'failure');
             }

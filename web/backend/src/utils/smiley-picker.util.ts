@@ -100,6 +100,7 @@ export function renderPicker(state: SmileyPickerState): string {
 
   // Title line
   output += `\x1b[${startY + 1};${startX}H`;
+  // WEB_: no express.e equivalent (chat() 6101-6223 only echoes keys; Ctrl+E means nothing). Web-only ASCII smiley picker opened from internode and operator chat.
   const title = ' ASCII SMILEYS ';
   const titlePadding = Math.floor((pickerWidth - 2 - title.length) / 2);
   output += `\x1b[44m\x1b[37m|${' '.repeat(titlePadding)}\x1b[1;33m${title}\x1b[0m\x1b[44m\x1b[37m${' '.repeat(pickerWidth - 2 - titlePadding - title.length)}|\x1b[0m`;

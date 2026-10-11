@@ -430,6 +430,7 @@ console.log('✅ User joined room:', session.user?.username, room.room_name);
     // Get room members
     const members = await db.getRoomMembers(room.room_id);
     emitToTerminal(socket, session, AnsiUtil.line(''));
+    // WEB_: no express.e equivalent (no chat rooms). Web-only member list.
     emitToTerminal(socket, session, AnsiUtil.line('Users in room (' + members.length + '):'));
     for (const member of members) {
       const modBadge = member.is_moderator ? ' [MOD]' : '';

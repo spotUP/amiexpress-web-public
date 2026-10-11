@@ -63,6 +63,7 @@ console.error('[ChatRoomUseCase] Error getting room members:', error);
    * Format room members list for display
    */
   formatMembersList(members: RoomMember[]): string {
+    // WEB_: no express.e equivalent (no chat rooms). Web-only member list with moderator and muted tags.
     let output = `\r\n\x1b[36mUsers in room (${members.length}):\x1b[0m\r\n`;
 
     for (const member of members) {

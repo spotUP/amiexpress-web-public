@@ -2131,6 +2131,7 @@ console.log(' [COMMAND] User wants to end chat');
 console.log(' [COMMAND] User requested help');
         emitText(socket,
           '\r\n' +
+          // WEB_: no express.e equivalent (no node-to-node chat with slash commands; chat() 6118 ends only on CTRL-C). Web-only internode chat help.
           '\x1b[36mChat Mode Commands:\x1b[0m\r\n' +
           '  \x1b[33m/END\x1b[0m or \x1b[33m/EXIT\x1b[0m  - End chat session\r\n' +
           '  \x1b[33m/HELP\x1b[0m             - Show this help\r\n' +
@@ -2319,6 +2320,7 @@ console.log(' [COMMAND] User in OPERATOR_CHAT_ACTIVE state, real-time input');
       }
 
       if (input.toUpperCase() === '/HELP') {
+        // WEB_: chat() 6101-6223 has no slash commands, so /HELP would be chat text. Explains the web-only return-twice send convention used by the bot sysop.
         emitText(socket, '\x1b[36mType, press return twice to send. /quit or CTRL-C ends the chat.\x1b[0m\r\n');
         return;
       }
@@ -2371,6 +2373,7 @@ console.log(' User in CHAT_ROOM mode, handling room input');
     if (input.toUpperCase() === '/HELP') {
       emitText(socket,
         '\r\n' +
+        // WEB_: no express.e equivalent (no chat rooms). Web-only chat room help.
         '\x1b[36mChat Room Commands:\x1b[0m\r\n' +
         '  \x1b[33m/LEAVE\x1b[0m or \x1b[33m/EXIT\x1b[0m  - Leave the room\r\n' +
         '  \x1b[33m/WHO\x1b[0m               - List users in room\r\n' +

@@ -138,6 +138,7 @@ async function showRoomMenu(socket: Socket, session: BBSSession) {
   let output = '';
 
   output += AnsiUtil.clearScreen();
+  // WEB_: no express.e equivalent (no chat rooms). Web-only chat room help.
   output += AnsiUtil.headerBox('Chat Room Commands');
   output += AnsiUtil.line('');
 
