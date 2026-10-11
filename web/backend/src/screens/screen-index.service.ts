@@ -21,13 +21,12 @@ import {
   ScreenDirType, SCREEN_DIR_MAP, getScreenDirType, getScreenFileName,
   resolveNodeScreenDir, screenSearchLocations, isScreenFile, themedPath,
 } from './screen-resolution';
-import { BOARD_WRITTEN_NAME } from './screen-tables';
 import {
   QUESTIONNAIRE_SCREEN, isQuestionnaireScript, preferredScript, baudOf,
 } from './questionnaire-script';
 import { countMciCodes, scanMciCodes, type ScannedMciCode } from './mci-catalog';
 import { checkPetsciiBoardRules } from './petscii-board-rules';
-import { readScreenFlags } from './screen-flags';
+import { classifyGenerated } from './generated-screens';
 import { parseMciReferences, type MciReference } from './mci-references';
 import { mciGateOpen, screenIsProgram } from './screen-blankness';
 import { commandLocationIsLive, loadCommandFromInfo } from '../utils/amiga-command-parser.util';
@@ -484,105 +483,6 @@ function readSauce(buf: Buffer): SauceFacts | undefined {
  * history, and the board prints the codes at the caller instead of colouring
  * the line.
  */
-/**
- * An old copy kept beside the real file. Every board grows these.
- *
- * Deliberately about the NAME: content cannot tell a backup from the screen it
- * was copied from - that is what makes it a backup.
- */
-const BACKUP_NAME = /(\.bak\b|\.old\b|\.orig\b|\.stale\b|\.backup|~$|\.save\b|\.prev\b|\bcopy\b|\bcopy \d+\b)/i;
-
-/**
- * Files the BOARD writes, which an edit would simply lose.
- *
- * express.e writes `Node<n>/CallersLog` and the other logs without a screen
- * extension, so they were never listed.
- *
- * `Callers.txt` and `callers!.txt` used to be here on the sysop's word and are
- * NOT board-written: express.e's only writer is `callersLog()`, which builds
- * `Node<n>/CallersLog` (express.e:9499) and never a `.txt`. On this board all
- * 62 copies are one of two hashes, the oldest stamped 2008, and not one is
- * dirty in git while every `Node<n>/CallersLog` is - the board rewrites the
- * log and leaves the screen alone. They are hand-drawn ANSI: a framed
- * `Spee N Name Location On-Time Action H:MM` header a designer may want to
- * edit.
- *
- * `Bulletins/lastc.txt` stays: Super-AmiLog (`Utils/lastcallers`) signs it in
- * the art, and RUNTIME_CONTENT's last-callers marker catches it too.
- *
- * `AchieveTop.txt` is here by NAME, against this module's usual rule, because
- * the name IS the evidence: achievements/bulletin.ts owns it and rewrites it
- * every fifteen minutes, and unlike `bull6.txt` beside `bull9.txt` there is no
- * hand-drawn file it could be confused with. Content would not do - a sysop
- * who fills the `AchieveTop.Header` slot replaces the strap a marker would
- * look for. Its `.Header` and `.Tailer` are art and must not match.
- * Left unmarked, seeding a theme copied the bulletin into it, and a theme copy
- * WINS the global screen walk - so the leaderboards froze at the moment the
- * theme was made (measured on the live board, 2026-09-08).
- *
- * `bull9.txt` is here because the door that writes it changed hands: the
- * classic `Request v2.1` door wrote it, our own REQUESTS door writes it now,
- * and in between it sat frozen for five days looking exactly like art. Its
- * content is the sysop's own, unmarked, so only the name can catch it.
- *
- * `quicknew.txt` is here for the same reason, found by auditing the whole
- * class after that bug rather than waiting for it to bite twice: the batch
- * jobs redirect a door's stdout over it every run (see command.handler's
- * EXEC_QUICKNEW comment), and a theme seeded today would serve last week's
- * new-files list for ever. Content cannot catch it - the file is whatever
- * door the sysop pointed the batch at.
- */
-const RUNTIME_NAME = BOARD_WRITTEN_NAME;   // the one copy, in screen-tables
-
-/**
- * Signatures of the tools that WRITE screens on this board.
- *
- * Bulletins 1 to 6 are rewritten every boot - five by MultiTop-II, whose own
- * header is in the art, and one by a last-callers generator. A designer
- * opening the gallery should see art, not output.
- *
- * Content, not names: `bull6.txt` looks exactly like a hand-drawn bulletin
- * from the outside, and the file names carry no hint at all. `bull9.txt` is
- * the case that proves the limit of that - the REQUESTS door writes it
- * between the sysop's own header and tail art, so there is no marker to find
- * and it is caught by NAME in RUNTIME_NAME above.
- */
-const RUNTIME_CONTENT: { marker: RegExp; tool: string }[] = [
-  { marker: /MultiTop/i, tool: 'MultiTop-II' },
-  { marker: /l\s*AST\s*c\s*ALLERS|LAST CALLERS/i, tool: 'a last-callers generator' },
-  // S-AmiLog's record table (SamiLogService.generateRecordStats). Unlike its
-  // weekly sibling it signs nothing - the "Last Callers" marker above catches
-  // that one - and the batch writes it to a path the SYSOP names, so there is
-  // no filename to match on either. This header IS the signature.
-  { marker: /^\s*Area\s+Record\s+Date\s*$/m, tool: 'S-AmiLog record stats' },
-];
-
-function classifyGenerated(
-  relPath: string,
-  buf: Buffer,
-  baseDir: string,
-): 'backup' | 'runtime' | undefined {
-  // The sysop's own answer first. `art` is an override that says the
-  // heuristics below are wrong about this file, so it returns nothing rather
-  // than a classification.
-  const flag = readScreenFlags(baseDir)[relPath];
-  if (flag === 'art') return undefined;
-  if (flag) return flag;
-
-  const name = path.basename(relPath);
-  if (BACKUP_NAME.test(name)) return 'backup';
-  if (RUNTIME_NAME.test(name)) return 'runtime';
-
-  // Only worth reading for a bulletin-sized file; a 240 KB RIP screen is not
-  // written by a stats door.
-  if (buf.length < 64_000) {
-    const text = buf.toString('latin1');
-    if (RUNTIME_CONTENT.some(({ marker }) => marker.test(text))) return 'runtime';
-  }
-
-  return undefined;
-}
-
 /**
  * Is there anything in this file but codes?
  *

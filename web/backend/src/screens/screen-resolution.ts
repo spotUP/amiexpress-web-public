@@ -17,6 +17,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 import { DEFAULT_SLUG, THEME_FILES_DIR, findTheme, isValidSlug, themeDirectory } from './theme-registry';
+import { isBoardGeneratedFile } from './generated-screens';
 import { BBSPaths } from '../utils/bbs-paths.util';
 import { readTooltypeMap } from '../utils/info-file.util';
 import * as amigafs from '../utils/amigafs';
@@ -265,6 +266,13 @@ function themeLocation(
  *   enforced here: by the time the loader sees a bulletin or a pool member,
  *   the caller has ALREADY chosen the path from the board's own files, so a
  *   number or a security variant the board lacks is never asked for.
+ *
+ * And one limit that IS enforced: a file the board writes for itself has no
+ * mirror. A theme's copy of a door's bulletin is that bulletin frozen on the
+ * day it was copied, and the mirror is offered first - so `Themes/h7/Files/
+ * Bulletins/bull9.txt` served the REQUESTS list as it stood on 2026-09-12 to
+ * every h7 caller for a month. `isBoardGeneratedFile` is the same rule that
+ * keeps such a file out of a seeded theme.
  */
 export function themedPath(
   baseDir: string,
@@ -286,6 +294,7 @@ export function themedPath(
   // A path already inside the theme has no second mirror - `Files/Themes/...`
   // is a directory no artist means to fill.
   if (path.resolve(absPath).startsWith(path.resolve(root) + path.sep)) return null;
+  if (isBoardGeneratedFile(baseDir, absPath)) return null;
 
   return path.join(root, THEME_FILES_DIR, rel);
 }

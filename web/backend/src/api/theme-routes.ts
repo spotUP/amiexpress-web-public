@@ -25,6 +25,7 @@ import { validateTheme } from '../screens/theme-validation';
 // it here.
 import { themeTargetFor, themeTargetForBoardFile } from '../screens/theme-target-path';
 import { copyScreenIntoTheme, seedThemeFromBoard } from '../screens/theme-seeding';
+import { isBoardGeneratedFile } from '../screens/generated-screens';
 import { userFileManager } from '../services/UserFileManager';
 export { themeTargetFor, themeTargetForBoardFile };
 import { liveThemeRegressions } from '../screens/theme-live-check';
@@ -500,6 +501,11 @@ themesRouter.post('/:slug/copy', (req: Request, res: Response) => {
   }
   if (!fs.existsSync(source) || !fs.statSync(source).isFile()) {
     return refuse(res, 404, `The board has no screen at ${from}`);
+  }
+  // A door's bulletin, MultiTop's bull1-5: the board rewrites them, so a theme
+  // copy is their output frozen on the day it was made.
+  if (isBoardGeneratedFile(bbsRoot, source)) {
+    return refuse(res, 400, `${from} is written by the board itself - a theme cannot carry it`);
   }
 
   const themeRoot = themeDirectory(bbsRoot, theme);

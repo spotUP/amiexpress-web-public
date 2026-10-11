@@ -23,6 +23,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 import { getScreenIndex } from './screen-index.service';
+import { isBoardGeneratedFile } from './generated-screens';
 import { screenIsProgram } from './screen-blankness';
 import { themeTargetFor, themeTargetForBoardFile } from './theme-target-path';
 import { themeScopeOf, variantSetFor } from './theme-variant-set';
@@ -203,6 +204,9 @@ export function landTargetsInTheme(
     }
     const inTheme = themeTargetForBoardFile(index, target);
     if (!inTheme) return { error: `${target} has no place in ${theme.title}` };
+    if (isBoardGeneratedFile(bbsRoot, path.join(bbsRoot, target))) {
+      return { error: `${target} is written by the board itself - a theme cannot carry it` };
+    }
     if (!options.dryRun) copyScreenIntoTheme(bbsRoot, theme, target);
     landed.add(path.join(theme.dir, inTheme));
   }
@@ -234,8 +238,13 @@ export function copyScreenIntoTheme(
 
   for (const relative of variantSetFor(index, boardRelPath)) {
     // A leftover or a file the board rewrites for itself is not art - the same
-    // rule the seeder applies. The file actually asked for is exempt: an
-    // artist who opens something and presses redraw meant that file.
+    // rule the seeder applies. The file actually asked for is exempt from the
+    // LEFTOVER half only: an artist who opens a backup and presses redraw
+    // meant that file. A file the board writes is never copied, asked for or
+    // not - the copy is its output frozen on the day, and the loader would
+    // not serve it anyway (`themedPath`). That exemption is how
+    // `Themes/h7/Files/Bulletins/bull9.txt` got in on 2026-09-12.
+    if (isBoardGeneratedFile(bbsRoot, path.join(bbsRoot, relative))) continue;
     if (relative !== boardRelPath && index.files[relative]?.generated) continue;
 
     const target = themeTargetForBoardFile(index, relative);
