@@ -39,7 +39,7 @@ import { triggerSamiLogRefresh } from "./SamiLogService";
 import { arexxEngine } from "./arexx.service";
 import { config } from "../config";
 import { getSystemTime } from "../utils/date-time.util";
-import { loginNamePrompt, loginPasswordPrompt } from '../utils/node-tooltypes.util';
+import { logonNamePromptText } from '../utils/node-tooltypes.util';
 
 export interface PreLoginConnectContext {
   /** Caller-provided socket id; used by AREXX login trigger. */
@@ -197,8 +197,8 @@ export async function showC64Title(emitter: LoginEmitter, session: BBSSession): 
   session.subState = undefined;
   session.tempData = session.tempData || {};
   session.tempData.loginPhase = "username";
-  emitter.emit("ansi-output", "\r\n\r\n");
-  emitter.emit("ansi-output", `${loginNamePrompt(session.nodeId ?? 0)} `);
+  // express.e:29571 - one break, the prompt (logonNamePromptText).
+  emitter.emit("ansi-output", logonNamePromptText(session.nodeId ?? 0));
 }
 
 export async function runPreLoginConnect(

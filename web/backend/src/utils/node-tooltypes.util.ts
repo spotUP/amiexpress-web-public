@@ -77,6 +77,21 @@ export function loginNamePrompt(nodeId: number): string {
 }
 
 /**
+ * The bytes that ask for the logon name, every time it is asked:
+ * express.e:29571 and 30141, `StringF(tempStr,'\b\n\s ',namePrompt)` -
+ * ONE line break, the prompt, a space. Every caller that asks for the name
+ * (after BBSTITLE on the graphics, system-password and C64 paths, the
+ * new-user name loop, a relogon) prints exactly this; the line break that
+ * ends the answer typed before it belongs to that answer's own input, not
+ * to the prompt. The port printed two breaks here and none at the graphics
+ * answer's Enter, so the title sat one row too high and the prompt one row
+ * too low.
+ */
+export function logonNamePromptText(nodeId: number): string {
+  return `\r\n${loginNamePrompt(nodeId)} `;
+}
+
+/**
  * The logon password prompt (express.e:31778-31780): "Password: ", or the
  * node's PASSWORD_PROMPT with a space after it.
  */

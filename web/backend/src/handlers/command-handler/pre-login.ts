@@ -15,7 +15,7 @@ import {
   recordPromptColumn, backspaceEcho, SAVE_CURSOR,
 } from '../../utils/line-input.util';
 import { emitPrompt } from '../../utils/output.util';
-import { loginNamePrompt, loginPasswordPrompt } from '../../utils/node-tooltypes.util';
+import { logonNamePromptText } from '../../utils/node-tooltypes.util';
 
 /**
  * Get the appropriate output event name based on session terminal type
@@ -91,7 +91,7 @@ console.log('[C64] Real C64 terminal detected - auto-enabling PETSCII mode');
         // (completeRealC64Connect): the prompt TEXT travels as ansi-output,
         // because `prompt-login` is a browser-only cue and a byte transport
         // is left silent without it.
-        emitPrompt(socket, `\r\n\r\n${loginNamePrompt(session.nodeId ?? 0)} `);
+        emitPrompt(socket, logonNamePromptText(session.nodeId ?? 0));
         socket.emit('prompt-login');
       }
       return true;
@@ -421,10 +421,8 @@ async function transitionToBBSTitle(socket: any, session: BBSSession): Promise<v
   // Immediately transition to login state (no key press required)
   session.state = BBSState.LOGON;
   session.subState = undefined;
-  const outputEvent = getOutputEvent(session);
-  socket.emit(outputEvent, '\r\n');
   // Kept in step with the live copies: the prompt text, then the cue.
-  emitPrompt(socket, `\r\n${loginNamePrompt(session.nodeId ?? 0)} `);
+  emitPrompt(socket, logonNamePromptText(session.nodeId ?? 0));
   socket.emit('prompt-login'); // Tell frontend to show login form
 }
 

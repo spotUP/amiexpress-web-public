@@ -80,7 +80,7 @@ describe('c64-detected handler (Finding 1: TTYPE/dedicated-port C64s reach the s
     await handleC64Detected(connection);
 
     expect(displayScreenMock.mock.calls[0][0]).toBe(own);
-    expect(own.emit).toHaveBeenCalledWith('ansi-output', 'Enter your Name: ');
+    expect(own.emit).toHaveBeenCalledWith('ansi-output', '\r\nEnter your Name: ');
   });
 
   it('drives displayScreen through buildConnectionEmitter, and the fixture .seq bytes reach connection.write byte-identically', async () => {

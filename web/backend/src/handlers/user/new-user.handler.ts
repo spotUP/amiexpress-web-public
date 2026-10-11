@@ -31,7 +31,7 @@ import { getSystemTime } from '../../utils/date-time.util';
 import { loadBBSConfig, getBoardConfig } from '../../services/bbs-config-file.service';
 import { checkIfNameAllowed } from '../../utils/name-allowed.util';
 import { newUserConferenceAccess, newUserPreset } from '../../utils/new-user-preset';
-import { nodeFlag } from '../../utils/node-tooltypes.util';
+import { nodeFlag, logonNamePromptText } from '../../utils/node-tooltypes.util';
 import { computerTypeChoices, computerTypeRows } from '../../utils/computer-types.util';
 
 // WEB_: GDPR privacy notice version (bump when Screens/PRIVACY.TXT changes
@@ -280,7 +280,7 @@ function checkForAst(name: string): boolean {
 function promptForName(socket: Socket, session: any) {
   const prefill = session.newUserData?.username || '';
   // express.e:30141 - StringF(string,'\b\n\s ',namePrompt) where namePrompt defaults to 'Enter your Name: '
-  socket.emit('ansi-output', `\r\nEnter your Name: `);
+  socket.emit('ansi-output', logonNamePromptText(session.nodeId ?? 0));
   // We send the prefill as actual input to the frontend so it appears at the prompt
   socket.emit('ansi-output', prefill);
   // Set input buffer to prefill so just pressing Enter accepts it

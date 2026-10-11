@@ -26,7 +26,7 @@ import { config } from '../../config';
 import { userScreenTypeExtension } from '../../screens/screen-metadata';
 import { flushOutput } from '../../utils/output.util';
 import { finalizeCommand } from '../../utils/command-response.util';
-import { loginNamePrompt, loginPasswordPrompt } from '../../utils/node-tooltypes.util';
+import { logonNamePromptText } from '../../utils/node-tooltypes.util';
 
 // Injected dependencies
 let _displayScreen: (socket: any, session: BBSSession, screenName: string) => Promise<boolean>;
@@ -269,7 +269,7 @@ console.error('[LOGOFF] Failed to save flagged files:', err);
     // which buffers the username itself and needs the prompt on screen. A
     // web caller used to be sent `retry-login` for a browser login editor
     // that TP-9b retired, and was left with no prompt at all.
-    socket.emit('ansi-output', `\r\n${loginNamePrompt(session.nodeId ?? 0)} `);
+    socket.emit('ansi-output', logonNamePromptText(session.nodeId ?? 0));
     return;
   }
 

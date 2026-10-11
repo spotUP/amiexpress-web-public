@@ -39,11 +39,15 @@ jest.mock('../../src/handlers/screen.handler', () => ({
     return true;
   }),
 }));
-// No system password: the walk goes straight from the graphics answer to the
-// title (express.e:29548-29552).
+// No system password by default: the walk goes straight from the graphics
+// answer to the title (express.e:29548-29552). The system-password walk sets
+// one. `var`, not `let`: the module graph reads the config while the
+// hoisted jest.mock runs, before a `let` would be initialised.
+// eslint-disable-next-line no-var
+var mockSysPassword = '';
 jest.mock('../../src/services/bbs-config-file.service', () => ({
   ...jest.requireActual('../../src/services/bbs-config-file.service'),
-  loadBBSConfig: () => ({}),
+  loadBBSConfig: () => ({ system_password: mockSysPassword || '' }),
 }));
 
 import { BBSState, LoggedOnSubState } from '../../src/constants/bbs-states';
@@ -84,10 +88,10 @@ describe('pressing a key at the title screen', () => {
 
     await handleCommand(socket, session, ' ');
 
-    // express.e:29571 StringF(tempStr,'\b\n\s ',namePrompt): nothing but
-    // line feeds between the (cleared) title and "Enter your Name: ".
+    // express.e:29571 StringF(tempStr,'\b\n\s ',namePrompt): one line
+    // break between the (cleared) title and "Enter your Name: ".
     const stream = wire(emits);
-    expect(stream).toBe('\x1b[2J\x1b[3J\x1b[H\r\n\r\nEnter your Name: ');
+    expect(stream).toBe('\x1b[2J\x1b[3J\x1b[H\r\nEnter your Name: ');
   });
 
   it('drops what SCROLLED OFF too, not just what is on screen', () => {
@@ -142,8 +146,65 @@ describe('the logon path, connect to name prompt (reachability)', () => {
     expect(session.state).toBe(BBSState.LOGON);
     expect(session.tempData.loginPhase).toBe('username');
     const stream = wire(emits);
-    const afterTitle = stream.slice(stream.indexOf('<<BBSTITLE>>') + '<<BBSTITLE>>'.length);
-    expect(afterTitle).toBe('\r\n\r\nEnter your Name: ');
     expect(stream).not.toMatch(/Welcome to AmiExpress-Web|Please login to continue/);
+  });
+
+  /*
+   * THE BREAKS AROUND THE TITLE. express.e prints the graphics answer's
+   * lineInput break (29530) BEFORE the title and one break after it, in the
+   * name prompt (29571 '\b\n\s '). The port printed none before and two
+   * after: the same count, so the line-break audit's totals matched, but the
+   * title started on the answer's own row and the prompt stood one row lower.
+   */
+  it('puts one line break before the title and one after it (express.e:29530, 29571)', async () => {
+    const { socket, session, emits } = aCallerAtTheTitle();
+    session.subState = LoggedOnSubState.DISPLAY_CONNECT;
+    session.connectionType = 'telnet';
+
+    await handleCommand(socket, session, '\r');
+    const answerAt = wire(emits).length;
+    expect(answerAt).toBeGreaterThan(0);
+    await handleCommand(socket, session, 'A');
+    await handleCommand(socket, session, '\r');
+
+    // The answer's echo, its Enter, the title, the prompt - and nothing else.
+    expect(wire(emits).slice(answerAt).endsWith('A\r\n<<BBSTITLE>>\r\nEnter your Name: ')).toBe(true);
+  });
+
+  it('after a correct system password: two breaks before the title, one after (express.e:29355, 29571)', async () => {
+    mockSysPassword = 'secret';
+    try {
+      const { socket, session, emits } = aCallerAtTheTitle();
+      session.subState = LoggedOnSubState.DISPLAY_CONNECT;
+      session.connectionType = 'telnet';
+
+      await handleCommand(socket, session, '\r');
+      await handleCommand(socket, session, '\r'); // graphics: default ANSI
+      expect(session.subState).toBe(LoggedOnSubState.SYSTEM_PASSWORD_INPUT);
+      for (const ch of 'secret') await handleCommand(socket, session, ch);
+      await handleCommand(socket, session, '\r');
+
+      // getPass2's break (1592) + doSystemPassword's (29355), the title,
+      // then the name prompt's one.
+      const stream = wire(emits);
+      expect(stream.slice(stream.lastIndexOf('>: '))).toMatch(/^>: [^\r\n]*\r\n\r\n<<BBSTITLE>>\r\nEnter your Name: $/);
+    } finally {
+      mockSysPassword = '';
+    }
+  });
+
+  it('a real C64 sent straight to the title gets the same one break after it (express.e:29571)', async () => {
+    const { showC64Title } = await import('../../src/services/login-connect.service');
+    const { socket, session, emits } = aCallerAtTheTitle();
+    session.subState = undefined;
+    screensShown.length = 0;
+
+    await showC64Title(socket, session);
+
+    // The title goes through the board's buffered writer in this harness and
+    // the prompt straight to the emitter, so compare without the marker.
+    expect(screensShown).toContain('BBSTITLE');
+    expect(wire(emits).replace('<<BBSTITLE>>', '')).toBe('\r\nEnter your Name: ');
+    expect(session.tempData.loginPhase).toBe('username');
   });
 });

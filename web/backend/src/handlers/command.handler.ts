@@ -216,7 +216,7 @@ import {
   getFileAreas,
   getDoors
 } from './command-handler/dependency-injection';
-import { loginNamePrompt, loginPasswordPrompt } from '../utils/node-tooltypes.util';
+import { loginNamePrompt, loginPasswordPrompt, logonNamePromptText } from '../utils/node-tooltypes.util';
 import { feedInputWaiter } from '../utils/await-input';
 import { endUpload } from '../services/upload-end.service';
 
@@ -1010,7 +1010,7 @@ export function promptForLogonName(socket: any, session: BBSSession): void {
   session.subState = undefined;
   session.tempData = session.tempData || {};
   session.tempData.loginPhase = 'username';
-  emitPrompt(socket, `\r\n\r\n${loginNamePrompt(session.nodeId ?? 0)} `);
+  emitPrompt(socket, logonNamePromptText(session.nodeId ?? 0));
   socket.emit('prompt-login'); // Tell frontend to show login form
 }
 
@@ -1441,6 +1441,12 @@ console.log(' Graphics prompt response:', answer || '(empty = ANSI)');
         // answering R never reached the screen loader.
         const { applyGraphicsAnswer } = require('./command-handler/pre-login');
         applyGraphicsAnswer(socket, session, answer);
+        // lineInput's own break when the answer is entered (express.e:29530,
+        // the `'\b\n'` at the end of lineInput). It goes BEFORE the title:
+        // the name prompt that follows the title carries only its own one
+        // (logonNamePromptText). After the graphics flip, so a P answer's
+        // transducer sees it like the PETSCII line below.
+        emitText(socket, '\r\n');
 
         // Sysop addendum (task 6 fix round): a web/modern-terminal caller
         // answering P gets ANSI-simulated PETSCII, not real C64 hardware —
@@ -1488,9 +1494,9 @@ console.log(' Graphics mode set:', session.petsciiMode ? 'PETSCII' : session.tex
             // System password configured — enter gate (express.e:29329-29356)
             session.tempData.systemPasswordAttempts = 0;
             session.subState = LoggedOnSubState.SYSTEM_PASSWORD_INPUT;
-            // The graphics answer's lineInput break (29530), then
-            // doSystemPassword's aePuts('\b\n') (29331).
-            emitText(socket, '\r\n\r\n');
+            // doSystemPassword's aePuts('\b\n') (29331); the graphics
+            // answer's lineInput break (29530) already went out at Enter.
+            emitText(socket, '\r\n');
             const { displayScreen: ds } = require('./screen.handler');
             await ds(socket, session, 'PRIVATE'); // express.e:29336 — optional PRIVATE screen
             emitText(socket, '>: ');              // express.e:29332 — default SYS_PWRD_PROMPT
@@ -1790,7 +1796,7 @@ function endPasswordMask(socket: any, session: BBSSession): void {
             beginLogoff(socket, session, { message: '\r\n\r\nToo Many Errors, Goodbye!\r\n' });
             return;
           }
-          emitPrompt(socket, `\r\n\r\n${loginNamePrompt(session.nodeId ?? 0)} `);
+          emitPrompt(socket, '\r\n' + logonNamePromptText(session.nodeId ?? 0)); // lineInput's break + namePrompt
           return;
         }
 
@@ -1849,7 +1855,7 @@ function endPasswordMask(socket: any, session: BBSSession): void {
         }
         session.tempData.loginPhase = 'username';
         session.tempData.loginUsername = '';
-        emitPrompt(socket, `\r\n\r\n${loginNamePrompt(session.nodeId ?? 0)} `);
+        emitPrompt(socket, '\r\n' + logonNamePromptText(session.nodeId ?? 0)); // lineInput's break + namePrompt
         return;
       }
 
@@ -1863,7 +1869,7 @@ function endPasswordMask(socket: any, session: BBSSession): void {
 
         if (!username) {
           endPasswordMask(socket, session);
-          emitPrompt(socket, `\r\n${loginNamePrompt(session.nodeId ?? 0)} `);
+          emitPrompt(socket, logonNamePromptText(session.nodeId ?? 0));
           session.tempData.loginPhase = 'username';
           return;
         }
