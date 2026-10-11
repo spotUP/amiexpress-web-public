@@ -16,6 +16,7 @@ import { getBoardConfig } from '../../services/bbs-config-file.service';
 import { config as appConfig } from '../../config';
 import { ACSPermission } from '../../constants/acs-permissions';
 import { ftpCallersOnline } from '../../ftp/ftp-presence';
+import { WHO_TABLE_TOP, WHO_TABLE_BOTTOM, whoRow } from '../../utils/who-table.util';
 import { checkSecurity } from '../../utils/acs.util';
 import { AnsiUtil } from '../../utils/ansi.util';
 import { headingIndent, isNarrow } from '../../utils/table-format.util';
@@ -79,19 +80,6 @@ export function handleVersionCommand(socket: any, session: BBSSession): void {
   session.subState = LoggedOnSubState.DISPLAY_MENU;
 }
 
-// express.e:24223. The blue starts after "Location   ", so the column's
-// last nine spaces are blue.
-const WHO_HEADER = '\x1b[34m|\x1b[33mNd#\x1b[34m|\x1b[36m Name/Handle         \x1b[34m|\x1b[36m Group      \x1b[34m         |\x1b[36m Action              \x1b[34m|\x1b[36mChat\x1b[0m\x1b[34m|\x1b[0m\r\n';
-
-/**
- * The Chat column: express.e:24255 chatstr through `\l\s[9]` (24260), which
- * pads the BYTES, escape included - "YES" gets one space, "NO" two, and both
- * fill the four columns under "Chat".
- */
-function whoChatColumn(chatEnabled: boolean): string {
-  return chatEnabled ? '\x1b[32mYES ' : '\x1b[31mNO  ';
-}
-
 /**
  * WHO Command - Who's Online
  *
@@ -115,11 +103,7 @@ export function handleWhoCommand(socket: any, session: BBSSession): void {
   console.log('[ENV] Doors');
 
   // express.e:24217-24218: aePuts('\b\n\b\n') before table (no screen clear)
-  emitText(socket, '\r\n');
-  emitText(socket, '\r\n');
-  emitText(socket, '\x1b[34m.---+---------------------+---------------------+---------------------+----.\x1b[0m\r\n');
-  emitText(socket, WHO_HEADER);
-  emitText(socket, '\x1b[34m)---+---------------------+---------------------+---------------------+----(\x1b[0m\r\n');
+  for (const line of WHO_TABLE_TOP) emitText(socket, line);
 
   // Get all online users - express.e:24231-24377
   // WEB_: express.e reads from a shared AmigaOS node list in global memory; on the web
@@ -153,20 +137,12 @@ export function handleWhoCommand(socket: any, session: BBSSession): void {
 
   // Output each user row - express.e:24257-24377 format
   allOnlineUsers.forEach(userInfo => {
-    const nodeStr = String(userInfo.nodeId).padStart(2, '0');
-    const nameStr = userInfo.username.substring(0, 19).padEnd(19);
-    const locStr = userInfo.location.substring(0, 19).padEnd(19);
-    const actionStr = userInfo.action.substring(0, 19).padEnd(19);
-    const chatStr = whoChatColumn(userInfo.chatEnabled);
-
     // express.e:24370-24375 - Row format
-    emitText(socket, `\x1b[34m| \x1b[0m${nodeStr}\x1b[34m| \x1b[33m${nameStr} \x1b[34m|\x1b[35m ${locStr} \x1b[34m|\x1b[0m ${actionStr} \x1b[34m|${chatStr}\x1b[34m|\x1b[0m\r\n`);
+    emitText(socket, whoRow(userInfo.nodeId, userInfo.username, userInfo.location, userInfo.action, userInfo.chatEnabled));
   });
 
   // express.e:24381-24382 - Table footer
-  emitText(socket, '\x1b[34m|---+---------------------+---------------------+---------------------+----|\x1b[0m\r\n');
-  emitText(socket, '\x1b[34m`--------------------------------------------------------------------------\'\x1b[0m\r\n');
-  emitText(socket, '\r\n');
+  for (const line of WHO_TABLE_BOTTOM) emitText(socket, line);
 
   // express.e: who() returns RESULT_SUCCESS — no press-key, main loop sets menuPause:=TRUE
   session.menuPause = true;
@@ -201,11 +177,7 @@ export function handleWhoDetailedCommand(socket: any, session: BBSSession): void
   // per-session detail table instead, preserving the intent (operator visibility) without
   // exposing meaningless pointer values. Multi-node session state lives in the Node.js
   // sessions Map, not in a shared Amiga memory region.
-  emitText(socket, '\r\n');
-  emitText(socket, '\r\n');
-  emitText(socket, '\x1b[34m.---+---------------------+---------------------+---------------------+----.\x1b[0m\r\n');
-  emitText(socket, WHO_HEADER);
-  emitText(socket, '\x1b[34m)---+---------------------+---------------------+---------------------+----(\x1b[0m\r\n');
+  for (const line of WHO_TABLE_TOP) emitText(socket, line);
 
   // Get all online users with detailed status
   const detailedOnlineUsers = Array.from(_sessions.values())
@@ -220,19 +192,11 @@ export function handleWhoDetailedCommand(socket: any, session: BBSSession): void
 
   // Output each user row using same format as WHO
   detailedOnlineUsers.forEach(userInfo => {
-    const nodeStr = String(userInfo.nodeId).padStart(2, '0');
-    const nameStr = userInfo.username.substring(0, 19).padEnd(19);
-    const locStr = userInfo.location.substring(0, 19).padEnd(19);
-    const actionStr = userInfo.activity.substring(0, 19).padEnd(19);
-    const chatStr = whoChatColumn(userInfo.chatEnabled);
-
-    emitText(socket, `\x1b[34m| \x1b[0m${nodeStr}\x1b[34m| \x1b[33m${nameStr} \x1b[34m|\x1b[35m ${locStr} \x1b[34m|\x1b[0m ${actionStr} \x1b[34m|${chatStr}\x1b[34m|\x1b[0m\r\n`);
+    emitText(socket, whoRow(userInfo.nodeId, userInfo.username, userInfo.location, userInfo.activity, userInfo.chatEnabled));
   });
 
   // Table footer
-  emitText(socket, '\x1b[34m|---+---------------------+---------------------+---------------------+----|\x1b[0m\r\n');
-  emitText(socket, '\x1b[34m`--------------------------------------------------------------------------\'\x1b[0m\r\n');
-  emitText(socket, '\r\n');
+  for (const line of WHO_TABLE_BOTTOM) emitText(socket, line);
 
   // express.e: who(1) returns RESULT_SUCCESS — no press-key
   session.menuPause = true;

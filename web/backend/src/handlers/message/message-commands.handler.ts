@@ -7,21 +7,30 @@
  * - CM (Conference Maintenance) - SYSOP conference settings - express.e:24843-24852
  */
 
-import { messagePointerFileManager } from '../../services/MessagePointerFileManager';
+import * as fs from 'fs';
+import * as path from 'path';
+import {
+  messagePointerFileManager,
+  deserializeConfBase,
+  CONFBASE_RECORD_SIZE,
+} from '../../services/MessagePointerFileManager';
+import { loadAccount } from './msg-names';
+import { readPackedBCD } from '../../utils/bcd-math.util';
+import { boardRoot } from '../../utils/board-root.util';
 import { LoggedOnSubState, BBSState } from '../../constants/bbs-states';
 import { isNarrow, narrowClip, narrowRule } from '../../utils/table-format.util';
 import { ACSPermission } from '../../constants/acs-permissions';
 import { checkSecurity } from '../../utils/acs.util';
-import { AnsiUtil } from '../../utils/ansi.util';
 import { emitText, emitPrompt, flushOutput } from '../../utils/output.util';
 import { ErrorHandler } from '../../utils/error-handling.util';
 import { ParamsUtil } from '../../utils/params.util';
 import { normalizeForComparison } from '../../utils/input-normalizer.util';
 import { getDatabase } from '../command-handler/dependency-injection';
-import { getSystemTime } from '../../utils/date-time.util';
 import { getActivityFromSubState } from '../../server/session-manager';
 import { emitterForNodeId } from '../../server/session-emitter-registry';
-import { EnvStat, ENV_NAMES } from '../../constants/env-codes';
+import { EnvStat } from '../../constants/env-codes';
+import { WHO_TABLE_TOP, WHO_TABLE_BOTTOM, whoRow } from '../../utils/who-table.util';
+import { YES_NO_PROMPT } from '../../utils/await-input';
 
 import type { BBSSession } from '../../index';
 import type { Server as SocketIOServer } from 'socket.io';
@@ -192,24 +201,19 @@ export function handleJMInput(socket: any, session: BBSSession, input: string): 
     return;
   }
 
-  const msgBaseNum = parseInt(input.trim());
-
-  if (isNaN(msgBaseNum) || msgBaseNum < 1 || msgBaseNum > currentConfBases.length) {
-    // express.e:25230-25234 — invalid number just clamps; no error message
-    session.menuPause = false;
-    session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
-    return;
-  }
+  // express.e:25227 Val(newStr), then 25229-25230 clamp into 1..cnt: a
+  // number out of range (or no number at all, Val = 0) joins the nearest
+  // base. No error text and no pause - 25232 joinConf, then RESULT_SUCCESS.
+  let msgBaseNum = parseInt(input.trim(), 10) || 0;
+  if (msgBaseNum < 1) msgBaseNum = 1;
+  if (msgBaseNum > currentConfBases.length) msgBaseNum = currentConfBases.length;
 
   const selectedBase = currentConfBases[msgBaseNum - 1];
 
   if (selectedBase) {
-    // express.e:25236 joinConf() - outputs "Joining Conference: {name}" already
+    // express.e:25232 joinConf() - outputs "Joining Conference: {name}" already
     _joinConference(socket, session, session.currentConf!, selectedBase.id);
   }
-
-  emitText(socket, '\r\n');
-  emitPrompt(socket, AnsiUtil.pressKeyPrompt());
 
   session.menuPause = false;
   session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
@@ -240,14 +244,8 @@ export function handleNodeManagementCommand(socket: any, session: BBSSession): v
 
   console.log('[ENV] Sysop');
 
-  // Display node status (who(0)) - express.e:25295
-  displayNodeStatus(socket, session);
-
-  // Prompt for node selection - express.e:25298
-  emitText(socket, '\r\n');
-  emitPrompt(socket, 'Which to change <Q>=QUIT ? ');
-
-  // Wait for input - express.e:25300
+  // express.e:25294-25300: who(0), a blank line, the prompt, lineInput.
+  promptNodeChange(socket, session);
   session.subState = LoggedOnSubState.NM_INPUT;
   session.tempData = { nmAction: 'select' };
 }
@@ -255,23 +253,25 @@ export function handleNodeManagementCommand(socket: any, session: BBSSession): v
 /**
  * One node-status row (C64/40-col Task 5d).
  *
- * 80 columns: the `|`-boxed express.e:24370-24375 row, byte-identical.
- * Narrow: two unboxed lines - the box drawing alone costs 5 of 40 columns
- * and there is no room for four 19-column fields.
+ * 80 columns: who(0)'s own row, express.e:24370-24375 (utils/who-table.util).
+ * WEB_: no express.e equivalent for 40 columns. Narrow: two unboxed lines -
+ * the box drawing alone costs 5 of 40 columns and there is no room for four
+ * 19-column fields.
  */
 export function buildNodeStatusRow(
-  nodeStr: string,
-  nameStr: string,
-  locStr: string,
-  actStr: string,
-  chatStr: string,
+  nodeId: number,
+  name: string,
+  location: string,
+  action: string,
+  chatEnabled: boolean,
   narrow: boolean
 ): string[] {
   if (!narrow) {
-    return [
-      `\x1b[34m|\x1b[33m ${nodeStr}  \x1b[34m|\x1b[33m ${nameStr} \x1b[34m|\x1b[35m ${locStr} \x1b[34m|\x1b[0m ${actStr} \x1b[34m|${chatStr}\x1b[34m|\x1b[0m`,
-    ];
+    return [whoRow(nodeId, name, location, action, chatEnabled)];
   }
+  const nodeStr = String(nodeId).padStart(2, '0');
+  const nameStr = name.substring(0, 19);
+  const actStr = action.substring(0, 19);
   // Clip the PLAIN fields, then colour: narrowClip counts raw characters,
   // so clipping a string that already carries escapes would spend the row
   // budget on invisible bytes (and could sever an escape sequence).
@@ -290,17 +290,16 @@ export function buildNodeStatusRow(
  */
 function displayNodeStatus(socket: any, session: BBSSession): void {
   const narrow = isNarrow(session);
-  emitText(socket, '\r\n\r\n');
 
-  // Table header - enhanced design based on express.e:24219-24224
+  // express.e:24217-24224 - who(0)'s header, the same bytes WHO prints.
   if (narrow) {
+    // WEB_: no express.e equivalent for 40 columns - the boxed header does not fit.
+    emitText(socket, '\r\n\r\n');
     emitText(socket, `\x1b[34m${narrowRule()}\x1b[0m\r\n`);
     emitText(socket, '\x1b[36mNd# Name/Handle\x1b[0m\r\n');
     emitText(socket, `\x1b[34m${narrowRule()}\x1b[0m\r\n`);
   } else {
-    emitText(socket, '\x1b[34m.-----+---------------------+---------------------+---------------------+------.\x1b[0m\r\n');
-    emitText(socket, '\x1b[34m|\x1b[33m Nd# \x1b[34m|\x1b[36m Name/Handle         \x1b[34m|\x1b[36m Group               \x1b[34m|\x1b[36m Action              \x1b[34m|\x1b[36m Chat \x1b[34m|\x1b[0m\r\n');
-    emitText(socket, '\x1b[34m)-----+---------------------+---------------------+---------------------+------(\x1b[0m\r\n');
+    for (const line of WHO_TABLE_TOP) emitText(socket, line);
   }
 
   // Iterate over all sessions (keyed by nodeId)
@@ -324,7 +323,6 @@ function displayNodeStatus(socket: any, session: BBSSession): void {
     const handle = nodeSess.user?.username || '';
     const location = nodeSess.user?.location || '';
     const chatAvail = !nodeSess.blockOLM;
-    const chatStr = chatAvail ? '\x1b[32m YES  ' : '\x1b[31m  NO  ';
 
     // Determine action/status
     let action = 'IDLE';
@@ -421,7 +419,8 @@ function displayNodeStatus(socket: any, session: BBSSession): void {
           action = 'ONLINE MESSAGE';
           break;
         default:
-          action = ENV_NAMES[status as EnvStat] || 'UNKNOWN';
+          // express.e:24366-24368 DEFAULT prints an empty action.
+          action = '';
       }
     } else if (nodeSess.state === BBSState.LOGON) {
       action = 'LOGGING ON';
@@ -431,28 +430,30 @@ function displayNodeStatus(socket: any, session: BBSSession): void {
       action = 'REGISTERING';
     }
 
-    // Format row - express.e:24370-24375 (enhanced table design)
-    const nodeStr = nodeId.toString().padStart(2, '0');
-    const nameStr = handle.padEnd(19).slice(0, 19);
-    const locStr = location.padEnd(19).slice(0, 19);
-    const actStr = action.padEnd(19).slice(0, 19);
-
-    for (const line of buildNodeStatusRow(nodeStr, nameStr, locStr, actStr, chatStr, narrow)) {
-      emitText(socket, `${line}\r\n`);
+    // Row - express.e:24370-24375
+    for (const line of buildNodeStatusRow(nodeId, handle, location, action, chatAvail, narrow)) {
+      emitText(socket, narrow ? `${line}\r\n` : line);
     }
   }
 
-  // If no active nodes
-  if (nodeIds.length === 0) {
-    emitText(socket, narrow
-      ? '\x1b[33m  No active nodes\x1b[0m\r\n'
-      : '\x1b[34m|\x1b[33m  No active nodes                                                              \x1b[34m|\x1b[0m\r\n');
+  // express.e:24381-24383 - the closing rule and bottom border. An empty
+  // table is just its frame: who() has no "no nodes" line.
+  if (narrow) {
+    emitText(socket, `\x1b[34m${narrowRule()}\x1b[0m\r\n`);
+  } else {
+    for (const line of WHO_TABLE_BOTTOM) emitText(socket, line);
   }
+}
 
-  // Table footer - matches header width
-  emitText(socket, narrow
-    ? `\x1b[34m${narrowRule()}\x1b[0m\r\n`
-    : '\x1b[34m`-----+---------------------+---------------------+---------------------+------\'\x1b[0m\r\n');
+/**
+ * express.e:25294-25298, the top of internalCommandNM's LOOP: who(0), a
+ * blank line, then the prompt. Every branch of the loop comes back here and
+ * prints nothing else on the way.
+ */
+function promptNodeChange(socket: any, session: BBSSession): void {
+  displayNodeStatus(socket, session);
+  emitText(socket, '\r\n');
+  emitPrompt(socket, 'Which to change <Q>=QUIT ? ');
 }
 
 /**
@@ -469,9 +470,10 @@ export function handleNMInput(socket: any, session: BBSSession, input: string): 
   // lineInput's line break (express.e:2378), then 25302's own.
   emitText(socket, '\r\n\r\n');
 
-  // Handle quit - express.e:25305
+  // Handle quit - express.e:25305. RESULT_SUCCESS, so the main loop pauses
+  // before the menu (28647 menuPause:=TRUE).
   if (input.toUpperCase() === 'Q' || input === '') {
-    session.menuPause = false;
+    session.menuPause = true;
     session.subState = LoggedOnSubState.DISPLAY_MENU;
     delete session.tempData;
     return;
@@ -481,42 +483,31 @@ export function handleNMInput(socket: any, session: BBSSession, input: string): 
   const nodeNum = parseInt(input);
 
   if (isNaN(nodeNum)) {
-    emitText(socket, '\r\n');
-    // Loop back - display status and re-prompt
-    displayNodeStatus(socket, session);
-    emitText(socket, '\r\n');
-    emitPrompt(socket, 'Which to change <Q>=QUIT ? ');
+    // express.e:25307 read=0: straight back to the top of the loop.
+    promptNodeChange(socket, session);
     return;
   }
 
   // Cannot manage own node - express.e:25309-25310
   if (nodeNum === session.nodeId) {
     emitText(socket, 'You cannot perform actions on the node you are connected to.\r\n');
-    emitText(socket, '\r\n');
-    displayNodeStatus(socket, session);
-    emitText(socket, '\r\n');
-    emitPrompt(socket, 'Which to change <Q>=QUIT ? ');
+    promptNodeChange(socket, session);
     return;
   }
 
   // Check valid node range - express.e:25311
   if (nodeNum < 0 || nodeNum >= 255) {
-    emitText(socket, '\r\n');
-    displayNodeStatus(socket, session);
-    emitText(socket, '\r\n');
-    emitPrompt(socket, 'Which to change <Q>=QUIT ? ');
+    promptNodeChange(socket, session);
     return;
   }
 
   // Get target node session
   const targetSession = _sessions.get(nodeNum.toString());
 
-  // If node doesn't exist in session map, just re-display
+  // express.e:25312-25321: a node with no port reads status -1, which no
+  // branch takes - the loop just comes round again, saying nothing.
   if (!targetSession) {
-    emitText(socket, `Node ${nodeNum} is not active.\r\n`);
-    displayNodeStatus(socket, session);
-    emitText(socket, '\r\n');
-    emitPrompt(socket, 'Which to change <Q>=QUIT ? ');
+    promptNodeChange(socket, session);
     return;
   }
 
@@ -526,28 +517,25 @@ export function handleNMInput(socket: any, session: BBSSession, input: string): 
   if (status === EnvStat.NOTACTIVE || status === EnvStat.SHUTDOWN) {
     // Node is offline - offer to bring online - express.e:25340-25346
     emitText(socket, `Do you wish to bring node ${nodeNum} online `);
-    emitPrompt(socket, '(Y/n)? ');
+    emitPrompt(socket, YES_NO_PROMPT[2]); // express.e:25343 yesNo(2)
     session.tempData = { nmNode: nodeNum, nmOp: 'online' };
     session.subState = LoggedOnSubState.NM_CONFIRM;
   } else if (targetSession.state === BBSState.AWAIT || status === EnvStat.AWAITCONNECT) {
     // Node is waiting - offer to take offline - express.e:25323-25338
     emitText(socket, `Do you wish to take node ${nodeNum} offline `);
-    emitPrompt(socket, '(Y/n)? ');
+    emitPrompt(socket, YES_NO_PROMPT[2]); // express.e:25326 yesNo(2)
     session.tempData = { nmNode: nodeNum, nmOp: 'offline' };
     session.subState = LoggedOnSubState.NM_CONFIRM;
   } else if (status >= 0 && targetSession.state === BBSState.LOGGEDON) {
     // User connected - offer to disconnect - express.e:25348-25363
-    const userName = targetSession.user?.username || 'user';
-    emitText(socket, `Do you wish to disconnect ${userName} from node ${nodeNum} `);
-    emitPrompt(socket, '(Y/n)? ');
+    // express.e:25349 names no one: "the current user".
+    emitText(socket, `Do you wish to disconnect the current user from node ${nodeNum} `);
+    emitPrompt(socket, YES_NO_PROMPT[2]); // express.e:25351 yesNo(2)
     session.tempData = { nmNode: nodeNum, nmOp: 'kick' };
     session.subState = LoggedOnSubState.NM_CONFIRM;
   } else {
-    // Unknown state - just re-display
-    emitText(socket, '\r\n');
-    displayNodeStatus(socket, session);
-    emitText(socket, '\r\n');
-    emitPrompt(socket, 'Which to change <Q>=QUIT ? ');
+    // Unknown state - no branch of express.e:25323-25364 takes it.
+    promptNodeChange(socket, session);
   }
 }
 
@@ -564,17 +552,19 @@ export function handleNMConfirm(socket: any, session: BBSSession, input: string)
   const nodeNum = tempData.nmNode;
   const operation = tempData.nmOp;
 
-  // Default to No for safety
-  const confirmed = input.toUpperCase() === 'Y';
+  // express.e:2129-2157 yesNo(2): only y, n or Return end it (Return means
+  // no), and it answers Yes or No. Any other key is read and ignored.
+  const key = input.toLowerCase();
+  if (key !== 'y' && key !== 'n' && input !== '') return;
+  const confirmed = key === 'y';
 
-  emitText(socket, '\r\n');
+  emitText(socket, confirmed ? 'Yes\r\n' : 'No\r\n');
 
   if (confirmed && nodeNum !== undefined && operation) {
     switch (operation) {
       case 'online':
-        // Bring node online - express.e:25344-25346
+        // Bring node online - express.e:25344-25346, which prints nothing.
         // In web version, nodes are created on connection - nothing to do
-        emitText(socket, `Node ${nodeNum} will accept connections.\r\n`);
         break;
 
       case 'offline':
@@ -582,8 +572,8 @@ export function handleNMConfirm(socket: any, session: BBSSession, input: string)
         // In web version, we just mark it as shutdown
         const offlineSession = _sessions.get(nodeNum.toString());
         if (offlineSession) {
+          // express.e:25328-25337 sends SV_EXITNODE and prints nothing.
           offlineSession.currentStat = EnvStat.SHUTDOWN;
-          emitText(socket, `Node ${nodeNum} has been taken offline.\r\n`);
         }
         break;
 
@@ -605,14 +595,11 @@ export function handleNMConfirm(socket: any, session: BBSSession, input: string)
           // the old getSession(socketId) lookup was making.
           kickTarget.session.sysopKicked = true;
 console.log(`[NM KICK] Set sysopKicked=true on session for node ${nodeNum}, nodeId=${kickTarget.session.nodeId}`);
-          // Notify user and disconnect
-          kickTarget.emitter.emit('ansi-output', '\r\n\x1b[31m*** Disconnected by SYSOP ***\x1b[0m\r\n');
+          // express.e:7945-7954: SV_KICKUSER drops carrier - the caller is
+          // told nothing, and 25354-25362 tells the sysop nothing either.
           setTimeout(() => {
             kickTarget.emitter.disconnect(true);
           }, 500);
-          emitText(socket, `User on node ${nodeNum} has been disconnected.\r\n`);
-        } else {
-          emitText(socket, `Could not disconnect node ${nodeNum} - no active connection.\r\n`);
         }
         break;
     }
@@ -624,9 +611,7 @@ console.log(`[NM KICK] Set sysopKicked=true on session for node ${nodeNum}, node
   delete session.tempData;
 
   setTimeout(() => {
-    displayNodeStatus(socket, session);
-    emitText(socket, '\r\n');
-    emitPrompt(socket, 'Which to change <Q>=QUIT ? ');
+    promptNodeChange(socket, session);
   }, 1000);
 }
 
@@ -667,6 +652,45 @@ function cmMessageBase(conf: number, ordinal: number): {
   return { bases, base, id: base?.id ?? ordinal };
 }
 
+/**
+ * express.e:22521-22585 dumpUserStats: `<board>/Conf<n>.Stats`, one block
+ * per Conf.DB record whose account slot loads, in express's own labels.
+ * Nothing is printed on screen - the caller has already said Working....
+ */
+export function dumpUserStats(conf: number): void {
+  // 22530-22532: the file is created even when the database cannot be read.
+  const statsFile = path.join(boardRoot(), `Conf${conf}.Stats`);
+  const lines: string[] = [];
+  const dbPath = messagePointerFileManager.getConfDbPath(conf);
+  if (fs.existsSync(dbPath)) {
+    const buf = fs.readFileSync(dbPath);
+    const count = Math.floor(buf.length / CONFBASE_RECORD_SIZE);
+    lines.push(`Conference Name: ${_conferences.find(c => c.id === conf)?.name ?? ''}`);
+    lines.push('='.repeat(42));
+    for (let n = 1; n <= count; n++) {
+      const account = loadAccount(n);
+      if (!account) continue;
+      const cb = deserializeConfBase(buf, (n - 1) * CONFBASE_RECORD_SIZE);
+      const access = account.user.conferenceAccess;
+      const accessText = (Buffer.isBuffer(access) ? access : Buffer.from(String(access ?? ''), 'latin1'))
+        .toString('latin1').split('\0')[0];
+      lines.push(`Name            : ${account.user.name}`);
+      lines.push(`Location        : ${account.user.location}`);
+      lines.push(`Area Access     : ${accessText}`);
+      lines.push(`Ratio           : ${cb.ratio}`);
+      lines.push(`RatioType       : ${cb.ratioType}`);
+      lines.push(`Files Uploaded  : ${cb.upload}`);
+      lines.push(`Files Downloaded: ${cb.downloads}`);
+      lines.push(`Bytes Uploaded  : ${readPackedBCD(cb.uploadBytesBCD, 0).toString()}`);
+      lines.push(`Bytes Downloaded: ${readPackedBCD(cb.downloadBytesBCD, 0).toString()}`);
+      lines.push(`Messages Posted : ${cb.messagesPosted}`);
+      lines.push('-'.repeat(42));
+    }
+  }
+  // fileWriteLn (MiscFuncs.e:472) ends every line with a bare LF.
+  fs.writeFileSync(statsFile, lines.map(l => `${l}\n`).join(''), 'latin1');
+}
+
 export async function handleConferenceMaintenanceCommand(socket: any, session: BBSSession): Promise<void> {
   // Check sysop security - express.e:24844
   if (!checkSecurity(session.user, ACSPermission.SYSOP_COMMANDS)) {
@@ -686,6 +710,27 @@ console.log('[ENV] Sysop');
   // Enter the conference maintenance menu loop
   session.subState = LoggedOnSubState.CM_DISPLAY_MENU;
   await displayConferenceMaintenanceMenu(socket, session);
+}
+
+/** StringF `\s[w]` (and `\d[w]`): left-justified in w columns, cut at w. */
+function sField(s: string, w: number): string {
+  return s.substring(0, w).padEnd(w);
+}
+
+/** StringF `\z\r\d[w]`: zero-filled, right-justified in w columns, cut at w. */
+function zrField(n: number, w: number): string {
+  return String(n).slice(0, w).padStart(w, '0');
+}
+
+/** What every conference maintenance action prints while it runs (express.e:22782). */
+const CM_WORKING = '\x1b[18;2H \x1b[0mWorking....';
+
+/** express.e:22937: the prompt row blanked at the end of every pass. */
+const CM_ROW_BLANK = '\x1b[18;2H                                     ';
+
+/** express.e numberInputNoDefault (21085-21088): `Val(tempStr) AND $FFFF`. */
+function numberInputNoDefault(input: string): number {
+  return (parseInt(input.trim(), 10) || 0) & 0xffff;
 }
 
 /**
@@ -715,40 +760,35 @@ async function displayConferenceMaintenanceMenu(socket: any, session: BBSSession
     // carries a substituted "Message Base <n>" label for lists; express
     // prints what MsgBases.info says and nothing when it says nothing.
     const declared = messageBase.declaredName ?? messageBase.name ?? '';
-    confTitle = `${conference?.name || `Conf ${conf}`} - ${declared}`;
+    confTitle = `${conference?.name ?? ''} - ${declared}`;
   } else {
     confStr = `${conf}`;
-    confTitle = conference?.name || `Conference ${conf}`;
+    confTitle = conference?.name ?? '';
   }
 
   // Clear screen and display full-screen ANSI menu - express.e:22718-22777
   emitText(socket, '\x1b[2J'); // Clear screen
   emitText(socket, '\x1b[?25l'); // Hide cursor
 
-  // Title - express.e:22720
-  emitText(socket, `\x1b[2;1H                      \x1b[33mCONFERENCE MAINTENANCE\x1b[0m\r\n`);
+  // express.e:22710-22768, byte for byte: each line is positioned, and only
+  // the conference line and the warning end in a line break.
+  emitText(socket, '\x1b[2;1H                      \x1b[33mCONFERENCE MAINTENANCE\x1b[0m');
+  emitText(socket, `\x1b[4;1H \x1b[32mConference \x1b[34m[\x1b[0m${sField(confStr, 5)}\x1b[34m]\x1b[36m:\x1b[0m ${sField(confTitle, 29)}\r\n`);
+  emitText(socket, '\x1b[6;1H\x1b[0m THE FOLLOWING OPTIONS EFFECT ALL USERS FOR THIS CONFERENCE!\r\n');
+  emitText(socket, '\x1b[8;2H\x1b[33m1.>\x1b[32m Ratio\x1b[0m');
+  emitText(socket, '\x1b[9;2H\x1b[33m2.>\x1b[32m Ratio Type\x1b[0m');
+  emitText(socket, '\x1b[10;2H\x1b[33m3.>\x1b[32m Reset New Mail Scan Pointers\x1b[0m');
+  emitText(socket, '\x1b[11;2H\x1b[33m4.>\x1b[32m Reset Last Message Read Pointers\x1b[0m');
+  emitText(socket, '\x1b[12;2H\x1b[33m5.>\x1b[32m Dump all user stats to Conf.Stats\x1b[0m');
+  emitText(socket, '\x1b[13;2H\x1b[33m6.>\x1b[32m Set Default New Mail Scan\x1b[0m');
+  emitText(socket, '\x1b[14;2H\x1b[33m7.>\x1b[32m Set Default New File Scan\x1b[0m');
+  emitText(socket, '\x1b[15;2H\x1b[33m8.>\x1b[32m Set Default Zoom Flag\x1b[0m');
 
-  // Conference header - express.e:22724-22725
-  emitText(socket, `\x1b[4;1H \x1b[32mConference \x1b[34m[\x1b[0m${confStr.padEnd(5)}\x1b[34m]\x1b[36m:\x1b[0m ${confTitle.padEnd(29)}\r\n`);
-
-  // Warning - express.e:22726
-  emitText(socket, `\x1b[6;1H\x1b[0m THE FOLLOWING OPTIONS EFFECT ALL USERS FOR THIS CONFERENCE!\r\n`);
-
-  // Left column options - express.e:22727-22734
-  emitText(socket, `\x1b[8;2H\x1b[33m1.>\x1b[32m Ratio\x1b[0m\r\n`);
-  emitText(socket, `\x1b[9;2H\x1b[33m2.>\x1b[32m Ratio Type\x1b[0m\r\n`);
-  emitText(socket, `\x1b[10;2H\x1b[33m3.>\x1b[32m Reset New Mail Scan Pointers\x1b[0m\r\n`);
-  emitText(socket, `\x1b[11;2H\x1b[33m4.>\x1b[32m Reset Last Message Read Pointers\x1b[0m\r\n`);
-  emitText(socket, `\x1b[12;2H\x1b[33m5.>\x1b[32m Dump all user stats to Conf.Stats\x1b[0m\r\n`);
-  emitText(socket, `\x1b[13;2H\x1b[33m6.>\x1b[32m Set Default New Mail Scan\x1b[0m\r\n`);
-  emitText(socket, `\x1b[14;2H\x1b[33m7.>\x1b[32m Set Default New File Scan\x1b[0m\r\n`);
-  emitText(socket, `\x1b[15;2H\x1b[33m8.>\x1b[32m Set Default Zoom Flag\x1b[0m\r\n`);
-
-  // Right column options - express.e:22737-22751
-  emitText(socket, `\x1b[8;40H\x1b[33m9.>\x1b[32m Reset Messages Posted\x1b[0m\r\n`);
-  emitText(socket, `\x1b[9;40H\x1b[33mA.>\x1b[32m Reset Voting Booth\x1b[0m\r\n`);
-  emitText(socket, `\x1b[10;40H\x1b[33mB.>\x1b[32m Next   Msg # \x1b[0m${String(mailStat.highMsgNum || 0).padStart(8)}\r\n`);
-  emitText(socket, `\x1b[11;40H\x1b[33mC.>\x1b[32m Lowest Msg # \x1b[0m${String(mailStat.lowestKey || 0).padStart(8)}\r\n`);
+  emitText(socket, '\x1b[8;40H\x1b[33m9.>\x1b[32m Reset Messages Posted\x1b[0m');
+  emitText(socket, '\x1b[9;40H\x1b[33mA.>\x1b[32m Reset Voting Booth\x1b[0m');
+  // `\z\r\d[8]`: zero-filled, right-justified in eight.
+  emitText(socket, `\x1b[10;40H\x1b[33mB.>\x1b[32m Next   Msg # \x1b[0m${zrField(mailStat.highMsgNum || 0, 8)}`);
+  emitText(socket, `\x1b[11;40H\x1b[33mC.>\x1b[32m Lowest Msg # \x1b[0m${zrField(mailStat.lowestKey || 0, 8)}`);
   // express.e:22741 prints the conference DATABASE's capacity in records
   // (`Div(FileLength(confDb), SIZEOF confBase)`), and :22743-22756 the share
   // of it in use. This printed the USER COUNT as the capacity and then
@@ -756,17 +796,20 @@ async function displayConferenceMaintenanceMenu(socket: any, session: BBSSession
   // read "Capacity 12 Users / 1.2% In use" whatever the sysop had set - and
   // option D, which sets the capacity, changed neither number.
   const capacity = Number(stats.capacity ?? 0);
-  emitText(socket, `\x1b[12;40H\x1b[33mD.>\x1b[32m Capacity \x1b[0m${String(capacity).padStart(4)} \x1b[32mUsers\x1b[0m\r\n`);
+  emitText(socket, `\x1b[12;40H\x1b[33mD.>\x1b[32m Capacity \x1b[0m${sField(String(capacity), 4)} \x1b[32mUsers`);
 
-  // Percentage in use - express.e:22743-22757, including its >100% branch and
-  // its red-above-90 colouring.
+  // Percentage in use - express.e:22742-22757 with its own arithmetic: n is
+  // the whole percent, f is the REMAINDER times 1000 (not a fraction of
+  // anything), printed `\z\r\d[3]` - so 12 of 200 reads " 6.000% In use ".
   const totalUsers = Number(stats.userCount ?? 0);
-  const pct = capacity > 0 ? (totalUsers * 100) / capacity : 0;
-  if (pct > 100) {
-    emitText(socket, `\x1b[13;44H\x1b[31m>100% In use    \x1b[0m\r\n`);
+  const n = capacity > 0 ? Math.floor((totalUsers * 100) / capacity) : 0;
+  const f = capacity > 0 ? ((totalUsers * 100) % capacity) * 1000 : 0;
+  if (n > 100) {
+    emitText(socket, '\x1b[13;44H\x1b[31m>100% In use    ');
+  } else if (n < 90) {
+    emitText(socket, `\x1b[13;44H\x1b[33m${String(n).slice(0, 2).padStart(2)}.${zrField(f, 3)}% In use `);
   } else {
-    const colour = pct < 90 ? '\x1b[33m' : '\x1b[31m';
-    emitText(socket, `\x1b[13;44H${colour}${pct.toFixed(1)}% In use \x1b[0m\r\n`);
+    emitText(socket, `\x1b[13;44H\x1b[31m${n}.${zrField(f, 3)}% In use `);
   }
 
   // Dir cache options - express.e:22759-22766.
@@ -776,11 +819,11 @@ async function displayConferenceMaintenanceMenu(socket: any, session: BBSSession
   // filesystem this port does not have. The lines are drawn so the screen
   // matches, the state always reads Disabled, and F is not offered - express
   // itself blanks that line when caching is off.
-  emitText(socket, `\x1b[14;40H\x1b[33mE.>\x1b[32m Ram Dir Cache(s) \x1b[0mDisabled\r\n`);
-  emitText(socket, `\x1b[15;40H\x1b[33m                        \r\n`);
+  emitText(socket, '\x1b[14;40H\x1b[33mE.>\x1b[32m Ram Dir Cache(s) \x1b[0mDisabled');
+  emitText(socket, '\x1b[15;40H\x1b[33m                        ');
 
-  // Footer - express.e:22776
-  emitText(socket, `\x1b[17;2H\x1b[33m<TAB>\x1b[36m to exit \x1b[33m-/+\x1b[36m=\x1b[0mPrev/Next Conference \x1b[0m\r\n`);
+  // Footer - express.e:22768
+  emitText(socket, '\x1b[17;2H\x1b[33m<TAB>\x1b[36m to exit \x1b[33m-/+\x1b[36m=\x1b[0mPrev/Next Conference \x1b[0m');
 
   // Position cursor and show - express.e:22778-22779
   emitText(socket, `\x1b[18;2H`);
@@ -817,130 +860,64 @@ export async function handleCMInput(socket: any, session: BBSSession, input: str
       return;
 
     case '3': // Reset New Mail Scan Pointers - express.e:22797-22799
-      emitText(socket, `\x1b[18;2H\x1b[K \x1b[33mResetting new mail scan pointers...\x1b[0m`);
+      emitText(socket, CM_WORKING);
       await _resetNewMailScanPointers(conf, msgBaseId);
-      emitText(socket, `\x1b[18;2H\x1b[K \x1b[1;32m[OK]\x1b[0m New mail scan pointers reset for all users\r\n`);
-      await new Promise(r => setTimeout(r, 1200));
       await displayConferenceMaintenanceMenu(socket, session);
       return;
 
     case '4': // Reset Last Message Read Pointers - express.e:22800-22802
-      emitText(socket, `\x1b[18;2H\x1b[K \x1b[33mResetting last message read pointers...\x1b[0m`);
+      emitText(socket, CM_WORKING);
       await _resetLastMessageReadPointers(conf, msgBaseId);
-      emitText(socket, `\x1b[18;2H\x1b[K \x1b[1;32m[OK]\x1b[0m Last message read pointers reset for all users\r\n`);
-      await new Promise(r => setTimeout(r, 1200));
       await displayConferenceMaintenanceMenu(socket, session);
       return;
 
     case '5': // Dump user stats - express.e:22803-22805
-      emitText(socket, `\x1b[18;2H\x1b[K \x1b[33mDumping user statistics...\x1b[0m`);
+      emitText(socket, CM_WORKING);
       try {
-        const confId = session.tempData?.cmConf || session.currentConf || 1;
-        const db = getDatabase();
-
-        // Get conference user statistics - express.e:22521-22582
-        // Output format: Name, Location, Access, Uploads, Downloads, Bytes Up/Down, Messages Posted
-        // Note: ratio is per-conference (in conferences table), not per-user
-        const stats = await db.query(`
-          SELECT
-            u.username,
-            u.location,
-            cb.conference_id,
-            cb.upload as files_uploaded,
-            cb.downloads as files_downloaded,
-            cb.bytes_upload as bytes_uploaded,
-            cb.bytes_download as bytes_downloaded,
-            cb.messages_posted
-          FROM conf_base cb
-          JOIN users u ON cb.user_id = u.id
-          WHERE cb.conference_id = $1
-          ORDER BY u.username
-        `, [confId]);
-
-        // Get conference ratio settings
-        const confSettings = await db.query(
-          `SELECT ratio, ratiotype FROM conferences WHERE id = $1`,
-          [confId]
-        );
-        const confRatio = confSettings.rows[0]?.ratio || 0;
-        const confRatioType = confSettings.rows[0]?.ratiotype || 0;
-
-        // Create output file: Conf{N}.Stats - express.e:22527-22530
-        const { config } = require('../../config');
-        const path = require('path');
-        const fs = require('fs');
-        const bbsRoot = config.get('bbsRoot') || process.cwd();
-        const statsFile = path.join(bbsRoot, `Conf${confId}.Stats`);
-
-        let output = '';
-        output += `Conference ${confId} User Statistics\n`;
-        output += `Generated: ${getSystemTime().toISOString()}\n`;
-        output += `${'='.repeat(80)}\n\n`;
-
-        // Write each user's statistics - express.e:22540-22580
-        for (const row of stats.rows) {
-          output += `User: ${row.username}\n`;
-          output += `  Group: ${row.location || 'Unknown'}\n`;
-          output += `  Conference Access: ${confId}\n`;
-          output += `  Ratio: ${confRatio}\n`;
-          output += `  Ratio Type: ${confRatioType}\n`;
-          output += `  Files Uploaded: ${row.files_uploaded || 0}\n`;
-          output += `  Files Downloaded: ${row.files_downloaded || 0}\n`;
-          output += `  Bytes Uploaded: ${row.bytes_uploaded || 0}\n`;
-          output += `  Bytes Downloaded: ${row.bytes_downloaded || 0}\n`;
-          output += `  Messages Posted: ${row.messages_posted || 0}\n`;
-          output += `${'-'.repeat(80)}\n`;
-        }
-
-        fs.writeFileSync(statsFile, output, 'utf8');
-
-        emitText(socket, `\x1b[18;2H\x1b[K \x1b[1;32m[OK]\x1b[0m Stats dumped to \x1b[1;33m${path.basename(statsFile)}\x1b[0m (${stats.rows.length} users)\r\n`);
-        await new Promise(r => setTimeout(r, 1500));
+        dumpUserStats(conf);
       } catch (error) {
+        // express.e:22533-22585 skips what it cannot open and says nothing.
         console.error('[CM] Error dumping user stats:', error);
-        emitText(socket, `\x1b[18;2H\x1b[K \x1b[1;31m[ERROR]\x1b[0m Failed to dump user stats\r\n`);
-        await new Promise(r => setTimeout(r, 1500));
       }
       await displayConferenceMaintenanceMenu(socket, session);
       return;
 
     case '6': // Set Default New Mail Scan - express.e:22798-22806
-      emitText(socket, `\x1b[18;2H \x1b[0mDefault ON (Y/N)? `);
+      // express.e:22799-22800: "Default ON " then yesNo(1).
+      emitText(socket, `\x1b[18;2H \x1b[0mDefault ON ${YES_NO_PROMPT[1]}`);
       session.tempData.cmAction = 'setMailScan';
       session.tempData.awaitingCMConfirm = true;
       return;
 
     case '7': // Set Default New File Scan - express.e:22807-22815
-      emitText(socket, `\x1b[18;2H \x1b[0mDefault ON (Y/N)? `);
+      // express.e:22799-22800: "Default ON " then yesNo(1).
+      emitText(socket, `\x1b[18;2H \x1b[0mDefault ON ${YES_NO_PROMPT[1]}`);
       session.tempData.cmAction = 'setFileScan';
       session.tempData.awaitingCMConfirm = true;
       return;
 
     case '8': // Set Default Zoom Flag - express.e:22816-22824
-      emitText(socket, `\x1b[18;2H \x1b[0mDefault ON (Y/N)? `);
+      // express.e:22799-22800: "Default ON " then yesNo(1).
+      emitText(socket, `\x1b[18;2H \x1b[0mDefault ON ${YES_NO_PROMPT[1]}`);
       session.tempData.cmAction = 'setZoomFlag';
       session.tempData.awaitingCMConfirm = true;
       return;
 
     case '9': // Reset Messages Posted - express.e:22833-22835
-      emitText(socket, `\x1b[18;2H\x1b[K \x1b[33mResetting messages posted counters...\x1b[0m`);
+      emitText(socket, CM_WORKING);
       try {
         const confId = session.tempData?.cmConf || session.currentConf || 1;
         // express.e:22833-22835 updateAllUsers(conf,msgBase,UPDATE_MESSAGES_POSTED,0):
         // every record of the conference's Conf.DB (22504).
         messagePointerFileManager.updateAllUsers(confId, rec => { rec.messagesPosted = 0; });
-        emitText(socket, `\x1b[18;2H\x1b[K \x1b[1;32m[OK]\x1b[0m Messages posted counters reset for all users\r\n`);
-        await new Promise(r => setTimeout(r, 1200));
       } catch (error) {
         console.error('[CM] Error resetting messages posted:', error);
-        emitText(socket, `\x1b[18;2H\x1b[K \x1b[1;31m[ERROR]\x1b[0m Failed to reset messages posted\r\n`);
-        await new Promise(r => setTimeout(r, 1200));
       }
       await displayConferenceMaintenanceMenu(socket, session);
       return;
 
     case 'A': // Reset Voting Booth - express.e:22836-22838
-      emitText(socket, `\x1b[18;2H\x1b[K \x1b[33mResetting voting booth...\x1b[0m`);
+      emitText(socket, CM_WORKING);
       try {
         const confId = session.tempData?.cmConf || session.currentConf || 1;
         const db = getDatabase();
@@ -953,13 +930,9 @@ export async function handleCMInput(socket: any, session: BBSSession, input: str
           DELETE FROM vote_status
           WHERE topic_id IN (SELECT id FROM vote_topics WHERE conference_id = ?)
         `, [confId]);
-        emitText(socket, `\x1b[18;2H\x1b[K \x1b[1;32m[OK]\x1b[0m Voting booth reset - all votes cleared\r\n`);
-        await new Promise(r => setTimeout(r, 1200));
         console.log(`[CM] Voting booth reset for conference ${confId}`);
       } catch (error) {
         console.error('[CM] Error resetting voting booth:', error);
-        emitText(socket, `\x1b[18;2H\x1b[K \x1b[1;31m[ERROR]\x1b[0m Failed to reset voting booth\r\n`);
-        await new Promise(r => setTimeout(r, 1200));
       }
       await displayConferenceMaintenanceMenu(socket, session);
       return;
@@ -982,9 +955,11 @@ export async function handleCMInput(socket: any, session: BBSSession, input: str
     case '\t': // TAB - exit - express.e:22924-22925
     case 'Q':
     case '':
-      emitText(socket, '\x1b[2J\x1b[H'); // Clear screen and home
-      emitText(socket, '\x1b[?25h'); // Show cursor
-      session.menuPause = false;
+      // express.e:22937 blanks the prompt row and leaves the screen as it
+      // is; internalCommandCM returns RESULT_SUCCESS, so the main loop
+      // pauses before the menu (28647 menuPause:=TRUE).
+      emitText(socket, CM_ROW_BLANK);
+      session.menuPause = true;
       session.subState = LoggedOnSubState.DISPLAY_MENU;
       delete session.tempData.cmConf;
       delete session.tempData.cmMsgBase;
@@ -1029,7 +1004,7 @@ export async function handleCMInput(socket: any, session: BBSSession, input: str
  * Handle CM numeric input (for B and C options)
  */
 export async function handleCMNumericInput(socket: any, session: BBSSession, input: string, field: string): Promise<void> {
-  const value = parseInt(input.trim());
+  const value = numberInputNoDefault(input);
   const conf = session.tempData.cmConf;
   const msgBase = session.tempData.cmMsgBase;
   // B and C write mail_stats, which is keyed by the base's id - writing the
@@ -1037,40 +1012,28 @@ export async function handleCMNumericInput(socket: any, session: BBSSession, inp
   // conference's base on every conference past the first.
   const { id: msgBaseId } = cmMessageBase(conf, msgBase);
 
-  if (!isNaN(value) && value >= 0) {
-    const db = getDatabase();
-
-    if (field === 'HIGH_MSG') {
-      await _updateMessageNumberRange(conf, msgBaseId, undefined, value);
-    } else if (field === 'LOW_MSG') {
-      await _updateMessageNumberRange(conf, msgBaseId, value, undefined);
-    } else if (field === 'RATIO') {
-      // express.e:22779-22783 updateAllUsers(conf,msgBase,UPDATE_RATIO,n):
-      // the ratio is every caller's own, in his Conf.DB record (22478).
-      messagePointerFileManager.updateAllUsers(conf, rec => { rec.ratio = value & 0xffff; });
-      emitText(socket, `\x1b[18;2H\x1b[K \x1b[1;32m[OK]\x1b[0m Ratio updated to \x1b[1;33m${value}\x1b[0m\r\n`);
-      await new Promise(r => setTimeout(r, 1200));
-    } else if (field === 'RATIO_TYPE') {
-      // express.e:22784-22788 updateAllUsers(conf,msgBase,UPDATE_RATIO_TYPE,n) (22480).
-      messagePointerFileManager.updateAllUsers(conf, rec => { rec.ratioType = value & 0xffff; });
-      const typeNames = ['None', 'Files', 'Bytes', 'Both'];
-      const typeName = typeNames[value] || value;
-      emitText(socket, `\x1b[18;2H\x1b[K \x1b[1;32m[OK]\x1b[0m Ratio type set to \x1b[1;33m${typeName}\x1b[0m\r\n`);
-      await new Promise(r => setTimeout(r, 1200));
-    } else if (field === 'CAPACITY') {
-      // express.e:22851-22859 - Set conference capacity (max users)
-      // This would resize the conference database file in Amiga version
-      // In our SQL version, we can track this as metadata
-      await db.run(
-        `UPDATE conferences SET max_users = $1 WHERE id = $2`,
-        [value, conf]
-      );
-      emitText(socket, `\x1b[18;2H\x1b[K \x1b[1;32m[OK]\x1b[0m Capacity set to \x1b[1;33m${value}\x1b[0m users\r\n`);
-      await new Promise(r => setTimeout(r, 1200));
-    }
-  } else {
-    emitText(socket, `\x1b[18;2H\x1b[K \x1b[1;31m[!]\x1b[0m Invalid value - enter a number >= 0\r\n`);
-    await new Promise(r => setTimeout(r, 1000));
+  if (field === 'HIGH_MSG') {
+    // express.e:22831-22844: no message, and Val of an empty line is 0.
+    await _updateMessageNumberRange(conf, msgBaseId, undefined, value);
+  } else if (field === 'LOW_MSG') {
+    await _updateMessageNumberRange(conf, msgBaseId, value, undefined);
+  } else if (field === 'RATIO') {
+    // express.e:22779-22783 updateAllUsers(conf,msgBase,UPDATE_RATIO,n):
+    // the ratio is every caller's own, in his Conf.DB record (22478).
+    emitText(socket, CM_WORKING);
+    messagePointerFileManager.updateAllUsers(conf, rec => { rec.ratio = value; });
+  } else if (field === 'RATIO_TYPE') {
+    // express.e:22784-22788 updateAllUsers(conf,msgBase,UPDATE_RATIO_TYPE,n) (22480).
+    emitText(socket, CM_WORKING);
+    messagePointerFileManager.updateAllUsers(conf, rec => { rec.ratioType = value; });
+  } else if (field === 'CAPACITY' && value > 0) {
+    // express.e:22845-22853 - only a size above 0 resizes the conference
+    // database. In our SQL version, we can track this as metadata.
+    emitText(socket, '\x1b[18;2H\x1b[0mResizing, Please Standby');
+    await getDatabase().run(
+      `UPDATE conferences SET max_users = $1 WHERE id = $2`,
+      [value, conf]
+    );
   }
 
   session.subState = LoggedOnSubState.CM_DISPLAY_MENU;
@@ -1082,21 +1045,20 @@ export async function handleCMNumericInput(socket: any, session: BBSSession, inp
  * For cases 6, 7, 8 (set default scan flags)
  */
 export async function handleCMConfirmInput(socket: any, session: BBSSession, input: string): Promise<void> {
-  const answer = input.trim().toUpperCase();
-  const isYes = (answer === 'Y' || answer === 'YES');
+  // express.e:2129-2157 yesNo(1): Return means yes, only y, n or Return end
+  // it, and it answers Yes or No. Any other key is read and ignored.
+  const key = input.toLowerCase();
+  if (key !== 'y' && key !== 'n' && input !== '') {
+    session.tempData.awaitingCMConfirm = true;
+    return;
+  }
+  const isYes = key !== 'n';
+  emitText(socket, isYes ? 'Yes\r\n' : 'No\r\n');
+
   const action = session.tempData.cmAction;
   const confId = session.tempData.cmConf || session.currentConf || 1;
 
-  // Map action to friendly name
-  const actionNames: Record<string, string> = {
-    'setMailScan': 'New Mail Scan',
-    'setFileScan': 'New File Scan',
-    'setZoomFlag': 'Zoom Flag'
-  };
-  const actionName = actionNames[action] || action;
-  const status = isYes ? 'ON' : 'OFF';
-
-  emitText(socket, `\x1b[18;2H\x1b[K \x1b[33mSetting ${actionName} to ${status}...\x1b[0m`);
+  emitText(socket, CM_WORKING);
 
   try {
     // express.e:22798-22824 updateAllUsers(conf,msgBase,UPDATE_NEW_MAIL_SCAN /
@@ -1112,13 +1074,8 @@ export async function handleCMConfirmInput(socket: any, session: BBSSession, inp
         rec.handle[0] = isYes ? (rec.handle[0] | mask) : (rec.handle[0] & ~mask & 0xff);
       });
     }
-
-    emitText(socket, `\x1b[18;2H\x1b[K \x1b[1;32m[OK]\x1b[0m ${actionName} set to \x1b[1;33m${status}\x1b[0m for all users\r\n`);
-    await new Promise(r => setTimeout(r, 1200));
   } catch (error) {
     console.error('[CM] Error updating default flags:', error);
-    emitText(socket, `\x1b[18;2H\x1b[K \x1b[1;31m[ERROR]\x1b[0m Failed to update ${actionName}\r\n`);
-    await new Promise(r => setTimeout(r, 1200));
   }
 
   delete session.tempData.cmAction;

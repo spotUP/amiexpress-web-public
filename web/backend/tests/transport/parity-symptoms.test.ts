@@ -351,7 +351,8 @@ describe('TP-1 - the five symptoms a sysop would report', () => {
       flushAllBuffers();
 
       const wire = socket.since(preamble).toString('latin1');
-      expect(wire).toContain('*** Disconnected by SYSOP ***');
+      // express.e:7945-7954: the kick drops carrier and says nothing.
+      expect(wire).not.toContain('Disconnected');
       expect(socket.ended).toBeGreaterThan(0);
     } finally {
       jest.clearAllTimers();

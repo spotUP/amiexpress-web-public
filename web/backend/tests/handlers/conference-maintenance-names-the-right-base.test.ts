@@ -171,9 +171,11 @@ describe('the capacity line', () => {
     await handleCMInput(socket, sessionOnSecondConference(), 'x');
     const said = plain();
 
-    // 12 users of 200 = 6.0%, not "12 users" and not 12/1000.
-    expect(said).toMatch(/Capacity\s+200 Users/);
-    expect(said).toContain('6.0% In use');
+    // 12 users of 200 = 6%, not "12 users" and not 12/1000. express.e:22741
+    // `\d[4]` is left-justified; 22753 prints the remainder times 1000 as
+    // `\z\r\d[3]`, so the fraction reads 000.
+    expect(said).toContain('Capacity 200  Users');
+    expect(said).toContain(' 6.000% In use ');
   });
 
   it('says >100% rather than a number when the conference is over its size', async () => {
@@ -200,6 +202,6 @@ describe('the capacity line', () => {
 
     await handleCMInput(socket, sessionOnSecondConference(), 'x');
 
-    expect(plain()).toContain('0.0% In use');
+    expect(plain()).toContain(' 0.000% In use ');
   });
 });

@@ -344,7 +344,8 @@ describe('TP-10 - one registry, so a cross-session push finds a byte terminal', 
     jest.advanceTimersByTime(600);
     flushAllBuffers();
 
-    expect(socket.since(preamble)).toContain('*** Disconnected by SYSOP ***');
+    // express.e:7945-7954: the kick drops carrier and says nothing.
+    expect(socket.since(preamble)).not.toContain('Disconnected');
     expect(socket.ended).toBeGreaterThan(0);
     expect(victim.sysopKicked).toBe(true);
     // And the sysop is NOT told the node could not be found.
@@ -364,9 +365,7 @@ describe('TP-10 - one registry, so a cross-session push finds a byte terminal', 
     flushAllBuffers();
     expect(mockRegistryCalls.emitterForNodeId).toBe(2);
     expect(socket.since(wireBefore)).toBe('');
-    expect(sysopEmitted.map((e) => String(e.args[0])).join('')).toContain(
-      'Could not disconnect node 99',
-    );
+    expect(sysopEmitted.map((e) => String(e.args[0])).join('')).not.toContain('Could not');
   });
 
   it('a telnet caller at the command prompt receives an OLM immediately', async () => {

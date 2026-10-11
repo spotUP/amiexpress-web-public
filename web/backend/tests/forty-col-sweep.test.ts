@@ -196,7 +196,7 @@ describe('40-column sweep: tables', () => {
   });
 
   it('node status rows', () => {
-    fits(buildNodeStatusRow('24', LONG, LONG, LONG, LONG, true));
+    fits(buildNodeStatusRow(24, LONG, LONG, LONG, true, true));
   });
 
   it('mail scan rows', () => {

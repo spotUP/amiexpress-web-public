@@ -677,25 +677,25 @@ describe('5d node status (message-commands.handler.ts handleNodeManagementComman
     expect(driver.session.subState).toBe(LoggedOnSubState.NM_INPUT);
   }
 
-  test('80-col PIN: the boxed table, byte-identical', () => {
+  test('80-col PIN: who(0)\'s own table, byte-identical (express.e:24217-24383)', () => {
     const driver = wide();
     driveNodeStatus(driver);
     const out = driver.output();
 
     expect(out).toContain(
-      '\x1b[34m.-----+---------------------+---------------------+---------------------+------.\x1b[0m\r\n'
+      '\x1b[34m.---+---------------------+---------------------+---------------------+----.\x1b[0m\r\n'
     );
     expect(out).toContain(
-      '\x1b[34m|\x1b[33m 02  \x1b[34m|\x1b[33m ' +
+      '\x1b[34m| \x1b[0m02\x1b[34m| \x1b[33m' +
         'ZAPHOD'.padEnd(19) +
         ' \x1b[34m|\x1b[35m ' +
         'Betelgeuse Five'.padEnd(19) +
         ' \x1b[34m|\x1b[0m ' +
         'IDLE'.padEnd(19) +
-        ' \x1b[34m|\x1b[32m YES  \x1b[34m|\x1b[0m\r\n'
+        ' \x1b[34m|\x1b[32mYES \x1b[34m|\x1b[0m\r\n'
     );
     expect(out).toContain(
-      "\x1b[34m`-----+---------------------+---------------------+---------------------+------'\x1b[0m\r\n"
+      "\x1b[34m`--------------------------------------------------------------------------'\x1b[0m\r\n"
     );
   });
 
