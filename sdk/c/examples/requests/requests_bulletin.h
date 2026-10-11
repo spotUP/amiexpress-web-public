@@ -36,10 +36,14 @@
 /** Visible columns one bulletin line occupies. */
 #define REQUESTS_BULLETIN_COLUMNS 80
 
-/** The handle column, as the header art rules it. */
+/* The two widths below are FALLBACKS. The renderer reads the real ones from
+   the header art's column-title line (see geometry_of), so the right border
+   follows the art; these apply only to art with no ruled line. */
+
+/** The handle column, when the header art rules none. */
 #define REQUESTS_BULLETIN_HANDLE_W 12
 
-/** The description column, as the header art rules it. */
+/** The description column, when the header art rules none. */
 #define REQUESTS_BULLETIN_TITLE_W 60
 
 /**

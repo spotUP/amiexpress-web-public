@@ -428,6 +428,87 @@ static void art_that_is_all_padding_becomes_empty(void)
     assert(art[0] == '\0');
 }
 
+/* Visible column of the last `|` on a rendered row, CSI not counting. */
+static int last_pipe_column(const char *line, unsigned long len)
+{
+    unsigned long i = 0;
+    int col = 0;
+    int pipe = 0;
+
+    while (i < len) {
+        if (line[i] == '\033') {
+            i++;
+            if (i < len && line[i] == '[') {
+                i++;
+                while (i < len && (unsigned char)line[i] < 0x40) i++;
+                if (i < len) i++;
+            }
+            continue;
+        }
+        col++;
+        if (line[i] == '|') pipe = col;
+        i++;
+    }
+    return pipe;
+}
+
+static int first_row_last_pipe(const char *header, int *width)
+{
+    requests_bulletin_row row;
+    const char *line;
+    unsigned long n;
+    unsigned long len;
+    int col = 0;
+    unsigned long i;
+
+    row.handle = "sysop";
+    row.title = "test";
+    len = requests_bulletin_render(out, sizeof out, header, TAIL, &row, 1,
+                                   REQUESTS_BULLETIN_ROW_BUDGET);
+    assert(len > 0);
+    assert(line_at(out, len, requests_bulletin_art_rows(header), &line, &n));
+    for (i = 0; i < n; i++) {
+        if (line[i] == '\033') {
+            while (i < n && line[i] != 'm') i++;
+            continue;
+        }
+        col++;
+    }
+    *width = col;
+    return last_pipe_column(line, n);
+}
+
+/* The live H7 header's column-title line: 80 columns, closes on a `|`. */
+static const char *HEADER_80 =
+    "\033[94m|\033[32m Requested by\033[36m \033[94m|\033[34m \033[32mDescription of File(s) Requested                           \033[34m.-\033[94m_|\n";
+
+/* The shipped header's: 78 columns. */
+static const char *HEADER_78 =
+    "\033[34m| \033[36mRequested by \033[34m| \033[36mDescription of File(s) Requested..        \033[35m\\/      |____|    \033[34m|\n";
+
+static void rows_close_where_the_80_column_art_closes(void)
+{
+    int width;
+    assert(first_row_last_pipe(HEADER_80, &width) == 80);
+    assert(width == 80);
+}
+
+static void rows_close_where_the_78_column_art_closes(void)
+{
+    int width;
+    assert(first_row_last_pipe(HEADER_78, &width) == 78);
+    assert(width == 80);
+}
+
+static void art_with_no_ruled_line_keeps_the_fallback_columns(void)
+{
+    int width;
+    assert(first_row_last_pipe("\033[35m_______\n _\\____\n", &width) == 78);
+    assert(first_row_last_pipe("", &width) == 78);
+    /* A ruled line that does not close on a `|` is not a border. */
+    assert(first_row_last_pipe(HEADER, &width) == 78);
+}
+
 int main(void)
 {
     canvas_padding_is_not_counted_as_art();
@@ -450,6 +531,9 @@ int main(void)
     the_art_keeps_its_colours_and_the_last_line_resets();
     a_screen_already_on_disk_is_judged_by_the_same_rule();
     a_buffer_too_small_writes_nothing();
+    rows_close_where_the_80_column_art_closes();
+    rows_close_where_the_78_column_art_closes();
+    art_with_no_ruled_line_keeps_the_fallback_columns();
     printf("test_requests_bulletin: ok\n");
     return 0;
 }

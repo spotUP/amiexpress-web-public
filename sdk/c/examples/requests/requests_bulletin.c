@@ -211,17 +211,98 @@ static int put_column(char *out, unsigned long cap, unsigned long *used,
     return 1;
 }
 
-/** `| <handle> | <title> |`, in the header art's own columns and colours. */
-static int put_request_row(char *out, unsigned long cap, unsigned long *used,
-                           const requests_bulletin_row *row)
+/** Column widths of the request rows, read from the header art. */
+typedef struct {
+    int handle_w;
+    int title_w;
+} row_geometry;
+
+/**
+ * The columns the header art rules, read from the art itself.
+ *
+ * The art is the single source of truth: a sysop who installs a header whose
+ * column-title line is 80 wide gets rows that close at column 80, not at the
+ * 78 the first art happened to have. The column-title line is the LAST header
+ * line holding a `|`. Its second `|` is the handle/description divider and
+ * its last visible character, when that is a `|`, is the right border. CSI
+ * escapes take no column; every other byte, high bytes included, is one.
+ *
+ * No such line, or one that does not close on a `|` inside the screen, keeps
+ * the fallback widths.
+ */
+static row_geometry geometry_of(const char *header)
 {
+    row_geometry g;
+    const char *p = header;
+    const char *ruled = 0;
+    unsigned long ruled_len = 0;
+
+    g.handle_w = REQUESTS_BULLETIN_HANDLE_W;
+    g.title_w = REQUESTS_BULLETIN_TITLE_W;
+    if (header == 0) return g;
+
+    while (*p != '\0') {
+        unsigned long len;
+        const char *next;
+        const char *line = art_line(p, &len, &next);
+        unsigned long i;
+        for (i = 0; i < len; i++) {
+            if (line[i] == '|') { ruled = line; ruled_len = len; break; }
+        }
+        p = next;
+    }
+    if (ruled != 0) {
+        unsigned long i = 0;
+        int col = 0;
+        int pipes = 0;
+        int middle = 0;
+        int last = 0;
+        char last_ch = 0;
+
+        while (i < ruled_len) {
+            if (ruled[i] == '\033') {
+                i++;
+                if (i < ruled_len && ruled[i] == '[') {
+                    i++;
+                    while (i < ruled_len && (unsigned char)ruled[i] >= 0x20 &&
+                           (unsigned char)ruled[i] < 0x40) i++;
+                    if (i < ruled_len) i++;
+                }
+                continue;
+            }
+            col++;
+            if (ruled[i] == '|' && ++pipes == 2) middle = col;
+            last = col;
+            last_ch = ruled[i];
+            i++;
+        }
+        /* Rows are `| <handle> | <title>|`: the divider sits at handle+4 and
+           the border at handle+6+title. */
+        if (middle > 4 && last_ch == '|' &&
+            last <= REQUESTS_BULLETIN_COLUMNS && last > middle + 2) {
+            g.handle_w = middle - 4;
+            g.title_w = last - g.handle_w - 6;
+        }
+    }
+    return g;
+}
+
+/** `| <handle> | <title>|`, in the header art's own columns and colours. */
+static int put_request_row(char *out, unsigned long cap, unsigned long *used,
+                           const requests_bulletin_row *row,
+                           const row_geometry *g)
+{
+    int i;
+    int end = g->handle_w + 6 + g->title_w;
+
     if (!put_str(out, cap, used, "\033[34m|\033[37m ")) return 0;
-    if (!put_column(out, cap, used, row->handle, REQUESTS_BULLETIN_HANDLE_W))
-        return 0;
+    if (!put_column(out, cap, used, row->handle, g->handle_w)) return 0;
     if (!put_str(out, cap, used, " \033[34m|\033[37m ")) return 0;
-    if (!put_column(out, cap, used, row->title, REQUESTS_BULLETIN_TITLE_W))
-        return 0;
-    if (!put_str(out, cap, used, "\033[34m|\033[37m  ")) return 0;
+    if (!put_column(out, cap, used, row->title, g->title_w)) return 0;
+    if (!put_str(out, cap, used, "\033[34m|\033[37m")) return 0;
+    for (i = end; i < REQUESTS_BULLETIN_COLUMNS; i++) {
+        if (!put(out, cap, used, " ", 1)) return 0;
+    }
     return put(out, cap, used, "\r\n", 2);
 }
 
@@ -269,6 +350,7 @@ unsigned long requests_bulletin_render(char *out, unsigned long cap,
 {
     unsigned long used = 0;
     int room = requests_bulletin_capacity(header, tail, budget);
+    row_geometry geometry = geometry_of(header);
     int i;
 
     if (out == 0 || cap == 0) return 0;
@@ -277,7 +359,7 @@ unsigned long requests_bulletin_render(char *out, unsigned long cap,
 
     if (!put_art(out, cap, &used, header, 0)) return 0;
     for (i = 0; i < row_count; i++) {
-        if (!put_request_row(out, cap, &used, &rows[i])) return 0;
+        if (!put_request_row(out, cap, &used, &rows[i], &geometry)) return 0;
     }
     if (!put_art(out, cap, &used, tail, 1)) return 0;
     return used;
