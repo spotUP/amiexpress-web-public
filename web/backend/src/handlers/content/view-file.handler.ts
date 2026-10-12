@@ -21,6 +21,7 @@ import { getMaxDirs } from '../../utils/max-dirs.util';
 import { conferencePathEntries } from '../../conferences/conference-paths';
 import { restricted } from '../../utils/file-restriction.util';
 import { emitText } from '../../utils/output.util';
+import { holdInput, checkInput, readChar, readCharWithin } from '../../utils/await-input';
 import { decodeUtf8Or } from '../../utils/wire-encoding.util';
 import { sessionColumns } from '../../utils/door-min-columns.util';
 import { deviceMounted, resolveAssignPath } from '../../utils/path-util';
@@ -234,6 +235,16 @@ console.error('[VIEW FILE] Error reading file:', error);
     initPauseState(session);
     if (nonStop) setNonStopMode(session, true);
 
+    // Showing the file holds the input (utils/await-input): what the caller
+    // types meanwhile waits for viewAFile's checkInput (express.e:20524), as
+    // the serial line keeps it for express.e.
+    session.subState = LoggedOnSubState.VIEW_FILE_SHOW;
+    await holdInput(session, LoggedOnSubState.VIEW_FILE_SHOW, () => this.showLines(socket, session, bytes));
+    done();
+  }
+
+  /** express.e:20481-20541 - the file's lines, until the end or a break. */
+  private static async showLines(socket: Socket, session: BBSSession, bytes: Buffer): Promise<void> {
     // express.e:20492-20516 wraps at 79 on an 80-column screen; the width is
     // the caller's (sessionColumns), 39 for a C64.
     const wrapWidth = Math.max(20, sessionColumns(session) - 1);
@@ -242,14 +253,25 @@ console.error('[VIEW FILE] Error reading file:', error);
       // express.e:20481-20485 - a line opening with a byte above 128 ends it.
       if (raw[0] > 128 || raw[1] > 128 || raw[2] > 128) {
         emitText(socket, '\r\nThis file is not a text file.\r\n\r\n');
-        return done();
+        return;
       }
       await this.displayLineWithWrapping(socket, decodeUtf8Or(raw, 'iso-8859-1'), wrapWidth);
       lineCount++;
-      if (lineCount % 20 === 0 && !(await flagPause(socket, session, 0))) return done();
+      if (lineCount % 20 === 0 && !(await flagPause(socket, session, 0))) return;
+      // express.e:20524-20537 - after each line, has the caller typed?
+      // readChar(1) takes the key: ^W (23, "Pause") waits for another key,
+      // ^C prints **Break and ends the file, any other key is read and dropped.
+      if (await checkInput(session)) {
+        const key = await readCharWithin(socket, session, 1);
+        if (key === '\x17') {
+          await readChar(socket, session); // 20528 readChar(INPUT_TIMEOUT)
+        } else if (key === '\x03') {
+          emitText(socket, '**Break\r\n\r\n'); // 20534
+          return;
+        }
+      }
     }
     emitText(socket, '\r\n\r\n'); // express.e:20540
-    done();
   }
 
   /**

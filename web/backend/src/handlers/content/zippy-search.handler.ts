@@ -20,6 +20,7 @@ import { isNewFileEntry, getHoldDirFilePath } from '../../utils/dir-file-reader.
 import { flagPause, initPauseState, setNonStopMode } from '../../utils/flag-pause.util';
 import { getMaxDirs } from '../../utils/max-dirs.util';
 import { getConferenceDir } from '../../utils/file-hold.util';
+import { holdInput, checkInput, readChar, readCharWithin } from '../../utils/await-input';
 
 /**
  * Zippy Search Handler
@@ -226,6 +227,34 @@ console.log('[ENV] Files');
 
     socket.emit('ansi-output', '\r\n');
 
+    // The search holds the input (utils/await-input): what the caller types
+    // while it runs waits for zippy's checkInput (express.e:27551), as the
+    // serial line keeps it for express.e.
+    session.subState = LoggedOnSubState.ZIPPY_SCAN;
+    const stopped = await holdInput(session, LoggedOnSubState.ZIPPY_SCAN,
+      () => this.searchDirs(socket, session, searchString, startDir, endDir, nonStop));
+    if (stopped) {
+      socket.emit('ansi-output', '\r\n'); // express.e:26205
+      session.subState = LoggedOnSubState.DISPLAY_MENU;
+      return;
+    }
+
+    socket.emit('ansi-output', '\r\n');
+    session.subState = LoggedOnSubState.DISPLAY_MENU;
+  }
+
+  /**
+   * express.e:26174-26210 - zippy() over each directory of the span. True
+   * when zippy stopped the search (stat<0).
+   */
+  private static async searchDirs(
+    socket: Socket,
+    session: BBSSession,
+    searchString: string,
+    startDir: number,
+    endDir: number,
+    nonStop: boolean,
+  ): Promise<boolean> {
     // Loop through directories - express.e:26180-26207
     if (searchString.length > 0) {
       for (let dirNum = startDir; dirNum <= endDir; dirNum++) {
@@ -246,16 +275,10 @@ console.log('[ENV] Files');
         // Call zippy() - express.e:26203
         const stat = await this.zippy(socket, session, dirFilePath, searchString, nonStop);
 
-        if (stat < 0) {
-          socket.emit('ansi-output', '\r\n');
-          session.subState = LoggedOnSubState.DISPLAY_MENU;
-          return;
-        }
+        if (stat < 0) return true;
       }
     }
-
-    socket.emit('ansi-output', '\r\n');
-    session.subState = LoggedOnSubState.DISPLAY_MENU;
+    return false;
   }
 
   /**
@@ -289,6 +312,20 @@ console.log('[ENV] Files');
 
       // Read file line by line - express.e:27552-27620
       for await (const line of rl) {
+        // express.e:27551-27567 - before each line, has the caller typed?
+        // readChar(1) takes the key: ^W (23; E's comment says ctrl-s) waits
+        // for another key, ^C prints **Break and stops the search, any other
+        // key is read and dropped.
+        if (await checkInput(session)) {
+          const key = await readCharWithin(socket, session, 1);
+          if (key === '\x17') {
+            await readChar(socket, session); // 27555 readChar(INPUT_TIMEOUT)
+          } else if (key === '\x03') {
+            rl.close();
+            socket.emit('ansi-output', '**Break\r\n'); // 27563
+            return -1; // RESULT_FAILURE
+          }
+        }
         const trimmedLine = line.trim();
 
         // Check if this is a new file entry - express.e:27569

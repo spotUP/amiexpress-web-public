@@ -70,6 +70,8 @@ export enum LoggedOnSubState {
   VIEW_FILE_INPUT = 'view_file_input',                  // V command filename input
   ZIPPY_SEARCH_INPUT = 'zippy_search_input',            // Z command search string input
   ZIPPY_DIR_SPAN_INPUT = 'zippy_dir_span_input',        // Z command getDirSpan directory selection (express.e:26162-26168)
+  ZIPPY_SCAN = 'zippy_scan',                            // Z searching: it holds the input for zippy's checkInput (express.e:27551)
+  VIEW_FILE_SHOW = 'view_file_show',                    // V showing the file: it holds the input for viewAFile's checkInput (express.e:20524)
   GOODBYE_CONFIRM = 'goodbye_confirm',            // G: leave with partial uploads / flagged files? (express.e:25050-25064)
   FILES_MAINTENANCE = 'files_maintenance',
   FILES_MAINT_SELECT = 'files_maint_select',
