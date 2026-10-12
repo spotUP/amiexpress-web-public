@@ -56,6 +56,13 @@ export interface FtpDeps {
    */
   refuseOnNode?(nodeId: number, user: FtpUser): Promise<FtpLogonRefusal | null>;
   releaseNode(sessionId: string): Promise<void>;
+  /**
+   * The logoff's account save (express.e:8197-8207): the FTP session ends
+   * in reqState=REQ_STATE_LOGOFF (29021), the same logoff a BBS call takes,
+   * so what this session changed - uploads, downloads, today's counters -
+   * reaches user.data. Absent only in fixtures that test something else.
+   */
+  saveAccount?(user: FtpUser): Promise<void>;
   /** express.e writes every FTP command to the CallersLog; so do we. */
   log(username: string, message: string, nodeId: number): void;
   /**
@@ -1024,7 +1031,19 @@ export class FtpSession {
   private close(): void {
     if (this.closed) return;
     this.closed = true;
-    if (this.user) void this.deps.releaseNode(this.sessionId);
+    if (this.user) {
+      const user = this.user;
+      // The account is saved before the node is given back, as express's
+      // logoff saves (8207) before the node is freed.
+      void (async () => {
+        try {
+          await this.deps.saveAccount?.(user);
+        } catch (error) {
+          console.error('[FTP] saving the account at logoff failed:', error);
+        }
+        await this.deps.releaseNode(this.sessionId);
+      })();
+    }
     this.socket.end();
   }
 }

@@ -3,11 +3,13 @@
  *
  * express.e:19524-19532, at the end of uploadaFile: the bytes the protocol
  * received (uTBT) are added to loggedOnUser.todaysBytesLimit and bytesADL,
- * kilobytes under CREDITBYKB, unless the file went to LCFILES or the caller
+ * kilobytes under CREDITBYKB, ONCE for the whole upload, and not at all
+ * when the last file was lost to a dropped carrier (lcfile) or the caller
  * has no daily limit (bytesADL=$7fffffff). The port booked the upload to
  * the account and nothing to today's limit, so uploading never let a
  * caller at their daily limit take another file. Driven through
- * processBatchFile, the filing every BBS upload (web and Zmodem) runs.
+ * processBatchFile, the filing every BBS upload (web and Zmodem) runs, to
+ * the end of the upload (runPostUpload).
  * FTP's path (19684-19686) is in tests/ftp/upload-belongs-to-the-conference.
  */
 import * as fs from 'fs';
@@ -32,7 +34,7 @@ jest.mock('../src/database', () => ({
   db: new Proxy({} as any, { get: (_target, prop) => (globalThis as any).__creditMockDb[prop] }),
 }));
 jest.mock('../src/server/database-helpers', () => ({ callersLog: jest.fn(async () => undefined) }));
-jest.mock('../src/services/post-upload.service', () => ({ runPostUpload: jest.fn(async () => undefined) }));
+jest.mock('../src/services/upload-end.service', () => ({ endUpload: jest.fn() }));
 jest.mock('../src/handlers/command-execution.handler', () => ({
   hasSysCommand: () => false,
   runSysCommandInFlow: jest.fn(async () => -1),
@@ -68,8 +70,8 @@ describe('upload credit to today\'s limit (express.e:19524-19532)', () => {
     fs.rmSync(dataDir, { recursive: true, force: true });
   });
 
-  async function upload(user: Record<string, unknown>) {
-    const session: any = {
+  function makeSession(user: Record<string, unknown>, pendingZmodemFiles: Array<{ name: string; path: string }>) {
+    return {
       user: { id: 1, username: 'spot', securityFlags: 'T'.repeat(100), secLibrary: 0, secLevel: 20, ...user },
       currentConf: 1,
       nodeId: 1,
@@ -80,15 +82,23 @@ describe('upload credit to today\'s limit (express.e:19524-19532)', () => {
         uploadSessionId: 'sess-1',
         uploadBatch: [{ filename: 'DEMO.TXT', description: 'a demo', isPrivate: false }],
         uploadCount: 1, currentUploadIndex: 0, uploadStartTime: Date.now(),
-        webUploadMode: true, pendingZmodemFiles: [],
+        webUploadMode: true, pendingZmodemFiles,
       },
-    };
+    } as any;
+  }
+
+  async function fileFirst(session: any) {
     await processBatchFile(
       { id: 'socket-credit', emit: () => true } as any, session,
       { filename: 'DEMO.TXT', originalname: 'DEMO.TXT', size: 2_000_000, path: playpenFile },
       config,
     );
     return session.user;
+  }
+
+  /** A one-file upload, filed and ended. */
+  async function upload(user: Record<string, unknown>) {
+    return fileFirst(makeSession(user, []));
   }
 
   test('a 2 MB upload lets a caller at their 1 MB daily limit take a 1.5 MB file', async () => {
@@ -102,4 +112,19 @@ describe('upload credit to today\'s limit (express.e:19524-19532)', () => {
     const user = await upload({ byteLimit: 0, todaysBytesLimit: 0 });
     expect(user.todaysBytesLimit).toBe(0);
   });
+
+  // The lcfile edge (19530): the carrier dropped with the batch's last file
+  // unfinished. The upload never ends - the logoff files the rest to
+  // LCFILES - so the files already filed earn nothing either.
+  test('a batch cut off by a dropped carrier earns no upload credit', async () => {
+    const second = path.join(dataDir, 'Node1', 'Playpen', 'PART2.TXT');
+    fs.writeFileSync(second, Buffer.alloc(500, 0x42));
+    const session = makeSession({ byteLimit: 1_000_000, todaysBytesLimit: 1_000_000 }, [{ name: 'PART2.TXT', path: second }]);
+    await fileFirst(session);
+    // The first file is filed, the second waits for its description...
+    expect(session.user.uploads).toBe(1);
+    // ...and the line drops: no credit was given per file.
+    expect(session.user.todaysBytesLimit).toBe(1_000_000);
+  });
 });
+

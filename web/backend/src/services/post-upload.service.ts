@@ -186,6 +186,27 @@ export async function runPostUpload(
     console.error(`[postUpload] cleanPlayPen failed: ${err?.message || err}`);
   }
 
+  /*
+   * express.e:19524-19532, once for the whole upload, after cleanPlayPen:
+   *
+   *     tempsize:=convertFromBCD(uTBT)       (every byte received)
+   *     IF CREDITBYKB THEN tempsize:=Shr(tempsize,10) AND $003fffff
+   *     IF(lcfile=FALSE) AND (bytesADL<>$7fffffff)
+   *       loggedOnUser.todaysBytesLimit:=loggedOnUser.todaysBytesLimit+tempsize
+   *
+   * lcfile is the LAST file's: a batch whose last file was lost to a
+   * dropped carrier earns nothing. That batch never reaches here - the
+   * logoff files what is left to LCFILES (lost-carrier-files.service)
+   * instead of ending the upload - so the gate is this procedure's own end.
+   */
+  if (session.user && ctx.uploadedBytes > 0) {
+    const { getACSConfig, ToggleFlags } = require('../utils/acs.util');
+    const { creditUploadToToday } = require('../utils/download-ratios.util');
+    creditUploadToToday(session.user, getACSConfig().toggles[ToggleFlags.CREDITBYKB] === true
+      ? Math.floor(ctx.uploadedBytes / 1024) & 0x003fffff
+      : ctx.uploadedBytes);
+  }
+
   // Caller cleanup (e.g. clearUploadContext for web) — must run before
   // we mutate subState so the cleanup sees the pre-transition state.
   try {

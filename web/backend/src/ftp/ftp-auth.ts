@@ -34,6 +34,8 @@ import { DEFAULT_LISTING_DAYS, FtpFilesystem } from './ftp-filesystem';
 import { nodeManager } from '../services/node-manager.service';
 import { logDownload, writeToCallersLog } from '../utils/download-logging.util';
 import type { FtpDeps, FtpLogonRefusal, FtpUser } from './ftp-session';
+import type { User } from '../database/types';
+import { saveAccountAtLogoff } from '../services/account.service';
 import { loadAccount } from '../services/load-account';
 import { applyLogonDayReset, isNewLogonDay } from '../utils/time-tracking.util';
 import {
@@ -417,17 +419,28 @@ console.log(`[FTP] no tagline for ${request.filename}: ${error instanceof Error 
       });
 
       /*
-       * TODAY'S LIMIT GROWS BY THE UPLOAD (express.e:19684-19686). An FTP
-       * upload is checked by doBackgroundCheck (ftpStartFileCheck, 15205),
-       * which credits every checked file, held or not. fsize is in
-       * kilobytes under CREDITBYKB only when it was booked to the account
-       * first (19678-19679: tracked and not held), as E's own order has it.
+       * THE UPLOAD IS THE CALLER'S (express.e doBackgroundCheck, which an FTP
+       * upload runs through ftpStartFileCheck, 15205). A file that tested
+       * clean and is no duplicate (status=RESULT_SUCCESS, hold=0) counts one
+       * upload (19626-19630) and its bytes (19676-19681, kilobytes under
+       * CREDITBYKB), when the credit account tracks uploads. Every checked
+       * file, held or not, raises today's limit by fsize (19684-19686) -
+       * fsize in kilobytes only when it was booked first, E's own order. In
+       * memory: the logoff saves it (saveAccount below, 8207). A failed
+       * transfer is never checked (ftpStartFileCheck `IF success`).
        */
       if (!outcome.orphaned) {
-        const user = request.user as unknown as Parameters<typeof creditAccountTrackUploads>[0];
-        const kb = getACSConfig().toggles[ToggleFlags.CREDITBYKB] === true
-          && initialStatus !== 'hold' && creditAccountTrackUploads(user);
-        creditUploadToToday(user, kb ? Math.floor(bytes / 1024) & 0x003fffff : bytes);
+        const user = request.user as unknown as User;
+        const held = outcome.duplicate || outcome.status !== 'active';
+        const booked = !held && creditAccountTrackUploads(user);
+        const units = booked && getACSConfig().toggles[ToggleFlags.CREDITBYKB] === true
+          ? Math.floor(bytes / 1024) & 0x003fffff
+          : bytes;
+        if (booked) {
+          user.uploads = (user.uploads || 0) + 1;
+          user.bytesUpload = (user.bytesUpload || 0) + units;
+        }
+        creditUploadToToday(user, units);
       }
 
       // ftpd.e:1690 - 426 when the upload did not survive. A file the board
@@ -531,6 +544,15 @@ console.log(`[FTP] no tagline for ${request.filename}: ${error instanceof Error 
         return { refused: { code: 420, text: `User ${user.username} already on another node!` } };
       }
       return null;
+    },
+
+    /*
+     * express.e's logoff (8197-8207) for an FTP session: timeLastOn, the
+     * conference sums and saveAccount, as for a BBS call. currentConf is 0
+     * (28936): FTP joins no conference, so there is no record to put back.
+     */
+    async saveAccount(user: FtpUser): Promise<void> {
+      await saveAccountAtLogoff({ user: user as unknown as User, currentConf: 0 });
     },
 
     async releaseNode(sessionId: string): Promise<void> {

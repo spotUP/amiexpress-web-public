@@ -206,6 +206,24 @@ test('a login takes a node, and QUIT gives it back', async () => {
   client.close();
 });
 
+// express.e:29021 REQ_STATE_LOGOFF: an FTP session ends in the board's
+// logoff, whose saveAccount (8207) writes what the session changed.
+test('QUIT saves the caller\'s account before giving the node back', async () => {
+  const order: string[] = [];
+  h = await listen({
+    saveAccount: async (user) => { order.push(`save:${user.username}`); },
+    releaseNode: async () => { order.push('release'); },
+  });
+  const client = await Client.connect(h.port);
+  await client.reply();
+  await client.send('USER sysop');
+  await client.send('PASS correct-horse');
+  await client.send('QUIT');
+  await new Promise(r => setTimeout(r, 50));
+  expect(order).toEqual(['save:sysop', 'release']);
+  client.close();
+});
+
 test('a board with every node busy says so rather than serving an invisible session', async () => {
   h = await listen({}, { nodes: false });
   const client = await Client.connect(h.port);

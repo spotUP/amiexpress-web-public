@@ -117,7 +117,7 @@ describe('the FTP upload gate', () => {
    * with the collaborators stubbed and reads what it decided: the description
    * it filed, and the area it filed against.
    */
-  const acceptAnUpload = async (opts: { diz: string[] | null; tagline?: { text: string; use: number }; user?: Record<string, unknown> }) => {
+  const acceptAnUpload = async (opts: { diz: string[] | null; tagline?: { text: string; use: number }; user?: Record<string, unknown>; outcome?: Record<string, unknown> }) => {
     jest.resetModules();
 
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ftp-accept-'));
@@ -157,7 +157,7 @@ describe('the FTP upload gate', () => {
       }),
       fileUploadedFile: jest.fn(async (payload: Record<string, unknown>) => {
         filed.push(payload);
-        return { orphaned: false, notices: [] };
+        return { orphaned: false, notices: [], status: 'active', duplicate: false, ...opts.outcome };
       }),
     }));
     jest.doMock('../../src/database', () => ({
@@ -230,5 +230,22 @@ describe('the FTP upload gate', () => {
     const user = { username: 'Knut', secLevel: 20, byteLimit: 0, todaysBytesLimit: 0 };
     await acceptAnUpload({ diz: null, user });
     expect(user.todaysBytesLimit).toBe(0);
+  });
+
+  // express.e:19626-19630 / 19676-19681 (doBackgroundCheck, FTP's path): a
+  // clean file counts one upload and its bytes; a held one counts neither.
+  it("an FTP upload counts toward the caller's uploads and bytes uploaded", async () => {
+    const user = { username: 'Knut', secLevel: 20, uploads: 2, bytesUpload: 100, byteLimit: 0 };
+    await acceptAnUpload({ diz: null, user });
+    expect(user.uploads).toBe(3);
+    expect(user.bytesUpload).toBe(100 + Buffer.byteLength('payload'));
+  });
+
+  it('a held FTP upload counts nothing but still raises today\'s limit', async () => {
+    const user = { username: 'Knut', secLevel: 20, uploads: 2, bytesUpload: 100, byteLimit: 1_000, todaysBytesLimit: 1_000 };
+    await acceptAnUpload({ diz: null, user, outcome: { status: 'hold' } });
+    expect(user.uploads).toBe(2);
+    expect(user.bytesUpload).toBe(100);
+    expect(user.todaysBytesLimit).toBe(1_000 + Buffer.byteLength('payload'));
   });
 });

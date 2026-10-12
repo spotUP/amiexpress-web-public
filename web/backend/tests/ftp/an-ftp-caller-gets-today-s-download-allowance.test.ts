@@ -18,6 +18,7 @@ jest.mock('../../src/database', () => ({
   db: {
     authenticateUser: (...args: unknown[]) => authenticateUser(...args),
     getUserByUsername: jest.fn(async () => null),
+    updateUser: jest.fn(async () => undefined),
     getConfigRepository: () => ({ getConferenceConfigs: () => [] }),
   },
   getDatabase: () => ({}),
@@ -65,5 +66,16 @@ describe('the FTP logon day reset (express.e:28902-28925)', () => {
     const user = await logOn('ftpsameday', 932, new Date());
     expect(user.dailyBytesDld).toBe(1_000_000);
     expect(user.todaysBytesLimit).toBe(9_000_000);
+  });
+
+  // express.e:8197-8207 at the FTP session's logoff (29021): what the
+  // session changed - here today's limit an upload raised - reaches user.data.
+  it('saves what an FTP session changed to the account on disk at logoff', async () => {
+    const user = await logOn('ftpsaves', 933, new Date());
+    user.todaysBytesLimit = 9_004_242;
+    await boardFtpDeps().saveAccount!(user);
+    const { loadAccount } = require('../../src/services/load-account');
+    const { user: reloaded } = loadAccount(row('ftpsaves', 933, new Date()));
+    expect(reloaded.todaysBytesLimit).toBe(9_004_242);
   });
 });
