@@ -64,7 +64,7 @@ describe('OpenLibrary of a library that does not exist', () => {
   // without it. Measured 2026-10-12: no repo door opens any of these.
   it.each([
     'commodities.library', 'cybergraphics.library', 'datatypes.library',
-    'diskfont.library', 'gadtools.library', 'iffparse.library',
+    'diskfont.library', 'iffparse.library',
     'keymap.library', 'layers.library', 'realtime.library', 'workbench.library',
   ])('returns NULL for %s, which has no implemented function', (name) => {
     expect(open(name, false)).toBe(0);
@@ -76,6 +76,9 @@ describe('OpenLibrary of a library that does not exist', () => {
     'dos.library',
     // stub-only, kept: AEreg / SmartShowCfg / ShowConfig refuse to start without the open
     'asl.library', 'expansion.library',
+    // stub-only, kept: LhA 2.15 opens gadtools.library v37 at startup and exits 900 without it
+    // (it calls no function of it for t/e/x/a/d); C/LhA is the board's archiver
+    'gadtools.library',
   ])('still answers %s with a base', (name) => {
     expect(open(name, false)).not.toBe(0);
   });

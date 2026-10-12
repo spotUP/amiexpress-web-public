@@ -2209,7 +2209,10 @@ console.warn(
    * reqtools/rexxtricks.library), and none has an implemented function, so a
    * base would only crash or answer 0 (the locale.library hang in C/Zip): NULL.
    *
-   * asl and expansion are the two stub-only libraries kept: AEreg and
+   * gadtools is back (2026-10-12): LhA 2.15 (C/LhA) opens gadtools.library v37 at
+   * startup and exits 900 on NULL; for t/e/x/a/d it calls no function of it.
+   *
+   * asl and expansion are stub-only libraries kept: AEreg and
    * SmartShowCfg refuse to start without asl ("asl.library v36+ is required",
    * "Can't open version 0 of asl.library") and ShowConfig exits FAIL without
    * expansion, while with the open none of them called a function in an 8 s
@@ -2221,7 +2224,7 @@ console.warn(
   private static readonly PROCESS_ALLOC_SIZE = 0x100;
 
   private static readonly STANDARD_SYSTEM_LIBRARIES: ReadonlySet<string> = new Set([
-    "asl.library", "expansion.library",
+    "asl.library", "expansion.library", "gadtools.library",
     "mathffp.library", "mathtrans.library",
     "mathieeedoubbas.library", "mathieeedoubtrans.library",
     "mathieeesingbas.library", "mathieeesingtrans.library",

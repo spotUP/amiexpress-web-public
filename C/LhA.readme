@@ -1,0 +1,102 @@
+Short:        Latest version of Amiga LhA
+Author:       S.Ottemann (S.Boberg,J.Cooper,D.Tritscher)
+Uploader:     S.Ottemann (ac-logic@freenet.de)
+Type:         util/arc
+Version:      2.15
+Architecture: m68k-amigaos
+
+This are the 680x0-versions of Amiga LhA 2.15
+
+History:
+
+2.15   Sven Ottemann
+       
+        removed some forgotten debugoutput
+ 
+2.14   Sven Ottemann
+        
+        Fix: Y2K11 bug
+        
+        changed the default I/O Buffersize to 128k
+        changed the max  I/O Buffersize to 512k
+        changed the default Headerlevel to 1 
+        
+2.13   internal version
+
+2.12  (Sven Ottemann)
+        
+ - Fix: a stringproblem reported by Alex Carmona
+        
+ - Fix: softlinks were handled as dirs
+        reported by Christian Aichinger
+
+2.11 (Sven Ottemann)
+
+ - Fix: a Enforcerhit/Greamreaper in the u-command
+   reported by Martin McKenzie
+
+ - New: a WarpOS-version of LhA
+
+ - some changes to reduce the number of contextswitches in
+   the WarpOS-version
+
+2.10 (Sven Ottemann)
+
+ - Fix: the support of selfextracting archives was broken
+
+2.9 (Sven Ottemann)
+
+ - Fix: the -lh1- decoding and enconding was broken in 2.8
+   (reported by Timo Sievänen)
+
+ - Fix: the archive date was showed as xx-xx-105 instead xx-xx-05
+
+2.8 (Sven Ottemann)
+
+ - Ported to AOS4
+
+ - Fix: protection bits are set correct now
+   (reported by Richard Drummond)
+
+2.7 (Jim Cooper & David Tritscher)
+
+ - FINALLY tracked down a crash problem with corrupted archives.
+   (Jim)
+
+ - Lots more bullet-proofing. (Jim)
+
+ - AMINET RELEASE
+
+2.4 (Jim Cooper & David Tritscher)
+
+ - More fixes, cleanups, code-tightening.
+
+2.3 (Jim Cooper & David Tritscher)
+
+ - Fixed final (I hope) prob with -Qm and output redirected to CON:.
+
+ - Doc cleanups.
+
+2.2 (Jim Cooper & David Tritscher)
+
+ - .guide translated to German, documentation cleaned up. (Martin)
+
+ - .guide translated to French, documentation cleaned up. (D.Hervé)
+
+2.1 (Jim Cooper & David Tritscher)
+
+ - Fix probs with -Qm & too narrow windows. (Jim)
+
+ - Final cleanups, etc. before new Aminet release. (Jim)
+
+ - Set up Web site - lha.warped.com - plain, but functional. (Jim)
+
+ - AMINET RELEASE
+
+----------------------------------------------------------------------
+Board note: C/LhA is the 68000 build (lha_68k) from lha_68k.lha, Aminet
+util/arc/lha_68k, sha256 of the archive
+b1e9ce416a84c4e2b53c70fd51d434df09eb11fe110014d86c0bea76147d1899.
+LhA is freeware: Jim Cooper released it free of charge, no registration
+(LhA.guide, section "History"). Copyright (c) 1991-94 Stefan Boberg,
+1998-99 Jim Cooper and David Tritscher, 2004-2011 Sven Ottemann.

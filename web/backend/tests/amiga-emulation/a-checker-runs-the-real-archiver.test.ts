@@ -115,6 +115,13 @@ describeMaybe('a checker runs the real archiver through SystemTagList', () => {
     expect(stdout).toMatch(/aDDED !/);
     expect(stdout).not.toMatch(/Adding of advert .* failed/);
     expect(fs.statSync(path.join(board(), 'Node1', 'Playpen', 'advert.lha')).size).toBeGreaterThan(before);
+    // The advert entry carries today's date: LhA 1.51 wrote 1980 for any file dated after 2010.
+    const listing = spawnSync('lha', ['-l', path.join(board(), 'Node1', 'Playpen', 'advert.lha')], { encoding: 'utf8' });
+    if (!listing.error) {
+      // lha prints HH:MM instead of a year for a stamp within the last six months; 1980 prints "1980".
+      expect(listing.stdout).toMatch(/[A-Z][a-z]{2} +\d+ +\d\d:\d\d +advert\.txt/);
+      expect(listing.stdout).not.toMatch(/\b1980\b/);
+    }
   }, 200_000);
 
   it('rejects a damaged archive: C:LHA runs and returns 10', () => {
