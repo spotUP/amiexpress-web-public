@@ -12,7 +12,6 @@ import * as amigafs from '../../../utils/amigafs';
 import { debugLog } from '../../../utils/debug-log';
 import { PathManager } from '../PathManager';
 import { FileManager } from '../FileManager';
-import { amigaEnvArchiveDir, amigaEnvDir, amigaRamDir } from '../../utils/env-paths';
 
 /**
  * Configuration for path resolver
@@ -33,17 +32,10 @@ export interface PathResolverConfig {
 /**
  * Handles Amiga path resolution to native filesystem paths.
  *
- * Supports the following device mappings:
- * - PROGDIR: -> Door's own directory
- * - BBS: -> BBS data path
- * - Doors: -> Doors directory root
- * - S: -> Amiga system scripts (BBS root /S)
- * - ENV: -> Environment variables, volatile (/tmp/ram/ENV)
- * - ENVARC: -> Environment archive, on disk (<bbsRoot>/System/Prefs/Env-Archive)
- * - RAM: -> RAM disk (/tmp/ram)
- * - T: -> Temporary directory (/tmp/ram/T)
- * - Relative paths -> Current directory
- * - Absolute paths -> Used as-is
+ * Devices and assigns come from the one assign table
+ * (standard-assigns.ts) through PathManager; PROGDIR: is the door's own
+ * directory; relative paths resolve against the current directory and
+ * absolute host paths are used as-is.
  */
 export class DosPathResolver {
   private rootPath: string = '';
@@ -57,6 +49,9 @@ export class DosPathResolver {
   private pathManager: PathManager | null = null;
   private fileManager: FileManager | null = null;
   private useNewFileSystem: boolean = false;
+  /** Assign table used before a session PathManager is enabled. */
+  private ownPathManager: PathManager | null = null;
+  private ownPathManagerRoot = '';
 
   constructor(config?: Partial<PathResolverConfig>) {
     if (config) {
@@ -178,91 +173,37 @@ export class DosPathResolver {
   resolve(amigaPath: string): string | null {
     debugLog(`[DosPathResolver] Resolving: "${amigaPath}"`);
 
-    // Try PathManager first if available
-    if (this.useNewFileSystem && this.pathManager) {
-      const currentDir = this.getCurrentDirectory();
-      const normalized = this.normalizeAmigaPath(amigaPath);
-      const resolved = this.pathManager.amiToSysPath(normalized, currentDir);
-      if (resolved) {
-        debugLog(`[DosPathResolver] PathManager resolved: "${normalized}" -> ${resolved}`);
-        return resolved;
-      }
-    }
-
-    const upperPath = amigaPath.toUpperCase();
-
-    // Handle PROGDIR: device - door's own directory
-    if (upperPath.startsWith('PROGDIR:')) {
-      return this.resolveProgDir(amigaPath.substring(8));
-    }
-
-    // Handle Doors: device - doors directory root
-    if (upperPath.startsWith('DOORS:')) {
-      const relativePath = amigaPath.substring(6);
-      let resolved = path.join(this.rootPath, 'doors', relativePath);
-      resolved = this.findCaseInsensitive(resolved);
-      debugLog(`[DosPathResolver] Doors: -> ${resolved}`);
-      return resolved;
-    }
-
-    // Handle BBS: device - BBS system files
-    if (upperPath.startsWith('BBS:')) {
-      return this.resolveBbs(amigaPath.substring(4));
-    }
-
-    // Handle S: device - Amiga system scripts/config
-    if (upperPath.startsWith('S:')) {
-      const relativePath = amigaPath.substring(2);
-      let resolved = path.join(this.rootPath, 'S', relativePath);
-      resolved = this.findCaseInsensitive(resolved);
-      debugLog(`[DosPathResolver] S: -> ${resolved}`);
-      return resolved;
-    }
-
-    // Handle ENVARC: device - the on-disk archive half of the environment.
-    // Must be tested BEFORE ENV: only in spirit (the prefixes don't overlap),
-    // but it must exist at all: without it an archive write fell through to
-    // resolveRelative() and landed loose in the BBS root. See
-    // amiga-emulation/utils/env-paths.ts.
-    if (upperPath.startsWith('ENVARC:')) {
-      const relativePath = amigaPath.substring(7);
-      const resolved = path.join(amigaEnvArchiveDir(this.rootPath), relativePath);
-      debugLog(`[DosPathResolver] ENVARC: -> ${resolved}`);
-      return resolved;
-    }
-
-    // Handle ENV: device - environment variables
-    if (upperPath.startsWith('ENV:')) {
-      const relativePath = amigaPath.substring(4);
-      const resolved = path.join(amigaEnvDir(), relativePath);
-      debugLog(`[DosPathResolver] ENV: -> ${resolved}`);
-      return resolved;
-    }
-
-    // Handle RAM: device
-    if (upperPath.startsWith('RAM:')) {
-      const relativePath = amigaPath.substring(4);
-      const resolved = path.join(amigaRamDir(), relativePath);
-      debugLog(`[DosPathResolver] RAM: -> ${resolved}`);
-      return resolved;
-    }
-
-    // Handle T: device - temporary directory
-    if (upperPath.startsWith('T:')) {
-      const relativePath = amigaPath.substring(2);
-      const resolved = path.join(amigaRamDir(), 'T', relativePath);
-      debugLog(`[DosPathResolver] T: -> ${resolved}`);
-      return resolved;
-    }
-
-    // Handle absolute paths
+    // Absolute host paths pass through.
     if (amigaPath.startsWith('/')) {
       debugLog(`[DosPathResolver] Absolute: ${amigaPath}`);
       return amigaPath;
     }
 
-    // Handle relative paths - resolve from current directory
-    return this.resolveRelative(amigaPath);
+    // A path without a device resolves against the current directory.
+    if (!amigaPath.includes(':')) {
+      return this.resolveRelative(amigaPath);
+    }
+
+    // Devices and assigns: the one assign table (standard-assigns.ts), through
+    // a PathManager - the session's when there is one, else one of our own.
+    // PROGDIR: is this resolver's door directory.
+    if (amigaPath.toUpperCase().startsWith('PROGDIR:') && !(this.useNewFileSystem && this.pathManager)) {
+      return this.resolveProgDir(amigaPath.substring(8));
+    }
+    const manager = this.assignTable();
+    const resolved = manager.amiToSysPath(this.normalizeAmigaPath(amigaPath), this.getCurrentDirectory());
+    debugLog(`[DosPathResolver] PathManager resolved: "${amigaPath}" -> ${resolved}`);
+    return resolved;
+  }
+
+  /** The session's PathManager, else one built on this resolver's root. */
+  private assignTable(): PathManager {
+    if (this.useNewFileSystem && this.pathManager) return this.pathManager;
+    if (!this.ownPathManager || this.ownPathManagerRoot !== this.rootPath) {
+      this.ownPathManager = new PathManager(this.rootPath || this.bbsRoot || process.cwd());
+      this.ownPathManagerRoot = this.rootPath;
+    }
+    return this.ownPathManager;
   }
 
   /**
@@ -272,16 +213,6 @@ export class DosPathResolver {
     let resolved = path.join(this.doorDirectory, relativePath);
     resolved = this.findCaseInsensitive(resolved);
     debugLog(`[DosPathResolver] PROGDIR: -> ${resolved}`);
-    return resolved;
-  }
-
-  /**
-   * Resolve BBS: relative path
-   */
-  private resolveBbs(relativePath: string): string {
-    let resolved = path.join(this.bbsDataPath, relativePath);
-    resolved = this.findCaseInsensitive(resolved);
-    debugLog(`[DosPathResolver] BBS: -> ${resolved}`);
     return resolved;
   }
 

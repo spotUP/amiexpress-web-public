@@ -995,13 +995,11 @@ function runAmigaDoorViaRunner(
   const appRootPath = path.resolve(__dirname, '../../../..');
   const dataDir = config.getConfig().dataDir;
   const bbsRoot = process.env.BBS_ROOT || dataDir || path.resolve(process.cwd(), '..');
+  // BBS:, DOORS:, C: and the rest come from the emulator's one assign table
+  // (amiga-emulation/api/dos/standard-assigns.ts) on the same board root;
+  // the runner adds only this node's own NODE<n>: volume.
   const assigns: Record<string, string> = {
-    'BBS:': dataDir,
-    'BBS': dataDir,
-    'Doors:': path.join(bbsRoot, 'Doors'),
-    'Doors': path.join(bbsRoot, 'Doors'),
     [`Node${nodeId}:`]: path.join(bbsRoot, `Node${nodeId}`),
-    [`Node${nodeId}`]: path.join(bbsRoot, `Node${nodeId}`),
   };
 
   // Create drop files so doors see expected environment

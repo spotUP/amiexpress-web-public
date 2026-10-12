@@ -121,9 +121,9 @@ describe('Path Utility Functions', () => {
       expect(findAssign('BBS:')).toBe('/path/to/bbs');
     });
 
-    it('should find SYS: assign', () => {
-      process.env.AMIGA_SYS_DIR = '/usr/local/amiga';
-      expect(findAssign('SYS:')).toBe('/usr/local/amiga');
+    it('should find SYS: assign (the board System/ directory, as the emulator has it)', () => {
+      process.env.BBS_DATA_DIR = '/path/to/bbs';
+      expect(findAssign('SYS:')).toBe(path.join('/path/to/bbs', 'System'));
     });
 
     it('should be case-insensitive', () => {
@@ -143,18 +143,18 @@ describe('Path Utility Functions', () => {
     });
 
     it('should support DOORS: assign', () => {
-      process.env.DOORS_DIR = '/path/to/doors';
-      expect(findAssign('DOORS:')).toBe('/path/to/doors');
+      process.env.BBS_DATA_DIR = '/path/to/bbs';
+      expect(findAssign('DOORS:')).toBe(path.join('/path/to/bbs', 'doors'));
     });
 
-    it('should support LIBS: assign', () => {
-      process.env.LIBS_DIR = '/path/to/libs';
-      expect(findAssign('LIBS:')).toBe('/path/to/libs');
+    it('should support LIBS: assign (System/Libs first, then Libs)', () => {
+      process.env.BBS_DATA_DIR = '/path/to/bbs';
+      expect(findAssign('LIBS:')).toBe(path.join('/path/to/bbs', 'System', 'Libs'));
     });
 
-    it('should support T: (temp) assign', () => {
-      process.env.TEMP_DIR = '/custom/tmp';
-      expect(findAssign('T:')).toBe('/custom/tmp');
+    it('should support T: (temp) assign - RAM:T', () => {
+      process.env.RAM_DIR = '/custom/ram';
+      expect(findAssign('T:')).toBe(path.join('/custom/ram', 'T'));
     });
   });
 

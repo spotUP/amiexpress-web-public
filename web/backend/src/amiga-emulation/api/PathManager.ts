@@ -9,11 +9,14 @@ import * as path from 'path';
 import * as fs from 'fs';
 import * as amigafs from '../../utils/amigafs';
 import { resolvePath as resolveCaseInsensitivePath } from '../../utils/amigafs';
-import { amigaEnvArchiveDir, amigaEnvDir, amigaRamDir } from '../utils/env-paths';
+import { amigaTempDir, assignKey, findInAssignDirs, standardAssigns } from './dos/standard-assigns';
 
 export class PathManager {
-  /** Map of AmigaDOS logical devices (assigns) to system paths */
-  private assigns: Map<string, string> = new Map();
+  /**
+   * AmigaDOS logical devices (assigns) -> system directories. An assign can
+   * name several directories (C:, L:, LIBS:); lookups search them in order.
+   */
+  private assigns: Map<string, string[]> = new Map();
 
   /** Base directory for BBS files */
   private baseDir: string;
@@ -51,55 +54,22 @@ export class PathManager {
   }
 
   /**
-   * Initialize standard AmigaDOS assigns
+   * The board's standard assigns, from the one table (dos/standard-assigns.ts).
+   * T: (RAM:T) is created here so a program can write to it at once.
    */
   private initializeStandardAssigns(): void {
-    // Resolve common assigns in a case-insensitive way to mirror Amiga volumes.
-    // Prefer capitalized "Doors" (matches repo layout) if present.
-    const doorsUpper = path.join(this.baseDir, 'Doors/');
-    const doorsLower = path.join(this.baseDir, 'doors/');
-    const doorsPath =
-      (amigafs.existsSync(doorsUpper) && doorsUpper) ||
-      (amigafs.existsSync(doorsLower) && doorsLower) ||
-      resolveCaseInsensitivePath(path.join(this.baseDir, 'doors')) ||
-      doorsLower;
-
-    // BBS-specific assigns
-    this.assigns.set('doors:', this.normalizeAssignPath(doorsPath));
-    this.assigns.set('bbs:', this.normalizeAssignPath(this.baseDir));
-    this.assigns.set('data:', this.normalizeAssignPath(path.join(this.baseDir, 'data/')));
-    this.assigns.set('screens:', this.normalizeAssignPath(path.join(this.baseDir, 'Screens/')));
-    this.assigns.set('bulletins:', this.normalizeAssignPath(path.join(this.baseDir, 'Bulletins/')));
-    this.assigns.set('s:', this.normalizeAssignPath(path.join(this.baseDir, 'S/')));
-    this.assigns.set('work:', this.normalizeAssignPath(this.baseDir));
-    this.assigns.set('sami:', this.normalizeAssignPath(path.join(this.baseDir, 'S/')));
-    this.assigns.set('env:', this.normalizeAssignPath(amigaEnvDir()));
-    // ENVARC: is the on-disk half of the AmigaOS environment (see
-    // utils/env-paths.ts). Without it, a door's archive write - the one that
-    // is supposed to outlive a reboot - fell through the unknown-volume
-    // fallback below and landed loose in the BBS root, never to be read
-    // again. GWall lost its BBS acronym that way on every restart.
-    this.assigns.set('envarc:', this.normalizeAssignPath(amigaEnvArchiveDir(this.baseDir)));
-    this.assigns.set('progdir:', this.normalizeAssignPath(this.baseDir));
-
-    // Standard AmigaDOS assigns
-    this.assigns.set('sys:', this.normalizeAssignPath(path.join(this.baseDir, 'System/')));
-    this.assigns.set('c:', this.normalizeAssignPath(path.join(this.baseDir, 'System/C/')));
-    this.assigns.set('l:', this.normalizeAssignPath(path.join(this.baseDir, 'System/L/')));
-    this.assigns.set('libs:', this.normalizeAssignPath(path.join(this.baseDir, 'System/Libs/')));
-    this.assigns.set('devs:', this.normalizeAssignPath(path.join(this.baseDir, 'System/Devs/')));
-    this.assigns.set('fonts:', this.normalizeAssignPath(path.join(this.baseDir, 'System/Fonts/')));
-    this.assigns.set('locale:', this.normalizeAssignPath(path.join(this.baseDir, 'System/Locale/')));
-    this.assigns.set('prefs:', this.normalizeAssignPath(path.join(this.baseDir, 'System/Prefs/')));
-    this.assigns.set('classes:', this.normalizeAssignPath(path.join(this.baseDir, 'System/Classes/')));
-
-    // RAM disk and temp
-    this.assigns.set('ram:', this.normalizeAssignPath(`${amigaRamDir()}/`));
-    this.assigns.set('t:', this.normalizeAssignPath('/tmp/'));
+    for (const [name, dirs] of standardAssigns(this.baseDir)) {
+      this.assigns.set(name, dirs.map((d) => this.normalizeAssignPath(d)));
+    }
+    try {
+      amigafs.mkdirSync(amigaTempDir(), { recursive: true });
+    } catch {
+      /* Open() reports it if T: really cannot be written */
+    }
 
 console.log('[PathManager] Initialized assigns:');
-    for (const [assign, sysPath] of this.assigns) {
-console.log(`  ${assign} => ${sysPath}`);
+    for (const [assign, dirs] of this.assigns) {
+console.log(`  ${assign} => ${dirs.join(' + ')}`);
     }
   }
 
@@ -113,7 +83,7 @@ console.log(`  ${assign} => ${sysPath}`);
     }
     name = name.toLowerCase();
 
-    this.assigns.set(name, this.normalizeAssignPath(sysPath));
+    this.assigns.set(name, [this.normalizeAssignPath(sysPath)]);
 console.log(`[PathManager] Added assign: ${name} => ${sysPath}`);
   }
 
@@ -122,7 +92,7 @@ console.log(`[PathManager] Added assign: ${name} => ${sysPath}`);
    */
   setProgDir(sysPath: string): void {
     const normalized = this.normalizeAssignPath(sysPath);
-    this.assigns.set('progdir:', normalized);
+    this.assigns.set('progdir:', [normalized]);
 console.log(`[PathManager] PROGDIR: assigned to ${normalized}`);
   }
 
@@ -220,23 +190,26 @@ console.log(`[PathManager] Absolute POSIX path: "${amiPath}" => "${normalized}"`
       }
     }
 
-    for (const [assign, sysPath] of this.assigns) {
+    for (const [assign, dirs] of this.assigns) {
       if (lowerPath.startsWith(assign)) {
         // Remove assign prefix and append to system path
         const relativePath = amiPath.substring(assign.length);
         const normalizedComponents = this.normalizeComponents(relativePath);
+        // A new file is created in the assign's first directory.
+        const sysPath = dirs[0];
 
         if (normalizedComponents.length === 0) {
 console.log(`[PathManager] Mapped assign root: "${amiPath}" => "${sysPath}"`);
           return sysPath;
         }
 
-        const fullPath = path.join(sysPath, ...normalizedComponents);
-        const caseInsensitivePath = resolveCaseInsensitivePath(fullPath);
+        // Multi-directory assigns (C:, L:, LIBS:) are searched in order.
+        const caseInsensitivePath = findInAssignDirs(dirs, normalizedComponents);
         if (caseInsensitivePath) {
 console.log(`[PathManager] Mapped (case-insensitive): "${amiPath}" => "${caseInsensitivePath}"`);
           return caseInsensitivePath;
         }
+        const fullPath = path.join(sysPath, ...normalizedComponents);
 
         // PROGDIR fallback to bbsRoot for BBS-data paths. Real Amiga
         // PROGDIR is the door binary's directory. Some doors (e.g.
@@ -340,7 +313,12 @@ console.log(`[PathManager] Base relative: "${amiPath}" => "${fullPath}"`);
    * Get all current assigns (for debugging)
    */
   getAssigns(): Map<string, string> {
-    return new Map(this.assigns);
+    return new Map([...this.assigns].map(([name, dirs]) => [name, dirs[0]]));
+  }
+
+  /** Every directory of an assign, in search order (C: is more than one). */
+  getAssignDirs(name: string): string[] {
+    return [...(this.assigns.get(assignKey(name)) ?? [])];
   }
 
   /**

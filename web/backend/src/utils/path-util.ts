@@ -7,6 +7,8 @@
 
 import * as path from 'path';
 import * as fs from 'fs';
+import { boardRoot } from './board-root.util';
+import { assignKey, findInAssignDirs, standardAssigns } from '../amiga-emulation/api/dos/standard-assigns';
 
 /**
  * Ensure path ends with trailing slash
@@ -46,64 +48,19 @@ export function removePathSlash(dirPath: string): string {
  * Equivalent to MiscFuncs.e findAssign()
  *
  * Express.e usage: 5 instances
- * Used for resolving logical assigns like "BBS:", "SYS:", "REXX:"
+ * Used for resolving logical assigns like "BBS:", "SYS:", "C:"
  *
- * Amiga assigns map logical names to physical paths:
- * - BBS: → /path/to/bbs/data
- * - SYS: → /usr/local/amiexpress
- * - REXX: → /path/to/arexx
+ * The board's assign table is the emulator's (amiga-emulation/api/dos/
+ * standard-assigns.ts), so the BBS and a 68K program mean the same directory
+ * by the same name. An assign that names several directories (C:, L:, LIBS:)
+ * answers with its first; resolveAssignPath() searches all of them.
  *
  * @param assignName - Assign name (e.g., "BBS:", "SYS:")
  * @returns Resolved path, or null if assign not found
  */
 export function findAssign(assignName: string): string | null {
-  // Map of Amiga assigns to actual paths
-  const assigns: Record<string, string> = {
-    // BBS: points to BBS data directory
-    // config's dataDir, which is BBS_DATA_DIR or this checkout's root. It used
-    // to end in one developer's absolute path, which resolves to nothing
-    // anywhere else and is not a fallback so much as a wrong answer with a
-    // straight face.
-    'BBS:': process.env.BBS_DATA_DIR || process.env.BBS_ROOT || path.resolve(__dirname, '../../../..'),
-
-    // SYS: points to system directory (Amiga OS root)
-    'SYS:': process.env.AMIGA_SYS_DIR || '/usr/local/amiexpress',
-
-    // REXX: points to AREXX scripts directory
-    'REXX:': process.env.AREXX_DIR || path.join(process.env.BBS_DATA_DIR || '.', 'AREXX'),
-
-    // DOORS: points to doors directory
-    'DOORS:': process.env.DOORS_DIR || path.join(process.env.BBS_DATA_DIR || '.', 'Doors'),
-
-    // LIBS: points to libraries directory
-    'LIBS:': process.env.LIBS_DIR || path.join(process.env.BBS_DATA_DIR || '.', 'Libs'),
-
-    // S: points to scripts directory
-    'S:': process.env.SCRIPTS_DIR || path.join(process.env.BBS_DATA_DIR || '.', 'S'),
-
-    // C: points to commands directory
-    'C:': process.env.COMMANDS_DIR || path.join(process.env.BBS_DATA_DIR || '.', 'Commands'),
-
-    // T: points to temp directory
-    'T:': process.env.TEMP_DIR || '/tmp',
-
-    // RAM: points to ram disk (use temp) - consistent with PathManager
-    'RAM:': process.env.RAM_DIR || '/tmp/ram',
-
-    // ENV: points to environment variables
-    'ENV:': process.env.ENV_DIR || '/tmp/ENV',
-
-    // ENVARC: points to saved environment variables
-    'ENVARC:': process.env.ENVARC_DIR || path.join(process.env.BBS_DATA_DIR || '.', 'ENVARC'),
-  };
-
-  // Normalize assign name to uppercase with colon
-  let normalizedAssign = assignName.toUpperCase();
-  if (!normalizedAssign.endsWith(':')) {
-    normalizedAssign += ':';
-  }
-
-  return assigns[normalizedAssign] || null;
+  const dirs = standardAssigns(boardRoot()).get(assignKey(assignName));
+  return dirs?.[0] ?? null;
 }
 
 /**
@@ -138,9 +95,10 @@ export function resolveAssignPath(filePath: string): string {
     const assignName = assignMatch[1] + ':';
     const remainingPath = assignMatch[2];
 
-    const assignPath = findAssign(assignName);
-    if (assignPath) {
-      return path.join(assignPath, remainingPath);
+    const dirs = standardAssigns(boardRoot()).get(assignKey(assignName));
+    if (dirs?.length) {
+      const components = remainingPath.split('/').filter((c) => c.length > 0);
+      return findInAssignDirs(dirs, components) ?? path.join(dirs[0], remainingPath);
     }
   }
 
