@@ -161,6 +161,12 @@ interface ChildFrame extends ChildStart {
     stackLower: number;
     stackUpper: number;
     task: number[];
+    /**
+     * The caller's cli_CommandName (a BPTR) and the CLI it lives in: the shell
+     * names the command it starts in the CLI, and the caller's name returns
+     * when the child ends. `block` is the child's BSTR, freed on return.
+     */
+    cliName: { cli: number; bptr: number; block: { addr: number; size: number } } | null;
   };
 }
 
@@ -3553,6 +3559,23 @@ debugLog(`[dos.library] Door will now exit cleanly`);
       const task = exec.getCurrentTaskAddress() >>> 0;
       const readTask = (off: number) => (task ? this.emulator.readMemory32(task + off) >>> 0 : 0);
 
+      // cli_CommandName (dos/dosextens.h +0x10): a BSTR of the command as
+      // invoked, from AllocMem like every other emulator-made structure.
+      let cliName: ChildFrame['saved']['cliName'] = null;
+      const cliBptr = readTask(0xac);
+      if (cliBptr) {
+        const cli = (cliBptr << 2) >>> 0;
+        const name = child.programName.slice(0, 255);
+        const size = (name.length + 2 + 3) & ~3;
+        const addr = exec.allocMem(size, MEMF_PUBLIC_CLEAR);
+        if (addr) {
+          this.emulator.writeMemory(addr, name.length);
+          for (let i = 0; i < name.length; i++) this.emulator.writeMemory(addr + 1 + i, name.charCodeAt(i) & 0xff);
+          cliName = { cli, bptr: this.emulator.readMemory32(cli + 0x10) >>> 0, block: { addr, size } };
+          this.emulator.writeMemory32(cli + 0x10, addr >>> 2);
+        }
+      }
+
       this.childFrames.push({
         ...child,
         stack,
@@ -3568,6 +3591,7 @@ debugLog(`[dos.library] Door will now exit cleanly`);
           stackLower: exec.getStackLower(),
           stackUpper: exec.getStackUpper(),
           task: TASK_STACK_FIELDS.map(readTask),
+          cliName,
         },
       });
 
@@ -3621,6 +3645,10 @@ debugLog(`[dos.library] Door will now exit cleanly`);
 
     this.argStringPtr = saved.argStringPtr;
     this.programName = saved.programName;
+    if (saved.cliName) {
+      this.emulator.writeMemory32(saved.cliName.cli + 0x10, saved.cliName.bptr);
+      exec?.freeMem(saved.cliName.block.addr, saved.cliName.block.size);
+    }
     this.setStdHandles(saved.input, saved.output);
     if (saved.currentDir !== null) {
       // The ending process's current directory is unlocked; the caller's comes back.
