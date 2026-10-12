@@ -1084,6 +1084,17 @@ debugLog(
         break;
 
       default:
+        // A library that is neither on disk (LibraryLoader), a fixed stub nor a
+        // standard system library does not exist: AmigaOS OpenLibrary and
+        // OldOpenLibrary return NULL. Handing back a zero-vector base made
+        // C/DMS (OldOpenLibrary "Bootblock.library") jump through it to an
+        // invalid PC instead of printing its own "can't open" message.
+        if (!ExecLibrary.STANDARD_SYSTEM_LIBRARIES.has(lower)) {
+debugLog(
+            `[ExecLibrary]   "${name}" does not exist (not on disk, not a standard system library) - returning NULL`
+          );
+          return 0;
+        }
         libAddr = this.nextStubLibraryAddr;
         this.nextStubLibraryAddr += 0x010000;
         libVersion = version;
@@ -2191,6 +2202,23 @@ console.warn(
         return true; // Return true to indicate we handled it (with a stub)
     }
   }
+
+  /**
+   * Stock AmigaOS 3.x libraries a real machine always has. Doors open these
+   * and often never call them, so an absent one is still answered with a
+   * generic (empty-vector) stub base, as before. Any other name that is not
+   * on disk is a library the machine does not have, and OpenLibrary says NULL.
+   */
+  private static readonly STANDARD_SYSTEM_LIBRARIES: ReadonlySet<string> = new Set([
+    "asl.library", "commodities.library", "cybergraphics.library",
+    "datatypes.library", "diskfont.library", "expansion.library",
+    "gadtools.library", "iffparse.library", "keymap.library",
+    "layers.library", "locale.library", "mathffp.library",
+    "mathieeedoubbas.library", "mathieeedoubtrans.library",
+    "mathieeesingbas.library", "mathieeesingtrans.library",
+    "mathtrans.library", "realtime.library", "rexxsyslib.library",
+    "workbench.library",
+  ]);
 
   openLibrary(nameAddr: number, version: number): number {
     // Read library name from memory
