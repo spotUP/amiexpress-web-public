@@ -201,6 +201,8 @@ export interface TestFileOptions {
   caller?: { socket: any; session: any };
   /** The node the upload is on: its NODE<n>: volume is the checker's. */
   nodeId?: number;
+  /** How long a checker may run before it is killed; CHECKER_TIMEOUT_MS when unset. */
+  checkerTimeoutMs?: number;
 }
 
 /** express.e axenums.e: RESULT_* as a door reports them through DT_GOODFILE. */
@@ -327,6 +329,15 @@ function nodeOfPath(filepath: string): number | null {
   return match ? Number(match[1]) : null;
 }
 
+/** A 68K checker unpacking a big archive is slow under the emulator; native checkers share it. */
+const CHECKER_TIMEOUT_MS = 120_000;
+
+/** What one checker command printed, and whether the timeout killed it first. */
+interface CheckerRun {
+  output: string;
+  timedOut: boolean;
+}
+
 /**
  * What a checker's command printed, from `program args...` on either side of
  * the Amiga/native line. null: the program is not there (SystemTagList would
@@ -342,33 +353,39 @@ async function runCheckerCommand(
   nodeId: number,
   cwd?: string,
   stackSize?: number,
-): Promise<string | null> {
+  timeoutMs: number = CHECKER_TIMEOUT_MS,
+): Promise<CheckerRun | null> {
   const parsed = parseAmigaCommandLine(commandLine);
   if (isAmigaPath(parsed.program)) {
     // The 68K program, run as the node's own through the board's one headless
     // launcher: no fake sysop drop files, stdout is the program's Output().
     const program = amigafs.resolvePath(resolveAssignPath(parsed.program));
     if (!program) return null;
-    const { output } = await runAmigaProgram(program, {
+    const { output, killed } = await runAmigaProgram(program, {
       nodeId,
       args: parsed.rawArgs,
       doorType: 'SIM',
-      timeoutMs: CHECKER_TIMEOUT_MS,
+      timeoutMs,
       // express.e:18580 NP_STACKSIZE. NP_PRIORITY (:18581) is not passed: the
       // emulator runs one task, so a priority has nothing to order.
       stackSize,
     });
-    return output;
+    return { output, timedOut: killed };
   }
 
   if (!fsSync.existsSync(parsed.program)) return null;
   let stdout = '';
   let stderr = '';
   try {
-    const done = await execAsync(nativeCommand, { timeout: 60000, cwd });
+    const done = await execAsync(nativeCommand, { timeout: timeoutMs, cwd });
     stdout = done.stdout;
     stderr = done.stderr;
   } catch (error: any) {
+    if (error.killed) {
+      // The timeout's SIGTERM: what it printed so far is not a verdict.
+      const partial = `${typeof error.stdout === 'string' ? error.stdout : ''}${typeof error.stderr === 'string' ? error.stderr : ''}`;
+      return { output: partial, timedOut: true };
+    }
     // 126/127 are the shell saying it could not start the checker, not
     // the checker speaking.
     const exitedWithCode =
@@ -377,11 +394,8 @@ async function runCheckerCommand(
     stdout = typeof error.stdout === 'string' ? error.stdout : '';
     stderr = typeof error.stderr === 'string' ? error.stderr : '';
   }
-  return `${stdout}${stdout && stderr ? '\n' : ''}${stderr}`;
+  return { output: `${stdout}${stdout && stderr ? '\n' : ''}${stderr}`, timedOut: false };
 }
-
-/** A 68K checker unpacking a big archive is slow under the emulator. */
-const CHECKER_TIMEOUT_MS = 120_000;
 
 /**
  * Run a disk-based file checker from Fcheck/*.info
@@ -410,9 +424,10 @@ async function runDiskBasedChecker(
     // the file as the Amiga path a door would open; a native one the host path.
     const withOptions = checker.options ? `${checker.checker} ${checker.options}` : checker.checker;
     const amigaFile = amigaPathOf(config.get('dataDir'), filepath);
-    let outputText: string | null;
+    const timeoutMs = options.checkerTimeoutMs ?? CHECKER_TIMEOUT_MS;
+    let run: CheckerRun | null;
     if (isAmigaPath(parseAmigaCommandLine(withOptions).program)) {
-      outputText = await runCheckerCommand(`${withOptions} "${amigaFile ?? filepath}"`, '', nodeId, undefined, checker.stackSize);
+      run = await runCheckerCommand(`${withOptions} "${amigaFile ?? filepath}"`, '', nodeId, undefined, checker.stackSize, timeoutMs);
     } else {
       // Common patterns: %s = file path, %f = filename
       let command = withOptions
@@ -425,18 +440,27 @@ async function runDiskBasedChecker(
         command = `${command} "${filepath}"`;
       }
 console.log(`[FileTest] Running disk checker: ${command}`);
-      outputText = await runCheckerCommand(command, command, nodeId, nodeWorkDir);
+      run = await runCheckerCommand(command, command, nodeId, nodeWorkDir, undefined, timeoutMs);
     }
-    if (outputText === null) {
+    if (run === null) {
       // SystemTagList failing on an Amiga leaves OutPut_Of_Test empty: no
       // ERROR.n line matches, so the file passes (express.e:18581-18620).
 console.log(`[FileTest] Disk checker "${checker.checker}" cannot run, empty output`);
-      outputText = '';
     }
+    const outputText = run?.output ?? '';
 
     // OutPut_Of_Test (express.e:18577), then shown to the caller (:18590).
     await fs.writeFile(outputFile, outputText);
     options.onCheckerOutput?.(outputText);
+
+    // express.e has no timeout: SystemTagList (18581) blocks until the checker
+    // ends, so a check that never finishes never lets a file through. A checker
+    // this board had to kill did not finish: the file is held for the sysop
+    // (sysop decision 2026-10-12), never passed on a partial output.
+    if (run?.timedOut) {
+console.warn(`[FileTest] Disk checker "${checker.checker}" timed out after ${timeoutMs / 1000}s on ${filename}: held for review`);
+      return TestResult.FAILURE;
+    }
 
     // express.e:18593-18603: SCRIPT <file> <FilePart(file)> <node>, output to NIL:.
     if (checker.scriptPath) await runCheckerScript(checker.scriptPath, filepath, amigaFile, nodeId, checker.stackSize);
@@ -454,8 +478,8 @@ console.log(`[FileTest] Disk checker reported failure for ${filename}`);
 console.log(`[FileTest] Disk checker succeeded for ${filename}`);
     return TestResult.SUCCESS;
   } catch (error: any) {
-    // Not run at all: the executable is missing or refused, or the checker
-    // was killed by the timeout (no exit code).
+    // Not run at all: the executable is missing or refused. (A checker the
+    // timeout killed is not here: it returns timedOut and the file is held.)
 console.error(`[FileTest] Disk checker error: ${error.message}`);
 
     const errMsg = error.message?.toLowerCase() || '';
