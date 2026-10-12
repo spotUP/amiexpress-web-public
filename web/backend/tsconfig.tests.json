@@ -6,6 +6,11 @@
       "node",
       "jest"
     ],
+    "lib": [
+      "ES2022",
+      "DOM",
+      "DOM.Iterable"
+    ],
     "noEmit": true,
     "baseUrl": ".",
     "paths": {
@@ -14,6 +19,9 @@
       ],
       "@amiexpress/bbs-door-sdk/settings": [
         "../../sdk/core/settings"
+      ],
+      "@amiexpress/terminal/utils/key-overrides": [
+        "../../packages/terminal/src/utils/key-overrides"
       ]
     }
   },
