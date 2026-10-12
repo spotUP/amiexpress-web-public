@@ -41,7 +41,9 @@
 
 #define DOOR_NAME "DoorRepo"
 #define DOOR_VERSION "1.0"
-#define DOOR_CONFIG_PATH "DoorRepo.cfg"
+/* A door starts in AmiExpress's directory (BBS:), not its own; its own folder
+ * is PROGDIR:. */
+#define DOOR_CONFIG_PATH "PROGDIR:DoorRepo.cfg"
 #define DOOR_CACHE_NAME "listtxt.cache"
 
 /* Hard cap on catalog rows held in memory at once (brief requirement 10).
