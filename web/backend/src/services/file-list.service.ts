@@ -105,7 +105,7 @@ export async function deleteEntry(
 }
 
 /** Every listing of a conference that can name a file: DIR<n> and Hold. */
-function conferenceListings(ctx: FileListContext, conf: number): string[] {
+export function conferenceListings(ctx: FileListContext, conf: number): string[] {
   const conferencePath = getConferenceDir(conf, ctx.dataDir);
   let names: string[] = [];
   try {

@@ -12,7 +12,7 @@ import { runExecuteOn } from '../services/batch-scheduler';
 import { mailOnUpload } from '../services/mail-notification.service';
 import { getSystemTime } from '../utils/date-time.util';
 
-function resolveSysopStatsDir(bbsDataPath: string): string {
+export function resolveSysopStatsDir(bbsDataPath: string): string {
   const rootDir = path.join(bbsDataPath, 'SysopStats');
   if (existsSync(rootDir)) {
     return rootDir;
