@@ -28,6 +28,7 @@ import {
 } from "../utils/upload-notify.util";
 import {
   creditAccountTrackUploads,
+  creditUploadToToday,
   updateUploadStats,
 } from "../utils/download-ratios.util";
 import {
@@ -493,6 +494,15 @@ console.error(`[testFile] Error:`, error);
     // HOLD quarantine both failed the file exists nowhere but the playpen,
     // and crediting the caller's ratio/byte count for it would be paying out
     // for a file nobody can ever download.
+    // express.e:19524-19532: the bytes received raise today's download
+    // limit - every file the protocol brought in (uTBT, 16822), kilobytes
+    // under CREDITBYKB. A file lost to a dropped carrier goes to LCFILES
+    // (socket-handlers, lcfile) and never reaches here, which is E's
+    // `lcfile=FALSE` gate.
+    creditUploadToToday(session.user!, getACSConfig().toggles[ToggleFlags.CREDITBYKB] === true
+      ? Math.floor(data.size / 1024) & 0x003fffff
+      : data.size);
+
     const trackUploads = creditAccountTrackUploads(session.user!);
     if (rzmsg) {
       // A message's file earns the upload count (19377-19380) and nothing

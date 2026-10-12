@@ -117,7 +117,7 @@ describe('the FTP upload gate', () => {
    * with the collaborators stubbed and reads what it decided: the description
    * it filed, and the area it filed against.
    */
-  const acceptAnUpload = async (opts: { diz: string[] | null; tagline?: { text: string; use: number } }) => {
+  const acceptAnUpload = async (opts: { diz: string[] | null; tagline?: { text: string; use: number }; user?: Record<string, unknown> }) => {
     jest.resetModules();
 
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ftp-accept-'));
@@ -178,7 +178,7 @@ describe('the FTP upload gate', () => {
         filename: 'ARTPACK.LHA',
         nodeId: 1,
         conferenceId: 7,
-        user: { username: 'Knut' },
+        user: opts.user ?? { username: 'Knut' },
       },
       Readable.from([Buffer.from('payload')]),
     );
@@ -216,5 +216,19 @@ describe('the FTP upload gate', () => {
     expect(areaAsked).toEqual([7]);
     expect(filed.fileArea).toEqual(area);
     expect(filed.conferenceId).toBe(7);
+  });
+
+  // express.e:19684-19686: an FTP upload is background-checked
+  // (ftpStartFileCheck, 15205), and each checked file raises today's limit.
+  it('an upload raises what the caller may download today', async () => {
+    const user = { username: 'Knut', secLevel: 20, byteLimit: 1_000_000, todaysBytesLimit: 3_000_000 };
+    await acceptAnUpload({ diz: null, user });
+    expect(user.todaysBytesLimit).toBe(3_000_000 + Buffer.byteLength('payload'));
+  });
+
+  it('an upload leaves an unlimited caller unlimited', async () => {
+    const user = { username: 'Knut', secLevel: 20, byteLimit: 0, todaysBytesLimit: 0 };
+    await acceptAnUpload({ diz: null, user });
+    expect(user.todaysBytesLimit).toBe(0);
   });
 });

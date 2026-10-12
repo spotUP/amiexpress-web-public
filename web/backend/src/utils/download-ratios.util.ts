@@ -64,6 +64,25 @@ export function todaysBytesLimitOf(user: TodaysBytesFields): number {
  *
  * In bytes; $7fffffff is "no limit".
  */
+/**
+ * An upload raises today's limit (express.e:19530-19532 after a protocol
+ * upload, 19684-19686 per background-checked file, which is FTP's path):
+ *
+ *     IF (bytesADL<>$7fffffff)
+ *       loggedOnUser.todaysBytesLimit:=loggedOnUser.todaysBytesLimit+tempsize
+ *       bytesADL:=bytesADL+tempsize
+ *
+ * bytesADL is $7fffffff exactly when today's limit is 0 (28531-28535), so an
+ * unlimited caller gains nothing. `units` is already in bytes or, under
+ * CREDITBYKB, kilobytes, as the caller computes it. bytesADL here is derived
+ * from todaysBytesLimit on every read, so raising the limit raises it.
+ */
+export function creditUploadToToday(user: TodaysBytesFields, units: number): void {
+  const limit = todaysBytesLimitOf(user);
+  if (limit === 0) return;
+  user.todaysBytesLimit = limit + units;
+}
+
 export function todaysBytesAvailable(user: TodaysBytesFields): number {
   const limit = todaysBytesLimitOf(user);
   return limit !== 0 ? limit - (user.dailyBytesDld || 0) : MAX_INT;

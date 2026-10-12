@@ -18,7 +18,7 @@ import { db } from '../database';
 import { checkConfAccess } from '../handlers/message/message-scan.handler';
 import { ACSPermission } from '../constants/acs-permissions';
 import { checkSecurity, getACSConfig, ToggleFlags } from '../utils/acs.util';
-import { checkDownloadRatios, updateDownloadStats } from '../utils/download-ratios.util';
+import { checkDownloadRatios, creditAccountTrackUploads, creditUploadToToday, updateDownloadStats } from '../utils/download-ratios.util';
 import { resolveFile } from '../handlers/transfer/batch-download.handler';
 import { loadConfConfig } from '../services/conf-config.service';
 import { fileUploadedFile, areaForConference } from '../services/upload-filing.service';
@@ -415,6 +415,20 @@ console.log(`[FTP] no tagline for ${request.filename}: ${error instanceof Error 
         marker,
         ftp: { seconds: receiveSeconds, cps: receiveCps },
       });
+
+      /*
+       * TODAY'S LIMIT GROWS BY THE UPLOAD (express.e:19684-19686). An FTP
+       * upload is checked by doBackgroundCheck (ftpStartFileCheck, 15205),
+       * which credits every checked file, held or not. fsize is in
+       * kilobytes under CREDITBYKB only when it was booked to the account
+       * first (19678-19679: tracked and not held), as E's own order has it.
+       */
+      if (!outcome.orphaned) {
+        const user = request.user as unknown as Parameters<typeof creditAccountTrackUploads>[0];
+        const kb = getACSConfig().toggles[ToggleFlags.CREDITBYKB] === true
+          && initialStatus !== 'hold' && creditAccountTrackUploads(user);
+        creditUploadToToday(user, kb ? Math.floor(bytes / 1024) & 0x003fffff : bytes);
+      }
 
       // ftpd.e:1690 - 426 when the upload did not survive. A file the board
       // could not file anywhere is not a completed transfer, whatever the

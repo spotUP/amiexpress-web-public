@@ -2044,7 +2044,7 @@ console.error('BBSCREATEDROPFILE error:', error);
       // --- Bytes ------------------------------------------------------
       case 117: return String(uploadBytes);                                            // DT_BYTESUPLOAD (express.e:5353 formatBCD)
       case 118: return String(downloadBytes);                                          // DT_BYTEDOWNLOAD (express.e:5357)
-      case 119: return String(dailyByteLimit);                                         // DT_DAILYBYTELIMIT (express.e:5377)
+      case 119: return String(dailyByteLimit);                                         // DT_DAILYBYTELIMIT (express.e:1300)
       case 120: return String(dailyBytesDld);                                          // DT_DAILYBYTEDLD
       case 703: return calcSize(uploadBytes);                                          // DT_SIZEUPLOAD — express.e:5361 calcSizeText
       case 704: return calcSize(downloadBytes);                                        // DT_SIZEDOWNLOAD — express.e:5365
