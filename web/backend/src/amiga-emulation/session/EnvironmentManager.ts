@@ -25,6 +25,18 @@ export interface LocalVarData {
   value: string;
   flags: number;
   nodeAddr: number;  // Address of LocalVar structure in emulator memory
+  /** Bytes allocated at nodeAddr: the LocalVar, its name and its value. */
+  allocSize: number;
+}
+
+/**
+ * Where variables live: dos.library's exec AllocMem. A fixed bump region
+ * (it was 0x130000) sat inside the AllocMem heap, so a door's own block
+ * there was overwritten by the next SetVar.
+ */
+export interface VarMemory {
+  alloc(size: number): number;
+  free(addr: number, size: number): void;
 }
 
 /**
@@ -36,7 +48,7 @@ const DEFAULT_HOST_FACTS: HostFacts = { connection: 'web', client: 'ansi', versi
 export class EnvironmentManager {
   private emulator: MoiraEmulator;
   private variables: Map<string, LocalVarData>;
-  private nextVarAddr: number;
+  private memory: VarMemory;
   private localVarsListAddr: number;
 
   // GVF flags from dos/var.h
@@ -46,10 +58,10 @@ export class EnvironmentManager {
   private static readonly GVF_DONT_NULL_TERM = 1024;
   private static readonly GVF_SAVE_VAR = 2048;
 
-  constructor(emulator: MoiraEmulator, baseAddr: number = 0x130000) {
+  constructor(emulator: MoiraEmulator, memory: VarMemory) {
     this.emulator = emulator;
     this.variables = new Map();
-    this.nextVarAddr = baseAddr;
+    this.memory = memory;
     this.localVarsListAddr = 0;
   }
 
@@ -92,19 +104,17 @@ console.log(`[EnvironmentManager] SetVar("${name}", "${value}", flags=${flags})`
         this.deleteVar(name);
       }
 
-      // Allocate memory for LocalVar structure (24 bytes)
-      const nodeAddr = this.nextVarAddr;
-      this.nextVarAddr += 24;
-
-      // Allocate memory for name string
-      const nameAddr = this.nextVarAddr;
+      // One block: the 24-byte LocalVar, then its name, then its value.
+      const allocSize = 24 + name.length + 1 + value.length + 1;
+      const nodeAddr = this.memory.alloc(allocSize);
+      if (nodeAddr === 0) {
+console.error(`[EnvironmentManager] SetVar("${name}"): out of memory`);
+        return false;
+      }
+      const nameAddr = nodeAddr + 24;
       this.emulator.writeString(nameAddr, name);
-      this.nextVarAddr += name.length + 1;
-
-      // Allocate memory for value string
-      const valueAddr = this.nextVarAddr;
+      const valueAddr = nameAddr + name.length + 1;
       this.emulator.writeString(valueAddr, value);
-      this.nextVarAddr += value.length + 1;
 
       // Write LocalVar structure
       // struct Node (14 bytes)
@@ -129,7 +139,8 @@ console.log(`[EnvironmentManager] SetVar("${name}", "${value}", flags=${flags})`
         name,
         value,
         flags,
-        nodeAddr
+        nodeAddr,
+        allocSize,
       });
 
 console.log(`[EnvironmentManager] Created LocalVar at 0x${nodeAddr.toString(16)}`);
@@ -222,9 +233,7 @@ console.log(`[EnvironmentManager] DeleteVar("${name}")`);
 
     // Remove from map
     this.variables.delete(name);
-
-    // Note: We don't actually free memory in the emulator as it would complicate
-    // memory management. The memory will be reclaimed when the session ends.
+    this.memory.free(varData.nodeAddr, varData.allocSize);
 
     return true;
   }

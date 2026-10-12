@@ -4,7 +4,7 @@ import { amigaProtectionOf, hostModeOf } from "./dos/protection";
 import { boardRoot } from "../../utils/board-root.util";
 import type { CpuContext } from "./dos/cpu-context";
 import { isHunkExecutable, loadSegList, type LoadedSegList } from "../loader/load-seg";
-import { CHILD_RETURN_TRAP_ADDR } from "../memory-map";
+import { ALLOCMEM_HEAP_BASE, ALLOCMEM_HEAP_END, CHILD_RETURN_TRAP_ADDR } from "../memory-map";
 import { MoiraEmulator, CPURegister } from "../cpu/MoiraEmulator";
 import * as fs from "fs";
 import * as amigafs from "../../utils/amigafs";
@@ -56,12 +56,9 @@ import {
   RESERVED_HANDLES,
   DEBUG_FILE_OPS,
   READARGS_DEFAULT_BUFFER_SIZE,
-  READARGS_HEAP_BASE,
   DOS_ERRORS,
   ACCESS_READ,
   ACCESS_WRITE,
-  ENV_VAR_STRUCT_BASE,
-  ENV_STRING_BASE,
   ENV_VAR_STRUCT_SIZE,
   // Types
   FileHandle,
@@ -74,8 +71,6 @@ import {
   ReadArgsInputInfo,
   // Classes
   DosPathResolver,
-  ReadArgsParser,
-  DosEnvManager,
 } from "./dos";
 
 /**
@@ -218,9 +213,6 @@ export class DosLibrary {
   private firstOpenSeen: boolean = false;
   private envNormalizedMap: Map<string, string> = new Map();
   private envVarCache: Map<string, number> = new Map();
-  // Environment variable storage pointers (using constants from dos-types.ts)
-  private envVarStructNext: number;
-  private envStringNext: number;
 
   // Base paths for logical devices
   private rootPath: string = "";
@@ -278,7 +270,6 @@ export class DosLibrary {
   // CLI support (for GetArgStr, GetProgramName)
   private argStringPtr: number = 0; // Pointer to argument string
   private programName: string = ""; // Program name
-  private readArgsHeapPtr: number = READARGS_HEAP_BASE;
   private readArgsContexts: Map<number, ReadArgsContext> = new Map();
   private readArgsBufferPool: number[] = [];
   private doorFileLogPath: string;
@@ -289,9 +280,6 @@ export class DosLibrary {
     this.pathResolver = new DosPathResolver();
     this.pathResolver.setCurrentDirSource(this.currentDirSource);
     this.setBasePaths(detectedRoot);
-    this.readArgsHeapPtr = READARGS_HEAP_BASE;
-    this.envVarStructNext = ENV_VAR_STRUCT_BASE;
-    this.envStringNext = ENV_STRING_BASE;
 
     // Initialize standard I/O handles
     this.openFiles.set(STDIN_HANDLE, {
@@ -329,8 +317,11 @@ export class DosLibrary {
 
     this.doorFileLogPath = path.join(this.rootPath, "logs", "door-68k.log");
 
-    // Initialize EnvironmentManager with base address 0x130000 (after 0x120000 env storage)
-    this.envManager = new EnvironmentManager(emulator, 0x130000);
+    // Variables live in dosMemory (exec AllocMem).
+    this.envManager = new EnvironmentManager(emulator, {
+      alloc: (size) => this.dosMemory(size),
+      free: (addr, size) => this.dosFree(addr, size),
+    });
   }
 
   /**
@@ -343,8 +334,8 @@ console.error('[DosLibrary] EnvironmentManager not initialized');
       return;
     }
 
-    // Initialize LocalVars list at 0x120000
-    this.envManager.initializeLocalVarsList(0x120000);
+    // The LocalVars MinList head, in dosMemory like the variables on it.
+    this.envManager.initializeLocalVarsList(this.dosMemory(12));
 
     // Populate standard BBS and AmiExpress variables
     this.envManager.populateStandardVars(
@@ -511,8 +502,6 @@ debugLog(`[dos.library] Allocated FileHandle structs: stdin=0x${this.stdinBptr.t
   setEnvironment(env?: Record<string, string | undefined>): void {
     this.envNormalizedMap.clear();
     this.envVarCache.clear();
-    this.envVarStructNext = ENV_VAR_STRUCT_BASE;
-    this.envStringNext = ENV_STRING_BASE;
 
     if (!env) {
       return;
@@ -544,11 +533,7 @@ debugLog(`[dos.library] Allocated FileHandle structs: stdin=0x${this.stdinBptr.t
     if (existing) {
       return existing;
     }
-    const structAddr = this.dosMemory(ENV_VAR_STRUCT_SIZE, () => {
-      const addr = this.envVarStructNext;
-      this.envVarStructNext += ENV_VAR_STRUCT_SIZE;
-      return addr;
-    });
+    const structAddr = this.dosMemory(ENV_VAR_STRUCT_SIZE);
 
     const nameAddr = this.writeEnvString(name);
     const valueAddr = this.writeEnvString(value);
@@ -569,30 +554,38 @@ debugLog(
   }
 
   private writeEnvString(text: string): number {
-    const addr = this.dosMemory(text.length + 1, () => {
-      const next = this.envStringNext;
-      this.envStringNext += text.length + 1;
-      return next;
-    });
+    const addr = this.dosMemory(text.length + 1);
     this.emulator.writeString(addr, text);
     return addr;
   }
 
   /**
-   * Memory dos.library keeps for a program (environment variables, ReadArgs
-   * buffers): exec AllocMem, the allocator every other allocation uses.
-   * The fixed regions (ENV_VAR_STRUCT_BASE, ENV_STRING_BASE,
-   * READARGS_HEAP_BASE) sit inside AllocMem's arena, so a door's own
-   * AllocMem - or a program it runs, with its 64 KB stack - was handed the
-   * same addresses (measured: mULTI-cHECK's AllocMem got 0x122520, in the
+   * Memory dos.library keeps for a program (environment variables, locks,
+   * file handles, ReadArgs buffers, dos objects): exec AllocMem, the
+   * allocator every other allocation uses. Fixed regions inside AllocMem's
+   * arena were handed to a door's own AllocMem - or a program it runs, with
+   * its 64 KB stack (measured: mULTI-cHECK's AllocMem got 0x122520, in the
    * environment strings; C:LhA's stack ended at 0x142e40, over the ReadArgs
-   * strings mULTI-cHECK still needed). The fixed region is used only where
-   * no exec is attached (unit tests of dos.library alone).
+   * strings mULTI-cHECK still needed).
+   *
+   * With no exec attached (dos.library alone, in unit tests) nothing else
+   * owns the heap, so dos.library bump-allocates the heap region itself.
    */
-  private dosMemory(size: number, fixedRegion: () => number): number {
-    const addr = this.processExec?.allocMem(size, MEMF_PUBLIC_CLEAR) ?? 0;
-    return addr || fixedRegion();
+  private dosMemory(size: number): number {
+    const aligned = (size + 3) & ~3;
+    if (this.processExec) return this.processExec.allocMem(aligned, MEMF_PUBLIC_CLEAR);
+    const addr = this.standaloneHeapNext;
+    if (addr + aligned > ALLOCMEM_HEAP_END) return 0;
+    this.standaloneHeapNext += aligned;
+    return addr;
   }
+
+  /** Give back dosMemory (a no-op for the standalone bump arena). */
+  private dosFree(addr: number, size: number): void {
+    if (addr) this.processExec?.freeMem(addr, (size + 3) & ~3);
+  }
+
+  private standaloneHeapNext = ALLOCMEM_HEAP_BASE;
 
   /**
    * Set the door directory for PROGDIR: device
@@ -3996,15 +3989,14 @@ debugLog(`[dos.library] IsInteractive(handle=${handle})`);
    */
   private writeTextToHandle(handle: number, text: string): void {
     const size = text.length + 1;
-    const owned = this.processExec?.allocMem(size, MEMF_PUBLIC_CLEAR) ?? 0;
-    const addr = owned || 0x140000;
+    const addr = this.dosMemory(size);
     for (let i = 0; i < text.length; i++) this.emulator.writeMemory(addr + i, text.charCodeAt(i) & 0xff);
     this.emulator.writeMemory(addr + text.length, 0);
     this.emulator.setRegister(CPURegister.D1, handle);
     this.emulator.setRegister(CPURegister.D2, addr);
     this.emulator.setRegister(CPURegister.D3, text.length);
     this.Write();
-    if (owned) this.processExec?.freeMem(owned, size);
+    this.dosFree(addr, size);
   }
 
   /**
@@ -5438,11 +5430,7 @@ debugLog(`[dos.library] VFPrintf: Wrote ${formatted.length} bytes`);
       this.zeroMemory(addr, aligned);
       return addr;
     }
-    const addr = this.dosMemory(aligned, () => {
-      const next = this.readArgsHeapPtr;
-      this.readArgsHeapPtr += aligned;
-      return next;
-    });
+    const addr = this.dosMemory(aligned);
     this.zeroMemory(addr, aligned);
     return addr;
   }
@@ -6896,20 +6884,16 @@ console.error(`[dos.library] AllocDosObject: Unknown type ${type}`);
         return;
     }
 
-    // Allocate memory (use high memory area for DOS objects)
-    // We'll use a simple bump allocator starting at 0x160000
-    // NOTE: Libraries use 0x200000+, so we use 0x160000 to avoid collision
-    if (!this.dosObjectAllocBase) {
-      this.dosObjectAllocBase = 0x160000;
+    // exec AllocMem (dosMemory), as AllocDosObject does. It used to bump
+    // from a fixed 0x160000, inside the AllocMem heap: a door's own block
+    // there was zeroed under it.
+    const addr = this.dosMemory(size);
+    if (addr === 0) {
+      this.emulator.setRegister(CPURegister.D0, 0);
+      this.lastError = 103; // ERROR_NO_FREE_STORE
+      return;
     }
-
-    const addr = this.dosObjectAllocBase;
-    this.dosObjectAllocBase += size + 4; // Add 4 bytes padding for alignment
-
-    // Zero the memory
-    for (let i = 0; i < size; i++) {
-      this.emulator.writeMemory(addr + i, 0);
-    }
+    this.zeroMemory(addr, size);
 
     // Track the allocation for FreeDosObject
     if (!this.allocatedDosObjects) {
@@ -6945,6 +6929,7 @@ debugLog(`[dos.library] FreeDosObject: NULL pointer, ignoring`);
 console.warn(`[dos.library] FreeDosObject: Type mismatch (allocated=${info.type}, freeing=${type})`);
       }
       this.allocatedDosObjects.delete(ptr);
+      this.dosFree(ptr, info.size);
 debugLog(`[dos.library] FreeDosObject: Freed ${info.size} bytes at 0x${ptr.toString(16)}`);
     } else {
       // Not tracked - just ignore (door may have allocated it differently)
@@ -6953,7 +6938,6 @@ debugLog(`[dos.library] FreeDosObject: Unknown allocation at 0x${ptr.toString(16
   }
 
   // Track DOS object allocations
-  private dosObjectAllocBase?: number;
   private allocatedDosObjects?: Map<number, { type: number; size: number }>;
 
   /**
@@ -7344,9 +7328,9 @@ debugLog(`[dos.library] FindVar("${name}", type=${type})`);
     if ((type & 0xff) === 0) {
       localSearchAttempted = true;
       // Get current CLI structure from pr_CLI
-      const taskAddr = 0x090000; // Current task (must match ExecLibrary)
+      const taskAddr = this.processTask();
       const prCliOffset = 0xac;
-      const cliBPTR = this.emulator.readMemory32(taskAddr + prCliOffset);
+      const cliBPTR = taskAddr ? this.emulator.readMemory32(taskAddr + prCliOffset) : 0;
 
       if (cliBPTR === 0) {
 debugLog(`[dos.library]   No CLI structure found`);
@@ -7890,20 +7874,8 @@ debugLog(`[dos.library] FindVar → not found`);
    * Helper function to allocate temporary memory
    */
   private allocateTemp(size: number): number {
-    // AllocMem when exec is attached (see dosMemory); the fixed region at
-    // 0x140000 is READARGS_HEAP_BASE too, so locks, file handles and ReadArgs
-    // buffers used to be bump-allocated over each other.
-    return this.dosMemory((size + 3) & ~3, () => {
-      if (!this.tempMemoryAddr) {
-        this.tempMemoryAddr = 0x140000;
-      }
-      const addr = this.tempMemoryAddr;
-      this.tempMemoryAddr += ((size + 3) & ~3); // Align to 4 bytes
-      return addr;
-    });
+    return this.dosMemory(size);
   }
-
-  private tempMemoryAddr: number = 0x140000;
 
   /**
    * Allocate and write a FileHandle structure to emulated memory.

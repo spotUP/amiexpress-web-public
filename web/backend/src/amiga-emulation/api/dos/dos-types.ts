@@ -356,15 +356,6 @@ export const DOS_LVO = {
 /** Default buffer size for ReadArgs */
 export const READARGS_DEFAULT_BUFFER_SIZE = 4096;
 
-/** Base address for ReadArgs heap allocations */
-export const READARGS_HEAP_BASE = 0x140000;
-
-/** Base address for environment variable structures */
-export const ENV_VAR_STRUCT_BASE = 0x120000;
-
-/** Base address for environment variable strings */
-export const ENV_STRING_BASE = 0x122000;
-
 /** Size of each environment variable structure */
 export const ENV_VAR_STRUCT_SIZE = 0x40;
 

@@ -50,13 +50,22 @@ class MockEmulator {
   }
 }
 
+/** A bump allocator standing in for exec AllocMem. */
+function bumpMemory() {
+  let next = 0x130000;
+  return {
+    alloc: (size: number) => { const addr = next; next += (size + 3) & ~3; return addr; },
+    free: () => { /* not needed */ },
+  };
+}
+
 describe('EnvironmentManager', () => {
   let emulator: MockEmulator;
   let envManager: EnvironmentManager;
 
   beforeEach(() => {
     emulator = new MockEmulator();
-    envManager = new EnvironmentManager(emulator as any, 0x130000);
+    envManager = new EnvironmentManager(emulator as any, bumpMemory());
     // Initialize LocalVars list
     envManager.initializeLocalVarsList(0x120000);
   });
@@ -245,7 +254,7 @@ describe('AE_HOST reaches a door through GetVar', () => {
 
   beforeEach(() => {
     emulator = new MockEmulator();
-    envManager = new EnvironmentManager(emulator as any, 0x130000);
+    envManager = new EnvironmentManager(emulator as any, bumpMemory());
     envManager.initializeLocalVarsList(0x120000);
   });
 
