@@ -1,0 +1,17 @@
+{
+  "command": "MULTICHECK",
+  "name": "mULTI-cHECK upload advert",
+  "description": "The advert the upload checker adds to every LHA, LZH, LZX and ZIP archive and every text file that passes the file check",
+  "settings": [
+    {
+      "key": "advert",
+      "label": "Upload advert",
+      "type": "string",
+      "art": true,
+      "default": "uprough.txt",
+      "artMaxLines": 40,
+      "artMaxLineLength": 79,
+      "help": "Added to every archive that passes the check; the file checker icons in FCheck/ name uprough.txt, so keep that name. ANSI is kept as drawn. Markers filled in: @@-@@-@@ date, ##:##:## time, ?? node, -U-S-E-R-H-A-N-D-L-E- uploader, -U-S-E-R-L-O-C-A-T-I-O-N- location."
+    }
+  ]
+}
