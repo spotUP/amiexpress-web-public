@@ -889,20 +889,20 @@ class RexxMastService {
         return 0;
       }
 
-      const { HunkLoader } = require('../../amiga-emulation/loader/HunkLoader');
-      const hunkLoader = new HunkLoader();
-      const bytes = fs.readFileSync(resolvedPath);
-      const hunks = hunkLoader.parse(bytes, baseAddressHint);
-      if (!hunks?.segments?.length) {
-        console.warn(`[AREXX] LoadSeg failed: ${resolvedPath} parsed to 0 segments`);
+      // The one run-time hunk loader (dos.library LoadSeg uses it too).
+      const { loadSegList } = require('../../amiga-emulation/loader/load-seg');
+      const { DOOR_SEGMENT_BASE } = require('../../amiga-emulation/memory-map');
+      const loaded = loadSegList(
+        this.emulator,
+        fs.readFileSync(resolvedPath),
+        path.basename(filename),
+        baseAddressHint ?? DOOR_SEGMENT_BASE,
+      );
+      if (!loaded) {
+        console.warn(`[AREXX] LoadSeg failed: ${resolvedPath} is not a load file`);
         return 0;
       }
-      hunkLoader.load(this.emulator, hunks, path.basename(filename));
-      const segs = (hunks.segments as Array<{ address: number; bptr: number; size: number }>).map(s => ({
-        address: s.address >>> 0,
-        bptr: s.bptr >>> 0,
-        size: s.size >>> 0,
-      }));
+      const segs = loaded.segments as Array<{ address: number; bptr: number; size: number }>;
       const seg0 = segs[0];
       this.dynamicSegLists.push({
         filename,
