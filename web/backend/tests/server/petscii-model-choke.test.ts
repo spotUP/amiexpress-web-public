@@ -111,9 +111,14 @@ const cursorOf = (session: any) => {
   return { x: s.cursorX, y: s.cursorY, bank: s.charsetBank, pen: s.pen };
 };
 
-/** require() after jest.mock so the module graph sees the stubbed index. */
-const sessionManager = () => require('../../src/server/session-manager');
-const socketHandlers = () => require('../../src/server/socket-handlers');
+/**
+ * require() after jest.mock so the module graph sees the stubbed index - at
+ * module scope, while the file is collected. Loaded inside the first test that
+ * needed it, the socket-handler graph took ~9 s of that test's 10 s timeout and
+ * failed it whenever the machine was busy.
+ */
+const sessionManager = require('../../src/server/session-manager');
+const socketHandlers = require('../../src/server/socket-handlers');
 
 /**
  * `registerSocketHandlers` registers the auth handlers through a dynamic
@@ -146,7 +151,7 @@ describe('OC-3: the web transport carries the session terminal model', () => {
   it("a web PETSCII session's menu text moves the server's model", () => {
     const emits: Emit[] = [];
     const socket = makeSocket('choke-menu-1', emits);
-    const { setSession, deleteSession, getSession } = sessionManager();
+    const { setSession, deleteSession, getSession } = sessionManager;
     const session: any = { nodeId: 71, socketId: socket.id, petsciiMode: true, screenWidth: 40, screenHeight: 25 };
     setSession(socket.id, session);
     try {
@@ -171,7 +176,7 @@ describe('OC-3: the web transport carries the session terminal model', () => {
   it("an ANSI session's bytes and emit are untouched", () => {
     const downstream = jest.fn().mockReturnValue('downstream-return');
     const socket: any = { id: 'choke-ansi-1', emit: downstream };
-    const { setSession, deleteSession, getSession } = sessionManager();
+    const { setSession, deleteSession, getSession } = sessionManager;
     const session: any = { nodeId: 72, socketId: socket.id, terminalType: 'modern', screenWidth: 80 };
     setSession(socket.id, session);
     try {
@@ -204,7 +209,7 @@ describe('OC-3: the web transport carries the session terminal model', () => {
     // between is green either way and proves nothing.
     const emits: Emit[] = [];
     const socket = makeSocket('choke-modem-1', emits);
-    const { setSession, deleteSession, getSession } = sessionManager();
+    const { setSession, deleteSession, getSession } = sessionManager;
     const session: any = { nodeId: 73, socketId: socket.id, petsciiMode: true, screenWidth: 40 };
     setSession(socket.id, session);
     try {
@@ -235,8 +240,8 @@ describe('OC-3: the web transport carries the session terminal model', () => {
     const socket = makeSocket('choke-reconnect-new', emits);
     const {
       setSession, deleteSession, getSession, sessions, userSessions, socketToUser, socketToNodeId,
-    } = sessionManager();
-    const { registerSocketHandlers } = socketHandlers();
+    } = sessionManager;
+    const { registerSocketHandlers } = socketHandlers;
 
     const userId = 'choke-reconnect-user';
     const existingSession: any = {
@@ -319,8 +324,8 @@ describe('OC-3: the web transport carries the session terminal model', () => {
     // must too or it is one column out for the whole next screen.
     const emits: Emit[] = [];
     const socket = makeSocket('choke-flush-1', emits);
-    const { setSession, deleteSession } = sessionManager();
-    const { registerSocketHandlers } = socketHandlers();
+    const { setSession, deleteSession } = sessionManager;
+    const { registerSocketHandlers } = socketHandlers;
     const session: any = {
       nodeId: 75,
       socketId: socket.id,
@@ -376,7 +381,7 @@ describe('OC-3: the web transport carries the session terminal model', () => {
     const liveEmits: Emit[] = [];
     const dead = makeSocket('choke-stale-dead', deadEmits);
     const live = makeSocket('choke-stale-live', liveEmits);
-    const { setSession, deleteSession, getSession, sessions } = sessionManager();
+    const { setSession, deleteSession, getSession, sessions } = sessionManager;
     const session: any = {
       nodeId: 77, socketId: dead.id, petsciiMode: true, screenWidth: 40, screenHeight: 25,
     };

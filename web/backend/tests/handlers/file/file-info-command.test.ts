@@ -18,6 +18,11 @@ import { FileListingHandler } from '../../../src/handlers/file/file-listing.hand
 import { INTERNAL_COMMAND_NAMES } from '../../../src/handlers/command-handler/internal-command-names';
 import { config } from '../../../src/config';
 import { resetFileViewLayoutCache } from '../../../src/services/file-layout.service';
+// Imported here, not inside the test that dispatches: the command handler's
+// graph took the whole 10 s timeout of the first test to load it.
+import { handleCommand } from '../../../src/handlers/command.handler';
+import { LoggedOnSubState } from '../../../src/constants/bbs-states';
+import { displayNewFiles } from '../../../src/handlers/file/file.handler';
 
 const INDENT = ' '.repeat(33);
 const DIR = [
@@ -160,8 +165,6 @@ describe('FI <n>, after a listing', () => {
  */
 describe('FI reaches its handler from a typed command', () => {
   it('runs the file-info case rather than answering "no such command"', async () => {
-    const { handleCommand } = require('../../../src/handlers/command.handler');
-    const { LoggedOnSubState } = require('../../../src/constants/bbs-states');
 
     const session = {
       ...makeSession(),
@@ -223,7 +226,6 @@ describe('FI without a listing first', () => {
 
 describe('N prints the same row F does', () => {
   it('numbers its records and lays them out at the template columns', async () => {
-    const { displayNewFiles } = require('../../../src/handlers/file/file.handler');
     const session = makeSession();
     session.user.newSinceDate = new Date(2018, 0, 1);   // everything is new
     const wire: string[] = [];
