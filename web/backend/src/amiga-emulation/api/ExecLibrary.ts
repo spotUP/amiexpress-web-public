@@ -18,6 +18,7 @@ import { getSystemTime } from '../../utils/date-time.util';
 import * as memoryMap from "../memory-map";
 import { amigaGaps, doorOf } from '../instrumentation/amiga-gaps';
 import { getLvoName } from '../constants/lvo-names.generated';
+import { EMULATED_ATTN_FLAGS } from '../cpu/emulated-cpu';
 
 /**
  * ExecBase structure (616 bytes for V36+)
@@ -639,6 +640,7 @@ debugLog(
 
     // ExecBase specific fields
     this.emulator.writeMemory16(addr + 34, this.execBase.softVer); // SoftVer
+    this.emulator.writeMemory16(addr + 296, EMULATED_ATTN_FLAGS); // AttnFlags (CPU the core emulates)
     this.emulator.writeMemory32(addr + 276, this.execBase.thisTask); // ThisTask
     this.emulator.writeMemory32(addr + 378, this.execBase.libList); // LibList
     this.initializeExecList(addr + this.PORT_LIST_OFFSET); // PortList
