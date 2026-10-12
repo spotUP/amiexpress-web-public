@@ -51,6 +51,8 @@ export class SSHConnection extends EventEmitter {
   private stream: any = null;
   /** Written before the shell opened; flushed in order when it does. */
   private pendingWrites: Buffer[] = [];
+  /** Set by the one hangup (close() or the stream's own close); nothing is written after it. */
+  private closed = false;
   public sessionId: string;
   public nodeId: number;
   public session: BBSSession | null = null;
@@ -184,6 +186,7 @@ console.log(`[SSH] Shell requested on node ${this.nodeId}`);
         // Handle stream close
         this.stream.on('close', () => {
 console.log(`[SSH] Stream closed on node ${this.nodeId}`);
+          this.closed = true;
           this.connection.end();
         });
 
@@ -203,6 +206,7 @@ console.log(`[SSH] Exec request rejected: ${info.command}`);
    * Write data to SSH connection
    */
   public write(data: string | Buffer): void {
+    if (this.closed) return;
     if (this.stream) {
       this.stream.write(data);
       return;
@@ -252,10 +256,15 @@ console.log(`[SSH] Flushing ${queued.length} write(s) queued before the shell op
    * (sysop, 2026-09-30: "massive mouse leak when they log off").
    */
   public close(): void {
+    // One hangup: the stream's own 'close' handler also ends the connection,
+    // and a second close() must not write to a stream that is already down.
+    if (this.closed) return;
     if (this.stream) {
       this.stream.write(MOUSE_REPORTING_OFF);
+      this.closed = true;
       this.stream.close();
     }
+    this.closed = true;
     this.connection.end();
   }
 

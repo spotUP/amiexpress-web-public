@@ -259,6 +259,12 @@ export class TelnetConnection extends EventEmitter {
     this.socket.on('data', this.handleData.bind(this));
     this.socket.on('error', this.handleError.bind(this));
     this.socket.on('close', this.handleClose.bind(this));
+    // The caller hung up its half (FIN): net auto-ends our side right after
+    // 'end', so the reset has to go out BEFORE that listener - prepended. A
+    // caller who only closed its sending half still reads it.
+    if (typeof (this.socket as any).prependListener === 'function') {
+      this.socket.prependListener('end', () => this.write(MOUSE_REPORTING_OFF));
+    }
 
     // Initialize telnet negotiation (express.e:1029-1055)
     this.initializeTelnet();
@@ -649,7 +655,20 @@ console.log(`[Telnet] Node ${this.nodeId} charset REJECTED - none of [${offered.
    * Send telnet command sequence
    */
   private sendCommand(bytes: number[]): void {
+    if (!this.canWrite()) return;
     this.socket.write(Buffer.from(bytes));
+  }
+
+  /**
+   * The line is still ours to write to. A socket the caller closed, or one
+   * the board already ended (a second hangup, a door still drawing as the
+   * line went down, the peer's FIN auto-ending it), takes no more bytes:
+   * writing then raised `write after end`, an 'error' event on the
+   * connection, 2026-10-12.
+   */
+  private canWrite(): boolean {
+    const s = this.socket as Socket & { writableEnded?: boolean };
+    return !s.destroyed && !s.writableEnded;
   }
 
   /**
@@ -677,6 +696,7 @@ console.log(`[Telnet] Node ${this.nodeId} charset REJECTED - none of [${offered.
       }
     }
 
+    if (!this.canWrite()) return;
     this.socket.write(Buffer.from(output));
   }
 
@@ -708,8 +728,11 @@ console.log(`[Telnet] Node ${this.nodeId} charset REJECTED - none of [${offered.
    * door dropping carrier - so this is the one place that cannot be missed.
    */
   public close(): void {
-    if (!this.socket.destroyed) this.write(MOUSE_REPORTING_OFF);
-    this.socket.end();
+    // Idempotent: the first call writes mouse-off and ends; a later one finds
+    // the line already down and writes nothing (write() refuses an ended
+    // socket), so there is exactly one reset per hangup.
+    this.write(MOUSE_REPORTING_OFF);
+    if (this.canWrite()) this.socket.end();
   }
 
   /**
