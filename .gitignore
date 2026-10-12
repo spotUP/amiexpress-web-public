@@ -632,3 +632,6 @@ Beeb/software/**
 !Beeb/roms/.gitkeep
 !Beeb/roms/b/.gitkeep
 !Beeb/software/.gitkeep
+
+# amiscan parts (virus database, unpackers), fetched by the updater
+/AmiScan/

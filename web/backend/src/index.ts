@@ -1502,6 +1502,13 @@ console.log("[OK] Achievements bulletin refresher started");
     startNewsBulletins();
 console.log("[OK] News bulletins refresher started");
 
+    // amiscan's virus database and unpackers, kept current on the data
+    // volume (AmiScan/). Does nothing when the binary is not installed.
+    const { startAmiscanUpdates } = await import("./services/amiscan-update.service");
+    if (startAmiscanUpdates()) {
+console.log("[OK] AmiScan parts updater started");
+    }
+
     // Initialize web push notifications with database config
     const { initWebPush } = await import("./utils/web-push.util");
     // config-source-ok: the VAPID push keys are database-only - express.e has

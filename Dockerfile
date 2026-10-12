@@ -269,6 +269,22 @@ RUN apk add --no-cache \
 COPY --from=backend-builder /usr/local/bin/lsz /usr/local/bin/lsz
 COPY --from=backend-builder /usr/local/bin/lrz /usr/local/bin/lrz
 COPY --from=backend-builder /usr/local/bin/lha /usr/local/bin/lha
+
+# amiscan: the upload virus checker a sysop can name as a CHECKER in
+# FCheck/<EXT>.info (-bbs prints one line and exits 0 clean / 1 infected /
+# 2 corrupted / 3 could not check; docs/bbs.md). A static linux-x86_64 binary,
+# pinned by release and sha256. Its parts (virus database, unpackers) are NOT in
+# the image: the backend runs `amiscan -update -libs <boardRoot>/AmiScan` at
+# startup and daily (services/amiscan-update.service.ts).
+ARG AMISCAN_VERSION=0.1b1
+ARG AMISCAN_SHA256=2fea1e9f8ca56042586d8136ce909a918fc350e18594d8f2bcb6b1d563f3f9a0
+RUN set -eux; \
+    curl -fsSL "https://github.com/creep-ltx/amiscan/releases/download/v${AMISCAN_VERSION}/amiscan-${AMISCAN_VERSION}-linux-x86_64.tar.gz" -o /tmp/amiscan.tgz; \
+    echo "${AMISCAN_SHA256}  /tmp/amiscan.tgz" | sha256sum -c -; \
+    mkdir /tmp/amiscan; \
+    tar -xzf /tmp/amiscan.tgz -C /tmp/amiscan; \
+    install -m 0755 "/tmp/amiscan/amiscan-${AMISCAN_VERSION}-linux-x86_64/amiscan" /usr/local/bin/amiscan; \
+    rm -rf /tmp/amiscan /tmp/amiscan.tgz
 RUN ln -sf /usr/local/bin/lsz /usr/local/bin/sz \
  && ln -sf /usr/local/bin/lsz /usr/local/bin/sb \
  && ln -sf /usr/local/bin/lsz /usr/local/bin/sx \
