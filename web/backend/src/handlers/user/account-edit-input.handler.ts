@@ -30,7 +30,7 @@ import { nodeTooltype } from '../../utils/node-tooltypes.util';
 import { writeToCallersLog } from '../../utils/download-logging.util';
 
 /** The account being edited: the record merged over its row (load-account). */
-type EditedAccount = User & { msgBaseRJoin?: number };
+type EditedAccount = User;
 
 /**
  * The account as displayAccount draws it, for the sysop at the keys:
@@ -177,6 +177,8 @@ export async function handleAccountEditInput(socket: any, session: BBSSession, k
     // @ - Conference Accounting (21316-21318)
     case '@':
       session.subState = LoggedOnSubState.CONF_ACCOUNTING_VIEW;
+      // express.e:22104 `checkLock:=checkLockAccounts(f6)`, once on entry.
+      session.tempData.confAcctEditable = accountsUnlocked(session);
       session.tempData.confAcctConf = user.confRJoin || 1;
       session.tempData.confAcctMsgBase = user.msgBaseRJoin || 1;
       await displayConferenceAccounting(socket, session);
@@ -426,7 +428,13 @@ async function editField(socket: any, session: BBSSession, command: string): Pro
       return;
     case 'Q': // Daily Bytes Limit (21535-21546)
       out('\x1b[11;21H         \x1b[11;21H');
-      user.byteLimit = await longNumberInput(socket, session, user.byteLimit);
+      {
+        // Today's extra bytes ride over the new limit (21537-21544).
+        const todays = user.todaysBytesLimit ?? user.byteLimit;
+        const extra = todays !== 0 ? todays - user.byteLimit : 0;
+        user.byteLimit = await longNumberInput(socket, session, user.byteLimit);
+        user.todaysBytesLimit = user.byteLimit !== 0 ? user.byteLimit + extra : 0;
+      }
       changed();
       return;
     case 'R': // Time_Total (21547-21558)
@@ -458,7 +466,9 @@ async function editField(socket: any, session: BBSSession, command: string): Pro
       return;
     case 'W': // uucpa (21594-21598)
       out('\x1b[13;76H');
-      user.uuCP = (await uucpNumberInput(socket, session, user.uuCP ? 1 : 0)) !== 0;
+      // A CHAR: the number typed, its low byte (21596).
+      user.uucpa = (await uucpNumberInput(socket, session, user.uucpa ?? (user.uuCP ? 1 : 0))) & 0xff;
+      user.uuCP = user.uucpa !== 0;
       changed();
       return;
     case 'Y': { // chat limit (21599-21606): what was used stays used.
@@ -922,7 +932,12 @@ export async function handleConferenceAccountingInput(socket: any, session: BBSS
     return;
   }
 
-  // ~ - Save (express.e:22189)
+  // express.e:22227 - G I K M O P L and ~ live inside `IF checkLock`. A
+  // sysop the LockAccounts list leaves out may walk and leave; those keys do
+  // nothing and print nothing.
+  if (!session.tempData.confAcctEditable) return;
+
+  // ~ - Save (express.e:22282)
   if (command === '~') {
     await saveConferenceAccountingChanges(socket, session);
     await displayConferenceAccounting(socket, session);
@@ -983,9 +998,8 @@ function creditDateStr(seconds: number): string {
  * Display the Credit Maintenance screen.
  * 1:1 port of express.e:21898-21953.
  *
- * Deviation from express.e: no checkLockAccounts() gate and no creditLog()
- * (the web port has neither) - the whole account editor is already sysop-gated
- * behind command "1", the same as displayConferenceAccounting.
+ * checkLockAccounts gates the edits and the save (creditEditable, 21896), and
+ * the save writes the CreditLog (writeCreditLog, 22013-22021).
  */
 export function displayCreditMaintenance(socket: any, session: BBSSession): void {
   const user = session.tempData.editingUser;
@@ -1093,6 +1107,7 @@ export async function handleCreditMaintenanceInput(socket: any, session: BBSSess
     // T - terminate: zero the days (express.e:22000-22002).
     case 'T': user.creditDays = 0; session.tempData.creditChanges = true; displayCreditMaintenance(socket, session); return;
     // ~ - save the account (express.e:22003-22036).
+    // WEB_: express.e:22004 saves only `IF (logonType<LOGON_TYPE_REMOTE) OR (f6=TRUE)` - a local console sysop. This board has no local console and every caller is remote, so E's rule would make credit maintenance unsaveable here; the sysop chose to keep the remote save (2026-10-12).
     case '~': await saveCreditMaintenance(socket, session); displayCreditMaintenance(socket, session); return;
   }
 }
@@ -1127,7 +1142,8 @@ async function saveCreditMaintenance(socket: any, session: BBSSession): Promise<
  * matching express.e's res=FALSE default.
  */
 function accountsUnlocked(session: BBSSession): boolean {
-  const lockFile = path.join(config.getConfig().dataDir, 'LockAccounts');
+  // `\sLockAccounts` with cmds.bbsLoc (21161): the board's own directory.
+  const lockFile = path.join(boardRoot(), 'LockAccounts');
   if (!amigafs.existsSync(lockFile)) return true;
   try {
     const raw = amigafs.readFileSync(lockFile, 'utf8');

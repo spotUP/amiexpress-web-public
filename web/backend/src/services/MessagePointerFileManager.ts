@@ -78,6 +78,14 @@ function zeroRecord(): ConfBaseRecord {
   };
 }
 
+/**
+ * The confBase INTs (axobjects.e:145-154) are E's INT: 16 bits, signed on
+ * read. A store into one keeps the low 16 bits (a MOVE.W), so 40000 goes to
+ * disk as $9C40 and -1 as $FFFF. writeUInt16BE of the masked value writes
+ * exactly those bits; writeInt16BE of the same masked value threw
+ * ERR_OUT_OF_RANGE for anything >= 32768 or negative, and the record was
+ * never saved. deserializeConfBase reads them back signed, as E does.
+ */
 export function serializeConfBase(rec: ConfBaseRecord): Buffer {
   const buf = Buffer.alloc(CONFBASE_RECORD_SIZE);
   let off = 0;
@@ -93,16 +101,16 @@ export function serializeConfBase(rec: ConfBaseRecord): Buffer {
   buf.writeInt32BE(rec.confYM | 0, off);       off += 4;
   buf.writeInt32BE(rec.bytesDownload | 0, off); off += 4;
   buf.writeInt32BE(rec.bytesUpload | 0, off);   off += 4;
-  buf.writeInt16BE(rec.uploadTracking & 0xffff, off); off += 2;
-  buf.writeInt16BE(rec.unused & 0xffff, off);   off += 2;
+  buf.writeUInt16BE(rec.uploadTracking & 0xffff, off); off += 2;
+  buf.writeUInt16BE(rec.unused & 0xffff, off);   off += 2;
   buf.writeInt32BE(rec.unused2 | 0, off);       off += 4;
-  buf.writeInt16BE(rec.upload & 0xffff, off);   off += 2;
-  buf.writeInt16BE(rec.downloads & 0xffff, off); off += 2;
-  buf.writeInt16BE(rec.ratioType & 0xffff, off); off += 2;
-  buf.writeInt16BE(rec.ratio & 0xffff, off);    off += 2;
-  buf.writeInt16BE(rec.messagesPosted & 0xffff, off); off += 2;
-  buf.writeInt16BE(rec.access & 0xffff, off);   off += 2;
-  buf.writeInt16BE(rec.active & 0xffff, off);   off += 2;
+  buf.writeUInt16BE(rec.upload & 0xffff, off);   off += 2;
+  buf.writeUInt16BE(rec.downloads & 0xffff, off); off += 2;
+  buf.writeUInt16BE(rec.ratioType & 0xffff, off); off += 2;
+  buf.writeUInt16BE(rec.ratio & 0xffff, off);    off += 2;
+  buf.writeUInt16BE(rec.messagesPosted & 0xffff, off); off += 2;
+  buf.writeUInt16BE(rec.access & 0xffff, off);   off += 2;
+  buf.writeUInt16BE(rec.active & 0xffff, off);   off += 2;
 
   if (off !== CONFBASE_RECORD_SIZE) {
     throw new Error(`confBase serialization size mismatch: ${off} != ${CONFBASE_RECORD_SIZE}`);

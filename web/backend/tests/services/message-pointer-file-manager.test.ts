@@ -160,3 +160,24 @@ describe('MessagePointerFileManager', () => {
     expect(mgr.readRecord(1, 9999)).toBeNull();
   });
 });
+
+// axobjects.e:145-154: the confBase INTs are E's 16-bit INT. E stores the low
+// 16 bits and reads them back signed. The writer threw ERR_OUT_OF_RANGE for
+// 40000 or -1, so the record was not saved at all.
+describe('a Conf.DB INT outside 0..32767', () => {
+  it('writes 40000 and -1 as E stores them, and reads them back signed', () => {
+    const rec = deserializeConfBase(Buffer.alloc(CONFBASE_RECORD_SIZE));
+    rec.upload = 40000;
+    rec.downloads = -1;
+    rec.messagesPosted = 40000;
+    rec.ratio = -1;
+    const buf = serializeConfBase(rec);
+    expect(buf.readUInt16BE(60)).toBe(0x9c40); // upload
+    expect(buf.readUInt16BE(62)).toBe(0xffff); // downloads
+    const back = deserializeConfBase(buf);
+    expect(back.upload).toBe(40000 - 65536);
+    expect(back.downloads).toBe(-1);
+    expect(back.messagesPosted).toBe(40000 - 65536);
+    expect(back.ratio).toBe(-1);
+  });
+});

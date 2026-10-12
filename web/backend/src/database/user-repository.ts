@@ -91,6 +91,9 @@ const DISK_ONLY_FIELDS = [
   'forcePwdReset',
   'pwdLastUpdated',
   'newSinceDate',
+  'msgBaseRJoin',
+  'todaysBytesLimit',
+  'uucpa',
 ] as const;
 
 export interface UpdateUserOptions {

@@ -62,6 +62,10 @@ const FROM_DISK = [
   // moved only by a logoff after N (8197) or a conference's record under
   // conference accounting (4906).
   'newSinceDate',
+  // The record's own (axobjects.e:61-65), written as held since 2026-10-12.
+  'msgBaseRJoin',
+  'todaysBytesLimit',
+  'uucpa',
 ] as const satisfies readonly (keyof User)[];
 
 /**

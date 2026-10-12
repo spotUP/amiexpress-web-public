@@ -235,7 +235,7 @@ export function displayAccount(socket: any, user: any, slot: number, page: numbe
     out.push(`\x1b[12;36H\x1b[33mS> \x1b[32mCps UP\x1b[36m:\x1b[0m ${ls(unsignedLong(user.topUploadCPS), 10)}`);
     out.push(`\x1b[12;58H\x1b[33mT> \x1b[32mCps DN\x1b[36m:\x1b[0m ${ls(unsignedLong(user.topDownloadCPS), 10)}`);
     out.push(`\x1b[13;1H\x1b[33mU> \x1b[32mTime_Limit\x1b[36m:\x1b[0m \x1b[36m[\x1b[0m${ld(minutes(user.timeLimit), 8)}\x1b[36m]\x1b[0m mins    `);
-    out.push(` \x1b[33mV> \x1b[32mTime_Used\x1b[36m:\x1b[0m \x1b[36m[\x1b[0m${ld(minutes(user.timeUsed), 8)}\x1b[36m]\x1b[0m mins  \x1b[33mW> \x1b[32mUUCP\x1b[36m: \x1b[0m${user.uuCP ? 1 : 0}  `);
+    out.push(` \x1b[33mV> \x1b[32mTime_Used\x1b[36m:\x1b[0m \x1b[36m[\x1b[0m${ld(minutes(user.timeUsed), 8)}\x1b[36m]\x1b[0m mins  \x1b[33mW> \x1b[32mUUCP\x1b[36m: \x1b[0m${user.uucpa ?? (user.uuCP ? 1 : 0)}  `);
     out.push(`\x1b[14;1H\x1b[33mY> \x1b[32mChat_Limit\x1b[36m:\x1b[0m \x1b[36m[\x1b[0m${ld(minutes(user.chatLimit), 8)}\x1b[36m]\x1b[0m mins    `);
     // chatLimit-chatRemain: the port's chatUsed (UserFileManager reads it so).
     out.push(` \x1b[33mZ> \x1b[32mChat_Used\x1b[36m:\x1b[0m \x1b[36m[\x1b[0m${ld(minutes(user.chatUsed), 8)}\x1b[36m]\x1b[0m mins    `);
@@ -324,7 +324,7 @@ export function displayAccountInfo(socket: any, user: any, slot: number, page: n
     out.push(`\x1b[12;61H\x1b[32mCps DN\x1b[36m:\x1b[0m ${ls(unsignedLong(user.topDownloadCPS), 10)}`);
     out.push(`\x1b[13;17H${ld(minutes(user.timeLimit), 6)}`);
     out.push(`\x1b[13;51H${ld(minutes(user.timeUsed), 6)}`);
-    out.push(`\x1b[13;76H${user.uuCP ? 1 : 0}`);
+    out.push(`\x1b[13;76H${user.uucpa ?? (user.uuCP ? 1 : 0)}`);
     out.push(`\x1b[14;17H${ld(minutes(user.chatLimit), 6)}`);
     out.push(`\x1b[14;51H${ld(minutes(user.chatUsed), 6)}`);
   }

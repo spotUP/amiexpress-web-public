@@ -114,6 +114,16 @@ export interface User {
    * the disk's state alone" to every writer.
    */
   accountDeleted?: boolean;
+  /**
+   * user.data's msgBaseRJoin (INT), todaysBytesLimit (LONG) and uucpa (CHAR),
+   * axobjects.e:61-65. Disk-only like the fields above: the table has no
+   * column for the first two, and its `uucp` is the yes/no `uuCP`, while the
+   * record holds the number the sysop typed (express.e:21596). Undefined
+   * means "leave the disk's value alone" to every writer.
+   */
+  msgBaseRJoin?: number;
+  todaysBytesLimit?: number;
+  uucpa?: number;
   created: Date;
   updated: Date;
 }

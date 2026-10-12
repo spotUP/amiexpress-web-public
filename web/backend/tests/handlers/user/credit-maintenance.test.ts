@@ -16,7 +16,7 @@ jest.mock('../../../src/handlers/user/account.handler', () => ({
   displayAccountInfo: jest.fn(),
 }));
 const updateUser = jest.fn().mockResolvedValue(undefined);
-jest.mock('../../../src/database', () => ({ db: { updateUser } }));
+jest.mock('../../../src/database', () => ({ db: { updateUser, getConferences: jest.fn().mockResolvedValue([]) } }));
 // checkSecurity gates entry (ACS_CREDIT_ACCESS); amigafs backs the LockAccounts
 // allow-list and the CreditLog append. Both modules are imported at the top of
 // the handler, so their mock factories must not reference outer consts (TDZ) -
@@ -38,7 +38,9 @@ import {
   displayCreditMaintenance,
   handleCreditMaintenanceInput,
   handleAccountEditInput,
+  handleConferenceAccountingInput,
 } from '../../../src/handlers/user/account-edit-input.handler';
+import * as nodePath from 'path';
 
 const checkSecurity = checkSecurityImport as jest.Mock;
 const amigafs = {
@@ -269,5 +271,56 @@ describe('CreditLog (express.e:22013-22021)', () => {
     await handleCreditMaintenanceInput(makeSocket(), session, '~');
     const [, line] = amigafs.appendFileSync.mock.calls[0];
     expect(line).toContain('CREDIT ACCOUNT INACTIVATED');
+  });
+});
+
+// express.e:22104 checkLock:=checkLockAccounts(f6), then 22227: G I K M O P L
+// and ~ live inside `IF checkLock`. The port gated credit maintenance and the
+// editor, not conference accounting - a sysop the list leaves out could edit
+// and save every conference's figures.
+describe('conference accounting under LockAccounts (express.e:22227)', () => {
+  const saved = process.env.BBS_DATA_DIR;
+  beforeEach(() => { process.env.BBS_DATA_DIR = '/the-board'; });
+  afterEach(() => { if (saved === undefined) delete process.env.BBS_DATA_DIR; else process.env.BBS_DATA_DIR = saved; });
+
+  function accountingSession() {
+    return {
+      subState: LoggedOnSubState.ACCOUNT_EDITOR_EDIT,
+      inputBuffer: '',
+      user: { username: 'sysop', secLevel: 255 },
+      tempData: {
+        accountEditing: true, page: 0, editingSlot: 0,
+        editingUser: { id: 'u1', username: 'ConfGuy', slotNumber: 0, confRJoin: 1 },
+      },
+    } as any;
+  }
+
+  it('a LockAccounts file that does not name the sysop refuses the edits and the save, silently', async () => {
+    amigafs.existsSync.mockReturnValue(true);
+    amigafs.readFileSync.mockReturnValue('someone\n');
+    const session = accountingSession();
+    await handleAccountEditInput(makeSocket(), session, '@');
+    // `\sLockAccounts` with cmds.bbsLoc (21161): the board's own directory.
+    expect(amigafs.existsSync).toHaveBeenCalledWith(nodePath.join('/the-board', 'LockAccounts'));
+    expect(session.subState).toBe(LoggedOnSubState.CONF_ACCOUNTING_VIEW);
+
+    const socket = makeSocket();
+    await handleConferenceAccountingInput(socket, session, 'G');
+    expect(session.tempData.confAcctFieldEdit).toBeUndefined();
+    await handleConferenceAccountingInput(socket, session, '~');
+    expect(socket.getOutput()).toBe('');
+  });
+
+  it('without a LockAccounts file the sysop edits and saves', async () => {
+    amigafs.existsSync.mockReturnValue(false);
+    const session = accountingSession();
+    await handleAccountEditInput(makeSocket(), session, '@');
+
+    const socket = makeSocket();
+    await handleConferenceAccountingInput(socket, session, 'G');
+    expect(session.tempData.confAcctFieldEdit).toBe('G');
+    session.tempData.confAcctFieldEdit = undefined;
+    await handleConferenceAccountingInput(socket, session, '~');
+    expect(socket.getOutput()).toContain('\x1b[JSave\r\n');
   });
 });

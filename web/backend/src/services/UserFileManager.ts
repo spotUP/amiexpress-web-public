@@ -250,11 +250,18 @@ export class UserFileManager {
       creditTotalDate: encodeAmigaDate(user.creditTotalDate),
       creditTracking: user.creditTracking ?? 0,
       translatorID: 0,
-      msgBaseRJoin: 1, // Default to first message base (not stored in user record, only in session)
+      // The record's own three fields (axobjects.e:61-65), written as the
+      // caller holds them. They were constants - msgBaseRJoin 1, uucpa 0/1,
+      // todaysBytesLimit := dailyBytesLimit - so J's `.n` (express.e:21488),
+      // a preset's PRESET.MSGBASERJOIN (29366), a join's base (5136), a UUCP
+      // value above 1 (21596) and today's extra bytes (21537-21544, 19531)
+      // never reached the disk. A User that does not carry one keeps the
+      // record's (updateUserDataFile); a new record starts as before.
+      msgBaseRJoin: user.msgBaseRJoin ?? 1,
       confYM9: 0,
-      todaysBytesLimit: user.byteLimit,
+      todaysBytesLimit: user.todaysBytesLimit ?? user.byteLimit,
       protocol: 0,
-      uucpa: user.uuCP ? 1 : 0,
+      uucpa: user.uucpa ?? (user.uuCP ? 1 : 0),
       // Lines per screen, 0 = auto (express.e:11272-11314). It was a constant
       // 79, as if it were a line WIDTH, so every caller's pause length on disk
       // was 79 whatever they had chosen.
@@ -433,7 +440,8 @@ export class UserFileManager {
 
     // CHARs
     buffer.writeUInt8(struct.protocol, offset++);
-    buffer.writeUInt8(struct.uucpa, offset++);
+    // CHAR: E stores the low byte (`hoozer.uucpa:=uucpNumberInput(...)`).
+    buffer.writeUInt8(struct.uucpa & 0xff, offset++);
     buffer.writeUInt8(struct.lineLength, offset++);
     buffer.writeUInt8(struct.newUser, offset++);
 
@@ -1017,6 +1025,9 @@ console.log(`[UserFileManager] Serialized userMisc struct: ${offset} bytes (expe
       confAccess: userStruct.conferenceAccess,
       areaName: '', // Not stored in binary files
       uuCP: userStruct.uucpa > 0,
+      uucpa: userStruct.uucpa,
+      msgBaseRJoin: userStruct.msgBaseRJoin,
+      todaysBytesLimit: userStruct.todaysBytesLimit,
       topUploadCPS: keysStruct.upCPS2,
       topDownloadCPS: keysStruct.dnCPS2,
       byteLimit: userStruct.dailyBytesLimit,
@@ -1362,7 +1373,10 @@ console.error('[UserFileManager] Error reading user files:', error);
    * is deleted, and its new-since date. null when the slot is past the end of the file or
    * has never held an account.
    */
-  private readRecordState(slotNumber: number): { messagesPosted: number; deleted: boolean; newSinceDate: number } | null {
+  private readRecordState(slotNumber: number): {
+    messagesPosted: number; deleted: boolean; newSinceDate: number;
+    msgBaseRJoin: number; todaysBytesLimit: number; uucpa: number;
+  } | null {
     try {
       if (!Number.isInteger(slotNumber) || slotNumber < 1 || !fs.existsSync(this.userDataPath)) return null;
       const offset = (slotNumber - 1) * this.USER_STRUCT_SIZE;
@@ -1374,7 +1388,10 @@ console.error('[UserFileManager] Error reading user files:', error);
       } finally { fs.closeSync(fd); }
       const record = this.deserializeUserStruct(buffer, 0);
       if (!record.name || record.name.trim().length === 0) return null;
-      return { messagesPosted: record.messagesPosted, deleted: record.slotNumber === 0, newSinceDate: record.newSinceDate };
+      return {
+        messagesPosted: record.messagesPosted, deleted: record.slotNumber === 0, newSinceDate: record.newSinceDate,
+        msgBaseRJoin: record.msgBaseRJoin, todaysBytesLimit: record.todaysBytesLimit, uucpa: record.uucpa,
+      };
     } catch {
       return null;
     }
@@ -1415,6 +1432,12 @@ console.error('[UserFileManager] Error reading user files:', error);
         // The table has no newSinceDate column either: a User from a row
         // carries none, and the record's own date stands.
         if (user.newSinceDate === undefined) userStruct.newSinceDate = current.newSinceDate;
+        // Nor msgBaseRJoin, todaysBytesLimit or the uucpa byte. uuCP is the
+        // row's yes/no of that byte: the record's own value stands while the
+        // row agrees with it, and a row that flipped it writes 0 or 1.
+        if (user.msgBaseRJoin === undefined) userStruct.msgBaseRJoin = current.msgBaseRJoin;
+        if (user.todaysBytesLimit === undefined) userStruct.todaysBytesLimit = current.todaysBytesLimit;
+        if (user.uucpa === undefined && (current.uucpa > 0) === Boolean(user.uuCP)) userStruct.uucpa = current.uucpa;
         if (user.accountDeleted === undefined && current.deleted) {
           userStruct.slotNumber = 0;
           keysStruct.number = 0;

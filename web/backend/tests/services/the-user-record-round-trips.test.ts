@@ -123,4 +123,34 @@ describe('the user.data record', () => {
     expect(record(2).readInt16BE(SLOT_FIELD)).toBe(2);
     expect(mgr.readUserBySlot(2)!.accountDeleted).toBe(false);
   });
+
+  // axobjects.e:61-65 msgBaseRJoin INT, todaysBytesLimit LONG, uucpa CHAR.
+  // The writer stamped 1, dailyBytesLimit and 0/1 over them, so J's `.n`
+  // (express.e:21488), a preset's message base (29366), today's extra bytes
+  // (21537-21544) and a UUCP value of 7 (21596) were lost at every save.
+  it('keeps the rejoin message base, today\'s byte limit and the UUCP number it is given', () => {
+    mgr.writeUserFiles(user({ uuCP: true, uucpa: 7, msgBaseRJoin: 3, byteLimit: 1000, todaysBytesLimit: 1500 }), 2);
+    const onDisk = mgr.deserializeUserStruct(record(2), 0);
+    expect(onDisk.msgBaseRJoin).toBe(3);
+    expect(onDisk.todaysBytesLimit).toBe(1500);
+    expect(onDisk.uucpa).toBe(7);
+    const back = mgr.readUserBySlot(2)!;
+    expect(back.msgBaseRJoin).toBe(3);
+    expect(back.todaysBytesLimit).toBe(1500);
+    expect(back.uucpa).toBe(7);
+
+    mgr.updateUserDataFile(user({ uuCP: true, uucpa: 2, msgBaseRJoin: 4, byteLimit: 1000, todaysBytesLimit: 1200 }), 2);
+    const edited = mgr.deserializeUserStruct(record(2), 0);
+    expect([edited.msgBaseRJoin, edited.todaysBytesLimit, edited.uucpa]).toEqual([4, 1200, 2]);
+  });
+
+  it('a User from a row, which carries none of the three, leaves the record\'s values alone', () => {
+    mgr.writeUserFiles(user({ uuCP: true, uucpa: 7, msgBaseRJoin: 3, byteLimit: 1000, todaysBytesLimit: 1500 }), 2);
+    mgr.updateUserDataFile(user({ uuCP: true, byteLimit: 1000 }), 2);
+    const onDisk = mgr.deserializeUserStruct(record(2), 0);
+    expect([onDisk.msgBaseRJoin, onDisk.todaysBytesLimit, onDisk.uucpa]).toEqual([3, 1500, 7]);
+    // A row that turned UUCP off is the newer word on it.
+    mgr.updateUserDataFile(user({ uuCP: false }), 2);
+    expect(mgr.deserializeUserStruct(record(2), 0).uucpa).toBe(0);
+  });
 });
