@@ -83,15 +83,10 @@ export enum LoggedOnSubState {
   FILES_EDIT_SELECT = 'files_edit_select',
 
   // File Maintenance (FM command) - express.e:24889-25045
-  FM_YESNO_INPUT = 'fm_yesno_input',                  // Y/n prompt for using flagged files
   FM_FILENAME_INPUT = 'fm_filename_input',            // Filename pattern input
   FM_DIRSPAN_INPUT = 'fm_dirspan_input',              // Directory span input
-  FM_ACTION_INPUT = 'fm_action_input',                // D/M/V/Q action input
-  FM_REMOVE_FLAG_INPUT = 'fm_remove_flag_input',      // Remove from flagged list Y/n
-  FM_CONFIRM_DELETE = 'fm_confirm_delete',            // Confirm file deletion
+  FM_SCAN = 'fm_scan',                                // The scan's own keys go through utils/await-input; between prompts a key answers nothing
   CALLERSLOG_NODE_INPUT = 'callerslog_node_input',   // Which node's CallersLog (express.e:24490)
-  FM_MOVE_CONF_INPUT = 'fm_move_conf_input',          // Move destination CONFERENCE input (express.e:27019 getMoveConf)
-  FM_MOVE_DEST_INPUT = 'fm_move_dest_input',          // Move destination directory input
 
   // Command execution
   COMMAND_PASSWORD_INPUT = 'command_password_input',      // Command password input (express.e:4716-4730)

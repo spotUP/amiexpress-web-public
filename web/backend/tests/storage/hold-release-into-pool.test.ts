@@ -65,7 +65,7 @@ function harness(opts: { storageVolume?: number } = {}): Harness {
 
   const out: string[] = [];
   const socket = {
-    id: 'socket-fm',
+    id: `socket-fm-${Math.random()}`, // the output buffer is keyed by id: one per harness
     emit: (event: string, payload: unknown) => {
       if (event === 'ansi-output') out.push(String(payload));
     },
@@ -174,7 +174,8 @@ describe('releasing a HOLD file into a pooled area', () => {
 
     await performMove(h, 1);
 
-    expect(h.written()).toContain('DRIVE.2 is unavailable - try again later');
+    // express.e:27358 - the cause (the pool is down) goes to the server log.
+    expect(h.written()).toContain('Move operation failed, restoring directories');
     expect(h.written()).not.toContain('Move operation successful');
     // The bytes stay in HOLD, and the listings still say HOLD - a listing that
     // moved without its file is a file the area advertises and cannot serve.

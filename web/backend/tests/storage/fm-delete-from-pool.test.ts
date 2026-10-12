@@ -53,7 +53,7 @@ function harness(opts: { retentionDays?: number; filename?: string; db?: any } =
 
   const out: string[] = [];
   const socket = {
-    id: 'socket-fm-delete',
+    id: `socket-fm-delete-${Math.random()}`, // the output buffer is keyed by id: one per harness
     emit: (event: string, payload: unknown) => {
       if (event === 'ansi-output') out.push(String(payload));
     },
@@ -219,6 +219,7 @@ describe('deleting a file from a pooled area', () => {
 
     const out: string[] = [];
     const socket = {
+      id: `socket-fm-delete-${Math.random()}`,
       emit: (event: string, payload: unknown) => {
         if (event === 'ansi-output') out.push(String(payload));
       },

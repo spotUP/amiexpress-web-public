@@ -469,8 +469,13 @@ function loadMsgBody(conf: number, msgNumb: number): string[] | null {
   }
 }
 
-/** getMoveConf(TRUE) (26990-27085). null is a failure; conf 0 means "none chosen". */
-async function getMoveConf(socket: any, session: BBSSession): Promise<{ conf: number; msgBase: number } | null> {
+/**
+ * getMoveConf(msgbase) (27019-27085). null is a failure; conf 0 means "none
+ * chosen". The message mover asks with msgbase TRUE (moveMSG); FM's file move
+ * asks with FALSE (maintenanceFileMove, 27105) and never sees the message-base
+ * step.
+ */
+export async function getMoveConf(socket: any, session: BBSSession, msgbase = true): Promise<{ conf: number; msgBase: number } | null> {
   // eslint-disable-next-line @typescript-eslint/no-var-requires
   const { getConferences, parseMciCodes } = require('../screen.handler');
   // eslint-disable-next-line @typescript-eslint/no-var-requires
@@ -505,8 +510,9 @@ async function getMoveConf(socket: any, session: BBSSession): Promise<{ conf: nu
   emitText(socket, `\r\nYou have chosen conference: ${name}\r\n`);
 
   let msgBase = 1;
-  const bases: Array<{ conferenceId: number; id: number; name: string }> =
-    (getMessageBases() || []).filter((b: any) => b.conferenceId === dest);
+  const bases: Array<{ conferenceId: number; id: number; name: string }> = msgbase
+    ? (getMessageBases() || []).filter((b: any) => b.conferenceId === dest)
+    : [];
   if (bases.length > 1) {
     for (;;) {
       emitText(socket, `\r\n${movePrompt(session, 'messagebase')}`);

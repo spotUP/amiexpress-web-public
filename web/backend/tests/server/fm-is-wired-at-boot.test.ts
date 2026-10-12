@@ -58,7 +58,7 @@ interface ProbeResult {
 async function runFileMaintenance(fmModule: any): Promise<ProbeResult> {
   const out: string[] = [];
   const socket = {
-    id: 'socket-fm-boot',
+    id: `socket-fm-boot-${Math.random()}`, // the output buffer is keyed by id: one per run
     emit: (event: string, payload: unknown) => {
       if (event === 'ansi-output') out.push(String(payload));
     },

@@ -105,56 +105,8 @@ describe('splicing a moved entry into the destination listing', () => {
   });
 });
 
-describe('the destination conference step', () => {
-  function socket() {
-    const out: string[] = [];
-    return {
-      out,
-      emit: (event: string, data?: unknown) => { if (event === 'ansi-output') out.push(String(data)); },
-    } as any;
-  }
-
-  function session(): any {
-    return {
-      currentConf: 1,
-      user: { username: 'sysop', securityLevel: 255, confAccess: 'XXXXX' },
-      tempData: { fmContext: { maxDirs: 4, matchPos: 0, nextPos: 1 } },
-      subState: '',
-    };
-  }
-
-  it('asks for a conference before it asks for a directory', async () => {
-    const s = socket();
-    const sess = session();
-
-    await handler.promptMoveDestination(s, sess);
-
-    expect(s.out.join('')).toContain('Conference Number to move to (L to List):');
-    expect(sess.subState).toBe('fm_move_conf_input');
-  });
-
-  it('abandons the move on an empty answer, as express does', async () => {
-    // express.e:27028 - `IF StrLen(destConfStr)=0 THEN RETURN`, not an error.
-    const sess = session();
-    handler.afterAction = jest.fn(async () => undefined);
-
-    await handler.handleMoveConfInput(socket(), sess, '');
-
-    expect(handler.afterAction).toHaveBeenCalled();
-  });
-
-  it('lists the conferences for L and asks again', async () => {
-    const s = socket();
-    const sess = session();
-
-    await handler.handleMoveConfInput(s, sess, 'L');
-
-    const text = s.out.join('');
-    expect(text).toContain('Conference List');
-    expect(text).toContain('Conference Number to move to (L to List):');
-    expect(sess.subState).toBe('fm_move_conf_input');
-  });
-});
+// The destination-conference step (getMoveConf, express.e:27019-27049) is
+// driven through the whole FM flow in fm-says-what-express-says.test.ts.
 
 describe('the bytes follow the entry', () => {
   // express.e:27256-27340 moves the file into ULPATH.1 of the DESTINATION
@@ -197,7 +149,7 @@ describe('the bytes follow the entry', () => {
 
   function caller() {
     const out: string[] = [];
-    const socket: any = { emit: (event: string, data?: unknown) => { if (event === 'ansi-output') out.push(String(data)); } };
+    const socket: any = { id: `fm-move-${Math.random()}`, emit: (event: string, data?: unknown) => { if (event === 'ansi-output') out.push(String(data)); } };
     const session: any = { currentConf: 1, nodeId: 1, user: { id: 1, username: 'sysop' } };
     return { socket, session, said: () => out.join('') };
   }
@@ -231,60 +183,15 @@ describe('the bytes follow the entry', () => {
     const before2 = fs.readFileSync(path.join(root, 'Conf2', 'DIR1'), 'latin1');
     await handler.performMove(c.socket, c.session, context('GHOST.LHA'), 1, 2);
 
-    expect(c.said()).toContain('Could not move GHOST.LHA');
+    // express.e:27358 - and the caller is told no more than express tells him.
+    expect(c.said()).toContain('\r\n\r\nMove operation failed, restoring directories \r\n');
     expect(fs.readFileSync(path.join(root, 'Conf1', 'DIR1'), 'latin1')).toBe(before1);
     expect(fs.readFileSync(path.join(root, 'Conf2', 'DIR1'), 'latin1')).toBe(before2);
   });
 });
 
-describe('FM works with the caller\'s own flagged files', () => {
-  // express.e:24924-24944 asks "You have flagged files, do you wish to work
-  // with these files" when the caller's flag list is not empty, and
-  // 25025-25033 offers "Remove from flagged list" after each. FM read a
-  // brand-new FileFlagManager('', 0, 0) - always empty - so it never asked,
-  // and the removal acted on that throwaway list.
-  const fs = require('fs') as typeof import('fs');
-  const os = require('os') as typeof import('os');
-  const path = require('path') as typeof import('path');
-  const { setFileMaintenanceDependencies } = require('../../src/handlers/file/file-maintenance.handler');
-  const { FileFlagManager } = require('../../src/utils/file-flag.util');
-
-  let root: string;
-  beforeEach(() => {
-    root = fs.mkdtempSync(path.join(os.tmpdir(), 'fm-flags-'));
-    fs.mkdirSync(path.join(root, 'Conf1'), { recursive: true });
-    fs.writeFileSync(path.join(root, 'Conf1', 'DIR1'), dirLine('FLAGGED.LHA', '03-01-24'));
-    fs.writeFileSync(path.join(root, 'Conf1.info'), 'NDIRS=1\n');
-    setFileMaintenanceDependencies({ db: undefined, config: { get: (key: string) => (key === 'dataDir' ? root : undefined) } });
-  });
-  afterEach(() => fs.rmSync(root, { recursive: true, force: true }));
-
-  function caller() {
-    const out: string[] = [];
-    const socket: any = { emit: (event: string, data?: unknown) => { if (event === 'ansi-output') out.push(String(data)); } };
-    const flagManager = new FileFlagManager(root, 1, 1);
-    flagManager.addFlag('FLAGGED.LHA', 1);
-    const session: any = {
-      currentConf: 1, nodeId: 1, flagManager, tempData: {},
-      user: { id: 1, username: 'sysop', secLevel: 255, slotNumber: 1, securityFlags: 'T'.repeat(100) },
-    };
-    return { socket, session, said: () => out.join('') };
-  }
-
-  it('asks whether to work with them', async () => {
-    const c = caller();
-    await handler.handleFileMaintenanceCommand(c.socket, c.session, '');
-    expect(c.said()).toContain('You have flagged files, do you wish to work with these files');
-  });
-
-  it('"Remove from flagged list" takes the file off the caller\'s list', async () => {
-    const c = caller();
-    c.session.tempData.fmContext = { currentFile: { filename: 'FLAGGED.LHA' }, nextPos: 99 };
-    handler.continueSearch = jest.fn(async () => undefined);
-    await handler.handleRemoveFlagInput(c.socket, c.session, 'Y');
-    expect(c.session.flagManager.getAll()).toHaveLength(0);
-  });
-});
+// The flagged-files question and "Remove from flagged list" (express.e:24926,
+// 25024) are driven through the whole FM flow in fm-says-what-express-says.test.ts.
 
 describe('FM directory spans', () => {
   // express.e:24965-24984: Hold is hold/held and every other span is DIR<n>,

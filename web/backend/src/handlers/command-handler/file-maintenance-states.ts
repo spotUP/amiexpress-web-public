@@ -18,29 +18,27 @@ import { emitText } from '../../utils/output.util';
  */
 type FMHandler = (socket: any, session: BBSSession, input: string) => void | Promise<void>;
 
+/**
+ * The two line prompts before the scan. FM_SCAN maps to nothing that reads:
+ * the scan (FileMaintenanceHandler.runScan) reads its keys through
+ * utils/await-input, which handleCommand feeds before any sub-state, so a key
+ * that reaches here arrived between prompts and answers nothing - as the
+ * message reader's MSG_READER_NAV drops one.
+ */
+const ignoreBetweenPrompts: FMHandler = () => undefined;
+
 const FM_HANDLERS: Map<LoggedOnSubState, FMHandler> = new Map([
-  [LoggedOnSubState.FM_YESNO_INPUT, FileMaintenanceHandler.handleYesNoInput],
   [LoggedOnSubState.FM_FILENAME_INPUT, FileMaintenanceHandler.handleFilenameInput],
   [LoggedOnSubState.FM_DIRSPAN_INPUT, FileMaintenanceHandler.handleDirSpanInput],
-  [LoggedOnSubState.FM_ACTION_INPUT, FileMaintenanceHandler.handleActionInput],
-  [LoggedOnSubState.FM_REMOVE_FLAG_INPUT, FileMaintenanceHandler.handleRemoveFlagInput],
-  [LoggedOnSubState.FM_CONFIRM_DELETE, FileMaintenanceHandler.handleConfirmDeleteInput],
-  [LoggedOnSubState.FM_MOVE_CONF_INPUT, FileMaintenanceHandler.handleMoveConfInput],
-  [LoggedOnSubState.FM_MOVE_DEST_INPUT, FileMaintenanceHandler.handleMoveDestInput],
+  [LoggedOnSubState.FM_SCAN, ignoreBetweenPrompts],
 ]);
 
 /**
  * States that should echo input
  */
 const ECHO_STATES = new Set<LoggedOnSubState>([
-  LoggedOnSubState.FM_YESNO_INPUT,
   LoggedOnSubState.FM_FILENAME_INPUT,
   LoggedOnSubState.FM_DIRSPAN_INPUT,
-  LoggedOnSubState.FM_ACTION_INPUT,
-  LoggedOnSubState.FM_REMOVE_FLAG_INPUT,
-  LoggedOnSubState.FM_CONFIRM_DELETE,
-  LoggedOnSubState.FM_MOVE_CONF_INPUT,
-  LoggedOnSubState.FM_MOVE_DEST_INPUT,
 ]);
 
 /**
@@ -65,6 +63,9 @@ export async function handleFileMaintInput(
 
   if (!handler) {
     return false;
+  }
+  if (subState === LoggedOnSubState.FM_SCAN) {
+    return true;
   }
 
   // Initialize inputBuffer if needed
