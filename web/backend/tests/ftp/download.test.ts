@@ -305,12 +305,12 @@ describe('the gates a download passes', () => {
     await new Promise<void>((resolve) => rig.server.close(() => resolve()));
   });
 
-  it('says so when the board lists a file whose bytes are not there', async () => {
+  it('answers ftpd.e:1775 when the board lists a file whose bytes are not there', async () => {
     const rig = await listen({ resolveFile: async () => null });
 
     const { replies, control } = await retrieve(rig.port, 'RETR DEMO.LHA');
 
-    expect(replies[1]).toBe('550 DEMO.LHA: the board lists it, but its bytes are not here');
+    expect(replies[1]).toBe('550 DEMO.LHA: No such file or directory');
     expect(rig.charged).toEqual([]);
 
     control.destroy();

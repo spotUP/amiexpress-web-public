@@ -175,20 +175,15 @@ test('FEAT advertises the extensions, and says AUTH TLS only when it can do it',
   client.close();
 });
 
-test('a command the phase has not built yet says so, instead of pretending', async () => {
+test('the transfer verbs ask for a data connection first', async () => {
   h = await listen();
   const client = await Client.connect(h.port);
   await client.reply();
   await client.send('USER sysop');
   await client.send('PASS correct-horse');
 
-  // 502, never 500: a client told APPE does not exist concludes this is not
-  // an FTP server at all.
-  //
-  // The verb here keeps moving as phases land - it was LIST, then RETR, then
-  // STOR, and is now APPE. All three of those answer 425 without a data
-  // connection, which is what `tests/ftp/list-over-pasv.test.ts` drives.
-  expect(await client.send('APPE SOMETHING.LHA')).toBe('502 APPE not implemented yet');
+  // Each answers 425 without a data connection (ftpd.e:1697, 1860, 1946);
+  // `tests/ftp/list-over-pasv.test.ts` drives the rest.
   expect(await client.send('RETR SOMETHING.LHA')).toBe("425 Can't open data connection");
   expect(await client.send('STOR SOMETHING.LHA')).toBe("425 Can't open data connection");
   expect(await client.send('LIST')).toBe("425 Can't open data connection");

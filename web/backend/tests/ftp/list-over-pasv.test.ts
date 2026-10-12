@@ -192,6 +192,12 @@ describe('a caller who has just logged in', () => {
     expect(await lines.next()).toBe('200 Type set to A!!!');
     control.write('TYPE Q\r\n');
     expect(await lines.next()).toBe('502 Type not implemented');
+    // ftpd.e:1348 knows only I and A: L is refused, and so is a parameter
+    // that merely starts with one.
+    control.write('TYPE L 8\r\n');
+    expect(await lines.next()).toBe('502 Type not implemented');
+    control.write('TYPE AB\r\n');
+    expect(await lines.next()).toBe('502 Type not implemented');
 
     control.destroy();
   });
@@ -282,6 +288,15 @@ describe('LIST over a passive connection', () => {
     // ftpd.e:881 - capitalised facts, and `Perm=r`.
     expect(rows[0]).toMatch(/^Type=dir;Modify=\d{14};Perm=r; 001-General$/);
     expect(rows[1]).toContain('002-Elite');
+
+    control.destroy();
+  });
+
+  it('refuses MLSD of any path but none or / (ftpd.e:1907-1917)', async () => {
+    const { control, lines } = await login();
+
+    control.write('MLSD 001-General\r\n');
+    expect(await lines.next()).toBe('550 001-General: No such file or directory');
 
     control.destroy();
   });
@@ -404,46 +419,27 @@ describe('asking about one file', () => {
   });
 });
 
-describe('what the board will not do over FTP', () => {
+describe('verbs ftpd.e does not have', () => {
   /**
-   * `DELE` answered `500 command not recognized`, which tells a client the
-   * server is broken. The board simply does not hand out deletions, and
-   * saying so is a different answer from not knowing the verb.
+   * ftpd.e:2047 answers every verb outside its dispatcher (2012-2036) with
+   * `500 command not recognized` - DELE, RMD, MKD, RNFR, RNTO, SITE, STOU and
+   * APPE included. The port used to invent 550 / 502 sentences for them.
    */
-  it('refuses a delete with a reason, not with 500', async () => {
+  it('answers DELE RMD MKD RNFR RNTO SITE STOU APPE with ftpd.e\'s 500', async () => {
     const { control, lines } = await login();
 
-    control.write('DELE SOMETHING.LHA\r\n');
-    expect(await lines.next()).toBe(
-      '550 Deleting files over FTP is not permitted on this board'
-    );
+    for (const verb of ['DELE X.LHA', 'RMD 001-General', 'MKD newthing', 'RNFR X.LHA',
+      'RNTO Y.LHA', 'SITE HELP', 'STOU', 'APPE X.LHA']) {
+      control.write(`${verb}\r\n`);
+      expect(await lines.next()).toBe('500 command not recognized');
+    }
 
     control.destroy();
   });
 
-  it('refuses making and removing directories - a directory here is a conference', async () => {
+  it('still asks the built transfer verbs for a data connection', async () => {
     const { control, lines } = await login();
 
-    control.write('MKD newthing\r\n');
-    expect(await lines.next()).toMatch(/^550 Making directories over FTP is not permitted/);
-    control.write('RMD 001-General\r\n');
-    expect(await lines.next()).toMatch(/^550 Removing directories over FTP is not permitted/);
-    control.write('RNFR 001-General\r\n');
-    expect(await lines.next()).toMatch(/^550 Renaming files over FTP is not permitted/);
-
-    control.destroy();
-  });
-
-  it('still says 502 for a transfer verb that is coming, not 550', async () => {
-    // The distinction is the point, and the LINE between them moves as phases
-    // land: STOR is unbuilt (502), DELE is refused (550), and RETR - which
-    // stood here until phase 4 - now answers 425 without a data connection.
-    const { control, lines } = await login();
-
-    control.write('APPE SOMETHING.LHA\r\n');
-    expect(await lines.next()).toBe('502 APPE not implemented yet');
-    control.write('STOU\r\n');
-    expect(await lines.next()).toBe('502 STOU not implemented yet');
     // Built, and therefore asking for a data connection rather than saying no.
     control.write('RETR SOMETHING.LHA\r\n');
     expect(await lines.next()).toBe("425 Can't open data connection");

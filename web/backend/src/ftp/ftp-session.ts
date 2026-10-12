@@ -120,40 +120,11 @@ export interface FtpDeps {
 /** Commands a caller may use before logging in. */
 const PRE_LOGIN = new Set(['USER', 'PASS', 'QUIT', 'FEAT', 'NOOP', 'AUTH', 'SYST']);
 
-/**
- * Commands the protocol has but this phase has not built yet.
- *
- * They answer 502, not 500: 500 means "no such command", and a client that is
- * told that about LIST concludes the server is not an FTP server at all. The
- * set shrinks to nothing as phases 3-6 land.
- */
-const NOT_YET = new Set(['STOU', 'APPE']);
-
-/**
- * Commands the board will not carry over FTP at all, and why they say so.
- *
- * A refusal with a reason is worth having: `DELE` answered `500 command not
- * recognized`, which tells a client the server is broken rather than that the
- * board does not hand out deletions. Files leave this board through the
- * sysop's own tools, not through a caller's file manager.
- */
-const REFUSED: Record<string, string> = {
-  DELE: 'Deleting files over FTP is not permitted on this board',
-  RMD: 'Removing directories over FTP is not permitted - a directory here is a conference',
-  XRMD: 'Removing directories over FTP is not permitted - a directory here is a conference',
-  MKD: 'Making directories over FTP is not permitted - a directory here is a conference',
-  XMKD: 'Making directories over FTP is not permitted - a directory here is a conference',
-  RNFR: 'Renaming files over FTP is not permitted on this board',
-  RNTO: 'Renaming files over FTP is not permitted on this board',
-  SITE: 'No SITE commands on this board',
-};
-
 /** Verbs this phase answers, but only for a caller who has logged in. */
 const AFTER_LOGIN = new Set([
   'PWD', 'XPWD', 'CWD', 'XCWD', 'CDUP', 'TYPE', 'PBSZ', 'PROT', 'PASV', 'LIST', 'NLST',
   'MLSD', 'MLST', 'OPTS', 'EPSV', 'SIZE', 'MDTM', 'RETR', 'REST', 'STOR',
   'MODE', 'STRU', 'PORT',
-  ...Object.keys(REFUSED),
 ]);
 
 export function isLoopback(address: string | undefined): boolean {
@@ -301,7 +272,7 @@ export class FtpSession {
       // A verb the server HAS is refused for want of a login; one it does not
       // have is unknown. Telling a client "command not recognized" about PWD
       // makes it conclude the server cannot browse at all.
-      if (NOT_YET.has(verb) || AFTER_LOGIN.has(verb)) {
+      if (AFTER_LOGIN.has(verb)) {
         // WEB_: ftpd.e answers 500 here (ftpDoLogin, ftpd.e:2218) because its
         // login runs BEFORE the command loop; this port has one loop, so a
         // verb sent too early gets the RFC 959 "not logged in" code (530)
@@ -396,12 +367,8 @@ export class FtpSession {
       case 'STOR':
         return this.onStor(arg);
       default:
-        // WEB_ (open decision): ftpd.e answers every verb it lacks with
-        // `500 command not recognized` (ftpd.e:2047). These two keep their
-        // own text because 550 / 502 tell a client "refused" / "not
-        // implemented", which a 500 does not.
-        if (REFUSED[verb]) return this.reply(550, REFUSED[verb]);
-        if (NOT_YET.has(verb)) return this.reply(502, `${verb} not implemented yet`);
+        // ftpd.e:2047 - every verb it lacks (DELE, RMD, MKD, RNFR, RNTO, SITE,
+        // STOU, APPE, ...) gets the one sentence.
         return this.reply(500, 'command not recognized');
     }
   }
@@ -502,11 +469,8 @@ export class FtpSession {
     }
     if (!located) {
       channel.close();
-      // WEB_ (open decision): ftpd.e:1775 answers `550 <name>: No such file
-      // or directory` here. Deliberately NOT that flat sentence: the
-      // board LISTED this file, so telling a caller it does not exist sends
-      // him to argue with a sysop about a catalogue entry that is right there.
-      return this.reply(550, `${entry.name}: the board lists it, but its bytes are not here`);
+      // ftpd.e:1775 - the same sentence as a file that is not there.
+      return this.reply(550, `${entry.name}: No such file or directory`);
     }
 
     // ftpd.e:1764 - always BINARY, whatever TYPE says.
@@ -774,9 +738,10 @@ export class FtpSession {
    * move. A refusal here stops a client before it ever asks for a listing.
    */
   private onType(arg: string): void {
-    const mode = arg.trim().toUpperCase().charAt(0);
-    if (mode !== 'A' && mode !== 'I' && mode !== 'L') {
-      // ftpd.e:1352.
+    const mode = arg.trim().toUpperCase();
+    if (mode !== 'A' && mode !== 'I') {
+      // ftpd.e:1348 takes the whole parameter and only I or A; L (and
+      // anything else) is refused by ftpd.e:1352.
       return this.reply(502, 'Type not implemented');
     }
     this.binary = mode !== 'A';
@@ -846,6 +811,15 @@ export class FtpSession {
     // forgot PASV gets the same 425 whatever the server would have listed
     // (ftpd.e:1946). A 550 here would read as "that directory does not
     // exist".
+    if (format === 'machine' && arg !== '' && arg !== '/') {
+      // ftpd.e:1907-1917 - MLSD lists the caller's current directory for no
+      // parameter or `/`, and refuses any other path (a subdirectory
+      // included) before it looks at the data connection. The path is
+      // echoed as sent; the PASV connection is closed, as ftpd.e:1925 does.
+      this.passive?.close();
+      this.passive = null;
+      return this.reply(550, `${arg}: No such file or directory`);
+    }
     const channel = this.passive;
     if (!channel) return this.reply(425, "Can't open data connection");
     this.passive = null;
@@ -863,7 +837,8 @@ export class FtpSession {
       .map((part) => part.trim())
       .filter((part) => part.length > 0 && !part.startsWith('-'))
       .join(' ');
-    const target = resolvePath(this.cwd, requested || '.');
+    // ftpd.e:1909 - MLSD (`/` included) lists the current directory.
+    const target = resolvePath(this.cwd, format === 'machine' ? '.' : requested || '.');
     if (target === null || !fs.exists(this.user, target)) {
       channel.close();
       // ftpd.e:1917 (MLSD's refusal) - the one "not there" sentence.
