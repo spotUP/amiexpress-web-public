@@ -42,7 +42,7 @@ import { SysopDebugUtil, DebugSeverity } from "../utils/sysop-debug.util";
 import { sessionLogManager } from "./SessionLogManager";
 import { emitUserLogin } from "./bbs-event-emitter";
 import { getSystemTime } from "../utils/date-time.util";
-import { amiExpressDay } from '../utils/time-tracking.util';
+import { amiExpressDay, logonTodaysBytesLimit } from '../utils/time-tracking.util';
 import { beginLogoff } from "../server/logoff";
 import { getBoardConfig } from './bbs-config-file.service';
 import {
@@ -256,10 +256,9 @@ export async function runPostAuthLogin(
    * against the user's LAST-ON day rather than this session's - which
    * `lastLoginBeforeUpdate` is, captured before the write below overwrites it.
    *
-   * `todaysBytesLimit` has no counterpart to keep: express.e stores it, while
-   * file-status.handler.ts:147 derives it from `dailyBytesLimit ?? byteLimit`
-   * on every read, which is already what express.e's new-day branch sets it
-   * to. Nothing to reset, rather than something forgotten.
+   * `todaysBytesLimit` is reset here too (express.e:28518-28523): it lives in
+   * user.data and carries the sysop's and the uploads' extra bytes, so
+   * without this a credit given yesterday stood for ever.
    */
   const currDay = amiExpressDay(Math.floor(getSystemTime().getTime() / 1000));
   const lastDay = amiExpressDay(Math.floor(lastLoginBeforeUpdate.getTime() / 1000));
@@ -281,6 +280,14 @@ export async function runPostAuthLogin(
     user.dailyBytesDld = 0;
     user.timeTotal = user.timeLimit;
   }
+  // express.e:28518 (new day) and 28520-28523 (same day). A disk-only field
+  // (user-repository DISK_ONLY_FIELDS): it reaches user.data at logoff with
+  // the rest of the record, never the row.
+  user.todaysBytesLimit = logonTodaysBytesLimit(
+    user.todaysBytesLimit ?? (user.byteLimit || 0),
+    user.byteLimit || 0,
+    newDay,
+  );
 
   /*
    * The ROW follows the record, never the other way round: the fields the

@@ -42,6 +42,34 @@ export function amiExpressDay(unixSeconds: number): number {
 }
 
 /**
+ * TODAY'S DOWNLOAD LIMIT AT LOGON (express.e:28512-28523, processLoggedOnUser):
+ *
+ *     IF (lastDay<>currDay)
+ *       ...
+ *       loggedOnUser.todaysBytesLimit:=loggedOnUser.dailyBytesLimit
+ *     ELSE
+ *       IF loggedOnUser.dailyBytesLimit=0
+ *         loggedOnUser.todaysBytesLimit:=0
+ *       ELSE
+ *         IF loggedOnUser.todaysBytesLimit<loggedOnUser.dailyBytesLimit THEN
+ *           loggedOnUser.todaysBytesLimit:=loggedOnUser.dailyBytesLimit
+ *       ENDIF
+ *
+ * A new day drops yesterday's extra bytes (the sysop's Q edit,
+ * express.e:21537-21544, and the upload credit, 19531/19685); the same day
+ * keeps them but never lets today's limit sit below the daily one.
+ */
+export function logonTodaysBytesLimit(
+  todaysBytesLimit: number,
+  dailyBytesLimit: number,
+  newDay: boolean,
+): number {
+  if (newDay) return dailyBytesLimit;
+  if (dailyBytesLimit === 0) return 0;
+  return todaysBytesLimit < dailyBytesLimit ? dailyBytesLimit : todaysBytesLimit;
+}
+
+/**
  * express.e:28425-28432 getTodaysCalls - the calls a user has made today, 0
  * when their last call was on another day:
  *
