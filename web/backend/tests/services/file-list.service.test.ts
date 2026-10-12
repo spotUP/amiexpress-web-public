@@ -46,6 +46,29 @@ test('delete by name takes out that entry, all its lines, and its bytes', async 
   expect(fs.existsSync(path.join(root, 'Conf1', 'Files', 'OLD.LHA'))).toBe(false);
 });
 
+// Live cleanups needed SQL: FM Delete took the DIR line and the bytes but left
+// the upload's catalogue row and its FILES.BBS line behind.
+test('delete also removes the catalogue row and the FILES.BBS line the upload wrote', async () => {
+  fs.mkdirSync(path.join(root, 'Conf1', 'Upload'), { recursive: true });
+  fs.writeFileSync(path.join(root, 'Conf1', 'Upload', 'FILES.BBS'), [line('OLD.LHA', '01-01-20'), line('KEEP.LHA', '02-02-24')].join('\n') + '\n');
+  const deleteFileEntriesByName = jest.fn(() => 1);
+  await deleteEntry({ dataDir: root, db: { deleteFileEntriesByName } }, 1, 1, 'old.lha');
+  expect(deleteFileEntriesByName).toHaveBeenCalledWith('old.lha', 1);
+  const bbs = read('Conf1/Upload/FILES.BBS');
+  expect(bbs).not.toContain('OLD.LHA');
+  expect(bbs).toContain('KEEP.LHA');
+});
+
+test('delete keeps the row and FILES.BBS line while another listing still names the file', async () => {
+  fs.writeFileSync(path.join(root, 'Conf1', 'DIR2'), line('OLD.LHA', '01-01-20'));
+  fs.mkdirSync(path.join(root, 'Conf1', 'Upload'), { recursive: true });
+  fs.writeFileSync(path.join(root, 'Conf1', 'Upload', 'FILES.BBS'), line('OLD.LHA', '01-01-20') + '\n');
+  const deleteFileEntriesByName = jest.fn(() => 1);
+  await deleteEntry({ dataDir: root, db: { deleteFileEntriesByName } }, 1, 1, 'OLD.LHA');
+  expect(deleteFileEntriesByName).not.toHaveBeenCalled();
+  expect(read('Conf1/Upload/FILES.BBS')).toContain('OLD.LHA');
+});
+
 test('move by name: bytes to the destination, entry spliced in by date', async () => {
   await moveEntry(ctx(), { conf: 1, dir: 1, filename: 'OLD.LHA' }, { conf: 2, dir: 1 });
   expect(fs.existsSync(path.join(root, 'Conf2', 'Upload', 'OLD.LHA'))).toBe(true);

@@ -305,6 +305,21 @@ export class FileRepository extends BaseRepository<any> {
 
   }
 
+  /**
+   * FM Delete's catalogue half: every row for this name in the conference,
+   * whatever the case (the DIR line and the row may spell it differently).
+   * Returns rows removed.
+   */
+  deleteFileEntriesByName(filename: string, conferenceId: number): number {
+    const result = this.run(
+      `DELETE FROM file_entries
+        WHERE LOWER(filename) = LOWER(?)
+          AND areaid IN (SELECT id FROM file_areas WHERE conferenceid = ?)`,
+      [filename, conferenceId]
+    );
+    return result.changes;
+  }
+
   async incrementDownloadCount(id: number): Promise<void> {
 
     const stmt = this.prepare('UPDATE file_entries SET downloads = downloads + 1 WHERE id = ?');

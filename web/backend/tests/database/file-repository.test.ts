@@ -72,6 +72,18 @@ describe('FileRepository', () => {
     });
   });
 
+  describe('deleteFileEntriesByName', () => {
+    it('removes the row whatever the name\'s case, only in that conference', async () => {
+      const entry = makeFileEntry({ filename: `gone_${Date.now()}.lha` });
+      const id = await repo.createFileEntry(entry as any);
+      const areaConf = rawDb.prepare('SELECT conferenceid FROM file_areas WHERE id = ?').get(TEST_AREA_ID).conferenceid;
+
+      expect(repo.deleteFileEntriesByName(entry.filename.toUpperCase(), 99999)).toBe(0);
+      expect(repo.deleteFileEntriesByName(entry.filename.toUpperCase(), areaConf)).toBe(1);
+      expect(rawDb.prepare('SELECT id FROM file_entries WHERE id = ?').get(id)).toBeUndefined();
+    });
+  });
+
   describe('createFileEntry', () => {
     it('returns a numeric id', async () => {
       const id = await repo.createFileEntry(makeFileEntry());

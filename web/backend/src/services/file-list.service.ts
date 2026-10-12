@@ -14,6 +14,7 @@ import * as path from 'path';
 import { findCaseInsensitive, forgetDirectoryListings } from '../utils/amigafs';
 
 import { getConferenceDir } from '../utils/file-hold.util';
+import { getFilesBBSPath } from '../utils/files-bbs.util';
 import { getHoldDirFilePath, parseDirFile, type DirFileEntry } from '../utils/dir-file-reader.util';
 import { conferenceDownloadDirs, conferenceUploadDirs } from '../conferences/conference-paths';
 import { getStorageContext } from '../storage/storage-context';
@@ -99,7 +100,55 @@ export async function deleteEntry(
     bytesError = error instanceof Error ? error.message : String(error);
     console.error('[FileList] Physical delete failed:', error);
   }
+  forgetUploadTraces(ctx, conf, filename);
   return { retentionWarning, bytesError };
+}
+
+/** Every listing of a conference that can name a file: DIR<n> and Hold. */
+function conferenceListings(ctx: FileListContext, conf: number): string[] {
+  const conferencePath = getConferenceDir(conf, ctx.dataDir);
+  let names: string[] = [];
+  try {
+    names = fs.readdirSync(conferencePath).filter((name) => /^DIR\d+$/i.test(name));
+  } catch {
+    // no conference directory: nothing lists anything
+  }
+  return [...names.map((name) => path.join(conferencePath, name)), getHoldDirFilePath(conferencePath)];
+}
+
+/**
+ * Deleting a file removes every store an upload wrote, not only the DIR
+ * line and the bytes: the catalogue row (file_entries) and the FILES.BBS
+ * line in Upload/ (upload-filing.service writes both; express.e has
+ * neither, so there is nothing for FM D to mirror). Live cleanups needed SQL
+ * because only the DIR line and bytes went. A copy of the file that another
+ * listing of the conference still names keeps the row and the FILES.BBS line.
+ */
+function forgetUploadTraces(ctx: FileListContext, conf: number, filename: string): void {
+  const stillListed = conferenceListings(ctx, conf).some((file) => {
+    try {
+      return fs.existsSync(file) && findEntryLines(readDirLines(file), filename) !== null;
+    } catch {
+      return false;
+    }
+  });
+  if (stillListed) return;
+
+  try {
+    ctx.db?.deleteFileEntriesByName?.(filename, conf);
+  } catch (error) {
+    console.error(`[FileList] deleted ${filename} but could not remove its catalogue row:`, error);
+  }
+
+  const filesBbs = getFilesBBSPath(getConferenceDir(conf, ctx.dataDir));
+  try {
+    if (!fs.existsSync(filesBbs)) return;
+    const lines = readDirLines(filesBbs);
+    const where = findEntryLines(lines, filename);
+    if (where) writeDirLines(filesBbs, [...lines.slice(0, where.start), ...lines.slice(where.start + where.count)]);
+  } catch (error) {
+    console.error(`[FileList] deleted ${filename} but could not remove its FILES.BBS line:`, error);
+  }
 }
 
 /**

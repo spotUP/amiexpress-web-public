@@ -2760,6 +2760,10 @@ console.error(`[Database] Failed to update disk misc for slot ${slotNumber}:`, e
     return this.fileRepo!.releaseFromHold(...args);
   }
 
+  deleteFileEntriesByName(...args: Parameters<FileRepository['deleteFileEntriesByName']>): number {
+    return this.fileRepo!.deleteFileEntriesByName(...args);
+  }
+
   clearLocation(...args: Parameters<FileRepository['clearLocation']>): boolean {
     return this.fileRepo!.clearLocation(...args);
   }
