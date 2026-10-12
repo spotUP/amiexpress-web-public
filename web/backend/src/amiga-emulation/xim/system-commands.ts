@@ -6,6 +6,7 @@
 
 import { messagePointerFileManager, CONFBASE_RECORD_SIZE } from '../../services/MessagePointerFileManager';
 import { userFileManager } from '../../services/UserFileManager';
+import { sessionRecords } from '../../services/load-account';
 import { RECORD_FIELDS } from '../../services/load-account';
 import type { AccountSession } from '../../services/account.service';
 import type { User } from '../../database/types';
@@ -1159,8 +1160,9 @@ debugLog(
     const caller = this.callerOnSlot(slot);
     if (caller) {
       saveConferenceAccount(caller, Number(caller.currentConf) || 0);
-      if (userPtr) userBuf = userFileManager.userRecord(caller.user, slot);
-      if (keysPtr) keysBuf = userFileManager.userKeysRecord(caller.user, slot);
+      const inMemory = sessionRecords(caller.user, slot);
+      if (userPtr) userBuf = inMemory.user;
+      if (keysPtr) keysBuf = inMemory.keys;
       loadConferenceAccount(caller, Number(caller.currentConf) || 0);
     }
 

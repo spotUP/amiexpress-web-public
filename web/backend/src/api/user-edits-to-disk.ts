@@ -17,6 +17,7 @@
  */
 
 import { userFileManager } from '../services/UserFileManager';
+import { expertLetter } from '../services/expert-mode';
 
 /** The fields the admin's user form can change. */
 export interface UserEdits {
@@ -34,7 +35,8 @@ export interface UserEdits {
    * verbatim and never normalised here.
    */
   confAccess?: string;
-  expert?: boolean;
+  /** The admin form's checkbox (boolean) or express.e's CHAR ('X' on, 'N' off). */
+  expert?: boolean | 'X' | 'N';
   ansi?: boolean;
   passwordHash?: string;
   // Lockout state off user.misc (express.e eduser page 1, B/C/D). Named
@@ -105,7 +107,11 @@ console.warn(
   carry('secLevel');
   carry('timeLimit');
   carry('confAccess');
-  carry('expert');
+  // The form sends a checkbox; the record holds express.e's CHAR.
+  if (edits.expert !== undefined) {
+    updated.expert = expertLetter(edits.expert);
+    applied.push('expert');
+  }
   carry('ansi');
   carry('accountLocked');
   carry('invalidAttempts');

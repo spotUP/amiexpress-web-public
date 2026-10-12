@@ -193,3 +193,22 @@ describe('the conference access a sysop picks', () => {
     expect(written.confAccess).toBeUndefined();
   });
 });
+
+describe('the expert byte of a database-side edit', () => {
+  beforeEach(() => {
+    readAllUsers.mockReset();
+    readUserBySlot.mockReset();
+    updateUserDataFile.mockReset();
+    readAllUsers.mockReturnValue([{ username: 'Phantasm', slotNumber: 7 }]);
+    readUserBySlot.mockReturnValue(diskRecord());
+  });
+
+  it('carries the form checkbox as express.e letter X (on) and N (off)', () => {
+    applyUserEditsToDisk('Phantasm', { expert: true });
+    expect(updateUserDataFile.mock.calls[0][0]).toEqual({ expert: 'X' });
+    applyUserEditsToDisk('Phantasm', { expert: false });
+    expect(updateUserDataFile.mock.calls[1][0]).toEqual({ expert: 'N' });
+    applyUserEditsToDisk('Phantasm', { expert: 'X' });
+    expect(updateUserDataFile.mock.calls[2][0]).toEqual({ expert: 'X' });
+  });
+});

@@ -117,18 +117,25 @@ interface UserMiscFileStruct {
   unused: Buffer;                  // [86] CHAR
 }
 
-/** user.data `expert` is a CHAR holding 'X' or 'N' (express.e:26114-26119). */
-const EXPERT_X = 0x58;
-const EXPERT_N = 0x4e;
+import { expertToByte, byteToExpert } from './expert-mode';
 
-function expertToByte(expert: unknown): number {
-  return String(expert ?? '').toUpperCase() === 'X' ? EXPERT_X : EXPERT_N;
-}
-
-function byteToExpert(byte: number): string {
-  if (byte === EXPERT_X) return 'X';
-  if (byte === EXPERT_N) return 'N';
-  return '';
+/**
+ * A record with a patch overlaid, byte for byte: the bytes the patch does not
+ * change are the record's own, padding and garbage included. The changed
+ * bytes are found by serializing the record with and without the patch and
+ * comparing the two images.
+ */
+function overlayBytes<T extends object>(
+  raw: Buffer, patch: Partial<T>,
+  serialize: (s: T) => Buffer, deserialize: (b: Buffer, o: number) => T,
+): Buffer {
+  const out = Buffer.from(raw);
+  if (Object.keys(patch).length === 0) return out;
+  const current = deserialize(raw, 0);
+  const base = serialize(current);
+  const next = serialize({ ...current, ...patch });
+  for (let i = 0; i < raw.length; i++) if (base[i] !== next[i]) out[i] = next[i];
+  return out;
 }
 
 /** Record sizes and the offsets of the fields express.e acts on - see UserFileManager.recordLayout. */
@@ -1498,37 +1505,45 @@ console.error('[UserFileManager] Error reading user files:', error);
     serialize: (s: T) => Buffer, deserialize: (b: Buffer, o: number) => T,
   ): void {
     if (Object.keys(patch).length === 0) return;
+    const raw = this.readSlotBytes(filePath, size, slotNumber);
+    this.updateFileAtOffset(filePath, overlayBytes(raw, patch, serialize, deserialize), (slotNumber - 1) * size);
+  }
+
+  /** One slot's bytes as the file holds them; zeros when the file stops short of it. */
+  private readSlotBytes(file: string, size: number, slotNumber: number): Buffer {
+    const buffer = Buffer.alloc(size);
+    if (!fs.existsSync(file)) return buffer;
     const offset = (slotNumber - 1) * size;
-    const raw = Buffer.alloc(size);
-    if (fs.existsSync(filePath)) {
-      const fd = fs.openSync(filePath, 'r');
-      try {
-        if (fs.fstatSync(fd).size >= offset + size) fs.readSync(fd, raw, 0, size, offset);
-      } finally { fs.closeSync(fd); }
-    }
-    const current = deserialize(raw, 0);
-    const base = serialize(current);
-    const next = serialize({ ...current, ...patch });
-    const out = Buffer.from(raw);
-    for (let i = 0; i < size; i++) if (base[i] !== next[i]) out[i] = next[i];
-    this.updateFileAtOffset(filePath, out, offset);
+    const fd = fs.openSync(file, 'r');
+    try {
+      if (fs.fstatSync(fd).size >= offset + size) fs.readSync(fd, buffer, 0, size, offset);
+    } finally { fs.closeSync(fd); }
+    return buffer;
   }
 
   /** The record as it is on disk, for the fields a patch is computed against. */
-  private readRecordStructs(slotNumber: number): { data: UserFileStruct; keys: UserKeysFileStruct } {
-    const read = (file: string, size: number): Buffer => {
-      const buffer = Buffer.alloc(size);
-      if (!fs.existsSync(file)) return buffer;
-      const offset = (slotNumber - 1) * size;
-      const fd = fs.openSync(file, 'r');
-      try {
-        if (fs.fstatSync(fd).size >= offset + size) fs.readSync(fd, buffer, 0, size, offset);
-      } finally { fs.closeSync(fd); }
-      return buffer;
-    };
+  public readRecordStructs(slotNumber: number): { data: UserFileStruct; keys: UserKeysFileStruct } {
     return {
-      data: this.deserializeUserStruct(read(this.userDataPath, this.USER_STRUCT_SIZE), 0),
-      keys: this.deserializeUserKeysStruct(read(this.userKeysPath, this.USERKEYS_STRUCT_SIZE), 0),
+      data: this.deserializeUserStruct(this.readSlotBytes(this.userDataPath, this.USER_STRUCT_SIZE, slotNumber), 0),
+      keys: this.deserializeUserKeysStruct(this.readSlotBytes(this.userKeysPath, this.USERKEYS_STRUCT_SIZE, slotNumber), 0),
+    };
+  }
+
+  /**
+   * The user.data and user.keys records of a slot with a patch laid over them,
+   * NOT written: what the files will hold after patchUserRecord(slot, patch).
+   * express.e hands a door loggedOnUser - the record as loaded plus what the
+   * session changed - so the node files and the door's loadAccount buffer are
+   * this, and share patchUserRecord's overlay.
+   */
+  public overlaidRecords(slotNumber: number, patch: UserRecordPatch): { user: Buffer; keys: Buffer } {
+    return {
+      user: overlayBytes<UserFileStruct>(
+        this.readSlotBytes(this.userDataPath, this.USER_STRUCT_SIZE, slotNumber), patch.data ?? {},
+        s => this.serializeUserStruct(s), (b, o) => this.deserializeUserStruct(b, o)),
+      keys: overlayBytes<UserKeysFileStruct>(
+        this.readSlotBytes(this.userKeysPath, this.USERKEYS_STRUCT_SIZE, slotNumber), patch.keys ?? {},
+        s => this.serializeUserKeysStruct(s), (b, o) => this.deserializeUserKeysStruct(b, o)),
     };
   }
 

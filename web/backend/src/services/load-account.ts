@@ -219,3 +219,26 @@ export function fieldsDifferingFrom(next: Partial<User>, base: Partial<User>): P
   }
   return changed as Partial<User>;
 }
+
+/**
+ * What a door is handed for a caller on `slot`: express.e's loggedOnUser,
+ * which is the record as loadAccount read it plus what the session changed
+ * since (a door's loadAccount copies the struct, 4556; node<n>.user is
+ * Write(fh,loggedOnUser,SIZEOF user), 2935-2950).
+ *
+ * Starts from the slot's own bytes - password, rejoin, padding and all - and
+ * lays over them the fields where the session's account differs from the
+ * account as it loads from that record: the same overlay a save uses
+ * (UserFileManager.overlaidRecords), so there is no second mapper. A slot
+ * with no record of this caller (a new account not yet saved) has nothing to
+ * start from and gets a whole record built from the account.
+ */
+export function sessionRecords(user: User, slot: number): { user: Buffer; keys: Buffer } {
+  const loaded = slot > 0 ? loadAccount({ ...user, slotNumber: slot }) : null;
+  if (!loaded || !loaded.fromDisk) {
+    return { user: userFileManager.userRecord(user, slot), keys: userFileManager.userKeysRecord(user, slot) };
+  }
+  const changed = fieldsDifferingFrom(user, loaded.user);
+  const patch = userFileManager.userFieldsToPatch(changed, slot, userFileManager.readRecordStructs(slot));
+  return userFileManager.overlaidRecords(slot, patch);
+}

@@ -30,6 +30,7 @@ import { BBSHealthCheckService } from '../services/bbs-health-check.service';
 import { SSHKeyUtil } from '../utils/ssh-key.util';
 import { userFileManager } from '../services/UserFileManager';
 import { fieldsDifferingFrom } from '../services/load-account';
+import { expertLetter } from '../services/expert-mode';
 import {
   readConftopSettings, writeConftopSettings, MAX_FITTING_ROWS, CONFTOP_CHROME_ROWS,
 } from '../conferences/conftop-settings';
@@ -2269,7 +2270,7 @@ console.log(`[API] Deduplicated to ${users.length} unique users`);
         if (updates.email !== undefined) updatedUser.email = updates.email;
         if (updates.secLevel !== undefined) updatedUser.secLevel = updates.secLevel;
         if (updates.timeLimit !== undefined) updatedUser.timeLimit = updates.timeLimit;
-        if (updates.expert !== undefined) updatedUser.expert = updates.expert;
+        if (updates.expert !== undefined) updatedUser.expert = expertLetter(updates.expert);
         if (updates.ansi !== undefined) updatedUser.ansi = updates.ansi;
         /*
          * Conference access, which the form has offered since 19dd8acf6 and
@@ -2339,7 +2340,7 @@ console.log(`[API] Deduplicated to ${users.length} unique users`);
             if (updates.phone !== undefined) dbUpdates.phone = updates.phone;
             if (updates.email !== undefined) dbUpdates.email = updates.email;
             if (updates.timeLimit !== undefined) dbUpdates.timeLimit = updates.timeLimit;
-            if (updates.expert !== undefined) dbUpdates.expert = updates.expert;
+            if (updates.expert !== undefined) dbUpdates.expert = expertLetter(updates.expert);
             if (updates.ansi !== undefined) dbUpdates.ansi = updates.ansi;
             // The row too: updateUser re-syncs the WHOLE user from the row to
             // disk (user-repository updateUser), so a row still saying 'XXX'

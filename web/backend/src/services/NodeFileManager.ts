@@ -17,6 +17,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { userFileManager, type UserFileStruct, type UserKeysFileStruct } from './UserFileManager';
 import { User } from '../types';
+import { sessionRecords } from './load-account';
 
 /**
  * Manages node status files for door compatibility
@@ -40,7 +41,7 @@ export class NodeFileManager {
 console.log(`[NodeFileManager] Writing ${filePath} for user ${user.username}`);
 
     // Create binary buffer matching E struct layout
-    const buffer = userFileManager.userRecord(user, user.slotNumber ?? 0);
+    const buffer = sessionRecords(user, user.slotNumber ?? 0).user;
 
     // Write atomically (tmp file + rename)
     const tmpPath = `${filePath}.tmp`;
@@ -58,7 +59,7 @@ console.log(`[NodeFileManager] Wrote node${nodeId}.user (${buffer.length} bytes)
 
 console.log(`[NodeFileManager] Writing ${filePath} for user ${user.username}`);
 
-    const buffer = userFileManager.userKeysRecord(user, user.slotNumber ?? 0);
+    const buffer = sessionRecords(user, user.slotNumber ?? 0).keys;
 
     const tmpPath = `${filePath}.tmp`;
     fs.writeFileSync(tmpPath, buffer);
