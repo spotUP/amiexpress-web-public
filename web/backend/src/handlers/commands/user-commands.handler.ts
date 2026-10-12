@@ -152,6 +152,13 @@ export async function fileReceivedUploads(
   const { handleDizExtractionAndDescription, handleUploadBatchComplete } =
     require('../../server/file-socket-handlers');
 
+  // express.e:17327-17347 (BG_EXIT, wait) and receivePlayPen 18029-18032: the
+  // files the background check filed during the transfer are in the stats
+  // already, and are no longer in the playpen the filing loop walks.
+  const { finishBackgroundFileCheck } = require('../../services/background-file-check.service');
+  const background: { count: number; bytes: number } = await finishBackgroundFileCheck(socket, session);
+  if (background.count > 0) received = received.filter((file) => fsSync.existsSync(file));
+
   // Target file area: prefer what displayUploadInterface already
   // resolved (file.handler.ts:720 sets session.tempData.fileArea
   // = uploadArea via the conference's upload-path Tooltype). Only
@@ -181,7 +188,13 @@ export async function fileReceivedUploads(
     // emits "Time increased" then drops back to the main loop.
     // The batch-complete step reads the upload context; RZ never set one,
     // so without this an empty RZ receive printed nothing at all.
-    session.tempData = { ...(session.tempData as any), uploadStartTime: ulStartTime, uploadedFiles: 0, uploadedBytes: 0 } as any;
+    session.tempData = {
+      ...(session.tempData as any),
+      uploadStartTime: ulStartTime,
+      uploadedFiles: background.count,
+      uploadedBytes: background.bytes,
+      backgroundChecked: background.count,
+    } as any;
     await handleUploadBatchComplete(socket, session);
     return;
   }
@@ -213,8 +226,9 @@ export async function fileReceivedUploads(
     batchUpload: false,
     currentUploadIndex: 0,
     filesProcessedCount: 0,
-    uploadedFiles: 0,
-    uploadedBytes: 0,
+    uploadedFiles: background.count,
+    uploadedBytes: background.bytes,
+    backgroundChecked: background.count,
     skipDizExtraction: false,
     pendingZmodemFiles: received.slice(1).map((fp: string) => ({
       path: fp,
@@ -382,8 +396,12 @@ console.error('[ZMODEM] Failed to ensure playpen:', err);
     {
       const { isLrzszAvailable, LrzszTransferManager } = require('../../services/lrzsz-transfer.service');
       if (isLrzszAvailable()) {
+        // express.e:17279-17283 fileReceive: the background check starts with the receive.
+        const { startBackgroundFileCheck } = require('../../services/background-file-check.service');
+        const background = startBackgroundFileCheck(session);
         const lrzManager = new LrzszTransferManager({
           session,
+          onFileReceived: background?.onFileReceived,
           transport: { type: transport.type, send: transport.send },
           direction: 'upload',
           paths: [playpen],

@@ -99,6 +99,12 @@ console.log('[ENV] Uploading');
 
   // express.e:25608-25619 internalCommandRZ - no header, directly starts upload
   socket.emit('ansi-output', '\r\n');
+  // 25613-25617: the node's BGFILECHECK decides whether this upload is checked
+  // in the background (every web / telnet / SSH caller is a remote logon).
+  {
+    const { nodeHasBackgroundFileCheck } = require('../../services/background-file-check.service');
+    session.bgFileCheck = nodeHasBackgroundFileCheck(session.nodeId || 1);
+  }
 
   // Start ZMODEM receive directly into the node playpen (matches express.e uploadaFile -> fileReceive path).
   const bbsRoot =
@@ -175,8 +181,12 @@ console.error('[ZMODEM] Failed to ensure playpen:', err);
       spawnLrzszForUpload();
     });
     function spawnLrzszForUpload() {
+      // express.e:17279-17283 fileReceive: the background check starts with the receive.
+      const { startBackgroundFileCheck } = require('../../services/background-file-check.service');
+      const background = startBackgroundFileCheck(session);
       const lrzManager = new LrzszTransferManager({
         session,
+        onFileReceived: background?.onFileReceived,
         transport: { type: transportType, send: sender },
         direction: 'upload',
         paths: [playpen],

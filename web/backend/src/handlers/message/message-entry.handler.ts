@@ -1184,7 +1184,9 @@ async function sendMessageFiles(socket: any, session: BBSSession, conf: number, 
   // 10722-10725 CreateDir
   try { amigafs.mkdirSync(wanted, { recursive: true }); } catch (err) { console.error('[X] CreateDir failed:', err); }
   const dir = amigafs.resolvePath(wanted) ?? wanted;
-  // 10726-10727 setEnvStat(ENV_UPLOADING) and bgFileCheck:=FALSE have no home here.
+  // 10726-10727 setEnvStat(ENV_UPLOADING) has no home here; bgFileCheck:=FALSE
+  // does: a message's file is filed by the message, never in the background.
+  session.bgFileCheck = false;
   emitText(socket, '\r\n');
   session.rzmsg = { dir, msgNumb };
   try {

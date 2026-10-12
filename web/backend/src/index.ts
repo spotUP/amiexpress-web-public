@@ -267,6 +267,8 @@ export interface UploadSessionContext {
   filesProcessedCount?: number; // Sequential counter for tracking processed files
   uploadedFiles?: number; // Total files uploaded in this session
   uploadedBytes?: number; // Total bytes uploaded in this session
+  /** Files the background check filed during the transfer (express.e bgData.checkedCount, 19059). */
+  backgroundChecked?: number;
   currentUploadedFile?: { filename: string; path?: string; size: number };
   currentDescription?: string[];
   hasDiz?: boolean;
@@ -395,6 +397,15 @@ export interface BBSSession {
   uploadReturn?: import('./services/upload-end.service').UploadReturn;
   /** express.e rzmsg (240): the upload is the X of a message - its files go into <msgBaseLocation>F<msgNumb>. */
   rzmsg?: { dir: string; msgNumb: number };
+  /**
+   * express.e bgFileCheck (330): the node's BGFILECHECK, raised by the RZ
+   * command (25614) and cleared by a message's file (10728). It stays set
+   * until one of them changes it, so a later U upload is checked in the
+   * background too. See services/background-file-check.service.
+   */
+  bgFileCheck?: boolean;
+  /** The background file check running for the upload in progress (express.e's bg thread). */
+  backgroundFileCheck?: import('./services/background-file-check.service').BackgroundFileCheck;
   /** express.e `editor` (219): the full-screen editor's object, what FULLEDIT reads and writes back (XIM EDITOR_STRUCT). */
   editor?: import('./amiga-emulation/xim/editor-struct').EditorState;
   pendingDisplayInputs?: string[];

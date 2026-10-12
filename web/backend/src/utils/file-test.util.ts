@@ -431,6 +431,9 @@ async function runDiskBasedChecker(
   const nodeId = options.nodeId ?? nodeOfPath(filepath) ?? 1;
 
   try {
+    // express.e's nodeWorkDir exists from the node's start; this board makes a
+    // node's directories when something first needs them.
+    await fs.mkdir(nodeWorkDir, { recursive: true });
     // express.e:18566-18589: `CHECKER OPTIONS <file>`. An Amiga checker gets
     // the file as the Amiga path a door would open; a native one the host path.
     const withOptions = checker.options ? `${checker.checker} ${checker.options}` : checker.checker;

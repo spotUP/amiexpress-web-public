@@ -143,6 +143,16 @@ describe('Post-upload banner + stats + time bonus (E-15, express.e:19053/19072/1
     expect(out).toContain(`${STATS}\r\n\r\nTime increased`);
   });
 
+  test('names the files the background check filed during the transfer (express.e:19082-19085)', async () => {
+    const c = aCaller();
+    await runPostUpload(c.socket, c.session, finished({ backgroundChecked: 2 }));
+    expect(c.said()).toContain(`${STATS}\r\n\r\n2 files were checked and posted in the background during upload\r\n\r\nTime increased`);
+
+    const none = aCaller();
+    await runPostUpload(none.socket, none.session, finished({ backgroundChecked: 0 }));
+    expect(none.said()).not.toContain('posted in the background');
+  });
+
   test('credits (ulTTTM * 3 / 2) + 60 seconds to the session time limit (express.e:19109, 19130)', async () => {
     const c = aCaller({ timeLimit: 3600 });
     await runPostUpload(c.socket, c.session, finished());

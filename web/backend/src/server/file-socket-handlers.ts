@@ -284,6 +284,87 @@ function promptForDescription(
 }
 
 /**
+ * The uploader is credited for a file that was filed (express.e:19377-19382
+ * uploads+1, 19442-19446 the bytes): his CPS record, the database mirror of his
+ * counters, and the in-memory user the logoff saves. The caller has already
+ * decided the account tracks uploads and the file is his to be credited for.
+ */
+export async function bookUploadCredit(session: BBSSession, size: number): Promise<void> {
+  // Update CPS tracking on user object using real transfer speed from frontend
+  const realUploadCPS = session.tempData?.lastUploadCPS || undefined;
+  await updateUploadStats(session.user!, size, realUploadCPS);
+
+  await db.run(
+    "UPDATE user_stats SET bytes_uploaded = bytes_uploaded + $1, files_uploaded = files_uploaded + 1 WHERE user_id = $2",
+    [size, session.user!.id]
+  );
+
+  // express.e:19444 CREDITBYKB books kilobytes.
+  const booked = getACSConfig().toggles[ToggleFlags.CREDITBYKB] === true
+    ? Math.floor(size / 1024) & 0x003fffff
+    : size;
+  session.user!.uploads = (session.user!.uploads || 0) + 1;
+  session.user!.bytesUpload = (session.user!.bytesUpload || 0) + booked;
+}
+
+/**
+ * What the board does once an upload IS filed, for the caller's own record and
+ * everyone else's: the CallersLog line (express.e:9493), the LiveChat event,
+ * the NEW_UPLOAD webhook, the achievements. One body for the file a caller
+ * described at the prompt and the file the background check filed while the
+ * transfer ran (services/background-file-check.service).
+ */
+export async function announceFiledUpload(
+  session: BBSSession,
+  filed: { filename: string; size: number; description: string; descriptionFromDiz: boolean },
+): Promise<void> {
+  await callersLog(
+    session.user!.id,
+    session.user!.username,
+    "Uploaded file",
+    filed.filename
+  );
+
+  // Emit BBS event for LiveChat integration
+  try {
+    const conference = await db.getConferenceById(session.currentConf);
+    emitUpload({
+      username: session.user!.username,
+      nodeId: session.nodeId || 1,
+      fileName: filed.filename,
+      fileSize: filed.size,
+      conferenceId: session.currentConf,
+      conferenceName: conference?.name,
+      timestamp: Date.now(),
+    });
+  } catch (error) {
+console.error("[BBSEvent] Error emitting upload event:", error);
+  }
+
+  // Trigger webhook for file upload
+  try {
+    const { webhookService, WebhookTrigger } = await import(
+      "../services/webhook.service"
+    );
+    const conference = await db.getConferenceById(session.currentConf);
+
+    await webhookService.sendWebhook(WebhookTrigger.NEW_UPLOAD, {
+      username: session.user!.username,
+      userId: session.user!.id,
+      gdprConsented: !!(session.user as any)?.gdprConsentAt,
+      filename: filed.filename,
+      filesize: filed.size,
+      conference: conference?.name || "Unknown",
+      description: filed.description.substring(0, 100),
+    });
+  } catch (error) {
+console.error("[Webhook] Error sending file upload webhook:", error);
+  }
+  // Achievements (SP2): the upload, the description, the ratio. Non-throwing.
+  reportUpload(session as any, filed.size, filed.description, filed.descriptionFromDiz);
+}
+
+/**
  * Process batch file - handles file testing, database entry, and stats updates
  * Exported for use by command.handler.ts when processing uploads after description entry
  */
@@ -517,82 +598,19 @@ console.error(`[testFile] Error:`, error);
       }
     }
     if (trackUploads && !foundDupe && !quarantineFailed && !rzmsg) {
-      // Update CPS tracking on user object using real transfer speed from frontend
-      const realUploadCPS = session.tempData?.lastUploadCPS || undefined;
-      await updateUploadStats(session.user!, data.size, realUploadCPS);
-
-      await db.run(
-        "UPDATE user_stats SET bytes_uploaded = bytes_uploaded + $1, files_uploaded = files_uploaded + 1 WHERE user_id = $2",
-        [data.size, session.user!.id]
-      );
-
-      // express.e:19444 CREDITBYKB books kilobytes.
-      const booked = getACSConfig().toggles[ToggleFlags.CREDITBYKB] === true
-        ? Math.floor(data.size / 1024) & 0x003fffff
-        : data.size;
-      session.user!.uploads = (session.user!.uploads || 0) + 1;
-      session.user!.bytesUpload = (session.user!.bytesUpload || 0) + booked;
+      await bookUploadCredit(session, data.size);
     }
 
-    // Log file upload (express.e:9493 callersLog)
-    // Express.e: Only log successful uploads (not duplicates)
-    // Also skipped when quarantineFailed: the file was never filed anywhere.
+    // Log, announce, webhook, achievements: only for a file that was filed
+    // (not a duplicate, not one the board could not move, not a message's file).
     if (!foundDupe && !quarantineFailed && !rzmsg) {
-      await callersLog(
-        session.user!.id,
-        session.user!.username,
-        "Uploaded file",
-        currentFile.filename
-      );
+      await announceFiledUpload(session, {
+        filename: currentFile.filename,
+        size: data.size,
+        description: finalDescription,
+        descriptionFromDiz,
+      });
     }
-
-    // Emit BBS event for LiveChat integration
-    // Express.e: Only emit events for successful uploads (not duplicates)
-    // Also skipped when quarantineFailed: other users must not see an
-    // announcement for a file that can never be listed or fetched.
-    if (!foundDupe && !quarantineFailed && !rzmsg) {
-      try {
-        const conference = await db.getConferenceById(session.currentConf);
-        emitUpload({
-          username: session.user!.username,
-          nodeId: session.nodeId || 1,
-          fileName: currentFile.filename,
-          fileSize: data.size,
-          conferenceId: session.currentConf,
-          conferenceName: conference?.name,
-          timestamp: Date.now(),
-        });
-      } catch (error) {
-console.error("[BBSEvent] Error emitting upload event:", error);
-      }
-    }
-
-    // Trigger webhook for file upload
-    // Express.e: Only trigger webhooks for successful uploads (not duplicates)
-    // Also skipped when quarantineFailed: an external webhook consumer must
-    // not be told a file exists that does not.
-    if (!foundDupe && !quarantineFailed && !rzmsg) {
-      try {
-        const { webhookService, WebhookTrigger } = await import(
-          "../services/webhook.service"
-        );
-        const conference = await db.getConferenceById(session.currentConf);
-
-        await webhookService.sendWebhook(WebhookTrigger.NEW_UPLOAD, {
-          username: session.user!.username,
-          userId: session.user!.id,
-          gdprConsented: !!(session.user as any)?.gdprConsentAt,
-          filename: currentFile.filename,
-          filesize: data.size,
-          conference: conference?.name || "Unknown",
-          description: finalDescription.substring(0, 100),
-        });
-      } catch (error) {
-console.error("[Webhook] Error sending file upload webhook:", error);
-      }
-    }
-    // Achievements (SP2): the upload, the description, the ratio. Non-throwing.
-    if (!foundDupe && !quarantineFailed && !rzmsg) reportUpload(session as any, data.size, finalDescription, descriptionFromDiz);
 
     // Clear currentUploadedFile so next file can be processed
     // This is critical for batch uploads - without this, subsequent files are ignored
@@ -719,6 +737,7 @@ console.log("[Upload] No upload context for batch complete");
     uploadStartTime: session.tempData.uploadStartTime,
     uploadedFiles: session.tempData.uploadedFiles || 0,
     uploadedBytes: session.tempData.uploadedBytes || 0,
+    backgroundChecked: session.tempData.backgroundChecked || 0,
     goodbyeAfter,
     onCleanup: () => clearUploadContext(session, socket),
   });

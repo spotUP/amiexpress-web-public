@@ -70,6 +70,14 @@ export interface LrzszTransferOptions {
    * exactly those).
    */
   isDuplicate?: (filename: string) => boolean | Promise<boolean>;
+  /**
+   * express.e:13921 xprfclose / 16825 zmuploadcompleted: a file has been
+   * received IN FULL while the transfer goes on (-> doBgCheck, the
+   * background file check). Upload only. rz announces a file when its ZFILE
+   * header arrives, so a file is complete when the next one is announced or
+   * when rz exits cleanly.
+   */
+  onFileReceived?: (fullPath: string) => void;
   onComplete?: (success: boolean, detail: {
     received: string[];
     sent: string[];
@@ -116,6 +124,9 @@ export class LrzszTransferManager {
   private binary: string;
   private timeoutMs: number;
   private onComplete?: LrzszTransferOptions['onComplete'];
+  private onFileReceived?: LrzszTransferOptions['onFileReceived'];
+  /** The file rz is receiving now (the last "Receiving:" line). */
+  private receivingNow: string | null = null;
 
   private proc: ChildProcess | null = null;
   private stderrBuf: string = '';
@@ -179,6 +190,7 @@ export class LrzszTransferManager {
     // An IDLE timeout, not a total-duration one. See `touch()`.
     this.timeoutMs = opts.timeoutMs ?? 5 * 60 * 1000;
     this.onComplete = opts.onComplete;
+    this.onFileReceived = opts.onFileReceived;
     this.isDuplicate = opts.isDuplicate;
   }
 
@@ -266,6 +278,9 @@ export class LrzszTransferManager {
           const m = line.match(/^\s*Receiving:\s+(\S.*?)\s*$/);
           if (m && m[1]) {
             const name = m[1].trim();
+            // The previous file is closed once the next is announced.
+            if (this.receivingNow !== null && this.receivingNow !== name) this.fileReceived(this.receivingNow);
+            this.receivingNow = name;
             // De-dup: rz may emit the line more than once if it
             // restarts/retries a file. Order-preserving uniqueness.
             if (!this.receivedFilenames.includes(name)) {
@@ -925,6 +940,19 @@ export class LrzszTransferManager {
     return ['-b', '-r', '-t', '600', '-vv'];
   }
 
+  /** One file is whole on disk: tell the caller who asked (express.e doBgCheck). */
+  private fileReceived(name: string): void {
+    const cwd = this.resolveCwd();
+    if (!this.onFileReceived || !cwd) return;
+    const full = path.join(cwd, name);
+    try {
+      if (!fs.statSync(full).isFile()) return;
+      this.onFileReceived(full);
+    } catch (err) {
+      console.error(`[lrzsz ${this.direction}] onFileReceived failed for ${name}:`, err);
+    }
+  }
+
   private resolveCwd(): string | undefined {
     if (this.direction === 'upload' && this.paths.length > 0) {
       // First path is the target directory for received files.
@@ -961,6 +989,11 @@ export class LrzszTransferManager {
     let received: string[] = [];
     let sent: string[] = [];
     if (success) {
+      // The last file rz announced is whole now: rz exited cleanly.
+      if (this.direction === 'upload' && this.receivingNow !== null) {
+        this.fileReceived(this.receivingNow);
+        this.receivingNow = null;
+      }
       if (this.direction === 'download') {
         sent = [...this.paths];
       } else {

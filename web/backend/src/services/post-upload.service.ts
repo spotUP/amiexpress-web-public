@@ -35,6 +35,8 @@ export interface PostUploadContext {
   uploadedFiles: number;
   /** Total bytes received across all files. */
   uploadedBytes: number;
+  /** express.e bgCnt (19059): files the background check filed while the transfer ran. */
+  backgroundChecked?: number;
   /** True if user picked "Goodbye after transfer" in the picker. */
   goodbyeAfter?: boolean;
   /**
@@ -73,6 +75,10 @@ export async function runPostUpload(
   const statsLine = ` ${ctx.uploadedFiles} file(s), ${bytesKB}k bytes, ${minutes} minute(s). ${seconds} second(s), ${cps} cps, ${eff}% efficiency.`;
   // express.e:19073 aePuts(string) - no break of its own; 19089's two follow.
   emitter.emit('ansi-output', statsLine);
+  // express.e:19082-19085
+  if ((ctx.backgroundChecked ?? 0) > 0) {
+    emitter.emit('ansi-output', `\r\n\r\n${ctx.backgroundChecked} files were checked and posted in the background during upload`);
+  }
   emitter.emit('ansi-output', '\r\n\r\n');
 
   // express.e:18862-18871 callersLog/udLog. express.e:19094 only logs
