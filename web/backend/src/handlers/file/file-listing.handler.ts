@@ -246,7 +246,7 @@ console.log(`[FileList] dirsToShow after filter: ${dirsToShow.length} dirs`);
 console.log(`[FileList] Could not read ${dirFilePath}: ${error.message}`);
         // express.e:27722-27726 displayIt: myError(4), then the next directory.
         FileListingHandler.fileListError(socket);
-        continue;
+        entries = [];
       }
 
       if (entries.length === 0) {
@@ -306,12 +306,12 @@ console.log(`[FileList] Could not read ${dirFilePath}: ${error.message}`);
         }
       }
 
-      // Pause after directory listing (no extra blank line - flagPause adds one)
-      const shouldContinue4 = await flagPause(socket, session, 1);
-      if (!shouldContinue4) {
-        session.subState = LoggedOnSubState.DISPLAY_MENU;
-        return;
-      }
+      // express.e:27717 aePuts('\b\n'): one blank line after every directory,
+      // a directory myError(4) could not open included (displayIt returns
+      // RESULT_SUCCESS, 27724-27725). flagPause is NOT called here - it only
+      // counts lines and asks More (28025-28063); it prints no newline.
+      // WEB_: a 40-column caller's template rows carry their own spacing.
+      if (!narrow) socket.emit('ansi-output', '\r\n');
     }
 
     if (narrow) {
