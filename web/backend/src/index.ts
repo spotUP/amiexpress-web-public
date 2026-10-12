@@ -595,6 +595,8 @@ export interface BBSSession {
   inputWaiter?: import('./utils/await-input').InputWaitingSession['inputWaiter'];
   /** Keys held for a ported procedure that owns the input (utils/await-input holdInput). */
   typeAhead?: string[];
+  /** Keys an ended procedure left unread; the board's next prompt reads them (utils/await-input readLineAhead). */
+  lineAhead?: string[];
   /**
    * Set by a caller that opened the account editor and waits for it to close:
    * editInfo's flag (express.e:21647 `ENDPROC flag`) - 1 for X (no-save),

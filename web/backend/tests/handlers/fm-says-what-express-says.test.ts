@@ -257,4 +257,21 @@ describe('FM follows express.e on Q, typed names and ^C', () => {
     expect(c.session.subState).not.toBe(LoggedOnSubState.FM_SCAN);
     expect(c.session.typeAhead).toBeUndefined();
   });
+
+  it('keys typed right after q are not lost: the menu prompt reads them, as the serial line keeps them for express.e', async () => {
+    // express.e has one serial buffer; only purgeLine empties it (1914-1925),
+    // and nothing between FM's q (25019) and the menu's lineInput (28617)
+    // calls it. The port dropped what the procedure had not read.
+    const c = caller();
+    c.session.user.expert = 'Y'; // no menu screen or doPause in the way
+    c.socket.connected = true; // the menu's carrier check (express.e:28590)
+    await atOne(c);
+    dispatchInOrder(c.session, ['q', 'x', 'y'], (piece) => handleCommand(c.socket, c.session, piece), (err) => { throw err; });
+    await c.settle();
+    await c.settle();
+    expect(c.session.subState).toBe(LoggedOnSubState.READ_COMMAND);
+    expect(c.session.lineAhead).toBeUndefined();
+    // The two keys are the start of the next command, echoed at the prompt.
+    expect(c.take()).toMatch(/Menu \(\x1b\[33m9999\x1b\[0m mins\. left\): \x1b7xy$/);
+  });
 });

@@ -213,7 +213,7 @@ import {
   getDoors
 } from './command-handler/dependency-injection';
 import { loginNamePrompt, loginPasswordPrompt, logonNamePromptText } from '../utils/node-tooltypes.util';
-import { feedInputWaiter } from '../utils/await-input';
+import { feedInputWaiter, readLineAhead } from '../utils/await-input';
 import { endUpload } from '../services/upload-end.service';
 
 // Re-export dependency injection for external modules (backward compatibility)
@@ -468,7 +468,21 @@ console.error('[pauseDisplayFlow] Error during pause:', error);
 }
 
 // Dependency injection setters
+/**
+ * Bring the board to its next prompt, then let that prompt read what is still
+ * on the line: keys typed while a ported procedure ran that it never read
+ * (utils/await-input holdInput). express.e's menu doPause / lineInput take
+ * them off the serial buffer (28583-28620); nothing purges it in between.
+ */
 export async function advanceDisplayFlow(socket: any, session: BBSSession): Promise<void> {
+  try {
+    await stepDisplayFlow(socket, session);
+  } finally {
+    readLineAhead(socket, session);
+  }
+}
+
+async function stepDisplayFlow(socket: any, session: BBSSession): Promise<void> {
   /*
    * A PAUSE ON SCREEN MEANS THE CALLER OWES A KEY, AND THE FLOW OWES HIM TIME.
    *

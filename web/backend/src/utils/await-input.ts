@@ -43,6 +43,13 @@ export interface InputWaitingSession {
   typeAhead?: string[];
   /** The sub-state the holding procedure sits in between its prompts. */
   typeAheadIn?: unknown;
+  /**
+   * Keys still on the line when the procedure that held them ended - unread,
+   * as the serial and telnet buffers keep them for express.e's next
+   * lineInput / readChar. The board's next prompt reads them (readLineAhead);
+   * a key that arrives before it does queues behind them.
+   */
+  lineAhead?: string[];
   subState?: unknown;
 }
 
@@ -52,24 +59,65 @@ export interface InputWaitingSession {
  * otherwise drops such a key - for its next readChar / lineInput /
  * checkInput, as the serial line keeps it. A key that a waiting input or a
  * sub-state dialog inside the procedure (editInfo's) reads is not touched.
- * Released when fn ends; keys still held then are dropped.
+ *
+ * Released when fn ends. Keys still held then stay on the line (lineAhead):
+ * express.e has one serial buffer, and only purgeLine (1914-1925) empties
+ * it, so what the caller typed ahead is read by the next prompt - the menu's
+ * lineInput or its doPause (28583-28620). The caller returns to the board
+ * through advanceDisplayFlow, which hands them over (readLineAhead). Keys
+ * left on the line by an earlier procedure are this one's first reads.
  */
 export async function holdInput<T>(session: InputWaitingSession, betweenPrompts: unknown, fn: () => Promise<T>): Promise<T> {
   const outer = session.typeAhead;
   const outerIn = session.typeAheadIn;
-  if (!outer) session.typeAhead = [];
+  if (!outer) session.typeAhead = session.lineAhead?.splice(0) ?? [];
   session.typeAheadIn = betweenPrompts;
   try {
     return await fn();
   } finally {
     session.typeAheadIn = outerIn;
-    if (!outer) session.typeAhead = undefined;
+    if (!outer) {
+      const unread = session.typeAhead ?? [];
+      session.typeAhead = undefined;
+      if (unread.length > 0) (session.lineAhead ??= []).push(...unread);
+    }
   }
 }
 
-/** Would a key arriving now be held for the procedure (holdInput)? */
+/** Holds a procedure the input between its prompts right now (holdInput)? */
+function holding(session: InputWaitingSession): boolean {
+  return !!session.typeAhead && session.subState === session.typeAheadIn;
+}
+
+/**
+ * Would a key arriving now be kept on the line - for the procedure holding
+ * the input, or behind keys an ended procedure left unread?
+ */
 export function holdsTypeAhead(session: InputWaitingSession): boolean {
-  return !session.inputWaiter && !!session.typeAhead && session.subState === session.typeAheadIn;
+  return !session.inputWaiter && (holding(session) || (session.lineAhead?.length ?? 0) > 0);
+}
+
+/**
+ * The board is at its next prompt: the keys left on the line (lineAhead) go
+ * to it in the order they were typed, through the transports' own
+ * dispatcher, ahead of anything typed after them - express.e's lineInput or
+ * readChar reads them off the serial buffer the same way. Called by
+ * advanceDisplayFlow when it has brought the board to its prompt.
+ */
+export function readLineAhead(socket: any, session: InputWaitingSession): void {
+  const keys = session.lineAhead;
+  if (!keys || keys.length === 0 || holding(session)) return;
+  session.lineAhead = undefined;
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { dispatchInOrder } = require('../server/terminal-input');
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { handleCommand } = require('../handlers/command.handler');
+  dispatchInOrder(
+    session,
+    keys,
+    (piece: string) => handleCommand(socket, session, piece),
+    (err: unknown) => console.error('[readLineAhead] a key typed ahead failed:', err),
+  );
 }
 
 /**
@@ -86,6 +134,7 @@ export async function checkInput(session: InputWaitingSession): Promise<boolean>
 /** purgeLine() - express.e:1914-1925: what the caller typed ahead is thrown away. */
 export function purgeLine(session: InputWaitingSession): void {
   if (session.typeAhead) session.typeAhead.length = 0;
+  session.lineAhead = undefined;
 }
 
 /**
@@ -102,9 +151,10 @@ export function takeTypeAhead(session: InputWaitingSession): string[] {
 /** Wait on `waiter`, handing it first whatever the caller typed ahead. */
 function park(socket: any, session: InputWaitingSession, waiter: Waiter): void {
   session.inputWaiter = waiter;
-  const held = session.typeAhead;
-  while (held && held.length > 0 && session.inputWaiter === waiter) {
-    feedInputWaiter(socket, session, held.shift() as string);
+  for (const held of [session.typeAhead, session.lineAhead]) {
+    while (held && held.length > 0 && session.inputWaiter === waiter) {
+      feedInputWaiter(socket, session, held.shift() as string);
+    }
   }
 }
 
@@ -208,9 +258,12 @@ export function feedInputWaiter(socket: any, session: InputWaitingSession, data:
   const waiter = session.inputWaiter;
   if (data === '') return false;
   if (!waiter) {
-    // A procedure holds the input and is between its prompts: the key waits for it.
-    if (!holdsTypeAhead(session)) return false;
-    (session.typeAhead as string[]).push(data);
+    // A procedure holds the input and is between its prompts: the key waits
+    // for it. Or keys an ended procedure left unread are still on the line:
+    // this one queues behind them for the board's next prompt.
+    if (holding(session)) (session.typeAhead as string[]).push(data);
+    else if ((session.lineAhead?.length ?? 0) > 0) (session.lineAhead as string[]).push(data);
+    else return false;
     return true;
   }
 
