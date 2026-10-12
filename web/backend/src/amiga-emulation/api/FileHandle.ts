@@ -483,6 +483,36 @@ console.error(`[FileHandle] Seek error:`, error);
   }
 
   /**
+   * Current size of the open file on disk, or -1 when there is no file
+   * descriptor (console, NIL, closed, memory-backed).
+   */
+  size(): number {
+    if (this.fd === null || this.fd < 0) return -1;
+    try {
+      return fs.fstatSync(this.fd).size;
+    } catch {
+      return -1;
+    }
+  }
+
+  /**
+   * Truncate or zero-extend the open file to `newSize` bytes (dos.library
+   * SetFileSize). A position past the new end moves to the new end.
+   * Returns false when the handle has no writable file descriptor.
+   */
+  setSize(newSize: number): boolean {
+    if (this.fd === null || this.fd < 0 || this.isMemoryHandle) return false;
+    try {
+      fs.ftruncateSync(this.fd, newSize);
+    } catch (error) {
+console.error(`[FileHandle] setSize error:`, error);
+      return false;
+    }
+    if (this.position > newSize) this.position = newSize;
+    return true;
+  }
+
+  /**
    * Close the file
    */
   close(): void {

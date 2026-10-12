@@ -431,7 +431,14 @@ export const DOS_VECTORS: LibraryVector[] = [
   // -438: ReadLink
   // -444: MakeLink
   // -450: ChangeMode
-  // -456: SetFileSize
+  {
+    offset: -456,
+    name: "SetFileSize",
+    handler: (emu, lib: DosLibrary) => {
+      lib.SetFileSize();
+      return emu.getRegister(0);
+    },
+  },
   // -462: SetIoErr — V36+. Surfaced as a stub by bulk-probe 2026-05-12
   //                  (Version door in `Version.LHA`). Real impl already
   //                  exists in DosLibrary.SetIoErr(); just needed

@@ -619,6 +619,29 @@ console.error(`[FileManager] Seek on invalid BPTR: ${bptr}`);
   }
 
   /**
+   * Resize a file (dos.library SetFileSize).
+   *
+   * @param bptr - BPTR of file
+   * @param offset - Signed offset
+   * @param whence - 0=from beginning, 1=from current position, 2=from end
+   * @returns New size, or -1 on error (no such handle, not writable, negative result)
+   */
+  setSize(bptr: number, offset: number, whence: number): number {
+    const fh = this.handles.get(bptr);
+    if (!fh) {
+console.error(`[FileManager] SetFileSize on invalid BPTR: ${bptr}`);
+      return -1;
+    }
+    const current = fh.size();
+    if (current < 0) return -1;
+    const base = whence === 0 ? 0 : whence === 1 ? fh.tell() : current;
+    const newSize = base + offset;
+    if (newSize < 0 || !fh.setSize(newSize)) return -1;
+    this.fileCache?.invalidate(fh.amiPath);
+    return newSize;
+  }
+
+  /**
    * Get current file position
    *
    * @param bptr - BPTR of file

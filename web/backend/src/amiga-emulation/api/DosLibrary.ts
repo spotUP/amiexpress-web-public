@@ -3769,91 +3769,74 @@ console.error(
   }
 
   /**
-   * SetFileSize - Resize a file
+   * SetFileSize - Truncate or extend an open file (dos.library -456)
    * D1 = file handle (BPTR)
-   * D2 = new size (LONG)
-   * D3 = mode (OFFSET_BEGINNING=1, OFFSET_CURRENT=0, OFFSET_END=-1)
-   * Returns: D0 = new position or -1 on error
+   * D2 = offset (LONG)
+   * D3 = mode (OFFSET_BEGINNING=-1, OFFSET_CURRENT=0, OFFSET_END=1)
+   * Returns: D0 = the new file size, or -1 on error with IoErr() set
    *
-   * Note: This is similar to Seek + truncate. The file is resized to the
-   * position specified by offset+mode, then the file pointer is positioned there.
+   * The new size is offset relative to the beginning, the handle's current
+   * position, or the current end. A handle whose position is beyond the new
+   * end moves to the new end. Extending zero-fills.
    */
   SetFileSize(): void {
     const fhBptr = this.emulator.getRegister(CPURegister.D1);
-    const newSize = this.emulator.getRegister(CPURegister.D2) | 0; // Signed 32-bit
-    const mode = this.emulator.getRegister(CPURegister.D3) | 0;    // Signed 32-bit
+    const offset = this.emulator.getRegister(CPURegister.D2) | 0;
+    const mode = this.emulator.getRegister(CPURegister.D3) | 0;
 
 debugLog(
-      `[dos.library] SetFileSize(fh=0x${fhBptr.toString(16)}, size=${newSize}, mode=${mode})`
+      `[dos.library] SetFileSize(fh=0x${fhBptr.toString(16)}, offset=${offset}, mode=${mode})`
     );
 
-    // Find file handle
+    const fail = (code: number): void => {
+      this.emulator.setRegister(CPURegister.D0, -1);
+      this.lastError = code;
+    };
+
+    if (mode !== OFFSET_BEGINNING && mode !== OFFSET_CURRENT && mode !== OFFSET_END) {
+      fail(DOS_ERRORS.ERROR_SEEK_ERROR);
+      return;
+    }
+
+    if (this.useNewFileSystem && this.fileManager) {
+      const whence = mode === OFFSET_BEGINNING ? 0 : mode === OFFSET_CURRENT ? 1 : 2;
+      const newSize = this.fileManager.setSize(fhBptr, offset, whence);
+      if (newSize < 0) {
+        fail(this.fileManager.getHandle(fhBptr) ? DOS_ERRORS.ERROR_SEEK_ERROR : DOS_ERRORS.ERROR_INVALID_LOCK);
+        return;
+      }
+      this.emulator.setRegister(CPURegister.D0, newSize);
+      this.lastError = DOS_ERRORS.ERROR_NO_ERROR;
+      return;
+    }
+
+    // Legacy buffered handle: the buffer is flushed to realPath on Close.
     const handle = this.openFiles.get(fhBptr);
     if (!handle) {
 console.error(`[dos.library] SetFileSize: Invalid file handle 0x${fhBptr.toString(16)}`);
-      this.emulator.setRegister(CPURegister.D0, -1);
-      this.lastError = DOS_ERRORS.ERROR_INVALID_LOCK;
+      fail(DOS_ERRORS.ERROR_INVALID_LOCK);
+      return;
+    }
+    if (handle.isConsole || !handle.buffer) {
+console.error(`[dos.library] SetFileSize: Cannot resize console/NIL handle "${handle.name}"`);
+      fail(DOS_ERRORS.ERROR_ACTION_NOT_KNOWN);
       return;
     }
 
-    // Check if this is a real file (not console/NIL)
-    if (!handle.realPath) {
-console.error(
-        `[dos.library] SetFileSize: Cannot resize console/NIL handle "${handle.name}"`
-      );
-      this.emulator.setRegister(CPURegister.D0, -1);
-      this.lastError = DOS_ERRORS.ERROR_ACTION_NOT_KNOWN;
+    const base =
+      mode === OFFSET_BEGINNING ? 0 : mode === OFFSET_CURRENT ? handle.position : handle.buffer.length;
+    const newSize = base + offset;
+    if (newSize < 0) {
+      fail(DOS_ERRORS.ERROR_SEEK_ERROR);
       return;
     }
+    const resized = Buffer.alloc(newSize);
+    handle.buffer.copy(resized, 0, 0, Math.min(newSize, handle.buffer.length));
+    handle.buffer = resized;
+    if (handle.position > newSize) handle.position = newSize;
 
-    try {
-      // Calculate absolute position based on mode
-      let absoluteSize: number;
-      const stats = amigafs.statSync(handle.realPath);
-      const currentSize = stats.size;
-
-      if (mode === -1) {
-        // OFFSET_END: size relative to end of file
-        absoluteSize = currentSize + newSize;
-      } else if (mode === 0) {
-        // OFFSET_CURRENT: size relative to current position
-        absoluteSize = handle.position + newSize;
-      } else {
-        // OFFSET_BEGINNING: absolute size
-        absoluteSize = newSize;
-      }
-
-      // Ensure size is non-negative
-      if (absoluteSize < 0) {
-        absoluteSize = 0;
-      }
-
-      // Truncate or extend the file. Same case-insensitivity contract as the
-      // statSync above: AmigaDOS paths reach us in the door's casing, so this
-      // has to go through amigafs or SetFileSize ENOENTs on the Linux container
-      // for a path statSync just resolved. 'r+' does not create, so a
-      // case-mismatch here is a hard failure rather than an empty twin.
-      const fd = amigafs.openSync(handle.realPath, 'r+');
-      fs.ftruncateSync(fd, absoluteSize);
-      fs.closeSync(fd);
-
-      // Update handle position to new size
-      handle.position = absoluteSize;
-
-debugLog(
-        `[dos.library] SetFileSize: Resized ${handle.realPath} to ${absoluteSize} bytes`
-      );
-
-      this.emulator.setRegister(CPURegister.D0, absoluteSize);
-      this.lastError = DOS_ERRORS.ERROR_NO_ERROR;
-    } catch (error) {
-console.error(
-        `[dos.library] SetFileSize: Error resizing file ${handle.realPath}:`,
-        error
-      );
-      this.emulator.setRegister(CPURegister.D0, -1);
-      this.lastError = DOS_ERRORS.ERROR_SEEK_ERROR;
-    }
+    this.emulator.setRegister(CPURegister.D0, newSize);
+    this.lastError = DOS_ERRORS.ERROR_NO_ERROR;
   }
 
   /**
