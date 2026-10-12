@@ -11,7 +11,8 @@
 
 import { YES_NO_PROMPT } from '../../utils/await-input';
 import { MOUSE_REPORTING_OFF } from '../../utils/terminal-modes';
-import { checkSecurity } from '../../utils/acs.util';
+import { checkSecurity, setEnvStat } from '../../utils/acs.util';
+import { EnvStat } from '../../constants/env-codes';
 import * as path from 'path';
 import { boardRoot } from '../../utils/board-root.util';
 import { servesPetsciiArt } from '../screen.handler';
@@ -170,7 +171,7 @@ console.error('[LOGOFF] Failed to save command history:', err);
 
   // express.e:25066 - reqState:=REQ_STATE_LOGOFF
   // express.e:25069 - setEnvStat(ENV_LOGOFF)
-console.log('[ENV] Logoff');
+  setEnvStat(session, EnvStat.LOGOFF);
 
   // express.e:8213 — StrCopy(reservedName,'') after logoff. Drop the
   // per-node reservation so the next caller isn't blocked by a stale

@@ -27,7 +27,7 @@ import * as amigafs from '../../utils/amigafs';
 import type { BBSSession } from '../../index';
 
 // Dependencies injected from index.ts
-let _handleGoodbyeCommand: (socket: any, session: BBSSession, params?: string) => void;
+let _handleGoodbyeCommand: (socket: any, session: BBSSession, params?: string) => void | Promise<void>;
 let _messages: any[] = [];
 let _confScreenDir: string;
 let _findSecurityScreen: (screenDirAndName: string, userSecLevel?: number, userScreenTypeExt?: string | null, ripMode?: boolean, defScreens?: boolean, petsciiMode?: boolean, texttvMode?: boolean) => string | null;
@@ -65,7 +65,7 @@ export function setUtilityCommandsDependencies(deps: {
  * @param session - Current BBS session
  * @param params - Optional parameters to pass to goodbye command
  */
-export function handleRelogonCommand(socket: any, session: BBSSession, params: string = ''): void {
+export async function handleRelogonCommand(socket: any, session: BBSSession, params: string = ''): Promise<void> {
   // express.e:25535 - checkSecurity(ACS_RELOGON)
   if (!checkSecurity(session.user, ACSPermission.RELOGON)) {
     ErrorHandler.permissionDenied(socket, 'relogon', {
@@ -77,7 +77,7 @@ export function handleRelogonCommand(socket: any, session: BBSSession, params: s
   // express.e:25536-25537 internalCommandRL - no confirmation prompt; set flag and call G immediately
   // WEB_: express.e sets relogon:=TRUE then calls internalCommandG directly (no "Are you sure?")
   session.relogon = true;
-  _handleGoodbyeCommand(socket, session, params);
+  await _handleGoodbyeCommand(socket, session, params);
 }
 
 /**

@@ -4073,7 +4073,7 @@ console.error(' ERROR in handleLiveChatCommand:', error);
       return await handleQuietCommand(socket, session);
 
     case 'RL': // RELOGON (internalCommandRL) - express.e:25534-25539
-      handleRelogonCommand(socket, session, params);
+      await handleRelogonCommand(socket, session, params);
       return;
 
     case 'RZ': // Zmodem Upload Command (internalCommandRZ) - express.e:25608-25621
