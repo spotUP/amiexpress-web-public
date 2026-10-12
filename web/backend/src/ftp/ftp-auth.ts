@@ -351,7 +351,8 @@ export function boardFtpDeps(socketIsAlive: (socketId: string) => boolean = () =
       // express.e tests an upload before it files it, and a failure is a
       // QUARANTINE rather than a rejection: the file goes to the sysop, and
       // the caller is told where it went.
-      const nodeWorkDir = getNodeWorkDir(0, dataDir);
+      // express.e nodeWorkDir is the node's own (BBS:Node<n>/Work/).
+      const nodeWorkDir = getNodeWorkDir(request.nodeId || 1, dataDir);
       let marker: 'P' | 'F' | 'N' = 'N';
       let initialStatus: 'active' | 'private' | 'hold' = 'active';
       try {

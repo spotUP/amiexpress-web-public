@@ -157,7 +157,8 @@ console.log("[DIZ] File selected, checking for DIZ...");
     // Try to extract FILE_ID.DIZ
     if (data.path) {
       try {
-        const nodeWorkDir = getNodeWorkDir(0, config.get("dataDir"));
+        // express.e nodeWorkDir is the caller's own node (BBS:Node<n>/Work/).
+        const nodeWorkDir = getNodeWorkDir(session.nodeId || 1, config.get("dataDir"));
         // express.e:19579 - the board's SysCmd EXAMINE door first (File
         // Description and its kin write the description themselves); the
         // built-in FILE_ID.DIZ reader when there is none.
@@ -355,7 +356,8 @@ export async function processBatchFile(
       : "active";
 
     if (data.path) {
-      const nodeWorkDir = getNodeWorkDir(0, config.get("dataDir")); // Node0/Work
+      // express.e nodeWorkDir is the caller's own node (BBS:Node<n>/Work/).
+      const nodeWorkDir = getNodeWorkDir(session.nodeId || 1, config.get("dataDir"));
 
       // Extract FILE_ID.DIZ (express.e:19258-19285) - skip if already extracted
       if (!session.tempData.skipDizExtraction) {

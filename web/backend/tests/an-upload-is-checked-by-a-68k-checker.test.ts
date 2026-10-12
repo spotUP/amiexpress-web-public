@@ -136,7 +136,7 @@ describeMaybe('an upload is checked by a 68K CHECKER named on an Amiga path', ()
     return out.join('');
   }
 
-  const outputOfTest = () => fs.readFileSync(path.join(dataDir, 'Node0', 'Work', 'OutPut_Of_Test'), 'latin1');
+  const outputOfTest = () => fs.readFileSync(path.join(dataDir, 'Node1', 'Work', 'OutPut_Of_Test'), 'latin1');
 
   function expectCheckerLaunchedOn(file: string) {
     expect(launched).toHaveBeenCalledTimes(1);
