@@ -646,8 +646,19 @@ static requests_bulletin_row bulletin_rows[REQUESTS_BULLETIN_ROW_BUDGET];
 
 static int slurp(const char *path, char *buf, unsigned long cap)
 {
-    FILE *f = fopen(path, "rb");
+    /* The art names are "relative to the door's own folder" (the setting's
+       contract). A door starts in AmiExpress's directory, BBS:, not its own,
+       so a bare name is PROGDIR:'s. */
+    char where[200];
+    FILE *f;
     unsigned long n;
+
+    if (strchr(path, ':') == 0 && strlen(path) + 9 < sizeof where) {
+        strcpy(where, "PROGDIR:");
+        strcat(where, path);
+        path = where;
+    }
+    f = fopen(path, "rb");
 
     if (f == 0) return 0;
     n = (unsigned long)fread(buf, 1, cap - 1, f);
@@ -1013,7 +1024,7 @@ int main(int argc, char **argv)
     keys.flush = door_flush;
     keys.ctx = 0;
 
-    if (!config_load(&config, "REQUESTS.cfg")) {
+    if (!config_load(&config, "PROGDIR:REQUESTS.cfg")) {
         ansi_clear(&screen.buf);
         draw_masthead("GLOBAL REQUESTS");
         say(&screen, 3, "This door has no REQUESTS.cfg beside it.");

@@ -748,8 +748,8 @@ int main(int argc, char **argv)
 
     /* No config, no problem: config_load leaves the defaults standing. The
        sysop's file is read first, then the callers' own favorites on top. */
-    config_load(&config, "TEXTTV.cfg");
-    favs_load(&config, "TEXTTV.favs");
+    config_load(&config, "PROGDIR:TEXTTV.cfg");
+    favs_load(&config, "PROGDIR:TEXTTV.favs");
 
     ui_screen_open(&screen, &session, frame_buffer, (long)sizeof(frame_buffer));
     wide = !ui_is_compact_width(screen.cols);
@@ -906,7 +906,7 @@ int main(int argc, char **argv)
             } else {
                 sprintf(status_line, "[OK] Page %d %s favorites.", page_num,
                         added ? "added to" : "removed from");
-                favs_save(&config, "TEXTTV.favs");
+                favs_save(&config, "PROGDIR:TEXTTV.favs");
             }
             full = 1;
             continue;

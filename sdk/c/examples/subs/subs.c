@@ -925,7 +925,7 @@ int main(int argc, char **argv)
     keys.flush = door_flush;
     keys.ctx = 0;
 
-    config_load("SUBS.cfg");
+    config_load("PROGDIR:SUBS.cfg");
 
     /* The masthead wants the conference's name, which is the board's to say -
        a message base is headers and bodies and does not know what it is

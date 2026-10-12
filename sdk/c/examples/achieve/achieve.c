@@ -312,7 +312,7 @@ int main(int argc, char **argv)
     keys.flush = 0;
     keys.ctx = 0;
 
-    if (!config_load(&config, "ACHIEVE.cfg")) {
+    if (!config_load(&config, "PROGDIR:ACHIEVE.cfg")) {
         ansi_clear(&screen.buf);
         ui_masthead_draw(&screen.buf, 1, 1, screen.cols, "ACHIEVEMENTS",
                          theme->rail, UI_TOKEN(UI_T_BAR_INK), UI_TOKEN(UI_T_BAR));

@@ -24,8 +24,17 @@ export interface ProcessLocks {
   lockDirectory(amigaPath: string): number;
 }
 
-/** The current directory a door starts in. */
-const DOOR_CURRENT_DIR = "PROGDIR:";
+/**
+ * The current directory a door starts in: AmiExpress's own, which is BBS:.
+ * ACP CurrentDir()s into its own directory at startup (ACP.e:3993-4014) and
+ * starts each node with SystemTagList and no NP_CurrentDir (ACP.e:3946,
+ * 3234), so express inherits it; express.e never moves it except around the
+ * PlayPen zoom packing (express.e:26282/26316), and starts every door and
+ * checker the same way - startProcess's SystemTagList, no NP_CurrentDir
+ * (express.e:3322-3323 from runDoor :4336; checkers :18584-18586). A door
+ * that wants its own directory says PROGDIR: (pr_HomeDir).
+ */
+const DOOR_CURRENT_DIR = "BBS:";
 
 export class DoorLoader {
   private emulator: MoiraEmulator;
