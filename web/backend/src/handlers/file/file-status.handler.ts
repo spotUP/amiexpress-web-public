@@ -163,8 +163,11 @@ export async function fileStatus(
       : (user.bytesDownload || 0);
     const downloadBytesStr = formatBytes(downloadBytes);
 
-    // Calculate available bytes - express.e:24174-24178
-    const todaysBytesLimit = (user.dailyBytesLimit ?? user.byteLimit) || 0;
+    // Calculate available bytes - express.e:24172-24176: today's limit, which
+    // carries the sysop's and the uploads' extra bytes (21537-21544, 19531)
+    // over the daily one. An account with no record value falls back to the
+    // daily limit, which is what the logon sets it to (28518).
+    const todaysBytesLimit = (user.todaysBytesLimit ?? user.dailyBytesLimit ?? user.byteLimit) || 0;
     const dailyBytesDld = user.dailyBytesDld || 0;
     let bytesAvailStr: string;
 
