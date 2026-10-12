@@ -1,3 +1,7 @@
+Installed build: lha_68020 (the 68020+ build) from the same Aminet archive util/arc/lha_68k.lha,
+sha256 07574c833cebbb6cd639f460671f2b75eb06be71cd4192d846fc710d39595a16.
+The board's emulator is a 68020 without FPU, so the 68020 build is the one it runs.
+
 Short:        Latest version of Amiga LhA
 Author:       S.Ottemann (S.Boberg,J.Cooper,D.Tritscher)
 Uploader:     S.Ottemann (ac-logic@freenet.de)
