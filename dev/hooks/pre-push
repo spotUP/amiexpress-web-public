@@ -128,6 +128,9 @@ have_deps() { [ -d "$1/node_modules" ]; }
 
 if have_deps web/backend; then
   step "backend types"  run_in web/backend    npx tsc --noEmit -p tsconfig.json
+  # jest does not type-check the tests, so nothing else stops them drifting
+  # from the code: 79 errors had piled up unseen by 2026-10-12.
+  step "backend test types" run_in web/backend npx tsc --noEmit -p tsconfig.tests.json
 else
   echo "[pre-push] backend types ... [SKIPPED] no node_modules in $CHECK_ROOT/web/backend"
   SKIPPED=yes
