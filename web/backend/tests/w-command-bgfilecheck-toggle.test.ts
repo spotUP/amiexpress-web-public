@@ -12,10 +12,9 @@
  * express.e:26083-26087 — toggle:
  *   CASE 16: userFlags := Eor(userFlags, USER_BGFILECHECK)
  *
- * Web version drops the per-Node tooltype gating (no bg checker process
- * runs server-side, so the gate is moot) and lets the user toggle the
- * preference flag freely. Display still reads userFlags & BGFILECHECK
- * to show YES/NO. WEB_ tag documents the deviation.
+ * The toggle is gated exactly as the display is (26085): a node without
+ * BGFILECHECK, or one that FORCE_BGFILECHECKs, shows [DISABLED] and the
+ * option changes nothing. (The web port used to toggle freely.)
  *
  * Driven through the REAL W menu (info-commands.handler, mocked the way
  * tests/handlers/w-menu-settings-doors.test.ts mocks it): the bytes row 16
@@ -36,6 +35,12 @@ jest.mock('../src/utils/acs.util', () => ({
   checkSecurity: () => true,
 }));
 
+import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
+
+import { config } from '../src/config';
+import { clearNodeTooltypeCache } from '../src/utils/node-tooltypes.util';
 import { LoggedOnSubState } from '../src/constants/bbs-states';
 import { UserFlag } from '../src/constants/express-flags';
 import { flushOutput } from '../src/utils/output.util';
@@ -61,7 +66,24 @@ function driver(userFlags: number) {
   return { socket, session, row16 };
 }
 
-beforeEach(() => mockUpdateUser.mockClear());
+let board: string;
+let previousDataDir: string;
+/** The node's own icon (express.e checkToolTypeExists(TOOLTYPE_NODE,...)). */
+const nodeIcon = (text: string) => fs.writeFileSync(path.join(board, 'Node1.info'), text);
+
+beforeEach(() => {
+  mockUpdateUser.mockClear();
+  board = fs.mkdtempSync(path.join(os.tmpdir(), 'w16-'));
+  previousDataDir = config.get('dataDir');
+  config.set('dataDir', board);
+  clearNodeTooltypeCache();
+  nodeIcon('BGFILECHECK\n');
+});
+afterEach(() => {
+  config.set('dataDir', previousDataDir);
+  clearNodeTooltypeCache();
+  fs.rmSync(board, { recursive: true, force: true });
+});
 
 describe('W command option 16 BGFILECHECK display + toggle (C-W, express.e:25872-25879 / 26083-26087)', () => {
   test('display gates YES/NO on userFlags & BGFILECHECK (not always NO)', () => {
@@ -88,5 +110,21 @@ describe('W command option 16 BGFILECHECK display + toggle (C-W, express.e:25872
     await handleWOptionSelectInput(d.socket, d.session, '16');
     expect(d.session.user.userFlags).toBe(others);
     expect(mockUpdateUser).not.toHaveBeenCalled();
+  });
+
+  test.each([
+    ['a node without BGFILECHECK', ''],
+    ['a node that FORCE_BGFILECHECKs', 'BGFILECHECK\nFORCE_BGFILECHECK\n'],
+  ])('%s: row 16 is [DISABLED] and option 16 changes nothing (25880, 26085)', async (_name, icon) => {
+    nodeIcon(icon);
+    clearNodeTooltypeCache();
+    const d = driver(0x05);
+    handleWriteUserParamsCommand(d.socket, d.session);
+    expect(d.row16()).toBe('');
+    flushOutput(d.socket);
+
+    d.session.subState = LoggedOnSubState.W_OPTION_SELECT;
+    await handleWOptionSelectInput(d.socket, d.session, '16');
+    expect(d.session.user.userFlags).toBe(0x05);
   });
 });

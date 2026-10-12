@@ -54,6 +54,8 @@ export interface XmodemOptions {
   onProgress?: (sent: number, total: number) => void;
   onError?: (error: string) => void;
   onComplete?: (success: boolean, bytesTransferred: number) => void;
+  /** The received file is whole on disk (express.e doBgCheck, via zmuploadcompleted). */
+  onFileReceived?: (fullPath: string) => void;
 }
 
 export interface XmodemTransfer {
@@ -529,6 +531,7 @@ console.log('[XMODEM] No data received');
 
     fs.writeFileSync(this.filePath, trimmedData);
 console.log(`[XMODEM] File saved: ${this.filePath} (${trimmedData.length} bytes)`);
+    this.options.onFileReceived?.(this.filePath);
   }
 
   /**

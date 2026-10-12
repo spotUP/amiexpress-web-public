@@ -360,10 +360,15 @@ console.error('[ZMODEM] Failed to ensure playpen:', err);
         target = path.join(playpen, path.basename(named));
       }
       const { TransferProtocolManager } = require('../../services/transfer-protocol.service');
+      // express.e:17279-17283 fileReceive starts the thread for every protocol
+      // (xpr library, xymodem, hydra, zmodem) and each posts a finished file
+      // to it (xprfclose 13921, zmuploadcompleted 16825).
+      const { startBackgroundFileCheck: startBgCheck } = require('../../services/background-file-check.service');
+      const protocolBackground = startBgCheck(session);
       const protocolManager = new TransferProtocolManager(
         session,
         { type: transport.type, send: transport.send },
-        { direction: 'upload', files: [target], protocol: chosenProtocol },
+        { direction: 'upload', files: [target], protocol: chosenProtocol, onFileReceived: protocolBackground?.onFileReceived },
       );
       // express.e:15891-15896 - BINARY before any transfer, not only ZMODEM:
       // XMODEM blocks carry 0x0D and 0xFF as freely as ZMODEM frames do.
@@ -477,11 +482,16 @@ console.error('[ZMODEM] Failed to ensure playpen:', err);
       console.warn('[ZMODEM-UL] lrzsz not installed, falling back to zmodem.js (may not interoperate)');
     }
 
+    // express.e:17279-17283 and zmuploadcompleted 16825: the zmodem.js fallback
+    // is the same receive, so it starts the thread and posts each file to it.
+    const { startBackgroundFileCheck: startFallbackBgCheck } = require('../../services/background-file-check.service');
+    const fallbackBackground = startFallbackBgCheck(session);
     const manager = new ZmodemTransferManager({
       session,
       transport,
       direction: 'upload',
       paths: [playpen],
+      onFileReceived: fallbackBackground?.onFileReceived,
       // zmodem.js is only the receive; what it received is filed exactly as
       // lrzsz's is (uploadaFile 19400-19500), one path for every protocol.
       onComplete: async (ok, detail) => {
@@ -1182,6 +1192,10 @@ export async function handleUploadCommand(socket: any, session: BBSSession): Pro
 
   // express.e:25649 - setEnvStat(ENV_UPLOADING)
 console.log('[ENV] Uploading');
+
+  // express.e:25651-25655 - the node's BGFILECHECK decides whether this
+  // upload is checked in the background.
+  require('../../services/background-file-check.service').raiseBackgroundFileCheck(session);
 
   // express.e:25656 - uploadaFile(0, cmdcode, FALSE)
   await startUploadaFile(socket, session, false);

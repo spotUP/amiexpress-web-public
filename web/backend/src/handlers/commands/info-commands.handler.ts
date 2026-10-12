@@ -454,18 +454,19 @@ function _paintWCommandMenu(socket: any, session: BBSSession): void {
     emitText(socket, wRow(' 15', 'TRANSLATOR..............', translationService.getUserLanguage(currentUser.id)));
   }
 
-  // Option 16: Background File Check — express.e:25872-25879
-  // express.e gates display on Node tooltype BGFILECHECK existing AND
-  // FORCE_BGFILECHECK NOT existing; web has no per-node tooltype gating
-  // (no bg checker process runs), so we always show the toggle so the user
-  // can persist their preference. Bit is USER_BGFILECHECK from axconsts.e:71.
-  // WEB_: dropped Node BGFILECHECK / FORCE_BGFILECHECK tooltype gates;
-  //       feature is preference-only in web until a bg-check service exists.
+  // Option 16: Background File Check — express.e:25872-25881. Shown only
+  // when the node has BGFILECHECK and does not FORCE_BGFILECHECK; otherwise
+  // [DISABLED] (25880). Bit is USER_BGFILECHECK from axconsts.e:71.
   {
     const { UserFlag } = require('../../constants/express-flags');
-    const bgfc = (currentUser.userFlags || 0) & UserFlag.BGFILECHECK;
-    // express.e:25875 [32mYES[0m / express.e:25877 [37mNO[0m
-    emitText(socket, wYesNo(' 16', 'BACKGROUND FILE CHECK...', !!bgfc));
+    const { userMayToggleBackgroundFileCheck } = require('../../services/background-file-check.service');
+    if (userMayToggleBackgroundFileCheck(session.nodeId || 1)) {
+      const bgfc = (currentUser.userFlags || 0) & UserFlag.BGFILECHECK;
+      // express.e:25875 [32mYES[0m / express.e:25877 [37mNO[0m
+      emitText(socket, wYesNo(' 16', 'BACKGROUND FILE CHECK...', !!bgfc));
+    } else {
+      emitText(socket, '\x1b[34m[\x1b[0m 16\x1b[34m]\x1b[31m [DISABLED]\x1b[0m\r\n');
+    }
   }
 
   // WEB_: MODERN_* — option 17: modem emulation speed throttle, no express.e counterpart; web terminal setting
@@ -791,14 +792,15 @@ export async function handleWOptionSelectInput(socket: any, session: BBSSession,
       break;
 
     case 16: // Toggle Background File Check — express.e:26083-26087
-      // express.e: loggedOnUserKeys.userFlags := Eor(loggedOnUserKeys.userFlags, USER_BGFILECHECK)
-      // Web version has no Node BGFILECHECK / FORCE_BGFILECHECK tooltype gating
-      // (the bg-checker thread doesn't run server-side), so we always allow
-      // the toggle so user preference round-trips through the menu.
+      // express.e:26085-26086: the Eor of USER_BGFILECHECK happens only when
+      // the node has BGFILECHECK and does not FORCE_BGFILECHECK.
       {
         const { UserFlag } = require('../../constants/express-flags');
-        session.user.userFlags = (session.user.userFlags || 0) ^ UserFlag.BGFILECHECK;
-        await changeAccount(session, { userFlags: session.user.userFlags });
+        const { userMayToggleBackgroundFileCheck } = require('../../services/background-file-check.service');
+        if (userMayToggleBackgroundFileCheck(session.nodeId || 1)) {
+          session.user.userFlags = (session.user.userFlags || 0) ^ UserFlag.BGFILECHECK;
+          await changeAccount(session, { userFlags: session.user.userFlags });
+        }
         _displayWCommandMenu(socket, session);
       }
       break;

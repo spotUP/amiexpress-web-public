@@ -101,10 +101,7 @@ console.log('[ENV] Uploading');
   socket.emit('ansi-output', '\r\n');
   // 25613-25617: the node's BGFILECHECK decides whether this upload is checked
   // in the background (every web / telnet / SSH caller is a remote logon).
-  {
-    const { nodeHasBackgroundFileCheck } = require('../../services/background-file-check.service');
-    session.bgFileCheck = nodeHasBackgroundFileCheck(session.nodeId || 1);
-  }
+  require('../../services/background-file-check.service').raiseBackgroundFileCheck(session);
 
   // Start ZMODEM receive directly into the node playpen (matches express.e uploadaFile -> fileReceive path).
   const bbsRoot =

@@ -140,6 +140,26 @@ export function nodeHasBackgroundFileCheck(nodeId: number): boolean {
 }
 
 /**
+ * `bgFileCheck:=checkToolTypeExists(TOOLTYPE_NODE,node,'BGFILECHECK')`, which
+ * express.e writes before every upload it starts for a remote caller: U
+ * (25652), RZ (25614), the logon part-upload URG (28130) and the lost-carrier
+ * restart in scanHoldDesc (17514). A message's file clears it (10728).
+ */
+export function raiseBackgroundFileCheck(session: BBSSession): void {
+  session.bgFileCheck = nodeHasBackgroundFileCheck(session.nodeId || 1);
+}
+
+/**
+ * express.e:25872 and 26085 (the W menu's option 16), 17764 and 17777 (the
+ * upload's Okay prompt): the caller may switch USER_BGFILECHECK only when the
+ * node has BGFILECHECK and does not FORCE_BGFILECHECK. A forced node checks
+ * every upload whatever the caller's flag says, so there is nothing to choose.
+ */
+export function userMayToggleBackgroundFileCheck(nodeId: number): boolean {
+  return nodeFlag(nodeId, 'BGFILECHECK') && !nodeFlag(nodeId, 'FORCE_BGFILECHECK');
+}
+
+/**
  * express.e:17280, 17327, 18478, 19081:
  *   bgFileCheck AND ((userFlags AND USER_BGFILECHECK) OR FORCE_BGFILECHECK)
  *

@@ -14,6 +14,7 @@
  */
 
 import { EventEmitter } from 'events';
+import * as path from 'path';
 import { BBSSession } from '../index';
 import { ZmodemTransferManager, TransferTransport, TransferDirection as ZmodemDirection } from './zmodem-transfer.service';
 import { XmodemTransferManager, XmodemMode } from './xmodem-transfer.service';
@@ -76,6 +77,11 @@ export interface TransferOptions {
   files: string[];  // Paths for download, destination for upload
   onProgress?: (filename: string, transferred: number, total: number) => void;
   onFileComplete?: (filename: string, success: boolean) => void;
+  /**
+   * An upload's file is whole on disk, whatever the protocol (express.e
+   * doBgCheck, from xprfclose 13921 and zmuploadcompleted 16825).
+   */
+  onFileReceived?: (fullPath: string) => void;
   onComplete?: (success: boolean, files: string[]) => void;
   onError?: (error: string) => void;
 }
@@ -282,6 +288,7 @@ console.log(`[TRANSFER] Starting ${this.protocol} ${this.direction}`);
       transport: this.transport,
       direction: zmDirection,
       paths: this.options.files,
+      onFileReceived: this.options.onFileReceived,
       onComplete: (success, detail) => {
         const files = this.direction === 'upload' ? detail.received : detail.sent;
         this.completedFiles = files;
@@ -331,6 +338,9 @@ console.log(`[TRANSFER] Starting ${this.protocol} ${this.direction}`);
       onFileComplete: (filename, success) => {
         if (success) {
           this.completedFiles.push(filename);
+          if (this.direction === 'upload') {
+            this.options.onFileReceived?.(path.join(this.options.files[0], filename));
+          }
         }
         if (this.options.onFileComplete) {
           this.options.onFileComplete(filename, success);
@@ -374,6 +384,7 @@ console.log(`[TRANSFER] Starting ${this.protocol} ${this.direction}`);
 
     this.manager = new XmodemTransferManager({
       mode,
+      onFileReceived: this.options.onFileReceived,
       onProgress: (transferred, total) => {
         this.bytesTransferred = transferred;
         if (this.options.onProgress) {
@@ -413,6 +424,7 @@ console.log(`[TRANSFER] Starting ${this.protocol} ${this.direction}`);
    */
   private async startPunter(): Promise<void> {
     this.manager = new PunterTransferManager({
+      onFileReceived: this.options.onFileReceived,
       onProgress: (transferred, total) => {
         this.bytesTransferred = transferred;
         if (this.options.onProgress) {

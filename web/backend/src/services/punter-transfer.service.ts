@@ -57,6 +57,8 @@ export interface PunterOptions {
   onProgress?: (sent: number, total: number) => void;
   onError?: (error: string) => void;
   onComplete?: (success: boolean, bytesTransferred: number) => void;
+  /** The received file is whole on disk (express.e doBgCheck). */
+  onFileReceived?: (fullPath: string) => void;
 }
 
 /**
@@ -648,6 +650,7 @@ console.log('[PUNTER] No data received');
 
     fs.writeFileSync(this.filePath, fullData);
 console.log(`[PUNTER] File saved: ${this.filePath} (${fullData.length} bytes)`);
+    this.options.onFileReceived?.(this.filePath);
   }
 
   /**

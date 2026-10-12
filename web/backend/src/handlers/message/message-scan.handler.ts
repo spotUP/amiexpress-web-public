@@ -339,6 +339,8 @@ export async function performPartialUploadCheck(
     }
     // express.e:28126-28134 - in this conference, the upload: its resume
     // step (resumeStuff) offers each part file back.
+    // express.e:28129-28133 - bgFileCheck from the node's BGFILECHECK.
+    require('../../services/background-file-check.service').raiseBackgroundFileCheck(session);
     const { uploadaFileAndWait } = require('../commands/user-commands.handler');
     const stat: string = await uploadaFileAndWait(socket, session, false);
     // express.e:28142 - EXIT mystat=RESULT_FAILURE; a goodbye ends the scan.

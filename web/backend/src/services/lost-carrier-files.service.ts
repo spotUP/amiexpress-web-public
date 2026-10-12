@@ -153,6 +153,12 @@ export async function scanHoldDesc(socket: any, session: BBSSession): Promise<vo
   }
   try { fs.unlinkSync(list); } catch { /* gone */ }
 
+  // express.e:17513-17517: bgFileCheck from the node's BGFILECHECK, then
+  // uploadaFile(1,'',FALSE). lcFileXfr is set, so fileReceive transfers
+  // nothing and starts no thread (17266); the flag is the global the next
+  // procedure reads.
+  require('./background-file-check.service').raiseBackgroundFileCheck(session);
+
   // uploadaFile(1,'',FALSE) (17518): no receive, the post-receive block on
   // what is in the playpen.
   const { awaitUploadEnd } = require('./upload-end.service');

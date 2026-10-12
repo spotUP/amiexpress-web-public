@@ -24,6 +24,11 @@ export interface TransferOptions {
    * caller nothing. Upload only; absent accepts everything.
    */
   isDuplicate?: (filename: string) => boolean | Promise<boolean>;
+  /**
+   * One file is whole on disk (express.e zmuploadcompleted 16820 -> doBgCheck):
+   * the background file check is told, when the caller has one.
+   */
+  onFileReceived?: (fullPath: string) => void;
   onComplete?: (success: boolean, detail: { received: string[]; sent: string[]; skipped: string[] }) => void;
 }
 
@@ -50,8 +55,10 @@ export class ZmodemTransferManager {
   /** Names answered with ZSKIP - express's `skipdFiles`. */
   private skippedFiles: string[] = [];
   private isDuplicate?: (filename: string) => boolean | Promise<boolean>;
+  private onFileReceived?: (fullPath: string) => void;
 
   constructor(opts: TransferOptions) {
+    this.onFileReceived = opts.onFileReceived;
     this.session = opts.session;
     this.transport = opts.transport;
     this.direction = opts.direction;
@@ -248,6 +255,12 @@ console.log(`[ZMODEM] accepting ${safeName} -> ${dest}`);
           writer.write(Buffer.from(octets));
         });
         xfer.accept().then(() => {
+          // The file is whole once the stream has flushed it, not at end().
+          writer.once('finish', () => {
+            try { this.onFileReceived?.(dest); } catch (err) {
+              console.error(`[ZMODEM] onFileReceived failed for ${safeName}:`, err);
+            }
+          });
           writer.end();
           this.receivedFiles.push(dest);
 console.log(`[ZMODEM] received ${safeName}: ${this.bytesWritten} bytes written`);
