@@ -401,7 +401,19 @@ console.log(`[FILE_ID.DIZ] Skipping extraction - already done`);
         );
         try {
           // Add 15 second timeout to prevent hanging on file tests
-          const testPromise = testFile(data.path, nodeWorkDir);
+          // express.e:18590 displayOutPutofTest: the checker's own lines
+          // go to the uploader (nonStopDisplayFlag, so no More prompt).
+          const testPromise = testFile(data.path, nodeWorkDir, {
+            onCheckerOutput: (output) => {
+              const text = output.replace(/\r?\n/g, "\r\n");
+              if (text.trim()) {
+                socket.emit(
+                  "ansi-output",
+                  text.endsWith("\r\n") ? text : `${text}\r\n`
+                );
+              }
+            },
+          });
           const timeoutPromise = new Promise<TestResult>((resolve) =>
             setTimeout(() => resolve(TestResult.NOT_TESTED), 15000)
           );

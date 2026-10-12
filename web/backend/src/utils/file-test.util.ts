@@ -29,6 +29,23 @@ interface FileCheckerInfo {
   stackSize: number;
   priority: number;
   scriptPath: string | null;
+  /** ERROR.1..n strings, contiguous from 1 (express.e:18604-18620). */
+  errors: string[];
+}
+
+/**
+ * The ERROR.n tooltypes of a checker, in order, stopping at the first gap.
+ * express.e:18604-18620 reads ERROR.1, ERROR.2, ... with a WHILE on
+ * readToolType, so ERROR.4 after a missing ERROR.3 is never looked at.
+ */
+export function readErrorStrings(toolTypes: Map<string, string>): string[] {
+  const errors: string[] = [];
+  for (let i = 1; ; i++) {
+    const value = toolTypes.get(`ERROR.${i}`);
+    if (value === undefined) break;
+    errors.push(value);
+  }
+  return errors;
 }
 
 /**
@@ -117,7 +134,8 @@ console.log('[FileTest] Fcheck/ directory not found, using built-in checkers onl
         options: toolTypes.get('OPTIONS') || toolTypes.get('SOPTIONS') || '',
         stackSize: parseInt(toolTypes.get('STACK') || '8192', 10),
         priority: parseInt(toolTypes.get('PRIORITY') || '0', 10),
-        scriptPath: toolTypes.get('SCRIPT') || null
+        scriptPath: toolTypes.get('SCRIPT') || null,
+        errors: readErrorStrings(toolTypes)
       };
 
       checkers.set(ext, checkerInfo);
@@ -150,7 +168,23 @@ export enum TestResult {
  * @param nodeWorkDir Work directory for test output
  * @returns Test result status
  */
-export async function testFile(filepath: string, nodeWorkDir: string): Promise<TestResult> {
+/**
+ * Optional hooks for a caller that has a screen.
+ *
+ * onCheckerOutput receives what a disk checker printed, as express.e's
+ * displayOutPutofTest (18535-18540) shows OutPut_Of_Test to the uploader
+ * right after the checker ran (18581-18590, only when bgChecking=FALSE; the
+ * FTP path runs the background variant and shows nothing).
+ */
+export interface TestFileOptions {
+  onCheckerOutput?: (output: string) => void;
+}
+
+export async function testFile(
+  filepath: string,
+  nodeWorkDir: string,
+  options: TestFileOptions = {}
+): Promise<TestResult> {
   const filename = path.basename(filepath);
   const ext = path.extname(filename).toLowerCase().replace('.', '');
 
@@ -168,8 +202,8 @@ console.log(`[testFile] FILECHECK command error: ${error.message}`);
   }
 
   // Express.e:18650-18672 - Extract extension and run checker for that type
-  if (ext.length === 3 || ext.length === 2) {
-    return await checkFileByExtension(ext, filepath, nodeWorkDir);
+  if (ext.length === 3) { // express.e:18663 StrLen(temp2)=3
+    return await checkFileByExtension(ext, filepath, nodeWorkDir, options);
   }
 
   // No extension or unsupported
@@ -247,7 +281,8 @@ console.error(`[testFile] FILECHECK command execution error: ${error.message}`);
 async function checkFileByExtension(
   extension: string,
   filepath: string,
-  nodeWorkDir: string
+  nodeWorkDir: string,
+  options: TestFileOptions = {}
 ): Promise<TestResult> {
   const extUpper = extension.toUpperCase();
 
@@ -255,9 +290,16 @@ async function checkFileByExtension(
   const diskCheckers = loadFileCheckersFromDisk();
   const diskChecker = diskCheckers.get(extUpper);
 
+  // express.e:18553-18560: no FCheck/<EXT>.info (no CHECKER tooltype) means
+  // checkFileExternal returns RESULT_SUCCESS, the file is not judged.
+  if (!diskChecker) {
+console.log(`[FileTest] No checker configured for .${extUpper}, file passes`);
+    return TestResult.SUCCESS;
+  }
+
   if (diskChecker) {
 console.log(`[FileTest] Using disk-based checker for .${extUpper}: ${diskChecker.checker}`);
-    const diskResult = await runDiskBasedChecker(diskChecker, filepath, nodeWorkDir);
+    const diskResult = await runDiskBasedChecker(diskChecker, filepath, nodeWorkDir, options);
     // If disk checker returned a result (not null), use it
     // null means the checker wasn't available, so fall through to built-in
     if (diskResult !== null) {
@@ -299,10 +341,12 @@ console.log(`[testFile] No checker for extension: ${extension}`);
 async function runDiskBasedChecker(
   checker: FileCheckerInfo,
   filepath: string,
-  nodeWorkDir: string
+  nodeWorkDir: string,
+  options: TestFileOptions = {}
 ): Promise<TestResult | null> {
   const outputFile = path.join(nodeWorkDir, 'OutPut_Of_Test');
 
+  // Gap: this is where the emulator path (68K CHECKER run) will plug in.
   // Check if the checker path looks like an Amiga path (contains : like "DOORS:" or "DH0:")
   // These won't work on macOS/Linux, so skip disk checker and fall back to built-in
   if (checker.checker.includes(':') && !checker.checker.startsWith('/')) {
@@ -342,18 +386,40 @@ console.log(`[FileTest] Disk checker "${checkerPath}" not found, skipping`);
 
 console.log(`[FileTest] Running disk checker: ${command}`);
 
-    const { stdout, stderr } = await execAsync(command, {
-      timeout: 60000, // 60 second timeout
-      cwd: nodeWorkDir,
-    });
+    // express.e:18581 SystemTagList ignores the exit code: whatever the
+    // checker printed is the verdict, so a checker that exits 1 with a clean
+    // line (amiscan: 1=infected, 3=could not check) is read the same way as
+    // one that exits 0.
+    let stdout = '';
+    let stderr = '';
+    try {
+      const done = await execAsync(command, {
+        timeout: 60000, // 60 second timeout
+        cwd: nodeWorkDir,
+      });
+      stdout = done.stdout;
+      stderr = done.stderr;
+    } catch (error: any) {
+      // 126/127 are the shell saying it could not start the checker, not
+      // the checker speaking.
+      const exitedWithCode =
+        typeof error.code === 'number' && !error.killed && error.code !== 126 && error.code !== 127;
+      if (!exitedWithCode) throw error;
+      stdout = typeof error.stdout === 'string' ? error.stdout : '';
+      stderr = typeof error.stderr === 'string' ? error.stderr : '';
+    }
 
-    // Write output to test output file
-    await fs.writeFile(outputFile, `${stdout}\n${stderr}`);
+    // OutPut_Of_Test (express.e:18577), then shown to the caller (:18590).
+    const outputText = `${stdout}${stdout && stderr ? '\n' : ''}${stderr}`;
+    await fs.writeFile(outputFile, outputText);
+    options.onCheckerOutput?.(outputText);
 
-    // Check for error indicators in output
-    const output = `${stdout} ${stderr}`.toLowerCase();
-    if (output.includes('error') || output.includes('failed') || output.includes('corrupt') ||
-        output.includes('bad') || output.includes('invalid')) {
+    // express.e:18604-18620: a line containing any ERROR.n string fails the
+    // file; InStr is case-sensitive.
+    const failed = outputText
+      .split(/\r?\n/)
+      .some((line) => checker.errors.some((needle) => line.includes(needle)));
+    if (failed) {
 console.log(`[FileTest] Disk checker reported failure for ${filename}`);
       return TestResult.FAILURE;
     }
@@ -361,10 +427,10 @@ console.log(`[FileTest] Disk checker reported failure for ${filename}`);
 console.log(`[FileTest] Disk checker succeeded for ${filename}`);
     return TestResult.SUCCESS;
   } catch (error: any) {
-    // Command execution failed (non-zero exit code or timeout)
+    // Not run at all: the executable is missing or refused, or the checker
+    // was killed by the timeout (no exit code).
 console.error(`[FileTest] Disk checker error: ${error.message}`);
 
-    // Check if error is due to command not found (ENOENT) or permission denied
     const errMsg = error.message?.toLowerCase() || '';
     if (errMsg.includes('enoent') || errMsg.includes('not found') ||
         errMsg.includes('no such file') || errMsg.includes('permission denied') ||
@@ -373,14 +439,6 @@ console.log(`[FileTest] Disk checker not available, falling back to built-in`);
       return null; // Signal to fall back to built-in checker
     }
 
-    await fs.writeFile(outputFile, `ERROR: ${error.message}`);
-
-    // Non-zero exit code from an actual test usually means test failure
-    if (error.code !== undefined && typeof error.code === 'number') {
-      return TestResult.FAILURE;
-    }
-
-    // Other errors - mark as not tested
     return TestResult.NOT_TESTED;
   }
 }
