@@ -229,20 +229,32 @@ describe('FM follows express.e on Q, typed names and ^C', () => {
     expect(shown).not.toContain('Continue');
   });
 
-  it('^C during the search prints **Break and leaves FM (express.e:27436-27442, 24993)', async () => {
+  it('^C typed while the scan runs prints **Break and leaves FM (express.e:27436-27442, 24993)', async () => {
+    // A long listing whose only match is its last entry: the scan runs for a
+    // while before it could show anything.
+    const filler = Array.from({ length: 300 }, (_, i) => dirLine(`F${i}.LHA`, '01-01-24'));
+    fs.writeFileSync(path.join(root, 'Conf1', 'DIR1'), [...filler, dirLine('LAST.LHA', '01-01-24')].join('\n') + '\n');
     const c = caller();
-    c.session.subState = LoggedOnSubState.FM_SCAN;
-    // A ^C reaches FM_SCAN's handler through handleCommand (checkInput + readChar=3).
-    await handleCommand(c.socket, c.session, '\x03');
-    expect(c.session.tempData.fmBreak).toBe(true);
-    // The search sees a ^C that arrived while it was reading: model that key
-    // as already pending when the loop looks (the search clears the flag as it starts).
-    Object.defineProperty(c.session.tempData, 'fmBreak', { get: () => true, set: () => undefined });
-    const search = (FileMaintenanceHandler as any).maintenanceFileSearch(
-      c.socket, c.session, false, 1, 1, ['ONE.LHA'], 0);
-    expect(await search).toBe('break');
-    const shown = c.take();
+    await c.start();
+    await c.type('LAST.LHA\r');
+    c.take();
+    const key = (k: string) => dispatchInOrder(c.session, [k], (piece) => handleCommand(c.socket, c.session, piece), (err) => { throw err; });
+    key('1');
+    await new Promise((r) => setTimeout(r, 5));
+    key('\r');
+    // The scan has started: its first line is out. ^C now, while it walks the listing.
+    let shown = '';
+    while (!shown.includes('Scanning directory 1')) {
+      await new Promise((r) => setImmediate(r));
+      shown += c.take();
+    }
+    key('\x03');
+    await c.settle();
+    shown += c.take();
     expect(shown).toContain('**Break\r\n');
+    expect(shown).not.toContain('LAST.LHA');
     expect(shown).not.toContain('Continue');
+    expect(c.session.subState).not.toBe(LoggedOnSubState.FM_SCAN);
+    expect(c.session.typeAhead).toBeUndefined();
   });
 });

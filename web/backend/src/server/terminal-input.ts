@@ -36,6 +36,7 @@
  */
 import type { BBSSession } from '../index';
 import { noteCallerActivity } from '../services/idle-timeout.service';
+import { holdsTypeAhead, type InputWaitingSession } from '../utils/await-input';
 
 /** Which of the two pause accumulators a decision belongs to. */
 export type PauseKind = 'check' | 'flag';
@@ -241,11 +242,13 @@ export function dispatchInOrder(
   };
   for (const piece of pieces) {
     const holder = session as { keyChain?: Promise<void>; keyBusy?: boolean; inputWaiter?: unknown };
-    if (holder.keyBusy && holder.inputWaiter) {
+    if (holder.keyBusy && (holder.inputWaiter || holdsTypeAhead(session as InputWaitingSession))) {
       // The key in flight is WAITING FOR THIS ONE: a procedure ported from
-      // express.e is parked on lineInput / readChar / yesNo
-      // (utils/await-input). Queued behind it, the answer would sit out
-      // KEY_ORDER_WAIT_MS first - or, one key at a time, never reach it.
+      // express.e is parked on lineInput / readChar / yesNo, or holds the
+      // input between its prompts for its checkInput (utils/await-input).
+      // Both take the key synchronously, so it cannot overtake one. Queued behind
+      // it, the answer would sit out KEY_ORDER_WAIT_MS first - or, one key at
+      // a time, never reach it.
       handle(piece).catch(onError);
       continue;
     }

@@ -23,7 +23,7 @@
 import { BBSSession, LoggedOnSubState } from '../../index';
 import type { User } from '../../database/types';
 import { emitText, flushOutput, clearTheScreen } from '../../utils/output.util';
-import { lineInput, readChar, readCharWithin, eValRead } from '../../utils/await-input';
+import { lineInput, readChar, eValRead, holdInput, checkInput, purgeLine, takeTypeAhead } from '../../utils/await-input';
 import { setEnvStat, getACSConfig, ToggleFlags } from '../../utils/acs.util';
 import { EnvStat } from '../../constants/env-codes';
 import { RESULT_SUCCESS, RESULT_FAILURE } from '../../constants/command-results';
@@ -54,13 +54,14 @@ interface EditAccounts {
  * internalCommand1 -> editAccounts(FALSE) (express.e:24458), started from the
  * command: it runs until the sysop leaves it, then the menu comes back. Keys
  * reach it through the waiting input (handleCommand feeds it first); one that
- * arrives between two prompts is dropped (ACCOUNT_EDITOR_MENU).
+ * arrives between two prompts is held for its next read (holdInput), as the
+ * serial line holds it for express.e.
  */
 export function startEditAccounts(socket: any, session: BBSSession): void {
   session.subState = LoggedOnSubState.ACCOUNT_EDITOR_MENU;
   void (async () => {
     try {
-      await editAccounts(socket, session);
+      await holdInput(session, LoggedOnSubState.ACCOUNT_EDITOR_MENU, () => editAccounts(socket, session));
     } catch (err) {
       console.error('[editAccounts] failed:', err);
       emitText(socket, '\r\n');
@@ -152,10 +153,24 @@ async function checkNEdit(socket: any, session: BBSSession, which: number): Prom
   return openEditInfo(socket, session, account, which, false);
 }
 
-/** editInfo after this procedure's buffered output is on the wire (the editor writes directly). */
+/**
+ * editInfo after this procedure's buffered output is on the wire (the editor
+ * writes directly). The editor reads its keys through its sub-state, so what
+ * the sysop typed ahead - while an account was loading - is handed to it in
+ * order: in express.e editInfo's readChar takes those keys off the line.
+ */
 function openEditInfo(socket: any, session: BBSSession, account: User, slot: number, onlineEdit: boolean): Promise<number> {
   flushOutput(socket);
-  return editInfo(socket, session, account, slot, onlineEdit);
+  const done = editInfo(socket, session, account, slot, onlineEdit);
+  const held = takeTypeAhead(session);
+  if (held.length > 0) {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { handleCommand } = require('../command.handler');
+    void (async () => {
+      for (const key of held) await handleCommand(socket, session, key);
+    })();
+  }
+  return done;
 }
 
 /**
@@ -195,16 +210,21 @@ async function listNewAccounts(socket: any, session: BBSSession, ctx: EditAccoun
       }
     }
     // 21777-21805: a key typed during the walk. ^W (23) pauses on 'Any key..'
-    // and wipes it; ^C (3) says Abort and jumps to acctMark1 (21807).
-    // checkInput()+readChar() is readCharWithin: a key already arrived is read.
-    const typed = await readCharWithin(socket, session, 0);
-    if (typed === '\x17') {
-      emitText(socket, 'Any key..');
-      await readChar(socket, session);
-      emitText(socket, '\b'.repeat(9) + ' '.repeat(9) + '\b'.repeat(9));
-    } else if (typed === '\x03') {
-      emitText(socket, '\r\nAbort\r\n');
-      break;
+    // and wipes it; ^C (3) says Abort and jumps to acctMark1 (21807); any
+    // other key is thrown away with whatever was typed after it.
+    if (await checkInput(session)) {
+      const typed = await readChar(socket, session);
+      if (typed === '\x17') {
+        purgeLine(session); // 21781
+        emitText(socket, 'Any key..');
+        await readChar(socket, session);
+        emitText(socket, '\b'.repeat(9) + ' '.repeat(9) + '\b'.repeat(9));
+      } else if (typed === '\x03') {
+        emitText(socket, '\r\nAbort\r\n');
+        break;
+      } else {
+        purgeLine(session); // 21803
+      }
     }
   }
   if (!foflag) emitText(socket, '\x1b[0mNo new users.'); // acctMark1, 21808

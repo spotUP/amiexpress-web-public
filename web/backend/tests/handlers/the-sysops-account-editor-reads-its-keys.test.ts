@@ -105,6 +105,7 @@ describe("the sysop's 1 reads its keys", () => {
   /** editAccounts has returned: nothing waits for a key, and its sub-state is gone. */
   const left = (s: ReturnType<typeof sysop>) => {
     expect(s.session.inputWaiter).toBeUndefined();
+    expect(s.session.typeAhead).toBeUndefined();
     expect(s.session.subState).not.toBe(LoggedOnSubState.ACCOUNT_EDITOR_MENU);
   };
 
@@ -206,44 +207,83 @@ describe("the sysop's 1 reads its keys", () => {
     expect(s.text()).toContain('Edit which account? ');
   });
 
-  /** TAB leaves the open editor; returns once the walk is polling for a typed key (21777). */
-  const tabIntoPoll = async (s: ReturnType<typeof sysop>, socketKeys: (k: string) => Promise<void>) => {
-    const before = s.session.inputWaiter;
-    await commandHandler.handleCommand(s.socket, s.session, '\t');
-    while (!s.session.inputWaiter || s.session.inputWaiter === before) await new Promise((r) => setImmediate(r));
-    await socketKeys('');
-  };
-
-  it('N: ^C typed during the walk says Abort and stops before the next account (21799-21801)', async () => {
-    await makeAccount(db, { newUser: true });
-    await makeAccount(db, { newUser: true });
+  /**
+   * new account, an old one, new account. Opens the editor on the first (past
+   * any new accounts earlier tests left) and TABs on; `key` is typed while the
+   * walk reads the old one off the disk - after it started, before it looks
+   * for a key (21777) and before the next editor.
+   */
+  async function typeBetweenRecords(key: string) {
+    const first = await makeAccount(db, { newUser: true });
+    const old = await makeAccount(db, { newUser: false });
+    const after = await makeAccount(db, { newUser: true });
     const s = sysop();
     await s.one();
     await s.keys('N\r');
+    while (!s.text().includes(`[${first.slotNumber}]`)) { s.out.length = 0; await s.keys('\t'); }
+    const real = userDatabaseManager.readUserFromDisk.bind(userDatabaseManager);
+    let typed = false;
+    const spy = jest.spyOn(userDatabaseManager, 'readUserFromDisk').mockImplementation(((slot: number) => {
+      if (slot === old.slotNumber && !typed) {
+        typed = true;
+        void commandHandler.handleCommand(s.socket, s.session, key);
+      }
+      return real(slot);
+    }) as any);
     s.out.length = 0;
-    await tabIntoPoll(s, async () => {});
-    await commandHandler.handleCommand(s.socket, s.session, '\x03');
-    await settle();
+    try {
+      await s.keys('\t');
+    } finally {
+      spy.mockRestore();
+    }
+    expect(typed).toBe(true);
+    return { s, after };
+  }
+
+  it('N: ^C typed during the walk says Abort and stops before the next account (21799-21801)', async () => {
+    const { s } = await typeBetweenRecords('\x03');
     expect(s.text()).toContain('\r\nAbort\r\n\r\n\r\n');
     expect(s.text()).not.toMatch(/ACTIVE\x1b\[0m \[\d+\]/);
     expect(s.text()).toContain('Edit which account? ');
   });
 
-  it('N: ^W typed during the walk asks Any key.. and wipes it, then the walk goes on (21780-21798)', async () => {
+  it('N: a key typed while the walk loads the next new account reaches that account\'s editor (21763-21764)', async () => {
     await makeAccount(db, { newUser: true });
-    await makeAccount(db, { newUser: true });
+    const next = await makeAccount(db, { newUser: true });
     const s = sysop();
     await s.one();
     await s.keys('N\r');
-    s.out.length = 0;
-    await tabIntoPoll(s, async () => {});
-    await commandHandler.handleCommand(s.socket, s.session, '\x17');
-    await settle();
+    // Walk to the account before `next`, whatever new accounts earlier tests left.
+    while (!s.text().includes(`[${next.slotNumber - 1}]`)) { s.out.length = 0; await s.keys('\t'); }
+    const real = userFileManager.readUserBySlot.bind(userFileManager);
+    let typed = false;
+    const spy = jest.spyOn(userFileManager, 'readUserBySlot').mockImplementation((slot: number) => {
+      if (slot === next.slotNumber && !typed) {
+        typed = true;
+        // The sysop presses X while the walk is loading `next`, before its editor is up.
+        void commandHandler.handleCommand(s.socket, s.session, 'X');
+      }
+      return real(slot);
+    });
+    try {
+      s.out.length = 0;
+      await s.keys('\t');
+      expect(typed).toBe(true);
+      expect(s.text()).toContain(`[${next.slotNumber}]`);
+      expect(s.text()).toContain('\x1b[JNo-Save\r\n');
+      expect(s.text()).toContain('\r\nAbort\r\n\r\n');
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it('N: ^W typed during the walk asks Any key.. and wipes it, then the walk goes on (21780-21798)', async () => {
+    const { s, after } = await typeBetweenRecords('\x17');
     expect(s.text()).toContain('Any key..');
     expect(s.text()).not.toMatch(/ACTIVE\x1b\[0m \[\d+\]/);
     await commandHandler.handleCommand(s.socket, s.session, 'k');
     await settle();
     expect(s.text()).toContain('Any key..' + '\b'.repeat(9) + ' '.repeat(9) + '\b'.repeat(9));
-    expect(s.text()).toMatch(/ACTIVE\x1b\[0m \[\d+\]/);
+    expect(s.text()).toContain(`[${after.slotNumber}]`);
   });
 });

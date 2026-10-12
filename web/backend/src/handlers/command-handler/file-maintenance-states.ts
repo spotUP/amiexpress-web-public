@@ -21,15 +21,11 @@ type FMHandler = (socket: any, session: BBSSession, input: string) => void | Pro
 /**
  * The two line prompts before the scan. FM_SCAN maps to nothing that reads:
  * the scan (FileMaintenanceHandler.runScan) reads its keys through
- * utils/await-input, which handleCommand feeds before any sub-state, so a key
- * that reaches here arrived between prompts and answers nothing - as the
- * message reader's MSG_READER_NAV drops one.
+ * utils/await-input, which handleCommand feeds before any sub-state, and it
+ * holds the input while it runs (holdInput), so a key typed mid-scan waits for
+ * its checkInput. Nothing it reads reaches here.
  */
-const ignoreBetweenPrompts: FMHandler = (_socket, session, input) => {
-  // express.e:27436-27438 - checkInput() then readChar(1)=3: a ^C typed while
-  // the scan runs ends the search (maintenanceFileSearch looks at this).
-  if (input === '\x03') session.tempData.fmBreak = true;
-};
+const ignoreBetweenPrompts: FMHandler = () => undefined;
 
 const FM_HANDLERS: Map<LoggedOnSubState, FMHandler> = new Map([
   [LoggedOnSubState.FM_FILENAME_INPUT, FileMaintenanceHandler.handleFilenameInput],
@@ -69,7 +65,6 @@ export async function handleFileMaintInput(
     return false;
   }
   if (subState === LoggedOnSubState.FM_SCAN) {
-    handler(socket, session, data);
     return true;
   }
 

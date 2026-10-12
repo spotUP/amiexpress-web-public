@@ -1163,8 +1163,8 @@ console.log('[handleCommand] Executing screen-initiated command (state bypass en
 
   // editAccounts (the sysop's 1, user/user-editor.handler) reads its own keys
   // through lineInput / readChar, which handleCommand feeds before any
-  // sub-state runs. A key that arrives between two of its prompts has
-  // nothing to answer.
+  // sub-state runs; a key that arrives between two of its prompts is held
+  // for it there (holdInput). Nothing reaches here while it runs.
   if (session.subState === LoggedOnSubState.ACCOUNT_EDITOR_MENU) {
     return;
   }

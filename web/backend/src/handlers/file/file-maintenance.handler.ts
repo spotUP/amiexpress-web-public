@@ -10,7 +10,8 @@
  * (FM_FILENAME_INPUT, FM_DIRSPAN_INPUT). From the directory span on, the scan
  * is one procedure, as in express.e: it waits on readChar / yesNo /
  * lineInput (utils/await-input), which handleCommand feeds before any
- * sub-state runs, and sits in FM_SCAN between prompts.
+ * sub-state runs, and sits in FM_SCAN between prompts. It holds the input
+ * while it runs: a key typed mid-scan waits for its checkInput or next read.
  */
 
 import { LoggedOnSubState } from '../../constants/bbs-states';
@@ -21,7 +22,7 @@ import { ErrorHandler } from '../../utils/error-handling.util';
 import { matchAmigaPattern } from '../../utils/amiga-pattern';
 import { flagManagerOf } from '../../utils/file-flag.util';
 import { emitText, flushOutput } from '../../utils/output.util';
-import { lineInput, readChar, yesNo } from '../../utils/await-input';
+import { lineInput, readChar, readCharWithin, yesNo, holdInput, checkInput } from '../../utils/await-input';
 import { NO_SUCH_DIRECTORY, parseDirSpan, getDirSpanPrompt, DirSpan } from '../../utils/dir-span.util';
 import { DirFileEntry, getHoldDirFilePath } from '../../utils/dir-file-reader.util';
 import { deleteEntry, moveEntry, listEntries, readDirLines, dateCompareValue, dateOfDirLine } from '../../services/file-list.service';
@@ -228,9 +229,9 @@ export class FileMaintenanceHandler {
     emitText(socket, '\r\n'); // express.e:24959, before the scan
 
     session.subState = LoggedOnSubState.FM_SCAN;
-    const finishedScan = await this.runScan(
+    const finishedScan = await holdInput(session, LoggedOnSubState.FM_SCAN, () => this.runScan(
       socket, session, flagFileList || [], this.buildDirList(dirSpan), useFlagged || false
-    );
+    ));
     // express.e:25040 - the closing '\b\n' only on the way out of the loop;
     // a D/M failure or q leaves through Raise(ERR_EXCEPT) without it.
     if (finishedScan) emitText(socket, '\r\n');
@@ -338,20 +339,19 @@ export class FileMaintenanceHandler {
     searchList: string[],
     startLine: number
   ): Promise<SearchHit | 'break' | null> {
-    // checkInput() (27436): a key typed while the scan runs. The FM_SCAN
-    // handler records a ^C that arrives between prompts.
-    session.tempData.fmBreak = false;
     const entries = await listEntries({ dataDir: _config.get('dataDir'), db: _db }, confNum, dirNum);
     const viewAllowed = this.canViewFile(session, holdDir); // 27431-27432
 
     for (const entry of entries) {
       if (entry.lineNumber < startLine || !entry.filename) continue;
-      // express.e:27434-27443: ^C ends the search.
-      if (session.tempData.fmBreak) {
-        session.tempData.fmBreak = false;
-        emitText(socket, '**Break\r\n');
-        flushOutput(socket);
-        return 'break';
+      // express.e:27436-27443: a key typed while the scan runs is read with
+      // readChar(1); ^C ends the search, any other key is dropped.
+      if (await checkInput(session)) {
+        if ((await readCharWithin(socket, session, 1)) === '\x03') {
+          emitText(socket, '**Break\r\n');
+          flushOutput(socket);
+          return 'break';
+        }
       }
       // express.e:27444-27470: the directory entry's name is the AmigaDOS
       // pattern (parsePatternNoCase2) and each typed name is the string it is
