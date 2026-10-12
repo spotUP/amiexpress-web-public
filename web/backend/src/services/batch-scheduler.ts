@@ -1,3 +1,4 @@
+import { parseAmigaCommandLine } from '../amiga-emulation/api/dos/dos-command-line';
 import * as fs from 'fs';
 /*
  * A BATCH SCRIPT IS AMIGA-CASED AND LINUX IS NOT, and the sysop writes the
@@ -246,49 +247,6 @@ function processMciInCommand(
   return processMciTokenizer(cmd, dispatch);
 }
 
-/**
- * Parse AmigaDOS-style command line arguments with quote handling.
- * CRITICAL: Keep quotes IN the arguments - AmigaDOS programs expect to parse them.
- *
- * Examples:
- *   -UC"0" -> ['-UC"0"']  (program parses the quotes)
- *   -O"BBS:path"15 -> ['-O"BBS:path"15']  (program parses quotes and number)
- *   doors:path/file arg1 arg2 -> ['doors:path/file', 'arg1', 'arg2']
- *
- * Only splits on spaces OUTSIDE of quotes. Quotes remain in the arguments.
- */
-function parseAmigaDOSArgs(cmdLine: string): string[] {
-  const parts: string[] = [];
-  let current = '';
-  let inQuotes = false;
-
-  for (let i = 0; i < cmdLine.length; i++) {
-    const char = cmdLine[i];
-
-    if (char === '"') {
-      // Keep the quote in the argument
-      current += char;
-      inQuotes = !inQuotes;
-    } else if (char === ' ' && !inQuotes) {
-      // Whitespace outside quotes - end current argument
-      if (current) {
-        parts.push(current);
-        current = '';
-      }
-    } else {
-      // Regular character - accumulate
-      current += char;
-    }
-  }
-
-  // Push final argument if any
-  if (current) {
-    parts.push(current);
-  }
-
-  return parts;
-}
-
 function resolveAssign(p: string): string {
   const lower = p.toLowerCase();
   const base = config.getConfig().dataDir;
@@ -432,21 +390,18 @@ async function executeLine(rawLine: string, nodeId: number): Promise<void> {
     return;
   }
 
-  // handle redirection
-  let cmdPart = line;
-  let redirect: string | undefined;
-  if (line.includes('>')) {
-    const [left, right] = line.split('>');
-    cmdPart = left.trim();
-    redirect = right.trim();
-  }
-
-  // Parse AmigaDOS-style arguments (handles quotes like -UC"0" -O"path"15)
-  const parts = parseAmigaDOSArgs(cmdPart);
-  if (parts.length === 0) {
+  // One parser for the line: quotes, and ">file" / ">>file" / "<file" anywhere
+  // in it (amiga-emulation/api/dos/dos-command-line.ts). Arguments keep their
+  // quotes (-UC"0" -O"path"15): AmigaDOS programs parse them themselves.
+  const parsed = parseAmigaCommandLine(line);
+  // ">NIL:" discards output; there is no file to write.
+  const redirect: string | undefined =
+    parsed.stdout && !/^nil:?$/i.test(parsed.stdout.path) ? parsed.stdout.path : undefined;
+  const parts = [parsed.words[0]?.value ?? '', ...parsed.rawArgs];
+  if (!parsed.words.length) {
     return;
   }
-  const amigaArgs = parts.slice(1);
+  const amigaArgs = parsed.rawArgs;
   // CRITICAL FIX: Do NOT resolve Amiga assigns to full paths!
   // 68K doors expect Amiga-style paths (doors:, bbs:, etc.)
   // Long Unix paths cause infinite loops in door string copy routines

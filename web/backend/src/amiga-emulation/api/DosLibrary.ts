@@ -1,3 +1,4 @@
+import { parseAmigaCommandLine } from "./dos/dos-command-line";
 import { MoiraEmulator, CPURegister } from "../cpu/MoiraEmulator";
 import * as fs from "fs";
 import * as amigafs from "../../utils/amigafs";
@@ -96,43 +97,6 @@ import {
  * @see ./dos/dos-readargs.ts for ReadArgs parsing
  * @see ./dos/dos-env-manager.ts for environment variable management
  */
-
-/**
- * Splits an AmigaDOS/shell command line into arguments, honouring double
- * quotes. Needed because the paths a door passes to an archiver routinely
- * contain no spaces but ARE quoted ("LhA" x "PROGDIR:downloads/A.LHA"
- * "Doors:MYDOOR/"), and a plain whitespace split leaves the quotes glued
- * to the path, where no resolver can match them.
- */
-function tokenizeShellArgs(line: string): string[] {
-  const args: string[] = [];
-  let current = '';
-  let inQuotes = false;
-  let started = false;
-
-  for (const ch of line) {
-    if (ch === '"') {
-      inQuotes = !inQuotes;
-      started = true;
-      continue;
-    }
-    if (!inQuotes && /\s/.test(ch)) {
-      if (started) {
-        args.push(current);
-        current = '';
-        started = false;
-      }
-      continue;
-    }
-    current += ch;
-    started = true;
-  }
-  if (started) {
-    args.push(current);
-  }
-  return args;
-}
-
 
 /**
  * A path whose existing prefix is spelled the way the disk spells it.
@@ -3674,26 +3638,15 @@ debugLog(`[dos.library] IsInteractive(handle=${handle})`);
   private runCommandLine(name: string, outputHandleArg: number): void {
     let outputHandle = outputHandleArg;
 
-    // Parse shell redirection (">file" or ">>file") from command string
-    // AmigaDOS Execute() expects the shell to handle redirection, so we parse it here
-    let redirectFile: string | null = null;
-    let redirectAppend = false;
-    let commandPart = name;
-
-    // Check for >> (append) first, then > (overwrite)
-    const appendMatch = name.match(/^(.+?)\s*>>\s*(.+)$/);
-    const overwriteMatch = name.match(/^(.+?)\s*>\s*(.+)$/);
-
-    if (appendMatch) {
-      commandPart = appendMatch[1].trim();
-      redirectFile = appendMatch[2].trim();
-      redirectAppend = true;
-      debugLog(`[dos.library] Execute: Parsed redirection: "${commandPart}" >> "${redirectFile}"`);
-    } else if (overwriteMatch) {
-      commandPart = overwriteMatch[1].trim();
-      redirectFile = overwriteMatch[2].trim();
-      redirectAppend = false;
-      debugLog(`[dos.library] Execute: Parsed redirection: "${commandPart}" > "${redirectFile}"`);
+    // The shell strips redirections (">file", ">>file", "<file") wherever they
+    // stand in the line; the program sees the rest. One parser for Execute,
+    // SystemTagList and the batch scheduler (dos/dos-command-line.ts).
+    const parsedLine = parseAmigaCommandLine(name);
+    const redirectFile: string | null = parsedLine.stdout?.path ?? null;
+    const redirectAppend = parsedLine.stdout?.append ?? false;
+    const commandPart = parsedLine.commandText;
+    if (redirectFile) {
+      debugLog(`[dos.library] Execute: Parsed redirection: "${commandPart}" ${redirectAppend ? '>>' : '>'} "${redirectFile}"`);
     }
 
     // If redirection is specified but no output handle provided, open the file
@@ -4168,7 +4121,7 @@ debugLog(`[dos.library] Execute("${name}") -> DATE command, date: "${dateStr.tri
     // member filters, a different verb - is not interpreted: an
     // unrecognised shape fails rather than silently doing something else.
     {
-      const argv = tokenizeShellArgs(commandPart);
+      const argv = parsedLine.words.map((w) => w.value);
       const program = (argv[0] || '').split(/[/:]/).pop()?.toUpperCase() || '';
       const isArchiver = program === 'LHA' || program === 'LZX' || program === 'UNLZX';
 
