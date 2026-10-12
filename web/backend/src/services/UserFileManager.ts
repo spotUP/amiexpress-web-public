@@ -261,7 +261,7 @@ export class UserFileManager {
       msgBaseRJoin: user.msgBaseRJoin ?? 1,
       confYM9: 0,
       todaysBytesLimit: user.todaysBytesLimit ?? user.byteLimit,
-      protocol: 0,
+      protocol: 0x5a, // express.e:30449 userData.protocol:="Z" at creation; nothing else sets it
       uucpa: user.uucpa ?? (user.uuCP ? 1 : 0),
       // Lines per screen, 0 = auto (express.e:11272-11314). It was a constant
       // 79, as if it were a line WIDTH, so every caller's pause length on disk

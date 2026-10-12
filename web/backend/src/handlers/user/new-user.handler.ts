@@ -876,8 +876,15 @@ export async function handleComputerInput(socket: Socket, session: any, input: s
  * only by an upload the node started, so a fresh new-user session has it
  * clear and gets no flag - exactly as express.e's first caller on a node does.
  */
-export function newUserDefaultFlags(session: { bgFileCheck?: boolean; nodeId?: number }): number {
-  return session.bgFileCheck && nodeFlag(session.nodeId || 1, 'DEFAULT_BGFILECHECK') ? UserFlag.BGFILECHECK : 0;
+export function newUserDefaultFlags(
+  session: { bgFileCheck?: boolean; nodeId?: number },
+  screenClear = false
+): number {
+  // express.e:30270 `userFlags:=USER_NEWMSG`, 30278 `OR USER_SCRNCLR` on a Y answer.
+  let flags: number = UserFlag.NEWMSG;
+  if (screenClear) flags |= UserFlag.SCRNCLR;
+  if (session.bgFileCheck && nodeFlag(session.nodeId || 1, 'DEFAULT_BGFILECHECK')) flags |= UserFlag.BGFILECHECK;
+  return flags;
 }
 
 function promptForScreenClear(socket: Socket, session: any) {
@@ -1494,8 +1501,8 @@ console.log(`[SETUP] First user created: ${data.username} - Auto-assigned sysop 
       ansi: ansiFlag,
       expert: expertFlag,
       screenClear: data.screenClear,
-      // express.e:30284 - USER_BGFILECHECK for a new caller when the node default asks for it.
-      userFlags: newUserDefaultFlags(session),
+      // express.e:30270-30284 - USER_NEWMSG, USER_SCRNCLR on a Y answer, USER_BGFILECHECK per the node default.
+      userFlags: newUserDefaultFlags(session, data.screenClear === true),
       availableForChat,
       quietNode,
       // The rejoin conference: users.autorejoin is the same number as the

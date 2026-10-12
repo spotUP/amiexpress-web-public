@@ -33,14 +33,14 @@ const icon = (t: string) => { fs.writeFileSync(path.join(board, 'Node1.info'), t
 describe('new account USER_BGFILECHECK (express.e:30284)', () => {
   test('DEFAULT_BGFILECHECK with bgFileCheck raised sets the flag', () => {
     icon('BGFILECHECK\nDEFAULT_BGFILECHECK\n');
-    expect(newUserDefaultFlags({ nodeId: 1, bgFileCheck: true })).toBe(UserFlag.BGFILECHECK);
+    expect(newUserDefaultFlags({ nodeId: 1, bgFileCheck: true })).toBe(UserFlag.NEWMSG | UserFlag.BGFILECHECK);
   });
   test('no DEFAULT_BGFILECHECK, or bgFileCheck clear, leaves it off', () => {
     icon('BGFILECHECK\n');
-    expect(newUserDefaultFlags({ nodeId: 1, bgFileCheck: true })).toBe(0);
+    expect(newUserDefaultFlags({ nodeId: 1, bgFileCheck: true })).toBe(UserFlag.NEWMSG);
     icon('DEFAULT_BGFILECHECK\n');
-    expect(newUserDefaultFlags({ nodeId: 1, bgFileCheck: false })).toBe(0);
-    expect(newUserDefaultFlags({ nodeId: 1 })).toBe(0);
+    expect(newUserDefaultFlags({ nodeId: 1, bgFileCheck: false })).toBe(UserFlag.NEWMSG);
+    expect(newUserDefaultFlags({ nodeId: 1 })).toBe(UserFlag.NEWMSG);
   });
   test('createUser keeps the flags it is given', async () => {
     const db = (global as any).testDb;
