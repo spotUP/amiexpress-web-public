@@ -12,7 +12,8 @@ import { isSysopAvailable } from '../../services/sysop-availability';
 import * as fs from 'fs';
 import { negotiateBinaryForTransfer } from '../file/file-delivery';
 import type { TransferResult } from '../../services/transfer-protocol.service';
-import { checkSecurity } from '../../utils/acs.util';
+import { checkSecurity, setEnvStat } from '../../utils/acs.util';
+import { EnvStat } from '../../constants/env-codes';
 import { ACSPermission } from '../../constants/acs-permissions';
 import { AnsiUtil } from '../../utils/ansi.util';
 import { joinedConf } from '../../utils/joined-conf.util';
@@ -829,7 +830,7 @@ export async function handleUserStatsCommand(socket: any, session: BBSSession): 
   }
 
   // express.e:25544 - setEnvStat(ENV_STATS)
-console.log('[ENV] User Statistics');
+setEnvStat(session, EnvStat.STATS);
 
   // express.e:25546 - aePuts('\b\n')
   // express.e:25546 - aePuts('\b\n') - just a newline, NO header
@@ -1067,7 +1068,7 @@ export async function handleJoinConferenceCommand(
   }
 
   // express.e:25122 - setEnvStat(ENV_JOIN)
-console.log('[ENV] Join Conference');
+setEnvStat(session, EnvStat.JOIN);
 
   // express.e:25124-25136 - Parse parameters
   const parsedParams = ParamsUtil.parse(params);
@@ -1191,7 +1192,7 @@ export async function handleUploadCommand(socket: any, session: BBSSession): Pro
   }
 
   // express.e:25649 - setEnvStat(ENV_UPLOADING)
-console.log('[ENV] Uploading');
+setEnvStat(session, EnvStat.UPLOADING);
 
   // express.e:25651-25655 - the node's BGFILECHECK decides whether this
   // upload is checked in the background.

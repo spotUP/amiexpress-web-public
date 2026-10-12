@@ -95,8 +95,6 @@ export async function handleZmodemUploadCommand(socket: any, session: BBSSession
   // Set environment status - express.e:25610
   _setEnvStat(session, EnvStat.UPLOADING);
 
-console.log('[ENV] Uploading');
-
   // express.e:25608-25619 internalCommandRZ - no header, directly starts upload
   socket.emit('ansi-output', '\r\n');
   // 25613-25617: the node's BGFILECHECK decides whether this upload is checked
@@ -306,8 +304,6 @@ export function handleSysopUploadCommand(socket: any, session: BBSSession, param
   // Set environment status - express.e:25662
   _setEnvStat(session, EnvStat.UPLOADING);
 
-console.log('[ENV] Uploading');
-
   // express.e:25660-25664 internalCommandUS - no header, calls sysopUpload()
   socket.emit('ansi-output', '\r\n');
 
@@ -323,8 +319,6 @@ console.log('[ENV] Uploading');
  * Web version: Shows when the node started and total uptime.
  */
 export function handleNodeUptimeCommand(socket: any, session: BBSSession): void {
-  console.log('[ENV] Stats');
-
   // express.e:25667-25672: '\b\nNode \d was started at \s.\b\n' with formatLongDateTime(nodeStart)
   const nodeStartTime = session.nodeStartTime || Date.now();
   const startTime = formatLongDateTime(new Date(nodeStartTime));

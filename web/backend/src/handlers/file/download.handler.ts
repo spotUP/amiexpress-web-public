@@ -16,7 +16,8 @@ import { Socket } from 'socket.io';
 import { BBSSession } from '../../index';
 import { LoggedOnSubState } from '../../constants/bbs-states';
 import { deliverFilesToCaller, deliveryRouteFor } from './file-delivery';
-import { checkSecurity, getACSConfig, ToggleFlags } from '../../utils/acs.util';
+import { checkSecurity, getACSConfig, ToggleFlags, setEnvStat } from '../../utils/acs.util';
+import { EnvStat } from '../../constants/env-codes';
 import { updateDownloadStats, creditAccountEnabled } from '../../utils/download-ratios.util';
 import { ACSPermission } from '../../constants/acs-permissions';
 import { db } from '../../database';
@@ -61,7 +62,7 @@ export class DownloadHandler {
     }
 
     // express.e:24855 setEnvStat(ENV_DOWNLOADING)
-    console.log('[ENV] Downloading');
+    setEnvStat(session, EnvStat.DOWNLOADING);
 
     // express.e:24857 beginDLF(cmdcode,params)
     await this.beginDLF(socket, session, params, cmdcode);

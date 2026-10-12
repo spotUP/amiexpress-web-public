@@ -14,7 +14,8 @@ import { conferenceSubdir } from '../../conferences/conference-paths';
 import { servesPetsciiArt } from '../screen.handler';
 import { LoggedOnSubState } from '../../constants/bbs-states';
 import { ACSPermission } from '../../constants/acs-permissions';
-import { checkSecurity, UserFlags } from '../../utils/acs.util';
+import { checkSecurity, UserFlags, setEnvStat } from '../../utils/acs.util';
+import { EnvStat } from '../../constants/env-codes';
 import { AnsiUtil } from '../../utils/ansi.util';
 import { ErrorHandler } from '../../utils/error-handling.util';
 import { InternalCommandResult } from '../../constants/command-results';
@@ -144,7 +145,7 @@ export async function handleFileListCommand(socket: any, session: BBSSession, pa
     return;
   }
 
-console.log('[ENV] Files');
+setEnvStat(session, EnvStat.FILES);
 
   // Import and use the new FileListingHandler
   const { FileListingHandler } = require('../file/file-listing.handler');
@@ -171,7 +172,7 @@ export async function handleFileListRawCommand(socket: any, session: BBSSession,
     return;
   }
 
-console.log('[ENV] Files');
+setEnvStat(session, EnvStat.FILES);
 
   // Import and use the new FileListingHandler
   const { FileListingHandler } = require('../file/file-listing.handler');
@@ -280,7 +281,7 @@ export function handleReadBulletinCommand(socket: any, session: BBSSession, para
     return;
   }
 
-console.log('[ENV] Bulletins');
+setEnvStat(session, EnvStat.BULLETINS);
 
   // express.e:24616-24621 - Check confScreenDir + 'Bulletins/BullHelp.txt'
   // confScreenDir = Conf{N}/Screens/ — per-conference screen directory

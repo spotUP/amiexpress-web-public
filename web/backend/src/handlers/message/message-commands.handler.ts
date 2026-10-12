@@ -110,7 +110,7 @@ export async function handleJoinMessageBaseCommand(socket: any, session: BBSSess
     return;
   }
 
-console.log('[ENV] Join');
+setEnvStat(session, EnvStat.JOIN);
 
   const parsedParams = ParamsUtil.parse(params);
   let newMsgBase = -1;
@@ -243,7 +243,7 @@ export function handleNodeManagementCommand(socket: any, session: BBSSession): v
     return;
   }
 
-  console.log('[ENV] Sysop');
+  setEnvStat(session, EnvStat.SYSOP);
 
   // express.e:25294-25300: who(0), a blank line, the prompt, lineInput.
   promptNodeChange(socket, session);

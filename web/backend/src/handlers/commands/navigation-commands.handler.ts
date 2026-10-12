@@ -141,7 +141,7 @@ export async function handlePreviousConferenceCommand(
   saveConferenceAccount(session, session.currentConf || 0);
 
   // express.e:24533 - setEnvStat(ENV_JOIN)
-console.log('[ENV] Join - Previous Conference');
+setEnvStat(session, EnvStat.JOIN);
 
   // express.e:24534-24538 - Find previous accessible conference
   let newConf = (session.currentConf || 1) - 1;
@@ -194,7 +194,7 @@ export async function handleNextConferenceCommand(
   saveConferenceAccount(session, session.currentConf || 0);
 
   // express.e:24552 - setEnvStat(ENV_JOIN)
-console.log('[ENV] Join - Next Conference');
+setEnvStat(session, EnvStat.JOIN);
 
   // express.e:24553-24557 - Find next accessible conference
   let newConf = (session.currentConf || 1) + 1;
@@ -231,7 +231,7 @@ export async function handlePreviousMessageBaseCommand(socket: any, session: BBS
   saveConferenceAccount(session, session.currentConf || 0);
 
   // express.e:24569 - setEnvStat(ENV_JOIN)
-console.log('[ENV] Join - Previous Message Base');
+setEnvStat(session, EnvStat.JOIN);
 
   // express.e:24570 - Get previous message base
   const currentConfId = session.currentConf || 1;
@@ -265,7 +265,7 @@ export async function handleNextMessageBaseCommand(socket: any, session: BBSSess
   saveConferenceAccount(session, session.currentConf || 0);
 
   // express.e:24583 - setEnvStat(ENV_JOIN)
-console.log('[ENV] Join - Next Message Base');
+setEnvStat(session, EnvStat.JOIN);
 
   // express.e:24584 - Get next message base
   const currentConfId = session.currentConf || 1;

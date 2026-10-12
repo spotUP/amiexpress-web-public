@@ -11,7 +11,8 @@ import { Socket } from 'socket.io';
 import { config } from '../../config';
 import { BBSSession } from '../../index';
 import { LoggedOnSubState } from '../../constants/bbs-states';
-import { checkSecurity } from '../../utils/acs.util';
+import { checkSecurity, setEnvStat } from '../../utils/acs.util';
+import { EnvStat } from '../../constants/env-codes';
 import { RESULT_NOT_ALLOWED, InternalCommandResult } from '../../constants/command-results';
 import { ACSPermission } from '../../constants/acs-permissions';
 import { flagManagerOf, getFlagFilesPrompt, getClearFlagsPrompt, getShowFlagsMessage } from '../../utils/file-flag.util';
@@ -61,7 +62,7 @@ export class AlterFlagsHandler {
     }
 
     // setEnvStat(ENV_FILES) - express.e:24603
-console.log('[ENV] Files');
+setEnvStat(session, EnvStat.FILES);
 
     await flagManagerOf(session, config.get('dataDir'));
 

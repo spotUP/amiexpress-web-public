@@ -12,7 +12,8 @@
 
 import { LoggedOnSubState } from '../../constants/bbs-states';
 import { ACSPermission } from '../../constants/acs-permissions';
-import { checkSecurity } from '../../utils/acs.util';
+import { checkSecurity, setEnvStat } from '../../utils/acs.util';
+import { EnvStat } from '../../constants/env-codes';
 import { AnsiUtil } from '../../utils/ansi.util';
 import { ErrorHandler } from '../../utils/error-handling.util';
 import { ParamsUtil } from '../../utils/params.util';
@@ -195,7 +196,7 @@ export async function handleZoomCommand(socket: any, session: BBSSession): Promi
     return;
   }
 
-  console.log('[ENV] Zoom');
+  setEnvStat(session, EnvStat.ZOOM);
 
   // express.e:26226 aePuts('\b\n')
   socket.emit('ansi-output', '\r\n');

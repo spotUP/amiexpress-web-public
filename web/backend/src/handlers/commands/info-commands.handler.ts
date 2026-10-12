@@ -17,7 +17,8 @@ import { config as appConfig } from '../../config';
 import { ACSPermission } from '../../constants/acs-permissions';
 import { ftpCallersOnline } from '../../ftp/ftp-presence';
 import { WHO_TABLE_TOP, WHO_TABLE_BOTTOM, whoRow } from '../../utils/who-table.util';
-import { checkSecurity } from '../../utils/acs.util';
+import { checkSecurity, setEnvStat } from '../../utils/acs.util';
+import { EnvStat } from '../../constants/env-codes';
 import { AnsiUtil } from '../../utils/ansi.util';
 import { headingIndent, isNarrow } from '../../utils/table-format.util';
 import { sessionColumns } from '../../utils/door-min-columns.util';
@@ -100,7 +101,7 @@ export function handleWhoCommand(socket: any, session: BBSSession): void {
     return;
   }
 
-  console.log('[ENV] Doors');
+  setEnvStat(session, EnvStat.DOORS);
 
   // express.e:24217-24218: aePuts('\b\n\b\n') before table (no screen clear)
   for (const line of WHO_TABLE_TOP) emitText(socket, line);
@@ -169,7 +170,7 @@ export function handleWhoDetailedCommand(socket: any, session: BBSSession): void
     return;
   }
 
-  console.log('[ENV] Doors');
+  setEnvStat(session, EnvStat.DOORS);
 
   // express.e:24239-24250 - who(1) is debug mode that prints raw memory pointers
   // WEB_: express.e WHD passes flag=1 to who(), which dumps struct addresses — meaningless
@@ -538,7 +539,7 @@ export function handleWriteUserParamsCommand(socket: any, session: BBSSession): 
     return;
   }
 
-console.log('[ENV] Stats');
+setEnvStat(session, EnvStat.STATS);
 
   // Display menu and wait for option selection
   session.cmdShortcuts = false;
