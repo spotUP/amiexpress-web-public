@@ -247,9 +247,11 @@ export async function checkForPause(
       const handleInput = async (input: string) => {
         const response = input.trim().toUpperCase();
 
-        // Y or Enter = continue (express.e:5196)
+        // Y or Enter = continue. express.e:5199 erases the prompt's row
+        // (`[1A[K` after lineInput echoed the RETURN); the RETURN is not
+        // echoed here, so the cursor is still on that row - as in flagPause.
         if (response === '' || response === 'Y') {
-          emitPrompt(socket, '\r\n');
+          emitPrompt(socket, '\r\x1b[K');
           session.tempData.checkPausePromise = undefined;
           resolveFn!(true);
           return;
@@ -266,7 +268,7 @@ export async function checkForPause(
         // NS = non-stop mode
         if (response === 'NS') {
           session.tempData.nonStopDisplayFlag = true;
-          emitPrompt(socket, '\r\n');
+          emitPrompt(socket, '\r\x1b[K'); // express.e:5197-5199
           session.tempData.checkPausePromise = undefined;
           resolveFn!(true);
           return;
