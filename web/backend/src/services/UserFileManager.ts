@@ -587,10 +587,9 @@ console.log(`[UserFileManager] Serialized userMisc struct: ${offset} bytes (expe
   }
 
   private writeInt16(buffer: Buffer, offset: number, value: number): number {
-    // Clamp to signed 16-bit range (-32768 to 32767)
-    // Use big-endian for Amiga 68K compatibility
-    const clamped = Math.max(-32768, Math.min(32767, value));
-    buffer.writeInt16BE(clamped, offset);
+    // An E INT store keeps the low 16 bits (57600 baud -> 0xE100), it does
+    // not clamp. Big-endian for Amiga 68K compatibility.
+    buffer.writeUInt16BE(value & 0xffff, offset);
     return offset + 2;
   }
 
