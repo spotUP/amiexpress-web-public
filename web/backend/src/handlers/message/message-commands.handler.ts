@@ -20,8 +20,9 @@ import { boardRoot } from '../../utils/board-root.util';
 import { LoggedOnSubState, BBSState } from '../../constants/bbs-states';
 import { isNarrow, narrowClip, narrowRule } from '../../utils/table-format.util';
 import { ACSPermission } from '../../constants/acs-permissions';
-import { checkSecurity } from '../../utils/acs.util';
-import { emitText, emitPrompt, flushOutput } from '../../utils/output.util';
+import { checkSecurity, setEnvStat } from '../../utils/acs.util';
+import { loadConferenceAccount } from '../../utils/message-pointers.util';
+import { emitText, emitPrompt, flushOutput, clearTheScreen } from '../../utils/output.util';
 import { ErrorHandler } from '../../utils/error-handling.util';
 import { ParamsUtil } from '../../utils/params.util';
 import { normalizeForComparison } from '../../utils/input-normalizer.util';
@@ -701,7 +702,10 @@ export async function handleConferenceMaintenanceCommand(socket: any, session: B
     return;
   }
 
-console.log('[ENV] Sysop');
+  // express.e:24845 setEnvStat(ENV_SYSOP), 24847 sendCLS(): the screen is
+  // cleared once, here; conferenceMaintenance's loop only repositions.
+  setEnvStat(session, EnvStat.SYSOP);
+  emitText(socket, clearTheScreen(socket));
 
   // Initialize conference maintenance state
   session.tempData = session.tempData || {};
@@ -713,6 +717,28 @@ console.log('[ENV] Sysop');
   // Enter the conference maintenance menu loop
   session.subState = LoggedOnSubState.CM_DISPLAY_MENU;
   await displayConferenceMaintenanceMenu(socket, session);
+}
+
+/**
+ * express.e:24849 loadMsgPointers(currentConf,currentMsgBase), run when CM
+ * returns: whatever CM wrote to the sysop's own Conf.DB record (ratio, ratio
+ * type, message counts, the read pointers of options 1-4 and 9) becomes his
+ * live account again (4894-4913), and lastMsgReadConf / lastNewReadConf are
+ * the record's (4911-4912) - otherwise the reader would write the old
+ * pointers back at its next exit.
+ */
+function reloadCallersAccount(session: BBSSession): void {
+  const conf = session.currentConf || 0;
+  const slot = Number(session.user?.slotNumber) || 0;
+  if (conf < 1 || slot < 1) {
+    session.lastMsgReadConf = 0;
+    session.lastNewReadConf = 0;
+    return;
+  }
+  loadConferenceAccount(session, conf);
+  const rec = messagePointerFileManager.readRecordOrZero(conf, slot);
+  session.lastMsgReadConf = rec.confYM;
+  session.lastNewReadConf = rec.confRead;
 }
 
 /** StringF `\s[w]` (and `\d[w]`): left-justified in w columns, cut at w. */
@@ -770,7 +796,6 @@ async function displayConferenceMaintenanceMenu(socket: any, session: BBSSession
   }
 
   // Clear screen and display full-screen ANSI menu - express.e:22718-22777
-  emitText(socket, '\x1b[2J'); // Clear screen
   emitText(socket, '\x1b[?25l'); // Hide cursor
 
   // express.e:22710-22768, byte for byte: each line is positioned, and only
@@ -968,6 +993,7 @@ export async function handleCMInput(socket: any, session: BBSSession, input: str
       // is; internalCommandCM returns RESULT_SUCCESS, so the main loop
       // pauses before the menu (28647 menuPause:=TRUE).
       emitText(socket, CM_ROW_BLANK);
+      reloadCallersAccount(session);
       session.menuPause = true;
       session.subState = LoggedOnSubState.DISPLAY_MENU;
       delete session.tempData.cmConf;
