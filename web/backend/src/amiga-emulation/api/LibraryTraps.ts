@@ -75,7 +75,6 @@ const DEBUG_LIBRARY_TRAPS = process.env.DEBUG_LIBRARY_TRAPS === "1";
 
 // Global named object registry for utility.library (exported for use in utility-vectors.ts)
 export const namedObjectRegistry = new Map<string, number>();
-export const namedObjectState = { nextAddr: 0x00200000 }; // Wrap in object to allow mutation
 
 /**
  * Library trap handler

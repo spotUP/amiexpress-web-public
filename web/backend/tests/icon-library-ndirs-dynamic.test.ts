@@ -27,7 +27,7 @@ import { IconLibrary } from '../src/amiga-emulation/api/IconLibrary';
 
 /** The NDIRS a door is handed by GetDiskObject's synthesized ACP icon. */
 function ndirsFor(bbsRoot: string): string | undefined {
-  const icons = new IconLibrary({} as never, bbsRoot);
+  const icons = new IconLibrary({} as never, bbsRoot, {} as never);
   const tooltypes = (
     icons as unknown as { synthesizeACPTooltypes: () => string[] }
   ).synthesizeACPTooltypes();

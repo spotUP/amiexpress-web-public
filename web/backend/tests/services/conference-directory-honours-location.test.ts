@@ -275,7 +275,7 @@ describe('a conference is found where LOCATION.n says, not at Conf<n>', () => {
 
   describe('ACP tooltypes for a relocated conference', () => {
     function synthesize(bbsRoot: string): string[] {
-      const icons = new IconLibrary({} as never, bbsRoot);
+      const icons = new IconLibrary({} as never, bbsRoot, {} as never);
       return (
         icons as unknown as { synthesizeACPTooltypes: () => string[] }
       ).synthesizeACPTooltypes();

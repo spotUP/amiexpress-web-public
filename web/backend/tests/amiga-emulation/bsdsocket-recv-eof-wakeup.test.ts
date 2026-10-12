@@ -317,7 +317,7 @@ describe('bsdsocket.library recv() at end of stream (regression)', () => {
     pokeBeforeFinalRecv = false,
   ): { finalRecv: number; elapsedMs: number; body: string; errno: number } {
     const fake = new FakeEmulator();
-    const lib = new BsdSocketLibrary(asEmu(fake));
+    const lib = new BsdSocketLibrary(asEmu(fake), {} as never);
 
     const fd = callSocket(lib, fake);
     expect(fd).toBeGreaterThanOrEqual(0);
@@ -371,7 +371,7 @@ describe('bsdsocket.library recv() at end of stream (regression)', () => {
    */
   function driveParkedRecv(port: number): { recvResult: number; elapsedMs: number; errno: number } {
     const fake = new FakeEmulator();
-    const lib = new BsdSocketLibrary(asEmu(fake));
+    const lib = new BsdSocketLibrary(asEmu(fake), {} as never);
 
     const fd = callSocket(lib, fake);
     expect(fd).toBeGreaterThanOrEqual(0);
@@ -443,7 +443,7 @@ describe('bsdsocket.library recv() at end of stream (regression)', () => {
 
   test('a recv() issued after the close is already known still returns 0 at once', async () => {
     const fake = new FakeEmulator();
-    const lib = new BsdSocketLibrary(asEmu(fake));
+    const lib = new BsdSocketLibrary(asEmu(fake), {} as never);
 
     const fd = callSocket(lib, fake);
     expect(setNonBlocking(lib, fake, fd, 1)).toBe(0);
@@ -480,7 +480,7 @@ describe('bsdsocket.library recv() at end of stream (regression)', () => {
    */
   test('a peer that replies and stays open still delivers the reply at once', async () => {
     const fake = new FakeEmulator();
-    const lib = new BsdSocketLibrary(asEmu(fake));
+    const lib = new BsdSocketLibrary(asEmu(fake), {} as never);
 
     const fd = callSocket(lib, fake);
     expect(setNonBlocking(lib, fake, fd, 1)).toBe(0);
@@ -505,7 +505,7 @@ describe('bsdsocket.library recv() at end of stream (regression)', () => {
 
   test('recv() hands back the buffered remainder without waiting for more data', async () => {
     const fake = new FakeEmulator();
-    const lib = new BsdSocketLibrary(asEmu(fake));
+    const lib = new BsdSocketLibrary(asEmu(fake), {} as never);
 
     const fd = callSocket(lib, fake);
     expect(setNonBlocking(lib, fake, fd, 1)).toBe(0);

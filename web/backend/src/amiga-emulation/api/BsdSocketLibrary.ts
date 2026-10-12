@@ -21,6 +21,7 @@ import type { MoiraEmulator } from '../cpu/MoiraEmulator';
 import { SocketTee } from './bsdsocket-tee';
 import { debugLog, isDebugEnabled } from '../../utils/debug-log';
 import { amigaGaps, doorOf } from '../instrumentation/amiga-gaps';
+import { MEMF_PUBLIC_CLEAR, type ExecMemory } from '../memory-map';
 
 // Amiga socket constants
 export const AF_INET = 2;
@@ -165,8 +166,23 @@ export class BsdSocketLibrary {
   // Library base address (set when opened)
   public baseAddress: number = 0;
 
-  constructor(emulator: MoiraEmulator) {
+  /** exec AllocMem, where the hostent and Inet_NtoA buffers live. */
+  private memory: ExecMemory;
+
+  constructor(emulator: MoiraEmulator, memory: ExecMemory) {
     this.emulator = emulator;
+    this.memory = memory;
+  }
+
+  private inetNtoaBuffer = 0;
+
+  /**
+   * Inet_NtoA's static result buffer ("aaa.bbb.ccc.ddd" + NUL), allocated
+   * once. It was a fixed 0x300100, outside every region of the memory map.
+   */
+  getInetNtoaBuffer(): number {
+    if (this.inetNtoaBuffer === 0) this.inetNtoaBuffer = this.allocateMemory(16);
+    return this.inetNtoaBuffer;
   }
 
   /**
@@ -922,11 +938,11 @@ export class BsdSocketLibrary {
    * Allocate memory from the emulator
    */
   private allocateMemory(size: number): number {
-    // Use a simple allocation from high memory
-    // In a real implementation, this would use exec.AllocMem
-    const addr = 0x300000 + Math.floor(Math.random() * 0x10000);
-    return addr;
+    // exec AllocMem. It was a random address in 0x300000-0x310000, memory
+    // nothing else knew was taken.
+    return this.memory.allocMem(size, MEMF_PUBLIC_CLEAR);
   }
+
 
   /**
    * WaitSelect() - Wait for socket activity (Amiga-specific select with signals)

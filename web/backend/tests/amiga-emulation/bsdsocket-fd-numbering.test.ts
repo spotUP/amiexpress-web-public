@@ -42,6 +42,15 @@ import {
 import { BSDSOCKET_VECTORS } from '../../src/amiga-emulation/api/library-vectors/bsdsocket-vectors';
 import * as net from 'net';
 
+/** exec AllocMem stand-in: the library keeps its hostent / Inet_NtoA buffers here. */
+function fakeExec() {
+  let next = 0x380000;
+  return {
+    allocMem: (size: number) => { const addr = next; next += (size + 3) & ~3; return addr; },
+    freeMem: () => { /* not needed */ },
+  };
+}
+
 // Minimal byte-addressable fake emulator, following the pattern established
 // in tests/amiga-emulation/exec-allocate.test.ts.
 class FakeEmulator {
@@ -122,7 +131,7 @@ function callClose(lib: BsdSocketLibrary, fake: FakeEmulator, fd: number): numbe
 describe('bsdsocket.library descriptor numbering (regression)', () => {
   test('first descriptor is allocated from a low base (0), not 100', () => {
     const fake = new FakeEmulator();
-    const lib = new BsdSocketLibrary(asEmu(fake));
+    const lib = new BsdSocketLibrary(asEmu(fake), fakeExec());
 
     const fd = callSocket(lib, fake);
 
@@ -131,7 +140,7 @@ describe('bsdsocket.library descriptor numbering (regression)', () => {
 
   test('descriptors stay strictly below BSD_FD_SETSIZE (32)', () => {
     const fake = new FakeEmulator();
-    const lib = new BsdSocketLibrary(asEmu(fake));
+    const lib = new BsdSocketLibrary(asEmu(fake), fakeExec());
 
     const fds: number[] = [];
     for (let i = 0; i < BSD_FD_SETSIZE; i++) {
@@ -148,7 +157,7 @@ describe('bsdsocket.library descriptor numbering (regression)', () => {
 
   test('a descriptor is reusable after CloseSocket, not abandoned', () => {
     const fake = new FakeEmulator();
-    const lib = new BsdSocketLibrary(asEmu(fake));
+    const lib = new BsdSocketLibrary(asEmu(fake), fakeExec());
 
     const first = callSocket(lib, fake);
     expect(first).toBe(0);
@@ -162,7 +171,7 @@ describe('bsdsocket.library descriptor numbering (regression)', () => {
 
   test('a long-running door cycling sockets never climbs past the limit', () => {
     const fake = new FakeEmulator();
-    const lib = new BsdSocketLibrary(asEmu(fake));
+    const lib = new BsdSocketLibrary(asEmu(fake), fakeExec());
 
     // Open and close 500 sockets one at a time - simulates a door that
     // repeatedly opens a connection, uses it, and closes it.
@@ -177,7 +186,7 @@ describe('bsdsocket.library descriptor numbering (regression)', () => {
 
   test('exhausting the descriptor table returns -1/EMFILE, not an unusable fd', () => {
     const fake = new FakeEmulator();
-    const lib = new BsdSocketLibrary(asEmu(fake));
+    const lib = new BsdSocketLibrary(asEmu(fake), fakeExec());
 
     for (let i = 0; i < BSD_FD_SETSIZE; i++) {
       const fd = callSocket(lib, fake);
@@ -192,7 +201,7 @@ describe('bsdsocket.library descriptor numbering (regression)', () => {
 
   test('freeing one descriptor after exhaustion allows exactly one more socket()', () => {
     const fake = new FakeEmulator();
-    const lib = new BsdSocketLibrary(asEmu(fake));
+    const lib = new BsdSocketLibrary(asEmu(fake), fakeExec());
 
     const fds: number[] = [];
     for (let i = 0; i < BSD_FD_SETSIZE; i++) {
@@ -212,7 +221,7 @@ describe('bsdsocket.library descriptor numbering (regression)', () => {
 
   test('WaitSelect round trip works with a mask built as 1 << fd for a freshly allocated descriptor', () => {
     const fake = new FakeEmulator();
-    const lib = new BsdSocketLibrary(asEmu(fake));
+    const lib = new BsdSocketLibrary(asEmu(fake), fakeExec());
 
     const fd = callSocket(lib, fake);
     expect(fd).toBeLessThan(32); // precondition: idiom `1 << fd` is well-defined
@@ -261,7 +270,7 @@ describe('bsdsocket.library getdtablesize (regression)', () => {
 
   test('reports the descriptor ceiling socket() actually honours, not 256', () => {
     const fake = new FakeEmulator();
-    const lib = new BsdSocketLibrary(asEmu(fake));
+    const lib = new BsdSocketLibrary(asEmu(fake), fakeExec());
 
     expect(callGetdtablesize(lib, fake)).toBe(BSD_FD_SETSIZE);
     expect(callGetdtablesize(lib, fake)).not.toBe(256);
@@ -269,7 +278,7 @@ describe('bsdsocket.library getdtablesize (regression)', () => {
 
   test('a door opening exactly getdtablesize() sockets never sees EMFILE', () => {
     const fake = new FakeEmulator();
-    const lib = new BsdSocketLibrary(asEmu(fake));
+    const lib = new BsdSocketLibrary(asEmu(fake), fakeExec());
 
     const limit = callGetdtablesize(lib, fake);
 
@@ -411,7 +420,7 @@ describe('bsdsocket.library non-blocking connect (regression)', () => {
 
   test('a socket set non-blocking returns -1/EINPROGRESS instead of blocking', () => {
     const fake = new FakeEmulator();
-    const lib = new BsdSocketLibrary(asEmu(fake));
+    const lib = new BsdSocketLibrary(asEmu(fake), fakeExec());
     const fd = callSocket(lib, fake);
 
     expect(setNonBlocking(lib, fake, fd, 1)).toBe(0);
@@ -431,7 +440,7 @@ describe('bsdsocket.library non-blocking connect (regression)', () => {
 
   test('a refused non-blocking connect wakes WaitSelect and reports SO_ERROR', () => {
     const fake = new FakeEmulator();
-    const lib = new BsdSocketLibrary(asEmu(fake));
+    const lib = new BsdSocketLibrary(asEmu(fake), fakeExec());
     const fd = callSocket(lib, fake);
     setNonBlocking(lib, fake, fd, 1);
     callConnect(lib, fake, fd, closedPort);
@@ -444,7 +453,7 @@ describe('bsdsocket.library non-blocking connect (regression)', () => {
 
   test('a successful non-blocking connect wakes WaitSelect with SO_ERROR clear', () => {
     const fake = new FakeEmulator();
-    const lib = new BsdSocketLibrary(asEmu(fake));
+    const lib = new BsdSocketLibrary(asEmu(fake), fakeExec());
     const fd = callSocket(lib, fake);
     setNonBlocking(lib, fake, fd, 1);
 
@@ -457,7 +466,7 @@ describe('bsdsocket.library non-blocking connect (regression)', () => {
 
   test('SO_ERROR is cleared once read, as BSD specifies', () => {
     const fake = new FakeEmulator();
-    const lib = new BsdSocketLibrary(asEmu(fake));
+    const lib = new BsdSocketLibrary(asEmu(fake), fakeExec());
     const fd = callSocket(lib, fake);
     setNonBlocking(lib, fake, fd, 1);
     callConnect(lib, fake, fd, closedPort);
@@ -469,7 +478,7 @@ describe('bsdsocket.library non-blocking connect (regression)', () => {
 
   test('without FIONBIO, connect still blocks and reports errno directly', () => {
     const fake = new FakeEmulator();
-    const lib = new BsdSocketLibrary(asEmu(fake));
+    const lib = new BsdSocketLibrary(asEmu(fake), fakeExec());
     const fd = callSocket(lib, fake);
 
     // No IoctlSocket call at all - the pre-existing behaviour every other
@@ -500,7 +509,7 @@ describe('bsdsocket.library recv chunk draining (regression)', () => {
 
   test('fills the requested length from several queued chunks in one call', () => {
     const fake = new FakeEmulator();
-    const lib = new BsdSocketLibrary(asEmu(fake));
+    const lib = new BsdSocketLibrary(asEmu(fake), fakeExec());
     const fd = callSocket(lib, fake);
 
     const state = lib.getSocketState(fd)!;
@@ -524,7 +533,7 @@ describe('bsdsocket.library recv chunk draining (regression)', () => {
 
   test('returns only what is available when the queue is shorter than asked', () => {
     const fake = new FakeEmulator();
-    const lib = new BsdSocketLibrary(asEmu(fake));
+    const lib = new BsdSocketLibrary(asEmu(fake), fakeExec());
     const fd = callSocket(lib, fake);
 
     const state = lib.getSocketState(fd)!;
@@ -538,7 +547,7 @@ describe('bsdsocket.library recv chunk draining (regression)', () => {
 
   test('leaves the unconsumed remainder of a partly-read chunk queued', () => {
     const fake = new FakeEmulator();
-    const lib = new BsdSocketLibrary(asEmu(fake));
+    const lib = new BsdSocketLibrary(asEmu(fake), fakeExec());
     const fd = callSocket(lib, fake);
 
     const state = lib.getSocketState(fd)!;
@@ -595,21 +604,21 @@ describe('bsdsocket.library gethostbyname (regression)', () => {
 
   test('resolves a dotted-quad literal without any DNS lookup', () => {
     const fake = new FakeEmulator();
-    const lib = new BsdSocketLibrary(asEmu(fake));
+    const lib = new BsdSocketLibrary(asEmu(fake), fakeExec());
 
     expect(resolveHost(lib, fake, '127.0.0.1')).toBe('127.0.0.1');
   });
 
   test('resolves a hosts-file name such as localhost', () => {
     const fake = new FakeEmulator();
-    const lib = new BsdSocketLibrary(asEmu(fake));
+    const lib = new BsdSocketLibrary(asEmu(fake), fakeExec());
 
     expect(resolveHost(lib, fake, 'localhost')).toBe('127.0.0.1');
   });
 
   test('still returns NULL for a name that does not resolve', () => {
     const fake = new FakeEmulator();
-    const lib = new BsdSocketLibrary(asEmu(fake));
+    const lib = new BsdSocketLibrary(asEmu(fake), fakeExec());
 
     expect(resolveHost(lib, fake, 'no-such-host.invalid')).toBeNull();
   });
@@ -653,7 +662,7 @@ describe('bsdsocket.library errno values (regression)', () => {
     await new Promise<void>((resolve) => probe.close(() => resolve()));
 
     const fake = new FakeEmulator();
-    const lib = new BsdSocketLibrary(asEmu(fake));
+    const lib = new BsdSocketLibrary(asEmu(fake), fakeExec());
 
     const fd = callSocket(lib, fake);
     expect(fd).toBeGreaterThanOrEqual(0);

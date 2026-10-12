@@ -290,8 +290,9 @@ export const BSDSOCKET_VECTORS: LibraryVector[] = [
       const addr = emu.getRegister(0); // D0 = IP address in network byte order
       const ip = `${(addr >> 24) & 0xFF}.${(addr >> 16) & 0xFF}.${(addr >> 8) & 0xFF}.${addr & 0xFF}`;
       console.log(`[BsdSocketLibrary] Inet_NtoA(0x${addr.toString(16)}) = "${ip}"`);
-      // Write to a static buffer and return pointer
-      const bufAddr = 0x300100;
+      // Write to the library's static buffer and return pointer
+      const bufAddr = lib.getInetNtoaBuffer();
+      if (bufAddr === 0) return 0;
       emu.writeString(bufAddr, ip);
       return bufAddr;
     },

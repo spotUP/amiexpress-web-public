@@ -572,7 +572,7 @@ debugLog("[LibraryManager] Creating icon.library...");
     const bbsRoot = projectRoot;
     this.ensureAnswerFiles(bbsRoot);
     mark("answer files ensured");
-    this.iconLibrary = new IconLibrary(this.emulator, bbsRoot);
+    this.iconLibrary = new IconLibrary(this.emulator, bbsRoot, this.execLibrary!);
     mark("icon library");
     // Set door directory for PROGDIR: support in GetDiskObject
     this.iconLibrary.setDoorDirectory(doorDir);
@@ -735,7 +735,7 @@ debugLog("[LibraryManager] Creating AEDoor.library...");
 
 debugLog("[LibraryManager] Creating utility.library...");
 
-    this.utilityLibrary = new UtilityLibrary(this.emulator, this.socket);
+    this.utilityLibrary = new UtilityLibrary(this.emulator, this.socket, this.execLibrary!);
     mark("aedoor + utility libraries");
 
 debugLog("[LibraryManager] Creating math libraries...");
@@ -751,7 +751,7 @@ debugLog("[LibraryManager] Creating intuition.library...");
     this.intuitionLibrary = new IntuitionLibrary(this.emulator);
 
 debugLog("[LibraryManager] Creating network libraries (bsdsocket, amissl)...");
-    this.bsdSocketLibrary = new BsdSocketLibrary(this.emulator);
+    this.bsdSocketLibrary = new BsdSocketLibrary(this.emulator, this.execLibrary!);
     mark("math + intuition libraries");
     this.amisslMasterLibrary = new AmiSSLMasterLibrary(this.emulator);
     this.amisslLibrary = new AmiSSLLibrary(this.emulator);

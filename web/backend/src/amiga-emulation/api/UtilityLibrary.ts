@@ -9,14 +9,45 @@
  */
 
 import type { MoiraEmulator } from '../cpu/MoiraEmulator';
+import { MEMF_PUBLIC_CLEAR, type ExecMemory } from '../memory-map';
 
 export class UtilityLibrary {
   private emulator: MoiraEmulator;
   private socket: any;
+  private memory: ExecMemory;
+  /** Memory utility.library handed out (tag lists, named objects): address -> bytes. */
+  private blocks = new Map<number, number>();
 
-  constructor(emulator: MoiraEmulator, socket: any) {
+  constructor(emulator: MoiraEmulator, socket: any, memory: ExecMemory) {
     this.emulator = emulator;
     this.socket = socket;
+    this.memory = memory;
+  }
+
+  /**
+   * Memory utility.library keeps for a program (TagItem arrays, NamedObject
+   * structures): exec AllocMem, MEMF_PUBLIC|MEMF_CLEAR, as the real library's
+   * AllocVec calls are. These were random addresses in 0x1f0000-0x1f9000 and
+   * a bump pointer from 0x200000: no allocator at all, inside the AllocMem
+   * heap (and later the exception handlers), never freed. 0 when exec has none.
+   */
+  allocBlock(bytes: number): number {
+    const addr = this.memory.allocMem(bytes, MEMF_PUBLIC_CLEAR);
+    if (addr !== 0) this.blocks.set(addr, bytes);
+    return addr;
+  }
+
+  /** Memory for a TagItem array of `items` entries (AllocateTagItems). */
+  allocTagList(items: number): number {
+    return this.allocBlock(items * 8);
+  }
+
+  /** Give a block from allocBlock back to exec (FreeTagItems, FreeNamedObject). */
+  freeBlock(addr: number): void {
+    const bytes = this.blocks.get(addr);
+    if (bytes === undefined) return;
+    this.blocks.delete(addr);
+    this.memory.freeMem(addr, bytes);
   }
 
   /**

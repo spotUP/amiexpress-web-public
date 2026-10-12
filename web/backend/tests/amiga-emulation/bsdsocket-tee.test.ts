@@ -183,7 +183,7 @@ describe('bsdsocket byte capture against a real socket', () => {
 
   test('the recv capture is byte-for-byte what recv() put in the door\'s memory, across a partial drain', () => {
     const fake = new FakeEmulator();
-    const lib = new BsdSocketLibrary(asEmu(fake));
+    const lib = new BsdSocketLibrary(asEmu(fake), {} as never);
     const fd = callSocket(lib, fake);
     expect(callConnect(lib, fake, fd, port)).toBe(0);
 

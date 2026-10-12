@@ -8,7 +8,7 @@ import { LibraryVector } from "./types";
 import { UtilityLibrary } from "../UtilityLibrary";
 import { MoiraEmulator } from "../../cpu/MoiraEmulator";
 import { findTagItemImpl, readTagItem, nextTagItemImpl, TAG_DONE, TAG_IGNORE, TAG_MORE, TAG_SKIP } from "./tag-helpers";
-import { namedObjectRegistry, namedObjectState } from "../LibraryTraps";
+import { namedObjectRegistry } from "../LibraryTraps";
 import { UTILITY_SCRATCH_ADDR } from '../../memory-map';
 
 export const UTILITY_VECTORS: LibraryVector[] = [
@@ -231,10 +231,11 @@ console.log("[UtilityLibrary] AllocateTagItems(0) = NULL");
         return 0;
       }
 
-      // Allocate memory for TagItem array (8 bytes each + TAG_DONE terminator)
-      const size = (numItems + 1) * 8;
-      // Use a simple bump allocator from high memory
-      const allocAddr = 0x1F0000 + (Math.random() * 0x8000) | 0;
+      // exec AllocMem, numItems entries plus a TAG_DONE terminator. This used
+      // to be a random address in 0x1f0000-0x1f8000 (no allocator at all),
+      // inside the AllocMem heap and never freed.
+      const allocAddr = lib.allocTagList(numItems + 1);
+      if (allocAddr === 0) return 0;
 
       // Initialize with TAG_DONE
       for (let i = 0; i <= numItems; i++) {
@@ -249,14 +250,15 @@ console.log(`[UtilityLibrary] AllocateTagItems(${numItems}) = 0x${allocAddr.toSt
   {
     offset: -72, // LVO -72: CloneTagItems
     name: "CloneTagItems",
-    handler: (emu) => {
+    handler: (emu, lib: UtilityLibrary) => {
       // Input: A0 = original tagList
       // Output: D0 = pointer to cloned tagList or NULL
       const original = emu.getRegister(8); // A0
 
       if (original === 0) {
         // Return empty tag list (just TAG_DONE)
-        const emptyAddr = 0x1F8000 + (Math.random() * 0x1000) | 0;
+        const emptyAddr = lib.allocTagList(1);
+        if (emptyAddr === 0) return 0;
         emu.writeMemory32(emptyAddr, TAG_DONE);
         emu.writeMemory32(emptyAddr + 4, 0);
 console.log(`[UtilityLibrary] CloneTagItems(NULL) = empty list at 0x${emptyAddr.toString(16)}`);
@@ -275,7 +277,8 @@ console.log(`[UtilityLibrary] CloneTagItems(NULL) = empty list at 0x${emptyAddr.
       }
 
       // Allocate and copy
-      const cloneAddr = 0x1F8000 + (Math.random() * 0x1000) | 0;
+      const cloneAddr = lib.allocTagList(count + 1);
+      if (cloneAddr === 0) return 0;
       emu.writeMemory32(tempPtrAddr, original);
       let idx = 0;
       maxIterations = 1000;
@@ -300,11 +303,11 @@ console.log(`[UtilityLibrary] CloneTagItems(0x${original.toString(16)}) = 0x${cl
   {
     offset: -78, // LVO -78: FreeTagItems
     name: "FreeTagItems",
-    handler: (emu) => {
+    handler: (emu, lib: UtilityLibrary) => {
       // Input: A0 = tagList
       // Output: void
       const tagList = emu.getRegister(8); // A0
-      // For our simple allocator, we just log and don't actually free
+      lib.freeBlock(tagList);
 console.log(`[UtilityLibrary] FreeTagItems(0x${tagList.toString(16)})`);
       return 0;
     },
@@ -843,7 +846,7 @@ console.log(
   {
     offset: -228, // LVO -228: AllocNamedObjectA
     name: "AllocNamedObjectA",
-    handler: (emu) => {
+    handler: (emu, lib: UtilityLibrary) => {
       // AllocNamedObjectA(name, tagList) - A0 = name, A1 = tagList
       const namePtr = emu.getRegister(8);  // A0
       const tagList = emu.getRegister(9);  // A1
@@ -857,14 +860,9 @@ console.log(
         }
       }
 
-      // Allocate NamedObject structure: 32 bytes
-      const objAddr = namedObjectState.nextAddr;
-      namedObjectState.nextAddr += 32;
-
-      // Initialize structure (simplified)
-      for (let i = 0; i < 32; i++) {
-        emu.writeMemory(objAddr + i, 0);
-      }
+      // NamedObject structure: 32 bytes of exec AllocMem (cleared)
+      const objAddr = lib.allocBlock(32);
+      if (objAddr === 0) return 0;
       // Write name pointer at offset +12
       emu.writeMemory32(objAddr + 12, namePtr);
 
@@ -927,7 +925,7 @@ console.log(
   {
     offset: -246, // LVO -246: FreeNamedObject
     name: "FreeNamedObject",
-    handler: (emu) => {
+    handler: (emu, lib: UtilityLibrary) => {
       // FreeNamedObject(object) - A0 = object
       const objectAddr = emu.getRegister(8);  // A0
 
@@ -942,6 +940,7 @@ console.log(
           break;
         }
       }
+      lib.freeBlock(objectAddr);
 
       return 0;
     },

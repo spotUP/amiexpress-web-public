@@ -6,6 +6,7 @@ import { execSync } from 'child_process';
 import * as amigafs from '../../utils/amigafs';
 import { amigaGaps, doorOf } from '../instrumentation/amiga-gaps';
 import { getLvoName } from '../constants/lvo-names.generated';
+import { MEMF_PUBLIC_CLEAR, type ExecMemory } from '../memory-map';
 
 /**
  * icon.library - Amiga Icon/Tooltype Library
@@ -22,6 +23,7 @@ import { getLvoName } from '../constants/lvo-names.generated';
 interface DiskObject {
   address: number;        // Memory address of structure
   toolTypes: string[];    // Array of tooltype strings
+  size: number;           // Bytes AllocMem'd at address (struct + array + strings)
 }
 
 /**
@@ -55,13 +57,15 @@ export function buildIconCandidates(
 export class IconLibrary {
   private emulator: MoiraEmulator;
   private diskObjects: Map<number, DiskObject> = new Map();
-  private nextDiskObjectAddr: number = 0x60000; // DiskObjects at 384KB
+  /** exec AllocMem: DiskObjects and tooltype values live there (memory-map.ts). */
+  private memory: ExecMemory;
   private bbsRoot: string;
   private doorDirectory: string = ''; // Set by AmigaDoorSession for PROGDIR: device
   private doorCommand: string = ''; // The command used to launch this door (e.g., "N", "FR")
   private doorBinaryName: string = ''; // Basename of the door executable (e.g., "ByteComment")
 
-  constructor(emulator: MoiraEmulator, bbsRoot: string = process.env.BBS_DATA_DIR || process.cwd()) {
+  constructor(emulator: MoiraEmulator, bbsRoot: string, memory: ExecMemory) {
+    this.memory = memory;
     this.emulator = emulator;
     this.bbsRoot = bbsRoot;
   }
@@ -242,8 +246,12 @@ console.warn(`[icon.library]   .info write not implemented — returning FAILURE
 
 console.log(`[icon.library] FreeDiskObject(0x${diskObjPtr.toString(16)})`);
 
-    // Remove from our registry
-    this.diskObjects.delete(diskObjPtr);
+    // Remove from our registry and give the memory back to exec
+    const diskObj = this.diskObjects.get(diskObjPtr);
+    if (diskObj) {
+      this.diskObjects.delete(diskObjPtr);
+      this.memory.freeMem(diskObjPtr, diskObj.size);
+    }
   }
 
   /**
@@ -753,8 +761,18 @@ console.error('[icon.library] synthesizeACPTooltypes failed:', err);
    * Create a DiskObject structure in memory with tooltypes
    */
   private createFakeDiskObject(toolTypes: string[]): number {
-    const diskObjAddr = this.nextDiskObjectAddr;
-    this.nextDiskObjectAddr += 0x1000; // Reserve 4KB per DiskObject (enough for tooltypes)
+    // One exec AllocMem block: the structure, the tooltype array at +256 and
+    // the strings after it. DiskObjects used to be bump-placed from 0x60000,
+    // inside the door's own segment region (a door over 384 KB had its BSS
+    // overwritten), 4 KB each whatever their tooltypes needed.
+    const tooltypesArrayOffset = 256;
+    const stringsOffset = tooltypesArrayOffset + (toolTypes.length + 1) * 4;
+    const size = toolTypes.reduce((n, t) => n + t.length + 1, stringsOffset);
+    const diskObjAddr = this.memory.allocMem(size, MEMF_PUBLIC_CLEAR);
+    if (diskObjAddr === 0) {
+console.error(`[icon.library] DiskObject: AllocMem(${size}) failed`);
+      return 0;
+    }
 
     // DiskObject structure (simplified):
     // struct DiskObject {
@@ -799,8 +817,8 @@ console.error('[icon.library] synthesizeACPTooltypes failed:', err);
     let tooltypesPtr = 0;
     if (toolTypes.length > 0) {
       // Allocate space for tooltype array and strings
-      const tooltypesArrayAddr = diskObjAddr + 256; // Start array at +256
-      const tooltypeStringsAddr = diskObjAddr + 512; // Start strings at +512
+      const tooltypesArrayAddr = diskObjAddr + tooltypesArrayOffset;
+      const tooltypeStringsAddr = diskObjAddr + stringsOffset;
 
       let stringOffset = 0;
       for (let i = 0; i < toolTypes.length; i++) {
@@ -841,7 +859,8 @@ console.log(`[icon.library]     ToolTypes array at 0x${tooltypesPtr.toString(16)
     // Register the DiskObject
     const diskObj: DiskObject = {
       address: diskObjAddr,
-      toolTypes: toolTypes
+      toolTypes: toolTypes,
+      size,
     };
     this.diskObjects.set(diskObjAddr, diskObj);
 
@@ -948,17 +967,16 @@ console.log(`[icon.library]   Fallback: Checking ${resolvedPath}`);
               const value = tooltype.substring(equalsPos + 1);
 console.log(`[icon.library]   Fallback: Found ${tooltypeName} = "${value}" in ${path.basename(resolvedPath)}`);
 
-              // Allocate memory for the value string and return pointer to it
-              // Use a fixed location in memory for tooltype values (0xf2000+ area)
-              const valueAddr = 0xf2000 + (this.tooltypeValueOffset || 0);
-              this.tooltypeValueOffset = (this.tooltypeValueOffset || 0) + value.length + 1;
-              if (this.tooltypeValueOffset > 0x1000) this.tooltypeValueOffset = 0; // Wrap around
-
-              // Write the value to memory
-              for (let i = 0; i < value.length; i++) {
-                this.emulator.writeMemory(valueAddr + i, value.charCodeAt(i));
+              // The value string, AllocMem'd once per distinct value and kept
+              // for the door's life (it used to wrap round 4 KB at 0xf2000,
+              // inside bsdsocket.library's stub).
+              let valueAddr = this.tooltypeValues.get(value) ?? 0;
+              if (valueAddr === 0) {
+                valueAddr = this.memory.allocMem(value.length + 1, MEMF_PUBLIC_CLEAR);
+                if (valueAddr === 0) return 0;
+                this.emulator.writeString(valueAddr, value);
+                this.tooltypeValues.set(value, valueAddr);
               }
-              this.emulator.writeMemory(valueAddr + value.length, 0); // Null terminator
 
 console.log(`[icon.library]   Fallback: Returning value at 0x${valueAddr.toString(16)}`);
               return valueAddr;
@@ -972,8 +990,8 @@ console.log(`[icon.library]   Fallback: ${tooltypeName} not found in any door ic
     return 0;
   }
 
-  // Track offset for allocating tooltype value strings in memory
-  private tooltypeValueOffset: number = 0;
+  /** Fallback tooltype values already written to emulator memory, by value. */
+  private tooltypeValues = new Map<string, number>();
 
   private parseInfoFile(infoPath: string): string[] | null {
     try {
