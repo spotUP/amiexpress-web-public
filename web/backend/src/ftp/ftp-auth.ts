@@ -36,7 +36,7 @@ import { nodeManager } from '../services/node-manager.service';
 import { logDownload, writeToCallersLog } from '../utils/download-logging.util';
 import type { FtpDeps, FtpLogonRefusal, FtpUser } from './ftp-session';
 import type { User } from '../database/types';
-import { saveAccountAtLogoff } from '../services/account.service';
+import { applyLogonBaud, saveAccountAtLogoff } from '../services/account.service';
 import { loadAccount } from '../services/load-account';
 import { applyLogonDayReset, isNewLogonDay } from '../utils/time-tracking.util';
 import {
@@ -536,6 +536,8 @@ console.log(`[FTP] no tagline for ${fname}: ${error instanceof Error ? error.mes
        * `lastLogin` is the record's timeLastOn, as loadAccount reads it.
        */
       applyLogonDayReset(user, isNewLogonDay(new Date(user.lastLogin ?? 0)));
+      // express.e:28770 loggedOnUserKeys.baud:=19200.
+      applyLogonBaud(user);
 
       // Without the record's deleted state, as login-post keeps it off the
       // session: a `false` carried here must never be written back over a

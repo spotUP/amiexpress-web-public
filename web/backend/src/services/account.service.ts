@@ -20,6 +20,7 @@ import { db } from '../database';
 import { userFileManager } from './UserFileManager';
 import { RECORD_FIELDS, changedRecordFields, rowFieldsFromAccount } from './load-account';
 import { getSystemTime } from '../utils/date-time.util';
+import { SOCKET_CONNECT_BAUD } from './CallersLogManager';
 
 /** The part of a session the account lives on. */
 export interface AccountSession {
@@ -70,6 +71,34 @@ export async function saveAccount(user: User): Promise<void> {
 }
 
 /**
+ * userKeys.baud:=onlineBaud at every logon (express.e:29759 and loadAccount's
+ * 30102 for the BBS logon, 28770 = 19200 for the FTP logon): "hold last logged
+ * on baud rate". Every caller here comes in on a socket, whose connect string
+ * is CONNECT 19200, so that is the one speed. In memory, like the rest of the
+ * logon's changes; the logoff's saveAccount writes it into user.keys.
+ */
+export function applyLogonBaud(user: Pick<User, 'connectBaud'>): void {
+  user.connectBaud = SOCKET_CONNECT_BAUD;
+}
+
+/**
+ * express.e:8193-8195, written into user.keys just before the logoff's save:
+ *
+ *   AstrCopy(loggedOnUserKeys.userName,loggedOnUser.name,31)
+ *   UpperStr(loggedOnUserKeys.userName)
+ *   loggedOnUserKeys.number:=loggedOnUser.slotNumber
+ *
+ * Overlaid on the record, so only these two fields can change. A deleted
+ * account carries 0 in userKeys.number (21364-21365) and the session does not
+ * hold that state, so a record that says deleted keeps its 0.
+ */
+function keysIdentityPatch(user: User, slot: number): { userName: string; number?: number } {
+  const patch: { userName: string; number?: number } = { userName: String(user.username ?? '').toUpperCase() };
+  if (userFileManager.readRecordStructs(slot).keys.number !== 0) patch.number = slot;
+  return patch;
+}
+
+/**
  * express.e:8197-8207, the account's part of a logoff:
  *
  *   IF(newSinceFlag) THEN loggedOnUser.newSinceDate:=getSystemTime()   8197
@@ -97,6 +126,8 @@ export async function saveAccountAtLogoff(session: AccountSession): Promise<void
   addMsgPointers(session);
   session.accountSavedAtLogoff = true;
   await saveAccount(user);
+  const slot = Number(user.slotNumber) || 0;
+  if (slot >= 1) userFileManager.patchUserRecord(slot, { keys: keysIdentityPatch(user, slot) });
 }
 
 /**

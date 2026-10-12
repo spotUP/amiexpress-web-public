@@ -43,6 +43,7 @@ import { sessionLogManager } from "./SessionLogManager";
 import { emitUserLogin } from "./bbs-event-emitter";
 import { getSystemTime } from "../utils/date-time.util";
 import { applyLogonDayReset, isNewLogonDay } from '../utils/time-tracking.util';
+import { applyLogonBaud } from './account.service';
 import { beginLogoff } from "../server/logoff";
 import { getBoardConfig } from './bbs-config-file.service';
 import {
@@ -273,6 +274,8 @@ export async function runPostAuthLogin(
   // express.e:28509-28528: today's counters and todaysBytesLimit, the
   // same block the FTP logon runs (28906-28925).
   applyLogonDayReset(user, newDay);
+  // express.e:29759 userKeys.baud:=onlineBaud.
+  applyLogonBaud(user);
 
   /*
    * The ROW follows the record, never the other way round: the fields the
