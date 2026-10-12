@@ -400,7 +400,14 @@ export const DOS_VECTORS: LibraryVector[] = [
       return emu.getRegister(0);
     },
   },
-  // -396: SetFileDate
+  {
+    offset: -396,
+    name: "SetFileDate",
+    handler: (emu, lib: DosLibrary) => {
+      lib.SetFileDate();
+      return emu.getRegister(0);
+    },
+  },
   {
     offset: -402,
     name: "NameFromLock",

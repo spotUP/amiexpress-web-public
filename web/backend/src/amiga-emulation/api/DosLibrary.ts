@@ -17,7 +17,7 @@ import { EnvironmentManager } from "../session/EnvironmentManager";
 import { convertAmigaBytesToAscii } from "../utils/character-conversion";
 import { initializeENVFiles } from "../utils/env-initializer";
 import { amigaEnvArchiveDir, amigaEnvDir, amigaRamDir } from "../utils/env-paths";
-import { getSystemTime, dateTimeToDateStamp } from '../../utils/date-time.util';
+import { getSystemTime, dateTimeToDateStamp, dateStampToDateTime } from '../../utils/date-time.util';
 import { debugLog } from "../../utils/debug-log";
 import { narrowVariants } from "../../utils/narrow-art.util";
 import type { FileShadowProvider } from "./file-shadow";
@@ -3913,6 +3913,41 @@ console.error(
   }
 
   /**
+   * SetFileDate - Set a file's modification date (dos.library -396)
+   * D1 = name
+   * D2 = pointer to a DateStamp {days, minute, tick}
+   * Returns: D0 = DOSTRUE (-1) or DOSFALSE (0), IoErr() says why
+   * The DateStamp is the Amiga's wall clock; dateStampToDateTime reads it back
+   * the way Examine's dateTimeToDateStamp wrote it.
+   */
+  SetFileDate(): void {
+    const name = this.readString(this.emulator.getRegister(CPURegister.D1));
+    const dsPtr = this.emulator.getRegister(CPURegister.D2);
+
+    const realPath = this.pathResolver.resolve(name);
+    if (!realPath || !amigafs.existsSync(realPath)) {
+      this.emulator.setRegister(CPURegister.D0, 0);
+      this.lastError = DOS_ERRORS.ERROR_OBJECT_NOT_FOUND;
+      return;
+    }
+
+    try {
+      const when = dateStampToDateTime(
+        this.emulator.readMemory32(dsPtr),
+        this.emulator.readMemory32(dsPtr + 4),
+        this.emulator.readMemory32(dsPtr + 8),
+      );
+      amigafs.utimesSync(realPath, when, when);
+      this.emulator.setRegister(CPURegister.D0, -1);
+      this.lastError = DOS_ERRORS.ERROR_NO_ERROR;
+    } catch (error) {
+      console.error(`[dos.library] SetFileDate: Error setting date on ${realPath}:`, error);
+      this.emulator.setRegister(CPURegister.D0, 0);
+      this.lastError = DOS_ERRORS.ERROR_WRITE_PROTECTED;
+    }
+  }
+
+  /**
    * ParentDir - Get parent directory lock
    * D1 = lock
    * Returns: D0 = parent lock (or 0 if none)
@@ -7130,6 +7165,9 @@ debugLog(
         return true;
       case -186: // _LVOSetProtection
         this.SetProtection();
+        return true;
+      case -396: // _LVOSetFileDate
+        this.SetFileDate();
         return true;
 
       // Date/time
