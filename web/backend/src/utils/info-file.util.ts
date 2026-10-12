@@ -93,11 +93,11 @@ const WORD_KEY_RE = /^[A-Za-z0-9][A-Za-z0-9_.<>-]*$/;
  *
  * A TEXT .info can hold a key spelled `(INTERNAL)`, which is a literal key and
  * not a commented-out one - only a fully wrapped entry is a comment - and this
- * board's own files carry `;RESIDENT`, `!KEY`, `&CHECKER` and `+LOCATION` for
- * entries a sysop or a tool switched off. Those are keys. `W\``, `K@B` and `IHDR` bytes out of a bitmap are not.
+ * board's own files carry `;RESIDENT` and `!KEY` for entries a tool commented
+ * out. Those are keys. `W\``, `K@B` and `IHDR` bytes out of a bitmap are not.
  */
 function keyIsWordShaped(key: string): boolean {
-  const core = key.replace(/^[!;(&*$#+%']+/, '').replace(/\)+$/, '');
+  const core = key.replace(/^[!;(#+%']+/, '').replace(/\)+$/, '');
   return core.length >= 2 && WORD_KEY_RE.test(core);
 }
 
@@ -119,9 +119,11 @@ function parseTooltypeString(raw: string): Tooltype | null {
 
   // A leading `#`, `+`, `%` or `'` stays PART OF THE KEY. icon.library's
   // FindToolType - what express.e reads every tooltype through
-  // (tooltypes.e:152-174) - matches the key as written, so `%ERROR.1` and
-  // `+LOCATION` are entries the sysop switched off, not ERROR.1 and LOCATION.
-  // The mark is split off only so the key's word can be validated.
+  // (tooltypes.e:152-174) - matches the key as written: `#RESIDENT` is not
+  // RESIDENT. These used to be stripped because a length byte scraped out of
+  // a damaged icon looked like one (`+LOCATION`, 0x2B = 43); that byte is now
+  // removed where it comes from, extractTooltypesFallback. The mark is split
+  // off here only so the key's word can be validated.
   if (content.length > 0 && AMIGA_PREFIX_CHARS.has(content[0])) {
     mark = content.substring(0, 1);
     content = content.substring(1);
@@ -482,10 +484,21 @@ function isAppendedTooltypeText(trailing: Buffer): boolean {
   });
 }
 
-function extractTooltypesFallback(buffer: Buffer): Tooltype[] {
+function extractTooltypesFallback(buffer: Buffer, lengthPrefixed = false): Tooltype[] {
   const tooltypes: Tooltype[] = [];
   const extracted: string[] = [];
   let current = '';
+  let start = 0;
+  // In an icon, a tooltype is a 4-byte length and then the string with its
+  // NUL. The length's high bytes are NULs and end the previous run, so a
+  // run scraped from a binary icon can start with the length's LOW byte:
+  // `+LOCATION=...` is 0x2B, 43 = the 42-byte string plus its NUL. That
+  // byte is not part of the key. A mark the sysop typed comes after it and
+  // stays. A text .info has no lengths, so this only applies to an icon.
+  const stripLengthByte = (run: string, at: number): string =>
+    lengthPrefixed && at > 0 && buffer[at - 1] === 0 && run.charCodeAt(0) === run.length
+      ? run.substring(1)
+      : run;
   for (let i = 0; i < buffer.length; i++) {
     const c = buffer[i];
     // Anything above 0x7e is text, not a delimiter: a tooltype VALUE is Amiga
@@ -496,21 +509,19 @@ function extractTooltypesFallback(buffer: Buffer): Tooltype[] {
     // ASCII: VALID_KEY_RE rejects a key with a high byte, so the extra bytes
     // can only ever land in a value.
     if (c >= 0x20 && c !== 0x7f) {
+      if (current === '') start = i;
       current += String.fromCharCode(c);
     } else {
-      if (current.length >= 2) extracted.push(current);
+      if (current.length >= 2) extracted.push(stripLengthByte(current, start));
       current = '';
     }
   }
-  if (current.length >= 2) extracted.push(current);
+  if (current.length >= 2) extracted.push(stripLengthByte(current, start));
 
   for (const raw of extracted) {
     const trimmed = raw.trim();
     if (!trimmed) continue;
-    // The marks a sysop puts in front of a key to switch it off (`&CHECKER`,
-    // `*ERROR.2`, `$LOCATION`) are part of the key - FindToolType matches it
-    // as written - so only other leading bytes are trimmed.
-    const cleaned = trimmed.replace(/^[^a-zA-Z0-9+(%#'!&*$]+/, '');
+    const cleaned = trimmed.replace(/^[^a-zA-Z0-9+(%#'!]+/, '');
     const tt = parseTooltypeString(cleaned);
     // A key here was GUESSED out of a printable run, so it has to look like a
     // key. VALID_KEY_RE accepts any printable byte but '=', which is right for
@@ -667,7 +678,7 @@ export function parseInfoBuffer(buffer: Buffer, filePath = ''): InfoFile {
   // and expose the heuristic extraction for read-only access. Marked
   // fallback so writeInfoFile knows not to corrupt the original
   // structure.
-  const fallbackTooltypes = extractTooltypesFallback(buffer);
+  const fallbackTooltypes = extractTooltypesFallback(buffer, true);
   const info: InfoFile = {
     filePath,
     isBinary: true,
