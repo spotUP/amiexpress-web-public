@@ -175,7 +175,10 @@ export async function fileStatus(
     if (todaysBytesLimit === 0) {
       bytesAvailStr = 'Infinite';
     } else {
-      const bytesAvail = Math.max(0, todaysBytesLimit - dailyBytesDld);
+      // express.e:24173 formatUnsignedLong(limit - dailyBytesDld): a 32-bit
+      // difference printed unsigned, so a caller over his limit reads the
+      // wrapped value, not 0.
+      const bytesAvail = (todaysBytesLimit - dailyBytesDld) >>> 0;
       bytesAvailStr = formatBytes(bytesAvail);
     }
 
@@ -190,7 +193,9 @@ export async function fileStatus(
     const confDisplay = String(relConf(confNum, user)).padStart(4, ' ');
     const uploadsDisplay = String(uploadsCount & 0xFFFF).padEnd(7, ' ');
     const uploadBytesDisplay = uploadBytesStr.padStart(14, ' ');
-    const downloadsDisplay = String(downloadsCount & 0xFFFF).padEnd(7, ' ');
+    // express.e:24179 / 24181: the download count is '\r\d[7]', right-justified
+    // (the upload count before it is a plain '\d[7]', left-justified).
+    const downloadsDisplay = String(downloadsCount & 0xFFFF).padStart(7, ' ');
     const downloadBytesDisplay = downloadBytesStr.padStart(14, ' ');
     const bytesAvailDisplay = bytesAvailStr.padStart(9, ' ');
 
