@@ -1,5 +1,6 @@
 import { parseAmigaCommandLine } from "./dos/dos-command-line";
 import { findInAssignDirs, standardAssigns } from "./dos/standard-assigns";
+import { amigaProtectionOf, hostModeOf } from "./dos/protection";
 import { boardRoot } from "../../utils/board-root.util";
 import type { CpuContext } from "./dos/cpu-context";
 import { isHunkExecutable, loadSegList, type LoadedSegList } from "../loader/load-seg";
@@ -2772,9 +2773,8 @@ debugLog(
       // fib_FileName (108 bytes, NUL-terminated C string per dos/dos.h)
       this.writeFixedCString(fibPtr + 8, fileName, 108);
 
-      // fib_Protection (4 bytes) - Amiga RWED bits (inverted: 0=allowed, 1=protected)
-      // Standard file: 0x0F = DEWR all protected (read-only)
-      const protection = stats.isDirectory() ? 0 : 0x0F;
+      // fib_Protection (4 bytes) - RWED deny bits, from the host mode
+      const protection = amigaProtectionOf(stats.mode);
       this.emulator.writeMemory32(fibPtr + 116, protection);
 
       // fib_EntryType (4 bytes) - same as fib_DirEntryType
@@ -2950,9 +2950,8 @@ debugLog(`[dos.library] ExNext: No more entries`);
       // fib_FileName (108 bytes, NUL-terminated C string per dos/dos.h)
       this.writeFixedCString(fibPtr + 8, fileName, 108);
 
-      // fib_Protection (4 bytes) - Amiga RWED bits (inverted: 0=allowed, 1=protected)
-      // Standard file: 0x0F = DEWR all protected (read-only)
-      const protection = stats.isDirectory() ? 0 : 0x0F;
+      // fib_Protection (4 bytes) - RWED deny bits, from the host mode
+      const protection = amigaProtectionOf(stats.mode);
       this.emulator.writeMemory32(fibPtr + 116, protection);
 
       // fib_EntryType (4 bytes) - same as fib_DirEntryType
@@ -3871,23 +3870,9 @@ console.error(
     }
 
     try {
-      // Convert Amiga protection bits to Unix mode
-      // Amiga protection bits (from dos/dos.h) - SET bit means PROTECTED (denied):
-      //   Bit 0 (FIBB_DELETE)  = 0x01 - Delete protection
-      //   Bit 1 (FIBB_EXECUTE) = 0x02 - Execute protection
-      //   Bit 2 (FIBB_WRITE)   = 0x04 - Write protection
-      //   Bit 3 (FIBB_READ)    = 0x08 - Read protection
-      // When bit is SET (1), operation is DENIED. When CLEAR (0), operation is ALLOWED.
-      const canRead = !(protect & 0x08);     // Bit 3 = Read protection
-      const canWrite = !(protect & 0x04);    // Bit 2 = Write protection
-      const canExec = !(protect & 0x02);     // Bit 1 = Execute protection
-      // Bit 0 (Delete) has no Unix equivalent, ignored
-
-      // Map to Unix permissions (owner + group/other read if readable)
-      let unixMode = 0;
-      if (canRead) unixMode |= 0o444;   // Read for all
-      if (canWrite) unixMode |= 0o200;  // Write for owner only
-      if (canExec) unixMode |= 0o111;   // Execute for all
+      // Amiga protection bits are DENY bits; the host mode is their inverse
+      // (dos/protection.ts, which Examine reads back through).
+      const unixMode = hostModeOf(protect);
 
       amigafs.chmodSync(realPath, unixMode);
 debugLog(
@@ -5799,8 +5784,8 @@ debugLog(`[dos.library] NameFromFH returned: ${path}`);
       // fib_FileName (108 bytes, NUL-terminated C string per dos/dos.h)
       this.writeFixedCString(fibPtr + 8, fileName, 108);
 
-      // fib_Protection (4 bytes)
-      const protection = stats.isDirectory() ? 0 : 0x0f;
+      // fib_Protection (4 bytes) - RWED deny bits, from the host mode
+      const protection = amigaProtectionOf(stats.mode);
       this.emulator.writeMemory32(fibPtr + 116, protection);
 
       // fib_EntryType (4 bytes) - same as fib_DirEntryType

@@ -40,7 +40,7 @@ function board(): string {
 const runs = new Map<string, { stdout: string; stderr: string }>();
 
 /** One runner run per file; the tests below read the same run. */
-function check(file: string): { stdout: string; stderr: string } {
+function check(file: string, advert?: string): { stdout: string; stderr: string } {
   const done = runs.get(file);
   if (done) return done;
   const result = spawnSync(
@@ -49,6 +49,7 @@ function check(file: string): { stdout: string; stderr: string } {
       HARNESS,
       path.join(board(), 'Doors-check', 'mULTI-cHECK'),
       '1',
+      ...(advert ? [`ADVERT=${advert}`] : []),
       'BBS-PATH=BBS:',
       'PACKER=C:LHA',
       'TYPE=LHA',
@@ -87,6 +88,8 @@ describeMaybe('a checker runs the real archiver through SystemTagList', () => {
     const bad = fs.readFileSync(ARCHIVE);
     for (let i = 200; i < 600; i++) bad[i] ^= 0x5a;
     fs.writeFileSync(path.join(playpen, 'bad.lha'), bad);
+    fs.copyFileSync(ARCHIVE, path.join(playpen, 'advert.lha'));
+    fs.writeFileSync(path.join(root, 'Doors-check', 'advert.txt'), 'Uploaded to the test board.\r\n');
   });
 
   it('passes a good archive: C:LHA runs and returns 0', () => {
@@ -101,6 +104,17 @@ describeMaybe('a checker runs the real archiver through SystemTagList', () => {
     expect(stderr).toMatch(/\[dos\.library\] "C:LHA" returned 0;/);
     expect(stderr).not.toMatch(/CurrentDir: Invalid lock/);
     expect(stderr).not.toMatch(/is not a lock dos\.library handed out/);
+  }, 200_000);
+
+  it('adds the advert: LhA -F a may write the upload (Examine reports it writable)', () => {
+    const before = fs.statSync(path.join(board(), 'Node1', 'Playpen', 'advert.lha')).size;
+    const { stdout, stderr } = check('advert.lha', 'BBS:Doors-check/advert.txt');
+    expect(stdout).toMatch(/pASSED !/);
+    const lhaRuns = stderr.match(/\[dos\.library\] "C:LHA" returned -?\d+;/g) ?? [];
+    expect(lhaRuns).toEqual(['[dos.library] "C:LHA" returned 0;', '[dos.library] "C:LHA" returned 0;']);
+    expect(stdout).toMatch(/aDDED !/);
+    expect(stdout).not.toMatch(/Adding of advert .* failed/);
+    expect(fs.statSync(path.join(board(), 'Node1', 'Playpen', 'advert.lha')).size).toBeGreaterThan(before);
   }, 200_000);
 
   it('rejects a damaged archive: C:LHA runs and returns 10', () => {
