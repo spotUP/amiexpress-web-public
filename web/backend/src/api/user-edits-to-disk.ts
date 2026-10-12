@@ -87,7 +87,7 @@ console.warn(
   const current = userFileManager.readUserBySlot(slotNumber);
   if (!current) return { slotNumber: null, applied: [] };
 
-  const updated = { ...current } as Record<string, unknown>;
+  const updated: Record<string, unknown> = {};
   const applied: string[] = [];
 
   const carry = <K extends keyof UserEdits>(field: K, target = field as string) => {
@@ -117,6 +117,7 @@ console.warn(
 
   if (applied.length === 0) return { slotNumber, applied };
 
+  // Only the fields the edit names: the rest of the record is not rewritten.
   userFileManager.updateUserDataFile(updated as never, slotNumber);
   return { slotNumber, applied };
 }

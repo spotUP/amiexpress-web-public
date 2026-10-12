@@ -29,6 +29,7 @@ import { EnvStat } from '../../constants/env-codes';
 import { RESULT_SUCCESS, RESULT_FAILURE } from '../../constants/command-results';
 import { userDatabaseManager } from '../../services/UserDatabaseManager';
 import { userFileManager } from '../../services/UserFileManager';
+import { fieldsDifferingFrom } from '../../services/load-account';
 import { findUserFromName, useWildcards } from '../message/msg-names';
 import { conferenceNumbers } from '../../conferences/conference-paths';
 import { boardRoot } from '../../utils/board-root.util';
@@ -294,7 +295,9 @@ async function writeBulkAccount(user: User, slot: number): Promise<void> {
   if (user.id) {
     await writeAccount(user);
   } else {
-    userFileManager.updateUserDataFile(user, slot);
+    // The fields this edit changed, against the record as it stands.
+    const onDisk = userFileManager.readUserBySlot(slot);
+    userFileManager.updateUserDataFile(onDisk ? fieldsDifferingFrom(user, onDisk) : user, slot);
   }
 }
 

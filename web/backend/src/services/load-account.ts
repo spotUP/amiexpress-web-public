@@ -175,3 +175,47 @@ export function rowFieldsFromAccount(user: User): Partial<User> {
   for (const [field] of TEXT_FROM_DISK) target[field] = source[field];
   return fields;
 }
+
+/** Equal as the record holds them: dates by instant, everything else by value. */
+function sameValue(a: unknown, b: unknown): boolean {
+  if (a instanceof Date || b instanceof Date) {
+    return new Date(a as Date | number).getTime() === new Date(b as Date | number).getTime();
+  }
+  return a === b;
+}
+
+/**
+ * The record fields a caller holding a WHOLE account has changed: those that
+ * differ from the account as it loads from this row (the record merged over
+ * it), plus the disk-only fields it names. A save writes these and nothing
+ * else, so a field the account only carries because the row supplied it (an
+ * expert byte the row spells 'N', a rejoin the row defaults) is never written
+ * over what the record holds. Without a row, every named field is a change.
+ */
+export function changedRecordFields(account: Partial<User>, row: User | null | undefined): Partial<User> {
+  if (!row) {
+    // No row to measure against: the record as it stands is the baseline.
+    const slot = Number(account.slotNumber) || 0;
+    const onDisk = slot > 0 ? userFileManager.readUserBySlot(slot) : null;
+    return onDisk ? fieldsDifferingFrom(account, onDisk) : { ...account };
+  }
+  const baseline = loadAccount(row).user as unknown as Record<string, unknown>;
+  const source = account as unknown as Record<string, unknown>;
+  const changed: Record<string, unknown> = {};
+  for (const [field, value] of Object.entries(source)) {
+    if (value === undefined) continue;
+    if ((RECORD_FIELDS as readonly string[]).includes(field) && sameValue(value, baseline[field])) continue;
+    changed[field] = value;
+  }
+  return changed as Partial<User>;
+}
+
+/** The fields of `next` whose value is not the one `base` holds. */
+export function fieldsDifferingFrom(next: Partial<User>, base: Partial<User>): Partial<User> {
+  const changed: Record<string, unknown> = {};
+  const before = base as unknown as Record<string, unknown>;
+  for (const [field, value] of Object.entries(next as unknown as Record<string, unknown>)) {
+    if (value !== undefined && !sameValue(value, before[field])) changed[field] = value;
+  }
+  return changed as Partial<User>;
+}

@@ -142,6 +142,13 @@ export interface UserRecordLayout {
   keysNewUserOffset: number;
 }
 
+/** The fields of an existing account's three records that a save changes; every other byte stays. */
+export interface UserRecordPatch {
+  data?: Partial<UserFileStruct>;
+  keys?: Partial<UserKeysFileStruct>;
+  misc?: Partial<UserMiscFileStruct>;
+}
+
 export class UserFileManager {
   private bbsRoot: string;
   private userDataPath: string;
@@ -182,7 +189,10 @@ export class UserFileManager {
   }
 
   /**
-   * Convert User (DB model) to UserFileStruct (binary file format)
+   * Convert User (DB model) to UserFileStruct (binary file format).
+   * A WHOLE record: for a NEW account and the node file's in-memory copy only.
+   * Saving an existing account never goes through here - it overlays the
+   * fields the caller names (userFieldsToPatch / patchUserRecord).
    */
   private userToFileStruct(user: User, slotNumber: number): UserFileStruct {
     return {
@@ -319,10 +329,13 @@ export class UserFileManager {
       pwdHash: '',
       salt: '', // Not used with bcrypt
       pwdType: 1, // bcrypt
-      forcePwdReset: 0,
-      accountLocked: 0,
-      invalidAttempts: 0,
-      pwdLastUpdated: encodeAmigaDate(user.updated),
+      // A new record is unlocked unless the caller names a lock (express.e:1008-1018).
+      forcePwdReset: user.forcePwdReset ? 1 : 0,
+      accountLocked: user.accountLocked ? 1 : 0,
+      invalidAttempts: Math.max(0, Math.floor(user.invalidAttempts ?? 0)),
+      pwdLastUpdated: user.pwdLastUpdated !== undefined
+        ? encodeAmigaDate(Math.max(0, Math.floor(user.pwdLastUpdated)))
+        : encodeAmigaDate(user.updated),
       lastIP: 0,
       ipMask: 0,
       unused: Buffer.alloc(86),
@@ -1070,6 +1083,17 @@ console.log(`[UserFileManager] Serialized userMisc struct: ${offset} bytes (expe
     if (!Number.isInteger(slotNumber) || slotNumber < 1) {
       throw new Error(`writeUserFiles: invalid slot ${slotNumber}`);
     }
+    // A slot that already holds an account is never rebuilt: the User names
+    // the fields it carries and the rest of the record stays as it is.
+    if (this.recordExists(slotNumber)) {
+      this.updateUserDataFile(user, slotNumber);
+      return;
+    }
+    this.writeNewRecord(user, slotNumber);
+  }
+
+  /** A whole record for a slot that holds no account: express.e's new-account values for what `user` does not carry. */
+  private writeNewRecord(user: User, slotNumber: number): void {
     try {
       this.ensureUserFilesReady();
       // Convert to file structs
@@ -1350,166 +1374,207 @@ console.error('[UserFileManager] Error reading user files:', error);
     }
   }
 
-  /** The connect speed user.keys holds at this slot; undefined when there is no such record. */
-  private readKeysBaud(slotNumber: number): number | undefined {
-    try {
-      if (!fs.existsSync(this.userKeysPath)) return undefined;
-      const offset = (slotNumber - 1) * this.USERKEYS_STRUCT_SIZE;
-      const buffer = Buffer.alloc(this.USERKEYS_STRUCT_SIZE);
-      const fd = fs.openSync(this.userKeysPath, 'r');
-      try {
-        if (fs.fstatSync(fd).size < offset + this.USERKEYS_STRUCT_SIZE) return undefined;
-        fs.readSync(fd, buffer, 0, this.USERKEYS_STRUCT_SIZE, offset);
-      } finally { fs.closeSync(fd); }
-      return this.deserializeUserKeysStruct(buffer, 0).baud;
-    } catch {
-      return undefined;
-    }
-  }
-
   /**
-   * The lockout bytes currently on disk for a 1-indexed slot.
-   * A missing file or a short record reads as all-zero: a new account has
-   * no lock. Deserializes through the same layout the writer uses, so the
-   * field offsets cannot drift apart.
+   * Does the slot hold an account in user.data? A blank name is an empty
+   * slot (never used, or zeroed by deleteUserSlot); a deleted account keeps
+   * its name and carries slotNumber 0 (express.e:21364).
    */
-  private readMiscLockFields(slotNumber: number): { forcePwdReset: number; accountLocked: number; invalidAttempts: number; pwdLastUpdated: number } {
-    const zero = { forcePwdReset: 0, accountLocked: 0, invalidAttempts: 0, pwdLastUpdated: 0 };
+  private recordExists(slotNumber: number): boolean {
     try {
-      if (!Number.isInteger(slotNumber) || slotNumber < 1 || !fs.existsSync(this.userMiscPath)) return zero;
-      const offset = (slotNumber - 1) * this.USERMISC_STRUCT_SIZE;
-      const buffer = Buffer.alloc(this.USERMISC_STRUCT_SIZE);
-      const fd = fs.openSync(this.userMiscPath, 'r');
-      try {
-        if (fs.fstatSync(fd).size < offset + this.USERMISC_STRUCT_SIZE) return zero;
-        fs.readSync(fd, buffer, 0, this.USERMISC_STRUCT_SIZE, offset);
-      } finally { fs.closeSync(fd); }
-      const misc = this.deserializeUserMiscStruct(buffer, 0);
-      return { forcePwdReset: misc.forcePwdReset, accountLocked: misc.accountLocked, invalidAttempts: misc.invalidAttempts, pwdLastUpdated: misc.pwdLastUpdated };
-    } catch {
-      return zero;
-    }
-  }
-
-  /**
-   * The disk-only facts of one user.data record: its post count, whether it
-   * is deleted, and its new-since date. null when the slot is past the end of the file or
-   * has never held an account.
-   */
-  private readRecordState(slotNumber: number): {
-    messagesPosted: number; deleted: boolean; newSinceDate: number; computerIndex: number; connectBaud: number | undefined; protocol: number;
-    msgBaseRJoin: number; todaysBytesLimit: number; uucpa: number;
-  } | null {
-    try {
-      if (!Number.isInteger(slotNumber) || slotNumber < 1 || !fs.existsSync(this.userDataPath)) return null;
+      if (!Number.isInteger(slotNumber) || slotNumber < 1 || !fs.existsSync(this.userDataPath)) return false;
       const offset = (slotNumber - 1) * this.USER_STRUCT_SIZE;
       const buffer = Buffer.alloc(this.USER_STRUCT_SIZE);
       const fd = fs.openSync(this.userDataPath, 'r');
       try {
-        if (fs.fstatSync(fd).size < offset + this.USER_STRUCT_SIZE) return null;
+        if (fs.fstatSync(fd).size < offset + this.USER_STRUCT_SIZE) return false;
         fs.readSync(fd, buffer, 0, this.USER_STRUCT_SIZE, offset);
       } finally { fs.closeSync(fd); }
-      const record = this.deserializeUserStruct(buffer, 0);
-      if (!record.name || record.name.trim().length === 0) return null;
-      return {
-        messagesPosted: record.messagesPosted, deleted: record.slotNumber === 0, newSinceDate: record.newSinceDate,
-        msgBaseRJoin: record.msgBaseRJoin, todaysBytesLimit: record.todaysBytesLimit, uucpa: record.uucpa,
-        computerIndex: record.secBulletin, connectBaud: this.readKeysBaud(slotNumber), protocol: record.protocol,
-      };
+      return this.deserializeUserStruct(buffer, 0).name.trim().length > 0;
     } catch {
-      return null;
+      return false;
     }
   }
 
-  public updateUserDataFile(user: User, slotNumber: number): void {
+  /**
+   * The record fields a caller NAMES, as struct fields. A User field that is
+   * undefined is not named and maps to nothing; the rest map one-to-one onto
+   * the fields of user.data / user.keys / user.misc that hold them.
+   *
+   * Never maps the password: the port authenticates against the users row
+   * (db.authenticateUser), express.e keeps its credential in user.pwdHash /
+   * userMisc.pwdHash+salt (958-1006) and the legacy `pass` field is cleared
+   * at creation (30468). A save that is not a password change has no business
+   * with any of them, so no User field maps to them at all.
+   */
+  public userFieldsToPatch(f: Partial<User>, slotNumber: number, current: { data: UserFileStruct; keys: UserKeysFileStruct }): UserRecordPatch {
+    const data: Partial<UserFileStruct> = {};
+    const keys: Partial<UserKeysFileStruct> = {};
+    const misc: Partial<UserMiscFileStruct> = {};
+
+    if (f.username !== undefined) { data.name = f.username; keys.userName = f.username; }
+    if (f.location !== undefined) data.location = f.location;
+    if (f.phone !== undefined) data.phoneNumber = f.phone;
+    // express.e:21364-21365 - a DELETED account carries 0 in both slot fields.
+    if (f.accountDeleted !== undefined) {
+      data.slotNumber = f.accountDeleted ? 0 : slotNumber;
+      keys.number = f.accountDeleted ? 0 : slotNumber;
+    }
+    if (f.secLevel !== undefined) data.secStatus = f.secLevel;
+    if (f.ratioType !== undefined) data.secBoard = f.ratioType;
+    if (f.ratio !== undefined) data.secLibrary = f.ratio;
+    // express.e:11344 secBulletin:=stat-1, the index into the board's computer list.
+    if (f.computerIndex !== undefined) data.secBulletin = f.computerIndex;
+    if (f.messagesPosted !== undefined) data.messagesPosted = f.messagesPosted;
+    if (f.newSinceDate !== undefined) data.newSinceDate = encodeAmigaDate(f.newSinceDate);
+    if (f.zoomType !== undefined) data.zoomType = this.zoomTypeToInt(f.zoomType);
+    if (f.protocol !== undefined) data.xferProtocol = this.protocolToInt(f.protocol);
+    // accountDate (created) is set once, with the record; no save moves it.
+    if (f.screenType !== undefined) data.screenType = this.screenTypeToInt(f.screenType);
+    if (f.editor !== undefined) data.editorType = this.editorTypeToInt(f.editor);
+    if (f.confAccess !== undefined) data.conferenceAccess = f.confAccess;
+    if (f.uploads !== undefined) data.uploads = f.uploads;
+    if (f.downloads !== undefined) data.downloads = f.downloads;
+    // autoRejoin and confRJoin are the same field (user.data confRJoin).
+    const rejoin = f.confRJoin ?? f.autoRejoin;
+    if (rejoin !== undefined) data.confRJoin = rejoin;
+    if (f.calls !== undefined) data.timesCalled = f.calls;
+    if (f.lastLogin !== undefined) data.timeLastOn = encodeAmigaDate(f.lastLogin);
+    if (f.timeUsed !== undefined) data.timeUsed = f.timeUsed;
+    if (f.timeLimit !== undefined) data.timeLimit = f.timeLimit;
+    if (f.timeTotal !== undefined) data.timeTotal = f.timeTotal;
+    if (f.bytesDownload !== undefined) { data.bytesDownload = f.bytesDownload; misc.downloadBytesBCD = this.numberToBCD(f.bytesDownload); }
+    if (f.bytesUpload !== undefined) { data.bytesUpload = f.bytesUpload; misc.uploadBytesBCD = this.numberToBCD(f.bytesUpload); }
+    if (f.byteLimit !== undefined) data.dailyBytesLimit = f.byteLimit;
+    if (f.dailyBytesDld !== undefined) data.dailyBytesDld = f.dailyBytesDld;
+    // A CHAR holding the letter (express.e:24595 `expert="X"`, 26116 `expert:="N"`).
+    if (f.expert !== undefined) data.expert = expertToByte(f.expert);
+    // chatRemain is limit minus used: naming one of the two keeps the other as the record holds it.
+    if (f.chatLimit !== undefined || f.chatUsed !== undefined) {
+      const limit = f.chatLimit ?? current.data.chatLimit;
+      const used = f.chatUsed ?? Math.max(0, current.data.chatLimit - current.data.chatRemain);
+      data.chatLimit = limit;
+      data.chatRemain = limit - used;
+    }
+    if (f.creditDays !== undefined) data.creditDays = f.creditDays;
+    if (f.creditAmount !== undefined) data.creditAmount = f.creditAmount;
+    if (f.creditStartDate !== undefined) data.creditStartDate = encodeAmigaDate(f.creditStartDate);
+    if (f.creditTotalToDate !== undefined) data.creditTotalToDate = f.creditTotalToDate;
+    if (f.creditTotalDate !== undefined) data.creditTotalDate = encodeAmigaDate(f.creditTotalDate);
+    if (f.creditTracking !== undefined) data.creditTracking = f.creditTracking;
+    if (f.msgBaseRJoin !== undefined) data.msgBaseRJoin = f.msgBaseRJoin;
+    if (f.todaysBytesLimit !== undefined) data.todaysBytesLimit = f.todaysBytesLimit;
+    // uuCP is the yes/no of the uucpa byte: the record's own value stands while it agrees.
+    if (f.uucpa !== undefined) data.uucpa = f.uucpa;
+    else if (f.uuCP !== undefined && (current.data.uucpa > 0) !== Boolean(f.uuCP)) data.uucpa = f.uuCP ? 1 : 0;
+    // Lines per screen, 0 = auto (express.e:11272-11314).
+    if (f.linesPerScreen !== undefined) data.lineLength = Math.max(0, Math.min(255, Math.trunc(f.linesPerScreen)));
+    if (f.newUser !== undefined) { data.newUser = f.newUser ? 1 : 0; keys.newUser = f.newUser ? 1 : 0; }
+
+    if (f.userFlags !== undefined) keys.userFlags = f.userFlags;
+    // express.e:30269 userKeys.baud:=onlineBaud.
+    if (f.connectBaud !== undefined) keys.baud = f.connectBaud;
+    if (f.topUploadCPS !== undefined) { keys.oldUpCPS = Math.min(f.topUploadCPS, 65535); keys.upCPS2 = f.topUploadCPS; }
+    if (f.topDownloadCPS !== undefined) { keys.oldDnCPS = Math.min(f.topDownloadCPS, 65535); keys.dnCPS2 = f.topDownloadCPS; misc.lastDlCPS = f.topDownloadCPS; }
+    if (f.callsToday !== undefined) keys.timesOnToday = f.callsToday;
+
+    if (f.realname !== undefined) misc.realName = f.realname;
+    if (f.email !== undefined) misc.eMail = f.email;
+    if (f.forcePwdReset !== undefined) misc.forcePwdReset = f.forcePwdReset ? 1 : 0;
+    if (f.accountLocked !== undefined) misc.accountLocked = f.accountLocked ? 1 : 0;
+    if (f.invalidAttempts !== undefined) misc.invalidAttempts = Math.max(0, Math.floor(f.invalidAttempts));
+    // WHEN THE PASSWORD WAS LAST CHANGED - only a real password change moves it (express.e:29828-29829).
+    if (f.pwdLastUpdated !== undefined) misc.pwdLastUpdated = encodeAmigaDate(Math.max(0, Math.floor(f.pwdLastUpdated)));
+    return { data, keys, misc };
+  }
+
+  /**
+   * Overlay a patch onto one record of one file, byte for byte: the bytes the
+   * patch does not change are the file's own, padding and garbage included.
+   * The changed bytes are found by serializing the record with and without the
+   * patch and comparing the two images.
+   */
+  private overlayRecord<T extends object>(
+    filePath: string, size: number, slotNumber: number, patch: Partial<T>,
+    serialize: (s: T) => Buffer, deserialize: (b: Buffer, o: number) => T,
+  ): void {
+    if (Object.keys(patch).length === 0) return;
+    const offset = (slotNumber - 1) * size;
+    const raw = Buffer.alloc(size);
+    if (fs.existsSync(filePath)) {
+      const fd = fs.openSync(filePath, 'r');
+      try {
+        if (fs.fstatSync(fd).size >= offset + size) fs.readSync(fd, raw, 0, size, offset);
+      } finally { fs.closeSync(fd); }
+    }
+    const current = deserialize(raw, 0);
+    const base = serialize(current);
+    const next = serialize({ ...current, ...patch });
+    const out = Buffer.from(raw);
+    for (let i = 0; i < size; i++) if (base[i] !== next[i]) out[i] = next[i];
+    this.updateFileAtOffset(filePath, out, offset);
+  }
+
+  /** The record as it is on disk, for the fields a patch is computed against. */
+  private readRecordStructs(slotNumber: number): { data: UserFileStruct; keys: UserKeysFileStruct } {
+    const read = (file: string, size: number): Buffer => {
+      const buffer = Buffer.alloc(size);
+      if (!fs.existsSync(file)) return buffer;
+      const offset = (slotNumber - 1) * size;
+      const fd = fs.openSync(file, 'r');
+      try {
+        if (fs.fstatSync(fd).size >= offset + size) fs.readSync(fd, buffer, 0, size, offset);
+      } finally { fs.closeSync(fd); }
+      return buffer;
+    };
+    return {
+      data: this.deserializeUserStruct(read(this.userDataPath, this.USER_STRUCT_SIZE), 0),
+      keys: this.deserializeUserKeysStruct(read(this.userKeysPath, this.USERKEYS_STRUCT_SIZE), 0),
+    };
+  }
+
+  /**
+   * Write the fields of an EXISTING account that the caller names, and
+   * nothing else: read-modify-write of the slot's three records.
+   */
+  public patchUserRecord(slotNumber: number, patch: UserRecordPatch): void {
+    if (!Number.isInteger(slotNumber) || slotNumber < 1) {
+      throw new Error(`patchUserRecord: invalid slot ${slotNumber}`);
+    }
+    this.ensureUserFilesReady();
+    this.overlayRecord<UserFileStruct>(this.userDataPath, this.USER_STRUCT_SIZE, slotNumber, patch.data ?? {},
+      s => this.serializeUserStruct(s), (b, o) => this.deserializeUserStruct(b, o));
+    this.overlayRecord<UserKeysFileStruct>(this.userKeysPath, this.USERKEYS_STRUCT_SIZE, slotNumber, patch.keys ?? {},
+      s => this.serializeUserKeysStruct(s), (b, o) => this.deserializeUserKeysStruct(b, o));
+    this.overlayRecord<UserMiscFileStruct>(this.userMiscPath, this.USERMISC_STRUCT_SIZE, slotNumber, patch.misc ?? {},
+      s => this.serializeUserMiscStruct(s), (b, o) => this.deserializeUserMiscStruct(b, o));
+  }
+
+  /**
+   * Save an account at its slot. An existing record takes ONLY the fields the
+   * caller names (a User field that is undefined is not named); a slot with no
+   * account yet gets a whole new record from `user`, express.e's new-account
+   * values for everything it does not carry.
+   *
+   * A caller holding a whole account passes the fields it changed, not the
+   * account: see load-account changedRecordFields.
+   */
+  public updateUserDataFile(user: Partial<User>, slotNumber: number): void {
+    // Slot 1 is the first record. A slot of 0 computed offset -232, and
+    // fs.writeSync with a negative position writes at the CURRENT position
+    // - byte 0 - so every caller that forgot the slot serialized its user
+    // over slot 1's record (the -TCB!- account, 2026-08-31). Loud refusal.
+    if (!Number.isInteger(slotNumber) || slotNumber < 1) {
+      throw new Error(`updateUserDataFile: invalid slot ${slotNumber} for ${user.username}`);
+    }
     try {
-      // Slot 1 is the first record. A slot of 0 computed offset -232, and
-      // fs.writeSync with a negative position writes at the CURRENT position
-      // - byte 0 - so every caller that forgot the slot serialized its user
-      // over slot 1's record. That is how the -TCB!- account was destroyed
-      // on 2026-08-31: a conference removal migrated 30+ users, each "into"
-      // slot 0, each landing on slot 1. Loud refusal, never a guess.
-      if (!Number.isInteger(slotNumber) || slotNumber < 1) {
-        throw new Error(`updateUserDataFile: invalid slot ${slotNumber} for ${user.username}`);
-      }
       this.ensureUserFilesReady();
-      // Convert to file structs
-      const userStruct = this.userToFileStruct(user, slotNumber);
-      const keysStruct = this.userToKeysStruct(user, slotNumber);
-      const miscStruct = this.userToMiscStruct(user);
-
-      // The lock lives in user.misc and only the password check, an explicit
-      // unlock, or a sysop edit may change it (express.e:1008-1018, :21625).
-      // A User synced from the database carries no lock fields, so writing
-      // its zeroes here unlocked every account on each login and on each
-      // admin edit. Preserve the on-disk values unless the caller names
-      // explicit numbers (BBS account editor B/C/D, admin unlock button).
-      // Disk-only state of the user.data record: kept when the caller's User
-      // does not name it. A User built from a database row carries neither -
-      // the table has no messagesPosted column, and "deleted" is the record's
-      // slotNumber field (express.e:21364), not a row value - so writing this
-      // User's defaults zeroed the post count on every login and admin edit,
-      // and would have undeleted every deleted account.
-      const current = this.readRecordState(slotNumber);
-      if (current) {
-        if (user.messagesPosted === undefined) userStruct.messagesPosted = current.messagesPosted;
-        // The table has no newSinceDate column either: a User from a row
-        // carries none, and the record's own date stands.
-        if (user.newSinceDate === undefined) userStruct.newSinceDate = current.newSinceDate;
-        // Nor msgBaseRJoin, todaysBytesLimit or the uucpa byte. uuCP is the
-        // row's yes/no of that byte: the record's own value stands while the
-        // row agrees with it, and a row that flipped it writes 0 or 1.
-        if (user.msgBaseRJoin === undefined) userStruct.msgBaseRJoin = current.msgBaseRJoin;
-        if (user.todaysBytesLimit === undefined) userStruct.todaysBytesLimit = current.todaysBytesLimit;
-        if (user.computerIndex === undefined) userStruct.secBulletin = current.computerIndex;
-        // The record's own protocol byte (axobjects.e userData.protocol): 'Z' is what a NEW record gets
-        // (express.e:30449); a save of an existing one must not overwrite what it holds.
-        userStruct.protocol = current.protocol;
-        if (user.connectBaud === undefined && current.connectBaud !== undefined) keysStruct.baud = current.connectBaud;
-        if (user.uucpa === undefined && (current.uucpa > 0) === Boolean(user.uuCP)) userStruct.uucpa = current.uucpa;
-        if (user.accountDeleted === undefined && current.deleted) {
-          userStruct.slotNumber = 0;
-          keysStruct.number = 0;
-        }
+      if (!this.recordExists(slotNumber)) {
+        this.writeNewRecord(user as User, slotNumber);
+        return;
       }
-
-      const keep = this.readMiscLockFields(slotNumber);
-      if (user.forcePwdReset === undefined) miscStruct.forcePwdReset = keep.forcePwdReset;
-      else miscStruct.forcePwdReset = user.forcePwdReset ? 1 : 0;
-      if (user.accountLocked === undefined) miscStruct.accountLocked = keep.accountLocked;
-      else miscStruct.accountLocked = user.accountLocked ? 1 : 0;
-      if (user.invalidAttempts === undefined) miscStruct.invalidAttempts = keep.invalidAttempts;
-      else miscStruct.invalidAttempts = Math.max(0, Math.floor(user.invalidAttempts));
-      // WHEN THE PASSWORD WAS LAST CHANGED - not when the record was last
-      // touched. userToMiscStruct fills this from `user.updated`, which the
-      // database bumps on every write, and a login writes: so each login
-      // rewrote it to now, the password was permanently seconds old, an
-      // expiry policy could never fire, and a 68K door reading user.misc was
-      // told the same untruth. Only a real password change moves it
-      // (updateUserMiscAfterPasswordChange, express.e:29828-29829). The same
-      // rule as the three bytes above; it was simply left out of the list.
-      if (user.pwdLastUpdated === undefined) {
-        if (keep.pwdLastUpdated > 0) miscStruct.pwdLastUpdated = keep.pwdLastUpdated;
-      } else {
-        miscStruct.pwdLastUpdated = encodeAmigaDate(Math.max(0, Math.floor(user.pwdLastUpdated)));
-      }
-
-      // Serialize to buffers
-      const userBuffer = this.serializeUserStruct(userStruct);
-      const keysBuffer = this.serializeUserKeysStruct(keysStruct);
-      const miscBuffer = this.serializeUserMiscStruct(miscStruct);
-
-      // Calculate file offsets (slots are 1-indexed in AmiExpress)
-      const userOffset = (slotNumber - 1) * this.USER_STRUCT_SIZE;
-      const keysOffset = (slotNumber - 1) * this.USERKEYS_STRUCT_SIZE;
-      const miscOffset = (slotNumber - 1) * this.USERMISC_STRUCT_SIZE;
-
-      // Update all three files at the correct offsets
-      this.updateFileAtOffset(this.userDataPath, userBuffer, userOffset);
-      this.updateFileAtOffset(this.userKeysPath, keysBuffer, keysOffset);
-      this.updateFileAtOffset(this.userMiscPath, miscBuffer, miscOffset);
-
-console.log(`[UserFileManager] Updated user files for ${user.username} (slot ${slotNumber})`);
+      const patch = this.userFieldsToPatch(user, slotNumber, this.readRecordStructs(slotNumber));
+      this.patchUserRecord(slotNumber, patch);
+console.log(`[UserFileManager] Updated user files for ${user.username ?? `slot ${slotNumber}`} (slot ${slotNumber})`);
     } catch (error) {
 console.error('[UserFileManager] Error updating user files:', error);
       throw error;

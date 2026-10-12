@@ -69,16 +69,14 @@ describe('a database-side user edit', () => {
     expect(written.secLevel).toBe(255);
   });
 
-  // The -TCB!- guard, stated as a test.
-  it('keeps every field the edit did not name', () => {
+  // The -TCB!- guard, stated as a test: the writer is handed the edited
+  // fields and nothing else, so the bytes of every other field are not
+  // rewritten (UserFileManager.updateUserDataFile overlays only what is named).
+  it('names only the fields the edit changed', () => {
     applyUserEditsToDisk('Phantasm', { location: 'uPTOWN' });
 
     const [written] = updateUserDataFile.mock.calls[0];
-    expect(written.uploads).toBe(412);
-    expect(written.downloads).toBe(1908);
-    expect(written.messagesPosted).toBe(77);
-    expect(written.confAccess).toBe('XXXXXXXXXX');
-    expect(written.timeLimit).toBe(60);
+    expect(Object.keys(written)).toEqual(['location']);
   });
 
   it('reads the record from disk, not from the caller', () => {
@@ -192,6 +190,6 @@ describe('the conference access a sysop picks', () => {
     applyUserEditsToDisk('Phantasm', { location: 'Stockholm' });
 
     const [written] = updateUserDataFile.mock.calls[0] as [Record<string, unknown>, number];
-    expect(written.confAccess).toBe('Internal');
+    expect(written.confAccess).toBeUndefined();
   });
 });

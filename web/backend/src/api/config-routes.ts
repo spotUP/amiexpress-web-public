@@ -29,6 +29,7 @@ import { listOrphanConferenceDirs, removeOrphanConferenceDir } from '../conferen
 import { BBSHealthCheckService } from '../services/bbs-health-check.service';
 import { SSHKeyUtil } from '../utils/ssh-key.util';
 import { userFileManager } from '../services/UserFileManager';
+import { fieldsDifferingFrom } from '../services/load-account';
 import {
   readConftopSettings, writeConftopSettings, MAX_FITTING_ROWS, CONFTOP_CHROME_ROWS,
 } from '../conferences/conftop-settings';
@@ -2352,7 +2353,8 @@ console.log(`[API] Deduplicated to ${users.length} unique users`);
         }
 
         // Then the record itself, what the BBS reads.
-        userFileManager.updateUserDataFile(updatedUser, slotNumber);
+        // Only what the sysop changed: the rest of the record is not rewritten.
+        userFileManager.updateUserDataFile(fieldsDifferingFrom(updatedUser, currentUser), slotNumber);
 
         // Remove password hash from response
         const { passwordHash: _, ...userWithoutPassword } = updatedUser;

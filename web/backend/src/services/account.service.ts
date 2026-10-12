@@ -18,7 +18,7 @@
 import type { User } from '../database/types';
 import { db } from '../database';
 import { userFileManager } from './UserFileManager';
-import { RECORD_FIELDS, rowFieldsFromAccount } from './load-account';
+import { RECORD_FIELDS, changedRecordFields, rowFieldsFromAccount } from './load-account';
 import { getSystemTime } from '../utils/date-time.util';
 
 /** The part of a session the account lives on. */
@@ -62,7 +62,10 @@ export async function changeAccount(session: AccountSession, updates: Partial<Us
 export async function saveAccount(user: User): Promise<void> {
   const slot = Number(user.slotNumber) || 0;
   if (slot < 1) return;
-  userFileManager.updateUserDataFile(user, slot);
+  // Only the fields the caller changed since the account loaded (against its
+  // row merged with the record): the rest of the record is left as it is.
+  const row = await db.getUserById(String(user.id));
+  userFileManager.updateUserDataFile(changedRecordFields(user, row), slot);
   await db.updateUser(String(user.id), rowFieldsFromAccount(user), { syncDisk: false });
 }
 

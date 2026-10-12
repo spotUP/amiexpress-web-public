@@ -19,6 +19,7 @@ jest.mock('../../src/database', () => ({
     authenticateUser: (...args: unknown[]) => authenticateUser(...args),
     getUserByUsername: jest.fn(async () => null),
     updateUser: jest.fn(async () => undefined),
+    getUserById: jest.fn(async () => null),
     getConfigRepository: () => ({ getConferenceConfigs: () => [] }),
   },
   getDatabase: () => ({}),

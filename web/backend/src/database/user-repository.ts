@@ -10,7 +10,7 @@ import type { User } from './types';
 import { normalizeForComparison, sanitizeInput } from '../utils/input-normalizer.util';
 import { SysopDebugUtil, DebugSeverity } from '../utils/sysop-debug.util';
 import { BaseRepository } from './BaseRepository';
-import { loadAccount, RECORD_FIELDS } from '../services/load-account';
+import { changedRecordFields, RECORD_FIELDS } from '../services/load-account';
 
 // Helper function to map field names to column names
 function fieldToColumn(field: string): string {
@@ -420,8 +420,18 @@ console.error(`[Database] Failed to append BBS user to disk:`, error);
       const row = await this.getUserById(id);
       if (row && row.slotNumber) {
         try {
-          const { user: account } = loadAccount(row);
-          userFileManager.updateUserDataFile({ ...account, ...recordUpdates }, row.slotNumber);
+          // Only what this save changes goes to the record (a rename, a level);
+          // everything else the record holds stays as it is. A record that is
+          // not this row's account (the slot points elsewhere) is not written.
+          const onDisk = userFileManager.readUserBySlot(row.slotNumber);
+          if (onDisk && onDisk.username.trim().toLowerCase() !== String(row.username ?? '').trim().toLowerCase()) {
+console.warn(`[Database] slot ${row.slotNumber} holds "${onDisk.username}", not "${row.username}" - record not written`);
+          } else {
+            userFileManager.updateUserDataFile(
+              onDisk ? changedRecordFields(recordUpdates, row) : { ...row, ...recordUpdates },
+              row.slotNumber,
+            );
+          }
 console.log(`[Database] Saved account ${row.username} at slot ${row.slotNumber}: ${Object.keys(recordUpdates).join(', ')}`);
         } catch (error) {
 console.error(`[Database] Failed to save the account to disk:`, error);
