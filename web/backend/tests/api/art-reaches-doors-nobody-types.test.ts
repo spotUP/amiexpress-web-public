@@ -79,3 +79,40 @@ describe('art belonging to a door nobody types', () => {
     expect(commands).toContain('QUICKNEW');
   });
 });
+
+describe('the upload advert of the multi-check file checker', () => {
+  // A file checker is run by the upload path, never typed: no Commands/BBSCmd
+  // icon. The Studio listed its card, but opening or saving it asked the
+  // registered-door list and answered "No door MULTICHECK".
+  it('is listed, opens with its text, and a save reaches its manifest limits', async () => {
+    const app = anAppWithNoRegisteredDoors();
+
+    const list = await request(app).get('/api/door-art');
+    const card = (list.body.data ?? []).find((d: any) => d.command === 'MULTICHECK');
+    expect(card).toBeDefined();
+    expect(card.sections[0]).toMatchObject({ file: 'uprough.txt', maxLineLength: 79 });
+
+    const opened = await request(app).get('/api/door-art/MULTICHECK');
+    expect(opened.status).toBe(200);
+    const text = Buffer.from(opened.body.data[0].content, 'base64').toString('latin1');
+    expect(text).toContain('bbs.uprough.net');
+    expect(text).toContain('@@-@@-@@');
+
+    // A save reaches the door's own directory. Doors/ is the checkout's here
+    // (a symlink in the test board) and the live-data guard refuses writes
+    // through it, so the save names a slot the manifest does not declare: the
+    // service's own refusal is only reachable once the command resolves, and
+    // before the fix this was "No door MULTICHECK" (404).
+    const refused = await request(app)
+      .put('/api/door-art/MULTICHECK')
+      .send({ file: 'uprough.txt', section: 'setting:nope', content: '' });
+    expect(refused.status).not.toBe(404);
+    expect(refused.body.message).toMatch(/No art setting nope/);
+  });
+
+  it('still refuses a command that is neither registered nor a door directory', async () => {
+    const res = await request(anAppWithNoRegisteredDoors()).get('/api/door-art/NOSUCHDOOR');
+    expect(res.status).toBe(404);
+  });
+});
+

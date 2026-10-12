@@ -2207,11 +2207,16 @@ console.warn(
    * generic (empty-vector) stub base, as before. Any other name that is not
    * on disk is a library the machine does not have, and OpenLibrary says NULL.
    */
+  // locale.library is deliberately NOT in this list. Its empty-vector stub
+  // answers every call with 0, and C/Zip (Info-ZIP 2.32) uses locale for
+  // character conversion: with the stub it spun forever in `Zip -T`. A machine
+  // without locale.library is a real configuration (pre-2.1 Kickstart) that
+  // every program that opens it must already survive, so OpenLibrary says NULL.
   private static readonly STANDARD_SYSTEM_LIBRARIES: ReadonlySet<string> = new Set([
     "asl.library", "commodities.library", "cybergraphics.library",
     "datatypes.library", "diskfont.library", "expansion.library",
     "gadtools.library", "iffparse.library", "keymap.library",
-    "layers.library", "locale.library", "mathffp.library",
+    "layers.library", "mathffp.library",
     "mathieeedoubbas.library", "mathieeedoubtrans.library",
     "mathieeesingbas.library", "mathieeesingtrans.library",
     "mathtrans.library", "realtime.library", "rexxsyslib.library",

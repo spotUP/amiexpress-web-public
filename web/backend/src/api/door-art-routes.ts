@@ -58,6 +58,36 @@ export function createDoorArtRouter(opts: { getDoors?: () => ArtDoor[] } = {}): 
     return require('../handlers/door.handler').getDoors();
   };
 
+  /**
+   * The directory a door's art lives in, for READ and WRITE as well as the
+   * listing: a registered command's directory, else the Doors/ directory whose
+   * manifest names this command. The listing already joined the doors nobody
+   * types (QuickNew, the multi-check file checker); without this the Studio
+   * showed the card and every open or save of it answered 404.
+   */
+  const artDoorDirFor = (command: string): string | null => {
+    const door = doors().find((d) => String(d.command).toUpperCase() === command);
+    if (door) return doorDirectoryFor(config.get('dataDir'), door);
+    try {
+      const doorsRoot = path.join(config.get('dataDir'), 'Doors');
+      for (const entry of fs.readdirSync(doorsRoot, { withFileTypes: true })) {
+        if (!entry.isDirectory()) continue;
+        const doorDir = path.join(doorsRoot, entry.name);
+        const manifestPath = path.join(doorDir, 'door.settings.json');
+        if (!fs.existsSync(manifestPath)) continue;
+        try {
+          const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8')) as { command?: string };
+          if ((manifest.command || entry.name).toUpperCase() === command) return doorDir;
+        } catch {
+          continue;
+        }
+      }
+    } catch {
+      /* no Doors directory */
+    }
+    return null;
+  };
+
   const sendResponse = <T>(res: Response, data: T, message?: string) => {
     const response: ApiResponse<T> = {
       success: true,
@@ -171,11 +201,8 @@ console.error('Door art API error:', error);
    */  router.get('/:command', async (req: Request, res: Response) => {
     try {
       const command = String(req.params.command).toUpperCase();
-      const door = doors().find((d) => String(d.command).toUpperCase() === command);
-      if (!door) return res.status(404).json({ success: false, message: `No door ${command}` });
-
-      const doorDir = doorDirectoryFor(config.get('dataDir'), door);
-      if (!doorDir) return res.status(404).json({ success: false, message: `${command} has no directory on disk` });
+      const doorDir = artDoorDirFor(command);
+      if (!doorDir) return res.status(404).json({ success: false, message: `No door ${command}` });
 
       // The board's Screens directory: where the narrow drawings live, and
       // how a section knows whether one has been made for it.
@@ -204,11 +231,8 @@ console.error('Door art API error:', error);
   router.put('/:command', async (req: any, res: Response) => {
     try {
       const command = String(req.params.command).toUpperCase();
-      const door = doors().find((d) => String(d.command).toUpperCase() === command);
-      if (!door) return res.status(404).json({ success: false, message: `No door ${command}` });
-
-      const doorDir = doorDirectoryFor(config.get('dataDir'), door);
-      if (!doorDir) return res.status(404).json({ success: false, message: `${command} has no directory on disk` });
+      const doorDir = artDoorDirFor(command);
+      if (!doorDir) return res.status(404).json({ success: false, message: `No door ${command}` });
 
       const { file, section, content, variant } = req.body ?? {};
       if (typeof file !== 'string' || typeof section !== 'string' || typeof content !== 'string') {

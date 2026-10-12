@@ -55,6 +55,10 @@ describe('OpenLibrary of a library that does not exist', () => {
     expect(open('nosuchthing.library', old)).toBe(0);
   });
 
+  it('returns NULL for locale.library so C/Zip does not spin on a zero-returning stub', () => {
+    expect(open('locale.library', false)).toBe(0);
+  });
+
   it('still answers a standard system library and a fixed stub with a base', () => {
     expect(open('gadtools.library', false)).not.toBe(0);
     expect(open('dos.library', false)).not.toBe(0);
