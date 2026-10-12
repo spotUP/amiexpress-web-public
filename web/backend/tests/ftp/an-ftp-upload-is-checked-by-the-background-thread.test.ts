@@ -20,6 +20,8 @@ import * as os from 'os';
 import * as path from 'path';
 import { PassThrough, Readable } from 'stream';
 
+import { getPlaypenDir } from '../../src/utils/bbs-paths.util';
+
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
 describe('an FTP upload is checked on the background-file-check thread', () => {
@@ -75,9 +77,16 @@ describe('an FTP upload is checked on the background-file-check thread', () => {
   const request = (user: Record<string, unknown>, extra: Record<string, unknown> = {}) => ({
     filename: 'ARTPACK.LHA', nodeId: 3, conferenceId: 7, user, ...extra,
   });
-  const tick = () => new Promise<void>((resolve) => setImmediate(resolve));
+  // The upload's first steps (mkdir, the write stream, the tagline read) are
+  // real file I/O on libuv's thread pool. Spinning a fixed number of
+  // setImmediate ticks does not wait for them - under load the 200 ticks ran
+  // out before the I/O came back and the test failed, then leaked the still
+  // running upload into the next test's event list. Wait on the real clock;
+  // useFakeTimers replaces the global setTimeout, so the real one is kept.
+  const realSetTimeout = setTimeout;
+  const pause = (ms: number) => new Promise<void>((resolve) => realSetTimeout(resolve, ms));
   async function until(condition: () => boolean): Promise<void> {
-    for (let i = 0; i < 200 && !condition(); i++) await tick();
+    for (let i = 0; i < 2000 && !condition(); i++) await pause(5);
     expect(condition()).toBe(true);
   }
 
@@ -123,7 +132,8 @@ describe('an FTP upload is checked on the background-file-check thread', () => {
     const broken = new PassThrough();
     const accepted = boardFtpDeps().acceptUpload(request({ id: 'u', username: 'Knut' }), broken);
     // Once the board is reading (it makes the playpen first), the line drops.
-    await new Promise<void>((resolve) => setTimeout(resolve, 100));
+    // The playpen file exists once the board's stream is open and piping.
+    await until(() => fs.existsSync(path.join(getPlaypenDir(3, root), 'ARTPACK.LHA')));
     broken.write('half');
     broken.destroy(new Error('connection reset'));
 
