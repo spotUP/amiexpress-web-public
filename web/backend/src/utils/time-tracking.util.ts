@@ -69,6 +69,59 @@ export function logonTodaysBytesLimit(
   return todaysBytesLimit < dailyBytesLimit ? dailyBytesLimit : todaysBytesLimit;
 }
 
+/** The fields express.e's logon day reset touches, under this port's names. */
+export interface LogonDayFields {
+  callsToday?: number;
+  timeUsed?: number;
+  chatUsed?: number;
+  dailyBytesDld?: number;
+  timeTotal?: number;
+  timeLimit?: number;
+  todaysBytesLimit?: number;
+  byteLimit?: number;
+}
+
+/**
+ * express.e:28506-28507 / 28902-28904: is this logon on another day than the
+ * caller's last (`timeLastOn`), by express.e's day number.
+ */
+export function isNewLogonDay(lastOn: Date, now: Date = getSystemTime()): boolean {
+  return amiExpressDay(Math.floor(now.getTime() / 1000))
+    !== amiExpressDay(Math.floor(lastOn.getTime() / 1000));
+}
+
+/**
+ * THE LOGON DAY RESET, one copy for both of express.e's logons:
+ * processLoggedOnUser (28509-28528) and processFtpLoggedOnUser (28906-28925)
+ * run the same block.
+ *
+ *     IF (lastDay<>currDay)
+ *       timesOnToday:=0; timeUsed:=0; chatRemain:=chatLimit
+ *       dailyBytesDld:=0; timeTotal:=timeLimit
+ *       todaysBytesLimit:=dailyBytesLimit
+ *     ELSE
+ *       (todaysBytesLimit, see logonTodaysBytesLimit)
+ *       timesOnToday:=timesOnToday+1
+ *
+ * chatRemain counts DOWN in express.e; this port counts chatUsed UP, so
+ * `chatRemain:=chatLimit` is `chatUsed:=0`. In memory only: the record
+ * reaches user.data where the caller's session saves it.
+ */
+export function applyLogonDayReset(user: LogonDayFields, newDay: boolean): void {
+  user.callsToday = newDay ? 0 : (user.callsToday || 0) + 1;
+  if (newDay) {
+    user.timeUsed = 0;
+    user.chatUsed = 0;
+    user.dailyBytesDld = 0;
+    user.timeTotal = user.timeLimit;
+  }
+  user.todaysBytesLimit = logonTodaysBytesLimit(
+    user.todaysBytesLimit ?? (user.byteLimit || 0),
+    user.byteLimit || 0,
+    newDay,
+  );
+}
+
 /**
  * express.e:28425-28432 getTodaysCalls - the calls a user has made today, 0
  * when their last call was on another day:

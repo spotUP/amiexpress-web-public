@@ -42,7 +42,7 @@ import { SysopDebugUtil, DebugSeverity } from "../utils/sysop-debug.util";
 import { sessionLogManager } from "./SessionLogManager";
 import { emitUserLogin } from "./bbs-event-emitter";
 import { getSystemTime } from "../utils/date-time.util";
-import { amiExpressDay, logonTodaysBytesLimit } from '../utils/time-tracking.util';
+import { applyLogonDayReset, isNewLogonDay } from '../utils/time-tracking.util';
 import { beginLogoff } from "../server/logoff";
 import { getBoardConfig } from './bbs-config-file.service';
 import {
@@ -260,9 +260,7 @@ export async function runPostAuthLogin(
    * user.data and carries the sysop's and the uploads' extra bytes, so
    * without this a credit given yesterday stood for ever.
    */
-  const currDay = amiExpressDay(Math.floor(getSystemTime().getTime() / 1000));
-  const lastDay = amiExpressDay(Math.floor(lastLoginBeforeUpdate.getTime() / 1000));
-  const newDay = lastDay !== currDay;
+  const newDay = isNewLogonDay(lastLoginBeforeUpdate, getSystemTime());
 
   /*
    * What express.e's logon changes in the loaded record, IN MEMORY: one more
@@ -272,22 +270,9 @@ export async function runPostAuthLogin(
    */
   const callsBeforeLogon = user.calls || 0;
   user.calls = callsBeforeLogon + 1;
-  // express.e:28513 zeroes it on a new day rather than starting at one.
-  user.callsToday = newDay ? 0 : (user.callsToday || 0) + 1;
-  if (newDay) {
-    user.timeUsed = 0;
-    user.chatUsed = 0;
-    user.dailyBytesDld = 0;
-    user.timeTotal = user.timeLimit;
-  }
-  // express.e:28518 (new day) and 28520-28523 (same day). A disk-only field
-  // (user-repository DISK_ONLY_FIELDS): it reaches user.data at logoff with
-  // the rest of the record, never the row.
-  user.todaysBytesLimit = logonTodaysBytesLimit(
-    user.todaysBytesLimit ?? (user.byteLimit || 0),
-    user.byteLimit || 0,
-    newDay,
-  );
+  // express.e:28509-28528: today's counters and todaysBytesLimit, the
+  // same block the FTP logon runs (28906-28925).
+  applyLogonDayReset(user, newDay);
 
   /*
    * The ROW follows the record, never the other way round: the fields the

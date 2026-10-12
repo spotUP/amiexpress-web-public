@@ -35,6 +35,7 @@ import { nodeManager } from '../services/node-manager.service';
 import { logDownload, writeToCallersLog } from '../utils/download-logging.util';
 import type { FtpDeps, FtpLogonRefusal, FtpUser } from './ftp-session';
 import { loadAccount } from '../services/load-account';
+import { applyLogonDayReset, isNewLogonDay } from '../utils/time-tracking.util';
 import {
   accountOnlineElsewhere,
   accountRefusal,
@@ -466,6 +467,15 @@ console.log(`[FTP] no tagline for ${request.filename}: ${error instanceof Error 
       const { user } = loadAccount(row);
       const refusal = accountRefusal(user);
       if (refusal !== null) return { refused: FTP_REFUSALS[refusal] };
+
+      /*
+       * THE FTP LOGON'S DAY RESET (express.e:28902-28925, processFtpLoggedOnUser),
+       * the block the BBS logon runs too (28506-28528): a caller last on
+       * yesterday gets today's allowances back, so yesterday's downloads
+       * no longer count against today's limit (bytesADL, 28927-28931).
+       * `lastLogin` is the record's timeLastOn, as loadAccount reads it.
+       */
+      applyLogonDayReset(user, isNewLogonDay(new Date(user.lastLogin ?? 0)));
 
       // Without the record's deleted state, as login-post keeps it off the
       // session: a `false` carried here must never be written back over a
