@@ -13,16 +13,16 @@
  *     scores, CARDS.REXX for card-rack persistence)
  *
  * Path resolution:
- *   Amiga assigns ("BBS:", "DOORS:", "RAM:") are mapped to host
- *   directories. The current working directory is tracked via
- *   `pragma('directory', dir)`; relative paths join against it.
- *   See resolveAmigaPath() below for the full mapping.
+ *   Amiga assigns ("BBS:", "DOORS:", "T:", ...) come from the board's one
+ *   assign table (amiga-emulation/api/dos/standard-assigns.ts) through
+ *   PathManager, the same resolver a 68K door's dos.library uses. The
+ *   current working directory is tracked via `pragma('directory', dir)`;
+ *   relative paths join against it.
  */
 
-import * as fs from 'fs';
 import * as path from 'path';
-import * as os from 'os';
 import * as amigafs from '../utils/amigafs';
+import { PathManager } from '../amiga-emulation/api/PathManager';
 
 /**
  * A line terminator: CRLF, LF, or a bare CR. Matched against the RAW
@@ -89,32 +89,18 @@ export class AREXXFileIO {
    */
   private currentDir: string;
   private bbsRoot: string;
+  /** The board's assign table (standard-assigns.ts), as dos.library sees it. */
+  private assigns: PathManager;
 
   constructor(bbsRoot: string) {
     this.bbsRoot = bbsRoot;
     this.currentDir = bbsRoot;
+    this.assigns = new PathManager(bbsRoot);
   }
 
   cwd(): string { return this.currentDir; }
   getBbsRoot(): string { return this.bbsRoot; }
 
-  /**
-   * Resolve an Amiga-style path to a host filesystem path. Mirrors
-   * the rules the door dispatcher uses elsewhere:
-   *
-   *   "BBS:foo"          → <bbsRoot>/foo
-   *   "DOORS:bar"        → <bbsRoot>/Doors/bar (case-insensitive)
-   *   "doors:bar"        → <bbsRoot>/Doors/bar (Amiga is CI)
-   *   "RAM:T/x"          → <os tmpdir>/aex-rexx/x
-   *   "RAM:x"            → <os tmpdir>/aex-rexx/x
-   *   "T:x"              → <os tmpdir>/aex-rexx/x
-   *   "<no colon, abs>"  → as-is
-   *   "<no colon, rel>"  → join against currentDir (set by pragma)
-   *
-   * The colons-to-slashes conversion (Amiga uses `:` after the
-   * volume / assign name) is the same pattern we apply when
-   * normalising the LOCATION tooltype in amiga-command-parser.util.
-   */
   /**
    * Assign substitution followed by case resolution.
    *
@@ -138,55 +124,26 @@ export class AREXXFileIO {
   }
 
   /**
-   * The assign table only: "BBS:" / "DOORS:" / "RAM:" / "T:" -> host
-   * directories, and bare paths against the current directory.
+   * The assign table only: an assign or volume through the board's one
+   * assign table (PathManager over standard-assigns.ts - "T:" is RAM:T,
+   * shared with the 68K side as on AmigaOS), a host-absolute path as-is,
+   * and a bare path against the current directory.
    *
    * A bare relative path deliberately resolves against `currentDir`, which
    * starts at the BBS root and is moved only by pragma('directory'). That is
    * 1:1 with express.e: an AIM door is launched as `REXXDOOR <node> <cmd>` /
-   * `<bbsLoc>Utils/REXXDOOR <node> <cmd>` via Execute() (express.e:4272-4277),
-   * from AmiExpress's own current directory - express.e never CurrentDir()s
-   * into a door's directory (its one CurrentDir pair, :26282/:26316, is the
-   * PlayPen zoom path). Doors that want their own directory say so, exactly as
-   * STNG.Rexx does with pragma('directory',"Doors:STNG/"). Defaulting to the
-   * door directory here would be a silent divergence.
+   * `<bbsLoc>Utils/REXXDOOR <node> <cmd>` by SystemTagList with no
+   * NP_CurrentDir (express.e:4272-4277, 3322-3323), from AmiExpress's own
+   * current directory. Doors that want their own directory say so, exactly
+   * as STNG.Rexx does with pragma('directory',"Doors:STNG/").
    */
   private substituteAssign(input: string): string {
     if (!input) return '';
-    const colon = input.indexOf(':');
-    if (colon < 0) {
-      // No assign → absolute or relative.
+    if (!input.includes(':')) {
       if (path.isAbsolute(input)) return input;
       return path.join(this.currentDir, input);
     }
-    const assign = input.slice(0, colon).toLowerCase();
-    const rest = input.slice(colon + 1).replace(/:/g, '/');
-    switch (assign) {
-      case 'bbs':
-        return path.join(this.bbsRoot, rest);
-      case 'doors':
-        return path.join(this.bbsRoot, 'Doors', rest);
-      case 'system':
-        return path.join(this.bbsRoot, 'System', rest);
-      case 'libs':
-        return path.join(this.bbsRoot, 'Libs', rest);
-      case 'ram':
-      case 't':
-        // Map to a per-process scratch dir. Doors that use RAM:T/foo
-        // or T:foo expect a fast scratch area; we give them an os-
-        // tmpdir-rooted equivalent that survives within a single
-        // door run but doesn't pollute the bbs tree.
-        {
-          const scratch = path.join(os.tmpdir(), 'aex-rexx');
-          try { fs.mkdirSync(scratch, { recursive: true }); } catch {}
-          return path.join(scratch, rest.replace(/^t\//i, ''));
-        }
-      default:
-        // Unknown assign — fall through to a bbsRoot-rooted resolve
-        // so the door at least gets a deterministic path it can
-        // create. Better than throwing.
-        return path.join(this.bbsRoot, assign, rest);
-    }
+    return this.assigns.amiToSysPath(input, this.currentDir) ?? '';
   }
 
   /**
