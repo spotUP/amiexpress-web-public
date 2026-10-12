@@ -19,6 +19,7 @@
 import type { Socket } from 'socket.io';
 import type { BBSSession } from '../index';
 import { getACSConfig, ToggleFlags } from './acs.util';
+import { todaysBytesAvailable, type TodaysBytesFields } from './download-ratios.util';
 
 export interface UlStatsEmitter {
   emit(event: string, ...args: unknown[]): unknown;
@@ -39,7 +40,9 @@ export function emitULStats(emitter: UlStatsEmitter | Socket, session: BBSSessio
 
   // express.e:12701-12714 — bytesADL=$7fffffff means Infinite.
   const toggles = getACSConfig().toggles;
-  const bytesADL = (user as any).bytesAvailableForDownload ?? 0x7fffffff;
+  // bytesADL is today's limit less today's downloads (28531-28535); this
+  // read a field nothing ever set, so it always said Infinite.
+  const bytesADL = todaysBytesAvailable(user as TodaysBytesFields);
   const creditByKB = !!(toggles as any)?.[ToggleFlags.CREDITBYKB];
 
   if (creditByKB) {

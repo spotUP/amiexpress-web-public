@@ -36,6 +36,39 @@ export const TRACK_UPLOADS_BIT = 2;
 
 const MAX_INT = 0x7fffffff;
 
+/** The fields today's download allowance is made of. */
+export interface TodaysBytesFields {
+  todaysBytesLimit?: number;
+  dailyBytesLimit?: number;
+  byteLimit?: number;
+  dailyBytesDld?: number;
+}
+
+/**
+ * loggedOnUser.todaysBytesLimit: the daily limit plus today's extra bytes
+ * (sysop Q edit 21537-21544, uploads 19531/19685), set at logon
+ * (28512-28523). An account that carries no record value has the daily
+ * limit, which is what the logon would have set. 0 means no limit.
+ */
+export function todaysBytesLimitOf(user: TodaysBytesFields): number {
+  return (user.todaysBytesLimit ?? user.dailyBytesLimit ?? user.byteLimit) || 0;
+}
+
+/**
+ * bytesADL, as express.e's logons set it (28531-28535 BBS, 28928-28932 FTP):
+ *
+ *     IF (loggedOnUser.todaysBytesLimit<>0)
+ *       bytesADL:=loggedOnUser.todaysBytesLimit-loggedOnUser.dailyBytesDld
+ *     ELSE
+ *       bytesADL:=$7fffffff
+ *
+ * In bytes; $7fffffff is "no limit".
+ */
+export function todaysBytesAvailable(user: TodaysBytesFields): number {
+  const limit = todaysBytesLimitOf(user);
+  return limit !== 0 ? limit - (user.dailyBytesDld || 0) : MAX_INT;
+}
+
 export function creditAccountEnabled(user: User): boolean {
   const days = user.creditDays || 0;
   if (days <= 0) return false;
@@ -119,8 +152,9 @@ export async function checkDownloadRatios(
   const bytesUpload = toUnits((user.bytesUpload ?? (user as any).uploadBytes) || 0);
   const bytesDownload = toUnits((user.bytesDownload ?? (user as any).downloadBytes) || 0);
 
-  // Daily allowance (bytesADL in express.e)
-  const dailyLimit = user.dailyBytesLimit ?? user.byteLimit ?? 0;
+  // Daily allowance (bytesADL in express.e): today's limit, which carries
+  // the sysop's and the uploads' extra bytes (28531-28535 / 28928-28932).
+  const dailyLimit = todaysBytesLimitOf(user as TodaysBytesFields);
   const dailyDownloaded = toUnits(user.dailyBytesDld || 0);
   const limitUnits = toUnits(dailyLimit);
   const bytesADL = dailyLimit > 0 ? Math.max(0, limitUnits - dailyDownloaded) : MAX_INT;

@@ -331,4 +331,11 @@ describe('ANSI byte-identity pin — MCI dispatch', () => {
     expect(fixedNow().getFullYear()).toBe(FIXED_NOW_PARTS[0]);
     expect(actual['clocks'].parsed).toContain('AmiExpress-Web 2.0');
   });
+
+  test("~BD shows today's limit with the sysop's extra bytes (express.e:5377)", async () => {
+    const session = makeSession({ logonTime: LOGON_TIME_SECONDS });
+    (session.user as unknown as { todaysBytesLimit: number }).todaysBytesLimit = 50000;
+    const result = await parseMciCodes('bd=~BD|', session, 'PinBBS', 'PinSysop', 'PinLand');
+    expect(result.parsed).toContain('bd=50000');
+  });
 });

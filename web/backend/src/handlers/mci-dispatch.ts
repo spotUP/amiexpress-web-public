@@ -23,6 +23,7 @@
  */
 import { getCallerCount } from '../services/caller-number';
 import { getTimeRemainingMinutes } from '../utils/time-tracking.util';
+import { todaysBytesLimitOf } from '../utils/download-ratios.util';
 import { db } from '../database';
 import { columnTabPadding } from '../utils/mci-column.util';
 import { flaggedFilesManager } from '../services/FlaggedFilesManager';
@@ -344,7 +345,8 @@ console.error('[parseMciCodes] Error getting message base name:', error);
     SD: (w) => applyMciWidth(calcSizeText(downloadBytes), w),
     FU: (w) => applyMciWidth(uploads.toString(), w),
     FD: (w) => applyMciWidth(downloads.toString(), w),
-    BD: (w) => applyMciWidth((user.byteLimit || 0).toString(), w),
+    // express.e:5377 loggedOnUser.todaysBytesLimit, not the daily limit.
+    BD: (w) => applyMciWidth(String(todaysBytesLimitOf(user)), w),
     // Node + identity (express.e:5379-5390)
     ON: (w) => applyMciWidth(nodeNumStr, w),
     LG: (w) => applyMciWidth(nodeNumStr, w),

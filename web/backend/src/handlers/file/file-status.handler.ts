@@ -15,6 +15,7 @@ import { injectable, inject } from 'tsyringe';
 import { isNarrow, narrowRule } from '../../utils/table-format.util';
 import { Socket } from 'socket.io';
 import { config } from '../../config';
+import { todaysBytesLimitOf } from '../../utils/download-ratios.util';
 import { BBSSession } from '../../index';
 import { LoggedOnSubState } from '../../constants/bbs-states';
 import { checkSecurity, getACSConfig, ToggleFlags } from '../../utils/acs.util';
@@ -167,7 +168,7 @@ export async function fileStatus(
     // carries the sysop's and the uploads' extra bytes (21537-21544, 19531)
     // over the daily one. An account with no record value falls back to the
     // daily limit, which is what the logon sets it to (28518).
-    const todaysBytesLimit = (user.todaysBytesLimit ?? user.dailyBytesLimit ?? user.byteLimit) || 0;
+    const todaysBytesLimit = todaysBytesLimitOf(user);
     const dailyBytesDld = user.dailyBytesDld || 0;
     let bytesAvailStr: string;
 
