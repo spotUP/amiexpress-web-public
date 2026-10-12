@@ -10,7 +10,8 @@
  * - >>: Next Message Base (internalCommandGT2 - express.e:24580-24592)
  */
 
-import { checkSecurity } from '../../utils/acs.util';
+import { checkSecurity, setEnvStat } from '../../utils/acs.util';
+import { EnvStat } from '../../constants/env-codes';
 import { ACSPermission } from '../../constants/acs-permissions';
 import { ErrorHandler } from '../../utils/error-handling.util';
 import { RESULT_NOT_ALLOWED, InternalCommandResult } from '../../constants/command-results';
@@ -100,7 +101,7 @@ export async function handleNewFilesCommand(socket: any, session: BBSSession, pa
   }
 
   // express.e:25278 - setEnvStat(ENV_FILES)
-console.log('[ENV] Files - New Files');
+  setEnvStat(session, EnvStat.FILES);
 
   // express.e:25279 - myNewFiles(params)
   // ONE N: displayNewFiles walks the DIR files (express.e:27906-28023). The
