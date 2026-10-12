@@ -283,8 +283,16 @@ function addToHistory(session: InputWaitingSession, text: string): void {
 
 /** E's Val: the leading (signed) integer, 0 when there is none. */
 export function eVal(str: string): number {
+  return eValRead(str).value;
+}
+
+/**
+ * E's two-result Val (`v,r:=Val(str)`): the value and how many characters it
+ * read - 0 when the string does not start with a number.
+ */
+export function eValRead(str: string): { value: number; read: number } {
   const m = /^\s*[-+]?\d+/.exec(str);
-  return m ? parseInt(m[0], 10) : 0;
+  return m ? { value: parseInt(m[0], 10), read: m[0].length } : { value: 0, read: 0 };
 }
 
 /** E's Val into a LONG: a number too big for 32 bits wraps, as the Amiga's does. */

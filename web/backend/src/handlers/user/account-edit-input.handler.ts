@@ -79,14 +79,16 @@ function afterCheckChanges(socket: any, session: BBSSession, then: () => Promise
 
 /**
  * Out of the account editor: back to whoever opened it - the message reader's
- * U (express.e 12196-12211, editInfo then displayMessage) - or the menu.
+ * U (express.e 12196-12211, editInfo then displayMessage), the sysop's 1
+ * (editAccounts / listNewAccounts, user-editor.handler) - or the menu.
+ * `flag` is editInfo's return (21647): 1 after X, 2 after TAB.
  */
-function leaveAccountEditor(session: BBSSession): void {
+function leaveAccountEditor(session: BBSSession, flag: number): void {
   const done = session.accountEditDone;
   session.accountEditDone = undefined;
   session.tempData = undefined;
   session.subState = LoggedOnSubState.DISPLAY_MENU;
-  if (done) done();
+  if (done) done(flag);
 }
 
 /**
@@ -117,14 +119,14 @@ export async function handleAccountEditInput(socket: any, session: BBSSession, k
   switch (command) {
     // TAB - Exit (21250-21253)
     case '\t':
-      afterCheckChanges(socket, session, async () => leaveAccountEditor(session));
+      afterCheckChanges(socket, session, async () => leaveAccountEditor(session, 2));
       return;
 
     // X - No-Save Exit (21254-21258)
     case 'X':
       afterCheckChanges(socket, session, async () => {
         socket.emit('ansi-output', '\x1b[JNo-Save\r\n');
-        leaveAccountEditor(session);
+        leaveAccountEditor(session, 1);
       });
       return;
 
@@ -162,10 +164,7 @@ export async function handleAccountEditInput(socket: any, session: BBSSession, k
         redraw(socket, session);
         break;
       }
-      // express.e:21896 - checkLockAccounts gates the field edits, computed once.
-      session.tempData.creditEditable = accountsUnlocked(session);
-      session.subState = LoggedOnSubState.CREDIT_MAINTENANCE_VIEW;
-      displayCreditMaintenance(socket, session);
+      openCreditMaintenance(socket, session);
       return;
 
     // * - User Notes (21313-21315)
@@ -491,6 +490,22 @@ async function editField(socket: any, session: BBSSession, command: string): Pro
 }
 
 /**
+ * applyPreset (express.e:29358-29370): what the preset sets, onto the account.
+ * The editor's 1-8 and the bulk editor's preset apply (23796+) both use it.
+ */
+export function presetOntoAccount(user: EditedAccount, values: NonNullable<ReturnType<typeof applyPreset>>): void {
+  user.confAccess = values.confAccess;
+  user.secLevel = values.secLevel;
+  user.ratioType = values.ratioType;
+  user.ratio = values.ratio;
+  user.timeLimit = values.timeLimit;
+  user.confRJoin = values.confRJoin;
+  user.autoRejoin = values.confRJoin;
+  user.msgBaseRJoin = values.msgBaseRJoin;
+  user.byteLimit = values.byteLimit;
+}
+
+/**
  * 1-8 (express.e:21329-21360): the board's preset n (Access/PRESET.n), when
  * it has a PRESET.AREA.
  */
@@ -503,16 +518,7 @@ async function applyPresetKey(socket: any, session: BBSSession, preset: number):
   socket.emit('ansi-output', `\x1b[JPreset ${preset}. `);
   session.tempData.changes = true;
   user.newUser = false;
-  // applyPreset (29358-29370).
-  user.confAccess = values.confAccess;
-  user.secLevel = values.secLevel;
-  user.ratioType = values.ratioType;
-  user.ratio = values.ratio;
-  user.timeLimit = values.timeLimit;
-  user.confRJoin = values.confRJoin;
-  user.autoRejoin = values.confRJoin;
-  user.msgBaseRJoin = values.msgBaseRJoin;
-  user.byteLimit = values.byteLimit;
+  presetOntoAccount(user, values);
   // 21343-21348
   user.timeUsed = 0;
   user.timeTotal = user.timeLimit;
@@ -537,7 +543,7 @@ async function applyPresetKey(socket: any, session: BBSSession, preset: number):
  * editor's save writes through. A slot's row counts only when it names the
  * same account; otherwise the row is found by the record's name.
  */
-async function loadAccountAt(slot: number): Promise<any | null> {
+export async function loadAccountAt(slot: number): Promise<any | null> {
   if (!Number.isInteger(slot) || slot < 1) return null;
   const { db } = require('../../database');
   const { userFileManager } = require('../../services/UserFileManager');
@@ -552,7 +558,7 @@ async function loadAccountAt(slot: number): Promise<any | null> {
 }
 
 /** express.e findLastAccount (21075-21083): user.data's size over SIZEOF user. */
-function lastAccountSlot(): number {
+export function lastAccountSlot(): number {
   const { userDatabaseManager } = require('../../services/UserDatabaseManager');
   return Math.max(1, Number(userDatabaseManager.getUserCount()) || 1);
 }
@@ -594,7 +600,7 @@ async function loadNextUser(socket: any, session: BBSSession, direction: number)
  * writes the user.data / user.keys / user.misc record first). False when it
  * failed - express.e's `stat<>RESULT_SUCCESS`.
  */
-async function writeAccount(user: EditedAccount): Promise<boolean> {
+export async function writeAccount(user: EditedAccount): Promise<boolean> {
   const { db } = require('../../database');
   try {
     await db.updateUser(user.id, user);
@@ -1079,10 +1085,11 @@ export async function handleCreditMaintenanceInput(socket: any, session: BBSSess
     return;
   }
 
-  // TAB / X - exit through checkChanges (express.e:21966-21969).
+  // TAB / X - exit through checkChanges (express.e:21966-21969): flag 2 / 1.
   if (key === '\t' || command === 'X') {
+    const flag = key === '\t' ? 2 : 1;
     startPass('credit maintenance exit', async () => {
-      if (await checkChanges(socket, session, session.tempData.creditChanges)) exitCreditMaintenance(socket, session);
+      if (await checkChanges(socket, session, session.tempData.creditChanges)) exitCreditMaintenance(socket, session, flag);
     });
     return;
   }
@@ -1192,14 +1199,54 @@ function writeCreditLog(user: any): void {
   }
 }
 
-/** Exit Credit Maintenance, back to the account editor (express.e:21312 displayAccount). */
-function exitCreditMaintenance(socket: any, session: BBSSession): void {
+/**
+ * Exit Credit Maintenance (`ENDPROC flag`, express.e:22042): back to the
+ * account editor (21312 displayAccount), or to listCreditAccounts (21869),
+ * which reads the flag.
+ */
+function exitCreditMaintenance(socket: any, session: BBSSession, flag: number): void {
   session.tempData.creditFieldEdit = undefined;
   session.tempData.creditChanges = undefined;
   session.inputBuffer = '';
 
+  const done = session.tempData.creditDone as ((flag: number) => void) | undefined;
+  if (done) {
+    done(flag);
+    return;
+  }
   session.subState = LoggedOnSubState.ACCOUNT_EDITOR_EDIT;
   redraw(socket, session);
+}
+
+/** express.e:21896 - checkLockAccounts gates the field edits, computed once; then the screen. */
+function openCreditMaintenance(socket: any, session: BBSSession): void {
+  session.tempData.creditEditable = accountsUnlocked(session);
+  session.subState = LoggedOnSubState.CREDIT_MAINTENANCE_VIEW;
+  displayCreditMaintenance(socket, session);
+}
+
+/**
+ * creditMaintenance(which,hoozer,...) (express.e:21884-22042) on its own, for
+ * listCreditAccounts (21869): resolves with its flag - 0 when a remote
+ * caller lacks ACS_CREDIT_ACCESS (21892-21894), 1 after X, 2 after TAB. The
+ * caller's sub-state is restored before it resolves.
+ */
+export function creditMaintenance(socket: any, session: BBSSession, account: EditedAccount, slot: number): Promise<number> {
+  if (!checkSecurity(session.user, ACSPermission.CREDIT_ACCESS)) return Promise.resolve(0);
+  const callerSubState = session.subState;
+  return new Promise<number>((resolve) => {
+    session.tempData = {
+      editingUser: account,
+      editingSlot: slot,
+      originalData: JSON.parse(JSON.stringify(account)),
+      creditDone: (flag: number) => {
+        session.tempData = undefined;
+        session.subState = callerSubState;
+        resolve(flag);
+      },
+    };
+    openCreditMaintenance(socket, session);
+  });
 }
 
 // ===== User Answers - express.e:21319-21326 =====

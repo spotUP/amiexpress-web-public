@@ -1010,7 +1010,7 @@ async function editUser(socket: any, session: BBSSession, r: Reader, loop: 'read
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     const { handleEditUserAccount } = require('../user/account.handler');
     await new Promise<void>((resolve) => {
-      session.accountEditDone = resolve;
+      session.accountEditDone = () => resolve();
       handleEditUserAccount(socket, session, account.keys.userName);
     });
   }

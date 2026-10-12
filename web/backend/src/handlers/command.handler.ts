@@ -263,6 +263,15 @@ export function isDisplayFlowState(subState?: LoggedOnSubState) {
   return typeof subState !== 'undefined' && displayFlowStates.has(subState);
 }
 
+/** The account editor's sub-states, dispatched through handleMessageEntryInput's switch. */
+const accountEditorSubStates = new Set<string>([
+  LoggedOnSubState.ACCOUNT_EDITOR_EDIT,
+  LoggedOnSubState.USER_NOTES_VIEW,
+  LoggedOnSubState.CONF_ACCOUNTING_VIEW,
+  LoggedOnSubState.CREDIT_MAINTENANCE_VIEW,
+  LoggedOnSubState.USER_ANSWERS_VIEW,
+]);
+
 async function handleMessageEntryInput(socket: any, session: BBSSession, data: string) {
   switch (session.subState) {
     case LoggedOnSubState.POST_MESSAGE_TO:
@@ -1138,6 +1147,25 @@ console.log('[handleCommand] Executing screen-initiated command (state bypass en
     const prevMessageSubState = session.subState;
     await handleMessageEntryInput(socket, session, data);
     await afterMessageEntryInput(socket, session, prevMessageSubState);
+    return;
+  }
+
+  // The account editor's keys (editInfo and the screens it opens, express.e
+  // 21211-22293). Their cases sit in handleMessageEntryInput's switch, but
+  // nothing sent these sub-states there: a key in the editor fell through to
+  // "Not in command input state" and was ignored. The editor returns to
+  // whoever opened it (accountEditDone / creditDone), not to the display
+  // flow, so afterMessageEntryInput does not run.
+  if (accountEditorSubStates.has(session.subState as string)) {
+    await handleMessageEntryInput(socket, session, data);
+    return;
+  }
+
+  // editAccounts (the sysop's 1, user/user-editor.handler) reads its own keys
+  // through lineInput / readChar, which handleCommand feeds before any
+  // sub-state runs. A key that arrives between two of its prompts has
+  // nothing to answer.
+  if (session.subState === LoggedOnSubState.ACCOUNT_EDITOR_MENU) {
     return;
   }
 
@@ -3610,10 +3638,7 @@ console.log(' In BULLETIN_INPUT state, buffering input');
     }
     return;
    } else {
-    if (
-      session.subState === LoggedOnSubState.DISPLAY_MENU ||
-      session.subState === LoggedOnSubState.ACCOUNT_EDITOR_MENU
-    ) {
+    if (session.subState === LoggedOnSubState.DISPLAY_MENU) {
       session.subState = LoggedOnSubState.READ_COMMAND;
       // Actually display the menu when transitioning from DISPLAY_MENU
       session.menuPause = false;

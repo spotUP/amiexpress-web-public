@@ -183,26 +183,4 @@ describe('showing and editing a limit', () => {
     expect(text()).toContain('Time_Limit\x1b[36m:\x1b[0m \x1b[36m[\x1b[0m1440    \x1b[36m]');
     expect(text()).not.toContain('86400');
   });
-
-  it('converts the sysop editor back to seconds on the way in', async () => {
-    // The editor's field is labelled "mins", so a sysop typing 60 must get an
-    // hour, not a minute. Driven as the sysop types it: B (bulk editor),
-    // U (Time Limit), 60, ~ (apply).
-    jest.resetModules();
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const editor = require('../../src/handlers/user/user-editor.handler');
-    const updateUser = jest.fn(async () => undefined);
-    const db: any = {
-      getUsers: async () => [{ id: 'u1', username: 'Spot', slotNumber: 1, secLevel: 10, location: '' }],
-      getUserById: async () => null,
-      updateUser,
-    };
-    const session: any = { state: 'loggedon', user: { username: 'sysop', secLevel: 255 }, tempData: undefined };
-    const { socket } = recordingSocket();
-
-    await editor.handleAccountEditorInput(socket, session, db, 'B');
-    for (const key of ['U', '60', '~']) await session.inputCallback(key);
-
-    expect(updateUser).toHaveBeenCalledWith('u1', expect.objectContaining({ timeLimit: 3600 }));
-  });
 });

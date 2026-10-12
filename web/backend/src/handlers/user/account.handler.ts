@@ -45,7 +45,53 @@ function editorNeverOpened(session: BBSSession): void {
   session.accountEditDone = undefined;
   session.tempData = undefined;
   session.subState = LoggedOnSubState.DISPLAY_MENU;
-  if (done) done();
+  if (done) done(0);
+}
+
+/**
+ * editInfo's opening (express.e:21220-21224): the account at `slot` becomes
+ * the one edited, page 0 is drawn, and account-edit-input reads the keys.
+ * `onlineEdit` is express's global of that name (listNewAccounts sets it,
+ * 21747): + and - do not walk the slots then (21263, 21275).
+ */
+function openEditor(socket: any, session: BBSSession, user: any, slot: number, onlineEdit: boolean): void {
+  // The opener's sub-state is back before it hears the editor closed: the
+  // reader (MSG_READER_NAV) and editAccounts drop a key that arrives between
+  // their prompts, where DISPLAY_MENU would take it to the main menu.
+  const callerSubState = session.subState;
+  const done = session.accountEditDone;
+  if (done) {
+    session.accountEditDone = (flag: number) => {
+      session.subState = callerSubState;
+      done(flag);
+    };
+  }
+  session.tempData = {
+    accountEditing: true,
+    editingUser: user,
+    // express.e editInfo(which,...): `which` is the account's SLOT in
+    // user.data - what +/- walk (21263-21286) and the header shows.
+    editingSlot: slot,
+    page: 0,
+    changes: false,
+    onlineEdit,
+    originalData: JSON.parse(JSON.stringify(user))
+  };
+  displayAccount(socket, user, slot, 0, session.user?.slotNumber);
+  session.subState = LoggedOnSubState.ACCOUNT_EDITOR_EDIT;
+}
+
+/**
+ * editInfo(which,hoozer,...) (express.e:21211-21647) for a caller that waits
+ * on it - the sysop's 1 (checkNEdit 22397, listNewAccounts 21764). Resolves
+ * with editInfo's flag, 1 after X and 2 after TAB, once the editor is left;
+ * the caller's sub-state is back by then.
+ */
+export function editInfo(socket: any, session: BBSSession, user: any, slot: number, onlineEdit = false): Promise<number> {
+  return new Promise<number>((resolve) => {
+    session.accountEditDone = resolve;
+    openEditor(socket, session, user, slot, onlineEdit);
+  });
 }
 
 /**
@@ -67,20 +113,7 @@ export function handleEditUserAccount(socket: any, session: BBSSession, username
     // The row alone put its own stale copy of every record field (time used,
     // post count, ...) over the disk at the next save.
     const user = loadAccount(row).user;
-
-    session.tempData = {
-      accountEditing: true,
-      editingUser: user,
-      // express.e editInfo(which,...): `which` is the account's SLOT in
-      // user.data - what +/- walk (21263-21286) and the header shows.
-      editingSlot: Number(user.slotNumber) || 0,
-      page: 0,
-      changes: false,
-      originalData: JSON.parse(JSON.stringify(user))
-    };
-
-    displayAccount(socket, user, Number(user.slotNumber) || 0, 0, session.user?.slotNumber);
-    session.subState = LoggedOnSubState.ACCOUNT_EDITOR_EDIT;
+    openEditor(socket, session, user, Number(user.slotNumber) || 0, false);
   }).catch((error: any) => {
     console.error('Error fetching user:', error);
     editorNeverOpened(session);

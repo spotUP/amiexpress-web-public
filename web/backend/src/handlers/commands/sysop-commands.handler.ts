@@ -11,11 +11,7 @@ import { ACSPermission } from '../../constants/acs-permissions';
 import { EnvStat } from '../../constants/env-codes';
 import { AnsiUtil } from '../../utils/ansi.util';
 import { ErrorHandler } from '../../utils/error-handling.util';
-import {
-  handleAccountEditorMenu,
-  handleAccountEditorInput,
-  handleSearchByNameInput
-} from '../user/user-editor.handler';
+import { startEditAccounts } from '../user/user-editor.handler';
 
 // Dependencies (injected)
 let _getRecentCallerActivity: any;
@@ -106,8 +102,8 @@ console.log('[ENV] Sysop');
   const { callersLogManager } = require('../../services/CallersLogManager');
   callersLogManager.logActivity(session.nodeId || 1, '\tAccount editing.\n');
 
-  // Call account editing menu - express.e:24458 (editAccounts)
-  await handleAccountEditorMenu(socket, session, _db);
+  // express.e:24458 editAccounts(FALSE) - it reads its own keys until the sysop leaves.
+  startEditAccounts(socket, session);
 }
 
 /**
