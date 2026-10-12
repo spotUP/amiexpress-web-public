@@ -40,6 +40,7 @@ import { DoorLogger } from "./DoorLogger.js";
 import { KickstartRom } from "./KickstartRom.js";
 import { spawnSync } from "child_process";
 import { debugLog } from '../utils/debug-log';
+import { boardRoot } from '../utils/board-root.util';
 import { factsFromSession, BOARD_VERSION } from './utils/host-vars';
 
 const DEFAULT_ROM =
@@ -92,14 +93,7 @@ export class LibraryManager {
   }
 
   private resolveBbsRoot(): string {
-    const sessionRoot =
-      (this.config.bbsSession?.bbsRoot as string | undefined) ||
-      (this.config.bbsSession?.dataDir as string | undefined);
-    const envRoot =
-      process.env.BBS_DATA_DIR || process.env.BBS_ROOT || sessionRoot;
-    const resolved = envRoot
-      ? path.resolve(envRoot)
-      : path.resolve(__dirname, "../../../..");
+    const resolved = boardRoot();
     this.bbsRoot = resolved;
     return resolved;
   }

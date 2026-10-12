@@ -22,6 +22,8 @@ import * as path from 'path';
 import { GENERATED_SCREEN_ROWS } from '../screens/screen-rows';
 import { readQuickNewFreshness } from './quicknew-freshness';
 import { config } from '../config';
+import { boardRoot } from '../utils/board-root.util';
+import { resolveAssignPath } from '../utils/path-util';
 import { findCaseInsensitive, resolveExistingAncestors } from '../utils/amigafs';
 
 import { generateBulletin as generateSamiLogBulletin } from '../services/SamiLogService';
@@ -105,7 +107,7 @@ function getExecuteOnTooltypes(): Map<string, string> {
   }
 
   const tooltypes = new Map<string, string>();
-  const bbsRoot = config.getConfig().dataDir;
+  const bbsRoot = boardRoot();
   const configPath = path.join(bbsRoot, 'bbsConfig.info');
 
   if (!fs.existsSync(configPath)) {
@@ -247,19 +249,9 @@ function processMciInCommand(
   return processMciTokenizer(cmd, dispatch);
 }
 
+/** An Amiga path in a batch line, through the board's one assign table. */
 function resolveAssign(p: string): string {
-  const lower = p.toLowerCase();
-  const base = config.getConfig().dataDir;
-  const bbsRoot = process.env.BBS_ROOT || base || path.resolve(process.cwd(), '..');
-  if (lower.startsWith('bbs:')) {
-    const rel = p.substring(4);
-    return path.join(base, rel);
-  }
-  if (lower.startsWith('doors:')) {
-    const rel = p.substring(6);
-    return path.join(bbsRoot, 'Doors', rel);
-  }
-  return p;
+  return resolveAssignPath(p);
 }
 
 /**
@@ -451,7 +443,7 @@ console.log('[BatchScheduler] Skipping disabled utility: dannounce');
     const result = await runGLCUpdater(resolvedArgs, {
       resolvePath: resolveAssign,
       progDir: progPath ? path.dirname(progPath) : null,
-      cwd: config.getConfig().dataDir,
+      cwd: boardRoot(),
     });
 console.log(`[BatchScheduler] GLCUpdater: ${result.status}, ${result.posted} of ${result.requests.length} call(s) posted`);
     return;
@@ -906,8 +898,8 @@ export function logoffBatchesAlreadyRan(session: { logoffBatchesRan?: boolean } 
  * AmiExpress runs these at logoff via system commands; mirror that behavior here.
  */
 export async function runLogoffBatches(nodeId: number): Promise<void> {
-  const baseDir = config.getConfig().dataDir;
-  const bbsRoot = process.env.BBS_ROOT || baseDir || path.resolve(process.cwd(), '..');
+  const baseDir = boardRoot();
+  const bbsRoot = baseDir;
   const appRoot = process.cwd(); // App root where batch files live
   const day = getSystemTime().getDay(); // 0-6, Sunday = 0
   const batchName = `batch${day}`;
@@ -993,8 +985,7 @@ function runAmigaDoorViaRunner(
   envOverrides?: Record<string, string>
 ): Promise<void> {
   const appRootPath = path.resolve(__dirname, '../../../..');
-  const dataDir = config.getConfig().dataDir;
-  const bbsRoot = process.env.BBS_ROOT || dataDir || path.resolve(process.cwd(), '..');
+  const bbsRoot = boardRoot();
   // BBS:, DOORS:, C: and the rest come from the emulator's one assign table
   // (amiga-emulation/api/dos/standard-assigns.ts) on the same board root;
   // the runner adds only this node's own NODE<n>: volume.

@@ -1,5 +1,6 @@
 import { parseAmigaCommandLine } from "./dos/dos-command-line";
 import { findInAssignDirs } from "./dos/standard-assigns";
+import { boardRoot } from "../../utils/board-root.util";
 import type { CpuContext } from "./dos/cpu-context";
 import { isHunkExecutable, loadSegList, type LoadedSegList } from "../loader/load-seg";
 import { CHILD_RETURN_TRAP_ADDR } from "../memory-map";
@@ -252,11 +253,7 @@ export class DosLibrary {
 
   constructor(emulator: MoiraEmulator, rootPathOverride?: string) {
     this.emulator = emulator;
-    const detectedRoot =
-      rootPathOverride ||
-      process.env.BBS_DATA_DIR ||
-      process.env.BBS_ROOT ||
-      path.resolve(process.cwd(), "../..");
+    const detectedRoot = rootPathOverride || boardRoot();
     this.pathResolver = new DosPathResolver();
     this.setBasePaths(detectedRoot);
     this.readArgsHeapPtr = READARGS_HEAP_BASE;
