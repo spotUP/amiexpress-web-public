@@ -93,6 +93,31 @@ describe('an XMODEM upload over telnet', () => {
     expect(session.tempData?.uploadBatch?.[0]?.description ?? '').toBe('a test');
   });
 
+  it('is filed with the description typed before it even when the DIZ extraction throws', async () => {
+    // The node's Work path is a file, so extracting FILE_ID.DIZ throws EEXIST.
+    // express.e never asks again for what the caller described before the
+    // transfer (17666-17720); the catch used to prompt for it anyway.
+    const { config } = require('../../src/config');
+    const { getNodeWorkDir } = require('../../src/utils/bbs-paths.util');
+    const workDir = getNodeWorkDir(1, config.get('dataDir'));
+    fs.rmSync(workDir, { recursive: true, force: true });
+    fs.mkdirSync(path.dirname(workDir), { recursive: true });
+    fs.writeFileSync(workDir, 'not a directory');
+    try {
+      const { session, socket } = aTelnetCaller(root);
+      const out: string[] = [];
+      socket.emit = (event: string, data: unknown) => { if (event === 'ansi-output') out.push(String(data)); return true; };
+      startZmodemUpload(socket, session);
+      await settle();
+      session.transferRawSink(block(1, 'filed'));
+      session.transferRawSink(Buffer.from([EOT]));
+      await settle(300);
+      expect(out.join('')).not.toMatch(/Please enter a description/);
+    } finally {
+      fs.rmSync(workDir, { force: true });
+    }
+  });
+
   it('leaves the transport\'s sender in place for the next transfer', async () => {
     const { session, socket, send } = aTelnetCaller(root);
     startZmodemUpload(socket, session);

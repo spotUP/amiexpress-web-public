@@ -87,6 +87,15 @@ function clearUploadContext(session: BBSSession, socket?: Socket) {
   session.uploadContext = undefined;
 }
 
+/** What the caller typed for this file before the transfer (XMODEM's batch, express.e:17666-17720), if anything. */
+function describedBeforeTransfer(
+  uploadContext: { describedBefore?: Record<string, string[]> },
+  data: { originalname: string },
+): string[] | undefined {
+  const typed = uploadContext.describedBefore?.[data.originalname.toUpperCase()];
+  return typed && typed.length > 0 ? typed : undefined;
+}
+
 /**
  * Handle DIZ extraction and description prompting
  * Shared logic for both file-upload and file-uploaded handlers
@@ -185,8 +194,8 @@ console.log("[DIZ] File selected, checking for DIZ...");
            * protocol carries no name. Asking again after the transfer threw
            * the first answer away (walked over telnet, 2026-09-27).
            */
-          const typed = uploadContext.describedBefore?.[data.originalname.toUpperCase()];
-          if (typed && typed.length > 0) {
+          const typed = describedBeforeTransfer(uploadContext, data);
+          if (typed) {
             return fileWithDescription(socket, session, uploadContext, data, typed, config);
           }
           promptForDescription(socket, uploadContext, data);
@@ -194,7 +203,13 @@ console.log("[DIZ] File selected, checking for DIZ...");
         }
       } catch (error: any) {
 console.error("[DIZ] Extraction error:", error);
-        // A file EXAMINE cannot read is described by the caller, silently.
+        // A file EXAMINE cannot read is described by the caller, silently -
+        // and a caller who already described it (XMODEM's batch, 17666-17720)
+        // is not asked again because the examine failed.
+        const typedBefore = describedBeforeTransfer(uploadContext, data);
+        if (typedBefore) {
+          return fileWithDescription(socket, session, uploadContext, data, typedBefore, config);
+        }
         promptForDescription(socket, uploadContext, data);
         return false; // Waiting for description
       }
