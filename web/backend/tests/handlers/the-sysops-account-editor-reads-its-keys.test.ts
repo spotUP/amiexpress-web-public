@@ -29,6 +29,10 @@ jest.mock('../../src/database', () => {
 
 // applyConfPresets / deleteConfAccess walk every Conf.DB of the board.
 const confDb = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'acct-1-')), 'Conf.DB');
+jest.mock('../../src/utils/download-logging.util', () => ({
+  ...jest.requireActual('../../src/utils/download-logging.util'),
+  writeToCallersLog: jest.fn().mockResolvedValue(undefined),
+}));
 jest.mock('../../src/services/delete-conf-access', () => {
   const actual = jest.requireActual('../../src/services/delete-conf-access');
   return { ...actual, confDbFiles: () => [confDb] };
@@ -37,6 +41,7 @@ jest.mock('../../src/services/delete-conf-access', () => {
 import * as commandHandler from '../../src/handlers/command.handler';
 import { handleAccountEditingCommand } from '../../src/handlers/commands/sysop-commands.handler';
 import { userFileManager } from '../../src/services/UserFileManager';
+import * as downloadLogging from '../../src/utils/download-logging.util';
 import { userDatabaseManager } from '../../src/services/UserDatabaseManager';
 import { BBSState, LoggedOnSubState } from '../../src/index';
 
@@ -82,6 +87,7 @@ function sysop() {
   };
   return {
     out,
+    socket,
     session,
     text: () => out.join(''),
     one: async () => { await handleAccountEditingCommand(socket, session); await settle(); },
@@ -166,7 +172,11 @@ describe("the sysop's 1 reads its keys", () => {
     await s.keys('Y'); await s.keys('5\r');
     await s.keys('Q'); await s.keys('7000\r');
     expect(s.text()).toContain('\x1b[18;19H\x1b[34m[\x1b[0m1/');
+    const logged = downloadLogging.writeToCallersLog as jest.Mock;
+    logged.mockClear();
     await s.keys('~');
+    // express.e 23794: applyBulkChanges ends in a bare ENDPROC, so the CallersLog line reads RecordsAffected=0.
+    expect(logged.mock.calls.map((c) => c[0])).toContain(`\tREMOTE Bulk User Update, Area=${area}, SecLevel=, RecordsAffected=0`);
     expect(s.text()).toContain('\x1b[0mUpdating users...');
     expect(s.text()).toContain('\x1b[24;1H                                     ');
     expect(s.text()).not.toContain('Updated ');
@@ -194,5 +204,46 @@ describe("the sysop's 1 reads its keys", () => {
     expect(s.text()).toContain('\x1b[JNo-Save\r\n');
     expect(s.text()).toContain('\r\nAbort\r\n\r\n');
     expect(s.text()).toContain('Edit which account? ');
+  });
+
+  /** TAB leaves the open editor; returns once the walk is polling for a typed key (21777). */
+  const tabIntoPoll = async (s: ReturnType<typeof sysop>, socketKeys: (k: string) => Promise<void>) => {
+    const before = s.session.inputWaiter;
+    await commandHandler.handleCommand(s.socket, s.session, '\t');
+    while (!s.session.inputWaiter || s.session.inputWaiter === before) await new Promise((r) => setImmediate(r));
+    await socketKeys('');
+  };
+
+  it('N: ^C typed during the walk says Abort and stops before the next account (21799-21801)', async () => {
+    await makeAccount(db, { newUser: true });
+    await makeAccount(db, { newUser: true });
+    const s = sysop();
+    await s.one();
+    await s.keys('N\r');
+    s.out.length = 0;
+    await tabIntoPoll(s, async () => {});
+    await commandHandler.handleCommand(s.socket, s.session, '\x03');
+    await settle();
+    expect(s.text()).toContain('\r\nAbort\r\n\r\n\r\n');
+    expect(s.text()).not.toMatch(/ACTIVE\x1b\[0m \[\d+\]/);
+    expect(s.text()).toContain('Edit which account? ');
+  });
+
+  it('N: ^W typed during the walk asks Any key.. and wipes it, then the walk goes on (21780-21798)', async () => {
+    await makeAccount(db, { newUser: true });
+    await makeAccount(db, { newUser: true });
+    const s = sysop();
+    await s.one();
+    await s.keys('N\r');
+    s.out.length = 0;
+    await tabIntoPoll(s, async () => {});
+    await commandHandler.handleCommand(s.socket, s.session, '\x17');
+    await settle();
+    expect(s.text()).toContain('Any key..');
+    expect(s.text()).not.toMatch(/ACTIVE\x1b\[0m \[\d+\]/);
+    await commandHandler.handleCommand(s.socket, s.session, 'k');
+    await settle();
+    expect(s.text()).toContain('Any key..' + '\b'.repeat(9) + ' '.repeat(9) + '\b'.repeat(9));
+    expect(s.text()).toMatch(/ACTIVE\x1b\[0m \[\d+\]/);
   });
 });

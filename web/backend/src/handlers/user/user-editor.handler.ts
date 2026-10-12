@@ -23,7 +23,7 @@
 import { BBSSession, LoggedOnSubState } from '../../index';
 import type { User } from '../../database/types';
 import { emitText, flushOutput, clearTheScreen } from '../../utils/output.util';
-import { lineInput, readChar, eValRead } from '../../utils/await-input';
+import { lineInput, readChar, readCharWithin, eValRead } from '../../utils/await-input';
 import { setEnvStat, getACSConfig, ToggleFlags } from '../../utils/acs.util';
 import { EnvStat } from '../../constants/env-codes';
 import { RESULT_SUCCESS, RESULT_FAILURE } from '../../constants/command-results';
@@ -185,13 +185,26 @@ async function listNewAccounts(socket: any, session: BBSSession, ctx: EditAccoun
     if (rec.keys.newUser === 1 && (ctx.includeDeact || rec.keys.number !== 0)) {
       foflag = true;
       const account = await loadAccountAt(x);
-      if (!account) continue;
-      const stat = await openEditInfo(socket, session, account, x, true);
-      if (stat === 1) {
-        emitText(socket, '\r\nAbort');
-        break;
+      if (account) {
+        const stat = await openEditInfo(socket, session, account, x, true);
+        if (stat === 1) {
+          emitText(socket, '\r\nAbort');
+          break;
+        }
+        emitText(socket, 'Searching...');
       }
-      emitText(socket, 'Searching...');
+    }
+    // 21777-21805: a key typed during the walk. ^W (23) pauses on 'Any key..'
+    // and wipes it; ^C (3) says Abort and jumps to acctMark1 (21807).
+    // checkInput()+readChar() is readCharWithin: a key already arrived is read.
+    const typed = await readCharWithin(socket, session, 0);
+    if (typed === '\x17') {
+      emitText(socket, 'Any key..');
+      await readChar(socket, session);
+      emitText(socket, '\b'.repeat(9) + ' '.repeat(9) + '\b'.repeat(9));
+    } else if (typed === '\x03') {
+      emitText(socket, '\r\nAbort\r\n');
+      break;
     }
   }
   if (!foflag) emitText(socket, '\x1b[0mNo new users.'); // acctMark1, 21808
