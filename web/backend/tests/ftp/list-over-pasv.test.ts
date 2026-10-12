@@ -161,15 +161,39 @@ describe('a caller who has just logged in', () => {
     control.destroy();
   });
 
-  it('answers LIST and NLST with anything after the verb as 500, as ftpd.e does (ftpd.e:1978-1985, 2047)', async () => {
-    // ftpd.e compares the whole request to 'LIST' / 'NLST', so `LIST -la`,
-    // `LIST 003-Hidden` and `NLST -a` match no branch. The PASV listener is
-    // left alone, as the unmatched branch never touches it.
+  it('answers LIST and NLST with a path, a mixed argument or a bare space as 500, as ftpd.e does (ftpd.e:1978-1985, 2047)', async () => {
     const { control, lines } = await login();
 
-    for (const request of ['LIST 003-Hidden', 'LIST -la', 'LIST ', 'NLST -a', 'NLST 001-General']) {
+    for (const request of ['LIST 003-Hidden', 'LIST ', 'NLST 001-General', 'LIST -la 001-General']) {
       control.write(`${request}\r\n`);
       expect(await lines.next()).toBe('500 command not recognized');
+    }
+
+    control.destroy();
+  });
+
+  it('lists the current directory for LIST -la and NLST -a (WEB_ deviation from ftpd.e:1978/1982)', async () => {
+    const { control, lines } = await login();
+
+    for (const [request, expected] of [
+      ['LIST -la', /001-General/],
+      ['NLST -a', /^001-General\r\n002-Elite\r\n$/],
+      ['NLST -l -a', /^001-General\r\n002-Elite\r\n$/],
+    ] as const) {
+      control.write('PASV\r\n');
+      const data = net.createConnection({
+        port: portFromPasv(await lines.next()),
+        host: '127.0.0.1',
+      });
+      const received: Buffer[] = [];
+      data.on('data', (chunk) => received.push(chunk));
+      const closed = new Promise<void>((resolve) => data.once('close', () => resolve()));
+
+      control.write(`${request}\r\n`);
+      expect(await lines.next()).toMatch(/^150 /);
+      await closed;
+      expect(await lines.next()).toBe('226 Transfer Complete');
+      expect(Buffer.concat(received).toString('latin1')).toMatch(expected);
     }
 
     control.destroy();

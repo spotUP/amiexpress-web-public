@@ -346,11 +346,18 @@ export class FtpSession {
       case 'NLST':
         // ftpd.e:1978 / 1982 compare the WHOLE request to 'LIST' / 'NLST'
         // (StrCmp without a length), so a request that carries anything
-        // after the verb - `LIST -la`, `LIST dir`, even `LIST ` - matches
-        // no branch and falls to ftpd.e:2047, `500 command not recognized`.
-        // There is no path or flag handling: the listing is always the
-        // caller's current directory (ftpd.e:1941 ftpDir).
-        if (space !== -1) return this.reply(500, 'command not recognized');
+        // after the verb matches no branch and falls to ftpd.e:2047,
+        // `500 command not recognized`. There is no path handling: the
+        // listing is always the caller's current directory (ftpd.e:1941).
+        // WEB_: flags are the one exception. Modern clients send `LIST -la`
+        // and give up on a 500, so an argument made only of `-` tokens is
+        // ignored. A path, a mixed argument and a bare `LIST ` still get 500.
+        if (space !== -1) {
+          const tokens = arg.split(/\s+/).filter((token) => token.length > 0);
+          if (tokens.length === 0 || !tokens.every((token) => token.startsWith('-'))) {
+            return this.reply(500, 'command not recognized');
+          }
+        }
         return this.onList('', verb === 'LIST' ? 'long' : 'names');
       case 'MLSD':
         // What Transmit actually asks for: FEAT advertises MLST, so a modern
