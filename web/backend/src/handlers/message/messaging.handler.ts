@@ -11,7 +11,7 @@
 import { BBSSession } from '../../index';
 import { messageIndent, narrowField } from '../../utils/table-format.util';
 import { LoggedOnSubState } from '../../constants/bbs-states';
-import { checkSecurity } from '../../utils/acs.util';
+import { checkSecurity, setEnvStat } from '../../utils/acs.util';
 import { ACSPermission } from '../../constants/acs-permissions';
 import { EnvStat } from '../../constants/env-codes';
 import { ErrorHandler } from '../../utils/error-handling.util';
@@ -84,7 +84,8 @@ export async function handleReadMessagesFullCommand(
     return;
   }
 
-console.log('[ENV] Mail - Read');
+// express.e:25520 setEnvStat(ENV_MAIL)
+  setEnvStat(session, EnvStat.MAIL);
 
   // express.e:25523 getMailStatFile, then callMsgFuncs(MAIL_READ) -> readMSG.
   const { startReadMSG } = require('./read-msg');
