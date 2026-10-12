@@ -60,7 +60,9 @@ describe('flagPause Q-quit (regression — live FR listing got stuck)', () => {
     expect(result).toBe(false);
   });
 
-  test('Q at checkForPause prompt resolves false', async () => {
+  // checkForPause is not flagPause: express.e:5196-5199 stops only on N, so
+  // Q there goes on (and nothing re-prompts, so nothing can get stuck).
+  test('Q at checkForPause prompt goes on, as express.e does', async () => {
     const { socket } = makeSocket();
     const session = makeSession();
 
@@ -69,7 +71,7 @@ describe('flagPause Q-quit (regression — live FR listing got stuck)', () => {
 
     await session.checkPauseHandler('Q');
     const result = await promise;
-    expect(result).toBe(false);
+    expect(result).toBe(true);
   });
 
   test('N still resolves false (regression-of-regression guard)', async () => {

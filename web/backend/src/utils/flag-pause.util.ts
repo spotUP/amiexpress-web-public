@@ -186,6 +186,16 @@ export async function flagPause(
 }
 
 /**
+ * What an answer to `(Pause)...More(y/n/ns)?` does (express.e:5196-5199):
+ * only its first two characters count. N stops, NS goes on non-stop, and
+ * anything else - RETURN, Y, Q, a typo - goes on. There is no re-prompt.
+ */
+export function checkPauseAnswer(line: string): 'stop' | 'nonstop' | 'continue' {
+  if (line.charAt(0).toUpperCase() !== 'N') return 'continue';
+  return line.charAt(1).toUpperCase() === 'S' ? 'nonstop' : 'stop';
+}
+
+/**
  * Check if pause is needed and display simple pause prompt
  * Port from express.e:5181-5196 checkForPause()
  *
@@ -245,39 +255,23 @@ export async function checkForPause(
       };
 
       const handleInput = async (input: string) => {
-        const response = input.trim().toUpperCase();
+        session.tempData.checkPausePromise = undefined;
+        const answer = checkPauseAnswer(input);
 
-        // Y or Enter = continue. express.e:5199 erases the prompt's row
-        // (`[1A[K` after lineInput echoed the RETURN); the RETURN is not
-        // echoed here, so the cursor is still on that row - as in flagPause.
-        if (response === '' || response === 'Y') {
-          emitPrompt(socket, '\r\x1b[K');
-          session.tempData.checkPausePromise = undefined;
-          resolveFn!(true);
-          return;
-        }
-
-        // N or Q = stop (see flagPause for Q-quit rationale)
-        if (response === 'N' || response === 'Q') {
+        // N = stop. lineInput echoed the RETURN, so the prompt stays on
+        // screen and the cursor sits below it.
+        if (answer === 'stop') {
           emitPrompt(socket, '\r\n');
-          session.tempData.checkPausePromise = undefined;
           resolveFn!(false);
           return;
         }
 
-        // NS = non-stop mode
-        if (response === 'NS') {
-          session.tempData.nonStopDisplayFlag = true;
-          emitPrompt(socket, '\r\x1b[K'); // express.e:5197-5199
-          session.tempData.checkPausePromise = undefined;
-          resolveFn!(true);
-          return;
-        }
-
-        // Invalid input: re-prompt
-        emitPrompt(socket, '\r\n');
-        emitPrompt(socket, prompt);
-        registerListener(handleInput);
+        // Everything else goes on. express.e:5199 erases the prompt's row
+        // (`[1A[K` after lineInput echoed the RETURN); the RETURN is not
+        // echoed here, so the cursor is still on that row - as in flagPause.
+        if (answer === 'nonstop') session.tempData.nonStopDisplayFlag = true;
+        emitPrompt(socket, '\r\x1b[K');
+        resolveFn!(true);
       };
 
       promptAgain();

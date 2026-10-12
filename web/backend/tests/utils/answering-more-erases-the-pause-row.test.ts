@@ -27,17 +27,25 @@ function pausedSession() {
 }
 
 describe('answering More', () => {
-  it.each(['', 'y', 'ns'])('with %p erases the prompt row and goes on', async (line) => {
+  // express.e:5196-5199: only N stops; there is no re-prompt for a typo.
+  it.each(['', 'y', 'ns', 'NS', 'q', 'x', 'yes', ' n'])('with %p erases the prompt row and goes on', async (line) => {
     const run = pausedSession();
     await run.answer(line);
     expect(await run.result).toBe(true);
     expect(run.written()).toBe('\r\x1b[K');
   });
 
-  it('with n stops and leaves the prompt on screen', async () => {
+  it.each(['n', 'N', 'no', 'nx'])('with %p stops and leaves the prompt on screen', async (line) => {
     const run = pausedSession();
-    await run.answer('n');
+    await run.answer(line);
     expect(await run.result).toBe(false);
     expect(run.written()).toBe('\r\n');
+  });
+
+  it('with ns turns on non-stop display', async () => {
+    const run = pausedSession();
+    await run.answer('ns');
+    await run.result;
+    expect(run.session.tempData.nonStopDisplayFlag).toBe(true);
   });
 });
