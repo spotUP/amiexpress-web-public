@@ -182,7 +182,7 @@ function displayAccountActions(socket: any, slot: number): void {
   socket.emit('ansi-output', '\x1b[16;1H\x1b[33mX  \x1b[36m=\x1b[0mEXIT-NOSAVE \x1b[33m~\x1b[36m=\x1b[0mSAVE  \x1b[33m1-8\x1b[36m=\x1b[0mPRESETS  \x1b[33m9\x1b[36m=\x1b[0mRE-ACTIVATE  \x1b[33m<DEL>\x1b[36m=\x1b[0mDELETE  \x1b[33m*\x1b[36m=\x1b[0mUSER NOTES\r\n');
   let answers = false;
   try {
-    answers = slot > 0 && findUserAnswersFile(config.getConfig().dataDir, slot) !== null;
+    answers = slot > 0 && findUserAnswersFile(boardRoot(), slot) !== null;
   } catch {
     answers = false;
   }

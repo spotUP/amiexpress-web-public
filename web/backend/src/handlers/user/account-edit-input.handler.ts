@@ -1169,8 +1169,10 @@ function accountsUnlocked(session: BBSSession): boolean {
  * Append a credit change to the BBS CreditLog.
  * 1:1 port of express.e:22013-22021 (the save-arm creditLog calls) + the
  * creditLog() writer at express.e:9437 (append, create if absent).
+ * express.e:9441 `StringF(fn,'\sCreditLog',cmds.bbsLoc)`: the board's root,
+ * which is boardRoot() here, not the config's snapshot of it.
  */
-function writeCreditLog(user: any): void {
+export function writeCreditLog(user: any): void {
   const now = new Date();
   const date = formatLongDate(now);
   const time = formatLongTime(now);
@@ -1193,7 +1195,7 @@ function writeCreditLog(user: any): void {
   }
 
   try {
-    amigafs.appendFileSync(path.join(config.getConfig().dataDir, 'CreditLog'), line);
+    amigafs.appendFileSync(path.join(boardRoot(), 'CreditLog'), line);
   } catch (err) {
     console.error('Error writing CreditLog:', err);
   }
@@ -1260,7 +1262,7 @@ export function creditMaintenance(socket: any, session: BBSSession, account: Edi
  */
 export function displayUserAnswers(socket: any, session: BBSSession): boolean {
   const slot = Number(session.tempData.editingSlot) || 0;
-  const file = slot > 0 ? findUserAnswersFile(config.getConfig().dataDir, slot) : null;
+  const file = slot > 0 ? findUserAnswersFile(boardRoot(), slot) : null;
   if (!file) return false;
   let text = '';
   try {

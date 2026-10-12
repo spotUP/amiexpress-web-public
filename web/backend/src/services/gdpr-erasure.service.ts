@@ -444,7 +444,8 @@ function conferenceBackupDirs(root: string): string[] {
  * '**********' banner written by the new-user handler.
  */
 function scrubAnswersFiles(originalUsername: string, erasedHandle: string, slot?: number): number {
-  const baseDir = bbsConfig.getConfig().dataDir;
+  // Where new-user.handler writes them (express.e:30331-30339, cmds.bbsLoc).
+  const baseDir = boardRoot();
   let filesTouched = 0;
 
   // The account's own Answers/<slot> (CENTRAL_ANSWERS, express.e:30332-30340)

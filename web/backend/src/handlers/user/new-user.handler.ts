@@ -20,6 +20,7 @@ import * as path from 'path';
 import { LoggedOnSubState, BBSState } from '../../constants/bbs-states';
 import { displayScreen, doPause } from '../screen.handler';
 import { config } from '../../config';
+import { boardRoot } from '../../utils/board-root.util';
 import { ConfigService } from '../../services/config.service';
 import { userFileManager } from '../../services/UserFileManager';
 import { userDatabaseManager } from '../../services/UserDatabaseManager';
@@ -1368,13 +1369,15 @@ console.warn('[NEW USER] Failed to append Answers file:', error);
  */
 export function answersFileFor(nodeId: number, slotNumber: number, nodeDir: string): string {
   if (!nodeFlag(nodeId, 'CENTRAL_ANSWERS')) return path.join(nodeDir, 'Answers');
-  const central = path.join(config.getConfig().dataDir, 'Answers');
+  // express.e:30333/30337 `\sAnswers` with cmds.bbsLoc: the board's root.
+  const central = path.join(boardRoot(), 'Answers');
   if (!amigafs.existsSync(central)) amigafs.mkdirSync(central, { recursive: true });
   return path.join(central, String(slotNumber));
 }
 
 function getNodeDirectory(session: any): string {
-  const baseDir = config.getConfig().dataDir;
+  // express.e:30331/30339/30344 `\sNode\d` with cmds.bbsLoc: the board's root.
+  const baseDir = boardRoot();
   // express.e:30339/30344 `Node\d` with `node` - the caller's own node, as
   // its CallersLog is. This took one off, so node 2's answers went to Node1.
   const preferred = path.join(baseDir, `Node${session.nodeId || 0}`);
