@@ -11,7 +11,7 @@ import * as path from 'path';
 import * as amigafs from '../../../utils/amigafs';
 import { debugLog } from '../../../utils/debug-log';
 import { PathManager } from '../PathManager';
-import { FileManager } from '../FileManager';
+import { FileManager, type CurrentDirSource } from '../FileManager';
 
 /**
  * Configuration for path resolver
@@ -44,6 +44,8 @@ export class DosPathResolver {
   private currentDirectory: string = '';
   private currentDirectoryAmiga: string = 'BBS:';
   private doorDirectory: string = '';
+  /** dos.library's current directory (the Process's pr_CurrentDir), when attached. */
+  private currentDirSource: CurrentDirSource | null = null;
 
   // Optional managers for advanced path resolution
   private pathManager: PathManager | null = null;
@@ -95,17 +97,19 @@ export class DosPathResolver {
    */
   setDoorDirectory(doorPath: string): void {
     this.doorDirectory = doorPath;
-    this.currentDirectory = doorPath;
-    this.currentDirectoryAmiga = 'PROGDIR:';
     debugLog(`[DosPathResolver] PROGDIR: set to ${doorPath}`);
 
     if (this.pathManager) {
       this.pathManager.setProgDir(doorPath);
     }
+  }
 
-    if (this.fileManager) {
-      this.fileManager.setCurrentDir('progdir:');
-    }
+  /**
+   * Relative names resolve against what `source` says is the current
+   * directory - dos.library's reading of the Process's pr_CurrentDir.
+   */
+  setCurrentDirSource(source: CurrentDirSource): void {
+    this.currentDirSource = source;
   }
 
   /**
@@ -121,6 +125,9 @@ export class DosPathResolver {
    * Get current directory as system path
    */
   getCurrentDirectory(): string {
+    if (this.currentDirSource) {
+      return this.currentDirSource().sysPath;
+    }
     if (this.fileManager) {
       return this.fileManager.getCurrentDirSysPath();
     }
@@ -131,6 +138,9 @@ export class DosPathResolver {
    * Get current directory as Amiga path
    */
   getCurrentDirectoryAmiga(): string {
+    if (this.currentDirSource) {
+      return this.currentDirSource().amigaPath;
+    }
     return this.currentDirectoryAmiga;
   }
 
@@ -153,13 +163,15 @@ export class DosPathResolver {
       return amigaPath;
     }
 
-    if (!this.currentDirectoryAmiga) {
+    const dir = this.getCurrentDirectoryAmiga();
+    if (!dir) {
       debugLog('[DosPathResolver] No current directory set, returning path unchanged');
       return amigaPath;
     }
 
-    const separator = this.currentDirectoryAmiga.endsWith('/') ? '' : '/';
-    const normalized = `${this.currentDirectoryAmiga}${separator}${amigaPath}`;
+    // AddPart's rule: no separator after a device or a trailing slash.
+    const separator = dir.endsWith('/') || dir.endsWith(':') ? '' : '/';
+    const normalized = `${dir}${separator}${amigaPath}`;
     debugLog(`[DosPathResolver] Normalized: "${amigaPath}" -> "${normalized}"`);
     return normalized;
   }
@@ -220,9 +232,10 @@ export class DosPathResolver {
    * Resolve relative path from current directory
    */
   private resolveRelative(relativePath: string): string {
-    let resolved = path.join(this.currentDirectory, relativePath);
+    const dir = this.getCurrentDirectory();
+    let resolved = path.join(dir, relativePath);
     resolved = this.findCaseInsensitive(resolved);
-    debugLog(`[DosPathResolver] Relative from ${this.currentDirectory} -> ${resolved}`);
+    debugLog(`[DosPathResolver] Relative from ${dir} -> ${resolved}`);
     return resolved;
   }
 

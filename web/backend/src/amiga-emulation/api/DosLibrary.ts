@@ -1,5 +1,5 @@
 import { parseAmigaCommandLine } from "./dos/dos-command-line";
-import { findInAssignDirs } from "./dos/standard-assigns";
+import { findInAssignDirs, standardAssigns } from "./dos/standard-assigns";
 import { boardRoot } from "../../utils/board-root.util";
 import type { CpuContext } from "./dos/cpu-context";
 import { isHunkExecutable, loadSegList, type LoadedSegList } from "../loader/load-seg";
@@ -57,6 +57,7 @@ import {
   READARGS_DEFAULT_BUFFER_SIZE,
   READARGS_HEAP_BASE,
   DOS_ERRORS,
+  ACCESS_READ,
   ACCESS_WRITE,
   ENV_VAR_STRUCT_BASE,
   ENV_STRING_BASE,
@@ -122,6 +123,9 @@ const SHELL_COMMAND_STACK = 0x10000;
 const MIN_COMMAND_STACK = 0x1000;
 /** Task/Process stack fields: tc_SPLower, tc_SPUpper, pr_StackSize, pr_StackBase (BPTR to the top). */
 const TASK_STACK_FIELDS = [0x3a, 0x3e, 0x84, 0x90];
+/** Process fields (dos/dosextens.h): the current directory lock, the program's directory lock. */
+const PR_CURRENT_DIR = 0x98;
+const PR_HOME_DIR = 0xbc;
 
 interface ChildStart {
   entry: number;
@@ -138,6 +142,12 @@ interface ChildStart {
   /** Segment list to unload on return (0 = the caller owns it, as with RunCommand). */
   unloadSeg: number;
   argBlock: { addr: number; size: number } | null;
+  /**
+   * Execute/SystemTagList start the command as a new process: it gets its
+   * own copy of the caller's current directory, unlocked when it ends, and
+   * the caller's is untouched. RunCommand runs it as the caller's process.
+   */
+  ownProcess: boolean;
 }
 
 interface ChildFrame extends ChildStart {
@@ -150,8 +160,8 @@ interface ChildFrame extends ChildStart {
     programName: string;
     input: number;
     output: number;
-    currentDirectory: string;
-    currentDirectoryAmiga: string;
+    /** The caller's pr_CurrentDir, when the child had its own (a new process). */
+    currentDir: number | null;
     stackLower: number;
     stackUpper: number;
     task: number[];
@@ -217,8 +227,29 @@ export class DosLibrary {
   private bbsRoot: string = "";
 
   // Directory and lock management for door support
-  private currentDirectory: string = "";
-  private currentDirectoryAmiga: string = "BBS:";
+  /**
+   * The current directory is the running Process's pr_CurrentDir: a lock from
+   * this library's lock table, which CurrentDir() swaps. A NULL lock is the
+   * boot volume's root (SYS:). With no Process attached (a dos.library used
+   * on its own, e.g. RexxMast's), the board root.
+   */
+  private detachedCurrentDir = 0;
+  private readonly currentDirSource = (): { sysPath: string; amigaPath: string } => {
+    const bptr = this.readCurrentDirBptr();
+    const lock = bptr ? this.findLockByBptr(bptr)?.lock : undefined;
+    if (lock) return { sysPath: lock.path, amigaPath: lock.amigaPath };
+    if (!this.processTask()) return { sysPath: this.bbsDataPath, amigaPath: "BBS:" };
+    // An assign root needs no current directory (resolving through the
+    // resolver would ask this source again).
+    const sys = this.pathManager?.amiToSysPath("SYS:") || standardAssigns(this.rootPath).get("sys:")?.[0];
+    return { sysPath: sys || this.bbsDataPath, amigaPath: "SYS:" };
+  };
+  private get currentDirectory(): string {
+    return this.currentDirSource().sysPath;
+  }
+  private get currentDirectoryAmiga(): string {
+    return this.currentDirSource().amigaPath;
+  }
   private lastLockPath: string = "";
   private doorDirectory: string = ""; // Set by AmigaDoorSession for PROGDIR: device
   private pathResolver: DosPathResolver; // Handles Amiga->native path resolution
@@ -255,6 +286,7 @@ export class DosLibrary {
     this.emulator = emulator;
     const detectedRoot = rootPathOverride || boardRoot();
     this.pathResolver = new DosPathResolver();
+    this.pathResolver.setCurrentDirSource(this.currentDirSource);
     this.setBasePaths(detectedRoot);
     this.readArgsHeapPtr = READARGS_HEAP_BASE;
     this.envVarStructNext = ENV_VAR_STRUCT_BASE;
@@ -367,7 +399,6 @@ debugLog(`[DosLibrary] Environment variables initialized for node ${nodeId}`);
     this.rootPath = rootPath;
     this.bbsDataPath = this.rootPath; // BBS data is at project root (Conf1, Conf2, Commands, etc.)
     this.bbsRoot = rootPath;
-    this.currentDirectory = this.bbsDataPath;
 
     // Configure path resolver with base paths
     this.pathResolver.setBasePaths(rootPath);
@@ -437,8 +468,8 @@ debugLog(
       this.fileCache
     );
     this.fileManager.setShadowProvider(this.shadowProvider);
+    this.fileManager.setCurrentDirSource(this.currentDirSource);
     this.useNewFileSystem = true;
-    this.currentDirectory = this.bbsDataPath;
 
     // Allocate FileHandle structures in emulated memory for stdin/stdout
     // This is CRITICAL - doors like Bulls read fields from the FileHandle structure!
@@ -568,8 +599,6 @@ debugLog(
    */
   setDoorDirectory(doorPath: string): void {
     this.doorDirectory = doorPath;
-    this.currentDirectory = doorPath;
-    this.currentDirectoryAmiga = "PROGDIR:";
 
     // Delegate to path resolver
     this.pathResolver.setDoorDirectory(doorPath);
@@ -577,10 +606,6 @@ debugLog(
     if (this.pathManager) {
       this.pathManager.setProgDir(doorPath);
       this.pathResolver.enableNewFileSystem(this.pathManager, this.fileManager || undefined);
-    }
-
-    if (this.fileManager) {
-      this.fileManager.setCurrentDir("progdir:");
     }
 
     debugLog(`[dos.library] PROGDIR: set to ${doorPath}`);
@@ -2546,7 +2571,10 @@ debugLog(`[dos.library] Lock("${name}") exclusive - held elsewhere [IoErr=${this
       return;
     }
 
-    this.emulator.setRegister(CPURegister.D0, this.createLock(realPath, mode, originalName)); // BPTR, not lockId!
+    // A relative name is named from the current directory, so a lock taken
+    // on it (CurrentDir, NameFromLock) knows where it is.
+    const lockName = this.pathResolver.normalizeAmigaPath(originalName);
+    this.emulator.setRegister(CPURegister.D0, this.createLock(realPath, mode, lockName)); // BPTR, not lockId!
     this.lastError = DOS_ERRORS.ERROR_NO_ERROR;
   }
 
@@ -3115,70 +3143,55 @@ console.error(
    * Returns: D0 = old directory lock
    */
   CurrentDir(): void {
-    const bptrIn = this.emulator.getRegister(CPURegister.D1);
-
-debugLog(`[dos.library] CurrentDir(lock=${bptrIn})`);
-
-    // Create lock for current directory (to return as "old directory")
-    const oldDirLockId = this.nextLockId++;
-    const oldDirBptr = this.allocateFileLock(oldDirLockId, -2); // ACCESS_READ
-    const oldDirMemAddr = oldDirBptr << 2;
-
-    this.locks.set(oldDirLockId, {
-      id: oldDirLockId,
-      path: this.currentDirectory,
-      amigaPath: this.currentDirectoryAmiga,
-      mode: -2, // ACCESS_READ
-      memAddr: oldDirMemAddr,
-      bptr: oldDirBptr,
-    });
-
-    if (bptrIn === 0) {
-      // D1=0 means "just get current directory lock, don't change"
-debugLog(
-        `[dos.library] CurrentDir: Returning current directory lock ${oldDirLockId} (BPTR ${oldDirBptr}) for ${this.currentDirectory}`
-      );
-      this.emulator.setRegister(CPURegister.D0, oldDirBptr); // Return BPTR
-      this.lastError = DOS_ERRORS.ERROR_NO_ERROR;
-      return;
+    const newLock = this.emulator.getRegister(CPURegister.D1) >>> 0;
+    const oldLock = this.readCurrentDirBptr();
+    // AmigaDOS stores the lock as given (0 = the boot volume's root) and
+    // hands back the old one; it checks nothing.
+    if (newLock !== 0 && !this.findLockByBptr(newLock)) {
+      console.warn(`[dos.library] CurrentDir: BPTR ${newLock} is not a lock dos.library handed out`);
     }
+    this.writeCurrentDirBptr(newLock);
+debugLog(`[dos.library] CurrentDir(lock=${newLock}) -> old ${oldLock}, now ${this.currentDirectoryAmiga} (${this.currentDirectory})`);
+    this.emulator.setRegister(CPURegister.D0, oldLock);
+  }
 
-    // Find lock by BPTR (D1 contains BPTR, not lockId)
-    const result = this.findLockByBptr(bptrIn);
-    if (!result) {
-console.error(`[dos.library] CurrentDir: Invalid lock BPTR ${bptrIn}`);
-      this.emulator.setRegister(CPURegister.D0, 0);
-      this.lastError = DOS_ERRORS.ERROR_OBJECT_NOT_FOUND;
-      return;
-    }
-    const newLock = result.lock;
+  /** The running Process, or 0 when no exec.library is attached. */
+  private processTask(): number {
+    return (this.processExec?.getCurrentTaskAddress() ?? 0) >>> 0;
+  }
 
-    // Verify the lock points to a directory
-    if (
-      !amigafs.existsSync(newLock.path) ||
-      !amigafs.statSync(newLock.path).isDirectory()
-    ) {
-console.error(
-        `[dos.library] CurrentDir: Lock BPTR ${bptrIn} does not point to a directory: ${newLock.path}`
-      );
-      this.emulator.setRegister(CPURegister.D0, 0);
-      this.lastError = DOS_ERRORS.ERROR_OBJECT_NOT_FOUND;
-      return;
-    }
+  private readCurrentDirBptr(): number {
+    const task = this.processTask();
+    return task ? this.emulator.readMemory32(task + PR_CURRENT_DIR) >>> 0 : this.detachedCurrentDir;
+  }
 
-    // Change current directory
-    const oldDir = this.currentDirectory;
-    this.currentDirectory = newLock.path;
-    if (newLock.amigaPath) {
-      this.currentDirectoryAmiga = newLock.amigaPath;
-    }
-debugLog(
-      `[dos.library] CurrentDir: Changed from ${oldDir} to ${this.currentDirectory}`
-    );
+  private writeCurrentDirBptr(bptr: number): void {
+    const task = this.processTask();
+    if (task) this.emulator.writeMemory32(task + PR_CURRENT_DIR, bptr >>> 0);
+    else this.detachedCurrentDir = bptr >>> 0;
+  }
 
-    // Return BPTR for old directory
-    this.emulator.setRegister(CPURegister.D0, oldDirBptr);
-    this.lastError = DOS_ERRORS.ERROR_NO_ERROR;
+  /**
+   * A shared lock on a directory, for a new Process's pr_CurrentDir or
+   * pr_HomeDir; 0 (the NULL lock) when it does not exist.
+   */
+  lockDirectory(amigaPath: string): number {
+    const realPath = this.pathResolver.resolve(amigaPath);
+    if (!realPath || !amigafs.existsSync(realPath) || !amigafs.statSync(realPath).isDirectory()) return 0;
+    return this.createLock(realPath, ACCESS_READ, amigaPath);
+  }
+
+  /** A second lock on what `bptr` locks (DupLock); 0 for the NULL lock or an unknown one. */
+  private dupLockBptr(bptr: number): number {
+    const lock = bptr ? this.findLockByBptr(bptr)?.lock : undefined;
+    return lock ? this.createLock(lock.path, lock.mode, lock.amigaPath, lock.fileName) : 0;
+  }
+
+  private releaseLockBptr(bptr: number): void {
+    const found = bptr ? this.findLockByBptr(bptr) : null;
+    if (!found) return;
+    if ((found.lock.mode | 0) === ACCESS_WRITE) unlockExclusive(found.lock.path, this);
+    this.locks.delete(found.lockId);
   }
 
   /**
@@ -3454,6 +3467,7 @@ debugLog(`[dos.library] Door will now exit cleanly`);
       resultOf: (rc) => rc >>> 0,
       unloadSeg: 0,
       argBlock: null,
+      ownProcess: false,
     });
     if (!started) {
       this.emulator.setRegister(CPURegister.D0, 0xffffffff);
@@ -3512,6 +3526,7 @@ debugLog(`[dos.library] Door will now exit cleanly`);
       resultOf: io.resultOf,
       unloadSeg: loaded.bptr,
       argBlock: { addr: argPtr, size: argSize },
+      ownProcess: true,
     });
     if (!started) {
       this.processExec.freeMem(argPtr, argSize);
@@ -3557,8 +3572,7 @@ debugLog(`[dos.library] Door will now exit cleanly`);
           programName: this.programName,
           input: this.Input(),
           output: this.Output(),
-          currentDirectory: this.currentDirectory,
-          currentDirectoryAmiga: this.currentDirectoryAmiga,
+          currentDir: child.ownProcess ? this.readCurrentDirBptr() : null,
           stackLower: exec.getStackLower(),
           stackUpper: exec.getStackUpper(),
           task: TASK_STACK_FIELDS.map(readTask),
@@ -3566,6 +3580,7 @@ debugLog(`[dos.library] Door will now exit cleanly`);
       });
 
       // The child's own command state.
+      if (child.ownProcess) this.writeCurrentDirBptr(this.dupLockBptr(this.readCurrentDirBptr()));
       this.argStringPtr = child.argPtr;
       this.programName = child.programName;
       this.setStdHandles(child.input, child.output);
@@ -3615,8 +3630,11 @@ debugLog(`[dos.library] Door will now exit cleanly`);
     this.argStringPtr = saved.argStringPtr;
     this.programName = saved.programName;
     this.setStdHandles(saved.input, saved.output);
-    this.currentDirectory = saved.currentDirectory;
-    this.currentDirectoryAmiga = saved.currentDirectoryAmiga;
+    if (saved.currentDir !== null) {
+      // The ending process's current directory is unlocked; the caller's comes back.
+      this.releaseLockBptr(this.readCurrentDirBptr());
+      this.writeCurrentDirBptr(saved.currentDir);
+    }
     if (exec) {
       exec.setStackBounds(saved.stackLower, saved.stackUpper - saved.stackLower);
       const task = exec.getCurrentTaskAddress() >>> 0;
@@ -7628,10 +7646,9 @@ debugLog(`[dos.library] SetProgramDir → oldLock=0x${oldLock.toString(16)}`);
   public GetProgramDir(): void {
 debugLog(`[dos.library] GetProgramDir()`);
 
-    // Return 0 for now (could be enhanced to track actual program directory)
-    // In a full implementation, we would read this from the Process structure
-    // pr_HomeDir field (offset 0x98)
-    const programDirLock = 0;
+    // The Process's pr_HomeDir: the lock on the directory the program was loaded from.
+    const task = this.processTask();
+    const programDirLock = task ? this.emulator.readMemory32(task + PR_HOME_DIR) >>> 0 : 0;
 
     this.emulator.setRegister(CPURegister.D0, programDirLock);
 debugLog(`[dos.library] GetProgramDir → 0x${programDirLock.toString(16)}`);

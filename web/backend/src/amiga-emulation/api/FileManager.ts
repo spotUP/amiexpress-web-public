@@ -23,6 +23,12 @@ import { getSystemTime } from '../../utils/date-time.util';
 import { DOS_ERRORS, FIRST_FILE_HANDLE, RESERVED_HANDLES } from './dos/dos-types';
 import { boardRoot } from '../../utils/board-root.util';
 
+/**
+ * Where the running process's current directory is, as dos.library reads it
+ * from the Process's pr_CurrentDir lock: the host directory and its Amiga name.
+ */
+export type CurrentDirSource = () => { sysPath: string; amigaPath: string };
+
 // PERFORMANCE: Debug logging disabled by default - synchronous file I/O is slow
 const FILE_DEBUG_ENABLED = process.env.DEBUG_FILE === '1';
 
@@ -48,9 +54,14 @@ export class FileManager {
   /** Base directory for file operations */
   private baseDir: string;
 
-  /** Current working directory (AmigaDOS path + resolved system path) */
-  private currentDirAmi: string = 'doors:';
-  private currentDirSysPath: string;
+  /**
+   * The running process's current directory. dos.library supplies it from
+   * pr_CurrentDir (setCurrentDirSource); a FileManager used on its own keeps
+   * a fixed one (setCurrentDir).
+   */
+  private currentDirSource: CurrentDirSource;
+  private get currentDirAmi(): string { return this.currentDirSource().amigaPath; }
+  private get currentDirSysPath(): string { return this.currentDirSource().sysPath; }
 
   /** Shared file cache for read-only Amiga files */
   private fileCache?: AmigaFileCache;
@@ -86,7 +97,13 @@ export class FileManager {
     this.pathManager = pathManager;
     this.fileCache = fileCache;
     this.initializeStandardHandles();
-    this.currentDirSysPath = this.pathManager.amiToSysPath(this.currentDirAmi, this.baseDir) || this.baseDir;
+    const doorsDir = this.pathManager.amiToSysPath('doors:', this.baseDir) || this.baseDir;
+    this.currentDirSource = () => ({ sysPath: doorsDir, amigaPath: 'doors:' });
+  }
+
+  /** Relative names resolve against what `source` says is the current directory. */
+  setCurrentDirSource(source: CurrentDirSource): void {
+    this.currentDirSource = source;
   }
 
   /** Set callback for sysop debug messages */
@@ -697,13 +714,12 @@ console.log(`[FileManager] stdout BPTR set to 0x${bptr.toString(16)} (addr 0x${(
   }
 
   /**
-   * Set current working directory
+   * Set a fixed current directory (a FileManager with no dos.library behind it).
    */
   setCurrentDir(amiPath: string): void {
     const sysPath = this.pathManager.amiToSysPath(amiPath, this.currentDirSysPath);
     if (sysPath) {
-      this.currentDirAmi = amiPath;
-      this.currentDirSysPath = sysPath;
+      this.currentDirSource = () => ({ sysPath, amigaPath: amiPath });
 console.log(`[FileManager] Changed directory to: ${amiPath} (${sysPath})`);
     } else {
 console.error(`[FileManager] Failed to change directory to: ${amiPath}`);

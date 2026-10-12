@@ -37,7 +37,12 @@ function board(): string {
   return path.resolve(root);
 }
 
+const runs = new Map<string, { stdout: string; stderr: string }>();
+
+/** One runner run per file; the tests below read the same run. */
 function check(file: string): { stdout: string; stderr: string } {
+  const done = runs.get(file);
+  if (done) return done;
   const result = spawnSync(
     TSX,
     [
@@ -63,7 +68,9 @@ function check(file: string): { stdout: string; stderr: string } {
     },
   );
   // eslint-disable-next-line no-control-regex
-  return { stdout: (result.stdout || '').replace(/\x1b\[[0-9;]*[A-Za-z]/g, ''), stderr: result.stderr || '' };
+  const run = { stdout: (result.stdout || '').replace(/\x1b\[[0-9;]*[A-Za-z]/g, ''), stderr: result.stderr || '' };
+  runs.set(file, run);
+  return run;
 }
 
 describeMaybe('a checker runs the real archiver through SystemTagList', () => {
@@ -87,6 +94,13 @@ describeMaybe('a checker runs the real archiver through SystemTagList', () => {
     expect(stderr).toMatch(/\[dos\.library\] "C:LHA" returned 0;/);
     expect(stdout).toMatch(/pASSED !/);
     expect(stdout).not.toMatch(/Archive Corrupt!/);
+  }, 200_000);
+
+  it('LhA returns to the directory it started in: pr_CurrentDir is a lock dos.library knows', () => {
+    const { stderr } = check('good.lha');
+    expect(stderr).toMatch(/\[dos\.library\] "C:LHA" returned 0;/);
+    expect(stderr).not.toMatch(/CurrentDir: Invalid lock/);
+    expect(stderr).not.toMatch(/is not a lock dos\.library handed out/);
   }, 200_000);
 
   it('rejects a damaged archive: C:LHA runs and returns 10', () => {

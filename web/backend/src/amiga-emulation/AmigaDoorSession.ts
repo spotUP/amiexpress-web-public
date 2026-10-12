@@ -485,7 +485,8 @@ debugLog(
         this.emulator,
         this.sharedState.execLibrary,
         this.config,
-        this.logger
+        this.logger,
+        this.sharedState.dosLibrary ?? undefined
       );
       await this.doorLoader.loadDoor();
       mark("door loaded");

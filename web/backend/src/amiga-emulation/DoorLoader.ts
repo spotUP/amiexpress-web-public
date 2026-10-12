@@ -18,6 +18,15 @@ import { SharedBBSData } from "./structures/GlobalStructures.js";
 import { assertDoorSegmentsFit, DOOR_EXIT_TRAP_ADDR } from "./memory-map.js";
 import { debugLog } from '../utils/debug-log';
 
+/** The part of dos.library a new Process needs: real locks for pr_CurrentDir / pr_HomeDir. */
+export interface ProcessLocks {
+  /** A shared lock on a directory (BPTR), or 0 - the NULL lock - when it does not exist. */
+  lockDirectory(amigaPath: string): number;
+}
+
+/** The current directory a door starts in. */
+const DOOR_CURRENT_DIR = "PROGDIR:";
+
 export class DoorLoader {
   private emulator: MoiraEmulator;
   private execLibrary: ExecLibrary;
@@ -42,13 +51,18 @@ export class DoorLoader {
     emulator: MoiraEmulator,
     execLibrary: ExecLibrary,
     config: DoorConfig,
-    logger?: DoorLogger
+    logger?: DoorLogger,
+    dos?: ProcessLocks
   ) {
     this.emulator = emulator;
     this.execLibrary = execLibrary;
     this.config = config;
     this.logger = logger || null;
+    this.dos = dos || null;
   }
+
+  /** dos.library, which hands out the Process's directory locks. */
+  private dos: ProcessLocks | null;
 
   /**
    * Compute where the door's stack should live, given the loaded hunk
@@ -457,7 +471,6 @@ debugLog(`  D0 (argLen): ${argLen} D2 (stackSize)=0x${this.stackSizeBytes.toStri
     // Memory Layout (from NDK amitools/vamos/libstructs/dos.py):
     //   0xa0000-0xa003F: CLIStruct (64 bytes, 16 fields), extended to 0xa007F for AX compat fields
     //   0xa0080-0xa00FF: BSTR command name (128 bytes max)
-    //   0xa0200-0xa0213: FileLockStruct (20 bytes: fl_Link, fl_Key, fl_Access, fl_Task, fl_Volume)
     // NOTE: CLI MUST NOT be at 0xe0000 - that address is used by intuition.library stub!
     const cliSize = 0x80; // 128 bytes: 64-byte standard CLI + extended fields + padding
     const cliAddr = 0xa0000; // Between ExecBase (0x80000) and DOS library (0xb0000)
@@ -506,20 +519,11 @@ debugLog(`  D0 (argLen): ${argLen} D2 (stackSize)=0x${this.stackSizeBytes.toStri
     const write32 = (addr: number, val: number) =>
       this.emulator.writeMemory32(addr, val >>> 0);
 
-    // Create a minimal FileLock for BBS: as current dir/home dir
-    // FileLockStruct is 20 bytes (5 x LONG/APTR/BPTR fields) - see amitools/vamos/libstructs/dos.py
-    // Placed at 0xa0200 to avoid overlap with CLI (0xa0000-0xa007F) + BSTR (0xa0080-0xa00FF)
-    const lockAddr = 0xa0200;
-    const FILELOCK_SIZE = 20; // fl_Link(4) + fl_Key(4) + fl_Access(4) + fl_Task(4) + fl_Volume(4)
-    for (let i = 0; i < FILELOCK_SIZE; i++) {
-      this.emulator.writeMemory(lockAddr + i, 0);
-    }
-    write32(lockAddr + 0x0, 0); // fl_Link
-    write32(lockAddr + 0x4, 0); // fl_Key
-    write32(lockAddr + 0x8, -2); // fl_Access = ACCESS_READ(-2)
-    write32(lockAddr + 0xc, taskAddr); // fl_Task = this process
-    write32(lockAddr + 0x10, 0); // fl_Volume (not emulated)
-    const lockBptr = lockAddr >> 2;
+    // pr_CurrentDir and pr_HomeDir are locks from dos.library's own lock
+    // table, so CurrentDir/DupLock/Examine/ParentDir on them work. pr_HomeDir
+    // (PROGDIR:) is the directory the door was loaded from.
+    const currentDirBptr = this.dos?.lockDirectory(DOOR_CURRENT_DIR) ?? 0;
+    const homeDirBptr = this.dos?.lockDirectory("PROGDIR:") ?? 0;
 
     write32(prSegList, segListBptr);
     write32(prStackSize, this.stackSizeBytes);
@@ -528,8 +532,8 @@ debugLog(`  D0 (argLen): ${argLen} D2 (stackSize)=0x${this.stackSizeBytes.toStri
     write32(prTaskNum, nodeId);
     write32(prStackBase, this.stackBaseAddr);
     write32(prResult2, 0);
-    write32(prCurrentDir, lockBptr);
-    write32(prHomeDir, lockBptr);
+    write32(prCurrentDir, currentDirBptr);
+    write32(prHomeDir, homeDirBptr);
     write32(prCIS, 1); // BPTR stdin
     write32(prCOS, 2); // BPTR stdout
     write32(prCES, 2); // error -> stdout
@@ -567,7 +571,7 @@ debugLog(`  D0 (argLen): ${argLen} D2 (stackSize)=0x${this.stackSizeBytes.toStri
       this.emulator.writeMemory32(cliAddr + offset, val >>> 0);
     writeCli32(0x00, 0); // cli_Result2
     writeCli32(0x04, 0); // cli_SetName
-    writeCli32(0x08, lockBptr); // cli_CommandDir
+    writeCli32(0x08, 0); // cli_CommandDir: the command path list, empty
     writeCli32(0x0c, 0); // cli_ReturnCode
     writeCli32(0x10, cmdNameBptr); // cli_CommandName
     writeCli32(0x14, 0); // cli_FailLevel
@@ -581,7 +585,7 @@ debugLog(`  D0 (argLen): ${argLen} D2 (stackSize)=0x${this.stackSizeBytes.toStri
     writeCli32(0x34, this.stackSizeBytes >> 2); // cli_DefaultStack (in longwords, not bytes)
     writeCli32(0x38, 2); // cli_StandardOutput (BPTR)
     writeCli32(0x3c, segListBptr); // cli_Module BPTR to seglist
-    writeCli32(0x40, lockBptr); // cli_CurrentDir (mirror)
+    writeCli32(0x40, currentDirBptr); // past the 64-byte CLI: current dir mirror
     writeCli32(0x44, 0); // cli_DirLen
     writeCli32(0x48, 0); // cli_DirBuf
     writeCli32(0x4c, 0); // cli_PathList
@@ -603,7 +607,7 @@ debugLog(`  D0 (argLen): ${argLen} D2 (stackSize)=0x${this.stackSizeBytes.toStri
       this.emulator.writeMemory32(compatCliAddr + offset, val >>> 0);
     writeCompat32(0x00, 0);
     writeCompat32(0x04, 0);
-    writeCompat32(0x08, lockAddr); // command dir (APTR)
+    writeCompat32(0x08, 0); // command path list, empty
     writeCompat32(0x0c, 0);
     writeCompat32(0x10, compatBstrAddr); // command name APTR
     writeCompat32(0x14, 0);
@@ -617,7 +621,7 @@ debugLog(`  D0 (argLen): ${argLen} D2 (stackSize)=0x${this.stackSizeBytes.toStri
     writeCompat32(0x34, this.stackSizeBytes);
     writeCompat32(0x38, 2 << 2);
     writeCompat32(0x3c, segListBptr << 2); // module APTR
-    writeCompat32(0x40, lockAddr);
+    writeCompat32(0x40, currentDirBptr << 2);
     writeCompat32(0x44, 0);
     writeCompat32(0x48, 0);
     writeCompat32(0x4c, 0);
