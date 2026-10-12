@@ -5,6 +5,9 @@
  * 1:1 port from AmiExpress express.e command processing
  */
 
+import { UserFlag } from '../constants/express-flags';
+import { userMayToggleBackgroundFileCheck } from '../services/background-file-check.service';
+import { changeAccount } from '../services/account.service';
 import { keysForLog } from '../utils/keys-for-log.util';
 import { BBSSession } from '../index';
 import { petsciiColumnsOf } from '../amiga-emulation/xim/screen-width.util';
@@ -2678,7 +2681,8 @@ console.log('[handleCommand] Display flow branch, subState=', session.subState);
     if (input === '') {
       emitText(socket, '\r\n');  // echo of blank line (express.e:17674)
       // express.e:17762-17769: blank line then Okay prompt (single-char read)
-      emitText(socket, '\r\nOkay:   (Enter) to Start, (G)oodbye after transfer, (A)bort? ');
+      emitText(socket, '\r\n');
+      emitUploadOkayPrompt(socket, session);
       session.subState = LoggedOnSubState.UPLOAD_OKAY_CONFIRM;
       return;
     }
@@ -2846,6 +2850,11 @@ console.log('[handleCommand] Display flow branch, subState=', session.subState);
   // Options: Enter=start transfer, G=goodbye after, A=abort; loop on anything else
   if (session.subState === LoggedOnSubState.UPLOAD_OKAY_CONFIRM) {
     const ch = data[0] || '';
+    // express.e:17777-17779 - B switches USER_BGFILECHECK where the prompt offered it.
+    if ((ch === 'B' || ch === 'b') && session.bgFileCheck && userMayToggleBackgroundFileCheck(session.nodeId || 1)) {
+      session.user.userFlags = (session.user.userFlags || 0) ^ UserFlag.BGFILECHECK;
+      await changeAccount(session, { userFlags: session.user.userFlags });
+    }
     if (ch === 'A' || ch === 'a') {
       // express.e:17781-17783: aePuts('Abort!\b\n\b\n'); RETURN RESULT_FAILURE
       emitText(socket, 'Abort!\r\n\r\n');
@@ -2860,7 +2869,8 @@ console.log('[handleCommand] Display flow branch, subState=', session.subState);
       emitText(socket, '\r\n\r\n');
       startBatchUploadTransfer(socket, session, false);
     }
-    // All other chars: loop (express.e REPEAT...UNTIL)
+    // All other chars: loop (express.e REPEAT...UNTIL redraws the prompt, 17764-17770)
+    else emitUploadOkayPrompt(socket, session, true);
     return;
   }
 
@@ -3668,6 +3678,22 @@ console.log('=== handleCommand end ===\n');
 }
 
 // express.e:17794+ — start the actual batch upload transfer after Okay confirm
+/**
+ * express.e:17764-17771 - the upload's Okay prompt. Where bgFileCheck is set
+ * and the node does not FORCE_BGFILECHECK it also shows the caller's
+ * USER_BGFILECHECK (YES green, NO white) and accepts B to switch it (17777).
+ */
+function emitUploadOkayPrompt(socket: any, session: BBSSession, redraw: boolean = false): void {
+  if (session.bgFileCheck && userMayToggleBackgroundFileCheck(session.nodeId || 1)) {
+    const on = ((session.user?.userFlags || 0) & UserFlag.BGFILECHECK) !== 0;
+    emitText(socket, `\x1b[1A\rOkay:   (B)ackground filecheck: ${on ? '\x1b[32mYES\x1b[0m' : '\x1b[37mNO\x1b[0m'} \r\n`);
+    emitText(socket, '(Enter) to Start, (G)oodbye after transfer, (A)bort? ');
+  } else {
+    // First draw follows 17762's '\b\n'; the REPEAT redraw begins with the '\b' (CR).
+    emitText(socket, `${redraw ? '\r' : ''}Okay:   (Enter) to Start, (G)oodbye after transfer, (A)bort? `);
+  }
+}
+
 function startBatchUploadTransfer(socket: any, session: BBSSession, goodbyeAfter: boolean): void {
   // Set the goodbye flag on tempData BEFORE the batch-length branch.
   // express.e:25657 — `IF stat=RESULT_GOODBYE THEN modemOffHook()`. The flag
