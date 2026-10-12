@@ -5,6 +5,7 @@
  */
 
 import { MoiraEmulator } from "../../cpu/MoiraEmulator";
+import { UTILITY_SCRATCH_ADDR } from '../../memory-map';
 
 /**
  * Tag constants from <utility/tagitem.h>
@@ -84,7 +85,7 @@ export function findTagItemImpl(emu: MoiraEmulator, tagValue: number, tagList: n
 
   // We need a temporary storage for the pointer
   // Use a high memory address that won't conflict
-  const tempPtrAddr = 0x1FE000; // Temporary storage for pointer
+  const tempPtrAddr = UTILITY_SCRATCH_ADDR; // Temporary storage for pointer
   emu.writeMemory32(tempPtrAddr, tagList);
 
   let maxIterations = 1000; // Safety limit

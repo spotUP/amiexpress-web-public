@@ -135,9 +135,7 @@ export class ExecLibrary {
   private static readonly SIGBREAKF_CTRL_C = 1 << 12; // Signal mask (0x1000)
 
   // Memory limits (Amiga classic has 16MB max addressable memory)
-  private static readonly MAX_MEMORY = 0x1000000; // 16MB limit
   private static readonly MAX_SINGLE_ALLOC = 0x800000; // 8MB max single allocation (sanity check)
-  private static readonly MEMORY_WARNING_THRESHOLD = 0xc00000; // 12MB - warn when exceeded
 
   private static readonly ROM_START = 0xf80000;
   private static readonly ROM_END = 0xffffff;
@@ -2775,28 +2773,19 @@ debugLog(
 
     // Fallback to bump allocator
     if (addr === 0) {
-      // Check if allocation would exceed memory limit
-      if (this.nextFreeMemory + alignedSize > ExecLibrary.MAX_MEMORY) {
+      // exec: a request that does not fit returns NULL. The heap ends below
+      // the system pages and the loaded libraries (memory-map.ts).
+      if (this.nextFreeMemory + alignedSize > memoryMap.ALLOCMEM_HEAP_END) {
 debugLog(
           `[ExecLibrary] AllocMem(${size}, 0x${flags.toString(
             16
-          )}) - FAILED: would exceed ${ExecLibrary.MAX_MEMORY} (16MB) limit`
+          )}) - FAILED: heap ends at 0x${memoryMap.ALLOCMEM_HEAP_END.toString(16)}`
         );
         return 0;
       }
 
       addr = this.nextFreeMemory;
       this.nextFreeMemory += alignedSize;
-
-      // Warn if approaching memory limit
-      if (this.nextFreeMemory > ExecLibrary.MEMORY_WARNING_THRESHOLD) {
-debugLog(
-          `[ExecLibrary] WARNING: Memory usage at ${(
-            (this.nextFreeMemory / ExecLibrary.MAX_MEMORY) *
-            100
-          ).toFixed(1)}% (${this.nextFreeMemory} bytes)`
-        );
-      }
     }
 
     // Track allocation

@@ -60,6 +60,20 @@ export const FAME_LIB_ADDR = 0x0fe000;
 /** ExecLibrary's AllocMem arena, and the fallback base for stub libraries. */
 export const ALLOCMEM_HEAP_BASE = 0x100000;
 
+/**
+ * Four-byte scratch longs the utility.library tag helpers use as a
+ * TagItem cursor (0x1fe000-0x1fe033).
+ */
+export const UTILITY_SCRATCH_ADDR = 0x1fe000;
+
+/**
+ * First address the AllocMem heap may NOT hand out: the system pages
+ * (utility scratch, the door exit and child return traps, the XIM command
+ * buffers at 0x1ff700/0x1ff800) and, at 0x200000, the loaded 68K libraries.
+ * AllocMem fails (returns 0) for a request that does not fit below it.
+ */
+export const ALLOCMEM_HEAP_END = UTILITY_SCRATCH_ADDR;
+
 /** The address DoorLoader parks as the door's outermost return address. */
 export const DOOR_EXIT_TRAP_ADDR = 0x1ff000;
 
@@ -121,6 +135,7 @@ export const RESERVED_REGIONS: ReservedRegion[] = [
   { start: ENV_VAR_STRUCT_BASE, name: "environment variable structures" },
   { start: ENV_STRING_BASE, name: "environment variable strings" },
   { start: READARGS_HEAP_BASE, name: "the ReadArgs heap" },
+  { start: UTILITY_SCRATCH_ADDR, name: "utility.library scratch" },
   { start: DOOR_EXIT_TRAP_ADDR, name: "the door exit trap" },
   { start: NATIVE_LIBRARY_BASE, name: "loaded 68K libraries" },
 ];

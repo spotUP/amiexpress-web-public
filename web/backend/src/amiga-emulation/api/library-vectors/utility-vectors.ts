@@ -9,6 +9,7 @@ import { UtilityLibrary } from "../UtilityLibrary";
 import { MoiraEmulator } from "../../cpu/MoiraEmulator";
 import { findTagItemImpl, readTagItem, nextTagItemImpl, TAG_DONE, TAG_IGNORE, TAG_MORE, TAG_SKIP } from "./tag-helpers";
 import { namedObjectRegistry, namedObjectState } from "../LibraryTraps";
+import { UTILITY_SCRATCH_ADDR } from '../../memory-map';
 
 export const UTILITY_VECTORS: LibraryVector[] = [
   // Tag-related functions (offsets -30 to -96)
@@ -65,7 +66,7 @@ console.log(`[UtilityLibrary] GetTagData(tag=0x${tagValue.toString(16)}, tagList
 
       if (boolMap !== 0) {
         // Use temporary pointer storage
-        const tempPtrAddr = 0x1FE008;
+        const tempPtrAddr = UTILITY_SCRATCH_ADDR + 0x8;
         emu.writeMemory32(tempPtrAddr, boolMap);
 
         let maxIterations = 100;
@@ -133,7 +134,7 @@ console.log("[UtilityLibrary] FilterTagChanges - NULL newList");
       }
 
       // Use temporary pointer for iteration
-      const tempPtrAddr = 0x1FE010;
+      const tempPtrAddr = UTILITY_SCRATCH_ADDR + 0x10;
       emu.writeMemory32(tempPtrAddr, newList);
 
       let filtered = 0;
@@ -189,7 +190,7 @@ console.log("[UtilityLibrary] MapTags - NULL list");
       }
 
       // Iterate through tagList
-      const tempPtrAddr = 0x1FE018;
+      const tempPtrAddr = UTILITY_SCRATCH_ADDR + 0x18;
       emu.writeMemory32(tempPtrAddr, tagList);
 
       let mapped = 0;
@@ -263,7 +264,7 @@ console.log(`[UtilityLibrary] CloneTagItems(NULL) = empty list at 0x${emptyAddr.
       }
 
       // Count tags in original
-      const tempPtrAddr = 0x1FE020;
+      const tempPtrAddr = UTILITY_SCRATCH_ADDR + 0x20;
       emu.writeMemory32(tempPtrAddr, original);
       let count = 0;
       let maxIterations = 1000;
@@ -324,7 +325,7 @@ console.log("[UtilityLibrary] RefreshTagItemClones - NULL pointer");
       }
 
       // Iterate through clone and update from original
-      const tempPtrAddr = 0x1FE028;
+      const tempPtrAddr = UTILITY_SCRATCH_ADDR + 0x28;
       emu.writeMemory32(tempPtrAddr, clone);
 
       let refreshed = 0;
@@ -399,7 +400,7 @@ console.log("[UtilityLibrary] FilterTagItems(NULL) = 0");
         return 0;
       }
 
-      const tempPtrAddr = 0x1FE030;
+      const tempPtrAddr = UTILITY_SCRATCH_ADDR + 0x30;
       emu.writeMemory32(tempPtrAddr, tagList);
 
       let remaining = 0;
