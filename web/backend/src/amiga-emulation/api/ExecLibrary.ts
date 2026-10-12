@@ -2196,28 +2196,36 @@ console.warn(
   }
 
   /**
-   * Stock AmigaOS 3.x libraries a real machine always has. Doors open these
-   * and often never call them, so an absent one is still answered with a
-   * generic (empty-vector) stub base, as before. Any other name that is not
-   * on disk is a library the machine does not have, and OpenLibrary says NULL.
+   * Stock libraries that have REAL functions behind the generic open (their
+   * vector tables are installed when they are opened: LibraryManager ->
+   * LibraryTraps.installMath*Vectors / RexxMast -> installRexxSysLibVectors).
+   * Any other name that is not on disk is a library this machine does not
+   * have, and OpenLibrary says NULL, like a machine without it.
+   *
+   * Measured 2026-10-12 (thoughts/shared/plans/2026-10-12-amiscan-upload-virus-check.md,
+   * "Library stand-ins"): the old list also held commodities, cybergraphics,
+   * datatypes, diskfont, gadtools, iffparse, keymap, layers, realtime and
+   * workbench. No repo door opens any of them (their names only occur inside
+   * reqtools/rexxtricks.library), and none has an implemented function, so a
+   * base would only crash or answer 0 (the locale.library hang in C/Zip): NULL.
+   *
+   * asl and expansion are the two stub-only libraries kept: AEreg and
+   * SmartShowCfg refuse to start without asl ("asl.library v36+ is required",
+   * "Can't open version 0 of asl.library") and ShowConfig exits FAIL without
+   * expansion, while with the open none of them called a function in an 8 s
+   * run. Their LVOs are named stubs that answer FAILED (0/NULL/FALSE), the
+   * true answer of a headless machine: no requester can be shown (AslRequest
+   * FALSE = cancelled) and no expansion board exists (FindConfigDev NULL).
    */
-  // locale.library is deliberately NOT in this list. Its empty-vector stub
-  // answers every call with 0, and C/Zip (Info-ZIP 2.32) uses locale for
-  // character conversion: with the stub it spun forever in `Zip -T`. A machine
-  // without locale.library is a real configuration (pre-2.1 Kickstart) that
-  // every program that opens it must already survive, so OpenLibrary says NULL.
   /** sizeof(struct Process) is 0xe4; DoorLoader writes up to pr_CES (+0xe0). */
   private static readonly PROCESS_ALLOC_SIZE = 0x100;
 
   private static readonly STANDARD_SYSTEM_LIBRARIES: ReadonlySet<string> = new Set([
-    "asl.library", "commodities.library", "cybergraphics.library",
-    "datatypes.library", "diskfont.library", "expansion.library",
-    "gadtools.library", "iffparse.library", "keymap.library",
-    "layers.library", "mathffp.library",
+    "asl.library", "expansion.library",
+    "mathffp.library", "mathtrans.library",
     "mathieeedoubbas.library", "mathieeedoubtrans.library",
     "mathieeesingbas.library", "mathieeesingtrans.library",
-    "mathtrans.library", "realtime.library", "rexxsyslib.library",
-    "workbench.library",
+    "rexxsyslib.library",
   ]);
 
   openLibrary(nameAddr: number, version: number): number {

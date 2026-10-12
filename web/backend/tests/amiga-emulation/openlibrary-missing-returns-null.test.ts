@@ -59,8 +59,24 @@ describe('OpenLibrary of a library that does not exist', () => {
     expect(open('locale.library', false)).toBe(0);
   });
 
-  it('still answers a standard system library and a fixed stub with a base', () => {
-    expect(open('gadtools.library', false)).not.toBe(0);
-    expect(open('dos.library', false)).not.toBe(0);
+  // A base whose calls all answer 0 (or crash) is a lie about the machine: a
+  // stock library with no implemented function is absent, like a machine
+  // without it. Measured 2026-10-12: no repo door opens any of these.
+  it.each([
+    'commodities.library', 'cybergraphics.library', 'datatypes.library',
+    'diskfont.library', 'gadtools.library', 'iffparse.library',
+    'keymap.library', 'layers.library', 'realtime.library', 'workbench.library',
+  ])('returns NULL for %s, which has no implemented function', (name) => {
+    expect(open(name, false)).toBe(0);
+  });
+
+  it.each([
+    'mathffp.library', 'mathtrans.library', 'mathieeedoubbas.library',
+    'mathieeedoubtrans.library', 'mathieeesingbas.library', 'mathieeesingtrans.library',
+    'dos.library',
+    // stub-only, kept: AEreg / SmartShowCfg / ShowConfig refuse to start without the open
+    'asl.library', 'expansion.library',
+  ])('still answers %s with a base', (name) => {
+    expect(open(name, false)).not.toBe(0);
   });
 });
