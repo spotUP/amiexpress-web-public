@@ -138,6 +138,21 @@ export function purgeLine(session: InputWaitingSession): void {
 }
 
 /**
+ * The next key the caller typed and nothing has read yet - held for the
+ * procedure, or left on the line by one that ended - taken off the line.
+ * For a prompt that reads its own way (the pause prompts), as express.e's
+ * lineInput takes it off the serial buffer.
+ */
+export function takeHeldKey(session: InputWaitingSession): string | undefined {
+  if (session.typeAhead && session.typeAhead.length > 0) return session.typeAhead.shift();
+  const line = session.lineAhead;
+  if (!line || line.length === 0) return undefined;
+  const key = line.shift();
+  if (line.length === 0) session.lineAhead = undefined;
+  return key;
+}
+
+/**
  * The keys typed ahead, taken off the line - for a sub-state dialog inside
  * the procedure (editInfo) whose first reads would have taken them in
  * express.e.

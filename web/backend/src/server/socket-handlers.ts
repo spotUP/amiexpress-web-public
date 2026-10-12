@@ -46,7 +46,7 @@ import {
 } from '../utils/petscii-session-model';
 import { handleCommand } from '../handlers/command.handler';
 import { handleChatModeInput } from '../utils/chat-mode-input.util';
-import { classifyTerminalInput, clearPauseHandler, commandPieces, commandFailed, dispatchInOrder } from './terminal-input';
+import { answerPause, classifyTerminalInput, commandPieces, commandFailed, dispatchInOrder } from './terminal-input';
 import { disarmIdleTimeout } from '../services/idle-timeout.service';
 import { initializeSecurity } from '../utils/security.util';
 import { triggerSamiLogRefresh, updateStoreFromCallersLog } from '../services/SamiLogService';
@@ -667,16 +667,7 @@ console.error('No session found for socket:', socket.id);
     }
 
     if (decision.kind === 'pause') {
-      // The echo first: a key typed in the same packet as its RETURN shows on
-      // the prompt's row before the handler draws what comes next. Only when
-      // NOT in a door - doors handle their own echo.
-      if (decision.echo !== null && !session.inDoorManager) {
-        socket.emit('ansi-output', decision.echo);
-      }
-      if (decision.handler && decision.line !== null) {
-        decision.handler(decision.line);
-        clearPauseHandler(session, decision.which, decision.handler);
-      }
+      answerPause(session, decision, (text) => socket.emit('ansi-output', text));
       return;
     }
 

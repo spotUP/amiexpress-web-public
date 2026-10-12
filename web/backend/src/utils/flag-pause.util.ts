@@ -22,6 +22,17 @@ import { config } from '../config';
 import { emitPrompt } from './output.util';
 
 /**
+ * The prompt just put up reads the keys already on the line before any typed
+ * after it (server/terminal-input readPauseFromLine), echoed in order behind
+ * the prompt.
+ */
+function readHeldAnswer(socket: Socket, session: Session, which: 'flag' | 'check'): void {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { readPauseFromLine } = require('../server/terminal-input');
+  readPauseFromLine(session, which, (text: string) => emitPrompt(socket, text));
+}
+
+/**
  * Display pause prompt and handle user response
  * Port from express.e:28025-28063
  *
@@ -88,6 +99,8 @@ export async function flagPause(
         // manually invoke it if they intercept input.
         (session as any).flagPauseHandler = handler;
         (session as any).flagPauseBuffer = '';
+        // express.e:28035 lineInput: what the caller typed ahead answers first.
+        readHeldAnswer(socket, session, 'flag');
       };
 
       const promptAgain = () => {
@@ -222,6 +235,8 @@ export async function checkForPause(
       const registerListener = (handler: (input: string) => Promise<void> | void) => {
         (session as any).checkPauseHandler = handler;
         (session as any).checkPauseBuffer = '';
+        // express.e:5194 lineInput: what the caller typed ahead answers first.
+        readHeldAnswer(socket, session, 'check');
       };
 
       const promptAgain = () => {

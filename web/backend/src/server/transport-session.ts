@@ -43,7 +43,7 @@ import { c64AdapterFor } from "./c64-door-adapter";
  * the join, and one column at a time is a key a caller would hold down.
  */
 const PAN_COLUMNS = 8;
-import { classifyTerminalInput, clearPauseHandler, commandPieces, commandFailed, dispatchInOrder, swallowTelnetLineFeed } from "./terminal-input";
+import { answerPause, classifyTerminalInput, commandPieces, commandFailed, dispatchInOrder, swallowTelnetLineFeed } from "./terminal-input";
 import { handleChatModeInput } from "../utils/chat-mode-input.util";
 import { classifyFirstKeypress } from "../utils/c64-detect.util";
 import { convertPetsciiInputToAscii } from "../utils/petscii.util";
@@ -354,16 +354,7 @@ console.log(
       }
 
       if (decision.kind === 'pause') {
-        // The echo first: a key typed in the same packet as its RETURN shows
-        // on the prompt's row before the handler draws what comes next.
-        // Doors echo their own input; the BBS's own prompt does not.
-        if (decision.echo !== null && !session.inDoorManager) {
-          emitter.emit('ansi-output', decision.echo);
-        }
-        if (decision.handler && decision.line !== null) {
-          decision.handler(decision.line);
-          clearPauseHandler(session, decision.which, decision.handler);
-        }
+        answerPause(session, decision, (text) => emitter.emit('ansi-output', text));
         return;
       }
 

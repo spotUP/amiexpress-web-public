@@ -36,7 +36,7 @@
  */
 import type { BBSSession } from '../index';
 import { noteCallerActivity } from '../services/idle-timeout.service';
-import { holdsTypeAhead, type InputWaitingSession } from '../utils/await-input';
+import { holdsTypeAhead, takeHeldKey, type InputWaitingSession } from '../utils/await-input';
 
 /** Which of the two pause accumulators a decision belongs to. */
 export type PauseKind = 'check' | 'flag';
@@ -345,6 +345,47 @@ export function clearPauseHandler(session: BBSSession, which: PauseKind, ran: (l
   // typing too.
   noteCallerActivity(session as never);
   if (state[HANDLER_FIELD[which]] === ran) state[HANDLER_FIELD[which]] = undefined;
+}
+
+/**
+ * Carry out a pause decision: the echo first - a key typed in the same packet
+ * as its RETURN shows on the prompt's row before the handler draws what comes
+ * next; doors echo their own input, the BBS's own prompt does not - then the
+ * handler, on the keystroke that submits the line.
+ */
+export function answerPause(
+  session: BBSSession,
+  decision: Extract<InputDecision, { kind: 'pause' }>,
+  emit: (text: string) => void,
+): void {
+  if (decision.echo !== null && !session.inDoorManager) emit(decision.echo);
+  if (decision.handler && decision.line !== null) {
+    decision.handler(decision.line);
+    clearPauseHandler(session, decision.which, decision.handler);
+  }
+}
+
+/**
+ * A pause prompt has just been put up: it reads what the caller has already
+ * typed first. checkForPause (express.e:5194) and flagPause (28035) read the
+ * answer with lineInput, which takes it off the serial buffer - so keys typed
+ * while the listing ran, held for its procedure or left on the line by one
+ * that ended (utils/await-input), answer the prompt before anything typed
+ * after it. They go through the same accumulator as a live key, one at a
+ * time, until the line is submitted; what follows the RETURN stays on the
+ * line for whatever reads next.
+ */
+export function readPauseFromLine(session: BBSSession, which: PauseKind, emit: (text: string) => void): void {
+  const state = session as unknown as PauseState;
+  const handler = state[HANDLER_FIELD[which]];
+  if (!handler) return;
+  // Stops once the line is submitted: the handler is cleared, or it asked
+  // again and that prompt's own read took over.
+  while (state[HANDLER_FIELD[which]] === handler) {
+    const key = takeHeldKey(session as unknown as InputWaitingSession);
+    if (key === undefined) return;
+    answerPause(session, accumulatePause(session, which, key) as Extract<InputDecision, { kind: 'pause' }>, emit);
+  }
 }
 
 /**
