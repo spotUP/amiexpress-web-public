@@ -51,7 +51,7 @@ describe('disabled tooltype round trip', () => {
     // Hand-built entries have no original form to preserve; the previous
     // behaviour stays the default.
     const rendered = renderTooltypeForTest({
-      key: 'NEWFLAG', value: '', commented: true, prefix: '', originalLine: '',
+      key: 'NEWFLAG', value: '', commented: true, originalLine: '',
     } as any);
 
     expect(rendered).toBe('!NEWFLAG');
@@ -59,7 +59,7 @@ describe('disabled tooltype round trip', () => {
 
   it('can be told to use parentheses for a new entry', () => {
     const rendered = renderTooltypeForTest({
-      key: 'ACS.DOWNLOAD', value: '', commented: true, prefix: '',
+      key: 'ACS.DOWNLOAD', value: '', commented: true,
       originalLine: '', commentStyle: '()',
     } as any);
 

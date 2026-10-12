@@ -13,6 +13,7 @@ import { config as appConfig } from '../../config';
 import * as fs from 'fs';
 import * as path from 'path';
 import { fileCache } from '../../utils/file-cache.util';
+import { fileCheckerFromTooltypes } from '../../utils/file-test.util';
 
 export class FileCheckerConfigService {
   private configRepo: ConfigRepository;
@@ -41,48 +42,19 @@ console.warn('[FileCheckerConfigService] Fcheck/ directory not found');
         // Use file cache for better performance (70-90% reduction in disk I/O)
         const stats = fs.statSync(infoPath);
         const toolTypes = tooltypeMap(parseInfoBuffer(fileCache.readBuffer(infoPath), infoPath));
-        // AmiExpress writes some checker keys with a '&' prefix; the reader has
-        // always accepted both spellings.
-        for (const [key, value] of [...toolTypes]) {
-          if (key.startsWith('&')) toolTypes.set(key.substring(1), value);
-        }
-
-        let checkerPath = toolTypes.get('CHECKER') || '';
-        if (!checkerPath) {
+        const parsed = fileCheckerFromTooltypes(path.basename(infoFile, '.info'), toolTypes);
+        if (!parsed) {
           continue;
         }
 
-        const checkerName = path.basename(infoFile, '.info');
-        const options = toolTypes.get('OPTIONS') || toolTypes.get('SOPTIONS') || '';
-
-        const stackStr = toolTypes.get('STACK');
-        let stackSize = 4096;
-        if (stackStr && stackStr !== 'SAME') {
-          const parsedStack = parseInt(stackStr, 10);
-          if (!isNaN(parsedStack)) {
-            stackSize = parsedStack;
-          }
-        }
-
-        const priorityStr = toolTypes.get('PRIORITY');
-        let priority = 0;
-        if (priorityStr) {
-          const parsedPriority = parseInt(priorityStr, 10);
-          if (!isNaN(parsedPriority)) {
-            priority = parsedPriority;
-          }
-        }
-
-        const scriptPath = toolTypes.get('SCRIPT') || '';
-
         fileCheckers.push({
           id: checkerId++,
-          checker_name: checkerName,
-          checker_path: checkerPath,
-          options: options,
-          stack_size: stackSize,
-          priority: priority,
-          script_path: scriptPath,
+          checker_name: parsed.name,
+          checker_path: parsed.checker,
+          options: parsed.options,
+          stack_size: parsed.stackSize,
+          priority: parsed.priority,
+          script_path: parsed.scriptPath ?? '',
           enabled: true,
           created_at: stats.birthtime,
           updated_at: stats.mtime

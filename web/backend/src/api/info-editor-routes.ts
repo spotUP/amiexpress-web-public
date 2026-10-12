@@ -26,8 +26,6 @@ interface Tooltype {
   originalLine: string;
   /** Amiga parentheses or a bang - which syntax disabled this entry. */
   commentStyle?: '()' | '!';
-  /** The #, +, % or ' AmiExpress writes in front of some keys. */
-  prefix?: string;
 }
 
 interface InfoFileMetadata {
@@ -60,7 +58,6 @@ function parseTooltypes(filePath: string): Tooltype[] {
       commented: tt.commented,
       originalLine: tt.originalLine,
       ...(tt.commentStyle ? { commentStyle: tt.commentStyle } : {}),
-      ...(tt.prefix ? { prefix: tt.prefix } : {}),
     }));
   } catch (error) {
 console.error(`[InfoEditor] Error parsing ${filePath}:`, error);
@@ -250,8 +247,8 @@ infoEditorRouter.put('/file', async (req: Request, res: Response) => {
       // An entry the sysop did not touch keeps its exact on-disk bytes. That
       // is not an optimisation: rebuilding every line as `!KEY=VALUE` rewrote
       // the ACS files' parentheses into bangs (express.e reads the
-      // parenthesised form), dropped the #, + and % prefixes AmiExpress
-      // writes, and turned `BANNER=` into `BANNER`.
+      // parenthesised form), dropped the #, + and % marks in front of
+      // switched-off keys, and turned `BANNER=` into `BANNER`.
       const existingByKey = new Map(info.tooltypes.map(tt => [tt.key, tt]));
 
       info.tooltypes = rows.map((tt: Tooltype) => {
@@ -261,9 +258,8 @@ infoEditorRouter.put('/file', async (req: Request, res: Response) => {
           return existing;
         }
 
-        const prefix = tt.prefix ?? existing?.prefix ?? '';
         const commentStyle = tt.commentStyle ?? existing?.commentStyle;
-        const body = tt.value ? `${prefix}${key}=${tt.value}` : `${prefix}${key}`;
+        const body = tt.value ? `${key}=${tt.value}` : key;
         const originalLine = !tt.commented
           ? body
           : commentStyle === '()' ? `(${body})` : `!${body}`;
@@ -271,7 +267,6 @@ infoEditorRouter.put('/file', async (req: Request, res: Response) => {
           key,
           value: tt.value,
           commented: tt.commented,
-          prefix,
           ...(commentStyle ? { commentStyle } : {}),
           originalLine,
         };

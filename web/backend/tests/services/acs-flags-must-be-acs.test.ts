@@ -18,7 +18,7 @@ import { flagsToTooltypes, tooltypesToFlags } from '../../src/services/config-se
 import type { Tooltype } from '../../src/utils/info-file.util';
 
 const tt = (key: string, commented = false): Tooltype => ({
-  key, value: '', commented, commentStyle: commented ? '()' : undefined, prefix: '', originalLine: key,
+  key, value: '', commented, commentStyle: commented ? '()' : undefined, originalLine: key,
 });
 
 describe('writing ACS flags', () => {

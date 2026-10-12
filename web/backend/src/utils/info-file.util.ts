@@ -35,7 +35,6 @@ export interface Tooltype {
   key: string;
   value: string;
   commented: boolean;
-  prefix: string;
   originalLine: string;
 }
 
@@ -68,8 +67,8 @@ const AMIGA_PREFIX_CHARS = new Set(['#', '+', '%', "'"]);
 
 /**
  * Parse a single tooltype string (as stored in the .info file) into a
- * Tooltype record. Handles Amiga comment prefixes `(name)`, `!name`, and
- * the special prefix characters #, +, %, '.
+ * Tooltype record. Handles Amiga comment prefixes `(name)` and `!name`; a
+ * leading #, +, %, ' stays part of the key (see parseTooltypeString).
  */
 // Amiga tooltypes are effectively "KEY=VALUE" with keys drawn from a wide
 // ASCII subset. Real .info files use characters like '/' and '-' in keys
@@ -94,18 +93,18 @@ const WORD_KEY_RE = /^[A-Za-z0-9][A-Za-z0-9_.<>-]*$/;
  *
  * A TEXT .info can hold a key spelled `(INTERNAL)`, which is a literal key and
  * not a commented-out one - only a fully wrapped entry is a comment - and this
- * board's own files carry `;RESIDENT` and `!KEY` for entries a tool commented
- * out. Those are keys. `W\``, `K@B` and `IHDR` bytes out of a bitmap are not.
+ * board's own files carry `;RESIDENT`, `!KEY`, `&CHECKER` and `+LOCATION` for
+ * entries a sysop or a tool switched off. Those are keys. `W\``, `K@B` and `IHDR` bytes out of a bitmap are not.
  */
 function keyIsWordShaped(key: string): boolean {
-  const core = key.replace(/^[!;(]+/, '').replace(/\)+$/, '');
+  const core = key.replace(/^[!;(&*$#+%']+/, '').replace(/\)+$/, '');
   return core.length >= 2 && WORD_KEY_RE.test(core);
 }
 
 function parseTooltypeString(raw: string): Tooltype | null {
   let content = raw;
   let commented = false;
-  let prefix = '';
+  let mark = '';
 
   let commentStyle: '()' | '!' | undefined;
   if (content.startsWith('!')) {
@@ -118,23 +117,28 @@ function parseTooltypeString(raw: string): Tooltype | null {
     content = content.substring(1, content.length - 1);
   }
 
+  // A leading `#`, `+`, `%` or `'` stays PART OF THE KEY. icon.library's
+  // FindToolType - what express.e reads every tooltype through
+  // (tooltypes.e:152-174) - matches the key as written, so `%ERROR.1` and
+  // `+LOCATION` are entries the sysop switched off, not ERROR.1 and LOCATION.
+  // The mark is split off only so the key's word can be validated.
   if (content.length > 0 && AMIGA_PREFIX_CHARS.has(content[0])) {
-    prefix = content.substring(0, 1);
+    mark = content.substring(0, 1);
     content = content.substring(1);
   }
 
   const eqIdx = content.indexOf('=');
   if (eqIdx !== -1) {
     const rawKey = content.substring(0, eqIdx).trim();
-    const key = rawKey.toUpperCase();
+    const key = (mark + rawKey).toUpperCase();
     const value = content.substring(eqIdx + 1).trim();
     if (!VALID_KEY_RE.test(rawKey)) return null;
-    return { key, value, commented, commentStyle, prefix, originalLine: raw };
+    return { key, value, commented, commentStyle, originalLine: raw };
   }
   const rawKey = content.trim();
-  const key = rawKey.toUpperCase();
+  const key = (mark + rawKey).toUpperCase();
   if (!VALID_KEY_RE.test(rawKey)) return null;
-  return { key, value: '', commented, commentStyle, prefix, originalLine: raw };
+  return { key, value: '', commented, commentStyle, originalLine: raw };
 }
 
 /**
@@ -142,7 +146,7 @@ function parseTooltypeString(raw: string): Tooltype | null {
  * added separately by the writer).
  */
 function renderTooltype(tt: Tooltype): string {
-  const body = `${tt.prefix || ''}${tt.key}`;
+  const body = tt.key;
   const entry = tt.value ? `${body}=${tt.value}` : body;
   if (!tt.commented) return entry;
   // Parentheses when the file used them; a bang otherwise, which keeps the
@@ -503,7 +507,10 @@ function extractTooltypesFallback(buffer: Buffer): Tooltype[] {
   for (const raw of extracted) {
     const trimmed = raw.trim();
     if (!trimmed) continue;
-    const cleaned = trimmed.replace(/^[^a-zA-Z0-9+(%#'!]+/, '');
+    // The marks a sysop puts in front of a key to switch it off (`&CHECKER`,
+    // `*ERROR.2`, `$LOCATION`) are part of the key - FindToolType matches it
+    // as written - so only other leading bytes are trimmed.
+    const cleaned = trimmed.replace(/^[^a-zA-Z0-9+(%#'!&*$]+/, '');
     const tt = parseTooltypeString(cleaned);
     // A key here was GUESSED out of a printable run, so it has to look like a
     // key. VALID_KEY_RE accepts any printable byte but '=', which is right for
@@ -945,13 +952,13 @@ export class TooltypeEditor {
     return this.info.tooltypes;
   }
 
-  public set(key: string, value: string, commented = false, prefix = ''): this {
-    this.info = updateTooltype(this.info, key, value, commented, prefix);
+  public set(key: string, value: string, commented = false): this {
+    this.info = updateTooltype(this.info, key, value, commented);
     return this;
   }
 
-  public add(key: string, value: string, commented = false, prefix = ''): this {
-    return this.set(key, value, commented, prefix);
+  public add(key: string, value: string, commented = false): this {
+    return this.set(key, value, commented);
   }
 
   public remove(key: string): this {
@@ -978,17 +985,14 @@ export function updateTooltype(
   key: string,
   value: string,
   commented: boolean,
-  prefix = ''
 ): InfoFile {
   const upperKey = key.toUpperCase();
   const existingIndex = info.tooltypes.findIndex(tt => tt.key === upperKey);
-  const effectivePrefix = prefix || (existingIndex !== -1 ? info.tooltypes[existingIndex].prefix : '');
 
   const newTt: Tooltype = {
     key: upperKey,
     value,
     commented,
-    prefix: effectivePrefix,
     originalLine: '',
   };
   newTt.originalLine = renderTooltype(newTt);
@@ -1006,13 +1010,12 @@ export function addTooltype(
   key: string,
   value: string,
   commented = false,
-  prefix = ''
 ): InfoFile {
   const upperKey = key.toUpperCase();
   if (info.tooltypes.some(tt => tt.key === upperKey)) {
     throw new Error(`Tooltype ${upperKey} already exists`);
   }
-  return updateTooltype(info, key, value, commented, prefix);
+  return updateTooltype(info, key, value, commented);
 }
 
 export function toggleTooltypeComment(info: InfoFile, key: string): InfoFile {

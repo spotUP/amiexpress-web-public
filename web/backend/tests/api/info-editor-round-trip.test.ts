@@ -90,7 +90,8 @@ describe('the .info editor round trip', () => {
 
     expect(res.status).toBe(200);
     const keys = res.body.data.tooltypes.map((t: { key: string }) => t.key);
-    expect(keys).toEqual(['NAME', 'MULTINODE', 'ACS.DOWNLOAD', 'STACK', 'BANNER', 'RESIDENT']);
+    // `#RESIDENT` is a switched-off RESIDENT: FindToolType matches keys as written.
+    expect(keys).toEqual(['NAME', 'MULTINODE', 'ACS.DOWNLOAD', 'STACK', 'BANNER', '#RESIDENT']);
   });
 
   it('leaves the file unchanged when the editor sends back what it was given', async () => {

@@ -145,7 +145,6 @@ export function flagsToTooltypes(
         value: '',
         commented: !granted,
         commentStyle: granted ? undefined : '()',
-        prefix: '',
         originalLine: granted ? flag : `(${flag})`,
       });
     }

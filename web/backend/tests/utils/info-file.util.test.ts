@@ -260,32 +260,32 @@ describe('info-file.util', () => {
       expect(tt!.commented).toBe(true);
     });
 
-    it('should handle Amiga prefix #', () => {
+    // FindToolType matches the key as written: #DOORTYPE is not DOORTYPE.
+    it('keeps the Amiga mark # in the key', () => {
       const result = parseInfoFile(textFile('#DOORTYPE=XIM'));
-      const tt = result.tooltypes.find(t => t.key === 'DOORTYPE');
-      expect(tt).toBeDefined();
-      expect(tt!.prefix).toBe('#');
+      expect(result.tooltypes.find(t => t.key === 'DOORTYPE')).toBeUndefined();
+      expect(result.tooltypes.find(t => t.key === '#DOORTYPE')?.value).toBe('XIM');
     });
 
-    it('should handle Amiga prefix +', () => {
+    // FindToolType matches the key as written: +DOORTYPE is not DOORTYPE.
+    it('keeps the Amiga mark + in the key', () => {
       const result = parseInfoFile(textFile('+DOORTYPE=XIM'));
-      const tt = result.tooltypes.find(t => t.key === 'DOORTYPE');
-      expect(tt).toBeDefined();
-      expect(tt!.prefix).toBe('+');
+      expect(result.tooltypes.find(t => t.key === 'DOORTYPE')).toBeUndefined();
+      expect(result.tooltypes.find(t => t.key === '+DOORTYPE')?.value).toBe('XIM');
     });
 
-    it('should handle Amiga prefix %', () => {
+    // FindToolType matches the key as written: %DOORTYPE is not DOORTYPE.
+    it('keeps the Amiga mark % in the key', () => {
       const result = parseInfoFile(textFile('%DOORTYPE=XIM'));
-      const tt = result.tooltypes.find(t => t.key === 'DOORTYPE');
-      expect(tt).toBeDefined();
-      expect(tt!.prefix).toBe('%');
+      expect(result.tooltypes.find(t => t.key === 'DOORTYPE')).toBeUndefined();
+      expect(result.tooltypes.find(t => t.key === '%DOORTYPE')?.value).toBe('XIM');
     });
 
-    it('should handle Amiga prefix apostrophe', () => {
+    // FindToolType matches the key as written: 'DOORTYPE is not DOORTYPE.
+    it('keeps the Amiga mark apostrophe in the key', () => {
       const result = parseInfoFile(textFile("'DOORTYPE=XIM"));
-      const tt = result.tooltypes.find(t => t.key === 'DOORTYPE');
-      expect(tt).toBeDefined();
-      expect(tt!.prefix).toBe("'");
+      expect(result.tooltypes.find(t => t.key === 'DOORTYPE')).toBeUndefined();
+      expect(result.tooltypes.find(t => t.key === "'DOORTYPE")?.value).toBe('XIM');
     });
 
     it('should convert keys to uppercase', () => {
@@ -579,38 +579,22 @@ describe('info-file.util', () => {
       expect(result.tooltypes[0].key).toBe('NEWKEY');
     });
 
-    it('should preserve existing prefix if not provided', () => {
+    it('updates a marked key under its own name and keeps the mark on disk', () => {
       const info: InfoFile = {
         filePath: '/test.info',
         isBinary: false,
         diskObject: Buffer.alloc(0),
         iconData: Buffer.alloc(0),
         tooltypes: [
-          { key: 'KEY', value: 'VALUE', commented: false, prefix: '#', originalLine: '#KEY=VALUE' }
+          { key: '#KEY', value: 'VALUE', commented: false, originalLine: '#KEY=VALUE' }
         ],
         rawBuffer: Buffer.alloc(0)
       };
 
-      const result = updateTooltype(info, 'KEY', 'NEWVALUE', false);
+      const result = updateTooltype(info, '#KEY', 'NEWVALUE', false);
 
-      expect(result.tooltypes[0].prefix).toBe('#');
-    });
-
-    it('should override prefix if provided', () => {
-      const info: InfoFile = {
-        filePath: '/test.info',
-        isBinary: false,
-        diskObject: Buffer.alloc(0),
-        iconData: Buffer.alloc(0),
-        tooltypes: [
-          { key: 'KEY', value: 'VALUE', commented: false, prefix: '#', originalLine: '#KEY=VALUE' }
-        ],
-        rawBuffer: Buffer.alloc(0)
-      };
-
-      const result = updateTooltype(info, 'KEY', 'NEWVALUE', false, '+');
-
-      expect(result.tooltypes[0].prefix).toBe('+');
+      expect(result.tooltypes).toHaveLength(1);
+      expect(result.tooltypes[0].originalLine).toBe('#KEY=NEWVALUE');
     });
   });
 

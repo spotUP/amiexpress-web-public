@@ -22,7 +22,7 @@ let cachedFileCheckers: Map<string, FileCheckerInfo> | null = null;
 let checkersCacheTime = 0;
 const CACHE_DURATION_MS = 60000; // 1 minute cache
 
-interface FileCheckerInfo {
+export interface FileCheckerInfo {
   name: string;
   checker: string;
   options: string;
@@ -31,6 +31,30 @@ interface FileCheckerInfo {
   scriptPath: string | null;
   /** ERROR.1..n strings, contiguous from 1 (express.e:18604-18620). */
   errors: string[];
+}
+
+/**
+ * One FCheck/<EXT>.info as checkFileExternal reads it (express.e:18556-18576).
+ *
+ * Every key is read through FindToolType, which matches it literally: the
+ * sysop's `&CHECKER`, `SOPTIONS` or `%ERROR.1` are entries switched off, not
+ * other spellings of CHECKER, OPTIONS and ERROR.1. No CHECKER = no checker
+ * (express.e:18556-18560). STACK and PRIORITY go through E's Val(), which
+ * reads a non-number as 0; a missing STACK is 4096 (:18567-18569).
+ */
+export function fileCheckerFromTooltypes(name: string, toolTypes: Map<string, string>): FileCheckerInfo | null {
+  const checker = toolTypes.get('CHECKER');
+  if (!checker) return null;
+  const val = (s: string | undefined) => parseInt(s ?? '', 10) || 0;
+  return {
+    name,
+    checker,
+    options: toolTypes.get('OPTIONS') || '',
+    stackSize: toolTypes.has('STACK') ? val(toolTypes.get('STACK')) : 4096,
+    priority: val(toolTypes.get('PRIORITY')),
+    scriptPath: toolTypes.get('SCRIPT') || null,
+    errors: readErrorStrings(toolTypes),
+  };
 }
 
 /**
@@ -116,27 +140,11 @@ console.log('[FileTest] Fcheck/ directory not found, using built-in checkers onl
       // it. Two faults stacked, and the directory one hid this one.
       const raw = readTooltypeMap(infoPath);
 
-      const toolTypes = new Map<string, string>();
-      for (const [key, value] of raw.entries()) {
-        const cleanKey = key.startsWith('&') ? key.substring(1).toUpperCase() : key.toUpperCase();
-        toolTypes.set(cleanKey, value);
-      }
-
-      const checkerPath = toolTypes.get('CHECKER');
-      if (!checkerPath) continue;
-
       // Extract extension from filename (e.g., ZIP.info -> ZIP)
       const ext = path.basename(infoFile, '.info').toUpperCase();
-
-      const checkerInfo: FileCheckerInfo = {
-        name: ext,
-        checker: checkerPath,
-        options: toolTypes.get('OPTIONS') || toolTypes.get('SOPTIONS') || '',
-        stackSize: parseInt(toolTypes.get('STACK') || '8192', 10),
-        priority: parseInt(toolTypes.get('PRIORITY') || '0', 10),
-        scriptPath: toolTypes.get('SCRIPT') || null,
-        errors: readErrorStrings(toolTypes)
-      };
+      const checkerInfo = fileCheckerFromTooltypes(ext, raw);
+      if (!checkerInfo) continue;
+      const checkerPath = checkerInfo.checker;
 
       checkers.set(ext, checkerInfo);
 console.log(`[FileTest] Loaded checker for .${ext}: ${checkerPath}`);
