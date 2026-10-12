@@ -23,7 +23,12 @@ class StubEmulator {
   getRegister(reg: number): number { return this.regs.get(reg) ?? 0; }
   setRegister(reg: number, v: number): void { this.regs.set(reg, v >>> 0); }
   readMemory(a: number): number { return this.mem.get(a >>> 0) ?? 0; }
-  readMemory32(a: number): number { return 0; }
+  readMemory32(a: number): number {
+    return ((this.readMemory(a) << 24) | (this.readMemory(a + 1) << 16) | (this.readMemory(a + 2) << 8) | this.readMemory(a + 3)) >>> 0;
+  }
+  writeMemory32(a: number, v: number): void {
+    for (let i = 0; i < 4; i++) this.writeMemory(a + i, (v >>> (24 - 8 * i)) & 0xff);
+  }
   writeMemory(a: number, b: number): void { this.mem.set(a >>> 0, b & 0xff); }
   writeString(a: number, s: string): void {
     for (let i = 0; i < s.length; i++) this.writeMemory(a + i, s.charCodeAt(i));
@@ -39,7 +44,15 @@ class StubEmulator {
 function getProgramName(name: string): string {
   const stub = new StubEmulator();
   const dos = new DosLibrary(stub as any, "/tmp");
-  dos.setCliInfo(0, name);
+  // The door launch's CLI: exec ThisTask (execBase+0x114) -> pr_CLI -> cli_CommandName BSTR.
+  const EXEC = 0x2000, TASK = 0x3000, CLI = 0x4000, BSTR = 0x5000;
+  stub.writeMemory32(4, EXEC);
+  stub.writeMemory32(EXEC + 0x114, TASK);
+  stub.writeMemory32(TASK + 0xac, CLI >> 2);
+  stub.writeMemory32(CLI + 0x10, BSTR >> 2);
+  stub.writeMemory(BSTR, name.length);
+  for (let i = 0; i < name.length; i++) stub.writeMemory(BSTR + 1 + i, name.charCodeAt(i));
+  dos.setCliInfo(0);
   stub.setRegister(CPURegister.D1, 0x1000);
   stub.setRegister(CPURegister.D2, 256);
   expect(dos.handleCall(-576)).toBe(true);

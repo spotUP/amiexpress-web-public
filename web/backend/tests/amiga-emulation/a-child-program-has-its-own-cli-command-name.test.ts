@@ -1,6 +1,6 @@
 /**
- * A program started by Execute / SystemTagList / RunCommand has its own
- * cli_CommandName. On AmigaOS the shell stores the command it starts in the
+ * A program started by Execute / SystemTagList has its own cli_CommandName;
+ * RunCommand leaves it alone. On AmigaOS the shell stores the command it starts in the
  * CLI's cli_CommandName BSTR; 01a96fb91 gave GetProgramName the right name for
  * a child but the CLI struct still held the parent's, so a program that reads
  * pr_CLI->cli_CommandName itself (as most C startup code and GetProgramName's
@@ -51,7 +51,7 @@ function setup() {
   };
   const dos = new DosLibrary(emu as any, "/tmp");
   (dos as any).processExec = exec;
-  dos.setCliInfo(0, "DOOR");
+  dos.setCliInfo(0);
   return { emu, dos, live };
 }
 
@@ -59,7 +59,7 @@ describe("a child program's cli_CommandName", () => {
   test("is the child's command while it runs, from AllocMem, and the parent's again after it returns", () => {
     const { emu, dos, live } = setup();
     const ok = (dos as any).startChild({
-      entry: 0x5000, stackSize: 4096, argPtr: 0, argLen: 0, programName: "C:LhA",
+      entry: 0x5000, stackSize: 4096, argPtr: 0, argLen: 0, commandName: "C:LhA",
       input: 0, output: 0, owned: [], resultOf: (rc: number) => rc, unloadSeg: 0, argBlock: null, ownProcess: false,
     });
     expect(ok).toBe(true);
@@ -80,7 +80,7 @@ describe("a child program's cli_CommandName", () => {
     const { emu, dos } = setup();
     const start = (name: string) => {
       (dos as any).startChild({
-        entry: 0x5000, stackSize: 4096, argPtr: 0, argLen: 0, programName: name,
+        entry: 0x5000, stackSize: 4096, argPtr: 0, argLen: 0, commandName: name,
         input: 0, output: 0, owned: [], resultOf: (rc: number) => rc, unloadSeg: 0, argBlock: null, ownProcess: false,
       });
       (dos as any).pendingContextSwitch(0x6000, 0);
@@ -91,5 +91,16 @@ describe("a child program's cli_CommandName", () => {
     expect(emu.bstr(emu.readMemory32(CLI + 0x10))).toBe("Zip");
     dos.childReturned(0);
     expect(emu.bstr(emu.readMemory32(CLI + 0x10))).toBe("DOOR");
+  });
+
+  test("RunCommand leaves cli_CommandName unchanged (dos.library does not touch it)", () => {
+    const { emu, dos } = setup();
+    emu.setRegister(1, 0x7000 >> 2);   // D1 = segList
+    emu.setRegister(2, 4096);          // D2 = stack size
+    (dos as any).RunCommand();
+    (dos as any).pendingContextSwitch(0x6000, 0);
+    expect(emu.readMemory32(CLI + 0x10)).toBe(PARENT_NAME >> 2);
+    dos.childReturned(0);
+    expect(emu.readMemory32(CLI + 0x10)).toBe(PARENT_NAME >> 2);
   });
 });

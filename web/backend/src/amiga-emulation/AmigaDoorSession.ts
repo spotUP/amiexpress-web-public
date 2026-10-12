@@ -1040,7 +1040,7 @@ debugLog(
     }
     this.emulator.writeMemory(argStringAddr + argStringPlain.length, 0);
 debugLog(`[AmigaDoorSession] CLI arg string="${argStringPlain}"`);
-    this.sharedState.dosLibrary.setCliInfo(argStringAddr, progName);
+    this.sharedState.dosLibrary.setCliInfo(argStringAddr);
 
     // Restore pr_CLI if a door CreatePort() overwrites it
     // XIM doors: pr_CLI is set by DoorLoader based on CLI_REQUIRED tooltype, don't modify here

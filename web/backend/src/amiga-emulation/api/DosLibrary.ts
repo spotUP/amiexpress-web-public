@@ -128,7 +128,12 @@ interface ChildStart {
   stackSize: number;
   argPtr: number;
   argLen: number;
-  programName: string;
+  /**
+   * The command as the shell was given it, stored in cli_CommandName while the
+   * child runs (Execute, SystemTagList). null for RunCommand: dos.library does
+   * not touch the CLI's name.
+   */
+  commandName: string | null;
   input: number;
   output: number;
   /** Handles the shell opened for this command's redirections; closed on return. */
@@ -153,7 +158,6 @@ interface ChildFrame extends ChildStart {
   parentPc: number;
   saved: {
     argStringPtr: number;
-    programName: string;
     input: number;
     output: number;
     /** The caller's pr_CurrentDir, when the child had its own (a new process). */
@@ -275,7 +279,6 @@ export class DosLibrary {
 
   // CLI support (for GetArgStr, GetProgramName)
   private argStringPtr: number = 0; // Pointer to argument string
-  private programName: string = ""; // Program name
   private readArgsContexts: Map<number, ReadArgsContext> = new Map();
   private readArgsBufferPool: number[] = [];
   private doorFileLogPath: string;
@@ -3458,7 +3461,7 @@ debugLog(`[dos.library] Door will now exit cleanly`);
       stackSize,
       argPtr,
       argLen,
-      programName: this.programName,
+      commandName: null,
       input: this.Input(),
       output: this.Output(),
       owned: [],
@@ -3517,7 +3520,7 @@ debugLog(`[dos.library] Door will now exit cleanly`);
       stackSize: SHELL_COMMAND_STACK,
       argPtr,
       argLen: argText.length,
-      programName: parsed.program,
+      commandName: parsed.program,
       input: io.input,
       output: io.output,
       owned: io.owned,
@@ -3563,9 +3566,9 @@ debugLog(`[dos.library] Door will now exit cleanly`);
       // invoked, from AllocMem like every other emulator-made structure.
       let cliName: ChildFrame['saved']['cliName'] = null;
       const cliBptr = readTask(0xac);
-      if (cliBptr) {
+      if (cliBptr && child.commandName !== null) {
         const cli = (cliBptr << 2) >>> 0;
-        const name = child.programName.slice(0, 255);
+        const name = child.commandName.slice(0, 255);
         const size = (name.length + 2 + 3) & ~3;
         const addr = exec.allocMem(size, MEMF_PUBLIC_CLEAR);
         if (addr) {
@@ -3584,7 +3587,6 @@ debugLog(`[dos.library] Door will now exit cleanly`);
         parentPc: returnAddr,
         saved: {
           argStringPtr: this.argStringPtr,
-          programName: this.programName,
           input: this.Input(),
           output: this.Output(),
           currentDir: child.ownProcess ? this.readCurrentDirBptr() : null,
@@ -3598,7 +3600,6 @@ debugLog(`[dos.library] Door will now exit cleanly`);
       // The child's own command state.
       if (child.ownProcess) this.writeCurrentDirBptr(this.dupLockBptr(this.readCurrentDirBptr()));
       this.argStringPtr = child.argPtr;
-      this.programName = child.programName;
       this.setStdHandles(child.input, child.output);
       exec.setStackBounds(stack, stackSize);
       const top = (stack + stackSize) & ~3;
@@ -3619,7 +3620,7 @@ debugLog(`[dos.library] Door will now exit cleanly`);
       ca[0] = child.argPtr >>> 0;
       ca[7] = sp >>> 0;
       console.log(
-        `[dos.library] start "${child.programName}" at 0x${child.entry.toString(16)} ` +
+        `[dos.library] start "${child.commandName ?? "(RunCommand)"}" at 0x${child.entry.toString(16)} ` +
           `(stack 0x${stack.toString(16)}+${stackSize}, depth ${this.childFrames.length}, caller resumes at 0x${returnAddr.toString(16)})`,
       );
       return { d: cd, a: ca, pc: child.entry >>> 0, sr };
@@ -3644,7 +3645,6 @@ debugLog(`[dos.library] Door will now exit cleanly`);
     const { saved } = frame;
 
     this.argStringPtr = saved.argStringPtr;
-    this.programName = saved.programName;
     if (saved.cliName) {
       this.emulator.writeMemory32(saved.cliName.cli + 0x10, saved.cliName.bptr);
       exec?.freeMem(saved.cliName.block.addr, saved.cliName.block.size);
@@ -3668,7 +3668,7 @@ debugLog(`[dos.library] Door will now exit cleanly`);
     if (frame.unloadSeg) this.unloadProgram(frame.unloadSeg);
 
     const result = frame.resultOf(rc) >>> 0;
-    console.log(`[dos.library] "${frame.programName}" returned ${rc | 0}; caller resumes at 0x${frame.parentPc.toString(16)} with D0=${result | 0}`);
+    console.log(`[dos.library] "${frame.commandName ?? "(RunCommand)"}" returned ${rc | 0}; caller resumes at 0x${frame.parentPc.toString(16)} with D0=${result | 0}`);
     this.pendingContextSwitch = (): CpuContext => {
       const d = frame.parent.d.slice();
       d[0] = result;
@@ -4752,8 +4752,9 @@ debugLog(
       )}, len=${bufLen})`
     );
 
-    if (this.programName.length === 0) {
-      // No program name set - return empty string and failure
+    const programName = this.readCliCommandName();
+    if (programName === null || programName.length === 0) {
+      // No CLI, or no command name in it - return empty string and failure
       this.emulator.writeMemory(bufPtr, 0);
       this.emulator.setRegister(CPURegister.D0, 0);
       this.lastError = 212; // ERROR_OBJECT_WRONG_TYPE
@@ -4764,16 +4765,16 @@ debugLog(
     }
 
     // Copy program name to buffer (truncate if necessary)
-    const copyLen = Math.min(this.programName.length, bufLen - 1);
+    const copyLen = Math.min(programName.length, bufLen - 1);
     for (let i = 0; i < copyLen; i++) {
-      this.emulator.writeMemory(bufPtr + i, this.programName.charCodeAt(i));
+      this.emulator.writeMemory(bufPtr + i, programName.charCodeAt(i));
     }
     this.emulator.writeMemory(bufPtr + copyLen, 0); // Null terminator
 
     this.emulator.setRegister(CPURegister.D0, -1); // DOSTRUE
     this.lastError = DOS_ERRORS.ERROR_NO_ERROR;
 debugLog(
-      `[dos.library] GetCliProgramName: Returned "${this.programName.substring(
+      `[dos.library] GetCliProgramName: Returned "${programName.substring(
         0,
         copyLen
       )}"`
@@ -4781,15 +4782,34 @@ debugLog(
   }
 
   /**
+   * cli_CommandName (+0x10) of the running process's CLI, or null when the
+   * process has no CLI. The one place the program's name lives; the door
+   * launch and the shell (Execute/SystemTagList) write it, nothing mirrors it.
+   */
+  private readCliCommandName(): string | null {
+    const task = this.processExec
+      ? this.processExec.getCurrentTaskAddress() >>> 0
+      : (() => {
+          const execBase = this.emulator.readMemory32(4);
+          return execBase ? this.emulator.readMemory32(execBase + 0x114) >>> 0 : 0;
+        })();
+    const cliBptr = task ? this.emulator.readMemory32(task + 0xac) >>> 0 : 0;
+    const cmdNameBptr = cliBptr ? this.emulator.readMemory32((cliBptr << 2) + 0x10) >>> 0 : 0;
+    if (cmdNameBptr === 0) return null;
+    const bstrAddr = (cmdNameBptr << 2) >>> 0;
+    const len = this.emulator.readMemory(bstrAddr) & 0xff;
+    let name = "";
+    for (let i = 0; i < len; i++) name += String.fromCharCode(this.emulator.readMemory(bstrAddr + 1 + i));
+    return name;
+  }
+
+  /**
    * Set CLI information (called by AmigaDoorSession)
    */
-  setCliInfo(argStringPtr: number, programName: string): void {
+  setCliInfo(argStringPtr: number): void {
     this.argStringPtr = argStringPtr;
-    this.programName = programName;
 debugLog(
-      `[dos.library] CLI info set: argString=0x${argStringPtr.toString(
-        16
-      )}, progName="${programName}"`
+      `[dos.library] CLI info set: argString=0x${argStringPtr.toString(16)}`
     );
   }
 
@@ -7577,29 +7597,9 @@ debugLog(`[dos.library] GetCurrentDirName → "${currentDir}"`);
 
 debugLog(`[dos.library] GetProgramName(buf=0x${bufferAddr.toString(16)}, size=${bufferSize})`);
 
-    // cli_CommandName of the running command: the name AS INVOKED. this.programName
-    // is that name (setCliInfo for the door, startChild's saved/restored value for
-    // a program started by Execute/SystemTagList/RunCommand), the one source
-    // GetCliProgramName reads too. The process's pr_CLI is the fallback.
-    let programName = this.programName;
-    if (programName.length === 0) {
-      try {
-        const execBase = this.emulator.readMemory32(4);
-        const thisTask = execBase ? this.emulator.readMemory32(execBase + 0x114) : 0;
-        const cliBptr = thisTask ? this.emulator.readMemory32(thisTask + 0xac) : 0;
-        const cmdNameBptr = cliBptr ? this.emulator.readMemory32((cliBptr << 2) + 0x10) : 0;
-        if (cmdNameBptr !== 0) {
-          const bstrAddr = cmdNameBptr << 2;
-          const bstrLen = this.emulator.readMemory(bstrAddr) & 0xff;
-          for (let i = 0; i < bstrLen; i++) {
-            programName += String.fromCharCode(this.emulator.readMemory(bstrAddr + 1 + i));
-          }
-        }
-      } catch (e) {
-        // fall through to the generic name
-      }
-      if (programName.length === 0) programName = "DoorProgram";
-    }
+    // cli_CommandName of the running process's CLI: the name AS INVOKED
+    // (the door launch, or the shell for Execute/SystemTagList, wrote it).
+    const programName = this.readCliCommandName() || "DoorProgram";
 
     if (bufferSize < programName.length + 1) {
 console.error(`[dos.library] GetProgramName: Buffer too small`);
