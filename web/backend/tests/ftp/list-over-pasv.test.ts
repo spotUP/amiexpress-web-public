@@ -104,7 +104,7 @@ async function login() {
   expect(await lines.next()).toBe('220 Welcome to Ami-Express FTP server.');
 
   control.write('USER sysop\r\n');
-  expect(await lines.next()).toBe('331 Password required');
+  expect(await lines.next()).toBe('331 user accepted');
   control.write('PASS correct-horse\r\n');
   expect(await lines.next()).toMatch(/^230 /);
 
@@ -133,11 +133,11 @@ describe('a caller who has just logged in', () => {
     const { control, lines } = await login();
 
     control.write('CWD 001-General\r\n');
-    expect(await lines.next()).toBe('250 Directory changed to /001-General');
+    expect(await lines.next()).toBe('250 CWD command successful.');
     control.write('PWD\r\n');
     expect(await lines.next()).toBe('257 "/001-General" is current directory.');
     control.write('CDUP\r\n');
-    expect(await lines.next()).toBe('250 Directory changed to /');
+    expect(await lines.next()).toBe('250 CWD command successful.');
 
     control.destroy();
   });
@@ -148,6 +148,26 @@ describe('a caller who has just logged in', () => {
     control.write('CWD 003-Hidden\r\n');
     // ftpd.e:1261 - a conference and a subdirectory read the same to a caller.
     expect(await lines.next()).toBe('550 003-Hidden: No such file or directory.');
+
+    control.destroy();
+  });
+
+  it('names the path the caller sent when he tries to leave the root (ftpd.e:1261)', async () => {
+    const { control, lines } = await login();
+
+    control.write('CWD ../../etc\r\n');
+    expect(await lines.next()).toBe('550 ../../etc: No such file or directory.');
+
+    control.destroy();
+  });
+
+  it('answers a LIST of a missing directory in ftpd.e\'s one "not there" sentence (ftpd.e:1917)', async () => {
+    const { control, lines } = await login();
+
+    control.write('PASV\r\n');
+    await lines.next();
+    control.write('LIST 003-Hidden\r\n');
+    expect(await lines.next()).toBe('550 003-Hidden: No such file or directory');
 
     control.destroy();
   });
@@ -167,11 +187,11 @@ describe('a caller who has just logged in', () => {
     const { control, lines } = await login();
 
     control.write('TYPE I\r\n');
-    expect(await lines.next()).toBe('200 Type set to I');
+    expect(await lines.next()).toBe('200 Type set to I!!!');
     control.write('TYPE A\r\n');
-    expect(await lines.next()).toBe('200 Type set to A');
+    expect(await lines.next()).toBe('200 Type set to A!!!');
     control.write('TYPE Q\r\n');
-    expect(await lines.next()).toBe('504 TYPE Q not supported');
+    expect(await lines.next()).toBe('502 Type not implemented');
 
     control.destroy();
   });
@@ -191,10 +211,10 @@ describe('LIST over a passive connection', () => {
     const closed = new Promise<void>((resolve) => data.once('close', () => resolve()));
 
     control.write('LIST\r\n');
-    expect(await lines.next()).toBe('150 Opening ASCII mode data connection for file list');
+    expect(await lines.next()).toBe('150 Opening Binary connection for directory listing');
 
     await closed;
-    expect(await lines.next()).toBe('226 Transfer complete');
+    expect(await lines.next()).toBe('226 Transfer Complete');
 
     const body = Buffer.concat(received).toString('latin1');
     const rows = body.split('\r\n').filter((row) => row.length > 0);
@@ -224,7 +244,7 @@ describe('LIST over a passive connection', () => {
     control.write('NLST\r\n');
     expect(await lines.next()).toMatch(/^150 /);
     await closed;
-    expect(await lines.next()).toBe('226 Transfer complete');
+    expect(await lines.next()).toBe('226 Transfer Complete');
 
     expect(Buffer.concat(received).toString('latin1')).toBe('001-General\r\n002-Elite\r\n');
 
@@ -254,7 +274,7 @@ describe('LIST over a passive connection', () => {
     control.write('MLSD\r\n');
     expect(await lines.next()).toMatch(/^150 /);
     await closed;
-    expect(await lines.next()).toBe('226 Transfer complete');
+    expect(await lines.next()).toBe('226 Transfer Complete');
 
     const rows = Buffer.concat(received).toString('latin1').split('\r\n').filter(Boolean);
     expect(rows).toHaveLength(2);
@@ -323,7 +343,7 @@ describe('LIST over a passive connection', () => {
     control.write('LIST\r\n');
     expect(await lines.next()).toMatch(/^150 /);
     await closed;
-    expect(await lines.next()).toBe('226 Transfer complete');
+    expect(await lines.next()).toBe('226 Transfer Complete');
     expect(Buffer.concat(received).toString('latin1')).toContain('001-General');
 
     control.destroy();
@@ -335,7 +355,7 @@ describe('LIST over a passive connection', () => {
     const { control, lines } = await login();
 
     control.write('LIST\r\n');
-    expect(await lines.next()).toBe('425 Use PASV first');
+    expect(await lines.next()).toBe("425 Can't open data connection");
 
     control.destroy();
   });
@@ -426,9 +446,9 @@ describe('what the board will not do over FTP', () => {
     expect(await lines.next()).toBe('502 STOU not implemented yet');
     // Built, and therefore asking for a data connection rather than saying no.
     control.write('RETR SOMETHING.LHA\r\n');
-    expect(await lines.next()).toBe('425 Use PASV first');
+    expect(await lines.next()).toBe("425 Can't open data connection");
     control.write('STOR SOMETHING.LHA\r\n');
-    expect(await lines.next()).toBe('425 Use PASV first');
+    expect(await lines.next()).toBe("425 Can't open data connection");
 
     control.destroy();
   });

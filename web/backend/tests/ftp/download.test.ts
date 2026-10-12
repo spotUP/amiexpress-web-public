@@ -128,11 +128,11 @@ async function login(port: number) {
   const lines = new Lines(control);
   expect(await lines.next()).toBe('220 Welcome to Ami-Express FTP server.');
   control.write('USER sysop\r\n');
-  expect(await lines.next()).toBe('331 Password required');
+  expect(await lines.next()).toBe('331 user accepted');
   control.write('PASS correct-horse\r\n');
   expect(await lines.next()).toMatch(/^230 /);
   control.write('CWD 001-General\r\n');
-  expect(await lines.next()).toBe('250 Directory changed to /001-General');
+  expect(await lines.next()).toBe('250 CWD command successful.');
   return { control, lines };
 }
 
@@ -204,8 +204,8 @@ describe('a caller downloading a file', () => {
 
     const { replies, body, control } = await retrieve(rig.port, 'RETR DEMO.LHA');
 
-    expect(replies[1]).toMatch(/^150 .*DEMO\.LHA/);
-    expect(replies[2]).toBe('226 Transfer complete');
+    expect(replies[1]).toBe("150 Opening BINARY connection with ASYNC");
+    expect(replies[2]).toBe('226 DEMO.LHA ... Transfer Complete');
     expect(body.equals(PAYLOAD)).toBe(true);
     expect(rig.charged).toEqual([PAYLOAD.length]);
 
@@ -322,7 +322,7 @@ describe('the gates a download passes', () => {
     const { control, lines } = await login(rig.port);
 
     control.write('RETR DEMO.LHA\r\n');
-    expect(await lines.next()).toBe('425 Use PASV first');
+    expect(await lines.next()).toBe("425 Can't open data connection");
 
     control.destroy();
     await new Promise<void>((resolve) => rig.server.close(() => resolve()));

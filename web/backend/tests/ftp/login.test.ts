@@ -113,7 +113,7 @@ test('a good password is accepted, and the caller is told the time left', async 
   const client = await Client.connect(h.port);
   await client.reply();
 
-  expect(await client.send('USER sysop')).toBe('331 Password required');
+  expect(await client.send('USER sysop')).toBe('331 user accepted');
   expect(await client.send('PASS correct-horse')).toBe(
     '230 password accepted'
   );
@@ -189,9 +189,9 @@ test('a command the phase has not built yet says so, instead of pretending', asy
   // STOR, and is now APPE. All three of those answer 425 without a data
   // connection, which is what `tests/ftp/list-over-pasv.test.ts` drives.
   expect(await client.send('APPE SOMETHING.LHA')).toBe('502 APPE not implemented yet');
-  expect(await client.send('RETR SOMETHING.LHA')).toBe('425 Use PASV first');
-  expect(await client.send('STOR SOMETHING.LHA')).toBe('425 Use PASV first');
-  expect(await client.send('LIST')).toBe('425 Use PASV first');
+  expect(await client.send('RETR SOMETHING.LHA')).toBe("425 Can't open data connection");
+  expect(await client.send('STOR SOMETHING.LHA')).toBe("425 Can't open data connection");
+  expect(await client.send('LIST')).toBe("425 Can't open data connection");
   client.close();
 });
 
@@ -232,5 +232,23 @@ test('the password never reaches the CallersLog', async () => {
   expect(log).toContain('\tFTP Command >: USER sysop');
   expect(log).toContain('\tFTP Command >: PASS ****');
   expect(log).not.toContain('correct-horse');
+  client.close();
+});
+
+test('answers PORT, MODE and STRU in the words ftpd.e uses (ftpd.e:1356-1377)', async () => {
+  h = await listen();
+  const client = await Client.connect(h.port);
+  await client.reply();
+  await client.send('USER sysop');
+  await client.send('PASS correct-horse');
+
+  // ftpd.e:1358 - active mode is refused; the client falls back to PASV.
+  expect(await client.send('PORT 127,0,0,1,4,1')).toBe('502 Only passive mode allowed');
+  // ftpd.e:1364-1366 - the parameter is echoed with three exclamation marks.
+  expect(await client.send('MODE S')).toBe('200 Mode set to S!!!');
+  expect(await client.send('MODE B')).toBe('502 Mode not implemented');
+  // ftpd.e:1374-1376, including the original's "Strucrure".
+  expect(await client.send('STRU F')).toBe('200 Structure set to F!!!');
+  expect(await client.send('STRU R')).toBe('502 Strucrure not implemented');
   client.close();
 });

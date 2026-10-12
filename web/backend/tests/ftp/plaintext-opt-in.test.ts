@@ -117,7 +117,7 @@ describe('a caller off the box, in the clear', () => {
     const session = await remoteSession(true);
 
     session.client.write('USER sysop\r\n');
-    expect(await session.lines.next()).toBe('331 Password required');
+    expect(await session.lines.next()).toBe('331 user accepted');
 
     session.client.write('PASS correct-horse\r\n');
     expect(await session.lines.next()).toMatch(/^230 /);
@@ -129,7 +129,7 @@ describe('a caller off the box, in the clear', () => {
     const session = await remoteSession(true);
 
     session.client.write('USER sysop\r\n');
-    expect(await session.lines.next()).toBe('331 Password required');
+    expect(await session.lines.next()).toBe('331 user accepted');
 
     session.client.write('PASS wrong\r\n');
     expect(await session.lines.next()).toBe('430 Invalid username or password');

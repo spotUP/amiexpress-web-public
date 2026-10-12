@@ -258,6 +258,8 @@ export class FtpSession {
        * the live board (sysop, 2026-09-07): a one-line ENOENT presented as a
        * hung upload.
        *
+       * WEB_: ftpd.e has no equivalent (an E procedure cannot throw into the
+       * read loop); 451 is the RFC 959 code for a local processing error.
        * A thrown command is a 451: the board failed, the caller is told, and
        * the session stays usable. This is the LAST line of defence - a
        * command that can fail should still catch its own failure and say
@@ -300,6 +302,10 @@ export class FtpSession {
       // have is unknown. Telling a client "command not recognized" about PWD
       // makes it conclude the server cannot browse at all.
       if (NOT_YET.has(verb) || AFTER_LOGIN.has(verb)) {
+        // WEB_: ftpd.e answers 500 here (ftpDoLogin, ftpd.e:2218) because its
+        // login runs BEFORE the command loop; this port has one loop, so a
+        // verb sent too early gets the RFC 959 "not logged in" code (530)
+        // that every client acts on, with the text kept.
         return this.reply(530, 'Please login with USER and PASS.');
       }
       return this.reply(500, 'command not recognized');
@@ -342,21 +348,21 @@ export class FtpSession {
       case 'PROT':
         return this.onProt(arg);
       case 'MODE':
-        // ftpd.e:1361 - only Stream.
+        // ftpd.e:1361-1368 - only Stream; the reply echoes the parameter and
+        // ends in three exclamation marks, as the original does.
         return arg.trim().toUpperCase().startsWith('S')
-          ? this.reply(200, 'Mode set to S')
-          : this.reply(504, `Mode ${arg.trim()} not supported`);
+          ? this.reply(200, `Mode set to ${arg.trim()}!!!`)
+          : this.reply(502, 'Mode not implemented');
       case 'STRU':
-        // ftpd.e:1371 - only File.
+        // ftpd.e:1370-1377 - only File. "Strucrure" is the original's
+        // spelling (ftpd.e:1376).
         return arg.trim().toUpperCase().startsWith('F')
-          ? this.reply(200, 'Structure set to F')
-          : this.reply(504, `Structure ${arg.trim()} not supported`);
+          ? this.reply(200, `Structure set to ${arg.trim()}!!!`)
+          : this.reply(502, 'Strucrure not implemented');
       case 'PORT':
-        // ftpd.e:1357 answers 200 and does nothing. Active mode asks the
-        // SERVER to dial the caller, which is unreachable behind NAT and
-        // refused by any sane firewall - a cheerful 200 followed by a
-        // transfer that never starts is worse than saying so now.
-        return this.reply(504, 'Active mode is not supported - use PASV or EPSV');
+        // ftpd.e:1356-1359, verbatim: active mode is refused with 502 and a
+        // client falls back to PASV.
+        return this.reply(502, 'Only passive mode allowed');
       case 'PASV':
         return this.onPasv('classic');
       case 'EPSV':
@@ -390,6 +396,10 @@ export class FtpSession {
       case 'STOR':
         return this.onStor(arg);
       default:
+        // WEB_ (open decision): ftpd.e answers every verb it lacks with
+        // `500 command not recognized` (ftpd.e:2047). These two keep their
+        // own text because 550 / 502 tell a client "refused" / "not
+        // implemented", which a 500 does not.
         if (REFUSED[verb]) return this.reply(550, REFUSED[verb]);
         if (NOT_YET.has(verb)) return this.reply(502, `${verb} not implemented yet`);
         return this.reply(500, 'command not recognized');
@@ -411,6 +421,9 @@ export class FtpSession {
   private onRest(arg: string): void {
     const offset = Number(arg.trim());
     if (!Number.isInteger(offset) || offset < 0) {
+      // WEB_: ftpd.e takes Val(params) unchecked (ftpd.e:1423), so garbage
+      // becomes 0 and a negative offset seeks before the file. A stream
+      // cannot start there, so the RFC 959 syntax-error code is the answer.
       return this.reply(501, 'REST needs a byte offset');
     }
     this.restartAt = offset;
@@ -429,7 +442,8 @@ export class FtpSession {
    */
   private async onRetr(arg: string): Promise<void> {
     const channel = this.passive;
-    if (!channel) return this.reply(425, 'Use PASV first');
+    // ftpd.e:1860 - no data connection is the one 425 sentence.
+    if (!channel) return this.reply(425, "Can't open data connection");
     this.passive = null;
 
     const offset = this.restartAt;
@@ -438,13 +452,8 @@ export class FtpSession {
     const tree = this.deps.filesystem;
     if (!tree || !this.deps.resolveFile || !this.user) {
       channel.close();
+      // WEB_: a board started without a file tree; ftpd.e always has one.
       return this.reply(550, 'Downloads are not available');
-    }
-
-    // ftpd.e:1729 - the same TYPE gate STOR has.
-    if (!this.binary && !this.ascii) {
-      channel.close();
-      return this.reply(550, 'This server only supports binary or ascii transfers');
     }
 
     const target = resolvePath(this.cwd, arg.trim());
@@ -465,6 +474,8 @@ export class FtpSession {
       const verdict = await this.deps.mayDownload(this.user, entry.size);
       if (!verdict.allowed) {
         channel.close();
+        // ftpd.e:1788 sends the ratio check's own sentence. WEB_: the
+        // fallback only exists for a gate that returned no sentence.
         return this.reply(550, verdict.message || 'Refused by your download ratio');
       }
     }
@@ -482,6 +493,7 @@ export class FtpSession {
       // file is missing when the bucket is having a bad minute is how a sysop
       // deletes a catalogue row for a file that was always fine.
       channel.close();
+      // WEB_: pooled volumes have no ftpd.e counterpart.
       return this.reply(
         451,
         `The storage this file lives on did not answer: ${
@@ -490,21 +502,19 @@ export class FtpSession {
     }
     if (!located) {
       channel.close();
-      // Deliberately NOT express's flat "No such file or directory": the
+      // WEB_ (open decision): ftpd.e:1775 answers `550 <name>: No such file
+      // or directory` here. Deliberately NOT that flat sentence: the
       // board LISTED this file, so telling a caller it does not exist sends
       // him to argue with a sysop about a catalogue entry that is right there.
       return this.reply(550, `${entry.name}: the board lists it, but its bytes are not here`);
     }
 
-    this.reply(150, `Opening ${this.binary ? 'BINARY' : 'ASCII'} mode data connection for ${entry.name} (${located.size} bytes)`);
+    // ftpd.e:1764 - always BINARY, whatever TYPE says.
+    this.reply(150, 'Opening BINARY connection with ASYNC');
 
-    let data: Duplex;
-    try {
-      data = await channel.accept();
-      if (this.protectData && this.deps.secureData) data = await this.deps.secureData(data);
-    } catch (error) {
-      return this.reply(425, error instanceof Error ? error.message : 'No data connection');
-    }
+    const data = await this.openData(channel);
+    if (!data) return;
+    const shownName = arg.trim().replace(/^\//, '');
 
     try {
       // ftpd.e cmdRetr calls downloadFileStart before the bytes go
@@ -515,11 +525,39 @@ export class FtpSession {
       if (this.deps.logDownload) await this.deps.logDownload(this.user, entry.name, located.size, this.nodeId);
       const sent = await this.sendFile(located.path, data, offset);
       if (this.deps.recordDownload) await this.deps.recordDownload(this.user, sent);
-      this.reply(226, 'Transfer complete');
+      // ftpd.e:1840-1846 - `226 <name> ... Transfer Complete`.
+      this.reply(226, `${shownName} ... Transfer Complete`);
     } catch (error) {
       data.destroy();
-      this.reply(451, `Transfer failed: ${error instanceof Error ? error.message : String(error)}`);
+      console.error(`[FTP] RETR ${entry.name} aborted: ${error instanceof Error ? error.message : String(error)}`);
+      // ftpd.e:1840-1846 - a transfer that did not finish is `426 <name> ...
+      // Transfer aborted`.
+      this.reply(426, `${shownName} ... Transfer aborted`);
     }
+  }
+
+  /**
+   * The caller's data connection, ready for bytes - or null after the 425 that
+   * says why not. ftpd.e cmdPasv: waiting too long is `Timed out waiting for
+   * data connection` (ftpd.e:732); anything else is `Can't open data
+   * connection` (ftpd.e:710, 741).
+   */
+  private async openData(channel: PassiveChannel): Promise<Duplex | null> {
+    let data: Duplex;
+    try {
+      data = await channel.accept();
+    } catch {
+      this.reply(425, 'Timed out waiting for data connection');
+      return null;
+    }
+    try {
+      if (this.protectData && this.deps.secureData) data = await this.deps.secureData(data);
+    } catch {
+      data.destroy();
+      this.reply(425, "Can't open data connection");
+      return null;
+    }
+    return data;
   }
 
   /**
@@ -583,13 +621,15 @@ export class FtpSession {
    */
   private async onStor(arg: string): Promise<void> {
     const channel = this.passive;
-    if (!channel) return this.reply(425, 'Use PASV first');
+    // ftpd.e:1697 - no data connection is the one 425 sentence.
+    if (!channel) return this.reply(425, "Can't open data connection");
     this.passive = null;
     this.restartAt = 0;
 
     const tree = this.deps.filesystem;
     if (!tree || !this.deps.acceptUpload || !this.user) {
       channel.close();
+      // WEB_: a board started without a filing service; ftpd.e always has one.
       return this.reply(550, 'Uploads are not available');
     }
 
@@ -597,12 +637,6 @@ export class FtpSession {
     // ftpd.e:1443 - FILENAMECAPS uppercases an upload's name before anything
     // else looks at it, so the dupe check and the DIR entry agree.
     if (this.deps.uppercaseUploads?.()) name = name.toUpperCase();
-
-    // ftpd.e:1445-1460 - only I and A exist.
-    if (!this.binary && !this.ascii) {
-      channel.close();
-      return this.reply(550, 'This server only supports binary or ascii transfers');
-    }
 
     // ftpd.e:1512-1516 - at the ROOT there is no conference to file it in,
     // and "Cant upload here" is express's own wording.
@@ -626,13 +660,8 @@ export class FtpSession {
 
     this.reply(150, `Opening ${this.binary ? 'Binary' : 'Ascii'} connection`);
 
-    let data: Duplex;
-    try {
-      data = await channel.accept();
-      if (this.protectData && this.deps.secureData) data = await this.deps.secureData(data);
-    } catch (error) {
-      return this.reply(425, error instanceof Error ? error.message : 'No data connection');
-    }
+    const data = await this.openData(channel);
+    if (!data) return;
 
     try {
       /*
@@ -663,6 +692,8 @@ export class FtpSession {
       );
     } catch (error) {
       data.destroy();
+      // WEB_: the filing service threw (ftpd.e's startFileCheck cannot);
+      // 451 is the RFC 959 local-error code and the board's own words.
       this.reply(
         451,
         `Upload failed: ${error instanceof Error ? error.message : String(error)}`
@@ -721,17 +752,20 @@ export class FtpSession {
 
   private async onCwd(arg: string): Promise<void> {
     const fs = this.deps.filesystem;
+    // WEB_: a board started without a file tree; ftpd.e always has one.
     if (!fs) return this.reply(550, 'No directories available');
 
     const target = resolvePath(this.cwd, arg.trim() || '/');
-    if (target === null) return this.reply(550, '..: No such file or directory.');
+    // ftpd.e:1261 - the path the caller sent, then the same sentence.
+    if (target === null) return this.reply(550, `${arg.trim()}: No such file or directory.`);
     if (!fs.exists(this.user, target)) {
       // ftpd.e:1261 - the same sentence for a conference and a subdirectory,
       // because to the caller they are both just a directory that is not there.
       return this.reply(550, `${arg.trim()}: No such file or directory.`);
     }
     this.cwd = target;
-    return this.reply(250, `Directory changed to ${target}`);
+    // ftpd.e:1240 - `250 CWD command successful.`, full-stop included.
+    return this.reply(250, 'CWD command successful.');
   }
 
   /**
@@ -742,11 +776,14 @@ export class FtpSession {
   private onType(arg: string): void {
     const mode = arg.trim().toUpperCase().charAt(0);
     if (mode !== 'A' && mode !== 'I' && mode !== 'L') {
-      return this.reply(504, `TYPE ${arg.trim()} not supported`);
+      // ftpd.e:1352.
+      return this.reply(502, 'Type not implemented');
     }
     this.binary = mode !== 'A';
     this.ascii = mode === 'A';
-    this.reply(200, `Type set to ${this.binary ? 'I' : 'A'}`);
+    // ftpd.e:1350 echoes the parameter as sent and adds three exclamation
+    // marks.
+    this.reply(200, `Type set to ${arg.trim()}!!!`);
   }
 
   /** `PROT`: C (clear) always, P (private) only when the board has TLS. */
@@ -806,16 +843,17 @@ export class FtpSession {
    */
   private async onList(arg: string, format: 'long' | 'names' | 'machine'): Promise<void> {
     // The data connection is checked FIRST, and deliberately: a client that
-    // forgot PASV gets the same 425 whatever the server would have listed,
-    // and "use PASV first" is the answer that tells it what to do. A 550
-    // here would read as "that directory does not exist".
+    // forgot PASV gets the same 425 whatever the server would have listed
+    // (ftpd.e:1946). A 550 here would read as "that directory does not
+    // exist".
     const channel = this.passive;
-    if (!channel) return this.reply(425, 'Use PASV first');
+    if (!channel) return this.reply(425, "Can't open data connection");
     this.passive = null;
 
     const fs = this.deps.filesystem;
     if (!fs) {
       channel.close();
+      // WEB_: a board started without a file tree; ftpd.e always has one.
       return this.reply(550, 'No directories available');
     }
 
@@ -828,7 +866,8 @@ export class FtpSession {
     const target = resolvePath(this.cwd, requested || '.');
     if (target === null || !fs.exists(this.user, target)) {
       channel.close();
-      return this.reply(550, `${requested || this.cwd}: no such directory`);
+      // ftpd.e:1917 (MLSD's refusal) - the one "not there" sentence.
+      return this.reply(550, `${requested || this.cwd}: No such file or directory`);
     }
 
     let entries;
@@ -836,27 +875,19 @@ export class FtpSession {
       entries = await fs.list(this.user, target);
     } catch (error) {
       channel.close();
+      // WEB_: the DIR files are read per request here; ftpd.e holds them in
+      // memory and cannot fail.
       return this.reply(
         451,
         `Could not read the directory: ${error instanceof Error ? error.message : String(error)}`
       );
     }
 
-    this.reply(150, 'Opening ASCII mode data connection for file list');
+    // ftpd.e:1909 / 1938 - the mode named is the caller's TYPE.
+    this.reply(150, `Opening ${this.binary ? 'Binary' : 'ASCII'} connection for directory listing`);
 
-    let data: Duplex;
-    try {
-      data = await channel.accept();
-    } catch (error) {
-      return this.reply(425, error instanceof Error ? error.message : 'No data connection');
-    }
-
-    try {
-      if (this.protectData && this.deps.secureData) data = await this.deps.secureData(data);
-    } catch {
-      data.destroy();
-      return this.reply(425, 'Could not secure the data connection');
-    }
+    const data = await this.openData(channel);
+    if (!data) return;
 
     const render = (entry: (typeof entries)[number]): string => {
       if (format === 'long') return longListLine(entry);
@@ -868,7 +899,8 @@ export class FtpSession {
     await new Promise<void>((resolve) => {
       data.end(body, () => resolve());
     });
-    this.reply(226, 'Transfer complete');
+    // ftpd.e:1915 - capital C.
+    this.reply(226, 'Transfer Complete');
   }
 
   private sendFeatures(): void {
@@ -928,7 +960,8 @@ export class FtpSession {
       return this.reply(534, 'Policy requires TLS - issue AUTH TLS first');
     }
     this.pendingUser = arg.trim();
-    this.reply(331, 'Password required');
+    // ftpd.e:1180.
+    this.reply(331, 'user accepted');
   }
 
   /**
@@ -954,6 +987,9 @@ export class FtpSession {
   }
 
   private async onPass(arg: string): Promise<void> {
+    // WEB_: ftpd.e takes a PASS with no USER as a failed login
+    // (430, ftpd.e:1189). 503 is the RFC 959 bad-sequence code, and tells
+    // the client what to do.
     if (!this.pendingUser) return this.reply(503, 'Login with USER first');
     if (this.mustUpgradeFirst()) {
       return this.reply(534, 'Policy requires TLS - issue AUTH TLS first');
@@ -976,6 +1012,8 @@ export class FtpSession {
       // busy has nowhere to put this caller. Saying so is better than serving
       // a session that no WHO, log or time limit can see.
       this.pendingUser = null;
+      // WEB_: ftpd.e runs inside a node that is already assigned
+      // (express.e:15511); a board with every node busy has no equivalent.
       return this.reply(421, 'All nodes are busy - try again later');
     }
 

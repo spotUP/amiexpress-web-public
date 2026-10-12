@@ -115,7 +115,7 @@ async function login(port: number, cwd = '001-General') {
   const lines = new Lines(control);
   expect(await lines.next()).toBe('220 Welcome to Ami-Express FTP server.');
   control.write('USER sysop\r\n');
-  expect(await lines.next()).toBe('331 Password required');
+  expect(await lines.next()).toBe('331 user accepted');
   control.write('PASS correct-horse\r\n');
   expect(await lines.next()).toMatch(/^230 /);
   if (cwd) {
@@ -318,7 +318,7 @@ describe('what is refused, and when', () => {
     const { control, lines } = await login(rig.port);
 
     control.write('STOR DEMO.LHA\r\n');
-    expect(await lines.next()).toBe('425 Use PASV first');
+    expect(await lines.next()).toBe("425 Can't open data connection");
 
     control.destroy();
     await new Promise<void>((resolve) => rig.server.close(() => resolve()));

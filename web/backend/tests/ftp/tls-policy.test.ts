@@ -147,7 +147,7 @@ describe('who may talk to us in the clear', () => {
 
     const inside = new Lines(secured);
     secured.write('USER sysop\r\n');
-    expect(await inside.next()).toBe('331 Password required');
+    expect(await inside.next()).toBe('331 user accepted');
     secured.write('PASS correct-horse\r\n');
     expect(await inside.next()).toBe('230 password accepted');
 
