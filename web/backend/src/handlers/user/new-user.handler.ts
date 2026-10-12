@@ -32,6 +32,7 @@ import { getSystemTime } from '../../utils/date-time.util';
 import { loadBBSConfig, getBoardConfig } from '../../services/bbs-config-file.service';
 import { checkIfNameAllowed } from '../../utils/name-allowed.util';
 import { newUserConferenceAccess, newUserPreset } from '../../utils/new-user-preset';
+import { UserFlag } from '../../constants/express-flags';
 import { nodeFlag, logonNamePromptText } from '../../utils/node-tooltypes.util';
 import { computerTypeChoices, computerTypeRows } from '../../utils/computer-types.util';
 
@@ -869,6 +870,16 @@ export async function handleComputerInput(socket: Socket, session: any, input: s
  * just Enter (defaults to N), which is the closest equivalent.
  * (Audit A-20.)
  */
+/**
+ * express.e:30284: `IF bgFileCheck AND DEFAULT_BGFILECHECK THEN userFlags OR USER_BGFILECHECK`.
+ * `bgFileCheck` is express.e's global (session.bgFileCheck here): it is set
+ * only by an upload the node started, so a fresh new-user session has it
+ * clear and gets no flag - exactly as express.e's first caller on a node does.
+ */
+export function newUserDefaultFlags(session: { bgFileCheck?: boolean; nodeId?: number }): number {
+  return session.bgFileCheck && nodeFlag(session.nodeId || 1, 'DEFAULT_BGFILECHECK') ? UserFlag.BGFILECHECK : 0;
+}
+
 function promptForScreenClear(socket: Socket, session: any) {
   // express.e:30272 prints no (y/N) hint; any answer but Y is No (30276-30281).
   socket.emit('ansi-output', 'You want Screen Clears after Messages ? ');
@@ -1483,6 +1494,8 @@ console.log(`[SETUP] First user created: ${data.username} - Auto-assigned sysop 
       ansi: ansiFlag,
       expert: expertFlag,
       screenClear: data.screenClear,
+      // express.e:30284 - USER_BGFILECHECK for a new caller when the node default asks for it.
+      userFlags: newUserDefaultFlags(session),
       availableForChat,
       quietNode,
       // The rejoin conference: users.autorejoin is the same number as the

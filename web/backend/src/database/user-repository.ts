@@ -135,8 +135,8 @@ export class UserRepository extends BaseRepository<User> {
         linesperscreen, computer, screentype, protocol, editor, zoomtype,
         availableforchat, quietnode, autorejoin, confaccess, areaname, uucp,
         topuploadcps, topdownloadcps, bytelimit, baud, slotnumber,
-        gdpr_consent_at, gdpr_notice_version, gdpr_consent_source
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        gdpr_consent_at, gdpr_notice_version, gdpr_consent_source, userflags
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `, [
       id, safeUsername, userData.passwordHash, userData.realname,
       userData.location, userData.phone, userData.email, userData.secLevel,
@@ -153,7 +153,8 @@ export class UserRepository extends BaseRepository<User> {
       userData.topDownloadCPS, userData.byteLimit, userData.baud ?? 0, nextSlot,
       userData.gdprConsentAt ?? null,
       userData.gdprNoticeVersion ?? null,
-      userData.gdprConsentSource ?? null
+      userData.gdprConsentSource ?? null,
+      userData.userFlags ?? 0
     ]);
 
     return id;
