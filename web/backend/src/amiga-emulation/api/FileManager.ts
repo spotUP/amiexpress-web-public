@@ -8,7 +8,8 @@
  * - BPTR = Byte Pointer = memory_address / 4
  * - BPTR 1 = stdin (pre-allocated)
  * - BPTR 2 = stdout (pre-allocated)
- * - BPTR 3+ = dynamically allocated file handles
+ * - BPTR 3 = stderr (reserved, never allocated), 99 = NIL (reserved)
+ * - BPTR 4+ = dynamically allocated file handles (dos-types RESERVED_HANDLES skipped)
  */
 
 import * as fs from 'fs';
@@ -19,7 +20,7 @@ import { AmigaFileCache } from './AmigaFileCache';
 import type { FileShadowProvider } from './file-shadow';
 import * as path from 'path';
 import { getSystemTime } from '../../utils/date-time.util';
-import { DOS_ERRORS } from './dos/dos-types';
+import { DOS_ERRORS, FIRST_FILE_HANDLE, RESERVED_HANDLES } from './dos/dos-types';
 
 // PERFORMANCE: Debug logging disabled by default - synchronous file I/O is slow
 const FILE_DEBUG_ENABLED = process.env.DEBUG_FILE === '1';
@@ -32,7 +33,7 @@ export class FileManager {
   private handles: Map<number, FileHandle> = new Map();
 
   /** Next available BPTR for allocation */
-  private nextBptr: number = 3; // 1=stdin, 2=stdout already allocated
+  private nextBptr: number = FIRST_FILE_HANDLE; // below it: stdin, stdout, stderr
 
   /** Current stdin BPTR (allows redirection) */
   private stdinBptr: number = 1;
@@ -196,9 +197,8 @@ console.log(`  BPTR 2 (stdout): ${stdout.toString()}`);
    * Allocate next available BPTR
    */
   private allocateBptr(): number {
-    const bptr = this.nextBptr;
-    this.nextBptr++;
-    return bptr;
+    while (RESERVED_HANDLES.has(this.nextBptr) || this.handles.has(this.nextBptr)) this.nextBptr++;
+    return this.nextBptr++;
   }
 
   /**
@@ -725,6 +725,6 @@ console.log(`[FileManager] Closed: ${fh.toString()}`);
     }
     this.handles.clear();
     this.initializeStandardHandles(); // Recreate stdin/stdout
-    this.nextBptr = 3; // Reset BPTR allocation
+    this.nextBptr = FIRST_FILE_HANDLE; // Reset BPTR allocation
   }
 }

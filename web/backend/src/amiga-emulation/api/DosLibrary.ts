@@ -46,6 +46,7 @@ import {
   STDOUT_HANDLE,
   STDERR_HANDLE,
   NIL_HANDLE,
+  RESERVED_HANDLES,
   DEBUG_FILE_OPS,
   READARGS_DEFAULT_BUFFER_SIZE,
   READARGS_HEAP_BASE,
@@ -5439,7 +5440,7 @@ debugLog(
       )}, buf=${bufAddr.toString(16)}, len=${bufLen})`
     );
 
-    const file = this.openFiles.get(fileHandle);
+    const file = this.pathedFile(fileHandle);
     if (!file) {
       this.lastError = DOS_ERRORS.ERROR_OBJECT_NOT_FOUND;
       this.emulator.setRegister(CPURegister.D0, 0); // FALSE
@@ -5472,7 +5473,7 @@ debugLog(`[dos.library] NameFromFH returned: ${path}`);
     debugLog(`[dos.library] DupLockFromFH(fh=0x${fhBptr.toString(16)})`);
 
     // Find the open file
-    const file = this.openFiles.get(fhBptr);
+    const file = this.pathedFile(fhBptr);
     if (!file) {
       console.error(`[dos.library] DupLockFromFH: Invalid file handle 0x${fhBptr.toString(16)}`);
       this.emulator.setRegister(CPURegister.D0, 0);
@@ -5516,7 +5517,7 @@ debugLog(`[dos.library] NameFromFH returned: ${path}`);
     debugLog(`[dos.library] ParentOfFH(fh=0x${fhBptr.toString(16)})`);
 
     // Find the open file
-    const file = this.openFiles.get(fhBptr);
+    const file = this.pathedFile(fhBptr);
     if (!file) {
       console.error(`[dos.library] ParentOfFH: Invalid file handle 0x${fhBptr.toString(16)}`);
       this.emulator.setRegister(CPURegister.D0, 0);
@@ -5571,6 +5572,19 @@ debugLog(`[dos.library] NameFromFH returned: ${path}`);
   }
 
   /**
+   * The one lookup for "which file is this handle" by name. With the new file
+   * system the FileManager table owns every file handle; openFiles then holds
+   * only the standard streams. Without it, openFiles is the only table.
+   */
+  private pathedFile(handle: number): { name: string; realPath?: string } | undefined {
+    if (this.useNewFileSystem && this.fileManager && !RESERVED_HANDLES.has(handle)) {
+      const fh = this.fileManager.getHandle(handle);
+      return fh ? { name: fh.amiPath, realPath: fh.sysPath } : undefined;
+    }
+    return this.openFiles.get(handle);
+  }
+
+  /**
    * ExamineFH - Gets information on an open file (V36)
    * D1 = fh (BPTR)
    * D2 = fib (pointer to FileInfoBlock, must be longword aligned)
@@ -5586,7 +5600,7 @@ debugLog(`[dos.library] NameFromFH returned: ${path}`);
     debugLog(`[dos.library] ExamineFH(fh=0x${fhBptr.toString(16)}, fib=0x${fibPtr.toString(16)})`);
 
     // Find the open file
-    const file = this.openFiles.get(fhBptr);
+    const file = this.pathedFile(fhBptr);
     if (!file) {
       console.error(`[dos.library] ExamineFH: Invalid file handle 0x${fhBptr.toString(16)}`);
       this.emulator.setRegister(CPURegister.D0, 0);

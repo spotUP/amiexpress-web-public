@@ -68,6 +68,17 @@ export const STDERR_HANDLE = 3;
 /** NIL: device handle ID */
 export const NIL_HANDLE = 99;
 
+/** Handle ids owned by the standard streams and NIL:; no file may ever be given one. */
+export const RESERVED_HANDLES: ReadonlySet<number> = new Set([
+  STDIN_HANDLE,
+  STDOUT_HANDLE,
+  STDERR_HANDLE,
+  NIL_HANDLE,
+]);
+
+/** First id a file handle may take: one above the highest reserved stream. */
+export const FIRST_FILE_HANDLE = STDERR_HANDLE + 1;
+
 // ============================================================================
 // DOS Error Codes (NDK 3.1 dos/dos.h and dos/dosasl.h, value for value)
 // ============================================================================
