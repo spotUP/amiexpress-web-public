@@ -87,9 +87,12 @@ describe('upload credit to today\'s limit (express.e:19524-19532)', () => {
     } as any;
   }
 
+  let shown: string[] = [];
+
   async function fileFirst(session: any) {
+    shown = [];
     await processBatchFile(
-      { id: 'socket-credit', emit: () => true } as any, session,
+      { id: 'socket-credit', emit: (_e: string, d: unknown) => { if (typeof d === 'string') shown.push(d); return true; } } as any, session,
       { filename: 'DEMO.TXT', originalname: 'DEMO.TXT', size: 2_000_000, path: playpenFile },
       config,
     );
@@ -126,5 +129,12 @@ describe('upload credit to today\'s limit (express.e:19524-19532)', () => {
     // ...and the line drops: no credit was given per file.
     expect(session.user.todaysBytesLimit).toBe(1_000_000);
   });
-});
 
+  // express.e:19535 displayULStats at the end of the upload.
+  test('the end of an upload shows what the caller may download today', async () => {
+    await upload({ byteLimit: 1_000_000, todaysBytesLimit: 1_000_000, dailyBytesDld: 250_000, uploads: 4 });
+    const out = shown.join('');
+    expect(out).toContain('Number of Uploads        : 5');
+    expect(out).toContain('Todays Bytes Available   : 2750000');
+  });
+});

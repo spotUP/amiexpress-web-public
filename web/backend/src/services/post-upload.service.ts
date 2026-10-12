@@ -22,6 +22,7 @@ import { config } from '../config';
 import { callersLog } from '../server/database-helpers';
 import { doUploadNotify } from '../utils/upload-notify.util';
 import { endUpload } from './upload-end.service';
+import { emitULStats } from '../utils/display-ul-stats.util';
 
 export interface PostUploadEmitter {
   emit(event: string, ...args: unknown[]): unknown;
@@ -206,6 +207,11 @@ export async function runPostUpload(
       ? Math.floor(ctx.uploadedBytes / 1024) & 0x003fffff
       : ctx.uploadedBytes);
   }
+
+  // express.e:19535-19536 displayULStats, then a blank line: the caller sees
+  // what today's limit now allows, the credit above included.
+  emitULStats(emitter, session);
+  emitter.emit('ansi-output', '\r\n');
 
   // Caller cleanup (e.g. clearUploadContext for web) — must run before
   // we mutate subState so the cleanup sees the pre-transition state.
