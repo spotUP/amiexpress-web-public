@@ -68,7 +68,8 @@ export async function handleConfMaintInput(
   // Handle CM menu state (single-key input)
   if (subState === LoggedOnSubState.CM_DISPLAY_MENU) {
     console.log('  In CM menu state');
-    await handleCMInput(socket, session, data.trim());
+    // Untrimmed: TAB (express.e:22910) must stay distinct from Return.
+    await handleCMInput(socket, session, data);
     return true;
   }
 

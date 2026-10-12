@@ -31,8 +31,10 @@ import {
   handleNMConfirm,
   handleCMInput,
   handleCMNumericInput,
+  handleConferenceMaintenanceCommand,
   setMessageCommandsDependencies,
 } from '../../src/handlers/message/message-commands.handler';
+import { handleConfMaintInput } from '../../src/handlers/command-handler/conference-maint-states';
 import {
   messagePointerFileManager,
   deserializeConfBase,
@@ -193,6 +195,17 @@ describe('NM', () => {
     expect(session.menuPause).toBe(true);
     expect(session.subState).toBe(LoggedOnSubState.DISPLAY_MENU);
   });
+
+  it('an empty line at "Which to change" redraws the node list instead of dropping to the menu (express.e:25305-25307)', () => {
+    deps(nodes());
+    const { socket, raw } = socketSpy();
+    const session: any = { nodeId: 1, user: SYSOP, subState: LoggedOnSubState.NM_INPUT };
+
+    handleNMInput(socket, session, '');
+
+    expect(session.subState).toBe(LoggedOnSubState.NM_INPUT);
+    expect(raw()).toContain('Which to change <Q>=QUIT ? ');
+  });
 });
 
 describe('CM', () => {
@@ -274,12 +287,75 @@ describe('CM', () => {
   it('TAB leaves the screen standing with the prompt row blanked, and the menu pauses first', async () => {
     deps();
     const { socket, raw } = socketSpy();
-    const session = cmSession();
+    const session = { ...cmSession(), subState: LoggedOnSubState.CM_DISPLAY_MENU };
 
-    await handleCMInput(socket, session, '');
+    await handleConfMaintInput(socket, session, '\t');
 
     expect(raw()).toBe('\x1b[18;2H                                     ');
     expect(session.menuPause).toBe(true);
+    expect(session.subState).toBe(LoggedOnSubState.DISPLAY_MENU);
+  });
+
+  it('Return and Q no longer leave conference maintenance - only TAB does (express.e:22910-22911)', async () => {
+    deps();
+    for (const key of ['\r', 'Q', 'q']) {
+      const { socket } = socketSpy();
+      const session = { ...cmSession(), subState: LoggedOnSubState.CM_DISPLAY_MENU };
+
+      await handleConfMaintInput(socket, session, key);
+
+      expect(session.subState).toBe(LoggedOnSubState.CM_DISPLAY_MENU);
+      expect(session.tempData.cmConf).toBe(1);
+    }
+  });
+
+  it('CM opens on conference 1.1, not on the conference the sysop is sitting in (express.e:22699-22700)', async () => {
+    setMessageCommandsDependencies({
+      messageBases: [
+        { id: 1, conferenceId: 1, name: 'General' },
+        { id: 2, conferenceId: 2, name: 'Amiga' },
+        { id: 3, conferenceId: 2, name: 'Elite' },
+      ] as never,
+      conferences: [{ id: 1, name: 'Uptown' }, { id: 2, name: 'Downtown' }] as never,
+      sessions: new Map(),
+      getConferenceStats: jest.fn(async () => ({ userCount: 0, capacity: 0 })),
+      getMailStatFile: jest.fn(async () => ({ lowestKey: 1, highMsgNum: 1 })),
+    } as never);
+    const { socket, raw } = socketSpy();
+    const session: any = { user: SYSOP, currentConf: 2, currentMsgBase: 2 };
+
+    await handleConferenceMaintenanceCommand(socket, session);
+
+    expect(session.tempData.cmConf).toBe(1);
+    expect(session.tempData.cmMsgBase).toBe(1);
+    expect(raw()).toContain('Uptown');
+  });
+
+  it('resetting the voting booth clears who voted in Conf.DB and keeps the scan flags - no SQL vote rows deleted (express.e:22505-22509, 22830)', async () => {
+    deps();
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cm-vote-'));
+    try {
+      const dbFile = path.join(dir, 'Conf.DB');
+      const rec = deserializeConfBase(Buffer.alloc(CONFBASE_RECORD_SIZE));
+      rec.handle = Buffer.alloc(16, 0xff);
+      rec.messagesPosted = 7;
+      fs.writeFileSync(dbFile, Buffer.concat([serializeConfBase(rec), serializeConfBase(rec)]));
+      jest.spyOn(messagePointerFileManager, 'getConfDbPath').mockReturnValue(dbFile);
+      const { socket, raw } = socketSpy();
+
+      await handleCMInput(socket, cmSession(), 'A');
+
+      expect(raw()).toContain('\x1b[18;2H \x1b[0mWorking....');
+      expect(mockRun).not.toHaveBeenCalled();
+      const buf = fs.readFileSync(dbFile);
+      for (const n of [0, 1]) {
+        const after = deserializeConfBase(buf, n * CONFBASE_RECORD_SIZE);
+        expect([...after.handle]).toEqual([0x0f, 0, 0, 0, ...Array(12).fill(0xff)]);
+        expect(after.messagesPosted).toBe(7);
+      }
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
   });
 
   it('the stats dump writes express.e\'s Conf.Stats - no "[OK] Stats dumped" on screen', async () => {

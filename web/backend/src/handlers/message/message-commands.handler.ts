@@ -470,9 +470,10 @@ export function handleNMInput(socket: any, session: BBSSession, input: string): 
   // lineInput's line break (express.e:2378), then 25302's own.
   emitText(socket, '\r\n\r\n');
 
-  // Handle quit - express.e:25305. RESULT_SUCCESS, so the main loop pauses
-  // before the menu (28647 menuPause:=TRUE).
-  if (input.toUpperCase() === 'Q' || input === '') {
+  // Handle quit - express.e:25305 StriCmp(str,'q'): only Q. RESULT_SUCCESS,
+  // so the main loop pauses before the menu (28647 menuPause:=TRUE). An empty
+  // line is Val()'s read=0 (25307) and loops back like any other non-number.
+  if (input.toUpperCase() === 'Q') {
     session.menuPause = true;
     session.subState = LoggedOnSubState.DISPLAY_MENU;
     delete session.tempData;
@@ -704,8 +705,10 @@ console.log('[ENV] Sysop');
 
   // Initialize conference maintenance state
   session.tempData = session.tempData || {};
-  session.tempData.cmConf = session.currentConf || 1;
-  session.tempData.cmMsgBase = session.currentMsgBase || 1;
+  // express.e:22699-22700: conference maintenance always opens on 1.1, not
+  // on the caller's own conference.
+  session.tempData.cmConf = 1;
+  session.tempData.cmMsgBase = 1;
 
   // Enter the conference maintenance menu loop
   session.subState = LoggedOnSubState.CM_DISPLAY_MENU;
@@ -834,14 +837,19 @@ async function displayConferenceMaintenanceMenu(socket: any, session: BBSSession
  * Handle CM menu input
  */
 export async function handleCMInput(socket: any, session: BBSSession, input: string): Promise<void> {
+  // The key arrives untrimmed: TAB is the exit (express.e:22910) and Return
+  // is not, and trimming made the two the same empty string.
   // Check if awaiting Y/N confirmation for cases 6, 7, 8
   if (session.tempData?.awaitingCMConfirm) {
     delete session.tempData.awaitingCMConfirm;
-    await handleCMConfirmInput(socket, session, input);
+    // yesNo (express.e:2143) takes Return (13) as the default answer; a TAB
+    // is just another key it ignores.
+    await handleCMConfirmInput(socket, session, input === '\t' ? input : input.trim());
     return;
   }
 
-  const choice = input.trim().toUpperCase();
+  // readChar + UpperChar (express.e:22773-22777).
+  const choice = input === '\t' ? input : input.trim().toUpperCase();
   const conf = session.tempData.cmConf;
   const msgBase = session.tempData.cmMsgBase;
   // The ordinal names a base; the pointer helpers take that base's id.
@@ -916,21 +924,24 @@ export async function handleCMInput(socket: any, session: BBSSession, input: str
       await displayConferenceMaintenanceMenu(socket, session);
       return;
 
-    case 'A': // Reset Voting Booth - express.e:22836-22838
+    case 'A': // Reset Voting Booth - express.e:22828-22830
       emitText(socket, CM_WORKING);
       try {
         const confId = session.tempData?.cmConf || session.currentConf || 1;
-        const db = getDatabase();
-        // Reset vote results and status for this conference (keeps topics/questions/answers)
-        await db.run(`
-          DELETE FROM vote_results
-          WHERE topic_id IN (SELECT id FROM vote_topics WHERE conference_id = ?)
-        `, [confId]);
-        await db.run(`
-          DELETE FROM vote_status
-          WHERE topic_id IN (SELECT id FROM vote_topics WHERE conference_id = ?)
-        `, [confId]);
-        console.log(`[CM] Voting booth reset for conference ${confId}`);
+        // express.e:22830 updateAllUsers(conf,msgBase,UPDATE_RESET_VOTING,-1),
+        // 22505-22509: every Conf.DB record forgets which topics its caller
+        // voted on - the voted bits are handle[0] bits 4-7 and handle[1..3]
+        // (topic n is bit n+3, 20547-20548), the scan flags in bits 0-3 stay.
+        // The tallies in Vote/ are left alone. That bit is the only "voted"
+        // the booth reads (handlers/commands/vote-booth.ts hasVoted).
+        messagePointerFileManager.updateAllUsers(confId, rec => {
+          const handle = Buffer.from(rec.handle);
+          handle[0] = handle[0]! & 15;
+          handle[1] = 0;
+          handle[2] = 0;
+          handle[3] = 0;
+          rec.handle = handle;
+        });
       } catch (error) {
         console.error('[CM] Error resetting voting booth:', error);
       }
@@ -952,9 +963,7 @@ export async function handleCMInput(socket: any, session: BBSSession, input: str
       session.subState = LoggedOnSubState.CM_INPUT_CAPACITY;
       return;
 
-    case '\t': // TAB - exit - express.e:22924-22925
-    case 'Q':
-    case '':
+    case '\t': // TAB - exit - express.e:22910-22911, the only way out
       // express.e:22937 blanks the prompt row and leaves the screen as it
       // is; internalCommandCM returns RESULT_SUCCESS, so the main loop
       // pauses before the menu (28647 menuPause:=TRUE).
