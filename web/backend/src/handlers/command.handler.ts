@@ -331,26 +331,8 @@ async function handleMessageEntryInput(socket: any, session: BBSSession, data: s
 
     // User Notes View (express.e:21679-21739)
     case LoggedOnSubState.USER_NOTES_VIEW:
-      const { handleUserNotesInput, handleUserNotesLineInput } = require('./user/account-edit-input.handler');
-      // Check if in notes editing mode (line input)
-      if (session.tempData?.notesEditing) {
-        if (data === '\r' || data === '\n') {
-          const line = (session.inputBuffer || '').trim();
-          session.inputBuffer = '';
-          await handleUserNotesLineInput(socket, session, line);
-        } else if (data === '\x7f' || data === '\b') {
-          if (session.inputBuffer?.length) {
-            session.inputBuffer = session.inputBuffer.slice(0, -1);
-            emitText(socket, '\b \b');
-          }
-        } else if (data.length === 1 && data >= ' ' && data <= '~' && (session.inputBuffer?.length ?? 0) < MAX_COMMAND_LINE) {
-          session.inputBuffer = (session.inputBuffer || '') + data;
-          emitText(socket, data);
-        }
-      } else {
-        // Single-key command mode
-        await handleUserNotesInput(socket, session, data);
-      }
+      const { handleUserNotesInput } = require('./user/account-edit-input.handler');
+      await handleUserNotesInput(socket, session, data);
       return;
 
     // Conference Accounting (express.e:22045-22250)

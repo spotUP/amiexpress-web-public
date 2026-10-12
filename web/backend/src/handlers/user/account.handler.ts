@@ -24,6 +24,7 @@ import { conferenceDir } from '../../conferences/conference-paths';
 import { MessageBaseLoaderService } from '../../services/message-base-loader.service';
 import { findUserAnswersFile } from '../../utils/user-answers.util';
 import { config } from '../../config';
+import { loadAccount } from '../../services/load-account';
 
 // Dependencies (injected)
 let db: any;
@@ -56,24 +57,29 @@ function editorNeverOpened(session: BBSSession): void {
  * editor that never opened.
  */
 export function handleEditUserAccount(socket: any, session: BBSSession, username: string) {
-  db.getUserByUsername(username).then((user: any) => {
-    if (!user) {
+  db.getUserByUsername(username).then((row: any) => {
+    if (!row) {
       editorNeverOpened(session);
       return;
     }
+    // express.e:12201 loadAccount: the record off the disk, merged over its
+    // row - what the board acts on, and what the editor's save writes back.
+    // The row alone put its own stale copy of every record field (time used,
+    // post count, ...) over the disk at the next save.
+    const user = loadAccount(row).user;
 
     session.tempData = {
       accountEditing: true,
       editingUser: user,
       // express.e editInfo(which,...): `which` is the account's SLOT in
       // user.data - what +/- walk (21263-21286) and the header shows.
-      editingSlot: user.slotNumber,
+      editingSlot: Number(user.slotNumber) || 0,
       page: 0,
       changes: false,
       originalData: JSON.parse(JSON.stringify(user))
     };
 
-    displayAccount(socket, user, user.slotNumber, 0);
+    displayAccount(socket, user, Number(user.slotNumber) || 0, 0, session.user?.slotNumber);
     session.subState = LoggedOnSubState.ACCOUNT_EDITOR_EDIT;
   }).catch((error: any) => {
     console.error('Error fetching user:', error);
@@ -154,12 +160,22 @@ function displayAccountActions(socket: any, slot: number): void {
 }
 
 /**
+ * express.e:23000-23009 / 23232-23243: `D> Pass` reads ENCRYPTED for slot 1;
+ * any other sysop - every web caller is remote, and the reader's U is not
+ * the f6 console - reads DISABLED, and D does not change it (21407-21423).
+ */
+function passwordShown(callerSlot: number | undefined): boolean {
+  return callerSlot === 1;
+}
+
+/**
  * express.e:22952-23174 displayAccount(who,page,...): clear the screen, the
  * status line, the name, then page 0 (the account) or page 1 (the password
  * record), then the key lines. Every field is placed with a cursor position,
- * as express.e places it.
+ * as express.e places it. `callerSlot` is the sysop's own slot
+ * (loggedOnUser.slotNumber).
  */
-export function displayAccount(socket: any, user: any, slot: number, page: number): void {
+export function displayAccount(socket: any, user: any, slot: number, page: number, callerSlot: number | undefined): void {
   const out: string[] = [];
   out.push(clearTheScreen(socket));
 
@@ -177,9 +193,9 @@ export function displayAccount(socket: any, user: any, slot: number, page: numbe
     out.push(`\x1b[2;42H\x1b[33mB> \x1b[32mReal Name\x1b[36m:\x1b[0m ${ls(user.realname, 25)}`);
     out.push(`\x1b[3;1H\x1b[33mC> \x1b[32mLoc.\x1b[36m:\x1b[0m ${ls(user.location, 29)}`);
     // express.e:23000-23009: a remote sysop who is not slot 1 reads DISABLED.
-    // These two functions are not given the caller, so the ENCRYPTED branch
-    // (slot 1, or a local login) is the one drawn.
-    out.push('\x1b[3;42H\x1b[33mD> \x1b[32mPass ....\x1b[36m: \x1b[44mENCRYPTED\x1b[0m');
+    out.push(passwordShown(callerSlot)
+      ? '\x1b[3;42H\x1b[33mD> \x1b[32mPass ....\x1b[36m: \x1b[44mENCRYPTED\x1b[0m'
+      : '\x1b[3;42H\x1b[33mD> \x1b[32mPass ....\x1b[34m: \x1b[31mDISABLED\x1b[0m');
     out.push(`\x1b[4;1H\x1b[33mE> \x1b[32mPhone Number ..\x1b[36m:\x1b[0m ${ls(user.phone, 13)}`);
     out.push(`\x1b[4;36H\x1b[33mF> \x1b[32mArea Name......\x1b[36m:\x1b[0m ${user.confAccess ?? ''}`);
     out.push(`\x1b[5;1H\x1b[33mG> \x1b[32mRatio .........\x1b[36m:\x1b[0m ${ld(user.ratio, 7)}`);
@@ -247,12 +263,83 @@ export function displayAccount(socket: any, user: any, slot: number, page: numbe
   displayAccountActions(socket, slot);
 }
 
-/** Page 0 of displayAccount - account-edit-input draws the pages through these. */
-export function displayAccountPage0(socket: any, user: any, slot: number) {
-  displayAccount(socket, user, slot, 0);
+/** Page 0 of displayAccount. */
+export function displayAccountPage0(socket: any, user: any, slot: number, callerSlot: number | undefined) {
+  displayAccount(socket, user, slot, 0, callerSlot);
 }
 
 /** Page 1 of displayAccount. */
-export function displayAccountPage1(socket: any, user: any, slot: number) {
-  displayAccount(socket, user, slot, 1);
+export function displayAccountPage1(socket: any, user: any, slot: number, callerSlot: number | undefined) {
+  displayAccount(socket, user, slot, 1, callerSlot);
+}
+
+/**
+ * express.e:23188-23397 displayAccountInfo: the VALUES only, over the screen
+ * displayAccount drew - after a save, a preset, a delete and the +/- walk.
+ * No clear, no labels (but N's and the Cps pair's, which it reprints).
+ */
+export function displayAccountInfo(socket: any, user: any, slot: number, page: number, callerSlot: number | undefined): void {
+  const out: string[] = [];
+  const keysBaud = (Number(user.baud) || 0) & 0xffff;
+  const baud = WRAPPED_BAUD[keysBaud] ?? keysBaud;
+  out.push(user.accountDeleted
+    ? `\x1b[0;0H\x1b[37mINACTIVE\x1b[0m [${slot}]   \x1b[32mBAUD\x1b[36m:\x1b[0m ${baud}    \r\n`
+    : `\x1b[0;0H\x1b[33m  ACTIVE\x1b[0m [${slot}]   \x1b[32mBAUD\x1b[36m:\x1b[0m ${baud}    \r\n`);
+  out.push(`\x1b[2;10H${ls(user.username, 32)}`);
+
+  if (page === 0) {
+    out.push(`\x1b[2;56H${ls(user.realname, 25)}`);
+    out.push(`\x1b[3;10H${ls(user.location, 29)}`);
+    out.push(passwordShown(callerSlot)
+      ? '\x1b[3;56H\x1b[36m\x1b[44mENCRYPTED\x1b[0m\x1b[K'
+      : '\x1b[3;56H\x1b[36m\x1b[44mDISABLED\x1b[0m\x1b[K\r\n');
+    out.push(`\x1b[4;21H${ls(user.phone, 13)}`);
+    out.push(`\x1b[4;56H${ls(user.confAccess, 10)}`);
+    out.push(`\x1b[5;21H${ld(user.ratio, 7)}`);
+    out.push(`\x1b[5;56H${ld(user.secLevel, 5)}`);
+    out.push(`\x1b[6;21H${ld(user.ratioType, 5)}`);
+    if (user.ratioType === 0) out.push(' \x1b[32m<-\x1b[33mByte\x1b[32m)\x1b[0m');
+    if (user.ratioType === 1) out.push(' \x1b[32m<-\x1b[33mB/F\x1b[32m)\x1b[0m ');
+    if (user.ratioType === 2) out.push(' \x1b[32m<-\x1b[33mFile\x1b[32m)\x1b[0m');
+    const confRJoin = Number(user.confRJoin ?? user.autoRejoin) || 0;
+    const msgBaseRJoin = Number(user.msgBaseRJoin) || 0;
+    const rejoin = confMsgBaseCount(confRJoin) > 1 && msgBaseRJoin > 0 ? `${confRJoin}.${msgBaseRJoin}` : `${confRJoin}`;
+    out.push(`\x1b[6;56H${ls(rejoin, 7)}`);
+    out.push(`\x1b[7;21H${ld((Number(user.uploads) || 0) & 0xffff, 10)}`);
+    out.push(`\x1b[7;56H${ld((Number(user.messagesPosted) || 0) & 0xffff, 7)}`);
+    out.push(`\x1b[8;21H${ld((Number(user.downloads) || 0) & 0xffff, 10)}`);
+    out.push(`\x1b[8;36H\x1b[33mN> \x1b[32mNew_User ......\x1b[36m:\x1b[0m ${ls(user.newUser ? 'Yes' : 'No', 3)} `);
+    out.push(`\x1b[6;63H\x1b[33m#\x1b[32mCalls\x1b[36m: \x1b[0m${ld((Number(user.calls) || 0) & 0xffff, 6)}`);
+    out.push(`\x1b[7;63H\x1b[33m%\x1b[32mToday\x1b[36m: \x1b[0m${ld(getTodaysCalls(user), 6)}`);
+    out.push(`\x1b[9;21H${ls(Math.trunc(Number(user.bytesUpload) || 0), 14)}`);
+    out.push(`\x1b[9;56H${longDateTime(user.lastLogin)}`);
+    out.push(`\x1b[10;21H${ls(Math.trunc(Number(user.bytesDownload) || 0), 14)}`);
+    out.push(`\x1b[10;56H${ls(user.computer, 16)}`);
+    const limit = Number(user.byteLimit) ? unsignedLong(user.byteLimit) : 'Infinite';
+    out.push(`\x1b[11;21H${ls(limit, 10)}`);
+    const screenType = screenTypeTitle(user.screenType);
+    out.push(`\x1b[11;56H${screenType === 'NOT VALID!' || screenType === '' ? screenType : ls(screenType, 16)}`);
+    out.push(`\x1b[12;17H${ld(minutes(user.timeTotal), 6)}`);
+    out.push(`\x1b[12;39H\x1b[32mCps UP\x1b[36m:\x1b[0m ${ls(unsignedLong(user.topUploadCPS), 10)}`);
+    out.push(`\x1b[12;61H\x1b[32mCps DN\x1b[36m:\x1b[0m ${ls(unsignedLong(user.topDownloadCPS), 10)}`);
+    out.push(`\x1b[13;17H${ld(minutes(user.timeLimit), 6)}`);
+    out.push(`\x1b[13;51H${ld(minutes(user.timeUsed), 6)}`);
+    out.push(`\x1b[13;76H${user.uuCP ? 1 : 0}`);
+    out.push(`\x1b[14;17H${ld(minutes(user.chatLimit), 6)}`);
+    out.push(`\x1b[14;51H${ld(minutes(user.chatUsed), 6)}`);
+  }
+
+  if (page === 1) {
+    out.push(`\x1b[3;21H${ls(user.forcePwdReset ? 'Yes' : 'No', 3)}`);
+    out.push(`\x1b[3;56H${ls(user.accountLocked ? 'Yes' : 'No', 3)}`);
+    out.push(`\x1b[4;21H${ld(user.invalidAttempts, 3)}`);
+    const pwdUpdated = Number(user.pwdLastUpdated) > 0 ? Number(user.pwdLastUpdated) * 1000 : 0;
+    out.push(`\x1b[4;56H${longDateTime(pwdUpdated)}`);
+    // WEB_: the PWD_ type name, as displayAccount's Pwd Type row.
+    out.push('\x1b[5;21HBCRYPT       ');
+    out.push('\x1b[5;56H0.0.0.0');
+  }
+
+  socket.emit('ansi-output', out.join(''));
+  displayAccountActions(socket, slot);
 }

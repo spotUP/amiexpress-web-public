@@ -280,3 +280,59 @@ function addToHistory(session: InputWaitingSession, text: string): void {
     if (h.num >= h.items.length) h.num = 0;
   }
 }
+
+/** E's Val: the leading (signed) integer, 0 when there is none. */
+export function eVal(str: string): number {
+  const m = /^\s*[-+]?\d+/.exec(str);
+  return m ? parseInt(m[0], 10) : 0;
+}
+
+/** E's Val into a LONG: a number too big for 32 bits wraps, as the Amiga's does. */
+function eValLong(str: string): number {
+  const m = /^\s*[-+]?\d+/.exec(str);
+  return m ? Number(BigInt.asIntN(32, BigInt(m[0].trim()))) : 0;
+}
+
+/**
+ * numberInput(n) - express.e:21090-21094: the INT's value as the default,
+ * five characters, `Val(tempStr) AND $FFFF`.
+ */
+export async function numberInput(socket: any, session: InputWaitingSession, n: number): Promise<number> {
+  const str = await lineInput(socket, session, 5, String((Number(n) || 0) & 0xffff));
+  return eVal(str) & 0xffff;
+}
+
+/**
+ * longNumberInput(n) - express.e:21108-21112: the LONG as formatUnsignedLong
+ * prints it, ten characters, Val.
+ */
+export async function longNumberInput(socket: any, session: InputWaitingSession, n: number): Promise<number> {
+  const str = await lineInput(socket, session, 10, String((Number(n) || 0) >>> 0));
+  return eValLong(str);
+}
+
+/** uucpNumberInput(n) - express.e:21114-21118: one character, Val. */
+export async function uucpNumberInput(socket: any, session: InputWaitingSession, n: number): Promise<number> {
+  const str = await lineInput(socket, session, 1, String(Number(n) || 0));
+  return eVal(str);
+}
+
+/**
+ * rJoinInput - express.e:21096-21106: an empty five-character field;
+ * `conf` or `conf.msgbase`, the message base 0 when there is no dot.
+ */
+export async function rJoinInput(socket: any, session: InputWaitingSession): Promise<{ conf: number; msgBase: number }> {
+  const str = await lineInput(socket, session, 5);
+  const dot = str.indexOf('.');
+  return { conf: eVal(str), msgBase: dot >= 0 ? eVal(str.slice(dot + 1)) : 0 };
+}
+
+/**
+ * bcdNumberInput - express.e:21120-21154: the counter's digits (formatBCD),
+ * fourteen characters, then bcdVal: every character a digit or the whole
+ * counter is zero.
+ */
+export async function bcdNumberInput(socket: any, session: InputWaitingSession, value: bigint): Promise<bigint> {
+  const str = await lineInput(socket, session, 14, value.toString());
+  return /^\d*$/.test(str) ? BigInt(str || '0') : 0n;
+}

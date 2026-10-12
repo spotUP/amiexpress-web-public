@@ -1,38 +1,60 @@
 /**
  * Account Edit Input Handler
  * Handles keyboard input during account editing
- * 1:1 port from express.e:21228-21650 editInfo() command handling
+ * 1:1 port from express.e:21211-21650 editInfo() command handling
  */
 
 import { messagePointerFileManager, accountedBytes, type ConfBaseRecord } from '../../services/MessagePointerFileManager';
 import { writePackedBCD } from '../../utils/bcd-math.util';
 import { BBSSession, LoggedOnSubState } from '../../index';
-import { AnsiUtil } from '../../utils/ansi.util';
-import { displayAccountPage0, displayAccountPage1 } from './account.handler';
+import type { User } from '../../database/types';
+import { displayAccount, displayAccountInfo } from './account.handler';
 import { formatLongDate, formatLongTime } from '../../utils/date-time.util';
 import { TRACK_UPLOADS_BIT, TRACK_DOWNLOADS_BIT } from '../../utils/download-ratios.util';
-import { checkSecurity } from '../../utils/acs.util';
+import { checkSecurity, getACSConfig, LevelFlags } from '../../utils/acs.util';
 import { ACSPermission } from '../../constants/acs-permissions';
 import { config } from '../../config';
 import { findUserAnswersFile } from '../../utils/user-answers.util';
-import { getUserNotesPath, readUserNotes, saveUserNotes } from '../../utils/user-notes.util';
+import { readUserNotes, saveUserNotes } from '../../utils/user-notes.util';
 import * as amigafs from '../../utils/amigafs';
 import { emitText, clearTheScreen } from '../../utils/output.util';
 import * as path from 'path';
-import { readChar } from '../../utils/await-input';
+import {
+  readChar, lineInput, yesNo, numberInput, longNumberInput, uucpNumberInput, rJoinInput, bcdNumberInput,
+} from '../../utils/await-input';
+import { getTodaysCalls } from '../../utils/time-tracking.util';
+import { readPreset, applyPreset } from '../../utils/new-user-preset';
+import { applyConfPresets } from '../../services/apply-conf-presets';
+import { boardRoot } from '../../utils/board-root.util';
+import { nodeTooltype } from '../../utils/node-tooltypes.util';
+import { writeToCallersLog } from '../../utils/download-logging.util';
+
+/** The account being edited: the record merged over its row (load-account). */
+type EditedAccount = User & { msgBaseRJoin?: number };
 
 /**
- * Out of the account editor: back to whoever opened it - the message reader's
- * U (express.e 12196-12211, editInfo then displayMessage) - or the menu.
+ * The account as displayAccount draws it, for the sysop at the keys:
+ * `D> Pass` depends on his own slot (express.e:23000-23009).
  */
+function redraw(socket: any, session: BBSSession): void {
+  const t = session.tempData;
+  displayAccount(socket, t.editingUser, t.editingSlot, t.page || 0, session.user?.slotNumber);
+}
+
+/** displayAccountInfo (express.e:23188): the values only, over the screen. */
+function redrawValues(socket: any, session: BBSSession): void {
+  const t = session.tempData;
+  displayAccountInfo(socket, t.editingUser, t.editingSlot, t.page || 0, session.user?.slotNumber);
+}
+
 /**
  * checkChanges (express.e:21200-21209): with nothing changed, go on; else ask,
  * take one key, erase the question, and go on only on Y. The port asked
  * "Save before exiting? (Y/N)" and nothing read the answer - the next key was
  * taken as an editor command and the caller could not leave.
  */
-async function checkChanges(socket: any, session: BBSSession): Promise<boolean> {
-  if (!session.tempData?.changes) return true;
+async function checkChanges(socket: any, session: BBSSession, changes: unknown): Promise<boolean> {
+  if (!changes) return true;
   socket.emit('ansi-output', 'You have unsaved changes. Do you wish to lose them (Y/N)? ');
   const ch = await readChar(socket, session);
   socket.emit('ansi-output', '\x1b[F\x1b[E\x1b[K');
@@ -40,16 +62,25 @@ async function checkChanges(socket: any, session: BBSSession): Promise<boolean> 
 }
 
 /**
- * Run `then` once checkChanges says go on. Started, not awaited: the answer is
- * the NEXT keystroke, and handleCommand takes keys one at a time - awaiting it
- * inside this key's handler would hold the queue that key must come through.
+ * Run one pass of an express.e key loop that reads more keys - a field's
+ * lineInput, checkChanges' answer. Started, not awaited: those keys come in
+ * through handleCommand one at a time (the waiting input takes them first),
+ * and awaiting here would hold the queue they must come through.
  */
-function afterCheckChanges(socket: any, session: BBSSession, then: () => Promise<void>): void {
-  void checkChanges(socket, session)
-    .then((go) => (go ? then() : undefined))
-    .catch((err) => console.error('[account editor] checkChanges failed:', err));
+function startPass(label: string, pass: () => Promise<void>): void {
+  void pass().catch((err) => console.error(`[account editor] ${label} failed:`, err));
 }
 
+function afterCheckChanges(socket: any, session: BBSSession, then: () => Promise<void>): void {
+  startPass('checkChanges', async () => {
+    if (await checkChanges(socket, session, session.tempData?.changes)) await then();
+  });
+}
+
+/**
+ * Out of the account editor: back to whoever opened it - the message reader's
+ * U (express.e 12196-12211, editInfo then displayMessage) - or the menu.
+ */
 function leaveAccountEditor(session: BBSSession): void {
   const done = session.accountEditDone;
   session.accountEditDone = undefined;
@@ -59,8 +90,19 @@ function leaveAccountEditor(session: BBSSession): void {
 }
 
 /**
- * Handle account edit input - Main keyboard handler
- * express.e:21228-21650
+ * checkLock (express.e:21224 checkLockAccounts, 21156-21173): taken once when
+ * the editor opens. Every field edit, the presets, DELETE and RE-ACTIVATE
+ * are under it (21328-21643); a sysop the LockAccounts list leaves out may
+ * look, walk, save and leave.
+ */
+function checkLock(session: BBSSession): boolean {
+  if (session.tempData.checkLock === undefined) session.tempData.checkLock = accountsUnlocked(session);
+  return session.tempData.checkLock;
+}
+
+/**
+ * Handle account edit input - one pass of editInfo's REPEAT loop
+ * (express.e:21227-21647).
  */
 export async function handleAccountEditInput(socket: any, session: BBSSession, key: string): Promise<void> {
   if (!session.tempData?.accountEditing) {
@@ -68,417 +110,412 @@ export async function handleAccountEditInput(socket: any, session: BBSSession, k
     return;
   }
 
-  const user = session.tempData.editingUser;
-  const slot = session.tempData.editingSlot;
-  const page = session.tempData.page;
+  const user: EditedAccount = session.tempData.editingUser;
   const command = key.toUpperCase();
 
-  // express.e:21249-21327 - Special commands (work on all pages)
+  // express.e:21249-21327 - the commands every sysop has.
+  switch (command) {
+    // TAB - Exit (21250-21253)
+    case '\t':
+      afterCheckChanges(socket, session, async () => leaveAccountEditor(session));
+      return;
 
-  // TAB - Exit (express.e:21250-21253)
-  if (command === '\t') {
-    afterCheckChanges(socket, session, async () => leaveAccountEditor(session));
-    return;
+    // X - No-Save Exit (21254-21258)
+    case 'X':
+      afterCheckChanges(socket, session, async () => {
+        socket.emit('ansi-output', '\x1b[JNo-Save\r\n');
+        leaveAccountEditor(session);
+      });
+      return;
+
+    // SPACE - the other page (21259-21262)
+    case ' ':
+      session.tempData.page = session.tempData.page === 0 ? 1 : 0;
+      redraw(socket, session);
+      break;
+
+    // + / - (21263-21286): the next / previous slot, when not editing online.
+    case '+':
+    case '-':
+      if (!session.tempData.onlineEdit) {
+        const direction = command === '+' ? 1 : -1;
+        afterCheckChanges(socket, session, async () => {
+          session.tempData.changes = false;
+          await loadNextUser(socket, session, direction);
+          socket.emit('ansi-output', '\x1b[18;1H');
+        });
+        return;
+      }
+      break;
+
+    // ~ - Save (21287-21309)
+    case '~':
+      await saveAccount(socket, session);
+      break;
+
+    // ! - Credit Maintenance (21310-21312 -> creditMaintenance 21884)
+    case '!':
+      // 21892-21894: a remote caller without ACS_CREDIT_ACCESS gets nothing
+      // (`RETURN 0`) and editInfo draws the account again (21312). Every web
+      // caller is remote; there is no f6 console.
+      if (!checkSecurity(session.user, ACSPermission.CREDIT_ACCESS)) {
+        redraw(socket, session);
+        break;
+      }
+      // express.e:21896 - checkLockAccounts gates the field edits, computed once.
+      session.tempData.creditEditable = accountsUnlocked(session);
+      session.subState = LoggedOnSubState.CREDIT_MAINTENANCE_VIEW;
+      displayCreditMaintenance(socket, session);
+      return;
+
+    // * - User Notes (21313-21315)
+    case '*':
+      session.subState = LoggedOnSubState.USER_NOTES_VIEW;
+      displayUserNotes(socket, session);
+      return;
+
+    // @ - Conference Accounting (21316-21318)
+    case '@':
+      session.subState = LoggedOnSubState.CONF_ACCOUNTING_VIEW;
+      session.tempData.confAcctConf = user.confRJoin || 1;
+      session.tempData.confAcctMsgBase = user.msgBaseRJoin || 1;
+      await displayConferenceAccounting(socket, session);
+      return;
+
+    // ? - User Answers (21319-21326): this account's new-user questionnaire.
+    case '?':
+      if (displayUserAnswers(socket, session)) {
+        session.subState = LoggedOnSubState.USER_ANSWERS_VIEW;
+        return;
+      }
+      break;
   }
 
-  // X - No-Save Exit (express.e:21254-21258)
-  if (command === 'X') {
-    afterCheckChanges(socket, session, async () => {
-      socket.emit('ansi-output', '\x1b[JNo-Save\r\n');
-      leaveAccountEditor(session);
-    });
-    return;
-  }
-
-  // SPACE - Toggle page (express.e:21259-21262)
-  if (command === ' ') {
-    session.tempData.page = page === 0 ? 1 : 0;
-    if (session.tempData.page === 0) {
-      displayAccountPage0(socket, user, slot);
-    } else {
-      displayAccountPage1(socket, user, slot);
-    }
-    return;
-  }
-
-  // + - Next user (express.e:21263-21276)
-  if (command === '+') {
-    afterCheckChanges(socket, session, async () => {
-      session.tempData.changes = false;
-      await loadNextUser(socket, session, 1);
-    });
-    return;
-  }
-
-  // - - Previous user (express.e:21277-21286)
-  if (command === '-') {
-    afterCheckChanges(socket, session, async () => {
-      session.tempData.changes = false;
-      await loadNextUser(socket, session, -1);
-    });
-    return;
-  }
-
-  // ~ - Save (express.e:21287-21309)
-  if (command === '~') {
-    await saveAccount(socket, session);
-    return;
-  }
-
-  // ! - Credit Maintenance (express.e:21310-21312 -> creditMaintenance 21884)
-  if (command === '!') {
-    // express.e:21892 - a remote caller needs ACS_CREDIT_ACCESS to enter at all
-    // (the web port has no local f6 console; every caller is remote).
-    if (!checkSecurity(session.user, ACSPermission.CREDIT_ACCESS)) {
-      socket.emit('ansi-output', '\r\n\x1b[31mYou do not have credit access.\x1b[0m\r\n');
-      socket.emit('ansi-output', '\x1b[32mPress any key...\x1b[0m');
+  if (checkLock(session)) {
+    // 1-8 - Presets (21329-21360).
+    if (command >= '1' && command <= '8') {
+      startPass('preset', async () => {
+        await applyPresetKey(socket, session, Number(command));
+        socket.emit('ansi-output', '\x1b[18;1H');
+      });
       return;
     }
-    // express.e:21896 - checkLockAccounts gates the field edits, computed once.
-    session.tempData.creditEditable = accountsUnlocked(session);
-    session.subState = LoggedOnSubState.CREDIT_MAINTENANCE_VIEW;
-    displayCreditMaintenance(socket, session);
-    return;
-  }
 
-  // * - User Notes (express.e:21313-21315)
-  if (command === '*') {
-    // Enter user notes view mode
-    session.subState = LoggedOnSubState.USER_NOTES_VIEW;
-    displayUserNotes(socket, session);
-    return;
-  }
-
-  // @ - Conference Accounting (express.e:21316-21318)
-  if (command === '@') {
-    // Enter conference accounting view mode
-    session.subState = LoggedOnSubState.CONF_ACCOUNTING_VIEW;
-    session.tempData.confAcctConf = session.tempData.editingUser.confRJoin || 1;
-    session.tempData.confAcctMsgBase = session.tempData.editingUser.msgBaseRJoin || 1;
-    await displayConferenceAccounting(socket, session);
-    return;
-  }
-
-  // ? - User Answers (express.e:21319-21326): show this user's new-user
-  // questionnaire transcript, read-only.
-  if (command === '?') {
-    if (displayUserAnswers(socket, session)) session.subState = LoggedOnSubState.USER_ANSWERS_VIEW;
-    return;
-  }
-
-  // DELETE - Delete account (express.e:21362-21373)
-  //
-  //   hoozer.slotNumber:=0; hoozer2.number:=0
-  //   saveAccount(hoozer,hoozer2,hoozer3,which,1)   -> at the SAME position
-  //   deleteConfAccess(...)
-  //
-  // The record keeps its place in user.data; its own slotNumber field becomes
-  // 0, which is what the logon refuses (29701). This set the row's slotnumber
-  // to 0 instead - the POSITION - so the disk write skipped it (slot 0 has no
-  // record), the deletion never reached user.data, and the startup backfill
-  // handed the row a fresh slot: the account logged in again after a restart.
-  if (key === '\x7f' || command === 'DELETE') {
-    socket.emit('ansi-output', '\r\n\x1b[31mDelete account\x1b[0m\r\n');
-    user.accountDeleted = true;
-    session.tempData.changes = true;
-    await saveAccount(socket, session);
-    if (user.slotNumber && user.slotNumber > 0) {
-      try {
-        const { deleteConfAccess } = require('../../services/delete-conf-access');
-        const { nodeTooltype } = require('../../utils/node-tooltypes.util');
-        const { boardRoot } = require('../../utils/board-root.util');
-        deleteConfAccess(boardRoot(), user.slotNumber, nodeTooltype(session.nodeId ?? 0, 'CONF_DB') || 'Conf.DB');
-      } catch (err) {
-        console.error('[ACCOUNT EDIT] deleteConfAccess failed:', err);
+    // DELETE (21362-21373)
+    //
+    //   hoozer.slotNumber:=0; hoozer2.number:=0
+    //   saveAccount(hoozer,hoozer2,hoozer3,which,1)   -> at the SAME position
+    //   deleteConfAccess(...)
+    //
+    // The record keeps its place in user.data; its own slotNumber field becomes
+    // 0, which is what the logon refuses (29701). The sysop stays in the
+    // editor (`flag:=0`), on the INACTIVE account.
+    if (key === '\x7f' || command === 'DELETE') {
+      socket.emit('ansi-output', '\x1b[JDelete\r\n');
+      user.accountDeleted = true;
+      session.tempData.changes = true;
+      if (!(await writeAccount(user))) socket.emit('ansi-output', 'Can\'t Save account\r\n');
+      if (user.slotNumber && user.slotNumber > 0) {
+        try {
+          const { deleteConfAccess } = require('../../services/delete-conf-access');
+          deleteConfAccess(boardRoot(), user.slotNumber, nodeTooltype(session.nodeId ?? 0, 'CONF_DB') || 'Conf.DB');
+        } catch (err) {
+          console.error('[ACCOUNT EDIT] deleteConfAccess failed:', err);
+        }
       }
+      redrawValues(socket, session);
     }
-    socket.emit('ansi-output', '\r\n\x1b[32mAccount deleted.\x1b[0m\r\n');
-    leaveAccountEditor(session);
-    return;
+
+    // 9 - RE-ACTIVATE (21374-21378): `hoozer.slotNumber:=which`, the record's
+    // field back to its own position; saved with the next save.
+    if (command === '9') {
+      socket.emit('ansi-output', '\x1b[JRe-Activate\r\n');
+      session.tempData.changes = true;
+      user.accountDeleted = false;
+    }
+
+    // The page's fields (21381-21643). Each reads its own keys.
+    if (isFieldKey(session.tempData.page, command)) {
+      startPass(`field ${command}`, async () => {
+        await editField(socket, session, command);
+        socket.emit('ansi-output', '\x1b[18;1H');
+      });
+      return;
+    }
   }
 
-  // 9 - Reactivate (express.e:21374-21378): `hoozer.slotNumber:=which`, the
-  // record's field back to its own position; saved with the next save.
-  if (command === '9') {
-    socket.emit('ansi-output', '\r\n\x1b[32mRe-Activate\x1b[0m\r\n');
-    user.accountDeleted = false;
-    session.tempData.changes = true;
-    if (session.tempData.page === 0) {
-      displayAccountPage0(socket, user, slot);
-    } else {
-      displayAccountPage1(socket, user, slot);
-    }
-    return;
-  }
+  // 21645: the end of every pass.
+  socket.emit('ansi-output', '\x1b[18;1H');
+}
 
-  // Page-specific field editing (express.e:21381-21643)
-  if (page === 0) {
-    await handlePage0Edit(socket, session, command);
-  } else {
-    await handlePage1Edit(socket, session, command);
+const PAGE0_KEYS = 'ABCDEFGHIJKLMN#%OPQRSTUVWYZ';
+const PAGE1_KEYS = 'ABCD';
+
+function isFieldKey(page: number, command: string): boolean {
+  return command.length === 1 && (page === 1 ? PAGE1_KEYS : PAGE0_KEYS).includes(command);
+}
+
+/** E's `Mul(numberInput(Div(x,60)),60)`: a minutes field held in seconds. */
+async function minutesInput(socket: any, session: BBSSession, seconds: number): Promise<number> {
+  return (await numberInput(socket, session, Math.trunc((Number(seconds) || 0) / 60))) * 60;
+}
+
+/**
+ * R and U (21547-21585): Time_Total never below Time_Limit, and back to it
+ * unless the level keeps upload credit (`acLvl[LVL_KEEP_UPLOAD_CREDIT]<2`).
+ */
+function settleTimeTotal(user: EditedAccount): void {
+  if (user.timeTotal < user.timeLimit) {
+    user.timeTotal = user.timeLimit;
+  } else if ((getACSConfig().acLvl[LevelFlags.KEEP_UPLOAD_CREDIT] ?? 0) < 2) {
+    user.timeTotal = user.timeLimit;
   }
 }
 
 /**
- * Handle Page 0 field edits (express.e:21382-21613)
+ * One field (express.e:21381-21643), on the account record's own fields -
+ * the names the record's writer saves (load-account RECORD_FIELDS) and
+ * displayAccount draws. The port read and wrote `conferenceAccess`,
+ * `dailyBytesLimit`, `upCPS`, `dnCPS`, `uucpa` and `chatRemain`, and set
+ * nothing at all: the value went to a `waitingForFieldInput` nobody read, so
+ * no edit ever reached the account.
  */
-async function handlePage0Edit(socket: any, session: BBSSession, command: string): Promise<void> {
-  const user = session.tempData.editingUser;
-  const slot = session.tempData.editingSlot;
+async function editField(socket: any, session: BBSSession, command: string): Promise<void> {
+  const user: EditedAccount = session.tempData.editingUser;
+  const out = (s: string) => socket.emit('ansi-output', s);
+  const changed = () => { session.tempData.changes = true; };
+  // `IF((logonType>=LOGON_TYPE_REMOTE) AND (f6=FALSE)) IF(loggedOnUser.slotNumber=1)`:
+  // every web caller is remote and the reader's U is not the f6 console.
+  const slotOne = session.user?.slotNumber === 1;
 
-  switch (command) {
-    // A - Name (express.e:21383-21391)
-    case 'A':
-      socket.emit('ansi-output', '\x1b[2;10H'); // Position cursor
-      await promptForString(socket, session, 'username', user.username || '', 30);
-      break;
-
-    // B - Real Name (express.e:21392-21398)
-    case 'B':
-      socket.emit('ansi-output', '\x1b[2;56H');
-      await promptForString(socket, session, 'realname', user.realname || '', 25);
-      break;
-
-    // C - Location (express.e:21399-21405)
-    case 'C':
-      socket.emit('ansi-output', '\x1b[3;10H');
-      await promptForString(socket, session, 'location', user.location || '', 29);
-      break;
-
-    // D - Password (express.e:21406-21438)
-    case 'D':
-      socket.emit('ansi-output', '\x1b[3;56H         \x1b[3;56H');
-      await promptForPassword(socket, session);
-      break;
-
-    // E - Phone (express.e:21439-21445)
-    case 'E':
-      socket.emit('ansi-output', '\x1b[4;21H');
-      await promptForString(socket, session, 'phone', user.phone || '', 12);
-      break;
-
-    // F - Conference Access (express.e:21446-21452)
-    case 'F':
-      socket.emit('ansi-output', '\x1b[4;56H');
-      await promptForString(socket, session, 'conferenceAccess', user.conferenceAccess || '', 9);
-      break;
-
-    // G - Ratio (express.e:21453-21457)
-    case 'G':
-      socket.emit('ansi-output', '\x1b[5;21H');
-      await promptForNumber(socket, session, 'ratio', user.ratio || 0);
-      break;
-
-    // H - Security Level (express.e:21458-21469)
-    case 'H':
-      socket.emit('ansi-output', '\x1b[5;56H');
-      await promptForNumber(socket, session, 'secLevel', user.secLevel || 0);
-      break;
-
-    // I - Ratio Type (express.e:21470-21483)
-    case 'I':
-      socket.emit('ansi-output', '\x1b[6;21H');
-      await promptForNumber(socket, session, 'ratioType', user.ratioType || 0, 0, 2);
-      break;
-
-    // J - Conference ReJoin (express.e:21484-21490)
-    case 'J':
-      socket.emit('ansi-output', '\x1b[6;56H');
-      await promptForRejoin(socket, session);
-      break;
-
-    // K - Uploads (express.e:21491-21495)
-    case 'K':
-      socket.emit('ansi-output', '\x1b[7;21H');
-      await promptForNumber(socket, session, 'uploads', user.uploads || 0);
-      break;
-
-    // L - Messages Posted (express.e:21496-21500)
-    case 'L':
-      socket.emit('ansi-output', '\x1b[7;56H');
-      await promptForNumber(socket, session, 'messagesPosted', user.messagesPosted || 0);
-      break;
-
-    // M - Downloads (express.e:21501-21505)
-    case 'M':
-      socket.emit('ansi-output', '\x1b[8;21H');
-      await promptForNumber(socket, session, 'downloads', user.downloads || 0);
-      break;
-
-    // N - New User Flag (express.e:21506-21511)
-    case 'N':
-      socket.emit('ansi-output', '\x1b[8;56H   \x1b[8;56H');
-      await promptForYesNo(socket, session, 'newUser', user.newUser);
-      break;
-
-    // # - Times Called (express.e:21512-21516)
-    case '#':
-      socket.emit('ansi-output', '\x1b[6;71H');
-      await promptForNumber(socket, session, 'calls', user.calls || 0);
-      break;
-
-    // % - Calls Today (express.e:21517-21521)
-    case '%':
-      socket.emit('ansi-output', '\x1b[7;71H');
-      await promptForNumber(socket, session, 'callsToday', user.callsToday || 0);
-      break;
-
-    // O - Bytes Uploaded (express.e:21522-21528)
-    case 'O':
-      socket.emit('ansi-output', '\x1b[9;21H');
-      await promptForLongNumber(socket, session, 'bytesUpload', user.bytesUpload || 0);
-      break;
-
-    // P - Bytes Downloaded (express.e:21529-21534)
-    case 'P':
-      socket.emit('ansi-output', '\x1b[10;21H');
-      await promptForLongNumber(socket, session, 'bytesDownload', user.bytesDownload || 0);
-      break;
-
-    // Q - Daily Bytes Limit (express.e:21535-21546)
-    case 'Q':
-      socket.emit('ansi-output', '\x1b[11;21H         \x1b[11;21H');
-      await promptForLongNumber(socket, session, 'dailyBytesLimit', user.dailyBytesLimit || 0);
-      break;
-
-    // R - Time Total (express.e:21547-21558)
-    case 'R':
-      socket.emit('ansi-output', '\x1b[12;17H');
-      await promptForTimeMinutes(socket, session, 'timeTotal', user.timeTotal || 0);
-      break;
-
-    // S - Upload CPS (express.e:21559-21564)
-    case 'S':
-      socket.emit('ansi-output', '\x1b[12;47H');
-      await promptForLongNumber(socket, session, 'upCPS', user.upCPS || 0);
-      break;
-
-    // T - Download CPS (express.e:21565-21570)
-    case 'T':
-      socket.emit('ansi-output', '\x1b[12;69H');
-      await promptForLongNumber(socket, session, 'dnCPS', user.dnCPS || 0);
-      break;
-
-    // U - Time Limit (express.e:21571-21585)
-    case 'U':
-      socket.emit('ansi-output', '\x1b[13;17H');
-      await promptForTimeMinutes(socket, session, 'timeLimit', user.timeLimit || 0);
-      break;
-
-    // V - Time Used (express.e:21586-21593)
-    case 'V':
-      socket.emit('ansi-output', '\x1b[13;51H');
-      await promptForTimeMinutes(socket, session, 'timeUsed', user.timeUsed || 0);
-      break;
-
-    // W - UUCP Address (express.e:21594-21598)
-    case 'W':
-      socket.emit('ansi-output', '\x1b[13;76H');
-      await promptForString(socket, session, 'uucpa', user.uucpa || '', 4);
-      break;
-
-    // Y - Chat Limit (express.e:21599-21606)
-    case 'Y':
-      socket.emit('ansi-output', '\x1b[14;17H');
-      await promptForTimeMinutes(socket, session, 'chatLimit', user.chatLimit || 0);
-      break;
-
-    // Z - Chat Used (express.e:21607-21612)
-    case 'Z':
-      socket.emit('ansi-output', '\x1b[14;51H');
-      const chatUsed = (user.chatLimit || 0) - (user.chatRemain || 0);
-      await promptForTimeMinutes(socket, session, 'chatUsed', chatUsed);
-      break;
+  if (command === 'A') { // NAME (21383-21391, page 1 21616-21624)
+    out('\x1b[2;10H');
+    user.username = (await lineInput(socket, session, 30, user.username || '')).slice(0, 30);
+    changed();
+    return;
   }
 
-  // Refresh display after edit
-  if (session.tempData?.accountEditing) {
-    displayAccountPage0(socket, user, slot);
+  if (session.tempData.page === 1) {
+    switch (command) {
+      case 'B': // Password reset (21625-21630)
+        out('\x1b[3;21H   \x1b[3;21H');
+        user.forcePwdReset = (await yesNo(socket, session, 0)) ? 1 : 0;
+        changed();
+        return;
+      case 'C': // account locked (21631-21636)
+        out('\x1b[3;56H   \x1b[3;56H');
+        user.accountLocked = (await yesNo(socket, session, 0)) ? 1 : 0;
+        changed();
+        return;
+      case 'D': // invalid attempts (21637-21641)
+        out('\x1b[4;21H');
+        user.invalidAttempts = await numberInput(socket, session, user.invalidAttempts ?? 0);
+        changed();
+        return;
+    }
+    return;
+  }
+
+  switch (command) {
+    case 'B': // Real Name (21392-21398)
+      out('\x1b[2;56H');
+      user.realname = (await lineInput(socket, session, 25, user.realname || '')).slice(0, 25);
+      changed();
+      return;
+    case 'C': // Location (21399-21405)
+      out('\x1b[3;10H');
+      user.location = (await lineInput(socket, session, 29, user.location || '')).slice(0, 29);
+      changed();
+      return;
+    case 'D': { // PASS (21406-21438): slot 1 only, an empty line changes nothing.
+      if (!slotOne) return;
+      out('\x1b[3;56H' + ' '.repeat(9) + '\b'.repeat(9));
+      const pass = await lineInput(socket, session, 50);
+      if (pass.length > 0) {
+        // setNewPassword (935) under the board's own hash - see database.hashPassword.
+        const { db } = require('../../database');
+        user.passwordHash = await db.hashPassword(pass);
+        user.pwdLastUpdated = Math.floor(Date.now() / 1000);
+        changed();
+      }
+      return;
+    }
+    case 'E': // Phone number (21439-21445)
+      out('\x1b[4;21H');
+      user.phone = (await lineInput(socket, session, 12, user.phone || '')).slice(0, 12);
+      changed();
+      return;
+    case 'F': // conference access (21446-21452)
+      out('\x1b[4;56H');
+      user.confAccess = (await lineInput(socket, session, 9, user.confAccess || '')).slice(0, 9);
+      changed();
+      return;
+    case 'G': // RATIO (21453-21457)
+      out('\x1b[5;21H');
+      user.ratio = await numberInput(socket, session, user.ratio);
+      changed();
+      return;
+    case 'H': // SEC_Level (21458-21469): slot 1 only, but `changes:=TRUE` either way.
+      if (slotOne) {
+        out('\x1b[5;56H');
+        user.secLevel = await numberInput(socket, session, user.secLevel);
+      }
+      changed();
+      return;
+    case 'I': // Ratio Type (21470-21483)
+      out('\x1b[6;21H');
+      user.ratioType = await numberInput(socket, session, user.ratioType);
+      if (user.ratioType < 0 || user.ratioType > 2) {
+        out('\x07');
+        user.ratioType = 0;
+      }
+      out(`\x1b[6;1H\x1b[33mI> \x1b[32mRatio Type ....\x1b[36m:\x1b[0m ${String(user.ratioType).padEnd(5)}`);
+      if (user.ratioType === 0) out(' \x1b[32m<-\x1b[33mByte\x1b[32m)\x1b[0m');
+      if (user.ratioType === 1) out(' \x1b[32m<-\x1b[33mB/F\x1b[32m)\x1b[0m ');
+      if (user.ratioType === 2) out(' \x1b[32m<-\x1b[33mFile\x1b[32m)\x1b[0m');
+      changed();
+      return;
+    case 'J': { // conference ReJoin (21484-21490)
+      out('\x1b[6;56H');
+      const { conf, msgBase } = await rJoinInput(socket, session);
+      user.confRJoin = conf;
+      user.autoRejoin = conf;
+      user.msgBaseRJoin = msgBase;
+      changed();
+      return;
+    }
+    case 'K': // UPLOADS (21491-21495)
+      out('\x1b[7;21H');
+      user.uploads = await numberInput(socket, session, user.uploads);
+      changed();
+      return;
+    case 'L': // MESSAGES_POSTED (21496-21500)
+      out('\x1b[7;56H');
+      user.messagesPosted = await numberInput(socket, session, user.messagesPosted ?? 0);
+      changed();
+      return;
+    case 'M': // DOWNLOADS (21501-21505)
+      out('\x1b[8;21H');
+      user.downloads = await numberInput(socket, session, user.downloads);
+      changed();
+      return;
+    case 'N': // New user (21506-21511)
+      out('\x1b[8;56H   \x1b[8;56H');
+      user.newUser = await yesNo(socket, session, 0);
+      changed();
+      return;
+    case '#': // times called (21512-21516)
+      out('\x1b[6;71H');
+      user.calls = await numberInput(socket, session, user.calls);
+      changed();
+      return;
+    case '%': // calls today (21517-21521)
+      out('\x1b[7;71H');
+      user.callsToday = await numberInput(socket, session, getTodaysCalls(user));
+      changed();
+      return;
+    case 'O': // Bytes Uploaded (21522-21528)
+      out('\x1b[9;21H');
+      user.bytesUpload = Number(await bcdNumberInput(socket, session, BigInt(Math.trunc(Number(user.bytesUpload) || 0))));
+      changed();
+      return;
+    case 'P': // Bytes Downloaded (21529-21534)
+      out('\x1b[10;21H');
+      user.bytesDownload = Number(await bcdNumberInput(socket, session, BigInt(Math.trunc(Number(user.bytesDownload) || 0))));
+      changed();
+      return;
+    case 'Q': // Daily Bytes Limit (21535-21546)
+      out('\x1b[11;21H         \x1b[11;21H');
+      user.byteLimit = await longNumberInput(socket, session, user.byteLimit);
+      changed();
+      return;
+    case 'R': // Time_Total (21547-21558)
+      out('\x1b[12;17H');
+      user.timeTotal = await minutesInput(socket, session, user.timeTotal);
+      settleTimeTotal(user);
+      changed();
+      return;
+    case 'S': // up cps (21559-21564)
+      out('\x1b[12;47H');
+      user.topUploadCPS = await longNumberInput(socket, session, user.topUploadCPS);
+      changed();
+      return;
+    case 'T': // down cps (21565-21570)
+      out('\x1b[12;69H');
+      user.topDownloadCPS = await longNumberInput(socket, session, user.topDownloadCPS);
+      changed();
+      return;
+    case 'U': // Time_Limit (21571-21585)
+      out('\x1b[13;17H');
+      user.timeLimit = await minutesInput(socket, session, user.timeLimit);
+      settleTimeTotal(user);
+      changed();
+      return;
+    case 'V': // TIME_USED (21586-21593)
+      out('\x1b[13;51H');
+      user.timeUsed = await minutesInput(socket, session, user.timeUsed);
+      changed();
+      return;
+    case 'W': // uucpa (21594-21598)
+      out('\x1b[13;76H');
+      user.uuCP = (await uucpNumberInput(socket, session, user.uuCP ? 1 : 0)) !== 0;
+      changed();
+      return;
+    case 'Y': { // chat limit (21599-21606): what was used stays used.
+      out('\x1b[14;17H');
+      const used = Number(user.chatUsed) || 0;
+      user.chatLimit = await minutesInput(socket, session, user.chatLimit);
+      // chatRemain:=chatLimit-temp, never below 0; the port keeps chatUsed.
+      user.chatUsed = user.chatLimit - Math.max(0, user.chatLimit - used);
+      changed();
+      return;
+    }
+    case 'Z': { // chat used (21607-21612)
+      out('\x1b[14;51H');
+      const used = await minutesInput(socket, session, user.chatUsed);
+      user.chatUsed = user.chatLimit - Math.max(0, user.chatLimit - used);
+      changed();
+      return;
+    }
   }
 }
 
 /**
- * Handle Page 1 field edits (express.e:21614-21642)
+ * 1-8 (express.e:21329-21360): the board's preset n (Access/PRESET.n), when
+ * it has a PRESET.AREA.
  */
-async function handlePage1Edit(socket: any, session: BBSSession, command: string): Promise<void> {
-  const user = session.tempData.editingUser;
-  const slot = session.tempData.editingSlot;
+async function applyPresetKey(socket: any, session: BBSSession, preset: number): Promise<void> {
+  const user: EditedAccount = session.tempData.editingUser;
+  const tooltypes = readPreset(boardRoot(), preset);
+  const values = applyPreset(tooltypes);
+  if (!tooltypes || !values) return;
 
-  switch (command) {
-    // A - Name (repeated, express.e:21616-21624)
-    case 'A':
-      socket.emit('ansi-output', '\x1b[2;10H');
-      await promptForString(socket, session, 'username', user.username || '', 30);
-      break;
+  socket.emit('ansi-output', `\x1b[JPreset ${preset}. `);
+  session.tempData.changes = true;
+  user.newUser = false;
+  // applyPreset (29358-29370).
+  user.confAccess = values.confAccess;
+  user.secLevel = values.secLevel;
+  user.ratioType = values.ratioType;
+  user.ratio = values.ratio;
+  user.timeLimit = values.timeLimit;
+  user.confRJoin = values.confRJoin;
+  user.autoRejoin = values.confRJoin;
+  user.msgBaseRJoin = values.msgBaseRJoin;
+  user.byteLimit = values.byteLimit;
+  // 21343-21348
+  user.timeUsed = 0;
+  user.timeTotal = user.timeLimit;
+  user.topUploadCPS = 0;
+  user.topDownloadCPS = 0;
 
-    // B - Password Reset Flag (express.e:21625-21630)
-    case 'B':
-      socket.emit('ansi-output', '\x1b[3;21H   \x1b[3;21H');
-      await promptForYesNo(socket, session, 'forcePwdReset', user.forcePwdReset);
-      break;
-
-    // C - Account Locked (express.e:21631-21636)
-    case 'C':
-      socket.emit('ansi-output', '\x1b[3;56H   \x1b[3;56H');
-      await promptForYesNo(socket, session, 'accountLocked', user.accountLocked);
-      break;
-
-    // D - Invalid Attempts (express.e:21637-21641)
-    case 'D':
-      socket.emit('ansi-output', '\x1b[4;21H');
-      await promptForNumber(socket, session, 'invalidAttempts', user.invalidAttempts || 0);
-      break;
+  socket.emit('ansi-output', 'Preset All Conferences with Ratios & RatioType ');
+  if (await yesNo(socket, session, 1)) {
+    applyConfPresets(boardRoot(), Number(user.slotNumber) || 0, tooltypes,
+      nodeTooltype(session.nodeId ?? 0, 'CONF_DB') || 'Conf.DB');
   }
-
-  // Refresh display after edit
-  if (session.tempData?.accountEditing) {
-    displayAccountPage1(socket, user, slot);
-  }
-}
-
-// ===== Input Prompt Functions =====
-
-async function promptForString(socket: any, session: BBSSession, field: string, currentValue: string, maxLength: number): Promise<void> {
-  session.tempData.waitingForFieldInput = { field, currentValue, maxLength, type: 'string' };
-  socket.emit('ansi-output', currentValue);
-}
-
-async function promptForNumber(socket: any, session: BBSSession, field: string, currentValue: number, min: number = 0, max: number = 999999): Promise<void> {
-  session.tempData.waitingForFieldInput = { field, currentValue, type: 'number', min, max };
-  socket.emit('ansi-output', String(currentValue));
-}
-
-async function promptForLongNumber(socket: any, session: BBSSession, field: string, currentValue: number): Promise<void> {
-  session.tempData.waitingForFieldInput = { field, currentValue, type: 'long' };
-  socket.emit('ansi-output', String(currentValue));
-}
-
-async function promptForTimeMinutes(socket: any, session: BBSSession, field: string, currentValue: number): Promise<void> {
-  const minutes = Math.floor(currentValue / 60);
-  session.tempData.waitingForFieldInput = { field, currentValue, type: 'time' };
-  socket.emit('ansi-output', String(minutes));
-}
-
-async function promptForYesNo(socket: any, session: BBSSession, field: string, currentValue: boolean | number): Promise<void> {
-  session.tempData.waitingForFieldInput = { field, currentValue, type: 'yesno' };
-  // Show (Y/N) prompt
-}
-
-async function promptForPassword(socket: any, session: BBSSession): Promise<void> {
-  session.tempData.waitingForFieldInput = { field: 'password', type: 'password' };
-  socket.emit('ansi-output', '         ');
-  for (let i = 0; i < 9; i++) {
-    socket.emit('ansi-output', '\b');
-  }
-}
-
-async function promptForRejoin(socket: any, session: BBSSession): Promise<void> {
-  const user = session.tempData.editingUser;
-  session.tempData.waitingForFieldInput = {
-    field: 'confRJoin',
-    currentValue: `${user.confRJoin || 0}:${user.msgBaseRJoin || 0}`,
-    type: 'rejoin'
-  };
+  socket.emit('ansi-output', '\x1b[18;1H' + ' '.repeat(68));
+  redrawValues(socket, session);
 }
 
 // ===== Helper Functions =====
@@ -519,7 +556,8 @@ function editAccountAt(session: BBSSession, account: any, slot: number): void {
 
 /**
  * + and - (express.e:21263-21286): which:=which+1, and past the last record
- * back to slot 1; which:=which-1, and below 1 to findLastAccount().
+ * back to slot 1; which:=which-1, and below 1 to findLastAccount(). Then
+ * displayAccountInfo - the values over the screen already drawn.
  */
 async function loadNextUser(socket: any, session: BBSSession, direction: number): Promise<void> {
   try {
@@ -530,46 +568,43 @@ async function loadNextUser(socket: any, session: BBSSession, direction: number)
       slot = 1;
       account = await loadAccountAt(slot);
     }
-    if (!account) {
-      socket.emit('ansi-output', '\r\n\x1b[31mError loading user.\x1b[0m\r\n');
-      return;
-    }
+    // express.e does not look at the second load's result; there is no
+    // message of its own. The account on screen stays the one edited.
+    if (!account) return;
     editAccountAt(session, account, slot);
     session.tempData.changes = false;
-    if (session.tempData.page === 1) {
-      displayAccountPage1(socket, account, slot);
-    } else {
-      displayAccountPage0(socket, account, slot);
-    }
+    redrawValues(socket, session);
   } catch (err) {
-console.error('Error loading next user:', err);
-    socket.emit('ansi-output', '\r\n\x1b[31mError loading user.\x1b[0m\r\n');
+    console.error('Error loading next user:', err);
   }
 }
 
-async function saveAccount(socket: any, session: BBSSession): Promise<void> {
+/**
+ * saveAccount for the editor: the record and its row (database.updateUser
+ * writes the user.data / user.keys / user.misc record first). False when it
+ * failed - express.e's `stat<>RESULT_SUCCESS`.
+ */
+async function writeAccount(user: EditedAccount): Promise<boolean> {
   const { db } = require('../../database');
-  const user = session.tempData.editingUser;
-
   try {
-    socket.emit('ansi-output', '\r\n\x1b[32mSaving...\x1b[0m\r\n');
-
     await db.updateUser(user.id, user);
-
-    session.tempData.changes = false;
-    socket.emit('ansi-output', '\x1b[32mSaved.\x1b[0m\r\n');
-
-    // Refresh display
-    const page = session.tempData.page;
-    if (page === 0) {
-      displayAccountPage0(socket, user, session.tempData.editingSlot);
-    } else {
-      displayAccountPage1(socket, user, session.tempData.editingSlot);
-    }
+    return true;
   } catch (err) {
-console.error('Error saving account:', err);
-    socket.emit('ansi-output', '\x1b[31mCan\'t save account\x1b[0m\r\n');
+    console.error('Error saving account:', err);
+    return false;
   }
+}
+
+/** ~ (express.e:21287-21309). */
+async function saveAccount(socket: any, session: BBSSession): Promise<void> {
+  const user: EditedAccount = session.tempData.editingUser;
+  socket.emit('ansi-output', '\x1b[JSave\r\n');
+  user.newUser = false;
+  redrawValues(socket, session);
+  if (!(await writeAccount(user))) socket.emit('ansi-output', 'Can\'t Save account\r\n');
+  // 21303-21307: every web caller is remote.
+  await writeToCallersLog(`\tREMOTE Account Maintenance on Account ${user.slotNumber ?? 0}`, session.nodeId ?? 0);
+  session.tempData.changes = false;
 }
 
 // ===== User Notes Functions - express.e:21679-21739 =====
@@ -582,7 +617,6 @@ console.error('Error saving account:', err);
 export function displayUserNotes(socket: any, session: BBSSession): void {
   const user = session.tempData.editingUser;
   const slot = session.tempData.editingSlot;
-  const onlineEdit = session.tempData.onlineEdit || false;
 
   // Clear screen and show header (express.e:21688-21689)
   socket.emit('ansi-output', '\x1b[2J');
@@ -613,12 +647,9 @@ export function displayUserNotes(socket: any, session: BBSSession): void {
   socket.emit('ansi-output', '\x1b[34m------------------------------------------------------------------------------\x1b[0m\r\n');
   socket.emit('ansi-output', '\r\n');
 
-  // Show commands - +/- only available if not online editing
-  if (onlineEdit) {
-    socket.emit('ansi-output', '\x1b[33m<TAB>\x1b[36m=\x1b[0mExit \x1b[33mE\x1b[36m=\x1b[0mEdit\r\n');
-  } else {
-    socket.emit('ansi-output', '\x1b[33m<TAB>\x1b[36m=\x1b[0mExit \x1b[33mE\x1b[36m=\x1b[0mEdit \x1b[33m+\x1b[36m=\x1b[0mNext \x1b[33m-\x1b[36m=\x1b[0mPrev\r\n');
-  }
+  // express.e:21709 - the one key line. + and - work (when not editing
+  // online) without being offered, as in express.e.
+  socket.emit('ansi-output', '\x1b[33m<TAB>\x1b[36m=\x1b[0mExit \x1b[33mE\x1b[36m=\x1b[0mEdit\r\n');
 
   // Show cursor
   socket.emit('ansi-output', '\x1b[?25h');
@@ -632,41 +663,29 @@ export async function handleUserNotesInput(socket: any, session: BBSSession, key
   const command = key.toUpperCase();
   const onlineEdit = session.tempData.onlineEdit || false;
 
-  // TAB - Exit (express.e:21734-21735)
+  // TAB - Exit (express.e:21734-21735); editInfo draws the account (21315).
   if (key === '\t') {
     session.subState = LoggedOnSubState.ACCOUNT_EDITOR_EDIT;
-    const page = session.tempData.page || 0;
-    if (page === 0) {
-      displayAccountPage0(socket, session.tempData.editingUser, session.tempData.editingSlot);
-    } else {
-      displayAccountPage1(socket, session.tempData.editingUser, session.tempData.editingSlot);
-    }
+    redraw(socket, session);
     return;
   }
 
-  // E - Edit notes (express.e:21731-21733)
+  // E - Edit notes (express.e:21731-21733): `loadMsg(fname)`, the board's
+  // message editor, `saveMsg(fname)` when it saves. The port had a line
+  // editor of its own ("Editing user notes. Enter text (blank line to
+  // finish)", "Notes saved.").
   if (command === 'E') {
     const slot = session.tempData.editingSlot;
-
-    // Load existing notes into message buffer
-    const existingNotes = readUserNotes(slot) || '';
-
-    // Initialize notes editing state
-    session.tempData.notesEditing = true;
-    session.tempData.notesBuffer = existingNotes.split('\n');
-    session.tempData.notesSlot = slot;
-
-    // Show simple line editor
-    socket.emit('ansi-output', '\r\n\x1b[33mEditing user notes. Enter text (blank line to finish):\x1b[0m\r\n');
-    socket.emit('ansi-output', '\x1b[36m' + '-'.repeat(78) + '\x1b[0m\r\n');
-
-    // Show existing content
-    if (existingNotes) {
-      socket.emit('ansi-output', existingNotes + '\r\n');
-    }
-
-    session.tempData.notesNewLines = [];
-    socket.emit('ansi-output', '> ');
+    startPass('notes edit', async () => {
+      // Required here: the message editor's module loads the mail services.
+      const { editLines, loadMsgLines, saveMsgText } = require('../message/door-edit-file') as typeof import('../message/door-edit-file');
+      const saved = await editLines(socket, session, loadMsgLines(readUserNotes(slot)));
+      if (saved !== null) {
+        const text = saveMsgText(saved);
+        if (text !== null) saveUserNotes(slot, text);
+      }
+      displayUserNotes(socket, session);
+    });
     return;
   }
 
@@ -681,37 +700,6 @@ export async function handleUserNotesInput(socket: any, session: BBSSession, key
     await loadNextUserForNotes(socket, session, -1);
     return;
   }
-}
-
-/**
- * Handle user notes line input (during editing)
- */
-export async function handleUserNotesLineInput(socket: any, session: BBSSession, line: string): Promise<void> {
-  // Blank line finishes editing
-  if (line.trim() === '') {
-    const slot = session.tempData.notesSlot;
-    const newContent = session.tempData.notesNewLines.join('\n');
-
-    if (saveUserNotes(slot, newContent)) {
-      socket.emit('ansi-output', '\r\n\x1b[32mNotes saved.\x1b[0m\r\n');
-    } else {
-      socket.emit('ansi-output', '\r\n\x1b[31mError saving notes.\x1b[0m\r\n');
-    }
-
-    // Clean up and redisplay
-    session.tempData.notesEditing = false;
-    session.tempData.notesBuffer = undefined;
-    session.tempData.notesNewLines = undefined;
-    session.tempData.notesSlot = undefined;
-
-    // Return to notes view
-    displayUserNotes(socket, session);
-    return;
-  }
-
-  // Add line to buffer
-  session.tempData.notesNewLines.push(line);
-  socket.emit('ansi-output', '> ');
 }
 
 /**
@@ -731,7 +719,6 @@ async function loadNextUserForNotes(socket: any, session: BBSSession, direction:
     displayUserNotes(socket, session);
   } catch (err) {
     console.error('Error loading user for notes:', err);
-    socket.emit('ansi-output', '\r\n\x1b[31mError loading user.\x1b[0m\r\n');
   }
 }
 
@@ -802,7 +789,7 @@ export async function displayConferenceAccounting(socket: any, session: BBSSessi
     socket.emit('ansi-output', '\x1b[2J');
 
     // User info (express.e:22112-22116)
-    socket.emit('ansi-output', `\x1b[2;1H \x1b[32mName\x1b[36m:\x1b[0m ${(user.username || '').substring(0, 32).padEnd(32)}`);
+    socket.emit('ansi-output', `\x1b[2;1H \x1b[32mName\x1b[36m:\x1b[0m ${(user.username || '').substring(0, 32).padEnd(32)} `);
     socket.emit('ansi-output', `\x1b[3;1H \x1b[32mLoc.\x1b[36m:\x1b[0m ${(user.location || '').substring(0, 29).padEnd(29)}\r\n`);
     socket.emit('ansi-output', `\x1b[4;1H \x1b[32mConf\x1b[36m:\x1b[0m ${confName.substring(0, 60).padEnd(60)}\r\n`);
 
@@ -844,7 +831,6 @@ export async function displayConferenceAccounting(socket: any, session: BBSSessi
 
   } catch (err) {
     console.error('Error displaying conference accounting:', err);
-    socket.emit('ansi-output', '\r\n\x1b[31mError loading conference data.\x1b[0m\r\n');
   }
 }
 
@@ -857,25 +843,11 @@ export async function handleConferenceAccountingInput(socket: any, session: BBSS
   const command = key.toUpperCase();
   const user = session.tempData.editingUser;
 
-  // TAB - Exit (express.e:22222-22225)
+  // TAB - Exit (express.e:22222-22225): checkChanges, as the editor's.
   if (key === '\t') {
-    // Check for unsaved changes
-    if (session.tempData.confAcctChanges) {
-      socket.emit('ansi-output', '\r\n\x1b[33mYou have unsaved changes. Save before exiting? (Y/N): \x1b[0m');
-      session.tempData.confAcctExitPending = true;
-      return;
-    }
-    exitConferenceAccounting(socket, session);
-    return;
-  }
-
-  // Handle save confirmation if pending
-  if (session.tempData.confAcctExitPending) {
-    if (command === 'Y') {
-      await saveConferenceAccountingChanges(socket, session);
-    }
-    session.tempData.confAcctExitPending = false;
-    exitConferenceAccounting(socket, session);
+    startPass('conference accounting exit', async () => {
+      if (await checkChanges(socket, session, session.tempData.confAcctChanges)) exitConferenceAccounting(socket, session);
+    });
     return;
   }
 
@@ -968,18 +940,14 @@ export async function handleConferenceAccountingInput(socket: any, session: BBSS
 }
 
 /**
- * Save conference accounting changes
+ * `~` (express.e:22282-22293): `[JSave`, masterSavePointers, no changes left.
+ * masterSavePointers says nothing either way; a failed write is logged.
  */
 async function saveConferenceAccountingChanges(socket: any, session: BBSSession): Promise<void> {
+  socket.emit('ansi-output', '\x1b[JSave\r\n');
   const confBase = session.tempData.confBaseRecord;
-  if (confBase && session.tempData.confAcctChanges) {
-    if (saveConfBaseRecord(session.tempData.editingUser, session.tempData.confBaseRecordConf || 1, confBase)) {
-      socket.emit('ansi-output', '\r\n\x1b[32mSaved.\x1b[0m\r\n');
-    } else {
-      socket.emit('ansi-output', '\r\n\x1b[31mError saving.\x1b[0m\r\n');
-    }
-    session.tempData.confAcctChanges = false;
-  }
+  if (confBase) saveConfBaseRecord(session.tempData.editingUser, session.tempData.confBaseRecordConf || 1, confBase);
+  session.tempData.confAcctChanges = false;
 }
 
 /**
@@ -992,16 +960,10 @@ function exitConferenceAccounting(socket: any, session: BBSSession): void {
   session.tempData.confBaseRecord = undefined;
   session.tempData.confAcctChanges = undefined;
   session.tempData.confAcctFieldEdit = undefined;
-  session.tempData.confAcctExitPending = undefined;
 
-  // Return to account editor
+  // editInfo draws the account (express.e:21318).
   session.subState = LoggedOnSubState.ACCOUNT_EDITOR_EDIT;
-  const page = session.tempData.page || 0;
-  if (page === 0) {
-    displayAccountPage0(socket, session.tempData.editingUser, session.tempData.editingSlot);
-  } else {
-    displayAccountPage1(socket, session.tempData.editingUser, session.tempData.editingSlot);
-  }
+  redraw(socket, session);
 }
 
 // ===== Credit Maintenance - express.e:21884-22042 creditMaintenance() =====
@@ -1046,22 +1008,28 @@ export function displayCreditMaintenance(socket: any, session: BBSSession): void
   const upYesNo = (tracking & TRACK_UPLOADS_BIT) ? 'Yes' : 'No ';
   const dnYesNo = (tracking & TRACK_DOWNLOADS_BIT) ? 'Yes' : 'No ';
 
+  // `\d[7]` is left-justified, of the INT (`AND $FFFF`).
+  const d7 = (n: number) => String((Number(n) || 0) & 0xffff).padEnd(7);
+
   socket.emit('ansi-output', '\x1b[2J');
   socket.emit('ansi-output', '\x1b[2;1H                      \x1b[33mACCOUNT CREDIT MAINTENANCE\x1b[0m');
-  socket.emit('ansi-output', `\x1b[4;2H\x1b[0m[${String(user.slotNumber ?? 0).padStart(4, '0')}] ${(user.username || '').substring(0, 32)}`);
+  socket.emit('ansi-output', `\x1b[4;2H\x1b[0m[${String(user.slotNumber ?? 0).padStart(4, '0')}] ${(user.username || '').substring(0, 32).padEnd(32)}`);
 
   socket.emit('ansi-output', '\x1b[6;2H\x1b[33mCREDIT STATUS \x1b[0m');
   socket.emit('ansi-output', days === 0 ? '\x1b[37mINACTIVE      \x1b[0m' : '\x1b[32mACTIVE        \x1b[0m');
 
-  socket.emit('ansi-output', `\x1b[8;2H\x1b[33m1.>\x1b[32m Days Credited  \x1b[33m[\x1b[0m${String(days).padStart(7)}\x1b[33m]\x1b[0m`);
-  socket.emit('ansi-output', `\x1b[9;2H\x1b[33m2.>\x1b[32m Amount Paid    \x1b[33m[\x1b[0m${String(amount).padStart(7)}\x1b[33m]\x1b[0m`);
-  socket.emit('ansi-output', `\x1b[10;2H\x1b[33m3.>\x1b[32m Amount Paid to Date \x1b[33m[\x1b[0m${String(totalToDate).padStart(7)}\x1b[33m]\x1b[32m as of \x1b[0m${creditDateStr(totalDate)}`);
+  socket.emit('ansi-output', `\x1b[8;2H\x1b[33m1.>\x1b[32m Days Credited  \x1b[33m[\x1b[0m${d7(days)}\x1b[33m]\x1b[0m`);
+  socket.emit('ansi-output', `\x1b[9;2H\x1b[33m2.>\x1b[32m Amount Paid    \x1b[33m[\x1b[0m${d7(amount)}\x1b[33m]\x1b[0m`);
+  socket.emit('ansi-output', `\x1b[10;2H\x1b[33m3.>\x1b[32m Amount Paid to Date \x1b[33m[\x1b[0m${d7(totalToDate)}\x1b[33m]\x1b[32m as of \x1b[0m${creditDateStr(totalDate)}`);
   socket.emit('ansi-output', `\x1b[11;2H\x1b[33m4.> \x1b[32mTrack Uploads   \x1b[0m${upYesNo} \x1b[32m Beginning Date \x1b[0m${creditDateStr(startDate)}`);
   socket.emit('ansi-output', `\x1b[12;2H\x1b[33m5.> \x1b[32mTrack Downloads \x1b[0m${dnYesNo} \x1b[32m Ending Date    \x1b[0m${creditDateStr(endDate)}`);
-  socket.emit('ansi-output', `\x1b[13;2H\x1b[33m   \x1b[32m Days Remaining. \x1b[0m${String(remain).padStart(7)}`);
+  socket.emit('ansi-output', `\x1b[13;2H\x1b[33m   \x1b[32m Days Remaining. \x1b[0m${String(remain).padEnd(7)}`);
 
-  socket.emit('ansi-output', '\x1b[15;2H\x1b[33mX\x1b[36m=\x1b[0mEXIT \x1b[33mR\x1b[36m=\x1b[0mRESET/SET BEGINNING DATE \x1b[33mT\x1b[36m=\x1b[0mTERMINATE CREDIT ACCOUNT \x1b[0m');
-  socket.emit('ansi-output', '\x1b[16;2H\x1b[33mU\x1b[36m=\x1b[0mUPDATE CREDIT TOTAL \x1b[33m~\x1b[36m=\x1b[0mSAVE ACCOUNT \x1b[33m<TAB>\x1b[36m=\x1b[0mCONT\x1b[0m');
+  // express.e:21949-21952
+  socket.emit('ansi-output', '\x1b[15;2H\x1b[33mX\x1b[36m=\x1b[0mEXIT \x1b[33mR\x1b[36m=\x1b[0mRESET/SET BEGINNING DATE \x1b[0m');
+  socket.emit('ansi-output', '\x1b[33mT\x1b[36m=\x1b[0mTERMINATE CREDIT ACCOUNT \x1b[0m');
+  socket.emit('ansi-output', '\x1b[16;2H\x1b[33mU\x1b[36m=\x1b[0mUPDATE CREDIT TOTAL \x1b[33m~\x1b[36m=\x1b[0mSAVE ACCOUNT \x1b[0m');
+  socket.emit('ansi-output', '\x1b[33m<TAB>\x1b[36m=\x1b[0mCONT\x1b[0m');
   socket.emit('ansi-output', '\x1b[17;2H');
 }
 
@@ -1072,16 +1040,6 @@ export function displayCreditMaintenance(socket: any, session: BBSSession): void
 export async function handleCreditMaintenanceInput(socket: any, session: BBSSession, key: string): Promise<void> {
   const user = session.tempData.editingUser;
   const command = key.toUpperCase();
-
-  // Save-confirmation on exit (express.e checkChanges).
-  if (session.tempData.creditExitPending) {
-    if (command === 'Y') {
-      await saveCreditMaintenance(socket, session);
-    }
-    session.tempData.creditExitPending = false;
-    exitCreditMaintenance(socket, session);
-    return;
-  }
 
   // Field-edit mode (1/2/3): buffer digits, commit on ENTER (express.e numberInput).
   if (session.tempData.creditFieldEdit) {
@@ -1107,14 +1065,11 @@ export async function handleCreditMaintenanceInput(socket: any, session: BBSSess
     return;
   }
 
-  // TAB / X - exit, with a save prompt if there are changes (express.e:21966-21969).
+  // TAB / X - exit through checkChanges (express.e:21966-21969).
   if (key === '\t' || command === 'X') {
-    if (session.tempData.creditChanges) {
-      socket.emit('ansi-output', '\r\n\x1b[33mYou have unsaved changes. Save before exiting? (Y/N): \x1b[0m');
-      session.tempData.creditExitPending = true;
-      return;
-    }
-    exitCreditMaintenance(socket, session);
+    startPass('credit maintenance exit', async () => {
+      if (await checkChanges(socket, session, session.tempData.creditChanges)) exitCreditMaintenance(socket, session);
+    });
     return;
   }
 
@@ -1160,7 +1115,7 @@ async function saveCreditMaintenance(socket: any, session: BBSSession): Promise<
     session.tempData.changes = false;
   } catch (err) {
     console.error('Error saving credit maintenance:', err);
-    socket.emit('ansi-output', '\r\n\x1b[31mCan\'t save account\x1b[0m\r\n');
+    socket.emit('ansi-output', 'Can\'t Save account\r\n');
   }
 }
 
@@ -1225,16 +1180,10 @@ function writeCreditLog(user: any): void {
 function exitCreditMaintenance(socket: any, session: BBSSession): void {
   session.tempData.creditFieldEdit = undefined;
   session.tempData.creditChanges = undefined;
-  session.tempData.creditExitPending = undefined;
   session.inputBuffer = '';
 
   session.subState = LoggedOnSubState.ACCOUNT_EDITOR_EDIT;
-  const page = session.tempData.page || 0;
-  if (page === 0) {
-    displayAccountPage0(socket, session.tempData.editingUser, session.tempData.editingSlot);
-  } else {
-    displayAccountPage1(socket, session.tempData.editingUser, session.tempData.editingSlot);
-  }
+  redraw(socket, session);
 }
 
 // ===== User Answers - express.e:21319-21326 =====
@@ -1266,10 +1215,5 @@ export function displayUserAnswers(socket: any, session: BBSSession): boolean {
 /** Any key returns to the account editor (express.e:21326 displayAccount). */
 export function handleUserAnswersInput(socket: any, session: BBSSession, _key: string): void {
   session.subState = LoggedOnSubState.ACCOUNT_EDITOR_EDIT;
-  const page = session.tempData.page || 0;
-  if (page === 0) {
-    displayAccountPage0(socket, session.tempData.editingUser, session.tempData.editingSlot);
-  } else {
-    displayAccountPage1(socket, session.tempData.editingUser, session.tempData.editingSlot);
-  }
+  redraw(socket, session);
 }

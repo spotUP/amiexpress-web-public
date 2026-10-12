@@ -12,8 +12,8 @@ jest.mock('../../../src/index', () => {
   return { BBSState: states.BBSState, LoggedOnSubState: states.LoggedOnSubState, BBSSession: {} };
 });
 jest.mock('../../../src/handlers/user/account.handler', () => ({
-  displayAccountPage0: jest.fn(),
-  displayAccountPage1: jest.fn(),
+  displayAccount: jest.fn(),
+  displayAccountInfo: jest.fn(),
 }));
 const updateUser = jest.fn().mockResolvedValue(undefined);
 jest.mock('../../../src/database', () => ({ db: { updateUser } }));
@@ -29,6 +29,8 @@ jest.mock('../../../src/utils/amigafs', () => ({
 }));
 
 import { LoggedOnSubState } from '../../../src/constants/bbs-states';
+import { feedInputWaiter } from '../../../src/utils/await-input';
+import { displayAccount as displayAccountImport } from '../../../src/handlers/user/account.handler';
 import { ACSPermission } from '../../../src/constants/acs-permissions';
 import { checkSecurity as checkSecurityImport } from '../../../src/utils/acs.util';
 import * as amigafsImport from '../../../src/utils/amigafs';
@@ -73,6 +75,9 @@ function makeSession(userOverrides: any = {}, tempOverrides: any = {}) {
     },
   } as any;
 }
+
+/** An exit runs checkChanges as its own pass; let it finish. */
+const settle = () => new Promise((r) => setTimeout(r, 0));
 
 /** Feed a string of single-char keys through the handler in order. */
 async function type(socket: any, session: any, keys: string[]) {
@@ -157,21 +162,26 @@ describe('handleCreditMaintenanceInput', () => {
     expect(session.tempData.creditChanges).toBe(false);
   });
 
-  it('X with unsaved changes prompts, then Y saves and returns to the account editor', async () => {
+  it('X with unsaved changes asked an invented "Save before exiting?"; express.e asks whether to lose them, and Y leaves unsaved', async () => {
     const socket = makeSocket();
     const session = makeSession();
     await type(socket, session, ['T']); // makes a change
     await handleCreditMaintenanceInput(socket, session, 'X');
-    expect(socket.getOutput()).toContain('Save before exiting');
+    await settle();
+    // checkChanges (express.e:21200-21209)
+    expect(socket.getOutput()).toContain('You have unsaved changes. Do you wish to lose them (Y/N)? ');
+    expect(socket.getOutput()).not.toContain('Save before exiting');
     expect(session.subState).toBe(LoggedOnSubState.CREDIT_MAINTENANCE_VIEW); // still here
-    await handleCreditMaintenanceInput(socket, session, 'Y');
-    expect(updateUser).toHaveBeenCalledTimes(1);
+    feedInputWaiter(socket, session, 'Y');
+    await settle();
+    expect(updateUser).not.toHaveBeenCalled();
     expect(session.subState).toBe(LoggedOnSubState.ACCOUNT_EDITOR_EDIT);
   });
 
   it('TAB with no changes exits straight to the account editor without saving', async () => {
     const session = makeSession();
     await handleCreditMaintenanceInput(makeSocket(), session, '\t');
+    await settle();
     expect(updateUser).not.toHaveBeenCalled();
     expect(session.subState).toBe(LoggedOnSubState.ACCOUNT_EDITOR_EDIT);
   });
@@ -184,6 +194,7 @@ describe('handleCreditMaintenanceInput', () => {
     expect(updateUser).not.toHaveBeenCalled();
     // exit still works
     await handleCreditMaintenanceInput(makeSocket(), session, '\t');
+    await settle();
     expect(session.subState).toBe(LoggedOnSubState.ACCOUNT_EDITOR_EDIT);
   });
 });
@@ -208,7 +219,10 @@ describe('express.e parity gates on the ! entry (handleAccountEditInput)', () =>
     await handleAccountEditInput(socket, session, '!');
     expect(checkSecurity).toHaveBeenCalledWith(session.user, ACSPermission.CREDIT_ACCESS);
     expect(session.subState).not.toBe(LoggedOnSubState.CREDIT_MAINTENANCE_VIEW);
-    expect(socket.getOutput().toLowerCase()).toContain('credit access');
+    // express.e:21893 `RETURN 0`, then editInfo draws the account (21312):
+    // no "You do not have credit access." and no press-any-key.
+    expect(socket.getOutput().toLowerCase()).not.toContain('credit access');
+    expect(displayAccountImport as jest.Mock).toHaveBeenCalled();
   });
 
   it('enters and computes an editable (unlocked) state when no LockAccounts file exists', async () => {

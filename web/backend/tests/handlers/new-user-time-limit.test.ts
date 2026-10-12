@@ -178,7 +178,7 @@ describe('showing and editing a limit', () => {
     account.displayAccountPage0(socket, {
       username: 'Spot', realname: 'Spot', location: 'Uprough', secLevel: 255,
       timeTotal: 0, timeUsed: 0, timeLimit: 86400, uploads: 0, downloads: 0,
-    }, 1);
+    }, 1, 1);
 
     expect(text()).toContain('Time_Limit\x1b[36m:\x1b[0m \x1b[36m[\x1b[0m1440    \x1b[36m]');
     expect(text()).not.toContain('86400');

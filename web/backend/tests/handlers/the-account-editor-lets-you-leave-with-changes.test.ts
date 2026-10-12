@@ -9,7 +9,7 @@
 process.env.SKIP_DB_INIT = '1';
 
 import { handleCommand } from '../../src/handlers/command.handler';
-import { handleAccountEditInput } from '../../src/handlers/user/account-edit-input.handler';
+import { handleAccountEditInput, handleConferenceAccountingInput } from '../../src/handlers/user/account-edit-input.handler';
 import { BBSState, LoggedOnSubState } from '../../src/index';
 
 function editing() {
@@ -54,5 +54,18 @@ describe('leaving the account editor with unsaved changes', () => {
     await e.type('Y');
     expect(e.out.join('')).toContain('\x1b[JNo-Save\r\n');
     expect(e.session.subState).toBe(LoggedOnSubState.DISPLAY_MENU);
+  });
+
+  it('conference accounting asked an invented "Save before exiting? (Y/N)"; express.e asks checkChanges\' question and N stays', async () => {
+    const e = editing();
+    e.session.subState = LoggedOnSubState.CONF_ACCOUNTING_VIEW;
+    e.session.tempData.confAcctChanges = true;
+    await handleConferenceAccountingInput({ emit: (_e: string, t: any) => e.out.push(String(t)) }, e.session, '\t');
+    await new Promise((r) => setTimeout(r, 30));
+    // express.e:22223 checkChanges (21200-21209)
+    expect(e.out.join('')).toContain('You have unsaved changes. Do you wish to lose them (Y/N)? ');
+    expect(e.out.join('')).not.toContain('Save before exiting');
+    await e.type('n');
+    expect(e.session.subState).toBe(LoggedOnSubState.CONF_ACCOUNTING_VIEW);
   });
 });

@@ -39,7 +39,19 @@ function presetFile(dir: string, presetNumber: number): string | null {
  */
 export function readNewUserPreset(bbsRoot: string, nodeId?: number): Map<string, string> | null {
   const nodePreset = nodeId !== undefined ? presetFile(path.join(bbsRoot, `Node${nodeId}`), 1) : null;
-  const file = nodePreset ?? presetFile(path.join(bbsRoot, 'Access'), 1);
+  return readTooltypes(nodePreset ?? presetFile(path.join(bbsRoot, 'Access'), 1));
+}
+
+/**
+ * TOOLTYPE_PRESET n - `Access/PRESET.<n>` (tooltypes.e:95-97), the board's
+ * preset, as the account editor's 1-8 read it (express.e:21330-21334). Null
+ * when the board has none.
+ */
+export function readPreset(bbsRoot: string, presetNumber: number): Map<string, string> | null {
+  return readTooltypes(presetFile(path.join(bbsRoot, 'Access'), presetNumber));
+}
+
+function readTooltypes(file: string | null): Map<string, string> | null {
   if (!file) return null;
   try {
     return readTooltypeMap(file);
@@ -102,16 +114,40 @@ function presetInt(preset: Map<string, string>, key: string): number {
 export function newUserPreset(bbsRoot: string, nodeId?: number): NewUserPreset | null {
   const preset = readNewUserPreset(bbsRoot, nodeId);
   const area = preset?.get('PRESET.AREA');
-  if (!preset || area === undefined || area.length === 0) return null;
-  const confRJoin = presetInt(preset, 'PRESET.CONFRJOIN');
+  if (area === undefined || area.length === 0) return null;
+  const applied = applyPreset(preset);
+  if (!applied) return null;
+  return { ...applied, confRJoin: applied.confRJoin === 0 ? 1 : applied.confRJoin };
+}
+
+/**
+ * applyPreset (express.e:29358-29370): what a preset sets, or null when it
+ * carries no PRESET.AREA (`IF readToolType(...,'PRESET.AREA',...)`) and sets
+ * nothing. A key the preset does not carry is readToolTypeInt's -1.
+ */
+export function applyPreset(preset: Map<string, string> | null): NewUserPreset | null {
+  const area = preset?.get('PRESET.AREA');
+  if (!preset || area === undefined) return null;
   return {
     secLevel: presetInt(preset, 'PRESET.ACCESS'),
     ratioType: presetInt(preset, 'PRESET.RATIO_TYPE'),
     ratio: presetInt(preset, 'PRESET.RATIO'),
     timeLimit: presetInt(preset, 'PRESET.TIME_LIMIT'),
-    confRJoin: confRJoin === 0 ? 1 : confRJoin,
+    confRJoin: presetInt(preset, 'PRESET.CONFRJOIN'),
     msgBaseRJoin: presetInt(preset, 'PRESET.MSGBASERJOIN'),
     byteLimit: presetInt(preset, 'PRESET.DAILY_BYTE_LIMIT'),
     confAccess: area.slice(0, CONFERENCE_ACCESS_CHARS),
   };
+}
+
+/**
+ * applyConfPresets' two values (express.e:21664-21670): PRESET.RATIO and
+ * PRESET.RATIOTYPE - spelled without the underscore applyPreset's
+ * PRESET.RATIO_TYPE has - each only when the preset carries it.
+ */
+export function confPresetValues(preset: Map<string, string>): { ratio?: number; ratioType?: number } {
+  const out: { ratio?: number; ratioType?: number } = {};
+  if (preset.has('PRESET.RATIO')) out.ratio = presetInt(preset, 'PRESET.RATIO');
+  if (preset.has('PRESET.RATIOTYPE')) out.ratioType = presetInt(preset, 'PRESET.RATIOTYPE');
+  return out;
 }

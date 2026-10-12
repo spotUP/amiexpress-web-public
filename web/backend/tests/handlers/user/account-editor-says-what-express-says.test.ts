@@ -43,7 +43,7 @@ const ACCOUNT = {
 describe('the account editor (displayAccount)', () => {
   it('drew "Account Editor: Page 1 of 2" and "Slot #7" instead of the status line', () => {
     const { socket, text } = socketSpy();
-    displayAccountPage0(socket, ACCOUNT, 7);
+    displayAccountPage0(socket, ACCOUNT, 7, 1);
     const out = text();
     expect(out).toContain('\x1b[0;0H\x1b[33m  ACTIVE\x1b[0m [7]   \x1b[32mBAUD\x1b[36m:\x1b[0m 57600\r\n');
     expect(out).not.toContain('Account Editor');
@@ -52,13 +52,24 @@ describe('the account editor (displayAccount)', () => {
 
   it('a deleted account read ACTIVE', () => {
     const { socket, text } = socketSpy();
-    displayAccountPage0(socket, { ...ACCOUNT, accountDeleted: true }, 7);
+    displayAccountPage0(socket, { ...ACCOUNT, accountDeleted: true }, 7, 1);
     expect(text()).toContain('\x1b[0;0H\x1b[37mINACTIVE\x1b[0m [7]');
+  });
+
+  it('D> Pass read ENCRYPTED to every sysop; express.e shows DISABLED to a remote sysop who is not slot 1', () => {
+    // express.e:23000-23009
+    const notSlotOne = socketSpy();
+    displayAccountPage0(notSlotOne.socket, ACCOUNT, 7, 2);
+    expect(notSlotOne.text()).toContain('\x1b[3;42H\x1b[33mD> \x1b[32mPass ....\x1b[34m: \x1b[31mDISABLED\x1b[0m');
+    expect(notSlotOne.text()).not.toContain('ENCRYPTED');
+    const slotOne = socketSpy();
+    displayAccountPage0(slotOne.socket, ACCOUNT, 7, 1);
+    expect(slotOne.text()).toContain('\x1b[44mENCRYPTED');
   });
 
   it('the account page labels were invented ("Name......:", "Group.....:", "Ratio Type...:") and in the wrong places', () => {
     const { socket, text } = socketSpy();
-    displayAccountPage0(socket, ACCOUNT, 7);
+    displayAccountPage0(socket, ACCOUNT, 7, 1);
     const out = text();
     expect(out).toContain(`\x1b[2;1H\x1b[33mA> \x1b[32mName\x1b[36m:\x1b[0m ${'SPOT'.padEnd(32)} `);
     expect(out).toContain(`\x1b[2;42H\x1b[33mB> \x1b[32mReal Name\x1b[36m:\x1b[0m ${'Johan'.padEnd(25)}`);
@@ -77,7 +88,7 @@ describe('the account editor (displayAccount)', () => {
 
   it('Area Name, CPS, UUCP and Chat Used read blank or 0 for every account', () => {
     const { socket, text } = socketSpy();
-    displayAccountPage0(socket, ACCOUNT, 7);
+    displayAccountPage0(socket, ACCOUNT, 7, 1);
     const out = text();
     expect(out).toContain('\x1b[4;36H\x1b[33mF> \x1b[32mArea Name......\x1b[36m:\x1b[0m XXX');
     expect(out).toContain(`\x1b[9;1H\x1b[33mO> \x1b[32mBytes Uled ....\x1b[36m:\x1b[0m ${'1234567'.padEnd(14)}`);
@@ -89,7 +100,7 @@ describe('the account editor (displayAccount)', () => {
 
   it('page 2 had no Last Pwd Reset, Pwd Type or Last IP Addr', () => {
     const { socket, text } = socketSpy();
-    displayAccountPage1(socket, ACCOUNT, 7);
+    displayAccountPage1(socket, ACCOUNT, 7, 1);
     const out = text();
     expect(out).toContain('\x1b[3;1H\x1b[33mB> \x1b[32mForce Pwd Reset\x1b[36m:\x1b[0m Yes');
     expect(out).toContain('\x1b[3;36H\x1b[33mC> \x1b[32mAccount Locked \x1b[36m:\x1b[0m No');
@@ -102,7 +113,7 @@ describe('the account editor (displayAccount)', () => {
 
   it('the key lines offered "<SPACE>=Page 2" and "+/-=Next/Prev User" instead of express.e\'s actions', () => {
     const { socket, text } = socketSpy();
-    displayAccountPage0(socket, ACCOUNT, 0);
+    displayAccountPage0(socket, ACCOUNT, 0, 1);
     const out = text();
     expect(out).toContain('\x1b[16;1H\x1b[33mX  \x1b[36m=\x1b[0mEXIT-NOSAVE \x1b[33m~\x1b[36m=\x1b[0mSAVE  \x1b[33m1-8\x1b[36m=\x1b[0mPRESETS  \x1b[33m9\x1b[36m=\x1b[0mRE-ACTIVATE  \x1b[33m<DEL>\x1b[36m=\x1b[0mDELETE  \x1b[33m*\x1b[36m=\x1b[0mUSER NOTES\r\n');
     // Slot 0 has no answers file: fourteen spaces where `?` would be.
