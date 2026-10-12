@@ -197,3 +197,52 @@ describe('FM move', () => {
     expect(fs.readFileSync(path.join(root, 'Conf1', 'DIR1'), 'latin1')).toContain('TWO.LHA');
   });
 });
+
+describe('FM follows express.e on Q, typed names and ^C', () => {
+  async function atOne(c: ReturnType<typeof caller>) {
+    await c.start();
+    await c.type('ONE.LHA\r');
+    await c.type('1\r');
+    c.take();
+  }
+
+  it('a capital Q does not quit: only lowercase q does (express.e:25019)', async () => {
+    const c = caller();
+    await atOne(c);
+    await c.type('Q');
+    // Falls through (no flagged list here) and shows the same file again.
+    expect(c.take()).toContain('ONE.LHA');
+    expect(c.session.subState).toBe(LoggedOnSubState.FM_SCAN);
+    await c.type('q');
+    c.take();
+    expect(c.session.subState).not.toBe(LoggedOnSubState.FM_SCAN);
+  });
+
+  it('a typed wildcard is not expanded: the directory name is the pattern (express.e:27444-27470)', async () => {
+    const c = caller();
+    await c.start();
+    await c.type('*.LHA\r');
+    await c.type('1\r');
+    const shown = c.take();
+    expect(shown).toContain('Scanning directory 1\r\n');
+    expect(shown).not.toContain('ONE.LHA');
+    expect(shown).not.toContain('Continue');
+  });
+
+  it('^C during the search prints **Break and leaves FM (express.e:27436-27442, 24993)', async () => {
+    const c = caller();
+    c.session.subState = LoggedOnSubState.FM_SCAN;
+    // A ^C reaches FM_SCAN's handler through handleCommand (checkInput + readChar=3).
+    await handleCommand(c.socket, c.session, '\x03');
+    expect(c.session.tempData.fmBreak).toBe(true);
+    // The search sees a ^C that arrived while it was reading: model that key
+    // as already pending when the loop looks (the search clears the flag as it starts).
+    Object.defineProperty(c.session.tempData, 'fmBreak', { get: () => true, set: () => undefined });
+    const search = (FileMaintenanceHandler as any).maintenanceFileSearch(
+      c.socket, c.session, false, 1, 1, ['ONE.LHA'], 0);
+    expect(await search).toBe('break');
+    const shown = c.take();
+    expect(shown).toContain('**Break\r\n');
+    expect(shown).not.toContain('Continue');
+  });
+});

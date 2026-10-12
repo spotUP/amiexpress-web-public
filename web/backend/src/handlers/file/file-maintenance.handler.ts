@@ -18,6 +18,7 @@ import { ACSPermission } from '../../constants/acs-permissions';
 import { checkSecurity } from '../../utils/acs.util';
 import { AnsiUtil } from '../../utils/ansi.util';
 import { ErrorHandler } from '../../utils/error-handling.util';
+import { matchAmigaPattern } from '../../utils/amiga-pattern';
 import { flagManagerOf } from '../../utils/file-flag.util';
 import { emitText, flushOutput } from '../../utils/output.util';
 import { lineInput, readChar, yesNo } from '../../utils/await-input';
@@ -274,6 +275,12 @@ export class FileMaintenanceHandler {
       let matchPos = 0;
       for (;;) {
         const hit = await this.maintenanceFileSearch(socket, session, holdDir, confNum, dirNum, flagFileList, matchPos);
+        if (hit === 'break') {
+          // express.e:24993-24996: RESULT_FAILURE from the search ends FM
+          // after a line break, without the closing one.
+          emitText(socket, '\r\n');
+          return false;
+        }
         if (!hit) break;
         matchPos = hit.entry.lineNumber;
 
@@ -294,11 +301,10 @@ export class FileMaintenanceHandler {
             await this.viewFile(socket, session, hit.entry);
             session.subState = LoggedOnSubState.FM_SCAN;
           }
-        } else if (action === 'Q' || action === 'q') {
-          // WEB_: express.e:25019 tests `(action="q") OR (action="q")`, so
-          // there a capital Q falls through to "Remove from flagged list" and
-          // shows the same file again. Both cases quit here, as the prompt
-          // `(Q)uit` says. Open decision for the sysop (tier-5 FM note).
+        } else if (action === 'q') {
+          // express.e:25019 tests `(action="q") OR (action="q")`: only the
+          // lowercase q quits. A capital Q falls through to "Remove from
+          // flagged list" and shows the same file again, as it does there.
           return false;
         }
 
@@ -331,15 +337,26 @@ export class FileMaintenanceHandler {
     dirNum: number,
     searchList: string[],
     startLine: number
-  ): Promise<SearchHit | null> {
+  ): Promise<SearchHit | 'break' | null> {
+    // checkInput() (27436): a key typed while the scan runs. The FM_SCAN
+    // handler records a ^C that arrives between prompts.
+    session.tempData.fmBreak = false;
     const entries = await listEntries({ dataDir: _config.get('dataDir'), db: _db }, confNum, dirNum);
     const viewAllowed = this.canViewFile(session, holdDir); // 27431-27432
 
     for (const entry of entries) {
       if (entry.lineNumber < startLine || !entry.filename) continue;
-      const matches = searchList.some(pattern =>
-        this.wildcardMatch(entry.filename.toUpperCase(), pattern.toUpperCase())
-      );
+      // express.e:27434-27443: ^C ends the search.
+      if (session.tempData.fmBreak) {
+        session.tempData.fmBreak = false;
+        emitText(socket, '**Break\r\n');
+        flushOutput(socket);
+        return 'break';
+      }
+      // express.e:27444-27470: the directory entry's name is the AmigaDOS
+      // pattern (parsePatternNoCase2) and each typed name is the string it is
+      // matched against, so a typed `*.LHA` is not a wildcard here.
+      const matches = searchList.some(typed => matchAmigaPattern(entry.filename, typed, true));
       if (!matches) continue;
 
       // express.e:27485-27503
@@ -634,17 +651,5 @@ export class FileMaintenanceHandler {
    */
   private static parseList(input: string): string[] {
     return input.split(/[,\s]+/).map(s => s.trim()).filter(s => s.length > 0);
-  }
-
-  /**
-   * Wildcard matching (supports * and ?)
-   */
-  private static wildcardMatch(text: string, pattern: string): boolean {
-    const regexPattern = pattern
-      .replace(/\./g, '\\.')
-      .replace(/\*/g, '.*')
-      .replace(/\?/g, '.');
-    const regex = new RegExp(`^${regexPattern}$`, 'i');
-    return regex.test(text);
   }
 }
