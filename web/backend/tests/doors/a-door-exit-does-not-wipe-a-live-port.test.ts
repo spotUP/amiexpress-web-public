@@ -23,9 +23,10 @@
  * a node.
  */
 import { MulticomManager } from '../../src/nodes/MulticomManager';
+import { MULTICOM_MY_NODE_ARRAY, MULTICOM_SINGLE_PORTS } from '../../src/amiga-emulation/memory-map';
 
-const MY_NODE_ARRAY_BASE = 0x1E003A;
-const SINGLE_PORTS_BASE = 0x1E1000;
+const MY_NODE_ARRAY_BASE = MULTICOM_MY_NODE_ARRAY;
+const SINGLE_PORTS_BASE = MULTICOM_SINGLE_PORTS;
 const MY_NODE_SIZE = 124;
 const SINGLE_PORT_SIZE = 512;
 

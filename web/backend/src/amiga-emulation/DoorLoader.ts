@@ -15,7 +15,20 @@ import { notifySysop } from "../utils/sysop-alert.util.js";
 import { SysopDebugUtil } from "../utils/sysop-debug.util.js";
 import { DoorLogger } from "./DoorLogger.js";
 import { SharedBBSData } from "./structures/GlobalStructures.js";
-import { assertDoorSegmentsFit, DOOR_EXIT_TRAP_ADDR } from "./memory-map.js";
+import {
+  assertDoorSegmentsFit,
+  DOOR_CLI_ADDR,
+  DOS_LIB_ADDR,
+  GRAPHICS_LIB_ADDR,
+  INTUITION_LIB_ADDR,
+  DOOR_CLI_ARGS_ADDR,
+  DOOR_CLI_ARGS_BSTR_ADDR,
+  DOOR_CLI_ARGS_MAX,
+  DOOR_CLI_COMMAND_NAME_ADDR,
+  DOOR_EXIT_TRAP_ADDR,
+  DOOR_STACK_BASE,
+  DOOR_STACK_TOP,
+} from "./memory-map.js";
 import { debugLog } from '../utils/debug-log';
 
 /** The part of dos.library a new Process needs: real locks for pr_CurrentDir / pr_HomeDir. */
@@ -74,42 +87,40 @@ export class DoorLoader {
   private dos: ProcessLocks | null;
 
   /**
-   * Compute where the door's stack should live, given the loaded hunk
-   * segments and the user-configured (or default) stack size.
+   * Compute where the door's stack lives: the top of memory-map.ts "the
+   * door stack", growing down. It used to sit just above the highest
+   * segment, so its 256 KB ran over ExecBase, the CLI block and dos.library
+   * for any door whose segments ended past 0x40000; in its own region it
+   * can clobber neither the door's BSS (SAS/C keeps saved ExecBase/argc at
+   * the top of BSS - DOORSMENU's 25 KB frame once overwrote it) nor the
+   * system.
    *
-   * The stack is placed AFTER the highest-address segment so the door's
-   * local-variable frame can grow downward without trampling any segment.
-   * This MUST consider the BSS hunk: SAS/C-style binaries place BSS at a
-   * higher address than DATA (e.g. CODE@0x2008, DATA@0x7608, BSS@0x7808),
-   * and the BSS holds the SAS/C startup's saved ExecBase/argc/argv at
-   * fixed offsets near the top. If the stack overlaps BSS, large local
-   * frames (DOORSMENU's `Config cfg` is ~25KB) will overwrite those
-   * variables — the next library JSR through the corrupted ExecBase then
-   * jumps to garbage and the door silently dies after parsing its config
-   * but before any output.
+   * @throws when the door asks for more stack than the region holds.
    */
   static computeStackBounds(
     segments: Array<{ address: number; size?: number; data?: { length: number }; type?: string }>,
     configStack?: number,
   ): { stackBaseAddr: number; stackSizeBytes: number } {
-    // 256 KB FLOOR. We have plenty of host RAM and the cost of a generous
-    // floor is one allocation per door launch. AmiExpress's .info default of
-    // 20000 (and even larger STACK= tooltypes around 30-50KB) caused stats /
-    // ustats to trip the SAS/C runtime "** Stack Overflow **" check right
-    // after AutoRequest setup, because the watermark math (SP - 4(SP) + 0x80)
-    // lands too close to SP itself when stack_size is small. Floor it to
-    // 256 KB regardless of .info value — anything LARGER than 256 KB still
-    // wins (a door explicitly asking for 1 MB gets 1 MB).
+    // 256 KB FLOOR. AmiExpress's .info default of 20000 (and even larger
+    // STACK= tooltypes around 30-50KB) caused stats / ustats to trip the
+    // SAS/C runtime "** Stack Overflow **" check right after AutoRequest
+    // setup, because the watermark math (SP - 4(SP) + 0x80) lands too close
+    // to SP itself when stack_size is small. Anything LARGER than 256 KB
+    // still wins (a door explicitly asking for 1 MB gets 1 MB).
     const stackSizeBytes = Math.max(256 * 1024, configStack || 0);
-    let lastSegmentEnd = 0x10000; // fallback for tiny single-segment binaries
-    for (const seg of segments) {
-      const segEnd =
-        seg.address + (seg.size || (seg.data ? seg.data.length : 0));
-      if (segEnd > lastSegmentEnd) lastSegmentEnd = segEnd;
+    const regionBytes = DOOR_STACK_TOP - DOOR_STACK_BASE;
+    if (stackSizeBytes > regionBytes) {
+      throw new Error(
+        `[DoorLoader] the door asks for a ${stackSizeBytes}-byte stack; the stack region holds ${regionBytes}`,
+      );
     }
-    // Align to 8 bytes and add small gap (vamos uses ~20 bytes gap)
-    const stackBaseAddr = ((lastSegmentEnd + 32) + 7) & ~7;
-    return { stackBaseAddr, stackSizeBytes };
+    for (const seg of segments) {
+      const segEnd = seg.address + (seg.size || (seg.data ? seg.data.length : 0));
+      if (segEnd > DOOR_STACK_BASE) {
+        throw new Error(`[DoorLoader] a segment ends at 0x${segEnd.toString(16)}, inside the stack region`);
+      }
+    }
+    return { stackBaseAddr: DOOR_STACK_TOP - stackSizeBytes, stackSizeBytes };
   }
 
   /**
@@ -329,18 +340,8 @@ debugLog(`  ${segInfo}`);
       }
     }
 
-    // CRITICAL: Allocate door Task structure AFTER door segments to avoid overlap
-    // Find the highest address used by door segments
-    let highestSegmentEnd = 0;
-    for (const seg of hunkFile.segments) {
-      const segEnd = seg.address + seg.size;
-      if (segEnd > highestSegmentEnd) {
-        highestSegmentEnd = segEnd;
-      }
-    }
-
-    // Allocate Task structure dynamically after door segments
-    this.execLibrary.allocateDoorTask(highestSegmentEnd);
+    // The door's Process (exec AllocMem).
+    this.execLibrary.allocateDoorTask();
 
 debugLog(
       `[DoorLoader] Door loaded at entry point: 0x${hunkFile.entryPoint.toString(
@@ -444,8 +445,13 @@ debugLog(`[DoorLoader] ${doorType} door CLI args=${JSON.stringify(customArgs)}`)
     // vamos shows: args: '1' (2) - the newline is INCLUDED in the length
     const argString = argStringBase + "\n";
 debugLog(`[DoorLoader] Building CLI args for doorType=${doorType} from config.args=${JSON.stringify(this.config.args || [])} -> "${argStringBase}" (len=${argString.length} with newline)`);
-    const ARG_STRING_ADDR = 0x0f0100;
-    const ARG_BSTR_ADDR = ARG_STRING_ADDR + 0x100;
+    const ARG_STRING_ADDR = DOOR_CLI_ARGS_ADDR;
+    const ARG_BSTR_ADDR = DOOR_CLI_ARGS_BSTR_ADDR;
+    if (argString.length > DOOR_CLI_ARGS_MAX) {
+      throw new Error(
+        `[DoorLoader] CLI argument string is ${argString.length} bytes; the CLI block holds ${DOOR_CLI_ARGS_MAX}`,
+      );
+    }
 
     for (let i = 0; i < argString.length; i++) {
       this.emulator.writeMemory(ARG_STRING_ADDR + i, argString.charCodeAt(i));
@@ -474,21 +480,18 @@ debugLog(`[DoorLoader] Building CLI args for doorType=${doorType} from config.ar
     this.emulator.setRegister(3, randomSeed); // D3 = random seed
 debugLog(`  D0 (argLen): ${argLen} D2 (stackSize)=0x${this.stackSizeBytes.toString(16)} D3 (seed)=0x${randomSeed.toString(16)}`);
 
-    // Build CLI structure with key BPTR fields (dos/dosextens.h CommandLineInterface)
-    // Memory Layout (from NDK amitools/vamos/libstructs/dos.py):
-    //   0xa0000-0xa003F: CLIStruct (64 bytes, 16 fields), extended to 0xa007F for AX compat fields
-    //   0xa0080-0xa00FF: BSTR command name (128 bytes max)
-    // NOTE: CLI MUST NOT be at 0xe0000 - that address is used by intuition.library stub!
-    const cliSize = 0x80; // 128 bytes: 64-byte standard CLI + extended fields + padding
-    const cliAddr = 0xa0000; // Between ExecBase (0x80000) and DOS library (0xb0000)
+    // CLI structure with key BPTR fields (dos/dosextens.h CommandLineInterface),
+    // in memory-map.ts "the door CLI block":
+    //   DOOR_CLI_ADDR: CLIStruct (64 bytes, 16 fields), extended to +0x7F
+    //   DOOR_CLI_COMMAND_NAME_ADDR: BSTR command name
+    const cliSize = DOOR_CLI_COMMAND_NAME_ADDR - DOOR_CLI_ADDR;
+    const cliAddr = DOOR_CLI_ADDR;
     const cliBptr = cliAddr >> 2;
-    const compatCliAddr = cliBptr; // raw pointer form for doors that skip BADDR
-    const compatBstrAddr = compatCliAddr + cliSize;
     for (let i = 0; i < cliSize; i++) {
       this.emulator.writeMemory(cliAddr + i, 0);
     }
     // BSTR command name
-    const bstrAddr = cliAddr + cliSize;
+    const bstrAddr = DOOR_CLI_COMMAND_NAME_ADDR;
     this.emulator.writeMemory(bstrAddr, progName.length);
     for (let i = 0; i < progName.length; i++) {
       this.emulator.writeMemory(bstrAddr + 1 + i, progName.charCodeAt(i));
@@ -602,45 +605,6 @@ debugLog(`  D0 (argLen): ${argLen} D2 (stackSize)=0x${this.stackSizeBytes.toStri
     writeCli32(0x54, nodeId); // cli_Pid
     writeCli32(0x58, customArgs.length); // cli_NumArgs
 
-    // Compatibility: some doors treat pr_CLI as an APTR instead of BPTR; mirror a direct-pointer CLI.
-    for (let i = 0; i < cliSize; i++) {
-      this.emulator.writeMemory(compatCliAddr + i, 0);
-    }
-    this.emulator.writeMemory(compatBstrAddr, progName.length);
-    for (let i = 0; i < progName.length; i++) {
-      this.emulator.writeMemory(compatBstrAddr + 1 + i, progName.charCodeAt(i));
-    }
-    const writeCompat32 = (offset: number, val: number) =>
-      this.emulator.writeMemory32(compatCliAddr + offset, val >>> 0);
-    writeCompat32(0x00, 0);
-    writeCompat32(0x04, 0);
-    writeCompat32(0x08, 0); // command path list, empty
-    writeCompat32(0x0c, 0);
-    writeCompat32(0x10, compatBstrAddr); // command name APTR
-    writeCompat32(0x14, 0);
-    writeCompat32(0x18, 0);
-    writeCompat32(0x1c, 1 << 2); // stdin as BPTR→APTR
-    writeCompat32(0x20, 1 << 2);
-    writeCompat32(0x24, 0);
-    writeCompat32(0x28, 1);
-    writeCompat32(0x2c, 0);
-    writeCompat32(0x30, 2 << 2);
-    writeCompat32(0x34, this.stackSizeBytes);
-    writeCompat32(0x38, 2 << 2);
-    writeCompat32(0x3c, segListBptr << 2); // module APTR
-    writeCompat32(0x40, currentDirBptr << 2);
-    writeCompat32(0x44, 0);
-    writeCompat32(0x48, 0);
-    writeCompat32(0x4c, 0);
-    writeCompat32(0x50, this.exitTrapAddress);
-    writeCompat32(0x54, nodeId);
-    writeCompat32(0x58, customArgs.length);
-
-    // DEBUG: Verify what's actually at 0xf0081 after initialization
-    const verify0xf0081 = this.emulator.readMemory32(0xf0081);
-debugLog(`[DoorLoader] DEBUG: Memory at 0xf0081 = 0x${verify0xf0081.toString(16).padStart(8, '0')}`);
-debugLog(`[DoorLoader] DEBUG: Expected 'who' = 0x77686f00, CLI at 0x${cliAddr.toString(16)}`);
-
 debugLog(
       `[DoorLoader] CLI set: BPTR=0x${cliBptr.toString(
         16
@@ -679,7 +643,7 @@ debugLog(
 
     // AmigaDOS startup: A0 = pointer to argument string (NOT stack top!)
     // Amiga E doors may expect A0=stack, but standard AmigaDOS programs expect A0=args
-    // The arg string is at ARG_STRING_ADDR (0x0f0100)
+    // The arg string is at ARG_STRING_ADDR (memory-map.ts DOOR_CLI_ARGS_ADDR)
     const stackTop = this.stackBaseAddr + this.stackSizeBytes;
     this.emulator.setRegister(8, ARG_STRING_ADDR); // A0 = arg string pointer
 debugLog(`  A0 (arg string): 0x${ARG_STRING_ADDR.toString(16)} "${argString}"`);
@@ -707,11 +671,8 @@ debugLog(`[DoorLoader] Single hunk: setting A4 relative to CODE segment: 0x${a4V
 
         // NOTE: Do NOT pre-zero a synthetic BSS here.
         // SAS/C startup allocates its own BSS via AllocMem(size, MEMF_CLEAR) at runtime.
-        // Pre-zeroing 128KB after the code segment overlaps with the task struct
-        // (which allocateDoorTask places at code_end + 0x1000 + alignment), zeroing
-        // pr_CLI and other fields that DoorLoader already set up correctly above.
-        // The task struct fields written by allocateDoorTask/writeTaskToMemory and
-        // DoorLoader.setupCpuRegisters must survive intact until the CPU starts.
+        // Pre-zeroing 128KB after the code segment would write memory the door
+        // does not own.
       } else {
 console.error(`[DoorLoader] ERROR: No CODE segment found! Cannot allocate BSS.`);
         a4Value = 0;
@@ -748,19 +709,9 @@ debugLog(
     writeFrame32(-36, 0); // wbmessage
     // Bases
     writeFrame32(-40, execBaseAddr);
-    const dosBaseAddr =
-      (this.execLibrary as any).DOS_LIB_ADDR ??
-      (this.execLibrary as any).dosLibraryBase ??
-      0x20000;
-    writeFrame32(-44, dosBaseAddr);
-    const intuitionBaseAddr =
-      (this.execLibrary as any).INTUITION_LIB_ADDR ??
-      (this.execLibrary as any).intuitionLibraryBase ??
-      0x50000;
-    const gfxBaseAddr =
-      (this.execLibrary as any).GRAPHICS_LIB_ADDR ??
-      (this.execLibrary as any).graphicsLibraryBase ??
-      0;
+    writeFrame32(-44, DOS_LIB_ADDR);
+    const intuitionBaseAddr = INTUITION_LIB_ADDR;
+    const gfxBaseAddr = GRAPHICS_LIB_ADDR;
     writeFrame32(-48, intuitionBaseAddr);
     writeFrame32(-52, gfxBaseAddr);
     writeFrame32(-64, this.stackBaseAddr); // stack bottom

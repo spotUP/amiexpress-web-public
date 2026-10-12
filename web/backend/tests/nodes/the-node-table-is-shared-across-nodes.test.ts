@@ -8,10 +8,11 @@
  * starts later the table as the others left it.
  */
 import { MulticomManager } from '../../src/nodes/MulticomManager';
+import { MULTICOM_MY_NODE_ARRAY, MULTICOM_SINGLE_PORTS } from '../../src/amiga-emulation/memory-map';
 
-const MY_NODE_ARRAY_BASE = 0x1e003a;
+const MY_NODE_ARRAY_BASE = MULTICOM_MY_NODE_ARRAY;
 const MY_NODE_SIZE = 124;
-const SINGLE_PORTS_BASE = 0x1e1000;
+const SINGLE_PORTS_BASE = MULTICOM_SINGLE_PORTS;
 const SINGLE_PORT_SIZE = 512;
 const tOf = (node: number) => MY_NODE_ARRAY_BASE + node * MY_NODE_SIZE + 0x70;
 

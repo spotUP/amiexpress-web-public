@@ -1,6 +1,7 @@
 import { MoiraEmulator, CPURegister } from '../cpu/MoiraEmulator';
 import { amigaGaps, doorOf } from '../instrumentation/amiga-gaps';
 import { getLvoName } from '../constants/lvo-names.generated';
+import { INTUITION_SCREEN_HANDLE, INTUITION_WINDOW_HANDLE } from '../memory-map';
 
 /**
  * intuition.library - Amiga Intuition Library (Stub Implementation)
@@ -23,8 +24,8 @@ import { getLvoName } from '../constants/lvo-names.generated';
 export class IntuitionLibrary {
   private emulator: MoiraEmulator;
   // Window/screen handles must be outside door code range (0x1000-0x80000)
-  private nextWindowHandle: number = 0x099000;
-  private nextScreenHandle: number = 0x09A000;
+  private nextWindowHandle: number = INTUITION_WINDOW_HANDLE;
+  private nextScreenHandle: number = INTUITION_SCREEN_HANDLE;
 
   constructor(emulator: MoiraEmulator) {
     this.emulator = emulator;
@@ -118,8 +119,7 @@ console.log('[intuition.library] RefreshGadgets() - no-op');
    */
   OpenWorkBench(): void {
 console.log('[intuition.library] OpenWorkBench() - returning dummy screen handle');
-    // Use screen handle range (0x09A000+) to avoid door code range (0x1000-0x80000)
-    this.emulator.setRegister(CPURegister.D0, 0x09A000);
+    this.emulator.setRegister(CPURegister.D0, INTUITION_SCREEN_HANDLE);
   }
 
   /**

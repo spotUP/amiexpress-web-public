@@ -3,9 +3,8 @@
  *
  * Background (2026-08-31, DoorRepo):
  *   HunkLoader packs a door's segments upward from 0x2000 and knows nothing
- *   about ExecBase (0x80000), the library stubs, the AllocMem heap
- *   (0x100000), the environment store (0x120000) or the ReadArgs heap
- *   (0x140000). DoorRepo's BSS grew from 0x599f4 to 0x6a7fc between the 20
+ *   about ExecBase (0x80000), the library stubs, the CLI block or the
+ *   AllocMem heap (0x100000). DoorRepo's BSS grew from 0x599f4 to 0x6a7fc between the 20
  *   August build and the current source, which pushed its segments from
  *   ending at 0x06e8fc to ending at 0x085d04 — 24 KB past the LVO table.
  *
@@ -104,9 +103,8 @@ describe('assertDoorSegmentsFit — a door may not be loaded over the emulator (
       message = (err as Error).message;
     }
     expect(message).toContain('dos.library');
+    expect(message).toContain('the door CLI block');
     expect(message).toContain('the AllocMem heap');
-    expect(message).toContain('environment variable structures');
-    expect(message).toContain('the ReadArgs heap');
   });
 
   test('the ceiling sits BELOW ExecBase, because the LVO vectors do too', () => {
@@ -176,6 +174,6 @@ describe('assertDoorSegmentsFit — a door may not be loaded over the emulator (
     const names = reservedRegionsInSpan(DOOR_SEGMENT_BASE, 0x141000);
     expect(names[0]).toBe('exec.library LVO jump table');
     expect(names[1]).toBe('ExecBase');
-    expect(names[names.length - 1]).toBe('the ReadArgs heap');
+    expect(names[names.length - 1]).toBe('the AllocMem heap');
   });
 });

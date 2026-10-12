@@ -26,6 +26,7 @@ import { SysopDebugUtil } from "../utils/sysop-debug.util.js";
 import { debugRegistry } from "../debug/DebugRegistry.js";
 import { parseInfoFile } from "../utils/amiga-command-parser.util";
 import { debugLog } from '../utils/debug-log';
+import { DOOR_CLI_ADDR, DOOR_CLI_ARGS_ADDR, assertMemoryMapFits } from "./memory-map";
 import { setEnvStat } from "../utils/acs.util";
 import { EnvStat } from "../constants/env-codes";
 import { c64AdapterFor, uninstallC64DoorAdapter } from "../server/c64-door-adapter";
@@ -364,7 +365,9 @@ debugLog(
       // Initialize emulator with configurable memory size
       // Default: 4MB (sufficient for 95%+ of doors). Set EMULATOR_MEMORY_MB=8 or 16 for demanding doors.
       const memSizeMB = parseInt(process.env.EMULATOR_MEMORY_MB || '4', 10);
-      const memSize = Math.max(2, Math.min(16, memSizeMB)) * 1024 * 1024;
+      // memory-map.ts places the stack and system regions up to 4 MB.
+      const memSize = Math.max(4, Math.min(16, memSizeMB)) * 1024 * 1024;
+      assertMemoryMapFits(memSize);
       debugLog(`[AmigaDoorSession] Emulator memory: ${memSizeMB}MB`);
       this.emulator = new MoiraEmulator(memSize);
       this.emulator.doorName = path.basename(this.config.executablePath);
@@ -569,22 +572,6 @@ debugLog('[AmigaDoorSession] [NATIVE DEBUG] Enabling Moira native debugger...');
           // Enable instruction logging (256-entry circular buffer)
           cpu.nativeEnableLogging();
 debugLog('[AmigaDoorSession] [NATIVE DEBUG] Instruction logging enabled');
-
-          // Set watchpoints on DiskObject/tooltypes memory regions
-          // These addresses are used by icon.library for ConfConfig.info
-          const nativeWatchAddrs = [
-            0x60000,  // DiskObject base
-            0x60036,  // do_ToolTypes field (offset 54)
-            0x60100,  // Tooltypes array
-            0x60104,  // Tooltypes[1]
-            0x60108,  // Tooltypes[2]
-            0x60200,  // First tooltype string (NCONFS)
-          ];
-
-          for (const addr of nativeWatchAddrs) {
-            cpu?.nativeSetWatchpoint?.(addr);
-          }
-debugLog(`[AmigaDoorSession] [NATIVE DEBUG] Watchpoints set on: ${nativeWatchAddrs.map(a => '0x' + a.toString(16)).join(', ')}`);
 
           // Set catchpoint for illegal instructions
           cpu?.nativeSetCatchpoint?.(4); // Vector 4 = Illegal instruction
@@ -998,27 +985,19 @@ debugLog(
   }
 
   /**
-   * Create a minimal CLI structure and attach it to pr_CLI, matching
-   * the /X SystemTagList environment (node number as arg, program name).
-   * This lets doors detect they're running from CLI and call Cli(), FindVar(), etc.
+   * The door's CLI argument string and program name for dos.library's
+   * GetArgStr/GetProgramName, matching the /X SystemTagList environment
+   * (node number as arg). The CLI structure itself is DoorLoader's.
    */
   private setupCliEnvironment(): void {
     if (!this.emulator || !this.sharedState.execLibrary || !this.sharedState.dosLibrary) {
       return;
     }
 
-    // Get the dynamically allocated task address from ExecLibrary
-    const taskAddr = this.sharedState.execLibrary.getCurrentTaskAddress();
     const prCliOffset = 0xac; // pr_CLI offset inside struct Process
-    // CLI structures at 0x110000+ to avoid overlap with door code (0x1000-0x100000)
-    const cliStructAddr = 0x110000;
-    const cmdLineAddr = 0x110100; // BSTR (length byte + text)
-    const argStringAddr = 0x0f0100; // args only (no program name) — keep aligned with DoorLoader
-    const localVarsListAddr = 0x110300;
-    const rcVarAddr = 0x110320;
-    const rcNameAddr = 0x110340;
-    const result2VarAddr = 0x110360;
-    const result2NameAddr = 0x110380;
+    // The args only (no program name), in memory-map.ts "the door CLI block";
+    // DoorLoader rewrites the same address with the AmigaDOS newline.
+    const argStringAddr = DOOR_CLI_ARGS_ADDR;
 
     // Use doorCommand if available (e.g., "N" for newscan), otherwise use executable basename
     // CRITICAL: AquaScan and other multi-function doors check the CLI program name to determine
@@ -1033,84 +1012,7 @@ debugLog(`[AmigaDoorSession] progName="${progName}" (from doorCommand="${session
       this.config.bbsSession?.nodeNumber ??
       1;
 
-    // Full command line BSTR (program + node)
-    const cmdLine = progName.toUpperCase();
-    this.emulator.writeMemory(cmdLineAddr, cmdLine.length);
-    for (let i = 0; i < cmdLine.length; i++) {
-      this.emulator.writeMemory(cmdLineAddr + 1 + i, cmdLine.charCodeAt(i));
-    }
-    this.emulator.writeMemory(cmdLineAddr + 1 + cmdLine.length, 0);
-
-    // CLI structure (partial) – offsets per dos/dosextens.h
-    this.emulator.writeMemory32(cliStructAddr + 0x00, 0); // cli_Result2
-    this.emulator.writeMemory32(cliStructAddr + 0x04, 0); // cli_SetName
-    this.emulator.writeMemory32(cliStructAddr + 0x08, 0); // cli_CommandDir
-    this.emulator.writeMemory32(cliStructAddr + 0x0c, 0); // cli_ReturnCode
-    this.emulator.writeMemory32(cliStructAddr + 0x10, cmdLineAddr >> 2); // cli_CommandName (BPTR to BSTR)
-    this.emulator.writeMemory32(cliStructAddr + 0x14, 0); // cli_FailLevel
-    this.emulator.writeMemory32(cliStructAddr + 0x18, 0); // cli_Prompt
-    this.emulator.writeMemory32(cliStructAddr + 0x1c, 0); // cli_StandardInput
-    this.emulator.writeMemory32(cliStructAddr + 0x20, 0); // cli_CurrentInput
-    this.emulator.writeMemory32(cliStructAddr + 0x24, 0); // cli_CommandFile
-    this.emulator.writeMemory32(cliStructAddr + 0x28, -1); // cli_Interactive (TRUE)
-    this.emulator.writeMemory32(cliStructAddr + 0x2c, 0); // cli_Background
-    this.emulator.writeMemory32(cliStructAddr + 0x30, 0); // cli_CurrentOutput
-    this.emulator.writeMemory32(cliStructAddr + 0x34, 65536 >> 2); // cli_DefaultStack (in longwords, not bytes) - generous 64KB default
-    this.emulator.writeMemory32(cliStructAddr + 0x38, 0); // cli_StandardOutput
-    this.emulator.writeMemory32(cliStructAddr + 0x3c, 0); // cli_Module
-    this.emulator.writeMemory32(cliStructAddr + 0x40, 0); // cli_CurrentDir
-    this.emulator.writeMemory32(cliStructAddr + 0x44, 0); // cli_DirLen
-    this.emulator.writeMemory32(cliStructAddr + 0x48, 0); // cli_DirBuf
-    this.emulator.writeMemory32(cliStructAddr + 0x4c, 0); // cli_PathList
-    this.emulator.writeMemory32(cliStructAddr + 0x50, 0); // cli_ReturnAddr
-    this.emulator.writeMemory32(cliStructAddr + 0x54, 0); // cli_Pid
-    this.emulator.writeMemory32(cliStructAddr + 0x58, 0); // cli_NumArgs
-
-    // LocalVars MinList with RC=0 and Result2=0 so FindVar("RC"/"Result2") works
-    this.emulator.writeMemory32(localVarsListAddr + 0, localVarsListAddr + 4); // lh_Head -> Tail
-    this.emulator.writeMemory32(localVarsListAddr + 4, 0); // lh_Tail = NULL
-    this.emulator.writeMemory32(localVarsListAddr + 8, localVarsListAddr); // lh_TailPred -> Head
-
-    this.emulator.writeString(rcNameAddr, "RC");
-    this.emulator.writeMemory32(rcVarAddr + 0, 0); // ln_Succ (patched below)
-    this.emulator.writeMemory32(rcVarAddr + 4, 0); // ln_Pred
-    this.emulator.writeMemory(rcVarAddr + 8, 0); // ln_Type
-    this.emulator.writeMemory(rcVarAddr + 9, 0); // ln_Pri
-    this.emulator.writeMemory32(rcVarAddr + 10, rcNameAddr); // ln_Name
-    this.emulator.writeMemory32(rcVarAddr + 14, 0); // lv_Value
-    this.emulator.writeMemory32(rcVarAddr + 18, 0); // lv_Len
-
-    this.emulator.writeString(result2NameAddr, "Result2");
-    this.emulator.writeMemory32(result2VarAddr + 0, 0); // ln_Succ
-    this.emulator.writeMemory32(result2VarAddr + 4, rcVarAddr); // ln_Pred -> RC
-    this.emulator.writeMemory(result2VarAddr + 8, 0); // ln_Type
-    this.emulator.writeMemory(result2VarAddr + 9, 0); // ln_Pri
-    this.emulator.writeMemory32(result2VarAddr + 10, result2NameAddr); // ln_Name
-    this.emulator.writeMemory32(result2VarAddr + 14, 0); // lv_Value
-    this.emulator.writeMemory32(result2VarAddr + 18, 0); // lv_Len
-
-    // Link RC -> Result2 and head -> RC
-    this.emulator.writeMemory32(rcVarAddr + 0, result2VarAddr);
-    this.emulator.writeMemory32(localVarsListAddr + 0, rcVarAddr);
-
-    this.emulator.writeMemory32(cliStructAddr + 0x5c, localVarsListAddr >> 2); // cli_LocalVars (BPTR)
-
-    const cliBPTR = cliStructAddr >> 2;
-
-    // CRITICAL: Do NOT write pr_CLI here! Task hasn't been allocated yet (address=0)
-    // DoorLoader will write pr_CLI after allocating the Task structure
     const isXimDoor = (this.config.doorType || "").toUpperCase() === "XIM";
-
-debugLog(
-      `[AmigaDoorSession] Created CLI struct at 0x${cliStructAddr.toString(
-        16
-      )} (cliBPTR=0x${cliBPTR.toString(16)}${isXimDoor ? " - XIM door, pr_CLI depends on CLI_REQUIRED tooltype" : " - will be written to pr_CLI by DoorLoader"})`
-    );
-debugLog(
-      `[AmigaDoorSession]   Command BSTR len=${cmdLine.length} at 0x${cmdLineAddr.toString(
-        16
-      )} "${cmdLine}"`
-    );
 
     // Set CLI info for dos.library helpers (GetArgStr, GetCliProgramName)
     // Note: isXimDoor already defined above (still gates the separate
@@ -1143,9 +1045,8 @@ debugLog(`[AmigaDoorSession] CLI arg string="${argStringPlain}"`);
     // Restore pr_CLI if a door CreatePort() overwrites it
     // XIM doors: pr_CLI is set by DoorLoader based on CLI_REQUIRED tooltype, don't modify here
     // Non-XIM doors: restore pr_CLI if it was cleared during CreatePort
-    // NOTE: DoorLoader creates its own CLI struct at a different address (0xa0000 vs 0x110000).
-    // This callback uses the CURRENT task address (from ExecLibrary) and the CLI struct
-    // created by DoorLoader, not the one from setupCliEnvironment.
+    // The CLI is DoorLoader's (memory-map.ts DOOR_CLI_ADDR); this callback
+    // uses the CURRENT task address from ExecLibrary.
     this.sharedState.execLibrary.setDoorInitCallback(() => {
       // Don't modify pr_CLI for XIM doors - DoorLoader already set the correct value
       if (isXimDoor) {
@@ -1159,9 +1060,7 @@ debugLog(`[AmigaDoorSession] CLI arg string="${argStringPlain}"`);
       }
       const currentValue = this.emulator?.readMemory32(currentTaskAddr + prCliOffset) ?? 0;
       if (currentValue === 0) {
-        // Use DoorLoader's CLI struct address (0xa0000 >> 2 = 0x28000)
-        // This is the CLI structure that DoorLoader populates with correct values
-        const doorLoaderCliBptr = 0xa0000 >> 2; // 0x28000
+        const doorLoaderCliBptr = DOOR_CLI_ADDR >> 2;
         this.emulator?.writeMemory32(currentTaskAddr + prCliOffset, doorLoaderCliBptr);
 debugLog(
           `[AmigaDoorSession] pr_CLI was cleared during CreatePort; restored to 0x${doorLoaderCliBptr.toString(16)} at task 0x${currentTaskAddr.toString(16)}`

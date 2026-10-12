@@ -1,5 +1,6 @@
 import { MoiraEmulator } from '../amiga-emulation/cpu/MoiraEmulator';
 import { debugLog } from '../utils/debug-log';
+import { MULTICOM_BASE, MULTICOM_MY_NODE_ARRAY, MULTICOM_SINGLE_PORTS } from '../amiga-emulation/memory-map';
 
 /**
  * MulticomManager
@@ -16,11 +17,11 @@ import { debugLog } from '../utils/debug-log';
  * This matches express.e architecture where ACP creates structures at startup,
  * then express.e just updates and references them.
  *
- * Memory Layout:
- * NOTE: Using 0x1E0000 (1.875MB) to avoid collision with DOS.library at 0x0B0000!
- * - 0x1E0000: masterNode semaphore (58 bytes header)
- * - 0x1E003A: myNode array (32 nodes × 124 bytes = 3,968 bytes)
- * - 0x1E1000: singlePort structures (32 nodes × 512 bytes = 16,384 bytes)
+ * Memory layout (memory-map.ts "the MULTICOM node table", outside the
+ * AllocMem heap - at 0x1E0000 it sat inside it):
+ * - MULTICOM_BASE: masterNode semaphore (58 bytes header)
+ * - MULTICOM_MY_NODE_ARRAY: myNode array (32 nodes x 124 bytes = 3,968 bytes)
+ * - MULTICOM_SINGLE_PORTS: singlePort structures (32 nodes x 512 bytes = 16,384 bytes)
  */
 
 // Status codes from express.e
@@ -31,10 +32,9 @@ export const ENV_DOORS = 3;       // In a door
 export const ENV_FILES = 4;       // In file areas
 export const ENV_CONFERENCE = 5;  // Changing conferences
 
-// Memory layout constants - MOVED TO 0x1E0000 to avoid DOS.library collision!
-const MASTER_NODE_BASE = 0x1E0000;
-const MY_NODE_ARRAY_BASE = 0x1E003A;
-const SINGLE_PORTS_BASE = 0x1E1000;
+const MASTER_NODE_BASE = MULTICOM_BASE;
+const MY_NODE_ARRAY_BASE = MULTICOM_MY_NODE_ARRAY;
+const SINGLE_PORTS_BASE = MULTICOM_SINGLE_PORTS;
 
 const MAX_NODES = 32;
 const MY_NODE_SIZE = 124;

@@ -103,8 +103,7 @@ export class ExecLibrary {
   // Memory allocation tracking
   private allocations: Map<number, number> = new Map(); // address -> size
   private allocVecBlocks?: Map<number, { size: number; headerAddr: number }>; // AllocVec tracking
-  // Start allocations at 0x100000 (1MB) to avoid overlap with door code segments
-  // Door code starts at 0x1000 and large doors can exceed 100KB
+  // The AllocMem arena (memory-map.ts "the AllocMem heap").
   private nextFreeMemory: number = memoryMap.ALLOCMEM_HEAP_BASE;
   // Free list for simple reuse
   private freeList: { addr: number; size: number }[] = [];
@@ -186,15 +185,9 @@ export class ExecLibrary {
   // Host-owned AEDoor messages that must not be freed by doors (jhMessage buffers)
   private protectedMessages: Set<number> = new Set();
 
-  // Memory Layout (per vamos/Amiga conventions):
-  // 0x000000-0x0007FF: Exception vectors, scratch
-  // 0x001000-0x07FFFF: Door code segments (512KB max)
-  // 0x080000+: System structures and library stubs
-  // 0x100000+: AllocMem heap
-  //
-  // The addresses themselves live in ../memory-map.ts, which is also what
-  // enforces the door-segment ceiling above — a second copy here is how the
-  // "512KB max" line stayed a comment instead of a rule.
+  // Memory layout: ../memory-map.ts MEMORY_REGIONS is the one map. A second
+  // copy here is how the "512KB max" door line stayed a comment instead of
+  // a rule.
   private readonly EXEC_BASE_ADDR = memoryMap.EXEC_BASE_ADDR;
   private readonly DOS_LIB_ADDR = memoryMap.DOS_LIB_ADDR;
   private readonly AEDOOR_LIB_ADDR = memoryMap.AEDOOR_LIB_ADDR;
@@ -209,7 +202,7 @@ export class ExecLibrary {
   private readonly REXXSUPPORT_LIB_ADDR = memoryMap.REXXSUPPORT_LIB_ADDR;
   private readonly REXXARPLIB_LIB_ADDR = memoryMap.REXXARPLIB_LIB_ADDR;
   private readonly FAME_LIB_ADDR = memoryMap.FAME_LIB_ADDR;
-  private nextStubLibraryAddr = memoryMap.ALLOCMEM_HEAP_BASE; // fallback base for unknown stub libraries (1MB+)
+  private nextStubLibrarySlot = 0; // next free slot in memory-map "stub libraries"
   private readonly PORT_LIST_OFFSET = 392;
   private currentStackLower = 0;
   private currentStackUpper = 0;
@@ -219,6 +212,7 @@ export class ExecLibrary {
 
   constructor(emulator: MoiraEmulator) {
     this.emulator = emulator;
+    memoryMap.assertMemoryMapDisjoint();
     this.instanceId = ++ExecLibrary.instanceCounter;
     debugLog(`[ExecLibrary] Created instance #${this.instanceId}`);
 
@@ -239,9 +233,8 @@ export class ExecLibrary {
     };
 
     // Create BBS handler task (owns AEDoorPort, handles door messages)
-    // BBS task at 0x088000 - between ExecBase and Door Task
-    const bbsTaskAddr = 0x088000;
-    const bbsMsgPortAddr = 0x08805c;
+    const bbsTaskAddr = memoryMap.BBS_TASK_ADDR;
+    const bbsMsgPortAddr = memoryMap.BBS_TASK_PORT_ADDR;
     this.bbsTask = {
       address: bbsTaskAddr,
       name: "BBS Handler",
@@ -332,15 +325,16 @@ debugLog(
   }
 
   /**
-   * Allocate door Task structure dynamically after door segments.
-   * CRITICAL: Must be called AFTER door segments are loaded to avoid overlap.
-   *
-   * @param doorSegmentEnd - End address of door's highest segment (CODE/BSS/DATA)
+   * Allocate the door's Process structure. exec AllocMem, as CreateNewProc
+   * does: it used to sit 4 KB past the door's highest segment, which for a
+   * door near the 0x7f000 ceiling is exec's LVO table and ExecBase.
    */
-  allocateDoorTask(doorSegmentEnd: number): void {
-    // Allocate Task structure after door segments with 4KB padding for safety
-    // Align to 256-byte boundary for structure alignment
-    const taskAddr = ((doorSegmentEnd + 0x1000 + 0xFF) & ~0xFF) >>> 0;
+  allocateDoorTask(): void {
+    const taskAddr = this.allocMem(ExecLibrary.PROCESS_ALLOC_SIZE, 0x10001); // MEMF_PUBLIC | MEMF_CLEAR
+    if (taskAddr === 0) {
+      console.error("[ExecLibrary] allocateDoorTask: AllocMem failed");
+      return;
+    }
     const taskMsgPortAddr = (taskAddr + 0x5C) >>> 0; // Process msg port at task + 0x5C
 
     this.currentTask.address = taskAddr;
@@ -370,7 +364,6 @@ debugLog(
 
 debugLog(
       `[ExecLibrary] *** DYNAMIC TASK ALLOCATION ***\n` +
-      `  Door segments end at: 0x${doorSegmentEnd.toString(16)}\n` +
       `  Task structure allocated at: 0x${taskAddr.toString(16)}\n` +
       `  Task message port at: 0x${taskMsgPortAddr.toString(16)}\n` +
       `  ExecBase.thisTask updated to: 0x${taskAddr.toString(16)}`
@@ -524,9 +517,9 @@ debugLog(
 
     // Create stub function for unknown system vectors
     // Some programs (like GetAnswer) load function pointers from low memory
-    // We create a stub that just does RTS (return immediately)
-    // MUST be in chip RAM (0x000000-0x1FFFFF) - using area after exception handlers
-    const STUB_FUNCTION_ADDR = 0x180f00; // After exception handlers (0x180000-0x180800)
+    // We create a stub that just does RTS (return immediately), right after
+    // the exception handlers (memory-map.ts).
+    const STUB_FUNCTION_ADDR = memoryMap.RTS_STUB_ADDR;
     this.emulator.writeMemory16(STUB_FUNCTION_ADDR, 0x4e75); // RTS instruction
 debugLog(
       `[ExecLibrary] Created stub function at 0x${STUB_FUNCTION_ADDR.toString(
@@ -571,15 +564,13 @@ debugLog("[ExecLibrary] ExecBase initialized successfully");
   private setupExceptionVectors(): void {
 debugLog("[ExecLibrary] Setting up exception vectors...");
 
-    // Exception handler code location - MUST be within chip RAM (0x000000-0x1FFFFF)
-    // The vAmiga-style WASM memory only maps chip RAM (2MB) and ROM (512KB at 0xF80000)
-    // Pages 0x20-0xF7 are unmapped and writes are silently ignored!
-    // Use 0x180000 (1.5MB into chip RAM) - safe distance from door code/data
-    const EXCEPTION_HANDLER_BASE = 0x180000;
+    // memory-map.ts "exec exception handlers", outside the AllocMem heap: at
+    // 0x180000 they sat inside it, and a door's AllocMem was handed them.
+    const EXCEPTION_HANDLER_BASE = memoryMap.EXCEPTION_HANDLERS_BASE;
 
     // Create exception handlers that skip the offending instruction
     for (let i = 0; i < 64; i++) {
-      const handlerAddr = EXCEPTION_HANDLER_BASE + i * 32;
+      const handlerAddr = EXCEPTION_HANDLER_BASE + i * memoryMap.EXCEPTION_HANDLER_SIZE;
 
       // Exception handler code:
       // ADDQ.L #2, 2(SP)    ; Skip 2 bytes (most 68000 instructions are 2+ bytes)
@@ -600,7 +591,7 @@ debugLog("[ExecLibrary] Setting up exception vectors...");
     }
 
     // Verify handler 4 (Illegal Instruction) was written correctly
-    const handler4Addr = EXCEPTION_HANDLER_BASE + 4 * 32; // 0xf00080
+    const handler4Addr = EXCEPTION_HANDLER_BASE + 4 * memoryMap.EXCEPTION_HANDLER_SIZE;
     const verifyWord0 = this.emulator.readMemory16(handler4Addr);
     const verifyWord1 = this.emulator.readMemory16(handler4Addr + 2);
     const verifyWord2 = this.emulator.readMemory16(handler4Addr + 4);
@@ -1093,8 +1084,11 @@ debugLog(
           );
           return 0;
         }
-        libAddr = this.nextStubLibraryAddr;
-        this.nextStubLibraryAddr += 0x010000;
+        libAddr = this.allocateStubLibraryBase();
+        if (libAddr === 0) {
+          debugLog(`[ExecLibrary]   no stub library slot left for "${name}" - returning NULL`);
+          return 0;
+        }
         libVersion = version;
         libRevision = 0;
 debugLog(
@@ -2212,6 +2206,9 @@ console.warn(
   // character conversion: with the stub it spun forever in `Zip -T`. A machine
   // without locale.library is a real configuration (pre-2.1 Kickstart) that
   // every program that opens it must already survive, so OpenLibrary says NULL.
+  /** sizeof(struct Process) is 0xe4; DoorLoader writes up to pr_CES (+0xe0). */
+  private static readonly PROCESS_ALLOC_SIZE = 0x100;
+
   private static readonly STANDARD_SYSTEM_LIBRARIES: ReadonlySet<string> = new Set([
     "asl.library", "commodities.library", "cybergraphics.library",
     "datatypes.library", "diskfont.library", "expansion.library",
@@ -2988,6 +2985,23 @@ debugLog(
   }
 
   /**
+   * The base of a fresh stub library: the next slot of the memory map's
+   * "stub libraries" region, its LVO table inside the slot below the base.
+   * 0 when every slot is taken (OpenLibrary then fails, as exec does when
+   * it cannot allocate a library).
+   */
+  private allocateStubLibraryBase(): number {
+    const slotStart =
+      memoryMap.STUB_LIBRARY_SLOTS_BASE +
+      this.nextStubLibrarySlot * memoryMap.STUB_LIBRARY_SLOT_SIZE;
+    if (slotStart + memoryMap.STUB_LIBRARY_SLOT_SIZE > memoryMap.STUB_LIBRARY_SLOTS_END) {
+      return 0;
+    }
+    this.nextStubLibrarySlot++;
+    return slotStart + memoryMap.LIBRARY_LVO_TABLE_BYTES;
+  }
+
+  /**
    * Pre-register a library placeholder so getLibraryBase() returns a stable
    * address even before OpenLibrary is called.
    */
@@ -3000,8 +3014,11 @@ debugLog(
     if (this.libraries.has(name) || this.libraries.has(lower)) {
       return;
     }
-    const libAddr = this.nextStubLibraryAddr;
-    this.nextStubLibraryAddr += 0x010000;
+    const libAddr = this.allocateStubLibraryBase();
+    if (libAddr === 0) {
+      console.warn(`[ExecLibrary] no stub library slot left for placeholder "${name}"`);
+      return;
+    }
     const lib: LibraryNode = {
       address: libAddr,
       name,
@@ -6517,7 +6534,9 @@ debugLog(
 
   private ensureRawDoFmtReturnStub(): number {
     if (this.rawDoFmtReturnStub === 0) {
-      this.rawDoFmtReturnStub = 0x001fe000; // Scratch area below exit trap
+      // The shared RTS stub after the exception handlers (memory-map.ts). It
+      // was 0x1fe000, the utility.library tag-helper scratch longs.
+      this.rawDoFmtReturnStub = memoryMap.RTS_STUB_ADDR;
       this.emulator.writeMemory16(this.rawDoFmtReturnStub, 0x4e75); // RTS
     }
     return this.rawDoFmtReturnStub;

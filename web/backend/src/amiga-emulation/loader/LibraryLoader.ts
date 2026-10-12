@@ -1,7 +1,7 @@
 import { MoiraEmulator } from '../cpu/MoiraEmulator';
 import { HunkLoader } from './HunkLoader';
 import { KickstartRom } from '../KickstartRom';
-import { NATIVE_LIBRARY_BASE } from '../memory-map';
+import { EXEC_BASE_ADDR, LIBRARY_LVO_TABLE_BYTES, NATIVE_LIBRARY_BASE, NATIVE_LIBRARY_END } from '../memory-map';
 import * as fs from 'fs';
 import * as amigafs from '../../utils/amigafs';
 import * as path from 'path';
@@ -56,9 +56,11 @@ export class LibraryLoader {
   private hunkLoader: HunkLoader;
   private kickstartRom: KickstartRom | null;
   private librarySearchPaths: string[];
-  // Place real libraries safely within 24-bit address space but above door code.
-  // Door code lives below ~0x200000; use 0x00200000 and step downward to avoid collisions.
-  private nextLibraryBase: number = NATIVE_LIBRARY_BASE;
+  // memory-map.ts "loaded 68K libraries": libraries are packed upward from
+  // NATIVE_LIBRARY_BASE, each with its LVO table room below its base. They
+  // used to step DOWN 64 KB at a time from 0x200000, into the AllocMem heap,
+  // whatever their size.
+  private nextLibraryStart: number = NATIVE_LIBRARY_BASE;
   private loadedLibraries = new Map<string, LoadedLibrary>();
 
   // Libraries that are ROM-resident in Kickstart 3.1
@@ -183,7 +185,15 @@ console.log(`[LibraryLoader] Read ${libraryData.length} bytes from ${libraryPath
 console.log(`[LibraryLoader] Parsed ${hunkFile.segments.length} segments`);
 
       // Allocate base address for this library
-      const baseAddress = this.allocateLibraryBase();
+      const span = hunkFile.segments.reduce(
+        (total: number, seg: { size: number }) => total + ((seg.size + 3) & ~3),
+        0,
+      );
+      const baseAddress = this.allocateLibraryBase(span);
+      if (baseAddress === 0) {
+console.error(`[LibraryLoader] ${libraryName} (${span} bytes) does not fit in the library region`);
+        return null;
+      }
 console.log(`[LibraryLoader] Allocated base address: 0x${baseAddress.toString(16)}`);
 
       // Load segments into memory
@@ -219,7 +229,7 @@ console.log(`[LibraryLoader] Loading ${segment.type} segment (${segment.size} by
       // Native AEDoor.library code does: movea.l 0x22(a6), a6 to load ExecBase
       // then calls Exec functions via jsr -$16e(a6) (PutMsg) etc.
       const EXECBASE_OFFSET = 0x22;  // 34 decimal
-      const execBase = 0x80000;  // ExecBase address in our memory map
+      const execBase = EXEC_BASE_ADDR;
       this.emulator.writeMemory32(baseAddress + EXECBASE_OFFSET, execBase);
 console.log(`[LibraryLoader] Stored ExecBase (0x${execBase.toString(16)}) at library+0x${EXECBASE_OFFSET.toString(16)}`);
 
@@ -267,12 +277,15 @@ console.error(`❌ [LibraryLoader] Failed to load ${libraryName}:`, error);
   }
 
   /**
-   * Allocate a base address for a new library
-   * Libraries are placed high in 24-bit address space
+   * Base address for a library whose segments take `span` bytes: the next
+   * free spot of the library region, LIBRARY_LVO_TABLE_BYTES above its start
+   * so the jump table stays inside the region. 0 when it does not fit.
    */
-  private allocateLibraryBase(): number {
-    const base = this.nextLibraryBase;
-    this.nextLibraryBase -= 0x10000; // Space libraries 64KB apart
+  private allocateLibraryBase(span: number): number {
+    const base = this.nextLibraryStart + LIBRARY_LVO_TABLE_BYTES;
+    const end = (base + span + 0xff) & ~0xff;
+    if (end > NATIVE_LIBRARY_END) return 0;
+    this.nextLibraryStart = end;
     return base;
   }
 

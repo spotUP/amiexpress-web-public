@@ -9,6 +9,7 @@ import { debugLog } from "../../../utils/debug-log";
 import * as fs from "fs";
 import * as path from "path";
 import { getSystemTime } from '../../../utils/date-time.util';
+import { DOOR_EXIT_TRAP_ADDR } from '../../memory-map';
 
 // PERFORMANCE: Debug logging disabled by default - synchronous file I/O is slow
 const TRAP_DEBUG_ENABLED = process.env.DEBUG_TRAP === '1';
@@ -766,7 +767,7 @@ console.log("[ExecLibrary] Permit() - stub (no-op)");
       // does not jump into random data.
       if (returnAddr === 0x119a) {
         const spAfterPop = emu.getRegister(15);
-        const exitTrapAddr = 0x1ff000;
+        const exitTrapAddr = DOOR_EXIT_TRAP_ADDR;
         emu.writeMemory32(spAfterPop, exitTrapAddr);
 console.log(
           `[ExecLibrary] FreeMem exit fix: seeded exit trap 0x${exitTrapAddr.toString(

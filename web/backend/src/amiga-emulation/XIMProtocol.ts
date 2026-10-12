@@ -37,6 +37,7 @@ import * as amigafs from '../utils/amigafs';
 import { debugRegistry } from '../debug/DebugRegistry';
 import * as net from 'net';
 import { amigaGaps, doorOf } from './instrumentation/amiga-gaps';
+import { XIM_DOOR_COMMAND_ADDR } from './memory-map';
 
 export { XIMCommand } from './xim/types';
 
@@ -113,11 +114,9 @@ debugLog(`[XIMProtocol] CONSTRUCTOR CALLED - bbsSession type: ${typeof bbsSessio
     this.doorCommand = bbsSession?.doorCommand || bbsSession?.doorId || bbsSession?.doorName || '';
 debugLog(`[XIMProtocol] doorCommand="${this.doorCommand}" (from: doorCommand=${bbsSession?.doorCommand}, doorId=${bbsSession?.doorId}, doorName=${bbsSession?.doorName})`);
 
-    // Allocate persistent memory for door command string in a high memory region
-    // Use a fixed high address that won't conflict with door's memory
+    // The door command string, in memory-map.ts "the XIM door command".
     if (this.doorCommand) {
-      // Use address 0x1FF800 (near top of 2MB address space, unlikely to be used)
-      this.doorCommandAddr = 0x1FF800;
+      this.doorCommandAddr = XIM_DOOR_COMMAND_ADDR;
       const bufferSize = this.doorCommand.length + 1;
 
       // Write the command string to this fixed address
@@ -136,7 +135,7 @@ debugLog(`[XIMProtocol]   Wrote: "${this.doorCommand}" -> Read back: "${verifySt
     this.iconLibrary = iconLibrary;
 
     // Command .info files are NOT pre-loaded for doors: real AmiExpress does
-    // not, and AquaScan works without DOORUSE tooltypes (preLoadCommandDiskObject).
+    // not, and AquaScan works without DOORUSE tooltypes.
 
     const userLineLength =
       this.bbsSession?.user?.linesPerScreen ??
@@ -1837,94 +1836,4 @@ debugLog(`[XIMProtocol] getStateSnapshot called - debugId="${debugId}" returnCom
     return this.state.replyHandled === true;
   }
 
-  /**
-   * Pre-load command's .info file and write DiskObject tooltype pointer to memory
-   * This mimics what real AmiExpress does when launching doors
-   * Doors like AquaScan expect the tooltype array pointer to be at a known memory location
-   */
-  private preLoadCommandDiskObject(): void {
-    if (!this.iconLibrary || !this.doorCommand) {
-      return;
-    }
-
-    const path = require('path');
-    const fs = require('fs');
-
-debugLog(`[XIMProtocol] Pre-loading command .info file for door: ${this.doorCommand}`);
-
-    // Try to find the command's .info file
-    const bbsPath = (this.bbsSession as any)?.dataDir || (this.bbsSession as any)?.bbsRoot || process.cwd();
-debugLog(`[XIMProtocol]   Using bbsPath: ${bbsPath}`);
-debugLog(`[XIMProtocol]   bbsSession.dataDir: ${(this.bbsSession as any)?.dataDir}`);
-debugLog(`[XIMProtocol]   bbsSession.bbsRoot: ${(this.bbsSession as any)?.bbsRoot}`);
-
-    const possiblePaths = [
-      path.join(bbsPath, 'Commands', 'BBSCmd', `${this.doorCommand}.info`),
-      path.join(bbsPath, 'Commands', 'SysCmd', `${this.doorCommand}.info`),
-      path.join(bbsPath, 'Commands', 'ConfCmd', `${this.doorCommand}.info`),
-    ];
-
-    let infoPath = '';
-    for (const p of possiblePaths) {
-debugLog(`[XIMProtocol]   Checking: ${p} -> ${amigafs.existsSync(p) ? 'EXISTS' : 'NOT FOUND'}`);
-      if (amigafs.existsSync(p)) {
-        infoPath = p;
-debugLog(`[XIMProtocol]   ✓ Found .info file: ${infoPath}`);
-        break;
-      }
-    }
-
-    if (!infoPath) {
-debugLog(`[XIMProtocol]   No .info file found for command: ${this.doorCommand}`);
-      return;
-    }
-
-    // Manually call icon.library GetDiskObject by simulating the library call
-    // Set A0 to point to the filename string
-    const CPURegister = { A0: 8, D0: 0 };
-
-    // Write the path to memory at a temporary location
-    const pathAddr = 0x1FF700; // Just below doorCommandAddr
-    for (let i = 0; i < infoPath.length; i++) {
-      this.emulator.writeMemory(pathAddr + i, infoPath.charCodeAt(i));
-    }
-    this.emulator.writeMemory(pathAddr + infoPath.length, 0); // null terminator
-
-    // Set A0 register to point to the path
-    this.emulator.setRegister(CPURegister.A0, pathAddr);
-
-    // Call GetDiskObject
-debugLog(`[XIMProtocol]   Calling GetDiskObject("${infoPath}")`);
-    this.iconLibrary.GetDiskObject();
-
-    // GetDiskObject returns DiskObject pointer in D0
-    const diskObjPtr = this.emulator.getRegister(CPURegister.D0);
-debugLog(`[XIMProtocol]   GetDiskObject returned: 0x${diskObjPtr.toString(16)}`);
-
-    if (diskObjPtr === 0) {
-debugLog(`[XIMProtocol]   Failed to load DiskObject`);
-      return;
-    }
-
-    // Extract do_ToolTypes pointer from DiskObject
-    // DiskObject structure: do_ToolTypes is at offset 53 (0x35)
-    const toolTypesPtr = this.emulator.readMemory32(diskObjPtr + 53);
-debugLog(`[XIMProtocol]   DiskObject->do_ToolTypes = 0x${toolTypesPtr.toString(16)}`);
-
-    // CRITICAL: Write tooltype array pointer to memory address 0x100e5c
-    // This is where AquaScan (and likely other doors) expect to find it
-    const TOOLTYPE_PTR_ADDR = 0x100e5c;
-    this.emulator.writeMemory32(TOOLTYPE_PTR_ADDR, toolTypesPtr);
-debugLog(`[XIMProtocol]   ✅ Wrote tooltype pointer to 0x${TOOLTYPE_PTR_ADDR.toString(16)}`);
-
-    // Verify the write
-    const verifyPtr = this.emulator.readMemory32(TOOLTYPE_PTR_ADDR);
-debugLog(`[XIMProtocol]   Verification: Memory at 0x${TOOLTYPE_PTR_ADDR.toString(16)} = 0x${verifyPtr.toString(16)}`);
-
-    if (verifyPtr === toolTypesPtr) {
-debugLog(`[XIMProtocol]   ✅ SUCCESS: Door can now call FindToolType(0x100e5c, ...) and it will work!`);
-    } else {
-debugLog(`[XIMProtocol]   ❌ ERROR: Verification failed!`);
-    }
-  }
 }

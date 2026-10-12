@@ -28,6 +28,7 @@ const BB_DEBUG_LOG_PATH = path.join(process.env.BBS_DATA_DIR || process.cwd(), '
 import { debugLog } from '../../utils/debug-log';
 import { doorScreenWidth, doorScreenHeight } from './screen-width.util';
 import { boardRoot } from '../../utils/board-root.util';
+import { INTUITION_WINDOW_HANDLE, MULTICOM_MY_NODE_ARRAY, MULTICOM_SINGLE_PORTS } from '../memory-map';
 
 export class XIMBBSInfoHandler {
   private emulator: MoiraEmulator;
@@ -105,8 +106,8 @@ console.error(`[XIMBBSInfo] Failed to write ${filename}:`, err);
     const sessionAddr = (this.bbsSession as any)?.screenAddress;
     if (typeof stateAddr === 'number') return stateAddr;
     if (typeof sessionAddr === 'number') return sessionAddr;
-    // Use a stable dummy handle in IntuitionLibrary stub range (0x099000+)
-    return 0x099000;
+    // intuition.library's stand-in Window handle (memory-map.ts)
+    return INTUITION_WINDOW_HANDLE;
   }
 
   /**
@@ -830,9 +831,9 @@ debugLog('[XIMBBSInfo] NODE_UNIT: 0');
     console.error(`[XIMBBSInfo] MULTICOM - Wrote 0x${masterNodePtr.toString(16)} to msgAddr+0xf4, readback=0x${writtenValue.toString(16)}`);
 
     // DEBUG: Dump what's at masterNode memory for first 4 nodes
-    const MY_NODE_ARRAY_BASE = 0x1E003A;
+    const MY_NODE_ARRAY_BASE = MULTICOM_MY_NODE_ARRAY;
     const MY_NODE_SIZE = 124;
-    const SINGLE_PORTS_BASE = 0x1E1000;
+    const SINGLE_PORTS_BASE = MULTICOM_SINGLE_PORTS;
     const SINGLE_PORT_SIZE = 512;
 
     console.error(`[XIMBBSInfo] MULTICOM - Memory dump of node structures:`);

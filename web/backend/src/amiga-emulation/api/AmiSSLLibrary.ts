@@ -22,6 +22,7 @@ import * as tls from 'tls';
 import * as deasync from 'deasync';
 import type { MoiraEmulator } from '../cpu/MoiraEmulator';
 import type { BsdSocketLibrary } from './BsdSocketLibrary';
+import { AMISSL_LIB_ADDR } from '../memory-map';
 
 // AmiSSL constants
 export const AMISSL_CURRENT_VERSION = 6;
@@ -136,7 +137,7 @@ export class AmiSSLMasterLibrary {
 
     // Return the same address that ExecLibrary uses for amissl.library
     // This ensures vectors are installed at the address dannounce will call
-    this.amisslBase = 0x0f6000; // Must match AMISSL_LIB_ADDR in ExecLibrary
+    this.amisslBase = AMISSL_LIB_ADDR;
     console.log(`[AmiSSLMasterLibrary] Opened AmiSSL at 0x${this.amisslBase.toString(16)}`);
 
     // Trigger installation of amissl.library vectors

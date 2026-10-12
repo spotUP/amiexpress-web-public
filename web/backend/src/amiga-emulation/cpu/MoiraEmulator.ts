@@ -704,17 +704,7 @@ console.log(`[Self-Mod Code] Registered CODE region: 0x${start.toString(16)}-0x$
   readMemory32(address: number): number {
     const high = this.readMemory16(address);
     const low = this.readMemory16(address + 2);
-    const value = ((high << 16) | low) >>> 0; // Unsigned 32-bit
-
-    // DEBUG: Track reads from 0xf0081 to see when it returns garbage
-    if (address === 0xf0081) {
-console.log(`[MEMORY-READ] readMemory32(0xf0081) = 0x${value.toString(16).padStart(8, '0')}`);
-      if (value === 0xfffec8) {
-console.error(`[MEMORY-READ] ERROR: Got garbage value 0xfffec8 instead of 0x77686f00!`);
-      }
-    }
-
-    return value;
+    return ((high << 16) | low) >>> 0; // Unsigned 32-bit
   }
 
   writeMemory16(address: number, value: number): void {

@@ -34,12 +34,16 @@ import { detectNativeAREXX } from './native-engine';
 import * as fs from 'fs';
 import * as path from 'path';
 import { config } from '../../config';
+import { DOOR_STACK_TOP, assertMemoryMapFits } from '../../amiga-emulation/memory-map';
 
 // MOIRA emulator memory size for the singleton. RexxMast itself is
 // ~3KB plus state; rexxsyslib is 33KB. ROM consumes 512KB. 4MB total
 // matches the per-door default (env EMULATOR_MEMORY_MB) and leaves
 // generous headroom for argstring + RexxMsg pools.
 const SINGLETON_MEM_MB = 4;
+
+/** RexxMast's stack top: 64 KB below the top of memory-map.ts "the door stack". */
+const REXX_STACK_TOP = DOOR_STACK_TOP - 0x10000;
 
 export interface RexxMastServiceStatus {
   /** Has start() been called and completed without error? */
@@ -193,6 +197,7 @@ class RexxMastService {
       // Step 2 — emulator instantiation.
       const { MoiraEmulator } = require('../../amiga-emulation/cpu/MoiraEmulator');
       const memBytes = SINGLETON_MEM_MB * 1024 * 1024;
+      assertMemoryMapFits(memBytes);
       this.emulator = new MoiraEmulator(memBytes);
       await this.emulator.initialize();
 
@@ -315,24 +320,9 @@ class RexxMastService {
       // Step 8 — install REXXSYSLIB_VECTORS at the resolved base.
       this.libraryTraps.installRexxSysLibVectors();
 
-      // CRITICAL: push the AllocMem bump-allocator base PAST rexxsyslib's
-      // loaded region (libBase + 33KB code segment + 64KB padding). The
-      // ExecLibrary heap starts at 0x100000 and grows upward; rexxsyslib
-      // loads at 0x200000 with ~32KB of code+data. After ~1MB of boot
-      // allocations (task structs, IORequests, internal pools), allocMem
-      // hands out addresses INSIDE rexxsyslib's data segment — every
-      // CreateRexxMsg lands at libBase+0xb8, overwriting rexxsyslib's
-      // global pending-list head and corrupting the daemon's dispatch.
-      // Symptom: daemon receives msg, runs IsRexxMsg/Remove/Enqueue,
-      // then enters a RemHead-empty/ReplyMsg-garbage loop because its
-      // own data structures were stomped by the msg allocation.
-      const REXXSYSLIB_RESERVED = 0x10000; // ~64KB padding past code+data
-      const heapMin = ((libBase + REXXSYSLIB_RESERVED) + 0xfff) & ~0xfff;
-      const execLibAny = this.execLibrary as any;
-      const currentBase = execLibAny.nextFreeMemory >>> 0;
-      if (typeof execLibAny.setAllocBase === 'function' && currentBase < heapMin) {
-        execLibAny.setAllocBase(heapMin);
-      }
+      // rexxsyslib sits in memory-map.ts "loaded 68K libraries", which the
+      // AllocMem heap cannot reach (assertMemoryMapDisjoint), so CreateRexxMsg
+      // can no longer be handed its data segment.
 
       // Step 9 — load RexxMast itself into emulator memory.
       const { HunkLoader } = require('../../amiga-emulation/loader/HunkLoader');
@@ -346,13 +336,7 @@ class RexxMastService {
       const firstSegment = rexxMastHunks.segments && rexxMastHunks.segments[0];
       this.status.rexxMastBase = firstSegment ? firstSegment.address : 0;
 
-      // Find the highest segment-end so allocateDoorTask doesn't overlap
-      // RexxMast code/data. Each segment is { address, size }.
       const segments = (rexxMastHunks.segments || []) as Array<{ address: number; bptr: number; size: number }>;
-      const segEnd = segments.reduce(
-        (hi, s) => Math.max(hi, (s.address >>> 0) + (s.size >>> 0)),
-        this.status.rexxMastBase >>> 0,
-      );
       // Capture the segment list for the CreateProc trampoline below.
       this.rexxMastSegments = segments.map(s => ({
         address: s.address >>> 0,
@@ -379,7 +363,7 @@ class RexxMastService {
       // layout; we then patch the few fields that differ from the
       // default door identity (NT_PROCESS instead of NT_TASK; name;
       // pr_TaskNum=1 for a singleton).
-      this.execLibrary.allocateDoorTask(segEnd);
+      this.execLibrary.allocateDoorTask();
       const taskAddr = this.execLibrary.getCurrentTaskAddress();
       if (!taskAddr) {
         this.status.lastError = 'allocateDoorTask returned no address';
@@ -412,7 +396,7 @@ class RexxMastService {
       // pr_StackBase / pr_StackSize so dos.library Cli() / FindCliProc()
       // style introspection sees a sane stack frame. Stack is the same
       // high-RAM region runUntilReady will use for SP.
-      const stackTop = (memBytes - 0x10000) & ~3;
+      const stackTop = REXX_STACK_TOP;
       const stackSize = 0x10000;
       this.emulator.writeMemory32(taskAddr + 0x84, stackSize);          // pr_StackSize
       this.emulator.writeMemory32(taskAddr + 0x90, stackTop >>> 2);     // pr_StackBase (BPTR)
@@ -1024,8 +1008,7 @@ class RexxMastService {
     // Set up a clean stack for the sub-call. We use the same high-RAM
     // top runUntilReady will use, so any heap allocations the init
     // function makes don't collide with the daemon's later activity.
-    const memBytes = SINGLETON_MEM_MB * 1024 * 1024;
-    const stackTop = (memBytes - 0x10000) & ~3;
+    const stackTop = REXX_STACK_TOP;
     const sentinelAddr = 0xFFFF00; // distinct from MOIRA exit traps used elsewhere
 
     // Save current MOIRA state so we can restore on completion.
@@ -1128,8 +1111,7 @@ class RexxMastService {
 
     // PC = RexxMast first segment address. SP = high in MOIRA RAM
     // (4MB heap minus 64KB stack, aligned).
-    const memBytes = SINGLETON_MEM_MB * 1024 * 1024;
-    const stackTop = (memBytes - 0x10000) & ~3;
+    const stackTop = REXX_STACK_TOP;
     try {
       const { CPURegister } = require('../../amiga-emulation/cpu/MoiraEmulator');
       this.emulator.setRegister(CPURegister.PC, this.status.rexxMastBase);
@@ -1245,7 +1227,7 @@ class RexxMastService {
     // dispatch through LibraryTraps if hit, fall back to plain
     // executeInstruction otherwise. Without this gate MOIRA routes
     // ILLEGAL through the standard 68K exception vector (vector 4 →
-    // chip-RAM handler at 0x180080) instead of our libraryTrapHandler,
+    // exec exception handler) instead of our libraryTrapHandler,
     // so JSR -N(A6) calls silently no-op via the generic ADDQ/RTE.
     const { CPURegister: CPU2 } = require('../../amiga-emulation/cpu/MoiraEmulator');
     const SLICE = 1024;

@@ -63,6 +63,7 @@ export type { ExecutionState, LifecycleConfig } from './lifecycle/lifecycle-type
 import type { ExecutionState, LifecycleConfig } from './lifecycle/lifecycle-types.js';
 import { multicomManager } from '../../nodes/MulticomManager';
 import { boardRoot } from "../../utils/board-root.util";
+import { EXCEPTION_HANDLERS_BASE, EXCEPTION_HANDLERS_END, EXCEPTION_HANDLER_SIZE, NATIVE_LIBRARY_BASE, NATIVE_LIBRARY_END } from '../memory-map';
 
 export class DoorLifecycleManager {
   private emulator: MoiraEmulator;
@@ -773,7 +774,7 @@ console.log(`[DoorLifecycleManager] alive: paused=${this.emulator.isPaused()} pc
       this.debugMonitor?.checkPcProbes(pc, this.executionState.iterationCount);
       this.debugMonitor?.checkWatchedValues();
         if (process.env.DEBUG_68K_NATIVE === '1') {
-          const inAedoorRange = pc >= 0x1fff00 && pc <= 0x200600;
+          const inAedoorRange = pc >= NATIVE_LIBRARY_BASE && pc < NATIVE_LIBRARY_END;
           if (
             inAedoorRange &&
             !this.loggedAedoorPc.has(pc) &&
@@ -1348,8 +1349,7 @@ debugLog(`[NCONFS] PC=0x19b6 CMP.L -0x6fd0(A4),D7  D7=${d7} NCONFS=${nconfs} at 
     }
 
     // Detect jumps to unusual memory regions
-    // Exception handlers are now at 0x180000 (within chip RAM)
-    if (pc >= 0x180000 && pc < 0x180800) {
+    if (pc >= EXCEPTION_HANDLERS_BASE && pc < EXCEPTION_HANDLERS_END) {
       // This is our exception handler space (64 handlers x 32 bytes) - ok
     } else if (pc >= 0x8000 && pc < 0xa000 && !this.executionState.gapJumpLogged) {
       // PC in gap between typical CODE and DATA segments - likely bad jump
@@ -1499,10 +1499,9 @@ debugLog(`\n[NATIVE DEBUG] *** BREAKPOINT HIT at 0x${bpAddr.toString(16)} ***`);
     // CRITICAL: Check if we ended up at an exception handler
     // This means MOIRA triggered an exception internally (not through our ILLEGAL check)
     const pcAfterExec = this.emulator.getRegister(16);
-    if (pcAfterExec >= 0x180000 && pcAfterExec < 0x180800) {
+    if (pcAfterExec >= EXCEPTION_HANDLERS_BASE && pcAfterExec < EXCEPTION_HANDLERS_END) {
       // We're at an exception handler! MOIRA handled an exception internally.
-      // Check which exception (each handler is 32 bytes apart)
-      const exceptionNum = (pcAfterExec - 0x180000) / 32;
+      const exceptionNum = (pcAfterExec - EXCEPTION_HANDLERS_BASE) / EXCEPTION_HANDLER_SIZE;
 console.error(`[DoorLifecycleManager] *** MOIRA EXCEPTION ${exceptionNum} at PC=0x${pc.toString(16)} ***`);
 
       // For ILLEGAL (exception 4), try our library trap handler
