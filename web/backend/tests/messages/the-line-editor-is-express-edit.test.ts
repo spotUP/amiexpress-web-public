@@ -36,6 +36,7 @@ jest.mock('../../src/utils/file-restriction.util', () => {
   return { ...actual, restricted: jest.fn(actual.restricted) };
 });
 import * as messageEntry from '../../src/handlers/message/message-entry.handler';
+import { setBoardRoot } from '../helpers/board-root';
 
 const tick = () => new Promise((r) => setTimeout(r, 5));
 
@@ -261,14 +262,14 @@ describe('Msg. Options (express.e 10373-10578)', () => {
 
   describe('F, with a device to attach from', () => {
     let dir: string;
-    const saved = process.env.BBS_DATA_DIR;
+    let restoreBoard: () => void;
     beforeAll(() => {
       dir = fs.mkdtempSync(path.join(os.tmpdir(), 'edit-attach-'));
       fs.writeFileSync(path.join(dir, 'song.mod'), 'x');
-      process.env.BBS_DATA_DIR = dir;
+      restoreBoard = setBoardRoot(dir);
     });
     afterAll(() => {
-      if (saved === undefined) delete process.env.BBS_DATA_DIR; else process.env.BBS_DATA_DIR = saved;
+      restoreBoard();
       fs.rmSync(dir, { recursive: true, force: true });
     });
 

@@ -16,17 +16,13 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import type { User } from '../../src/types';
+import { setBoardRoot } from '../helpers/board-root';
 
 const board = fs.mkdtempSync(path.join(os.tmpdir(), 'download-logging-'));
 fs.mkdirSync(path.join(board, 'Node1'));
 
-jest.mock('../../src/config', () => ({
-  config: { get: (key: string) => (key === 'dataDir' ? board : undefined) },
-}));
-
-// The CallersLog writer takes its root when it loads.
-const savedRoot = process.env.BBS_ROOT;
-process.env.BBS_ROOT = board;
+// The board is the directory config.dataDir names (utils/board-root.util).
+setBoardRoot(board);
 /* eslint-disable @typescript-eslint/no-var-requires */
 const { logDownload } = require('../../src/utils/download-logging.util') as typeof import('../../src/utils/download-logging.util');
 const { setACSConfig, LevelFlags } = require('../../src/utils/acs.util') as typeof import('../../src/utils/acs.util');
@@ -36,7 +32,6 @@ beforeAll(() => {
 });
 
 afterAll(() => {
-  if (savedRoot === undefined) delete process.env.BBS_ROOT; else process.env.BBS_ROOT = savedRoot;
   fs.rmSync(board, { recursive: true, force: true });
 });
 

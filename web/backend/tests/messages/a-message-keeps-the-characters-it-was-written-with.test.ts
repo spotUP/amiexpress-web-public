@@ -21,25 +21,24 @@ import * as path from 'path';
 
 import { MessageFileManager } from '../../src/services/MessageFileManager';
 import { puaForScreenCode } from '@amiexpress/bbs-door-sdk/petscii';
+import { setBoardRoot } from '../helpers/board-root';
 
 const CONF = 1;
 const MSG_NUMBER = 4242;
 
 let root = '';
-let previousDataDir: string | undefined;
+let restoreBoard: () => void;
 let manager: MessageFileManager;
 
 // The board's files are wherever BBS_DATA_DIR says (utils/board-root.util).
 beforeEach(() => {
   root = fs.mkdtempSync(path.join(os.tmpdir(), 'msg-encoding-'));
-  previousDataDir = process.env.BBS_DATA_DIR;
-  process.env.BBS_DATA_DIR = root;
+  restoreBoard = setBoardRoot(root);
   manager = new MessageFileManager();
 });
 
 afterEach(() => {
-  if (previousDataDir === undefined) delete process.env.BBS_DATA_DIR;
-  else process.env.BBS_DATA_DIR = previousDataDir;
+  restoreBoard();
   fs.rmSync(root, { recursive: true, force: true });
 });
 

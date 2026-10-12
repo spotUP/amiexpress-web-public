@@ -23,16 +23,17 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { handleHelpCommand, setSystemCommandsDependencies } from '../../src/handlers/commands/system-commands.handler';
+import { setBoardRoot } from '../helpers/board-root';
 
 describe('the BBSHelp screen', () => {
   let board: string;
-  const saved = process.env.BBS_DATA_DIR;
+  let restoreBoard: () => void;
   beforeEach(() => {
     board = fs.mkdtempSync(path.join(os.tmpdir(), 'help-board-'));
-    process.env.BBS_DATA_DIR = board;
+    restoreBoard = setBoardRoot(board);
   });
   afterEach(() => {
-    if (saved === undefined) delete process.env.BBS_DATA_DIR; else process.env.BBS_DATA_DIR = saved;
+    restoreBoard();
     fs.rmSync(board, { recursive: true, force: true });
   });
 

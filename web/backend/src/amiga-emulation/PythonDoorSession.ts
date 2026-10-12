@@ -5,6 +5,7 @@ import * as amigafs from '../utils/amigafs';
 import * as path from 'path';
 import { doorDropFileManager } from '../services/DoorDropFileManager';
 import { User } from '../database';
+import { boardRoot } from '../utils/board-root.util';
 
 /**
  * PythonDoorSession - Manages Python door execution
@@ -59,7 +60,7 @@ export class PythonDoorSession {
       ...config
     };
 
-    this.bbsRoot = process.env.BBS_ROOT || path.join(__dirname, '../../../backend/data/bbs/BBS');
+    this.bbsRoot = boardRoot();
 
     // Set up socket event handlers
     this.setupSocketHandlers();

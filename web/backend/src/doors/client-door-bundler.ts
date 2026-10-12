@@ -8,6 +8,7 @@ import * as path from 'path';
 import * as fs from 'fs';
 import * as crypto from 'crypto';
 import { getSystemTime } from '../utils/date-time.util';
+import { codeRoot } from '../utils/board-root.util';
 
 export interface BundleOptions {
   doorPath: string;
@@ -80,8 +81,8 @@ console.log(`[ClientDoorBundler] Bundling door: ${doorId} from ${doorPath}`);
       // Output file path
       const outputPath = path.join(this.cacheDir, `${doorId}.bundle.js`);
 
-      // Get BBS root (use BBS_ROOT env var or default to project root)
-      const bbsRoot = process.env.BBS_ROOT || path.resolve(process.cwd(), '../..');
+      // The SDK ships with the code, not with the board's volume.
+      const bbsRoot = codeRoot();
       const sdkPath = path.join(bbsRoot, 'sdk');
 
       const resolveSdkPath = (subpath: string): string => {

@@ -78,13 +78,7 @@ export function releaseLaunchTokenForDoor(token: string | null): void {
 }
 
 function logDoorDebug(message: string) {
-  try {
-    const logPath = path.join(process.cwd(), '..', '..', 'logs', 'door-68k.log');
-    const line = `[DoorDebug] ${getSystemTime().toISOString()} ${message}\n`;
-    fs.appendFileSync(logPath, line, { encoding: 'utf8' });
-  } catch (err) {
-console.error('[DoorDebug] Failed to log door debug:', err);
-  }
+  ensureDoorLogLine(`[DoorDebug] ${getSystemTime().toISOString()} ${message}`);
 }
 
 function disableShortcuts(session: BBSSession) {
@@ -516,6 +510,7 @@ import { AMIGA_68K_DOOR_TYPES as AMIGA_TYPES } from '../constants/door-types';
 import { withDoorReporting } from '../achievements/sites';
 import { MOUSE_REPORTING_OFF } from '../utils/terminal-modes';
 import { boardRoot } from '../utils/board-root.util';
+import { ensureDoorLogLine } from '../utils/door-logging.util';
 export { MOUSE_REPORTING_OFF };
 
 export function isAmiga68kDoorType(t: string): boolean {
@@ -1971,7 +1966,7 @@ console.log(`[executeTypeScriptDoor] Door path: ${door.path}`);
 
     // Get BBS root directory (use BBS_DATA_DIR env var or default to project root)
     // In Docker, /app/Doors symlinks to /app/data/bbs/Doors for path consistency
-    const projectRoot = process.env.BBS_DATA_DIR || path.resolve(process.cwd(), '../..');
+    const projectRoot = boardRoot();
 
     // The door's root directory (where package.json lives) - known whenever
     // door.path is a directory. The manifest probe after import MUST use
@@ -4500,8 +4495,8 @@ async function loadDoorManifestForExecution(door: Door): Promise<any | null> {
   try {
 console.log(`[loadDoorManifestForExecution] Loading manifest for door: ${door.name}, id: ${door.id}, path: ${door.path}`);
 
-    // Get BBS root (use BBS_ROOT env var or default to project root)
-    const bbsRoot = process.env.BBS_ROOT || path.resolve(process.cwd(), '../..');
+    // door.path is relative to the board (Doors/<name>): the board's root.
+    const bbsRoot = boardRoot();
 
     // First try: Use door.path directly if provided (case-insensitive via amigafs)
     if (door.path) {

@@ -42,6 +42,7 @@ import {
   checkAcsPermission,
 } from '../../src/utils/acs-access-loader';
 import { ACSPermission } from '../../src/constants/acs-permissions';
+import { setBoardRoot } from '../helpers/board-root';
 import { EnvStat } from '../../src/constants/env-codes';
 import type { User } from '../../src/database';
 
@@ -720,52 +721,35 @@ describe('ACS Utility', () => {
        * regress to cwd-relative.
        */
       describe('bbsRoot resolution', () => {
-        let prevBbsRoot: string | undefined;
-        let prevBbsDataDir: string | undefined;
+        let restoreBoard: (() => void) | undefined;
 
         beforeEach(() => {
-          prevBbsRoot = process.env.BBS_ROOT;
-          prevBbsDataDir = process.env.BBS_DATA_DIR;
           // Force the lazy loader to run again for each test.
           mockIsAcsLoaded.mockReturnValue(false);
         });
 
         afterEach(() => {
-          if (prevBbsRoot === undefined) delete process.env.BBS_ROOT;
-          else process.env.BBS_ROOT = prevBbsRoot;
-          if (prevBbsDataDir === undefined) delete process.env.BBS_DATA_DIR;
-          else process.env.BBS_DATA_DIR = prevBbsDataDir;
+          restoreBoard?.();
+          restoreBoard = undefined;
           // Restore the default mock so other tests aren't affected.
           mockIsAcsLoaded.mockReturnValue(true);
         });
 
-        it('uses BBS_ROOT when set', () => {
-          process.env.BBS_ROOT = '/var/lib/amiexpress/bbs';
-          delete process.env.BBS_DATA_DIR;
-          const session = createSession(createUser({ secLevel: 100 }));
-          initializeSecurity(session);
-          expect(mockLoadAcsAccessFiles).toHaveBeenCalledWith('/var/lib/amiexpress/bbs');
-        });
-
-        it('falls back to BBS_DATA_DIR when BBS_ROOT is unset (prod container)', () => {
-          delete process.env.BBS_ROOT;
-          process.env.BBS_DATA_DIR = '/app/data/bbs';
+        // The root is boardRoot() (config.dataDir: BBS_DATA_DIR, BBS_ROOT,
+        // the repo tree) - never a cwd-relative guess, which on the prod
+        // container is /app.
+        it('loads the access files from the board root', () => {
+          restoreBoard = setBoardRoot('/app/data/bbs');
           const session = createSession(createUser({ secLevel: 255 }));
           initializeSecurity(session);
           expect(mockLoadAcsAccessFiles).toHaveBeenCalledWith('/app/data/bbs');
         });
 
-        it('falls back to cwd-relative only when neither env is set (dev)', () => {
-          delete process.env.BBS_ROOT;
-          delete process.env.BBS_DATA_DIR;
+        it('follows the board root when it changes', () => {
+          restoreBoard = setBoardRoot('/var/lib/amiexpress/bbs');
           const session = createSession(createUser({ secLevel: 100 }));
           initializeSecurity(session);
-          // cwd-relative ../.. — we don't pin the exact value, just that
-          // it's the dev fallback (i.e. NOT one of the env values above).
-          const call = mockLoadAcsAccessFiles.mock.calls[0]?.[0];
-          expect(call).toBeDefined();
-          expect(call).not.toBe('/app/data/bbs');
-          expect(call).not.toBe('/var/lib/amiexpress/bbs');
+          expect(mockLoadAcsAccessFiles).toHaveBeenCalledWith('/var/lib/amiexpress/bbs');
         });
       });
     });

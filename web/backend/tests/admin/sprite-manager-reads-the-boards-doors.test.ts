@@ -14,6 +14,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { SpriteManagerHandler } from '../../src/handlers/admin/sprite-manager.handler';
+import { setBoardRoot } from '../helpers/board-root';
 
 function response() {
   const res: any = { body: undefined, code: 200 };
@@ -22,18 +23,18 @@ function response() {
   return res;
 }
 
-const saved = process.env.BBS_DATA_DIR;
 let board: string;
+let restoreBoard: () => void;
 
 beforeEach(() => {
   board = fs.mkdtempSync(path.join(os.tmpdir(), 'sprite-board-'));
   const sprites = path.join(board, 'Doors', 'pengo', 'sprites');
   fs.mkdirSync(sprites, { recursive: true });
   fs.writeFileSync(path.join(sprites, 'penguin.sprite.json'), JSON.stringify({ animations: { walk: [] } }));
-  process.env.BBS_DATA_DIR = board;
+  restoreBoard = setBoardRoot(board);
 });
 afterEach(() => {
-  if (saved === undefined) delete process.env.BBS_DATA_DIR; else process.env.BBS_DATA_DIR = saved;
+  restoreBoard();
   fs.rmSync(board, { recursive: true, force: true });
 });
 

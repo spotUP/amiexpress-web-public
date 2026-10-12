@@ -62,6 +62,7 @@ const TRACE_PC_JUMPS = process.env.TRACE_PC_JUMPS === "1";
 export type { ExecutionState, LifecycleConfig } from './lifecycle/lifecycle-types.js';
 import type { ExecutionState, LifecycleConfig } from './lifecycle/lifecycle-types.js';
 import { multicomManager } from '../../nodes/MulticomManager';
+import { boardRoot } from "../../utils/board-root.util";
 
 export class DoorLifecycleManager {
   private emulator: MoiraEmulator;
@@ -273,8 +274,7 @@ debugLog(
         .join(", ") || "none"}`
     );
     try {
-      const root = path.resolve(process.cwd(), "../..");
-      this.traceLogPath = path.join(root, "logs", "door-68k.log");
+      this.traceLogPath = path.join(boardRoot(), "logs", "door-68k.log");
       if (this.traceFirstCount > 0) {
         // For first-PC tracing, write to a small temp file to avoid huge log noise
         this.traceLogPathFirst =

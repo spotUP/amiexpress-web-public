@@ -138,6 +138,7 @@ import { getMailStatFile, loadMsgPointers, validatePointers, updateReadPointer }
 import { findSecurityScreen } from '../utils/screen-security.util';
 import { searchFileDescriptions } from './database-helpers';
 import { getBoardConfig } from '../services/bbs-config-file.service';
+import { boardRoot } from '../utils/board-root.util';
 import { nodeFileManager } from '../services/NodeFileManager';
 import { collapseSeedNodeScreens } from '../services/seed-node-screens';
 
@@ -145,7 +146,7 @@ const AROS_ROM_FILES = ['aros-rom.bin', 'aros-ext.bin'];
 
 function ensureArosRomsAvailable(): void {
   try {
-    const bbsRoot = process.env.BBS_ROOT || process.env.BBS_DATA_DIR || config.get('dataDir');
+    const bbsRoot = boardRoot();
     const targetDir = path.resolve(bbsRoot, 'data', 'amiga-roms');
     const sourceCandidates = [
       path.resolve(__dirname, '../data/amiga-roms'),
@@ -328,7 +329,7 @@ function replaceInPlace<T>(target: T[], next: T[]): T[] {
 }
 
 export async function refreshConferencesFromDisk(bbsRootOverride?: string): Promise<any[]> {
-  const bbsRoot = bbsRootOverride || process.env.BBS_ROOT || config.get('dataDir');
+  const bbsRoot = bbsRootOverride || boardRoot();
 
   const confConfig = loadConfConfig(bbsRoot);
 
@@ -467,7 +468,7 @@ export async function refreshConferencesFromDisk(bbsRootOverride?: string): Prom
  * the collapse against a developer's checkout would move tracked art around.
  */
 function collapseNodeScreensOnBoot(caller: string): void {
-  const bbsRoot = process.env.BBS_ROOT || process.env.BBS_DATA_DIR || config.get('dataDir');
+  const bbsRoot = boardRoot();
   if (!fs.existsSync(path.join(bbsRoot, '.initialized'))) return;
   try {
     const report = collapseSeedNodeScreens(bbsRoot, { existingSharedWins: true });
@@ -512,7 +513,7 @@ export async function initializeData(io?: SocketIOServer) {
 
     // express.e: cmds.numConf and confNames/confDirs are populated from ConfConfig.info (NCONFS, NAME.n, LOCATION.n)
     // The BBS ALWAYS uses disk files, NOT the database, for conference configuration
-    const bbsRoot = process.env.BBS_ROOT || config.get('dataDir');
+    const bbsRoot = boardRoot();
     console.log(`[INIT] bbsRoot=${bbsRoot}`);
 
     // NOBODY IS ONLINE YET, so no node may claim a caller. `node<n>.user` is
@@ -694,7 +695,7 @@ export async function initializeData(io?: SocketIOServer) {
         }
       };
       const doorsRoot = path.join(
-        process.env.BBS_ROOT || process.env.BBS_DATA_DIR || config.get("dataDir"),
+        boardRoot(),
         "Doors",
       );
       /*

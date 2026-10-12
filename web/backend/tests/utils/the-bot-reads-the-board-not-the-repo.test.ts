@@ -10,10 +10,20 @@
  */
 import * as path from 'path';
 
-import { boardRoot } from '../../src/utils/board-root.util';
+import { boardRoot as importedBoardRoot } from '../../src/utils/board-root.util';
+import { config } from '../../src/config';
 
 const env = { ...process.env };
 afterEach(() => { process.env = { ...env }; });
+
+/** boardRoot() as a process started with the current env would answer: config reads the env once, at load. */
+function boardRoot(): string {
+  let answer = '';
+  jest.isolateModules(() => {
+    answer = require('../../src/utils/board-root.util').boardRoot();
+  });
+  return answer;
+}
 
 describe('where the board is', () => {
   it('is the container volume when it is set - the case that was wrong', () => {
@@ -44,6 +54,18 @@ describe('where the board is', () => {
   it('never leaves a trailing slash to double up in a join', () => {
     process.env.BBS_DATA_DIR = '/app/data/bbs/';
     expect(boardRoot()).toBe('/app/data/bbs');
+  });
+});
+
+describe('one answer', () => {
+  it('follows config.dataDir when it changes at runtime (admin, tests)', () => {
+    const original = config.get.bind(config);
+    jest.spyOn(config, 'get').mockImplementation((key: string) => (key === 'dataDir' ? '/somewhere/chosen' : original(key as never)));
+    try {
+      expect(importedBoardRoot()).toBe('/somewhere/chosen');
+    } finally {
+      jest.restoreAllMocks();
+    }
   });
 });
 

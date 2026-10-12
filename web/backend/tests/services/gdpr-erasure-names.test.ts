@@ -10,6 +10,7 @@
 process.env.SKIP_DB_INIT = '1';
 
 import { headerNameIsTheCaller } from '../../src/services/gdpr-erasure.service';
+import { setBoardRoot } from '../helpers/board-root';
 
 const names = { username: 'alicezed', realnames: ['Bob Bobson', undefined] };
 
@@ -150,8 +151,7 @@ describe('the erasure and the sysop\'s safety copies', () => {
 
   it('blanks the caller\'s record in a user.data copy, and the same slot in its .keys copy, by name', () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'gdpr-backups-'));
-    const saved = process.env.BBS_DATA_DIR;
-    process.env.BBS_DATA_DIR = root;
+    const restoreBoard = setBoardRoot(root);
     try {
       fs.writeFileSync(path.join(root, 'user.data'), record('live', 232));
       const data = path.join(root, 'user.data.pre-swap-20261004.backup');
@@ -168,7 +168,7 @@ describe('the erasure and the sysop\'s safety copies', () => {
       expect(k.subarray(0, 5).toString('latin1')).toBe('other');
       expect(k.subarray(56).every((x: number) => x === 0)).toBe(true);
     } finally {
-      if (saved === undefined) delete process.env.BBS_DATA_DIR; else process.env.BBS_DATA_DIR = saved;
+      restoreBoard();
       fs.rmSync(root, { recursive: true, force: true });
     }
   });

@@ -20,9 +20,11 @@ import express from 'express';
 import request from 'supertest';
 import { doorApiRouter } from '../../src/doors/door-api-routes';
 import { createChatRouter } from '../../src/api/chat-routes';
+import { setBoardRoot } from '../helpers/board-root';
 
 describe('a public route that fails', () => {
   let root: string;
+  let restoreBoard: () => void;
 
   beforeAll(() => {
     root = fs.mkdtempSync(path.join(os.tmpdir(), 'public-500-'));
@@ -31,11 +33,11 @@ describe('a public route that fails', () => {
     // A client door whose entry is not there: the bundler throws, naming it.
     fs.writeFileSync(path.join(door, 'package.json'),
       JSON.stringify({ name: 'brokendoor', runtime: 'client', entry: 'missing.ts' }));
-    process.env.BBS_ROOT = root;
+    restoreBoard = setBoardRoot(root);
   });
 
   afterAll(() => {
-    delete process.env.BBS_ROOT;
+    restoreBoard();
     fs.rmSync(root, { recursive: true, force: true });
   });
 

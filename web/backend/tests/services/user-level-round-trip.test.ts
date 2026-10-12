@@ -32,6 +32,7 @@ import * as path from 'path';
 
 import { UserFileManager } from '../../src/services/UserFileManager';
 import type { User } from '../../src/database';
+import { setBoardRoot } from '../helpers/board-root';
 
 const REC = 232;
 const SEC_STATUS_OFFSET = 86;
@@ -68,13 +69,11 @@ function account(username: string, secLevel: number): User {
 
 function boardWithManager(): { root: string; mgr: UserFileManager } {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'userlevel-'));
-  const saved = process.env.BBS_DATA_DIR;
-  process.env.BBS_DATA_DIR = root;
+  const restoreBoard = setBoardRoot(root);
   try {
     return { root, mgr: new UserFileManager() };
   } finally {
-    if (saved === undefined) delete process.env.BBS_DATA_DIR;
-    else process.env.BBS_DATA_DIR = saved;
+    restoreBoard();
   }
 }
 

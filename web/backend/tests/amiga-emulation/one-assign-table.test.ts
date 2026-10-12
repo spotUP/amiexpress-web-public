@@ -14,9 +14,11 @@ import * as path from 'path';
 import { PathManager } from '../../src/amiga-emulation/api/PathManager';
 import { amigaTempDir } from '../../src/amiga-emulation/api/dos/standard-assigns';
 import { findAssign, resolveAssignPath } from '../../src/utils/path-util';
+import { setBoardRoot } from '../helpers/board-root';
 
 describe('one assign table', () => {
   let root: string;
+  let restoreBoard: () => void;
   const savedEnv = { ...process.env };
 
   beforeEach(() => {
@@ -28,10 +30,12 @@ describe('one assign table', () => {
     fs.writeFileSync(path.join(root, 'System', 'C', 'Avail'), 'avail');
     fs.writeFileSync(path.join(root, 'L', 'LZX.Keyfile'), 'key');
     process.env.BBS_DATA_DIR = root;
+    restoreBoard = setBoardRoot(root);
     process.env.RAM_DIR = path.join(root, 'ram');
   });
 
   afterEach(() => {
+    restoreBoard();
     process.env = { ...savedEnv };
     fs.rmSync(root, { recursive: true, force: true });
   });

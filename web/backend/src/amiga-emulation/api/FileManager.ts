@@ -21,6 +21,7 @@ import type { FileShadowProvider } from './file-shadow';
 import * as path from 'path';
 import { getSystemTime } from '../../utils/date-time.util';
 import { DOS_ERRORS, FIRST_FILE_HANDLE, RESERVED_HANDLES } from './dos/dos-types';
+import { boardRoot } from '../../utils/board-root.util';
 
 // PERFORMANCE: Debug logging disabled by default - synchronous file I/O is slow
 const FILE_DEBUG_ENABLED = process.env.DEBUG_FILE === '1';
@@ -281,7 +282,7 @@ console.error(`[FileManager] Failed to resolve path: "${amiPath}"`);
       try {
         const fs = require('fs');
         const path = require('path');
-        const bbsRoot = process.env.BBS_DATA_DIR || path.resolve(process.cwd(), '../..');
+        const bbsRoot = boardRoot();
 
         const acpPath = path.join(bbsRoot, 'ACP');
         if (fs.existsSync(acpPath)) {
@@ -685,6 +686,14 @@ console.log(`[FileManager] stdout BPTR set to 0x${bptr.toString(16)} (addr 0x${(
    */
   setStdoutHandle(bptr: number): void {
     this.stdoutBptr = bptr;
+  }
+
+  /**
+   * Redirect stdin to a different BPTR (e.g., CLI-style "< file"). Unlike
+   * setStdinBptr, the console handle stays registered where it is.
+   */
+  setStdinHandle(bptr: number): void {
+    this.stdinBptr = bptr;
   }
 
   /**

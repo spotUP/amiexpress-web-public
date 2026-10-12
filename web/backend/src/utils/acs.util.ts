@@ -11,6 +11,7 @@ import * as path from 'path';
 import { ACSPermission, ACS_PERMISSION_NAMES } from '../constants/acs-permissions';
 import { EnvStat } from '../constants/env-codes';
 import type { User } from '../database';
+import { boardRoot } from './board-root.util';
 import {
   loadAcsAccessFiles,
   isAcsLoaded,
@@ -180,8 +181,7 @@ export function getACSConfig(): ACSConfig {
  * the BBS data is mounted at $BBS_DATA_DIR (/app/data/bbs), and cwd-relative
  * ../.. lands on /app - which has no Access/ subdirectory, causing ALL ACS
  * lookups to deny. That left sysop locked out of `j`, `who`, `b`, `r`, etc.
- * on live for months. Honour BBS_ROOT, then BBS_DATA_DIR, then the dev-only
- * cwd fallback.
+ * on live for months. boardRoot() is the one answer.
  *
  * This used to run at login only (initializeSecurity). A session that reaches
  * a permission check WITHOUT having come through that path - the board
@@ -193,11 +193,7 @@ export function getACSConfig(): ACSConfig {
  */
 export function ensureAcsLoaded(): void {
   if (isAcsLoaded()) return;
-  const bbsRoot =
-    process.env.BBS_ROOT ||
-    process.env.BBS_DATA_DIR ||
-    path.resolve(process.cwd(), '..', '..');
-  loadAcsAccessFiles(bbsRoot);
+  loadAcsAccessFiles(boardRoot());
 }
 
 export function checkSecurity(

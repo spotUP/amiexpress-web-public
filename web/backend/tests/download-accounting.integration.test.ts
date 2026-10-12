@@ -10,9 +10,10 @@
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
+import { setBoardRoot } from './helpers/board-root';
 
 const board = fs.mkdtempSync(path.join(os.tmpdir(), 'dl-accounting-'));
-process.env.BBS_DATA_DIR = board;
+setBoardRoot(board);
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const { bookConference } = require('../src/services/download-booking.service');

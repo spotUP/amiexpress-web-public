@@ -13,6 +13,7 @@ import * as path from 'path';
 import { User } from '../database';
 import { boardScreenTypes, screenTypeIndex } from '../screens/screen-metadata';
 import { encodeAmigaDate, decodeAmigaDate, decodeAmigaDateToUnix } from '../utils/date-time.util';
+import { boardRoot } from '../utils/board-root.util';
 
 /**
  * E language struct: axobjects.e:11-68
@@ -169,7 +170,7 @@ export class UserFileManager {
     // legacy installs may set BBS_ROOT; dev falls back to the calculated path.
     // __dirname when compiled is /dist/services and with tsx it's /src/services,
     // so go 4 levels up either way: dist|src -> backend -> web -> amiexpress-web.
-    this.bbsRoot = bbsRoot || process.env.BBS_DATA_DIR || process.env.BBS_ROOT || path.join(__dirname, '../../../..');
+    this.bbsRoot = bbsRoot || boardRoot();
     this.userDataPath = this.normalizeTargetPath(path.join(this.bbsRoot, 'user.data'));
     this.userKeysPath = this.normalizeTargetPath(path.join(this.bbsRoot, 'user.keys'));
     this.userMiscPath = this.normalizeTargetPath(path.join(this.bbsRoot, 'user.misc'));

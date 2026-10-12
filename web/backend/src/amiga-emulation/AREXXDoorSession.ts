@@ -5,6 +5,7 @@ import * as path from 'path';
 import { User } from '../database';
 import { AREXXInterpreter } from '../services/arexx.service';
 import { doorDropFileManager } from '../services/DoorDropFileManager';
+import { boardRoot } from '../utils/board-root.util';
 
 /**
  * AREXXDoorSession - Manages AREXX door execution
@@ -54,7 +55,7 @@ export class AREXXDoorSession {
       ...config
     };
 
-    this.bbsRoot = process.env.BBS_ROOT || path.join(__dirname, '../../../backend/data/bbs/BBS');
+    this.bbsRoot = boardRoot();
 
     // Set up socket event handlers
     this.setupSocketHandlers();

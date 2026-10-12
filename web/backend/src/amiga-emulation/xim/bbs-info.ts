@@ -27,6 +27,7 @@ import { ximLogger } from '../../utils/XIMLogger';
 const BB_DEBUG_LOG_PATH = path.join(process.env.BBS_DATA_DIR || process.cwd(), 'logs', 'bb-conflocal-debug.log');
 import { debugLog } from '../../utils/debug-log';
 import { doorScreenWidth, doorScreenHeight } from './screen-width.util';
+import { boardRoot } from '../../utils/board-root.util';
 
 export class XIMBBSInfoHandler {
   private emulator: MoiraEmulator;
@@ -58,7 +59,7 @@ export class XIMBBSInfoHandler {
   private getBbsRoot(): string {
     const sessionRoot = (this.bbsSession as any)?.bbsRoot;
     if (sessionRoot) return sessionRoot;
-    return process.env.BBS_ROOT || path.join(process.cwd());
+    return boardRoot();
   }
 
   private getNodeId(): number {

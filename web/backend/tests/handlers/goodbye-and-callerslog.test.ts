@@ -50,6 +50,7 @@ describe('a caller with unfinished uploads says goodbye', () => {
   }
 
   function partUploads(session: any): string[] {
+    // resetModules above: the handler gets a fresh config, which reads this.
     process.env.BBS_DATA_DIR = root;
     const { partUploadsForCaller } = require('../../src/handlers/commands/system-commands.handler');
     return partUploadsForCaller(session);
@@ -94,11 +95,11 @@ describe('which node\'s callers log', () => {
   beforeEach(() => {
     root = fs.mkdtempSync(path.join(os.tmpdir(), 'cl-'));
     jest.resetModules();
-    process.env.BBS_ROOT = root;
+    process.env.BBS_DATA_DIR = root;
   });
   afterEach(() => {
     fs.rmSync(root, { recursive: true, force: true });
-    delete process.env.BBS_ROOT;
+    delete process.env.BBS_DATA_DIR;
   });
 
   function seedNodeLog(nodeId: number, text: string): void {

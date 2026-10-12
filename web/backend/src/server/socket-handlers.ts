@@ -73,6 +73,7 @@ import { endRawTransfer } from '../utils/raw-transfer-teardown.util';
 import { c64AdapterFor } from './c64-door-adapter';
 import { routeDoorInput } from '../services/door-input-routing';
 import { onLevel, SYSOP_LEVEL } from './socket-guard';
+import { ensureDoorLogLine } from '../utils/door-logging.util';
 
 /**
  * How far one press of a cursor key moves a windowed door's view, in source
@@ -302,13 +303,7 @@ console.error('[SOCKET HANDLER ERROR] Failed to load audio-video.handler:', err)
 }
 
 function logDoorDebug(message: string) {
-  try {
-    const logPath = path.join(process.cwd(), '..', '..', 'logs', 'door-68k.log');
-    const line = `[DoorDebug] ${getSystemTime().toISOString()} ${message}\n`;
-    fs.appendFileSync(logPath, line, { encoding: 'utf8' });
-  } catch {
-    /* ignore */
-  }
+  ensureDoorLogLine(`[DoorDebug] ${getSystemTime().toISOString()} ${message}`);
 }
 
 /**

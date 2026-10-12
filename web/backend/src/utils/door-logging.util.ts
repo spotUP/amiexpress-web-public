@@ -1,14 +1,18 @@
-import { appendFileSync } from 'fs';
+import { appendFileSync, mkdirSync } from 'fs';
 import * as path from 'path';
 import { XIMCommand, XIMMessage } from '../amiga-emulation/xim/types';
 import { getSystemTime } from '../utils/date-time.util';
+import { boardRoot } from './board-root.util';
 
-const projectRoot = process.env.BBS_ROOT || path.resolve(process.cwd(), '../..');
-const doorLogPath = path.join(projectRoot, 'logs', 'door-68k.log');
+// The board writes this log, so it lives under the board's root. Resolved per
+// call: the root can change at runtime (admin, tests).
+const doorLogPath = (): string => path.join(boardRoot(), 'logs', 'door-68k.log');
 
-function ensureDoorLogLine(line: string) {
+export function ensureDoorLogLine(line: string) {
   try {
-    appendFileSync(doorLogPath, line + '\n', { encoding: 'utf8' });
+    const file = doorLogPath();
+    mkdirSync(path.dirname(file), { recursive: true });
+    appendFileSync(file, line + '\n', { encoding: 'utf8' });
   } catch (error) {
 console.error('[DoorLogging] Failed to write door log:', error);
   }

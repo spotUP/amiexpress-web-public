@@ -43,6 +43,8 @@ function post(n: number, from: string, to: string, subject: string, status: numb
 
 beforeAll(() => {
   process.env.BBS_DATA_DIR = root;
+  // The board's access files: this board is the one the reader asks.
+  fs.cpSync(path.join(savedData!, 'Access'), path.join(root, 'Access'), { recursive: true });
   messageIndexManager.setBbsRoot(root);
   messageIndexManager.initializeMessageIndex(1);
   post(1, 'Alice', 'ALL', 'Hello', MsgStatus.NORMAL, 'first body\n');

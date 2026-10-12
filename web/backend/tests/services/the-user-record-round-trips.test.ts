@@ -21,6 +21,7 @@ import * as path from 'path';
 
 import { UserFileManager } from '../../src/services/UserFileManager';
 import type { User } from '../../src/database';
+import { setBoardRoot } from '../helpers/board-root';
 
 const REC = 232;
 const SLOT_FIELD = 84;
@@ -49,10 +50,9 @@ describe('the user.data record', () => {
 
   beforeEach(() => {
     root = fs.mkdtempSync(path.join(os.tmpdir(), 'user-roundtrip-'));
-    const saved = process.env.BBS_DATA_DIR;
-    process.env.BBS_DATA_DIR = root;
+    const restoreBoard = setBoardRoot(root);
     try { mgr = new UserFileManager(); } finally {
-      if (saved === undefined) delete process.env.BBS_DATA_DIR; else process.env.BBS_DATA_DIR = saved;
+      restoreBoard();
     }
   });
   afterEach(() => fs.rmSync(root, { recursive: true, force: true }));

@@ -27,6 +27,7 @@ import { getSystemTime, formatLongDate, formatLongTime } from '../utils/date-tim
 import { getBoardConfig } from './bbs-config-file.service';
 import { config as appConfig } from '../config';
 import { getACSConfig, LevelFlags } from '../utils/acs.util';
+import { boardRoot } from '../utils/board-root.util';
 
 /** express.e:9575-9577 callersLogDivider(). */
 export const CALLERS_LOG_DIVIDER = '**************************************************************';
@@ -110,11 +111,8 @@ export class CallersLogManager {
     // fallback (repo root) meant every deploy wiped the logs while the
     // console still showed their lines, which is exactly the "emitted
     // but never reach the file" gap (2026-09-10). Same precedence as
-    // initialization.ts: explicit root, BBS_ROOT, BBS_DATA_DIR, repo.
-    this.bbsRoot = root
-      ?? process.env.BBS_ROOT
-      ?? process.env.BBS_DATA_DIR
-      ?? path.join(__dirname, '../../../..');
+    // initialization.ts: explicit root, then boardRoot().
+    this.bbsRoot = root ?? boardRoot();
   }
 
   /**

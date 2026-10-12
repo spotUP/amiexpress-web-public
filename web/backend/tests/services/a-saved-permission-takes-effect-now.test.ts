@@ -23,6 +23,7 @@ import {
   invalidateAcsIfAccessFile,
 } from '../../src/utils/acs-access-loader';
 import { parseInfoFile, writeInfoFile } from '../../src/utils/info-file.util';
+import { setBoardRoot } from '../helpers/board-root';
 import {
   acsLevelFilePath,
   flagsToTooltypes,
@@ -53,6 +54,7 @@ function grantOnDisk(root: string, level: number, flag: string): string {
 
 describe('a permission saved from the admin', () => {
   let root: string;
+  let restoreBoard: () => void;
   const caller = {
     id: 'u-50',
     username: 'scener',
@@ -64,12 +66,12 @@ describe('a permission saved from the admin', () => {
   beforeEach(() => {
     root = boardWithLevel(50);
     resetAcsLoader();
-    process.env.BBS_ROOT = root;
+    restoreBoard = setBoardRoot(root);
     loadAcsAccessFiles(root);
   });
 
   afterEach(() => {
-    delete process.env.BBS_ROOT;
+    restoreBoard();
     fs.rmSync(root, { recursive: true, force: true });
     resetAcsLoader();
   });

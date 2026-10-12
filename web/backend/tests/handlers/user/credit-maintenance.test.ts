@@ -41,6 +41,7 @@ import {
   handleConferenceAccountingInput,
 } from '../../../src/handlers/user/account-edit-input.handler';
 import * as nodePath from 'path';
+import { setBoardRoot } from '../../helpers/board-root';
 
 const checkSecurity = checkSecurityImport as jest.Mock;
 const amigafs = {
@@ -279,9 +280,9 @@ describe('CreditLog (express.e:22013-22021)', () => {
 // editor, not conference accounting - a sysop the list leaves out could edit
 // and save every conference's figures.
 describe('conference accounting under LockAccounts (express.e:22227)', () => {
-  const saved = process.env.BBS_DATA_DIR;
-  beforeEach(() => { process.env.BBS_DATA_DIR = '/the-board'; });
-  afterEach(() => { if (saved === undefined) delete process.env.BBS_DATA_DIR; else process.env.BBS_DATA_DIR = saved; });
+  let restoreBoard: () => void;
+  beforeEach(() => { restoreBoard = setBoardRoot('/the-board'); });
+  afterEach(() => { restoreBoard(); });
 
   function accountingSession() {
     return {

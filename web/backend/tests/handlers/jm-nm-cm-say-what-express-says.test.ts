@@ -47,6 +47,7 @@ import { YES_NO_PROMPT } from '../../src/utils/await-input';
 import { flushOutput } from '../../src/utils/output.util';
 import { BBSState, LoggedOnSubState } from '../../src/constants/bbs-states';
 import { EnvStat } from '../../src/constants/env-codes';
+import { setBoardRoot } from '../helpers/board-root';
 
 const SYSOP = { id: 'u1', username: 'SPOT', secLevel: 255, securityFlags: 'T'.repeat(64) };
 
@@ -361,8 +362,7 @@ describe('CM', () => {
   it('the stats dump writes express.e\'s Conf.Stats - no "[OK] Stats dumped" on screen', async () => {
     deps();
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cm-stats-'));
-    const prev = process.env.BBS_DATA_DIR;
-    process.env.BBS_DATA_DIR = dir;
+    const restoreBoard = setBoardRoot(dir);
     try {
       const dbFile = path.join(dir, 'Conf.DB');
       const rec = deserializeConfBase(Buffer.alloc(CONFBASE_RECORD_SIZE));
@@ -400,7 +400,7 @@ describe('CM', () => {
         '',
       ].join('\n'));
     } finally {
-      if (prev === undefined) delete process.env.BBS_DATA_DIR; else process.env.BBS_DATA_DIR = prev;
+      restoreBoard();
       fs.rmSync(dir, { recursive: true, force: true });
     }
   });

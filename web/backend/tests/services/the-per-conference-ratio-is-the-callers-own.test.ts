@@ -14,9 +14,10 @@
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
+import { setBoardRoot } from '../helpers/board-root';
 
 const board = fs.mkdtempSync(path.join(os.tmpdir(), 'conf-ratio-'));
-process.env.BBS_DATA_DIR = board;
+setBoardRoot(board);
 process.env.SKIP_DB_INIT = '1';
 
 /* eslint-disable @typescript-eslint/no-var-requires */

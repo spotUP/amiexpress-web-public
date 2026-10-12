@@ -20,6 +20,7 @@ import * as path from 'path';
 import { UserFileManager } from '../../src/services/UserFileManager';
 import { decodeAmigaDateToUnix } from '../../src/utils/date-time.util';
 import type { User } from '../../src/database';
+import { setBoardRoot } from '../helpers/board-root';
 
 process.env.SKIP_DB_INIT = '1';
 
@@ -40,13 +41,11 @@ function dbUser(username: string, updated: Date): User {
 
 function board(): { root: string; mgr: UserFileManager } {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'pwdage-'));
-  const saved = process.env.BBS_DATA_DIR;
-  process.env.BBS_DATA_DIR = root;
+  const restoreBoard = setBoardRoot(root);
   try {
     return { root, mgr: new UserFileManager() };
   } finally {
-    if (saved === undefined) delete process.env.BBS_DATA_DIR;
-    else process.env.BBS_DATA_DIR = saved;
+    restoreBoard();
   }
 }
 

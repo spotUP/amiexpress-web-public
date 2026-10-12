@@ -23,21 +23,19 @@ import os from 'os';
 import path from 'path';
 import { UserDatabaseManager } from '../../src/services/UserDatabaseManager';
 import { UserFileManager } from '../../src/services/UserFileManager';
+import { setBoardRoot } from '../helpers/board-root';
 
 describe('user.data has one home', () => {
   let root: string;
-  let previousDataDir: string | undefined;
-  let previousRoot: string | undefined;
+  let restoreBoard: () => void;
 
   beforeEach(() => {
     root = fs.mkdtempSync(path.join(os.tmpdir(), 'user-root-'));
-    previousDataDir = process.env.BBS_DATA_DIR;
-    previousRoot = process.env.BBS_ROOT;
+    restoreBoard = setBoardRoot(root);
   });
 
   afterEach(() => {
-    if (previousDataDir === undefined) delete process.env.BBS_DATA_DIR; else process.env.BBS_DATA_DIR = previousDataDir;
-    if (previousRoot === undefined) delete process.env.BBS_ROOT; else process.env.BBS_ROOT = previousRoot;
+    restoreBoard();
     fs.rmSync(root, { recursive: true, force: true });
   });
 
@@ -48,19 +46,9 @@ describe('user.data has one home', () => {
     return fs.existsSync(path.join(root, 'user.data')) ? path.join(root, 'user.data') : 'somewhere else';
   };
 
-  it('both managers write under BBS_DATA_DIR, as Docker sets it', () => {
-    process.env.BBS_DATA_DIR = root;
-    delete process.env.BBS_ROOT;
-
+  it('both managers write under the board root, as Docker sets it', () => {
     expect(writtenPath(new UserFileManager())).toBe(path.join(root, 'user.data'));
     fs.rmSync(path.join(root, 'user.data'), { force: true });
-    expect(writtenPath(new UserDatabaseManager())).toBe(path.join(root, 'user.data'));
-  });
-
-  it('still honours BBS_ROOT when that is the only one set', () => {
-    delete process.env.BBS_DATA_DIR;
-    process.env.BBS_ROOT = root;
-
     expect(writtenPath(new UserDatabaseManager())).toBe(path.join(root, 'user.data'));
   });
 });

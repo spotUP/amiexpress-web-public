@@ -58,6 +58,7 @@ import * as os from 'os';
 import * as path from 'path';
 import { BBSState, LoggedOnSubState } from '../../../src/constants/bbs-states';
 import { config } from '../../../src/config';
+import { setBoardRoot } from '../../helpers/board-root';
 
 const { handleConfirmInput, setNewUserDependencies } = require('../../../src/handlers/user/new-user.handler');
 
@@ -87,7 +88,7 @@ const SCRIPT = [
 ].join('\r\n');
 
 let dataDir: string;
-let getConfig: jest.SpyInstance;
+let restoreBoard: () => void;
 
 function makeSocket() {
   const emits: { event: string; payload: any }[] = [];
@@ -111,13 +112,13 @@ beforeEach(() => {
   // The caller's own node directory, as express.e uses `node` (30339) -
   // this used to be Node0 for node 1, one behind.
   fs.mkdirSync(path.join(dataDir, 'Node1'), { recursive: true });
-  getConfig = jest.spyOn(config, 'getConfig').mockReturnValue({ dataDir } as any);
+  restoreBoard = setBoardRoot(dataDir);
   users.clear();
   setNewUserDependencies({ db, sessions: new Map() });
 });
 
 afterEach(() => {
-  getConfig.mockRestore();
+  restoreBoard();
   fs.rmSync(dataDir, { recursive: true, force: true });
 });
 

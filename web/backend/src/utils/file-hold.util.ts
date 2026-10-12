@@ -9,6 +9,7 @@ import * as path from 'path';
 import { conferenceDir } from '../conferences/conference-paths';
 import { findCaseInsensitive } from './amigafs';
 import * as fs from 'fs/promises';
+import { boardRoot } from './board-root.util';
 
 /**
  * Get HOLD directory path for a conference
@@ -213,7 +214,7 @@ export async function moveToFiles(
   if (dlPath) {
     // Resolve Amiga path assigns (BBS:, Work:, etc.) to filesystem paths
     const { BBSPaths } = require('./bbs-paths.util');
-    const rootPath = bbsRoot || process.env.BBS_ROOT || process.cwd();
+    const rootPath = bbsRoot || boardRoot();
     const paths = new BBSPaths(rootPath);
     filesDir = paths.resolveAmigaPath(dlPath);
   } else {

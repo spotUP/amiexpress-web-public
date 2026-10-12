@@ -37,8 +37,10 @@ import * as os from 'os';
 import * as path from 'path';
 import request from 'supertest';
 import type { Express } from 'express';
+import { setBoardRoot } from '../helpers/board-root';
 
 let root = '';
+let restoreBoard: () => void = () => {};
 const ORIGINAL_ROOT = process.env.BBS_ROOT;
 
 function door(dir: string, manifest: object, files: Record<string, string>): void {
@@ -53,11 +55,13 @@ function door(dir: string, manifest: object, files: Record<string, string>): voi
 
 beforeEach(() => {
   root = fs.mkdtempSync(path.join(os.tmpdir(), 'door-routes-'));
+  restoreBoard = setBoardRoot(root);
   process.env.BBS_ROOT = root;
   fs.writeFileSync(path.join(root, 'user.data'), 'every caller');
 });
 
 afterEach(() => {
+  restoreBoard();
   if (ORIGINAL_ROOT === undefined) delete process.env.BBS_ROOT;
   else process.env.BBS_ROOT = ORIGINAL_ROOT;
   fs.rmSync(root, { recursive: true, force: true });

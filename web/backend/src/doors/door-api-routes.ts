@@ -11,6 +11,7 @@ import { getClientDoorBundler } from './client-door-bundler';
 import { authenticateToken, requireSysop } from '../middleware/auth.middleware';
 import { db } from '../database';
 import { isPlainFileName } from '../utils/plain-file-name.util';
+import { boardRoot, codeRoot } from '../utils/board-root.util';
 
 export const doorApiRouter = express.Router();
 
@@ -21,9 +22,9 @@ export const doorApiRouter = express.Router();
  * the log beside each response, never to the browser.
  */
 
-const getBbsRoot = (): string => {
-  return process.env.BBS_ROOT || path.resolve(process.cwd(), '../..');
-};
+// Doors/ is the board's own content (the volume on live): boardRoot(). The SDK
+// and its worklets ship with the code: codeRoot().
+const getBbsRoot = (): string => boardRoot();
 
 /**
  * A path a door's manifest names, kept inside that door's own directory.
@@ -225,7 +226,7 @@ doorApiRouter.get(/^\/doors\/[^/]+\/(chiptune3\.worklet\.js|libopenmpt\.worklet\
     return res.status(404).json({ error: 'Not found' });
   }
 
-  const workletPath = path.join(getBbsRoot(), 'sdk', 'node_modules', 'chiptune3', fileName);
+  const workletPath = path.join(codeRoot(), 'sdk', 'node_modules', 'chiptune3', fileName);
   if (!fs.existsSync(workletPath)) {
 console.error(`[DoorAPI] chiptune3 worklet missing: ${workletPath} - run npm install in sdk/`);
     return res.status(404).json({ error: 'Worklet not installed' });
@@ -332,7 +333,7 @@ function resolveDoorPath(doorId: string, entryPoint: string): string {
   }
 
   // Fall back to SDK examples (dev)
-  const sdkPath = path.join(bbsRoot, 'sdk/doors', doorId, entryPoint);
+  const sdkPath = path.join(codeRoot(), 'sdk/doors', doorId, entryPoint);
   if (amigafs.existsSync(sdkPath)) {
     return sdkPath;
   }

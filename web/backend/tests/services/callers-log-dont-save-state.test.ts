@@ -21,22 +21,18 @@ describe('CallersLogManager honours SYS_DONT_SAVE_STATE', () => {
   let bbsRoot: string;
   let spy: jest.SpyInstance;
   let mgr: CallersLogManager;
-  const prevBbsRoot = process.env.BBS_ROOT;
 
   beforeEach(() => {
     bbsRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'dont-save-state-'));
-    process.env.BBS_ROOT = bbsRoot;
-    mgr = new CallersLogManager();
-
     const original = config.get.bind(config);
     spy = jest
       .spyOn(config, 'get')
       .mockImplementation((key: string) => (key === 'dataDir' ? bbsRoot : original(key as never)));
+    mgr = new CallersLogManager();
   });
 
   afterEach(() => {
     spy.mockRestore();
-    process.env.BBS_ROOT = prevBbsRoot;
     fs.rmSync(bbsRoot, { recursive: true, force: true });
   });
 

@@ -7,6 +7,7 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
+import { setBoardRoot } from '../helpers/board-root';
 import {
   checkPathSlash,
   removePathSlash,
@@ -112,29 +113,33 @@ describe('Path Utility Functions', () => {
       process.env = { ...originalEnv };
     });
 
+    afterEach(() => {
+      jest.restoreAllMocks();
+    });
+
     afterAll(() => {
       process.env = originalEnv;
     });
 
     it('should find BBS: assign', () => {
-      process.env.BBS_DATA_DIR = '/path/to/bbs';
+      setBoardRoot('/path/to/bbs');
       expect(findAssign('BBS:')).toBe('/path/to/bbs');
     });
 
     it('should find SYS: assign (the board System/ directory, as the emulator has it)', () => {
-      process.env.BBS_DATA_DIR = '/path/to/bbs';
+      setBoardRoot('/path/to/bbs');
       expect(findAssign('SYS:')).toBe(path.join('/path/to/bbs', 'System'));
     });
 
     it('should be case-insensitive', () => {
-      process.env.BBS_DATA_DIR = '/path/to/bbs';
+      setBoardRoot('/path/to/bbs');
       expect(findAssign('bbs:')).toBe('/path/to/bbs');
       expect(findAssign('BBS')).toBe('/path/to/bbs');
       expect(findAssign('Bbs:')).toBe('/path/to/bbs');
     });
 
     it('should add colon if missing', () => {
-      process.env.BBS_DATA_DIR = '/path/to/bbs';
+      setBoardRoot('/path/to/bbs');
       expect(findAssign('BBS')).toBe('/path/to/bbs');
     });
 
@@ -143,12 +148,12 @@ describe('Path Utility Functions', () => {
     });
 
     it('should support DOORS: assign', () => {
-      process.env.BBS_DATA_DIR = '/path/to/bbs';
+      setBoardRoot('/path/to/bbs');
       expect(findAssign('DOORS:')).toBe(path.join('/path/to/bbs', 'doors'));
     });
 
     it('should support LIBS: assign (System/Libs first, then Libs)', () => {
-      process.env.BBS_DATA_DIR = '/path/to/bbs';
+      setBoardRoot('/path/to/bbs');
       expect(findAssign('LIBS:')).toBe(path.join('/path/to/bbs', 'System', 'Libs'));
     });
 
@@ -163,6 +168,11 @@ describe('Path Utility Functions', () => {
 
     beforeEach(() => {
       process.env = { ...originalEnv, BBS_DATA_DIR: '/bbs/data' };
+      setBoardRoot('/bbs/data');
+    });
+
+    afterEach(() => {
+      jest.restoreAllMocks();
     });
 
     afterAll(() => {

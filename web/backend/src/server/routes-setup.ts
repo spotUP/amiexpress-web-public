@@ -17,7 +17,7 @@ import multer from 'multer';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as amigafs from '../utils/amigafs';
-import { boardRoot } from '../utils/board-root.util';
+import { boardRoot, codeRoot } from '../utils/board-root.util';
 import express from 'express';
 import { db } from '../database';
 import { config } from '../config';
@@ -313,10 +313,7 @@ export function registerHttpRoutes(app: Application, io: SocketIOServer): void {
   // board's root here would serve the admin app out of /app/data/bbs, where
   // there is no admin app. BBS_ROOT still overrides, for a host that keeps
   // the checkout somewhere unusual.
-  const codeRootOverride = process.env.BBS_ROOT;
-  const projectRoot = codeRootOverride
-    ? path.resolve(codeRootOverride)
-    : path.resolve(__dirname, '../../../..');
+  const projectRoot = codeRoot();
 
   // Helper: Serve SPA with fallback to index.html
   function serveSPA(prefix: string, distPath: string, name: string) {

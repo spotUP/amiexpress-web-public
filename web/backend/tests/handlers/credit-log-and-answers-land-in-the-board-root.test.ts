@@ -19,20 +19,20 @@ jest.mock('../../src/utils/node-tooltypes.util', () => ({
 
 import { writeCreditLog } from '../../src/handlers/user/account-edit-input.handler';
 import { answersFileFor } from '../../src/handlers/user/new-user.handler';
+import { setBoardRoot } from '../helpers/board-root';
 
 describe('board files follow the board root', () => {
   let root: string;
-  let saved: string | undefined;
+  let restoreBoard: () => void;
 
   beforeEach(() => {
     // Set AFTER the modules (and the config singleton) have loaded.
     root = fs.mkdtempSync(path.join(os.tmpdir(), 'board-root-'));
-    saved = process.env.BBS_DATA_DIR;
-    process.env.BBS_DATA_DIR = root;
+    restoreBoard = setBoardRoot(root);
   });
 
   afterEach(() => {
-    if (saved === undefined) delete process.env.BBS_DATA_DIR; else process.env.BBS_DATA_DIR = saved;
+    restoreBoard();
     fs.rmSync(root, { recursive: true, force: true });
   });
 

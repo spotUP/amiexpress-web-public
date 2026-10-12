@@ -4,17 +4,16 @@ import path from 'path';
 import { config } from '../config';
 import { findCaseInsensitive } from '../utils/amigafs';
 import * as amigafs from '../utils/amigafs';
+import { boardRoot, codeRoot } from '../utils/board-root.util';
 
 // Standard batch files to ensure they exist
 const STANDARD_BATCH_FILES = ['batch0', 'batch000', 'batch1', 'batch2', 'batch3', 'batch4', 'batch5', 'batch6'];
 
 function batchRoots(): string[] {
   const roots = [
-    config.getConfig().dataDir,
-    // BBS_DATA_DIR is what the container sets; BBS_ROOT is empty there.
-    process.env.BBS_DATA_DIR || process.env.BBS_ROOT || path.resolve(process.cwd(), '..'),
-    // Project root (two levels up from web/backend) to find default batch files in repo/default-data
-    path.resolve(process.cwd(), '..', '..'),
+    boardRoot(),
+    // The code tree holds the default batch files (repo/default-data).
+    codeRoot(),
   ].filter(Boolean);
   return Array.from(new Set(roots));
 }
@@ -87,7 +86,7 @@ function writeBatch(name: string, content: string) {
 
 function resolveAssign(p: string): string {
   const lower = p.toLowerCase();
-  const base = config.getConfig().dataDir;
+  const base = boardRoot();
   if (lower.startsWith('bbs:')) {
     const rel = p.substring(4);
     return path.join(base, rel);

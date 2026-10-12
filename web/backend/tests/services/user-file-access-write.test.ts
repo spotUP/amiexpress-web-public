@@ -15,14 +15,15 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { UserFileManager } from '../../src/services/UserFileManager';
+import { setBoardRoot } from '../helpers/board-root';
 
 const SIZE = 232;
 
 function makeManager(): { mgr: UserFileManager; root: string } {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'user-data-'));
-  process.env.BBS_DATA_DIR = root;
+  const restoreBoard = setBoardRoot(root);
   const mgr = new UserFileManager();
-  delete process.env.BBS_DATA_DIR;
+  restoreBoard();
   // Three slots of distinct filler so any stray write is visible.
   fs.writeFileSync(path.join(root, 'user.data'), Buffer.alloc(SIZE * 3, 0xaa));
   fs.writeFileSync(path.join(root, 'user.keys'), Buffer.alloc(56 * 3, 0xbb));
