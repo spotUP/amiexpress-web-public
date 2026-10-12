@@ -64,7 +64,7 @@ describe('the account editor', () => {
   it('opens on the account\'s slot, not its database id', async () => {
     const e = await editorOn('alice');
     expect(e.session.tempData.editingSlot).toBe(2);
-    expect(e.out.join('')).toContain('Slot #2');
+    expect(e.out.join('')).toContain('  ACTIVE\x1b[0m [2]');
   });
 
   it('+ goes to the next slot, and past the last back to slot 1', async () => {
@@ -73,7 +73,7 @@ describe('the account editor', () => {
     expect(e.session.tempData.editingSlot).toBe(3);
     expect(e.session.tempData.editingUser.username).toBe('bob');
     expect(e.session.tempData.editingUser.id).toBe('uuid-bob');
-    expect(e.out.join('')).toContain('Slot #3');
+    expect(e.out.join('')).toContain('  ACTIVE\x1b[0m [3]');
 
     await e.key('+');
     expect(e.session.tempData.editingSlot).toBe(1);

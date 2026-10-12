@@ -326,56 +326,6 @@ describe('5b LIVECHAT picker (chat-commands.handler.ts renderChatUserList)', () 
   });
 });
 
-describe('5b user list (account.handler.ts displayUserList)', () => {
-  const LIST_USER = { ...ONLINE_USER, lastLogin: new Date(Date.UTC(2026, 0, 2, 12, 0, 0)) };
-
-  async function driveUserList(driver: Driver) {
-    const account = require('../../src/handlers/user/account.handler');
-    account.setDatabase({ getUsers: jest.fn().mockResolvedValue([LIST_USER]) });
-    account.displayUserList(driver.socket, driver.session, 1);
-    await new Promise((resolve) => setImmediate(resolve));
-  }
-
-  test('80-col PIN: header, 75-wide rule and row byte-identical', async () => {
-    const driver = wide();
-    await driveUserList(driver);
-    const out = driver.output();
-
-    expect(out).toContain(
-      '\x1b[32mUsername'.padEnd(16) +
-        'Real Name'.padEnd(20) +
-        'Group'.padEnd(15) +
-        'Level  Last Login\x1b[0m\r\n'
-    );
-    expect(out).toContain('\x1b[36m' + '='.repeat(75) + '\x1b[0m\r\n');
-    expect(out).toContain(
-      'ZAPHOD'.padEnd(16) +
-        'Zaphod Beeblebrox'.padEnd(20) +
-        'Betelgeuse Five'.padEnd(15) +
-        '255'.padStart(5) +
-        '  ' +
-        LIST_USER.lastLogin.toLocaleDateString() +
-        '\r\n'
-    );
-  });
-
-  test('40-col: no line over 39 columns, level and location still shown', async () => {
-    const driver = narrow();
-    await driveUserList(driver);
-    const out = driver.output();
-
-    expectNarrowScreen(out);
-
-    // Exact header, rule and the two stacked rows.
-    expect(out).toContain('\x1b[32mUsername         Lvl  Last Login\x1b[0m\r\n');
-    expect(out).toContain('\x1b[36m' + '='.repeat(40) + '\x1b[0m\r\n');
-    expect(out).toContain(
-      'ZAPHOD'.padEnd(16) + ' ' + '255'.padStart(3) + '  ' + LIST_USER.lastLogin.toLocaleDateString() + '\r\n'
-    );
-    expect(out).toContain('  Betelgeuse Five\r\n');
-  });
-});
-
 describe('5b room members (room-commands.handler.ts whoInRoom)', () => {
   const MEMBER = {
     username: 'ZAPHOD',

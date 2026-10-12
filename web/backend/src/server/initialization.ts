@@ -95,7 +95,7 @@ import {
 // name it actually has, from the module that actually serves FM.
 import { setFileMaintenanceDependencies } from '../handlers/file/file-maintenance.handler';
 import { setMessageEntryDependencies } from '../handlers/message/message-entry.handler';
-import { displayAccountEditingMenu, setDatabase as setDatabaseForAccountHandler } from '../handlers/user/account.handler';
+import { setDatabase as setDatabaseForAccountHandler } from '../handlers/user/account.handler';
 import {
   setDoors,
   getDoors,

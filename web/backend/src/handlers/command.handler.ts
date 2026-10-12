@@ -38,10 +38,6 @@ import {
   matchesWildcard,
 } from './file/file.handler';
 import {
-  displayAccountEditingMenu,
-  displayUserList
-} from './user/account.handler';
-import {
   FileMaintenanceHandler,
   setFileMaintenanceDependencies
 } from './file/file-maintenance.handler';
@@ -3029,27 +3025,6 @@ console.log('[handleCommand] Display flow branch, subState=', session.subState);
   if (session.subState === LoggedOnSubState.GOODBYE_CONFIRM) {
     const { handleGoodbyeConfirm } = require('./commands/system-commands.handler');
     await handleGoodbyeConfirm(socket, session, data.trim());
-    return;
-  }
-
-  // Handle account editing operations (delegate to account editor menu)
-  if (session.tempData?.accountEditingMenu) {
-    await handleAccountEditingCommand(socket, session);
-    return;
-  }
-
-  if (session.tempData?.editUserAccount) {
-    await handleAccountEditingCommand(socket, session);
-    return;
-  }
-
-  if (session.tempData?.viewUserStats) {
-    await handleAccountEditingCommand(socket, session);
-    return;
-  }
-
-  if (session.tempData?.changeSecLevel || session.tempData?.toggleUserFlags || session.tempData?.deleteUserAccount || session.tempData?.searchUsers) {
-    await handleAccountEditingCommand(socket, session);
     return;
   }
 

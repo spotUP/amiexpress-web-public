@@ -173,20 +173,15 @@ describe('showing and editing a limit', () => {
     jest.resetModules();
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     const account = require('../../src/handlers/user/account.handler');
-    account.setDatabase({
-      getUserByUsername: async () => ({
-        username: 'Spot', realname: 'Spot', location: 'Uprough', secLevel: 255,
-        firstLogin: new Date(0), lastLogin: new Date(0), calls: 1, callsToday: 1,
-        timeTotal: 0, timeUsed: 0, timeLimit: 86400, uploads: 0, downloads: 0,
-        bytesUpload: 0, bytesDownload: 0,
-      }),
-    });
     const { socket, text } = recordingSocket();
-    account.handleViewUserStats(socket, {} as any, 'Spot');
-    await new Promise((resolve) => setImmediate(resolve));
+    // The account editor's U> Time_Limit (express.e:23108 Div(timeLimit,60)).
+    account.displayAccountPage0(socket, {
+      username: 'Spot', realname: 'Spot', location: 'Uprough', secLevel: 255,
+      timeTotal: 0, timeUsed: 0, timeLimit: 86400, uploads: 0, downloads: 0,
+    }, 1);
 
-    expect(text()).toContain('Time Limit: 1440 minutes');
-    expect(text()).not.toContain('86400 minutes');
+    expect(text()).toContain('Time_Limit\x1b[36m:\x1b[0m \x1b[36m[\x1b[0m1440    \x1b[36m]');
+    expect(text()).not.toContain('86400');
   });
 
   it('converts the sysop editor back to seconds on the way in', async () => {

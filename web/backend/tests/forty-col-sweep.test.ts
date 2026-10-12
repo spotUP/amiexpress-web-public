@@ -580,20 +580,6 @@ describe('40-column sweep: the driven surfaces', () => {
     };
   }
 
-  it('the user list (account.handler.ts displayUserList)', async () => {
-    const d = drive();
-    const account = require('../src/handlers/user/account.handler');
-    account.setDatabase({
-      getUsers: jest.fn().mockResolvedValue([
-        { username: LONG, realname: LONG, location: LONG, secLevel: 255, lastLogin: new Date(0) },
-        { username: EMPTY, realname: EMPTY, location: EMPTY, secLevel: 0, lastLogin: null },
-      ]),
-    });
-    account.displayUserList(d.socket, d.session, 1);
-    await new Promise((resolve) => setImmediate(resolve));
-    fits(d.rows());
-  });
-
   it('the new-user computer picker (new-user.handler.ts)', async () => {
     const d = drive();
     d.session.newUserData = {};

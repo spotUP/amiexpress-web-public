@@ -196,17 +196,6 @@ import {
 } from "./handlers/file/file.handler";
 import { setMessageEntryDependencies } from "./handlers/message/message-entry.handler";
 import {
-  handleAccountEditing,
-  displayUserList,
-  handleEditUserAccount,
-  handleViewUserStats,
-  handleChangeSecLevel,
-  handleToggleUserFlags,
-  handleDeleteUserAccount,
-  handleSearchUsers,
-  setDatabase as setDatabaseForAccountHandler,
-} from "./handlers/user/account.handler";
-import {
   displayMainMenu,
   displayMenuPrompt,
   handleCommand,
