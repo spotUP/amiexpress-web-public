@@ -166,7 +166,7 @@ describe('which node\'s callers log', () => {
       checkSecurity: () => true,
     }));
     const { handleCallersLogCommand, setSysopCommandsDependencies } = require('../../src/handlers/commands/sysop-commands.handler');
-    setSysopCommandsDependencies({ getRecentCallerActivity: jest.fn(), setEnvStat: jest.fn(), db: {} });
+    setSysopCommandsDependencies({ setEnvStat: jest.fn(), db: {} });
     const s = socket();
     const session: any = { user: { username: 'sysop' }, tempData: {}, nodeId: 1 };
 
@@ -191,5 +191,52 @@ describe('which node\'s callers log', () => {
     err.mockRestore();
     fs.chmodSync(path.join(root, 'Node0', 'CallersLog'), 0o644);
     expect(s.out.join('')).not.toContain('Could not read that log');
+  });
+
+  describe('CL with a node number (express.e:24472-24477, displayCallersLog 9067)', () => {
+    function run(params: string, session: any = { user: { username: 'sysop' }, tempData: {}, nodeId: 1 }) {
+      jest.doMock('../../src/utils/acs.util', () => ({
+        ...jest.requireActual('../../src/utils/acs.util'),
+        checkSecurity: () => true,
+      }));
+      const { handleCallersLogCommand, setSysopCommandsDependencies } = require('../../src/handlers/commands/sysop-commands.handler');
+      setSysopCommandsDependencies({ setEnvStat: jest.fn(), db: {} });
+      const s = socket();
+      return handleCallersLogCommand(s, session, params).then(() => s.out.join(''));
+    }
+
+    it('shows the newest line first and no node header', async () => {
+      seedNodeLog(1, 'first\nsecond\nthird\n');
+      const text = await run('1');
+      expect(text).not.toContain('Callerslog for Node');
+      expect(text.indexOf('third')).toBeLessThan(text.indexOf('second'));
+      expect(text.indexOf('second')).toBeLessThan(text.indexOf('first'));
+    });
+
+    it('refuses a node with no log with E\'s two line breaks', async () => {
+      const text = await run('7');
+      expect(text).toContain('\r\nNot a valid node!\r\n\r\n');
+    });
+
+    it('reads the node with Val, so a non-number means node 0', async () => {
+      seedNodeLog(0, 'zero log\n');
+      expect(await run('abc')).toContain('zero log');
+    });
+
+    it('pauses at the screen length unless NS is given', async () => {
+      seedNodeLog(1, Array.from({ length: 40 }, (_, i) => `line${i}`).join('\n') + '\n');
+      const session: any = { user: { username: 'sysop', lineLength: 10 }, tempData: {}, nodeId: 1 };
+      const pending = run('1', session);
+      // The log stops at the prompt until the sysop answers; N ends it (checkForPause 5196-5197).
+      for (let i = 0; i < 200 && !session.checkPauseHandler; i += 1) await new Promise((r) => setTimeout(r, 10));
+      expect(typeof session.checkPauseHandler).toBe('function');
+      await session.checkPauseHandler('n');
+      const paused = await pending;
+      expect(paused).toContain('(Pause)...More(y/n/ns)? ');
+      expect(paused).not.toContain('line0');
+      const free = await run('1 ns', { user: { username: 'sysop', lineLength: 10 }, tempData: {}, nodeId: 1 });
+      expect(free).not.toContain('(Pause)');
+      expect(free).toContain('line0');
+    });
   });
 });

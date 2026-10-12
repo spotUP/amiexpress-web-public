@@ -10,11 +10,13 @@ import { checkSecurity } from '../../utils/acs.util';
 import { ACSPermission } from '../../constants/acs-permissions';
 import { EnvStat } from '../../constants/env-codes';
 import { AnsiUtil } from '../../utils/ansi.util';
+import { ParamsUtil } from '../../utils/params.util';
+import { eVal } from '../../utils/await-input';
+import { checkForPause } from '../../utils/flag-pause.util';
 import { ErrorHandler } from '../../utils/error-handling.util';
 import { startEditAccounts } from '../user/user-editor.handler';
 
 // Dependencies (injected)
-let _getRecentCallerActivity: any;
 let _setEnvStat: any;
 let _db: Database;
 
@@ -22,11 +24,9 @@ let _db: Database;
  * Dependency injection setter
  */
 export function setSysopCommandsDependencies(deps: {
-  getRecentCallerActivity: any;
   setEnvStat: any;
   db: Database;
 }) {
-  _getRecentCallerActivity = deps.getRecentCallerActivity;
   _setEnvStat = deps.setEnvStat;
   _db = deps.db;
 }
@@ -146,9 +146,17 @@ console.log('[ENV] Sysop');
   const { callersLogManager } = require('../../services/CallersLogManager');
   const available = callersLogManager.availableLogs();
 
-  const requested = params.trim().split(/\s+/)[0];
-  if (requested && /^\d+$/.test(requested)) {
-    await displayNodeCallersLog(socket, session, Number.parseInt(requested, 10));
+  // express.e:24472-24477 - parseParams; a first item is the node (Val), `NS` anywhere
+  // is non-stop. No header and no node check here: displayCallersLog does the refusing.
+  const parsedParams = ParamsUtil.parse(params);
+  if (parsedParams.length > 0) {
+    await displayCallersLog(
+      socket,
+      session,
+      eVal(parsedParams[0]),
+      ParamsUtil.hasFlag(parsedParams, 'NS'),
+      false,
+    );
     return;
   }
 
@@ -326,42 +334,73 @@ console.log('[ENV] Sysop');
 }
 
 /**
- * Show one node's CallersLog, or express's refusal.
- *
- * express.e:24498-24506: it re-opens the file, echoes the same
- * `<n> - Callerslog for Node <n>` header it listed, then displays it; a node
- * with no log gets "Not a valid node!".
+ * displayCallersLog (express.e:9067-9142): one node's CallersLog, NEWEST LINE FIRST
+ * (it reads the file backwards from the end), paused through checkForPause unless
+ * `nonStop` (the NS parameter). A node with no log gets "\b\nNot a valid node!\b\n\b\n".
  *
  * The file holds Amiga text, so it is read as latin1: reading it as UTF-8
  * turns every high-bit byte into U+FFFD.
+ *
+ * WEB_: E reads 4096-byte chunks from the end and skips the first line of the file
+ * (its loop stops at index 1 of the last chunk); here every line is printed.
  */
-export async function displayNodeCallersLog(
+export async function displayCallersLog(
   socket: any,
   session: BBSSession,
   nodeId: number,
+  nonStop: boolean,
+  headerAndRefusal: boolean,
 ): Promise<void> {
   const fs = require('fs');
   const { callersLogManager } = require('../../services/CallersLogManager');
   const logPath = callersLogManager.logPathFor(nodeId);
 
+  session.subState = LoggedOnSubState.DISPLAY_MENU;
+  session.menuPause = true;
+
   if (!fs.existsSync(logPath)) {
-    socket.emit('ansi-output', '\r\nNot a valid node!\r\n');
-    session.subState = LoggedOnSubState.DISPLAY_MENU;
-    session.menuPause = true;
+    // 24500-24506 (prompt answer) checks first and prints one break; 9138 (displayCallersLog) two.
+    socket.emit('ansi-output', headerAndRefusal ? '\r\nNot a valid node!\r\n' : '\r\nNot a valid node!\r\n\r\n');
+    return;
+  }
+  if (headerAndRefusal) socket.emit('ansi-output', `${nodeId} - Callerslog for Node ${nodeId}\r\n`);
+
+  let text: string;
+  try {
+    text = fs.readFileSync(logPath, 'latin1');
+  } catch (err) {
+    // 9067: nothing is printed when the file will not open.
+    console.error('[CL] could not read the callers log:', err);
     return;
   }
 
-  socket.emit('ansi-output', `${nodeId} - Callerslog for Node ${nodeId}\r\n`);
-  try {
-    const text = fs.readFileSync(logPath, 'latin1');
-    socket.emit('ansi-output', text.replace(/\r?\n/g, '\r\n'));
-  } catch (err) {
-    // express.e:9067 displayCallersLog prints nothing when the file will not open.
-    console.error('[CL] could not read the callers log:', err);
-  }
+  // 9076-9077: the pause counters restart; NS makes it non-stop.
+  session.tempData = session.tempData || {};
+  session.tempData.lineCount = 0;
+  session.tempData.nonStopDisplayFlag = nonStop;
 
-  session.subState = LoggedOnSubState.DISPLAY_MENU;
-  session.menuPause = true;
+  // 9094: buf[readSize-1]:=0 drops the final byte, the trailing line break.
+  const lines = text.replace(/\n$/, '').split('\n').map((l) => l.replace(/\r$/, '')).reverse();
+  for (const line of lines) {
+    socket.emit('ansi-output', `${line}\r\n`);
+    // 9104-9107: a long line wraps, so it counts for the rows it takes.
+    if (line.length > 72) {
+      session.tempData.lineCount = (session.tempData.lineCount || 0) + Math.floor((line.length - 72) / 80) + 1;
+    }
+    if (!(await checkForPause(socket, session as any))) {
+      socket.emit('ansi-output', '\r\n');
+      break;
+    }
+  }
+}
+
+/** The prompt path of internalCommand2 (24498-24506): header, then the log; no log is refused. */
+export async function displayNodeCallersLog(
+  socket: any,
+  session: BBSSession,
+  nodeId: number,
+): Promise<void> {
+  await displayCallersLog(socket, session, nodeId, false, true);
 }
 
 /** The answer to "Which node to view?" (express.e:24490-24495). */
@@ -381,5 +420,5 @@ export async function handleCallersLogNodeInput(
     return;
   }
 
-  await displayNodeCallersLog(socket, session, Number.parseInt(answer, 10));
+  await displayNodeCallersLog(socket, session, eVal(answer));
 }

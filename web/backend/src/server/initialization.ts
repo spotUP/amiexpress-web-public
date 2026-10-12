@@ -854,7 +854,6 @@ export async function initializeData(io?: SocketIOServer) {
 
     // Inject dependencies into sysop commands handler
     setSysopCommandsDependencies({
-      getRecentCallerActivity,
       setEnvStat,
       db
     });
