@@ -19,6 +19,7 @@ import { resolveAssignPath } from './path-util';
 import { runAmigaProgram } from './amiga-program-runner.util';
 import { parseAmigaCommandLine } from '../amiga-emulation/api/dos/dos-command-line';
 import { amigaPathOf } from '../services/upload-examine.service';
+import { flushOutput } from './output.util';
 
 const execAsync = promisify(exec);
 
@@ -191,10 +192,32 @@ export enum TestResult {
  */
 export interface TestFileOptions {
   onCheckerOutput?: (output: string) => void;
+  /**
+   * The caller's connection, for the FILECHECK system command: a door runs on
+   * the caller's screen (express.e:18647 processSysCommand). Without one
+   * (FTP's background check) there is no screen to give it and FILECHECK is
+   * not run.
+   */
+  caller?: { socket: any; session: any };
   /** The node the upload is on: its NODE<n>: volume is the checker's. */
   nodeId?: number;
 }
 
+/** express.e axenums.e: RESULT_* as a door reports them through DT_GOODFILE. */
+const GOODFILE_SUCCESS = 0;
+const GOODFILE_FAILURE = -1;
+const GOODFILE_NOT_ALLOWED = 1;
+const GOODFILE_NOT_TESTED = 2;
+
+/** aeGoodFile (a RESULT_* number) as this port's verdict. */
+export function testResultFromGoodFile(aeGoodFile: number): TestResult {
+  switch (aeGoodFile | 0) {
+    case GOODFILE_SUCCESS: return TestResult.SUCCESS;
+    case GOODFILE_FAILURE: return TestResult.FAILURE;
+    case GOODFILE_NOT_TESTED: return TestResult.NOT_TESTED;
+    default: return TestResult.NOT_ALLOWED;
+  }
+}
 
 export async function testFile(
   filepath: string,
@@ -206,10 +229,9 @@ export async function testFile(
 
 console.log(`[testFile] Testing ${filename} (extension: ${ext})`);
 
-  // Express.e:18645-18648 - Try FILECHECK system command first
-  // Check if FILECHECK system command exists in config
+  // Express.e:18645-18648 - FILECHECK system command first
   try {
-    const filecheckResult = await tryFilecheckCommand(filepath, nodeWorkDir);
+    const filecheckResult = await tryFilecheckCommand(filename, options);
     if (filecheckResult !== null) {
       return filecheckResult;
     }
@@ -228,60 +250,37 @@ console.log(`[testFile] No valid extension, file not tested`);
 }
 
 /**
- * Try to execute FILECHECK system command if configured
- * Express.e:18645-18648 - checkSystemCommand('FILECHECK')
+ * express.e:18645-18648:
  *
- * @param filepath Full path to file
- * @param nodeWorkDir Work directory for output
- * @returns Test result or null if command not configured
+ *   StringF(temp2,'FILECHECK \s',str)
+ *   IF (processSysCommand(temp2)=RESULT_SUCCESS) AND (aeGoodFile<>RESULT_NOT_TESTED)
+ *     RETURN aeGoodFile
+ *
+ * FILECHECK is a SYSTEM COMMAND (Commands/SysCmd/FILECHECK.info), a door that
+ * runs on the caller's screen and reports its verdict through DT_GOODFILE
+ * (DoorMessageHandler sets session.aeGoodFile). `str` is the file's name as
+ * the upload loop has it. Returns null when the command did not run or the
+ * door left the file NOT_TESTED: the extension checkers go on.
  */
-async function tryFilecheckCommand(filepath: string, nodeWorkDir: string): Promise<TestResult | null> {
-  const { db } = require('../database');
-  const outputFile = path.join(nodeWorkDir, 'OutPut_Of_Test');
+async function tryFilecheckCommand(filename: string, options: TestFileOptions): Promise<TestResult | null> {
+  const { caller } = options;
+  if (!caller) return null;
+  const { runSysCommandInFlow } = require('../handlers/command-execution.handler');
+  const { RESULT_SUCCESS } = require('../constants/command-results');
 
-  // Check if FILECHECK system command is configured
-  const syscmdResult = await db.query(
-    `SELECT commandstring FROM system_commands WHERE UPPER(commandname) = 'FILECHECK' LIMIT 1`
-  );
-
-  if (syscmdResult.rows.length === 0) {
-console.log(`[testFile] FILECHECK system command not configured`);
-    return null;
-  }
-
-  const commandString = syscmdResult.rows[0].commandstring;
-console.log(`[testFile] Running FILECHECK command: ${commandString}`);
-
-  try {
-    // Replace placeholders: %f = filename, %p = filepath
-    const command = commandString
-      .replace(/%f/g, path.basename(filepath))
-      .replace(/%p/g, filepath)
-      .replace(/%w/g, nodeWorkDir);
-
-    // Execute the command
-    const { stdout, stderr } = await execAsync(command, {
-      timeout: 60000, // 60 second timeout
-      cwd: nodeWorkDir,
-    });
-
-    // Write output to test output file
-    await fs.writeFile(outputFile, `${stdout}\n${stderr}`);
-
-    // Check for error indicators in output
-    const output = `${stdout} ${stderr}`.toLowerCase();
-    if (output.includes('error') || output.includes('failed') || output.includes('corrupt')) {
-console.log(`[testFile] FILECHECK command reported failure`);
-      return TestResult.FAILURE;
-    }
-
-console.log(`[testFile] FILECHECK command succeeded`);
-    return TestResult.SUCCESS;
-  } catch (error: any) {
-console.error(`[testFile] FILECHECK command execution error: ${error.message}`);
-    await fs.writeFile(outputFile, `ERROR: ${error.message}`);
-    return TestResult.FAILURE;
-  }
+  const { session, socket } = caller;
+  session.aeGoodFile = GOODFILE_NOT_ALLOWED; // express.e:18642
+  const savedSubState = session.subState;
+  // The door takes over the caller's screen; whatever this flow has buffered goes first.
+  flushOutput(socket);
+  const ran = (await runSysCommandInFlow(socket, session, 'FILECHECK', filename)) === RESULT_SUCCESS;
+  // A door exit sends the session back to the menu; the upload is not done.
+  session.subState = savedSubState;
+  if (!ran) return null;
+  const goodFile = Number(session.aeGoodFile);
+  if (goodFile === GOODFILE_NOT_TESTED) return null;
+console.log(`[testFile] FILECHECK door returned ${goodFile}`);
+  return testResultFromGoodFile(goodFile);
 }
 
 /**

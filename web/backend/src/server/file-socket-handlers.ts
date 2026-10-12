@@ -407,6 +407,7 @@ console.log(`[FILE_ID.DIZ] Skipping extraction - already done`);
           // express.e:18590 displayOutPutofTest: the checker's own lines
           // go to the uploader (nonStopDisplayFlag, so no More prompt).
           testStatus = await testFile(data.path, nodeWorkDir, {
+            caller: { socket, session },
             nodeId: session.nodeId,
             onCheckerOutput: (output) => {
               const text = output.replace(/\r?\n/g, "\r\n");

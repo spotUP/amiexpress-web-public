@@ -43,6 +43,7 @@ jest.mock('../src/services/post-upload.service', () => ({ runPostUpload: jest.fn
 const sysCommands = new Set<string>();
 /** Every system command run, with what it was given. */
 const ran: Array<{ cmd: string; params: string; subState: unknown }> = [];
+const examineRuns = () => ran.filter((r) => r.cmd.startsWith('EXAMINE'));
 /** What the stand-in EXAMINE door writes, and where. */
 let doorWrites: { file: string; text: string } | null = null;
 jest.mock('../src/handlers/command-execution.handler', () => ({
@@ -128,7 +129,8 @@ describe('an upload runs the board\'s EXAMINE door', () => {
 
     // EXAMINE, told the file the way a door opens it, then EXAMINE1, which the
     // board does not have - express.e's chain ends there.
-    expect(ran.map((r) => [r.cmd, r.params])).toEqual([
+    // FILECHECK (express.e:18647) is the same upload's test step, not EXAMINE's.
+    expect(examineRuns().map((r) => [r.cmd, r.params])).toEqual([
       ['EXAMINE', 'BBS:Node1/Playpen/DEMO.ZIP'],
       ['EXAMINE1', 'BBS:Node1/Playpen/DEMO.ZIP'],
     ]);
@@ -163,7 +165,7 @@ describe('an upload runs the board\'s EXAMINE door', () => {
   test('a board with no EXAMINE door keeps the built-in FILE_ID.DIZ reader', async () => {
     await upload();
 
-    expect(ran).toEqual([]);
+    expect(examineRuns()).toEqual([]);
     expect(fs.readFileSync(path.join(confDir, 'DIR1'), 'latin1')).toContain('THE BUILT-IN READER FOUND THIS');
   });
 });
