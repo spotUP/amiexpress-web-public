@@ -32,7 +32,7 @@ import 'reflect-metadata';
 import { processBBSCommand } from '../../src/handlers/command.handler';
 import { handleAmigaGuideInput, findGuides, pickGuide } from '../../src/handlers/commands/amigaguide-commands.handler';
 import { LoggedOnSubState } from '../../src/constants/bbs-states';
-import { config } from '../../src/config';
+import { config, type BBSConfig } from '../../src/config';
 import { flushOutput } from '../../src/utils/output.util';
 
 /** A small but real AmigaGuide document. */
@@ -95,8 +95,8 @@ afterAll(() => {
 });
 
 beforeEach(() => {
-  jest.spyOn(config, 'get').mockImplementation((key: never) =>
-    (key as unknown as string) === 'dataDir' ? root : realGet(key));
+  jest.spyOn(config, 'get').mockImplementation((key: keyof BBSConfig) =>
+    key === 'dataDir' ? root : realGet(key));
 });
 
 afterEach(() => jest.restoreAllMocks());

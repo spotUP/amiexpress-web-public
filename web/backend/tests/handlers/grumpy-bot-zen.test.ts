@@ -269,7 +269,7 @@ describe('cerebras', () => {  const cbCfg = (over: Partial<AIProviderConfig> = {
 describe('keyed provider catalogues', () => {
   beforeEach(() => { resetKeyedCatalogues(); });
   afterEach(() => { resetKeyedCatalogues(); });
-  const cfg = (over = {}) => ({
+  const cfg = (over: Partial<AIProviderConfig> = {}): AIProviderConfig => ({
     provider: 'groq', modelName: '', temperature: 0.9, systemPrompt: '',
     groqApiKey: 'gsk-test', ...over,
   });

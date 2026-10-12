@@ -34,7 +34,7 @@ const displayMainMenu = jest.fn(async (socket: any) => {
 });
 jest.mock('../../src/handlers/command-handler/menu', () => ({
   ...jest.requireActual('../../src/handlers/command-handler/menu'),
-  displayMainMenu: (...args: any[]) => displayMainMenu(...(args as [])),
+  displayMainMenu: (socket: any) => displayMainMenu(socket),
 }));
 
 import { handleCommand } from '../../src/handlers/command.handler';

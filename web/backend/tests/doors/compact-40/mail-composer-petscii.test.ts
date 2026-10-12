@@ -21,6 +21,8 @@
  * under test is the editor it chooses and the body that editor yields.
  */
 
+export {};
+
 const { Screen, PetsciiEditor } = require('../../../../../sdk/engines/ui/blessed');
 const { colourMarker, puaForScreenCode } = require('../../../../../sdk/petscii/pua');
 const { readFileSync } = require('fs');

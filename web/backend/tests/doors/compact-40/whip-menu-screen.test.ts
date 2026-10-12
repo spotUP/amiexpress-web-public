@@ -11,6 +11,8 @@
  * resolves on a keypress, which nothing here sends - the screen is measured
  * while the menu is up, which is when a caller is looking at it.
  */
+
+export {};
 const { Screen } = require('../../../../../sdk/engines/ui/blessed');
 const { showMainMenu } = require('../../../../../Doors/whip/ui/main-menu');
 

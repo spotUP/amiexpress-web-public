@@ -29,7 +29,6 @@ describe('starting an upload with U', () => {
 
     const startResumeStuff = jest.fn();
     jest.doMock('../../src/services/resume-stuff.service', () => ({
-      startResumeStuff,
       // The real module exports more; the upload path only calls this one.
       ...jest.requireActual('../../src/services/resume-stuff.service'),
       startResumeStuff,

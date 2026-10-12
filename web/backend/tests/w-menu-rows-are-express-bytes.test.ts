@@ -15,10 +15,10 @@ jest.mock('../src/index', () => {
 });
 jest.mock('../src/handlers/command-handler/dependency-injection', () => ({ getDoors: () => [] }));
 jest.mock('../src/database', () => ({ db: { updateUser: jest.fn(async () => undefined) } }));
-let denied = new Set<string>();
+let denied = new Set<ACSPermission>();
 jest.mock('../src/utils/acs.util', () => ({
   ...jest.requireActual('../src/utils/acs.util'),
-  checkSecurity: (_user: unknown, perm: string) => !denied.has(perm),
+  checkSecurity: (_user: unknown, perm: ACSPermission) => !denied.has(perm),
 }));
 
 import { ACSPermission } from '../src/constants/acs-permissions';

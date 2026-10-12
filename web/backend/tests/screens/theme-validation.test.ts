@@ -234,7 +234,7 @@ test('a screen whose codes would print as text says so, not "a problem the board
   // refused h7 over exactly this with no word of why (2026-10-02).
   const report = validateTheme(root, theme({ 'Conf/1/bull20.txt': 'Hello\r\n~SS_BBS:Screens/x.txt\r\n' }));
 
-  const finding = report.blocking.find(f => f.file.endsWith('bull20.txt'));
+  const finding = report.blocking.find(f => f.file?.endsWith('bull20.txt'));
   expect(finding?.message).toMatch(/first line does not start with ~/);
   expect(report.blocking.map(f => f.message).join('\n')).not.toMatch(/could not describe/);
 });

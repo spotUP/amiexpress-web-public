@@ -155,6 +155,7 @@ describe('whip readers', () => {
   const whip = {
     listProjects: async () => [{ name: 'Board', id: 'p1' }],
     listTasks: async () => [{ title: 'Fix it', status: 'todo', assignee: 'ann' }],
+    listAllTasks: async () => [],
     listUserTasks: async () => ({ tasks: [{ title: 'Mine', status: 'doing' }] }),
     leaderboard: async () => [{ handle: 'ann', points: 42 }],
     achievementsFor: async () => ({ achievements: [{ name: 'First' }] }),
@@ -185,6 +186,7 @@ describe('whip readers', () => {
         { title: 'Shipped', status: 'done' },
         { title: 'Stuck', status: 'blocked' },
       ],
+      listAllTasks: async () => [],
       listUserTasks: async () => ({ tasks: [] }),
       leaderboard: async () => [],
       achievementsFor: async () => ({}),

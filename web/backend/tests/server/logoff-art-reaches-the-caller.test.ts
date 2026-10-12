@@ -68,7 +68,7 @@ describe('the logoff art reaches the caller', () => {
         emitText(socket, 'ROW-THREE\r\n');
         return true;
       },
-      findSecurityScreen: async () => null,
+      findSecurityScreen: () => null,
     });
   });
   afterEach(() => { jest.useRealTimers(); jest.restoreAllMocks(); });
@@ -94,7 +94,7 @@ describe('the logoff art reaches the caller', () => {
   test('a board without a LOGOFF screen prints no invented goodbye', async () => {
     setSystemCommandsDependencies({
       displayScreen: async () => false,
-      findSecurityScreen: async () => null,
+      findSecurityScreen: () => null,
     });
     const socket = makeSocket();
     await handleGoodbyeCommand(socket as any, makeSession());

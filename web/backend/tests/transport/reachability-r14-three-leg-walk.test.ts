@@ -27,7 +27,7 @@
 import * as crypto from 'crypto';
 import * as http from 'http';
 import * as net from 'net';
-import { Client as SSHClient } from 'ssh2';
+import { Client as SSHClient, type ClientChannel } from 'ssh2';
 import { Server as SocketIOServer } from 'socket.io';
 import { io as ioClient, type Socket as ClientSocket } from 'socket.io-client';
 import { bootBoard, type BootedBoard } from '../support/booted-board';
@@ -146,11 +146,11 @@ describe('R14 - three legs, one board', () => {
     const chunks: Buffer[] = [];
     const text = () => Buffer.concat(chunks).toString('utf-8');
     try {
-      const stream: { on: (e: string, f: (d: Buffer) => void) => void; write: (s: string) => void } =
-        await new Promise((resolve, reject) => {
+      const stream: ClientChannel =
+        await new Promise<ClientChannel>((resolve, reject) => {
           client.on('ready', () => {
             client.shell({ term: 'xterm-256color', cols: 80, rows: 24 } as never,
-              (err: Error | undefined, s: never) => { if (err) reject(err); else resolve(s); });
+              (err, s) => { if (err) reject(err); else resolve(s); });
           });
           client.on('error', reject);
           client.connect({ host: '127.0.0.1', port, username: 'walker', password: 'ignored' });

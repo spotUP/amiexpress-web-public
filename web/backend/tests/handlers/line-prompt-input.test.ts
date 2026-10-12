@@ -304,8 +304,8 @@ describe('the line-prompt table is the one declaration', () => {
     // A readChar()/yesNo() prompt in this table would make the caller press
     // Return after Y. These are the confirmations nearest the entries above.
     for (const singleKey of [
-      LoggedOnSubState.BATCH_DOWNLOAD_CONFIRM,
-      LoggedOnSubState.MAILSCAN_PROMPT_INPUT,
+      LoggedOnSubState.DOWNLOAD_CONFIRM_INPUT,
+      LoggedOnSubState.GOODBYE_CONFIRM,
     ]) {
       expect(LINE_PROMPT_SUBSTATES.has(singleKey)).toBe(false);
     }

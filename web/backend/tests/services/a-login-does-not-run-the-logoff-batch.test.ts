@@ -59,7 +59,7 @@ jest.mock('../../src/handlers/screen.handler', () => ({
  * change removed. Spying on it is what makes the assertion non-vacuous: if it
  * fired, the pipeline reached the place the batch used to run from.
  */
-const runExecuteOn = jest.fn(async () => undefined);
+const runExecuteOn = jest.fn(async (..._args: unknown[]) => undefined);
 jest.mock('../../src/services/batch-scheduler', () => ({
   ...jest.requireActual('../../src/services/batch-scheduler'),
   runExecuteOn,

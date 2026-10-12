@@ -27,7 +27,7 @@ import {
 } from '../../src/services/new-user-policy.service';
 import { getBoardConfig } from '../../src/services/bbs-config-file.service';
 import { nodeTooltype } from '../../src/utils/node-tooltypes.util';
-import { config } from '../../src/config';
+import { config, type BBSConfig } from '../../src/config';
 
 const board = getBoardConfig as unknown as jest.Mock;
 const tooltype = nodeTooltype as unknown as jest.Mock;
@@ -35,8 +35,8 @@ const realGet = config.get.bind(config);
 
 /** `config.get`, with the two environment-backed keys under our control. */
 function withEnv(values: Record<string, string>) {
-  jest.spyOn(config, 'get').mockImplementation((key: never) => {
-    const name = key as unknown as string;
+  jest.spyOn(config, 'get').mockImplementation((key: keyof BBSConfig) => {
+    const name: string = key;
     if (name in values) return values[name] as never;
     if (name === 'dataDir') return '/nowhere' as never;
     return realGet(key);

@@ -31,7 +31,7 @@ jest.mock('../../src/handlers/command-execution.handler', () => ({
 import { FileListingHandler } from '../../src/handlers/file/file-listing.handler';
 import { factsForRecord } from '../../src/services/file-facts.service';
 import { commandCache } from '../../src/handlers/command-execution.handler';
-import { config } from '../../src/config';
+import { config, type BBSConfig } from '../../src/config';
 
 const facts = factsForRecord as unknown as jest.Mock;
 
@@ -106,8 +106,8 @@ afterAll(() => {
 });
 
 beforeEach(() => {
-  jest.spyOn(config, 'get').mockImplementation((key: never) =>
-    (key as unknown as string) === 'dataDir' ? tmp : realGet(key));
+  jest.spyOn(config, 'get').mockImplementation((key: keyof BBSConfig) =>
+    key === 'dataDir' ? tmp : realGet(key));
   facts.mockResolvedValue(null);
   commandCache.bbscmd.clear();
 });

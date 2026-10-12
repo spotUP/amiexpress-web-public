@@ -17,8 +17,8 @@
  */
 process.env.SKIP_DB_INIT = '1';
 
-const finalizeDisconnectCleanup = jest.fn(async () => undefined);
-const releaseSessionResources = jest.fn(async () => undefined);
+const finalizeDisconnectCleanup = jest.fn(async (..._args: unknown[]) => undefined);
+const releaseSessionResources = jest.fn(async (..._args: unknown[]) => undefined);
 const endTransportSession = jest.fn(async (emitter: any, session: any, key: string) => {
   await releaseSessionResources(emitter, session);
   await finalizeDisconnectCleanup(emitter, session, key);

@@ -72,7 +72,7 @@ describe('the questionnaire in the screen index', () => {
     // 57600, 38400, 33600, 28800, 19200, 14400 - so with every baud present
     // the board runs script57600 and the index must say so rather than
     // whichever the directory listed first.
-    expect(node1.file.toLowerCase()).toContain('script57600');
+    expect(node1.file?.toLowerCase()).toContain('script57600');
     expect(node1.variants.length).toBe(BAUDS.length);
     for (const baud of BAUDS) {
       expect(node1.variants.map(v => v.toLowerCase())).toContain(`script${baud}`);

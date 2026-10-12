@@ -21,7 +21,7 @@ describe('who gets a pasted chunk whole', () => {
   });
 
   it('and nowhere else - a menu still reads one key at a time', () => {
-    expect(chatTakesTheWholeChunk(LoggedOnSubState.MAIN_MENU, 'hello')).toBe(false);
+    expect(chatTakesTheWholeChunk(LoggedOnSubState.READ_COMMAND, 'hello')).toBe(false);
     // The rule below is what a menu keeps getting.
     expect(commandPieces('hi')).toEqual(['h', 'i']);
   });

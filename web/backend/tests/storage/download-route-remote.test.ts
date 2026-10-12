@@ -161,6 +161,7 @@ describe('GET /api/download/:fileId', () => {
     size: number;
     storageVolume?: number;
     objectKey?: string;
+    filePath?: string;
   }
 
   let restoreLookup: (() => void) | null = null;

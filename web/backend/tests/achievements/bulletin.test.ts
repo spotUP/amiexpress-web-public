@@ -40,7 +40,7 @@ function stubApi(
 ): DoorAchievementsApi {
   return {
     enabled: () => enabled,
-    leaderboard: (scope) => Promise.resolve(scope === 'global' ? global : board),
+    leaderboard: (scope: 'global' | 'board') => Promise.resolve(scope === 'global' ? global : board),
   } as unknown as DoorAchievementsApi;
 }
 

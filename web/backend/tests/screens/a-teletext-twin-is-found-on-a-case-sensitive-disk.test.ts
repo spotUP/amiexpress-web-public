@@ -15,7 +15,7 @@ import * as path from 'path';
 /** A directory path whose every segment is spelled as the disk spells it. */
 function exactlySpelled(dir: string): boolean {
   const parts = path.resolve(dir).split(path.sep).filter(Boolean);
-  let at = path.sep;
+  let at: string = path.sep;
   for (const part of parts) {
     let names: string[];
     try { names = fs.readdirSync(at); } catch { return false; }
@@ -33,7 +33,7 @@ jest.mock('../../src/utils/amigafs', () => {
       (exactlySpelled(dir) ? actual.findCaseInsensitive(dir, name) : null),
     // Live's answer: the walk, never this disk's "it exists" shortcut.
     resolvePath: (target: string) => {
-      let at = path.sep;
+      let at: string = path.sep;
       for (const part of path.resolve(target).split(path.sep).filter(Boolean)) {
         let names: string[];
         try { names = fs.readdirSync(at); } catch { return null; }

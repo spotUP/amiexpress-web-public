@@ -1,6 +1,6 @@
 import { checkDownloadRatios } from '../src/utils/download-ratios.util';
 import type { User } from '../src/types';
-import type { Conference } from '../src/database/types';
+import type { ConferenceAccount } from '../src/utils/download-ratios.util';
 
 function makeUser(overrides: Partial<User> = {}): User {
   const now = new Date();
@@ -51,20 +51,15 @@ function makeUser(overrides: Partial<User> = {}): User {
   };
 }
 
-function makeConference(overrides: Partial<Conference> = {}): Conference {
-  const now = new Date();
+function makeConference(overrides: Partial<ConferenceAccount> = {}): ConferenceAccount {
   return {
-    id: overrides.id ?? 1,
-    name: 'Conf1',
-    description: '',
+    id: 1,
     ratio: 1,
     ratioType: 0,
     uploads: 0,
     downloads: 0,
     bytesUpload: 0,
     bytesDownload: 0,
-    created: now,
-    updated: now,
     ...overrides
   };
 }

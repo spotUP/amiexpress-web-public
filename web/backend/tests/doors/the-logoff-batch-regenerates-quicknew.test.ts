@@ -38,7 +38,7 @@ jest.mock('fs', () => {
   const nodePath = jest.requireActual<typeof import('path')>('path');
   const existsCaseSensitively = (target: string): boolean => {
     const parts = nodePath.resolve(String(target)).split(nodePath.sep).filter(Boolean);
-    let current = nodePath.sep;
+    let current: string = nodePath.sep;
     for (const part of parts) {
       let entries: string[];
       try { entries = actual.readdirSync(current); } catch { return false; }

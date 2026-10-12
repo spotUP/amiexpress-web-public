@@ -73,9 +73,9 @@ describe('R3 - a real socket.io client through registerSocketHandlers', () => {
       // The row's other sentinel is "the socket's emit". Counting it at the
       // SOURCE rather than by what the client happens to receive: an event the
       // board sends is a crossing whether or not this client subscribes to it.
-      const realEmit = socket.emit.bind(socket);
+      const realEmit: (e: string, ...a: unknown[]) => boolean = socket.emit.bind(socket);
       (socket as unknown as { emit: (e: string, ...a: unknown[]) => boolean }).emit =
-        (event: string, ...args: unknown[]) => { serverEmits.push(event); return realEmit(event, ...args as never); };
+        (event: string, ...args: unknown[]) => { serverEmits.push(event); return realEmit(event, ...args); };
       /*
        * A SESSION, because the `command` listener returns early without one
        * (socket-handlers.ts:591-595) - it logs "No session found for socket"

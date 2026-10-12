@@ -12,6 +12,8 @@
  * hands a door in production.
  */
 
+export {};
+
 const { PetsciiStudioDoor } = require('../../../../../Doors/petscii-editor/index');
 
 type Coords = { xi: number; xl: number; yi: number; yl: number };

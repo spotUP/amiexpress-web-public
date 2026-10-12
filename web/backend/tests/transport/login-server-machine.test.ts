@@ -67,7 +67,7 @@ jest.mock('../../src/handlers/user/new-user.handler', () => ({
  * successful password. Counting it at the module boundary is the only way -
  * the loop reaches it through `await import(...)` inside the branch.
  */
-const runPostAuthLogin = jest.fn(async (_socket: unknown, session: any) => {
+const runPostAuthLogin = jest.fn(async (_socket: unknown, session: any, _user?: unknown) => {
   session.state = BBSState.LOGGEDON;
   session.subState = LoggedOnSubState.DISPLAY_BULL;
   return { ok: true };

@@ -33,7 +33,7 @@ jest.mock('../../src/handlers/chat/preference-chat-commands.handler', () => ({
   handleCommentToSysopCommand,
 }));
 
-const checkSecurity = jest.fn(() => true);
+const checkSecurity = jest.fn((_user: unknown, _perm: unknown) => true);
 jest.mock('../../src/utils/acs.util', () => ({
   ...jest.requireActual('../../src/utils/acs.util'),
   checkSecurity,

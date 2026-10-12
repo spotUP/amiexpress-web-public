@@ -32,12 +32,12 @@ jest.mock('../../src/database', () => ({
 }));
 jest.mock('../../src/server/database-helpers', () => ({ callersLog: jest.fn(async () => undefined) }));
 jest.mock('../../src/utils/download-logging.util', () => ({ logDownload: jest.fn(async () => undefined) }));
-const sendWebhook = jest.fn(async () => undefined);
+const sendWebhook = jest.fn(async (..._args: unknown[]) => undefined);
 jest.mock('../../src/services/webhook.service', () => ({
   ...jest.requireActual('../../src/services/webhook.service'),
   webhookService: { sendWebhook: (...a: unknown[]) => (sendWebhook as any)(...a) },
 }));
-const reportDownload = jest.fn(() => 1);
+const reportDownload = jest.fn((..._args: unknown[]) => 1);
 jest.mock('../../src/achievements/sites', () => ({
   ...jest.requireActual('../../src/achievements/sites'),
   reportDownload: (...a: unknown[]) => (reportDownload as any)(...a),

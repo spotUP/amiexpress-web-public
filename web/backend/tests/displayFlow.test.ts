@@ -1,6 +1,6 @@
 import { BBSState, LoggedOnSubState } from '../src/constants/bbs-states';
 
-const displayScreenMock = jest.fn(async () => true);
+const displayScreenMock = jest.fn(async (..._args: unknown[]) => true);
 // doPause must set paginatedScreen to pause the display flow (pauseDisplayFlow checks this)
 const doPauseMock = jest.fn((socket: any, session: any) => {
   session.paginatedScreen = {
