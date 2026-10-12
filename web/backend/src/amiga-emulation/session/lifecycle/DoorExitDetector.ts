@@ -105,7 +105,7 @@ export class DoorExitDetector {
    * the lifecycle was terminated by this call (caller must stop looping).
    */
   checkExitConditions(pc: number): boolean {
-    const { emulator, socket, config, libraryManager, executionState } = this.deps;
+    const { emulator, config, libraryManager, executionState } = this.deps;
     const lastPCs = this.deps.getLastPCs();
     const libraryTraps = this.deps.getLibraryTraps();
 
@@ -144,10 +144,10 @@ export class DoorExitDetector {
               : returnCode === 20
                 ? "FAIL"
                 : `code ${returnCode}`;
-        socket.emit(
-          "ansi-output",
-          `\x1b[33m[68K] ${doorName} exited with ${codeDesc}\x1b[0m\r\n`,
-        );
+        // A log line, not terminal output: the door's stdout is the
+        // program's own (a headless run captures it as OutPut_Of_Test or a
+        // batch `>file`), and the board's runner has no sysop to show it to.
+        console.warn(`[DoorExitDetector] [68K] ${doorName} exited with ${codeDesc}`);
       }
 
       this.deps.terminate();

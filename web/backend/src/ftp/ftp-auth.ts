@@ -355,7 +355,7 @@ export function boardFtpDeps(socketIsAlive: (socketId: string) => boolean = () =
       let marker: 'P' | 'F' | 'N' = 'N';
       let initialStatus: 'active' | 'private' | 'hold' = 'active';
       try {
-        const result = await testFile(playpenPath, nodeWorkDir);
+        const result = await testFile(playpenPath, nodeWorkDir, { nodeId: request.nodeId || 1 });
         if (result === TestResult.SUCCESS) marker = 'P';
         else if (result === TestResult.FAILURE) {
           marker = 'F';

@@ -400,10 +400,14 @@ console.log(`[FILE_ID.DIZ] Skipping extraction - already done`);
           `\r\nTesting... ${currentFile.filename}...\r\n`
         );
         try {
-          // Add 15 second timeout to prevent hanging on file tests
+          // No timeout of this function's own: express.e waits for the
+          // checker. A 68K checker takes ~10 s under the emulator and a
+          // FILECHECK door is interactive; each runs under its own limit
+          // (runCheckerCommand, the door lifecycle).
           // express.e:18590 displayOutPutofTest: the checker's own lines
           // go to the uploader (nonStopDisplayFlag, so no More prompt).
-          const testPromise = testFile(data.path, nodeWorkDir, {
+          testStatus = await testFile(data.path, nodeWorkDir, {
+            nodeId: session.nodeId,
             onCheckerOutput: (output) => {
               const text = output.replace(/\r?\n/g, "\r\n");
               if (text.trim()) {
@@ -414,10 +418,6 @@ console.log(`[FILE_ID.DIZ] Skipping extraction - already done`);
               }
             },
           });
-          const timeoutPromise = new Promise<TestResult>((resolve) =>
-            setTimeout(() => resolve(TestResult.NOT_TESTED), 15000)
-          );
-          testStatus = await Promise.race([testPromise, timeoutPromise]);
 console.log(`[testFile] Result: ${testStatus}`);
 
           if (

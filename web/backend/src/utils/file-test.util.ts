@@ -14,6 +14,11 @@ import * as fsSync from 'fs';
 import { runExamineCommandsForTesting } from './examine-runner.util';
 import { config } from '../config';
 import { resolveDirectory, readTooltypeMap, isRealInfoFile } from './info-file.util';
+import * as amigafs from './amigafs';
+import { resolveAssignPath } from './path-util';
+import { runAmigaProgram } from './amiga-program-runner.util';
+import { parseAmigaCommandLine } from '../amiga-emulation/api/dos/dos-command-line';
+import { amigaPathOf } from '../services/upload-examine.service';
 
 const execAsync = promisify(exec);
 
@@ -186,7 +191,10 @@ export enum TestResult {
  */
 export interface TestFileOptions {
   onCheckerOutput?: (output: string) => void;
+  /** The node the upload is on: its NODE<n>: volume is the checker's. */
+  nodeId?: number;
 }
+
 
 export async function testFile(
   filepath: string,
@@ -337,6 +345,69 @@ console.log(`[testFile] No checker for extension: ${extension}`);
   }
 }
 
+/** A CHECKER on an Amiga volume (`DOORS:multi-check/mULTI-cHECK`) is a 68K program; `/usr/local/bin/amiscan` is native. */
+export function isAmigaPath(program: string): boolean {
+  return program.includes(':') && !program.startsWith('/');
+}
+
+/** The node an upload sits on: `.../Node3/Playpen/x` is 3. */
+function nodeOfPath(filepath: string): number | null {
+  const match = filepath.match(/[\\/]Node(\d+)[\\/]/i);
+  return match ? Number(match[1]) : null;
+}
+
+/**
+ * What a checker's command printed, from `program args...` on either side of
+ * the Amiga/native line. null: the program is not there (the caller falls
+ * back to the built-in checkers).
+ *
+ * express.e:18581 SystemTagList ignores the exit code: whatever the checker
+ * printed is the verdict, so a checker that exits 1 with a clean line (amiscan:
+ * 1=infected, 3=could not check) is read the same way as one that exits 0.
+ */
+async function runCheckerCommand(
+  commandLine: string,
+  nativeCommand: string,
+  nodeId: number,
+  cwd?: string,
+): Promise<string | null> {
+  const parsed = parseAmigaCommandLine(commandLine);
+  if (isAmigaPath(parsed.program)) {
+    // The 68K program, run as the node's own through the board's one headless
+    // launcher: no fake sysop drop files, stdout is the program's Output().
+    const program = amigafs.resolvePath(resolveAssignPath(parsed.program));
+    if (!program) return null;
+    const { output } = await runAmigaProgram(program, {
+      nodeId,
+      args: parsed.rawArgs,
+      doorType: 'SIM',
+      timeoutMs: CHECKER_TIMEOUT_MS,
+    });
+    return output;
+  }
+
+  if (!fsSync.existsSync(parsed.program)) return null;
+  let stdout = '';
+  let stderr = '';
+  try {
+    const done = await execAsync(nativeCommand, { timeout: 60000, cwd });
+    stdout = done.stdout;
+    stderr = done.stderr;
+  } catch (error: any) {
+    // 126/127 are the shell saying it could not start the checker, not
+    // the checker speaking.
+    const exitedWithCode =
+      typeof error.code === 'number' && !error.killed && error.code !== 126 && error.code !== 127;
+    if (!exitedWithCode) throw error;
+    stdout = typeof error.stdout === 'string' ? error.stdout : '';
+    stderr = typeof error.stderr === 'string' ? error.stderr : '';
+  }
+  return `${stdout}${stdout && stderr ? '\n' : ''}${stderr}`;
+}
+
+/** A 68K checker unpacking a big archive is slow under the emulator. */
+const CHECKER_TIMEOUT_MS = 120_000;
+
 /**
  * Run a disk-based file checker from Fcheck/*.info
  * Express.e:18556-18614 - checkFileExternal
@@ -353,74 +424,42 @@ async function runDiskBasedChecker(
   options: TestFileOptions = {}
 ): Promise<TestResult | null> {
   const outputFile = path.join(nodeWorkDir, 'OutPut_Of_Test');
-
-  // Gap: this is where the emulator path (68K CHECKER run) will plug in.
-  // Check if the checker path looks like an Amiga path (contains : like "DOORS:" or "DH0:")
-  // These won't work on macOS/Linux, so skip disk checker and fall back to built-in
-  if (checker.checker.includes(':') && !checker.checker.startsWith('/')) {
-console.log(`[FileTest] Disk checker "${checker.checker}" appears to be Amiga path, skipping`);
-    return null; // Signal to fall back to built-in checker
-  }
-
-  // Check if the checker executable actually exists
-  const checkerPath = checker.checker.split(' ')[0]; // Get just the executable, not arguments
-  if (!fsSync.existsSync(checkerPath)) {
-console.log(`[FileTest] Disk checker "${checkerPath}" not found, skipping`);
-    return null; // Signal to fall back to built-in checker
-  }
+  const filename = path.basename(filepath);
+  const nodeId = options.nodeId ?? nodeOfPath(filepath) ?? 1;
 
   try {
-    // Build command with file path substitution
-    // Common patterns: %s = file path, %f = filename
-    let command = checker.checker;
-    const filename = path.basename(filepath);
-
-    // If options exist, append them
-    if (checker.options) {
-      command = `${command} ${checker.options}`;
-    }
-
-    // Substitute placeholders
-    command = command
-      .replace(/%s/g, `"${filepath}"`)
-      .replace(/%f/g, `"${filename}"`)
-      .replace(/%p/g, `"${filepath}"`)
-      .replace(/%w/g, `"${nodeWorkDir}"`);
-
-    // If no placeholder, append filepath at end
-    if (!command.includes(filepath) && !command.includes(filename)) {
-      command = `${command} "${filepath}"`;
-    }
-
+    // express.e:18566-18589: `CHECKER OPTIONS <file>`. An Amiga checker gets
+    // the file as the Amiga path a door would open; a native one the host path.
+    const withOptions = checker.options ? `${checker.checker} ${checker.options}` : checker.checker;
+    const amigaFile = amigaPathOf(config.get('dataDir'), filepath);
+    let outputText: string | null;
+    if (isAmigaPath(parseAmigaCommandLine(withOptions).program)) {
+      outputText = await runCheckerCommand(`${withOptions} "${amigaFile ?? filepath}"`, '', nodeId);
+    } else {
+      // Common patterns: %s = file path, %f = filename
+      let command = withOptions
+        .replace(/%s/g, `"${filepath}"`)
+        .replace(/%f/g, `"${filename}"`)
+        .replace(/%p/g, `"${filepath}"`)
+        .replace(/%w/g, `"${nodeWorkDir}"`);
+      // If no placeholder, append filepath at end
+      if (!command.includes(filepath) && !command.includes(filename)) {
+        command = `${command} "${filepath}"`;
+      }
 console.log(`[FileTest] Running disk checker: ${command}`);
-
-    // express.e:18581 SystemTagList ignores the exit code: whatever the
-    // checker printed is the verdict, so a checker that exits 1 with a clean
-    // line (amiscan: 1=infected, 3=could not check) is read the same way as
-    // one that exits 0.
-    let stdout = '';
-    let stderr = '';
-    try {
-      const done = await execAsync(command, {
-        timeout: 60000, // 60 second timeout
-        cwd: nodeWorkDir,
-      });
-      stdout = done.stdout;
-      stderr = done.stderr;
-    } catch (error: any) {
-      // 126/127 are the shell saying it could not start the checker, not
-      // the checker speaking.
-      const exitedWithCode =
-        typeof error.code === 'number' && !error.killed && error.code !== 126 && error.code !== 127;
-      if (!exitedWithCode) throw error;
-      stdout = typeof error.stdout === 'string' ? error.stdout : '';
-      stderr = typeof error.stderr === 'string' ? error.stderr : '';
+      outputText = await runCheckerCommand(command, command, nodeId, nodeWorkDir);
+    }
+    if (outputText === null) {
+console.log(`[FileTest] Disk checker "${checker.checker}" not found, skipping`);
+      return null; // Signal to fall back to built-in checker
     }
 
     // OutPut_Of_Test (express.e:18577), then shown to the caller (:18590).
-    const outputText = `${stdout}${stdout && stderr ? '\n' : ''}${stderr}`;
     await fs.writeFile(outputFile, outputText);
     options.onCheckerOutput?.(outputText);
+
+    // express.e:18593-18603: SCRIPT <file> <FilePart(file)> <node>, output to NIL:.
+    if (checker.scriptPath) await runCheckerScript(checker.scriptPath, filepath, amigaFile, nodeId);
 
     // express.e:18604-18620: a line containing any ERROR.n string fails the
     // file; InStr is case-sensitive.
@@ -448,6 +487,34 @@ console.log(`[FileTest] Disk checker not available, falling back to built-in`);
     }
 
     return TestResult.NOT_TESTED;
+  }
+}
+
+/**
+ * express.e:18593-18603: `SCRIPT file FilePart(file) node`, input NIL, output
+ * to NIL:. The script's own output is discarded; a script that cannot be run
+ * does not change the verdict.
+ */
+export async function runCheckerScript(
+  script: string,
+  filepath: string,
+  amigaFile: string | null,
+  nodeId: number,
+): Promise<void> {
+  const name = path.basename(filepath);
+  try {
+    if (isAmigaPath(parseAmigaCommandLine(script).program)) {
+      await runCheckerCommand(`${script} "${amigaFile ?? filepath}" "${name}" ${nodeId}`, '', nodeId);
+    } else {
+      await runCheckerCommand(
+        `${script} "${filepath}" "${name}" ${nodeId}`,
+        `${script} "${filepath}" "${name}" ${nodeId}`,
+        nodeId,
+        path.dirname(filepath),
+      );
+    }
+  } catch (error: any) {
+console.log(`[FileTest] Checker script failed: ${error.message}`);
   }
 }
 
