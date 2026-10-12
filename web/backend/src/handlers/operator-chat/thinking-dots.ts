@@ -77,7 +77,7 @@ export function startThinkingDots(
   chatSession: ChatSession,
   pageId: string,
   options: ThinkingDotsOptions = {}
-): () => void {
+): (keepDots?: boolean) => void {
   const afterMs = options.afterMs ?? THINKING_DOTS_AFTER_MS;
   const gapMs = options.gapMs ?? humanGap;
 

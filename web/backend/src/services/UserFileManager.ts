@@ -344,7 +344,7 @@ export class UserFileManager {
   /**
    * Serialize UserFileStruct to binary buffer (239 bytes)
    */
-  private serializeUserStruct(struct: UserFileStruct): Buffer {
+  public serializeUserStruct(struct: UserFileStruct): Buffer {
     const buffer = Buffer.alloc(this.USER_STRUCT_SIZE);
     let offset = 0;
 
