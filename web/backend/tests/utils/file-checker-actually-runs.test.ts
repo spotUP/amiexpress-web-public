@@ -127,16 +127,34 @@ describe('a configured file checker', () => {
     expect(written.charCodeAt(0)).not.toBe(0xe3); // an icon starts 0xE310
   });
 
-  it('leaves a file with no checker to the built-in path', async () => {
-    // No FCheck directory at all: the fallback still has to answer, or fixing
-    // the loader would break every board that has no checkers configured.
+  it('passes a file with no checker: the board has no archive checking of its own', async () => {
+    // express.e:18553-18560. No FCheck directory at all; a damaged archive is
+    // not judged by anything but a configured checker.
     const upload = path.join(root, 'UPLOAD.ZIP');
     fs.writeFileSync(upload, 'not really a zip');
 
     const result = await testFile(upload, root);
 
     expect(fs.existsSync(sentinel)).toBe(false);
-    expect(result).not.toBeUndefined();
+    expect(result).toBe(TestResult.SUCCESS);
+  });
+
+  it('passes a file whose configured checker cannot run, as SystemTagList failing leaves empty output', async () => {
+    // A CHECKER that is not there used to fall to a built-in JavaScript zip
+    // test, which failed this damaged file. express.e reads no ERROR.n in an
+    // empty OutPut_Of_Test.
+    const dir = path.join(root, 'FCheck');
+    fs.mkdirSync(dir, { recursive: true });
+    const infoPath = path.join(dir, 'ZIP.info');
+    let info = updateTooltype(parseOrCreateInfoFile(infoPath), 'CHECKER', '/no/such/checker', false);
+    info = updateTooltype(info, 'ERROR.1', 'corrupt', false);
+    writeInfoFile(info);
+    const upload = path.join(root, 'UPLOAD.ZIP');
+    fs.writeFileSync(upload, 'not really a zip');
+
+    const result = await testFile(upload, root);
+
+    expect(result).toBe(TestResult.SUCCESS);
   });
 
   it('ignores an AppleDouble sidecar rather than loading it as a checker', async () => {

@@ -118,13 +118,13 @@ function loadFileCheckersFromDisk(): Map<string, FileCheckerInfo> {
   // board's volume holds `FCheck`; on the Amiga's case-insensitive filesystem
   // they are one directory and on the Linux container they are two. Joining
   // the express.e spelling raw meant this read ENOENT on the live board and
-  // logged "using built-in checkers only" - so not one of the sysop's fifteen
+  // logged "no checkers" - so not one of the sysop's fifteen
   // checkers had ever run. The admin's own service was fixed with this helper
   // and this, the half that RUNS them, was missed.
   const fcheckDir = resolveDirectory(bbsRoot, 'Fcheck');
 
   if (!fsSync.existsSync(fcheckDir)) {
-console.log('[FileTest] Fcheck/ directory not found, using built-in checkers only');
+console.log('[FileTest] Fcheck/ directory not found, no checkers');
     cachedFileCheckers = checkers;
     checkersCacheTime = now;
     return checkers;
@@ -287,7 +287,7 @@ console.log(`[testFile] FILECHECK door returned ${goodFile}`);
  * Check file based on extension type
  * Express.e:18659-18672 - Calls checkFileExternal(temp2, temp4)
  *
- * First tries disk-based Fcheck/*.info checkers, then falls back to built-in checkers
+ * Only the configured Fcheck/*.info checker judges a file; express.e has no built-in checking.
  *
  * @param extension File extension (e.g., "zip", "lha")
  * @param filepath Full file path
@@ -312,36 +312,8 @@ console.log(`[FileTest] No checker configured for .${extUpper}, file passes`);
     return TestResult.SUCCESS;
   }
 
-  if (diskChecker) {
 console.log(`[FileTest] Using disk-based checker for .${extUpper}: ${diskChecker.checker}`);
-    const diskResult = await runDiskBasedChecker(diskChecker, filepath, nodeWorkDir, options);
-    // If disk checker returned a result (not null), use it
-    // null means the checker wasn't available, so fall through to built-in
-    if (diskResult !== null) {
-      return diskResult;
-    }
-console.log(`[FileTest] Disk checker not available, trying built-in checker`);
-  }
-
-  // FALLBACK: Built-in JavaScript checkers for common archive formats
-console.log(`[FileTest] Using built-in checker for .${extUpper}`);
-  switch (extUpper) {
-    case 'ZIP':
-      return await testZipFile(filepath, nodeWorkDir);
-    case 'LHA':
-    case 'LZH':
-      return await testLhaFile(filepath, nodeWorkDir);
-    case 'LZX':
-      return await testLzxFile(filepath, nodeWorkDir);
-    case 'GZ':
-    case 'TGZ':
-      return await testGzipFile(filepath, nodeWorkDir);
-    case 'TAR':
-      return await testTarFile(filepath, nodeWorkDir);
-    default:
-console.log(`[testFile] No checker for extension: ${extension}`);
-      return TestResult.NOT_TESTED;
-  }
+  return runDiskBasedChecker(diskChecker, filepath, nodeWorkDir, options);
 }
 
 /** A CHECKER on an Amiga volume (`DOORS:multi-check/mULTI-cHECK`) is a 68K program; `/usr/local/bin/amiscan` is native. */
@@ -357,8 +329,8 @@ function nodeOfPath(filepath: string): number | null {
 
 /**
  * What a checker's command printed, from `program args...` on either side of
- * the Amiga/native line. null: the program is not there (the caller falls
- * back to the built-in checkers).
+ * the Amiga/native line. null: the program is not there (SystemTagList would
+ * fail: empty output).
  *
  * express.e:18581 SystemTagList ignores the exit code: whatever the checker
  * printed is the verdict, so a checker that exits 1 with a clean line (amiscan:
@@ -418,14 +390,14 @@ const CHECKER_TIMEOUT_MS = 120_000;
  * @param checker FileCheckerInfo from Fcheck/*.info
  * @param filepath Full path to file being tested
  * @param nodeWorkDir Work directory for output
- * @returns TestResult, or null if checker is not available (fall back to built-in)
+ * @returns TestResult (a checker that cannot run passes, as SystemTagList failing does)
  */
 async function runDiskBasedChecker(
   checker: FileCheckerInfo,
   filepath: string,
   nodeWorkDir: string,
   options: TestFileOptions = {}
-): Promise<TestResult | null> {
+): Promise<TestResult> {
   const outputFile = path.join(nodeWorkDir, 'OutPut_Of_Test');
   const filename = path.basename(filepath);
   const nodeId = options.nodeId ?? nodeOfPath(filepath) ?? 1;
@@ -456,8 +428,10 @@ console.log(`[FileTest] Running disk checker: ${command}`);
       outputText = await runCheckerCommand(command, command, nodeId, nodeWorkDir);
     }
     if (outputText === null) {
-console.log(`[FileTest] Disk checker "${checker.checker}" not found, skipping`);
-      return null; // Signal to fall back to built-in checker
+      // SystemTagList failing on an Amiga leaves OutPut_Of_Test empty: no
+      // ERROR.n line matches, so the file passes (express.e:18581-18620).
+console.log(`[FileTest] Disk checker "${checker.checker}" cannot run, empty output`);
+      outputText = '';
     }
 
     // OutPut_Of_Test (express.e:18577), then shown to the caller (:18590).
@@ -488,8 +462,8 @@ console.error(`[FileTest] Disk checker error: ${error.message}`);
     if (errMsg.includes('enoent') || errMsg.includes('not found') ||
         errMsg.includes('no such file') || errMsg.includes('permission denied') ||
         errMsg.includes('command not found')) {
-console.log(`[FileTest] Disk checker not available, falling back to built-in`);
-      return null; // Signal to fall back to built-in checker
+      // The checker could not be started: empty output, no ERROR.n, success.
+      return TestResult.SUCCESS;
     }
 
     return TestResult.NOT_TESTED;
@@ -522,153 +496,6 @@ export async function runCheckerScript(
     }
   } catch (error: any) {
 console.log(`[FileTest] Checker script failed: ${error.message}`);
-  }
-}
-
-/**
- * Test ZIP file integrity
- * Uses adm-zip (JavaScript extractor)
- */
-async function testZipFile(filepath: string, nodeWorkDir: string): Promise<TestResult> {
-  const outputFile = path.join(nodeWorkDir, 'OutPut_Of_Test');
-
-  try {
-    // Use JavaScript ZIP library to test archive
-    const AdmZip = require('adm-zip');
-    const zip = new AdmZip(filepath);
-    const entries = zip.getEntries();
-
-    const output = `ZIP file integrity test\nFiles: ${entries.length}\nStatus: OK`;
-    await fs.writeFile(outputFile, output);
-
-console.log(`[testFile] ZIP file passed integrity test (${entries.length} files)`);
-    return TestResult.SUCCESS;
-  } catch (error: any) {
-console.error(`[testFile] ZIP test error: ${error.message}`);
-    await fs.writeFile(outputFile, `ERROR: ${error.message}`);
-    return TestResult.FAILURE;
-  }
-}
-
-/**
- * Test LHA/LZH file integrity
- *
- * Since we don't have a proper native LHA validator (only a JavaScript parser
- * that doesn't support all LHA variants), we just check for valid magic bytes
- * and return NOT_TESTED. This avoids rejecting legitimate Amiga LHA files.
- *
- * For proper validation, configure an external checker in Fcheck/LHA.info
- */
-async function testLhaFile(filepath: string, nodeWorkDir: string): Promise<TestResult> {
-  const outputFile = path.join(nodeWorkDir, 'OutPut_Of_Test');
-
-  try {
-    // Read the file header
-    const buffer = await fs.readFile(filepath);
-
-    if (buffer.length < 7) {
-      await fs.writeFile(outputFile, `File too small to be valid LHA archive`);
-      return TestResult.FAILURE;
-    }
-
-    // LHA method ID is at offset 2, should be like "-lhX-" or "-lzX-"
-    // Format: [headerSize(1)][checksum(1)][methodID(5)]...
-    const methodId = buffer.slice(2, 7).toString('ascii');
-
-    // Check if it looks like a valid LHA method ID (starts with "-l", ends with "-")
-    // This covers -lh0- through -lh7-, -lhd-, -lzs-, -lz4-, -lz5-, etc.
-    if (methodId.startsWith('-l') && methodId.endsWith('-')) {
-      // Valid LHA magic bytes - return NOT_TESTED since we don't have a full validator
-      const output = `LHA file has valid magic bytes: ${methodId}\nNo full validation available - configure external checker for detailed testing`;
-      await fs.writeFile(outputFile, output);
-console.log(`[testFile] LHA file has valid magic (${methodId}), marking as not tested`);
-      return TestResult.NOT_TESTED;
-    }
-
-    // Doesn't look like LHA despite the extension
-console.log(`[testFile] File has .lha extension but invalid magic: "${methodId}"`);
-    await fs.writeFile(outputFile, `Invalid LHA magic bytes: ${methodId}`);
-    return TestResult.FAILURE;
-  } catch (error: any) {
-console.error(`[testFile] LHA test error: ${error.message}`);
-    await fs.writeFile(outputFile, `ERROR: ${error.message}`);
-    return TestResult.FAILURE;
-  }
-}
-
-/**
- * Test LZX file integrity
- * Uses lzx-extractor.ts (TypeScript extractor)
- */
-async function testLzxFile(filepath: string, nodeWorkDir: string): Promise<TestResult> {
-  const outputFile = path.join(nodeWorkDir, 'OutPut_Of_Test');
-
-  try {
-    // Use JavaScript LZX library to test archive
-    const { listLzxFiles } = require('./lzx-extractor');
-    const files = await listLzxFiles(filepath);
-
-    const output = `LZX file integrity test\nFiles: ${files.length}\nStatus: OK`;
-    await fs.writeFile(outputFile, output);
-
-console.log(`[testFile] LZX file passed integrity test (${files.length} files)`);
-    return TestResult.SUCCESS;
-  } catch (error: any) {
-console.error(`[testFile] LZX test error: ${error.message}`);
-    await fs.writeFile(outputFile, `ERROR: ${error.message}`);
-    return TestResult.FAILURE;
-  }
-}
-
-/**
- * Test GZIP file integrity
- * Uses gzip -t (test archive)
- */
-async function testGzipFile(filepath: string, nodeWorkDir: string): Promise<TestResult> {
-  const outputFile = path.join(nodeWorkDir, 'OutPut_Of_Test');
-
-  try {
-    const { stdout, stderr } = await execAsync(`gzip -t "${filepath}"`, {
-      timeout: 30000
-    });
-
-    await fs.writeFile(outputFile, `${stdout}\n${stderr}`);
-
-    const output = `${stdout} ${stderr}`.toLowerCase();
-    if (output.includes('error') || output.includes('invalid') || output.includes('corrupt')) {
-console.log(`[testFile] GZIP file failed integrity test`);
-      return TestResult.FAILURE;
-    }
-
-console.log(`[testFile] GZIP file passed integrity test`);
-    return TestResult.SUCCESS;
-  } catch (error: any) {
-console.error(`[testFile] GZIP test error: ${error.message}`);
-    await fs.writeFile(outputFile, `ERROR: ${error.message}`);
-    return TestResult.FAILURE;
-  }
-}
-
-/**
- * Test TAR file integrity
- * Uses tar -t (test/list archive)
- */
-async function testTarFile(filepath: string, nodeWorkDir: string): Promise<TestResult> {
-  const outputFile = path.join(nodeWorkDir, 'OutPut_Of_Test');
-
-  try {
-    const { stdout, stderr } = await execAsync(`tar -tf "${filepath}" > /dev/null`, {
-      timeout: 30000
-    });
-
-    await fs.writeFile(outputFile, `${stdout}\n${stderr}`);
-
-console.log(`[testFile] TAR file passed integrity test`);
-    return TestResult.SUCCESS;
-  } catch (error: any) {
-console.error(`[testFile] TAR test error: ${error.message}`);
-    await fs.writeFile(outputFile, `ERROR: ${error.message}`);
-    return TestResult.FAILURE;
   }
 }
 
