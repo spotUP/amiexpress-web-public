@@ -343,9 +343,15 @@ export class FtpSession {
         // fall back gets no data connection at all.
         return this.onPasv('extended');
       case 'LIST':
-        return this.onList(arg, 'long');
       case 'NLST':
-        return this.onList(arg, 'names');
+        // ftpd.e:1978 / 1982 compare the WHOLE request to 'LIST' / 'NLST'
+        // (StrCmp without a length), so a request that carries anything
+        // after the verb - `LIST -la`, `LIST dir`, even `LIST ` - matches
+        // no branch and falls to ftpd.e:2047, `500 command not recognized`.
+        // There is no path or flag handling: the listing is always the
+        // caller's current directory (ftpd.e:1941 ftpDir).
+        if (space !== -1) return this.reply(500, 'command not recognized');
+        return this.onList('', verb === 'LIST' ? 'long' : 'names');
       case 'MLSD':
         // What Transmit actually asks for: FEAT advertises MLST, so a modern
         // client prefers the machine listing and never sends LIST at all.
@@ -831,18 +837,13 @@ export class FtpSession {
       return this.reply(550, 'No directories available');
     }
 
-    // A client passes flags here (`LIST -al`), which are not a path.
-    const requested = arg
-      .split(' ')
-      .map((part) => part.trim())
-      .filter((part) => part.length > 0 && !part.startsWith('-'))
-      .join(' ');
-    // ftpd.e:1909 - MLSD (`/` included) lists the current directory.
-    const target = resolvePath(this.cwd, format === 'machine' ? '.' : requested || '.');
+    // ftpd.e:1941 - LIST, NLST and MLSD (`/` included) all list the current
+    // directory; no request names another one.
+    const target = resolvePath(this.cwd, '.');
     if (target === null || !fs.exists(this.user, target)) {
       channel.close();
       // ftpd.e:1917 (MLSD's refusal) - the one "not there" sentence.
-      return this.reply(550, `${requested || this.cwd}: No such file or directory`);
+      return this.reply(550, `${this.cwd}: No such file or directory`);
     }
 
     let entries;

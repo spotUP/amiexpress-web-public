@@ -161,13 +161,16 @@ describe('a caller who has just logged in', () => {
     control.destroy();
   });
 
-  it('answers a LIST of a missing directory in ftpd.e\'s one "not there" sentence (ftpd.e:1917)', async () => {
+  it('answers LIST and NLST with anything after the verb as 500, as ftpd.e does (ftpd.e:1978-1985, 2047)', async () => {
+    // ftpd.e compares the whole request to 'LIST' / 'NLST', so `LIST -la`,
+    // `LIST 003-Hidden` and `NLST -a` match no branch. The PASV listener is
+    // left alone, as the unmatched branch never touches it.
     const { control, lines } = await login();
 
-    control.write('PASV\r\n');
-    await lines.next();
-    control.write('LIST 003-Hidden\r\n');
-    expect(await lines.next()).toBe('550 003-Hidden: No such file or directory');
+    for (const request of ['LIST 003-Hidden', 'LIST -la', 'LIST ', 'NLST -a', 'NLST 001-General']) {
+      control.write(`${request}\r\n`);
+      expect(await lines.next()).toBe('500 command not recognized');
+    }
 
     control.destroy();
   });
