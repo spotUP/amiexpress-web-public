@@ -15,7 +15,7 @@ import { KickstartRom } from "./KickstartRom.js";
 import * as path from "path";
 import { appendFileSync } from "fs";
 
-import { DoorConfig } from "./DoorTypes.js";
+import { DoorConfig, doorProgramName } from "./DoorTypes.js";
 import { LibraryManager } from "./LibraryManager.js";
 import { DoorLoader } from "./DoorLoader.js";
 import { DoorLifecycleManager } from "./session/DoorLifecycleManager.js";
@@ -1024,9 +1024,7 @@ debugLog(
     // CRITICAL: AquaScan and other multi-function doors check the CLI program name to determine
     // which operation to perform (N=newscan, NSU=new since upload, FR=file rescan, etc.)
     const sessionCommand = this.config.bbsSession?.doorCommand;
-    const progName = (sessionCommand && typeof sessionCommand === 'string')
-      ? sessionCommand.toUpperCase()
-      : path.basename(this.config.executablePath);
+    const progName = doorProgramName(this.config);
 debugLog(`[AmigaDoorSession] progName="${progName}" (from doorCommand="${sessionCommand}" or basename)`);
     // CRITICAL: Default to 1, not 0, to match port creation at line 437
     // This ensures the door's first argument matches the AEDoorPort name

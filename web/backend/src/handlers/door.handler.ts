@@ -2969,6 +2969,7 @@ console.log(
       executablePath: doorPath,
       doorType: doorType,
       doorId: door.command,  // Command name (e.g., "FR") for GET_CMD_TOOLTYPE
+      invokedName: door.invokedName,  // LOCATION as invoked: the door's cli_CommandName
       timeout: 300, // 5 minutes
       bbsSession: session, // Use session's actual nodeId assigned by getNextAvailableNodeId()
       args: doorArgs, // CLI arguments for the door

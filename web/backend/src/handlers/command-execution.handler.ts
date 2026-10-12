@@ -551,6 +551,7 @@ async function runCommand(
       description: `${commandDef.type} door`,
       type: commandDef.type,
       path: location, // Door execution expects 'path', not 'location'
+      invokedName: commandDef.invokedName,
       accessLevel: commandDef.access || 0,
       enabled: true,
       parameters: params ? [params] : [],
@@ -679,6 +680,7 @@ console.warn(`[CommandPassword] executeDoor not available - command execution sk
     description: `${commandDef.type} door`,
     type: commandDef.type,
     path: location,
+    invokedName: commandDef.invokedName,
     accessLevel: commandDef.access || 0,
     enabled: true,
     parameters: [],

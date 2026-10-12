@@ -27,6 +27,7 @@ type ParsedOptions = {
   stack?: number;
   args: string[];
   command?: string;
+  location?: string;
   params?: string;
 };
 
@@ -79,6 +80,14 @@ function parseArgs(argv: string[]): ParsedOptions {
         options.params = raw;
       }
       i += 1;
+    } else if (arg === "--location") {
+      // The icon's LOCATION as written: express.e runDoor's cmd, which the
+      // door's CLI carries as cli_CommandName (GetProgramName).
+      const raw = argv[i + 1];
+      if (raw) {
+        options.location = raw;
+      }
+      i += 1;
     } else if (arg === "--command") {
       const raw = argv[i + 1];
       if (raw) {
@@ -116,6 +125,7 @@ async function main(): Promise<void> {
 
   const amigaSession = new AmigaDoorSession(socket as any, {
     executablePath: resolvedDoorPath,
+    invokedName: parsed.location,
     doorType: parsed.doorType,
     timeout: parsed.timeout ?? 300,
     stack: parsed.stack,

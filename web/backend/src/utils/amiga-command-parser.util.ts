@@ -76,6 +76,8 @@ export interface CommandDefinition {
   name: string;
   type: DoorType;
   location: string;
+  /** LOCATION exactly as the icon spells it: express.e runDoor's cmd, which the door's CLI carries as cli_CommandName. */
+  invokedName?: string;
   access?: number;          // Minimum security level (express.e:4693)
   password?: string;        // Command password (express.e:4697-4709)
   priority?: string;        // Task priority (express.e:4746-4751)
@@ -662,6 +664,7 @@ export function parseCmdFile(filePath: string, session?: any, socket?: any): Com
           }
         }
 
+        const invokedName = location.trim();
         // Convert Amiga paths to Unix paths
         location = location.replace(/^DOORS:/i, 'Doors/').replace(/:/g, '/');
 
@@ -669,6 +672,7 @@ export function parseCmdFile(filePath: string, session?: any, socket?: any): Com
           name,
           type,
           location,
+          invokedName,
           access
         };
       }
@@ -737,6 +741,7 @@ export function loadCommandFromInfo(filePath: string): CommandDefinition | null 
     name,
     type,
     location: normalizedLocation, // Convert Amiga paths to Unix
+    invokedName: locationKey.trim(),
     toolTypes: toolTypeObject,
   };
 

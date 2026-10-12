@@ -7,7 +7,7 @@ import { MoiraEmulator } from "./cpu/MoiraEmulator.js";
 import { HunkLoader } from "./loader/HunkLoader.js";
 import { SymbolResolver } from "./loader/SymbolResolver.js";
 import { ExecLibrary } from "./api/ExecLibrary.js";
-import { DoorConfig } from "./DoorTypes.js";
+import { DoorConfig, doorProgramName } from "./DoorTypes.js";
 import * as fs from "fs";
 import * as amigafs from "../utils/amigafs";
 import * as path from "path";
@@ -425,9 +425,7 @@ debugLog(`  A6 (ExecBase): 0x${execBaseAddr.toString(16)}`);
     // Otherwise fallback to executable basename.
     const sessionCommand = this.config.bbsSession?.doorCommand;
 debugLog(`[DoorLoader] sessionCommand="${sessionCommand}" type=${typeof sessionCommand} bbsSession=${!!this.config.bbsSession}`);
-    const progName = (sessionCommand && typeof sessionCommand === 'string')
-      ? sessionCommand.toUpperCase()
-      : path.basename(this.config.executablePath);
+    const progName = doorProgramName(this.config);
 debugLog(`[DoorLoader] progName="${progName}" (from sessionCommand="${sessionCommand}" or basename)`);
 
     const configArgs = Array.isArray(this.config.args) ? this.config.args : [];

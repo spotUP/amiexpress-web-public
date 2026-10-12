@@ -7565,25 +7565,28 @@ debugLog(`[dos.library] GetCurrentDirName → "${currentDir}"`);
 
 debugLog(`[dos.library] GetProgramName(buf=0x${bufferAddr.toString(16)}, size=${bufferSize})`);
 
-    // Read program name from CLI structure (cli_CommandName at offset 0x10)
-    // CLI base is at 0xa0000, cli_CommandName is a BPTR to a BSTR
-    let programName = "DoorProgram";
-    try {
-      const cliAddr = 0xa0000;
-      const cmdNameBptr = this.emulator.readMemory32(cliAddr + 0x10);
-      if (cmdNameBptr !== 0) {
-        const bstrAddr = cmdNameBptr << 2; // BPTR to real address
-        const bstrLen = this.emulator.readMemory(bstrAddr) & 0xff;
-        if (bstrLen > 0 && bstrLen < 256) {
-          let name = "";
+    // cli_CommandName of the running command: the name AS INVOKED. this.programName
+    // is that name (setCliInfo for the door, startChild's saved/restored value for
+    // a program started by Execute/SystemTagList/RunCommand), the one source
+    // GetCliProgramName reads too. The process's pr_CLI is the fallback.
+    let programName = this.programName;
+    if (programName.length === 0) {
+      try {
+        const execBase = this.emulator.readMemory32(4);
+        const thisTask = execBase ? this.emulator.readMemory32(execBase + 0x114) : 0;
+        const cliBptr = thisTask ? this.emulator.readMemory32(thisTask + 0xac) : 0;
+        const cmdNameBptr = cliBptr ? this.emulator.readMemory32((cliBptr << 2) + 0x10) : 0;
+        if (cmdNameBptr !== 0) {
+          const bstrAddr = cmdNameBptr << 2;
+          const bstrLen = this.emulator.readMemory(bstrAddr) & 0xff;
           for (let i = 0; i < bstrLen; i++) {
-            name += String.fromCharCode(this.emulator.readMemory(bstrAddr + 1 + i));
+            programName += String.fromCharCode(this.emulator.readMemory(bstrAddr + 1 + i));
           }
-          programName = name;
         }
+      } catch (e) {
+        // fall through to the generic name
       }
-    } catch (e) {
-      // Fall back to generic name
+      if (programName.length === 0) programName = "DoorProgram";
     }
 
     if (bufferSize < programName.length + 1) {

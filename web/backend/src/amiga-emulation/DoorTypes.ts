@@ -2,12 +2,38 @@
 // Extracted interfaces, enums, and constants from AmigaDoorSession.ts
 // Phase 1: Foundation Setup - 2025-11-20
 
+/**
+ * The name the door's CLI carries as cli_CommandName / GetProgramName: the
+ * command AS INVOKED (the first word of the command line, unquoted, as the
+ * AmigaOS shell stores it), never a bare file name. express.e runDoor builds
+ * "<LOCATION> <node>" for SystemTagList, so a door started from
+ * LOCATION=bbs:amixnet/doors/TERM sees "bbs:amixnet/doors/TERM" and opens its
+ * "<programName>.cfg" beside the binary. Falls back to the BBS command name,
+ * then the executable's basename, for callers that have no LOCATION.
+ */
+export function doorProgramName(config: Pick<DoorConfig, 'invokedName' | 'executablePath' | 'bbsSession'>): string {
+  const invoked = (config.invokedName ?? '').trim();
+  let first = invoked;
+  if (invoked.startsWith('"')) {
+    const end = invoked.indexOf('"', 1);
+    first = end < 0 ? invoked.slice(1) : invoked.slice(1, end);
+  } else {
+    first = invoked.split(/\s+/)[0] ?? '';
+  }
+  // The BSTR is one length byte; the slot DoorLoader reserves for it is 127.
+  if (first) return first.slice(0, 120);
+  const sessionCommand = config.bbsSession?.doorCommand;
+  if (sessionCommand && typeof sessionCommand === 'string') return sessionCommand.toUpperCase();
+  return config.executablePath.split(/[\\/]/).pop() ?? '';
+}
+
 export interface DoorConfig {
   executablePath: string; // Path to Amiga door binary
   doorType?: string; // Door type: XIM, AIM, SIM, TIM, IIM, MCI, AEM, SUP, FIM, DD (default: SIM)
   timeout?: number; // Max execution time in seconds (default: 300)
   bbsSession?: any; // BBS session data (user, system, node info)
   doorId?: string; // Optional door identifier (info name/shortcut)
+  invokedName?: string; // The command string as the shell is given it: express.e runDoor's cmd (the icon's LOCATION), which becomes cli_CommandName
   args?: string[]; // Optional CLI arguments (without program name)
   cwd?: string; // Working directory for the door (defaults to door directory)
   assigns?: Record<string, string>; // Amiga assigns (BBS:, Doors:, NodeX:, etc.)
