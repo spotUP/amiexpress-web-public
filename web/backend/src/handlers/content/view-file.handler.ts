@@ -16,7 +16,7 @@ import { ACSPermission } from '../../constants/acs-permissions';
 import * as fs from 'fs';
 import * as amigafs from '../../utils/amigafs';
 import * as path from 'path';
-import { flagPause, initPauseState, setNonStopMode } from '../../utils/flag-pause.util';
+import { checkForPause, initPauseState, setNonStopMode } from '../../utils/flag-pause.util';
 import { getMaxDirs } from '../../utils/max-dirs.util';
 import { conferencePathEntries } from '../../conferences/conference-paths';
 import { restricted } from '../../utils/file-restriction.util';
@@ -248,16 +248,19 @@ console.error('[VIEW FILE] Error reading file:', error);
     // express.e:20492-20516 wraps at 79 on an 80-column screen; the width is
     // the caller's (sessionColumns), 39 for a C64.
     const wrapWidth = Math.max(20, sessionColumns(session) - 1);
-    let lineCount = 0;
     for (const raw of splitReadStrLines(bytes)) {
       // express.e:20481-20485 - a line opening with a byte above 128 ends it.
       if (raw[0] > 128 || raw[1] > 128 || raw[2] > 128) {
         emitText(socket, '\r\nThis file is not a text file.\r\n\r\n');
         return;
       }
-      await this.displayLineWithWrapping(socket, decodeUtf8Or(raw, 'iso-8859-1'), wrapWidth);
-      lineCount++;
-      if (lineCount % 20 === 0 && !(await flagPause(socket, session, 0))) return;
+      // express.e:20492-20523 - the line (wrapped), each break followed by
+      // checkForPause; an N there ends the file after a '\b\n'.
+      const pause = () => checkForPause(socket, session);
+      if (!(await this.displayLineWithWrapping(socket, decodeUtf8Or(raw, 'iso-8859-1'), wrapWidth, pause))) {
+        emitText(socket, '\r\n');
+        return;
+      }
       // express.e:20524-20537 - after each line, has the caller typed?
       // readChar(1) takes the key: ^W (23, "Pause") waits for another key,
       // ^C prints **Break and ends the file, any other key is read and dropped.
@@ -306,12 +309,13 @@ console.error('[VIEW FILE] Error reading file:', error);
   private static async displayLineWithWrapping(
     socket: Socket,
     line: string,
-    wrapWidth: number
-  ): Promise<void> {
+    wrapWidth: number,
+    pause: () => Promise<boolean> = async () => true,
+  ): Promise<boolean> {
     // If line has CR or is short, display as-is - express.e:20494-20495
     if (line.includes('\r') || line.length <= wrapWidth) {
       emitText(socket, line + '\r\n');
-      return;
+      return pause(); // 20517-20518
     }
 
     // Wrap long lines at wrapWidth characters - express.e:20497-20514
@@ -324,6 +328,7 @@ console.error('[VIEW FILE] Error reading file:', error);
 
         if (remaining.length > 0) {
           emitText(socket, '\r\n');
+          if (!(await pause())) return false; // 20507-20511
         }
       } else {
         emitText(socket, remaining);
@@ -331,6 +336,7 @@ console.error('[VIEW FILE] Error reading file:', error);
       }
     }
     emitText(socket, '\r\n');
+    return pause(); // 20517-20518
   }
 
   /**
@@ -369,4 +375,4 @@ export const displayLineWithWrappingForTest = (
   socket: Socket,
   line: string,
   wrapWidth: number
-): Promise<void> => (ViewFileHandler as any).displayLineWithWrapping(socket, line, wrapWidth);
+): Promise<boolean> => (ViewFileHandler as any).displayLineWithWrapping(socket, line, wrapWidth);

@@ -76,3 +76,23 @@ test('a restricted file is refused and both CallersLog lines are written', async
     '\t\tAttempt to read RESTRICTED file [SECRET.TXT]',
   ]);
 });
+
+test('V asks (Pause)...More after each screenful, line by line, and n ends the file (express.e:20517-20523)', async () => {
+  fs.writeFileSync(path.join(root, 'Conf1', 'Uploads', 'LONG.TXT'), Array.from({ length: 30 }, (_, i) => `line ${i}`).join('\n') + '\n');
+  const wire: string[] = [];
+  const socket: any = {
+    id: `v-pause-${Math.random().toString(36).slice(2)}`,
+    emit: (event: string, data: unknown) => { if (event === 'ansi-output') wire.push(String(data)); return true; },
+    on: () => socket,
+  };
+  // A ten-row page: checkForPause asks after the tenth line shown.
+  const session: any = { nodeId: 1, currentConf: 1, screenHeight: 10, user: { id: 1, username: 'viewer', secLevel: 100, securityFlags: 'T'.repeat(64) } };
+  const viewing = ViewFileHandler.handleViewFileCommand(socket, session, 'LONG.TXT');
+  for (let i = 0; i < 400 && !session.checkPauseHandler; i++) await new Promise((r) => setTimeout(r, 5));
+  flushOutput(socket);
+  expect(wire.join('')).toMatch(/line 9\r\n\(Pause\)\.\.\.More\(y\/n\/ns\)\? $/);
+  session.checkPauseHandler('n');
+  await viewing;
+  flushOutput(socket);
+  expect(wire.join('')).not.toContain('line 10');
+});
