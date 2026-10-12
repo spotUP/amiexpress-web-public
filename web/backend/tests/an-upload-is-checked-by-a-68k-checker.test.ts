@@ -143,6 +143,8 @@ describeMaybe('an upload is checked by a 68K CHECKER named on an Amiga path', ()
     const [program, options] = launched.mock.calls[0] as [string, runner.RunAmigaProgramOptions];
     expect(program).toBe(path.join(dataDir, 'Doors', 'multi-check', 'mULTI-cHECK'));
     expect(options.args).toEqual(['BBS-PATH=BBS:', 'PACKER=C:LHA', 'TYPE=LHA', `"BBS:Node1/Playpen/${file}"`]);
+    // express.e:18567-18580: NP_STACKSIZE is the icon's STACK, 4096 when it has none.
+    expect(options.stackSize).toBe(4096);
   }
 
   test('a good archive passes: the checker ran and its verdict is the uploader\'s', async () => {

@@ -112,6 +112,14 @@ export interface RunAmigaProgramOptions {
   doorType?: string;
   /** Kill the program after this long. Default: 30 s for a SIM utility, 300 s otherwise. */
   timeoutMs?: number;
+  /**
+   * The program's stack in bytes: express.e:18580 NP_STACKSIZE for a file
+   * checker (the FCheck icon's STACK, 4096 when absent). DoorLoader's own
+   * 256 KB floor still applies to anything smaller. There is no priority
+   * option: express.e:18581 NP_PRIORITY orders tasks, and this emulator runs
+   * one task, so a priority has nothing to act on.
+   */
+  stackSize?: number;
 }
 
 export interface RunAmigaProgramResult {
@@ -179,9 +187,10 @@ export function runAmigaProgram(doorPath: string, options: RunAmigaProgramOption
     const doorType = options.doorType ?? getDoorTypeFromInfo(doorPath);
     console.log(`[AmigaProgramRunner] Running ${path.basename(doorPath)} as type ${doorType} (overclock=${batchOverclock}x)`);
     const toolTypes = {}; // Use DoorLifecycleManager defaults
+    const stackArgs = options.stackSize && options.stackSize > 0 ? ['--stack', String(Math.floor(options.stackSize))] : [];
     const execArgs = useTsRunner
-      ? ['tsx', resolvedRunner, doorPath, String(nodeId), ...args, '--assigns', JSON.stringify(assigns), '--tooltypes', JSON.stringify(toolTypes), '--doortype', doorType]
-      : [resolvedRunner, doorPath, String(nodeId), ...args, '--assigns', JSON.stringify(assigns), '--tooltypes', JSON.stringify(toolTypes), '--doortype', doorType];
+      ? ['tsx', resolvedRunner, doorPath, String(nodeId), ...args, '--assigns', JSON.stringify(assigns), '--tooltypes', JSON.stringify(toolTypes), '--doortype', doorType, ...stackArgs]
+      : [resolvedRunner, doorPath, String(nodeId), ...args, '--assigns', JSON.stringify(assigns), '--tooltypes', JSON.stringify(toolTypes), '--doortype', doorType, ...stackArgs];
 
     const spawnEnv: Record<string, string | undefined> = {
       ...process.env,

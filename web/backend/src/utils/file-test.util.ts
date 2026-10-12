@@ -369,6 +369,7 @@ async function runCheckerCommand(
   nativeCommand: string,
   nodeId: number,
   cwd?: string,
+  stackSize?: number,
 ): Promise<string | null> {
   const parsed = parseAmigaCommandLine(commandLine);
   if (isAmigaPath(parsed.program)) {
@@ -381,6 +382,9 @@ async function runCheckerCommand(
       args: parsed.rawArgs,
       doorType: 'SIM',
       timeoutMs: CHECKER_TIMEOUT_MS,
+      // express.e:18580 NP_STACKSIZE. NP_PRIORITY (:18581) is not passed: the
+      // emulator runs one task, so a priority has nothing to order.
+      stackSize,
     });
     return output;
   }
@@ -433,7 +437,7 @@ async function runDiskBasedChecker(
     const amigaFile = amigaPathOf(config.get('dataDir'), filepath);
     let outputText: string | null;
     if (isAmigaPath(parseAmigaCommandLine(withOptions).program)) {
-      outputText = await runCheckerCommand(`${withOptions} "${amigaFile ?? filepath}"`, '', nodeId);
+      outputText = await runCheckerCommand(`${withOptions} "${amigaFile ?? filepath}"`, '', nodeId, undefined, checker.stackSize);
     } else {
       // Common patterns: %s = file path, %f = filename
       let command = withOptions
@@ -458,7 +462,7 @@ console.log(`[FileTest] Disk checker "${checker.checker}" not found, skipping`);
     options.onCheckerOutput?.(outputText);
 
     // express.e:18593-18603: SCRIPT <file> <FilePart(file)> <node>, output to NIL:.
-    if (checker.scriptPath) await runCheckerScript(checker.scriptPath, filepath, amigaFile, nodeId);
+    if (checker.scriptPath) await runCheckerScript(checker.scriptPath, filepath, amigaFile, nodeId, checker.stackSize);
 
     // express.e:18604-18620: a line containing any ERROR.n string fails the
     // file; InStr is case-sensitive.
@@ -499,11 +503,12 @@ export async function runCheckerScript(
   filepath: string,
   amigaFile: string | null,
   nodeId: number,
+  stackSize?: number,
 ): Promise<void> {
   const name = path.basename(filepath);
   try {
     if (isAmigaPath(parseAmigaCommandLine(script).program)) {
-      await runCheckerCommand(`${script} "${amigaFile ?? filepath}" "${name}" ${nodeId}`, '', nodeId);
+      await runCheckerCommand(`${script} "${amigaFile ?? filepath}" "${name}" ${nodeId}`, '', nodeId, undefined, stackSize);
     } else {
       await runCheckerCommand(
         `${script} "${filepath}" "${name}" ${nodeId}`,

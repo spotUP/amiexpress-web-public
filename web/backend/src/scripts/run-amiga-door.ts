@@ -24,6 +24,7 @@ type ParsedOptions = {
   toolTypes: Record<string, string>;
   doorType: string;
   timeout?: number;
+  stack?: number;
   args: string[];
   command?: string;
   params?: string;
@@ -61,6 +62,13 @@ function parseArgs(argv: string[]): ParsedOptions {
       const raw = argv[i + 1];
       if (raw) {
         options.timeout = Number(raw);
+      }
+      i += 1;
+    } else if (arg === "--stack") {
+      // The program's stack in bytes (express.e NP_STACKSIZE for a checker).
+      const raw = argv[i + 1];
+      if (raw) {
+        options.stack = Number(raw);
       }
       i += 1;
     } else if (arg === "--params") {
@@ -110,6 +118,7 @@ async function main(): Promise<void> {
     executablePath: resolvedDoorPath,
     doorType: parsed.doorType,
     timeout: parsed.timeout ?? 300,
+    stack: parsed.stack,
     args: doorArgs,
     assigns: parsed.assigns,
     toolTypes: parsed.toolTypes,
