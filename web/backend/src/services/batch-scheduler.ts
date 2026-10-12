@@ -269,7 +269,22 @@ function resolveExecutable(base: string): string | null {
   return null;
 }
 
-async function runProgram(progPath: string, args: string[], redirectPath?: string, nodeId: number = 1, envOverrides?: Record<string, string>): Promise<void> {
+/**
+ * Write a program's captured stdout to the file a batch line redirected it to.
+ * ">file" replaces the file, ">>file" appends to it (AmigaDOS: the shell opens
+ * MODE_NEWFILE for ">" and seeks to the end for ">>").
+ */
+export function writeRedirectedOutput(resolvedPath: string, output: string, append: boolean, encoding: BufferEncoding = 'utf-8'): void {
+  const amigafs = require('../utils/amigafs');
+  amigafs.mkdirSync(path.dirname(resolvedPath), { recursive: true });
+  if (append) {
+    amigafs.appendFileSync(resolvedPath, output, encoding);
+  } else {
+    amigafs.writeFileSync(resolvedPath, output, encoding);
+  }
+}
+
+async function runProgram(progPath: string, args: string[], redirectPath?: string, nodeId: number = 1, envOverrides?: Record<string, string>, redirectAppend: boolean = false): Promise<void> {
   const ext = path.extname(progPath).toLowerCase();
   const isTs = ext === '.ts';
   const isJs = ext === '.js';
@@ -279,7 +294,7 @@ async function runProgram(progPath: string, args: string[], redirectPath?: strin
 
   // Route Amiga binaries through the door runner (everything non-TS/JS in batches)
   if (!isTs && !isJs) {
-    await runAmigaDoorViaRunner(progPath, nodeId || 1, args, path.dirname(progPath), redirectPath, envOverrides);
+    await runAmigaDoorViaRunner(progPath, nodeId || 1, args, path.dirname(progPath), redirectPath, envOverrides, redirectAppend);
     return;
   }
 
@@ -325,9 +340,7 @@ console.warn(`[BatchScheduler] Program ${progPath} exited with code ${code}`);
         if (redirectPath && output.length > 0) {
           try {
             const resolved = resolveAssign(redirectPath);
-            const dir = path.dirname(resolved);
-            amigafs.mkdirSync(dir, { recursive: true });
-            amigafs.writeFileSync(resolved, output, 'utf-8');
+            writeRedirectedOutput(resolved, output, redirectAppend);
           } catch (err) {
 console.error('[BatchScheduler] Failed to write output:', err);
           }
@@ -685,7 +698,7 @@ console.warn('[BatchScheduler] Skipping missing program:', parts[0]);
     return;
   }
 
-  await runProgram(resolvedProg, amigaArgs, redirect, nodeId);
+  await runProgram(resolvedProg, amigaArgs, redirect, nodeId, undefined, !!parsed.stdout?.append);
 }
 
 /**
@@ -908,7 +921,8 @@ async function runAmigaDoorViaRunner(
   args: string[] = [],
   cwd?: string,
   redirectPath?: string,
-  envOverrides?: Record<string, string>
+  envOverrides?: Record<string, string>,
+  redirectAppend: boolean = false
 ): Promise<void> {
   // Create drop files so doors see expected environment
   try {
@@ -973,9 +987,7 @@ console.warn('[BatchScheduler] Failed to create drop files:', err?.message || er
        * case-insensitively and only create what genuinely does not exist,
        * which is the same rule the door's own file handling uses.
        */
-      const amigafs = require('../utils/amigafs');
-      amigafs.mkdirSync(path.dirname(resolved), { recursive: true });
-      amigafs.writeFileSync(resolved, output, 'utf8');
+      writeRedirectedOutput(resolved, output, redirectAppend, 'utf8');
 console.log(`[BatchScheduler] Redirected output to ${resolved}`);
     } catch (err) {
 console.error('[BatchScheduler] Failed to write redirect file:', err);
