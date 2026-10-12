@@ -119,7 +119,16 @@ export interface FtpDeps {
    * board files every other upload. Returns what to tell him.
    */
   acceptUpload?(
-    request: { user: FtpUser; conferenceId: number; nodeId: number; filename: string },
+    request: {
+      user: FtpUser;
+      conferenceId: number;
+      nodeId: number;
+      filename: string;
+      /** ftpd.e:1666: every byte has arrived - the caller is told a file check is starting. */
+      onReceived?: () => void;
+      /** ftpd.e:1682: the check has not finished - another "please wait" line. */
+      onChecking?: () => void;
+    },
     data: Duplex
   ): Promise<{ bytes: number; accepted: boolean; notices: string[] }>;
 }
@@ -649,17 +658,24 @@ export class FtpSession {
 
     try {
       /*
-       * ftpd.e:1669-1692 - the file-check conversation.
+       * ftpd.e:1666-1686 - the file-check conversation.
        *
        * The bytes arriving is not the end of it: the board tests the archive,
        * and express keeps the caller informed WHILE it does, with `226-`
        * continuation lines. A client told nothing for ten seconds decides the
-       * server has died; one that reads "file check in progress" waits.
+       * server has died; one that reads "file check in progress" waits. The
+       * first line goes out when the last byte is in (1666), a "please wait"
+       * for every ten seconds the check is still running (1682).
        */
-      this.socket.write(`226-${name} ... Upload complete, file check in progress.. \r\n`);
-
       const outcome = await this.deps.acceptUpload(
-        { user: this.user, conferenceId: conference.conference_id, nodeId: this.nodeId, filename: name },
+        {
+          user: this.user,
+          conferenceId: conference.conference_id,
+          nodeId: this.nodeId,
+          filename: name,
+          onReceived: () => { this.socket.write(`226-${name} ... Upload complete, file check in progress.. \r\n`); },
+          onChecking: () => { this.socket.write('226-Please wait, Checking..\r\n'); },
+        },
         data
       );
 

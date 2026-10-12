@@ -67,6 +67,7 @@ async function listen(over: Partial<FtpDeps> = {}): Promise<Rig> {
         data.on('close', () => resolve(seen));
       });
       filed.push({ filename: request.filename, bytes, conferenceId: request.conferenceId });
+      request.onReceived?.();
       return { bytes, accepted: true, notices: [] };
     },
     ...over,
@@ -207,6 +208,31 @@ describe('a caller uploading a file', () => {
 
     expect(replies).toContain("226-File already exists, moving to Sysop's private directory");
     expect(replies[replies.length - 1]).toBe('226 DEMO.LHA ... Transfer Complete');
+
+    control.destroy();
+    await new Promise<void>((resolve) => rig.server.close(() => resolve()));
+  });
+
+  it('tells the caller to wait for every ten seconds the check runs (ftpd.e:1676-1686)', async () => {
+    const rig = await listen({
+      acceptUpload: async (request, data: Duplex) => {
+        data.resume();
+        await new Promise<void>((resolve) => data.on('close', () => resolve()));
+        request.onReceived?.();
+        request.onChecking?.();
+        request.onChecking?.();
+        return { bytes: PAYLOAD.length, accepted: true, notices: [] };
+      },
+    });
+
+    const { replies, control } = await upload(rig.port, 'STOR DEMO.LHA');
+
+    expect(replies.slice(1)).toEqual([
+      '226-DEMO.LHA ... Upload complete, file check in progress.. ',
+      '226-Please wait, Checking..',
+      '226-Please wait, Checking..',
+      '226 DEMO.LHA ... Transfer Complete',
+    ]);
 
     control.destroy();
     await new Promise<void>((resolve) => rig.server.close(() => resolve()));

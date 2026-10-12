@@ -18,7 +18,7 @@ import { db } from '../database';
 import { checkConfAccess } from '../handlers/message/message-scan.handler';
 import { ACSPermission } from '../constants/acs-permissions';
 import { checkSecurity, getACSConfig, ToggleFlags } from '../utils/acs.util';
-import { checkDownloadRatios, creditAccountTrackUploads, creditUploadToToday, updateDownloadStats } from '../utils/download-ratios.util';
+import { checkDownloadRatios, updateDownloadStats } from '../utils/download-ratios.util';
 import { resolveFile } from '../handlers/transfer/batch-download.handler';
 import { loadConfConfig } from '../services/conf-config.service';
 import { fileUploadedFile, areaForConference } from '../services/upload-filing.service';
@@ -29,6 +29,7 @@ import { conferenceDir, conferenceDownloadDirs } from '../conferences/conference
 import { getNodeWorkDir, getPlaypenDir } from '../utils/bbs-paths.util';
 import { readTooltypeMap } from '../utils/info-file.util';
 import { testFile, TestResult } from '../utils/file-test.util';
+import { BackgroundFileCheck, creditCheckedUpload } from '../services/background-file-check.service';
 import { validateFilename } from '../utils/file-upload.util';
 import { DEFAULT_LISTING_DAYS, FtpFilesystem } from './ftp-filesystem';
 import { nodeManager } from '../services/node-manager.service';
@@ -52,6 +53,9 @@ import { countWrongPasswordFor, clearWrongPasswords } from '../services/password
  * are the BBS logon's own words (29775-29776, 29768 LOCKOUT0/1, 29785), on
  * the one line FTP has.
  */
+/** ftpd.e:1678 `waitFileCheck(ftpData,10)`: seconds the server waits for the check before another "please wait". */
+export const FTP_FILE_CHECK_WAIT_SECONDS = 10;
+
 const FTP_REFUSALS: Record<AccountRefusal, { code: number; text: string }> = {
   'deleted-account': { code: 420, text: 'That account has been deleted.' },
   lockout: { code: 420, text: 'Your access level does not allow you to log on.' },
@@ -348,100 +352,128 @@ export function boardFtpDeps(socketIsAlive: (socketId: string) => boolean = () =
       const receiveSeconds = (Date.now() - receiveStarted) / 1000;
       const receiveCps = receiveSeconds > 0 ? Math.floor(bytes / receiveSeconds) : bytes;
 
-      // express.e tests an upload before it files it, and a failure is a
-      // QUARANTINE rather than a rejection: the file goes to the sysop, and
-      // the caller is told where it went.
+      // ftpd.e:1666: every byte is in. express.e's ftpStartFileCheck (15205) then
+      // starts the background file-check thread for a SUCCESSFUL transfer only
+      // (a failed one rejected above and is never checked) and ftpd.e waits
+      // for it, ten seconds at a time (ftpWaitFileCheck 15224), telling the
+      // caller "please wait" for each ten seconds that pass (1676-1686).
+      request.onReceived?.();
+
       // express.e nodeWorkDir is the node's own (BBS:Node<n>/Work/).
       const nodeWorkDir = getNodeWorkDir(request.nodeId || 1, dataDir);
-      let marker: 'P' | 'F' | 'N' = 'N';
-      let initialStatus: 'active' | 'private' | 'hold' = 'active';
-      try {
-        const result = await testFile(playpenPath, nodeWorkDir, { nodeId: request.nodeId || 1 });
-        if (result === TestResult.SUCCESS) marker = 'P';
-        else if (result === TestResult.FAILURE) {
-          marker = 'F';
-          initialStatus = 'hold';
+
+      let outcome: Awaited<ReturnType<typeof fileUploadedFile>> | undefined;
+      let failure: unknown;
+      const thread = new BackgroundFileCheck(async (fname) => {
+        try {
+          outcome = await checkAndFileFtpUpload(fname);
+        } catch (error) {
+          failure = error;
+          return null;
         }
-      } catch {
-        marker = 'N';
-      }
-
-      // WHAT THE FILE SAYS ABOUT ITSELF. A menu upload extracts FILE_ID.DIZ
-      // (express.e:19258-19285) and catalogues that; an FTP upload was
-      // catalogued as "Uploaded over FTP by <user>", which tells the next
-      // caller nothing. Same extractor, same ten-second bound; the
-      // placeholder stays only when the archive carries no DIZ, since an
-      // FTP caller has no prompt to type a description at.
-      let description = `Uploaded over FTP by ${request.user.username}`;
-      try {
-        const dizLines = await Promise.race([
-          extractAndReadDiz(playpenPath, nodeWorkDir, [], 10),
-          new Promise<null>((resolve) => setTimeout(() => resolve(null), 10000)),
-        ]);
-        if (dizLines && dizLines.length > 0) {
-          description = dizLines.join('\n');
-console.log(`[FTP] FILE_ID.DIZ used for ${request.filename} (${dizLines.length} lines)`);
-        }
-      } catch (error) {
-console.log(`[FTP] no FILE_ID.DIZ for ${request.filename}: ${error instanceof Error ? error.message : String(error)}`);
-      }
-
-      // The uploader's tagline, which the board's EXAMINE door would have added
-      // (services/examine-tagline.service - a deliberate deviation: FTP cannot
-      // answer the door's prompts, so the door is not run).
-      try {
-        const slot = (await db.getUserById(String(request.user.id)))?.slotNumber;
-        const tagline = examineTaglineFor(config.get('dataDir'), slot);
-        if (tagline) description = `${description}\n${tagline}`;
-      } catch (error) {
-console.log(`[FTP] no tagline for ${request.filename}: ${error instanceof Error ? error.message : String(error)}`);
-      }
-
-      // The area the board implies, created from the conference's own icons
-      // when the mirror has none - the same one the menu upload files into.
-      const area = await areaForConference(request.conferenceId, config.get('dataDir'));
-
-      const outcome = await fileUploadedFile({
-        playpenPath,
-        filename: request.filename,
-        size: bytes,
-        description,
-        fileArea: area,
-        conferenceId: request.conferenceId,
-        nodeId: request.nodeId || 1,
-        uploader: {
-          username: request.user.username,
-          location: (request.user as unknown as { location?: string }).location,
-          slotNumber: (request.user as unknown as { slotNumber?: number }).slotNumber,
-        },
-        initialStatus,
-        marker,
-        ftp: { seconds: receiveSeconds, cps: receiveCps },
+        return { bytes };
       });
+      thread.postThenQuit(request.filename);
+      while (!(await thread.waitForExit(FTP_FILE_CHECK_WAIT_SECONDS))) request.onChecking?.();
+      if (failure) throw failure;
+      if (!outcome) throw new Error('the file check produced no result');
 
-      /*
-       * THE UPLOAD IS THE CALLER'S (express.e doBackgroundCheck, which an FTP
-       * upload runs through ftpStartFileCheck, 15205). A file that tested
-       * clean and is no duplicate (status=RESULT_SUCCESS, hold=0) counts one
-       * upload (19626-19630) and its bytes (19676-19681, kilobytes under
-       * CREDITBYKB), when the credit account tracks uploads. Every checked
-       * file, held or not, raises today's limit by fsize (19684-19686) -
-       * fsize in kilobytes only when it was booked first, E's own order. In
-       * memory: the logoff saves it (saveAccount below, 8207). A failed
-       * transfer is never checked (ftpStartFileCheck `IF success`).
+      /**
+       * doBackgroundCheck (express.e:19551-19739) for this one file. The order
+       * is express's: the description (EXAMINE, 19012), then testFile with
+       * bgChecking=TRUE (19051: the checker's output is not shown, and without
+       * a caller there is no FILECHECK door), then the duplicate rule, HOLD or
+       * the upload area and the DIR line (19061-19130), then the credit.
        */
-      if (!outcome.orphaned) {
-        const user = request.user as unknown as User;
-        const held = outcome.duplicate || outcome.status !== 'active';
-        const booked = !held && creditAccountTrackUploads(user);
-        const units = booked && getACSConfig().toggles[ToggleFlags.CREDITBYKB] === true
-          ? Math.floor(bytes / 1024) & 0x003fffff
-          : bytes;
-        if (booked) {
-          user.uploads = (user.uploads || 0) + 1;
-          user.bytesUpload = (user.bytesUpload || 0) + units;
+      async function checkAndFileFtpUpload(fname: string) {
+        // WHAT THE FILE SAYS ABOUT ITSELF. A menu upload extracts FILE_ID.DIZ
+        // (express.e:19258-19285) and catalogues that; an FTP upload was
+        // catalogued as "Uploaded over FTP by <user>", which tells the next
+        // caller nothing. Same extractor, same ten-second bound; the
+        // placeholder stays only when the archive carries no DIZ, since an
+        // FTP caller has no prompt to type a description at (express.e leaves
+        // such a file in the playpen; the sysop approved this deviation).
+        let description = `Uploaded over FTP by ${request.user.username}`;
+        try {
+          const dizLines = await Promise.race([
+            extractAndReadDiz(playpenPath, nodeWorkDir, [], 10),
+            new Promise<null>((resolve) => setTimeout(() => resolve(null), 10000)),
+          ]);
+          if (dizLines && dizLines.length > 0) {
+            description = dizLines.join('\n');
+console.log(`[FTP] FILE_ID.DIZ used for ${fname} (${dizLines.length} lines)`);
+          }
+        } catch (error) {
+console.log(`[FTP] no FILE_ID.DIZ for ${fname}: ${error instanceof Error ? error.message : String(error)}`);
         }
-        creditUploadToToday(user, units);
+
+        // The uploader's tagline, which the board's EXAMINE door would have added
+        // (services/examine-tagline.service - a deliberate deviation: FTP cannot
+        // answer the door's prompts, so the door is not run).
+        try {
+          const slot = (await db.getUserById(String(request.user.id)))?.slotNumber;
+          const tagline = examineTaglineFor(config.get('dataDir'), slot);
+          if (tagline) description = `${description}\n${tagline}`;
+        } catch (error) {
+console.log(`[FTP] no tagline for ${fname}: ${error instanceof Error ? error.message : String(error)}`);
+        }
+
+        // express.e tests an upload before it files it, and a failure is a
+        // QUARANTINE rather than a rejection: the file goes to the sysop, and
+        // the caller is told where it went.
+        let marker: 'P' | 'F' | 'N' = 'N';
+        let initialStatus: 'active' | 'private' | 'hold' = 'active';
+        try {
+          const result = await testFile(playpenPath, nodeWorkDir, { nodeId: request.nodeId || 1 });
+          if (result === TestResult.SUCCESS) marker = 'P';
+          else if (result === TestResult.FAILURE) {
+            marker = 'F';
+            initialStatus = 'hold';
+          }
+        } catch {
+          marker = 'N';
+        }
+
+        // The area the board implies, created from the conference's own icons
+        // when the mirror has none - the same one the menu upload files into.
+        const area = await areaForConference(request.conferenceId, config.get('dataDir'));
+
+        const filed = await fileUploadedFile({
+          playpenPath,
+          filename: fname,
+          size: bytes,
+          description,
+          fileArea: area,
+          conferenceId: request.conferenceId,
+          nodeId: request.nodeId || 1,
+          uploader: {
+            username: request.user.username,
+            location: (request.user as unknown as { location?: string }).location,
+            slotNumber: (request.user as unknown as { slotNumber?: number }).slotNumber,
+          },
+          initialStatus,
+          marker,
+          ftp: { seconds: receiveSeconds, cps: receiveCps },
+        });
+
+        /*
+         * THE UPLOAD IS THE CALLER'S (doBackgroundCheck 19626-19630, 19676-
+         * 19686). A file that tested clean and is no duplicate (hold=0)
+         * counts one upload and its bytes (kilobytes under CREDITBYKB), when
+         * the credit account tracks uploads. Every checked file, held or not,
+         * raises today's limit by fsize - fsize in kilobytes only when it was
+         * booked first, E's own order. In memory: the logoff saves it
+         * (saveAccount below, 8207).
+         */
+        if (!filed.orphaned) {
+          const user = request.user as unknown as User;
+          const held = filed.duplicate || filed.status !== 'active';
+          await creditCheckedUpload(user, { held, bytes }, (units) => {
+            user.uploads = (user.uploads || 0) + 1;
+            user.bytesUpload = (user.bytesUpload || 0) + units;
+          });
+        }
+        return filed;
       }
 
       // ftpd.e:1690 - 426 when the upload did not survive. A file the board
