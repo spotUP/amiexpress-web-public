@@ -76,12 +76,15 @@ fi
 
 if [ -n "$SCRATCH" ] && git -C "$REPO_ROOT" worktree add --detach --no-checkout "$SCRATCH" "$PUSHED_SHA" >/dev/null 2>&1; then
   # Only what the type-checks read. The board's own directories - Conf, Doors,
-  # Node<n> - are thousands of files this never opens.
-  if git -C "$SCRATCH" sparse-checkout set --no-cone web sdk packages >/dev/null 2>&1 \
+  # Node<n> - are thousands of files this never opens. The backend tests
+  # import door and dev-script sources, so their .ts/.json come along; door
+  # binaries and art do not.
+  if git -C "$SCRATCH" sparse-checkout set --no-cone web sdk packages \
+       '/Doors/**/*.ts' '/Doors/**/*.json' '/dev/**/*.ts' '/dev/**/*.json' >/dev/null 2>&1 \
      && git -C "$SCRATCH" checkout --quiet >/dev/null 2>&1; then
     # tsc needs the toolchain, and a fresh worktree has none. Borrowed, not
     # installed: an install here would cost minutes and a gigabyte.
-    for dir in . web/backend web/config-app packages/terminal sdk; do
+    for dir in . web/backend web/config-app packages/terminal sdk $(cd "$REPO_ROOT" && ls -d Doors/*/node_modules 2>/dev/null | sed 's:/node_modules$::'); do
       if [ -d "$REPO_ROOT/$dir/node_modules" ] && [ ! -e "$SCRATCH/$dir/node_modules" ]; then
         mkdir -p "$SCRATCH/$dir" 2>/dev/null
         ln -s "$REPO_ROOT/$dir/node_modules" "$SCRATCH/$dir/node_modules" 2>/dev/null
