@@ -5,7 +5,6 @@
 
 import * as fs from 'fs/promises';
 import { BaseArchiveExtractor, ArchiveEntry } from '../archive-extractor';
-import { parseAmigaPattern } from '../amiga-pattern';
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const LHA = require('../lha.js');
@@ -80,101 +79,6 @@ export class LhaExtractor extends BaseArchiveExtractor {
       return null;
     }
   }
-}
-
-/**
- * Unpacks every member of an LHA archive into `destDir`, synchronously.
- *
- * Sync because its caller is a 68K trap: dos.library/Execute() has to set
- * D0 before the CPU resumes, and there is nowhere to await. lha.js itself
- * is synchronous - only this module's class wrapper is async, because it
- * reads with fs/promises - so the sync path costs nothing but a
- * readFileSync.
- *
- * Member names carry AmigaDOS separators (`nested\dir\file`); they become
- * real directories. A member is REFUSED if its normalised path would land
- * outside `destDir` (`..`, an absolute path, or a drive/assign prefix): the
- * archives come from a public catalog, and an install must not be able to
- * write over the BBS.
- *
- * Returns what happened rather than throwing, so the caller can report
- * partial success: Amiga-authored archives routinely carry one member that
- * a strict reader rejects while every other member unpacks perfectly.
- */
-/**
- * An LhA member name matches an AmigaDOS pattern the way LhA itself reads
- * one: case-insensitively (AmigaDOS does not tell FILE_ID.DIZ and file_id.diz
- * apart), with the full AmigaDOS grammar (utils/amiga-pattern). A pattern
- * with no directory part is matched against the member's own name.
- */
-export function lhaMemberMatches(member: string, pattern: string): boolean {
-  const parsed = parseAmigaPattern(pattern, true);
-  const name = member.split('/').pop() ?? member;
-  return parsed.matches(member) || (!pattern.includes('/') && parsed.matches(name));
-}
-
-export interface LhaExtractOptions {
-  /** Member patterns (LhA's `[file...]`); empty or absent means every member. */
-  members?: string[];
-  /** LhA `e`: every member lands in the destination itself, without its path. */
-  flatten?: boolean;
-}
-
-export function extractLhaArchiveSync(
-  archivePath: string,
-  destDir: string,
-  options: LhaExtractOptions = {}
-): { extracted: string[]; failed: string[] } {
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
-  const nodeFs = require('fs') as typeof import('fs');
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
-  const nodePath = require('path') as typeof import('path');
-
-  const extracted: string[] = [];
-  const failed: string[] = [];
-
-  const data = new Uint8Array(nodeFs.readFileSync(archivePath));
-  const entries: LhaEntryInternal[] = LHA.read(data);
-
-  const destRoot = nodePath.resolve(destDir);
-
-  for (const entry of entries) {
-    const rawName = entry.name || '';
-    // AmigaDOS/LHA use backslash for directories; a drive or assign prefix
-    // ("Work:", "C:") is stripped so the member stays relative.
-    const relative = rawName
-      .replace(/\\/g, '/')
-      .replace(/^[A-Za-z0-9_.-]*:/, '')
-      .replace(/^\/+/, '');
-
-    if (!relative || relative.endsWith('/')) {
-      continue; // directory entry - created below by its members
-    }
-    if (options.members?.length && !options.members.some((m) => lhaMemberMatches(relative, m))) {
-      continue;
-    }
-
-    const target = nodePath.resolve(destRoot, options.flatten ? nodePath.basename(relative) : relative);
-    if (target !== destRoot && !target.startsWith(destRoot + nodePath.sep)) {
-      failed.push(rawName);
-      continue;
-    }
-
-    try {
-      const unpacked = LHA.unpack(entry);
-      if (!unpacked) {
-        failed.push(rawName);
-        continue;
-      }
-      nodeFs.mkdirSync(nodePath.dirname(target), { recursive: true });
-      nodeFs.writeFileSync(target, Buffer.from(unpacked));
-      extracted.push(relative);
-    } catch {
-      failed.push(rawName);
-    }
-  }
-
-  return { extracted, failed };
 }
 
 // Legacy exports for backward compatibility

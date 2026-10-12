@@ -467,7 +467,14 @@ export const DOS_VECTORS: LibraryVector[] = [
     },
   },
   // -498: CreateNewProc
-  // -504: RunCommand
+  {
+    offset: -504,
+    name: "RunCommand",
+    handler: (emu, lib: DosLibrary) => {
+      lib.RunCommand();
+      return emu.getRegister(0);
+    },
+  },
   // -510: GetConsoleTask
   // -516: SetConsoleTask
   {

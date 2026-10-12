@@ -4,58 +4,11 @@
  * b.lha"` redirected into a file called `NIL: -F t "Work:a b.lha"` and ran LhA
  * with no arguments. One parser now serves DosLibrary and the batch scheduler.
  */
-import * as fs from 'fs';
-import * as os from 'os';
-import * as path from 'path';
-
-import { DosLibrary } from '../../src/amiga-emulation/api/DosLibrary';
-import { CPURegister } from '../../src/amiga-emulation/cpu/MoiraEmulator';
 import { parseAmigaCommandLine } from '../../src/amiga-emulation/api/dos/dos-command-line';
 
-const FIXTURE = path.join(__dirname, '../fixtures/archives/tiny-nested.lha');
-const CMD_ADDR = 0x200000;
-const DOSTRUE = 0xffffffff;
-
-class StubEmulator {
-  private regs = new Map<number, number>();
-  private mem = new Map<number, number>();
-
-  getRegister(reg: number): number {
-    return this.regs.get(reg) ?? 0;
-  }
-  setRegister(reg: number, value: number): void {
-    this.regs.set(reg, value >>> 0);
-  }
-  writeMemory(address: number, byte: number): void {
-    this.mem.set(address >>> 0, byte & 0xff);
-  }
-  readMemory(address: number): number {
-    return this.mem.get(address >>> 0) ?? 0;
-  }
-  getMemoryByte(address: number): number {
-    return this.readMemory(address);
-  }
-}
-
-function runExecute(root: string, command: string): { d0: number } {
-  const stub = new StubEmulator();
-  const dos = new DosLibrary(stub as any, root);
-
-  for (let i = 0; i < command.length; i++) {
-    stub.writeMemory(CMD_ADDR + i, command.charCodeAt(i));
-  }
-  stub.writeMemory(CMD_ADDR + command.length, 0);
-
-  stub.setRegister(CPURegister.D1, CMD_ADDR);
-  stub.setRegister(CPURegister.D2, 0);
-  stub.setRegister(CPURegister.D3, 0);
-
-  const handled = dos.handleCall(-222); // _LVOExecute
-  expect(handled).toBe(true);
-
-  return { d0: stub.getRegister(CPURegister.D0) };
-}
-
+// The line running for real - `"C:LHA" >NIL: -F t "<file>"` started as a 68K
+// child with its arguments - is proven end to end in
+// a-checker-runs-the-real-archiver.test.ts.
 
 describe('parseAmigaCommandLine', () => {
   it('takes a redirect in the middle of the line and keeps the arguments after it', () => {
@@ -116,20 +69,5 @@ describe('parseAmigaCommandLine', () => {
     const p = parseAmigaCommandLine('prog >');
     expect(p.stdout).toBeUndefined();
     expect(p.args).toEqual([]);
-  });
-});
-
-describe('Execute() with a redirect ahead of the arguments', () => {
-  it('runs the archiver with its arguments instead of treating them as the redirect file', () => {
-    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'cmdline-'));
-    try {
-      fs.mkdirSync(path.join(root, 'Doors'), { recursive: true });
-      fs.copyFileSync(FIXTURE, path.join(root, 'Doors', 'tiny-nested.lha'));
-      const { d0 } = runExecute(root, '"LhA" >NIL: x "doors:tiny-nested.lha" "doors:OUT/"');
-      expect(d0).toBe(DOSTRUE);
-      expect(fs.existsSync(path.join(root, 'Doors', 'OUT', 'root.txt'))).toBe(true);
-    } finally {
-      fs.rmSync(root, { recursive: true, force: true });
-    }
   });
 });

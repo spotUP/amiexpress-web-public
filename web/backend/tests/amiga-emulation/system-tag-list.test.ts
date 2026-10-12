@@ -163,7 +163,7 @@ describe("SystemTagList's output handle (dos/dostags.h)", () => {
 
   function run(tagList: number, stub: StubEmulator, dos: DosLibrary): number[] {
     const seen: number[] = [];
-    (dos as any).runCommandLine = (_name: string, out: number) => { seen.push(out); };
+    (dos as any).runCommandLine = (_name: string, io: { output: number }) => { seen.push(io.output); return false; };
     (dos as any).Output = () => 0x5000b;
     stub.writeString(STRING_ADDR, "Unzip -o x.zip file_id.diz");
     stub.setRegister(CPURegister.D1, STRING_ADDR);

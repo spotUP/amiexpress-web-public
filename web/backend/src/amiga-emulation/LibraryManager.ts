@@ -613,6 +613,9 @@ debugLog(
 debugLog("[LibraryManager] Creating DOS.library...");
 
     this.dosLibrary = new DosLibrary(this.emulator, projectRoot);
+    // Memory and the task's stack for programs the door runs (LoadSeg,
+    // RunCommand, Execute, SystemTagList).
+    this.dosLibrary.setExecLibrary(this.execLibrary);
     mark("dos library");
     // The caller's width, for the ONE place dos.library needs it: a door that
     // opens its own header file (`ctop`, `conftop`) instead of asking the BBS

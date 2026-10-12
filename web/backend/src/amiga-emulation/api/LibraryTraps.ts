@@ -33,6 +33,7 @@ import { getLvoName } from "../constants/lvo-names.generated";
 import { libraryCallLedger } from "../instrumentation/library-call-ledger";
 import { doorOf } from "../instrumentation/amiga-gaps";
 import { debugLog } from "../../utils/debug-log";
+import { CHILD_RETURN_TRAP_ADDR } from "../memory-map";
 import * as fs from "fs";
 import * as amigafs from "../../utils/amigafs";
 import * as path from "path";
@@ -538,6 +539,21 @@ console.log(
     );
 
     this.installStubVectorsForLibrary("dos.library", dosBase, this.dosLibrary);
+
+    // A program started by RunCommand / Execute / SystemTagList returns here
+    // (its stack's return address); dos.library hands its return code back
+    // to the program that started it.
+    const dos = this.dosLibrary;
+    this.emulator.writeMemory16(CHILD_RETURN_TRAP_ADDR, 0x4afc);
+    this.registerCustomTrap(
+      CHILD_RETURN_TRAP_ADDR,
+      'ChildReturn',
+      (emu: MoiraEmulator) => {
+        dos.childReturned(emu.getRegister(0));
+        return 0;
+      },
+      this.dosLibrary,
+    );
   }
 
   /**
@@ -1682,6 +1698,22 @@ console.log(
       this.emulator.refillPrefetch();
 console.log(`[LibraryTraps] Wait() BLOCKING - PC stays at trap 0x${pc.toString(16)}, returnAddr pushed back`);
       return true;
+    }
+
+    // dos.library started a program (RunCommand / Execute / SystemTagList)
+    // or one just ended (its rts reached CHILD_RETURN_TRAP_ADDR, or it called
+    // Exit()): the whole register set changes hands, PC included, so none of
+    // the D0/A6/SR/return-address handling below applies.
+    if (library === this.dosLibrary && this.dosLibrary) {
+      const next = this.dosLibrary.takeContextSwitch(returnAddr, a6Before);
+      if (next) {
+        for (let i = 0; i < 8; i++) this.emulator.setRegister(i, next.d[i] >>> 0);
+        for (let i = 0; i < 8; i++) this.emulator.setRegister(8 + i, next.a[i] >>> 0);
+        this.emulator.setRegister(17, next.sr);
+        this.emulator.setRegister(16, next.pc >>> 0);
+        this.emulator.refillPrefetch();
+        return true;
+      }
     }
 
     // CRITICAL: Check for SP corruption immediately after handler

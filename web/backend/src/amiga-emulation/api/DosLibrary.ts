@@ -1,4 +1,8 @@
 import { parseAmigaCommandLine } from "./dos/dos-command-line";
+import { findInAssignDirs } from "./dos/standard-assigns";
+import type { CpuContext } from "./dos/cpu-context";
+import { isHunkExecutable, loadSegList, type LoadedSegList } from "../loader/load-seg";
+import { CHILD_RETURN_TRAP_ADDR } from "../memory-map";
 import { MoiraEmulator, CPURegister } from "../cpu/MoiraEmulator";
 import * as fs from "fs";
 import * as amigafs from "../../utils/amigafs";
@@ -98,31 +102,59 @@ import {
  * @see ./dos/dos-env-manager.ts for environment variable management
  */
 
+/** What dos.library needs from exec.library to run a program. */
+export interface ProcessExec {
+  allocMem(size: number, flags: number): number;
+  freeMem(addr: number, size: number): void;
+  getCurrentTaskAddress(): number;
+  setStackBounds(lower: number, size: number): void;
+  getStackLower(): number;
+  getStackUpper(): number;
+}
+
+const MEMF_PUBLIC_CLEAR = 0x10001;
 /**
- * A path whose existing prefix is spelled the way the disk spells it.
- *
- * amigafs.resolvePath only answers for a path that exists. A destination
- * directory usually does not yet - "doors:OUT/" is about to be created - so
- * the deepest part that DOES exist is resolved and the remainder appended to
- * it. Without this, the extractor creates "doors/OUT" beside the real
- * "Doors/", and on a case-sensitive filesystem those are two directories.
+ * Stack for a command the shell runs. AmigaDOS's default is 4 KB, which every
+ * board raised in its startup (`Stack 20000` and more); LhA and LZX recurse.
  */
-export function resolveAgainstExistingParent(target: string): string {
-  const direct = amigafs.resolvePath(target);
-  if (direct) return direct;
+const SHELL_COMMAND_STACK = 0x10000;
+const MIN_COMMAND_STACK = 0x1000;
+/** Task/Process stack fields: tc_SPLower, tc_SPUpper, pr_StackSize, pr_StackBase (BPTR to the top). */
+const TASK_STACK_FIELDS = [0x3a, 0x3e, 0x84, 0x90];
 
-  const parts = target.split(path.sep);
-  const tail: string[] = [];
+interface ChildStart {
+  entry: number;
+  stackSize: number;
+  argPtr: number;
+  argLen: number;
+  programName: string;
+  input: number;
+  output: number;
+  /** Handles the shell opened for this command's redirections; closed on return. */
+  owned: number[];
+  /** D0 the caller gets from the child's return code. */
+  resultOf: (rc: number) => number;
+  /** Segment list to unload on return (0 = the caller owns it, as with RunCommand). */
+  unloadSeg: number;
+  argBlock: { addr: number; size: number } | null;
+}
 
-  while (parts.length > 1) {
-    tail.unshift(parts.pop() as string);
-    const prefix = parts.join(path.sep);
-    if (!prefix) break;
-
-    const resolved = amigafs.resolvePath(prefix);
-    if (resolved) return path.join(resolved, ...tail);
-  }
-  return target;
+interface ChildFrame extends ChildStart {
+  stack: number;
+  stackSize: number;
+  parent: { d: number[]; a: number[]; sr: number };
+  parentPc: number;
+  saved: {
+    argStringPtr: number;
+    programName: string;
+    input: number;
+    output: number;
+    currentDirectory: string;
+    currentDirectoryAmiga: string;
+    stackLower: number;
+    stackUpper: number;
+    task: number[];
+  };
 }
 
 export class DosLibrary {
@@ -483,8 +515,11 @@ debugLog(`[dos.library] Allocated FileHandle structs: stdin=0x${this.stdinBptr.t
     if (existing) {
       return existing;
     }
-    const structAddr = this.envVarStructNext;
-    this.envVarStructNext += ENV_VAR_STRUCT_SIZE;
+    const structAddr = this.dosMemory(ENV_VAR_STRUCT_SIZE, () => {
+      const addr = this.envVarStructNext;
+      this.envVarStructNext += ENV_VAR_STRUCT_SIZE;
+      return addr;
+    });
 
     const nameAddr = this.writeEnvString(name);
     const valueAddr = this.writeEnvString(value);
@@ -505,10 +540,29 @@ debugLog(
   }
 
   private writeEnvString(text: string): number {
-    const addr = this.envStringNext;
+    const addr = this.dosMemory(text.length + 1, () => {
+      const next = this.envStringNext;
+      this.envStringNext += text.length + 1;
+      return next;
+    });
     this.emulator.writeString(addr, text);
-    this.envStringNext += text.length + 1;
     return addr;
+  }
+
+  /**
+   * Memory dos.library keeps for a program (environment variables, ReadArgs
+   * buffers): exec AllocMem, the allocator every other allocation uses.
+   * The fixed regions (ENV_VAR_STRUCT_BASE, ENV_STRING_BASE,
+   * READARGS_HEAP_BASE) sit inside AllocMem's arena, so a door's own
+   * AllocMem - or a program it runs, with its 64 KB stack - was handed the
+   * same addresses (measured: mULTI-cHECK's AllocMem got 0x122520, in the
+   * environment strings; C:LhA's stack ended at 0x142e40, over the ReadArgs
+   * strings mULTI-cHECK still needed). The fixed region is used only where
+   * no exec is attached (unit tests of dos.library alone).
+   */
+  private dosMemory(size: number, fixedRegion: () => number): number {
+    const addr = this.processExec?.allocMem(size, MEMF_PUBLIC_CLEAR) ?? 0;
+    return addr || fixedRegion();
   }
 
   /**
@@ -3203,6 +3257,14 @@ debugLog(`[dos.library] CreateProc("${name}") - UNSUPPORTED (process creation no
     const returnCode = this.emulator.getRegister(CPURegister.D1);
 
 debugLog(`[dos.library] Exit(returnCode=${returnCode})`);
+
+    // A program started by RunCommand/Execute/SystemTagList ends here and its
+    // code goes back to the program that started it, as AmigaDOS unwinds a
+    // CLI command's Exit() to the shell - it does not end the session.
+    if (this.childFrames.length > 0) {
+      this.finishChild(returnCode);
+      return;
+    }
 debugLog(
       `[dos.library] Setting PC to exit trap address 0xFFFF00 to terminate door`
     );
@@ -3262,35 +3324,332 @@ debugLog(`[dos.library] Door will now exit cleanly`);
       }
     }
 
-debugLog(`[dos.library] LoadSeg("${name}") - UNSUPPORTED (no override registered), returning NULL`);
-
-    // Dynamic code loading not supported (security) — door binaries
-    // never need LoadSeg, so the absence of an override is the
-    // correct default.
-    this.emulator.setRegister(CPURegister.D0, 0);
-    this.lastError = DOS_ERRORS.ERROR_OBJECT_NOT_FOUND;
+    const sysPath = this.resolveToHost(name);
+    const loaded = sysPath ? this.loadProgram(sysPath, name) : null;
+    debugLog(`[dos.library] LoadSeg("${name}") -> ${sysPath ?? '(not found)'} BPTR=0x${(loaded?.bptr ?? 0).toString(16)}`);
+    this.emulator.setRegister(CPURegister.D0, loaded ? loaded.bptr : 0);
+    // lastError was set by loadProgram on failure.
   }
 
   /**
    * UnLoadSeg - Unload a segment list
    * D1 = segList
-   * Returns: D0 = success (DOSTRUE=-1, DOSFALSE=0)
    *
-   * No-op for our purposes — the segments stay in MOIRA memory for
-   * the singleton's lifetime. RexxMast may UnLoadSeg between script
-   * invocations to reclaim space; on a 4MB emulator we leak it.
+   * Frees a segment list LoadSeg loaded. One loaded some other way (RexxMast's
+   * override keeps its own for its CreateProc trampoline) stays in memory.
    */
   UnLoadSeg(): void {
-    const segList = this.emulator.getRegister(CPURegister.D1);
-
-debugLog(
-      `[dos.library] UnLoadSeg(segList=0x${segList.toString(16)}) - No-op (segments stay loaded)`
-    );
-
-    // Success regardless — see above. Real Amiga frees memory; ours
-    // doesn't, but the daemon doesn't depend on the freed bytes.
+    const segList = this.emulator.getRegister(CPURegister.D1) >>> 0;
+    const freed = this.unloadProgram(segList);
+    debugLog(`[dos.library] UnLoadSeg(0x${segList.toString(16)}) ${freed ? 'freed' : 'not ours, kept'}`);
     this.emulator.setRegister(CPURegister.D0, -1);
     this.lastError = DOS_ERRORS.ERROR_NO_ERROR;
+  }
+
+  // ===================================================================
+  // Program execution: LoadSeg / RunCommand / Execute / SystemTagList
+  // ===================================================================
+  //
+  // A program runs another the AmigaDOS way: LoadSeg its file, then run the
+  // segment list as a CLI command on its own stack with the argument string
+  // in A0/D0, its own Input()/Output(), and its return code (rts, or Exit())
+  // handed back to the caller. The caller is suspended meanwhile - RunCommand
+  // is synchronous, and SystemTagList waits for the command it starts.
+  //
+  // No second task: the child runs on the caller's Process, as RunCommand's
+  // child does on a real Amiga, with the per-command state (argument string,
+  // program name, Input/Output, current directory, stack bounds) saved on
+  // entry and restored on return. The switch itself is a whole register set
+  // handed to LibraryTraps (takeContextSwitch) when the starting trap
+  // returns, and again when the child's rts reaches CHILD_RETURN_TRAP_ADDR.
+
+  /** exec.library services a started program needs. */
+  private processExec: ProcessExec | null = null;
+
+  setExecLibrary(exec: ProcessExec): void {
+    this.processExec = exec;
+  }
+
+  /** Segment lists LoadSeg loaded, by BPTR, so UnLoadSeg can free them. */
+  private loadedPrograms: Map<number, LoadedSegList> = new Map();
+  /** Programs started and not yet returned, innermost last. */
+  private childFrames: ChildFrame[] = [];
+  private pendingContextSwitch: ((returnAddr: number, a6: number) => CpuContext) | null = null;
+
+  /**
+   * Called by LibraryTraps after a dos.library trap handler: the register set
+   * to switch to (a child starting, or a parent resuming), or null.
+   * `returnAddr` is where the trapped call would have returned; `a6` the A6
+   * the caller had.
+   */
+  takeContextSwitch(returnAddr: number, a6: number): CpuContext | null {
+    const pending = this.pendingContextSwitch;
+    this.pendingContextSwitch = null;
+    return pending ? pending(returnAddr >>> 0, a6 >>> 0) : null;
+  }
+
+  /** How many programs started by RunCommand/Execute/SystemTagList are running. */
+  getChildDepth(): number {
+    return this.childFrames.length;
+  }
+
+  private resolveToHost(amigaPath: string): string | null {
+    return this.pathManager?.amiToSysPath(amigaPath, this.currentDirectory) || this.pathResolver.resolve(amigaPath);
+  }
+
+  /** LoadSeg a host file. Sets lastError and returns null when it cannot. */
+  private loadProgram(sysPath: string, name: string): LoadedSegList | null {
+    const real = amigafs.resolvePath(sysPath);
+    if (!real || !amigafs.statSync(real).isFile()) {
+      this.lastError = DOS_ERRORS.ERROR_OBJECT_NOT_FOUND;
+      return null;
+    }
+    const exec = this.processExec;
+    if (!exec) {
+      this.lastError = DOS_ERRORS.ERROR_NO_FREE_STORE;
+      return null;
+    }
+    const bytes = amigafs.readFileSync(real) as Buffer;
+    if (!isHunkExecutable(bytes)) {
+      this.lastError = DOS_ERRORS.ERROR_FILE_NOT_OBJECT;
+      return null;
+    }
+    const loaded = loadSegList(this.emulator, bytes, path.basename(real), (span) => exec.allocMem(span, MEMF_PUBLIC_CLEAR));
+    if (!loaded) {
+      this.lastError = DOS_ERRORS.ERROR_NO_FREE_STORE;
+      return null;
+    }
+    this.loadedPrograms.set(loaded.bptr, loaded);
+    this.lastError = DOS_ERRORS.ERROR_NO_ERROR;
+    console.log(`[dos.library] LoadSeg "${name}" (${real}): ${loaded.segments.length} segment(s) at 0x${loaded.entry.toString(16)}`);
+    return loaded;
+  }
+
+  private unloadProgram(bptr: number): boolean {
+    const loaded = this.loadedPrograms.get(bptr >>> 0);
+    if (!loaded) return false;
+    this.loadedPrograms.delete(bptr >>> 0);
+    this.processExec?.freeMem(loaded.base, loaded.span);
+    return true;
+  }
+
+  /**
+   * RunCommand - run a loaded segment list as a CLI command (LVO -504)
+   * D1 = segList, D2 = stack size, D3 = argument string, D4 = its length
+   * Returns: D0 = the command's return code, or -1 if it could not run.
+   */
+  RunCommand(): void {
+    const segList = this.emulator.getRegister(CPURegister.D1) >>> 0;
+    const stackSize = this.emulator.getRegister(CPURegister.D2) >>> 0;
+    const argPtr = this.emulator.getRegister(CPURegister.D3) >>> 0;
+    const argLen = this.emulator.getRegister(CPURegister.D4) >>> 0;
+    // HunkLoader's layout: BPTR<<2 is the segment header, code starts 8 later.
+    const entry = this.loadedPrograms.get(segList)?.entry ?? (((segList << 2) >>> 0) + 8);
+    const started = segList !== 0 && this.startChild({
+      entry,
+      stackSize,
+      argPtr,
+      argLen,
+      programName: this.programName,
+      input: this.Input(),
+      output: this.Output(),
+      owned: [],
+      resultOf: (rc) => rc >>> 0,
+      unloadSeg: 0,
+      argBlock: null,
+    });
+    if (!started) {
+      this.emulator.setRegister(CPURegister.D0, 0xffffffff);
+    }
+  }
+
+  /**
+   * Where the shell finds a command: a name with a device or a path is
+   * looked up as given; a bare name in the current directory, then along C:.
+   */
+  private findCommand(program: string): string | null {
+    const asFile = (p: string | null | undefined): string | null => {
+      const real = p ? amigafs.resolvePath(p) : null;
+      return real && amigafs.statSync(real).isFile() ? real : null;
+    };
+    if (program.includes(':') || program.includes('/')) return asFile(this.resolveToHost(program));
+    const here = asFile(path.join(this.currentDirectory, program));
+    if (here) return here;
+    const cDirs = this.pathManager?.getAssignDirs('C:') ?? [];
+    if (cDirs.length) return asFile(findInAssignDirs(cDirs, [program]));
+    return asFile(this.pathResolver.resolve(`C:${program}`));
+  }
+
+  /** Load and start the program a parsed shell line names. False if it cannot. */
+  private startCommand(
+    parsed: ReturnType<typeof parseAmigaCommandLine>,
+    io: { input: number; output: number; owned: number[]; resultOf: (rc: number) => number },
+  ): boolean {
+    if (!parsed.program || !this.processExec) return false;
+    const sysPath = this.findCommand(parsed.program);
+    if (!sysPath) return false;
+    const loaded = this.loadProgram(sysPath, parsed.program);
+    if (!loaded) return false;
+
+    // The command sees the rest of the line, redirections removed, ended by
+    // a newline - what the shell hands a CLI command in A0/D0.
+    const argText = `${parsed.rawArgs.join(' ')}\n`;
+    const argSize = argText.length + 1;
+    const argPtr = this.processExec.allocMem(argSize, MEMF_PUBLIC_CLEAR);
+    if (!argPtr) {
+      this.unloadProgram(loaded.bptr);
+      return false;
+    }
+    for (let i = 0; i < argText.length; i++) this.emulator.writeMemory(argPtr + i, argText.charCodeAt(i) & 0xff);
+    this.emulator.writeMemory(argPtr + argText.length, 0);
+
+    const started = this.startChild({
+      entry: loaded.entry,
+      stackSize: SHELL_COMMAND_STACK,
+      argPtr,
+      argLen: argText.length,
+      programName: parsed.program,
+      input: io.input,
+      output: io.output,
+      owned: io.owned,
+      resultOf: io.resultOf,
+      unloadSeg: loaded.bptr,
+      argBlock: { addr: argPtr, size: argSize },
+    });
+    if (!started) {
+      this.processExec.freeMem(argPtr, argSize);
+      this.unloadProgram(loaded.bptr);
+    }
+    return started;
+  }
+
+  /**
+   * Arrange for the child to start when the current trap returns. Allocates
+   * its stack now (false if there is no memory); everything else happens in
+   * the context switch, when the caller's registers are final.
+   */
+  private startChild(child: ChildStart): boolean {
+    const exec = this.processExec;
+    if (!exec) {
+      this.lastError = DOS_ERRORS.ERROR_NO_FREE_STORE;
+      return false;
+    }
+    const stackSize = (Math.max(child.stackSize >>> 0, MIN_COMMAND_STACK) + 3) & ~3;
+    const stack = exec.allocMem(stackSize, MEMF_PUBLIC_CLEAR);
+    if (!stack) {
+      this.lastError = DOS_ERRORS.ERROR_NO_FREE_STORE;
+      return false;
+    }
+
+    this.pendingContextSwitch = (returnAddr: number, a6: number): CpuContext => {
+      const d = Array.from({ length: 8 }, (_, i) => this.emulator.getRegister(i) >>> 0);
+      const a = Array.from({ length: 8 }, (_, i) => this.emulator.getRegister(8 + i) >>> 0);
+      a[6] = a6;
+      const sr = this.emulator.getRegister(17);
+      const task = exec.getCurrentTaskAddress() >>> 0;
+      const readTask = (off: number) => (task ? this.emulator.readMemory32(task + off) >>> 0 : 0);
+
+      this.childFrames.push({
+        ...child,
+        stack,
+        stackSize,
+        parent: { d, a, sr },
+        parentPc: returnAddr,
+        saved: {
+          argStringPtr: this.argStringPtr,
+          programName: this.programName,
+          input: this.Input(),
+          output: this.Output(),
+          currentDirectory: this.currentDirectory,
+          currentDirectoryAmiga: this.currentDirectoryAmiga,
+          stackLower: exec.getStackLower(),
+          stackUpper: exec.getStackUpper(),
+          task: TASK_STACK_FIELDS.map(readTask),
+        },
+      });
+
+      // The child's own command state.
+      this.argStringPtr = child.argPtr;
+      this.programName = child.programName;
+      this.setStdHandles(child.input, child.output);
+      exec.setStackBounds(stack, stackSize);
+      const top = (stack + stackSize) & ~3;
+      if (task) {
+        const values = [stack, top, stackSize, top >>> 2];
+        TASK_STACK_FIELDS.forEach((off, i) => this.emulator.writeMemory32(task + off, values[i] >>> 0));
+      }
+
+      // CLI command entry: (SP) = return address, 4(SP) = stack size,
+      // A0 = argument string, D0 = its length, D2 = stack size (vamos run.py).
+      const sp = top - 8;
+      this.emulator.writeMemory32(sp, CHILD_RETURN_TRAP_ADDR);
+      this.emulator.writeMemory32(sp + 4, stackSize);
+      const cd = d.slice();
+      cd[0] = child.argLen >>> 0;
+      cd[2] = stackSize;
+      const ca = a.slice();
+      ca[0] = child.argPtr >>> 0;
+      ca[7] = sp >>> 0;
+      console.log(
+        `[dos.library] start "${child.programName}" at 0x${child.entry.toString(16)} ` +
+          `(stack 0x${stack.toString(16)}+${stackSize}, depth ${this.childFrames.length}, caller resumes at 0x${returnAddr.toString(16)})`,
+      );
+      return { d: cd, a: ca, pc: child.entry >>> 0, sr };
+    };
+    return true;
+  }
+
+  /** The child's rts reached CHILD_RETURN_TRAP_ADDR with its code in D0. */
+  childReturned(rc: number): void {
+    if (this.childFrames.length === 0) {
+      console.error('[dos.library] child return trap reached with no program running');
+      return;
+    }
+    this.finishChild(rc);
+  }
+
+  /** The innermost child ended with `rc`: restore its caller and resume it. */
+  private finishChild(rc: number): void {
+    const frame = this.childFrames.pop();
+    if (!frame) return;
+    const exec = this.processExec;
+    const { saved } = frame;
+
+    this.argStringPtr = saved.argStringPtr;
+    this.programName = saved.programName;
+    this.setStdHandles(saved.input, saved.output);
+    this.currentDirectory = saved.currentDirectory;
+    this.currentDirectoryAmiga = saved.currentDirectoryAmiga;
+    if (exec) {
+      exec.setStackBounds(saved.stackLower, saved.stackUpper - saved.stackLower);
+      const task = exec.getCurrentTaskAddress() >>> 0;
+      if (task) TASK_STACK_FIELDS.forEach((off, i) => this.emulator.writeMemory32(task + off, saved.task[i]));
+    }
+    for (const handle of frame.owned) {
+      if (handle && this.fileManager) this.fileManager.close(handle);
+    }
+    exec?.freeMem(frame.stack, frame.stackSize);
+    if (frame.argBlock) exec?.freeMem(frame.argBlock.addr, frame.argBlock.size);
+    if (frame.unloadSeg) this.unloadProgram(frame.unloadSeg);
+
+    const result = frame.resultOf(rc) >>> 0;
+    console.log(`[dos.library] "${frame.programName}" returned ${rc | 0}; caller resumes at 0x${frame.parentPc.toString(16)} with D0=${result | 0}`);
+    this.pendingContextSwitch = (): CpuContext => {
+      const d = frame.parent.d.slice();
+      d[0] = result;
+      const flags = (result === 0 ? 0x04 : 0) | (result & 0x80000000 ? 0x08 : 0);
+      return { d, a: frame.parent.a.slice(), pc: frame.parentPc, sr: (frame.parent.sr & 0xfff0) | flags };
+    };
+  }
+
+  /** Point Input()/Output() at these handles without moving any handle. */
+  private setStdHandles(input: number, output: number): void {
+    if (this.useNewFileSystem && this.fileManager) {
+      this.fileManager.setStdinHandle(input);
+      this.fileManager.setStdoutHandle(output);
+    }
+    this.inheritedInput = input;
+    this.inheritedOutput = output;
   }
 
   /**
@@ -3616,27 +3975,54 @@ debugLog(`[dos.library] IsInteractive(handle=${handle})`);
 
   /**
    * Execute - Execute a command
-   * D1 = command name
-   * D2 = input file handle
-   * D3 = output file handle
-   * Returns: D0 = success (DOSTRUE=-1, DOSFALSE=0)
+   * D1 = command line
+   * D2 = input file handle (more commands to read after D1 - not supported)
+   * D3 = output file handle (0 = the caller's Output())
+   * Returns: D0 = DOSTRUE if the command ran, DOSFALSE if it could not
    */
   Execute(): void {
     const namePtr = this.emulator.getRegister(CPURegister.D1);
     const name = this.readString(namePtr);
-    const outputHandle = this.emulator.getRegister(CPURegister.D3);
+    const outputHandle = this.emulator.getRegister(CPURegister.D3) >>> 0;
     console.log(`[DosLibrary] *** Execute() CALLED *** command="${name}" namePtr=0x${namePtr.toString(16)} outputHandle=0x${outputHandle.toString(16)}`);
-    this.runCommandLine(name, outputHandle);
+    // A started program answers DOSTRUE when it returns, whatever its code.
+    this.runCommandLine(name, { input: this.Input(), output: outputHandle || this.Output() }, () => 0xffffffff);
   }
 
   /**
-   * Run one shell command line, writing to `outputHandle` (0 = none given).
-   * The body Execute() and SystemTagList() share: each reads its OWN
-   * arguments - Execute's D3 is its output handle, SystemTagList's comes from
-   * its tag list - and hands them here.
+   * Write a built-in command's text to a handle through Write(). The bytes go
+   * through AllocMem'd memory (freed after), not a fixed address another
+   * allocation may own.
    */
-  private runCommandLine(name: string, outputHandleArg: number): void {
-    let outputHandle = outputHandleArg;
+  private writeTextToHandle(handle: number, text: string): void {
+    const size = text.length + 1;
+    const owned = this.processExec?.allocMem(size, MEMF_PUBLIC_CLEAR) ?? 0;
+    const addr = owned || 0x140000;
+    for (let i = 0; i < text.length; i++) this.emulator.writeMemory(addr + i, text.charCodeAt(i) & 0xff);
+    this.emulator.writeMemory(addr + text.length, 0);
+    this.emulator.setRegister(CPURegister.D1, handle);
+    this.emulator.setRegister(CPURegister.D2, addr);
+    this.emulator.setRegister(CPURegister.D3, text.length);
+    this.Write();
+    if (owned) this.processExec?.freeMem(owned, size);
+  }
+
+  /**
+   * Run one shell command line with `io` as the program's Input()/Output()
+   * unless the line redirects them. The body Execute() and SystemTagList()
+   * share: each reads its OWN arguments and hands them here.
+   *
+   * A built-in answered here sets D0 to DOSTRUE/DOSFALSE and returns false.
+   * A real program (resolved like the shell does: a path, else the current
+   * directory, else C:) is loaded and started as a child and this returns
+   * true: the caller's D0 is `resultOf(rc)` when the child returns.
+   */
+  private runCommandLine(
+    name: string,
+    io: { input: number; output: number },
+    resultOf: (rc: number) => number,
+  ): boolean {
+    let outputHandle = io.output;
 
     // The shell strips redirections (">file", ">>file", "<file") wherever they
     // stand in the line; the program sees the rest. One parser for Execute,
@@ -3649,9 +4035,10 @@ debugLog(`[dos.library] IsInteractive(handle=${handle})`);
       debugLog(`[dos.library] Execute: Parsed redirection: "${commandPart}" ${redirectAppend ? '>>' : '>'} "${redirectFile}"`);
     }
 
-    // If redirection is specified but no output handle provided, open the file
+    // A redirection in the line wins over the handle the caller passed, as
+    // the shell's does.
     let ownedOutputHandle = 0;
-    if (redirectFile && (!outputHandle || outputHandle === 0) && this.fileManager) {
+    if (redirectFile && this.fileManager) {
       const mode = redirectAppend ? MODE_READWRITE : MODE_NEWFILE;
       ownedOutputHandle = this.fileManager.open(redirectFile, mode);
       if (ownedOutputHandle) {
@@ -3692,16 +4079,7 @@ debugLog(`[dos.library] Execute("${name}") -> DATE command, date: "${dateStr.tri
       if (outputHandle && outputHandle > 0) {
         // Write date string directly to the file handle using Write()
         // Allocate temp memory for the string
-        const tempAddr = 0x140000; // Use a temp buffer area
-        for (let i = 0; i < dateStr.length; i++) {
-          this.emulator.writeMemory(tempAddr + i, dateStr.charCodeAt(i));
-        }
-        this.emulator.writeMemory(tempAddr + dateStr.length, 0); // Null terminate
-
-        this.emulator.setRegister(CPURegister.D1, outputHandle);
-        this.emulator.setRegister(CPURegister.D2, tempAddr);
-        this.emulator.setRegister(CPURegister.D3, dateStr.length);
-        this.Write();
+        this.writeTextToHandle(outputHandle, dateStr);
       }
 
       // Close owned output handle if we opened it
@@ -3710,7 +4088,7 @@ debugLog(`[dos.library] Execute("${name}") -> DATE command, date: "${dateStr.tri
       }
       this.emulator.setRegister(CPURegister.D0, -1); // DOSTRUE = success
       this.lastError = DOS_ERRORS.ERROR_NO_ERROR;
-      return;
+      return false;
     }
 
     // AVAIL command - returns memory info
@@ -3738,15 +4116,7 @@ debugLog(`[dos.library] Execute("${name}") -> DATE command, date: "${dateStr.tri
       debugLog(`[dos.library] Execute("${name}") -> AVAIL command`);
 
       if (outputHandle && outputHandle > 0) {
-        const tempAddr = 0x140000;
-        for (let i = 0; i < availStr.length; i++) {
-          this.emulator.writeMemory(tempAddr + i, availStr.charCodeAt(i));
-        }
-        this.emulator.writeMemory(tempAddr + availStr.length, 0);
-        this.emulator.setRegister(CPURegister.D1, outputHandle);
-        this.emulator.setRegister(CPURegister.D2, tempAddr);
-        this.emulator.setRegister(CPURegister.D3, availStr.length);
-        this.Write();
+        this.writeTextToHandle(outputHandle, availStr);
       }
 
       // Close owned output handle if we opened it
@@ -3755,7 +4125,7 @@ debugLog(`[dos.library] Execute("${name}") -> DATE command, date: "${dateStr.tri
       }
       this.emulator.setRegister(CPURegister.D0, -1);
       this.lastError = DOS_ERRORS.ERROR_NO_ERROR;
-      return;
+      return false;
     }
 
     // INFO command - returns disk info
@@ -3773,15 +4143,7 @@ debugLog(`[dos.library] Execute("${name}") -> DATE command, date: "${dateStr.tri
       debugLog(`[dos.library] Execute("${name}") -> INFO command`);
 
       if (outputHandle && outputHandle > 0) {
-        const tempAddr = 0x140000;
-        for (let i = 0; i < infoStr.length; i++) {
-          this.emulator.writeMemory(tempAddr + i, infoStr.charCodeAt(i));
-        }
-        this.emulator.writeMemory(tempAddr + infoStr.length, 0);
-        this.emulator.setRegister(CPURegister.D1, outputHandle);
-        this.emulator.setRegister(CPURegister.D2, tempAddr);
-        this.emulator.setRegister(CPURegister.D3, infoStr.length);
-        this.Write();
+        this.writeTextToHandle(outputHandle, infoStr);
       }
 
       // Close owned output handle if we opened it
@@ -3790,7 +4152,7 @@ debugLog(`[dos.library] Execute("${name}") -> DATE command, date: "${dateStr.tri
       }
       this.emulator.setRegister(CPURegister.D0, -1);
       this.lastError = DOS_ERRORS.ERROR_NO_ERROR;
-      return;
+      return false;
     }
 
     // VERSION command - returns version info from a binary
@@ -3847,15 +4209,7 @@ debugLog(`[dos.library] Execute("${name}") -> DATE command, date: "${dateStr.tri
 
       if (outputHandle && outputHandle > 0) {
         const versionOutput = `${verString}\n`;
-        const tempAddr = 0x140000;
-        for (let i = 0; i < versionOutput.length; i++) {
-          this.emulator.writeMemory(tempAddr + i, versionOutput.charCodeAt(i));
-        }
-        this.emulator.writeMemory(tempAddr + versionOutput.length, 0);
-        this.emulator.setRegister(CPURegister.D1, outputHandle);
-        this.emulator.setRegister(CPURegister.D2, tempAddr);
-        this.emulator.setRegister(CPURegister.D3, versionOutput.length);
-        this.Write();
+        this.writeTextToHandle(outputHandle, versionOutput);
       }
 
       // Close owned output handle if we opened it
@@ -3864,7 +4218,7 @@ debugLog(`[dos.library] Execute("${name}") -> DATE command, date: "${dateStr.tri
       }
       this.emulator.setRegister(CPURegister.D0, -1);
       this.lastError = DOS_ERRORS.ERROR_NO_ERROR;
-      return;
+      return false;
     }
 
     // SHOWCONFIG command - returns Amiga hardware configuration
@@ -3890,15 +4244,7 @@ debugLog(`[dos.library] Execute("${name}") -> DATE command, date: "${dateStr.tri
       debugLog(`[dos.library] Execute("${name}") -> SHOWCONFIG command`);
 
       if (outputHandle && outputHandle > 0) {
-        const tempAddr = 0x140000;
-        for (let i = 0; i < showConfigStr.length; i++) {
-          this.emulator.writeMemory(tempAddr + i, showConfigStr.charCodeAt(i));
-        }
-        this.emulator.writeMemory(tempAddr + showConfigStr.length, 0);
-        this.emulator.setRegister(CPURegister.D1, outputHandle);
-        this.emulator.setRegister(CPURegister.D2, tempAddr);
-        this.emulator.setRegister(CPURegister.D3, showConfigStr.length);
-        this.Write();
+        this.writeTextToHandle(outputHandle, showConfigStr);
       }
 
       // Close owned output handle if we opened it
@@ -3907,7 +4253,7 @@ debugLog(`[dos.library] Execute("${name}") -> DATE command, date: "${dateStr.tri
       }
       this.emulator.setRegister(CPURegister.D0, -1);
       this.lastError = DOS_ERRORS.ERROR_NO_ERROR;
-      return;
+      return false;
     }
 
     // COPY command - copy a file (used by Request door for delete operations)
@@ -3962,7 +4308,7 @@ debugLog(`[dos.library] Execute("${name}") -> DATE command, date: "${dateStr.tri
             }
             this.emulator.setRegister(CPURegister.D0, -1); // Success (DOSTRUE)
             this.lastError = DOS_ERRORS.ERROR_NO_ERROR;
-            return;
+            return false;
           } catch (err: any) {
             console.error(`[dos.library] Execute COPY: Failed to copy "${sourcePath}" to "${destPath}":`, err.message || err);
           }
@@ -3982,7 +4328,7 @@ debugLog(`[dos.library] Execute("${name}") -> DATE command, date: "${dateStr.tri
       }
       this.emulator.setRegister(CPURegister.D0, 0); // Failure
       this.lastError = DOS_ERRORS.ERROR_OBJECT_NOT_FOUND;
-      return;
+      return false;
     }
 
     // DELETE command - delete a file
@@ -4011,7 +4357,7 @@ debugLog(`[dos.library] Execute("${name}") -> DATE command, date: "${dateStr.tri
             }
             this.emulator.setRegister(CPURegister.D0, -1); // Success (DOSTRUE)
             this.lastError = DOS_ERRORS.ERROR_NO_ERROR;
-            return;
+            return false;
           } catch (err: any) {
             console.error(`[dos.library] Execute DELETE: Failed to delete "${sysPath}":`, err.message || err);
           }
@@ -4026,7 +4372,7 @@ debugLog(`[dos.library] Execute("${name}") -> DATE command, date: "${dateStr.tri
       }
       this.emulator.setRegister(CPURegister.D0, 0); // Failure
       this.lastError = DOS_ERRORS.ERROR_OBJECT_NOT_FOUND;
-      return;
+      return false;
     }
 
     // RENAME command - rename a file (used by Request door for delete operations)
@@ -4083,7 +4429,7 @@ debugLog(`[dos.library] Execute("${name}") -> DATE command, date: "${dateStr.tri
             }
             this.emulator.setRegister(CPURegister.D0, -1); // Success (DOSTRUE)
             this.lastError = DOS_ERRORS.ERROR_NO_ERROR;
-            return;
+            return false;
           } catch (err: any) {
             console.error(`[dos.library] Execute RENAME: Failed to rename "${sourcePath}" to "${destPath}":`, err.message || err);
           }
@@ -4103,196 +4449,32 @@ debugLog(`[dos.library] Execute("${name}") -> DATE command, date: "${dateStr.tri
       }
       this.emulator.setRegister(CPURegister.D0, 0); // Failure
       this.lastError = DOS_ERRORS.ERROR_OBJECT_NOT_FOUND;
-      return;
+      return false;
     }
 
-    // ARCHIVER (LhA/LZX) - unpack an archive into a directory.
-    //
-    // The single exception to "shell command execution blocked": an
-    // archiver call is not arbitrary code, it is a file operation this
-    // process already knows how to do. DoorRepo installs a door by asking
-    // the archiver to unpack it, and with no shell and no LhA inside the
-    // emulator that call reached nothing - every install wrote a command
-    // config pointing at files that were never created, which is how a
-    // door could be "installed" and then answer "No such command".
-    //
-    // Only extraction is honoured, and only into a path this process can
-    // already resolve. Anything else about the command line - options,
-    // member filters, a different verb - is not interpreted: an
-    // unrecognised shape fails rather than silently doing something else.
-    {
-      const argv = parsedLine.words.map((w) => w.value);
-      const program = (argv[0] || '').split(/[/:]/).pop()?.toUpperCase() || '';
-      const isArchiver = program === 'LHA' || program === 'LZX' || program === 'UNLZX';
-
-      // UnZip, Info-ZIP's grammar: `UnZip [-opts] <archive> [member...] [-d dir]`,
-      // into `-d dir` or the current directory. File Description's Depack_ZIP
-      // is `Unzip -o %P file_id.diz` - no destination - and it looks for the
-      // file where the door stands. Members match case-insensitively, as
-      // AmigaDOS names do. Only extraction exists; `-l`/`-t` and the rest fail.
-      if (program === 'UNZIP') {
-        const fail = (why: string) => {
-          console.warn(`[dos.library] Execute UNZIP: ${why} ("${commandPart}")`);
-          if (ownedOutputHandle && this.fileManager) this.fileManager.close(ownedOutputHandle);
-          this.emulator.setRegister(CPURegister.D0, 0);
-          this.lastError = DOS_ERRORS.ERROR_OBJECT_NOT_FOUND;
-        };
-        let destArg: string | null = null;
-        const rest: string[] = [];
-        for (let k = 1; k < argv.length; k++) {
-          const w = argv[k];
-          if (w === '-d') { destArg = argv[++k] ?? null; continue; }
-          if (/^-[a-z]+$/i.test(w)) {
-            if (/[ltvzZ]/.test(w)) { fail('only extraction is supported'); return; }
-            continue; // -o (overwrite), -q, -j ... : extraction either way
-          }
-          rest.push(w);
-        }
-        const [archiveArg, ...members] = rest;
-        if (!archiveArg) { fail('no archive named'); return; }
-        const archivePath = this.pathManager?.amiToSysPath(archiveArg, this.currentDirectory) || this.pathResolver.resolve(archiveArg);
-        const destPath = destArg
-          ? this.pathManager?.amiToSysPath(destArg, this.currentDirectory) || this.pathResolver.resolve(destArg)
-          : this.currentDirectory;
-        const realArchive = archivePath ? amigafs.resolvePath(archivePath) ?? archivePath : null;
-        if (!realArchive || !amigafs.existsSync(realArchive)) { fail(`archive not found at "${archivePath}"`); return; }
-        if (!destPath) { fail('could not resolve the destination'); return; }
-        try {
-          // eslint-disable-next-line @typescript-eslint/no-var-requires
-          const AdmZip = require('adm-zip');
-          // eslint-disable-next-line @typescript-eslint/no-var-requires
-          const { lhaMemberMatches } = require('../../utils/extractors/lha-extractor');
-          const realDest = resolveAgainstExistingParent(destPath);
-          const destRoot = path.resolve(realDest);
-          let count = 0;
-          for (const entry of new AdmZip(realArchive).getEntries()) {
-            if (entry.isDirectory) continue;
-            const name = entry.entryName.replace(/\\/g, '/');
-            if (members.length && !members.some((m: string) => lhaMemberMatches(name, m))) continue;
-            const target = path.resolve(destRoot, name);
-            if (!target.startsWith(destRoot + path.sep)) continue; // no escaping the destination
-            fs.mkdirSync(path.dirname(target), { recursive: true });
-            fs.writeFileSync(target, entry.getData());
-            count++;
-          }
-          console.log(`[dos.library] Execute UNZIP: extracted ${count} file(s) from "${archivePath}" into "${destRoot}"`);
-          if (count === 0) { fail('the archive yielded no files'); return; }
-          if (ownedOutputHandle && this.fileManager) this.fileManager.close(ownedOutputHandle);
-          this.emulator.setRegister(CPURegister.D0, -1); // DOSTRUE
-          this.lastError = DOS_ERRORS.ERROR_NO_ERROR;
-          return;
-        } catch (err: any) {
-          fail(`extraction failed: ${err?.message || err}`);
-          return;
-        }
-      }
-
-      if (isArchiver) {
-        // LhA's own grammar: `LhA [-opts] <cmd> <archive> [dir/] [file...]`.
-        // After the archive, the argument ending in `/` or `:` is where to
-        // unpack; the rest are the members wanted. File Description sends
-        // `Lha e %P file_id.diz BBS:Node1/Work/` - reading argv[3] as the
-        // destination unpacked the whole archive into a directory called
-        // file_id.diz and the door never found its FILE_ID (sysop, 2026-09-30).
-        const words = argv.slice(1).filter((w) => !/^-[a-z]+$/i.test(w) || w === '-x');
-        const verb = (words[0] || '').toLowerCase();
-        const archiveArg = words[1];
-        const after = words.slice(2);
-        const destArg = [...after].reverse().find((w) => /[/:]$/.test(w)) ?? (after.length === 1 ? after[0] : undefined);
-        const members = after.filter((w) => w !== destArg);
-        const wantsExtract = verb === 'x' || verb === 'e' || verb === '-x';
-
-        const fail = (why: string, err: number = DOS_ERRORS.ERROR_OBJECT_NOT_FOUND) => {
-          console.warn(`[dos.library] Execute ${program}: ${why} ("${commandPart}")`);
-          if (ownedOutputHandle && this.fileManager) {
-            this.fileManager.close(ownedOutputHandle);
-          }
-          this.emulator.setRegister(CPURegister.D0, 0);
-          this.lastError = err;
-        };
-
-        if (!wantsExtract || !archiveArg || !destArg) {
-          fail('only "x|e <archive> [file...] <destination/>" is supported');
-          return;
-        }
-        if (program !== 'LHA') {
-          // LZX needs the wasm extractor, which is async and cannot be
-          // awaited inside a trap. Failing here is honest; DoorRepo
-          // refuses the install instead of writing a broken .info.
-          fail('LZX extraction is not available inside the emulator', DOS_ERRORS.ERROR_NOT_IMPLEMENTED);
-          return;
-        }
-
-        const archivePath =
-          this.pathManager?.amiToSysPath(archiveArg, process.cwd()) ||
-          this.pathResolver.resolve(archiveArg);
-        const destPath =
-          this.pathManager?.amiToSysPath(destArg, process.cwd()) ||
-          this.pathResolver.resolve(destArg);
-
-        if (!archivePath || !destPath) {
-          fail(`could not resolve "${archiveArg}" / "${destArg}"`);
-          return;
-        }
-        if (!amigafs.existsSync(archivePath)) {
-          fail(`archive not found at "${archivePath}"`);
-          return;
-        }
-
-        // AmigaDOS is case-insensitive, so "Doors:" can reach here as
-        // "doors/". amigafs resolves that - which is why the existsSync guard
-        // above passes - but the extractor uses plain fs, which on a
-        // case-sensitive filesystem does not:
-        //
-        //   extraction failed: ENOENT, open '/tmp/.../doors/tiny-nested.lha'
-        //
-        // macOS hides it entirely; this failed only on Linux CI. The archive
-        // has to reach the extractor as the path it really has on disk.
-        const realArchivePath = amigafs.resolvePath(archivePath) ?? archivePath;
-
-        // The destination usually does not exist yet, so it cannot be
-        // resolved directly - its nearest existing parent can, and the rest
-        // is rebuilt onto that.
-        const realDestPath = resolveAgainstExistingParent(destPath);
-
-        try {
-          // eslint-disable-next-line @typescript-eslint/no-var-requires
-          const { extractLhaArchiveSync } = require('../../utils/extractors/lha-extractor');
-          const result = extractLhaArchiveSync(realArchivePath, realDestPath, { members, flatten: verb === 'e' });
-          console.log(
-            `[dos.library] Execute ${program}: extracted ${result.extracted.length} file(s) ` +
-              `from "${archivePath}" into "${destPath}"` +
-              (result.failed.length ? ` (${result.failed.length} refused/failed)` : '')
-          );
-
-          if (result.extracted.length === 0) {
-            fail('the archive yielded no files');
-            return;
-          }
-
-          if (ownedOutputHandle && this.fileManager) {
-            this.fileManager.close(ownedOutputHandle);
-          }
-          this.emulator.setRegister(CPURegister.D0, -1); // DOSTRUE
-          this.lastError = DOS_ERRORS.ERROR_NO_ERROR;
-          return;
-        } catch (err: any) {
-          fail(`extraction failed: ${err?.message || err}`);
-          return;
-        }
-      }
+    // Anything else is a program: LhA, LZX, UnZip ... run for real, as the
+    // shell runs them.
+    let inputHandle = io.input;
+    let ownedInputHandle = 0;
+    if (parsedLine.stdin && this.fileManager) {
+      ownedInputHandle = this.fileManager.open(parsedLine.stdin, MODE_OLDFILE);
+      if (ownedInputHandle) inputHandle = ownedInputHandle;
     }
+    const started = this.startCommand(parsedLine, {
+      input: inputHandle,
+      output: outputHandle,
+      owned: [ownedOutputHandle, ownedInputHandle].filter((h) => h !== 0),
+      resultOf,
+    });
+    if (started) return true;
 
-debugLog(`[dos.library] Execute("${name}") - UNSUPPORTED (shell command execution blocked for security), returning failure`);
-
-    // Close owned output handle if we opened it (even on failure)
-    if (ownedOutputHandle && this.fileManager) {
-      this.fileManager.close(ownedOutputHandle);
+    console.warn(`[dos.library] Execute("${name}"): ${parsedLine.program}: Unknown command`);
+    for (const h of [ownedOutputHandle, ownedInputHandle]) {
+      if (h && this.fileManager) this.fileManager.close(h);
     }
-
-    // Shell command execution not supported (security)
     this.emulator.setRegister(CPURegister.D0, 0);
     this.lastError = DOS_ERRORS.ERROR_OBJECT_NOT_FOUND;
+    return false;
   }
 
   /**
@@ -4304,28 +4486,39 @@ debugLog(`[dos.library] Execute("${name}") - UNSUPPORTED (shell command executio
    * zOOsTAT uses this on exec version >= 36 to run "delete RAM:T/ZOOSTAT.TMP".
    * Returns 0 on success so the caller's TST.L/BEQ skips the "NOT deleted" message.
    */
-  /** SYS_Output from a SystemTagList tag list, else the caller's Output(). */
-  private systemTagOutput(tagList: number): number {
-    // utility/tagitem.h; TAG_IGNORE (1) and unknown tags are stepped over.
-    const TAG_DONE = 0, TAG_MORE = 2, TAG_SKIP = 3;
-    const SYS_OUTPUT = 0x80000022; // SYS_Dummy (TAG_USER+32) + 2
-    let tag = tagList;
+  /** Every (tag, data) pair of a tag list, TAG_MORE/TAG_SKIP followed (utility/tagitem.h). */
+  private readTagItems(tagList: number): Array<[number, number]> {
+    const TAG_DONE = 0, TAG_IGNORE = 1, TAG_MORE = 2, TAG_SKIP = 3;
+    const items: Array<[number, number]> = [];
+    let tag = tagList >>> 0;
     for (let guard = 0; tag !== 0 && guard < 256; guard++) {
       const id = this.emulator.readMemory32(tag) >>> 0;
       const data = this.emulator.readMemory32(tag + 4) >>> 0;
       if (id === TAG_DONE) break;
       if (id === TAG_MORE) { tag = data; continue; }
       if (id === TAG_SKIP) { tag += 8 * (data + 1); continue; }
-      if (id === SYS_OUTPUT) return data;
+      if (id !== TAG_IGNORE) items.push([id, data]);
       tag += 8;
     }
-    return this.Output();
+    return items;
+  }
+
+  /** SYS_Input / SYS_Output from a SystemTagList tag list, else the caller's Input() / Output(). */
+  private systemTagHandles(tagList: number): { input: number; output: number } {
+    const SYS_INPUT = 0x80000021; // SYS_Dummy (TAG_USER+32) + 1
+    const SYS_OUTPUT = 0x80000022; // SYS_Dummy (TAG_USER+32) + 2
+    const tags = this.readTagItems(tagList);
+    const input = tags.find(([id]) => id === SYS_INPUT)?.[1];
+    const output = tags.find(([id]) => id === SYS_OUTPUT)?.[1];
+    return { input: input || this.Input(), output: output || this.Output() };
   }
 
   SystemTagList(): void {
     const namePtr = this.emulator.getRegister(CPURegister.D1);
     const name = this.readString(namePtr);
-    console.log(`[dos.library] SystemTagList("${name}")`);
+    const tagDump = this.readTagItems(this.emulator.getRegister(CPURegister.D2))
+      .map(([id, data]) => `0x${id.toString(16)}=0x${data.toString(16)}`).join(' ');
+    console.log(`[dos.library] SystemTagList("${name}") tags=[${tagDump}] Input=0x${this.Input().toString(16)} Output=0x${this.Output().toString(16)}`);
 
     const upperName = name.toUpperCase().trim();
 
@@ -4354,13 +4547,15 @@ debugLog(`[dos.library] Execute("${name}") - UNSUPPORTED (shell command executio
       return;
     }
 
-    // SystemTagList(command D1, tags D2): the output is SYS_Output from the
-    // tags, and without one the caller's own Output() (dos/dostags.h). D3 is
-    // not an argument here - it held whatever the door left in it, and
-    // Execute() read that as the output handle (logged 0xd7ad34a8 for File
-    // Description's System() call).
-    this.runCommandLine(name, this.systemTagOutput(this.emulator.getRegister(CPURegister.D2)));
-    // Convert DOSTRUE/DOSFALSE to RC convention: DOSTRUE(-1) -> 0, DOSFALSE(0) -> 10
+    // SystemTagList(command D1, tags D2): the program's input and output are
+    // SYS_Input / SYS_Output from the tags, and without them the caller's own
+    // Input() / Output() (dos/dostags.h). D3 is not an argument here - it held
+    // whatever the door left in it, and Execute() read that as the output
+    // handle (logged 0xd7ad34a8 for File Description's System() call).
+    const io = this.systemTagHandles(this.emulator.getRegister(CPURegister.D2));
+    // A started program's own return code is SystemTagList's result.
+    if (this.runCommandLine(name, io, (rc) => rc >>> 0)) return;
+    // A built-in answered DOSTRUE/DOSFALSE: RC 0 / 10.
     const execResult = this.emulator.getRegister(CPURegister.D0);
     this.emulator.setRegister(CPURegister.D0, execResult !== 0 ? 0 : 10);
   }
@@ -5243,8 +5438,11 @@ debugLog(`[dos.library] VFPrintf: Wrote ${formatted.length} bytes`);
       this.zeroMemory(addr, aligned);
       return addr;
     }
-    const addr = this.readArgsHeapPtr;
-    this.readArgsHeapPtr += aligned;
+    const addr = this.dosMemory(aligned, () => {
+      const next = this.readArgsHeapPtr;
+      this.readArgsHeapPtr += aligned;
+      return next;
+    });
     this.zeroMemory(addr, aligned);
     return addr;
   }
@@ -7046,6 +7244,9 @@ debugLog(
         this.Execute();
         return true;
 
+      case -504: // RunCommand
+        this.RunCommand();
+        return true;
       case -606: // SystemTagList (V36+ Execute-with-tags)
         this.SystemTagList();
         return true;
@@ -7687,13 +7888,17 @@ debugLog(`[dos.library] FindVar → not found`);
    * Helper function to allocate temporary memory
    */
   private allocateTemp(size: number): number {
-    // Use a temporary memory region (e.g., 0x140000+)
-    if (!this.tempMemoryAddr) {
-      this.tempMemoryAddr = 0x140000;
-    }
-    const addr = this.tempMemoryAddr;
-    this.tempMemoryAddr += ((size + 3) & ~3); // Align to 4 bytes
-    return addr;
+    // AllocMem when exec is attached (see dosMemory); the fixed region at
+    // 0x140000 is READARGS_HEAP_BASE too, so locks, file handles and ReadArgs
+    // buffers used to be bump-allocated over each other.
+    return this.dosMemory((size + 3) & ~3, () => {
+      if (!this.tempMemoryAddr) {
+        this.tempMemoryAddr = 0x140000;
+      }
+      const addr = this.tempMemoryAddr;
+      this.tempMemoryAddr += ((size + 3) & ~3); // Align to 4 bytes
+      return addr;
+    });
   }
 
   private tempMemoryAddr: number = 0x140000;

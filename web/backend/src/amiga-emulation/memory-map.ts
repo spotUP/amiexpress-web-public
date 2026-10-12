@@ -63,6 +63,13 @@ export const ALLOCMEM_HEAP_BASE = 0x100000;
 /** The address DoorLoader parks as the door's outermost return address. */
 export const DOOR_EXIT_TRAP_ADDR = 0x1ff000;
 
+/**
+ * Where a program started by RunCommand / Execute / SystemTagList returns
+ * to. Its stack's return address is this trap; the trap hands the program's
+ * return code back to the program that started it (dos.library child frames).
+ */
+export const CHILD_RETURN_TRAP_ADDR = 0x1ff100;
+
 /** LibraryLoader's first base for a real 68K library, stepping downward. */
 export const NATIVE_LIBRARY_BASE = 0x200000;
 
