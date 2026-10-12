@@ -1227,7 +1227,7 @@ export async function handleWEditComputerInput(socket: any, session: BBSSession,
   // express.e:11344 loggedOnUser.secBulletin:=stat-1
   const selectedName = choices[num - 1];
   session.user.computer = selectedName;
-  await changeAccount(session, { computer: selectedName });
+  await changeAccount(session, { computer: selectedName, computerIndex: num - 1 });
 
   if (session.tempData) delete session.tempData.computerChoices;
 

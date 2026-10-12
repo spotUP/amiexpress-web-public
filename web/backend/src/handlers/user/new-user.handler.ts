@@ -1592,7 +1592,13 @@ console.error('[NewUser] Error running MAIL_ON_NEW_USER:', error);
 
     // DISK-BASED: Append to user.data/keys/misc for Amiga door compatibility.
     // Only BBS terminal registrations reach here — web/admin/test users must NOT be written.
-    await db.appendUserToDisk(newUserId);
+    // express.e:11344 secBulletin is the chosen index into the board's computer
+    // list (a blank answer leaves the record's 0); 30269 userKeys.baud:=onlineBaud.
+    const { SOCKET_CONNECT_BAUD } = require('../../services/CallersLogManager');
+    await db.appendUserToDisk(newUserId, {
+      computerIndex: data.computerIndex ?? 0,
+      connectBaud: SOCKET_CONNECT_BAUD,
+    });
 
     // The slot is the one the record LANDED in (appendUserToDisk), which is
     // where every Conf.DB keeps this caller's per-conference record.

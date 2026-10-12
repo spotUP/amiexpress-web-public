@@ -94,6 +94,8 @@ const DISK_ONLY_FIELDS = [
   'msgBaseRJoin',
   'todaysBytesLimit',
   'uucpa',
+  'computerIndex',
+  'connectBaud',
 ] as const;
 
 export interface UpdateUserOptions {
@@ -166,9 +168,11 @@ export class UserRepository extends BaseRepository<User> {
    * Do NOT call from tests, admin API, or web registration — those users must not pollute
    * the Amiga binary user database which is shared with 68K door binaries.
    */
-  async appendUserToDisk(id: string): Promise<void> {
-    const user = await this.getUserById(id);
-    if (!user) return;
+  async appendUserToDisk(id: string, diskOnly: Partial<User> = {}): Promise<void> {
+    const found = await this.getUserById(id);
+    if (!found) return;
+    // What the record holds and the table has no column for (computerIndex, connectBaud).
+    const user = { ...found, ...diskOnly };
     // 1-indexed Amiga slot: the record being appended lands at file index
     // getUserCount(), which is slot getUserCount()+1. (Slot 0 is a deleted
     // account per express.e:21365.)

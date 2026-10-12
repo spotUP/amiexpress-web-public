@@ -197,7 +197,9 @@ export class UserFileManager {
       secStatus: user.secLevel,
       secBoard: user.ratioType,
       secLibrary: user.ratio,
-      secBulletin: 0, // Computer type
+      // express.e:11344 secBulletin:=stat-1, the index into the board's computer list.
+      // Disk-only: a User that does not carry one keeps the record's (updateUserDataFile).
+      secBulletin: user.computerIndex ?? 0,
       // Disk-only: the users table has no column for it. updateUserDataFile
       // keeps the disk's own count when the caller's User does not carry one,
       // which is every User built from a database row.
@@ -283,7 +285,8 @@ export class UserFileManager {
       oldUpCPS: Math.min(user.topUploadCPS, 65535), // Max 16-bit unsigned
       oldDnCPS: Math.min(user.topDownloadCPS, 65535),
       userFlags: user.userFlags,
-      baud: 57600, // Max signed 16-bit is 32767, use 57600 as common high speed
+      // express.e:30269 userKeys.baud:=onlineBaud. Disk-only; a User that does not carry one keeps the record's.
+      baud: user.connectBaud ?? 57600,
       upCPS2: user.topUploadCPS,
       dnCPS2: user.topDownloadCPS,
       timesOnToday: user.callsToday,
@@ -1015,7 +1018,9 @@ console.log(`[UserFileManager] Serialized userMisc struct: ${offset} bytes (expe
       expert: byteToExpert(userStruct.expert),
       ansi: userStruct.screenType !== 2, // Not ASCII
       linesPerScreen: userStruct.lineLength,
-      computer: '', // Not stored in binary files
+      computer: '', // The name is the row's; the record holds the index (computerIndex)
+      computerIndex: userStruct.secBulletin,
+      connectBaud: keysStruct.baud,
       screenType: this.intToScreenType(userStruct.screenType),
       protocol: this.intToProtocol(userStruct.xferProtocol),
       editor: this.intToEditorType(userStruct.editorType),
@@ -1345,6 +1350,23 @@ console.error('[UserFileManager] Error reading user files:', error);
     }
   }
 
+  /** The connect speed user.keys holds at this slot; undefined when there is no such record. */
+  private readKeysBaud(slotNumber: number): number | undefined {
+    try {
+      if (!fs.existsSync(this.userKeysPath)) return undefined;
+      const offset = (slotNumber - 1) * this.USERKEYS_STRUCT_SIZE;
+      const buffer = Buffer.alloc(this.USERKEYS_STRUCT_SIZE);
+      const fd = fs.openSync(this.userKeysPath, 'r');
+      try {
+        if (fs.fstatSync(fd).size < offset + this.USERKEYS_STRUCT_SIZE) return undefined;
+        fs.readSync(fd, buffer, 0, this.USERKEYS_STRUCT_SIZE, offset);
+      } finally { fs.closeSync(fd); }
+      return this.deserializeUserKeysStruct(buffer, 0).baud;
+    } catch {
+      return undefined;
+    }
+  }
+
   /**
    * The lockout bytes currently on disk for a 1-indexed slot.
    * A missing file or a short record reads as all-zero: a new account has
@@ -1375,7 +1397,7 @@ console.error('[UserFileManager] Error reading user files:', error);
    * has never held an account.
    */
   private readRecordState(slotNumber: number): {
-    messagesPosted: number; deleted: boolean; newSinceDate: number;
+    messagesPosted: number; deleted: boolean; newSinceDate: number; computerIndex: number; connectBaud: number | undefined; protocol: number;
     msgBaseRJoin: number; todaysBytesLimit: number; uucpa: number;
   } | null {
     try {
@@ -1392,6 +1414,7 @@ console.error('[UserFileManager] Error reading user files:', error);
       return {
         messagesPosted: record.messagesPosted, deleted: record.slotNumber === 0, newSinceDate: record.newSinceDate,
         msgBaseRJoin: record.msgBaseRJoin, todaysBytesLimit: record.todaysBytesLimit, uucpa: record.uucpa,
+        computerIndex: record.secBulletin, connectBaud: this.readKeysBaud(slotNumber), protocol: record.protocol,
       };
     } catch {
       return null;
@@ -1438,6 +1461,11 @@ console.error('[UserFileManager] Error reading user files:', error);
         // row agrees with it, and a row that flipped it writes 0 or 1.
         if (user.msgBaseRJoin === undefined) userStruct.msgBaseRJoin = current.msgBaseRJoin;
         if (user.todaysBytesLimit === undefined) userStruct.todaysBytesLimit = current.todaysBytesLimit;
+        if (user.computerIndex === undefined) userStruct.secBulletin = current.computerIndex;
+        // The record's own protocol byte (axobjects.e userData.protocol): 'Z' is what a NEW record gets
+        // (express.e:30449); a save of an existing one must not overwrite what it holds.
+        userStruct.protocol = current.protocol;
+        if (user.connectBaud === undefined && current.connectBaud !== undefined) keysStruct.baud = current.connectBaud;
         if (user.uucpa === undefined && (current.uucpa > 0) === Boolean(user.uuCP)) userStruct.uucpa = current.uucpa;
         if (user.accountDeleted === undefined && current.deleted) {
           userStruct.slotNumber = 0;

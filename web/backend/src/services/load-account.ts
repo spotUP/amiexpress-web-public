@@ -66,6 +66,8 @@ const FROM_DISK = [
   'msgBaseRJoin',
   'todaysBytesLimit',
   'uucpa',
+  // express.e:11344 secBulletin, the W command's choice - the record's own.
+  'computerIndex',
 ] as const satisfies readonly (keyof User)[];
 
 /**

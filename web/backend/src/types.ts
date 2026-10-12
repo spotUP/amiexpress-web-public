@@ -66,6 +66,9 @@ export interface User {
   creditTotalDate?: number;
   creditTracking?: number;
   baud?: number;  // Connection baud rate (for web = 57600)
+  // Disk-only (user.data secBulletin / user.keys baud): the chosen index into the board's computer list (express.e:11344) and the connect speed the account was made on (express.e:30269). No column; the record keeps them.
+  computerIndex?: number;
+  connectBaud?: number;
   alias?: string;  // User alias/handle
   securityFlags?: string;
   secOverride?: string;

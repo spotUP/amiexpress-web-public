@@ -45,6 +45,9 @@ export const CALLERS_LOG_DIVIDER = '********************************************
  */
 export const SOCKET_CONNECT_STRING = 'CONNECT 19200';
 
+/** express.e:7344 onlineBaud:=Val(connectString+7) - the speed the string above carries. */
+export const SOCKET_CONNECT_BAUD = parseInt(SOCKET_CONNECT_STRING.slice(8), 10);
+
 /** The fields displayUserToCallersLog (express.e:16023-16056) prints. */
 export interface CallerLogonLine {
   /** loggedOnUser.slotNumber - the ACCOUNT number, not the node. */

@@ -144,8 +144,7 @@ export async function emitConnectBanner(
   // comes in on a socket, whose connect string is CONNECT 19200
   // (CallersLogManager). The browser's emulated modem speed is a display
   // effect, not the line, and the banner is the same on every transport.
-  const { SOCKET_CONNECT_STRING } = require("./CallersLogManager");
-  const onlineBaud = parseInt(SOCKET_CONNECT_STRING.slice(8), 10);
+  const { SOCKET_CONNECT_BAUD: onlineBaud } = require("./CallersLogManager");
   const currentYear = getSystemTime().getFullYear();
   const dateStr = getSystemTime().toLocaleString("en-US", {
     weekday: "short", month: "short", day: "numeric", year: "numeric",
