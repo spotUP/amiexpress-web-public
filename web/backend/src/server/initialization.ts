@@ -52,8 +52,7 @@ import {
   getNextTopicNumber,
   loadFlagged,
   loadHistory,
-  processOlmMessageQueue,
-  displaySystemBulletins
+  processOlmMessageQueue
 } from './database-helpers';
 import { sessions } from './session-manager';
 import { setConferences, displayScreen, parseMciCodes, addAnsiEscapes, loadScreenFile, hasKeysFile } from '../handlers/screen.handler';

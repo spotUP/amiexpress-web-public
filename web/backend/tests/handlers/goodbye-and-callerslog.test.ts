@@ -156,4 +156,40 @@ describe('which node\'s callers log', () => {
 
     expect(s.out.join('')).not.toContain('Not a valid node!');
   });
+
+  it('asks which node to view even when no node has a log, instead of a database summary', async () => {
+    // express.e:24479-24489 lists the logs that exist (none here) and then always asks
+    // "Which node to view? "; the board used to print an invented "Recent caller
+    // activity" table with "Time User Action" headers.
+    jest.doMock('../../src/utils/acs.util', () => ({
+      ...jest.requireActual('../../src/utils/acs.util'),
+      checkSecurity: () => true,
+    }));
+    const { handleCallersLogCommand, setSysopCommandsDependencies } = require('../../src/handlers/commands/sysop-commands.handler');
+    setSysopCommandsDependencies({ getRecentCallerActivity: jest.fn(), setEnvStat: jest.fn(), db: {} });
+    const s = socket();
+    const session: any = { user: { username: 'sysop' }, tempData: {}, nodeId: 1 };
+
+    await handleCallersLogCommand(s, session, '');
+
+    const text = s.out.join('');
+    expect(text).toContain('Which node to view? ');
+    expect(text).not.toContain('Recent caller activity');
+    expect(text).not.toContain('Action');
+    expect(text).not.toContain('Press any key');
+    expect(session.subState).toBe(require('../../src/constants/bbs-states').LoggedOnSubState.CALLERSLOG_NODE_INPUT);
+  });
+
+  it('prints nothing extra when a node log cannot be read', async () => {
+    // express.e:9067 displayCallersLog stays silent when Open fails.
+    seedNodeLog(0, 'x');
+    fs.chmodSync(path.join(root, 'Node0', 'CallersLog'), 0o000);
+    const { displayNodeCallersLog } = require('../../src/handlers/commands/sysop-commands.handler');
+    const s = socket();
+    const err = jest.spyOn(console, 'error').mockImplementation(() => undefined);
+    await displayNodeCallersLog(s, { tempData: {} } as any, 0);
+    err.mockRestore();
+    fs.chmodSync(path.join(root, 'Node0', 'CallersLog'), 0o644);
+    expect(s.out.join('')).not.toContain('Could not read that log');
+  });
 });

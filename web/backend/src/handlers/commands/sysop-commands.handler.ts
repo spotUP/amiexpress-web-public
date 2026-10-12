@@ -112,12 +112,6 @@ console.log('[ENV] Sysop');
  *
  * Displays caller activity logs for sysop review.
  * In multi-node systems, allows selecting which node's log to view.
- * Web version: Single-node, shows recent caller activity from database.
- *
- * WEB_: express.e:24478-24506 walks BBS:Node{N}/Callerslog files, lists all nodes that
- * have a Callerslog file, and prompts the user to select a node number.
- * Our deployment is single-node and logs go to the database, not per-node flat files,
- * so the node-selection loop is replaced with a flat DB query of recent caller activity.
  */
 export async function handleCallersLogCommand(socket: any, session: BBSSession, params: string = ''): Promise<void> {
   // Check security - express.e:24464
@@ -158,56 +152,13 @@ console.log('[ENV] Sysop');
     return;
   }
 
-  if (available.length > 0) {
-    for (const entry of available) {
-      socket.emit('ansi-output', `${entry.nodeId} - Callerslog for Node ${entry.nodeId}\r\n`);
-    }
-    socket.emit('ansi-output', '\r\nWhich node to view? ');
-    session.subState = LoggedOnSubState.CALLERSLOG_NODE_INPUT;
-    return;
+  // express.e:24479-24487 lists the nodes that have a Callerslog (none, when none
+  // exist), then 24489 always asks - there is no database fallback in express.
+  for (const entry of available) {
+    socket.emit('ansi-output', `${entry.nodeId} - Callerslog for Node ${entry.nodeId}\r\n`);
   }
-
-  // No per-node logs on this board yet: fall back to the database summary
-  // this command used to show unconditionally.
-  socket.emit('ansi-output', 'Recent caller activity:\r\n');
-  socket.emit('ansi-output', '\r\n');
-
-  // Get recent caller activity from database (last 20 entries)
-  const recentActivity = await _getRecentCallerActivity(20);
-
-  if (recentActivity.length === 0) {
-    socket.emit('ansi-output', 'No caller activity recorded yet.\r\n');
-  } else {
-    // Column headers
-    socket.emit('ansi-output', AnsiUtil.colorize('Time'.padEnd(10), 'cyan'));
-    socket.emit('ansi-output', AnsiUtil.colorize('User'.padEnd(16), 'cyan'));
-    socket.emit('ansi-output', AnsiUtil.colorize('Action', 'cyan'));
-    socket.emit('ansi-output', '\r\n');
-    socket.emit('ansi-output', '='.repeat(70) + '\r\n');
-
-    // Activity list
-    recentActivity.forEach((entry: any) => {
-      const timestamp = new Date(entry.timestamp);
-      const timeStr = timestamp.toLocaleTimeString('en-US', {
-        hour12: false,
-        hour: '2-digit',
-        minute: '2-digit'
-      });
-      const details = entry.details ? ` - ${entry.details}` : '';
-
-      socket.emit('ansi-output',
-        timeStr.padEnd(10) +
-        entry.username.padEnd(16) +
-        entry.action + details + '\r\n'
-      );
-    });
-  }
-
-  socket.emit('ansi-output', '\r\n');
-  socket.emit('ansi-output', AnsiUtil.pressKeyPrompt());
-
-  session.menuPause = false;
-  session.subState = LoggedOnSubState.DISPLAY_CONF_BULL;
+  socket.emit('ansi-output', '\r\nWhich node to view? ');
+  session.subState = LoggedOnSubState.CALLERSLOG_NODE_INPUT;
 }
 
 /**
@@ -405,8 +356,8 @@ export async function displayNodeCallersLog(
     const text = fs.readFileSync(logPath, 'latin1');
     socket.emit('ansi-output', text.replace(/\r?\n/g, '\r\n'));
   } catch (err) {
+    // express.e:9067 displayCallersLog prints nothing when the file will not open.
     console.error('[CL] could not read the callers log:', err);
-    socket.emit('ansi-output', '\r\nCould not read that log.\r\n');
   }
 
   session.subState = LoggedOnSubState.DISPLAY_MENU;

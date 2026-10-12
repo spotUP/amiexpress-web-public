@@ -747,26 +747,3 @@ export function processOlmMessageQueue(socket: any, session: BBSSession, showMes
     session.tempData.olmQueue = [];
   }
 }
-
-/**
- * Display system bulletins (SCREEN_BULL equivalent)
- */
-export function displaySystemBulletins(socket: any, session: BBSSession) {
-  // In AmiExpress, await displayScreen(SCREEN_BULL) shows system bulletins
-  socket.emit('ansi-output', '\x1b[2J\x1b[H'); // Clear screen
-  socket.emit('ansi-output', '\r\n\x1b[36m-= AmiExpress Web BBS System Bulletins =-\x1b[0m\r\n');
-  socket.emit('ansi-output', '\x1b[33mWelcome to AmiExpress Web!\x1b[0m\r\n');
-  socket.emit('ansi-output', 'This is a modern web implementation of the classic AmiExpress BBS.\r\n');
-  socket.emit('ansi-output', '\r\n\x1b[32mSystem News:\x1b[0m\r\n');
-  socket.emit('ansi-output', '- New web interface available\r\n');
-  socket.emit('ansi-output', '- Enhanced security features\r\n');
-  socket.emit('ansi-output', '- Real-time chat capabilities\r\n');
-  socket.emit('ansi-output', '- SQLite database backend\r\n');
-  socket.emit('ansi-output', '- Full conference system\r\n');
-  socket.emit('ansi-output', '\r\n\x1b[32mPress any key to continue...\x1b[0m\r\n');
-
-  // Move to next state after bulletin display
-  // express.e:28555-28648 flow: BULL → NODE_BULL → confScan → CONF_BULL → MENU
-  const LoggedOnSubState = require('../constants/bbs-states').LoggedOnSubState;
-  session.subState = LoggedOnSubState.CONF_SCAN;
-}
