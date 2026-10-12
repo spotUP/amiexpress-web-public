@@ -292,7 +292,9 @@ describeMaybe('remove-upload undoes an upload in every store it touched', () => 
     // Backups: every written file kept its pre-removal copy under the named suffix.
     expect(fs.existsSync(path.join(dataDir, 'Conf1', 'NumULs.remove-GOOD.LHA-20261012.backup'))).toBe(true);
     expect(fs.readFileSync(path.join(dataDir, 'Conf1', 'NumULs.remove-GOOD.LHA-20261012.backup'), 'utf8')).toBe('4\n');
-    expect(fs.existsSync(path.join(dataDir, 'Conf1', 'Files', 'GOOD.LHA.remove-GOOD.LHA-20261012.backup'))).toBe(true);
+    // The upload's bytes are backed up outside every file area, beside the SQL backup.
+    expect(fs.existsSync(path.join(dataDir, 'Conf1', 'Files', 'GOOD.LHA.remove-GOOD.LHA-20261012.backup'))).toBe(false);
+    expect(fs.existsSync(path.join(path.dirname(dbPath), 'remove-upload-backups', 'GOOD.LHA-20261012', 'Conf1', 'Files', 'GOOD.LHA'))).toBe(true);
     expect(fs.existsSync(`${dbPath}.remove-BAD.LHA-20261012.backup`)).toBe(true);
 
     // Idempotent: the file is in no listing now, so nothing is counted twice.

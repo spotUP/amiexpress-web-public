@@ -37,6 +37,9 @@
  *   Every file written is first copied to
  *   <file>.remove-<name>-<YYYYMMDD>.backup (an existing backup is kept: it is
  *   the older, truer copy); the SQL file goes through SQLite's online backup.
+ *   The upload's own bytes are the exception: a copy beside them would sit in
+ *   a file area callers and FTP can see, so they go next to the SQL backup,
+ *   to <db dir>/remove-upload-backups/<name>-<YYYYMMDD>/<path under the board>.
  *
  * Usage (from web/backend, with the board's BBS_DATA_DIR / DATABASE_DIR):
  *
@@ -336,16 +339,21 @@ export async function removeUpload(opts: RemoveUploadOptions): Promise<RemoveOut
 
     if (opts.dryRun) {
       const files = [...new Set([...steps.flatMap((s) => s.files), ...writtenFiles])].filter((f) => fs.existsSync(f));
-      say(`${files.length} file(s) would be backed up as <file>.remove-${name}-${stamp}.backup (plus the SQL file)`);
+      say(`${files.length} file(s) would be backed up as <file>.remove-${name}-${stamp}.backup (plus the SQL file; the upload's bytes under ${path.join(path.dirname(dbPath), 'remove-upload-backups')})`);
       return 'dry-run';
     }
 
     // --- the run ------------------------------------------------------------------------
     let backups = 0;
+    const bytesBackupDir = path.join(path.dirname(dbPath), 'remove-upload-backups', `${name}-${stamp}`);
     const backupFile = (p: string) => {
       if (!fs.existsSync(p)) return;
-      const dest = `${p}.remove-${name}-${stamp}.backup`;
+      const underRoot = path.relative(root, p);
+      const dest = byteFiles.includes(p)
+        ? path.join(bytesBackupDir, underRoot.startsWith('..') || path.isAbsolute(underRoot) ? path.basename(p) : underRoot)
+        : `${p}.remove-${name}-${stamp}.backup`;
       if (fs.existsSync(dest)) return; // the older copy is the truer one
+      fs.mkdirSync(path.dirname(dest), { recursive: true });
       fs.copyFileSync(p, dest);
       try {
         const st = fs.statSync(p);
