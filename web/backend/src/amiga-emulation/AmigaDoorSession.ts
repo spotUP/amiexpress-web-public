@@ -28,6 +28,7 @@ import { parseInfoFile } from "../utils/amiga-command-parser.util";
 import { debugLog } from '../utils/debug-log';
 import { DOOR_CLI_ADDR, DOOR_CLI_ARGS_ADDR, assertMemoryMapFits } from "./memory-map";
 import { setEnvStat } from "../utils/acs.util";
+import { multicomManager, ENV_DOORS } from "../nodes/MulticomManager";
 import { EnvStat } from "../constants/env-codes";
 import { c64AdapterFor, uninstallC64DoorAdapter } from "../server/c64-door-adapter";
 
@@ -722,9 +723,11 @@ debugLog(
     this.logger.log('MULTICOM', `INIT: nodeId=${nodeId}, username="${username}", location="${location}"`);
 
     try {
-      const { multicomManager, ENV_DOORS } = await import("../nodes/MulticomManager.js");
-      this.logger.log('MULTICOM', `multicomManager imported successfully`);
-
+      // The board's one table, the instance DoorLifecycleManager and the
+      // cleanup below use. Never `await import()` it: under Node 20 + tsx that
+      // goes through the off-thread ESM loader, loads a SECOND MulticomManager,
+      // and in a headless runner (nothing else on the event loop) the reply
+      // never arrives - the 68K upload checker hung here until the 120 s kill.
       // Initialize structures in this emulator (all nodes get valid singlePort ptrs;
       // RTW output is capped via JH_SM filtering in io.ts, not via the struct).
       multicomManager.initializeInEmulator(this.emulator, sessionId, nodeId);
@@ -1164,7 +1167,6 @@ console.error(`[AmigaDoorSession] Error deleting port ${this.doorPortName}:`, er
     }
 
     // Clear node status and unregister from MULTICOM manager
-    const { multicomManager } = require("../nodes/MulticomManager.js");
     const nodeId = this.config.bbsSession?.nodeId ?? this.config.bbsSession?.nodeNumber ?? 1;
     const sessionId = this.multicomSessionId;
 

@@ -18,8 +18,10 @@ debugLog(`[XIMIOHandler] JH_MCI: Processing MCI codes`);
   const inputString = self.getMessageString(msg).trim();
 
   try {
-    // Import parseMciCodes dynamically since it's async
-    const { parseMciCodes } = await import('../../handlers/screen.handler.js');
+    // A lazy require, never `await import()`: under Node 20 + tsx a dynamic import
+    // goes through the off-thread ESM loader, loads a second copy of the module,
+    // and in a headless runner its reply can wait forever (see AmigaDoorSession).
+    const { parseMciCodes } = require('../../handlers/screen.handler') as typeof import('../../handlers/screen.handler');
 
     // Get BBS session info for MCI processing
     const bbsSession = self.bbsSession || {};
