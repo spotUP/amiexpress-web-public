@@ -11,12 +11,14 @@
  * same move for the editing dialogs.
  */
 
-import * as fs from 'fs';
-import * as path from 'path';
 import { describe, expect, it, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { Modal } from '../components/ui/Modal';
+import { readAdminSources } from './admin-sources';
+
+/** The pages, read once while the file is collected - see admin-sources.ts. */
+const PAGES = readAdminSources(/\.tsx$/).filter(({ rel }) => /^pages\/[^/]+$/.test(rel));
 
 describe('the shared Modal', () => {
   it('announces itself as a dialog, by name', () => {
@@ -64,11 +66,9 @@ describe('the shared Modal', () => {
 
 describe('no page hand-rolls one any more', () => {
   it('has no `fixed inset-0` dialog left in pages/', () => {
-    const dir = path.join(__dirname, '..', 'pages');
-    const offenders = fs
-      .readdirSync(dir)
-      .filter((name) => name.endsWith('.tsx'))
-      .filter((name) => /className="fixed inset-0[^"]*z-50/.test(fs.readFileSync(path.join(dir, name), 'utf8')))
+    const offenders = PAGES
+      .filter(({ text }) => /className="fixed inset-0[^"]*z-50/.test(text))
+      .map(({ rel }) => rel.slice('pages/'.length))
       .sort();
 
     // Vitest's expect takes no message, so the report goes in the value.

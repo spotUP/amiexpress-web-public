@@ -18,20 +18,9 @@
  *   configured" for a request that had FAILED.
  */
 import { describe, expect, it } from 'vitest';
-import { readdirSync, readFileSync, statSync } from 'fs';
-import { join, resolve } from 'path';
+import { readAdminSources } from './admin-sources';
 
-const SRC = resolve(__dirname, '..');
-
-function sourceFiles(dir: string): string[] {
-  return readdirSync(dir).flatMap(entry => {
-    const full = join(dir, entry);
-    // The tests name these classes in assertions; they are not consumers.
-    if (full === resolve(SRC, 'test')) return [];
-    if (statSync(full).isDirectory()) return sourceFiles(full);
-    return /\.(ts|tsx|css)$/.test(entry) ? [full] : [];
-  });
-}
+const SOURCES = readAdminSources(/\.(ts|tsx|css)$/);
 
 const UTILITY = 'bg|text|border|divide|ring|outline|shadow|fill|stroke|caret|accent|decoration|placeholder|from|via|to';
 
@@ -64,9 +53,9 @@ const EDITABLE_GRIDS = [
 ];
 
 function offenders(pattern: RegExp): string[] {
-  return sourceFiles(SRC).flatMap(file => {
-    const hits = [...readFileSync(file, 'utf8').matchAll(pattern)].map(m => m[0]);
-    return [...new Set(hits)].map(hit => `${file.slice(SRC.length + 1)}: ${hit}`);
+  return SOURCES.flatMap(({ rel, text }) => {
+    const hits = [...text.matchAll(pattern)].map(m => m[0]);
+    return [...new Set(hits)].map(hit => `${rel}: ${hit}`);
   });
 }
 
@@ -107,9 +96,9 @@ describe('every admin page', () => {
    * has to be shown in the face the board will draw it in.
    */
   it('keeps Topaz for the art, not the interface', () => {
-    const found = sourceFiles(SRC)
-      .filter(file => /font-topaz/.test(readFileSync(file, 'utf8')))
-      .map(file => file.slice(SRC.length + 1))
+    const found = SOURCES
+      .filter(({ text }) => /font-topaz/.test(text))
+      .map(({ rel }) => rel)
       .filter(rel => !TOPAZ_SURFACES.includes(rel));
 
     expect(found, found.join('\n')).toEqual([]);
@@ -164,12 +153,12 @@ describe('every admin page', () => {
       return text.slice(from);
     };
 
-    for (const file of sourceFiles(SRC)) {
-      if (!/\.tsx$/.test(file)) continue;
+    for (const source of SOURCES) {
+      if (!/\.tsx$/.test(source.rel)) continue;
       // Comments first: this file's own doc comments talk ABOUT `<input
       // type="number">`, and prose is not a control. Replaced with spaces so
       // the offsets - and so the reported lines - stay true.
-      const text = readFileSync(file, 'utf8')
+      const text = source.text
         .replace(/\/\*[\s\S]*?\*\//g, blank => blank.replace(/[^\n]/g, ' '))
         .replace(/\/\/[^\n]*/g, blank => ' '.repeat(blank.length));
       for (const match of text.matchAll(/<(select|textarea|input)\b/g)) {
@@ -178,7 +167,7 @@ describe('every admin page', () => {
         if (SKIP_TYPES.test(attrs)) continue;
 
         const className = /className=(?:"([^"]*)"|\{)/.exec(attrs);
-        const where = `${file.slice(SRC.length + 1)}: <${tag}>`;
+        const where = `${source.rel}: <${tag}>`;
         if (!className) { found.push(`${where} has no className at all`); continue; }
         // An expression builds its classes elsewhere, and the palette rules
         // above cover what it may build them from.
@@ -197,9 +186,9 @@ describe('every admin page', () => {
   });
 
   it('renders tables through DataTable, except the grids that are edited', () => {
-    const found = sourceFiles(SRC)
-      .filter(file => /<table[\s>]/.test(readFileSync(file, 'utf8')))
-      .map(file => file.slice(SRC.length + 1))
+    const found = SOURCES
+      .filter(({ text }) => /<table[\s>]/.test(text))
+      .map(({ rel }) => rel)
       .filter(rel => !EDITABLE_GRIDS.includes(rel));
 
     expect(found, found.join('\n')).toEqual([]);

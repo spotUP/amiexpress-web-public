@@ -1,13 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { readdirSync, readFileSync, statSync } from 'fs';
-import { join, resolve } from 'path';
+import { readFileSync } from 'fs';
+import { resolve } from 'path';
 // The Tailwind config is plain JavaScript. It used to need a @ts-expect-error
 // here; the project now compiles with allowJs (the vendored RIP renderer is
 // JavaScript too), so tsc infers its shape and the suppression would be an
 // unused directive.
 import tailwindConfig from '../../tailwind.config.js';
 
-const SRC_DIR = resolve(__dirname, '..');
+import { readAdminSources, SRC as SRC_DIR } from './admin-sources';
 
 /** Every `bbs-*` name Tailwind knows about, from the single source of truth. */
 const definedColors = new Set(
@@ -22,27 +22,18 @@ const definedColors = new Set(
 const BBS_CLASS =
   /\b(?:bg|text|border|divide|ring|outline|shadow|fill|stroke|caret|accent|decoration|placeholder|from|via|to)-(bbs-[a-z][a-z0-9-]*)/g;
 
-function sourceFiles(dir: string): string[] {
-  return readdirSync(dir).flatMap((entry) => {
-    const full = join(dir, entry);
-    // The tests themselves name colours in assertions; they are not consumers.
-    if (full === resolve(SRC_DIR, 'test')) return [];
-    if (statSync(full).isDirectory()) return sourceFiles(full);
-    return /\.(ts|tsx|css|html)$/.test(entry) ? [full] : [];
-  });
-}
+/** Read once, while the file is collected - see admin-sources.ts. */
+const SOURCES = readAdminSources(/\.(ts|tsx|css|html)$/);
 
 describe('Tailwind bbs-* colour tokens', () => {
   it('defines every bbs-* colour the admin pages use', () => {
     const missing = new Map<string, string[]>();
 
-    for (const file of sourceFiles(SRC_DIR)) {
-      const text = readFileSync(file, 'utf8');
+    for (const { rel: relative, text } of SOURCES) {
       for (const match of text.matchAll(BBS_CLASS)) {
         const name = match[1];
         if (definedColors.has(name)) continue;
         const users = missing.get(name) ?? [];
-        const relative = file.slice(SRC_DIR.length + 1);
         if (!users.includes(relative)) users.push(relative);
         missing.set(name, users);
       }
@@ -82,8 +73,7 @@ describe('Tailwind bbs-* colour tokens', () => {
       /\b(?:bg|text|border|divide|ring|outline|shadow|fill|stroke|caret|accent|decoration|placeholder|from|via|to)-(surface|content|status)-([a-z0-9]+(?:-[a-z0-9]+)*)/g;
 
     const missing = new Map<string, string[]>();
-    for (const file of sourceFiles(SRC_DIR)) {
-      const text = readFileSync(file, 'utf8');
+    for (const { rel: relative, text } of SOURCES) {
       for (const match of text.matchAll(RAMP_CLASS)) {
         const [, family, step] = match;
         // `bg-surface-2/40` and the like: the opacity suffix is not the step.
@@ -91,7 +81,6 @@ describe('Tailwind bbs-* colour tokens', () => {
         if (known[family].has(name)) continue;
         const key = `${family}-${name}`;
         const users = missing.get(key) ?? [];
-        const relative = file.slice(SRC_DIR.length + 1);
         if (!users.includes(relative)) users.push(relative);
         missing.set(key, users);
       }
