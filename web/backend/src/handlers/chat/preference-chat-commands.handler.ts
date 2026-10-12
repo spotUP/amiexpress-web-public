@@ -11,7 +11,8 @@
 
 import { LoggedOnSubState } from '../../constants/bbs-states';
 import { ACSPermission } from '../../constants/acs-permissions';
-import { checkSecurity } from '../../utils/acs.util';
+import { checkSecurity, setEnvStat } from '../../utils/acs.util';
+import { EnvStat } from '../../constants/env-codes';
 import { AnsiUtil } from '../../utils/ansi.util';
 import { emitText } from '../../utils/output.util';
 import { ErrorHandler } from '../../utils/error-handling.util';
@@ -144,7 +145,8 @@ export function handleCommentToSysopCommand(socket: any, session: BBSSession, pa
     return;
   }
 
-console.log('[ENV] Mail');
+  // express.e:24662 setEnvStat(ENV_MAIL)
+  setEnvStat(session, EnvStat.MAIL);
 
   // express.e:8762 stat:=captureRealAndInternetNames(currentConf,currentMsgBase)
   // - a missing real / internet name is asked for here, and the comment
