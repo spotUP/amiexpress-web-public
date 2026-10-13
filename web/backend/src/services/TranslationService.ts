@@ -205,7 +205,12 @@ class TranslationService {
    * express.e:6460-6468 - getTranslator()
    */
   private getTranslator(name: string): TranslatorDict | undefined {
-    return this.translators.get(name);
+    // StriCmp(trans.translatorName,translatorName): the name match ignores case.
+    const wanted = name.toLowerCase();
+    for (const [key, dict] of this.translators) {
+      if (key.toLowerCase() === wanted) return dict;
+    }
+    return undefined;
   }
 
   /**
@@ -249,7 +254,10 @@ class TranslationService {
           result = translation.toUpperCase();
         } else if (properCaps) {
           // Proper Case - capitalize first letter
-          result = translation.charAt(0).toUpperCase() + translation.slice(1).toLowerCase();
+          // express.e:6439 raises only the first letter; the rest stays as the dictionary holds it
+          result = /^[a-z]/.test(translation)
+            ? translation.charAt(0).toUpperCase() + translation.slice(1)
+            : translation;
         }
       }
     }
