@@ -196,7 +196,20 @@ rm -rf "$DEST.previous"
 # overwrites the door you are working on with the last one you shipped.
 # A symlink keeps the board finding them where it expects while door work
 # stays where it belongs.
-if [ ! -e "$DEST/Doors" ]; then
+#
+# The link is absolute, so moving the checkout leaves it dangling - and `-e`
+# is false for a dangling link, so an existence test never repairs it. Test
+# for the link itself (-L) and repoint it when its target is not this repo.
+# A real directory is somebody's data: leave it alone and say so.
+if [ -L "$DEST/Doors" ]; then
+  OLD_TARGET="$(readlink "$DEST/Doors")"
+  if [ "$OLD_TARGET" != "$REPO_ROOT/Doors" ]; then
+    ln -sfn "$REPO_ROOT/Doors" "$DEST/Doors"
+    echo "[INFO] Doors symlink repointed: $OLD_TARGET -> $REPO_ROOT/Doors"
+  fi
+elif [ -d "$DEST/Doors" ]; then
+  echo "[WARN] $DEST/Doors is a real directory, not the checkout's Doors; left as it is" >&2
+elif [ ! -e "$DEST/Doors" ]; then
   ln -s "$REPO_ROOT/Doors" "$DEST/Doors"
   echo "[INFO] Doors -> the checkout (symlink), so door work is not overwritten by a pull"
 fi
