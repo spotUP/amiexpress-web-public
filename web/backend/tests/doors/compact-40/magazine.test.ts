@@ -133,6 +133,10 @@ function writeMagazine(approve: boolean): string {
     {
       headline: HEADLINE,
       summary: `The demoscene group released a new intro. ${TOKEN} appears nowhere except in this story file.`,
+      // A feed story is an article only with real full text (ARTICLE_MIN_BODY_CHARS):
+      // the body goes in through the ingest, so this also proves ingest -> reader.
+      body: `The demoscene group released a new intro. ${TOKEN} appears nowhere except in this story file.\n\n`
+        + 'The music was composed in a tracker and ported to the player on a stock machine.\n\n'.repeat(20),
       source: 'demozoo.org',
       date: '2026-10-13',
     },

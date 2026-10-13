@@ -69,6 +69,21 @@ export const DESK_LABEL: Record<Desk, string> = {
  */
 export type StoryOrigin = 'feed' | 'authored';
 
+/**
+ * The most body text a story keeps: 20,000 characters (about 3,000 words).
+ * A feed that sends a whole long read is cut at the last paragraph break
+ * under the cap, so the reader never opens a half-sentence.
+ */
+export const STORY_BODY_CAP = 20000;
+
+/**
+ * How much body text makes a story an ARTICLE. Below it the story is wire
+ * material: a headline, a teaser and a detail panel. 1,200 characters is about
+ * six paragraphs of a narrow column, the least that fills a spread without
+ * padding.
+ */
+export const ARTICLE_MIN_BODY_CHARS = 1200;
+
 export interface Story {
   /** Stable across runs: a hash of the normalised headline. */
   id: string;
@@ -89,6 +104,41 @@ export interface Story {
   approvedAt?: string;
   /** Absent on a story stored before the field existed: read it with `storyOrigin`. */
   origin?: StoryOrigin;
+  /**
+   * The story's full text as plain paragraphs separated by a blank line, from
+   * the feed's own full content or from the story page (prefetched at ingest).
+   * At most `STORY_BODY_CAP` characters. Absent on a teaser-only story.
+   */
+  body?: string;
+  /**
+   * Set when the story page could not give a body (robots.txt, 403, 404,
+   * timeout, no article text). It is the record that stops the next tick from
+   * asking again; the story stays wire material.
+   */
+  bodyFailed?: { at: string; reason: string };
+}
+
+/**
+ * Does this story open in the article layout? A human-written story always
+ * does; a feed story does once it carries real full text. Everything else is
+ * a teaser and belongs on the wire.
+ */
+export function isArticle(story: Pick<Story, 'origin' | 'body'>): boolean {
+  return story.origin === 'authored' || (story.body?.length ?? 0) >= ARTICLE_MIN_BODY_CHARS;
+}
+
+/**
+ * A source as the reader names it: the site, never an address. `www.` goes,
+ * and so does a trailing "via ..." or "(note)" ("news.ycombinator.com via Algolia").
+ * The ONE place this lives: the MAG reader and the teletext pages both print it.
+ */
+export function sourceName(source: string): string {
+  return source
+    .replace(/\s+via\s+.*$/i, '')
+    .replace(/\s*\(.*$/, '')
+    .replace(/^\s*(?:https?:\/\/)?(?:www\.)?/i, '')
+    .replace(/\/.*$/, '')
+    .trim();
 }
 
 /** A stored story without the field is a feed story (back-compat). */

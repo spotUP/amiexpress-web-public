@@ -42,6 +42,8 @@ export interface IncomingItem {
   source: string;
   url?: string;
   date?: string;
+  /** The feed's own full text, when it carries one. */
+  body?: string;
 }
 
 export type { MagazineIndexEntry };
@@ -60,7 +62,7 @@ export interface MagazineDeps {
 
 const MAGAZINE = MAGAZINE_DIR;
 
-function writeAtomic(target: string, contents: string): void {
+export function writeAtomic(target: string, contents: string): void {
   const tmp = `${target}.tmp-${process.pid}`;
   try {
     fs.writeFileSync(tmp, contents, 'latin1');
@@ -131,6 +133,9 @@ export function mergeIncoming(
       // A field the archive lacks is filled from any later sighting, never
       // overwritten: the url must not depend on the summary having grown.
       if (item.url && !prior.url) prior.url = item.url;
+      // Likewise the full text: a later sighting from a feed that carries it
+      // completes a story the first feed only teased.
+      if (item.body && item.body.length > (prior.body ?? '').length) prior.body = item.body;
       prior.seenCount += 1;
       duplicates++;
       continue;
@@ -144,6 +149,7 @@ export function mergeIncoming(
       date: item.date ?? nowIso.slice(0, 10),
       source: item.source,
       url: item.url,
+      ...(item.body ? { body: item.body } : {}),
       origin: 'feed',
       firstSeen: nowIso,
       seenCount: 1,
@@ -220,7 +226,6 @@ export function publishMagazine(
         summary: story.summary,
         format: story.format,
         source: story.source,
-        url: story.url,
         date: story.date,
       },
       page,

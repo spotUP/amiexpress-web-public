@@ -19,7 +19,7 @@
  * wants.
  */
 
-import { MAGAZINE_TITLE } from '@amiexpress/bbs-door-sdk/formats/magazine';
+import { MAGAZINE_TITLE, sourceName } from '@amiexpress/bbs-door-sdk/formats/magazine';
 
 /** Teletext is 40x24; the board's generated-screen budget has the last word. */
 export const PAGE_WIDTH = 40;
@@ -47,7 +47,6 @@ export interface ComposedStory {
   summary: string;
   format: string;
   source: string;
-  url?: string;
   date?: string;
 }
 
@@ -144,7 +143,8 @@ export function composeStoryPage(
   // half is unreadable, a summary tail is merely lost.
   const headLines = wrap(story.headline.toUpperCase());
   const summaryLines = wrap(story.summary);
-  const sourceLines = wrap(`Source: ${story.source}${story.url ? `\n${story.url}` : ''}`);
+  // The site name only, as the reader prints it: a 40-column page has no room for an address.
+  const sourceLines = wrap(`Source: ${sourceName(story.source)}`);
 
   const summaryRoom = Math.max(1, budgetForBody - headLines.length - sourceLines.length);
   const keptSummary = summaryLines.slice(0, summaryRoom);

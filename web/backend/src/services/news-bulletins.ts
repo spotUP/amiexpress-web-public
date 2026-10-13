@@ -19,11 +19,12 @@ import axios from 'axios';
 import * as fs from 'fs';
 import * as path from 'path';
 import { parseString } from 'xml2js';
+import { STORY_BODY_CAP } from '@amiexpress/bbs-door-sdk/formats/magazine';
 import { renderedRows, GENERATED_SCREEN_ROWS } from '../screens/screen-rows';
 import { config } from '../config';
 
 const TEXTTV = 'https://api.texttv.nu/api/get';
-const TEXTTV_APP = 'amiexpress-web-bbs';
+export const TEXTTV_APP = 'amiexpress-web-bbs';
 const FETCH_TIMEOUT_MS = 15000;
 
 export const NEWS_BULLETIN_INTERVAL_MS = 3600 * 1000;
@@ -412,6 +413,46 @@ export function toBulletinText(input: string): string {
   return stripFeedBoilerplate(text);
 }
 
+/**
+ * Block-level tags: where one paragraph ends and the next begins. `toBulletinText`
+ * flattens markup to one line (a headline or a teaser has no paragraphs); a
+ * story's full text does, so its HTML is cut at these first.
+ */
+const BLOCK_TAGS = /<\/?(?:p|div|br|hr|h[1-6]|li|ul|ol|blockquote|pre|tr|table|section|article|header|footer|figure|figcaption|aside|dd|dt|dl)\b[^>]*>/gi;
+/** Elements whose content is never text a caller reads. */
+const NON_TEXT = /<(script|style|noscript|svg|iframe|form|button|nav)\b[\s\S]*?<\/\1>/gi;
+
+/**
+ * A story's full text as plain paragraphs, a blank line between them, cleaned
+ * by the SAME cleaner the summaries use (`toBulletinText`, which ends in
+ * `stripFeedBoilerplate`) so there is one HTML-to-text path. The result is cut
+ * at the last paragraph break under `cap` (or the last space when one
+ * paragraph is longer than the cap), so a reader never meets half a sentence.
+ */
+export function toBulletinParagraphs(html: string, cap: number): string {
+  const paragraphs = html
+    .replace(NON_TEXT, ' ')
+    .split(BLOCK_TAGS)
+    .map((chunk) => toBulletinText(chunk).replace(/\s*\n\s*/g, ' ').trim())
+    .filter((p) => p.length > 0);
+  const out: string[] = [];
+  let used = 0;
+  for (const p of paragraphs) {
+    const next = used + (out.length ? 2 : 0) + p.length;
+    if (next > cap) {
+      if (out.length === 0) {
+        const cut = p.slice(0, cap);
+        const at = cut.lastIndexOf(' ');
+        out.push((at > cap / 2 ? cut.slice(0, at) : cut).trim());
+      }
+      break;
+    }
+    out.push(p);
+    used = next;
+  }
+  return out.join('\n\n');
+}
+
 function asArray<T>(v: T | T[] | undefined | null): T[] {
   if (v === undefined || v === null) return [];
   return Array.isArray(v) ? v : [v];
@@ -462,6 +503,31 @@ export interface FeedItem {
   summary: string;
   source: string;
   url?: string;
+  /** The feed's own full text (`content:encoded`, Atom `content`), when it carries one. */
+  body?: string;
+}
+
+/**
+ * A feed's full text counts as a body only when it carries clearly more than
+ * the teaser: Atom `content` is often the same teaser again, and a "body" of
+ * 200 characters would stop the prefetch from ever asking the story page.
+ */
+export const FEED_BODY_MIN_CHARS = 400;
+
+/** The first paragraph of a body, cut at a word near 300 characters. */
+function firstParagraphTeaser(body: string): string {
+  const first = body.split('\n\n')[0];
+  if (first.length <= 300) return first;
+  const cut = first.slice(0, 300);
+  return cut.slice(0, Math.max(cut.lastIndexOf(' '), 1)).trim();
+}
+
+/** The full text a feed item carries, or '' when it only has a teaser. */
+function feedBody(item: any, summary: string): string {
+  const raw = labelOf(item['content:encoded']) || labelOf(item.content);
+  if (!raw) return '';
+  const body = toBulletinParagraphs(raw, STORY_BODY_CAP);
+  return body.length >= FEED_BODY_MIN_CHARS && body.length > summary.length * 1.5 ? body : '';
 }
 
 export async function parseFeedItems(
@@ -480,9 +546,13 @@ export async function parseFeedItems(
   const items: FeedItem[] = [];
   for (const it of rows.slice(0, limit)) {
     const headline = pick(it, 'title');
-    const summary = pick(it, 'description') || pick(it, 'summary') || pick(it, 'content');
+    let summary = pick(it, 'description') || pick(it, 'summary');
+    const body = feedBody(it, summary);
+    // An Atom entry with only <content> has no teaser: its first paragraph is
+    // the teaser, and the whole text is the body (not a 12,000-character summary).
+    if (!summary) summary = body ? firstParagraphTeaser(body) : pick(it, 'content');
     if (!headline && !summary) continue;
-    items.push({ headline, summary, source, url: pick(it, 'link') || undefined });
+    items.push({ headline, summary, source, url: pick(it, 'link') || undefined, ...(body ? { body } : {}) });
   }
   const text = items
     .map((i) => (i.summary ? `${i.headline}\n   ${i.summary}` : i.headline))
@@ -577,7 +647,7 @@ export function defaultNewsBulletinDeps(): NewsBulletinDeps {
  */
 const hostGate = new Map<string, number>();
 
-function hostOf(url: string): string {
+export function hostOf(url: string): string {
   try {
     return new URL(url).host;
   } catch {
@@ -598,7 +668,7 @@ function sleep(ms: number): Promise<void> {
 }
 
 /** Wait until this host's gap has elapsed, then claim the next slot. */
-async function passHostGate(url: string, gapMs: number): Promise<void> {
+export async function passHostGate(url: string, gapMs: number): Promise<void> {
   if (!(gapMs > 0)) return;
   const host = hostOf(url);
   const now = Date.now();
@@ -860,7 +930,7 @@ async function fetchSourceItems(
   deps: NewsBulletinDeps,
 ): Promise<{
   body: string | null;
-  items: Array<{ headline: string; summary: string; source: string; url?: string }>;
+  items: FeedItem[];
 }> {
   if (src.kind === 'teletext') {
     const body = src.page ? await deps.fetchPage(src.page) : null;
@@ -884,7 +954,7 @@ async function fetchSourceItems(
   }
   if (res.etag || res.lastModified) validators.set(src.file, { etag: res.etag, lastModified: res.lastModified });
   const limit = src.limit ?? 12;
-  let items: Array<{ headline: string; summary: string; source: string; url?: string }> = [];
+  let items: FeedItem[] = [];
   let body: string | null = null;
   try {
     if (src.kind === 'json') {
@@ -932,7 +1002,7 @@ export async function refreshNewsBulletins(
     if (!sourceIsDue(src, lastRun.get(src.file), nowMs, globalIntervalMs)) continue;
 
     let body: string | null = null;
-    let items: Array<{ headline: string; summary: string; source: string; url?: string }> = [];
+    let items: FeedItem[] = [];
     try {
       const fetched = await fetchSourceItems(src, deps);
       body = fetched.body;
@@ -994,6 +1064,10 @@ export function startNewsBulletins(
             log: deps.log,
           });
           if (out.added > 0) deps.log(`[magazine] ${out.added} new stories, ${out.pages} pages`);
+          // Full text for the new stories, fetched in the background: the
+          // tick does not wait for it and other sources are never held up.
+          const { startBodyPrefetch } = await import('./magazine/body-prefetch');
+          startBodyPrefetch({ rootDir: deps.baseDir, now: deps.now, log: deps.log });
         } catch (err) {
           // The bulletins are already written. A magazine that did not compose
           // this tick is worth saying out loud, never worth crashing the board.

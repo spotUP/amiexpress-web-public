@@ -1,7 +1,7 @@
 BBSCMD=MAG
 TYPE=typescript
 LOCATION=Doors/magazine
-DESCRIPTION=Underground Mag reader: stories in newspaper columns
+DESCRIPTION=The Unknown Frequency
 MULTINODE=YES
 PRIORITY=SAME
 MIN_COLUMNS=40
