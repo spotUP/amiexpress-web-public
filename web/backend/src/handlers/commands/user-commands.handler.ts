@@ -974,13 +974,14 @@ setEnvStat(session, EnvStat.STATS);
  * @param cn            - User-visible (relative) conference number (1-based)
  * @param user          - User object (for checkConfAccess)
  * @param confRelative  - Value of sopt.toggles[TOGGLES_CONFRELATIVE]
+ * @param force         - express.e's force=TRUE: count accessible conferences even when the toggle is off
  * @returns Absolute conference number, or 0 if out of range
  */
-export function getInverse(cn: number, user: any, confRelative: boolean): number {
+export function getInverse(cn: number, user: any, confRelative: boolean, force: boolean = false): number {
   // express.e:8571 - IF(cn<1) THEN RETURN 0
   if (cn < 1) return 0;
   // express.e:8572 - IF (force=FALSE) AND (sopt.toggles[TOGGLES_CONFRELATIVE]=FALSE) THEN RETURN cn
-  if (!confRelative) return cn;
+  if (!force && !confRelative) return cn;
 
   // Relative mode: walk accessible conferences until we've counted cn of them
   let i = 0; // count of accessible conferences visited so far
