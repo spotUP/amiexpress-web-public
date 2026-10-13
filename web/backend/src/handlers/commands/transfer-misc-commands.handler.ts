@@ -6,7 +6,7 @@
 
 import { BBSSession, LoggedOnSubState } from '../../index';
 import { negotiateBinaryForTransfer } from '../file/file-delivery';
-import { checkSecurity } from '../../utils/acs.util';
+import { checkSecurity, setEnvStat } from '../../utils/acs.util';
 import { ACSPermission } from '../../constants/acs-permissions';
 import { EnvStat } from '../../constants/env-codes';
 import { AnsiUtil } from '../../utils/ansi.util';
@@ -22,7 +22,6 @@ import { joinedConf } from '../../utils/joined-conf.util';
 import type { InternalCommandResult } from '../../constants/command-results';
 
 // Dependencies (injected)
-let _setEnvStat: any;
 let _displayUploadInterface: any;
 let _fileAreas: any[] = [];
 let _getActiveVoteTopics: any;
@@ -42,7 +41,8 @@ let _getNextTopicNumber: any;
  * Dependency injection setter
  */
 export function setTransferMiscCommandsDependencies(deps: {
-  setEnvStat: any;
+  /** Unused: setEnvStat is imported from acs.util; initialization.ts still passes it. */
+  setEnvStat?: unknown;
   displayUploadInterface: any;
   fileAreas: any[];
   getActiveVoteTopics: any;
@@ -58,7 +58,6 @@ export function setTransferMiscCommandsDependencies(deps: {
   deleteVoteTopic: any;
   getNextTopicNumber: any;
 }) {
-  _setEnvStat = deps.setEnvStat;
   _displayUploadInterface = deps.displayUploadInterface;
   _fileAreas = deps.fileAreas;
   _getActiveVoteTopics = deps.getActiveVoteTopics;
@@ -93,7 +92,7 @@ export async function handleZmodemUploadCommand(socket: any, session: BBSSession
   }
 
   // Set environment status - express.e:25610
-  _setEnvStat(session, EnvStat.UPLOADING);
+  setEnvStat(session, EnvStat.UPLOADING);
 
   // express.e:25608-25619 internalCommandRZ - no header, directly starts upload
   socket.emit('ansi-output', '\r\n');
@@ -302,7 +301,7 @@ export function handleSysopUploadCommand(socket: any, session: BBSSession, param
   }
 
   // Set environment status - express.e:25662
-  _setEnvStat(session, EnvStat.UPLOADING);
+  setEnvStat(session, EnvStat.UPLOADING);
 
   // express.e:25660-25664 internalCommandUS - no header, calls sysopUpload()
   socket.emit('ansi-output', '\r\n');
@@ -334,7 +333,7 @@ export function handleNodeUptimeCommand(socket: any, session: BBSSession): void 
  */
 export async function handleVotingBoothCommand(socket: any, session: BBSSession): Promise<InternalCommandResult> {
   // express.e:25703 setEnvStat(ENV_DOORS)
-  if (checkSecurity(session.user, ACSPermission.VOTE)) _setEnvStat(session, EnvStat.DOORS);
+  if (checkSecurity(session.user, ACSPermission.VOTE)) setEnvStat(session, EnvStat.DOORS);
   const { handleVotingBoothCommand: voteBooth } = require('./vote-booth');
   return await voteBooth(socket, session);
 }
