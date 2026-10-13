@@ -12,3 +12,39 @@ BULLETINS
 #9    Requests
 #10   Board Changes
 
+#13    0x00SEC - reversing and exploit research
+#14    Crackmes - new challenges to reverse
+#15    Exploit-DB - fresh public exploits
+#16    oss-security - the open wall
+#17    Packet Storm - exploits and advisories
+#18    The Hacker News
+#19    BleepingComputer
+#20    Krebs on Security
+#21    Schneier on Security
+#22    Project Zero - deep bug research
+#23    Ars Technica
+#24    Hacker News - newest stories
+#25    RTL-SDR - decoding closed signals
+#26    Hackaday - phreaking and comms
+#27    Hackaday - hardware hacking
+#28    The Scene - demoscene news
+#29    Pouet - Amiga scene productions
+#31    Rave Archive UK - pirate radio and jungle
+#32    Acid Techno
+#33    r/Amiga
+#34    r/reverseengineering
+#35    r/demoscene
+#36    r/phreaking
+#37    r/SDR - software defined radio
+#38    r/radionerds
+#39    r/PirateRadio
+#40    r/ANSI - text art
+#41    r/modmusic - tracker files
+#42    r/synthdiy - build your own synths
+#43    r/freetekno - free parties and sound systems
+#44    r/urbanexploration - urbex
+#45    Jason Scott - preserving old text
+#46    Phrack - the hacker magazine
+#47    KELA - cybercrime research
+#48    SpyCloud - cybercrime insights
+#49    SOCRadar - threat intelligence
