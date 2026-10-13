@@ -446,3 +446,38 @@ export async function aCursorMoveInAListRepaintsTwoEntriesNotThePanel(): Promise
     } finally { await finish(h, b); }
   }
 }
+
+// ---------------------------------------------------------------------------
+// Footer and progress: fit the screen at every tier
+// ---------------------------------------------------------------------------
+
+export async function theFooterFitsTheScreenAndEndsOnAWholeHintAtEveryTier(): Promise<void> {
+  for (const [w, hgt] of [[40, 25], [80, 25], [132, 40]] as const) {
+    const b = board([]);
+    const h = await open(w, hgt);
+    try {
+      const footer = h.reader.footerRow().trimEnd();
+      assert.ok(footer.length <= w, `${w}: footer is ${footer.length} wide: "${footer}"`);
+      assert.ok(footer.includes('?: Help') && footer.includes('Q: Quit'), `${w}: Help and Quit stay: "${footer}"`);
+      // Every hint is whole: each "K:" cap is followed by its full word.
+      const words = ['Page', 'Contents', 'Front', 'Section', 'Bookmark', 'Search', 'Help', 'Quit'];
+      for (const m of footer.matchAll(/(\S+): (\S+)/g)) {
+        assert.ok(words.includes(m[2]), `${w}: cut hint "${m[0]}" in "${footer}"`);
+      }
+      if (w === 80) assert.ok(!footer.endsWith(':'), `80: "${footer}"`);
+    } finally { await finish(h, b); }
+  }
+}
+
+export async function aMultiSpreadArticleShowsItsPageCounterAndAShortOneToo(): Promise<void> {
+  const b = board([]);
+  const h = await open(80, 25);
+  try {
+    h.reader.press('c', 'c');
+    h.reader.press('enter');
+    assert.ok(/Page 1 of \d+$/.test(h.reader.progressRow()), `"${h.reader.progressRow()}"`);
+    assert.ok(Number(h.reader.progressRow().match(/of (\d+)$/)![1]) > 1, 'the long story has several spreads');
+    h.reader.press('space');
+    assert.ok(/Page 2 of \d+$/.test(h.reader.progressRow()));
+  } finally { await finish(h, b); }
+}

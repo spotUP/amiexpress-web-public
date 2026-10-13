@@ -78,8 +78,9 @@ export interface Article {
 export declare function signalTag(story: Pick<Story, 'format' | 'desk' | 'date'>): string;
 export declare function buildArticle(story: Story, layout: MagLayout): Article;
 /**
- * One row that fills as the reader moves through the spreads. At 40 columns
- * the line is short, so the position is also written as `2/5`.
+ * One row that fills as the reader moves through the spreads, with the
+ * position written out at every width (`Page 2 of 5`). The bar alone is a
+ * full-width rule on a one-spread story and reads as a divider, not progress.
  */
 export declare function buildProgress(layout: MagLayout, position: number, total: number): PanelRow;
 /** The ticker text: the newest headlines, separated by a signal marker. */

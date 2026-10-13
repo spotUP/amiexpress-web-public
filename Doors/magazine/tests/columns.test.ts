@@ -49,10 +49,10 @@ export async function noRowIsWiderThanTheMeasure(): Promise<void> {
 
 export async function flowFillsColumnOneThenColumnTwoThenTheNextSpread(): Promise<void> {
   const rows = Array.from({ length: 11 }, (_, i) => `row ${i}`);
-  const spreads = flowColumns(rows, 2, { first: 3, rest: 4 }, { balance: true });
+  const spreads = flowColumns(rows, 2, { first: 3, rest: 4 });
   assert.deepStrictEqual(spreads[0].columns, [['row 0', 'row 1', 'row 2'], ['row 3', 'row 4', 'row 5']]);
-  // The last spread is balanced, as a newspaper sets it: 3 + 2, not 4 + 1.
-  assert.deepStrictEqual(spreads[1].columns, [['row 6', 'row 7', 'row 8'], ['row 9', 'row 10']]);
+  // Column one takes the full height before column two: 4 + 1.
+  assert.deepStrictEqual(spreads[1].columns, [['row 6', 'row 7', 'row 8', 'row 9'], ['row 10']]);
   assert.strictEqual(spreads.length, 2);
 }
 
@@ -62,11 +62,13 @@ export async function aListingFillsColumnOneFirst(): Promise<void> {
   assert.deepStrictEqual(spreads[0].columns, [['a', 'b', 'c'], []]);
 }
 
-export async function aShortStoryIsEvenColumnsNotOneFullColumn(): Promise<void> {
-  const rows = Array.from({ length: 9 }, (_, i) => `row ${i}`);
-  const spreads = flowColumns(rows, 3, { first: 30, rest: 30 }, { balance: true });
-  assert.strictEqual(spreads.length, 1);
-  assert.deepStrictEqual(spreads[0].columns.map((c) => c.length), [3, 3, 3]);
+export async function fillsColumnOneToTheFullHeightBeforeColumnTwo(): Promise<void> {
+  const rows = Array.from({ length: 17 }, (_, i) => `row ${i}`);
+  for (const cols of [2, 3]) {
+    const spreads = flowColumns(rows, cols, { first: 16, rest: 16 });
+    assert.strictEqual(spreads.length, 1);
+    assert.deepStrictEqual(spreads[0].columns.map((c) => c.length), cols === 2 ? [16, 1] : [16, 1, 0]);
+  }
 }
 
 export async function noRowIsLostOrReorderedAcrossSpreads(): Promise<void> {

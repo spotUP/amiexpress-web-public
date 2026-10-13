@@ -96,14 +96,14 @@ export async function articleAtEightyIsPinned(): Promise<void> {
     ' [ RELEASE // SCENE // 2026-10-13 ]                                           ',
     ' SKAVEN RELEASES COPPER LIGHTS, A NEW 64K INTRO FOR THE AMIGA                 ',
     ' ─'.slice(0, 1) + '─'.repeat(77),
-    ' The Amiga demoscene has a new release │ A second paragraph explains how the  ',
-    ' this week. It runs on a stock A500    │ music was composed in a tracker and  ',
-    ' with half a megabyte, and the group   │ ported to the player.                ',
+    ' The Amiga demoscene has a new release │                                      ',
+    ' this week. It runs on a stock A500    │                                      ',
+    ' with half a megabyte, and the group   │                                      ',
     ' says the copper bars are the cleanest │                                      ',
-    ' they have shipped in years.           │ >> SRC demozoo.org                   ',
-    '                                       │ https://demozoo.org/productions/1/   ',
+    ' they have shipped in years.           │                                      ',
     '                                       │                                      ',
-    '                                       │                                      ',
+    ' A second paragraph explains how the   │                                      ',
+    ' music was composed in a tracker and   │                                      ',
   ]);
 }
 
@@ -190,16 +190,19 @@ export async function noticeCentresItsTitle(): Promise<void> {
   assert.strictEqual(title.indexOf('N') - 1, 38 - title.trim().length - (title.indexOf('N') - 1), 'centred in the 38-column set text');
 }
 
-export async function progressFillsInProportionAndShowsTheCounterOnlyAtForty(): Promise<void> {
+export async function progressFillsInProportionAndWritesThePageAtEveryWidth(): Promise<void> {
   const eighty = buildProgress(buildLayout(80, 24), 1, 4);
   assert.strictEqual(rowText(eighty).length, 79);
-  assert.strictEqual(eighty[0].text.length, Math.round((79 * 2) / 4));
-  assert.ok(!rowText(eighty).includes('/'), 'no counter at 80');
+  assert.ok(rowText(eighty).endsWith(' Page 2 of 4'), 'the counter at 80');
+  const bar = 79 - ' Page 2 of 4'.length;
+  assert.strictEqual(eighty[0].text.length, Math.round((bar * 2) / 4));
   const forty = buildProgress(buildLayout(40, 25), 1, 4);
-  assert.ok(rowText(forty).endsWith(' 2/4'), 'the counter at 40');
+  assert.ok(rowText(forty).endsWith(' Page 2 of 4'), 'the counter at 40');
   assert.ok(rowText(forty).length <= 40);
+  const wide = buildProgress(buildLayout(132, 40), 0, 3);
+  assert.ok(rowText(wide).endsWith(' Page 1 of 3'), 'the counter at 132');
   const last = buildProgress(buildLayout(80, 24), 3, 4);
-  assert.strictEqual(last.length, 1, 'the last spread fills the whole line');
+  assert.strictEqual(last.length, 2, 'the last spread fills the whole bar, then the counter');
 }
 
 export async function headerLineKeepsBothSidesOrDropsTheRight(): Promise<void> {

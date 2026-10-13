@@ -45,11 +45,6 @@ export interface SpreadHeights {
 export declare function flowColumns<T = string>(rows: readonly T[], cols: number, heights: SpreadHeights, options?: {
     /** A row that adds nothing at the top of a column (a paragraph gap). */
     isBlank?: (row: T) => boolean;
-    /**
-     * Even out the columns of the LAST spread, as a newspaper sets a short
-     * story. A listing leaves this off: its entries read down column one first.
-     */
-    balance?: boolean;
     /** A row that must not end a column: a heading stays with what it heads. */
     keepWithNext?: (row: T) => boolean;
 }): Spread<T>[];

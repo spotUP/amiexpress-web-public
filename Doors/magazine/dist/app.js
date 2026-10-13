@@ -45,14 +45,14 @@ exports.HINTS = [
     { key: 'S', does: 'Section' },
     { key: 'B', does: 'Bookmark' },
     { key: '/', does: 'Search' },
-    { key: '?', does: 'Help' },
-    { key: 'Q', does: 'Quit' },
+    { key: '?', does: 'Help', keep: true },
+    { key: 'Q', does: 'Quit', keep: true },
 ];
 /** Forty columns: only what a caller cannot guess. */
 exports.COMPACT_HINTS = [
     { key: 'C', does: 'Contents' },
-    { key: '?', does: 'Help' },
-    { key: 'Q', does: 'Quit' },
+    { key: '?', does: 'Help', keep: true },
+    { key: 'Q', does: 'Quit', keep: true },
 ];
 exports.HELP_TEXT = [
     'Arrow keys, Page Up, Page Down, Space   turn the page',
@@ -648,6 +648,7 @@ async function startReader(session) {
         press,
         panelRows: () => (spreads[spreadNo] ?? []).map(layout_1.rowText),
         progressRow: () => (0, layout_1.rowText)((0, layout_1.buildProgress)(layout, spreadNo, spreads.length)),
+        footerRow: () => chrome.footerContent().replace(/\{[^{}]*\}/g, ''),
         viewKind: () => view.kind,
         stats: () => ({ ...counters }),
         stop: () => finish(),

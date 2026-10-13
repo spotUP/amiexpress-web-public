@@ -87,15 +87,15 @@ export const HINTS: readonly FooterHint[] = [
   { key: 'S', does: 'Section' },
   { key: 'B', does: 'Bookmark' },
   { key: '/', does: 'Search' },
-  { key: '?', does: 'Help' },
-  { key: 'Q', does: 'Quit' },
+  { key: '?', does: 'Help', keep: true },
+  { key: 'Q', does: 'Quit', keep: true },
 ];
 
 /** Forty columns: only what a caller cannot guess. */
 export const COMPACT_HINTS: readonly FooterHint[] = [
   { key: 'C', does: 'Contents' },
-  { key: '?', does: 'Help' },
-  { key: 'Q', does: 'Quit' },
+  { key: '?', does: 'Help', keep: true },
+  { key: 'Q', does: 'Quit', keep: true },
 ];
 
 export const HELP_TEXT = [
@@ -130,6 +130,8 @@ export interface Reader {
   panelRows(): string[];
   /** The plain text of the progress row. */
   progressRow(): string;
+  /** The plain text of the footer row (hints and status), tags stripped. */
+  footerRow(): string;
   /** The kind of view on screen. */
   viewKind(): View['kind'];
   /** What actually ran: sentinels for the tests that prove the effects are wired. */
@@ -641,6 +643,7 @@ export async function startReader(session: DoorSession): Promise<Reader> {
     press,
     panelRows: () => (spreads[spreadNo] ?? []).map(rowText),
     progressRow: () => rowText(buildProgress(layout, spreadNo, spreads.length)),
+    footerRow: () => chrome.footerContent().replace(/\{[^{}]*\}/g, ''),
     viewKind: () => view.kind,
     stats: () => ({ ...counters }),
     stop: () => finish(),

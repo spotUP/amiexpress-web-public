@@ -277,7 +277,6 @@ function buildArticle(story, layout) {
     const restHeight = Math.max(1, panelHeight - 1);
     const flowed = (0, columns_1.flowColumns)(cells, geometry.cols, { first: firstHeight, rest: restHeight }, {
         isBlank: (c) => c.text === '',
-        balance: true,
     });
     const running = truncate((0, library_1.paintSafe)(story.headline).toUpperCase(), w);
     const spreads = flowed.map((spread, n) => {
@@ -294,14 +293,15 @@ function buildArticle(story, layout) {
 // Progress, ticker, desk signal
 // ---------------------------------------------------------------------------
 /**
- * One row that fills as the reader moves through the spreads. At 40 columns
- * the line is short, so the position is also written as `2/5`.
+ * One row that fills as the reader moves through the spreads, with the
+ * position written out at every width (`Page 2 of 5`). The bar alone is a
+ * full-width rule on a one-spread story and reads as a divider, not progress.
  */
 function buildProgress(layout, position, total) {
     const w = layout.width;
     const safeTotal = Math.max(1, total);
     const at = Math.min(Math.max(0, position), safeTotal - 1);
-    const counter = layout.collapseChrome ? ` ${at + 1}/${safeTotal}` : '';
+    const counter = ` Page ${at + 1} of ${safeTotal}`;
     const line = Math.max(1, w - 1 - counter.length);
     const filled = Math.max(1, Math.round((line * (at + 1)) / safeTotal));
     const row = [seg(RULE.repeat(filled), 'accent')];

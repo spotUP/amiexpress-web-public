@@ -465,6 +465,8 @@ export interface FooterHint {
   key: string;
   /** What it does. Drawn dim, because the CAP is the part worth reading. */
   does: string;
+  /** Survives fitting: a hint line that must shrink drops the others first. */
+  keep?: boolean;
 }
 
 /**
@@ -484,13 +486,34 @@ export interface FooterHint {
 export function footerHints(
   hints: readonly FooterHint[],
   paint: { key: (t: string) => string; dim: (t: string) => string },
-  rail = ''
+  rail = '',
+  /**
+   * The cells the line may take. When the hints do not fit, the branding rail
+   * goes first, then hints from the END of the list that are not `keep`, so a
+   * line is never cut mid-word. Omitted: no fitting.
+   */
+  fit?: number
 ): string {
-  const line = hints
+  const plain = (list: readonly FooterHint[], tail: string): number =>
+    list.map(h => `${h.key}: ${h.does}`).join('  ').length + (tail ? 2 + tail.length : 0);
+  let shown = [...hints];
+  let tail = rail;
+  if (fit !== undefined) {
+    if (plain(shown, tail) > fit) tail = '';
+    while (plain(shown, tail) > fit) {
+      let drop = -1;
+      for (let i = shown.length - 1; i >= 0; i--) {
+        if (!shown[i].keep) { drop = i; break; }
+      }
+      if (drop < 0) break;
+      shown.splice(drop, 1);
+    }
+  }
+  const line = shown
     .map(h => `${paint.key(h.key + ':')} ${paint.dim(h.does)}`)
     .join('  ');
   // The rail at the end is branding, not a hint, so it stays dim.
-  return rail ? `${line}  ${paint.dim(rail)}` : line;
+  return tail ? `${line}  ${paint.dim(tail)}` : line;
 }
 
 /** The style a footer row takes: the bar's colours, dim text, no border. */
@@ -685,7 +708,9 @@ export function attachDoorChrome(
 
   const paintFooter = () => {
     footerText =
-      footerPad + footerHints(hints, { key: s.key, dim: s.dim }, railTail) + suffix;
+      footerPad +
+      footerHints(hints, { key: s.key, dim: s.dim }, railTail, Math.max(0, width - footerPad.length - suffix.length)) +
+      suffix;
     footer?.setContent(footerText);
   };
   if (footer) {

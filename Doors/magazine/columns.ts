@@ -101,11 +101,6 @@ export function flowColumns<T = string>(
   options: {
     /** A row that adds nothing at the top of a column (a paragraph gap). */
     isBlank?: (row: T) => boolean;
-    /**
-     * Even out the columns of the LAST spread, as a newspaper sets a short
-     * story. A listing leaves this off: its entries read down column one first.
-     */
-    balance?: boolean;
     /** A row that must not end a column: a heading stays with what it heads. */
     keepWithNext?: (row: T) => boolean;
   } = {},
@@ -117,22 +112,12 @@ export function flowColumns<T = string>(
   let spreadNo = 0;
   do {
     const room = Math.max(1, spreadNo === 0 ? heights.first : heights.rest);
-    // The last spread is balanced, as a newspaper sets it: a short story is
-    // three even columns, not one full column and two empty ones.
     // Blank rows inside the text take room too; only the ones at the top of
-    // the spread are free.
-    let first = at;
-    while (first < rows.length && isBlank(rows[first])) first++;
-    const remaining = rows.length - first;
-    const balanced = options.balance === true && remaining <= room * cols;
-    const height = balanced ? Math.max(1, Math.ceil(remaining / cols)) : room;
+    // a column are free.
     const columns: T[][] = [];
     for (let c = 0; c < cols; c++) {
       while (at < rows.length && isBlank(rows[at])) at++;
-      // The last balanced column takes whatever is left, up to the real room,
-      // so a heading pushed along by keepWithNext cannot strand a row.
-      const limit = balanced && c === cols - 1 ? room : height;
-      let take = rows.slice(at, at + limit);
+      let take = rows.slice(at, at + room);
       // Only when something follows: a heading that is the very last row has
       // nothing to be kept with, and dropping it would lose it.
       while (take.length > 1 && at + take.length < rows.length && keepWithNext(take[take.length - 1])) {
