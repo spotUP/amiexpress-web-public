@@ -133,10 +133,16 @@ export function conferenceAmigaPath(bbsRoot: string, conferenceNumber: number, .
   }
 
   const base = location || `BBS:Conf${conferenceNumber}/`;
-  const withoutTrailer = base.replace(/[\\/]+$/, '');
-  const suffix = parts.length ? `/${parts.join('/')}` : '';
 
-  return `${withoutTrailer}${suffix}/`;
+  // express.e:2084-2087 getConfLocation hands back confDirs.item, which
+  // 31849-31859 stored through checkPathSlash (MiscFuncs.e:66-71): a slash is
+  // added only when the last character is neither ':' nor '/', so a LOCATION
+  // of `BBS:` stays `BBS:` and `BBS:Conf2//` is not collapsed.
+  if (!parts.length) return /[:/]$/.test(base) ? base : `${base}/`;
+
+  // A volume root takes its subdirectory with no slash (`BBS:MsgBase/`).
+  const joiner = base.endsWith(':') ? '' : '/';
+  return `${base.replace(/[\\/]+$/, '')}${joiner}${parts.join('/')}/`;
 }
 
 /**
