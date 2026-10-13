@@ -16,7 +16,7 @@ import { setACSConfig, getACSConfig, LevelFlags } from '../src/utils/acs.util';
 
 const setDoUdLog = (on: boolean) => {
   const acLvl = [...getACSConfig().acLvl];
-  acLvl[LevelFlags.DO_UD_LOG] = on;
+  acLvl[LevelFlags.DO_UD_LOG] = on ? 1 : 0;
   setACSConfig({ acLvl });
 };
 
