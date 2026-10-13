@@ -1904,37 +1904,35 @@ debugLog(`  Data: ${data}`);
 
   /**
    * Handle BB_PURGELINE commands
-   * Per doordocs.txt (AmiExpress 2.20 Module Interface):
-   * - BB_PURGELINE (522): aborts serial input, flushes buffer, requests more input
-   * - BB_PURGELINESTART (523): clears buffer, requests more input
-   * - BB_PURGELINEEND (524): clears buffer only
+   * - BB_PURGELINE (522, express.e:1914-1925): aborts serial input, flushes, drains the telnet line
+   * - BB_PURGELINESTART (523, express.e:1906-1913): serial only. Every statement
+   *   sits under serialReadIO<>NIL; a web node has no serial port, so it does nothing
+   *   and the typed-ahead keys stay queued.
+   * - BB_PURGELINEEND (524, express.e:1889-1905): the serial half is the same no-op;
+   *   purgeTelnet() (1927-1938) drains what the caller already sent, unless a file
+   *   transfer or a silent door owns the line (transfering / doorSilent).
    */
   handlePurgeLine(msg: XIMMessage): void {
 debugLog('[XIMIOHandler] Purge line command');
 
-    let requestMoreInput = false;
-
     switch (msg.command) {
-      case XIMCommand.BB_PURGELINE:
-        // Aborts serial input, flushes buffer, requests more input
-debugLog('  BB_PURGELINE: Abort input, flush buffer, request more');
-        requestMoreInput = true;
-        break;
-
       case XIMCommand.BB_PURGELINESTART:
-        // Clear buffer, request more input
-debugLog('  BB_PURGELINESTART: Clear buffer, request more');
-        requestMoreInput = true;
+debugLog('  BB_PURGELINESTART: serial only, nothing to clear on a web node');
         break;
 
       case XIMCommand.BB_PURGELINEEND:
-        // Clear buffer only
-debugLog('  BB_PURGELINEEND: Clear buffer only');
-        requestMoreInput = false;
+        if (!this.state.transfering && !this.state.doorSilent) {
+debugLog('  BB_PURGELINEEND: drain what the caller already sent');
+          this.inputQueue.length = 0;
+        }
+        break;
+
+      default:
+debugLog('  BB_PURGELINE: Abort input, flush buffer, request more');
+        this.clearInputBuffer(true);
         break;
     }
 
-    this.clearInputBuffer(requestMoreInput);
     this.reply(msg, 1);
   }
 

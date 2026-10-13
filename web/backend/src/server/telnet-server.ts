@@ -896,6 +896,15 @@ console.log('[Telnet Server] Stopped');
       return;
     }
 
+    // express.e:1030-1037: checkCarrier()=FALSE on the accepted socket closes it
+    // and leaves the node free. A caller that hung up before we looked has
+    // already had its 'close' event; seating it would attach the listeners
+    // too late and hold the node for good.
+    if (socket.destroyed) {
+      console.warn(`[Telnet Server] ${remoteAddress} hung up before the node was seated`);
+      return;
+    }
+
     // A node first, as the web path takes one: a full board says so and
     // hangs up rather than seating a second caller on somebody's node.
     const nodeId = getNextAvailableNodeId();
