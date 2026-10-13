@@ -9,9 +9,10 @@
  *
  * Regions top to bottom (row numbers from `buildLayout`):
  *   header     the door chrome's masthead (rail and title)
- *   ticker     one row of scrolling headlines - wide screens only
  *   panel      the ONLY region a page turn repaints
  *   progress   one row, filled in proportion to the spread being read
+ *   ticker     the news wire, one row: it scrolls where effects are allowed,
+ *              and at 40 columns it is one static headline
  *   footer     the door chrome's hint line
  */
 import { effectsAllowed, getCompactProfile } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
@@ -87,7 +88,7 @@ export interface MagLayout {
   /** The 40-column tier: header and footer are one row each, no frames. */
   collapseChrome: boolean;
   headerRow: number;
-  /** Null when there is no ticker row (40 columns, or the sysop turned it off). */
+  /** Null when the sysop turned the news wire off. Directly above the footer. */
   tickerRow: number | null;
   panelTop: number;
   panelHeight: number;
@@ -99,11 +100,11 @@ export function buildLayout(width: number, height: number, options: { ticker?: b
   const w = Math.max(1, Math.floor(width) || 80);
   const h = Math.max(6, Math.floor(height) || 24);
   const effects = effectsAllowed(w);
-  const hasTicker = effects && options.ticker !== false;
-  const tickerRow = hasTicker ? 1 : null;
-  const panelTop = hasTicker ? 2 : 1;
+  const hasTicker = options.ticker !== false;
   const footerRow = h - 1;
-  const progressRow = h - 2;
+  const tickerRow = hasTicker ? footerRow - 1 : null;
+  const progressRow = hasTicker ? footerRow - 2 : footerRow - 1;
+  const panelTop = 1;
   return {
     width: w,
     height: h,
@@ -417,11 +418,47 @@ export function buildProgress(layout: MagLayout, position: number, total: number
   return row;
 }
 
-/** The ticker text: the newest headlines, separated by a signal marker. */
-export function tickerText(headlines: readonly string[]): string {
-  const clean = headlines.map((h) => paintSafe(h).replace(/\s+/g, ' ').trim()).filter(Boolean);
-  if (clean.length === 0) return 'NO TRANSMISSIONS';
-  return `LATEST TRANSMISSIONS >> ${clean.join('  //  ')}`;
+/** The wire's separator: U+25A0 is a solid block on a C64 (reverse space) and CP437 0xFE. */
+export const NEWS_SEPARATOR = '  \u25A0  ';
+
+export interface NewsItem {
+  source: string;
+  title: string;
+}
+
+const cleanNews = (text: string): string =>
+  paintSafe(text).replace(/\s+/g, ' ').trim().replace(/[{}]/g, (c) => (c === '{' ? '(' : ')'));
+
+/** `SOURCE // Headline`; just the headline when the feed named no source. */
+export function newsRow(item: NewsItem): PanelRow {
+  const source = cleanNews(item.source).toUpperCase();
+  const title = cleanNews(item.title);
+  return source ? [seg(source, 'source'), seg(' // ', 'dim'), seg(title, 'dim')] : [seg(title, 'dim')];
+}
+
+/** The wire as rows, one per headline; a placeholder when there is none. */
+export function newsRows(items: readonly NewsItem[]): PanelRow[] {
+  const rows = items.map(newsRow).filter((r) => rowText(r).trim() !== '');
+  return rows.length ? rows : [[seg('NO TRANSMISSIONS', 'dim')]];
+}
+
+/** A row cut to `width` columns, roles kept. */
+export function clipRow(row: PanelRow, width: number): PanelRow {
+  const out: PanelRow = [];
+  let left = Math.max(0, width);
+  for (const part of row) {
+    if (left <= 0) break;
+    out.push(part.text.length <= left ? part : seg(part.text.slice(0, left), part.role));
+    left -= part.text.length;
+  }
+  return out;
+}
+
+/** The 40-column wire: headline number `n` (wrapping), one margin column, cut to the width. */
+export function staticNewsRow(items: readonly NewsItem[], n: number, width: number): PanelRow {
+  const rows = newsRows(items);
+  const at = ((n % rows.length) + rows.length) % rows.length;
+  return clipRow([seg(' '), ...rows[at]], width);
 }
 
 /** `SIGNAL ` plus the sparkline, or '' when there is nothing to show. */

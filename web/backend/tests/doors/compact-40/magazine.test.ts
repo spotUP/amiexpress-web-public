@@ -71,7 +71,7 @@ describe('MAG across the three screens', () => {
     const l = buildLayout(80, 24);
     expect(l.geometry).toEqual({ cols: 2, colWidth: 37, gutter: 3, margin: 1, contentWidth: 77 });
     expect({ ticker: l.tickerRow, panelTop: l.panelTop, panelHeight: l.panelHeight, progress: l.progressRow, footer: l.footerRow })
-      .toEqual({ ticker: 1, panelTop: 2, panelHeight: 20, progress: 22, footer: 23 });
+      .toEqual({ ticker: 22, panelTop: 1, panelHeight: 20, progress: 21, footer: 23 });
     const rows = buildArticle(STORY, l).spreads[0].map(rowText);
     expect(rows[0]).toBe(' [ RELEASE // SCENE // 2026-10-13 ]'.padEnd(78));
     expect(rows[3]).toBe(' The Amiga demoscene has a new release │ A second paragraph explains how the  ');
@@ -82,7 +82,9 @@ describe('MAG across the three screens', () => {
     expect(l.geometry.cols).toBe(1);
     expect(l.collapseChrome).toBe(true);
     expect(l.effects).toBe(false);
-    expect(l.tickerRow).toBeNull();
+    // The news wire is one static headline directly above the footer, with no timer.
+    expect(l.tickerRow).toBe(l.footerRow - 1);
+    expect(l.panelHeight).toBe(21);
     const spreads = [
       ...buildArticle({ ...STORY, summary: STORY.summary.repeat(6) }, l).spreads,
       buildAwaitingEditor(l),
@@ -255,6 +257,8 @@ describe('MAG: the shipped bundle reads the magazine the board wrote', () => {
     // which is what an unmappable glyph (a story's curly quote, a rule) would print.
     expect(lines.slice(1, 23).join('\n')).not.toContain('?');
     expect(screenText).toContain('REDACTED');
+    // The news wire is the row above the footer: one static headline, source first.
+    expect(lines[23]).toContain('DEMOZOO.ORG // Skaven');
     expect(lines.filter((l) => l.trim()).length).toBeGreaterThan(8);
   });
 });

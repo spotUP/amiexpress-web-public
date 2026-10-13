@@ -15,7 +15,9 @@ import {
   rowText,
   signalStrength,
   signalTag,
-  tickerText,
+  newsRows,
+  staticNewsRow,
+  NEWS_SEPARATOR,
   type ListingBlock,
 } from '../layout';
 
@@ -38,7 +40,7 @@ export async function regionsArePinnedAtEightyByTwentyFour(): Promise<void> {
   const l = buildLayout(80, 24);
   assert.deepStrictEqual(
     { h: l.headerRow, t: l.tickerRow, p: l.panelTop, ph: l.panelHeight, pr: l.progressRow, f: l.footerRow, e: l.effects },
-    { h: 0, t: 1, p: 2, ph: 20, pr: 22, f: 23, e: true },
+    { h: 0, t: 22, p: 1, ph: 20, pr: 21, f: 23, e: true },
   );
   assert.deepStrictEqual(l.geometry, { cols: 2, colWidth: 37, gutter: 3, margin: 1, contentWidth: 77 });
 }
@@ -46,7 +48,9 @@ export async function regionsArePinnedAtEightyByTwentyFour(): Promise<void> {
 export async function fortyColumnsHasOneColumnOneChromeRowAndNoEffects(): Promise<void> {
   const l = buildLayout(40, 25);
   assert.strictEqual(l.effects, false, 'effects are off at 40');
-  assert.strictEqual(l.tickerRow, null, 'no ticker row at 40');
+  assert.strictEqual(l.tickerRow, 23, 'the static headline sits directly above the footer at 40');
+  assert.strictEqual(l.progressRow, 22);
+  assert.strictEqual(l.panelHeight, 21);
   assert.strictEqual(l.geometry.cols, 1);
   assert.strictEqual(l.collapseChrome, true);
   assert.strictEqual(l.panelTop, 1, 'the panel starts right under the single header row');
@@ -63,6 +67,7 @@ export async function theSysopCanTurnTheTickerOff(): Promise<void> {
   const l = buildLayout(80, 24, { ticker: false });
   assert.strictEqual(l.tickerRow, null);
   assert.strictEqual(l.panelTop, 1);
+  assert.strictEqual(l.progressRow, 22);
   assert.strictEqual(l.panelHeight, 21);
 }
 
@@ -211,8 +216,16 @@ export async function headerLineKeepsBothSidesOrDropsTheRight(): Promise<void> {
 }
 
 export async function tickerAndSignalStrengthDegradeToNothingWithoutData(): Promise<void> {
-  assert.strictEqual(tickerText([]), 'NO TRANSMISSIONS');
-  assert.ok(tickerText(['One', 'Two']).includes('One  //  Two'));
+  assert.deepStrictEqual(newsRows([]).map(rowText), ['NO TRANSMISSIONS']);
+  assert.deepStrictEqual(
+    newsRows([{ source: 'demozoo.org', title: 'One' }, { source: '', title: 'Two {x}' }]).map(rowText),
+    ['DEMOZOO.ORG // One', 'Two (x)'],
+  );
+  assert.ok(/^[\x20-\x7e\u25A0]+$/.test(NEWS_SEPARATOR), 'the separator maps on a C64');
+  const items = [{ source: 'a.org', title: 'x'.repeat(80) }, { source: 'b.org', title: 'Short' }];
+  assert.strictEqual(rowText(staticNewsRow(items, 1, 40)), ' B.ORG // Short');
+  assert.strictEqual(rowText(staticNewsRow(items, 2, 40)).length, 40, 'cut to the width, wraps round');
+  assert.strictEqual(rowText(staticNewsRow(items, -1, 40)), ' B.ORG // Short');
   assert.strictEqual(signalStrength([3], () => 'x'), '');
   assert.strictEqual(signalStrength([1, 2], () => 'ab'), 'SIGNAL ab');
 }

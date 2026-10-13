@@ -339,6 +339,7 @@ export async function atFortyByTwentyFiveEveryRowFitsOneColumnAndNothingMoves():
     await new Promise((resolve) => setTimeout(resolve, 700));
     const later = h.reader.stats();
     assert.deepStrictEqual(later, { glitches: 0, tickerSteps: 0, intervals: 0 }, 'no effect runs at 40');
+    assert.ok(h.reader.tickerRow().includes('EXAMPLE.ORG // '), `a static headline: "${h.reader.tickerRow()}"`);
     assert.deepStrictEqual(afterOpen, later);
   } finally { await finish(h, b); }
 }
@@ -419,8 +420,10 @@ export async function aPageTurnTouchesOnlyThePanelAndTheProgressRow(): Promise<v
       const first = layout.panelTop + 1;
       const last = layout.progressRow + 1;
       assert.ok(touched.length > 0, `${w}: the page turn painted something`);
+      // At 40 the static headline changes with the page, so its row is the one extra.
+      const wire = layout.effects ? -1 : (layout.tickerRow ?? -2) + 1;
       for (const row of touched) {
-        assert.ok(row >= first && row <= last, `${w}: row ${row} is outside the panel (${first}..${last})`);
+        assert.ok((row >= first && row <= last) || row === wire, `${w}: row ${row} is outside the panel (${first}..${last})`);
       }
       // The numbers the handoff records.
       // eslint-disable-next-line no-console
@@ -480,4 +483,137 @@ export async function aMultiSpreadArticleShowsItsPageCounterAndAShortOneToo(): P
     h.reader.press('space');
     assert.ok(/Page 2 of \d+$/.test(h.reader.progressRow()));
   } finally { await finish(h, b); }
+}
+
+// ---------------------------------------------------------------------------
+// The news wire: one row above the footer, repainted alone
+// ---------------------------------------------------------------------------
+
+/** Run `fn` with setInterval/clearInterval spied; hands back what the reader started and stopped. */
+async function withTimers<T>(fn: (t: {
+  started: Array<{ ms: number; cb: () => void; handle: any }>;
+  cleared: any[];
+}) => Promise<T>): Promise<T> {
+  const started: Array<{ ms: number; cb: () => void; handle: any }> = [];
+  const cleared: any[] = [];
+  const realSet = global.setInterval;
+  const realClear = global.clearInterval;
+  (global as any).setInterval = (cb: () => void, ms?: number, ...rest: unknown[]) => {
+    const handle = (realSet as any)(() => { /* the test drives ticks by hand */ }, 3600_000, ...rest);
+    started.push({ ms: Number(ms), cb, handle });
+    return handle;
+  };
+  (global as any).clearInterval = (handle: any) => { cleared.push(handle); return (realClear as any)(handle); };
+  try { return await fn({ started, cleared }); } finally {
+    global.setInterval = realSet;
+    global.clearInterval = realClear;
+  }
+}
+
+const TICKER_MS = 125;
+
+export async function theNewsWireIsTheRowAboveTheFooterAt80And132(): Promise<void> {
+  for (const [w, hgt] of [[80, 24], [132, 40]] as const) {
+    const b = board([]);
+    await withTimers(async () => {
+      const h = await open(w, hgt);
+      try {
+        const l = h.reader.layout;
+        assert.strictEqual(l.tickerRow, l.footerRow - 1, `${w}: directly above the footer`);
+        assert.strictEqual(l.progressRow, l.tickerRow - 1, `${w}: progress sits above the wire`);
+        assert.strictEqual(l.panelTop, 1, `${w}: the header carries no ticker`);
+        for (const key of ['f', 'c', 'enter', 'k', '/']) {
+          if (key === '/') continue;
+          h.reader.press(key, key.length === 1 ? key : undefined);
+          assert.ok(h.reader.tickerRow().startsWith(' ') || h.reader.tickerRow().length > 0, `${w}: wire shown in ${h.reader.viewKind()}`);
+        }
+        // The wire is on the glass at that row: the last write of its first frame addresses it.
+        const painted = h.writes.join('');
+        assert.ok(painted.includes(`\x1b[${l.tickerRow + 1};`), `${w}: bytes address row ${l.tickerRow + 1}`);
+        assert.ok(h.reader.tickerRow().includes('EXAMPLE.ORG // Copper Lights lands'), `${w}: newest first: "${h.reader.tickerRow()}"`);
+      } finally { await finish(h, b); }
+    });
+  }
+}
+
+export async function atFortyNoTimerIsCreatedAndOneStaticHeadlineChangesOnEachPageTurnOrViewChange(): Promise<void> {
+  const b = board([]);
+  await withTimers(async ({ started }) => {
+    const h = await open(40, 25);
+    try {
+      assert.strictEqual(started.filter((s) => s.ms === TICKER_MS).length, 0, 'no ticker timer at 40');
+      assert.strictEqual(h.reader.stats().intervals, 0);
+      const l = h.reader.layout;
+      assert.strictEqual(l.tickerRow, l.footerRow - 1);
+      const seen: string[] = [h.reader.tickerRow()];
+      h.reader.press('c', 'c');
+      seen.push(h.reader.tickerRow());
+      h.reader.press('enter');
+      seen.push(h.reader.tickerRow());
+      h.reader.press('space');
+      seen.push(h.reader.tickerRow());
+      for (let i = 1; i < seen.length; i++) assert.notStrictEqual(seen[i], seen[i - 1], `headline ${i} differs from the last`);
+      for (const line of seen) assert.ok(line.length <= 40 && line.includes(' // '), `"${line}"`);
+      // A cursor move is not a page turn: the wire holds still and costs nothing extra.
+      h.reader.press('escape');
+      const held = h.reader.tickerRow();
+      h.reader.press('down');
+      assert.strictEqual(h.reader.tickerRow(), held);
+      assert.strictEqual(started.filter((s) => s.ms === TICKER_MS).length, 0, 'still no timer');
+    } finally { await finish(h, b); }
+  });
+}
+
+export async function oneTickRepaintsTheNewsWireRowAndNothingElse(): Promise<void> {
+  for (const [w, hgt] of [[80, 24], [132, 40]] as const) {
+    const b = board([]);
+    await withTimers(async ({ started }) => {
+      const h = await open(w, hgt);
+      try {
+        h.reader.press('c', 'c');
+        h.reader.press('down');
+        await new Promise((resolve) => setImmediate(resolve));
+        const timers = started.filter((s) => s.ms === TICKER_MS);
+        assert.strictEqual(timers.length, 1, `${w}: exactly one ticker timer`);
+        const tick = timers[0].cb;
+        const bodyBefore = h.reader.panelRows();
+        const progressBefore = h.reader.progressRow();
+        const wireBefore = h.reader.tickerRow();
+        h.mark();
+        tick();
+        const rows = [...h.rowsTouched()];
+        assert.deepStrictEqual(rows, [h.reader.layout.tickerRow + 1], `${w}: only the wire row is addressed`);
+        assert.notStrictEqual(h.reader.tickerRow(), wireBefore, `${w}: the wire moved`);
+        assert.strictEqual(h.reader.stats().tickerSteps, 1);
+        assert.deepStrictEqual(h.reader.panelRows(), bodyBefore, `${w}: body untouched`);
+        assert.strictEqual(h.reader.progressRow(), progressBefore);
+        assert.strictEqual(h.reader.viewKind(), 'contents');
+        // The selection still acts: Enter opens the story the cursor was on.
+        // (a full repaint path would also reset it through build()).
+        const perFrame = h.bytes();
+        // eslint-disable-next-line no-console
+        console.log(`    ticker ${w}x${hgt}: ${perFrame} bytes/frame, ${perFrame * 8} bytes/s at 8 cells/s`);
+        assert.ok(perFrame < w * 3, `${w}: a frame cost ${perFrame} bytes`);
+        // Ten more ticks: still one row, never a growing cost.
+        h.mark();
+        for (let i = 0; i < 10; i++) tick();
+        assert.deepStrictEqual([...h.rowsTouched()], [h.reader.layout.tickerRow + 1]);
+      } finally { await finish(h, b); }
+    });
+  }
+}
+
+export async function theNewsWireTimerIsClearedOnExitAndDoesNotKeepTheDoorAlive(): Promise<void> {
+  const b = board([]);
+  await withTimers(async ({ started, cleared }) => {
+    const h = await open(80, 24);
+    const timers = started.filter((s) => s.ms === TICKER_MS);
+    assert.strictEqual(timers.length, 1);
+    assert.strictEqual(timers[0].handle.hasRef(), false, 'unref()ed: the marquee cannot hold the process open');
+    assert.ok(!cleared.includes(timers[0].handle));
+    h.reader.press('q', 'q');
+    await h.reader.done;
+    assert.ok(cleared.includes(timers[0].handle), 'clearInterval ran on exit');
+    b.restore();
+  });
 }

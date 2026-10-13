@@ -44,6 +44,8 @@ export interface Reader {
     progressRow(): string;
     /** The plain text of the footer row (hints and status), tags stripped. */
     footerRow(): string;
+    /** The plain text of the news wire row now, tags stripped ('' when the sysop turned it off). */
+    tickerRow(): string;
     /** The kind of view on screen. */
     viewKind(): View['kind'];
     /** What actually ran: sentinels for the tests that prove the effects are wired. */

@@ -18,7 +18,7 @@ export interface MagLayout {
     /** The 40-column tier: header and footer are one row each, no frames. */
     collapseChrome: boolean;
     headerRow: number;
-    /** Null when there is no ticker row (40 columns, or the sysop turned it off). */
+    /** Null when the sysop turned the news wire off. Directly above the footer. */
     tickerRow: number | null;
     panelTop: number;
     panelHeight: number;
@@ -83,8 +83,20 @@ export declare function buildArticle(story: Story, layout: MagLayout): Article;
  * full-width rule on a one-spread story and reads as a divider, not progress.
  */
 export declare function buildProgress(layout: MagLayout, position: number, total: number): PanelRow;
-/** The ticker text: the newest headlines, separated by a signal marker. */
-export declare function tickerText(headlines: readonly string[]): string;
+/** The wire's separator: U+25A0 is a solid block on a C64 (reverse space) and CP437 0xFE. */
+export declare const NEWS_SEPARATOR = "  \u25A0  ";
+export interface NewsItem {
+    source: string;
+    title: string;
+}
+/** `SOURCE // Headline`; just the headline when the feed named no source. */
+export declare function newsRow(item: NewsItem): PanelRow;
+/** The wire as rows, one per headline; a placeholder when there is none. */
+export declare function newsRows(items: readonly NewsItem[]): PanelRow[];
+/** A row cut to `width` columns, roles kept. */
+export declare function clipRow(row: PanelRow, width: number): PanelRow;
+/** The 40-column wire: headline number `n` (wrapping), one margin column, cut to the width. */
+export declare function staticNewsRow(items: readonly NewsItem[], n: number, width: number): PanelRow;
 /** `SIGNAL ` plus the sparkline, or '' when there is nothing to show. */
 export declare function signalStrength(perDay: readonly number[], spark: (n: number[]) => string): string;
 /** Section names for the section cycle, in reading order. */

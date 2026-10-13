@@ -10,8 +10,9 @@
  * only the cells that changed.
  *
  * Everything that moves is gated by `effectsAllowed(width)` through the
- * layout: the rail, the ticker and the headline glitch do not exist at 40
- * columns.
+ * layout: the rail, the scrolling news wire and the headline glitch do not
+ * exist at 40 columns, where the wire is one static headline that changes on
+ * each view change or page turn.
  */
 import { createScreen, createBox } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
 import { DoorInputManager } from '@amiexpress/bbs-door-sdk/utils/door-input-manager';
@@ -54,7 +55,10 @@ import {
   rowText,
   sectionLabel,
   signalStrength,
-  tickerText,
+  newsRows,
+  staticNewsRow,
+  NEWS_SEPARATOR,
+  type NewsItem,
   type ListingBlock,
   type MagLayout,
   type PanelRow,
@@ -71,7 +75,8 @@ export const READ_KEY = 'read-story-ids';
 export const BOOKMARK_KEY = 'bookmark-story-ids';
 const STORED_CAP = 500;
 const TICKER_HEADLINES = 8;
-const TICKER_STEP_MS = 250;
+/** 8 cells per second: a readable marquee that costs one row per frame. */
+const TICKER_STEP_MS = 125;
 const SIGNAL_DAYS = 8;
 /** The headline settles for this long before the one glitch lands. */
 const GLITCH_DELAY_MS = 450;
@@ -132,6 +137,8 @@ export interface Reader {
   progressRow(): string;
   /** The plain text of the footer row (hints and status), tags stripped. */
   footerRow(): string;
+  /** The plain text of the news wire row now, tags stripped ('' when the sysop turned it off). */
+  tickerRow(): string;
   /** The kind of view on screen. */
   viewKind(): View['kind'];
   /** What actually ran: sentinels for the tests that prove the effects are wired. */
@@ -423,6 +430,7 @@ export async function startReader(session: DoorSession): Promise<Reader> {
     view = next;
     if (!keepSelection && next.kind !== 'article') selected = null;
     build();
+    advanceNews();
     if (next.kind === 'article') {
       read.add(next.storyId);
       persist(READ_KEY, read);
@@ -433,17 +441,41 @@ export async function startReader(session: DoorSession): Promise<Reader> {
   // ---- ticker ----------------------------------------------------------
 
   let tickerTimer: ReturnType<typeof setInterval> | null = null;
+  let newsItems: NewsItem[] = [];
+  let newsAt = -1;
+  const loadNews = () => {
+    const root = magazineRoot(__dirname);
+    newsItems = [...snapshot.index]
+      .sort((a, b) => b.date.localeCompare(a.date))
+      .slice(0, TICKER_HEADLINES)
+      .map((e) => ({ source: loadStory(e.storyId, root)?.source ?? '', title: e.title }));
+  };
+  /** 40 columns: the next headline, painted into the ticker row (flushed by the caller's render). */
+  const showStaticNews = () => {
+    if (tickerBox) tickerBox.setContent(paintRow(staticNewsRow(newsItems, newsAt, layout.width)));
+  };
+  const advanceNews = () => {
+    if (layout.effects) return;
+    newsAt += 1;
+    showStaticNews();
+  };
   const startTicker = () => {
     if (!tickerBox) return;
-    const newest = [...snapshot.index].sort((a, b) => b.date.localeCompare(a.date)).slice(0, TICKER_HEADLINES);
-    const text = tickerText(newest.map((e) => e.title)).replace(/[{}]/g, (c) => (c === '{' ? '(' : ')'));
-    const scroll = createScrollText({ text, width: Math.max(1, layout.width - 2), gap: '   //   ' });
+    loadNews();
+    if (!layout.effects) { showStaticNews(); return; }
+    const sep = s.dim(NEWS_SEPARATOR);
+    const text = newsRows(newsItems).map(paintRow).join(sep);
+    const scroll = createScrollText({ text, width: Math.max(1, layout.width - 2), gap: sep });
     let step = 0;
-    const frame = () => tickerBox.setContent(` ${s.dim(scroll.frame(step))}`);
+    const frame = () => tickerBox.setContent(` ${scroll.frame(step)}`);
     frame();
     if (scroll.overflows) {
       counters.intervals += 1;
+      // The tick touches the ticker row alone: setContent + the differential
+      // render. It must never call paint(), go() or forceFullRedraw().
       tickerTimer = setInterval(() => { step += 1; counters.tickerSteps += 1; frame(); render(); }, TICKER_STEP_MS);
+      // A running marquee must not keep the door process alive.
+      tickerTimer.unref?.();
     }
   };
 
@@ -460,7 +492,7 @@ export async function startReader(session: DoorSession): Promise<Reader> {
   const page = (delta: number) => {
     if (view.kind === 'article') {
       const next = spreadNo + delta;
-      if (next >= 0 && next < spreads.length) { spreadNo = next; paint(); return; }
+      if (next >= 0 && next < spreads.length) { spreadNo = next; advanceNews(); paint(); return; }
       const at = view.list.indexOf(view.storyId) + delta;
       if (at >= 0 && at < view.list.length) {
         go({ ...view, storyId: view.list[at] });
@@ -475,6 +507,7 @@ export async function startReader(session: DoorSession): Promise<Reader> {
     if (first) selected = first;
     build();
     spreadNo = next;
+    advanceNews();
     paint();
   };
 
@@ -644,6 +677,7 @@ export async function startReader(session: DoorSession): Promise<Reader> {
     panelRows: () => (spreads[spreadNo] ?? []).map(rowText),
     progressRow: () => rowText(buildProgress(layout, spreadNo, spreads.length)),
     footerRow: () => chrome.footerContent().replace(/\{[^{}]*\}/g, ''),
+    tickerRow: () => (tickerBox ? String(tickerBox.getContent()).replace(/\{[^{}]*\}/g, '') : ''),
     viewKind: () => view.kind,
     stats: () => ({ ...counters }),
     stop: () => finish(),

@@ -410,7 +410,7 @@ describe('40-column sweep: the adapted doors', () => {
   });
 
   it('magazine reader: article, contents and footer rows for a long story at 40', () => {
-    const { buildLayout, buildArticle, buildListing, rowText } = require('../../../Doors/magazine/layout');
+    const { buildLayout, buildArticle, buildListing, rowText, staticNewsRow } = require('../../../Doors/magazine/layout');
     const { HINTS, COMPACT_HINTS } = require('../../../Doors/magazine/app');
     const layout = buildLayout(40, 25);
     const story = {
@@ -423,6 +423,9 @@ describe('40-column sweep: the adapted doors', () => {
       'x', layout, { left: `CONTENTS - ${LONG}`, right: '2026-10-13' },
     );
     for (const spread of listing.spreads) fits(spread.map(rowText));
+    // The static news wire row, for every headline, however long its source and title.
+    const wire = [{ source: LONG, title: `${LONG} ${LONG_WORDS}` }, { source: '', title: LONG_WORDS }];
+    for (let n = 0; n < 3; n++) fits([rowText(staticNewsRow(wire, n, 40))]);
     // The footer is one row: ' ' plus `Key: Does` joined by two spaces.
     fits([' ' + COMPACT_HINTS.map((h: any) => `${h.key}: ${h.does}`).join('  ')]);
     void HINTS;

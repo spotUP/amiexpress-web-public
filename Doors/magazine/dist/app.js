@@ -15,8 +15,9 @@ exports.createApp = createApp;
  * only the cells that changed.
  *
  * Everything that moves is gated by `effectsAllowed(width)` through the
- * layout: the rail, the ticker and the headline glitch do not exist at 40
- * columns.
+ * layout: the rail, the scrolling news wire and the headline glitch do not
+ * exist at 40 columns, where the wire is one static headline that changes on
+ * each view change or page turn.
  */
 const blessed_helpers_1 = require("@amiexpress/bbs-door-sdk/utils/blessed-helpers");
 const door_input_manager_1 = require("@amiexpress/bbs-door-sdk/utils/door-input-manager");
@@ -31,7 +32,8 @@ exports.READ_KEY = 'read-story-ids';
 exports.BOOKMARK_KEY = 'bookmark-story-ids';
 const STORED_CAP = 500;
 const TICKER_HEADLINES = 8;
-const TICKER_STEP_MS = 250;
+/** 8 cells per second: a readable marquee that costs one row per frame. */
+const TICKER_STEP_MS = 125;
 const SIGNAL_DAYS = 8;
 /** The headline settles for this long before the one glitch lands. */
 const GLITCH_DELAY_MS = 450;
@@ -347,6 +349,7 @@ async function startReader(session) {
         if (!keepSelection && next.kind !== 'article')
             selected = null;
         build();
+        advanceNews();
         if (next.kind === 'article') {
             read.add(next.storyId);
             persist(exports.READ_KEY, read);
@@ -355,18 +358,47 @@ async function startReader(session) {
     };
     // ---- ticker ----------------------------------------------------------
     let tickerTimer = null;
+    let newsItems = [];
+    let newsAt = -1;
+    const loadNews = () => {
+        const root = (0, library_1.magazineRoot)(__dirname);
+        newsItems = [...snapshot.index]
+            .sort((a, b) => b.date.localeCompare(a.date))
+            .slice(0, TICKER_HEADLINES)
+            .map((e) => ({ source: (0, library_1.loadStory)(e.storyId, root)?.source ?? '', title: e.title }));
+    };
+    /** 40 columns: the next headline, painted into the ticker row (flushed by the caller's render). */
+    const showStaticNews = () => {
+        if (tickerBox)
+            tickerBox.setContent(paintRow((0, layout_1.staticNewsRow)(newsItems, newsAt, layout.width)));
+    };
+    const advanceNews = () => {
+        if (layout.effects)
+            return;
+        newsAt += 1;
+        showStaticNews();
+    };
     const startTicker = () => {
         if (!tickerBox)
             return;
-        const newest = [...snapshot.index].sort((a, b) => b.date.localeCompare(a.date)).slice(0, TICKER_HEADLINES);
-        const text = (0, layout_1.tickerText)(newest.map((e) => e.title)).replace(/[{}]/g, (c) => (c === '{' ? '(' : ')'));
-        const scroll = (0, bbs_door_sdk_1.createScrollText)({ text, width: Math.max(1, layout.width - 2), gap: '   //   ' });
+        loadNews();
+        if (!layout.effects) {
+            showStaticNews();
+            return;
+        }
+        const sep = s.dim(layout_1.NEWS_SEPARATOR);
+        const text = (0, layout_1.newsRows)(newsItems).map(paintRow).join(sep);
+        const scroll = (0, bbs_door_sdk_1.createScrollText)({ text, width: Math.max(1, layout.width - 2), gap: sep });
         let step = 0;
-        const frame = () => tickerBox.setContent(` ${s.dim(scroll.frame(step))}`);
+        const frame = () => tickerBox.setContent(` ${scroll.frame(step)}`);
         frame();
         if (scroll.overflows) {
             counters.intervals += 1;
+            // The tick touches the ticker row alone: setContent + the differential
+            // render. It must never call paint(), go() or forceFullRedraw().
             tickerTimer = setInterval(() => { step += 1; counters.tickerSteps += 1; frame(); render(); }, TICKER_STEP_MS);
+            // A running marquee must not keep the door process alive.
+            tickerTimer.unref?.();
         }
     };
     // ---- actions ---------------------------------------------------------
@@ -383,6 +415,7 @@ async function startReader(session) {
             const next = spreadNo + delta;
             if (next >= 0 && next < spreads.length) {
                 spreadNo = next;
+                advanceNews();
                 paint();
                 return;
             }
@@ -405,6 +438,7 @@ async function startReader(session) {
             selected = first;
         build();
         spreadNo = next;
+        advanceNews();
         paint();
     };
     const openStory = (storyId, list) => {
@@ -649,6 +683,7 @@ async function startReader(session) {
         panelRows: () => (spreads[spreadNo] ?? []).map(layout_1.rowText),
         progressRow: () => (0, layout_1.rowText)((0, layout_1.buildProgress)(layout, spreadNo, spreads.length)),
         footerRow: () => chrome.footerContent().replace(/\{[^{}]*\}/g, ''),
+        tickerRow: () => (tickerBox ? String(tickerBox.getContent()).replace(/\{[^{}]*\}/g, '') : ''),
         viewKind: () => view.kind,
         stats: () => ({ ...counters }),
         stop: () => finish(),

@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.SECTION_ORDER = void 0;
+exports.SECTION_ORDER = exports.NEWS_SEPARATOR = void 0;
 exports.rowText = rowText;
 exports.buildLayout = buildLayout;
 exports.buildListing = buildListing;
@@ -10,7 +10,10 @@ exports.buildAwaitingEditor = buildAwaitingEditor;
 exports.signalTag = signalTag;
 exports.buildArticle = buildArticle;
 exports.buildProgress = buildProgress;
-exports.tickerText = tickerText;
+exports.newsRow = newsRow;
+exports.newsRows = newsRows;
+exports.clipRow = clipRow;
+exports.staticNewsRow = staticNewsRow;
 exports.signalStrength = signalStrength;
 exports.sectionLabel = sectionLabel;
 /**
@@ -24,9 +27,10 @@ exports.sectionLabel = sectionLabel;
  *
  * Regions top to bottom (row numbers from `buildLayout`):
  *   header     the door chrome's masthead (rail and title)
- *   ticker     one row of scrolling headlines - wide screens only
  *   panel      the ONLY region a page turn repaints
  *   progress   one row, filled in proportion to the spread being read
+ *   ticker     the news wire, one row: it scrolls where effects are allowed,
+ *              and at 40 columns it is one static headline
  *   footer     the door chrome's hint line
  */
 const blessed_1 = require("@amiexpress/bbs-door-sdk/engines/ui/blessed");
@@ -60,11 +64,11 @@ function buildLayout(width, height, options = {}) {
     const w = Math.max(1, Math.floor(width) || 80);
     const h = Math.max(6, Math.floor(height) || 24);
     const effects = (0, blessed_1.effectsAllowed)(w);
-    const hasTicker = effects && options.ticker !== false;
-    const tickerRow = hasTicker ? 1 : null;
-    const panelTop = hasTicker ? 2 : 1;
+    const hasTicker = options.ticker !== false;
     const footerRow = h - 1;
-    const progressRow = h - 2;
+    const tickerRow = hasTicker ? footerRow - 1 : null;
+    const progressRow = hasTicker ? footerRow - 2 : footerRow - 1;
+    const panelTop = 1;
     return {
         width: w,
         height: h,
@@ -311,12 +315,37 @@ function buildProgress(layout, position, total) {
         row.push(seg(counter, 'dim'));
     return row;
 }
-/** The ticker text: the newest headlines, separated by a signal marker. */
-function tickerText(headlines) {
-    const clean = headlines.map((h) => (0, library_1.paintSafe)(h).replace(/\s+/g, ' ').trim()).filter(Boolean);
-    if (clean.length === 0)
-        return 'NO TRANSMISSIONS';
-    return `LATEST TRANSMISSIONS >> ${clean.join('  //  ')}`;
+/** The wire's separator: U+25A0 is a solid block on a C64 (reverse space) and CP437 0xFE. */
+exports.NEWS_SEPARATOR = '  \u25A0  ';
+const cleanNews = (text) => (0, library_1.paintSafe)(text).replace(/\s+/g, ' ').trim().replace(/[{}]/g, (c) => (c === '{' ? '(' : ')'));
+/** `SOURCE // Headline`; just the headline when the feed named no source. */
+function newsRow(item) {
+    const source = cleanNews(item.source).toUpperCase();
+    const title = cleanNews(item.title);
+    return source ? [seg(source, 'source'), seg(' // ', 'dim'), seg(title, 'dim')] : [seg(title, 'dim')];
+}
+/** The wire as rows, one per headline; a placeholder when there is none. */
+function newsRows(items) {
+    const rows = items.map(newsRow).filter((r) => rowText(r).trim() !== '');
+    return rows.length ? rows : [[seg('NO TRANSMISSIONS', 'dim')]];
+}
+/** A row cut to `width` columns, roles kept. */
+function clipRow(row, width) {
+    const out = [];
+    let left = Math.max(0, width);
+    for (const part of row) {
+        if (left <= 0)
+            break;
+        out.push(part.text.length <= left ? part : seg(part.text.slice(0, left), part.role));
+        left -= part.text.length;
+    }
+    return out;
+}
+/** The 40-column wire: headline number `n` (wrapping), one margin column, cut to the width. */
+function staticNewsRow(items, n, width) {
+    const rows = newsRows(items);
+    const at = ((n % rows.length) + rows.length) % rows.length;
+    return clipRow([seg(' '), ...rows[at]], width);
 }
 /** `SIGNAL ` plus the sparkline, or '' when there is nothing to show. */
 function signalStrength(perDay, spark) {
