@@ -21,6 +21,8 @@ import * as fsSync from 'fs';
 import * as path from 'path';
 import { config } from '../config';
 import { parseInfoFile } from '../utils/info-file.util';
+import * as amigafs from '../utils/amigafs';
+import { resolveAssignPath } from '../utils/path-util';
 
 /**
  * Read a tooltype value from an .info file
@@ -28,8 +30,11 @@ import { parseInfoFile } from '../utils/info-file.util';
  */
 function readToolType(infoPath: string, key: string): string {
   try {
-    if (!fsSync.existsSync(infoPath)) return '';
-    const info = parseInfoFile(infoPath);
+    // An Amiga volume ignores case; the live board's volume does not
+    // (LANGUAGES.info is Languages.info there).
+    const realPath = amigafs.resolvePath(infoPath);
+    if (!realPath || !fsSync.existsSync(realPath)) return '';
+    const info = parseInfoFile(realPath);
     const tt = info.tooltypes.find(t => !t.commented && t.key.toUpperCase() === key.toUpperCase());
     return tt?.value || '';
   } catch {
@@ -80,10 +85,17 @@ class TranslationService {
 
     // Read language base path - express.e:2597
     const bbsConfigPath = path.join(bbsDataPath, 'bbsConfig.info');
-    this.languageBasePath = readToolType(bbsConfigPath, 'LANGUAGE_BASE') || path.join(bbsDataPath, 'Languages');
+    // No LANGUAGE_BASE tooltype means no translators: express.e:2597 only loads
+    // inside IF readToolType(...'LANGUAGE_BASE'...), it has no default folder.
+    const languageBase = readToolType(bbsConfigPath, 'LANGUAGE_BASE');
+    this.languageBasePath = languageBase
+      ? (path.isAbsolute(languageBase) || /^[A-Za-z]+:/.test(languageBase)
+        ? resolveAssignPath(languageBase)
+        : path.join(bbsDataPath, languageBase))
+      : '';
 
-    // Ensure trailing slash
-    if (!this.languageBasePath.endsWith('/') && !this.languageBasePath.endsWith('\\')) {
+    // checkPathSlash - express.e:2599
+    if (this.languageBasePath && !this.languageBasePath.endsWith('/') && !this.languageBasePath.endsWith('\\')) {
       this.languageBasePath += '/';
     }
 
@@ -109,7 +121,9 @@ class TranslationService {
    * express.e:2586-2648 - loadTranslators()
    */
   private async loadTranslators(): Promise<void> {
-    this.translators.clear();
+    this.unloadTranslators(); // express.e:2595
+
+    if (!this.languageBasePath) return; // no LANGUAGE_BASE tooltype, express.e:2597
 
     for (const lang of this.languageList) {
       if (lang === this.hostLanguage) continue;
@@ -127,6 +141,15 @@ class TranslationService {
   }
 
   /**
+   * Drop every loaded dictionary
+   * express.e:2650-2668 - unloadTranslators(); the Amiga frees the list and the
+   * text blocks by hand, here the Map is released to the collector.
+   */
+  private unloadTranslators(): void {
+    this.translators.clear();
+  }
+
+  /**
    * Load a single translator dictionary file
    * express.e:2492-2584 - loadTranslator()
    *
@@ -136,12 +159,14 @@ class TranslationService {
    */
   private async loadTranslator(name: string, filePath: string): Promise<void> {
     try {
-      if (!fsSync.existsSync(filePath)) {
-        console.log(`[TranslationService] Dictionary not found: ${filePath}`);
+      // express.e:2610 fileExists on '.TRN'; the Amiga ignores case, so the
+      // board's lowercase .trn files must match too.
+      const realPath = amigafs.resolvePath(filePath);
+      if (!realPath || !fsSync.existsSync(realPath)) {
         return;
       }
 
-      const content = await fs.readFile(filePath, 'utf-8');
+      const content = await fs.readFile(realPath, 'utf-8');
       const words = new Map<string, string>();
 
       // Parse dictionary file
