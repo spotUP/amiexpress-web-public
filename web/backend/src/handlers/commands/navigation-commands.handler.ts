@@ -245,7 +245,7 @@ setEnvStat(session, EnvStat.JOIN);
   if (newIndex < 0) {
     // Mirror express.e: fall back to JM prompt
     const { handleJoinMessageBaseCommand } = require('../message/message-commands.handler');
-    handleJoinMessageBaseCommand(socket, session, '');
+    await handleJoinMessageBaseCommand(socket, session, '');
     return;
   } else {
     const newMsgBase = confMessageBases[newIndex];
@@ -279,7 +279,7 @@ setEnvStat(session, EnvStat.JOIN);
   if (newIndex >= confMessageBases.length) {
     // Mirror express.e: fall back to JM prompt
     const { handleJoinMessageBaseCommand } = require('../message/message-commands.handler');
-    handleJoinMessageBaseCommand(socket, session, '');
+    await handleJoinMessageBaseCommand(socket, session, '');
     return;
   } else {
     const newMsgBase = confMessageBases[newIndex];
