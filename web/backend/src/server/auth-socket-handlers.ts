@@ -36,36 +36,6 @@ import { installPetsciiModelChoke, disposePetsciiSessionModel } from '../utils/p
 import { reportPresence } from '../achievements/sites';
 
 /**
- * Check password strength against MIN_PASSWORD_LENGTH and MIN_PASSWORD_STRENGTH tooltypes.
- * express.e:908-933
- *
- * Returns:
- *   true  — password meets all criteria
- *   1     — password too short (fails MIN_PASSWORD_LENGTH)
- *   2     — password lacks enough character classes (fails MIN_PASSWORD_STRENGTH)
- */
-function checkPasswordStrength(newPass: string, minLength: number, minStrength: number): true | 1 | 2 {
-  // express.e:910-912 — MIN_PASSWORD_LENGTH check
-  if (minLength > 0 && newPass.length < minLength) return 1;
-
-  // express.e:915-932 — MIN_PASSWORD_STRENGTH check (how many character classes are present)
-  if (minStrength > 0) {
-    const cap = Math.min(minStrength, 4);
-    let lower = 0, upper = 0, num = 0, sym = 0;
-    for (let i = 0; i < newPass.length; i++) {
-      const c = newPass.charCodeAt(i);
-      if (c >= 48 && c <= 57)       num   = 1;
-      else if (c >= 65 && c <= 90)  upper = 1;
-      else if (c >= 97 && c <= 122) lower = 1;
-      else                          sym   = 1;
-    }
-    if (lower + upper + num + sym < cap) return 2;
-  }
-
-  return true;
-}
-
-/**
  * Register authentication socket event handlers
  */
 export function registerAuthHandlers(socket: Socket) {
