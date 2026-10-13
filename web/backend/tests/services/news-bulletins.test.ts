@@ -15,6 +15,8 @@ import {
   NEWS_BULLETIN_SOURCES,
   OWNED_BULLETIN_NUMBERS,
   parseFeed,
+  parseFeedItems,
+  jsonItems,
   parseJsonFeed,
   toBulletinText,
   sourceIsDue,
@@ -272,5 +274,53 @@ describe('the shipped BullHelp.txt', () => {
       ensureBullHelpLine(dir, parseInt(/\d+/.exec(src.file)![0], 10), src.title);
     });
     expect(fsMod.readFileSync(pathMod.join(dir, 'BullHelp.txt'), 'latin1')).toBe(before);
+  });
+});
+
+
+describe('feed items keep their summary and url', () => {
+  const REDDIT_ATOM = `<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <title>r/amiga</title>
+  <entry>
+    <author><name>/u/zed</name><uri>https://www.reddit.com/user/zed</uri></author>
+    <content type="html">&lt;!-- SC_OFF --&gt;&lt;div class="md"&gt;&lt;p&gt;My A1200 &amp;amp; its new 68060 board boots&lt;/p&gt;&lt;/div&gt;&lt;!-- SC_ON --&gt;</content>
+    <id>t3_abc</id>
+    <link rel="self" href="https://www.reddit.com/r/amiga/comments/abc/feed.rss"/>
+    <link href="https://www.reddit.com/r/amiga/comments/abc/a1200_boots/" rel="alternate"/>
+    <title>A1200 boots</title>
+  </entry>
+</feed>`;
+
+  it('reads Atom content text and the alternate link of a reddit feed', async () => {
+    const { items } = await parseFeedItems(REDDIT_ATOM, 'reddit.com');
+    expect(items).toHaveLength(1);
+    expect(items[0].summary).toBe('My A1200 & its new 68060 board boots');
+    expect(items[0].url).toBe('https://www.reddit.com/r/amiga/comments/abc/a1200_boots/');
+  });
+
+  it('reads a single Atom link and an html-typed summary', async () => {
+    const xml = `<feed xmlns="http://www.w3.org/2005/Atom"><entry><title>Fix</title>
+      <link href="https://gitlab.com/x/-/commit/1"/><summary type="html">&lt;p&gt;Adds exploit&lt;/p&gt;</summary></entry></feed>`;
+    const { items } = await parseFeedItems(xml, 'x');
+    expect(items[0].summary).toBe('Adds exploit');
+    expect(items[0].url).toBe('https://gitlab.com/x/-/commit/1');
+  });
+
+  it('still reads RSS 2.0 text links and descriptions', async () => {
+    const xml = `<rss><channel><item><title>T</title><link>https://e.org/1</link><description>Plain text</description></item></channel></rss>`;
+    const { items } = await parseFeedItems(xml, 'x');
+    expect(items[0]).toMatchObject({ headline: 'T', summary: 'Plain text', url: 'https://e.org/1' });
+  });
+
+  it('gives a Hacker News row its own url, else its item page', () => {
+    const src = NEWS_BULLETIN_SOURCES.find((s) => s.file === 'bull24.txt')!;
+    const raw = JSON.stringify({ hits: [
+      { title: 'With url', url: 'https://example.com/a', objectID: '11', points: 3 },
+      { title: 'Ask HN: x', url: null, objectID: '22', points: 1 },
+    ] });
+    const items = jsonItems(raw, src);
+    expect(items[0].url).toBe('https://example.com/a');
+    expect(items[1].url).toBe('https://news.ycombinator.com/item?id=22');
   });
 });

@@ -63,6 +63,10 @@ export interface NewsBulletinSource {
   limit?: number;
   /** `json`: dotted path to the item array. */
   listPath?: string;
+  /** JSON: path of each row's own URL, and the template used when it is empty (`{id}` = the row's `idPath`). */
+  urlPath?: string;
+  idPath?: string;
+  fallbackUrl?: string;
   /** `json`: which fields, in render order. */
   fields?: NewsBulletField[];
 }
@@ -93,7 +97,7 @@ export const NEWS_BULLETIN_SOURCES: NewsBulletinSource[] = [
   { kind: 'rss', url: 'https://www.schneier.com/feed/atom/', file: 'bull21.txt', title: 'Schneier on Security', source: 'schneier.com', hostGapMs: 5000 },
   { kind: 'rss', url: 'https://googleprojectzero.blogspot.com/feeds/posts/default', file: 'bull22.txt', title: 'Project Zero - deep bug research', source: 'Google Project Zero', hostGapMs: 5000, intervalMs: 6 * 60 * MINUTE },
   { kind: 'rss', url: 'https://feeds.arstechnica.com/arstechnica/index', file: 'bull23.txt', title: 'Ars Technica', source: 'arstechnica.com', hostGapMs: 5000 },
-  { kind: 'json', url: 'https://hn.algolia.com/api/v1/search_by_date?tags=story&hitsPerPage=20', file: 'bull24.txt', title: 'Hacker News - newest stories', source: 'news.ycombinator.com via Algolia', hostGapMs: 5000, intervalMs: 5 * MINUTE, listPath: 'hits', fields: [{ label: '', path: 'title' }, { label: 'points', path: 'points' }] },
+  { kind: 'json', url: 'https://hn.algolia.com/api/v1/search_by_date?tags=story&hitsPerPage=20', file: 'bull24.txt', title: 'Hacker News - newest stories', source: 'news.ycombinator.com via Algolia', hostGapMs: 5000, intervalMs: 5 * MINUTE, listPath: 'hits', urlPath: 'url', idPath: 'objectID', fallbackUrl: 'https://news.ycombinator.com/item?id={id}', fields: [{ label: '', path: 'title' }, { label: 'points', path: 'points' }] },
 
   { kind: 'rss', url: 'https://rtl-sdr.com/feed/', file: 'bull25.txt', title: 'RTL-SDR - decoding closed signals', source: 'rtl-sdr.com', hostGapMs: 5000 },
   { kind: 'rss', url: 'https://hackaday.com/tag/phreaking/feed/', file: 'bull26.txt', title: 'Hackaday - phreaking and comms', source: 'hackaday.com', hostGapMs: 5000 },
@@ -388,8 +392,15 @@ function valueAt(obj: any, dotted: string): any {
 function labelOf(value: any): string {
   if (value == null) return '';
   if (typeof value === 'object') {
-    const first = Array.isArray(value) ? value[0] : value;
-    return String(first?.name ?? first?.title ?? first?.value ?? first?.href ?? '');
+    // Atom repeats <link>; the post itself is rel="alternate" (or has no rel),
+    // the others are "self", "replies", "enclosure".
+    const first = Array.isArray(value)
+      ? (value.find((v: any) => v && typeof v === 'object' && (!v.$?.rel || v.$.rel === 'alternate')) ?? value[0])
+      : value;
+    if (first == null || typeof first !== 'object') return String(first ?? '');
+    // xml2js keeps an element with attributes as { _: text, $: { attr } }, and
+    // an empty one with attributes as { $: { href } } (Atom <link href="..."/>).
+    return String(first.name ?? first.title ?? first.value ?? first._ ?? first.href ?? first.$?.href ?? '');
   }
   return String(value);
 }
@@ -444,7 +455,14 @@ export async function parseFeed(xml: string, limit = 12): Promise<string> {
   return (await parseFeedItems(xml, '', limit)).text;
 }
 
-/** A JSON endpoint, shaped by the source's `listPath` and `fields`. */
+/** A JSON row's link: its own URL, else the template filled from its id. */
+function jsonUrl(item: any, src: NewsBulletinSource): string | undefined {
+  const own = src.urlPath ? labelOf(valueAt(item, src.urlPath)).trim() : '';
+  if (own) return own;
+  const id = src.idPath ? labelOf(valueAt(item, src.idPath)).trim() : '';
+  return id && src.fallbackUrl ? src.fallbackUrl.replace('{id}', id) : undefined;
+}
+
 /** A JSON endpoint's rows, shaped by the source's `listPath` and `fields`. */
 export function jsonItems(raw: string, src: NewsBulletinSource, limit = 12): FeedItem[] {
   const data = JSON.parse(raw);
@@ -460,6 +478,7 @@ export function jsonItems(raw: string, src: NewsBulletinSource, limit = 12): Fee
         headline,
         summary: parts.filter((p) => p !== headline).join('  '),
         source: src.source,
+        url: jsonUrl(item, src),
       };
     })
     .filter((i) => i.headline);

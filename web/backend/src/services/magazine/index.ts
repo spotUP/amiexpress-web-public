@@ -126,8 +126,10 @@ export function mergeIncoming(
       // sentence - so the archive gets the better copy, not the first.
       if ((item.summary ?? '').length > (prior.summary ?? '').length) {
         prior.summary = item.summary;
-        if (item.url && !prior.url) prior.url = item.url;
       }
+      // A field the archive lacks is filled from any later sighting, never
+      // overwritten: the url must not depend on the summary having grown.
+      if (item.url && !prior.url) prior.url = item.url;
       prior.seenCount += 1;
       duplicates++;
       continue;

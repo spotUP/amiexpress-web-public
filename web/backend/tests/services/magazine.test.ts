@@ -229,3 +229,32 @@ describe('one refresh pass', () => {
     fs.rmSync(dir, { recursive: true, force: true });
   });
 });
+
+describe('a re-seen story gains what it lacked', () => {
+  const NOW = '2026-10-13T00:00:00Z';
+  it('fills an empty summary and url from a later sighting', () => {
+    const first = mergeIncoming([], [{ headline: 'Skaven ships a new Amiga intro', summary: '', source: 'reddit.com' }], NOW);
+    const second = mergeIncoming(first.stories, [
+      { headline: 'Skaven ships a new Amiga intro', summary: 'Details here.', source: 'reddit.com', url: 'https://r.example/1' },
+    ], NOW);
+    expect(second.stories[0].summary).toBe('Details here.');
+    expect(second.stories[0].url).toBe('https://r.example/1');
+  });
+
+  it('fills a missing url even when the new summary is not longer', () => {
+    const first = mergeIncoming([], [{ headline: 'Skaven ships a new Amiga intro', summary: 'Long existing summary.', source: 'a' }], NOW);
+    const second = mergeIncoming(first.stories, [
+      { headline: 'Skaven ships a new Amiga intro', summary: 'Short', source: 'b', url: 'https://r.example/2' },
+    ], NOW);
+    expect(second.stories[0].summary).toBe('Long existing summary.');
+    expect(second.stories[0].url).toBe('https://r.example/2');
+  });
+
+  it('never overwrites a non-empty url', () => {
+    const first = mergeIncoming([], [{ headline: 'Skaven ships a new Amiga intro', summary: 'x', source: 'a', url: 'https://keep.example' }], NOW);
+    const second = mergeIncoming(first.stories, [
+      { headline: 'Skaven ships a new Amiga intro', summary: 'a much longer summary', source: 'b', url: 'https://other.example' },
+    ], NOW);
+    expect(second.stories[0].url).toBe('https://keep.example');
+  });
+});
