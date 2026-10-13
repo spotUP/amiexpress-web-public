@@ -40,6 +40,7 @@ import {
 } from '../utils/date-time.util';
 import { SysopDebugUtil, DebugSeverity } from '../utils/sysop-debug.util';
 import { narrowClip } from '../utils/table-format.util';
+import { calcSizeText } from '../utils/byte-format.util';
 import { vicColorToPetscii } from '@amiexpress/bbs-door-sdk/petscii';
 
 export type MciFlavour = 'ansi' | 'petscii';
@@ -269,20 +270,7 @@ export async function buildMciDispatch(
   const lcRaw = user.lastLogin || user.timeLastOn;
   const lcDate: Date | null = lcRaw instanceof Date ? lcRaw : (lcRaw ? new Date(lcRaw) : null);
 
-  // ~SU / ~SD - Upload/Download Size (express.e:5359-5366) - calcSizeText()
-  // express.e calcSizeText() divides by 1024 repeatedly until value < 1024,
-  // appending lowercase unit suffix: b, kb, mb, gb, tb, pb (MiscFuncs.e:3336-3370)
-  const calcSizeText = (bytes: number): string => {
-    const units = ['b', 'kb', 'mb', 'gb', 'tb', 'pb'];
-    let val = bytes;
-    let i = 0;
-    while (val >= 1024 && i < units.length - 1) {
-      val = Math.round(val / 1024);
-      i++;
-    }
-    return `${val}${units[i]}`;
-  };
-
+  // ~SU / ~SD - Upload/Download Size (express.e:5359-5366): calcSizeText, utils/byte-format.util
   let msgBaseName = 'Default';
   const currentMsgBase = session.currentMsgBase || 1;
   try {

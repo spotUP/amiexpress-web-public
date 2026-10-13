@@ -28,6 +28,7 @@ import * as path from "path";
 import * as net from "net";
 import { amigaGaps, doorOf } from '../instrumentation/amiga-gaps';
 import { toAmigaTime, encodeAmigaDate } from '../../utils/date-time.util';
+import { calcSizeText } from '../../utils/byte-format.util';
 
 // Telnet session state for TELNET_CONNECT command (express.e:3051-3302)
 interface TelnetSessionState {
@@ -1874,7 +1875,7 @@ debugLog(`[DoorMessageHandler]   DT_GEOGRAPHIC: "${bbsLoc}"`);
         {
           const user = (this.config.bbsSession as any)?.user;
           const bytes = user?.bytesUploaded || 0;
-          const sizeStr = this.formatByteSize(bytes);
+          const sizeStr = calcSizeText(bytes);
 debugLog(`[DoorMessageHandler]   DT_SIZEUPLOAD: "${sizeStr}"`);
           this.writeStringToMessage(msgAddr, sizeStr);
         }
@@ -1885,7 +1886,7 @@ debugLog(`[DoorMessageHandler]   DT_SIZEUPLOAD: "${sizeStr}"`);
         {
           const user = (this.config.bbsSession as any)?.user;
           const bytes = user?.bytesDownloaded || 0;
-          const sizeStr = this.formatByteSize(bytes);
+          const sizeStr = calcSizeText(bytes);
 debugLog(`[DoorMessageHandler]   DT_SIZEDOWNLOAD: "${sizeStr}"`);
           this.writeStringToMessage(msgAddr, sizeStr);
         }
@@ -3404,21 +3405,4 @@ console.error(`[DoorMessageHandler] Error reading file ${filePath}:`, error?.mes
     debugLog(`[DoorMessageHandler] Telnet session cleaned up`);
   }
 
-  /**
-   * Format byte size to human-readable string (e.g., "1.5mb")
-   * Per express.e:3336-3370 calcSizeText()
-   */
-  private formatByteSize(bytes: number): string {
-    if (bytes < 1024) {
-      return `${bytes}b`;
-    } else if (bytes < 1024 * 1024) {
-      return `${(bytes / 1024).toFixed(1)}kb`;
-    } else if (bytes < 1024 * 1024 * 1024) {
-      return `${(bytes / (1024 * 1024)).toFixed(1)}mb`;
-    } else if (bytes < 1024 * 1024 * 1024 * 1024) {
-      return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)}gb`;
-    } else {
-      return `${(bytes / (1024 * 1024 * 1024 * 1024)).toFixed(1)}tb`;
-    }
-  }
 }

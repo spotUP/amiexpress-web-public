@@ -1177,7 +1177,11 @@ debugLog(
       this.writeBuffer(miscPtr, miscBuf);
     }
 
-    const success = !!userBuf || !!keysBuf || !!miscBuf;
+    // express.e:4557-4568: the caller's own slot always answers 1; any other
+    // slot answers 1 only when loadAccount (7977-8022) read EVERY record the
+    // door asked for - one short or missing file is RESULT_FAILURE, whatever
+    // else was read.
+    const success = !!caller || ((!userPtr || !!userBuf) && (!keysPtr || !!keysBuf) && (!miscPtr || !!miscBuf));
     this.messageParser.writeNodeId(msg.msgAddr, success ? 1 : 0);
     this.reply(msg, success ? 1 : 0);
   }

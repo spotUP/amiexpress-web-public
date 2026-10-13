@@ -13,6 +13,7 @@ import { ACSPermission } from '../constants/acs-permissions';
 import { LoggedOnSubState } from '../constants/bbs-states';
 import { displayScreen } from './screen.handler';
 import { beginLogoff } from '../server/logoff';
+import { AUTOSAVE_FLAGS_BANNER } from '../utils/file-flag.util';
 
 /**
  * Check if user has exceeded time limit and force logoff if needed.
@@ -67,6 +68,7 @@ export async function checkTimeUsed(socket: any, session: BBSSession): Promise<b
     // notes that leaving it to disconnect-time cleanup loses history to a race.
     // A timed-out caller must not lose either.
     try {
+      socket.emit('ansi-output', AUTOSAVE_FLAGS_BANNER);
       session.flagManager?.save();
     } catch {
       // Non-fatal; never block the logoff on a persistence hiccup.

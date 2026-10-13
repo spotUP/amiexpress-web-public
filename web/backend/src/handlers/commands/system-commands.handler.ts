@@ -22,7 +22,7 @@ import { ErrorHandler } from '../../utils/error-handling.util';
 import { ParamsUtil } from '../../utils/params.util';
 import { BBSState, LoggedOnSubState } from '../../constants/bbs-states';
 import type { BBSSession } from '../../index';
-import { FileFlagManager } from '../../utils/file-flag.util';
+import { FileFlagManager, AUTOSAVE_FLAGS_BANNER } from '../../utils/file-flag.util';
 import { config } from '../../config';
 import { userScreenTypeExtension } from '../../screens/screen-metadata';
 import { flushOutput } from '../../utils/output.util';
@@ -215,6 +215,7 @@ console.log('[LOGOFF] Displaying Logoff screen with NO door execution');
 
   // Persist flagged list (express.e saveFlagged) before dropping carrier
   try {
+    socket.emit('ansi-output', AUTOSAVE_FLAGS_BANNER);
     session.flagManager?.save();
   } catch (err) {
 console.error('[LOGOFF] Failed to save flagged files:', err);

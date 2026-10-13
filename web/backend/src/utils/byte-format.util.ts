@@ -104,3 +104,22 @@ export function formatBytesCompact(bytes: number): string {
 export function formatBytesPadded(bytes: number, width: number): string {
   return formatBytes(bytes, { width });
 }
+
+/**
+ * express.e calcSizeText (3336-3371): the size line of ~SU / ~SD and the
+ * DT_SIZEUPLOAD / DT_SIZEDOWNLOAD door queries. Each pass adds 512 and divides
+ * by 1024 (round half up) while the value is still 1024 or more, then appends
+ * a lowercase unit: b kb mb gb tb pb. No decimals, no space.
+ * The CASE DEFAULT (formatBCD of the raw value, no unit) needs 1024^6, past
+ * the 16-digit BCD ceiling, so it cannot occur.
+ */
+export function calcSizeText(bytes: number): string {
+  const units = ['b', 'kb', 'mb', 'gb', 'tb', 'pb'];
+  let val = Math.max(0, Math.trunc(bytes));
+  let i = 0;
+  while (val >= 1024 && i < units.length - 1) {
+    val = Math.floor((val + 512) / 1024);
+    i++;
+  }
+  return `${val}${units[i]}`;
+}

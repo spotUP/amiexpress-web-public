@@ -10,6 +10,7 @@ import { callersLogManager } from './CallersLogManager';
 import { formatCDateTime, formatLongDateTime, getSystemTime } from '../utils/date-time.util';
 import { doorScreenWidth } from '../amiga-emulation/xim/screen-width.util';
 import { getTodaysCalls } from '../utils/time-tracking.util';
+import { calcSizeText } from '../utils/byte-format.util';
 
 /**
  * AREXX Variable Storage
@@ -1884,15 +1885,7 @@ console.error('BBSCREATEDROPFILE error:', error);
       const parsed = new Date(raw as string);
       return Number.isNaN(parsed.getTime()) ? null : parsed;
     };
-    const calcSize = (bytes: number): string => {
-      // express.e calcSizeText (MiscFuncs.e:3336-3370) — divide by
-      // 1024 until <1024, append lowercase unit.
-      const units = ['b', 'kb', 'mb', 'gb', 'tb', 'pb'];
-      let val = bytes;
-      let i = 0;
-      while (val >= 1024 && i < units.length - 1) { val = Math.round(val / 1024); i++; }
-      return `${val}${units[i]}`;
-    };
+    const calcSize = calcSizeText;
     const boolToOnOff = (b: any): string => (b ? 'ON' : 'OFF');
 
     // ====================================================================

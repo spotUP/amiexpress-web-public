@@ -24,6 +24,7 @@ import * as amigafs from '../../utils/amigafs';
 import { checkSecurity, setUserPermission } from '../../utils/acs.util';
 import { formatCDateTime } from '../../utils/date-time.util';
 import { getTodaysCalls } from '../../utils/time-tracking.util';
+import { calcSizeText } from '../../utils/byte-format.util';
 
 /** express.e:3662 ACTIVE_NODES answers 32 characters, one per node 0..31. */
 const ACTIVE_NODE_SLOTS = 32;
@@ -1030,20 +1031,20 @@ debugLog(`  [READ] DT_GEOGRAPHIC: "${geo}"`);
         break;
 
       case XIMCommand.DT_SIZEUPLOAD:
-        // express.e:4115-4117: Human-readable upload size (e.g., "1.5 MB")
+        // express.e:4115-4117: Human-readable upload size (calcSizeText)
         if (isRead) {
           const bytesUp = user?.bytesUpload || 0;
-          const sizeText = this.formatSizeText(bytesUp);
+          const sizeText = calcSizeText(bytesUp);
           this.messageParser.writeString(stringAddr, sizeText, 200);
 debugLog(`  [READ] DT_SIZEUPLOAD: "${sizeText}"`);
         }
         break;
 
       case XIMCommand.DT_SIZEDOWNLOAD:
-        // express.e:4118-4120: Human-readable download size (e.g., "2.3 GB")
+        // express.e:4118-4120: Human-readable download size (calcSizeText)
         if (isRead) {
           const bytesDown = user?.bytesDownload || 0;
-          const sizeText = this.formatSizeText(bytesDown);
+          const sizeText = calcSizeText(bytesDown);
           this.messageParser.writeString(stringAddr, sizeText, 200);
 debugLog(`  [READ] DT_SIZEDOWNLOAD: "${sizeText}"`);
         }
@@ -1152,19 +1153,6 @@ debugLog(`  [UNHANDLED] ${this.messageParser.getCommandName(msg.command)}`);
     }
 
     this.reply(msg, replyData);
-  }
-
-  /**
-   * Format bytes as human-readable size text (e.g., "1.5 MB", "2.3 GB")
-   * express.e uses calcSizeText() for DT_SIZEUPLOAD/DT_SIZEDOWNLOAD
-   */
-  private formatSizeText(bytes: number): string {
-    if (bytes === 0) return '0 B';
-    const units = ['B', 'KB', 'MB', 'GB', 'TB'];
-    const k = 1024;
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    const value = bytes / Math.pow(k, i);
-    return `${value.toFixed(1)} ${units[i]}`;
   }
 
   /**

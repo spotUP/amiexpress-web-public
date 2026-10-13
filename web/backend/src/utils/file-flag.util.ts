@@ -13,6 +13,7 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
+import { config } from '../config';
 
 export interface FlaggedFile {
   filename: string;     // Filename (uppercase)
@@ -243,7 +244,7 @@ console.error('Error loading flagged files:', error);
 
   /**
    * Save flagged files to disk
-   * Port from express.e:2795+ saveFlagged()
+   * Port from express.e:2798-2829 saveFlagged()
    */
   async save(): Promise<void> {
     const flaggedPath = this.getFlaggedFilePath();
@@ -275,22 +276,30 @@ console.error('Error saving flagged files:', error);
   }
 
   /**
-   * Get path to flagged files storage
-   * Port from express.e:2765+ loadFlagged() path logic
+   * Partdownload/<kind><slot>, or <kind><node>-<slot> when the sysop sets
+   * ownPartFiles (express.e:2763-2767, 2777-2781, 2806-2813 - loadFlagged and
+   * saveFlagged build the same two names).
    */
-  private getFlaggedFilePath(): string {
-    // Format: Partdownload/flagged{slotNumber}
-    // Note: express.e has ownPartFiles flag that includes node number, we'll simplify
-    return path.join(this.bbsDataPath, 'Partdownload', `flagged${this.userSlot}`);
+  private partdownloadPath(kind: 'flagged' | 'dump'): string {
+    const ownPartFiles = !!(config as { get(key: string): unknown }).get('ownPartFiles');
+    const suffix = ownPartFiles ? `${this.nodeNumber}-${this.userSlot}` : `${this.userSlot}`;
+    return path.join(this.bbsDataPath, 'Partdownload', `${kind}${suffix}`);
   }
 
-  /**
-   * Get path to dump file storage
-   */
+  private getFlaggedFilePath(): string {
+    return this.partdownloadPath('flagged');
+  }
+
   private getDumpFilePath(): string {
-    return path.join(this.bbsDataPath, 'Partdownload', `dump${this.userSlot}`);
+    return this.partdownloadPath('dump');
   }
 }
+
+/**
+ * What saveFlagged prints before it writes (express.e:2802-2803: the banner,
+ * then sendBELL). The caller emits it - the manager has no socket.
+ */
+export const AUTOSAVE_FLAGS_BANNER = '\r\n** AutoSaving File Flags **\r\n\x07';
 
 /**
  * Show flags prompt
