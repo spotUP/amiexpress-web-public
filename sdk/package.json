@@ -45,6 +45,11 @@
       "require": "./dist/formats/estringf.js",
       "default": "./dist/formats/estringf.js"
     },
+    "./formats/magazine": {
+      "types": "./dist/formats/magazine.d.ts",
+      "require": "./dist/formats/magazine.js",
+      "default": "./dist/formats/magazine.js"
+    },
     "./formats/ctop-data": {
       "types": "./dist/formats/ctop-data.d.ts",
       "require": "./dist/formats/ctop-data.js",

@@ -22,51 +22,12 @@
  * see what the magazine believes.
  */
 
-/**
- * The editorial formats of §5. The page family a story lands in follows from
- * its format, so a RELEASE is discoverable where a reader looks for releases.
+/*
+ * Story, StoryFormat and Desk live in the SDK (`formats/magazine`): the MAG
+ * door reads the same files this store writes, so both import one declaration.
  */
-export type StoryFormat =
-  | 'NEWS'
-  | 'RELEASE'
-  | 'HISTORY'
-  | 'EVENT'
-  | 'DISCOVERY'
-  | 'ARCHIVE'
-  | 'OPINION'
-  | 'INTERVIEW'
-  | 'TECHNIQUE';
-
-export interface Story {
-  /** Stable across runs: a hash of the normalised headline. */
-  id: string;
-  headline: string;
-  /** The compact summary §6 asks for. Never a truncated article. */
-  summary: string;
-  format: StoryFormat;
-  /** Which scene of §3 this belongs to. Drives the page family. */
-  desk: Desk;
-  /** ISO date the story is ABOUT - when it happened, when the feed says. */
-  date: string;
-  source: string;
-  url?: string;
-  /** First tick that saw it. The archive's chronology. */
-  firstSeen: string;
-  /** Ticks it has survived. A story nobody returns to is not a story. */
-  seenCount: number;
-  /** Set once a human approves it for the front page. */
-  approvedAt?: string;
-}
-
-export type Desk =
-  | 'hack'
-  | 'scene'
-  | 'music'
-  | 'graffiti'
-  | 'people'
-  | 'stream'
-  | 'archive'
-  | 'general';
+import type { Desk, Story, StoryFormat } from '@amiexpress/bbs-door-sdk/formats/magazine';
+export type { Desk, Story, StoryFormat };
 
 /**
  * The page families of §12, in the 100-999 range the teletext engine already

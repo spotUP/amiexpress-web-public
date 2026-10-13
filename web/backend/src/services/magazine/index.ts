@@ -15,6 +15,13 @@
  */
 import * as fs from 'fs';
 import * as path from 'path';
+import {
+  MAGAZINE_DIR,
+  MAGAZINE_FRONTPAGE_FILE,
+  MAGAZINE_INDEX_FILE,
+  MAGAZINE_STORIES_DIR,
+  type MagazineIndexEntry,
+} from '@amiexpress/bbs-door-sdk/formats/magazine';
 import { GENERATED_SCREEN_ROWS } from '../../screens/screen-rows';
 import { classify, classifyFormat, familyFor } from './classify';
 import {
@@ -36,14 +43,7 @@ export interface IncomingItem {
   date?: string;
 }
 
-export interface MagazineIndexEntry {
-  page: number;
-  title: string;
-  desk: Desk;
-  format: string;
-  storyId: string;
-  date: string;
-}
+export type { MagazineIndexEntry };
 
 export interface MagazineLayout {
   index: MagazineIndexEntry[];
@@ -57,7 +57,7 @@ export interface MagazineDeps {
   log: (line: string) => void;
 }
 
-const MAGAZINE = 'Magazine';
+const MAGAZINE = MAGAZINE_DIR;
 
 function writeAtomic(target: string, contents: string): void {
   const tmp = `${target}.tmp-${process.pid}`;
@@ -266,8 +266,8 @@ export function publishMagazine(
   );
   writeAtomic(path.join(pagesDir, 'p100.txt'), `${renderPage(frontComposed)}\r\n`);
 
-  fs.writeFileSync(path.join(root, MAGAZINE, 'index.json'), JSON.stringify(index, null, 2), 'utf8');
-  fs.writeFileSync(path.join(root, MAGAZINE, 'frontpage.json'), JSON.stringify(approvedIds, null, 2), 'utf8');
+  fs.writeFileSync(path.join(root, MAGAZINE, MAGAZINE_INDEX_FILE), JSON.stringify(index, null, 2), 'utf8');
+  fs.writeFileSync(path.join(root, MAGAZINE, MAGAZINE_FRONTPAGE_FILE), JSON.stringify(approvedIds, null, 2), 'utf8');
 
   deps.log(`[magazine] published ${index.length} stories across ${new Set(index.map((e) => e.page)).size} pages`);
   return { index, familyPages };
@@ -276,7 +276,7 @@ export function publishMagazine(
 /** The ids a human approved, read from disk. Missing file means none. */
 export function readApproved(root: string): string[] {
   try {
-    const raw = fs.readFileSync(path.join(root, MAGAZINE, 'frontpage.json'), 'utf8');
+    const raw = fs.readFileSync(path.join(root, MAGAZINE, MAGAZINE_FRONTPAGE_FILE), 'utf8');
     const parsed = JSON.parse(raw);
     return Array.isArray(parsed) ? parsed.filter((x) => typeof x === 'string') : [];
   } catch {
@@ -286,7 +286,7 @@ export function readApproved(root: string): string[] {
 
 export function writeApproved(root: string, ids: string[]): void {
   fs.mkdirSync(path.join(root, MAGAZINE), { recursive: true });
-  writeAtomic(path.join(root, MAGAZINE, 'frontpage.json'), JSON.stringify(ids, null, 2));
+  writeAtomic(path.join(root, MAGAZINE, MAGAZINE_FRONTPAGE_FILE), JSON.stringify(ids, null, 2));
 }
 
 /**
@@ -298,7 +298,7 @@ export function refreshMagazine(deps: MagazineDeps): { added: number; duplicates
   const root = deps.rootDir();
   const magDir = path.join(root, MAGAZINE);
   fs.mkdirSync(path.join(magDir, 'incoming'), { recursive: true });
-  fs.mkdirSync(path.join(magDir, 'stories'), { recursive: true });
+  fs.mkdirSync(path.join(magDir, MAGAZINE_STORIES_DIR), { recursive: true });
 
   const nowIso = deps.now().toISOString();
   const items: IncomingItem[] = [];
@@ -313,10 +313,10 @@ export function refreshMagazine(deps: MagazineDeps): { added: number; duplicates
     }
   }
 
-  const existing = loadStories(path.join(magDir, 'stories'), deps.log);
+  const existing = loadStories(path.join(magDir, MAGAZINE_STORIES_DIR), deps.log);
   const merged = mergeIncoming(existing, items, nowIso, deps.log);
   for (const story of merged.stories) {
-    writeAtomic(path.join(magDir, 'stories', `${story.id}.json`), JSON.stringify(story, null, 2));
+    writeAtomic(path.join(magDir, MAGAZINE_STORIES_DIR, `${story.id}.json`), JSON.stringify(story, null, 2));
   }
 
   const layout = publishMagazine(merged.stories, readApproved(root), deps);
