@@ -16,7 +16,7 @@
  *   footer     the door chrome's hint line
  */
 import { effectsAllowed, getCompactProfile } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
-import { DESK_LABEL, type Desk, type Story } from '@amiexpress/bbs-door-sdk/formats/magazine';
+import { DESK_LABEL, sourceName, type Desk, type Story } from '@amiexpress/bbs-door-sdk/formats/magazine';
 import {
   columnGeometry,
   flowColumns,
@@ -181,6 +181,11 @@ export interface WireLine {
   stamp: string;
 }
 
+export interface ArticleLine {
+  source: string;
+  stamp: string;
+}
+
 export interface ListingItem {
   storyId: string;
   page: number;
@@ -188,6 +193,8 @@ export interface ListingItem {
   unread: boolean;
   bookmarked: boolean;
   wire?: WireLine;
+  /** A story with real full text: tagged ARTICLE so the list tells it from the wire. */
+  article?: ArticleLine;
 }
 
 export type ListingBlock =
@@ -223,7 +230,7 @@ function itemCells(item: ListingItem, index: number, selected: boolean, colWidth
       text: i === 0 ? `${mark}${left} ${page}` : ` ${left}`,
       role,
       item: index,
-      keep: wire !== undefined || i < lines.length - 1,
+      keep: wire !== undefined || item.article !== undefined || i < lines.length - 1,
     });
   });
   if (wire) {
@@ -233,6 +240,11 @@ function itemCells(item: ListingItem, index: number, selected: boolean, colWidth
     if (teaser) cells.push({ text: ` ${teaser}`, role: 'plain', item: index, keep: true });
     const origin = `${paintSafe(sourceName(wire.source)).toUpperCase()} // ${wire.stamp}`;
     cells.push({ text: ` ${truncate(origin, inner)}`, role: 'dim', item: index });
+  }
+  if (item.article) {
+    const inner = Math.max(1, colWidth - 1);
+    const tag = `ARTICLE // ${paintSafe(sourceName(item.article.source)).toUpperCase()} // ${item.article.stamp}`;
+    cells.push({ text: ` ${truncate(tag, inner)}`, role: 'dim', item: index });
   }
   return cells;
 }
@@ -248,18 +260,7 @@ export function trimAtWord(text: string, width: number): string {
   return `${head.replace(/[\s,;:.-]+$/, '')}..`;
 }
 
-/**
- * A source as the reader names it: the site, never an address. `www.` goes,
- * and so does a trailing "via ..." or "(note)" ("news.ycombinator.com via Algolia").
- */
-export function sourceName(source: string): string {
-  return source
-    .replace(/\s+via\s+.*$/i, '')
-    .replace(/\s*\(.*$/, '')
-    .replace(/^\s*(?:https?:\/\/)?(?:www\.)?/i, '')
-    .replace(/\/.*$/, '')
-    .trim();
-}
+export { sourceName };
 
 /** `TODAY`, `YESTERDAY`, `3D AGO`, else the date: how old a wire row is. */
 export function wireStamp(date: string, now: Date): string {
@@ -439,7 +440,9 @@ export function buildArticle(story: Story, layout: MagLayout): Article {
     spanRow(geometry, RULE.repeat(w), 'rule'),
   ];
 
-  const paragraphs = paintSafe(story.summary).split(/\n+/);
+  // A story with full text is set from its body; the summary is the teaser the
+  // body replaces, not a standfirst printed above it.
+  const paragraphs = paintSafe(story.body || story.summary).split(/\n+/);
   const body = setParagraphs(paragraphs, geometry.colWidth);
   const cells: Cell[] = body.map((text) => ({ text, role: 'plain' }));
   // The site name only: the reader never prints an address.

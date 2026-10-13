@@ -223,11 +223,16 @@ async function startReader(session) {
     const listingBlocks = (entries, headings) => {
         const blocks = [];
         const item = (e) => {
-            // A feed story is wire material in every list: headline, one teaser
-            // line, source and age. Only an authored story is a plain headline row.
+            // A story without full text is wire material in every list: headline,
+            // one teaser line, source and age. A story with full text (or an authored
+            // one) is a headline row, a feed article tagged ARTICLE.
             const st = storyOf(e.storyId);
-            const wire = st && (0, magazine_1.storyOrigin)(st) === 'feed'
-                ? { teaser: st.summary, source: st.source, stamp: (0, layout_1.wireStamp)(st.date || e.date, new Date()) }
+            const stamp = st ? (0, layout_1.wireStamp)(st.date || e.date, new Date()) : '';
+            const wire = st && !(0, magazine_1.isArticle)(st)
+                ? { teaser: st.summary, source: st.source, stamp }
+                : undefined;
+            const article = st && (0, magazine_1.isArticle)(st) && st.source
+                ? { source: st.source, stamp }
                 : undefined;
             return {
                 kind: 'item',
@@ -238,6 +243,7 @@ async function startReader(session) {
                     unread: !read.has(e.storyId),
                     bookmarked: bookmarks.has(e.storyId),
                     wire,
+                    article,
                 },
             };
         };
@@ -461,7 +467,7 @@ async function startReader(session) {
     };
     const openStory = (storyId, list) => {
         const st = storyOf(storyId);
-        if (st && (0, magazine_1.storyOrigin)(st) === 'feed') {
+        if (st && !(0, magazine_1.isArticle)(st)) {
             openWire(st);
             return;
         }
@@ -533,7 +539,7 @@ async function startReader(session) {
         render();
     };
     /**
-     * A feed story never opens the article layout: a small panel with the
+     * A story without full text never opens the article layout: a small panel with the
      * cleaned teaser, the site and the date. The view underneath does not move,
      * so closing it leaves the cursor where it was.
      */

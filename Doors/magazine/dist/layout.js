@@ -1,10 +1,9 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.SECTION_ORDER = exports.NEWS_SEPARATOR = void 0;
+exports.SECTION_ORDER = exports.NEWS_SEPARATOR = exports.sourceName = void 0;
 exports.rowText = rowText;
 exports.buildLayout = buildLayout;
 exports.trimAtWord = trimAtWord;
-exports.sourceName = sourceName;
 exports.wireStamp = wireStamp;
 exports.wireDetail = wireDetail;
 exports.buildListing = buildListing;
@@ -39,6 +38,7 @@ exports.sectionLabel = sectionLabel;
  */
 const blessed_1 = require("@amiexpress/bbs-door-sdk/engines/ui/blessed");
 const magazine_1 = require("@amiexpress/bbs-door-sdk/formats/magazine");
+Object.defineProperty(exports, "sourceName", { enumerable: true, get: function () { return magazine_1.sourceName; } });
 const columns_1 = require("./columns");
 const library_1 = require("./library");
 /** The plain text of a row: what a C64 caller would read. */
@@ -136,7 +136,7 @@ function itemCells(item, index, selected, colWidth) {
             text: i === 0 ? `${mark}${left} ${page}` : ` ${left}`,
             role,
             item: index,
-            keep: wire !== undefined || i < lines.length - 1,
+            keep: wire !== undefined || item.article !== undefined || i < lines.length - 1,
         });
     });
     if (wire) {
@@ -145,8 +145,13 @@ function itemCells(item, index, selected, colWidth) {
         const teaser = trimAtWord((0, library_1.paintSafe)(wire.teaser), inner);
         if (teaser)
             cells.push({ text: ` ${teaser}`, role: 'plain', item: index, keep: true });
-        const origin = `${(0, library_1.paintSafe)(sourceName(wire.source)).toUpperCase()} // ${wire.stamp}`;
+        const origin = `${(0, library_1.paintSafe)((0, magazine_1.sourceName)(wire.source)).toUpperCase()} // ${wire.stamp}`;
         cells.push({ text: ` ${truncate(origin, inner)}`, role: 'dim', item: index });
+    }
+    if (item.article) {
+        const inner = Math.max(1, colWidth - 1);
+        const tag = `ARTICLE // ${(0, library_1.paintSafe)((0, magazine_1.sourceName)(item.article.source)).toUpperCase()} // ${item.article.stamp}`;
+        cells.push({ text: ` ${truncate(tag, inner)}`, role: 'dim', item: index });
     }
     return cells;
 }
@@ -160,18 +165,6 @@ function trimAtWord(text, width) {
     const at = cut.lastIndexOf(' ');
     const head = at > 0 ? cut.slice(0, at) : flat.slice(0, room);
     return `${head.replace(/[\s,;:.-]+$/, '')}..`;
-}
-/**
- * A source as the reader names it: the site, never an address. `www.` goes,
- * and so does a trailing "via ..." or "(note)" ("news.ycombinator.com via Algolia").
- */
-function sourceName(source) {
-    return source
-        .replace(/\s+via\s+.*$/i, '')
-        .replace(/\s*\(.*$/, '')
-        .replace(/^\s*(?:https?:\/\/)?(?:www\.)?/i, '')
-        .replace(/\/.*$/, '')
-        .trim();
 }
 /** `TODAY`, `YESTERDAY`, `3D AGO`, else the date: how old a wire row is. */
 function wireStamp(date, now) {
@@ -201,7 +194,7 @@ function wireDetail(story, now) {
         '',
         teaser || '(no summary)',
         '',
-        `Source: ${(0, library_1.paintSafe)(sourceName(story.source)) || 'unknown'}`,
+        `Source: ${(0, library_1.paintSafe)((0, magazine_1.sourceName)(story.source)) || 'unknown'}`,
         `Date: ${story.date ? story.date.slice(0, 10) : 'UNDATED'} (${wireStamp(story.date ?? '', now).toLowerCase()})`,
     ];
 }
@@ -330,11 +323,13 @@ function buildArticle(story, layout) {
         ...headLines.map((line) => spanRow(geometry, line, 'head')),
         spanRow(geometry, RULE.repeat(w), 'rule'),
     ];
-    const paragraphs = (0, library_1.paintSafe)(story.summary).split(/\n+/);
+    // A story with full text is set from its body; the summary is the teaser the
+    // body replaces, not a standfirst printed above it.
+    const paragraphs = (0, library_1.paintSafe)(story.body || story.summary).split(/\n+/);
     const body = (0, columns_1.setParagraphs)(paragraphs, geometry.colWidth);
     const cells = body.map((text) => ({ text, role: 'plain' }));
     // The site name only: the reader never prints an address.
-    const source = (0, library_1.paintSafe)(sourceName(story.source)).trim();
+    const source = (0, library_1.paintSafe)((0, magazine_1.sourceName)(story.source)).trim();
     const trailer = [];
     if (source)
         trailer.push({ text: truncate(`>> SRC ${source}`, geometry.colWidth), role: 'source' });

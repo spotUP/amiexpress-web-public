@@ -33,7 +33,7 @@ import {
   searchModal,
   sparklineText,
 } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
-import { DESK_LABEL, MAGAZINE_TITLE, storyOrigin, type Desk, type MagazineIndexEntry, type Story } from '@amiexpress/bbs-door-sdk/formats/magazine';
+import { DESK_LABEL, MAGAZINE_TITLE, isArticle, type Desk, type MagazineIndexEntry, type Story } from '@amiexpress/bbs-door-sdk/formats/magazine';
 import { createScrollText } from '@amiexpress/bbs-door-sdk';
 import {
   loadSnapshot,
@@ -309,11 +309,16 @@ export async function startReader(session: DoorSession): Promise<Reader> {
   const listingBlocks = (entries: readonly MagazineIndexEntry[], headings: boolean): ListingBlock[] => {
     const blocks: ListingBlock[] = [];
     const item = (e: MagazineIndexEntry): ListingBlock => {
-      // A feed story is wire material in every list: headline, one teaser
-      // line, source and age. Only an authored story is a plain headline row.
+      // A story without full text is wire material in every list: headline,
+      // one teaser line, source and age. A story with full text (or an authored
+      // one) is a headline row, a feed article tagged ARTICLE.
       const st = storyOf(e.storyId);
-      const wire = st && storyOrigin(st) === 'feed'
-        ? { teaser: st.summary, source: st.source, stamp: wireStamp(st.date || e.date, new Date()) }
+      const stamp = st ? wireStamp(st.date || e.date, new Date()) : '';
+      const wire = st && !isArticle(st)
+        ? { teaser: st.summary, source: st.source, stamp }
+        : undefined;
+      const article = st && isArticle(st) && st.source
+        ? { source: st.source, stamp }
         : undefined;
       return {
         kind: 'item',
@@ -324,6 +329,7 @@ export async function startReader(session: DoorSession): Promise<Reader> {
           unread: !read.has(e.storyId),
           bookmarked: bookmarks.has(e.storyId),
           wire,
+          article,
         },
       };
     };
@@ -535,7 +541,7 @@ export async function startReader(session: DoorSession): Promise<Reader> {
 
   const openStory = (storyId: string, list: string[]) => {
     const st = storyOf(storyId);
-    if (st && storyOrigin(st) === 'feed') { openWire(st); return; }
+    if (st && !isArticle(st)) { openWire(st); return; }
     go({ kind: 'article', storyId, list: list.length ? list : [storyId], back: view.kind === 'article' ? view.back : view });
   };
 
@@ -586,7 +592,7 @@ export async function startReader(session: DoorSession): Promise<Reader> {
   };
 
   /**
-   * A feed story never opens the article layout: a small panel with the
+   * A story without full text never opens the article layout: a small panel with the
    * cleaned teaser, the site and the date. The view underneath does not move,
    * so closing it leaves the cursor where it was.
    */

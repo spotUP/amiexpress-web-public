@@ -16,6 +16,8 @@ import {
   MAGAZINE_FRONTPAGE_FILE,
   MAGAZINE_INDEX_FILE,
   MAGAZINE_STORIES_DIR,
+  ARTICLE_MIN_BODY_CHARS,
+  isArticle,
   type Desk,
   type MagazineIndexEntry,
   type Story,
@@ -693,6 +695,82 @@ export async function anAuthoredStoryStillOpensTheArticleAmongWireRows(): Promis
       assert.ok(t.includes('NEW EXPLOIT CHAIN'), `${w}: article headline`);
       assert.ok(!/https?:/.test(t), `${w}: and no raw url`);
       if (w === 132) assert.strictEqual(h.reader.layout.geometry.cols, 3, 'authored stories keep the columns');
+    } finally { await finish(h, b); }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// A feed story with real full text is an article (sysop 2026-10-14)
+// ---------------------------------------------------------------------------
+
+/** Paragraphs of `body` text whose total length is exactly `length`. */
+function bodyOf(length: number): string {
+  const para = 'The relay chassis hums while the old contacts click through their sequence and the clock finds its second. ';
+  const text = Array.from({ length: Math.ceil(length / para.length) }, (_, i) => `${para.trim()} Part ${i + 1}.`).join('\n\n');
+  return text.slice(0, length).trimEnd().padEnd(length, '.');
+}
+
+function withBody(st: Story, length: number): Story {
+  return { ...st, body: bodyOf(length) };
+}
+
+export async function theArticleThresholdSeparatesTheWireFromAnArticle(): Promise<void> {
+  const feed = story('x', 'h', 'hack', '2026-10-12', 'Teaser.', 'feed');
+  assert.strictEqual(isArticle(feed), false, 'a teaser is wire');
+  assert.strictEqual(isArticle(withBody(feed, ARTICLE_MIN_BODY_CHARS - 1)), false, 'one character short is wire');
+  assert.strictEqual(isArticle(withBody(feed, ARTICLE_MIN_BODY_CHARS)), true, 'the threshold is an article');
+  assert.strictEqual(isArticle({ ...feed, origin: 'authored' }), true, 'authored is always an article');
+}
+
+export async function aFeedStoryWithFullTextOpensInColumnsAndIsTaggedArticle(): Promise<void> {
+  const expectedCols: Record<number, number> = { 40: 1, 80: 2, 132: 3 };
+  for (const [w, hgt] of [[40, 25], [80, 24], [132, 40]] as const) {
+    const stories = [withBody(FEED[0], ARTICLE_MIN_BODY_CHARS + 800), FEED[1], STORIES[1]];
+    const b = board([], stories);
+    const h = await open(w, hgt);
+    try {
+      h.reader.press('c', 'c');
+      h.reader.press('down');
+      const rows = h.reader.panelRows();
+      const at = rows.findIndex((r) => r.includes('A relay clock'));
+      assert.ok(at >= 0, `${w}: listed`);
+      assert.ok(/ARTICLE \/\/ EXAMPLE\.ORG/.test(rows.join('\n')), `${w}: the full-text story is tagged ARTICLE`);
+      assert.ok(!rows[at + 1].includes('We rebuild'), `${w}: and has no teaser line`);
+      const wireAt = rows.findIndex((r) => r.includes('Another feed headline'));
+      assert.ok(wireAt < 0 || /EXAMPLE\.ORG \/\/ (TODAY|YESTERDAY|\dD AGO|\d{4})/.test(rows.slice(wireAt).join('\n')), `${w}: the short one stays a wire row`);
+      // Enter on the article story opens the article layout.
+      h.reader.press('up');
+      for (let i = 0; i < 6 && !h.reader.panelRows().some((r) => r.includes('>A relay clock')); i++) h.reader.press('down');
+      assert.ok(h.reader.panelRows().some((r) => r.includes('>A relay clock')), `${w}: cursor on the full-text story`);
+      h.reader.press('enter');
+      assert.strictEqual(h.reader.viewKind(), 'article', `${w}: Enter opens the article, not the wire panel`);
+      assert.strictEqual(h.reader.modalText(), '', `${w}: no wire panel`);
+      assert.strictEqual(h.reader.layout.geometry.cols, expectedCols[w], `${w}: columns`);
+      const t = h.reader.panelRows().join('\n');
+      assert.ok(t.includes('A RELAY CLOCK'), `${w}: headline`);
+      assert.ok(t.includes('relay chassis hums'), `${w}: body text, not the teaser`);
+      assert.ok(!t.includes('We rebuild a clock'), `${w}: the teaser is replaced by the body`);
+      let everything = t;
+      for (let i = 0; i < 12; i++) { h.reader.press('down'); everything += `\n${h.reader.panelRows().join('\n')}`; }
+      assert.ok(everything.includes('example.org') && !/https?:/.test(everything), `${w}: the site name, no address`);
+      for (const r of h.reader.panelRows()) assert.ok(r.length <= w, `${w}: row fits`);
+    } finally { await finish(h, b); }
+  }
+}
+
+export async function aFeedStoryWithAShortBodyStillOpensTheWirePanel(): Promise<void> {
+  for (const [w, hgt] of [[40, 25], [80, 24], [132, 40]] as const) {
+    const b = board([], [withBody(FEED[0], ARTICLE_MIN_BODY_CHARS - 1), FEED[1], STORIES[1]]);
+    const h = await open(w, hgt);
+    try {
+      h.reader.press('c', 'c');
+      h.reader.press('down');
+      const rows = h.reader.panelRows();
+      const at = rows.findIndex((r) => r.includes('A relay clock'));
+      assert.ok(at >= 0 && !/ARTICLE \/\//.test(rows[at + 1] + (rows[at + 2] ?? '')), `${w}: not tagged`);
+      h.reader.press('enter');
+      assert.strictEqual(h.reader.viewKind(), 'contents', `${w}: stays on the list`);
+      assert.ok(h.reader.modalText().includes(TEASER), `${w}: the wire panel opened`);
     } finally { await finish(h, b); }
   }
 }

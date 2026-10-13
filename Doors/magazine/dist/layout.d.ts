@@ -1,4 +1,4 @@
-import { type Desk, type Story } from '@amiexpress/bbs-door-sdk/formats/magazine';
+import { sourceName, type Desk, type Story } from '@amiexpress/bbs-door-sdk/formats/magazine';
 import { type ColumnGeometry } from './columns';
 /** What a run of text MEANS; the app decides what that looks like in the theme. */
 export type Role = 'plain' | 'dim' | 'accent' | 'head' | 'rule' | 'tag' | 'source' | 'unread' | 'selected' | 'warn';
@@ -38,6 +38,10 @@ export interface WireLine {
     source: string;
     stamp: string;
 }
+export interface ArticleLine {
+    source: string;
+    stamp: string;
+}
 export interface ListingItem {
     storyId: string;
     page: number;
@@ -45,6 +49,8 @@ export interface ListingItem {
     unread: boolean;
     bookmarked: boolean;
     wire?: WireLine;
+    /** A story with real full text: tagged ARTICLE so the list tells it from the wire. */
+    article?: ArticleLine;
 }
 export type ListingBlock = {
     kind: 'heading';
@@ -65,11 +71,7 @@ export interface Listing {
 }
 /** One line cut at a word boundary to `width`; `..` marks a cut. */
 export declare function trimAtWord(text: string, width: number): string;
-/**
- * A source as the reader names it: the site, never an address. `www.` goes,
- * and so does a trailing "via ..." or "(note)" ("news.ycombinator.com via Algolia").
- */
-export declare function sourceName(source: string): string;
+export { sourceName };
 /** `TODAY`, `YESTERDAY`, `3D AGO`, else the date: how old a wire row is. */
 export declare function wireStamp(date: string, now: Date): string;
 /**
