@@ -10,8 +10,8 @@ It answers the telnet negotiation (TTYPE "ANSI", NAWS 80x25), then walks the
 login by reading what the board prints and answering it:
 
   graphics prompt   -> A (ANSI)
-  username prompt   -> --user
-  password prompt   -> --password
+  username prompt   -> --user     (else env BBS_USER)
+  password prompt   -> --password (else env BBS_PASSWORD)
   any pause         -> RETURN   ("Space To Resume", "More(y/n/ns)", "Press RETURN")
   the menu prompt   -> the next --cmd, or logoff when there are none left
 
@@ -77,9 +77,22 @@ class Timeout(Exception):
     """Nothing the session was waiting for arrived."""
 
 
+def credentials(user: Optional[str], password: Optional[str]) -> tuple[str, str]:
+    """The login to answer with: the option, else BBS_USER / BBS_PASSWORD.
+    No built-in default - a wrong password locks an account after a few tries.
+    Exits 2 (before any connection) when either is missing."""
+    user = user or os.environ.get("BBS_USER")
+    password = password or os.environ.get("BBS_PASSWORD")
+    if not user or not password:
+        sys.stderr.write("[DRIVER] no credentials: pass --user and --password, "
+                         "or set BBS_USER and BBS_PASSWORD\n")
+        raise SystemExit(2)
+    return user, password
+
+
 class Session:
     def __init__(self, host: str = "localhost", port: int = 64128,
-                 user: str = "sysop", password: str = "sysop",
+                 user: Optional[str] = None, password: Optional[str] = None,
                  log: Optional[str] = None, watch: bool = False,
                  echo: Callable[[str], None] = lambda text: None,
                  ttype: Optional[str] = "ANSI", naws: tuple[int, int] = (80, 25)):
@@ -186,8 +199,10 @@ class Session:
         if GRAPHICS.search(tail):
             self.send("A\r", "graphics: ANSI")
         elif PASSWORD.search(tail):
+            assert self.password is not None, "Session has no password; use credentials()"
             self.send(self.password + "\r", "password")
         elif USERNAME.search(tail):
+            assert self.user is not None, "Session has no user; use credentials()"
             self.send(self.user + "\r", "username")
         elif PAUSE.search(tail):
             self.send("\r", "pause")
@@ -298,8 +313,8 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--host", default="bbs.uprough.net")
     ap.add_argument("--port", type=int, default=64128)
-    ap.add_argument("--user", default="sysop")
-    ap.add_argument("--password", default="sysop")
+    ap.add_argument("--user", help="login name (else env BBS_USER)")
+    ap.add_argument("--password", help="password (else env BBS_PASSWORD)")
     ap.add_argument("--cmd", action="append", default=[], help="a command to type at the menu; repeatable")
     ap.add_argument("--no-logoff", action="store_true", help="drop the line instead of typing G")
     ap.add_argument("--idle", type=float, default=20.0,
@@ -308,6 +323,7 @@ def main() -> int:
     ap.add_argument("--watch", action="store_true",
                     help="macOS: open a Terminal tab that tails --log, so a human sees the session live")
     args = ap.parse_args()
+    args.user, args.password = credentials(args.user, args.password)
 
     def echo(text: str) -> None:
         sys.stdout.write(text)

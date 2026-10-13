@@ -37,7 +37,7 @@ import threading
 import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from bbs_telnet import Session  # noqa: E402
+from bbs_telnet import Session, credentials  # noqa: E402
 
 import pyte  # noqa: E402
 
@@ -263,7 +263,7 @@ def serve(args: argparse.Namespace) -> None:
                 board.settle(req.get("quiet", 0.8), req.get("limit", 10.0))
                 reply = board.render()
             elif cmd == "advance":
-                reply = board.advance(req.get("user", "sysop"), req.get("password", "sysop"))
+                reply = board.advance(req["user"], req["password"])
             elif cmd == "wait":
                 board.settle(quiet=float(req["seconds"]), limit=float(req["seconds"]) + 1)
                 reply = board.render()
@@ -308,8 +308,8 @@ def main() -> int:
     sv.add_argument("--watch", action="store_true")
     sub.add_parser("screen")
     av = sub.add_parser("advance", help="answer known prompts (graphics, login, pauses) until the menu or an unknown prompt")
-    av.add_argument("--user", default="sysop")
-    av.add_argument("--password", default="sysop")
+    av.add_argument("--user", help="login name (else env BBS_USER)")
+    av.add_argument("--password", help="password (else env BBS_PASSWORD)")
     sd = sub.add_parser("send")
     sd.add_argument("keys", help="python-escaped: 'sysop\\r'")
     sd.add_argument("--quiet", type=float, default=0.8)
@@ -344,7 +344,8 @@ def main() -> int:
     if args.cmd == "screen":
         print(ask({"cmd": "screen"}))
     elif args.cmd == "advance":
-        print(ask({"cmd": "advance", "user": args.user, "password": args.password}))
+        user, password = credentials(args.user, args.password)
+        print(ask({"cmd": "advance", "user": user, "password": password}))
     elif args.cmd == "send":
         keys = codecs.decode(args.keys, "unicode_escape")
         print(ask({"cmd": "send", "keys": keys, "quiet": args.quiet, "limit": args.limit}))

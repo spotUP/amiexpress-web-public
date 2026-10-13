@@ -36,6 +36,7 @@ from typing import Callable
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from bbs_screen import MENU_PROMPT, Board  # noqa: E402
+from bbs_telnet import credentials  # noqa: E402
 
 REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 DEFAULT_RESULTS = os.path.join(REPO, "thoughts", "spot", "bbs-regress-results.json")
@@ -564,8 +565,8 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--host", default="localhost")
     ap.add_argument("--port", type=int, default=64128)
-    ap.add_argument("--user", default="sysop")
-    ap.add_argument("--password", default="sysop")
+    ap.add_argument("--user", help="login name (else env BBS_USER)")
+    ap.add_argument("--password", help="password, or @file (else env BBS_PASSWORD)")
     ap.add_argument("--only", action="append", default=[])
     ap.add_argument("--failed", action="store_true")
     ap.add_argument("--all", action="store_true")
@@ -574,13 +575,15 @@ def main() -> int:
     ap.add_argument("--watch", action="store_true")
     ap.add_argument("--list", action="store_true")
     args = ap.parse_args()
-    if args.password.startswith("@"):
+    if args.password and args.password.startswith("@"):
         # `@<file>`: read the password from a notes file instead of the
         # command line, where ps and the transcript would show it.
         found = re.search(r"[Pp]assword[^:]*:\s*`?([^`\s]+)", open(args.password[1:]).read())
         if not found:
             raise SystemExit(f"no password in {args.password[1:]}")
         args.password = found.group(1)
+    if not args.list:
+        args.user, args.password = credentials(args.user, args.password)
 
     if args.list:
         print("\n".join(n for n, _ in CASES))
