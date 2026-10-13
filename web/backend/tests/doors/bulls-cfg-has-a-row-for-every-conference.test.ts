@@ -65,11 +65,16 @@ describe('the conference masks', () => {
 });
 
 describe('the bulletin names', () => {
-  it('names twenty bulletins, one per flag in a mask', () => {
-    expect(nameRows()).toHaveLength(20);
+  // The sysop edits this file on the live board through the admin's Bulls
+  // editor and trims unused rows, so the count follows the board: at least
+  // one, and never more than the twenty flags a mask row carries - a 21st
+  // name has no flag to switch it on in any conference.
+  it('names no more bulletins than a mask row has flags', () => {
+    expect(nameRows().length).toBeGreaterThan(0);
+    expect(nameRows().length).toBeLessThanOrEqual(20);
   });
 
   it('names them in order, each row the bulletin it maps to', () => {
-    expect(nameRows()).toEqual(Array.from({ length: 20 }, (_, i) => i + 1));
+    expect(nameRows()).toEqual(Array.from({ length: nameRows().length }, (_, i) => i + 1));
   });
 });
