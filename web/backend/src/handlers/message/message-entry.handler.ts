@@ -15,6 +15,7 @@ import { runExecuteOn } from '../../services/batch-scheduler';
 import { emitText, emitPrompt, emitLine, flushOutput } from '../../utils/output.util';
 import { mailOnSysopComment } from '../../services/mail-notification.service';
 import * as amigafs from '../../utils/amigafs';
+import { amigaProtectionOf } from '../../amiga-emulation/api/dos/protection';
 import * as path from 'path';
 import { getSystemTime, formatLongDateTime, toAmigaTime, fromAmigaTime } from '../../utils/date-time.util';
 import { messageBodyLineLimit, messageIndent, messageRule } from '../../utils/table-format.util';
@@ -1489,16 +1490,24 @@ export async function displayDirectoryListing(socket: any, session: BBSSession, 
 }
 
 /**
- * myDirProtect (express.e:8306-8318): the hsparwed letters, '-' where clear.
- * rwed are active-low in AmigaDOS; a host file has its owner's r, w and x
- * (delete follows write), and none of h, s, p or a.
+ * myDirProtect (express.e:8303-8317): `ps` starts as '--------' and bit x of
+ * Eor(bits,15) writes pbits[x] at ps[7-x], pbits = d,e,w,r,a,p,s,h. rwed are
+ * active-low (a SET bit denies), so Eor makes them read as granted; a,p,s,h
+ * are active-high.
  */
+export function myDirProtect(bits: number): string {
+  const pbits = 'dewrapsh';
+  const ps = '--------'.split('');
+  const c = bits ^ 15;
+  for (let x = 0; x <= 7; x++) {
+    if ((c & (1 << x)) === (1 << x)) ps[7 - x] = pbits[x];
+  }
+  return ps.join('');
+}
+
+/** A host file's bits (owner r/w/x, delete follows write) shown the express.e way. */
 function amigaProtection(mode: number): string {
-  const r = mode & 0o400 ? 'r' : '-';
-  const w = mode & 0o200 ? 'w' : '-';
-  const e = mode & 0o100 ? 'e' : '-';
-  const d = mode & 0o200 ? 'd' : '-';
-  return `----${r}${w}${e}${d}`;
+  return myDirProtect(amigaProtectionOf(mode));
 }
 
 /**
