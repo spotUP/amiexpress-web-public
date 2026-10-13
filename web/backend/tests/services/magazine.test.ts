@@ -82,16 +82,16 @@ describe('deduplication (§14 step 4)', () => {
 
 describe('classification (§3, §5)', () => {
   it('puts each story on the desk the brief gives it', () => {
-    expect(classify({ headline: 'New Detroit electro record from Channel Awesome', summary: '' })).toBe('music');
-    expect(classify({ headline: 'New Amiga demo released', summary: 'a 68k intro' })).toBe('scene');
-    expect(classify({ headline: 'New RCE in OpenSSL', summary: 'exploit available' })).toBe('hack');
-    expect(classify({ headline: 'Wildstyle piece on a freight train', summary: 'graffiti crew' })).toBe('graffiti');
-    expect(classify({ headline: 'Something happened', summary: '' })).toBe('general');
+    expect(classify({ headline: 'New Detroit electro record from Channel Awesome', summary: '', source: 'test' })).toBe('music');
+    expect(classify({ headline: 'New Amiga demo released', summary: 'a 68k intro', source: 'test' })).toBe('scene');
+    expect(classify({ headline: 'New RCE in OpenSSL', summary: 'exploit available', source: 'test' })).toBe('hack');
+    expect(classify({ headline: 'Wildstyle piece on a freight train', summary: 'graffiti crew', source: 'test' })).toBe('graffiti');
+    expect(classify({ headline: 'Something happened', summary: '', source: 'test' })).toBe('general');
   });
 
   it('does not let the chattiest feed take a desk it does not own', () => {
     // A security headline that merely mentions a band name is still security.
-    expect(classify({ headline: 'CVE in Acid CMS', summary: 'remote code execution, patch available' })).toBe('hack');
+    expect(classify({ headline: 'CVE in Acid CMS', summary: 'remote code execution, patch available', source: 'test' })).toBe('hack');
   });
 
   it('names the editorial format from the wording', () => {
