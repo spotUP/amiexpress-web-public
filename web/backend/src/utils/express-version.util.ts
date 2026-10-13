@@ -5,14 +5,10 @@
  * when it has no dot). The 'v' / 'V' prefix is skipped before reading.
  */
 
+import { eVal } from './e-val.util';
+
 /** The board's own version string when the session carries none. */
 export const DEFAULT_EXPRESS_VER = 'v5.6';
-
-/** E Val(): optional sign and leading digits; anything else reads as 0. */
-function eVal(text: string): number {
-  const match = /^\s*([+-]?\d+)/.exec(text);
-  return match ? parseInt(match[1], 10) : 0;
-}
 
 export function getExpressMajorVer(mimicVersion: string | undefined, expressVer: string | undefined): string {
   if (mimicVersion && mimicVersion.length > 0) return mimicVersion;

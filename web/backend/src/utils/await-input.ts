@@ -16,6 +16,7 @@
  * sub-state driven and untouched; this is for ports of whole express.e
  * procedures, where a prompt is a line in the middle of the code.
  */
+import { eVal } from './e-val.util';
 import { emitText, flushOutput } from './output.util';
 
 type Waiter =
@@ -432,25 +433,7 @@ function addToHistory(session: InputWaitingSession, text: string): void {
   }
 }
 
-/** E's Val: the leading (signed) integer, 0 when there is none. */
-export function eVal(str: string): number {
-  return eValRead(str).value;
-}
-
-/**
- * E's two-result Val (`v,r:=Val(str)`): the value and how many characters it
- * read - 0 when the string does not start with a number.
- */
-export function eValRead(str: string): { value: number; read: number } {
-  const m = /^\s*[-+]?\d+/.exec(str);
-  return m ? { value: parseInt(m[0], 10), read: m[0].length } : { value: 0, read: 0 };
-}
-
-/** E's Val into a LONG: a number too big for 32 bits wraps, as the Amiga's does. */
-function eValLong(str: string): number {
-  const m = /^\s*[-+]?\d+/.exec(str);
-  return m ? Number(BigInt.asIntN(32, BigInt(m[0].trim()))) : 0;
-}
+export { eVal, eValRead } from './e-val.util';
 
 /**
  * numberInput(n) - express.e:21090-21094: the INT's value as the default,
@@ -467,7 +450,7 @@ export async function numberInput(socket: any, session: InputWaitingSession, n: 
  */
 export async function longNumberInput(socket: any, session: InputWaitingSession, n: number): Promise<number> {
   const str = await lineInput(socket, session, 10, String((Number(n) || 0) >>> 0));
-  return eValLong(str);
+  return eVal(str);
 }
 
 /** uucpNumberInput(n) - express.e:21114-21118: one character, Val. */

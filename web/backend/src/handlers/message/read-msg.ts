@@ -23,7 +23,7 @@ import { checkSecurity } from '../../utils/acs.util';
 import { emitText, clearTheScreen, flushOutput } from '../../utils/output.util';
 import { formatLongDateTime, fromAmigaTime, toAmigaTime } from '../../utils/date-time.util';
 import { isNarrow, headingIndent, movePrompt } from '../../utils/table-format.util';
-import { lineInput, readChar, yesNo } from '../../utils/await-input';
+import { lineInput, readChar, yesNo, eVal, eValRead } from '../../utils/await-input';
 import { messageIndexManager, MsgStatus } from '../../services/MessageIndexManager';
 import type { MailStat, MsgHeader } from '../../services/MessageIndexManager';
 import { translationService, TranslatorMode } from '../../services/TranslationService';
@@ -451,20 +451,9 @@ async function deleteMSG(socket: any, session: BBSSession, r: Reader): Promise<b
   return true;
 }
 
-/**
- * Val(): the number a string starts with, or null when it starts with none.
- * Like Amiga E's Val it reads `$` hex and `%` binary as well as decimal.
- */
-export function val(text: string): number | null {
-  const m = /^\s*(-?)(?:\$([0-9a-f]+)|%([01]+)|(\d+))/i.exec(text);
-  if (!m) return null;
-  const n = m[2] !== undefined ? parseInt(m[2], 16) : m[3] !== undefined ? parseInt(m[3], 2) : parseInt(m[4], 10);
-  return m[1] ? -n : n;
-}
-
 /** isDigit (8806-8812): TRUE when Val reads at least one character of the string. */
 export function isDigit(text: string): boolean {
-  return val(text) !== null;
+  return eValRead(text).read > 0;
 }
 
 /** loadMsg (9969-9996) of a message's own file: its lines, as the editor holds them. */
@@ -509,7 +498,7 @@ export async function getMoveConf(socket: any, session: BBSSession, msgbase = tr
   }
 
   const conferences: Array<{ id: number; name: string }> = getConferences();
-  let dest = getInverse(val(answer) ?? 0, session.user, getConfRelativeToggle(session));
+  let dest = getInverse(eVal(answer), session.user, getConfRelativeToggle(session));
   if (dest < 1) dest = 1;
   if (dest > conferences.length) dest = conferences.length;
   if (!checkConfAccess(session.user, dest)) {
@@ -538,7 +527,7 @@ export async function getMoveConf(socket: any, session: BBSSession, msgbase = tr
       session.currentConf = was;
       emitText(socket, list?.parsed ?? '');
     }
-    msgBase = val(answer) ?? 0;
+    msgBase = eVal(answer);
     if (msgBase < 1) msgBase = 1;
     if (msgBase > bases.length) msgBase = bases.length;
     emitText(socket, `\r\nYou have chosen message base: ${bases[msgBase - 1]?.name ?? ''}\r\n`);
@@ -624,12 +613,12 @@ async function listMSGs(socket: any, session: BBSSession, r: Reader): Promise<vo
     r.msgNum = r.stats.lowestNotDel;
   } else {
     // Val(): the leading number, and nothing when there is none.
-    const n = val(answer);
-    if (n === null) {
+    const n = eValRead(answer);
+    if (n.read === 0) {
       r.msgNum = oldMsgNum;
       return;
     }
-    r.msgNum = n;
+    r.msgNum = n.value;
   }
 
   const me = confMailName(session);
@@ -1140,7 +1129,7 @@ export async function readMSG(socket: any, session: BBSSession, params: string[]
       } else {
         const t = s.trim();
         if (isDigit(t)) {
-          r.msgNum = val(t) ?? 0;
+          r.msgNum = eVal(t);
           at = 'goNextMsg';
         } else {
           at = 'nextMenu';

@@ -19,7 +19,7 @@ import { amigaProtectionOf } from '../../amiga-emulation/api/dos/protection';
 import * as path from 'path';
 import { getSystemTime, formatLongDateTime, toAmigaTime, fromAmigaTime } from '../../utils/date-time.util';
 import { messageBodyLineLimit, messageIndent, messageRule } from '../../utils/table-format.util';
-import { lineInput, yesNo } from '../../utils/await-input';
+import { lineInput, yesNo, eVal as val } from '../../utils/await-input';
 import { higherAccess } from '../../utils/error-handling.util';
 import { deviceMounted, resolveAssignPath } from '../../utils/path-util';
 import { restricted } from '../../utils/file-restriction.util';
@@ -476,12 +476,6 @@ function linePromptFor(lineNum: number): string {
     ? String(lineNum).padStart(2)
     : String(lineNum).padStart(3);
   return `${n}> `;
-}
-
-/** E's Val(): the leading integer, 0 when there is none. */
-function val(str: string): number {
-  const n = parseInt(str.trim(), 10);
-  return Number.isNaN(n) ? 0 : n;
 }
 
 /** Where one pass of the Msg. Options loop goes next. */
