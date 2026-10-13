@@ -48,3 +48,5 @@ describe('mailOnNewUser / mailOnLogoff', () => {
     expect(sendMail).not.toHaveBeenCalled();
   });
 });
+
+export {};
