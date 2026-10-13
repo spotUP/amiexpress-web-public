@@ -16,7 +16,7 @@ import { XIMProtocol, XIMCommand } from "../XIMProtocol.js";
 import { DoorConfig, DoorConstants, AEDoorCommand } from "../DoorTypes.js";
 import { doorScreenWidth, doorScreenHeight } from "../xim/screen-width.util";
 import { logDoorMessage } from "../../utils/door-logging.util";
-import { checkSecurity } from "../../utils/acs.util.js";
+import { checkSecurity, setUserPermission } from "../../utils/acs.util.js";
 import { ACSPermission } from "../../constants/acs-permissions.js";
 import { populateDoorInfoStructs } from "./door-info.util.js";
 import { parseMciCodes } from "../../handlers/screen.handler.js";
@@ -1778,10 +1778,9 @@ debugLog(`[DoorMessageHandler]   DT_GOODFILE: SET to ${data}`);
         // express.e:3853-3854: Add temporary security flag bit
 debugLog(`[DoorMessageHandler]   DT_ADDBIT: Adding bit ${data}`);
         {
-          const session = this.config.bbsSession as any;
-          if (session) {
-            session.tempSecurityFlags = (session.tempSecurityFlags || 0) | (1 << data);
-          }
+          // setTempSecurityFlags (express.e:8430-8436): securityFlags[data] := "T".
+          const user = (this.config.bbsSession as any)?.user;
+          if (user) setUserPermission(user, data as ACSPermission, true);
         }
         break;
 
@@ -1789,10 +1788,9 @@ debugLog(`[DoorMessageHandler]   DT_ADDBIT: Adding bit ${data}`);
         // express.e:3855-3856: Remove temporary security flag bit
 debugLog(`[DoorMessageHandler]   DT_REMBIT: Removing bit ${data}`);
         {
-          const session = this.config.bbsSession as any;
-          if (session) {
-            session.tempSecurityFlags = (session.tempSecurityFlags || 0) & ~(1 << data);
-          }
+          // clearTempSecurityFlags (express.e:8437-8443): securityFlags[data] := "F".
+          const user = (this.config.bbsSession as any)?.user;
+          if (user) setUserPermission(user, data as ACSPermission, false);
         }
         break;
 

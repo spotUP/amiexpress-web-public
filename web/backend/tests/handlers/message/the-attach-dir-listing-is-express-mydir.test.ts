@@ -5,6 +5,12 @@
  * hsparwed protection letters, formatLongDateTime - with no colours. A path
  * that does not exist returns silently. The port printed a red "<path> does
  * not exist", coloured columns and an MM/DD/YY date.
+ *
+ * myDirAnyWhere (express.e 8390-8429) frames the listing in aePuts('\b\n') before
+ * and after. Kept on purpose: express passes the whole "5 <dir>" line, so
+ * parseParams item(0) is "5" and the real board lists a directory named 5; the
+ * port lists <dir>. checkForPause paging and the comment column (no file comments
+ * on the host fs) are not ported.
  */
 import * as fs from 'fs';
 import * as os from 'os';
@@ -32,6 +38,7 @@ test('a directory lists as myDirDisplay rows', async () => {
   expect(out.startsWith(`\r\nDirectory of ${dir}\r\n`)).toBe(true);
   expect(out).toMatch(/\r\n DEMO\.LHA {17}     1234 ----rw-d \w{3} \d\d-\w{3}-\d{4} \d\d:\d\d:\d\d 00:00:00\r\n/);
   expect(out).toMatch(/ Sub {22}      Dir ----rwed /);
+  expect(out.endsWith('\r\n')).toBe(true);
   expect(out).not.toContain('\x1b[');
   fs.rmSync(dir, { recursive: true, force: true });
 });
