@@ -1239,6 +1239,11 @@ function promptForPrivate(socket: any, session: BBSSession): void {
   session.subState = LoggedOnSubState.POST_MESSAGE_PRIVATE;
 }
 
+/** firstCharValue (8816-8819): the string's first character code, 0 for an empty string. */
+export function firstCharValue(text: string): number {
+  return text.length === 0 ? 0 : text.charCodeAt(0);
+}
+
 /**
  * The answer to the quote range - express.e:10904-10944.
  */
@@ -1246,8 +1251,8 @@ function quoteRange(socket: any, session: BBSSession, input: string): void {
   const quoteData = session.tempData.quoteData;
   const messageData = session.tempData.messageEntry;
   const raw = input.trim();
-  // express.e:10908 firstCharValue(str) — use first char for A/* checks
-  const firstChar = (raw[0] || '').toUpperCase();
+  // express.e:10908 firstCharValue(str): the first character as typed, no trimming
+  const firstChar = String.fromCharCode(firstCharValue(input)).toUpperCase();
 
   if (!quoteData) {
     void promptForMessageBody(socket, session);

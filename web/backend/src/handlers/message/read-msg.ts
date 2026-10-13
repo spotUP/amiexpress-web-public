@@ -451,10 +451,20 @@ async function deleteMSG(socket: any, session: BBSSession, r: Reader): Promise<b
   return true;
 }
 
-/** Val(): the number a string starts with, or null when it starts with none. */
-function val(text: string): number | null {
-  const m = /^\s*([+-]?\d+)/.exec(text);
-  return m ? parseInt(m[1], 10) : null;
+/**
+ * Val(): the number a string starts with, or null when it starts with none.
+ * Like Amiga E's Val it reads `$` hex and `%` binary as well as decimal.
+ */
+export function val(text: string): number | null {
+  const m = /^\s*(-?)(?:\$([0-9a-f]+)|%([01]+)|(\d+))/i.exec(text);
+  if (!m) return null;
+  const n = m[2] !== undefined ? parseInt(m[2], 16) : m[3] !== undefined ? parseInt(m[3], 2) : parseInt(m[4], 10);
+  return m[1] ? -n : n;
+}
+
+/** isDigit (8806-8812): TRUE when Val reads at least one character of the string. */
+export function isDigit(text: string): boolean {
+  return val(text) !== null;
 }
 
 /** loadMsg (9969-9996) of a message's own file: its lines, as the editor holds them. */
@@ -614,12 +624,12 @@ async function listMSGs(socket: any, session: BBSSession, r: Reader): Promise<vo
     r.msgNum = r.stats.lowestNotDel;
   } else {
     // Val(): the leading number, and nothing when there is none.
-    const m = /^\s*([+-]?\d+)/.exec(answer);
-    if (!m) {
+    const n = val(answer);
+    if (n === null) {
       r.msgNum = oldMsgNum;
       return;
     }
-    r.msgNum = parseInt(m[1], 10);
+    r.msgNum = n;
   }
 
   const me = confMailName(session);
@@ -1129,8 +1139,8 @@ export async function readMSG(socket: any, session: BBSSession, params: string[]
         at = 'goNextMsg';
       } else {
         const t = s.trim();
-        if (/^\d/.test(t)) {
-          r.msgNum = parseInt(t, 10);
+        if (isDigit(t)) {
+          r.msgNum = val(t) ?? 0;
           at = 'goNextMsg';
         } else {
           at = 'nextMenu';
