@@ -16,7 +16,7 @@ import { getBoardConfig } from '../../services/bbs-config-file.service';
 import { config as appConfig } from '../../config';
 import { ACSPermission } from '../../constants/acs-permissions';
 import { ftpCallersOnline } from '../../ftp/ftp-presence';
-import { WHO_TABLE_TOP, WHO_TABLE_BOTTOM, whoRow } from '../../utils/who-table.util';
+import { WHO_TABLE_TOP, WHO_TABLE_BOTTOM, whoRow, whoEntry, whoListsNode } from '../../utils/who-table.util';
 import { checkSecurity, setEnvStat } from '../../utils/acs.util';
 import { EnvStat } from '../../constants/env-codes';
 import { AnsiUtil } from '../../utils/ansi.util';
@@ -93,8 +93,19 @@ export function handleVersionCommand(socket: any, session: BBSSession): void {
  * @param session - Current BBS session
  */
 export function handleWhoCommand(socket: any, session: BBSSession): void {
-  // Check security - express.e:26095
-  if (!checkSecurity(session.user, ACSPermission.WHO_IS_ONLINE)) {
+  printWho(socket, session);
+}
+
+/**
+ * express.e:26095 / 26105 - the gate both WHO and WHD share:
+ * checkSecurity(ACS_WHO_IS_ONLINE) AND sopt.toggles[TOGGLES_MULTICOM]<>0.
+ * The port's MULTICOM toggle is config `olmEnabled` (olm.handler.ts:86 reads
+ * it for the same purpose). RESULT_NOT_ALLOWED prints "Command requires
+ * higher access." (the dispatcher, 28392); the second [INFO] line after it
+ * is the port's, kept 2026-09-08 (error-handling.util permissionDenied).
+ */
+function printWho(socket: any, session: BBSSession): void {
+  if (!checkSecurity(session.user, ACSPermission.WHO_IS_ONLINE) || !appConfig.get('olmEnabled')) {
     ErrorHandler.permissionDenied(socket, 'view who is online', {
       nextState: LoggedOnSubState.DISPLAY_MENU
     });
@@ -106,46 +117,40 @@ export function handleWhoCommand(socket: any, session: BBSSession): void {
   // express.e:24217-24218: aePuts('\b\n\b\n') before table (no screen clear)
   for (const line of WHO_TABLE_TOP) emitText(socket, line);
 
-  // Get all online users - express.e:24231-24377
-  // WEB_: express.e reads from a shared AmigaOS node list in global memory; on the web
-  // platform multi-node session state lives in the Node.js sessions Map, so we enumerate
-  // that instead. Displayed columns and row format are 1:1 with express.e:24370-24375.
-  const allOnlineUsers = Array.from(_sessions.values())
-    .filter(sess => sess.state === BBSState.LOGGEDON && sess.user)
-    .map(sess => ({
-      username: sess.user!.username,
-      location: sess.user!.location || '',
-      nodeId: sess.nodeId || 0,
-      chatEnabled: !(sess.user!.quietNode || false),
-      action: _getActivityFromSubState(sess.subState as any)
-    }));
+  // express.e:24231-24377. WEB_: express.e reads a shared AmigaOS node list;
+  // on the web, multi-node session state lives in the sessions Map, so that
+  // is enumerated (only logged-on sessions - the port has no idle-node slots,
+  // so express's "NODE INACTIVE." / "AWAITING CONNECT" rows do not exist).
+  const viewerIsSysop = checkSecurity(session.user, ACSPermission.SYSOP_COMMANDS);
+  const hideFiles = checkSecurity(session.user, ACSPermission.HIDE_FILES);
+  const rows: { nodeId: number; line: string }[] = [];
+  for (const sess of _sessions.values()) {
+    if (sess.state !== BBSState.LOGGEDON || !sess.user) continue;
+    const status = sess.currentStat ?? EnvStat.IDLE;
+    // express.e:24370 - RESERVE, SHUTDOWN and NOTACTIVE nodes are the sysop's to see
+    if (!whoListsNode(status, viewerIsSysop)) continue;
+    const e = whoEntry(status, sess.user.username, sess.user.location || '', { isSelf: sess === session, hideFiles });
+    // express.e:24252-24254 - the Chat column is the node's blockOLM, not the account's quiet flag
+    rows.push({ nodeId: sess.nodeId || 0, line: whoRow(sess.nodeId || 0, e.name, e.location, e.action, !sess.blockOLM) });
+  }
 
   // An FTP caller holds a node from the same pool but has no BBSSession, so
-  // he is absent from the map above - a sysop would see a node in use and
-  // nobody using it. `ftp-presence` is the registry the FTP wiring keeps for
-  // exactly this table.
+  // he is absent from the map above. `ftp-presence` is the registry the FTP
+  // wiring keeps for exactly this table.
   for (const caller of ftpCallersOnline()) {
-    allOnlineUsers.push({
-      username: caller.username,
-      location: caller.location,
+    rows.push({
       nodeId: caller.nodeId,
       // An FTP session has no chat channel to answer on.
-      chatEnabled: false,
-      action: 'FTP',
+      line: whoRow(caller.nodeId, caller.username, caller.location, 'FTP', false),
     });
   }
-  allOnlineUsers.sort((a, b) => a.nodeId - b.nodeId);
+  rows.sort((a, b) => a.nodeId - b.nodeId);
+  for (const r of rows) emitText(socket, r.line);
 
-  // Output each user row - express.e:24257-24377 format
-  allOnlineUsers.forEach(userInfo => {
-    // express.e:24370-24375 - Row format
-    emitText(socket, whoRow(userInfo.nodeId, userInfo.username, userInfo.location, userInfo.action, userInfo.chatEnabled));
-  });
-
-  // express.e:24381-24382 - Table footer
+  // express.e:24381-24383 - Table footer
   for (const line of WHO_TABLE_BOTTOM) emitText(socket, line);
 
-  // express.e: who() returns RESULT_SUCCESS — no press-key, main loop sets menuPause:=TRUE
+  // express.e: who() returns RESULT_SUCCESS - no press-key, main loop sets menuPause:=TRUE
   session.menuPause = true;
   session.subState = LoggedOnSubState.DISPLAY_MENU;
 }
@@ -155,53 +160,13 @@ export function handleWhoCommand(socket: any, session: BBSSession): void {
  *
  * From express.e:26104-26112 (internalCommandWHD)
  *
- * Original: Calls who(1) to show detailed online user information
- * Requires ACS_WHO_IS_ONLINE permission
- *
- * @param socket - Socket.IO socket
- * @param session - Current BBS session
+ * express.e:24239-24250 - who(1) is a debug mode that prints raw memory
+ * pointers (`\l\d[20]` of the singlePort and masterNode addresses) for every
+ * node. WEB_: meaningless on the web (no shared Amiga memory), so WHD prints
+ * the same table as WHO under the same gate and status. Left as is.
  */
 export function handleWhoDetailedCommand(socket: any, session: BBSSession): void {
-  // Check security - express.e:26105
-  if (!checkSecurity(session.user, ACSPermission.WHO_IS_ONLINE)) {
-    ErrorHandler.permissionDenied(socket, 'view who is online', {
-      nextState: LoggedOnSubState.DISPLAY_MENU
-    });
-    return;
-  }
-
-  setEnvStat(session, EnvStat.DOORS);
-
-  // express.e:24239-24250 - who(1) is debug mode that prints raw memory pointers
-  // WEB_: express.e WHD passes flag=1 to who(), which dumps struct addresses — meaningless
-  // on the web platform where there is no shared Amiga memory space. We show a richer
-  // per-session detail table instead, preserving the intent (operator visibility) without
-  // exposing meaningless pointer values. Multi-node session state lives in the Node.js
-  // sessions Map, not in a shared Amiga memory region.
-  for (const line of WHO_TABLE_TOP) emitText(socket, line);
-
-  // Get all online users with detailed status
-  const detailedOnlineUsers = Array.from(_sessions.values())
-    .filter(sess => sess.state === BBSState.LOGGEDON && sess.user)
-    .map(sess => ({
-      username: sess.user!.username,
-      location: sess.user!.location || '',
-      nodeId: sess.nodeId || 0,
-      chatEnabled: !(sess.user!.quietNode || false),
-      activity: _getActivityFromSubState(sess.subState as any)
-    }));
-
-  // Output each user row using same format as WHO
-  detailedOnlineUsers.forEach(userInfo => {
-    emitText(socket, whoRow(userInfo.nodeId, userInfo.username, userInfo.location, userInfo.activity, userInfo.chatEnabled));
-  });
-
-  // Table footer
-  for (const line of WHO_TABLE_BOTTOM) emitText(socket, line);
-
-  // express.e: who(1) returns RESULT_SUCCESS — no press-key
-  session.menuPause = true;
-  session.subState = LoggedOnSubState.DISPLAY_MENU;
+  printWho(socket, session);
 }
 
 /**
@@ -1392,26 +1357,4 @@ export async function handleWEditFontInput(socket: any, session: BBSSession, inp
 
   _displayWCommandMenu(socket, session);
   session.subState = LoggedOnSubState.W_OPTION_SELECT;
-}
-
-/**
- * Helper: Determine user activity from substate
- */
-function _getActivityFromSubState(subState: string): string {
-  // Map substates to human-readable activities
-  const activityMap: { [key: string]: string } = {
-    'DISPLAY_MENU': 'Main Menu',
-    'DISPLAY_CONF_BULL': 'Reading Bulletin',
-    'READ_COMMAND': 'Command Input',
-    'READ_SHORTCUTS': 'Command Input',
-    'POST_MESSAGE_SUBJECT': 'Posting Message',
-    'CONFERENCE_SELECT': 'Joining Conference',
-    'FILE_LIST': 'Browsing Files',
-    'FILE_AREA_SELECT': 'File Area Select',
-    'DOOR_RUNNING': 'Running Door',
-    'CHAT_MODE': 'Chatting',
-    'UNKNOWN': 'Idle'
-  };
-
-  return activityMap[subState] || 'Active';
 }

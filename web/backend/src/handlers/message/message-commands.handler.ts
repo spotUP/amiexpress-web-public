@@ -30,7 +30,7 @@ import { getDatabase } from '../command-handler/dependency-injection';
 import { getActivityFromSubState } from '../../server/session-manager';
 import { emitterForNodeId } from '../../server/session-emitter-registry';
 import { EnvStat } from '../../constants/env-codes';
-import { WHO_TABLE_TOP, WHO_TABLE_BOTTOM, whoRow } from '../../utils/who-table.util';
+import { WHO_TABLE_TOP, WHO_TABLE_BOTTOM, whoRow, whoEntry } from '../../utils/who-table.util';
 import { YES_NO_PROMPT } from '../../utils/await-input';
 
 import type { BBSSession } from '../../index';
@@ -329,100 +329,14 @@ function displayNodeStatus(socket: any, session: BBSSession): void {
     let action = 'IDLE';
     const status = nodeSess.currentStat ?? EnvStat.IDLE;
 
+    let rowName = handle;
+    let rowLocation = location;
     if (nodeSess.state === BBSState.LOGGEDON) {
-      // Map currentStat to display string - express.e:24257-24368
-      switch (status) {
-        case EnvStat.IDLE:
-          action = 'IDLE';
-          break;
-        case EnvStat.DOWNLOADING:
-          action = 'DOWNLOADING';
-          break;
-        case EnvStat.UPLOADING:
-          action = 'UPLOADING';
-          break;
-        case EnvStat.DOORS:
-          action = nodeSess.inDoorManager ? 'MODULE' : 'WHO';
-          break;
-        case EnvStat.MAIL:
-          action = 'READING MAIL';
-          break;
-        case EnvStat.STATS:
-          action = 'REVIEWING STATS';
-          break;
-        case EnvStat.ACCOUNT:
-          action = 'ACCOUNT EDITING';
-          break;
-        case EnvStat.ZOOM:
-          action = 'ZOOMING';
-          break;
-        case EnvStat.FILES:
-          action = 'VIEWING DIRS';
-          break;
-        case EnvStat.BULLETINS:
-          action = 'READING BULLS';
-          break;
-        case EnvStat.VIEWING:
-          action = 'VIEWING FILES';
-          break;
-        case EnvStat.ACCOUNTSEQ:
-          action = 'ACCOUNT SEQUENCE';
-          break;
-        case EnvStat.LOGOFF:
-          action = 'LOGGING OFF';
-          break;
-        case EnvStat.SYSOP:
-          action = 'SYSOPING';
-          break;
-        case EnvStat.SHELL:
-          action = 'USING SHELL';
-          break;
-        case EnvStat.EMACS:
-          action = 'EDITING';
-          break;
-        case EnvStat.JOIN:
-          action = 'JOINING CONF';
-          break;
-        case EnvStat.CHAT:
-          action = 'CHATTING';
-          break;
-        case EnvStat.NOTACTIVE:
-          action = 'NODE INACTIVE.';
-          break;
-        case EnvStat.REQ_CHAT:
-          action = 'REQUESTING CHAT';
-          break;
-        case EnvStat.CONNECT:
-          action = 'CONNECTING';
-          break;
-        case EnvStat.LOGGINGON:
-          action = 'LOGGING ON';
-          break;
-        case EnvStat.AWAITCONNECT:
-          action = 'AWAITING CONNECT';
-          break;
-        case EnvStat.SCANNING:
-          action = 'SCANNING MAIL';
-          break;
-        case EnvStat.SHUTDOWN:
-          action = 'SHUTDOWN';
-          break;
-        case EnvStat.MULTICHAT:
-          action = 'MULTICHAT';
-          break;
-        case EnvStat.SUSPEND:
-          action = 'SUSPENDED';
-          break;
-        case EnvStat.RESERVE:
-          action = 'RESERVED';
-          break;
-        case EnvStat.ONLINEMSG:
-          action = 'ONLINE MESSAGE';
-          break;
-        default:
-          // express.e:24366-24368 DEFAULT prints an empty action.
-          action = '';
-      }
+      // express.e:24257-24369 - the shared SELECT (who-table.util whoEntry)
+      const e = whoEntry(status, handle, location, { isSelf: nodeSess === session, hideFiles: checkSecurity(session.user, ACSPermission.HIDE_FILES) });
+      action = e.action;
+      rowName = e.name;
+      rowLocation = e.location;
     } else if (nodeSess.state === BBSState.LOGON) {
       action = 'LOGGING ON';
     } else if (nodeSess.state === BBSState.AWAIT) {
@@ -432,7 +346,7 @@ function displayNodeStatus(socket: any, session: BBSSession): void {
     }
 
     // Row - express.e:24370-24375
-    for (const line of buildNodeStatusRow(nodeId, handle, location, action, chatAvail, narrow)) {
+    for (const line of buildNodeStatusRow(nodeId, rowName, rowLocation, action, chatAvail, narrow)) {
       emitText(socket, narrow ? `${line}\r\n` : line);
     }
   }
