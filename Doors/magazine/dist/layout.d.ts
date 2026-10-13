@@ -1,0 +1,92 @@
+import { type Desk, type Story } from '@amiexpress/bbs-door-sdk/formats/magazine';
+import { type ColumnGeometry } from './columns';
+/** What a run of text MEANS; the app decides what that looks like in the theme. */
+export type Role = 'plain' | 'dim' | 'accent' | 'head' | 'rule' | 'tag' | 'source' | 'unread' | 'selected' | 'warn';
+export interface Seg {
+    text: string;
+    role: Role;
+}
+export type PanelRow = Seg[];
+/** The plain text of a row: what a C64 caller would read. */
+export declare function rowText(row: PanelRow): string;
+export interface MagLayout {
+    width: number;
+    height: number;
+    geometry: ColumnGeometry;
+    /** True when decoration may move: the ticker, the rail, the headline glitch. */
+    effects: boolean;
+    /** The 40-column tier: header and footer are one row each, no frames. */
+    collapseChrome: boolean;
+    headerRow: number;
+    /** Null when there is no ticker row (40 columns, or the sysop turned it off). */
+    tickerRow: number | null;
+    panelTop: number;
+    panelHeight: number;
+    progressRow: number;
+    footerRow: number;
+}
+export declare function buildLayout(width: number, height: number, options?: {
+    ticker?: boolean;
+}): MagLayout;
+export interface ListingItem {
+    storyId: string;
+    page: number;
+    title: string;
+    unread: boolean;
+    bookmarked: boolean;
+}
+export type ListingBlock = {
+    kind: 'heading';
+    label: string;
+} | {
+    kind: 'item';
+    item: ListingItem;
+};
+export interface Listing {
+    /** Each spread is exactly `panelHeight` rows. */
+    spreads: PanelRow[][];
+    /** The spread that holds the selected item (0 when none is selected). */
+    selectedSpread: number;
+    /** Items in reading order, for moving the selection. */
+    itemIds: string[];
+    /** The first item shown on each spread, for paging the cursor with the page. */
+    spreadFirst: Array<string | null>;
+}
+/**
+ * Blocks to spreads of rows. The first row of every spread is the view header
+ * (`headerLeft` / `headerRight`), the rest is the newspaper flow.
+ */
+export declare function buildListing(blocks: readonly ListingBlock[], selectedStoryId: string | null, layout: MagLayout, header: {
+    left: string;
+    right: string;
+}): Listing;
+/** `LEFT ........ RIGHT` across the set text. */
+export declare function headerLine(left: string, right: string, width: number): string;
+/** A centred notice that fills the panel: a title, then lines of detail. */
+export declare function buildNotice(layout: MagLayout, title: string, detail: readonly string[]): PanelRow[];
+/** The front page when no human has approved anything yet. Never a guess. */
+export declare function buildAwaitingEditor(layout: MagLayout): PanelRow[];
+export interface Article {
+    /** Each spread is exactly `panelHeight` rows. */
+    spreads: PanelRow[][];
+    /** Row of the headline's first line inside spread 0, for the one-shot glitch. */
+    headlineRow: number;
+    /** How many rows the headline takes. */
+    headlineRows: number;
+}
+/** `[ NEWS // HACK // 2026-10-13 ]` - a signal tag, not a label. */
+export declare function signalTag(story: Pick<Story, 'format' | 'desk' | 'date'>): string;
+export declare function buildArticle(story: Story, layout: MagLayout): Article;
+/**
+ * One row that fills as the reader moves through the spreads. At 40 columns
+ * the line is short, so the position is also written as `2/5`.
+ */
+export declare function buildProgress(layout: MagLayout, position: number, total: number): PanelRow;
+/** The ticker text: the newest headlines, separated by a signal marker. */
+export declare function tickerText(headlines: readonly string[]): string;
+/** `SIGNAL ` plus the sparkline, or '' when there is nothing to show. */
+export declare function signalStrength(perDay: readonly number[], spark: (n: number[]) => string): string;
+/** Section names for the section cycle, in reading order. */
+export declare const SECTION_ORDER: readonly Desk[];
+export declare function sectionLabel(desk: Desk | null): string;
+//# sourceMappingURL=layout.d.ts.map

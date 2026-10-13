@@ -409,6 +409,25 @@ describe('40-column sweep: the adapted doors', () => {
     expect([f.title, ...f.body, f.hint].join(' ')).toContain('Supercalifragilistic');
   });
 
+  it('magazine reader: article, contents and footer rows for a long story at 40', () => {
+    const { buildLayout, buildArticle, buildListing, rowText } = require('../../../Doors/magazine/layout');
+    const { HINTS, COMPACT_HINTS } = require('../../../Doors/magazine/app');
+    const layout = buildLayout(40, 25);
+    const story = {
+      id: 'a1', headline: `${LONG} ${LONG_WORDS}`, summary: `${PROSE}\n\n${LONG_WORDS} ${PROSE}`,
+      format: 'NEWS', desk: 'hack', date: '2026-10-13', source: LONG, url: `https://example.org/${LONG_WORDS.split(' ')[0]}`,
+    };
+    for (const spread of buildArticle(story, layout).spreads) fits(spread.map(rowText));
+    const listing = buildListing(
+      [{ kind: 'item', item: { storyId: 'x', page: 120, title: `${LONG} ${LONG_WORDS}`, unread: true, bookmarked: true } }],
+      'x', layout, { left: `CONTENTS - ${LONG}`, right: '2026-10-13' },
+    );
+    for (const spread of listing.spreads) fits(spread.map(rowText));
+    // The footer is one row: ' ' plus `Key: Does` joined by two spaces.
+    fits([' ' + COMPACT_HINTS.map((h: any) => `${h.key}: ${h.does}`).join('  ')]);
+    void HINTS;
+  });
+
   it('screen-theme-picker: theme rows, note, footer hints', () => {
     const { getCompactProfile } = require('../../../sdk/engines/ui/blessed/core/responsive-constants');
     const { buildThemeItems, buildNote, buildFooterHints, choicesForWidth } =

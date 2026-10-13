@@ -1,0 +1,12 @@
+{
+  "command": "MAG",
+  "settings": [
+    {
+      "key": "show_ticker",
+      "label": "Show the latest-headlines ticker",
+      "type": "boolean",
+      "default": true,
+      "help": "A scrolling line of the newest headlines under the masthead. Wide screens only; 40-column callers never get it."
+    }
+  ]
+}

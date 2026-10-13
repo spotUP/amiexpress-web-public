@@ -163,7 +163,7 @@ const BBSCMD = path.resolve(__dirname, '../../../../../Commands/BBSCmd');
  * fixes they got are kept - see `bbslink-doors-tell-the-truth.test.ts` -
  * because they were wrong at EVERY width.
  */
-const ADAPTED = ['THEME', 'SCREENTHEME', 'DOORS', 'BUGS', 'DOORMAN', 'STRIP', 'PHREAKWARS', 'GMASTER', 'THEMEC', 'ACHIEVE', 'SUBS', 'TIP', 'CTOP', 'WHIP', 'DASHBOARD', 'PROMPTCOMPLETE', 'LIVECHAT', 'IRC', 'PETSCII-EDIT', 'AE'];
+const ADAPTED = ['THEME', 'SCREENTHEME', 'DOORS', 'BUGS', 'DOORMAN', 'STRIP', 'PHREAKWARS', 'GMASTER', 'THEMEC', 'ACHIEVE', 'SUBS', 'TIP', 'CTOP', 'WHIP', 'DASHBOARD', 'PROMPTCOMPLETE', 'LIVECHAT', 'IRC', 'PETSCII-EDIT', 'AE', 'MAG'];
 
 const UNROUTED = 'unrouted-gate-test-type' as unknown as Door['type'];
 

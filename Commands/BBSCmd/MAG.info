@@ -1,0 +1,10 @@
+BBSCMD=MAG
+TYPE=typescript
+LOCATION=Doors/magazine
+DESCRIPTION=Underground Mag reader: stories in newspaper columns
+MULTINODE=YES
+PRIORITY=SAME
+MIN_COLUMNS=40
+NAME=MAG
+DRACCESS=-1
+ACCESS=0
