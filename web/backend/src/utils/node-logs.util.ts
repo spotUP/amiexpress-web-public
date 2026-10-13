@@ -10,6 +10,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 import { DoorType } from './amiga-command-parser.util';
+import { formatLongDate, formatLongTime } from './date-time.util';
 
 /**
  * The number DoorLog writes for a door type: its position in axenums.e:15,
@@ -61,30 +62,6 @@ function formatLongDateTime(date: Date): string {
 }
 
 /**
- * Format date like express.e formatLongDate
- * Format: "DD-Mon-YYYY"
- */
-function formatLongDate(date: Date): string {
-  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-                  'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-  const day = date.getDate().toString().padStart(2, '0');
-  const month = months[date.getMonth()];
-  const year = date.getFullYear();
-  return `${day}-${month}-${year}`;
-}
-
-/**
- * Format time like express.e formatLongTime
- * Format: "HH:MM:SS"
- */
-function formatLongTime(date: Date): string {
-  const hours = date.getHours().toString().padStart(2, '0');
-  const mins = date.getMinutes().toString().padStart(2, '0');
-  const secs = date.getSeconds().toString().padStart(2, '0');
-  return `${hours}:${mins}:${secs}`;
-}
-
-/**
  * Get the Node directory path
  */
 function getNodeDir(bbsRoot: string, nodeId: number): string {
@@ -106,7 +83,8 @@ function ensureNodeDir(bbsRoot: string, nodeId: number): string {
  * Log error to Node{N}/ErrorLog
  *
  * express.e:8968-8992:
- * Format: "{date} {time} {message}"
+ * Format: "{date} {time} {message}", date and time as MiscFuncs.e
+ * formatLongDate/formatLongTime (FORMAT_USA: MM-DD-YY and HH:MM:SS).
  */
 export function errorLog(bbsRoot: string, nodeId: number, message: string): void {
   try {

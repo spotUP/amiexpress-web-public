@@ -9,7 +9,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { User } from '../types';
 import { getACSConfig, LevelFlags } from './acs.util';
-import { config } from '../config';
+import { boardRoot } from './board-root.util';
 import { getSystemTime } from '../utils/date-time.util';
 import { leftField } from '@amiexpress/bbs-door-sdk/formats/estringf';
 
@@ -95,21 +95,13 @@ export function formatFtpUploadLines(fileName: string, bytes: number, resumePos:
 export async function writeToUDLog(message: string, nodeId: number): Promise<void> {
   if (!getACSConfig().acLvl[LevelFlags.DO_UD_LOG]) return;
   try {
-    const dataDir = config.get('dataDir');
-    const nodeDir = path.join(dataDir, `Node${nodeId || 0}`);
-    const logDir = fs.existsSync(nodeDir) ? nodeDir : path.join(process.cwd(), 'logs');
-
-    // Create logs directory if it doesn't exist
-    if (!fs.existsSync(logDir)) {
-      fs.mkdirSync(logDir, { recursive: true });
-    }
-
-    const logFile = path.join(logDir, 'UDLog');
-
-    // Append to log file
-    fs.appendFileSync(logFile, message + '\n');
+    // express.e:9525-9535 opens BBS:Node<n>/UDLog and writes nothing when the
+    // open fails: a missing Node directory is not created and has no fallback.
+    const nodeDir = path.join(boardRoot(), `Node${nodeId}`);
+    if (!fs.existsSync(nodeDir)) return;
+    fs.appendFileSync(path.join(nodeDir, 'UDLog'), message + '\n');
   } catch (error) {
-console.error('[UDLOG] Error writing to log:', error);
+    console.error('[UDLOG] Error writing to log:', error);
   }
 }
 
@@ -122,13 +114,14 @@ export async function writeToCallersLog(message: string, nodeId: number): Promis
   callersLogManager.logActivity(nodeId, message);
 }
 
+const UD_LOG_DIVIDER = '**************************************************************';
+
 /**
  * Write divider to UDLog
  * Port from express.e:9542-9544 udLogDivider()
  */
-export async function logDivider(): Promise<void> {
-  const divider = '**************************************************************';
-  await writeToUDLog(divider, 0);
+export async function logDivider(nodeId: number): Promise<void> {
+  await writeToUDLog(UD_LOG_DIVIDER, nodeId);
 }
 
 /**
@@ -152,8 +145,7 @@ export async function writeUDSessionHeader(session: any): Promise<void> {
 
   const nodeId = session.nodeId || 1;
   // Divider first
-  const divider = '**************************************************************';
-  await writeToUDLog(divider, nodeId);
+  await logDivider(nodeId);
 
   // express.e:16034-16042, the same line the logon wrote to the CallersLog.
   const { formatCallerLogonLine, SOCKET_CONNECT_STRING } = require('../services/CallersLogManager');
