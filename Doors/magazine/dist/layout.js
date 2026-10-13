@@ -127,6 +127,7 @@ function itemCells(item, index, selected, colWidth) {
             text: i === 0 ? `${mark}${left} ${page}` : ` ${left}`,
             role,
             item: index,
+            keep: i < lines.length - 1,
         });
     });
     return cells;
@@ -168,11 +169,20 @@ function buildListing(blocks, selectedStoryId, layout, header) {
     const { geometry } = layout;
     const itemIds = [];
     const cells = [];
+    // The one place entry rows are built: a blank row sits between two entries
+    // that follow each other directly (sysop 2026-10-13: "too busy"). The gap is
+    // an ordinary blank cell, so the flow drops it at the top of a column and a
+    // heading keeps its own spacing.
+    let afterItem = false;
     for (const block of blocks) {
         if (block.kind === 'heading') {
             cells.push({ ...headingCell(block.label, geometry.colWidth), item: -1 });
+            afterItem = false;
             continue;
         }
+        if (afterItem)
+            cells.push({ text: '', role: 'plain' });
+        afterItem = true;
         const index = itemIds.length;
         itemIds.push(block.item.storyId);
         cells.push(...itemCells(block.item, index, block.item.storyId === selectedStoryId, geometry.colWidth));
@@ -180,7 +190,7 @@ function buildListing(blocks, selectedStoryId, layout, header) {
     const bodyHeight = Math.max(1, layout.panelHeight - 1);
     const flowed = (0, columns_1.flowColumns)(cells, geometry.cols, { first: bodyHeight, rest: bodyHeight }, {
         isBlank: (c) => c.text === '' && c.item === undefined,
-        keepWithNext: (c) => c.item === -1,
+        keepWithNext: (c) => c.item === -1 || c.keep === true,
     });
     const selectedIndex = selectedStoryId ? itemIds.indexOf(selectedStoryId) : -1;
     let selectedSpread = 0;

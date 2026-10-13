@@ -213,3 +213,43 @@ export async function tickerAndSignalStrengthDegradeToNothingWithoutData(): Prom
   assert.strictEqual(signalStrength([3], () => 'x'), '');
   assert.strictEqual(signalStrength([1, 2], () => 'ab'), 'SIGNAL ab');
 }
+
+export async function leavesABlankRowBetweenConsecutiveHeadlines(): Promise<void> {
+  const COUNT = 120;
+  const many: ListingBlock[] = [
+    { kind: 'heading', label: 'SCENE' },
+    ...Array.from({ length: COUNT }, (_, i) => ({
+      kind: 'item' as const,
+      item: { storyId: `s${i}`, page: 100 + i, title: i % 3 === 0 ? `Story ${i} with a headline long enough to wrap onto a second row of the contents list` : `Story ${i}`, unread: true, bookmarked: false },
+    })),
+  ];
+  for (const [w, h] of WIDTHS) {
+    const l = buildLayout(w, h);
+    const ls = buildListing(many, 's0', l, { left: 'C', right: '' });
+    assert.ok(ls.spreads.length > 1, `${w}: paginates`);
+    const { cols, colWidth, gutter, margin } = l.geometry;
+    let firsts = 0;
+    for (const spread of ls.spreads) {
+      assert.strictEqual(spread.length, l.panelHeight, `${w}: spread height`);
+      for (let c = 0; c < cols; c++) {
+        const at = margin + c * (colWidth + gutter);
+        const cells = spread.slice(1).map((r) => rowText(r).slice(at, at + colWidth));
+        cells.forEach((cell, r) => {
+          // An entry's first row: mark column, title, three-digit page.
+          if (!/^[ >]\S/.test(cell) || !/\s\d{3}$/.test(cell.trimEnd()) || cell.includes('─')) return;
+          firsts++;
+          if (r === 0) return;
+          const above = cells[r - 1];
+          assert.ok(above.trim() === '' || above.includes('─'), `${w}: "${cell.trim()}" sits directly under "${above.trim()}"`);
+        });
+        // A two-row title is never cut across a column break.
+        cells.forEach((cell, r) => {
+          if (/^ \S/.test(cell) && !/\s\d{3}$/.test(cell.trimEnd())) {
+            assert.ok(r > 0 && cells[r - 1].trim() !== '', `${w}: continuation row "${cell.trim()}" has lost its first row`);
+          }
+        });
+      }
+    }
+    assert.strictEqual(firsts, COUNT, `${w}: every entry once`);
+  }
+}
