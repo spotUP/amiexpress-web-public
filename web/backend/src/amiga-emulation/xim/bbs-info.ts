@@ -6,6 +6,7 @@
  */
 
 import { isSysopAvailable } from '../../services/sysop-availability';
+import { getExpressMajorVer } from '../../utils/express-version.util';
 import { Socket } from 'socket.io';
 import { DEFAULT_PAUSE_LINES } from '../../screens/screen-rows';
 import * as fs from 'fs';
@@ -570,37 +571,10 @@ debugLog(`[XIMBBSInfo] BB_MAINLINE verify buffer: "${verify}"`);
 
   private getExpressMajorVersion(): string {
     const session: any = this.bbsSession || {};
-    const mimicVer = typeof session.mimicVer === 'string' ? session.mimicVer : '';
-    if (mimicVer.length > 0) {
-      return mimicVer;
-    }
-
-    // express.e uses the core expressVer string; avoid using web/app versions here.
-    const raw = typeof session.expressVer === 'string' ? session.expressVer : '';
-    const expressVer = raw.trim().length > 0 ? raw.trim() : 'v5.6';
-
-    const normalized = expressVer.startsWith('v') || expressVer.startsWith('V')
-      ? expressVer.slice(1)
-      : expressVer;
-    const dotIndex = normalized.indexOf('.');
-    if (dotIndex >= 0) {
-      const major = parseInt(normalized.slice(0, dotIndex), 10);
-      const minor = parseInt(normalized.slice(dotIndex + 1), 10);
-      if (Number.isFinite(major) && Number.isFinite(minor)) {
-        return `v${major}.${minor}`;
-      }
-      if (Number.isFinite(major)) {
-        return `v${major}`;
-      }
-      return 'v5.6';
-    }
-
-    const major = parseInt(normalized, 10);
-    if (Number.isFinite(major)) {
-      return `v${major}`;
-    }
-
-    return 'v5.6';
+    return getExpressMajorVer(
+      typeof session.mimicVer === 'string' ? session.mimicVer : '',
+      typeof session.expressVer === 'string' ? session.expressVer : '',
+    );
   }
 
   /**

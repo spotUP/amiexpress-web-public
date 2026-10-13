@@ -100,6 +100,17 @@ export function clearTheScreen(socket: Socket): string {
   return session?.petsciiMode ? '\x93' : ANSI.CLEAR_SCREEN;
 }
 
+/**
+ * express.e send017 (5210-5216): one 0x0F (SI, shift in) byte, sent before
+ * sendCLS where the sysop's screens may follow a door or teletext art that
+ * shifted out (0x0E). PETSCII has no shift-in: 0x0F is not a PETSCII control,
+ * so a C64 caller gets nothing - the same ternary as clearTheScreen.
+ */
+export function send017(socket: Socket): string {
+  const session = (socket as any)?.session;
+  return session?.petsciiMode ? '' : '\x0f';
+}
+
 export function eraseRestOfLine(socket: Socket): string {
   const session = (socket as any)?.session;
   if (session && session.ansiEnabled === false) return '';

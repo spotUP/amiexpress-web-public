@@ -4,6 +4,7 @@
 // 2025-11-20
 
 import { conferenceAmigaPath } from '../../conferences/conference-paths';
+import { getExpressMajorVer } from '../../utils/express-version.util';
 import { DEFAULT_PAUSE_LINES } from '../../screens/screen-rows';
 import { petsciiColumnsOf, C64_COLUMNS } from '../xim/screen-width.util';
 import { config as appConfig } from '../../config';
@@ -2844,36 +2845,10 @@ debugLog(`[DoorMessageHandler]   Resumed door with key 0x${code.toString(16)}`);
    */
   private getExpressMajorVersion(): string {
     const session: any = this.config.bbsSession || {};
-    const mimicVer = typeof session.mimicVer === 'string' ? session.mimicVer : '';
-    if (mimicVer.length > 0) {
-      return mimicVer;
-    }
-
-    const raw = typeof session.expressVer === 'string' ? session.expressVer : '';
-    const expressVer = raw.trim().length > 0 ? raw.trim() : 'v5.6';
-
-    const normalized = expressVer.startsWith('v') || expressVer.startsWith('V')
-      ? expressVer.slice(1)
-      : expressVer;
-    const dotIndex = normalized.indexOf('.');
-    if (dotIndex >= 0) {
-      const major = parseInt(normalized.slice(0, dotIndex), 10);
-      const minor = parseInt(normalized.slice(dotIndex + 1), 10);
-      if (Number.isFinite(major) && Number.isFinite(minor)) {
-        return `v${major}.${minor}`;
-      }
-      if (Number.isFinite(major)) {
-        return `v${major}`;
-      }
-      return 'v5.6';
-    }
-
-    const major = parseInt(normalized, 10);
-    if (Number.isFinite(major)) {
-      return `v${major}`;
-    }
-
-    return 'v5.6';
+    return getExpressMajorVer(
+      typeof session.mimicVer === 'string' ? session.mimicVer : '',
+      typeof session.expressVer === 'string' ? session.expressVer : '',
+    );
   }
 
   /**

@@ -22,7 +22,7 @@
 
 import { BBSSession, LoggedOnSubState } from '../../index';
 import type { User } from '../../database/types';
-import { emitText, flushOutput, clearTheScreen } from '../../utils/output.util';
+import { emitText, flushOutput, clearTheScreen, send017 } from '../../utils/output.util';
 import { lineInput, readChar, eValRead, holdInput, checkInput, purgeLine, takeTypeAhead } from '../../utils/await-input';
 import { setEnvStat, getACSConfig, ToggleFlags } from '../../utils/acs.util';
 import { EnvStat } from '../../constants/env-codes';
@@ -147,9 +147,7 @@ async function checkNEdit(socket: any, session: BBSSession, which: number): Prom
     emitText(socket, 'Warning, error while loading account\r\n');
     return RESULT_FAILURE;
   }
-  // WEB_: send017 (the SI character, express.e 22395, 21749) is not sent: no
-  // other screen of the board sends it, and a web terminal has no character
-  // set to shift back to.
+  emitText(socket, send017(socket)); // 22395
   emitText(socket, clearTheScreen(socket));
   return openEditInfo(socket, session, account, which, false);
 }
@@ -189,7 +187,8 @@ function diskRecord(slot: number) {
  */
 async function listNewAccounts(socket: any, session: BBSSession, ctx: EditAccounts): Promise<void> {
   let foflag = false;
-  emitText(socket, clearTheScreen(socket)); // sendCLS, 21750 (send017: see checkNEdit)
+  emitText(socket, send017(socket)); // 21749
+  emitText(socket, clearTheScreen(socket)); // sendCLS, 21750
   emitText(socket, 'Searching...');
   const maximum = lastAccountSlot();
   for (let x = 1; x <= maximum; x++) {
