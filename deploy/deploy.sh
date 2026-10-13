@@ -350,6 +350,18 @@ df -h / | tail -1
 # failed their boot smoke on ENOSPC (2026-10-04). Cap the cache and keep a
 # floor of free disk instead - recent layers survive, so builds stay cached.
 docker builder prune -f --max-used-space=6GB --min-free-space=12GB 2>&1 | tail -2 || true
+# Docker 29.2.1 honours none of the limit flags: --max-used-space,
+# --reserved-space and --min-free-space each pruned 0B from 5.7GB, the
+# daemon's builder.gc did not hold its 10GB, and the cache reached 32.8GB
+# and filled the disk twice on 2026-10-13 (deploy failed, board writes hit
+# ENOSPC). So measure the disk and clear the whole cache below a floor; one
+# uncached build costs minutes, a full disk costs the board.
+DEPLOY_MIN_FREE_GB="${DEPLOY_MIN_FREE_GB:-20}"
+free_gb=$(df -BG --output=avail / | tail -1 | tr -dc '0-9')
+if [ "${free_gb:-0}" -lt "$DEPLOY_MIN_FREE_GB" ]; then
+  echo "only ${free_gb}GB free (< ${DEPLOY_MIN_FREE_GB}GB): clearing the build cache"
+  docker builder prune -af 2>&1 | tail -1 || true
+fi
 # Untagged leftovers only: :latest and :rollback are tags, so
 # neither is a dangling image and neither can be caught here.
 docker image prune -f 2>&1 | tail -2 || true
