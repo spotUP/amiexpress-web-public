@@ -4,7 +4,7 @@ exports.HELP_TEXT = exports.COMPACT_HINTS = exports.HINTS = exports.MAGAZINE_TIT
 exports.startReader = startReader;
 exports.createApp = createApp;
 /**
- * MAG - the Underground Mag reader.
+ * MAG - the reader for THE UNKNOWN FREQUENCY.
  *
  * The screens are built as rows by the pure modules (columns.ts, layout.ts);
  * this file owns the terminal: the blessed boxes, the keys, the storage, and
@@ -25,6 +25,7 @@ const settings_1 = require("@amiexpress/bbs-door-sdk/settings");
 const theme_1 = require("@amiexpress/bbs-door-sdk/engines/ui/theme");
 const blessed_1 = require("@amiexpress/bbs-door-sdk/engines/ui/blessed");
 const magazine_1 = require("@amiexpress/bbs-door-sdk/formats/magazine");
+Object.defineProperty(exports, "MAGAZINE_TITLE", { enumerable: true, get: function () { return magazine_1.MAGAZINE_TITLE; } });
 const bbs_door_sdk_1 = require("@amiexpress/bbs-door-sdk");
 const library_1 = require("./library");
 const layout_1 = require("./layout");
@@ -39,7 +40,6 @@ const SIGNAL_DAYS = 8;
 const GLITCH_DELAY_MS = 450;
 const GLITCH_HOLD_MS = 160;
 const DIGIT_COMMIT_MS = 1500;
-exports.MAGAZINE_TITLE = 'UNDERGROUND MAG';
 exports.HINTS = [
     { key: 'Arrows', does: 'Page' },
     { key: 'C', does: 'Contents' },
@@ -106,7 +106,7 @@ async function startReader(session) {
     const persist = (key, set) => {
         storage.save(key, [...set].slice(-STORED_CAP)).catch(() => { });
     };
-    const screen = (0, blessed_helpers_1.createScreen)(bbs, { title: exports.MAGAZINE_TITLE });
+    const screen = (0, blessed_helpers_1.createScreen)(bbs, { title: magazine_1.MAGAZINE_TITLE });
     const width = screen.width || 80;
     const height = screen.height || 24;
     const layout = (0, layout_1.buildLayout)(width, height, { ticker: showTicker });
@@ -164,7 +164,7 @@ async function startReader(session) {
     const render = () => screen.render();
     const chrome = (0, theme_1.attachDoorChrome)(theme, {
         width,
-        title: layout.collapseChrome ? exports.MAGAZINE_TITLE : `${exports.MAGAZINE_TITLE} // SIGNAL TERMINAL`,
+        title: layout.collapseChrome ? magazine_1.MAGAZINE_TITLE : `${magazine_1.MAGAZINE_TITLE} // SIGNAL TERMINAL`,
         masthead: mastheadRow,
         footer: footerRow,
         hints: exports.HINTS,
@@ -208,22 +208,39 @@ async function startReader(session) {
     let glitchTimer = null;
     let repairTimer = null;
     let modalOpen = false;
+    let modalContent = '';
     const counters = { glitches: 0, tickerSteps: 0, intervals: 0 };
     let stopped = false;
     let finish = () => { };
     const byId = (id) => snapshot.index.find((e) => e.storyId === id);
+    // One read per story per visit to a view: a cursor move rebuilds the list.
+    const storyCache = new Map();
+    const storyOf = (id) => {
+        if (!storyCache.has(id))
+            storyCache.set(id, (0, library_1.loadStory)(id, (0, library_1.magazineRoot)(__dirname)));
+        return storyCache.get(id) ?? null;
+    };
     const listingBlocks = (entries, headings) => {
         const blocks = [];
-        const item = (e) => ({
-            kind: 'item',
-            item: {
-                storyId: e.storyId,
-                page: e.page,
-                title: e.title,
-                unread: !read.has(e.storyId),
-                bookmarked: bookmarks.has(e.storyId),
-            },
-        });
+        const item = (e) => {
+            // A feed story is wire material in every list: headline, one teaser
+            // line, source and age. Only an authored story is a plain headline row.
+            const st = storyOf(e.storyId);
+            const wire = st && (0, magazine_1.storyOrigin)(st) === 'feed'
+                ? { teaser: st.summary, source: st.source, stamp: (0, layout_1.wireStamp)(st.date || e.date, new Date()) }
+                : undefined;
+            return {
+                kind: 'item',
+                item: {
+                    storyId: e.storyId,
+                    page: e.page,
+                    title: e.title,
+                    unread: !read.has(e.storyId),
+                    bookmarked: bookmarks.has(e.storyId),
+                    wire,
+                },
+            };
+        };
         if (!headings)
             return entries.map(item);
         for (const desk of layout_1.SECTION_ORDER) {
@@ -345,6 +362,7 @@ async function startReader(session) {
     const setStatus = (text) => chrome.setFooterSuffix(text ? `  ${text}` : '');
     const go = (next, keepSelection = false) => {
         snapshot = (0, library_1.loadSnapshot)((0, library_1.magazineRoot)(__dirname));
+        storyCache.clear();
         view = next;
         if (!keepSelection && next.kind !== 'article')
             selected = null;
@@ -442,6 +460,11 @@ async function startReader(session) {
         paint();
     };
     const openStory = (storyId, list) => {
+        const st = storyOf(storyId);
+        if (st && (0, magazine_1.storyOrigin)(st) === 'feed') {
+            openWire(st);
+            return;
+        }
         go({ kind: 'article', storyId, list: list.length ? list : [storyId], back: view.kind === 'article' ? view.back : view });
     };
     const openSelected = () => {
@@ -509,11 +532,51 @@ async function startReader(session) {
         modalOpen = false;
         render();
     };
+    /**
+     * A feed story never opens the article layout: a small panel with the
+     * cleaned teaser, the site and the date. The view underneath does not move,
+     * so closing it leaves the cursor where it was.
+     */
+    const openWire = (st) => {
+        modalOpen = true;
+        const lines = (0, layout_1.wireDetail)(st, new Date());
+        modalContent = lines.join('\n');
+        const newlyRead = !read.has(st.id);
+        if (newlyRead) {
+            read.add(st.id);
+            persist(exports.READ_KEY, read);
+        }
+        // Sized to its text: a panel that fills the screen repaints the screen.
+        const panelWidth = Math.min(width, Math.max(30, (0, blessed_1.calculateDialogWidth)(width)));
+        const textRows = lines.reduce((n, l) => n + Math.max(1, Math.ceil(l.length / Math.max(1, panelWidth - 4))), 0);
+        const modal = (0, blessed_1.docModal)({
+            parent: screen,
+            width: panelWidth,
+            height: Math.min(height - 2, textRows + 4),
+            title: 'Wire',
+            content: lines.map(escapeTags).join('\n'),
+            contentStyle: { fg: t.ink, bg: t.ground },
+            footerStyle: { fg: t.ground, bg: t.accent },
+            footerText: 'Enter or Escape: back to the list',
+            mobileFooterText: 'Enter: back',
+            closeKeys: ['enter', 'return'],
+            zIndex: 9990,
+            onClose: () => {
+                modalContent = '';
+                modalDone();
+                if (newlyRead && view.kind !== 'article') {
+                    build();
+                    paint();
+                }
+            },
+        });
+        modal.display();
+    };
     const openHelp = () => {
         modalOpen = true;
         const modal = (0, blessed_1.docModal)({
             parent: screen,
-            title: `${exports.MAGAZINE_TITLE} help`,
+            title: `${magazine_1.MAGAZINE_TITLE} help`,
             content: exports.HELP_TEXT,
             contentStyle: { fg: t.ink, bg: t.ground },
             footerStyle: { fg: t.ground, bg: t.accent },
@@ -684,6 +747,7 @@ async function startReader(session) {
         progressRow: () => (0, layout_1.rowText)((0, layout_1.buildProgress)(layout, spreadNo, spreads.length)),
         footerRow: () => chrome.footerContent().replace(/\{[^{}]*\}/g, ''),
         tickerRow: () => (tickerBox ? String(tickerBox.getContent()).replace(/\{[^{}]*\}/g, '') : ''),
+        modalText: () => modalContent,
         viewKind: () => view.kind,
         stats: () => ({ ...counters }),
         stop: () => finish(),

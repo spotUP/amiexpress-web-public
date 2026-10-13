@@ -32,6 +32,7 @@ import {
   PAGE_WIDTH,
   type ComposedPage,
 } from './compose';
+import { stripFeedBoilerplate } from '../news-bulletins';
 import { isSameStory, isWorthReading, storyId, type Desk, type Story } from './story-store';
 
 /** One item as a feed produced it, before the magazine has opinions about it. */
@@ -143,6 +144,7 @@ export function mergeIncoming(
       date: item.date ?? nowIso.slice(0, 10),
       source: item.source,
       url: item.url,
+      origin: 'feed',
       firstSeen: nowIso,
       seenCount: 1,
     };
@@ -292,6 +294,19 @@ export function writeApproved(root: string, ids: string[]): void {
 }
 
 /**
+ * Re-clean every stored summary with the bulletins' one cleaner, so stories
+ * stored before the cleaner learned a pattern ("[...]", "Read more", reddit's
+ * footer) heal on the next publish without a refetch. Idempotent. Returns new
+ * objects; the stories on disk are rewritten by the caller.
+ */
+export function healSummaries(stories: Story[]): Story[] {
+  return stories.map((s) => {
+    const summary = stripFeedBoilerplate(s.summary ?? '');
+    return summary === s.summary ? s : { ...s, summary };
+  });
+}
+
+/**
  * One pass: read what the feeds produced, merge it into the archive, and
  * recompose. `incoming/` is cleared afterwards - the bulletins own that data
  * and the stories own their copy.
@@ -315,7 +330,7 @@ export function refreshMagazine(deps: MagazineDeps): { added: number; duplicates
     }
   }
 
-  const existing = loadStories(path.join(magDir, MAGAZINE_STORIES_DIR), deps.log);
+  const existing = healSummaries(loadStories(path.join(magDir, MAGAZINE_STORIES_DIR), deps.log));
   const merged = mergeIncoming(existing, items, nowIso, deps.log);
   for (const story of merged.stories) {
     writeAtomic(path.join(magDir, MAGAZINE_STORIES_DIR, `${story.id}.json`), JSON.stringify(story, null, 2));

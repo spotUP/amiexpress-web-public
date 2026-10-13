@@ -342,9 +342,44 @@ const TRANSLITERATE: Record<string, string> = {
   '\u20ac': 'EUR', '\u00a3': 'GBP', '\u00a5': 'JPY', '\u00b1': '+/-', '\u00d7': 'x', '\u00f7': '/',
 };
 
+/**
+ * The furniture a feed bolts onto a teaser: truncation marks, "read more"
+ * links, the WordPress "The post ... appeared first on ..." line and reddit's
+ * submitter/link/comments footer. None of it is the item's own text, and a
+ * reader that lays the teaser out shows it as dead words.
+ *
+ * Idempotent (it only removes) and run to a fixpoint, because the marks stack:
+ * "text [...] Read more" needs two passes. The ONE place this lives; the
+ * magazine's publish step calls it again over stored summaries so old stories
+ * heal without a refetch.
+ */
+export function stripFeedBoilerplate(input: string): string {
+  let text = input;
+  // Reddit's footer, wherever it sits (an image-only post has it mid-text).
+  const hadRedditFooter = /submitted\s+by\b|\[\s*(?:link|comments)\s*\]/i.test(text);
+  text = text
+    .replace(/\bsubmitted\s+by\s+\/?u\/[A-Za-z0-9_-]+/gi, ' ')
+    .replace(/\[\s*(?:link|comments)\s*\]/gi, ' ');
+  if (hadRedditFooter) text = text.replace(/(^|\s)\/?u\/[A-Za-z0-9_-]+/g, '$1');
+  // WordPress: "The post <title> appeared first on <site>."
+  text = text.replace(/\s*\bThe post\b[^\n]*?\bappeared first on\b[^\n]*?(?:\.(?=\s|$)|$)/gim, ' ');
+  for (let pass = 0; pass < 6; pass++) {
+    const before = text;
+    text = text
+      // "[...]" / "[…]" at the end of a line
+      .replace(/\s*\[\s*(?:\.{2,}|\u2026)\s*\]\s*$/gm, '')
+      // "Read more", "...read more", "Continue reading ->" at the end of a line
+      .replace(/\s*(?:\.{2,}|\u2026)?\s*\b(?:read more|continue reading)\b(?:\s*(?:\.{2,}|\u2026|>>|->|>|\u2192))*\s*$/gim, '')
+      // a bare trailing ellipsis
+      .replace(/\s*(?:\.{3,}|\u2026)\s*$/gm, '');
+    if (text === before) break;
+  }
+  return text.replace(/[ \t]{2,}/g, ' ').replace(/ *\n */g, '\n').trim();
+}
+
 /** Strip markup, decode entities, transliterate, collapse whitespace. */
 export function toBulletinText(input: string): string {
-  return input
+  const text = input
     .replace(/<script[\s\S]*?<\/script>/gi, ' ')
     .replace(/<style[\s\S]*?<\/style>/gi, ' ')
     .replace(/<[^>]+>/g, ' ')
@@ -360,8 +395,12 @@ export function toBulletinText(input: string): string {
     .replace(/&lt;/g, '<')
     .replace(/&gt;/g, '>')
     .replace(/&quot;/g, '"')
+    // Reddit separates its footer words with &#32; (a plain space) and &#160;.
+    .replace(/&#(?:32|160|x20|xa0);/gi, ' ')
     .replace(/&#(\d+);/g, (_m, n) => TRANSLITERATE[String.fromCharCode(Number(n))] ?? '')
     .replace(/&amp;/g, '&')
+    // A feed escaped twice leaves real tags behind once decoded.
+    .replace(/<\/?[a-z][a-z0-9]*(?:\s[^<>]*)?\/?>/gi, ' ')
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
     // eslint-disable-next-line no-control-regex
@@ -370,6 +409,7 @@ export function toBulletinText(input: string): string {
     .replace(/[ \t]{2,}/g, ' ')
     .replace(/ *\n */g, '\n')
     .trim();
+  return stripFeedBoilerplate(text);
 }
 
 function asArray<T>(v: T | T[] | undefined | null): T[] {

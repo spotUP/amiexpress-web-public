@@ -19,6 +19,8 @@
  * wants.
  */
 
+import { MAGAZINE_TITLE } from '@amiexpress/bbs-door-sdk/formats/magazine';
+
 /** Teletext is 40x24; the board's generated-screen budget has the last word. */
 export const PAGE_WIDTH = 40;
 
@@ -113,7 +115,7 @@ export function wrap(text: string, width = PAGE_WIDTH): string[] {
  * is and where they are (§12: "the reader can understand where they are").
  */
 export function masthead(page: number, deskLabel: string): PageRow[] {
-  const left = 'UNDERGROUND MAG';
+  const left = MAGAZINE_TITLE;
   const right = String(page);
   const gap = Math.max(1, PAGE_WIDTH - left.length - right.length);
   return [

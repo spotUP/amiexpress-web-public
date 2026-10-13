@@ -28,12 +28,23 @@ export interface MagLayout {
 export declare function buildLayout(width: number, height: number, options?: {
     ticker?: boolean;
 }): MagLayout;
+/**
+ * What a feed story shows in a list besides its headline: the cleaned teaser,
+ * the site it came from and how old it is. A story that carries this is a WIRE
+ * row; one that does not is a plain headline row (an authored story).
+ */
+export interface WireLine {
+    teaser: string;
+    source: string;
+    stamp: string;
+}
 export interface ListingItem {
     storyId: string;
     page: number;
     title: string;
     unread: boolean;
     bookmarked: boolean;
+    wire?: WireLine;
 }
 export type ListingBlock = {
     kind: 'heading';
@@ -52,6 +63,21 @@ export interface Listing {
     /** The first item shown on each spread, for paging the cursor with the page. */
     spreadFirst: Array<string | null>;
 }
+/** One line cut at a word boundary to `width`; `..` marks a cut. */
+export declare function trimAtWord(text: string, width: number): string;
+/**
+ * A source as the reader names it: the site, never an address. `www.` goes,
+ * and so does a trailing "via ..." or "(note)" ("news.ycombinator.com via Algolia").
+ */
+export declare function sourceName(source: string): string;
+/** `TODAY`, `YESTERDAY`, `3D AGO`, else the date: how old a wire row is. */
+export declare function wireStamp(date: string, now: Date): string;
+/**
+ * The detail panel of a wire row, as plain lines: the cleaned teaser in full,
+ * the site and the date. No address: the reader never shows a raw URL (the
+ * story keeps it in the data).
+ */
+export declare function wireDetail(story: Pick<Story, 'headline' | 'summary' | 'source' | 'date'>, now: Date): string[];
 /**
  * Blocks to spreads of rows. The first row of every spread is the view header
  * (`headerLeft` / `headerRight`), the rest is the newspaper flow.

@@ -1,5 +1,5 @@
 /**
- * MAG - the Underground Mag reader.
+ * MAG - the reader for THE UNKNOWN FREQUENCY.
  *
  * The screens are built as rows by the pure modules (columns.ts, layout.ts);
  * this file owns the terminal: the blessed boxes, the keys, the storage, and
@@ -33,7 +33,7 @@ import {
   searchModal,
   sparklineText,
 } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
-import { DESK_LABEL, type Desk, type MagazineIndexEntry, type Story } from '@amiexpress/bbs-door-sdk/formats/magazine';
+import { DESK_LABEL, MAGAZINE_TITLE, storyOrigin, type Desk, type MagazineIndexEntry, type Story } from '@amiexpress/bbs-door-sdk/formats/magazine';
 import { createScrollText } from '@amiexpress/bbs-door-sdk';
 import {
   loadSnapshot,
@@ -57,6 +57,8 @@ import {
   signalStrength,
   newsRows,
   staticNewsRow,
+  wireDetail,
+  wireStamp,
   NEWS_SEPARATOR,
   type NewsItem,
   type ListingBlock,
@@ -83,7 +85,7 @@ const GLITCH_DELAY_MS = 450;
 const GLITCH_HOLD_MS = 160;
 const DIGIT_COMMIT_MS = 1500;
 
-export const MAGAZINE_TITLE = 'UNDERGROUND MAG';
+export { MAGAZINE_TITLE };
 
 export const HINTS: readonly FooterHint[] = [
   { key: 'Arrows', does: 'Page' },
@@ -139,6 +141,8 @@ export interface Reader {
   footerRow(): string;
   /** The plain text of the news wire row now, tags stripped ('' when the sysop turned it off). */
   tickerRow(): string;
+  /** The text of the wire detail panel when it is open, else ''. */
+  modalText(): string;
   /** The kind of view on screen. */
   viewKind(): View['kind'];
   /** What actually ran: sentinels for the tests that prove the effects are wired. */
@@ -288,24 +292,41 @@ export async function startReader(session: DoorSession): Promise<Reader> {
   let glitchTimer: ReturnType<typeof setTimeout> | null = null;
   let repairTimer: ReturnType<typeof setTimeout> | null = null;
   let modalOpen = false;
+  let modalContent = '';
   const counters = { glitches: 0, tickerSteps: 0, intervals: 0 };
   let stopped = false;
   let finish: () => void = () => { /* replaced below */ };
 
   const byId = (id: string) => snapshot.index.find((e) => e.storyId === id);
 
+  // One read per story per visit to a view: a cursor move rebuilds the list.
+  const storyCache = new Map<string, Story | null>();
+  const storyOf = (id: string): Story | null => {
+    if (!storyCache.has(id)) storyCache.set(id, loadStory(id, magazineRoot(__dirname)));
+    return storyCache.get(id) ?? null;
+  };
+
   const listingBlocks = (entries: readonly MagazineIndexEntry[], headings: boolean): ListingBlock[] => {
     const blocks: ListingBlock[] = [];
-    const item = (e: MagazineIndexEntry): ListingBlock => ({
-      kind: 'item',
-      item: {
-        storyId: e.storyId,
-        page: e.page,
-        title: e.title,
-        unread: !read.has(e.storyId),
-        bookmarked: bookmarks.has(e.storyId),
-      },
-    });
+    const item = (e: MagazineIndexEntry): ListingBlock => {
+      // A feed story is wire material in every list: headline, one teaser
+      // line, source and age. Only an authored story is a plain headline row.
+      const st = storyOf(e.storyId);
+      const wire = st && storyOrigin(st) === 'feed'
+        ? { teaser: st.summary, source: st.source, stamp: wireStamp(st.date || e.date, new Date()) }
+        : undefined;
+      return {
+        kind: 'item',
+        item: {
+          storyId: e.storyId,
+          page: e.page,
+          title: e.title,
+          unread: !read.has(e.storyId),
+          bookmarked: bookmarks.has(e.storyId),
+          wire,
+        },
+      };
+    };
     if (!headings) return entries.map(item);
     for (const desk of SECTION_ORDER) {
       const group = entries.filter((e) => e.desk === desk);
@@ -427,6 +448,7 @@ export async function startReader(session: DoorSession): Promise<Reader> {
 
   const go = (next: View, keepSelection = false) => {
     snapshot = loadSnapshot(magazineRoot(__dirname));
+    storyCache.clear();
     view = next;
     if (!keepSelection && next.kind !== 'article') selected = null;
     build();
@@ -512,6 +534,8 @@ export async function startReader(session: DoorSession): Promise<Reader> {
   };
 
   const openStory = (storyId: string, list: string[]) => {
+    const st = storyOf(storyId);
+    if (st && storyOrigin(st) === 'feed') { openWire(st); return; }
     go({ kind: 'article', storyId, list: list.length ? list : [storyId], back: view.kind === 'article' ? view.back : view });
   };
 
@@ -559,6 +583,41 @@ export async function startReader(session: DoorSession): Promise<Reader> {
   const modalDone = () => {
     modalOpen = false;
     render();
+  };
+
+  /**
+   * A feed story never opens the article layout: a small panel with the
+   * cleaned teaser, the site and the date. The view underneath does not move,
+   * so closing it leaves the cursor where it was.
+   */
+  const openWire = (st: Story) => {
+    modalOpen = true;
+    const lines = wireDetail(st, new Date());
+    modalContent = lines.join('\n');
+    const newlyRead = !read.has(st.id);
+    if (newlyRead) { read.add(st.id); persist(READ_KEY, read); }
+    // Sized to its text: a panel that fills the screen repaints the screen.
+    const panelWidth = Math.min(width, Math.max(30, calculateDialogWidth(width)));
+    const textRows = lines.reduce((n, l) => n + Math.max(1, Math.ceil(l.length / Math.max(1, panelWidth - 4))), 0);
+    const modal = docModal({
+      parent: screen,
+      width: panelWidth,
+      height: Math.min(height - 2, textRows + 4),
+      title: 'Wire',
+      content: lines.map(escapeTags).join('\n'),
+      contentStyle: { fg: t.ink, bg: t.ground },
+      footerStyle: { fg: t.ground, bg: t.accent },
+      footerText: 'Enter or Escape: back to the list',
+      mobileFooterText: 'Enter: back',
+      closeKeys: ['enter', 'return'],
+      zIndex: 9990,
+      onClose: () => {
+        modalContent = '';
+        modalDone();
+        if (newlyRead && view.kind !== 'article') { build(); paint(); }
+      },
+    } as never) as any;
+    modal.display();
   };
 
   const openHelp = () => {
@@ -678,6 +737,7 @@ export async function startReader(session: DoorSession): Promise<Reader> {
     progressRow: () => rowText(buildProgress(layout, spreadNo, spreads.length)),
     footerRow: () => chrome.footerContent().replace(/\{[^{}]*\}/g, ''),
     tickerRow: () => (tickerBox ? String(tickerBox.getContent()).replace(/\{[^{}]*\}/g, '') : ''),
+    modalText: () => modalContent,
     viewKind: () => view.kind,
     stats: () => ({ ...counters }),
     stop: () => finish(),

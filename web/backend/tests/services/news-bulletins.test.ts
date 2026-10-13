@@ -324,3 +324,60 @@ describe('feed items keep their summary and url', () => {
     expect(items[1].url).toBe('https://news.ycombinator.com/item?id=22');
   });
 });
+
+describe('feed teasers lose the source furniture (toBulletinText)', () => {
+  const clean = (s: string) => toBulletinText(s);
+
+  it.each([
+    ['A tidy sentence about a board. [...]', 'A tidy sentence about a board.'],
+    ['A tidy sentence about a board. […]', 'A tidy sentence about a board.'],
+    ['A tidy sentence about a board …', 'A tidy sentence about a board'],
+    ['A tidy sentence about a board...', 'A tidy sentence about a board'],
+    ['A tidy sentence about a board. Read more', 'A tidy sentence about a board.'],
+    ['A tidy sentence about a board. Continue reading →', 'A tidy sentence about a board.'],
+    ['A tidy sentence about a board. [...] Read more', 'A tidy sentence about a board.'],
+    [
+      'A tidy sentence about a board. The post Amiga Thing appeared first on Hackaday.',
+      'A tidy sentence about a board.',
+    ],
+    [
+      'Body text [&#8230;] The post A Title. With Dots appeared first on Krebs on Security.',
+      'Body text',
+    ],
+  ])('strips the tail of %j', (raw, want) => {
+    expect(clean(raw)).toBe(want);
+  });
+
+  it('strips hackaday\'s glued "...read more" tail', () => {
+    expect(clean('We build a clock from relays and a lot of patience...read more'))
+      .toBe('We build a clock from relays and a lot of patience');
+    expect(clean('A clock from relays…read more')).toBe('A clock from relays');
+  });
+
+  it('removes reddit\'s whole footer from real escaped content, mid-text after an image post', () => {
+    // xml2js hands the parser the html below (one level of escaping removed).
+    const html =
+      '<table> <tr><td> <a href="https://www.reddit.com/r/amiga/comments/x/y/"> ' +
+      '<img src="https://i.redd.it/abc.jpg" alt="A500 recap" /> </a> </td><td>&#32; ' +
+      'submitted by &#32; <a href="https://www.reddit.com/user/zed"> /u/zed </a> ' +
+      '<br/> <span><a href="https://i.redd.it/abc.jpg">[link]</a></span> &#32; ' +
+      '<span><a href="https://www.reddit.com/r/amiga/comments/x/y/">[comments]</a></span> ' +
+      '</td></tr></table>';
+    expect(clean(html)).toBe('');
+    // The same footer escaped twice, with text before and after it.
+    const twice =
+      'My A500 recap &lt;table&gt;&lt;tr&gt;&lt;td&gt;&#32; submitted by &#32; ' +
+      '&lt;a href="x"&gt; /u/zed &lt;/a&gt; &lt;span&gt;&lt;a href="y"&gt;[link]&lt;/a&gt;&lt;/span&gt;' +
+      '&#32; &lt;span&gt;[comments]&lt;/span&gt;&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt; and more words';
+    const out = clean(twice);
+    expect(out).toBe('My A500 recap and more words');
+    expect(out).not.toMatch(/submitted|\[link\]|\[comments\]|\/u\/|&#/);
+  });
+
+  it('leaves a normal sentence untouched, and cleaning twice changes nothing', () => {
+    const s = 'Skaven released Copper Lights for the Amiga; read more about it in the readme, then ask u/someone.';
+    expect(clean(s)).toBe(s);
+    const dirty = 'text [...] Read more';
+    expect(clean(clean(dirty))).toBe(clean(dirty));
+  });
+});

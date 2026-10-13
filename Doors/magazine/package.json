@@ -1,7 +1,7 @@
 {
   "name": "magazine",
   "version": "1.0.0",
-  "description": "Underground Mag reader: stories in newspaper columns, front page, contents, search, bookmarks",
+  "description": "The Unknown Frequency reader: stories in newspaper columns, front page, contents, search, bookmarks",
   "main": "dist/index.js",
   "bbsCommand": "MAG",
   "doorType": "TS",

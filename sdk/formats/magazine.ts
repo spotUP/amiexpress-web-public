@@ -11,6 +11,9 @@
  * by the caller (`resolveBbsRoot`), this module only says what is under it.
  */
 
+/** The magazine's name: the reader's masthead and the composer's masthead row. ONE constant. */
+export const MAGAZINE_TITLE = 'THE UNKNOWN FREQUENCY';
+
 /** Directory under the board root that holds the whole magazine. */
 export const MAGAZINE_DIR = 'Magazine';
 /** The navigation index: one MagazineIndexEntry per published story. */
@@ -58,6 +61,14 @@ export const DESK_LABEL: Record<Desk, string> = {
   stream: 'LATEST TRANSMISSIONS',
 };
 
+/**
+ * Where a story's text came from. A `feed` story is a teaser a source sent
+ * (about 200 characters, then "[...]" or "Read more"): wire material, shown as
+ * a headline and one line, never laid out as an article. An `authored` story
+ * is long-form text a human wrote or curated and keeps the article layout.
+ */
+export type StoryOrigin = 'feed' | 'authored';
+
 export interface Story {
   /** Stable across runs: a hash of the normalised headline. */
   id: string;
@@ -76,6 +87,13 @@ export interface Story {
   seenCount: number;
   /** Set once a human approves it for the front page. */
   approvedAt?: string;
+  /** Absent on a story stored before the field existed: read it with `storyOrigin`. */
+  origin?: StoryOrigin;
+}
+
+/** A stored story without the field is a feed story (back-compat). */
+export function storyOrigin(story: Pick<Story, 'origin'>): StoryOrigin {
+  return story.origin === 'authored' ? 'authored' : 'feed';
 }
 
 /**

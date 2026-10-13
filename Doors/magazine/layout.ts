@@ -170,12 +170,24 @@ function blankRows(n: number): PanelRow[] {
 // Listings: Front page, Contents, Section, Bookmarks
 // ---------------------------------------------------------------------------
 
+/**
+ * What a feed story shows in a list besides its headline: the cleaned teaser,
+ * the site it came from and how old it is. A story that carries this is a WIRE
+ * row; one that does not is a plain headline row (an authored story).
+ */
+export interface WireLine {
+  teaser: string;
+  source: string;
+  stamp: string;
+}
+
 export interface ListingItem {
   storyId: string;
   page: number;
   title: string;
   unread: boolean;
   bookmarked: boolean;
+  wire?: WireLine;
 }
 
 export type ListingBlock =
@@ -204,16 +216,79 @@ function itemCells(item: ListingItem, index: number, selected: boolean, colWidth
   const mark = selected ? '>' : ' ';
   const page = String(item.page).padStart(PAGE_DIGITS, ' ');
   const cells: Cell[] = [];
+  const wire = item.wire;
   lines.forEach((line, i) => {
     const left = padRight(line, titleWidth);
     cells.push({
       text: i === 0 ? `${mark}${left} ${page}` : ` ${left}`,
       role,
       item: index,
-      keep: i < lines.length - 1,
+      keep: wire !== undefined || i < lines.length - 1,
     });
   });
+  if (wire) {
+    // A wire row: headline, one teaser line cut at a word, then where and when.
+    const inner = Math.max(1, colWidth - 1);
+    const teaser = trimAtWord(paintSafe(wire.teaser), inner);
+    if (teaser) cells.push({ text: ` ${teaser}`, role: 'plain', item: index, keep: true });
+    const origin = `${paintSafe(sourceName(wire.source)).toUpperCase()} // ${wire.stamp}`;
+    cells.push({ text: ` ${truncate(origin, inner)}`, role: 'dim', item: index });
+  }
   return cells;
+}
+
+/** One line cut at a word boundary to `width`; `..` marks a cut. */
+export function trimAtWord(text: string, width: number): string {
+  const flat = text.replace(/\s+/g, ' ').trim();
+  if (flat.length <= width) return flat;
+  const room = Math.max(1, width - 2);
+  const cut = flat.slice(0, room + 1);
+  const at = cut.lastIndexOf(' ');
+  const head = at > 0 ? cut.slice(0, at) : flat.slice(0, room);
+  return `${head.replace(/[\s,;:.-]+$/, '')}..`;
+}
+
+/**
+ * A source as the reader names it: the site, never an address. `www.` goes,
+ * and so does a trailing "via ..." or "(note)" ("news.ycombinator.com via Algolia").
+ */
+export function sourceName(source: string): string {
+  return source
+    .replace(/\s+via\s+.*$/i, '')
+    .replace(/\s*\(.*$/, '')
+    .replace(/^\s*(?:https?:\/\/)?(?:www\.)?/i, '')
+    .replace(/\/.*$/, '')
+    .trim();
+}
+
+/** `TODAY`, `YESTERDAY`, `3D AGO`, else the date: how old a wire row is. */
+export function wireStamp(date: string, now: Date): string {
+  const day = date.slice(0, 10);
+  const then = Date.parse(`${day}T00:00:00Z`);
+  if (!Number.isFinite(then)) return 'UNDATED';
+  const today = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+  const days = Math.round((today - then) / 86_400_000);
+  if (days < 0) return day;
+  if (days === 0) return 'TODAY';
+  if (days === 1) return 'YESTERDAY';
+  return days < 7 ? `${days}D AGO` : day;
+}
+
+/**
+ * The detail panel of a wire row, as plain lines: the cleaned teaser in full,
+ * the site and the date. No address: the reader never shows a raw URL (the
+ * story keeps it in the data).
+ */
+export function wireDetail(story: Pick<Story, 'headline' | 'summary' | 'source' | 'date'>, now: Date): string[] {
+  const teaser = paintSafe(story.summary).replace(/\s+/g, ' ').trim();
+  return [
+    paintSafe(story.headline),
+    '',
+    teaser || '(no summary)',
+    '',
+    `Source: ${paintSafe(sourceName(story.source)) || 'unknown'}`,
+    `Date: ${story.date ? story.date.slice(0, 10) : 'UNDATED'} (${wireStamp(story.date ?? '', now).toLowerCase()})`,
+  ];
 }
 
 /** Wrap a title onto at most `maxLines` rows; the last is cut with `..` if there is more. */
@@ -367,14 +442,10 @@ export function buildArticle(story: Story, layout: MagLayout): Article {
   const paragraphs = paintSafe(story.summary).split(/\n+/);
   const body = setParagraphs(paragraphs, geometry.colWidth);
   const cells: Cell[] = body.map((text) => ({ text, role: 'plain' }));
-  const source = paintSafe(story.source).trim();
+  // The site name only: the reader never prints an address.
+  const source = paintSafe(sourceName(story.source)).trim();
   const trailer: Cell[] = [];
   if (source) trailer.push({ text: truncate(`>> SRC ${source}`, geometry.colWidth), role: 'source' });
-  if (story.url) {
-    for (const line of setParagraphs([paintSafe(story.url)], geometry.colWidth)) {
-      trailer.push({ text: line, role: 'dim' });
-    }
-  }
   if (cells.length === 0) cells.push({ text: '(no summary)', role: 'dim' });
   if (trailer.length) cells.push({ text: '', role: 'plain' }, ...trailer);
 

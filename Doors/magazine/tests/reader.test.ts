@@ -26,10 +26,10 @@ const LONG = ('The Amiga demoscene has a new release this week. It runs on a sto
   + 'and the group says the copper bars are the cleanest they have shipped in years.\n\n'
   + 'A second paragraph explains how the music was composed in a tracker and ported to the player. ').repeat(6);
 
-function story(id: string, headline: string, desk: Desk, date: string, summary = LONG): Story {
+function story(id: string, headline: string, desk: Desk, date: string, summary = LONG, origin: 'feed' | 'authored' = 'authored'): Story {
   return {
     id, headline, summary, format: 'NEWS', desk, date, source: 'example.org', url: `https://example.org/${id}`,
-    firstSeen: date, seenCount: 1,
+    firstSeen: date, seenCount: 1, origin,
   };
 }
 
@@ -52,7 +52,7 @@ function board(approved: string[], stories: Story[] = STORIES): Board {
   const mag = path.join(root, MAGAZINE_DIR);
   fs.mkdirSync(path.join(mag, MAGAZINE_STORIES_DIR), { recursive: true });
   // The page numbers the tests rely on: the two hack stories sit on 120 and 121.
-  const pages: Record<string, number> = { aaaa0001: 201, aaaa0002: 120, aaaa0003: 401, aaaa0004: 121 };
+  const pages: Record<string, number> = { aaaa0001: 201, aaaa0002: 120, aaaa0003: 401, aaaa0004: 121, ffff0001: 122, ffff0002: 123 };
   const index: MagazineIndexEntry[] = stories.map((st) => ({
     page: pages[st.id], title: st.headline, desk: st.desk, format: st.format, storyId: st.id, date: st.date,
   }));
@@ -616,4 +616,125 @@ export async function theNewsWireTimerIsClearedOnExitAndDoesNotKeepTheDoorAlive(
     assert.ok(cleared.includes(timers[0].handle), 'clearInterval ran on exit');
     b.restore();
   });
+}
+
+// ---------------------------------------------------------------------------
+// Feed stories are wire, never articles (sysop 2026-10-13)
+// ---------------------------------------------------------------------------
+
+const TEASER = 'We rebuild a clock from relays and a lot of patience, with a second sentence that '
+  + 'runs on well past any single column so the list line has to be cut at a word.';
+
+const FEED: Story[] = [
+  story('ffff0001', 'A relay clock from the junk drawer', 'hack', '2026-10-12', TEASER, 'feed'),
+  story('ffff0002', 'Another feed headline about radios', 'hack', '2026-10-11', 'Short teaser.', 'feed'),
+];
+const MIXED: Story[] = [...FEED, STORIES[1]];
+
+/** A key the way the terminal delivers it, through the screen's own key routing. */
+function modalKey(h: Harness, name: string): void {
+  (h.reader.screen as any)._handleKey('', { name, full: name, sequence: name });
+}
+
+export async function aFeedStoryIsAWireRowAndEnterOpensThePanelNotTheArticle(): Promise<void> {
+  for (const [w, hgt] of [[40, 25], [80, 24], [132, 40]] as const) {
+    const b = board([], MIXED);
+    const h = await open(w, hgt);
+    try {
+      h.reader.press('c', 'c');
+      h.reader.press('down');
+      const rows = h.reader.panelRows();
+      const flat = rows.join('\n');
+      const at = rows.findIndex((r) => r.includes('A relay clock'));
+      assert.ok(at >= 0, `${w}: the feed headline is listed`);
+      const teaserAt = rows.findIndex((r) => r.includes('We rebuild a clock'));
+      assert.ok(teaserAt > at, `${w}: one teaser line under the headline`);
+      assert.ok(rows[teaserAt].includes('..'), `${w}: cut at a word with a mark`);
+      assert.ok(/EXAMPLE\.ORG \/\/ (TODAY|YESTERDAY|\dD AGO|\d{4}-\d\d-\d\d)/.test(rows[teaserAt + 1]), `${w}: SOURCE // age: "${rows[teaserAt + 1]}"`);
+      assert.ok(!/https?:/.test(flat), `${w}: no raw url in the list`);
+      for (const r of rows) assert.ok(r.length <= w, `${w}: row fits`);
+      assert.ok(!flat.includes(TEASER.slice(60)), `${w}: the teaser is one line, not the whole text`);
+
+      const before = h.reader.panelRows();
+      h.reader.press('enter');
+      assert.strictEqual(h.reader.viewKind(), 'contents', `${w}: Enter did not open the article`);
+      const modal = h.reader.modalText();
+      assert.ok(modal.includes(TEASER), `${w}: the panel holds the whole teaser`);
+      assert.ok(modal.includes('Source: example.org'), `${w}: the panel names the site`);
+      assert.ok(/Date: 2026-10-12/.test(modal), `${w}: and the date`);
+      assert.ok(!/https?:|Read at source/.test(modal), `${w}: and no address`);
+      assert.deepStrictEqual(overflowing(h.reader.screen, w), [], `${w}: the panel fits the screen`);
+
+      modalKey(h, 'escape');
+      assert.strictEqual(h.reader.modalText(), '', `${w}: Escape closes the panel`);
+      assert.strictEqual(h.reader.viewKind(), 'contents');
+      const after = h.reader.panelRows();
+      assert.ok(after.some((r) => r.includes('>A relay clock')), `${w}: same cursor position`);
+      assert.deepStrictEqual(after.map((r) => r.replace(/\S/g, 'x').length), before.map((r) => r.replace(/\S/g, 'x').length));
+      h.reader.press('enter');
+      assert.ok(h.reader.modalText().length > 0, `${w}: reopens`);
+      modalKey(h, 'enter');
+      assert.strictEqual(h.reader.modalText(), '', `${w}: Enter closes it too`);
+    } finally { await finish(h, b); }
+  }
+}
+
+export async function anAuthoredStoryStillOpensTheArticleAmongWireRows(): Promise<void> {
+  for (const [w, hgt] of [[40, 25], [80, 24], [132, 40]] as const) {
+    const b = board([], MIXED);
+    const h = await open(w, hgt);
+    try {
+      h.reader.press('c', 'c');
+      assert.ok(h.reader.panelRows().some((r) => r.includes('>New exploit chain')), `${w}: cursor on the authored story`);
+      h.reader.press('enter');
+      assert.strictEqual(h.reader.viewKind(), 'article');
+      assert.strictEqual(h.reader.modalText(), '');
+      const t = h.reader.panelRows().join('\n');
+      assert.ok(t.includes('NEW EXPLOIT CHAIN'), `${w}: article headline`);
+      assert.ok(!/https?:/.test(t), `${w}: and no raw url`);
+      if (w === 132) assert.strictEqual(h.reader.layout.geometry.cols, 3, 'authored stories keep the columns');
+    } finally { await finish(h, b); }
+  }
+}
+
+export async function aFeedStoryOnTheFrontPageAndInBookmarksIsAWireRowToo(): Promise<void> {
+  const b = board(['ffff0001'], FEED);
+  const h = await open(80, 24);
+  try {
+    assert.strictEqual(h.reader.viewKind(), 'front');
+    const rows = h.reader.panelRows();
+    assert.ok(/EXAMPLE\.ORG \/\//.test(rows.join('\n')));
+    h.reader.press('enter');
+    assert.strictEqual(h.reader.viewKind(), 'front');
+    assert.ok(h.reader.modalText().includes(TEASER));
+    modalKey(h, 'escape');
+    h.reader.press('b', 'b');
+    h.reader.press('k', 'k');
+    assert.strictEqual(h.reader.viewKind(), 'bookmarks');
+    assert.ok(/EXAMPLE\.ORG \/\//.test(h.reader.panelRows().join('\n')));
+  } finally { await finish(h, b); }
+}
+
+export async function theWirePanelOpenAndCloseCostIsMeasuredAndSmallerThanTheScreen(): Promise<void> {
+  for (const [w, hgt] of [[80, 24], [40, 25]] as const) {
+    const b = board([], FEED);
+    const h = await open(w, hgt);
+    try {
+      h.reader.press('c', 'c');
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      h.mark();
+      h.reader.press('down');
+      const move = h.bytes();
+      h.mark();
+      h.reader.press('enter');
+      const open = h.bytes();
+      h.mark();
+      modalKey(h, 'escape');
+      const close = h.bytes();
+      assert.ok(move < 700, `${w}: wire-list cursor move ${move} bytes`);
+      assert.ok(open < 1800 && close < 1800, `${w}: panel open ${open} / close ${close} bytes`);
+      // eslint-disable-next-line no-console
+      console.log(`    repaint ${w}x${hgt}: wire cursor move ${move} bytes, panel open ${open} bytes, close ${close} bytes`);
+    } finally { await finish(h, b); }
+  }
 }

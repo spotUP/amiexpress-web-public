@@ -1,7 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 /**
- * MAG - the Underground Mag reader.
+ * MAG - the reader for THE UNKNOWN FREQUENCY.
  *
  * Reads the stories the board's magazine service publishes
  * (Magazine/index.json, Magazine/stories/<id>.json, Magazine/frontpage.json)
@@ -12,7 +12,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const bbs_door_sdk_1 = require("@amiexpress/bbs-door-sdk");
 const app_1 = require("./app");
 const door = new bbs_door_sdk_1.CoreDoor({
-    name: 'Underground Mag',
+    name: 'The Unknown Frequency',
     version: '1.0.0',
     author: 'AmiExpress',
 });

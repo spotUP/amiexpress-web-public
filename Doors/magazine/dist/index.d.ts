@@ -1,5 +1,5 @@
 /**
- * MAG - the Underground Mag reader.
+ * MAG - the reader for THE UNKNOWN FREQUENCY.
  *
  * Reads the stories the board's magazine service publishes
  * (Magazine/index.json, Magazine/stories/<id>.json, Magazine/frontpage.json)

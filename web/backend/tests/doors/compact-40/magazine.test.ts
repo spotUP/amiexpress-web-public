@@ -1,5 +1,5 @@
 /**
- * MAG, the Underground Mag reader, on the three screens the board serves
+ * MAG, the reader for THE UNKNOWN FREQUENCY, on the three screens the board serves
  * (door-three-screens skill, section 5).
  *
  *  - V1  80x24 is pinned, 40x25 stays inside 40 columns with chrome of one row

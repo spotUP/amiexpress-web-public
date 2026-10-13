@@ -1,5 +1,5 @@
 import { type FooterHint } from '@amiexpress/bbs-door-sdk/engines/ui/theme';
-import { type Desk } from '@amiexpress/bbs-door-sdk/formats/magazine';
+import { MAGAZINE_TITLE, type Desk } from '@amiexpress/bbs-door-sdk/formats/magazine';
 import { type MagLayout } from './layout';
 interface DoorSession {
     bbs: any;
@@ -13,7 +13,7 @@ interface DoorSession {
 }
 export declare const READ_KEY = "read-story-ids";
 export declare const BOOKMARK_KEY = "bookmark-story-ids";
-export declare const MAGAZINE_TITLE = "UNDERGROUND MAG";
+export { MAGAZINE_TITLE };
 export declare const HINTS: readonly FooterHint[];
 /** Forty columns: only what a caller cannot guess. */
 export declare const COMPACT_HINTS: readonly FooterHint[];
@@ -46,6 +46,8 @@ export interface Reader {
     footerRow(): string;
     /** The plain text of the news wire row now, tags stripped ('' when the sysop turned it off). */
     tickerRow(): string;
+    /** The text of the wire detail panel when it is open, else ''. */
+    modalText(): string;
     /** The kind of view on screen. */
     viewKind(): View['kind'];
     /** What actually ran: sentinels for the tests that prove the effects are wired. */
@@ -58,5 +60,4 @@ export interface Reader {
 }
 export declare function startReader(session: DoorSession): Promise<Reader>;
 export declare function createApp(session: DoorSession): Promise<void>;
-export {};
 //# sourceMappingURL=app.d.ts.map

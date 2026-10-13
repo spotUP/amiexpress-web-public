@@ -258,3 +258,41 @@ describe('a re-seen story gains what it lacked', () => {
     expect(second.stories[0].url).toBe('https://keep.example');
   });
 });
+
+describe('story origin and healing stored summaries', () => {
+  it('the feed ingest writes origin "feed"', () => {
+    const out = mergeIncoming([], [item('Skaven ships a new Amiga intro')], '2026-10-13T00:00:00Z');
+    expect(out.stories[0].origin).toBe('feed');
+  });
+
+  it('the publish step re-cleans an old stored summary without a refetch, and is idempotent', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mag-'));
+    const stories = path.join(dir, 'Magazine', 'stories');
+    fs.mkdirSync(stories, { recursive: true });
+    const old = {
+      id: storyId('Skaven ships a new Amiga intro'),
+      headline: 'Skaven ships a new Amiga intro',
+      summary: 'A new intro for the Amiga lands today [...] Read more',
+      format: 'NEWS', desk: 'scene', date: '2026-10-12', source: 'hackaday.com',
+      firstSeen: '2026-10-12T00:00:00Z', seenCount: 1,
+    };
+    fs.writeFileSync(path.join(stories, `${old.id}.json`), JSON.stringify(old));
+    refreshMagazine(depsFor(dir));
+    const read = () => JSON.parse(fs.readFileSync(path.join(stories, `${old.id}.json`), 'utf8'));
+    expect(read().summary).toBe('A new intro for the Amiga lands today');
+    refreshMagazine(depsFor(dir));
+    expect(read().summary).toBe('A new intro for the Amiga lands today');
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+});
+
+describe('the magazine has one name', () => {
+  it('the composed masthead row and the reader share THE UNKNOWN FREQUENCY, and it fits 40 columns', () => {
+    const { MAGAZINE_TITLE } = require('@amiexpress/bbs-door-sdk/formats/magazine');
+    const { masthead } = require('../../src/services/magazine/compose');
+    expect(MAGAZINE_TITLE).toBe('THE UNKNOWN FREQUENCY');
+    expect(MAGAZINE_TITLE.length).toBeLessThanOrEqual(40 - 4);
+    expect(masthead(120, 'Hacking')[0].text).toContain('THE UNKNOWN FREQUENCY');
+    expect(masthead(120, 'Hacking')[0].text).not.toContain('UNDERGROUND');
+  });
+});
