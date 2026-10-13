@@ -46,6 +46,18 @@ export type Desk =
   | 'archive'
   | 'general';
 
+/** The name of each desk as a caller reads it, on page headers and in the reader's sections. */
+export const DESK_LABEL: Record<Desk, string> = {
+  general: 'FRONT PAGE',
+  hack: 'HACKING & PHREAKING',
+  scene: 'SCENE & RETRO',
+  graffiti: 'GRAFFITI & URBEX',
+  music: 'MUSIC & RADIO',
+  people: 'PEOPLE & LONG READS',
+  archive: 'ARCHIVE',
+  stream: 'LATEST TRANSMISSIONS',
+};
+
 export interface Story {
   /** Stable across runs: a hash of the normalised headline. */
   id: string;

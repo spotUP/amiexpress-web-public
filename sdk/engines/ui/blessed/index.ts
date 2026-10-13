@@ -147,6 +147,9 @@ export { Picture, picture } from './widgets/picture';
 export type { PictureOptions } from './widgets/picture';
 export { Sparkline, sparkline } from './widgets/sparkline';
 export type { SparklineOptions } from './widgets/sparkline';
+// The bare one-line generator ("\u2581\u2583\u2585"), for a door that sets a sparkline inside a text row
+// instead of giving it a widget of its own.
+export { sparkline as sparklineText } from './utils/contrib-utils/sparkline';
 export { StackedBar, stackedBar } from './widgets/stacked-bar';
 export type { StackedBarData, StackedBarOptions } from './widgets/stacked-bar';
 export { Tree, tree } from './widgets/tree';

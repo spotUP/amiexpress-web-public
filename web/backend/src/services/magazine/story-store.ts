@@ -26,7 +26,7 @@
  * Story, StoryFormat and Desk live in the SDK (`formats/magazine`): the MAG
  * door reads the same files this store writes, so both import one declaration.
  */
-import type { Desk, Story, StoryFormat } from '@amiexpress/bbs-door-sdk/formats/magazine';
+import { DESK_LABEL, type Desk, type Story, type StoryFormat } from '@amiexpress/bbs-door-sdk/formats/magazine';
 export type { Desk, Story, StoryFormat };
 
 /**
@@ -40,20 +40,20 @@ export type { Desk, Story, StoryFormat };
 export const FRONT_PAGE = 100;
 
 export const PAGE_FAMILIES: Record<Desk, { first: number; last: number; label: string }> = {
-  general: { first: 101, last: 119, label: 'FRONT PAGE' },
-  hack: { first: 120, last: 139, label: 'HACKING & PHREAKING' },
-  scene: { first: 200, last: 219, label: 'SCENE & RETRO' },
-  graffiti: { first: 300, last: 319, label: 'GRAFFITI & URBEX' },
-  music: { first: 400, last: 419, label: 'MUSIC & RADIO' },
-  people: { first: 500, last: 519, label: 'PEOPLE & LONG READS' },
+  general: { first: 101, last: 119, label: DESK_LABEL.general },
+  hack: { first: 120, last: 139, label: DESK_LABEL.hack },
+  scene: { first: 200, last: 219, label: DESK_LABEL.scene },
+  graffiti: { first: 300, last: 319, label: DESK_LABEL.graffiti },
+  music: { first: 400, last: 419, label: DESK_LABEL.music },
+  people: { first: 500, last: 519, label: DESK_LABEL.people },
   // ARCHIVE is history that was always history: §5.F scene histories,
   // recovered recordings, lost publications.
-  archive: { first: 900, last: 949, label: 'ARCHIVE' },
+  archive: { first: 900, last: 949, label: DESK_LABEL.archive },
   // STREAM is §5.A "latest transmissions" - a chronological surface for
   // everything the desks could not hold. It is NOT the archive, and calling a
   // story from Tuesday "archive" because its section filled up is an editorial
   // lie: on the first full run it mislabelled 85 of 164 stories.
-  stream: { first: 950, last: 999, label: 'LATEST TRANSMISSIONS' },
+  stream: { first: 950, last: 999, label: DESK_LABEL.stream },
 };
 
 /**
