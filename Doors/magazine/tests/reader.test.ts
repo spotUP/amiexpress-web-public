@@ -79,6 +79,8 @@ interface Harness {
   /** Rows (1-based) the terminal was told to move to, since `mark()`. */
   rowsTouched: () => Set<number>;
   mark: () => void;
+  /** Feed raw terminal bytes the way the backend feeds a caller: through the session's door input handler into blessed's program. */
+  raw: (bytes: string) => void;
 }
 
 async function open(width: number, height: number, options: { theme?: ReturnType<typeof themeById>; secLevel?: number } = {}): Promise<Harness> {
@@ -109,6 +111,7 @@ async function open(width: number, height: number, options: { theme?: ReturnType
   let from = writes.length;
   return {
     reader, writes, storage,
+    raw: (bytes: string) => { session.bbsSession.doorInputHandler(bytes); },
     mark: () => { from = writes.length; },
     bytes: () => writes.slice(from).join('').length,
     rowsTouched: () => {
@@ -967,5 +970,48 @@ export async function aToggleAndAMoveRepaintOnlyTheRowsThatChanged(): Promise<vo
     assert.ok(moveBytes < 1200, `a move repainted ${moveBytes} bytes`);
     assert.ok(toggleBytes < 800, `a toggle repainted ${toggleBytes} bytes`);
     assert.ok(!toggleRows.has(1) || toggleRows.size < 8, 'a toggle does not repaint the screen');
+  } finally { await finish(h, b); }
+}
+
+// The sysop's keys as a real caller sends them: raw bytes, not reader.press()
+export async function pressingPOnAContentsRowAddsTheStoryToTheFrontPage(): Promise<void> {
+  const b = board([]);
+  const h = await open(80, 24, { secLevel: 255 });
+  try {
+    h.raw('c');
+    assert.strictEqual(h.reader.viewKind(), 'contents', 'raw c reaches the screen handler');
+    assert.ok(/P: Add to front page/.test(h.reader.footerRow()), h.reader.footerRow());
+    h.raw('p');
+    assert.deepStrictEqual(frontOnDisk(b), ['aaaa0002'], 'raw p wrote the front page');
+    assert.ok(/P: Remove from front page/.test(h.reader.footerRow()), h.reader.footerRow());
+    h.raw('P');
+    assert.deepStrictEqual(frontOnDisk(b), [], 'a shifted P toggles it off again');
+  } finally { await finish(h, b); }
+}
+
+export async function pressingPInAnOpenArticleTogglesTheStoryFromRawBytes(): Promise<void> {
+  const b = board([]);
+  const h = await open(80, 24, { secLevel: 255 });
+  try {
+    h.raw('c');
+    h.raw('\r');
+    assert.strictEqual(h.reader.viewKind(), 'article');
+    h.raw('p');
+    assert.deepStrictEqual(frontOnDisk(b), ['aaaa0002']);
+  } finally { await finish(h, b); }
+}
+
+export async function uDAndLReorderTheFrontPageFromRawBytes(): Promise<void> {
+  const b = board(['aaaa0001', 'aaaa0002', 'aaaa0003']);
+  const h = await open(80, 24, { secLevel: 255 });
+  try {
+    h.raw('\x1b[B');
+    h.raw('u');
+    assert.deepStrictEqual(frontOnDisk(b), ['aaaa0002', 'aaaa0001', 'aaaa0003'], 'raw u moved the story up');
+    h.raw('d');
+    assert.deepStrictEqual(frontOnDisk(b), ['aaaa0001', 'aaaa0002', 'aaaa0003'], 'raw d moved it back down');
+    h.raw('\x1b[B');
+    h.raw('l');
+    assert.deepStrictEqual(frontOnDisk(b), ['aaaa0003', 'aaaa0001', 'aaaa0002'], 'raw l made the story the lead');
   } finally { await finish(h, b); }
 }
