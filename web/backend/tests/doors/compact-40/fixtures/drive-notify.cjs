@@ -27,6 +27,9 @@ const COLS = spec.cols || 80;
 const ROWS = spec.rows || 24;
 const steps = spec.steps || [];
 const captured = [];
+const sets = [];
+let storedPrefs = { 'msg.reply': { email: 'instant' } };
+const SETTINGS = { quietFrom: null, quietTo: null, timeZone: null, digestKind: 'daily', digestHour: 8, digestWeekday: null, paused: false };
 const errors = [];
 
 const session = { nodeId: 1, petsciiMode: spec.petscii === true, screenWidth: COLS, screenHeight: ROWS };
@@ -46,14 +49,18 @@ const bbs = {
         { id: 'mail.private', label: 'Private mail', channels: ['email', 'push'] },
         { id: 'msg.reply', label: 'Reply to my message', channels: ['email', 'push', 'board'] },
       ],
-      deliverable: { email: true, push: false, board: true }, conferences: [], boardZone: 'UTC',
+      deliverable: { email: true, push: spec.push === true, board: true }, conferences: [], boardZone: 'UTC',
     }),
     get: async () => ({
-      prefs: { 'msg.reply': { email: 'instant' } },
-      settings: { quietFrom: null, quietTo: null, timeZone: null, digestKind: 'daily', digestHour: 8, digestWeekday: null, paused: false },
+      prefs: storedPrefs, settings: SETTINGS,
       follows: [], email: { address: 'a@b.c', verified: true },
     }),
-    set: async () => ({ ok: false, error: 'driver is read only' }),
+    // Records what the door saves and keeps it, like the board does.
+    set: async (prefs, settings) => {
+      sets.push(JSON.parse(JSON.stringify(prefs)));
+      storedPrefs = prefs;
+      return { ok: true, state: { prefs, settings, follows: [], email: { address: 'a@b.c', verified: true } } };
+    },
     follow: async () => ({ ok: true, follows: [] }),
     startEmailVerification: async () => ({ ok: false, reason: 'send-failed' }),
     confirmEmail: async () => ({ ok: false, reason: 'none' }),
@@ -95,6 +102,6 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     await sleep(step.wait);
   }
 
-  process.stdout.write(JSON.stringify({ captured, errors, ended }));
+  process.stdout.write(JSON.stringify({ captured, errors, ended, sets }));
   process.exit(0);
 })();

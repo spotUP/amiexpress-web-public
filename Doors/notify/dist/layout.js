@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.HELP_LINES = exports.COMPACT_HINTS = exports.HINTS = exports.digestWords = exports.quietWords = exports.DAYS = exports.cellWord = exports.blurbOf = exports.CHANNEL_WORD = exports.CHANNELS = void 0;
+exports.HELP_LINES = exports.COMPACT_HINTS = exports.HINTS = exports.digestWords = exports.quietWords = exports.DAYS = exports.MARKER_W = exports.cellWord = exports.blurbOf = exports.CHANNEL_WORD = exports.CHANNELS = void 0;
 exports.clip = clip;
 exports.buildEventRows = buildEventRows;
 exports.prefsFromRows = prefsFromRows;
@@ -92,36 +92,47 @@ function compactSummary(row, active) {
         return c === active ? `{inverse}${tok}{/inverse}` : tok;
     }).join(' ');
 }
+// ---------------------------------------------------------------- geometry
+/** The list draws a two character selection marker (`>>`, `> `, blank) in front of every item. */
+exports.MARKER_W = 2;
+/** The longest cell word; every cell is at least this plus its two marker slots. */
+const WIDEST_WORD = (0, exports.cellWord)('na').length;
 /** Every width the Events view uses, from the screen width alone. */
 function columnPlan(width) {
     if (width < 80)
         return { compact: true, nameW: Math.max(8, width - 1 - 1 - 18 - 1), cellW: 0, descW: 0 };
     const grow = width >= 100;
-    const cellW = grow ? 14 : 12;
+    const cellW = WIDEST_WORD + (grow ? 4 : 2);
     const nameW = grow ? 36 : 34;
-    const used = 1 + nameW + 3 * cellW;
+    const used = exports.MARKER_W + 1 + nameW + 3 * cellW;
     const spare = width - used - 3;
     return { compact: false, nameW, cellW, descW: spare >= 24 ? Math.min(spare, 60) : 0 };
 }
 const OPEN = '{inverse}';
 const SHUT = '{/inverse}';
-/** One Events row. `active` is the channel the cursor is on (its cell is drawn inverse). */
+/**
+ * One cell of a wide row, and its title in the header, from the same plan.
+ * The word starts one character into the cell, after the slot; the active
+ * cell shows `[Word]` in those slots. No colour tag: the selected row is one
+ * bar, and a tag inside it cuts the bar in two.
+ */
+function cellText(word, plan, active) {
+    return (active ? `[${word}]` : ` ${word}`).padEnd(plan.cellW);
+}
+/** One Events row. `active` is the channel the cursor is on, drawn `[Word]`. */
 function eventRowText(row, plan, active) {
     if (plan.compact)
         return ` ${clip(row.label, plan.nameW).padEnd(plan.nameW)} ${compactSummary(row, active)}`;
-    const cells = exports.CHANNELS.map((c) => {
-        const word = (0, exports.cellWord)(row.cells[c]).padEnd(plan.cellW);
-        return c === active ? `${OPEN}${word.trimEnd()}${SHUT}${' '.repeat(plan.cellW - word.trimEnd().length)}` : word;
-    }).join('');
+    const cells = exports.CHANNELS.map((c) => cellText((0, exports.cellWord)(row.cells[c]), plan, c === active)).join('');
     const desc = plan.descW > 0 ? ` ${clip(row.blurb, plan.descW)}` : '';
     return ` ${clip(row.label, plan.nameW).padEnd(plan.nameW)}${cells}${desc}`;
 }
-/** The column heads; empty at 40, where each row says what its tokens mean. */
+/** The column heads, over the words of the rows: indented by the list's marker; empty at 40, where each row says what its tokens mean. */
 function headerText(plan) {
     if (plan.compact)
         return '';
-    const heads = exports.CHANNELS.map((c) => exports.CHANNEL_WORD[c].padEnd(plan.cellW)).join('');
-    return ` ${'Event'.padEnd(plan.nameW)}${heads}${plan.descW > 0 ? ' About' : ''}`;
+    const heads = exports.CHANNELS.map((c) => cellText(exports.CHANNEL_WORD[c], plan, false)).join('');
+    return `${' '.repeat(exports.MARKER_W)} ${'Event'.padEnd(plan.nameW)}${heads}${plan.descW > 0 ? ' About' : ''}`;
 }
 // ---------------------------------------------------------------- detail
 /** The channel rows of one event's detail view. */

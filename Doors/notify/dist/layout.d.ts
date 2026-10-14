@@ -21,18 +21,21 @@ export declare function prefsFromRows(rows: readonly EventRow[]): NotifyPrefs;
 export declare const cellWord: (cell: Cell) => string;
 /** `E:Inst P:Off B:Dig`; a channel that cannot be used shows `-`. */
 export declare function compactSummary(row: EventRow, active?: NotifyChannel): string;
+/** The list draws a two character selection marker (`>>`, `> `, blank) in front of every item. */
+export declare const MARKER_W = 2;
 export interface ColumnPlan {
     compact: boolean;
     nameW: number;
+    /** One cell: a slot, the word, a slot. The slots hold the `[` `]` of the active cell. */
     cellW: number;
     /** 0 = no description column. */
     descW: number;
 }
 /** Every width the Events view uses, from the screen width alone. */
 export declare function columnPlan(width: number): ColumnPlan;
-/** One Events row. `active` is the channel the cursor is on (its cell is drawn inverse). */
+/** One Events row. `active` is the channel the cursor is on, drawn `[Word]`. */
 export declare function eventRowText(row: EventRow, plan: ColumnPlan, active?: NotifyChannel): string;
-/** The column heads; empty at 40, where each row says what its tokens mean. */
+/** The column heads, over the words of the rows: indented by the list's marker; empty at 40, where each row says what its tokens mean. */
 export declare function headerText(plan: ColumnPlan): string;
 /** The channel rows of one event's detail view. */
 export declare function detailRows(row: EventRow, width: number, active?: NotifyChannel): string[];

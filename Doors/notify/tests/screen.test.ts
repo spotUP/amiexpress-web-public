@@ -52,9 +52,9 @@ function fakeApi(over: { push?: boolean; doorEvents?: number } = {}): Fake {
 
 interface Harness { door: Notify; writes: string[]; fake: Fake; key: (k: string) => Promise<void>; since: () => string; mark: () => void }
 
-async function open(width: number, height: number, web = true, doorEvents = 0): Promise<Harness> {
+async function open(width: number, height: number, web = true, doorEvents = 0, push = false): Promise<Harness> {
   const writes: string[] = [];
-  const fake = fakeApi({ doorEvents });
+  const fake = fakeApi({ doorEvents, push });
   const theme = themeById('uprough-neon');
   const bbs: any = {
     write: (d: string) => { writes.push(String(d)); }, writeLine: () => {}, on: () => {},
@@ -82,9 +82,9 @@ export async function at80TheEventsRowsHaveFullWordCells(): Promise<void> {
   const h = await open(80, 25);
   try {
     assert.strictEqual(h.door.view(), 'events');
-    assert.strictEqual(find(h.door, 'Reply to my message'), ' Reply to my message               Off         Unavailable Off         ');
-    assert.match(find(h.door, 'Private mail'), /Off +Unavailable +Unavailable/);
-    assert.match(find(h.door, 'Achievement unlocked'), /Off +Unavailable +Unavailable/);
+    assert.strictEqual(find(h.door, 'Reply to my message').trimEnd(), ' Reply to my message                Off          Unavailable  Off');
+    assert.match(find(h.door, 'Private mail'), /\[?Off\]? +Unavailable +Unavailable/);
+    assert.match(find(h.door, 'Achievement unlocked'), /\[?Off\]? +Unavailable +Unavailable/);
   } finally { h.door.stop(); }
 }
 
@@ -93,7 +93,7 @@ export async function spaceCyclesTheActiveCellAndSavesIt(): Promise<void> {
   try {
     await h.key(DOWN); // Reply to my message
     await h.key(' ');
-    assert.match(find(h.door, 'Reply to my message'), /Instant +Unavailable/);
+    assert.match(find(h.door, 'Reply to my message'), /\[Instant\] +Unavailable/);
     assert.deepStrictEqual(h.fake.sets.at(-1)!.prefs['msg.reply'], { email: 'instant', board: 'off' });
     await h.key(' ');
     assert.match(find(h.door, 'Reply to my message'), /Digest/);
@@ -204,6 +204,47 @@ export async function doorDeclaredEventsScrollIntoViewAndSaveAt80And40(): Promis
       await h.key(' ');
       const saved = h.fake.sets.at(-1)!.prefs['door.d13.update'];
       assert.ok(saved && Object.values(saved).includes('instant'), `${w}: the last door event saved ${JSON.stringify(saved)}`);
+    } finally { h.door.stop(); }
+  }
+}
+
+export async function aBoardCellSetToInstantIsSavedAsInstant(): Promise<void> {
+  for (const push of [false, true]) {
+    const h = await open(80, 25, true, 0, push);
+    try {
+      await h.key(DOWN); // Reply to my message
+      await h.key(RIGHT); await h.key(RIGHT); // Email, Push, Board
+      await h.key(' ');
+      assert.deepStrictEqual(
+        h.fake.sets.at(-1)!.prefs['msg.reply'],
+        push ? { email: 'off', push: 'off', board: 'instant' } : { email: 'off', board: 'instant' },
+      );
+      assert.match(find(h.door, 'Reply to my message'), /\[Instant\]/);
+    } finally { h.door.stop(); }
+  }
+}
+
+export async function aPushCellCanBeSetOnAWebSessionAndTelnetStillSavesOtherCells(): Promise<void> {
+  const web = await open(80, 25, true, 0, true);
+  try {
+    await web.key(DOWN); await web.key(RIGHT); await web.key(' ');
+    assert.strictEqual(web.fake.sets.at(-1)!.prefs['msg.reply'].push, 'instant');
+    assert.match(find(web.door, 'Reply to my message'), /\[Instant\]/);
+  } finally { web.door.stop(); }
+  const telnet = await open(80, 25, false, 0, true);
+  try {
+    await telnet.key(DOWN); await telnet.key(' ');
+    assert.strictEqual(telnet.fake.sets.at(-1)!.prefs['msg.reply'].email, 'instant');
+  } finally { telnet.door.stop(); }
+}
+
+export async function theSelectedRowCarriesNoTagThatCutsItsHighlight(): Promise<void> {
+  for (const [w, h2] of [[80, 25], [132, 40]] as const) {
+    const h = await open(w, h2);
+    try {
+      await h.key(DOWN);
+      const raw = h.door.rows()[1];
+      assert.ok(!/\{[^}]*\}/.test(raw), `${w}: the selected row has a tag inside it: ${raw}`);
     } finally { h.door.stop(); }
   }
 }
