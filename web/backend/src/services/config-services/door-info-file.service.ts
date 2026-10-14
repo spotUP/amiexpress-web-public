@@ -400,3 +400,22 @@ export function buildNewDoorTooltypes(fields: {
 
   return tts;
 }
+
+/**
+ * The admin's Add Door, as a function: a NEW door's registration file.
+ * DoorConfigService.createDoor writes through this, and so does anything
+ * else that registers a door - one writer for a new .info.
+ */
+export function writeNewDoorRegistration(bbsRoot: string, door: {
+  door_command: string; door_type: string; door_path?: string; door_name?: string;
+  min_security_level?: number; priority?: string; door_args?: string; working_directory?: string;
+}): string {
+  const cmdDir = door.door_type === 'SYSCMD' ? 'SysCmd' : 'BBSCmd';
+  const infoPath = path.join(bbsRoot, 'Commands', cmdDir, `${door.door_command}.info`);
+  fs.mkdirSync(path.dirname(infoPath), { recursive: true });
+  const tooltypes = buildNewDoorTooltypes(door);
+  const lines = tooltypes.map(t => (t.value ? `${t.key}=${t.value}` : t.key));
+  if (door.working_directory) lines.push(`WORKDIR=${door.working_directory}`);
+  fs.writeFileSync(infoPath, lines.join('\r\n') + '\r\n');
+  return infoPath;
+}

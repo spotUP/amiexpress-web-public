@@ -73,3 +73,14 @@ describe('one-shot: the record dies unless the W door itself exits with a return
     expect(processCommand).not.toHaveBeenCalled();
   });
 });
+
+describe('the account was erased inside the settings door', () => {
+  test('the door-exit tail does not reopen W for a caller the board has dropped', async () => {
+    const session: any = { state: 'await', user: undefined };   // what performErasure leaves (gdpr.handler.ts)
+    armSettingsResume(session, 'W', 21);
+    settleSettingsResume(session, 'W', true);
+    await expect(resumeSettingsHub({}, session)).resolves.toBe(false);
+    expect(processCommand).not.toHaveBeenCalled();
+    expect(settingsResumeOf(session)).toBeUndefined();
+  });
+});

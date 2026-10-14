@@ -5,7 +5,7 @@
 
 import type { Database } from '../../database';
 import type { ConfigRepository } from '../../database/config-repository';
-import { findDoorInfoFile, applyDoorFieldsToTooltypes, applyEnabledToTooltypes, buildNewDoorTooltypes } from './door-info-file.service';
+import { findDoorInfoFile, applyDoorFieldsToTooltypes, applyEnabledToTooltypes, writeNewDoorRegistration } from './door-info-file.service';
 import { parseInfoFile, writeInfoFile } from '../../utils/info-file.util';
 import type { Door } from '../../database/types';
 import { DoorSchema, type RequestContext } from '../config.schemas';
@@ -214,19 +214,7 @@ console.log(`[DoorConfigService] Updated ${existingPath}`);
       // A door that does not exist yet: write the tooltypes it needs, with
       // TYPE as the door type the loader understands rather than a runtime
       // name, and no invented NAME.
-      const tooltypes = buildNewDoorTooltypes({
-        door_command: door.door_command,
-        door_type: door.door_type as string,
-        door_path: door.door_path,
-        door_name: door.door_name,
-        min_security_level: door.min_security_level,
-        priority: door.priority,
-        door_args: door.door_args,
-      });
-      const lines = tooltypes.map(t => (t.value ? `${t.key}=${t.value}` : t.key));
-      if (door.working_directory) lines.push(`WORKDIR=${door.working_directory}`);
-
-      fs.writeFileSync(infoPath, lines.join('\r\n') + '\r\n');
+      writeNewDoorRegistration(bbsRoot, door as never);
 console.log(`[DoorConfigService] Wrote ${infoPath}`);
     } catch (error) {
 console.error(`[DoorConfigService] Failed to write ${infoPath}:`, error);

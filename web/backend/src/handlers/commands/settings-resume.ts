@@ -43,6 +43,10 @@ export function settleSettingsResume(session: BBSSession, exitingCommand: string
 export async function resumeSettingsHub(socket: unknown, session: BBSSession): Promise<boolean> {
   const record = records.get(session);
   if (!record || (record.phase !== 'armed' && record.phase !== 'returning')) return false;
+  // The caller erased their account inside the settings door: performErasure
+  // (gdpr.handler.ts) has dropped the session ('await', no user) and the line
+  // closes in half a second. There is no menu to go back to.
+  if ((session as { state?: string }).state === 'await') { records.delete(session); return false; }
   record.phase = 'resuming';
   try {
     // eslint-disable-next-line @typescript-eslint/no-var-requires

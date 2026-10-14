@@ -1,0 +1,10 @@
+LOCATION=Doors/web-terminal
+TYPE=TS
+NAME=Web terminal
+ACCESS=1
+MULTINODE=YES
+DESCRIPTION=Modem speed, font, PETSCII colours and character set, and your data
+MIN_COLUMNS=40
+SETTINGS=YES
+SETTINGS_LABEL=Web terminal
+SETTINGS_SECTION=Web terminal
