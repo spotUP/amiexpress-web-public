@@ -4,7 +4,7 @@
  * Two ways in, one drawing:
  *
  *   renderAchievementToast(notice, width, opts)  the lines, as bytes a BBS
- *       writes straight to the caller: a three-row box of `+ - |` in the
+ *       writes straight to the caller: a framed box in the SDK's Amiga border alphabet in the
  *       eight ANSI colours, cursor saved and restored around it. At forty
  *       columns and under nothing exceeds forty cells and no glyph is
  *       outside ASCII, so the PETSCII transducer has nothing to guess at.
@@ -19,6 +19,8 @@
  */
 import { Box } from '../engines/ui/blessed/widgets/box';
 import type { Screen } from '../engines/ui/blessed/core/screen';
+import { borderCharsFor } from '../engines/ui/blessed/core/border-chars';
+import { wrapText } from '../src/utils/screen-utils';
 import { calculateDialogWidth, effectsAllowed, BREAKPOINT_XXS, BREAKPOINT_SM } from '../engines/ui/blessed/core/responsive-constants';
 
 export interface AchievementNotice {
@@ -44,13 +46,6 @@ export interface ToastRenderOptions {
   petscii?: boolean;
   /** Skip the save/restore cursor pair (a blessed screen positions its own). */
   bare?: boolean;
-  /**
-   * The caller renders Unicode box-drawing (the web terminal). Telnet and
-   * Amiga callers are ANSI but NOT Unicode - they get the ASCII frame. Only
-   * consulted for the wide themed frame; the narrow badge and the PETSCII box
-   * are ASCII at every terminal.
-   */
-  unicode?: boolean;
 }
 
 /** The eight ANSI colours the tiers wear. Bronze 33 yellow, silver 37 white, gold 33+bold, platinum 36 cyan. */
@@ -63,14 +58,21 @@ const TIER_SGR: Record<NonNullable<AchievementNotice['tier']>, string> = {
 
 export const TOAST_MIN_WIDTH = 24;
 
-/** The three text rows, before any box or colour - the same for every renderer. */
-export function toastLines(notice: AchievementNotice, inner: number): [string, string, string] {
+/** A notice body never takes more than this many rows; the last is marked `~` if cut. */
+const NOTICE_MAX_BODY_ROWS = 4;
+
+/**
+ * The text rows, before any box or colour - the same for every renderer.
+ * An unlock and a link are always three rows; a board notice is its title and
+ * its body wrapped on word boundaries to the box (SDK wrapText).
+ */
+export function toastLines(notice: AchievementNotice, inner: number): string[] {
   const clip = (s: string): string => (s.length > inner ? s.slice(0, Math.max(0, inner - 1)) + '~' : s);
   if (notice.kind === 'notice') {
-    const text = notice.text ?? '';
-    const first = text.slice(0, inner);
-    const rest = text.length > inner ? text.slice(inner) : '';
-    return [clip(notice.title ?? 'NOTIFICATION'), clip(first), clip(rest)];
+    const wrapped = wrapText(notice.text ?? '', inner);
+    const body = wrapped.slice(0, NOTICE_MAX_BODY_ROWS);
+    if (wrapped.length > NOTICE_MAX_BODY_ROWS) body[body.length - 1] = clip(body[body.length - 1] + '~');
+    return [clip(notice.title ?? 'NOTIFICATION'), ...body.map(clip)];
   }
   if (notice.kind === 'link') {
     const cmd = (notice.doorCommand ?? 'ACHIEVE').toUpperCase();
@@ -109,21 +111,20 @@ function paint(lines: string[], on: string, off: string): string {
  * shape at every terminal - what a PETSCII caller and a 40-column ANSI caller
  * get.
  */
-function plainBox(rows: [string, string, string], boxWidth: number, inner: number, on: string, off: string): string {
+function plainBox(rows: string[], boxWidth: number, inner: number, on: string, off: string): string {
   const rule = `+${'-'.repeat(boxWidth - 2)}+`;
   const line = (s: string): string => `| ${s.padEnd(inner)} |`;
   return paint([rule, ...rows.map(line), rule], on, off);
 }
 
 /**
- * The wide themed frame: the title set into the top rule, the name and the
- * tier/points on two framed rows. Box-drawing glyphs when the caller renders
- * Unicode, `+ - |` otherwise.
+ * The wide themed frame: the title set into the top rule, the body on framed
+ * rows. The glyphs are the SDK's border alphabet for an Amiga caller
+ * (borderCharsFor) - the same one every blessed door's frame is drawn with -
+ * so the web terminal (Topaz, no PC box-drawing) and telnet get one look.
  */
-function frame(title: string, body: [string, string], boxWidth: number, unicode: boolean, on: string, off: string): string {
-  const [tl, tr, bl, br, h, v] = unicode
-    ? ['┌', '┐', '└', '┘', '─', '│']
-    : ['+', '+', '+', '+', '-', '|'];
+function frame(title: string, body: string[], boxWidth: number, borderType: string, on: string, off: string): string {
+  const { tl, tr, bl, br, h, v } = borderCharsFor(borderType, false);
   const inner = boxWidth - 4;
   // `tl h SP title SP h*k tr` == boxWidth. Keep at least one rule glyph.
   const t = title.slice(0, Math.max(0, boxWidth - 6));
@@ -139,18 +140,17 @@ function frame(title: string, body: [string, string], boxWidth: number, unicode:
  * the title. ASCII at every terminal - the fallback where the frame is too
  * tight to read.
  */
-function badge(rows: [string, string, string], boxWidth: number, on: string, off: string): string {
+function badge(rows: string[], boxWidth: number, on: string, off: string): string {
   const inner = boxWidth - 2;
   const rule = `+${'='.repeat(inner)}+`;
   const line = (s: string): string => `|${centre(s, inner)}|`;
-  return paint([rule, line(`[*] ${rows[0]} [*]`), line(rows[1]), line(rows[2]), rule], on, off);
+  return paint([rule, line(`[*] ${rows[0]} [*]`), ...rows.slice(1).map(line), rule], on, off);
 }
 
 /**
  * The toast as bytes, in one of three dressings chosen by width:
  *   - PETSCII, or a sub-40 ANSI caller: the plain ASCII box (safe everywhere).
- *   - 80 columns and up: the themed frame (Unicode box-drawing when the caller
- *     renders it, `opts.unicode`; ASCII otherwise).
+ *   - 80 columns and up: the themed frame, SDK border alphabet (Amiga ASCII).
  *   - in between: the centred trophy badge, ASCII.
  *
  * The width is the CALLER'S. This used to clamp a PETSCII toast to forty
@@ -172,7 +172,7 @@ export function renderAchievementToast(notice: AchievementNotice, width: number,
   if (opts.petscii || cols < BREAKPOINT_XXS) {
     body = plainBox(rows, boxWidth, inner, on, off);
   } else if (cols >= BREAKPOINT_SM) {
-    body = frame(rows[0], [rows[1], rows[2]], boxWidth, opts.unicode === true, on, off);
+    body = frame(rows[0], rows.slice(1), boxWidth, 'line', on, off);
   } else {
     body = badge(rows, boxWidth, on, off);
   }
@@ -194,7 +194,7 @@ export function showAchievementToast(screen: Screen, notice: AchievementNotice, 
     top: 0,
     left: Math.max(0, width - boxWidth),
     width: boxWidth,
-    height: 5,
+    height: rows.length + 2,
     border: 'line',
     content: rows.join('\n'),
     focusable: false,

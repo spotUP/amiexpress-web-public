@@ -19,10 +19,10 @@ describe('the achievement toast', () => {
     expect(lines).toHaveLength(4);
     const w = toastWidth(80);
     for (const l of lines) expect(l.length).toBe(w);
-    // No caller unicode flag -> ASCII frame.
-    expect(lines[0].startsWith('+- ')).toBe(true);
+    // The SDK's Amiga border alphabet.
+    expect(lines[0].startsWith('.- ')).toBe(true);
     expect(lines[0]).toContain('ACHIEVEMENT UNLOCKED');
-    expect(lines[3]).toBe(`+${'-'.repeat(w - 2)}+`);
+    expect(lines[3]).toBe(`\`${'-'.repeat(w - 2)}'`);
     expect(lines[1].startsWith('| ') && lines[1].endsWith(' |')).toBe(true);
     expect(lines[1]).toContain('Century');
     expect(lines[2]).toContain('SILVER, 10 pts');
@@ -31,13 +31,10 @@ describe('the achievement toast', () => {
     expect(out.split('\x1b[0m').length - 1).toBe(4);
   });
 
-  it('a Unicode caller gets box-drawing glyphs in the wide frame; a plain one does not', () => {
-    const uni = strip(renderAchievementToast(unlock, 80, { unicode: true }));
-    for (const g of ['┌', '─', '┐', '│', '└', '┘']) expect(uni).toContain(g);
-    expect(uni).toContain('ACHIEVEMENT UNLOCKED');
-    const ascii = strip(renderAchievementToast(unlock, 80, { unicode: false }));
-    for (const g of ['┌', '─', '│']) expect(ascii).not.toContain(g);
-    expect(ascii).toContain('+-');
+  it('no caller, Unicode-capable or not, is given PC box-drawing in the wide frame', () => {
+    const out = strip(renderAchievementToast(unlock, 80, { unicode: true } as never));
+    for (const g of ['┌', '─', '┐', '│', '└', '┘']) expect(out).not.toContain(g);
+    expect(out).toContain('.- ACHIEVEMENT UNLOCKED');
   });
 
   it('at a middling width the toast is a centred trophy badge, ASCII at every terminal', () => {
