@@ -23,6 +23,7 @@ const blessed_1 = require("@amiexpress/bbs-door-sdk/engines/ui/blessed");
 const layout_1 = require("./layout");
 const HINTS = [{ key: 'Up/Down', does: 'Move' }, { key: 'Enter', does: 'Change' }, { key: 'Esc', does: 'Back' }];
 const COMPACT_HINTS = [{ key: 'Enter', does: 'Change' }, { key: 'Esc', does: 'Back' }];
+const DATA_HINTS = [{ key: 'Up/Down', does: 'Scroll' }, { key: 'Esc', does: 'Back' }];
 async function startWebTerminal(session) {
     const { bbs } = session;
     const theme = bbs?.getTheme ? bbs.getTheme() : (0, theme_1.themeById)('classic');
@@ -79,8 +80,8 @@ async function startWebTerminal(session) {
             }
         return { lines, owner: own };
     };
-    const setBody = (items, at = 0) => { painted = items.slice(); list.setItems(items); list.select(at); screen.render(); };
-    const showRows = (at = 0) => { view = 'rows'; const v = linesNow(); owner = v.owner; setBody(v.lines, at); };
+    const setBody = (items, at = 0) => { painted = items.slice(); list.setItems(items); list.scrollTo?.(0); list.select(at); screen.render(); };
+    const showRows = (at = 0) => { view = 'rows'; chrome.setHints(compact.collapseChrome ? COMPACT_HINTS : HINTS); const v = linesNow(); owner = v.owner; setBody(v.lines, at); };
     /** A value changed: re-read the board's state and set only the lines that differ. */
     const refresh = () => {
         state = bbs.webTerminalSettings();
@@ -147,8 +148,9 @@ async function startWebTerminal(session) {
             }
             case 'data':
                 view = 'data';
+                chrome.setHints(DATA_HINTS);
                 setBody((0, layout_1.dataLines)(bbs.myData(), width));
-                note('Esc returns to the list.');
+                note('Up and Down scroll. Esc returns to the list.');
                 return;
             case 'erase': {
                 const confirm = await ask('Delete my account', 'This cannot be undone. Type YES ERASE to continue:');
@@ -172,7 +174,11 @@ async function startWebTerminal(session) {
                 // resume runs when it resolves).
                 leaveNow(false);
                 try {
-                    await bbs.eraseMyAccount(answers);
+                    const done = await bbs.eraseMyAccount(answers);
+                    // The check passed a moment ago; a refusal now (the session moved on)
+                    // must not end on a blank screen: say why, then end.
+                    if (!done.ok)
+                        bbs.write(`\r\n${done.reason}\r\n`);
                 }
                 finally {
                     endNow();
@@ -223,8 +229,16 @@ async function startWebTerminal(session) {
         screen.key(['enter', 'space'], activate);
         /** Move by ROW, not by line: at 40 a row is two lines and the value line is not a stop. */
         const move = (by) => guard(() => {
-            if (view !== 'rows')
+            if (view === 'data') {
+                // Page-wise: the list does not follow a key on its own (keys are off).
+                const page = Math.max(1, list.height - 2);
+                const last = Math.max(0, painted.length - 1);
+                const to = Math.min(Math.max(selected() + by * page, 0), last);
+                if (to !== selected())
+                    list.select(to);
+                screen.render();
                 return;
+            }
             const here = owner[selected()];
             const order = layout_1.ROWS.map(r => r.id);
             const next = order[Math.min(Math.max(order.indexOf(here) + by, 0), order.length - 1)];
@@ -244,7 +258,7 @@ async function startWebTerminal(session) {
     showRows();
     list.focus();
     screen.render();
-    return { rows: () => painted.slice(), note: () => noteText, stop: () => { leaveNow(); }, done: finished };
+    return { rows: () => painted.slice(), visible: () => { const at = Number(list.getScroll?.() ?? 0); return painted.slice(at, at + Number(list.height)); }, note: () => noteText, stop: () => { leaveNow(); }, done: finished };
 }
 async function createApp(session) {
     const door = await startWebTerminal(session);

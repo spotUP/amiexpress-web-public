@@ -19,10 +19,11 @@ import type { WebTerminalState } from '@amiexpress/bbs-door-sdk/core/types';
 import { ROWS, rowLines, dataLines, clip, type RowId } from './layout';
 
 interface DoorSession { bbs: any; bbsSession?: any }
-export interface WebTerminal { rows(): string[]; note(): string; stop(): void; done: Promise<void> }
+export interface WebTerminal { rows(): string[]; /** The lines the caller can see now. */ visible(): string[]; note(): string; stop(): void; done: Promise<void> }
 
 const HINTS = [{ key: 'Up/Down', does: 'Move' }, { key: 'Enter', does: 'Change' }, { key: 'Esc', does: 'Back' }];
 const COMPACT_HINTS = [{ key: 'Enter', does: 'Change' }, { key: 'Esc', does: 'Back' }];
+const DATA_HINTS = [{ key: 'Up/Down', does: 'Scroll' }, { key: 'Esc', does: 'Back' }];
 
 export async function startWebTerminal(session: DoorSession): Promise<WebTerminal> {
   const { bbs } = session;
@@ -78,8 +79,8 @@ export async function startWebTerminal(session: DoorSession): Promise<WebTermina
     for (const r of ROWS) for (const l of rowLines(r.id, state, width)) { lines.push(l); own.push(r.id); }
     return { lines, owner: own };
   };
-  const setBody = (items: string[], at = 0): void => { painted = items.slice(); (list as any).setItems(items); (list as any).select(at); screen.render(); };
-  const showRows = (at = 0): void => { view = 'rows'; const v = linesNow(); owner = v.owner; setBody(v.lines, at); };
+  const setBody = (items: string[], at = 0): void => { painted = items.slice(); (list as any).setItems(items); (list as any).scrollTo?.(0); (list as any).select(at); screen.render(); };
+  const showRows = (at = 0): void => { view = 'rows'; chrome.setHints(compact.collapseChrome ? COMPACT_HINTS : HINTS); const v = linesNow(); owner = v.owner; setBody(v.lines, at); };
   /** A value changed: re-read the board's state and set only the lines that differ. */
   const refresh = (): void => {
     state = bbs.webTerminalSettings();
@@ -122,7 +123,7 @@ export async function startWebTerminal(session: DoorSession): Promise<WebTermina
       }
       case 'palette': await bbs.togglePetsciiPalette(); refresh(); return;
       case 'charset': { const r = await bbs.togglePetsciiCharset(); refresh(); note(r.notice); return; }
-      case 'data': view = 'data'; setBody(dataLines(bbs.myData(), width)); note('Esc returns to the list.'); return;
+      case 'data': view = 'data'; chrome.setHints(DATA_HINTS); setBody(dataLines(bbs.myData(), width)); note('Up and Down scroll. Esc returns to the list.'); return;
       case 'erase': {
         const confirm = await ask('Delete my account', 'This cannot be undone. Type YES ERASE to continue:');
         if (confirm === null) return;
@@ -138,7 +139,12 @@ export async function startWebTerminal(session: DoorSession): Promise<WebTermina
         // holds execute() open until the board has finished (the settings
         // resume runs when it resolves).
         leaveNow(false);
-        try { await bbs.eraseMyAccount(answers); } finally { endNow(); }
+        try {
+          const done = await bbs.eraseMyAccount(answers);
+          // The check passed a moment ago; a refusal now (the session moved on)
+          // must not end on a blank screen: say why, then end.
+          if (!done.ok) bbs.write(`\r\n${done.reason}\r\n`);
+        } finally { endNow(); }
         return;
       }
     }
@@ -165,7 +171,15 @@ export async function startWebTerminal(session: DoorSession): Promise<WebTermina
     screen.key(['enter', 'space'], activate);
     /** Move by ROW, not by line: at 40 a row is two lines and the value line is not a stop. */
     const move = (by: number) => guard(() => {
-      if (view !== 'rows') return;
+      if (view === 'data') {
+        // Page-wise: the list does not follow a key on its own (keys are off).
+        const page = Math.max(1, (list as any).height - 2);
+        const last = Math.max(0, painted.length - 1);
+        const to = Math.min(Math.max(selected() + by * page, 0), last);
+        if (to !== selected()) (list as any).select(to);
+        screen.render();
+        return;
+      }
       const here = owner[selected()];
       const order = ROWS.map(r => r.id);
       const next = order[Math.min(Math.max(order.indexOf(here) + by, 0), order.length - 1)];
@@ -181,7 +195,7 @@ export async function startWebTerminal(session: DoorSession): Promise<WebTermina
   showRows();
   list.focus();
   screen.render();
-  return { rows: () => painted.slice(), note: () => noteText, stop: () => { leaveNow(); }, done: finished };
+  return { rows: () => painted.slice(), visible: () => { const at = Number((list as any).getScroll?.() ?? 0); return painted.slice(at, at + Number((list as any).height)); }, note: () => noteText, stop: () => { leaveNow(); }, done: finished };
 }
 
 export async function createApp(session: DoorSession): Promise<void> {

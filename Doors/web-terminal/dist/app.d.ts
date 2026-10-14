@@ -3,7 +3,8 @@ interface DoorSession {
     bbsSession?: any;
 }
 export interface WebTerminal {
-    rows(): string[];
+    rows(): string[]; /** The lines the caller can see now. */
+    visible(): string[];
     note(): string;
     stop(): void;
     done: Promise<void>;

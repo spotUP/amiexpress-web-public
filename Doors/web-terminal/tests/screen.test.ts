@@ -13,7 +13,9 @@ const DOWN = '\x1b[B';
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
 const strip = (t: string): string => t.replace(/\{\/?[a-z-]+\}/g, '');
 
-async function open(width: number, height: number, erase: 'refuse' | 'accept' = 'refuse') {
+async function open(width: number, height: number, erase: 'refuse' | 'accept' | 'check-only' | 'deferred' = 'refuse', data = [{ label: 'Handle', value: 'Spot' }, { label: 'Group', value: 'Old Town' }]) {
+  let release: () => void = () => {};
+  const gate = new Promise<void>((r) => { release = r; });
   const writes: string[] = [];
   const calls: string[] = [];
   const touched: string[] = [];
@@ -30,10 +32,12 @@ async function open(width: number, height: number, erase: 'refuse' | 'accept' = 
     chooseTerminalFont: async (id: string) => { calls.push(`font ${id}`); return 'set'; },
     togglePetsciiPalette: async () => { calls.push('palette'); palette = 'C64 (VIC-II)'; return 'vic'; },
     togglePetsciiCharset: async () => { calls.push('charset'); return { charset: 'swedish', notice: 'PETSCII character set: SWEDISH' }; },
-    myData: () => [{ label: 'Handle', value: 'Spot' }, { label: 'Group', value: 'Old Town' }],
+    myData: () => data,
     eraseMyAccount: async (a: any, o: any) => {
       calls.push(`erase ${a.confirm}/${a.username}/${o?.check ? 'check' : 'do'}`);
       if (erase === 'accept') return { ok: true };
+      if (erase === 'check-only') return o?.check ? { ok: true } : { ok: false, reason: 'Session moved on.' };
+      if (erase === 'deferred') { if (!o?.check) await gate; return { ok: true }; }
       return { ok: false, reason: 'Password incorrect. Deletion cancelled.' };
     },
   };
@@ -43,7 +47,7 @@ async function open(width: number, height: number, erase: 'refuse' | 'accept' = 
   await sleep(50);
   let from = writes.length;
   return {
-    door, calls, touched, bbs,
+    door, calls, touched, bbs, release: () => release(),
     key: async (k: string) => { session.bbsSession.doorInputHandler(k); await sleep(60); },
     mark: () => { from = writes.length; },
     since: () => writes.slice(from).join(''),
@@ -127,4 +131,39 @@ export async function a_wide_screen_grows_and_adds_the_blurb(): Promise<void> {
   const h = await open(132, 40);
   assert.ok(h.door.rows().map(strip).some(r => r.includes('typeface')));
   h.door.stop(); await h.door.done;
+}
+
+const SIXTEEN = Array.from({ length: 16 }, (_, i) => ({ label: `Field number ${i + 1}`, value: `Value ${i + 1}` }));
+
+export async function view_my_data_at_forty_columns_scrolls_to_the_last_field(): Promise<void> {
+  const h = await open(40, 25, 'refuse', SIXTEEN);
+  for (let i = 0; i < 4; i++) await h.key(DOWN);  // onto View my data
+  await h.key('\r');
+  assert.ok(!h.door.visible().map(strip).some(r => r.includes('Field number 16')), 'sixteen stacked fields fit on one 25-row screen');
+  await h.key(DOWN);
+  await h.key(DOWN);
+  assert.ok(h.door.visible().map(strip).some(r => r.includes('Field number 16')), 'the last field is unreachable');
+  await h.key('\x1b');                            // Esc returns to the list
+  await sleep(400);                               // a lone Esc waits out the escape-sequence timeout
+  assert.ok(h.door.visible().map(strip).some(r => r.includes('Modem emulation speed')));
+  h.door.stop(); await h.door.done;
+}
+export async function a_refused_second_erasure_shows_its_reason_and_ends(): Promise<void> {
+  const h = await open(80, 24, 'check-only');
+  for (let i = 0; i < 5; i++) await h.key(DOWN);
+  await h.key('\r'); await h.key('YES ERASE\r'); await h.key('pw\r'); await h.key('Spot\r');
+  await Promise.race([h.door.done, sleep(1000).then(() => { throw new Error('the door did not end'); })]);
+  assert.ok(h.since().includes('Session moved on.'), 'the refusal reason never reached the caller');
+}
+export async function done_stays_pending_while_the_board_erases(): Promise<void> {
+  const h = await open(80, 24, 'deferred');
+  for (let i = 0; i < 5; i++) await h.key(DOWN);
+  await h.key('\r'); await h.key('YES ERASE\r'); await h.key('pw\r'); await h.key('Spot\r');
+  let ended = false;
+  void h.door.done.then(() => { ended = true; });
+  await sleep(100);
+  assert.strictEqual(ended, false, 'execute() resolved while the board was still erasing');
+  h.release();
+  await sleep(50);
+  assert.strictEqual(ended, true);
 }
