@@ -22,8 +22,16 @@ import type { Screen } from '../engines/ui/blessed/core/screen';
 import { calculateDialogWidth, effectsAllowed, BREAKPOINT_XXS, BREAKPOINT_SM } from '../engines/ui/blessed/core/responsive-constants';
 
 export interface AchievementNotice {
-  /** 'unlock': an achievement was earned. 'link': the link explanation. */
-  kind: 'unlock' | 'link';
+  /**
+   * 'unlock': an achievement was earned. 'link': the link explanation.
+   * 'notice': a board notification (the Board channel of the NOTIFY door),
+   * drawn in the same box with `title` and `text`.
+   */
+  kind: 'unlock' | 'link' | 'notice';
+  /** 'notice' only: the first row. */
+  title?: string;
+  /** 'notice' only: the second and third rows (wrapped by the caller's width). */
+  text?: string;
   name?: string;
   tier?: 'bronze' | 'silver' | 'gold' | 'platinum';
   points?: number;
@@ -58,6 +66,12 @@ export const TOAST_MIN_WIDTH = 24;
 /** The three text rows, before any box or colour - the same for every renderer. */
 export function toastLines(notice: AchievementNotice, inner: number): [string, string, string] {
   const clip = (s: string): string => (s.length > inner ? s.slice(0, Math.max(0, inner - 1)) + '~' : s);
+  if (notice.kind === 'notice') {
+    const text = notice.text ?? '';
+    const first = text.slice(0, inner);
+    const rest = text.length > inner ? text.slice(inner) : '';
+    return [clip(notice.title ?? 'NOTIFICATION'), clip(first), clip(rest)];
+  }
   if (notice.kind === 'link') {
     const cmd = (notice.doorCommand ?? 'ACHIEVE').toUpperCase();
     return [clip('ACHIEVEMENTS: account not linked'), clip(`Type ${cmd} at the prompt to link`), clip('this board to your global profile.')];
@@ -151,7 +165,7 @@ export function renderAchievementToast(notice: AchievementNotice, width: number,
   const inner = boxWidth - 4; // "| " and " |"
   const rows = toastLines(notice, inner);
   const colour = !opts.petscii && effectsAllowed(cols);
-  const on = colour ? (notice.kind === 'link' ? '\x1b[0;36m' : TIER_SGR[notice.tier ?? 'bronze']) : '';
+  const on = colour ? (notice.kind !== 'unlock' ? '\x1b[0;36m' : TIER_SGR[notice.tier ?? 'bronze']) : '';
   const off = colour ? '\x1b[0m' : '';
 
   let body: string;

@@ -50,6 +50,11 @@
       "require": "./dist/formats/magazine.js",
       "default": "./dist/formats/magazine.js"
     },
+    "./formats/notify": {
+      "types": "./dist/formats/notify.d.ts",
+      "require": "./dist/formats/notify.js",
+      "default": "./dist/formats/notify.js"
+    },
     "./formats/magazine-front-file": {
       "types": "./dist/formats/magazine-front-file.d.ts",
       "require": "./dist/formats/magazine-front-file.js",
