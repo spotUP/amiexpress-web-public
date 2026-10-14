@@ -66,6 +66,7 @@ const fs = __importStar(require("fs"));
 const path = __importStar(require("path"));
 const settings_1 = require("@amiexpress/bbs-door-sdk/settings");
 const magazine_1 = require("@amiexpress/bbs-door-sdk/formats/magazine");
+const magazine_front_file_1 = require("@amiexpress/bbs-door-sdk/formats/magazine-front-file");
 /** `<bbsRoot>/Magazine`, found the way every other board path is found. */
 function magazineRoot(startDir = __dirname) {
     return path.join((0, settings_1.resolveBbsRoot)(startDir), magazine_1.MAGAZINE_DIR);
@@ -144,22 +145,12 @@ exports.SYSOP_SEC_LEVEL = 255;
 function isSysopCaller(session) {
     return (session.user?.secLevel ?? 0) >= exports.SYSOP_SEC_LEVEL;
 }
-/** Write `frontpage.json` atomically: a temp file in the same directory, then a rename. */
+/**
+ * Write `frontpage.json`. The writer is the SDK's, shared with the board's
+ * admin Magazine page: one atomic write, not a copy per caller.
+ */
 function writeFront(ids, root = magazineRoot()) {
-    const target = path.join(root, magazine_1.MAGAZINE_FRONTPAGE_FILE);
-    const tmp = `${target}.tmp-${process.pid}`;
-    try {
-        fs.mkdirSync(root, { recursive: true });
-        fs.writeFileSync(tmp, JSON.stringify(ids, null, 2), 'utf8');
-        fs.renameSync(tmp, target);
-    }
-    catch (err) {
-        try {
-            fs.unlinkSync(tmp);
-        }
-        catch { /* the target is untouched */ }
-        throw err;
-    }
+    (0, magazine_front_file_1.writeFrontFile)(root, ids);
 }
 /**
  * One edit of the front page. The file is re-read first so two sysops only

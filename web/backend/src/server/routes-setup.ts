@@ -28,6 +28,8 @@ import { isPlainFileName } from '../utils/plain-file-name.util';
 import { redeemUploadTicket, redeemAreaDownloadTicket, type OnServed } from '../handlers/file/download-ticket';
 import { getSession } from './session-manager';
 import { createConfigRouter } from '../api/config-routes';
+import { mountMagazineAdmin } from '../api/magazine-admin-routes';
+import { republishMagazine } from '../services/magazine';
 import { createDoorArtRouter } from '../api/door-art-routes';
 import { createBatchRouter } from '../api/batch-routes';
 import { createImportRouter } from '../handlers/admin/import.handler';
@@ -283,6 +285,12 @@ export function registerHttpRoutes(app: Application, io: SocketIOServer): void {
   // ===== Bulls Menu API - Sysop-only (Bulls.CFG for the 68K Bulls door) =====
   const { createBullsRouter } = require('../api/bulls-routes');
   app.use('/api/config/bulls', authenticateToken(db), requireSysop(), createBullsRouter(boardRoot()));
+
+  // ===== Magazine API - Sysop-only (the front page of THE UNKNOWN FREQUENCY) =====
+  mountMagazineAdmin(app, [authenticateToken(db), requireSysop()], {
+    boardRoot,
+    republish: () => republishMagazine({ rootDir: boardRoot, now: () => new Date(), log: (l: string) => console.log(l) }),
+  });
 
   // ===== Chat API - Public Routes (for web chat authentication) =====
   const chatRouter = createChatRouter(db);

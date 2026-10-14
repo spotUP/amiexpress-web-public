@@ -37,6 +37,7 @@ import {
   Zap,
   FileImage,
   ListOrdered,
+  BookOpen,
   Newspaper,
   Palette,
 } from 'lucide-react';
@@ -136,6 +137,7 @@ export const NAV_GROUPS: NavGroup[] = [
       { path: 'sprite-manager', label: 'Sprite Manager', icon: FileImage, minLevel: 255, description: 'Upload and manage sprite sheets for installed doors' },
       { path: 'login-sequence', label: 'Login Sequence', icon: ListOrdered, minLevel: 255, description: 'What a caller is shown on the way in, step by step, and which parts of it to keep', keywords: ['Logon', 'Logon Screen', 'Startup', 'Login Flow', 'Bulletins', 'Bulls', 'Includes', 'Pause', 'Sequence', 'Screens'] },
       { path: 'bulls', label: 'Bulls Menu', icon: Newspaper, minLevel: 255, description: 'Bulls.CFG: the bulletin menu of the 68K Bulls door' },
+      { path: 'magazine', label: 'Magazine', icon: BookOpen, minLevel: 255, description: 'THE UNKNOWN FREQUENCY: which articles are on the front page, and which one leads', keywords: ['Front page', 'Lead', 'Articles', 'Teletext', 'MAG', 'News', 'Unknown Frequency'] },
     ],
   },
   {

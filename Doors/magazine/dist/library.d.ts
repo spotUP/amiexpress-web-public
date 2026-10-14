@@ -42,7 +42,10 @@ export declare function isSysopCaller(session: {
         secLevel?: number;
     } | null;
 }): boolean;
-/** Write `frontpage.json` atomically: a temp file in the same directory, then a rename. */
+/**
+ * Write `frontpage.json`. The writer is the SDK's, shared with the board's
+ * admin Magazine page: one atomic write, not a copy per caller.
+ */
 export declare function writeFront(ids: readonly string[], root?: string): void;
 /**
  * One edit of the front page. The file is re-read first so two sysops only

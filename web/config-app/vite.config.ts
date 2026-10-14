@@ -46,6 +46,11 @@ export default defineConfig({
       // place, whose header says the patterns mirror the loader's; a second
       // copy in the admin would be a third parser to keep in step. The module
       // is pure - no fs, no path - so it bundles like any other source file.
+      // The magazine's front page edits (frontToggle, frontMove, frontLead,
+      // normalizeFront) and desk labels, from the SDK source: pure, no Node
+      // imports. The MAG door and the board's Magazine route run the same
+      // functions, so the three cannot disagree on how the list changes.
+      '@amiexpress/bbs-door-sdk/formats/magazine': path.resolve(__dirname, '../../sdk/formats/magazine'),
       '@bbs/screens': path.resolve(__dirname, '../backend/src/screens'),
       // Same rule, same reason: which ACS file serves a level is express.e's
       // (findAcsLevel, express.e:3025), and the admin has to apply it in a

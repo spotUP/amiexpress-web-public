@@ -26,6 +26,7 @@ import {
   type MagazineIndexEntry,
   type Story,
 } from '@amiexpress/bbs-door-sdk/formats/magazine';
+import { writeFrontFile } from '@amiexpress/bbs-door-sdk/formats/magazine-front-file';
 
 /** `<bbsRoot>/Magazine`, found the way every other board path is found. */
 export function magazineRoot(startDir: string = __dirname): string {
@@ -113,18 +114,12 @@ export function isSysopCaller(session: { user?: { secLevel?: number } | null }):
   return (session.user?.secLevel ?? 0) >= SYSOP_SEC_LEVEL;
 }
 
-/** Write `frontpage.json` atomically: a temp file in the same directory, then a rename. */
+/**
+ * Write `frontpage.json`. The writer is the SDK's, shared with the board's
+ * admin Magazine page: one atomic write, not a copy per caller.
+ */
 export function writeFront(ids: readonly string[], root: string = magazineRoot()): void {
-  const target = path.join(root, MAGAZINE_FRONTPAGE_FILE);
-  const tmp = `${target}.tmp-${process.pid}`;
-  try {
-    fs.mkdirSync(root, { recursive: true });
-    fs.writeFileSync(tmp, JSON.stringify(ids, null, 2), 'utf8');
-    fs.renameSync(tmp, target);
-  } catch (err) {
-    try { fs.unlinkSync(tmp); } catch { /* the target is untouched */ }
-    throw err;
-  }
+  writeFrontFile(root, ids);
 }
 
 /**

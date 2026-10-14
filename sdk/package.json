@@ -50,6 +50,11 @@
       "require": "./dist/formats/magazine.js",
       "default": "./dist/formats/magazine.js"
     },
+    "./formats/magazine-front-file": {
+      "types": "./dist/formats/magazine-front-file.d.ts",
+      "require": "./dist/formats/magazine-front-file.js",
+      "default": "./dist/formats/magazine-front-file.js"
+    },
     "./formats/ctop-data": {
       "types": "./dist/formats/ctop-data.d.ts",
       "require": "./dist/formats/ctop-data.js",

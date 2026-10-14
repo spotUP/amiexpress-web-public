@@ -64,6 +64,7 @@ module.exports = {
     // same reason as the rest: a RED/GREEN cycle must not ride on sdk/dist.
     '^@amiexpress/bbs-door-sdk/formats/ctop-data$': '<rootDir>/../../sdk/formats/ctop-data.ts',
     '^@amiexpress/bbs-door-sdk/formats/magazine$': '<rootDir>/../../sdk/formats/magazine.ts',
+    '^@amiexpress/bbs-door-sdk/formats/magazine-front-file$': '<rootDir>/../../sdk/formats/magazine-front-file.ts',
     '^@amiexpress/bbs-door-sdk/formats/estringf$': '<rootDir>/../../sdk/formats/estringf.ts',
     '^@amiexpress/bbs-door-sdk/utils/narrow-art$': '<rootDir>/../../sdk/utils/narrow-art.ts',
     // Tone.js is ESM and jest cannot parse it. A test that imports a DOOR's
