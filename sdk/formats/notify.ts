@@ -301,3 +301,68 @@ export function capAllows(
   const recent = sentTimes.filter((t) => t > now - CAP_WINDOW_SECONDS && t <= now).length;
   return recent < caps[channel];
 }
+
+// ---------------------------------------------------------------- door API
+
+/** `notify.test`: the one item NOTIFY's Send Test pushes through a real sender. Not a catalogue event. */
+export const TEST_EVENT = 'notify.test';
+
+/** What `bbs.notifications().catalogue()` answers: what THIS caller may choose, and what the board can deliver now. */
+export interface NotifyCatalogue {
+  /** Events this caller may receive (sysop-only ones are left out for everyone else). */
+  events: NotifyEventDef[];
+  /** Channels the board can deliver on right now: email = SMTP configured, push = off until caller push lands, board = always. */
+  deliverable: Record<NotifyChannel, boolean>;
+  /** Conferences the caller may enter, for the file.new follow list. */
+  conferences: { id: number; name: string }[];
+  /** The zone quiet hours and digests use when the caller sets none. */
+  boardZone: string;
+}
+
+/** The caller's own choices and where their email stands. */
+export interface NotifyState {
+  prefs: NotifyPrefs;
+  settings: NotifySettings;
+  /** Conference ids followed for file.new. */
+  follows: number[];
+  email: { address: string | null; verified: boolean };
+}
+
+export type NotifySetResult = { ok: true; state: NotifyState } | { ok: false; error: string };
+export type NotifyFollowResult = { ok: true; follows: number[] } | { ok: false; error: string };
+export type NotifyVerifyStartResult =
+  | { ok: true; email: string; expiresAt: number }
+  | { ok: false; reason: 'no-address' | 'too-soon' | 'send-failed'; error?: string };
+export type NotifyConfirmResult =
+  | { ok: true; email: string }
+  | { ok: false; reason: 'none' | 'expired' | 'wrong' | 'locked' | 'changed'; attemptsLeft?: number };
+export type NotifyTestResult = { ok: true; detail: string } | { ok: false; error: string };
+
+/**
+ * What a door may ask of the board's notification system. The caller is the
+ * session's own user - never a parameter - so a door cannot read or change
+ * anyone else's choices.
+ */
+export interface DoorNotificationsApi {
+  catalogue(): Promise<NotifyCatalogue>;
+  /** The caller's state. Opening NOTIFY counts as having been offered it (no logon offer after this). */
+  get(): Promise<NotifyState>;
+  /** Replace the caller's cells and settings. Refuses a channel an event does not offer, or one the board cannot deliver now. */
+  set(prefs: NotifyPrefs, settings: NotifySettings): Promise<NotifySetResult>;
+  /** file.new subscriptions; a conference the caller cannot enter is refused. */
+  follow(conferenceIds: readonly number[]): Promise<NotifyFollowResult>;
+  startEmailVerification(): Promise<NotifyVerifyStartResult>;
+  confirmEmail(code: string): Promise<NotifyConfirmResult>;
+  /** One test item through the real sender for `channel`. */
+  test(channel: NotifyChannel): Promise<NotifyTestResult>;
+}
+
+/** The full word for a mode, as the screens print it. */
+export function modeWord(mode: NotifyMode): string {
+  return mode === 'instant' ? 'Instant' : mode === 'digest' ? 'Digest' : 'Off';
+}
+
+/** The next mode when a cell is cycled with Space: Off, Instant, Digest, Off. */
+export function nextMode(mode: NotifyMode): NotifyMode {
+  return mode === 'off' ? 'instant' : mode === 'instant' ? 'digest' : 'off';
+}

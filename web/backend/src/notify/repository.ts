@@ -107,6 +107,24 @@ export function setSettings(db: Db, userId: string, s: NotifySettings, now: numb
   })();
 }
 
+/**
+ * Has this caller never been offered NOTIFY and never opened it? (No settings
+ * row, or a row - made by a verified address, say - with no offered_at.)
+ * The logon offer is made while this holds, once.
+ */
+export function needsOffer(db: Db, userId: string): boolean {
+  const r = db.prepare('SELECT offered_at FROM notify_settings WHERE user_id = ?').get(userId) as { offered_at: number | null } | undefined;
+  return !r || r.offered_at === null;
+}
+
+/** Record that the offer was made, or NOTIFY was opened: the offer is never repeated. */
+export function markOffered(db: Db, userId: string, now: number): void {
+  db.prepare(
+    `INSERT INTO notify_settings (user_id, offered_at) VALUES (?, ?)
+     ON CONFLICT(user_id) DO UPDATE SET offered_at = COALESCE(notify_settings.offered_at, excluded.offered_at)`
+  ).run(userId, now);
+}
+
 /** The caller's account address, or null. The board's one address column: users.email. */
 export function accountEmail(db: Db, userId: string): string | null {
   const r = db.prepare('SELECT email FROM users WHERE id = ?').get(userId) as { email: string | null } | undefined;

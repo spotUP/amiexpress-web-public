@@ -18,7 +18,17 @@ import type { NotifyItem } from '@amiexpress/bbs-door-sdk/formats/notify';
 import { atThePrompt, defaultNoticeDeps, noticeBytes } from '../achievements/notices';
 import type { NoticeDeps, NoticeSession } from '../achievements/notices';
 import { emitterForUserId } from '../server/session-emitter-registry';
-import { addInbox, takeInbox } from './repository';
+import { addInbox, markOffered, needsOffer, takeInbox } from './repository';
+
+/** The command that opens the Notifications door. */
+export const NOTIFY_COMMAND = 'NOTIFY';
+
+/** The one-time logon offer, as the shared toast shows it. */
+export const OFFER_NOTICE: AchievementNotice = {
+  kind: 'notice',
+  title: 'NOTIFICATIONS',
+  text: `Type ${NOTIFY_COMMAND} to choose how the board reaches you: email, push or here.`,
+};
 
 /** An item as the shared toast wants it. */
 export function toNotice(item: NotifyItem): AchievementNotice {
@@ -37,7 +47,15 @@ export function drainNotifyInbox(
     if (userId === undefined || userId === null || !handle) return 0;
     const items = takeInbox(handle, String(userId));
     for (const item of items) socket.emit('ansi-output', noticeBytes(session, toNotice(item)));
-    return items.length;
+    // Once per caller, ever: the first menu after logon of someone who never
+    // opened NOTIFY. Recorded before it is drawn, so a failed draw is not repeated.
+    let offered = 0;
+    if (needsOffer(handle, String(userId))) {
+      markOffered(handle, String(userId), Math.floor(deps.now() / 1000));
+      socket.emit('ansi-output', noticeBytes(session, OFFER_NOTICE));
+      offered = 1;
+    }
+    return items.length + offered;
   } catch (err) {
     console.warn(`[WARN] notify: board notices not drawn: ${(err as Error).message}`);
     return 0;

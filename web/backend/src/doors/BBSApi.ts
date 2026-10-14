@@ -1868,6 +1868,16 @@ console.log(`[BBSApi.executeCommand] Queued command for after door exit: ${comma
   }
 
   /**
+   * Notifications (NOTIFY door): the caller's own choices - catalogue, get/set,
+   * follow, email verification, test. Acts on this session's user only. See
+   * notify/door-api.ts.
+   */
+  notifications(): import('@amiexpress/bbs-door-sdk/formats/notify').DoorNotificationsApi {
+    const { doorNotificationsApi } = require('../notify/door-api');
+    return doorNotificationsApi(this.session);
+  }
+
+  /**
    * Achievements (SP3): the server, through the board. The door gets the
    * answers; the board key stays here. See achievements/door-api.ts.
    */

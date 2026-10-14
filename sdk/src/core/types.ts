@@ -280,6 +280,12 @@ export interface BBSApi {
    * when a row was queued. Optional: an older backend has no such method.
    */
   notify?(type: string, toUser: string, item: { title: string; body: string; url?: string; objectId: string }): boolean;
+  /**
+   * The caller's notification choices (the NOTIFY door's API): catalogue, get/set,
+   * follow, email verification, test. The caller is the session's own user.
+   * Optional: an older backend has no such method.
+   */
+  notifications?(): import('../../formats/notify').DoorNotificationsApi;
   /** Get user by ID */
   getUser(userId: string): Promise<User | null>;
 

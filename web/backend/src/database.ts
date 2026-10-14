@@ -971,6 +971,13 @@ console.log('[+] Added sha256 column to door_catalog');
       this.db.exec(
         fs.readFileSync(path.join(__dirname, 'notify', 'notify.schema.sql'), 'utf-8')
       );
+      // notify_settings.offered_at: the once-only logon offer of the NOTIFY door.
+      {
+        const notifyCols = (this.db.prepare('PRAGMA table_info(notify_settings)').all() as any[]).map(c => c.name);
+        if (!notifyCols.includes('offered_at')) {
+          this.db.exec('ALTER TABLE notify_settings ADD COLUMN offered_at INTEGER');
+        }
+      }
 console.log('[+] door_installs table ensured');
 
         // command needs COLLATE NOCASE (AmigaDOS commands are

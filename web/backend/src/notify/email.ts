@@ -46,7 +46,9 @@ const oneLine = (s: string): string => s.replace(/\s+/g, ' ').trim().slice(0, LI
 /** The event the unsubscribe link switches off: the items' common event, else everything. */
 export function unsubscribeScope(items: readonly NotifyItem[]): string {
   const first = items[0]?.event;
-  return first && items.every((i) => i.event === first) ? first : ALL_EVENTS;
+  // An event outside the catalogue (the Send Test item, a digest) has no Email
+  // cell of its own to switch off, so its link pauses everything.
+  return first && findEvent(first) && items.every((i) => i.event === first) ? first : ALL_EVENTS;
 }
 
 export interface BuiltEmail { subject: string; text: string; scope: string }

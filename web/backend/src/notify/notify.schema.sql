@@ -28,7 +28,8 @@ CREATE TABLE IF NOT EXISTS notify_settings (
   digest_weekday INTEGER,                         -- 0-6 when weekly
   paused         INTEGER NOT NULL DEFAULT 0,
   email_verified TEXT,                            -- the address that was verified
-  email_verified_at INTEGER
+  email_verified_at INTEGER,
+  offered_at     INTEGER                          -- epoch s the logon offer was made or NOTIFY was opened; NULL = never
 );
 
 CREATE TABLE IF NOT EXISTS notify_email_codes (
