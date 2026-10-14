@@ -407,7 +407,7 @@ export function DoorsPage() {
               <div className="mb-6 border-b border-border/40 pb-6">
                 <h3 className="text-lg text-accent mb-1">Listed under W</h3>
                 <p className="text-content-secondary text-sm mb-4">
-                  A door that changes what the board does for the caller can sit in his W settings menu.
+                  A door that changes what the board does for the caller can sit in their W settings menu.
                 </p>
                 <label className="flex items-start gap-2 cursor-pointer">
                   <input

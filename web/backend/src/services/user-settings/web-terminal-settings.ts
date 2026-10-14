@@ -46,7 +46,7 @@ export function webTerminalState(session: BBSSession): WebTerminalState {
   };
 }
 
-/** W row 17: store the caller's modem speed, throttle his socket and tell the terminal. False when the choice is out of range. */
+/** W row 17: store the caller's modem speed, throttle their socket and tell the terminal. False when the choice is out of range. */
 export async function applyModemSpeed(socket: SocketLike, session: BBSSession, choice: number): Promise<boolean> {
   const option = MODEM_OPTIONS[choice];
   if (!Number.isInteger(choice) || !option) return false;

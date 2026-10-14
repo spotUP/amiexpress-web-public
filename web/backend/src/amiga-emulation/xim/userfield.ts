@@ -41,8 +41,8 @@ export function sanitiseFieldValue(raw: string): string {
 
 /**
  * The list a caller was shown for a choice row, taken at `CHOICES n 0` and
- * served until his SET: the answer is a position in THAT list, and the list
- * (a DB read for rows 8 and 9) may change underneath him.
+ * served until their SET: the answer is a position in THAT list, and the list
+ * (a DB read for rows 8 and 9) may change underneath them.
  */
 const shownChoices = new WeakMap<object, { n: number; titles: string[] }>();
 

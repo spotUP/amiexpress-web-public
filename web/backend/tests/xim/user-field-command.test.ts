@@ -102,7 +102,7 @@ test('the sentinel: a SET reaches applyWField exactly once', async () => {
   expect(spy).toHaveBeenCalledTimes(1);
 });
 
-test('the list the caller was shown decides a choice answer, even when the list changes before his SET', async () => {
+test('the list the caller was shown decides a choice answer, even when the list changes before their SET', async () => {
   const wf = require('../../src/services/user-settings/w-fields');
   const s = caller();
   wf.wFieldChoices.mockImplementationOnce(async () => ['Alpha', 'Beta', 'Gamma']);

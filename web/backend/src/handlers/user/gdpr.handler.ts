@@ -199,7 +199,7 @@ export function refuseErasureConfirm(input: string): string | null {
   return input === ERASE_CONFIRM_WORDS ? null : 'Deletion cancelled.';
 }
 
-/** Step two: the caller's password against his stored hash. */
+/** Step two: the caller's password against their stored hash. */
 export async function refuseErasurePassword(user: User | undefined | null, input: string): Promise<string | null> {
   if (!user || !user.passwordHash) return 'No password set on this account. Contact the sysop.';
   let ok = false;
@@ -211,7 +211,7 @@ export async function refuseErasurePassword(user: User | undefined | null, input
   return ok ? null : 'Password incorrect. Deletion cancelled.';
 }
 
-/** Step three: his username, verbatim. */
+/** Step three: their username, verbatim. */
 export function refuseErasureUsername(user: User, input: string): string | null {
   return input === user.username ? null : 'Username did not match. Deletion cancelled.';
 }

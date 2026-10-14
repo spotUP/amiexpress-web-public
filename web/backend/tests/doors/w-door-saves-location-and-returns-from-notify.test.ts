@@ -4,7 +4,7 @@
  * runBbsCommand -> executeDoor -> executeAmigaDoor -> the real binary ->
  * AEW_USERFIELD -> applyWField -> saveAccount -> userFileManager), edits
  * Location with a Swedish 0xF6 letter, and a NOTIFY round trip brings the
- * caller back to W on the row he left (W6 resume record).
+ * caller back to W on the row they left (W6 resume record).
  *
  * NOTIFY is registered with the unrouted type of the dispatch harness: jest
  * cannot import() a TypeScript door by file URL (see
@@ -99,7 +99,7 @@ async function registerBoard(): Promise<void> {
 
 describe('W through the board: save onto user.data and come back from a settings door', () => {
   let userData = '';
-  test('a caller types W, changes his location onto user.data, visits NOTIFY and is back on its row', async () => {
+  test('a caller types W, changes their location onto user.data, visits NOTIFY and is back on its row', async () => {
     const user = newUser();
     // The board's own user.data: tests/setup.ts points the user files at a per-run temp board.
     userData = (userFileManager as any).userDataPath as string;
