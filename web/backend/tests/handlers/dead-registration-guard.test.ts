@@ -75,7 +75,7 @@ describe('dead registrations do not enter the command cache', () => {
   });
 
   it('drops G when the 5D-LogOff directory is gone, so the internal goodbye is reachable again', () => {
-    writeInfo(bbsCmdDir, 'G', ['TYPE=XIM', 'LOCATION=Doors:5D-LogOff/5d!logoff', 'ACCESS=0']);
+    writeInfo(bbsCmdDir, 'G', ['TYPE=XIM', 'LOCATION=Doors:5D-LogOff/5d!logoff']);
 
     const cache = load();
 
@@ -83,7 +83,7 @@ describe('dead registrations do not enter the command cache', () => {
   });
 
   it('says which registration it dropped and where it pointed', () => {
-    writeInfo(bbsCmdDir, 'BR', ['TYPE=XIM', 'LOCATION=Doors:BroadCast/BroadCast', 'ACCESS=0']);
+    writeInfo(bbsCmdDir, 'BR', ['TYPE=XIM', 'LOCATION=Doors:BroadCast/BroadCast']);
 
     load();
 
@@ -99,7 +99,7 @@ describe('dead registrations do not enter the command cache', () => {
     // Requiring the exact file would unregister all of them.
     fs.mkdirSync(path.join(baseDir, 'Doors', 'bbslink'), { recursive: true });
     fs.writeFileSync(path.join(baseDir, 'Doors', 'bbslink', 'index.ts'), 'export {}');
-    writeInfo(bbsCmdDir, 'BBSC', ['TYPE=XIM', 'LOCATION=Doors:bbslink/bbslink', 'ACCESS=0']);
+    writeInfo(bbsCmdDir, 'BBSC', ['TYPE=XIM', 'LOCATION=Doors:bbslink/bbslink']);
 
     const cache = load();
 
@@ -108,7 +108,7 @@ describe('dead registrations do not enter the command cache', () => {
 
   it('keeps a door whose LOCATION is on disk', () => {
     doorFile('Doors/AquaScan/AquaScan.020');
-    writeInfo(bbsCmdDir, 'AQ', ['TYPE=XIM', 'LOCATION=Doors:AquaScan/AquaScan.020', 'ACCESS=0']);
+    writeInfo(bbsCmdDir, 'AQ', ['TYPE=XIM', 'LOCATION=Doors:AquaScan/AquaScan.020']);
 
     const cache = load();
 
@@ -122,7 +122,6 @@ describe('dead registrations do not enter the command cache', () => {
       'TYPE=XIM',
       'LOCATION=Doors:NoSuchDoor/nothing',
       'INTERNAL=G',
-      'ACCESS=0',
     ]);
 
     const cache = load();
@@ -135,7 +134,6 @@ describe('dead registrations do not enter the command cache', () => {
       'TYPE=MCI',
       'LOCATION=Doors:NoSuchDoor/nothing',
       'MCI_TEXT=Hello',
-      'ACCESS=0',
     ]);
 
     const cache = load();
@@ -144,7 +142,7 @@ describe('dead registrations do not enter the command cache', () => {
   });
 
   it('drops a dead SysCmd hook too - PWFAIL fires on every failed password', () => {
-    writeInfo(sysCmdDir, 'PWFAIL', ['TYPE=XIM', 'LOCATION=Doors:AquaPWFail/AquaPWFail', 'ACCESS=0']);
+    writeInfo(sysCmdDir, 'PWFAIL', ['TYPE=XIM', 'LOCATION=Doors:AquaPWFail/AquaPWFail']);
 
     const cache = load();
 
@@ -157,8 +155,8 @@ describe('dead registrations do not enter the command cache', () => {
     // goodbye. A live door in the same board proves the failure is the dead
     // LOCATION and not a broken fixture - it must reach executeDoor.
     doorFile('Doors/AquaScan/AquaScan.020');
-    writeInfo(bbsCmdDir, 'AQ', ['TYPE=XIM', 'LOCATION=Doors:AquaScan/AquaScan.020', 'ACCESS=0']);
-    writeInfo(bbsCmdDir, 'G', ['TYPE=XIM', 'LOCATION=Doors:5D-LogOff/5d!logoff', 'ACCESS=0']);
+    writeInfo(bbsCmdDir, 'AQ', ['TYPE=XIM', 'LOCATION=Doors:AquaScan/AquaScan.020']);
+    writeInfo(bbsCmdDir, 'G', ['TYPE=XIM', 'LOCATION=Doors:5D-LogOff/5d!logoff']);
 
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     const mod = require('../../src/handlers/command-execution.handler');
@@ -183,9 +181,9 @@ describe('dead registrations do not enter the command cache', () => {
     // fail; the global door behind it must now be found instead.
     const confCmdDir = path.join(baseDir, 'Conf1', 'Commands', 'BBSCmd');
     fs.mkdirSync(confCmdDir, { recursive: true });
-    writeInfo(confCmdDir, 'FS', ['TYPE=XIM', 'LOCATION=Doors:GoneDoor/gone', 'ACCESS=0']);
+    writeInfo(confCmdDir, 'FS', ['TYPE=XIM', 'LOCATION=Doors:GoneDoor/gone']);
     doorFile('Doors/FileScan/FileScan');
-    writeInfo(bbsCmdDir, 'FS', ['TYPE=XIM', 'LOCATION=Doors:FileScan/FileScan', 'ACCESS=0']);
+    writeInfo(bbsCmdDir, 'FS', ['TYPE=XIM', 'LOCATION=Doors:FileScan/FileScan']);
 
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     const mod = require('../../src/handlers/command-execution.handler');
