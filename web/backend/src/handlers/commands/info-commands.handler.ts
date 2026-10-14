@@ -10,7 +10,6 @@
 
 import { LoggedOnSubState, BBSState } from '../../constants/bbs-states';
 import { settingsDoorsFor, type SettingsDoorEntry } from './w-settings-doors';
-import { autoLinesFor } from '../../utils/auto-lines.util';
 import { linesCountdown, LINES_PROMPT } from '../../utils/lines-test.util';
 import { getBoardConfig } from '../../services/bbs-config-file.service';
 import { config as appConfig } from '../../config';
@@ -25,7 +24,6 @@ import { sessionColumns } from '../../utils/door-min-columns.util';
 import { wMenuPage, wMenuPrompt, wMenuPageStep } from './w-menu-pager';
 import { ErrorHandler } from '../../utils/error-handling.util';
 import { db } from '../../database';
-import { translationService } from '../../services/TranslationService';
 import { emitText, emitPrompt, emitLine, flushOutput } from '../../utils/output.util';
 import { releaseAnsiBuffer } from '../../utils/ansi-buffer.util';
 import { sessionWantsPetscii, PETSCII_FONT_IS_FIXED } from '../../utils/petscii-session-model';
@@ -34,7 +32,9 @@ import { fontMenuRows, fontForChoice, chooseTerminalFont } from '../../services/
 import bcrypt from 'bcryptjs';
 import { finalizeCommand } from '../../utils/command-response.util';
 import { changeAccount, saveAccount } from '../../services/account.service';
-import { checkIfNameAllowed } from '../../utils/name-allowed.util';
+import {
+  applyWField, wFieldState, wFieldValue, screenTypeChoices, PROTOCOL_CHOICES,
+} from '../../services/user-settings/w-fields';
 
 import type { BBSSession } from '../../index';
 
@@ -308,81 +308,77 @@ function _paintWCommandMenu(socket: any, session: BBSSession): void {
   emitText(socket, '\r\n');
 
   // Option 0: Login Name - express.e:25724-25728
-  if (!checkSecurity(session.user, ACSPermission.EDIT_USER_NAME)) {
+  if (wFieldState(session, 0) === 'disabled') {
     emitText(socket, '\x1b[34m[\x1b[0m  0\x1b[34m]\x1b[31m [DISABLED]\x1b[0m\r\n');
   } else {
-    emitText(socket, wRow('  0', 'LOGIN NAME..............', currentUser.username));
+    emitText(socket, wRow('  0', 'LOGIN NAME..............', wFieldValue(session, 0)));
   }
 
   // Option 1: Email - express.e:25729-25733
-  if (!checkSecurity(session.user, ACSPermission.EDIT_EMAIL)) {
+  if (wFieldState(session, 1) === 'disabled') {
     emitText(socket, '\x1b[34m[\x1b[0m  1\x1b[34m]\x1b[31m [DISABLED]\x1b[0m\r\n');
   } else {
-    emitText(socket, wRow('  1', 'EMAIL ADDRESS...........', currentUser.email || ''));
+    emitText(socket, wRow('  1', 'EMAIL ADDRESS...........', wFieldValue(session, 1)));
   }
 
   // Option 2: Real Name - express.e:25734-25738
-  if (!checkSecurity(session.user, ACSPermission.EDIT_REAL_NAME)) {
+  if (wFieldState(session, 2) === 'disabled') {
     emitText(socket, '\x1b[34m[\x1b[0m  2\x1b[34m]\x1b[31m [DISABLED]\x1b[0m\r\n');
   } else {
-    emitText(socket, wRow('  2', 'REAL NAME...............', currentUser.realname || ''));
+    emitText(socket, wRow('  2', 'REAL NAME...............', wFieldValue(session, 2)));
   }
 
   // Option 3: Internet Name - express.e:25739-25743
-  if (!checkSecurity(session.user, ACSPermission.EDIT_INTERNET_NAME)) {
+  if (wFieldState(session, 3) === 'disabled') {
     emitText(socket, '\x1b[34m[\x1b[0m  3\x1b[34m]\x1b[31m [DISABLED]\x1b[0m\r\n');
   } else {
-    emitText(socket, wRow('  3', 'INTERNET NAME...........', currentUser.internetName || ''));
+    emitText(socket, wRow('  3', 'INTERNET NAME...........', wFieldValue(session, 3)));
   }
 
   // Option 4: Location - express.e:25744-25748
-  if (!checkSecurity(session.user, ACSPermission.EDIT_USER_LOCATION)) {
+  if (wFieldState(session, 4) === 'disabled') {
     emitText(socket, '\x1b[34m[\x1b[0m  4\x1b[34m]\x1b[31m [DISABLED]\x1b[0m\r\n');
   } else {
     // WEB_: express.e's LOCATION; this board asks callers for their group.
-    emitText(socket, wRow('  4', 'GROUP...................', currentUser.location || ''));
+    emitText(socket, wRow('  4', 'GROUP...................', wFieldValue(session, 4)));
   }
 
   // Option 5: Phone - express.e:25749-25753
-  if (!checkSecurity(session.user, ACSPermission.EDIT_PHONE_NUMBER)) {
+  if (wFieldState(session, 5) === 'disabled') {
     emitText(socket, '\x1b[34m[\x1b[0m  5\x1b[34m]\x1b[31m [DISABLED]\x1b[0m\r\n');
   } else {
-    emitText(socket, wRow('  5', 'PHONE NUMBER............', currentUser.phone || ''));
+    emitText(socket, wRow('  5', 'PHONE NUMBER............', wFieldValue(session, 5)));
   }
 
   // Option 6: Password - express.e:25754-25758
-  if (!checkSecurity(session.user, ACSPermission.EDIT_PASSWORD)) {
+  if (wFieldState(session, 6) === 'disabled') {
     emitText(socket, '\x1b[34m[\x1b[0m  6\x1b[34m]\x1b[31m [DISABLED]\x1b[0m\r\n');
   } else {
-    emitText(socket, wRow('  6', 'PASSWORD................', 'ENCRYPTED', '\x1b[36m'));
+    emitText(socket, wRow('  6', 'PASSWORD................', wFieldValue(session, 6), '\x1b[36m'));
   }
 
   // Option 7: Lines Per Screen - express.e:25759-25760
-  const linesPerScreen = currentUser.linesPerScreen || 'Auto';
-  emitText(socket, wRow('  7', 'LINES PER SCREEN........', linesPerScreen.toString()));
+  emitText(socket, wRow('  7', 'LINES PER SCREEN........', wFieldValue(session, 7)));
 
   // Option 8: Computer - express.e:25761-25767
-  emitText(socket, wRow('  8', 'COMPUTER................', currentUser.computer || ''));
+  emitText(socket, wRow('  8', 'COMPUTER................', wFieldValue(session, 8)));
 
   // Option 9: Screen Type - express.e:25768-25774
-  emitText(socket, wRow('  9', 'SCREEN TYPE.............', currentUser.screenType || ''));
+  emitText(socket, wRow('  9', 'SCREEN TYPE.............', wFieldValue(session, 9)));
 
   // Option 10: Screen Clear - express.e:25775-25779
   // express.e:25808-25812 — userFlags AND USER_SCRNCLR (bit 8)
-  emitText(socket, wYesNo(' 10', 'SCREEN CLEAR............', !!((currentUser.userFlags || 0) & 8)));
+  emitText(socket, wYesNo(' 10', 'SCREEN CLEAR............', wFieldValue(session, 10) === 'YES'));
 
   // Option 11: Transfer Protocol - express.e:25780-25790
-  if (!checkSecurity(session.user, ACSPermission.XPR_SEND) && !checkSecurity(session.user, ACSPermission.XPR_RECEIVE)) {
+  if (wFieldState(session, 11) === 'disabled') {
     emitText(socket, '\x1b[34m[\x1b[0m 11\x1b[34m]\x1b[31m [DISABLED]\x1b[0m\r\n');
   } else {
-    const { PROTOCOL_DISPLAY_NAMES } = require('../../types');
-    const userProtocol = currentUser.protocol || 'zmodem';
-    const protocolName = PROTOCOL_DISPLAY_NAMES[userProtocol] || userProtocol.toUpperCase();
-    emitText(socket, wRow(' 11', 'TRANSFER PROTOCOL.......', protocolName));
+    emitText(socket, wRow(' 11', 'TRANSFER PROTOCOL.......', wFieldValue(session, 11)));
   }
 
   // Option 12: Editor Type - express.e:25791-25800
-  if (!checkSecurity(session.user, ACSPermission.FULL_EDIT)) {
+  if (wFieldState(session, 12) === 'disabled') {
     emitText(socket, '\x1b[34m[\x1b[0m 12\x1b[34m]\x1b[31m [DISABLED]\x1b[0m\r\n');
   } else {
     // WEB_: express.e 25829-25838 builds this row for a caller with
@@ -393,43 +389,35 @@ function _paintWCommandMenu(socket: any, session: BBSSession): void {
     // (UserFileManager.editorTypeToInt). `editorType` is a runtime-only
     // number with no column behind it, so reading it here showed PROMPT to
     // everyone whatever they had chosen.
-    const editorName = EDITOR_DISPLAY[editorValue(currentUser)] ?? 'PROMPT';
-
-    emitText(socket, wRow(' 12', 'EDITOR TYPE.............', editorName));
+    emitText(socket, wRow(' 12', 'EDITOR TYPE.............', wFieldValue(session, 12)));
   }
 
   // Option 13: Zoom Type - express.e:25801-25808
-  if (!checkSecurity(session.user, ACSPermission.ZOOM_MAIL)) {
+  if (wFieldState(session, 13) === 'disabled') {
     emitText(socket, '\x1b[34m[\x1b[0m 13\x1b[34m]\x1b[31m [DISABLED]\x1b[0m\r\n');
   } else {
-    const zoomType = currentUser.zoomType || 0;
-    const zoomName = zoomType === 1 ? 'ASCII' : 'QWK';
-
-    emitText(socket, wRow(' 13', 'ZOOM TYPE...............', zoomName));
+    emitText(socket, wRow(' 13', 'ZOOM TYPE...............', wFieldValue(session, 13)));
   }
 
   // Option 14: Available for Chat/OLM - express.e:25809-25816
-  if (!checkSecurity(session.user, ACSPermission.OLM)) {
+  if (wFieldState(session, 14) === 'disabled') {
     emitText(socket, '\x1b[34m[\x1b[0m 14\x1b[34m]\x1b[31m [DISABLED]\x1b[0m\r\n');
   } else {
-    emitText(socket, wYesNo(' 14', 'AVAILABLE FOR CHAT/OLM..', !!currentUser.availableForChat));
+    emitText(socket, wYesNo(' 14', 'AVAILABLE FOR CHAT/OLM..', wFieldValue(session, 14) === 'YES'));
   }
 
   // Option 15: Translator - express.e:25867-25870, no ELSE: nothing when denied
-  if (checkSecurity(session.user, ACSPermission.TRANSLATION)) {
-    emitText(socket, wRow(' 15', 'TRANSLATOR..............', translationService.getUserLanguage(currentUser.id)));
+  if (wFieldState(session, 15) === 'editable') {
+    emitText(socket, wRow(' 15', 'TRANSLATOR..............', wFieldValue(session, 15)));
   }
 
   // Option 16: Background File Check — express.e:25872-25881. Shown only
   // when the node has BGFILECHECK and does not FORCE_BGFILECHECK; otherwise
   // [DISABLED] (25880). Bit is USER_BGFILECHECK from axconsts.e:71.
   {
-    const { UserFlag } = require('../../constants/express-flags');
-    const { userMayToggleBackgroundFileCheck } = require('../../services/background-file-check.service');
-    if (userMayToggleBackgroundFileCheck(session.nodeId || 1)) {
-      const bgfc = (currentUser.userFlags || 0) & UserFlag.BGFILECHECK;
+    if (wFieldState(session, 16) === 'editable') {
       // express.e:25875 [32mYES[0m / express.e:25877 [37mNO[0m
-      emitText(socket, wYesNo(' 16', 'BACKGROUND FILE CHECK...', !!bgfc));
+      emitText(socket, wYesNo(' 16', 'BACKGROUND FILE CHECK...', wFieldValue(session, 16) === 'YES'));
     } else {
       emitText(socket, '\x1b[34m[\x1b[0m 16\x1b[34m]\x1b[31m [DISABLED]\x1b[0m\r\n');
     }
@@ -532,9 +520,6 @@ setEnvStat(session, EnvStat.STATS);
 /**
  * Handle W option selection input (express.e:25832)
  */
-/** W 11's choices, in the order they are numbered (xprTitle). */
-const PROTOCOL_CHOICES = ['zmodem', 'ymodem', 'xmodem-1k', 'xmodem-crc', 'xmodem', 'punter', 'websocket'] as const;
-
 const CHOOSE_PROTOCOL = '\r\nChoose protocol: ';
 
 /**
@@ -688,10 +673,8 @@ export async function handleWOptionSelectInput(socket: any, session: BBSSession,
       break;
 
     case 10: // Toggle Screen Clear — express.e:25993: userFlags EOR USER_SCRNCLR (bit 8)
-      { const SCRNCLR = 8;
-        session.user.userFlags = (session.user.userFlags || 0) ^ SCRNCLR;
-        await changeAccount(session, { userFlags: session.user.userFlags });
-        _displayWCommandMenu(socket, session); }
+      await applyWField(session, 10, '');
+      _displayWCommandMenu(socket, session);
       break;
 
     case 11: // Edit Transfer Protocol - express.e:25995-26002
@@ -716,10 +699,7 @@ export async function handleWOptionSelectInput(socket: any, session: BBSSession,
       // UPDATE named a column that does not exist, SQLite threw, and the W
       // command answered "[ERROR] Command processing failed" - reported from
       // the board on 2026-09-01. The setting had never persisted either.
-      const nextEditor = EDITOR_ORDER[(EDITOR_ORDER.indexOf(editorValue(session.user)) + 1) % EDITOR_ORDER.length];
-      session.user.editor = nextEditor;
-      session.user.editorType = EDITOR_ORDER.indexOf(nextEditor);
-      await changeAccount(session, { editor: nextEditor });
+      await applyWField(session, 12, '');
       _displayWCommandMenu(socket, session);
       break;
 
@@ -728,9 +708,7 @@ export async function handleWOptionSelectInput(socket: any, session: BBSSession,
         _displayWCommandMenu(socket, session);
         return;
       }
-      const currentZoom = session.user.zoomType || 0;
-      session.user.zoomType = (currentZoom + 1) & 1; // Toggle between 0 and 1
-      await changeAccount(session, { zoomType: session.user.zoomType });
+      await applyWField(session, 13, '');
       _displayWCommandMenu(socket, session);
       break;
 
@@ -739,8 +717,7 @@ export async function handleWOptionSelectInput(socket: any, session: BBSSession,
         _displayWCommandMenu(socket, session);
         return;
       }
-      session.user.availableForChat = !session.user.availableForChat;
-      await changeAccount(session, { availableForChat: session.user.availableForChat });
+      await applyWField(session, 14, '');
       _displayWCommandMenu(socket, session);
       break;
 
@@ -760,15 +737,8 @@ export async function handleWOptionSelectInput(socket: any, session: BBSSession,
     case 16: // Toggle Background File Check — express.e:26083-26087
       // express.e:26085-26086: the Eor of USER_BGFILECHECK happens only when
       // the node has BGFILECHECK and does not FORCE_BGFILECHECK.
-      {
-        const { UserFlag } = require('../../constants/express-flags');
-        const { userMayToggleBackgroundFileCheck } = require('../../services/background-file-check.service');
-        if (userMayToggleBackgroundFileCheck(session.nodeId || 1)) {
-          session.user.userFlags = (session.user.userFlags || 0) ^ UserFlag.BGFILECHECK;
-          await changeAccount(session, { userFlags: session.user.userFlags });
-        }
-        _displayWCommandMenu(socket, session);
-      }
+      await applyWField(session, 16, '');
+      _displayWCommandMenu(socket, session);
       break;
 
     case 17: // WEB_: MODERN_* — modem emulation speed; no express.e:25712-26092 counterpart
@@ -871,37 +841,17 @@ const W_NAME_ROWS = {
 
 async function wEditAName(socket: any, session: BBSSession, row: keyof typeof W_NAME_ROWS): Promise<void> {
   const { lineInput } = require('../../utils/await-input');
-  const { checkForAst, findUserFromName, useWildcards } = require('../message/msg-names');
   const spec = W_NAME_ROWS[row];
-  const wildcards = useWildcards(session);
   const current = row === 0 ? session.user.username : row === 2 ? session.user.realname : session.user.internetName;
   for (;;) {
     emitText(socket, spec.prompt);
     const str: string = await lineInput(socket, session, spec.maxLen, String(current || '').slice(0, spec.keep));
-    const same = row === 0 ? session.user.username : session.user.realname;
-    if (str.toLowerCase() === String(same || '').toLowerCase()) return;
-    if (row === 0) {
-      const refused = checkIfNameAllowed(str);
-      if (refused) { emitText(socket, `${refused}\r\n\r\n`); continue; }
-    }
-    emitText(socket, '\r\nChecking for duplicate name...');
-    if (checkForAst(str, wildcards)) {
-      emitText(socket, 'No wildcards allowed in a name.\r\n\r\n');
-      continue;
-    }
-    if (findUserFromName(1, spec.type, str, wildcards) !== 0) {
-      emitText(socket, 'Already in use!, try another.\r\n\r\n');
-      continue;
-    }
+    const outcome = await applyWField(session, row, str, {
+      onChecking: () => emitText(socket, '\r\nChecking for duplicate name...'),
+    });
+    if (outcome.kind === 'unchanged' || outcome.kind === 'denied') return;
+    if (outcome.kind === 'refused') { emitText(socket, `${outcome.refusal}\r\n\r\n`); continue; }
     emitText(socket, 'Ok!\r\n');
-    if (row === 0) {
-      await changeAccount(session, { username: str });
-      await saveAccount(session.user);
-    } else if (row === 2) {
-      await changeAccount(session, { realname: str });
-    } else {
-      await changeAccount(session, { internetName: str });
-    }
     return;
   }
 }
@@ -919,8 +869,7 @@ export async function handleWEditEmailInput(socket: any, session: BBSSession, in
     return;
   }
 
-  session.user.email = trimmed;
-  await changeAccount(session, { email: trimmed });
+  await applyWField(session, 1, trimmed);
 
   _displayWCommandMenu(socket, session);
   session.subState = LoggedOnSubState.W_OPTION_SELECT;
@@ -939,8 +888,7 @@ export async function handleWEditLocationInput(socket: any, session: BBSSession,
     return;
   }
 
-  session.user.location = trimmed;
-  await changeAccount(session, { location: trimmed });
+  await applyWField(session, 4, trimmed);
 
   _displayWCommandMenu(socket, session);
   session.subState = LoggedOnSubState.W_OPTION_SELECT;
@@ -959,8 +907,7 @@ export async function handleWEditPhoneInput(socket: any, session: BBSSession, in
     return;
   }
 
-  session.user.phone = trimmed;
-  await changeAccount(session, { phone: trimmed });
+  await applyWField(session, 5, trimmed);
 
   _displayWCommandMenu(socket, session);
   session.subState = LoggedOnSubState.W_OPTION_SELECT;
@@ -1073,8 +1020,8 @@ export async function handleWEditLinesInput(socket: any, session: BBSSession, in
 
   // Val (11311): leading digits, else 0. Out of 0-255 the test fails and
   // case 7's REPEAT runs it again - no error text (11313, 26034-26037).
-  const lines = parseInt(trimmed, 10) || 0;
-  if (lines < 0 || lines > 255) {
+  const outcome = await applyWField(session, 7, trimmed);
+  if (outcome.kind === 'again') {
     emitText(socket, linesCountdown() + LINES_PROMPT);
     return;
   }
@@ -1083,9 +1030,6 @@ export async function handleWEditLinesInput(socket: any, session: BBSSession, in
   // line test - not null. A stored null read back as the default 23 (one row
   // short), so the runtime W command had the same off-by-one the signup Auto
   // did (the sysop, 2026-09-16). See auto-lines.util.
-  session.user.linesPerScreen = lines > 0 ? lines : autoLinesFor(session);
-  await changeAccount(session, { linesPerScreen: session.user.linesPerScreen });
-
   _displayWCommandMenu(socket, session);
   session.subState = LoggedOnSubState.W_OPTION_SELECT;
 }
@@ -1094,24 +1038,6 @@ export async function handleWEditLinesInput(socket: any, session: BBSSession, in
  * Display numbered computer list and prompt (chooseComputer - express.e:11319-11346)
  * Two-column layout: \d[2]> \l\s[34]
  */
-/**
- * The three editors, in the order W cycles them, spelled the way the `editor`
- * column and the disk record spell them (UserFileManager.editorTypeToInt).
- */
-const EDITOR_ORDER: string[] = ['Prompt', 'Line', 'Full'];
-const EDITOR_DISPLAY: Record<string, string> = {
-  Prompt: 'PROMPT',
-  Line: 'LINE EDITOR',
-  Full: 'FULLSCREEN EDITOR',
-};
-
-/** A user's editor as one of EDITOR_ORDER, whatever the record carries. */
-function editorValue(user: { editor?: string; editorType?: number }): string {
-  if (user.editor && EDITOR_ORDER.includes(user.editor)) return user.editor;
-  // A session that only carries the runtime number still answers correctly.
-  return EDITOR_ORDER[user.editorType ?? 0] ?? EDITOR_ORDER[0];
-}
-
 async function _displayComputerList(socket: any, session: BBSSession): Promise<void> {
   // The one list and layout sign-up uses too (utils/computer-types.util).
   const { computerTypeChoices, computerTypeRows } = require('../../utils/computer-types.util');
@@ -1132,26 +1058,10 @@ async function _displayComputerList(socket: any, session: BBSSession): Promise<v
  * Single-column layout: \d> \l\s
  */
 async function _displayScreenTypeList(socket: any, session: BBSSession): Promise<void> {
-  let choices: string[] = [];
-
-  // ScreenTypes.info first, for the same reason as the computer list above:
-  // W offered "1> Commodore PETSCII  2> Web" on a board whose file and admin
-  // page both list four, because only those two had database rows.
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const { ScreenConfigService } = require('../../services/config-services/screen-config.service');
-    const records = await new ScreenConfigService(db).getAllScreenTypes();
-    if (Array.isArray(records) && records.length > 0) {
-      choices = records
-        .filter((c: any) => c.enabled !== false)
-        .sort((a: any, b: any) => a.screen_number - b.screen_number)
-        .map((c: any) => c.screen_title || c.screen_type);
-    }
-  } catch (_e) { /* fall through to defaults */ }
-
-  if (choices.length === 0) {
-    choices = ['ANSI', 'ASCII', 'Amiga ANSI', 'VT100', 'RIP'];
-  }
+  // ScreenTypes.info first (w-fields.screenTypeChoices): W offered
+  // "1> Commodore PETSCII  2> Web" on a board whose file and admin page both
+  // list four, because only those two had database rows.
+  const choices = await screenTypeChoices();
 
   // express.e:11353-11356 - FOR stat:=1 TO screenTypeTitle.count() single-column
   for (let i = 0; i < choices.length; i++) {
@@ -1181,19 +1091,14 @@ export async function handleWEditComputerInput(socket: any, session: BBSSession,
     return;
   }
 
-  const choices: string[] = session.tempData?.computerChoices || [];
-  const num = parseInt(trimmed, 10);
-
-  if (isNaN(num) || num < 1 || num > choices.length) {
+  const outcome = await applyWField(session, 8, trimmed);
+  if (outcome.kind === 'again') {
     // Invalid - re-prompt loop (express.e:11342 IF((stat <= 0) OR (stat > computerTypes.count())) THEN JUMP jLoop6)
     await _displayComputerList(socket, session);
     return;
   }
 
-  // express.e:11344 loggedOnUser.secBulletin:=stat-1
-  const selectedName = choices[num - 1];
-  session.user.computer = selectedName;
-  await changeAccount(session, { computer: selectedName, computerIndex: num - 1 });
+  // express.e:11344 loggedOnUser.secBulletin:=stat-1 (applyWField stores name and index)
 
   if (session.tempData) delete session.tempData.computerChoices;
 
@@ -1216,19 +1121,14 @@ export async function handleWEditScreentypeInput(socket: any, session: BBSSessio
     return;
   }
 
-  const choices: string[] = session.tempData?.screenTypeChoices || [];
-  const num = parseInt(trimmed, 10);
-
-  if (isNaN(num) || num < 1 || num > choices.length) {
+  const outcome = await applyWField(session, 9, trimmed);
+  if (outcome.kind === 'again') {
     // Invalid - re-prompt loop (express.e:11364 IF((stat <= 0) OR (stat > screenTypeTitle.count())) THEN JUMP stLoop5)
     await _displayScreenTypeList(socket, session);
     return;
   }
 
-  // express.e:11366 loggedOnUser.screenType:=stat-1
-  const selectedName = choices[num - 1];
-  session.user.screenType = selectedName;
-  await changeAccount(session, { screenType: selectedName });
+  // express.e:11366 loggedOnUser.screenType:=stat-1 (applyWField stores it)
 
   if (session.tempData) delete session.tempData.screenTypeChoices;
 
@@ -1250,15 +1150,11 @@ export async function handleWEditProtocolInput(socket: any, session: BBSSession,
   }
 
   // express.e:11383-11386: Val; outside 1..count asks again, no text.
-  const selectedProtocol = PROTOCOL_CHOICES[(parseInt(trimmed, 10) || 0) - 1];
-  if (!selectedProtocol) {
+  const outcome = await applyWField(session, 11, trimmed);
+  if (outcome.kind === 'again') {
     emitText(socket, CHOOSE_PROTOCOL);
     return;
   }
-
-  // Update user protocol
-  session.user.protocol = selectedProtocol;
-  await changeAccount(session, { protocol: selectedProtocol });
 
   _displayWCommandMenu(socket, session);
   session.subState = LoggedOnSubState.W_OPTION_SELECT;
