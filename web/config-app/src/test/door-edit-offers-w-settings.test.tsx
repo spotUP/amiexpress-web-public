@@ -45,4 +45,32 @@ describe('a door listed under W', () => {
     const [, written] = updateInfoFile.mock.calls[0] as unknown as [string, Array<{ key: string; value: string }>];
     expect(written.find((t) => t.key === 'SETTINGS_SECTION')?.value).toBe('Communication');
   });
+
+  it('a section already on the .info is edited, not duplicated', async () => {
+    state.tooltypes = [...state.tooltypes,
+      { key: 'SETTINGS_SECTION', value: 'Appearance', commented: false, originalLine: 'SETTINGS_SECTION=Appearance' }];
+    const user = userEvent.setup();
+    await renderPage();
+    await user.click(await screen.findByLabelText('Edit GWall'));
+    const field = await screen.findByLabelText('Section');
+    await waitFor(() => expect((field as HTMLInputElement).value).toBe('Appearance'));
+    await user.clear(field);
+    await user.type(field, 'Communication');
+    await user.click(screen.getByRole('button', { name: 'Update Door' }));
+    await waitFor(() => expect(updateInfoFile).toHaveBeenCalled());
+    const [, written] = updateInfoFile.mock.calls[0] as unknown as [string, Array<{ key: string; value: string }>];
+    expect(written.filter((t) => t.key === 'SETTINGS_SECTION')).toEqual([expect.objectContaining({ value: 'Communication' })]);
+  });
+
+  it.each([['YES', true], ['', true], ['TRUE', true], ['1', true], ['NO', false]])(
+    'SETTINGS=%j is read the way the board reads it (ticked: %s)',
+    async (value, ticked) => {
+      state.tooltypes = [{ key: 'SETTINGS', value, commented: false, originalLine: `SETTINGS=${value}` }];
+      const user = userEvent.setup();
+      await renderPage();
+      await user.click(await screen.findByLabelText('Edit GWall'));
+      await waitFor(() =>
+        expect((screen.getByLabelText('Show in the W settings menu') as HTMLInputElement).checked).toBe(ticked));
+    },
+  );
 });

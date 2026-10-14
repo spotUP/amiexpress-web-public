@@ -51,13 +51,15 @@ function toolType(door: SettingsDoorShape, key: string): string | undefined {
 }
 
 /**
- * A tooltype the .info sets to YES.
+ * A tooltype the .info sets to YES. Exported because the admin's Doors dialog
+ * (config-app, alias @bbs/settings-doors) ticks its box from THIS function:
+ * one parse, so a hand-written `SETTINGS=` is live on the board AND ticked.
  *
  * A BOOLEAN TOOLTYPE CANNOT DEFAULT TO TRUE on this board - a key that is
  * absent means "not declared", and every existing .info is absent - so this
  * reads the positive only: a door is in the W menu when it says it is.
  */
-function declaresSettings(door: SettingsDoorShape): boolean {
+export function declaresSettings(door: SettingsDoorShape): boolean {
   const raw = toolType(door, 'SETTINGS');
   if (raw === undefined) return false;
   const value = raw.trim().toUpperCase();

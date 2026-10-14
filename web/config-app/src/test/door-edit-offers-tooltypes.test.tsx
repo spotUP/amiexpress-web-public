@@ -14,65 +14,28 @@
  */
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import type { ReactNode } from 'react';
 
-const DOORS = [
-  {
-    id: 7, door_name: 'GWall', door_command: 'GWALL', door_type: 'BBSCMD',
-    door_path: 'Doors/GWall/GWall', door_args: '', working_directory: '', priority: 'SAME',
-    door_options: [], runtime_env: 'AMIGA_68K', min_security_level: 30,
-    max_security_level: 255, required_flags: '', time_limit: 0, memory_limit: 0,
-    title: 'GWall', description: 'Global wall', category: 'Comms',
-    enabled: true, has_settings: false, created_at: new Date(), updated_at: new Date(),
-  },
-];
+vi.mock('../api/client', async () => (await import('./door-edit-harness')).apiClientMock());
+vi.mock('../contexts/NotificationContext', async () => (await import('./door-edit-harness')).notificationMock());
+
+const { renderPage, state, getInfoFile } = await import('./door-edit-harness');
 
 const TOOLTYPES = [
   { key: 'LOCATION', value: 'DOORS:GWall/GWall', commented: false, originalLine: 'LOCATION=DOORS:GWall/GWall' },
   { key: 'C64_ADAPT', value: '40', commented: false, originalLine: 'C64_ADAPT=40' },
 ];
 
-const getInfoFile = vi.fn(async (_path: string) => ({ success: true, data: { tooltypes: TOOLTYPES } }));
-
-vi.mock('../api/client', () => ({
-  apiClient: {
-    getDoors: vi.fn(async () => ({ success: true, data: DOORS })),
-    getInfoFile: (path: string) => getInfoFile(path),
-    updateInfoFile: vi.fn(async (_path: string, _tooltypes: unknown) => ({ success: true, data: {} })),
-    getDoorSettings: vi.fn(async (_command: string) => ({
-      success: true,
-      data: { manifest: { command: 'GWALL', settings: [] }, values: {}, secretsSet: [] as string[] },
-    })),
-    saveDoorSettings: vi.fn(async (_command: string, _values: Record<string, unknown>) => ({ success: true, data: {} })),
-    updateDoor: vi.fn(async (_id: number, _updates: unknown) => ({ success: true, data: {} })),
-  },
-}));
-
-vi.mock('../contexts/NotificationContext', () => ({
-  useNotification: () => ({ showSuccess: vi.fn(), showError: vi.fn(), confirm: vi.fn(async () => false) }),
-  NotificationProvider: ({ children }: { children: ReactNode }) => children,
-}));
-
-const { DoorsPage } = await import('../pages/DoorsPage');
-
-function renderPage() {
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return render(
-    <QueryClientProvider client={client}>
-      <DoorsPage />
-    </QueryClientProvider>
-  );
-}
-
 describe('editing a door', () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => {
+    vi.clearAllMocks();
+    state.tooltypes = TOOLTYPES;
+  });
 
   it('offers the way to the tooltypes, and names the flag a sysop is looking for', async () => {
     const user = userEvent.setup();
-    renderPage();
+    await renderPage();
 
     await user.click(await screen.findByLabelText('Edit GWall'));
 
@@ -84,7 +47,7 @@ describe('editing a door', () => {
 
   it('lands on the existing tooltype table, loaded from the door.s own .info', async () => {
     const user = userEvent.setup();
-    renderPage();
+    await renderPage();
 
     await user.click(await screen.findByLabelText('Edit GWall'));
     await user.click(await screen.findByRole('button', { name: /edit tooltypes/i }));

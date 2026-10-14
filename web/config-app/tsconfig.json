@@ -35,6 +35,7 @@
       "@amiexpress/bbs-door-sdk/formats/magazine": [
         "../../sdk/formats/magazine"
       ],
+      "@bbs/settings-doors": ["../backend/src/handlers/commands/w-settings-doors"],
       "@bbs/screens/*": ["../backend/src/screens/*"],
       "@bbs/config-services/*": ["../backend/src/services/config-services/*"]
     }

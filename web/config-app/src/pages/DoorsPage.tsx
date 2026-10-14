@@ -4,6 +4,7 @@ import { DoorSettingsForm } from '../components/DoorSettingsForm';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Edit2, Trash2, Plus, X, FileCode, Save, Power, PowerOff, Search, Upload, SlidersHorizontal } from 'lucide-react';
 import { apiClient } from '../api/client';
+import { declaresSettings } from '@bbs/settings-doors';
 import type { Door } from '../types';
 import { useNotification } from '../contexts/NotificationContext';
 import { DataTable, type DataTableColumn } from '../components/ui/DataTable';
@@ -62,8 +63,9 @@ const C64_FLAG_TOOLTYPES: Array<{ key: string; label: string; help: string }> = 
 
 /**
  * The W settings menu's declaration (handlers/commands/w-settings-doors.ts).
- * SETTINGS is read as present-and-truthy there ('' / YES / TRUE / 1), so the
- * checkbox writes 1 through setTruthyFlag like the C64 switches.
+ * The box is ticked by the board's own parse (declaresSettings: '' / YES /
+ * TRUE / 1, so a hand-written `SETTINGS=` is ticked too) - one reader, not a
+ * mirror. Ticking writes 1 through setTruthyFlag like the C64 switches.
  */
 const W_SETTINGS_TEXT_TOOLTYPES: Array<{ key: string; label: string; help: string; placeholder: string }> = [
   { key: 'SETTINGS_LABEL', label: 'Row label', help: "What the caller's W row says.", placeholder: "blank = the door's description" },
@@ -411,7 +413,7 @@ export function DoorsPage() {
                   <input
                     type="checkbox"
                     aria-label="Show in the W settings menu"
-                    checked={isTruthyFlagSet('SETTINGS')}
+                    checked={isCommandFlagSet('SETTINGS') && declaresSettings({ toolTypes: { SETTINGS: getCommandFlagValue('SETTINGS') } })}
                     onChange={(e) => setTruthyFlag('SETTINGS', e.target.checked)}
                     className="mt-0.5 h-4 w-4 accent-accent"
                   />
