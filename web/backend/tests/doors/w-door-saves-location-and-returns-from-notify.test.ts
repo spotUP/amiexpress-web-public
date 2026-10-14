@@ -135,7 +135,8 @@ describe('W through the board: save onto user.data and come back from a settings
     const record = fs.readFileSync(userData).subarray(0, 232);
     expect(Array.from(record.subarray(40, 49))).toEqual([0x47, 0xf6, 0x74, 0x65, 0x62, 0x6f, 0x72, 0x67, 0x00]);
     // 2. NOTIFY's registration ran, then W again, on the Notifications row.
-    expect(doorDropFileManager.createAllDropFiles).toHaveBeenCalled();
+    // Three launches, in order: W, NOTIFY (the returned command), W again (the resume). W alone would be 1.
+    expect(doorDropFileManager.createAllDropFiles).toHaveBeenCalledTimes(3);
     expect(takeSpy.mock.results.filter(r => r.value !== null)).toHaveLength(1);
     const second = out().slice(out().lastIndexOf('USER CONFIGURATION'));
     expect(second).toMatch(/\x1b\[(\d+);\d+H>>[\s\S]{0,80}?\x1b\[\1;\d+H[^\x1b]*Notifications/);
@@ -163,6 +164,7 @@ describe('W through the board: save onto user.data and come back from a settings
     // OTHER ran and exited without handing back a command: its exit discarded
     // the armed record, so the tail never reopened W (one frame, no hub call).
     expect(doorDropFileManager.createAllDropFiles).toHaveBeenCalled();
+    // settingsResumeOf carries the discard proof: the armed record is gone after OTHER's exit.
     expect(resume.settingsResumeOf(session)).toBeUndefined();
     expect(out().split('USER CONFIGURATION').length - 1).toBe(1);
     expect(hub).not.toHaveBeenCalled();
