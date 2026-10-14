@@ -70,6 +70,38 @@ const MAGAZINE = MAGAZINE_DIR;
  */
 export const NEVER_ARTICLE_MAX_AGE_DAYS = 3;
 
+/** How long the id of a purged story is remembered, so a feed that still carries it cannot bring it back. */
+export const TOMBSTONE_DAYS = 30;
+const TOMBSTONE_FILE = 'purged.json';
+
+interface Tombstone { id: string; purgedAt: string }
+
+function readTombstoneRecords(root: string): Tombstone[] {
+  try {
+    const parsed = JSON.parse(fs.readFileSync(path.join(root, MAGAZINE, TOMBSTONE_FILE), 'utf8'));
+    return Array.isArray(parsed)
+      ? parsed.filter((t): t is Tombstone => typeof t?.id === 'string' && Number.isFinite(Date.parse(t?.purgedAt)))
+      : [];
+  } catch {
+    return [];
+  }
+}
+
+/** The ids purged within the last TOMBSTONE_DAYS. */
+export function readTombstones(root: string, nowMs: number): Set<string> {
+  const keep = nowMs - TOMBSTONE_DAYS * 24 * 3600 * 1000;
+  return new Set(readTombstoneRecords(root).filter((t) => Date.parse(t.purgedAt) > keep).map((t) => t.id));
+}
+
+/** Remember purged ids; records older than TOMBSTONE_DAYS are dropped as the file is rewritten. */
+function writeTombstones(root: string, ids: string[], nowMs: number): void {
+  const keep = nowMs - TOMBSTONE_DAYS * 24 * 3600 * 1000;
+  const fresh = readTombstoneRecords(root).filter((t) => Date.parse(t.purgedAt) > keep && !ids.includes(t.id));
+  const all = [...fresh, ...ids.map((id) => ({ id, purgedAt: new Date(nowMs).toISOString() }))];
+  fs.mkdirSync(path.join(root, MAGAZINE), { recursive: true });
+  writeAtomic(path.join(root, MAGAZINE, TOMBSTONE_FILE), JSON.stringify(all));
+}
+
 export function writeAtomic(target: string, contents: string): void {
   const tmp = `${target}.tmp-${process.pid}`;
   try {
@@ -110,6 +142,8 @@ export function mergeIncoming(
   items: IncomingItem[],
   nowIso: string,
   log: (l: string) => void = () => {},
+  /** Ids of stories purged recently (see `readTombstones`): never added again. */
+  tombstoned: ReadonlySet<string> = new Set(),
 ): { stories: Story[]; added: number; duplicates: number; rejected: number } {
   const byId = new Map(existing.map((s) => [s.id, { ...s }]));
   let added = 0;
@@ -119,6 +153,12 @@ export function mergeIncoming(
   for (const item of items) {
     const headline = (item.headline ?? '').trim();
     if (!headline) {
+      rejected++;
+      continue;
+    }
+    // Purged within the last TOMBSTONE_DAYS: the feed still carries it, but it
+    // never became an article, so it is not re-added (and so not re-fetched).
+    if (tombstoned.has(storyId(headline))) {
       rejected++;
       continue;
     }
@@ -340,6 +380,7 @@ export function purgeNeverArticles(root: string, nowMs: number, log: (l: string)
       gone.push(story.id);
     } catch { /* already gone */ }
   }
+  if (gone.length) writeTombstones(root, gone, nowMs);
   if (gone.length) log(`[magazine] purged ${gone.length} stories that never became articles in ${NEVER_ARTICLE_MAX_AGE_DAYS} days`);
   return gone;
 }
@@ -381,7 +422,7 @@ export function refreshMagazine(deps: MagazineDeps): { added: number; duplicates
   }
 
   const existing = healSummaries(loadStories(path.join(magDir, MAGAZINE_STORIES_DIR), deps.log));
-  const merged = mergeIncoming(existing, items, nowIso, deps.log);
+  const merged = mergeIncoming(existing, items, nowIso, deps.log, readTombstones(root, deps.now().getTime()));
   for (const story of merged.stories) {
     writeAtomic(path.join(magDir, MAGAZINE_STORIES_DIR, `${story.id}.json`), JSON.stringify(story, null, 2));
   }

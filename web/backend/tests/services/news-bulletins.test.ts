@@ -174,9 +174,9 @@ describe('the underground magazine', () => {
     const dir = mkBoard();
     const out = await refreshNewsBulletins(feedDeps(dir, RSS));
     expect(out).toBe('written');
-    const raw = fs.readFileSync(path.join(dir, 'Bulletins', 'bull13.txt'), 'latin1');
+    const raw = fs.readFileSync(path.join(dir, 'Bulletins', 'bull14.txt'), 'latin1');
     expect(raw).toContain('First headline');
-    expect(raw).toContain('0x00sec.org');
+    expect(raw).toContain('crackmes.one');
     expect(raw).toContain('\r\n');
     fs.rmSync(dir, { recursive: true, force: true });
   });
@@ -201,7 +201,7 @@ describe('the underground magazine', () => {
 
   it('a 304 keeps the file instead of rewriting it', async () => {
     const dir = mkBoard();
-    fs.writeFileSync(path.join(dir, 'Bulletins', 'bull13.txt'), 'yesterday\r\n', 'latin1');
+    fs.writeFileSync(path.join(dir, 'Bulletins', 'bull14.txt'), 'yesterday\r\n', 'latin1');
     const deps: NewsBulletinDeps = {
       baseDir: () => dir,
       fetchPage: async () => null,
@@ -210,7 +210,7 @@ describe('the underground magazine', () => {
       log: () => {},
     };
     await refreshNewsBulletins(deps);
-    expect(fs.readFileSync(path.join(dir, 'Bulletins', 'bull13.txt'), 'latin1')).toBe('yesterday\r\n');
+    expect(fs.readFileSync(path.join(dir, 'Bulletins', 'bull14.txt'), 'latin1')).toBe('yesterday\r\n');
     fs.rmSync(dir, { recursive: true, force: true });
   });
 

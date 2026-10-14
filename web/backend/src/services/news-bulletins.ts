@@ -75,6 +75,15 @@ export interface NewsBulletinSource {
 const MINUTE = 60 * 1000;
 
 /**
+ * Reddit throttles unauthenticated datacenter clients per IP: measured from the
+ * live host, 11 of 12 subreddit feeds answered 429. So each subreddit is asked
+ * rarely (every three hours) and the host gate spaces the twelve requests a
+ * minute apart; on a 429 the host back-off below stops the rest of the tick.
+ */
+export const REDDIT_HOST_GAP_MS = 60 * 1000;
+export const REDDIT_INTERVAL_MS = 3 * 60 * MINUTE;
+
+/**
  * The board's own numbers. MultiTop owns 1-6, the Requests door owns 9, the
  * checker door writes 11, and 7/8 are SVT. A source aimed at one of these is a
  * bug, not a conflict to resolve at runtime, so it is refused at the door.
@@ -86,17 +95,15 @@ export const NEWS_BULLETIN_SOURCES: NewsBulletinSource[] = [
   { kind: 'teletext', page: '300', file: 'bull8.txt', title: 'SVT Text sports headlines', source: 'SVT Text via texttv.nu (unofficial mirror)' },
 
   // --- the magazine. 13 upward: Bulls.CFG reserves 13-20, the files do not exist.
-  { kind: 'rss', url: 'https://0x00sec.org/feed', file: 'bull13.txt', title: '0x00SEC - reversing and exploit research', source: '0x00sec.org', hostGapMs: 5000 },
   { kind: 'rss', url: 'https://crackmes.one/rss', file: 'bull14.txt', title: 'Crackmes - new challenges to reverse', source: 'crackmes.one', hostGapMs: 5000 },
   { kind: 'rss', url: 'https://gitlab.com/exploit-database/exploitdb/-/commits/main.atom', file: 'bull15.txt', title: 'Exploit-DB - fresh public exploits', source: 'Exploit Database (OffSec)', hostGapMs: 5000 },
-  { kind: 'rss', url: 'https://www.openwall.com/lists/oss-security/', file: 'bull16.txt', title: 'oss-security - the open wall', source: 'Openwall oss-security (no feed; index scrape)', hostGapMs: 15000 },
-  { kind: 'rss', url: 'https://packetstormsecurity.com/feeds/files/latest.xml', file: 'bull17.txt', title: 'Packet Storm - exploits and advisories', source: 'Packet Storm Security', hostGapMs: 10000 },
+  { kind: 'rss', url: 'https://seclists.org/rss/oss-sec.rss', file: 'bull16.txt', title: 'oss-security - the open wall', source: 'Openwall oss-security', hostGapMs: 15000 },
 
   { kind: 'rss', url: 'https://feeds.feedburner.com/TheHackersNews', file: 'bull18.txt', title: 'The Hacker News', source: 'thehackernews.com', hostGapMs: 5000 },
   { kind: 'rss', url: 'https://www.bleepingcomputer.com/feed/', file: 'bull19.txt', title: 'BleepingComputer', source: 'bleepingcomputer.com', hostGapMs: 5000 },
   { kind: 'rss', url: 'https://krebsonsecurity.com/feed/', file: 'bull20.txt', title: 'Krebs on Security', source: 'krebsonsecurity.com', hostGapMs: 5000 },
   { kind: 'rss', url: 'https://www.schneier.com/feed/atom/', file: 'bull21.txt', title: 'Schneier on Security', source: 'schneier.com', hostGapMs: 5000 },
-  { kind: 'rss', url: 'https://googleprojectzero.blogspot.com/feeds/posts/default', file: 'bull22.txt', title: 'Project Zero - deep bug research', source: 'Google Project Zero', hostGapMs: 5000, intervalMs: 6 * 60 * MINUTE },
+  { kind: 'rss', url: 'https://projectzero.google/feed.xml', file: 'bull22.txt', title: 'Project Zero - deep bug research', source: 'Google Project Zero', hostGapMs: 5000, intervalMs: 6 * 60 * MINUTE },
   { kind: 'rss', url: 'https://feeds.arstechnica.com/arstechnica/index', file: 'bull23.txt', title: 'Ars Technica', source: 'arstechnica.com', hostGapMs: 5000 },
   { kind: 'json', url: 'https://hn.algolia.com/api/v1/search_by_date?tags=story&hitsPerPage=20', file: 'bull24.txt', title: 'Hacker News - newest stories', source: 'news.ycombinator.com via Algolia', hostGapMs: 5000, intervalMs: 5 * MINUTE, listPath: 'hits', urlPath: 'url', idPath: 'objectID', fallbackUrl: 'https://news.ycombinator.com/item?id={id}', fields: [{ label: '', path: 'title' }, { label: 'points', path: 'points' }] },
 
@@ -111,24 +118,19 @@ export const NEWS_BULLETIN_SOURCES: NewsBulletinSource[] = [
   { kind: 'rss', url: 'https://rave-archive.com/feed/', file: 'bull31.txt', title: 'Rave Archive UK - pirate radio and jungle', source: 'rave-archive.com', hostGapMs: 5000 },
   { kind: 'rss', url: 'https://acidtechno.co.uk/feed', file: 'bull32.txt', title: 'Acid Techno', source: 'acidtechno.co.uk', hostGapMs: 5000 },
 
-  { kind: 'rss', url: 'https://www.reddit.com/r/Amiga/.rss', file: 'bull33.txt', title: 'r/Amiga', source: 'reddit.com', hostGapMs: 12000, intervalMs: 30 * MINUTE },
-  { kind: 'rss', url: 'https://www.reddit.com/r/reverseengineering/.rss', file: 'bull34.txt', title: 'r/reverseengineering', source: 'reddit.com', hostGapMs: 12000, intervalMs: 30 * MINUTE },
-  { kind: 'rss', url: 'https://www.reddit.com/r/demoscene/.rss', file: 'bull35.txt', title: 'r/demoscene', source: 'reddit.com', hostGapMs: 12000, intervalMs: 30 * MINUTE },
-  { kind: 'rss', url: 'https://www.reddit.com/r/phreaking/.rss', file: 'bull36.txt', title: 'r/phreaking', source: 'reddit.com', hostGapMs: 12000, intervalMs: 30 * MINUTE },
-  { kind: 'rss', url: 'https://www.reddit.com/r/sdr/.rss', file: 'bull37.txt', title: 'r/SDR - software defined radio', source: 'reddit.com', hostGapMs: 12000, intervalMs: 30 * MINUTE },
-  { kind: 'rss', url: 'https://www.reddit.com/r/radionerds/.rss', file: 'bull38.txt', title: 'r/radionerds', source: 'reddit.com', hostGapMs: 12000, intervalMs: 30 * MINUTE },
-  { kind: 'rss', url: 'https://www.reddit.com/r/pirateradio/.rss', file: 'bull39.txt', title: 'r/PirateRadio', source: 'reddit.com', hostGapMs: 12000, intervalMs: 30 * MINUTE },
-  { kind: 'rss', url: 'https://www.reddit.com/r/ansi/.rss', file: 'bull40.txt', title: 'r/ANSI - text art', source: 'reddit.com', hostGapMs: 12000, intervalMs: 30 * MINUTE },
-  { kind: 'rss', url: 'https://www.reddit.com/r/modmusic/.rss', file: 'bull41.txt', title: 'r/modmusic - tracker files', source: 'reddit.com', hostGapMs: 12000, intervalMs: 30 * MINUTE },
-  { kind: 'rss', url: 'https://www.reddit.com/r/synthdiy/.rss', file: 'bull42.txt', title: 'r/synthdiy - build your own synths', source: 'reddit.com', hostGapMs: 12000, intervalMs: 30 * MINUTE },
-  { kind: 'rss', url: 'https://www.reddit.com/r/freetekno/.rss', file: 'bull43.txt', title: 'r/freetekno - free parties and sound systems', source: 'reddit.com', hostGapMs: 12000, intervalMs: 30 * MINUTE },
-  { kind: 'rss', url: 'https://www.reddit.com/r/urbanexploration/.rss', file: 'bull44.txt', title: 'r/urbanexploration - urbex', source: 'reddit.com', hostGapMs: 12000, intervalMs: 30 * MINUTE },
+  { kind: 'rss', url: 'https://www.reddit.com/r/Amiga/.rss', file: 'bull33.txt', title: 'r/Amiga', source: 'reddit.com', hostGapMs: REDDIT_HOST_GAP_MS, intervalMs: REDDIT_INTERVAL_MS },
+  { kind: 'rss', url: 'https://www.reddit.com/r/reverseengineering/.rss', file: 'bull34.txt', title: 'r/reverseengineering', source: 'reddit.com', hostGapMs: REDDIT_HOST_GAP_MS, intervalMs: REDDIT_INTERVAL_MS },
+  { kind: 'rss', url: 'https://www.reddit.com/r/demoscene/.rss', file: 'bull35.txt', title: 'r/demoscene', source: 'reddit.com', hostGapMs: REDDIT_HOST_GAP_MS, intervalMs: REDDIT_INTERVAL_MS },
+  { kind: 'rss', url: 'https://www.reddit.com/r/phreaking/.rss', file: 'bull36.txt', title: 'r/phreaking', source: 'reddit.com', hostGapMs: REDDIT_HOST_GAP_MS, intervalMs: REDDIT_INTERVAL_MS },
+  { kind: 'rss', url: 'https://www.reddit.com/r/sdr/.rss', file: 'bull37.txt', title: 'r/SDR - software defined radio', source: 'reddit.com', hostGapMs: REDDIT_HOST_GAP_MS, intervalMs: REDDIT_INTERVAL_MS },
+  { kind: 'rss', url: 'https://www.reddit.com/r/radionerds/.rss', file: 'bull38.txt', title: 'r/radionerds', source: 'reddit.com', hostGapMs: REDDIT_HOST_GAP_MS, intervalMs: REDDIT_INTERVAL_MS },
+  { kind: 'rss', url: 'https://www.reddit.com/r/pirateradio/.rss', file: 'bull39.txt', title: 'r/PirateRadio', source: 'reddit.com', hostGapMs: REDDIT_HOST_GAP_MS, intervalMs: REDDIT_INTERVAL_MS },
+  { kind: 'rss', url: 'https://www.reddit.com/r/ansi/.rss', file: 'bull40.txt', title: 'r/ANSI - text art', source: 'reddit.com', hostGapMs: REDDIT_HOST_GAP_MS, intervalMs: REDDIT_INTERVAL_MS },
+  { kind: 'rss', url: 'https://www.reddit.com/r/modmusic/.rss', file: 'bull41.txt', title: 'r/modmusic - tracker files', source: 'reddit.com', hostGapMs: REDDIT_HOST_GAP_MS, intervalMs: REDDIT_INTERVAL_MS },
+  { kind: 'rss', url: 'https://www.reddit.com/r/synthdiy/.rss', file: 'bull42.txt', title: 'r/synthdiy - build your own synths', source: 'reddit.com', hostGapMs: REDDIT_HOST_GAP_MS, intervalMs: REDDIT_INTERVAL_MS },
+  { kind: 'rss', url: 'https://www.reddit.com/r/freetekno/.rss', file: 'bull43.txt', title: 'r/freetekno - free parties and sound systems', source: 'reddit.com', hostGapMs: REDDIT_HOST_GAP_MS, intervalMs: REDDIT_INTERVAL_MS },
+  { kind: 'rss', url: 'https://www.reddit.com/r/urbanexploration/.rss', file: 'bull44.txt', title: 'r/urbanexploration - urbex', source: 'reddit.com', hostGapMs: REDDIT_HOST_GAP_MS, intervalMs: REDDIT_INTERVAL_MS },
 
-  { kind: 'rss', url: 'https://www.textfiles.com/blog.xml', file: 'bull45.txt', title: 'Jason Scott - preserving old text', source: 'textfiles.com', hostGapMs: 15000, intervalMs: 6 * 60 * MINUTE },
-  { kind: 'rss', url: 'https://phrack.org/feed/', file: 'bull46.txt', title: 'Phrack - the hacker magazine', source: 'phrack.org', hostGapMs: 15000, intervalMs: 6 * 60 * MINUTE },
-  { kind: 'rss', url: 'https://www.kelacyber.com/feed/rss', file: 'bull47.txt', title: 'KELA - cybercrime research', source: 'kelacyber.com', hostGapMs: 10000 },
-  { kind: 'rss', url: 'https://spycloud.com/blog/feed/', file: 'bull48.txt', title: 'SpyCloud - cybercrime insights', source: 'spycloud.com', hostGapMs: 10000 },
-  { kind: 'rss', url: 'https://socradar.io/blog/rss', file: 'bull49.txt', title: 'SOCRadar - threat intelligence', source: 'socradar.io', hostGapMs: 10000 },
 ];
 
 export interface NewsBulletinDeps {
@@ -152,6 +154,8 @@ export interface FeedFetchOptions {
 export interface FeedFetchResult {
   body: string | null;
   notModified?: boolean;
+  /** HTTP status when the fetch was refused (429 = throttled, host on hold). */
+  status?: number;
   etag?: string;
   lastModified?: string;
   /**
@@ -708,7 +712,58 @@ export async function passHostGate(url: string, gapMs: number): Promise<void> {
   hostGate.set(host, Date.now() + gapMs);
 }
 
-async function fetchFeedUrl(url: string, opts: FeedFetchOptions): Promise<FeedFetchResult> {
+/**
+ * THE HOST BACK-OFF.
+ *
+ * A 429 means the host has decided this IP asks too often; asking again on the
+ * next tick (or for the next of twelve subreddits) only lengthens the penalty.
+ * So a 429 puts the whole HOST on hold: `Retry-After` when the host says how
+ * long, else 10 minutes doubling per consecutive 429 up to 6 hours. A request
+ * to a held host is not made at all. One success clears the strikes.
+ */
+export const BACKOFF_BASE_MS = 10 * MINUTE;
+export const BACKOFF_MAX_MS = 6 * 60 * MINUTE;
+const hostBackoff = new Map<string, { until: number; strikes: number }>();
+
+/** `Retry-After` as ms: delta-seconds or an HTTP date. NaN when absent or unreadable. */
+export function parseRetryAfter(value: unknown, nowMs: number): number {
+  if (typeof value !== 'string' && typeof value !== 'number') return NaN;
+  const raw = String(value).trim();
+  if (/^\d+$/.test(raw)) return parseInt(raw, 10) * 1000;
+  const t = Date.parse(raw);
+  return Number.isNaN(t) ? NaN : Math.max(0, t - nowMs);
+}
+
+/** How long to hold a host after its `strikes`-th consecutive 429. */
+export function backoffDelayMs(strikes: number, retryAfterMs: number): number {
+  const exp = Math.min(BACKOFF_BASE_MS * 2 ** Math.max(0, strikes - 1), BACKOFF_MAX_MS);
+  return Number.isFinite(retryAfterMs) ? Math.min(Math.max(retryAfterMs, 0), BACKOFF_MAX_MS) : exp;
+}
+
+/** Record a 429 for the URL's host; returns when it may be asked again. */
+export function noteHostThrottled(url: string, retryAfter: unknown, nowMs = Date.now()): number {
+  const host = hostOf(url);
+  const strikes = (hostBackoff.get(host)?.strikes ?? 0) + 1;
+  const until = nowMs + backoffDelayMs(strikes, parseRetryAfter(retryAfter, nowMs));
+  hostBackoff.set(host, { until, strikes });
+  return until;
+}
+
+/** When the URL's host may be asked again, or 0 when it is not on hold. */
+export function hostHeldUntil(url: string, nowMs = Date.now()): number {
+  const b = hostBackoff.get(hostOf(url));
+  return b && b.until > nowMs ? b.until : 0;
+}
+
+export function resetHostBackoff(): void {
+  hostBackoff.clear();
+}
+
+export async function fetchFeedUrl(url: string, opts: FeedFetchOptions): Promise<FeedFetchResult> {
+  const heldUntil = hostHeldUntil(url);
+  if (heldUntil) {
+    return { body: null, error: `host on hold after HTTP 429 until ${new Date(heldUntil).toISOString()}; not asked`, status: 429 };
+  }
   await passHostGate(url, opts.hostGapMs ?? 1000);
   try {
     const headers: Record<string, string> = {
@@ -719,6 +774,7 @@ async function fetchFeedUrl(url: string, opts: FeedFetchOptions): Promise<FeedFe
     if (opts.lastModified) headers['If-Modified-Since'] = opts.lastModified;
     const res = await axios.get(url, { timeout: FETCH_TIMEOUT_MS, responseType: 'text', transformResponse: [(d) => d], headers });
     if (res.status === 304) return { body: null, notModified: true, etag: opts.etag, lastModified: opts.lastModified };
+    hostBackoff.delete(hostOf(url));
     return {
       body: typeof res.data === 'string' ? res.data : JSON.stringify(res.data),
       etag: res.headers?.etag,
@@ -727,6 +783,10 @@ async function fetchFeedUrl(url: string, opts: FeedFetchOptions): Promise<FeedFe
   } catch (err: any) {
     // 304 can arrive as a thrown axios error on some versions; treat it as not-modified.
     if (err?.response?.status === 304) return { body: null, notModified: true };
+    if (err?.response?.status === 429) {
+      const until = noteHostThrottled(url, err.response.headers?.['retry-after']);
+      return { body: null, error: `HTTP 429; host on hold until ${new Date(until).toISOString()}`, status: 429 };
+    }
     return { body: null, error: err?.message ?? String(err) };
   }
 }

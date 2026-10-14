@@ -396,6 +396,31 @@ describe('only articles get a page', () => {
     fs.rmSync(dir, { recursive: true, force: true });
   });
 
+  it('a purged story that its feed still carries is not added again, and not for 30 days only', () => {
+    const t0 = new Date(NOW - 4 * DAY).toISOString();
+    const headline = 'Skaven ships a teaser nobody could read';
+    const dir = board([{ ...teaser('t1'), id: storyId(headline), headline, firstSeen: t0 }]);
+    fs.mkdirSync(path.join(dir, 'Magazine', 'incoming'), { recursive: true });
+    let now = NOW;
+    const deps = { rootDir: () => dir, now: () => new Date(now), log: () => {} };
+    const feedAgain = () => fs.writeFileSync(
+      path.join(dir, 'Magazine', 'incoming', 'bull99.json'),
+      JSON.stringify([{ headline, summary: 'Still in the feed.', source: 'x.org', url: 'https://x.org/a' }]),
+    );
+    refreshMagazine(deps);                       // purges it, writes the tombstone
+    expect(storyFiles(dir)).toEqual([]);
+    feedAgain();
+    now = NOW + 10 * DAY;
+    const r = refreshMagazine(deps);             // the feed still has it
+    expect(r.added).toBe(0);
+    expect(r.rejected).toBe(1);
+    expect(storyFiles(dir)).toEqual([]);
+    feedAgain();
+    now = NOW + 31 * DAY;                        // tombstone expired: it is news again
+    expect(refreshMagazine(deps).added).toBe(1);
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
   it('a pending story (fresh, no text yet) is kept but unpaged until its body lands', () => {
     const fresh = new Date(NOW - DAY).toISOString();
     const dir = board([{ ...teaser('p1'), firstSeen: fresh }]);

@@ -12,11 +12,9 @@ BULLETINS
 #9    Requests
 #10   Board Changes
 
-#13    0x00SEC - reversing and exploit research
 #14    Crackmes - new challenges to reverse
 #15    Exploit-DB - fresh public exploits
 #16    oss-security - the open wall
-#17    Packet Storm - exploits and advisories
 #18    The Hacker News
 #19    BleepingComputer
 #20    Krebs on Security
@@ -44,8 +42,3 @@ BULLETINS
 #42    r/synthdiy - build your own synths
 #43    r/freetekno - free parties and sound systems
 #44    r/urbanexploration - urbex
-#45    Jason Scott - preserving old text
-#46    Phrack - the hacker magazine
-#47    KELA - cybercrime research
-#48    SpyCloud - cybercrime insights
-#49    SOCRadar - threat intelligence
