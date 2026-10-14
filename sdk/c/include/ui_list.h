@@ -25,6 +25,14 @@ extern "C" {
 /** Where the rows come from: `index` is 0-based, the return is the text. */
 typedef const char *(*ui_list_row_fn)(void *context, int index);
 
+/**
+ * How a row's text is inked in two segments: `*head` up to column `split`
+ * of the text, `*tail` from there on. Return 0 for no split (the whole row is
+ * in `*head`). Only unselected rows ask; the selected row keeps the
+ * selection's colours across its whole width.
+ */
+typedef int (*ui_list_style_fn)(void *context, int index, int *head, int *tail);
+
 typedef struct {
     /** Where the box sits, 1-based like every ANSI coordinate. */
     int top, left, height, width;
@@ -64,6 +72,19 @@ typedef struct {
     int follow_extra;
     ui_list_row_fn row;
     void *context;
+    /** Optional per-segment inks for an unselected row; NULL = all in `ink`. */
+    ui_list_style_fn style;
+    /**
+     * The background every cell of the list is drawn on, or -1 for the
+     * terminal's own (what ui_list_init sets). A door that paints its ground
+     * sets this so the rows, the caret blanks and the scroll bar sit on it.
+     */
+    int ground;
+    /**
+     * Non-zero with `caret`: the selected row is ALSO a bar in
+     * selected_fg/selected_bg across its whole width, caret included.
+     */
+    int caret_bar;
     /**
      * What is on the glass right now, so a cursor move repaints two rows
      * instead of the whole box. -1 until ui_list_draw() has run once.

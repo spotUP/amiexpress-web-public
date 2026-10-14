@@ -195,6 +195,11 @@ void ansi_flush(ansi_buf *b, ansi_sink_fn sink, void *context);
 /* Clears the whole screen and homes the cursor. */
 void ansi_clear(ansi_buf *b);
 
+/* Clears the whole screen to a GROUND colour and homes the cursor: the erase
+ * takes the current background, so the colours are set first. A negative
+ * `bg` (or a terminal whose cells carry no background) is a plain ansi_clear. */
+void ansi_clear_ground(ansi_buf *b, int fg, int bg);
+
 /* Moves the cursor. Rows and columns are 1-based, as in the escape itself. */
 void ansi_goto(ansi_buf *b, int row, int col);
 

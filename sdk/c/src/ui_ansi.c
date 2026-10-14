@@ -112,6 +112,14 @@ void ansi_clear(ansi_buf *b)
     b->last_reverse = 0;
 }
 
+void ansi_clear_ground(ansi_buf *b, int fg, int bg)
+{
+    if (bg < 0 || !b->cell_backgrounds) { ansi_clear(b); return; }
+    ansi_clear(b);
+    ansi_color(b, fg, bg, 0);
+    put_str(b, "\033[2J\033[H");
+}
+
 void ansi_goto(ansi_buf *b, int row, int col)
 {
     put_str(b, "\033[");

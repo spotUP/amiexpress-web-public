@@ -494,6 +494,84 @@ static void follow_extra_keeps_rows_below_the_selection_visible(void)
     printf("  [OK] follow_extra keeps the value line under the selection in the window\n");
 }
 
+static const char *label_value_row(void *context, int index)
+{
+    (void)context; (void)index;
+    return "Label  value";
+}
+
+static int label_value_style(void *context, int index, int *head, int *tail)
+{
+    (void)context;
+    *head = ANSI_RED;
+    *tail = ANSI_GREEN;
+    return index == 0 ? 7 : 0;      /* row 0 splits after "Label  ", the others are one piece */
+}
+
+static void a_row_can_carry_a_label_ink_and_a_value_ink(void)
+{
+    ui_list list = a_list(3, 10);
+    static ansi_buf b;
+    const char *head, *value;
+
+    list.borders = 0;
+    list.ground = ANSI_BLUE;
+    list.row = label_value_row;
+    list.style = label_value_style;
+    list.selected = 2;
+    list.drawn_selected = -1;
+    ansi_begin(&b, frame, (long)sizeof(frame));
+    ui_list_draw(&list, &b);
+    frame[b.len] = '\0';
+    head = strstr(frame, "31;44m");           /* the head ink, on the ground, before the label */
+    value = strstr(frame, "Label  ");
+    assert(head != 0 && value != 0 && head < value);
+    assert(strstr(frame, "32;44m") != 0);      /* the tail ink, on the ground */
+    assert(strstr(frame, "32;44m") > value && strstr(frame, "32;44m") < strstr(frame, "value"));
+    /* row 1 is one piece: only row 0 ever switches to the tail ink */
+    assert(strstr(strstr(frame, "32;44m") + 1, "32;44m") == 0);
+    printf("  [OK] a row can carry a label ink and a value ink, on the list's ground\n");
+}
+
+static void a_caret_bar_fills_the_whole_selected_row(void)
+{
+    ui_list list = a_list(3, 10);
+    static ansi_buf b;
+    const char *row;
+
+    list.borders = 0;
+    list.caret = ">>";
+    list.caret_bar = 1;
+    list.selected_fg = ANSI_WHITE;
+    list.selected_bg = ANSI_MAGENTA;
+    ui_list_select(&list, 1);
+    ansi_begin(&b, frame, (long)sizeof(frame));
+    ui_list_draw(&list, &b);
+    frame[b.len] = '\0';
+    row = strstr(frame, "45m");
+    assert(row != 0 && row < strstr(frame, ">>"));
+    printf("  [OK] a caret bar paints the selection colours under the caret too\n");
+}
+
+static void a_cursor_move_leaves_the_scroll_bar_alone(void)
+{
+    ui_list list = a_list(50, 10);
+    static ansi_buf b;
+
+    list.borders = 0;
+    ui_list_select(&list, 0);
+    ansi_begin(&b, frame, (long)sizeof(frame));
+    ui_list_draw(&list, &b);
+    frame[b.len] = '\0';
+    assert(strchr(frame, '#') != 0);            /* the full draw paints the thumb */
+    ui_list_move(&list, 1);
+    ansi_begin(&b, frame, (long)sizeof(frame));
+    ui_list_draw_changed(&list, &b, 0);
+    frame[b.len] = '\0';
+    assert(strchr(frame, '#') == 0 && strchr(frame, '|') == 0);   /* a move at the same offset cannot move it */
+    printf("  [OK] a cursor move does not rewrite the scroll bar\n");
+}
+
 int main(void)
 {
     printf("ui_list\n");
@@ -517,6 +595,9 @@ int main(void)
     one_changed_row_repaints_only_that_row();
     page_follow_scrolls_a_page_not_a_row();
     follow_extra_keeps_rows_below_the_selection_visible();
+    a_row_can_carry_a_label_ink_and_a_value_ink();
+    a_caret_bar_fills_the_whole_selected_row();
+    a_cursor_move_leaves_the_scroll_bar_alone();
     printf("ui_list: all passed\n");
     return 0;
 }

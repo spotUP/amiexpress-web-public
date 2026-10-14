@@ -30,6 +30,7 @@ void ui_list_init(ui_list *list)
     list->drawn_selected = -1;
     list->drawn_offset = -1;
     list->borders = 1;
+    list->ground = -1;
 }
 
 int ui_list_visible_rows(const ui_list *list)
@@ -112,7 +113,7 @@ static void thumb_for(const ui_list *list, int visible, int *start, int *size)
 
 /* One row of the box, exactly as the full draw paints it. */
 static void draw_row(ui_list *list, ansi_buf *b, int row, int inner_left,
-                     int inner_width, int scrolls, int thumb_start, int thumb_size)
+                     int inner_width, int scrolls, int thumb_start, int thumb_size, int bar)
 {
         int index = list->offset + row;
     int screen_row = (list->borders ? list->top + 1 : list->top) + row;
@@ -127,10 +128,15 @@ static void draw_row(ui_list *list, ansi_buf *b, int row, int inner_left,
     /* The selected row is a filled bar, not just coloured text: a
        highlight that stops at the end of the word leaves the eye
        hunting for where the selection is. */
-    if (chosen && list->caret) {
+    if (chosen && list->caret && list->caret_bar) {
+        /* No separate fill: the caret and the padded text below cover the row once. */
+        ansi_color(b, list->selected_fg, list->selected_bg, 1);
+        ansi_text_raw(b, screen_row, inner_left, list->caret,
+                      (int) strlen(list->caret));
+    } else if (chosen && list->caret) {
     /* A caret, and the row in the selection's ink beside it. No
            bar: the caret IS the mark. */
-        ansi_color(b, list->ink, -1, 1);
+        ansi_color(b, list->ink, list->ground, 1);
         ansi_text_raw(b, screen_row, inner_left, list->caret,
                       (int) strlen(list->caret));
     } else if (chosen) {
@@ -146,7 +152,7 @@ static void draw_row(ui_list *list, ansi_buf *b, int row, int inner_left,
            which is what blessed draws - `style.item` carries a colour
            and no bg. Painting the ground explicitly made every row a
            filled band in the C door and none in the TypeScript. */
-        ansi_color(b, list->ink, -1, 0);
+        ansi_color(b, list->ink, list->ground, 0);
     }
 
     /* ansi_text pads to the width, so a shorter row overwrites what was
@@ -176,13 +182,33 @@ static void draw_row(ui_list *list, ansi_buf *b, int row, int inner_left,
             ansi_text_raw(b, screen_row, inner_left, blanks, n);
         }
 
-        ansi_text(b, screen_row, inner_left + lead, text,
-                  inner_width - lead);
+        {
+            int head = list->ink, tail = list->ink, split = 0;
+            if (!chosen && list->style && index < list->count)
+                split = list->style(list->context, index, &head, &tail);
+            if (!chosen && list->style) {
+                if (split > 0 && split < (int) strlen(text) && split < inner_width - lead) {
+                    ansi_color(b, head, list->ground, 0);
+                    ansi_text_raw(b, screen_row, inner_left + lead, text, split);
+                    ansi_color(b, tail, list->ground, 0);
+                    ansi_text(b, screen_row, inner_left + lead + split, text + split,
+                              inner_width - lead - split);
+                } else {
+                    ansi_color(b, head, list->ground, 0);
+                    ansi_text(b, screen_row, inner_left + lead, text, inner_width - lead);
+                }
+            } else {
+                ansi_text(b, screen_row, inner_left + lead, text, inner_width - lead);
+            }
+        }
     }
 
-    if (scrolls) {
+    /* The thumb depends on the window and the count only: a repaint at the same
+       offset leaves it as it is, and rewriting it was ~40 bytes a row (colour,
+       address, glyph) for a cell that cannot have changed. */
+    if (scrolls && bar) {
     int on_thumb = (row >= thumb_start) && (row < thumb_start + thumb_size);
-        ansi_color(b, list->chrome, ANSI_BLACK, 0);
+        ansi_color(b, list->chrome, list->ground >= 0 ? list->ground : ANSI_BLACK, 0);
         ansi_text_raw(b, screen_row, inner_left + inner_width,
                       on_thumb ? "#" : "|", 1);
     }
@@ -217,12 +243,12 @@ void ui_list_draw(ui_list *list, ansi_buf *b)
     if (scrolls) thumb_for(list, visible, &thumb_start, &thumb_size);
 
     for (row = 0; row < visible; row++) {
-        draw_row(list, b, row, inner_left, inner_width, scrolls, thumb_start, thumb_size);
+        draw_row(list, b, row, inner_left, inner_width, scrolls, thumb_start, thumb_size, 1);
     }
 
     list->drawn_selected = list->selected;
     list->drawn_offset = list->offset;
-    ansi_color(b, list->ink, -1, 0);
+    ansi_color(b, list->ink, list->ground, 0);
 }
 
 static int geometry(const ui_list *list, int *inner_left, int *inner_width,
@@ -263,12 +289,12 @@ void ui_list_draw_changed(ui_list *list, ansi_buf *b, int rows_changed)
     was = list->drawn_selected - list->offset;
     now = list->selected - list->offset;
     if (was >= 0 && was < visible) {
-        draw_row(list, b, was, inner_left, inner_width, scrolls, thumb_start, thumb_size);
+        draw_row(list, b, was, inner_left, inner_width, scrolls, thumb_start, thumb_size, 0);
     }
     if (now >= 0 && now < visible) {
-        draw_row(list, b, now, inner_left, inner_width, scrolls, thumb_start, thumb_size);
+        draw_row(list, b, now, inner_left, inner_width, scrolls, thumb_start, thumb_size, 0);
     }
-    ansi_color(b, list->ink, -1, 0);
+    ansi_color(b, list->ink, list->ground, 0);
 
     list->drawn_selected = list->selected;
 }
@@ -285,6 +311,6 @@ void ui_list_draw_row(ui_list *list, ansi_buf *b, int index)
     visible = geometry(list, &inner_left, &inner_width, &scrolls, &thumb_start, &thumb_size);
     row = index - list->offset;
     if (row < 0 || row >= visible) return;
-    draw_row(list, b, row, inner_left, inner_width, scrolls, thumb_start, thumb_size);
-    ansi_color(b, list->ink, -1, 0);
+    draw_row(list, b, row, inner_left, inner_width, scrolls, thumb_start, thumb_size, 0);
+    ansi_color(b, list->ink, list->ground, 0);
 }
