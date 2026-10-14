@@ -22,7 +22,7 @@ const CONFIG_APP = path.join(REPO, 'web', 'config-app', 'src');
 /** Every path the config-builder stage copies into the image, repo-relative. */
 function stageCopies(): string[] {
   const dockerfile = fs.readFileSync(path.join(REPO, 'Dockerfile'), 'utf8');
-  const start = dockerfile.indexOf('FROM node:20-alpine AS config-builder');
+  const start = dockerfile.search(/^FROM \S+ AS config-builder$/m);
   const end = dockerfile.indexOf('FROM ', start + 1);
   expect(start).toBeGreaterThan(-1);
 
@@ -176,7 +176,7 @@ describe('the backend image stage', () => {
     if (importers.length === 0) return;
 
     const dockerfile = fs.readFileSync(path.join(REPO, 'Dockerfile'), 'utf8');
-    const stage = dockerfile.slice(dockerfile.indexOf('FROM node:20-alpine AS backend-builder'));
+    const stage = dockerfile.slice(dockerfile.search(/^FROM \S+ AS backend-builder$/m));
     // Anchor on the RUN line: the words "npm ci" also appear in the comment
     // that explains why the copy has to come first.
     const beforeInstall = stage.slice(0, stage.indexOf('RUN npm ci'));

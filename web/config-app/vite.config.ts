@@ -54,7 +54,7 @@ export default defineConfig({
       // Which doors the W menu lists is ONE parse (declaresSettings): the admin's
       // "Listed under W" box reads the tooltype the way the board does. The module
       // is pure - no imports at all.
-      '@bbs/settings-doors': path.resolve(__dirname, '../backend/src/handlers/commands/w-settings-doors'),
+      '@bbs/settings-doors': path.resolve(__dirname, '../backend/src/handlers/commands/w-settings-doors.ts'),
       '@bbs/screens': path.resolve(__dirname, '../backend/src/screens'),
       // Same rule, same reason: which ACS file serves a level is express.e's
       // (findAcsLevel, express.e:3025), and the admin has to apply it in a

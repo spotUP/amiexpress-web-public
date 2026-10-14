@@ -90,6 +90,7 @@ COPY sdk/engines/ui/ansi-editor ./sdk/engines/ui/ansi-editor
 COPY sdk/petscii ./sdk/petscii
 COPY web/backend/src/screens ./web/backend/src/screens
 COPY web/backend/src/services/config-services ./web/backend/src/services/config-services
+COPY web/backend/src/handlers/commands/w-settings-doors.ts ./web/backend/src/handlers/commands/w-settings-doors.ts
 # ...and the terminal package, BUILT, from its own stage - source for the two
 # things the admin aliases into it (`@amiexpress/terminal/rip`, the RIP
 # renderer the caller's terminal draws with) and `dist` for the `file:` package
