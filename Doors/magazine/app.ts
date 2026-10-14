@@ -33,8 +33,20 @@ import {
   searchModal,
   sparklineText,
 } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
-import { DESK_LABEL, MAGAZINE_TITLE, frontLead, frontMove, frontToggle, isArticle, type Desk, type MagazineIndexEntry, type Story } from '@amiexpress/bbs-door-sdk/formats/magazine';
+import { DESK_LABEL, FRONT_PAGE_LABEL, MAGAZINE_TITLE, frontLead, frontMove, frontToggle, isArticle, type Desk, type MagazineIndexEntry, type Story } from '@amiexpress/bbs-door-sdk/formats/magazine';
 import { createScrollText } from '@amiexpress/bbs-door-sdk';
+import {
+  BANNER_MAX_ROWS,
+  BANNER_MAX_ROWS_40,
+  SECTION_ART,
+  artKindFor,
+  artRowText,
+  artRows,
+  loadArt,
+  overrideArtDir,
+  shippedArtDir,
+  type ArtSources,
+} from './art';
 import {
   editFront,
   isSysopCaller,
@@ -88,6 +100,12 @@ const SIGNAL_DAYS = 8;
 const GLITCH_DELAY_MS = 450;
 const GLITCH_HOLD_MS = 160;
 const DIGIT_COMMIT_MS = 1500;
+/** The title screen waits this long for a key, then the reader opens by itself. */
+const TITLE_MS = 6000;
+/** The goodbye is a glimpse: a key or this long, then the call ends. */
+const GOODBYE_MS = 1500;
+/** The mark after an article is small. */
+const END_MARK_MAX_ROWS = 3;
 
 export { MAGAZINE_TITLE };
 
@@ -157,7 +175,12 @@ type View =
 
 export interface Reader {
   screen: any;
-  layout: MagLayout;
+  /** The layout now: it changes with the banner each view carries. */
+  readonly layout: MagLayout;
+  /** The plain text of the banner above the panel now ([] for none). */
+  bannerText(): string[];
+  /** The plain text of the full-screen art on top of everything ([] when none is up). */
+  overlayText(): string[];
   /** Resolves when the caller leaves. */
   done: Promise<void>;
   /** Feed a key as the terminal would: `press('down')`, `press('c', 'c')`. */
@@ -175,7 +198,7 @@ export interface Reader {
   /** The kind of view on screen. */
   viewKind(): View['kind'];
   /** What actually ran: sentinels for the tests that prove the effects are wired. */
-  stats(): { glitches: number; tickerSteps: number; intervals: number };
+  stats(): { glitches: number; tickerSteps: number; intervals: number; banners: number; titles: number };
   stop(): void;
 }
 
@@ -189,7 +212,12 @@ function readEdition(index: readonly MagazineIndexEntry[]): string {
   return latest.slice(0, 10);
 }
 
-export async function startReader(session: DoorSession): Promise<Reader> {
+export interface ReaderOptions {
+  /** Where the shipped placeholder art is; null for none. Default: the door's own art/ directory. */
+  shippedArtDir?: string | null;
+}
+
+export async function startReader(session: DoorSession, options: ReaderOptions = {}): Promise<Reader> {
   const { bbs, storage } = session;
   const theme: Theme = bbs?.getTheme ? bbs.getTheme() : (themeById('uprough-neon') ?? UPROUGH_NEON);
   const t = theme.tokens;
@@ -219,7 +247,20 @@ export async function startReader(session: DoorSession): Promise<Reader> {
   const screen = createScreen(bbs, { title: MAGAZINE_TITLE }) as any;
   const width = (screen.width as number) || 80;
   const height = (screen.height as number) || 24;
-  const layout = buildLayout(width, height, { ticker: showTicker });
+  let layout = buildLayout(width, height, { ticker: showTicker });
+  // Which alphabet this caller reads: the session knows (createScreen asks it too).
+  const petscii = typeof bbs?.isPetsciiMode === 'function' && bbs.isPetsciiMode() === true;
+  const artSources: ArtSources = {
+    overrideDir: overrideArtDir(magazineRoot(__dirname)),
+    shippedDir: options.shippedArtDir === undefined ? shippedArtDir() : options.shippedArtDir,
+  };
+  const artKind = artKindFor(petscii, width);
+  /** One piece of art as rows of content for this caller, [] when there is none. */
+  const artFor = (name: string, maxRows: number, maxCols: number = width): string[] => {
+    const art = loadArt(name, artKind, artSources);
+    return art ? artRows(art, maxRows, artKind === 'seq' ? Math.min(maxCols, 40) : maxCols) : [];
+  };
+  const bannerCap = artKind === 'seq' ? BANNER_MAX_ROWS_40 : BANNER_MAX_ROWS;
 
   const input = new DoorInputManager(session as any, screen, {
     enableGameMode: false,
@@ -260,6 +301,11 @@ export async function startReader(session: DoorSession): Promise<Reader> {
     content: '',
     style: { fg: t.ink, bg: t.ground },
   } as never) as any;
+  // The banner: art above the panel, drawn when a view is entered and never again.
+  const bannerBox = row(1);
+  bannerBox.hide();
+  let bannerKey = '';
+  let bannerLines: string[] = [];
   const progressBox = row(layout.progressRow);
   const footerRow = createBox({
     parent: screen,
@@ -291,6 +337,7 @@ export async function startReader(session: DoorSession): Promise<Reader> {
   // ---- painting --------------------------------------------------------
 
   const paintSeg = (seg: Seg): string => {
+    if (seg.raw !== undefined) return seg.raw;
     if (!seg.text) return '';
     const text = escapeTags(seg.text);
     switch (seg.role) {
@@ -327,7 +374,7 @@ export async function startReader(session: DoorSession): Promise<Reader> {
   let wireModal: any = null;
   let hintsKey = '';
   let modalContent = '';
-  const counters = { glitches: 0, tickerSteps: 0, intervals: 0 };
+  const counters = { glitches: 0, tickerSteps: 0, intervals: 0, banners: 0, titles: 0 };
   let stopped = false;
   let finish: () => void = () => { /* replaced below */ };
 
@@ -412,7 +459,7 @@ export async function startReader(session: DoorSession): Promise<Reader> {
         return;
       }
       showListing(
-        [{ kind: 'heading', label: DESK_LABEL.general }, ...listingBlocks(entries, false)],
+        [{ kind: 'heading', label: FRONT_PAGE_LABEL }, ...listingBlocks(entries, false)],
         'FRONT PAGE - THE EDITOR\'S CHOICE',
         entries,
       );
@@ -443,7 +490,8 @@ export async function startReader(session: DoorSession): Promise<Reader> {
         spreadNo = 0;
         return;
       }
-      const article = buildArticle(story, layout);
+      const mark = artFor('mag_article_end', END_MARK_MAX_ROWS, layout.geometry.colWidth).map((raw) => ({ raw, text: artRowText(raw) }));
+      const article = buildArticle(story, layout, mark);
       spreads = article.spreads;
       headline = { row: article.headlineRow, rows: article.headlineRows };
       spreadNo = 0;
@@ -505,10 +553,40 @@ export async function startReader(session: DoorSession): Promise<Reader> {
 
   const setStatus = (text: string) => chrome.setFooterSuffix(text ? `  ${text}` : '');
 
+  /** The banner a view carries: the front page and contents have their own, a section its desk's. */
+  const bannerNameFor = (v: View): string => {
+    if (v.kind === 'front') return 'mag_front';
+    if (v.kind === 'contents') return v.desk ? SECTION_ART[v.desk] : 'mag_contents';
+    return '';
+  };
+
+  /**
+   * Put the view's banner up. Called on view entry only: if the same art is
+   * already there nothing is touched, and the panel is resized only when the
+   * number of banner rows changes. The layout (and so every page break the
+   * views compute) takes the rows from the panel.
+   */
+  const applyBanner = (name: string) => {
+    if (name === bannerKey) return;
+    bannerKey = name;
+    const wanted = name ? artFor(name, bannerCap) : [];
+    const next = buildLayout(width, height, { ticker: showTicker, banner: wanted.length });
+    layout = next;
+    bannerLines = next.bannerRows > 0 ? wanted.slice(0, next.bannerRows) : [];
+    panel.top = next.panelTop;
+    panel.height = next.panelHeight;
+    if (bannerLines.length === 0) { bannerBox.hide(); return; }
+    bannerBox.height = bannerLines.length;
+    bannerBox.setContent(bannerLines.join('\n'));
+    bannerBox.show();
+    counters.banners += 1;
+  };
+
   const go = (next: View, keepSelection = false) => {
     snapshot = loadSnapshot(magazineRoot(__dirname));
     storyCache.clear();
     view = next;
+    applyBanner(bannerNameFor(next));
     if (!keepSelection && next.kind !== 'article') selected = null;
     build();
     advanceNews();
@@ -775,9 +853,66 @@ export async function startReader(session: DoorSession): Promise<Reader> {
     modal.display();
   };
 
+  // ---- full-screen art: the title on entry, the goodbye on Q ------------
+
+  let overlay: any = null;
+  let overlayLines: string[] = [];
+  let overlayTimer: ReturnType<typeof setTimeout> | null = null;
+  let closing = false;
+
+  const clearOverlayTimer = () => {
+    if (overlayTimer) { clearTimeout(overlayTimer); overlayTimer = null; }
+  };
+
+  /** Art over the whole screen, until `dropOverlay`. Returns false when there is no art. */
+  const raiseOverlay = (name: string): boolean => {
+    const rows = artFor(name, height);
+    if (rows.length === 0) return false;
+    overlayLines = rows;
+    overlay = createBox({
+      parent: screen,
+      top: 0,
+      left: 0,
+      width: '100%',
+      height: '100%',
+      border: undefined,
+      focusable: false,
+      clickable: false,
+      mouse: false,
+      tags: true,
+      content: rows.join('\n'),
+      style: { fg: t.ink, bg: t.ground },
+    } as never) as any;
+    overlay.setFront?.();
+    render();
+    return true;
+  };
+
+  const dropOverlay = () => {
+    clearOverlayTimer();
+    if (!overlay) return;
+    try { overlay.destroy(); } catch { /* leaving anyway */ }
+    overlay = null;
+    overlayLines = [];
+    render();
+  };
+
+  /** Q: a glimpse of the goodbye art where there is some, then the call ends. */
+  const quit = () => {
+    if (closing) return;
+    if (!raiseOverlay('mag_goodbye')) { finish(); return; }
+    closing = true;
+    clearOverlayTimer();
+    overlayTimer = setTimeout(() => finish(), GOODBYE_MS);
+    overlayTimer.unref?.();
+  };
+
   // ---- keys ------------------------------------------------------------
 
   const press = (name: string, ch?: string) => {
+    if (!stopped && closing) { finish(); return; }
+    // The title waits for a key; that key only lets the reader in.
+    if (!stopped && overlay) { dropOverlay(); return; }
     const c = (ch ?? '').toLowerCase();
     if (!stopped && modalOpen && wireId && sysop && c === 'p') { toggleFront(); return; }
     if (stopped || modalOpen) return;
@@ -808,7 +943,7 @@ export async function startReader(session: DoorSession): Promise<Reader> {
       default: break;
     }
     switch (c) {
-      case 'q': finish(); return;
+      case 'q': quit(); return;
       case 'c': go({ kind: 'contents', desk: null }); return;
       case 'f': go({ kind: 'front' }); return;
       case 'k': go({ kind: 'bookmarks' }); return;
@@ -835,6 +970,7 @@ export async function startReader(session: DoorSession): Promise<Reader> {
       if (stopped) return;
       stopped = true;
       clearGlitch();
+      clearOverlayTimer();
       if (digitTimer) clearTimeout(digitTimer);
       if (tickerTimer) clearInterval(tickerTimer);
       try { chrome.stop(); } catch { /* leaving anyway */ }
@@ -848,10 +984,18 @@ export async function startReader(session: DoorSession): Promise<Reader> {
   snapshot = loadSnapshot(magazineRoot(__dirname));
   startTicker();
   go({ kind: 'front' });
+  // The title: once, on entry, over the front page that is already drawn under it.
+  if (raiseOverlay('mag_title')) {
+    counters.titles += 1;
+    overlayTimer = setTimeout(dropOverlay, TITLE_MS);
+    overlayTimer.unref?.();
+  }
 
   return {
     screen,
-    layout,
+    get layout() { return layout; },
+    bannerText: () => bannerLines.map(artRowText),
+    overlayText: () => overlayLines.map(artRowText),
     done,
     press,
     panelRows: () => (spreads[spreadNo] ?? []).map(rowText),

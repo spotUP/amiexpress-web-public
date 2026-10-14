@@ -47,7 +47,12 @@ type View = {
 };
 export interface Reader {
     screen: any;
-    layout: MagLayout;
+    /** The layout now: it changes with the banner each view carries. */
+    readonly layout: MagLayout;
+    /** The plain text of the banner above the panel now ([] for none). */
+    bannerText(): string[];
+    /** The plain text of the full-screen art on top of everything ([] when none is up). */
+    overlayText(): string[];
     /** Resolves when the caller leaves. */
     done: Promise<void>;
     /** Feed a key as the terminal would: `press('down')`, `press('c', 'c')`. */
@@ -69,9 +74,15 @@ export interface Reader {
         glitches: number;
         tickerSteps: number;
         intervals: number;
+        banners: number;
+        titles: number;
     };
     stop(): void;
 }
-export declare function startReader(session: DoorSession): Promise<Reader>;
+export interface ReaderOptions {
+    /** Where the shipped placeholder art is; null for none. Default: the door's own art/ directory. */
+    shippedArtDir?: string | null;
+}
+export declare function startReader(session: DoorSession, options?: ReaderOptions): Promise<Reader>;
 export declare function createApp(session: DoorSession): Promise<void>;
 //# sourceMappingURL=app.d.ts.map

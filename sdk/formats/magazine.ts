@@ -90,8 +90,11 @@ export type Desk =
   | 'general';
 
 /** The name of each desk as a caller reads it, on page headers and in the reader's sections. */
+/** The front page's own name: it is a view, not a desk, so no desk label carries it. */
+export const FRONT_PAGE_LABEL = 'FRONT PAGE';
+
 export const DESK_LABEL: Record<Desk, string> = {
-  general: 'FRONT PAGE',
+  general: 'MISCELLANEOUS SIGNALS',
   hack: 'HACKING & PHREAKING',
   scene: 'SCENE & RETRO',
   graffiti: 'GRAFFITI & URBEX',

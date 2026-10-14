@@ -3,8 +3,11 @@ import { type ColumnGeometry } from './columns';
 /** What a run of text MEANS; the app decides what that looks like in the theme. */
 export type Role = 'plain' | 'dim' | 'accent' | 'head' | 'rule' | 'tag' | 'source' | 'unread' | 'selected' | 'warn';
 export interface Seg {
+    /** What a caller reads: width, tests and the glitch work from this. */
     text: string;
     role: Role;
+    /** Art: painted as is (it already carries its own colours and escaped braces), `text` being its plain reading. */
+    raw?: string;
 }
 export type PanelRow = Seg[];
 /** The plain text of a row: what a C64 caller would read. */
@@ -18,6 +21,8 @@ export interface MagLayout {
     /** The 40-column tier: header and footer are one row each, no frames. */
     collapseChrome: boolean;
     headerRow: number;
+    /** Rows of art above the panel (0 for none); the panel below it is that much shorter. */
+    bannerRows: number;
     /** Null when the sysop turned the news wire off. Directly above the footer. */
     tickerRow: number | null;
     panelTop: number;
@@ -25,8 +30,11 @@ export interface MagLayout {
     progressRow: number;
     footerRow: number;
 }
+/** A banner may not leave the panel shorter than this: a page of text still has to read. */
+export declare const MIN_PANEL_ROWS = 8;
 export declare function buildLayout(width: number, height: number, options?: {
     ticker?: boolean;
+    banner?: number;
 }): MagLayout;
 /**
  * What a feed story shows in a list besides its headline: the cleaned teaser,
@@ -108,7 +116,12 @@ export interface Article {
 }
 /** `[ NEWS // HACK // 2026-10-13 ]` - a signal tag, not a label. */
 export declare function signalTag(story: Pick<Story, 'format' | 'desk' | 'date'>): string;
-export declare function buildArticle(story: Story, layout: MagLayout): Article;
+/** A row of the mark after an article: `raw` as painted, `text` as read (at most one column wide). */
+export interface EndMarkRow {
+    raw: string;
+    text: string;
+}
+export declare function buildArticle(story: Story, layout: MagLayout, endMark?: readonly EndMarkRow[]): Article;
 /**
  * One row that fills as the reader moves through the spreads, with the
  * position written out at every width (`Page 2 of 5`). The bar alone is a

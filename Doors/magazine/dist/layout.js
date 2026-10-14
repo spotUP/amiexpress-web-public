@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.SECTION_ORDER = exports.NEWS_SEPARATOR = exports.sourceName = void 0;
+exports.SECTION_ORDER = exports.NEWS_SEPARATOR = exports.sourceName = exports.MIN_PANEL_ROWS = void 0;
 exports.rowText = rowText;
 exports.buildLayout = buildLayout;
 exports.trimAtWord = trimAtWord;
@@ -64,6 +64,8 @@ function centre(text, width, fill = ' ') {
     const left = Math.floor((width - text.length) / 2);
     return fill.repeat(left) + text + fill.repeat(width - text.length - left);
 }
+/** A banner may not leave the panel shorter than this: a page of text still has to read. */
+exports.MIN_PANEL_ROWS = 8;
 function buildLayout(width, height, options = {}) {
     const w = Math.max(1, Math.floor(width) || 80);
     const h = Math.max(6, Math.floor(height) || 24);
@@ -72,7 +74,11 @@ function buildLayout(width, height, options = {}) {
     const footerRow = h - 1;
     const tickerRow = hasTicker ? footerRow - 1 : null;
     const progressRow = hasTicker ? footerRow - 2 : footerRow - 1;
-    const panelTop = 1;
+    const withoutBanner = Math.max(1, progressRow - 1);
+    // The banner takes its rows from the panel, and gives them back when the screen is too short to spare them.
+    const wanted = Math.max(0, Math.floor(options.banner ?? 0));
+    const bannerRows = withoutBanner - wanted >= exports.MIN_PANEL_ROWS ? wanted : 0;
+    const panelTop = 1 + bannerRows;
     return {
         width: w,
         height: h,
@@ -80,6 +86,7 @@ function buildLayout(width, height, options = {}) {
         effects,
         collapseChrome: (0, blessed_1.getCompactProfile)(w).collapseChrome,
         headerRow: 0,
+        bannerRows,
         tickerRow,
         panelTop,
         panelHeight: Math.max(1, progressRow - panelTop),
@@ -98,7 +105,12 @@ function composeRow(geometry, cells) {
             const pad = Math.floor((gutter - 1) / 2);
             row.push(seg(`${' '.repeat(pad)}${COLUMN_RULE}${' '.repeat(gutter - 1 - pad)}`, 'dim'));
         }
-        row.push(seg(padRight(cell?.text ?? '', colWidth), cell?.role ?? 'plain'));
+        if (cell?.raw !== undefined) {
+            row.push({ text: padRight(cell.text, colWidth), role: cell.role, raw: cell.raw + ' '.repeat(Math.max(0, colWidth - cell.text.length)) });
+        }
+        else {
+            row.push(seg(padRight(cell?.text ?? '', colWidth), cell?.role ?? 'plain'));
+        }
     });
     return row;
 }
@@ -313,7 +325,7 @@ function deskCode(desk) {
     return desk.toUpperCase();
 }
 const HEADLINE_MAX_ROWS = 3;
-function buildArticle(story, layout) {
+function buildArticle(story, layout, endMark = []) {
     const { geometry, panelHeight } = layout;
     const w = geometry.contentWidth;
     const kicker = spanRow(geometry, truncate(signalTag(story), w), 'tag');
@@ -337,6 +349,9 @@ function buildArticle(story, layout) {
         cells.push({ text: '(no summary)', role: 'dim' });
     if (trailer.length)
         cells.push({ text: '', role: 'plain' }, ...trailer);
+    // The mark closes the text: it flows with it, after the last line.
+    if (endMark.length)
+        cells.push({ text: '', role: 'plain' }, ...endMark.map((m) => ({ text: m.text, role: 'plain', raw: m.raw })));
     const firstHeight = Math.max(1, panelHeight - head.length);
     const restHeight = Math.max(1, panelHeight - 1);
     const flowed = (0, columns_1.flowColumns)(cells, geometry.cols, { first: firstHeight, rest: restHeight }, {

@@ -28,6 +28,7 @@ const blessed_1 = require("@amiexpress/bbs-door-sdk/engines/ui/blessed");
 const magazine_1 = require("@amiexpress/bbs-door-sdk/formats/magazine");
 Object.defineProperty(exports, "MAGAZINE_TITLE", { enumerable: true, get: function () { return magazine_1.MAGAZINE_TITLE; } });
 const bbs_door_sdk_1 = require("@amiexpress/bbs-door-sdk");
+const art_1 = require("./art");
 const library_1 = require("./library");
 const layout_1 = require("./layout");
 exports.READ_KEY = 'read-story-ids';
@@ -41,6 +42,12 @@ const SIGNAL_DAYS = 8;
 const GLITCH_DELAY_MS = 450;
 const GLITCH_HOLD_MS = 160;
 const DIGIT_COMMIT_MS = 1500;
+/** The title screen waits this long for a key, then the reader opens by itself. */
+const TITLE_MS = 6000;
+/** The goodbye is a glimpse: a key or this long, then the call ends. */
+const GOODBYE_MS = 1500;
+/** The mark after an article is small. */
+const END_MARK_MAX_ROWS = 3;
 exports.HINTS = [
     { key: 'Arrows', does: 'Page' },
     { key: 'C', does: 'Contents' },
@@ -104,7 +111,7 @@ function readEdition(index) {
             latest = e.date;
     return latest.slice(0, 10);
 }
-async function startReader(session) {
+async function startReader(session, options = {}) {
     const { bbs, storage } = session;
     const theme = bbs?.getTheme ? bbs.getTheme() : ((0, theme_1.themeById)('uprough-neon') ?? theme_1.UPROUGH_NEON);
     const t = theme.tokens;
@@ -134,7 +141,20 @@ async function startReader(session) {
     const screen = (0, blessed_helpers_1.createScreen)(bbs, { title: magazine_1.MAGAZINE_TITLE });
     const width = screen.width || 80;
     const height = screen.height || 24;
-    const layout = (0, layout_1.buildLayout)(width, height, { ticker: showTicker });
+    let layout = (0, layout_1.buildLayout)(width, height, { ticker: showTicker });
+    // Which alphabet this caller reads: the session knows (createScreen asks it too).
+    const petscii = typeof bbs?.isPetsciiMode === 'function' && bbs.isPetsciiMode() === true;
+    const artSources = {
+        overrideDir: (0, art_1.overrideArtDir)((0, library_1.magazineRoot)(__dirname)),
+        shippedDir: options.shippedArtDir === undefined ? (0, art_1.shippedArtDir)() : options.shippedArtDir,
+    };
+    const artKind = (0, art_1.artKindFor)(petscii, width);
+    /** One piece of art as rows of content for this caller, [] when there is none. */
+    const artFor = (name, maxRows, maxCols = width) => {
+        const art = (0, art_1.loadArt)(name, artKind, artSources);
+        return art ? (0, art_1.artRows)(art, maxRows, artKind === 'seq' ? Math.min(maxCols, 40) : maxCols) : [];
+    };
+    const bannerCap = artKind === 'seq' ? art_1.BANNER_MAX_ROWS_40 : art_1.BANNER_MAX_ROWS;
     const input = new door_input_manager_1.DoorInputManager(session, screen, {
         enableGameMode: false,
         enableGrabKeys: false,
@@ -172,6 +192,11 @@ async function startReader(session) {
         content: '',
         style: { fg: t.ink, bg: t.ground },
     });
+    // The banner: art above the panel, drawn when a view is entered and never again.
+    const bannerBox = row(1);
+    bannerBox.hide();
+    let bannerKey = '';
+    let bannerLines = [];
     const progressBox = row(layout.progressRow);
     const footerRow = (0, blessed_helpers_1.createBox)({
         parent: screen,
@@ -200,6 +225,8 @@ async function startReader(session) {
     });
     // ---- painting --------------------------------------------------------
     const paintSeg = (seg) => {
+        if (seg.raw !== undefined)
+            return seg.raw;
         if (!seg.text)
             return '';
         const text = escapeTags(seg.text);
@@ -238,7 +265,7 @@ async function startReader(session) {
     let wireModal = null;
     let hintsKey = '';
     let modalContent = '';
-    const counters = { glitches: 0, tickerSteps: 0, intervals: 0 };
+    const counters = { glitches: 0, tickerSteps: 0, intervals: 0, banners: 0, titles: 0 };
     let stopped = false;
     let finish = () => { };
     const onFront = { has: (id) => snapshot.front.includes(id) };
@@ -315,7 +342,7 @@ async function startReader(session) {
                 spreadNo = 0;
                 return;
             }
-            showListing([{ kind: 'heading', label: magazine_1.DESK_LABEL.general }, ...listingBlocks(entries, false)], 'FRONT PAGE - THE EDITOR\'S CHOICE', entries);
+            showListing([{ kind: 'heading', label: magazine_1.FRONT_PAGE_LABEL }, ...listingBlocks(entries, false)], 'FRONT PAGE - THE EDITOR\'S CHOICE', entries);
         }
         else if (view.kind === 'contents') {
             const entries = snapshot.index.filter((e) => view.kind === 'contents' && (!view.desk || e.desk === view.desk));
@@ -346,7 +373,8 @@ async function startReader(session) {
                 spreadNo = 0;
                 return;
             }
-            const article = (0, layout_1.buildArticle)(story, layout);
+            const mark = artFor('mag_article_end', END_MARK_MAX_ROWS, layout.geometry.colWidth).map((raw) => ({ raw, text: (0, art_1.artRowText)(raw) }));
+            const article = (0, layout_1.buildArticle)(story, layout, mark);
             spreads = article.spreads;
             headline = { row: article.headlineRow, rows: article.headlineRows };
             spreadNo = 0;
@@ -413,10 +441,44 @@ async function startReader(session) {
         chrome.setHints(id ? [...sysopHints({ compact: layout.collapseChrome, frontView: view.kind === 'front', onFront: onFront.has(id) }), ...base] : base);
     };
     const setStatus = (text) => chrome.setFooterSuffix(text ? `  ${text}` : '');
+    /** The banner a view carries: the front page and contents have their own, a section its desk's. */
+    const bannerNameFor = (v) => {
+        if (v.kind === 'front')
+            return 'mag_front';
+        if (v.kind === 'contents')
+            return v.desk ? art_1.SECTION_ART[v.desk] : 'mag_contents';
+        return '';
+    };
+    /**
+     * Put the view's banner up. Called on view entry only: if the same art is
+     * already there nothing is touched, and the panel is resized only when the
+     * number of banner rows changes. The layout (and so every page break the
+     * views compute) takes the rows from the panel.
+     */
+    const applyBanner = (name) => {
+        if (name === bannerKey)
+            return;
+        bannerKey = name;
+        const wanted = name ? artFor(name, bannerCap) : [];
+        const next = (0, layout_1.buildLayout)(width, height, { ticker: showTicker, banner: wanted.length });
+        layout = next;
+        bannerLines = next.bannerRows > 0 ? wanted.slice(0, next.bannerRows) : [];
+        panel.top = next.panelTop;
+        panel.height = next.panelHeight;
+        if (bannerLines.length === 0) {
+            bannerBox.hide();
+            return;
+        }
+        bannerBox.height = bannerLines.length;
+        bannerBox.setContent(bannerLines.join('\n'));
+        bannerBox.show();
+        counters.banners += 1;
+    };
     const go = (next, keepSelection = false) => {
         snapshot = (0, library_1.loadSnapshot)((0, library_1.magazineRoot)(__dirname));
         storyCache.clear();
         view = next;
+        applyBanner(bannerNameFor(next));
         if (!keepSelection && next.kind !== 'article')
             selected = null;
         build();
@@ -719,8 +781,77 @@ async function startReader(session) {
         });
         modal.display();
     };
+    // ---- full-screen art: the title on entry, the goodbye on Q ------------
+    let overlay = null;
+    let overlayLines = [];
+    let overlayTimer = null;
+    let closing = false;
+    const clearOverlayTimer = () => {
+        if (overlayTimer) {
+            clearTimeout(overlayTimer);
+            overlayTimer = null;
+        }
+    };
+    /** Art over the whole screen, until `dropOverlay`. Returns false when there is no art. */
+    const raiseOverlay = (name) => {
+        const rows = artFor(name, height);
+        if (rows.length === 0)
+            return false;
+        overlayLines = rows;
+        overlay = (0, blessed_helpers_1.createBox)({
+            parent: screen,
+            top: 0,
+            left: 0,
+            width: '100%',
+            height: '100%',
+            border: undefined,
+            focusable: false,
+            clickable: false,
+            mouse: false,
+            tags: true,
+            content: rows.join('\n'),
+            style: { fg: t.ink, bg: t.ground },
+        });
+        overlay.setFront?.();
+        render();
+        return true;
+    };
+    const dropOverlay = () => {
+        clearOverlayTimer();
+        if (!overlay)
+            return;
+        try {
+            overlay.destroy();
+        }
+        catch { /* leaving anyway */ }
+        overlay = null;
+        overlayLines = [];
+        render();
+    };
+    /** Q: a glimpse of the goodbye art where there is some, then the call ends. */
+    const quit = () => {
+        if (closing)
+            return;
+        if (!raiseOverlay('mag_goodbye')) {
+            finish();
+            return;
+        }
+        closing = true;
+        clearOverlayTimer();
+        overlayTimer = setTimeout(() => finish(), GOODBYE_MS);
+        overlayTimer.unref?.();
+    };
     // ---- keys ------------------------------------------------------------
     const press = (name, ch) => {
+        if (!stopped && closing) {
+            finish();
+            return;
+        }
+        // The title waits for a key; that key only lets the reader in.
+        if (!stopped && overlay) {
+            dropOverlay();
+            return;
+        }
         const c = (ch ?? '').toLowerCase();
         if (!stopped && modalOpen && wireId && sysop && c === 'p') {
             toggleFront();
@@ -789,7 +920,7 @@ async function startReader(session) {
         }
         switch (c) {
             case 'q':
-                finish();
+                quit();
                 return;
             case 'c':
                 go({ kind: 'contents', desk: null });
@@ -838,6 +969,7 @@ async function startReader(session) {
                 return;
             stopped = true;
             clearGlitch();
+            clearOverlayTimer();
             if (digitTimer)
                 clearTimeout(digitTimer);
             if (tickerTimer)
@@ -864,9 +996,17 @@ async function startReader(session) {
     snapshot = (0, library_1.loadSnapshot)((0, library_1.magazineRoot)(__dirname));
     startTicker();
     go({ kind: 'front' });
+    // The title: once, on entry, over the front page that is already drawn under it.
+    if (raiseOverlay('mag_title')) {
+        counters.titles += 1;
+        overlayTimer = setTimeout(dropOverlay, TITLE_MS);
+        overlayTimer.unref?.();
+    }
     return {
         screen,
-        layout,
+        get layout() { return layout; },
+        bannerText: () => bannerLines.map(art_1.artRowText),
+        overlayText: () => overlayLines.map(art_1.artRowText),
         done,
         press,
         panelRows: () => (spreads[spreadNo] ?? []).map(layout_1.rowText),

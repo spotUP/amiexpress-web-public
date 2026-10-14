@@ -23,6 +23,7 @@ import {
   type Story,
 } from '@amiexpress/bbs-door-sdk/formats/magazine';
 import { BOOKMARK_KEY, READ_KEY, startReader, type Reader } from '../app';
+import { buildLayout } from '../layout';
 
 const LONG = ('The Amiga demoscene has a new release this week. It runs on a stock A500 with half a megabyte, '
   + 'and the group says the copper bars are the cleanest they have shipped in years.\n\n'
@@ -55,8 +56,8 @@ function board(approved: string[], stories: Story[] = STORIES): Board {
   fs.mkdirSync(path.join(mag, MAGAZINE_STORIES_DIR), { recursive: true });
   // The page numbers the tests rely on: the two hack stories sit on 120 and 121.
   const pages: Record<string, number> = { aaaa0001: 201, aaaa0002: 120, aaaa0003: 401, aaaa0004: 121, ffff0001: 122, ffff0002: 123 };
-  const index: MagazineIndexEntry[] = stories.map((st) => ({
-    page: pages[st.id], title: st.headline, desk: st.desk, format: st.format, storyId: st.id, date: st.date,
+  const index: MagazineIndexEntry[] = stories.map((st, i) => ({
+    page: pages[st.id] ?? 600 + i, title: st.headline, desk: st.desk, format: st.format, storyId: st.id, date: st.date,
   }));
   fs.writeFileSync(path.join(mag, MAGAZINE_INDEX_FILE), JSON.stringify(index));
   fs.writeFileSync(path.join(mag, MAGAZINE_FRONTPAGE_FILE), JSON.stringify(approved));
@@ -83,7 +84,7 @@ interface Harness {
   raw: (bytes: string) => void;
 }
 
-async function open(width: number, height: number, options: { theme?: ReturnType<typeof themeById>; secLevel?: number } = {}): Promise<Harness> {
+async function open(width: number, height: number, options: { theme?: ReturnType<typeof themeById>; secLevel?: number; petscii?: boolean; shippedArt?: string | null } = {}): Promise<Harness> {
   const writes: string[] = [];
   const storage = new Map<string, unknown>();
   const theme = options.theme ?? themeById('uprough-neon');
@@ -95,6 +96,7 @@ async function open(width: number, height: number, options: { theme?: ReturnType
     getModemSpeed: () => 0, disableModemEmulation: () => {}, setModemSpeed: () => {},
     getTheme: () => theme,
     connectionType: 'web', unicodeCapable: true,
+    isPetsciiMode: () => options.petscii === true,
   };
   const socket: any = { on: () => {}, emit: () => {}, off: () => {}, removeAllListeners: () => {} };
   const session: any = {
@@ -106,7 +108,8 @@ async function open(width: number, height: number, options: { theme?: ReturnType
       save: async (k: string, v: unknown) => { storage.set(k, v); },
     },
   };
-  const reader = await startReader(session);
+  // The shipped placeholder art is off unless a test asks for it: every other test is about the text.
+  const reader = await startReader(session, { shippedArtDir: options.shippedArt ?? null });
   await new Promise((resolve) => setImmediate(resolve));
   let from = writes.length;
   return {
@@ -271,7 +274,7 @@ export async function readAndBookmarkStateComesBackFromStorage(): Promise<void> 
   const reader = await startReader({
     bbs,
     storage: { load: async (k: string) => (store.get(k) as never) ?? null, save: async () => {} },
-  } as never);
+  } as never, { shippedArtDir: null });
   try {
     reader.press('c', 'c');
     const t = reader.panelRows().join('\n');
@@ -344,7 +347,7 @@ export async function atFortyByTwentyFiveEveryRowFitsOneColumnAndNothingMoves():
     const afterOpen = h.reader.stats();
     await new Promise((resolve) => setTimeout(resolve, 700));
     const later = h.reader.stats();
-    assert.deepStrictEqual(later, { glitches: 0, tickerSteps: 0, intervals: 0 }, 'no effect runs at 40');
+    assert.deepStrictEqual({ glitches: later.glitches, tickerSteps: later.tickerSteps, intervals: later.intervals }, { glitches: 0, tickerSteps: 0, intervals: 0 }, 'no effect runs at 40');
     assert.ok(h.reader.tickerRow().includes('EXAMPLE.ORG // '), `a static headline: "${h.reader.tickerRow()}"`);
     assert.deepStrictEqual(afterOpen, later);
   } finally { await finish(h, b); }
@@ -1047,5 +1050,217 @@ export async function pressingPInTheWirePanelFromRawBytesTogglesTheStory(): Prom
     assert.deepStrictEqual(frontOnDisk(b), ['ffff0001'], 'raw p in the wire panel wrote the front page');
     h.raw('P');
     assert.deepStrictEqual(frontOnDisk(b), [], 'a shifted P toggles it off again');
+  } finally { await finish(h, b); }
+}
+
+// ---- art on the screen ----------------------------------------------------
+
+const SHIPPED_ART = path.join(__dirname, '..', 'art');
+const noSpaces = (rows: string[]): string => rows.join('').replace(/ /g, '');
+
+/** The sysop's own drawing, on the board's data volume: `<board root>/Magazine/art/<file>`. */
+function sysopArt(b: Board, file: string, content: string | Buffer): void {
+  const dir = path.join(b.root, MAGAZINE_DIR, 'art');
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, file), content);
+}
+
+export async function theTitleIsShownOnceOnEntryAndTheFirstKeyOnlyLetsTheReaderIn(): Promise<void> {
+  const b = board(['aaaa0001']);
+  const h = await open(80, 24, { shippedArt: SHIPPED_ART });
+  try {
+    assert.strictEqual(h.reader.stats().titles, 1, 'the title is shown on entry');
+    assert.ok(h.reader.overlayText().join('\n').includes('PLACEHOLDER'), 'the shipped title, 80 columns, says placeholder');
+    assert.ok(h.reader.overlayText().join('').includes('«'), 'an ANSI session gets the Amiga ANSI drawing');
+    h.reader.press('c', 'c');
+    assert.deepStrictEqual(h.reader.overlayText(), [], 'a key dismisses it');
+    assert.strictEqual(h.reader.viewKind(), 'front', 'and is not also taken as a command');
+    h.reader.press('c', 'c');
+    assert.strictEqual(h.reader.viewKind(), 'contents');
+    h.reader.press('f', 'f');
+    h.reader.press('c', 'c');
+    assert.strictEqual(h.reader.stats().titles, 1, 'moving between views never shows it again');
+  } finally { await finish(h, b); }
+}
+
+export async function theTitleGivesWayByItselfAfterAShortWait(): Promise<void> {
+  const b = board([]);
+  const h = await open(80, 24, { shippedArt: SHIPPED_ART });
+  try {
+    assert.ok(h.reader.overlayText().length > 0);
+    await new Promise((resolve) => setTimeout(resolve, 6200));
+    assert.deepStrictEqual(h.reader.overlayText(), [], 'the title times out');
+  } finally { await finish(h, b); }
+}
+
+export async function theSysopsOwnTitleInTheBoardRootBeatsTheShippedOne(): Promise<void> {
+  const b = board([]);
+  sysopArt(b, 'mag_title.ans', Buffer.from('\x1b[1;36mMY OWN TITLE \xaf\r\n', 'latin1'));
+  const h = await open(80, 24, { shippedArt: SHIPPED_ART });
+  try {
+    assert.deepStrictEqual(h.reader.overlayText(), ['MY OWN TITLE ¯'], 'the override is read as latin1, escapes kept out of the text');
+  } finally { await finish(h, b); }
+}
+
+export async function aC64CallerAndAFortyColumnCallerGetTheSeqNotTheAns(): Promise<void> {
+  for (const [w, hgt, petscii] of [[80, 24, true], [40, 25, false], [40, 25, true]] as const) {
+    const b = board([]);
+    const h = await open(w, hgt, { shippedArt: SHIPPED_ART, petscii });
+    try {
+      const t = h.reader.overlayText().join('\n');
+      assert.ok(t.includes('placeholder art'), `${w} petscii=${petscii}: the .seq title (small-letter placeholder note)`);
+      assert.ok(!t.includes('«') && /[\u2581-\u2584]/.test(t), 'PETSCII glyphs, not Amiga ones');
+      for (const r of h.reader.overlayText()) assert.ok(r.length <= 40, `${w}: row of ${r.length}`);
+    } finally { await finish(h, b); }
+  }
+}
+
+export async function aBannerTakesItsRowsFromThePanelAndEachViewHasItsOwn(): Promise<void> {
+  const b = board([]);
+  const h = await open(80, 24, { shippedArt: SHIPPED_ART });
+  try {
+    h.reader.press('c', 'c');
+    const bare = buildLayout(80, 24, { ticker: true });
+    assert.strictEqual(h.reader.layout.bannerRows, 4);
+    assert.strictEqual(h.reader.layout.panelHeight, bare.panelHeight - 4, 'the panel is four rows shorter');
+    assert.strictEqual(h.reader.layout.panelTop, bare.panelTop + 4);
+    assert.ok(noSpaces(h.reader.bannerText()).includes('FRONTPAGE'), 'the front page banner');
+    assert.ok(h.reader.panelRows().length <= h.reader.layout.panelHeight);
+    h.reader.press('c', 'c');
+    assert.ok(noSpaces(h.reader.bannerText()).includes('CONTENTS'), 'the contents banner');
+    h.reader.press('s', 's');
+    assert.ok(noSpaces(h.reader.bannerText()).includes('HACKING&PHREAKING'), 'a section has its desk banner');
+    h.reader.press('k', 'k');
+    assert.deepStrictEqual(h.reader.bannerText(), [], 'bookmarks carry none');
+    assert.strictEqual(h.reader.layout.bannerRows, 0, 'and the panel has the rows back');
+    assert.strictEqual(h.reader.layout.panelHeight, bare.panelHeight);
+  } finally { await finish(h, b); }
+}
+
+export async function theGeneralDeskBannerNamesTheMiscellaneousDeskNotTheFrontPage(): Promise<void> {
+  const b = board([], [story('gggg0001', 'A stray signal', 'general', '2026-10-13')]);
+  const h = await open(80, 24, { shippedArt: SHIPPED_ART });
+  try {
+    h.reader.press('c', 'c');
+    h.reader.press('c', 'c');
+    h.reader.press('s', 's');
+    assert.ok(noSpaces(h.reader.bannerText()).includes('MISCELLANEOUSSIGNALS'), noSpaces(h.reader.bannerText()));
+    assert.ok(!noSpaces(h.reader.bannerText()).includes('FRONTPAGE'));
+    assert.ok(h.reader.panelRows().join('\n').includes('MISCELLANEOUS SIGNALS'), 'the listing heading too');
+  } finally { await finish(h, b); }
+}
+
+export async function theBannerIsDrawnOnViewEntryAndNeverOnAKeypress(): Promise<void> {
+  const b = board([]);
+  const h = await open(80, 24, { shippedArt: SHIPPED_ART });
+  try {
+    h.reader.press('c', 'c');
+    h.reader.press('c', 'c');
+    const drawn = h.reader.stats().banners;
+    assert.strictEqual(drawn, 2, 'front, then contents');
+    h.mark();
+    for (const k of ['down', 'down', 'up']) h.reader.press(k);
+    h.reader.press('right');
+    assert.strictEqual(h.reader.stats().banners, drawn, 'cursor moves and page turns do not redraw it');
+    for (const row of h.rowsTouched()) assert.ok(row < 2 || row > 5, `terminal row ${row} is a banner row`);
+  } finally { await finish(h, b); }
+}
+
+export async function pagingStaysCorrectWithABannerAtFortyEightyAndOneThirtyTwo(): Promise<void> {
+  const many: Story[] = Array.from({ length: 30 }, (_, i) =>
+    story(`cccc${String(i).padStart(4, '0')}`, `Signal number ${String(i).padStart(2, '0')} on the dial`, 'hack', '2026-10-10'));
+  for (const [w, hgt] of [[40, 25], [80, 24], [132, 40]] as const) {
+    const b = board([], many);
+    const h = await open(w, hgt, { shippedArt: SHIPPED_ART });
+    try {
+      h.reader.press('c', 'c');
+      h.reader.press('c', 'c');
+      assert.ok(h.reader.layout.bannerRows > 0 && h.reader.layout.bannerRows <= (w === 40 ? 4 : 5), `${w}: banner rows ${h.reader.layout.bannerRows}`);
+      const seen = new Set<string>();
+      let last = '';
+      for (let i = 0; i < 60; i++) {
+        const rows = h.reader.panelRows();
+        assert.ok(rows.length <= h.reader.layout.panelHeight, `${w}: ${rows.length} rows in a ${h.reader.layout.panelHeight} row panel`);
+        for (const r of rows) for (const m of r.matchAll(/Signal number (\d\d)/g)) seen.add(m[1]);
+        const text = rows.join('\n');
+        if (text === last) break;
+        last = text;
+        h.reader.press('pagedown');
+      }
+      assert.strictEqual(seen.size, 30, `${w}: every story is reachable by paging (saw ${seen.size})`);
+    } finally { await finish(h, b); }
+  }
+}
+
+/** Every page of the article that is open, first to last (it stops when the next key leaves the article). */
+function articlePages(h: Harness, nextHeadline: string): string[] {
+  const pages: string[] = [];
+  for (let i = 0; i < 20; i++) {
+    pages.push(h.reader.panelRows().join('\n'));
+    h.reader.press('right');
+    if (h.reader.panelRows().join('\n').includes(nextHeadline)) break;
+  }
+  return pages;
+}
+
+export async function theMarkAfterAnArticleFollowsItsLastLineOnTheLastPage(): Promise<void> {
+  // A short article: one page with room under the last line.
+  const shortOne = [story('aaaa0002', 'New exploit chain in a router firmware', 'hack', '2026-10-12', 'One short paragraph.'), STORIES[3]];
+  const b = board([], shortOne);
+  sysopArt(b, 'mag_article_end.ans', 'THE END MARK\r\n');
+  const h = await open(80, 24, { shippedArt: SHIPPED_ART });
+  try {
+    h.reader.press('c', 'c');
+    h.reader.press('c', 'c');
+    h.reader.press('enter');
+    assert.strictEqual(h.reader.viewKind(), 'article');
+    const rows = h.reader.panelRows();
+    assert.ok(rows.length <= h.reader.layout.panelHeight);
+    const at = rows.findIndex((r) => r.includes('THE END MARK'));
+    assert.ok(at > 0, 'the mark is on the page: ' + JSON.stringify(rows));
+    assert.ok(rows.slice(0, at).some((r) => r.includes('One short paragraph')), 'after the last line of text');
+  } finally { await finish(h, b); }
+
+  // A long one: the mark closes the text on the last page, once, inside the panel.
+  const b2 = board([]);
+  sysopArt(b2, 'mag_article_end.ans', 'THE END MARK\r\n');
+  const h2 = await open(80, 24, { shippedArt: SHIPPED_ART });
+  try {
+    h2.reader.press('c', 'c');
+    h2.reader.press('c', 'c');
+    h2.reader.press('enter');
+    const pages = articlePages(h2, 'SECOND HACKING');
+    assert.ok(pages.length > 1);
+    for (const p of pages) assert.ok(p.split('\n').length <= h2.reader.layout.panelHeight);
+    const marked = pages.map((p, n) => (p.includes('THE END MARK') ? n : -1)).filter((n) => n >= 0);
+    assert.deepStrictEqual(marked, [pages.length - 1], 'on the last page and nowhere else');
+  } finally { await finish(h2, b2); }
+}
+
+export async function qShowsTheGoodbyeBrieflyThenAKeyEndsTheCall(): Promise<void> {
+  const b = board([]);
+  sysopArt(b, 'mag_goodbye.ans', 'BYE FROM THE FREQUENCY\r\n');
+  const h = await open(80, 24, { shippedArt: SHIPPED_ART });
+  try {
+    let ended = false;
+    void h.reader.done.then(() => { ended = true; });
+    h.reader.press('x', 'x');
+    h.reader.press('q', 'q');
+    assert.deepStrictEqual(h.reader.overlayText(), ['BYE FROM THE FREQUENCY']);
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.strictEqual(ended, false, 'the goodbye is on screen, the call is not over');
+    h.reader.press('x', 'x');
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.strictEqual(ended, true, 'a key ends it');
+  } finally { await finish(h, b); }
+}
+
+export async function theFrontPageViewKeepsItsOwnNameWhileTheGeneralDeskIsMiscellaneous(): Promise<void> {
+  const b = board(['aaaa0001']);
+  const h = await open(80, 24);
+  try {
+    const t = h.reader.panelRows().join('\n');
+    assert.ok(t.includes('FRONT PAGE'), 'the front page view says FRONT PAGE');
+    assert.ok(!t.includes('MISCELLANEOUS'));
   } finally { await finish(h, b); }
 }

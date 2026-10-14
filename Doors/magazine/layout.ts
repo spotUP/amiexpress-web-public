@@ -43,8 +43,11 @@ export type Role =
   | 'warn';
 
 export interface Seg {
+  /** What a caller reads: width, tests and the glitch work from this. */
   text: string;
   role: Role;
+  /** Art: painted as is (it already carries its own colours and escaped braces), `text` being its plain reading. */
+  raw?: string;
 }
 
 export type PanelRow = Seg[];
@@ -88,6 +91,8 @@ export interface MagLayout {
   /** The 40-column tier: header and footer are one row each, no frames. */
   collapseChrome: boolean;
   headerRow: number;
+  /** Rows of art above the panel (0 for none); the panel below it is that much shorter. */
+  bannerRows: number;
   /** Null when the sysop turned the news wire off. Directly above the footer. */
   tickerRow: number | null;
   panelTop: number;
@@ -96,7 +101,10 @@ export interface MagLayout {
   footerRow: number;
 }
 
-export function buildLayout(width: number, height: number, options: { ticker?: boolean } = {}): MagLayout {
+/** A banner may not leave the panel shorter than this: a page of text still has to read. */
+export const MIN_PANEL_ROWS = 8;
+
+export function buildLayout(width: number, height: number, options: { ticker?: boolean; banner?: number } = {}): MagLayout {
   const w = Math.max(1, Math.floor(width) || 80);
   const h = Math.max(6, Math.floor(height) || 24);
   const effects = effectsAllowed(w);
@@ -104,7 +112,11 @@ export function buildLayout(width: number, height: number, options: { ticker?: b
   const footerRow = h - 1;
   const tickerRow = hasTicker ? footerRow - 1 : null;
   const progressRow = hasTicker ? footerRow - 2 : footerRow - 1;
-  const panelTop = 1;
+  const withoutBanner = Math.max(1, progressRow - 1);
+  // The banner takes its rows from the panel, and gives them back when the screen is too short to spare them.
+  const wanted = Math.max(0, Math.floor(options.banner ?? 0));
+  const bannerRows = withoutBanner - wanted >= MIN_PANEL_ROWS ? wanted : 0;
+  const panelTop = 1 + bannerRows;
   return {
     width: w,
     height: h,
@@ -112,6 +124,7 @@ export function buildLayout(width: number, height: number, options: { ticker?: b
     effects,
     collapseChrome: getCompactProfile(w).collapseChrome,
     headerRow: 0,
+    bannerRows,
     tickerRow,
     panelTop,
     panelHeight: Math.max(1, progressRow - panelTop),
@@ -127,6 +140,8 @@ export function buildLayout(width: number, height: number, options: { ticker?: b
 interface Cell {
   text: string;
   role: Role;
+  /** Art: painted as is, `text` being its plain reading (the width it occupies). */
+  raw?: string;
   /** Which listing item this row belongs to (listings only). */
   item?: number;
   /** Not the last row of its entry: a column or page break may not fall after it. */
@@ -143,7 +158,11 @@ function composeRow(geometry: ColumnGeometry, cells: Array<Cell | undefined>): P
       const pad = Math.floor((gutter - 1) / 2);
       row.push(seg(`${' '.repeat(pad)}${COLUMN_RULE}${' '.repeat(gutter - 1 - pad)}`, 'dim'));
     }
-    row.push(seg(padRight(cell?.text ?? '', colWidth), cell?.role ?? 'plain'));
+    if (cell?.raw !== undefined) {
+      row.push({ text: padRight(cell.text, colWidth), role: cell.role, raw: cell.raw + ' '.repeat(Math.max(0, colWidth - cell.text.length)) });
+    } else {
+      row.push(seg(padRight(cell?.text ?? '', colWidth), cell?.role ?? 'plain'));
+    }
   });
   return row;
 }
@@ -432,7 +451,13 @@ function deskCode(desk: Desk): string {
 
 const HEADLINE_MAX_ROWS = 3;
 
-export function buildArticle(story: Story, layout: MagLayout): Article {
+/** A row of the mark after an article: `raw` as painted, `text` as read (at most one column wide). */
+export interface EndMarkRow {
+  raw: string;
+  text: string;
+}
+
+export function buildArticle(story: Story, layout: MagLayout, endMark: readonly EndMarkRow[] = []): Article {
   const { geometry, panelHeight } = layout;
   const w = geometry.contentWidth;
 
@@ -455,6 +480,8 @@ export function buildArticle(story: Story, layout: MagLayout): Article {
   if (source) trailer.push({ text: truncate(`>> SRC ${source}`, geometry.colWidth), role: 'source' });
   if (cells.length === 0) cells.push({ text: '(no summary)', role: 'dim' });
   if (trailer.length) cells.push({ text: '', role: 'plain' }, ...trailer);
+  // The mark closes the text: it flows with it, after the last line.
+  if (endMark.length) cells.push({ text: '', role: 'plain' }, ...endMark.map((m): Cell => ({ text: m.text, role: 'plain', raw: m.raw })));
 
   const firstHeight = Math.max(1, panelHeight - head.length);
   const restHeight = Math.max(1, panelHeight - 1);
