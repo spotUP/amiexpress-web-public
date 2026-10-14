@@ -218,17 +218,29 @@ void ui_list_draw(ui_list *list, ansi_buf *b)
     ansi_color(b, list->ink, -1, 0);
 }
 
+static int geometry(const ui_list *list, int *inner_left, int *inner_width,
+                    int *scrolls, int *thumb_start, int *thumb_size)
+{
+    int visible = ui_list_visible_rows(list);
+    *inner_left = list->borders ? list->left + 1 : list->left;
+    *inner_width = list->borders ? list->width - 2 : list->width;
+    *scrolls = list->count > visible;
+    if (*scrolls) *inner_width -= 1;
+    *thumb_start = 0; *thumb_size = 0;
+    if (*scrolls) thumb_for(list, visible, thumb_start, thumb_size);
+    return *inner_width >= 1 ? visible : 0;
+}
+
 void ui_list_draw_changed(ui_list *list, ansi_buf *b, int rows_changed)
 {
     int visible;
     int inner_left;
     int inner_width;
     int scrolls;
-    int thumb_start = 0, thumb_size = 0;
+    int thumb_start, thumb_size;
     int was, now;
 
     if (!list || !b) return;
-    visible = ui_list_visible_rows(list);
 
     /* Never drawn, scrolled, or the rows themselves moved: the whole box. */
     if (list->drawn_selected < 0 || rows_changed
@@ -238,12 +250,8 @@ void ui_list_draw_changed(ui_list *list, ansi_buf *b, int rows_changed)
     }
     if (list->drawn_selected == list->selected) return;   /* nothing moved */
 
-    inner_left = list->borders ? list->left + 1 : list->left;
-    inner_width = list->borders ? list->width - 2 : list->width;
-    scrolls = list->count > visible;
-    if (scrolls) inner_width -= 1;
-    if (inner_width < 1) return;
-    if (scrolls) thumb_for(list, visible, &thumb_start, &thumb_size);
+    visible = geometry(list, &inner_left, &inner_width, &scrolls, &thumb_start, &thumb_size);
+    if (visible == 0) return;
 
     was = list->drawn_selected - list->offset;
     now = list->selected - list->offset;
@@ -256,4 +264,20 @@ void ui_list_draw_changed(ui_list *list, ansi_buf *b, int rows_changed)
     ansi_color(b, list->ink, -1, 0);
 
     list->drawn_selected = list->selected;
+}
+
+void ui_list_draw_row(ui_list *list, ansi_buf *b, int index)
+{
+    int inner_left, inner_width, scrolls, thumb_start, thumb_size, visible, row;
+
+    if (!list || !b) return;
+    if (list->drawn_selected < 0 || list->drawn_offset != list->offset) {
+        ui_list_draw(list, b);
+        return;
+    }
+    visible = geometry(list, &inner_left, &inner_width, &scrolls, &thumb_start, &thumb_size);
+    row = index - list->offset;
+    if (row < 0 || row >= visible) return;
+    draw_row(list, b, row, inner_left, inner_width, scrolls, thumb_start, thumb_size);
+    ansi_color(b, list->ink, -1, 0);
 }

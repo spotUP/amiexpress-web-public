@@ -96,6 +96,9 @@ void ui_list_draw(ui_list *list, ansi_buf *b);
  */
 void ui_list_draw_changed(ui_list *list, ansi_buf *b, int rows_changed);
 
+/** Repaint exactly row `index` if it is visible; a full draw if the list was never drawn or scrolled. */
+void ui_list_draw_row(ui_list *list, ansi_buf *b, int index);
+
 #ifdef __cplusplus
 }
 #endif

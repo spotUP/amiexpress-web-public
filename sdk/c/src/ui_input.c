@@ -16,6 +16,7 @@ void ui_input_style_init(ui_input_style *style)
     style->bg = ANSI_BLUE;
     style->ink = ANSI_YELLOW;
     style->upper = 0;
+    style->mask = 0;
 }
 
 /** Draw the prompt row and leave the cursor after the text. */
@@ -30,7 +31,13 @@ static void paint(ansi_buf *b, const ui_input_style *st,
         strncat(line, label, room);
         strncat(line, " ", room - strlen(line));
     }
-    if (text) strncat(line, text, room - strlen(line));
+    if (text && st->mask) {
+        unsigned long at = strlen(line), i, n = strlen(text);
+        for (i = 0; i < n && at < room; i++) line[at++] = (char) st->mask;
+        line[at] = '\0';
+    } else if (text) {
+        strncat(line, text, room - strlen(line));
+    }
 
     ansi_fill(b, st->row, st->left, st->cols, st->fg, st->bg);
     ansi_color(b, st->ink, st->bg, 1);
@@ -95,7 +102,10 @@ int ui_input(ansi_buf *b, const ui_key_source *src, int *pushback,
         } else if (key == 21) {              /* CTRL-U clears the line */
             len = 0;
             buf[0] = '\0';
-        } else if (key >= 32 && key < 127 && len < maxlen - 1) {
+        /* Latin-1's printable half too (0xA0-0xFF): a caller's own name is
+           typed with them, and the board stores them as they are. 0x80-0x9F
+           are C1 controls and stay out. */
+        } else if (((key >= 32 && key < 127) || (key >= 160 && key <= 255)) && len < maxlen - 1) {
             char c = (char) key;
             if (style->upper && c >= 'a' && c <= 'z') c = (char) (c - 'a' + 'A');
             buf[len++] = c;

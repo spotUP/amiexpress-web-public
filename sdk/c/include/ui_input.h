@@ -33,6 +33,8 @@ typedef struct {
     int fg, bg, ink;
     /** Fold typed letters to upper case - what a BBS command prompt wants. */
     int upper;
+    /** Non-zero: echo this character for every typed one (getPass2). */
+    int mask;
 } ui_input_style;
 
 /** Sensible defaults: white on blue, yellow text, no folding. */

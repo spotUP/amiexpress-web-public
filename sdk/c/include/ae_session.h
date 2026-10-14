@@ -173,7 +173,15 @@ typedef enum {
      * notifications, the board's copy of it. See ae_post_open. A board that
      * does not know it answers nothing, and the door writes the base itself.
      */
-    AE_FIELD_POSTMSG        = 10500  /* AEW_POSTMSG */
+    AE_FIELD_POSTMSG        = 10500, /* AEW_POSTMSG */
+
+    /*
+     * ALSO THIS BOARD'S OWN: the W door's field conversation (AEW_USERFIELD).
+     * A request in String, the answer in String - ae_field_exchange. See
+     * ae_userfield.h for the verbs. A board that does not know it answers
+     * nothing and the door leaves.
+     */
+    AE_FIELD_USERFIELD      = 10600  /* AEW_USERFIELD */
 } ae_field;
 
 /**

@@ -435,6 +435,26 @@ static void a_cursor_move_repaints_two_rows(void)
     printf("  [OK] a cursor move repaints two rows, not the box\n");
 }
 
+static void one_changed_row_repaints_only_that_row(void)
+{
+    ui_list list = a_list(50, 10);
+    static ansi_buf b;
+    ui_list_select(&list, 0);
+    ansi_begin(&b, frame, (long)sizeof(frame));
+    ui_list_draw(&list, &b);
+    ansi_begin(&b, frame, (long)sizeof(frame));
+    ui_list_draw_row(&list, &b, 3);      /* screen row top+1+3 = 5 under a border */
+    frame[b.len] = '\0';
+    assert(strstr(frame, "\033[5;") != 0);
+    assert(strstr(frame, "\033[2;") == 0);
+    assert(strstr(frame, "\033[4;") == 0);
+    assert(strstr(frame, "\033[6;") == 0);
+    ansi_begin(&b, frame, (long)sizeof(frame));
+    ui_list_draw_row(&list, &b, 40);     /* not visible: nothing */
+    assert(b.len == 0);
+    printf("  [OK] one changed row repaints that row and nothing else\n");
+}
+
 int main(void)
 {
     printf("ui_list\n");
@@ -455,6 +475,7 @@ int main(void)
     the_profile_says_which_screens_have_backgrounds();
     a_cursor_move_repaints_two_rows();
     the_row_left_behind_loses_its_caret();
+    one_changed_row_repaints_only_that_row();
     printf("ui_list: all passed\n");
     return 0;
 }

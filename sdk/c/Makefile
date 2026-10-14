@@ -37,7 +37,7 @@ AMIGA_CFLAGS = +aos68k -c99 -DAMIGA -Iinclude -I"$(VBCC)/targets/m68k-amigaos/in
 # ae_dos_amiga is the dos.library backend - the same split as
 # ae_transport_amiga, whose host twin is likewise absent from this list because
 # the host is not what `lib` builds.
-MODULES = ae_host ae_out ae_box ae_session ui_profile ui_ansi ui_screen ui_list ui_chrome ui_key ui_input ui_editor ui_doc ui_theme ui_settings json_lite ae_chunk ae_transport_amiga ae_session_bbs ae_net ae_http ae_achieve ae_request ae_msgbase ae_dos ae_dos_amiga
+MODULES = ae_host ae_out ae_box ae_session ui_profile ui_ansi ui_screen ui_list ui_chrome ui_key ui_input ui_editor ui_doc ui_theme ui_settings json_lite ae_chunk ae_transport_amiga ae_session_bbs ae_net ae_http ae_achieve ae_request ae_msgbase ae_dos ae_dos_amiga ae_userfield
 AMIGA_OBJS = $(patsubst %,build/amiga/%.o,$(MODULES))
 
 .PHONY: door-sources-compile all test amiga lib measure settings clean
@@ -48,7 +48,7 @@ all: test
 # Tests (host)
 # ---------------------------------------------------------------------
 
-test: door-sources-compile build/write-message build/test_ae_host build/test_ae_session build/test_ui_profile build/test_ui_list build/test_ui_chrome build/test_ui_screen build/test_ui_input build/test_ui_editor build/test_frame_budget build/test_ui_theme build/test_ui_settings build/test_ui_doc build/test_ae_http build/test_ae_achieve build/test_ae_request build/test_ae_msgbase build/test_ae_dos build/test_texttv build/test_subs_scan build/test_achieve_rows build/test_requests_bulletin
+test: door-sources-compile build/write-message build/test_ae_host build/test_ae_session build/test_ui_profile build/test_ui_list build/test_ui_chrome build/test_ui_screen build/test_ui_input build/test_ui_editor build/test_frame_budget build/test_ui_theme build/test_ui_settings build/test_ui_doc build/test_ae_http build/test_ae_achieve build/test_ae_request build/test_ae_msgbase build/test_ae_dos build/test_texttv build/test_subs_scan build/test_achieve_rows build/test_requests_bulletin build/test_ae_userfield
 	./build/test_ae_host
 	./build/test_ae_session
 	./build/test_ui_profile
@@ -70,6 +70,7 @@ test: door-sources-compile build/write-message build/test_ae_host build/test_ae_
 	./build/test_subs_scan
 	./build/test_achieve_rows
 	./build/test_requests_bulletin
+	./build/test_ae_userfield
 
 # Every door's own .c, syntax-checked with the host compiler.
 #
@@ -84,6 +85,10 @@ door-sources-compile:
 		$(CC) -fsyntax-only -Iinclude -I$$(dirname $$f) $$f || exit 1; \
 	done
 	@echo "door sources: all compile"
+
+build/test_ae_userfield: src/ae_userfield.c src/ae_transport_native.c tests/test_ae_userfield.c include/ae_userfield.h include/ae_transport_native.h
+	@mkdir -p build
+	$(CC) $(HOST_CFLAGS) src/ae_userfield.c src/ae_transport_native.c tests/test_ae_userfield.c -o $@
 
 build/test_ae_host: src/ae_host.c tests/test_ae_host.c include/ae_host.h
 	@mkdir -p build

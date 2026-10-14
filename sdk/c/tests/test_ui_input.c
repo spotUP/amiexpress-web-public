@@ -291,6 +291,34 @@ static void confirm_answers_y_n_enter_and_escape(void)
     printf("  [OK] confirm answers Y, N, ENTER and ESC - and ignores the rest\n");
 }
 
+static void a_swedish_letter_is_kept(void)
+{
+    char buf[32];
+    buf[0] = '\0';
+    assert(run_input("G\xf6teborg\r", buf, (int)sizeof(buf), 0) == 1);
+    assert(strcmp(buf, "G\xf6teborg") == 0);
+    printf("  [OK] a latin1 letter typed into a prompt is kept\n");
+}
+
+static void a_masked_prompt_never_echoes_the_text(void)
+{
+    typist t; ui_key_source src; ansi_buf b; ui_input_style st;
+    int pushback = -1;
+    char buf[16];
+    buf[0] = '\0';
+    t.keys = "hunter2\r"; t.at = 0; t.overrun = 0;
+    src = source_for(&t);
+    ansi_begin(&b, frame, (long)sizeof(frame));
+    ui_input_style_init(&st);
+    st.mask = '*';
+    assert(ui_input(&b, &src, &pushback, &st, "Password:", buf, (int)sizeof(buf)) == 1);
+    frame[b.len] = '\0';
+    assert(strcmp(buf, "hunter2") == 0);
+    assert(strstr(frame, "hunter") == 0);
+    assert(strstr(frame, "*******") != 0);
+    printf("  [OK] a masked prompt echoes the mask, never the text\n");
+}
+
 int main(void)
 {
     printf("ui_input\n");
@@ -309,6 +337,8 @@ int main(void)
     it_can_fold_to_upper_case();
     a_caller_who_hangs_up_mid_edit_is_not_an_empty_answer();
     confirm_answers_y_n_enter_and_escape();
+    a_swedish_letter_is_kept();
+    a_masked_prompt_never_echoes_the_text();
     printf("ui_input: all passed\n");
     return 0;
 }
