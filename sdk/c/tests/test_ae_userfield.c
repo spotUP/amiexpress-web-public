@@ -95,6 +95,36 @@ static void a_refusal_is_not_silence(void)
     printf("  [OK] a refused open is not told as a silent board\n");
 }
 
+static void a_long_value_is_kept_whole(void)
+{
+    ae_uf_field f;
+    char reply[199];
+    int i;
+    memset(reply, 'a', sizeof(reply) - 1);
+    memcpy(reply, "E\tEmail\t", 8);
+    for (i = 8; i < 108; i++) reply[i] = 'x';          /* a 100-char value */
+    memcpy(reply + 108, "\tT\t100\tEmail: ", 14);
+    reply[108 + 14] = '\0';
+    assert(ae_uf_parse_field(2, reply, &f) == 1);
+    assert(strlen(f.value) == 100 && f.maxlen == 100 && strcmp(f.prompt, "Email: ") == 0);
+    /* a full 198-byte answer: 4 + 189 value + 5 */
+    memcpy(reply, "E\tL\t", 4);
+    for (i = 4; i < 193; i++) reply[i] = 'y';
+    memcpy(reply + 193, "\tT\t9\t", 5);
+    reply[198] = '\0';
+    assert(strlen(reply) == 198);
+    assert(ae_uf_parse_field(2, reply, &f) == 1 && strlen(f.value) == 189 && f.maxlen == 9);
+    printf("  [OK] a long value is kept whole\n");
+}
+
+static void an_empty_prompt_cycle_row_parses(void)
+{
+    ae_uf_field f;
+    assert(ae_uf_parse_field(9, "E\tScreen clear\tON\tY\t0\t", &f) == 1);
+    assert(f.kind == 'Y' && f.maxlen == 0 && strcmp(f.value, "ON") == 0 && f.prompt[0] == '\0');
+    printf("  [OK] an empty-prompt cycle row parses\n");
+}
+
 int main(void)
 {
     printf("ae_userfield\n");
@@ -106,6 +136,8 @@ int main(void)
     a_door_row_and_the_end_of_the_list();
     the_resume_row_comes_back_once();
     a_refusal_is_not_silence();
+    a_long_value_is_kept_whole();
+    an_empty_prompt_cycle_row_parses();
     printf("ae_userfield: all passed\n");
     return 0;
 }

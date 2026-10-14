@@ -39,7 +39,7 @@ typedef struct {
     char kind;
     int maxlen;
     char label[32];
-    char value[64];
+    char value[200];   /* any 198-byte answer fits whole: a legacy email can exceed 64 */
     char prompt[72];
 } ae_uf_field;
 

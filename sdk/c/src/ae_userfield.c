@@ -106,13 +106,17 @@ int ae_uf_set(int n, const char *value, ae_uf_answer *out)
 int ae_uf_password(const char *first, const char *second, ae_uf_answer *out)
 {
     char req[AE_MAX_LINE + 1], reply[AE_MAX_LINE + 1];
-    int got;
+    volatile char *wipe;
+    int got, i;
     strcpy(req, "PASSWORD ");
-    strncat(req, first, 50);
+    strncat(req, first ? first : "", 50);
     strcat(req, "\t");
-    strncat(req, second, 50);
+    strncat(req, second ? second : "", 50);
     got = ask(req, reply, (int)sizeof(reply));
-    memset(req, 0, sizeof(req));          /* the text lives only as long as the round trip */
+    /* The text lives only as long as the round trip. Through a volatile
+       pointer so the compiler cannot drop the stores as dead. */
+    wipe = req;
+    for (i = 0; i < (int)sizeof(req); i++) wipe[i] = 0;
     if (got < 0) { memset(out, 0, sizeof(*out)); return out->outcome = AE_UF_GONE; }
     return ae_uf_parse_answer(reply, out);
 }

@@ -319,6 +319,34 @@ static void a_masked_prompt_never_echoes_the_text(void)
     printf("  [OK] a masked prompt echoes the mask, never the text\n");
 }
 
+static void a_masked_prompt_stays_masked_through_edits(void)
+{
+    typist t; ui_key_source src; ansi_buf b; ui_input_style st;
+    int pushback = -1;
+    char buf[16];
+    const char *hidden = "qjkzy";
+    buf[0] = '\0';
+    t.keys = "qjk\x7fz\x15yq\r"; t.at = 0; t.overrun = 0;
+    src = source_for(&t);
+    ansi_begin(&b, frame, (long)sizeof(frame));
+    ui_input_style_init(&st);
+    st.mask = '*';
+    assert(ui_input(&b, &src, &pushback, &st, "Password:", buf, (int)sizeof(buf)) == 1);
+    frame[b.len] = '\0';
+    assert(strcmp(buf, "yq") == 0);
+    for (; *hidden; hidden++) assert(strchr(frame, *hidden) == 0);
+    printf("  [OK] a masked prompt shows no text after backspace or CTRL-U\n");
+}
+
+static void the_latin1_bounds_are_exact(void)
+{
+    char buf[8];
+    buf[0] = '\0'; assert(run_input("\xa0\r", buf, (int)sizeof(buf), 0) == 1 && (unsigned char)buf[0] == 0xA0);
+    buf[0] = '\0'; assert(run_input("\xff\r", buf, (int)sizeof(buf), 0) == 1 && (unsigned char)buf[0] == 0xFF);
+    buf[0] = '\0'; assert(run_input("\x9f\r", buf, (int)sizeof(buf), 0) == 0 && buf[0] == '\0');
+    printf("  [OK] latin1 0xA0 and 0xFF are accepted, the C1 control 0x9F is not\n");
+}
+
 int main(void)
 {
     printf("ui_input\n");
@@ -339,6 +367,8 @@ int main(void)
     confirm_answers_y_n_enter_and_escape();
     a_swedish_letter_is_kept();
     a_masked_prompt_never_echoes_the_text();
+    a_masked_prompt_stays_masked_through_edits();
+    the_latin1_bounds_are_exact();
     printf("ui_input: all passed\n");
     return 0;
 }
