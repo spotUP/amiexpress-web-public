@@ -62,6 +62,19 @@ export interface DoorSetting {
   artMaxLines?: number;
   artMaxLineLength?: number;
   /**
+   * The files this slot's picker may offer, as values with `*` inside a
+   * segment (`headers/*`, `bulletindesign/Tail*`). Omitted, the slot offers
+   * only its default: a door folder holds many pieces and most of them belong
+   * to OTHER slots - the magazine's title slot was offered every banner.
+   */
+  artChoices?: string[];
+  /**
+   * The 40-column drawings this DOOR reads for the slot - the Studio's C64
+   * and Teletext tabs. Omitted, none: a tab whose drawing nothing reads is a
+   * save that changes nothing a caller sees.
+   */
+  artVariants?: Array<'c64' | 'ttx'>;
+  /**
    * Render this value into the door's legacy cfg file under this key, when the
    * manifest declares `cfgFile`. 68K/C doors cannot read settings.json - they
    * read a plain `Key=value` file beside the binary - so this is the bridge.
@@ -160,6 +173,17 @@ export interface DoorSettingsManifest {
    * form, which is the wrong tool for art.
    */
   artSections?: DoorArtSection[];
+  /** Folders whose every art file is a Studio slot. See ArtFolderSchema. */
+  artFolders?: DoorArtFolder[];
+}
+
+export interface DoorArtFolder {
+  /** Inside the door's folder, e.g. `art/fill`. */
+  dir: string;
+  label: string;
+  maxLines: number;
+  maxLineLength: number;
+  commands?: string[];
 }
 
 /**
@@ -216,6 +240,17 @@ const ArtSectionSchema = z.object({
    */
   commands: z.array(z.string().min(1).max(20)).max(10).optional(),
 });
+/**
+ * A folder of whole-file pieces the Studio lists one slot per file - the
+ * magazine's filler, sixty-five pieces nobody would declare one by one.
+ */
+const ArtFolderSchema = z.object({
+  dir: z.string().min(1).max(80).regex(ART_FOLDER_RE),
+  label: z.string().min(1).max(80),
+  maxLines: z.number().int().min(1).max(100),
+  maxLineLength: z.number().int().min(1).max(1000),
+  commands: z.array(z.string().min(1).max(20)).max(10).optional(),
+});
 const SettingSchema = z.object({
   key: z.string().min(1).max(64),
   label: z.string().min(1).max(120),
@@ -235,6 +270,8 @@ const SettingSchema = z.object({
   art: z.boolean().optional(),
   artMaxLines: z.number().int().min(1).max(100).optional(),
   artMaxLineLength: z.number().int().min(1).max(1000).optional(),
+  artChoices: z.array(z.string().min(1).max(80).regex(/^[A-Za-z0-9_*-][A-Za-z0-9._*-]*(\/[A-Za-z0-9_*-][A-Za-z0-9._*-]*)?$/)).max(20).optional(),
+  artVariants: z.array(z.enum(['c64', 'ttx'])).max(2).optional(),
   cfgKey: z.string().min(1).max(64).optional(),
   narrowValue: z.string().min(1).max(64).optional(),
   fromSystemConfig: z.string().min(1).max(64).optional(),
@@ -281,6 +318,7 @@ const ManifestSchema = z.object({
   cfgFile: z.string().min(1).max(64).regex(BARE_FILE_RE).optional(),
   cfgFormat: z.enum(['key-value', 'empire']).optional(),
   artSections: z.array(ArtSectionSchema).max(10).optional(),
+  artFolders: z.array(ArtFolderSchema).max(10).optional(),
 });
 
 /**
@@ -1160,7 +1198,15 @@ import {
   VARIANT_COLUMNS,
   type ArtAlphabet,
 } from './door-art-variants';
-import { resolveArtValue, listArtChoices, artFileLines } from './door-art-file';
+import {
+  resolveArtValue,
+  listArtChoices,
+  artFileLines,
+  artChoiceMatches,
+  listArtFolder,
+  resolveArtFolderFile,
+  ART_FOLDER_RE,
+} from './door-art-file';
 
 export interface DoorArtSection {
   /** Bare filename inside the door directory (e.g. `Bulls.CFG`). */
@@ -1197,7 +1243,16 @@ export interface DoorArtContent {
    * a drawing somebody made and emptied.
    */
   variants: { c64: boolean; ttx: boolean };
+  /** The narrow tabs the Studio offers: the drawings this door actually reads. */
+  offers: ArtAlphabet[];
 }
+
+/**
+ * Which 40-column drawings a door reads, per kind of slot. A section in a
+ * config file is served both by the Empire narrow shadow; a setting's file
+ * only by a door that says so (`artVariants`); a folder piece by none.
+ */
+const SECTION_OFFERS: ArtAlphabet[] = ['c64', 'ttx'];
 
 /**
  * The art this DOOR declares.
@@ -1211,7 +1266,7 @@ export interface DoorArtContent {
 function readArtManifest(
   doorDir: string,
   command?: string,
-): DoorSettingsManifest & { artSections: DoorArtSection[]; artSettings: DoorSetting[] } {
+): DoorSettingsManifest & { artSections: DoorArtSection[]; artSettings: DoorSetting[]; artFolders: DoorArtFolder[] } {
   const manifest = readManifestFromDir(doorDir);
   if (!manifest) throw new Error('This door does not declare any settings');
   const want = command ? command.toUpperCase() : null;
@@ -1224,10 +1279,11 @@ function readArtManifest(
    * that kind, so the "declares no art" refusal has to consider both.
    */
   const artSettings = (manifest.settings ?? []).filter(x => x.art && scoped(x));
-  if (sections.length === 0 && artSettings.length === 0) {
+  const artFolders = (manifest.artFolders ?? []).filter(scoped);
+  if (sections.length === 0 && artSettings.length === 0 && artFolders.length === 0) {
     throw new Error('This door declares no art sections for the Studio');
   }
-  return { ...manifest, artSections: sections, artSettings };
+  return { ...manifest, artSections: sections, artSettings, artFolders };
 }
 
 function loadArtFile(doorDir: string, file: string): EmpireFile {
@@ -1264,10 +1320,14 @@ export function readDoorArtSections(
      * the Studio answers with the picker.
      */
     const settingKey = artSettingKey(entry.section);
-    if (settingKey !== null) {
+    const folderPiece = artFolderPiece(entry.section);
+    if (settingKey !== null || folderPiece !== null) {
       const body = entry.missing
         ? ''
-        : fs.readFileSync(resolveArtValue(doorDir, entry.file), 'latin1');
+        : fs.readFileSync(
+          folderPiece ? resolveArtFolderFile(doorDir, folderPiece.dir, folderPiece.name) : resolveArtValue(doorDir, entry.file),
+          'latin1',
+        );
       const drawn = drawnFor(entry.section);
       return {
         file: entry.file,
@@ -1278,6 +1338,7 @@ export function readDoorArtSections(
         maxLines: entry.maxLines,
         maxLineLength: entry.maxLineLength,
         variants: { c64: drawn('c64'), ttx: drawn('ttx') },
+        offers: entry.offers ?? [],
       };
     }
 
@@ -1297,6 +1358,7 @@ export function readDoorArtSections(
       maxLines: entry.maxLines,
       maxLineLength: entry.maxLineLength,
       variants: { c64: drawn('c64'), ttx: drawn('ttx') },
+      offers: entry.offers ?? SECTION_OFFERS,
     };
   });
 }
@@ -1314,8 +1376,10 @@ export interface DoorArtListing {
    * must not take the whole door-art tab down with it.
    */
   missing?: boolean;
-  /** For a file-backed slot: the art this door ships, as a picker's options. */
+  /** For a file-backed slot: the files this slot may draw, as a picker's options. */
   choices?: Array<{ file: string; lines: number }>;
+  /** The narrow tabs the Studio offers for this slot. */
+  offers?: ArtAlphabet[];
 }
 
 /**
@@ -1329,6 +1393,44 @@ export interface DoorArtListing {
 export const artSettingSection = (key: string): string => `setting:${key}`;
 export const artSettingKey = (section: string): string | null =>
   section.startsWith('setting:') ? section.slice('setting:'.length) : null;
+
+/** A folder piece is addressed `folder:<dir>/<name>`; its file is `<dir>/<name>`. */
+export const artFolderSection = (dir: string, name: string): string => `folder:${dir}/${name}`;
+export function artFolderPiece(section: string): { dir: string; name: string } | null {
+  if (!section.startsWith('folder:')) return null;
+  const rel = section.slice('folder:'.length);
+  const cut = rel.lastIndexOf('/');
+  if (cut <= 0) return null;
+  return { dir: rel.slice(0, cut), name: rel.slice(cut + 1) };
+}
+
+/**
+ * What one slot's picker offers: the door's art files its `artChoices`
+ * patterns match - its default alone when it declares none - and the file it
+ * names now, so the control always has its own value.
+ */
+function choicesFor(doorDir: string, setting: DoorSetting, current: string): Array<{ file: string; lines: number }> {
+  const patterns = setting.artChoices ?? (typeof setting.default === 'string' ? [setting.default] : []);
+  return listArtChoices(doorDir).filter(
+    (c) => c.file === current || patterns.some((p) => artChoiceMatches(p, c.file)),
+  );
+}
+
+/** The slots a door's art FOLDERS contribute: one per art file in each. */
+function artFolderListings(doorDir: string, command?: string): DoorArtListing[] {
+  const manifest = readArtManifest(doorDir, command);
+  return manifest.artFolders.flatMap((folder) =>
+    listArtFolder(doorDir, folder.dir).map((piece) => ({
+      file: `${folder.dir}/${piece.name}`,
+      section: artFolderSection(folder.dir, piece.name),
+      label: `${folder.label}: ${piece.name}`,
+      lines: piece.lines,
+      maxLines: folder.maxLines,
+      maxLineLength: folder.maxLineLength,
+      offers: [],
+    })),
+  );
+}
 
 /** The slots a door's art SETTINGS contribute, with live line counts. */
 function artSettingListings(doorDir: string, command?: string): DoorArtListing[] {
@@ -1352,7 +1454,8 @@ function artSettingListings(doorDir: string, command?: string): DoorArtListing[]
       missing,
       maxLines: setting.artMaxLines ?? 100,
       maxLineLength: setting.artMaxLineLength ?? 1000,
-      choices: listArtChoices(doorDir),
+      choices: choicesFor(doorDir, setting, value),
+      offers: setting.artVariants ?? [],
     };
   });
 }
@@ -1379,7 +1482,7 @@ export function listDoorArtSections(doorDir: string, command?: string): DoorArtL
       maxLineLength: entry.maxLineLength,
     }];
   });
-  return [...sections, ...artSettingListings(doorDir, command)];
+  return [...sections, ...artSettingListings(doorDir, command), ...artFolderListings(doorDir, command)];
 }
 
 /** Read QuickNew's config as one editable template per heading and stats line. */
@@ -1448,6 +1551,33 @@ export function writeDoorArtSection(
     return written;
   }
 
+  /**
+   * A folder piece: the whole file, inside the folder the manifest declares,
+   * held to the folder's limits. The file must already be one of its pieces -
+   * the Studio edits what is there, it does not mint names.
+   */
+  const piece = artFolderPiece(section);
+  if (piece !== null) {
+    const folder = manifest.artFolders.find((f) => f.dir === piece.dir);
+    if (!folder || fileName !== `${piece.dir}/${piece.name}`) {
+      throw new Error(`No art folder ${piece.dir} - the manifest must declare it`);
+    }
+    const full = resolveArtFolderFile(doorDir, folder.dir, piece.name);
+    if (!fs.existsSync(full)) throw new Error(`${fileName} not found in ${folder.dir}`);
+    const text = Buffer.from(contentBase64, 'base64').toString('latin1');
+    const rows = text.split(/\r\n|\n/);
+    if (rows.length > 0 && rows[rows.length - 1] === '') rows.pop();
+    if (rows.length > folder.maxLines) {
+      throw new Error(`${folder.label}: ${rows.length} lines, at most ${folder.maxLines}`);
+    }
+    const temp = `${full}.tmp`;
+    fs.writeFileSync(temp, Buffer.from(text, 'latin1'));
+    fs.renameSync(temp, full);
+    const written = readDoorArtSections(doorDir, command).find((c) => c.section === section);
+    if (!written) throw new Error(`${section} vanished between the write and the read`);
+    return written;
+  }
+
   const discovered = parseQuickNewSectionName(section);
   const entry = manifest.artSections.find((a) =>
     a.file === fileName &&
@@ -1498,8 +1628,29 @@ export function writeDoorArtSection(
  * Scoped like every other art call: a request in one door's name cannot
  * reach the other door's logo just by naming its file.
  */
-function artEntryFor(doorDir: string, command: string, fileName: string, section: string) {
+function artEntryFor(
+  doorDir: string,
+  command: string,
+  fileName: string,
+  section: string,
+  alphabet: ArtAlphabet,
+): { file: string; label: string; maxLines: number } {
   const manifest = readArtManifest(doorDir, command);
+  /*
+   * A setting's slot draws its narrow versions too - when its door reads them.
+   * This lookup used to know only config sections, so every C64 or Teletext
+   * save on a setting slot (MAG, GLC) failed with "the manifest must declare
+   * it" while the tab sat there offering itself.
+   */
+  const settingKey = artSettingKey(section);
+  if (settingKey !== null || artFolderPiece(section) !== null) {
+    const setting = settingKey !== null ? manifest.artSettings.find((x) => x.key === settingKey) : undefined;
+    if (!setting) throw new Error(`No art setting ${section} - the manifest must declare it`);
+    if (!(setting.artVariants ?? []).includes(alphabet)) {
+      throw new Error(`${setting.label}: this door does not read a ${alphabet} drawing, so it must be declared in artVariants first`);
+    }
+    return { file: fileName, label: setting.label, maxLines: setting.artMaxLines ?? 100 };
+  }
   const entry = manifest.artSections.find(
     (a) => a.file === fileName &&
       ((a.section ?? '').toLowerCase() === section.toLowerCase() ||
@@ -1527,7 +1678,7 @@ export function readDoorArtVariant(
   section: string,
   alphabet: ArtAlphabet,
 ): DoorArtContent {
-  const entry = artEntryFor(doorDir, command, fileName, section);
+  const entry = artEntryFor(doorDir, command, fileName, section, alphabet);
   const lines = readVariant(artRoot, command, section, alphabet) ?? [];
   return {
     file: entry.file,
@@ -1541,6 +1692,9 @@ export function readDoorArtVariant(
       c64: readVariant(artRoot, command, section, 'c64') !== null,
       ttx: readVariant(artRoot, command, section, 'ttx') !== null,
     },
+    offers: artSettingKey(section) !== null
+      ? (readArtManifest(doorDir, command).artSettings.find((x) => x.key === artSettingKey(section))?.artVariants ?? [])
+      : SECTION_OFFERS,
   };
 }
 
@@ -1554,7 +1708,7 @@ export function writeDoorArtVariant(
   alphabet: ArtAlphabet,
   contentBase64: string,
 ): DoorArtContent {
-  const entry = artEntryFor(doorDir, command, fileName, section);
+  const entry = artEntryFor(doorDir, command, fileName, section, alphabet);
   const text = Buffer.from(contentBase64, 'base64').toString('latin1');
   const lines = text.split(/\r\n|\n/);
   if (lines.length > 0 && lines[lines.length - 1] === '') lines.pop();

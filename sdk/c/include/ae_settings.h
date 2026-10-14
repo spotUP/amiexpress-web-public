@@ -81,6 +81,10 @@ typedef struct {
      from_system_config is: every macro above predates it, and C zero-fills
      what an initializer does not name. */
   int         art;
+  /* The files this art slot's Studio picker may offer, NULL-terminated, as
+     `artChoices` patterns (a `*` inside a name). NULL: the default only - a door
+     folder holds other slots' art, and a header slot offered the tails. */
+  const char *const *art_choices;
 } ae_setting;
 
 typedef struct {
@@ -109,6 +113,12 @@ typedef struct {
 #define AE_SETTING_ART(key, label, def, cfgkey, help)                         \
   { key, cfgkey, label, AE_SET_STRING, def, 0, 0, help, 0, 0, 0, 0, NULL,     \
     NULL, 1 },
+
+/* An art setting whose picker offers the alternates `choices_arr` names
+   (a NULL-terminated array of patterns), not only its default. */
+#define AE_SETTING_ART_CHOICES(key, label, def, cfgkey, help, choices_arr)    \
+  { key, cfgkey, label, AE_SET_STRING, def, 0, 0, help, 0, 0, 0, 0, NULL,     \
+    NULL, 1, choices_arr },
 
 #define AE_SETTING_SECRET(key, label, cfgkey, help)                           \
   { key, cfgkey, label, AE_SET_STRING, "", 0, 0, help, 0, 0, 0, 1, NULL },

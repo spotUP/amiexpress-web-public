@@ -58,6 +58,12 @@ export function DoorArtDialog({
   const [lineCount, setLineCount] = useState(0);
   const [variant, setVariant] = useState<Variant>('wide');
   const [drawn, setDrawn] = useState<{ c64: boolean; ttx: boolean }>({ c64: false, ttx: false });
+  /**
+   * The narrow tabs this slot has: the drawings its door actually reads. A
+   * tab whose drawing nothing reads was a save that changed nothing a caller
+   * saw (MAG's Teletext tab, REQUESTS' C64 one). Wide only until the listing says.
+   */
+  const [offers, setOffers] = useState<Array<'c64' | 'ttx'>>([]);
   /** The wide art, kept so a variant can be started from it. */
   const [wideContent, setWideContent] = useState<string | null>(null);
   const [wideLines, setWideLines] = useState(0);
@@ -78,6 +84,7 @@ export function DoorArtDialog({
       const sections = (res?.data ?? res) as Array<{
         file: string; section: string; content: string;
         variants?: { c64: boolean; ttx: boolean };
+        offers?: Array<'c64' | 'ttx'>;
       }>;
       const match = sections.find(s => s.file === file && s.section.toLowerCase() === section.toLowerCase());
       if (!live) return;
@@ -87,6 +94,7 @@ export function DoorArtDialog({
         return;
       }
       setDrawn(match.variants ?? { c64: false, ttx: false });
+      setOffers(match.offers ?? []);
       setWideContent(match.content);
       setWideLines(base64ToLatin1(match.content).split('\n').length);
       try {
@@ -211,7 +219,7 @@ export function DoorArtDialog({
           </button>
         </div>
         <div className="flex items-center gap-2" role="group" aria-label="Art variant">
-          {(['wide', 'c64', 'ttx'] as Variant[]).map((v) => (
+          {(['wide', ...offers] as Variant[]).map((v) => (
             <button
               key={v}
               type="button"

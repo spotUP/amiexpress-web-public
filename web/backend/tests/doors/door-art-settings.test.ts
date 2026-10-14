@@ -16,6 +16,7 @@ import {
   listDoorArtSections,
   readDoorArtSections,
   writeDoorArtSection,
+  writeDoorArtVariant,
 } from '../../src/doors/door-settings.service';
 
 function doorWith(settings: unknown[]): string {
@@ -195,5 +196,77 @@ describe('an art setting is a Studio slot', () => {
     expect(() => writeDoorArtSection(dir, '../escape.txt', 'setting:bulletinHeader',
       Buffer.from('x', 'latin1').toString('base64'), 'REQ')).toThrow();
     expect(fs.existsSync(path.join(path.dirname(dir), 'escape.txt'))).toBe(false);
+  });
+});
+
+describe('a slot offers only the files that are its own', () => {
+  /*
+   * The picker listed every art file in the door's folder for every slot, so
+   * the magazine's title slot was offered all fifteen banners and REQUESTS'
+   * header was offered the tails. A slot offers what its `artChoices` names,
+   * its default alone when it names nothing, and the file it holds now.
+   */
+  function twoSlotDoor(): string {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ae-req-choices-'));
+    fs.mkdirSync(path.join(dir, 'headers'));
+    fs.mkdirSync(path.join(dir, 'bulletindesign'));
+    for (const f of ['Bulletin_Header.txt', 'Bulletin_Tail.txt', 'headers/Header1.ansi',
+      'bulletindesign/Header2.ansi', 'bulletindesign/Tail2.ansi']) {
+      fs.writeFileSync(path.join(dir, f), 'x\n', 'latin1');
+    }
+    fs.writeFileSync(path.join(dir, 'door.settings.json'), JSON.stringify({
+      command: 'REQ',
+      settings: [
+        { key: 'bulletinHeader', label: 'Header', type: 'string', art: true, default: 'Bulletin_Header.txt',
+          artChoices: ['Bulletin_Header.txt', 'headers/*', 'bulletindesign/Header*'] },
+        { key: 'bulletinTail', label: 'Tail', type: 'string', art: true, default: 'Bulletin_Tail.txt' },
+      ],
+    }));
+    return dir;
+  }
+
+  it('never offers a header slot the tails, nor a tail slot anything but itself', () => {
+    const slots = listDoorArtSections(twoSlotDoor(), 'REQ');
+    const header = slots.find((s) => s.section === 'setting:bulletinHeader')!;
+    const tail = slots.find((s) => s.section === 'setting:bulletinTail')!;
+    expect(header.choices!.map((c) => c.file).sort()).toEqual(
+      ['Bulletin_Header.txt', 'bulletindesign/Header2.ansi', 'headers/Header1.ansi'],
+    );
+    expect(tail.choices!.map((c) => c.file)).toEqual(['Bulletin_Tail.txt']);
+  });
+
+  it('keeps the file a slot holds now on offer, declared or not', () => {
+    const dir = twoSlotDoor();
+    fs.writeFileSync(path.join(dir, 'settings.json'), JSON.stringify({ bulletinTail: 'bulletindesign/Tail2.ansi' }));
+    const tail = listDoorArtSections(dir, 'REQ').find((s) => s.section === 'setting:bulletinTail')!;
+    expect(tail.choices!.map((c) => c.file).sort()).toEqual(['Bulletin_Tail.txt', 'bulletindesign/Tail2.ansi']);
+  });
+
+  it('offers each magazine screen only itself, from the repo manifest', () => {
+    const repoDoor = path.join(__dirname, '..', '..', '..', '..', 'Doors', 'magazine');
+    const slots = listDoorArtSections(repoDoor, 'MAG').filter((s) => s.section.startsWith('setting:'));
+    expect(slots).toHaveLength(15);
+    for (const slot of slots) expect(slot.choices!.map((c) => c.file)).toEqual([slot.file]);
+  });
+
+  it('offers REQUESTS header its header alternates and its tail its tails, from the repo manifest', () => {
+    const repoDoor = path.join(__dirname, '..', '..', '..', '..', 'Doors', 'REQUESTS');
+    const slots = listDoorArtSections(repoDoor, 'REQ');
+    const header = slots.find((s) => s.section === 'setting:bulletinHeader')!;
+    const tail = slots.find((s) => s.section === 'setting:bulletinTail')!;
+    expect(header.choices!.some((c) => /Tail/.test(c.file))).toBe(false);
+    expect(tail.choices!.some((c) => /Header/.test(c.file))).toBe(false);
+    expect(tail.choices!.length).toBeGreaterThan(1);
+  });
+});
+
+describe('a narrow drawing is offered only where the door reads one', () => {
+  it('lists no tab for a slot that declares none, and refuses a drawing for it', () => {
+    const dir = requestsDoor();
+    const [slot] = listDoorArtSections(dir, 'REQ');
+    expect(slot.offers).toEqual([]);
+    const screens = fs.mkdtempSync(path.join(os.tmpdir(), 'ae-req-screens-'));
+    expect(() => writeDoorArtVariant(dir, screens, 'REQ', slot.file, slot.section, 'ttx',
+      Buffer.from('x', 'latin1').toString('base64'))).toThrow(/does not read a ttx drawing/);
   });
 });

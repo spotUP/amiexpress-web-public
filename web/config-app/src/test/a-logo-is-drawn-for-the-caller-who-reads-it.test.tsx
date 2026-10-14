@@ -52,6 +52,7 @@ beforeEach(() => {
     data: [{
       file: 'Bulls.CFG', section: 'title', label: 'Title logo', content: WIDE,
       lines: 1, maxLines: 20, maxLineLength: 200, variants: { c64: true, ttx: false },
+      offers: ['c64', 'ttx'],
     }],
   } as never);
   vi.mocked(apiClient.getDoorArtVariant).mockResolvedValue({
@@ -66,7 +67,8 @@ describe('a logo is drawn for the caller who reads it', () => {
   it('offers a canvas per alphabet, and says which have been drawn', async () => {
     renderDialog();
     await waitFor(() => expect(screen.getByRole('button', { name: /^Wide$/ })).toBeTruthy());
-    expect(screen.getByRole('button', { name: /^C64$/ })).toBeTruthy();
+    // The tabs arrive with the listing: they are the drawings the door reads.
+    await waitFor(() => expect(screen.getByRole('button', { name: /^C64$/ })).toBeTruthy());
     // The one nobody has drawn says so, rather than opening a blank canvas
     // that looks the same as a drawing somebody emptied.
     expect(screen.getByRole('button', { name: /Teletext \(not drawn\)/ })).toBeTruthy();
@@ -89,5 +91,29 @@ describe('a logo is drawn for the caller who reads it', () => {
     await waitFor(() =>
       expect(screen.getByRole('button', { name: /Start from the wide art/ })).toBeTruthy(),
     );
+  });
+});
+
+describe('a tab is offered only for a drawing the door reads', () => {
+  it('shows no C64 or Teletext tab on a slot whose door reads neither', async () => {
+    // REQUESTS' bulletin header: a 68K door that reads its one file and no
+    // narrow drawing, so a tab there was a save that changed nothing.
+    vi.mocked(apiClient.getDoorArt).mockResolvedValue({
+      data: [{
+        file: 'Bulletin_Header.txt', section: 'setting:bulletinHeader', label: 'Bulletin header art',
+        content: WIDE, lines: 1, maxLines: 100, maxLineLength: 1000,
+        variants: { c64: false, ttx: false }, offers: [],
+      }],
+    } as never);
+    render(
+      <DoorArtDialog
+        command="REQ" doorName="REQUESTS" file="Bulletin_Header.txt" section="setting:bulletinHeader"
+        label="Bulletin header art" maxLines={100} maxLineLength={1000} onClose={() => {}}
+      />,
+      { wrapper },
+    );
+    await waitFor(() => expect(screen.getByRole('button', { name: /^Wide$/ })).toBeTruthy());
+    await waitFor(() => expect(screen.queryByRole('button', { name: /^C64/ })).toBeNull());
+    expect(screen.queryByRole('button', { name: /^Teletext/ })).toBeNull();
   });
 });

@@ -61,6 +61,7 @@
       "label": "Bulletin header art",
       "type": "string",
       "art": true,
+      "artChoices": ["Bulletin_Header.txt", "headers/*", "bulletindesign/Header*", "bulletindesign/Bulletin_Header.txt"],
       "default": "Bulletin_Header.txt",
       "help": "The art above the request table, relative to the door's own folder. Its height comes off the 23-row budget, so taller art shows fewer requests."
     },
@@ -70,6 +71,7 @@
       "label": "Bulletin tail art",
       "type": "string",
       "art": true,
+      "artChoices": ["Bulletin_Tail.txt", "bulletindesign/Tail*"],
       "default": "Bulletin_Tail.txt",
       "help": "The art below the request table, relative to the door's own folder."
     }

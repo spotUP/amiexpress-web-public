@@ -80,6 +80,14 @@ int ae_settings_emit_manifest(FILE *out, const ae_settings_table *t) {
     /* Before `default`, like `secret`: a reader meets what the field IS
        before what it currently holds. */
     if (s->art) fputs(",\n      \"art\": true", out);
+    if (s->art && s->art_choices) {
+      fputs(",\n      \"artChoices\": [", out);
+      for (const char *const *c = s->art_choices; *c; c++) {
+        if (c != s->art_choices) fputs(", ", out);
+        emit_json_string(out, *c);
+      }
+      fputc(']', out);
+    }
 
     /* Where the value comes from when the door has none: the backend reads
        this and falls back to the board's own system config. */

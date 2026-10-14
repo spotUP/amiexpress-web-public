@@ -38,7 +38,9 @@ beforeEach(() => {
     cfgFile: 'REQUESTS.cfg',
     settings: [
       { key: 'bulletinHeader', label: 'Bulletin header art', type: 'string',
-        default: 'Bulletin_Header.txt', cfgKey: 'BulletinHeader', art: true },
+        default: 'Bulletin_Header.txt', cfgKey: 'BulletinHeader', art: true,
+        // The alternates are declared per slot, as Doors/REQUESTS' manifest does.
+        artChoices: ['Bulletin_Header.txt', 'headers/*'] },
     ],
   }));
   fs.writeFileSync(path.join(doorDir, 'settings.json'),

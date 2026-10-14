@@ -35,6 +35,29 @@ const isArtName = (name: string): boolean =>
   ART_EXT.includes(path.extname(name).toLowerCase());
 
 /**
+ * An art FOLDER's path, as a manifest declares it: up to three segments, none
+ * starting with a dot. It is the manifest's, not a form's, but it is checked
+ * the same way so a bad manifest cannot widen what the Studio reaches.
+ */
+export const ART_FOLDER_RE = new RegExp(`^${SEGMENT}(\\/${SEGMENT}){0,2}$`);
+const SEGMENT_RE = new RegExp(`^${SEGMENT}$`);
+
+/**
+ * Whether a candidate file is one of a slot's declared choices.
+ *
+ * A pattern is a value with `*` allowed inside a segment (`headers/*`,
+ * `bulletindesign/Header*`); `*` never crosses a `/`. Everything else is
+ * literal, so a pattern cannot say more than "these names in this folder".
+ */
+export function artChoiceMatches(pattern: string, file: string): boolean {
+  const source = pattern
+    .split('*')
+    .map((part) => part.replace(/[.+?^${}()|[\]\\]/g, '\\$&'))
+    .join('[^/]*');
+  return new RegExp(`^${source}$`).test(file);
+}
+
+/**
  * The absolute path an art value names, or a throw.
  *
  * Throws rather than returning null: every caller wants the path, and the
@@ -68,6 +91,52 @@ export function resolveArtValue(doorDir: string, value: string): string {
     }
   }
   return full;
+}
+
+/**
+ * The absolute path of one file inside a declared art folder, or a throw.
+ *
+ * `dir` comes from the manifest and `name` from the request; both are checked,
+ * and the result is held inside the door exactly as `resolveArtValue` holds a
+ * setting's value (lexically, then through realpath).
+ */
+export function resolveArtFolderFile(doorDir: string, dir: string, name: string): string {
+  if (!ART_FOLDER_RE.test(dir) || !SEGMENT_RE.test(name) || !isArtName(name)) {
+    throw new Error(`"${dir}/${name}" is not a file inside this door's folder`);
+  }
+  const root = path.resolve(doorDir);
+  const full = path.resolve(root, dir, name);
+  if (!full.startsWith(root + path.sep)) {
+    throw new Error(`"${dir}/${name}" resolves outside this door's folder`);
+  }
+  if (fs.existsSync(full)) {
+    const realRoot = fs.realpathSync(root);
+    if (!fs.realpathSync(full).startsWith(realRoot + path.sep)) {
+      throw new Error(`"${dir}/${name}" is a link out of this door's folder`);
+    }
+  }
+  return full;
+}
+
+/** The art files in one declared folder, by name, sorted. A missing folder has none. */
+export function listArtFolder(doorDir: string, dir: string): Array<{ name: string; lines: number }> {
+  if (!ART_FOLDER_RE.test(dir)) return [];
+  let entries: fs.Dirent[];
+  try {
+    entries = fs.readdirSync(path.join(doorDir, dir), { withFileTypes: true });
+  } catch {
+    return [];
+  }
+  const out: Array<{ name: string; lines: number }> = [];
+  for (const entry of entries) {
+    if (!entry.isFile() || !isArtName(entry.name) || !SEGMENT_RE.test(entry.name)) continue;
+    try {
+      out.push({ name: entry.name, lines: artFileLines(resolveArtFolderFile(doorDir, dir, entry.name)) });
+    } catch {
+      /* unreadable or a link out: not a piece */
+    }
+  }
+  return out.sort((a, b) => a.name.localeCompare(b.name));
 }
 
 /**
