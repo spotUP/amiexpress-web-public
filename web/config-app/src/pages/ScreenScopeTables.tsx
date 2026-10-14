@@ -10,11 +10,10 @@ import { DataTable, type DataTableColumn } from '../components/ui/DataTable';
 import { TabbedWorkspace, type TabDefinition } from '../components/ui/Tabs';
 import { ScreenThumbnail } from '../components/ScreenThumbnail';
 import { formatBytes } from '../lib/format';
-import { DoorArtDialog } from './DoorArtDialog';
+import { DoorArtList } from './DoorArtList';
 import { ArtistScreenDialog } from './ArtistScreenDialog';
 import { ErrorPanel } from '../components/ui/states';
 import type { ArtistTheme } from './use-my-theme';
-import { DoorArtSlot, settingKeyOf } from './DoorArtSlot';
 import {
   toScreenRows, filterScreenRows,
   type ScreenIndexShape, type ScreenRow, type ScreenIndexEntryShape,
@@ -103,15 +102,6 @@ export function ScreenScopeTables() {
    * are the page's, not the dialog's, so the message belongs on the page.
    */
   const [fileError, setFileError] = useState<string | null>(null);
-  /**
-   * A door's art block living inside its config file (Bulls' Title logo in
-   * Bulls.CFG) — no screen path, so the file dialog cannot open it. Opened
-   * in the door-art dialog on the same canvas instead.
-   */
-  const [openArt, setOpenArt] = useState<{
-    command: string; doorName: string; file: string; section: string;
-    label: string; maxLines: number; maxLineLength: number;
-  } | null>(null);
   const [shareSummary, setShareSummary] = useState<ShareSummary | null>(null);
   /**
    * Which directory to point nodes at.
@@ -207,27 +197,6 @@ export function ScreenScopeTables() {
       directories: { dir: string; files: number }[];
     },
   });
-
-  /**
-   * Art blocks living inside door config files. Small and few (doors declare
-   * them in their manifests), so loaded with the page like the MCI catalog.
-   */
-  const { data: doorArt } = useQuery({
-    queryKey: ['door-art'],
-    queryFn: async () => (await apiClient.listDoorArt()).data as Array<{
-      command: string;
-      name: string;
-      sections: Array<{
-        file: string; section: string; label: string; lines: number;
-        maxLines: number; maxLineLength: number;
-        // A slot backed by a whole FILE the door's setting names, rather than
-        // a section of its config: it can be missing, and it has alternates.
-        missing?: boolean;
-        choices?: Array<{ file: string; lines: number }>;
-      }>;
-    }>,
-  });
-
 
   useEffect(() => {
     if (!openScreen || !detailRef.current) return;
@@ -596,43 +565,7 @@ export function ScreenScopeTables() {
             <span className="font-mono"> .GR </span> routing. Editing one
             changes what that door draws, and nothing else.
           </p>
-          {(Array.isArray(doorArt) ? doorArt : []).map(door => (
-            <div key={door.command} className="border border-border rounded p-2 space-y-1">
-              <p className="text-content-primary">
-                <span className="font-mono">{door.command}</span>
-                <span className="text-content-secondary"> — {door.name}</span>
-              </p>
-              {door.sections.map(section => settingKeyOf(section.section) !== null ? (
-                <DoorArtSlot
-                  key={`${section.file}#${section.section}`}
-                  command={door.command}
-                  slot={section}
-                  onOpen={slot => setOpenArt({
-                    command: door.command, doorName: door.name,
-                    file: slot.file, section: slot.section, label: slot.label,
-                    maxLines: slot.maxLines, maxLineLength: slot.maxLineLength,
-                  })}
-                />
-              ) : (
-                <div key={`${section.file}#${section.section}`} className="flex flex-wrap items-center gap-2 pl-2">
-                  <span className="text-content-primary">{section.label}</span>
-                  <span className="font-mono text-xs text-content-secondary">
-                    {section.file} [{section.section}] — {section.lines} of {section.maxLines} lines
-                  </span>
-                  <button
-                    onClick={() => setOpenArt({
-                      command: door.command, doorName: door.name,
-                      file: section.file, section: section.section, label: section.label,
-                      maxLines: section.maxLines, maxLineLength: section.maxLineLength,
-                    })}
-                    className="btn-small btn-secondary"
-                  >
-                    Open in ANSI editor
-                  </button>
-                </div>
-              ))}
-            </div>
-          ))}
+          <DoorArtList />
           <DataTable
             columns={doorColumns}
             rows={buckets.door.filter(item =>
@@ -849,18 +782,6 @@ export function ScreenScopeTables() {
       />
 
 
-      {openArt && (
-        <DoorArtDialog
-          command={openArt.command}
-          doorName={openArt.doorName}
-          file={openArt.file}
-          section={openArt.section}
-          label={openArt.label}
-          maxLines={openArt.maxLines}
-          maxLineLength={openArt.maxLineLength}
-          onClose={() => setOpenArt(null)}
-        />
-      )}
 
     </div>
   );

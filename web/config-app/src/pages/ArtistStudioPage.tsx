@@ -18,6 +18,7 @@ import { apiClient } from '../api/client';
 import { ScreenGallery } from '../components/ScreenGallery';
 import { SkeletonRows } from '../components/ui/states';
 import { ArtistScreenDialog } from './ArtistScreenDialog';
+import { DoorArtList } from './DoorArtList';
 import { ThemeStatusBar } from './ThemeStatusBar';
 import { previewScreenOrder } from './screen-preview-view';
 import { buildGalleryItems, type ScreenIndexShape } from './screen-index-view';
@@ -276,6 +277,21 @@ export function ArtistStudioPage() {
       </div>
 
       <ScreenGallery items={shown} isLoading={isLoading} onOpen={setOpenPath} theme={theme.slug} />
+
+      {/*
+        Door art is the board's, not a theme's: /api/door-art is keyed by door
+        command and sits on the level-100 artist lane, and an artist is never
+        served the `default` view, so it shows in every theme view. Asked for,
+        2026-10-14: door art "needs to be reachable from the ansi studio".
+      */}
+      <section aria-labelledby="door-art-heading" className="space-y-2">
+        <h2 id="door-art-heading" className="text-content-primary">Door art</h2>
+        <p className="text-sm text-content-secondary">
+          Logos and screens that belong to a door. They are the board&apos;s, shared by
+          every theme.
+        </p>
+        <DoorArtList query={search} />
+      </section>
 
       <ArtistScreenDialog
         path={openPath}
