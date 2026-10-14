@@ -27,6 +27,11 @@ export interface PromptOptions extends BoxOptions {
   text?: string;
   title?: string;
   value?: string;
+  /**
+   * Hide what is typed: each character shows as `*` while getValue() and the
+   * submit event still carry the plain text. For passwords and codes.
+   */
+  censor?: boolean;
   overlay?: boolean;
   overlayOpacity?: number;
   /** Mobile width (default: calculated based on screen) */
@@ -138,6 +143,7 @@ export class Prompt extends Box {
       inputOnFocus: true,
       mouse: true,
       value: options.value || '',
+      censor: options.censor,
       style: {
         fg: 'white',
         bg: 'black',
