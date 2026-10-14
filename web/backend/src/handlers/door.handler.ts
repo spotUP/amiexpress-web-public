@@ -3243,16 +3243,10 @@ console.log(
           if ((session as any).returnCommand) {
             const cmd = (session as any).returnCommand;
             (session as any).returnCommand = undefined;
-            try {
-              await runCommand(cmd, true);
-            } catch (err) {
-              require('./commands/settings-resume').clearSettingsResume(session);
-              throw err;
-            }
             // The W door hands a settings door back as its return command and
-            // asks to be reopened on the row it left (settings-resume.ts).
-            const { resumeSettingsHub } = require('./commands/settings-resume');
-            await resumeSettingsHub(socket, session);
+            // asks to be reopened on the row it left (settings-resume.ts): the
+            // reopen is a loop there, so the call depth does not grow per round trip.
+            await require('./commands/settings-resume').runReturnedCommand(socket, session, cmd, runCommand);
           }
           if ((session as any).prvCommand) {
             const cmd = (session as any).prvCommand;

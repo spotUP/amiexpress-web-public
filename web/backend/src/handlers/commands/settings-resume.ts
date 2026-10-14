@@ -53,12 +53,51 @@ export async function resumeSettingsHub(socket: unknown, session: BBSSession): P
   const { theCallerIsLeaving } = require('../door.handler') as typeof import('../door.handler');
   if (theCallerIsLeaving(session)) { records.delete(session); return false; }
   record.phase = 'resuming';
+  looping.add(session);
   try {
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     const { processCommand } = require('../command.handler') as typeof import('../command.handler');
     await processCommand(socket as never, session, record.command, '');
   } finally {
+    looping.delete(session);
     if (records.get(session) === record) records.delete(session);
   }
   return true;
+}
+
+/** Sessions whose W is being reopened by the loop in runReturnedCommand right now. */
+const looping = new WeakSet<object>();
+
+/**
+ * The door-exit tail's way to run a door's RETURNCOMMAND (door.handler.ts). The
+ * W door hands a settings door back as its returned command and asks to be
+ * reopened; reopening is a LOOP here, not a call from inside the returned
+ * command's tail: a W reopened by the loop exits through the same tail, and that
+ * inner tail must not run the next settings door and reopen W again (each round
+ * trip would nest one more processCommand frame - 8 stacked seen live). The inner
+ * tail parks its returned command back on the session and returns; this loop
+ * picks it up, so the call depth is the same for the first round trip and the
+ * hundredth.
+ */
+export async function runReturnedCommand(
+  socket: unknown, session: BBSSession, cmd: string,
+  runCommand: (cmd: string, isReturn: boolean) => Promise<void>,
+): Promise<void> {
+  const s = session as { returnCommand?: string };
+  if (looping.has(session)) { s.returnCommand = cmd; return; }   // the running loop runs it
+  let next: string | undefined = cmd;
+  try {
+    while (next) {
+      s.returnCommand = undefined;
+      await runCommand(next, true);
+      // eslint-disable-next-line @typescript-eslint/no-use-before-define
+      if (!(await resumeSettingsHub(socket, session))) break;
+      next = s.returnCommand;     // parked by the reopened W's own exit tail, if it handed a door back
+    }
+  } catch (err) {
+    clearSettingsResume(session);
+    throw err;
+  } finally {
+    s.returnCommand = undefined;
+  }
 }

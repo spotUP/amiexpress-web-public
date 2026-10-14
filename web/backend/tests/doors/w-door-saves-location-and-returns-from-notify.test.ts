@@ -53,6 +53,7 @@ jest.mock('../../src/handlers/commands/settings-resume', () => {
     ...actual,
     takeSettingsResumeRow: jest.fn(actual.takeSettingsResumeRow),
     resumeSettingsHub: jest.fn(actual.resumeSettingsHub),
+    runReturnedCommand: jest.fn(actual.runReturnedCommand),
   };
 });
 const fields = jest.requireMock('../../src/services/user-settings/w-fields');
@@ -137,6 +138,7 @@ describe('W through the board: save onto user.data and come back from a settings
     // 2. NOTIFY's registration ran, then W again, on the Notifications row.
     // Three launches, in order: W, NOTIFY (the returned command), W again (the resume). W alone would be 1.
     expect(doorDropFileManager.createAllDropFiles).toHaveBeenCalledTimes(3);
+    expect(resume.runReturnedCommand).toHaveBeenCalledTimes(1);   // the tail's loop ran NOTIFY and reopened W
     expect(takeSpy.mock.results.filter(r => r.value !== null)).toHaveLength(1);
     const second = out().slice(out().lastIndexOf('USER CONFIGURATION'));
     expect(second).toMatch(/\x1b\[(\d+);\d+H>>[\s\S]{0,80}?\x1b\[\1;\d+H[^\x1b]*Notifications/);
@@ -153,7 +155,7 @@ describe('W through the board: save onto user.data and come back from a settings
     // What the W door's RESUME verb leaves behind when a caller heads for a settings door.
     resume.armSettingsResume(session, 'W', 7);
     expect(resume.settingsResumeOf(session)).toBeDefined();
-    const hub = resume.resumeSettingsHub as jest.Mock;
+    const hub = resume.runReturnedCommand as jest.Mock;   // the tail's only way into the resume loop
     hub.mockClear();
     session.commandText = 'OTHER';
     const out = () => socket.ansi.join('');

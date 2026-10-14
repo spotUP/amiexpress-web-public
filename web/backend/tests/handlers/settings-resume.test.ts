@@ -2,7 +2,7 @@ const processCommand = jest.fn(async () => 'SUCCESS');
 jest.mock('../../src/handlers/command.handler', () => ({ processCommand: (...a: unknown[]) => processCommand(...(a as [])) }));
 
 import {
-  armSettingsResume, takeSettingsResumeRow, resumeSettingsHub, settingsResumeOf, clearSettingsResume, settleSettingsResume,
+  armSettingsResume, takeSettingsResumeRow, resumeSettingsHub, runReturnedCommand, settingsResumeOf, clearSettingsResume, settleSettingsResume,
 } from '../../src/handlers/commands/settings-resume';
 
 beforeEach(() => processCommand.mockClear());
@@ -97,6 +97,53 @@ describe('the caller is leaving while the settings door runs', () => {
     settleSettingsResume(session, 'W', true);
     await expect(resumeSettingsHub({}, session)).resolves.toBe(false);
     expect(processCommand).not.toHaveBeenCalled();
+    expect(settingsResumeOf(session)).toBeUndefined();
+  });
+});
+
+describe('each W -> settings door -> W round trip does not nest the call stack', () => {
+  /**
+   * Plays the board: W is a door whose exit tail (door.handler.ts) hands its returned
+   * command to runReturnedCommand; the reopened W (processCommand) does the same.
+   * `depth` counts the frames of door runs and returned commands stacked at once.
+   */
+  async function play(roundTrips: number): Promise<{ maxDepth: number; settingsRuns: number; wRuns: number }> {
+    const session: any = {};
+    let depth = 0, maxDepth = 0, settingsRuns = 0, wRuns = 0;
+    const enter = () => { depth++; maxDepth = Math.max(maxDepth, depth); };
+    const wDoor = async () => {
+      enter(); wRuns++;
+      if (wRuns <= roundTrips) {
+        armSettingsResume(session, 'W', 17);
+        session.returnCommand = 'THEMEC';
+        settleSettingsResume(session, 'W', true);
+        await runReturnedCommand({}, session, session.returnCommand, runCommand);   // the tail
+      } else {
+        settleSettingsResume(session, 'W', false);
+      }
+      depth--;
+    };
+    const runCommand = async () => { enter(); settingsRuns++; settleSettingsResume(session, 'THEMEC', false); depth--; };
+    processCommand.mockImplementation(wDoor as never);
+    await wDoor();          // the first W, opened from the menu
+    return { maxDepth, settingsRuns, wRuns };
+  }
+  afterEach(() => processCommand.mockImplementation(async () => 'SUCCESS'));
+
+  test('the stack is as deep after six round trips as after one', async () => {
+    const one = await play(1);
+    const six = await play(6);
+    expect(six.settingsRuns).toBe(6);            // every trip really ran its settings door
+    expect(six.wRuns).toBe(7);                   // and W was reopened after each
+    expect(six.maxDepth).toBe(one.maxDepth);
+    expect(six.maxDepth).toBeLessThanOrEqual(3);
+  });
+
+  test('a settings door that throws drops the record', async () => {
+    const session: any = {};
+    armSettingsResume(session, 'W', 4);
+    settleSettingsResume(session, 'W', true);
+    await expect(runReturnedCommand({}, session, 'THEMEC', async () => { throw new Error('boom'); })).rejects.toThrow('boom');
     expect(settingsResumeOf(session)).toBeUndefined();
   });
 });
