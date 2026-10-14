@@ -6,6 +6,7 @@
  *
  *   paused caller        not selected (due() skips them) and never purged: held until unpause
  *   digest rows          one message per (user, channel) listing every item
+ *   online caller        an instant email/push row is consumed unsent (decision 6, any channel but board)
  *   instant rows         one message each; over the per-user cap (capAllows)
  *                        the row is re-timed into the next digest, never dropped
  *   success              rows deleted, the send logged for the cap window
@@ -27,6 +28,7 @@ import { db } from '../database';
 import { boardTimeZone } from './intake';
 import { deliverBoard } from './board';
 import { productionEmailSender } from './email';
+import { isLoggedOn } from './presence';
 import {
   due, getSettings, markFailed, NOTIFY_MAX_AGE_SECONDS, purgeOlderThan, purgeSentLog, recordSent, remove, retime, sentSince,
 } from './repository';
@@ -60,6 +62,12 @@ export interface DispatcherDeps {
   senders: Partial<Record<Exclude<NotifyChannel, 'board'>, ChannelSender>>;
   /** The Board channel: drawn now, or kept for the next menu. */
   showBoard: (userId: string, item: NotifyItem) => 'shown' | 'kept' | 'dropped';
+  /**
+   * Decision 6, for every outbound channel (email now, push in N5): is this
+   * caller logged on? An INSTANT item for them is consumed unsent (they see it
+   * at the prompt); a digest still goes. Absent = nobody is online.
+   */
+  isOnline?: (userId: string) => boolean;
 }
 
 export interface TickOutcome {
@@ -92,6 +100,7 @@ export function productionDispatcherDeps(io: unknown): DispatcherDeps {
     boardZone: boardTimeZone,
     senders: { email: productionEmailSender() },
     showBoard: (userId, item) => deliverBoard(io, userId, item, { rawDb, now: () => Date.now() }),
+    isOnline: isLoggedOn,
   };
 }
 
@@ -176,6 +185,12 @@ export async function dispatchOnce(deps: DispatcherDeps): Promise<TickOutcome> {
     const userId = row.user_id;
     const channel = row.channel;
     if (channel !== 'board') {
+      // Decision 6, before the cap: an online caller is not sent to, so the row
+      // is neither counted against the cap nor re-timed into a digest.
+      if (deps.isOnline?.(userId)) {
+        settle([row.ref], { ok: true, suppressed: true }, userId, channel);
+        continue;
+      }
       const key = `${userId}\u0000${channel}`;
       let times = sentMemo.get(key);
       if (!times) { times = sentSince(handle, userId, channel, now - CAP_WINDOW_SECONDS); sentMemo.set(key, times); }

@@ -22,6 +22,7 @@ import { userFileManager } from './UserFileManager';
 import { deleteConfAccess } from './delete-conf-access';
 import { conferenceDir, conferenceUploadDirs } from '../conferences/conference-paths';
 import { getHoldDirFilePath } from '../utils/dir-file-reader.util';
+import { eraseUserNotifyData } from '../notify/repository';
 import {
   CTOP_HEADER_SIZE,
   CTOP_RECORD_SIZE,
@@ -71,6 +72,8 @@ export interface ErasureResult {
   backupRecordsBlanked: number;
   /** HeaderFile records renamed in the sysop's safety copies of the message bases. */
   backupHeadersRenamed: number;
+  /** Rows removed from the notify_* tables (prefs, follows, settings, codes, outbox, inbox, sent log). */
+  notifyRowsErased: number;
 }
 
 /**
@@ -182,6 +185,10 @@ export async function eraseUserData(db: any, userId: string, options: ErasureOpt
     erasedHandle,
   );
 
+  // 7. The notification tables (prefs, follows, settings, email codes, outbox,
+  //    inbox, sent log): nothing of the caller's stays there.
+  const notifyRowsErased = stmt ? eraseUserNotifyData(stmt, userId) : 0;
+
   return {
     userId,
     erasedHandle,
@@ -198,6 +205,7 @@ export async function eraseUserData(db: any, userId: string, options: ErasureOpt
     ctopFilesRenamed,
     backupRecordsBlanked,
     backupHeadersRenamed,
+    notifyRowsErased,
   };
 }
 

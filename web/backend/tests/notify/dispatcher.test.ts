@@ -3,7 +3,7 @@
  */
 import { dispatchOnce, _resetPurgeClockForTests, digestItem } from '../../src/notify/dispatcher';
 import type { ChannelSender, DispatcherDeps } from '../../src/notify/dispatcher';
-import { enqueue, pendingCount, purgeOlderThan, recordSent, setPrefs, setSettings } from '../../src/notify/repository';
+import { enqueue, pendingCount, purgeOlderThan, recordSent, setPrefs, setSettings, sentSince } from '../../src/notify/repository';
 import { queueNotification } from '../../src/notify/intake';
 import { DEFAULT_SETTINGS, notifyRef } from '@amiexpress/bbs-door-sdk/formats/notify';
 import type { NotifyChannel, NotifyItem } from '@amiexpress/bbs-door-sdk/formats/notify';
@@ -170,5 +170,106 @@ describe('dispatchOnce', () => {
     const d = digestItem([it1('a'), it1('b')], NOW);
     expect(d.title).toBe('2 notifications');
     expect(d.body).toBe('Reply a; Reply b');
+  });
+});
+
+describe('dispatchOnce - decision 6 holds for every outbound channel', () => {
+  const online = (ids: string[]) => ({ ...deps({}), isOnline: (u: string) => ids.includes(u) });
+
+  it('an online caller gets no instant email or push, even over the cap: consumed, not re-timed, not counted', async () => {
+    const email = jest.fn().mockResolvedValue({ ok: true });
+    const push = jest.fn().mockResolvedValue({ ok: true });
+    for (let i = 0; i < 8; i++) put('u1', 'email', `e${i}`);
+    for (let i = 0; i < 3; i++) put('u1', 'push', `p${i}`);
+    const out = await dispatchOnce({ ...online(['u1']), senders: { email, push } });
+    expect(email).not.toHaveBeenCalled();
+    expect(push).not.toHaveBeenCalled();
+    expect(out).toMatchObject({ sent: 0, retimed: 0, suppressed: 11 });
+    expect(pendingCount(db)).toBe(0);
+    expect(sentSince(db, 'u1', 'email', 0)).toEqual([]);
+  });
+
+  it('an online caller still gets a digest, and the Board channel is never suppressed', async () => {
+    const email = jest.fn().mockResolvedValue({ ok: true });
+    put('u1', 'email', 'a', { digest: true });
+    put('u1', 'email', 'b', { digest: true });
+    put('u1', 'board', 'c');
+    const d = online(['u1']);
+    await dispatchOnce({ ...d, senders: { email } });
+    expect(email).toHaveBeenCalledTimes(1);
+    expect(email.mock.calls[0][2]).toBe(true);
+    expect(d.showBoard).toHaveBeenCalledTimes(1);
+  });
+
+  it('a caller who is not online is sent to as before', async () => {
+    const email = jest.fn().mockResolvedValue({ ok: true });
+    put('u2', 'email', 'a');
+    await dispatchOnce({ ...online(['u1']), senders: { email } });
+    expect(email).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('unpause', () => {
+  it('rows that piled up while paused go out as ONE grouped message per channel, not a burst of instants', async () => {
+    setSettings(db, 'u1', { ...DEFAULT_SETTINGS, paused: true }, NOW - 5000);
+    for (let i = 0; i < 10; i++) put('u1', 'email', `m${i}`, { deliverAfter: NOW - 4000 + i });
+    const email = jest.fn().mockResolvedValue({ ok: true });
+    await dispatchOnce(deps({ email }));
+    expect(email).not.toHaveBeenCalled();
+    setSettings(db, 'u1', { ...DEFAULT_SETTINGS, paused: false }, NOW);
+    const out = await dispatchOnce(deps({ email }));
+    expect(email).toHaveBeenCalledTimes(1);
+    expect(email.mock.calls[0][1]).toHaveLength(10);
+    expect(email.mock.calls[0][2]).toBe(true);
+    expect(out).toMatchObject({ sent: 10, retimed: 0 });
+    expect(pendingCount(db)).toBe(0);
+  });
+
+  it('rows still waiting for their digest slot keep it; saving settings without a pause change regroups nothing', async () => {
+    setSettings(db, 'u1', { ...DEFAULT_SETTINGS, paused: true }, NOW);
+    put('u1', 'email', 'later', { digest: true, deliverAfter: NOW + 3600 });
+    put('u1', 'email', 'now');
+    setSettings(db, 'u1', { ...DEFAULT_SETTINGS, paused: false }, NOW);
+    const rows = db.prepare('SELECT ref, digest, deliver_after FROM notify_outbox ORDER BY ref').all();
+    expect(rows.find((r: any) => r.ref.includes('later')).deliver_after).toBe(NOW + 3600);
+    setSettings(db, 'u2', { ...DEFAULT_SETTINGS }, NOW);
+    put('u2', 'email', 'x');
+    setSettings(db, 'u2', { ...DEFAULT_SETTINGS, digestHour: 9 }, NOW);
+    expect(db.prepare("SELECT digest FROM notify_outbox WHERE user_id = 'u2'").get().digest).toBe(0);
+  });
+});
+
+describe('digest slots (audit of plan section 6)', () => {
+  const at = (iso: string): number => Math.floor(Date.parse(iso) / 1000);
+
+  it('a weekly digest lands on digest_weekday at digest_hour in the caller zone, defaulting to the board zone', () => {
+    const base = { ...DEFAULT_SETTINGS, digestKind: 'weekly' as const, digestHour: 9, digestWeekday: 1 };
+    setPrefs(db, 'w1', { 'msg.reply': { email: 'digest' } });
+    setSettings(db, 'w1', { ...base, timeZone: 'Europe/Oslo' }, NOW);
+    setPrefs(db, 'w2', { 'msg.reply': { email: 'digest' } });
+    setSettings(db, 'w2', { ...base, timeZone: null }, NOW);
+    const wed = at('2026-10-14T12:00:00Z');
+    queueNotification(db, 'w1', { ...it1('w'), at: wed }, wed, 'UTC');
+    queueNotification(db, 'w2', { ...it1('w'), at: wed }, wed, 'UTC');
+    const slot = (u: string): number => db.prepare('SELECT deliver_after FROM notify_outbox WHERE user_id = ?').get(u).deliver_after;
+    expect(slot('w1')).toBe(at('2026-10-19T07:00:00Z'));  // Monday 09:00 Oslo (CEST, UTC+2)
+    expect(slot('w2')).toBe(at('2026-10-19T09:00:00Z'));  // board zone UTC
+  });
+
+  it('an empty digest is not sent: no rows, no message', async () => {
+    const email = jest.fn().mockResolvedValue({ ok: true });
+    const out = await dispatchOnce(deps({ email }));
+    expect(email).not.toHaveBeenCalled();
+    expect(out.sent).toBe(0);
+  });
+
+  it('a row queued for the NEXT slot while this slot is due is not pulled into this digest', async () => {
+    const email = jest.fn().mockResolvedValue({ ok: true });
+    put('u1', 'email', 'a', { digest: true });
+    put('u1', 'email', 'b', { digest: true });
+    put('u1', 'email', 'next', { digest: true, deliverAfter: NOW + 86400 });
+    await dispatchOnce(deps({ email }));
+    expect(email.mock.calls[0][1]).toHaveLength(2);
+    expect(pendingCount(db)).toBe(1);
   });
 });

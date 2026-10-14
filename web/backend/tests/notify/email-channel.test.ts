@@ -20,7 +20,6 @@ function deps(over: Partial<EmailDeps> = {}): EmailDeps & { send: jest.Mock } {
   return {
     rawDb: () => db,
     send: jest.fn().mockResolvedValue({ ok: true }),
-    isOnline: () => false,
     baseUrl: () => 'https://bbs.example',
     bbsName: async () => 'Test BBS',
     ...over,
@@ -120,26 +119,5 @@ describe('what the email carries', () => {
     await makeEmailSender(d)('u1', [reply('1'), priv], true);
     const link = /<([^>]+)>/.exec(d.send.mock.calls[0][3]['List-Unsubscribe'])![1];
     expect(verifyUnsubscribeToken(decodeURIComponent(link.split('?t=')[1]))?.evt).toBe('all');
-  });
-});
-
-describe('a caller who is logged on', () => {
-  beforeEach(() => markEmailVerified(db, 'u1', 'sven@example.com', NOW));
-
-  it('gets no email for an instant item: consumed, not sent, not counted against the cap', async () => {
-    enqueue(db, { ref: notifyRef('msg.reply', '1', 'u1', 'email'), userId: 'u1', channel: 'email', item: reply('1'), deliverAfter: NOW, digest: false }, NOW);
-    const d = deps({ isOnline: (u) => u === 'u1' });
-    const dd: DispatcherDeps = { rawDb: () => db, now: () => NOW * 1000, log: jest.fn(), boardZone: () => 'UTC', senders: { email: makeEmailSender(d) }, showBoard: jest.fn() as any };
-    const out = await dispatchOnce(dd);
-    expect(d.send).not.toHaveBeenCalled();
-    expect(out).toMatchObject({ sent: 0, suppressed: 1 });
-    expect(pendingCount(db)).toBe(0);
-    expect(db.prepare("SELECT COUNT(*) AS n FROM notify_sent_log").get().n).toBe(0);
-  });
-
-  it('still gets a digest, which summarises a period the caller has not read', async () => {
-    const d = deps({ isOnline: () => true });
-    expect(await makeEmailSender(d)('u1', [reply('1'), reply('2')], true)).toEqual({ ok: true });
-    expect(d.send).toHaveBeenCalledTimes(1);
   });
 });

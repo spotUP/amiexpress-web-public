@@ -62,7 +62,7 @@ describe('a reply posted on the board reaches its author', () => {
 
     const send = jest.fn(async (_to: string, _subject: string, _text: string, _headers?: Record<string, string>) => ({ ok: true as const }));
     const email: ChannelSender = makeEmailSender({
-      rawDb: () => raw, send: send as any, isOnline: () => false, baseUrl: () => 'https://bbs.example', bbsName: async () => 'TestBBS',
+      rawDb: () => raw, send: send as any, baseUrl: () => 'https://bbs.example', bbsName: async () => 'TestBBS',
     });
     const deps: DispatcherDeps = {
       rawDb: () => raw, now: () => Date.now(), log: () => undefined, boardZone: () => 'UTC',

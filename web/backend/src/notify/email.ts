@@ -17,9 +17,8 @@
  *   everything     plain text; the footer carries the unsubscribe link and the
  *                  same link goes in the List-Unsubscribe headers (RFC 8058).
  *
- * Decision 6: an INSTANT item for a caller who is logged on is suppressed (they
- * see it at the prompt). A DIGEST is not: it summarises a period, and the
- * caller being on at the digest hour does not mean they saw its contents.
+ * Decision 6 (an instant item for a caller who is logged on is not sent) is the
+ * dispatcher's rule for every outbound channel, not this sender's.
  */
 import type Database from 'better-sqlite3';
 import { findEvent } from '@amiexpress/bbs-door-sdk/formats/notify';
@@ -29,7 +28,6 @@ import { adminBaseUrl } from '../utils/admin-base-url.util';
 import { getBbsName, sendMailTo } from '../services/mail-notification.service';
 import type { SendMailResult } from '../services/mail-notification.service';
 import type { ChannelSender, SendResult } from './dispatcher';
-import { isLoggedOn } from './presence';
 import { accountEmail, getSettings, sameAddress } from './repository';
 import { ALL_EVENTS, mintUnsubscribeToken, unsubscribeUrl } from './unsubscribe';
 
@@ -39,7 +37,6 @@ const LINE_MAX = 200;
 export interface EmailDeps {
   rawDb: () => Database.Database | undefined;
   send: (to: string, subject: string, text: string, headers?: Record<string, string>) => Promise<SendMailResult>;
-  isOnline: (userId: string) => boolean;
   baseUrl: () => string;
   bbsName: () => Promise<string>;
 }
@@ -85,7 +82,6 @@ export function makeEmailSender(deps: EmailDeps): ChannelSender {
   return async (userId, items, digest): Promise<SendResult> => {
     const handle = deps.rawDb();
     if (!handle) return { ok: false, error: 'no database', retry: true };
-    if (!digest && deps.isOnline(userId)) return { ok: true, suppressed: true };
 
     const address = accountEmail(handle, userId);
     const verified = getSettings(handle, userId).emailVerified;
@@ -108,7 +104,6 @@ export function productionEmailSender(): ChannelSender {
   return makeEmailSender({
     rawDb: () => (db as any).db as Database.Database | undefined,
     send: sendMailTo,
-    isOnline: isLoggedOn,
     baseUrl: adminBaseUrl,
     bbsName: getBbsName,
   });

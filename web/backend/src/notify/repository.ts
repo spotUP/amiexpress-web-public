@@ -81,16 +81,30 @@ export function getSettings(db: Db, userId: string): StoredSettings {
   };
 }
 
-/** Write the caller's own settings. The verified-address columns are not touched here. */
-export function setSettings(db: Db, userId: string, s: NotifySettings): void {
-  db.prepare(
-    `INSERT INTO notify_settings (user_id, quiet_from, quiet_to, time_zone, digest_kind, digest_hour, digest_weekday, paused)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-     ON CONFLICT(user_id) DO UPDATE SET
-       quiet_from = excluded.quiet_from, quiet_to = excluded.quiet_to, time_zone = excluded.time_zone,
-       digest_kind = excluded.digest_kind, digest_hour = excluded.digest_hour,
-       digest_weekday = excluded.digest_weekday, paused = excluded.paused`
-  ).run(userId, s.quietFrom, s.quietTo, s.timeZone, s.digestKind, s.digestHour, s.digestWeekday, s.paused ? 1 : 0);
+/**
+ * Write the caller's own settings. The verified-address columns are not touched here.
+ *
+ * Unpausing (paused 1 -> 0) regroups what piled up: every instant row already
+ * due becomes a group member, so the dispatcher sends ONE message per channel
+ * instead of a burst of instants (and instead of the cap pushing most of them
+ * into a digest one by one). Rows still waiting for quiet end or a digest slot
+ * keep their time. `now` is epoch seconds.
+ */
+export function setSettings(db: Db, userId: string, s: NotifySettings, now: number = Math.floor(Date.now() / 1000)): void {
+  const was = db.prepare('SELECT paused FROM notify_settings WHERE user_id = ?').get(userId) as { paused: number } | undefined;
+  db.transaction(() => {
+    db.prepare(
+      `INSERT INTO notify_settings (user_id, quiet_from, quiet_to, time_zone, digest_kind, digest_hour, digest_weekday, paused)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(user_id) DO UPDATE SET
+         quiet_from = excluded.quiet_from, quiet_to = excluded.quiet_to, time_zone = excluded.time_zone,
+         digest_kind = excluded.digest_kind, digest_hour = excluded.digest_hour,
+         digest_weekday = excluded.digest_weekday, paused = excluded.paused`
+    ).run(userId, s.quietFrom, s.quietTo, s.timeZone, s.digestKind, s.digestHour, s.digestWeekday, s.paused ? 1 : 0);
+    if (was?.paused === 1 && !s.paused) {
+      db.prepare('UPDATE notify_outbox SET digest = 1, deliver_after = ? WHERE user_id = ? AND digest = 0 AND deliver_after <= ?').run(now, userId, now);
+    }
+  })();
 }
 
 /** The caller's account address, or null. The board's one address column: users.email. */
@@ -298,4 +312,36 @@ export function takeInbox(db: Db, userId: string): NotifyItem[] {
 
 export function inboxCount(db: Db, userId: string): number {
   return (db.prepare('SELECT COUNT(*) AS n FROM notify_inbox WHERE user_id = ?').get(userId) as { n: number }).n;
+}
+
+// ---------------------------------------------------------------- erasure
+
+/**
+ * GDPR: delete everything the caller has in the notification tables. The set
+ * is read from the schema, not listed here: every `notify_*` table with a
+ * `user_id` column, so a table added to notify.schema.sql is erased without
+ * anyone remembering to add it. Returns the number of rows removed.
+ */
+export function eraseUserNotifyData(db: Db, userId: string): number {
+  const tables = db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name LIKE 'notify\\_%' ESCAPE '\\'").all() as { name: string }[];
+  let n = 0;
+  db.transaction(() => {
+    for (const { name } of tables) {
+      const cols = db.prepare(`PRAGMA table_info(${name})`).all() as { name: string }[];
+      if (!cols.some((c) => c.name === 'user_id')) continue;
+      n += db.prepare(`DELETE FROM ${name} WHERE user_id = ?`).run(userId).changes;
+    }
+    n += erasePushSubscriptions(db, userId);
+  })();
+  return n;
+}
+
+/**
+ * N5 SEAM: a caller's browser push subscriptions for notifications are rows of
+ * the push table with purpose = 'notify' (the column lands in N5). Until then
+ * there are none to erase. N5 replaces this body with the DELETE and extends
+ * the erasure test to insert one.
+ */
+export function erasePushSubscriptions(_db: Db, _userId: string): number {
+  return 0;
 }
