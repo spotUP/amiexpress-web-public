@@ -4,7 +4,7 @@
  * Every minute (and once at start): the rows whose delivery time has come,
  * for the channels this board can deliver on right now, oldest first.
  *
- *   paused caller        held; the row stays and goes out after unpause
+ *   paused caller        not selected (due() skips them) and never purged: held until unpause
  *   digest rows          one message per (user, channel) listing every item
  *   instant rows         one message each; over the per-user cap (capAllows)
  *                        the row is re-timed into the next digest, never dropped
@@ -32,6 +32,7 @@ import {
 import type { OutboxRow } from './repository';
 
 export const DISPATCH_INTERVAL_MS = 60_000;
+/** (user, channel) groups per tick; a group is never split across ticks. */
 export const DISPATCH_BATCH = 200;
 
 export type SendResult = { ok: true } | { ok: false; error: string; retry: boolean };
@@ -58,7 +59,6 @@ export interface DispatcherDeps {
 export interface TickOutcome {
   sent: number;
   failed: number;
-  held: number;
   retimed: number;
   purged: number;
 }
@@ -95,7 +95,7 @@ export function _resetPurgeClockForTests(): void {
 
 /** One pass. Returns what happened, for the log and the tests. */
 export async function dispatchOnce(deps: DispatcherDeps): Promise<TickOutcome> {
-  const out: TickOutcome = { sent: 0, failed: 0, held: 0, retimed: 0, purged: 0 };
+  const out: TickOutcome = { sent: 0, failed: 0, retimed: 0, purged: 0 };
   const handle = deps.rawDb();
   if (!handle) return out;
   const now = Math.floor(deps.now() / 1000);
@@ -143,17 +143,9 @@ export async function dispatchOnce(deps: DispatcherDeps): Promise<TickOutcome> {
     }
   };
 
-  const pausedUsers = new Map<string, boolean>();
-  const isPaused = (userId: string): boolean => {
-    let p = pausedUsers.get(userId);
-    if (p === undefined) { p = getSettings(handle, userId).paused; pausedUsers.set(userId, p); }
-    return p;
-  };
-
   const digests = new Map<string, OutboxRow[]>();
   const instants: OutboxRow[] = [];
   for (const row of rows) {
-    if (isPaused(row.user_id)) { out.held++; continue; }
     if (row.digest === 1) {
       const key = `${row.user_id}\u0000${row.channel}`;
       (digests.get(key) ?? digests.set(key, []).get(key)!).push(row);

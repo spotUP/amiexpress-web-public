@@ -135,6 +135,23 @@ describe('outbox', () => {
   });
 });
 
+describe('sysop-only events', () => {
+  const addUser = (id: string, level: number): void => {
+    db.prepare('INSERT OR REPLACE INTO users (id, username, passwordhash, realname, seclevel) VALUES (?, ?, ?, ?, ?)').run(id, `n-${id}`, 'x', id, level);
+  };
+  afterEach(() => { db.exec("DELETE FROM users WHERE id LIKE 'ntf-%'"); });
+
+  it('a page for the sysop is queued for a sysop and never for a caller', () => {
+    addUser('ntf-sysop', 255);
+    addUser('ntf-caller', 10);
+    const page: NotifyItem = { event: 'page.sysop', title: 'Page from bob', body: 'hi', at: NOW, objectId: 'p1' };
+    setPrefs(db, 'ntf-sysop', { 'page.sysop': { board: 'instant' } });
+    setPrefs(db, 'ntf-caller', { 'page.sysop': { board: 'instant' } });
+    expect(queueNotification(db, 'ntf-caller', page, NOW, 'UTC')).toBe(0);
+    expect(queueNotification(db, 'ntf-sysop', page, NOW, 'UTC')).toBe(1);
+  });
+});
+
 describe('sent log and inbox', () => {
   it('sentSince returns only sends inside the window', () => {
     recordSent(db, 'u1', 'email', NOW - 7200);

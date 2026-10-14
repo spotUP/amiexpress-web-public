@@ -151,17 +151,31 @@ export function enqueue(db: Db, o: OutboxInsert, now: number): boolean {
 }
 
 /**
- * Rows whose delivery time and retry time have both come, oldest first.
- * `channels` limits the selection to channels the board can deliver on right
- * now, so rows for an unconfigured channel stay in the outbox without
- * crowding the batch.
+ * The due rows of up to `groupLimit` (user, channel) groups, oldest group first.
+ *
+ * The limit counts GROUPS, never rows: a digest is one message per group, and a
+ * row cut in the middle of a group would send a partial digest now and the rest
+ * a minute later. Every due row of a chosen group comes back together.
+ *
+ * Due = delivery time and retry time both come. A paused caller's rows are
+ * not selected at all (they are held until unpause, and must not fill the batch
+ * and starve everyone else). `channels` limits the selection to channels the
+ * board can deliver on right now, so rows for an unconfigured channel stay in
+ * the outbox untouched.
  */
-export function due(db: Db, now: number, limit: number, channels: readonly NotifyChannel[] = ['email', 'push', 'board']): OutboxRow[] {
+export function due(db: Db, now: number, groupLimit: number, channels: readonly NotifyChannel[] = ['email', 'push', 'board']): OutboxRow[] {
   if (channels.length === 0) return [];
   const marks = channels.map(() => '?').join(',');
-  return db
-    .prepare(`SELECT * FROM notify_outbox WHERE deliver_after <= ? AND next_attempt_at <= ? AND channel IN (${marks}) ORDER BY created_at, ref LIMIT ?`)
-    .all(now, now, ...channels, limit) as OutboxRow[];
+  const where = `o.deliver_after <= ? AND o.next_attempt_at <= ? AND o.channel IN (${marks})
+                 AND COALESCE((SELECT s.paused FROM notify_settings s WHERE s.user_id = o.user_id), 0) = 0`;
+  const groups = db
+    .prepare(`SELECT o.user_id AS user_id, o.channel AS channel FROM notify_outbox o WHERE ${where}
+              GROUP BY o.user_id, o.channel ORDER BY MIN(o.created_at), o.user_id, o.channel LIMIT ?`)
+    .all(now, now, ...channels, groupLimit) as { user_id: string; channel: string }[];
+  const rowsOf = db.prepare(`SELECT * FROM notify_outbox o WHERE ${where} AND o.user_id = ? AND o.channel = ? ORDER BY o.created_at, o.ref`);
+  const out: OutboxRow[] = [];
+  for (const g of groups) out.push(...(rowsOf.all(now, now, ...channels, g.user_id, g.channel) as OutboxRow[]));
+  return out;
 }
 
 export function pendingCount(db: Db): number {
@@ -197,8 +211,11 @@ export function remove(db: Db, refs: readonly string[]): number {
   return n;
 }
 
+/** Stale rows go; a paused caller's rows are held until unpause (plan section 6), however old. */
 export function purgeOlderThan(db: Db, cutoff: number): number {
-  return db.prepare('DELETE FROM notify_outbox WHERE created_at < ?').run(cutoff).changes;
+  return db
+    .prepare('DELETE FROM notify_outbox WHERE created_at < ? AND user_id NOT IN (SELECT user_id FROM notify_settings WHERE paused = 1)')
+    .run(cutoff).changes;
 }
 
 // ---------------------------------------------------------------- sent log (cap window)

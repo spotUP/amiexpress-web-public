@@ -3,7 +3,8 @@
  */
 import { dispatchOnce, _resetPurgeClockForTests, digestItem } from '../../src/notify/dispatcher';
 import type { ChannelSender, DispatcherDeps } from '../../src/notify/dispatcher';
-import { enqueue, pendingCount, recordSent, setSettings } from '../../src/notify/repository';
+import { enqueue, pendingCount, purgeOlderThan, recordSent, setPrefs, setSettings } from '../../src/notify/repository';
+import { queueNotification } from '../../src/notify/intake';
 import { DEFAULT_SETTINGS, notifyRef } from '@amiexpress/bbs-door-sdk/formats/notify';
 import type { NotifyChannel, NotifyItem } from '@amiexpress/bbs-door-sdk/formats/notify';
 
@@ -35,6 +36,53 @@ beforeAll(async () => { db = (await waitForTestDb()).db; }, 30000);
 beforeEach(() => {
   for (const t of ['notify_outbox', 'notify_inbox', 'notify_sent_log', 'notify_settings']) db.exec(`DELETE FROM ${t}`);
   _resetPurgeClockForTests();
+});
+
+describe('dispatchOnce - batches and holds', () => {
+  it('a paused caller with more than a batch of due rows does not starve the next caller', async () => {
+    setSettings(db, 'paused', { ...DEFAULT_SETTINGS, paused: true });
+    for (let i = 0; i < 250; i++) enqueue(db, { ref: `p${i}`, userId: 'paused', channel: 'email', item: it1(`p${i}`), deliverAfter: NOW, digest: false }, NOW - 10);
+    // The paused caller's rows are the OLDEST, so a row-limited batch is all theirs.
+    enqueue(db, { ref: notifyRef('msg.reply', 'o1', 'other', 'email'), userId: 'other', channel: 'email', item: it1('o1'), deliverAfter: NOW, digest: false }, NOW);
+    const email = jest.fn().mockResolvedValue({ ok: true });
+    await dispatchOnce(deps({ email }));
+    expect(email).toHaveBeenCalledTimes(1);
+    expect(email.mock.calls[0][0]).toBe('other');
+    expect(pendingCount(db)).toBe(250);
+  });
+
+  it('a paused caller rows survive the fourteen-day purge', () => {
+    setSettings(db, 'paused', { ...DEFAULT_SETTINGS, paused: true });
+    enqueue(db, { ref: 'old-p', userId: 'paused', channel: 'email', item: it1('x'), deliverAfter: NOW, digest: false }, NOW - 20 * 86400);
+    enqueue(db, { ref: 'old-q', userId: 'other', channel: 'email', item: it1('y'), deliverAfter: NOW, digest: false }, NOW - 20 * 86400);
+    expect(purgeOlderThan(db, NOW - 14 * 86400)).toBe(1);
+    expect(pendingCount(db)).toBe(1);
+  });
+
+  it('250 digest rows over 50 callers at one slot send exactly one message per caller', async () => {
+    const email = jest.fn().mockResolvedValue({ ok: true });
+    for (let u = 0; u < 50; u++) for (let i = 0; i < 5; i++) put(`u${u}`, 'email', `${i}-${u}`, { digest: true });
+    await dispatchOnce(deps({ email }));
+    await dispatchOnce(deps({ email }));
+    expect(email).toHaveBeenCalledTimes(50);
+    for (const c of email.mock.calls) expect(c[1]).toHaveLength(5);
+    expect(pendingCount(db)).toBe(0);
+  });
+
+  it('ten items held overnight by quiet hours go out as one message at quiet end', async () => {
+    setPrefs(db, 'u1', { 'msg.reply': { email: 'instant' } });
+    setSettings(db, 'u1', { ...DEFAULT_SETTINGS, quietFrom: '22:00', quietTo: '07:00', timeZone: 'UTC' });
+    const night = Date.UTC(2026, 6, 1, 23, 0) / 1000;
+    for (let i = 0; i < 10; i++) queueNotification(db, 'u1', it1(`n${i}`), night + i, 'UTC');
+    const email = jest.fn().mockResolvedValue({ ok: true });
+    const at = (t: number): DispatcherDeps => ({ ...deps({ email }), now: () => t * 1000 });
+    await dispatchOnce(at(night + 3600));
+    expect(email).not.toHaveBeenCalled();
+    await dispatchOnce(at(Date.UTC(2026, 6, 2, 7, 0) / 1000));
+    expect(email).toHaveBeenCalledTimes(1);
+    expect(email.mock.calls[0][1]).toHaveLength(10);
+    expect(db.prepare("SELECT COUNT(*) AS n FROM notify_sent_log WHERE user_id='u1'").get().n).toBe(1);
+  });
 });
 
 describe('dispatchOnce', () => {
@@ -112,7 +160,7 @@ describe('dispatchOnce', () => {
     const email = jest.fn().mockResolvedValue({ ok: true });
     put('u1', 'email', 'a');
     const out = await dispatchOnce(deps({ email }));
-    expect(out.held).toBe(1);
+    expect(out.sent).toBe(0);
     expect(email).not.toHaveBeenCalled();
     expect(pendingCount(db)).toBe(1);
   });
