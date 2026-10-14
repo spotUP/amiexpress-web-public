@@ -1,20 +1,15 @@
 /**
- * A REPLY REACHES THE AUTHOR (plan 2026-10-14-notification-door.md section 9).
+ * A REPLY REACHES THE AUTHOR BY EMAIL (plan 2026-10-14-notification-door.md section 9).
  *
  * The one test that proves the sites are WIRED: a reply posted through the
  * board's message funnel (Database.createMessage - what the message editor,
  * doors, AREXX and the co-sysop all call) ends, one dispatcher tick later, in
- * the author's EMAIL sender, exactly once.
+ * the real email sender (notify/email.ts) with an injected transport: sent
+ * exactly once to the author's VERIFIED address, naming the replier, with the
+ * List-Unsubscribe header; the outbox row is gone; a second tick sends nothing.
  *
- * The email form drives the dispatcher's `senders.email` seam with an injected
- * sender. The real SMTP sender, the verified-address check and the
- * List-Unsubscribe header are N2 (built in parallel); when N2 lands the
- * injected sender here becomes N2's sender over an injected transport and the
- * header assertion is added. Everything N3 owns - the site, the recipient, the
- * outbox row, the tick, idempotency - is real.
- *
- * Note on the entry point: BBSApi.postMessage cannot post a reply (it has no
- * parent argument), so the funnel it shares with every writer is the driver.
+ * BBSApi.postMessage cannot post a reply (it has no parent argument), so the
+ * funnel it shares with every writer is the driver.
  */
 jest.mock('../../src/services/MessageFileManager', () => ({
   messageFileManager: { writeMessageFile: jest.fn(), deleteMessageFile: jest.fn() },
@@ -26,6 +21,7 @@ jest.mock('../../src/services/MessageIndexManager', () => ({
 
 import { dispatchOnce, _resetPurgeClockForTests } from '../../src/notify/dispatcher';
 import type { ChannelSender, DispatcherDeps } from '../../src/notify/dispatcher';
+import { makeEmailSender } from '../../src/notify/email';
 import { pendingCount, setPrefs } from '../../src/notify/repository';
 
 async function waitForTestDb(): Promise<any> {
@@ -54,6 +50,7 @@ beforeEach(() => {
   _resetPurgeClockForTests();
   const add = raw.prepare(`INSERT INTO users (id, username, passwordhash, realname, email) VALUES (?, ?, 'x', 'r', ?)`);
   add.run('rr-author', 'rr_author', 'author@example.com');
+  raw.prepare("INSERT INTO notify_settings (user_id, email_verified, email_verified_at) VALUES ('rr-author', 'author@example.com', 1) ON CONFLICT(user_id) DO UPDATE SET email_verified = excluded.email_verified").run();
   add.run('rr-replier', 'rr_replier', 'replier@example.com');
 });
 
@@ -63,7 +60,10 @@ describe('a reply posted on the board reaches its author', () => {
     setPrefs(raw, 'rr-author', { 'msg.reply': { email: 'instant' } });
     const parentId = await board.createMessage({ subject: 'rr-thread', body: 'first', author: 'rr_author', timestamp: new Date(), conferenceId: 1, messageBaseId: 1, isPrivate: false, attachments: [], edited: false }, { skipDiskWrite: true });
 
-    const email = jest.fn<ReturnType<ChannelSender>, Parameters<ChannelSender>>(async () => ({ ok: true }));
+    const send = jest.fn(async (_to: string, _subject: string, _text: string, _headers?: Record<string, string>) => ({ ok: true as const }));
+    const email: ChannelSender = makeEmailSender({
+      rawDb: () => raw, send: send as any, isOnline: () => false, baseUrl: () => 'https://bbs.example', bbsName: async () => 'TestBBS',
+    });
     const deps: DispatcherDeps = {
       rawDb: () => raw, now: () => Date.now(), log: () => undefined, boardZone: () => 'UTC',
       senders: { email }, showBoard: () => 'dropped',
@@ -74,16 +74,16 @@ describe('a reply posted on the board reaches its author', () => {
     expect(pendingCount(raw)).toBe(1);
 
     await dispatchOnce(deps);
-    expect(email).toHaveBeenCalledTimes(1);
-    const [userId, items, digest] = email.mock.calls[0];
-    expect(userId).toBe('rr-author');
-    expect(digest).toBe(false);
-    expect(items).toHaveLength(1);
-    expect(items[0].title).toBe('Reply from rr_replier');
+    expect(send).toHaveBeenCalledTimes(1);
+    const [to, subject, text, headers] = send.mock.calls[0];
+    expect(to).toBe('author@example.com');
+    expect(subject).toContain('Reply from rr_replier');
+    expect(text).toContain('Reply from rr_replier');
+    expect(headers?.['List-Unsubscribe']).toMatch(/^<https:\/\/bbs\.example\//);
     expect(pendingCount(raw)).toBe(0);
 
     await dispatchOnce(deps);
-    expect(email).toHaveBeenCalledTimes(1);
+    expect(send).toHaveBeenCalledTimes(1);
   });
 
   it('the replier posting in their own thread sends the author-poster nothing', async () => {
