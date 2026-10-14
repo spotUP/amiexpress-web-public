@@ -36,7 +36,7 @@ function fakeContext(recorded: Recorded) {
       keys: async () => [], load: async () => null,
       save: async () => {}, delete: async () => {},
     },
-    user: { name: 'sysop', accessLevel: 255 },
+    user: { name: 'sysop', secLevel: 255 },
     close: () => {},
   } as any;
 }
@@ -107,4 +107,19 @@ export async function theSizeToggleIsInTheEditorsOwnMenu(): Promise<void> {
   } finally {
     door.cleanup?.();
   }
+}
+
+/**
+ * The sysop-only BBS files browser keys off the caller secLevel, the field
+ * the board user record carries. It read accessLevel, which the board never
+ * fills, so nobody - the sysop included - passed the check.
+ */
+export async function onlyASysopLevelCallerGetsTheBbsFileBrowser(): Promise<void> {
+  const asLevel = (secLevel: number): boolean => {
+    const door: any = new (ANSIEditorDoor as any)();
+    door.setContext({ user: { name: 'caller', secLevel } });
+    return door.isSysop();
+  };
+  assert.strictEqual(asLevel(255), true, 'secLevel 255 is the sysop');
+  assert.strictEqual(asLevel(10), false, 'a level-10 caller is not');
 }

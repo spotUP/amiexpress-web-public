@@ -861,7 +861,7 @@ var BugTrackerApp = class {
   constructor(session) {
     this.session = session;
     this.username = session.user?.username || "Anonymous";
-    this.isSysop = (session.user?.securityLevel || 0) >= 255;
+    this.isSysop = (session.user?.secLevel || 0) >= 255;
     const doorPath = path2.dirname(new URL(import.meta.url).pathname);
     this.storage = new BugStorage(doorPath);
     this.screen = this.createAppScreen();

@@ -176,7 +176,7 @@ class ANSIEditorDoor {
      * Check if current user is a sysop
      */
     isSysop() {
-        return (this.ctx.user?.accessLevel || 0) >= SYSOP_ACCESS_LEVEL;
+        return (this.ctx.user?.secLevel || 0) >= SYSOP_ACCESS_LEVEL;
     }
     /**
      * List BBS screen files in a directory

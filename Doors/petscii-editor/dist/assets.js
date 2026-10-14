@@ -48,7 +48,7 @@ exports.BBS_SCREEN_DIRS = [
     'Conf03/Screens',
 ];
 function isSysop(ctx) {
-    return (ctx.user?.accessLevel ?? 0) >= exports.SYSOP_ACCESS_LEVEL;
+    return (ctx.user?.secLevel ?? 0) >= exports.SYSOP_ACCESS_LEVEL;
 }
 /** Every screen this caller has saved, newest name order, without the prefix. */
 async function listOwnScreens(ctx) {

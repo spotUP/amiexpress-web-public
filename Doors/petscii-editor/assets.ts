@@ -48,7 +48,7 @@ export interface StoredScreen {
 }
 
 export function isSysop(ctx: DoorContext): boolean {
-  return ((ctx.user as any)?.accessLevel ?? 0) >= SYSOP_ACCESS_LEVEL;
+  return (ctx.user?.secLevel ?? 0) >= SYSOP_ACCESS_LEVEL;
 }
 
 /** Every screen this caller has saved, newest name order, without the prefix. */

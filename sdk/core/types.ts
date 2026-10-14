@@ -655,7 +655,7 @@ export interface User {
   username: string;
   realname?: string;
   location?: string;
-  accessLevel: number;
+  secLevel: number;
   timesCalled: number;
   uploads: number;
   downloads: number;

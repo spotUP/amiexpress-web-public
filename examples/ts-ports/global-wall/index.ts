@@ -1018,7 +1018,7 @@ door.onStart(async (ctx: DoorContext) => {
 
   // Check if configured
   if (settings.mybbsshortcode === '???') {
-      const accesslevel = user.accessLevel || 0;
+      const accesslevel = user.secLevel || 0;
       if (accesslevel >= settings.sysoplevel) {
         transmit(socket, '');
         transmit(socket, '\x1b[0mThe wall has not yet been configured, performing initial setup');
@@ -1089,7 +1089,7 @@ door.onStart(async (ctx: DoorContext) => {
     transmit(socket, '\x1b[0m');
 
     if (inputBuffer === 'S') {
-      const accesslevel = user.accessLevel || 0;
+      const accesslevel = user.secLevel || 0;
       if (accesslevel >= settings.sysoplevel) {
         await sysopMode(socket, bbs);
         redo = true; // Refresh wall after sysop mode

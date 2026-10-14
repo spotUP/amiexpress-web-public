@@ -13,7 +13,7 @@ import { PetsciiStudioDoor } from '../index';
 
 interface Recorded { mouseEnabled: number }
 
-function fakeContext(size: { width: number; height: number }, recorded: Recorded, accessLevel = 100) {
+function fakeContext(size: { width: number; height: number }, recorded: Recorded, secLevel = 100) {
   const bbs: any = {
     write: () => {},
     writeLine: () => {},
@@ -34,7 +34,7 @@ function fakeContext(size: { width: number; height: number }, recorded: Recorded
       keys: async () => [], load: async () => null,
       save: async () => {}, delete: async () => {},
     },
-    user: { name: 'sysop', accessLevel },
+    user: { name: 'sysop', secLevel },
     output: { writeLine: () => {} },
     close: () => {},
   } as any;

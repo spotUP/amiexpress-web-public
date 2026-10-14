@@ -215,7 +215,7 @@ export class ANSIEditorDoor {
    * Check if current user is a sysop
    */
   private isSysop(): boolean {
-    return (this.ctx.user?.accessLevel || 0) >= SYSOP_ACCESS_LEVEL;
+    return (this.ctx.user?.secLevel || 0) >= SYSOP_ACCESS_LEVEL;
   }
 
   /**

@@ -83,7 +83,7 @@ export class BugTrackerApp {
   constructor(session: DoorSession) {
     this.session = session;
     this.username = session.user?.username || 'Anonymous';
-    this.isSysop = (session.user?.securityLevel || 0) >= 255;
+    this.isSysop = (session.user?.secLevel || 0) >= 255;
 
     // Get door path for data storage
     const doorPath = path.dirname(new URL(import.meta.url).pathname);

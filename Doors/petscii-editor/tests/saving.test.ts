@@ -29,10 +29,10 @@ function fakeStorage() {
   };
 }
 
-function ctxWith(storage: any, accessLevel = 100, written: Array<[string, string]> = []) {
+function ctxWith(storage: any, secLevel = 100, written: Array<[string, string]> = []) {
   return {
     storage,
-    user: { name: 'spot', accessLevel },
+    user: { name: 'spot', secLevel },
     bbs: {
       writeFile: async (path: string, data: string) => { written.push([path, data]); },
       listFiles: async () => [],

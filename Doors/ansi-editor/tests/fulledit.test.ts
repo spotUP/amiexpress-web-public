@@ -24,7 +24,7 @@ function fakeContext(files: Map<string, string>, doorCommand: string) {
     ctx: {
       bbs, nodeId: 3, bbsSession: { doorCommand },
       storage: { keys: async () => [], load: async () => null, save: async () => {}, delete: async () => {} },
-      user: { name: 'caller', accessLevel: 10 },
+      user: { name: 'caller', secLevel: 10 },
       close: () => { closed++; },
     } as any,
     closedCount: () => closed,
