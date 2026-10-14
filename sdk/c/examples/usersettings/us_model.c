@@ -43,8 +43,10 @@ static int add(us_model *m, us_row_kind kind, int ref)
     return m->row_count++;
 }
 
+/* One empty line between sections, never before the first. */
 static int add_header(us_model *m, int *headers, const char *title)
 {
+    if (m->row_count > 0) add(m, US_ROW_BLANK, 0);
     strncpy(m->header[*headers], title, sizeof(m->header[0]) - 1);
     m->header[*headers][sizeof(m->header[0]) - 1] = '\0';
     return add(m, US_ROW_HEADER, (*headers)++);
@@ -146,6 +148,8 @@ static void build_row(us_model *m, int index, char *line)
     const us_row *r = &m->row[index];
     line[0] = '\0';
     switch (r->kind) {
+        case US_ROW_BLANK:
+            break;
         case US_ROW_HEADER:
             sprintf(line, "%s", m->header[r->ref]);
             break;
@@ -166,6 +170,16 @@ static void build_row(us_model *m, int index, char *line)
             break;
         }
     }
+}
+
+int us_row_split(const us_model *m, int index)
+{
+    const us_row *r;
+    if (index < 0 || index >= m->row_count) return 0;
+    r = &m->row[index];
+    if (r->kind == US_ROW_FIELD) return m->stacked ? 0 : VALUE_OFFSET_WIDE;
+    if (r->kind == US_ROW_DOOR) return m->stacked ? 0 : 1 + 24 + 6;   /* label, then the command */
+    return 0;
 }
 
 int us_row_length(us_model *m, int index)

@@ -43,6 +43,28 @@ static void door_flush(void *ctx) { (void)ctx; ui_screen_flush(&screen); }
 
 static const char *row_text(void *ctx, int index) { (void)ctx; return us_row_text(&model, index); }
 
+/* The board's ground, painted under everything. A C64 cell cannot carry a background (the screen is
+   black), so there the ground stays the terminal's own. */
+static int ground(void) { return screen.profile.cell_backgrounds ? UI_TOKEN(UI_T_GROUND) : -1; }
+
+/** Pen back to primary ink on the ground: what every draw leaves behind. */
+static void pen_ink(void) { ansi_color(&screen.buf, UI_TOKEN(UI_T_INK), ground(), 0); }
+
+static void clear_screen(void) { ansi_clear_ground(&screen.buf, UI_TOKEN(UI_T_INK), ground()); }
+
+/* Token map: headings accent, labels ink, values accent-alt (stacked: the value line). */
+static int row_style(void *ctx, int index, int *head, int *tail)
+{
+    (void)ctx;
+    *head = *tail = UI_TOKEN(UI_T_INK);
+    switch (model.row[index].kind) {
+        case US_ROW_HEADER: *head = UI_TOKEN(UI_T_ACCENT); return 0;
+        case US_ROW_VALUE:  *head = UI_TOKEN(UI_T_ACCENT_ALT); return 0;
+        case US_ROW_FIELD: case US_ROW_DOOR: *tail = UI_TOKEN(UI_T_ACCENT_ALT); return us_row_split(&model, index);
+        default: return 0;
+    }
+}
+
 /* ------------------------------------------------------------- masthead rail
 
    The rail slides while the door waits for a key: the same idle hook SUBS, ACHIEVE and
@@ -90,14 +112,14 @@ static void show_message(const char *text, int token)
     char lines[4][81];
     int n, i, max = message_rows();
     if (message_lines == 0 && (!text || !text[0])) return;   /* nothing on the glass, nothing to repaint */
-    for (i = 0; i < max; i++) ansi_fill(&screen.buf, message_row() - (max - 1) + i, 1, screen.cols, UI_TOKEN(UI_T_INK), -1);
+    for (i = 0; i < max; i++) ansi_fill(&screen.buf, message_row() - (max - 1) + i, 1, screen.cols, UI_TOKEN(UI_T_INK), ground());
     message_lines = 0;
     if (!text || !text[0]) return;
     n = us_wrap(text, us_message_width(screen.cols), lines, max);
     message_lines = n;
-    ansi_color(&screen.buf, token, -1, 0);
+    ansi_color(&screen.buf, token, ground(), 0);
     for (i = 0; i < n; i++) ansi_text(&screen.buf, message_row() - (n - 1) + i, 1, lines[i], us_message_width(screen.cols));
-    ansi_color(&screen.buf, UI_TOKEN(UI_T_INK), -1, 0);
+    pen_ink();
 }
 
 static void draw_key_bar(const char *primary, const char *last, int jump)
@@ -108,22 +130,22 @@ static void draw_key_bar(const char *primary, const char *last, int jump)
     ui_footer_build(footer, sizeof(footer), screen.cols - 1, primary, optional,
                     (jump && !screen.profile.collapse_chrome) ? 1 : 0, last);
     if (screen.profile.collapse_chrome) {
-        ansi_color(&screen.buf, UI_TOKEN(UI_T_DIM), -1, 0);
+        ansi_color(&screen.buf, UI_TOKEN(UI_T_DIM), ground(), 0);
         ansi_text(&screen.buf, screen.rows, 1, footer, screen.cols - 1);
     } else {
-        ui_bar_draw(&screen.buf, screen.rows, 1, screen.cols, footer, UI_TOKEN(UI_T_DIM), UI_TOKEN(UI_T_BAR));
+        ui_bar_draw(&screen.buf, screen.rows, 1, screen.cols, footer, UI_TOKEN(UI_T_BAR_INK), UI_TOKEN(UI_T_BAR));
     }
 }
 
 static void draw_full(void)
 {
-    ansi_clear(&screen.buf);
+    clear_screen();
     message_lines = 0;
     draw_masthead("USER CONFIGURATION");
     ui_list_draw(&list, &screen.buf);
     draw_key_bar("Up/Down: Move  Enter: Change", "Q: Leave", 1);
     /* Leave the pen in the list's ink: the first keypress then opens with a row, not a colour change. */
-    ansi_color(&screen.buf, UI_TOKEN(UI_T_INK), -1, 0);
+    pen_ink();
 }
 
 /** Re-read one field from the board and repaint its row(s) only. */
@@ -175,13 +197,13 @@ static int edit_text(const ae_uf_field *f, int r)
         }
         if (ae_uf_set(f->number, buf, &a) == AE_UF_GONE) return -1;
         if (a.outcome == AE_UF_REFUSED) {
-            show_message(a.text, UI_TOKEN(UI_T_WARN));
+            show_message(a.text, UI_TOKEN(UI_T_ALERT));
             if (a.retry) continue;
             return 0;
         }
         if (a.outcome == AE_UF_AGAIN) continue;
         /* express.e 25928/25957/25978 prints "Ok!" after a stored name. */
-        if (a.outcome == AE_UF_STORED && is_name_row(f->number)) show_message("Ok!", UI_TOKEN(UI_T_DIM));
+        if (a.outcome == AE_UF_STORED && is_name_row(f->number)) show_message("Ok!", UI_TOKEN(UI_T_OK));
         else show_message("", UI_TOKEN(UI_T_INK));
         return 0;
     }
@@ -215,7 +237,7 @@ static int edit_password(int r)
     memset(first, 0, sizeof(first));
     memset(second, 0, sizeof(second));
     /* express.e 26024-26026 prints nothing on success. */
-    show_message(a.outcome == AE_UF_REFUSED ? a.text : "", UI_TOKEN(UI_T_WARN));
+    show_message(a.outcome == AE_UF_REFUSED ? a.text : "", UI_TOKEN(UI_T_ALERT));
     return a.outcome == AE_UF_GONE ? -1 : 0;
 }
 
@@ -235,7 +257,7 @@ static int edit_lines(const ae_uf_field *f)
     ae_uf_answer a;
     int i, at;
     for (;;) {
-        ansi_clear(&screen.buf);
+        clear_screen();
         ui_screen_flush(&screen);
         at = 0;
         for (i = 70; i >= 2; i--) at += sprintf(countdown + at, " %d\r\n", i);
@@ -275,9 +297,10 @@ static int edit_choice(const ae_uf_field *f)
     pick.offset = 0; pick.drawn_selected = -1;
     pick.page_follow = 0; pick.follow_extra = 0;
     pick.row = choice_row;
+    pick.style = 0;
     pick.context = 0;
     ui_list_select(&pick, current);
-    ansi_clear(&screen.buf);
+    clear_screen();
     message_lines = 0;
     draw_masthead(f->label);
     draw_key_bar("Up/Down: Move  Enter: Pick", "Esc: Keep", 0);
@@ -351,7 +374,10 @@ int main(int argc, char **argv)
     list.page_follow = 1;                 /* one box per page, not one per row past the edge */
     list.follow_extra = model.stacked ? 1 : 0;   /* the value line stays in the window with its label */
     list.caret = ">>";
-    list.chrome = UI_TOKEN(UI_T_ACCENT);
+    list.caret_bar = 1;                   /* the selected row is one bar, caret included */
+    list.style = row_style;
+    list.ground = ground();
+    list.chrome = UI_TOKEN(UI_T_CHROME);
     list.ink = UI_TOKEN(UI_T_INK);
     list.selected_fg = UI_TOKEN(UI_T_SELECTION_INK);
     list.selected_bg = UI_TOKEN(UI_T_SELECTION_BG);

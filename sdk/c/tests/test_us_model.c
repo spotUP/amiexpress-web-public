@@ -169,9 +169,60 @@ static void no_duplicate_board_settings_heading(void)
     /* ROW ORDER: the sectionless door sits right under the outer heading, before any named section. */
     for (i = 0; i < m.row_count && !(m.row[i].kind == US_ROW_HEADER && strcmp(us_row_text(&m, i), "Board settings") == 0); i++) {}
     assert(m.row[i + 1].kind == US_ROW_DOOR && strcmp(m.door[m.row[i + 1].ref].label, "Notifications") == 0);
-    assert(m.row[i + 2].kind == US_ROW_HEADER && strcmp(us_row_text(&m, i + 2), "Appearance") == 0);
-    assert(m.row[i + 3].kind == US_ROW_DOOR && strcmp(m.door[m.row[i + 3].ref].label, "Door colours") == 0);
+    assert(m.row[i + 2].kind == US_ROW_BLANK && m.row[i + 3].kind == US_ROW_HEADER && strcmp(us_row_text(&m, i + 3), "Appearance") == 0);
+    assert(m.row[i + 4].kind == US_ROW_DOOR && strcmp(m.door[m.row[i + 4].ref].label, "Door colours") == 0);
     printf("  [OK] a door with no section does not repeat the Board settings heading\n");
+}
+
+static void sections_are_separated_by_one_empty_row(void)
+{
+    int i, k, headers = 0;
+    int widths[2] = { 80, 40 };
+    for (k = 0; k < 2; k++) {
+        fill(2);
+        us_model_layout(&m, widths[k]);
+        assert(m.row[0].kind == US_ROW_HEADER);             /* nothing before the first heading */
+        for (i = 1; i < m.row_count; i++) {
+            if (m.row[i].kind == US_ROW_HEADER) {
+                headers++;
+                assert(m.row[i - 1].kind == US_ROW_BLANK);   /* exactly one empty row before a later heading */
+                assert(m.row[i - 2].kind != US_ROW_BLANK);
+            }
+            if (m.row[i].kind == US_ROW_BLANK) {
+                assert(m.row[i + 1].kind == US_ROW_HEADER);
+                assert(!us_row_selectable(&m, i));
+                assert(strlen(us_row_text(&m, i)) == 0);
+            }
+        }
+        assert(headers >= 5);
+    }
+    printf("  [OK] one empty, unselectable row between sections, none before the first\n");
+}
+
+static void moving_and_jumping_skip_blank_rows(void)
+{
+    int i, last_account, r;
+    fill(0);
+    us_model_layout(&m, 80);
+    last_account = us_row_of_field(&m, 6);
+    r = us_step(&m, last_account, 1);
+    assert(m.row[r].kind == US_ROW_FIELD && m.row[r].ref == 7);    /* over the blank and the heading */
+    assert(us_step(&m, r, -1) == last_account);
+    for (i = 0; i < US_FIELDS; i++) if (i != 15) assert(m.row[us_row_of_field(&m, i)].ref == i);
+    printf("  [OK] stepping crosses blank and heading rows; every field number still has its row\n");
+}
+
+static void a_value_row_splits_after_its_label(void)
+{
+    int r;
+    fill(1);
+    us_model_layout(&m, 80);
+    r = us_row_of_field(&m, 4);
+    assert(us_row_split(&m, r) == us_value_column(&m) - US_CARET_WIDTH - 1);
+    assert(strncmp(us_row_text(&m, r) + us_row_split(&m, r), "value", 5) == 0);
+    us_model_layout(&m, 40);
+    assert(us_row_split(&m, us_row_of_field(&m, 4)) == 0);
+    printf("  [OK] a wide row splits exactly where its value starts\n");
 }
 
 int main(void)
@@ -187,6 +238,9 @@ int main(void)
     the_wide_screen_shows_a_description();
     the_editor_starts_where_the_value_is_drawn();
     no_duplicate_board_settings_heading();
+    sections_are_separated_by_one_empty_row();
+    moving_and_jumping_skip_blank_rows();
+    a_value_row_splits_after_its_label();
     printf("us_model: all passed\n");
     return 0;
 }

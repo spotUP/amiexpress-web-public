@@ -10,7 +10,7 @@
 /* The list draws this many columns of caret before a row's text. */
 #define US_CARET_WIDTH 2
 
-typedef enum { US_ROW_HEADER, US_ROW_FIELD, US_ROW_VALUE, US_ROW_DOOR } us_row_kind;
+typedef enum { US_ROW_HEADER, US_ROW_BLANK, US_ROW_FIELD, US_ROW_VALUE, US_ROW_DOOR } us_row_kind;
 typedef struct { us_row_kind kind; int ref; } us_row;   /* ref: field number, door index, or header id */
 typedef struct {
     ae_uf_field field[US_FIELDS];
@@ -30,6 +30,9 @@ int us_step(const us_model *m, int from, int delta);
 int us_first(const us_model *m);
 int us_row_of_field(const us_model *m, int n);
 const char *us_row_text(us_model *m, int index);
+/* Text index where a row's value part starts (the label part before it is primary ink,
+   the rest secondary), or 0 for a row inked as one piece. */
+int us_row_split(const us_model *m, int index);
 /* Length of a row's text BEFORE it is clipped to the room: a row longer than
    us_text_room() loses its tail on the glass, so the tests ask this. */
 int us_row_length(us_model *m, int index);
