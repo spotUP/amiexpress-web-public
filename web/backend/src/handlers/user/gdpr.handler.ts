@@ -20,6 +20,7 @@ import { beginLogoff } from '../../server/logoff';
 import { eraseUserData } from '../../services/gdpr-erasure.service';
 import { db } from '../../database';
 import { config } from '../../config';
+import type { User } from '../../database/types';
 import { loadBBSConfig } from '../../services/bbs-config-file.service';
 // Runtime require for bcrypt to match the import style used elsewhere in the
 // codebase (avoids TypeScript default-import interop surprises).
@@ -62,23 +63,12 @@ function setPasswordMask(socket: any, session: any, enabled: boolean) {
   socket.emit('password-mode', enabled);
 }
 
-/**
- * W option 19 — print the user's full record and return to the W menu.
- * Output is plain-text; if it overflows a single screen, the existing
- * pagination in socket-emit handles the pause.
- */
-export async function handleViewMyDataOption(socket: any, session: BBSSession): Promise<void> {
-  const user = session.user;
-  if (!user) return;
-
-  emitText(socket, '\r\n');
-  emitText(socket, AnsiUtil.colorize('-= YOUR DATA ON FILE =-\r\n', 'cyan'));
-  emitText(socket, '\r\n');
-
-  const rows: Array<[string, string]> = [
+/** The record W option 19 prints, and the WEBTERM door shows, as label and value pairs. */
+export function myDataRows(user: User): Array<[string, string]> {
+  return [
     ['Handle',          user.username || '(none)'],
     ['Real name',       user.realname || '(none)'],
-    ['Group',  user.location || '(blank)'],
+    ['Group',          user.location || '(blank)'],
     ['Phone',           user.phone || '(blank)'],
     ['Email',           user.email || '(blank)'],
     ['Security level',  String(user.secLevel ?? 0)],
@@ -93,8 +83,23 @@ export async function handleViewMyDataOption(socket: any, session: BBSSession): 
     ['Consent version', (user as any).gdprNoticeVersion || '(none)'],
     ['Consent source',  (user as any).gdprConsentSource || '(none)'],
   ];
+}
 
-  for (const [k, v] of rows) {
+/**
+ * W option 19 — print the user's full record and return to the W menu.
+ * Output is plain-text; if it overflows a single screen, the existing
+ * pagination in socket-emit handles the pause.
+ */
+export async function handleViewMyDataOption(socket: any, session: BBSSession): Promise<void> {
+  const user = session.user;
+  if (!user) return;
+
+  emitText(socket, '\r\n');
+  emitText(socket, AnsiUtil.colorize('-= YOUR DATA ON FILE =-\r\n', 'cyan'));
+  emitText(socket, '\r\n');
+
+
+  for (const [k, v] of myDataRows(user)) {
     emitText(socket, AnsiUtil.colorize(`${k.padEnd(17, ' ')}: `, 'magenta'));
     emitText(socket, AnsiUtil.colorize(v, 'yellow'));
     emitText(socket, '\r\n');
@@ -135,7 +140,7 @@ export function startForgetMe(socket: any, session: BBSSession): void {
 
 export async function handleForgetMeConfirmInput(socket: any, session: BBSSession, input: string): Promise<void> {
   // NOTE: case-sensitive to prevent accidental invocation.
-  if (input !== 'YES ERASE') {
+  if (refuseErasureConfirm(input) !== null) {
     emitText(socket, '\r\n');
     emitText(socket, AnsiUtil.colorize('Deletion cancelled.\r\n', 'green'));
     emitText(socket, '\r\n');
@@ -155,19 +160,9 @@ export async function handleForgetMeConfirmInput(socket: any, session: BBSSessio
 export async function handleForgetMePasswordInput(socket: any, session: BBSSession, input: string): Promise<void> {
   setPasswordMask(socket, session, false);
   const user: any = session.user;
-  if (!user || !user.passwordHash) {
-    await cancelErasure(socket, session, 'No password set on this account. Contact the sysop.');
-    return;
-  }
-
-  let ok = false;
-  try {
-    ok = await bcrypt.compare(input, user.passwordHash);
-  } catch (error) {
-    console.warn('[gdpr] password compare failed:', error);
-  }
-  if (!ok) {
-    await cancelErasure(socket, session, 'Password incorrect. Deletion cancelled.');
+  const refusal = await refuseErasurePassword(user, input);
+  if (refusal !== null) {
+    await cancelErasure(socket, session, refusal);
     return;
   }
 
@@ -187,11 +182,43 @@ export async function handleForgetMeUsernameInput(socket: any, session: BBSSessi
     return;
   }
 
-  if (input !== user.username) {
-    await cancelErasure(socket, session, 'Username did not match. Deletion cancelled.');
+  const refusal = refuseErasureUsername(user, input);
+  if (refusal !== null) {
+    await cancelErasure(socket, session, refusal);
     return;
   }
 
+  await performErasure(socket, session);
+}
+
+/** The three erasure questions, each a refusal text or null when the answer holds. */
+export const ERASE_CONFIRM_WORDS = 'YES ERASE';
+
+/** Step one. NOTE: case-sensitive to prevent accidental invocation. */
+export function refuseErasureConfirm(input: string): string | null {
+  return input === ERASE_CONFIRM_WORDS ? null : 'Deletion cancelled.';
+}
+
+/** Step two: the caller's password against his stored hash. */
+export async function refuseErasurePassword(user: User | undefined | null, input: string): Promise<string | null> {
+  if (!user || !user.passwordHash) return 'No password set on this account. Contact the sysop.';
+  let ok = false;
+  try {
+    ok = await bcrypt.compare(input, user.passwordHash);
+  } catch (error) {
+    console.warn('[gdpr] password compare failed:', error);
+  }
+  return ok ? null : 'Password incorrect. Deletion cancelled.';
+}
+
+/** Step three: his username, verbatim. */
+export function refuseErasureUsername(user: User, input: string): string | null {
+  return input === user.username ? null : 'Username did not match. Deletion cancelled.';
+}
+
+/** Everything after the last answer holds: erase, say so, drop the line. */
+export async function performErasure(socket: any, session: BBSSession): Promise<void> {
+  const user: any = session.user;
   emitText(socket, '\r\n');
   emitText(socket, AnsiUtil.colorize('Erasing your data...\r\n', 'red'));
 

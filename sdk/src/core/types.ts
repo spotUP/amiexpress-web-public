@@ -272,6 +272,24 @@ export interface StorageAPI {
 // ===== BBS API (Advanced) =====
 
 export interface BBSApi {
+  /** W's web terminal rows (modem speed, font, PETSCII palette and character set) as the caller has them now. Optional: an older backend has no such method. */
+  webTerminalSettings?(): import('../../core/types').WebTerminalState;
+  /** The modem emulation speed labels, in the order chooseModemSpeed numbers them. Optional: an older backend has no such method. */
+  modemSpeedChoices?(): string[];
+  /** Store, apply and announce a modem emulation speed by its index in modemSpeedChoices(); false when out of range. Optional: an older backend has no such method. */
+  chooseModemSpeed?(choice: number): Promise<boolean>;
+  /** The terminal fonts a caller can pick on an 80-column ANSI screen. Optional: an older backend has no such method. */
+  terminalFontChoices?(): Array<{ id: string; label: string }>;
+  /** Choose a terminal font; 'petscii' means the screen is PETSCII and its font is fixed. Optional: an older backend has no such method. */
+  chooseTerminalFont?(fontId: string): Promise<'set' | 'petscii'>;
+  /** Flip the 80-column PETSCII palette between C128 (VDC) and C64 (VIC-II). Optional: an older backend has no such method. */
+  togglePetsciiPalette?(): Promise<'vdc' | 'vic'>;
+  /** Flip the PETSCII character set between standard and Swedish; the notice is the board's own sentence. Optional: an older backend has no such method. */
+  togglePetsciiCharset?(): Promise<{ charset: 'standard' | 'swedish'; notice: string }>;
+  /** The caller's own record as W option 19 prints it. Optional: an older backend has no such method. */
+  myData?(): Array<{ label: string; value: string }>;
+  /** Run the board's three GDPR erasure checks (confirm, password, username) in order and, unless check is true, erase and drop the line. Optional: an older backend has no such method. */
+  eraseMyAccount?(answers: { confirm: string; password: string; username: string }, opts?: { check?: boolean }): Promise<{ ok: true } | { ok: false; reason: string }>;
   /**
    * Raise one of this door's own notification events for a user (id or name).
    * The type must be `door.<command>.<slug>` for the running door.

@@ -37,6 +37,9 @@ import {
 
 import type { BBSSession } from '../../index';
 import { changeWPassword } from '../../services/user-settings/w-password';
+import {
+  MODEM_OPTIONS, webTerminalState, applyModemSpeed, togglePetsciiPalette, togglePetsciiCharset, petsciiCharsetNotice,
+} from '../../services/user-settings/web-terminal-settings';
 
 // Dependencies injected from index.ts
 let _sessions: Map<string, BBSSession>;
@@ -184,26 +187,6 @@ export function handleWhoDetailedCommand(socket: any, session: BBSSession): void
 /**
  * Helper: Display W command menu (express.e:25727-25773)
  */
-const MODEM_OPTIONS = [
-  { bps: 0, label: 'MAX (No Throttle)' },
-  { bps: 1200, label: '1200 bps' },
-  { bps: 2400, label: '2400 bps' },
-  { bps: 4800, label: '4800 bps' },
-  { bps: 7200, label: '7200 bps' },
-  { bps: 9600, label: '9600 bps' },
-  { bps: 12000, label: '12.0 kbps' },
-  { bps: 14400, label: '14.4 kbps' },
-  { bps: 14400, label: 'HST 14.4 kbps' },
-  { bps: 16800, label: '16.8 kbps' },
-  { bps: 16800, label: 'HST 16.8 kbps' },
-  { bps: 19200, label: '19.2 kbps' },
-  { bps: 21600, label: '21.6 kbps' },
-  { bps: 21600, label: 'HST 21.6 kbps' },
-  { bps: 24000, label: '24.0 kbps' },
-  { bps: 28800, label: '28.8 kbps' },
-  { bps: 33600, label: '33.6 kbps' },
-  { bps: 56000, label: '56 kbps' },
-];
 
 /**
  * The menu, on the screen the caller actually has.
@@ -293,13 +276,7 @@ function wYesNo(num: string, label: string, yes: boolean): string {
 
 function _paintWCommandMenu(socket: any, session: BBSSession): void {
   const currentUser = session.user!;
-  const modemLabel = (() => {
-    const bps = session.modemBps || currentUser.baud || 0;
-    if (!bps || bps <= 0) return 'MAX (No Throttle)';
-    const found = MODEM_OPTIONS.find(opt => opt.bps === bps);
-    if (found) return found.label;
-    return `${bps} bps`;
-  })();
+  const webTerminal = webTerminalState(session);
 
   // express.e:25730-25732 - exact format with colored asterisks
   emitText(socket, '\r\n');
@@ -424,13 +401,10 @@ function _paintWCommandMenu(socket: any, session: BBSSession): void {
   }
 
   // WEB_: MODERN_* — option 17: modem emulation speed throttle, no express.e counterpart; web terminal setting
-  emitText(socket, wRow(' 17', 'MODEM EMULATION SPEED..', modemLabel));
+  emitText(socket, wRow(' 17', 'MODEM EMULATION SPEED..', webTerminal.modemSpeed));
 
   // WEB_: MODERN_* — option 18: terminal font selection, no express.e counterpart; web terminal setting
-  const userFont = sessionWantsPetscii(session)
-    ? 'C64 CHARACTER SET'
-    : currentUser.fontPreference || DEFAULT_TERMINAL_FONT;
-  emitText(socket, wRow(' 18', 'TERMINAL FONT..........', userFont));
+  emitText(socket, wRow(' 18', 'TERMINAL FONT..........', webTerminal.font));
 
   // WEB_: Phase 3 GDPR self-service — see thoughts/shared/plans/
   // 2026-04-24-gdpr-hobby-baseline.md. No express.e counterpart.
@@ -441,20 +415,14 @@ function _paintWCommandMenu(socket: any, session: BBSSession): void {
   // WEB_: the PETSCII palette. Only the 80-column screen has a choice - a C64
   // is a VIC-II by construction - but the row is shown either way so a caller
   // can set it before he next answers P8, and it says which screen it governs.
-  {
-    const vdc = session.user?.petsciiPalette !== 'vic';
-    emitText(socket, wRow(' 21', 'PETSCII 80 COLOURS.....', vdc ? 'C128 (VDC)' : 'C64 (VIC-II)'));
-  }
+  emitText(socket, wRow(' 21', 'PETSCII 80 COLOURS.....', webTerminal.petsciiPalette));
 
   // WEB_: the PETSCII CHARACTER SET. A C64 sold in Sweden shipped ROM
   // 325018-02, which puts a-ring and the umlauts where the bracket/pound trio
   // sits - without it a Swedish caller cannot type their own name. Standard
   // unless asked for, because $5C is the pound sign this board's MCI uses for
   // its column tab.
-  {
-    const swedish = session.user?.petsciiCharset === 'swedish';
-    emitText(socket, wRow(' 22', 'PETSCII CHARACTER SET..', swedish ? 'SWEDISH' : 'STANDARD'));
-  }
+  emitText(socket, wRow(' 22', 'PETSCII CHARACTER SET..', webTerminal.petsciiCharset));
 
   // WEB_: DOORS THAT REGISTER THEMSELVES AS SETTINGS. A door that exists to
   // change what the board does for this caller belongs in the list he already
@@ -780,40 +748,14 @@ export async function handleWOptionSelectInput(socket: any, session: BBSSession,
     }
 
     case 21: { // WEB_ which sixteen colours his 80-column PETSCII screen uses
-      const { db } = require('../../database');
-      const next = session.user?.petsciiPalette === 'vic' ? 'vdc' : 'vic';
-      if (session.user) {
-        try {
-          await changeAccount(session, { petsciiPalette: next });
-          session.user.petsciiPalette = next;
-        } catch (error) {
-console.error('[W] could not save the PETSCII palette:', error);
-        }
-      }
-      // The canvas repaints from the machine it already has.
-      socket.emit('petscii-palette', { palette: next });
+      await togglePetsciiPalette(socket, session);
       _displayWCommandMenu(socket, session);
       return;
     }
 
     case 22: { // WEB_ which character ROM his PETSCII screen draws
-      const { db } = require('../../database');
-      const next = session.user?.petsciiCharset === 'swedish' ? 'standard' : 'swedish';
-      if (session.user) {
-        try {
-          await changeAccount(session, { petsciiCharset: next });
-          session.user.petsciiCharset = next;
-        } catch (error) {
-console.error('[W] could not save the PETSCII character set:', error);
-        }
-      }
-      (session as any).petsciiSwedish = next === 'swedish';
-      // The atlas is rebuilt from the new set; the screen's machine is untouched.
-      socket.emit('petscii-charset', { charset: next });
       emitText(socket, AnsiUtil.colorize(
-        next === 'swedish'
-          ? 'PETSCII character set: SWEDISH - \u00e5\u00e4\u00f6 where [ \u00a3 ] were\r\n'
-          : 'PETSCII character set: STANDARD\r\n',
+        petsciiCharsetNotice(await togglePetsciiCharset(socket, session)) + '\r\n',
         'yellow'));
       _displayWCommandMenu(socket, session);
       return;
@@ -1135,44 +1077,10 @@ export async function handleWEditModemSpeedInput(socket: any, session: BBSSessio
     return;
   }
 
-  const choice = parseInt(trimmed, 10);
-  if (isNaN(choice) || choice < 0 || choice >= MODEM_OPTIONS.length) {
+  const ok = await applyModemSpeed(socket, session, parseInt(trimmed, 10));
+  if (!ok) {
     emitText(socket, `\r\nInvalid selection. Use 0-${MODEM_OPTIONS.length - 1}.\r\n`);
-    _displayWCommandMenu(socket, session);
-    session.subState = LoggedOnSubState.W_OPTION_SELECT;
-    return;
   }
-
-  const bps = MODEM_OPTIONS[choice].bps;
-  session.modemBps = bps;
-  session.modemEmulationEnabled = bps > 0;
-  await changeAccount(session, { baud: bps });
-  session.user.baud = bps;
-
-  // Update modem emulator with new baud rate
-  const { getModemEmulator } = require('../../utils/modem-emulator.util');
-  const modemEmulator = getModemEmulator(socket);
-  // Ensure modem emulator is installed (might not be if user started with baud=0)
-  modemEmulator.install();
-  if (bps > 0) {
-    modemEmulator.enable(bps);
-console.log(`[W Command] Modem emulation set to ${bps} bps`);
-  } else {
-    modemEmulator.disable();
-console.log(`[W Command] Modem emulation disabled (full speed)`);
-  }
-
-  // Tell the browser the speed: above 0 it stands aside for the server pacer
-  // Also track in session so doors can query it via bbs.getModemSpeed()
-console.log(`[W Command] Emitting modem-speed event with bps=${bps}`);
-  (session as any).modemSpeed = bps;
-  socket.emit('modem-speed', bps);
-console.log(`[W Command] modem-speed event emitted`);
-
-  // Disable AnsiBuffer batching when modem emulation is enabled
-  const { getAnsiBuffer } = require('../../utils/ansi-buffer.util');
-  const ansiBuffer = getAnsiBuffer(socket);
-  ansiBuffer.setFlushDelay(bps > 0 ? 0 : 16);
 
   _displayWCommandMenu(socket, session);
   session.subState = LoggedOnSubState.W_OPTION_SELECT;

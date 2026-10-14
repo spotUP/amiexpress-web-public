@@ -26,6 +26,15 @@ import { PetsciiStreamConverter } from '../utils/petscii.util';
 import { db } from '../database';
 import { checkConfAccess } from '../handlers/message/message-scan.handler';
 import { changeAccount } from '../services/account.service';
+import {
+  MODEM_OPTIONS, webTerminalState, applyModemSpeed, togglePetsciiPalette as applyPetsciiPalette,
+  togglePetsciiCharset as applyPetsciiCharset, petsciiCharsetNotice, type WebTerminalState,
+} from '../services/user-settings/web-terminal-settings';
+import { TERMINAL_FONTS } from '../constants/terminal-fonts';
+import { chooseTerminalFont as applyTerminalFont } from '../services/terminal-font.service';
+import {
+  myDataRows, refuseErasureConfirm, refuseErasurePassword, refuseErasureUsername, performErasure,
+} from '../handlers/user/gdpr.handler';
 import { getSystemTime } from '../utils/date-time.util';
 import {
   enableGameMode as enableGameModeForSession,
@@ -623,6 +632,55 @@ console.log('[BBSApi] Mouse events disabled');
    */
   getModemSpeed(): number {
     return (this.session as any).modemSpeed || 0;
+  }
+
+  /** W's web terminal rows for the WEBTERM door - services/user-settings/web-terminal-settings.ts. */
+  webTerminalSettings(): WebTerminalState { return webTerminalState(this.session); }
+
+  modemSpeedChoices(): string[] { return MODEM_OPTIONS.map(o => o.label); }
+
+  async chooseModemSpeed(choice: number): Promise<boolean> {
+    return applyModemSpeed(this.socket, this.session, choice);
+  }
+
+  terminalFontChoices(): Array<{ id: string; label: string }> {
+    return TERMINAL_FONTS.map(f => ({ id: f.id, label: f.label }));
+  }
+
+  async chooseTerminalFont(fontId: string): Promise<'set' | 'petscii'> {
+    return applyTerminalFont(this.socket, this.session, fontId);
+  }
+
+  async togglePetsciiPalette(): Promise<'vdc' | 'vic'> {
+    return applyPetsciiPalette(this.socket, this.session);
+  }
+
+  async togglePetsciiCharset(): Promise<{ charset: 'standard' | 'swedish'; notice: string }> {
+    const charset = await applyPetsciiCharset(this.socket, this.session);
+    return { charset, notice: petsciiCharsetNotice(charset) };
+  }
+
+  myData(): Array<{ label: string; value: string }> {
+    return this.session.user ? myDataRows(this.session.user).map(([label, value]) => ({ label, value })) : [];
+  }
+
+  /**
+   * The board's three GDPR erasure checks, in the board's order and with its
+   * texts. `check: true` answers without erasing, so the door can take its
+   * screen down before the board writes its erasure lines and drops the line.
+   */
+  async eraseMyAccount(
+    answers: { confirm: string; password: string; username: string },
+    opts: { check?: boolean } = {},
+  ): Promise<{ ok: true } | { ok: false; reason: string }> {
+    const user = this.session.user;
+    if (!user) return { ok: false, reason: 'Session has no user bound. Deletion cancelled.' };
+    const reason = refuseErasureConfirm(answers.confirm)
+      ?? (await refuseErasurePassword(user, answers.password))
+      ?? refuseErasureUsername(user, answers.username);
+    if (reason) return { ok: false, reason };
+    if (!opts.check) await performErasure(this.socket, this.session);
+    return { ok: true };
   }
 
   /**
