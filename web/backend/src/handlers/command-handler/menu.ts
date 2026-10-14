@@ -24,6 +24,7 @@ import { recordPromptColumn, SAVE_CURSOR } from '../../utils/line-input.util';
 import { setEnvStat } from '../../utils/acs.util';
 import { EnvStat } from '../../constants/env-codes';
 import { drainAchievementNotices } from '../../achievements/notices';
+import { drainNotifyInbox } from '../../notify/board';
 
 /**
  * Display main menu (express.e:28586)
@@ -166,6 +167,8 @@ console.log('[menu] displayMainMenu SKIPPED (debounce - last menu was', now - la
   // explanation is drawn - after the menu, before the prompt, never
   // mid-door or between a prompt and its answer. Non-throwing.
   drainAchievementNotices(socket, session as any);
+  // NOTIFY door's Board channel: same boundary, same rules.
+  drainNotifyInbox(socket, session as any);
 
   // Always show menu prompt (express.e calls displayMenuPrompt regardless of expert/menu display).
   // A display the caller asked for carries its bypass through to the prompt:

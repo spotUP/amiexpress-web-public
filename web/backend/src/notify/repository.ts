@@ -1,0 +1,237 @@
+/**
+ * The notification tables in notify.schema.sql, and nothing else touches them.
+ *
+ * Every function takes the open better-sqlite3 handle the caller already holds
+ * (the Database singleton's `db`, or a test's), the achievements repository's
+ * rule: no second connection. Writes are synchronous and take microseconds.
+ * Times are epoch seconds.
+ */
+import type Database from 'better-sqlite3';
+import { BACKOFF_CEILING_SECONDS, BACKOFF_SECONDS } from '../achievements/outbox.repository';
+import {
+  DEFAULT_SETTINGS, normalizePrefs,
+} from '@amiexpress/bbs-door-sdk/formats/notify';
+import type {
+  NotifyChannel, NotifyItem, NotifyMode, NotifyPrefs, NotifySettings,
+} from '@amiexpress/bbs-door-sdk/formats/notify';
+
+export { BACKOFF_SECONDS, BACKOFF_CEILING_SECONDS };
+
+/** A row older than this is given up on and purged, with one WARN per purge. */
+export const NOTIFY_MAX_AGE_SECONDS = 14 * 24 * 3600;
+
+type Db = Database.Database;
+
+// ---------------------------------------------------------------- prefs
+
+/** The caller's cells. Rows the catalogue no longer allows are dropped on read. */
+export function getPrefs(db: Db, userId: string): NotifyPrefs {
+  const rows = db
+    .prepare('SELECT event, channel, mode FROM notify_prefs WHERE user_id = ?')
+    .all(userId) as { event: string; channel: string; mode: string }[];
+  const raw: Record<string, Record<string, string>> = {};
+  for (const r of rows) (raw[r.event] ??= {})[r.channel] = r.mode;
+  return normalizePrefs(raw);
+}
+
+/** Replace the caller's cells with `prefs` (normalised first), atomically. */
+export function setPrefs(db: Db, userId: string, prefs: unknown): NotifyPrefs {
+  const clean = normalizePrefs(prefs);
+  const del = db.prepare('DELETE FROM notify_prefs WHERE user_id = ?');
+  const ins = db.prepare('INSERT INTO notify_prefs (user_id, event, channel, mode) VALUES (?, ?, ?, ?)');
+  db.transaction(() => {
+    del.run(userId);
+    for (const [event, cells] of Object.entries(clean)) {
+      for (const [channel, mode] of Object.entries(cells)) ins.run(userId, event, channel, mode);
+    }
+  })();
+  return clean;
+}
+
+/** Users who chose a delivering mode for `event` on `channel`. */
+export function usersWanting(db: Db, event: string, channel: NotifyChannel): { userId: string; mode: Exclude<NotifyMode, 'off'> }[] {
+  const rows = db
+    .prepare(`SELECT user_id, mode FROM notify_prefs WHERE event = ? AND channel = ? AND mode != 'off'`)
+    .all(event, channel) as { user_id: string; mode: Exclude<NotifyMode, 'off'> }[];
+  return rows.map((r) => ({ userId: r.user_id, mode: r.mode }));
+}
+
+// ---------------------------------------------------------------- settings
+
+interface SettingsRow {
+  quiet_from: string | null; quiet_to: string | null; time_zone: string | null;
+  digest_kind: string; digest_hour: number; digest_weekday: number | null; paused: number;
+  email_verified: string | null; email_verified_at: number | null;
+}
+
+export interface StoredSettings extends NotifySettings {
+  emailVerified: string | null;
+  emailVerifiedAt: number | null;
+}
+
+/** The caller's settings, or the defaults when they never opened NOTIFY. */
+export function getSettings(db: Db, userId: string): StoredSettings {
+  const r = db.prepare('SELECT * FROM notify_settings WHERE user_id = ?').get(userId) as SettingsRow | undefined;
+  if (!r) return { ...DEFAULT_SETTINGS, emailVerified: null, emailVerifiedAt: null };
+  return {
+    quietFrom: r.quiet_from, quietTo: r.quiet_to, timeZone: r.time_zone,
+    digestKind: r.digest_kind === 'weekly' ? 'weekly' : 'daily',
+    digestHour: r.digest_hour, digestWeekday: r.digest_weekday, paused: r.paused === 1,
+    emailVerified: r.email_verified, emailVerifiedAt: r.email_verified_at,
+  };
+}
+
+/** Write the caller's own settings. The verified-address columns are not touched here. */
+export function setSettings(db: Db, userId: string, s: NotifySettings): void {
+  db.prepare(
+    `INSERT INTO notify_settings (user_id, quiet_from, quiet_to, time_zone, digest_kind, digest_hour, digest_weekday, paused)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT(user_id) DO UPDATE SET
+       quiet_from = excluded.quiet_from, quiet_to = excluded.quiet_to, time_zone = excluded.time_zone,
+       digest_kind = excluded.digest_kind, digest_hour = excluded.digest_hour,
+       digest_weekday = excluded.digest_weekday, paused = excluded.paused`
+  ).run(userId, s.quietFrom, s.quietTo, s.timeZone, s.digestKind, s.digestHour, s.digestWeekday, s.paused ? 1 : 0);
+}
+
+// ---------------------------------------------------------------- follow
+
+export function getFollows(db: Db, userId: string): number[] {
+  return (db.prepare('SELECT conference_id FROM notify_follow WHERE user_id = ? ORDER BY conference_id').all(userId) as { conference_id: number }[])
+    .map((r) => r.conference_id);
+}
+
+export function setFollows(db: Db, userId: string, conferenceIds: readonly number[]): void {
+  const ins = db.prepare('INSERT OR IGNORE INTO notify_follow (user_id, conference_id) VALUES (?, ?)');
+  db.transaction(() => {
+    db.prepare('DELETE FROM notify_follow WHERE user_id = ?').run(userId);
+    for (const id of conferenceIds) ins.run(userId, id);
+  })();
+}
+
+export function followersOf(db: Db, conferenceId: number): string[] {
+  return (db.prepare('SELECT user_id FROM notify_follow WHERE conference_id = ?').all(conferenceId) as { user_id: string }[])
+    .map((r) => r.user_id);
+}
+
+// ---------------------------------------------------------------- outbox
+
+export interface OutboxRow {
+  ref: string;
+  user_id: string;
+  channel: NotifyChannel;
+  event: string;
+  payload: string;
+  created_at: number;
+  deliver_after: number;
+  digest: number;
+  attempts: number;
+  next_attempt_at: number;
+  last_error: string | null;
+}
+
+export interface OutboxInsert {
+  ref: string;
+  userId: string;
+  channel: NotifyChannel;
+  item: NotifyItem;
+  deliverAfter: number;
+  digest: boolean;
+}
+
+/** Enqueue one item. A ref already present is left alone; returns whether a row was added. */
+export function enqueue(db: Db, o: OutboxInsert, now: number): boolean {
+  return db
+    .prepare(
+      `INSERT OR IGNORE INTO notify_outbox
+         (ref, user_id, channel, event, payload, created_at, deliver_after, digest, attempts, next_attempt_at, last_error)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, NULL)`
+    )
+    .run(o.ref, o.userId, o.channel, o.item.event, JSON.stringify(o.item), now, o.deliverAfter, o.digest ? 1 : 0, now)
+    .changes > 0;
+}
+
+/**
+ * Rows whose delivery time and retry time have both come, oldest first.
+ * `channels` limits the selection to channels the board can deliver on right
+ * now, so rows for an unconfigured channel stay in the outbox without
+ * crowding the batch.
+ */
+export function due(db: Db, now: number, limit: number, channels: readonly NotifyChannel[] = ['email', 'push', 'board']): OutboxRow[] {
+  if (channels.length === 0) return [];
+  const marks = channels.map(() => '?').join(',');
+  return db
+    .prepare(`SELECT * FROM notify_outbox WHERE deliver_after <= ? AND next_attempt_at <= ? AND channel IN (${marks}) ORDER BY created_at, ref LIMIT ?`)
+    .all(now, now, ...channels, limit) as OutboxRow[];
+}
+
+export function pendingCount(db: Db): number {
+  return (db.prepare('SELECT COUNT(*) AS n FROM notify_outbox').get() as { n: number }).n;
+}
+
+/** Seconds to wait after the `attempts`-th failure (1-based). */
+export function backoffAfter(attempts: number): number {
+  return BACKOFF_SECONDS[attempts - 1] ?? BACKOFF_CEILING_SECONDS;
+}
+
+export function markFailed(db: Db, refs: readonly string[], error: string, now: number): void {
+  const get = db.prepare('SELECT attempts FROM notify_outbox WHERE ref = ?');
+  const upd = db.prepare('UPDATE notify_outbox SET attempts = attempts + 1, next_attempt_at = ?, last_error = ? WHERE ref = ?');
+  db.transaction(() => {
+    for (const ref of refs) {
+      const row = get.get(ref) as { attempts: number } | undefined;
+      if (row) upd.run(now + backoffAfter(row.attempts + 1), error.slice(0, 500), ref);
+    }
+  })();
+}
+
+/** Push rows to a later delivery time (cap overflow into a digest; unpause). */
+export function retime(db: Db, refs: readonly string[], deliverAfter: number, asDigest: boolean): void {
+  const upd = db.prepare('UPDATE notify_outbox SET deliver_after = ?, digest = ? WHERE ref = ?');
+  db.transaction(() => { for (const ref of refs) upd.run(deliverAfter, asDigest ? 1 : 0, ref); })();
+}
+
+export function remove(db: Db, refs: readonly string[]): number {
+  const del = db.prepare('DELETE FROM notify_outbox WHERE ref = ?');
+  let n = 0;
+  db.transaction(() => { for (const ref of refs) n += del.run(ref).changes; })();
+  return n;
+}
+
+export function purgeOlderThan(db: Db, cutoff: number): number {
+  return db.prepare('DELETE FROM notify_outbox WHERE created_at < ?').run(cutoff).changes;
+}
+
+// ---------------------------------------------------------------- sent log (cap window)
+
+export function recordSent(db: Db, userId: string, channel: NotifyChannel, sentAt: number): void {
+  db.prepare('INSERT INTO notify_sent_log (user_id, channel, sent_at) VALUES (?, ?, ?)').run(userId, channel, sentAt);
+}
+
+/** The user's sends on `channel` since `since`, as epoch seconds. */
+export function sentSince(db: Db, userId: string, channel: NotifyChannel, since: number): number[] {
+  return (db.prepare('SELECT sent_at FROM notify_sent_log WHERE user_id = ? AND channel = ? AND sent_at > ?').all(userId, channel, since) as { sent_at: number }[])
+    .map((r) => r.sent_at);
+}
+
+export function purgeSentLog(db: Db, cutoff: number): number {
+  return db.prepare('DELETE FROM notify_sent_log WHERE sent_at < ?').run(cutoff).changes;
+}
+
+// ---------------------------------------------------------------- inbox (the Board channel)
+
+export function addInbox(db: Db, userId: string, item: NotifyItem, now: number): void {
+  db.prepare('INSERT INTO notify_inbox (user_id, payload, created_at) VALUES (?, ?, ?)').run(userId, JSON.stringify(item), now);
+}
+
+/** Read and delete every item waiting for the caller, oldest first. */
+export function takeInbox(db: Db, userId: string): NotifyItem[] {
+  const rows = db.prepare('SELECT id, payload FROM notify_inbox WHERE user_id = ? ORDER BY id').all(userId) as { id: number; payload: string }[];
+  if (rows.length === 0) return [];
+  const del = db.prepare('DELETE FROM notify_inbox WHERE id = ?');
+  db.transaction(() => { for (const r of rows) del.run(r.id); })();
+  return rows.map((r) => JSON.parse(r.payload) as NotifyItem);
+}
+
+export function inboxCount(db: Db, userId: string): number {
+  return (db.prepare('SELECT COUNT(*) AS n FROM notify_inbox WHERE user_id = ?').get(userId) as { n: number }).n;
+}

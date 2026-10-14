@@ -966,6 +966,11 @@ console.log('[+] Added sha256 column to door_catalog');
         'utf-8'
       );
       this.db.exec(achievementsDdl);
+
+      // Notifications (NOTIFY door): preferences, outbox, Board-channel inbox.
+      this.db.exec(
+        fs.readFileSync(path.join(__dirname, 'notify', 'notify.schema.sql'), 'utf-8')
+      );
 console.log('[+] door_installs table ensured');
 
         // command needs COLLATE NOCASE (AmigaDOS commands are

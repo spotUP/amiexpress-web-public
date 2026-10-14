@@ -1498,6 +1498,12 @@ console.log("[OK] Operator chat handler initialized");
     startFlusher(productionFlusherDeps(io));
 console.log(`[OK] Achievements flusher started (${achievementsNow().enabled ? "reporting to " + achievementsNow().serverUrl : "not configured, idle"})`);
 
+    // Notifications (NOTIFY door): drain notify_outbox. N1 delivers the Board
+    // channel; email and push senders are wired by their own phases.
+    const { startNotifyDispatcher, productionDispatcherDeps } = await import("./notify/dispatcher");
+    startNotifyDispatcher(productionDispatcherDeps(io));
+console.log("[OK] Notification dispatcher started");
+
     // The achievements bulletin (Screens/AchieveTop.txt): the two
     // leaderboards a caller sees at login, on the Conftop-II shape - a file
     // the board writes, a screen the login ladder reads. Off boards remove
