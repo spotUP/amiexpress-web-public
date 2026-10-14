@@ -6,7 +6,7 @@
  * way the backend feeds a caller (the session's doorInputHandler).
  */
 import assert from 'node:assert';
-import { NOTIFY_EVENTS, DEFAULT_SETTINGS } from '@amiexpress/bbs-door-sdk/formats/notify';
+import { NOTIFY_EVENTS, DEFAULT_SETTINGS, doorEventDef } from '@amiexpress/bbs-door-sdk/formats/notify';
 import type { DoorNotificationsApi, NotifyPrefs, NotifySettings } from '@amiexpress/bbs-door-sdk/formats/notify';
 import { themeById } from '@amiexpress/bbs-door-sdk/engines/ui/theme';
 import { startNotify, type Notify } from '../app';
@@ -19,7 +19,7 @@ const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms
 
 interface Fake { api: DoorNotificationsApi; sets: Array<{ prefs: NotifyPrefs; settings: NotifySettings }>; follows: number[][] }
 
-function fakeApi(over: { push?: boolean } = {}): Fake {
+function fakeApi(over: { push?: boolean; doorEvents?: number } = {}): Fake {
   const sets: Fake['sets'] = [];
   const follows: number[][] = [];
   let prefs: NotifyPrefs = {};
@@ -27,7 +27,11 @@ function fakeApi(over: { push?: boolean } = {}): Fake {
   let followed: number[] = [];
   const api: DoorNotificationsApi = {
     catalogue: async () => ({
-      events: NOTIFY_EVENTS.filter((e) => !e.sysopOnly).map((e) => ({ ...e, channels: [...e.channels] })),
+      events: [
+        ...NOTIFY_EVENTS.filter((e) => !e.sysopOnly),
+        // Declared by installed doors (door.settings.json notifications): any number, any label length.
+        ...Array.from({ length: over.doorEvents ?? 0 }, (_, i) => doorEventDef(`door.d${i}.update`, `Door event number ${i} with a long label that must be clipped`, 'What it is about')!),
+      ].map((e) => ({ ...e, channels: [...e.channels] })),
       deliverable: { email: true, push: over.push === true, board: true },
       conferences: [{ id: 1, name: 'General' }, { id: 3, name: 'Amiga Files' }],
       boardZone: 'Europe/Stockholm',
@@ -48,9 +52,9 @@ function fakeApi(over: { push?: boolean } = {}): Fake {
 
 interface Harness { door: Notify; writes: string[]; fake: Fake; key: (k: string) => Promise<void>; since: () => string; mark: () => void }
 
-async function open(width: number, height: number, web = true): Promise<Harness> {
+async function open(width: number, height: number, web = true, doorEvents = 0): Promise<Harness> {
   const writes: string[] = [];
-  const fake = fakeApi();
+  const fake = fakeApi({ doorEvents });
   const theme = themeById('uprough-neon');
   const bbs: any = {
     write: (d: string) => { writes.push(String(d)); }, writeLine: () => {}, on: () => {},
@@ -183,4 +187,23 @@ export async function theDeliveryViewTellsATelnetCallerPushNeedsTheWebTerminal()
     assert.strictEqual(h.door.view(), 'delivery');
     assert.ok(h.door.rows().map(strip).some((r) => r.includes('Push needs the web terminal')));
   } finally { h.door.stop(); }
+}
+
+export async function doorDeclaredEventsScrollIntoViewAndSaveAt80And40(): Promise<void> {
+  for (const [w, h2] of [[80, 25], [40, 25]] as const) {
+    const h = await open(w, h2, true, 14);
+    try {
+      const board = NOTIFY_EVENTS.filter((e) => !e.sysopOnly).length;
+      assert.strictEqual(h.door.rows().length, board + 14);
+      for (const r of h.door.rows()) assert.ok(strip(r).length <= w - 1, `${w}: row too wide: ${strip(r)}`);
+      const mine = h.door.rows().map(strip).filter((r) => r.includes('Door event'));
+      assert.strictEqual(mine.length, 14);
+      assert.ok(mine.every((r) => r.includes('~')), `${w}: a long door label is clipped, not folded`);
+      // walk to the last row, past the visible window, and choose a cell on it
+      for (let i = 0; i < board + 13; i++) await h.key(DOWN);
+      await h.key(' ');
+      const saved = h.fake.sets.at(-1)!.prefs['door.d13.update'];
+      assert.ok(saved && Object.values(saved).includes('instant'), `${w}: the last door event saved ${JSON.stringify(saved)}`);
+    } finally { h.door.stop(); }
+  }
 }

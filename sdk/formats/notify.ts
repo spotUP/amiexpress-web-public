@@ -24,6 +24,8 @@ export interface NotifyEventDef {
   id: string;
   /** Full words for the caller. */
   label: string;
+  /** One line of what it is about; a door's event carries the door's own words. */
+  description?: string;
   /** The channels this event may use. */
   channels: readonly NotifyChannel[];
   /** Only sysops may receive it. */
@@ -61,8 +63,8 @@ export function doorEventCommand(id: string): string | null {
 }
 
 /** The definition of a door-declared event: every channel, no special flags. */
-export function doorEventDef(id: string, label: string): NotifyEventDef | null {
-  return isDoorEventId(id) ? { id, label, channels: NOTIFY_CHANNELS } : null;
+export function doorEventDef(id: string, label: string, description?: string): NotifyEventDef | null {
+  return isDoorEventId(id) ? { id, label, ...(description ? { description } : {}), channels: NOTIFY_CHANNELS } : null;
 }
 
 /** The catalogue entry for an id; a well-formed door event id resolves too. */

@@ -694,6 +694,21 @@ function announceAssigned(bbs, bug, assignee) {
 function announceDeleted(bbs, bugId, title) {
   emit(bbs, "bug_updated", `Deleted bug #${bugId} "${title}"`, { bugId, title });
 }
+function notifyReporter(bbs, bug, actor, change) {
+  try {
+    if (!bug.reporter || bug.reporter === "Anonymous" || bug.reporter === actor) return;
+    if (change.kind === "comment" && change.isInternal) return;
+    const last = bug.comments[bug.comments.length - 1];
+    const objectId = change.kind === "status" ? `${bug.id}:status:${bug.status}:${bug.updatedAt}` : `${bug.id}:comment:${last ? last.id : bug.updatedAt}`;
+    bbs?.notify?.("door.bugs.update", bug.reporter, {
+      title: `Bug #${bug.id} ${change.kind === "status" ? change.label : "has a new comment"}`,
+      body: `${actor} ${change.kind === "status" ? `set "${bug.title}" to ${change.label}` : `commented on "${bug.title}"`}.`,
+      objectId
+    });
+  } catch (err) {
+    console.error("[BugTracker] Failed to notify the reporter:", err);
+  }
+}
 
 // webhook-settings.ts
 import {
@@ -2250,6 +2265,7 @@ var BugTrackerApp = class {
         if (bug) {
           sendWebhook(this.storage, "comment", bug);
           announceBugCommented(this.session.bbs, bug, isInternal);
+          notifyReporter(this.session.bbs, bug, this.username, { kind: "comment", isInternal });
         }
       }
       this.showBugDetail(bugId);
@@ -2279,6 +2295,7 @@ var BugTrackerApp = class {
           const event = bug.status === "closed" || bug.status === "fixed" ? "close" : "update";
           sendWebhook(this.storage, event, bug);
           announceStatusChanged(this.session.bbs, bug, STATUSES[idx].label);
+          notifyReporter(this.session.bbs, bug, this.username, { kind: "status", label: STATUSES[idx].label });
         }
       }
       this.showBugDetail(bugId);

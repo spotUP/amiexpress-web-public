@@ -47,6 +47,7 @@ import {
   announceBugEdited,
   announceDeleted,
   announceStatusChanged,
+  notifyReporter,
 } from './board-announce';
 import { showWebhookSettings as showWebhookSettingsUI } from './webhook-settings';
 
@@ -1720,6 +1721,7 @@ export class BugTrackerApp {
         if (bug) {
           sendWebhook(this.storage, 'comment', bug);
           announceBugCommented(this.session.bbs, bug, isInternal);
+          notifyReporter(this.session.bbs, bug, this.username, { kind: 'comment', isInternal });
         }
       }
       this.showBugDetail(bugId);
@@ -1753,6 +1755,7 @@ export class BugTrackerApp {
           const event = bug.status === 'closed' || bug.status === 'fixed' ? 'close' : 'update';
           sendWebhook(this.storage, event, bug);
           announceStatusChanged(this.session.bbs, bug, STATUSES[idx].label);
+          notifyReporter(this.session.bbs, bug, this.username, { kind: 'status', label: STATUSES[idx].label });
         }
       }
       this.showBugDetail(bugId);

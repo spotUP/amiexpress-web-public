@@ -60,3 +60,35 @@ export function announceAssigned(bbs: any, bug: BugReport, assignee: string | nu
 export function announceDeleted(bbs: any, bugId: number, title: string): void {
   emit(bbs, 'bug_updated', `Deleted bug #${bugId} "${title}"`, { bugId, title });
 }
+
+/**
+ * Tell the person who REPORTED a bug that someone else moved it (NOTIFY event
+ * `door.bugs.update`, declared in door.settings.json). Whether and where they
+ * hear about it is their own NOTIFY choice; this only raises the event.
+ *
+ * Never the reporter's own edits, never an internal sysop note, never an
+ * anonymous report. `objectId` names the change (the status and when, or the
+ * comment), so a repeated call for one change queues one row.
+ */
+export function notifyReporter(
+  bbs: any,
+  bug: BugReport,
+  actor: string,
+  change: { kind: 'status'; label: string } | { kind: 'comment'; isInternal: boolean },
+): void {
+  try {
+    if (!bug.reporter || bug.reporter === 'Anonymous' || bug.reporter === actor) return;
+    if (change.kind === 'comment' && change.isInternal) return;
+    const last = bug.comments[bug.comments.length - 1];
+    const objectId = change.kind === 'status'
+      ? `${bug.id}:status:${bug.status}:${bug.updatedAt}`
+      : `${bug.id}:comment:${last ? last.id : bug.updatedAt}`;
+    bbs?.notify?.('door.bugs.update', bug.reporter, {
+      title: `Bug #${bug.id} ${change.kind === 'status' ? change.label : 'has a new comment'}`,
+      body: `${actor} ${change.kind === 'status' ? `set "${bug.title}" to ${change.label}` : `commented on "${bug.title}"`}.`,
+      objectId,
+    });
+  } catch (err) {
+    console.error('[BugTracker] Failed to notify the reporter:', err);
+  }
+}

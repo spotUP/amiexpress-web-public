@@ -12,7 +12,7 @@ import express, { Request, Response, NextFunction } from 'express';
 import * as fsSync from 'fs';
 import { parseInfoFile, writeInfoFile } from '../utils/info-file.util';
 import { applyDoorFieldsToTooltypes, applyEnabledToTooltypes, findDoorInfoFile, doorDisplayName, isDoorEnabled, doorNormalAccessLevel, resolveRenamedInfoPath, DoorCommandRenameError } from '../services/config-services/door-info-file.service';
-import { doorDirectoryFor, readDoorSettingsView, writeDoorSettings, UnknownDoorSettingError, readDoorArtSections, writeDoorArtSection, readDoorArtVariant, writeDoorArtVariant, listDoorArtSections, DoorSettingsPayloadSchema } from '../doors/door-settings.service';
+import { doorDirectoryFor, hasAdminContent, readManifestFromDir, readDoorSettingsView, writeDoorSettings, UnknownDoorSettingError, readDoorArtSections, writeDoorArtSection, readDoorArtVariant, writeDoorArtVariant, listDoorArtSections, DoorSettingsPayloadSchema } from '../doors/door-settings.service';
 import { listAcsLevels, acsLevelFilePath, tooltypesToFlags, flagsToTooltypes, ambiguouslyDeniedFlags, acsLevelServing, saveAcsLevelFlags } from '../services/config-services/acs-level-file.service';
 import { ACS_PERMISSION_NAMES } from '../constants/acs-permissions';
 import { invalidateAcsIfAccessFile } from '../utils/acs-access-loader';
@@ -642,7 +642,8 @@ console.log(`[DoorsAPI] getDoors() returned ${backendDoors.length} doors`);
         has_settings: (() => {
           try {
             const dir = doorDirectoryFor(config.get('dataDir'), door);
-            return dir ? fsSync.existsSync(path.join(dir, 'door.settings.json')) : false;
+            const manifest = dir ? readManifestFromDir(dir) : null;
+            return manifest ? hasAdminContent(manifest) : false;
           } catch {
             return false;
           }

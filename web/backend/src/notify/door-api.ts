@@ -22,7 +22,7 @@
  */
 import type Database from 'better-sqlite3';
 import {
-  DEFAULT_SETTINGS, NOTIFY_CHANNELS, NOTIFY_EVENTS, NOTIFY_MODES, TEST_EVENT, findEvent, normalizePrefs,
+  DEFAULT_SETTINGS, NOTIFY_CHANNELS, NOTIFY_EVENTS, NOTIFY_MODES, TEST_EVENT, normalizePrefs,
 } from '@amiexpress/bbs-door-sdk/formats/notify';
 import type {
   DoorNotificationsApi, NotifyCatalogue, NotifyChannel, NotifyEventDef, NotifyItem, NotifyPrefs, NotifySettings, NotifyState,
@@ -31,6 +31,7 @@ import { db as boardDb } from '../database';
 import { adminBaseUrl } from '../utils/admin-base-url.util';
 import { getBbsName, isSmtpConfigured, sendMailTo } from '../services/mail-notification.service';
 import { diskHasConfAccess, diskIsSysop } from './account';
+import { productionDoorEvents } from './door-events';
 import type { ChannelSender } from './dispatcher';
 import { makeEmailSender } from './email';
 import { boardTimeZone } from './intake';
@@ -56,6 +57,8 @@ export interface NotificationsDeps {
   /** The email sender Send Test calls directly: online suppression lives in the dispatcher, so a caller inside the door is still mailed. */
   emailSender: ChannelSender;
   boardZone: () => string;
+  /** The events installed doors declare in door.settings.json (door-events.ts). */
+  doorEvents: () => NotifyEventDef[];
 }
 
 export const productionNotificationsDeps = (): NotificationsDeps => ({
@@ -74,6 +77,7 @@ export const productionNotificationsDeps = (): NotificationsDeps => ({
     bbsName: getBbsName,
   }),
   boardZone: boardTimeZone,
+  doorEvents: productionDoorEvents,
 });
 
 const HM = /^([01]?\d|2[0-3]):[0-5]\d$/;
@@ -134,7 +138,8 @@ export function doorNotificationsApi(
 
   const eventsFor = (db: Db, userId: string): NotifyEventDef[] => {
     const sysop = deps.isSysop(db, userId);
-    return NOTIFY_EVENTS.filter((e) => !e.sysopOnly || sysop).map((e) => ({ ...e, channels: [...e.channels] }));
+    const board = NOTIFY_EVENTS.filter((e) => !e.sysopOnly || sysop);
+    return [...board, ...deps.doorEvents()].map((e) => ({ ...e, channels: [...e.channels] }));
   };
 
   const stateOf = (db: Db, userId: string): NotifyState => {
@@ -173,9 +178,9 @@ export function doorNotificationsApi(
       const can = await deliverable();
       if (!prefs || typeof prefs !== 'object') return { ok: false as const, error: 'preferences missing' };
       for (const [eventId, cells] of Object.entries(prefs)) {
-        const def = findEvent(eventId, allowed);
-        // A door event is well formed by id alone; every other event must be one this caller may receive.
-        if (!def || (def.sysopOnly && !allowed.some((e) => e.id === eventId))) return { ok: false as const, error: `unknown event ${eventId}` };
+        // Board events this caller may receive, and the events installed doors declare; nothing else.
+        const def = allowed.find((e) => e.id === eventId);
+        if (!def) return { ok: false as const, error: `unknown event ${eventId}` };
         for (const [channel, mode] of Object.entries(cells ?? {})) {
           if (!(NOTIFY_CHANNELS as readonly string[]).includes(channel)) return { ok: false as const, error: `unknown channel ${channel}` };
           if (!(NOTIFY_MODES as readonly string[]).includes(mode as string)) return { ok: false as const, error: `unknown mode ${String(mode)}` };

@@ -27,7 +27,7 @@ function deps(over: Partial<NotificationsDeps> = {}): NotificationsDeps {
     hasConfAccess: (_d, u, c) => access.get(u)?.has(c) ?? false,
     isSysop: (_d, u) => sysops.has(u),
     verify: { send: async () => ({ ok: true }), now: () => 1_000_000, makeCode: () => '123456', bbsName: async () => 'Test' },
-    emailSender: async () => ({ ok: true }), boardZone: () => 'UTC', ...over,
+    emailSender: async () => ({ ok: true }), boardZone: () => 'UTC', doorEvents: () => [], ...over,
   };
 }
 const as = (id: string, d = deps()) => doorNotificationsApi({ user: { id } }, d);

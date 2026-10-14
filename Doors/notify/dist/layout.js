@@ -66,7 +66,7 @@ function buildEventRows(events, prefs, can) {
             }
             cells[c] = prefs[e.id]?.[c] ?? 'off';
         }
-        return { id: e.id, label: e.label, blurb: (0, exports.blurbOf)(e.id), followsConference: e.followsConference === true, cells, why };
+        return { id: e.id, label: e.label, blurb: e.description ?? (0, exports.blurbOf)(e.id), followsConference: e.followsConference === true, cells, why };
     });
 }
 /** The prefs that follow from the rows: only delivering and explicit cells are kept. */

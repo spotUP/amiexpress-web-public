@@ -12,8 +12,9 @@
  */
 import type Database from 'better-sqlite3';
 import { doorEventCommand, isDoorEventId, NOTIFY_CHANNELS } from '@amiexpress/bbs-door-sdk/formats/notify';
-import type { NotifyItem } from '@amiexpress/bbs-door-sdk/formats/notify';
+import type { NotifyEventDef, NotifyItem } from '@amiexpress/bbs-door-sdk/formats/notify';
 import { diskHasConfAccess, diskIsSysop } from './account';
+import { productionDoorEvents } from './door-events';
 import { queueNotification } from './intake';
 import { followersOf, usersWanting } from './repository';
 
@@ -25,6 +26,8 @@ export interface SiteDeps {
   hasConfAccess: (db: Database.Database, userId: string, conferenceId: number) => boolean;
   /** The sysop test, from the disk record. */
   isSysop: (db: Database.Database, userId: string) => boolean;
+  /** The events installed doors declare (door-events.ts). */
+  doorEvents: () => NotifyEventDef[];
 }
 
 export const defaultSiteDeps: SiteDeps = {
@@ -32,6 +35,7 @@ export const defaultSiteDeps: SiteDeps = {
   now: () => Date.now(),
   hasConfAccess: diskHasConfAccess,
   isSysop: diskIsSysop,
+  doorEvents: productionDoorEvents,
 };
 
 const seconds = (deps: SiteDeps): number => Math.floor(deps.now() / 1000);
@@ -213,6 +217,10 @@ export function notifyFromDoor(command: string, type: string, toUser: string, it
     console.warn(`[WARN] notify: door ${command || '?'} may not raise ${type}; only door.${command || '<command>'}.<slug>`);
     return false;
   }
+  if (!deps.doorEvents().some((e) => e.id === type.toLowerCase())) {
+    console.warn(`[WARN] notify: door ${command} raised ${type}, which its door.settings.json does not declare under notifications; refused`);
+    return false;
+  }
   const objectId = typeof item?.objectId === 'string' ? item.objectId.trim() : '';
   if (!objectId) {
     console.warn(`[WARN] notify: door ${command} raised ${type} without an objectId; refused`);
@@ -223,7 +231,7 @@ export function notifyFromDoor(command: string, type: string, toUser: string, it
     if (!to) return 0;
     const now = seconds(deps);
     const nid: NotifyItem = {
-      event: type, title: String(item.title ?? '').slice(0, 120), body: String(item.body ?? '').slice(0, 500),
+      event: type.toLowerCase(), title: String(item.title ?? '').slice(0, 120), body: String(item.body ?? '').slice(0, 500),
       ...(item.url ? { url: String(item.url).slice(0, 300) } : {}),
       at: now, objectId: objectId.slice(0, 80),
     };

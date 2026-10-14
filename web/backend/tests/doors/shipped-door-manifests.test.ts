@@ -44,7 +44,7 @@ describe('shipped door manifests', () => {
      * nothing behind it, and that is what this line is here to catch.
      */
     const declares =
-      view!.manifest.settings.length + (view!.manifest.artSections?.length ?? 0);
+      view!.manifest.settings.length + (view!.manifest.artSections?.length ?? 0) + (view!.manifest.notifications?.length ?? 0);
     expect(declares).toBeGreaterThan(0);
 
     // The door, reading the same files, gets every key the admin would show -
@@ -108,6 +108,9 @@ describe('shipped door manifests', () => {
   it.each(doorsWithManifests)('%s reads the settings it declares', doorName => {
     const doorDir = path.join(DOORS_DIR, doorName);
     const manifest = JSON.parse(fs.readFileSync(path.join(doorDir, 'door.settings.json'), 'utf8'));
+
+    // A manifest that only declares NOTIFY events has no settings for a door to read.
+    if (!manifest.cfgFile && manifest.settings.length === 0 && manifest.notifications?.length) return;
 
     if (manifest.cfgFile) {
       // The 68K route: the board writes <cfgFile>, the door parses it. Its

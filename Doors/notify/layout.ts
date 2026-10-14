@@ -61,7 +61,7 @@ export function buildEventRows(events: readonly NotifyEventDef[], prefs: NotifyP
       if (!can[c]) { cells[c] = 'na'; why[c] = `${CHANNEL_WORD[c]} is not available on this board yet.`; continue; }
       cells[c] = prefs[e.id]?.[c] ?? 'off';
     }
-    return { id: e.id, label: e.label, blurb: blurbOf(e.id), followsConference: e.followsConference === true, cells, why };
+    return { id: e.id, label: e.label, blurb: e.description ?? blurbOf(e.id), followsConference: e.followsConference === true, cells, why };
   });
 }
 

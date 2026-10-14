@@ -18,6 +18,7 @@ import {
 import type { SiteDeps } from '../../src/notify/sites';
 import { setFollows, setPrefs } from '../../src/notify/repository';
 import { SYSOP_LEVEL } from '../../src/server/socket-guard';
+import { doorEventDef } from '@amiexpress/bbs-door-sdk/formats/notify';
 
 async function waitForTestDb(): Promise<any> {
   let attempts = 0;
@@ -35,7 +36,7 @@ const NOW_MS = 1_800_000_000_000;
 // The disk record is stood in for here (account.ts is tested against a mocked
 // user.data in sites-read-the-disk.test.ts): a user is a sysop when the test row says so.
 const testIsSysop = (h: any, id: string): boolean => ((h.prepare('SELECT seclevel FROM users WHERE id = ?').get(id) as any)?.seclevel ?? 0) >= SYSOP_LEVEL;
-const deps = (hasConfAccess: SiteDeps['hasConfAccess'] = () => true): SiteDeps => ({ rawDb: () => db, now: () => NOW_MS, hasConfAccess, isSysop: testIsSysop });
+const deps = (hasConfAccess: SiteDeps['hasConfAccess'] = () => true): SiteDeps => ({ rawDb: () => db, now: () => NOW_MS, hasConfAccess, isSysop: testIsSysop, doorEvents: () => [doorEventDef('door.tetris.your-turn', 'Your turn')!] });
 
 const addUser = (id: string, username: string, seclevel = 10, confaccess = 'XXX'): void => {
   db.prepare(`INSERT INTO users (id, username, passwordhash, realname, email, seclevel, confaccess) VALUES (?, ?, 'x', 'r', ?, ?, ?)`)
@@ -164,6 +165,17 @@ describe('door notify', () => {
     expect(notifyFromDoor('tetris', 'door.tetris.your-turn', 'ns-alice', item, deps())).toBe(true);
     expect(notifyFromDoor('tetris', 'door.tetris.your-turn', 'NS_ALICE', { ...item, objectId: 'second' }, deps())).toBe(true);
     expect(outbox()).toHaveLength(2);
+  });
+
+  it('refuses an event the door never declared, with one WARN naming the door.settings.json', () => {
+    setPrefs(db, 'ns-alice', { 'door.tetris.undeclared': { email: 'instant' } });
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      expect(notifyFromDoor('tetris', 'door.tetris.undeclared', 'ns-alice', item, deps())).toBe(false);
+      expect(warn).toHaveBeenCalledTimes(1);
+      expect(String(warn.mock.calls[0][0])).toMatch(/door\.settings\.json.*notifications/);
+    } finally { warn.mockRestore(); }
+    expect(outbox()).toHaveLength(0);
   });
 
   it('refuses another door\'s namespace and a board event', () => {

@@ -175,6 +175,20 @@ export interface DoorSettingsManifest {
   artSections?: DoorArtSection[];
   /** Folders whose every art file is a Studio slot. See ArtFolderSchema. */
   artFolders?: DoorArtFolder[];
+  /**
+   * Events this door raises with bbs.notify (`door.<command>.<slug>`). A door
+   * that does not declare an event cannot send it, and nobody can opt in to it:
+   * the NOTIFY door lists exactly these, under the door's own labels.
+   */
+  notifications?: DoorNotificationDecl[];
+}
+
+export interface DoorNotificationDecl {
+  /** The last part of the event id: lowercase letters, digits, `-` and `_`. */
+  slug: string;
+  /** Full words the caller sees in NOTIFY. */
+  label: string;
+  description?: string;
 }
 
 export interface DoorArtFolder {
@@ -319,7 +333,21 @@ const ManifestSchema = z.object({
   cfgFormat: z.enum(['key-value', 'empire']).optional(),
   artSections: z.array(ArtSectionSchema).max(10).optional(),
   artFolders: z.array(ArtFolderSchema).max(10).optional(),
+  notifications: z.array(z.object({
+    slug: z.string().regex(/^[a-z0-9_-]+$/).max(40),
+    label: z.string().min(1).max(60),
+    description: z.string().max(200).optional(),
+  })).max(20).optional(),
 });
+
+/**
+ * Whether the admin has anything to show for a manifest: a setting, an art
+ * block or an art folder. A manifest that only declares `notifications` is
+ * read by NOTIFY, not by the admin, and must not put a badge on the door.
+ */
+export function hasAdminContent(manifest: DoorSettingsManifest): boolean {
+  return manifest.settings.length + (manifest.artSections?.length ?? 0) + (manifest.artFolders?.length ?? 0) > 0;
+}
 
 /**
  * The door's declaration, or null when it has none - the normal case.
@@ -350,6 +378,12 @@ export function readManifestFromDir(doorDir: string): DoorSettingsManifest | nul
   for (const setting of result.data.settings) {
     if (seen.has(setting.key)) throw new Error(`${file}: declares ${setting.key} twice`);
     seen.add(setting.key);
+  }
+
+  const slugs = new Set<string>();
+  for (const n of result.data.notifications ?? []) {
+    if (slugs.has(n.slug)) throw new Error(`${file}: declares notification ${n.slug} twice`);
+    slugs.add(n.slug);
   }
 
   return result.data as DoorSettingsManifest;
