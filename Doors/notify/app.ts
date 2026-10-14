@@ -390,7 +390,7 @@ export async function startNotify(session: DoorSession): Promise<Notify> {
       if (i >= 4) await toggleFollow(i - 4);
     };
 
-    screen.key(['escape', 'x', 'X'], guard(back));
+    screen.key(['escape', 'x', 'X', 'q', 'Q'], guard(back));
     screen.key(['left'], guard(() => {
       if (view !== 'events') return;
       active = CHANNELS[(CHANNELS.indexOf(active) + CHANNELS.length - 1) % CHANNELS.length];
@@ -408,7 +408,7 @@ export async function startNotify(session: DoorSession): Promise<Notify> {
     }));
     screen.key(['f1', '?', 'h', 'H'], guard(() => show('help')));
     screen.key(['f2', 'a', 'A'], guard(() => { show('delivery'); }));
-    screen.key(['f3', 'q', 'Q'], guard(async () => { show('delivery'); await editQuiet(); }));
+    screen.key(['f3'], guard(async () => { show('delivery'); await editQuiet(); }));
     screen.key(['f4', 't', 'T'], guard(sendTest));
   });
 

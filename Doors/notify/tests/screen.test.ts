@@ -248,3 +248,32 @@ export async function theSelectedRowCarriesNoTagThatCutsItsHighlight(): Promise<
     } finally { h.door.stop(); }
   }
 }
+
+export async function qLeavesTheDoorLikeEscapeAndDoesNotOpenQuietHours(): Promise<void> {
+  const h = await open(80, 25);
+  let left = false;
+  void h.door.done.then(() => { left = true; });
+  try {
+    assert.strictEqual(h.door.view(), 'events');
+    await h.key('q');
+    await sleep(200);
+    assert.ok(left, 'q in the events view should leave the door');
+    assert.notStrictEqual(h.door.view(), 'delivery', 'q must not open quiet hours');
+  } finally { h.door.stop(); }
+  const upper = await open(80, 25);
+  let leftUpper = false;
+  void upper.door.done.then(() => { leftUpper = true; });
+  try { await upper.key('Q'); await sleep(200); assert.ok(leftUpper, 'Q should leave the door'); } finally { upper.door.stop(); }
+}
+
+export async function qStepsBackFromADetailViewAndF3StillOpensQuietHours(): Promise<void> {
+  const h = await open(80, 25);
+  try {
+    await h.key('\r');
+    assert.strictEqual(h.door.view(), 'detail');
+    await h.key('q');
+    assert.strictEqual(h.door.view(), 'events');
+    await h.key('\x1bOR'); // F3
+    assert.strictEqual(h.door.view(), 'delivery');
+  } finally { h.door.stop(); }
+}
