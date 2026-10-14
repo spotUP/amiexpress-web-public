@@ -73,31 +73,30 @@ describe('what the row says', () => {
   });
 });
 
+describe('a settings door says which section it belongs in', () => {
+  const session = { user: { secLevel: 10 } };
+  test('SETTINGS_SECTION names the section and DESCRIPTION is carried', () => {
+    const [entry] = settingsDoorsFor([{ command: 'notify', enabled: true, accessLevel: 1, description: 'How the board reaches you',
+      toolTypes: { SETTINGS: 'YES', SETTINGS_LABEL: 'Notifications', SETTINGS_SECTION: 'Communication' } }], session);
+    expect(entry).toMatchObject({ command: 'NOTIFY', label: 'Notifications', section: 'Communication', description: 'How the board reaches you' });
+  });
+  test('no SETTINGS_SECTION is Board settings', () => {
+    const [entry] = settingsDoorsFor([{ command: 'x', toolTypes: { SETTINGS: 'YES' } }], session);
+    expect(entry.section).toBe('Board settings');
+  });
+});
+
 /**
- * The board's own two pickers, read off the .info files it ships - so the
- * feature is not merely possible but actually in use, and a rename of either
- * file is caught here rather than by a caller finding an empty list.
- */
-/**
- * WHICH doors are settings, decided once by reading the whole roster
- * (2026-09-07, at the sysop's request: "audit what other doors should have
- * user settings registered in W and register them").
+ * The board's shipped declarations, read off the .info files it ships - so
+ * the feature is in use and a rename of a file is caught here rather than by
+ * a caller finding an empty list. A property of the registration, not a
+ * pinned board value.
  *
- * Three qualify, and the reason is the same for each: they change what the
- * BOARD does for this caller, and the change outlives the door.
- *
- *   SCREENTHEME  which set of the board's art he is shown
- *   THEME        the colours the doors are drawn with
- *   ACHIEVE      the account this board reports his achievements to
- *
- * The rest of the roster is games, chat, viewers, sysop tools and the
- * batch-registered DayDream imports: none of them remembers anything about
- * the caller. Two are deliberately NOT registered:
- *
- *   THEMEC       the same setting as THEME, in C. Two rows for one choice is
- *                worse than one, and this port exists to prove the C SDK.
- *   PROMPTCOMPLETE  a board-wide feature a door PROVIDES, not a per-caller
- *                setting. If it ever gains an on/off it belongs here.
+ * WHICH doors: the ones that change what the BOARD does for this caller and
+ * whose change outlives the door. The three theme pickers (THEMEC, THEME,
+ * SCREENTHEME - sysop, 2026-10-14), NOTIFY, COSYSOP and ACHIEVE; the last
+ * three are also the doors the signup SCRIPT questionnaire runs
+ * (`~CC_ACHIEVE`, `~CC_COSYSOP`, `~CC_SCREENTHEME`, `~CC_THEME`).
  */
 describe("the board's shipped settings doors", () => {
   const BBSCMD = path.resolve(__dirname, '../../../../Commands/BBSCmd');
@@ -110,17 +109,21 @@ describe("the board's shipped settings doors", () => {
   };
 
   it.each([
-    ['SCREENTHEME', 'Screen artwork'],
-    ['THEME', 'Door colours'],
-    ['ACHIEVE', 'Achievements account'],
-  ])('%s declares itself a setting and names its row', (command, label) => {
+    ['THEMEC', 'Door colours (C version)', 'Appearance'],
+    ['THEME', 'Door colours', 'Appearance'],
+    ['SCREENTHEME', 'Screen artwork', 'Appearance'],
+    ['NOTIFY', 'Notifications', 'Communication'],
+    ['COSYSOP', 'Co-sysop', 'Communication'],
+    ['ACHIEVE', 'Achievements account', 'Board features'],
+  ])('%s declares itself under W as %s in %s', (command, label, section) => {
     expect(fs.existsSync(path.join(BBSCMD, `${command}.info`))).toBe(true);
     const toolTypes = toolTypesOf(command);
     expect(toolTypes.SETTINGS).toBe('YES');
     expect(settingsLabelFor({ command, toolTypes })).toBe(label);
+    expect(toolTypes.SETTINGS_SECTION).toBe(section);
   });
 
-  it.each(['THEMEC', 'PROMPTCOMPLETE', 'DOORS', 'GMASTER'])(
+  it.each(['PROMPTCOMPLETE', 'FRIENDSONLY', 'DOORS', 'GMASTER'])(
     '%s is not a setting, and does not claim to be',
     (command) => {
       const file = path.join(BBSCMD, `${command}.info`);

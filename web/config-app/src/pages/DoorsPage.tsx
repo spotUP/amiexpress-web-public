@@ -61,6 +61,16 @@ const C64_FLAG_TOOLTYPES: Array<{ key: string; label: string; help: string }> = 
 ];
 
 /**
+ * The W settings menu's declaration (handlers/commands/w-settings-doors.ts).
+ * SETTINGS is read as present-and-truthy there ('' / YES / TRUE / 1), so the
+ * checkbox writes 1 through setTruthyFlag like the C64 switches.
+ */
+const W_SETTINGS_TEXT_TOOLTYPES: Array<{ key: string; label: string; help: string; placeholder: string }> = [
+  { key: 'SETTINGS_LABEL', label: 'Row label', help: "What the caller's W row says.", placeholder: "blank = the door's description" },
+  { key: 'SETTINGS_SECTION', label: 'Section', help: 'Which group of rows under W the door sits in.', placeholder: 'blank = Board settings' },
+];
+
+/**
  * The adapter's numeric settings. Every one is a positive integer or blank;
  * `validColumns` rejects anything else, so a bad value reads as "not set"
  * rather than as zero.
@@ -380,6 +390,43 @@ export function DoorsPage() {
                       <input
                         id={`door-c64-${field.key}`}
                         type="number"
+                        value={getCommandFlagValue(field.key)}
+                        onChange={(e) => setCommandFlagValue(field.key, e.target.value)}
+                        className="input-field w-full"
+                        placeholder={field.placeholder}
+                      />
+                      <p className="text-xs text-content-secondary mt-1">
+                        {field.help} <code className="opacity-60">{field.key}</code>
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div className="mb-6 border-b border-border/40 pb-6">
+                <h3 className="text-lg text-accent mb-1">Listed under W</h3>
+                <p className="text-content-secondary text-sm mb-4">
+                  A door that changes what the board does for the caller can sit in his W settings menu.
+                </p>
+                <label className="flex items-start gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    aria-label="Show in the W settings menu"
+                    checked={isTruthyFlagSet('SETTINGS')}
+                    onChange={(e) => setTruthyFlag('SETTINGS', e.target.checked)}
+                    className="mt-0.5 h-4 w-4 accent-accent"
+                  />
+                  <span>
+                    <span className="block text-content-primary text-sm">Show in the W settings menu</span>
+                    <code className="block text-content-secondary text-[10px] opacity-60">SETTINGS</code>
+                  </span>
+                </label>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+                  {W_SETTINGS_TEXT_TOOLTYPES.map((field) => (
+                    <div key={field.key}>
+                      <label htmlFor={`door-w-${field.key}`} className="label">{field.label}</label>
+                      <input
+                        id={`door-w-${field.key}`}
+                        type="text"
                         value={getCommandFlagValue(field.key)}
                         onChange={(e) => setCommandFlagValue(field.key, e.target.value)}
                         className="input-field w-full"

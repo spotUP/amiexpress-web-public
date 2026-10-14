@@ -112,7 +112,7 @@ export function settingsDoorsFor(
  * THE AUDIT, 2026-09-07 ("audit what other doors should have user settings
  * registered in W and register them").
  *
- * Every command on the board was read. Three qualify, and the test is the
+ * Every command on the board was read. Three qualified then, and the test is the
  * same for each: does it change what the BOARD does for this caller, and does
  * the change outlive the door?
  *
@@ -123,12 +123,16 @@ export function settingsDoorsFor(
  *
  * Everything else is a game, a chat, a viewer, a sysop tool, or one of the
  * batch-registered DayDream imports: none of them remembers anything about
- * the caller. Two near misses, recorded so the question is not re-asked:
+ * the caller. One near miss, recorded so the question is not re-asked:
  *
- *   THEMEC          listed beside THEME since 2026-10-14: the sysop ruled that
- *                   all three theme pickers declare themselves.
  *   PROMPTCOMPLETE  a board-wide feature a door PROVIDES, not a per-caller
- *                   setting. If it ever gains an on/off, it belongs here.
+ *                   setting (sysop, 2026-10-14: still not one). FRIENDSONLY is
+ *                   the same ruling. If either ever gains a per-caller on/off,
+ *                   it belongs here.
+ *
+ * THEMEC - listed beside THEME since 2026-10-14: the sysop ruled that all
+ * three theme pickers declare themselves. NOTIFY and COSYSOP joined with the
+ * sections (Appearance, Communication, Board features).
  *
  * The board's own settings - font, transfer protocol, PETSCII palette, the
  * express.e fields - are built-in W rows and need no door.
