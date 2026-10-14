@@ -46,8 +46,13 @@ const REPO = path.resolve(__dirname, '../../../../..');
 const DOOR = path.join(REPO, 'Doors', 'USERSETTINGS', 'usersettings');
 const EIGHTY = path.join(__dirname, 'fixtures', 'usersettings-80.ans');
 
-/** `at` is a time in ms, or 'idle': once the door has painted and then been quiet for a second (load-proof). */
+/**
+ * `at` is a time in ms, or 'idle': the door has painted and then been quiet for a second since the
+ * previous idle key went in (load-proof). Idle steps run IN ORDER, one after the other, each waiting
+ * for the door to answer the one before; a fixed time only suits a step that needs no answer.
+ */
 interface Step { at: number | 'idle'; keys: string }
+const QUIET_MS = 1000;
 
 async function driveFull(cols: number, steps: Step[], rows = 25): Promise<{ ansi: string; user: any }> {
   const { AmigaDoorSession } = require('../../../src/amiga-emulation/AmigaDoorSession');
@@ -67,15 +72,22 @@ async function driveFull(cols: number, steps: Step[], rows = 25): Promise<{ ansi
     },
   });
   const timers: NodeJS.Timeout[] = steps.filter(st => st.at !== 'idle').map(st => setTimeout(() => socket.emit('door:input', st.keys), st.at as number));
-  for (const st of steps.filter(x => x.at === 'idle')) {
-    let seen = 0, quietSince = Date.now();
-    const poll = setInterval(() => {
-      if (socket.ansi.length !== seen) { seen = socket.ansi.length; quietSince = Date.now(); return; }
-      if (seen > 0 && Date.now() - quietSince >= 1000) { clearInterval(poll); socket.emit('door:input', st.keys); }
-    }, 200);
-    timers.push(poll as unknown as NodeJS.Timeout);
-  }
-  try { await session.start(); } finally { timers.forEach(t => { clearTimeout(t); clearInterval(t); }); }
+  let ended = false;
+  const idleKeys = steps.filter(x => x.at === 'idle');
+  // Wait until the door has painted something and then said nothing for QUIET_MS, then type the next key.
+  const typist = (async () => {
+    for (const st of idleKeys) {
+      let seen = 0, quietSince = Date.now();
+      while (!ended) {
+        await new Promise(r => setTimeout(r, 100));
+        if (socket.ansi.length !== seen) { seen = socket.ansi.length; quietSince = Date.now(); continue; }
+        if (seen > 0 && Date.now() - quietSince >= QUIET_MS) break;
+      }
+      if (ended) return;
+      socket.emit('door:input', st.keys);
+    }
+  })();
+  try { await session.start(); } finally { ended = true; await typist; timers.forEach(t => { clearTimeout(t); clearInterval(t); }); }
   return { ansi: socket.ansi.join(''), user };
 }
 
@@ -144,8 +156,8 @@ describe('the W door on three screens', () => {
     const { changeAccount } = require('../../../src/services/account.service');
     (changeAccount as jest.Mock).mockClear();
     const { ansi } = await driveFull(80, [
-      { at: 5000, keys: '\r' }, { at: 5800, keys: '\x7f\x7f\x7f\x7f' }, { at: 6600, keys: 'NEW\r' },
-      { at: 8500, keys: '\x7f\x7f\x7f' }, { at: 9300, keys: 'Ziggy\r' }, { at: 11500, keys: 'q' },
+      { at: 'idle', keys: '\r' }, { at: 'idle', keys: '\x7f\x7f\x7f\x7f' }, { at: 'idle', keys: 'NEW\r' },
+      { at: 'idle', keys: '\x7f\x7f\x7f' }, { at: 'idle', keys: 'Ziggy\r' }, { at: 'idle', keys: 'q' },
     ]);
     const refused = ansi.indexOf('Username not allowed!!');
     expect(refused).toBeGreaterThan(0);
@@ -158,8 +170,8 @@ describe('the W door on three screens', () => {
     const { changeAccount } = require('../../../src/services/account.service');
     (changeAccount as jest.Mock).mockClear();
     const ansi = await drive(80, [
-      { at: 5000, keys: '8' }, { at: 5800, keys: '\r' }, { at: 7000, keys: '\x1b[B' }, { at: 7800, keys: '\r' },
-      { at: 9500, keys: 'q' },
+      { at: 'idle', keys: '8' }, { at: 'idle', keys: '\r' }, { at: 'idle', keys: '\x1b[B' }, { at: 'idle', keys: '\r' },
+      { at: 'idle', keys: 'q' },
     ]);
     expect(ansi).toContain('AMiGA 500');        // the list drew
     expect(ansi).toContain('Up/Down: Move  Enter: Pick');
@@ -170,7 +182,7 @@ describe('the W door on three screens', () => {
 
   test('Lines per screen counts 70 down to 2, asks on the line after, and stores the answer', async () => {
     const { ansi, user } = await driveFull(80, [
-      { at: 5000, keys: '7' }, { at: 5800, keys: '\r' }, { at: 7200, keys: '30\r' }, { at: 9000, keys: 'q' },
+      { at: 'idle', keys: '7' }, { at: 'idle', keys: '\r' }, { at: 'idle', keys: '30\r' }, { at: 'idle', keys: 'q' },
     ]);
     expect(ansi).toContain(' 70\r\n 69\r\n');
     expect(ansi).toContain(' 3\r\n 2\r\n\r\nEnter the number you see at the top of your screen (or 0 for Auto): ');
@@ -190,8 +202,8 @@ describe('the W door on three screens', () => {
       jest.spyOn(console, level).mockImplementation((...a: unknown[]) => { lines.push(a.map(String).join(' ')); }));
     try {
       await drive(80, [
-        { at: 5000, keys: '6' }, { at: 5800, keys: '\r' },
-        { at: 6600, keys: `${secret}\r` }, { at: 8200, keys: `${secret}\r` }, { at: 10000, keys: 'q' },
+        { at: 'idle', keys: '6' }, { at: 'idle', keys: '\r' },
+        { at: 'idle', keys: `${secret}\r` }, { at: 'idle', keys: `${secret}\r` }, { at: 'idle', keys: 'q' },
       ]);
     } finally { spies.forEach(s => s.mockRestore()); }
     await new Promise(r => setTimeout(r, 500));   // the JSON and Amiga logs are write streams
