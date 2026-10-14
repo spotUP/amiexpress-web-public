@@ -46,6 +46,20 @@ export function sanitiseFieldValue(raw: string): string {
  */
 const shownChoices = new WeakMap<object, { n: number; titles: string[] }>();
 
+/**
+ * Sessions whose door has said OPEN (express.e:25718 checks ACS_EDIT_USER_INFO once, at
+ * the top of W). A door that skips OPEN gets that same refusal on every verb that edits
+ * or prepares an edit; closeUserField() ends it with the door.
+ */
+const opened = new WeakSet<object>();
+export function closeUserField(session: object | null | undefined): void { if (session) opened.delete(session); }
+
+function refuseUnopened(session: BBSSession, socket: unknown): boolean {
+  if (opened.has(session)) return false;
+  ErrorHandler.permissionDenied(socket as never, 'edit user information');
+  return true;
+}
+
 const clip = (s: string): string => (s.length > USERFIELD_WIRE_MAX ? s.slice(0, USERFIELD_WIRE_MAX) : s);
 
 async function answerOutcome(session: BBSSession, outcome: WFieldOutcome): Promise<string> {
@@ -89,15 +103,18 @@ export async function userFieldAnswer(request: string, session: BBSSession, sock
   switch (verb) {
     case 'OPEN':
       if (!checkSecurity(session.user, ACSPermission.EDIT_USER_INFO)) {
+        opened.delete(session);
         ErrorHandler.permissionDenied(socket as never, 'edit user information');
         return 'NO';
       }
+      opened.add(session);
       shownChoices.delete(session);
       setEnvStat(session, EnvStat.STATS); // express.e:25720
       return 'OK';
     case 'GET':
       return fieldRow(session, parseInt(rest, 10));
     case 'SET': {
+      if (refuseUnopened(session, socket)) return 'DENIED';
       const gap = rest.indexOf(' ');
       const n = parseInt(gap < 0 ? rest : rest.slice(0, gap), 10);
       if (!isWFieldNumber(n)) return '';
@@ -108,11 +125,13 @@ export async function userFieldAnswer(request: string, session: BBSSession, sock
       return answerOutcome(session, await applyWField(session, n, value, opts));
     }
     case 'PASSWORD': {
+      if (refuseUnopened(session, socket)) return 'DENIED';
       const tab = rest.indexOf('\t');
       if (tab < 0) return answerOutcome(session, { kind: 'unchanged' });
       return answerOutcome(session, await changeWPassword(session, rest.slice(0, tab), rest.slice(tab + 1)));
     }
     case 'CHOICES': {
+      if (refuseUnopened(session, socket)) return '';
       const [nText, iText] = rest.split(' ');
       const n = parseInt(nText, 10);
       if (!isWFieldNumber(n)) return '';
@@ -127,6 +146,7 @@ export async function userFieldAnswer(request: string, session: BBSSession, sock
     case 'DOORS':
       return doorRow(session, parseInt(rest, 10));
     case 'SECRET':
+      if (refuseUnopened(session, socket)) return 'NO';
       // The door is about to read (1) or has finished reading (0) a masked entry: the input traces withhold content meanwhile.
       setSecretInput(session, rest.trim() === '1');
       return 'OK';

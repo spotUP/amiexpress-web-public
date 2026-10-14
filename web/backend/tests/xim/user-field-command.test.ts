@@ -28,6 +28,9 @@ const caller = (): any => ({
   user: { id: 7, username: 'Spot', realname: 'Johan', location: 'Old Town', secLevel: 10, securityFlags: 'T'.repeat(128), userFlags: 0 },
 });
 
+/** A caller whose door has said OPEN, as the W door always does first. */
+const opened = async (): Promise<any> => { const s = caller(); await userFieldAnswer('OPEN', s, socket); return s; };
+
 beforeEach(() => { saveAccount.mockClear(); permissionDenied.mockClear(); doors.length = 0; });
 
 test('OPEN without ACS_EDIT_USER_INFO says NO after the board printed the refusal (25718)', async () => {
@@ -43,25 +46,25 @@ test('GET answers state, label, value, kind, limit and prompt', async () => {
 });
 
 test('a latin1 value is stored as the caller typed it and the account is saved once', async () => {
-  const s = caller();
+  const s = await opened();
   expect(await userFieldAnswer('SET 4 Göteborg', s, socket)).toBe('OK\tGöteborg');
   expect(s.user.location).toBe('Göteborg');
   expect(saveAccount).toHaveBeenCalledTimes(1);
 });
 
 test('TAB, ESC and CR inside a value never reach the record', async () => {
-  const s = caller();
+  const s = await opened();
   expect(await userFieldAnswer('SET 4 Old\tTown\x1b[2J\r', s, socket)).toBe('OK\tOldTown[2J');
   expect(s.user.location).toBe('OldTown[2J');
 });
 
 test('unchanged input answers SAME and does not save', async () => {
-  expect(await userFieldAnswer('SET 4 ', caller(), socket)).toBe('SAME');
+  expect(await userFieldAnswer('SET 4 ', await opened(), socket)).toBe('SAME');
   expect(saveAccount).not.toHaveBeenCalled();
 });
 
 test('access taken back by DT_REMBIT between GET and SET denies the write', async () => {
-  const s = caller();
+  const s = await opened();
   expect((await userFieldAnswer('GET 4', s, socket)).startsWith('E\t')).toBe(true);
   const parser: any = { writeData: jest.fn(), writeString: jest.fn(), writeMessageString: jest.fn(), readString: jest.fn(() => ''), writeCommand: jest.fn(), getCommandName: jest.fn(() => 'CMD') };
   const dq = new XIMDataQueryHandler({ readMemory32: () => 0, writeMemory32: () => undefined, writeMemory: () => undefined, readString: () => '' } as any,
@@ -73,12 +76,12 @@ test('access taken back by DT_REMBIT between GET and SET denies the write', asyn
 });
 
 test('a refused name carries its retry flag and express.e\'s text', async () => {
-  expect(await userFieldAnswer('SET 0 NEW', caller(), socket)).toBe('NO\t1\tUsername not allowed!!');
+  expect(await userFieldAnswer('SET 0 NEW', await opened(), socket)).toBe('NO\t1\tUsername not allowed!!');
 });
 
 test('the password goes through changeWPassword and SET 6 is denied', async () => {
-  expect(await userFieldAnswer('SET 6 secret', caller(), socket)).toBe('DENIED');
-  expect(await userFieldAnswer('PASSWORD Abc123!x\tAbc123!y', caller(), socket)).toBe('NO\t0\t\r\nPasswords do not match, changes not saved');
+  expect(await userFieldAnswer('SET 6 secret', await opened(), socket)).toBe('DENIED');
+  expect(await userFieldAnswer('PASSWORD Abc123!x\tAbc123!y', await opened(), socket)).toBe('NO\t0\t\r\nPasswords do not match, changes not saved');
 });
 
 test('the declared doors come one at a time and never overflow the wire', async () => {
@@ -98,13 +101,13 @@ test('a door the caller may not run is not listed (the board filters at query ti
 test('the sentinel: a SET reaches applyWField exactly once', async () => {
   const spy = require('../../src/services/user-settings/w-fields').applyWField as jest.Mock;
   spy.mockClear();
-  await userFieldAnswer('SET 5 555-9999', caller(), socket);
+  await userFieldAnswer('SET 5 555-9999', await opened(), socket);
   expect(spy).toHaveBeenCalledTimes(1);
 });
 
 test('the list the caller was shown decides a choice answer, even when the list changes before their SET', async () => {
   const wf = require('../../src/services/user-settings/w-fields');
-  const s = caller();
+  const s = await opened();
   wf.wFieldChoices.mockImplementationOnce(async () => ['Alpha', 'Beta', 'Gamma']);
   expect(await userFieldAnswer('CHOICES 9 0', s, socket)).toBe('Alpha');
   wf.wFieldChoices.mockImplementation(async () => ['Xray', 'Yankee', 'Zulu']);
@@ -119,7 +122,7 @@ test('the list the caller was shown decides a choice answer, even when the list 
 
 test('SECRET 1 marks the session as reading a secret and SECRET 0 clears it; inputForTrace withholds only while set', async () => {
   const { isSecretInput, inputForTrace } = require('../../src/amiga-emulation/xim/secret-input');
-  const s = caller();
+  const s = await opened();
   expect(isSecretInput(s)).toBe(false);
   expect(await userFieldAnswer('SECRET 1', s, socket)).toBe('OK');
   expect(isSecretInput(s)).toBe(true);
@@ -127,4 +130,25 @@ test('SECRET 1 marks the session as reading a secret and SECRET 0 clears it; inp
   expect(inputForTrace(s, 'Zebra7!x\r', (x: string) => x)).toBe('<9 bytes withheld>');
   expect(await userFieldAnswer('SECRET 0', s, socket)).toBe('OK');
   expect(inputForTrace(s, 'q', (x: string) => `"${x}"`)).toBe('"q"');
+});
+
+test('SET, PASSWORD, CHOICES and SECRET before OPEN get the edit-user-information refusal and change nothing (25718)', async () => {
+  const s = caller();                                   // a door that skipped OPEN
+  expect(await userFieldAnswer('SET 4 Nowhere', s, socket)).toBe('DENIED');
+  expect(await userFieldAnswer('PASSWORD Abc123!x\tAbc123!x', s, socket)).toBe('DENIED');
+  expect(await userFieldAnswer('CHOICES 9 0', s, socket)).toBe('');
+  expect(await userFieldAnswer('SECRET 1', s, socket)).toBe('NO');
+  expect(s.user.location).toBe('Old Town');
+  expect(saveAccount).not.toHaveBeenCalled();
+  expect(permissionDenied).toHaveBeenCalledWith(socket, 'edit user information');
+  expect(require('../../src/amiga-emulation/xim/secret-input').isSecretInput(s)).toBe(false);
+  expect(await userFieldAnswer('OPEN', s, socket)).toBe('OK');   // OPEN opens it
+  expect(await userFieldAnswer('SET 4 Nowhere', s, socket)).toBe('OK\tNowhere');
+});
+
+test('a door that ends is closed: a later door on the same session must OPEN again', async () => {
+  const { closeUserField } = require('../../src/amiga-emulation/xim/userfield');
+  const s = await opened();
+  closeUserField(s);
+  expect(await userFieldAnswer('SET 4 Nowhere', s, socket)).toBe('DENIED');
 });
