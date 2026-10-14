@@ -1,6 +1,8 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.runDoor = exports.createApp = exports.startNotify = void 0;
+exports.startNotify = startNotify;
+exports.createApp = createApp;
+exports.runDoor = runDoor;
 /**
  * NOTIFY - choose how the board reaches you.
  *
@@ -502,15 +504,12 @@ async function startNotify(session) {
         done: finished,
     };
 }
-exports.startNotify = startNotify;
 async function createApp(session) {
     const door = await startNotify(session);
     await door.done;
 }
-exports.createApp = createApp;
 async function runDoor(bbs, session) {
     await createApp({ ...(session || {}), bbs });
 }
-exports.runDoor = runDoor;
 exports.default = runDoor;
 //# sourceMappingURL=app.js.map
