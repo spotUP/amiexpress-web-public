@@ -35,8 +35,10 @@ var __importStar = (this && this.__importStar) || (function () {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.SYSOP_SEC_LEVEL = void 0;
 exports.magazineRoot = magazineRoot;
+exports.isListed = isListed;
 exports.loadIndex = loadIndex;
 exports.loadFront = loadFront;
+exports.loadTickerItems = loadTickerItems;
 exports.isSysopCaller = isSysopCaller;
 exports.writeFront = writeFront;
 exports.editFront = editFront;
@@ -83,17 +85,54 @@ function isIndexEntry(value) {
     return typeof e.page === 'number' && typeof e.storyId === 'string' && typeof e.title === 'string'
         && typeof e.desk === 'string' && typeof e.date === 'string';
 }
-/** `index.json`, entries that do not have the shape dropped. */
+/**
+ * Is this story shown to a caller? Only an article is: the SDK's `isArticle`,
+ * the same predicate the board's publisher uses to give a story a page. A
+ * story that is gone, a teaser, or one still waiting for its text is hidden.
+ */
+function isListed(storyId, root = magazineRoot()) {
+    const story = loadStory(storyId, root);
+    return story !== null && (0, magazine_1.isArticle)(story);
+}
+/** `index.json`, entries that do not have the shape dropped and stories that are not articles hidden. */
 function loadIndex(root = magazineRoot()) {
     const parsed = readJson(path.join(root, magazine_1.MAGAZINE_INDEX_FILE));
     if (!Array.isArray(parsed))
         return [];
-    return parsed.filter(isIndexEntry).sort((a, b) => a.page - b.page);
+    return parsed.filter(isIndexEntry).filter((e) => isListed(e.storyId, root)).sort((a, b) => a.page - b.page);
 }
-/** `frontpage.json`: the editor's order, and only the editor's. */
+/**
+ * `frontpage.json`: the editor's order, and only the editor's. An id whose story
+ * is not an article is skipped on display; the sysop's file is never rewritten by a read.
+ */
 function loadFront(root = magazineRoot()) {
     const parsed = readJson(path.join(root, magazine_1.MAGAZINE_FRONTPAGE_FILE));
-    return Array.isArray(parsed) ? parsed.filter((x) => typeof x === 'string') : [];
+    return Array.isArray(parsed) ? parsed.filter((x) => typeof x === 'string' && isListed(x, root)) : [];
+}
+/**
+ * The ticker's material: the newest headlines of EVERY story in the store,
+ * teasers included. A ticker scrolls past; it is not a list a caller opens, so
+ * a headline with no article behind it is still news worth a glance.
+ */
+function loadTickerItems(limit, root = magazineRoot()) {
+    const dir = path.join(root, magazine_1.MAGAZINE_STORIES_DIR);
+    let names;
+    try {
+        names = fs.readdirSync(dir).filter((n) => n.endsWith('.json'));
+    }
+    catch {
+        return [];
+    }
+    const stories = [];
+    for (const name of names) {
+        const story = loadStory(name.slice(0, -'.json'.length), root);
+        if (story)
+            stories.push(story);
+    }
+    return stories
+        .sort((a, b) => b.date.localeCompare(a.date))
+        .slice(0, limit)
+        .map((s) => ({ source: s.source, title: s.headline }));
 }
 /**
  * Who may edit the front page: the full sysop. The same tier and the same

@@ -28,6 +28,7 @@ import {
   parseRobots,
   prefetchBodies,
   robotsAllows,
+  startBodyPrefetch,
   type HttpResult,
   type PrefetchDeps,
 } from '../../src/services/magazine/body-prefetch';
@@ -180,6 +181,15 @@ describe('the body prefetch', () => {
     fs.mkdirSync(path.join(root, MAGAZINE_DIR, MAGAZINE_STORIES_DIR), { recursive: true });
   });
   afterEach(() => fs.rmSync(root, { recursive: true, force: true }));
+
+  it('gives the story its page as soon as its text lands (startBodyPrefetch republishes)', async () => {
+    write(story('s1', 'https://example.org/a/1'));
+    const { d } = deps((u) => (u.endsWith('/robots.txt') ? robots200() : html200()));
+    startBodyPrefetch({ rootDir: d.rootDir, now: d.now, log: d.log }, d);
+    const indexFile = path.join(root, MAGAZINE_DIR, 'index.json');
+    for (let i = 0; i < 100 && !fs.existsSync(indexFile); i++) await new Promise((r) => setTimeout(r, 20));
+    expect(JSON.parse(fs.readFileSync(indexFile, 'utf8')).map((e: { storyId: string }) => e.storyId)).toEqual(['s1']);
+  });
 
   it('fetches a new teaser-only story once and stores its text as the body', async () => {
     write(story('s1', 'https://example.org/a/1'));

@@ -10,13 +10,14 @@ import {
   MAGAZINE_FRONTPAGE_FILE,
   MAGAZINE_INDEX_FILE,
   MAGAZINE_STORIES_DIR,
+  ARTICLE_MIN_BODY_CHARS,
   frontLead,
   frontMove,
   frontToggle,
   type MagazineIndexEntry,
   type Story,
 } from '@amiexpress/bbs-door-sdk/formats/magazine';
-import { editFront, isSysopCaller, writeFront, loadFront, loadIndex, loadSnapshot, loadStory, paintSafe, searchStories, storiesPerDay } from '../library';
+import { editFront, isListed, loadTickerItems, isSysopCaller, writeFront, loadFront, loadIndex, loadSnapshot, loadStory, paintSafe, searchStories, storiesPerDay } from '../library';
 
 function tmpMagazine(): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'mag-lib-'));
@@ -26,10 +27,16 @@ const entry = (page: number, storyId: string, title: string, date = '2026-10-13'
   page, storyId, title, desk: 'hack', format: 'NEWS', date,
 });
 
-const story = (id: string, headline: string, summary: string): Story => ({
+const story = (id: string, headline: string, summary: string, extra: Partial<Story> = {}): Story => ({
   id, headline, summary, format: 'NEWS', desk: 'hack', date: '2026-10-13', source: 'example.org',
-  firstSeen: '2026-10-13', seenCount: 1,
+  firstSeen: '2026-10-13', seenCount: 1, origin: 'authored', ...extra,
 });
+
+/** Write the stories (authored by default, so they are articles) under `<root>/stories`. */
+function putStories(root: string, ...stories: Story[]): void {
+  fs.mkdirSync(path.join(root, MAGAZINE_STORIES_DIR), { recursive: true });
+  for (const st of stories) fs.writeFileSync(path.join(root, MAGAZINE_STORIES_DIR, `${st.id}.json`), JSON.stringify(st));
+}
 
 export async function aMissingMagazineIsEmptyNotAnError(): Promise<void> {
   const root = path.join(tmpMagazine(), 'nope');
@@ -53,12 +60,14 @@ export async function indexEntriesWithoutTheShapeAreDroppedAndPagesSorted(): Pro
     path.join(root, MAGAZINE_INDEX_FILE),
     JSON.stringify([entry(120, 'bbbb', 'B'), { page: 'x' }, null, entry(101, 'aaaa', 'A')]),
   );
+  putStories(root, story('bbbb', 'B', ''), story('aaaa', 'A', ''));
   assert.deepStrictEqual(loadIndex(root).map((e) => e.page), [101, 120]);
 }
 
 export async function frontPageIsExactlyTheEditorsIdsInOrder(): Promise<void> {
   const root = tmpMagazine();
   fs.writeFileSync(path.join(root, MAGAZINE_FRONTPAGE_FILE), JSON.stringify(['b', 7, 'a']));
+  putStories(root, story('a', 'A', ''), story('b', 'B', ''));
   assert.deepStrictEqual(loadFront(root), ['b', 'a']);
 }
 
@@ -113,6 +122,7 @@ function withIndex(ids: string[], front: unknown): string {
   const root = tmpMagazine();
   fs.writeFileSync(path.join(root, MAGAZINE_INDEX_FILE), JSON.stringify(ids.map((id, i) => entry(100 + i, id, `Story ${id}`))));
   fs.writeFileSync(path.join(root, MAGAZINE_FRONTPAGE_FILE), JSON.stringify(front));
+  putStories(root, ...ids.map((id) => story(id, `Story ${id}`, '')));
   return root;
 }
 const frontOf = (root: string): string[] => JSON.parse(fs.readFileSync(path.join(root, MAGAZINE_FRONTPAGE_FILE), 'utf8'));
@@ -167,4 +177,41 @@ export async function anEditThatChangesNothingWritesNothing(): Promise<void> {
   (cjs as any).renameSync = (...args: Parameters<typeof fs.renameSync>) => { calls += 1; return real(...args); };
   try { editFront((ids) => frontMove(ids, 'a', -1), root); } finally { (cjs as any).renameSync = real; }
   assert.strictEqual(calls, 0);
+}
+
+const TEASER_ONLY = (id: string, headline: string, date = '2026-10-13'): Story =>
+  story(id, headline, 'A short teaser.', { origin: 'feed', date });
+
+export async function theIndexTheFrontPageAndSearchHideEveryStoryThatIsNotAnArticle(): Promise<void> {
+  const root = tmpMagazine();
+  putStories(
+    root,
+    story('art1', 'Relay computers explained', ''),
+    TEASER_ONLY('tea1', 'Relay clock teaser'),
+    story('long', 'Fed with a full body', 'x', { origin: 'feed', body: 'b'.repeat(ARTICLE_MIN_BODY_CHARS) }),
+    story('shrt', 'Fed with a short body', 'x', { origin: 'feed', body: 'b'.repeat(ARTICLE_MIN_BODY_CHARS - 1) }),
+  );
+  fs.writeFileSync(
+    path.join(root, MAGAZINE_INDEX_FILE),
+    JSON.stringify(['art1', 'tea1', 'long', 'shrt', 'gone'].map((id, i) => entry(100 + i, id, `Relay ${id}`))),
+  );
+  fs.writeFileSync(path.join(root, MAGAZINE_FRONTPAGE_FILE), JSON.stringify(['tea1', 'art1', 'gone', 'long']));
+  const before = fs.readFileSync(path.join(root, MAGAZINE_FRONTPAGE_FILE), 'utf8');
+  assert.deepStrictEqual(loadIndex(root).map((e) => e.storyId), ['art1', 'long']);
+  assert.deepStrictEqual(loadFront(root), ['art1', 'long'], 'a non-article id is skipped on display');
+  assert.strictEqual(fs.readFileSync(path.join(root, MAGAZINE_FRONTPAGE_FILE), 'utf8'), before, 'and the sysop\'s file is not rewritten by a read');
+  assert.deepStrictEqual(searchStories(loadIndex(root), 'relay').map((e) => e.storyId), ['art1', 'long']);
+  assert.strictEqual(isListed('tea1', root), false);
+  assert.strictEqual(isListed('shrt', root), false);
+  assert.strictEqual(isListed('art1', root), true);
+}
+
+export async function theTickerCarriesTheNewestHeadlinesOfEveryStoryTeasersIncluded(): Promise<void> {
+  const root = tmpMagazine();
+  putStories(root, story('art1', 'An article', '', { date: '2026-10-10' }), TEASER_ONLY('tea1', 'A teaser headline', '2026-10-14'), TEASER_ONLY('tea2', 'Older teaser', '2026-10-01'));
+  assert.deepStrictEqual(loadTickerItems(2, root), [
+    { source: 'example.org', title: 'A teaser headline' },
+    { source: 'example.org', title: 'An article' },
+  ]);
+  assert.deepStrictEqual(loadTickerItems(5, path.join(root, 'nope')), []);
 }

@@ -17,9 +17,7 @@ import {
   signalStrength,
   signalTag,
   sourceName,
-  trimAtWord,
-  wireDetail,
-  wireStamp,
+  ageStamp,
   newsRows,
   staticNewsRow,
   NEWS_SEPARATOR,
@@ -276,38 +274,24 @@ export async function leavesABlankRowBetweenConsecutiveHeadlines(): Promise<void
 }
 
 // ---------------------------------------------------------------------------
-// Wire rows: feed teasers are never laid out as articles
+// Article rows: source and age under the headline
 // ---------------------------------------------------------------------------
 
-const WIRE_BLOCKS: ListingBlock[] = [
+const ARTICLE_BLOCKS: ListingBlock[] = [
   {
     kind: 'item',
     item: {
       storyId: 'w', page: 122, title: 'A relay clock from the junk drawer', unread: true, bookmarked: false,
-      wire: { teaser: 'We rebuild a clock from relays and a lot of patience, with a second sentence that runs on.', source: 'www.hackaday.com', stamp: 'YESTERDAY' },
+      article: { source: 'www.hackaday.com', stamp: 'YESTERDAY' },
     },
   },
   { kind: 'item', item: { storyId: 'x', page: 123, title: 'Plain headline row', unread: false, bookmarked: false } },
 ];
 
-export async function aWireRowIsHeadlineTeaserLineAndSourceWithAgeAtEightyColumns(): Promise<void> {
-  const rows = buildListing(WIRE_BLOCKS, 'w', buildLayout(80, 24), { left: 'C', right: '' }).spreads[0].map(rowText);
-  // Pinned deliberately: a feed story takes four rows here (two for the wrapped
-  // headline, the teaser cut at a word, source and age), then the blank gap.
-  assert.deepStrictEqual(rows.slice(1, 8).map((r) => r.slice(0, 40)), [
-    ' >A relay clock from the junk      122 \u2502',
-    '  drawer                               \u2502',
-    '  We rebuild a clock from relays and.. \u2502',
-    '  HACKADAY.COM // YESTERDAY            \u2502',
-    '                                       \u2502',
-    '  Plain headline row               123 \u2502',
-    '                                       \u2502',
-  ]);
-}
-
-export async function aWireRowFitsAtEveryWidthAndShowsNoAddress(): Promise<void> {
+export async function anArticleRowFitsAtEveryWidthAndShowsNoAddress(): Promise<void> {
   for (const [w, h] of WIDTHS) {
-    const rows = buildListing(WIRE_BLOCKS, 'w', buildLayout(w, h), { left: 'C', right: '' }).spreads[0].map(rowText);
+    const rows = buildListing(ARTICLE_BLOCKS, 'w', buildLayout(w, h), { left: 'C', right: '' }).spreads[0].map(rowText);
+    assert.ok(rows.some((r) => r.includes('ARTICLE // HACKADAY.COM // YESTERDAY')), `${w}: tag present`);
     for (const r of rows) assert.ok(r.length <= w && !/https?:/.test(r), `${w}: "${r}"`);
   }
 }
@@ -319,28 +303,13 @@ export async function theReaderNamesASiteNeverAnAddress(): Promise<void> {
   assert.strictEqual(sourceName('https://www.reddit.com/r/amiga'), 'reddit.com');
 }
 
-export async function wireStampSaysHowOldInWordsThenTheDate(): Promise<void> {
+export async function ageStampSaysHowOldInWordsThenTheDate(): Promise<void> {
   const now = new Date('2026-10-14T09:00:00Z');
-  assert.strictEqual(wireStamp('2026-10-14', now), 'TODAY');
-  assert.strictEqual(wireStamp('2026-10-13', now), 'YESTERDAY');
-  assert.strictEqual(wireStamp('2026-10-11', now), '3D AGO');
-  assert.strictEqual(wireStamp('2026-09-01', now), '2026-09-01');
-  assert.strictEqual(wireStamp('', now), 'UNDATED');
-}
-
-export async function aTeaserIsCutAtAWordNotInsideOne(): Promise<void> {
-  assert.strictEqual(trimAtWord('short', 20), 'short');
-  const cut = trimAtWord('We rebuild a clock from relays', 20);
-  assert.strictEqual(cut, 'We rebuild a clock..');
-  assert.ok(cut.length <= 20);
-}
-
-export async function theWireDetailHasTheWholeTeaserSourceAndDateButNoAddress(): Promise<void> {
-  const lines = wireDetail({ ...STORY, source: 'www.demozoo.org' }, new Date('2026-10-14T00:00:00Z'));
-  const t = lines.join('\n');
-  assert.ok(t.includes(STORY.summary.split('\n')[0]));
-  assert.ok(t.includes('Source: demozoo.org') && t.includes('Date: 2026-10-13 (yesterday)'));
-  assert.ok(!/https?:|Read at source/.test(t));
+  assert.strictEqual(ageStamp('2026-10-14', now), 'TODAY');
+  assert.strictEqual(ageStamp('2026-10-13', now), 'YESTERDAY');
+  assert.strictEqual(ageStamp('2026-10-11', now), '3D AGO');
+  assert.strictEqual(ageStamp('2026-09-01', now), '2026-09-01');
+  assert.strictEqual(ageStamp('', now), 'UNDATED');
 }
 
 export async function anArticleEndsOnTheSiteNameAndNeverPrintsTheAddress(): Promise<void> {

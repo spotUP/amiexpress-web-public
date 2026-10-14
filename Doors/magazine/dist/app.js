@@ -264,11 +264,7 @@ async function startReader(session, options = {}) {
     let glitchTimer = null;
     let repairTimer = null;
     let modalOpen = false;
-    /** The wire story whose panel is open, so the sysop's P key knows what it acts on. */
-    let wireId = null;
-    let wireModal = null;
     let hintsKey = '';
-    let modalContent = '';
     const counters = { glitches: 0, tickerSteps: 0, intervals: 0, banners: 0, titles: 0, searchTicks: 0, lands: 0 };
     let stopped = false;
     let finish = () => { };
@@ -284,15 +280,11 @@ async function startReader(session, options = {}) {
     const listingBlocks = (entries, headings) => {
         const blocks = [];
         const item = (e) => {
-            // A story without full text is wire material in every list: headline,
-            // one teaser line, source and age. A story with full text (or an authored
-            // one) is a headline row, a feed article tagged ARTICLE.
+            // Every listed story is an article (the snapshot holds nothing else): a
+            // headline row tagged ARTICLE with its source and age.
             const st = storyOf(e.storyId);
-            const stamp = st ? (0, layout_1.wireStamp)(st.date || e.date, new Date()) : '';
-            const wire = st && !(0, magazine_1.isArticle)(st)
-                ? { teaser: st.summary, source: st.source, stamp }
-                : undefined;
-            const article = st && (0, magazine_1.isArticle)(st) && st.source
+            const stamp = st ? (0, layout_1.ageStamp)(st.date || e.date, new Date()) : '';
+            const article = st && st.source
                 ? { source: st.source, stamp }
                 : undefined;
             return {
@@ -305,7 +297,6 @@ async function startReader(session, options = {}) {
                     bookmarked: bookmarks.has(e.storyId),
                     lead: view.kind === 'front' && snapshot.front[0] === e.storyId,
                     front: sysop && view.kind !== 'front' && onFront.has(e.storyId),
-                    wire,
                     article,
                 },
             };
@@ -432,8 +423,8 @@ async function startReader(session, options = {}) {
             }, GLITCH_HOLD_MS);
         }, GLITCH_DELAY_MS);
     };
-    /** The story a sysop key acts on: the open panel, the open article, else the cursor. */
-    const subjectId = () => wireId ?? (view.kind === 'article' ? view.storyId : selected);
+    /** The story a sysop key acts on: the open article, else the cursor. */
+    const subjectId = () => (view.kind === 'article' ? view.storyId : selected);
     /** The sysop's hints follow the story in view; the footer is repainted only when they change. */
     const updateHints = () => {
         if (!sysop)
@@ -517,10 +508,7 @@ async function startReader(session, options = {}) {
     let newsAt = -1;
     const loadNews = () => {
         const root = (0, library_1.magazineRoot)(__dirname);
-        newsItems = [...snapshot.index]
-            .sort((a, b) => b.date.localeCompare(a.date))
-            .slice(0, TICKER_HEADLINES)
-            .map((e) => ({ source: (0, library_1.loadStory)(e.storyId, root)?.source ?? '', title: e.title }));
+        newsItems = (0, library_1.loadTickerItems)(TICKER_HEADLINES, root);
     };
     /** 40 columns: the next headline, painted into the ticker row (flushed by the caller's render). */
     const showStaticNews = () => {
@@ -613,11 +601,6 @@ async function startReader(session, options = {}) {
         paint();
     };
     const openStory = (storyId, list) => {
-        const st = storyOf(storyId);
-        if (st && !(0, magazine_1.isArticle)(st)) {
-            openWire(st);
-            return;
-        }
         go({ kind: 'article', storyId, list: list.length ? list : [storyId], back: view.kind === 'article' ? view.back : view });
     };
     const openSelected = () => {
@@ -660,17 +643,11 @@ async function startReader(session, options = {}) {
             render();
     };
     // ---- the sysop's front page editor -----------------------------------
-    const wireFooter = (id) => sysop ? `P: ${onFront.has(id) ? 'Remove from' : 'Add to'} front page   Enter: back` : 'Enter or Escape: back to the list';
     /** The front page changed on disk: show it. Only what differs is repainted (blessed diffs the cells). */
     const frontChanged = (next, status) => {
         snapshot = { ...snapshot, front: next };
         setStatus(status);
-        if (wireId) {
-            wireModal?.setFooterText?.(wireFooter(wireId));
-            updateHints();
-            render();
-        }
-        else if (view.kind === 'article') {
+        if (view.kind === 'article') {
             updateHints();
             render();
         }
@@ -679,14 +656,14 @@ async function startReader(session, options = {}) {
             paint();
         }
     };
-    /** P: on a story row, inside an article or in the wire panel, add the story to the front page or take it off. */
+    /** P: on a story row or inside an article, add the story to the front page or take it off. */
     const toggleFront = () => {
         const id = subjectId();
         if (!sysop || !id)
             return;
         const was = onFront.has(id);
         // Leaving the front view's selection on a neighbour, not on a row that is about to go.
-        if (was && view.kind === 'front' && !wireId) {
+        if (was && view.kind === 'front') {
             const at = listIds.indexOf(id);
             selected = listIds[at + 1] ?? listIds[at - 1] ?? null;
         }
@@ -694,7 +671,7 @@ async function startReader(session, options = {}) {
     };
     /** U / D / L in the front page view: reorder, lead first. */
     const reorderFront = (how) => {
-        if (!sysop || view.kind !== 'front' || !selected || wireId)
+        if (!sysop || view.kind !== 'front' || !selected)
             return;
         const id = selected;
         const root = (0, library_1.magazineRoot)(__dirname);
@@ -761,63 +738,6 @@ async function startReader(session, options = {}) {
     const modalDone = () => {
         modalOpen = false;
         render();
-    };
-    /**
-     * A story without full text never opens the article layout: a small panel with the
-     * cleaned teaser, the site and the date. The view underneath does not move,
-     * so closing it leaves the cursor where it was.
-     */
-    const openWire = (st) => {
-        modalOpen = true;
-        wireId = st.id;
-        const lines = (0, layout_1.wireDetail)(st, new Date());
-        modalContent = lines.join('\n');
-        const newlyRead = !read.has(st.id);
-        if (newlyRead) {
-            read.add(st.id);
-            persist(exports.READ_KEY, read);
-        }
-        // Sized to its text: a panel that fills the screen repaints the screen.
-        const panelWidth = Math.min(width, Math.max(30, (0, blessed_1.calculateDialogWidth)(width)));
-        const textRows = lines.reduce((n, l) => n + Math.max(1, Math.ceil(l.length / Math.max(1, panelWidth - 4))), 0);
-        const modal = (0, blessed_1.docModal)({
-            parent: screen,
-            width: panelWidth,
-            height: Math.min(height - 2, textRows + 4),
-            title: 'Wire',
-            content: lines.map(escapeTags).join('\n'),
-            contentStyle: { fg: t.ink, bg: t.ground },
-            footerStyle: { fg: t.ground, bg: t.accent },
-            footerText: wireFooter(st.id),
-            mobileFooterText: sysop ? 'P: Front page   Enter: back' : 'Enter: back',
-            closeKeys: ['enter', 'return'],
-            zIndex: 9990,
-            onClose: () => {
-                modalContent = '';
-                wireId = null;
-                wireModal = null;
-                updateHints();
-                modalDone();
-                if (newlyRead && view.kind !== 'article') {
-                    build();
-                    paint();
-                }
-            },
-        });
-        wireModal = modal;
-        /*
-         * A modal is a focus trap: while it is open the screen's own 'keypress'
-         * never fires (screen.ts _handleKey, suppressGlobalKeys), so `press` is
-         * not reached and P did nothing in the panel. The sysop's key is bound on
-         * the modal, the way its own close keys are.
-         */
-        if (sysop)
-            modal.key(['p', 'P', 'S-p'], () => { if (wireId === st.id)
-                press('p', 'p'); });
-        modal.key(['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'], (ch) => { if (wireId === st.id)
-            press(ch, ch); });
-        modal.display();
-        updateHints();
     };
     const openHelp = () => {
         modalOpen = true;
@@ -940,15 +860,6 @@ async function startReader(session, options = {}) {
             return;
         }
         const c = (ch ?? '').toLowerCase();
-        if (!stopped && modalOpen && wireId && sysop && c === 'p') {
-            toggleFront();
-            return;
-        }
-        // A digit typed in the wire panel closes the panel and starts the number
-        // in the view underneath. The panel traps focus, so only a binding on the
-        // modal ever sees the key (see openWire).
-        if (!stopped && modalOpen && wireId && /^[0-9]$/.test(c))
-            wireModal?.close();
         if (stopped || modalOpen)
             return;
         if (pageSearch.feed(searchKey(name, c)))
@@ -1050,7 +961,7 @@ async function startReader(session, options = {}) {
         catch (err) {
             const message = err instanceof Error ? err.message : String(err);
             // eslint-disable-next-line no-console
-            console.error(`[MAG] key handler failed: key=${JSON.stringify(ch ?? name)} view=${view.kind}${wireId ? ' (wire panel)' : ''}: ${err instanceof Error && err.stack ? err.stack : message}`);
+            console.error(`[MAG] key handler failed: key=${JSON.stringify(ch ?? name)} view=${view.kind}: ${err instanceof Error && err.stack ? err.stack : message}`);
             if (stopped)
                 return;
             try {
@@ -1114,7 +1025,6 @@ async function startReader(session, options = {}) {
         counterRow: () => String(progressBox.getContent()).replace(/\{[^{}]*\}/g, ''),
         footerRow: () => chrome.footerContent().replace(/\{[^{}]*\}/g, ''),
         tickerRow: () => (tickerBox ? String(tickerBox.getContent()).replace(/\{[^{}]*\}/g, '') : ''),
-        modalText: () => modalContent,
         viewKind: () => view.kind,
         stats: () => ({ ...counters }),
         stop: () => finish(),

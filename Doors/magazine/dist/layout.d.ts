@@ -37,16 +37,6 @@ export declare function buildLayout(width: number, height: number, options?: {
     ticker?: boolean;
     banner?: number;
 }): MagLayout;
-/**
- * What a feed story shows in a list besides its headline: the cleaned teaser,
- * the site it came from and how old it is. A story that carries this is a WIRE
- * row; one that does not is a plain headline row (an authored story).
- */
-export interface WireLine {
-    teaser: string;
-    source: string;
-    stamp: string;
-}
 export interface ArticleLine {
     source: string;
     stamp: string;
@@ -61,8 +51,7 @@ export interface ListingItem {
     lead?: boolean;
     /** Shown to the sysop only, in the lists that are not the front page: this story is on it. */
     front?: boolean;
-    wire?: WireLine;
-    /** A story with real full text: tagged ARTICLE so the list tells it from the wire. */
+    /** The source and age printed under the headline. */
     article?: ArticleLine;
 }
 export type ListingBlock = {
@@ -96,17 +85,9 @@ export interface Listing {
  * entry is not on this spread.
  */
 export declare function columnStep(columns: ReadonlyArray<ReadonlyArray<number | null>>, selectedIndex: number, delta: -1 | 1): number | 'edge' | null;
-/** One line cut at a word boundary to `width`; `..` marks a cut. */
-export declare function trimAtWord(text: string, width: number): string;
 export { sourceName };
-/** `TODAY`, `YESTERDAY`, `3D AGO`, else the date: how old a wire row is. */
-export declare function wireStamp(date: string, now: Date): string;
-/**
- * The detail panel of a wire row, as plain lines: the cleaned teaser in full,
- * the site and the date. No address: the reader never shows a raw URL (the
- * story keeps it in the data).
- */
-export declare function wireDetail(story: Pick<Story, 'headline' | 'summary' | 'source' | 'date'>, now: Date): string[];
+/** `TODAY`, `YESTERDAY`, `3D AGO`, else the date: how old a story is. */
+export declare function ageStamp(date: string, now: Date): string;
 /**
  * Blocks to spreads of rows. The first row of every spread is the view header
  * (`headerLeft` / `headerRight`), the rest is the newspaper flow.

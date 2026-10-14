@@ -1,12 +1,12 @@
 /**
  * FULL TEXT FOR THE MAGAZINE, FETCHED AT INGEST.
  *
- * A feed that only sends a teaser leaves a story that is wire material. The
+ * A feed that only sends a teaser leaves a story that is not yet an article. The
  * story page usually has the whole piece, so for each NEW story whose feed
  * carried no full text this module fetches the page once, in the background,
  * and keeps the main article text as `story.body`. A story with a long enough
  * body opens as an article in the reader (`isArticle`); one whose page could
- * not be read stays a teaser on the wire.
+ * not be read stays hidden and is purged after three days.
  *
  * The manners are the point, because this talks to other people's sites:
  *   - robots.txt is read once per host (cached a day) and obeyed for the
@@ -37,7 +37,7 @@ import {
   passHostGate,
   toBulletinParagraphs,
 } from '../news-bulletins';
-import { loadStories, writeAtomic } from './index';
+import { loadStories, republishMagazine, writeAtomic } from './index';
 
 /** How long one request may take, robots.txt and the page alike. */
 export const ARTICLE_FETCH_TIMEOUT_MS = 15000;
@@ -298,7 +298,7 @@ export async function prefetchBodies(deps: PrefetchDeps): Promise<PrefetchSummar
     const fail = (reason: string) => {
       record(root, story.id, { bodyFailed: { at: nowIso, reason } });
       out.failed++;
-      deps.log(`[magazine] body: ${story.source} kept as wire (${reason})`);
+      deps.log(`[magazine] body: ${story.source} no article text (${reason})`);
     };
     let verdict: Verdict;
     try {
@@ -344,7 +344,9 @@ export function startBodyPrefetch(base: Pick<PrefetchDeps, 'rootDir' | 'now' | '
   running = true;
   prefetchBodies(deps ?? defaultPrefetchDeps(base, robotsByProcess))
     .then((r) => {
-      if (r.fetched || r.failed) base.log(`[magazine] body prefetch: ${r.fetched} filled, ${r.failed} kept as wire, ${r.deferred} deferred`);
+      if (r.fetched || r.failed) base.log(`[magazine] body prefetch: ${r.fetched} filled, ${r.failed} failed, ${r.deferred} deferred`);
+      // A story that just got its text is an article now: give it its page.
+      if (r.fetched) republishMagazine(base);
     })
     .catch((err: Error) => base.log(`[WARN] magazine: body prefetch failed (${err.message})`))
     .finally(() => { running = false; });

@@ -215,17 +215,6 @@ function blankRows(n: number): PanelRow[] {
 // Listings: Front page, Contents, Section, Bookmarks
 // ---------------------------------------------------------------------------
 
-/**
- * What a feed story shows in a list besides its headline: the cleaned teaser,
- * the site it came from and how old it is. A story that carries this is a WIRE
- * row; one that does not is a plain headline row (an authored story).
- */
-export interface WireLine {
-  teaser: string;
-  source: string;
-  stamp: string;
-}
-
 export interface ArticleLine {
   source: string;
   stamp: string;
@@ -241,8 +230,7 @@ export interface ListingItem {
   lead?: boolean;
   /** Shown to the sysop only, in the lists that are not the front page: this story is on it. */
   front?: boolean;
-  wire?: WireLine;
-  /** A story with real full text: tagged ARTICLE so the list tells it from the wire. */
+  /** The source and age printed under the headline. */
   article?: ArticleLine;
 }
 
@@ -319,24 +307,15 @@ function itemCells(item: ListingItem, index: number, selected: boolean, colWidth
   const mark = selected ? '>' : ' ';
   const page = String(item.page).padStart(PAGE_DIGITS, ' ');
   const cells: Cell[] = [];
-  const wire = item.wire;
   lines.forEach((line, i) => {
     const left = padRight(line, titleWidth);
     cells.push({
       text: i === 0 ? `${mark}${left} ${page}` : ` ${left}`,
       role,
       item: index,
-      keep: wire !== undefined || item.article !== undefined || i < lines.length - 1,
+      keep: item.article !== undefined || i < lines.length - 1,
     });
   });
-  if (wire) {
-    // A wire row: headline, one teaser line cut at a word, then where and when.
-    const inner = Math.max(1, colWidth - 1);
-    const teaser = trimAtWord(paintSafe(wire.teaser), inner);
-    if (teaser) cells.push({ text: ` ${teaser}`, role: 'plain', item: index, keep: true });
-    const origin = `${paintSafe(sourceName(wire.source)).toUpperCase()} // ${wire.stamp}`;
-    cells.push({ text: ` ${truncate(origin, inner)}`, role: 'dim', item: index });
-  }
   if (item.article) {
     const inner = Math.max(1, colWidth - 1);
     const tag = `ARTICLE // ${paintSafe(sourceName(item.article.source)).toUpperCase()} // ${item.article.stamp}`;
@@ -345,21 +324,10 @@ function itemCells(item: ListingItem, index: number, selected: boolean, colWidth
   return cells;
 }
 
-/** One line cut at a word boundary to `width`; `..` marks a cut. */
-export function trimAtWord(text: string, width: number): string {
-  const flat = text.replace(/\s+/g, ' ').trim();
-  if (flat.length <= width) return flat;
-  const room = Math.max(1, width - 2);
-  const cut = flat.slice(0, room + 1);
-  const at = cut.lastIndexOf(' ');
-  const head = at > 0 ? cut.slice(0, at) : flat.slice(0, room);
-  return `${head.replace(/[\s,;:.-]+$/, '')}..`;
-}
-
 export { sourceName };
 
-/** `TODAY`, `YESTERDAY`, `3D AGO`, else the date: how old a wire row is. */
-export function wireStamp(date: string, now: Date): string {
+/** `TODAY`, `YESTERDAY`, `3D AGO`, else the date: how old a story is. */
+export function ageStamp(date: string, now: Date): string {
   const day = date.slice(0, 10);
   const then = Date.parse(`${day}T00:00:00Z`);
   if (!Number.isFinite(then)) return 'UNDATED';
@@ -369,23 +337,6 @@ export function wireStamp(date: string, now: Date): string {
   if (days === 0) return 'TODAY';
   if (days === 1) return 'YESTERDAY';
   return days < 7 ? `${days}D AGO` : day;
-}
-
-/**
- * The detail panel of a wire row, as plain lines: the cleaned teaser in full,
- * the site and the date. No address: the reader never shows a raw URL (the
- * story keeps it in the data).
- */
-export function wireDetail(story: Pick<Story, 'headline' | 'summary' | 'source' | 'date'>, now: Date): string[] {
-  const teaser = paintSafe(story.summary).replace(/\s+/g, ' ').trim();
-  return [
-    paintSafe(story.headline),
-    '',
-    teaser || '(no summary)',
-    '',
-    `Source: ${paintSafe(sourceName(story.source)) || 'unknown'}`,
-    `Date: ${story.date ? story.date.slice(0, 10) : 'UNDATED'} (${wireStamp(story.date ?? '', now).toLowerCase()})`,
-  ];
 }
 
 /** Wrap a title onto at most `maxLines` rows; the last is cut with `..` if there is more. */

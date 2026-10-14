@@ -339,24 +339,6 @@ export async function aPageNumberInDeskRangeWithNoStoryOpensTheDesksContentsAndP
   } finally { await finish(h, b); }
 }
 
-export async function digitsInTheWirePanelStartAPageNumberAndTheSysopKeysStillWork(): Promise<void> {
-  const b = board([], MIXED);
-  const h = await open(80, 24, { secLevel: 255 });
-  try {
-    h.raw('c');
-    h.raw('\x1b[B');
-    h.raw('\r');
-    assert.ok(h.reader.modalText().includes('relay clock'), 'the wire panel is open');
-    h.raw('1'); h.raw('2'); h.raw('0');
-    assert.strictEqual(h.reader.modalText(), '', 'the panel closed');
-    assert.strictEqual(h.reader.counterRow().trim(), 'P120');
-    h.raw('x');
-    assert.strictEqual(h.reader.viewKind(), 'article', 'page 120 is the exploit story');
-    h.raw('p');
-    assert.ok(frontOnDisk(b).includes('aaaa0002'), 'P still toggles the front page in an article');
-  } finally { await finish(h, b); }
-}
-
 export async function sectionKeyCyclesThroughTheDesksThatHaveStories(): Promise<void> {
   const b = board([]);
   const h = await open(80, 24);
@@ -759,7 +741,7 @@ export async function theNewsWireTimerIsClearedOnExitAndDoesNotKeepTheDoorAlive(
 }
 
 // ---------------------------------------------------------------------------
-// Feed stories are wire, never articles (sysop 2026-10-13)
+// Only articles are shown (sysop 2026-10-14): a feed teaser is never a story
 // ---------------------------------------------------------------------------
 
 const TEASER = 'We rebuild a clock from relays and a lot of patience, with a second sentence that '
@@ -770,72 +752,6 @@ const FEED: Story[] = [
   story('ffff0002', 'Another feed headline about radios', 'hack', '2026-10-11', 'Short teaser.', 'feed'),
 ];
 const MIXED: Story[] = [...FEED, STORIES[1]];
-
-/** A key the way the terminal delivers it, through the screen's own key routing. */
-function modalKey(h: Harness, name: string): void {
-  (h.reader.screen as any)._handleKey('', { name, full: name, sequence: name });
-}
-
-export async function aFeedStoryIsAWireRowAndEnterOpensThePanelNotTheArticle(): Promise<void> {
-  for (const [w, hgt] of [[40, 25], [80, 24], [132, 40]] as const) {
-    const b = board([], MIXED);
-    const h = await open(w, hgt);
-    try {
-      h.reader.press('c', 'c');
-      h.reader.press('down');
-      const rows = h.reader.panelRows();
-      const flat = rows.join('\n');
-      const at = rows.findIndex((r) => r.includes('A relay clock'));
-      assert.ok(at >= 0, `${w}: the feed headline is listed`);
-      const teaserAt = rows.findIndex((r) => r.includes('We rebuild a clock'));
-      assert.ok(teaserAt > at, `${w}: one teaser line under the headline`);
-      assert.ok(rows[teaserAt].includes('..'), `${w}: cut at a word with a mark`);
-      assert.ok(/EXAMPLE\.ORG \/\/ (TODAY|YESTERDAY|\dD AGO|\d{4}-\d\d-\d\d)/.test(rows[teaserAt + 1]), `${w}: SOURCE // age: "${rows[teaserAt + 1]}"`);
-      assert.ok(!/https?:/.test(flat), `${w}: no raw url in the list`);
-      for (const r of rows) assert.ok(r.length <= w, `${w}: row fits`);
-      assert.ok(!flat.includes(TEASER.slice(60)), `${w}: the teaser is one line, not the whole text`);
-
-      const before = h.reader.panelRows();
-      h.reader.press('enter');
-      assert.strictEqual(h.reader.viewKind(), 'contents', `${w}: Enter did not open the article`);
-      const modal = h.reader.modalText();
-      assert.ok(modal.includes(TEASER), `${w}: the panel holds the whole teaser`);
-      assert.ok(modal.includes('Source: example.org'), `${w}: the panel names the site`);
-      assert.ok(/Date: 2026-10-12/.test(modal), `${w}: and the date`);
-      assert.ok(!/https?:|Read at source/.test(modal), `${w}: and no address`);
-      assert.deepStrictEqual(overflowing(h.reader.screen, w), [], `${w}: the panel fits the screen`);
-
-      modalKey(h, 'escape');
-      assert.strictEqual(h.reader.modalText(), '', `${w}: Escape closes the panel`);
-      assert.strictEqual(h.reader.viewKind(), 'contents');
-      const after = h.reader.panelRows();
-      assert.ok(after.some((r) => r.includes('>A relay clock')), `${w}: same cursor position`);
-      assert.deepStrictEqual(after.map((r) => r.replace(/\S/g, 'x').length), before.map((r) => r.replace(/\S/g, 'x').length));
-      h.reader.press('enter');
-      assert.ok(h.reader.modalText().length > 0, `${w}: reopens`);
-      modalKey(h, 'enter');
-      assert.strictEqual(h.reader.modalText(), '', `${w}: Enter closes it too`);
-    } finally { await finish(h, b); }
-  }
-}
-
-export async function anAuthoredStoryStillOpensTheArticleAmongWireRows(): Promise<void> {
-  for (const [w, hgt] of [[40, 25], [80, 24], [132, 40]] as const) {
-    const b = board([], MIXED);
-    const h = await open(w, hgt);
-    try {
-      h.reader.press('c', 'c');
-      assert.ok(h.reader.panelRows().some((r) => r.includes('>New exploit chain')), `${w}: cursor on the authored story`);
-      h.reader.press('enter');
-      assert.strictEqual(h.reader.viewKind(), 'article');
-      assert.strictEqual(h.reader.modalText(), '');
-      const t = h.reader.panelRows().join('\n');
-      assert.ok(t.includes('NEW EXPLOIT CHAIN'), `${w}: article headline`);
-      assert.ok(!/https?:/.test(t), `${w}: and no raw url`);
-      if (w === 132) assert.strictEqual(h.reader.layout.geometry.cols, 3, 'authored stories keep the columns');
-    } finally { await finish(h, b); }
-  }
-}
 
 // ---------------------------------------------------------------------------
 // A feed story with real full text is an article (sysop 2026-10-14)
@@ -868,21 +784,15 @@ export async function aFeedStoryWithFullTextOpensInColumnsAndIsTaggedArticle(): 
     const h = await open(w, hgt);
     try {
       h.reader.press('c', 'c');
-      h.reader.press('down');
       const rows = h.reader.panelRows();
       const at = rows.findIndex((r) => r.includes('A relay clock'));
       assert.ok(at >= 0, `${w}: listed`);
       assert.ok(/ARTICLE \/\/ EXAMPLE\.ORG/.test(rows.join('\n')), `${w}: the full-text story is tagged ARTICLE`);
-      assert.ok(!rows[at + 1].includes('We rebuild'), `${w}: and has no teaser line`);
-      const wireAt = rows.findIndex((r) => r.includes('Another feed headline'));
-      assert.ok(wireAt < 0 || /EXAMPLE\.ORG \/\/ (TODAY|YESTERDAY|\dD AGO|\d{4})/.test(rows.slice(wireAt).join('\n')), `${w}: the short one stays a wire row`);
-      // Enter on the article story opens the article layout.
-      h.reader.press('up');
+      assert.ok(!rows.join('\n').includes('Another feed headline'), `${w}: the teaser-only story is not listed`);
       for (let i = 0; i < 6 && !h.reader.panelRows().some((r) => r.includes('>A relay clock')); i++) h.reader.press('down');
       assert.ok(h.reader.panelRows().some((r) => r.includes('>A relay clock')), `${w}: cursor on the full-text story`);
       h.reader.press('enter');
-      assert.strictEqual(h.reader.viewKind(), 'article', `${w}: Enter opens the article, not the wire panel`);
-      assert.strictEqual(h.reader.modalText(), '', `${w}: no wire panel`);
+      assert.strictEqual(h.reader.viewKind(), 'article', `${w}: Enter opens the article`);
       assert.strictEqual(h.reader.layout.geometry.cols, expectedCols[w], `${w}: columns`);
       const t = h.reader.panelRows().join('\n');
       assert.ok(t.includes('A RELAY CLOCK'), `${w}: headline`);
@@ -896,63 +806,86 @@ export async function aFeedStoryWithFullTextOpensInColumnsAndIsTaggedArticle(): 
   }
 }
 
-export async function aFeedStoryWithAShortBodyStillOpensTheWirePanel(): Promise<void> {
-  for (const [w, hgt] of [[40, 25], [80, 24], [132, 40]] as const) {
-    const b = board([], [withBody(FEED[0], ARTICLE_MIN_BODY_CHARS - 1), FEED[1], STORIES[1]]);
-    const h = await open(w, hgt);
-    try {
-      h.reader.press('c', 'c');
-      h.reader.press('down');
-      const rows = h.reader.panelRows();
-      const at = rows.findIndex((r) => r.includes('A relay clock'));
-      assert.ok(at >= 0 && !/ARTICLE \/\//.test(rows[at + 1] + (rows[at + 2] ?? '')), `${w}: not tagged`);
-      h.reader.press('enter');
-      assert.strictEqual(h.reader.viewKind(), 'contents', `${w}: stays on the list`);
-      assert.ok(h.reader.modalText().includes(TEASER), `${w}: the wire panel opened`);
-    } finally { await finish(h, b); }
-  }
-}
-
-export async function aFeedStoryOnTheFrontPageAndInBookmarksIsAWireRowToo(): Promise<void> {
-  const b = board(['ffff0001'], FEED);
+export async function everyListHidesTeaserOnlyAndPendingStoriesAndShowsArticles(): Promise<void> {
+  // ffff0001 short body (teaser), ffff0002 no body at all (pending prefetch), ffff0003 a full body (article).
+  const full = withBody(story('ffff0003', 'Relay computers explained properly', 'hack', '2026-10-12', 'Teaser.', 'feed'), ARTICLE_MIN_BODY_CHARS);
+  const stories = [withBody(FEED[0], ARTICLE_MIN_BODY_CHARS - 1), FEED[1], full, STORIES[1]];
+  const b = board(['ffff0001', 'ffff0003', 'aaaa0002'], stories);
   const h = await open(80, 24);
   try {
+    const hidden = ['A relay clock', 'Another feed headline'];
+    const shown = ['Relay computers explained', 'New exploit chain'];
+    const check = (where: string) => {
+      const t = text(h);
+      for (const x of hidden) assert.ok(!t.includes(x), `${where}: ${x} must not be listed`);
+      for (const x of shown) assert.ok(t.includes(x), `${where}: ${x} must be listed`);
+    };
     assert.strictEqual(h.reader.viewKind(), 'front');
-    const rows = h.reader.panelRows();
-    assert.ok(/EXAMPLE\.ORG \/\//.test(rows.join('\n')));
-    h.reader.press('enter');
-    assert.strictEqual(h.reader.viewKind(), 'front');
-    assert.ok(h.reader.modalText().includes(TEASER));
-    modalKey(h, 'escape');
-    h.reader.press('b', 'b');
-    h.reader.press('k', 'k');
-    assert.strictEqual(h.reader.viewKind(), 'bookmarks');
-    assert.ok(/EXAMPLE\.ORG \/\//.test(h.reader.panelRows().join('\n')));
+    check('front');
+    h.reader.press('c', 'c'); check('contents');
+    h.reader.press('s', 's'); check('section hack');
+    // Bookmarks hold only what a caller can open: bookmarking is by cursor, so a hidden story cannot be marked.
+    // A page number of a hidden story goes nowhere.
   } finally { await finish(h, b); }
 }
 
-export async function theWirePanelOpenAndCloseCostIsMeasuredAndSmallerThanTheScreen(): Promise<void> {
-  for (const [w, hgt] of [[80, 24], [40, 25]] as const) {
-    const b = board([], FEED);
+export async function aTeaserPageNumberGoesNowhereAndAnArticlePageOpens(): Promise<void> {
+  // 40 columns load a page number at once (no rolling counter), so the result is readable straight away.
+  const b = board([], MIXED);
+  const h = await open(40, 25);
+  try {
+    for (const d of '122') h.raw(d); // ffff0001 sits on 122 and is a teaser
+    assert.notStrictEqual(h.reader.viewKind(), 'article', 'page 122 (a teaser) is not reachable');
+    h.reader.press('escape');
+    for (const d of '120') h.raw(d);
+    assert.strictEqual(h.reader.viewKind(), 'article', 'an article page is');
+  } finally { await finish(h, b); }
+}
+
+export async function aNonArticleIdInFrontpageJsonIsSkippedAndTheFileIsNotRewritten(): Promise<void> {
+  const b = board(['ffff0001', 'aaaa0002'], MIXED);
+  const h = await open(80, 24);
+  try {
+    assert.strictEqual(h.reader.viewKind(), 'front');
+    const t = text(h);
+    assert.ok(!t.includes('A relay clock'), t);
+    assert.ok(t.includes('New exploit chain'), t);
+    assert.deepStrictEqual(frontOnDisk(b), ['ffff0001', 'aaaa0002'], 'a read leaves the sysop\'s file alone');
+  } finally { await finish(h, b); }
+}
+
+export async function aFrontPageOfOnlyTeasersSaysAwaitingEditor(): Promise<void> {
+  const b = board(['ffff0001'], FEED);
+  const h = await open(80, 24);
+  try {
+    assert.ok(text(h).includes('AWAITING EDITOR'), text(h));
+  } finally { await finish(h, b); }
+}
+
+export async function enterAlwaysOpensTheArticleViewAndNoWirePanelExists(): Promise<void> {
+  for (const [w, hgt] of [[40, 25], [80, 24], [132, 40]] as const) {
+    const b = board([], MIXED);
     const h = await open(w, hgt);
     try {
       h.reader.press('c', 'c');
-      await new Promise((resolve) => setTimeout(resolve, 50));
-      h.mark();
-      h.reader.press('down');
-      const move = h.bytes();
-      h.mark();
+      assert.ok(h.reader.panelRows().some((r) => r.includes('>New exploit chain')), `${w}: the only listed story is selected`);
       h.reader.press('enter');
-      const open = h.bytes();
-      h.mark();
-      modalKey(h, 'escape');
-      const close = h.bytes();
-      assert.ok(move < 700, `${w}: wire-list cursor move ${move} bytes`);
-      assert.ok(open < 1800 && close < 1800, `${w}: panel open ${open} / close ${close} bytes`);
-      // eslint-disable-next-line no-console
-      console.log(`    repaint ${w}x${hgt}: wire cursor move ${move} bytes, panel open ${open} bytes, close ${close} bytes`);
+      assert.strictEqual(h.reader.viewKind(), 'article', `${w}: Enter opens the article`);
+      assert.ok(!('modalText' in h.reader), `${w}: the wire panel is gone from the reader API`);
     } finally { await finish(h, b); }
   }
+}
+
+export async function theTickerStillScrollsTeaserHeadlinesThatAreNotListed(): Promise<void> {
+  const newest = story('ffff0009', 'A relay clock from the junk drawer', 'hack', '2026-10-14', TEASER, 'feed');
+  const b = board([], [newest, STORIES[1]]);
+  const h = await open(80, 24);
+  try {
+    assert.ok(!text(h).includes('A relay clock'), 'not on the front page');
+    h.reader.press('c', 'c');
+    assert.ok(!text(h).includes('A relay clock'), 'not in the contents');
+    assert.ok(h.reader.tickerRow().includes('A relay'), `the ticker carries it: ${h.reader.tickerRow()}`);
+  } finally { await finish(h, b); }
 }
 
 // ---------------------------------------------------------------------------
@@ -1013,22 +946,6 @@ export async function aSysopTogglesAStoryOntoAndOffTheFrontPageFromTheListAndThe
     h.reader.press('escape');
     h.reader.press('f', 'f');
     assert.ok(text(h).includes('New exploit chain'), 'the front view shows it at once');
-  } finally { await finish(h, b); }
-}
-
-export async function aSysopTogglesAStoryFromTheWirePanel(): Promise<void> {
-  const b = board([], MIXED);
-  const h = await open(80, 24, { secLevel: 255 });
-  try {
-    h.reader.press('c', 'c');
-    h.reader.press('down');
-    h.reader.press('enter');
-    assert.ok(h.reader.modalText().includes('relay clock'), 'the wire panel is open');
-    h.reader.press('p', 'p');
-    assert.deepStrictEqual(frontOnDisk(b), ['ffff0001']);
-    h.reader.press('p', 'p');
-    assert.deepStrictEqual(frontOnDisk(b), []);
-    modalKey(h, 'enter');
   } finally { await finish(h, b); }
 }
 
@@ -1167,21 +1084,6 @@ export async function pressingPWhileReadingAnArticleAddsTheStoryToTheFrontPage()
     assert.deepStrictEqual(frontOnDisk(b), [], 'and toggles it off again');
   } finally { await finish(h, b); }
   }
-}
-
-export async function pressingPInTheWirePanelFromRawBytesTogglesTheStory(): Promise<void> {
-  const b = board([], MIXED);
-  const h = await open(80, 24, { secLevel: 255 });
-  try {
-    h.raw('c');
-    h.raw('\x1b[B');
-    h.raw('\r');
-    assert.ok(h.reader.modalText().includes('relay clock'), 'the wire panel is open');
-    h.raw('p');
-    assert.deepStrictEqual(frontOnDisk(b), ['ffff0001'], 'raw p in the wire panel wrote the front page');
-    h.raw('P');
-    assert.deepStrictEqual(frontOnDisk(b), [], 'a shifted P toggles it off again');
-  } finally { await finish(h, b); }
 }
 
 // ---- art on the screen ----------------------------------------------------
@@ -1413,7 +1315,7 @@ function cursorAt(h: Harness): { row: number; col: number; title: string } {
 /** Forty wire stories on one desk: every entry is the same height, so the columns line up row for row. */
 function manyStories(n = 40): Story[] {
   return Array.from({ length: n }, (_, i) => story(
-    `cccc${String(i).padStart(4, '0')}`, `Wire story number ${String(i).padStart(2, '0')}`, 'hack', '2026-10-12', 'A short teaser line.', 'feed',
+    `cccc${String(i).padStart(4, '0')}`, `Story number ${String(i).padStart(2, '0')}`, 'hack', '2026-10-12', 'A short summary line.', 'authored',
   ));
 }
 

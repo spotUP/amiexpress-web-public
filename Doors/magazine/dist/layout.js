@@ -4,9 +4,7 @@ exports.SECTION_ORDER = exports.NEWS_SEPARATOR = exports.sourceName = exports.MI
 exports.rowText = rowText;
 exports.buildLayout = buildLayout;
 exports.columnStep = columnStep;
-exports.trimAtWord = trimAtWord;
-exports.wireStamp = wireStamp;
-exports.wireDetail = wireDetail;
+exports.ageStamp = ageStamp;
 exports.buildListing = buildListing;
 exports.headerLine = headerLine;
 exports.buildNotice = buildNotice;
@@ -209,25 +207,15 @@ function itemCells(item, index, selected, colWidth) {
     const mark = selected ? '>' : ' ';
     const page = String(item.page).padStart(PAGE_DIGITS, ' ');
     const cells = [];
-    const wire = item.wire;
     lines.forEach((line, i) => {
         const left = padRight(line, titleWidth);
         cells.push({
             text: i === 0 ? `${mark}${left} ${page}` : ` ${left}`,
             role,
             item: index,
-            keep: wire !== undefined || item.article !== undefined || i < lines.length - 1,
+            keep: item.article !== undefined || i < lines.length - 1,
         });
     });
-    if (wire) {
-        // A wire row: headline, one teaser line cut at a word, then where and when.
-        const inner = Math.max(1, colWidth - 1);
-        const teaser = trimAtWord((0, library_1.paintSafe)(wire.teaser), inner);
-        if (teaser)
-            cells.push({ text: ` ${teaser}`, role: 'plain', item: index, keep: true });
-        const origin = `${(0, library_1.paintSafe)((0, magazine_1.sourceName)(wire.source)).toUpperCase()} // ${wire.stamp}`;
-        cells.push({ text: ` ${truncate(origin, inner)}`, role: 'dim', item: index });
-    }
     if (item.article) {
         const inner = Math.max(1, colWidth - 1);
         const tag = `ARTICLE // ${(0, library_1.paintSafe)((0, magazine_1.sourceName)(item.article.source)).toUpperCase()} // ${item.article.stamp}`;
@@ -235,19 +223,8 @@ function itemCells(item, index, selected, colWidth) {
     }
     return cells;
 }
-/** One line cut at a word boundary to `width`; `..` marks a cut. */
-function trimAtWord(text, width) {
-    const flat = text.replace(/\s+/g, ' ').trim();
-    if (flat.length <= width)
-        return flat;
-    const room = Math.max(1, width - 2);
-    const cut = flat.slice(0, room + 1);
-    const at = cut.lastIndexOf(' ');
-    const head = at > 0 ? cut.slice(0, at) : flat.slice(0, room);
-    return `${head.replace(/[\s,;:.-]+$/, '')}..`;
-}
-/** `TODAY`, `YESTERDAY`, `3D AGO`, else the date: how old a wire row is. */
-function wireStamp(date, now) {
+/** `TODAY`, `YESTERDAY`, `3D AGO`, else the date: how old a story is. */
+function ageStamp(date, now) {
     const day = date.slice(0, 10);
     const then = Date.parse(`${day}T00:00:00Z`);
     if (!Number.isFinite(then))
@@ -261,22 +238,6 @@ function wireStamp(date, now) {
     if (days === 1)
         return 'YESTERDAY';
     return days < 7 ? `${days}D AGO` : day;
-}
-/**
- * The detail panel of a wire row, as plain lines: the cleaned teaser in full,
- * the site and the date. No address: the reader never shows a raw URL (the
- * story keeps it in the data).
- */
-function wireDetail(story, now) {
-    const teaser = (0, library_1.paintSafe)(story.summary).replace(/\s+/g, ' ').trim();
-    return [
-        (0, library_1.paintSafe)(story.headline),
-        '',
-        teaser || '(no summary)',
-        '',
-        `Source: ${(0, library_1.paintSafe)((0, magazine_1.sourceName)(story.source)) || 'unknown'}`,
-        `Date: ${story.date ? story.date.slice(0, 10) : 'UNDATED'} (${wireStamp(story.date ?? '', now).toLowerCase()})`,
-    ];
 }
 /** Wrap a title onto at most `maxLines` rows; the last is cut with `..` if there is more. */
 function wrapTitle(text, width, maxLines) {

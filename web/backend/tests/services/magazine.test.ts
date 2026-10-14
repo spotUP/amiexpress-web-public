@@ -15,6 +15,9 @@ import {
   mergeIncoming,
   allocatePages,
   publishMagazine,
+  purgeNeverArticles,
+  republishMagazine,
+  loadStories,
   refreshMagazine,
   readApproved,
   writeApproved,
@@ -22,6 +25,8 @@ import {
 } from '../../src/services/magazine';
 import { classify, classifyFormat } from '../../src/services/magazine/classify';
 import { isWorthReading, storyId, normaliseHeadline, type Story } from '../../src/services/magazine/story-store';
+import { ARTICLE_MIN_BODY_CHARS } from '@amiexpress/bbs-door-sdk/formats/magazine';
+import { loadIndex, loadFront } from '../../../../Doors/magazine/library';
 import { composeStoryPage, wrap, toWidth, renderPage } from '../../src/services/magazine/compose';
 
 function depsFor(dir: string) {
@@ -109,7 +114,7 @@ describe('classification (§3, §5)', () => {
 describe('page allocation (§12)', () => {
   const mk = (n: number, desk: Story['desk']): Story => ({
     id: `s${n}`, headline: `Story number ${n}`, summary: 'x', format: 'NEWS',
-    desk, date: '2026-10-13', source: 's', firstSeen: 'now', seenCount: 1,
+    desk, date: '2026-10-13', source: 's', firstSeen: 'now', seenCount: 1, origin: 'authored',
   });
 
   it('gives every story a page inside its own family', () => {
@@ -174,7 +179,7 @@ describe('the front page is human-approved (§17)', () => {
   }
   const mk = (id: string): Story => ({
     id, headline: `Story ${id}`, summary: 'body text', format: 'NEWS', desk: 'general',
-    date: '2026-10-13', source: 's', firstSeen: 'now', seenCount: 1,
+    date: '2026-10-13', source: 's', firstSeen: 'now', seenCount: 1, origin: 'authored',
   });
 
   it('says it is awaiting an editor when nothing is approved', () => {
@@ -298,5 +303,107 @@ describe('the magazine has one name', () => {
     expect(MAGAZINE_TITLE.length).toBeLessThanOrEqual(40 - 4);
     expect(masthead(120, 'Hacking')[0].text).toContain('THE UNKNOWN FREQUENCY');
     expect(masthead(120, 'Hacking')[0].text).not.toContain('UNDERGROUND');
+  });
+});
+
+
+// ---------------------------------------------------------------------------
+// Articles only (sysop 2026-10-14): "either we get the full articles or dump them"
+// ---------------------------------------------------------------------------
+
+describe('only articles get a page', () => {
+  const DAY = 24 * 3600 * 1000;
+  const NOW = Date.parse('2026-10-14T12:00:00Z');
+  const mkStory = (id: string, extra: Partial<Story> = {}): Story => ({
+    id, headline: `Story ${id}`, summary: 'A teaser.', format: 'NEWS', desk: 'hack',
+    date: '2026-10-13', source: 's', url: `https://example.org/${id}`, firstSeen: '2026-10-13T00:00:00Z', seenCount: 1,
+    origin: 'feed', ...extra,
+  });
+  const article = (id: string) => mkStory(id, { body: 'b'.repeat(ARTICLE_MIN_BODY_CHARS) });
+  const teaser = (id: string) => mkStory(id);
+  const shortBody = (id: string) => mkStory(id, { body: 'b'.repeat(ARTICLE_MIN_BODY_CHARS - 1) });
+  const authored = (id: string) => mkStory(id, { origin: 'authored', url: undefined });
+
+  function board(stories: Story[], approved: string[] = []): string {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mag-art-'));
+    fs.mkdirSync(path.join(dir, 'Magazine', 'stories'), { recursive: true });
+    for (const s of stories) fs.writeFileSync(path.join(dir, 'Magazine', 'stories', `${s.id}.json`), JSON.stringify(s));
+    writeApproved(dir, approved);
+    return dir;
+  }
+  const storyFiles = (dir: string) => fs.readdirSync(path.join(dir, 'Magazine', 'stories')).sort();
+
+  it('allocatePages gives a page to an article and an authored story, and none to a teaser or a short body', () => {
+    const pages = allocatePages([article('a1'), teaser('t1'), shortBody('s1'), authored('h1')]);
+    expect([...pages.keys()].sort()).toEqual(['a1', 'h1']);
+  });
+
+  it('writes pages and an index entry for articles only, and the reader lists exactly those', () => {
+    const stories = [article('a1'), teaser('t1'), shortBody('s1'), authored('h1')];
+    const dir = board(stories, ['t1', 'a1']);
+    const layout = publishMagazine(stories, readApproved(dir), depsFor(dir));
+    expect(layout.index.map((e) => e.storyId).sort()).toEqual(['a1', 'h1']);
+    // The pages on disk: one per article, none for the teasers.
+    const pages = fs.readdirSync(path.join(dir, 'Magazine', 'pages'));
+    for (const e of layout.index) expect(pages).toContain(`p${e.page}.txt`);
+    for (const n of pages) {
+      const page = fs.readFileSync(path.join(dir, 'Magazine', 'pages', n), 'latin1');
+      expect(page).not.toContain('Story t1');
+      expect(page).not.toContain('Story s1');
+    }
+    // The front page page carries the article, not the approved teaser.
+    const front = fs.readFileSync(path.join(dir, 'Magazine', 'pages', 'p100.txt'), 'latin1');
+    expect(front).toContain('Story a1');
+    expect(front).not.toContain('Story t1');
+    // The MAG reader (Doors/magazine/library) lists the same stories the writer paged.
+    const root = path.join(dir, 'Magazine');
+    expect(loadIndex(root).map((e) => e.storyId).sort()).toEqual(layout.index.map((e) => e.storyId).sort());
+    expect(loadFront(root)).toEqual(['a1']);
+    expect(readApproved(dir)).toEqual(['t1', 'a1']); // the sysop's file is untouched
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('purges a story that never became an article after three days, whatever the reason', () => {
+    const old = new Date(NOW - 3 * DAY - 1000).toISOString();
+    const fresh = new Date(NOW - 3 * DAY + 60_000).toISOString();
+    const dir = board([
+      teaser('oldtea'),
+      { ...teaser('oldtea'), id: 'oldfail', bodyFailed: { at: old, reason: 'HTTP 404' } },
+      { ...teaser('oldnourl'), url: undefined },
+      { ...article('oldart') },
+      { ...authored('oldhum') },
+      { ...teaser('newtea') },
+      { ...teaser('newfail'), bodyFailed: { at: fresh, reason: 'HTTP 404' } },
+    ].map((s) => (['oldtea', 'oldfail', 'oldnourl', 'oldart', 'oldhum'].includes(s.id) ? { ...s, firstSeen: old } : { ...s, firstSeen: fresh })));
+    const gone = purgeNeverArticles(dir, NOW);
+    expect(gone.sort()).toEqual(['oldfail', 'oldnourl', 'oldtea']);
+    expect(storyFiles(dir)).toEqual(['newfail.json', 'newtea.json', 'oldart.json', 'oldhum.json']);
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('refreshMagazine and republishMagazine purge with the injected clock', () => {
+    const t0 = new Date(NOW - 4 * DAY).toISOString();
+    const dir = board([{ ...teaser('t1'), firstSeen: t0 }, { ...article('a1'), firstSeen: t0 }]);
+    fs.mkdirSync(path.join(dir, 'Magazine', 'incoming'), { recursive: true });
+    const deps = { rootDir: () => dir, now: () => new Date(NOW), log: () => {} };
+    refreshMagazine(deps);
+    expect(storyFiles(dir)).toEqual(['a1.json']);
+    fs.writeFileSync(path.join(dir, 'Magazine', 'stories', 't2.json'), JSON.stringify({ ...teaser('t2'), firstSeen: t0 }));
+    const layout = republishMagazine(deps);
+    expect(storyFiles(dir)).toEqual(['a1.json']);
+    expect(layout.index.map((e) => e.storyId)).toEqual(['a1']);
+    expect(loadStories(path.join(dir, 'Magazine', 'stories'))).toHaveLength(1);
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('a pending story (fresh, no text yet) is kept but unpaged until its body lands', () => {
+    const fresh = new Date(NOW - DAY).toISOString();
+    const dir = board([{ ...teaser('p1'), firstSeen: fresh }]);
+    const deps = { rootDir: () => dir, now: () => new Date(NOW), log: () => {} };
+    expect(republishMagazine(deps).index).toEqual([]);
+    expect(storyFiles(dir)).toEqual(['p1.json']);
+    fs.writeFileSync(path.join(dir, 'Magazine', 'stories', 'p1.json'), JSON.stringify({ ...teaser('p1'), firstSeen: fresh, body: 'b'.repeat(ARTICLE_MIN_BODY_CHARS) }));
+    expect(republishMagazine(deps).index.map((e) => e.storyId)).toEqual(['p1']);
+    fs.rmSync(dir, { recursive: true, force: true });
   });
 });

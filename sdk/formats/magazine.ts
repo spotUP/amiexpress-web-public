@@ -133,9 +133,10 @@ export const PAGE_FAMILIES: Record<Desk, { first: number; last: number; label: s
 
 /**
  * Where a story's text came from. A `feed` story is a teaser a source sent
- * (about 200 characters, then "[...]" or "Read more"): wire material, shown as
- * a headline and one line, never laid out as an article. An `authored` story
- * is long-form text a human wrote or curated and keeps the article layout.
+ * (about 200 characters, then "[...]" or "Read more"): never shown as a story
+ * unless its page gives a full body (it then passes `isArticle`); its headline
+ * may still scroll in the ticker. An `authored` story is long-form text a
+ * human wrote or curated and keeps the article layout.
  */
 export type StoryOrigin = 'feed' | 'authored';
 
@@ -148,7 +149,7 @@ export const STORY_BODY_CAP = 20000;
 
 /**
  * How much body text makes a story an ARTICLE. Below it the story is wire
- * material: a headline, a teaser and a detail panel. 1,200 characters is about
+ * material: hidden from every list and given no page. 1,200 characters is about
  * six paragraphs of a narrow column, the least that fills a spread without
  * padding.
  */
@@ -183,15 +184,17 @@ export interface Story {
   /**
    * Set when the story page could not give a body (robots.txt, 403, 404,
    * timeout, no article text). It is the record that stops the next tick from
-   * asking again; the story stays wire material.
+   * asking again; the story stays hidden and is purged after three days.
    */
   bodyFailed?: { at: string; reason: string };
 }
 
 /**
- * Does this story open in the article layout? A human-written story always
- * does; a feed story does once it carries real full text. Everything else is
- * a teaser and belongs on the wire.
+ * Is this story shown at all? The ONE predicate: the board's publisher gives a
+ * page only to a story that passes it, and the MAG reader lists only stories
+ * that pass it. A human-written story always does; a feed story does once it
+ * carries real full text. A teaser, or a story still waiting for its text, is
+ * hidden (its headline may still scroll in the ticker).
  */
 export function isArticle(story: Pick<Story, 'origin' | 'body'>): boolean {
   return story.origin === 'authored' || (story.body?.length ?? 0) >= ARTICLE_MIN_BODY_CHARS;

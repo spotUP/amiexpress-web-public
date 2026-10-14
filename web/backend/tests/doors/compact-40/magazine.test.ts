@@ -237,19 +237,30 @@ function drive(spec: { cols: number; rows: number; petscii: boolean; steps: Arra
 
 jest.setTimeout(120000);
 
+/**
+ * The reader opens on its title art, which waits for a key (or its own timer);
+ * that key only lets the caller in. A caller presses one before anything else.
+ */
+const LET_IN = { key: ' ', wait: 300 };
+/** Q puts the goodbye art up; the door ends on the next key (or its own timer). */
+const LEAVE = { key: ' ', wait: 300 };
+
 describe('MAG: the shipped bundle reads the magazine the board wrote', () => {
   it('opens a story from the board\'s own files, and the front page waits for the editor (V2 + V3)', () => {
     writeMagazine(false);
     const run = drive({
       cols: 80, rows: 24, petscii: false,
-      steps: [{ key: 'c', wait: 300 }, { key: '\r', wait: 600 }, { key: 'q', wait: 300 }],
+      steps: [LET_IN, { key: 'c', wait: 300 }, { key: '\r', wait: 600 }, { key: 'q', wait: 300 }, LEAVE],
     });
     expect(run.errors).toEqual([]);
     // V2: nothing approved, so the front page says so and prints no story.
-    // The first frame is what the caller sees before pressing anything.
-    const firstFrame = run.captured.slice(0, Math.max(1, run.captured.findIndex((c) => c.includes('CONTENTS')))).join('');
-    expect(firstFrame.replace(/\x1b\[[0-9;?]*[A-Za-z]/g, '')).toContain('AWAITING EDITOR');
-    expect(firstFrame).not.toContain(HEADLINE.toUpperCase());
+    // The first thing a caller meets is the title art, which waits for a key;
+    // the reader behind it is the frame these assertions are about.
+    const contentsAt = run.captured.findIndex((c) => c.includes('CONTENTS'));
+    expect(contentsAt).toBeGreaterThan(0);
+    const frontFrames = run.captured.slice(0, contentsAt).join('');
+    expect(frontFrames.replace(/\x1b\[[0-9;?]*[A-Za-z]/g, '')).toContain('AWAITING EDITOR');
+    expect(frontFrames).not.toContain(HEADLINE.toUpperCase());
     // V3: the token lives only in the story file, so seeing it on the wire
     // proves library.ts read Magazine/stories/<id>.json written by the board.
     expect(run.text).toContain('CONTENTS - ALL SECTIONS');
@@ -260,7 +271,7 @@ describe('MAG: the shipped bundle reads the magazine the board wrote', () => {
 
   it('shows the front page the editor approved', () => {
     writeMagazine(true);
-    const run = drive({ cols: 80, rows: 24, petscii: false, steps: [{ key: 'q', wait: 300 }] });
+    const run = drive({ cols: 80, rows: 24, petscii: false, steps: [LET_IN, { key: 'q', wait: 300 }] });
     expect(run.errors).toEqual([]);
     expect(run.text).not.toContain('AWAITING EDITOR');
     // The first story on the front page is the lead, tagged LEAD; the tag shortens the first title line.
@@ -272,7 +283,7 @@ describe('MAG: the shipped bundle reads the magazine the board wrote', () => {
     writeMagazine(true);
     const run = drive({
       cols: 40, rows: 25, petscii: true,
-      steps: [{ key: '\r', wait: 600 }],
+      steps: [LET_IN, { key: '\r', wait: 600 }],
     });
     expect(run.errors).toEqual([]);
     expect(run.glass).toHaveLength(40 * 25);

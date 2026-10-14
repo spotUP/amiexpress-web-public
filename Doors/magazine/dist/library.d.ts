@@ -8,10 +8,28 @@ export interface MagazineSnapshot {
     /** Story ids a human approved for the front page, in the editor's order. */
     front: string[];
 }
-/** `index.json`, entries that do not have the shape dropped. */
+/**
+ * Is this story shown to a caller? Only an article is: the SDK's `isArticle`,
+ * the same predicate the board's publisher uses to give a story a page. A
+ * story that is gone, a teaser, or one still waiting for its text is hidden.
+ */
+export declare function isListed(storyId: string, root?: string): boolean;
+/** `index.json`, entries that do not have the shape dropped and stories that are not articles hidden. */
 export declare function loadIndex(root?: string): MagazineIndexEntry[];
-/** `frontpage.json`: the editor's order, and only the editor's. */
+/**
+ * `frontpage.json`: the editor's order, and only the editor's. An id whose story
+ * is not an article is skipped on display; the sysop's file is never rewritten by a read.
+ */
 export declare function loadFront(root?: string): string[];
+/**
+ * The ticker's material: the newest headlines of EVERY story in the store,
+ * teasers included. A ticker scrolls past; it is not a list a caller opens, so
+ * a headline with no article behind it is still news worth a glance.
+ */
+export declare function loadTickerItems(limit: number, root?: string): Array<{
+    source: string;
+    title: string;
+}>;
 /**
  * Who may edit the front page: the full sysop. The same tier and the same
  * field the other TS doors read off the door session (`session.user.secLevel`,

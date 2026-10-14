@@ -20,6 +20,7 @@ import {
   MAGAZINE_FRONTPAGE_FILE,
   MAGAZINE_INDEX_FILE,
   MAGAZINE_STORIES_DIR,
+  isArticle,
   type MagazineIndexEntry,
 } from '@amiexpress/bbs-door-sdk/formats/magazine';
 import { GENERATED_SCREEN_ROWS } from '../../screens/screen-rows';
@@ -61,6 +62,13 @@ export interface MagazineDeps {
 }
 
 const MAGAZINE = MAGAZINE_DIR;
+
+/**
+ * How long a story may stay in the store without becoming an article: a feed
+ * teaser whose page gave no text (or has not been asked yet) is not read by
+ * anyone, so after three days it goes rather than piling up forever.
+ */
+export const NEVER_ARTICLE_MAX_AGE_DAYS = 3;
 
 export function writeAtomic(target: string, contents: string): void {
   const tmp = `${target}.tmp-${process.pid}`;
@@ -162,7 +170,9 @@ export function mergeIncoming(
 }
 
 /**
- * Allocate a page to every story, newest first within its desk.
+ * Allocate a page to every ARTICLE, newest first within its desk. A story that
+ * is not an article (`isArticle`, the predicate the MAG reader lists by) gets
+ * no page: a page for it would be a teaser laid out as an article.
  *
  * A desk's range is finite (§12 gives twenty pages) and the archive is
  * unbounded, so a story that will not fit goes to the archive's own range
@@ -175,7 +185,7 @@ export function allocatePages(stories: Story[]): Map<string, number> {
   const desks: Desk[] = ['general', 'hack', 'scene', 'music', 'graffiti', 'people', 'archive', 'stream'];
   for (const d of desks) nextByDesk.set(d, familyFor(d).first);
 
-  const ordered = [...stories].sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
+  const ordered = stories.filter(isArticle).sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
   for (const story of ordered) {
     let desk = story.desk;
     let cursor = nextByDesk.get(desk) ?? familyFor(desk).first;
@@ -261,7 +271,7 @@ export function publishMagazine(
   // The front page proper: human-approved stories only.
   const approved = approvedIds
     .map((id) => byId.get(id))
-    .filter((s): s is Story => Boolean(s))
+    .filter((s): s is Story => Boolean(s) && isArticle(s as Story))
     .sort((a, b) => (a.date < b.date ? 1 : -1));
   const frontTitle = approved.length
     ? 'TODAY'
@@ -312,6 +322,41 @@ export function healSummaries(stories: Story[]): Story[] {
 }
 
 /**
+ * Delete every story that has been in the store longer than
+ * `NEVER_ARTICLE_MAX_AGE_DAYS` without becoming an article (`isArticle`) -
+ * which covers a story whose prefetch failed (`bodyFailed`) and a teaser that
+ * never had an address to fetch. Returns the ids removed. The clock is passed
+ * in. An undated story (no readable `firstSeen`) is kept: its age is unknown.
+ */
+export function purgeNeverArticles(root: string, nowMs: number, log: (l: string) => void = () => {}): string[] {
+  const dir = path.join(root, MAGAZINE, MAGAZINE_STORIES_DIR);
+  const gone: string[] = [];
+  for (const story of loadStories(dir, log)) {
+    if (isArticle(story)) continue;
+    const seen = Date.parse(story.firstSeen);
+    if (!Number.isFinite(seen) || nowMs - seen <= NEVER_ARTICLE_MAX_AGE_DAYS * 24 * 3600 * 1000) continue;
+    try {
+      fs.unlinkSync(path.join(dir, `${story.id}.json`));
+      gone.push(story.id);
+    } catch { /* already gone */ }
+  }
+  if (gone.length) log(`[magazine] purged ${gone.length} stories that never became articles in ${NEVER_ARTICLE_MAX_AGE_DAYS} days`);
+  return gone;
+}
+
+/**
+ * Compose again from the stories on disk, with no new material: what the body
+ * prefetch calls once a story's text has landed, so the story gets its page now
+ * rather than at the next tick.
+ */
+export function republishMagazine(deps: MagazineDeps): MagazineLayout {
+  const root = deps.rootDir();
+  purgeNeverArticles(root, deps.now().getTime(), deps.log);
+  const stories = loadStories(path.join(root, MAGAZINE, MAGAZINE_STORIES_DIR), deps.log);
+  return publishMagazine(stories, readApproved(root), deps);
+}
+
+/**
  * One pass: read what the feeds produced, merge it into the archive, and
  * recompose. `incoming/` is cleared afterwards - the bulletins own that data
  * and the stories own their copy.
@@ -341,7 +386,9 @@ export function refreshMagazine(deps: MagazineDeps): { added: number; duplicates
     writeAtomic(path.join(magDir, MAGAZINE_STORIES_DIR, `${story.id}.json`), JSON.stringify(story, null, 2));
   }
 
-  const layout = publishMagazine(merged.stories, readApproved(root), deps);
+  // A story that has stayed a teaser for three days leaves the store before it is composed.
+  const purged = new Set(purgeNeverArticles(root, deps.now().getTime(), deps.log));
+  const layout = publishMagazine(merged.stories.filter((s) => !purged.has(s.id)), readApproved(root), deps);
 
   // Clear the inbox: the stories own their copy now, and a stale item would be
   // re-merged (harmlessly) on every run forever.
