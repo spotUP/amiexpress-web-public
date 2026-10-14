@@ -21,6 +21,7 @@ jest.mock('../../src/services/background-file-check.service', () => ({
   userMayToggleBackgroundFileCheck: (node: number) => node === 1,
 }));
 
+import { userFileManager } from '../../src/services/UserFileManager';
 import { applyWField, wFieldState, wFieldValue, W_FIELDS } from '../../src/services/user-settings/w-fields';
 
 const everything = 'T'.repeat(128);
@@ -182,5 +183,35 @@ describe('choices, lines and toggles', () => {
     expect(wFieldValue(caller(), 6)).toBe('ENCRYPTED');
     expect(wFieldValue(caller({ linesPerScreen: 0 }), 7)).toBe('Auto');
     expect(wFieldValue(caller(), 14)).toBe('YES');
+  });
+});
+
+const zoomInt = (z: string): number =>
+  (userFileManager as unknown as { zoomTypeToInt(z: string): number }).zoomTypeToInt(z);
+
+describe('zoom type reaches the disk record', () => {
+  test('ASCII toggles to int 1 in user.data and back to 0, from a loaded QWK record', async () => {
+    const s = caller({ zoomType: 'QWK' });
+    expect(await applyWField(s, 13, '')).toEqual({ kind: 'stored', value: 'ASCII' });
+    expect(zoomInt(s.user.zoomType)).toBe(1);
+    expect(await applyWField(s, 13, '')).toEqual({ kind: 'stored', value: 'QWK' });
+    expect(zoomInt(s.user.zoomType)).toBe(0);
+  });
+  test('a record loaded with the int-1 string toggles to QWK, and the legacy number 1 reads ASCII', async () => {
+    const s = caller({ zoomType: 'BlueWave' });
+    expect(wFieldValue(s, 13)).toBe('ASCII');
+    expect(await applyWField(s, 13, '')).toEqual({ kind: 'stored', value: 'QWK' });
+    expect(zoomInt(s.user.zoomType)).toBe(0);
+    expect(wFieldValue(caller({ zoomType: 1 }), 13)).toBe('ASCII');
+    expect(wFieldValue(caller({ zoomType: 0 }), 13)).toBe('QWK');
+  });
+});
+
+describe('the list the caller was shown wins', () => {
+  test('a passed choices list is the one the number indexes, not a re-read', async () => {
+    const s = caller();
+    expect(await applyWField(s, 8, '2', { choices: ['One', 'Two'] })).toEqual({ kind: 'stored', value: 'Two' });
+    expect(s.user.computerIndex).toBe(1);
+    expect(await applyWField(s, 8, '3', { choices: ['One', 'Two'] })).toEqual({ kind: 'again' });
   });
 });

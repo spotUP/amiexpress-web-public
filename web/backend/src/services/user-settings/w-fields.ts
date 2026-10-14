@@ -101,6 +101,17 @@ export function wFieldState(session: BBSSession, n: WFieldNumber): WFieldState {
   return n === 15 ? 'hidden' : 'disabled';
 }
 
+/**
+ * User.zoomType is the string the record decodes int 0 / int 1 to
+ * (UserFileManager.intToZoomType): int 0 = QWK, int 1 = ASCII (express.e).
+ * Older sessions and rows may still carry the number 0/1.
+ */
+const ZOOM_QWK = 'QWK';
+const ZOOM_ASCII = 'BlueWave'; // the string whose user.data int is 1
+function isAsciiZoom(z: unknown): boolean {
+  return z === ZOOM_ASCII || z === 1 || z === '1';
+}
+
 const yesNo = (on: boolean): string => (on ? 'YES' : 'NO');
 
 /** What the row reads as - the same strings the internal W menu paints. */
@@ -123,7 +134,7 @@ export function wFieldValue(session: BBSSession, n: WFieldNumber): string {
       return (PROTOCOL_DISPLAY_NAMES as Record<string, string>)[p] || p.toUpperCase();
     }
     case 12: return EDITOR_DISPLAY[editorValue(u)] ?? 'PROMPT';
-    case 13: return (u.zoomType ?? 0) === 1 ? 'ASCII' : 'QWK';
+    case 13: return isAsciiZoom(u.zoomType) ? 'ASCII' : 'QWK';
     case 14: return yesNo(!!u.availableForChat);
     case 15: return translationService.getUserLanguage(Number(u.id));
     case 16: return yesNo(((u.userFlags ?? 0) & UserFlag.BGFILECHECK) !== 0);
@@ -166,6 +177,11 @@ export type WFieldOutcome =
 export interface ApplyWFieldOptions {
   /** express.e prints "Checking for duplicate name..." here (25914, 25947, 25969). */
   onChecking?: () => void;
+  /**
+   * The list the caller showed for a choice row (8, 9). The answer is a
+   * position in THAT list; it is re-read only when the caller has none.
+   */
+  choices?: string[];
 }
 
 const NAME_ROWS = {
@@ -203,9 +219,9 @@ async function storeText(session: BBSSession, field: 'email' | 'location' | 'pho
   return { kind: 'stored', value };
 }
 
-async function pick(session: BBSSession, n: 8 | 9, input: string): Promise<WFieldOutcome> {
+async function pick(session: BBSSession, n: 8 | 9, input: string, shown?: string[]): Promise<WFieldOutcome> {
   if (input.length === 0) return { kind: 'unchanged' };
-  const choices = await wFieldChoices(n);
+  const choices = shown && shown.length > 0 ? shown : await wFieldChoices(n);
   if (choices.length === 0) return { kind: 'unchanged' }; // 26033 / 26040: count()>0
   const num = parseInt(input, 10);
   if (isNaN(num) || num < 1 || num > choices.length) return { kind: 'again' };
@@ -233,10 +249,13 @@ export async function applyWField(
       if (input.length === 0) return { kind: 'unchanged' };
       const lines = parseInt(input, 10) || 0; // Val()
       if (lines < 0 || lines > 255) return { kind: 'again' };
+      // 0/Auto resolves to the height the session measured, the same as the
+      // signup line test - not null. A stored null read back as the default 23
+      // (one row short): the sysop, 2026-09-16. See auto-lines.util.
       await changeAccount(session, { linesPerScreen: lines > 0 ? lines : autoLinesFor(session) });
       return { kind: 'stored', value: wFieldValue(session, 7) };
     }
-    case 8: case 9: return pick(session, n, input);
+    case 8: case 9: return pick(session, n, input, opts.choices);
     case 10:
       await changeAccount(session, { userFlags: (u.userFlags ?? 0) ^ UserFlag.SCRNCLR });
       return { kind: 'stored', value: wFieldValue(session, 10) };
@@ -254,9 +273,7 @@ export async function applyWField(
       return { kind: 'stored', value: wFieldValue(session, 12) };
     }
     case 13:
-      // WEB_: the menu has always stored 0/1 here while User.zoomType is declared
-      // string ('QWK'); the number is kept so the menu reads back as before.
-      await changeAccount(session, { zoomType: (((u.zoomType ?? 0) + 1) & 1) as unknown as string });
+      await changeAccount(session, { zoomType: isAsciiZoom(u.zoomType) ? ZOOM_QWK : ZOOM_ASCII });
       return { kind: 'stored', value: wFieldValue(session, 13) };
     case 14:
       await changeAccount(session, { availableForChat: !u.availableForChat });

@@ -1026,10 +1026,6 @@ export async function handleWEditLinesInput(socket: any, session: BBSSession, in
     return;
   }
 
-  // 0/Auto resolves to the height the session measured, the same as the signup
-  // line test - not null. A stored null read back as the default 23 (one row
-  // short), so the runtime W command had the same off-by-one the signup Auto
-  // did (the sysop, 2026-09-16). See auto-lines.util.
   _displayWCommandMenu(socket, session);
   session.subState = LoggedOnSubState.W_OPTION_SELECT;
 }
@@ -1091,7 +1087,7 @@ export async function handleWEditComputerInput(socket: any, session: BBSSession,
     return;
   }
 
-  const outcome = await applyWField(session, 8, trimmed);
+  const outcome = await applyWField(session, 8, trimmed, { choices: session.tempData?.computerChoices });
   if (outcome.kind === 'again') {
     // Invalid - re-prompt loop (express.e:11342 IF((stat <= 0) OR (stat > computerTypes.count())) THEN JUMP jLoop6)
     await _displayComputerList(socket, session);
@@ -1121,7 +1117,7 @@ export async function handleWEditScreentypeInput(socket: any, session: BBSSessio
     return;
   }
 
-  const outcome = await applyWField(session, 9, trimmed);
+  const outcome = await applyWField(session, 9, trimmed, { choices: session.tempData?.screenTypeChoices });
   if (outcome.kind === 'again') {
     // Invalid - re-prompt loop (express.e:11364 IF((stat <= 0) OR (stat > screenTypeTitle.count())) THEN JUMP stLoop5)
     await _displayScreenTypeList(socket, session);
