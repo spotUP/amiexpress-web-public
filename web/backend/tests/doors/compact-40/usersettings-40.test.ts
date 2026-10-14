@@ -234,7 +234,10 @@ describe('the W door on three screens', () => {
   test('the keystroke traces withhold the password, say so, and still show a key typed outside the entry', async () => {
     const { traces } = await passwordSinks('Zebra7!x');
     expect(traces).not.toContain('Zebra7');
-    expect(traces).toMatch(/<9 bytes withheld>/);          // "Zebra7!x" + Enter, in each of the three traces
+    // "Zebra7!x" + Enter is 9 bytes, and each of the three traces says so.
+    for (const prefix of ['[DoorInput] <9 bytes withheld>', '[AmigaDoorSession] door:input event received: "<9 bytes withheld>"', '[XIMIOHandler] queueInput: data="<9 bytes withheld>"']) {
+      expect(traces).toContain(prefix);
+    }
     expect(traces).toContain('[DoorInput] "6"');            // the field jump typed before the entry is traced with content
   });
 });

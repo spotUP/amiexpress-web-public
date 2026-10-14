@@ -1127,6 +1127,8 @@ debugLog("[AmigaDoorSession] Terminating refactored door session...");
     this.logger.info("Terminating session...");
 
     this.isRunning = false;
+    // First, so a throw further down cannot leave the traces withholding for the next door (AEW_USERFIELD SECRET).
+    setSecretInput(this.config.bbsSession, false);
     this.removeSocketHandlers();
 
     // Drop the debug registry entry so MCP callers stop seeing a stale session.
@@ -1186,9 +1188,6 @@ console.error(`[AmigaDoorSession] Error deleting port ${this.doorPortName}:`, er
     multicomManager.unregisterEmulator(sessionId);
 
 debugLog(`[AmigaDoorSession] Cleared node ${nodeId} and unregistered MULTICOM for session ${sessionId}`);
-
-    // A door that died mid password entry must not leave the traces withholding for the next one.
-    setSecretInput(this.config.bbsSession, false);
 
     // Give the user their modem speed back before anything else can throw.
     this.restoreModemThrottle();
