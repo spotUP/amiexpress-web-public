@@ -15,8 +15,9 @@ jest.mock('../../../src/handlers/user/account.handler', () => ({
   displayAccount: jest.fn(),
   displayAccountInfo: jest.fn(),
 }));
-const updateUser = jest.fn().mockResolvedValue(undefined);
-jest.mock('../../../src/database', () => ({ db: { updateUser, getConferences: jest.fn().mockResolvedValue([]) } }));
+// Inline jest.fn()s: the account editor's import chain (w-password -> account.service)
+// loads the database module while the imports below run, before any outer const exists.
+jest.mock('../../../src/database', () => ({ db: { updateUser: jest.fn().mockResolvedValue(undefined), getConferences: jest.fn().mockResolvedValue([]) } }));
 // checkSecurity gates entry (ACS_CREDIT_ACCESS); amigafs backs the LockAccounts
 // allow-list and the CreditLog append. Both modules are imported at the top of
 // the handler, so their mock factories must not reference outer consts (TDZ) -
@@ -42,6 +43,9 @@ import {
 } from '../../../src/handlers/user/account-edit-input.handler';
 import * as nodePath from 'path';
 import { setBoardRoot } from '../../helpers/board-root';
+import { db as mockedDb } from '../../../src/database';
+
+const updateUser = mockedDb.updateUser as jest.Mock;
 
 const checkSecurity = checkSecurityImport as jest.Mock;
 const amigafs = {
