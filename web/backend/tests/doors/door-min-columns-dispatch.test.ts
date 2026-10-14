@@ -36,7 +36,7 @@ const INSTALLED_RECORD = {
   name: 'Gate40 Door',
   location: 'Doors:Gate40/Gate40',
   resolvedPath: '/nonexistent/Gate40',
-  access: 0,
+  access: undefined,
   type: 'unrouted-dispatch-test-type',
   installed: true,
   minColumns: 40,
@@ -109,7 +109,7 @@ const bbsCmdDefinition = {
   name: 'GATE40',
   type: UNROUTED,
   location: 'Doors/Gate40/Gate40',
-  access: 0,
+  access: undefined,
   toolTypes: { LOCATION: 'Doors:Gate40/Gate40', TYPE: 'XIM' },
 };
 
@@ -241,7 +241,7 @@ describe('initializeDoors warns about MIN_COLUMNS on an adapter-type door', () =
       name: 'LIAR',
       type: 'XIM',
       location: 'Doors/Liar/Liar',
-      access: 0,
+      access: undefined,
       toolTypes: { LOCATION: 'Doors:Liar/Liar', TYPE: 'XIM', MIN_COLUMNS: '40' },
     });
 
@@ -257,7 +257,7 @@ describe('initializeDoors warns about MIN_COLUMNS on an adapter-type door', () =
       name: 'HONEST',
       type: 'TS',
       location: 'Doors/Honest',
-      access: 0,
+      access: undefined,
       toolTypes: { LOCATION: 'Doors:Honest', TYPE: 'TS', MIN_COLUMNS: '40' },
     });
 
@@ -270,7 +270,7 @@ describe('initializeDoors warns about MIN_COLUMNS on an adapter-type door', () =
       name: 'WIDE',
       type: 'XIM',
       location: 'Doors/Wide/Wide',
-      access: 0,
+      access: undefined,
       toolTypes: { LOCATION: 'Doors:Wide/Wide', TYPE: 'XIM', MIN_COLUMNS: '80' },
     });
 
@@ -292,14 +292,14 @@ describe('a C64_ADAPT door reached through the real Enter dispatch', () => {
     name: 'C64DOOR',
     type: 'XIM',
     location: 'Doors/C64Door/C64Door',
-    access: 0,
+    access: undefined,
     toolTypes: { LOCATION: 'Doors:C64Door/C64Door', TYPE: 'XIM', C64_ADAPT: '40' },
   };
   const PLAIN_68K = {
     name: 'PLAIN68K',
     type: 'XIM',
     location: 'Doors/C64Door/C64Door',
-    access: 0,
+    access: undefined,
     toolTypes: { LOCATION: 'Doors:C64Door/C64Door', TYPE: 'XIM' },
   };
 
@@ -381,7 +381,7 @@ describe('a C64_ADAPT door reached through the real Enter dispatch', () => {
       name: 'Installed Only',
       location: 'Doors:C64Door/C64Door',
       resolvedPath: path.join(root, 'Doors', 'C64Door', 'C64Door'),
-      access: 0,
+      access: undefined,
       type: 'XIM',
       installed: true,
       toolTypes: { LOCATION: 'Doors:C64Door/C64Door', TYPE: 'XIM', C64_ADAPT: '40' },

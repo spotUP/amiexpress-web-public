@@ -138,7 +138,7 @@ const C64_CMD = {
   name: 'C64DOOR',
   type: 'XIM',
   location: 'Doors/C64Door/C64Door',
-  access: 0,
+  access: undefined,
   toolTypes: { LOCATION: 'Doors:C64Door/C64Door', TYPE: 'XIM', C64_ADAPT: '40' },
 };
 
@@ -153,7 +153,7 @@ const UNADAPTED_CMD = {
   name: 'RAW68K',
   type: 'XIM',
   location: 'Doors/C64Door/C64Door',
-  access: 0,
+  access: undefined,
   toolTypes: { LOCATION: 'Doors:C64Door/C64Door', TYPE: 'XIM', MIN_COLUMNS: '40' },
 };
 

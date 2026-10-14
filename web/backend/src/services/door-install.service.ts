@@ -100,14 +100,15 @@ export function registerDoor(opts: RegisterDoorOptions): RegisterDoorResult {
   }
 
   const description: string = pkg.description || '';
-  const access: number = pkg.accessLevel !== undefined ? pkg.accessLevel : 0;
+  // express.e:4703: ACCESS=0 refuses the door to everybody; no level = no ACCESS line.
+  const access: number = Number(pkg.accessLevel) || 0;
 
   const lines: Array<string | null> = [
     `BBSCMD=${bbsCommand}`,
     `TYPE=${doorType}`,
     `LOCATION=Doors/${doorName}`,
     description ? `DESCRIPTION=${description}` : null,
-    `ACCESS=${access}`,
+    access ? `ACCESS=${access}` : null,
     'MULTINODE=YES',
     'PRIORITY=SAME',
     '',

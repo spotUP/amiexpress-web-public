@@ -75,7 +75,7 @@ const doorOver = (name: string, toolTypes: Record<string, string> = {}) => ({
   name,
   type: UNROUTED,
   location: `Doors/${name}/${name}`,
-  access: 0,
+  access: undefined,
   toolTypes: { LOCATION: `Doors:${name}/${name}`, TYPE: 'XIM', ...toolTypes },
 });
 

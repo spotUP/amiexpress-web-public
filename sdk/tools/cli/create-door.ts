@@ -374,7 +374,7 @@ function getDoorTypeCode(template: string): string {
  *   - TYPE: Door type (TS, AREXX, PYTHON, XIM for 68K)
  *   - LOCATION: Path to door directory (relative to BBS root)
  *   - DESCRIPTION: Description shown in DOORS command
- *   - ACCESS: Minimum security level (0 = all users)
+ *   - ACCESS: Minimum security level. Omit for all users: express.e:4703 treats ACCESS=0 as "nobody"
  *   - MULTINODE: YES/NO for multi-node support
  *   - PRIORITY: Task priority (SAME = inherit)
  */
@@ -387,7 +387,6 @@ function generateInfoFile(projectPath: string, config: DoorConfig): void {
 TYPE=${typeCode}
 LOCATION=Doors/${config.name}
 DESCRIPTION=${config.description}
-ACCESS=0
 MULTINODE=YES
 PRIORITY=SAME
 `;

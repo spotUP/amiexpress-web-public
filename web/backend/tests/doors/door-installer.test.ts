@@ -207,6 +207,39 @@ describe('DoorInstaller — 68K door', () => {
       .toContain(path.join('Doors', 'who', 'WHO'));
   });
 
+  test('a 68K icon with no ACCESS installs with no ACCESS line (ACCESS=0 would run for nobody)', async () => {
+    (getExtractorForFile as jest.Mock).mockResolvedValue({
+      getEntries: async () => [
+        { name: 'WHO', size: 5000, data: Buffer.alloc(5000, 0x4e) },
+        {
+          name: 'WHO.info',
+          size: 100,
+          data: Buffer.from('BBSCMD=WHO\nTYPE=XIM\nLOCATION=DOORS:WHO/WHO\nDESCRIPTION=Who is online'),
+        },
+      ],
+    });
+    const result = await installer.install('/fake/archives/who.lha');
+    expect(result.success).toBe(true);
+    const written = fs.readFileSync(path.join(tmpRoot, 'Commands', 'BBSCmd', 'WHO.info'), 'utf8');
+    expect(written).not.toMatch(/^ACCESS=/m);
+  });
+
+  test('a 68K icon level is carried over unchanged', async () => {
+    (getExtractorForFile as jest.Mock).mockResolvedValue({
+      getEntries: async () => [
+        { name: 'WHO', size: 5000, data: Buffer.alloc(5000, 0x4e) },
+        {
+          name: 'WHO.info',
+          size: 100,
+          data: Buffer.from('BBSCMD=WHO\nTYPE=XIM\nLOCATION=DOORS:WHO/WHO\nACCESS=25'),
+        },
+      ],
+    });
+    await installer.install('/fake/archives/who.lha');
+    const written = fs.readFileSync(path.join(tmpRoot, 'Commands', 'BBSCmd', 'WHO.info'), 'utf8');
+    expect(written).toMatch(/^ACCESS=25$/m);
+  });
+
   test('installs a 68K door from LHA entries', async () => {
     (getExtractorForFile as jest.Mock).mockResolvedValue({
       getEntries: async () => [

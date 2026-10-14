@@ -194,13 +194,17 @@ export class DoorInstaller {
 
     const outInfoPath = path.join(bbsCommandsDir, `${cmdName}.info`);
     const description = get('DESCRIPTION') || get('TOOLTIP') || '';
-    const access = get('ACCESS') || '0';
+    // express.e:4703: ACCESS=0 refuses the door to everybody, so an icon with no
+    // ACCESS must stay without one (absent = everyone). A level the source icon
+    // does carry is passed through unchanged.
+    const rawAccess = (get('ACCESS') || '').trim();
+    const accessLine = rawAccess ? `ACCESS=${rawAccess}` : null;
     const lines = [
       `BBSCMD=${cmdName}`,
       `TYPE=${doorType}`,
       `LOCATION=${location}`,
       description ? `DESCRIPTION=${description}` : null,
-      `ACCESS=${access}`,
+      accessLine,
     ].filter(Boolean).join('\n');
 
     fs.writeFileSync(outInfoPath, lines);

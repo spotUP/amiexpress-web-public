@@ -88,7 +88,7 @@ const aquaScanOver = (name: string) => ({
   name,
   type: UNROUTED,
   location: 'Doors/AquaScan/AquaScan.000',
-  access: 0,
+  access: undefined,
   toolTypes: { LOCATION: 'Doors:AquaScan/AquaScan.000', TYPE: 'XIM', ACCESS: '20' },
 });
 

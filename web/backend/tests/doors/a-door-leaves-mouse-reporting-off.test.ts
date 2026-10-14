@@ -49,7 +49,7 @@ import { LoggedOnSubState } from '../../src/constants/bbs-states';
 setHelpers({ callersLog: async () => undefined, getRecentCallerActivity: async () => [] });
 
 const MOUSE_CMD = {
-  name: 'MOUSEDOOR', type: 'XIM', location: 'Doors/MouseDoor/MouseDoor', access: 0,
+  name: 'MOUSEDOOR', type: 'XIM', location: 'Doors/MouseDoor/MouseDoor', access: undefined,
   toolTypes: { LOCATION: 'Doors:MouseDoor/MouseDoor', TYPE: 'XIM' },
 };
 

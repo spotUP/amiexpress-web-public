@@ -4124,7 +4124,7 @@ console.log(`[reloadDoors] Doors cache reloaded: ${doors.length} doors`);
 
 export async function initializeDoors() {
   // Use require to get the SAME module instance as loadCommands (dynamic import may get a separate ESM instance)
-  const { commandCache } = require('./command-execution.handler');
+  const { commandCache, doorLevelForCommandAccess } = require('./command-execution.handler');
   const bbsBaseDir = require('../config').config.get('dataDir');
 
   console.log(`[initializeDoors] commandCache.bbscmd.size=${commandCache.bbscmd.size}, syscmd.size=${commandCache.syscmd.size}`);
@@ -4243,7 +4243,7 @@ console.warn(`[initializeDoors] installed-door scan unavailable for MIN_COLUMNS 
       description: `${cmdDef.type} door`,
       command: cmdDef.name.toUpperCase(),  // Door command (e.g., "HELLOTS")
       path: cmdDef.location,                // Path from LOCATION= field
-      accessLevel: cmdDef.access || 0,      // ACCESS= level
+      accessLevel: doorLevelForCommandAccess(cmdDef.access), // ACCESS= level
       enabled: true,
       type: doorType,                       // TYPE= (XIM, AIM, TS  typescript, etc.)
       size: getDoorSize(cmdDef.location),   // Calculate file/directory size

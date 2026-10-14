@@ -67,8 +67,10 @@ export const DISABLED_ACCESS_LEVEL = 32767;
 /**
  * What is remembered for a door that had no ACCESS tooltype at all.
  *
- * express.e:4703 reads `IF access=0 THEN RETURN TRUE` - and TRUE is
- * RESULT_NOT_ALLOWED (axenums.e:23). readToolTypeInt answers -1 for an ABSENT
+ * express.e:4703 reads `IF access=0 THEN RETURN TRUE` - and TRUE is -1, which
+ * is RESULT_FAILURE (axenums.e:23), not RESULT_NOT_ALLOWED. The effect is what
+ * matters: the BBSCmd never runs and processCommand falls through to the
+ * internal command of the same name. readToolTypeInt answers -1 for an ABSENT
  * tooltype (tooltypes.e:176-180), and -1 is never greater than a caller's
  * level. So absence means EVERYONE may run the door and 0 means NOBODY may:
  * they are opposites. Recording an absent level as 0 and writing it back on
@@ -199,8 +201,8 @@ function tooltypeValue(field: string, raw: unknown): string | null {
 /**
  * Is this the access level that means "everyone"?
  *
- * express.e:4703 is `IF access=0 THEN RETURN TRUE`, and TRUE is
- * RESULT_NOT_ALLOWED - so `ACCESS=0` denies the door to EVERYBODY. A door
+ * express.e:4703 is `IF access=0 THEN RETURN TRUE`, and TRUE is -1
+ * (RESULT_FAILURE) - so `ACCESS=0` runs the door for NOBODY. A door
  * open to everyone carries no ACCESS tooltype at all: readToolTypeInt answers
  * -1 for an absent one (tooltypes.e:176-180), and -1 is never above a
  * caller's level.

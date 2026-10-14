@@ -21,7 +21,7 @@ function socketSpy() {
 test('a door whose start throws prints nothing invented', async () => {
   const executeDoor = jest.fn(async () => { throw new Error('boom'); });
   setCommandExecutionDependencies(executeDoor, null);
-  commandCache.bbscmd.set('BROKEN', { name: 'BROKEN', access: 0, type: 'BBSCMD', location: 'Doors/broken', toolTypes: {} } as never);
+  commandCache.bbscmd.set('BROKEN', { name: 'BROKEN', access: undefined, type: 'BBSCMD', location: 'Doors/broken', toolTypes: {} } as never);
   const { socket, said } = socketSpy();
   try {
     await runBbsCommand(socket, { user: { id: 'u1', username: 'sysop', secLevel: 255 }, tempData: {}, subState: '' } as any, 'BROKEN', '');

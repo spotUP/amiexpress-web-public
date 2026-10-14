@@ -369,7 +369,8 @@ export class ReleasePacker {
       `LOCATION=Doors/${params.doorDir}`,
       name ? `NAME=${name}` : '',
       description ? `DESCRIPTION=${description}` : '',
-      `ACCESS=${access}`,
+      // express.e:4703: ACCESS=0 refuses everybody; no level = no ACCESS line.
+      Number(access) ? `ACCESS=${access}` : '',
       'MULTINODE=YES',
       'PRIORITY=SAME',
       '',

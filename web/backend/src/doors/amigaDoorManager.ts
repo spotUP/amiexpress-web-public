@@ -57,7 +57,10 @@ export interface DoorInfo {
   command: string;           // Command name (from filename)
   location: string;          // LOCATION= field (with assigns)
   resolvedPath: string;      // Resolved physical path
-  access: number;            // ACCESS= required level
+  // ACCESS= required level. UNDEFINED when the icon has no (numeric) ACCESS:
+  // absent means everyone (readToolTypeInt answers -1, tooltypes.e:176-181),
+  // while exactly 0 means nobody (express.e:4703). Never collapse one into the other.
+  access?: number;
   type: string;              // TYPE= (XIM, AIM, REXX, etc.)
   stack?: number;            // STACK= size
   priority?: string;         // PRIORITY= setting
@@ -265,8 +268,9 @@ export class AmigaDoorManager {
       }
 
       const access = tooltypes.get('ACCESS');
-      if (access) {
-        metadata.access = parseInt(access, 10);
+      if (access !== undefined) {
+        const level = parseInt(access, 10);
+        if (Number.isFinite(level)) metadata.access = level;
       }
 
       const typeValue = tooltypes.get('TYPE');
@@ -413,7 +417,7 @@ console.error(`Error parsing .info file ${infoPath}:`, error);
           command: metadata.command || path.basename(infoFile, '.info'),
           location: metadata.location,
           resolvedPath: metadata.resolvedPath,
-          access: metadata.access || 0,
+          access: metadata.access,
           type: metadata.type || 'UNKNOWN',
           stack: metadata.stack,
           priority: metadata.priority,
@@ -1211,7 +1215,7 @@ console.warn(`[LZX] Failed to extract: ${filename}`);
             command: installedDoor.command || path.basename(infoFile, '.info'),
             location: installedDoor.location || '',
             resolvedPath: installedDoor.resolvedPath || '',
-            access: installedDoor.access || 0,
+            access: installedDoor.access,
             type: installedDoor.type || 'UNKNOWN',
             stack: installedDoor.stack,
             priority: installedDoor.priority,

@@ -627,7 +627,7 @@ export function parseCmdFile(filePath: string, session?: any, socket?: any): Com
 
         // Parse type (first 2-3 chars) and access level (remaining digits)
         let type = DoorType.XIM;
-        let access = 0;
+        let access: number | undefined;
 
         if (typeAndAccess.length >= 2) {
           // Match type and access: e.g., "XM050" or "XIM050"
@@ -747,8 +747,10 @@ export function loadCommandFromInfo(filePath: string): CommandDefinition | null 
 
   // Optional fields (express.e:4693-4767)
   const access = tooltypes.get('ACCESS');
-  if (access) {
-    cmd.access = parseInt(access, 10);
+  if (access !== undefined) {
+    // Unparseable ACCESS stays undefined = absent = everyone, never 0 = nobody.
+    const level = parseInt(access, 10);
+    if (Number.isFinite(level)) cmd.access = level;
   }
 
   const password = tooltypes.get('PASSWORD');

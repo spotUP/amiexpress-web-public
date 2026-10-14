@@ -56,7 +56,8 @@ describe('registerDoor (door-install.service)', () => {
     expect(content).toContain('TYPE=TS');
     expect(content).toContain('LOCATION=Doors/livechat');
     expect(content).toContain('DESCRIPTION=Real-time chat');
-    expect(content).toContain('ACCESS=0');
+    // express.e:4703: ACCESS=0 would run for nobody; level 0 means no ACCESS line.
+    expect(content).not.toMatch(/^ACCESS=/m);
     expect(content).toContain('MULTINODE=YES');
     expect(content).toContain('PRIORITY=SAME');
   });
@@ -119,7 +120,7 @@ describe('registerDoor (door-install.service)', () => {
     expect(result.doorType).toBe('COBOL');
   });
 
-  test('falls back to derived bbsCommand and default ACCESS=0 when fields are missing', () => {
+  test('falls back to derived bbsCommand and no ACCESS line when fields are missing', () => {
     fs.writeFileSync(
       path.join(doorPath, 'package.json'),
       JSON.stringify({ name: 'multi-word-door', main: 'dist/index.js' }),
@@ -133,7 +134,7 @@ describe('registerDoor (door-install.service)', () => {
     expect(result.bbsCommand).toBe('MULTIWORDDOOR');
     expect(result.doorType).toBe('TS');
     const content = fs.readFileSync(result.infoPath!, 'utf8');
-    expect(content).toContain('ACCESS=0');
+    expect(content).not.toMatch(/^ACCESS=/m);
     expect(content).toContain('LOCATION=Doors/multi-word-door');
   });
 
@@ -152,5 +153,14 @@ describe('registerDoor (door-install.service)', () => {
 
     const result = registerDoor({ doorPath, bbsCommandsDir });
     expect(result.status).toBe('created');
+  });
+
+  test('a package.json level above 0 is written as ACCESS=<level>', () => {
+    fs.writeFileSync(
+      path.join(doorPath, 'package.json'),
+      JSON.stringify({ name: 'livechat', bbsCommand: 'LIVECHAT', doorType: 'TS', accessLevel: 30, main: 'dist/index.js' }),
+    );
+    const result = registerDoor({ doorPath, bbsCommandsDir });
+    expect(fs.readFileSync(result.infoPath!, 'utf8')).toMatch(/^ACCESS=30$/m);
   });
 });

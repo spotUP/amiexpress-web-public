@@ -29,6 +29,40 @@ import { BBSSession } from '../index';
 import { RESULT_SUCCESS, RESULT_FAILURE, RESULT_NOT_ALLOWED } from '../constants/command-results';
 
 /**
+ * express.e:4702-4708 as one pure decision.
+ *
+ *   access:=readToolTypeInt(tooltype,cmd,'ACCESS')
+ *   IF access=0 THEN RETURN TRUE        (4703: TRUE=-1=RESULT_FAILURE)
+ *   IF (access>acsLevel) -> NOT_ALLOWED (4704)
+ *
+ * An ABSENT ACCESS reads -1 (tooltypes.e:176-181), which nobody is below, so
+ * absent means everyone. Exactly 0 means the command never runs and
+ * processCommand falls through to the internal command of the same name,
+ * printing nothing. The three are different answers: callers must hand over
+ * `undefined` for "no ACCESS", never 0.
+ */
+export type CommandAccessVerdict = 'allowed' | 'fall-through' | 'not-allowed';
+
+export function commandAccessVerdict(
+  access: number | undefined,
+  userSecLevel: number,
+): CommandAccessVerdict {
+  if (access === undefined || !Number.isFinite(access)) return 'allowed';
+  if (access === 0) return 'fall-through';
+  return access > userSecLevel ? 'not-allowed' : 'allowed';
+}
+
+/**
+ * The level a Door record carries for a BBSCmd's ACCESS. ACCESS=0 is parked at
+ * the disabled level so no menu offers a door express.e would never run;
+ * absent is level 0 (everyone).
+ */
+export function doorLevelForCommandAccess(access: number | undefined): number {
+  if (access === 0) return DISABLED_ACCESS_LEVEL;
+  return access !== undefined && Number.isFinite(access) && access > 0 ? access : 0;
+}
+
+/**
  * Debug log helper - logs to console AND sysop terminal/session log
  * When a sysop is logged in, debug messages appear in both backend.log and session log
  */
@@ -443,9 +477,18 @@ async function runCommand(
   // await-screen animations like V-AWAIT can still execute.
   const isScreenAutoCommand = !session.user && session.executingScreenCommand;
   const userSecLevel = isScreenAutoCommand ? Number.MAX_SAFE_INTEGER : (session.user?.secLevel || 0);
-  const requiredAccess = commandDef.access || 0;
+  const requiredAccess = commandDef.access ?? 0;
+  const accessVerdict = commandAccessVerdict(commandDef.access, userSecLevel);
 
-  if (requiredAccess !== 0 && userSecLevel < requiredAccess) {
+  if (accessVerdict === 'fall-through') {
+    // express.e:4703 `IF access=0 THEN RETURN TRUE` (RESULT_FAILURE): the
+    // BBSCmd does not run, nothing is printed, and processCommand falls
+    // through to the internal command of the same name.
+    debugLog(socket, session, `ACCESS=0 on ${cmdUpper}: not run, falling through to the internal command`);
+    return RESULT_FAILURE;
+  }
+
+  if (accessVerdict === 'not-allowed') {
     // express.e:4705-4707 - User doesn't have sufficient access
     SysopDebugUtil.debug(
       socket,
@@ -552,7 +595,7 @@ async function runCommand(
       type: commandDef.type,
       path: location, // Door execution expects 'path', not 'location'
       invokedName: commandDef.invokedName,
-      accessLevel: commandDef.access || 0,
+      accessLevel: doorLevelForCommandAccess(commandDef.access),
       enabled: true,
       parameters: params ? [params] : [],
       // express.e:4758-4770 - Additional door options
@@ -681,7 +724,7 @@ console.warn(`[CommandPassword] executeDoor not available - command execution sk
     type: commandDef.type,
     path: location,
     invokedName: commandDef.invokedName,
-    accessLevel: commandDef.access || 0,
+    accessLevel: doorLevelForCommandAccess(commandDef.access),
     enabled: true,
     parameters: [],
     priority: commandDef.priority || 'SAME',

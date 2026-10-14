@@ -77,7 +77,7 @@ const def = (name: string, location: string, type = 'TS') => ({
   name,
   type,
   location,
-  access: 0,
+  access: undefined,
   toolTypes: { LOCATION: location, TYPE: type },
 });
 
