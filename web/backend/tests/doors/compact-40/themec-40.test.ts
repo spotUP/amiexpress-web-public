@@ -31,21 +31,12 @@
 import 'reflect-metadata';
 import * as fs from 'fs';
 import * as path from 'path';
-import { EventEmitter } from 'events';
 import { AnsiToPetsciiTransducer } from '@amiexpress/bbs-door-sdk/petscii';
+import { CaptureSocket, beforeTeardown, screenCodeToChar } from './door-capture';
 
 const REPO = path.resolve(__dirname, '../../../../..');
 const THEMEC = path.join(REPO, 'Doors', 'THEMEC', 'themec');
 const EIGHTY_BEFORE = path.join(__dirname, 'fixtures', 'themec-80-before.ans');
-
-/** The socket a door is handed: everything it paints, in order. */
-class CaptureSocket extends EventEmitter {
-  readonly ansi: string[] = [];
-  emit(event: string, data?: any): boolean {
-    if (event === 'ansi-output') this.ansi.push(typeof data === 'string' ? data : String(data ?? ''));
-    return super.emit(event, data);
-  }
-}
 
 /**
  * Run the REAL binary under the REAL emulator for one caller geometry.
@@ -89,40 +80,7 @@ async function drive(cols: number): Promise<string> {
   return socket.ansi.join('');
 }
 
-/** A C64 screen code (bit 7 = reverse) back to the character it shows. */
-function screenCodeToChar(sc: number): string {
-  const c = sc & 0x7f;
-  if (c === 0) return '@';
-  if (c <= 0x1f) return String.fromCharCode(64 + c);
-  if (c <= 0x3f) return String.fromCharCode(c);
-  if (c >= 0x41 && c <= 0x5a) return String.fromCharCode(c);
-  return '·'; // a PETSCII graphic glyph
-}
-
-/** What a real C64 is showing after eating `ansi`, row by row. */
-/**
- * The screen the CALLER saw, which is not the screen the session ends on.
- *
- * The picker clears on the way out and leaves the terminal black (44c444fdc),
- * so the capture ends with `ESC[2J ESC[H ESC[?25h`. Transducing the whole
- * session therefore models the screen AFTER the door quit - empty, every time,
- * however well the door painted. That is what made this test read as "the door
- * writes nothing at 40 columns" while the door was in fact writing 2,182 bytes
- * of correctly addressed 40-column output.
- *
- * So the model stops at the teardown clear, and `leavesScreenBlack` below pins
- * the teardown itself rather than letting it hide the screen.
- */
-function beforeTeardown(ansi: string): string {
-  const clear = ansi.lastIndexOf('\x1b[2J');
-  // Only the FINAL clear counts, and only when nothing but the teardown tail
-  // follows it - a clear mid-session is a repaint and belongs in the model.
-  if (clear <= 0) return ansi;
-  const tail = ansi.slice(clear);
-  return /^\x1b\[2J(\x1b\[H)?(\x1b\[\?25[hl])?\s*$/.test(tail) ? ansi.slice(0, clear) : ansi;
-}
-
-/** Whether the door really did leave the screen black behind it. */
+/** Whether the door really did leave the screen black behind it (the cut beforeTeardown makes, door-capture.ts, hides it). */
 function leavesScreenBlack(ansi: string): boolean {
   return /\x1b\[2J(\x1b\[H)?(\x1b\[\?25[hl])?\s*$/.test(ansi);
 }

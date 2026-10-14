@@ -116,3 +116,15 @@ test('the list the caller was shown decides a choice answer, even when the list 
     wf.wFieldChoices.mockImplementation(jest.requireActual('../../src/services/user-settings/w-fields').wFieldChoices);
   }
 });
+
+test('SECRET 1 marks the session as reading a secret and SECRET 0 clears it; inputForTrace withholds only while set', async () => {
+  const { isSecretInput, inputForTrace } = require('../../src/amiga-emulation/xim/secret-input');
+  const s = caller();
+  expect(isSecretInput(s)).toBe(false);
+  expect(await userFieldAnswer('SECRET 1', s, socket)).toBe('OK');
+  expect(isSecretInput(s)).toBe(true);
+  expect(isSecretInput(caller())).toBe(false);                       // per session
+  expect(inputForTrace(s, 'Zebra7!x\r', (x: string) => x)).toBe('<9 bytes withheld>');
+  expect(await userFieldAnswer('SECRET 0', s, socket)).toBe('OK');
+  expect(inputForTrace(s, 'q', (x: string) => `"${x}"`)).toBe('"q"');
+});

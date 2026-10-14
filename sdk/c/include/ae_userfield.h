@@ -62,6 +62,7 @@ int ae_uf_set(int n, const char *value, ae_uf_answer *out);
 int ae_uf_password(const char *first, const char *second, ae_uf_answer *out);
 int ae_uf_choice(int n, int index, char *out, int cap); /* length, 0 past the end, AE_UF_GONE */
 int ae_uf_door_at(int index, ae_uf_door *out);          /* 1, 0 past the end, AE_UF_GONE */
+int ae_uf_secret(int on);                               /* 1 acknowledged, 0 not, AE_UF_GONE: the board's input traces withhold keys while on */
 int ae_uf_resume_arm(int row);                          /* 1 armed, 0 not, AE_UF_GONE */
 int ae_uf_resume_take(void);                            /* row >= 0, -2 none, AE_UF_GONE */
 

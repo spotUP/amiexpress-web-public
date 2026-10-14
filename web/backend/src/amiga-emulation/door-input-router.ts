@@ -53,6 +53,7 @@ export interface DoorInputRoutingTargets {
   ximProtocol?: {
     queueInput(data: string): void;
     isWaitingForLineInput?(): boolean;
+    isSecretInput?(): boolean;
     shouldInjectNativeInput?(): boolean;
     injectInputToNativeDoor(char: string): void;
   } | null;
@@ -82,7 +83,7 @@ export function routeAmigaDoorInput(
    * instead of from a guess.
    */
   console.log(
-    `[DoorInput] ${JSON.stringify(data)} -> ` +
+    `[DoorInput] ${shared.ximProtocol?.isSecretInput?.() ? `<${data.length} bytes withheld>` : JSON.stringify(data)} -> ` +
       `fim=${!!shared.fimProtocol} dd=${!!shared.dreamDoorLibrary?.isActive?.()} ` +
       `xim=${!!shared.ximProtocol} tim=${!!shared.timHandler?.isWaitingForInput?.()}`,
   );

@@ -164,12 +164,15 @@ static int edit_password(int r)
     first[0] = second[0] = '\0';
     editor_style(&st, r, '*');
     show_message("Enter New Password: ", UI_TOKEN(UI_T_DIM));   /* the two entries must be told apart at 40 */
+    /* The board's keystroke traces withhold what is typed while this is on; every way out below turns it off. */
+    ae_uf_secret(1);
     got = ui_input(&screen.buf, &keys, &pushback, &st, "", first, 51);
-    if (got < 0) { memset(first, 0, sizeof(first)); return -1; }
-    if (got == 0) { show_message("", UI_TOKEN(UI_T_INK)); return 0; }
+    if (got < 0) { ae_uf_secret(0); memset(first, 0, sizeof(first)); return -1; }
+    if (got == 0) { ae_uf_secret(0); show_message("", UI_TOKEN(UI_T_INK)); return 0; }
     show_message("Reenter New Password: ", UI_TOKEN(UI_T_DIM));
     got = ui_input(&screen.buf, &keys, &pushback, &st, "", second, 51);
-    if (got < 0) { memset(first, 0, sizeof(first)); memset(second, 0, sizeof(second)); return -1; }
+    if (got < 0) { ae_uf_secret(0); memset(first, 0, sizeof(first)); memset(second, 0, sizeof(second)); return -1; }
+    ae_uf_secret(0);
     if (got == 0) { memset(first, 0, sizeof(first)); show_message("", UI_TOKEN(UI_T_INK)); return 0; }
     ae_uf_password(first, second, &a);
     memset(first, 0, sizeof(first));

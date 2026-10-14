@@ -77,6 +77,14 @@ static void a_door_row_and_the_end_of_the_list(void)
     printf("  [OK] a door row, and the end of the list\n");
 }
 
+static void the_secret_flag_is_asked_on_and_off(void)
+{
+    next_answer = "OK"; assert(ae_uf_secret(1) == 1); assert(strcmp(last_request, "SECRET 1") == 0);
+    next_answer = "OK"; assert(ae_uf_secret(0) == 1); assert(strcmp(last_request, "SECRET 0") == 0);
+    next_answer = "";   assert(ae_uf_secret(1) == 0);
+    printf("  [OK] the secret flag is asked on and off\n");
+}
+
 static void the_resume_row_comes_back_once(void)
 {
     next_answer = "OK"; assert(ae_uf_resume_arm(21) == 1); assert(strcmp(last_request, "RESUME 21") == 0);
@@ -134,6 +142,7 @@ int main(void)
     every_answer_to_a_write_is_told_apart();
     the_password_goes_as_one_request();
     a_door_row_and_the_end_of_the_list();
+    the_secret_flag_is_asked_on_and_off();
     the_resume_row_comes_back_once();
     a_refusal_is_not_silence();
     a_long_value_is_kept_whole();

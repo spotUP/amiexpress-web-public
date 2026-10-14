@@ -21,6 +21,7 @@ import { SysopDebugUtil } from '../../utils/sysop-debug.util';
 import { getNewlineMode, normalizeNewlines } from './newline-mode.util';
 import { ximLogger } from '../../utils/XIMLogger';
 import { debugLog } from '../../utils/debug-log';
+import { inputForTrace } from './secret-input';
 import { handleUserData as handleUserDataFn, handleUserString as handleUserStringFn } from './user-info-handlers';
 import { handleMCI as handleMCIFn } from './mci-handler';
 import { processHotkeyToken as processHotkeyTokenFn } from './io-hotkey-tokens';
@@ -245,7 +246,7 @@ export class XIMIOHandler {
 
     // Parse input into tokens, preserving ANSI escape sequences
     const tokens = this.parseInputTokens(data);
-    debugLog(`[XIMIOHandler] queueInput: data="${data.replace(/\r/g, '\\r').replace(/\n/g, '\\n')}" waitingForHotkey=${this.waitingForHotkey} waitingForPause=${this.waitingForPause} tokens=${tokens.length}`);
+    debugLog(`[XIMIOHandler] queueInput: data="${inputForTrace(this.bbsSession, data, (s) => s.replace(/\r/g, '\\r').replace(/\n/g, '\\n'))}" waitingForHotkey=${this.waitingForHotkey} waitingForPause=${this.waitingForPause} tokens=${tokens.length}`);
 
     for (const token of tokens) {
       // Handle input during pause

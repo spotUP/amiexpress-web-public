@@ -30,6 +30,7 @@ import { XIMSystemCommandsHandler } from './xim/system-commands';
 import { handleSetPointer } from './xim/msgpointer';
 import { handlePostMessage, postMessageAnswer } from './xim/postmsg';
 import { userFieldAnswer } from './xim/userfield';
+import { isSecretInput } from './xim/secret-input';
 import type { BBSSession } from '../index';
 import { ximDebugLogger } from './xim/debug-logger';
 import { getDoorLogger, DoorLogger } from './DoorLogger';
@@ -260,6 +261,11 @@ debugLog(`[XIMProtocol] Updating port address from 0x${this.doorPort.toString(16
   /**
    * Check if waiting for line input from user
    */
+  /** The W door is reading a masked entry (AEW_USERFIELD SECRET): the input traces withhold content. */
+  isSecretInput(): boolean {
+    return isSecretInput(this.bbsSession);
+  }
+
   isWaitingForLineInput(): boolean {
     // JH_EF's editor too: its handler replies and resumes the door itself.
     return this.ioHandler.isWaitingForLineInput() || this.systemCommandsHandler.isEditingForCaller();

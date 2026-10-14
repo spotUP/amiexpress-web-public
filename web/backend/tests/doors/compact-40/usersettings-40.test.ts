@@ -3,6 +3,9 @@
  * emulator, as themec-40.test.ts proves THEMEC - and a typed password reaching
  * no log at runtime.
  *
+ * The fake user carries no `computer` or screen-type fields, so the Computer and
+ * Screen type rows are blank in the 80-column fixture; that is pinned as painted.
+ *
  * The 80-column fixture is COMMITTED, and a missing fixture FAILS the test: a
  * test that writes its own fixture on a first run pins whatever the door
  * painted that day. To regenerate it deliberately (and then read it before
@@ -41,7 +44,8 @@ const REPO = path.resolve(__dirname, '../../../../..');
 const DOOR = path.join(REPO, 'Doors', 'USERSETTINGS', 'usersettings');
 const EIGHTY = path.join(__dirname, 'fixtures', 'usersettings-80.ans');
 
-interface Step { at: number; keys: string }
+/** `at` is a time in ms, or 'idle': once the door has painted and then been quiet for a second (load-proof). */
+interface Step { at: number | 'idle'; keys: string }
 
 async function driveFull(cols: number, steps: Step[], rows = 25): Promise<{ ansi: string; user: any }> {
   const { AmigaDoorSession } = require('../../../src/amiga-emulation/AmigaDoorSession');
@@ -60,14 +64,22 @@ async function driveFull(cols: number, steps: Step[], rows = 25): Promise<{ ansi
       screenWidth: cols, screenHeight: rows,
     },
   });
-  const timers = steps.map(s => setTimeout(() => socket.emit('door:input', s.keys), s.at));
-  try { await session.start(); } finally { timers.forEach(clearTimeout); }
+  const timers: NodeJS.Timeout[] = steps.filter(st => st.at !== 'idle').map(st => setTimeout(() => socket.emit('door:input', st.keys), st.at as number));
+  for (const st of steps.filter(x => x.at === 'idle')) {
+    let seen = 0, quietSince = Date.now();
+    const poll = setInterval(() => {
+      if (socket.ansi.length !== seen) { seen = socket.ansi.length; quietSince = Date.now(); return; }
+      if (seen > 0 && Date.now() - quietSince >= 1000) { clearInterval(poll); socket.emit('door:input', st.keys); }
+    }, 200);
+    timers.push(poll as unknown as NodeJS.Timeout);
+  }
+  try { await session.start(); } finally { timers.forEach(t => { clearTimeout(t); clearInterval(t); }); }
   return { ansi: socket.ansi.join(''), user };
 }
 
 const drive = async (cols: number, steps: Step[], rows = 25): Promise<string> => (await driveFull(cols, steps, rows)).ansi;
 
-const QUIT: Step[] = [{ at: 5000, keys: 'q' }];
+const QUIT: Step[] = [{ at: 'idle', keys: 'q' }];
 
 describe('the W door on three screens', () => {
   jest.setTimeout(90000);
@@ -81,23 +93,45 @@ describe('the W door on three screens', () => {
   });
 
   (process.env.USERSETTINGS_WRITE_FIXTURE ? test : test.skip)('writes the fixture (deliberate, flagged)', async () => {
-    fs.writeFileSync(EIGHTY, beforeTeardown(await drive(80, QUIT)), 'latin1');
+    fs.writeFileSync(process.env.USERSETTINGS_WRITE_FIXTURE_TO || EIGHTY, beforeTeardown(await drive(80, QUIT)), 'latin1');
   });
 
-  test('40 columns: every row a C64 shows is 40 cells, the value under its label, no "?" glyph', async () => {
-    const rows = c64Rows(beforeTeardown(await drive(40, QUIT)));
-    expect(rows.every(r => r.length <= 40)).toBe(true);
+  test('40 columns: nothing is addressed off a C64 screen, the value sits under its label, no "?" glyph', async () => {
+    const ansi = beforeTeardown(await drive(40, QUIT));
+    // The door addressed nothing past row 25 or column 40 (c64Rows always yields 40-cell rows, so the
+    // raw cursor addressing is what can overflow).
+    const cups = [...ansi.matchAll(/\x1b\[(\d+);(\d+)H/g)];
+    expect(cups.length).toBeGreaterThan(0);
+    for (const m of cups) {
+      expect(Number(m[1])).toBeLessThanOrEqual(25);
+      expect(Number(m[2])).toBeLessThanOrEqual(40);
+    }
+    const rows = c64Rows(ansi);
     const label = rows.findIndex(r => r.includes('GROUP'));
     expect(label).toBeGreaterThanOrEqual(0);
     expect(rows[label + 1]).toContain('OLD TOWN');
     expect(rows.join('')).not.toContain('?');
   });
 
-  test('132 columns: the value column grows and nothing folds', async () => {
+  /*
+   * What "responsive" means for a 68K door on THIS board (see subs-40.test.ts): a 132-column ANSI caller is
+   * told the screen is 80 wide on purpose (BB_SCRWIDTH answers doorScreenWidth(), xim/bbs-info.ts), so the
+   * door cannot grow in WIDTH and must not paint past it. HEIGHT is not clamped: the list is sized from
+   * screen.rows, so a 40-row caller gets rows a 25-row caller never does - that is the growth asserted here.
+   */
+  test('132x40: the extra rows are used, and nothing is painted wider than the 80 the board reported', async () => {
     const ansi = beforeTeardown(await drive(132, QUIT, 40));
     expect(ansi).toContain('spot@example.com');
-    // Columns 130-132 are the screen; only past 132 is overflow (ruling C4).
+    const cups = [...ansi.matchAll(/\x1b\[(\d+);(\d+)H/g)];
+    expect(cups.length).toBeGreaterThan(0);
+    // A 25-row caller is never addressed below row 25; this one is, and never below 40.
+    const lastRow = Math.max(...cups.map(m => Number(m[1])));
+    expect(lastRow).toBeGreaterThan(25);
+    expect(lastRow).toBeLessThanOrEqual(40);
+    // Columns: nothing past 132 (ruling C4), and no painted run wider than the board's 80.
     expect(ansi).not.toMatch(/\x1b\[\d+;(13[3-9]|1[4-9]\d|[2-9]\d\d)H/);
+    const longestRun = Math.max(...ansi.split(/\x1b\[[0-9;?]*[A-Za-z]/).map(run => run.length));
+    expect(longestRun).toBeLessThanOrEqual(80);
   });
 
   /*
@@ -128,6 +162,7 @@ describe('the W door on three screens', () => {
     expect(ansi).toContain('AMiGA 500');        // the list drew
     expect(ansi).toContain('Up/Down: Move  Enter: Pick');
     expect(changeAccount).toHaveBeenCalledTimes(1);
+    expect(changeAccount).toHaveBeenCalledWith(expect.anything(), { computer: 'AMiGA 2000', computerIndex: 1 });
     expect(ansi).toMatch(/Computer\s+\[ 8\] AMiGA 2000/);
   });
 
@@ -190,15 +225,16 @@ describe('the W door on three screens', () => {
   });
 
   /*
-   * OPEN, found by W10 on 2026-10-14: the per-keystroke INPUT traces write what a
-   * caller types into ANY door to the console, a password included.
-   * door-input-router.ts:84 is an unconditional console.log (production stdout);
-   * the other two are debugLog (DEBUG_68K). The host has no signal that a door is
-   * reading a secret, so this needs a design ruling (see the W10 report). test.failing
-   * turns red the day the leak is closed, which is the cue to make it a plain test.
+   * Closed 2026-10-14 (W10 fix round 1): the per-keystroke input traces
+   * (door-input-router.ts console.log, AmigaDoorSession.ts onDoorInput, xim/io.ts
+   * queueInput) used to echo what a caller typed into ANY door, a password
+   * included. The W door now sends AEW_USERFIELD `SECRET 1` before a masked entry
+   * and `SECRET 0` after; while set, the three traces say how many bytes arrived.
    */
-  test.failing('KNOWN LEAK: the keystroke traces echo the typed password', async () => {
+  test('the keystroke traces withhold the password, say so, and still show a key typed outside the entry', async () => {
     const { traces } = await passwordSinks('Zebra7!x');
     expect(traces).not.toContain('Zebra7');
+    expect(traces).toMatch(/<9 bytes withheld>/);          // "Zebra7!x" + Enter, in each of the three traces
+    expect(traces).toContain('[DoorInput] "6"');            // the field jump typed before the entry is traced with content
   });
 });

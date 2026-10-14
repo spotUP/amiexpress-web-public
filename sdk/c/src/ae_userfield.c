@@ -138,6 +138,14 @@ int ae_uf_door_at(int index, ae_uf_door *out)
     return got == 0 ? 0 : ae_uf_parse_door(reply, out);
 }
 
+int ae_uf_secret(int on)
+{
+    char reply[8];
+    int got = ask(on ? "SECRET 1" : "SECRET 0", reply, (int)sizeof(reply));
+    if (got < 0) return AE_UF_GONE;
+    return strcmp(reply, "OK") == 0;
+}
+
 int ae_uf_resume_arm(int row)
 {
     char req[16], reply[8];

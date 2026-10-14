@@ -25,7 +25,6 @@ import 'reflect-metadata';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { EventEmitter } from 'events';
 
 const REPO = path.resolve(__dirname, '../../../../..');
 const SUBS = path.join(REPO, 'Doors', 'SUBS', 'subs');
@@ -37,6 +36,7 @@ process.env.BBS_ROOT = BOARD;
 process.env.BBS_DATA_DIR = BOARD;
 
 import { AnsiToPetsciiTransducer } from '@amiexpress/bbs-door-sdk/petscii';
+import { CaptureSocket, beforeTeardown, screenCodeToChar } from './door-capture';
 
 /** Eight public messages, all addressed to everyone, all with bodies. */
 const SENDERS = ['Spot', 'Phantasm', 'Rebel', 'Nark'];
@@ -71,15 +71,6 @@ function buildBoard() {
       `The body of message ${n}.\nA second line.\n`,
       'latin1',
     );
-  }
-}
-
-/** The socket a door is handed: everything it paints, in order. */
-class CaptureSocket extends EventEmitter {
-  readonly ansi: string[] = [];
-  emit(event: string, data?: any): boolean {
-    if (event === 'ansi-output') this.ansi.push(typeof data === 'string' ? data : String(data ?? ''));
-    return super.emit(event, data);
   }
 }
 
@@ -129,28 +120,7 @@ async function drive(cols: number, rows = 25): Promise<string> {
   return socket.ansi.join('');
 }
 
-/** A C64 screen code (bit 7 = reverse) back to the character it shows. */
-function screenCodeToChar(sc: number): string {
-  const c = sc & 0x7f;
-  if (c === 0) return '@';
-  if (c <= 0x1f) return String.fromCharCode(64 + c);
-  if (c <= 0x3f) return String.fromCharCode(c);
-  if (c >= 0x41 && c <= 0x5a) return String.fromCharCode(c);
-  return '·'; // a PETSCII graphic glyph
-}
-
-/**
- * The screen the CALLER saw, which is not the screen the session ends on: the
- * door clears on the way out, so transducing the whole capture models an empty
- * terminal however well it painted.
- */
-function beforeTeardown(ansi: string): string {
-  const clear = ansi.lastIndexOf('\x1b[2J');
-  if (clear <= 0) return ansi;
-  const tail = ansi.slice(clear);
-  return /^\x1b\[2J(\x1b\[H)?(\x1b\[\?25[hl])?\s*$/.test(tail) ? ansi.slice(0, clear) : ansi;
-}
-
+/** Whether the door really did leave the screen black behind it (the cut beforeTeardown makes, door-capture.ts, hides it). */
 function leavesScreenBlack(ansi: string): boolean {
   return /\x1b\[2J(\x1b\[H)?(\x1b\[\?25[hl])?\s*$/.test(ansi);
 }

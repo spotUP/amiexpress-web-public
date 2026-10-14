@@ -24,6 +24,7 @@ import {
   applyWField, isWFieldNumber, wFieldChoices, wFieldState, wFieldValue, W_FIELDS,
   type WFieldKind, type WFieldOutcome,
 } from '../../services/user-settings/w-fields';
+import { setSecretInput } from './secret-input';
 import { changeWPassword } from '../../services/user-settings/w-password';
 import { settingsDoorsFor } from '../../handlers/commands/w-settings-doors';
 import { getDoors } from '../../handlers/command-handler/dependency-injection';
@@ -125,6 +126,10 @@ export async function userFieldAnswer(request: string, session: BBSSession, sock
     }
     case 'DOORS':
       return doorRow(session, parseInt(rest, 10));
+    case 'SECRET':
+      // The door is about to read (1) or has finished reading (0) a masked entry: the input traces withhold content meanwhile.
+      setSecretInput(session, rest.trim() === '1');
+      return 'OK';
     case 'RESUME': {
       const row = parseInt(rest, 10);
       if (!Number.isInteger(row) || row < 0) return '';

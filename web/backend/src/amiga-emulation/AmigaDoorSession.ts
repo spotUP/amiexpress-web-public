@@ -26,6 +26,7 @@ import { SysopDebugUtil } from "../utils/sysop-debug.util.js";
 import { debugRegistry } from "../debug/DebugRegistry.js";
 import { parseInfoFile } from "../utils/amiga-command-parser.util";
 import { debugLog } from '../utils/debug-log';
+import { inputForTrace, setSecretInput } from './xim/secret-input';
 import { DOOR_CLI_ADDR, DOOR_CLI_ARGS_ADDR, assertMemoryMapFits } from "./memory-map";
 import { setEnvStat } from "../utils/acs.util";
 import { multicomManager, ENV_DOORS } from "../nodes/MulticomManager";
@@ -271,7 +272,7 @@ debugLog(
     // FIM live-input bug both happened).
     this.onDoorInput = (data: string) => {
 debugLog(
-        `[AmigaDoorSession] door:input event received: "${data}" isRunning=${this.isRunning}`
+        `[AmigaDoorSession] door:input event received: "${inputForTrace(this.config.bbsSession, data, (s) => s)}" isRunning=${this.isRunning}`
       );
 
       if (!this.isRunning || !this.sharedState.dosLibrary) {
@@ -1185,6 +1186,9 @@ console.error(`[AmigaDoorSession] Error deleting port ${this.doorPortName}:`, er
     multicomManager.unregisterEmulator(sessionId);
 
 debugLog(`[AmigaDoorSession] Cleared node ${nodeId} and unregistered MULTICOM for session ${sessionId}`);
+
+    // A door that died mid password entry must not leave the traces withholding for the next one.
+    setSecretInput(this.config.bbsSession, false);
 
     // Give the user their modem speed back before anything else can throw.
     this.restoreModemThrottle();
