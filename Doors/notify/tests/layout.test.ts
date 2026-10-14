@@ -1,6 +1,7 @@
 /** The pure rows: widths, summaries, parsing. */
 import assert from 'node:assert';
 import { DEFAULT_SETTINGS, NOTIFY_EVENTS } from '@amiexpress/bbs-door-sdk/formats/notify';
+import { doorEventDef } from '@amiexpress/bbs-door-sdk/formats/notify';
 import {
   CHANNELS, MARKER_W, buildEventRows, cellWord, columnPlan, compactSummary, deliveryRows, eventRowText, headerText, parseDigest, parseQuiet, prefsFromRows,
 } from '../layout';
@@ -38,8 +39,9 @@ export async function theColumnsGrowFromTheWidth(): Promise<void> {
 
 export async function theCompactSummaryReadsEPB(): Promise<void> {
   const reply = rows.find((r) => r.id === 'msg.reply')!;
-  assert.strictEqual(compactSummary(reply), 'E:Inst P:- B:Dig');
-  assert.strictEqual(strip(compactSummary(reply, 'email')), 'E:Inst P:- B:Dig');
+  assert.strictEqual(compactSummary(reply), ' E:Inst P:-    B:Dig  ');
+  assert.strictEqual(compactSummary(reply, 'email'), '[E:Inst]P:-    B:Dig  ');
+  assert.strictEqual(compactSummary(reply, 'board'), ' E:Inst P:-   [B:Dig ]');
 }
 
 export async function onlyChosenCellsAreKept(): Promise<void> {
@@ -124,4 +126,22 @@ export async function theSelectedRowIsOneBarNotCutByAColourTag(): Promise<void> 
       assert.ok(line.includes(`[${cellWord(rows[1].cells[c])}]`), `${w}: the active ${c} cell is not marked`);
     }
   }
+}
+
+export async function theWorstCompactRowFitsFortyColumnsAndNeverWraps(): Promise<void> {
+  const long = doorEventDef('door.x.update', 'A door event with a very long label indeed', 'About it')!;
+  const events = [...NOTIFY_EVENTS, { ...long, channels: [...long.channels] }];
+  const worst = buildEventRows(events, Object.fromEntries(events.map((e) => [e.id, { email: 'instant', push: 'instant', board: 'instant' }])), { email: true, push: true, board: true });
+  for (const w of [36, 40, 60]) {
+    const plan = columnPlan(w);
+    for (const r of worst) for (const active of [undefined, ...CHANNELS] as const) {
+      const line = eventRowText(r, plan, active);
+      assert.ok(MARKER_W + line.length <= w - 1, `${w}: ${r.id} is ${MARKER_W + line.length} wide with the marker: ${line}`);
+    }
+  }
+}
+
+export async function theCompactSelectedRowCarriesNoTagThatCutsItsHighlight(): Promise<void> {
+  const plan = columnPlan(40);
+  for (const c of CHANNELS) assert.ok(!/\{[^}]*\}/.test(eventRowText(rows[1], plan, c)), `active ${c} carries a tag`);
 }

@@ -127,10 +127,10 @@ export async function aCursorMoveAndACellChangeRepaintOnlyTheirRows(): Promise<v
 export async function at40OneEventPerRowWithACompactSummary(): Promise<void> {
   const h = await open(40, 25);
   try {
-    for (const r of h.door.rows()) assert.ok(strip(r).length <= 39, `row too wide: ${strip(r)}`);
-    assert.match(find(h.door, 'Reply to my message'), /E:Off P:- B:Off$/);
+    for (const r of h.door.rows()) assert.ok(strip(r).length + 2 <= 39, `row too wide with the list marker: ${strip(r)}`);
+    assert.match(find(h.door, 'Reply to'), /E:Off\s+P:-\s+B:Off\s*$/);
     await h.key(DOWN); await h.key(' ');
-    assert.match(find(h.door, 'Reply to my message'), /E:Inst P:- B:Off$/);
+    assert.match(find(h.door, 'Reply to'), /\[E:Inst\]\s*P:-\s+B:Off\s*$/);
     await h.key('\r');
     assert.strictEqual(h.door.view(), 'detail');
     const detail = h.door.rows().map(strip);
@@ -239,7 +239,7 @@ export async function aPushCellCanBeSetOnAWebSessionAndTelnetStillSavesOtherCell
 }
 
 export async function theSelectedRowCarriesNoTagThatCutsItsHighlight(): Promise<void> {
-  for (const [w, h2] of [[80, 25], [132, 40]] as const) {
+  for (const [w, h2] of [[40, 25], [80, 25], [132, 40]] as const) {
     const h = await open(w, h2);
     try {
       await h.key(DOWN);

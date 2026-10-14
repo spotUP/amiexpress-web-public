@@ -81,12 +81,19 @@ export const cellWord = (cell: Cell): string => (cell === 'na' ? 'Unavailable' :
 
 const SHORT: Record<NotifyMode, string> = { instant: 'Inst', digest: 'Dig', off: 'Off' };
 
-/** `E:Inst P:Off B:Dig`; a channel that cannot be used shows `-`. */
+/** The widest token (`E:Inst`); every token is padded to it so the three never move. */
+const TOKEN_W = 6;
+/** Three tokens and the four slots around and between them, which hold the active token's `[` and `]`. */
+export const COMPACT_SUMMARY_W = 3 * TOKEN_W + CHANNELS.length + 1;
+
+/** ` E:Inst  P:-    B:Dig `; the active token reads `[E:Inst]`. A channel that cannot be used shows `-`. */
 export function compactSummary(row: EventRow, active?: NotifyChannel): string {
-  return CHANNELS.map((c) => {
-    const tok = `${CHANNEL_LETTER[c]}:${row.cells[c] === 'na' ? '-' : SHORT[row.cells[c] as NotifyMode]}`;
-    return c === active ? `{inverse}${tok}{/inverse}` : tok;
-  }).join(' ');
+  let out = '';
+  CHANNELS.forEach((c, i) => {
+    const slot = c === active ? '[' : CHANNELS[i - 1] !== undefined && CHANNELS[i - 1] === active ? ']' : ' ';
+    out += slot + `${CHANNEL_LETTER[c]}:${row.cells[c] === 'na' ? '-' : SHORT[row.cells[c] as NotifyMode]}`.padEnd(TOKEN_W);
+  });
+  return out + (active === CHANNELS[CHANNELS.length - 1] ? ']' : ' ');
 }
 
 // ---------------------------------------------------------------- geometry
@@ -108,7 +115,8 @@ export interface ColumnPlan {
 
 /** Every width the Events view uses, from the screen width alone. */
 export function columnPlan(width: number): ColumnPlan {
-  if (width < 80) return { compact: true, nameW: Math.max(8, width - 1 - 1 - 18 - 1), cellW: 0, descW: 0 };
+  // The list's marker, a lead blank, the name, the summary, and the scrollbar column: nothing wraps.
+  if (width < 80) return { compact: true, nameW: Math.max(8, width - 1 - MARKER_W - 1 - COMPACT_SUMMARY_W), cellW: 0, descW: 0 };
   const grow = width >= 100;
   const cellW = WIDEST_WORD + (grow ? 4 : 2);
   const nameW = grow ? 36 : 34;
@@ -132,7 +140,7 @@ function cellText(word: string, plan: ColumnPlan, active: boolean): string {
 
 /** One Events row. `active` is the channel the cursor is on, drawn `[Word]`. */
 export function eventRowText(row: EventRow, plan: ColumnPlan, active?: NotifyChannel): string {
-  if (plan.compact) return ` ${clip(row.label, plan.nameW).padEnd(plan.nameW)} ${compactSummary(row, active)}`;
+  if (plan.compact) return ` ${clip(row.label, plan.nameW).padEnd(plan.nameW)}${compactSummary(row, active)}`;
   const cells = CHANNELS.map((c) => cellText(cellWord(row.cells[c]), plan, c === active)).join('');
   const desc = plan.descW > 0 ? ` ${clip(row.blurb, plan.descW)}` : '';
   return ` ${clip(row.label, plan.nameW).padEnd(plan.nameW)}${cells}${desc}`;

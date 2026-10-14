@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.HELP_LINES = exports.COMPACT_HINTS = exports.HINTS = exports.digestWords = exports.quietWords = exports.DAYS = exports.MARKER_W = exports.cellWord = exports.blurbOf = exports.CHANNEL_WORD = exports.CHANNELS = void 0;
+exports.HELP_LINES = exports.COMPACT_HINTS = exports.HINTS = exports.digestWords = exports.quietWords = exports.DAYS = exports.MARKER_W = exports.COMPACT_SUMMARY_W = exports.cellWord = exports.blurbOf = exports.CHANNEL_WORD = exports.CHANNELS = void 0;
 exports.clip = clip;
 exports.buildEventRows = buildEventRows;
 exports.prefsFromRows = prefsFromRows;
@@ -85,12 +85,18 @@ function prefsFromRows(rows) {
 const cellWord = (cell) => (cell === 'na' ? 'Unavailable' : (0, notify_1.modeWord)(cell));
 exports.cellWord = cellWord;
 const SHORT = { instant: 'Inst', digest: 'Dig', off: 'Off' };
-/** `E:Inst P:Off B:Dig`; a channel that cannot be used shows `-`. */
+/** The widest token (`E:Inst`); every token is padded to it so the three never move. */
+const TOKEN_W = 6;
+/** Three tokens and the four slots around and between them, which hold the active token's `[` and `]`. */
+exports.COMPACT_SUMMARY_W = 3 * TOKEN_W + exports.CHANNELS.length + 1;
+/** ` E:Inst  P:-    B:Dig `; the active token reads `[E:Inst]`. A channel that cannot be used shows `-`. */
 function compactSummary(row, active) {
-    return exports.CHANNELS.map((c) => {
-        const tok = `${CHANNEL_LETTER[c]}:${row.cells[c] === 'na' ? '-' : SHORT[row.cells[c]]}`;
-        return c === active ? `{inverse}${tok}{/inverse}` : tok;
-    }).join(' ');
+    let out = '';
+    exports.CHANNELS.forEach((c, i) => {
+        const slot = c === active ? '[' : exports.CHANNELS[i - 1] !== undefined && exports.CHANNELS[i - 1] === active ? ']' : ' ';
+        out += slot + `${CHANNEL_LETTER[c]}:${row.cells[c] === 'na' ? '-' : SHORT[row.cells[c]]}`.padEnd(TOKEN_W);
+    });
+    return out + (active === exports.CHANNELS[exports.CHANNELS.length - 1] ? ']' : ' ');
 }
 // ---------------------------------------------------------------- geometry
 /** The list draws a two character selection marker (`>>`, `> `, blank) in front of every item. */
@@ -99,8 +105,9 @@ exports.MARKER_W = 2;
 const WIDEST_WORD = (0, exports.cellWord)('na').length;
 /** Every width the Events view uses, from the screen width alone. */
 function columnPlan(width) {
+    // The list's marker, a lead blank, the name, the summary, and the scrollbar column: nothing wraps.
     if (width < 80)
-        return { compact: true, nameW: Math.max(8, width - 1 - 1 - 18 - 1), cellW: 0, descW: 0 };
+        return { compact: true, nameW: Math.max(8, width - 1 - exports.MARKER_W - 1 - exports.COMPACT_SUMMARY_W), cellW: 0, descW: 0 };
     const grow = width >= 100;
     const cellW = WIDEST_WORD + (grow ? 4 : 2);
     const nameW = grow ? 36 : 34;
@@ -122,7 +129,7 @@ function cellText(word, plan, active) {
 /** One Events row. `active` is the channel the cursor is on, drawn `[Word]`. */
 function eventRowText(row, plan, active) {
     if (plan.compact)
-        return ` ${clip(row.label, plan.nameW).padEnd(plan.nameW)} ${compactSummary(row, active)}`;
+        return ` ${clip(row.label, plan.nameW).padEnd(plan.nameW)}${compactSummary(row, active)}`;
     const cells = exports.CHANNELS.map((c) => cellText((0, exports.cellWord)(row.cells[c]), plan, c === active)).join('');
     const desc = plan.descW > 0 ? ` ${clip(row.blurb, plan.descW)}` : '';
     return ` ${clip(row.label, plan.nameW).padEnd(plan.nameW)}${cells}${desc}`;

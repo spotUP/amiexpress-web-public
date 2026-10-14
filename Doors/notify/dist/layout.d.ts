@@ -19,7 +19,9 @@ export declare function buildEventRows(events: readonly NotifyEventDef[], prefs:
 /** The prefs that follow from the rows: only delivering and explicit cells are kept. */
 export declare function prefsFromRows(rows: readonly EventRow[]): NotifyPrefs;
 export declare const cellWord: (cell: Cell) => string;
-/** `E:Inst P:Off B:Dig`; a channel that cannot be used shows `-`. */
+/** Three tokens and the four slots around and between them, which hold the active token's `[` and `]`. */
+export declare const COMPACT_SUMMARY_W: number;
+/** ` E:Inst  P:-    B:Dig `; the active token reads `[E:Inst]`. A channel that cannot be used shows `-`. */
 export declare function compactSummary(row: EventRow, active?: NotifyChannel): string;
 /** The list draws a two character selection marker (`>>`, `> `, blank) in front of every item. */
 export declare const MARKER_W = 2;
