@@ -841,7 +841,7 @@ console.error('[Operator Chat] ntfy.sh notification failed:', error);
     } = require('../utils/web-push.util');
 
     if (isWebPushEnabled()) {
-      const subscriptions = repository.getAllPushSubscriptions();
+      const subscriptions = repository.getAllPushSubscriptions('operator');
 
       if (subscriptions.length > 0) {
         const authUrl = operatorChatUrl(page.token);

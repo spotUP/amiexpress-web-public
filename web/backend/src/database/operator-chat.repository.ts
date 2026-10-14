@@ -255,6 +255,14 @@ export class OperatorChatRepository {
       )
     `);
 
+    // Whose page a push subscription is for. 'operator' rows are the sysop's
+    // browsers and receive operator pages; 'notify' rows are callers' browsers
+    // (NOTIFY door) and must never receive one - getAllPushSubscriptions would
+    // otherwise hand every caller every sysop page.
+    try {
+      this.db.exec(`ALTER TABLE operator_push_subscriptions ADD COLUMN purpose TEXT NOT NULL DEFAULT 'operator'`);
+    } catch (e) { /* Column already exists */ }
+
     // Co-sysop personas the SYSOP wrote (s.9) - slug/handle are unique across presets + board together.
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS operator_chat_personas (
@@ -776,10 +784,11 @@ ntfyTopic: row.ntfy_topic || '',
   ): void {
     const now = Date.now();
     this.db.prepare(`
-      INSERT INTO operator_push_subscriptions (sysop_id, endpoint, p256dh, auth, user_agent, created_at)
-      VALUES (?, ?, ?, ?, ?, ?)
+      INSERT INTO operator_push_subscriptions (sysop_id, endpoint, p256dh, auth, user_agent, created_at, purpose)
+      VALUES (?, ?, ?, ?, ?, ?, 'operator')
       ON CONFLICT(endpoint) DO UPDATE SET
         sysop_id = excluded.sysop_id,
+        purpose = 'operator',
         p256dh = excluded.p256dh,
         auth = excluded.auth,
         user_agent = excluded.user_agent
@@ -797,18 +806,19 @@ ntfyTopic: row.ntfy_topic || '',
    * Remove all push subscriptions for a sysop
    */
   removePushSubscriptionsForSysop(sysopId: string): void {
-    this.db.prepare('DELETE FROM operator_push_subscriptions WHERE sysop_id = ?').run(sysopId);
+    this.db.prepare('DELETE FROM operator_push_subscriptions WHERE sysop_id = ? AND purpose = \'operator\'').run(sysopId);
   }
 
   /**
-   * Get all push subscriptions (for sending notifications to all sysops)
+   * Get the push subscriptions of one purpose. The operator page asks for
+   * 'operator' and nothing else: a caller's 'notify' browser is not a sysop.
    */
-  getAllPushSubscriptions(): Array<{
+  getAllPushSubscriptions(purpose: 'operator' | 'notify'): Array<{
     sysopId: string;
     endpoint: string;
     keys: { p256dh: string; auth: string };
   }> {
-    const rows = this.db.prepare('SELECT * FROM operator_push_subscriptions').all() as any[];
+    const rows = this.db.prepare('SELECT * FROM operator_push_subscriptions WHERE purpose = ?').all(purpose) as any[];
     return rows.map(row => ({
       sysopId: row.sysop_id,
       endpoint: row.endpoint,
@@ -827,7 +837,7 @@ ntfyTopic: row.ntfy_topic || '',
     keys: { p256dh: string; auth: string };
   }> {
     const rows = this.db.prepare(
-      'SELECT * FROM operator_push_subscriptions WHERE sysop_id = ?'
+      'SELECT * FROM operator_push_subscriptions WHERE sysop_id = ? AND purpose = \'operator\''
     ).all(sysopId) as any[];
     return rows.map(row => ({
       endpoint: row.endpoint,
@@ -852,7 +862,7 @@ ntfyTopic: row.ntfy_topic || '',
    */
   hasPushSubscriptions(sysopId: string): boolean {
     const row = this.db.prepare(
-      'SELECT COUNT(*) as count FROM operator_push_subscriptions WHERE sysop_id = ?'
+      'SELECT COUNT(*) as count FROM operator_push_subscriptions WHERE sysop_id = ? AND purpose = \'operator\''
     ).get(sysopId) as any;
     return row.count > 0;
   }

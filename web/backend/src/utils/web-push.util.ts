@@ -113,16 +113,22 @@ export interface PushNotificationPayload {
 }
 
 /**
- * Send a push notification to a single subscription
- * Returns true if sent successfully, false otherwise
+ * One send, and WHY it failed. `gone` is the push service saying the
+ * subscription no longer exists (404/410): the only failure that proves the
+ * browser is unreachable for good. Any other failure may be a passing outage.
  */
-export async function sendPushNotification(
+export interface PushSendOutcome {
+  success: boolean;
+  gone: boolean;
+}
+
+export async function sendPushNotificationDetailed(
   subscription: PushSubscription,
   payload: PushNotificationPayload
-): Promise<boolean> {
+): Promise<PushSendOutcome> {
   if (!webPushConfigured) {
 console.warn('[Web Push] Not configured - cannot send notification');
-    return false;
+    return { success: false, gone: false };
   }
 
   try {
@@ -138,30 +144,42 @@ console.warn('[Web Push] Not configured - cannot send notification');
       }
     );
 console.log('[Web Push] Notification sent successfully');
-    return true;
+    return { success: true, gone: false };
   } catch (error: any) {
     // Handle expired/invalid subscriptions
     if (error.statusCode === 410 || error.statusCode === 404) {
 console.log('[Web Push] Subscription expired or invalid:', subscription.endpoint);
-      return false;
+      return { success: false, gone: true };
     }
 console.error('[Web Push] Failed to send notification:', error);
-    return false;
+    return { success: false, gone: false };
   }
 }
 
 /**
+ * Send a push notification to a single subscription
+ * Returns true if sent successfully, false otherwise
+ */
+export async function sendPushNotification(
+  subscription: PushSubscription,
+  payload: PushNotificationPayload
+): Promise<boolean> {
+  return (await sendPushNotificationDetailed(subscription, payload)).success;
+}
+
+/**
  * Send push notifications to multiple subscriptions
- * Returns array of results (subscription + success boolean)
+ * Returns array of results (subscription + success boolean; `gone` when the
+ * push service reported the subscription expired)
  */
 export async function sendPushNotifications(
   subscriptions: PushSubscription[],
   payload: PushNotificationPayload
-): Promise<Array<{ subscription: PushSubscription; success: boolean }>> {
+): Promise<Array<{ subscription: PushSubscription; success: boolean; gone: boolean }>> {
   const results = await Promise.all(
     subscriptions.map(async (subscription) => ({
       subscription,
-      success: await sendPushNotification(subscription, payload)
+      ...(await sendPushNotificationDetailed(subscription, payload))
     }))
   );
 

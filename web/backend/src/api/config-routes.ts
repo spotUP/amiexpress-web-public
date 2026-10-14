@@ -3273,7 +3273,7 @@ console.log('[Push] Removed subscription');
       }
 
       const operatorChatRepo = database.getOperatorChatRepository();
-      const subscriptions = operatorChatRepo.getAllPushSubscriptions();
+      const subscriptions = operatorChatRepo.getAllPushSubscriptions('operator');
 
       if (subscriptions.length === 0) {
         return sendResponse(res, {

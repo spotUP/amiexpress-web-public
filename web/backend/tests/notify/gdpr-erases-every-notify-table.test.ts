@@ -9,6 +9,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { eraseUserData } from '../../src/services/gdpr-erasure.service';
+import { OperatorChatRepository } from '../../src/database/operator-chat.repository';
 import { erasePushSubscriptions } from '../../src/notify/repository';
 import { waitForTestDb } from './helpers';
 
@@ -59,7 +60,17 @@ describe('GDPR erasure and the notification tables', () => {
     expect(result.notifyRowsErased).toBe(SCHEMA_TABLES.length);
   });
 
-  it('N5 seam: the push-subscription erase exists and is a no-op until the purpose column lands', () => {
-    expect(erasePushSubscriptions(undefined as any, 'x')).toBe(0);
+  it('erasing a caller removes their notify push browsers, and leaves a sysop\'s browser and other callers alone', async () => {
+    const raw = (await waitForTestDb()).db;
+    new OperatorChatRepository(raw);
+    raw.exec("DELETE FROM operator_push_subscriptions");
+    const ins = raw.prepare("INSERT INTO operator_push_subscriptions (sysop_id, endpoint, p256dh, auth, created_at, purpose) VALUES (?, ?, 'p', 'a', 1, ?)");
+    ins.run('gone-user', 'https://push.example/1', 'notify');
+    ins.run('gone-user', 'https://push.example/2', 'notify');
+    ins.run('gone-user', 'https://push.example/sysop', 'operator');
+    ins.run('someone-else', 'https://push.example/3', 'notify');
+    expect(erasePushSubscriptions(raw, 'gone-user')).toBe(2);
+    const left = raw.prepare('SELECT endpoint FROM operator_push_subscriptions ORDER BY endpoint').all().map((r: any) => r.endpoint);
+    expect(left).toEqual(['https://push.example/3', 'https://push.example/sysop']);
   });
 });

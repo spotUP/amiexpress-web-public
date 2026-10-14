@@ -355,11 +355,50 @@ export function eraseUserNotifyData(db: Db, userId: string): number {
 }
 
 /**
- * N5 SEAM: a caller's browser push subscriptions for notifications are rows of
- * the push table with purpose = 'notify' (the column lands in N5). Until then
- * there are none to erase. N5 replaces this body with the DELETE and extends
- * the erasure test to insert one.
+ * Callers' browsers for notifications are rows of the sysop-page push table
+ * (`operator_push_subscriptions`) with purpose = 'notify'; `sysop_id` holds the
+ * caller's user id for them. The operator page asks for purpose = 'operator'
+ * only (OperatorChatRepository.getAllPushSubscriptions), so a caller's browser
+ * is never sent a sysop page.
  */
-export function erasePushSubscriptions(_db: Db, _userId: string): number {
-  return 0;
+export interface PushSubscriptionRow { endpoint: string; keys: { p256dh: string; auth: string } }
+
+const hasPushTable = (db: Db): boolean =>
+  !!db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'operator_push_subscriptions'").get();
+
+/**
+ * Save (or refresh) a caller's browser. An endpoint already registered as a
+ * sysop's ('operator') is NOT taken over: the row stays the sysop's and this
+ * returns false. The same browser re-subscribing as the same caller refreshes
+ * its keys; a different caller on the same browser takes the row over, because
+ * one browser endpoint is one person at a time.
+ */
+export function saveNotifyPush(db: Db, userId: string, sub: PushSubscriptionRow, userAgent: string | null, now: number): boolean {
+  return db.prepare(`
+    INSERT INTO operator_push_subscriptions (sysop_id, endpoint, p256dh, auth, user_agent, created_at, purpose)
+    VALUES (?, ?, ?, ?, ?, ?, 'notify')
+    ON CONFLICT(endpoint) DO UPDATE SET
+      sysop_id = excluded.sysop_id, p256dh = excluded.p256dh, auth = excluded.auth, user_agent = excluded.user_agent
+    WHERE operator_push_subscriptions.purpose = 'notify'
+  `).run(userId, sub.endpoint, sub.keys.p256dh, sub.keys.auth, userAgent, now).changes > 0;
+}
+
+export function notifyPushOf(db: Db, userId: string): PushSubscriptionRow[] {
+  return (db.prepare("SELECT endpoint, p256dh, auth FROM operator_push_subscriptions WHERE purpose = 'notify' AND sysop_id = ?").all(userId) as any[])
+    .map((r) => ({ endpoint: r.endpoint, keys: { p256dh: r.p256dh, auth: r.auth } }));
+}
+
+export function notifyPushCount(db: Db, userId: string): number {
+  return (db.prepare("SELECT COUNT(*) AS n FROM operator_push_subscriptions WHERE purpose = 'notify' AND sysop_id = ?").get(userId) as { n: number }).n;
+}
+
+/** Drop one notify browser (the push service said it is gone). Never touches a sysop's row. */
+export function removeNotifyPushEndpoint(db: Db, endpoint: string): void {
+  db.prepare("DELETE FROM operator_push_subscriptions WHERE purpose = 'notify' AND endpoint = ?").run(endpoint);
+}
+
+/** Drop every notify browser of one caller: Disable, and GDPR erasure. */
+export function erasePushSubscriptions(db: Db, userId: string): number {
+  if (!hasPushTable(db)) return 0;
+  return db.prepare("DELETE FROM operator_push_subscriptions WHERE purpose = 'notify' AND sysop_id = ?").run(userId).changes;
 }
