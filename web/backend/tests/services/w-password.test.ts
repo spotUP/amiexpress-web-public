@@ -32,3 +32,9 @@ test('a good password is hashed and pwdLastUpdated is set (26025-26026)', async 
   expect(bcrypt.compareSync('Abc123!x', s.user.passwordHash)).toBe(true);
   expect(s.user.pwdLastUpdated).toBeGreaterThanOrEqual(before);
 });
+test('spaces around a password are part of it, as getPass2 keeps them (1540-1544)', async () => {
+  const s = caller();
+  expect(await changeWPassword(s, ' Abc123!x ', ' Abc123!x ')).toEqual({ kind: 'stored', value: 'ENCRYPTED' });
+  expect(bcrypt.compareSync(' Abc123!x ', s.user.passwordHash)).toBe(true);
+  expect(bcrypt.compareSync('Abc123!x', s.user.passwordHash)).toBe(false);
+});

@@ -215,3 +215,17 @@ describe('the list the caller was shown wins', () => {
     expect(await applyWField(s, 8, '3', { choices: ['One', 'Two'] })).toEqual({ kind: 'again' });
   });
 });
+
+describe('edge spaces: one rule for the internal W and the W door (applyWField)', () => {
+  test.each([[1, 'email', '  me@x.se  ', 'me@x.se'], [4, 'location', '  Oslo ', 'Oslo'], [5, 'phone', ' 555-0000  ', '555-0000']] as const)(
+    'field %i loses the spaces around what was typed', async (n, key, typed, stored) => {
+      const s = caller();
+      expect(await applyWField(s, n, typed)).toEqual({ kind: 'stored', value: stored });
+      expect(s.user[key]).toBe(stored);
+    });
+  test('spaces alone are no input: nothing is stored', async () => {
+    const s = caller();
+    expect(await applyWField(s, 4, '   ')).toEqual({ kind: 'unchanged' });
+    expect(s.user.location).toBe('Old Town');
+  });
+});

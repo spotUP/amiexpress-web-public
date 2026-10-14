@@ -238,6 +238,10 @@ export async function applyWField(
   opts: ApplyWFieldOptions = {},
 ): Promise<WFieldOutcome> {
   if (wFieldState(session, n) !== 'editable') return { kind: 'denied' };
+  // The one place a typed value loses its edge spaces, for the internal W and the W door alike.
+  // WEB_: express.e:25874-26019 keeps the line as typed; the board has always trimmed these
+  // fields. Passwords are not here (6 is denied, changeWPassword keeps them as getPass2 does).
+  input = input.trim();
   const u = session.user;
   switch (n) {
     case 0: case 2: case 3: return applyName(session, n, input, opts);

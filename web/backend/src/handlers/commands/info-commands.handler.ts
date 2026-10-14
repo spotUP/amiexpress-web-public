@@ -801,16 +801,15 @@ async function wEditAName(socket: any, session: BBSSession, row: keyof typeof W_
  * Handle edit email input - express.e:25874-25882
  */
 export async function handleWEditEmailInput(socket: any, session: BBSSession, input: string): Promise<void> {
-  const trimmed = input.trim();
 
   // Empty = cancel
-  if (trimmed === '') {
+  if (input === '') {
     _displayWCommandMenu(socket, session);
     session.subState = LoggedOnSubState.W_OPTION_SELECT;
     return;
   }
 
-  await applyWField(session, 1, trimmed);
+  await applyWField(session, 1, input);
 
   _displayWCommandMenu(socket, session);
   session.subState = LoggedOnSubState.W_OPTION_SELECT;
@@ -820,16 +819,15 @@ export async function handleWEditEmailInput(socket: any, session: BBSSession, in
  * Handle edit location input - express.e:25927-25935
  */
 export async function handleWEditLocationInput(socket: any, session: BBSSession, input: string): Promise<void> {
-  const trimmed = input.trim();
 
   // Empty = cancel
-  if (trimmed === '') {
+  if (input === '') {
     _displayWCommandMenu(socket, session);
     session.subState = LoggedOnSubState.W_OPTION_SELECT;
     return;
   }
 
-  await applyWField(session, 4, trimmed);
+  await applyWField(session, 4, input);
 
   _displayWCommandMenu(socket, session);
   session.subState = LoggedOnSubState.W_OPTION_SELECT;
@@ -839,16 +837,15 @@ export async function handleWEditLocationInput(socket: any, session: BBSSession,
  * Handle edit phone input - express.e:25936-25944
  */
 export async function handleWEditPhoneInput(socket: any, session: BBSSession, input: string): Promise<void> {
-  const trimmed = input.trim();
 
   // Empty = cancel
-  if (trimmed === '') {
+  if (input === '') {
     _displayWCommandMenu(socket, session);
     session.subState = LoggedOnSubState.W_OPTION_SELECT;
     return;
   }
 
-  await applyWField(session, 5, trimmed);
+  await applyWField(session, 5, input);
 
   _displayWCommandMenu(socket, session);
   session.subState = LoggedOnSubState.W_OPTION_SELECT;
@@ -858,17 +855,16 @@ export async function handleWEditPhoneInput(socket: any, session: BBSSession, in
  * Handle edit password input - express.e:25945-25975
  */
 export function handleWEditPasswordInput(socket: any, session: BBSSession, input: string): void {
-  const trimmed = input.trim();
 
   // Empty = cancel
-  if (trimmed === '') {
+  if (input === '') {
     _displayWCommandMenu(socket, session);
     session.subState = LoggedOnSubState.W_OPTION_SELECT;
     return;
   }
 
   // Store password temporarily and ask for confirmation
-  session.tempData = { newPassword: trimmed };
+  session.tempData = { newPassword: input };
   // express.e:26008 - straight after getPass2's own line break.
   emitText(socket, 'Reenter New Password: ');
   session.subState = LoggedOnSubState.W_EDIT_PASSWORD_CONFIRM;
@@ -878,11 +874,10 @@ export function handleWEditPasswordInput(socket: any, session: BBSSession, input
  * Handle password confirmation input - express.e:25953-25974
  */
 export async function handleWEditPasswordConfirmInput(socket: any, session: BBSSession, input: string): Promise<void> {
-  const trimmed = input.trim();
   const originalPassword = session.tempData?.newPassword || '';
 
   // express.e:26009-26010: IF(StrLen(str2)=0) THEN JUMP cant — silent cancel, no message
-  if (trimmed === '') {
+  if (input === '') {
     _displayWCommandMenu(socket, session);
     session.subState = LoggedOnSubState.W_OPTION_SELECT;
     session.tempData = {};
@@ -890,7 +885,7 @@ export async function handleWEditPasswordConfirmInput(socket: any, session: BBSS
   }
 
   // express.e:25995-26026 (strength 908-933, setNewPassword 935, pwdLastUpdated 26026), once in w-password.ts.
-  const outcome = await changeWPassword(session, originalPassword, trimmed);
+  const outcome = await changeWPassword(session, originalPassword, input);
   if (outcome.kind === 'refused') emitText(socket, outcome.refusal);
 
   _displayWCommandMenu(socket, session);
@@ -902,10 +897,9 @@ export async function handleWEditPasswordConfirmInput(socket: any, session: BBSS
  * Handle edit lines per screen input - express.e:25976-25980
  */
 export async function handleWEditLinesInput(socket: any, session: BBSSession, input: string): Promise<void> {
-  const trimmed = input.trim();
 
   // express.e:11310: an empty answer changes nothing.
-  if (trimmed === '') {
+  if (input === '') {
     _displayWCommandMenu(socket, session);
     session.subState = LoggedOnSubState.W_OPTION_SELECT;
     return;
@@ -913,7 +907,7 @@ export async function handleWEditLinesInput(socket: any, session: BBSSession, in
 
   // Val (11311): leading digits, else 0. Out of 0-255 the test fails and
   // case 7's REPEAT runs it again - no error text (11313, 26034-26037).
-  const outcome = await applyWField(session, 7, trimmed);
+  const outcome = await applyWField(session, 7, input);
   if (outcome.kind === 'again') {
     emitText(socket, linesCountdown() + LINES_PROMPT);
     return;
@@ -971,16 +965,15 @@ async function _displayScreenTypeList(socket: any, session: BBSSession): Promise
 export async function handleWEditComputerInput(socket: any, session: BBSSession, input: string): Promise<void> {
   // express.e:11336-11345 (chooseComputer jLoop6)
   // Accepts a 1-based number from the list, or empty to cancel
-  const trimmed = input.trim();
 
-  if (trimmed === '') {
+  if (input === '') {
     // Empty = cancel - express.e:11340 IF(StrLen(tempStr)=0) THEN RETURN RESULT_SUCCESS
     _displayWCommandMenu(socket, session);
     session.subState = LoggedOnSubState.W_OPTION_SELECT;
     return;
   }
 
-  const outcome = await applyWField(session, 8, trimmed, { choices: session.tempData?.computerChoices });
+  const outcome = await applyWField(session, 8, input, { choices: session.tempData?.computerChoices });
   if (outcome.kind === 'again') {
     // Invalid - re-prompt loop (express.e:11342 IF((stat <= 0) OR (stat > computerTypes.count())) THEN JUMP jLoop6)
     await _displayComputerList(socket, session);
@@ -1001,16 +994,15 @@ export async function handleWEditComputerInput(socket: any, session: BBSSession,
 export async function handleWEditScreentypeInput(socket: any, session: BBSSession, input: string): Promise<void> {
   // express.e:11358-11367 (chooseScreenType stLoop5)
   // Accepts a 1-based number from the list, or empty to cancel
-  const trimmed = input.trim();
 
-  if (trimmed === '') {
+  if (input === '') {
     // Empty = cancel - express.e:11362 IF(StrLen(tempStr)=0) THEN RETURN RESULT_SUCCESS
     _displayWCommandMenu(socket, session);
     session.subState = LoggedOnSubState.W_OPTION_SELECT;
     return;
   }
 
-  const outcome = await applyWField(session, 9, trimmed, { choices: session.tempData?.screenTypeChoices });
+  const outcome = await applyWField(session, 9, input, { choices: session.tempData?.screenTypeChoices });
   if (outcome.kind === 'again') {
     // Invalid - re-prompt loop (express.e:11364 IF((stat <= 0) OR (stat > screenTypeTitle.count())) THEN JUMP stLoop5)
     await _displayScreenTypeList(socket, session);
@@ -1029,17 +1021,16 @@ export async function handleWEditScreentypeInput(socket: any, session: BBSSessio
  * Handle edit transfer protocol input - express.e:25995-26002
  */
 export async function handleWEditProtocolInput(socket: any, session: BBSSession, input: string): Promise<void> {
-  const trimmed = input.trim();
 
   // Empty = cancel
-  if (trimmed === '') {
+  if (input === '') {
     _displayWCommandMenu(socket, session);
     session.subState = LoggedOnSubState.W_OPTION_SELECT;
     return;
   }
 
   // express.e:11383-11386: Val; outside 1..count asks again, no text.
-  const outcome = await applyWField(session, 11, trimmed);
+  const outcome = await applyWField(session, 11, input);
   if (outcome.kind === 'again') {
     emitText(socket, CHOOSE_PROTOCOL);
     return;

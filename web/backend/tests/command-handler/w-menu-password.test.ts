@@ -33,3 +33,14 @@ test('W 6 sets pwdLastUpdated, as express.e:26026 does', async () => {
   expect(session.user.pwdLastUpdated).toBeGreaterThan(0);
   expect(bcrypt.compareSync('Abc123!x', session.user.passwordHash)).toBe(true);
 });
+
+test('the internal W keeps spaces around a password, exactly as the door path does (getPass2 does not trim)', async () => {
+  const socket: any = { emit: jest.fn() };
+  const session: any = {
+    nodeId: 1, screenHeight: 25, tempData: {},
+    user: { id: 7, username: 'Spot', secLevel: 10, securityFlags: 'T'.repeat(128), passwordHash: 'old', pwdLastUpdated: 0 },
+  };
+  await handleWEditPasswordInput(socket, session, ' Abc123!x ');
+  await handleWEditPasswordConfirmInput(socket, session, ' Abc123!x ');
+  expect(bcrypt.compareSync(' Abc123!x ', session.user.passwordHash)).toBe(true);
+});
