@@ -35,6 +35,15 @@ const SIGNALS: Array<{ desk: Desk; terms: RegExp; weight: number }> = [
   { desk: 'people', terms: /\b(interview|talk(?:ed)? with|q&a|profile|podcast|conversation with|in conversation|the story of|documentary|oral history)\b/i, weight: 3 },
 ];
 
+/**
+ * A source whose whole subject is one desk's (a retro-computing essayist's
+ * teaser often names no machine at all) lands there when the words carry no
+ * signal of their own. Content still wins: a signal of its own outranks this.
+ */
+const SOURCE_HOME_DESK: Record<string, Desk> = {
+  'datagubbe.se': 'scene',
+};
+
 export function classify(story: Pick<Story, 'headline' | 'summary' | 'source'>): Desk {
   const head = story.headline ?? '';
   const body = story.summary ?? '';
@@ -59,7 +68,8 @@ export function classify(story: Pick<Story, 'headline' | 'summary' | 'source'>):
       bestScore = score;
     }
   }
-  return bestScore >= 3 ? best : 'general';
+  if (bestScore >= 3) return best;
+  return SOURCE_HOME_DESK[story.source ?? ''] ?? 'general';
 }
 
 /**

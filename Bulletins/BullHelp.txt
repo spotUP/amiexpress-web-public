@@ -29,6 +29,7 @@ BULLETINS
 #27    Hackaday - hardware hacking
 #28    The Scene - demoscene news
 #29    Pouet - Amiga scene productions
+#30    datagubbe - old fogey computing
 #31    Rave Archive UK - pirate radio and jungle
 #32    Acid Techno
 #33    r/Amiga

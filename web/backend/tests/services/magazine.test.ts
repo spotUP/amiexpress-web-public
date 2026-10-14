@@ -85,6 +85,10 @@ describe('classification (§3, §5)', () => {
     expect(classify({ headline: 'New Detroit electro record from Channel Awesome', summary: '', source: 'test' })).toBe('music');
     expect(classify({ headline: 'New Amiga demo released', summary: 'a 68k intro', source: 'test' })).toBe('scene');
     expect(classify({ headline: 'New RCE in OpenSSL', summary: 'exploit available', source: 'test' })).toBe('hack');
+    // A source's home desk applies only when the words carry no signal of their own.
+    expect(classify({ headline: 'Why I still like small computers', summary: 'a rant about nothing in particular', source: 'datagubbe.se' })).toBe('scene');
+    expect(classify({ headline: 'Why I still like small computers', summary: 'a rant about nothing in particular', source: 'test' })).toBe('general');
+    expect(classify({ headline: 'New RCE in OpenSSL', summary: 'exploit available', source: 'datagubbe.se' })).toBe('hack');
     expect(classify({ headline: 'Wildstyle piece on a freight train', summary: 'graffiti crew', source: 'test' })).toBe('graffiti');
     expect(classify({ headline: 'Something happened', summary: '', source: 'test' })).toBe('general');
   });

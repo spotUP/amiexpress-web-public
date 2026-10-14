@@ -381,3 +381,51 @@ describe('feed teasers lose the source furniture (toBulletinText)', () => {
     expect(clean(clean(dirty))).toBe(clean(dirty));
   });
 });
+
+
+describe('a feed yields its newest items, whatever order it lists them in', () => {
+  const rss = (rows: Array<[string, string | null]>): string =>
+    `<rss><channel>${rows.map(([t, d]) => `<item><title>${t}</title><description>teaser ${t}</description>${d ? `<pubDate>${d}</pubDate>` : ''}</item>`).join('')}</channel></rss>`;
+  const D = (n: number): string => new Date(Date.UTC(2020, 0, n)).toUTCString();
+
+  it('an oldest-first feed (datagubbe.se) gives the newest items, not the oldest', async () => {
+    const xml = rss([1, 2, 3, 4, 5, 6].map((n) => [`post${n}`, D(n)] as [string, string]));
+    const { items } = await parseFeedItems(xml, 'x', 3);
+    expect(items.map((i) => i.headline)).toEqual(['post6', 'post5', 'post4']);
+  });
+
+  it('a newest-first feed comes out unchanged', async () => {
+    const xml = rss([6, 5, 4, 3, 2, 1].map((n) => [`post${n}`, D(n)] as [string, string]));
+    const { items } = await parseFeedItems(xml, 'x', 3);
+    expect(items.map((i) => i.headline)).toEqual(['post6', 'post5', 'post4']);
+  });
+
+  it('undated items keep document order, after the dated ones', async () => {
+    const xml = rss([['undatedA', null], ['old', D(1)], ['undatedB', null], ['new', D(9)]]);
+    const { items } = await parseFeedItems(xml, 'x', 10);
+    expect(items.map((i) => i.headline)).toEqual(['new', 'old', 'undatedA', 'undatedB']);
+  });
+
+  it('an entirely undated feed is untouched, and an unreadable date counts as undated', async () => {
+    const xml = rss([['a', null], ['b', 'not a date'], ['c', null]]);
+    const { items } = await parseFeedItems(xml, 'x', 2);
+    expect(items.map((i) => i.headline)).toEqual(['a', 'b']);
+  });
+
+  it('reads Atom published and updated dates too', async () => {
+    const xml = `<feed xmlns="http://www.w3.org/2005/Atom">
+      <entry><title>older</title><summary>s</summary><updated>2021-01-01T00:00:00Z</updated></entry>
+      <entry><title>newer</title><summary>s</summary><published>2024-05-01T00:00:00Z</published></entry></feed>`;
+    const { items } = await parseFeedItems(xml, 'x', 1);
+    expect(items[0].headline).toBe('newer');
+  });
+
+  it('datagubbe.se is on bull30 with a polite gap and a long interval', () => {
+    const src = NEWS_BULLETIN_SOURCES.find((x) => x.source === 'datagubbe.se')!;
+    expect(src).toMatchObject({ file: 'bull30.txt', url: 'https://www.datagubbe.se/atom.xml', title: 'datagubbe - old fogey computing' });
+    expect(src.hostGapMs).toBeGreaterThanOrEqual(10000);
+    expect(src.intervalMs).toBeGreaterThanOrEqual(6 * 60 * 60 * 1000);
+    const help = fs.readFileSync(path.join(__dirname, '..', '..', '..', '..', 'Bulletins', 'BullHelp.txt'), 'latin1');
+    expect(help).toContain('#30    datagubbe - old fogey computing');
+  });
+});

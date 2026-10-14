@@ -107,6 +107,7 @@ export const NEWS_BULLETIN_SOURCES: NewsBulletinSource[] = [
   { kind: 'rss', url: 'https://news.scene.org/feeds/rss/', file: 'bull28.txt', title: 'The Scene - demoscene news', source: 'news.scene.org', hostGapMs: 5000 },
   { kind: 'json', url: 'https://api.pouet.net/v1/prod/?random=true', file: 'bull29.txt', title: 'Pouet - Amiga scene productions', source: 'pouet.net', hostGapMs: 5000, listPath: 'prod', fields: [{ label: '', path: 'name' }, { label: '', path: 'type' }] },
 
+  { kind: 'rss', url: 'https://www.datagubbe.se/atom.xml', file: 'bull30.txt', title: 'datagubbe - old fogey computing', source: 'datagubbe.se', hostGapMs: 15000, intervalMs: 6 * 60 * MINUTE },
   { kind: 'rss', url: 'https://rave-archive.com/feed/', file: 'bull31.txt', title: 'Rave Archive UK - pirate radio and jungle', source: 'rave-archive.com', hostGapMs: 5000 },
   { kind: 'rss', url: 'https://acidtechno.co.uk/feed', file: 'bull32.txt', title: 'Acid Techno', source: 'acidtechno.co.uk', hostGapMs: 5000 },
 
@@ -530,6 +531,36 @@ function feedBody(item: any, summary: string): string {
   return body.length >= FEED_BODY_MIN_CHARS && body.length > summary.length * 1.5 ? body : '';
 }
 
+/** When a feed row was published, in ms, or NaN when it carries no readable date. */
+export function feedItemTime(item: any): number {
+  for (const key of ['pubDate', 'published', 'updated', 'dc:date']) {
+    const raw = labelOf(item?.[key]).trim();
+    if (!raw) continue;
+    const t = Date.parse(raw);
+    if (!Number.isNaN(t)) return t;
+  }
+  return NaN;
+}
+
+/**
+ * Newest first, whatever order the feed is in. A feed lists its items oldest
+ * first as readily as newest first (datagubbe.se's first row is from 2020);
+ * taking the first `limit` rows in document order would then hand the board
+ * the OLDEST items. Undated rows keep their document order, after the dated
+ * ones; equal dates keep document order too (the sort is stable).
+ */
+function newestFirst<T>(rows: T[]): T[] {
+  const timed = rows.map((row, i) => ({ row, i, t: feedItemTime(row) }));
+  timed.sort((a, b) => {
+    const aKnown = !Number.isNaN(a.t);
+    const bKnown = !Number.isNaN(b.t);
+    if (aKnown && bKnown) return b.t - a.t || a.i - b.i;
+    if (aKnown !== bKnown) return aKnown ? -1 : 1;
+    return a.i - b.i;
+  });
+  return timed.map((x) => x.row);
+}
+
 export async function parseFeedItems(
   xml: string,
   source: string,
@@ -544,7 +575,7 @@ export async function parseFeedItems(
   const atomEntries = asArray(parsed?.feed?.entry);
   const rows = rssItems.length ? rssItems : atomEntries;
   const items: FeedItem[] = [];
-  for (const it of rows.slice(0, limit)) {
+  for (const it of newestFirst(rows).slice(0, limit)) {
     const headline = pick(it, 'title');
     let summary = pick(it, 'description') || pick(it, 'summary');
     const body = feedBody(it, summary);
