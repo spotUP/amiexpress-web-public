@@ -84,6 +84,10 @@ export interface Reader {
 export interface ReaderOptions {
     /** Where the shipped placeholder art is; null for none. Default: the door's own art/ directory. */
     shippedArtDir?: string | null;
+    /** Slot name to file, as `slotFiles` makes it. Default: from the door's saved settings (only with the default art folder). */
+    slots?: Record<string, string>;
+    /** Where the Studio's C64 drawings are. Default: the board's `Screens/doors/MAG` (only with the default art folder). */
+    variantDir?: string | null;
 }
 export declare function startReader(session: DoorSession, options?: ReaderOptions): Promise<Reader>;
 export declare function createApp(session: DoorSession): Promise<void>;

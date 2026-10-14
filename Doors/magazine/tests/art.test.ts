@@ -17,7 +17,7 @@ import {
   BOARD_CHARSET_BANK,
   C64_PALETTE_COLODORE,
 } from '@amiexpress/bbs-door-sdk/petscii';
-import { ART_NAMES, artKindFor, artRowText, ansiRows, loadArt, seqRows, seqSurface, shippedArtDir, type ArtSources } from '../art';
+import { ART_NAMES, artKindFor, artRowText, artRows, ansiRows, loadArt, seqRows, seqSurface, shippedArtDir, slotFiles, slotKey, type ArtSources } from '../art';
 import { buildAll } from '../tools/make-art';
 
 const SHIPPED = shippedArtDir(path.join(__dirname, '..'));
@@ -34,14 +34,69 @@ function sources(): { sources: ArtSources; override: string; shipped: string } {
 
 // ---- the loader -----------------------------------------------------------
 
-export async function theSysopsOverrideBeatsTheShippedPlaceholder(): Promise<void> {
+export async function aFileTheStudioSavedIsTheFileTheLoaderReads(): Promise<void> {
   const s = sources();
   fs.writeFileSync(path.join(s.shipped, 'mag_front.ans'), 'shipped');
   assert.strictEqual(loadArt('mag_front', 'ans', s.sources)?.bytes.toString(), 'shipped');
-  fs.writeFileSync(path.join(s.override, 'mag_front.ans'), 'sysop');
+  // The Studio saves in place, into the same art folder.
+  fs.writeFileSync(path.join(s.shipped, 'mag_front.ans'), 'studio');
   const got = loadArt('mag_front', 'ans', s.sources);
-  assert.strictEqual(got?.bytes.toString(), 'sysop');
-  assert.ok(got!.file.startsWith(s.override), 'it came from the override directory');
+  assert.strictEqual(got?.bytes.toString(), 'studio');
+  assert.ok(got!.file.startsWith(s.shipped), 'it came from the door art folder');
+  // The old sysop folder no longer decides which drawing a caller sees.
+  fs.writeFileSync(path.join(s.override, 'mag_front.ans'), 'stale override');
+  assert.strictEqual(loadArt('mag_front', 'ans', s.sources)?.bytes.toString(), 'studio');
+}
+
+export async function aSlotPointedAtAnotherFileReadsThatFileAndFallsBackWhenItIsGone(): Promise<void> {
+  const s = sources();
+  fs.writeFileSync(path.join(s.shipped, 'mag_front.ans'), 'default');
+  fs.writeFileSync(path.join(s.shipped, 'sec_hack.ans'), 'picked');
+  s.sources.slots = { mag_front: path.join(s.shipped, 'sec_hack.ans') };
+  assert.strictEqual(loadArt('mag_front', 'ans', s.sources)?.bytes.toString(), 'picked');
+  fs.rmSync(path.join(s.shipped, 'sec_hack.ans'));
+  assert.strictEqual(loadArt('mag_front', 'ans', s.sources)?.bytes.toString(), 'default', 'a deleted pick does not blank the page');
+}
+
+export async function slotFilesTakesOnlyANameOrADirAndANameInsideTheDoor(): Promise<void> {
+  const door = path.join(os.tmpdir(), 'door');
+  const got = slotFiles({
+    art_mag_title: 'art/alt_title.ans',
+    art_mag_front: '../../etc/passwd',
+    art_mag_contents: '/etc/passwd',
+    art_mag_goodbye: 'a/b/c.ans',
+    art_sec_hack: '.hidden',
+    art_sec_scene: 'plain.ans',
+    art_sec_music: 42,
+    unrelated: 'art/x.ans',
+  }, door);
+  assert.deepStrictEqual(got, { mag_title: path.join(door, 'art/alt_title.ans'), sec_scene: path.join(door, 'plain.ans') });
+}
+
+export async function theStudiosC64DrawingBeatsTheShippedSeqForAFortyColumnCaller(): Promise<void> {
+  const s = sources();
+  const variants = tmp();
+  fs.writeFileSync(path.join(s.shipped, 'sec_hack.seq'), 'seq');
+  s.sources.variantDir = variants;
+  assert.strictEqual(loadArt('sec_hack', 'seq', s.sources)?.kind, 'seq', 'nothing drawn: the shipped file');
+  fs.writeFileSync(path.join(variants, 'setting:art_sec_hack.c64.ans'), '\x1b[36mDRAWN\n');
+  const got = loadArt('sec_hack', 'seq', s.sources);
+  assert.strictEqual(got?.kind, 'ans', 'the Studio draws ANSI, so it is read as ANSI');
+  assert.deepStrictEqual(artRows(got!, 5, 40).map(artRowText), ['DRAWN']);
+  assert.strictEqual(loadArt('sec_hack', 'ans', s.sources), null, 'a wide caller never reads the C64 drawing');
+}
+
+export async function theManifestDeclaresEveryPieceAsAStudioSlotWhoseDefaultIsShipped(): Promise<void> {
+  const door = path.join(__dirname, '..');
+  const manifest = JSON.parse(fs.readFileSync(path.join(door, 'door.settings.json'), 'utf8')) as {
+    settings: Array<{ key: string; art?: boolean; default?: string }>;
+  };
+  const slots = manifest.settings.filter((x) => x.art);
+  assert.deepStrictEqual(slots.map((x) => x.key).sort(), ART_NAMES.map(slotKey).sort(), 'one slot per piece, no more');
+  for (const slot of slots) {
+    assert.strictEqual(slot.default, `art/${slot.key.slice('art_'.length)}.ans`);
+    assert.ok(fs.statSync(path.join(door, slot.default!)).size > 0, `${slot.default} ships`);
+  }
 }
 
 export async function aPetsciiCallerGetsTheSeqAndEveryoneElseTheAns(): Promise<void> {
@@ -60,12 +115,11 @@ export async function aMissingOrEmptyFileIsSkippedWithoutAnError(): Promise<void
   const s = sources();
   assert.strictEqual(loadArt('mag_title', 'ans', s.sources), null, 'nowhere: no art');
   assert.strictEqual(loadArt('mag_title', 'ans', { overrideDir: path.join(s.override, 'nope'), shippedDir: null }), null);
-  // An empty override is not art: the shipped one still shows.
-  fs.writeFileSync(path.join(s.override, 'mag_title.ans'), '');
-  fs.writeFileSync(path.join(s.shipped, 'mag_title.ans'), 'shipped');
-  assert.strictEqual(loadArt('mag_title', 'ans', s.sources)?.bytes.toString(), 'shipped');
+  // An empty file is not art.
+  fs.writeFileSync(path.join(s.shipped, 'mag_title.ans'), '');
+  assert.strictEqual(loadArt('mag_title', 'ans', s.sources), null);
   // A directory with the file's name is not a file.
-  fs.mkdirSync(path.join(s.override, 'mag_goodbye.ans'));
+  fs.mkdirSync(path.join(s.shipped, 'mag_goodbye.ans'));
   assert.strictEqual(loadArt('mag_goodbye', 'ans', s.sources), null);
 }
 

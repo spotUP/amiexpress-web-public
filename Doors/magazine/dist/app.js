@@ -1,4 +1,37 @@
 "use strict";
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.helpText = exports.HELP_TEXT = exports.COMPACT_HINTS = exports.HINTS = exports.MAGAZINE_TITLE = exports.BOOKMARK_KEY = exports.READ_KEY = void 0;
 exports.sysopHints = sysopHints;
@@ -22,6 +55,7 @@ exports.createApp = createApp;
  */
 const blessed_helpers_1 = require("@amiexpress/bbs-door-sdk/utils/blessed-helpers");
 const door_input_manager_1 = require("@amiexpress/bbs-door-sdk/utils/door-input-manager");
+const path = __importStar(require("path"));
 const settings_1 = require("@amiexpress/bbs-door-sdk/settings");
 const theme_1 = require("@amiexpress/bbs-door-sdk/engines/ui/theme");
 const blessed_1 = require("@amiexpress/bbs-door-sdk/engines/ui/blessed");
@@ -147,9 +181,23 @@ async function startReader(session, options = {}) {
     let layout = (0, layout_1.buildLayout)(width, height, { ticker: showTicker });
     // Which alphabet this caller reads: the session knows (createScreen asks it too).
     const petscii = typeof bbs?.isPetsciiMode === 'function' && bbs.isPetsciiMode() === true;
+    // A test that points the reader at its own art folder gets no slots and no C64 drawings unless it passes them.
+    const ownArt = options.shippedArtDir !== undefined;
+    let slots = options.slots ?? {};
+    if (!ownArt) {
+        try {
+            slots = (0, art_1.slotFiles)((0, settings_1.readDoorSettings)(__dirname), (0, settings_1.resolveDoorRoot)(__dirname));
+        }
+        catch { /* every slot keeps its default file */ }
+    }
     const artSources = {
         overrideDir: (0, art_1.overrideArtDir)((0, library_1.magazineRoot)(__dirname)),
-        shippedDir: options.shippedArtDir === undefined ? (0, art_1.shippedArtDir)() : options.shippedArtDir,
+        shippedDir: ownArt ? (options.shippedArtDir ?? null) : (0, art_1.shippedArtDir)(),
+        slots,
+        // Where the Studio's C64 tab saves a drawing: <board root>/Screens/doors/MAG.
+        variantDir: options.variantDir !== undefined
+            ? options.variantDir
+            : ownArt ? null : path.join((0, settings_1.resolveBbsRoot)(__dirname), 'Screens', 'doors', 'MAG'),
     };
     const artKind = (0, art_1.artKindFor)(petscii, width);
     /** Mortimer's clipart for empty column space; a caller that reads PETSCII only gets pieces that map. */

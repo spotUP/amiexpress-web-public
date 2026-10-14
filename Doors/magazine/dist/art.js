@@ -33,7 +33,8 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.BANNER_MAX_ROWS_40 = exports.BANNER_MAX_ROWS = exports.SECTION_ART = exports.ART_NAMES = void 0;
+exports.slotKey = exports.BANNER_MAX_ROWS_40 = exports.BANNER_MAX_ROWS = exports.SECTION_ART = exports.ART_NAMES = void 0;
+exports.slotFiles = slotFiles;
 exports.shippedArtDir = shippedArtDir;
 exports.overrideArtDir = overrideArtDir;
 exports.loadArt = loadArt;
@@ -46,17 +47,26 @@ exports.artRowText = artRowText;
 /**
  * The magazine's art: title screen, banners, the mark at the end of an article.
  *
- * Two files per piece, one for each kind of caller, looked up in two places:
+ * Two kinds per piece, one for each kind of caller, read from ONE place - the
+ * door's own `art/` folder - which is also the place the ANSI Studio writes:
  *
- *   1. `<board root>/Magazine/art/<name>.<ext>` - the sysop's own. It lives on
- *      the board's data volume, so a deploy never replaces it.
- *   2. `Doors/magazine/art/<name>.<ext>` - the placeholder the door ships.
+ *   - `.ans` is Amiga ANSI (Topaz, ISO-8859-1, read and written as latin1
+ *     bytes, never as UTF-8: a high-bit glyph read as text becomes U+FFFD).
+ *     Each piece is an art slot in `door.settings.json` (`art_<name>`, the
+ *     door-art convention REQUESTS and MULTICHECK use), so the Studio lists
+ *     it, saves into that file in place, and the slot's picker can point it
+ *     at another file; `slotFiles` turns the saved values into paths.
+ *   - `.seq` is C64 PETSCII. A PETSCII caller - and any caller on a 40-column
+ *     screen - first gets the drawing an artist made on the Studio's C64 tab
+ *     (`<board>/Screens/doors/MAG/setting:art_<name>.c64.ans`, 40-column
+ *     ANSI), then the shipped `.seq`.
  *
- * `.ans` is Amiga ANSI (Topaz, ISO-8859-1, read and written as latin1 bytes,
- * never as UTF-8: a high-bit glyph read as text becomes U+FFFD). `.seq` is
- * C64 PETSCII. A PETSCII caller - and any caller on a 40-column screen -
- * gets the `.seq`; everyone else gets the `.ans`. A file that is missing or
- * empty is skipped without a word: no art is a valid magazine.
+ * On the live board `Doors/magazine/art/` is on the data volume and the
+ * entrypoint holds back every art slot's default file, so a deploy never puts
+ * the shipped placeholder over an edit (docker-entrypoint.sh, "A DOOR'S ART
+ * IS NOT A CFG FILE"). A file that is missing or empty is skipped without a
+ * word: no art is a valid magazine. The filler (`art/fill/`) is plain ASCII
+ * and keeps its own sysop folder, `<board root>/Magazine/art/fill/`.
  *
  * WHO DECIDES THE KIND. The session does: `bbs.isPetsciiMode()`, the same
  * question `createScreen` asks to set `screen.petscii`. This module does not
@@ -92,6 +102,27 @@ exports.SECTION_ART = {
 /** Banner ceilings: five rows on an ANSI screen, four on the C64's forty columns. */
 exports.BANNER_MAX_ROWS = 5;
 exports.BANNER_MAX_ROWS_40 = 4;
+/** The Studio's name for the slot that holds a piece: the setting key, as the section it is addressed by. */
+const slotKey = (name) => `art_${name}`;
+exports.slotKey = slotKey;
+/**
+ * Which file each slot reads, from the door's saved settings.
+ *
+ * A value is one name or `dir/name` inside the door's folder, as
+ * `resolveArtValue` in the backend requires (no dot-first segment, so no
+ * `..`); anything else is ignored and the slot keeps its default file.
+ */
+function slotFiles(values, doorDir) {
+    const segment = '[A-Za-z0-9_-][A-Za-z0-9._-]*';
+    const valid = new RegExp(`^${segment}(\\/${segment})?$`);
+    const out = {};
+    for (const name of exports.ART_NAMES) {
+        const value = values[(0, exports.slotKey)(name)];
+        if (typeof value === 'string' && valid.test(value))
+            out[name] = path.join(doorDir, value);
+    }
+    return out;
+}
 /** The directory the door ships its placeholders in, from source (`Doors/magazine`) or from `dist`. */
 function shippedArtDir(startDir = __dirname) {
     const base = path.basename(startDir) === 'dist' ? path.dirname(startDir) : startDir;
@@ -113,13 +144,22 @@ function readBytes(file) {
     }
 }
 /**
- * One piece of art for one caller: the override first, then the shipped
- * placeholder; the caller's kind only. Null when neither exists.
+ * One piece of art for one caller. A wide caller gets the slot's file, else
+ * the default `.ans`. A 40-column caller gets the Studio's C64 drawing (read
+ * as ANSI, so `kind` is `ans`), else the shipped `.seq`. Null when none exists.
  */
 function loadArt(name, kind, sources) {
-    const dirs = sources.shippedDir ? [sources.overrideDir, sources.shippedDir] : [sources.overrideDir];
-    for (const dir of dirs) {
-        const file = path.join(dir, `${name}.${kind}`);
+    if (kind === 'seq' && sources.variantDir) {
+        const file = path.join(sources.variantDir, `setting:${(0, exports.slotKey)(name)}.c64.ans`);
+        const bytes = readBytes(file);
+        if (bytes)
+            return { kind: 'ans', bytes, file };
+    }
+    if (!sources.shippedDir)
+        return null;
+    const candidates = kind === 'ans' && sources.slots?.[name] ? [sources.slots[name]] : [];
+    candidates.push(path.join(sources.shippedDir, `${name}.${kind}`));
+    for (const file of candidates) {
         const bytes = readBytes(file);
         if (bytes)
             return { kind, bytes, file };

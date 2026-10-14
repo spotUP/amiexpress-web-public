@@ -175,4 +175,42 @@ describe('door art across a deploy', () => {
       expect(fs.existsSync(path.join(REPO, 'Doors', 'REQUESTS', name))).toBe(true);
     }
   });
+
+  it('holds back every magazine art slot the Studio can edit, from the repo manifest', () => {
+    // The magazine ships 15 placeholder screens under art/ and the Studio
+    // saves over them in place: the exclusion must name each one.
+    const real = path.join(REPO, 'Doors', 'magazine', 'door.settings.json');
+    const script = fs.readFileSync(ENTRYPOINT, 'utf8');
+    const awkStart = script.indexOf("        awk 'BEGIN { RS = \"}\" }");
+    const awkEnd = script.indexOf("' \"$manifest\"", awkStart);
+    const program = script.slice(awkStart, awkEnd).replace(/^\s*awk '/, '');
+    const found = execFileSync('awk', [program, real], { encoding: 'utf8' }).split('\n').filter(Boolean).sort();
+    expect(found).toHaveLength(15);
+    for (const name of found) {
+      expect(name).toMatch(/^art\/(mag|sec)_[a-z_]+\.ans$/);
+      expect(fs.existsSync(path.join(REPO, 'Doors', 'magazine', name))).toBe(true);
+    }
+  });
+
+  it('keeps a Studio edit of a magazine screen across deploys while the image leads untouched ones', () => {
+    const mag = (side: string, rel: string) => path.join(root, side, 'Doors', 'magazine', rel);
+    for (const side of ['image']) {
+      fs.mkdirSync(mag(side, 'art'), { recursive: true });
+      fs.writeFileSync(mag(side, 'door.settings.json'), JSON.stringify({
+        command: 'MAG',
+        settings: ['mag_title', 'mag_front'].map((n) => ({
+          key: `art_${n}`, label: n, type: 'string', art: true, default: `art/${n}.ans`,
+        })),
+      }, null, 2));
+      fs.writeFileSync(mag(side, 'art/mag_title.ans'), 'placeholder title\n');
+      fs.writeFileSync(mag(side, 'art/mag_front.ans'), 'placeholder front\n');
+    }
+    fs.mkdirSync(path.dirname(mag('volume', 'art/x')), { recursive: true });
+    boot();
+    fs.writeFileSync(mag('volume', 'art/mag_title.ans'), 'the artist drew this\n');
+    fs.writeFileSync(mag('image', 'art/mag_front.ans'), 'redrawn placeholder\n');
+    boot(); boot();
+    expect(fs.readFileSync(mag('volume', 'art/mag_title.ans'), 'utf8')).toBe('the artist drew this\n');
+    expect(fs.readFileSync(mag('volume', 'art/mag_front.ans'), 'utf8')).toBe('redrawn placeholder\n');
+  });
 });

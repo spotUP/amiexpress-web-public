@@ -16,7 +16,8 @@
  */
 import { createScreen, createBox } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
 import { DoorInputManager } from '@amiexpress/bbs-door-sdk/utils/door-input-manager';
-import { readDoorSettings } from '@amiexpress/bbs-door-sdk/settings';
+import * as path from 'path';
+import { readDoorSettings, resolveBbsRoot, resolveDoorRoot } from '@amiexpress/bbs-door-sdk/settings';
 import {
   themeById,
   themeStyles,
@@ -45,6 +46,7 @@ import {
   artRows,
   loadArt,
   overrideArtDir,
+  slotFiles,
   shippedArtDir,
   type ArtSources,
 } from './art';
@@ -219,6 +221,10 @@ function readEdition(index: readonly MagazineIndexEntry[]): string {
 export interface ReaderOptions {
   /** Where the shipped placeholder art is; null for none. Default: the door's own art/ directory. */
   shippedArtDir?: string | null;
+  /** Slot name to file, as `slotFiles` makes it. Default: from the door's saved settings (only with the default art folder). */
+  slots?: Record<string, string>;
+  /** Where the Studio's C64 drawings are. Default: the board's `Screens/doors/MAG` (only with the default art folder). */
+  variantDir?: string | null;
 }
 
 export async function startReader(session: DoorSession, options: ReaderOptions = {}): Promise<Reader> {
@@ -254,9 +260,20 @@ export async function startReader(session: DoorSession, options: ReaderOptions =
   let layout = buildLayout(width, height, { ticker: showTicker });
   // Which alphabet this caller reads: the session knows (createScreen asks it too).
   const petscii = typeof bbs?.isPetsciiMode === 'function' && bbs.isPetsciiMode() === true;
+  // A test that points the reader at its own art folder gets no slots and no C64 drawings unless it passes them.
+  const ownArt = options.shippedArtDir !== undefined;
+  let slots: Record<string, string> = options.slots ?? {};
+  if (!ownArt) {
+    try { slots = slotFiles(readDoorSettings(__dirname) as Record<string, unknown>, resolveDoorRoot(__dirname)); } catch { /* every slot keeps its default file */ }
+  }
   const artSources: ArtSources = {
     overrideDir: overrideArtDir(magazineRoot(__dirname)),
-    shippedDir: options.shippedArtDir === undefined ? shippedArtDir() : options.shippedArtDir,
+    shippedDir: ownArt ? (options.shippedArtDir ?? null) : shippedArtDir(),
+    slots,
+    // Where the Studio's C64 tab saves a drawing: <board root>/Screens/doors/MAG.
+    variantDir: options.variantDir !== undefined
+      ? options.variantDir
+      : ownArt ? null : path.join(resolveBbsRoot(__dirname), 'Screens', 'doors', 'MAG'),
   };
   const artKind = artKindFor(petscii, width);
   /** Mortimer's clipart for empty column space; a caller that reads PETSCII only gets pieces that map. */

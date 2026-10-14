@@ -45,6 +45,8 @@ const STORIES: Story[] = [
 
 interface Board {
   root: string;
+  /** The folder the Studio saves art into, made by `sysopArt`. */
+  artDir?: string;
   restore: () => void;
 }
 
@@ -84,7 +86,7 @@ interface Harness {
   raw: (bytes: string) => void;
 }
 
-async function open(width: number, height: number, options: { theme?: ReturnType<typeof themeById>; secLevel?: number; petscii?: boolean; shippedArt?: string | null } = {}): Promise<Harness> {
+async function open(width: number, height: number, options: { theme?: ReturnType<typeof themeById>; secLevel?: number; petscii?: boolean; shippedArt?: string | null; slots?: Record<string, string>; variantDir?: string | null } = {}): Promise<Harness> {
   const writes: string[] = [];
   const storage = new Map<string, unknown>();
   const theme = options.theme ?? themeById('uprough-neon');
@@ -109,7 +111,7 @@ async function open(width: number, height: number, options: { theme?: ReturnType
     },
   };
   // The shipped placeholder art is off unless a test asks for it: every other test is about the text.
-  const reader = await startReader(session, { shippedArtDir: options.shippedArt ?? null });
+  const reader = await startReader(session, { shippedArtDir: options.shippedArt ?? null, slots: options.slots, variantDir: options.variantDir });
   await new Promise((resolve) => setImmediate(resolve));
   let from = writes.length;
   return {
@@ -1091,12 +1093,22 @@ export async function pressingPWhileReadingAnArticleAddsTheStoryToTheFrontPage()
 const SHIPPED_ART = path.join(__dirname, '..', 'art');
 const noSpaces = (rows: string[]): string => rows.join('').replace(/ /g, '');
 
-/** The sysop's own drawing, on the board's data volume: `<board root>/Magazine/art/<file>`. */
+/**
+ * A drawing saved by the ANSI Studio: it lands in the door's own art folder
+ * (here a copy of the shipped one, so the other pieces stay), which is the
+ * one place the reader looks. Open the reader with `artOf(b)`.
+ */
 function sysopArt(b: Board, file: string, content: string | Buffer): void {
-  const dir = path.join(b.root, MAGAZINE_DIR, 'art');
-  fs.mkdirSync(dir, { recursive: true });
-  fs.writeFileSync(path.join(dir, file), content);
+  if (!b.artDir) {
+    b.artDir = path.join(b.root, 'Doors', 'magazine', 'art');
+    fs.mkdirSync(b.artDir, { recursive: true });
+    for (const f of fs.readdirSync(SHIPPED_ART)) {
+      if (fs.statSync(path.join(SHIPPED_ART, f)).isFile()) fs.copyFileSync(path.join(SHIPPED_ART, f), path.join(b.artDir, f));
+    }
+  }
+  fs.writeFileSync(path.join(b.artDir, file), content);
 }
+const artOf = (b: Board): string => b.artDir ?? SHIPPED_ART;
 
 export async function theTitleIsShownOnceOnEntryAndTheFirstKeyOnlyLetsTheReaderIn(): Promise<void> {
   const b = board(['aaaa0001']);
@@ -1126,13 +1138,34 @@ export async function theTitleGivesWayByItselfAfterAShortWait(): Promise<void> {
   } finally { await finish(h, b); }
 }
 
-export async function theSysopsOwnTitleInTheBoardRootBeatsTheShippedOne(): Promise<void> {
+export async function aTitleSavedByTheStudioIsTheOneTheReaderShows(): Promise<void> {
   const b = board([]);
   sysopArt(b, 'mag_title.ans', Buffer.from('\x1b[1;36mMY OWN TITLE \xaf\r\n', 'latin1'));
-  const h = await open(80, 24, { shippedArt: SHIPPED_ART });
+  const h = await open(80, 24, { shippedArt: artOf(b) });
   try {
     assert.deepStrictEqual(h.reader.overlayText(), ['MY OWN TITLE ¯'], 'the override is read as latin1, escapes kept out of the text');
   } finally { await finish(h, b); }
+}
+
+export async function aC64CallerSeesTheDrawingTheStudiosC64TabSavedAndAWideCallerTheSlotsFile(): Promise<void> {
+  // Reachability for the Studio's two doors into the reader: the C64 tab's
+  // drawing and a slot's picked file, through startReader and onto the screen.
+  const b = board([]);
+  const variants = path.join(b.root, 'Screens', 'doors', 'MAG');
+  fs.mkdirSync(variants, { recursive: true });
+  fs.writeFileSync(path.join(variants, 'setting:art_mag_title.c64.ans'), 'DRAWN ON THE C64 TAB\n');
+  const other = path.join(b.root, 'picked.ans');
+  fs.writeFileSync(other, 'PICKED IN THE STUDIO\r\n');
+  try {
+    const c64 = await open(40, 25, { shippedArt: SHIPPED_ART, petscii: true, variantDir: variants });
+    try {
+      assert.deepStrictEqual(c64.reader.overlayText(), ['DRAWN ON THE C64 TAB'], 'a 40-column caller gets the C64 tab drawing over the shipped .seq');
+    } finally { c64.reader.stop(); }
+    const wide = await open(80, 24, { shippedArt: SHIPPED_ART, slots: { mag_title: other }, variantDir: variants });
+    try {
+      assert.deepStrictEqual(wide.reader.overlayText(), ['PICKED IN THE STUDIO'], 'a wide caller gets the file the slot names');
+    } finally { wide.reader.stop(); }
+  } finally { b.restore(); fs.rmSync(b.root, { recursive: true, force: true }); }
 }
 
 export async function aC64CallerAndAFortyColumnCallerGetTheSeqNotTheAns(): Promise<void> {
@@ -1241,7 +1274,7 @@ export async function theMarkAfterAnArticleFollowsItsLastLineOnTheLastPage(): Pr
   const shortOne = [story('aaaa0002', 'New exploit chain in a router firmware', 'hack', '2026-10-12', 'One short paragraph.'), STORIES[3]];
   const b = board([], shortOne);
   sysopArt(b, 'mag_article_end.ans', 'THE END MARK\r\n');
-  const h = await open(80, 24, { shippedArt: SHIPPED_ART });
+  const h = await open(80, 24, { shippedArt: artOf(b) });
   try {
     h.reader.press('c', 'c');
     h.reader.press('c', 'c');
@@ -1257,7 +1290,7 @@ export async function theMarkAfterAnArticleFollowsItsLastLineOnTheLastPage(): Pr
   // A long one: the mark closes the text on the last page, once, inside the panel.
   const b2 = board([]);
   sysopArt(b2, 'mag_article_end.ans', 'THE END MARK\r\n');
-  const h2 = await open(80, 24, { shippedArt: SHIPPED_ART });
+  const h2 = await open(80, 24, { shippedArt: artOf(b2) });
   try {
     h2.reader.press('c', 'c');
     h2.reader.press('c', 'c');
@@ -1273,7 +1306,7 @@ export async function theMarkAfterAnArticleFollowsItsLastLineOnTheLastPage(): Pr
 export async function qShowsTheGoodbyeBrieflyThenAKeyEndsTheCall(): Promise<void> {
   const b = board([]);
   sysopArt(b, 'mag_goodbye.ans', 'BYE FROM THE FREQUENCY\r\n');
-  const h = await open(80, 24, { shippedArt: SHIPPED_ART });
+  const h = await open(80, 24, { shippedArt: artOf(b) });
   try {
     let ended = false;
     void h.reader.done.then(() => { ended = true; });

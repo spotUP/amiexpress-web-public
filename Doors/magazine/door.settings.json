@@ -7,6 +7,171 @@
       "type": "boolean",
       "default": true,
       "help": "A scrolling line of the newest headlines under the masthead. Wide screens only; 40-column callers never get it."
+    },
+    {
+      "key": "art_mag_title",
+      "label": "Title screen art",
+      "type": "string",
+      "art": true,
+      "group": "Art",
+      "default": "art/mag_title.ans",
+      "artMaxLines": 25,
+      "artMaxLineLength": 80,
+      "help": "The first screen, before the front page. Amiga ANSI. Amiga ANSI (Topaz, latin1), kept in art/ beside the door. The Commodore 64 drawing is the Studio's C64 tab; until one is drawn, C64 callers get the shipped PETSCII file."
+    },
+    {
+      "key": "art_mag_front",
+      "label": "Front page banner art",
+      "type": "string",
+      "art": true,
+      "group": "Art",
+      "default": "art/mag_front.ans",
+      "artMaxLines": 25,
+      "artMaxLineLength": 80,
+      "help": "The banner above the front page. Amiga ANSI (Topaz, latin1), kept in art/ beside the door. The Commodore 64 drawing is the Studio's C64 tab; until one is drawn, C64 callers get the shipped PETSCII file."
+    },
+    {
+      "key": "art_mag_contents",
+      "label": "Contents banner art",
+      "type": "string",
+      "art": true,
+      "group": "Art",
+      "default": "art/mag_contents.ans",
+      "artMaxLines": 25,
+      "artMaxLineLength": 80,
+      "help": "The banner above the contents list. Amiga ANSI (Topaz, latin1), kept in art/ beside the door. The Commodore 64 drawing is the Studio's C64 tab; until one is drawn, C64 callers get the shipped PETSCII file."
+    },
+    {
+      "key": "art_mag_goodbye",
+      "label": "Goodbye screen art",
+      "type": "string",
+      "art": true,
+      "group": "Art",
+      "default": "art/mag_goodbye.ans",
+      "artMaxLines": 25,
+      "artMaxLineLength": 80,
+      "help": "Shown when a caller leaves the magazine. Amiga ANSI (Topaz, latin1), kept in art/ beside the door. The Commodore 64 drawing is the Studio's C64 tab; until one is drawn, C64 callers get the shipped PETSCII file."
+    },
+    {
+      "key": "art_mag_article_end",
+      "label": "End of article mark art",
+      "type": "string",
+      "art": true,
+      "group": "Art",
+      "default": "art/mag_article_end.ans",
+      "artMaxLines": 25,
+      "artMaxLineLength": 80,
+      "help": "The mark under the last line of an article. Amiga ANSI (Topaz, latin1), kept in art/ beside the door. The Commodore 64 drawing is the Studio's C64 tab; until one is drawn, C64 callers get the shipped PETSCII file."
+    },
+    {
+      "key": "art_mag_logo_small",
+      "label": "Small logo art",
+      "type": "string",
+      "art": true,
+      "group": "Art",
+      "default": "art/mag_logo_small.ans",
+      "artMaxLines": 25,
+      "artMaxLineLength": 80,
+      "help": "The small logo for narrow screens and the masthead. Amiga ANSI (Topaz, latin1), kept in art/ beside the door. The Commodore 64 drawing is the Studio's C64 tab; until one is drawn, C64 callers get the shipped PETSCII file."
+    },
+    {
+      "key": "art_mag_loading",
+      "label": "Loading banner art",
+      "type": "string",
+      "art": true,
+      "group": "Art",
+      "default": "art/mag_loading.ans",
+      "artMaxLines": 25,
+      "artMaxLineLength": 80,
+      "help": "Shown while the magazine loads. Amiga ANSI (Topaz, latin1), kept in art/ beside the door. The Commodore 64 drawing is the Studio's C64 tab; until one is drawn, C64 callers get the shipped PETSCII file."
+    },
+    {
+      "key": "art_sec_hack",
+      "label": "Hacking and Phreaking banner art",
+      "type": "string",
+      "art": true,
+      "group": "Art",
+      "default": "art/sec_hack.ans",
+      "artMaxLines": 25,
+      "artMaxLineLength": 80,
+      "help": "The banner above the hacking section. Amiga ANSI (Topaz, latin1), kept in art/ beside the door. The Commodore 64 drawing is the Studio's C64 tab; until one is drawn, C64 callers get the shipped PETSCII file."
+    },
+    {
+      "key": "art_sec_scene",
+      "label": "Scene and Retro banner art",
+      "type": "string",
+      "art": true,
+      "group": "Art",
+      "default": "art/sec_scene.ans",
+      "artMaxLines": 25,
+      "artMaxLineLength": 80,
+      "help": "The banner above the scene section. Amiga ANSI (Topaz, latin1), kept in art/ beside the door. The Commodore 64 drawing is the Studio's C64 tab; until one is drawn, C64 callers get the shipped PETSCII file."
+    },
+    {
+      "key": "art_sec_graffiti",
+      "label": "Graffiti and Urbex banner art",
+      "type": "string",
+      "art": true,
+      "group": "Art",
+      "default": "art/sec_graffiti.ans",
+      "artMaxLines": 25,
+      "artMaxLineLength": 80,
+      "help": "The banner above the graffiti section. Amiga ANSI (Topaz, latin1), kept in art/ beside the door. The Commodore 64 drawing is the Studio's C64 tab; until one is drawn, C64 callers get the shipped PETSCII file."
+    },
+    {
+      "key": "art_sec_music",
+      "label": "Music and Radio banner art",
+      "type": "string",
+      "art": true,
+      "group": "Art",
+      "default": "art/sec_music.ans",
+      "artMaxLines": 25,
+      "artMaxLineLength": 80,
+      "help": "The banner above the music section. Amiga ANSI (Topaz, latin1), kept in art/ beside the door. The Commodore 64 drawing is the Studio's C64 tab; until one is drawn, C64 callers get the shipped PETSCII file."
+    },
+    {
+      "key": "art_sec_people",
+      "label": "People and Long Reads banner art",
+      "type": "string",
+      "art": true,
+      "group": "Art",
+      "default": "art/sec_people.ans",
+      "artMaxLines": 25,
+      "artMaxLineLength": 80,
+      "help": "The banner above the people section. Amiga ANSI (Topaz, latin1), kept in art/ beside the door. The Commodore 64 drawing is the Studio's C64 tab; until one is drawn, C64 callers get the shipped PETSCII file."
+    },
+    {
+      "key": "art_sec_archive",
+      "label": "Archive banner art",
+      "type": "string",
+      "art": true,
+      "group": "Art",
+      "default": "art/sec_archive.ans",
+      "artMaxLines": 25,
+      "artMaxLineLength": 80,
+      "help": "The banner above the archive section. Amiga ANSI (Topaz, latin1), kept in art/ beside the door. The Commodore 64 drawing is the Studio's C64 tab; until one is drawn, C64 callers get the shipped PETSCII file."
+    },
+    {
+      "key": "art_sec_stream",
+      "label": "Latest Transmissions banner art",
+      "type": "string",
+      "art": true,
+      "group": "Art",
+      "default": "art/sec_stream.ans",
+      "artMaxLines": 25,
+      "artMaxLineLength": 80,
+      "help": "The banner above the live stream section. Amiga ANSI (Topaz, latin1), kept in art/ beside the door. The Commodore 64 drawing is the Studio's C64 tab; until one is drawn, C64 callers get the shipped PETSCII file."
+    },
+    {
+      "key": "art_sec_general",
+      "label": "Miscellaneous Signals banner art",
+      "type": "string",
+      "art": true,
+      "group": "Art",
+      "default": "art/sec_general.ans",
+      "artMaxLines": 25,
+      "artMaxLineLength": 80,
+      "help": "The banner above the general section. Amiga ANSI (Topaz, latin1), kept in art/ beside the door. The Commodore 64 drawing is the Studio's C64 tab; until one is drawn, C64 callers get the shipped PETSCII file."
     }
   ]
 }
