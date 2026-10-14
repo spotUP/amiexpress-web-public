@@ -26,35 +26,12 @@
  * Story, StoryFormat and Desk live in the SDK (`formats/magazine`): the MAG
  * door reads the same files this store writes, so both import one declaration.
  */
-import { DESK_LABEL, type Desk, type Story, type StoryFormat } from '@amiexpress/bbs-door-sdk/formats/magazine';
+import { FRONT_PAGE, PAGE_FAMILIES, type Desk, type Story, type StoryFormat } from '@amiexpress/bbs-door-sdk/formats/magazine';
 export type { Desk, Story, StoryFormat };
 
-/**
- * The page families of §12, in the 100-999 range the teletext engine already
- * serves. The exact numbers are the brief's suggestion; what matters is that a
- * reader can tell where they are.
- *
- * `general` starts at 101, not 100: page 100 is the magazine's front page and
- * is composed from approved stories, so a story may not take it.
- */
-export const FRONT_PAGE = 100;
-
-export const PAGE_FAMILIES: Record<Desk, { first: number; last: number; label: string }> = {
-  general: { first: 101, last: 119, label: DESK_LABEL.general },
-  hack: { first: 120, last: 139, label: DESK_LABEL.hack },
-  scene: { first: 200, last: 219, label: DESK_LABEL.scene },
-  graffiti: { first: 300, last: 319, label: DESK_LABEL.graffiti },
-  music: { first: 400, last: 419, label: DESK_LABEL.music },
-  people: { first: 500, last: 519, label: DESK_LABEL.people },
-  // ARCHIVE is history that was always history: §5.F scene histories,
-  // recovered recordings, lost publications.
-  archive: { first: 900, last: 949, label: DESK_LABEL.archive },
-  // STREAM is §5.A "latest transmissions" - a chronological surface for
-  // everything the desks could not hold. It is NOT the archive, and calling a
-  // story from Tuesday "archive" because its section filled up is an editorial
-  // lie: on the first full run it mislabelled 85 of 164 stories.
-  stream: { first: 950, last: 999, label: DESK_LABEL.stream },
-};
+// The page families live in the SDK: the MAG reader needs the same first pages to
+// open a desk's index by number, and a second table would drift.
+export { FRONT_PAGE, PAGE_FAMILIES };
 
 /**
  * The normal form a headline is compared in.

@@ -46,8 +46,8 @@ export declare class TeletextApp {
     private subpage;
     private reveal;
     private held;
-    private digits;
     private notice;
+    private readonly search;
     private carousel;
     private closed;
     /** The program running on the board's BBC Micro, while one is. */
@@ -80,7 +80,6 @@ export declare class TeletextApp {
     private scrollPickerIntoView;
     private openService;
     private pageKey;
-    private typeDigit;
     private follow;
     private goHome;
     private goTo;

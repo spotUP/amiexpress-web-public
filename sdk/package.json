@@ -213,6 +213,12 @@
       "require": "./dist/teletext/telesoftware.js",
       "default": "./dist/teletext/telesoftware.js"
     },
+    "./teletext/page-search": {
+      "types": "./dist/teletext/page-search.d.ts",
+      "import": "./dist-esm/teletext/page-search.js",
+      "require": "./dist/teletext/page-search.js",
+      "default": "./dist/teletext/page-search.js"
+    },
     "./teletext/screen": {
       "types": "./dist/teletext/screen.d.ts",
       "import": "./dist-esm/teletext/screen.js",

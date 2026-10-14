@@ -76,7 +76,11 @@ export interface Reader {
         intervals: number;
         banners: number;
         titles: number;
+        searchTicks: number;
+        lands: number;
     };
+    /** The plain text of the row the page counter rolls in (the progress row), tags stripped. */
+    counterRow(): string;
     stop(): void;
 }
 export interface ReaderOptions {

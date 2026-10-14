@@ -28,6 +28,7 @@ const blessed_1 = require("@amiexpress/bbs-door-sdk/engines/ui/blessed");
 const magazine_1 = require("@amiexpress/bbs-door-sdk/formats/magazine");
 Object.defineProperty(exports, "MAGAZINE_TITLE", { enumerable: true, get: function () { return magazine_1.MAGAZINE_TITLE; } });
 const bbs_door_sdk_1 = require("@amiexpress/bbs-door-sdk");
+const page_search_1 = require("@amiexpress/bbs-door-sdk/teletext/page-search");
 const art_1 = require("./art");
 const library_1 = require("./library");
 const layout_1 = require("./layout");
@@ -41,7 +42,6 @@ const SIGNAL_DAYS = 8;
 /** The headline settles for this long before the one glitch lands. */
 const GLITCH_DELAY_MS = 450;
 const GLITCH_HOLD_MS = 160;
-const DIGIT_COMMIT_MS = 1500;
 /** The title screen waits this long for a key, then the reader opens by itself. */
 const TITLE_MS = 6000;
 /** The goodbye is a glimpse: a key or this long, then the call ends. */
@@ -98,7 +98,7 @@ exports.HELP_TEXT = [
     'B   bookmark or unbookmark a story',
     'K   your bookmarks',
     '/   search headlines and summaries',
-    '0-9 type a page number, Enter to go',
+    '0-9 type a page number (100-999); Escape cancels',
     'Q   quit',
 ].join('\n');
 const helpText = (sysop) => (sysop ? `${exports.HELP_TEXT}\n\n${SYSOP_HELP}` : exports.HELP_TEXT);
@@ -258,8 +258,6 @@ async function startReader(session, options = {}) {
     let selected = null;
     let headline = null;
     let panelText = '';
-    let digits = '';
-    let digitTimer = null;
     let glitchTimer = null;
     let repairTimer = null;
     let modalOpen = false;
@@ -268,7 +266,7 @@ async function startReader(session, options = {}) {
     let wireModal = null;
     let hintsKey = '';
     let modalContent = '';
-    const counters = { glitches: 0, tickerSteps: 0, intervals: 0, banners: 0, titles: 0 };
+    const counters = { glitches: 0, tickerSteps: 0, intervals: 0, banners: 0, titles: 0, searchTicks: 0, lands: 0 };
     let stopped = false;
     let finish = () => { };
     const onFront = { has: (id) => snapshot.front.includes(id) };
@@ -699,28 +697,63 @@ async function startReader(session, options = {}) {
         const next = (0, library_1.editFront)((ids) => (how === 'lead' ? (0, magazine_1.frontLead)(ids, id) : (0, magazine_1.frontMove)(ids, id, how === 'up' ? -1 : 1)), root);
         frontChanged(next, how === 'lead' ? 'Now the lead' : how === 'up' ? 'Moved up' : 'Moved down');
     };
-    const jumpToPage = (n) => {
+    const resolvePage = (n) => {
+        if (n === magazine_1.FRONT_PAGE)
+            return { kind: 'front' };
         const entry = snapshot.index.find((e) => e.page === n);
-        if (!entry) {
-            setStatus(`No page ${n}`);
+        if (entry)
+            return { kind: 'story', storyId: entry.storyId };
+        const desk = Object.keys(magazine_1.PAGE_FAMILIES).find((d) => magazine_1.PAGE_FAMILIES[d].first === n);
+        return desk ? { kind: 'desk', desk } : null;
+    };
+    /** The number the caller is on now: where the counter starts rolling from. */
+    const currentPage = () => {
+        if (view.kind === 'article')
+            return byId(view.storyId)?.page ?? magazine_1.FRONT_PAGE;
+        if (view.kind === 'contents' && view.desk)
+            return magazine_1.PAGE_FAMILIES[view.desk].first;
+        return magazine_1.FRONT_PAGE;
+    };
+    const showPage = (n) => {
+        const target = resolvePage(n);
+        if (!target) {
             render();
             return;
         }
-        openStory(entry.storyId, view.kind === 'article' ? view.list : listIds.length ? listIds : snapshot.index.map((e) => e.storyId));
-    };
-    const commitDigits = () => {
-        if (digitTimer) {
-            clearTimeout(digitTimer);
-            digitTimer = null;
+        counters.lands += 1;
+        if (target.kind === 'front') {
+            go({ kind: 'front' });
+            return;
         }
-        const n = Number(digits);
-        digits = '';
-        setStatus('');
-        if (Number.isFinite(n) && n > 0)
-            jumpToPage(n);
-        else
-            render();
+        if (target.kind === 'desk') {
+            go({ kind: 'contents', desk: target.desk });
+            return;
+        }
+        openStory(target.storyId, view.kind === 'article' ? view.list : listIds.length ? listIds : snapshot.index.map((e) => e.storyId));
     };
+    /**
+     * The header counter is the progress row: one row, replaced in place, so a
+     * tick of the search repaints that row and nothing else.
+     */
+    const restoreProgress = () => {
+        progressBox.setContent(paintRow((0, layout_1.buildProgress)(layout, spreadNo, spreads.length)));
+        render();
+    };
+    const pageSearch = new page_search_1.PageSearch({
+        space: (0, page_search_1.rangeSpace)(100, 999, String),
+        width,
+        parse: (typed) => (/^[1-9][0-9]{2}$/.test(typed) ? Number(typed) : null),
+        exists: (n) => resolvePage(n) !== null,
+        current: currentPage,
+        header: (text, phase) => {
+            if (phase === 'searching')
+                counters.searchTicks += 1;
+            progressBox.setContent(paintSeg({ text, role: phase === 'notfound' ? 'warn' : 'accent' }));
+            render();
+        },
+        restore: restoreProgress,
+        land: showPage,
+    });
     const modalDone = () => {
         modalOpen = false;
         render();
@@ -777,6 +810,8 @@ async function startReader(session, options = {}) {
         if (sysop)
             modal.key(['p', 'P', 'S-p'], () => { if (wireId === st.id)
                 press('p', 'p'); });
+        modal.key(['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'], (ch) => { if (wireId === st.id)
+            press(ch, ch); });
         modal.display();
         updateHints();
     };
@@ -878,6 +913,18 @@ async function startReader(session, options = {}) {
         overlayTimer.unref?.();
     };
     // ---- keys ------------------------------------------------------------
+    /** The key as the page-number machine reads it: a digit, one of three named keys, or anything else. */
+    const searchKey = (name, c) => {
+        if (/^[0-9]$/.test(c))
+            return c;
+        if (name === 'escape')
+            return 'escape';
+        if (name === 'backspace')
+            return 'backspace';
+        if (name === 'enter' || name === 'return')
+            return 'enter';
+        return name || c;
+    };
     const dispatchKey = (name, ch) => {
         if (!stopped && closing) {
             finish();
@@ -893,34 +940,15 @@ async function startReader(session, options = {}) {
             toggleFront();
             return;
         }
+        // A digit typed in the wire panel closes the panel and starts the number
+        // in the view underneath. The panel traps focus, so only a binding on the
+        // modal ever sees the key (see openWire).
+        if (!stopped && modalOpen && wireId && /^[0-9]$/.test(c))
+            wireModal?.close();
         if (stopped || modalOpen)
             return;
-        if (/^[0-9]$/.test(c)) {
-            digits = (digits + c).slice(-3);
-            setStatus(`Page ${digits}_`);
-            if (digitTimer)
-                clearTimeout(digitTimer);
-            digitTimer = setTimeout(commitDigits, DIGIT_COMMIT_MS);
-            if (digits.length === 3)
-                commitDigits();
-            else
-                render();
+        if (pageSearch.feed(searchKey(name, c)))
             return;
-        }
-        if (digits && name === 'enter') {
-            commitDigits();
-            return;
-        }
-        if (digits && name === 'escape') {
-            digits = '';
-            if (digitTimer) {
-                clearTimeout(digitTimer);
-                digitTimer = null;
-            }
-            setStatus('');
-            render();
-            return;
-        }
         setStatus('');
         switch (name) {
             case 'up':
@@ -1039,8 +1067,7 @@ async function startReader(session, options = {}) {
             stopped = true;
             clearGlitch();
             clearOverlayTimer();
-            if (digitTimer)
-                clearTimeout(digitTimer);
+            pageSearch.dispose();
             if (tickerTimer)
                 clearInterval(tickerTimer);
             try {
@@ -1080,6 +1107,7 @@ async function startReader(session, options = {}) {
         press,
         panelRows: () => (spreads[spreadNo] ?? []).map(layout_1.rowText),
         progressRow: () => (0, layout_1.rowText)((0, layout_1.buildProgress)(layout, spreadNo, spreads.length)),
+        counterRow: () => String(progressBox.getContent()).replace(/\{[^{}]*\}/g, ''),
         footerRow: () => chrome.footerContent().replace(/\{[^{}]*\}/g, ''),
         tickerRow: () => (tickerBox ? String(tickerBox.getContent()).replace(/\{[^{}]*\}/g, '') : ''),
         modalText: () => modalContent,

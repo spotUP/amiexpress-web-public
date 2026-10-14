@@ -34,6 +34,9 @@ export interface TeletextScreenOptions {
   mosaicStyle?: MosaicStyle;
 }
 
+/** Wide enough for PAGE NOT FOUND and SEARCHING P120. */
+const COUNTER_WIDTH = 16;
+
 export interface PaintOptions {
   reveal?: boolean;
   flashPhase?: boolean;
@@ -89,6 +92,29 @@ export class TeletextScreen {
       out += `\x1b[${row + 1};1H${lines[row]}\x1b[K`;
     }
     this.writeOut(out);
+  }
+
+  /**
+   * Repaint the header row of a page and nothing else. What a cancelled page
+   * entry puts back: one row, not the 24 that `paint` writes.
+   */
+  paintHeader(subpage: TeletextSubpage, options: PaintOptions = {}): void {
+    const lines = renderSubpageLines(subpage, {
+      mode: this.mode,
+      reveal: options.reveal ?? false,
+      flashPhase: options.flashPhase ?? true,
+      mosaicStyle: this.mosaicStyle,
+    });
+    this.writeOut(`\x1b[1;1H${lines[0]}\x1b[K`);
+  }
+
+  /**
+   * The page counter in the header: what a decoder shows while the caller
+   * types a number and while it waits for the page to come round. One short
+   * write on row one, padded so a shorter text wipes a longer one.
+   */
+  counter(text: string): void {
+    this.writeOut(`\x1b[1;1H\x1b[0;1;37;44m${text.padEnd(COUNTER_WIDTH)}\x1b[0m`);
   }
 
   /** Paint the bottom line. Blue on white is the teletext convention. */

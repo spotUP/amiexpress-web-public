@@ -214,15 +214,146 @@ export async function qQuitsFromAnywhere(): Promise<void> {
   b.restore();
 }
 
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/** Poll until `done()` or `limit` ms, collecting each new value of `watch()` on the way. */
+async function watchUntil(done: () => boolean, watch: () => string, limit = 2500): Promise<string[]> {
+  const seen: string[] = [];
+  const t0 = Date.now();
+  while (!done() && Date.now() - t0 < limit) {
+    const now = watch();
+    if (seen[seen.length - 1] !== now) seen.push(now);
+    await sleep(4);
+  }
+  return seen;
+}
+
 export async function typingAPageNumberJumpsToThatStoryAndAnUnknownPageSaysSo(): Promise<void> {
   const b = board([]);
   const h = await open(80, 24);
   try {
     h.reader.press('1', '1'); h.reader.press('2', '2'); h.reader.press('1', '1');
+    h.reader.press('x', 'x'); // any key skips the wait
     assert.strictEqual(h.reader.viewKind(), 'article');
     assert.ok(text(h).includes('SECOND HACKING STORY'), 'page 121');
     h.reader.press('9', '9'); h.reader.press('9', '9'); h.reader.press('9', '9');
+    assert.strictEqual(h.reader.counterRow().trim(), 'PAGE NOT FOUND');
     assert.ok(text(h).includes('SECOND HACKING STORY'), 'an unknown page leaves the reader where it was');
+  } finally { await finish(h, b); }
+}
+
+export async function typingOneTwoZeroShowsP120RollsTheCounterThenOpensPage120(): Promise<void> {
+  const b = board([]);
+  const h = await open(80, 24);
+  try {
+    h.raw('1');
+    assert.strictEqual(h.reader.counterRow().trim(), 'P1__');
+    h.raw('2');
+    assert.strictEqual(h.reader.counterRow().trim(), 'P12_');
+    h.raw('0');
+    assert.strictEqual(h.reader.counterRow().trim(), 'P120', 'the typed number is up');
+    assert.strictEqual(h.reader.viewKind(), 'front', 'the page has not loaded yet');
+    const seen = await watchUntil(() => h.reader.viewKind() === 'article', () => h.reader.counterRow().trim());
+    const rolled = seen.filter((v) => /^P\d{3}$/.test(v)).map((v) => Number(v.slice(1)));
+    rolled.shift(); // the number as typed
+    assert.ok(rolled.length >= 2, `the counter rolled through ${JSON.stringify(seen)}`);
+    assert.ok(rolled.every((n, i) => i === 0 || n >= rolled[i - 1]), 'upward');
+    assert.strictEqual(h.reader.viewKind(), 'article', 'then the page opens');
+    assert.ok(text(h).includes('NEW EXPLOIT CHAIN'), 'page 120');
+    assert.ok(/Page 1 of/.test(h.reader.counterRow()), 'the progress row is back');
+    assert.ok(h.reader.stats().searchTicks >= 3 && h.reader.stats().lands === 1, 'the search code ran');
+  } finally { await finish(h, b); }
+}
+
+export async function aPageSearchRepaintsTheCounterRowAloneAtEightyColumns(): Promise<void> {
+  const b = board([]);
+  const h = await open(80, 24);
+  try {
+    h.raw('4'); h.raw('0'); h.raw('1');
+    const before = h.reader.counterRow().trim();
+    h.mark();
+    const t0 = Date.now();
+    while (h.reader.counterRow().trim() === before && Date.now() - t0 < 500) await sleep(2);
+    assert.notStrictEqual(h.reader.counterRow().trim(), before, 'a tick happened');
+    const row = h.reader.layout.progressRow + 1;
+    const sent = h.writes.slice(0).join('');
+    const tail = sent.slice(sent.lastIndexOf(`\x1b[${row};`));
+    // The masthead rail animates on its own clock (row 1); the search touches the counter row alone.
+    const rows = h.rowsTouched();
+    rows.delete(1);
+    assert.deepStrictEqual([...rows], [row], `only the counter row is repainted by a tick: ${[...rows]}`);
+    const bytes = tail.replace(/\x1b\[1;\d+H[^\x1b]*(\x1b\[[0-9;]*m[^\x1b]*)*$/, '').length;
+    assert.ok(bytes < 80, `a tick costs ${bytes} bytes: ${JSON.stringify(tail)}`);
+    // eslint-disable-next-line no-console
+    process.stderr.write(`[MAG] page-search tick: ${bytes} bytes on row ${row}\n`);
+  } finally { await finish(h, b); }
+}
+
+export async function aPageSearchAtFortyColumnsShowsSearchingAndMakesNoTimer(): Promise<void> {
+  const b = board([]);
+  const h = await open(40, 25);
+  const realTimeout = global.setTimeout;
+  const realInterval = global.setInterval;
+  let made = 0;
+  (global as any).setTimeout = (...a: any[]) => { made += 1; return (realTimeout as any)(...a); };
+  (global as any).setInterval = (...a: any[]) => { made += 1; return (realInterval as any)(...a); };
+  try {
+    h.mark();
+    h.raw('1'); h.raw('2'); h.raw('0');
+    assert.strictEqual(made, 0, 'no timer was created for the search');
+    assert.strictEqual(h.reader.viewKind(), 'article', 'the page loaded at once');
+    assert.ok(text(h).includes('NEW EXPLOIT CHAIN'));
+    assert.ok(h.writes.join('').includes('SEARCHING P120'), 'the static line went out first');
+  } finally {
+    global.setTimeout = realTimeout;
+    global.setInterval = realInterval;
+    await finish(h, b);
+  }
+}
+
+export async function escapeCancelsAPageNumberWithoutLeavingTheReader(): Promise<void> {
+  const b = board([]);
+  const h = await open(80, 24);
+  try {
+    h.raw('1'); h.raw('2');
+    assert.strictEqual(h.reader.counterRow().trim(), 'P12_');
+    h.reader.press('escape');
+    assert.ok(/Page 1 of/.test(h.reader.counterRow()), 'the progress row is back');
+    assert.strictEqual(h.reader.viewKind(), 'front', 'Escape only cancelled the number');
+    h.reader.press('backspace');
+    assert.ok(h.reader.stats().lands === 0);
+  } finally { await finish(h, b); }
+}
+
+export async function aPageNumberInDeskRangeWithNoStoryOpensTheDesksContentsAndPage100IsTheFront(): Promise<void> {
+  const b = board([]);
+  const h = await open(80, 24);
+  try {
+    for (const d of '200') h.reader.press(d, d);
+    h.reader.press('x', 'x');
+    assert.strictEqual(h.reader.viewKind(), 'contents');
+    assert.ok(text(h).includes('CONTENTS - SCENE & RETRO'), text(h));
+    for (const d of '100') h.reader.press(d, d);
+    h.reader.press('x', 'x');
+    assert.strictEqual(h.reader.viewKind(), 'front');
+  } finally { await finish(h, b); }
+}
+
+export async function digitsInTheWirePanelStartAPageNumberAndTheSysopKeysStillWork(): Promise<void> {
+  const b = board([], MIXED);
+  const h = await open(80, 24, { secLevel: 255 });
+  try {
+    h.raw('c');
+    h.raw('\x1b[B');
+    h.raw('\r');
+    assert.ok(h.reader.modalText().includes('relay clock'), 'the wire panel is open');
+    h.raw('1'); h.raw('2'); h.raw('0');
+    assert.strictEqual(h.reader.modalText(), '', 'the panel closed');
+    assert.strictEqual(h.reader.counterRow().trim(), 'P120');
+    h.raw('x');
+    assert.strictEqual(h.reader.viewKind(), 'article', 'page 120 is the exploit story');
+    h.raw('p');
+    assert.ok(frontOnDisk(b).includes('aaaa0002'), 'P still toggles the front page in an article');
   } finally { await finish(h, b); }
 }
 

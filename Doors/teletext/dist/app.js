@@ -14,6 +14,7 @@ exports.TeletextApp = void 0;
  * which view is up, and when the carousel turns.
  */
 const store_1 = require("@amiexpress/bbs-door-sdk/teletext/store");
+const page_search_1 = require("@amiexpress/bbs-door-sdk/teletext/page-search");
 const screen_1 = require("@amiexpress/bbs-door-sdk/teletext/screen");
 const library_1 = require("@amiexpress/bbs-door-sdk/teletext/library");
 const telesoftware_1 = require("@amiexpress/bbs-door-sdk/teletext/telesoftware");
@@ -55,7 +56,6 @@ class TeletextApp {
         this.subpage = 0;
         this.reveal = false;
         this.held = false;
-        this.digits = '';
         this.notice = '';
         this.carousel = null;
         this.closed = false;
@@ -75,6 +75,22 @@ class TeletextApp {
             rows: Number(session.bbsSession?.screenHeight),
             mode: teletextMode ? 'teletext' : 'ansi',
             mosaicStyle: teletextMode ? 'sextant' : this.settings.mosaicStyle,
+        });
+        /*
+         * Page entry and the fake carousel search are the SDK's, shared with MAG:
+         * the door says what its header counter is, how to put the header back
+         * and what landing on a page means. The width is the board's column
+         * model, so a 40-column session gets the static line, not the roll.
+         */
+        this.search = new page_search_1.PageSearch({
+            space: (0, page_search_1.rangeSpace)(store_1.FIRST_PAGE, store_1.LAST_PAGE, store_1.formatPageNumber),
+            width: Number(session.bbsSession?.screenWidth) || 80,
+            parse: store_1.parsePageNumber,
+            exists: page => Boolean(this.loaded?.index.has(page)),
+            current: () => this.page,
+            header: text => this.screen.counter(text),
+            restore: () => this.paintPage(),
+            land: page => this.goTo(page),
         });
         this.keys = new screen_1.KeyStream({
             key: ch => this.handleKey(ch),
@@ -125,6 +141,7 @@ class TeletextApp {
     stop() {
         this.closed = true;
         this.clearCarousel();
+        this.search.dispose();
         this.keys.dispose();
         this.session.socket.off?.('emulator:closed', this.onEmulatorClosed);
         // A surface left open would outlive the door.
@@ -139,6 +156,15 @@ class TeletextApp {
     }
     // --- Input ------------------------------------------------------------
     handleKey(ch) {
+        // In a page the digits are a page number, and while one is being typed or
+        // searched for the keys that would leave it belong to the search first.
+        if (this.view === 'page' && this.search.feed(searchKey(ch))) {
+            // The carousel must not repaint the page over the counter. A cancel or
+            // a landing has already repainted the page, which restarts it.
+            if (this.search.active)
+                this.clearCarousel();
+            return;
+        }
         if (this.view === 'index')
             return this.indexKey(ch);
         if (this.view === 'picker')
@@ -146,6 +172,8 @@ class TeletextApp {
         return this.pageKey(ch);
     }
     onArrow(direction) {
+        if (this.view === 'page' && this.search.active && this.search.feed(direction))
+            return;
         if (this.view === 'index') {
             if (direction === 'up')
                 this.indexAt = Math.max(0, this.indexAt - 1);
@@ -176,6 +204,9 @@ class TeletextApp {
         this.stepPage(direction === 'right' ? 1 : -1);
     }
     onEscape() {
+        if (this.view === 'page' && this.search.active && this.search.feed('escape'))
+            return;
+        this.search.dispose();
         // ESC walks back the way the caller came: a page returns to whichever
         // list opened it, and a list leaves the door.
         if (this.view === 'page' && this.catalogue.length > 0) {
@@ -327,10 +358,10 @@ class TeletextApp {
             this.paintPicker();
             return false;
         }
+        this.search.dispose();
         this.view = 'page';
         this.page = this.loaded.index.homePage;
         this.subpage = 0;
-        this.digits = '';
         this.notice = '';
         this.screen.clear();
         this.paintPage();
@@ -338,12 +369,11 @@ class TeletextApp {
     }
     // --- The page view ----------------------------------------------------
     pageKey(ch) {
-        // Page entry is 0-9 only. Teletext page numbers are hexadecimal and
-        // services really do carry pages like 1A0, but a television remote had
-        // no hex keys either - those pages are reached with the page step and
-        // the coloured links, exactly as they were on air.
-        if (ch >= '0' && ch <= '9')
-            return this.typeDigit(ch);
+        // Page entry (0-9 only) is handled before this, in handleKey. Teletext
+        // page numbers are hexadecimal and services really do carry pages like
+        // 1A0, but a television remote had no hex keys either - those pages are
+        // reached with the page step and the coloured links, exactly as they
+        // were on air.
         switch (ch) {
             case 'r':
             case 'R': {
@@ -373,21 +403,6 @@ class TeletextApp {
             case 'Q': return this.quit();
             default: return;
         }
-    }
-    typeDigit(digit) {
-        this.digits += digit;
-        if (this.digits.length < 3) {
-            this.paintStatus();
-            return;
-        }
-        const wanted = (0, store_1.parsePageNumber)(this.digits);
-        this.digits = '';
-        if (wanted === null) {
-            this.notice = 'pages run from 100 to 899';
-            this.paintStatus();
-            return;
-        }
-        this.goTo(wanted);
     }
     follow(key) {
         const target = (0, store_1.resolveFastext)(this.current(), key);
@@ -583,7 +598,7 @@ class TeletextApp {
         const page = this.current();
         const count = (0, store_1.subpageCount)(page);
         const parts = [];
-        parts.push(this.digits ? `P${this.digits}_` : `P${(0, store_1.formatPageNumber)(this.page)}`);
+        parts.push(`P${(0, store_1.formatPageNumber)(this.page)}`);
         if (count > 1)
             parts.push(`${this.subpage + 1}/${count}${this.held ? ' HELD' : ''}`);
         // Only the coloured keys this page actually offers are advertised, so a
@@ -669,4 +684,12 @@ class TeletextApp {
     }
 }
 exports.TeletextApp = TeletextApp;
+/** The key as the page-number machine reads it. */
+function searchKey(ch) {
+    if (ch === '\x7f' || ch === '\b')
+        return 'backspace';
+    if (ch === '\r' || ch === '\n')
+        return 'enter';
+    return ch;
+}
 //# sourceMappingURL=app.js.map

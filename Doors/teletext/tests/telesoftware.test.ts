@@ -60,7 +60,7 @@ class Terminal {
         on: () => {},
         off: () => {},
       },
-      bbsSession: { texttvMode: true, screenHeight: 25 },
+      bbsSession: { texttvMode: true, screenHeight: 25, screenWidth: 40 },
       user: { username: 'tester', id: 7 },
       bbs: { grantBeebRomAccess: () => 'test-grant' },
       close: () => { this.closed = true; },

@@ -31,7 +31,7 @@ class FakeTerminal {
   readonly chunks: string[] = [];
   closed = false;
 
-  session(teletextMode = false): DoorSession {
+  session(teletextMode = false, screenWidth = 40): DoorSession {
     return {
       socket: {
         emit: (_event: string, data?: unknown) => {
@@ -40,7 +40,7 @@ class FakeTerminal {
         on: () => {},
         off: () => {},
       },
-      bbsSession: { texttvMode: teletextMode, screenHeight: 25 },
+      bbsSession: { texttvMode: teletextMode, screenHeight: 25, screenWidth },
       user: { username: 'tester' },
       close: () => { this.closed = true; },
     };
@@ -85,9 +85,9 @@ class FakeTerminal {
   }
 }
 
-function open(teletextMode = false): { term: FakeTerminal; app: TeletextApp } {
+function open(teletextMode = false, width = 40): { term: FakeTerminal; app: TeletextApp } {
   const term = new FakeTerminal();
-  const app = new TeletextApp(term.session(teletextMode), board());
+  const app = new TeletextApp(term.session(teletextMode, width), board());
   app.start();
   return { term, app };
 }
@@ -116,7 +116,7 @@ export async function partialPageNumberShowsInTheBar(): Promise<void> {
   const { term, app } = open();
   term.forget();
   type(app, '10');
-  assert.ok(term.text.includes('P10_'), 'the bar should show the digits so far');
+  assert.ok(term.text.includes('P10_'), 'the header counter should show the digits so far');
   app.stop();
 }
 
@@ -193,7 +193,7 @@ export async function aPageTheRecoveryLacksIsReported(): Promise<void> {
   const { term, app } = open();
   term.forget();
   type(app, '899');
-  assert.ok(/is not in this recovery/.test(term.text), term.text.slice(-120));
+  assert.ok(/PAGE NOT FOUND/.test(term.text), term.text.slice(-120));
   app.stop();
 }
 
@@ -275,4 +275,98 @@ export async function ansiSessionsGetAsciiBlockGraphics(): Promise<void> {
   assert.ok(/[\u{1FB00}-\u{1FB3B}]|█/u.test(teletext.raw), 'real sextants in teletext mode');
   tt.stop();
   app.stop();
+}
+
+// --- Page entry and the fake carousel search (SDK page-search) -----------
+
+const COUNTER = /\x1b\[1;1H\x1b\[0;1;37;44m(.{16})\x1b\[0m/g;
+const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+/** What the header counter said, in order. */
+function counters(term: FakeTerminal): string[] {
+  return [...term.raw.matchAll(COUNTER)].map(m => m[1].trim());
+}
+
+export async function typingAPageNumberShowsItInTheHeaderRollsTheCounterThenOpensThePage(): Promise<void> {
+  const { term, app } = open(false, 80);
+  term.forget();
+  type(app, '103');
+  assert.deepStrictEqual(counters(term), ['P1__', 'P10_', 'P103'], 'the number as it is typed');
+  assert.ok(!term.text.includes('Which BBS software'), 'the page has not loaded yet');
+
+  await sleep(1700);
+  const shown = counters(term);
+  assert.deepStrictEqual(shown.slice(0, 3), ['P1__', 'P10_', 'P103']);
+  const rolled = shown.slice(3);
+  assert.ok(rolled.length >= 2, `the counter rolled: ${JSON.stringify(shown)}`);
+  assert.strictEqual(rolled[rolled.length - 1], 'P103', 'and stopped on the page');
+  assert.ok(rolled.every((c, i) => i === 0 || parseInt(c.slice(1), 16) > parseInt(rolled[i - 1].slice(1), 16)));
+  assert.ok(term.text.includes('Which BBS software'), 'then the page appeared');
+  app.stop();
+}
+
+export async function anyKeySkipsTheSearchAndIsNotAlsoAHold(): Promise<void> {
+  const { term, app } = open(false, 80);
+  term.forget();
+  type(app, '103');
+  type(app, ' '); // the hold key, taken by the skip
+  assert.ok(term.text.includes('Which BBS software'), 'the page appeared at once');
+  assert.ok(!term.bar.includes('HELD'));
+  await sleep(120);
+  const after = counters(term).length;
+  await sleep(200);
+  assert.strictEqual(counters(term).length, after, 'no tick after the skip');
+  app.stop();
+}
+
+export async function aSearchTickRepaintsTheCounterAloneAndCostsAFewBytes(): Promise<void> {
+  const { term, app } = open(false, 80);
+  type(app, '106');
+  const base = term.chunks.length;
+  await sleep(1700);
+  const ticks = term.chunks.slice(base).filter(chunk => /^\x1b\[1;1H\x1b\[0;1;37;44m/.test(chunk));
+  assert.ok(ticks.length >= 3, `ticks: ${ticks.length}`);
+  for (const tick of ticks) {
+    assert.ok(tick.length <= 40, `a tick is ${tick.length} bytes`);
+    assert.strictEqual(tick.match(/\x1b\[\d+;\d+H/g)?.length, 1, 'one cursor move: one row');
+  }
+  process.stderr.write(`[TELETEXT] page-search tick: ${ticks[0].length} bytes, ${ticks.length} ticks\n`);
+  app.stop();
+}
+
+export async function escapeCancelsAPageNumberAndPutsTheHeaderBack(): Promise<void> {
+  const { term, app } = open(false, 80);
+  type(app, '10');
+  term.forget();
+  app.handleInput('\x1b');
+  await sleep(120);
+  assert.strictEqual(term.closed, false, 'Escape only cancelled the number');
+  assert.ok(term.text.includes('UP ROUGH DEMO SERVICE'), 'the real header is back');
+  app.stop();
+}
+
+export async function aPageSearchAtFortyColumnsShowsSearchingAndCreatesNoTimer(): Promise<void> {
+  const { term, app } = open(false, 40);
+  const realTimeout = global.setTimeout;
+  let made = 0;
+  (global as any).setTimeout = (...args: any[]) => { made += 1; return (realTimeout as any)(...args); };
+  try {
+    term.forget();
+    type(app, '103');
+    assert.strictEqual(made, 0, 'no timer was created');
+    assert.ok(counters(term).includes('SEARCHING P103'), JSON.stringify(counters(term)));
+    assert.ok(term.text.includes('Which BBS software'), 'the page loaded at once');
+  } finally {
+    global.setTimeout = realTimeout;
+    app.stop();
+  }
+}
+
+export async function leavingTheDoorMidSearchClearsTheTimer(): Promise<void> {
+  const { term, app } = open(false, 80);
+  type(app, '106');
+  app.stop();
+  term.forget();
+  await sleep(300);
+  assert.strictEqual(term.chunks.length, 0, 'nothing is painted after the door has gone');
 }

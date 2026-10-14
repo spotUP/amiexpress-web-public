@@ -33,8 +33,9 @@ import {
   searchModal,
   sparklineText,
 } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
-import { DESK_LABEL, FRONT_PAGE_LABEL, MAGAZINE_TITLE, frontLead, frontMove, frontToggle, isArticle, type Desk, type MagazineIndexEntry, type Story } from '@amiexpress/bbs-door-sdk/formats/magazine';
+import { DESK_LABEL, FRONT_PAGE, FRONT_PAGE_LABEL, MAGAZINE_TITLE, PAGE_FAMILIES, frontLead, frontMove, frontToggle, isArticle, type Desk, type MagazineIndexEntry, type Story } from '@amiexpress/bbs-door-sdk/formats/magazine';
 import { createScrollText } from '@amiexpress/bbs-door-sdk';
+import { PageSearch, rangeSpace } from '@amiexpress/bbs-door-sdk/teletext/page-search';
 import {
   BANNER_MAX_ROWS,
   BANNER_MAX_ROWS_40,
@@ -100,7 +101,6 @@ const SIGNAL_DAYS = 8;
 /** The headline settles for this long before the one glitch lands. */
 const GLITCH_DELAY_MS = 450;
 const GLITCH_HOLD_MS = 160;
-const DIGIT_COMMIT_MS = 1500;
 /** The title screen waits this long for a key, then the reader opens by itself. */
 const TITLE_MS = 6000;
 /** The goodbye is a glimpse: a key or this long, then the call ends. */
@@ -164,7 +164,7 @@ export const HELP_TEXT = [
   'B   bookmark or unbookmark a story',
   'K   your bookmarks',
   '/   search headlines and summaries',
-  '0-9 type a page number, Enter to go',
+  '0-9 type a page number (100-999); Escape cancels',
   'Q   quit',
 ].join('\n');
 
@@ -201,7 +201,9 @@ export interface Reader {
   /** The kind of view on screen. */
   viewKind(): View['kind'];
   /** What actually ran: sentinels for the tests that prove the effects are wired. */
-  stats(): { glitches: number; tickerSteps: number; intervals: number; banners: number; titles: number };
+  stats(): { glitches: number; tickerSteps: number; intervals: number; banners: number; titles: number; searchTicks: number; lands: number };
+  /** The plain text of the row the page counter rolls in (the progress row), tags stripped. */
+  counterRow(): string;
   stop(): void;
 }
 
@@ -368,8 +370,6 @@ export async function startReader(session: DoorSession, options: ReaderOptions =
   let selected: string | null = null;
   let headline: { row: number; rows: number } | null = null;
   let panelText = '';
-  let digits = '';
-  let digitTimer: ReturnType<typeof setTimeout> | null = null;
   let glitchTimer: ReturnType<typeof setTimeout> | null = null;
   let repairTimer: ReturnType<typeof setTimeout> | null = null;
   let modalOpen = false;
@@ -378,7 +378,7 @@ export async function startReader(session: DoorSession, options: ReaderOptions =
   let wireModal: any = null;
   let hintsKey = '';
   let modalContent = '';
-  const counters = { glitches: 0, tickerSteps: 0, intervals: 0, banners: 0, titles: 0 };
+  const counters = { glitches: 0, tickerSteps: 0, intervals: 0, banners: 0, titles: 0, searchTicks: 0, lands: 0 };
   let stopped = false;
   let finish: () => void = () => { /* replaced below */ };
 
@@ -776,19 +776,65 @@ export async function startReader(session: DoorSession, options: ReaderOptions =
     frontChanged(next, how === 'lead' ? 'Now the lead' : how === 'up' ? 'Moved up' : 'Moved down');
   };
 
-  const jumpToPage = (n: number) => {
+  // ---- page numbers ----------------------------------------------------
+
+  /**
+   * What a page number is in this magazine: 100 is the front page, a story
+   * sits on the page index.json gave it, and the first page of a desk's
+   * family (120 for hacking) is that desk's contents when no story took it.
+   */
+  type PageTarget =
+    | { kind: 'front' }
+    | { kind: 'story'; storyId: string }
+    | { kind: 'desk'; desk: Desk };
+
+  const resolvePage = (n: number): PageTarget | null => {
+    if (n === FRONT_PAGE) return { kind: 'front' };
     const entry = snapshot.index.find((e) => e.page === n);
-    if (!entry) { setStatus(`No page ${n}`); render(); return; }
-    openStory(entry.storyId, view.kind === 'article' ? view.list : listIds.length ? listIds : snapshot.index.map((e) => e.storyId));
+    if (entry) return { kind: 'story', storyId: entry.storyId };
+    const desk = (Object.keys(PAGE_FAMILIES) as Desk[]).find((d) => PAGE_FAMILIES[d].first === n);
+    return desk ? { kind: 'desk', desk } : null;
   };
 
-  const commitDigits = () => {
-    if (digitTimer) { clearTimeout(digitTimer); digitTimer = null; }
-    const n = Number(digits);
-    digits = '';
-    setStatus('');
-    if (Number.isFinite(n) && n > 0) jumpToPage(n); else render();
+  /** The number the caller is on now: where the counter starts rolling from. */
+  const currentPage = (): number => {
+    if (view.kind === 'article') return byId(view.storyId)?.page ?? FRONT_PAGE;
+    if (view.kind === 'contents' && view.desk) return PAGE_FAMILIES[view.desk].first;
+    return FRONT_PAGE;
   };
+
+  const showPage = (n: number) => {
+    const target = resolvePage(n);
+    if (!target) { render(); return; }
+    counters.lands += 1;
+    if (target.kind === 'front') { go({ kind: 'front' }); return; }
+    if (target.kind === 'desk') { go({ kind: 'contents', desk: target.desk }); return; }
+    openStory(target.storyId, view.kind === 'article' ? view.list : listIds.length ? listIds : snapshot.index.map((e) => e.storyId));
+  };
+
+  /**
+   * The header counter is the progress row: one row, replaced in place, so a
+   * tick of the search repaints that row and nothing else.
+   */
+  const restoreProgress = () => {
+    progressBox.setContent(paintRow(buildProgress(layout, spreadNo, spreads.length)));
+    render();
+  };
+
+  const pageSearch = new PageSearch({
+    space: rangeSpace(100, 999, String),
+    width,
+    parse: (typed) => (/^[1-9][0-9]{2}$/.test(typed) ? Number(typed) : null),
+    exists: (n) => resolvePage(n) !== null,
+    current: currentPage,
+    header: (text, phase) => {
+      if (phase === 'searching') counters.searchTicks += 1;
+      progressBox.setContent(paintSeg({ text, role: phase === 'notfound' ? 'warn' : 'accent' }));
+      render();
+    },
+    restore: restoreProgress,
+    land: showPage,
+  });
 
   const modalDone = () => {
     modalOpen = false;
@@ -839,6 +885,7 @@ export async function startReader(session: DoorSession, options: ReaderOptions =
      * the modal, the way its own close keys are.
      */
     if (sysop) modal.key(['p', 'P', 'S-p'], () => { if (wireId === st.id) press('p', 'p'); });
+    modal.key(['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'], (ch: string) => { if (wireId === st.id) press(ch, ch); });
     modal.display();
     updateHints();
   };
@@ -938,29 +985,27 @@ export async function startReader(session: DoorSession, options: ReaderOptions =
 
   // ---- keys ------------------------------------------------------------
 
+  /** The key as the page-number machine reads it: a digit, one of three named keys, or anything else. */
+  const searchKey = (name: string, c: string): string => {
+    if (/^[0-9]$/.test(c)) return c;
+    if (name === 'escape') return 'escape';
+    if (name === 'backspace') return 'backspace';
+    if (name === 'enter' || name === 'return') return 'enter';
+    return name || c;
+  };
+
   const dispatchKey = (name: string, ch?: string) => {
     if (!stopped && closing) { finish(); return; }
     // The title waits for a key; that key only lets the reader in.
     if (!stopped && overlay) { dropOverlay(); return; }
     const c = (ch ?? '').toLowerCase();
     if (!stopped && modalOpen && wireId && sysop && c === 'p') { toggleFront(); return; }
+    // A digit typed in the wire panel closes the panel and starts the number
+    // in the view underneath. The panel traps focus, so only a binding on the
+    // modal ever sees the key (see openWire).
+    if (!stopped && modalOpen && wireId && /^[0-9]$/.test(c)) wireModal?.close();
     if (stopped || modalOpen) return;
-    if (/^[0-9]$/.test(c)) {
-      digits = (digits + c).slice(-3);
-      setStatus(`Page ${digits}_`);
-      if (digitTimer) clearTimeout(digitTimer);
-      digitTimer = setTimeout(commitDigits, DIGIT_COMMIT_MS);
-      if (digits.length === 3) commitDigits(); else render();
-      return;
-    }
-    if (digits && name === 'enter') { commitDigits(); return; }
-    if (digits && name === 'escape') {
-      digits = '';
-      if (digitTimer) { clearTimeout(digitTimer); digitTimer = null; }
-      setStatus('');
-      render();
-      return;
-    }
+    if (pageSearch.feed(searchKey(name, c))) return;
     setStatus('');
     switch (name) {
       case 'up': if (view.kind === 'article') page(-1); else move(-1); return;
@@ -1023,7 +1068,7 @@ export async function startReader(session: DoorSession, options: ReaderOptions =
       stopped = true;
       clearGlitch();
       clearOverlayTimer();
-      if (digitTimer) clearTimeout(digitTimer);
+      pageSearch.dispose();
       if (tickerTimer) clearInterval(tickerTimer);
       try { chrome.stop(); } catch { /* leaving anyway */ }
       try { input.disable(); } catch { /* leaving anyway */ }
@@ -1052,6 +1097,7 @@ export async function startReader(session: DoorSession, options: ReaderOptions =
     press,
     panelRows: () => (spreads[spreadNo] ?? []).map(rowText),
     progressRow: () => rowText(buildProgress(layout, spreadNo, spreads.length)),
+    counterRow: () => String(progressBox.getContent()).replace(/\{[^{}]*\}/g, ''),
     footerRow: () => chrome.footerContent().replace(/\{[^{}]*\}/g, ''),
     tickerRow: () => (tickerBox ? String(tickerBox.getContent()).replace(/\{[^{}]*\}/g, '') : ''),
     modalText: () => modalContent,
