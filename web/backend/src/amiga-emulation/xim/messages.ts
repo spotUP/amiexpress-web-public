@@ -7,6 +7,7 @@
 import { MoiraEmulator } from "../cpu/MoiraEmulator";
 import { DoorConstants } from "../DoorTypes";
 import { XIMMessage, XIMCommand } from "./types";
+import { loggableXimString, mayDumpRawString } from "./redact";
 
 export class XIMMessageParser {
   private emulator: MoiraEmulator;
@@ -108,12 +109,15 @@ export class XIMMessageParser {
     const stringAddr = msgAddr + DoorConstants.MESSAGE_STRING_OFFSET;
 
     // DEBUG: Dump raw bytes at string offset to trace "D" issue
-    const strBytes: number[] = [];
-    for (let i = 0; i < 16; i++) {
-      strBytes.push(this.emulator.readMemory(stringAddr + i) & 0xff);
+    // A password is in this String for two commands: never dump its bytes.
+    if (mayDumpRawString(command)) {
+      const strBytes: number[] = [];
+      for (let i = 0; i < 16; i++) {
+        strBytes.push(this.emulator.readMemory(stringAddr + i) & 0xff);
+      }
+      const strHex = strBytes.map(b => b.toString(16).padStart(2, '0')).join(' ');
+      console.log(`[XIMMessageParser] RAW STRING @0x${stringAddr.toString(16)}: ${strHex}`);
     }
-    const strHex = strBytes.map(b => b.toString(16).padStart(2, '0')).join(' ');
-    console.log(`[XIMMessageParser] RAW STRING @0x${stringAddr.toString(16)}: ${strHex}`);
 
     // Read the string (200 bytes starting at offset 24)
     const messageString = this.emulator.readString(
@@ -149,7 +153,7 @@ console.log(`  Signal: ${signal}, Task: 0x${task.toString(16)}`);
 console.log(`  Semi: ${this.formatHex(semaphore)}`);
 console.log(`  Filler1: ${this.formatHex(filler1)}, Filler2: ${this.formatHex(filler2)}`);
 console.log(`  StrPtr: ${this.formatHex(stringPtr)}, Filler3: ${this.formatHex(filler3)}`);
-console.log(`  String: "${messageString}"`);
+console.log(`  String: "${loggableXimString(command, data, messageString)}"`);
     if (layout === 'short') {
       const dumpBase = msgAddr + offsets.data;
       const raw: number[] = [];
@@ -495,6 +499,7 @@ console.log(`[XIMMessageParser] writeCommand: msgAddr=0x${msgAddr.toString(16)} 
       // This board's own, above express.e's MAX_CMD. Named here so an XIM log
       // reads "AEW_MSGQUERY" and not "CMD_10200".
       [XIMCommand.AEW_THEME]: 'AEW_THEME',
+      [XIMCommand.AEW_USERFIELD]: 'AEW_USERFIELD',
       [XIMCommand.AEW_DISPLAYMODE]: 'AEW_DISPLAYMODE',
       [XIMCommand.SV_NEWMSG]: 'SV_NEWMSG',
       [XIMCommand.SV_UNICONIFY]: 'SV_UNICONIFY',

@@ -29,7 +29,6 @@ import { releaseAnsiBuffer } from '../../utils/ansi-buffer.util';
 import { sessionWantsPetscii, PETSCII_FONT_IS_FIXED } from '../../utils/petscii-session-model';
 import { DEFAULT_TERMINAL_FONT } from '../../constants/terminal-fonts';
 import { fontMenuRows, fontForChoice, chooseTerminalFont } from '../../services/terminal-font.service';
-import bcrypt from 'bcryptjs';
 import { finalizeCommand } from '../../utils/command-response.util';
 import { changeAccount, saveAccount } from '../../services/account.service';
 import {
@@ -37,6 +36,7 @@ import {
 } from '../../services/user-settings/w-fields';
 
 import type { BBSSession } from '../../index';
+import { changeWPassword } from '../../services/user-settings/w-password';
 
 // Dependencies injected from index.ts
 let _sessions: Map<string, BBSSession>;
@@ -948,57 +948,9 @@ export async function handleWEditPasswordConfirmInput(socket: any, session: BBSS
     return;
   }
 
-  // express.e:26012-26029: IF StrCmp(str,str2) ... ELSE '\b\nPasswords do not match, changes not saved' Delay(60)
-  if (trimmed !== originalPassword) {
-    emitText(socket, '\r\nPasswords do not match, changes not saved');
-    _displayWCommandMenu(socket, session);
-    session.subState = LoggedOnSubState.W_OPTION_SELECT;
-    session.tempData = {};
-    return;
-  }
-
-  // express.e:26013-26024: checkPasswordStrength before saving
-  let minLen = 0, minStrength = 0;
-  try {
-    // bbsConfig.info is the source: the admin writes disk, and the mirror
-    // has already diverged here - disk MIN_PASSWORD_STRENGTH=0 against a
-    // database 1, so the admin showed "no check" while this enforced 1.
-    const sysConf = getBoardConfig(appConfig.get('dataDir'));
-    minLen = sysConf.min_password_length ?? 0;
-    minStrength = sysConf.min_password_strength ?? 0;
-  } catch (_) { /* use defaults */ }
-
-  if (minLen > 0 && trimmed.length < minLen) {
-    // express.e:26016: '\b\nPassword length must be at least \d chars, changes not saved' (no trailing \n)
-    emitText(socket, `\r\nPassword length must be at least ${minLen} chars, changes not saved`);
-    _displayWCommandMenu(socket, session);
-    session.subState = LoggedOnSubState.W_OPTION_SELECT;
-    session.tempData = {};
-    return;
-  }
-  if (minStrength > 0) {
-    let lower = 0, upper = 0, num = 0, sym = 0;
-    for (const c of trimmed) {
-      const code = c.charCodeAt(0);
-      if (code >= 48 && code <= 57) num = 1;
-      else if (code >= 65 && code <= 90) upper = 1;
-      else if (code >= 97 && code <= 122) lower = 1;
-      else sym = 1;
-    }
-    if (lower + upper + num + sym < Math.min(minStrength, 4)) {
-      // express.e:26021: '\b\nPassword must have at least \d of these:\b\n  upper case,lower case, numeric and symbols - changes not saved' (no trailing \n)
-      emitText(socket, `\r\nPassword must have at least ${minStrength} of these:\r\n  upper case,lower case, numeric and symbols - changes not saved`);
-      _displayWCommandMenu(socket, session);
-      session.subState = LoggedOnSubState.W_OPTION_SELECT;
-      session.tempData = {};
-      return;
-    }
-  }
-
-  // express.e:26025-26026: setNewPassword() + pwdLastUpdated:=getSystemTime() — no "success" message
-  const hashedPassword = await bcrypt.hash(trimmed, 10);
-  session.user.password = hashedPassword;
-  await changeAccount(session, { passwordHash: hashedPassword });
+  // express.e:25995-26026 (strength 908-933, setNewPassword 935, pwdLastUpdated 26026), once in w-password.ts.
+  const outcome = await changeWPassword(session, originalPassword, trimmed);
+  if (outcome.kind === 'refused') emitText(socket, outcome.refusal);
 
   _displayWCommandMenu(socket, session);
   session.subState = LoggedOnSubState.W_OPTION_SELECT;

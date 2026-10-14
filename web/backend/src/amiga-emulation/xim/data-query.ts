@@ -14,7 +14,7 @@ import { XIMMessageParser } from './messages';
 import { displayModeOf } from './display-mode.util';
 import { ExecLibrary } from '../api/ExecLibrary';
 import { editorStructFromDoor, editorStructToDoor, EditorState, EditorStringPool } from './editor-struct';
-import * as bcrypt from 'bcryptjs';
+import { setNewPassword } from '../../services/user-settings/w-password';
 import { SysopDebugUtil, DebugSeverity } from '../../utils/sysop-debug.util';
 import { userDatabaseManager } from '../../services/UserDatabaseManager';
 import { getSystemTime, toAmigaTime, encodeAmigaDate } from '../../utils/date-time.util';
@@ -171,13 +171,9 @@ debugLog(`  [READ] DT_PASSWORD: (blocked)`);
           // express.e:3508 IF StrLen(tempstring)>0 - an empty string sets nothing.
           if (user && newPwd.length > 0) {
             try {
-              const hash = bcrypt.hashSync(newPwd, 10);
-              user.passwordHash = hash;
+              setNewPassword(user as never, newPwd);
               // Retain plaintext only if other paths expect it (some importers do)
               user.password = newPwd;
-              // Unix seconds, like every other User date; user.misc gets
-              // express.e's form from UserFileManager (encodeAmigaDate).
-              (user as any).pwdLastUpdated = Math.floor(Date.now() / 1000);
               (user as any).pwdType = 1; // bcrypt
             } catch (err) {
 console.error('[XIMDataQuery] Failed to hash password:', err);

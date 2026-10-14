@@ -359,6 +359,9 @@ export enum XIMCommand {
    */
   AEW_POSTMSG = 10500,
 
+  /** This board's own: the W door's field conversation - xim/userfield.ts. */
+  AEW_USERFIELD = 10600,
+
   NETUPLOAD = 10001,
   NETDOWNLOAD = 10002,
 }

@@ -14,6 +14,7 @@ import { TRACK_UPLOADS_BIT, TRACK_DOWNLOADS_BIT } from '../../utils/download-rat
 import { checkSecurity, getACSConfig, LevelFlags } from '../../utils/acs.util';
 import { ACSPermission } from '../../constants/acs-permissions';
 import { config } from '../../config';
+import { setNewPassword } from '../../services/user-settings/w-password';
 import { findUserAnswersFile } from '../../utils/user-answers.util';
 import { readUserNotes, saveUserNotes } from '../../utils/user-notes.util';
 import * as amigafs from '../../utils/amigafs';
@@ -334,9 +335,7 @@ async function editField(socket: any, session: BBSSession, command: string): Pro
       const pass = await lineInput(socket, session, 50);
       if (pass.length > 0) {
         // setNewPassword (935) under the board's own hash - see database.hashPassword.
-        const { db } = require('../../database');
-        user.passwordHash = await db.hashPassword(pass);
-        user.pwdLastUpdated = Math.floor(Date.now() / 1000);
+        setNewPassword(user, pass);
         changed();
       }
       return;

@@ -21,6 +21,7 @@ import { Socket } from 'socket.io';
 import { XIMCommand, BBSSessionData, XIMState, XIMMessage, isCommandInfoRequestCommand } from './xim/types';
 import { DoorConstants } from './DoorTypes';
 import { XIMMessageParser } from './xim/messages';
+import { loggableXimString } from './xim/redact';
 import { DEFAULT_PAUSE_LINES } from '../screens/screen-rows';
 import { XIMIOHandler } from './xim/io';
 import { XIMDataQueryHandler } from './xim/data-query';
@@ -504,7 +505,9 @@ debugLog('[XIMProtocol] Discovered door reply port: 0x' + msg.replyPort.toString
     this.state.replyHandled = false;
 
     const humanName = this.messageParser.getCommandName(msg.command);
-    console.log(`[XIMProtocol] handleMessage: cmd=${msg.command} (${humanName}) usedXimInput=${this.state.usedXimInput} string="${msg.string?.substring(0, 50) || ''}"`);
+    // What every log below says the String was: a password is withheld (redact.ts).
+    const logged = loggableXimString(msg.command, msg.data, msg.string);
+    console.log(`[XIMProtocol] handleMessage: cmd=${msg.command} (${humanName}) usedXimInput=${this.state.usedXimInput} string="${logged.substring(0, 50)}"`);
 
     // Push onto the live debug ring buffer (dev-only, no-op in production).
     // CRITICAL: uses a top-level static import of debugRegistry — NOT `await import()`.
@@ -526,7 +529,7 @@ debugLog('[XIMProtocol] Discovered door reply port: 0x' + msg.replyPort.toString
             data: msg.data ?? 0,
             node: msg.nodeId ?? nodeId,
             line: msg.lineNumber ?? 0,
-            str: (msg.string ?? "").slice(0, 200),
+            str: logged.slice(0, 200),
           });
         }
       } catch { /* debug ring push failure is fine */ }
@@ -536,7 +539,7 @@ debugLog('[XIMProtocol] Discovered door reply port: 0x' + msg.replyPort.toString
     ximDebugLogger.logMessage(msg.command, humanName, 'RECV', {
       msgAddr: `0x${msg.msgAddr.toString(16)}`,
       data: msg.data,
-      string: msg.string,
+      string: logged,
       stringPtr: msg.stringPtr ? `0x${msg.stringPtr.toString(16)}` : null,
       nodeId: msg.nodeId,
       lineNumber: msg.lineNumber
@@ -547,25 +550,25 @@ debugLog('[XIMProtocol] Discovered door reply port: 0x' + msg.replyPort.toString
       type: humanName,
       typeCode: msg.command,
       param: msg.data,
-      data: msg.string || undefined,
+      data: logged || undefined,
     }, {
       msgAddr: `0x${msg.msgAddr.toString(16)}`,
       port: this.doorReplyPort ? `0x${this.doorReplyPort.toString(16)}` : undefined,
     });
 
 debugLog(
-      `[XIMProtocol] <<< XIM Command: ${msg.command} (${humanName}) data=${msg.data} string="${msg.string || ''}"`
+      `[XIMProtocol] <<< XIM Command: ${msg.command} (${humanName}) data=${msg.data} string="${logged}"`
     );
 
     // Log in Amiga CONSOLE_DEBUG format for direct comparison with real Amiga logs
     // Note: This logs the REQUEST. The response will be logged by the handler after filling in values.
     if (ximLogger.isAmigaEnabled()) {
-      ximLogger.logAmigaMessage(msg.command, msg.data, msg.string || '');
+      ximLogger.logAmigaMessage(msg.command, msg.data, logged);
     }
 
     // Log to door log file for debugging
     if (this.doorLogger) {
-      this.doorLogger.xim('RX', `${msg.command} (${humanName})`, `data=${msg.data} str="${msg.string || ''}"`);
+      this.doorLogger.xim('RX', `${msg.command} (${humanName})`, `data=${msg.data} str="${logged}"`);
     }
 
     // AEDoor.library startup handshake:
@@ -756,7 +759,7 @@ console.warn('[XIMProtocol] Door requested commands after shutdown, replying wit
     // express.e just logs a warning and does NOT modify msg.data - reply with data unchanged
 debugLog(`[XIMProtocol] ⚠️ UNHANDLED COMMAND: ${msg.command} (0x${msg.command.toString(16)})`);
         amigaGaps.record('xim', `command ${msg.command} (0x${msg.command.toString(16)})`, doorOf(this.emulator));
-debugLog(`[XIMProtocol]   Message details: msgAddr=0x${msg.msgAddr.toString(16)}, data=${msg.data}, string="${msg.string}"`);
+debugLog(`[XIMProtocol]   Message details: msgAddr=0x${msg.msgAddr.toString(16)}, data=${msg.data}, string="${logged}"`);
     this.sendReply(msg, msg.data);
   }
 
