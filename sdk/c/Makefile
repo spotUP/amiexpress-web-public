@@ -48,7 +48,7 @@ all: test
 # Tests (host)
 # ---------------------------------------------------------------------
 
-test: door-sources-compile build/write-message build/test_ae_host build/test_ae_session build/test_ui_profile build/test_ui_list build/test_ui_chrome build/test_ui_screen build/test_ui_input build/test_ui_editor build/test_frame_budget build/test_ui_theme build/test_ui_settings build/test_ui_doc build/test_ae_http build/test_ae_achieve build/test_ae_request build/test_ae_msgbase build/test_ae_dos build/test_texttv build/test_subs_scan build/test_achieve_rows build/test_requests_bulletin build/test_ae_userfield
+test: door-sources-compile build/write-message build/test_ae_host build/test_ae_session build/test_ui_profile build/test_ui_list build/test_ui_chrome build/test_ui_screen build/test_ui_input build/test_ui_editor build/test_frame_budget build/test_ui_theme build/test_ui_settings build/test_ui_doc build/test_ae_http build/test_ae_achieve build/test_ae_request build/test_ae_msgbase build/test_ae_dos build/test_texttv build/test_subs_scan build/test_achieve_rows build/test_requests_bulletin build/test_ae_userfield build/test_us_model
 	./build/test_ae_host
 	./build/test_ae_session
 	./build/test_ui_profile
@@ -71,6 +71,7 @@ test: door-sources-compile build/write-message build/test_ae_host build/test_ae_
 	./build/test_achieve_rows
 	./build/test_requests_bulletin
 	./build/test_ae_userfield
+	./build/test_us_model
 
 # Every door's own .c, syntax-checked with the host compiler.
 #
@@ -89,6 +90,10 @@ door-sources-compile:
 build/test_ae_userfield: src/ae_userfield.c src/ae_transport_native.c tests/test_ae_userfield.c include/ae_userfield.h include/ae_transport_native.h
 	@mkdir -p build
 	$(CC) $(HOST_CFLAGS) src/ae_userfield.c src/ae_transport_native.c tests/test_ae_userfield.c -o $@
+
+build/test_us_model: examples/usersettings/us_model.c tests/test_us_model.c examples/usersettings/us_model.h include/ae_userfield.h
+	@mkdir -p build
+	$(CC) $(HOST_CFLAGS) -I examples/usersettings -I include examples/usersettings/us_model.c tests/test_us_model.c -o $@
 
 build/test_ae_host: src/ae_host.c tests/test_ae_host.c include/ae_host.h
 	@mkdir -p build
@@ -211,7 +216,7 @@ check-themes:
 # The 68K library and the two yardstick doors
 # ---------------------------------------------------------------------
 
-amiga: lib build/amiga/hello build/amiga/hello_box build/amiga/hello_list build/amiga/theme-picker build/amiga/achieve build/amiga/requests build/amiga/subs build/amiga/texttv build/amiga/bench_repaint build/amiga/bench_repaint11
+amiga: lib build/amiga/hello build/amiga/hello_box build/amiga/hello_list build/amiga/theme-picker build/amiga/achieve build/amiga/requests build/amiga/subs build/amiga/texttv build/amiga/usersettings build/amiga/bench_repaint build/amiga/bench_repaint11
 
 lib: build/amiga/libae.lib
 
@@ -276,6 +281,11 @@ build/amiga/hello_list: examples/hello/hello_list.c build/amiga/libae.lib
 build/amiga/theme-picker: examples/theme-picker/theme_picker.c build/amiga/libae.lib
 	@mkdir -p build/amiga
 	$(VC) $(AMIGA_CFLAGS) $< build/amiga/libae.lib -lauto -o $@
+
+# W: the caller's settings (express.e internalCommandW) and the settings hub.
+build/amiga/usersettings: examples/usersettings/usersettings.c examples/usersettings/us_model.c examples/usersettings/us_model.h build/amiga/libae.lib
+	@mkdir -p build/amiga
+	$(VC) $(AMIGA_CFLAGS) -Iexamples/usersettings examples/usersettings/usersettings.c examples/usersettings/us_model.c build/amiga/libae.lib -lauto -o $@
 
 build/amiga/achieve: examples/achieve/achieve.c examples/achieve/achieve_rows.c examples/achieve/achieve_rows.h build/amiga/libae.lib
 	@mkdir -p build/amiga
