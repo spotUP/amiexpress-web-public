@@ -24,9 +24,8 @@ export declare function petsciiMappable(text: string): boolean;
 /** Parse one piece from its bytes; null for a file that is not plain printable latin1 art. */
 export declare function parsePiece(file: string, bytes: Buffer): FillerPiece | null;
 /**
- * The pieces for one caller: the sysop's `fill/` when it holds any, else the
- * shipped ones. A caller that reads PETSCII (or a screen of forty columns or
- * fewer) gets only the pieces that map.
+ * The pieces for one caller, from the door's `art/fill/`. A caller that reads
+ * PETSCII (or a screen of forty columns or fewer) gets only the pieces that map.
  */
 export declare function loadFiller(sources: ArtSources, petsciiLike: boolean): FillerPiece[];
 /** FNV-1a, 32 bit: small, stable, and the same on every machine. */

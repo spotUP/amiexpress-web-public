@@ -9,6 +9,7 @@ interface DoorSession {
     } | null;
     bbsSession?: {
         doorCommand?: string;
+        texttvMode?: boolean;
     };
     storage: {
         load<T>(key: string): Promise<T | null>;

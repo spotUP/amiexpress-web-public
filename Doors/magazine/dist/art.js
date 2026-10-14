@@ -36,7 +36,6 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.slotKey = exports.BANNER_MAX_ROWS_40 = exports.BANNER_MAX_ROWS = exports.SECTION_ART = exports.ART_NAMES = void 0;
 exports.slotFiles = slotFiles;
 exports.shippedArtDir = shippedArtDir;
-exports.overrideArtDir = overrideArtDir;
 exports.loadArt = loadArt;
 exports.ansiRows = ansiRows;
 exports.seqSurface = seqSurface;
@@ -59,14 +58,18 @@ exports.artRowText = artRowText;
  *   - `.seq` is C64 PETSCII. A PETSCII caller - and any caller on a 40-column
  *     screen - first gets the drawing an artist made on the Studio's C64 tab
  *     (`<board>/Screens/doors/MAG/setting:art_<name>.c64.ans`, 40-column
- *     ANSI), then the shipped `.seq`.
+ *     ANSI), then the shipped `.seq`. A TELETEXT caller (forty columns on an
+ *     ANSI terminal) first gets the Studio's Teletext tab drawing
+ *     (`...setting:art_<name>.ttx.ans`), then falls to the C64 path - the
+ *     order GLC's logo uses.
  *
  * On the live board `Doors/magazine/art/` is on the data volume and the
  * entrypoint holds back every art slot's default file, so a deploy never puts
  * the shipped placeholder over an edit (docker-entrypoint.sh, "A DOOR'S ART
  * IS NOT A CFG FILE"). A file that is missing or empty is skipped without a
- * word: no art is a valid magazine. The filler (`art/fill/`) is plain ASCII
- * and keeps its own sysop folder, `<board root>/Magazine/art/fill/`.
+ * word: no art is a valid magazine. The filler (`art/fill/`) is plain ASCII,
+ * declared to the Studio as an art FOLDER (`artFolders` in the manifest), so
+ * it too is edited in place, read from here alone, and held back on deploy.
  *
  * WHO DECIDES THE KIND. The session does: `bbs.isPetsciiMode()`, the same
  * question `createScreen` asks to set `screen.petscii`. This module does not
@@ -128,9 +131,6 @@ function shippedArtDir(startDir = __dirname) {
     const base = path.basename(startDir) === 'dist' ? path.dirname(startDir) : startDir;
     return path.join(base, 'art');
 }
-function overrideArtDir(magazineRootDir) {
-    return path.join(magazineRootDir, 'art');
-}
 /** The raw bytes of one file, or null when it is absent, empty or not a file. */
 function readBytes(file) {
     try {
@@ -145,15 +145,19 @@ function readBytes(file) {
 }
 /**
  * One piece of art for one caller. A wide caller gets the slot's file, else
- * the default `.ans`. A 40-column caller gets the Studio's C64 drawing (read
- * as ANSI, so `kind` is `ans`), else the shipped `.seq`. Null when none exists.
+ * the default `.ans`. A 40-column caller gets the Studio's narrow drawing
+ * (read as ANSI, so `kind` is `ans`) - a teletext caller his Teletext one
+ * first, everyone the C64 one - else the shipped `.seq`. Null when none exists.
  */
 function loadArt(name, kind, sources) {
     if (kind === 'seq' && sources.variantDir) {
-        const file = path.join(sources.variantDir, `setting:${(0, exports.slotKey)(name)}.c64.ans`);
-        const bytes = readBytes(file);
-        if (bytes)
-            return { kind: 'ans', bytes, file };
+        const alphabets = sources.teletext ? ['ttx', 'c64'] : ['c64'];
+        for (const alphabet of alphabets) {
+            const file = path.join(sources.variantDir, `setting:${(0, exports.slotKey)(name)}.${alphabet}.ans`);
+            const bytes = readBytes(file);
+            if (bytes)
+                return { kind: 'ans', bytes, file };
+        }
     }
     if (!sources.shippedDir)
         return null;

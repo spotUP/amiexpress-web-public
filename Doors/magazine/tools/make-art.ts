@@ -11,8 +11,9 @@
  * for capitals and `$41-$5A` for small, colours are the VIC colour codes, a
  * solid fill is reverse video, and no cell has a background of its own.
  *
- * The art is a placeholder and says so on every piece. A sysop's own drawing
- * goes in `<board root>/Magazine/art/<name>.ans|.seq` and wins.
+ * The art is a placeholder and says so on every piece. An artist replaces it
+ * in the ANSI Studio (admin Screens, Door screens, MAG), which saves over these
+ * same files in place; the C64 and Teletext tabs draw the 40-column versions.
  *
  * LOOK: a signal terminal. Black screen, neon cyan / magenta / green, a
  * magenta rules, wide letter-spaced captions - not a diskmag copy.
@@ -128,7 +129,7 @@ function ansTitle(): Buffer {
     '',
     paint(centred(W, [[C.grey, '± ± ±  hack · scene · graffiti · music · people · archive  ± ± ±']])),
     '',
-    paint(centred(W, [[C.yellow, `» ${PLACEHOLDER_NOTE} - the sysop replaces it in Magazine/art/mag_title.ans «`]])),
+    paint(centred(W, [[C.yellow, `» ${PLACEHOLDER_NOTE} - redraw it in the ANSI Studio: Door screens, MAG «`]])),
     '',
     paint(centred(W, [[C.white, 'press any key to tune in']])),
     '',
@@ -147,7 +148,7 @@ function ansGoodbye(): Buffer {
     paint(centred(W, [[C.greenDim, 'the frequency stays open · tune in again']])),
     '',
     '',
-    paint(centred(W, [[C.grey, `${PLACEHOLDER_NOTE} - Magazine/art/mag_goodbye.ans`]])),
+    paint(centred(W, [[C.grey, `${PLACEHOLDER_NOTE} - redraw it in the ANSI Studio: Door screens, MAG`]])),
   ], { clear: true });
 }
 

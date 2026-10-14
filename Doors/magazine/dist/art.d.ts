@@ -7,14 +7,14 @@ export declare const SECTION_ART: Record<Desk, string>;
 export declare const BANNER_MAX_ROWS = 5;
 export declare const BANNER_MAX_ROWS_40 = 4;
 export interface ArtSources {
-    /** `<board root>/Magazine/art`: the sysop's folder, now read for the filler only. */
-    overrideDir: string;
-    /** `Doors/magazine/art`: where the Studio saves and the loader reads. Null when the caller wants no art. */
+    /** `Doors/magazine/art`: where the Studio saves and the loader reads, filler included. Null when the caller wants no art. */
     shippedDir: string | null;
     /** Slot name to the absolute file the Studio's slot names, from `slotFiles`. Absent: the default file. */
     slots?: Readonly<Record<string, string>>;
     /** `<board root>/Screens/doors/MAG`: where the Studio's C64 tab saves. Null or absent: no C64 drawings. */
     variantDir?: string | null;
+    /** The caller answered T at the graphics prompt: his own Teletext drawing comes before the C64 one. */
+    teletext?: boolean;
 }
 /** The Studio's name for the slot that holds a piece: the setting key, as the section it is addressed by. */
 export declare const slotKey: (name: string) => string;
@@ -28,7 +28,6 @@ export declare const slotKey: (name: string) => string;
 export declare function slotFiles(values: Readonly<Record<string, unknown>>, doorDir: string): Record<string, string>;
 /** The directory the door ships its placeholders in, from source (`Doors/magazine`) or from `dist`. */
 export declare function shippedArtDir(startDir?: string): string;
-export declare function overrideArtDir(magazineRootDir: string): string;
 export type ArtKind = 'ans' | 'seq';
 export interface LoadedArt {
     kind: ArtKind;
@@ -38,8 +37,9 @@ export interface LoadedArt {
 }
 /**
  * One piece of art for one caller. A wide caller gets the slot's file, else
- * the default `.ans`. A 40-column caller gets the Studio's C64 drawing (read
- * as ANSI, so `kind` is `ans`), else the shipped `.seq`. Null when none exists.
+ * the default `.ans`. A 40-column caller gets the Studio's narrow drawing
+ * (read as ANSI, so `kind` is `ans`) - a teletext caller his Teletext one
+ * first, everyone the C64 one - else the shipped `.seq`. Null when none exists.
  */
 export declare function loadArt(name: string, kind: ArtKind, sources: ArtSources): LoadedArt | null;
 /**

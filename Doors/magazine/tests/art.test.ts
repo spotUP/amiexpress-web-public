@@ -27,9 +27,10 @@ function tmp(): string {
 }
 
 function sources(): { sources: ArtSources; override: string; shipped: string } {
+  // `override` stands for the retired <board>/Magazine/art: a folder the loader must never read.
   const override = tmp();
   const shipped = tmp();
-  return { sources: { overrideDir: override, shippedDir: shipped }, override, shipped };
+  return { sources: { shippedDir: shipped }, override, shipped };
 }
 
 // ---- the loader -----------------------------------------------------------
@@ -86,6 +87,21 @@ export async function theStudiosC64DrawingBeatsTheShippedSeqForAFortyColumnCalle
   assert.strictEqual(loadArt('sec_hack', 'ans', s.sources), null, 'a wide caller never reads the C64 drawing');
 }
 
+export async function aTeletextCallerGetsHisOwnDrawingBeforeTheC64One(): Promise<void> {
+  // The Studio's Teletext tab saves <board>/Screens/doors/MAG/setting:art_<name>.ttx.ans.
+  const s = sources();
+  const variants = tmp();
+  fs.writeFileSync(path.join(s.shipped, 'sec_hack.seq'), 'seq');
+  fs.writeFileSync(path.join(variants, 'setting:art_sec_hack.c64.ans'), 'C64\n');
+  s.sources.variantDir = variants;
+  s.sources.teletext = true;
+  assert.deepStrictEqual(artRows(loadArt('sec_hack', 'seq', s.sources)!, 5, 40).map(artRowText), ['C64'], 'no teletext drawing yet: the C64 one');
+  fs.writeFileSync(path.join(variants, 'setting:art_sec_hack.ttx.ans'), 'TELETEXT\n');
+  assert.deepStrictEqual(artRows(loadArt('sec_hack', 'seq', s.sources)!, 5, 40).map(artRowText), ['TELETEXT']);
+  s.sources.teletext = false;
+  assert.deepStrictEqual(artRows(loadArt('sec_hack', 'seq', s.sources)!, 5, 40).map(artRowText), ['C64'], 'a C64 caller never reads the teletext drawing');
+}
+
 export async function theManifestDeclaresEveryPieceAsAStudioSlotWhoseDefaultIsShipped(): Promise<void> {
   const door = path.join(__dirname, '..');
   const manifest = JSON.parse(fs.readFileSync(path.join(door, 'door.settings.json'), 'utf8')) as {
@@ -114,7 +130,7 @@ export async function aPetsciiCallerGetsTheSeqAndEveryoneElseTheAns(): Promise<v
 export async function aMissingOrEmptyFileIsSkippedWithoutAnError(): Promise<void> {
   const s = sources();
   assert.strictEqual(loadArt('mag_title', 'ans', s.sources), null, 'nowhere: no art');
-  assert.strictEqual(loadArt('mag_title', 'ans', { overrideDir: path.join(s.override, 'nope'), shippedDir: null }), null);
+  assert.strictEqual(loadArt('mag_title', 'ans', { shippedDir: null }), null);
   // An empty file is not art.
   fs.writeFileSync(path.join(s.shipped, 'mag_title.ans'), '');
   assert.strictEqual(loadArt('mag_title', 'ans', s.sources), null);
@@ -261,6 +277,18 @@ export async function theRowsOfEachWordInTheTitleShareTheirLeftColumn(): Promise
     assert.ok(lefts[2] - lefts[0] <= 1, `the last row starts at ${lefts[2]}, the first at ${lefts[0]}`);
     // Padded to one width, so a row is never centred on its own length.
     assert.strictEqual(new Set(word.map((r) => r.length)).size, 1, `row widths ${word.map((r) => r.length).join(', ')}`);
+  }
+}
+
+export async function noPlaceholderSendsTheSysopToAFolderTheDoorDoesNotRead(): Promise<void> {
+  // Since c2cc9fe2f the Studio edits Doors/magazine/art in place and nothing reads <board>/Magazine/art.
+  const generator = fs.readFileSync(path.join(__dirname, '..', 'tools', 'make-art.ts'), 'utf8');
+  assert.ok(!generator.includes('Magazine/art'), 'make-art.ts names Magazine/art');
+  for (const name of ART_NAMES) {
+    for (const kind of ['ans', 'seq']) {
+      const text = fs.readFileSync(path.join(SHIPPED, `${name}.${kind}`)).toString('latin1');
+      assert.ok(!/magazine\/art/i.test(text), `${name}.${kind} names Magazine/art`);
+    }
   }
 }
 

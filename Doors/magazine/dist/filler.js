@@ -47,7 +47,10 @@ exports.placeFiller = placeFiller;
  * of a long one ends half way down. That space is decoration room. Sixty-five
  * pieces by Mortimer ("Mt", each signed (c)Mt - the signature is part of the
  * piece and is never cut) ship in `Doors/magazine/art/fill/` as latin1 text,
- * one file each; `<board root>/Magazine/art/fill/` wins when it holds any.
+ * one file each. That folder is the one place they live: the ANSI Studio lists
+ * it as an art folder and saves there in place, and this module reads nothing
+ * else (the old `<board root>/Magazine/art/fill/` override is gone - two
+ * folders meant the Studio's edit could lose to a copy nobody could see).
  *
  * RULES. A piece is placed whole or not at all. Filler never moves or hides
  * text (it only takes rows a column does not use), is never counted when the
@@ -125,14 +128,11 @@ function piecesIn(dir) {
     return out;
 }
 /**
- * The pieces for one caller: the sysop's `fill/` when it holds any, else the
- * shipped ones. A caller that reads PETSCII (or a screen of forty columns or
- * fewer) gets only the pieces that map.
+ * The pieces for one caller, from the door's `art/fill/`. A caller that reads
+ * PETSCII (or a screen of forty columns or fewer) gets only the pieces that map.
  */
 function loadFiller(sources, petsciiLike) {
-    let pieces = piecesIn(path.join(sources.overrideDir, 'fill'));
-    if (pieces.length === 0 && sources.shippedDir)
-        pieces = piecesIn(path.join(sources.shippedDir, 'fill'));
+    const pieces = sources.shippedDir ? piecesIn(path.join(sources.shippedDir, 'fill')) : [];
     return petsciiLike ? pieces.filter((p) => p.petsciiOk) : pieces;
 }
 /** FNV-1a, 32 bit: small, stable, and the same on every machine. */

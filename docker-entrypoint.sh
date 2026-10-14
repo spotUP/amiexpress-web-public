@@ -994,6 +994,33 @@ else
             echo "Doors/$door/$art" >> "$DOOR_CFG_LIST"
             echo "./$door/$art" >> "$DOOR_CFG_EXCLUDES"
         done
+
+        # AN ART FOLDER IS ART TOO. `artFolders` declares a folder whose every
+        # file is a Studio slot - the magazine's 65 filler pieces in art/fill -
+        # and the Studio saves them in place, so they join the tracked set the
+        # same way: the image leads each one until the artist edits it. Read
+        # from the manifest's `artFolders` block only (bracket depth, so a
+        # `commands` array inside an entry does not end it early); the files
+        # are whatever the IMAGE ships in that folder.
+        awk 'f == 0 && /"artFolders"/ { f = 1 }
+             f == 1 {
+               line = $0
+               o = gsub(/\[/, "[", line); c = gsub(/\]/, "]", line)
+               d += o - c
+               print
+               if (o > 0) started = 1
+               if (started && d <= 0) exit
+             }' "$manifest" \
+          | grep -o '"dir"[[:space:]]*:[[:space:]]*"[^"]*"' \
+          | sed 's/.*"\([^"]*\)"$/\1/' | sort -u | while IFS= read -r artdir; do
+            [ -n "$artdir" ] || continue
+            for piece in "$DEFAULT_DATA_DIR/Doors/$door/$artdir"/*; do
+                [ -f "$piece" ] || continue
+                name=$(basename "$piece")
+                echo "Doors/$door/$artdir/$name" >> "$DOOR_CFG_LIST"
+                echo "./$door/$artdir/$name" >> "$DOOR_CFG_EXCLUDES"
+            done
+        done
     done
 
     # A 68K DOOR WRITES ITS STATE BESIDE ITS BINARY, because that is how an

@@ -13,14 +13,18 @@
  *   - `.seq` is C64 PETSCII. A PETSCII caller - and any caller on a 40-column
  *     screen - first gets the drawing an artist made on the Studio's C64 tab
  *     (`<board>/Screens/doors/MAG/setting:art_<name>.c64.ans`, 40-column
- *     ANSI), then the shipped `.seq`.
+ *     ANSI), then the shipped `.seq`. A TELETEXT caller (forty columns on an
+ *     ANSI terminal) first gets the Studio's Teletext tab drawing
+ *     (`...setting:art_<name>.ttx.ans`), then falls to the C64 path - the
+ *     order GLC's logo uses.
  *
  * On the live board `Doors/magazine/art/` is on the data volume and the
  * entrypoint holds back every art slot's default file, so a deploy never puts
  * the shipped placeholder over an edit (docker-entrypoint.sh, "A DOOR'S ART
  * IS NOT A CFG FILE"). A file that is missing or empty is skipped without a
- * word: no art is a valid magazine. The filler (`art/fill/`) is plain ASCII
- * and keeps its own sysop folder, `<board root>/Magazine/art/fill/`.
+ * word: no art is a valid magazine. The filler (`art/fill/`) is plain ASCII,
+ * declared to the Studio as an art FOLDER (`artFolders` in the manifest), so
+ * it too is edited in place, read from here alone, and held back on deploy.
  *
  * WHO DECIDES THE KIND. The session does: `bbs.isPetsciiMode()`, the same
  * question `createScreen` asks to set `screen.petscii`. This module does not
@@ -62,14 +66,14 @@ export const BANNER_MAX_ROWS = 5;
 export const BANNER_MAX_ROWS_40 = 4;
 
 export interface ArtSources {
-  /** `<board root>/Magazine/art`: the sysop's folder, now read for the filler only. */
-  overrideDir: string;
-  /** `Doors/magazine/art`: where the Studio saves and the loader reads. Null when the caller wants no art. */
+  /** `Doors/magazine/art`: where the Studio saves and the loader reads, filler included. Null when the caller wants no art. */
   shippedDir: string | null;
   /** Slot name to the absolute file the Studio's slot names, from `slotFiles`. Absent: the default file. */
   slots?: Readonly<Record<string, string>>;
   /** `<board root>/Screens/doors/MAG`: where the Studio's C64 tab saves. Null or absent: no C64 drawings. */
   variantDir?: string | null;
+  /** The caller answered T at the graphics prompt: his own Teletext drawing comes before the C64 one. */
+  teletext?: boolean;
 }
 
 /** The Studio's name for the slot that holds a piece: the setting key, as the section it is addressed by. */
@@ -99,10 +103,6 @@ export function shippedArtDir(startDir: string = __dirname): string {
   return path.join(base, 'art');
 }
 
-export function overrideArtDir(magazineRootDir: string): string {
-  return path.join(magazineRootDir, 'art');
-}
-
 /** The raw bytes of one file, or null when it is absent, empty or not a file. */
 function readBytes(file: string): Buffer | null {
   try {
@@ -125,14 +125,18 @@ export interface LoadedArt {
 
 /**
  * One piece of art for one caller. A wide caller gets the slot's file, else
- * the default `.ans`. A 40-column caller gets the Studio's C64 drawing (read
- * as ANSI, so `kind` is `ans`), else the shipped `.seq`. Null when none exists.
+ * the default `.ans`. A 40-column caller gets the Studio's narrow drawing
+ * (read as ANSI, so `kind` is `ans`) - a teletext caller his Teletext one
+ * first, everyone the C64 one - else the shipped `.seq`. Null when none exists.
  */
 export function loadArt(name: string, kind: ArtKind, sources: ArtSources): LoadedArt | null {
   if (kind === 'seq' && sources.variantDir) {
-    const file = path.join(sources.variantDir, `setting:${slotKey(name)}.c64.ans`);
-    const bytes = readBytes(file);
-    if (bytes) return { kind: 'ans', bytes, file };
+    const alphabets = sources.teletext ? ['ttx', 'c64'] : ['c64'];
+    for (const alphabet of alphabets) {
+      const file = path.join(sources.variantDir, `setting:${slotKey(name)}.${alphabet}.ans`);
+      const bytes = readBytes(file);
+      if (bytes) return { kind: 'ans', bytes, file };
+    }
   }
   if (!sources.shippedDir) return null;
   const candidates = kind === 'ans' && sources.slots?.[name] ? [sources.slots[name]] : [];

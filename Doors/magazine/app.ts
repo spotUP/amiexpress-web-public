@@ -45,7 +45,6 @@ import {
   artRowText,
   artRows,
   loadArt,
-  overrideArtDir,
   slotFiles,
   shippedArtDir,
   type ArtSources,
@@ -90,7 +89,7 @@ interface DoorSession {
   bbs: any;
   /** The board's user: `secLevel` decides who may edit the front page. */
   user?: { secLevel?: number } | null;
-  bbsSession?: { doorCommand?: string };
+  bbsSession?: { doorCommand?: string; texttvMode?: boolean };
   storage: { load<T>(key: string): Promise<T | null>; save(key: string, data: any): Promise<void> };
 }
 
@@ -267,13 +266,14 @@ export async function startReader(session: DoorSession, options: ReaderOptions =
     try { slots = slotFiles(readDoorSettings(__dirname) as Record<string, unknown>, resolveDoorRoot(__dirname)); } catch { /* every slot keeps its default file */ }
   }
   const artSources: ArtSources = {
-    overrideDir: overrideArtDir(magazineRoot(__dirname)),
     shippedDir: ownArt ? (options.shippedArtDir ?? null) : shippedArtDir(),
     slots,
     // Where the Studio's C64 tab saves a drawing: <board root>/Screens/doors/MAG.
     variantDir: options.variantDir !== undefined
       ? options.variantDir
       : ownArt ? null : path.join(resolveBbsRoot(__dirname), 'Screens', 'doors', 'MAG'),
+    // A caller who answered T: the session says so, as it does for GLC's logo.
+    teletext: session.bbsSession?.texttvMode === true,
   };
   const artKind = artKindFor(petscii, width);
   /** Mortimer's clipart for empty column space; a caller that reads PETSCII only gets pieces that map. */

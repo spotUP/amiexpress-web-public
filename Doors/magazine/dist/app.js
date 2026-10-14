@@ -191,13 +191,14 @@ async function startReader(session, options = {}) {
         catch { /* every slot keeps its default file */ }
     }
     const artSources = {
-        overrideDir: (0, art_1.overrideArtDir)((0, library_1.magazineRoot)(__dirname)),
         shippedDir: ownArt ? (options.shippedArtDir ?? null) : (0, art_1.shippedArtDir)(),
         slots,
         // Where the Studio's C64 tab saves a drawing: <board root>/Screens/doors/MAG.
         variantDir: options.variantDir !== undefined
             ? options.variantDir
             : ownArt ? null : path.join((0, settings_1.resolveBbsRoot)(__dirname), 'Screens', 'doors', 'MAG'),
+        // A caller who answered T: the session says so, as it does for GLC's logo.
+        teletext: session.bbsSession?.texttvMode === true,
     };
     const artKind = (0, art_1.artKindFor)(petscii, width);
     /** Mortimer's clipart for empty column space; a caller that reads PETSCII only gets pieces that map. */

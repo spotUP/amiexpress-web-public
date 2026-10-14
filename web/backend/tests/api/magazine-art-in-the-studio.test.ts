@@ -41,6 +41,7 @@ beforeEach(() => {
   fs.mkdirSync(path.join(door, 'art'), { recursive: true });
   fs.copyFileSync(path.join(DOOR_SRC, 'door.settings.json'), path.join(door, 'door.settings.json'));
   for (const p of PIECES) fs.copyFileSync(path.join(DOOR_SRC, 'art', `${p}.ans`), path.join(door, 'art', `${p}.ans`));
+  fs.cpSync(path.join(DOOR_SRC, 'art', 'fill'), path.join(door, 'art', 'fill'), { recursive: true });
   previousDataDir = config.get('dataDir');
   config.set('dataDir', root);
 });
@@ -56,7 +57,8 @@ describe('the magazine screens in the ANSI Studio', () => {
     const list = await request(app()).get('/api/door-art');
     expect(list.status).toBe(200);
     const mag = list.body.data.find((d: { command: string }) => d.command === 'MAG');
-    expect(mag.sections.map((s: { file: string }) => s.file).sort()).toEqual(PIECES.map((p) => `art/${p}.ans`).sort());
+    const screens = mag.sections.filter((s: { section: string }) => s.section.startsWith('setting:'));
+    expect(screens.map((s: { file: string }) => s.file).sort()).toEqual(PIECES.map((p) => `art/${p}.ans`).sort());
     expect(mag.sections.every((s: { missing?: boolean; lines: number }) => !s.missing && s.lines > 0)).toBe(true);
   });
 
@@ -81,5 +83,45 @@ describe('the magazine screens in the ANSI Studio', () => {
     const res = await request(app()).put('/api/door-art/MAG')
       .send({ file: '../settings.json', section: 'setting:art_mag_title', content: b64('x') });
     expect(res.status).toBe(400);
+  });
+
+  it('lists the sixty-five filler pieces as slots of their own', async () => {
+    const list = await request(app()).get('/api/door-art');
+    const mag = list.body.data.find((d: { command: string }) => d.command === 'MAG');
+    const fill = mag.sections.filter((s: { section: string }) => s.section.startsWith('folder:'));
+    expect(fill).toHaveLength(65);
+    expect(fill[0]).toMatchObject({ file: 'art/fill/mortimer_01.txt', section: 'folder:art/fill/mortimer_01.txt', offers: [] });
+    expect(fill.every((s: { lines: number }) => s.lines > 0)).toBe(true);
+  });
+
+  it('saves a filler piece in place, into the folder the filler loader reads', async () => {
+    // Doors/magazine/filler.ts loadFiller reads <art>/fill and nothing else.
+    const bytes = '  (\xa9Mt)\r\n';
+    const res = await request(app()).put('/api/door-art/MAG')
+      .send({ file: 'art/fill/mortimer_07.txt', section: 'folder:art/fill/mortimer_07.txt', content: b64(bytes) });
+    expect(res.status).toBe(200);
+    const read = fs.readFileSync(path.join(root, 'Doors', 'magazine', 'art', 'fill', 'mortimer_07.txt'));
+    expect(read.equals(Buffer.from(bytes, 'latin1'))).toBe(true);
+  });
+
+  it('will not write a filler name the folder does not hold, or outside it', async () => {
+    for (const file of ['art/fill/new_piece.txt', 'art/fill/../mag_title.ans']) {
+      const res = await request(app()).put('/api/door-art/MAG')
+        .send({ file, section: `folder:${file}`, content: b64('x') });
+      expect(res.status).not.toBe(200);
+    }
+    expect(fs.existsSync(path.join(root, 'Doors', 'magazine', 'art', 'fill', 'new_piece.txt'))).toBe(false);
+  });
+
+  it('saves the Teletext and C64 drawings where the door reads them', async () => {
+    // Doors/magazine/art.ts loadArt: <board>/Screens/doors/MAG/setting:art_<name>.<ttx|c64>.ans
+    for (const variant of ['c64', 'ttx']) {
+      const res = await request(app()).put('/api/door-art/MAG')
+        .send({ file: 'art/sec_hack.ans', section: 'setting:art_sec_hack', content: b64(`${variant} HACK\n`), variant });
+      expect(res.status).toBe(200);
+      expect(res.body.data.offers).toEqual(['c64', 'ttx']);
+      const saved = path.join(root, 'Screens', 'doors', 'MAG', `setting:art_sec_hack.${variant}.ans`);
+      expect(fs.readFileSync(saved, 'latin1')).toContain(`${variant} HACK`);
+    }
   });
 });

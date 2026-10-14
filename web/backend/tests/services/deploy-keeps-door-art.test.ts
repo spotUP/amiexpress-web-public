@@ -213,4 +213,24 @@ describe('door art across a deploy', () => {
     expect(fs.readFileSync(mag('volume', 'art/mag_title.ans'), 'utf8')).toBe('the artist drew this\n');
     expect(fs.readFileSync(mag('volume', 'art/mag_front.ans'), 'utf8')).toBe('redrawn placeholder\n');
   });
+
+  it('keeps a Studio edit of a magazine filler piece across deploys while the image leads untouched ones', () => {
+    // The filler is declared as an art FOLDER (artFolders: art/fill), not one setting per piece.
+    const mag = (side: string, rel: string) => path.join(root, side, 'Doors', 'magazine', rel);
+    fs.mkdirSync(mag('image', 'art/fill'), { recursive: true });
+    fs.writeFileSync(mag('image', 'door.settings.json'), JSON.stringify({
+      command: 'MAG',
+      settings: [{ key: 'show_ticker', label: 'Ticker', type: 'boolean', default: true }],
+      artFolders: [{ dir: 'art/fill', label: 'Filler', maxLines: 25, maxLineLength: 80, commands: ['MAG'] }],
+    }, null, 2));
+    fs.writeFileSync(mag('image', 'art/fill/mortimer_01.txt'), 'shipped one\n');
+    fs.writeFileSync(mag('image', 'art/fill/mortimer_02.txt'), 'shipped two\n');
+    fs.mkdirSync(mag('volume', 'art'), { recursive: true });
+    boot();
+    fs.writeFileSync(mag('volume', 'art/fill/mortimer_01.txt'), 'the artist redrew this\n');
+    fs.writeFileSync(mag('image', 'art/fill/mortimer_02.txt'), 'redrawn shipped two\n');
+    boot(); boot();
+    expect(fs.readFileSync(mag('volume', 'art/fill/mortimer_01.txt'), 'utf8')).toBe('the artist redrew this\n');
+    expect(fs.readFileSync(mag('volume', 'art/fill/mortimer_02.txt'), 'utf8')).toBe('redrawn shipped two\n');
+  });
 });

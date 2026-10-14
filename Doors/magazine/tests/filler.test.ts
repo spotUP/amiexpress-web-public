@@ -22,8 +22,7 @@ import {
 import { buildArticle, buildLayout, buildListing, rowText, type ListingBlock } from '../layout';
 
 const SHIPPED = shippedArtDir(path.join(__dirname, '..'));
-const NO_OVERRIDE = path.join(os.tmpdir(), 'mag-fill-no-such-dir');
-const sources = (override = NO_OVERRIDE): ArtSources => ({ overrideDir: override, shippedDir: SHIPPED });
+const sources = (artDir: string = SHIPPED): ArtSources => ({ shippedDir: artDir });
 const ALL = loadFiller(sources(), false);
 
 const SHORT: Story = {
@@ -256,19 +255,20 @@ export async function aShortListingKeepsItsListCleanAndPutsOnePieceInTheEmptyRig
   assert.strictEqual(filled.selectedSpread, bare.selectedSpread);
 }
 
-// ---- the override ------------------------------------------------------------
+// ---- one folder ---------------------------------------------------------------
 
-export async function theSysopsFillDirectoryBeatsTheShippedOneWhenItHoldsPieces(): Promise<void> {
-  const root = tmpDir();
-  const mine = path.join(root, 'fill');
-  fs.mkdirSync(mine);
-  fs.writeFileSync(path.join(mine, 'mine.txt'), Buffer.from('  /\\_/\\\n ( o.o )\n  > ^ <  \xa9Mt\n', 'latin1'));
-  const got = loadFiller(sources(root), false);
-  assert.deepStrictEqual(got.map((p) => p.file), ['mine.txt'], 'the sysop set replaces the shipped one');
+export async function theFillerIsReadFromTheFolderTheStudioSavesIntoAndNoOther(): Promise<void> {
+  // The Studio lists Doors/magazine/art/fill as an art folder and saves there
+  // in place; the door's art folder is ArtSources.shippedDir. A piece saved
+  // there is the piece a caller gets - no second folder outranks it.
+  const art = tmpDir();
+  const fill = path.join(art, 'fill');
+  fs.mkdirSync(fill);
+  fs.writeFileSync(path.join(fill, 'mine.txt'), Buffer.from('  /\\_/\\\n ( o.o )\n  > ^ <  \xa9Mt\n', 'latin1'));
+  const got = loadFiller({ shippedDir: art }, false);
+  assert.deepStrictEqual(got.map((p) => p.file), ['mine.txt'], 'the saved piece is the set');
   assert.strictEqual(got[0].signed, true);
-  fs.rmSync(path.join(mine, 'mine.txt'));
-  assert.strictEqual(loadFiller(sources(root), false).length, 65, 'an empty override directory falls back to the shipped pieces');
-  assert.strictEqual(loadFiller({ overrideDir: root, shippedDir: null }, false).length, 0, 'no shipped art, no override: no filler');
+  assert.strictEqual(loadFiller({ shippedDir: null }, false).length, 0, 'no art folder: no filler');
 }
 
 export async function aFileThatIsNotPlainPrintableArtIsNotAPiece(): Promise<void> {
