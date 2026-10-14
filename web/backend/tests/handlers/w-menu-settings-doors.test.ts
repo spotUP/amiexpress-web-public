@@ -92,6 +92,20 @@ describe('the W menu', () => {
     expect(out.indexOf('DOOR COLOURS')).toBeLessThan(out.indexOf('SCREEN ARTWORK'));
   });
 
+  it('does not list the WEBTERM door a second time: the menu already shows its six settings as rows 17-22', async () => {
+    doors.push(settingsDoor('WEBTERM', 'Web terminal'), settingsDoor('THEME', 'Door colours'));
+    const d = driver();
+    handleWriteUserParamsCommand(d.socket, d.session);
+    const out = d.output();
+    expect(out).toContain('PETSCII CHARACTER SET');          // rows 17-22 are drawn
+    expect(out).toContain('DOOR COLOURS');
+    expect(out).not.toContain('WEB TERMINAL');
+    // the numbers still line up: the first settings-door option opens THEME, not a hidden WEBTERM
+    d.session.subState = LoggedOnSubState.W_OPTION_SELECT;
+    await handleWOptionSelectInput(d.socket, d.session, String(FIRST_SETTINGS_DOOR_OPTION));
+    expect(executeDoor.mock.calls[0][2]).toMatchObject({ command: 'THEME' });
+  });
+
   it('lists nothing extra when no door has registered', () => {
     const d = driver();
     handleWriteUserParamsCommand(d.socket, d.session);

@@ -443,8 +443,14 @@ export const FIRST_SETTINGS_DOOR_OPTION = 23;
 /** The settings doors this caller may open, from the board's own door list. */
 export function settingsDoorEntries(session: BBSSession): SettingsDoorEntry[] {
   const { getDoors } = require('../command-handler/dependency-injection');
-  return settingsDoorsFor(getDoors(), session as never);
+  // WEB_: this menu draws the web terminal settings itself (rows 17-22: modem speed, font, data,
+  // erasure, PETSCII colours and character set), so the WEBTERM door that is the same six
+  // settings in the W door is not offered a second time. No express.e counterpart.
+  return settingsDoorsFor(getDoors(), session as never).filter((entry) => entry.command !== WEB_TERMINAL_DOOR);
 }
+
+/** The settings door whose rows the internal W already shows as 17-22. */
+export const WEB_TERMINAL_DOOR = 'WEBTERM';
 
 /**
  * W Command - Write User Parameters (edit user configuration)
