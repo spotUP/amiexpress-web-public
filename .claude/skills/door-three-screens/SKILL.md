@@ -161,11 +161,119 @@ Put them in `web/backend/tests/doors/compact-40/<door>.test.ts` (see
    `web/backend/tests/petscii-frame/c64-door-adapter-corpus-e2e.test.ts`.
 6. Prove RED: revert the width rule, the 40-column test must fail; put a
    constant back, the 80-column pin must fail.
+7. **One reachability test per door** - drive the real entry point (the 68K
+   binary or the shipped `dist/` pair), count a sentinel proving the new code
+   ran, and assert the bytes on disk, not a mock call. Reference:
+   `web/backend/tests/doors/w-door-saves-location-and-returns-from-notify.test.ts`.
+8. **Fixtures are committed and a missing one FAILS the test** - a test that
+   writes its own fixture on first run pins whatever the door does. Reference:
+   `web/backend/tests/doors/compact-40/usersettings-40.test.ts:9-14,47`.
+9. **Wait for output, never fixed sleeps** - drive keys on the frame or text
+   appearing; fixed `at:` timings went red under load (263 s). Reference: idle
+   steps at `usersettings-40.test.ts:51,87`.
+10. **Per-sink assertions** - a secret test first shows each sink DID carry the
+    message, then asserts absence; a sink that is empty proves nothing. Assert
+    per key, not on the contiguous string (`!includes('Zebra7')` passes while a
+    one-char-per-line trace leaks). Reference: `web/backend/tests/xim/redact.test.ts`.
+11. **Reuse the shared harnesses, do not copy them** -
+    `web/backend/tests/doors/dispatch-harness.ts`,
+    `web/backend/tests/doors/compact-40/door-capture.ts`,
+    `web/backend/tests/doors/compact-40/fixtures/drive-door.cjs`.
 
 `web/backend/tests/forty-col-sweep.test.ts` sweeps every adapted surface; add
 your door's builder to it. The SDK baselines
 `sdk/tests/unit/{eighty,forty}-col-baseline.test.ts` guard the widgets - never
 regenerate the eighty-col snapshot.
+
+## 5a. Look-and-feel parity with the sibling doors
+
+A door passes this checklist at 80, wide and 40 before it is called done.
+Compare it side by side with THEMEC / SUBS / NOTIFY.
+
+- **Animate the masthead rail while idle** - a door that sits still looks
+  dead next to its siblings. C: `ui_key` `idle` hook calling
+  `ui_masthead_rail_tick` with `UI_RAIL_STEP` / `UI_RAIL_TICK_DELAY`, touching
+  the rail only (`sdk/c/examples/achieve/achieve.c:201-229`; hook at
+  `sdk/c/include/ui_key.h:88`). TS: `attachDoorChrome`
+  (`sdk/engines/ui/theme/chrome.ts:671`). Off at 40 (section 2).
+- **Text role -> theme token (binding)**; never a hardcoded colour
+  (`sdk/c/include/ui_theme.h:88`):
+
+  | Role | Token |
+  |---|---|
+  | background (paint it, never bg -1) | GROUND |
+  | primary text, labels | INK |
+  | secondary text, hints | DIM |
+  | values | ACCENT_ALT |
+  | section headings | ACCENT |
+  | frames, dividers | CHROME |
+  | masthead, key bar | BAR + BAR_INK |
+  | selected row | SELECTION_BG + SELECTION_INK |
+  | success / refusal / caution | OK / ALERT / WARN |
+
+  One empty line between sections.
+- **Mouse hover** - TS: `enableMouse` plus list mouse (NOTIFY:
+  `Doors/notify/app.ts:67`). C: no SDK mouse support yet; note the gap in the
+  handoff, do not hand-roll it.
+- **Leave keys are `q`, `Q`, `Esc`, `X`, and nothing else binds `q`** - NOTIFY
+  bound `q` to Quiet hours, so a W caller pressing `q` landed in the wrong
+  screen (2026-10-15). Reference: `Doors/notify/app.ts:393`; quiet hours is F3.
+- **A long list follows page-wise** - one-row scroll repaints the whole box
+  per key; set `page_follow` (`sdk/c/include/ui_list.h:59`); no scroll regions
+  on PETSCII.
+- **Scrollbars are the SDK's, one look** (sysop, 2026-10-15): solid colour
+  bars, track = a space on DIM, thumb = a space on BAR, no glyphs (identical in
+  Topaz/latin1 and as reverse space in PETSCII), hover INK where the mouse is
+  supported. A door never passes its own scrollbar glyphs or colours. SDK
+  unification is in progress: until it lands, do NOT add door-local scrollbar
+  options.
+
+## 5b. 40-column traps (each one shipped broken once)
+
+- **Measure the row length BEFORE clipping** - a clipped row always passes the
+  "<= 40" check, so the test proves nothing. Measure the composed row, then
+  clip, and assert on the pre-clip length. Reference: the overflow scan in
+  `usersettings-40.test.ts:147`.
+- **The scrollbar takes one column** - the text area is `width - 1`, not
+  `width`.
+- **Message rows wrap at the width actually drawn**, not at the screen width.
+- **Keep the row below a stacked label visible** - when a label sits above its
+  value, set `follow_extra = 1` so the window keeps both rows
+  (`sdk/c/include/ui_list.h:64`).
+
+## 5c. Board integration (a door that talks to the board)
+
+- **A new board-own AEW command that awaits goes in `ASYNC_OUTPUT_COMMANDS`**
+  (`web/backend/src/amiga-emulation/session/lifecycle/door-message-callbacks.ts:72`)
+  - else the door reads its own request back (AEW_POSTMSG race, 2026-10-04).
+- **Answer through `writeMessageString`**
+  (`web/backend/src/amiga-emulation/xim/messages.ts:243`) - it zeroes the whole
+  String, so no secret tail stays behind; on a throw answer empty so the door
+  never hangs.
+- **Secrets stay out of all seven XIM log sinks and the keystroke traces** -
+  redact the request (`web/backend/src/amiga-emulation/xim/redact.ts:13`) and
+  wrap every masked entry in `AEW_USERFIELD SECRET 1|0` (C: `ae_uf_secret`,
+  `sdk/c/include/ae_userfield.h:65`; board: `xim/secret-input.ts:19`,
+  `io.ts:24`). Trace every path a key can take (hotkey readers too, not only
+  `queueInput`).
+- **Gate writes on OPEN** - SET/PASSWORD/CHOICES refuse unless the door said
+  OPEN (ACS gate, `web/backend/src/amiga-emulation/xim/userfield.ts:50,104`).
+- **Register only through `writeNewDoorRegistration`
+  (`web/backend/src/services/config-services/door-info-file.service.ts:409`)
+  and `applyTooltypes` (`web/backend/src/utils/info-file.util.ts:927`)** - never
+  hand-edit `.info` bytes.
+- **An admin import of backend code through a vite alias needs a Dockerfile
+  config-builder `COPY`** - the build passes locally and the deploy fails
+  (`Dockerfile:93`; guard `web/backend/tests/dockerfile-copies-admin-sources.test.ts`).
+- **A TS door's `dist/` is built and committed** (RULES.md section 5).
+- **A settings door declares `SETTINGS=YES`, `SETTINGS_LABEL`,
+  `SETTINGS_SECTION`, `DESCRIPTION`** so it appears in W
+  (`web/backend/src/handlers/commands/w-settings-doors.ts:12-14`).
+- **Return to the hub through the settings-resume loop, never a nested call** -
+  a nested `processCommand` stacked 8 frames deep per round trip. Reference:
+  `runReturnedCommand` (`web/backend/src/handlers/commands/settings-resume.ts:82`,
+  called at `door.handler.ts:3249`); drop the record when the caller is leaving
+  (`theCallerIsLeaving`, `door.handler.ts:1282`).
 
 ## 6. Ship
 

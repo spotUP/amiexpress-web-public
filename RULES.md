@@ -518,6 +518,12 @@ Checklist:
 Never: skip SDK docs, guess at input handling, assume game mode, skip `.info`,
 ship a door whose repaint cost you have not measured.
 
+- [ ] Load `.claude/skills/door-three-screens/SKILL.md` and pass its checklists:
+      look-and-feel parity (5a: idle masthead rail, text-role -> theme-token map,
+      leave keys `q`/`Q`/`Esc`/`X`, SDK scrollbars only), 40-column traps (5b),
+      board integration (5c), and the proof rules (5). The skill is the one
+      place these rules live; do not copy them here.
+
 ---
 
 ## 68K Door Debugging

@@ -25,6 +25,25 @@ Use the Read tool to read each file. Do NOT skip this step.
 
 ---
 
+## Step 1b: Load the door skill (MANDATORY)
+
+Load `.claude/skills/door-three-screens/SKILL.md` before the first line of UI
+code. These are required steps, not advice; a door is not done until each is
+ticked:
+
+- Section 0: repaint only what changed; measure it at 80 and 40.
+- Section 5a: look-and-feel parity checklist (idle masthead rail, text-role to
+  theme-token map, mouse hover, leave keys q/Q/Esc/X, page-wise list follow,
+  SDK scrollbars only - no door-local scrollbar options).
+- Section 5b: the 40-column traps (measure the row BEFORE clipping).
+- Section 5c: board integration, if the door talks to the board (async
+  command list, writeMessageString, secrets out of logs, OPEN gating,
+  registration helpers, Dockerfile COPY, settings tooltypes, resume loop).
+- Section 5: one reachability test with a sentinel and disk-byte assertions,
+  committed fixtures, wait-for-output drives, shared harnesses.
+
+---
+
 ## Step 2: Create Door Directory Structure
 
 Create the door in `Doors/{door-name}/`:
