@@ -11,11 +11,11 @@ const SECRET = 'hunter2-Zq9';
 
 // xim-debug.log and the door log both write through amigafs; keep what they
 // are asked to write instead of writing it into the repo's logs/.
-const mockFileWrites: string[] = [];
+const mockFileWrites: { file: string; data: string }[] = [];
 jest.mock('../../src/utils/amigafs', () => ({
   ...jest.requireActual('../../src/utils/amigafs'),
-  appendFileSync: (_p: unknown, data: unknown) => { mockFileWrites.push(String(data)); },
-  writeFileSync: (_p: unknown, data: unknown) => { mockFileWrites.push(String(data)); },
+  appendFileSync: (p: unknown, data: unknown) => { mockFileWrites.push({ file: String(p), data: String(data) }); },
+  writeFileSync: (p: unknown, data: unknown) => { mockFileWrites.push({ file: String(p), data: String(data) }); },
 }));
 
 // Every logger reads its switch when it is first loaded.
@@ -33,9 +33,6 @@ import * as path from 'path';
 const logDir = fs.mkdtempSync(path.join(os.tmpdir(), 'xim-redact-'));
 process.env.XIM_LOG_FILE = path.join(logDir, 'xim.json');
 process.env.XIM_AMIGA_LOG = path.join(logDir, 'xim-amiga.log');
-// XIMLogger.initLogStream logs before its stream has created the file, which
-// re-enters initLogStream without end; an existing file avoids that loop.
-fs.writeFileSync(process.env.XIM_LOG_FILE, '');
 
 const { XIMProtocol } = require('../../src/amiga-emulation/XIMProtocol');
 const { XIMMessageParser } = require('../../src/amiga-emulation/xim/messages');
@@ -70,10 +67,12 @@ function makeEmulator() {
 
 describe('a password never reaches a log', () => {
   const written: string[] = [];
+  const ring: string[] = [];
   let spies: jest.SpyInstance[] = [];
 
   beforeEach(() => {
     written.length = 0;
+    ring.length = 0;
     mockFileWrites.length = 0;
     const take = (...a: unknown[]) => { written.push(a.map(String).join(' ')); };
     spies = [
@@ -81,7 +80,7 @@ describe('a password never reaches a log', () => {
       jest.spyOn(console, 'error').mockImplementation(take),
       jest.spyOn(console, 'warn').mockImplementation(take),
       // The debug ring only keeps a registered node; capture what is pushed to it.
-      jest.spyOn(debugRegistry, 'pushXIM').mockImplementation((_n: number, entry: unknown) => { written.push(JSON.stringify(entry)); }),
+      jest.spyOn(debugRegistry, 'pushXIM').mockImplementation((_n: number, entry: unknown) => { ring.push(JSON.stringify(entry)); }),
     ];
   });
   afterEach(() => { spies.forEach((s) => s.mockRestore()); });
@@ -107,19 +106,42 @@ describe('a password never reaches a log', () => {
       .map((f) => (fs.existsSync(f) ? fs.readFileSync(f, 'utf8') : '')).join('\n');
   }
 
-  test('a DT_PASSWORD write, through handleMessage, leaves no trace in console, ring, or any log file', async () => {
-    await sendThroughHandleMessage(XIMCommand.DT_PASSWORD, 0, SECRET);
-    const everything = written.join('\n') + '\n' + mockFileWrites.join('\n') + '\n' + (await streamLogs());
-    // The sinks are alive: the command itself was logged.
-    expect(everything).toContain('DT_PASSWORD');
-    expect(everything).not.toContain(SECRET);
-  });
+  /**
+   * Each sink's own text. Every sink must show the message's command (its
+   * marker) BEFORE the password is looked for, so a dead sink cannot pass.
+   */
+  async function sinkTexts(): Promise<Record<string, string>> {
+    const fileOf = (part: string) => mockFileWrites.filter((w) => w.file.includes(part)).map((w) => w.data).join('\n');
+    const consoleLines = written.join('\n').split('\n');
+    const linesWith = (needle: string) => consoleLines.filter((l) => l.includes(needle)).join('\n');
+    const streams = await streamLogs();
+    const [jsonLog, amigaLog] = [process.env.XIM_LOG_FILE!, process.env.XIM_AMIGA_LOG!]
+      .map((f) => (fs.existsSync(f) ? fs.readFileSync(f, 'utf8') : ''));
+    void streams;
+    return {
+      console: linesWith('[XIMProtocol] handleMessage:'),
+      debugLog: linesWith('<<< XIM Command'),
+      ring: ring.join('\n'),
+      ximDebugLogFile: fileOf('xim-debug.log'),
+      doorLogFile: fileOf('door-68k-'),
+      jsonLogFile: jsonLog,
+      amigaLogFile: amigaLog,
+    };
+  }
 
-  test('the W door\'s PASSWORD request, through handleMessage, leaves no trace either', async () => {
+  /** Both password messages go through the one door; the stream loggers close once, after both. */
+  test('a DT_PASSWORD write and the W door\'s PASSWORD request leave no trace in any of the seven sinks', async () => {
+    await sendThroughHandleMessage(XIMCommand.DT_PASSWORD, 0, SECRET);
     await sendThroughHandleMessage(XIMCommand.AEW_USERFIELD, 1, `PASSWORD ${SECRET}\t${SECRET}`);
-    const everything = written.join('\n') + '\n' + mockFileWrites.join('\n') + '\n' + (await streamLogs());
-    expect(everything).toContain('AEW_USERFIELD');
-    expect(everything).not.toContain(SECRET);
+    const sinks = await sinkTexts();
+    for (const [name, text] of Object.entries(sinks)) {
+      // The sink is alive and saw each message (the Amiga log names the number).
+      const seen = name === 'amigaLogFile'
+        ? [`msg request: ${XIMCommand.DT_PASSWORD}`, `msg request: ${XIMCommand.AEW_USERFIELD}`]
+        : ['DT_PASSWORD', 'AEW_USERFIELD'];
+      for (const marker of seen) expect([name, marker, text.includes(marker)]).toEqual([name, marker, true]);
+      expect([name, text.includes(SECRET)]).toEqual([name, false]);
+    }
   });
 
   test('the parser\'s own dump of a password message carries neither the text nor its hex', () => {

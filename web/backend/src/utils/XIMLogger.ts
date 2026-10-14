@@ -59,6 +59,8 @@ export class XIMLogger {
   private logFile: string;
   private amigaLogFile: string;
   private logStream: fs.WriteStream | null = null;
+  /** True while initLogStream runs: its own LOG_START entry must not start another init. */
+  private initialisingLog = false;
   private amigaLogStream: fs.WriteStream | null = null;
   private messageCount = 0;
   private errorCount = 0;
@@ -108,13 +110,20 @@ console.log(`[XIMLogger] Amiga CONSOLE_DEBUG format enabled, writing to: ${this.
         }
       }
 
+      // createWriteStream opens the file on a later tick; until then the
+      // file does not exist and ensureJsonLogStream would start a new stream
+      // for every entry. Create it now.
+      fs.appendFileSync(this.logFile, '');
       this.logStream = fs.createWriteStream(this.logFile, { flags: 'a' });
+      this.initialisingLog = true;
       this.log('info', 'send', 'SYSTEM', 0, {
         type: 'LOG_START',
         typeCode: 0,
       }, { message: 'XIM structured logging initialized' });
     } catch (err) {
 console.error('[XIMLogger] Failed to initialize log stream:', err);
+    } finally {
+      this.initialisingLog = false;
     }
   }
 
@@ -278,7 +287,7 @@ console.log(`[XIMLogger] NOT writing to JSON: jsonEnabled=${this.jsonEnabled} lo
   }
 
   private ensureJsonLogStream() {
-    if (!this.jsonEnabled) {
+    if (!this.jsonEnabled || this.initialisingLog) {
       return;
     }
     const logMissing = !fs.existsSync(this.logFile);
