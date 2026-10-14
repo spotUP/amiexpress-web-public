@@ -32,13 +32,15 @@ describe('news sources', () => {
   });
 
   it('dead or unfetchable sources are gone, remaining numbers unchanged', () => {
-    for (const f of ['bull13.txt', 'bull17.txt', 'bull45.txt', 'bull46.txt', 'bull47.txt', 'bull48.txt', 'bull49.txt']) {
+    for (const f of ['bull13.txt', 'bull17.txt', 'bull46.txt', 'bull47.txt', 'bull48.txt', 'bull49.txt']) {
       expect(byFile(f)).toBeUndefined();
     }
     const urls = NEWS_BULLETIN_SOURCES.map((s) => s.url ?? '').join('\n');
-    expect(urls).not.toMatch(/packetstorm|phrack\.org|spycloud|0x00sec|socradar|textfiles|kelacyber/);
+    expect(urls).not.toMatch(/packetstorm|phrack\.org|spycloud|0x00sec|socradar|www\.textfiles\.com|kelacyber/);
     expect(byFile('bull14.txt')!.title).toBe('Crackmes - new challenges to reverse');
     expect(byFile('bull44.txt')!.title).toMatch(/urbex/);
+    // textfiles.com has no HTTPS and no blog.xml; Jason Scott's blog feed lives on ascii.textfiles.com.
+    expect(byFile('bull45.txt')!.url).toBe('https://ascii.textfiles.com/feed');
   });
 
   it('BullHelp lists exactly the sources that exist', () => {

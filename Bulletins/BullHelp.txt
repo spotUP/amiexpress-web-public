@@ -42,3 +42,4 @@ BULLETINS
 #42    r/synthdiy - build your own synths
 #43    r/freetekno - free parties and sound systems
 #44    r/urbanexploration - urbex
+#45    Jason Scott - preserving old text

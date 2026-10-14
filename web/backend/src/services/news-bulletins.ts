@@ -130,6 +130,9 @@ export const NEWS_BULLETIN_SOURCES: NewsBulletinSource[] = [
   { kind: 'rss', url: 'https://www.reddit.com/r/synthdiy/.rss', file: 'bull42.txt', title: 'r/synthdiy - build your own synths', source: 'reddit.com', hostGapMs: REDDIT_HOST_GAP_MS, intervalMs: REDDIT_INTERVAL_MS },
   { kind: 'rss', url: 'https://www.reddit.com/r/freetekno/.rss', file: 'bull43.txt', title: 'r/freetekno - free parties and sound systems', source: 'reddit.com', hostGapMs: REDDIT_HOST_GAP_MS, intervalMs: REDDIT_INTERVAL_MS },
   { kind: 'rss', url: 'https://www.reddit.com/r/urbanexploration/.rss', file: 'bull44.txt', title: 'r/urbanexploration - urbex', source: 'reddit.com', hostGapMs: REDDIT_HOST_GAP_MS, intervalMs: REDDIT_INTERVAL_MS },
+  // Jason Scott's ASCII blog. textfiles.com itself serves no HTTPS and has no blog.xml (404);
+  // the feed is WordPress at ascii.textfiles.com, full posts in content:encoded (checked 2026-10-14).
+  { kind: 'rss', url: 'https://ascii.textfiles.com/feed', file: 'bull45.txt', title: 'Jason Scott - preserving old text', source: 'ascii.textfiles.com', hostGapMs: 15000, intervalMs: 6 * 60 * MINUTE },
 
 ];
 
