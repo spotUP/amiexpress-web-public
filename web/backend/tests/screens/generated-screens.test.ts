@@ -155,6 +155,14 @@ describe('bulletins written by a door', () => {
     expect(index.files['Bulletins/bull9.txt']?.generated).toBe('runtime');
   });
 
+  test('the board changes bulletin the deploy writes is runtime, not art', () => {
+    write('Bulletins/bull10.txt', '\n  BOARD CHANGES - what changed on the board, newest first\n 10-14-26  deploy 8f664a98b\n');
+
+    const index = buildScreenIndex(root);
+
+    expect(index.files['Bulletins/bull10.txt']?.generated).toBe('runtime');
+  });
+
   test('hand-drawn art in the same directory is left alone', () => {
     write('Bulletins/bull10.txt', '  _______\n _\\______   \\ ____\n');
 

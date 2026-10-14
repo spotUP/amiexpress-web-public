@@ -108,6 +108,10 @@ const RUNTIME_CONTENT: { marker: RegExp; tool: string }[] = [
   // that one - and the batch writes it to a path the SYSOP names, so there is
   // no filename to match on either. This header IS the signature.
   { marker: /^\s*Area\s+Record\s+Date\s*$/m, tool: 'S-AmiLog record stats' },
+  // The Board Changes bulletin (bull10), rewritten on every deploy by
+  // deploy/changelog-bulletin.sh. Matched on its header, not its name: a
+  // board that never ran the deploy keeps a hand-drawn bull10.txt as art.
+  { marker: /BOARD CHANGES - what changed on the board/, tool: 'the deploy changelog' },
 ];
 
 export function classifyGenerated(
