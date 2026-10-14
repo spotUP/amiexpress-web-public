@@ -180,6 +180,8 @@ export class DosLibrary {
   private nextFileId: number = 4; // Start after STDIN/STDOUT/STDERR
   private outputCallback: ((data: string) => void) | null = null;
   private outputRawCallback: ((data: Buffer) => void) | null = null;
+  /** True while a door reads a secret (secret-input.ts): queueInput then traces only the size. */
+  private inputIsSecret: (() => boolean) | null = null;
   private inputBuffer: string = "";
   private rawInputBuffers: Buffer[] = [];
   private lastError: number = 0;
@@ -628,11 +630,16 @@ debugLog(
     this.outputRawCallback = callback;
   }
 
+  /** Wire the secret-input check, so the keystroke trace below withholds a typed password. */
+  setInputSecretCheck(check: (() => boolean) | null): void {
+    this.inputIsSecret = check;
+  }
+
   /**
    * Queue input data from user
    */
   queueInput(data: string | Buffer): void {
-debugLog(`[dos.library] queueInput: ${typeof data === 'string' ? JSON.stringify(data) : `<buffer ${data.length}>`}`);
+    debugLog(`[dos.library] queueInput: ${this.inputIsSecret?.() ? `<${data.length} bytes withheld>` : typeof data === 'string' ? JSON.stringify(data) : `<buffer ${data.length}>`}`);
     if (Buffer.isBuffer(data)) {
       this.rawInputBuffers.push(data);
       this.inputBuffer += data.toString('latin1');

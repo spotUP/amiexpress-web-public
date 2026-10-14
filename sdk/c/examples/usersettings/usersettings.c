@@ -43,6 +43,38 @@ static void door_flush(void *ctx) { (void)ctx; ui_screen_flush(&screen); }
 
 static const char *row_text(void *ctx, int index) { (void)ctx; return us_row_text(&model, index); }
 
+/* ------------------------------------------------------------- masthead rail
+
+   The rail slides while the door waits for a key: the same idle hook SUBS, ACHIEVE and
+   THEMEC use (ui_key.h), the same two constants for speed (ui_chrome.h). The tick is
+   skipped while the caller TYPES (SUBS' caller_is_typing): the flush would leave the
+   terminal cursor in the banner between keystrokes. */
+static int rail_tick;
+static const char *masthead_title = "USER CONFIGURATION";
+static int caller_is_typing;
+
+static void draw_masthead(const char *title)
+{
+    masthead_title = title;
+    ui_masthead_draw_tick(&screen.buf, 1, 1, screen.cols, title,
+                          screen.profile.collapse_chrome ? "" : theme->rail,
+                          UI_TOKEN(UI_T_BAR_INK), UI_TOKEN(UI_T_BAR), rail_tick);
+}
+
+static void door_idle(void *ctx)
+{
+    (void)ctx;
+    if (caller_is_typing || screen.profile.collapse_chrome || !ui_masthead_rail_animates(theme->rail)) {
+        ae_delay_ticks(caller_is_typing ? 1 : UI_RAIL_TICK_DELAY);   /* still yield: one thread on a 68K */
+        return;
+    }
+    rail_tick += UI_RAIL_STEP;
+    ui_masthead_rail_tick(&screen.buf, 1, 1, screen.cols, masthead_title, theme->rail,
+                          UI_TOKEN(UI_T_BAR_INK), UI_TOKEN(UI_T_BAR), rail_tick);
+    ui_screen_flush(&screen);
+    ae_delay_ticks(UI_RAIL_TICK_DELAY);
+}
+
 static int message_row(void) { return screen.rows - 1; }
 
 /** Message rows above the key bar: three where the chrome is collapsed, two otherwise. */
@@ -87,8 +119,7 @@ static void draw_full(void)
 {
     ansi_clear(&screen.buf);
     message_lines = 0;
-    ui_masthead_draw(&screen.buf, 1, 1, screen.cols, "USER CONFIGURATION",
-                     screen.profile.collapse_chrome ? "" : theme->rail, UI_TOKEN(UI_T_ACCENT), UI_TOKEN(UI_T_GROUND));
+    draw_masthead("USER CONFIGURATION");
     ui_list_draw(&list, &screen.buf);
     draw_key_bar("Up/Down: Move  Enter: Change", "Q: Leave", 1);
     /* Leave the pen in the list's ink: the first keypress then opens with a row, not a colour change. */
@@ -133,7 +164,9 @@ static int edit_text(const ae_uf_field *f, int r)
     show_message(f->prompt, UI_TOKEN(UI_T_DIM));            /* express.e's own question, while the editor is open */
     for (;;) {
         editor_style(&st, r, 0);
+        caller_is_typing = 1;
         got = ui_input(&screen.buf, &keys, &pushback, &st, "", buf, cap);
+        caller_is_typing = 0;
         if (got < 0) return -1;
         if (is_name_row(f->number) && buf[0]) {
             /* WEB_: express.e 25914/25947/25969 prints this between its checks; the board answers once, so it is shown before the SET. */
@@ -166,11 +199,15 @@ static int edit_password(int r)
     show_message("Enter New Password: ", UI_TOKEN(UI_T_DIM));   /* the two entries must be told apart at 40 */
     /* The board's keystroke traces withhold what is typed while this is on; every way out below turns it off. */
     ae_uf_secret(1);
+    caller_is_typing = 1;
     got = ui_input(&screen.buf, &keys, &pushback, &st, "", first, 51);
+    caller_is_typing = 0;
     if (got < 0) { ae_uf_secret(0); memset(first, 0, sizeof(first)); return -1; }
     if (got == 0) { ae_uf_secret(0); show_message("", UI_TOKEN(UI_T_INK)); return 0; }
     show_message("Reenter New Password: ", UI_TOKEN(UI_T_DIM));
+    caller_is_typing = 1;
     got = ui_input(&screen.buf, &keys, &pushback, &st, "", second, 51);
+    caller_is_typing = 0;
     if (got < 0) { ae_uf_secret(0); memset(first, 0, sizeof(first)); memset(second, 0, sizeof(second)); return -1; }
     ae_uf_secret(0);
     if (got == 0) { memset(first, 0, sizeof(first)); show_message("", UI_TOKEN(UI_T_INK)); return 0; }
@@ -242,7 +279,7 @@ static int edit_choice(const ae_uf_field *f)
     ui_list_select(&pick, current);
     ansi_clear(&screen.buf);
     message_lines = 0;
-    ui_masthead_draw(&screen.buf, 1, 1, screen.cols, f->label, "", UI_TOKEN(UI_T_ACCENT), UI_TOKEN(UI_T_GROUND));
+    draw_masthead(f->label);
     draw_key_bar("Up/Down: Move  Enter: Pick", "Esc: Keep", 0);
     for (;;) {
         ui_list_draw_changed(&pick, &screen.buf, 0);
@@ -300,7 +337,7 @@ int main(int argc, char **argv)
     us_model_layout(&model, screen.cols);
 
     keys.next = door_key; keys.pending = door_pending; keys.settle = door_settle;
-    keys.idle = 0;                 /* no animation: a still masthead costs the board nothing */
+    keys.idle = door_idle;
     keys.flush = door_flush; keys.ctx = 0;
 
     ui_list_init(&list);

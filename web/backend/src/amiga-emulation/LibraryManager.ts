@@ -40,6 +40,7 @@ import { DoorLogger } from "./DoorLogger.js";
 import { KickstartRom } from "./KickstartRom.js";
 import { spawnSync } from "child_process";
 import { debugLog } from '../utils/debug-log';
+import { isSecretInput } from './xim/secret-input';
 import { boardRoot } from '../utils/board-root.util';
 import { factsFromSession, BOARD_VERSION } from './utils/host-vars';
 
@@ -688,6 +689,7 @@ debugLog(
       doorType: useXimProtocol ? doorType : 'SIM',
       silent: this.config.silent,
     });
+    this.dosLibrary.setInputSecretCheck(() => isSecretInput(this.config.bbsSession));
     this.dosLibrary.setOutputRawCallback((buf: Buffer) => {
       const bbsSession: any = this.config.bbsSession || {};
       if (bbsSession.transferRawActive) {
