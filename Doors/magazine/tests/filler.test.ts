@@ -110,12 +110,42 @@ export async function aPieceWiderThanTheColumnIsNeverUsed(): Promise<void> {
   assert.strictEqual(chooseFiller(only, 'x', 38, 40, new Set()), null, 'the wide pieces fit no column');
 }
 
-export async function oneSpreadNeverShowsAPieceTwice(): Promise<void> {
+export async function oneSpreadShowsAtMostOnePiece(): Promise<void> {
   for (let n = 0; n < 200; n++) {
-    const at = placeFiller(options(`story${n}`), n % 3, [0, 0, 0], 20, 38);
-    const files = at.map((a) => a!.piece.file);
-    assert.strictEqual(new Set(files).size, 3, `story${n}: ${files.join(' ')}`);
+    for (const rows of [[0, 0, 0], [0, 0], [4, 0, 0], [20, 3, 9], [12, 8, 0]]) {
+      const at = placeFiller(options(`story${n}`), n % 3, rows, 20, 38);
+      assert.ok(at.filter(Boolean).length <= 1, `story${n} ${rows}: ${at.filter(Boolean).length} pieces`);
+    }
+    assert.strictEqual(placeFiller(options(`story${n}`), n % 3, [0, 0, 0], 20, 38).filter(Boolean).length, 1, 'and one is placed');
   }
+}
+
+export async function anEntirelyEmptyColumnIsPreferredAndThePieceIsCentredInIt(): Promise<void> {
+  const room = 20;
+  for (let n = 0; n < 100; n++) {
+    // Column 0 holds text with a big tail gap; column 1 is empty: the piece goes to column 1.
+    const at = placeFiller(options(`k${n}`), 0, [4, 0], room, 38);
+    assert.strictEqual(at[0], null, 'nothing under or between the text of the column that holds text');
+    const p = at[1]!;
+    assert.ok(p, 'the empty column gets the piece');
+    assert.strictEqual(p.top, Math.floor((room - p.piece.height) / 2), 'centred vertically');
+    assert.strictEqual(p.indent, Math.floor((38 - p.piece.width) / 2), 'centred horizontally');
+    // Even when the empty column comes first.
+    const first = placeFiller(options(`k${n}`), 0, [0, 4], room, 38);
+    assert.ok(first[0] && first[1] === null);
+  }
+}
+
+export async function withNoEmptyColumnThePieceGoesInTheLargestGapNeverTwo(): Promise<void> {
+  const room = 30;
+  for (let n = 0; n < 100; n++) {
+    const at = placeFiller(options(`g${n}`), 0, [30, 10, 16], room, 38); // gaps 0, 20, 14
+    assert.deepStrictEqual(at.map((a) => a !== null), [false, true, false], 'the 20 row gap wins');
+    assert.ok(at[1]!.top >= 10 + 1 && at[1]!.top + at[1]!.piece.height <= room);
+    const flip = placeFiller(options(`g${n}`), 0, [10, 30, 16], room, 38);
+    assert.deepStrictEqual(flip.map((a) => a !== null), [true, false, false]);
+  }
+  assert.deepStrictEqual(placeFiller(options('x'), 0, [30, 25, 26], room, 38), [null, null, null], 'no gap of 6: none');
 }
 
 export async function aPieceAlreadyOnTheSpreadIsSkippedEvenWhenTheHashPicksItAgain(): Promise<void> {
@@ -152,7 +182,18 @@ function onlyFillsBlanks(without: string[], withFill: string[]): void {
   });
 }
 
-export async function aShortArticleFillsItsEmptyColumnsAtEightyAndAHundredThirtyTwo(): Promise<void> {
+/** The piece found whole in one column of the rendered rows, with its first row; null when the column holds none. */
+function pieceInColumn(rows: string[], left: number, colWidth: number): { piece: FillerPiece; first: number } | null {
+  const slice = rows.map((r) => r.slice(left, left + colWidth));
+  for (const p of ALL) {
+    const first = slice.findIndex((s) => s.trim() === p.rows[0].trim());
+    if (first < 0) continue;
+    if (p.rows.every((row, i) => slice[first + i]?.trim() === row.trim())) return { piece: p, first };
+  }
+  return null;
+}
+
+export async function aShortArticleGetsExactlyOnePieceInAnEmptyColumnAtEightyAndAHundredThirtyTwo(): Promise<void> {
   for (const [w, h, cols] of [[80, 24, 2], [132, 40, 3]] as const) {
     const layout = buildLayout(w, h);
     assert.strictEqual(layout.geometry.cols, cols);
@@ -163,21 +204,14 @@ export async function aShortArticleFillsItsEmptyColumnsAtEightyAndAHundredThirty
     const b = filled.spreads[0].map(rowText);
     onlyFillsBlanks(a, b);
     assert.notDeepStrictEqual(a, b, `${w}: something was drawn`);
-    // Each empty column holds exactly one whole piece, trimmed of the column's own padding.
     const { margin, colWidth, gutter } = layout.geometry;
-    const used: string[] = [];
-    for (let c = 1; c < cols; c++) {
+    const found: number[] = [];
+    for (let c = 0; c < cols; c++) {
       const left = margin + c * (colWidth + gutter);
-      const slice = b.map((r) => r.slice(left, left + colWidth));
-      const piece = ALL.find((p) => {
-        const first = slice.findIndex((s) => s.trim() === p.rows[0].trim());
-        if (first < 0) return false;
-        return p.rows.every((row, i) => slice[first + i]?.trimEnd().endsWith(row.trimEnd()) && slice[first + i].trim() === row.trim());
-      });
-      assert.ok(piece, `${w}: column ${c + 1} holds one whole piece`);
-      used.push(piece.file);
+      if (pieceInColumn(b, left, colWidth)) found.push(c);
     }
-    assert.strictEqual(new Set(used).size, used.length, `${w}: no piece twice on the spread`);
+    assert.strictEqual(found.length, 1, `${w}: one piece on the screen, found in columns ${found}`);
+    assert.ok(found[0] >= 1, `${w}: in an empty column, never under the article text in column 1`);
     assert.deepStrictEqual(buildArticle(SHORT, layout, [], options(SHORT.id)).spreads[0].map(rowText), b, 'deterministic');
   }
 }
@@ -197,7 +231,7 @@ export async function aFullPageOfTextGetsNoFillerAndPagesIdentically(): Promise<
   }
 }
 
-export async function aShortListingFillsItsEmptyColumnAndTheCursorSkipsIt(): Promise<void> {
+export async function aShortListingKeepsItsListCleanAndPutsOnePieceInTheEmptyRightColumn(): Promise<void> {
   const blocks: ListingBlock[] = [
     { kind: 'heading', label: 'SCENE' },
     { kind: 'item', item: { storyId: 'a', page: 120, title: 'First story', unread: true, bookmarked: false } },
@@ -209,6 +243,13 @@ export async function aShortListingFillsItsEmptyColumnAndTheCursorSkipsIt(): Pro
   const filled = buildListing(blocks, 'a', layout, header, options('CONTENTS'));
   onlyFillsBlanks(bare.spreads[0].map(rowText), filled.spreads[0].map(rowText));
   assert.notDeepStrictEqual(bare.spreads[0].map(rowText), filled.spreads[0].map(rowText), 'the empty column got a piece');
+  // Exactly one piece, whole, in the right column; none under or between the entries on the left.
+  const { margin, colWidth, gutter } = layout.geometry;
+  const rowsOf = filled.spreads[0].map(rowText);
+  const right = margin + colWidth + gutter;
+  assert.ok(pieceInColumn(rowsOf, right, colWidth), 'the right column holds a whole piece');
+  const bareRows = bare.spreads[0].map(rowText);
+  rowsOf.forEach((row, r) => assert.strictEqual(row.slice(0, right - gutter), bareRows[r].slice(0, right - gutter), `row ${r}: the list column is clean`));
   assert.deepStrictEqual(filled.grid, bare.grid, 'filler rows are no entry: the grid is the same');
   assert.deepStrictEqual(filled.itemIds, bare.itemIds);
   assert.deepStrictEqual(filled.spreadFirst, bare.spreadFirst);

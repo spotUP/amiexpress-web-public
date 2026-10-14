@@ -1,5 +1,5 @@
 /**
- * Filler: the artist Mortimer's ASCII clipart, set into the empty tail of a column.
+ * Filler: the artist Mortimer's ASCII clipart, set into the empty room of a spread (one piece per screen).
  *
  * A short article leaves the second and third column empty, and the last page
  * of a long one ends half way down. That space is decoration room. Sixty-five
@@ -9,9 +9,9 @@
  *
  * RULES. A piece is placed whole or not at all. Filler never moves or hides
  * text (it only takes rows a column does not use), is never counted when the
- * text is paged, and carries no listing item, so the cursor skips it. The
- * choice is a hash of the view and the column: the same page shows the same
- * piece, and one spread never shows a piece twice.
+ * text is paged, and carries no listing item, so the cursor skips it. ONE piece
+ * per screen at most, in a wholly empty column when there is one. The choice is
+ * a hash of the view and the column: the same page shows the same piece.
  *
  * THE C64. Pieces are drawn in glyphs the board's transducer must map back to
  * PETSCII. Every piece is checked at load against that transducer: one
@@ -154,10 +154,17 @@ export interface FillerPlacement {
 }
 
 /**
- * Filler for the columns of one spread. `textRows[c]` is how many rows column
- * `c` uses; `room` is the rows each column has. One entry per column, null
- * where nothing is placed. The piece is centred in the gap, one blank row
- * away from the text above it.
+ * Filler for one spread: at most ONE piece, however many columns have room.
+ * `textRows[c]` is how many rows column `c` uses; `room` is the rows each
+ * column has. One entry per column, null everywhere but the chosen one.
+ *
+ * WHERE. A column holding no text at all comes first (a contents list that
+ * fills the left column gets its clipart in the right one; the list is never
+ * interrupted). With several empty columns the view's hash picks one. The
+ * piece is centred in an empty column, both ways. Only when every column holds
+ * text does filler go into a column's tail: the largest gap first, centred in
+ * that gap one blank row below the text, and only for a gap of FILLER_MIN_GAP
+ * rows or more. A column that cannot take a piece whole yields to the next.
  */
 export function placeFiller(
   options: FillerOptions,
@@ -166,18 +173,36 @@ export function placeFiller(
   room: number,
   colWidth: number,
 ): Array<FillerPlacement | null> {
-  const used = new Set<string>();
-  return textRows.map((n, c) => {
-    const gap = room - n;
-    if (gap < FILLER_MIN_GAP) return null;
-    const spacer = n > 0 ? 1 : 0;
-    const piece = chooseFiller(options.pieces, `${options.key}:${spreadNo}:${c}`, colWidth, gap - spacer, used);
-    if (!piece) return null;
-    used.add(piece.file);
-    return {
+  const out: Array<FillerPlacement | null> = textRows.map(() => null);
+  const none = new Set<string>();
+  const empties = textRows.map((n, c) => (n === 0 ? c : -1)).filter((c) => c >= 0);
+  if (empties.length > 0 && room >= FILLER_MIN_GAP) {
+    const start = hashKey(`${options.key}:${spreadNo}`) % empties.length;
+    for (let i = 0; i < empties.length; i++) {
+      const c = empties[(start + i) % empties.length];
+      const piece = chooseFiller(options.pieces, `${options.key}:${spreadNo}:${c}`, colWidth, room, none);
+      if (!piece) continue;
+      out[c] = {
+        piece,
+        top: Math.floor((room - piece.height) / 2),
+        indent: Math.floor((colWidth - piece.width) / 2),
+      };
+      return out;
+    }
+  }
+  const byGap = textRows
+    .map((n, c) => ({ c, n, gap: room - n }))
+    .filter((e) => e.n > 0 && e.gap >= FILLER_MIN_GAP)
+    .sort((x, y) => y.gap - x.gap || x.c - y.c);
+  for (const { c, n, gap } of byGap) {
+    const piece = chooseFiller(options.pieces, `${options.key}:${spreadNo}:${c}`, colWidth, gap - 1, none);
+    if (!piece) continue;
+    out[c] = {
       piece,
-      top: n + spacer + Math.floor((gap - spacer - piece.height) / 2),
+      top: n + 1 + Math.floor((gap - 1 - piece.height) / 2),
       indent: Math.floor((colWidth - piece.width) / 2),
     };
-  });
+    return out;
+  }
+  return out;
 }

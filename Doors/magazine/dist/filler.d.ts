@@ -46,10 +46,17 @@ export interface FillerPlacement {
     indent: number;
 }
 /**
- * Filler for the columns of one spread. `textRows[c]` is how many rows column
- * `c` uses; `room` is the rows each column has. One entry per column, null
- * where nothing is placed. The piece is centred in the gap, one blank row
- * away from the text above it.
+ * Filler for one spread: at most ONE piece, however many columns have room.
+ * `textRows[c]` is how many rows column `c` uses; `room` is the rows each
+ * column has. One entry per column, null everywhere but the chosen one.
+ *
+ * WHERE. A column holding no text at all comes first (a contents list that
+ * fills the left column gets its clipart in the right one; the list is never
+ * interrupted). With several empty columns the view's hash picks one. The
+ * piece is centred in an empty column, both ways. Only when every column holds
+ * text does filler go into a column's tail: the largest gap first, centred in
+ * that gap one blank row below the text, and only for a gap of FILLER_MIN_GAP
+ * rows or more. A column that cannot take a piece whole yields to the next.
  */
 export declare function placeFiller(options: FillerOptions, spreadNo: number, textRows: readonly number[], room: number, colWidth: number): Array<FillerPlacement | null>;
 //# sourceMappingURL=filler.d.ts.map
