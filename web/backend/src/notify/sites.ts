@@ -13,6 +13,7 @@
 import type Database from 'better-sqlite3';
 import { doorEventCommand, isDoorEventId, NOTIFY_CHANNELS } from '@amiexpress/bbs-door-sdk/formats/notify';
 import type { NotifyItem } from '@amiexpress/bbs-door-sdk/formats/notify';
+import { diskHasConfAccess, diskIsSysop } from './account';
 import { queueNotification } from './intake';
 import { followersOf, usersWanting } from './repository';
 
@@ -20,16 +21,17 @@ export interface SiteDeps {
   rawDb: () => Database.Database | undefined;
   /** Epoch milliseconds. */
   now: () => number;
-  /** express.e checkConfAccess for a stored access field. */
-  hasConfAccess: (confAccess: string, conferenceId: number) => boolean;
+  /** express.e checkConfAccess for this user, from the disk record (account.ts). */
+  hasConfAccess: (db: Database.Database, userId: string, conferenceId: number) => boolean;
+  /** The sysop test, from the disk record. */
+  isSysop: (db: Database.Database, userId: string) => boolean;
 }
 
 export const defaultSiteDeps: SiteDeps = {
   rawDb: () => (require('../database').db as any).db as Database.Database | undefined,
   now: () => Date.now(),
-  // Lazy: message-scan.handler pulls in most of the message system (the same
-  // reason accountHasConfAccess requires it inside the function).
-  hasConfAccess: (confAccess, conferenceId) => require('../handlers/message/message-scan.handler').checkConfAccess({ confAccess }, conferenceId),
+  hasConfAccess: diskHasConfAccess,
+  isSysop: diskIsSysop,
 };
 
 const seconds = (deps: SiteDeps): number => Math.floor(deps.now() / 1000);
@@ -88,7 +90,7 @@ export function notifyMessage(msg: MessageFacts, messageId: number, deps: SiteDe
       if (!to || to.username.toLowerCase() === msg.author.toLowerCase()) return 0;
       return queueNotification(db, to.id, {
         event: 'mail.private', title: `New private mail from ${msg.author}`, body: '', at: now, objectId: String(messageId),
-      }, now);
+      }, now, undefined, deps.isSysop);
     }
     if (!msg.parentId) return 0;
     const parent = db.prepare('SELECT author FROM messages WHERE id = ?').get(msg.parentId) as { author: string } | undefined;
@@ -97,7 +99,7 @@ export function notifyMessage(msg: MessageFacts, messageId: number, deps: SiteDe
     if (!to) return 0;
     return queueNotification(db, to.id, {
       event: 'msg.reply', title: `Reply from ${msg.author}`, body: `Re: ${msg.subject}`, at: now, objectId: String(messageId),
-    }, now);
+    }, now, undefined, deps.isSysop);
   });
 }
 
@@ -119,16 +121,14 @@ export function notifyFileFiled(file: FiledFileFacts, deps: SiteDeps = defaultSi
   return guarded('file', deps, (db) => {
     const now = seconds(deps);
     const uploader = userByName(db, file.uploader);
-    const access = db.prepare('SELECT confaccess FROM users WHERE id = ?');
     let added = 0;
     for (const userId of followersOf(db, file.conferenceId)) {
       if (uploader && userId === uploader.id) continue;
-      const row = access.get(userId) as { confaccess: string | null } | undefined;
-      if (!row || !deps.hasConfAccess(row.confaccess ?? '', file.conferenceId)) continue;
+      if (!deps.hasConfAccess(db, userId, file.conferenceId)) continue;
       added += queueNotification(db, userId, {
         event: 'file.new', title: `New file in conference ${file.conferenceId}`, body: `${file.filename} - ${file.description}`.slice(0, 200),
         at: now, objectId: `${file.conferenceId}:${file.filename.toLowerCase()}`,
-      }, now);
+      }, now, undefined, deps.isSysop);
     }
     return added;
   });
@@ -152,7 +152,7 @@ export function notifySysopPage(page: PageFacts, deps: SiteDeps = defaultSiteDep
       added += queueNotification(db, userId, {
         event: 'page.sysop', title: `Operator page from ${page.userHandle}`, body: `Node ${page.nodeId}, ${page.conferenceName}`,
         at: now, objectId: page.id,
-      }, now);
+      }, now, undefined, deps.isSysop);
     }
     return added;
   });
@@ -173,7 +173,7 @@ export function notifyUnlock(userId: string, unlock: UnlockFacts, deps: SiteDeps
     return queueNotification(db, userId, {
       event: 'ach.unlock', title: `Achievement unlocked: ${unlock.name}`, body: `${unlock.tier} tier, ${unlock.points} points`,
       at: now, objectId: unlock.id,
-    }, now);
+    }, now, undefined, deps.isSysop);
   });
 }
 
@@ -189,7 +189,7 @@ export function notifyMagazine(added: number, deps: SiteDeps = defaultSiteDeps):
       n += queueNotification(db, userId, {
         event: 'mag.story', title: `${added} new magazine ${added === 1 ? 'story' : 'stories'}`, body: 'Read them in the board magazine.',
         at: now, objectId: `tick-${now}`,
-      }, now);
+      }, now, undefined, deps.isSysop);
     }
     return n;
   });
@@ -197,17 +197,25 @@ export function notifyMagazine(added: number, deps: SiteDeps = defaultSiteDeps):
 
 // ---------------------------------------------------------------- doors
 
-export interface DoorNotifyItem { title: string; body: string; url?: string; objectId?: string }
+/** `objectId` is REQUIRED: it is the outbox idempotency key, so a looping door cannot flood a user. */
+export interface DoorNotifyItem { title: string; body: string; url?: string; objectId: string }
 
 /**
  * bbs.notify: a door raises one of ITS OWN events (`door.<command>.<slug>`,
  * the running door's command - never another door's, never a board event) for
- * a named user (id or name). Returns true when a row was queued.
+ * a named user (id or name). Returns true when a row was queued. A call with
+ * no `objectId` is refused (one WARN): without the key the outbox cannot tell
+ * a repeat from a new event.
  */
 export function notifyFromDoor(command: string, type: string, toUser: string, item: DoorNotifyItem, deps: SiteDeps = defaultSiteDeps): boolean {
   const owner = doorEventCommand(type);
   if (!command || !isDoorEventId(type) || owner !== command.toUpperCase()) {
     console.warn(`[WARN] notify: door ${command || '?'} may not raise ${type}; only door.${command || '<command>'}.<slug>`);
+    return false;
+  }
+  const objectId = typeof item?.objectId === 'string' ? item.objectId.trim() : '';
+  if (!objectId) {
+    console.warn(`[WARN] notify: door ${command} raised ${type} without an objectId; refused`);
     return false;
   }
   return guarded('door', deps, (db) => {
@@ -217,8 +225,8 @@ export function notifyFromDoor(command: string, type: string, toUser: string, it
     const nid: NotifyItem = {
       event: type, title: String(item.title ?? '').slice(0, 120), body: String(item.body ?? '').slice(0, 500),
       ...(item.url ? { url: String(item.url).slice(0, 300) } : {}),
-      at: now, objectId: String(item.objectId ?? `${deps.now()}`).slice(0, 80),
+      at: now, objectId: objectId.slice(0, 80),
     };
-    return queueNotification(db, to.id, nid, now);
+    return queueNotification(db, to.id, nid, now, undefined, deps.isSysop);
   }) > 0;
 }

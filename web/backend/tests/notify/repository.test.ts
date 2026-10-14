@@ -147,8 +147,10 @@ describe('sysop-only events', () => {
     const page: NotifyItem = { event: 'page.sysop', title: 'Page from bob', body: 'hi', at: NOW, objectId: 'p1' };
     setPrefs(db, 'ntf-sysop', { 'page.sysop': { board: 'instant' } });
     setPrefs(db, 'ntf-caller', { 'page.sysop': { board: 'instant' } });
-    expect(queueNotification(db, 'ntf-caller', page, NOW, 'UTC')).toBe(0);
-    expect(queueNotification(db, 'ntf-sysop', page, NOW, 'UTC')).toBe(1);
+    // The level truth is the disk record (account.ts); a stand-in reads the row here.
+    const byRow = (h: any, id: string): boolean => (h.prepare('SELECT seclevel FROM users WHERE id = ?').get(id) as any).seclevel >= 255;
+    expect(queueNotification(db, 'ntf-caller', page, NOW, 'UTC', byRow)).toBe(0);
+    expect(queueNotification(db, 'ntf-sysop', page, NOW, 'UTC', byRow)).toBe(1);
   });
 });
 

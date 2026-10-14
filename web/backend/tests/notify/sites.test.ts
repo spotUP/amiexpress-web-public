@@ -32,7 +32,10 @@ async function waitForTestDb(): Promise<any> {
 
 let db: any;
 const NOW_MS = 1_800_000_000_000;
-const deps = (hasConfAccess: SiteDeps['hasConfAccess'] = () => true): SiteDeps => ({ rawDb: () => db, now: () => NOW_MS, hasConfAccess });
+// The disk record is stood in for here (account.ts is tested against a mocked
+// user.data in sites-read-the-disk.test.ts): a user is a sysop when the test row says so.
+const testIsSysop = (h: any, id: string): boolean => ((h.prepare('SELECT seclevel FROM users WHERE id = ?').get(id) as any)?.seclevel ?? 0) >= SYSOP_LEVEL;
+const deps = (hasConfAccess: SiteDeps['hasConfAccess'] = () => true): SiteDeps => ({ rawDb: () => db, now: () => NOW_MS, hasConfAccess, isSysop: testIsSysop });
 
 const addUser = (id: string, username: string, seclevel = 10, confaccess = 'XXX'): void => {
   db.prepare(`INSERT INTO users (id, username, passwordhash, realname, email, seclevel, confaccess) VALUES (?, ?, 'x', 'r', ?, ?, ?)`)
@@ -112,8 +115,7 @@ describe('file site', () => {
       setPrefs(db, u, { 'file.new': { email: 'instant' } });
       setFollows(db, u, [2]);
     }
-    const access = (confAccess: string): boolean => confAccess !== 'NONE';
-    db.prepare(`UPDATE users SET confaccess = 'NONE' WHERE id = 'ns-sysop'`).run();
+    const access = (_h: unknown, userId: string): boolean => userId !== 'ns-sysop';
     expect(notifyFileFiled(file, deps(access))).toBe(1);
     expect(usersInOutbox()).toEqual(['ns-alice']);
   });
@@ -155,7 +157,7 @@ describe('magazine site', () => {
 });
 
 describe('door notify', () => {
-  const item = { title: 'Your turn', body: 'bob moved' };
+  const item = { title: 'Your turn', body: 'bob moved', objectId: 'turn-1' };
 
   it('a door raises its own event for a user named by id or by name', () => {
     setPrefs(db, 'ns-alice', { 'door.tetris.your-turn': { email: 'instant' } });
@@ -170,6 +172,17 @@ describe('door notify', () => {
     expect(notifyFromDoor('tetris', 'msg.reply', 'ns-alice', item, deps())).toBe(false);
     expect(notifyFromDoor('', 'door..x', 'ns-alice', item, deps())).toBe(false);
     expect(outbox()).toHaveLength(0);
+  });
+
+  it('a call without an objectId is refused, so a looping door cannot flood', () => {
+    setPrefs(db, 'ns-alice', { 'door.tetris.your-turn': { email: 'instant' } });
+    expect(notifyFromDoor('tetris', 'door.tetris.your-turn', 'ns-alice', { title: 't', body: 'b' } as any, deps())).toBe(false);
+    expect(notifyFromDoor('tetris', 'door.tetris.your-turn', 'ns-alice', { title: 't', body: 'b', objectId: '  ' }, deps())).toBe(false);
+    expect(outbox()).toHaveLength(0);
+    // The same objectId twice is one row: the key does its job.
+    notifyFromDoor('tetris', 'door.tetris.your-turn', 'ns-alice', { title: 't', body: 'b', objectId: 'k' }, deps());
+    notifyFromDoor('tetris', 'door.tetris.your-turn', 'ns-alice', { title: 't', body: 'b', objectId: 'k' }, deps());
+    expect(outbox()).toHaveLength(1);
   });
 
   it('an unknown recipient queues nothing', () => {

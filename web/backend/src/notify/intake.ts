@@ -6,7 +6,7 @@
 import type Database from 'better-sqlite3';
 import { deliverAfter, findEvent, modeFor, NOTIFY_CHANNELS, notifyRef } from '@amiexpress/bbs-door-sdk/formats/notify';
 import type { NotifyItem } from '@amiexpress/bbs-door-sdk/formats/notify';
-import { SYSOP_LEVEL } from '../server/socket-guard';
+import { diskIsSysop } from './account';
 import { enqueue, getPrefs, getSettings } from './repository';
 
 /** The board's own zone: the process's TZ (docker-compose.yml), as config.ts documents. */
@@ -14,10 +14,9 @@ export function boardTimeZone(): string {
   return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
 }
 
-/** The board's sysop test: the same level the socket guard uses (socket-guard.ts SYSOP_LEVEL). */
+/** The board's sysop test: the socket guard's level over the DISK record (account.ts), not the SQL mirror. */
 export function isSysop(db: Database.Database, userId: string): boolean {
-  const row = db.prepare('SELECT seclevel FROM users WHERE id = ?').get(userId) as { seclevel: number | null } | undefined;
-  return (row?.seclevel ?? 0) >= SYSOP_LEVEL;
+  return diskIsSysop(db, userId);
 }
 
 /**
@@ -25,10 +24,13 @@ export function isSysop(db: Database.Database, userId: string): boolean {
  * their quiet hours / digest slot. Returns the number of NEW rows; a repeat of
  * the same event and object adds none (the ref is the idempotency key).
  */
-export function queueNotification(db: Database.Database, userId: string, item: NotifyItem, now: number, zone: string = boardTimeZone()): number {
+export function queueNotification(
+  db: Database.Database, userId: string, item: NotifyItem, now: number, zone: string = boardTimeZone(),
+  sysopTest: (db: Database.Database, userId: string) => boolean = isSysop,
+): number {
   const def = findEvent(item.event);
   if (!def) return 0;
-  if (def.sysopOnly && !isSysop(db, userId)) return 0;
+  if (def.sysopOnly && !sysopTest(db, userId)) return 0;
   const prefs = getPrefs(db, userId);
   const settings = getSettings(db, userId);
   let added = 0;
