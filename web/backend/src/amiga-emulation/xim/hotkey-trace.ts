@@ -14,7 +14,11 @@
  * A prompt answered out of the TYPE-AHEAD QUEUE, with how many keys were
  * still behind it - the key a door acts on need not be the key just pressed.
  */
-export function logHotkeyFromTypeAhead(token: string, keyData: string, queued: number): void {
+export function logHotkeyFromTypeAhead(token: string, keyData: string, queued: number, secret = false): void {
+  if (secret) {
+    console.log(`[JH_HK] answered with <withheld> (${queued} more queued)`);
+    return;
+  }
   console.log(
     `[JH_HK] answered with ${JSON.stringify(token)} -> ` +
       `${JSON.stringify(keyData)} (${queued} more queued)`,
@@ -35,7 +39,12 @@ export function logHotkeyReply(
   ximPort: number,
   msgAddr: number,
   stringPtr: number,
+  secret = false,
 ): void {
+  if (secret) {
+    console.log(`[JH_HK] replied <withheld> port=${ximPort} msg=0x${msgAddr.toString(16)}`);
+    return;
+  }
   console.log(
     `[JH_HK] replied ${JSON.stringify(char)} -> 0x${keyCode.toString(16)} ` +
       `at 0x${stringAddr.toString(16)} (read back 0x${readBack.toString(16)}), ` +

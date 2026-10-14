@@ -183,7 +183,7 @@ describe('the W door on three screens', () => {
    * the two debugLog lines in AmigaDoorSession.ts:274 and xim/io.ts:248); `console`
    * is everything else the console said.
    */
-  async function passwordSinks(secret: string): Promise<{ sinks: Record<string, string>; traces: string }> {
+  async function passwordSinks(secret: string): Promise<{ sinks: Record<string, string>; traces: string; hotkeyLines: string[] }> {
     const started = Date.now() - 1000;
     const lines: string[] = [];
     const spies = (['log', 'info', 'warn', 'error', 'debug'] as const).map(level =>
@@ -201,7 +201,10 @@ describe('the W door on three screens', () => {
     const doorLogs = fs.readdirSync(logsDir)
       .filter(f => /^door-68k-W-.*\.log$/.test(f) && fs.statSync(path.join(logsDir, f)).mtimeMs >= started)
       .map(f => path.join(logsDir, f));
+    const ximDebug = fs.readFileSync(path.join(logsDir, 'xim-debug.log'), 'utf8').split('\n');
     return {
+      // every hotkey-read trace line from the console and the XIM debug log (the per-key JH_HK traces)
+      hotkeyLines: [...lines, ...ximDebug].filter(l => /JH_HK|JH_ExtHK|Input char|Processed keyData|\[READ\]/.test(l)),
       traces: lines.filter(isTrace).join('\n'),
       sinks: {
         console: lines.filter(l => !isTrace(l)).join('\n'),
@@ -241,5 +244,27 @@ describe('the W door on three screens', () => {
       expect(traces).toContain(prefix);
     }
     expect(traces).toContain('[DoorInput] "6"');            // the field jump typed before the entry is traced with content
+  });
+
+  /*
+   * Closed 2026-10-15 (W fix wave I1): the JH_HK hotkey traces (xim/io.ts handleHotkey,
+   * completeHotkey, the extended and quick readers, hotkey-trace.ts) printed each typed key
+   * ONE CHARACTER PER LINE, so the contiguous-substring check above could not see them.
+   * Asserted per character, with DEBUG_68K on (set at the top of this file).
+   */
+  test('no single key of the password appears in any JH_HK hotkey trace while SECRET is on', async () => {
+    const secret = 'Zebra7!x';
+    const { hotkeyLines } = await passwordSinks(secret);
+    // control: the trace is live and shows the key typed outside the entry ('6' jumps to the row)
+    expect(hotkeyLines.some(l => /char '6'|"6"/.test(l))).toBe(true);
+    for (const c of new Set(secret.split(''))) {
+      const code = c.charCodeAt(0);
+      const leaks = hotkeyLines.filter(l =>
+        l.includes(`char '${c}'`) || l.includes(`char: ${JSON.stringify(c)}`) || l.includes(`Input char: ${JSON.stringify(c)}`) ||
+        l.includes(`with ${JSON.stringify(c)}`) || l.includes(`replied ${JSON.stringify(c)}`) || l.includes(`'${c}' (code`) ||
+        new RegExp(`(charCode|keyCode|key code|code)[= ]${code}\\b`).test(l) ||
+        l.toLowerCase().includes(`(0x${code.toString(16)})`) || l.toLowerCase().includes(`-> 0x${code.toString(16)} `));
+      expect({ char: c, leaks }).toEqual({ char: c, leaks: [] });
+    }
   });
 });

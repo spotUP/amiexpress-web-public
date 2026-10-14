@@ -21,7 +21,7 @@ import { SysopDebugUtil } from '../../utils/sysop-debug.util';
 import { getNewlineMode, normalizeNewlines } from './newline-mode.util';
 import { ximLogger } from '../../utils/XIMLogger';
 import { debugLog } from '../../utils/debug-log';
-import { inputForTrace } from './secret-input';
+import { inputForTrace, isSecretInput } from './secret-input';
 import { handleUserData as handleUserDataFn, handleUserString as handleUserStringFn } from './user-info-handlers';
 import { handleMCI as handleMCIFn } from './mci-handler';
 import { processHotkeyToken as processHotkeyTokenFn } from './io-hotkey-tokens';
@@ -935,7 +935,7 @@ debugLog(`[XIMIOHandler] JH_HK: Displaying prompt: "${prompt}"`);
       const token = this.inputQueue.shift()!;
       const keyData = this.processHotkeyToken(token);
 
-      logHotkeyFromTypeAhead(token, keyData, this.inputQueue.length);
+      logHotkeyFromTypeAhead(token, keyData, this.inputQueue.length, isSecretInput(this.bbsSession));
 
       // Skip ignored escape sequences (Home, End, Page Up/Down, etc.)
       if (keyData === '') {
@@ -983,15 +983,15 @@ debugLog(`[DEBUG JH_HK handleHotkey] ALSO wrote to original stringPtr at 0x${str
       const ximPort = this.getXimPort();
       this.messageParser.writeCommand(msg.msgAddr, ximPort);
 
-      const keyName = keyCode === 10 ? 'ENTER(LF)' : keyCode === 13 ? 'CR' : keyCode === 4 ? 'UP' : keyCode === 5 ? 'DOWN' : keyCode === 2 ? 'LEFT' : keyCode === 3 ? 'RIGHT' : `char '${keyData}'`;
-debugLog(`[XIMIOHandler] JH_HK: Got key code ${keyCode} (0x${keyCode.toString(16)}) = ${keyName}`);
-debugLog(`[XIMIOHandler] JH_HK: Wrote keyCode=${keyCode} (${keyName}) to msg.string[0] at 0x${stringAddr.toString(16)}`);
+      const keyName = keyCode === 10 ? 'ENTER(LF)' : keyCode === 13 ? 'CR' : keyCode === 4 ? 'UP' : keyCode === 5 ? 'DOWN' : keyCode === 2 ? 'LEFT' : keyCode === 3 ? 'RIGHT' : this.keyForTrace(`char '${keyData}'`);
+debugLog(`[XIMIOHandler] JH_HK: Got key code ${this.keyForTrace(`${keyCode} (0x${keyCode.toString(16)})`)} = ${keyName}`);
+debugLog(`[XIMIOHandler] JH_HK: Wrote keyCode=${this.keyForTrace(String(keyCode))} (${keyName}) to msg.string[0] at 0x${stringAddr.toString(16)}`);
 debugLog(`[XIMIOHandler] JH_HK: Wrote ximPort=${ximPort} to msg.command`);
 
       // CRITICAL FIX 2026-01-20: DON'T pass empty string to reply() - it overwrites msg.string!
       // Door needs to read the character from msg.string[0], so we must preserve it.
       // Passing undefined for stringValue skips writeMessageString() call.
-debugLog(`[DEBUG JH_HK] BEFORE reply(): msg.string[0]=0x${this.emulator.readMemory(stringAddr).toString(16)} keyCode=${keyCode}`);
+debugLog(`[DEBUG JH_HK] BEFORE reply(): msg.string[0]=${this.keyForTrace('0x' + this.emulator.readMemory(stringAddr).toString(16))} keyCode=${this.keyForTrace(String(keyCode))}`);
       this.reply(msg, 1);
 debugLog(`[DEBUG JH_HK] AFTER reply(): msg.string[0]=0x${this.emulator.readMemory(stringAddr).toString(16)}`);
 
@@ -1072,6 +1072,11 @@ debugLog(`[XIMIOHandler] JH_HK: Timeout callback skipped (emulator gone): ${(err
    * Called when input arrives while waitingForHotkey is true.
    * Sends the reply and resumes the emulator.
    */
+  /** A key's content for a debug trace: withheld while the door reads a secret (see secret-input.ts). */
+  private keyForTrace(text: string): string {
+    return inputForTrace(this.bbsSession, text, (s) => s);
+  }
+
   private completeHotkey(char: string): void {
     if (!this.hotkeyMessage) {
       return;
@@ -1125,12 +1130,12 @@ debugLog(`[XIMIOHandler] JH_HK completeHotkey: NUL is not a keypress (express.e:
       debugLog(`[DEBUG JH_HK completeHotkey] Sending CR (0x0D) as-is - testing if door expects CR`);
       // keyCode = 10;  // DISABLED: Don't convert CR to LF
     }
-    const keyName = keyCode === 10 ? 'ENTER(LF)' : keyCode === 13 ? 'CR' : keyCode === 4 ? 'UP' : keyCode === 5 ? 'DOWN' : keyCode === 2 ? 'LEFT' : keyCode === 3 ? 'RIGHT' : `char '${keyData}'`;
+    const keyName = keyCode === 10 ? 'ENTER(LF)' : keyCode === 13 ? 'CR' : keyCode === 4 ? 'UP' : keyCode === 5 ? 'DOWN' : keyCode === 2 ? 'LEFT' : keyCode === 3 ? 'RIGHT' : this.keyForTrace(`char '${keyData}'`);
 
 debugLog('========================================');
 debugLog(`[XIMIOHandler] JH_HK COMPLETE:`);
-debugLog(`  Input char: ${JSON.stringify(char)} (charCode=${char.charCodeAt(0)})`);
-debugLog(`  Processed keyData: ${JSON.stringify(keyData)} (charCode=${keyCode})`);
+debugLog(`  Input char: ${this.keyForTrace(`${JSON.stringify(char)} (charCode=${char.charCodeAt(0)})`)}`);
+debugLog(`  Processed keyData: ${this.keyForTrace(`${JSON.stringify(keyData)} (charCode=${keyCode})`)}`);
 debugLog(`  Key name: ${keyName}`);
 debugLog(`  Data reply: ${this.state.carrierDropped ? -1 : 1}`);
 debugLog('========================================');
@@ -1158,7 +1163,7 @@ debugLog('========================================');
       if (doorMsgAddr !== msg.msgAddr) {
         console.error(`[DEBUG JH_HK completeHotkey] *** MISMATCH! Door's msg addr (0x${doorMsgAddr.toString(16)}) != our msg addr (0x${msg.msgAddr.toString(16)})! ***`);
       } else {
-        debugLog(`[DEBUG JH_HK completeHotkey] Message addresses MATCH - writing char '${keyData}' (0x${keyCode.toString(16)}) to 0x${(msg.msgAddr + 0x14).toString(16)}`);
+        debugLog(`[DEBUG JH_HK completeHotkey] Message addresses MATCH - writing char ${this.keyForTrace(`'${keyData}' (0x${keyCode.toString(16)})`)} to 0x${(msg.msgAddr + 0x14).toString(16)}`);
       }
     }
 
@@ -1193,11 +1198,11 @@ debugLog(`[DEBUG JH_HK completeHotkey] ALSO wrote to original stringPtr at 0x${s
 
     this.reply(msg, this.state.carrierDropped ? -1 : 1);
 
-    logHotkeyReply(char, keyCode, stringAddr, this.emulator.readMemory(stringAddr), ximPort, msg.msgAddr, stringPtr);
+    logHotkeyReply(char, keyCode, stringAddr, this.emulator.readMemory(stringAddr), ximPort, msg.msgAddr, stringPtr, isSecretInput(this.bbsSession));
 
     // DEBUG: Verify character is still there after reply
     const verifyChar = this.emulator.readMemory(stringAddr);
-    debugLog(`[DEBUG JH_HK completeHotkey] AFTER reply: msg.string[0] = 0x${verifyChar.toString(16)} (expected 0x${keyCode.toString(16)})`);
+    debugLog(`[DEBUG JH_HK completeHotkey] AFTER reply: msg.string[0] = 0x${verifyChar.toString(16)} (expected ${this.keyForTrace('0x' + keyCode.toString(16))})`);
     if (verifyChar !== keyCode) {
       console.error(`[DEBUG JH_HK completeHotkey] *** CORRUPTION! Character was overwritten during reply! ***`);
     }
@@ -1219,7 +1224,7 @@ debugLog(`[DEBUG JH_HK completeHotkey] ALSO wrote to original stringPtr at 0x${s
     this.hotkeyMessage = null;
 
     // Resume emulator execution now that we have input
-    debugLog(`[DEBUG JH_HK completeHotkey] About to resume emulator, char=${keyData} (0x${keyCode.toString(16)}) at msg.string[0]=0x${stringAddr.toString(16)}`);
+    debugLog(`[DEBUG JH_HK completeHotkey] About to resume emulator, char=${this.keyForTrace(`${keyData} (0x${keyCode.toString(16)})`)} at msg.string[0]=0x${stringAddr.toString(16)}`);
     this.emulator.resume();
   }
 
@@ -1240,7 +1245,7 @@ debugLog(`[DEBUG JH_HK completeHotkey] ALSO wrote to original stringPtr at 0x${s
 
 debugLog('========================================');
 debugLog(`[XIMIOHandler] JH_ExtHK COMPLETE:`);
-debugLog(`  Input char: ${JSON.stringify(char)} (charCode=${charCode})`);
+debugLog(`  Input char: ${this.keyForTrace(`${JSON.stringify(char)} (charCode=${charCode})`)}`);
 debugLog(`  Data reply: ${this.state.carrierDropped ? -1 : 1}`);
 debugLog('========================================');
 
@@ -1288,7 +1293,7 @@ debugLog('[XIMIOHandler] JH_ExtHK - Extended hotkey with signal (BLOCKS)');
       const char = this.inputQueue.shift()!;
       const charCode = char.charCodeAt(0);
       this.messageParser.writeCommand(msg.msgAddr, charCode);
-debugLog(`  [READ] Extended hotkey: '${char}' (code=${charCode})`);
+debugLog(`  [READ] Extended hotkey: ${this.keyForTrace(`'${char}' (code=${charCode})`)}`);
       this.reply(msg, 1);
       // NOTE: reply() already calls replyMsg() for native doors
       this.emulator.resume();  // CRITICAL: Resume when input was queued (pre-paused by callback)
@@ -1393,7 +1398,7 @@ debugLog('[XIMIOHandler] QUICK_KEY - Quick key input');
     this.messageParser.writeCommand(msg.msgAddr, this.getXimPort());
 
     if (char) {
-debugLog(`  [READ] Quick key: '${char}' (code ${charCode})`);
+debugLog(`  [READ] Quick key: ${this.keyForTrace(`'${char}' (code ${charCode})`)}`);
       this.reply(msg, charCode);
     } else {
 debugLog('  [TIMEOUT] No input available');
