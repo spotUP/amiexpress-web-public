@@ -5,6 +5,7 @@
 import assert from 'node:assert';
 import type { Story } from '@amiexpress/bbs-door-sdk/formats/magazine';
 import {
+  columnStep,
   buildArticle,
   buildAwaitingEditor,
   buildLayout,
@@ -349,4 +350,23 @@ export async function anArticleEndsOnTheSiteNameAndNeverPrintsTheAddress(): Prom
     assert.ok(t.includes('>> SRC demozoo.org'), `${w}: site name`);
     assert.ok(!/https?:/.test(t), `${w}: no raw url`);
   }
+}
+
+export async function columnStepGoesToTheSameRowInTheNextColumnOrTheNearestEntry(): Promise<void> {
+  // Two columns of eleven body rows; 0 is a heading row or a gap (null).
+  const left = [0, 0, 0, null, 1, 1, 1, null, 2, 2, 2];
+  const right = [null, 3, 3, 3, null, 4, 4, 4, null, null, 5];
+  const grid = [left, right];
+  assert.strictEqual(columnStep(grid, 1, 1), 4, 'entry 1 starts on row 4; row 4 of the next column is a gap, 4 starts on row 5');
+  assert.strictEqual(columnStep(grid, 0, 1), 3, 'row 0 is a gap on the right: the nearest entry is 3');
+  assert.strictEqual(columnStep(grid, 2, 1), 4, 'row 8 is a gap: 4 ends on row 7, one away; 5 starts on row 10, two away');
+  assert.strictEqual(columnStep(grid, 3, -1), 0, 'left from 3 (row 1) lands on 0');
+  assert.strictEqual(columnStep(grid, 4, -1), 1, 'left from 4 (row 5) lands on 1');
+  assert.strictEqual(columnStep(grid, 0, -1), 'edge', 'no column before the first');
+  assert.strictEqual(columnStep(grid, 5, 1), 'edge', 'no column after the last');
+  assert.strictEqual(columnStep([left, [null, null]], 0, 1), 'edge', 'a neighbouring column with no entry is the edge');
+  assert.strictEqual(columnStep([[0, 0, null, 1]], 1, 1), 'edge', 'one column: always the edge');
+  assert.strictEqual(columnStep(grid, 99, 1), null, 'an entry that is not on this spread');
+  // Two entries equally near: the one that starts nearer, then the upper.
+  assert.strictEqual(columnStep([[null, null, 0], [7, null, null, null, 8]], 0, 1), 7, 'row 2: 7 and 8 are two rows away; ties go up');
 }

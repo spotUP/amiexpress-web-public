@@ -86,8 +86,10 @@ const SYSOP_HELP = [
     'U   move the story up       D   move it down',
 ].join('\n');
 exports.HELP_TEXT = [
-    'Arrow keys, Page Up, Page Down, Space   turn the page',
+    'Page Up, Page Down, Space               turn the page',
+    'Arrow keys in a story                   turn the page',
     'Up and Down in a list                   move the cursor',
+    'Left and Right in a list                move between columns',
     'Enter                                   open the story',
     'Escape                                  back, then quit',
     'C   contents of every section',
@@ -252,6 +254,7 @@ async function startReader(session, options = {}) {
     let spreadNo = 0;
     let listIds = [];
     let spreadFirst = [];
+    let listGrid = [];
     let selected = null;
     let headline = null;
     let panelText = '';
@@ -328,6 +331,7 @@ async function startReader(session, options = {}) {
         }
         listIds = l.itemIds;
         spreadFirst = l.spreadFirst;
+        listGrid = l.grid;
         spreads = l.spreads;
         spreadNo = l.selectedSpread;
     };
@@ -475,19 +479,35 @@ async function startReader(session, options = {}) {
         counters.banners += 1;
     };
     const go = (next, keepSelection = false) => {
-        snapshot = (0, library_1.loadSnapshot)((0, library_1.magazineRoot)(__dirname));
-        storyCache.clear();
-        view = next;
-        applyBanner(bannerNameFor(next));
-        if (!keepSelection && next.kind !== 'article')
-            selected = null;
-        build();
-        advanceNews();
-        if (next.kind === 'article') {
-            read.add(next.storyId);
-            persist(exports.READ_KEY, read);
+        const before = view;
+        const beforeSelected = selected;
+        try {
+            snapshot = (0, library_1.loadSnapshot)((0, library_1.magazineRoot)(__dirname));
+            storyCache.clear();
+            view = next;
+            applyBanner(bannerNameFor(next));
+            if (!keepSelection && next.kind !== 'article')
+                selected = null;
+            build();
+            advanceNews();
+            if (next.kind === 'article') {
+                read.add(next.storyId);
+                persist(exports.READ_KEY, read);
+            }
+            paint();
         }
-        paint();
+        catch (err) {
+            // A view that cannot be built leaves the caller where they were, with the screen they had.
+            view = before;
+            selected = beforeSelected;
+            try {
+                applyBanner(bannerNameFor(before));
+                build();
+                paint();
+            }
+            catch { /* the original error is the one to report */ }
+            throw err;
+        }
     };
     // ---- ticker ----------------------------------------------------------
     let tickerTimer = null;
@@ -540,6 +560,22 @@ async function startReader(session, options = {}) {
             return;
         const at = Math.max(0, Math.min(listIds.length - 1, (selected ? listIds.indexOf(selected) : 0) + delta));
         selected = listIds[at];
+        build();
+        paint();
+    };
+    /**
+     * Left and Right in a list: the entry at the same visual row in the next
+     * column. At the first or last column (and at 40 columns, which has one) the
+     * key turns the page, as it does inside an article.
+     */
+    const columnMove = (delta) => {
+        const at = selected ? listIds.indexOf(selected) : -1;
+        const step = at < 0 ? null : (0, layout_1.columnStep)(listGrid[spreadNo] ?? [], at, delta);
+        if (typeof step !== 'number') {
+            page(delta);
+            return;
+        }
+        selected = listIds[step];
         build();
         paint();
     };
@@ -740,7 +776,7 @@ async function startReader(session, options = {}) {
          */
         if (sysop)
             modal.key(['p', 'P', 'S-p'], () => { if (wireId === st.id)
-                toggleFront(); });
+                press('p', 'p'); });
         modal.display();
         updateHints();
     };
@@ -842,7 +878,7 @@ async function startReader(session, options = {}) {
         overlayTimer.unref?.();
     };
     // ---- keys ------------------------------------------------------------
-    const press = (name, ch) => {
+    const dispatchKey = (name, ch) => {
         if (!stopped && closing) {
             finish();
             return;
@@ -900,10 +936,20 @@ async function startReader(session, options = {}) {
                     move(1);
                 return;
             case 'left':
+                if (view.kind === 'article')
+                    page(-1);
+                else
+                    columnMove(-1);
+                return;
+            case 'right':
+                if (view.kind === 'article')
+                    page(1);
+                else
+                    columnMove(1);
+                return;
             case 'pageup':
                 page(-1);
                 return;
-            case 'right':
             case 'pagedown':
             case 'space':
                 page(1);
@@ -957,6 +1003,29 @@ async function startReader(session, options = {}) {
                 openHelp();
                 return;
             default: break;
+        }
+    };
+    /**
+     * A key that throws must not vanish: the SDK swallows errors out of a screen
+     * handler, so a stale build or a bad story used to leave the caller pressing
+     * a key that did nothing. The error goes to the board's log with the key and
+     * the view, and the footer says so in one line.
+     */
+    const press = (name, ch) => {
+        try {
+            dispatchKey(name, ch);
+        }
+        catch (err) {
+            const message = err instanceof Error ? err.message : String(err);
+            // eslint-disable-next-line no-console
+            console.error(`[MAG] key handler failed: key=${JSON.stringify(ch ?? name)} view=${view.kind}${wireId ? ' (wire panel)' : ''}: ${err instanceof Error && err.stack ? err.stack : message}`);
+            if (stopped)
+                return;
+            try {
+                setStatus('That key failed - see the board log');
+                render();
+            }
+            catch { /* the notice is best effort; the log has the error */ }
         }
     };
     screen.on('keypress', (ch, key) => {

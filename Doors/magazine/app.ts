@@ -66,6 +66,7 @@ import {
   buildListing,
   buildNotice,
   buildProgress,
+  columnStep,
   rowText,
   sectionLabel,
   signalStrength,
@@ -151,8 +152,10 @@ const SYSOP_HELP = [
 ].join('\n');
 
 export const HELP_TEXT = [
-  'Arrow keys, Page Up, Page Down, Space   turn the page',
+  'Page Up, Page Down, Space               turn the page',
+  'Arrow keys in a story                   turn the page',
   'Up and Down in a list                   move the cursor',
+  'Left and Right in a list                move between columns',
   'Enter                                   open the story',
   'Escape                                  back, then quit',
   'C   contents of every section',
@@ -361,6 +364,7 @@ export async function startReader(session: DoorSession, options: ReaderOptions =
   let spreadNo = 0;
   let listIds: string[] = [];
   let spreadFirst: Array<string | null> = [];
+  let listGrid: Array<Array<Array<number | null>>> = [];
   let selected: string | null = null;
   let headline: { row: number; rows: number } | null = null;
   let panelText = '';
@@ -443,6 +447,7 @@ export async function startReader(session: DoorSession, options: ReaderOptions =
     }
     listIds = l.itemIds;
     spreadFirst = l.spreadFirst;
+    listGrid = l.grid;
     spreads = l.spreads;
     spreadNo = l.selectedSpread;
   };
@@ -583,18 +588,28 @@ export async function startReader(session: DoorSession, options: ReaderOptions =
   };
 
   const go = (next: View, keepSelection = false) => {
-    snapshot = loadSnapshot(magazineRoot(__dirname));
-    storyCache.clear();
-    view = next;
-    applyBanner(bannerNameFor(next));
-    if (!keepSelection && next.kind !== 'article') selected = null;
-    build();
-    advanceNews();
-    if (next.kind === 'article') {
-      read.add(next.storyId);
-      persist(READ_KEY, read);
+    const before = view;
+    const beforeSelected = selected;
+    try {
+      snapshot = loadSnapshot(magazineRoot(__dirname));
+      storyCache.clear();
+      view = next;
+      applyBanner(bannerNameFor(next));
+      if (!keepSelection && next.kind !== 'article') selected = null;
+      build();
+      advanceNews();
+      if (next.kind === 'article') {
+        read.add(next.storyId);
+        persist(READ_KEY, read);
+      }
+      paint();
+    } catch (err) {
+      // A view that cannot be built leaves the caller where they were, with the screen they had.
+      view = before;
+      selected = beforeSelected;
+      try { applyBanner(bannerNameFor(before)); build(); paint(); } catch { /* the original error is the one to report */ }
+      throw err;
     }
-    paint();
   };
 
   // ---- ticker ----------------------------------------------------------
@@ -644,6 +659,20 @@ export async function startReader(session: DoorSession, options: ReaderOptions =
     if (listIds.length === 0) return;
     const at = Math.max(0, Math.min(listIds.length - 1, (selected ? listIds.indexOf(selected) : 0) + delta));
     selected = listIds[at];
+    build();
+    paint();
+  };
+
+  /**
+   * Left and Right in a list: the entry at the same visual row in the next
+   * column. At the first or last column (and at 40 columns, which has one) the
+   * key turns the page, as it does inside an article.
+   */
+  const columnMove = (delta: -1 | 1) => {
+    const at = selected ? listIds.indexOf(selected) : -1;
+    const step = at < 0 ? null : columnStep(listGrid[spreadNo] ?? [], at, delta);
+    if (typeof step !== 'number') { page(delta); return; }
+    selected = listIds[step];
     build();
     paint();
   };
@@ -809,7 +838,7 @@ export async function startReader(session: DoorSession, options: ReaderOptions =
      * not reached and P did nothing in the panel. The sysop's key is bound on
      * the modal, the way its own close keys are.
      */
-    if (sysop) modal.key(['p', 'P', 'S-p'], () => { if (wireId === st.id) toggleFront(); });
+    if (sysop) modal.key(['p', 'P', 'S-p'], () => { if (wireId === st.id) press('p', 'p'); });
     modal.display();
     updateHints();
   };
@@ -909,7 +938,7 @@ export async function startReader(session: DoorSession, options: ReaderOptions =
 
   // ---- keys ------------------------------------------------------------
 
-  const press = (name: string, ch?: string) => {
+  const dispatchKey = (name: string, ch?: string) => {
     if (!stopped && closing) { finish(); return; }
     // The title waits for a key; that key only lets the reader in.
     if (!stopped && overlay) { dropOverlay(); return; }
@@ -936,8 +965,10 @@ export async function startReader(session: DoorSession, options: ReaderOptions =
     switch (name) {
       case 'up': if (view.kind === 'article') page(-1); else move(-1); return;
       case 'down': if (view.kind === 'article') page(1); else move(1); return;
-      case 'left': case 'pageup': page(-1); return;
-      case 'right': case 'pagedown': case 'space': page(1); return;
+      case 'left': if (view.kind === 'article') page(-1); else columnMove(-1); return;
+      case 'right': if (view.kind === 'article') page(1); else columnMove(1); return;
+      case 'pageup': page(-1); return;
+      case 'pagedown': case 'space': page(1); return;
       case 'enter': case 'return': openSelected(); return;
       case 'escape': case 'backspace': back(); return;
       default: break;
@@ -956,6 +987,27 @@ export async function startReader(session: DoorSession, options: ReaderOptions =
       case '/': openSearch(); return;
       case '?': case 'h': openHelp(); return;
       default: break;
+    }
+  };
+
+  /**
+   * A key that throws must not vanish: the SDK swallows errors out of a screen
+   * handler, so a stale build or a bad story used to leave the caller pressing
+   * a key that did nothing. The error goes to the board's log with the key and
+   * the view, and the footer says so in one line.
+   */
+  const press = (name: string, ch?: string) => {
+    try {
+      dispatchKey(name, ch);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      // eslint-disable-next-line no-console
+      console.error(`[MAG] key handler failed: key=${JSON.stringify(ch ?? name)} view=${view.kind}${wireId ? ' (wire panel)' : ''}: ${err instanceof Error && err.stack ? err.stack : message}`);
+      if (stopped) return;
+      try {
+        setStatus('That key failed - see the board log');
+        render();
+      } catch { /* the notice is best effort; the log has the error */ }
     }
   };
 

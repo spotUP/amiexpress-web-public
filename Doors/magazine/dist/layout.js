@@ -3,6 +3,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.SECTION_ORDER = exports.NEWS_SEPARATOR = exports.sourceName = exports.MIN_PANEL_ROWS = void 0;
 exports.rowText = rowText;
 exports.buildLayout = buildLayout;
+exports.columnStep = columnStep;
 exports.trimAtWord = trimAtWord;
 exports.wireStamp = wireStamp;
 exports.wireDetail = wireDetail;
@@ -130,6 +131,52 @@ function spanRow(geometry, text, role) {
 }
 function blankRows(n) {
     return Array.from({ length: Math.max(0, n) }, () => []);
+}
+/**
+ * Left or Right in a list: the entry at the same visual row in the
+ * neighbouring column, or the nearest entry when that row is a gap or a
+ * heading (ties go up). `'edge'` when there is no neighbouring column with an
+ * entry in it - the caller turns the page instead. `null` when the selected
+ * entry is not on this spread.
+ */
+function columnStep(columns, selectedIndex, delta) {
+    let from = -1;
+    let row = -1;
+    columns.forEach((col, c) => {
+        if (from >= 0)
+            return;
+        const at = col.indexOf(selectedIndex);
+        if (at >= 0) {
+            from = c;
+            row = at;
+        }
+    });
+    if (from < 0)
+        return null;
+    const target = columns[from + delta];
+    if (!target)
+        return 'edge';
+    // The row it is on, else the nearest entry; of two equally near, the one
+    // that starts nearer (so Left undoes Right), then the upper.
+    const start = new Map();
+    target.forEach((index, r) => { if (index !== null && !start.has(index))
+        start.set(index, r); });
+    let best = -1;
+    let bestDistance = Infinity;
+    let bestStart = Infinity;
+    for (let r = 0; r < target.length; r++) {
+        const index = target[r];
+        if (index === null)
+            continue;
+        const distance = Math.abs(r - row);
+        const startDistance = Math.abs((start.get(index) ?? r) - row);
+        if (distance < bestDistance || (distance === bestDistance && startDistance < bestStart)) {
+            best = index;
+            bestDistance = distance;
+            bestStart = startDistance;
+        }
+    }
+    return best < 0 ? 'edge' : best;
 }
 /** Digits a page number is right-aligned in. */
 const PAGE_DIGITS = 3;
@@ -273,6 +320,7 @@ function buildListing(blocks, selectedStoryId, layout, header) {
     const selectedIndex = selectedStoryId ? itemIds.indexOf(selectedStoryId) : -1;
     let selectedSpread = 0;
     const spreadFirst = [];
+    const grid = flowed.map((spread) => spread.columns.map((col) => col.map((c) => (c.item !== undefined && c.item >= 0 ? c.item : null))));
     const spreads = flowed.map((spread, n) => {
         const firstCell = spread.columns.flat().find((c) => c.item !== undefined && c.item >= 0);
         spreadFirst.push(firstCell?.item !== undefined ? itemIds[firstCell.item] : null);
@@ -282,7 +330,7 @@ function buildListing(blocks, selectedStoryId, layout, header) {
         const head = spanRow(geometry, headerLine(header.left, header.right, geometry.contentWidth), 'dim');
         return [head, ...composeSpread(geometry, spread.columns, bodyHeight)];
     });
-    return { spreads, selectedSpread, itemIds, spreadFirst };
+    return { spreads, selectedSpread, itemIds, spreadFirst, grid };
 }
 /** `LEFT ........ RIGHT` across the set text. */
 function headerLine(left, right, width) {

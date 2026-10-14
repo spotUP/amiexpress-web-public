@@ -233,6 +233,53 @@ export interface Listing {
   itemIds: string[];
   /** The first item shown on each spread, for paging the cursor with the page. */
   spreadFirst: Array<string | null>;
+  /**
+   * Where every item sits: `grid[spread][column][row]` is the index into
+   * `itemIds` of the entry that row belongs to, or null for a heading or a gap.
+   * Left and Right read it to move to the same visual row in the next column.
+   */
+  grid: Array<Array<Array<number | null>>>;
+}
+
+/**
+ * Left or Right in a list: the entry at the same visual row in the
+ * neighbouring column, or the nearest entry when that row is a gap or a
+ * heading (ties go up). `'edge'` when there is no neighbouring column with an
+ * entry in it - the caller turns the page instead. `null` when the selected
+ * entry is not on this spread.
+ */
+export function columnStep(
+  columns: ReadonlyArray<ReadonlyArray<number | null>>,
+  selectedIndex: number,
+  delta: -1 | 1,
+): number | 'edge' | null {
+  let from = -1;
+  let row = -1;
+  columns.forEach((col, c) => {
+    if (from >= 0) return;
+    const at = col.indexOf(selectedIndex);
+    if (at >= 0) { from = c; row = at; }
+  });
+  if (from < 0) return null;
+  const target = columns[from + delta];
+  if (!target) return 'edge';
+  // The row it is on, else the nearest entry; of two equally near, the one
+  // that starts nearer (so Left undoes Right), then the upper.
+  const start = new Map<number, number>();
+  target.forEach((index, r) => { if (index !== null && !start.has(index)) start.set(index, r); });
+  let best = -1;
+  let bestDistance = Infinity;
+  let bestStart = Infinity;
+  for (let r = 0; r < target.length; r++) {
+    const index = target[r];
+    if (index === null) continue;
+    const distance = Math.abs(r - row);
+    const startDistance = Math.abs((start.get(index) ?? r) - row);
+    if (distance < bestDistance || (distance === bestDistance && startDistance < bestStart)) {
+      best = index; bestDistance = distance; bestStart = startDistance;
+    }
+  }
+  return best < 0 ? 'edge' : best;
 }
 
 /** Digits a page number is right-aligned in. */
@@ -381,6 +428,7 @@ export function buildListing(
   const selectedIndex = selectedStoryId ? itemIds.indexOf(selectedStoryId) : -1;
   let selectedSpread = 0;
   const spreadFirst: Array<string | null> = [];
+  const grid = flowed.map((spread) => spread.columns.map((col) => col.map((c) => (c.item !== undefined && c.item >= 0 ? c.item : null))));
   const spreads = flowed.map((spread, n) => {
     const firstCell = spread.columns.flat().find((c) => c.item !== undefined && c.item >= 0);
     spreadFirst.push(firstCell?.item !== undefined ? itemIds[firstCell.item] : null);
@@ -390,7 +438,7 @@ export function buildListing(
     const head = spanRow(geometry, headerLine(header.left, header.right, geometry.contentWidth), 'dim');
     return [head, ...composeSpread(geometry, spread.columns, bodyHeight)];
   });
-  return { spreads, selectedSpread, itemIds, spreadFirst };
+  return { spreads, selectedSpread, itemIds, spreadFirst, grid };
 }
 
 /** `LEFT ........ RIGHT` across the set text. */

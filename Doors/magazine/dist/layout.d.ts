@@ -80,7 +80,21 @@ export interface Listing {
     itemIds: string[];
     /** The first item shown on each spread, for paging the cursor with the page. */
     spreadFirst: Array<string | null>;
+    /**
+     * Where every item sits: `grid[spread][column][row]` is the index into
+     * `itemIds` of the entry that row belongs to, or null for a heading or a gap.
+     * Left and Right read it to move to the same visual row in the next column.
+     */
+    grid: Array<Array<Array<number | null>>>;
 }
+/**
+ * Left or Right in a list: the entry at the same visual row in the
+ * neighbouring column, or the nearest entry when that row is a gap or a
+ * heading (ties go up). `'edge'` when there is no neighbouring column with an
+ * entry in it - the caller turns the page instead. `null` when the selected
+ * entry is not on this spread.
+ */
+export declare function columnStep(columns: ReadonlyArray<ReadonlyArray<number | null>>, selectedIndex: number, delta: -1 | 1): number | 'edge' | null;
 /** One line cut at a word boundary to `width`; `..` marks a cut. */
 export declare function trimAtWord(text: string, width: number): string;
 export { sourceName };

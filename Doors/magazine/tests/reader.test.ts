@@ -591,7 +591,7 @@ export async function oneTickRepaintsTheNewsWireRowAndNothingElse(): Promise<voi
         h.mark();
         tick();
         const rows = [...h.rowsTouched()];
-        assert.deepStrictEqual(rows, [h.reader.layout.tickerRow + 1], `${w}: only the wire row is addressed`);
+        assert.deepStrictEqual(rows, [(h.reader.layout.tickerRow ?? 0) + 1], `${w}: only the wire row is addressed`);
         assert.notStrictEqual(h.reader.tickerRow(), wireBefore, `${w}: the wire moved`);
         assert.strictEqual(h.reader.stats().tickerSteps, 1);
         assert.deepStrictEqual(h.reader.panelRows(), bodyBefore, `${w}: body untouched`);
@@ -606,7 +606,7 @@ export async function oneTickRepaintsTheNewsWireRowAndNothingElse(): Promise<voi
         // Ten more ticks: still one row, never a growing cost.
         h.mark();
         for (let i = 0; i < 10; i++) tick();
-        assert.deepStrictEqual([...h.rowsTouched()], [h.reader.layout.tickerRow + 1]);
+        assert.deepStrictEqual([...h.rowsTouched()], [(h.reader.layout.tickerRow ?? 0) + 1]);
       } finally { await finish(h, b); }
     });
   }
@@ -1263,4 +1263,164 @@ export async function theFrontPageViewKeepsItsOwnNameWhileTheGeneralDeskIsMiscel
     assert.ok(t.includes('FRONT PAGE'), 'the front page view says FRONT PAGE');
     assert.ok(!t.includes('MISCELLANEOUS'));
   } finally { await finish(h, b); }
+}
+
+// ---- navigation as a caller types it: raw bytes, after the title -----------
+
+const ARROW = { up: '\x1b[A', down: '\x1b[B', right: '\x1b[C', left: '\x1b[D', pgup: '\x1b[5~', pgdn: '\x1b[6~' };
+
+/** Where the cursor ('>') is in the panel now: its row, its character column, and the title after it. */
+function cursorAt(h: Harness): { row: number; col: number; title: string } {
+  const rows = h.reader.panelRows();
+  for (let row = 0; row < rows.length; row++) {
+    const col = rows[row].indexOf('>');
+    if (col >= 0) return { row, col, title: rows[row].slice(col + 1).replace(/\s+\d+\s*(│.*)?$/, '').trim() };
+  }
+  return { row: -1, col: -1, title: '' };
+}
+
+/** Forty wire stories on one desk: every entry is the same height, so the columns line up row for row. */
+function manyStories(n = 40): Story[] {
+  return Array.from({ length: n }, (_, i) => story(
+    `cccc${String(i).padStart(4, '0')}`, `Wire story number ${String(i).padStart(2, '0')}`, 'hack', '2026-10-12', 'A short teaser line.', 'feed',
+  ));
+}
+
+export async function arrowKeysMoveTheSelectionAfterTheTitleScreenIsDismissed(): Promise<void> {
+  const b = board([]);
+  const h = await open(80, 24, { shippedArt: SHIPPED_ART });
+  try {
+    assert.ok(h.reader.overlayText().length > 0, 'the title is up');
+    h.raw(ARROW.down);
+    assert.deepStrictEqual(h.reader.overlayText(), [], 'the first key dismisses the title');
+    h.raw('c');
+    assert.strictEqual(h.reader.viewKind(), 'contents');
+    assert.ok(/^New exploit/.test(cursorAt(h).title), cursorAt(h).title);
+    h.raw(ARROW.down);
+    assert.ok(/^Second hacking/.test(cursorAt(h).title), `down moved: ${cursorAt(h).title}`);
+    h.raw(ARROW.up);
+    assert.ok(/^New exploit/.test(cursorAt(h).title), `up moved: ${cursorAt(h).title}`);
+    h.raw('\r');
+    assert.strictEqual(h.reader.viewKind(), 'article');
+    const first = text(h);
+    h.raw(ARROW.down);
+    assert.notStrictEqual(text(h), first, 'down pages the article');
+    h.raw(ARROW.up);
+    assert.strictEqual(text(h), first, 'up pages back');
+    h.raw(ARROW.right);
+    h.raw(ARROW.left);
+    assert.strictEqual(text(h), first, 'right then left returns to the same spread');
+    h.raw(' ');
+    h.raw(ARROW.pgdn);
+    h.raw(ARROW.pgup);
+    assert.strictEqual(h.reader.viewKind(), 'article');
+  } finally { await finish(h, b); }
+}
+
+export async function leftAndRightMoveBetweenColumnsInTheContentsListAt80(): Promise<void> {
+  const b = board([], manyStories());
+  const h = await open(80, 24);
+  try {
+    h.raw('c');
+    h.raw(ARROW.down);
+    h.raw(ARROW.down);
+    const from = cursorAt(h);
+    assert.ok(from.col < 40, `starts in the first column: ${from.col}`);
+    h.raw(ARROW.right);
+    const to = cursorAt(h);
+    assert.ok(to.col > 40, `right moved into the second column: ${to.col}`);
+    assert.ok(Math.abs(to.row - from.row) <= 2, `and stayed on the same visual row: ${from.row} -> ${to.row}`);
+    assert.strictEqual(h.reader.progressRow().includes('Page 1 of'), true, 'a column move does not turn the page');
+    h.raw(ARROW.left);
+    assert.deepStrictEqual(cursorAt(h), from, 'left returns to the entry it came from');
+  } finally { await finish(h, b); }
+}
+
+export async function leftAndRightMoveBetweenColumnsInTheContentsListAt132(): Promise<void> {
+  const b = board([], manyStories());
+  const h = await open(132, 40);
+  try {
+    h.raw('c');
+    h.raw(ARROW.down);
+    const first = cursorAt(h);
+    h.raw(ARROW.right);
+    const second = cursorAt(h);
+    h.raw(ARROW.right);
+    const third = cursorAt(h);
+    assert.ok(first.col < second.col && second.col < third.col, `three columns: ${first.col} ${second.col} ${third.col}`);
+    assert.ok(/Page 1 of/.test(h.reader.progressRow()));
+    h.raw(ARROW.left);
+    h.raw(ARROW.left);
+    assert.deepStrictEqual(cursorAt(h), first, 'two lefts are back where it started');
+  } finally { await finish(h, b); }
+}
+
+export async function leftAtTheFirstColumnAndRightAtTheLastTurnThePage(): Promise<void> {
+  const b = board([], manyStories());
+  const h = await open(80, 24);
+  try {
+    h.raw('c');
+    assert.ok(/Page 1 of (\d+)/.test(h.reader.progressRow()));
+    h.raw(ARROW.right);
+    assert.ok(/Page 1 of/.test(h.reader.progressRow()), 'first column to second: same page');
+    h.raw(ARROW.right);
+    assert.ok(/Page 2 of/.test(h.reader.progressRow()), 'right in the last column turns to the next spread');
+    assert.ok(cursorAt(h).col >= 0, 'the cursor goes with the page');
+    assert.ok(cursorAt(h).col < 40, 'and lands in the first column of it');
+    h.raw(ARROW.left);
+    assert.ok(/Page 1 of/.test(h.reader.progressRow()), 'left in the first column turns back');
+    h.raw(ARROW.left);
+    assert.ok(/Page 1 of/.test(h.reader.progressRow()), 'and on the first spread there is nothing before it');
+  } finally { await finish(h, b); }
+}
+
+export async function atFortyColumnsLeftAndRightPageBecauseThereIsOneColumn(): Promise<void> {
+  const b = board([], manyStories());
+  const h = await open(40, 25);
+  try {
+    h.raw('c');
+    assert.ok(/Page 1 of/.test(h.reader.progressRow()));
+    h.raw(ARROW.right);
+    assert.ok(/Page 2 of/.test(h.reader.progressRow()), 'right pages');
+    h.raw(ARROW.left);
+    assert.ok(/Page 1 of/.test(h.reader.progressRow()), 'left pages back');
+    h.raw(ARROW.down);
+    assert.ok(/Page 1 of/.test(h.reader.progressRow()), 'down still moves the cursor');
+  } finally { await finish(h, b); }
+}
+
+export async function leftAndRightRepaintOnlyTheRowsThatChange(): Promise<void> {
+  const b = board([], manyStories());
+  const h = await open(80, 24);
+  try {
+    h.raw('c');
+    h.raw(ARROW.down);
+    h.mark();
+    h.raw(ARROW.right);
+    const bytes = h.bytes();
+    const rows = h.rowsTouched();
+    // eslint-disable-next-line no-console
+    console.log(`        repaint at 80: left/right ${bytes} bytes rows ${[...rows].join(',')}`);
+    assert.ok(bytes > 0, 'the move was drawn');
+    assert.ok(bytes < 800, `a column move repainted ${bytes} bytes`);
+    assert.ok(rows.size <= 6, `rows touched: ${[...rows].join(',')}`);
+  } finally { await finish(h, b); }
+}
+
+export async function aKeyThatThrowsIsLoggedWithTheKeyAndViewAndShownInTheFooter(): Promise<void> {
+  const broken: Story = { ...story('dddd0001', 'A story whose body is not text', 'hack', '2026-10-13'), body: 42 as unknown as string };
+  const b = board([], [broken]);
+  const h = await open(80, 24);
+  const logged: string[] = [];
+  const realError = console.error;
+  console.error = (...args: unknown[]) => { logged.push(args.map(String).join(' ')); };
+  try {
+    h.raw('c');
+    h.raw('\r');
+    assert.ok(logged.some((l) => l.includes('[MAG] key handler failed') && l.includes('key="\\r"') && l.includes('view=contents')), logged.join('\n') || 'nothing was logged');
+    assert.ok(h.reader.footerRow().includes('That key failed'), h.reader.footerRow());
+    h.raw(ARROW.down);
+    assert.ok(!h.reader.footerRow().includes('That key failed'), 'the notice goes with the next key');
+    assert.strictEqual(h.reader.viewKind(), 'contents', 'and the reader still answers');
+  } finally { console.error = realError; await finish(h, b); }
 }
