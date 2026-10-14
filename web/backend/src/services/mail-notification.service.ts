@@ -15,6 +15,7 @@ import { db } from '../database';
 import { loadBBSConfig } from './bbs-config-file.service';
 import { config as appConfig } from '../config';
 import { getSystemTime } from '../utils/date-time.util';
+import { substituteUnmappable } from '../utils/wire-encoding.util';
 
 /**
  * Is this connection implicit TLS?
@@ -235,7 +236,7 @@ export async function isMailEventEnabled(event: MailEvent): Promise<boolean> {
 /**
  * Get BBS name for email subjects
  */
-async function getBbsName(): Promise<string> {
+export async function getBbsName(): Promise<string> {
   try {
     const sysConfig = readConfig() as { bbs_name?: string };
     return sysConfig?.bbs_name || 'AmiExpress BBS';
@@ -247,7 +248,30 @@ async function getBbsName(): Promise<string> {
 /**
  * Send email using configured SMTP
  * express.e mailssl.e - sendMail()
+ *
+ * Throws on failure; sendMail() below keeps the MAIL_ON_* wrappers' "log and
+ * go on" contract, sendMailTo() hands the failure to a caller that retries.
  */
+async function deliverMail(
+  to: string,
+  subject: string,
+  body: string,
+  options: MailOptions,
+  headers?: Record<string, string>
+): Promise<void> {
+  const transporter = nodemailer.createTransport(buildTransportConfig(options));
+
+  await transporter.sendMail({
+    from: options.bbsEmail || `noreply@${options.smtpHost}`,
+    to,
+    subject,
+    text: body,
+    ...(headers ? { headers } : {})
+  });
+
+  console.log(`[MailService] Email sent to ${to}: ${subject}`);
+}
+
 async function sendMail(
   to: string,
   subject: string,
@@ -255,20 +279,47 @@ async function sendMail(
   options: MailOptions
 ): Promise<boolean> {
   try {
-    const transporter = nodemailer.createTransport(buildTransportConfig(options));
-
-    await transporter.sendMail({
-      from: options.bbsEmail || `noreply@${options.smtpHost}`,
-      to,
-      subject,
-      text: body
-    });
-
-console.log(`[MailService] Email sent to ${to}: ${subject}`);
+    await deliverMail(to, subject, body, options);
     return true;
   } catch (error: any) {
-console.error(`[MailService] Failed to send email: ${error.message}`);
+    console.error(`[MailService] Failed to send email: ${error.message}`);
     return false;
+  }
+}
+
+export type SendMailResult = { ok: true } | { ok: false; error: string };
+
+/** Characters Latin-1 cannot hold become their ASCII forms, then '?'; line breaks in header values are removed. */
+function latin1Safe(text: string): string {
+  const mapped = substituteUnmappable(text, 'iso-8859-1');
+  let out = '';
+  for (const ch of mapped) out += (ch.codePointAt(0) ?? 0) <= 0xff ? ch : '?';
+  return out;
+}
+
+/**
+ * Send one plain-text email to any address through the board's SMTP.
+ *
+ * The notification senders (verification codes, NOTIFY email) use this; the
+ * MAIL_ON_* wrappers stay sysop-only. Unlike them it REPORTS failure, because
+ * the dispatcher backs off and retries on one. `headers` is for the
+ * List-Unsubscribe pair (RFC 8058).
+ */
+export async function sendMailTo(
+  to: string,
+  subject: string,
+  text: string,
+  headers?: Record<string, string>
+): Promise<SendMailResult> {
+  const options = await getMailOptions();
+  if (!options?.smtpHost) return { ok: false, error: 'SMTP is not configured' };
+  const safeHeaders: Record<string, string> = {};
+  for (const [k, v] of Object.entries(headers ?? {})) safeHeaders[k] = latin1Safe(v).replace(/[\r\n]+/g, ' ');
+  try {
+    await deliverMail(to, latin1Safe(subject).replace(/[\r\n]+/g, ' '), latin1Safe(text), options, safeHeaders);
+    return { ok: true };
+  } catch (error: any) {
+    return { ok: false, error: String(error?.message ?? error) };
   }
 }
 

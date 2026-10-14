@@ -93,6 +93,53 @@ export function setSettings(db: Db, userId: string, s: NotifySettings): void {
   ).run(userId, s.quietFrom, s.quietTo, s.timeZone, s.digestKind, s.digestHour, s.digestWeekday, s.paused ? 1 : 0);
 }
 
+/** The caller's account address, or null. The board's one address column: users.email. */
+export function accountEmail(db: Db, userId: string): string | null {
+  const r = db.prepare('SELECT email FROM users WHERE id = ?').get(userId) as { email: string | null } | undefined;
+  const e = r?.email?.trim();
+  return e ? e : null;
+}
+
+/** Same mailbox: case-insensitive, surrounding blanks ignored. */
+export function sameAddress(a: string | null | undefined, b: string | null | undefined): boolean {
+  if (!a || !b) return false;
+  return a.trim().toLowerCase() === b.trim().toLowerCase();
+}
+
+/** Record the address that passed verification (settings row created at defaults if the caller has none). */
+export function markEmailVerified(db: Db, userId: string, email: string, now: number): void {
+  db.prepare(
+    `INSERT INTO notify_settings (user_id, email_verified, email_verified_at) VALUES (?, ?, ?)
+     ON CONFLICT(user_id) DO UPDATE SET email_verified = excluded.email_verified, email_verified_at = excluded.email_verified_at`
+  ).run(userId, email, now);
+}
+
+// ---------------------------------------------------------------- email codes
+
+export interface EmailCodeRow { user_id: string; email: string; code_hash: string; expires_at: number; attempts: number }
+
+export function getEmailCode(db: Db, userId: string): EmailCodeRow | undefined {
+  return db.prepare('SELECT * FROM notify_email_codes WHERE user_id = ?').get(userId) as EmailCodeRow | undefined;
+}
+
+/** One pending code per caller: a new one replaces the old and resets the attempts. */
+export function putEmailCode(db: Db, userId: string, email: string, codeHash: string, expiresAt: number): void {
+  db.prepare(
+    `INSERT INTO notify_email_codes (user_id, email, code_hash, expires_at, attempts) VALUES (?, ?, ?, ?, 0)
+     ON CONFLICT(user_id) DO UPDATE SET email = excluded.email, code_hash = excluded.code_hash, expires_at = excluded.expires_at, attempts = 0`
+  ).run(userId, email, codeHash, expiresAt);
+}
+
+/** Count one wrong guess; returns the attempts used so far. */
+export function bumpEmailAttempts(db: Db, userId: string): number {
+  db.prepare('UPDATE notify_email_codes SET attempts = attempts + 1 WHERE user_id = ?').run(userId);
+  return (db.prepare('SELECT attempts FROM notify_email_codes WHERE user_id = ?').get(userId) as { attempts: number } | undefined)?.attempts ?? 0;
+}
+
+export function deleteEmailCode(db: Db, userId: string): void {
+  db.prepare('DELETE FROM notify_email_codes WHERE user_id = ?').run(userId);
+}
+
 // ---------------------------------------------------------------- follow
 
 export function getFollows(db: Db, userId: string): number[] {

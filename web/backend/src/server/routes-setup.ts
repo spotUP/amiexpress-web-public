@@ -34,6 +34,7 @@ import { createDoorArtRouter } from '../api/door-art-routes';
 import { createBatchRouter } from '../api/batch-routes';
 import { createImportRouter } from '../handlers/admin/import.handler';
 import { createChatRouter } from '../api/chat-routes';
+import { createNotifyRouter } from '../api/notify-routes';
 import { createWhipRouter } from '../api/whip-routes';
 import { createBotDataRouter } from '../api/bot-data-routes';
 import { authenticateServiceToken, authenticateBotToken } from '../middleware/service-auth.middleware';
@@ -295,6 +296,9 @@ export function registerHttpRoutes(app: Application, io: SocketIOServer): void {
   // ===== Chat API - Public Routes (for web chat authentication) =====
   const chatRouter = createChatRouter(db);
   app.use('/api/chat', chatRouter);
+
+  // ===== Notification unsubscribe links - Public, token-scoped (the signed token is the credential) =====
+  app.use('/notify', createNotifyRouter(() => (db as any).db));
 
   // ===== Statistics API - Sysop-only Routes =====
   const statisticsRouter = createStatisticsRouter(db);

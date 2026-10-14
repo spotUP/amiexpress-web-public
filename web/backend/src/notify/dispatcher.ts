@@ -12,7 +12,7 @@
  *   failure              the achievements backoff ladder; a non-retryable
  *                        failure deletes the row with one WARN
  *
- * N1 delivers the Board channel. Email and push are typed seams: a sender
+ * The Board and Email channels are delivered (email.ts). Push is a typed seam: a sender
  * injected in `deps.senders` makes that channel live. A channel with NO sender
  * is excluded from the selection, so its rows stay in the outbox untouched
  * (and do not crowd the batch) until a sender is wired - they are never
@@ -26,6 +26,7 @@ import type { NotifyChannel, NotifyItem } from '@amiexpress/bbs-door-sdk/formats
 import { db } from '../database';
 import { boardTimeZone } from './intake';
 import { deliverBoard } from './board';
+import { productionEmailSender } from './email';
 import {
   due, getSettings, markFailed, NOTIFY_MAX_AGE_SECONDS, purgeOlderThan, purgeSentLog, recordSent, remove, retime, sentSince,
 } from './repository';
@@ -35,7 +36,12 @@ export const DISPATCH_INTERVAL_MS = 60_000;
 /** (user, channel) groups per tick; a group is never split across ticks. */
 export const DISPATCH_BATCH = 200;
 
-export type SendResult = { ok: true } | { ok: false; error: string; retry: boolean };
+/**
+ * `suppressed`: the channel chose not to send (the caller is logged on and will
+ * see it at the prompt). The row is consumed - dropped for this channel, not
+ * deferred - and the send is NOT logged against the per-user cap.
+ */
+export type SendResult = { ok: true; suppressed?: boolean } | { ok: false; error: string; retry: boolean };
 
 /**
  * What a channel's sender receives: one user's items (several for a digest) and
@@ -61,6 +67,8 @@ export interface TickOutcome {
   failed: number;
   retimed: number;
   purged: number;
+  /** Rows a sender declined to send because the caller is logged on. */
+  suppressed: number;
 }
 
 /** One message standing in for several items. */
@@ -82,7 +90,7 @@ export function productionDispatcherDeps(io: unknown): DispatcherDeps {
     now: () => Date.now(),
     log: (line) => console.log(line),
     boardZone: boardTimeZone,
-    senders: {},
+    senders: { email: productionEmailSender() },
     showBoard: (userId, item) => deliverBoard(io, userId, item, { rawDb, now: () => Date.now() }),
   };
 }
@@ -95,7 +103,7 @@ export function _resetPurgeClockForTests(): void {
 
 /** One pass. Returns what happened, for the log and the tests. */
 export async function dispatchOnce(deps: DispatcherDeps): Promise<TickOutcome> {
-  const out: TickOutcome = { sent: 0, failed: 0, retimed: 0, purged: 0 };
+  const out: TickOutcome = { sent: 0, failed: 0, retimed: 0, purged: 0, suppressed: 0 };
   const handle = deps.rawDb();
   if (!handle) return out;
   const now = Math.floor(deps.now() / 1000);
@@ -129,7 +137,10 @@ export async function dispatchOnce(deps: DispatcherDeps): Promise<TickOutcome> {
   };
 
   const settle = (refs: string[], res: SendResult, userId: string, channel: NotifyChannel): void => {
-    if (res.ok) {
+    if (res.ok && res.suppressed) {
+      remove(handle, refs);
+      out.suppressed += refs.length;
+    } else if (res.ok) {
       remove(handle, refs);
       recordSent(handle, userId, channel, now);
       out.sent += refs.length;
