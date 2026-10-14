@@ -469,7 +469,6 @@ static void page_follow_scrolls_a_page_not_a_row(void)
     assert(scrolls == 3);                       /* 29 steps: a page each 8 rows, not a scroll per row */
     for (i = 0; i < 29; i++) ui_list_move(&list, -1);
     assert(list.selected == 0 && list.offset == 0);
-    list.follow_extra = 0;
     printf("  [OK] page follow: crossing the edge scrolls a page, then the cursor moves free\n");
 }
 

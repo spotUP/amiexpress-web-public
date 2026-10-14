@@ -56,6 +56,14 @@ static const char *section_of(const us_model *m, int d)
     return m->door[d].section[0] ? m->door[d].section : "Board settings";
 }
 
+/* The "Board settings" group comes first, under the outer heading itself; named sections follow alphabetically. */
+static int section_before(const char *a, const char *b)
+{
+    const int ra = strcmp(a, "Board settings") == 0 ? 0 : 1, rb = strcmp(b, "Board settings") == 0 ? 0 : 1;
+    if (ra != rb) return ra < rb;
+    return strcmp(a, b) < 0;
+}
+
 void us_model_layout(us_model *m, int cols)
 {
     int s, n, d, headers = 0, done[US_MAX_DOORS];
@@ -78,7 +86,7 @@ void us_model_layout(us_model *m, int cols)
         int pick = -1;
         for (d = 0; d < m->door_count; d++) {
             if (done[d]) continue;
-            if (pick < 0 || strcmp(section_of(m, d), section_of(m, pick)) < 0) pick = d;
+            if (pick < 0 || section_before(section_of(m, d), section_of(m, pick))) pick = d;
         }
         if (pick < 0) break;
         if (strcmp(section_of(m, pick), "Board settings") != 0) add_header(m, &headers, section_of(m, pick));

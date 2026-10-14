@@ -166,6 +166,11 @@ static void no_duplicate_board_settings_heading(void)
     for (i = 0; i < m.row_count; i++)
         if (m.row[i].kind == US_ROW_HEADER && strcmp(us_row_text(&m, i), "Board settings") == 0) count++;
     assert(count == 1);
+    /* ROW ORDER: the sectionless door sits right under the outer heading, before any named section. */
+    for (i = 0; i < m.row_count && !(m.row[i].kind == US_ROW_HEADER && strcmp(us_row_text(&m, i), "Board settings") == 0); i++) {}
+    assert(m.row[i + 1].kind == US_ROW_DOOR && strcmp(m.door[m.row[i + 1].ref].label, "Notifications") == 0);
+    assert(m.row[i + 2].kind == US_ROW_HEADER && strcmp(us_row_text(&m, i + 2), "Appearance") == 0);
+    assert(m.row[i + 3].kind == US_ROW_DOOR && strcmp(m.door[m.row[i + 3].ref].label, "Door colours") == 0);
     printf("  [OK] a door with no section does not repeat the Board settings heading\n");
 }
 

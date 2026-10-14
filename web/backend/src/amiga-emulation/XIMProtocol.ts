@@ -1024,7 +1024,7 @@ debugLog(`[XIMProtocol]   Wrote tooltype value="${tooltypeValue}", StringPtr not
       case XIMCommand.AEW_POSTMSG:
         if (msg.data !== 0) {
           const answer = postMessageAnswer(this.bbsSession);
-          this.messageParser.writeMessageString(msg.msgAddr, answer);
+          this.messageParser.writeString(msg.msgAddr + DoorConstants.MESSAGE_STRING_OFFSET, answer, 200);
           debugLog(`[XIMProtocol] AEW_POSTMSG read -> "${answer}"`);
           this.sendReply(msg, answer.length);
         } else {
@@ -1050,7 +1050,7 @@ debugLog(`[XIMProtocol]   Wrote tooltype value="${tooltypeValue}", StringPtr not
         }
         // writeMessageString zeroes the whole 200-byte String first: a PASSWORD request's tail
         // (the confirm copy) must not stay in door memory behind a short answer.
-        this.messageParser.writeString(msg.msgAddr + DoorConstants.MESSAGE_STRING_OFFSET, answer, 200);
+        this.messageParser.writeMessageString(msg.msgAddr, answer);
         debugLog(`[XIMProtocol] AEW_USERFIELD ${loggableXimString(msg.command, msg.data, msg.string).split(' ')[0]} -> ${answer.length} bytes`);
         this.sendReply(msg, answer.length);
         break;

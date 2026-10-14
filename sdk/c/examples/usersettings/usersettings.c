@@ -201,6 +201,7 @@ static int edit_lines(const ae_uf_field *f)
         for (i = 70; i >= 2; i--) at += sprintf(countdown + at, " %d\r\n", i);
         strcpy(countdown + at, "\r\n");
         at += 2;
+        /* WEB_: express.e 11307's 69-character question does not fit 40 columns; the short form asks the same thing. */
         strcpy(countdown + at, screen.cols >= 80 ? f->prompt : "Lines (0 = Auto): ");
         ae_put(countdown, 0);
         buf[0] = '\0';
