@@ -556,8 +556,17 @@ else
   SDK_NEEDS_BUILD=false
   if [ ! -d "$REPO_ROOT/sdk/dist" ]; then
     SDK_NEEDS_BUILD=true
-  elif [ -n "$(find "$REPO_ROOT/sdk/core" "$REPO_ROOT/sdk/engines" "$REPO_ROOT/sdk/utils" -name "*.ts" -newer "$REPO_ROOT/sdk/dist/index.js" 2>/dev/null | head -1)" ]; then
-    SDK_NEEDS_BUILD=true
+  else
+    # The inputs are whatever sdk/tsconfig.json compiles - read from its
+    # `include`, never a list kept here. A hand list of core/engines/utils
+    # missed sdk/formats: a door imported a function its stale dist did not
+    # have, and the key that called it did nothing (2026-10-14).
+    SDK_INPUTS=$(cd "$REPO_ROOT/sdk" && node -e 'const fs=require("fs");const t=JSON.parse(fs.readFileSync("tsconfig.json","utf8").replace(/^\s*\/\/.*$/mg,""));for(const p of t.include||[])console.log(p.replace(/\/\*\*\/\*$/,""))' 2>/dev/null)
+    if [ -z "$SDK_INPUTS" ]; then
+      SDK_NEEDS_BUILD=true
+    elif [ -n "$(cd "$REPO_ROOT/sdk" && printf '%s\n' "$SDK_INPUTS" | while IFS= read -r p; do [ -e "$p" ] && find "$p" -name "*.ts" -newer dist/index.js 2>/dev/null; done | head -1)" ]; then
+      SDK_NEEDS_BUILD=true
+    fi
   fi
 
   if [ "$SDK_NEEDS_BUILD" = true ]; then
