@@ -49,10 +49,17 @@ static void follow(ui_list *list)
 
     if (visible <= 0) { list->offset = 0; return; }
 
-    if (list->selected < list->offset) {
-        list->offset = list->selected;
-    } else if (list->selected >= list->offset + visible) {
-        list->offset = list->selected - visible + 1;
+    {
+        int extra = list->follow_extra > 0 ? list->follow_extra : 0;
+        int need = list->selected + extra;           /* the last row that must show */
+        if (extra >= visible) extra = 0, need = list->selected;
+
+        if (list->selected < list->offset) {
+            /* A page back puts the selection (and its extra rows) at the bottom. */
+            list->offset = list->page_follow ? need - visible + 1 : list->selected;
+        } else if (need >= list->offset + visible) {
+            list->offset = list->page_follow ? list->selected : need - visible + 1;
+        }
     }
 
     /* A list shorter than its box does not scroll at all, and no window ever

@@ -51,6 +51,17 @@ typedef struct {
      * thing that moves.
      */
     const char *caret;
+    /**
+     * Non-zero: leaving the window scrolls a PAGE (the selection lands at the
+     * edge it came from), not one row. A one-row scroll repaints the whole
+     * box on every key past the edge; a page costs one box per page.
+     */
+    int page_follow;
+    /**
+     * Rows below the selection that must stay inside the window with it: 1
+     * for a door whose row has its value on the line under it.
+     */
+    int follow_extra;
     ui_list_row_fn row;
     void *context;
     /**

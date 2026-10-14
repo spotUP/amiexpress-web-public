@@ -45,28 +45,36 @@ static const char *row_text(void *ctx, int index) { (void)ctx; return us_row_tex
 
 static int message_row(void) { return screen.rows - 1; }
 
-/** Clear the message rows, then write `text` wrapped into them (refusals arrive in express.e's words). */
-static void show_message(const char *text)
+/** Message rows above the key bar: three where the chrome is collapsed, two otherwise. */
+static int message_rows(void) { return screen.profile.collapse_chrome ? 3 : 2; }
+
+/**
+ * Clear the message rows, then write `text` wrapped into them (refusals arrive in express.e's words).
+ * It wraps at us_message_width and draws from column 1 at that same width, so what was wrapped is
+ * what is drawn. Only rows that hold text are ever cleared (doors draw smart).
+ */
+static void show_message(const char *text, int token)
 {
-    char lines[3][81];
-    int n, i, max = screen.profile.collapse_chrome ? 3 : 2;
+    char lines[4][81];
+    int n, i, max = message_rows();
     if (message_lines == 0 && (!text || !text[0])) return;   /* nothing on the glass, nothing to repaint */
     for (i = 0; i < max; i++) ansi_fill(&screen.buf, message_row() - (max - 1) + i, 1, screen.cols, UI_TOKEN(UI_T_INK), -1);
     message_lines = 0;
     if (!text || !text[0]) return;
-    n = us_wrap(text, screen.cols - 2, lines, max);
+    n = us_wrap(text, us_message_width(screen.cols), lines, max);
     message_lines = n;
-    ansi_color(&screen.buf, UI_TOKEN(UI_T_WARN), -1, 0);
-    for (i = 0; i < n; i++) ansi_text(&screen.buf, message_row() - (n - 1) + i, 2, lines[i], screen.cols - 2);
+    ansi_color(&screen.buf, token, -1, 0);
+    for (i = 0; i < n; i++) ansi_text(&screen.buf, message_row() - (n - 1) + i, 1, lines[i], us_message_width(screen.cols));
+    ansi_color(&screen.buf, UI_TOKEN(UI_T_INK), -1, 0);
 }
 
-static void draw_key_bar(void)
+static void draw_key_bar(const char *primary, const char *last, int jump)
 {
     char footer[160];
     const char *optional[1];
     optional[0] = "0-16: Jump";
-    ui_footer_build(footer, sizeof(footer), screen.cols - 1, "Up/Down: Move  Enter: Change", optional,
-                    screen.profile.collapse_chrome ? 0 : 1, "Q: Leave");
+    ui_footer_build(footer, sizeof(footer), screen.cols - 1, primary, optional,
+                    (jump && !screen.profile.collapse_chrome) ? 1 : 0, last);
     if (screen.profile.collapse_chrome) {
         ansi_color(&screen.buf, UI_TOKEN(UI_T_DIM), -1, 0);
         ansi_text(&screen.buf, screen.rows, 1, footer, screen.cols - 1);
@@ -82,7 +90,7 @@ static void draw_full(void)
     ui_masthead_draw(&screen.buf, 1, 1, screen.cols, "USER CONFIGURATION",
                      screen.profile.collapse_chrome ? "" : theme->rail, UI_TOKEN(UI_T_ACCENT), UI_TOKEN(UI_T_GROUND));
     ui_list_draw(&list, &screen.buf);
-    draw_key_bar();
+    draw_key_bar("Up/Down: Move  Enter: Change", "Q: Leave", 1);
     /* Leave the pen in the list's ink: the first keypress then opens with a row, not a colour change. */
     ansi_color(&screen.buf, UI_TOKEN(UI_T_INK), -1, 0);
 }
@@ -98,18 +106,20 @@ static void refresh_field(int n)
     if (model.stacked) ui_list_draw_row(&list, &screen.buf, r + 1);
 }
 
-/** Where the editor sits: exactly where the row draws the value (us_value_column, ruling C3). */
+/** Where the editor sits: its text lands exactly where the row draws the value (us_editor_left, ruling C3). */
 static void editor_style(ui_input_style *st, int r, int mask)
 {
     ui_input_style_init(st);
-    st->row = list.top + ((model.stacked ? r + 1 : r) - list.offset);
-    st->left = us_value_column(&model);
-    st->cols = screen.cols - st->left;     /* the last column stays free */
+    st->row = list.top + ((model.stacked ? r + 1 : r) - list.offset);   /* follow_extra keeps r+1 in the window */
+    st->left = us_editor_left(&model);
+    st->cols = screen.cols - st->left - 1;     /* the scroll bar's column stays the list's */
     st->fg = UI_TOKEN(UI_T_SELECTION_INK);
     st->bg = UI_TOKEN(UI_T_SELECTION_BG);
     st->ink = UI_TOKEN(UI_T_SELECTION_INK);
     st->mask = mask;
 }
+
+static int is_name_row(int n) { return n == 0 || n == 2 || n == 3; }
 
 static int edit_text(const ae_uf_field *f, int r)
 {
@@ -120,52 +130,82 @@ static int edit_text(const ae_uf_field *f, int r)
     int cap = f->maxlen + 1 > (int)sizeof(buf) ? (int)sizeof(buf) : f->maxlen + 1;
     strncpy(buf, f->value, sizeof(buf) - 1);
     buf[sizeof(buf) - 1] = '\0';
+    show_message(f->prompt, UI_TOKEN(UI_T_DIM));            /* express.e's own question, while the editor is open */
     for (;;) {
         editor_style(&st, r, 0);
         got = ui_input(&screen.buf, &keys, &pushback, &st, "", buf, cap);
         if (got < 0) return -1;
+        if (is_name_row(f->number) && buf[0]) {
+            /* WEB_: express.e 25914/25947/25969 prints this between its checks; the board answers once, so it is shown before the SET. */
+            show_message("Checking for duplicate name...", UI_TOKEN(UI_T_DIM));
+            ui_screen_flush(&screen);
+        }
         if (ae_uf_set(f->number, buf, &a) == AE_UF_GONE) return -1;
-        show_message(a.outcome == AE_UF_REFUSED ? a.text : "");
-        if (a.outcome == AE_UF_REFUSED && a.retry) continue;
+        if (a.outcome == AE_UF_REFUSED) {
+            show_message(a.text, UI_TOKEN(UI_T_WARN));
+            if (a.retry) continue;
+            return 0;
+        }
         if (a.outcome == AE_UF_AGAIN) continue;
+        /* express.e 25928/25957/25978 prints "Ok!" after a stored name. */
+        if (a.outcome == AE_UF_STORED && is_name_row(f->number)) show_message("Ok!", UI_TOKEN(UI_T_DIM));
+        else show_message("", UI_TOKEN(UI_T_INK));
         return 0;
     }
 }
 
+/** express.e 26004-26010: getPass2 twice; an empty entry in either is the silent cant. */
 static int edit_password(int r)
 {
     char first[52], second[52];
     ui_input_style st;
     ae_uf_answer a;
+    int got;
     first[0] = second[0] = '\0';
     editor_style(&st, r, '*');
-    if (ui_input(&screen.buf, &keys, &pushback, &st, model.stacked ? "" : "New:", first, 51) < 0) return -1;
-    if (ui_input(&screen.buf, &keys, &pushback, &st, model.stacked ? "" : "Again:", second, 51) < 0) {
-        memset(first, 0, sizeof(first));
-        return -1;
-    }
+    show_message("Enter New Password: ", UI_TOKEN(UI_T_DIM));   /* the two entries must be told apart at 40 */
+    got = ui_input(&screen.buf, &keys, &pushback, &st, "", first, 51);
+    if (got < 0) { memset(first, 0, sizeof(first)); return -1; }
+    if (got == 0) { show_message("", UI_TOKEN(UI_T_INK)); return 0; }
+    show_message("Reenter New Password: ", UI_TOKEN(UI_T_DIM));
+    got = ui_input(&screen.buf, &keys, &pushback, &st, "", second, 51);
+    if (got < 0) { memset(first, 0, sizeof(first)); memset(second, 0, sizeof(second)); return -1; }
+    if (got == 0) { memset(first, 0, sizeof(first)); show_message("", UI_TOKEN(UI_T_INK)); return 0; }
     ae_uf_password(first, second, &a);
     memset(first, 0, sizeof(first));
     memset(second, 0, sizeof(second));
-    show_message(a.outcome == AE_UF_REFUSED ? a.text : (a.outcome == AE_UF_STORED ? "Password changed." : ""));
+    /* express.e 26024-26026 prints nothing on success. */
+    show_message(a.outcome == AE_UF_REFUSED ? a.text : "", UI_TOKEN(UI_T_WARN));
     return a.outcome == AE_UF_GONE ? -1 : 0;
 }
 
-/** express.e numberOfLinesTest (11299): the countdown, then the question. A transition: full redraw after. */
+static ae_session *door_session;
+
+/**
+ * express.e numberOfLinesTest (11299-11318): " n" and a line break for 70 down to 2, then
+ * "\b\n" and the question - ONE write, so the prompt is the line after the countdown wherever
+ * the terminal ends, and the top number is the screen's. The answer is read inline (ae_get) at
+ * the cursor, with no absolute row. A transition: full redraw after.
+ */
+static char countdown[512];
+
 static int edit_lines(const ae_uf_field *f)
 {
     char buf[8];
-    ui_input_style st;
     ae_uf_answer a;
-    int i;
+    int i, at;
     for (;;) {
         ansi_clear(&screen.buf);
         ui_screen_flush(&screen);
-        for (i = 70; i >= 2; i--) { char line[8]; sprintf(line, " %d", i); ae_put(line, 1); }
+        at = 0;
+        for (i = 70; i >= 2; i--) at += sprintf(countdown + at, " %d\r\n", i);
+        strcpy(countdown + at, "\r\n");
+        at += 2;
+        strcpy(countdown + at, screen.cols >= 80 ? f->prompt : "Lines (0 = Auto): ");
+        ae_put(countdown, 0);
         buf[0] = '\0';
-        ui_input_style_init(&st);
-        st.row = screen.rows; st.left = 1; st.cols = screen.cols;
-        if (ui_input(&screen.buf, &keys, &pushback, &st, screen.cols >= 80 ? f->prompt : "Lines (0 = Auto):", buf, 4) < 0) return -1;
+        ae_get(buf, 4);
+        if (!ae_carrier(door_session)) return -1;
         if (ae_uf_set(f->number, buf, &a) == AE_UF_GONE) return -1;
         if (a.outcome != AE_UF_AGAIN) return 1;
     }
@@ -174,23 +214,32 @@ static int edit_lines(const ae_uf_field *f)
 static char choice_titles[32][48];
 static const char *choice_row(void *ctx, int index) { (void)ctx; return choice_titles[index]; }
 
-/** A choice row's pick list, drawn where the main list is; Enter picks, Esc keeps. A transition: full redraw after. */
+/**
+ * A choice row's pick list, drawn where the main list is, opened on the current value;
+ * Enter picks, Esc keeps it. A transition: full redraw after.
+ * WEB_: express.e 11319-11389 prints a numbered list and asks "Choose ... :"; the door shows
+ * a list the caller moves in instead. The board still receives express.e's number (from 1).
+ */
 static int edit_choice(const ae_uf_field *f)
 {
     ui_list pick;
     ae_uf_answer a;
     char number[8];
-    int count = 0, key;
+    int count = 0, key, current = 0, i;
     while (count < 32 && ae_uf_choice(f->number, count, choice_titles[count], (int)sizeof(choice_titles[0])) > 0) count++;
     if (count == 0) return 1;                 /* express.e 26033/26040/26052: count()>0 */
+    for (i = 0; i < count; i++) if (strcmp(choice_titles[i], f->value) == 0) current = i;
     pick = list;
     pick.count = count;
-    pick.selected = 0; pick.offset = 0; pick.drawn_selected = -1;
+    pick.offset = 0; pick.drawn_selected = -1;
+    pick.page_follow = 0; pick.follow_extra = 0;
     pick.row = choice_row;
     pick.context = 0;
+    ui_list_select(&pick, current);
     ansi_clear(&screen.buf);
+    message_lines = 0;
     ui_masthead_draw(&screen.buf, 1, 1, screen.cols, f->label, "", UI_TOKEN(UI_T_ACCENT), UI_TOKEN(UI_T_GROUND));
-    draw_key_bar();
+    draw_key_bar("Up/Down: Move  Enter: Pick", "Esc: Keep", 0);
     for (;;) {
         ui_list_draw_changed(&pick, &screen.buf, 0);
         ui_screen_flush(&screen);
@@ -235,6 +284,7 @@ int main(int argc, char **argv)
             return 0;
     }
 
+    door_session = &session;
     ui_screen_open(&screen, &session, frame_buffer, (long)sizeof(frame_buffer));
     ae_user_theme(&session, theme_id, (int)sizeof(theme_id));
     theme = ui_theme_by_id(theme_id);
@@ -257,6 +307,8 @@ int main(int argc, char **argv)
     list.count = model.row_count;
     list.row = row_text;
     list.borders = 0;
+    list.page_follow = 1;                 /* one box per page, not one per row past the edge */
+    list.follow_extra = model.stacked ? 1 : 0;   /* the value line stays in the window with its label */
     list.caret = ">>";
     list.chrome = UI_TOKEN(UI_T_ACCENT);
     list.ink = UI_TOKEN(UI_T_INK);
@@ -293,19 +345,29 @@ int main(int argc, char **argv)
             case ' ': case UI_KEY_ENTER:
                 if (row->kind == US_ROW_DOOR) {
                     if (key == ' ') break;
-                    if (ae_uf_resume_arm(r) == 1) { leave_for = model.door[row->ref].command; running = 0; }
+                    {
+                           int armed = ae_uf_resume_arm(r);
+                           if (armed == 1) { leave_for = model.door[row->ref].command; running = 0; }
+                           else if (armed < 0) running = 0;
+                           else show_message("That setting cannot be opened right now.", UI_TOKEN(UI_T_WARN));
+                       }
                     break;
                 }
                 if (row->kind != US_ROW_FIELD) break;
                 {
                     const ae_uf_field *f = &model.field[row->ref];
                     int res = 0;
-                    show_message("");
+                    show_message("", UI_TOKEN(UI_T_INK));
                     if (f->state != 'E') break;                    /* [DISABLED]: express.e JUMP cant */
                     if (key == ' ' && f->kind != 'Y') break;
                     switch (f->kind) {
                         case 'Y': res = cycle(f); break;
-                        case 'T': case 'X': res = edit_text(f, r); break;
+                        case 'T': res = edit_text(f, r); break;
+                           case 'X':
+                               /* WEB_: express.e 11391-11425 lists the language libraries; this board has none, and
+                                  its own text for that case is: */
+                               show_message("Languages list unavailable", UI_TOKEN(UI_T_WARN));
+                               break;
                         case 'P': res = edit_password(r); break;
                         case 'L': res = edit_lines(f); break;
                         case 'C': res = edit_choice(f); break;

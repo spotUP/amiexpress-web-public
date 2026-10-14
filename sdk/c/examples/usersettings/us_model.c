@@ -15,6 +15,21 @@ static const struct { const char *title; int first, last; } SECTIONS[] = {
 #define VALUE_OFFSET_WIDE (1 + LABEL_WIDE + 1 + 4 + 1)   /* text index of the value */
 #define VALUE_OFFSET_STACKED 5
 
+int us_text_room(int cols)
+{
+    return cols - 1 - 1 - US_CARET_WIDTH;     /* list width, scroll bar, caret */
+}
+
+int us_message_width(int cols)
+{
+    return cols - 1;                          /* from column 1; the last column stays free */
+}
+
+int us_editor_left(const us_model *m)
+{
+    return us_value_column(m) - 1;
+}
+
 int us_value_column(const us_model *m)
 {
     return US_CARET_WIDTH + 1 + (m->stacked ? VALUE_OFFSET_STACKED : VALUE_OFFSET_WIDE);
@@ -33,6 +48,12 @@ static int add_header(us_model *m, int *headers, const char *title)
     strncpy(m->header[*headers], title, sizeof(m->header[0]) - 1);
     m->header[*headers][sizeof(m->header[0]) - 1] = '\0';
     return add(m, US_ROW_HEADER, (*headers)++);
+}
+
+/* A door without a section sits under the "Board settings" heading, once. */
+static const char *section_of(const us_model *m, int d)
+{
+    return m->door[d].section[0] ? m->door[d].section : "Board settings";
 }
 
 void us_model_layout(us_model *m, int cols)
@@ -57,12 +78,12 @@ void us_model_layout(us_model *m, int cols)
         int pick = -1;
         for (d = 0; d < m->door_count; d++) {
             if (done[d]) continue;
-            if (pick < 0 || strcmp(m->door[d].section, m->door[pick].section) < 0) pick = d;
+            if (pick < 0 || strcmp(section_of(m, d), section_of(m, pick)) < 0) pick = d;
         }
         if (pick < 0) break;
-        add_header(m, &headers, m->door[pick].section);
+        if (strcmp(section_of(m, pick), "Board settings") != 0) add_header(m, &headers, section_of(m, pick));
         for (d = 0; d < m->door_count; d++) {
-            if (!done[d] && strcmp(m->door[d].section, m->door[pick].section) == 0) {
+            if (!done[d] && strcmp(section_of(m, d), section_of(m, pick)) == 0) {
                 done[d] = 1;
                 add(m, US_ROW_DOOR, d);
             }
@@ -112,11 +133,9 @@ static void clip_into(char *dest, const char *src, int width)
     dest[n] = '\0';
 }
 
-const char *us_row_text(us_model *m, int index)
+static void build_row(us_model *m, int index, char *line)
 {
-    char line[256];
     const us_row *r = &m->row[index];
-    const int room = m->cols - 1;              /* the caret column is the list's */
     line[0] = '\0';
     switch (r->kind) {
         case US_ROW_HEADER:
@@ -124,7 +143,7 @@ const char *us_row_text(us_model *m, int index)
             break;
         case US_ROW_FIELD: {
             const ae_uf_field *f = &m->field[r->ref];
-            if (m->stacked) sprintf(line, " %-32.32s[%2d]", f->label, f->number);
+            if (m->stacked) { const int w = us_text_room(m->cols) - 5; sprintf(line, " %-*.*s[%2d]", w, w, f->label, f->number); }
             else sprintf(line, " %-*.*s [%2d] %s", LABEL_WIDE, LABEL_WIDE, f->label, f->number, f->value);
             break;
         }
@@ -139,7 +158,20 @@ const char *us_row_text(us_model *m, int index)
             break;
         }
     }
-    clip_into(m->text, line, room);
+}
+
+int us_row_length(us_model *m, int index)
+{
+    char line[256];
+    build_row(m, index, line);
+    return (int) strlen(line);
+}
+
+const char *us_row_text(us_model *m, int index)
+{
+    char line[256];
+    build_row(m, index, line);
+    clip_into(m->text, line, us_text_room(m->cols));
     return m->text;
 }
 

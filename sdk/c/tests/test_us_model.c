@@ -31,7 +31,16 @@ static void every_row_fits_forty_columns(void)
     fill(2);
     us_model_layout(&m, 40);
     assert(m.stacked);
-    for (i = 0; i < m.row_count; i++) assert(strlen(us_row_text(&m, i)) <= 40);
+    for (i = 0; i < m.row_count; i++) {
+        assert(strlen(us_row_text(&m, i)) <= 40);
+        /* BEFORE the clip: the list shows only us_text_room() of it (caret and scroll bar take the rest). */
+        assert(us_row_length(&m, i) <= us_text_room(40));
+    }
+    /* the longest label the board has still shows its field number whole */
+    strcpy(m.field[8].label, "Background file check");
+    us_model_layout(&m, 40);
+    assert(strstr(us_row_text(&m, us_row_of_field(&m, 8)), "[ 8]") != 0);
+    for (i = 0; i < m.row_count; i++) assert(us_row_length(&m, i) <= us_text_room(40));
     printf("  [OK] every row fits forty columns\n");
 }
 
@@ -93,11 +102,15 @@ static void two_digits_reach_sixteen(void)
 
 static void a_refusal_wraps_into_the_message_rows(void)
 {
-    char lines[3][81];
-    int n = us_wrap("\r\nPassword must have at least 3 of these:\r\n  upper case,lower case, numeric and symbols - changes not saved", 39, lines, 3);
+    char lines[4][81];
+    int n = us_wrap("\r\nPassword must have at least 3 of these:\r\n  upper case,lower case, numeric and symbols - changes not saved", us_message_width(40), lines, 4);
+    assert(us_message_width(40) == 39);
     assert(n == 3);
+    assert(strstr(lines[2], "changes not saved") != 0);    /* the last words must survive the three rows at 40 */
     assert(strcmp(lines[0], "Password must have at least 3 of these:") == 0);
     assert(strlen(lines[1]) <= 39 && strlen(lines[2]) <= 39);
+    n = us_wrap("\r\nPassword must have at least 3 of these:\r\n  upper case,lower case, numeric and symbols - changes not saved", us_message_width(80), lines, 4);
+    assert(n == 2);
     printf("  [OK] a refusal wraps into the message rows, leading break dropped\n");
 }
 
@@ -130,6 +143,7 @@ static void the_editor_starts_where_the_value_is_drawn(void)
         t = us_row_text(&m, r);
         assert(strstr(t, "VALUEMARK") != 0);
         assert(US_CARET_WIDTH + 1 + (int) (strstr(t, "VALUEMARK") - t) == us_value_column(&m));
+        assert(us_editor_left(&m) + 1 == us_value_column(&m));   /* ui_input's text sits one column right of its bar */
         if (!m.stacked) {                 /* the editor must not cover the [ n] field number */
             r = us_row_of_field(&m, 4);
             t = us_row_text(&m, r);
@@ -141,6 +155,18 @@ static void the_editor_starts_where_the_value_is_drawn(void)
     us_model_layout(&m, 40);
     assert(us_value_column(&m) == 8);
     printf("  [OK] the editor starts where the value is drawn, at 80, 40 and 132\n");
+}
+
+static void no_duplicate_board_settings_heading(void)
+{
+    int i, count = 0;
+    fill(2);
+    m.door[0].section[0] = '\0';
+    us_model_layout(&m, 80);
+    for (i = 0; i < m.row_count; i++)
+        if (m.row[i].kind == US_ROW_HEADER && strcmp(us_row_text(&m, i), "Board settings") == 0) count++;
+    assert(count == 1);
+    printf("  [OK] a door with no section does not repeat the Board settings heading\n");
 }
 
 int main(void)
@@ -155,6 +181,7 @@ int main(void)
     a_refusal_wraps_into_the_message_rows();
     the_wide_screen_shows_a_description();
     the_editor_starts_where_the_value_is_drawn();
+    no_duplicate_board_settings_heading();
     printf("us_model: all passed\n");
     return 0;
 }

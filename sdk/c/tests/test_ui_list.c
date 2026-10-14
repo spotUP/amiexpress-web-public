@@ -455,6 +455,46 @@ static void one_changed_row_repaints_only_that_row(void)
     printf("  [OK] one changed row repaints that row and nothing else\n");
 }
 
+static void page_follow_scrolls_a_page_not_a_row(void)
+{
+    ui_list list = a_list(50, 10);              /* 8 rows visible inside the border */
+    int i, scrolls = 0, last = 0;
+    list.page_follow = 1;
+    ui_list_select(&list, 0);
+    for (i = 1; i < 30; i++) {
+        ui_list_move(&list, 1);
+        if (list.offset != last) { scrolls++; last = list.offset; }
+        assert(list.selected >= list.offset && list.selected < list.offset + 8);
+    }
+    assert(scrolls == 3);                       /* 29 steps: a page each 8 rows, not a scroll per row */
+    for (i = 0; i < 29; i++) ui_list_move(&list, -1);
+    assert(list.selected == 0 && list.offset == 0);
+    list.follow_extra = 0;
+    printf("  [OK] page follow: crossing the edge scrolls a page, then the cursor moves free\n");
+}
+
+static void follow_extra_keeps_rows_below_the_selection_visible(void)
+{
+    ui_list list = a_list(50, 10);
+    int i;
+    list.follow_extra = 1;
+    for (i = 0; i < 50; i++) {
+        ui_list_select(&list, i);
+        assert(i + 1 < list.offset + 8 || i == 49);
+    }
+    list.page_follow = 1;
+    for (i = 0; i < 49; i++) {
+        ui_list_select(&list, i);
+        assert(i + 1 < list.offset + 8);
+        assert(i >= list.offset);
+    }
+    for (i = 48; i >= 0; i--) {
+        ui_list_select(&list, i);
+        assert(i + 1 < list.offset + 8 && i >= list.offset);
+    }
+    printf("  [OK] follow_extra keeps the value line under the selection in the window\n");
+}
+
 int main(void)
 {
     printf("ui_list\n");
@@ -476,6 +516,8 @@ int main(void)
     a_cursor_move_repaints_two_rows();
     the_row_left_behind_loses_its_caret();
     one_changed_row_repaints_only_that_row();
+    page_follow_scrolls_a_page_not_a_row();
+    follow_extra_keeps_rows_below_the_selection_visible();
     printf("ui_list: all passed\n");
     return 0;
 }

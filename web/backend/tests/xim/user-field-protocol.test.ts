@@ -8,6 +8,7 @@ jest.mock('../../src/amiga-emulation/xim/userfield', () => ({
 }));
 
 import { XIMProtocol } from '../../src/amiga-emulation/XIMProtocol';
+import { DoorConstants } from '../../src/amiga-emulation/DoorTypes';
 import { XIMCommand } from '../../src/amiga-emulation/xim/types';
 import { isIOCommand } from '../../src/amiga-emulation/xim/command-classes';
 import { ASYNC_OUTPUT_COMMANDS } from '../../src/amiga-emulation/session/lifecycle/door-message-callbacks';
@@ -35,4 +36,21 @@ test('a userFieldAnswer that throws is answered empty, so the door never waits f
   const sendReply = jest.spyOn(protocol, 'sendReply').mockImplementation(() => undefined);
   await protocol.handleMessage({ command: XIMCommand.AEW_USERFIELD, data: 1, msgAddr: 0x1000, string: 'GET 4', replyPort: 0x2000 });
   expect(sendReply).toHaveBeenCalledWith(expect.anything(), 0);
+});
+
+test('an answer leaves no tail of the request in the whole String (a PASSWORD confirm copy does not stay in door memory)', async () => {
+  const mem = new Map<number, number>();
+  const emulator: any = {
+    readMemory: (a: number) => mem.get(a) ?? 0, writeMemory: (a: number, v: number) => { mem.set(a, v & 0xff); },
+    readMemory8: (a: number) => mem.get(a) ?? 0, writeMemory8: (a: number, v: number) => { mem.set(a, v & 0xff); },
+    readMemory16: () => 0, writeMemory16: () => undefined, readMemory32: () => 0, writeMemory32: () => undefined,
+    readString: () => '', writeString: () => undefined,
+  };
+  const session: any = { nodeId: 1, doorCommand: 'W', user: { id: 1, username: 'spot', secLevel: 255, securityFlags: 'T'.repeat(128), userFlags: 0 } };
+  const protocol: any = new XIMProtocol(emulator, { replyMsg: jest.fn() } as any, { id: 's', emit: jest.fn(), on: jest.fn() } as any, 1, session);
+  jest.spyOn(protocol, 'sendReply').mockImplementation(() => undefined);
+  const base = 0x1000 + DoorConstants.MESSAGE_STRING_OFFSET;
+  for (let i = 0; i < DoorConstants.MESSAGE_STRING_CAPACITY; i++) mem.set(base + i, 'S'.charCodeAt(0));       // the request, as the door left it
+  await protocol.handleMessage({ command: XIMCommand.AEW_USERFIELD, data: 1, msgAddr: 0x1000, string: 'PASSWORD x', replyPort: 0x2000 });
+  for (let i = 0; i < DoorConstants.MESSAGE_STRING_CAPACITY; i++) expect(mem.get(base + i) ?? 0).toBe(0);
 });
