@@ -84,3 +84,19 @@ describe('the account was erased inside the settings door', () => {
     expect(settingsResumeOf(session)).toBeUndefined();
   });
 });
+
+describe('the caller is leaving while the settings door runs', () => {
+  const { LoggedOnSubState, BBSState } = require('../../src/constants/bbs-states');
+  test.each([
+    ['logoff started', { subState: LoggedOnSubState.LOGOFF }],
+    ['logging off', { state: BBSState.LOGGING_OFF }],
+    ['carrier lost', { state: BBSState.HANGUP }],
+  ])('%s: W is not reopened and the record is dropped', async (_n, flags) => {
+    const session: any = { ...flags };
+    armSettingsResume(session, 'W', 21);
+    settleSettingsResume(session, 'W', true);
+    await expect(resumeSettingsHub({}, session)).resolves.toBe(false);
+    expect(processCommand).not.toHaveBeenCalled();
+    expect(settingsResumeOf(session)).toBeUndefined();
+  });
+});

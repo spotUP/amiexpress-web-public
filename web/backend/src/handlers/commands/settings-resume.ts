@@ -47,6 +47,11 @@ export async function resumeSettingsHub(socket: unknown, session: BBSSession): P
   // (gdpr.handler.ts) has dropped the session ('await', no user) and the line
   // closes in half a second. There is no menu to go back to.
   if ((session as { state?: string }).state === 'await') { records.delete(session); return false; }
+  // The caller is leaving (time up, kick, carrier lost, logoff started) while the settings
+  // door ran: nobody is left to reopen W for. One predicate, the board's own (door.handler.ts).
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { theCallerIsLeaving } = require('../door.handler') as typeof import('../door.handler');
+  if (theCallerIsLeaving(session)) { records.delete(session); return false; }
   record.phase = 'resuming';
   try {
     // eslint-disable-next-line @typescript-eslint/no-var-requires
