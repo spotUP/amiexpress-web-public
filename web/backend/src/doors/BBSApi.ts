@@ -664,6 +664,8 @@ console.log('[BBSApi] Mouse events disabled');
     return this.session.user ? myDataRows(this.session.user).map(([label, value]) => ({ label, value })) : [];
   }
 
+  private static readonly MAX_ERASE_PASSWORD_REFUSALS = 5;
+
   /**
    * The board's three GDPR erasure checks, in the board's order and with its
    * texts. `check: true` answers without erasing, so the door can take its
@@ -675,9 +677,21 @@ console.log('[BBSApi] Mouse events disabled');
   ): Promise<{ ok: true } | { ok: false; reason: string }> {
     const user = this.session.user;
     if (!user) return { ok: false, reason: 'Session has no user bound. Deletion cancelled.' };
-    const reason = refuseErasureConfirm(answers.confirm)
-      ?? (await refuseErasurePassword(user, answers.password))
-      ?? refuseErasureUsername(user, answers.username);
+    // A door can ask this as often as it likes, so the password check is an
+    // oracle unless it is limited: five refused passwords per session, then no more.
+    const counted = this.session as { erasurePasswordRefusals?: number };
+    if ((counted.erasurePasswordRefusals ?? 0) >= BBSApi.MAX_ERASE_PASSWORD_REFUSALS) {
+      return { ok: false, reason: 'Too many attempts. Deletion cancelled.' };
+    }
+    let reason = refuseErasureConfirm(answers.confirm);
+    if (!reason) {
+      reason = await refuseErasurePassword(user, answers.password);
+      if (reason) {
+        counted.erasurePasswordRefusals = (counted.erasurePasswordRefusals ?? 0) + 1;
+        console.warn(`[gdpr] eraseMyAccount password refused for user ${user.id} (refusal ${counted.erasurePasswordRefusals})`);
+      }
+    }
+    reason = reason ?? refuseErasureUsername(user, answers.username);
     if (reason) return { ok: false, reason };
     if (!opts.check) await performErasure(this.socket, this.session);
     return { ok: true };

@@ -38,6 +38,8 @@ test('the character set flips and the atlas is told (W 22)', async () => {
   const s = caller(); const sock = socket();
   expect(await togglePetsciiCharset(sock, s)).toBe('swedish');
   expect(s.petsciiSwedish).toBe(true);
+  expect(s.user.petsciiCharset).toBe('swedish');
+  expect(webTerminalState(s).petsciiCharset).toBe('SWEDISH');
   expect(sock.emit).toHaveBeenCalledWith('petscii-charset', { charset: 'swedish' });
 });
 test('a PETSCII screen shows the C64 set as its font and says why it cannot change', () => {

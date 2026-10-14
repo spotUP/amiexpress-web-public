@@ -894,9 +894,6 @@ export interface StorageAPI {
   clear(): Promise<void>;
 }
 
-/**
- * BBS API (Advanced) - Optional BBS integration
- */
 /** The board's web-terminal settings (W rows 17, 18, 21, 22), declared once here. */
 export interface WebTerminalState {
   /** The modem speed label, 'MAX (No Throttle)' when off. */
@@ -909,6 +906,9 @@ export interface WebTerminalState {
   petsciiCharset: 'STANDARD' | 'SWEDISH';
 }
 
+/**
+ * BBS API (Advanced) - Optional BBS integration
+ */
 export interface BBSApi {
   /** W's web terminal rows (modem speed, font, PETSCII palette and character set) as the caller has them now. Optional: an older backend has no such method. */
   webTerminalSettings?(): WebTerminalState;
