@@ -11,6 +11,7 @@
  *
  *   SETTINGS=YES                     put me in the W menu
  *   SETTINGS_LABEL=Screen artwork    what the row says (optional)
+ *   SETTINGS_SECTION=Appearance      which group of rows (optional)
  *
  * with no label, the row is the door's DESCRIPTION, and failing that its
  * command name. Nothing here knows any door by name: the board reads the
@@ -33,6 +34,10 @@ export interface SettingsDoorEntry {
   command: string;
   /** What the W row says, in full English words. */
   label: string;
+  /** Which group of W rows the door sits in: SETTINGS_SECTION, else Board settings. */
+  section: string;
+  /** The door's DESCRIPTION, trimmed; empty when it has none. */
+  description: string;
   /** The door itself, for the dispatcher. */
   door: SettingsDoorShape;
 }
@@ -68,6 +73,14 @@ export function settingsLabelFor(door: SettingsDoorShape): string {
   return chosen === '' ? String(door.command ?? '').toUpperCase() : chosen;
 }
 
+export const DEFAULT_SETTINGS_SECTION = 'Board settings';
+
+/** Which section of W the door's row sits in: its own word, or Board settings. */
+export function settingsSectionFor(door: SettingsDoorShape): string {
+  const section = (toolType(door, 'SETTINGS_SECTION') ?? '').trim();
+  return section === '' ? DEFAULT_SETTINGS_SECTION : section;
+}
+
 /**
  * The settings doors this caller may open, in the order the menu lists them.
  *
@@ -87,6 +100,8 @@ export function settingsDoorsFor(
     .map((door) => ({
       command: String(door.command ?? '').toUpperCase(),
       label: settingsLabelFor(door),
+      section: settingsSectionFor(door),
+      description: String(door.description ?? '').trim(),
       door,
     }))
     .filter((entry) => entry.command !== '')
@@ -110,8 +125,8 @@ export function settingsDoorsFor(
  * batch-registered DayDream imports: none of them remembers anything about
  * the caller. Two near misses, recorded so the question is not re-asked:
  *
- *   THEMEC          the same setting as THEME, in C. Two rows for one choice
- *                   is worse than one; that port exists to prove the C SDK.
+ *   THEMEC          listed beside THEME since 2026-10-14: the sysop ruled that
+ *                   all three theme pickers declare themselves.
  *   PROMPTCOMPLETE  a board-wide feature a door PROVIDES, not a per-caller
  *                   setting. If it ever gains an on/off, it belongs here.
  *

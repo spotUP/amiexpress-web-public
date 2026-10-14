@@ -18,6 +18,13 @@ jest.mock('../../src/utils/amigafs', () => ({
   writeFileSync: (p: unknown, data: unknown) => { mockFileWrites.push({ file: String(p), data: String(data) }); },
 }));
 
+// The PASSWORD request now reaches the real command (xim/userfield.ts) and so
+// the account store; this suite is about the logs, not the database.
+jest.mock('../../src/services/account.service', () => ({
+  changeAccount: jest.fn(async (s: any, u: any) => { Object.assign(s.user, u); }),
+  saveAccount: jest.fn(async () => undefined),
+}));
+
 // Every logger reads its switch when it is first loaded.
 process.env.SKIP_DB_INIT = '1';
 process.env.XIM_DEBUG = '1';

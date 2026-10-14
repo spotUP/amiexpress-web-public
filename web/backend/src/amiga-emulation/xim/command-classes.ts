@@ -45,6 +45,9 @@ export function isIOCommand(command: number): boolean {
     XIMCommand.AEW_SETPOINTER,
     // AEW_POSTMSG saves a message, which is asynchronous for the same reason.
     XIMCommand.AEW_POSTMSG,
+    // AEW_USERFIELD saves the account and reads the user files - async, like
+    // the two above, and the line the comment at the top of this list warns about.
+    XIMCommand.AEW_USERFIELD,
     // Note: PG_SM, PG_UD, PG_US were removed - they don't exist in axcommon.e
     // and conflicted with JH_REGISTER (1), JH_FLAGFILE (13), JH_SHOWFLAGS (14)
   ];

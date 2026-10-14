@@ -29,6 +29,7 @@ import { XIMBBSInfoHandler } from './xim/bbs-info';
 import { XIMSystemCommandsHandler } from './xim/system-commands';
 import { handleSetPointer } from './xim/msgpointer';
 import { handlePostMessage, postMessageAnswer } from './xim/postmsg';
+import { userFieldAnswer } from './xim/userfield';
 import type { BBSSession } from '../index';
 import { ximDebugLogger } from './xim/debug-logger';
 import { getDoorLogger, DoorLogger } from './DoorLogger';
@@ -1032,6 +1033,19 @@ debugLog(`[XIMProtocol]   Wrote tooltype value="${tooltypeValue}", StringPtr not
           this.sendReply(msg, taken);
         }
         break;
+
+      /**
+       * AEW_USERFIELD (10600): the W door's field conversation - xim/userfield.ts.
+       * A READ that carries its question in String; the answer goes back in
+       * String and its length in Data, the ae_field_exchange contract.
+       */
+      case XIMCommand.AEW_USERFIELD: {
+        const answer = await userFieldAnswer(String(msg.string || ''), this.bbsSession as unknown as BBSSession, this.socket);
+        this.messageParser.writeString(msg.msgAddr + DoorConstants.MESSAGE_STRING_OFFSET, answer, 200);
+        debugLog(`[XIMProtocol] AEW_USERFIELD ${loggableXimString(msg.command, msg.data, msg.string).split(' ')[0]} -> ${answer.length} bytes`);
+        this.sendReply(msg, answer.length);
+        break;
+      }
 
       // Note: PG_SM, PG_UD, PG_US case handlers removed - they don't exist in axcommon.e
       // and conflicted with JH_REGISTER (1), JH_FLAGFILE (13), JH_SHOWFLAGS (14)
