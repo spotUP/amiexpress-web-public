@@ -3224,6 +3224,14 @@ console.log(
           }
         };
 
+        // One-shot settings resume (handlers/commands/settings-resume.ts): only
+        // the W door's own exit with a returned command keeps its record.
+        // Runs for every XIM/C door exit; TypeScript doors have no
+        // returnCommand path, so this is the one exit hook.
+        {
+          const { settleSettingsResume } = require('./commands/settings-resume');
+          settleSettingsResume(session, invokingCommand, !!(session as any).returnCommand && !(session as any).chainCommand);
+        }
         if ((session as any).chainCommand) {
           const cmd = (session as any).chainCommand;
           (session as any).chainCommand = undefined;
@@ -3235,7 +3243,16 @@ console.log(
           if ((session as any).returnCommand) {
             const cmd = (session as any).returnCommand;
             (session as any).returnCommand = undefined;
-            await runCommand(cmd, true);
+            try {
+              await runCommand(cmd, true);
+            } catch (err) {
+              require('./commands/settings-resume').clearSettingsResume(session);
+              throw err;
+            }
+            // The W door hands a settings door back as its return command and
+            // asks to be reopened on the row it left (settings-resume.ts).
+            const { resumeSettingsHub } = require('./commands/settings-resume');
+            await resumeSettingsHub(socket, session);
           }
           if ((session as any).prvCommand) {
             const cmd = (session as any).prvCommand;

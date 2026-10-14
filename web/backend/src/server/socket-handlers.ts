@@ -32,6 +32,7 @@ import { nodeManager } from '../services/node-manager.service';
 import { arexxEngine } from '../services/arexx.service';
 import { nodeFileManager } from '../services/NodeFileManager';
 import { saveAccountAtLogoff } from '../services/account.service';
+import { clearSettingsResume } from '../handlers/commands/settings-resume';
 import { runLogoffBatches, runExecuteOn, logoffBatchesAlreadyRan } from '../services/batch-scheduler';
 import { mailOnLogoff } from '../services/mail-notification.service';
 import { callersLogManager } from '../services/CallersLogManager';
@@ -1030,6 +1031,10 @@ console.log(`[DISCONNECT] finalizeDisconnectCleanup: userId=${userId || '-'}, no
   // before anything that can be slow or throw. The bookkeeping below holds
   // its own `session` object and needs no map entry.
   forgetSession(session, socketId, userId);
+
+  // A pending W resume belongs to this call only; drop it before anything
+  // that can await or throw (settings-resume.ts).
+  clearSettingsResume(session);
 
   // Log user logout if they were logged in (express.e:9493 callersLog)
   if (session.user) {
