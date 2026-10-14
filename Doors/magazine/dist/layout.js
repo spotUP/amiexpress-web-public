@@ -123,7 +123,7 @@ function blankRows(n) {
 const PAGE_DIGITS = 3;
 function itemCells(item, index, selected, colWidth) {
     const titleWidth = Math.max(1, colWidth - 1 - 1 - PAGE_DIGITS);
-    const prefix = item.bookmarked ? '* ' : '';
+    const prefix = `${item.lead ? 'LEAD ' : item.front ? '^ ' : ''}${item.bookmarked ? '* ' : ''}`;
     const lines = wrapTitle(prefix + (0, library_1.paintSafe)(item.title), titleWidth, 2);
     const role = selected ? 'selected' : item.unread ? 'unread' : 'plain';
     const mark = selected ? '>' : ' ';

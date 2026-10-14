@@ -192,6 +192,10 @@ export interface ListingItem {
   title: string;
   unread: boolean;
   bookmarked: boolean;
+  /** The lead of the front page: the first story on it, tagged LEAD. */
+  lead?: boolean;
+  /** Shown to the sysop only, in the lists that are not the front page: this story is on it. */
+  front?: boolean;
   wire?: WireLine;
   /** A story with real full text: tagged ARTICLE so the list tells it from the wire. */
   article?: ArticleLine;
@@ -217,7 +221,7 @@ const PAGE_DIGITS = 3;
 
 function itemCells(item: ListingItem, index: number, selected: boolean, colWidth: number): Cell[] {
   const titleWidth = Math.max(1, colWidth - 1 - 1 - PAGE_DIGITS);
-  const prefix = item.bookmarked ? '* ' : '';
+  const prefix = `${item.lead ? 'LEAD ' : item.front ? '^ ' : ''}${item.bookmarked ? '* ' : ''}`;
   const lines = wrapTitle(prefix + paintSafe(item.title), titleWidth, 2);
   const role: Role = selected ? 'selected' : item.unread ? 'unread' : 'plain';
   const mark = selected ? '>' : ' ';

@@ -24,6 +24,46 @@ export const MAGAZINE_FRONTPAGE_FILE = 'frontpage.json';
 export const MAGAZINE_STORIES_DIR = 'stories';
 
 /**
+ * The front page is an ordered list of story ids; the FIRST is the lead (the
+ * front article). These pure edits are the ONE definition of how the list may
+ * change, for whoever writes `frontpage.json` (the MAG door's sysop mode today).
+ * Filesystem access stays with the caller.
+ */
+
+/** Ids in order, de-duplicated, with any id not in `known` dropped. */
+export function normalizeFront(ids: readonly string[], known: Iterable<string>): string[] {
+  const exists = new Set(known);
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const id of ids) {
+    if (typeof id !== 'string' || !exists.has(id) || seen.has(id)) continue;
+    seen.add(id);
+    out.push(id);
+  }
+  return out;
+}
+
+/** Add the story at the end of the front page, or take it off when it is already there. */
+export function frontToggle(ids: readonly string[], id: string): string[] {
+  return ids.includes(id) ? ids.filter((x) => x !== id) : [...ids, id];
+}
+
+/** Move a story one place towards the lead (`-1`) or away from it (`1`). Unchanged at the ends. */
+export function frontMove(ids: readonly string[], id: string, delta: -1 | 1): string[] {
+  const at = ids.indexOf(id);
+  const to = at + delta;
+  if (at < 0 || to < 0 || to >= ids.length) return [...ids];
+  const out = [...ids];
+  [out[at], out[to]] = [out[to], out[at]];
+  return out;
+}
+
+/** Make the story the lead: first on the front page, the rest keep their order. */
+export function frontLead(ids: readonly string[], id: string): string[] {
+  return ids.includes(id) ? [id, ...ids.filter((x) => x !== id)] : [...ids];
+}
+
+/**
  * The editorial formats. The page family a story lands in follows from its
  * format, so a RELEASE is discoverable where a reader looks for releases.
  */

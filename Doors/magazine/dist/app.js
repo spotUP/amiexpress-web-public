@@ -1,6 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.HELP_TEXT = exports.COMPACT_HINTS = exports.HINTS = exports.MAGAZINE_TITLE = exports.BOOKMARK_KEY = exports.READ_KEY = void 0;
+exports.helpText = exports.HELP_TEXT = exports.COMPACT_HINTS = exports.HINTS = exports.MAGAZINE_TITLE = exports.BOOKMARK_KEY = exports.READ_KEY = void 0;
+exports.sysopHints = sysopHints;
 exports.startReader = startReader;
 exports.createApp = createApp;
 /**
@@ -56,6 +57,27 @@ exports.COMPACT_HINTS = [
     { key: '?', does: 'Help', keep: true },
     { key: 'Q', does: 'Quit', keep: true },
 ];
+/**
+ * The sysop's keys, ahead of the reader's own. P is the one that is always
+ * there (and survives the fit); the others drop first on a tight line.
+ */
+function sysopHints(opts) {
+    const p = opts.compact
+        ? { key: 'P', does: opts.onFront ? 'Front remove' : 'Front add', keep: true }
+        : { key: 'P', does: opts.onFront ? 'Remove from front page' : 'Add to front page', keep: true };
+    const hints = [p];
+    if (opts.frontView) {
+        hints.push({ key: 'L', does: 'Make lead' }, { key: 'U', does: 'Move up' }, { key: 'D', does: 'Move down' });
+    }
+    return hints;
+}
+const SYSOP_HELP = [
+    'P   add the story to the front page, or remove it',
+    '    (a ^ marks a story already on it)',
+    'In the front page, the first story is the LEAD:',
+    'L   make the story the lead',
+    'U   move the story up       D   move it down',
+].join('\n');
 exports.HELP_TEXT = [
     'Arrow keys, Page Up, Page Down, Space   turn the page',
     'Up and Down in a list                   move the cursor',
@@ -70,6 +92,8 @@ exports.HELP_TEXT = [
     '0-9 type a page number, Enter to go',
     'Q   quit',
 ].join('\n');
+const helpText = (sysop) => (sysop ? `${exports.HELP_TEXT}\n\n${SYSOP_HELP}` : exports.HELP_TEXT);
+exports.helpText = helpText;
 function escapeTags(text) {
     return text.replace(/[{}]/g, (c) => (c === '{' ? '{open}' : '{close}'));
 }
@@ -85,6 +109,7 @@ async function startReader(session) {
     const theme = bbs?.getTheme ? bbs.getTheme() : ((0, theme_1.themeById)('uprough-neon') ?? theme_1.UPROUGH_NEON);
     const t = theme.tokens;
     const s = (0, theme_1.themeStyles)(theme);
+    const sysop = (0, library_1.isSysopCaller)(session);
     let showTicker = true;
     try {
         const v = (0, settings_1.readDoorSettings)(__dirname);
@@ -208,10 +233,15 @@ async function startReader(session) {
     let glitchTimer = null;
     let repairTimer = null;
     let modalOpen = false;
+    /** The wire story whose panel is open, so the sysop's P key knows what it acts on. */
+    let wireId = null;
+    let wireModal = null;
+    let hintsKey = '';
     let modalContent = '';
     const counters = { glitches: 0, tickerSteps: 0, intervals: 0 };
     let stopped = false;
     let finish = () => { };
+    const onFront = { has: (id) => snapshot.front.includes(id) };
     const byId = (id) => snapshot.index.find((e) => e.storyId === id);
     // One read per story per visit to a view: a cursor move rebuilds the list.
     const storyCache = new Map();
@@ -242,6 +272,8 @@ async function startReader(session) {
                     title: e.title,
                     unread: !read.has(e.storyId),
                     bookmarked: bookmarks.has(e.storyId),
+                    lead: view.kind === 'front' && snapshot.front[0] === e.storyId,
+                    front: sysop && view.kind !== 'front' && onFront.has(e.storyId),
                     wire,
                     article,
                 },
@@ -337,6 +369,7 @@ async function startReader(session) {
         panelText = rows.map(paintRow).join('\n');
         panel.setContent(panelText);
         progressBox.setContent(paintRow((0, layout_1.buildProgress)(layout, spreadNo, spreads.length)));
+        updateHints();
         render();
         scheduleGlitch(rows);
     };
@@ -364,6 +397,20 @@ async function startReader(session) {
                 }
             }, GLITCH_HOLD_MS);
         }, GLITCH_DELAY_MS);
+    };
+    /** The story a sysop key acts on: the open panel, the open article, else the cursor. */
+    const subjectId = () => wireId ?? (view.kind === 'article' ? view.storyId : selected);
+    /** The sysop's hints follow the story in view; the footer is repainted only when they change. */
+    const updateHints = () => {
+        if (!sysop)
+            return;
+        const id = subjectId();
+        const key = `${id ? 1 : 0}|${id && onFront.has(id) ? 1 : 0}|${view.kind === 'front' ? 1 : 0}`;
+        if (key === hintsKey)
+            return;
+        hintsKey = key;
+        const base = layout.collapseChrome ? exports.COMPACT_HINTS : exports.HINTS;
+        chrome.setHints(id ? [...sysopHints({ compact: layout.collapseChrome, frontView: view.kind === 'front', onFront: onFront.has(id) }), ...base] : base);
     };
     const setStatus = (text) => chrome.setFooterSuffix(text ? `  ${text}` : '');
     const go = (next, keepSelection = false) => {
@@ -512,6 +559,48 @@ async function startReader(session) {
         else
             render();
     };
+    // ---- the sysop's front page editor -----------------------------------
+    const wireFooter = (id) => sysop ? `P: ${onFront.has(id) ? 'Remove from' : 'Add to'} front page   Enter: back` : 'Enter or Escape: back to the list';
+    /** The front page changed on disk: show it. Only what differs is repainted (blessed diffs the cells). */
+    const frontChanged = (next, status) => {
+        snapshot = { ...snapshot, front: next };
+        setStatus(status);
+        if (wireId) {
+            wireModal?.setFooterText?.(wireFooter(wireId));
+            updateHints();
+            render();
+        }
+        else if (view.kind === 'article') {
+            updateHints();
+            render();
+        }
+        else {
+            build();
+            paint();
+        }
+    };
+    /** P: on a story row, inside an article or in the wire panel, add the story to the front page or take it off. */
+    const toggleFront = () => {
+        const id = subjectId();
+        if (!sysop || !id)
+            return;
+        const was = onFront.has(id);
+        // Leaving the front view's selection on a neighbour, not on a row that is about to go.
+        if (was && view.kind === 'front' && !wireId) {
+            const at = listIds.indexOf(id);
+            selected = listIds[at + 1] ?? listIds[at - 1] ?? null;
+        }
+        frontChanged((0, library_1.editFront)((ids) => (0, magazine_1.frontToggle)(ids, id), (0, library_1.magazineRoot)(__dirname)), was ? 'Removed from the front page' : 'Added to the front page');
+    };
+    /** U / D / L in the front page view: reorder, lead first. */
+    const reorderFront = (how) => {
+        if (!sysop || view.kind !== 'front' || !selected || wireId)
+            return;
+        const id = selected;
+        const root = (0, library_1.magazineRoot)(__dirname);
+        const next = (0, library_1.editFront)((ids) => (how === 'lead' ? (0, magazine_1.frontLead)(ids, id) : (0, magazine_1.frontMove)(ids, id, how === 'up' ? -1 : 1)), root);
+        frontChanged(next, how === 'lead' ? 'Now the lead' : how === 'up' ? 'Moved up' : 'Moved down');
+    };
     const jumpToPage = (n) => {
         const entry = snapshot.index.find((e) => e.page === n);
         if (!entry) {
@@ -545,6 +634,7 @@ async function startReader(session) {
      */
     const openWire = (st) => {
         modalOpen = true;
+        wireId = st.id;
         const lines = (0, layout_1.wireDetail)(st, new Date());
         modalContent = lines.join('\n');
         const newlyRead = !read.has(st.id);
@@ -563,12 +653,15 @@ async function startReader(session) {
             content: lines.map(escapeTags).join('\n'),
             contentStyle: { fg: t.ink, bg: t.ground },
             footerStyle: { fg: t.ground, bg: t.accent },
-            footerText: 'Enter or Escape: back to the list',
-            mobileFooterText: 'Enter: back',
+            footerText: wireFooter(st.id),
+            mobileFooterText: sysop ? 'P: Front page   Enter: back' : 'Enter: back',
             closeKeys: ['enter', 'return'],
             zIndex: 9990,
             onClose: () => {
                 modalContent = '';
+                wireId = null;
+                wireModal = null;
+                updateHints();
                 modalDone();
                 if (newlyRead && view.kind !== 'article') {
                     build();
@@ -576,14 +669,16 @@ async function startReader(session) {
                 }
             },
         });
+        wireModal = modal;
         modal.display();
+        updateHints();
     };
     const openHelp = () => {
         modalOpen = true;
         const modal = (0, blessed_1.docModal)({
             parent: screen,
             title: `${magazine_1.MAGAZINE_TITLE} help`,
-            content: exports.HELP_TEXT,
+            content: (0, exports.helpText)(sysop),
             contentStyle: { fg: t.ink, bg: t.ground },
             footerStyle: { fg: t.ground, bg: t.accent },
             zIndex: 9990,
@@ -617,9 +712,13 @@ async function startReader(session) {
     };
     // ---- keys ------------------------------------------------------------
     const press = (name, ch) => {
+        const c = (ch ?? '').toLowerCase();
+        if (!stopped && modalOpen && wireId && sysop && c === 'p') {
+            toggleFront();
+            return;
+        }
         if (stopped || modalOpen)
             return;
-        const c = (ch ?? '').toLowerCase();
         if (/^[0-9]$/.test(c)) {
             digits = (digits + c).slice(-3);
             setStatus(`Page ${digits}_`);
@@ -697,6 +796,18 @@ async function startReader(session) {
                 return;
             case 'b':
                 toggleBookmark();
+                return;
+            case 'p':
+                toggleFront();
+                return;
+            case 'u':
+                reorderFront('up');
+                return;
+            case 'd':
+                reorderFront('down');
+                return;
+            case 'l':
+                reorderFront('lead');
                 return;
             case '/':
                 openSearch();

@@ -33,9 +33,13 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.SYSOP_SEC_LEVEL = void 0;
 exports.magazineRoot = magazineRoot;
 exports.loadIndex = loadIndex;
 exports.loadFront = loadFront;
+exports.isSysopCaller = isSysopCaller;
+exports.writeFront = writeFront;
+exports.editFront = editFront;
 exports.loadSnapshot = loadSnapshot;
 exports.loadStory = loadStory;
 exports.paintSafe = paintSafe;
@@ -90,6 +94,47 @@ function loadIndex(root = magazineRoot()) {
 function loadFront(root = magazineRoot()) {
     const parsed = readJson(path.join(root, magazine_1.MAGAZINE_FRONTPAGE_FILE));
     return Array.isArray(parsed) ? parsed.filter((x) => typeof x === 'string') : [];
+}
+/**
+ * Who may edit the front page: the full sysop. The same tier and the same
+ * field the other TS doors read off the door session (`session.user.secLevel`,
+ * Doors/livechat/server.ts, Doors/door-manager/app.ts), and the backend's own
+ * SYSOP_LEVEL (web/backend/src/server/socket-guard.ts).
+ */
+exports.SYSOP_SEC_LEVEL = 255;
+function isSysopCaller(session) {
+    return (session.user?.secLevel ?? 0) >= exports.SYSOP_SEC_LEVEL;
+}
+/** Write `frontpage.json` atomically: a temp file in the same directory, then a rename. */
+function writeFront(ids, root = magazineRoot()) {
+    const target = path.join(root, magazine_1.MAGAZINE_FRONTPAGE_FILE);
+    const tmp = `${target}.tmp-${process.pid}`;
+    try {
+        fs.mkdirSync(root, { recursive: true });
+        fs.writeFileSync(tmp, JSON.stringify(ids, null, 2), 'utf8');
+        fs.renameSync(tmp, target);
+    }
+    catch (err) {
+        try {
+            fs.unlinkSync(tmp);
+        }
+        catch { /* the target is untouched */ }
+        throw err;
+    }
+}
+/**
+ * One edit of the front page. The file is re-read first so two sysops only
+ * overwrite each other's edit of the SAME moment, not a stale copy; ids no
+ * longer in the index are dropped; nothing is written when nothing changed.
+ * Returns the front page as it now stands.
+ */
+function editFront(edit, root = magazineRoot()) {
+    const current = loadFront(root);
+    const known = loadIndex(root).map((e) => e.storyId);
+    const next = (0, magazine_1.normalizeFront)(edit((0, magazine_1.normalizeFront)(current, known)), known);
+    if (JSON.stringify(next) !== JSON.stringify(current))
+        writeFront(next, root);
+    return next;
 }
 function loadSnapshot(root = magazineRoot()) {
     return { index: loadIndex(root), front: loadFront(root) };

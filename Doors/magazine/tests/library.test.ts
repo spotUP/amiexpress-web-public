@@ -10,10 +10,13 @@ import {
   MAGAZINE_FRONTPAGE_FILE,
   MAGAZINE_INDEX_FILE,
   MAGAZINE_STORIES_DIR,
+  frontLead,
+  frontMove,
+  frontToggle,
   type MagazineIndexEntry,
   type Story,
 } from '@amiexpress/bbs-door-sdk/formats/magazine';
-import { loadFront, loadIndex, loadSnapshot, loadStory, paintSafe, searchStories, storiesPerDay } from '../library';
+import { editFront, isSysopCaller, writeFront, loadFront, loadIndex, loadSnapshot, loadStory, paintSafe, searchStories, storiesPerDay } from '../library';
 
 function tmpMagazine(): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'mag-lib-'));
@@ -104,4 +107,64 @@ export async function storiesPerDayCountsTheNewestDaysOldestFirst(): Promise<voi
   ];
   assert.deepStrictEqual(storiesPerDay(entries, 8), [1, 2, 1]);
   assert.deepStrictEqual(storiesPerDay(entries, 2), [2, 1]);
+}
+
+function withIndex(ids: string[], front: unknown): string {
+  const root = tmpMagazine();
+  fs.writeFileSync(path.join(root, MAGAZINE_INDEX_FILE), JSON.stringify(ids.map((id, i) => entry(100 + i, id, `Story ${id}`))));
+  fs.writeFileSync(path.join(root, MAGAZINE_FRONTPAGE_FILE), JSON.stringify(front));
+  return root;
+}
+const frontOf = (root: string): string[] => JSON.parse(fs.readFileSync(path.join(root, MAGAZINE_FRONTPAGE_FILE), 'utf8'));
+
+export async function onlyTheFullSysopMayEditTheFrontPage(): Promise<void> {
+  assert.strictEqual(isSysopCaller({ user: { secLevel: 255 } }), true);
+  assert.strictEqual(isSysopCaller({ user: { secLevel: 254 } }), false);
+  assert.strictEqual(isSysopCaller({ user: null }), false);
+  assert.strictEqual(isSysopCaller({}), false);
+}
+
+export async function frontEditsToggleMoveAndLeadAndKeepAPlainDeduplicatedArray(): Promise<void> {
+  assert.deepStrictEqual(frontToggle(['a', 'b'], 'c'), ['a', 'b', 'c']);
+  assert.deepStrictEqual(frontToggle(['a', 'b'], 'a'), ['b']);
+  assert.deepStrictEqual(frontMove(['a', 'b', 'c'], 'b', -1), ['b', 'a', 'c']);
+  assert.deepStrictEqual(frontMove(['a', 'b', 'c'], 'c', 1), ['a', 'b', 'c']);
+  assert.deepStrictEqual(frontLead(['a', 'b', 'c'], 'c'), ['c', 'a', 'b']);
+  assert.deepStrictEqual(frontLead(['a'], 'zz'), ['a']);
+}
+
+export async function writingTheFrontPageDropsUnknownIdsAndDuplicatesAndLeavesValidJson(): Promise<void> {
+  const root = withIndex(['a', 'b', 'c'], ['a', 'gone', 'b', 'a']);
+  const next = editFront((ids) => [...ids, 'c', 'b', 'also-gone'], root);
+  assert.deepStrictEqual(next, ['a', 'b', 'c']);
+  assert.deepStrictEqual(frontOf(root), ['a', 'b', 'c']);
+  assert.deepStrictEqual(fs.readdirSync(root).filter((f) => f.includes('.tmp')), [], 'no temp file left behind');
+}
+
+export async function aFailedWriteLeavesTheOldFrontPageWhole(): Promise<void> {
+  const root = withIndex(['a', 'b'], ['a']);
+  const cjs = require('fs') as typeof fs;
+  const real = cjs.renameSync;
+  (cjs as any).renameSync = () => { throw new Error('disk full'); };
+  try {
+    assert.throws(() => writeFront(['a', 'b'], root), /disk full/);
+  } finally { (cjs as any).renameSync = real; }
+  assert.deepStrictEqual(frontOf(root), ['a'], 'the old file is untouched');
+  assert.deepStrictEqual(fs.readdirSync(root).filter((f) => f.includes('.tmp')), []);
+}
+
+export async function theFrontPageIsReReadBeforeEveryWriteSoAnotherSysopsEditSurvives(): Promise<void> {
+  const root = withIndex(['a', 'b', 'c'], ['a']);
+  fs.writeFileSync(path.join(root, MAGAZINE_FRONTPAGE_FILE), JSON.stringify(['a', 'b']));
+  assert.deepStrictEqual(editFront((ids) => frontToggle(ids, 'c'), root), ['a', 'b', 'c']);
+}
+
+export async function anEditThatChangesNothingWritesNothing(): Promise<void> {
+  const root = withIndex(['a', 'b'], ['a', 'b']);
+  const cjs = require('fs') as typeof fs;
+  const real = cjs.renameSync;
+  let calls = 0;
+  (cjs as any).renameSync = (...args: Parameters<typeof fs.renameSync>) => { calls += 1; return real(...args); };
+  try { editFront((ids) => frontMove(ids, 'a', -1), root); } finally { (cjs as any).renameSync = real; }
+  assert.strictEqual(calls, 0);
 }

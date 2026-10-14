@@ -48,6 +48,10 @@ export interface ListingItem {
     title: string;
     unread: boolean;
     bookmarked: boolean;
+    /** The lead of the front page: the first story on it, tagged LEAD. */
+    lead?: boolean;
+    /** Shown to the sysop only, in the lists that are not the front page: this story is on it. */
+    front?: boolean;
     wire?: WireLine;
     /** A story with real full text: tagged ARTICLE so the list tells it from the wire. */
     article?: ArticleLine;

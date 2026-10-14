@@ -81,7 +81,7 @@ interface Harness {
   mark: () => void;
 }
 
-async function open(width: number, height: number, options: { theme?: ReturnType<typeof themeById> } = {}): Promise<Harness> {
+async function open(width: number, height: number, options: { theme?: ReturnType<typeof themeById>; secLevel?: number } = {}): Promise<Harness> {
   const writes: string[] = [];
   const storage = new Map<string, unknown>();
   const theme = options.theme ?? themeById('uprough-neon');
@@ -97,6 +97,7 @@ async function open(width: number, height: number, options: { theme?: ReturnType
   const socket: any = { on: () => {}, emit: () => {}, off: () => {}, removeAllListeners: () => {} };
   const session: any = {
     bbs, socket, params: [],
+    user: options.secLevel === undefined ? undefined : { id: 1, username: 'caller', secLevel: options.secLevel },
     bbsSession: { userId: 1, username: 'sysop', nodeId: 1, secLevel: 255, tempData: {}, socket, doorCommand: 'MAG' },
     storage: {
       load: async (k: string) => (storage.has(k) ? storage.get(k) : null),
@@ -815,4 +816,156 @@ export async function theWirePanelOpenAndCloseCostIsMeasuredAndSmallerThanTheScr
       console.log(`    repaint ${w}x${hgt}: wire cursor move ${move} bytes, panel open ${open} bytes, close ${close} bytes`);
     } finally { await finish(h, b); }
   }
+}
+
+// ---------------------------------------------------------------------------
+// The sysop edits the front page from inside the door
+// ---------------------------------------------------------------------------
+
+const frontFile = (b: Board): string => path.join(b.root, MAGAZINE_DIR, MAGAZINE_FRONTPAGE_FILE);
+const frontOnDisk = (b: Board): string[] => JSON.parse(fs.readFileSync(frontFile(b), 'utf8'));
+
+/** Count every rename the door makes while `fn` runs: the front page's only way to reach the disk. */
+async function countingRenames<T>(fn: () => Promise<T>): Promise<{ result: T; renames: number }> {
+  const cjs = require('fs') as typeof fs; // the module object the door's own import reads through
+  const real = cjs.renameSync;
+  let renames = 0;
+  (cjs as any).renameSync = (...args: Parameters<typeof fs.renameSync>) => { renames += 1; return real(...args); };
+  try { return { result: await fn(), renames }; } finally { (cjs as any).renameSync = real; }
+}
+
+export async function aCallerBelowSysopHasNoEditingKeysAndWritesNothing(): Promise<void> {
+  for (const secLevel of [undefined, 0, 250]) {
+    const b = board(['aaaa0001', 'aaaa0002']);
+    const h = await open(80, 24, { secLevel });
+    try {
+      const before = fs.readFileSync(frontFile(b), 'utf8');
+      const { renames } = await countingRenames(async () => {
+        for (const k of ['p', 'u', 'd', 'l']) h.reader.press(k, k);
+        h.reader.press('c', 'c');
+        h.reader.press('p', 'p');
+        h.reader.press('enter');
+        h.reader.press('p', 'p');
+      });
+      assert.strictEqual(renames, 0, `secLevel ${secLevel}: the writer ran`);
+      assert.strictEqual(fs.readFileSync(frontFile(b), 'utf8'), before, `secLevel ${secLevel}: frontpage.json changed`);
+      assert.ok(!/front page|Make lead|Move up/i.test(h.reader.footerRow()), `secLevel ${secLevel}: footer shows "${h.reader.footerRow()}"`);
+    } finally { await finish(h, b); }
+  }
+}
+
+export async function aSysopTogglesAStoryOntoAndOffTheFrontPageFromTheListAndTheArticle(): Promise<void> {
+  const b = board([]);
+  const h = await open(80, 24, { secLevel: 255 });
+  try {
+    h.reader.press('c', 'c');
+    assert.ok(/P: Add to front page/.test(h.reader.footerRow()), h.reader.footerRow());
+    const first = await countingRenames(async () => h.reader.press('p', 'p'));
+    assert.strictEqual(first.renames, 1, 'the spy sees the sysop write (so 0 for a caller means something)');
+    assert.deepStrictEqual(frontOnDisk(b), ['aaaa0002']);
+    assert.ok(/P: Remove from front page/.test(h.reader.footerRow()), 'the label follows the state');
+    assert.ok(/\^ New exploit chain/.test(text(h)), `the row carries the front mark: ${text(h)}`);
+    h.reader.press('p', 'p');
+    assert.deepStrictEqual(frontOnDisk(b), []);
+    assert.ok(!/\^ New exploit/.test(text(h)));
+    // Inside an open article.
+    h.reader.press('enter');
+    assert.strictEqual(h.reader.viewKind(), 'article');
+    h.reader.press('p', 'p');
+    assert.deepStrictEqual(frontOnDisk(b), ['aaaa0002']);
+    h.reader.press('escape');
+    h.reader.press('f', 'f');
+    assert.ok(text(h).includes('New exploit chain'), 'the front view shows it at once');
+  } finally { await finish(h, b); }
+}
+
+export async function aSysopTogglesAStoryFromTheWirePanel(): Promise<void> {
+  const b = board([], MIXED);
+  const h = await open(80, 24, { secLevel: 255 });
+  try {
+    h.reader.press('c', 'c');
+    h.reader.press('down');
+    h.reader.press('enter');
+    assert.ok(h.reader.modalText().includes('relay clock'), 'the wire panel is open');
+    h.reader.press('p', 'p');
+    assert.deepStrictEqual(frontOnDisk(b), ['ffff0001']);
+    h.reader.press('p', 'p');
+    assert.deepStrictEqual(frontOnDisk(b), []);
+    modalKey(h, 'enter');
+  } finally { await finish(h, b); }
+}
+
+export async function theFrontViewTagsTheLeadAndASysopMovesAndLeadsStories(): Promise<void> {
+  const b = board(['aaaa0001', 'aaaa0002', 'aaaa0003']);
+  const h = await open(80, 24, { secLevel: 255 });
+  try {
+    const lead = () => h.reader.panelRows().filter((r) => r.includes('LEAD'));
+    assert.strictEqual(lead().length, 1, 'exactly one LEAD tag');
+    assert.ok(lead()[0].includes('Copper Lights'), `the first story is the lead: ${lead()[0]}`);
+    h.reader.press('down');
+    h.reader.press('u', 'u');
+    assert.deepStrictEqual(frontOnDisk(b), ['aaaa0002', 'aaaa0001', 'aaaa0003']);
+    assert.ok(lead()[0].includes('New exploit'), 'moving to the top moves the tag');
+    h.reader.press('d', 'd');
+    assert.deepStrictEqual(frontOnDisk(b), ['aaaa0001', 'aaaa0002', 'aaaa0003']);
+    h.reader.press('down');
+    h.reader.press('l', 'l');
+    assert.deepStrictEqual(frontOnDisk(b), ['aaaa0003', 'aaaa0001', 'aaaa0002']);
+    assert.ok(lead()[0].includes('Tracker music'));
+    h.reader.press('u', 'u');
+    assert.deepStrictEqual(frontOnDisk(b), ['aaaa0003', 'aaaa0001', 'aaaa0002'], 'up from the lead is a no-op');
+    // Remove from the front view.
+    h.reader.press('p', 'p');
+    assert.deepStrictEqual(frontOnDisk(b), ['aaaa0001', 'aaaa0002']);
+    assert.ok(!text(h).includes('Tracker music'));
+  } finally { await finish(h, b); }
+}
+
+export async function everyoneSeesTheLeadTagOnTheFrontPage(): Promise<void> {
+  const b = board(['aaaa0003', 'aaaa0001']);
+  const h = await open(80, 24);
+  try {
+    const tagged = h.reader.panelRows().filter((r) => r.includes('LEAD'));
+    assert.strictEqual(tagged.length, 1);
+    assert.ok(tagged[0].includes('Tracker music'));
+  } finally { await finish(h, b); }
+}
+
+export async function theSysopFooterFitsAtFortyEightyAndOneThirtyTwo(): Promise<void> {
+  for (const [w, hgt] of [[40, 25], [80, 24], [132, 40]] as const) {
+    const b = board(['aaaa0001', 'aaaa0002']);
+    const h = await open(w, hgt, { secLevel: 255 });
+    try {
+      for (const view of ['f', 'c']) {
+        h.reader.press(view, view);
+        const f = h.reader.footerRow();
+        assert.ok(f.length <= w, `${w} ${view}: footer is ${f.length} wide: "${f}"`);
+        assert.ok(/P: /.test(f) && /Q: Quit/.test(f) && /\?: Help/.test(f), `${w} ${view}: P, help and quit survive: "${f}"`);
+        if (w === 132 && view === 'f') assert.ok(/Make lead/.test(f) && /Move up/.test(f) && /Move down/.test(f), f);
+      }
+    } finally { await finish(h, b); }
+  }
+}
+
+export async function aToggleAndAMoveRepaintOnlyTheRowsThatChanged(): Promise<void> {
+  const b = board(['aaaa0001', 'aaaa0002', 'aaaa0003']);
+  const h = await open(80, 24, { secLevel: 255 });
+  try {
+    h.reader.press('down');
+    h.mark();
+    h.reader.press('u', 'u');
+    const moveBytes = h.bytes();
+    const moveRows = h.rowsTouched();
+    h.reader.press('c', 'c');
+    h.mark();
+    h.reader.press('p', 'p');
+    const toggleBytes = h.bytes();
+    const toggleRows = h.rowsTouched();
+    // eslint-disable-next-line no-console
+    console.log(`        repaint at 80: move ${moveBytes} bytes rows ${[...moveRows].join(',')}; toggle ${toggleBytes} bytes rows ${[...toggleRows].join(',')}`);
+    assert.ok(moveBytes > 0 && toggleBytes > 0);
+    assert.ok(moveBytes < 1200, `a move repainted ${moveBytes} bytes`);
+    assert.ok(toggleBytes < 800, `a toggle repainted ${toggleBytes} bytes`);
+    assert.ok(!toggleRows.has(1) || toggleRows.size < 8, 'a toggle does not repaint the screen');
+  } finally { await finish(h, b); }
 }

@@ -21,6 +21,7 @@ import {
   MAGAZINE_FRONTPAGE_FILE,
   MAGAZINE_INDEX_FILE,
   MAGAZINE_STORIES_DIR,
+  normalizeFront,
   type MagazineIndexEntry,
   type Story,
 } from '@amiexpress/bbs-door-sdk/formats/magazine';
@@ -64,6 +65,46 @@ export function loadIndex(root: string = magazineRoot()): MagazineIndexEntry[] {
 export function loadFront(root: string = magazineRoot()): string[] {
   const parsed = readJson(path.join(root, MAGAZINE_FRONTPAGE_FILE));
   return Array.isArray(parsed) ? parsed.filter((x): x is string => typeof x === 'string') : [];
+}
+
+/**
+ * Who may edit the front page: the full sysop. The same tier and the same
+ * field the other TS doors read off the door session (`session.user.secLevel`,
+ * Doors/livechat/server.ts, Doors/door-manager/app.ts), and the backend's own
+ * SYSOP_LEVEL (web/backend/src/server/socket-guard.ts).
+ */
+export const SYSOP_SEC_LEVEL = 255;
+
+export function isSysopCaller(session: { user?: { secLevel?: number } | null }): boolean {
+  return (session.user?.secLevel ?? 0) >= SYSOP_SEC_LEVEL;
+}
+
+/** Write `frontpage.json` atomically: a temp file in the same directory, then a rename. */
+export function writeFront(ids: readonly string[], root: string = magazineRoot()): void {
+  const target = path.join(root, MAGAZINE_FRONTPAGE_FILE);
+  const tmp = `${target}.tmp-${process.pid}`;
+  try {
+    fs.mkdirSync(root, { recursive: true });
+    fs.writeFileSync(tmp, JSON.stringify(ids, null, 2), 'utf8');
+    fs.renameSync(tmp, target);
+  } catch (err) {
+    try { fs.unlinkSync(tmp); } catch { /* the target is untouched */ }
+    throw err;
+  }
+}
+
+/**
+ * One edit of the front page. The file is re-read first so two sysops only
+ * overwrite each other's edit of the SAME moment, not a stale copy; ids no
+ * longer in the index are dropped; nothing is written when nothing changed.
+ * Returns the front page as it now stands.
+ */
+export function editFront(edit: (ids: string[]) => string[], root: string = magazineRoot()): string[] {
+  const current = loadFront(root);
+  const known = loadIndex(root).map((e) => e.storyId);
+  const next = normalizeFront(edit(normalizeFront(current, known)), known);
+  if (JSON.stringify(next) !== JSON.stringify(current)) writeFront(next, root);
+  return next;
 }
 
 export function loadSnapshot(root: string = magazineRoot()): MagazineSnapshot {

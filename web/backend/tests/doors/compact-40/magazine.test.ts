@@ -45,6 +45,8 @@ import { config } from '../../../src/config';
 import { LoggedOnSubState } from '../../../src/constants/bbs-states';
 import { buildAwaitingEditor, buildArticle, buildLayout, buildListing, rowText } from '../../../../../Doors/magazine/layout';
 import { columnCount, columnGeometry } from '../../../../../Doors/magazine/columns';
+import { COMPACT_HINTS, sysopHints } from '../../../../../Doors/magazine/app';
+import { footerHints } from '@amiexpress/bbs-door-sdk/engines/ui/theme';
 import type { Story } from '@amiexpress/bbs-door-sdk/formats/magazine';
 
 setHelpers({ callersLog: async () => undefined, getRecentCallerActivity: async () => [] });
@@ -98,6 +100,27 @@ describe('MAG across the three screens', () => {
       'x', l, { left: 'CONTENTS - ALL SECTIONS', right: '2026-10-13' },
     );
     for (const row of listing.spreads[0]) expect(rowText(row).length).toBeLessThanOrEqual(40);
+  });
+
+  it('40x25: the sysop front-page keys fit one footer row, P survives, and the LEAD tag fits row one', () => {
+    const l = buildLayout(40, 25);
+    const plain = { key: (t: string) => t, dim: (t: string) => t };
+    for (const frontView of [false, true]) {
+      for (const onFront of [false, true]) {
+        const hints = [...sysopHints({ compact: true, frontView, onFront }), ...COMPACT_HINTS];
+        const line = footerHints(hints, plain, '', 40 - 1);
+        expect(line.length).toBeLessThanOrEqual(39);
+        expect(line).toMatch(/P: Front (add|remove)/);
+        expect(line).toContain('Q: Quit');
+      }
+    }
+    const listing = buildListing(
+      [{ kind: 'item', item: { storyId: 'x', page: 120, title: 'A long headline '.repeat(6), unread: true, bookmarked: true, lead: true } }],
+      'FRONT PAGE', l, { left: 'FRONT PAGE', right: '' },
+    );
+    const rows = listing.spreads[0].map(rowText);
+    for (const row of rows) expect(row.length).toBeLessThanOrEqual(40);
+    expect(rows.filter((r) => r.includes('LEAD '))).toHaveLength(1);
   });
 
   it('132x40: three columns that keep a readable measure', () => {
@@ -240,7 +263,9 @@ describe('MAG: the shipped bundle reads the magazine the board wrote', () => {
     const run = drive({ cols: 80, rows: 24, petscii: false, steps: [{ key: 'q', wait: 300 }] });
     expect(run.errors).toEqual([]);
     expect(run.text).not.toContain('AWAITING EDITOR');
-    expect(run.text).toContain('Skaven releases Copper Lights');
+    // The first story on the front page is the lead, tagged LEAD; the tag shortens the first title line.
+    expect(run.text).toContain('LEAD Skaven releases Copper');
+    expect(run.text).toContain('Lights for Amiga');
   });
 
   it('on a 40x25 PETSCII caller the headline is on the glass, in one column, with nothing unmappable', () => {

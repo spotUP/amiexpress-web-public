@@ -12,6 +12,27 @@ export interface MagazineSnapshot {
 export declare function loadIndex(root?: string): MagazineIndexEntry[];
 /** `frontpage.json`: the editor's order, and only the editor's. */
 export declare function loadFront(root?: string): string[];
+/**
+ * Who may edit the front page: the full sysop. The same tier and the same
+ * field the other TS doors read off the door session (`session.user.secLevel`,
+ * Doors/livechat/server.ts, Doors/door-manager/app.ts), and the backend's own
+ * SYSOP_LEVEL (web/backend/src/server/socket-guard.ts).
+ */
+export declare const SYSOP_SEC_LEVEL = 255;
+export declare function isSysopCaller(session: {
+    user?: {
+        secLevel?: number;
+    } | null;
+}): boolean;
+/** Write `frontpage.json` atomically: a temp file in the same directory, then a rename. */
+export declare function writeFront(ids: readonly string[], root?: string): void;
+/**
+ * One edit of the front page. The file is re-read first so two sysops only
+ * overwrite each other's edit of the SAME moment, not a stale copy; ids no
+ * longer in the index are dropped; nothing is written when nothing changed.
+ * Returns the front page as it now stands.
+ */
+export declare function editFront(edit: (ids: string[]) => string[], root?: string): string[];
 export declare function loadSnapshot(root?: string): MagazineSnapshot;
 /** One story, or null when it is gone or unreadable. */
 export declare function loadStory(storyId: string, root?: string): Story | null;
