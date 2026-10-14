@@ -1,0 +1,8 @@
+BBSCMD=NOTIFY
+TYPE=TS
+LOCATION=Doors/notify
+DESCRIPTION=Choose how the board reaches you: email, push or a notice here
+MULTINODE=YES
+PRIORITY=SAME
+ACCESS=1
+MIN_COLUMNS=40

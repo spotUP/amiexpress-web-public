@@ -431,6 +431,16 @@ describe('40-column sweep: the adapted doors', () => {
     void HINTS;
   });
 
+  it('notifications: event rows, delivery rows and footer for every event at 40', () => {
+    const { columnPlan, buildEventRows, eventRowText, deliveryRows, headerText, COMPACT_HINTS } = require('../../../Doors/notify/layout');
+    const { NOTIFY_EVENTS, DEFAULT_SETTINGS } = require('../../../sdk/formats/notify');
+    const plan = columnPlan(40);
+    const rows = buildEventRows(NOTIFY_EVENTS.map((e: any) => ({ ...e, label: `${e.label} ${LONG}` })), {}, { email: true, push: true, board: true });
+    fits([...rows.map((r: any) => eventRowText(r, plan, 'push').replace(/\{\/?inverse\}/g, '')), headerText(plan)]);
+    fits(deliveryRows({ address: `${LONG}@${LONG_WORDS.split(' ')[0]}.example`, verified: false, emailDeliverable: true, pushDeliverable: true, web: true, settings: { ...DEFAULT_SETTINGS, timeZone: LONG }, boardZone: LONG }, 39).map((r: any) => r.text));
+    fits([' ' + COMPACT_HINTS.map((h: any) => `${h.key}: ${h.does}`).join('  ')]);
+  });
+
   it('screen-theme-picker: theme rows, note, footer hints', () => {
     const { getCompactProfile } = require('../../../sdk/engines/ui/blessed/core/responsive-constants');
     const { buildThemeItems, buildNote, buildFooterHints, choicesForWidth } =
