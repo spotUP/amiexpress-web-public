@@ -1015,3 +1015,37 @@ export async function uDAndLReorderTheFrontPageFromRawBytes(): Promise<void> {
     assert.deepStrictEqual(frontOnDisk(b), ['aaaa0003', 'aaaa0001', 'aaaa0002'], 'raw l made the story the lead');
   } finally { await finish(h, b); }
 }
+
+export async function pressingPWhileReadingAnArticleAddsTheStoryToTheFrontPage(): Promise<void> {
+  const stories = [withBody(FEED[0], ARTICLE_MIN_BODY_CHARS + 2400)];
+  for (const [w, hgt] of [[40, 25], [80, 24], [132, 40]] as const) {
+  const b = board([], stories);
+  const h = await open(w, hgt, { secLevel: 255 });
+  try {
+    h.raw('c');
+    h.raw('\r');
+    assert.strictEqual(h.reader.viewKind(), 'article');
+    h.raw('\x1b[B');
+    h.raw('p');
+    assert.deepStrictEqual(frontOnDisk(b), ['ffff0001'], 'raw p while reading wrote the front page');
+    assert.ok(/P: (Remove from front page|Front remove)/.test(h.reader.footerRow()), h.reader.footerRow());
+    h.raw('p');
+    assert.deepStrictEqual(frontOnDisk(b), [], 'and toggles it off again');
+  } finally { await finish(h, b); }
+  }
+}
+
+export async function pressingPInTheWirePanelFromRawBytesTogglesTheStory(): Promise<void> {
+  const b = board([], MIXED);
+  const h = await open(80, 24, { secLevel: 255 });
+  try {
+    h.raw('c');
+    h.raw('\x1b[B');
+    h.raw('\r');
+    assert.ok(h.reader.modalText().includes('relay clock'), 'the wire panel is open');
+    h.raw('p');
+    assert.deepStrictEqual(frontOnDisk(b), ['ffff0001'], 'raw p in the wire panel wrote the front page');
+    h.raw('P');
+    assert.deepStrictEqual(frontOnDisk(b), [], 'a shifted P toggles it off again');
+  } finally { await finish(h, b); }
+}

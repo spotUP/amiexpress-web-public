@@ -670,6 +670,15 @@ async function startReader(session) {
             },
         });
         wireModal = modal;
+        /*
+         * A modal is a focus trap: while it is open the screen's own 'keypress'
+         * never fires (screen.ts _handleKey, suppressGlobalKeys), so `press` is
+         * not reached and P did nothing in the panel. The sysop's key is bound on
+         * the modal, the way its own close keys are.
+         */
+        if (sysop)
+            modal.key(['p', 'P', 'S-p'], () => { if (wireId === st.id)
+                toggleFront(); });
         modal.display();
         updateHints();
     };
