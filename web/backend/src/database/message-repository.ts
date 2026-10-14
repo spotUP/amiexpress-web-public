@@ -9,6 +9,7 @@ import type { Message } from './types';
 import { SysopDebugUtil, DebugSeverity } from '../utils/sysop-debug.util';
 import { BaseRepository } from './BaseRepository';
 import { toAmigaTime, encodeAmigaDate } from '../utils/date-time.util';
+import { notifyMessage, defaultSiteDeps } from '../notify/sites';
 
 export class MessageRepository extends BaseRepository<any> {
   constructor(db: any) { super(db); }
@@ -22,10 +23,14 @@ export class MessageRepository extends BaseRepository<any> {
    *   through `writeMessageFile` from utils/message-file.util.ts before
    *   reaching here). Avoids the dual-allocation that produced two
    *   physical .msg files per posted message.
+   * @param opts.skipNotify — true for a bulk import of EXISTING mail: a board
+   *   migration must not tell every addressee about years-old messages. An
+   *   explicit flag, never guessed from the content (plan 2026-10-14 section
+   *   10). No importer calls createMessage today; the first one sets this.
    */
   async createMessage(
     message: Omit<Message, 'id'>,
-    opts?: { skipDiskWrite?: boolean }
+    opts?: { skipDiskWrite?: boolean; skipNotify?: boolean }
   ): Promise<number> {
 
     const stmt = this.prepare(`
@@ -46,6 +51,10 @@ export class MessageRepository extends BaseRepository<any> {
     );
 
     const messageId = result.lastInsertRowid as number;
+
+    // The one funnel every writer shares (board, doors, AREXX, AI): mail and
+    // replies tell their recipient. Never throws; only inserts outbox rows.
+    if (!opts?.skipNotify) notifyMessage(message, messageId, { ...defaultSiteDeps, rawDb: () => this.db });
 
     // Skip disk write when the caller already handled it (express.e flow:
     // message-entry.handler.saveMessage allocates msgNum and writes file +

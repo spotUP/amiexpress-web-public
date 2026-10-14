@@ -1158,6 +1158,7 @@ export function startNewsBulletins(
             log: deps.log,
           });
           if (out.added > 0) deps.log(`[magazine] ${out.added} new stories, ${out.pages} pages`);
+          (await import('../notify/sites')).notifyMagazine(out.added);
           // Full text for the new stories, fetched in the background: the
           // tick does not wait for it and other sources are never held up.
           const { startBodyPrefetch } = await import('./magazine/body-prefetch');

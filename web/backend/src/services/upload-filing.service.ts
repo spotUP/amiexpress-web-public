@@ -47,6 +47,7 @@ import { pooledUploadArea, putUploadIntoPool } from '../storage/remote-upload';
 import type { RemoteLocation } from '../storage/remote-areas';
 import { getStorageContext } from '../storage/storage-context';
 import { storageFailureText } from '../storage/remote-download';
+import { notifyFileFiled } from '../notify/sites';
 
 /**
  * WHERE THE BYTES GO: the conference's own DLPATH, not the SQL row.
@@ -530,6 +531,12 @@ export async function fileUploadedFile(request: FilingRequest): Promise<FilingOu
       status !== 'active',
       request.uploader.slotNumber,
     );
+  }
+
+  // The file is live for callers (not HOLD, not private, not an orphan or a
+  // duplicate): tell the conference's followers.
+  if (status === 'active' && !orphaned && !duplicate) {
+    notifyFileFiled({ filename: request.filename, description: request.description, conferenceId: request.conferenceId, uploader: request.uploader.username });
   }
 
   return { status, marker, duplicate, orphaned, pool, notices };

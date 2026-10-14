@@ -35,6 +35,7 @@ import type { OutboxRow } from './outbox.repository';
 import type { EventIn, EventsResponse, UnlockOut } from './contract';
 import { deliverNotice } from './notices';
 import { registerDoorCatalogs } from './door-catalog';
+import { notifyUnlock, defaultSiteDeps } from '../notify/sites';
 
 export const FLUSH_INTERVAL_MS = 5_000;
 export const FLUSH_BATCH = 100;
@@ -109,6 +110,7 @@ export function productionFlusherDeps(io: unknown): FlusherDeps {
       if (!player) return;
       deliverNotice(io, player.id, 'unlock', unlock, { rawDb: () => rawDb, now: () => now });
       fireUnlockWebhook(player, unlock);
+      notifyUnlock(player.id, unlock, { ...defaultSiteDeps, rawDb: () => rawDb, now: () => now });
     },
     onNotLinked: (rawDb, email, now) => {
       const userId = userIdForEmail(rawDb, email);

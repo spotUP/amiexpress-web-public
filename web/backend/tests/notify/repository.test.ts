@@ -42,8 +42,8 @@ describe('prefs and settings', () => {
   it('setPrefs replaces the caller rows and leaves other callers alone', () => {
     setPrefs(db, 'u1', { 'msg.reply': { email: 'instant' } });
     setPrefs(db, 'u2', { 'msg.reply': { email: 'digest' } });
-    setPrefs(db, 'u1', { 'ach.unlock': { board: 'instant' } });
-    expect(getPrefs(db, 'u1')).toEqual({ 'ach.unlock': { board: 'instant' } });
+    setPrefs(db, 'u1', { 'ach.unlock': { email: 'instant' } });
+    expect(getPrefs(db, 'u1')).toEqual({ 'ach.unlock': { email: 'instant' } });
     expect(getPrefs(db, 'u2')).toEqual({ 'msg.reply': { email: 'digest' } });
   });
 

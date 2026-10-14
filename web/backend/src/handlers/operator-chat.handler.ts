@@ -154,6 +154,7 @@ const bbsRoot = boardRoot();
 import { activeChatSessions, chatIsLive, deliverToCaller, deliverGreeting, chatResetColourBytes, chatCharBytes, chatBackspaceBytes, chatReturnBytes, callerTypedChar, callerTypedRun, callerEditedLine, chatLineEditKey, callerBackspaced, callerPressedReturn, callerLineEntered, cancelSendHint, scheduleSendHint, cancelThinkingDots, wrapChatMessage, CHAT_COLOR_SYSOP, CHAT_COLOR_USER, chatAcceptsKeystroke } from './operator-chat/chat-stream';
 import { startThinkingDots, thinkingDotsShown, clearThinkingDotsShown } from './operator-chat/thinking-dots';
 import { boardRoot } from '../utils/board-root.util';
+import { notifySysopPage } from '../notify/sites';
 import { boardSysopName, pagingLine, pageUnansweredText } from '../utils/sysop-page-text.util';
 // The caller's half of the chat lives in ./operator-chat/chat-stream; these stay importable from here.
 export { chatCharBytes, chatBackspaceBytes, chatReturnBytes, callerTypedChar, callerTypedRun, callerEditedLine, chatLineEditKey, callerBackspaced, callerPressedReturn, callerLineEntered, cancelSendHint, scheduleSendHint, cancelThinkingDots, wrapChatMessage, CHAT_COLOR_SYSOP, CHAT_COLOR_USER, chatAcceptsKeystroke };
@@ -736,6 +737,9 @@ console.log(`[Operator Chat] Socket.IO notification sent to sysops room for page
   } catch (error) {
 console.error('[Operator Chat] Socket.IO notification failed:', error);
   }
+
+  // 1b. The NOTIFY door: sysops who chose Sysop page. Never throws.
+  notifySysopPage(page);
 
   // 2. Discord webhook notification
   if (config.discordWebhook) {

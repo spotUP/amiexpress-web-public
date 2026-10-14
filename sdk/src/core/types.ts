@@ -272,6 +272,13 @@ export interface StorageAPI {
 // ===== BBS API (Advanced) =====
 
 export interface BBSApi {
+  /**
+   * Raise one of this door's own notification events for a user (id or name).
+   * The type must be `door.<command>.<slug>` for the running door. It queues
+   * an outbox row; the user's NOTIFY choices decide delivery. Returns true
+   * when a row was queued. Optional: an older backend has no such method.
+   */
+  notify?(type: string, toUser: string, item: { title: string; body: string; url?: string; objectId?: string }): boolean;
   /** Get user by ID */
   getUser(userId: string): Promise<User | null>;
 

@@ -1843,6 +1843,30 @@ console.log(`[BBSApi.executeCommand] Queued command for after door exit: ${comma
   }
 
   /**
+   * Notifications (NOTIFY door): raise one of THIS door's own events for a
+   * user. The type must be `door.<command>.<slug>` for the running door - the
+   * same namespace rule as achievement() - and `toUser` is a user id or a
+   * name. It only queues an outbox row: whether and where the user hears
+   * about it is their own NOTIFY choice. Returns true when a row was queued;
+   * false (one WARN when the namespace is refused) otherwise. Never throws.
+   *
+   * @example
+   * ```typescript
+   * bbs.notify('door.tetris.your-turn', 'dino', { title: 'Your turn', body: 'bob moved' });
+   * ```
+   */
+  notify(type: string, toUser: string, item: { title: string; body: string; url?: string; objectId?: string }): boolean {
+    try {
+      const command = String(this.session.currentDoorName || this.session.commandText?.split(' ')[0] || '').toLowerCase();
+      const { notifyFromDoor } = require('../notify/sites');
+      return notifyFromDoor(command, type, toUser, item) === true;
+    } catch (error) {
+      console.warn(`[WARN] notify: door notify failed: ${(error as Error).message}`);
+      return false;
+    }
+  }
+
+  /**
    * Achievements (SP3): the server, through the board. The door gets the
    * answers; the board key stays here. See achievements/door-api.ts.
    */

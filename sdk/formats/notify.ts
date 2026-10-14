@@ -35,6 +35,8 @@ export interface NotifyEventDef {
 /**
  * The events the board itself emits. Private mail offers Email and Push only:
  * the logon mail scan already tells a caller about mail (sysop decision 3).
+ * An unlock offers Email and Push only: the achievements flusher already draws
+ * its own toast on the board, so a Board cell would show the same unlock twice.
  */
 export const NOTIFY_EVENTS: readonly NotifyEventDef[] = [
   { id: 'mail.private', label: 'Private mail', channels: ['email', 'push'] },
@@ -42,7 +44,7 @@ export const NOTIFY_EVENTS: readonly NotifyEventDef[] = [
   { id: 'file.new', label: 'New file in a followed conference', channels: ['email', 'push', 'board'], followsConference: true },
   { id: 'page.sysop', label: 'Sysop page', channels: ['email', 'push', 'board'], sysopOnly: true },
   { id: 'mag.story', label: 'New magazine stories', channels: ['email', 'push', 'board'] },
-  { id: 'ach.unlock', label: 'Achievement unlocked', channels: ['email', 'push', 'board'] },
+  { id: 'ach.unlock', label: 'Achievement unlocked', channels: ['email', 'push'] },
 ];
 
 /** `door.<command>.<slug>`: the namespace a door declares its own events in. */

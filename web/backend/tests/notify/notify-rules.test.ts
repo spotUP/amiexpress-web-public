@@ -152,6 +152,7 @@ describe('catalogue', () => {
     expect(byId['page.sysop'].sysopOnly).toBe(true);
     expect(byId['file.new'].followsConference).toBe(true);
     expect(byId['mail.private'].channels).toEqual(['email', 'push']);
+    expect(byId['ach.unlock'].channels).toEqual(['email', 'push']); // the flusher already draws its own board toast
   });
 
   it('the outbox ref is event:object:user:channel', () => {
