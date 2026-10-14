@@ -13,6 +13,7 @@ import * as path from 'path';
 
 import { BOARD_WRITTEN_NAME } from './screen-tables';
 import { readScreenFlags } from './screen-flags';
+import { NEWS_BULLETIN_SOURCES } from '../services/news-bulletins';
 
 /**
  * An old copy kept beside the real file. Every board grows these.
@@ -65,6 +66,28 @@ const BACKUP_NAME = /(\.bak\b|\.old\b|\.orig\b|\.stale\b|\.backup|~$|\.save\b|\.
 const RUNTIME_NAME = BOARD_WRITTEN_NAME;   // the one copy, in screen-tables
 
 /**
+ * The bulletins the news job writes, read from the job's OWN table.
+ *
+ * WEB_NEWS_BULLETINS (services/news-bulletins.ts) rewrites one
+ * `Bulletins/bullN.txt` per feed - thirty of them on the live board, the
+ * headlines the magazine is composed from - and the Screen Designer offered
+ * every one to the artists as hand-drawn art: "i meant all logos etc not the
+ * articles they are generated anyway" (sysop, 2026-10-14). Their content is a
+ * feed's and carries no marker, so the job's list of files is the evidence;
+ * reading it from NEWS_BULLETIN_SOURCES means a feed added there is hidden
+ * here with no second edit. Board root only: a conference's own `bull14.txt`
+ * is nobody's output.
+ */
+const NEWS_BULLETIN_PATHS = new Set(
+  NEWS_BULLETIN_SOURCES.map((source) => `bulletins/${source.file}`.toLowerCase()),
+);
+
+/** True for a bulletin the news job writes, by its path under the board root. */
+export function isNewsBulletin(relPath: string): boolean {
+  return NEWS_BULLETIN_PATHS.has(relPath.split(path.sep).join('/').toLowerCase());
+}
+
+/**
  * Signatures of the tools that WRITE screens on this board.
  *
  * Bulletins 1 to 6 are rewritten every boot - five by MultiTop-II, whose own
@@ -102,6 +125,7 @@ export function classifyGenerated(
   const name = path.basename(relPath);
   if (BACKUP_NAME.test(name)) return 'backup';
   if (RUNTIME_NAME.test(name)) return 'runtime';
+  if (isNewsBulletin(relPath)) return 'runtime';
 
   // Only worth reading for a bulletin-sized file; a 240 KB RIP screen is not
   // written by a stats door.

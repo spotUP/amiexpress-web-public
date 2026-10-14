@@ -163,3 +163,35 @@ describe('bulletins written by a door', () => {
     expect(index.files['Bulletins/bull10.txt']?.generated).toBeUndefined();
   });
 });
+
+/*
+ * The news job (services/news-bulletins.ts) rewrites one bulletin per feed,
+ * and the Screen Designer offered all thirty to the artists as art: "i meant
+ * all logos etc not the articles they are generated anyway" (sysop,
+ * 2026-10-14). The job's own NEWS_BULLETIN_SOURCES is the list.
+ */
+describe('bulletins written by the news job', () => {
+  test('every file the news job writes is runtime, and a hand-drawn bulletin beside them is not', () => {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { NEWS_BULLETIN_SOURCES } = require('../../src/services/news-bulletins');
+    const files: string[] = NEWS_BULLETIN_SOURCES.map((s: { file: string }) => s.file);
+    expect(files).toContain('bull14.txt');
+    for (const file of files) write(`Bulletins/${file}`, 'Exploit-DB - fresh public exploits\n  1. a headline\n');
+    write('Bulletins/bull10.txt', '  _______\n _\\______   \\ ____\n');
+
+    const index = buildScreenIndex(root);
+
+    for (const file of files) expect([file, index.files[`Bulletins/${file}`]?.generated]).toEqual([file, 'runtime']);
+    expect(index.files['Bulletins/bull10.txt']?.generated).toBeUndefined();
+  });
+
+  test('a conference bulletin that shares a news number is still art', () => {
+    write('Conf1/bull14.txt', '  _______\n _\\______   \\ ____\n');
+
+    const index = buildScreenIndex(root);
+
+    const conf = Object.values(index.files).find((f) => f.relPath.endsWith(path.join('Conf1', 'bull14.txt')));
+    expect(conf).toBeDefined();
+    expect(conf?.generated).toBeUndefined();
+  });
+});
