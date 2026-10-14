@@ -27,10 +27,9 @@ import { db } from '../../database';
 import { emitText, emitPrompt, emitLine, flushOutput } from '../../utils/output.util';
 import { releaseAnsiBuffer } from '../../utils/ansi-buffer.util';
 import { sessionWantsPetscii, PETSCII_FONT_IS_FIXED } from '../../utils/petscii-session-model';
-import { DEFAULT_TERMINAL_FONT } from '../../constants/terminal-fonts';
 import { fontMenuRows, fontForChoice, chooseTerminalFont } from '../../services/terminal-font.service';
 import { finalizeCommand } from '../../utils/command-response.util';
-import { changeAccount, saveAccount } from '../../services/account.service';
+import { saveAccount } from '../../services/account.service';
 import {
   applyWField, wFieldState, wFieldValue, screenTypeChoices, PROTOCOL_CHOICES,
 } from '../../services/user-settings/w-fields';
