@@ -41,6 +41,7 @@ const blessed_1 = require("@amiexpress/bbs-door-sdk/engines/ui/blessed");
 const magazine_1 = require("@amiexpress/bbs-door-sdk/formats/magazine");
 Object.defineProperty(exports, "sourceName", { enumerable: true, get: function () { return magazine_1.sourceName; } });
 const columns_1 = require("./columns");
+const filler_1 = require("./filler");
 const library_1 = require("./library");
 /** The plain text of a row: what a C64 caller would read. */
 function rowText(row) {
@@ -114,6 +115,26 @@ function composeRow(geometry, cells) {
         }
     });
     return row;
+}
+/**
+ * The columns of a spread with filler set into the empty tail of each. The
+ * text cells are untouched; the filler takes rows no text uses, so it can move
+ * nothing and hide nothing, and it carries no `item`, so no cursor lands on it.
+ */
+function withFiller(columns, rows, geometry, spreadNo, fill) {
+    if (!fill || fill.pieces.length === 0)
+        return columns;
+    const placed = (0, filler_1.placeFiller)(fill, spreadNo, columns.map((c) => c.length), rows, geometry.colWidth);
+    return columns.map((col, c) => {
+        const at = placed[c];
+        if (!at)
+            return col;
+        const out = col.slice();
+        at.piece.rows.forEach((text, i) => {
+            out[at.top + i] = { text: ' '.repeat(at.indent) + text, role: 'dim' };
+        });
+        return out;
+    });
 }
 function composeSpread(geometry, columns, rows) {
     const out = [];
@@ -290,7 +311,7 @@ function headingCell(label, colWidth) {
  * Blocks to spreads of rows. The first row of every spread is the view header
  * (`headerLeft` / `headerRight`), the rest is the newspaper flow.
  */
-function buildListing(blocks, selectedStoryId, layout, header) {
+function buildListing(blocks, selectedStoryId, layout, header, fill) {
     const { geometry } = layout;
     const itemIds = [];
     const cells = [];
@@ -328,7 +349,7 @@ function buildListing(blocks, selectedStoryId, layout, header) {
             selectedSpread = n;
         }
         const head = spanRow(geometry, headerLine(header.left, header.right, geometry.contentWidth), 'dim');
-        return [head, ...composeSpread(geometry, spread.columns, bodyHeight)];
+        return [head, ...composeSpread(geometry, withFiller(spread.columns, bodyHeight, geometry, n, fill), bodyHeight)];
     });
     return { spreads, selectedSpread, itemIds, spreadFirst, grid };
 }
@@ -373,7 +394,7 @@ function deskCode(desk) {
     return desk.toUpperCase();
 }
 const HEADLINE_MAX_ROWS = 3;
-function buildArticle(story, layout, endMark = []) {
+function buildArticle(story, layout, endMark = [], fill) {
     const { geometry, panelHeight } = layout;
     const w = geometry.contentWidth;
     const kicker = spanRow(geometry, truncate(signalTag(story), w), 'tag');
@@ -408,10 +429,10 @@ function buildArticle(story, layout, endMark = []) {
     const running = truncate((0, library_1.paintSafe)(story.headline).toUpperCase(), w);
     const spreads = flowed.map((spread, n) => {
         if (n === 0) {
-            const rows = [...head, ...composeSpread(geometry, spread.columns, firstHeight)];
+            const rows = [...head, ...composeSpread(geometry, withFiller(spread.columns, firstHeight, geometry, n, fill), firstHeight)];
             return rows.slice(0, panelHeight);
         }
-        return [spanRow(geometry, running, 'dim'), ...composeSpread(geometry, spread.columns, restHeight)]
+        return [spanRow(geometry, running, 'dim'), ...composeSpread(geometry, withFiller(spread.columns, restHeight, geometry, n, fill), restHeight)]
             .slice(0, panelHeight);
     });
     return { spreads, headlineRow: 1, headlineRows: headLines.length };

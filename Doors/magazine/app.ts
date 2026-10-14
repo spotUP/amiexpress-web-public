@@ -48,6 +48,7 @@ import {
   shippedArtDir,
   type ArtSources,
 } from './art';
+import { loadFiller } from './filler';
 import {
   editFront,
   isSysopCaller,
@@ -260,6 +261,8 @@ export async function startReader(session: DoorSession, options: ReaderOptions =
     shippedDir: options.shippedArtDir === undefined ? shippedArtDir() : options.shippedArtDir,
   };
   const artKind = artKindFor(petscii, width);
+  /** Mortimer's clipart for empty column space; a caller that reads PETSCII only gets pieces that map. */
+  const fillerPieces = loadFiller(artSources, artKind === 'seq');
   /** One piece of art as rows of content for this caller, [] when there is none. */
   const artFor = (name: string, maxRows: number, maxCols: number = width): string[] => {
     const art = loadArt(name, artKind, artSources);
@@ -440,10 +443,11 @@ export async function startReader(session: DoorSession, options: ReaderOptions =
 
   const showListing = (blocks: ListingBlock[], left: string, entries: readonly MagazineIndexEntry[]) => {
     const header = { left, right: headerRight(entries) };
-    let l = buildListing(blocks, selected, layout, header);
+    const fill = { pieces: fillerPieces, key: left };
+    let l = buildListing(blocks, selected, layout, header, fill);
     if (selected === null || !l.itemIds.includes(selected)) {
       selected = l.itemIds[0] ?? null;
-      l = buildListing(blocks, selected, layout, header);
+      l = buildListing(blocks, selected, layout, header, fill);
     }
     listIds = l.itemIds;
     spreadFirst = l.spreadFirst;
@@ -496,7 +500,7 @@ export async function startReader(session: DoorSession, options: ReaderOptions =
         return;
       }
       const mark = artFor('mag_article_end', END_MARK_MAX_ROWS, layout.geometry.colWidth).map((raw) => ({ raw, text: artRowText(raw) }));
-      const article = buildArticle(story, layout, mark);
+      const article = buildArticle(story, layout, mark, { pieces: fillerPieces, key: story.id });
       spreads = article.spreads;
       headline = { row: article.headlineRow, rows: article.headlineRows };
       spreadNo = 0;

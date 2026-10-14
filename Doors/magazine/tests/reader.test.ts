@@ -1555,3 +1555,27 @@ export async function aKeyThatThrowsIsLoggedWithTheKeyAndViewAndShownInTheFooter
     assert.strictEqual(h.reader.viewKind(), 'contents', 'and the reader still answers');
   } finally { console.error = realError; await finish(h, b); }
 }
+
+// ---- filler: Mortimer's clipart in an empty column (wiring) ----------------
+
+export async function aShortArticleShowsMortimersClipartInItsEmptyColumnThroughTheReader(): Promise<void> {
+  const b = board(['aaaa0001'], [story('aaaa0001', 'Copper Lights lands for the Amiga', 'scene', '2026-10-13', 'A short note on a small release.')]);
+  const h = await open(80, 24, { shippedArt: SHIPPED_ART });
+  try {
+    h.reader.press('c', 'c'); // title off
+    h.reader.press('enter');
+    assert.strictEqual(h.reader.viewKind(), 'article');
+    const t = h.reader.panelRows().join('\n');
+    assert.ok(t.includes('©Mt'), `a signed piece sits in the empty column:\n${t}`);
+    assert.ok(t.includes('COPPER LIGHTS LANDS'), 'and the article is still there');
+  } finally { await finish(h, b); }
+}
+
+export async function noFillerAppearsWhenTheDoorShipsNoArt(): Promise<void> {
+  const b = board(['aaaa0001']);
+  const none = await open(80, 24);
+  try {
+    none.reader.press('enter');
+    assert.ok(!none.reader.panelRows().join('\n').includes('©Mt'), 'no shipped art, no filler');
+  } finally { await finish(none, b); }
+}

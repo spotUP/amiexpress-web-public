@@ -30,6 +30,7 @@ Object.defineProperty(exports, "MAGAZINE_TITLE", { enumerable: true, get: functi
 const bbs_door_sdk_1 = require("@amiexpress/bbs-door-sdk");
 const page_search_1 = require("@amiexpress/bbs-door-sdk/teletext/page-search");
 const art_1 = require("./art");
+const filler_1 = require("./filler");
 const library_1 = require("./library");
 const layout_1 = require("./layout");
 exports.READ_KEY = 'read-story-ids';
@@ -151,6 +152,8 @@ async function startReader(session, options = {}) {
         shippedDir: options.shippedArtDir === undefined ? (0, art_1.shippedArtDir)() : options.shippedArtDir,
     };
     const artKind = (0, art_1.artKindFor)(petscii, width);
+    /** Mortimer's clipart for empty column space; a caller that reads PETSCII only gets pieces that map. */
+    const fillerPieces = (0, filler_1.loadFiller)(artSources, artKind === 'seq');
     /** One piece of art as rows of content for this caller, [] when there is none. */
     const artFor = (name, maxRows, maxCols = width) => {
         const art = (0, art_1.loadArt)(name, artKind, artSources);
@@ -322,10 +325,11 @@ async function startReader(session, options = {}) {
     const headerRight = (entries) => [spark(entries), readEdition(snapshot.index)].filter(Boolean).join('  ');
     const showListing = (blocks, left, entries) => {
         const header = { left, right: headerRight(entries) };
-        let l = (0, layout_1.buildListing)(blocks, selected, layout, header);
+        const fill = { pieces: fillerPieces, key: left };
+        let l = (0, layout_1.buildListing)(blocks, selected, layout, header, fill);
         if (selected === null || !l.itemIds.includes(selected)) {
             selected = l.itemIds[0] ?? null;
-            l = (0, layout_1.buildListing)(blocks, selected, layout, header);
+            l = (0, layout_1.buildListing)(blocks, selected, layout, header, fill);
         }
         listIds = l.itemIds;
         spreadFirst = l.spreadFirst;
@@ -376,7 +380,7 @@ async function startReader(session, options = {}) {
                 return;
             }
             const mark = artFor('mag_article_end', END_MARK_MAX_ROWS, layout.geometry.colWidth).map((raw) => ({ raw, text: (0, art_1.artRowText)(raw) }));
-            const article = (0, layout_1.buildArticle)(story, layout, mark);
+            const article = (0, layout_1.buildArticle)(story, layout, mark, { pieces: fillerPieces, key: story.id });
             spreads = article.spreads;
             headline = { row: article.headlineRow, rows: article.headlineRows };
             spreadNo = 0;

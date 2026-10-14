@@ -1,0 +1,66 @@
+file	rows	width	signatures	fits	source_line	description
+mortimer_01.txt	14	62	1	wide	1	character figure
+mortimer_02.txt	23	29	1	col34	20	character figure
+mortimer_03.txt	13	23	0	col34	47	big-eyed character (unsigned)
+mortimer_04.txt	11	28	0	col34	66	figure with sleeves (unsigned)
+mortimer_05.txt	19	46	1	wide	81	character figure
+mortimer_06.txt	19	38	1	col40	103	character figure
+mortimer_07.txt	13	22	0	col34	127	computer monitor and keyboard (unsigned)
+mortimer_08.txt	10	14	0	col34	127	stepped tower (unsigned)
+mortimer_09.txt	7	16	0	col34	127	framed window or screen (unsigned)
+mortimer_10.txt	11	26	0	col34	127	arcade machine row (unsigned)
+mortimer_11.txt	10	18	0	col34	127	tall cabinet (unsigned)
+mortimer_12.txt	10	22	0	col34	127	puffy cloud (unsigned)
+mortimer_13.txt	19	37	1	col40	155	afro-haired figure
+mortimer_14.txt	13	35	1	col36	177	character figure
+mortimer_15.txt	11	25	1	col34	192	character figure
+mortimer_16.txt	9	65	1	wide	206	character figure
+mortimer_17.txt	21	30	1	col34	219	character figure
+mortimer_18.txt	11	36	1	col36	243	character figure
+mortimer_19.txt	17	26	1	col34	259	character figure
+mortimer_20.txt	5	9	0	col34	259	small unknown figure (unsigned)
+mortimer_21.txt	14	30	1	col34	259	character figure
+mortimer_22.txt	14	74	1	wide	280	character figure
+mortimer_23.txt	20	37	1	col40	300	character figure
+mortimer_24.txt	12	41	1	wide	323	afro-haired figure
+mortimer_25.txt	14	37	1	col40	339	figure with pointed hat
+mortimer_26.txt	13	41	1	wide	354	afro-haired figure
+mortimer_27.txt	12	45	1	wide	368	figure with pointed hat
+mortimer_28.txt	12	37	1	col40	384	figure with pointed hat
+mortimer_29.txt	16	49	1	wide	401	character figure
+mortimer_30.txt	16	43	1	wide	421	character figure
+mortimer_31.txt	15	19	1	col34	440	figure with pointed hat
+mortimer_32.txt	15	23	1	col34	458	figure with pointed hat
+mortimer_33.txt	20	36	1	col36	477	afro-haired figure
+mortimer_34.txt	5	47	1	wide	477	wide reclining figure
+mortimer_35.txt	12	29	1	col34	510	afro-haired figure
+mortimer_36.txt	14	27	1	col34	526	figure with pointed hat
+mortimer_37.txt	14	26	1	col34	545	character figure
+mortimer_38.txt	14	32	0	col34	560	robed figure (unsigned)
+mortimer_39.txt	12	37	1	col40	579	figure with pointed hat
+mortimer_40.txt	8	38	1	col40	579	character figure
+mortimer_41.txt	16	26	1	col34	600	afro-haired figure
+mortimer_42.txt	11	23	1	col34	600	figure with pointed hat
+mortimer_43.txt	15	20	1	col34	628	character figure
+mortimer_44.txt	14	26	1	col34	628	character figure
+mortimer_45.txt	15	28	1	col34	628	character figure
+mortimer_46.txt	10	38	1	col40	672	afro-haired figure
+mortimer_47.txt	18	26	0	col34	685	figure (unsigned)
+mortimer_48.txt	10	26	1	col34	706	character figure
+mortimer_49.txt	16	24	1	col34	717	character figure
+mortimer_50.txt	12	37	1	col40	736	afro-haired figure
+mortimer_51.txt	17	29	1	col34	750	character figure
+mortimer_52.txt	14	25	1	col34	750	character figure
+mortimer_53.txt	9	23	1	col34	783	character figure
+mortimer_54.txt	14	22	1	col34	793	afro-haired figure
+mortimer_55.txt	15	26	1	col34	810	character figure
+mortimer_56.txt	11	26	1	col34	827	figure with pointed hat
+mortimer_57.txt	13	23	1	col34	840	character figure
+mortimer_58.txt	11	26	1	col34	840	afro-haired figure
+mortimer_59.txt	12	23	1	col34	866	character figure
+mortimer_60.txt	12	21	1	col34	880	character figure
+mortimer_61.txt	6	16	1	col34	895	afro hairdo only
+mortimer_62.txt	17	65	1	wide	902	figure with pointed hat
+mortimer_63.txt	12	19	1	col34	921	character figure
+mortimer_64.txt	15	24	1	col34	935	character figure
+mortimer_65.txt	12	27	1	col34	970	hatted figure from ad banner
