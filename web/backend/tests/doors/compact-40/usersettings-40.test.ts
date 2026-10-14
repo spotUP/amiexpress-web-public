@@ -29,6 +29,8 @@ process.env.XIM_DEBUG = '1';
 process.env.XIM_DEBUG_JSON = '1';
 process.env.XIM_DEBUG_AMIGA = '1';
 process.env.DEBUG_68K = '1';
+// every XIM sink (debug.log, door-68k-*.log, json, amiga) lives in the temp dir, never in the repo's logs/
+process.env.XIM_LOG_DIR = LOGS;
 process.env.XIM_LOG_FILE = path.join(LOGS, 'xim-debug.json');
 process.env.XIM_AMIGA_LOG = path.join(LOGS, 'xim-amiga.log');
 
@@ -195,7 +197,7 @@ describe('the W door on three screens', () => {
     await new Promise(r => setTimeout(r, 500));   // the JSON and Amiga logs are write streams
 
     const isTrace = (l: string) => /^\[(DoorInput|XIMIOHandler\] queueInput|AmigaDoorSession\] door:input)/.test(l);
-    const logsDir = path.join(REPO, 'logs');
+    const logsDir = LOGS;
     const doorLogs = fs.readdirSync(logsDir)
       .filter(f => /^door-68k-W-.*\.log$/.test(f) && fs.statSync(path.join(logsDir, f)).mtimeMs >= started)
       .map(f => path.join(logsDir, f));

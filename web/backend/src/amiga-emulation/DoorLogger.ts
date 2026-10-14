@@ -35,7 +35,7 @@ console.log(`[DoorLogger] Creating logger for door: ${doorName} node: ${nodeId}`
     // Navigate from web/backend/src/amiga-emulation to project root (4 levels up)
     // __dirname = .../web/backend/src/amiga-emulation
     const projectRoot = path.resolve(__dirname, '../../../..');
-    const logsDir = path.join(projectRoot, 'logs');
+    const logsDir = process.env.XIM_LOG_DIR || path.join(projectRoot, 'logs');
 console.log(`[DoorLogger] __dirname: ${__dirname}, projectRoot: ${projectRoot}, logs dir: ${logsDir}`);
     if (!amigafs.existsSync(logsDir)) {
       amigafs.mkdirSync(logsDir, { recursive: true });

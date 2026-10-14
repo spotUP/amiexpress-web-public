@@ -19,7 +19,7 @@ class XIMDebugLogger {
     this.enabled = process.env.XIM_DEBUG === '1' || process.env.XIM_DEBUG === 'true';
     this.sessionStart = getSystemTime();
     const projectRoot = path.resolve(__dirname, '../../../../..');
-    const logsDir = path.join(projectRoot, 'logs');
+    const logsDir = process.env.XIM_LOG_DIR || path.join(projectRoot, 'logs');
     if (!amigafs.existsSync(logsDir)) {
       amigafs.mkdirSync(logsDir, { recursive: true });
     }
