@@ -187,3 +187,25 @@ export async function everySeqSurvivesTheBoardsTransducerCellForCell(): Promise<
     }
   }
 }
+
+export async function theRowsOfEachWordInTheTitleShareTheirLeftColumn(): Promise<void> {
+  const text = fs.readFileSync(path.join(SHIPPED, 'mag_title.ans')).toString('latin1').replace(/\x1b\[[0-9;]*[A-Za-z]/g, '');
+  const rows = text.split(/\r\n/);
+  // A wordmark row is drawn with | or \; a word is a run of consecutive such rows (UNKNOWN, FREQUENCY).
+  const words: string[][] = [];
+  const isWordRow = (r: string | undefined): boolean => r !== undefined && r.trim().length < 70 && /[|\\]/.test(r); // the 80-cell waveform has a backslash too
+  rows.forEach((r, i) => {
+    if (!isWordRow(r)) return;
+    if (isWordRow(rows[i - 1])) words[words.length - 1].push(r);
+    else words.push([r]);
+  });
+  assert.strictEqual(words.length, 2, 'the title has two words');
+  for (const word of words) {
+    // The first letter's stem starts rows one and two; row three of a round letter (U) is indented by the glyph itself.
+    const lefts = word.map((r) => r.length - r.trimStart().length);
+    assert.strictEqual(lefts[0], lefts[1], `the rows of one word start at columns ${lefts.join(', ')}`);
+    assert.ok(lefts[2] - lefts[0] <= 1, `the last row starts at ${lefts[2]}, the first at ${lefts[0]}`);
+    // Padded to one width, so a row is never centred on its own length.
+    assert.strictEqual(new Set(word.map((r) => r.length)).size, 1, `row widths ${word.map((r) => r.length).join(', ')}`);
+  }
+}

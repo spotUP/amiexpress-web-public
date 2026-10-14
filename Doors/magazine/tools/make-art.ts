@@ -82,7 +82,10 @@ function wordmark(word: string): [string, string, string] {
     if (!glyph) throw new Error(`no wordmark glyph for ${ch}`);
     for (let i = 0; i < 3; i++) rows[i] += `${glyph[i]} `;
   }
-  return rows.map((r) => r.trimEnd()) as [string, string, string];
+  // Every row of one word is as wide as the widest: a row trimmed on its own is a row that
+  // centres one cell to the left of the others.
+  const width = Math.max(...rows.map((r) => r.trimEnd().length));
+  return rows.map((r) => r.trimEnd().padEnd(width)) as [string, string, string];
 }
 
 const PLACEHOLDER_NOTE = 'PLACEHOLDER art';
