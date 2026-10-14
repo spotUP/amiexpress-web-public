@@ -62,6 +62,10 @@ export async function theDeliveryViewSaysWhyPushIsOff(): Promise<void> {
   const telnet = deliveryRows(base, 79);
   assert.ok(telnet.find((r) => r.id === 'push')!.text.includes('Push needs the web terminal'));
   assert.ok(telnet.find((r) => r.id === 'email')!.text.includes('(verified)'));
+  const web = { ...base, web: true, pushDeliverable: true };
+  assert.ok(deliveryRows(web, 79).find((r) => r.id === 'push')!.text.includes('Off  (Enter turns it on here)'));
+  assert.ok(deliveryRows({ ...web, pushBrowsers: 2 }, 79).find((r) => r.id === 'push')!.text.includes('On in 2 browsers'));
+  assert.ok(deliveryRows({ ...web, pushDeliverable: false }, 79).find((r) => r.id === 'push')!.text.includes('Not available'));
   assert.ok(telnet.find((r) => r.id === 'zone')!.text.includes('Europe/Stockholm (board)'));
   for (const w of [39, 79]) for (const r of deliveryRows({ ...base, address: 'a-very-long-address@some-long-domain.example.com' }, w)) assert.ok(r.text.length <= w);
 }

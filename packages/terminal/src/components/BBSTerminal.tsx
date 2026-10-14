@@ -3,6 +3,7 @@ import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { io, Socket } from 'socket.io-client';
 import { reconnectPolicy, shouldReconnectNow } from '../utils/reconnect-policy';
+import { browserPushEnv, subscribeThisBrowser } from '../utils/push-subscribe';
 import { createLoginCredentials, type LoginCredentials } from '../utils/login-credentials';
 import '@xterm/xterm/css/xterm.css';
 import { XTERM_CONFIG } from '../utils/terminal-utils';
@@ -2300,6 +2301,13 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
         uploadNextFile();
       }
     };
+
+    // NOTIFY's Enable push: subscribe this browser and answer. The board takes
+    // the user from the session, so the answer carries no id.
+    socket.on('notify:push-subscribe', async (req: { publicKey?: string }) => {
+      const result = await subscribeThisBrowser(String(req?.publicKey ?? ''), browserPushEnv());
+      socket.emit('notify:push-subscription', result);
+    });
 
     // Handle file upload request from backend
     socket.on('show-file-upload', (options: { accept?: string; maxSize?: number; multiple?: boolean; batchContinue?: boolean }) => {

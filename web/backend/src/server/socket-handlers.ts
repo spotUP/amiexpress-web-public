@@ -263,6 +263,9 @@ console.error('[SOCKET HANDLER ERROR] Failed to load auth-socket-handlers:', err
   import('./file-socket-handlers').then(({ registerFileHandlers }) => registerFileHandlers(socket)).catch((err) => {
 console.error('[SOCKET HANDLER ERROR] Failed to load file-socket-handlers:', err);
   });
+  import('../notify/socket').then(({ registerNotifySocketHandlers }) => registerNotifySocketHandlers(socket)).catch((err) => {
+console.error('[SOCKET HANDLER ERROR] Failed to load notify socket handlers:', err);
+  });
   import('./chat-socket-handlers').then(({ registerChatHandlers }) => registerChatHandlers(socket, chatState)).catch((err) => {
 console.error('[SOCKET HANDLER ERROR] Failed to load chat-socket-handlers:', err);
   });

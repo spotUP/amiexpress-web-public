@@ -48,13 +48,15 @@ export interface DeliveryFacts {
     verified: boolean;
     emailDeliverable: boolean;
     pushDeliverable: boolean;
+    /** Browsers of this caller that receive push. */
+    pushBrowsers?: number;
     /** The caller is on the web terminal (the only place push can be turned on). */
     web: boolean;
     settings: NotifySettings;
     boardZone: string;
 }
 export type DeliveryId = 'email' | 'push' | 'quiet' | 'zone' | 'digest' | 'pause' | 'test';
-export declare function pushWords(f: Pick<DeliveryFacts, 'pushDeliverable' | 'web'>): string;
+export declare function pushWords(f: Pick<DeliveryFacts, 'pushDeliverable' | 'web' | 'pushBrowsers'>): string;
 /** The Delivery view's rows. At 40 the label and the value stack on one row each, clipped. */
 export declare function deliveryRows(f: DeliveryFacts, width: number): Array<{
     id: DeliveryId;

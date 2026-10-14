@@ -1,20 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.HELP_LINES = exports.COMPACT_HINTS = exports.HINTS = exports.digestWords = exports.quietWords = exports.DAYS = exports.cellWord = exports.blurbOf = exports.CHANNEL_WORD = exports.CHANNELS = void 0;
-exports.clip = clip;
-exports.buildEventRows = buildEventRows;
-exports.prefsFromRows = prefsFromRows;
-exports.compactSummary = compactSummary;
-exports.columnPlan = columnPlan;
-exports.eventRowText = eventRowText;
-exports.headerText = headerText;
-exports.detailRows = detailRows;
-exports.followRows = followRows;
-exports.pushWords = pushWords;
-exports.deliveryRows = deliveryRows;
-exports.parseQuiet = parseQuiet;
-exports.parseDigest = parseDigest;
-exports.explainVerify = explainVerify;
+exports.HELP_LINES = exports.COMPACT_HINTS = exports.HINTS = exports.explainVerify = exports.parseDigest = exports.parseQuiet = exports.deliveryRows = exports.pushWords = exports.digestWords = exports.quietWords = exports.DAYS = exports.followRows = exports.detailRows = exports.headerText = exports.eventRowText = exports.columnPlan = exports.compactSummary = exports.cellWord = exports.prefsFromRows = exports.buildEventRows = exports.clip = exports.blurbOf = exports.CHANNEL_WORD = exports.CHANNELS = void 0;
 /**
  * NOTIFY's screens as rows of text, pure.
  *
@@ -49,6 +35,7 @@ exports.blurbOf = blurbOf;
 function clip(text, width) {
     return text.length > width ? text.slice(0, Math.max(0, width - 1)) + '~' : text;
 }
+exports.clip = clip;
 function buildEventRows(events, prefs, can) {
     return events.map((e) => {
         const cells = {};
@@ -69,6 +56,7 @@ function buildEventRows(events, prefs, can) {
         return { id: e.id, label: e.label, blurb: e.description ?? (0, exports.blurbOf)(e.id), followsConference: e.followsConference === true, cells, why };
     });
 }
+exports.buildEventRows = buildEventRows;
 /** The prefs that follow from the rows: only delivering and explicit cells are kept. */
 function prefsFromRows(rows) {
     var _a;
@@ -82,6 +70,7 @@ function prefsFromRows(rows) {
     }
     return out;
 }
+exports.prefsFromRows = prefsFromRows;
 const cellWord = (cell) => (cell === 'na' ? 'Unavailable' : (0, notify_1.modeWord)(cell));
 exports.cellWord = cellWord;
 const SHORT = { instant: 'Inst', digest: 'Dig', off: 'Off' };
@@ -92,6 +81,7 @@ function compactSummary(row, active) {
         return c === active ? `{inverse}${tok}{/inverse}` : tok;
     }).join(' ');
 }
+exports.compactSummary = compactSummary;
 /** Every width the Events view uses, from the screen width alone. */
 function columnPlan(width) {
     if (width < 80)
@@ -103,6 +93,7 @@ function columnPlan(width) {
     const spare = width - used - 3;
     return { compact: false, nameW, cellW, descW: spare >= 24 ? Math.min(spare, 60) : 0 };
 }
+exports.columnPlan = columnPlan;
 const OPEN = '{inverse}';
 const SHUT = '{/inverse}';
 /** One Events row. `active` is the channel the cursor is on (its cell is drawn inverse). */
@@ -116,6 +107,7 @@ function eventRowText(row, plan, active) {
     const desc = plan.descW > 0 ? ` ${clip(row.blurb, plan.descW)}` : '';
     return ` ${clip(row.label, plan.nameW).padEnd(plan.nameW)}${cells}${desc}`;
 }
+exports.eventRowText = eventRowText;
 /** The column heads; empty at 40, where each row says what its tokens mean. */
 function headerText(plan) {
     if (plan.compact)
@@ -123,6 +115,7 @@ function headerText(plan) {
     const heads = exports.CHANNELS.map((c) => exports.CHANNEL_WORD[c].padEnd(plan.cellW)).join('');
     return ` ${'Event'.padEnd(plan.nameW)}${heads}${plan.descW > 0 ? ' About' : ''}`;
 }
+exports.headerText = headerText;
 // ---------------------------------------------------------------- detail
 /** The channel rows of one event's detail view. */
 function detailRows(row, width, active) {
@@ -131,9 +124,11 @@ function detailRows(row, width, active) {
         return clip(c === active ? `${OPEN}${cell}${SHUT}` : cell, width + (c === active ? OPEN.length + SHUT.length : 0));
     });
 }
+exports.detailRows = detailRows;
 function followRows(conferences, follows, width) {
     return conferences.map((c) => clip(` [${follows.includes(c.id) ? 'x' : ' '}] ${c.id} ${c.name}`, width));
 }
+exports.followRows = followRows;
 // ---------------------------------------------------------------- delivery
 exports.DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 const hh = (h) => `${String(h).padStart(2, '0')}:00`;
@@ -144,8 +139,12 @@ exports.digestWords = digestWords;
 function pushWords(f) {
     if (!f.web)
         return 'Push needs the web terminal';
-    return f.pushDeliverable ? 'Off in this browser' : 'Not available on this board yet';
+    if (!f.pushDeliverable)
+        return 'Not available on this board yet';
+    const n = f.pushBrowsers ?? 0;
+    return n > 0 ? `On in ${n} browser${n === 1 ? '' : 's'}  (Enter turns it off)` : 'Off  (Enter turns it on here)';
 }
+exports.pushWords = pushWords;
 /** The Delivery view's rows. At 40 the label and the value stack on one row each, clipped. */
 function deliveryRows(f, width) {
     const email = !f.emailDeliverable ? 'Not set up on this board'
@@ -162,6 +161,7 @@ function deliveryRows(f, width) {
     ];
     return lines.map(([id, name, value]) => ({ id, text: clip(` ${name.padEnd(width < 80 ? 6 : 17)} ${value}`, width) }));
 }
+exports.deliveryRows = deliveryRows;
 const HM = /^(\d{1,2})(?::(\d{2}))?$/;
 function hourOf(text) {
     const m = HM.exec(text.trim());
@@ -190,6 +190,7 @@ function parseQuiet(text) {
         return { ok: false, error: 'Type two times, like 22:00 to 07:00, or none.' };
     return { ok: true, value: { quietFrom: from, quietTo: to } };
 }
+exports.parseQuiet = parseQuiet;
 /** `daily 8`, `daily 08:00`, `weekly monday 18`. */
 function parseDigest(text) {
     const words = text.trim().toLowerCase().split(/\s+/).filter((w) => w !== 'at' && w !== 'on');
@@ -205,6 +206,7 @@ function parseDigest(text) {
     }
     return bad;
 }
+exports.parseDigest = parseDigest;
 function explainVerify(reason, attemptsLeft) {
     switch (reason) {
         case 'no-address': return 'Your account has no email address yet.';
@@ -218,6 +220,7 @@ function explainVerify(reason, attemptsLeft) {
         default: return 'That did not work.';
     }
 }
+exports.explainVerify = explainVerify;
 /** The footer: F1 Help  F2 Address  F3 Quiet Hours  F4 Test  Esc Exit. */
 exports.HINTS = [
     { key: 'F1', does: 'Help' }, { key: 'F2', does: 'Address' }, { key: 'F3', does: 'Quiet Hours' },

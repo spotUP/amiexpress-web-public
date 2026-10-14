@@ -22,7 +22,7 @@ const sysops = new Set<string>();
 const access = new Map<string, Set<number>>();
 function deps(over: Partial<NotificationsDeps> = {}): NotificationsDeps {
   return {
-    rawDb: () => handle, now: () => 1_000_000, smtpConfigured: async () => true, pushAvailable: () => false,
+    rawDb: () => handle, now: () => 1_000_000, smtpConfigured: async () => true, pushAvailable: () => false, vapidKey: () => null, pushSender: async () => ({ ok: false, error: 'no subscribed browser', retry: true }),
     conferences: async () => [{ id: 1, name: 'General' }, { id: 2, name: 'Secret' }],
     hasConfAccess: (_d, u, c) => access.get(u)?.has(c) ?? false,
     isSysop: (_d, u) => sysops.has(u),

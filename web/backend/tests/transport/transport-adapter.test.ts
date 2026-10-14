@@ -187,6 +187,7 @@ const PINNED_EVENT_NAMES: ReadonlyArray<string> = [
   'matchmaking:queue_population',
   'modem-speed',
   'network-pong',
+  'notify:push-subscribe',
   'olm-quiet-status',
   'operator:accept-queued',
   'operator:active-chats',
@@ -613,7 +614,9 @@ describe('TP-3 - the adapter: one ruling for every event name', () => {
     // 246 as of 2026-10-04: the five `transfer:*` names left with the dead
     // socket channel that sent them, which read and wrote any path a
     // visitor named (open-surface audit).
-    expect(ruled.length).toBe(246);
+    // 247 as of 2026-10-14: `notify:push-subscribe`, web-only - NOTIFY's
+    // Enable push asking the caller's browser to subscribe (notify/push.ts).
+    expect(ruled.length).toBe(247);
 
     // (c) every ruling's note is non-empty - the point of the table is the
     // written reason, not the classification.
@@ -682,7 +685,7 @@ describe('TP-3 - the adapter: one ruling for every event name', () => {
       // 118 (2026-09-28): `retry-login` gone with RL's web branch.
       // 114 (2026-10-04): the five `transfer:*` names gone with the dead
       // socket channel that read and wrote any path a visitor named.
-      'web-only': 114,
+      'web-only': 115, // 115 (2026-10-14): `notify:push-subscribe`, NOTIFY's Enable push.
       // 105 (2026-09-24): `terminal-type-settled`, the telnet connection's
       // own end-of-TTYPE signal to its session start.
       'not-transport': 105,

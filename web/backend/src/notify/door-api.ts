@@ -16,9 +16,11 @@
  *               from the disk record) is refused, the whole call with it
  *   test        one item through the real sender for the channel
  *
- * Push is a seam: `deliverable.push` is false until the caller-push phase (N5)
- * wires a sender; `pushAvailable` below is the one line that phase changes.
- * enablePush / disablePush are declared there, not here.
+ * Push: `deliverable.push` is the board's ability to push at all (VAPID keys),
+ * NOT the session's: a telnet caller who set Push on the web must still be able
+ * to save other cells, which `set` refuses for any delivering cell the board
+ * cannot deliver. enablePush is the web-only part (it needs a browser to ask);
+ * disablePush needs none. See push.ts.
  */
 import type Database from 'better-sqlite3';
 import {
@@ -34,9 +36,10 @@ import { diskHasConfAccess, diskIsSysop } from './account';
 import { productionDoorEvents } from './door-events';
 import type { ChannelSender } from './dispatcher';
 import { makeEmailSender } from './email';
+import { makePushSender, productionPushDeps, requestPushSubscription, vapidKey } from './push';
 import { boardTimeZone } from './intake';
 import {
-  accountEmail, addInbox, getFollows, getPrefs, getSettings, markOffered, sameAddress, setFollows, setPrefs, setSettings,
+  accountEmail, addInbox, erasePushSubscriptions, getFollows, notifyPushCount, getPrefs, getSettings, markOffered, sameAddress, setFollows, setPrefs, setSettings,
 } from './repository';
 import { confirmEmail, productionVerifyDeps, startEmailVerification } from './verify';
 import type { VerifyDeps } from './verify';
@@ -48,8 +51,14 @@ export interface NotificationsDeps {
   /** Epoch seconds. */
   now: () => number;
   smtpConfigured: () => Promise<boolean>;
-  /** N5 changes this: true once a caller-push sender is wired. */
+  /** The board can push at all: VAPID keys are configured. */
   pushAvailable: () => boolean;
+  /** The VAPID public key a browser subscribes with. */
+  vapidKey: () => string | null;
+  /** The push sender Send Test calls directly (online suppression lives in the dispatcher). */
+  pushSender: ChannelSender;
+  /** How long enablePush waits for the browser, ms. */
+  pushTimeoutMs?: number;
   conferences: () => Promise<{ id: number; name: string }[]>;
   hasConfAccess: (db: Db, userId: string, conferenceId: number) => boolean;
   isSysop: (db: Db, userId: string) => boolean;
@@ -65,7 +74,9 @@ export const productionNotificationsDeps = (): NotificationsDeps => ({
   rawDb: () => (boardDb as any).db as Db | undefined,
   now: () => Math.floor(Date.now() / 1000),
   smtpConfigured: isSmtpConfigured,
-  pushAvailable: () => false,
+  pushAvailable: productionPushDeps().enabled,
+  vapidKey,
+  pushSender: makePushSender(productionPushDeps()),
   conferences: async () => (await boardDb.getConferences()).map((c: any) => ({ id: Number(c.id), name: String(c.name ?? '') })),
   hasConfAccess: diskHasConfAccess,
   isSysop: diskIsSysop,
@@ -121,6 +132,8 @@ export function checkSettings(raw: unknown): { ok: true; settings: NotifySetting
 export function doorNotificationsApi(
   session: { user?: { id?: string | number } | null },
   deps: NotificationsDeps = productionNotificationsDeps(),
+  /** The caller's own socket; absent for a session with no browser. */
+  socket?: { emit: (event: string, payload: unknown) => unknown },
 ): DoorNotificationsApi {
   /** The caller's id and the board's handle, or a refusal; there is no other source of "who". */
   const who = (): { db: Db; userId: string } => {
@@ -151,6 +164,7 @@ export function doorNotificationsApi(
       settings,
       follows: getFollows(db, userId),
       email: { address, verified: sameAddress(stored.emailVerified, address) },
+      pushBrowsers: notifyPushCount(db, userId),
     };
   };
 
@@ -235,7 +249,26 @@ export function doorNotificationsApi(
         const res = await deps.emailSender(userId, [item], false);
         return res.ok ? { ok: true as const, detail: 'Sent. Check your mail.' } : { ok: false as const, error: res.error };
       }
-      return { ok: false as const, error: 'push is not available yet' };
+      const res = await deps.pushSender(userId, [item], false);
+      return res.ok ? { ok: true as const, detail: 'Sent. It arrives on your subscribed browsers.' }
+        : { ok: false as const, error: res.error === 'no subscribed browser' ? 'Turn push on in a browser first.' : res.error };
+    },
+
+    async enablePush() {
+      who();
+      if (!deps.pushAvailable()) return { ok: false as const, error: 'push is not set up on this board' };
+      if (!socket || ((session as { connectionType?: string }).connectionType ?? 'web') !== 'web') {
+        return { ok: false as const, error: 'push needs the web terminal' };
+      }
+      return requestPushSubscription(session, socket, {
+        enabled: deps.pushAvailable, vapidKey: deps.vapidKey, timeoutMs: deps.pushTimeoutMs,
+      });
+    },
+
+    async disablePush() {
+      const { db, userId } = who();
+      const n = erasePushSubscriptions(db, userId);
+      return { ok: true as const, detail: n > 0 ? 'Push is off.' : 'Push was already off.' };
     },
   };
 }

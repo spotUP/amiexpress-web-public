@@ -28,6 +28,7 @@ import { db } from '../database';
 import { boardTimeZone } from './intake';
 import { deliverBoard } from './board';
 import { productionEmailSender } from './email';
+import { productionPushSender } from './push';
 import { isLoggedOn } from './presence';
 import {
   due, getSettings, markFailed, NOTIFY_MAX_AGE_SECONDS, purgeOlderThan, purgeSentLog, recordSent, remove, retime, sentSince,
@@ -98,7 +99,7 @@ export function productionDispatcherDeps(io: unknown): DispatcherDeps {
     now: () => Date.now(),
     log: (line) => console.log(line),
     boardZone: boardTimeZone,
-    senders: { email: productionEmailSender() },
+    senders: { email: productionEmailSender(), push: productionPushSender() },
     showBoard: (userId, item) => deliverBoard(io, userId, item, { rawDb, now: () => Date.now() }),
     isOnline: isLoggedOn,
   };

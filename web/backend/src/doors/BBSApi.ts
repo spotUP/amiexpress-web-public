@@ -1874,7 +1874,7 @@ console.log(`[BBSApi.executeCommand] Queued command for after door exit: ${comma
    */
   notifications(): import('@amiexpress/bbs-door-sdk/formats/notify').DoorNotificationsApi {
     const { doorNotificationsApi } = require('../notify/door-api');
-    return doorNotificationsApi(this.session);
+    return doorNotificationsApi(this.session, undefined, this.socket);
   }
 
   /**

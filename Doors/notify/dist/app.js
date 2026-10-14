@@ -1,8 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.startNotify = startNotify;
-exports.createApp = createApp;
-exports.runDoor = runDoor;
+exports.runDoor = exports.createApp = exports.startNotify = void 0;
 /**
  * NOTIFY - choose how the board reaches you.
  *
@@ -134,7 +132,7 @@ async function startNotify(session) {
     };
     const settingsRows = () => (0, layout_1.deliveryRows)({
         address: state?.email.address ?? null, verified: state?.email.verified ?? false,
-        emailDeliverable: cat.deliverable.email, pushDeliverable: cat.deliverable.push, web: web(),
+        emailDeliverable: cat.deliverable.email, pushDeliverable: cat.deliverable.push, pushBrowsers: state?.pushBrowsers ?? 0, web: web(),
         settings: state.settings, boardZone: cat.boardZone,
     }, rowWidth);
     const show = (next) => {
@@ -320,13 +318,31 @@ async function startNotify(session) {
         const res = await api.test(channel);
         note(res.ok ? res.detail : res.error);
     };
+    /** Enter on the Push row: subscribe this browser, or stop push to every browser of the caller. */
+    const togglePush = async () => {
+        if (!web()) {
+            note('Push needs the web terminal.');
+            return;
+        }
+        if (!cat.deliverable.push) {
+            note('Push is not set up on this board.');
+            return;
+        }
+        const turnOff = (state?.pushBrowsers ?? 0) > 0;
+        if (!turnOff)
+            note('Allow notifications in your browser when it asks.');
+        const res = turnOff ? await api.disablePush() : await api.enablePush();
+        await load();
+        show('delivery');
+        note(res.ok ? res.detail : res.error);
+    };
     const pickDelivery = async (id) => {
         switch (id) {
             case 'email':
                 await verifyAddress();
                 return;
             case 'push':
-                note(web() ? 'Push is not available on this board yet.' : 'Push needs the web terminal.');
+                await togglePush();
                 return;
             case 'quiet':
                 await editQuiet();
@@ -486,12 +502,15 @@ async function startNotify(session) {
         done: finished,
     };
 }
+exports.startNotify = startNotify;
 async function createApp(session) {
     const door = await startNotify(session);
     await door.done;
 }
+exports.createApp = createApp;
 async function runDoor(bbs, session) {
     await createApp({ ...(session || {}), bbs });
 }
+exports.runDoor = runDoor;
 exports.default = runDoor;
 //# sourceMappingURL=app.js.map

@@ -166,7 +166,7 @@ export async function startNotify(session: DoorSession): Promise<Notify> {
 
   const settingsRows = (): Array<{ id: DeliveryId; text: string }> => deliveryRows({
     address: state?.email.address ?? null, verified: state?.email.verified ?? false,
-    emailDeliverable: cat.deliverable.email, pushDeliverable: cat.deliverable.push, web: web(),
+    emailDeliverable: cat.deliverable.email, pushDeliverable: cat.deliverable.push, pushBrowsers: state?.pushBrowsers ?? 0, web: web(),
     settings: state!.settings, boardZone: cat.boardZone,
   }, rowWidth);
 
@@ -307,10 +307,22 @@ export async function startNotify(session: DoorSession): Promise<Notify> {
     note(res.ok ? res.detail : res.error);
   };
 
+  /** Enter on the Push row: subscribe this browser, or stop push to every browser of the caller. */
+  const togglePush = async (): Promise<void> => {
+    if (!web()) { note('Push needs the web terminal.'); return; }
+    if (!cat.deliverable.push) { note('Push is not set up on this board.'); return; }
+    const turnOff = (state?.pushBrowsers ?? 0) > 0;
+    if (!turnOff) note('Allow notifications in your browser when it asks.');
+    const res = turnOff ? await api!.disablePush() : await api!.enablePush();
+    await load();
+    show('delivery');
+    note(res.ok ? res.detail : res.error);
+  };
+
   const pickDelivery = async (id: DeliveryId): Promise<void> => {
     switch (id) {
       case 'email': await verifyAddress(); return;
-      case 'push': note(web() ? 'Push is not available on this board yet.' : 'Push needs the web terminal.'); return;
+      case 'push': await togglePush(); return;
       case 'quiet': await editQuiet(); return;
       case 'zone': await editZone(); return;
       case 'digest': await editDigest(); return;

@@ -44,6 +44,7 @@ import { enhancePrompt, analyzePrompt, enhanceAudioDescription, analyzeAudioDesc
 import { reloadDoorCommands } from '../handlers/command-execution.handler';
 import { getConferenceDir } from '../utils/file-hold.util';
 import { webTerminalGate, isReservedPath } from './web-terminal-gate';
+import { serveRootServiceWorker } from './root-service-worker';
 import { bareEmulatorPage } from './beeb-bare-page';
 import { ROM_COOKIE, romAccessHolder, cookieValue, queryWithoutGrant } from './beeb-rom-access';
 import { AdminPermissionsHandler } from '../handlers/admin/admin-permissions.handler';
@@ -365,6 +366,10 @@ console.error(`[Static] ${name} index.html not found: ${indexPath}`);
   // Serve SDK Preview at /sdk/
   const sdkPreviewPath = join(projectRoot, 'sdk/tools/preview/frontend/dist');
   serveSPA('/sdk', sdkPreviewPath, 'SDK Preview');
+
+  // Root-scope service worker for callers' push (NOTIFY). Before the static
+  // handlers below, which would otherwise answer /sw.js with the SPA page.
+  app.get('/sw.js', webTerminalGate, serveRootServiceWorker(projectRoot));
 
   // Serve Admin Config at /admin/
   const adminConfigPath = join(projectRoot, 'web/config-app/dist');

@@ -328,6 +328,8 @@ export interface NotifyState {
   /** Conference ids followed for file.new. */
   follows: number[];
   email: { address: string | null; verified: boolean };
+  /** Browsers of this caller that receive push; 0 or absent = none. */
+  pushBrowsers?: number;
 }
 
 export type NotifySetResult = { ok: true; state: NotifyState } | { ok: false; error: string };
@@ -357,6 +359,13 @@ export interface DoorNotificationsApi {
   confirmEmail(code: string): Promise<NotifyConfirmResult>;
   /** One test item through the real sender for `channel`. */
   test(channel: NotifyChannel): Promise<NotifyTestResult>;
+  /**
+   * Web terminal only. Asks THIS browser to subscribe (the browser may show a
+   * permission prompt) and resolves when it has answered, or after a minute.
+   */
+  enablePush(): Promise<NotifyTestResult>;
+  /** Stops push to every browser of this caller (a lost device cannot be asked). */
+  disablePush(): Promise<NotifyTestResult>;
 }
 
 /** The full word for a mode, as the screens print it. */

@@ -160,6 +160,8 @@ export interface DeliveryFacts {
   verified: boolean;
   emailDeliverable: boolean;
   pushDeliverable: boolean;
+  /** Browsers of this caller that receive push. */
+  pushBrowsers?: number;
   /** The caller is on the web terminal (the only place push can be turned on). */
   web: boolean;
   settings: NotifySettings;
@@ -168,9 +170,11 @@ export interface DeliveryFacts {
 
 export type DeliveryId = 'email' | 'push' | 'quiet' | 'zone' | 'digest' | 'pause' | 'test';
 
-export function pushWords(f: Pick<DeliveryFacts, 'pushDeliverable' | 'web'>): string {
+export function pushWords(f: Pick<DeliveryFacts, 'pushDeliverable' | 'web' | 'pushBrowsers'>): string {
   if (!f.web) return 'Push needs the web terminal';
-  return f.pushDeliverable ? 'Off in this browser' : 'Not available on this board yet';
+  if (!f.pushDeliverable) return 'Not available on this board yet';
+  const n = f.pushBrowsers ?? 0;
+  return n > 0 ? `On in ${n} browser${n === 1 ? '' : 's'}  (Enter turns it off)` : 'Off  (Enter turns it on here)';
 }
 
 /** The Delivery view's rows. At 40 the label and the value stack on one row each, clipped. */

@@ -1581,6 +1581,15 @@ const NAMED_RULINGS: Readonly<Record<string, EventRuling>> = {
     "server-side meaning (transportState.inputMode on the connection, shared " +
     "with door:input-mode) that it has never had on any transport.",
   },
+  "notify:push-subscribe": {
+    kind: "web-only",
+    note:
+    "NOTIFY's Enable push: asks THIS browser to register the root service " +
+    "worker and subscribe (notify/push.ts requestPushSubscription, consumer " +
+    "packages/terminal/src/components/BBSTerminal.tsx). A byte transport has " +
+    "no browser to subscribe; the door API refuses enablePush there. Its " +
+    "reply, notify:push-subscription, is a socket.on and out of this table's scope.",
+  },
   "show-file-upload": {
     kind: "web-only",
     note:
