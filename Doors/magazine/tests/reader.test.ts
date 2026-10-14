@@ -1142,7 +1142,7 @@ export async function aC64CallerAndAFortyColumnCallerGetTheSeqNotTheAns(): Promi
     try {
       const t = h.reader.overlayText().join('\n');
       assert.ok(t.includes('placeholder art'), `${w} petscii=${petscii}: the .seq title (small-letter placeholder note)`);
-      assert.ok(!t.includes('«') && /[\u2581-\u2584]/.test(t), 'PETSCII glyphs, not Amiga ones');
+      assert.ok(!t.includes('«') && /[\u2500-\u259f]/.test(t), 'PETSCII glyphs, not Amiga ones');
       for (const r of h.reader.overlayText()) assert.ok(r.length <= 40, `${w}: row of ${r.length}`);
     } finally { await finish(h, b); }
   }
@@ -1154,9 +1154,9 @@ export async function aBannerTakesItsRowsFromThePanelAndEachViewHasItsOwn(): Pro
   try {
     h.reader.press('c', 'c');
     const bare = buildLayout(80, 24, { ticker: true });
-    assert.strictEqual(h.reader.layout.bannerRows, 4);
-    assert.strictEqual(h.reader.layout.panelHeight, bare.panelHeight - 4, 'the panel is four rows shorter');
-    assert.strictEqual(h.reader.layout.panelTop, bare.panelTop + 4);
+    assert.strictEqual(h.reader.layout.bannerRows, 3);
+    assert.strictEqual(h.reader.layout.panelHeight, bare.panelHeight - 3, 'the panel is three rows shorter');
+    assert.strictEqual(h.reader.layout.panelTop, bare.panelTop + 3);
     assert.ok(noSpaces(h.reader.bannerText()).includes('FRONTPAGE'), 'the front page banner');
     assert.ok(h.reader.panelRows().length <= h.reader.layout.panelHeight);
     h.reader.press('c', 'c');

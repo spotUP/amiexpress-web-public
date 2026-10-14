@@ -209,3 +209,21 @@ export async function theRowsOfEachWordInTheTitleShareTheirLeftColumn(): Promise
     assert.strictEqual(new Set(word.map((r) => r.length)).size, 1, `row widths ${word.map((r) => r.length).join(', ')}`);
   }
 }
+
+export async function noGeneratedPieceCarriesTheCyanFrequencyWave(): Promise<void> {
+  // Sysop 2026-10-14: the cyan square-wave band is gone from every piece. ANSI: _/¯\__/¯¯\_ ; PETSCII: lower blocks a4 af b9 a2 b9 af a4.
+  const wavePet = Buffer.from([0xa4, 0xaf, 0xb9, 0xa2, 0xb9, 0xaf, 0xa4, 0x20]);
+  let n = 0;
+  for (const name of ART_NAMES) {
+    const ans = fs.readFileSync(path.join(SHIPPED, `${name}.ans`)).toString('latin1');
+    assert.ok(!ans.includes('/\xaf\\__/\xaf\xaf\\'), `${name}.ans carries the wave`);
+    assert.ok(!ans.includes('_/\xaf\\_'), `${name}.ans carries wave fragments`);
+    assert.ok(!fs.readFileSync(path.join(SHIPPED, `${name}.seq`)).includes(wavePet), `${name}.seq carries the wave`);
+    n += 1;
+  }
+  assert.ok(n >= 15, `checked ${n} pieces`);
+  // And the generator itself no longer makes one.
+  for (const [file, buf] of buildAll()) {
+    assert.ok(!buf.toString('latin1').includes('/\xaf\\__/\xaf\xaf\\'), `generator still emits the wave in ${file}`);
+  }
+}

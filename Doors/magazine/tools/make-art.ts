@@ -15,7 +15,7 @@
  * goes in `<board root>/Magazine/art/<name>.ans|.seq` and wins.
  *
  * LOOK: a signal terminal. Black screen, neon cyan / magenta / green, a
- * waveform for a rule, wide letter-spaced captions - not a diskmag copy.
+ * magenta rules, wide letter-spaced captions - not a diskmag copy.
  */
 import * as fs from 'fs';
 import * as path from 'path';
@@ -48,12 +48,6 @@ const paint = (runs: readonly Run[]): string => runs.map(([c, t]) => `${c}${t}`)
 
 const pad = (n: number): string => ' '.repeat(Math.max(0, n));
 const centred = (width: number, runs: readonly Run[]): Run[] => [[C.reset, pad(Math.floor((width - visible(runs)) / 2))], ...runs];
-
-/** The signal rule: a waveform of latin1 line characters, `width` cells. */
-function wave(width: number): string {
-  const unit = '_/¯\\__/¯¯\\_';
-  return unit.repeat(Math.ceil(width / unit.length)).slice(0, width);
-}
 
 /** Letters spaced out: "FRONT PAGE" -> "F R O N T   P A G E". */
 const spaced = (s: string): string => s.split('').join(' ').replace(/ {3}/g, '   ');
@@ -102,14 +96,13 @@ function ansBytes(rows: readonly string[], opts: { clear?: boolean } = {}): Buff
   return buf;
 }
 
-/** A banner: waveform, caption, tagline, rule. Four rows, 80 wide. */
+/** A banner: caption, tagline, rule. Three rows, 80 wide. */
 function ansBanner(label: string, tagline: string, ink: string, inkDim: string): Buffer {
   const width = 80;
   const caption: Run[] = [[C.reset, ' '], [inkDim, '« '], [ink, spaced(label)], [inkDim, ' »']];
   const note: Run[] = [[C.grey, `${PLACEHOLDER_NOTE} `]];
   const gap = width - visible(caption) - visible(note);
   return ansBytes([
-    paint([[C.cyanDim, wave(width)]]),
     paint([...caption, [C.reset, pad(gap)], ...note]),
     paint([[C.reset, ' '], [C.greenDim, '¦ '], [C.green, tagline]]),
     paint([[C.magentaDim, '¯'.repeat(width)]]),
@@ -122,7 +115,6 @@ function ansTitle(): Buffer {
   const unknown = wordmark('UNKNOWN');
   const frequency = wordmark('FREQUENCY');
   return ansBytes([
-    paint([[C.cyanDim, wave(W)]]),
     paint([[C.grey, ' // incoming transmission ' + '·'.repeat(W - 27)]]),
     '',
     paint(the),
@@ -130,7 +122,6 @@ function ansTitle(): Buffer {
     '',
     ...frequency.map((r) => paint(centred(W, [[C.magenta, r]]))),
     '',
-    paint([[C.cyanDim, wave(W)]]),
     '',
     paint(centred(W, [[C.green, 'S I G N A L   T E R M I N A L']])),
     paint(centred(W, [[C.greenDim, 'news from the edge of the network']])),
@@ -142,7 +133,6 @@ function ansTitle(): Buffer {
     paint(centred(W, [[C.white, 'press any key to tune in']])),
     '',
     paint([[C.magentaDim, '¯'.repeat(W)]]),
-    paint([[C.cyanDim, wave(W)]]),
   ], { clear: true });
 }
 
@@ -152,12 +142,10 @@ function ansGoodbye(): Buffer {
     '',
     '',
     '',
-    paint([[C.cyanDim, wave(W)]]),
     '',
     paint(centred(W, [[C.magenta, 'S I G N A L   L O S T']])),
     paint(centred(W, [[C.greenDim, 'the frequency stays open · tune in again']])),
     '',
-    paint([[C.cyanDim, wave(W)]]),
     '',
     paint(centred(W, [[C.grey, `${PLACEHOLDER_NOTE} - Magazine/art/mag_goodbye.ans`]])),
   ], { clear: true });
@@ -165,7 +153,6 @@ function ansGoodbye(): Buffer {
 
 function ansLoading(): Buffer {
   return ansBytes([
-    paint([[C.cyanDim, wave(80)]]),
     paint([[C.reset, ' '], [C.cyan, 'T U N I N G'], [C.greenDim, '  ['], [C.green, '»»»»»»»»'], [C.grey, '········'], [C.greenDim, ']']]),
     paint([[C.reset, ' '], [C.grey, `${PLACEHOLDER_NOTE} - loading`]]),
   ]);
@@ -173,7 +160,6 @@ function ansLoading(): Buffer {
 
 function ansLogoSmall(): Buffer {
   return ansBytes([
-    paint([[C.cyanDim, wave(80)]]),
     paint([[C.reset, ' '], [C.cyan, 'THE UNKNOWN '], [C.magenta, 'FREQUENCY'], [C.greenDim, '  //  signal terminal'], [C.grey, `   ${PLACEHOLDER_NOTE}`]]),
     paint([[C.magentaDim, '¯'.repeat(80)]]),
   ]);
@@ -208,8 +194,6 @@ const PET = {
 // Graphics, by PETSCII code (the board's lowercase bank): lower blocks and the horizontal line.
 const G = { lower1: 0xa4, lower2: 0xaf, lower3: 0xb9, lower4: 0xa2, line: 0xc0 } as const;
 
-const WAVE_UNIT = [G.lower1, G.lower2, G.lower3, G.lower4, G.lower3, G.lower2, G.lower1, 0x20];
-
 /** ASCII to the PETSCII code of the board's bank: capitals shifted ($C1-$DA), small letters $41-$5A. */
 function petCode(ch: string): number {
   const c = ch.charCodeAt(0);
@@ -242,11 +226,6 @@ class Seq {
     this.put(...Array(width - left - s.length).fill(0x20));
     return this.ctl(PET.rvsOff);
   }
-  wave(colour: number): this {
-    this.colour(colour);
-    for (let i = 0; i < 40; i++) this.put(WAVE_UNIT[i % WAVE_UNIT.length]);
-    return this.eol();
-  }
   rule(colour: number): this {
     this.colour(colour);
     for (let i = 0; i < 40; i++) this.put(G.line);
@@ -276,7 +255,6 @@ const seq = (): Seq => new Seq().ctl(PET.clear);
 
 function seqBanner(label: string, tagline: string, band: number, ink: number): Buffer {
   return seq()
-    .wave(PET.darkGrey)
     .band(band, label).eol()
     .centre(ink, tagline.toLowerCase())
     .centre(PET.darkGrey, 'placeholder art')
@@ -285,14 +263,12 @@ function seqBanner(label: string, tagline: string, band: number, ink: number): B
 
 function seqTitle(): Buffer {
   return seq()
-    .wave(PET.darkGrey)
     .centre(PET.darkGrey, '// incoming transmission')
     .blank()
     .centre(PET.purple, 't  h  e')
     .band(PET.cyan, 'UNKNOWN').eol()
     .band(PET.purple, 'FREQUENCY').eol()
     .blank()
-    .wave(PET.darkGrey)
     .blank()
     .centre(PET.green, 's i g n a l   t e r m i n a l')
     .centre(PET.lightGreen, 'news from the edge of the network')
@@ -307,19 +283,16 @@ function seqTitle(): Buffer {
     .centre(PET.white, 'press any key to tune in')
     .blank()
     .rule(PET.purple)
-    .wave(PET.darkGrey)
     .buffer();
 }
 
 function seqGoodbye(): Buffer {
   return seq()
     .blank().blank().blank().blank()
-    .wave(PET.darkGrey)
     .blank()
     .centre(PET.purple, 's i g n a l   l o s t')
     .centre(PET.lightGreen, 'the frequency stays open')
     .blank()
-    .wave(PET.darkGrey)
     .blank()
     .centre(PET.darkGrey, 'placeholder art - goodbye')
     .buffer();
@@ -327,7 +300,6 @@ function seqGoodbye(): Buffer {
 
 function seqLoading(): Buffer {
   return seq()
-    .wave(PET.darkGrey)
     .colour(PET.cyan).text('t u n i n g ').colour(PET.green).text('<<<<<<<<').colour(PET.darkGrey).text('........').eol()
     .centre(PET.darkGrey, 'placeholder art - loading')
     .buffer();
@@ -335,7 +307,6 @@ function seqLoading(): Buffer {
 
 function seqLogoSmall(): Buffer {
   return seq()
-    .wave(PET.darkGrey)
     .colour(PET.cyan).text('THE UNKNOWN ').colour(PET.purple).text('FREQUENCY').eol()
     .centre(PET.darkGrey, 'placeholder art')
     .buffer();
