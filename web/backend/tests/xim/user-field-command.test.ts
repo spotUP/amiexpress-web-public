@@ -13,7 +13,7 @@ jest.mock('../../src/utils/error-handling.util', () => ({ ErrorHandler: { permis
 // A pass-through wrapper: the real rules run, and the sentinel counts the calls.
 jest.mock('../../src/services/user-settings/w-fields', () => {
   const actual = jest.requireActual('../../src/services/user-settings/w-fields');
-  return { ...actual, applyWField: jest.fn(actual.applyWField) };
+  return { ...actual, applyWField: jest.fn(actual.applyWField), wFieldChoices: jest.fn(actual.wFieldChoices) };
 });
 const doors: any[] = [];
 jest.mock('../../src/handlers/command-handler/dependency-injection', () => ({ getDoors: () => doors }));
@@ -100,4 +100,19 @@ test('the sentinel: a SET reaches applyWField exactly once', async () => {
   spy.mockClear();
   await userFieldAnswer('SET 5 555-9999', caller(), socket);
   expect(spy).toHaveBeenCalledTimes(1);
+});
+
+test('the list the caller was shown decides a choice answer, even when the list changes before his SET', async () => {
+  const wf = require('../../src/services/user-settings/w-fields');
+  const s = caller();
+  wf.wFieldChoices.mockImplementationOnce(async () => ['Alpha', 'Beta', 'Gamma']);
+  expect(await userFieldAnswer('CHOICES 9 0', s, socket)).toBe('Alpha');
+  wf.wFieldChoices.mockImplementation(async () => ['Xray', 'Yankee', 'Zulu']);
+  try {
+    expect(await userFieldAnswer('CHOICES 9 1', s, socket)).toBe('Beta'); // from the snapshot, no re-read
+    expect(await userFieldAnswer('SET 9 2', s, socket)).toBe('OK\tBeta');
+    expect(s.user.screenType).toBe('Beta');
+  } finally {
+    wf.wFieldChoices.mockImplementation(jest.requireActual('../../src/services/user-settings/w-fields').wFieldChoices);
+  }
 });

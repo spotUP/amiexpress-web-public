@@ -28,6 +28,7 @@
 import * as deasync from "deasync";
 import { isPumping } from '../../api/pump-owner';
 import { asyncWaitEnabled } from '../../api/wait-budget';
+import { XIMCommand } from '../../xim/types';
 import type { LibraryManager } from "../../LibraryManager.js";
 import type { MoiraEmulator } from "../../cpu/MoiraEmulator.js";
 import type { XIMProtocol } from "../../XIMProtocol.js";
@@ -62,7 +63,18 @@ const BLOCKING_COMMANDS = [6, 0, 5, 15, 9]; // JH_HK=6, JH_LI=0, JH_PM=5, JH_Ext
 // posted through the board, the board saved message 324, and the door read
 // "READY" - the answer from before SEND - and told the caller it was not
 // posted (headless harness, 2026-10-04).
-const ASYNC_OUTPUT_COMMANDS = [7, 8, 507, 617, 618, 10300, 10500];
+//
+// 10600 AEW_USERFIELD awaits the account save and the user files before it
+// answers, and the door reads the answer from String the moment it is
+// released: the same race. THIS LIST IS THE SECOND STEP THAT GETS FORGOTTEN -
+// the first is isIOCommand in xim/command-classes.ts. A board-own command
+// whose handler awaits belongs in both.
+export const ASYNC_OUTPUT_COMMANDS: readonly number[] = [
+  7, 8, 507, 617, 618,
+  XIMCommand.AEW_SETPOINTER,
+  XIMCommand.AEW_POSTMSG,
+  XIMCommand.AEW_USERFIELD,
+];
 
 /** 5 s wall-clock deadline mirrors AEDoorLibrary.waitForReply. */
 const ASYNC_HANDLER_DEADLINE_MS = 5000;

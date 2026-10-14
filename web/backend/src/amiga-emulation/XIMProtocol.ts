@@ -1040,7 +1040,14 @@ debugLog(`[XIMProtocol]   Wrote tooltype value="${tooltypeValue}", StringPtr not
        * String and its length in Data, the ae_field_exchange contract.
        */
       case XIMCommand.AEW_USERFIELD: {
-        const answer = await userFieldAnswer(String(msg.string || ''), this.bbsSession as unknown as BBSSession, this.socket);
+        let answer = '';
+        try {
+          answer = await userFieldAnswer(String(msg.string || ''), this.bbsSession as unknown as BBSSession, this.socket);
+        } catch (err) {
+          // An empty answer is "this board cannot answer": the door leaves
+          // rather than waiting for a reply that never comes. No value logged.
+          debugLog(`[XIMProtocol] AEW_USERFIELD failed: ${err instanceof Error ? err.message : 'error'}`);
+        }
         this.messageParser.writeString(msg.msgAddr + DoorConstants.MESSAGE_STRING_OFFSET, answer, 200);
         debugLog(`[XIMProtocol] AEW_USERFIELD ${loggableXimString(msg.command, msg.data, msg.string).split(' ')[0]} -> ${answer.length} bytes`);
         this.sendReply(msg, answer.length);

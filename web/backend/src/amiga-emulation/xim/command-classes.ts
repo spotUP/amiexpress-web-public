@@ -39,6 +39,8 @@ export function isIOCommand(command: number): boolean {
     // theme picker asked on every open, got "UNHANDLED COMMAND: 10100" and
     // an empty reply, and drew every theme in the classic palette. The
     // handler was fine; the route was missing.
+    // A handler that AWAITS needs a second line too: ASYNC_OUTPUT_COMMANDS in
+    // session/lifecycle/door-message-callbacks.ts, or the door is released early.
     // AEW_SETPOINTER writes the caller's pointer through loadMsgPointers /
     // saveMsgPointers, so it is asynchronous too and belongs here for the
     // same reason - and this is the line the comment above warns about.

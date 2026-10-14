@@ -38,6 +38,13 @@ export function sanitiseFieldValue(raw: string): string {
   return raw.replace(/[\x00-\x1f\x7f]/g, '');
 }
 
+/**
+ * The list a caller was shown for a choice row, taken at `CHOICES n 0` and
+ * served until his SET: the answer is a position in THAT list, and the list
+ * (a DB read for rows 8 and 9) may change underneath him.
+ */
+const shownChoices = new WeakMap<object, { n: number; titles: string[] }>();
+
 const clip = (s: string): string => (s.length > USERFIELD_WIRE_MAX ? s.slice(0, USERFIELD_WIRE_MAX) : s);
 
 async function answerOutcome(session: BBSSession, outcome: WFieldOutcome): Promise<string> {
@@ -84,6 +91,7 @@ export async function userFieldAnswer(request: string, session: BBSSession, sock
         ErrorHandler.permissionDenied(socket as never, 'edit user information');
         return 'NO';
       }
+      shownChoices.delete(session);
       setEnvStat(session, EnvStat.STATS); // express.e:25720
       return 'OK';
     case 'GET':
@@ -93,7 +101,10 @@ export async function userFieldAnswer(request: string, session: BBSSession, sock
       const n = parseInt(gap < 0 ? rest : rest.slice(0, gap), 10);
       if (!isWFieldNumber(n)) return '';
       const value = sanitiseFieldValue(gap < 0 ? '' : rest.slice(gap + 1));
-      return answerOutcome(session, await applyWField(session, n, value));
+      const shown = shownChoices.get(session);
+      const opts = shown && shown.n === n ? { choices: shown.titles } : {};
+      shownChoices.delete(session);
+      return answerOutcome(session, await applyWField(session, n, value, opts));
     }
     case 'PASSWORD': {
       const tab = rest.indexOf('\t');
@@ -104,7 +115,13 @@ export async function userFieldAnswer(request: string, session: BBSSession, sock
       const [nText, iText] = rest.split(' ');
       const n = parseInt(nText, 10);
       if (!isWFieldNumber(n)) return '';
-      return clip(sanitiseFieldValue((await wFieldChoices(n))[parseInt(iText, 10)] ?? ''));
+      const i = parseInt(iText, 10);
+      let shown = shownChoices.get(session);
+      if (i === 0 || !shown || shown.n !== n) {
+        shown = { n, titles: await wFieldChoices(n) };
+        shownChoices.set(session, shown);
+      }
+      return clip(sanitiseFieldValue(shown.titles[i] ?? ''));
     }
     case 'DOORS':
       return doorRow(session, parseInt(rest, 10));

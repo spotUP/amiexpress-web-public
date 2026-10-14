@@ -13,7 +13,8 @@ import { XIMCommand } from './types';
 export function loggableXimString(command: number, data: number, text: string | undefined): string {
   const s = text ?? '';
   if (command === XIMCommand.DT_PASSWORD && data === 0) return s ? '[password withheld]' : '';
-  if (command === XIMCommand.AEW_USERFIELD && /^PASSWORD\b/.test(s)) return 'PASSWORD [withheld]';
+  // SET 6 is refused (the password is PASSWORD's) but still carries plaintext.
+  if (command === XIMCommand.AEW_USERFIELD && /^(PASSWORD|SET 6)\b/.test(s)) return 'PASSWORD [withheld]';
   return s;
 }
 
