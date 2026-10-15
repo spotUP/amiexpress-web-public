@@ -154,6 +154,7 @@ struct menudoor {
     char notice[40];                  /* shown in the status row instead of the description, until the next key */
     char status_drawn[100];           /* the status row as the caller sees it; "" until a frame has drawn it */
     int status_valid;                 /* 0 = the row is not on the glass (a fresh frame is about to draw it) */
+    char pager_drawn[24];             /* the "Page n of m" at the right of the status row; "" when none */
     char title[32];
     int rail_tick;
     int gone;                         /* the caller hung up */
@@ -219,9 +220,9 @@ static void draw_status(struct menudoor *d, int full)
 {
     level *lv = cur(d);
     ui_screen *sc = &d->screen;
-    char line[100];
+    char line[100], pager[24];
     const char *text = "";
-    int width, first;
+    int width, first, room;
 
     if (d->notice[0]) text = d->notice;
     else if (lv->menu.entry_count > 0 && lv->grid.selected < lv->menu.entry_count)
@@ -229,8 +230,15 @@ static void draw_status(struct menudoor *d, int full)
     line[0] = ' ';
     strncpy(line + 1, text, sizeof line - 2);
     line[sizeof line - 1] = '\0';
-    if (full || !d->status_valid) {
-        ui_status_draw(&sc->buf, lv->lay.status_row, 1, sc->cols, line, "", UI_TOKEN(UI_T_BAR_INK), UI_TOKEN(UI_T_BAR));
+    /* A caller who reads a menu a page at a time must be told which page: the number outranks the description,
+       which gives way to it (a C64 row has no room for both in full). */
+    pager[0] = '\0';
+    if (lv->grid.mode == UI_GRID_PAGES && lv->grid.page_count > 1)
+        sprintf(pager, "Page %d of %d", ui_grid_page(&lv->grid) + 1, lv->grid.page_count);
+    room = sc->cols - (int)strlen(pager) - 2;
+    if (pager[0] && room > 0 && (int)strlen(line) > room) line[room] = '\0';
+    if (full || !d->status_valid || strcmp(pager, d->pager_drawn) != 0) {
+        ui_status_draw(&sc->buf, lv->lay.status_row, 1, sc->cols, line, pager, UI_TOKEN(UI_T_BAR_INK), UI_TOKEN(UI_T_BAR));
     } else {
         /* From the first character that differs to the end of the longer text: the shared lead stays on the glass,
            and the shorter text's tail is cleared by the padding. */
@@ -246,6 +254,7 @@ static void draw_status(struct menudoor *d, int full)
         }
     }
     strcpy(d->status_drawn, line);
+    strcpy(d->pager_drawn, pager);
     d->status_valid = 1;
 }
 
@@ -353,6 +362,19 @@ static void compose_all(struct menudoor *d)
     draw_prompt(d);
 }
 
+/* A logo is drawn by the BOARD, through the door's own output path, and it ends in an SGR reset the door never wrote:
+   the terminal is back to its default colours while the writer still believes the ground is in force. The next
+   colour the door asks for would then be judged "already set" and skipped, and a repainted cell would land on the
+   terminal's own background instead of the theme's ground (invisible on a black terminal, wrong on every other). */
+static void forget_colours(struct menudoor *d)
+{
+    ansi_buf *b = &d->screen.buf;
+    b->last_fg = -1;
+    b->last_bg = -1;
+    b->last_bold = -1;
+    b->last_reverse = 0;
+}
+
 /* Logos are the board's: it draws them through the door's own output path, so a wipe capture includes them. */
 static void draw_between(struct menudoor *d)
 {
@@ -360,6 +382,7 @@ static void draw_between(struct menudoor *d)
     int row = ui_grid_band_row(&lv->grid);
     if (row && lv->lay.band_height > 0)
         ae_menu_logo_draw("between", row, lv->grid.left, lv->lay.band_height, lv->lay.band_cols);
+    forget_colours(d);
 }
 
 static void draw_logos(struct menudoor *d)

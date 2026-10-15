@@ -22,6 +22,7 @@ int ae_field_write(int field, const char *value) { (void)field; (void)value; ret
 int ae_query_bit(int acs) { (void)acs; return 1; }
 
 #define CAT_PATH "build/test_mainmenu.cat"
+static const char *size_text = "80\t25";
 static char requests[2048];
 static char screen_text[65536];
 
@@ -39,7 +40,7 @@ static int board(void *ctx, int field, const char *request, char *out, int cap)
     out[0] = '\0';
     if (field != AE_FIELD_MENU && field != AE_FIELD_SCREEN) return 0;
     strcat(requests, request); strcat(requests, "|");
-    if (field == AE_FIELD_SCREEN) return strcmp(request, "SIZE") == 0 ? answer("80\t25", out, cap) : 0;
+    if (field == AE_FIELD_SCREEN) return strcmp(request, "SIZE") == 0 ? answer(size_text, out, cap) : 0;
     if (strcmp(request, "OVERFLOW?") == 0) return answer("default\tpages", out, cap);
     if (strncmp(request, "OPEN ", 5) == 0) return answer("OK\t" CAT_PATH, out, cap);
     if (strncmp(request, "RUN ", 4) == 0) return answer("OK", out, cap);
@@ -88,6 +89,33 @@ int main(void)
     drive("qms\r", 4, &rc);                                 /* q on an empty line leaves; nothing after it is read */
     assert(rc == 0 && !strstr(requests, "RUN"));
     printf("  [OK] q on an empty line leaves the door without running anything\n");
+
+    /* Pages mode: the status row says which page the caller is on, and the description gives way to it. */
+    f = fopen(CAT_PATH, "wb");
+    assert(f);
+    fputs("AEMENU 1\nK MAIN\t-\nT MAIN MENU\nP Menu: \nO pages\nW -\t-\t-\nR 0\nS Messages\n", f);
+    {
+        int i;
+        for (i = 0; i < 30; i++) fprintf(f, "E K%d\tLabel %d\tA long description of what this entry does for the caller\t\t\n", i, i);
+    }
+    fputs(".\n", f);
+    fclose(f);
+    size_text = "40\t25";
+    invoked_name = "MENU";
+    drive("\x1b", 1, &rc);
+    assert(rc == 0 && strstr(screen_text, "Page 1 of 2"));
+    printf("  [OK] pages mode names the page in the status row\n");
+    drive("\x1b[6~\x1b", 5, &rc);                          /* PgDn turns the page: the status row follows */
+    assert(rc == 0 && strstr(screen_text, "Page 2 of 2"));
+    printf("  [OK] a page turn updates the page number\n");
+    size_text = "80\t25";
+    f = fopen(CAT_PATH, "wb");
+    assert(f);
+    fputs("AEMENU 1\nK MAIN\t-\nT MAIN MENU\nP Menu: \nO scroll\nW -\t-\t-\nR 0\nS Messages\nE R\tRead Mail\tRead your mail\t\t\n.\n", f);
+    fclose(f);
+    drive("\x1b", 1, &rc);
+    assert(rc == 0 && !strstr(screen_text, "Page "));
+    printf("  [OK] scroll mode shows no page number\n");
 
     invoked_name = "MENUSETTINGS";
     drive("\x1b", 1, &rc);
