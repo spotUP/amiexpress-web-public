@@ -112,7 +112,6 @@ const PINNED_EVENT_NAMES: ReadonlyArray<string> = [
   'cursor-style',
   'data',
   'disconnect',
-  'disconnecting',
   'door-active',
   'door:await-key',
   'door:close',
@@ -617,9 +616,7 @@ describe('TP-3 - the adapter: one ruling for every event name', () => {
     // visitor named (open-surface audit).
     // 247 as of 2026-10-14: `notify:push-subscribe`, web-only - NOTIFY's
     // Enable push asking the caller's browser to subscribe (notify/push.ts).
-    // 248 as of 2026-10-15: `disconnecting`, not-transport - the session link re-raises
-    // socket.io's own event to its listeners (server/session-link.ts).
-    expect(ruled.length).toBe(248);
+    expect(ruled.length).toBe(247);
 
     // (c) every ruling's note is non-empty - the point of the table is the
     // written reason, not the classification.
@@ -691,8 +688,7 @@ describe('TP-3 - the adapter: one ruling for every event name', () => {
       'web-only': 115, // 115 (2026-10-14): `notify:push-subscribe`, NOTIFY's Enable push.
       // 105 (2026-09-24): `terminal-type-settled`, the telnet connection's
       // own end-of-TTYPE signal to its session start.
-      // 106 (2026-10-15): `disconnecting`, the session link's re-raise of socket.io's own event.
-      'not-transport': 106,
+      'not-transport': 105,
     });
   });
 
@@ -775,8 +771,7 @@ describe('TP-3 - the adapter: one ruling for every event name', () => {
     expect(messageArm?.sites.length).toBe(1);
     // 7 as of 2026-09-28: server/session-rooms.ts emitToMembers, the chat and
     // room forwarder whose names grep A now reads from its call sites.
-    // 8 as of 2026-10-15: server/session-link.ts, the web caller's link forwarding to its raw socket.
-    expect(FORWARDING_EMIT_SITES.length).toBe(8);
+    expect(FORWARDING_EMIT_SITES.length).toBe(7);
     for (const s of FORWARDING_EMIT_SITES) expect(s.why.length).toBeGreaterThan(20);
     for (const p of PATTERN_RULINGS) expect(p.ruling.note.length).toBeGreaterThan(40);
   });

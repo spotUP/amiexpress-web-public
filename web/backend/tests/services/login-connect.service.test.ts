@@ -208,10 +208,7 @@ describe('runPreLoginConnect — connect-time unification', () => {
         expect(typeof handlers.connection).toBe('function');
         await handlers.connection(socket);
         expect(mockReached).toHaveLength(1);
-        // The web caller's emitter is the session's LINK over his socket
-        // (server/web-connection.ts), not the raw socket.
-        expect(mockReached[0].emitter).toBe(mockReached[0].session.webLink);
-        expect(mockReached[0].emitter.raw).toBe(socket);
+        expect(mockReached[0].emitter).toBe(socket);
         expect(mockReached[0].session).toEqual(expect.objectContaining({ nodeId: 6, connectionType: 'web' }));
       } finally {
         assign?.mockRestore();
