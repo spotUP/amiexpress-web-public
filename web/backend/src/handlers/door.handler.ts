@@ -512,6 +512,7 @@ import { withDoorReporting } from '../achievements/sites';
 import { MOUSE_REPORTING_OFF } from '../utils/terminal-modes';
 import { boardRoot } from '../utils/board-root.util';
 import { ensureDoorLogLine } from '../utils/door-logging.util';
+import { inputForTrace } from '../amiga-emulation/xim/secret-input';
 import * as menuTail from './commands/menu-door-exit';
 export { MOUSE_REPORTING_OFF };
 
@@ -3063,11 +3064,9 @@ console.log(`[executeAmigaDoor] Set session.inDoorManager=true, door-active: tru
     session.doorInputHandler = (data: string) => {
       try {
         const shared: any = (amigaSession as any).sharedState || {};
-console.log(`[executeAmigaDoor] doorInputHandler received: "${data}" (len=${data.length}) hasXIM=${!!shared.ximProtocol} hasFIM=${!!shared.fimProtocol}`);
+console.log(`[executeAmigaDoor] doorInputHandler received: "${inputForTrace(session, data, (s) => s)}" (len=${data.length}) hasXIM=${!!shared.ximProtocol} hasFIM=${!!shared.fimProtocol}`);
         logDoorDebug(
-          `KEY door=${door.command || door.id || 'UNK'} data=${JSON.stringify(
-            data
-          )}`
+          `KEY door=${door.command || door.id || 'UNK'} data=${inputForTrace(session, data, (s) => JSON.stringify(s))}`
         );
         routeAmigaDoorInput(shared, data);
         // A MENU door the caller never touched is not a door that ran (menu-door-exit). After the routing and in

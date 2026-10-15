@@ -43,6 +43,8 @@
  *   5. DOS stdin fallback — only when nothing above consumed the input,
  *      preventing double-delivery.
  */
+import { inputTraceText } from './xim/secret-input';
+
 export interface DoorInputRoutingTargets {
   fimProtocol?: { queueInput(data: string): void } | null;
   dreamDoorLibrary?: {
@@ -83,7 +85,7 @@ export function routeAmigaDoorInput(
    * instead of from a guess.
    */
   console.log(
-    `[DoorInput] ${shared.ximProtocol?.isSecretInput?.() ? `<${data.length} bytes withheld>` : JSON.stringify(data)} -> ` +
+    `[DoorInput] ${inputTraceText(!!shared.ximProtocol?.isSecretInput?.(), data, (s) => JSON.stringify(s))} -> ` +
       `fim=${!!shared.fimProtocol} dd=${!!shared.dreamDoorLibrary?.isActive?.()} ` +
       `xim=${!!shared.ximProtocol} tim=${!!shared.timHandler?.isWaitingForInput?.()}`,
   );

@@ -8,7 +8,7 @@
  * provides a central location for all Socket.IO event registration.
  */
 
-import { doorInputTraceLine } from '../amiga-emulation/xim/secret-input';
+import { doorInputTraceLine, inputForTrace } from '../amiga-emulation/xim/secret-input';
 import { Server as SocketIOServer, Socket } from 'socket.io';
 import { keyBytesFor } from './composed-key';
 import { db } from '../database';
@@ -387,8 +387,8 @@ console.error('[SOCKET-DEBUG] PING TEST RECEIVED!', data);
       return;
     }
 
-console.log('[socket-handlers] door:input received:', JSON.stringify(data));
-    logDoorDebug(`SOCKET door:input data=${JSON.stringify(data)} node=${session.nodeId} state=${session.subState} door=${(session as any).doorId || ''}`);
+console.log('[socket-handlers] door:input received:', inputForTrace(session, data, (s) => JSON.stringify(s)));
+    logDoorDebug(`SOCKET door:input data=${inputForTrace(session, data, (s) => JSON.stringify(s))} node=${session.nodeId} state=${session.subState} door=${(session as any).doorId || ''}`);
 
     if (session.inDoorManager && session.doorInputHandler) {
 console.log('[socket-handlers] Calling doorInputHandler from door:input');

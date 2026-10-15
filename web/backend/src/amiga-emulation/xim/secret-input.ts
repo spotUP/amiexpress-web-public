@@ -22,7 +22,12 @@ export function isSecretInput(session: object | null | undefined): boolean {
 
 /** What a keystroke trace may say about `data`: its content, or only its size while a secret is typed. A mouse report (AEW_SCREEN MOUSE ON) is named, never printed: a hover is dozens a second. */
 export function inputForTrace(session: object | null | undefined, data: string, render: (s: string) => string): string {
-  return isSecretInput(session) ? `<${data.length} bytes withheld>` : render(data.replace(/\x1b\[<\d+;\d+;\d+[Mm]/g, '<mouse>'));
+  return inputTraceText(isSecretInput(session), data, render);
+}
+
+/** The redaction itself, for a caller that already holds the secret flag (door-input-router asks the XIM protocol, not the session). */
+export function inputTraceText(secret: boolean, data: string, render: (s: string) => string): string {
+  return secret ? `<${data.length} bytes withheld>` : render(data.replace(/\x1b\[<\d+;\d+;\d+[Mm]/g, '<mouse>'));
 }
 
 /** The TRACE_DOOR_INPUT line (socket-handlers traceDoorInput): the same redaction as the other two input traces. */
