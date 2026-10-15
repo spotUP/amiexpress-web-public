@@ -63,6 +63,12 @@ KNOWN_PROMPTS = [
     (re.compile(r"^\s*TIP OF THE DAY$"), "\r", "press a key"),
 ]
 MENU_PROMPT = re.compile(r"\]\s*Menu \(\d+ mins?\. left\):$", re.I)
+# The menu door (MAINMENU) stands in front of the main prompt when the board
+# shows menus. Its bottom row, with nothing typed, is a hint and a key bar
+# ending "Esc Prompt" (or "Esc/q Prompt"); the cursor is parked, so the row is
+# read whole. Esc on that empty line hands back the board's own prompt.
+# Source: sdk/c/examples/mainmenu/mainmenu.c keybar, sdk/c/src/menudoor.c.
+MENU_DOOR_ROW = re.compile(r"Esc(/q)? Prompt\s*$")
 DEFAULT_LOG = os.path.join(tempfile.gettempdir(), "bbs-screen.log")
 
 
@@ -168,6 +174,22 @@ class Board:
             row = self.screen.display[self.screen.cursor.y]
             return row[: self.screen.cursor.x].rstrip()
 
+    def row(self) -> str:
+        """The cursor's whole row, also what lies right of the cursor."""
+        with self.lock:
+            return self.screen.display[self.screen.cursor.y].rstrip()
+
+    def at_menu(self) -> bool:
+        """At the main prompt: the board's own, or the menu door in front of
+        it, which Esc puts away so the caller types at the board's prompt."""
+        if MENU_PROMPT.search(self.prompt()):
+            return True
+        if not MENU_DOOR_ROW.search(self.row()):
+            return False
+        self.send("\x1b")
+        self.settle(1.2, 10.0)
+        return bool(MENU_PROMPT.search(self.prompt()))
+
     def advance(self, user: str, password: str, stop_at_menu: bool = True, limit: int = 60) -> str:
         """Answer the prompts this knows, reading the screen before each one,
         until the menu prompt - or until the board asks something unknown,
@@ -180,7 +202,7 @@ class Board:
             # (a 68K door can sit silent for seconds). Give it time before
             # calling it anything.
             waited = 0.0
-            while not here and waited < 30.0:
+            while not here and waited < 30.0 and not MENU_DOOR_ROW.search(self.row()):
                 self.settle(2.0, 10.0)
                 waited += 2.0
                 here = self.prompt()
@@ -191,8 +213,8 @@ class Board:
                     shown = "<password>" if "{password}" in keys else repr(answer)
                     log.append(f"[{why}] {here[-60:]!r} -> {shown}")
                     break
-            if MENU_PROMPT.search(here):
-                log.append(f"[menu] {here[-60:]!r}")
+            if self.at_menu():
+                log.append(f"[menu] {self.prompt()[-60:]!r}")
                 break
             if answer is None:
                 # Not a question this knows - but the board may simply still

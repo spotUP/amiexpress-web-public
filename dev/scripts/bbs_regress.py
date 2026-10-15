@@ -35,7 +35,7 @@ import traceback
 from typing import Callable
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from bbs_screen import MENU_PROMPT, Board  # noqa: E402
+from bbs_screen import Board  # noqa: E402
 from bbs_telnet import credentials  # noqa: E402
 
 REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
@@ -95,9 +95,9 @@ def to_menu(b: Board, timeout: float = 40.0) -> None:
     start = time.time()
     while time.time() - start < timeout:
         b.settle(0.8, 10.0)
-        here = b.prompt()
-        if MENU_PROMPT.search(here):
+        if b.at_menu():
             return
+        here = b.prompt()
         if PAUSE.search(here) or PRESS_KEY.search(here):
             b.send("\r")
             continue
@@ -114,7 +114,7 @@ def read_protocol(b: Board) -> str:
     expect(b, r"Which to change <CR>=QUIT \?$", "the W menu")
     m = PROTOCOL_ROW.search(expect_on_screen(b, r"\[\s*11\] TRANSFER PROTOCOL.*$", "the protocol row"))
     b.send("\r")
-    expect(b, MENU_PROMPT, "the menu after W")
+    to_menu(b)
     return m.group(1).strip() if m else ""
 
 
@@ -128,7 +128,7 @@ def set_protocol(b: Board, name: str) -> None:
     row = expect_on_screen(b, r"\[\s*11\] TRANSFER PROTOCOL.*$", "the protocol row")
     check(row.upper().rstrip().endswith(name.upper()), f"protocol row says {row!r}, wanted {name}", b)
     b.send("\r")
-    expect(b, MENU_PROMPT, "the menu after W")
+    to_menu(b)
 
 
 def answer_leftovers(b: Board) -> None:
@@ -543,14 +543,14 @@ def call(args: argparse.Namespace, watch: bool, quick: bool = True) -> Board:
         expect(b, r"\(A/R/P/P8/T/N\).*\?$", "the graphics prompt")
         b.send("AQ\r")
     log = b.advance(args.user, args.password)
-    if not MENU_PROMPT.search(b.prompt()):
+    if not b.at_menu():
         raise Failed("login did not reach the menu:\n" + log)
     return b
 
 
 def hang_up(b: Board) -> None:
     try:
-        if MENU_PROMPT.search(b.prompt()):
+        if b.at_menu():
             b.send("G\r")
             b.settle(1.0, 5.0)
             if re.search(r"\(Y/N\)\??$", b.prompt()):

@@ -71,5 +71,56 @@ class MailFoundAtLogon(unittest.TestCase):
         self.assertEqual(login_contract(HEARD, [GLC_WHOLE, SAMI_WHOLE, scan_asked, TIP]), [])
 
 
+
+class MenuDoorAtTheMainPrompt(unittest.TestCase):
+    # 2026-10-16: the menu door (MAINMENU) stands in front of the main prompt;
+    # the live login reached it and the contract failed "did not reach the
+    # menu", because only the board's own text prompt counted as the menu.
+    NAVIGATING = "Arrows and Enter, or type a command          Arrows Move  Enter Run  Esc Prompt"
+    BOARD_PROMPT = "[Main] Menu (59 mins. left):"
+
+    class FakeBoard:
+        def __init__(self, row, after_esc):
+            self.cursor_row, self.after_esc, self.sent = row, after_esc, []
+
+        def prompt(self):
+            return self.cursor_row if self.cursor_row.endswith(":") else ""
+
+        def row(self):
+            return self.cursor_row
+
+        def send(self, keys, secret=False):
+            self.sent.append(keys)
+            if keys == "\x1b":
+                self.cursor_row = self.after_esc
+
+        def settle(self, quiet=0.8, limit=10.0):
+            pass
+
+    def test_the_menu_door_rows_are_recognised(self):
+        from bbs_screen import MENU_DOOR_ROW
+        for row in (self.NAVIGATING, "Arrows or type    Enter Run  Esc Prompt", "Arrows Move  Enter Run  Esc/q Prompt"):
+            self.assertTrue(MENU_DOOR_ROW.search(row), row)
+        # Typing, and a child list, are not the main prompt.
+        for row in ("] Menu (59 mins. left): W    Enter Run  Tab Show  Esc Clear", "Arrows Move  Enter Run  Esc Back"):
+            self.assertFalse(MENU_DOOR_ROW.search(row), row)
+
+    def test_esc_puts_the_menu_door_away_and_the_board_prompt_counts(self):
+        from bbs_screen import Board
+        b = self.FakeBoard(self.NAVIGATING, self.BOARD_PROMPT)
+        self.assertTrue(Board.at_menu(b))
+        self.assertEqual(b.sent, ["\x1b"])
+
+    def test_the_board_prompt_alone_needs_no_key(self):
+        from bbs_screen import Board
+        b = self.FakeBoard(self.BOARD_PROMPT, "")
+        self.assertTrue(Board.at_menu(b))
+        self.assertEqual(b.sent, [])
+
+    def test_a_menu_door_that_does_not_leave_is_not_the_menu(self):
+        from bbs_screen import Board
+        self.assertFalse(Board.at_menu(self.FakeBoard(self.NAVIGATING, self.NAVIGATING)))
+
+
 if __name__ == "__main__":
     unittest.main()
