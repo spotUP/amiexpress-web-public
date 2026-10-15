@@ -49,6 +49,7 @@ export interface SystemConfig {
   default_time_limit: number; // -1 unlimited
   max_session_time: number;   // -1 unlimited
   idle_timeout: number;
+  web_resume_minutes: number;
 
   // New User Defaults
   new_user_sec_level: number;

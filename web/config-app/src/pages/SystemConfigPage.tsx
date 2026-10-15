@@ -689,6 +689,24 @@ export function SystemConfigPage() {
                 ))}
               </select>
             </div>
+
+            <div>
+              <label htmlFor="web_resume_minutes" className="label">
+                Minutes a dropped web session waits to be resumed
+              </label>
+              <TooltypeKey field="web_resume_minutes" />
+              <input
+                id="web_resume_minutes"
+                type="number"
+                min={0}
+                max={120}
+                {...register('web_resume_minutes', { min: 0, max: 120, valueAsNumber: true })}
+                className="input-field w-full"
+              />
+              <span className="text-xs text-content-secondary">
+                0 ends a dropped call at once, as telnet does.
+              </span>
+            </div>
           </div>
         </div>
         )}

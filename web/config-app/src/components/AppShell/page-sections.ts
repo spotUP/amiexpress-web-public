@@ -72,7 +72,7 @@ export const SYSTEM_CONFIG_SECTIONS: PageSection[] = [
   {
     name: 'Session Settings',
     category: 'Security & Access',
-    fields: ['default_time_limit', 'max_session_time', 'idle_timeout'],
+    fields: ['default_time_limit', 'max_session_time', 'idle_timeout', 'web_resume_minutes'],
     keywords: ['time limit', 'timeout', 'call length'],
   },
   {

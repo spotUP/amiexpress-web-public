@@ -235,6 +235,13 @@ export interface BBSConfigData {
    */
   timeout_lc?: boolean;
   /**
+   * `WEB_RESUME_MINUTES` - how long a web session whose connection dropped
+   * (a phone locked, a tunnel, a tab closed) waits to be resumed before the
+   * board treats it as a dropped carrier. 0 ends a dropped call at once, as
+   * telnet does. Board-own: express.e has no parked state.
+   */
+  web_resume_minutes?: number;
+  /**
    * `REGKEY` (express.e:31991) - the name this board is registered to, printed
    * by `VER` ("Registered to \s.", :25696) and in express's connect banner
    * (:29516).
@@ -484,6 +491,7 @@ const TOOLTYPE_MAP: Record<string, keyof BBSConfigData> = {
   'AUTOVAL_PASSWORD': 'autoval_password',
   'NEWUSER_PASSWORD': 'new_user_password',           // ACP.e:2632 express.e:30013
   'ZMODEM_PACKETLEN': 'zmodem_packetlen',            // sz -L, this port's own knob
+  'WEB_RESUME_MINUTES': 'web_resume_minutes',        // board-own: minutes a dropped web session waits to be resumed
   'TIMEOUT_LC': 'timeout_lc',                        // express.e:31826
   'REGKEY': 'reg_key',                               // express.e:31991
 
@@ -1178,6 +1186,7 @@ function getDefaultConfig(): BBSConfigData {
     new_user_password: '',
     zmodem_packetlen: 1024,
     timeout_lc: false,
+    web_resume_minutes: 10,
     reg_key: '',
     auto_deactivate_days: 0,
     local_upload_path: '',

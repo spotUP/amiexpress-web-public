@@ -56,4 +56,24 @@ describe('a board setting survives the save', () => {
     expect(() => SystemConfigSchema.partial().parse({ terminal_colours: 4 })).toThrow();
     expect(() => SystemConfigSchema.partial().parse({ terminal_colours: 256 })).toThrow();
   });
+  it('keeps web_resume_minutes through the validator the API uses, and refuses a negative one', () => {
+    expect(SystemConfigSchema.partial().parse({ web_resume_minutes: 10 })).toEqual({ web_resume_minutes: 10 });
+    expect(() => SystemConfigSchema.partial().parse({ web_resume_minutes: -1 })).toThrow();
+    expect(() => SystemConfigSchema.partial().parse({ web_resume_minutes: 121 })).toThrow();
+  });
+
+  it('writes WEB_RESUME_MINUTES to the board and reads the same answer back, defaulting to ten', () => {
+    saveBBSConfig(board, { web_resume_minutes: 0 } as never);
+
+    const text = fs.readFileSync(path.join(board, 'bbsConfig.info.txt'), 'utf8');
+    expect(text).toContain('WEB_RESUME_MINUTES=0');
+    expect(loadBBSConfig(board).web_resume_minutes).toBe(0);
+
+    const fresh = fs.mkdtempSync(path.join(os.tmpdir(), 'board-setting-'));
+    try {
+      expect(loadBBSConfig(fresh).web_resume_minutes).toBe(10);
+    } finally {
+      fs.rmSync(fresh, { recursive: true, force: true });
+    }
+  });
 });
