@@ -33,6 +33,38 @@ import { getConferenceToolFlags } from '../../utils/conference-tooltypes.util';
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const iconv = require('iconv-lite');
 
+/** `cmp.l $3022(a4),d0`: TLP2's pause-threshold compare (TLP2:0x24f4 region). */
+export const TLP2_PAUSE_COMPARE = 0xb0ac3022;
+
+/**
+ * Whether any segment of a loaded seglist holds `value` as a big-endian long
+ * at an even offset (68K instructions are word aligned). Segments use the
+ * HunkLoader layout: header at BPTR<<2 = [size in longs][next BPTR], data at
+ * header+8.
+ */
+export function segListContainsLong(
+  mem: { readMemory16(address: number): number; readMemory32(address: number): number },
+  segListBptr: number,
+  value: number
+): boolean {
+  const hi = (value >>> 16) & 0xffff;
+  const lo = value & 0xffff;
+  let bptr = segListBptr >>> 0;
+  for (let seg = 0; bptr !== 0 && seg < 256; seg++) {
+    const header = (bptr << 2) >>> 0;
+    const bytes = Math.min(mem.readMemory32(header) * 4, 0x1000000);
+    const start = header + 8;
+    let prev = -1;
+    for (let off = 0; off < bytes; off += 2) {
+      const word = mem.readMemory16(start + off);
+      if (prev === hi && word === lo) return true;
+      prev = word;
+    }
+    bptr = mem.readMemory32(header + 4) >>> 0;
+  }
+  return false;
+}
+
 export class XIMSystemCommandsHandler {
   private emulator: MoiraEmulator;
   private execLibrary: ExecLibrary;
@@ -102,6 +134,14 @@ export class XIMSystemCommandsHandler {
       this.receivedPostRegisterMessage = true;
       this.state.isNativeDoor = false; // Definitely not native
     }
+  }
+
+  /** The running door's seglist (pr_SegList) contains TLP2's pause compare. */
+  private doorCodeHasTlp2PauseCompare(): boolean {
+    const taskAddr = this.execLibrary?.getCurrentTaskAddress?.();
+    if (!taskAddr) return false;
+    const segListBptr = this.emulator.readMemory32(taskAddr + 0x80);
+    return segListContainsLong(this.emulator, segListBptr, TLP2_PAUSE_COMPARE);
   }
 
   /**
@@ -177,9 +217,17 @@ debugLog(
     // (BSS-initialized), so every line triggers a pause. Patch the BSS slot now
     // while A4 is live and the register-reply hasn't returned yet.
     // Only safe for doors that use this exact offset; TLP2 disasm confirms 0x3022.
+    //
+    // So it is done ONLY for a door whose code holds that compare. A4 is the
+    // small-data base in TLP2, but in any other door it is just a register:
+    // the C MENU door registers with A4=0x2468, and A4+0x3022 is the middle
+    // of its own ae_delay_ticks(). Writing 9999 there turned
+    // `move.l 12(sp),d2` into `move.l 0(sp),d2`, so every Delay(3) became a
+    // Delay of the caller's key code (1000/1001 ticks = 20 s) and the door
+    // froze after each key (measured 2026-10-15).
     {
       const a4 = this.emulator.getRegister(12); // A4 = register 12 in MOIRA
-      if (a4 > 0x1000) {
+      if (a4 > 0x1000 && this.doorCodeHasTlp2PauseCompare()) {
         this.emulator.writeMemory32(a4 + 0x3022, lineLen);
         debugLog(`[XIMSystem] WEB_* TLP2 BSS patch: wrote lineLen=${lineLen} to A4(0x${a4.toString(16)})+0x3022=0x${(a4+0x3022).toString(16)}`);
       }
