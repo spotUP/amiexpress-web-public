@@ -511,6 +511,7 @@ import { withDoorReporting } from '../achievements/sites';
 import { MOUSE_REPORTING_OFF } from '../utils/terminal-modes';
 import { boardRoot } from '../utils/board-root.util';
 import { ensureDoorLogLine } from '../utils/door-logging.util';
+import * as menuTail from './commands/menu-door-exit';
 export { MOUSE_REPORTING_OFF };
 
 export function isAmiga68kDoorType(t: string): boolean {
@@ -2795,7 +2796,7 @@ console.log(`[executeAmigaDoor] door.args="${door.args}" (used for DOORUSE looku
           doorArgs.push(...param.split(' ').filter((a: string) => a));
         }
       }
-console.log(`[executeAmigaDoor] Added runtime parameters: ${JSON.stringify(door.parameters)} -> doorArgs=${JSON.stringify(doorArgs)}`);
+console.log(`[executeAmigaDoor] Added runtime parameters: ${menuTail.loggableCommandParams(session, JSON.stringify(door.parameters))} -> doorArgs=${menuTail.loggableCommandParams(session, JSON.stringify(doorArgs))}`);
     }
 
     // Add doorCommand and doorId to session for XIMProtocol to access
@@ -3138,6 +3139,12 @@ console.log(`[executeAmigaDoor] Door execution completed`);
     delete session.doorInputHandler;
     session.subState = LoggedOnSubState.DISPLAY_MENU;
 
+    // The exit tail (plan M7): every command, bulletin and reopen a door asks for runs inside it. A menu
+    // door launched while ANY tail runs is parked, and the OUTERMOST tail launches it after this one has
+    // finished - so the call's stack depth is the same for the first menu pick and the hundredth.
+    const menuExit = menuTail.takeMenuExit(session);
+    menuTail.enterExitTail(session);
+    try {   // closed by the finally after applyPostDoorMenuAction below (not re-indented: it spans the whole tail)
     // Capture any return/chain/PRV/ACP requests from the door
     if (typeof (amigaSession as any).getExitState === 'function') {
       const exitState = (amigaSession as any).getExitState();
@@ -3163,6 +3170,20 @@ console.log(
             (exitState as any).bbsSession.acpCommand.command || ''
           } (code=${(exitState as any).bbsSession.acpCommand.code}, target=${(exitState as any).bbsSession.acpCommand.targetNode})`
         );
+      }
+
+      // A menu door's exit (plan M7): what the caller picked runs as typed or as a listed SysCmd (Decision
+      // 34); a bulletin is shown and B reopened (below); leaving without a pick drops to the plain prompt
+      // once (Decision 37). WEB_: the pick is carried by the board, not by the door's RETURNCOMMAND, so the
+      // typed line - which can hold a password - stays out of every log (menuTail.runRedacted).
+      {
+        const invoking = (((session as any).doorCommand) || (door as any)?.command || '').toUpperCase();
+        if (menuExit.run) {
+          (session as any).returnCommand = menuExit.run.text;
+          (session as any).returnCommandRunAs = menuExit.run.runAs;
+        } else if (!menuExit.show && invoking === 'MENU') {
+          menuTail.markMenuDoorDismissed(session);
+        }
       }
 
       // Copy flagged files from door bbsSession back to main session.
@@ -3216,8 +3237,12 @@ console.log(
               await processBBSCommand(socket, session, command, params);
               return;
             }
-            console.log(`[door.handler] Executing RETURNCOMMAND via processCommand: ${command} ${params}`);
-            await processCommand(socket, session, command, params, true);
+            console.log(`[door.handler] Executing RETURNCOMMAND via processCommand: ${command} ${menuTail.loggableCommandParams(session, params)}`);
+            // A menu door's pick runs as the caller typed it unless the board listed it as a SysCmd (Decision 34);
+            // every other returned command keeps express.e's processSysCommand meaning (allowSyscmd TRUE, express.e:28249).
+            const runAs = (session as any).returnCommandRunAs;
+            (session as any).returnCommandRunAs = undefined;
+            await processCommand(socket, session, command, params, runAs === undefined ? true : runAs === 'syscmd');
           }
         };
 
@@ -3243,7 +3268,8 @@ console.log(
             // The W door hands a settings door back as its return command and
             // asks to be reopened on the row it left (settings-resume.ts): the
             // reopen is a loop there, so the call depth does not grow per round trip.
-            await require('./commands/settings-resume').runReturnedCommand(socket, session, cmd, runCommand);
+            await menuTail.runRedacted(session, !!menuExit.run, () =>
+              require('./commands/settings-resume').runReturnedCommand(socket, session, cmd, runCommand));
           }
           if ((session as any).prvCommand) {
             const cmd = (session as any).prvCommand;
@@ -3293,7 +3319,13 @@ console.warn('[executeAmigaDoor] sysop page-wait flow failed:', err);
     // The display flow will handle showing the menu after the user dismisses the pause.
     const doorName = door?.name || door?.command || 'Unknown';
     fs.appendFileSync('/tmp/bbs-debug.log', `[${new Date().toISOString()}] executeAmigaDoor EXIT: door="${doorName}", paginatedScreen=${!!session.paginatedScreen}, returnCommand=${(session as any).returnCommand || 'NONE'}\n`);
-    await applyPostDoorMenuAction(socket, session);
+    // A bulletin that paused owns the screen until it is answered; a parked reopen owns what comes next.
+    if (menuExit.show) await menuTail.showBulletinThenReopen(socket, session, menuExit.show);
+    if (!menuTail.hasParkedDoor(session) && !menuExit.show) await applyPostDoorMenuAction(socket, session);
+    } finally {
+      menuTail.leaveExitTail(session);
+    }
+    await menuTail.drainParkedDoors(socket, session);
 
   } catch (error) {
 console.error(`[executeAmigaDoor] Error executing Amiga door:`, error);

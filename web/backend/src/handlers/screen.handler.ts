@@ -50,7 +50,7 @@ export { resolveNodeScreenDir } from '../screens/screen-resolution';
 import { SysopDebugUtil, DebugSeverity } from '../utils/sysop-debug.util';
 import { DebugLogger } from '../utils/debug-logger.util';
 import { formatBytes as formatBytesUtil } from '../utils/byte-format.util';
-import { parseWipeMCI, getWipeFrames, wipeEffectsEnabled, type WipeType } from '../utils/screen-wipe.util';
+import { parseWipeMCI, WIPE_CODES, getWipeFrames, wipeEffectsEnabled, type WipeType } from '../utils/screen-wipe.util';
 import { sessionColumns } from '../utils/door-min-columns.util';
 import { fromCharset, type OutputAttributes } from '../utils/output-pacing';
 import { playWipeFrames } from '../utils/wipe-playback';
@@ -2696,7 +2696,7 @@ export async function emitPetsciiScreen(
  * @param screenName - Name of screen to display
  * @returns true if screen was displayed successfully, false otherwise
  */
-export async function displayScreen(socket: any, session: BBSSession, screenName: string, runCommands: boolean = true, silent: boolean = false): Promise<boolean> {
+export async function displayScreen(socket: any, session: BBSSession, screenName: string, runCommands: boolean = true, silent: boolean = false, opts?: { fallbackWipe?: string }): Promise<boolean> {
   screenDebug(`[displayScreen] ========================================`);
   screenDebug(`[displayScreen] REQUESTED SCREEN: ${screenName}`);
   screenDebug(`[displayScreen] Conference ID: ${session.currentConf || 'none'}`);
@@ -2998,6 +2998,8 @@ console.log(`[NEWLINE-DEBUG] RAW CONTENT (${screenName}): ${content.length} byte
     // because inline mode emits content directly and sets parsed='',
     // preventing later wipe detection.
     const earlyWipeResult = parseWipeMCI(content);
+    // A caller of the board's own screens (menu doors, plan M7) names the wipe to play when the file has none.
+    if (!earlyWipeResult.wipeType && opts?.fallbackWipe && WIPE_CODES[opts.fallbackWipe]) earlyWipeResult.wipeType = WIPE_CODES[opts.fallbackWipe];
     const wipeCodePresent = earlyWipeResult.wipeType !== null;
     // Effects-off for a C64 or teletext caller (C64/40-col Task 8 +
     // teletext-40): the wipe does not run at all on a PETSCII or

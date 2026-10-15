@@ -26,7 +26,11 @@ export interface MenuContext { session: any; socket: any; emitDoorText(text: str
 /** The wire answers at most 198 bytes (writeMessageString, W ruling). */
 const WIRE_MAX = 198;
 
+// The top-level catalogue the door opened, and the child it is looking into (OPEN <kind> <parentKey>), if any.
+// A child never replaces the top level: the door can return to it without a new OPEN, and a RUN there must
+// still find the entries the board listed (a listed SysCmd runs as a SysCmd - Decision 34).
 const last = new WeakMap<object, Catalogue>();
+const child = new WeakMap<object, Catalogue>();
 export function lastCatalogueOf(session: object, kind: string): Catalogue | undefined {
   const c = last.get(session);
   return c && c.kind === kind ? c : undefined;
@@ -54,7 +58,8 @@ async function open(rest: string, ctx: MenuContext): Promise<string> {
   }
   if (kind === 'MAIN') built.prompt = await menuPromptTextAsync(ctx.session);
   if (parent === undefined) built.logos = chooseLogos(config, kind, caller, root);
-  last.set(ctx.session, built);
+  if (parent === undefined) { last.set(ctx.session, built); child.delete(ctx.session); }
+  else child.set(ctx.session, built);
   return `OK\t${writeCatalogueFile(root, caller.node, built, menuRowOf(ctx.session, kind))}`;
 }
 
@@ -76,7 +81,8 @@ export async function menuAnswer(request: string, ctx: MenuContext): Promise<str
   const space = text.indexOf(' ');
   const verb = space < 0 ? text : text.slice(0, space);
   const rest = space < 0 ? '' : text.slice(space + 1);
-  const cat = last.get(ctx.session);
+  const top = last.get(ctx.session);
+  const cat = child.get(ctx.session) ?? top;      // what the door is showing now
   switch (verb) {
     case 'OPEN': return open(rest, ctx);
     case 'ROW': {
@@ -96,7 +102,7 @@ export async function menuAnswer(request: string, ctx: MenuContext): Promise<str
       // The exact key of a listed entry IS picking it: the board runs that entry's runText (J: `J 3.1`),
       // and a listed SysCmd runs as a SysCmd (Decision 34). Typing the exact key of a listed entry and
       // picking it are the same line, so both are the listed entry; anything else runs as typed.
-      const listed = cat.sections.flatMap(s => s.entries).find(e => e.key.toUpperCase() === line.toUpperCase());
+      const listed = [cat, top].flatMap(c => c ? c.sections.flatMap(s => s.entries) : []).find(e => e.key.toUpperCase() === line.toUpperCase());
       armMenuRun(ctx.session, { text: listed ? listed.runText : line, runAs: listed?.runAs === 'syscmd' ? 'syscmd' : 'typed' });
       return 'OK';
     }

@@ -9,6 +9,7 @@ import { UserFlag } from '../constants/express-flags';
 import { userMayToggleBackgroundFileCheck } from '../services/background-file-check.service';
 import { changeAccount } from '../services/account.service';
 import { keysForLog } from '../utils/keys-for-log.util';
+import { loggableCommandParams } from './commands/menu-door-exit';
 import { BBSSession } from '../index';
 import { petsciiColumnsOf } from '../amiga-emulation/xim/screen-width.util';
 import { BBSState, LoggedOnSubState } from '../constants/bbs-states';
@@ -3781,7 +3782,7 @@ export async function processCommand(socket: any, session: BBSSession, command: 
     }
   };
 
-console.log(`[CommandPriority] Processing command: ${command} with params: ${params} allowSyscmd: ${allowSyscmd}`);
+console.log(`[CommandPriority] Processing command: ${command} with params: ${loggableCommandParams(session, params)} allowSyscmd: ${allowSyscmd}`);
 
   // SPECIAL CASE: "J" command with numeric params should use internal handler directly
   // This handles RETURNCOMMAND "j 2" from JoinCnf door - it means "join conference 2"
@@ -4050,7 +4051,7 @@ async function dispatchInternalCommand(
       return await handleOlm(socket, session, params);
 
     case 'LIVECHAT': // Modern Real-Time Internode Chat (Enhancement)
-console.log(' BEFORE calling handleLiveChatCommand, params:', params);
+console.log(' BEFORE calling handleLiveChatCommand, params:', loggableCommandParams(session, params));
       try {
         await handleLiveChatCommand(socket, session, params);
 console.log(' AFTER calling handleLiveChatCommand successfully');

@@ -126,6 +126,30 @@ test('RUN of a listed entry runs its runText, which may differ from its key (J\'
   } finally { registerMenuSource(original); }
 });
 
+test('a child OPEN does not replace the top-level catalogue: RUN of a top-level SysCmd still runs as a SysCmd, a child key runs its runText, and a top-level OPEN forgets the child', async () => {
+  const { menuSourceFor, registerMenuSource } = require('../../src/services/menu-catalogue/registry');
+  const original = menuSourceFor('MAIN');
+  const entry = (key: string, runText: string, runAs: 'typed' | 'syscmd') =>
+    ({ key, label: key, description: '', right: '', flags: '', runText, runAs, section: 'doors' });
+  registerMenuSource({
+    ...original,
+    entries: () => [entry('ZZ', 'ZZ', 'syscmd'), entry('3', '3', 'typed')],
+    children: (_c: unknown, parent: string) => (parent === '3' ? [entry('3.1', 'J 3.1', 'typed')] : null),
+  });
+  try {
+    const s = session();
+    await menuAnswer('OPEN MAIN', ctx(s));
+    await menuAnswer('OPEN MAIN 3', ctx(s));
+    await menuAnswer('RUN ZZ', ctx(s));
+    expect(takeMenuExit(s).run).toEqual({ text: 'ZZ', runAs: 'syscmd' });      // the top level is still listed
+    await menuAnswer('RUN 3.1', ctx(s));
+    expect(takeMenuExit(s).run).toEqual({ text: 'J 3.1', runAs: 'typed' });    // and so is the child
+    await menuAnswer('OPEN MAIN', ctx(s));                                      // back at the top: the child is gone
+    await menuAnswer('RUN 3.1', ctx(s));
+    expect(takeMenuExit(s).run).toEqual({ text: '3.1', runAs: 'typed' });
+  } finally { registerMenuSource(original); }
+});
+
 test('a failed write leaves the caller\'s choice in memory as it was', async () => {
   updateUser.mockImplementationOnce(() => Promise.reject(new Error('disk full')));
   try {
