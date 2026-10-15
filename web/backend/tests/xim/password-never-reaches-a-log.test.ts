@@ -155,6 +155,7 @@ describe('a password never reaches a log', () => {
       expect([name, text.includes(SECRET)]).toEqual([name, false]);
     }
     // The harmless AEW_MENU request IS printed where sinks print the String: the RUN line is withheld, not AEW_MENU.
+    // amigaLogFile is excluded below: it writes only `msg request: <number>` (XIMLogger.ts:210), never the String, so it cannot carry OVERFLOW?.
     // Every sink that prints the String carried it; none of them carried the RUN line.
     for (const name of ['console', 'debugLog', 'ring', 'ximDebugLogFile', 'jsonLogFile']) {
       expect([name, sinks[name].includes('OVERFLOW?')]).toEqual([name, true]);
