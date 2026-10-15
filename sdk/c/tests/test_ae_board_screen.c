@@ -11,6 +11,7 @@
 static char last_request[256];
 static int requests;
 static int silent;
+static const char *size_answer = "132\t40";
 static int queued_mouse;   /* MOUSE? answers this many events, then "" */
 
 static int answer(const char *text, char *out, int cap)
@@ -29,7 +30,7 @@ static int stand_in(void *ctx, int field, const char *request, char *out, int ca
     strncpy(last_request, request, sizeof(last_request) - 1);
     requests++;
     if (silent) return 0;
-    if (strcmp(request, "SIZE") == 0) return answer("132\t40", out, cap);
+    if (strcmp(request, "SIZE") == 0) return answer(size_answer, out, cap);
     if (strncmp(request, "WIPE IN ", 8) == 0 || strncmp(request, "WIPE OUT ", 9) == 0) return answer("OK", out, cap);
     if (strcmp(request, "WIPE END") == 0) return answer("OK", out, cap);
     if (strcmp(request, "MOUSE ON") == 0) return answer("OK", out, cap);
@@ -202,6 +203,25 @@ static void a_responsive_screen_takes_the_real_size_and_the_wide_tier(void)
     printf("  [OK] a responsive screen takes the real size; a silent board changes nothing\n");
 }
 
+/* A C64 caller: the board answers 40x25 and the profile must stay the compact one. */
+static void a_forty_column_answer_keeps_the_compact_profile(void)
+{
+    static char frame[8192], storage[AE_SESSION_MIN_STORAGE];
+    ae_session s;
+    ui_screen sc;
+    silent = 0;
+    size_answer = "40\t25";
+    assert(ae_open(&s, session_transport, 0, storage, (long)sizeof storage, 1) == 0);
+    assert(ui_screen_open_responsive(&sc, &s, frame, (long)sizeof frame) == 0);
+    assert(sc.cols == 40 && sc.rows == 25);
+    assert(sc.profile.cell_backgrounds == ui_profile_for(40).cell_backgrounds);
+    assert(sc.profile.borders == ui_profile_for(40).borders && !sc.profile.borders);
+    ui_screen_measure(&sc);
+    assert(sc.cols == 40 && sc.rows == 25);
+    size_answer = "132\t40";
+    printf("  [OK] a 40x25 answer keeps the 40x25 compact profile\n");
+}
+
 int main(void)
 {
     ae_native_set_exchange(stand_in, 0);
@@ -216,6 +236,7 @@ int main(void)
     the_wake_byte_is_a_mouse_key_and_ordinary_keys_are_themselves();
     the_tail_of_a_split_mouse_report_never_reaches_the_door_as_keys();
     a_responsive_screen_takes_the_real_size_and_the_wide_tier();
+    a_forty_column_answer_keeps_the_compact_profile();
     puts("test_ae_board_screen: OK");
     return 0;
 }
