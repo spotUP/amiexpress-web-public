@@ -515,7 +515,7 @@ static void a_double_height_headline_highlights_both_halves(void)
     bars = 0;
     inverted = storage;
     for (;;) {
-        inverted = strstr(inverted, "\x1b[0;30;47m");
+        inverted = strstr(inverted, "30;47m");
         if (!inverted) break;
         bars++;
         inverted += 1;

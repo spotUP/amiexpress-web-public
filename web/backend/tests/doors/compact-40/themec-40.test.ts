@@ -216,6 +216,10 @@ describe('THEMEC opens on a 40-column caller', () => {
    * GROUND (ESC[48;2;..] clear) instead of leaving the terminal default, so
    * the preview of another theme cannot leak the old one's background.
    */
+  (process.env.THEMEC_WRITE_FIXTURE_TO ? it : it.skip)('writes the 80-column fixture (deliberate, flagged)', async () => {
+    fs.writeFileSync(process.env.THEMEC_WRITE_FIXTURE_TO as string, await drive(80), 'latin1');
+  });
+
   it('an 80-column caller sees the door byte-for-byte as it was before the 40-column work', async () => {
     const ansi = await drive(80);
     const before = fs.readFileSync(EIGHTY_BEFORE, 'latin1');

@@ -200,9 +200,45 @@ void ansi_color(ansi_buf *b, int fg, int bg, int bold)
         && b->last_bold == (bold ? 1 : 0)) {
         return;
     }
+    {
+    /* ONLY WHAT CHANGED. SGR 0 resets the background too, so the full form
+       has to restate it; but when the terminal's colour is KNOWN (every cache
+       field >= 0) and we keep a background, the change is just what moved:
+       the pen, the background, and bold as SGR 1 / 22. A themed row used to write
+       `38;2;r;g;b;48;2;r;g;b` for every pen change - the same ground, again
+       and again (THEMEC's live preview was 4.5 KB a move). An unknown cache
+       (after a reset, a clear, a palette swap) falls through to the whole
+       sequence. */
+    int partial = b->cell_backgrounds && b->last_fg >= 0 && b->last_bg >= 0
+                  && b->last_bold >= 0
+                  && want_bg >= 0 && !want_reverse && b->last_reverse == 0;
+    int bold_moved = b->last_bold != (bold ? 1 : 0);
+    int fg_moved = b->last_fg != want_fg || bold_moved;   /* bold applies to the pen */
+    int bg_moved = b->last_bg != want_bg;
+    int lead = 0;
+
     b->last_fg = want_fg;
     b->last_bg = want_bg;
     b->last_bold = bold ? 1 : 0;
+    if (partial) {
+        put_str(b, "\033[");
+        /* SGR 1 / 22 switch intensity without touching the background (SGR 0
+           would, which is why the whole form restates it). */
+        if (bold_moved) { put_str(b, bold ? "1" : "22"); lead = 1; }
+        if (fg_moved) {
+            if (lead) put_char(b, ';');
+            if (fg_rgb >= 0) put_rgb(b, 38, (unsigned long) fg_rgb);
+            else put_int(b, 30 + pen);
+        }
+        if (bg_moved) {
+            if (fg_moved || lead) put_char(b, ';');
+            if (bg_rgb >= 0) put_rgb(b, 48, (unsigned long) bg_rgb);
+            else put_int(b, 40 + bg);
+        }
+        put_char(b, 'm');
+        return;
+    }
+    }
 
     /* INK ON A BAR, WHERE THERE ARE NO BACKGROUNDS.
      *

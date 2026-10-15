@@ -232,6 +232,10 @@ describe('SUBS on all three screens', () => {
    * screen. Everything after it was byte-identical, which is what made the
    * refresh safe to make - checked before the file was rewritten.
    */
+  (process.env.SUBS_WRITE_FIXTURE_TO ? it : it.skip)('writes the 80-column fixture (deliberate, flagged)', async () => {
+    fs.writeFileSync(process.env.SUBS_WRITE_FIXTURE_TO as string, await drive(80), 'latin1');
+  });
+
   it('an 80-column caller sees the door byte-for-byte as it was pinned', async () => {
     const ansi = await drive(80);
     const before = fs.readFileSync(EIGHTY, 'latin1');

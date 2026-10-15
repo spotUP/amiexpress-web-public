@@ -512,6 +512,18 @@ static int label_value_style(void *context, int index, int *head, int *tail)
     return index == 0 ? 7 : 0;      /* row 0 splits after "Label  ", the others are one piece */
 }
 
+/* A colour on the ground: whole ("31;44m") or, when only the pen moved, just the pen ("[31m"). */
+static const char *ink_on_ground(const char *from, const char *pen, const char *ground)
+{
+    char whole[16], bare[16];
+    const char *w, *n;
+    sprintf(whole, "%s;%sm", pen, ground);
+    sprintf(bare, "[%sm", pen);
+    w = strstr(from, whole);
+    n = strstr(from, bare);
+    return (w && (!n || w < n)) ? w : n;
+}
+
 static void a_row_can_carry_a_label_ink_and_a_value_ink(void)
 {
     ui_list list = a_list(3, 10);
@@ -527,13 +539,13 @@ static void a_row_can_carry_a_label_ink_and_a_value_ink(void)
     ansi_begin(&b, frame, (long)sizeof(frame));
     ui_list_draw(&list, &b);
     frame[b.len] = '\0';
-    head = strstr(frame, "31;44m");           /* the head ink, on the ground, before the label */
+    head = ink_on_ground(frame, "31", "44");           /* the head ink, on the ground, before the label */
     value = strstr(frame, "Label  ");
     assert(head != 0 && value != 0 && head < value);
-    assert(strstr(frame, "32;44m") != 0);      /* the tail ink, on the ground */
-    assert(strstr(frame, "32;44m") > value && strstr(frame, "32;44m") < strstr(frame, "value"));
+    assert(ink_on_ground(frame, "32", "44") != 0);      /* the tail ink, on the ground */
+    assert(ink_on_ground(frame, "32", "44") > value && ink_on_ground(frame, "32", "44") < strstr(frame, "value"));
     /* row 1 is one piece: only row 0 ever switches to the tail ink */
-    assert(strstr(strstr(frame, "32;44m") + 1, "32;44m") == 0);
+    assert(ink_on_ground(ink_on_ground(frame, "32", "44") + 1, "32", "44") == 0);
     printf("  [OK] a row can carry a label ink and a value ink, on the list's ground\n");
 }
 
