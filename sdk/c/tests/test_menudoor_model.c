@@ -250,7 +250,7 @@ static void a_picked_entry_runs_through_the_whole_shell(void)
     assert(strstr(requests, "WIPE OUT V|") && strstr(requests, "MOUSE OFF|"));
     assert(strstr(screen_text, "MAIN MENU") && strstr(screen_text, "Read Mail") && strstr(screen_text, "Scan for new mail"));
     assert(strstr(screen_text, "BBS [1:Main] Menu: "));
-    assert(strstr(screen_text, "Arrows Move  Enter Run  Esc Prompt"));       /* the key bar at 80 columns */
+    assert(strstr(screen_text, "Arrows Move  Enter Run  Esc/q Prompt"));       /* the key bar at 80 columns */
     printf("  [OK] a picked entry runs through the whole shell: open, wipe in, logo, mouse, run, row, wipe out\n");
 }
 
@@ -296,7 +296,7 @@ static void forty_columns_get_the_caret_the_short_key_bar_and_one_column(void)
     write_catalogue(CATALOGUE);
     size_reply = "80\t25";
     assert(strstr(screen_text, ">>"));                                      /* the caret marks the selection */
-    assert(strstr(screen_text, "Enter Run  Esc Prompt") && !strstr(screen_text, "Arrows Move"));
+    assert(strstr(screen_text, "Enter Run  Esc/q Prompt") && !strstr(screen_text, "Arrows Move"));
     printf("  [OK] 40 columns get the caret and the short key bar\n");
 }
 
@@ -383,10 +383,10 @@ static void the_key_bar_says_what_escape_does_at_each_depth(void)
     write_catalogue(CATALOGUE_WITH_LIST);
     mouse_queue = 0; silent_board = 0;
     assert(DRIVE("\r\x1bz\r") == 0);              /* Enter opens the list, Esc goes back up, a typed line leaves */
-    top = strstr(screen_text, "Esc Prompt");
+    top = strstr(screen_text, "Esc/q Prompt");
     child = strstr(screen_text, "Esc Back");
     assert(top && child && top < child);            /* the top level leaves to the prompt; the list says Back */
-    assert(strstr(child + 1, "Esc Prompt"));         /* and the parent's bar is drawn again after Esc */
+    assert(strstr(child + 1, "Esc/q Prompt"));         /* and the parent's bar is drawn again after Esc */
     assert(strstr(MENUDOOR_CHILD_KEYBAR_NARROW, "Esc Back"));
     write_catalogue(CATALOGUE);
     printf("  [OK] the key bar says Esc leaves at the top and goes back in a list\n");
@@ -430,6 +430,51 @@ static void one_binary_runs_the_settings_under_its_second_name_and_the_menu_othe
     printf("  [OK] one binary: settings under its second name, the menu under any other\n");
 }
 
+static const char *CATALOGUE_WITH_Q =
+    "AEMENU 1\nK MAIN\t-\nT MAIN MENU\nP Go: \nO scroll\nW -\t-\t-\nR 0\nS Messages\n"
+    "E R\tRead Mail\tRead your mail\t\t\nE Q\tQuiet Node\tQuiet this node\t\t\n.\n";
+
+static void q_on_an_empty_line_leaves_only_when_no_entry_starts_with_q(void)
+{
+    /* No Q entry: q is the leave key. The keys after it are never read, so nothing is typed. */
+    write_catalogue(CATALOGUE);
+    mouse_queue = 0; silent_board = 0;
+    assert(DRIVE("qR\r") == 0);
+    assert(typed_calls == 0 && activations == 0 && !strstr(requests, "RUN"));
+    assert(DRIVE("QR\r") == 0 && typed_calls == 0);
+    assert(strstr(screen_text, "Esc/q Prompt"));                      /* and the bar says so */
+
+    /* q after another character is plain text. */
+    assert(DRIVE("mq\r") == 0);
+    assert(typed_calls == 1 && strcmp(typed_line, "mq") == 0);
+
+    /* A Q entry exists: q is a command character, Esc is the only leave, the bar says Esc only. */
+    write_catalogue(CATALOGUE_WITH_Q);
+    assert(DRIVE("q\r") == 0);
+    assert(typed_calls == 1 && strcmp(typed_line, "q") == 0);
+    assert(strstr(screen_text, "Esc Prompt") && !strstr(screen_text, "Esc/q"));
+    size_reply = "40\t25";
+    write_catalogue("AEMENU 1\nK MAIN\t-\nT MAIN MENU\nP Go: \nO pages\nW -\t-\t-\nR 0\nS Messages\n"
+                    "E Q\tQuiet Node\tQuiet this node\t\t\n.\n");
+    assert(DRIVE("\x1b") == 0);
+    assert(strstr(screen_text, "Esc Prompt") && !strstr(screen_text, "Esc/q"));
+    write_catalogue(CATALOGUE_SHORT_PROMPT);
+    assert(DRIVE("\x1b") == 0);
+    assert(strstr(screen_text, "Esc/q Prompt"));                      /* the narrow bar too */
+    size_reply = "80\t25";
+    printf("  [OK] q leaves from an empty line only when no entry starts with q, and the bar agrees\n");
+}
+
+static void the_settings_bar_names_q_because_q_leaves(void)
+{
+    mouse_queue = 0; silent_board = 0;
+    door = run_settings;
+    assert(DRIVE("q") == 0);                                          /* q ends the screen: the run returns */
+    assert(strstr(screen_text, "Esc/q Back"));
+    door = run_menu;
+    printf("  [OK] the settings bar names q, which leaves\n");
+}
+
 int main(void)
 {
     ae_native_set_exchange(board, 0);
@@ -450,6 +495,8 @@ int main(void)
     the_key_bar_says_what_escape_does_at_each_depth();
     a_one_row_terminal_puts_the_settings_status_on_row_one();
     one_binary_runs_the_settings_under_its_second_name_and_the_menu_otherwise();
+    q_on_an_empty_line_leaves_only_when_no_entry_starts_with_q();
+    the_settings_bar_names_q_because_q_leaves();
     remove(CAT_PATH); remove("build/test_menudoor_keys.bin"); remove("build/test_menudoor_screen.bin");
     puts("test_menudoor_model: OK");
     return 0;

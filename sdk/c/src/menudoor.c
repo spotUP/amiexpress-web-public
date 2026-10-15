@@ -51,6 +51,11 @@ int md_typeahead(const ae_menu *m, const char *typed)
     return -1;
 }
 
+int md_q_leaves(const ae_menu *m)
+{
+    return m && md_typeahead(m, "q") < 0;          /* typeahead: an exact Q, else any key that starts with Q */
+}
+
 int md_digits_act(const ae_menu *m, const char *typed)
 {
     int i, exact = -1;
@@ -225,8 +230,18 @@ static void draw_prompt(struct menudoor *d)
     /* Esc leaves to the prompt at the top and goes up a level in a child list: the bar says which. */
     const char *bar = d->depth > 0 ? (wide ? MENUDOOR_CHILD_KEYBAR_WIDE : MENUDOOR_CHILD_KEYBAR_NARROW)
                                    : (wide ? spec->keybar_wide : spec->keybar_narrow);
+    char bar_q[96];
+    const char *esc;
     int row = lv->lay.prompt_row, room = sc->cols - 1, plen, blen;
 
+    /* Where q leaves too (top level, no Q entry), the bar says so: "Esc Prompt" becomes "Esc/q Prompt". */
+    if (bar && d->depth == 0 && md_q_leaves(&lv->menu) && (esc = strstr(bar, "Esc Prompt")) != 0
+        && strlen(bar) + 3 < sizeof bar_q) {
+        memcpy(bar_q, bar, (size_t)(esc - bar));
+        strcpy(bar_q + (esc - bar), "Esc/q Prompt");
+        strcat(bar_q, esc + strlen("Esc Prompt"));
+        bar = bar_q;
+    }
     line[0] = '\0';
     strncat(line, lv->menu.prompt, 72);
     strncat(line, d->typed, TYPED_MAX);
@@ -525,6 +540,8 @@ static menudoor_result loop(struct menudoor *d)
             }
             break;
         default:
+            /* Decision 37: q on an empty line leaves to the prompt, unless an entry key starts with Q (then q is a command). */
+            if ((key == 'q' || key == 'Q') && d->typed_len == 0 && d->depth == 0 && md_q_leaves(&cur(d)->menu)) return MENUDOOR_LEAVE;
             if (key < 1000) r = typed_key(d, key);
             break;
         }
@@ -663,7 +680,7 @@ static int run_settings_started(struct menudoor *d, ae_session *session)
     ui_masthead_draw_tick(&sc->buf, 1, 1, sc->cols, d->title, d->rail, UI_TOKEN(UI_T_BAR_INK), UI_TOKEN(UI_T_BAR), 0);
     ui_list_draw(&list, &sc->buf);
     ui_status_draw(&sc->buf, status_row, 1, sc->cols,
-                   sc->cols >= 80 ? " Arrows Move  Enter Choose  Esc Back" : " Enter Choose  Esc Back", "",
+                   sc->cols >= 80 ? " Arrows Move  Enter Choose  Esc/q Back" : " Enter Choose  Esc/q Back", "",
                    UI_TOKEN(UI_T_BAR_INK), UI_TOKEN(UI_T_BAR));
     ansi_cursor(&sc->buf, 0);
     ui_screen_flush(sc);

@@ -18,6 +18,8 @@ typedef struct {
 
 /** The entry to highlight for what is typed: an exact key (any case) first, else the first key it starts; -1 none. */
 int  md_typeahead(const ae_menu *m, const char *typed);
+/** Decision 37: q on an empty line leaves, but only while no entry key is Q or starts with Q (the same scan as typeahead). */
+int  md_q_leaves(const ae_menu *m);
 /** The entry to act on at once for typed digits: exactly one key equals them and no other starts with them; -1 wait. */
 int  md_digits_act(const ae_menu *m, const char *typed);
 /** Where everything goes at cols x rows. */
