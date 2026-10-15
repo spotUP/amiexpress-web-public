@@ -163,6 +163,14 @@ static struct menudoor shell;
 static char frame_buffer[49152];      /* Decision 26 */
 static char session_storage[AE_SESSION_MIN_STORAGE];
 
+/* The board's prompt as the row shows it: clipped to 72, and the ONE length drawing, parking and the typing room all use. */
+#define PROMPT_SHOWN 72
+static int prompt_len(const level *lv)
+{
+    int n = (int)strlen(lv->menu.prompt);
+    return n < PROMPT_SHOWN ? n : PROMPT_SHOWN;
+}
+
 static level *cur(struct menudoor *d) { return &d->lv[d->depth]; }
 static int ground(const struct menudoor *d)
 {
@@ -213,7 +221,7 @@ static void draw_status(struct menudoor *d, int full)
     ui_screen *sc = &d->screen;
     char line[100];
     const char *text = "";
-    int width;
+    int width, first;
 
     if (d->notice[0]) text = d->notice;
     else if (lv->menu.entry_count > 0 && lv->grid.selected < lv->menu.entry_count)
@@ -224,11 +232,18 @@ static void draw_status(struct menudoor *d, int full)
     if (full || !d->status_valid) {
         ui_status_draw(&sc->buf, lv->lay.status_row, 1, sc->cols, line, "", UI_TOKEN(UI_T_BAR_INK), UI_TOKEN(UI_T_BAR));
     } else {
-        if (strcmp(line, d->status_drawn) == 0) return;
+        /* From the first character that differs to the end of the longer text: the shared lead stays on the glass,
+           and the shorter text's tail is cleared by the padding. */
         width = (int)strlen(line) > (int)strlen(d->status_drawn) ? (int)strlen(line) : (int)strlen(d->status_drawn);
         if (width > sc->cols) width = sc->cols;
-        ansi_color(&sc->buf, UI_TOKEN(UI_T_BAR_INK), UI_TOKEN(UI_T_BAR), 0);
-        ansi_text(&sc->buf, lv->lay.status_row, 1, line, width);
+        for (first = 0; first < width; first++) {
+            char a = line[first], b = d->status_drawn[first];
+            if ((a ? a : ' ') != (b ? b : ' ')) break;
+        }
+        if (first < width) {
+            ansi_color(&sc->buf, UI_TOKEN(UI_T_BAR_INK), UI_TOKEN(UI_T_BAR), 0);
+            ansi_text(&sc->buf, lv->lay.status_row, 1 + first, line + (first < (int)strlen(line) ? first : (int)strlen(line)), width - first);
+        }
     }
     strcpy(d->status_drawn, line);
     d->status_valid = 1;
@@ -290,7 +305,7 @@ static void draw_prompt(struct menudoor *d)
         strncat(line, lead, (size_t)room);
     } else {
         line[0] = '\0';
-        strncat(line, lv->menu.prompt, 72);
+        strncat(line, lv->menu.prompt, PROMPT_SHOWN);
         strncat(line, d->typed, TYPED_MAX);
         plen = (int)strlen(line);
         if (plen > room) plen = room;
@@ -323,7 +338,7 @@ static void park_cursor(struct menudoor *d)
     level *lv = cur(d);
     int plen;
     if (d->typed_len == 0) return;
-    plen = (int)strlen(lv->menu.prompt) + d->typed_len;
+    plen = prompt_len(lv) + d->typed_len;
     if (plen > d->screen.cols - 1) plen = d->screen.cols - 1;
     ansi_goto(&d->screen.buf, lv->lay.prompt_row, 1 + plen);
 }
@@ -540,7 +555,7 @@ static int printable(int key) { return (key >= 32 && key < 127) || (key >= 160 &
 /* What the caller can see: the columns left after the prompt (one stays free), never more than the buffer. */
 static int typed_room(struct menudoor *d)
 {
-    int room = d->screen.cols - 1 - (int)strlen(cur(d)->menu.prompt);
+    int room = d->screen.cols - 1 - prompt_len(cur(d));
     return room < TYPED_MAX ? room : TYPED_MAX;
 }
 
@@ -551,7 +566,7 @@ static int bar_fits(struct menudoor *d, int typed_len)
     char bar_q[96];
     const char *bar = typed_len > 0 ? (d->screen.cols >= 80 ? MENUDOOR_TYPING_KEYBAR_WIDE : MENUDOOR_TYPING_KEYBAR_NARROW)
                                     : mode_bar(d, bar_q, sizeof bar_q);
-    int room = d->screen.cols - 1, plen = (int)strlen(cur(d)->menu.prompt) + typed_len;
+    int room = d->screen.cols - 1, plen = prompt_len(cur(d)) + typed_len;
     return bar && bar[0] && plen + 2 + (int)strlen(bar) <= room;
 }
 
@@ -559,7 +574,7 @@ static void draw_prompt_after_edit(struct menudoor *d, int was_len)
 {
     level *lv = cur(d);
     ui_screen *sc = &d->screen;
-    int plen = (int)strlen(lv->menu.prompt), width;
+    int plen = prompt_len(lv), width;
 
     if (was_len == 0 || d->typed_len == 0 || bar_fits(d, was_len) != bar_fits(d, d->typed_len)) { draw_prompt(d); return; }
     width = d->typed_len > was_len ? d->typed_len : was_len;

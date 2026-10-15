@@ -545,12 +545,12 @@ static void a_key_repaints_two_cells_and_the_description_only(void)
     size_reply = "80\t25"; write_big_catalogue("scroll");
     down80 = key_cost("", "\x1b[B", "\x1b");
     up80 = key_cost("\x1b[B", "\x1b[A", "\x1b");
-    assert(down80 > 0 && down80 <= 280);                      /* was 406 */
-    assert(up80 > 0 && up80 <= 280);
+    assert(down80 > 0 && down80 <= 256);                      /* was 406 */
+    assert(up80 > 0 && up80 <= 256);
     assert(strstr(screen_text, "Description of Read Mail for the caller"));     /* the status row followed the selection back */
     size_reply = "40\t25"; write_big_catalogue("pages");
     down40 = key_cost("", "\x1b[B", "\x1b");
-    assert(down40 > 0 && down40 <= 240);                      /* was 311 */
+    assert(down40 > 0 && down40 <= 230);                      /* was 311 */
     size_reply = "80\t25";
     printf("  [OK] a key repaints two cells and the description: down %ld, up %ld bytes at 80 columns, down %ld at 40\n", down80, up80, down40);
 }
@@ -700,6 +700,184 @@ static void the_row_text_fits_forty_columns_in_both_states(void)
     printf("  [OK] the row text fits 39 columns in both states at 40 columns\n");
 }
 
+
+/* ------------------------------------------- a small terminal, to read what the bytes LEAVE on the glass */
+
+#define TM_ROWS 25
+#define TM_COLS 132
+static char tm_cell[TM_ROWS + 1][TM_COLS + 2];
+static int tm_row, tm_col, tm_saved_row, tm_saved_col, tm_addresses;
+
+static void tm_clear(void)
+{
+    int r;
+    for (r = 0; r <= TM_ROWS; r++) { memset(tm_cell[r], ' ', TM_COLS); tm_cell[r][TM_COLS] = '\0'; }
+    tm_row = 1; tm_col = 1; tm_addresses = 0;
+}
+
+/* Plays bytes [from, to) of `text`: cursor addressing, save/restore, clear, printable characters. SGR and modes are ignored. */
+static void tm_play(const char *text, const char *to)
+{
+    const char *p = text;
+    while (p < to) {
+        if (*p == '\033' && p[1] == '7') { tm_saved_row = tm_row; tm_saved_col = tm_col; p += 2; }
+        else if (*p == '\033' && p[1] == '8') { tm_row = tm_saved_row; tm_col = tm_saved_col; p += 2; }
+        else if (*p == '\033' && p[1] == '[') {
+            const char *q = p + 2;
+            int a = 0, b = 0, have_b = 0, priv = 0;
+            if (*q == '?') { priv = 1; q++; }
+            while (*q >= '0' && *q <= '9') a = a * 10 + (*q++ - '0');
+            if (*q == ';') { q++; have_b = 1; while (*q >= '0' && *q <= '9') b = b * 10 + (*q++ - '0'); }
+            while (*q && ((*q >= '0' && *q <= '9') || *q == ';')) q++;
+            if (!priv && *q == 'H') { tm_row = a ? a : 1; tm_col = have_b && b ? b : 1; tm_addresses++; }
+            else if (!priv && *q == 'J' && a == 2) { int r = tm_row, c = tm_col, n = tm_addresses; tm_clear(); tm_row = r; tm_col = c; tm_addresses = n; }
+            p = *q ? q + 1 : q;
+        } else {
+            if ((unsigned char)*p >= 32 && tm_row >= 1 && tm_row <= TM_ROWS && tm_col >= 1 && tm_col <= TM_COLS) tm_cell[tm_row][tm_col - 1] = *p;
+            tm_col++; p++;
+        }
+    }
+}
+
+/* The door's closing clear (and the cursor it shows again) is not part of the picture a caller was looking at. */
+static const char *closing_clear(void)
+{
+    const char *close = 0, *q = screen_text;
+    while ((q = strstr(q, "\033[0m\033[2J\033[H")) != 0) { close = q; q++; }
+    return close ? close : screen_text + strlen(screen_text);
+}
+
+static void tm_after(const char *keys)
+{
+    wrote(keys);
+    tm_clear();
+    tm_play(screen_text, closing_clear());
+}
+
+/* What ONE key adds to the stream: the bytes between the common start and the common end of the two runs. */
+static char delta_text[4096];
+static void key_bytes(const char *before, const char *key, const char *after)
+{
+    static char a[65536];
+    char ka[96], kb[96];
+    size_t i = 0, la, lb;
+    sprintf(ka, "%s%s", before, after);
+    sprintf(kb, "%s%s%s", before, key, after);
+    wrote(ka); strcpy(a, screen_text); la = strlen(a);
+    wrote(kb); lb = strlen(screen_text);
+    while (i < la && a[i] == screen_text[i]) i++;
+    assert(lb >= la && lb - la < sizeof delta_text);
+    memcpy(delta_text, screen_text + i, lb - la); delta_text[lb - la] = '\0';
+}
+
+static int addresses_in(const char *bytes)
+{
+    int n = 0;
+    const char *p = bytes;
+    while ((p = strstr(p, "\033[")) != 0) {
+        const char *q = p + 2;
+        while ((*q >= '0' && *q <= '9') || *q == ';') q++;
+        if (*q == 'H' && q > p + 2) n++;
+        p += 2;
+    }
+    return n;
+}
+
+static const char *CATALOGUE_DESCRIPTIONS =
+    "AEMENU 1\nK MAIN\t-\nT MAIN MENU\nP Go: \nO scroll\nW -\t-\t-\nR 0\nS Messages\n"
+    "E R\tRead\tA very long description of the first entry, which is long\t\t\n"
+    "E E\tEnter\tShort\t\t\n"
+    "E M\tMail\tShort\t\t\n"
+    ".\n";
+
+static void an_identical_description_is_not_sent_again(void)
+{
+    mouse_queue = 0; silent_board = 0; theme_name = ""; size_reply = "80\t25";
+    write_catalogue(CATALOGUE_DESCRIPTIONS);
+    key_bytes("\x1b[C", "\x1b[C", "\x1b");                      /* Enter -> Mail: both say "Short" */
+    assert(addresses_in(delta_text) == 2);                     /* the two cells, and NOT the status row */
+    assert(!strstr(delta_text, "\033[24;"));
+    printf("  [OK] an identical description is not sent again\n");
+}
+
+static void a_shorter_description_leaves_no_tail_of_the_longer_one(void)
+{
+    mouse_queue = 0; silent_board = 0; theme_name = ""; size_reply = "80\t25";
+    write_catalogue(CATALOGUE_DESCRIPTIONS);
+    tm_after("\x1b[C");                                         /* long -> Short */
+    assert(strncmp(&tm_cell[24][0], " Short", 6) == 0);
+    assert(strspn(&tm_cell[24][6], " ") >= (size_t)(80 - 6));  /* nothing of the long text remains, on 80 columns */
+    tm_after("\x1b[C\x1b[D");                                   /* and back to the long one, then it is all there */
+    assert(strncmp(&tm_cell[24][0], " A very long description of the first entry, which is long", 58) == 0);
+    tm_after("\x1b[C\x1b[D\x1b[C");
+    assert(strncmp(&tm_cell[24][0], " Short", 6) == 0 && strspn(&tm_cell[24][6], " ") >= (size_t)(80 - 6));
+    printf("  [OK] a shorter description leaves no tail of the longer one on the glass\n");
+}
+
+static void backspacing_leaves_no_stale_character_on_the_prompt_row(void)
+{
+    mouse_queue = 0; silent_board = 0; theme_name = ""; size_reply = "80\t25";
+    write_catalogue(CATALOGUE_SHORT_PROMPT);
+    tm_after("xy\x08");
+    assert(strncmp(&tm_cell[25][0], "Go: x", 5) == 0);
+    assert(tm_cell[25][5] == ' ' && tm_cell[25][6] == ' ');      /* the y is gone, not painted over */
+    printf("  [OK] backspace leaves no stale character on the prompt row\n");
+}
+
+static void a_cell_is_one_cursor_move_and_one_run(void)
+{
+    mouse_queue = 0; silent_board = 0; theme_name = ""; size_reply = "80\t25";
+    write_big_catalogue("scroll");
+    key_bytes("", "\x1b[B", "\x1b");
+    assert(addresses_in(delta_text) == 3);                     /* the old cell, the new cell, the status row: one move each */
+    printf("  [OK] a changed cell is one cursor move and one run\n");
+}
+
+static void every_idle_tick_stays_on_the_masthead_row(void)
+{
+    static const char *const SCRIPTS[3] = { "\x1b[B", "\x1b[B\x1b[B", "x" };
+    int i, ticks = 0;
+    mouse_queue = 0; silent_board = 0; size_reply = "80\t25"; theme_name = "uprough-neon";
+    write_big_catalogue("scroll");
+    for (i = 0; i < 3; i++) {
+        const char *p, *stop;
+        wrote(SCRIPTS[i]);
+        stop = closing_clear();
+        for (p = screen_text; (p = strstr(p, "\0337")) != 0 && p < stop; p++) {
+            const char *end = strstr(p, "\0338"), *q;
+            assert(end && end < stop);
+            for (q = p; q < end; q++) {
+                int r = 0, c = 0, n = 0;
+                if (q[0] == '\033' && q[1] == '[' && sscanf(q + 2, "%d;%d%n", &r, &c, &n) == 2 && q[2 + n] == 'H') assert(r == 1);
+            }
+            ticks++;
+        }
+    }
+    assert(ticks >= 3);                                          /* the sentinel: three ticks ran, each checked */
+    theme_name = "";
+    printf("  [OK] every idle tick (%d of them, one per script) addresses the masthead row only\n", ticks);
+}
+
+static void a_long_board_prompt_is_clipped_once_for_drawing_parking_and_room(void)
+{
+    char prompt100[101], cat[512], keys[32];
+    const char *row;
+    int i;
+    for (i = 0; i < 100; i++) prompt100[i] = 'p';
+    prompt100[100] = '\0';
+    sprintf(cat, "AEMENU 1\nK MAIN\t-\nT MAIN MENU\nP %s\nO scroll\nW -\t-\t-\nR 0\nS Messages\nE R\tRead\tRead\t\t\n.\n", prompt100);
+    write_catalogue(cat);
+    mouse_queue = 0; silent_board = 0; theme_name = ""; size_reply = "80\t25";
+    wrote("a");
+    row = last_prompt_row();
+    assert(row && strstr(row, "\033[25;74H"));                   /* 72 shown + 1 typed: the cursor is after the 'a' the caller sees */
+    memset(keys, 'a', 20); keys[20] = '\r'; keys[21] = '\0';
+    assert(drive(keys, 21) == 0);
+    assert(typed_calls == 1 && strlen(typed_line) == 79 - 72);   /* seven columns are left after the clipped prompt */
+    write_catalogue(CATALOGUE);
+    printf("  [OK] a 100-character board prompt is clipped once: drawing, cursor and typing room agree\n");
+}
+
 int main(void)
 {
     ae_native_set_exchange(board, 0);
@@ -731,6 +909,12 @@ int main(void)
     esc_clears_the_line_and_only_an_empty_line_leaves();
     backspacing_to_an_empty_line_returns_to_the_hint();
     the_row_text_fits_forty_columns_in_both_states();
+    an_identical_description_is_not_sent_again();
+    a_shorter_description_leaves_no_tail_of_the_longer_one();
+    backspacing_leaves_no_stale_character_on_the_prompt_row();
+    a_cell_is_one_cursor_move_and_one_run();
+    every_idle_tick_stays_on_the_masthead_row();
+    a_long_board_prompt_is_clipped_once_for_drawing_parking_and_room();
     remove(CAT_PATH); remove("build/test_menudoor_keys.bin"); remove("build/test_menudoor_screen.bin");
     puts("test_menudoor_model: OK");
     return 0;
