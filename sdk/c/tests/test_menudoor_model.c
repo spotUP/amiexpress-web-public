@@ -675,7 +675,7 @@ static void the_prompt_row_is_a_hint_until_something_is_typed(void)
     wrote("m");
     row = last_prompt_row();
     assert(row && strstr(row, "BBS [1:Main] Menu: m") && !strstr(row, MENUDOOR_HINT_WIDE));
-    assert(strstr(row, "Enter Run  Esc Clear") && !strstr(row, "Esc/q"));      /* the bar is true for THIS mode: q is text now */
+    assert(strstr(row, "Enter Run  Tab Show  Esc Clear") && !strstr(row, "Esc/q"));      /* the bar is true for THIS mode: q is text now */
     assert(strstr(row, "\033[?25h"));
     printf("  [OK] the prompt row is a hint with a hidden cursor until a character is typed, then the prompt with the cursor\n");
 }
@@ -1044,6 +1044,17 @@ static void a_moved_selection_leaves_the_screen_a_fresh_frame_would_show(void)
 
 /* ---- plan M15 follow-up 5: a typed character costs the character, a jump costs only the cells (or window) it changes ---- */
 
+/* True when every cursor address in `bytes` is on row `a` or row `b`. */
+static int addresses_only_on(const char *bytes, int a, int b)
+{
+    const char *p = bytes;
+    while ((p = strstr(p, "\033[")) != 0) {
+        int r = 0, c = 0, n = 0;
+        if (sscanf(p + 2, "%d;%d%n", &r, &c, &n) == 2 && p[2 + n] == 'H' && r != a && r != b) return 0;
+        p += 2;
+    }
+    return 1;
+}
 static int has(const char *haystack, const char *needle) { return strstr(haystack, needle) != 0; }
 /* a measured cost against its bound; the number is printed when it is over, so a bound is never guessed */
 #define AT_MOST(what, got, bound) do { if ((got) > (bound)) printf("  %s: %ld bytes, bound %d\n", what, (long)(got), (bound)); assert((got) <= (bound)); } while (0)
@@ -1070,11 +1081,13 @@ static void typing_costs_the_character_and_a_jump_costs_what_it_changes(void)
     AT_MOST("back to the hint", back_to_hint, 165);
 
     size_reply = "80\t12"; write_big_catalogue("scroll");        /* a short window: Download is off it */
-    key_bytes("", "d", "\x1b");
+    key_bytes("", "d", "");                                        /* off the window: named in the status row, nothing scrolls */
+    assert(addresses_only_on(delta_text, 11, 12));
+    key_bytes("d", "\t", "");                                       /* Tab: the one window rewrite */
     jump_scrolls = (long)strlen(delta_text);
     assert(!has(delta_text, "\033[2J"));                         /* no clear between: the window is written over itself */
     assert(!has(delta_text, "\033[?25l\033[?25h"));
-    AT_MOST("jump past the window", jump_scrolls, 1160);
+    AT_MOST("Tab past the window", jump_scrolls, 1160);
 
     size_reply = "80\t25"; write_big_catalogue("scroll");
     key_bytes("wh", "o", "\x1b");
@@ -1089,7 +1102,7 @@ static void typing_costs_the_character_and_a_jump_costs_what_it_changes(void)
 
     size_reply = "80\t25";
     big_long_label = 0;
-    printf("  [OK] typing at 80 columns: first character %ld, same match %ld, back to the hint %ld, a jump past the window %ld bytes\n",
+    printf("  [OK] typing at 80 columns: first character %ld, same match %ld, back to the hint %ld, Tab past the window %ld bytes\n",
            first_on_window, same_match, back_to_hint, jump_scrolls);
 
     /* 40 columns: the same rules on the C64's grid (pages, caret, no erase). */
@@ -1129,7 +1142,7 @@ static void the_door_plays_the_catalogues_wipes_at_forty_columns_as_at_eighty(vo
         /* pages mode: a page turn plays the page wipe, at 40 as at 80 */
         sprintf(size, "%d\t12", width);                                              /* a screen too short for the whole menu: it has pages */
         big_wipes = "-\t-\tH"; big_long_label = 1; big_prompt = "Go: "; write_big_catalogue("pages");
-        assert(DRIVE("g\x1b") == 0);
+        assert(DRIVE("g\t\x1b") == 0);                                              /* Tab is the page turn: typing alone does not move the window */
         assert(has(requests, "WIPE IN H|"));
         big_wipes = "-\t-\t-"; big_long_label = 0; big_prompt = "AmiExpress Web BBS [1:Demoscene] Menu (99 mins. left): ";
     }
@@ -1158,6 +1171,85 @@ static void at_forty_columns_the_description_is_still_readable_beside_the_pager(
     assert(strncmp(row + 1, "Description of Read Mail for the caller", (size_t)(shown - 1)) == 0);
     big_prompt = "AmiExpress Web BBS [1:Demoscene] Menu (99 mins. left): "; size_reply = "80\t25";
     printf("  [OK] at 40 columns %d columns of description stay readable beside the pager\n", shown);
+}
+
+/* ---- plan M15 follow-up (sysop ruling): type-ahead never scrolls or repaints the window. The highlight follows a match
+        that is on the window; a match below it is named in the status row, and Tab is what shows it. ------------- */
+
+static void type_ahead_to_an_entry_below_the_window_names_it_in_the_status_row_and_repaints_no_grid(void)
+{
+    int width;
+    for (width = 80; width >= 40; width -= 40) {
+        char size[16];
+        long first, tab;
+        mouse_queue = 0; silent_board = 0; theme_name = "";
+        sprintf(size, "%d\t12", width);
+        size_reply = size;
+        big_long_label = width == 80; big_prompt = "Go: ";
+        write_big_catalogue(width == 80 ? "scroll" : "pages");
+        /* 12 rows: grid rows 2..9, status row 11, prompt row 12; Download (80) / Goodbye (40) is below the window */
+        key_bytes("", width == 80 ? "d" : "g", "");
+        first = (long)strlen(delta_text);
+        assert(addresses_only_on(delta_text, 11, 12));                      /* no cursor address in a grid row: the grid is not repainted */
+        assert(!has(delta_text, "\033[2J"));
+        AT_MOST("first letter of an off-window entry", first, width == 80 ? 250 : 180);
+        tm_after(width == 80 ? "d" : "g");
+        assert(strstr(tm_cell[11], width == 80 ? "Enter runs: D" : "Enter runs: G"));                     /* the match, in the status row's slot */
+        assert(strstr(tm_cell[11], width == 80 ? "Download" : "Goodbye"));
+        assert(strstr(tm_cell[12], width == 80 ? "Go: d" : "Go: g"));      /* the typed text stays on the prompt row */
+        assert(strstr(tm_cell[2], "Messages"));                             /* the window still starts where it did */
+        /* a match ON the window keeps the cell repaint: the old cell, the new cell, the status row, the prompt row */
+        key_bytes("", width == 80 ? "m" : "e", "");
+        AT_MOST("first letter of an on-window entry", (long)strlen(delta_text), width == 80 ? 455 : 337);
+        assert(has(delta_text, "\033[K") == (width == 80));
+        /* the highlight did not move: Backspace empties the line, Esc leaves, and the board is asked for row 0 */
+        assert(DRIVE(width == 80 ? "d\x08\x1b" : "g\x08\x1b") == 0);
+        assert(strstr(requests, "ROW 0|"));
+        /* Enter still runs what was TYPED, as always */
+        assert(DRIVE(width == 80 ? "d\r" : "g\r") == 0);
+        assert(typed_calls == 1 && strcmp(typed_line, width == 80 ? "d" : "g") == 0 && activations == 0);
+        /* Tab shows it: one window rewrite, no clear, the highlight lands on the match */
+        key_bytes(width == 80 ? "d" : "g", "\t", "");
+        tab = (long)strlen(delta_text);
+        assert(!has(delta_text, "\033[2J") && has(delta_text, "\033[2;1H"));
+        AT_MOST("Tab to the off-window match", tab, width == 80 ? 845 : 640);
+        assert(DRIVE(width == 80 ? "d\t\x08\x1b" : "g\t\x08\x1b") == 0);
+        assert(strstr(requests, width == 80 ? "ROW 6|" : "ROW 13|"));
+        /* Tab with the match already in view moves nothing */
+        key_bytes("r", "\t", "");
+        assert(strlen(delta_text) == 0);
+        /* Backspace off a second letter re-evaluates: "do" names DOORS, "d" names Download again; nothing is repainted in the grid */
+        if (width == 80) {
+            key_bytes("do", "\x08", "");
+            assert(addresses_only_on(delta_text, 11, 12));
+            tm_after("do\x08");
+            assert(strstr(tm_cell[11], "Enter runs: D  Download"));
+        }
+        printf("  [OK] %d columns: an off-window first letter costs %ld bytes in the status and prompt rows only; Tab shows it for %ld\n", width, first, tab);
+    }
+    big_long_label = 0; big_wipes = "-\t-\t-"; big_prompt = "AmiExpress Web BBS [1:Demoscene] Menu (99 mins. left): ";
+    size_reply = "80\t25";
+}
+
+static void the_typing_key_bar_names_tab_and_shortens_itself_to_fit_forty_columns(void)
+{
+    const char *row;
+    mouse_queue = 0; silent_board = 0; theme_name = ""; size_reply = "80\t25";
+    big_long_label = 0; big_prompt = "Go: "; write_big_catalogue("scroll");
+    wrote("r");
+    row = last_prompt_row();
+    assert(row && strstr(row, "Enter Run  Tab Show  Esc Clear"));
+    size_reply = "40\t25"; write_big_catalogue("pages");
+    wrote("r");
+    row = last_prompt_row();
+    assert(row && strstr(row, "Enter Run  Tab Show  Esc Clear"));             /* "Go: r" + 2 + 30 = 37 columns: it fits, so it is said in full */
+    big_prompt = "Menu [1:Main]: "; write_big_catalogue("pages");
+    wrote("r");
+    row = last_prompt_row();
+    assert(row && strstr(row, "Tab Show  Esc Clear") && !strstr(row, "Enter Run"));   /* 16 + 2 + 30 is too wide: the shorter bar keeps Tab (Enter is the obvious key) */
+    assert(strlen("Menu [1:Main]: r") + 2 + strlen("Tab Show  Esc Clear") <= 39);
+    big_prompt = "AmiExpress Web BBS [1:Demoscene] Menu (99 mins. left): "; size_reply = "80\t25";
+    printf("  [OK] the typing key bar says Tab Show where it fits, and drops to Tab Show / Esc Clear where it does not\n");
 }
 
 int main(void)
@@ -1203,6 +1295,8 @@ int main(void)
     typing_costs_the_character_and_a_jump_costs_what_it_changes();
     the_door_plays_the_catalogues_wipes_at_forty_columns_as_at_eighty();
     at_forty_columns_the_description_is_still_readable_beside_the_pager();
+    type_ahead_to_an_entry_below_the_window_names_it_in_the_status_row_and_repaints_no_grid();
+    the_typing_key_bar_names_tab_and_shortens_itself_to_fit_forty_columns();
     remove(CAT_PATH); remove("build/test_menudoor_keys.bin"); remove("build/test_menudoor_screen.bin");
     puts("test_menudoor_model: OK");
     return 0;

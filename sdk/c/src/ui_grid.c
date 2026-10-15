@@ -140,6 +140,14 @@ static int line_of(const ui_grid *g, int entry, int *col)
     return -1;
 }
 
+int ui_grid_visible(const ui_grid *g, int entry)
+{
+    int l;
+    if (!g || entry < 0 || entry >= g->entry_count) return 0;
+    l = line_of(g, entry, 0);
+    return l >= g->offset && l < g->offset + g->height;
+}
+
 int ui_grid_page(const ui_grid *g)
 {
     int l = line_of(g, g->selected, 0), p;

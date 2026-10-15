@@ -57,8 +57,10 @@ int menudoor_settings_run(int node);
 /* A door whose typing is numbers (digits_show_at_once) says so instead. */
 #define MENUDOOR_HINT_NUMBER_WIDE    "Arrows and Enter, or type a number"
 #define MENUDOOR_HINT_NUMBER_NARROW  "Type a number"
-#define MENUDOOR_TYPING_KEYBAR_WIDE   "Enter Run  Esc Clear"
-#define MENUDOOR_TYPING_KEYBAR_NARROW "Enter Run  Esc Clear"
+/* Typing does not move the grid's window: a match below it is named in the status row and Tab brings the window to it.
+   The full bar says so; where it does not fit, the shorter one keeps Tab (Enter is the obvious key) - see typing_bar(). */
+#define MENUDOOR_TYPING_KEYBAR_WIDE   "Enter Run  Tab Show  Esc Clear"
+#define MENUDOOR_TYPING_KEYBAR_NARROW "Tab Show  Esc Clear"
 
 /* For the activate / typed callbacks. */
 const ae_menu_entry *menudoor_entry(struct menudoor *d, int entry);

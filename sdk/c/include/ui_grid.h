@@ -63,6 +63,8 @@ void ui_grid_layout(ui_grid *g);
 /** One key; returns 1 when the selection or the window moved. */
 int  ui_grid_move(ui_grid *g, int key);
 void ui_grid_select(ui_grid *g, int index);
+/** 1 when `entry` is drawn in the box as it stands (its line is inside the window): a selection of it needs no scroll. */
+int  ui_grid_visible(const ui_grid *g, int entry);
 int  ui_grid_page(const ui_grid *g);                     /* page of the selection, 0-based (PAGES mode) */
 void ui_grid_draw(ui_grid *g, ansi_buf *b);
 /** The same, for a box whose rows were just cleared to `ground` (ansi_clear_ground): no blank pass, so no row goes out twice. */

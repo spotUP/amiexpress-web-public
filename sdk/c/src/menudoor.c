@@ -151,6 +151,7 @@ struct menudoor {
     int depth;
     char typed[TYPED_MAX + 1];
     int typed_len;
+    int offwindow;                    /* the type-ahead match when it is below/above the window (named in the status row, not shown), else -1 */
     char notice[40];                  /* shown in the status row instead of the description, until the next key */
     char status_drawn[100];           /* the status row as the caller sees it; "" until a frame has drawn it */
     int status_valid;                 /* 0 = the row is not on the glass (a fresh frame is about to draw it) */
@@ -221,11 +222,16 @@ static void draw_status(struct menudoor *d, int full)
 {
     level *lv = cur(d);
     ui_screen *sc = &d->screen;
-    char line[100], pager[24];
+    char line[100], pager[24], offtext[64];
     const char *text = "";
     int width, first, room;
 
     if (d->notice[0]) text = d->notice;
+    else if (d->typed_len > 0 && d->offwindow >= 0 && d->offwindow < lv->menu.entry_count) {
+        /* The match is not on the glass and the window does not move for typing: say what Enter will find, and that Tab shows it. */
+        sprintf(offtext, "Enter runs: %s  %s", lv->menu.entries[d->offwindow].key, lv->menu.entries[d->offwindow].label);
+        text = offtext;
+    }
     else if (lv->menu.entry_count > 0 && lv->grid.selected < lv->menu.entry_count)
         text = lv->menu.entries[lv->grid.selected].description;
     line[0] = ' ';
@@ -271,6 +277,15 @@ static const char *hint_text(const struct menudoor *d, const char *bar, int room
     return numbers ? MENUDOOR_HINT_NUMBER_NARROW : MENUDOOR_HINT_NARROW;
 }
 
+/* The typing bar that fits beside the prompt and `typed_len` characters (one column stays free), or 0 when neither does. */
+static const char *typing_bar(const struct menudoor *d, int typed_len)
+{
+    int room = d->screen.cols - 1, plen = prompt_len(&d->lv[d->depth]) + typed_len;
+    if (plen + 2 + (int)strlen(MENUDOOR_TYPING_KEYBAR_WIDE) <= room) return MENUDOOR_TYPING_KEYBAR_WIDE;
+    if (plen + 2 + (int)strlen(MENUDOOR_TYPING_KEYBAR_NARROW) <= room) return MENUDOOR_TYPING_KEYBAR_NARROW;
+    return 0;
+}
+
 /* What Esc and Enter do NOW: the key bar for the mode the row is in. */
 static const char *mode_bar(struct menudoor *d, char *out, size_t cap)
 {
@@ -279,7 +294,7 @@ static const char *mode_bar(struct menudoor *d, char *out, size_t cap)
     const menudoor_spec *spec = d->spec;
     const char *bar, *esc;
 
-    if (d->typed_len > 0) return wide ? MENUDOOR_TYPING_KEYBAR_WIDE : MENUDOOR_TYPING_KEYBAR_NARROW;
+    if (d->typed_len > 0) return typing_bar(d, d->typed_len);
     /* Esc leaves to the prompt at the top and goes up a level in a child list: the bar says which. */
     bar = d->depth > 0 ? (wide ? MENUDOOR_CHILD_KEYBAR_WIDE : MENUDOOR_CHILD_KEYBAR_NARROW)
                        : (wide ? spec->keybar_wide : spec->keybar_narrow);
@@ -489,7 +504,7 @@ menudoor_result menudoor_open_child(struct menudoor *d, int entry)
 {
     level *parent = cur(d), *child;
     char parent_title[32], saved_typed[TYPED_MAX + 1];
-    int rc, saved_len;
+    int rc, saved_len, saved_off;
     menudoor_result result;
 
     if (!d || d->depth + 1 >= LEVELS || entry < 0 || entry >= parent->menu.entry_count) return MENUDOOR_STAY;
@@ -503,7 +518,8 @@ menudoor_result menudoor_open_child(struct menudoor *d, int entry)
     strcpy(parent_title, d->title);
     strcpy(saved_typed, d->typed);
     saved_len = d->typed_len;
-    d->typed[0] = '\0'; d->typed_len = 0;
+    saved_off = d->offwindow;
+    d->typed[0] = '\0'; d->typed_len = 0; d->offwindow = -1;
     d->depth++;
     set_title(d, parent->menu.entries[entry].label);
     configure(d, child, child->menu.last_row);
@@ -514,6 +530,7 @@ menudoor_result menudoor_open_child(struct menudoor *d, int entry)
     strcpy(d->title, parent_title);                        /* Esc: back to the parent, its selection kept */
     strcpy(d->typed, saved_typed);
     d->typed_len = saved_len;
+    d->offwindow = saved_off;
     show_frame(d, 0, 0);
     return MENUDOOR_STAY;
 }
@@ -528,6 +545,8 @@ static menudoor_result press_entry(struct menudoor *d, int entry)
     return d->spec->activate ? d->spec->activate(d, entry) : MENUDOOR_STAY;
 }
 
+static void drop_line(struct menudoor *d);
+
 static menudoor_result press_enter(struct menudoor *d)
 {
     menudoor_result r;
@@ -535,6 +554,7 @@ static menudoor_result press_enter(struct menudoor *d)
         char line[TYPED_MAX + 1];
         strcpy(line, d->typed);
         d->typed[0] = '\0'; d->typed_len = 0;
+        if (d->offwindow >= 0) { d->offwindow = -1; draw_status(d, 0); }
         draw_prompt(d);
         ui_screen_flush(&d->screen);
         return d->spec->typed ? d->spec->typed(d, line) : MENUDOOR_STAY;
@@ -563,11 +583,7 @@ static menudoor_result on_mouse(struct menudoor *d)
             if (hit < 0) continue;
             if (hit != cur(d)->grid.selected) select_entry(d, hit);      /* hover moves the real selection */
             if (evs[i].kind == 'P') {
-                if (d->typed_len > 0) {                         /* the line is dropped: the prompt row says so too */
-                    d->typed[0] = '\0'; d->typed_len = 0;
-                    draw_prompt(d);
-                    ui_screen_flush(&d->screen);
-                }
+                if (d->typed_len > 0) drop_line(d);             /* the line is dropped: the prompt row says so too */
                 r = press_entry(d, hit);
                 if (r == MENUDOOR_LEAVE) return r;
             }
@@ -586,25 +602,17 @@ static int typed_room(struct menudoor *d)
 }
 
 /* The typed text alone, when the row was already in typing mode and the key bar stays as it was: a character costs
-   itself, not the row. Returns 0 when the whole row has to be drawn (mode change, or the bar appears or goes). */
-static int bar_fits(struct menudoor *d, int typed_len)
-{
-    char bar_q[96];
-    const char *bar = typed_len > 0 ? (d->screen.cols >= 80 ? MENUDOOR_TYPING_KEYBAR_WIDE : MENUDOOR_TYPING_KEYBAR_NARROW)
-                                    : mode_bar(d, bar_q, sizeof bar_q);
-    int room = d->screen.cols - 1, plen = prompt_len(cur(d)) + typed_len;
-    return bar && bar[0] && plen + 2 + (int)strlen(bar) <= room;
-}
-
+   itself, not the row. draw_prompt_after_edit says when the whole row has to be drawn. */
 static void draw_prompt_after_edit(struct menudoor *d, int was_len)
 {
     level *lv = cur(d);
     ui_screen *sc = &d->screen;
-    int plen = prompt_len(lv), width, was_bar, bar;
+    int plen = prompt_len(lv), width;
+    const char *was_bar, *bar;
 
     if (was_len == 0 || d->typed_len == 0) { draw_prompt(d); return; }
-    was_bar = bar_fits(d, was_len);
-    bar = bar_fits(d, d->typed_len);
+    was_bar = typing_bar(d, was_len);                     /* the bar's identity: a different bar (or none) is a different row */
+    bar = typing_bar(d, d->typed_len);
     /* The key bar at the right is in the way of an erase (it would go with the tail), and a bar that APPEARS has to
        be drawn: both are the whole row. When there is none before or after - or it has just gone - the typed text
        and one erase to the end of the line are the whole change: three bytes instead of the row's blank padding. */
@@ -620,6 +628,41 @@ static void draw_prompt_after_edit(struct menudoor *d, int was_len)
     ansi_color(&sc->buf, UI_TOKEN(UI_T_INK), ground(d), 0);
     ansi_text(&sc->buf, lv->lay.prompt_row, 1 + plen, d->typed, width);
     park_cursor(d);
+}
+
+/* The type-ahead highlight (sysop ruling 2026-10-15: typing never scrolls or repaints the window). A match ON the glass
+   moves the bar by repainting two cells and the status row, as before. A match off it leaves the bar where it was and
+   is named in the status row ("Enter runs: M  Colour Mode"); Tab is what brings the window to it. The bar is only a
+   display: Enter runs the TYPED text whatever it shows. */
+static void follow_typed(struct menudoor *d)
+{
+    level *lv = cur(d);
+    int idx = d->typed_len > 0 ? md_typeahead(&lv->menu, d->typed) : -1, was = d->offwindow;
+
+    d->offwindow = -1;
+    if (idx >= 0) {
+        if (ui_grid_visible(&lv->grid, idx)) select_entry(d, idx);
+        else d->offwindow = idx;
+    }
+    if (d->offwindow != was) draw_status(d, 0);          /* the "Enter runs" line came, changed or went; an unchanged row sends nothing */
+}
+
+/* The line is dropped (Esc, a click): the prompt row says so, and so does the status row if it was naming a match. */
+static void drop_line(struct menudoor *d)
+{
+    d->typed[0] = '\0'; d->typed_len = 0;
+    if (d->offwindow >= 0) { d->offwindow = -1; draw_status(d, 0); }
+    draw_prompt(d);
+    ui_screen_flush(&d->screen);
+}
+
+/* Tab: bring the window to the match the status row is naming. A match already in view has nothing to show. */
+static void show_match(struct menudoor *d)
+{
+    int idx = d->offwindow;
+    if (d->typed_len == 0 || idx < 0) return;
+    d->offwindow = -1;
+    select_entry(d, idx);                                /* the one allowed window rewrite: one batch, no clear */
 }
 
 static menudoor_result typed_key(struct menudoor *d, int key)
@@ -646,8 +689,7 @@ static menudoor_result typed_key(struct menudoor *d, int key)
     } else {
         return MENUDOOR_STAY;
     }
-    idx = md_typeahead(&cur(d)->menu, d->typed);
-    if (idx >= 0) select_entry(d, idx);
+    follow_typed(d);
     draw_prompt_after_edit(d, was_len);
     ui_screen_flush(&d->screen);
     return MENUDOOR_STAY;
@@ -674,11 +716,12 @@ static menudoor_result loop(struct menudoor *d)
         case UI_KEY_MOUSE:
             r = on_mouse(d);
             break;
+        case 9:                                            /* Tab: show the type-ahead match the window does not */
+            show_match(d);
+            break;
         case UI_KEY_ESC:
             if (d->typed_len > 0) {
-                d->typed[0] = '\0'; d->typed_len = 0;
-                draw_prompt(d);
-                ui_screen_flush(&d->screen);
+                drop_line(d);
             } else {
                 return d->depth > 0 ? MENUDOOR_STAY : MENUDOOR_LEAVE;
             }
@@ -702,6 +745,7 @@ static int begin(struct menudoor *d, ae_session *session, int node)
     if (ae_start(node) != 0) return 20;
     if (ae_open_bbs(session, session_storage, (long)sizeof session_storage, node) != 0) { ae_shutdown(); return 20; }
     memset(d, 0, sizeof *d);
+    d->offwindow = -1;
     ae_user_theme(session, theme_id, (int)sizeof theme_id);
     d->theme = ui_theme_by_id(theme_id);
     return 0;
