@@ -222,7 +222,7 @@ describe('MAINMENU on three screens', () => {
   });
 
   describe('idle animation (sibling parity: the masthead rail ticks, nothing else moves)', () => {
-    test('with no key for a second the rail ticks at least twice, touches row 1 only, and no other row changes', async () => {
+    test('with no key for a second the rail ticks at least twice, touches the divider row under the header logo only, and no other row changes', async () => {
       const r = await rail80();
       const before = r.chunks.slice(0, r.marks[0]!.at);
       const first = firstFrame(r);
@@ -230,10 +230,11 @@ describe('MAINMENU on three screens', () => {
       const ticks = afterFirst.filter(c => c.startsWith('\x1b7'));
       expect(ticks.length).toBeGreaterThanOrEqual(2);                              // it moved
       expect(afterFirst.every(isRailTick)).toBe(true);                             // and nothing but the rail was painted
-      for (const t of ticks) for (const m of t.matchAll(/\x1b\[(\d+);\d+H/g)) expect(m[1]).toBe('1');
+      for (const t of ticks) for (const m of t.matchAll(/\x1b\[(\d+);\d+H/g)) expect(m[1]).toBe('5');
       const was = gridText(replayCells(first, 80, 25)), now = gridText(replayCells(before.join(''), 80, 25));
-      expect(now.slice(1)).toEqual(was.slice(1));                                   // rows 2..25 are what the first frame left
-      expect(now[0]).not.toBe(was[0]);                                              // the rail moved: row 1 is not what the first frame left
+      // The rail is the DIVIDER under the 3-row header logo (rows 2-4): row 5. Row 1 is the title alone.
+      expect(now.filter((_, i) => i !== 4)).toEqual(was.filter((_, i) => i !== 4));  // every row but the divider is what the first frame left
+      expect(now[4]).not.toBe(was[4]);                                              // the rail moved: the divider is not what the first frame left
     });
   });
 

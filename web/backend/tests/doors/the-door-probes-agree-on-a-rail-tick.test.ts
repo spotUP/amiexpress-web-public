@@ -18,6 +18,10 @@ describe('a rail tick, for the probe and the harness alike', () => {
     expect(probeTick('\x1b8')).toBe(true);
   });
 
+  test('the rail under a header logo is on the divider row: a save, the rail on that one row and the restore is a tick too', () => {
+    expect(probeTick('\x1b7\x1b[1;38;2;1;2;3m\x1b[5;1H////  ///\x1b8')).toBe(true);
+  });
+
   test('a message that opens with a save but addresses another row is an answer, not a tick', () => {
     expect(probeTick('\x1b7\x1b[1;1Habc\x1b[5;1Hdef\x1b8')).toBe(false);
     expect(probeTick('\x1b[1;1Habc')).toBe(false);          // row 1 alone, with no opening save: a frame's first message
