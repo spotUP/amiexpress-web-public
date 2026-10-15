@@ -362,9 +362,13 @@ describe('the chat is one stream', () => {
     const after = w.seen.slice(before).join('');
     expect(after).toContain('Ending Chat.');
     // Nothing in the bot's colour after the chat ended - no leaked reply.
-    const tail = after.slice(after.indexOf('Ending Chat.'));
+    // The menu prompt the caller returns to is drawn after it and carries its
+    // own cyan (the conference name), so the leak is looked for before it.
+    const afterEnd = after.slice(after.indexOf('Ending Chat.'));
+    const promptAt = afterEnd.indexOf('AmiExpress Web BBS');
+    const tail = promptAt === -1 ? afterEnd : afterEnd.slice(0, promptAt);
     expect(tail).not.toContain('\x1b[36m');
-    expect(tail).not.toMatch(/\[(RB|AI)\]/);
+    expect(afterEnd).not.toMatch(/\[(RB|AI)\]/);
   });
 
   it('return twice sends: a line with text is kept, an empty line hands over what was kept as one message', () => {
