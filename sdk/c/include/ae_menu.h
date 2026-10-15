@@ -1,0 +1,70 @@
+/*
+ * ae_menu - the client for AEW_MENU (10900): the board's menu catalogue and the
+ * actions a menu door sends back. The board side is
+ * web/backend/src/amiga-emulation/xim/menu.ts; the catalogue file it writes is
+ * services/menu-catalogue/catalogue-file.ts (magic "AEMENU 1", TAB fields, LF).
+ *
+ *   OPEN <kind> [<parent>]   -> "OK TAB <amiga path>" | "NO" (the board printed why) | "" (not listening)
+ *   LOGO <pos> <t> <l> <r> <c> -> "OK TAB <rows>" | "NONE"   (the board draws it)
+ *   ROW <n>                  -> "OK"     (the selected row, kept for the next open)
+ *   OVERFLOW? / OVERFLOW <m> -> "<stored> TAB <effective>" / "OK TAB <effective>"
+ *   RUN <line>               -> "OK"     (run after this door exits, as typed)
+ *   SHOW <key>               -> "OK" | "NO"
+ *
+ * A board that does not know the field answers nothing: AE_MENU_SILENT, and the
+ * door's fallback command runs instead.
+ */
+#ifndef AE_MENU_H
+#define AE_MENU_H
+
+#include "ui_grid.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+#define AE_MENU_MAX_ENTRIES  UI_GRID_MAX_ENTRIES
+#define AE_MENU_MAX_SECTIONS 24
+#define AE_MENU_MAX_LOGOS    4
+#define AE_MENU_SILENT 6
+#define AE_MENU_GONE  (-1)
+
+typedef struct {
+    char key[16]; char label[27]; char description[77]; char right[11]; char flags[5];
+} ae_menu_entry;
+
+typedef struct { char position[8]; int rows, cols, after_section; } ae_menu_logo;
+
+typedef struct {
+    char kind[16]; char parent[16]; char title[31]; char prompt[73];
+    int pages;                               /* 1 = PAGES mode */
+    char wipe_open, wipe_leave, wipe_page;   /* 0 = none */
+    int last_row;
+    int section_count, entry_count, logo_count, truncated;
+    char section_title[AE_MENU_MAX_SECTIONS][31];
+    int entry_section[AE_MENU_MAX_ENTRIES];
+    ae_menu_entry entries[AE_MENU_MAX_ENTRIES];
+    ae_menu_logo logos[AE_MENU_MAX_LOGOS];
+} ae_menu;
+
+/** 1 OK, 0 refused (the board printed why), AE_MENU_SILENT (also: the file is unreadable or malformed), AE_MENU_GONE. */
+int ae_menu_open(const char *kind, const char *parent, ae_menu *m);
+/** Pure: 1 a whole catalogue, 0 malformed. A file with no final "." line is never shown. Fields are cut at their widths. */
+int ae_menu_parse(const char *text, long len, ae_menu *m);
+/** Rows the board drew, 0 none, AE_MENU_GONE. */
+int ae_menu_logo_draw(const char *position, int top, int left, int rows, int cols);
+/** 1 stored, 0 not, AE_MENU_GONE. Sent on leave only. */
+int ae_menu_row(int row);
+/** mode "scroll", "pages", "default" stores; 0 asks. `effective` receives the mode in force. 1 answered, 0 silent, AE_MENU_GONE. */
+int ae_menu_overflow(const char *mode, char *effective, int cap);
+/** The caller's own choice ("scroll", "pages", "default") as well as the effective mode; as ae_menu_overflow(0, ...). */
+int ae_menu_overflow_get(char *stored, int scap, char *effective, int ecap);
+/** 1 the board will run `line` once this door exits, 0 refused, AE_MENU_GONE. */
+int ae_menu_run(const char *line);
+/** 1 the board will show bulletin `key` once this door exits, 0 refused, AE_MENU_GONE. */
+int ae_menu_show(const char *key);
+
+#ifdef __cplusplus
+}
+#endif
+#endif
