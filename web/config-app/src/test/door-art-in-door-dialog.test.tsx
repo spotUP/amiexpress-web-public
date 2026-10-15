@@ -94,6 +94,18 @@ describe('door art in the door dialog', () => {
     expect(saveMenuConfig).toHaveBeenCalledWith('BULLETINS', expect.anything());
   });
 
+  it('is in the .info editor too: the Bulletins door shows its art and the BULLETINS logos there', async () => {
+    const user = userEvent.setup();
+    renderIn(<DoorsPage />);
+    await user.click(await screen.findByLabelText('Edit the .info file for B'));
+
+    expect(await screen.findByText('Door art')).toBeTruthy();
+    expect(await screen.findByText('Bulletins title')).toBeTruthy();
+    expect(screen.queryByText('Wall header')).toBeNull();
+    await waitFor(() => expect(listMenuLogos).toHaveBeenCalledWith('BULLETINS'));
+    expect(screen.getByLabelText('Upload a logo')).toBeTruthy();
+  });
+
   it('shows no menu logos on a door that is not a menu door', async () => {
     const user = userEvent.setup();
     renderIn(<DoorsPage />);

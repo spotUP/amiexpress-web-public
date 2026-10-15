@@ -1155,6 +1155,10 @@ export function DoorsPage() {
                 <DoorSettingsForm command={editingInfoDoor.door_command} />
               </div>
 
+              <div className="mb-6 border-b border-border/40 pb-6">
+                <DoorArtSection command={editingInfoDoor.door_command} menuKind={editingInfoDoor.menu_kind} />
+              </div>
+
               {/*
                 AmiExpress's own per-command switches (express.e:4732-4804
                 runCommand()) - SILENT, EXPERT_MODE, LOG_INPUTS, QUICKMODE,
