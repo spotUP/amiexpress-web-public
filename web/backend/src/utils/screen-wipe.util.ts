@@ -187,7 +187,7 @@ function applySgr(params: string, attrs: Attributes): void {
  * animation on the caller's own bytes, so the screen the user is left
  * looking at never depends on this model being bit-exact.
  */
-function parseAnsiToGrid(content: string, columns: number = DEFAULT_GRID_COLUMNS): Cell[][] {
+export function parseAnsiToGrid(content: string, columns: number = DEFAULT_GRID_COLUMNS): Cell[][] {
   const rows: Cell[][] = [[]];
   const attrs = defaultAttributes();
   let ansi = RESET;
@@ -424,6 +424,28 @@ function renderGridFull(grid: Cell[][]): string {
   }
 
   return out + RESET;
+}
+
+/** Rows (trailing blank rows dropped) and columns a grid occupies. */
+export function gridSize(grid: Cell[][]): { rows: number; cols: number } {
+  let rows = grid.length;
+  while (rows > 0 && trimRow(grid[rows - 1]).length === 0) rows--;
+  return { rows, cols: gridWidth(grid.slice(0, rows)) };
+}
+
+/**
+ * A grid painted inside a box: every row cursor-addressed at (top + i, left),
+ * nothing past `maxRows` x `maxCols`. For a logo the board draws into a door's
+ * screen (Decision 29) - a door's frame is not cleared around it.
+ */
+export function renderGridAt(grid: Cell[][], top: number, left: number, maxRows: number, maxCols: number): string {
+  const { rows } = gridSize(grid);
+  let out = '';
+  for (let y = 0; y < Math.min(rows, maxRows); y++) {
+    out += `\x1b[${top + y};${left}H`;
+    out += gridToAnsi([trimRow(grid[y]).slice(0, maxCols)]);
+  }
+  return out + '\x1b[0m';
 }
 
 /**
@@ -917,6 +939,47 @@ function explodeWipe(content: string, columns: number): WipeGrids {
 }
 
 /**
+ * The grids of one wipe. ONE switch for both directions: the reveal plays
+ * them forwards (`getWipeFrames`), the conceal backwards (`getWipeOutFrames`).
+ * `null` for a code that is not a wipe.
+ */
+function wipeGrids(wipeType: WipeType, content: string, columns: number): WipeGrids | null {
+  // Handle random selection
+  if (wipeType === 'random') {
+    const types: WipeType[] = [
+      'matrix', 'hblinds', 'vblinds', 'spiral', 'checker',
+      'radial', 'blocks', 'noise', 'typewriter', 'explode'
+    ];
+    wipeType = types[Math.floor(Math.random() * types.length)];
+  }
+
+  switch (wipeType) {
+    case 'matrix':
+      return matrixRainWipe(content, columns);
+    case 'hblinds':
+      return horizontalBlindsWipe(content, columns);
+    case 'vblinds':
+      return verticalBlindsWipe(content, columns);
+    case 'spiral':
+      return spiralWipe(content, columns);
+    case 'checker':
+      return checkerboardWipe(content, columns);
+    case 'radial':
+      return radialWipe(content, columns);
+    case 'blocks':
+      return blockWipe(content, columns);
+    case 'noise':
+      return noiseFadeWipe(content, columns);
+    case 'typewriter':
+      return typewriterWipe(content, columns);
+    case 'explode':
+      return explodeWipe(content, columns);
+    default:
+      return null;
+  }
+}
+
+/**
  * Get wipe animation frames
  *
  * The frame model: frame 0 clears and paints every cell; every later frame
@@ -938,51 +1001,8 @@ export function getWipeFrames(
   content: string,
   columns: number = DEFAULT_GRID_COLUMNS,
 ): WipeFrame[] {
-  // Handle random selection
-  if (wipeType === 'random') {
-    const types: WipeType[] = [
-      'matrix', 'hblinds', 'vblinds', 'spiral', 'checker',
-      'radial', 'blocks', 'noise', 'typewriter', 'explode'
-    ];
-    wipeType = types[Math.floor(Math.random() * types.length)];
-  }
-
-  let animation: WipeGrids;
-
-  switch (wipeType) {
-    case 'matrix':
-      animation = matrixRainWipe(content, columns);
-      break;
-    case 'hblinds':
-      animation = horizontalBlindsWipe(content, columns);
-      break;
-    case 'vblinds':
-      animation = verticalBlindsWipe(content, columns);
-      break;
-    case 'spiral':
-      animation = spiralWipe(content, columns);
-      break;
-    case 'checker':
-      animation = checkerboardWipe(content, columns);
-      break;
-    case 'radial':
-      animation = radialWipe(content, columns);
-      break;
-    case 'blocks':
-      animation = blockWipe(content, columns);
-      break;
-    case 'noise':
-      animation = noiseFadeWipe(content, columns);
-      break;
-    case 'typewriter':
-      animation = typewriterWipe(content, columns);
-      break;
-    case 'explode':
-      animation = explodeWipe(content, columns);
-      break;
-    default:
-      return [];
-  }
+  const animation = wipeGrids(wipeType, content, columns);
+  if (!animation) return [];
 
   const frames = framesFromGrids(animation);
 
@@ -1007,6 +1027,23 @@ export function getWipeFrames(
     frames.push({ content: HOME + finalPaint, delay: 0 });
   }
 
+  return frames;
+}
+
+/**
+ * The reveal played backwards: the screen goes away in the wipe's own
+ * pattern and the caller is left on a blank one (Decision 27, "leaving to a
+ * command"). Built from the SAME grids as the reveal, reversed, so every wipe
+ * code has a conceal without a second set of builders.
+ */
+export function getWipeOutFrames(wipeType: WipeType, content: string, columns: number = DEFAULT_GRID_COLUMNS): WipeFrame[] {
+  const animation = wipeGrids(wipeType, content, columns);
+  if (!animation) return [];
+  const frames = framesFromGrids({ ...animation, grids: [...animation.grids].reverse() });
+  if (frames.length === 0) return [];
+  // The reveal ends on one extra frame (the content itself); the conceal's
+  // extra frame is the blank screen it leaves the caller on.
+  frames.push({ content: '\x1b[0m\x1b[2J\x1b[H', delay: 0 });
   return frames;
 }
 
