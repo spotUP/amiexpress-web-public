@@ -37,7 +37,7 @@ jest.mock('../../src/doors/amigaDoorManager', () => ({
 
 import { executeDoor, initializeDoors, getDoors, setHelpers } from '../../src/handlers/door.handler';
 import { processBBSCommand } from '../../src/handlers/command.handler';
-import { setCommandExecutionDependencies, commandCache } from '../../src/handlers/command-execution.handler';
+import { setCommandExecutionDependencies, commandCache, revalidateBbsCommandsIfChanged } from '../../src/handlers/command-execution.handler';
 import { doorDropFileManager } from '../../src/services/DoorDropFileManager';
 import { config } from '../../src/config';
 import { flushAllBuffers } from '../../src/utils/ansi-buffer.util';
@@ -63,6 +63,13 @@ export const doorOver = (name: string, toolTypes: Record<string, string> = {}) =
 });
 
 export async function register(...defs: any[]) {
+  // A BBSCmd lookup re-reads the command directories whenever their stamp
+  // moved since the last check (6db5bfa47), and a door launch or a listing
+  // touches the board root. A cache seeded only in memory would then be
+  // replaced by the empty disk on the next test's first command. Take the
+  // pending reload now, before seeding, so the stamp the handler compares is
+  // the current one.
+  revalidateBbsCommandsIfChanged(config.get('dataDir'), undefined, 1);
   commandCache.bbscmd.clear();
   for (const d of defs) commandCache.bbscmd.set(d.name.toUpperCase(), d);
   await initializeDoors();
