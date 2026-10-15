@@ -45,6 +45,20 @@ const seconds = (d: Date | string | number | null | undefined): number | null =>
 };
 
 /**
+ * One row from the board's own database, or null. A site runs AFTER its action
+ * committed and cannot throw, so a missing table or a locked database is a
+ * fact that is not reported, never an error that unwinds the action (a saved
+ * reply came back "Failed!" and skipped its X upload when the lookup threw).
+ */
+function lookup<T>(rawDb: Database.Database, sql: string, ...args: unknown[]): T | null {
+  try {
+    return (rawDb.prepare(sql).get(...args) as T | undefined) ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * This caller's ordinal among the board's accounts, by first login - the
  * "thousandth caller" fact. Counted only on a first call; null when the
  * record has no first-login time.
@@ -52,8 +66,8 @@ const seconds = (d: Date | string | number | null | undefined): number | null =>
 export function callerOrdinal(rawDb: Database.Database | undefined, user: PresenceUser): number | null {
   const first = seconds(user.firstLogin);
   if (!rawDb || first === null) return null;
-  const row = rawDb.prepare('SELECT COUNT(*) AS n FROM users WHERE firstlogin <= ?').get(first) as { n: number };
-  return row.n;
+  const row = lookup<{ n: number }>(rawDb, 'SELECT COUNT(*) AS n FROM users WHERE firstlogin <= ?', first);
+  return row ? row.n : null;
 }
 
 /**
@@ -132,16 +146,12 @@ interface ParentRow {
 /** The parent of a reply: its author, its time, and how many replies it has now (this one included). */
 function parentOf(rawDb: Database.Database | undefined, parentId: number): ParentRow | null {
   if (!rawDb) return null;
-  const row = rawDb
-    .prepare('SELECT author, timestamp, (SELECT COUNT(*) FROM messages r WHERE r.parentid = m.id) AS replies FROM messages m WHERE m.id = ?')
-    .get(parentId) as ParentRow | undefined;
-  return row ?? null;
+  return lookup<ParentRow>(rawDb, 'SELECT author, timestamp, (SELECT COUNT(*) FROM messages r WHERE r.parentid = m.id) AS replies FROM messages m WHERE m.id = ?', parentId);
 }
 
 function userByUsername(rawDb: Database.Database | undefined, username: string): { id: string; email: string | null } | null {
   if (!rawDb) return null;
-  const row = rawDb.prepare('SELECT id, email FROM users WHERE username = ? COLLATE NOCASE').get(username) as { id: string; email: string | null } | undefined;
-  return row ?? null;
+  return lookup<{ id: string; email: string | null }>(rawDb, 'SELECT id, email FROM users WHERE username = ? COLLATE NOCASE', username);
 }
 
 /**
@@ -182,8 +192,7 @@ export const RATIO_MIN_UPLOADS = 10;
 /** The caller's counters as the row holds them now (after the upload's own update). */
 function countersOf(rawDb: Database.Database | undefined, userId: string | number | undefined): { uploads: number; downloads: number } | null {
   if (!rawDb || userId === undefined) return null;
-  const row = rawDb.prepare('SELECT uploads, downloads FROM users WHERE id = ?').get(String(userId)) as { uploads: number; downloads: number } | undefined;
-  return row ?? null;
+  return lookup<{ uploads: number; downloads: number }>(rawDb, 'SELECT uploads, downloads FROM users WHERE id = ?', String(userId));
 }
 
 /**
