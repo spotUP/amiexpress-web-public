@@ -1,6 +1,7 @@
 import { useMemo, useRef, useState } from 'react';
 import { Modal } from '../components/ui/Modal';
 import { DoorSettingsForm } from '../components/DoorSettingsForm';
+import { DoorArtSection } from '../components/DoorArtSection';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Edit2, Trash2, Plus, X, FileCode, Save, Power, PowerOff, Search, Upload, SlidersHorizontal } from 'lucide-react';
 import { apiClient } from '../api/client';
@@ -1048,6 +1049,10 @@ export function DoorsPage() {
                     onPendingChange={save => { pendingSettingsSave.current = save; }}
                   />
                 </div>
+              )}
+
+              {editingDoor && (
+                <DoorArtSection command={editingDoor.door_command} menuKind={editingDoor.menu_kind} />
               )}
 
               {/*

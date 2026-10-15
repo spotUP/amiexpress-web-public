@@ -34,9 +34,11 @@ interface OpenArt {
 export interface DoorArtListProps {
   /** Narrows the list to doors, slots or files containing this text. */
   query?: string;
+  /** Shows only the door registered under this command (the Doors dialog). */
+  command?: string;
 }
 
-export function DoorArtList({ query = '' }: DoorArtListProps) {
+export function DoorArtList({ query = '', command }: DoorArtListProps) {
   /**
    * Art blocks living inside door config files. Small and few (doors declare
    * them in their manifests), so loaded with the page.
@@ -54,11 +56,12 @@ export function DoorArtList({ query = '' }: DoorArtListProps) {
 
   const needle = query.trim().toLowerCase();
   const doors = (Array.isArray(doorArt) ? doorArt : []).filter(door =>
-    !needle
+    (!command || door.command.toUpperCase() === command.toUpperCase())
+    && (!needle
     || door.command.toLowerCase().includes(needle)
     || door.name.toLowerCase().includes(needle)
     || door.sections.some(section =>
-      section.label.toLowerCase().includes(needle) || section.file.toLowerCase().includes(needle)));
+      section.label.toLowerCase().includes(needle) || section.file.toLowerCase().includes(needle))));
 
   return (
     <div className="space-y-2 text-sm">

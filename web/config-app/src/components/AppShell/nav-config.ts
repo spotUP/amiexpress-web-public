@@ -112,7 +112,7 @@ export const NAV_GROUPS: NavGroup[] = [
     title: 'Content',
     items: [
       { path: 'conferences', label: 'Conferences', icon: MessageSquare, minLevel: 255, description: 'Message areas, and the file paths that belong to them', keywords: ['Drives', 'Drive Setup', 'File Areas', 'DLPATH', 'ULPATH', 'Storage', 'S3', 'Bucket', 'Pooled Storage', 'QUOTA', 'Cloud'] },
-      { path: 'doors', label: 'Doors', icon: DoorOpen, minLevel: 255, description: 'External programs on the command menu', keywords: ['Global Wall'] },
+      { path: 'doors', label: 'Doors', icon: DoorOpen, minLevel: 255, description: 'External programs on the command menu, their settings, screens and logos', keywords: ['Global Wall', 'Logos', 'Door Art', 'Menu Logos'] },
       /*
        * ONE NAME: Screen Designer.
        *
@@ -137,7 +137,7 @@ export const NAV_GROUPS: NavGroup[] = [
       { path: 'screen-health', label: 'Screen Health', icon: Gauge, minLevel: 255, description: 'The board\'s screens audited: duplicates, files nothing reads, screens that are only codes, and the codes themselves', keywords: ['Duplicates', 'Read by nothing', 'Not art', 'Codes', 'MCI', 'Repair', 'Export', 'Import', 'Preview as a caller'] },
       { path: 'sprite-manager', label: 'Sprite Manager', icon: FileImage, minLevel: 255, description: 'Upload and manage sprite sheets for installed doors' },
       { path: 'login-sequence', label: 'Login Sequence', icon: ListOrdered, minLevel: 255, description: 'What a caller is shown on the way in, step by step, and which parts of it to keep', keywords: ['Logon', 'Logon Screen', 'Startup', 'Login Flow', 'Bulletins', 'Bulls', 'Includes', 'Pause', 'Sequence', 'Screens'] },
-      { path: 'menus', label: 'Menu Doors', icon: LayoutGrid, minLevel: 255, description: 'The main menu and bulletins doors: sections, descriptions, levels, wipes, logos', keywords: ['Main Menu', 'Menu', 'Bulletins', 'Sections', 'Wipes', 'Logos', 'C64 Menu', 'Overflow', 'Scroll', 'Pages'] },
+      { path: 'menus', label: 'Menu Doors', icon: LayoutGrid, minLevel: 255, description: 'The main menu and bulletins doors: sections, descriptions, levels, wipes (logos are on the Doors page)', keywords: ['Main Menu', 'Menu', 'Bulletins', 'Sections', 'Wipes', 'C64 Menu', 'Overflow', 'Scroll', 'Pages'] },
       { path: 'bulls', label: 'Bulls Menu', icon: Newspaper, minLevel: 255, description: 'Bulls.CFG: the bulletin menu of the 68K Bulls door' },
       { path: 'magazine', label: 'Magazine', icon: BookOpen, minLevel: 255, description: 'THE UNKNOWN FREQUENCY: which articles are on the front page, and which one leads', keywords: ['Front page', 'Lead', 'Articles', 'Teletext', 'MAG', 'News', 'Unknown Frequency'] },
     ],

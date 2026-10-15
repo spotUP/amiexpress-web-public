@@ -331,6 +331,8 @@ export interface Door {
    * door decides it by carrying the file or not.
    */
   has_settings?: boolean;
+  /** Which menu this command is the door of (MENU -> MAIN, B -> BULLETINS), or null. */
+  menu_kind?: 'MAIN' | 'BULLETINS' | null;
 
   // Metadata
   created_at: Date;
