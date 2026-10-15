@@ -123,6 +123,15 @@ export class NodeManager {
     return nodeSession as NodeSession;
   }
 
+  /** The same node session under the socket a resume attached (server/session-parking.ts). */
+  rekeySession(oldId: string, newId: string): void {
+    const s = this.sessions.get(oldId);
+    if (!s || oldId === newId) return;
+    this.sessions.delete(oldId);
+    s.socketId = newId;
+    this.sessions.set(newId, s);
+  }
+
   // Update session activity
   async updateSessionActivity(sessionId: string): Promise<void> {
     const session = this.sessions.get(sessionId);

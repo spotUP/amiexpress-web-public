@@ -237,10 +237,8 @@ function _displayWCommandMenu(socket: any, session: BBSSession): void {
 function _collectWCommandMenu(socket: any, session: BBSSession): string[] {
   const captured: string[] = [];
   const collector = Object.create(socket);
-  // ITS OWN ID, or it shares the caller's output buffer: `getAnsiBuffer` keys
-  // by `socket.id`, and the first object to ask owns the buffer - so a shared
-  // id would send the page this function is collecting FOR into the
-  // collector instead of to the caller.
+  // ITS OWN ID for the log lines; the output buffer is keyed by the collector
+  // object itself, so it can never share the caller's buffer.
   collector.id = `${socket.id}:w-menu`;
   collector.session = Object.create(session);
   collector.session.screenWidth = 80;
@@ -252,7 +250,7 @@ function _collectWCommandMenu(socket: any, session: BBSSession): string[] {
   };
   _paintWCommandMenu(collector, session);
   flushOutput(collector);
-  releaseAnsiBuffer(collector.id);
+  releaseAnsiBuffer(collector);
   // The prompt is the pager's to write, so the trailing row goes.
   const rows = captured.join('').split('\r\n');
   while (rows.length && rows[rows.length - 1].trim() === '') rows.pop();

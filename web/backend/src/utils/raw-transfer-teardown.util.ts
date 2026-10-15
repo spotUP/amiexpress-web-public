@@ -62,3 +62,30 @@ export function endRawTransfer(session: any): void {
 
 /** How long input after a transfer is taken to be the protocol's goodbye. */
 export const TRANSFER_TAIL_DRAIN_MS = 2000;
+
+/**
+ * End a session's transfer for good: destroy the stream half (browser only),
+ * the raw routing, and the outbound sender. Moved here from socket-handlers so
+ * the session parking code can call it without importing the socket graph.
+ */
+export function cleanupTransfer(session: any) {
+  if (!session) return;
+  const transfer = session.transfer;
+  // The stream half only exists for the browser transport. It used to guard
+  // the WHOLE function with an early return, so a session with no
+  // `session.transfer` - every telnet and SSH caller - left the raw input
+  // routing wired to a finished transfer. Destroy the stream if there is one;
+  // tear the routing down either way.
+  if (transfer) {
+    try {
+      if (transfer.stream && typeof transfer.stream.destroy === 'function') {
+        transfer.stream.destroy();
+      }
+    } catch (_) {
+      /* ignore */
+    }
+    session.transfer = undefined;
+  }
+  endRawTransfer(session);
+  session.transferRawSend = undefined;
+}

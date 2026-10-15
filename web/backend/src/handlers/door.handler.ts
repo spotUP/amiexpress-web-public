@@ -388,7 +388,8 @@ console.log(`[DoorSocket][Video] User ${session.user?.username} stopped video st
 
   // Forward all other socket properties and methods
   wrappedSocket.server = socket.server;
-  wrappedSocket.id = socket.id;
+  // A getter, not a copy: after a resume the socket's id is the new one.
+  Object.defineProperty(wrappedSocket, 'id', { get: () => socket.id, enumerable: true });
   wrappedSocket.on = (event: string, handler: (...args: any[]) => void) => {
     addLocalHandler(event, handler);
     return socket.on(event, handler);

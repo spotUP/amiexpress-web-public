@@ -72,7 +72,7 @@ export { enableGameMode, disableGameMode } from '../services/game-mode.service';
 import { repeatReachesDoor } from '../services/game-mode.service';
 import { deliversKeyEvents } from '../services/key-event-capable';
 import { reportLogout } from '../achievements/sites';
-import { endRawTransfer } from '../utils/raw-transfer-teardown.util';
+import { cleanupTransfer } from '../utils/raw-transfer-teardown.util';
 import { c64AdapterFor } from './c64-door-adapter';
 import { routeDoorInput } from '../services/door-input-routing';
 import { onLevel, SYSOP_LEVEL } from './socket-guard';
@@ -1267,28 +1267,6 @@ console.log(`[DISCONNECT] Sessions map now has ${sessions.size} entries`);
       }
     }
   }
-}
-
-function cleanupTransfer(session: any) {
-  if (!session) return;
-  const transfer = session.transfer;
-  // The stream half only exists for the browser transport. It used to guard
-  // the WHOLE function with an early return, so a session with no
-  // `session.transfer` - every telnet and SSH caller - left the raw input
-  // routing wired to a finished transfer. Destroy the stream if there is one;
-  // tear the routing down either way.
-  if (transfer) {
-    try {
-      if (transfer.stream && typeof transfer.stream.destroy === 'function') {
-        transfer.stream.destroy();
-      }
-    } catch (_) {
-      /* ignore */
-    }
-    session.transfer = undefined;
-  }
-  endRawTransfer(session);
-  session.transferRawSend = undefined;
 }
 
 export default registerSocketHandlers;

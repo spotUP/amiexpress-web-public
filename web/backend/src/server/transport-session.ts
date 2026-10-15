@@ -539,7 +539,7 @@ console.log(
           await endTransportSession(emitter, session, connection.sessionId);
           // Divergence 30: the buffer's own cleanup listens for
           // 'disconnect', which no byte transport ever emits.
-          releaseAnsiBuffer(connection.sessionId);
+          releaseAnsiBuffer(emitter);
         } catch (err) {
           console.error(`[${type.toUpperCase()}] Session teardown failed:`, err);
         }

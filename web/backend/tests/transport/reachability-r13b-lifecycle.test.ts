@@ -105,7 +105,8 @@ describe('R13b - the real finalize writes the caller off the board', () => {
     // getAnsiBuffer takes a SOCKET (it registers a disconnect handler on it),
     // not an id - a buffer keyed by id with nothing to release it is the leak
     // releaseAnsiBuffer exists to close.
-    getAnsiBuffer({ id: session.socketId, on: () => undefined } as never);
+    const bufferSocket = { id: session.socketId, on: () => undefined } as never;
+    getAnsiBuffer(bufferSocket);
     const buffersBefore = ansiBufferCount();
     expect(emitterForSession(session)).not.toBeNull();
 
@@ -123,7 +124,7 @@ describe('R13b - the real finalize writes the caller off the board', () => {
     expect(mockRunLogoffBatches).toHaveBeenCalledTimes(1);
 
     // The two resources: released, and no longer reachable.
-    releaseAnsiBuffer(session.socketId as string);
+    releaseAnsiBuffer(bufferSocket);
     expect(ansiBufferCount()).toBeLessThan(buffersBefore + 1);
     unregisterConnectionEmitter(session);
     expect(emitterForSession(session)).toBeNull();

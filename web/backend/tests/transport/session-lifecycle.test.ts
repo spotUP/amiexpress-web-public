@@ -145,11 +145,11 @@ describe("the connection's AnsiBuffer", () => {
     // Divergence 30: the buffer's own cleanup listens for 'disconnect',
     // which no byte transport ever emits, so every telnet and SSH caller
     // used to leave this behind for the life of the process.
-    expect(releaseAnsiBuffer(socketId)).toBe(true);
+    expect(releaseAnsiBuffer(fakeSocket)).toBe(true);
 
     expect(sent.join('')).toContain('half a screen');
     expect(ansiBufferCount()).toBe(before);
     // Releasing twice is not an error - a close can race a disconnect.
-    expect(releaseAnsiBuffer(socketId)).toBe(false);
+    expect(releaseAnsiBuffer(fakeSocket)).toBe(false);
   });
 });

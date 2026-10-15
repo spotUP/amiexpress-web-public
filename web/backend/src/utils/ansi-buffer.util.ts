@@ -155,7 +155,14 @@ export class AnsiBuffer {
  * Session-based buffer management
  * One buffer per socket, automatically cleaned up
  */
-const bufferMap = new Map<string, AnsiBuffer>();
+/*
+ * Keyed by the emitter OBJECT, never its id: after a resume the link's id is
+ * the new socket's id (session persistence S4), and a buffer found by id would
+ * split in two. A Map rather than a WeakMap on purpose - the buffer holds its
+ * socket strongly, so weakness would never collect anything, and
+ * `flushAllBuffers` / `ansiBufferCount` must iterate.
+ */
+const bufferMap = new Map<object, AnsiBuffer>();
 
 /**
  * Get or create ANSI buffer for a socket
@@ -165,16 +172,13 @@ const bufferMap = new Map<string, AnsiBuffer>();
  * @returns AnsiBuffer instance for this socket
  */
 export function getAnsiBuffer(socket: Socket): AnsiBuffer {
-  const socketId = socket.id;
-
   // Return existing buffer
-  if (bufferMap.has(socketId)) {
-    return bufferMap.get(socketId)!;
-  }
+  const existing = bufferMap.get(socket);
+  if (existing) return existing;
 
   // Create new buffer
   const buffer = new AnsiBuffer(socket);
-  bufferMap.set(socketId, buffer);
+  bufferMap.set(socket, buffer);
 
   /*
    * Clean up on disconnect - when the socket can tell us it disconnected.
@@ -189,7 +193,7 @@ export function getAnsiBuffer(socket: Socket): AnsiBuffer {
    */
   if (typeof (socket as any).on === 'function') {
     socket.on('disconnect', () => {
-      releaseAnsiBuffer(socketId);
+      releaseAnsiBuffer(socket);
     });
   }
 
@@ -206,11 +210,11 @@ export function getAnsiBuffer(socket: Socket): AnsiBuffer {
  * whatever had not been flushed when the line dropped. The close handler
  * calls this directly.
  */
-export function releaseAnsiBuffer(socketId: string): boolean {
-  const buf = bufferMap.get(socketId);
+export function releaseAnsiBuffer(socket: object): boolean {
+  const buf = bufferMap.get(socket);
   if (!buf) return false;
   buf.flush(); // Whatever it was still holding goes out first.
-  bufferMap.delete(socketId);
+  bufferMap.delete(socket);
   return true;
 }
 
