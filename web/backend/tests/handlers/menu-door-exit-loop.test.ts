@@ -22,12 +22,16 @@ jest.mock('../../src/handlers/command.handler', () => ({
   }),
 }));
 jest.mock('../../src/handlers/door.handler', () => ({ theCallerIsLeaving: () => false }));
-const showBulletin = jest.fn(async (..._a: unknown[]) => true);
+const order: string[] = [];
+const showBulletin = jest.fn(async (..._a: unknown[]) => { order.push('bulletin'); return true; });
+const pause = { answered: null as null | (() => void | Promise<void>) };
+const doPause = jest.fn((_s: unknown, _x: unknown, cont?: () => void | Promise<void>) => { order.push('pause'); pause.answered = cont ?? null; });
 jest.mock('../../src/handlers/commands/display-file-commands.handler', () => ({
   showBulletin: (...a: unknown[]) => showBulletin(...a),
 }));
 const screen = { defer: false, deferred: null as null | (() => void | Promise<void>) };
 jest.mock('../../src/handlers/screen.handler', () => ({
+  doPause: (...a: [unknown, unknown, (() => void | Promise<void>)?]) => doPause(...a),
   continueAfterScreen: jest.fn(async (_s: unknown, _x: unknown, cont: () => void | Promise<void>) => {
     if (!screen.defer) { await cont(); return false; }
     screen.deferred = cont;
@@ -50,7 +54,7 @@ afterAll(() => require('fs').rmSync(mockBoard, { recursive: true, force: true })
 import * as exit from '../../src/handlers/commands/menu-door-exit';
 
 beforeEach(() => {
-  launched.length = 0; depth = 0; maxDepth = 0; screen.defer = false; screen.deferred = null; failOn.command = ''; showBulletin.mockReset(); showBulletin.mockResolvedValue(true);
+  launched.length = 0; order.length = 0; doPause.mockClear(); pause.answered = null; depth = 0; maxDepth = 0; screen.defer = false; screen.deferred = null; failOn.command = ''; showBulletin.mockReset(); showBulletin.mockResolvedValue(true);
 });
 
 test('five menu relaunches run one after another at the same depth', async () => {
@@ -76,11 +80,12 @@ test('a bulletin is shown through the board with the leave wipe, then B is reope
   const session: any = {};
   await exit.showBulletinThenReopen({}, session, { kind: 'BULLETINS', key: '3', command: 'B' });
   expect(showBulletin).toHaveBeenCalledWith({}, session, 3, 'H');
+  await pause.answered!();
   expect(launched[0]).toBe('B');
 });
 
 test('a bulletin with a pause reopens B only when the pause is answered', async () => {
-  const session: any = {};
+  const session: any = { paginatedScreen: { kind: 'doPause' } };
   screen.defer = true;
   await exit.showBulletinThenReopen({}, session, { kind: 'BULLETINS', key: '7', command: 'B' });
   expect(launched).toEqual([]);
@@ -92,6 +97,7 @@ test('a bulletin that does not exist still reopens B', async () => {
   const session: any = {};
   showBulletin.mockResolvedValueOnce(false);
   await exit.showBulletinThenReopen({}, session, { kind: 'BULLETINS', key: '99', command: 'B' });
+  await pause.answered!();   // the caller reads the board's "no such bulletin" line first
   expect(launched[0]).toBe('B');
 });
 
@@ -127,5 +133,22 @@ test('a bulletin that cannot be shown still reopens B, so the caller is not left
   const session: any = {};
   showBulletin.mockRejectedValueOnce(new Error('unreadable'));
   await exit.showBulletinThenReopen({}, session, { kind: 'BULLETINS', key: '3', command: 'B' });
+  await pause.answered!();
   expect(launched[0]).toBe('B');
+});
+
+test('a bulletin with no pause of its own is held for a key before B is reopened', async () => {
+  const session: any = {};
+  await exit.showBulletinThenReopen({}, session, { kind: 'BULLETINS', key: '3', command: 'B' });
+  expect(doPause).toHaveBeenCalledTimes(1);
+  expect(launched).toEqual([]);                 // the reopen waits for the caller's key
+  await pause.answered!();
+  expect(launched[0]).toBe('B');
+  expect(order.indexOf('bulletin')).toBeLessThan(order.indexOf('pause'));
+});
+
+test('a bulletin that already holds a pause gate is not paused twice', async () => {
+  const session: any = { paginatedScreen: { kind: 'doPause' } };
+  await exit.showBulletinThenReopen({}, session, { kind: 'BULLETINS', key: '3', command: 'B' });
+  expect(doPause).not.toHaveBeenCalled();
 });

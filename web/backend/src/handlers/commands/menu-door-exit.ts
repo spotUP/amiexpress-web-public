@@ -245,7 +245,7 @@ export async function showBulletinThenReopen(socket: unknown, session: BBSSessio
   // eslint-disable-next-line @typescript-eslint/no-var-requires
   const { showBulletin } = require('./display-file-commands.handler') as typeof import('./display-file-commands.handler');
   // eslint-disable-next-line @typescript-eslint/no-var-requires
-  const { continueAfterScreen } = require('../screen.handler') as typeof import('../screen.handler');
+  const { continueAfterScreen, doPause } = require('../screen.handler') as typeof import('../screen.handler');
   const wipe = readMenuConfig(boardRoot(), show.kind).config.wipes.leave;
   try {
     await showBulletin(socket as never, session, Number(show.key), wipe);
@@ -253,10 +253,18 @@ export async function showBulletinThenReopen(socket: unknown, session: BBSSessio
     // The caller must not be left without a screen: B reopens even when the bulletin could not be shown.
     console.warn('[menu-door-exit] bulletin could not be shown:', err);
   }
-  await continueAfterScreen(socket as never, session, async () => {
+  const reopen = async (): Promise<void> => {
     parkDoor(session, show.command);
     await drainParkedDoors(socket, session);
-  }, 'bulletins-door');
+  };
+  // A bulletin with no ~SP of its own leaves no gate: reopening at once wipes it unread (sysop, 2026-10-15,
+  // "it opens bulls and closes them directly"). The caller is owed a key press before the menu returns.
+  const s = session as { paginatedScreen?: unknown; screenSegments?: { segments: unknown[] } };
+  if (!s.paginatedScreen && !(s.screenSegments && s.screenSegments.segments.length > 0)) {
+    doPause(socket as never, session, reopen);
+    return;
+  }
+  await continueAfterScreen(socket as never, session, reopen, 'bulletins-door');
 }
 
 // ---- Redaction: the picked line can hold a password (a conference or command password typed as a parameter) ----

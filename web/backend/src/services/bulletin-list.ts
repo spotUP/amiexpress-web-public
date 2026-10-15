@@ -95,9 +95,24 @@ export function bulletinTitles(doorsDir: string): Map<number, string> {
 }
 
 /**
+ * Is there anything on this bulletin to read? A zero-byte file, or one holding only blanks and
+ * colour codes, is a placeholder: the menu must not offer it, and the board shows nothing for it.
+ */
+export function bulletinHasContent(filePath: string): boolean {
+  try {
+    const bytes = amigafs.readFileSync(filePath);
+    const text = typeof bytes === 'string' ? bytes : bytes.toString('latin1');
+    // eslint-disable-next-line no-control-regex
+    return text.replace(/\x1b\[[0-9;]*[A-Za-z]/g, '').replace(/[\s\x00-\x1f]/g, '').length > 0;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Every bulletin the board can actually show, in number order.
  *
- * The FILES decide what exists - a name in Bulls.CFG with no file behind it
+ * The FILES decide what exists (a file with nothing in it does not) - a name in Bulls.CFG with no file behind it
  * is a promise the board cannot keep - and the names decorate them.
  */
 export function listBulletins(
@@ -118,6 +133,7 @@ export function listBulletins(
   for (const entry of entries) {
     const number = bulletinNumber(entry);
     if (number === null || seen.has(number)) continue;
+    if (!bulletinHasContent(path.join(dir, entry))) continue;
     seen.set(number, {
       number,
       title: titles.get(number) ?? `Bulletin ${number}`,

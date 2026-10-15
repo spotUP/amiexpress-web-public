@@ -163,10 +163,15 @@ describe('a menu door exit tail', () => {
 
     order.length = 0;
     fake.arm = s => menuExit.armMenuShow(s, { kind: 'BULLETINS', key: '3', command: 'B' });
-    await runMenuDoor('B');
+    const session = await runMenuDoor('B');
     expect(showBulletin).toHaveBeenCalledTimes(1);
     expect(showBulletin.mock.calls[0][2]).toBe(3);
     expect(order).toEqual(['bulletin']);
+    // The bulletin has no ~SP of its own: the board holds it on screen for a key before B returns
+    // (sysop 2026-10-15, "it opens bulls and closes them directly").
+    expect(session.paginatedScreen?.kind).toBe('doPause');
+    expect(processSpy.mock.calls.map(c => c[2])).not.toContain('B');
+    await session.paginatedScreen.onComplete();
     expect(processSpy.mock.calls.map(c => c[2])).toContain('B');
   });
 
