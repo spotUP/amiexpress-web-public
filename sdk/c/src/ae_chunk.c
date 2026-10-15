@@ -27,8 +27,27 @@ unsigned long ae_safe_chunk(const char *text, unsigned long len,
         return take;
     }
 
-    /* Terminated inside the chunk? A CSI sequence ends on its final byte,
-     * anything in 0x40..0x7e after the '['. */
+    /* Terminated inside the chunk? Three shapes end differently:
+     *   CSI (ESC [): on a final byte, 0x40..0x7e, after the '['.
+     *   a designation (ESC ( ) * + # % or space, then one more byte): three bytes in all.
+     *   anything else (ESC 7, ESC 8, ESC c, ESC D ...): the byte after the ESC IS the whole sequence.
+     * The last shape used to be looked for a CSI final byte too, and found none: an "ESC 8" ending a write was
+     * "unterminated", so the rail tick left as a 109-byte message plus a lone ESC 8. */
+    if ((unsigned long) esc + 1 >= take) {
+        goto unterminated;           /* the ESC is the last byte: its second byte is not here yet */
+    }
+    {
+        unsigned char next = (unsigned char) text[esc + 1];
+        if (next != '[') {
+            if (next == '(' || next == ')' || next == '*' || next == '+' || next == '#' || next == '%' || next == ' ') {
+                if ((unsigned long) esc + 2 < take) {
+                    return take;
+                }
+                goto unterminated;
+            }
+            return take;
+        }
+    }
     for (i = (unsigned long) esc + 2; i < take; i++) {
         unsigned char c = (unsigned char) text[i];
         if (c >= 0x40 && c <= 0x7e) {
@@ -36,6 +55,7 @@ unsigned long ae_safe_chunk(const char *text, unsigned long len,
         }
     }
 
+unterminated:
     /* Unterminated: cut before it and let the next message carry it whole. */
     if (esc == 0) {
         return take;                 /* longer than a whole message: send on */
