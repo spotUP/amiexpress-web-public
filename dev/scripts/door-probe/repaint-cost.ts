@@ -27,6 +27,10 @@ process.env.SKIP_DB_INIT = '1';
 
 import * as path from 'path';
 import { EventEmitter } from 'events';
+import { claimHarnessPorts } from './harness-ports';
+
+// Loading the backend below starts the whole board: keep it off the sysop's local ports (3001/2323/2222).
+const PORTS = claimHarnessPorts();
 
 // The emulator's decorators need this loaded first; it lives with the backend.
 const BACKEND = path.resolve(__dirname, '../../../web/backend');
@@ -110,6 +114,7 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
  * Whatever animation is not a rail tick is measured over an idle window with no key and subtracted. */
 async function main() {
   const opts = parseArgs(process.argv.slice(2));
+  console.error(`[INFO] harness ports: ${Object.entries(PORTS).map(([k, v]) => `${k}=${v}`).join(' ')}`);
   const petscii = opts.cols < 80;
   if (opts.board) {
     process.env.BBS_DATA_DIR = opts.board;
