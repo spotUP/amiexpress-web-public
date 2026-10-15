@@ -288,6 +288,10 @@ export function registerHttpRoutes(app: Application, io: SocketIOServer): void {
   const { createBullsRouter } = require('../api/bulls-routes');
   app.use('/api/config/bulls', authenticateToken(db), requireSysop(), createBullsRouter(boardRoot()));
 
+  // ===== Menu doors API - Sysop-only (Menus/<KIND>.json and Screens/menus/<kind>/logos) =====
+  const { createMenuConfigRouter } = require('../api/menu-config-routes');
+  app.use('/api/config/menus', authenticateToken(db), requireSysop(), createMenuConfigRouter(boardRoot()));
+
   // ===== Magazine API - Sysop-only (the front page of THE UNKNOWN FREQUENCY) =====
   mountMagazineAdmin(app, [authenticateToken(db), requireSysop()], {
     boardRoot,
