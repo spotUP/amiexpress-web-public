@@ -20,6 +20,9 @@ export const bulletinsMenuSource: MenuSource = {
     // express.e:24616-24621 - BullHelp absent: "No bulletins are available in this conference!"
     const confScreens = conferenceSubdir(config.get('dataDir'), caller.conference, 'Screens');
     if (!conferenceHasBulletins(config.get('dataDir'), confScreens)) return { ok: false, refusal: 'none' };
+    // Nothing with content to offer (every file empty, or the mask switches them all off) is the same
+    // answer as no BullHelp: the board's own "No bulletins are available" line, never an empty grid.
+    if (bulletinsMenuSource.entries(caller).length === 0) return { ok: false, refusal: 'none' };
     return { ok: true };
   },
   entries(caller) {

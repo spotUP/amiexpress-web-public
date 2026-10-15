@@ -26,7 +26,7 @@ import * as amigafs from '../../utils/amigafs';
 import { finalizeCommand } from '../../utils/command-response.util';
 import { displayMainMenu, launchMenuDoor } from '../command-handler/menu';
 import { config } from '../../config';
-import { conferenceHasBulletins } from '../../services/bulletin-list';
+import { conferenceHasBulletins, bulletinHasContent } from '../../services/bulletin-list';
 import { userScreenTypeExtension } from '../../screens/screen-metadata';
 
 /**
@@ -375,7 +375,9 @@ export async function showBulletin(socket: any, session: BBSSession, bulletinNum
 
   // express.e:24648-24655: displayFile, then straight back to the prompt -
   // no line break of its own either side (lineInput's is the caller's).
-  if (!bulletinScreen) {
+  // An empty or blank file is a placeholder: the menu does not list it (listBulletins, same predicate), and a
+  // number picked before it was emptied gets the line a missing file gets - never a silent blank screen.
+  if (!bulletinScreen || !bulletinHasContent(bulletinScreen)) {
     // express.e:24652-24653: '\b\nSorry there is no bulletin #\d\b\n\b\n'
     socket.emit('ansi-output', `\r\nSorry there is no bulletin #${bulletinNum}\r\n\r\n`);
     return false;
