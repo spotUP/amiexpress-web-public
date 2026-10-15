@@ -57,6 +57,7 @@ jest.mock('../../src/services/UserFileManager', () => ({
 }));
 
 import { BBSState, LoggedOnSubState } from '../../src/constants/bbs-states';
+import { lookupResumeToken, tokenFingerprint } from '../../src/server/resume-tokens';
 
 function emitter() {
   const emitted: Array<{ event: string; data: unknown }> = [];
@@ -85,10 +86,10 @@ const USER = {
 };
 
 /** Run the pipeline far enough to see the mint, and no further. */
-async function loginOn(connectionType?: 'web' | 'telnet') {
+async function loginOn(connectionType?: 'web' | 'telnet', sess = session(connectionType)) {
   const { runPostAuthLogin } = require('../../src/services/login-post.service');
   const socket = emitter();
-  await runPostAuthLogin(socket, session(connectionType), USER, {
+  await runPostAuthLogin(socket, sess, USER, {
     lastLoginBeforeUpdate: new Date(0),
   }).catch((err: Error) => {
     if (!(err instanceof Error) || !/past the mint/.test(err.message)) throw err;
@@ -125,5 +126,45 @@ describe('the session token a web caller needs for auto-login', () => {
     const socket = await loginOn(undefined);
     const success = socket.emitted.find((e: any) => e.event === 'login-success');
     expect(success?.data).toMatchObject({ token: 'access-token' });
+  });
+});
+
+describe('the resume token a web caller needs to get a dropped session back', () => {
+  it('login-success carries a resumeToken that opens THIS session and nothing else', async () => {
+    const sess = session('web');
+    const socket = await loginOn('web', sess);
+    const success = socket.emitted.find((e: any) => e.event === 'login-success');
+    const token = success?.data?.resumeToken;
+    expect(typeof token).toBe('string');
+    const found = lookupResumeToken(token);
+    expect(found.ok && found.bound.session).toBe(sess);
+    expect(found.ok && found.bound.userId).toBe('u-1');
+    expect(found.ok && found.bound.nodeId).toBe(1);
+  });
+
+  it('a telnet caller gets no resume token (it has no reconnect path)', async () => {
+    const socket = await loginOn('telnet');
+    expect(JSON.stringify(socket.emitted)).not.toContain('resumeToken');
+  });
+
+  it('the token reaches no console sink during the login', async () => {
+    const lines: string[] = [];
+    const spies = (['log', 'info', 'warn', 'error', 'debug'] as const).map((m) =>
+      jest.spyOn(console, m).mockImplementation((...a: unknown[]) => {
+        lines.push(a.map((x) => (typeof x === 'string' ? x : JSON.stringify(x))).join(' '));
+      }));
+    let token = '';
+    try {
+      const socket = await loginOn('web');
+      token = socket.emitted.find((e: any) => e.event === 'login-success').data.resumeToken;
+    } finally {
+      spies.forEach((s) => s.mockRestore());
+    }
+    // The sink was live and carried other text...
+    expect(lines.length).toBeGreaterThan(0);
+    expect(lines.some((l) => l.includes(tokenFingerprint(token)))).toBe(true);
+    // ...and the token (and the raw secret form of it) is in none of it.
+    expect(token).toMatch(/^[A-Za-z0-9_-]{43}$/);
+    expect(lines.filter((l) => l.includes(token))).toEqual([]);
   });
 });
