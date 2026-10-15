@@ -3069,8 +3069,10 @@ console.log(`[executeAmigaDoor] doorInputHandler received: "${data}" (len=${data
             data
           )}`
         );
-        menuTail.noteCallerInput(session);   // a MENU door the caller never touched is not a door that ran (menu-door-exit)
         routeAmigaDoorInput(shared, data);
+        // A MENU door the caller never touched is not a door that ran (menu-door-exit). After the routing and in
+        // its own try, so counting can never cost the door a keystroke.
+        try { menuTail.noteCallerInput(session, data); } catch { /* presence is advisory */ }
       } catch (err) {
 console.error('[executeAmigaDoor] Error routing door input:', err);
       }

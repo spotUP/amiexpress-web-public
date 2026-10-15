@@ -40,6 +40,17 @@ const reentered = new WeakSet<object>();
 const launchStart = new WeakMap<object, number>();
 const inputs = new WeakMap<object, number>();
 const lastSelfExit = new WeakMap<object, number>();
+const launchTimes = new WeakMap<object, number[]>();
+
+/**
+ * Hard relaunch budget, whatever the input: more than MENU_LAUNCH_BUDGET MENU launches inside
+ * MENU_LAUNCH_WINDOW_MS latches the session onto the art menu. A human cycle (open, pick, command, back) takes
+ * seconds, so the budget never meets one; a loop that no other guard catches meets it at once.
+ */
+export const MENU_LAUNCH_BUDGET = 8;
+export const MENU_LAUNCH_WINDOW_MS = 10_000;
+/** Absolute cap on relaunches one drain call carries; reaching it latches and draws the art menu. */
+export const DRAIN_ITERATION_CAP = 500;
 
 /**
  * A MENU door that reaches its exit tail by itself (the caller sent it nothing) inside this window is a
@@ -48,8 +59,28 @@ const lastSelfExit = new WeakMap<object, number>();
  * past the window anyway.
  */
 export const MENU_SELF_EXIT_WINDOW_MS = 2000;
-/** The caller sent the running door a key (door.handler's door input handler). */
-export function noteCallerInput(session: object): void { inputs.set(session, (inputs.get(session) ?? 0) + 1); }
+/**
+ * Is this chunk the CALLER's (a key, a click, a hover) rather than the terminal talking to the door?
+ * A terminal answers cursor-position and attribute queries and reports focus on its own, and those
+ * bytes must not make a door that quit by itself look used. Ignored: CSI cursor-position replies
+ * (ESC [ r ; c R), focus in/out (ESC [ I, ESC [ O), device-attribute replies (ESC [ ? .. c, ESC [ > .. c),
+ * status and size reports (ESC [ .. n, ESC [ .. t) and OSC replies. Kept: printable bytes, CR, LF, a lone
+ * ESC, arrows and every mouse report (ESC [ < ..). The one classification; menu-door-input.test pins the table.
+ */
+export function isCallerInput(data: string): boolean {
+  const rest = data
+    .replace(/\x1b\[\d*(?:;\d+)*R/g, '')
+    .replace(/\x1b\[[IO]/g, '')
+    .replace(/\x1b\[[?>=]?\d*(?:;\d+)*c/g, '')
+    .replace(/\x1b\[\d+(?:;\d+)*[nt]/g, '')
+    .replace(/\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)/g, '');
+  return rest.length > 0;
+}
+/** The caller sent the running MENU door something (door.handler's door input handler). Only counted while a launch is in flight. */
+export function noteCallerInput(session: object, data: string): void {
+  if (!launching.has(session) || !isCallerInput(data)) return;
+  inputs.set(session, (inputs.get(session) ?? 0) + 1);
+}
 /** Forget a parked door by name (a latched MENU must not be relaunched by an entry its own tail parked). */
 export function unparkDoor(session: object, command: string): void {
   const q = parked.get(session); if (q) parked.set(session, q.filter((c) => c !== command));
@@ -115,9 +146,18 @@ export async function runMenuDoor(socket: unknown, session: BBSSession): Promise
   if (!def || !doorBinaryExists(def.location)) return 'failed';
   // eslint-disable-next-line @typescript-eslint/no-var-requires
   const { processCommand } = require('../command.handler') as typeof import('../command.handler');
+  const startedAt = Date.now();
+  const recent = (launchTimes.get(session) ?? []).filter((t) => startedAt - t < MENU_LAUNCH_WINDOW_MS);
+  if (recent.length >= MENU_LAUNCH_BUDGET) {
+    markMenuDoorFailed(session);
+    unparkDoor(session, 'MENU');
+    launchTimes.set(session, recent);
+    return 'failed';
+  }
+  recent.push(startedAt);
+  launchTimes.set(session, recent);
   const tailsBefore = exitTailsEntered(session);
   const inputsBefore = inputs.get(session) ?? 0;
-  const startedAt = Date.now();
   setMenuLaunchInFlight(session, true);
   try {
     await processCommand(socket as never, session, 'MENU', '');
@@ -162,9 +202,19 @@ export async function drainParkedDoors(socket: unknown, session: BBSSession): Pr
     const { theCallerIsLeaving } = require('../door.handler') as typeof import('../door.handler');
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     const { processCommand } = require('../command.handler') as typeof import('../command.handler');
+    let iterations = 0;
     for (;;) {
       const next = parked.get(session)?.shift();
       if (!next) break;
+      if (++iterations > DRAIN_ITERATION_CAP) {
+        console.warn('[menu-door-exit] drain iteration cap reached; the art menu serves this session');
+        markMenuDoorFailed(session);
+        parked.delete(session);
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        const { displayMainMenu } = require('../command-handler/menu') as typeof import('../command-handler/menu');
+        if (!theCallerIsLeaving(session)) await displayMainMenu(socket as never, session, false, true);
+        break;
+      }
       if (theCallerIsLeaving(session)) { parked.delete(session); break; }
       if (next === 'MENU') {
         // One guarded path for every MENU launch: a crashing relaunch is tried once, then the art menu serves.

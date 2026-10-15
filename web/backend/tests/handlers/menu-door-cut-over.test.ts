@@ -260,7 +260,7 @@ describe('a parked MENU relaunch (the exit-tail drain)', () => {
 });
 
 describe('review round 3', () => {
-  const seat = (session: any, keys: boolean) => { if (keys) exit.noteCallerInput(session); exit.enterExitTail(session); exit.leaveExitTail(session); };
+  const seat = (session: any, keys: boolean) => { if (keys) exit.noteCallerInput(session, 'x'); exit.enterExitTail(session); exit.leaveExitTail(session); };
 
   test('the caller hanging up while a parked MENU relaunch throws gets no menu drawn', async () => {
     register(); const c = caller();
@@ -330,4 +330,62 @@ describe('review round 3', () => {
     expect(processCommand).toHaveBeenCalledTimes(1);
     expect(displayScreen).not.toHaveBeenCalled();
   });
+});
+
+describe('relaunch budget', () => {
+  let now = 1_000_000;
+  let spy: jest.SpyInstance;
+  beforeEach(() => { now = 1_000_000; spy = jest.spyOn(Date, 'now').mockImplementation(() => now); });
+  afterEach(() => spy.mockRestore());
+
+  /** a door the caller really uses (input present) that runs `ms` of fake time and parks MENU again from its tail */
+  const looping = (ms: number) => async (s: any, session: any) => {
+    if (processCommand.mock.calls.length > 5000) return 'STOP';   // hard stop so a missing guard fails instead of hanging
+    now += ms;
+    exit.noteCallerInput(session, 'M');
+    exit.enterExitTail(session);
+    await displayMainMenu(s, session, false, true);               // the tail's menu display parks the next MENU
+    exit.leaveExitTail(session);
+    return 'SUCCESS';
+  };
+  async function run(c: { socket: any; session: any }) {
+    exit.enterExitTail(c.session); await displayMainMenu(c.socket, c.session, false, true); exit.leaveExitTail(c.session);
+    await exit.drainParkedDoors(c.socket, c.session);
+  }
+
+  test('more launches than the budget inside the window latch the session, even with input present', async () => {
+    register(); const c = caller();
+    doorBehaviour = looping(1000);
+    await run(c);
+    expect(processCommand).toHaveBeenCalledTimes(exit.MENU_LAUNCH_BUDGET);
+    expect(exit.menuDoorFailed(c.session)).toBe(true);
+    expect(displayScreen).toHaveBeenCalledTimes(1);
+    expect(emitPrompt).toHaveBeenCalledTimes(1);
+    expect(exit.hasParkedDoor(c.session)).toBe(false);
+  });
+
+  test('a slow loop (3 s per run) that never trips the budget meets the drain iteration cap: latched, art menu once', async () => {
+    register(); const c = caller();
+    doorBehaviour = looping(3000);
+    await run(c);
+    expect(processCommand.mock.calls.length).toBeLessThanOrEqual(exit.DRAIN_ITERATION_CAP + 1);
+    expect(exit.menuDoorFailed(c.session)).toBe(true);
+    expect(displayScreen).toHaveBeenCalledTimes(1);
+    expect(exit.hasParkedDoor(c.session)).toBe(false);
+  });
+
+  test('a caller at human pace (one run every 4 s) is never latched by the budget', async () => {
+    register(); const c = caller();
+    for (let i = 0; i < 20; i++) { now += 4000; doorBehaviour = async (_s, session) => { exit.noteCallerInput(session, 'M'); exit.enterExitTail(session); exit.leaveExitTail(session); return 'SUCCESS'; }; await displayMainMenu(c.socket, c.session, false, true); }
+    expect(processCommand).toHaveBeenCalledTimes(20);
+    expect(exit.menuDoorFailed(c.session)).toBe(false);
+  });
+});
+
+test('terminal replies on the wire are not a caller using the door', async () => {
+  register(); const c = caller();
+  doorBehaviour = async (_s, session) => { exit.noteCallerInput(session, '\x1b[24;80R'); exit.noteCallerInput(session, '\x1b[I'); seat(session, false); return 'SUCCESS'; };
+  await displayMainMenu(c.socket, c.session, false, true);
+  await displayMainMenu(c.socket, c.session, false, true);
+  expect(exit.menuDoorFailed(c.session)).toBe(true);   // two quick self-exits: the replies did not count as presence
 });
