@@ -1,0 +1,23 @@
+
+                            You have access 255
+
+  Files uploaded                            Bytes uploaded
+  (    0 file(s) x     0)                   (     0 Mb x     0) 
+                      :         0 file(s)                   :         0 Mb         
+  ---------------------------------------   -------------------------------
+  Files available     :         0 file(s)   Bytes available :         0 Mb  
+
+  Files downloaded    :         0 file(s)   Bytes downloaded:         0 Mb
+  ---------------------------------------   -------------------------------
+  Still available     :         0 file(s)   Still available :         0 Mb
+
+                     ------------------------------------------   
+
+                     You have a limit of           0 Kb per day
+                     You downloaded today          0 Kb - 
+                                          --------------------- 
+                     Which leaves you          DSBLD Kb Today
+
+
+Ratioinfo v 1.5 by fanta & SøNy 
+

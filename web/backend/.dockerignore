@@ -1,0 +1,22 @@
+# Exclude development scripts and documentation
+dev-scripts/
+tests/
+
+# Exclude development files
+.DS_Store
+.env.local
+.git/
+.gitignore
+
+# Exclude node_modules (Render will install during build)
+node_modules/
+
+# Exclude TypeScript config (not needed at runtime)
+tsconfig.json
+
+# Keep these files for deployment:
+# - src/ (source code)
+# - package.json
+# - package-lock.json
+# - BBS/ (data directory)
+# - bin/ (runtime scripts)

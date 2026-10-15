@@ -1,0 +1,368 @@
+{
+  "D-terminator-dot": {
+    "parsed": "ab",
+    "commands": [],
+    "hasPause": false,
+    "slowmo": 0,
+    "slowmoCount": 0,
+    "nonStopText": false,
+    "currentMenuName": null
+  },
+  "D-terminator-retargets-tokenizer": {
+    "parsed": "PrePassUser",
+    "commands": [],
+    "hasPause": false,
+    "slowmo": 0,
+    "slowmoCount": 0,
+    "nonStopText": false,
+    "currentMenuName": null
+  },
+  "XC-command": {
+    "parsed": "ab",
+    "commands": [
+      "DOORS:who/NI ~N"
+    ],
+    "hasPause": false,
+    "slowmo": 0,
+    "slowmoCount": 0,
+    "nonStopText": false,
+    "currentMenuName": null
+  },
+  "XI-door": {
+    "parsed": "a b",
+    "commands": [
+      "DOORS:who/NI"
+    ],
+    "hasPause": false,
+    "slowmo": 0,
+    "slowmoCount": 0,
+    "nonStopText": false,
+    "currentMenuName": null
+  },
+  "CL-conference-list": {
+    "parsed": "[                     \u001b[32m  1\u001b[33m) \u001b[35mMain Conference               \u001b[36m\u001b[0m\r\n                     \u001b[32m  2\u001b[33m) \u001b[35mAmiga Chat                    \u001b[36m\u001b[0m\r\n                     \u001b[32m  3\u001b[33m) \u001b[35mUploads And Downloads Area    \u001b[36m\u001b[0m\r\n]",
+    "commands": [],
+    "hasPause": false,
+    "slowmo": 0,
+    "slowmoCount": 0,
+    "nonStopText": false,
+    "currentMenuName": null
+  },
+  "CL-conference-list-narrow": {
+    "parsed": "[  \u001b[32m  1\u001b[33m) \u001b[35mMain Conference\u001b[0m\r\n  \u001b[32m  2\u001b[33m) \u001b[35mAmiga Chat\u001b[0m\r\n  \u001b[32m  3\u001b[33m) \u001b[35mUploads And Downloads Area\u001b[0m\r\n]",
+    "commands": [],
+    "hasPause": false,
+    "slowmo": 0,
+    "slowmoCount": 0,
+    "nonStopText": false,
+    "currentMenuName": null
+  },
+  "CD-conference-dir": {
+    "parsed": "[   \u001b[34m[\u001b[0m001\u001b[34m] \u001b[0mMain Conference                  \u001b[34m[\u001b[0m002\u001b[34m] \u001b[0mAmiga Chat                    \r\n   \u001b[34m[\u001b[0m003\u001b[34m] \u001b[0mUploads And Downloads Area    \r\n]",
+    "commands": [],
+    "hasPause": false,
+    "slowmo": 0,
+    "slowmoCount": 0,
+    "nonStopText": false,
+    "currentMenuName": null
+  },
+  "CD-conference-dir-narrow": {
+    "parsed": "[   \u001b[34m[\u001b[0m001\u001b[34m] \u001b[0mMain Conference\r\n   \u001b[34m[\u001b[0m002\u001b[34m] \u001b[0mAmiga Chat\r\n   \u001b[34m[\u001b[0m003\u001b[34m] \u001b[0mUploads And Downloads Area\r\n]",
+    "commands": [],
+    "hasPause": false,
+    "slowmo": 0,
+    "slowmoCount": 0,
+    "nonStopText": false,
+    "currentMenuName": null
+  },
+  "ML-msgbase-list": {
+    "parsed": "[                     \u001b[32m1\u001b[33m) \u001b[35mGeneral                       \u001b[36m\u001b[0m\r\n                     \u001b[32m2\u001b[33m) \u001b[35mAmiga Coding                  \u001b[36m\u001b[0m\r\n]",
+    "commands": [],
+    "hasPause": false,
+    "slowmo": 0,
+    "slowmoCount": 0,
+    "nonStopText": false,
+    "currentMenuName": null
+  },
+  "ML-msgbase-list-narrow": {
+    "parsed": "[  \u001b[32m1\u001b[33m) \u001b[35mGeneral\u001b[0m\r\n  \u001b[32m2\u001b[33m) \u001b[35mAmiga Coding\u001b[0m\r\n]",
+    "commands": [],
+    "hasPause": false,
+    "slowmo": 0,
+    "slowmoCount": 0,
+    "nonStopText": false,
+    "currentMenuName": null
+  },
+  "MD-msgbase-desc": {
+    "parsed": "[   \u001b[34m[\u001b[0m1\u001b[34m] \u001b[0mGeneral                          \u001b[34m[\u001b[0m2\u001b[34m] \u001b[0mAmiga Coding                  \r\n]",
+    "commands": [],
+    "hasPause": false,
+    "slowmo": 0,
+    "slowmoCount": 0,
+    "nonStopText": false,
+    "currentMenuName": null
+  },
+  "MD-msgbase-desc-narrow": {
+    "parsed": "[   \u001b[34m[\u001b[0m1\u001b[34m] \u001b[0mGeneral\r\n   \u001b[34m[\u001b[0m2\u001b[34m] \u001b[0mAmiga Coding\r\n]",
+    "commands": [],
+    "hasPause": false,
+    "slowmo": 0,
+    "slowmoCount": 0,
+    "nonStopText": false,
+    "currentMenuName": null
+  },
+  "NODELIST": {
+    "parsed": "[Node 0:  Waiting\r\nNode 1:  \u001b[32mYou\u001b[0m\r\nNode 2:  Waiting\r\nNode 3:  Waiting\r\n]",
+    "commands": [],
+    "hasPause": false,
+    "slowmo": 0,
+    "slowmoCount": 0,
+    "nonStopText": false,
+    "currentMenuName": null
+  },
+  "NODELIST-narrow": {
+    "parsed": "[Node 0:  Waiting\r\nNode 1:  \u001b[32mYou\u001b[0m\r\nNode 2:  Waiting\r\nNode 3:  Waiting\r\n]",
+    "commands": [],
+    "hasPause": false,
+    "slowmo": 0,
+    "slowmoCount": 0,
+    "nonStopText": false,
+    "currentMenuName": null
+  },
+  "CR-underscore-prompt": {
+    "parsed": "aPress any keyb",
+    "commands": [],
+    "hasPause": true,
+    "slowmo": 0,
+    "slowmoCount": 0,
+    "nonStopText": false,
+    "currentMenuName": null
+  },
+  "SM-set-menu": {
+    "parsed": "ab",
+    "commands": [],
+    "hasPause": false,
+    "slowmo": 0,
+    "slowmoCount": 0,
+    "nonStopText": false,
+    "currentMenuName": "MAINMENU"
+  },
+  "CC-noninline": {
+    "parsed": "ab",
+    "commands": [
+      "X"
+    ],
+    "hasPause": false,
+    "slowmo": 0,
+    "slowmoCount": 0,
+    "nonStopText": false,
+    "currentMenuName": null
+  },
+  "CC-noninline-double-pipe": {
+    "parsed": "ab",
+    "commands": [
+      "BULL"
+    ],
+    "hasPause": false,
+    "slowmo": 0,
+    "slowmoCount": 0,
+    "nonStopText": false,
+    "currentMenuName": null
+  },
+  "SS-noninline": {
+    "parsed": "ab",
+    "commands": [],
+    "hasPause": false,
+    "slowmo": 0,
+    "slowmoCount": 0,
+    "nonStopText": false,
+    "currentMenuName": null
+  },
+  "2S-noninline": {
+    "parsed": "ab",
+    "commands": [],
+    "hasPause": false,
+    "slowmo": 0,
+    "slowmoCount": 0,
+    "nonStopText": false,
+    "currentMenuName": null
+  },
+  "SR-noninline": {
+    "parsed": "ab",
+    "commands": [],
+    "hasPause": false,
+    "slowmo": 0,
+    "slowmoCount": 0,
+    "nonStopText": false,
+    "currentMenuName": null
+  },
+  "SR-noninline-no-width": {
+    "parsed": "ab",
+    "commands": [],
+    "hasPause": false,
+    "slowmo": 0,
+    "slowmoCount": 0,
+    "nonStopText": false,
+    "currentMenuName": null
+  },
+  "SX-sequential": {
+    "parsed": "ab",
+    "commands": [],
+    "hasPause": false,
+    "slowmo": 0,
+    "slowmoCount": 0,
+    "nonStopText": false,
+    "currentMenuName": null
+  },
+  "SMO-3": {
+    "parsed": "ab",
+    "commands": [],
+    "hasPause": false,
+    "slowmo": 3,
+    "slowmoCount": 60,
+    "nonStopText": false,
+    "currentMenuName": null
+  },
+  "SMO-bare": {
+    "parsed": "ab",
+    "commands": [],
+    "hasPause": false,
+    "slowmo": 1,
+    "slowmoCount": 60,
+    "nonStopText": false,
+    "currentMenuName": null
+  },
+  "SMO-clamped-high": {
+    "parsed": "ab",
+    "commands": [],
+    "hasPause": false,
+    "slowmo": 1,
+    "slowmoCount": 60,
+    "nonStopText": false,
+    "currentMenuName": null
+  },
+  "SMO-clamped-low": {
+    "parsed": "ab",
+    "commands": [],
+    "hasPause": false,
+    "slowmo": -3,
+    "slowmoCount": 60,
+    "nonStopText": false,
+    "currentMenuName": null
+  },
+  "SMC-clears": {
+    "parsed": "abc",
+    "commands": [],
+    "hasPause": false,
+    "slowmo": 0,
+    "slowmoCount": 0,
+    "nonStopText": false,
+    "currentMenuName": null
+  },
+  "SP-dot": {
+    "parsed": "ab",
+    "commands": [],
+    "hasPause": true,
+    "slowmo": 0,
+    "slowmoCount": 0,
+    "nonStopText": false,
+    "currentMenuName": null
+  },
+  "CR-dot": {
+    "parsed": "ab",
+    "commands": [],
+    "hasPause": false,
+    "slowmo": 0,
+    "slowmoCount": 0,
+    "nonStopText": false,
+    "currentMenuName": null
+  },
+  "NSF": {
+    "parsed": "ab",
+    "commands": [],
+    "hasPause": false,
+    "slowmo": 0,
+    "slowmoCount": 0,
+    "nonStopText": true,
+    "currentMenuName": null
+  },
+  "bare-tilde-line": {
+    "parsed": "a\n\u001b[2J\u001b[H\nb",
+    "commands": [],
+    "hasPause": false,
+    "slowmo": 0,
+    "slowmoCount": 0,
+    "nonStopText": false,
+    "currentMenuName": null
+  },
+  "bare-tilde-line-trailing-space": {
+    "parsed": "a\n\u001b[2J\u001b[H\nb",
+    "commands": [],
+    "hasPause": false,
+    "slowmo": 0,
+    "slowmoCount": 0,
+    "nonStopText": false,
+    "currentMenuName": null
+  },
+  "all-rows-combined": {
+    "parsed": "\nxy\nx y\n                     \u001b[32m  1\u001b[33m) \u001b[35mMain Conference               \u001b[36m\u001b[0m\r\n                     \u001b[32m  2\u001b[33m) \u001b[35mAmiga Chat                    \u001b[36m\u001b[0m\r\n                     \u001b[32m  3\u001b[33m) \u001b[35mUploads And Downloads Area    \u001b[36m\u001b[0m\r\n\n   \u001b[34m[\u001b[0m001\u001b[34m] \u001b[0mMain Conference                  \u001b[34m[\u001b[0m002\u001b[34m] \u001b[0mAmiga Chat                    \r\n   \u001b[34m[\u001b[0m003\u001b[34m] \u001b[0mUploads And Downloads Area    \r\n\n                     \u001b[32m1\u001b[33m) \u001b[35mGeneral                       \u001b[36m\u001b[0m\r\n                     \u001b[32m2\u001b[33m) \u001b[35mAmiga Coding                  \u001b[36m\u001b[0m\r\n\n   \u001b[34m[\u001b[0m1\u001b[34m] \u001b[0mGeneral                          \u001b[34m[\u001b[0m2\u001b[34m] \u001b[0mAmiga Coding                  \r\n\nNode 0:  Waiting\r\nNode 1:  \u001b[32mYou\u001b[0m\r\nNode 2:  Waiting\r\nNode 3:  Waiting\r\n\nHit it\n\n\n\n\n\n\n\n\n\n\n\u001b[2J\u001b[H",
+    "commands": [
+      "DOORS:who/NI",
+      "DOORS:who/NO",
+      "X"
+    ],
+    "hasPause": true,
+    "slowmo": 0,
+    "slowmoCount": 0,
+    "nonStopText": true,
+    "currentMenuName": "MENUNAME"
+  },
+  "inline-SX-sequential": {
+    "parsed": "",
+    "commands": [],
+    "hasPause": false,
+    "slowmo": 0,
+    "slowmoCount": 0,
+    "nonStopText": false,
+    "currentMenuName": null,
+    "emitted": "ab",
+    "inlineEmitted": true,
+    "pendingInlineContent": ""
+  },
+  "inline-SP-dot": {
+    "parsed": "",
+    "commands": [],
+    "hasPause": true,
+    "slowmo": 0,
+    "slowmoCount": 0,
+    "nonStopText": false,
+    "currentMenuName": null,
+    "emitted": "a",
+    "inlineEmitted": true,
+    "pendingInlineContent": "b"
+  },
+  "inline-NSF": {
+    "parsed": "",
+    "commands": [],
+    "hasPause": false,
+    "slowmo": 0,
+    "slowmoCount": 0,
+    "nonStopText": true,
+    "currentMenuName": null,
+    "emitted": "ab",
+    "inlineEmitted": true,
+    "pendingInlineContent": ""
+  },
+  "inline-bare-tilde-line": {
+    "parsed": "",
+    "commands": [],
+    "hasPause": false,
+    "slowmo": 0,
+    "slowmoCount": 0,
+    "nonStopText": false,
+    "currentMenuName": null,
+    "emitted": "a\r\n\u001b[2J\u001b[H\r\nb",
+    "inlineEmitted": true,
+    "pendingInlineContent": ""
+  }
+}

@@ -1,0 +1,19 @@
+# /etc/systemd/system/bbs-backup.service
+[Unit]
+Description=AmiExpress BBS nightly snapshot
+Documentation=file:///app/amiexpress/Documentation/2-Sysops/BACKUP_AND_RESTORE.md
+After=docker.service
+OnFailure=bbs-backup-alert.service
+
+[Service]
+Type=oneshot
+Environment=BBS_BACKUP_DEST=/var/backups/bbs
+# Uncomment once an off-box target exists. Until then every snapshot lives on
+# the same disk as the board it protects - see BACKUP_AND_RESTORE.md.
+#Environment=BBS_BACKUP_REMOTE=u123456@u123456.your-storagebox.de:bbs
+# Uncomment to also POST the alarm to a Discord/Slack webhook.
+#Environment=BBS_BACKUP_ALERT_URL=https://discord.com/api/webhooks/xxx/yyy
+ExecStart=/usr/local/sbin/bbs-backup.sh
+TimeoutStartSec=3600
+Nice=10
+IOSchedulingClass=idle

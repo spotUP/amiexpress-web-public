@@ -1,0 +1,580 @@
+/**
+ * Video Tile Component
+ *
+ * Individual tile in the video grid
+ * - Shows video stream or avatar
+ * - Status indicators (mute, video, speaking)
+ * - Active speaker highlighting
+ * - Username label
+ */
+
+import blessed from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
+import { resolveBoxSize } from '../features/video-layout';
+import { fitFrameToTile } from './frame-fit';
+import type { Screen, Box } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
+import { T } from '../door-theme';
+
+/**
+ * What a tile with no picture yet should say.
+ *
+ * Every tile used to say "WAITING FOR VIDEO...", including your own and
+ * including when there was nobody else in the channel. Reported 2026-08-26 as
+ * a camera that "just wouldn't work" - by somebody whose camera was working
+ * and who was simply alone in the room.
+ */
+export function videoPlaceholderMessage(
+  opts: { isCurrentUser: boolean; videoError?: string | null }
+): string {
+  if (opts.videoError) return opts.videoError;
+  return opts.isCurrentUser ? 'STARTING CAMERA...' : 'WAITING FOR VIDEO...';
+}
+
+/**
+ * The line to show across an empty channel, or null when there is company.
+ *
+ * "Waiting" is only true when there is somebody to wait for.
+ */
+export function emptyChannelNotice(participantCount: number): string | null {
+  return participantCount === 1
+    ? 'You are the only one here - others appear when they join'
+    : null;
+}
+
+export interface VideoTileOptions {
+  parent: any;
+  screen: Screen;
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+  userId: number | string;
+  username: string;
+  isMuted: boolean;
+  hasVideo: boolean;
+  isSpeaking: boolean;
+  audioLevel: number;
+  isCurrentUser: boolean;
+  avatar?: string;
+  renderMode?: string;  // For the self-tile: shown in the status bar
+}
+
+/**
+ * Generate the no-video avatar: a large block-letter initial of the user's
+ * handle, in a per-user foreground colour so tiles are visually distinct.
+ * Replaced the face-glyph (two block columns + chin) which 2026-04-24
+ * feedback flagged as looking like Mickey Mouse ears.
+ */
+function generateAvatar(username: string): string[] {
+  const colors = ['red', 'green', 'yellow', 'blue', 'magenta', 'cyan'];
+  const color = colors[username.length % colors.length];
+  const initial = (username?.[0] || '?').toUpperCase();
+  return blockLetter(initial).map(row => `{${color}-fg}${row}{/${color}-fg}`);
+}
+
+/**
+ * 8x8 block-letter glyphs for A-Z and '?'. Rendered with █ for ink,
+ * space for background. Terminal rows are roughly half as tall as wide,
+ * so the glyph looks proportional in a typical font.
+ */
+function blockLetter(ch: string): string[] {
+  const G: Record<string, string[]> = {
+    A: [
+      '   ████   ',
+      '  ██  ██  ',
+      ' ██    ██ ',
+      ' ████████ ',
+      ' ██    ██ ',
+      ' ██    ██ ',
+    ],
+    B: [
+      ' ███████  ',
+      ' ██    ██ ',
+      ' ███████  ',
+      ' ██    ██ ',
+      ' ██    ██ ',
+      ' ███████  ',
+    ],
+    C: [
+      '  ███████ ',
+      ' ██       ',
+      ' ██       ',
+      ' ██       ',
+      ' ██       ',
+      '  ███████ ',
+    ],
+    D: [
+      ' ██████   ',
+      ' ██   ██  ',
+      ' ██    ██ ',
+      ' ██    ██ ',
+      ' ██   ██  ',
+      ' ██████   ',
+    ],
+    E: [
+      ' ████████ ',
+      ' ██       ',
+      ' ██████   ',
+      ' ██       ',
+      ' ██       ',
+      ' ████████ ',
+    ],
+    F: [
+      ' ████████ ',
+      ' ██       ',
+      ' ██████   ',
+      ' ██       ',
+      ' ██       ',
+      ' ██       ',
+    ],
+    G: [
+      '  ███████ ',
+      ' ██       ',
+      ' ██  ████ ',
+      ' ██    ██ ',
+      ' ██    ██ ',
+      '  ██████  ',
+    ],
+    H: [
+      ' ██    ██ ',
+      ' ██    ██ ',
+      ' ████████ ',
+      ' ██    ██ ',
+      ' ██    ██ ',
+      ' ██    ██ ',
+    ],
+    I: [
+      ' ████████ ',
+      '    ██    ',
+      '    ██    ',
+      '    ██    ',
+      '    ██    ',
+      ' ████████ ',
+    ],
+    J: [
+      ' ████████ ',
+      '      ██  ',
+      '      ██  ',
+      '      ██  ',
+      ' ██   ██  ',
+      '  █████   ',
+    ],
+    K: [
+      ' ██    ██ ',
+      ' ██   ██  ',
+      ' █████    ',
+      ' ██   ██  ',
+      ' ██    ██ ',
+      ' ██    ██ ',
+    ],
+    L: [
+      ' ██       ',
+      ' ██       ',
+      ' ██       ',
+      ' ██       ',
+      ' ██       ',
+      ' ████████ ',
+    ],
+    M: [
+      ' ██    ██ ',
+      ' ███  ███ ',
+      ' ██ ██ ██ ',
+      ' ██    ██ ',
+      ' ██    ██ ',
+      ' ██    ██ ',
+    ],
+    N: [
+      ' ██    ██ ',
+      ' ███   ██ ',
+      ' ████  ██ ',
+      ' ██ ██ ██ ',
+      ' ██  ████ ',
+      ' ██   ███ ',
+    ],
+    O: [
+      '  ██████  ',
+      ' ██    ██ ',
+      ' ██    ██ ',
+      ' ██    ██ ',
+      ' ██    ██ ',
+      '  ██████  ',
+    ],
+    P: [
+      ' ███████  ',
+      ' ██    ██ ',
+      ' ███████  ',
+      ' ██       ',
+      ' ██       ',
+      ' ██       ',
+    ],
+    Q: [
+      '  ██████  ',
+      ' ██    ██ ',
+      ' ██    ██ ',
+      ' ██ ██ ██ ',
+      ' ██  ████ ',
+      '  ███████ ',
+    ],
+    R: [
+      ' ███████  ',
+      ' ██    ██ ',
+      ' ███████  ',
+      ' ██  ██   ',
+      ' ██   ██  ',
+      ' ██    ██ ',
+    ],
+    S: [
+      '  ███████ ',
+      ' ██       ',
+      '  ██████  ',
+      '       ██ ',
+      '       ██ ',
+      ' ███████  ',
+    ],
+    T: [
+      ' ████████ ',
+      '    ██    ',
+      '    ██    ',
+      '    ██    ',
+      '    ██    ',
+      '    ██    ',
+    ],
+    U: [
+      ' ██    ██ ',
+      ' ██    ██ ',
+      ' ██    ██ ',
+      ' ██    ██ ',
+      ' ██    ██ ',
+      '  ██████  ',
+    ],
+    V: [
+      ' ██    ██ ',
+      ' ██    ██ ',
+      ' ██    ██ ',
+      '  ██  ██  ',
+      '   ████   ',
+      '    ██    ',
+    ],
+    W: [
+      ' ██    ██ ',
+      ' ██    ██ ',
+      ' ██    ██ ',
+      ' ██ ██ ██ ',
+      ' ███  ███ ',
+      ' ██    ██ ',
+    ],
+    X: [
+      ' ██    ██ ',
+      '  ██  ██  ',
+      '   ████   ',
+      '   ████   ',
+      '  ██  ██  ',
+      ' ██    ██ ',
+    ],
+    Y: [
+      ' ██    ██ ',
+      '  ██  ██  ',
+      '   ████   ',
+      '    ██    ',
+      '    ██    ',
+      '    ██    ',
+    ],
+    Z: [
+      ' ████████ ',
+      '      ██  ',
+      '    ██    ',
+      '  ██      ',
+      ' ██       ',
+      ' ████████ ',
+    ],
+    '?': [
+      '  ██████  ',
+      '      ██  ',
+      '    ███   ',
+      '   ██     ',
+      '          ',
+      '   ██     ',
+    ],
+  };
+  return G[ch] || G['?'];
+}
+
+/**
+ * VideoTile - Individual participant tile
+ */
+export class VideoTile {
+  private container: any; // Using any since Box type doesn't expose runtime properties
+  private videoBox: any;
+  private statusBar: any;
+  private screen: Screen;
+  private options: VideoTileOptions;
+  private isActive: boolean = false;
+  private hasFrame: boolean = false;
+  private videoError: string | null = null;
+
+  constructor(options: VideoTileOptions) {
+    this.options = options;
+    this.screen = options.screen;
+
+    // Tile container — no inner border; the parent chat panel already
+    // has its own. Adding another one just makes the video area look like
+    // nested windows (reported 2026-04-24).
+    this.container = blessed.box({
+      parent: options.parent,
+      left: options.left,
+      top: options.top,
+      width: options.width,
+      height: options.height,
+      // A bar, not a frame: Panel borders when the caller names none, and a
+      // one-row box with a frame has no interior - its content never renders.
+      border: undefined,
+      style: { bg: T.ground },
+      tags: true,
+    });
+
+    // Video/avatar display area — the WHOLE tile.
+    //
+    // This used to stop one row short so the status bar could have its own
+    // line, which spent a row of every tile on a caption and made each tile
+    // look like a little boxed window ("it's the user boxes the videos are
+    // rendered in... they waste space"). The status bar is drawn OVER the
+    // last row instead, so the picture gets the full height and the name is
+    // still there to read.
+    this.videoBox = blessed.box({
+      parent: this.container,
+      left: 0,
+      top: 0,
+      width: '100%',
+      height: '100%',
+      border: undefined,
+      style: {
+        bg: T.ground,
+      },
+      // Frames are now emitted as blessed colour tags ({red-fg} etc.)
+      // matching the backend/neoshowcase pipeline — blessed's cell
+      // buffer doesn't handle raw 24-bit ANSI reliably (row mis-align
+      // reported 2026-04-24). Tag parsing via tags:true keeps widths
+      // consistent across rows.
+      tags: true,
+    }) as any;
+
+    // Render avatar or video placeholder
+    this.updateVideoDisplay();
+
+    // Status bar at bottom (username and indicators)
+    this.statusBar = blessed.box({
+      border: undefined,
+      parent: this.container,
+      left: 0,
+      bottom: 0,
+      width: '100%',
+      height: 1,
+      content: this.renderStatusBar(),
+      style: {
+        bg: T.ground,
+        fg: T.ink,
+      },
+      tags: true,
+      // Over the picture, not beside it - see the video box above.
+      // @ts-ignore - zIndex exists but is not in the types
+      zIndex: 5,
+    });
+  }
+
+  /**
+   * Update video/avatar display
+   */
+  private updateVideoDisplay(): void {
+    if (this.options.hasVideo) {
+      if (!this.hasFrame) {
+        const height = Math.max(0, (this.container.height as number) - 1);
+        const message = videoPlaceholderMessage({
+          isCurrentUser: this.options.isCurrentUser,
+          videoError: this.videoError,
+        });
+        const topPadding = Math.max(0, Math.floor((height - 1) / 2));
+        const placeholder = [
+          ...Array(topPadding).fill(''),
+          `{center}{${T.accentAlt}-fg}{bold}${message}{/bold}{/${T.accentAlt}-fg}{/center}`,
+        ];
+        this.videoBox.setContent(placeholder.join('\n'));
+      }
+      this.videoBox.style.bg = 'black';
+    } else {
+      this.hasFrame = false;
+      this.videoError = null;
+      const avatar = generateAvatar(this.options.username);
+      const avatarContent = [
+        '',
+        ...avatar,
+        '',
+      ];
+      this.videoBox.setContent(avatarContent.join('\n'));
+      this.videoBox.style.bg = 'black';
+    }
+  }
+
+  /**
+   * Render status bar with username and indicators
+   */
+  private renderStatusBar(): string {
+    const username = this.options.username;
+    const speakingIcon = this.options.isSpeaking ? `{${T.ok}-fg}[*]{/${T.ok}-fg}` : '[ ]';
+    const muteIcon = this.options.isMuted ? `{${T.alert}-fg}[M]{/${T.alert}-fg}` : '';
+    const videoIcon = this.options.hasVideo ? `{${T.bar}-fg}[V]{/${T.bar}-fg}` : '';
+    const youLabel = this.options.isCurrentUser ? ` {${T.accentAlt}-fg}(you){/${T.accentAlt}-fg}` : '';
+    // Show the active render mode on the self-tile so the user can see
+    // which encoder produced what they're looking at (ascii/color/
+    // halfblock/braille all look quite different).
+    const modeLabel = this.options.isCurrentUser && this.options.renderMode
+      ? ` {${T.accentAlt}-fg}[${this.options.renderMode.toUpperCase()}]{/${T.accentAlt}-fg}`
+      : '';
+
+    return ` ${speakingIcon} ${username}${youLabel} ${muteIcon} ${videoIcon}${modeLabel}`.trim();
+  }
+
+  /**
+   * Update status indicators
+   */
+  updateStatus(status: {
+    isMuted?: boolean;
+    hasVideo?: boolean;
+    isSpeaking?: boolean;
+    audioLevel?: number;
+    renderMode?: string;
+  }): void {
+    if (status.renderMode !== undefined) {
+      this.options.renderMode = status.renderMode;
+    }
+    if (status.isMuted !== undefined) {
+      this.options.isMuted = status.isMuted;
+    }
+    if (status.hasVideo !== undefined) {
+      const hadVideo = this.options.hasVideo;
+      this.options.hasVideo = status.hasVideo;
+
+      // Update video display if video state changed
+      if (hadVideo !== status.hasVideo) {
+        this.updateVideoDisplay();
+      }
+    }
+    if (status.isSpeaking !== undefined) {
+      this.options.isSpeaking = status.isSpeaking;
+    }
+    if (status.audioLevel !== undefined) {
+      this.options.audioLevel = status.audioLevel;
+    }
+
+    this.statusBar.setContent(this.renderStatusBar());
+    this.screen.render();
+  }
+
+  /**
+   * Set a new video frame (ASCII)
+   */
+  setVideoFrame(frame: string): void {
+    // Match the working neoshowcase webcam-demo pattern: if a frame
+    // arrives for this tile, paint it. The old `if (hasVideo)` gate was
+    // racing with the hasVideo flip in updateStatus — frames landed
+    // between startStream() returning and updateParticipant(hasVideo:true)
+    // firing, and got silently dropped while the tile still showed the
+    // no-video avatar.
+    this.hasFrame = true;
+    this.videoError = null;
+
+    // Fit it to THIS tile, exactly. A sender encodes for the size of its
+    // own tile and every viewer's tile can differ, so a frame is both cut
+    // when too big - an over-wide frame wraps every row onto the next and
+    // arrives as stripes - and padded when too small, so that no cell keeps
+    // showing the previous frame. ASCII cannot be rescaled; a smaller
+    // picture on a black field is honest, a wrapped or half-stale one is
+    // not.
+    const box = resolveBoxSize(this.videoBox as any, { width: 0, height: 0 });
+    const fitted = box.width > 0 && box.height > 0
+      ? fitFrameToTile(frame, box.width, box.height)
+      : frame;
+
+    this.videoBox.setContent(fitted);
+    // Also flip our copy of hasVideo so updateVideoDisplay won't rewrite
+    // the avatar back over the frame on the next state tick.
+    this.options.hasVideo = true;
+    this.screen.render();
+  }
+
+  /**
+   * Set a video error message
+   */
+  setVideoError(message: string): void {
+    this.videoError = message;
+    this.hasFrame = false;
+    this.updateVideoDisplay();
+    this.screen.render();
+  }
+
+  /**
+   * Set active speaker highlighting. Tile container is borderless now (to
+   * avoid nested-window visual clutter), so indicate active speaker via
+   * the status bar background instead.
+   */
+  setActive(active: boolean): void {
+    this.isActive = active;
+    if (this.statusBar) {
+      this.statusBar.style.bg = active ? 'green' : 'black';
+      this.statusBar.style.fg = active ? 'black' : 'white';
+    }
+    this.screen.render();
+  }
+
+  /**
+   * Destroy the tile
+   */
+  destroy(): void {
+    this.container.destroy();
+  }
+
+  /**
+   * Get tile container
+   */
+  getContainer(): any {
+    return this.container;
+  }
+
+  /**
+   * Get the actual character dimensions of the inner video area (excluding
+   * the 1-row status bar). Used to ask the SDK to render ASCII frames at
+   * the tile's real size so the picture fills the available space instead
+   * of leaving a 80x24 patch in a much larger panel.
+   */
+  getVideoDims(): { width: number; height: number } {
+    // Derive dims from the tile container — reading videoBox directly
+    // can return the layout spec string instead of a number.
+    //
+    // One column is held back: a row that ends exactly at the last column
+    // can wrap and double the row count, and halfblock and colour frames
+    // emit a trailing reset per row.
+    //
+    // The two ROWS that used to be held back are not any more. They existed
+    // so an overflowing final row could not overwrite the status bar, and
+    // neither reason survives: the status bar is drawn over the picture on
+    // purpose now, and incoming frames are clipped to the tile (see
+    // ui/frame-fit), so nothing overflows in the first place. That is two
+    // rows and a column of picture back in every tile.
+    const resolved = resolveBoxSize(this.container as any, { width: 0, height: 0 });
+    const cw = resolved.width;
+    const ch = resolved.height;
+    return { width: Math.max(1, cw - 1), height: Math.max(1, ch) };
+  }
+
+  /**
+   * Get user ID
+   */
+  getUserId(): number | string {
+    return this.options.userId;
+  }
+
+  /**
+   * Get username
+   */
+  getUsername(): string {
+    return this.options.username;
+  }
+}

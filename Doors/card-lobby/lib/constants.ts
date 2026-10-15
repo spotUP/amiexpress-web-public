@@ -1,0 +1,438 @@
+/**
+ * Card Lobby - Constants and Configuration
+ * All constants, themes, catalogs, and configuration data
+ */
+
+import type { Colors } from '@amiexpress/bbs-door-sdk/engines/ui/blessed/core/types';
+import { themeById, type Theme } from '@amiexpress/bbs-door-sdk/engines/ui/theme';
+import type { GameDefinition, AchievementDefinition, BulletinEntry } from './types';
+
+export type ActionButtonKey = 'fold' | 'check' | 'call' | 'raise' | 'quit';
+export type UnoActionButtonKey = 'play' | 'draw' | 'uno' | 'challenge' | 'quit';
+
+export const CHIP_NAME = 'BBS Chips';
+export const STARTING_CHIPS = 1000;
+export const DAILY_BONUS = 200;
+export const DAILY_COOLDOWN_MS = 24 * 60 * 60 * 1000;
+/** How often the daily stats buckets roll over. Not the bonus cooldown,
+ *  which the sysop sets - a one-hour bonus must not reset the day. */
+export const DAILY_RESET_MS = 24 * 60 * 60 * 1000;
+export const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
+export const ENTRY_FEE_RATE = 0.02;
+export const ACTIVITY_REWARD = 5;
+export const WIN_REWARD = 10;
+export const WEEKLY_BULLETIN_NUMBER = 20;
+export const REFRESH_INTERVAL_MS = 5000;
+export const MAX_ACTIVITY_EVENTS = 200;
+
+export const BOT_NAMES = [
+  'Atlas',
+  'Nova',
+  'Pixel',
+  'Echo',
+  'Orion',
+  'Vega',
+  'Juno',
+  'Quark',
+  'Sable',
+  'Rogue',
+];
+
+export const PokerAction = {
+  SIT: 'SIT',
+  STAND: 'STAND',
+  ADD_CHIPS: 'ADD_CHIPS',
+  RESERVE_SEAT: 'RESERVE_SEAT',
+  DEAL: 'DEAL',
+  FOLD: 'FOLD',
+  CHECK: 'CHECK',
+  CALL: 'CALL',
+  BET: 'BET',
+  RAISE: 'RAISE',
+  SHOW: 'SHOW',
+  MUCK: 'MUCK',
+  TIMEOUT: 'TIMEOUT',
+  TIME_BANK: 'TIME_BANK',
+  UNCALLED_BET_RETURNED: 'UNCALLED_BET_RETURNED',
+  NEXT_BLIND_LEVEL: 'NEXT_BLIND_LEVEL',
+} as const;
+
+export const ANSI_TAGS: Record<string, string> = {
+  '0': '{/}',
+  '30': '{black-fg}',
+  '31': '{red-fg}',
+  '32': '{green-fg}',
+  '33': '{yellow-fg}',
+  '34': '{blue-fg}',
+  '35': '{magenta-fg}',
+  '36': '{cyan-fg}',
+  '37': '{white-fg}',
+  '40': '{black-bg}',
+  '41': '{red-bg}',
+  '42': '{green-bg}',
+  '43': '{yellow-bg}',
+  '44': '{blue-bg}',
+  '45': '{magenta-bg}',
+  '46': '{cyan-bg}',
+  '47': '{white-bg}',
+};
+
+/**
+ * The door's palette, DERIVED from the board's theme.
+ *
+ * It used to be a frozen literal, so CARD LOBBY looked the same whichever
+ * theme the sysop had chosen - cyan frames and a blue bar on a board running
+ * Quiet Phosphor. The SDK's themes carry exactly the tokens this needs
+ * (sdk/engines/ui/theme/tokens.ts); applyTheme() copies them in once at
+ * startup, before any widget is built.
+ *
+ * The object is mutated rather than replaced because the whole door imports
+ * this one binding. The theme stays the source of truth; this is a cache of
+ * it in the shape the widgets want.
+ */
+export const UI_THEME = {
+  topBar: { fg: 'white', bg: 'blue', item: { fg: 'gray' }, selected: { fg: 'white' } },
+  statusBar: { fg: 'white', bg: 'blue' },
+  windowBorder: { fg: 'cyan' },
+  /**
+   * The border of the panel that holds the focus.
+   *
+   * A second colour, because a focused panel that looks the same as an
+   * unfocused one makes Tab invisible. It follows the theme's alternate
+   * accent so a themed board keeps its own palette.
+   */
+  focusBorder: { fg: 'yellow' },
+  windowBg: 'black',
+  ink: 'white',
+  dim: 'gray',
+  accent: 'cyan',
+  accentAlt: 'yellow',
+  highlightBg: 'lightcyan',
+  highlightInk: 'black',
+  warning: 'yellow',
+  ok: 'green',
+  error: 'red',
+  /**
+   * The theme's branding mark - the "//////" chrome every other themed door
+   * draws. This door mapped every token except this one, so its masthead was
+   * bare in a theme that has one ("the theme colors are correct but the
+   * chrome is missing", 2026-09-02).
+   */
+  rail: '',
+};
+
+/**
+ * The resolved theme itself, not just the tokens copied out of it.
+ *
+ * The chrome - the animated rail and the theme's glitches - is driven from
+ * the Theme object, and the widgets that carry it are built in UIManager.
+ * This module already owns "what the board asked this door to look like",
+ * so the theme is cached HERE rather than threaded through one more
+ * constructor.
+ */
+let activeThemeValue: Theme | null = null;
+
+/** The theme applyTheme() was last given; Classic until it has been called. */
+export function activeTheme(): Theme {
+  return activeThemeValue ?? themeById('classic');
+}
+
+/** Fill UI_THEME from a resolved SDK theme. Call before building the UI. */
+export function applyTheme(theme: Theme): void {
+  activeThemeValue = theme;
+  const t = theme.tokens;
+
+  // The bars ARE the theme's primary colour, with the ground on top of
+  // them, and every window frame takes the same colour: "the menu bg color
+  // should be the primary theme color and the texts and slashes black. all
+  // borders in the app needs to use the themes primary color as well"
+  // (sysop, 2026-09-03). The SDK's own styles.ts says the same thing for
+  // every door that draws from themeStyles; this door keeps its own palette
+  // object, so the rule is written here too - and pinned by
+  // tests/theme.test.ts so the two cannot drift.
+  UI_THEME.topBar = { fg: t.ground, bg: t.accent, item: { fg: t.ground }, selected: { fg: t.ground } };
+  UI_THEME.statusBar = { fg: t.ground, bg: t.accent };
+  UI_THEME.windowBorder = { fg: t.accent };
+  UI_THEME.focusBorder = { fg: t.accentAlt ?? t.accent };
+  UI_THEME.windowBg = t.ground;
+  UI_THEME.ink = t.ink;
+  UI_THEME.dim = t.dim;
+  UI_THEME.accent = t.accent;
+  UI_THEME.accentAlt = t.accentAlt;
+  UI_THEME.highlightBg = t.selectionBg;
+  UI_THEME.highlightInk = t.selectionInk;
+  UI_THEME.warning = t.warn;
+  UI_THEME.ok = t.ok;
+  UI_THEME.error = t.alert;
+  UI_THEME.rail = theme.rail ?? '';
+
+  // The action buttons follow the theme as well - except the UNO row, whose
+  // colours ARE the game (a red card is red in every theme).
+  ACTION_BUTTON_STYLES.fold.base = { fg: t.ink, bg: t.alert };
+  ACTION_BUTTON_STYLES.fold.focus = { fg: t.ink, bg: t.accent };
+  ACTION_BUTTON_STYLES.check.base = { fg: t.ground, bg: t.ok };
+  ACTION_BUTTON_STYLES.call.base = { fg: t.ground, bg: t.dim };
+  ACTION_BUTTON_STYLES.raise.base = { fg: t.barInk, bg: t.bar };
+  ACTION_BUTTON_STYLES.raise.focus = { fg: t.ink, bg: t.accent };
+  ACTION_BUTTON_STYLES.quit.base = { fg: t.ink, bg: t.alert };
+  ACTION_BUTTON_STYLES.quit.focus = { fg: t.ink, bg: t.accent };
+}
+
+export type ButtonStyleSet = {
+  base: Colors;
+  hover: Colors;
+  focus: Colors;
+  active: Colors;
+};
+
+export const ACTION_BUTTON_STYLES: Record<ActionButtonKey, ButtonStyleSet> = {
+  fold: {
+    base: { fg: 'white', bg: UI_THEME.error },
+    hover: { fg: 'white', bg: 'light-red' },
+    focus: { fg: 'white', bg: 'yellow' },
+    active: { fg: 'white', bg: 'red' },
+  },
+  check: {
+    base: { fg: 'black', bg: UI_THEME.ok },
+    hover: { fg: 'black', bg: 'light-green' },
+    focus: { fg: 'black', bg: 'green' },
+    active: { fg: 'black', bg: 'lime' },
+  },
+  call: {
+    base: { fg: 'black', bg: 'gray' },
+    hover: { fg: 'black', bg: 'white' },
+    focus: { fg: 'black', bg: 'white' },
+    active: { fg: 'black', bg: 'light-white' },
+  },
+  raise: {
+    base: { fg: 'white', bg: 'blue' },
+    hover: { fg: 'white', bg: 'light-blue' },
+    focus: { fg: 'white', bg: 'cyan' },
+    active: { fg: 'white', bg: 'blue' },
+  },
+  quit: {
+    base: { fg: 'white', bg: UI_THEME.error },
+    hover: { fg: 'white', bg: 'light-red' },
+    focus: { fg: 'white', bg: 'yellow' },
+    active: { fg: 'white', bg: 'red' },
+  },
+};
+
+export const ACTION_BUTTON_ORDER: ActionButtonKey[] = ['fold', 'check', 'call', 'raise', 'quit'];
+
+export const UNO_ACTION_BUTTON_STYLES: Record<UnoActionButtonKey, ButtonStyleSet> = {
+  play: {
+    base: { fg: 'black', bg: 'green' },
+    hover: { fg: 'black', bg: 'light-green' },
+    focus: { fg: 'black', bg: 'lime' },
+    active: { fg: 'black', bg: 'green' },
+  },
+  draw: {
+    base: { fg: 'white', bg: 'blue' },
+    hover: { fg: 'white', bg: 'light-blue' },
+    focus: { fg: 'white', bg: 'cyan' },
+    active: { fg: 'white', bg: 'blue' },
+  },
+  uno: {
+    base: { fg: 'black', bg: 'yellow' },
+    hover: { fg: 'black', bg: 'light-yellow' },
+    focus: { fg: 'black', bg: 'white' },
+    active: { fg: 'black', bg: 'yellow' },
+  },
+  challenge: {
+    base: { fg: 'white', bg: 'red' },
+    hover: { fg: 'white', bg: 'light-red' },
+    focus: { fg: 'white', bg: 'yellow' },
+    active: { fg: 'white', bg: 'red' },
+  },
+  quit: {
+    base: { fg: 'white', bg: UI_THEME.error },
+    hover: { fg: 'white', bg: 'light-red' },
+    focus: { fg: 'white', bg: 'yellow' },
+    active: { fg: 'white', bg: 'red' },
+  },
+};
+
+export const UNO_ACTION_BUTTON_ORDER: UnoActionButtonKey[] = ['play', 'draw', 'uno', 'challenge', 'quit'];
+
+export const GAME_CATALOG: GameDefinition[] = [
+  {
+    id: 'holdem',
+    name: "Texas Hold'em",
+    description: 'No-limit Hold\'em using the SDK PokerEngine.',
+    minPlayers: 2,
+    maxPlayers: 6,
+    stakes: [
+      { label: '5/10', smallBlind: 5, bigBlind: 10, buyIn: 500 },
+      { label: '10/20', smallBlind: 10, bigBlind: 20, buyIn: 1000 },
+      { label: '25/50', smallBlind: 25, bigBlind: 50, buyIn: 2500 },
+    ],
+    enabled: true,
+  },
+  {
+    id: 'blackjack',
+    name: 'Blackjack',
+    description: 'Dealer showdown, coming soon.',
+    minPlayers: 1,
+    maxPlayers: 5,
+    stakes: [{ label: '10', smallBlind: 0, bigBlind: 10, buyIn: 200 }],
+    enabled: false,
+  },
+  {
+    id: 'uno',
+    name: 'UNO',
+    description: 'Classic UNO with ASCII cards. First to 500 points wins.',
+    minPlayers: 2,
+    maxPlayers: 4,
+    stakes: [
+      { label: '10', smallBlind: 0, bigBlind: 10, buyIn: 200 },
+      { label: '25', smallBlind: 0, bigBlind: 25, buyIn: 500 },
+      { label: '50', smallBlind: 0, bigBlind: 50, buyIn: 1000 },
+    ],
+    enabled: true,
+  },
+  {
+    /*
+     * TWO GAMES SHARE THIS NAME, and this is the one the board means: also
+     * vandtia or finne, internationally Shithead. Three cards face down,
+     * three face up on top of them, three in hand; one pile you must equal
+     * or beat; a 2 goes on anything, a 10 turns the pile away, and so does
+     * four of a kind. Last player holding cards is the Skitgubbe.
+     * (The sysop's own rules, 2026-09-15.)
+     */
+    id: 'skitgubbe',
+    name: 'Skitgubbe',
+    description: 'Vandtia: equal or higher, or pick the pile up. Last one holding loses.',
+    minPlayers: 2,
+    maxPlayers: 4,
+    stakes: [
+      { label: 'Social', smallBlind: 0, bigBlind: 0, buyIn: 0 },
+    ],
+    enabled: true,
+  },
+  /*
+   * THE SOLITAIRES, one catalogue entry per `.game` file under `games/`.
+   *
+   * They are all the same module (lib/games/patience/module.ts) reading a
+   * different file, which is the point of adopting csol's format: another
+   * patience is a text file plus four lines here. One seat, no stake - a
+   * solitaire is the caller against the pack, and the lobby's seat filling
+   * already leaves a one-seat table alone.
+   */
+  {
+    id: 'patience-klondike',
+    name: 'Klondike',
+    description: 'The solitaire everybody knows. Build the foundations up in suit.',
+    minPlayers: 1,
+    maxPlayers: 1,
+    stakes: [{ label: 'Solo', smallBlind: 0, bigBlind: 0, buyIn: 0 }],
+    enabled: true,
+  },
+  {
+    id: 'patience-freecell',
+    name: 'Freecell',
+    description: 'Every card face up and four cells to think with. Nearly always winnable.',
+    minPlayers: 1,
+    maxPlayers: 1,
+    stakes: [{ label: 'Solo', smallBlind: 0, bigBlind: 0, buyIn: 0 }],
+    enabled: true,
+  },
+  {
+    id: 'patience-yukon',
+    name: 'Yukon',
+    description: 'Klondike with no stock and any card movable, buried or not.',
+    minPlayers: 1,
+    maxPlayers: 1,
+    stakes: [{ label: 'Solo', smallBlind: 0, bigBlind: 0, buyIn: 0 }],
+    enabled: true,
+  },
+  {
+    id: 'patience-spider1',
+    name: 'Spider (1 suit)',
+    description: 'Eight packs of spades. Build runs down and they leave the table.',
+    minPlayers: 1,
+    maxPlayers: 1,
+    stakes: [{ label: 'Solo', smallBlind: 0, bigBlind: 0, buyIn: 0 }],
+    enabled: true,
+  },
+  {
+    id: 'skitgubbe-tricks',
+    name: 'Skitgubbe (Tricks)',
+    /*
+     * The OTHER Swedish Skitgubbe, the one pagat.com describes: two phases
+     * with opposite goals. Win tricks to collect cards, then get rid of
+     * every one of them. Kept because it is a real game and the lobby's
+     * registry makes a second one free.
+     * https://www.pagat.com/beating/skitgubbe.html
+     */
+    description: 'Win tricks, then shed every card. Last one holding is the Skitgubbe.',
+    minPlayers: 2,
+    maxPlayers: 4,
+    /*
+     * SOCIAL, not staked: "skitgubbe is a social game, it requires no buy
+     * in" (sysop, 2026-09-15). Nothing is wagered and nothing changes hands
+     * - the only thing at stake is being the Skitgubbe. A single free stake
+     * also means the create dialog never asks (managers/TableFlow.ts).
+     */
+    stakes: [
+      { label: 'Social', smallBlind: 0, bigBlind: 0, buyIn: 0 },
+    ],
+    enabled: true,
+  },
+  {
+    id: 'uno-house',
+    name: 'UNO: House Rules',
+    description: 'UNO with customizable house rules. Create your own chaos!',
+    minPlayers: 2,
+    maxPlayers: 4,
+    stakes: [
+      { label: '10', smallBlind: 0, bigBlind: 10, buyIn: 200 },
+      { label: '25', smallBlind: 0, bigBlind: 25, buyIn: 500 },
+    ],
+    enabled: false,  // Enable after House Rules implementation
+  },
+];
+
+export const ACHIEVEMENTS: AchievementDefinition[] = [
+  {
+    id: 'first_hand',
+    name: 'First Shuffle',
+    description: 'Play your first hand.',
+    reward: 25,
+  },
+  {
+    id: 'first_win',
+    name: 'First Win',
+    description: 'Win a hand.',
+    reward: 50,
+  },
+  {
+    id: 'hot_streak',
+    name: 'Hot Streak',
+    description: 'Win 3 hands in a row.',
+    reward: 100,
+  },
+  {
+    id: 'big_pot',
+    name: 'Big Pot',
+    description: 'Win a pot of 500+ chips.',
+    reward: 150,
+  },
+  {
+    id: 'grinder',
+    name: 'Grinder',
+    description: 'Play 25 hands.',
+    reward: 200,
+  },
+];
+
+export const LOBBY_BULLETINS: BulletinEntry[] = [
+  {
+    number: WEEKLY_BULLETIN_NUMBER,
+    title: 'Card Lobby Weekly Leaders',
+    description: 'Top 10 chip winners from the lobby.',
+  },
+];
+
+export const LOBBY_KEY = 'lobby';
+export const PROFILES_KEY = 'profiles';

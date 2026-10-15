@@ -1,0 +1,207 @@
+@database WarOLMDoc
+@Author Wardancer/Vanity
+@Index MAIN
+
+Copyright 1995 Wardancer/Vanity
+
+@node MAIN "WarOLM V0.3 Documentation."
+
+    THe PHuCKiNG /X DuDeS FRoM VANi7Y iS PRouD To BRiNG you aNoTHeR DooR
+                  ___                                  __
+                _/  |__________   __ __________________|¬\
+                |   |   _/  _ ¬\_/ ¬\|   _/_\__   __/  |: \_
+                |:  |   |  __   |    \  :|   ||  :|\__   __/
+                |_______|  :|___|   \____|___||  _|øo|_  |
+                 ---Y--\____|--\____|----Stz--|_/------\_|
+                ------------------(Presents)----------------
+                @{BG FILL}                 WarOLM  V0.3               @{BG BACKGROUND}
+                --------------------------------------------
+
+                aND THiS TiMe iT iS MaDe By Wardancer/Vanity
+
+                             Table of contents :
+
+                           @{".....Whats This ?....." link 01}
+                           @{".....Installation....." link 02}
+                           @{"........Greets........" link 03}
+                           @{"...Bug report/ideas..." link 04}
+                           @{".......History........" link 05}
+                           @{"...R_E_G_I_S_T_E_R...." link 06}
+
+@endnode
+
+@node 01 "Whats This ?..."
+
+  =========================[   Whats This ?   ]===========================
+
+  WarOLM is an 'OnLine Message' program that allows users to send messages
+  to other nodes, so that they can deliver brief messages to each other in
+  a relatively quick way.
+
+  So, what makes WarOLM special compared to the countless number of other
+  OLM doors already available, I will tell you... WarOLM supports the
+  following features: Cursor Keys Select...
+                      Neat Blacklisting Module...
+                      Color Support In OLM Message...
+                      Icon Config FIle...
+                      Cool Ascii By Zany/Vty...
+                      Reciever Does Not Have To Be Idle...
+                      Mainline supports (eg. 'OLM 1')...
+
+  But you just wait and see, more stuff will be added in later version,
+  which should be reason enough for you to register your version.
+
+  To use WarOLM just install it as described and enter 'olm' at the
+  prompt, a fanzy menu should appear. To access the blacklisting module,
+  you should type 'olm blacklist' at the prompt. Furthermore, you can
+  also type specify which node you wish to send to at the prompt by typing
+  'olm x' where x is the nodenumber.
+
+  =========================[   Whats This ?   ]===========================
+
+@endnode
+
+@node 02 "Installation..."
+
+  =========================[   Installation   ]===========================
+
+  Installing this program is really quite simple, the only things you have
+  to is to make sure the following is right :
+
+  Program      Location                      Description
+  -------      --------                      -----------
+  WarOLM       Doors:!!!WAR!!!/WarOLM/       The main program...
+               (It doesn't have to be there
+               exactly, put remember to
+               update in olm.info if you
+               change the path)
+  Config.info  Doors:!!!WAR!!!/WarOLM/       Config file...
+
+  The Config file is quite simple, so anybody should be able to alter it
+  as they please, here are the tooltypes:
+
+  LOWNODE=xx              Where 'xx' is the lowest nodenumber which
+                          WarOLM will display, this tooltype is optional,
+                          it will default to 0 if it is not set.
+
+  HIGNNODE=xx             Where 'xx' is the highest nodenumber which
+                          WarOLM will display, this tooltype is NOT
+                          optional.
+
+  ASK_BEFORE_SENDING=xxx  Where 'xxx' is either 'YES' or 'NO', if it is a
+                          'YES' then WarOLM will ask the user if he/she
+                          is sure that he/she wants to send the message
+                          he/she just typed. This tooltype is optional,
+                          and it will default to 'NO' if not set.
+
+  NOTE: The HIGHNODE value must always be higher or equal the LOWNODE
+        value.
+
+  Furthermore, to enable blacklisting, you hve to create a drawer called
+  'DOORS:!!!WAR!!!/WAROLM/LISTS'
+
+  Also make sure that olm.info is in the commands/bbscmd drawer. To use
+  this door most effectively, the command icon must be named olm.info,
+  this is because of the mainline support that wont work if the command
+  name is anything else than 'olm' (case insensitive).
+
+  =========================[   Installation   ]===========================
+
+@endnode
+
+@node 03 "Greets..."
+
+  =========================[      Greets      ]===========================
+
+  @{BG FILL}                 GReeTZ Go ouT To THe FoLLoWiNG DuDeS:                  @{BG BACKGROUND}
+
+  Dux, Kronion, Zeke, Mickey, Tactica, Mandrake, Nookman, Sorcerer,
+  The Freak, Melomaniac, Marty, Morph, Deature, Json, D-Tron, Webster,
+  Gilthanas, Striker, Hellhound, Devilstar, Zinko, Lector, Playmate,
+  Paranoid, Enzo, Menace, Ironman, Nashua, Ramirez, Omar, Nero, Janitor,
+  Conan, Newton, Relief, The Priest
+
+   Mega Super Special Fantastic Thanks To ZANY/VTY At Susperia For Making
+  All That Great Ascii For Me, Thanks Dude, It Made It Look So Much Better
+
+  =========================[      Greets      ]===========================
+
+@endnode
+
+@node 04 "Bug Report/Ideas..."
+
+  =========================[ Bug Report/Ideas ]===========================
+
+  Send your bug reports or ideas to the following boards :
+
+  Susperia ............... +45  434-342-36   (VANiTY SCHQ)
+  Somewhere Online ....... +45  597-538-01   (VANiTY DKHQ)
+
+  You can also leave a msg on the InterNet to me at wardance@scala.ping.dk
+
+  If you would like to betatest for me, then just contact me at Susperia.
+
+  =========================[ Bug Report/Ideas ]===========================
+
+@endnode
+
+@node 05 "History..."
+
+  =========================[      History     ]===========================
+
+  V0.1 - First version, never went beyond Susperia...
+
+  V0.2 - Made a nice menu system, incorporated Ascii from Zany, and
+         finally added the blacklisting module...
+
+  V0.3 - Added color support...
+
+  =========================[      History     ]===========================
+
+@endnode
+
+@node 06 "Registration Info..."
+
+  =========================[   Registration   ]===========================
+
+  So, why should you register your Wardancer doors, here is a couple of
+  reasons...
+
+  1)     You will get a registered version with your handle & board name
+         in it.
+
+  2)     You will get all future versions some time before they are
+         released.
+
+  3)     If you desperately need a special door for your board, then the
+         chance that I will actually get around to programming it is much
+         larger if you show that you are serious by registering.
+
+  4)     You will get access to a lot of my source-code (Information
+         Wants To Be Free).
+
+  So how fo you register your Wardancer doors, there are 2 ways...
+
+  1)     Drop a message to me on any Vanity board.
+
+  2)     Drop a message to my email account (wardance@scala.ping.dk).
+
+  The message should comtain the following information:
+
+                          ... The Names Of The War Doors You Are
+                              Currently Using
+                          ... The Name AND Number Of Your Board
+                              (Includinf, Ofcoz, Any Nups or Syspw's)
+                          ... Why You Want To Register
+                          ... If You Have Email, Your Email Address,
+                              So That I Can UUEncode And Email You
+                              The Future Versions
+
+  Believe it or not, that is all it takes to register. Since I dont charge
+  you $$$, you will have to be the one who has to pick up the updates at
+  one of our boards, which is also why I would prefer if you have an email
+  address where I can mail your updates to.
+
+  =========================[   Registering   ]============================
+
+@endnode

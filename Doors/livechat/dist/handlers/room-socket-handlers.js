@@ -1,0 +1,108 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.setupRoomHandlers = setupRoomHandlers;
+const settings_1 = require("../settings");
+const door_theme_1 = require("../door-theme");
+function setupRoomHandlers(sock, st, ou, uid, un, nid, ps, ucl, uut, usb, asm, aa, aud, hl, sc, setCrl, smd, ib, s) {
+    sock.on('room:list', (d) => {
+        const rs = Array.isArray(d?.rooms) ? d.rooms : [];
+        if (rs.length > 0) {
+            st.channels = rs.map((r) => ({ id: r.room_id || r.roomId || r.room_name || r.roomName, name: r.room_name || r.roomName, displayName: '#' + (r.room_name || r.roomName), topic: r.topic || '', type: r.is_public !== false ? 'public' : 'private', createdBy: r.created_by_username || 'system', createdAt: new Date(r.created_at || Date.now()), memberCount: r.member_count || 0, unreadCount: 0 }));
+            ucl();
+            usb();
+            asm(`Found ${rs.length} room${rs.length === 1 ? '' : 's'}`);
+            if (!st.currentChannel) {
+                const defaultChannel = (0, settings_1.settings)().defaultChannel;
+                const dr = st.channels.find((c) => c.name === defaultChannel && c.type === 'public') || st.channels.find((c) => c.type === 'public') || st.channels[0];
+                if (dr) {
+                    sock.emit('room:join', { roomName: dr.name });
+                    asm(`Auto-joining #${dr.name}...`);
+                }
+            }
+        }
+        else if (!st.currentChannel) {
+            const defaultChannel = (0, settings_1.settings)().defaultChannel;
+            asm(`No rooms found - creating #${defaultChannel}...`);
+            sock.emit('room:create', { roomName: defaultChannel, topic: 'General chat', isPublic: true });
+        }
+        hl();
+    });
+    sock.on('room:joined', (d) => {
+        sc(st, d.roomId || d.roomName);
+        setCrl(d.roomName || '');
+        st.currentRoomMotd = d.motd ?? null;
+        if (d.members && Array.isArray(d.members)) {
+            ou.clear();
+            // Find current user in members list to get their UUID
+            const currentUserMember = d.members.find((m) => m.username === un);
+            if (currentUserMember) {
+                const currentUserId = String(currentUserMember.user_id || currentUserMember.userId);
+                // We are here, so we are online whatever the payload says.
+                ou.set(currentUserId, { username: un, status: 'online', nodeId: nid, joinedAt: new Date() });
+                // Everyone ELSE only counts if the server says they hold a socket.
+                //
+                // This list is the sidebar's "Us (n)" roster and every entry gets a
+                // presence indicator, so it must be who is HERE - not the room's
+                // membership, which is everyone who ever joined and never leaves.
+                // Marking all of them online is what left coffe and DiNO showing as
+                // present for days.
+                for (const m of d.members) {
+                    const memberId = String(m.user_id || m.userId);
+                    if (memberId === currentUserId)
+                        continue;
+                    if (!m.is_online)
+                        continue;
+                    ou.set(memberId, { username: m.username, status: m.is_muted ? 'dnd' : 'online', joinedAt: new Date() });
+                }
+            }
+        }
+        ucl();
+        uut();
+        usb();
+        asm(`Joined #${d.roomName} (${d.memberCount || ou.size} users)`);
+        aa(`Joined #${d.roomName}`);
+        aud.onNotification();
+    });
+    sock.on('room:left', (d) => { sc(st, ''); setCrl(''); st.currentRoomMotd = null; ucl(); usb(); asm(`Left ${d.roomName}`); });
+    sock.on('room:created', (d) => {
+        st.channels.push({ id: d.roomId, name: d.roomName, displayName: '#' + d.roomName, topic: d.topic || '', type: d.isPublic ? 'public' : 'private', createdBy: un, createdAt: new Date(), memberCount: 1, unreadCount: 0 });
+        ucl();
+        asm(`Room "#${d.roomName}" created!`);
+        aa(`Created #${d.roomName}`);
+        if (!st.currentChannel) {
+            sock.emit('room:join', { roomName: d.roomName });
+            asm(`Auto-joining #${d.roomName}...`);
+        }
+    });
+    sock.on('room:user-joined', (d) => {
+        if (String(d.userId) !== String(uid)) {
+            ou.set(String(d.userId), { username: d.username, status: 'online', joinedAt: new Date() });
+            ps.setStatus(d.userId, 'online');
+            uut();
+            asm(`${d.username} joined the room`);
+            aa(`${d.username} joined`);
+            aud.onJoin();
+        }
+    });
+    sock.on('room:user-left', (d) => {
+        if (String(d.userId) !== String(uid)) {
+            ou.delete(String(d.userId));
+            uut();
+            asm(`${d.username} left the room`);
+            aa(`${d.username} left`);
+            aud.onLeave();
+        }
+    });
+    sock.on('room:kicked', (d) => {
+        smd(`{${door_theme_1.T.alert}-fg}You were kicked from ${d.roomName}{/${door_theme_1.T.alert}-fg}\n\nReason: ${d.reason || 'No reason given'}\nBy: ${d.kickedBy}`, () => { ib.focus(); });
+        st.currentChannel = '';
+        setCrl('');
+        usb();
+        aud.onError();
+    });
+    sock.on('room:error', (d) => {
+        const em = typeof d === 'string' ? d : (d.error || d.message || 'An error occurred');
+        smd(`{${door_theme_1.T.alert}-fg}Error{/${door_theme_1.T.alert}-fg}\n\n${em}`, () => { ib.focus(); s.render(); });
+        aud.onError();
+    });
+}

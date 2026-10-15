@@ -1,0 +1,10 @@
+{
+  "name": "heboriscce",
+  "builtin-baseline": "1de2026f28ead93ff1773e6e680387643e914ea1",
+  "dependencies": [
+    "sdl2",
+    "sdl2-image",
+    "sdl2-mixer",
+    "physfs"
+  ]
+}

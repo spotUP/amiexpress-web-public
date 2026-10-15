@@ -1,0 +1,8 @@
+# npm always writes package.json and package-lock.json with LF. Seventeen
+# door lockfiles were committed with CRLF, so the copy baked into the image
+# never matched the copy npm regenerates on the volume when the entrypoint
+# runs `npm install --omit=dev` - and the deploy's door-sync verification
+# compares the two byte for byte. Every deploy therefore ended in a red X
+# on a board that had deployed correctly.
+*.json text eol=lf
+package-lock.json text eol=lf

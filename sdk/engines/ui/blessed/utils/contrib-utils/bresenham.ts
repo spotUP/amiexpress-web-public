@@ -1,0 +1,69 @@
+/**
+ * Bresenham's Line Algorithm
+ *
+ * Efficient line drawing algorithm for rasterizing lines
+ * Used by drawille-canvas for drawing lines between points
+ */
+
+export interface Point {
+  x: number;
+  y: number;
+}
+
+/**
+ * Generate points along a line from (x0, y0) to (x1, y1)
+ * @param x0 Start X coordinate
+ * @param y0 Start Y coordinate
+ * @param x1 End X coordinate
+ * @param y1 End Y coordinate
+ * @param fn Optional callback function called for each point
+ * @returns Array of points along the line
+ */
+export function bresenham(
+  x0: number,
+  y0: number,
+  x1: number,
+  y1: number,
+  fn?: (x: number, y: number) => void
+): Point[] {
+  const points: Point[] = [];
+
+  x0 = Math.floor(x0);
+  y0 = Math.floor(y0);
+  x1 = Math.floor(x1);
+  y1 = Math.floor(y1);
+
+  const dx = Math.abs(x1 - x0);
+  const dy = Math.abs(y1 - y0);
+  const sx = x0 < x1 ? 1 : -1;
+  const sy = y0 < y1 ? 1 : -1;
+  let err = dx - dy;
+
+  let x = x0;
+  let y = y0;
+
+  while (true) {
+    points.push({ x, y });
+    if (fn) {
+      fn(x, y);
+    }
+
+    if (x === x1 && y === y1) {
+      break;
+    }
+
+    const e2 = 2 * err;
+
+    if (e2 > -dy) {
+      err -= dy;
+      x += sx;
+    }
+
+    if (e2 < dx) {
+      err += dx;
+      y += sy;
+    }
+  }
+
+  return points;
+}

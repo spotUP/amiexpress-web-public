@@ -1,0 +1,276 @@
+The Following is a list of ToolTypes for this ICON:
+
+
+NOTICE: ALL TOOLTYPES ARE CASE SENSITIVE
+
+
+NODESTART=
+IDLENODE
+BATCH.LOGOFF=
+BATCH.SHUTDOWN=
+TRAPDOOR
+PLAYPEN=
+SYSTEM_PASSWORD=
+REMOTE_PASSWORD=
+NEWUSER_PASSWORD=
+PRIORITY=
+QUIETNODE
+SENTBY_FILES
+CHAT_ON
+CAPITOL_FILES
+SYSOP_CHAT_COLOR=
+USER_CHAT_COLOR=
+KEEP_UPLOAD_CREDIT=
+FREE_RESUMING
+CALLERS_LOG
+UD_LOG
+DOOR_LOG
+START_LOG
+NO_TIMEOUT
+NO_MCI_MDG
+BREAK_CHAT
+DISABLE_QUICK_LOGONS
+
+
+NODESTART=<location & name of express>
+
+         -Version 3.0
+         -REQUIRED
+         -It tells ACP where Express is located.
+
+     NODESTART=BBS:EXPRESS
+
+IDLENODE
+
+         -Version 3.0
+         -OPTIONAL
+         -Tells ACP not to start the node
+
+     IDLENODE
+
+
+BATCH.LOGOFF=<location & name of logoffbatch>
+
+         -Version 3.0
+         -OPTIONAL
+         -Tells ACP to run a script file when a user logs off.
+         -/X will pass the node number to the script file.
+
+     BATCH.LOGOFF=BBS:Cycle
+
+
+BATCH.SHUTDOWN=<location & name of shutdownbatch>
+
+         -Version 3.0
+         -OPTIONAL
+         -Tells ACP to run a script file when the node is shutdown.
+         -/X will pass the node number to the script file.
+
+     BATCH.SHUTDOWN=BBS:ShutDown.Rexx
+
+
+TRAPDOOR
+
+         -Version 3.0
+         -OPTIONAL
+         -Tells ACP that this node is going to run Express indirectly via
+          another program.
+         -If this option is used then you should specify the program to be
+          run externally in the NODESTART=tooltype.
+
+     TRAPDOOR
+
+
+PLAYPEN=<directory>
+
+         -Version 3.0
+         -OPTIONAL
+         -Tells ACP that this node is going to use a sysop defined directory
+          for initial uploads to go into.
+         -!! using RAM for this is highly discouraged !!
+         -You must create the directory for this.
+         -Each node using this option must specify a unique directory.
+
+     PLAYPEN=SYS:Node1
+
+
+SYSTEM_PASSWORD=<password>
+
+         -Version 3.0
+         -OPTIONAL
+         -Tells ACP that this node is going to require users to enter a
+          password before allowing access to the system.
+
+     SYSTEM_PASSWORD=FRANKLY
+
+
+REMOTE_PASSWORD=<password>
+
+         -Version 3.0
+         -OPTIONAL
+         -Tells ACP that a user is required to enter the specified password
+          prior to gaining access to the REMOTE_SHELL.
+
+     REMOTE_PASSWORD=TestWord
+
+
+PRIORITY=<number>
+
+         -Version 3.0
+         -OPTIONAL
+         -Tells ACP the priority for this Node in respects to the system.
+
+     PRIORITY=10
+
+
+QUIETNODE
+
+         -Version 3.0
+         -OPTIONAL
+         -Tells ACP to make this node quiet to the WHO command, and some
+          3rd party modules.
+
+     QUIETNODE
+
+
+SENTBY_FILES
+
+         -Version 3.0
+         -OPTIONAL
+         -tells /X that you wish to have the user's handle placed at the end
+          of his/her files descriptions.
+
+     SENTBY_FILES
+
+
+CHAT_ON
+
+         -Version 3.0
+         -OPTIONAL
+         -tells /X that the node should have the CHAT FLAG ON, when the node
+          is started.
+
+     CHAT_ON
+
+
+CAPITOL_FILES
+
+         -Version 3.0
+         -OPTIONAL
+         -tells /X to make all upload file names UPPER_CASE letters.
+
+     CAPITOL_FILES
+
+
+SYSOP_CHAT_COLOR=<num>
+
+         -Version 3.0
+         -REQUIRED
+         -tells /X which ANSI color to use when display the Sysops Chat.
+         -Range (31-37)
+
+     SYSOP_CHAT_COLOR=33
+
+
+USER_CHAT_COLOR=<num>
+
+         -Version 3.0
+         -REQUIRED
+         -tells /X which ANSI color to use when displaying the User's Chat.
+         -Range (31-37)
+
+     USER_CHAT_COLOR=32
+
+KEEP_UPLOAD_CREDIT=<num>
+
+         -Version 3.0
+         -OPTIONAL
+         -
+
+     KEEP_UPLOAD_CREDIT=1
+
+
+FREE_RESUMING
+
+         -Version 3.0
+         -OPTIONAL
+         -
+
+     FREE_RESUMING
+
+
+CALLERS_LOG
+
+         -Version 3.0
+         -OPTIONAL
+         -tells /X to record all events to a file called CallersLog in the
+          node directory.
+
+     CALLERS_LOG
+
+
+UD_LOG
+
+         -Version 3.0
+         -OPTIONAL
+         -tells /X to record all uploads & downloads to a file called UDLOG
+          in the node directory.
+
+     UD_LOG
+
+
+DOOR_LOG
+
+         -Version 3.0
+         -OPTIONAL
+         -tells /X to record the start and end time for MODULE use.
+
+     DOOR_LOG
+
+
+START_LOG
+
+         -Version 3.0
+         -OPTIONAL
+         -tells /X to record the start & end times of the NODE.
+
+     START_LOG
+
+
+NO_TIMEOUT
+
+         -Version 3.0
+         -OPTIONAL
+         -tells /X to disable the keyboard timeout option.
+
+     NO_TIMEOUT
+
+
+NO_MCI_MSG
+
+         -Version 3.0
+         -OPTIONAL
+         -tells /X to disable the ability to use MCI commands in the message
+          base.
+
+     NO_MCI_MSG
+
+
+BREAK_CHAT
+
+         -Version 3.0
+         -OPTIONAL
+         -Allows users to exit sysop chat with the CTRL-C command.
+
+     BREAK_CHAT
+
+
+DISABLE_QUICK_LOGONS
+
+         -Version 3.0
+         -OPTIONAL
+         -Allows you to prevent a user from using the Quick option at logon.
+
+     DISABLE_QUICK_LOGONS
+
+

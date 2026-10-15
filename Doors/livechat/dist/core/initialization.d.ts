@@ -1,0 +1,21 @@
+import { SocketEmitter, PresenceService, ExtendedEventBus } from '../services';
+import { AudioService } from '../utils/audio';
+import { MessageHandler } from '../handlers/message';
+import { CommandHandler } from '../handlers/command';
+export declare function initializeLiveChat(session: any, screen: any): {
+    username: any;
+    userId: number;
+    nodeId: any;
+    secLevel: any;
+    state: import("./state").AppState;
+    registry: import("../commands").CommandRegistry;
+    currentRoomLabel: string;
+    socketEmitter: SocketEmitter;
+    presenceService: PresenceService;
+    eventBus: ExtendedEventBus;
+    audio: AudioService;
+    messageHandler: MessageHandler;
+    commandHandler: CommandHandler;
+    onlineUsers: Map<any, any>;
+    cmdCtx: import("../commands").CommandContext;
+};

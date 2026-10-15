@@ -1,0 +1,330 @@
+import { BBSState, LoggedOnSubState } from '../src/constants/bbs-states';
+
+const displayScreenMock = jest.fn(async (..._args: unknown[]) => true);
+// doPause must set paginatedScreen to pause the display flow (pauseDisplayFlow checks this)
+const doPauseMock = jest.fn((socket: any, session: any) => {
+  session.paginatedScreen = {
+    callback: null,
+    currentPage: 1,
+    totalPages: 1,
+    content: []
+  };
+});
+const displayConferenceBulletinsMock = jest.fn(async () => true);
+const displayMainMenuMock = jest.fn(async (_socket: any, session: any) => {
+  // Mirror menu handler: set input mode based on cmdShortcuts.
+  session.subState = session.cmdShortcuts ? LoggedOnSubState.READ_SHORTCUTS : LoggedOnSubState.READ_COMMAND;
+});
+const getConferenceToolFlagsMock = jest.fn(() => ({
+  forceNewscan: false,
+  noNewscan: false,
+  showNewFiles: false,
+  noNewFiles: false,
+  forceMenus: false,
+  noBulls: false,
+  noConfBulls: false,
+}));
+
+// Prevent index.ts from booting servers; export only the constants and stub setters.
+jest.mock('../src/index', () => {
+  const states = require('../src/constants/bbs-states');
+  return {
+    BBSState: states.BBSState,
+    LoggedOnSubState: states.LoggedOnSubState,
+    initializeSecurity: jest.fn(),
+    setSecurityDependencies: jest.fn(),
+    setMessageCommandsDependencies: jest.fn(),
+    setDisplayFileCommandsDependencies: jest.fn(),
+    setPreferenceChatCommandsDependencies: jest.fn(),
+    setSystemCommandsDependencies: jest.fn(),
+    setNavigationCommandsDependencies: jest.fn(),
+    setAdvancedCommandsDependencies: jest.fn(),
+    setInfoCommandsDependencies: jest.fn(),
+    setUtilityCommandsDependencies: jest.fn(),
+    setMessageEntryDependencies: jest.fn(),
+    setSysopCommandsDependencies: jest.fn(),
+    setTransferMiscDependencies: jest.fn(),
+    setMessagingDependencies: jest.fn(),
+    setDatabaseDependencies: jest.fn(),
+    setCommandHandlerDependencies: jest.fn(),
+    setConfigDependencies: jest.fn(),
+    setDoorDependencies: jest.fn(),
+    setNodeServices: jest.fn(),
+    setServiceDependencies: jest.fn(),
+    setChatDependencies: jest.fn(),
+    setAmigaExports: jest.fn(),
+    setServerState: jest.fn(),
+    setAmigaDoorDependencies: jest.fn(),
+    setUserServices: jest.fn(),
+    setWebhookDependencies: jest.fn(),
+    setBulletinDependencies: jest.fn(),
+    setFileMaintenanceDependencies: jest.fn(),
+    setUserCommandsDependencies: jest.fn(),
+    setMessageHandlersDependencies: jest.fn(),
+    setSessionManager: jest.fn(),
+    setConferences: jest.fn(),
+    setMessageBases: jest.fn(),
+    setFileAreas: jest.fn(),
+    setDoors: jest.fn(),
+    setProcessOlmMessageQueue: jest.fn(),
+    setCheckSecurity: jest.fn(),
+    setSetEnvStat: jest.fn(),
+    setGetRecentCallerActivity: jest.fn(),
+  };
+});
+
+jest.mock('../src/handlers/screen.handler', () => ({
+  displayScreen: displayScreenMock,
+  doPause: doPauseMock,
+  handlePaginatedScreenInput: jest.fn(async (socket: any, session: any) => {
+    // Simulate pagination completion - clear paginatedScreen
+    session.paginatedScreen = null;
+    return true;
+  }),
+}));
+
+jest.mock('../src/amiga-emulation/loader/LibraryLoader', () => ({
+  LibraryLoader: jest.fn(),
+}));
+
+jest.mock('../src/amiga-emulation/AmigaDoorSession', () => ({
+  AmigaDoorSession: jest.fn(),
+}));
+
+jest.mock('../src/handlers/operations/conference.handler', () => ({
+  displayConferenceBulletins: displayConferenceBulletinsMock,
+  // joinConference is responsible for emitting displayScreen('CONF_BULL')
+  // per express.e:5058 (the CONF_BULL display moved from command.handler
+  // into joinConference in commit 3716da37e-era refactor). Simulate that
+  // here so the display-flow test still sees the call in the mock log.
+  joinConference: jest.fn(async (_socket: any, session: any) => {
+    // Pull the real displayScreen mock from the screen-handler mock; it's
+    // installed via jest.mock('.../screen.handler') in the test file.
+    try {
+      const sh = require('../src/handlers/screen.handler');
+      if (sh.displayScreen) await sh.displayScreen(_socket, session, 'CONF_BULL');
+    } catch { /* mock not installed yet — ok */ }
+  }),
+}));
+
+// Mock confScan so it doesn't call the real message scanner or set menuPause
+jest.mock('../src/handlers/message/message-scan.handler', () => ({
+  performConferenceScan: jest.fn(async () => 0),
+}));
+
+jest.mock('../src/handlers/door.handler', () => ({
+  executeDoor: jest.fn(),
+  displayDoorMenu: jest.fn(),
+}));
+
+jest.mock('../src/handlers/command-handler/menu', () => ({
+  displayMainMenu: displayMainMenuMock,
+  displayMenuPrompt: jest.fn(),
+}));
+
+// A finished download: the handler returns with DISPLAY_MENU set, which is
+// what the real one does once the transfer is away.
+jest.mock('../src/handlers/file/download.handler', () => {
+  const states = require('../src/constants/bbs-states');
+  return {
+    DownloadHandler: {
+      handleConfirmInput: jest.fn(async (_socket: any, session: any) => {
+        session.subState = states.LoggedOnSubState.DISPLAY_MENU;
+      }),
+      handleFilenameInput: jest.fn(),
+      handlePGoodbyeInput: jest.fn(),
+    },
+  };
+});
+
+jest.mock('../src/utils/conference-tooltypes.util', () => ({
+  getConferenceToolFlags: getConferenceToolFlagsMock,
+}));
+
+describe('Display flow parity', () => {
+  const socket = {
+    // The buffered writer (emitText) registers a disconnect handler and keys
+    // its buffer by socket id, so both have to exist.
+    id: 'display-flow-test',
+    on(_event: string, _handler: () => void) { /* nothing to clean up here */ },
+    emitted: [] as Array<{ event: string; data: any }>,
+    emit(event: string, data?: any) {
+      this.emitted.push({ event, data });
+    },
+  };
+
+  let handleCommand: typeof import('../src/handlers/command.handler').handleCommand;
+
+  beforeAll(() => {
+    ({ handleCommand } = require('../src/handlers/command.handler'));
+  });
+
+  beforeEach(() => {
+    displayScreenMock.mockClear();
+    doPauseMock.mockClear();
+    displayConferenceBulletinsMock.mockClear();
+    displayMainMenuMock.mockClear();
+    getConferenceToolFlagsMock.mockClear();
+    socket.emitted = [];
+    // Reset to default implementation
+    doPauseMock.mockImplementation((socket: any, session: any) => {
+      session.paginatedScreen = {
+        callback: null,
+        currentPage: 1,
+        totalPages: 1,
+        content: []
+      };
+    });
+  });
+
+  function baseSession() {
+    return {
+      state: BBSState.LOGGEDON,
+      subState: LoggedOnSubState.DISPLAY_BULL,
+      user: { expert: 'N', confRJoin: 1 },
+      currentConf: 1,
+      currentConfName: 'General',
+      relConfNum: 1,
+      currentMsgBase: 1,
+      confRJoin: 1,
+      msgBaseRJoin: 1,
+      commandBuffer: '',
+      inputBuffer: '',
+      menuPause: true,
+      cmdShortcuts: false,
+      shortcuts: new Map(),
+      timeRemaining: 60,
+      lastActivity: Date.now(),
+      displayFlowPaused: false,
+      doorExpertMode: false,
+      lastScreenHadPause: false,
+    } as any;
+  }
+
+  test('advances through display flow states (BULL -> NODE_BULL -> CONF_BULL -> MENU)', async () => {
+    const session = baseSession();
+
+    // No-pause doPause so the loop drives through every state in order.
+    doPauseMock.mockImplementation(() => { /* no paginatedScreen — keep flowing */ });
+
+    // DISPLAY_BULL -> ... -> CONF_SCAN (the scan runs to its end, express.e
+    // confScan) -> DISPLAY_CONF_BULL -> AUTO_REJOIN -> displayScreen('CONF_BULL').
+    // CONF_BULL is rendered by the join (express.e:5058). See
+    // tests/conference-join-conf-bull.test.ts for the architectural pin.
+    await handleCommand(socket, session, '');
+    expect(displayScreenMock).toHaveBeenCalled();
+    const names = displayScreenMock.mock.calls.map((c: any[]) => c[2]);
+    expect(names).toContain('BULL');
+    expect(names).toContain('NODE_BULL');
+    expect(doPauseMock).toHaveBeenCalled();
+    expect(names.indexOf('CONF_BULL')).toBeGreaterThan(names.indexOf('MAILSCAN'));
+  });
+
+  /**
+   * The achievements bulletin is REACHED at login.
+   *
+   * achievements/bulletin.ts writes Screens/AchieveTop.txt on its own timer;
+   * without a step in the login ladder that file is a file nobody reads. The
+   * pin is the order: NODE_BULL, then ACHIEVETOP, then the conference scan.
+   */
+  test('the achievements bulletin is shown between NODE_BULL and the conference scan', async () => {
+    const session = baseSession();
+    doPauseMock.mockImplementation(() => { /* no pause — walk the whole ladder */ });
+
+    await handleCommand(socket, session, '');
+
+    const names = displayScreenMock.mock.calls.map((c: any[]) => c[2]);
+    expect(names).toContain('ACHIEVETOP');
+    expect(names.indexOf('ACHIEVETOP')).toBeGreaterThan(names.indexOf('NODE_BULL'));
+    // Silent: a board with no achievements server has no file, and a missing
+    // screen must not raise the sysop alert BULL/NODE_BULL are also spared.
+    const achieveCall = displayScreenMock.mock.calls.find((c: any[]) => c[2] === 'ACHIEVETOP');
+    expect(achieveCall?.[4]).toBe(true);
+  });
+
+  // express.e:29853-29855 — quickFlag only skips the LOGON screen, NOT BULL.
+  // Earlier copies of this test asserted the opposite, but the source is
+  //   IF (quickFlag=FALSE) IF (displayScreen(SCREEN_LOGON)) THEN doPause()
+  // — there is no quickFlag check around displayScreen(SCREEN_BULL).
+  test('express.e:29853 — quickFlag does NOT suppress BULL/NODE_BULL', async () => {
+    doPauseMock.mockImplementation(() => {});
+    const session = baseSession();
+    session.quickFlag = true;
+
+    await handleCommand(socket, session, '');
+
+    const bullCalls = displayScreenMock.mock.calls.filter((c: any[]) => c[2] === 'BULL');
+    expect(bullCalls.length).toBeGreaterThan(0);
+  });
+
+  // express.e:28556 — doPause IS called when BULL screen was shown
+  test('express.e:28556 — doPause called when BULL displayScreen returns true', async () => {
+    // Default doPauseMock installs a paginatedScreen — the flow stops at BULL
+    const session = baseSession();
+
+    await handleCommand(socket, session, '');
+
+    expect(doPauseMock).toHaveBeenCalled();
+    const bullCalls = displayScreenMock.mock.calls.filter((c: any[]) => c[2] === 'BULL');
+    expect(bullCalls.length).toBeGreaterThan(0);
+    // Flow should be paused (paginatedScreen set by doPauseMock)
+    expect(session.paginatedScreen).toBeDefined();
+  });
+
+  // NO_BULLS / NO_CONF_BULLS are not in express.e — the original BBS always
+  // displays BULL/NODE_BULL/CONF_BULL when the screens exist. Supporting
+  // suppression tooltypes would be a WEB_-tagged extension, which we
+  // explicitly avoid for this codebase. Test removed; if the extension is
+  // ever introduced, gate it behind a WEB_* tag and add a parity test there.
+
+  /**
+   * Leaving the A command must land back on the menu, not on a blank screen
+   * waiting for a keypress.
+   *
+   * Reported as "it doesnt exit when i press enter, i have to press enter
+   * twice". The Enter DID exit - alterFlags set DISPLAY_MENU (express.e:
+   * 12664) - but DISPLAY_MENU only repaints when the next key arrives, so
+   * nothing happened until the second press.
+   */
+  test('pressing Enter at the flag prompt returns to the menu without a second key', async () => {
+    const session = baseSession();
+    session.subState = LoggedOnSubState.FLAG_INPUT;
+    session.inputBuffer = '';
+    session.tempData = { waitingForFlag: true };
+    // Nothing flagged: Enter on an empty line ends the command.
+    session.flagManager = {
+      getCount: () => 0,
+      getDisplayString: () => '',
+      addFlags: () => 0,
+      addFlag: () => true,
+      removeFlag: () => false,
+      clearAll: () => {},
+      save: async () => {},
+    };
+
+    displayMainMenuMock.mockClear();
+
+    await handleCommand(socket, session, '\r');
+
+    expect(displayMainMenuMock).toHaveBeenCalled();
+  });
+
+  /**
+   * Same gap, one screen over: "i downloaded two files now i have to press
+   * enter to return to the bbs prompt... it was stuck with no prompt".
+   *
+   * The download confirmation is what starts the transfer, so a finished
+   * batch download ends inside that input branch - and DISPLAY_MENU set
+   * from an input branch does not repaint until the next keystroke.
+   */
+  test('a finished download returns to the menu without a keypress', async () => {
+    const session = baseSession();
+    session.subState = LoggedOnSubState.DOWNLOAD_CONFIRM_INPUT;
+
+    displayMainMenuMock.mockClear();
+
+    await handleCommand(socket, session, 'Y');
+
+    expect(displayMainMenuMock).toHaveBeenCalled();
+  });
+});

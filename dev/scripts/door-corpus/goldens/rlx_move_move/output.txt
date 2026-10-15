@@ -1,0 +1,5 @@
+
+                   SlickMove 1.0 By BUGBYTE For /X 3.x
+
+Current Date is 05-15-26 
+ERROR: cannot find 's:slickmove.cfg'

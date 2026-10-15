@@ -1,0 +1,84 @@
+/**
+ * What the ACTIVITY panel says about the moment, above the event log.
+ *
+ * Kept away from the door so the wording can be tested without a terminal,
+ * and because the door had grown to the repo's 2000-line ceiling on the way
+ * to writing it.
+ *
+ * The keys belong to the GAME being played: an UNO table was being shown
+ * poker's "F Fold  X Check  C Call  R Raise" in a panel too narrow to hold
+ * the line (reported 2026-09-02, with a screenshot).
+ */
+
+import { UI_THEME } from './constants';
+
+export interface ActivityHintInput {
+  /** Only a table view has anything to hint about. */
+  viewMode: 'lobby' | 'table';
+  /** The table being played, if any. */
+  table: { players: Array<{ role: string; stack: number }>; minPlayers: number } | null;
+  /** True for an UNO table (isUnoTable), false for a poker one. */
+  isUno: boolean;
+  /**
+   * Which game's key legend to print. Defaults to the isUno/poker pair so
+   * every existing caller keeps its behaviour; a game that registers with
+   * the lobby passes its own kind (lib/games/types.ts).
+   */
+  gameKind?: 'poker' | 'uno' | 'skitgubbe' | 'vandtia' | 'patience';
+  /** The player's own id, to tell "your turn" from "waiting for". */
+  userId: string | null;
+  /** The live hand, when one is dealt. */
+  engine: { state: { actionTo?: number | null; players: Array<{ id?: string; name?: string }> } } | null;
+}
+
+export function buildActivityHints(input: ActivityHintInput): string[] {
+  const { viewMode, table, isUno, userId, engine } = input;
+  const kind = input.gameKind ?? (isUno ? 'uno' : 'poker');
+  if (viewMode !== 'table' || !table || !userId) return [];
+
+  const lines: string[] = [];
+
+  if (!engine) {
+    const seated = table.players.filter((player) => player.role === 'player' && player.stack > 0);
+    lines.push(seated.length < table.minPlayers
+      ? `{${UI_THEME.warning}-fg}Waiting for players to join...{/}`
+      : `{${UI_THEME.warning}-fg}Ready to deal. Press D or use Deal to start.{/}`);
+  } else {
+    const seat = engine.state.actionTo;
+    if (seat === null || seat === undefined) {
+      lines.push(`{${UI_THEME.warning}-fg}Dealing in progress...{/}`);
+    } else {
+      const actor = engine.state.players[seat];
+      if (actor?.id === userId) {
+        lines.push(`{${UI_THEME.warning}-fg}Your turn. Choose an action below.{/}`);
+      } else if (actor?.name) {
+        lines.push(`{${UI_THEME.warning}-fg}Waiting for ${actor.name} to act...{/}`);
+      }
+    }
+  }
+
+  lines.push(
+    kind === 'uno'
+      ? `{${UI_THEME.dim}-fg}Keys: 1-9 or arrows Pick  ENTER Play  D Draw  L Leave{/}`
+      : kind === 'patience'
+        // Two picks make a move: the pile a card leaves, then where it goes.
+        ? `{${UI_THEME.dim}-fg}Keys: 1-9 Pile  X Home  C Stock  R Cancel  L Leave  D Deal{/}`
+        : kind === 'vandtia'
+        /*
+         * A CARD KEY PICKS AND THE SAME KEY PLAYS, and so does ENTER - and
+         * the arrows walk a hand of any length, which is the only way to
+         * reach a card past the tenth (KeyBindings.ts). X still plays, and
+         * is left out of the legend rather than out of the door: the line
+         * has to fit a 40-column panel.
+         */
+        ? `{${UI_THEME.dim}-fg}Keys: 1-9 or arrows Pick  ENTER Play  C Take  V Flip  L Leave{/}`
+        : kind === 'skitgubbe'
+        // Two moves: play the card you picked, or take the one in front of
+        // you. The keys are the door's existing ones - X is "do the main
+        // thing" at every table, C is the second action.
+        ? `{${UI_THEME.dim}-fg}Keys: 1-9 or arrows Pick  ENTER Play  C Take  L Leave  D Deal{/}`
+        : `{${UI_THEME.dim}-fg}Keys: F Fold  X Check  C Call  R Raise  L Leave  D Deal{/}`,
+  );
+
+  return lines;
+}

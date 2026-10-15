@@ -1,0 +1,313 @@
+import React, { useState, useRef, useEffect } from 'react';
+import { Package, Download, Loader, Upload, X, File } from 'lucide-react';
+import { ArchiveOptions } from '../types';
+import { ArchiveFileManager } from './ArchiveFileManager';
+import { SDK_API_URL } from '../utils/api-config';
+
+interface FileNode {
+  id: string;
+  name: string;
+  type: 'file' | 'folder';
+  path: string;
+  size?: number;
+  children?: FileNode[];
+  isEditing?: boolean;
+}
+
+interface ReleaseArchiveProps {
+  doorName: string;
+  doorId: string;
+  onCreateArchive: (options: ArchiveOptions, extraFiles?: File[]) => Promise<void>;
+  className?: string;
+}
+
+export const ReleaseArchive: React.FC<ReleaseArchiveProps> = ({
+  doorName,
+  doorId,
+  onCreateArchive,
+  className = '',
+}) => {
+  const [isCreating, setIsCreating] = useState(false);
+  const [uploadedFiles, setUploadedFiles] = useState<File[]>([]);
+  const [archiveFiles, setArchiveFiles] = useState<FileNode[]>([]);
+  const [doorFiles, setDoorFiles] = useState<FileNode[]>([]);
+  const [isFetchingFiles, setIsFetchingFiles] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [options, setOptions] = useState<ArchiveOptions>({
+    format: 'zip',
+    includeSource: true,
+    includeAssets: true,
+    includeDocs: true,
+    doormanCompatible: true,
+  });
+
+  // Fetch door files when options change
+  useEffect(() => {
+    const fetchDoorFiles = async () => {
+      setIsFetchingFiles(true);
+      try {
+        const params = new URLSearchParams({
+          includeSource: String(options.includeSource),
+          includeAssets: String(options.includeAssets),
+          includeDocs: String(options.includeDocs),
+        });
+
+        const response = await fetch(`${SDK_API_URL}/api/doors/${doorId}/files?${params}`);
+        if (!response.ok) throw new Error('Failed to fetch door files');
+
+        const data = await response.json();
+        setDoorFiles(data.files || []);
+      } catch (error) {
+        console.error('Error fetching door files:', error);
+        setDoorFiles([]);
+      } finally {
+        setIsFetchingFiles(false);
+      }
+    };
+
+    if (doorId) {
+      fetchDoorFiles();
+    }
+  }, [doorId, options.includeSource, options.includeAssets, options.includeDocs]);
+
+  // Merge door files and uploaded files
+  useEffect(() => {
+    const uploadedFileNodes: FileNode[] = uploadedFiles.map((file, index) => ({
+      id: `uploaded-${index}-${Date.now()}`,
+      name: file.name,
+      type: 'file' as const,
+      path: file.name,
+      size: file.size,
+    }));
+
+    // Combine door files with uploaded files at the root
+    setArchiveFiles([...doorFiles, ...uploadedFileNodes]);
+  }, [doorFiles, uploadedFiles]);
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    setUploadedFiles(prev => [...prev, ...files]);
+    // Reset input so same file can be selected again
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
+  const handleRemoveFile = (index: number) => {
+    setUploadedFiles(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const formatFileSize = (bytes: number): string => {
+    if (bytes === 0) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
+  };
+
+  const handleCreateArchive = async () => {
+    setIsCreating(true);
+    try {
+      await onCreateArchive(options, uploadedFiles);
+    } catch (error) {
+      console.error('Failed to create archive:', error);
+    } finally {
+      setIsCreating(false);
+    }
+  };
+
+  return (
+    <div className={`bg-[#1E1E1E] rounded-lg border border-gray-700 p-4 ${className}`}>
+      <div className="flex items-center gap-3 mb-4">
+        <Package className="w-5 h-5 text-blue-400" />
+        <h3 className="text-lg font-semibold text-white">Release Archive</h3>
+      </div>
+
+      <div className="space-y-4">
+        {/* Format selection */}
+        <div>
+          <label className="block text-sm font-medium text-gray-300 mb-2">
+            Archive Format
+          </label>
+          <div className="flex gap-2">
+            <button
+              onClick={() => setOptions({ ...options, format: 'zip' })}
+              className={`flex-1 px-3 py-2 rounded border transition-colors ${
+                options.format === 'zip'
+                  ? 'bg-blue-600 border-blue-600 text-white'
+                  : 'bg-gray-800 border-gray-700 text-gray-300 hover:bg-gray-700'
+              }`}
+            >
+              .zip (TypeScript)
+            </button>
+            <button
+              disabled
+              className="flex-1 px-3 py-2 rounded border border-gray-700 text-gray-500 cursor-not-allowed"
+            >
+              .lha (Native Amiga)
+            </button>
+          </div>
+          <p className="text-xs text-gray-500 mt-2">
+            TypeScript releases are ZIP. Native Amiga doors should use LHA.
+          </p>
+        </div>
+
+        {/* Include options */}
+        <div className="space-y-2">
+          <label className="block text-sm font-medium text-gray-300">
+            Include in Archive
+          </label>
+
+          <label className="flex items-center gap-2 cursor-pointer opacity-70">
+            <input
+              type="checkbox"
+              checked={options.includeSource}
+              onChange={() => undefined}
+              disabled
+              className="w-4 h-4 rounded border-gray-700 bg-gray-800 text-blue-600 focus:ring-blue-600 focus:ring-offset-gray-900"
+            />
+            <span className="text-sm text-gray-300">Runtime source files (required)</span>
+          </label>
+
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={options.includeAssets}
+              onChange={(e) =>
+                setOptions({ ...options, includeAssets: e.target.checked })
+              }
+              className="w-4 h-4 rounded border-gray-700 bg-gray-800 text-blue-600 focus:ring-blue-600 focus:ring-offset-gray-900"
+            />
+            <span className="text-sm text-gray-300">Assets (images, sounds, etc.)</span>
+          </label>
+
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={options.includeDocs}
+              onChange={(e) =>
+                setOptions({ ...options, includeDocs: e.target.checked })
+              }
+              className="w-4 h-4 rounded border-gray-700 bg-gray-800 text-blue-600 focus:ring-blue-600 focus:ring-offset-gray-900"
+            />
+            <span className="text-sm text-gray-300">Documentation (README, etc.)</span>
+          </label>
+        </div>
+
+        {/* Extra Files Upload */}
+        <div className="space-y-2">
+          <label className="block text-sm font-medium text-gray-300">
+            Additional Files
+          </label>
+          <p className="text-xs text-gray-500 mb-2">
+            Add extra files to include in the release (READMEs, licenses, docs, etc.)
+          </p>
+
+          <input
+            ref={fileInputRef}
+            type="file"
+            multiple
+            onChange={handleFileSelect}
+            className="hidden"
+          />
+
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-gray-800 hover:bg-gray-700 border border-gray-700 text-gray-300 rounded transition-colors"
+          >
+            <Upload className="w-4 h-4" />
+            Upload Files
+          </button>
+
+          {/* Uploaded files list */}
+          {uploadedFiles.length > 0 && (
+            <div className="mt-2 space-y-1 max-h-32 overflow-y-auto">
+              {uploadedFiles.map((file, index) => (
+                <div
+                  key={index}
+                  className="flex items-center justify-between px-2 py-1.5 bg-gray-800 rounded text-xs"
+                >
+                  <div className="flex items-center gap-2 flex-1 min-w-0">
+                    <File className="w-3 h-3 text-gray-400 flex-shrink-0" />
+                    <span className="text-gray-300 truncate">{file.name}</span>
+                    <span className="text-gray-500 flex-shrink-0">
+                      ({formatFileSize(file.size)})
+                    </span>
+                  </div>
+                  <button
+                    onClick={() => handleRemoveFile(index)}
+                    className="ml-2 p-1 hover:bg-gray-700 rounded text-gray-400 hover:text-red-400 transition-colors flex-shrink-0"
+                    title="Remove file"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Doorman compatibility */}
+        <div>
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={options.doormanCompatible}
+              onChange={() => undefined}
+              disabled
+              className="w-4 h-4 rounded border-gray-700 bg-gray-800 text-blue-600 focus:ring-blue-600 focus:ring-offset-gray-900"
+            />
+            <span className="text-sm text-gray-300">
+              BBS .info included (required)
+            </span>
+          </label>
+          <p className="text-xs text-gray-500 mt-1 ml-6">
+            Release archives always include `Commands/BBSCmd/*.info`
+          </p>
+        </div>
+
+        {/* Archive File Manager */}
+        {isFetchingFiles ? (
+          <div className="flex items-center justify-center p-8 text-gray-400">
+            <Loader className="w-5 h-5 animate-spin mr-2" />
+            <span>Loading door files...</span>
+          </div>
+        ) : (
+          <ArchiveFileManager
+            files={archiveFiles}
+            onFilesChange={setArchiveFiles}
+          />
+        )}
+
+        {/* Create button */}
+        <button
+          onClick={handleCreateArchive}
+          disabled={isCreating}
+          className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white rounded font-medium transition-colors"
+        >
+          {isCreating ? (
+            <>
+              <Loader className="w-4 h-4 animate-spin" />
+              Creating Archive...
+            </>
+          ) : (
+            <>
+              <Download className="w-4 h-4" />
+              Create Release Archive
+            </>
+          )}
+        </button>
+
+        {/* Info */}
+        <div className="text-xs text-gray-500 p-3 bg-gray-800 rounded">
+          <p className="mb-1">
+            <strong>Filename:</strong> {doorName}_v{'{version}'}.{options.format}
+          </p>
+          <p>
+            The archive includes Commands/BBSCmd and Doors/&lt;door&gt; with required runtime files.
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+};

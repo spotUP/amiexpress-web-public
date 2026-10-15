@@ -1,0 +1,223 @@
+/**
+ * What a replace should touch.
+ *
+ * A screen exists once per node, so replacing "the LOGON screen" means
+ * replacing forty files - and sometimes it means replacing one, because a node
+ * is deliberately different. Neither can be the silent default: the fan-out is
+ * a choice the sysop makes per upload, with the target count in front of them.
+ *
+ * When every copy is already identical there is a better answer than writing
+ * the same bytes forty times, and it is express.e's own: point the nodes at
+ * one directory with the SCREENS tooltype and write once. That is suggested,
+ * never forced.
+ */
+
+import type { ScreenIndexShape } from './screen-index-view';
+import { isThemeWidePath } from '@bbs/screens/screen-tables';
+
+export type FanOutChoice =
+  | 'this-file'
+  | 'same-content'
+  | 'all-copies'
+  | 'share-then-write';
+
+export interface FanOutOption {
+  choice: FanOutChoice;
+  label: string;
+  targets: string[];
+  suggested: boolean;
+}
+
+/**
+ * Which conference a screen file belongs to, or null for a board or node one.
+ *
+ * Both spellings the board writes: `Conf5/bull20.txt` on the volume and
+ * `Themes/h7/Conf/5/bull20.txt` inside a theme, which mirrors the same scope
+ * with a separator.
+ */
+export function conferenceOf(rel: string): number | null {
+  const match = /(?:^|\/)conf\/?(\d+)(?:\/|$)/i.exec(rel);
+  return match ? Number(match[1]) : null;
+}
+
+export function fanOutOptions(
+  index: ScreenIndexShape,
+  screen: string,
+  openPath: string,
+): FanOutOption[] {
+  /*
+   * A THEME'S ONE MAIN MENU IS ONE FILE, and it is the whole write.
+   *
+   * It serves every conference by being the place each one falls back to, so
+   * there are no copies to reach. Every conference resolves to it, and a
+   * conference with its own override resolves there instead - fanning out
+   * along the resolutions wrote the main menu over each override, and the
+   * identical-copies rule over any conference copy still holding the same
+   * template.
+   */
+  const thisFileOnly: FanOutOption = { choice: 'this-file', label: 'this file only', targets: [openPath], suggested: false };
+  if (isThemeWidePath(openPath)) return [thisFileOnly];
+
+  // An index without its `screens` list is one a caller built for a narrower
+  // question - the studio's dialog holds files and nothing else. It has no
+  // resolutions, which is exactly what an empty list means here.
+  const entry = (index.screens ?? []).find(s => s.screen === screen);
+  const resolved = (entry?.resolutions ?? [])
+    .map(r => r.file)
+    .filter((f): f is string => !!f);
+
+  /*
+   * NEVER ACROSS CONFERENCES.
+   *
+   * A screen exists once per NODE and the board keeps 41 copies of it, so a
+   * fan-out is what a sysop means: "when do i not want to replace the 41 files
+   * for the bbstitle?" A CONFERENCE is the other thing entirely. `CONF_BULL`
+   * resolves to `Conf1/bull20.txt` through `Conf5/bull20.txt`, and those are
+   * five different bulletins for five different conferences - the demoscene
+   * one, the internal one - not copies of one screen.
+   *
+   * Fanning out across them wrote one picture into all five: the sysop
+   * redrew h7's conference 5 bulletin and found conference 2 wearing it too,
+   * "5 and 2 shows the same art though with my amiga demos test text in them"
+   * (2026-09-18). The identical set made it worse rather than better - once
+   * five conferences hold the same bytes, `same-content` keeps them welded.
+   *
+   * So a target in a DIFFERENT conference than the file being edited is
+   * dropped. Node copies of that conference's screen still fan out, and a
+   * board or node screen is untouched by this.
+   */
+  const openConference = conferenceOf(openPath);
+  /*
+   * Only a file that IS in a conference is held to its own conference. Editing
+   * a node screen goes on reaching a `Conf<n>/Screens/` twin of it, which is
+   * how a board that keeps the same logoff in eighty places is re-converged -
+   * that is a copy of one screen, not another conference's screen.
+   */
+  const sameConference = (rel: string) =>
+    openConference === null || conferenceOf(rel) === openConference;
+
+  // The file the sysop opened leads, whatever order the index holds.
+  const targets = [openPath, ...resolved.filter(f => f !== openPath && sameConference(f))];
+
+  const options: FanOutOption[] = [thisFileOnly];
+
+  /*
+   * Every file that is byte-identical to this one, wherever it lives.
+   *
+   * This board is 1,155 screen files of which 34 are unique: `guestlogon.txt`
+   * exists 80 times in one version, `logoff.txt` 93 times in five. Editing one
+   * copy at a time is what produced the five - somebody fixed a few nodes and
+   * the rest drifted - so the identical set is the honest default: writing it
+   * changes nothing that was not already the same bytes.
+   *
+   * Not limited to this screen NAME's resolutions, because the copies are
+   * spread across `Node<n>/`, `Node<n>/Screens/` and `Conf<n>/Screens/`, and
+   * the index knows them by content rather than by which screen resolves to
+   * them.
+   */
+  const openFile = index.files[openPath];
+  const identical = openFile
+    ? Object.values(index.files)
+      .filter(f => f.sha256 === openFile.sha256 && f.relPath !== openPath)
+      .filter(f => sameConference(f.relPath))
+      .map(f => f.relPath)
+      .sort((a, b) => a.localeCompare(b))
+    : [];
+
+  if (identical.length) {
+    options.push({
+      choice: 'same-content',
+      label: `all ${identical.length + 1} copies that are identical to this one`,
+      targets: [openPath, ...identical],
+      // Suggested only when there is nothing better. Sharing is better when it
+      // applies: it makes the NEXT edit one file instead of eighty, which is
+      // the actual fix for a board that is 97% clones.
+      suggested: false,
+    });
+  }
+
+  if (targets.length < 2) {
+    // Nothing to share and no sibling to overwrite, so the safe bulk is the
+    // best answer available.
+    const sameContent = options.find(o => o.choice === 'same-content');
+    if (sameContent) sameContent.suggested = true;
+    return options;
+  }
+
+  const hashes = new Set(
+    targets.map(t => index.files[t]?.sha256).filter((h): h is string => !!h),
+  );
+  const allIdentical = hashes.size === 1;
+
+  options.push({
+    choice: 'all-copies',
+    label: `all ${targets.length} nodes that have ${screen}`,
+    targets,
+    suggested: !allIdentical,
+  });
+
+  options.push({
+    choice: 'share-then-write',
+    label: 'share from one directory, then write once',
+    targets,
+    suggested: allIdentical,
+  });
+
+  return options;
+}
+
+/**
+ * The option a sysop almost always means: every copy of this screen.
+ *
+ * "this file only or all 41 files needs to be click but i dunno the ux is not
+ * so nice - when do i not want to replace the 41 files for the bbstitle?"
+ * (sysop, 2026-09-14). Almost never: a board keeps one BBSTITLE per node
+ * because AmiExpress stores it per node, not because anyone wants forty-one
+ * different titles. Asking every time is asking a question with one answer,
+ * and picking `this file only` by mistake is what left the board serving an
+ * old PETSCII title from a copy nothing matched.
+ *
+ * So the page writes THIS and offers the rest, rather than asking first.
+ *
+ * Deliberately not `suggested`: when every copy already matches, that is
+ * `share-then-write`, which MOVES the files into a shared directory. It is a
+ * good idea and it is a change to how the board is laid out, so it stays a
+ * choice the sysop makes on purpose rather than the default action of an
+ * upload.
+ */
+export function everyCopyOption(options: FanOutOption[]): FanOutOption | undefined {
+  return options.find(option => option.choice === 'all-copies')
+    ?? options.find(option => option.choice === 'same-content')
+    ?? options.find(option => option.choice === 'this-file');
+}
+
+/**
+ * What the write-everywhere button says it will do.
+ *
+ * The count is the point - a sysop who reads "Write all 41 copies" knows the
+ * board will be consistent afterwards, which is the thing the old four-way
+ * question kept failing to make obvious.
+ */
+export function writeEverywhereLabel(option: FanOutOption): string {
+  const count = option.targets.length;
+  if (count <= 1) return 'Write this file';
+  return option.choice === 'same-content'
+    ? `Write all ${count} identical copies`
+    : `Write all ${count} copies`;
+}
+
+/**
+ * What a SAVE is about to touch, said before the click rather than after it.
+ *
+ * The artist dialog already fans out - it writes the union of every copy the
+ * screen resolves to and every copy still identical to this one - and it says
+ * "Saved 38 copies" afterwards. Afterwards is the wrong moment: an artist who
+ * believes they are editing one node's screen and is in fact rewriting
+ * thirty-eight has no way to know until it has happened.
+ *
+ * One file reads as nothing, because "Saving 1 copy" is noise on every
+ * ordinary screen this board has.
+ */
+export function savingLabel(targets: string[]): string {
+  return targets.length > 1 ? `Saving ${targets.length} copies` : '';
+}

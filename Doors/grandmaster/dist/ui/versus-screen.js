@@ -1,0 +1,1797 @@
+"use strict";
+/**
+ * Versus Screen
+ *
+ * Multiplayer game screen with opponent board, garbage strip, hold box,
+ * and full visual-effect parity with game-screen.ts.
+ */
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.VersusScreen = void 0;
+const blessed_helpers_1 = require("@amiexpress/bbs-door-sdk/utils/blessed-helpers");
+const board_effects_1 = require("./board-effects");
+const clear_screen_1 = require("./clear-screen");
+const block_width_1 = require("./block-width");
+const versus_cells_1 = require("./versus-cells");
+/** Playfield columns, in BLOCKS. What they cost in characters is the screen's answer. */
+const BOARD_COLUMNS = 10;
+const minimap_1 = require("./minimap");
+const versus_layout_1 = require("./versus-layout");
+const bot_player_1 = require("../ai/bot-player");
+const board_1 = require("../core/board");
+const screen_shake_1 = require("../effects/screen-shake");
+const particles_1 = require("../effects/particles");
+const animations_1 = require("../effects/animations");
+const block_glow_1 = require("../effects/block-glow");
+const line_clear_animation_1 = require("../effects/line-clear-animation");
+const items_1 = require("../core/items");
+const versus_goal_1 = require("../core/versus-goal");
+const up_key_lock_1 = require("../core/up-key-lock");
+const mission_run_1 = require("../core/mission-run");
+const door_theme_1 = require("../door-theme");
+/**
+ * Versus Screen
+ *
+ * Extends game screen with multiplayer features (online or CPU battle).
+ * Full visual-effect parity with GameScreen (particles, shake, board overlay,
+ * lock flash, grade-up, combo, section COOL/REGRET, hold piece).
+ */
+class VersusScreen {
+    constructor(screen, engine, inputHandler, sounds, state, network, attackManager, botOrAI, // number = old botDifficulty, object = VersusAI controller
+    sessionRef) {
+        this.botPlayer = null;
+        this.versusAI = null; // VersusAI controller for CPU Battle mode
+        this.voiceStates = new Map();
+        this.localMuted = false;
+        this.sessionSocket = null;
+        this.voiceSpeakingHandler = null;
+        this.opponentBoards = []; // one full board per opponent that fits
+        /** What each opponent box currently shows, so an unchanged board is skipped. */
+        this.drawnBoards = [];
+        this.lastLayoutKey = ''; // suppresses widget churn between frames
+        /**
+         * Where the lone opponent goes on a narrow screen, or null on a wide one.
+         *
+         * versusLayout places opponents from LEFT_PANEL_COLS - the width of an
+         * 80-column player panel - which is off the right edge of a C64. The
+         * compact screen works out its own three columns instead: player, middle,
+         * opponent.
+         */
+        this.compactOpponent = null;
+        /** Match outcome, readable after run() resolves. */
+        this.victory = false;
+        /** Lobby "Garbage Lines" setting; false disconnects the attack router. */
+        this.garbageEnabled = true;
+        /** True once at least one networked opponent has been seen (win detection). */
+        this.sawNetworkOpponent = false;
+        this.lastRender = 0;
+        // Board overlay compositor for inline effects (same as game-screen)
+        this.boardOverlay = [];
+        this.running = false;
+        this.unsubscribers = [];
+        // Track previous state for detecting changes
+        this.lastGrade = '9';
+        this.lastLines = 0;
+        this.lastLevel = 0;
+        this.lastSection = 0;
+        this.lastPieceExists = false;
+        this.lastScore = -1;
+        this.lastCombo = -1;
+        this.lastHold = null;
+        this.lastBoardHash = '';
+        // Animation state
+        this.gradeAnimProgress = 0;
+        this.gradeAnimDirection = 1;
+        this.lastComboMilestone = 0;
+        this.twentyGFlashTimer = 0;
+        this.rainbowTimer = 0;
+        this.lastRainbowUpdate = 0;
+        this.screen = screen;
+        this.engine = engine;
+        this.inputHandler = inputHandler;
+        this.sounds = sounds;
+        this.state = state;
+        this.network = network;
+        this.attackManager = attackManager;
+        this.sessionSocket = sessionRef?.bbsSession?.socket ?? null;
+        this.minimapRenderer = new minimap_1.MinimapRenderer({ height: 10, compact: true });
+        this.opponentTracker = new minimap_1.OpponentTracker();
+        // Check if AI controller was passed (new implementation)
+        if (botOrAI && typeof botOrAI === 'object') {
+            this.versusAI = botOrAI;
+        }
+        // Legacy: Initialize bot player if difficulty provided (old single-bot mode)
+        else if (typeof botOrAI === 'number') {
+            this.botPlayer = new bot_player_1.BotPlayer(botOrAI);
+        }
+        // Initialize visual effect systems
+        this.shaker = new screen_shake_1.ScreenShaker();
+        this.particles = new particles_1.ParticleSystem();
+        this.animations = new animations_1.AnimationManager();
+        this.glowManager = new block_glow_1.BlockGlowManager();
+        this.clearAnimation = new line_clear_animation_1.LineClearAnimationManager();
+        // Share managers with game engine
+        this.engine.setAnimationManager(this.animations);
+        this.engine.setGlowManager(this.glowManager);
+        // Configure from settings
+        this.glowManager.setEnabled(state.settings.blockGlow);
+        this.glowManager.setIntensityMultiplier(state.settings.glowIntensity);
+        this.clearAnimation.setEnabled(state.settings.clearStyle !== 'instant');
+        this.setupUI();
+        if (this.network) {
+            this.setupNetworkListeners();
+        }
+        this.setupAttackRouting();
+        this.setupItemRouting();
+    }
+    /** Lobby "Garbage Lines" toggle. Call before run(). */
+    setGarbageEnabled(enabled) {
+        this.garbageEnabled = enabled;
+    }
+    /**
+     * The attack ROUTER - the missing layer this whole feature dead-ended on.
+     *
+     * Every engine (human and AI) has a complete AttackManager: line clears
+     * produce attacks via onAttackSent, and queued garbage is applied to the
+     * board on lock. But nothing ever CONNECTED them: the human's only
+     * onAttackSent listener played a sound (and in CPU battle wasn't even
+     * registered, since setupNetworkListeners was gated on `this.network`),
+     * receiveAttack() had zero callers repo-wide, and the AI engines had no
+     * attack managers at all. Result: "No incoming attack" was a permanent
+     * state and the lobby's garbage setting described nothing.
+     */
+    setupAttackRouting() {
+        // Human attacks out
+        this.attackManager.onAttackSentCallback((lines, _type) => {
+            this.sounds.playSfx('attack');
+            if (!this.garbageEnabled)
+                return;
+            if (this.network) {
+                // Networked: broadcast; the broker fans it out to lobby members and
+                // receivers filter their own id.
+                this.network.sendAttack({
+                    from: this.localAttackId(),
+                    to: null,
+                    lines,
+                    type: lines >= 4 ? 'tetris' : lines === 3 ? 'triple' : lines === 2 ? 'double' : 'single',
+                    combo: 0,
+                    backToBack: false,
+                });
+            }
+            else if (this.versusAI) {
+                // CPU battle: random living bot takes the hit.
+                const living = this.versusAI.getOpponents().filter((o) => o.alive);
+                if (living.length > 0) {
+                    const target = living[Math.floor(Math.random() * living.length)];
+                    target.attackManager.receiveAttack('You', lines);
+                }
+            }
+        });
+        // Feedback when garbage lands in the human's queue (was previously only
+        // registered in the networked path).
+        this.attackManager.onGarbageReceivedCallback((_lines, _sender) => {
+            this.sounds.playSfx('garbage');
+            this.shaker.shake('garbageReceive');
+        });
+        // AI attacks out (CPU battle): each bot targets a random living player -
+        // the human or another bot - standard free-for-all behaviour.
+        if (this.versusAI) {
+            for (const opp of this.versusAI.getOpponents()) {
+                opp.attackManager.onAttackSentCallback((lines) => {
+                    if (!this.garbageEnabled)
+                        return;
+                    const others = this.versusAI.getOpponents().filter((o) => o.alive && o.id !== opp.id);
+                    // Human is one target slot among the others.
+                    const slot = Math.floor(Math.random() * (others.length + 1));
+                    if (slot === others.length) {
+                        this.attackManager.receiveAttack(opp.name, lines);
+                    }
+                    else {
+                        others[slot].attackManager.receiveAttack(opp.name, lines);
+                    }
+                });
+            }
+        }
+    }
+    /** Stable id used as `from` in outgoing network attacks. */
+    localAttackId() {
+        return this.network?.getLocalPlayerId?.() ?? 'local';
+    }
+    /**
+     * TGM item wiring - the smallest reachable path from core/items.ts to a
+     * live TGM versus game. Enables item pickups on the human engine and, for
+     * CPU battle, on each AI opponent's engine too, then routes collected
+     * items to a target the same way setupAttackRouting() routes garbage.
+     *
+     * Networked human-vs-human versus only enables the local engine: an
+     * opponent's own GameEngine lives in their own process, so an
+     * enemy-targeted item collected here has no reachable remote target and
+     * falls back to the collector - exactly the reference's own fallback rule
+     * (gamestart.c:14358-14365, cited in the task: "enemy = 1 - player,
+     * falling back to enemy = player" when there's no second player to hit).
+     * Extending item effects across the network is a protocol change, out of
+     * scope for this pass.
+     */
+    setupItemRouting() {
+        this.engine.enableItems('TGM');
+        this.wireItemCollection(this.engine);
+        if (this.versusAI) {
+            // Some opponent stand-ins (tracker-only seeding, before their real
+            // GameEngine exists) carry no `engine` - skip those, they get no item
+            // pickups of their own but remain valid attack/item targets once
+            // wireItemCollection() on other engines looks them up fresh each time.
+            for (const opp of this.versusAI.getOpponents()) {
+                if (!opp?.engine)
+                    continue;
+                opp.engine.enableItems('TGM');
+                this.wireItemCollection(opp.engine, opp);
+            }
+        }
+    }
+    /**
+     * Route one engine's collected enemy-targeted items to a living opponent,
+     * applying the effect via core/items.ts's pure board transforms. `source`
+     * is the AI opponent record for a bot's own engine (undefined for the
+     * human), used to exclude that bot from its own target pool.
+     */
+    wireItemCollection(engine, source) {
+        engine.onItemCollected((itemId) => {
+            const target = this.pickItemTarget(source);
+            const targetEngine = target ?? engine; // reference's own-player fallback
+            const result = (0, items_1.applyEnemyItem)(itemId, targetEngine.getBoard(), engine.getBoard());
+            // One applier for every kind of effect (row deletes, the hard block,
+            // and the timed BIG / ROLL ROLL states) - this used to handle only
+            // insertHardBlockNext, so anything else the item returned was dropped.
+            targetEngine.applyItemEffectResult(result);
+            if (target) {
+                this.sounds.playSfx('attack');
+            }
+        });
+    }
+    /**
+     * A random living opponent engine for an item attack.
+     * `source` identifies the AI bot whose own pickup this is (undefined for
+     * the human), so it can be excluded from its own target pool while still
+     * being targetable by everyone else.
+     */
+    pickItemTarget(source) {
+        if (!this.versusAI)
+            return null;
+        const pool = this.versusAI.getOpponents()
+            .filter((o) => o.alive && o.id !== source?.id && o.engine)
+            .map((o) => o.engine);
+        if (source) {
+            // A bot's pickup can also land on the human.
+            pool.push(this.engine);
+        }
+        if (pool.length === 0)
+            return null;
+        return pool[Math.floor(Math.random() * pool.length)];
+    }
+    /**
+     * Setup UI layout — 80x24 terminal
+     *
+     * Col  0-21 : player board  (22w, 22h, top=1)
+     * Col 22-33 : NEXT (12w,12h,top=1) + HOLD (12w,10h,top=13)
+     * Col 34-36 : garbage strip (3w, 22h, top=1)
+     * Col 37-58 : opponent board (22w, 22h, top=1)
+     * Col 59-79 : VS info panel  (21w, 22h, top=1)
+     * Row 23    : stats bar (no border)
+     *   22 + 12 + 3 + 22 + 21 = 80 ✓
+     */
+    setupUI() {
+        // Clear screen
+        (0, clear_screen_1.clearScreen)(this.screen);
+        this.opponentBoards = [];
+        this.drawnBoards = [];
+        this.lastLayoutKey = '';
+        // The well is as wide as its blocks ARE on this screen - twenty-two
+        // characters where a block is two, twelve where it is one - and the
+        // panels beside it follow, instead of being drawn at column 22 and 34
+        // regardless. On a 40-column screen those numbers put the next queue and
+        // the garbage strip off the right edge, which is what a C64 caller saw:
+        // "the playfield looks wider than it is and the next pieces are too wide".
+        const cols = (0, block_width_1.blockCols)(this.screen.width);
+        const wellCols = BOARD_COLUMNS * cols;
+        const sideLeft = wellCols + 2;
+        const compact = this.screen.width < 80;
+        // A CPU BATTLE SHOWS THE CPU, even at forty columns.
+        //
+        // Both wells are ten blocks; at one character each that is twelve columns
+        // with a frame, so the two of them and a middle column all fit - the
+        // middle just has to stop taking whatever is left over: "cpu battle has
+        // broken layout make the middle columns less wide and fit the full cpu
+        // playfield" (2026-09-06). Two characters for the garbage strip between
+        // the middle and the opponent, and it comes to 38 of the 40.
+        const opponentWidth = compact ? wellCols + 2 : versus_layout_1.OPPONENT_BOARD_COLS;
+        const garbageWidth = compact ? 2 : 3;
+        const sideWidth = compact
+            ? Math.max(8, this.screen.width - sideLeft - garbageWidth - opponentWidth)
+            : Math.max(6, Math.min(12, this.screen.width - sideLeft - 1));
+        const opponentLeft = sideLeft + sideWidth + garbageWidth;
+        this.compactOpponent = compact
+            ? { left: opponentLeft, width: opponentWidth, top: 1, height: 22 }
+            : null;
+        // Player board
+        this.boardBox = (0, blessed_helpers_1.createBox)({
+            parent: this.screen,
+            top: 1,
+            left: 0,
+            width: wellCols + 2,
+            height: 22,
+            border: { type: 'line' },
+            style: { bg: door_theme_1.T.ground, border: { fg: door_theme_1.T.ink } },
+            fixed: true,
+        });
+        // Player NEXT queue
+        this.nextBox = (0, blessed_helpers_1.createBox)({
+            parent: this.screen,
+            top: 1,
+            left: sideLeft,
+            width: sideWidth,
+            height: 12,
+            border: { type: 'line' },
+            style: { bg: door_theme_1.T.ground, border: { fg: door_theme_1.T.chrome } },
+            label: ' NEXT ',
+            fixed: true,
+            focusable: false,
+            mouse: false,
+            clickable: false,
+        });
+        // Player HOLD box
+        this.holdBox = (0, blessed_helpers_1.createBox)({
+            parent: this.screen,
+            top: 13,
+            left: sideLeft,
+            width: sideWidth,
+            height: 10,
+            border: { type: 'line' },
+            style: { bg: door_theme_1.T.ground, border: { fg: door_theme_1.T.accentAlt } },
+            label: ' HOLD ',
+            fixed: true,
+            focusable: false,
+            mouse: false,
+            clickable: false,
+        });
+        // Garbage strip
+        this.garbageIndicator = (0, blessed_helpers_1.createBox)({
+            parent: this.screen,
+            top: 1,
+            left: sideLeft + sideWidth,
+            width: garbageWidth,
+            height: 22,
+            border: { type: 'line' },
+            style: { border: { fg: door_theme_1.T.alert } },
+            content: '',
+            fixed: true,
+            focusable: false,
+            mouse: false,
+            clickable: false,
+        });
+        // Opponent full board. More are created as the layout asks for them.
+        this.opponentBoards = [this.createOpponentBoard(0)];
+        this.drawnBoards = [];
+        // ── 1v1 right side (visible when ≤1 opponent) ──────────────────────────
+        // VS info panel (21w)
+        this.opponentInfoBox = (0, blessed_helpers_1.createBox)({
+            parent: this.screen,
+            top: 1,
+            left: versus_layout_1.LEFT_PANEL_COLS + versus_layout_1.OPPONENT_BOARD_COLS,
+            width: versus_layout_1.VS_INFO_COLS,
+            height: 22,
+            border: { type: 'line' },
+            style: { border: { fg: door_theme_1.T.chrome } },
+            label: ' VS ',
+            content: '',
+            fixed: true,
+            focusable: false,
+            mouse: false,
+            clickable: false,
+        });
+        // ── The grid, for every opponent that does not get a board ───────────
+        // Placed and sized per-render; these are its 80-column values.
+        this.minimapPanel = (0, blessed_helpers_1.createBox)({
+            parent: this.screen,
+            top: 1,
+            left: versus_layout_1.LEFT_PANEL_COLS,
+            width: this.screen.width - versus_layout_1.LEFT_PANEL_COLS,
+            height: 22,
+            border: { type: 'line' },
+            style: { border: { fg: door_theme_1.T.chrome } },
+            label: ' Opponents ',
+            fixed: true,
+            focusable: false,
+            mouse: false,
+            clickable: false,
+        });
+        // Inner container — bucket/text content rendered here via setContent()
+        this.minimapContainer = (0, blessed_helpers_1.createBox)({
+            parent: this.minimapPanel,
+            top: 1,
+            left: 1,
+            width: this.screen.width - versus_layout_1.LEFT_PANEL_COLS - 2,
+            height: 20,
+            border: 'none',
+            tags: true,
+            focusable: false,
+            mouse: false,
+            clickable: false,
+        });
+        // ── The leaderboard, for the opponents past the bars ─────────────────
+        // Only ever shown in the cascade (see ui/versus-layout.ts): boards for
+        // the closest few, bars for the next handful, and this for the rest of
+        // a field that no width could draw in full.
+        this.listPanel = (0, blessed_helpers_1.createBox)({
+            parent: this.screen,
+            top: 1,
+            left: versus_layout_1.LEFT_PANEL_COLS,
+            width: 22,
+            height: 22,
+            border: { type: 'line' },
+            style: { border: { fg: door_theme_1.T.chrome } },
+            label: ' Standings ',
+            fixed: true,
+            focusable: false,
+            mouse: false,
+            clickable: false,
+        });
+        this.listContainer = (0, blessed_helpers_1.createBox)({
+            parent: this.listPanel,
+            top: 1,
+            left: 1,
+            width: 20,
+            height: 20,
+            border: 'none',
+            tags: true,
+            focusable: false,
+            mouse: false,
+            clickable: false,
+        });
+        this.listPanel.hide();
+        // Player stats — bottom row
+        this.statsBox = (0, blessed_helpers_1.createBox)({
+            parent: this.screen,
+            top: 23,
+            left: 0,
+            width: Math.max(20, this.screen.width - 1),
+            height: 1,
+            border: 'none',
+            content: '',
+            focusable: false,
+            mouse: false,
+            clickable: false,
+        });
+        // Start in 1v1 mode (hidden minimap panel); render() will switch as needed
+        this.minimapPanel.hide();
+        // Voice speaking indicators
+        if (this.sessionSocket) {
+            this.voiceSpeakingHandler = (data) => {
+                const existing = this.voiceStates.get(String(data.userId)) ?? { speaking: false, muted: false };
+                this.voiceStates.set(String(data.userId), { ...existing, speaking: data.speaking });
+                this.screen.render();
+            };
+            this.sessionSocket.on('voice:speaking', this.voiceSpeakingHandler);
+            // M key toggles mic mute
+            this.screen.key(['m', 'M'], () => {
+                this.localMuted = !this.localMuted;
+                this.sessionSocket.emit('audio:mute', { muted: this.localMuted });
+                this.screen.render();
+            });
+        }
+    }
+    /** One opponent playfield, at the Nth board slot. */
+    createOpponentBoard(index) {
+        return (0, blessed_helpers_1.createBox)({
+            parent: this.screen,
+            top: 1,
+            left: (0, versus_layout_1.boardLeft)(index),
+            width: versus_layout_1.OPPONENT_BOARD_COLS,
+            height: 22,
+            border: { type: 'line' },
+            style: { bg: door_theme_1.T.ground, border: { fg: door_theme_1.T.chrome } },
+            label: ' CPU ',
+            fixed: true,
+            focusable: false,
+            mouse: false,
+            clickable: false,
+        });
+    }
+    /**
+     * Put the right-hand widgets where the layout says they go.
+     *
+     * Creates the boards the layout asks for, destroys the ones it does not
+     * (a board left behind is a framed rectangle full of a dead opponent), and
+     * gives the grid whatever columns the boards did not take. Guarded by a
+     * key because this runs inside a 20 fps render loop and rebuilding widgets
+     * every frame would flicker.
+     */
+    applyVersusLayout(layout) {
+        const width = this.screen.width;
+        const key = `${width}:${layout.fullBoards}:${layout.minimaps}:${layout.showInfo}`;
+        if (key === this.lastLayoutKey)
+            return;
+        this.lastLayoutKey = key;
+        // A 40-column screen shows the PLAYER's game and nothing else.
+        //
+        // `versusLayout` starts the opponent area at LEFT_PANEL_COLS, which is 37 -
+        // the width of an 80-column player panel - so every opponent board,
+        // minimap and standings list lands past the right edge of a C64 screen and
+        // draws as loose vertical rules over the black ("cpu battle has issues").
+        // A CPU battle is playable without seeing the bot's well; a screen full of
+        // stray borders is not. Deriving the origin instead would mean widening
+        // versus-layout and the pins that hold it, which is its own change.
+        if (width < 80 && this.compactOpponent) {
+            // ONE opponent, at full size, in the columns setupUI reserved for it.
+            // Hiding them all was the previous answer and it showed a CPU battle
+            // with no CPU in it.
+            const slot = this.compactOpponent;
+            while (this.opponentBoards.length > 1)
+                this.opponentBoards.pop()?.destroy();
+            if (this.opponentBoards.length === 0) {
+                this.opponentBoards.push(this.createOpponentBoard(0));
+            }
+            const [board] = this.opponentBoards;
+            board.left = slot.left;
+            board.top = slot.top;
+            board.width = slot.width;
+            board.height = slot.height;
+            if (this.opponentTracker.getAliveOpponents().length > 0)
+                board.show();
+            else
+                board.hide();
+            this.opponentInfoBox?.hide();
+            this.minimapPanel?.hide();
+            this.listPanel?.hide();
+            return;
+        }
+        while (this.opponentBoards.length > layout.fullBoards) {
+            this.opponentBoards.pop()?.destroy();
+        }
+        while (this.opponentBoards.length < layout.fullBoards) {
+            this.opponentBoards.push(this.createOpponentBoard(this.opponentBoards.length));
+        }
+        this.opponentBoards.forEach((box, i) => {
+            const at = (0, versus_layout_1.boardPosition)(i, layout.boardRows);
+            box.left = at.left;
+            box.top = at.top;
+            box.width = versus_layout_1.OPPONENT_BOARD_COLS;
+            box.show();
+        });
+        if (layout.showInfo) {
+            this.opponentInfoBox.left = (0, versus_layout_1.boardLeft)(layout.fullBoards);
+            this.opponentInfoBox.width = versus_layout_1.VS_INFO_COLS;
+            this.opponentInfoBox.show();
+        }
+        else {
+            this.opponentInfoBox.hide();
+        }
+        if (layout.minimaps > 0 && layout.minimapWidth > 0) {
+            this.minimapPanel.left = layout.minimapLeft;
+            this.minimapPanel.width = layout.minimapWidth;
+            this.minimapPanel.height = layout.panelHeight;
+            this.minimapContainer.width = Math.max(1, layout.minimapWidth - 2);
+            this.minimapContainer.height = Math.max(1, layout.panelHeight - 2);
+            // Say how many are in there. A battle royale fields 98 CPUs and the
+            // list shows the most dangerous of them; without the count, the rest
+            // are simply missing with nothing to say so.
+            this.minimapPanel.setLabel?.(` Opponents (${layout.minimaps}) `);
+            this.minimapPanel.show();
+        }
+        else {
+            this.minimapPanel.hide();
+        }
+        if (layout.listed > 0 && layout.listWidth > 0) {
+            this.listPanel.left = layout.listLeft;
+            this.listPanel.top = layout.listTop;
+            this.listPanel.width = layout.listWidth;
+            this.listPanel.height = layout.listHeight;
+            this.listContainer.width = Math.max(1, layout.listWidth - 2);
+            this.listContainer.height = Math.max(1, layout.listHeight - 2);
+            this.listPanel.setLabel?.(` Standings (${layout.listed}) `);
+            this.listPanel.show();
+        }
+        else {
+            this.listPanel.hide();
+        }
+    }
+    /**
+     * Setup network event listeners
+     */
+    setupNetworkListeners() {
+        if (!this.network)
+            return;
+        const unsubUpdate = this.network.onUpdate((update) => {
+            if (update.alive === false) {
+                this.opponentTracker.removeOpponent(update.playerId);
+                return;
+            }
+            this.sawNetworkOpponent = true;
+            this.opponentTracker.updateOpponent(update.playerId, {
+                id: update.playerId,
+                name: update.playerName ?? update.name ?? update.playerId,
+                board: update.board,
+                level: update.level,
+                grade: update.grade,
+                alive: true,
+                pieceCells: update.pieceCells,
+                // The lobby knows who is a CPU; the tracker has to, because the
+                // layout gives the boards to the people first when not all fit.
+                isBot: this.network?.getMatchState()?.players.find(p => String(p.id) === String(update.playerId))?.isBot ?? false,
+            });
+            // Repaint on receipt instead of waiting for the next loop tick.
+            this.renderNow();
+        });
+        this.unsubscribers.push(unsubUpdate);
+        // Incoming attacks: feed the local garbage queue. This subscription is
+        // the receive half the feature never had - game:attack reached
+        // network-manager's callback set, but nothing subscribed, so garbage
+        // evaporated before touching the queue.
+        if (this.network) {
+            const unsubAttack = this.network.onAttack((attack) => {
+                if (!this.garbageEnabled)
+                    return;
+                if (attack.from === this.localAttackId())
+                    return; // broker echoes to all members
+                if (attack.to && attack.to !== this.localAttackId())
+                    return;
+                this.attackManager.receiveAttack(attack.from, attack.lines);
+            });
+            this.unsubscribers.push(unsubAttack);
+        }
+        // NOTE: onAttackSent / onGarbageReceived feedback now lives in
+        // setupAttackRouting(), which runs for BOTH network and CPU battles.
+    }
+    /**
+     * Run game loop
+     */
+    async run() {
+        this.running = true;
+        this.setupInput();
+        // The whole field, before the countdown starts.
+        //
+        // The tracker used to fill up as the first AI samples arrived, so the
+        // layout was recomputed on almost every frame of the countdown and the
+        // boards were created, moved and destroyed under it - "when starting
+        // battle royale... the playfields behind the counter shuffle around a
+        // bit; all playfields should be there from the moment the countdown
+        // starts with correct layout" (2026-09-02). The opponents are KNOWN
+        // before the countdown; only their boards are not.
+        this.seedOpponents();
+        this.renderNow();
+        await this.showCountdown();
+        this.engine.start();
+        return new Promise((resolve) => {
+            let lastTime = Date.now();
+            const updateInterval = setInterval(() => {
+                if (!this.running) {
+                    clearInterval(updateInterval);
+                    resolve();
+                    return;
+                }
+                const now = Date.now();
+                const deltaTime = now - lastTime;
+                lastTime = now;
+                // Update player game
+                this.engine.update(deltaTime);
+                this.inputHandler.update(deltaTime);
+                // Update AI opponents (new CPU Battle mode)
+                if (this.versusAI) {
+                    this.versusAI.update(deltaTime);
+                    // Update tracker every ~100 ms
+                    // Sample every frame in 1v1 so the opponent's piece visibly falls.
+                    // The 100ms throttle exists for battle-royale sized fields; at one
+                    // opponent it just made the board update 10x a second, which is far
+                    // too coarse to show a piece in flight.
+                    const singleOpponent = this.versusAI.getOpponents().length <= 1;
+                    if (singleOpponent || now % 100 < deltaTime) {
+                        const aiOpponents = this.versusAI.getOpponents();
+                        // Compute danger rank = sorted by stack height descending
+                        // (tallest stack = closest to topping out = highest priority)
+                        const withHeight = aiOpponents.map((opp) => {
+                            const state = opp.engine?.getState?.();
+                            const board = state?.board;
+                            let stackHeight = 0;
+                            if (board) {
+                                for (let y = 0; y < board.height; y++) {
+                                    if (board.grid[y]?.some((c) => c.filled)) {
+                                        stackHeight = board.height - y;
+                                        break;
+                                    }
+                                }
+                            }
+                            return { opp, state, stackHeight };
+                        });
+                        // Sort by danger descending, assign rank 1 = most dangerous
+                        withHeight.sort((a, b) => b.stackHeight - a.stackHeight);
+                        for (let i = 0; i < withHeight.length; i++) {
+                            const { opp, state } = withHeight[i];
+                            if (!opp.alive) {
+                                // Immediately remove dead players from the grid
+                                this.opponentTracker.removeOpponent(opp.id);
+                                continue;
+                            }
+                            // Absolute cells of the piece currently in flight. `board` only
+                            // ever holds LOCKED cells, so without this the opponent view
+                            // cannot show a piece falling - it appears the moment it locks.
+                            const oppState = opp.engine?.getState?.();
+                            let pieceCells;
+                            const cp = oppState?.currentPiece;
+                            if (cp) {
+                                const shape = opp.engine?.pieceManager?.getShape?.(cp.type, cp.rotation);
+                                if (shape) {
+                                    pieceCells = [];
+                                    for (let r = 0; r < shape.length; r++) {
+                                        for (let c = 0; c < shape[r].length; c++) {
+                                            if (shape[r][c]) {
+                                                pieceCells.push({ x: cp.x + c, y: cp.y + r, type: cp.type });
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            this.opponentTracker.updateOpponent(opp.id, {
+                                name: opp.name,
+                                board: oppState?.board ?? state?.board,
+                                level: state?.level ?? 0,
+                                grade: state?.grade ?? '9',
+                                alive: true,
+                                rank: i + 1,
+                                pieceCells,
+                                isBot: true, // VersusAI opponents are CPUs by definition
+                            });
+                        }
+                    }
+                }
+                // Legacy: Update bot AI
+                else if (this.botPlayer) {
+                    this.botPlayer.update(deltaTime, this.engine);
+                }
+                // Send state to opponents (online multiplayer only). 20 Hz instead
+                // of 10 (halves the mean 50 ms send-gate delay), and includes the
+                // falling piece's cells so the opponent actually sees it in flight
+                // (updates used to carry locked cells only - the piece popped into
+                // existence at lock).
+                if (this.network && now % 50 < deltaTime) {
+                    this.network.sendUpdate(this.engine.getState(), true, this.localPieceCells());
+                }
+                // Get current state once for all subsystem updates
+                const gameState = this.engine.getState();
+                // Update visual effects
+                this.shaker.update(deltaTime);
+                this.particles.update(deltaTime);
+                this.animations.update(deltaTime);
+                this.glowManager.update(deltaTime);
+                this.clearAnimation.update(deltaTime);
+                this.updateGradeAnimation(deltaTime);
+                // Update 20G flash timer
+                if (gameState.gravity >= 20) {
+                    this.twentyGFlashTimer += deltaTime;
+                }
+                else {
+                    this.twentyGFlashTimer = 0;
+                }
+                // Check for game events and trigger effects
+                this.checkGameEvents();
+                // Render at 20 fps background rate. This was an UNCONDITIONAL
+                // this.render() on every 16 ms tick - 60 full blessed renders per
+                // second, 3x the single-player screen, for no visual gain. Input
+                // still feels immediate because input callbacks call renderNow().
+                if (now - this.lastRender >= VersusScreen.RENDER_INTERVAL) {
+                    this.render();
+                    this.lastRender = now;
+                }
+                // WIN TYPE: a goal match can end before anyone tops out.
+                const goalResult = this.checkWinTypeGoal();
+                if (goalResult !== null) {
+                    this.victory = goalResult;
+                    this.running = false;
+                    clearInterval(updateInterval);
+                    void this.showMatchResult(goalResult).then(resolve);
+                    return;
+                }
+                // Victory: every AI opponent topped out (CPU battle)...
+                const cpuVictory = this.versusAI
+                    ? this.versusAI.getOpponents().length > 0 && this.versusAI.allDead()
+                    : false;
+                // ...or every networked opponent reported alive:false after we saw
+                // at least one (versusAI.allDead() previously had zero callers -
+                // outliving all bots never ended the match, so the player could
+                // only ever LOSE a CPU battle).
+                const netVictory = !!this.network && this.sawNetworkOpponent
+                    && this.opponentTracker.getAliveOpponents().length === 0;
+                if (cpuVictory || netVictory) {
+                    this.victory = true;
+                    this.running = false;
+                    clearInterval(updateInterval);
+                    void this.showMatchResult(true).then(resolve);
+                    return;
+                }
+                // Check for game over
+                if (gameState.status === 'gameover' || gameState.status === 'complete') {
+                    this.running = false;
+                    clearInterval(updateInterval);
+                    // Tell the opponent we topped out - sendUpdate never carried a
+                    // death flag, so the survivor previously never learned the match
+                    // was over.
+                    if (this.network) {
+                        this.network.sendUpdate(gameState, false);
+                    }
+                    void this.showMatchResult(false).then(resolve);
+                    return;
+                }
+            }, 16); // ~60 FPS
+        });
+    }
+    /**
+     * GOAL LV / GOAL LINE (gamestart.c:9489-9519). Returns true when this
+     * player reached the goal first, false when an opponent did, and null
+     * while the match is still open - SURVIVAL always returns null, which is
+     * every match this door played before the setting existed.
+     *
+     * The reference ends the match by setting the loser's status to game over
+     * (9494-9503); here the screen resolves with the same result instead.
+     */
+    checkWinTypeGoal() {
+        const winType = this.state.settings.versusWinType ?? 'survival';
+        const goal = this.state.settings.versusGoal ?? versus_goal_1.DEFAULT_VERSUS_GOAL;
+        if ((0, versus_goal_1.versusGoalTarget)(winType, goal) === null)
+            return null;
+        const me = this.engine.getState();
+        if ((0, versus_goal_1.versusGoalReached)(winType, goal, { level: me.level, lines: me.lines }))
+            return true;
+        for (const opp of this.versusAI?.getOpponents() ?? []) {
+            const state = opp?.engine?.getState?.();
+            if (!state || !opp.alive)
+                continue;
+            if ((0, versus_goal_1.versusGoalReached)(winType, goal, { level: state.level, lines: state.lines }))
+                return false;
+        }
+        // A networked opponent is only known through OpponentState, which
+        // carries a level but no line count (ui/minimap.ts). GOAL LV can be
+        // judged from it; GOAL LINE cannot, and is left to the loser's own
+        // client to report - the reference has both players in one process and
+        // never faces this.
+        if (winType === 'level') {
+            for (const opp of this.opponentTracker.getAliveOpponents()) {
+                if ((0, versus_goal_1.versusGoalReached)(winType, goal, { level: opp.level ?? 0, lines: 0 }))
+                    return false;
+            }
+        }
+        return null;
+    }
+    /**
+     * Brief WIN/LOSE overlay before resolving back to the menu.
+     */
+    async showMatchResult(won) {
+        try {
+            this.sounds.playSfx(won ? 'game_clear' : 'game_over');
+            const box = (0, blessed_helpers_1.createBox)({
+                parent: this.screen,
+                top: 9,
+                left: 25,
+                width: 30,
+                height: 5,
+                border: { type: 'line' },
+                style: { border: { fg: won ? 'green' : 'red' } },
+                align: 'center',
+                valign: 'middle',
+                content: won
+                    ? `{bold}{${door_theme_1.T.ok}-fg}YOU WIN!{/${door_theme_1.T.ok}-fg}{/bold}\nAll opponents eliminated`
+                    : `{bold}{${door_theme_1.T.alert}-fg}GAME OVER{/${door_theme_1.T.alert}-fg}{/bold}\nBetter luck next time`,
+            });
+            this.screen.render();
+            await new Promise(r => setTimeout(r, 2500));
+            box.destroy();
+        }
+        catch {
+            // Overlay is cosmetic; never block match end on it.
+        }
+    }
+    /**
+     * Setup input handlers
+     */
+    setupInput() {
+        // Render immediately after every input-driven engine change - waiting
+        // for the next render tick added 0-50 ms between keypress and pixels.
+        //
+        // Sound effects mirror game-screen.ts: versus previously bound bare
+        // engine calls with NO audio at all, so moving, rotating, hard-dropping
+        // and holding were silent in 1v1 and CPU battle while the same actions
+        // were audible in single player. Initial-rotation (IRS) and
+        // initial-hold (IHS) get their own cues, same as single player.
+        const act = (fn) => () => { fn(); this.renderNow(); };
+        this.inputHandler.on('left', act(() => {
+            if (this.engine.move(-1))
+                this.sounds.playSfx('move');
+        }));
+        this.inputHandler.on('right', act(() => {
+            if (this.engine.move(1))
+                this.sounds.playSfx('move');
+        }));
+        this.inputHandler.on('rotate_cw', act(() => {
+            if (this.engine.rotate(1)) {
+                this.sounds.playSfx('rotate');
+            }
+            else if (this.engine.setIRS(1)) {
+                this.sounds.playSfx('pre_rotate');
+            }
+        }));
+        this.inputHandler.on('rotate_ccw', act(() => {
+            if (this.engine.rotate(-1)) {
+                this.sounds.playSfx('rotate');
+            }
+            else if (this.engine.setIRS(-1)) {
+                this.sounds.playSfx('pre_rotate');
+            }
+        }));
+        // rotate_180 was not bound at all in versus - the key did nothing.
+        this.inputHandler.on('rotate_180', act(() => {
+            const r1 = this.engine.rotate(1);
+            const r2 = this.engine.rotate(1);
+            if (r1 || r2)
+                this.sounds.playSfx('rotate');
+        }));
+        this.inputHandler.on('soft_drop', act(() => this.engine.softDrop()));
+        this.inputHandler.on('hard_drop', act(() => {
+            this.engine.hardDrop();
+            this.sounds.playSfx('hard_drop');
+        }));
+        // ACE-ARS's up key locks (ars.c:331,361-389); every other rotation system
+        // sonic drops and leaves the piece live, so only the lock gets the sound.
+        this.inputHandler.on('sonic_drop', act(() => {
+            const locks = (0, up_key_lock_1.lockedByUpKey)(this.state.settings.rotationSystem);
+            if (this.engine.sonicDrop() && locks)
+                this.sounds.playSfx('hard_drop');
+        }));
+        this.inputHandler.on('hold', act(() => {
+            if (this.engine.hold()) {
+                this.sounds.playSfx('hold');
+            }
+            else if (this.engine.setIHS()) {
+                this.sounds.playSfx('pre_hold');
+            }
+        }));
+        this.inputHandler.on('pause', () => this.togglePause());
+    }
+    /** Absolute cells of the local falling piece, for network updates. */
+    localPieceCells() {
+        const st = this.engine.getState();
+        const cp = st.currentPiece;
+        if (!cp)
+            return undefined;
+        const shape = this.engine.pieceManager?.getShape?.(cp.type, cp.rotation);
+        if (!shape)
+            return undefined;
+        const cells = [];
+        for (let r = 0; r < shape.length; r++) {
+            for (let c = 0; c < shape[r].length; c++) {
+                if (shape[r][c])
+                    cells.push({ x: cp.x + c, y: cp.y + r, type: cp.type });
+            }
+        }
+        return cells;
+    }
+    /** Render immediately (input feedback / network receipt), floored at 8 ms. */
+    renderNow() {
+        const now = Date.now();
+        if (now - this.lastRender >= 8) {
+            this.render();
+            this.lastRender = now;
+        }
+    }
+    /**
+     * Put every opponent in the tracker with an empty board.
+     *
+     * The versus layout is a function of HOW MANY opponents there are, so it
+     * can only be stable from the first frame if the field is known from the
+     * first frame. The CPU opponents exist the moment VersusAI built them and
+     * a networked lobby knows its players before the match starts; both are
+     * asked here, and the real boards replace these as the samples arrive.
+     */
+    seedOpponents() {
+        const blank = () => {
+            const state = this.engine.getState();
+            const height = state.board?.height ?? 22;
+            const width = state.board?.width ?? 10;
+            return {
+                width, height,
+                grid: Array.from({ length: height }, () => Array.from({ length: width }, () => ({ filled: false, color: null }))),
+            };
+        };
+        for (const opp of (this.versusAI?.getOpponents?.() ?? [])) {
+            this.opponentTracker.updateOpponent(opp.id, {
+                id: opp.id, name: opp.name, board: blank(),
+                level: 0, grade: '9', alive: true, isBot: true,
+            });
+        }
+        const players = this.network?.getMatchState()?.players ?? [];
+        const localId = String(this.network?.getLocalPlayerId?.() ?? '');
+        for (const player of players) {
+            if (String(player.id) === localId)
+                continue;
+            this.opponentTracker.updateOpponent(String(player.id), {
+                id: String(player.id), name: player.name, board: blank(),
+                level: 0, grade: '9', alive: true, isBot: player.isBot === true,
+            });
+        }
+    }
+    /**
+     * Show countdown (3, 2, 1, GO!)
+     */
+    async showCountdown() {
+        this.sounds.playSfx('ready');
+        await new Promise(resolve => setTimeout(resolve, 500));
+        const countdown = ['3', '2', '1', 'GO!'];
+        for (let i = 0; i < countdown.length; i++) {
+            const text = countdown[i];
+            if (text === 'GO!') {
+                this.sounds.playSfx('go');
+            }
+            else {
+                this.sounds.playSfx('countdown');
+            }
+            const box = (0, blessed_helpers_1.createBox)({
+                parent: this.screen,
+                top: 'center',
+                left: 'center',
+                width: 20,
+                height: 5,
+                content: `{${door_theme_1.T.accent}-fg}{bold}${text}{/bold}{/${door_theme_1.T.accent}-fg}`,
+                focusable: false,
+                mouse: false,
+                clickable: false,
+                // Dialogs must be opaque. Without a background the board or menu behind
+                // them showed through and the text was hard to read (reported 2026-08-25).
+                style: { bg: door_theme_1.T.ground },
+            });
+            this.screen.render();
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            box.destroy();
+        }
+    }
+    /**
+     * Check for game events and trigger visual effects
+     * Ported directly from game-screen.ts checkGameEvents().
+     */
+    checkGameEvents() {
+        const gameState = this.engine.getState();
+        // Level change
+        if (gameState.level > this.lastLevel) {
+            const oldSection = Math.floor(this.lastLevel / 100);
+            const newSection = Math.floor(gameState.level / 100);
+            if (newSection > oldSection && gameState.level < 1000) {
+                this.sounds.playSfx('section_up');
+            }
+            else {
+                this.sounds.playSfx('level_up');
+            }
+            this.lastLevel = gameState.level;
+        }
+        // Grade change
+        if (gameState.grade !== this.lastGrade) {
+            this.animations.gradeUp(this.lastGrade, gameState.grade, 40, 5);
+            this.particles.spawn('gradeUp', 5, 7);
+            this.shaker.shake('lineClear');
+            this.sounds.playSfx('grade_up');
+            this.lastGrade = gameState.grade;
+        }
+        // Line clear
+        if (gameState.lines > this.lastLines) {
+            const linesCleared = gameState.lines - this.lastLines;
+            if (gameState.lastTSpin === 'full') {
+                this.particles.spawn('tetris', 5, 14);
+                this.shaker.shake('tetris');
+                this.animations.tSpin(12, 12);
+                this.sounds.playSfx('tetris');
+                this.sounds.playVoice('tetris_voice');
+            }
+            else if (gameState.lastTSpin === 'mini') {
+                this.particles.spawn('lineClear', 5, 14);
+                this.animations.tSpin(12, 12);
+                this.sounds.playSfx('rotate');
+            }
+            else if (linesCleared === 4) {
+                this.particles.spawn('tetris', 5, 14);
+                this.shaker.shake('tetris');
+                this.animations.lineClearFlash([], 4);
+                this.sounds.playSfx('tetris');
+                this.sounds.playVoice('tetris_voice');
+            }
+            else if (linesCleared === 3) {
+                this.particles.spawn('lineClear', 5, 14);
+                this.shaker.shake('lineClear');
+                this.animations.lineClearFlash([], linesCleared);
+                this.sounds.playSfx('line_clear');
+                this.sounds.playVoice('triple');
+            }
+            else if (linesCleared === 2) {
+                this.particles.spawn('lineClear', 5, 14);
+                this.shaker.shake('lineClear');
+                this.animations.lineClearFlash([], linesCleared);
+                this.sounds.playSfx('line_clear');
+                this.sounds.playVoice('double');
+            }
+            else if (linesCleared >= 1) {
+                this.particles.spawn('lineClear', 5, 14);
+                this.shaker.shake('lineClear');
+                this.animations.lineClearFlash([], linesCleared);
+                this.sounds.playSfx('line_clear');
+            }
+            this.lastLines = gameState.lines;
+        }
+        // Combo milestones
+        const combo = gameState.combo;
+        const milestone = Math.floor(combo / 5) * 5;
+        if (combo > 0 && milestone > this.lastComboMilestone && milestone >= 5) {
+            this.triggerComboAnimation(combo, milestone);
+            this.lastComboMilestone = milestone;
+        }
+        if (combo === 0)
+            this.lastComboMilestone = 0;
+        // Recently awarded medals
+        const recentMedals = this.engine.getRecentMedals();
+        if (recentMedals.length > 0) {
+            for (const medal of recentMedals) {
+                this.triggerMedalAnimation(medal);
+            }
+            this.engine.clearRecentMedals();
+        }
+        // Section completion
+        if (gameState.section > this.lastSection) {
+            const result = gameState.lastSectionResult;
+            if (result) {
+                this.handleSectionComplete(this.lastSection, result);
+            }
+            this.lastSection = gameState.section;
+        }
+        // Piece spawn (null -> non-null)
+        if (gameState.currentPiece && !this.lastPieceExists) {
+            this.sounds.playSfx(this.getSpawnSfx(gameState.currentPiece.type));
+            // IRS visual/audio feedback
+            if (gameState.currentPiece.rotation !== 0) {
+                this.animations.tSpin(gameState.currentPiece.x + 1, gameState.currentPiece.y + 1);
+                this.sounds.playSfx('pre_rotate');
+            }
+        }
+        // IHS visual feedback
+        if (!gameState.canHold && gameState.holdPiece && this.lastHold !== gameState.holdPiece && !this.lastPieceExists) {
+            this.sounds.playSfx('pre_hold');
+        }
+        // Piece lock (non-null -> null)
+        if (!gameState.currentPiece && this.lastPieceExists) {
+            this.triggerLockFlash();
+        }
+        this.lastPieceExists = gameState.currentPiece !== null;
+    }
+    /**
+     * Trigger medal award animation
+     */
+    triggerMedalAnimation(medal) {
+        const tierName = ['BRONZE', 'SILVER', 'GOLD', 'PLATINUM'][medal.tier];
+        this.animations.gradeUp('', `${tierName} ${medal.type}`, 40, 10);
+        this.sounds.playSfx('grade_up');
+    }
+    /**
+     * Get spawn sound for piece type
+     */
+    getSpawnSfx(type) {
+        const map = {
+            I: 'spawn_i', J: 'spawn_j', L: 'spawn_l', O: 'spawn_o',
+            S: 'spawn_s', T: 'spawn_t', Z: 'spawn_z',
+        };
+        return map[type] || 'move';
+    }
+    /**
+     * Trigger lock flash effect
+     */
+    triggerLockFlash() {
+        const gameState = this.engine.getState();
+        const lockTime = Date.now();
+        const cells = [];
+        for (let y = 0; y < gameState.board.height; y++) {
+            for (let x = 0; x < gameState.board.width; x++) {
+                const cell = gameState.board.grid[y][x];
+                if (cell.lockTime && (lockTime - cell.lockTime) < 50) {
+                    cells.push({ x, y });
+                }
+            }
+        }
+        const color = cells.length > 0
+            ? gameState.board.grid[cells[0].y][cells[0].x].color || 'white'
+            : 'white';
+        this.animations.lockGlow(cells, color);
+        this.sounds.playSfx('lock');
+    }
+    /**
+     * Trigger combo animation for milestone achievements
+     */
+    triggerComboAnimation(combo, milestone) {
+        if (milestone >= 10)
+            this.particles.spawn('combo', 5, 14);
+        this.animations.comboCounter(combo, milestone);
+        if (milestone >= 15) {
+            this.sounds.playSfx('tetris');
+            this.sounds.playVoice('excellent');
+        }
+        else if (milestone >= 10) {
+            this.sounds.playSfx('grade_up');
+            this.sounds.playVoice('combo');
+        }
+        else if (milestone >= 5) {
+            this.sounds.playVoice('combo');
+        }
+    }
+    /**
+     * Handle section completion
+     */
+    handleSectionComplete(section, result) {
+        if (result === 'COOL') {
+            this.animations.cool(section);
+            this.sounds.playSfx('section_cool');
+            this.sounds.playVoice('cool');
+            this.particles.spawn('cool', 5, 14);
+        }
+        else if (result === 'REGRET') {
+            this.animations.regret(section);
+            this.sounds.playSfx('section_regret');
+            this.sounds.playVoice('regret');
+        }
+    }
+    /**
+     * Update grade display pulse animation
+     */
+    updateGradeAnimation(deltaTime) {
+        const PULSE_SPEED = 0.001;
+        this.gradeAnimProgress += PULSE_SPEED * deltaTime * this.gradeAnimDirection;
+        if (this.gradeAnimProgress >= 1) {
+            this.gradeAnimProgress = 1;
+            this.gradeAnimDirection = -1;
+        }
+        else if (this.gradeAnimProgress <= 0) {
+            this.gradeAnimProgress = 0;
+            this.gradeAnimDirection = 1;
+        }
+    }
+    /**
+     * Toggle pause
+     */
+    togglePause() {
+        const gameState = this.engine.getState();
+        if (gameState.status === 'playing') {
+            this.engine.pause();
+        }
+        else if (gameState.status === 'paused') {
+            this.engine.resume();
+        }
+    }
+    /**
+     * Render game state — all effects applied inline
+     */
+    render() {
+        const gameState = this.engine.getState();
+        // Build board overlay (particles, animations, floating text, lock glow)
+        if (this.particles.getRenderableParticles().length > 0 ||
+            this.animations.getAnimations().length > 0 ||
+            this.animations.getFloatingTexts().length > 0) {
+            this.buildBoardOverlay();
+        }
+        else {
+            this.boardOverlay = [];
+        }
+        // Render board with shake and overlay
+        const isShaking = this.shaker.isShaking();
+        if (isShaking) {
+            const offset = this.shaker.getOffset();
+            this.boardBox.top = 1 + offset.y;
+            this.boardBox.left = 0 + offset.x;
+        }
+        else {
+            this.boardBox.top = 1;
+            this.boardBox.left = 0;
+        }
+        this.renderBoard(gameState);
+        // Render next queue
+        // HIDE NEXT (item 7) - versus is where the item is thrown in the first place.
+        this.renderNextQueue((0, mission_run_1.nextIsHidden)(gameState) ? [] : (gameState.nextQueue ?? []));
+        // Render hold piece
+        this.renderHold(gameState);
+        // Render garbage strip
+        const pending = this.attackManager.getPendingGarbage();
+        this.renderGarbage(pending);
+        // Right side: how many boards the TERMINAL holds, not how many
+        // opponents exist. The rule and its arithmetic live in versus-layout.ts.
+        const opponents = this.opponentTracker.getAliveOpponents();
+        const humans = opponents.filter(o => !o.isBot);
+        const bots = opponents.filter(o => o.isBot);
+        // An empty tracker is an opponent who has not arrived yet - between the
+        // countdown and the first update there is nobody - so the 1v1 shell
+        // stays up rather than the right side blinking out and back.
+        const layout = opponents.length > 0
+            ? (0, versus_layout_1.versusLayout)(this.screen.width, humans.length, bots.length, this.screen.height)
+            : (0, versus_layout_1.versusLayout)(this.screen.width, 1, 0, this.screen.height);
+        // Humans first, then the CPUs by danger: when only some of the field
+        // gets a board, the ones that get it are the people and then whoever is
+        // closest to killing you. `rank` is assigned at sample time, 1 being the
+        // tallest stack (see run()'s AI sampling).
+        const byRank = (a, b) => (a.rank ?? 99) - (b.rank ?? 99);
+        const ordered = [...humans.sort(byRank), ...bots.sort(byRank)];
+        // A NARROW SCREEN HAS ONE BOARD SLOT, whatever versusLayout says.
+        //
+        // versusLayout counts full boards from LEFT_PANEL_COLS, which is off a
+        // C64's right edge, so it answers "none" and puts everyone in the grid -
+        // the grid this screen hides at 40 columns. The result was a CPU panel
+        // with a name and nothing in it: "i see no cpu pieces" (2026-09-06). The
+        // compact geometry already reserved the columns; this is the slot that
+        // goes with them.
+        const boardSlots = this.compactOpponent ? 1 : layout.fullBoards;
+        const onBoards = ordered.slice(0, boardSlots);
+        const onGrid = this.compactOpponent
+            ? []
+            : ordered.slice(layout.fullBoards, layout.fullBoards + layout.minimaps);
+        const onList = layout.listed > 0
+            ? ordered.slice(layout.fullBoards + layout.minimaps)
+            : [];
+        const attackPending = this.attackManager.getPendingGarbage();
+        this.applyVersusLayout(layout);
+        // Only boards that CHANGED are rebuilt.
+        //
+        // This screen repaints at 60 Hz and the tracker samples opponents at
+        // about 10, so five frames in six every board was rebuilt from a state
+        // identical to the one already on it. On a wide terminal with a full
+        // field that was the entire frame budget - 14 ms of a 16 ms tick, all of
+        // it spent redrawing what was already there.
+        for (let i = 0; i < onBoards.length; i++) {
+            const box = this.opponentBoards[i];
+            if (!box)
+                continue;
+            const opp = onBoards[i];
+            const drawn = this.drawnBoards[i];
+            // A box is reused for whoever ranks into it, so the id has to match
+            // too - otherwise a reshuffle would show the previous opponent's board.
+            if (drawn && drawn.id === opp.id && drawn.revision === opp.revision)
+                continue;
+            this.renderOpponentBoard(box, opp);
+            box.setLabel(` ${opp.name || 'CPU'} `);
+            this.drawnBoards[i] = { id: opp.id, revision: opp.revision };
+        }
+        // Boxes beyond the current field must not keep a stale stamp.
+        this.drawnBoards.length = onBoards.length;
+        if (onGrid.length > 0) {
+            this.minimapRenderer.renderBuckets(this.minimapContainer, onGrid, this.minimapContainer.width);
+        }
+        if (onList.length > 0) {
+            this.minimapRenderer.renderList(this.listContainer, onList, this.listContainer.width);
+        }
+        if (layout.showInfo) {
+            // The 1v1 VS/attack panel, for the one opponent beside it.
+            const opp = onBoards[0] ?? null;
+            const oppName = opp?.name || 'CPU';
+            const oppLevel = opp?.level ?? '-';
+            const oppGrade = opp?.grade ?? '-';
+            const oppAlive = opp ? opp.alive : true;
+            const localUserId = String(this.network?.getMatchState()?.players.find(p => !p.isBot && !this.opponentTracker.getAliveOpponents().some((o) => String(o.id) === String(p.id)))?.id ?? '');
+            const oppUserId = String(opp?.id ?? '');
+            const voiceSection = this.sessionSocket
+                ? this.renderVoiceSection(localUserId, oppUserId)
+                : '';
+            this.opponentInfoBox.setContent(`{${door_theme_1.T.chrome}-fg}${oppName}{/${door_theme_1.T.chrome}-fg}\n\n` +
+                `Level: {${door_theme_1.T.accent}-fg}${oppLevel}{/${door_theme_1.T.accent}-fg}\n` +
+                `Grade: {magenta-fg}${oppGrade}{/magenta-fg}\n` +
+                `Status: {${oppAlive ? 'green' : 'red'}-fg}${oppAlive ? 'ALIVE' : 'TOPPED OUT'}{/${oppAlive ? 'green' : 'red'}-fg}\n\n` +
+                (attackPending > 0
+                    ? `{${door_theme_1.T.alert}-fg}INCOMING: ${attackPending} line${attackPending > 1 ? 's' : ''}{/${door_theme_1.T.alert}-fg}`
+                    : `{${door_theme_1.T.dim}-fg}No incoming attack{/${door_theme_1.T.dim}-fg}`) +
+                voiceSection);
+        }
+        // Stats bar
+        const combo = gameState.combo;
+        let comboStr = '';
+        if (combo > 0) {
+            const comboColor = combo >= 15 ? 'red' : combo >= 10 ? 'yellow' : combo >= 5 ? 'cyan' : 'magenta';
+            comboStr = `  Combo: {${comboColor}-fg}${combo}x{/${comboColor}-fg}`;
+        }
+        let b2bStr = '';
+        if (gameState.backToBack) {
+            const b2bCount = gameState.backToBackCount ?? 1;
+            b2bStr = `  {${door_theme_1.T.accent}-fg}B2B${b2bCount > 1 ? ` x${b2bCount}` : ''}{/${door_theme_1.T.accent}-fg}`;
+        }
+        this.statsBox.setContent(`Score: {${door_theme_1.T.accent}-fg}${gameState.score}{/${door_theme_1.T.accent}-fg}` +
+            `  Level: {${door_theme_1.T.chrome}-fg}${gameState.level}{/${door_theme_1.T.chrome}-fg}` +
+            `  Grade: {magenta-fg}${gameState.grade}{/magenta-fg}` +
+            comboStr +
+            b2bStr);
+        this.screen.render();
+    }
+    /**
+     * Build board overlay grid from all active effects
+     * Z-order (highest priority first):
+     *   1. Text announcements (gradeUp, cool/regret, combo, tSpin)
+     *   2. Floating text
+     *   3. Particles
+     *   4. Lock glow (lowest)
+     */
+    buildBoardOverlay() {
+        // Reset overlay: 20 visible rows (y=4..23) x 10 cols
+        this.boardOverlay = [];
+        for (let r = 0; r < 20; r++) {
+            this.boardOverlay[r] = new Array(10).fill(null);
+        }
+        const setCell = (boardX, boardY, content) => {
+            const row = boardY - 4;
+            if (row >= 0 && row < 20 && boardX >= 0 && boardX < 10) {
+                this.boardOverlay[row][boardX] = content;
+            }
+        };
+        // Layer 4 (lowest): Lock glow
+        // Same flash as the single-player board, from the same function - the
+        // curve this used to sample was shorter than one painted frame, so the
+        // landing flashed or did not depending on the phase.
+        const lockGlowAnims = this.animations.getAnimationsByType('lockGlow');
+        for (const anim of lockGlowAnims) {
+            const char = (0, board_effects_1.lockFlashChar)(anim.elapsed);
+            if (!char)
+                continue;
+            const data = anim.data;
+            for (const cell of data.cells) {
+                setCell(cell.x, cell.y, char);
+            }
+        }
+        // Layer 3: Particles
+        const particles = this.particles.getRenderableParticles();
+        for (const particle of particles) {
+            const boardX = Math.floor(particle.x);
+            const boardY = Math.floor(particle.y);
+            if (boardX >= 0 && boardX < 10 && boardY >= 4 && boardY < 24) {
+                const alpha = particle.alpha;
+                if (alpha > 0.7) {
+                    setCell(boardX, boardY, `{${particle.color}-fg}${particle.char}${particle.char}{/${particle.color}-fg}`);
+                }
+                else if (alpha > 0.3) {
+                    setCell(boardX, boardY, `{gray-fg}${particle.char}${particle.char}{/gray-fg}`);
+                }
+            }
+        }
+        // Layer 2: Floating text
+        const floatingTexts = this.animations.getFloatingTexts();
+        for (const text of floatingTexts) {
+            if (text.mode === 'offboard' && text.x >= 0 && text.x < 10) {
+                continue;
+            }
+            let alpha = 1.0;
+            if (text.timer > 80) {
+                alpha = 1.0 - ((text.timer - 80) / 20);
+            }
+            const color = alpha > 0.5 ? text.color : 'gray';
+            const boardY = Math.floor(text.y);
+            const boardX = Math.floor(text.x);
+            for (let lineIdx = 0; lineIdx < text.text.length; lineIdx++) {
+                const line = text.text[lineIdx];
+                const textBoardY = boardY + lineIdx;
+                for (let ci = 0; ci < line.length; ci++) {
+                    const cellX = boardX + Math.floor(ci / 2);
+                    const charIdx = ci % 2;
+                    if (charIdx === 0) {
+                        const c1 = line[ci] || ' ';
+                        const c2 = (ci + 1 < line.length) ? line[ci + 1] : ' ';
+                        setCell(cellX, textBoardY, `{${color}-fg}${c1}${c2}{/${color}-fg}`);
+                    }
+                }
+            }
+        }
+        // Layer 1 (highest): Text announcements
+        const animList = this.animations.getAnimations();
+        for (const anim of animList) {
+            if (anim.type === 'gradeUp') {
+                const rendered = animations_1.AnimationRenderer.renderGradeUp(anim);
+                this.overlayTextOnBoard(rendered, 7, setCell);
+            }
+            else if (anim.type === 'cool' || anim.type === 'regret') {
+                const rendered = animations_1.AnimationRenderer.renderSectionResult(anim);
+                this.overlayTextOnBoard(rendered, 5, setCell);
+            }
+            else if (anim.type === 'comboCounter') {
+                const data = anim.data;
+                const cCombo = data.combo;
+                const progress = anim.elapsed / anim.duration;
+                if (progress < 0.8) {
+                    const color = cCombo >= 15 ? 'red' : cCombo >= 10 ? 'yellow' : 'cyan';
+                    const comboText = `${cCombo} COMBO!`;
+                    const boldTag = progress < 0.2 ? '{bold}' : '';
+                    const boldEnd = progress < 0.2 ? '{/bold}' : '';
+                    this.overlayTextOnBoard(`{${color}-fg}${boldTag}${comboText}${boldEnd}{/${color}-fg}`, 10, setCell);
+                }
+            }
+            else if (anim.type === 'tSpin') {
+                const progress = anim.elapsed / anim.duration;
+                if (progress < 0.6) {
+                    this.overlayTextOnBoard('{magenta-fg}{bold}T-SPIN!{/bold}{/magenta-fg}', 9, setCell);
+                }
+            }
+        }
+    }
+    /**
+     * Overlay text centered on the board at a given visible row offset
+     */
+    overlayTextOnBoard(taggedText, visibleRow, setCell) {
+        const lines = taggedText.split('\n');
+        for (let lineIdx = 0; lineIdx < lines.length; lineIdx++) {
+            const line = lines[lineIdx];
+            const plainText = line.replace(/\{[^}]*\}/g, '');
+            const boardWidth = 10;
+            const textCellWidth = Math.ceil(plainText.length / 2);
+            const startCell = Math.floor((boardWidth - textCellWidth) / 2);
+            const boardY = 4 + visibleRow + lineIdx;
+            let cellChars = [];
+            for (let i = 0; i < line.length; i++) {
+                if (line[i] === '{') {
+                    const end = line.indexOf('}', i);
+                    if (end !== -1) {
+                        i = end;
+                        continue;
+                    }
+                }
+                cellChars.push(line[i]);
+            }
+            const tagPrefix = line.match(/^(\{[^}]*\})+/)?.[0] || '';
+            const tagSuffix = line.match(/(\{\/[^}]*\})+$/)?.[0] || '';
+            for (let ci = 0; ci < cellChars.length; ci += 2) {
+                const c1 = cellChars[ci] || ' ';
+                const c2 = cellChars[ci + 1] || ' ';
+                const cellX = startCell + Math.floor(ci / 2);
+                setCell(cellX, boardY, `${tagPrefix}${c1}${c2}${tagSuffix}`);
+            }
+        }
+    }
+    /**
+     * Render game board with ghost, glow, line-clear fade, and overlay effects
+     */
+    renderBoard(state) {
+        const { board, currentPiece } = state;
+        let content = '';
+        let pieceShape = null;
+        let ghostY = null;
+        if (currentPiece) {
+            const pieceManager = this.engine.pieceManager;
+            const shape = pieceManager?.getShape(currentPiece.type, currentPiece.rotation, !!currentPiece.big);
+            if (shape) {
+                pieceShape = shape;
+                if (currentPiece.y >= 4 || currentPiece.y + shape.length - 1 >= 4) {
+                    const calculatedGhostY = (0, board_1.getGhostY)(board, shape, currentPiece.x, currentPiece.y);
+                    const ghostBottom = calculatedGhostY + shape.length - 1;
+                    if (ghostBottom >= 4 && calculatedGhostY !== currentPiece.y) {
+                        ghostY = calculatedGhostY;
+                    }
+                }
+            }
+        }
+        for (let y = 4; y < 24; y++) {
+            if (y > 4)
+                content += '\n';
+            for (let x = 0; x < board.width; x++) {
+                const cell = board.grid[y]?.[x];
+                let char = '  ';
+                // Active piece
+                if (currentPiece && pieceShape) {
+                    const px = x - currentPiece.x;
+                    const py = y - currentPiece.y;
+                    if (py >= 0 && py < pieceShape.length &&
+                        px >= 0 && px < pieceShape[py].length &&
+                        pieceShape[py][px]) {
+                        char = (0, versus_cells_1.blockChar)(currentPiece.type);
+                    }
+                }
+                // Ghost piece
+                if (ghostY !== null && currentPiece && pieceShape && char === '  ') {
+                    const px = x - currentPiece.x;
+                    const py = y - ghostY;
+                    const ghostBlockY = ghostY + py;
+                    if (py >= 0 && py < pieceShape.length &&
+                        px >= 0 && px < pieceShape[py].length &&
+                        pieceShape[py][px] &&
+                        ghostBlockY >= 4 && ghostBlockY < 24 &&
+                        x >= 0 && x < board.width) {
+                        char = '{gray-fg}░░{/gray-fg}';
+                    }
+                }
+                // Locked cell with effects
+                if (char === '  ' && cell?.filled) {
+                    const clearFade = this.clearAnimation.getCellFade(x, y);
+                    if (clearFade >= 1.0) {
+                        char = '  ';
+                    }
+                    else if (cell.item) {
+                        // TGM item cell: distinct from a normal locked piece at a
+                        // glance (see getItemCellChar).
+                        char = (0, versus_cells_1.itemCellChar)(cell.item, cell.color, this.screen);
+                    }
+                    else {
+                        char = (0, versus_cells_1.blockChar)(cell.color);
+                        // Block glow
+                        const glowIntensity = this.glowManager.getGlowIntensity(x, y);
+                        if (glowIntensity > 0) {
+                            const glowColor = this.glowManager.getGlowColor(x, y);
+                            if (glowColor) {
+                                char = this.applyGlow(char, glowColor, glowIntensity);
+                            }
+                        }
+                        // Line clear fade
+                        if (clearFade > 0 && clearFade < 1.0) {
+                            char = line_clear_animation_1.LineClearAnimationManager.applyFade(char, clearFade);
+                        }
+                    }
+                }
+                // TGM item HUD: the collected item's name, top-right of the field
+                // (HeborisCE shows item_name[player] in a fixed HUD slot near the
+                // field - gamestart.c:12725-12744 is the equivalent setup-screen
+                // display). Right-aligned across the top visible row.
+                if (y === 4 && state.itemBanner) {
+                    const width2 = board.width * 2;
+                    const text = ` ${state.itemBanner.name}`.slice(-width2);
+                    const startCol = width2 - text.length;
+                    const charCol = x * 2;
+                    if (charCol >= startCol) {
+                        const chunk = text.slice(charCol - startCol, charCol - startCol + 2).padEnd(2, ' ');
+                        // Ink in the foreground where the screen has no background to
+                        // put it on, or the banner is black on black.
+                        char = (0, block_width_1.cellsCanCarryBackground)(this.screen)
+                            ? `{${door_theme_1.T.accent}-bg}{${door_theme_1.T.ground}-fg}${chunk}{/${door_theme_1.T.ground}-fg}{/${door_theme_1.T.accent}-bg}`
+                            : `{${door_theme_1.T.accent}-fg}${chunk}{/${door_theme_1.T.accent}-fg}`;
+                    }
+                }
+                // Board overlay (highest priority)
+                if (this.boardOverlay.length > 0) {
+                    const overlayRow = y - 4;
+                    if (overlayRow >= 0 && overlayRow < this.boardOverlay.length) {
+                        const overlayCell = this.boardOverlay[overlayRow][x];
+                        if (overlayCell !== null) {
+                            char = overlayCell;
+                        }
+                    }
+                }
+                content += (0, block_width_1.fitCell)(char, (0, block_width_1.blockCols)(this.screen.width), (0, block_width_1.cellsCanCarryBackground)(this.screen));
+            }
+        }
+        this.boardBox.setContent(content);
+    }
+    /**
+     * Render player's next piece queue
+     */
+    renderNextQueue(queue) {
+        if (!this.nextBox)
+            return;
+        const cols = (0, block_width_1.blockCols)(this.screen.width);
+        let content = '';
+        const show = Math.min(queue.length, 5);
+        for (let i = 0; i < show; i++) {
+            content += (0, block_width_1.pieceArt)(queue[i], cols, versus_cells_1.PREVIEW_COLORS[queue[i]] ?? 'white').join('\n');
+            content += i < show - 1 ? '\n\n' : '\n';
+        }
+        this.nextBox.setContent(content);
+    }
+    /**
+     * Render hold piece
+     */
+    renderHold(state) {
+        if (!this.holdBox)
+            return;
+        if (!state.holdPiece) {
+            this.holdBox.setContent(`{${door_theme_1.T.dim}-fg}(empty){/${door_theme_1.T.dim}-fg}`);
+            return;
+        }
+        const type = state.holdPiece;
+        const canHold = state.canHold !== false;
+        const colour = canHold ? (versus_cells_1.PREVIEW_COLORS[type] ?? 'white') : 'gray';
+        this.holdBox.setContent((0, block_width_1.pieceArt)(type, (0, block_width_1.blockCols)(this.screen.width), colour).join('\n'));
+    }
+    /**
+     * Render garbage strip — stacked red blocks showing pending count
+     */
+    renderGarbage(pending) {
+        if (!this.garbageIndicator)
+            return;
+        // AN EMPTY STRIP IS A QUESTION, not information.
+        //
+        // With nothing pending this drew a bordered box with nothing in it, and
+        // on a 40-column screen it sits between the player and the CPU where it
+        // reads as a broken panel: "what is the empty brown square supposed to
+        // be?" (2026-09-06). Garbage is news; no garbage is not.
+        if (pending <= 0) {
+            this.garbageIndicator.setContent('');
+            this.garbageIndicator.hide();
+            return;
+        }
+        this.garbageIndicator.show();
+        const capped = Math.min(pending, 18);
+        const bars = `{${door_theme_1.T.alert}-fg}` + ('█\n').repeat(capped).trim() + `{/${door_theme_1.T.alert}-fg}`;
+        this.garbageIndicator.setContent(`{${door_theme_1.T.alert}-fg}${pending}{/${door_theme_1.T.alert}-fg}\n${bars}`);
+    }
+    /**
+     * Render opponent board (full size)
+     */
+    renderOpponentBoard(box, opponent) {
+        if (!box || !opponent.board)
+            return;
+        const board = opponent.board;
+        // Overlay the in-flight piece (see OpponentState.pieceCells): board.grid
+        // is locked cells only, so drawing it alone made pieces pop into
+        // existence at the bottom rather than fall.
+        const falling = new Map();
+        for (const c of (opponent.pieceCells ?? [])) {
+            falling.set(`${c.x},${c.y}`, c.type);
+        }
+        let content = '';
+        const startY = Math.max(0, board.height - 20);
+        for (let y = startY; y < board.height; y++) {
+            if (y > startY)
+                content += '\n';
+            // The opponent's cells are the screen's width too - this sink was
+            // missed when the played board learned it, so a C64 opponent board
+            // would have been twice as wide as the player's.
+            const cols = (0, block_width_1.blockCols)(this.screen.width);
+            for (let x = 0; x < board.width; x++) {
+                const fallingType = falling.get(`${x},${y}`);
+                if (fallingType) {
+                    content += (0, block_width_1.fitCell)((0, versus_cells_1.blockChar)(fallingType), cols, (0, block_width_1.cellsCanCarryBackground)(this.screen));
+                    continue;
+                }
+                const cell = board.grid[y]?.[x];
+                content += (0, block_width_1.fitCell)(cell?.item
+                    ? (0, versus_cells_1.itemCellChar)(cell.item, cell.color, this.screen)
+                    : (cell?.filled ? (0, versus_cells_1.blockChar)(cell.color ?? '') : '  '), cols, (0, block_width_1.cellsCanCarryBackground)(this.screen));
+            }
+        }
+        box.setContent(content);
+    }
+    /**
+     * Apply glow effect to block character
+     */
+    applyGlow(baseChar, glowColor, intensity) {
+        const brightMap = {
+            red: 'lightred', green: 'lightgreen', yellow: 'lightyellow', blue: 'lightblue',
+            magenta: 'lightmagenta', cyan: 'lightcyan', white: 'lightwhite', orange: 'yellow',
+        };
+        const brightColor = brightMap[glowColor] || glowColor;
+        if (intensity > 0.7) {
+            return `{${brightColor}-bg}${baseChar}{/${brightColor}-bg}`;
+        }
+        else if (intensity > 0.3) {
+            return `{${glowColor}-bg}${baseChar}{/${glowColor}-bg}`;
+        }
+        return baseChar;
+    }
+    /**
+     * Render voice chat status section for opponentInfoBox
+     */
+    renderVoiceSection(localUserId, oppUserId) {
+        const fmtRow = (uid, label, isLocal) => {
+            const muted = isLocal ? this.localMuted : (this.voiceStates.get(uid)?.muted ?? false);
+            const speaking = this.voiceStates.get(uid)?.speaking ?? false;
+            if (muted)
+                return `{${door_theme_1.T.alert}-fg}[M]{/${door_theme_1.T.alert}-fg} ${label}`;
+            if (speaking)
+                return `{${door_theme_1.T.ok}-fg}[*]{/${door_theme_1.T.ok}-fg} ${label}`;
+            return `{${door_theme_1.T.dim}-fg}[ ]{/${door_theme_1.T.dim}-fg} ${label}`;
+        };
+        const localName = this.state.playerName || 'You';
+        const opp = this.opponentTracker.getAliveOpponents()[0];
+        const oppName = opp?.name || 'Opp';
+        return (`\n{${door_theme_1.T.chrome}-fg}-- VOICE ----------{/${door_theme_1.T.chrome}-fg}\n` +
+            `${fmtRow(localUserId, localName, true)}\n` +
+            `${fmtRow(oppUserId, oppName, false)}\n` +
+            `{${door_theme_1.T.dim}-fg}M=mute{/${door_theme_1.T.dim}-fg}`);
+    }
+    /**
+     * Cleanup
+     */
+    cleanup() {
+        if (this.sessionSocket && this.voiceSpeakingHandler) {
+            this.sessionSocket.off('voice:speaking', this.voiceSpeakingHandler);
+            this.voiceSpeakingHandler = null;
+        }
+        this.running = false;
+        this.unsubscribers.forEach(unsub => unsub());
+        this.unsubscribers = [];
+    }
+}
+exports.VersusScreen = VersusScreen;
+VersusScreen.RENDER_INTERVAL = 50; // 20 fps background rate
+//# sourceMappingURL=versus-screen.js.map

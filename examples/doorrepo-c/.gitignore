@@ -1,0 +1,18 @@
+# Build artifacts. Sources, tests, Makefile, README and the example config are
+# the only things that belong in git here; everything a compiler emits does not.
+*.o
+*.dSYM/
+doorrepo
+doorrepo.amiga
+doorrepo.amiga-stub
+probe-fetch
+probe-fetch.amiga
+# The probe writes next to itself; on a host that is a literal "PROGDIR:" name.
+PROGDIR:*
+probe.bin
+probe.txt
+build-test-*
+amiga-ndk-shim/
+amiga-netinclude-vendor
+test_*
+!test_*.c

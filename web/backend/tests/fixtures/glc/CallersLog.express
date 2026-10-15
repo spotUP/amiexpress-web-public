@@ -1,0 +1,14 @@
+**************************************************************
+10-04-26 (16:43:05) [1] CALLER2 (SYSOP_LOCAL) Somewhere
+	Amiga Demoscene! (1) Conference Joined
+10-04-26 (16:58:27) CALLER2 Off Normally
+**************************************************************
+10-04-26 (17:37:02) [7] regress (CONNECT 19200) Test Account
+	Amiga Demoscene! (1) Conference Joined
+	C64 Demoscene (2) Conference Joined
+	Uploading DEMO.LHA 12345 bytes
+	 1 file(s), 12k bytes, 0 minute(s). 4 second(s), 3086 cps, 100% efficiency.
+	Upload moved to BBS:Conf02/Upload/DEMO.LHA
+	Downloading BBS:Conf02/Upload/MUSIC.LHA 54321 bytes
+	 1 files, 53k bytes, 0 minutes 9 seconds 6035 cps, 100% efficiency at 19200
+10-04-26 (17:41:11) regress Off Normally

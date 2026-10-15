@@ -1,0 +1,334 @@
+/**
+ * Client-Side Modem Speed Emulator
+ *
+ * Throttles terminal output to simulate classic modem speeds.
+ * Queues output and writes it to xterm.js at the configured baud rate.
+ *
+ * Once the caller is logged in at a real modem speed the server meters
+ * the output and this pacer stands aside (see `serverPaces`). It paces on
+ * its own only before login (the cookie speed) and at MAX (the soft cap).
+ */
+
+import { Terminal } from '@xterm/xterm';
+import { PlayoutBuffer } from './playout-buffer';
+
+// Use String.fromCharCode(27) for ESC to survive Terser/Vite minification
+// Terser strips literal \x1b from string constants during minification
+const ESC = String.fromCharCode(27);
+
+/**
+ * Soft-cap throughput applied when the UI's "MAX" option is selected
+ * (bps === 0 historically meant "no throttle"). Without a cap xterm.js
+ * paints a full 80×25 screen in a single ~16ms frame, making transient
+ * screens flash past too fast to read. 230400 bps (≈23 KB/s) paces a
+ * full screen at ~87ms — imperceptible for short echoes, visible for
+ * whole-screen updates.
+ */
+const MAX_SOFT_CAP_BPS = 230400;
+
+export interface ModemEmulatorOptions {
+  bps: number; // Bits per second (1200, 2400, 9600, etc.)
+}
+
+/**
+ * Per-payload write options.
+ *
+ * `prePaced` is the client side of the wire attribute declared in
+ * `web/backend/src/utils/output-pacing.ts` (`PRE_PACED`, carried as the
+ * second argument of `ansi-output`). It marks a payload whose timing the
+ * SERVER already decided - today the screen-wipe frames, which are an
+ * animation paced by sleeping between whole frames and emitted one write
+ * each. Metering those bytes a second time here does not slow the
+ * animation down, it drip-feeds every frame: measured 2,910 ms at 14400
+ * and 17,400 ms at 2400 for a 625 ms radial wipe of `Conf1/Menu.txt`.
+ *
+ * A pre-paced payload keeps its PLACE in the queue - it must never
+ * overtake text queued before it, the queue is strict FIFO - but is
+ * written whole when its turn comes, and its bytes are not charged to the
+ * baud budget, because they were already paid for in frame delays.
+ */
+export interface ModemWriteOptions {
+  prePaced?: boolean;
+  /**
+   * When the server's pacer meant this chunk to arrive (server clock, ms).
+   * Present only while the server meters the caller; such chunks are
+   * replayed at that spacing through a PlayoutBuffer.
+   */
+  pacedAt?: number;
+}
+
+/** A payload waiting its turn, with the pacing decision made at write time. */
+interface QueuedPayload {
+  data: string;
+  prePaced: boolean;
+}
+
+export class ModemEmulator {
+  private terminal: Terminal;
+  private bps: number = 0;
+  private bytesPerSecond: number = 0;
+  private queue: QueuedPayload[] = [];
+  private processing: boolean = false;
+  private enabled: boolean = false;
+  private startTime: number = 0;
+  private bytesSent: number = 0;
+  // While a door is running, skip throttling entirely regardless of bps.
+  // 68K doors drive interactive UIs (games, menus, dRE!WAll prompt echo)
+  // and their screen updates should feel instant. The soft-cap only
+  // applies to BBS navigation so transient prompts stay readable.
+  private doorActive: boolean = false;
+
+  /** Replays the server's pacing when the network bunched it. */
+  private playout: PlayoutBuffer;
+
+  constructor(terminal: Terminal) {
+    this.terminal = terminal;
+    this.playout = new PlayoutBuffer((data) => this.terminal.write(data));
+  }
+
+  /**
+   * Toggle the "a door is running" bypass. While true, write() hands
+   * bytes to xterm immediately — no soft-cap, no queueing. Toggled by
+   * BBSTerminal in the `door-active` socket handler.
+   */
+  setDoorActive(active: boolean): void {
+    this.doorActive = active;
+    this.playout.flush();
+    if (active) {
+      // Drain pending BBS-phase content so door output isn't behind it.
+      this.flushImmediate();
+    } else {
+      // Reset throttle budget so BBS resumption doesn't inherit stale timing.
+      this.startTime = performance.now();
+      this.bytesSent = 0;
+    }
+  }
+
+  /**
+   * Enable modem emulation at specified baud rate.
+   *
+   * Historically bps=0 meant "no throttle" (disabled). That produces
+   * screen flashes too fast to read, so bps=0 now maps to
+   * MAX_SOFT_CAP_BPS (230400 bps ≈ 87ms per 80×25 screen).
+   */
+  enable(bps: number): void {
+    this.playout.flush();
+    const effectiveBps = bps === 0 ? MAX_SOFT_CAP_BPS : bps;
+    this.bps = effectiveBps;
+    // 10 bits per byte (1 start + 8 data + 1 stop)
+    this.bytesPerSecond = Math.max(1, Math.floor(effectiveBps / 10));
+    this.enabled = effectiveBps > 0;
+    this.startTime = performance.now();
+    this.bytesSent = 0;
+
+    console.log(
+      `[ModemEmulator] Enabled at ${effectiveBps} bps (${this.bytesPerSecond} bytes/sec)` +
+        (bps === 0 ? ` — MAX soft-cap from bps=0` : '')
+    );
+  }
+
+  /**
+   * The server's word on this connection's speed (`modem-speed`).
+   *
+   * At a real modem speed the SERVER meters the caller's output
+   * (web/backend/src/utils/modem-emulator.util.ts, installed at login for
+   * every transport). Metering it here as well paced every web caller
+   * twice - the reason PRE_PACED had to exist, and a second clock telnet
+   * callers never had (web-vs-telnet audit item 17, 2026-09-28). So a
+   * speed above 0 turns this pacer off, delivering what it still holds in
+   * order first. At 0 (MAX) the server sends unpaced and this pacer keeps
+   * the browser-only soft cap, which is a rendering concern: xterm.js
+   * paints a whole screen in one frame.
+   *
+   * `enable` stays for pacing the browser does on its own - the cookie
+   * speed before login, when no server pacer exists yet.
+   */
+  serverPaces(bps: number): void {
+    if (bps > 0) this.disable();
+    else this.enable(0);
+  }
+
+  /**
+   * Disable modem emulation (full speed)
+   */
+  disable(): void {
+    this.enabled = false;
+    this.bps = 0;
+    this.bytesPerSecond = 0;
+    // Flush any remaining queue immediately
+    this.flushImmediate();
+    console.log('[ModemEmulator] Disabled (full speed)');
+  }
+
+  /**
+   * Check if emulation is enabled
+   */
+  isEnabled(): boolean {
+    return this.enabled;
+  }
+
+  /**
+   * Get current baud rate
+   */
+  getBps(): number {
+    return this.bps;
+  }
+
+  /**
+   * Queue data for throttled output.
+   *
+   * `options.prePaced` (see ModemWriteOptions) writes the payload through
+   * unmetered while keeping its place in the queue.
+   */
+  write(data: string, options?: ModemWriteOptions): void {
+    const prePaced = options?.prePaced === true;
+
+    if (!this.enabled && !this.doorActive) {
+      // The server meters this caller: no rate here, only the server's own
+      // spacing restored after the network bunched it.
+      if (typeof options?.pacedAt === 'number') this.playout.paced(data, options.pacedAt);
+      else this.playout.unpaced(data);
+      return;
+    }
+
+    if (!this.enabled || this.doorActive) {
+      // No throttling — either the emulator is disabled or a 68K door
+      // is running and its output should feel instant. Soft-cap exists
+      // for BBS navigation only.
+      this.terminal.write(data);
+      return;
+    }
+
+    const idle = !this.processing && this.queue.length === 0;
+
+    if (prePaced && idle) {
+      // Nothing is queued ahead of it, so writing now IS its place in the
+      // queue. The budget is left alone: these bytes are not charged, and
+      // the next ordinary payload resets the burst window itself.
+      this.terminal.write(data);
+      return;
+    }
+
+    // Reset token budget for a new burst after idle
+    if (idle) {
+      this.startTime = performance.now();
+      this.bytesSent = 0;
+    }
+
+    // Queue the data
+    this.queue.push({ data, prePaced });
+
+    // Start processing if not already
+    if (!this.processing) {
+      this.processQueue();
+    }
+  }
+
+  /**
+   * Flush queue immediately (for disable/cleanup)
+   */
+  private flushImmediate(): void {
+    while (this.queue.length > 0) {
+      const item = this.queue.shift()!;
+      this.terminal.write(item.data);
+    }
+  }
+
+  /**
+   * Process queue with throttling
+   */
+  private async processQueue(): Promise<void> {
+    if (this.processing) return;
+    this.processing = true;
+
+    while (this.queue.length > 0 && this.enabled) {
+      const item = this.queue.shift()!;
+      if (item.prePaced) {
+        // The server already paced it. Its turn in the queue has come, so
+        // order is kept; it is written whole and charged nothing.
+        this.terminal.write(item.data);
+        continue;
+      }
+      await this.sendThrottled(item.data);
+    }
+
+    this.processing = false;
+  }
+
+  /**
+   * Send data with modem-speed throttling
+   */
+  private async sendThrottled(payload: string): Promise<void> {
+    if (!this.enabled || this.bytesPerSecond <= 0) {
+      this.terminal.write(payload);
+      return;
+    }
+
+    // Tokenize ANSI so we never split escape sequences
+    const tokens = this.tokenizeAnsi(payload);
+
+    for (const tok of tokens) {
+      const isEscape = tok.startsWith(ESC);
+
+      if (isEscape) {
+        // Send ANSI escape sequences immediately (they're control codes)
+        this.terminal.write(tok);
+        continue;
+      }
+
+      // Send visible characters with throttling
+      let offset = 0;
+      while (offset < tok.length) {
+        const now = performance.now();
+        const elapsedMs = now - this.startTime;
+        const allowedBytes = Math.floor(this.bytesPerSecond * (elapsedMs / 1000));
+        const available = Math.max(0, allowedBytes - this.bytesSent);
+
+        if (available <= 0) {
+          // Wait a bit for more budget
+          await this.sleep(5);
+          continue;
+        }
+
+        // Send a chunk (up to available budget, max 64 chars at a time for smoother output)
+        const chunkSize = Math.min(available, tok.length - offset, 64);
+        const chunk = tok.slice(offset, offset + chunkSize);
+        this.terminal.write(chunk);
+        offset += chunkSize;
+        this.bytesSent += chunkSize;
+      }
+    }
+  }
+
+  /**
+   * Tokenize string to separate ANSI escape sequences
+   */
+  private tokenizeAnsi(payload: string): string[] {
+    const tokens: string[] = [];
+    // Use ESC constant in regex to survive minification (same issue as string literals)
+    const ansiRegex = new RegExp(ESC + '\\[[0-9;?]*[A-Za-z]', 'g');
+    let lastIndex = 0;
+    let match: RegExpExecArray | null;
+
+    while ((match = ansiRegex.exec(payload)) !== null) {
+      if (match.index > lastIndex) {
+        tokens.push(payload.slice(lastIndex, match.index));
+      }
+      tokens.push(match[0]);
+      lastIndex = match.index + match[0].length;
+    }
+
+    if (lastIndex < payload.length) {
+      tokens.push(payload.slice(lastIndex));
+    }
+
+    return tokens;
+  }
+
+  /**
+   * Sleep helper
+   */
+  private sleep(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+}

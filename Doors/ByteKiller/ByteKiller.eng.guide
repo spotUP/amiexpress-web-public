@@ -1,0 +1,400 @@
+@database Bytekiller.guide
+@author "Byteandi/trsi"
+@$VER: Bytekiller.guide 
+@node main "ByteKiller V2.2 Documentation (c) Byteandi/trsi"
+
+
+               _____         _____________  _____________
+               \   /_____.__/  /  ______  \/    \___  \__\
+               / .   /  / _/ __/ ___/     /  /  /  /  /  /
+              /_____/__   /__/_____/__/__/__/__/_____/__/ 
+              ________/of (tRSi/X-iNNOVATiOn) presents:
+
+
+                           @{BG fill}@{"   ByteKiller V2.0    "   link Bytekiller}@{BG Background}
+                           @{BG fill}@{"   ByteComment V1.0   "   link ByteComment}@{BG Background}
+                           @{BG fill}@{" BytekillHandler V1.0 "   link Bytekillhandler}@{BG Background}
+                           @{BG fill}@{"     ByteLog V1.0     "   link ByteLog}@{BG Background}
+                           @{BG fill}@{"Registration & Updates" link updates}@{BG Background}
+                           @{BG fill}@{"      Greeting(s)     " link greetings}@{BG Background}
+                           @{BG fill}@{"      Other Tools     " link other_tools}@{BG Background}
+
+
+
+                           @{BG fill}@{"   Changes to  V2.2   "   link Changes}@{BG Background}
+
+
+@endnode
+@node Bytekiller "ByteKiller V2.0"
+
+ByteKiller V2.0 is XIM Tool for /X 3.+ and /X 4.+
+
+What can Bytekiller :
+
+You can start Bytekiller with "Nuke trsi* afl*.dms fake*.l*.txt"
+
+Bytekiller search if the ToolType @{BG fill}@{"NUKER_ALL" link ToolTypes}@{BG Background}
+is installed or if there any Tooltypes looks like @{BG fill}@{"NUKER.<x>" link ToolTypes}@{BG Background} or @{BG fill}@{"PASSWORD.<x>" link ToolTypes}@{BG Background}
+
+If there is NUKER_ALL, bytekiller starts for all who wanted to nuke and 
+have the right level,
+else bytekiller search for the right name and if he have any PW-protection`s !
+
+Bytekiller can write only one message to the Up-Downloader about all fakes
+
+If bytekiller doesn`t can Lock Msgbase or Filelist, he wait a while and if 
+there is no chance for Lock, he aborted this routine..
+
+You can Configure all Comments and Messages how ever you want..please 
+search in @{BG fill}@{"Configuration" link mycfg}@{BG Background} for that
+
+Bytekiller can search for hisself about Dl- and UlPathes or Path to Callerslog 
+and any more, but it is important to install the Tooltype @{BG fill}@{"USER_DATA" link ToolTypes}@{BG Background}
+because I handle this for myself because some stupid changes in /X 4.+
+
+Bytekiller can open an ASL-Requester if you have installed the Tooltype @{BG fill}@{"ASK_ASL" link ToolTypes}@{BG Background}
+but this Option works only if you nuked from the Console..
+
+Bytekiller have some extern Tools, if you use any of them you have the fastest
+Nuker of the world...
+
+You can set up All Options in Bytekiller !
+
+                           @{BG fill}@{"Start von Bytekiller"   link start_bytekiller}@{BG Background}
+
+@endnode
+@node start_bytekiller "ByteKiller V2.0"
+
+Start Bytekiller V2.0 :
+
+if you started bytekiller he ask (if exist) for the Password from the User,
+than he shows, if there any UserComments about some fakes and ask if 
+you want to Nuke from List !
+You can Insert so many Files you ever want with and without Wildcarts !
+Now Bytekiller Ask you if you want to nuke with Automodus and if you want to 
+use the same options for all Files.....
+if you use Automodus, you can set options for all files or options 
+from file to file.
+now Ask Bytekiller if you are interested to search for UpLoader and 
+show you his status if he have found the User..
+You can take or give now so many Creditz you ever want..
+If you have done this, bytekiller ask you to search for Downloader
+and do show you his status and ask if he can have some bytes back..
+If that is Ok you can set up the comments for the Filelisting !
+
+Now Bytekiller changes the listing writes some messages to the 
+Up-Downloader and ask you if you want to give some extra comments 
+in that message (if you have install the Tooltype "EXTERN_COMMENT") !
+
+                              @{BG fill}@{"   ByteKiller V2.0    "   link Bytekiller}@{BG Background}
+                              @{BG fill}@{"ToolTypes" link ToolTypes}@{BG Background}
+@endnode
+
+@node ByteComment "ByteComment V1.0"
+
+ByteComment V1.0 is XIM for /X 3+ 
+
+This Tool is for all User to add some comments in your Filelisting,
+this comments are saved in your bytekiller/fakes/ dir and if you 
+started Bytekiller and he found some Comments, he ask you to use this list !
+
+                              @{BG fill}@{"       Menue          "   link main}@{BG Background}
+                              @{BG fill}@{"   ByteKiller V2.0    "   link Bytekiller}@{BG Background}
+                              @{BG fill}@{"ToolTypes" link ToolTypes}@{BG Background}
+@endnode
+
+@node Bytekillhandler "Bytekillhandler V1.0"
+
+Bytekillhandler is an external CLI-Tool to start in your logoff-batch, 
+if you use this Tool, you doesn`t need to run ByteLog. 
+
+this Handler search in your Callerslog for any Uploads from the last user
+and saves his AccountNumber, this Handler doesn`t need DataFiles for that,
+so it doesn`t need any bytes from your HD`s
+
+my tip : start bytekillhandler before all other in your Logoff-batch !
+
+example for logoff-batch:
+----------------------------
+.key node
+
+Doors:Bytekilller/bytekillhandler BBS:node<node>/Callerslog
+
+---------------------------------------------------------------------------
+
+                           @{BG fill}@{"       Menue          "   link main}@{BG Background}
+                           @{BG fill}@{"   ByteKiller V2.0    "   link Bytekiller}@{BG Background}
+@endnode
+
+@node Bytelog "Bytelog V1.0"
+
+ByteLog is XIM Tool for /X 3.+
+
+You can start it with EXAMINE.INFO
+                      EXAMINE1.INFO .....  (/X 4.+)
+                      FILECHECK.INFO
+                      FILECHECK1.INFO .... (/X 4.+)
+in your SYSCMD/
+
+it saves the user and his Upload in one dataFile in your Conf,you can 
+say how many days you want to Log if you install @{BG fill}@{"LOG_DAYS=<tage>" link ToolTypes}@{BG Background}
+in your bytekiller.info, default is 7 days !
+
+ByteLog doesn`t strip the UdLog, he search, if there is an Upload witch
+is older than your Log Days and overwrite this data !
+
+if you run this Door you doesn`t need Bytekillhandler !
+
+                              @{BG fill}@{"       Menue          "   link main}@{BG Background}
+                              @{BG fill}@{"   ByteKiller V2.0    "   link Bytekiller}@{BG Background}
+                              @{BG fill}@{"ToolTypes" link ToolTypes}@{BG Background}
+@endnode
+
+@node updates "Registration & Updates"
+
+Updates :           !!!!! Only for Registered user from my Tools !!!!
+
+I want install the question if you like to see what Bytekiller 
+does in autonukeModus, or if you want to do other nice thinks..
+Highscore List for Top nuked User
+Random Comments for AutonukeModus...
+Give bytes to user who says any about fakes...
+all what you want....and what I can do
+
+ IF YOU WANT TO BE REGISTERED FOR THAT OR NEXT COMMING TOOLS 
+
+                PAY 20$ OR 30,-DM
+
+ IF YOU WAS REGISTERED FOR FILEID AND TOOLS BEFORE, YOU GET THIS 
+ AND NEXT COMMING TOOLS FOR FREE
+
+                 # +49 (30) 7216071  4 Nodes Ringdown Dual 288er
+
+
+                              @{BG fill}@{"       Menue          "   link main}@{BG Background}
+
+@endnode
+
+@node greetings "Special Greeting(s)"
+
+SPEEDLOCK      for some tests in his BBS 
+Death Angel    because he installed all my Tools
+[-Amok-]       for his english changes in my Tool
+Spy/trsi       for his best Alloc() Routine...and some tips..
+ByteAndi/trsi  for his very nice Tools
+siegel/trsi    your Soft-Del is great, I like it and thx for your 
+               configs
+TRSI           for the nice Group..
+
+Mac LifeGuard  your TurboNews is Fast but Shit, I don`t like to hear 
+               4MB ram is not enough or see my Listing in green or see
+               "can`t advange any furter..."
+
+
+                              @{BG fill}@{"       Menue          "   link main}@{BG Background}
+
+@endnode
+
+@node mycfg "All Informations about Configuration(s)"
+
+Configuration from the messages :
+
+
+%L  ----->  List of all Fakes and Up-Download Day with 
+            creditz taken/Given
+
+%N ------>  Name of the Nuker 
+
+%F ------>  Name of the Faker or Downloader
+
+%T ------>  All bytes taken in this Session.......
+            (ONLY FOR UPLOADER.CFG)               
+          
+%G ------>  All bytes Given in this Session.......
+            (ONLY FOR UPLOADER.CFG)               
+
+%B ------>  All Dl-Bytes given back in this Session.......
+            (ONLY FOR DOWNLOADER.CFG)               
+
+example :
+----------
+
+
+Hey %F you are Lame ,
+I have taken you %T because some fakes.., here is a list of all
+
+%L
+
+             please Delete this Message !
+
+-----------------------------------------------------------------------------
+means :
+
+Hey byteandi/trsi you are lame,
+I have taken you 32228 bytes because some fakes.., here is the list of all
+
+Old UpLoad Bytes   :                         8738
+Bytekiller V2.0    : Nuked *( -5)              71  Uploaded on (10-23-94)
+LamerDoc.txt       : Nuked *( -5)              71  Uploaded on (10-23-94)
+-------------------------------------------------
+New UpLoad Bytes   :                            1
+
+             please Delete this Message !
+
+-----------------------------------------------------------------------------
+
+Configuration for your Comments in the Filelisting :
+
+%b  ---->  how many Creditz Taken/given
+%B  ---->  bytes from the Nuked File
+%N  ---->  Name of the Nuker
+
+Example :
+
+Enter FakeComment : ^^ %N Takes you %B Bytes * (%b) ^^
+
+means :
+
+                    ^^ Byteandi/trsi Takes you 32321 Bytes * (-5) ^^
+
+
+
+                              @{BG fill}@{"       Menue          "   link main}@{BG Background}
+                              @{BG fill}@{"   ByteKiller V2.0    "   link Bytekiller}@{BG Background}
+                              @{BG fill}@{"ToolTypes" link ToolTypes}@{BG Background}
+
+
+@endnode
+
+@node ToolTypes "All Informations about ToolTypes"
+
+
+
+USER_DATA         -----> Path and Name from  UserData
+
+NUKER_ALL         -----> this means that there is no PW protection,
+                         All User with the right Level can nuke
+
+NUKER.<x>=<name>  -----> the name of the User who can Nuke 
+                         x = Number from 1 to ..
+
+PASSWORD.<x>=<PW> -----> The Password from the User who can Nuke
+                         x = Number from 1 to ..
+
+ANSI_MESSAGE      -----> if you doesn`t use this Tooltype, Bytekiller striped
+                         All Ansi-Codes in the messages...
+
+COMMENT.x=<wieviel> ---> Comment for the Filelisting (default`s)
+                         x = Number from 1 to ..                 
+
+FAKE.<x>=<warum>  -----> Why you have Nuked the File (default`s)
+                         x = Number from 1 to ..                 
+
+SIZE.<x>=<shit!>  -----> Comments for the ByteSize in the Listing 
+                         x = Number from 1 to ..                 
+
+FREE_COLOR=<36>   -----> Color for the Comment if you make the File to 
+                         freedownload
+                         
+GIVE_COLOR=<32>   -----> Color for the Comment if you Give Creditz 
+                         
+
+TAKE_COLOR=<44;39> ----> Color for the Comment if you Take Creditz 
+                         
+
+EXTERN_COMMENT    -----> if you have this Toolstype, bytekiller ask
+                         if you want to write some lines to the 
+                         Up-Downloader
+
+CREATE_FAKEFILE   -----> you can create Fakefiles if you want..
+
+ASK_ASL           -----> Bytekiller ask you if you want to use an 
+                         ASl-Requester to flag files
+
+SPY_LIST=<list>   -----> ONLY to use if you have installed SPY_LIST
+                         or you have the files and descriptions in more
+                         FileListings, than list = the last list of deleted
+                         Files..
+FREEDOWNLOAD=<text>  --> text = what ever you want to give as Comment in 
+                         your Listing default is :
+                         "FREEDOWNLOAD FREEDOWNLOAD"
+
+LOG_DAYS=<days>   -----> for ByteLog, to say how many Days he must Log !
+                         
+
+COM_COLOR=<44;39> -----> Color for ByteComment
+
+                              @{BG fill}@{"       Menue          "   link main}@{BG Background}
+                              @{BG fill}@{"   ByteKiller V2.0    "   link Bytekiller}@{BG Background}
+                              @{BG fill}@{"ToolTypes" link ToolTypes}@{BG Background}
+@endnode
+
+@node other_tools "All Informations about other Tools "
+
+
+SysopDownload V1.1     the best Tool for /X....
+
+NewFiles V2.1          with his funktions the first of his art...
+                       the last version was V2.5ß for any friends..
+                       I`m doesn`t interested this time to make some 
+                       new versions of this Tool because there was 
+                       to many out this moment ( Fuck TN or Task-NewScan)
+                       (Aqua-scan Rulez....I only can say..)
+
+BullView V1.5          one of the first Tools I have made
+                       1.5+ doesn`t from me it is shit...
+
+VereNaris V1.1         Cool work from re/Y\o and me 
+
+FileId V1.5            Last FileId version I think to make some
+                       versions because I doesn`t like all other 
+                       FileId Tools.....
+                       FileId V2.0 is in work and I think to bring 
+                       this Tool January 95
+
+Autosent V1.6          Last Version for regidstered Sysops
+
+AutoCfg V1.0           only internal for some stupid User
+
+AFL-Quest V1.1         one of the first Tools I have made..
+                       
+FastDupe V1.0          nice programming of dre! and me hehe
+                       and nice to see how many lamer have made 
+                       other versions
+
+ByteMover V1.1         this Time Internal, but I think to release
+                       becuase all sysops like this Tool
+
+Comment V1.2           Comment to Sysop, the first with Message-Upload
+                       
+FileDl V1.0            Download of All Filelistings from date 
+                       
+Register V1.5          Only Internal for (Mystic/X-Design)
+                       
+afl_Bull V1.0          The first Tool I have made, create 5 Bulls
+
+
+
+                              @{BG fill}@{"       Menue          "   link main}@{BG Background}
+                              @{BG fill}@{"   ByteKiller V2.0    "   link Bytekiller}@{BG Background}
+@endnode
+
+@node Changes "Changes to this Version V2.2 "
+
+Small Bug in Memory-routines is now fixed..
+
+Tooltype FREE_DOWNLOAD works now 100%
+
+I have added the "award.cfg", this txt is for Uploader if the sysop 
+only have Bytes given, if the sysop take and give Bytes he get the 
+Uploader.cfg !
+
+Bytekiller is this Time by V2.3 (only for registered Sysops) and have 
+more new Futures, and I`m working to add some more Options
+
+KiloByte Option in Acp.Info works now 100%
+
+                              @{BG fill}@{"       Menue          "   link main}@{BG Background}
+                              @{BG fill}@{"   ByteKiller V2.0    "   link Bytekiller}@{BG Background}
+
+@endnode

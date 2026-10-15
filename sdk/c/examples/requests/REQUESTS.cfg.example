@@ -1,0 +1,21 @@
+# REQUESTS.cfg - the global-requests door's own config, read from beside the
+# executable (PROGDIR:). A 68K door cannot ask the BBS for the board's
+# encrypted key, so the sysop puts it here. Keep this file out of the file
+# areas and out of git: it holds the board secret.
+#
+# Copy to REQUESTS.cfg next to the binary and fill BoardKey=.
+
+Host=doors.uprough.net
+Port=80
+# The key the door server minted for this board: <board-id>.<secret>.
+BoardKey=
+# Seconds to wait on the connect and each read. 1..119; default 10.
+Timeout=10
+
+# The board's requests screen, rewritten when a caller adds or changes a
+# request. Clear Bulletin to turn it off. The art paths are relative to the
+# door's own folder; their height comes off the 23-row budget that keeps the
+# screen off the (Pause)...More prompt on a 24-row terminal.
+Bulletin=BBS:Bulletins/bull9.txt
+BulletinHeader=Bulletin_Header.txt
+BulletinTail=Bulletin_Tail.txt

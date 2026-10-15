@@ -1,0 +1,10 @@
+BBSCMD=SUBSCAN
+NAME=Subs digest
+TYPE=XIM
+LOCATION=Doors/SUBS/subs
+DESCRIPTION=The three-line public discussion digest shown when you join a conference
+ACCESS=1
+MULTINODE=YES
+PRIORITY=SAME
+STACK=8192
+MIN_COLUMNS=40

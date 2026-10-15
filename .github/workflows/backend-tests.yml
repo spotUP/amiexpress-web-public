@@ -1,0 +1,223 @@
+name: Backend Tests
+
+# Runs the backend jest suite and the type-check on every push and PR.
+#
+# Why this exists: until now nothing in CI ran jest at all. The one workflow
+# named "Door CI" (kept disabled as door-ci.yml.disabled) runs `npm run
+# door:ci`, which is the doctor + fixture-door harness, not the test suite.
+# So every regression test in web/backend/tests was manual-only - including
+# the bsdsocket fd-lifecycle, errno, gethostbyname and non-blocking-connect
+# tests, whose entire purpose is to fail loudly if someone reintroduces a bug
+# that hangs real Amiga network doors.
+#
+# The suite is fast (~40-75s for 268 suites / 5090 tests) and passes clean, so
+# there is no reason for it not to gate merges.
+#
+# NOTE: do NOT set SKIP_DB_INIT=1 for a full run. It is meant for targeted
+# emulator suites; applied to the whole suite it disables the test database
+# that the ~39 database suites need and manufactures ~344 failures.
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+# A newer push to the same branch makes an in-flight run redundant.
+concurrency:
+  group: backend-tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.21.0'
+          cache: 'npm'
+          cache-dependency-path: web/backend/package-lock.json
+
+      # Build the SDK with its own pinned TypeScript before the backend
+      # install triggers the SDK's prepare hook, exactly as
+      # corpus-integration.yml does - see that file for why the version
+      # mismatch matters.
+      - name: Build SDK
+        working-directory: sdk
+        run: npm ci --no-audit --no-fund && npm run build
+
+      - name: Install backend deps
+        working-directory: web/backend
+        env:
+          SKIP_WEB_ASSET_BUILD: '1'
+          SKIP_SDK_PREPARE: '1'
+        run: npm ci --no-audit --no-fund
+
+      # web/backend's test script points jest at a TypeScript config file, and
+      # jest needs ts-node to read one - but web/backend declares neither
+      # ts-node nor typescript. Both live in the REPO ROOT node_modules, and a
+      # developer's checkout works only because node resolution walks up into
+      # it. So the root install is not optional tooling here; without it
+      # `npm test` fails with "'ts-node' is required for the TypeScript
+      # configuration files".
+      #
+      # --ignore-scripts and SKIP_SDK_PREPARE mirror the documented root
+      # install and keep it from rebuilding the SDK built above.
+      - name: Install root deps (provides ts-node for the jest config)
+        env:
+          SKIP_SDK_PREPARE: '1'
+        run: npm install --ignore-scripts --no-audit --no-fund
+
+      # Every door the backend type-checks or tests, installed by DERIVING
+      # the list rather than writing it down.
+      #
+      # It used to be three hardcoded steps, and the history of this file is
+      # the cost of that: grandmaster, then livechat, then "same missing
+      # install, four more doors" for the 40-column suites, and then main
+      # went red again the day ncurses-pong and phreakwars arrived -
+      # "Cannot find module '@amiexpress/bbs-door-sdk'" from a door nobody
+      # had added here. A list that has to be edited every time a door is
+      # written is a list that will be out of date again.
+      #
+      # The rule: a door referenced from web/backend's sources or tests, that
+      # has a package.json depending on the SDK, gets installed. That covers
+      # every door the two type-check steps below can reach, and it is a
+      # superset of the six names that used to be here.
+      - name: Install door deps (every door that depends on the SDK)
+        run: |
+          for pkg in Doors/*/package.json; do
+            grep -q "bbs-door-sdk" "$pkg" || continue
+            door=$(dirname "$pkg")
+            # --ignore-scripts everywhere except where a NATIVE module has to
+            # land its binary: GRANDMASTER and DOPEWARS use better-sqlite3,
+            # and with scripts off prebuild-install never runs, so the suites
+            # that drive those doors die on "Could not locate the bindings
+            # file" - a failure that looks like the door and is the install.
+            if grep -qE '"(better-sqlite3|node-pty|canvas|sharp|bcrypt)"' "$pkg"; then
+              echo "  installing $door (native deps, scripts allowed)"
+              npm install --prefix "$door" --no-audit --no-fund
+            else
+              echo "  installing $door"
+              npm install --prefix "$door" --ignore-scripts --no-audit --no-fund
+            fi
+          done
+
+      - name: Type-check
+        working-directory: web/backend
+        run: npx tsc --noEmit
+
+      - name: Type-check tests
+        working-directory: web/backend
+        run: npm run typecheck:tests
+
+      - name: Jest
+        working-directory: web/backend
+        env:
+          NODE_OPTIONS: --max-old-space-size=6144
+        run: npx jest --config dev-scripts/jest.config.ts --rootDir . --ci
+
+  # The admin web UI type-checks nowhere else.
+  #
+  # Nine errors sat on main from 2026-09-04 to 2026-09-06 - a form registering
+  # six Pushover/Gotify/ntfy fields the config interface never declared, an
+  # API type missing the `defaultMinLevel` the roles page reads off it, two
+  # dead imports - because no workflow ever ran tsc over web/config-app. The
+  # backend job's two type-check steps cover web/backend only.
+  config-app-typecheck:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.21.0'
+          cache: 'npm'
+          cache-dependency-path: web/config-app/package-lock.json
+
+      # config-app imports `@amiexpress/terminal`, and that package's types
+      # are its BUILT dist (its package.json "exports" points every subpath
+      # at dist/*.d.ts). Nothing builds it on install - there is no prepare
+      # script and this repo has no workspaces - so a bare checkout
+      # type-checked against a package that did not exist yet and failed with
+      # "Cannot find module '@amiexpress/terminal'". The terminal package
+      # imports the SDK, so the SDK is built first.
+      #
+      # --ignore-scripts on both: they depend on each other through `file:`
+      # paths, and npm's automatic prepare for a file: dependency rebuilds it
+      # WITHOUT its dev dependencies, which fails.
+      - name: Build the SDK
+        working-directory: sdk
+        run: npm ci --no-audit --no-fund --ignore-scripts && npm run build
+
+      - name: Build the terminal package
+        working-directory: packages/terminal
+        run: npm ci --no-audit --no-fund --ignore-scripts && npm run build
+
+      - name: Install config-app deps
+        working-directory: web/config-app
+        run: npm ci --no-audit --no-fund
+
+      - name: Type-check
+        working-directory: web/config-app
+        run: npx tsc --noEmit
+
+  # dev/console (the blessed sysop TUI) had NO CI coverage at all - it appears
+  # in no workflow, and the root `npm test` script didn't reach it either. Its
+  # test suite (added 2026-09-06) exists specifically to guard against a
+  # regression back to /api/config/security/:level, a SQLite-table mirror
+  # express.e never reads - the exact bug that made the TUI's old Access
+  # Levels page silently do nothing. A guard nothing runs is decoration, not
+  # coverage.
+  console-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.21.0'
+          cache: 'npm'
+          cache-dependency-path: dev/console/package-lock.json
+
+      - name: Install console deps
+        working-directory: dev/console
+        run: npm ci --no-audit --no-fund
+
+      - name: Type-check
+        working-directory: dev/console
+        run: npx tsc --noEmit
+
+      - name: Test
+        working-directory: dev/console
+        run: npm test
+
+  # The DoorRepo reference door is plain C89 with no dependencies beyond a
+  # host compiler, so its suite costs seconds. It is the only thing guarding
+  # the door's security predicates (shell-safety allowlist, archive-name
+  # path-traversal check) and its HTTP/list.txt parsers.
+  doorrepo-c-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Build and run the DoorRepo C suite
+        working-directory: examples/doorrepo-c
+        run: make test

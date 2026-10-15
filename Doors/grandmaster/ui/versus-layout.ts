@@ -1,0 +1,322 @@
+/**
+ * How many opponents can be shown as FULL boards, given the width.
+ *
+ * The versus screen has always decided this by counting opponents: one
+ * opponent gets a full board, more than one gets a grid of miniatures. That
+ * was right when every caller had exactly 80 columns. Now a door can ask the
+ * terminal to widen, and the sysop's point stands - "it can have MANY
+ * playfields that are forced to miniature maps today" - so the question is
+ * how many boards FIT, not how many exist.
+ *
+ * Kept as a pure function because the versus screen is two thousand lines of
+ * widgets and timers, and the interesting decision here is arithmetic.
+ */
+
+/** Player board (22) + NEXT/HOLD column (12) + garbage strip (3). */
+export const LEFT_PANEL_COLS = 37;
+
+/** One opponent board, borders included - the geometry the screen already uses. */
+export const OPPONENT_BOARD_COLS = 22;
+
+/** The 1v1 VS/attack panel beside a single opponent. */
+export const VS_INFO_COLS = 21;
+
+/**
+ * The narrowest a miniature grid can be and still say anything.
+ *
+ * A CPU battle fills the room with boards and leaves the rest in miniature;
+ * below this there is nowhere to draw the miniatures, so the last board is
+ * given back instead.
+ */
+export const MINIMAP_MIN_COLS = 8;
+
+/**
+ * The cascade: boards, then bars, then a leaderboard.
+ *
+ * A 99-player battle royale can never be all boards - 98 of them is 2,156
+ * columns - and a leaderboard alone throws away a wide terminal. "top few
+ * as boards, some minimaps and the rest as list" (2026-09-01), which is
+ * also how the field reads: the two closest to killing you get playfields,
+ * the next handful get danger bars, and the rest are a ranked list.
+ *
+ * It is a WIDE-terminal shape by arithmetic rather than by rule: all three
+ * sections need 37 + 22 + 14 + 22 columns before the first board is worth
+ * drawing, which no 80-column caller has. At 80 the screen behaves exactly
+ * as it did.
+ */
+export const CASCADE_MAX_BOARDS = 3;
+
+/** An opponent board with its border, in rows - the geometry the screen uses. */
+export const OPPONENT_BOARD_ROWS = 22;
+
+/** Row 0 is the door's own top margin; the last row is the stats line. */
+export const BOARD_TOP = 1;
+export const STATS_ROWS = 1;
+
+/** A bucket bar and its separator - the minimap grid's own geometry. */
+export const BUCKET_SLOT_COLS = 4;
+
+/** Bars are not worth a section below three of them, borders included. */
+export const MIN_BUCKETS_COLS = 3 * BUCKET_SLOT_COLS + 2;
+
+/** One leaderboard column: rank, name, level, height, plus borders. */
+export const LIST_COLUMN_COLS = 19;
+/**
+ * The narrowest standings strip, which is the same 21 columns the 1v1 VS
+ * panel gets - and for the same reason: 37 + 22 + 21 is exactly 80.
+ *
+ * It was 22, one column more than an 80-column terminal can spare beside a
+ * board, so at 80x25 the cascade gave up the board and drew a list on its
+ * own: "when gmaster is in 80x25 mode i only see myself but there is room
+ * for 1 fullsize board and the list" (2026-09-02).
+ */
+export const MIN_LIST_COLS = LIST_COLUMN_COLS + 2;
+
+/** Bars stop being readable past this many, however wide the panel is. */
+export const MAX_BUCKETS = 10;
+
+/** Fewer rows than this under the player's board is not a standings list. */
+export const MIN_LIST_ROWS = 6;
+
+/**
+ * A field this size cannot be shown in full at any width, so the cascade
+ * is honest about ranking it rather than pretending to be the whole field.
+ */
+export const CASCADE_MIN_OPPONENTS = 6;
+
+export interface VersusLayout {
+  /** How many opponents to draw as full boards. Zero means the minimap grid. */
+  fullBoards: number;
+  /** How many board ROWS the window holds - boards fill a grid, not a row. */
+  boardRows: number;
+  /** How many go to the minimap grid instead. */
+  minimaps: number;
+  /** How many go to the leaderboard, after the boards and the bars. */
+  listed: number;
+  /** Whether the 1v1 VS/attack panel fits beside them. */
+  showInfo: boolean;
+  /** Where the opponent boards start, in columns. */
+  left: number;
+  /** Columns each full board occupies. */
+  boardWidth: number;
+  /** Where the bucket-bar panel goes, and how wide. Zero width means none. */
+  minimapLeft: number;
+  minimapWidth: number;
+  /** Where the leaderboard goes. Zero width means none. */
+  listLeft: number;
+  listTop: number;
+  listWidth: number;
+  listHeight: number;
+  /** How tall the right-hand panels may be, in rows. */
+  panelHeight: number;
+}
+
+/**
+ * Humans get the boards; bots get miniatures if that is what it takes.
+ *
+ * "the normal case is probably that we have enough room for all human
+ * players" - which is the observation the whole rule turns on. A match can
+ * carry many CPU opponents, and forcing everyone to miniatures because eight
+ * bots will not fit wastes a wide terminal on the two people actually
+ * playing. So: fit everyone if everyone fits, otherwise fit the humans, and
+ * only fall back to an all-miniature grid when even they do not.
+ *
+ * Within a group it stays all-or-nothing. Showing two humans full and a
+ * third as a miniature would say something false about the match - the
+ * player would read the two as the threats.
+ */
+export function versusLayout(
+  screenWidth: number,
+  humanCount: number,
+  botCount: number = 0,
+  screenHeight: number = 25,
+): VersusLayout {
+  const total = Math.max(0, humanCount) + Math.max(0, botCount);
+  const available = Math.max(0, screenWidth - LEFT_PANEL_COLS);
+
+  /** Everything that is not on a board fills one grid panel, as it always did. */
+  const grid = (fullBoards: number, showInfo = false): VersusLayout => {
+    const left = LEFT_PANEL_COLS + fullBoards * OPPONENT_BOARD_COLS;
+    const rest = total - fullBoards;
+    return {
+      fullBoards,
+      boardRows: 1,
+      minimaps: rest,
+      listed: 0,
+      showInfo,
+      left: LEFT_PANEL_COLS,
+      boardWidth: OPPONENT_BOARD_COLS,
+      minimapLeft: rest > 0 ? left : 0,
+      minimapWidth: rest > 0 ? Math.max(0, screenWidth - left - (showInfo ? VS_INFO_COLS : 0)) : 0,
+      listLeft: 0,
+      listTop: BOARD_TOP,
+      listWidth: 0,
+      listHeight: 0,
+      panelHeight: OPPONENT_BOARD_ROWS,
+    };
+  };
+
+  if (total <= 0) return { ...grid(0), minimaps: 0, minimapWidth: 0, minimapLeft: 0 };
+
+  const fits = (n: number): boolean => {
+    if (n <= 0) return false;
+    // A lone opponent is the classic 1v1 and wants the VS panel beside it,
+    // but the board matters more than the numbers: below that, board only.
+    if (n === 1) return available >= OPPONENT_BOARD_COLS;
+    return Math.floor(available / OPPONENT_BOARD_COLS) >= n;
+  };
+
+  if (fits(total)) {
+    return grid(total, total === 1 && available >= OPPONENT_BOARD_COLS + VS_INFO_COLS);
+  }
+
+  // A FIELD OF BOTS TAKES WHAT FITS: boards first, miniatures for the rest.
+  //
+  // The all-or-nothing rule above is about HUMANS - two people full and a
+  // third in miniature says something false about who the threats are. A CPU
+  // battle has no such reading, and refusing the one board that does fit left
+  // forty columns of black beside three miniature bars on an 80-column
+  // screen: "we have room for one full cpu playfield in ansimode for the cpu
+  // battle, add it and keep the remaining ones as minimaps" (2026-09-06).
+  //
+  // The last board is given up if taking it would leave the miniatures no
+  // room to be drawn in - a board and an invisible remainder is worse than a
+  // board fewer and a legible one.
+  // Past the cascade's threshold the cascade decides: a hundred bots is what
+  // it was written for, and one board beside ninety-nine bars is the shape it
+  // exists to replace.
+  if (humanCount === 0 && total < CASCADE_MIN_OPPONENTS && fits(1)) {
+    let boards = Math.min(total, Math.floor(available / OPPONENT_BOARD_COLS));
+    const roomLeft = (n: number) => screenWidth - (LEFT_PANEL_COLS + n * OPPONENT_BOARD_COLS);
+    while (boards > 1 && total - boards > 0 && roomLeft(boards) < MINIMAP_MIN_COLS) boards -= 1;
+    if (total - boards > 0 && roomLeft(boards) < MINIMAP_MIN_COLS) boards = Math.max(0, boards - 1);
+    if (boards > 0) return grid(boards, total === 1 && available >= OPPONENT_BOARD_COLS + VS_INFO_COLS);
+  }
+
+  // Humans before bots, but only while the field is small enough for the
+  // rest to be miniatures. With one human and a lobby of bots this branch
+  // used to fire every time -  is true on any terminal - so a
+  // battle royale showed one board and a wall of minimaps, and a WIDER
+  // terminal changed nothing at all. Past the cascade's threshold the
+  // cascade decides, which is what puts boards and a standings list on
+  // screen instead ("the minimaps made no sense in gmaster battle royal").
+  if (humanCount > 0 && fits(humanCount) && total < CASCADE_MIN_OPPONENTS) {
+    return grid(humanCount, humanCount === 1 && total === 1
+      && available >= OPPONENT_BOARD_COLS + VS_INFO_COLS);
+  }
+
+  const cascaded = cascade(screenWidth, total, screenHeight);
+  if (cascaded) return cascaded;
+
+  return grid(0);
+}
+
+/**
+ * Boards, then bars, then the leaderboard - or null if it does not fit.
+ *
+ * Only for a field too large to show any other way, and only where all
+ * three sections have room. Sections are filled in priority order: a board
+ * is the most information about one opponent, a bar is the next most, and
+ * the list is what a hundred players look like. Anything that cannot be
+ * given a section is simply not drawn, which is why each has a minimum.
+ */
+function cascade(screenWidth: number, total: number, screenHeight: number): VersusLayout | null {
+  if (total < CASCADE_MIN_OPPONENTS) return null;
+
+  const available = Math.max(0, screenWidth - LEFT_PANEL_COLS);
+  const rows = Math.max(1, Math.floor((screenHeight - BOARD_TOP - STATS_ROWS) / OPPONENT_BOARD_ROWS));
+  const maxColumns = Math.floor(available / OPPONENT_BOARD_COLS);
+  if (maxColumns < 1) return null;
+
+  // Room under the player's own board, once the stats line has its row.
+  const belowTop = BOARD_TOP + OPPONENT_BOARD_ROWS + STATS_ROWS;
+  const belowRows = screenHeight - belowTop;
+  const belowFits = belowRows >= MIN_LIST_ROWS;
+
+  // As many playfields as the window holds, and the standings wherever
+  // they still fit. Boards first and boards always: "the minimaps made no
+  // sense in gmaster battle royal, replace them with full players and the
+  // list can be moved under the players playfield" (2026-09-02).
+  for (let columns = maxColumns; columns >= 0; columns--) {
+    const boards = Math.min(columns * rows, total);
+    const leftover = total - boards;
+    const boardsEnd = LEFT_PANEL_COLS + columns * OPPONENT_BOARD_COLS;
+
+    const base: VersusLayout = {
+      fullBoards: boards,
+      boardRows: rows,
+      minimaps: 0,
+      listed: leftover,
+      showInfo: false,
+      left: LEFT_PANEL_COLS,
+      boardWidth: OPPONENT_BOARD_COLS,
+      minimapLeft: 0,
+      minimapWidth: 0,
+      listLeft: 0,
+      listTop: BOARD_TOP,
+      listWidth: 0,
+      listHeight: 0,
+      panelHeight: rows * OPPONENT_BOARD_ROWS,
+    };
+
+    if (boards <= 0 && leftover > 0 && columns > 0) continue;
+
+    if (leftover === 0) {
+      if (boards <= 0) continue;
+      return base;
+    }
+
+    // Under the player's board is the calm place for it: the field stays
+    // one uninterrupted grid of playfields.
+    if (belowFits) {
+      return {
+        ...base,
+        listLeft: 0,
+        listTop: belowTop,
+        listWidth: LEFT_PANEL_COLS,
+        listHeight: belowRows,
+      };
+    }
+
+    // No room below - the standings take whatever width the boards left.
+    const rightWidth = available - columns * OPPONENT_BOARD_COLS;
+    if (rightWidth >= MIN_LIST_COLS) {
+      return {
+        ...base,
+        listLeft: boardsEnd,
+        listTop: BOARD_TOP,
+        listWidth: rightWidth,
+        listHeight: rows * OPPONENT_BOARD_ROWS,
+      };
+    }
+  }
+
+  return null;
+}
+
+/** Where the Nth full opponent board starts. */
+export function boardLeft(index: number): number {
+  return LEFT_PANEL_COLS + index * OPPONENT_BOARD_COLS;
+}
+
+/**
+ * Where the Nth board goes when the boards form a grid.
+ *
+ * Down each column, then across, so the first boards - the opponents
+ * closest to killing you - are the leftmost ones, next to your own board.
+ */
+export function boardPosition(index: number, rows: number): { left: number; top: number } {
+  const column = Math.floor(index / Math.max(1, rows));
+  const row = index % Math.max(1, rows);
+  return {
+    left: LEFT_PANEL_COLS + column * OPPONENT_BOARD_COLS,
+    top: BOARD_TOP + row * OPPONENT_BOARD_ROWS,
+  };
+}
+
+/** The narrowest terminal that shows `count` opponents as full boards. */
+export function widthForFullBoards(count: number): number {
+  if (count <= 0) return LEFT_PANEL_COLS;
+  if (count === 1) return LEFT_PANEL_COLS + OPPONENT_BOARD_COLS + VS_INFO_COLS;
+  return LEFT_PANEL_COLS + count * OPPONENT_BOARD_COLS;
+}

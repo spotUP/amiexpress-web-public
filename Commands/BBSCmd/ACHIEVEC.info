@@ -1,0 +1,10 @@
+BBSCMD=ACHIEVEC
+NAME=Achievements (C door)
+TYPE=XIM
+LOCATION=Doors/ACHIEVEC/achievec
+DESCRIPTION=Your achievements and scoreboards - the C port of ACHIEVE
+ACCESS=1
+MULTINODE=YES
+PRIORITY=SAME
+STACK=8192
+MIN_COLUMNS=40

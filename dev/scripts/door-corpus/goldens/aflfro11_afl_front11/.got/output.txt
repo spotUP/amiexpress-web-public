@@ -1,0 +1,17 @@
+
+
+        [FRONTSTAT V1.1]  (c) 1993 By FuZzY/ALPHA FLiGHT - DiABoLo BBS
+    -====================================================================-
+     ND#  ALIAS/HANDLE          LOCATION              ACTION
+    -====================================================================-
+      1.  -----!YOUR NODE!----- --------------------- FRONTSTATUS V1.1 
+      2.  sysop                 Server Room           IDLE             
+      3.  sysop                 Server Room           IDLE             
+      4.  sysop                 Server Room           IDLE             
+      5.  sysop                 Server Room           IDLE             
+      6.  sysop                 Server Room           IDLE             
+      7.  sysop                 Server Room           IDLE             
+      8.  sysop                 Server Room           IDLE             
+      9.  sysop                 Server Room           IDLE             
+    -====================================================================-
+

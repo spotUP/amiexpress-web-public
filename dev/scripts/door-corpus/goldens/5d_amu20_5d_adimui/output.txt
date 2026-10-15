@@ -1,0 +1,10 @@
+
+-- ---[ 5D-AdiMUI v2.0  ]------ - -- -- ---[ [tHE aDDiCT/5D!] ]--- -- - -
+
+             Please wait, Sysop, Sysop is on the way!!!  
+
+-- ---[ 5D-AdiMUI v2.0  ]------ - -- -- ---[ [tHE aDDiCT/5D!] ]--- -- - -
+
+
+Config: DOORS:5D-AdiMUI/5D-AdiMUI.CFG *NOT* found!
+

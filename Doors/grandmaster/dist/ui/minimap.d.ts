@@ -1,0 +1,142 @@
+/**
+ * Minimap Renderer
+ *
+ * Battle Royale opponent visualization.
+ * Two modes driven by opponent count:
+ *
+ *   Bucket mode  (≤ BUCKET_THRESHOLD opponents):
+ *     Each player = a narrow vertical bar that fills from the bottom as
+ *     their stack grows.  Color changes green → yellow → red by danger.
+ *
+ *   Text list mode  (> BUCKET_THRESHOLD opponents):
+ *     Ranked leaderboard showing name, level, and stack height.
+ */
+import type { Board } from '../core/types';
+/**
+ * Opponent state for minimap
+ */
+export interface OpponentState {
+    id: string;
+    name: string;
+    board: Board;
+    level: number;
+    grade: string;
+    alive: boolean;
+    targeting?: boolean;
+    rank?: number;
+    /** Bumped by the tracker on every update; a renderer skips what it drew. */
+    revision?: number;
+    /**
+     * A CPU opponent rather than a person.
+     *
+     * The versus screen hands full boards to the humans first when not
+     * everyone fits (see ui/versus-layout.ts), so the tracker has to know
+     * which is which - the lobby knew, and the tracker did not.
+     */
+    isBot?: boolean;
+    /**
+     * Absolute cells of the opponent's CURRENTLY FALLING piece.
+     *
+     * `board` holds locked cells only, so a view rendered from it alone never
+     * shows a piece in flight - the piece simply materialises at the bottom
+     * the instant it locks, which is what the AI opponent looked like
+     * (reported live 2026-08-25). Precomputed at sample time so the renderer
+     * does not need the opponent's PieceManager.
+     */
+    pieceCells?: Array<{
+        x: number;
+        y: number;
+        type: string;
+    }>;
+}
+/**
+ * Minimap configuration (kept for backward-compat; only compact flag is used)
+ */
+export interface MinimapConfig {
+    width: number;
+    height: number;
+    showName: boolean;
+    showLevel: boolean;
+    showGrade: boolean;
+    compact: boolean;
+}
+/**
+ * MinimapRenderer — renders the battle-royale opponent panel.
+ */
+export declare class MinimapRenderer {
+    private config;
+    constructor(config?: Partial<MinimapConfig>);
+    /**
+     * Render opponents into `container`.
+     * Switches between bucket bars and text list automatically.
+     *
+     * `innerWidth` is the panel's content width. It was 41 for the whole life
+     * of this renderer because 80 columns minus the player's side left exactly
+     * that; now the grid can sit beside one or more full opponent boards and
+     * get far less, so how many bars fit is arithmetic rather than a constant.
+     */
+    renderBuckets(container: any, opponents: OpponentState[], innerWidth?: number): void;
+    /**
+     * Render opponents as the ranked leaderboard, whatever their number.
+     *
+     * renderBuckets picks bars or list by how many there are; the cascade has
+     * already made that choice for each section (ui/versus-layout.ts), so the
+     * list section must not turn into bars when the field thins out.
+     */
+    renderList(container: any, opponents: OpponentState[], innerWidth?: number): void;
+    /** Rows the stack occupies (0 = empty board, board.height = topped out). */
+    private stackHeight;
+    /** Color string based on fill fraction (0–1). */
+    private dangerColor;
+    /**
+     * Bucket bar mode — up to BUCKET_THRESHOLD players as vertical bars.
+     *
+     * Layout (container content, tags enabled):
+     *   Row  0     : 3-char names, space-separated
+     *   Rows 1-18  : bar fill (full blocks from bottom up)
+     *   Row 19     : level numbers
+     */
+    private buildBuckets;
+    /**
+     * Text list mode — ranked leaderboard for large lobbies.
+     *
+     * Format (columns derived from the panel's width; the name column is what
+     * gives when the panel is narrow, because the rank and the numbers are
+     * what the list is FOR):
+     *   # Name       Lv Ht
+     *   ─────────────────────
+     *   1 Opponent1  05  12
+     *   ...
+     */
+    private buildTextList;
+    /**
+     * Update minimap configuration
+     */
+    setConfig(config: Partial<MinimapConfig>): void;
+}
+/**
+ * Opponent Tracker — manages live opponent states.
+ */
+export declare class OpponentTracker {
+    private opponents;
+    /**
+     * Bumped on every update, so a renderer can tell what it has already drawn.
+     *
+     * The versus screen repaints at 60 Hz but opponents are SAMPLED at about
+     * 10 - so five frames in six, every opponent board was rebuilt from a state
+     * identical to the one already on screen. With a full field on a wide
+     * terminal that was the whole frame budget: 14 ms of the 16 ms tick went on
+     * boards that had not changed ("can gmasters battle royale be optimized?
+     * it's laggy with all the players and action on screen", 2026-09-02).
+     */
+    private revision;
+    updateOpponent(id: string, state: Partial<OpponentState>): void;
+    removeOpponent(id: string): void;
+    getOpponents(): OpponentState[];
+    getAliveOpponents(): OpponentState[];
+    getTargetingOpponents(): OpponentState[];
+    clear(): void;
+    count(): number;
+    aliveCount(): number;
+}
+//# sourceMappingURL=minimap.d.ts.map

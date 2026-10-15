@@ -1,0 +1,8 @@
+
+
+              FileID V1.4 by Byteandi (Mystic/X-Design)
+              (*.Lha/*.Exe/*.Zip/*.Dms/*.Txt) Supported
+
+ None testing for FILE_ID.DIZ...
+Error (FileId.info)
+

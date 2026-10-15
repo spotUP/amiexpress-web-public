@@ -1,0 +1,5 @@
+-=- NEWS (C) 1994 Hydra of RDC,LSD and Maniacs -=- 
+Oooh, i see you've not read the news before
+Creating User Data..Error!
+Error Creating User data, make sure i can access the following path
+DOORS:News/Users/#?

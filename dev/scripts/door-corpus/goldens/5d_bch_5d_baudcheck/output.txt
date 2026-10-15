@@ -1,0 +1,5 @@
+
+         [- >5D-BaudCheck V0.01< By SvEN tHE CREAToR Of 5th Dynasty -]
+
+Can Not Open 'Doors:5D-BaudCheck/5D-BaudCheck.info'!
+

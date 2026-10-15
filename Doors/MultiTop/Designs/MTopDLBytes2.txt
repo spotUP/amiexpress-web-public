@@ -1,0 +1,21 @@
+[4;33m                                                                             [0m
+[4;33;44m No | Name              | Group / Location    |   Down Bytes | Files | Calls [0m
+[0m
+[0m 01. [32mSMITH !             [33mIndependent           [37m3.617.209.638  [35m 4.514  [36m 1.009
+[0m 02. [32mZANY                [33m -*- DEBRIS -*-       [33m2.454.473.515  [35m 4.416  [36m 2.251
+[0m 03. [32mPiLGRiM             [33m[PENTAX/THE GHETTO]   [31m1.306.336.464  [35m 2.186  [36m 1.263
+[0m 04. [32mblackwiz            [33mBorlange              [36m1.195.273.136  [35m 1.301  [36m   696
+[0m 05. [32mKorpen              [33mHaparanda, Sweden!    [36m  902.538.153  [35m 1.168  [36m 1.015
+[0m 06. [32mBad Karma           [33mnuke kilrah           [36m  830.384.830  [35m   935  [36m 1.102
+[0m 07. [32mSHAN                [33mGotta get connected!  [36m  819.637.344  [35m 2.159  [36m 1.543
+[0m 08. [32mSCREWBALL           [33mGryningstiden..       [36m  812.065.242  [35m   785  [36m   418
+[0m 09. [32m[ TRAiDOR! ]        [33mLONELY AS HELL!       [36m  799.032.642  [35m 1.512  [36m   699
+[0m 10. [32mTrava               [33mThe Home Boys         [36m  757.542.362  [35m   967  [36m   342
+[0m 11. [32mRasta Man           [33m--**(To BUSY)**--     [36m  756.645.770  [35m   838  [36m 1.030
+[0m 12. [32mbon                 [33mlidingoe              [36m  650.742.085  [35m   759  [36m 1.051
+[0m 13. [32mX-Citing            [33mInternet Surfer!      [36m  557.087.187  [35m 1.042  [36m 1.632
+[0m 14. [32mSNIPER              [33m#ð:. ¡NSANE'95 .:ð#   [36m  544.350.598  [35m   778  [36m   694
+[0m 15. [32mVAFFEL KILLER       [33m(*) PRESTIGE (*)      [36m  508.046.093  [35m   777  [36m   586
+[4;33m                                                                             [0m
+[4;33;44m   UP: 28.875.703.393 bytes /  47.601 files | MultiTop v2.1   By Bobo/Mystic [0m
+[4;33;44m DOWN: 40.526.999.025 bytes /  70.952 files | CALLS: 312.076  Design By EzCo [0m

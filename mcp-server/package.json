@@ -1,0 +1,19 @@
+{
+  "name": "amiexpress-docs-mcp-server",
+  "version": "1.0.0",
+  "description": "MCP server providing AmiExpress-Web project documentation",
+  "type": "module",
+  "bin": {
+    "amiexpress-docs-mcp": "./index.js"
+  },
+  "scripts": {
+    "start": "node index.js",
+    "build-indexes": "node build-indexes.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.25.1"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

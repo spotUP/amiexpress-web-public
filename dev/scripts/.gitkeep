@@ -1,0 +1,14 @@
+# Scripts Directory
+
+All project scripts are organized here by category.
+
+## For Future Development
+
+When creating new scripts, place them in the appropriate subdirectory:
+- deployment/ - Deployment, CI/CD, release automation
+- arexx/ - BBS automation, door scripts
+- build/ - Build, compilation, packaging scripts
+
+Create new subdirectories as needed for new script categories.
+
+See README.md for full guidelines.

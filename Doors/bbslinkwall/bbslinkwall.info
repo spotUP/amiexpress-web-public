@@ -1,0 +1,11 @@
+MENUNAME=BBSLink Wall
+CMDNAME=bbslinkwall
+DOORTYPE=SDK
+RUNTYPE=nodejs
+DESCRIPTION=BBSLink Wall - One-liner wall for BBS messages
+CATEGORY=Communication
+VERSION=1.0.0
+AUTHOR=AmiExpress Team
+SECURITY=0
+TIMELIMIT=0
+ENABLED=1

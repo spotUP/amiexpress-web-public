@@ -1,0 +1,938 @@
+/**
+ * Internode Chat Handler
+ * Real-time user-to-user chat system
+ *
+ * Based on INTERNODE_CHAT_COMPLETE.md documentation
+ * Implements Socket.io event handlers for real-time messaging
+ */
+
+import { Socket } from 'socket.io';
+import { LoggedOnSubState, BBSState } from '../../constants/bbs-states';
+import { getSystemTime } from '../../utils/date-time.util';
+
+import type { BBSSession } from '../../index';
+import {
+  emitterForSession,
+  emitterForUserId,
+  type SessionEmitter,
+} from '../../server/session-emitter-registry';
+import { internodeChatMembers, emitToMembers } from '../../server/session-rooms';
+import { report } from '../../achievements/reporter';
+// Session type
+
+// Dependencies (injected)
+let db: any;
+let sessions: Map<string, BBSSession>;
+let io: any;
+
+export function setInternodeChatDependencies(deps: {
+  db: any;
+  sessions: Map<string, BBSSession>;
+  io: any;
+}) {
+  db = deps.db;
+  sessions = deps.sessions;
+  io = deps.io;
+}
+
+/**
+ * Convert ANSI color code to hex color for cursor OSC sequence
+ */
+function ansiColorToHex(ansiCode: number): string {
+  const colorMap: { [key: number]: string } = {
+    31: 'ff0000', // Red
+    32: '00ff00', // Green
+    33: 'ffff00', // Yellow
+    34: '0000ff', // Blue
+    35: 'ff00ff', // Magenta
+    36: '00ffff'  // Cyan
+  };
+  return colorMap[ansiCode] || 'ff0000'; // Default to red
+}
+
+/**
+ * Calculate username color hash (same logic used for message display)
+ */
+function getUsernameColor(username: string): number {
+  const usernameColors = [31, 32, 33, 34, 35, 36];
+  let hash = 0;
+  for (let i = 0; i < username.length; i++) {
+    hash = username.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  return usernameColors[Math.abs(hash) % usernameColors.length];
+}
+
+/**
+ * Handle chat:request - User requests chat with another user
+ * Based on INTERNODE_CHAT_DAY2_COMPLETE.md lines 47-131
+ */
+export async function handleChatRequest(socket: Socket, session: BBSSession, data: { targetUsername: string }) {
+  try {
+    const { targetUsername } = data;
+console.log('🔥 [CHAT] handleChatRequest called, targetUsername:', targetUsername);
+
+    // Validation 1: Check if user is logged in
+    if (!session.user) {
+console.log('❌ [CHAT] Validation failed: User not logged in');
+      socket.emit('chat:error', 'You must be logged in to use chat');
+      return;
+    }
+console.log('✅ [CHAT] Validation 1 passed: User logged in');
+
+    // Validation 2: Check if initiator is available for chat
+console.log('🔍 [CHAT] Checking availableForChat:', session.user.availableForChat);
+    if (!session.user.availableForChat) {
+console.log('❌ [CHAT] Validation failed: User not available for chat');
+      socket.emit('chat:error', 'You must toggle your chat availability first (CHAT TOGGLE)');
+      return;
+    }
+console.log('✅ [CHAT] Validation 2 passed: User available for chat');
+
+    // Validation 3: Check if initiator is already in chat
+    if (session.subState === LoggedOnSubState.CHAT) {
+console.log('❌ [CHAT] Validation failed: User already in chat');
+      socket.emit('chat:error', 'You are already in a chat session');
+      return;
+    }
+console.log('✅ [CHAT] Validation 3 passed: User not in chat');
+
+    // Validation 4: Find target user in database
+console.log('🔍 [CHAT] Looking up target user:', targetUsername);
+    const targetUser = await db.getUserByUsernameForOLM(targetUsername);
+    if (!targetUser) {
+console.log('❌ [CHAT] Validation failed: Target user not found');
+      socket.emit('chat:error', `User "${targetUsername}" not found`);
+      return;
+    }
+console.log('✅ [CHAT] Validation 4 passed: Target user found:', targetUser.username);
+
+    // Validation 5: Cannot chat with self
+    if (targetUser.id === session.user.id) {
+console.log('❌ [CHAT] Validation failed: Self-chat attempt');
+      socket.emit('chat:error', 'You cannot chat with yourself');
+      return;
+    }
+console.log('✅ [CHAT] Validation 5 passed: Not chatting with self');
+
+    // Validation 6: Check if target is online
+console.log('🔍 [CHAT] Looking for target session, total sessions:', sessions.size);
+    let targetSession: BBSSession | null = null;
+    let targetSocketId: string | null = null;
+    for (const [socketId, sess] of Array.from(sessions.entries())) {
+console.log(`  Checking session: user=${sess.user?.username}, id=${sess.user?.id}, socketId=${socketId}, sess.socketId=${sess.socketId}`);
+      if (sess.user?.id === targetUser.id) {
+        targetSession = sess;
+        targetSocketId = socketId; // Use the Map key (actual socket ID)
+console.log('  ✅ FOUND target session!');
+console.log('  Target socketId from map:', socketId);
+console.log('  Target session.socketId:', sess.socketId);
+        break;
+      }
+    }
+
+    if (!targetSession) {
+console.log('❌ [CHAT] Validation failed: Target not online');
+      socket.emit('chat:error', `${targetUsername} is not currently online`);
+      return;
+    }
+console.log('✅ [CHAT] Validation 6 passed: Target is online');
+
+    // Validation 7: Check if target is available for chat
+console.log('🔍 [CHAT] Target availableForChat:', targetUser.availableForChat);
+    if (!targetUser.availableForChat) {
+console.log('❌ [CHAT] Validation failed: Target not available');
+      socket.emit('chat:error', `${targetUsername} is not available for chat`);
+      return;
+    }
+console.log('✅ [CHAT] Validation 7 passed: Target available for chat');
+
+    // Validation 8: Check if target is already in chat
+console.log('🔍 [CHAT] Target subState:', targetSession.subState);
+    if (targetSession.subState === LoggedOnSubState.CHAT) {
+console.log('❌ [CHAT] Validation failed: Target in another chat');
+      socket.emit('chat:error', `${targetUsername} is currently in another chat`);
+      return;
+    }
+console.log('✅ [CHAT] Validation 8 passed: Target not in chat');
+
+    // Create chat session in database
+console.log('📝 [CHAT] Creating chat session in database...');
+console.log('  initiatorSocket:', socket.id);
+console.log('  recipientSocket (from map):', targetSocketId);
+console.log('  recipientSocket (from session):', targetSession.socketId);
+
+    const sessionId = await db.createChatSession(
+      session.user.id,           // initiatorId
+      session.user.username,     // initiatorUsername
+      socket.id,                 // initiatorSocket
+      targetUser.id,             // recipientId
+      targetUser.username,       // recipientUsername
+      targetSocketId!            // recipientSocket - Use Map key, not session.socketId
+    );
+console.log('✅ [CHAT] Chat session created:', sessionId);
+
+    // Send confirmation to initiator in terminal
+console.log('📤 [CHAT] Sending confirmation to initiator...');
+    socket.emit('ansi-output',
+      '\r\n\x1b[32m✓ Chat request sent to ' + targetUsername + '\x1b[0m\r\n' +
+      '\x1b[33mWaiting for response (30 seconds)...\x1b[0m\r\n'
+    );
+
+    // Also emit Socket.io event
+    socket.emit('chat:request-sent', {
+      sessionId,
+      to: targetUsername
+    });
+console.log('✅ [CHAT] Confirmation displayed in initiator terminal');
+
+    // Send invite to target user via terminal output
+console.log('📤 [CHAT] Sending invite to target:', targetSocketId);
+
+    // Display invitation in recipient's terminal with Y/n prompt.
+    // TP-10: through the ONE session-emitter registry. `io.to(<id>)` addressed
+    // a socket.io room, so a telnet or SSH recipient was never invited - and
+    // the id here is the `sessions` map KEY, which is the nodeId, so the room
+    // was empty for a web recipient too.
+    emitterForSession(targetSession, io)?.emit('ansi-output',
+      '\r\n\r\n' +
+      '\x1b[36m' + session.user.username + '\x1b[0m wants to chat with you, accept (Y/n)? '
+    );
+
+    // Set recipient's session state to LIVECHAT_INVITATION_RESPONSE
+    // and store the sessionId for handling Y/n response
+    const recipientSessions = Array.from(sessions.entries());
+    for (const [sid, sess] of recipientSessions) {
+      if (sess.user?.id === targetSession.user.id) {
+        sess.subState = LoggedOnSubState.LIVECHAT_INVITATION_RESPONSE;
+        sess.pendingChatSessionId = sessionId;
+        break;
+      }
+    }
+
+    // Also emit Socket.io event for future frontend enhancements
+    io.to(targetSocketId!).emit('chat:invite', {
+      sessionId,
+      from: session.user.username,
+      fromId: session.user.id
+    });
+console.log('✅ [CHAT] Invite displayed in target terminal');
+
+    // Set 30-second timeout
+    setTimeout(async () => {
+      const chatSession = await db.getChatSession(sessionId);
+      if (chatSession && chatSession.status === 'requesting') {
+        // Timeout - cancel invite
+        await db.updateChatSessionStatus(sessionId, 'timeout');
+
+        // Notify initiator via terminal
+        socket.emit('ansi-output',
+          '\r\n\x1b[31m✗ Chat request timed out\x1b[0m\r\n' +
+          `${targetUsername} did not respond within 30 seconds.\r\n`
+        );
+        socket.emit('chat:timeout', {
+          username: targetUsername
+        });
+
+        // Notify recipient via terminal (cancel invite)
+        // TP-10: the same registry the invite went out through.
+        emitterForSession(targetSession, io)?.emit('ansi-output',
+          '\r\n\x1b[33m✗ Chat request from ' + session.user.username + ' has expired.\x1b[0m\r\n'
+        );
+        io.to(targetSocketId!).emit('chat:invite-cancelled', {
+          from: session.user.username
+        });
+      }
+    }, 30000);
+
+  } catch (error) {
+console.error('[INTERNODE CHAT] Error handling chat request:', error);
+    socket.emit('chat:error', 'Failed to send chat request');
+  }
+}
+
+/**
+ * Handle chat:accept - User accepts incoming chat request
+ * Based on INTERNODE_CHAT_DAY2_COMPLETE.md lines 133-218
+ */
+export async function handleChatAccept(socket: Socket, session: BBSSession, data: { sessionId: string }) {
+  try {
+console.log('🚀 [handleChatAccept] ENTRY POINT - Function called');
+console.log('   socket.id:', socket.id);
+console.log('   session.user?.id:', session.user?.id);
+console.log('   data:', data);
+
+    const { sessionId } = data;
+console.log('   sessionId extracted:', sessionId);
+
+    // Get chat session from database
+console.log('   Calling db.getChatSession...');
+    const chatSession = await db.getChatSession(sessionId);
+console.log('   chatSession result:', chatSession);
+
+    if (!chatSession) {
+console.log('❌ [handleChatAccept] Chat session not found in DB');
+      socket.emit('chat:error', 'Chat session not found');
+      return;
+    }
+
+    // Validate recipient
+console.log('   Validating recipient...', chatSession.recipientId, 'vs', session.user?.id);
+    if (chatSession.recipientId !== session.user?.id) {
+console.log('❌ [handleChatAccept] User is not the recipient');
+      socket.emit('chat:error', 'You are not the recipient of this chat');
+      return;
+    }
+
+    // Validate status
+console.log('   Validating status:', chatSession.status);
+    if (chatSession.status !== 'requesting') {
+console.log('❌ [handleChatAccept] Chat status is not requesting:', chatSession.status);
+      socket.emit('chat:error', 'Chat request is no longer valid');
+      return;
+    }
+
+console.log('✅ [handleChatAccept] All validations passed, continuing...');
+
+    // Update session status to active
+    await db.updateChatSessionStatus(sessionId, 'active');
+
+    // Get initiator session from Map (capture socket ID from Map key)
+    let initiatorSession: BBSSession | null = null;
+    let initiatorSocketId: string | null = null;
+    for (const [socketId, sess] of Array.from(sessions.entries())) {
+      if (sess.user?.id === chatSession.initiatorId) {
+        initiatorSession = sess;
+        initiatorSocketId = socketId; // CRITICAL: Use Map key as socket ID
+        break;
+      }
+    }
+
+    if (!initiatorSession || !initiatorSocketId) {
+      socket.emit('chat:error', 'Initiator is no longer online');
+      await db.updateChatSessionStatus(sessionId, 'ended');
+      return;
+    }
+    // Achievements (SP2): both parties chatted node to node. Non-throwing.
+    report(initiatorSession as any, 'social.nodechat');
+    report(session as any, 'social.nodechat');
+
+    // Get recipient session from Map (CRITICAL: we need the actual session object from the Map, not the passed-in copy)
+    let recipientSession: BBSSession | null = null;
+    let recipientSocketId: string | null = null;
+    for (const [socketId, sess] of Array.from(sessions.entries())) {
+      if (sess.user?.id === chatSession.recipientId) {
+        recipientSession = sess;
+        recipientSocketId = socketId; // CRITICAL: Use Map key as socket ID
+console.log('✅ [CHAT ACCEPT] Found recipient session in Map');
+        break;
+      }
+    }
+
+    if (!recipientSession) {
+      socket.emit('chat:error', 'Recipient session not found in Map');
+      await db.updateChatSessionStatus(sessionId, 'ended');
+      return;
+    }
+
+    // No socket.io room: the chat's members are the two sessions whose
+    // chatSessionId is set just below (server/session-rooms.ts). A telnet or
+    // SSH end has no socket.io socket to join one - accepting threw here
+    // (web-vs-telnet audit item 3, 2026-09-28).
+console.log('🏠 [CHAT ACCEPT] Recipient socket:', recipientSocketId);
+console.log('🏠 [CHAT ACCEPT] Initiator socket:', initiatorSocketId);
+
+    // Save previous states for both users (using the actual sessions from the Map)
+    initiatorSession.previousState = initiatorSession.state;
+    initiatorSession.previousSubState = initiatorSession.subState;
+    initiatorSession.chatSessionId = sessionId;
+    initiatorSession.chatWithUserId = recipientSession.user?.id;
+    initiatorSession.chatWithUsername = recipientSession.user?.username;
+
+    recipientSession.previousState = recipientSession.state;
+    recipientSession.previousSubState = recipientSession.subState;
+    recipientSession.chatSessionId = sessionId;
+    recipientSession.chatWithUserId = chatSession.initiatorId;
+    recipientSession.chatWithUsername = chatSession.initiatorUsername;
+
+    // Set both users to CHAT substate (CRITICAL: modifying the actual session objects from the Map)
+    initiatorSession.subState = LoggedOnSubState.CHAT;
+    recipientSession.subState = LoggedOnSubState.CHAT;
+console.log('✅ [CHAT ACCEPT] Both users set to CHAT substate');
+console.log('   Initiator subState:', initiatorSession.subState);
+console.log('   Recipient subState:', recipientSession.subState);
+
+    // Notify both users that chat has started
+console.log('📤 [CHAT ACCEPT] Emitting chat:started to both ends');
+    emitToMembers(internodeChatMembers(sessionId), io, 'chat:started', {
+      sessionId,
+      withUsername: recipientSession.user?.username,
+      withUserId: recipientSession.user?.id
+    });
+
+    // Set up fixed chat layout for initiator
+    // Clear screen, set scroll region (lines 1-21), typing preview at 22, separator at 23, input at 24
+    // Also set cursor color to initiator's username color
+    const initiatorColor = getUsernameColor(initiatorSession.user!.username);
+    const initiatorCursorHex = ansiColorToHex(initiatorColor);
+    const setupScreen =
+      '\x1b%G' + // Select UTF-8 character set (fixes åäö and other international characters)
+      '\x1b[2J\x1b[H' + // Clear screen, home cursor
+      '\x1b[1;21r' + // Set scroll region to lines 1-21 (messages area - allows scrolling)
+      `\x1b]12;#${initiatorCursorHex}\x07` + // Set cursor color to user's chat color (OSC 12)
+      '\x1b[32m═══════════════════════════════════════════════════════════════\x1b[0m\r\n' +
+      `\x1b[36m                CHAT SESSION WITH ${recipientSession.user?.username.toUpperCase()}\x1b[0m\r\n` +
+      '\x1b[32m═══════════════════════════════════════════════════════════════\x1b[0m\r\n' +
+      '\r\n' +
+      'Type your messages and press ENTER to send. Type /END to exit.\r\n' +
+      '\r\n' +
+      '\x1b[23;1H' + // Move to line 23
+      '\x1b[36m─────────────────────────────────────────────────────────────────\x1b[0m' +
+      '\x1b[24;1H'; // Move to line 24 for input
+
+    // TP-10: addressed to the session, so a telnet initiator sees the chat
+    // layout instead of nothing.
+    emitterForSession(initiatorSession, io)?.emit('ansi-output', setupScreen);
+
+    // Set up fixed chat layout for recipient
+    // Also set cursor color to recipient's username color
+    const recipientColor = getUsernameColor(recipientSession.user!.username);
+    const recipientCursorHex = ansiColorToHex(recipientColor);
+    const setupScreenRecipient =
+      '\x1b%G' + // Select UTF-8 character set (fixes åäö and other international characters)
+      '\x1b[2J\x1b[H' + // Clear screen, home cursor
+      '\x1b[1;21r' + // Set scroll region to lines 1-21 (messages area - allows scrolling)
+      `\x1b]12;#${recipientCursorHex}\x07` + // Set cursor color to user's chat color (OSC 12)
+      '\x1b[32m═══════════════════════════════════════════════════════════════\x1b[0m\r\n' +
+      `\x1b[36m                CHAT SESSION WITH ${chatSession.initiatorUsername.toUpperCase()}\x1b[0m\r\n` +
+      '\x1b[32m═══════════════════════════════════════════════════════════════\x1b[0m\r\n' +
+      '\r\n' +
+      'Type your messages and press ENTER to send. Type /END to exit.\r\n' +
+      '\r\n' +
+      '\x1b[23;1H' + // Move to line 23
+      '\x1b[36m─────────────────────────────────────────────────────────────────\x1b[0m' +
+      '\x1b[24;1H'; // Move to line 24 for input
+
+    socket.emit('ansi-output', setupScreenRecipient);
+
+  } catch (error) {
+console.error('[INTERNODE CHAT] Error accepting chat:', error);
+    socket.emit('chat:error', 'Failed to accept chat');
+  }
+}
+
+/**
+ * Handle chat:decline - User declines incoming chat request
+ * Based on INTERNODE_CHAT_DAY2_COMPLETE.md lines 220-258
+ */
+export async function handleChatDecline(socket: Socket, session: BBSSession, data: { sessionId: string }) {
+  try {
+    const { sessionId } = data;
+
+    // Get chat session from database
+    const chatSession = await db.getChatSession(sessionId);
+    if (!chatSession) {
+      socket.emit('chat:error', 'Chat session not found');
+      return;
+    }
+
+    // Validate recipient
+    if (chatSession.recipientId !== session.user?.id) {
+      socket.emit('chat:error', 'You are not the recipient of this chat');
+      return;
+    }
+
+    // Update session status to declined
+    await db.updateChatSessionStatus(sessionId, 'declined');
+
+    // Notify initiator via terminal.
+    // TP-10: the initiator is found by user id through the registry; the
+    // stored `initiatorSocket` is a socket.io id, which a telnet caller has no
+    // equivalent of.
+    emitterForUserId(chatSession.initiatorId, io)?.emitter.emit('ansi-output',
+      '\r\n\x1b[31m✗ Chat request declined\x1b[0m\r\n' +
+      `${chatSession.recipientUsername} has declined your chat request.\r\n`
+    );
+    io.to(chatSession.initiatorSocket).emit('chat:declined', {
+      username: chatSession.recipientUsername
+    });
+
+    // Confirm to decliner via terminal
+    socket.emit('ansi-output',
+      '\r\n\x1b[32m✓ Chat request declined\x1b[0m\r\n' +
+      `You declined the chat request from ${chatSession.initiatorUsername}.\r\n`
+    );
+
+  } catch (error) {
+console.error('[INTERNODE CHAT] Error declining chat:', error);
+    socket.emit('chat:error', 'Failed to decline chat');
+  }
+}
+
+/**
+ * Handle real-time keystroke transmission - transmit each character immediately to partner
+ * Displays partner's typing in the scroll region (line 22) instead of input line (line 24)
+ */
+export async function handleChatKeystroke(socket: Socket, session: BBSSession, data: { keystroke: string }) {
+  try {
+    const { keystroke } = data;
+
+    if (!session.chatSessionId) {
+      return;
+    }
+
+    // Get chat session
+    const chatSession = await db.getChatSession(session.chatSessionId);
+    if (!chatSession || chatSession.status !== 'active') {
+      return;
+    }
+
+    // Get partner's user ID and username
+    const partnerId = session.user!.id === chatSession.initiatorId
+      ? chatSession.recipientId
+      : chatSession.initiatorId;
+    const partnerUsername = session.user!.id === chatSession.initiatorId
+      ? chatSession.recipientUsername
+      : chatSession.initiatorUsername;
+
+    // Find partner's socket and session
+    let partnerSocketId: string | null = null;
+    let partnerSession: BBSSession | null = null;
+    for (const [socketId, sess] of Array.from(sessions.entries())) {
+      if (sess.user?.id === partnerId) {
+        partnerSocketId = socketId;
+        partnerSession = sess;
+        break;
+      }
+    }
+
+    if (!partnerSocketId || !partnerSession) {
+      return; // Partner not online
+    }
+
+    // Initialize partner's typing buffer if needed
+    if (!partnerSession.partnerTypingBuffer) {
+      partnerSession.partnerTypingBuffer = '';
+    }
+
+    // Update partner's typing buffer based on keystroke
+    if (keystroke === '\x7f') {
+      // Backspace - remove last character from buffer
+      if (partnerSession.partnerTypingBuffer.length > 0) {
+        partnerSession.partnerTypingBuffer = partnerSession.partnerTypingBuffer.slice(0, -1);
+      }
+    } else if (keystroke.length === 1 && keystroke >= ' ' && keystroke <= '~') {
+      // Printable character - add to buffer
+      partnerSession.partnerTypingBuffer += keystroke;
+    }
+
+    // Get sender's username color (same logic as message display)
+    const usernameColors = [31, 32, 33, 34, 35, 36];
+    let hash = 0;
+    for (let i = 0; i < session.user!.username.length; i++) {
+      hash = session.user!.username.charCodeAt(i) + ((hash << 5) - hash);
+    }
+    const userColor = usernameColors[Math.abs(hash) % usernameColors.length];
+
+    // Display typing preview at line 22 (below scroll region)
+    // Show solid cursor while typing, blink when idle
+    const now = Date.now();
+    const isTyping = (now - (partnerSession.lastTypingTime || 0)) < 500; // Less than 500ms since last keystroke = actively typing
+    partnerSession.lastTypingTime = now;
+
+    // Clear existing blink timer
+    if (partnerSession.typingBlinkTimer) {
+      clearInterval(partnerSession.typingBlinkTimer);
+      partnerSession.typingBlinkTimer = undefined;
+    }
+
+    // Show solid cursor while typing
+    // CRITICAL: Use save/restore cursor to preserve partner's typing position
+    // Otherwise moving to line 22 and back to line 24 disrupts their cursor position
+    const typingPreview =
+      '\x1b7' + // Save partner's cursor position (they're typing at line 24)
+      '\x1b[22;1H' + // Move to line 22 (typing preview line)
+      '\x1b[K' + // Clear line
+      (partnerSession.partnerTypingBuffer.length > 0
+        ? `\x1b[90m\x1b[${userColor}m${session.user!.username}:\x1b[0m ${partnerSession.partnerTypingBuffer}\x1b[${userColor}m█\x1b[0m`
+        : '') +
+      '\x1b8'; // Restore partner's cursor position (preserves column position at line 24)
+
+    // Send typing preview to partner.
+    // TP-10: `partnerSocketId` is the `sessions` map key - the nodeId - so
+    // this room was empty on EVERY transport. The registry resolves the
+    // partner's own sink from the session it was found on.
+    const partnerEmitter: SessionEmitter | null = emitterForSession(partnerSession, io);
+    partnerEmitter?.emit('ansi-output', typingPreview);
+
+    // Start blink timer after 500ms of no typing
+    if (partnerSession.partnerTypingBuffer.length > 0) {
+      partnerSession.typingBlinkTimer = setInterval(() => {
+        const timeSinceLastTyping = Date.now() - (partnerSession.lastTypingTime || 0);
+        if (timeSinceLastTyping >= 500 && partnerSession.partnerTypingBuffer && partnerSession.partnerTypingBuffer.length > 0) {
+          // Idle - send blinking cursor
+          const showCursor = Math.floor(Date.now() / 530) % 2 === 0;
+          const blinkPreview =
+            '\x1b7' + // Save partner's cursor position
+            '\x1b[22;1H' +
+            '\x1b[K' +
+            `\x1b[90m\x1b[${userColor}m${session.user!.username}:\x1b[0m ${partnerSession.partnerTypingBuffer}${showCursor ? `\x1b[${userColor}m█\x1b[0m` : ' '}` +
+            '\x1b8'; // Restore partner's cursor position
+          partnerEmitter?.emit('ansi-output', blinkPreview);
+        } else if (partnerSession.typingBlinkTimer) {
+          // Typing again or buffer cleared - stop blinking
+          clearInterval(partnerSession.typingBlinkTimer);
+          partnerSession.typingBlinkTimer = undefined;
+        }
+      }, 530); // Blink at 530ms intervals to match xterm cursor
+    }
+
+  } catch (error) {
+console.error('❌ [CHAT KEYSTROKE] Error:', error);
+  }
+}
+
+/**
+ * Handle chat:message - User sends message during active chat
+ * Based on INTERNODE_CHAT_DAY2_COMPLETE.md lines 260-316
+ */
+export async function handleChatMessage(socket: Socket, session: BBSSession, data: { message: string }) {
+  try {
+    const { message } = data;
+console.log('\n💬 [CHAT MESSAGE] Received message:', { message, from: session.user?.username, subState: session.subState });
+
+    // Validation 1: Check if in chat mode
+    if (session.subState !== LoggedOnSubState.CHAT) {
+console.log('❌ [CHAT MESSAGE] Validation failed: Not in chat mode. Current subState:', session.subState);
+      socket.emit('chat:error', 'You are not in a chat session');
+      return;
+    }
+console.log('✅ [CHAT MESSAGE] Validation 1 passed: User in CHAT mode');
+
+    // Validation 2: Check if chat session exists
+    if (!session.chatSessionId) {
+console.log('❌ [CHAT MESSAGE] Validation failed: No chatSessionId');
+      socket.emit('chat:error', 'No active chat session');
+      return;
+    }
+console.log('✅ [CHAT MESSAGE] Validation 2 passed: chatSessionId exists:', session.chatSessionId);
+
+    // Validation 3: Get chat session from database
+    const chatSession = await db.getChatSession(session.chatSessionId);
+console.log('🔍 [CHAT MESSAGE] Database chat session:', chatSession);
+    if (!chatSession || chatSession.status !== 'active') {
+console.log('❌ [CHAT MESSAGE] Validation failed: Chat session not active');
+      socket.emit('chat:error', 'Chat session is not active');
+      return;
+    }
+console.log('✅ [CHAT MESSAGE] Validation 3 passed: Chat session is active');
+
+    // Validation 4: Message length
+    if (message.length > 500) {
+console.log('❌ [CHAT MESSAGE] Validation failed: Message too long');
+      socket.emit('chat:error', 'Message too long (max 500 characters)');
+      return;
+    }
+
+    if (message.trim().length === 0) {
+console.log('⚠️  [CHAT MESSAGE] Empty message, ignoring');
+      return; // Ignore empty messages
+    }
+console.log('✅ [CHAT MESSAGE] Validation 4 passed: Message length OK');
+
+    // Sanitize message (remove ANSI escape codes) and ensure UTF-8 encoding
+    const sanitized = message.replace(/\x1b/g, '');
+    // Ensure proper UTF-8 encoding for international characters (åäö, etc.)
+    const utf8Message = Buffer.from(sanitized, 'utf8').toString('utf8');
+console.log('🧹 [CHAT MESSAGE] Sanitized message:', utf8Message);
+
+    // Save message to database
+console.log('💾 [CHAT MESSAGE] Saving to database...');
+    await db.saveChatMessage(
+      session.chatSessionId!,
+      session.user!.id,
+      session.user!.username,
+      utf8Message
+    );
+console.log('✅ [CHAT MESSAGE] Message saved to database');
+
+    // Clear typing buffers and timers for both users (message is being finalized)
+    // Find both users' sessions and clear their partnerTypingBuffer and blink timers
+    for (const [socketId, sess] of Array.from(sessions.entries())) {
+      if (sess.user?.id === chatSession.initiatorId || sess.user?.id === chatSession.recipientId) {
+        sess.partnerTypingBuffer = '';
+        if (sess.typingBlinkTimer) {
+          clearInterval(sess.typingBlinkTimer);
+          sess.typingBlinkTimer = undefined;
+        }
+      }
+    }
+
+    // Broadcast message to room (both users)
+    const members = internodeChatMembers(session.chatSessionId);
+    const timestamp = getSystemTime().toLocaleTimeString('en-US', {
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false
+    });
+
+console.log('📤 [CHAT MESSAGE] Broadcasting to', members.length, 'members');
+
+    emitToMembers(members, io, 'chat:message-received', {
+      sessionId: session.chatSessionId,
+      from: session.user!.username,
+      fromId: session.user!.id,
+      message: utf8Message,
+      timestamp
+    });
+console.log('✅ [CHAT MESSAGE] Emitted chat:message-received event');
+
+    // Assign color based on username (hash username to get consistent color)
+    const usernameColors = [31, 32, 33, 34, 35, 36]; // Red, Green, Yellow, Blue, Magenta, Cyan
+    let hash = 0;
+    for (let i = 0; i < session.user!.username.length; i++) {
+      hash = session.user!.username.charCodeAt(i) + ((hash << 5) - hash);
+    }
+    const userColor = usernameColors[Math.abs(hash) % usernameColors.length];
+
+    // Insert message into scroll region while keeping cursor at line 24
+    // Explicitly scroll the region up, then write message at bottom
+    const insertMessage =
+      '\x1b7' + // Save cursor position (line 24)
+      '\x1b[22;1H\x1b[K' + // Clear typing preview at line 22
+      '\x1b[S' + // Scroll Up (SU): Scroll the scroll region up by 1 line
+      '\x1b[21;1H' + // Move to line 21 (now a blank line after scroll)
+      `\x1b[36m${timestamp}\x1b[0m \x1b[${userColor}m${session.user!.username}:\x1b[0m ${utf8Message}` + // Write message
+      '\x1b8' + // Restore cursor to line 24
+      '\x1b[K'; // Clear input line
+
+    emitToMembers(members, io, 'ansi-output', insertMessage);
+console.log('✅ [CHAT MESSAGE] Emitted message in scroll region:', insertMessage.substring(0, 50) + '...');
+
+  } catch (error) {
+console.error('❌ [CHAT MESSAGE] Error sending message:', error);
+    socket.emit('chat:error', 'Failed to send message');
+  }
+}
+
+/**
+ * Handle chat:end - User ends active chat session
+ * Based on INTERNODE_CHAT_DAY2_COMPLETE.md lines 318-382
+ */
+export async function handleChatEnd(socket: Socket, session: BBSSession) {
+  try {
+    // Validation 1: Check if in chat mode
+    if (session.subState !== LoggedOnSubState.CHAT) {
+      socket.emit('chat:error', 'You are not in a chat session');
+      return;
+    }
+
+    // Validation 2: Check if chat session exists
+    if (!session.chatSessionId) {
+      socket.emit('chat:error', 'No active chat session');
+      return;
+    }
+
+    const sessionId = session.chatSessionId;
+
+    // Get chat session from database
+    const chatSession = await db.getChatSession(sessionId);
+    if (!chatSession) {
+      // Session doesn't exist, just clean up local state
+      await cleanupChatSession(socket, session);
+      return;
+    }
+
+    // End session in database
+    await db.endChatSession(sessionId);
+
+    // Get statistics
+    const messageCount = await db.getChatMessageCount(sessionId);
+    const duration = Math.floor((Date.now() - new Date(chatSession.startedAt).getTime()) / 60000);
+
+    // Get partner session
+    const partnerId = session.user!.id === chatSession.initiatorId
+      ? chatSession.recipientId
+      : chatSession.initiatorId;
+
+console.log(`🔍 [CHAT END] Looking for partner with ID: ${partnerId}`);
+
+    let partnerSession: BBSSession | null = null;
+    let partnerSocketId: string | null = null;
+    for (const [socketId, sess] of Array.from(sessions.entries())) {
+console.log(`  Checking session: socketId=${socketId}, userId=${sess.user?.id}`);
+      if (sess.user?.id === partnerId) {
+        partnerSession = sess;
+        partnerSocketId = socketId;
+console.log(`  ✅ FOUND PARTNER! socketId=${socketId}`);
+        break;
+      }
+    }
+
+console.log(`🔍 [CHAT END] Partner session found: ${!!partnerSession}, socketId: ${partnerSocketId}`);
+
+    // Both ends, while both still carry the chat's id (cleanup is below).
+    const members = internodeChatMembers(sessionId);
+
+    // Notify both users
+    emitToMembers(members, io, 'chat:ended', {
+      sessionId,
+      messageCount,
+      duration
+    });
+
+    // Build end message
+    const endMessage =
+      '\x1b[?25l' + // Hide cursor
+      '\x1b[r' + // Reset scroll region to full screen
+      '\x1b]12;#ff0000\x07' + // Reset cursor color to red (OSC 12)
+      '\x1b[2J\x1b[H' + // Clear entire screen and move cursor to home
+      '\x1b[3J' + // Clear scrollback buffer
+      '\r\n\x1b[32m═══════════════════════════════════════════════════════════════\x1b[0m\r\n' +
+      '\x1b[36m                     CHAT SESSION ENDED\x1b[0m\r\n' +
+      '\x1b[32m═══════════════════════════════════════════════════════════════\x1b[0m\r\n' +
+      '\r\n' +
+      `Chat with ${session.chatWithUsername} has ended.\r\n` +
+      `Duration: ${duration} minute(s)\r\n` +
+      `Messages exchanged: ${messageCount}\r\n` +
+      '\r\n' +
+      '\x1b[32mPress any key to continue...\x1b[0m' +
+      '\x1b[?25h'; // Show cursor again
+
+    // Send to both users
+    emitToMembers(members, io, 'ansi-output', endMessage);
+
+    // Clean up both users and set them to menu display state
+console.log(`🧹 [CHAT END] Cleaning up initiating user: ${session.user?.username}`);
+    await cleanupChatSession(socket, session);
+    session.menuPause = true; // Force menu redisplay
+
+console.log(`🧹 [CHAT END] Attempting partner cleanup: partnerSession=${!!partnerSession}, partnerSocketId=${partnerSocketId}`);
+    if (partnerSession && partnerSocketId) {
+      // TP-10: the partner's sink, whichever transport it is.
+      const partnerSocket = emitterForSession(partnerSession, io);
+console.log(`🧹 [CHAT END] Partner socket found: ${!!partnerSocket}`);
+      if (partnerSocket) {
+console.log(`🧹 [CHAT END] Cleaning up partner user: ${partnerSession.user?.username}`);
+        await cleanupChatSession(partnerSocket, partnerSession);
+        partnerSession.menuPause = true; // Force menu redisplay
+console.log(`🧹 [CHAT END] Partner cleanup complete`);
+      } else {
+console.log(`❌ [CHAT END] Partner socket NOT FOUND for socketId: ${partnerSocketId}`);
+      }
+    } else {
+console.log(`❌ [CHAT END] Partner session or socketId is NULL`);
+    }
+
+
+  } catch (error) {
+console.error('[INTERNODE CHAT] Error ending chat:', error);
+    socket.emit('chat:error', 'Failed to end chat');
+  }
+}
+
+/**
+ * Handle chat disconnect - User disconnects during active chat
+ * Based on INTERNODE_CHAT_DAY2_COMPLETE.md lines 384-436
+ */
+export async function handleChatDisconnect(socket: Socket, session: BBSSession) {
+  try {
+    if (session.subState !== LoggedOnSubState.CHAT || !session.chatSessionId) {
+      return; // Not in chat, nothing to clean up
+    }
+
+    const sessionId = session.chatSessionId;
+
+    // Get chat session
+    const chatSession = await db.getChatSession(sessionId);
+    if (!chatSession) {
+      return;
+    }
+
+    // End session in database
+    await db.endChatSession(sessionId);
+
+    // Get partner
+    const partnerId = session.user!.id === chatSession.initiatorId
+      ? chatSession.recipientId
+      : chatSession.initiatorId;
+
+    const partnerUsername = session.user!.id === chatSession.initiatorId
+      ? chatSession.recipientUsername
+      : chatSession.initiatorUsername;
+
+    // Find partner session
+    let partnerSession: BBSSession | null = null;
+    for (const [socketId, sess] of Array.from(sessions.entries())) {
+      if (sess.user?.id === partnerId) {
+        partnerSession = sess;
+        break;
+      }
+    }
+
+    if (partnerSession) {
+      // Notify partner
+      io.to(partnerSession.socketId!).emit('chat:partner-disconnected', {
+        username: session.user!.username
+      });
+
+      // TP-10: both of these resolve the partner through the ONE registry, so
+      // a telnet partner is told the chat ended and is cleaned up instead of
+      // being left in CHAT with a dead counterpart.
+      const partnerEmitter = emitterForSession(partnerSession, io);
+      partnerEmitter?.emit('ansi-output',
+        '\x1b]12;#ff0000\x07' + // Reset cursor color to red
+        `\r\n\x1b[33m${session.user!.username} has disconnected. Chat ended.\x1b[0m\r\n`
+      );
+
+      // Clean up partner session
+      const partnerSocket = partnerEmitter;
+      if (partnerSocket) {
+        await cleanupChatSession(partnerSocket, partnerSession);
+      }
+    }
+
+
+  } catch (error) {
+console.error('[INTERNODE CHAT] Error handling chat disconnect:', error);
+  }
+}
+
+/**
+ * Cleanup chat session - Restore user to previous state
+ *
+ * TP-10: takes a `SessionEmitter` rather than a socket.io `Socket` - the
+ * surface a real Socket and a telnet/SSH connection emitter both satisfy, and
+ * all this function ever needed. Its two partner call sites resolve through
+ * `emitterForSession`, so a byte-transport partner is restored to the menu
+ * instead of being left in CHAT for ever.
+ */
+async function cleanupChatSession(socket: SessionEmitter, session: BBSSession) {
+console.log(`🧹 [CLEANUP CHAT] Starting cleanup for user: ${session.user?.username}`);
+console.log(`  Current subState: ${session.subState}`);
+console.log(`  Previous subState: ${session.previousSubState}`);
+
+  // Always restore to DISPLAY_MENU after chat ends
+  // Don't use previousSubState as it might be a chat-related state like livechat_invitation_response
+  session.subState = LoggedOnSubState.DISPLAY_MENU;
+
+console.log(`  New subState: ${session.subState}`);
+
+  // Clear chat fields
+  delete session.chatSessionId;
+  delete session.chatWithUserId;
+  delete session.chatWithUsername;
+  delete session.previousState;
+  delete session.previousSubState;
+
+  // Clear input buffer, typing buffer, and blink timer
+  session.inputBuffer = '';
+  session.partnerTypingBuffer = '';
+  if (session.typingBlinkTimer) {
+    clearInterval(session.typingBlinkTimer);
+    delete session.typingBlinkTimer;
+  }
+  delete session.lastTypingTime;
+
+  // Return to menu (handled by main command loop)
+  socket.emit('ansi-output', '\r\n');
+}

@@ -1,0 +1,170 @@
+{
+  "built": "2026-09-17T13:56:11.408Z",
+  "entries": [
+    {
+      "service": "bamboozle-1997",
+      "serviceTitle": "Bamboozle - Channel 4, 22 Dec 1997",
+      "page": 338,
+      "kind": "game",
+      "label": "Bamboozle - Channel 4, 22 Dec 1997"
+    },
+    {
+      "service": "bamboozle-1993",
+      "serviceTitle": "Bamboozle - Channel 4, 31 Dec 1993",
+      "page": 338,
+      "kind": "game",
+      "label": "Bamboozle - Channel 4, 31 Dec 1993"
+    },
+    {
+      "service": "ch4-1997",
+      "serviceTitle": "Channel 4 Teletext, 17 March 1997",
+      "page": 256,
+      "kind": "game",
+      "label": "Channel 4 Teletext, 17 March 1997"
+    },
+    {
+      "service": "ceefax-1985",
+      "serviceTitle": "Ceefax - BBC1, 28 Dec 1985",
+      "page": 1796,
+      "kind": "program",
+      "label": "PATCH2",
+      "command": "*EXEC PATCH2",
+      "playable": true
+    },
+    {
+      "service": "ceefax-1985",
+      "serviceTitle": "Ceefax - BBC1, 28 Dec 1985",
+      "page": 1797,
+      "kind": "program",
+      "label": "VIDIED",
+      "command": "*TYPE VIDIED",
+      "playable": true
+    },
+    {
+      "service": "ceefax-1985",
+      "serviceTitle": "Ceefax - BBC1, 28 Dec 1985",
+      "page": 1797,
+      "kind": "program",
+      "label": "F.T",
+      "command": "*TYPE FT",
+      "playable": true
+    },
+    {
+      "service": "ceefax-1985",
+      "serviceTitle": "Ceefax - BBC1, 28 Dec 1985",
+      "page": 1798,
+      "kind": "program",
+      "label": "VIDFAX1",
+      "command": "*TYPE VIDFAX1",
+      "playable": true
+    },
+    {
+      "service": "ceefax-1985",
+      "serviceTitle": "Ceefax - BBC1, 28 Dec 1985",
+      "page": 1799,
+      "kind": "program",
+      "label": "VIDFAX2",
+      "command": "*TYPE VIDFAX2",
+      "playable": true
+    },
+    {
+      "service": "ceefax-1985",
+      "serviceTitle": "Ceefax - BBC1, 28 Dec 1985",
+      "page": 1800,
+      "kind": "program",
+      "label": "DATE",
+      "command": "CHAIN \"DATE\"",
+      "playable": true
+    },
+    {
+      "service": "ceefax-1985",
+      "serviceTitle": "Ceefax - BBC1, 28 Dec 1985",
+      "page": 1801,
+      "kind": "program",
+      "label": "CALEND",
+      "command": "*TYPE CALEND",
+      "playable": true
+    },
+    {
+      "service": "ceefax-1985",
+      "serviceTitle": "Ceefax - BBC1, 28 Dec 1985",
+      "page": 1808,
+      "kind": "program",
+      "label": "BUBBLES",
+      "command": "CHAIN \"BUBBLES\"",
+      "playable": true
+    },
+    {
+      "service": "ceefax-1985",
+      "serviceTitle": "Ceefax - BBC1, 28 Dec 1985",
+      "page": 1809,
+      "kind": "program",
+      "label": "GAMEINF",
+      "command": "*TYPE GAMEINF",
+      "playable": true
+    },
+    {
+      "service": "ceefax-1985",
+      "serviceTitle": "Ceefax - BBC1, 28 Dec 1985",
+      "page": 1811,
+      "kind": "program",
+      "label": "BREAKOU",
+      "command": "CHAIN \"BREAKOU\"",
+      "playable": true
+    },
+    {
+      "service": "ceefax-1985",
+      "serviceTitle": "Ceefax - BBC1, 28 Dec 1985",
+      "page": 1812,
+      "kind": "program",
+      "label": "FLASH",
+      "command": "CHAIN \"FLASH\"",
+      "playable": true
+    },
+    {
+      "service": "ceefax-1985",
+      "serviceTitle": "Ceefax - BBC1, 28 Dec 1985",
+      "page": 1813,
+      "kind": "program",
+      "label": "SNAKE",
+      "command": "CHAIN \"SNAKE\"",
+      "playable": true
+    },
+    {
+      "service": "ceefax-1985",
+      "serviceTitle": "Ceefax - BBC1, 28 Dec 1985",
+      "page": 1814,
+      "kind": "program",
+      "label": "GALAXY",
+      "command": "CHAIN \"GALAXY\"",
+      "playable": true
+    },
+    {
+      "service": "ceefax-1985",
+      "serviceTitle": "Ceefax - BBC1, 28 Dec 1985",
+      "page": 1815,
+      "kind": "program",
+      "label": "GOMOKU",
+      "command": "CHAIN \"GOMOKU\"",
+      "playable": true
+    },
+    {
+      "service": "ceefax-1985",
+      "serviceTitle": "Ceefax - BBC1, 28 Dec 1985",
+      "page": 1816,
+      "kind": "program",
+      "label": "MASTRBR",
+      "command": "CHAIN \"MASTRBR\"",
+      "playable": true
+    },
+    {
+      "service": "ceefax-1985",
+      "serviceTitle": "Ceefax - BBC1, 28 Dec 1985",
+      "page": 1817,
+      "kind": "program",
+      "label": "REVERSI",
+      "command": "CHAIN \"REVERSI\"",
+      "playable": true
+    }
+  ]
+}

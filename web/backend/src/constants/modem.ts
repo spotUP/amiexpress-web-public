@@ -1,0 +1,1 @@
+export const DEFAULT_CONNECTION_BAUD = 57600;

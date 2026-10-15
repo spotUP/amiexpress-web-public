@@ -1,0 +1,7 @@
+                                                                               
+                      BelchVIEW v1.3 by Noisy Belch/LOGIC                      
+
+            ARC ARJ DMS LHA LZH LZX RUN SFX SHR TXT WRP ZIP ZOM ZOO
+
+DOORS:BelchVIEW/BelchVIEW.config NOT FOUND
+

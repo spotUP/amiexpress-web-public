@@ -1,0 +1,7 @@
+BBSCMD=HDRDROP
+TYPE=TS
+LOCATION=Doors/header-dropdown-demo
+DESCRIPTION=Header dropdown menu bar demo
+MULTINODE=YES
+PRIORITY=SAME
+PRELOADER=YES

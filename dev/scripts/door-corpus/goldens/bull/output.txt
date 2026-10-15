@@ -1,0 +1,2 @@
+Update bulletins? (y/N): No!
+Tell Sysop to install BullView v1.0 correct.

@@ -1,0 +1,38 @@
+
+
+
+Warning less than 1 min(s) time remaining on BBS
+Users in chat
+-------------
+Rm(   0) Node  0 (29656133 min(s))> 
+Rm(   0) Node  1 (   0 min(s))> sysop
+Rm(   0) Node  2 (29656133 min(s))> 
+Rm(   0) Node  3 (29656133 min(s))> 
+Rm(   0) Node  4 (29656133 min(s))> 
+Rm(   0) Node  5 (29656133 min(s))> 
+Rm(   0) Node  6 (29656133 min(s))> 
+Rm(   0) Node  7 (29656133 min(s))> 
+Rm(   0) Node  8 (29656133 min(s))> 
+Rm(   0) Node  9 (29656133 min(s))> 
+Rm(   0) Node  10 (29656133 min(s))> 
+Rm(   0) Node  11 (29656133 min(s))> 
+Rm(   0) Node  12 (29656133 min(s))> 
+Rm(   0) Node  13 (29656133 min(s))> 
+Rm(   0) Node  14 (29656133 min(s))> 
+Rm(   0) Node  15 (29656133 min(s))> 
+Rm(   0) Node  16 (29656133 min(s))> 
+press <RETURN> to continue                          Rm(   0) Node  17 (29656134 min(s))> 
+Rm(   0) Node  18 (29656134 min(s))> 
+Rm(   0) Node  19 (29656134 min(s))> 
+Rm(   0) Node  20 (29656134 min(s))> 
+Rm(   0) Node  21 (29656134 min(s))> 
+Rm(   0) Node  22 (29656134 min(s))> 
+Rm(   0) Node  23 (29656134 min(s))> 
+Rm(   0) Node  24 (29656134 min(s))> 
+Rm(   0) Node  25 (29656134 min(s))> 
+Rm(   0) Node  26 (29656134 min(s))> 
+Rm(   0) Node  27 (29656134 min(s))> 
+Rm(   0) Node  28 (29656134 min(s))> 
+Rm(   0) Node  29 (29656134 min(s))> 
+Rm(   0) Node  30 (29656134 min(s))> 
+Rm(   0) Node  31 (29656134 min(s))> 

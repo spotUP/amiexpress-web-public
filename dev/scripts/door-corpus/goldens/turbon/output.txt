@@ -1,0 +1,7 @@
+
+TuRBo NeWSCaN PRO 2.z By [MaCK LiFeGuaRD/DuaL CReW-SHiNiNG] 68000 CoDe By [NZO]
+
+No configuration record, using defaults. Hit 'config' at /X prompt.
+No Sysop Configuration Record. Using Default Sysop Access of 200+.
+[MM-DD-YY], [T]oday, [Y]esterday, [W]eekly, [S]ince Call, [-X]Days, [C]entury
+            [ENTER=Last Logon] >Directories: [1-2], [A]ll, [U]pload, [H]old, [?]Help, [ENTER=EXIT] 

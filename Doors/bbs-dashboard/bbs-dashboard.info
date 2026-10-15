@@ -1,0 +1,11 @@
+MENUNAME=BBS Dashboard
+CMDNAME=dashboard
+DOORTYPE=SDK
+RUNTYPE=nodejs
+DESCRIPTION=BBS System Dashboard with stats and monitoring
+CATEGORY=Utilities
+VERSION=1.0.0
+AUTHOR=AmiExpress-Web
+SECURITY=200
+TIMELIMIT=0
+ENABLED=1

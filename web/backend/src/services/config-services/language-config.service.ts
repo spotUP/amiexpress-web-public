@@ -1,0 +1,250 @@
+/**
+ * Language Configuration Service
+ * Handles system languages and individual language configuration
+ */
+
+import type { Database } from '../../database';
+import type { ConfigRepository } from '../../database/config-repository';
+import type { SystemLanguages, Language } from '../../database/types';
+import { SystemLanguagesSchema, LanguageSchema, type RequestContext } from '../config.schemas';
+import { applyTooltypes, moveInfoFile, readTooltypeMap, resolveDirectory } from '../../utils/info-file.util';
+import { config as appConfig } from '../../config';
+import * as fs from 'fs';
+import * as path from 'path';
+import { getSystemTime } from '../../utils/date-time.util';
+import { isRealInfoFile } from '../../utils/info-file.util';
+
+export class LanguageConfigService {
+  private configRepo: ConfigRepository;
+
+  constructor(private database: Database) {
+    this.configRepo = database.getConfigRepository();
+  }
+
+  async getSystemLanguages(): Promise<SystemLanguages> {
+    let config = this.configRepo.getSystemLanguages();
+    if (!config) {
+      config = this.configRepo.createSystemLanguages({});
+    }
+    return config;
+  }
+
+  async updateSystemLanguages(
+    updates: Partial<SystemLanguages>,
+    context: RequestContext
+  ): Promise<SystemLanguages> {
+    const validated = SystemLanguagesSchema.parse(updates);
+    const oldConfig = await this.getSystemLanguages();
+    const newConfig = this.configRepo.updateSystemLanguages(validated);
+
+    this.configRepo.logConfigChange('system_languages', 1, 'UPDATE',
+      context.userId, context.username, oldConfig, newConfig,
+      context.ipAddress, context.userAgent);
+
+    return newConfig;
+  }
+
+  async getLanguages(): Promise<Language[]> {
+    const bbsRoot = appConfig.get('dataDir');
+    const languagesDir = resolveDirectory(bbsRoot, 'Languages');
+
+    if (!fs.existsSync(languagesDir)) {
+console.warn('[LanguageConfigService] Languages/ directory not found');
+      return this.configRepo.getLanguages();
+    }
+
+    try {
+      const languages: Language[] = [];
+      const files = fs.readdirSync(languagesDir);
+      const infoFiles = files.filter(isRealInfoFile);
+
+      let languageNum = 1;
+      for (const infoFile of infoFiles) {
+        const infoPath = path.join(languagesDir, infoFile);
+        const stats = fs.statSync(infoPath);
+        const toolTypes = readTooltypeMap(infoPath);
+
+        const languageName = infoFile.replace(/\.info$/i, '');
+
+        // Read the tooltypes the writer writes. They were ignored: the code
+        // came from the first two letters of the filename, the path was the
+        // .info file itself, and enabled was hardcoded true - so editing any
+        // of the three wrote a key nothing read back, and the form showed the
+        // derived value again. Where a tooltype is absent the old derivation
+        // still applies, so a language that has never been edited reads the
+        // same as before.
+        languages.push({
+          id: languageNum++,
+          language_number: languageNum - 1,
+          title: languageName,
+          language_code: toolTypes.get('CODE') || languageName.substring(0, 2).toLowerCase(),
+          file_path: toolTypes.get('PATH') || infoPath,
+          enabled: toolTypes.get('ENABLED') !== '0',
+          created_at: stats.birthtime,
+          updated_at: stats.mtime
+        });
+      }
+
+console.log(`[LanguageConfigService] Loaded ${languages.length} languages`);
+      return languages;
+    } catch (error) {
+console.error('[LanguageConfigService] Error reading Languages/ directory:', error);
+      return this.configRepo.getLanguages();
+    }
+  }
+
+  /**
+   * Resolve the language the admin is pointing at.
+   *
+   * The list this id came from is the one on DISK, where the id is the entry's
+   * position. Looking that number up as a database rowid is a different
+   * namespace: with the table empty every edit throws "not found", and with
+   * the table partly filled it edits a DIFFERENT record. Disk first, mirror as
+   * the fallback - the same resolution ComputerConfigService.getComputerType
+   * uses, and the same fault the doors page had.
+   */
+async getLanguage(id: number): Promise<Language | null> {
+    const onDisk = await this.getLanguages();
+    const fromDisk = onDisk.find(l => l.id === id);
+    if (fromDisk) return fromDisk;
+
+    return this.configRepo.getLanguage(id);
+  }
+
+  async getLanguageByCode(code: string): Promise<Language | null> {
+    return this.configRepo.getLanguageByCode(code);
+  }
+
+  async createLanguage(
+    language: Omit<Language, 'id' | 'created_at' | 'updated_at'>,
+    context: RequestContext
+  ): Promise<Language> {
+    const validated = LanguageSchema.parse(language) as Omit<Language, 'id' | 'created_at' | 'updated_at'>;
+
+    const allLanguages = await this.getLanguages();
+    const existing = allLanguages.find(l =>
+      l.language_code.toUpperCase() === validated.language_code.toUpperCase()
+    );
+    if (existing) {
+      throw new Error(`Language code '${validated.language_code}' already exists`);
+    }
+
+    const newLanguage = this.configRepo.createLanguage(validated);
+    if (!newLanguage) throw new Error('Failed to create language');
+
+    this.writeLanguageInfoFile(validated);
+    this.configRepo.logConfigChange('languages', newLanguage.id, 'CREATE',
+      context.userId, context.username, undefined, newLanguage,
+      context.ipAddress, context.userAgent);
+
+    return newLanguage;
+  }
+
+  async updateLanguage(
+    id: number,
+    updates: Partial<Language>,
+    context: RequestContext
+  ): Promise<Language> {
+    const validated = LanguageSchema.partial().parse(updates);
+    const oldLanguage = await this.getLanguage(id);
+    if (!oldLanguage) throw new Error(`Language ${id} not found`);
+
+    if (validated.language_code && validated.language_code !== oldLanguage.language_code) {
+      const allLanguages = await this.getLanguages();
+      const existing = allLanguages.find(l =>
+        l.language_code.toUpperCase() === validated.language_code!.toUpperCase() && l.id !== id
+      );
+      if (existing) {
+        throw new Error(`Language code '${validated.language_code}' already exists`);
+      }
+    }
+
+    if (validated.title && validated.title !== oldLanguage.title) {
+      // MOVE the icon rather than deleting it - see moveInfoFile. Deleting it
+      // and writing the new name left a text stub where an icon had been.
+      this.renameLanguageInfoFile(oldLanguage.title, validated.title);
+    }
+
+    const dbLanguage = this.configRepo.updateLanguage(id, validated);
+    const newLanguage: Language = dbLanguage || {
+      ...oldLanguage,
+      ...validated,
+      updated_at: getSystemTime()
+    };
+
+    const mergedLanguage = { ...oldLanguage, ...validated };
+    this.writeLanguageInfoFile(mergedLanguage);
+
+    this.configRepo.logConfigChange('languages', newLanguage.id, 'UPDATE',
+      context.userId, context.username, oldLanguage, newLanguage,
+      context.ipAddress, context.userAgent);
+
+    return newLanguage;
+  }
+
+  async deleteLanguage(id: number, context: RequestContext): Promise<boolean> {
+    const oldLanguage = await this.getLanguage(id);
+    if (!oldLanguage) return false;
+
+    const deleted = this.configRepo.deleteLanguage(id);
+    this.deleteLanguageInfoFile(oldLanguage.title);
+
+    if (deleted) {
+      this.configRepo.logConfigChange('languages', oldLanguage.id, 'DELETE',
+        context.userId, context.username, oldLanguage, undefined,
+        context.ipAddress, context.userAgent);
+    }
+
+    return deleted;
+  }
+
+  private writeLanguageInfoFile(language: Partial<Language>): void {
+    if (!language.title) return;
+
+    const bbsRoot = appConfig.get('dataDir');
+    const languagesDir = resolveDirectory(bbsRoot, 'Languages');
+    const infoPath = path.join(languagesDir, `${language.title}.info`);
+
+    try {
+      if (!fs.existsSync(languagesDir)) {
+        fs.mkdirSync(languagesDir, { recursive: true });
+      }
+
+      // Only the three fields this form owns are written; applyTooltypes
+      // leaves the icon and every other tooltype in the file alone.
+      const toolTypes = new Map<string, string>();
+      if (language.language_code) toolTypes.set('CODE', language.language_code);
+      if (language.file_path) toolTypes.set('PATH', language.file_path);
+      if (language.enabled !== undefined) toolTypes.set('ENABLED', language.enabled ? '1' : '0');
+
+      applyTooltypes(infoPath, toolTypes);
+
+console.log(`[LanguageConfigService] Wrote ${infoPath}`);
+    } catch (error) {
+console.error(`[LanguageConfigService] Failed to write ${infoPath}:`, error);
+    }
+  }
+
+  private renameLanguageInfoFile(oldTitle: string, newTitle: string): void {
+    const languagesDir = resolveDirectory(appConfig.get('dataDir'), 'Languages');
+    try {
+      moveInfoFile(path.join(languagesDir, `${oldTitle}.info`), path.join(languagesDir, `${newTitle}.info`));
+    } catch (error) {
+console.error(`[LanguageConfigService] Failed to rename ${oldTitle}.info to ${newTitle}.info:`, error);
+    }
+  }
+
+  private deleteLanguageInfoFile(title: string): void {
+    const bbsRoot = appConfig.get('dataDir');
+    const infoPath = path.join(resolveDirectory(bbsRoot, 'Languages'), `${title}.info`);
+
+    if (fs.existsSync(infoPath)) {
+      try {
+        fs.unlinkSync(infoPath);
+console.log(`[LanguageConfigService] Deleted ${infoPath}`);
+      } catch (error) {
+console.error(`[LanguageConfigService] Failed to delete ${infoPath}:`, error);
+      }
+    }
+  }
+}

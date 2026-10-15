@@ -1,0 +1,233 @@
+/**
+ * Pure presentation helpers for DOORMAN's repository view.
+ *
+ * Split out of app.ts when that file hit the repo's 2000-line ceiling. These
+ * are the pieces with no blessed, no filesystem and no catalog behind them -
+ * text wrapping, selection clamping, the footer hint string and the hotkey
+ * registration table - which is also why they are the parts worth unit
+ * testing. app.ts re-exports them so existing importers and tests are
+ * unaffected.
+ */
+import type { KeyBinder } from './ViewManager';
+import type { DoorRepoMode } from './repoDataSource';
+import { T } from './door-theme';
+import { sanitizeForTags } from './ViewManager';
+
+/**
+ * Wraps text to the info pane's real width, breaking on spaces.
+ *
+ * Messages used to carry their own line breaks at a guessed width, which
+ * re-broke mid-word whenever the pane was narrower than the guess - the
+ * live BBS showed "fi les" and "thi s platform". Only the pane knows how
+ * wide it is.
+ */
+export function wrapText(text: string, width: number): string {
+  const safeWidth = Math.max(8, Math.floor(width));
+  const out: string[] = [];
+  for (const paragraph of text.split('\n')) {
+    let line = '';
+    for (const word of paragraph.split(/\s+/).filter(Boolean)) {
+      if (!line.length) {
+        line = word;
+      } else if (line.length + 1 + word.length <= safeWidth) {
+        line += ` ${word}`;
+      } else {
+        out.push(line);
+        line = word;
+      }
+    }
+    out.push(line);
+  }
+  return out.join('\n');
+}
+
+export function wrapToInfoPane(text: string, layout: any): string {
+  // -4 for the panel border and the padding the info box already applies.
+  const width = (layout?.infoWidth ?? layout?.width ?? 60) - 4;
+  return wrapText(text, width);
+}
+
+export function clampSelection(index: number, count: number): number {
+  if (count <= 0) return 0;
+  if (!Number.isFinite(index) || index < 0) return 0;
+  return Math.min(Math.floor(index), count - 1);
+}
+
+export function repoViewCurationAllowed(mode: DoorRepoMode): boolean {
+  return mode.kind !== 'consumer';
+}
+
+/** RepoView's per-entry footer hint string, gated by repo mode. Byte-
+ * identical to DOORMAN's pre-Task-8 string in owner mode (and disabled
+ * mode, which reads identically) -- only consumer mode differs, by omitting
+ * the Strip hint entirely rather than advertising a key that does nothing. */
+export function repoViewFooterParts(
+  mode: DoorRepoMode,
+  opts: { installed: boolean; hasJunk: boolean; hasDoc: boolean; narrow?: boolean }
+): string {
+  const inst = opts.installed ? 'Uninst' : 'Inst';
+  const curationAllowed = repoViewCurationAllowed(mode);
+  // A 40-column footer (the C64/PETSCII tier) holds five hints at most, and
+  // the nine below run to about eighty characters. Archive, Filter, System
+  // and Strip lose their hint there - the keys still work; the row simply
+  // cannot name them without folding onto the list above it.
+  if (opts.narrow) {
+    const narrowParts = [
+      `{${T.warn}-fg}R{/${T.warn}-fg}=${inst}`,
+      opts.hasDoc ? `{${T.warn}-fg}V{/${T.warn}-fg}=Doc` : null,
+      curationAllowed ? `{${T.warn}-fg}D{/${T.warn}-fg}=Del` : null,
+      `{${T.warn}-fg}ESC{/${T.warn}-fg}=Back`,
+      `{${T.warn}-fg}Q{/${T.warn}-fg}=Quit`,
+    ].filter(Boolean).join(' ');
+    return `{center}${narrowParts}{/center}`;
+  }
+  // Every hint is "KEY=Label". It used to mix that with bare words whose
+  // active letter was marked only by a colour highlight ("Strip", "Archive",
+  // "Quit") - which is invisible on plenty of real terminals, and led to
+  // "it doesn't say anywhere that S is used to strip".
+  const parts = [
+    `{${T.warn}-fg}R{/${T.warn}-fg}=${inst}`,
+    (opts.hasJunk && curationAllowed) ? `{${T.warn}-fg}S{/${T.warn}-fg}=Strip` : null,
+    opts.hasDoc  ? `{${T.warn}-fg}V{/${T.warn}-fg}=Doc` : null,
+    `{${T.warn}-fg}A{/${T.warn}-fg}=Archive`,
+    curationAllowed ? `{${T.warn}-fg}D{/${T.warn}-fg}=Delete` : null,
+    `{${T.warn}-fg}F{/${T.warn}-fg}=Filter`,
+    `{${T.warn}-fg}C{/${T.warn}-fg}=System`,
+    `{${T.warn}-fg}ESC{/${T.warn}-fg}=Back`,
+    `{${T.warn}-fg}Q{/${T.warn}-fg}=Quit`,
+  ].filter(Boolean).join('  ');
+  return `{center}${parts}{/center}`;
+}
+
+/**
+ * Whether [V]iew doc has anything to open for this entry.
+ *
+ * An owner's row carries the documentation itself (doc_raw). A consumer's
+ * row carries only the manifest's has_doc flag until something fetches the
+ * text - and reading doc_raw alone is what left the footer silent about
+ * [V] on every consumer row, months after the key started working.
+ */
+export function entryHasDoc(entry: { doc_raw?: string | null; has_doc?: boolean } | null): boolean {
+  if (!entry) return false;
+  return !!entry.doc_raw || entry.has_doc === true;
+}
+
+/** One row of an archive listing, in either source's spelling: the local
+ *  catalog service returns door_catalog_files rows (`is_junk`, 0 or 1), the
+ *  door server's detail endpoint returns `isJunk`. */
+export interface ArchiveFileRow {
+  path: string;
+  size: number;
+  is_junk?: number | boolean;
+  isJunk?: boolean;
+}
+
+function isJunkRow(file: ArchiveFileRow): boolean {
+  return file.isJunk === true || file.is_junk === 1 || file.is_junk === true;
+}
+
+/**
+ * The info pane's file-listing block, identical for both sources: the local
+ * catalog's door_catalog_files rows (owner mode) and the door server's
+ * detail rows (consumer mode). One renderer, so a consumer's listing cannot
+ * drift from an owner's.
+ *
+ * Returns '' for an empty list -- the pane simply shows nothing rather than
+ * an empty box, which is what it did when only the local source existed.
+ */
+export function renderFileLines(files: ArchiveFileRow[], limit = 25): string {
+  if (files.length === 0) return '';
+  const junk = files.filter(isJunkRow).length;
+  const junkTag = junk > 0 ? `  {${T.alert}-fg}${junk} ad files{/${T.alert}-fg}` : `  {${T.ok}-fg}clean{/${T.ok}-fg}`;
+  let out = `\n\n{${T.dim}-fg}─── ${files.length} files${junkTag}{/${T.dim}-fg}  {${T.dim}-fg}──────────────────────{/${T.dim}-fg}\n`;
+  for (const f of files.slice(0, limit)) {
+    const sz = f.size < 1024 ? `${f.size}b` : `${Math.round(f.size / 1024)}k`;
+    const junkMark = isJunkRow(f) ? `{${T.alert}-fg}!{/${T.alert}-fg}` : ' ';
+    const name = f.path.length > 34 ? '<' + f.path.slice(f.path.length - 33) : f.path;
+    out += `${junkMark} ${name.padEnd(34)} ${sz.padStart(5)}\n`;
+  }
+  if (files.length > limit) out += `{${T.dim}-fg}  ... and ${files.length - limit} more{/${T.dim}-fg}\n`;
+  return out;
+}
+
+/**
+ * The catalog's suggested tooltypes, as readable NAME=value lines.
+ *
+ * Stored as a JSON object of tooltype name -> value, read out of whatever
+ * the scanner could find - an archive's own icon, or its documentation.
+ * Plenty of rows are partial or plainly wrong ("LOCATION":"<dir>-",
+ * "TYPE":"XIM."), which is why this is only ever SHOWN to the sysop: an
+ * installed door's .info comes from the archive's own icon, never from
+ * here.
+ *
+ * Anything that is not a JSON object is returned as its own single line, so
+ * a differently-shaped row still tells the sysop something instead of
+ * vanishing.
+ */
+export function formatSuggestedTooltypes(raw: string | null | undefined): string[] {
+  if (!raw) return [];
+  const trimmed = raw.trim();
+  if (!trimmed) return [];
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(trimmed);
+  } catch {
+    return [trimmed];
+  }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return [trimmed];
+  return Object.entries(parsed as Record<string, unknown>).map(
+    ([key, value]) => `${key}=${value == null ? '' : String(value)}`
+  );
+}
+
+export interface RepoViewHotkeyHandlers {
+  onInstallUninstall: () => void;
+  onStrip: () => void;
+  onViewDoc: () => void;
+  onBrowseArchive: () => void;
+  onCycleFilter: () => void;
+  onDelete: () => void;
+}
+
+/** Registers RepoView's per-entry action hotkeys (R/S/V/A/C), gated by repo
+ * mode: consumer mode omits the [S]trip binding entirely -- see
+ * repoViewCurationAllowed. Install/uninstall (R), view doc (V), browse
+ * archive contents (A), and the system-type filter (C) register in every
+ * mode. */
+export function registerRepoViewActionKeys(
+  keys: KeyBinder,
+  mode: DoorRepoMode,
+  handlers: RepoViewHotkeyHandlers
+): void {
+  keys.key(['r', 'R'], () => handlers.onInstallUninstall());
+  if (repoViewCurationAllowed(mode)) {
+    keys.key(['s', 'S'], () => handlers.onStrip());
+    // Deleting removes the archive from the repository permanently. A
+    // consumer browses somebody else's catalog, so the binding must not
+    // exist for them at all rather than be refused at the far end.
+    keys.key(['d', 'D'], () => handlers.onDelete());
+  }
+  keys.key(['v', 'V'], () => handlers.onViewDoc());
+  keys.key(['a', 'A'], () => handlers.onBrowseArchive());
+  keys.key(['c', 'C'], () => handlers.onCycleFilter());
+}
+
+/**
+ * A door's repo text for the info panel: its one-line description, then its
+ * FILE_ID.DIZ as authored below it.
+ *
+ * Both, not either: the description says what the door does in the repo's
+ * words, the FILE_ID is the author's own art and credits, and the panel used
+ * to drop the description whenever a FILE_ID existed ("make sure doorman and
+ * doorrepo display the descriptions and file_id's from the door repo", sysop
+ * 2026-09-29). Raw archive text is sanitized, or blessed reads the art as tags.
+ * Empty string when there is neither.
+ */
+export function repoTextBlock(description: string | null | undefined, fileIdDiz: string | null | undefined): string {
+  const desc = (description ?? '').trim();
+  const diz = (fileIdDiz ?? '').replace(/\s+$/, '');
+  let out = '';
+  if (desc) out += `\n\n{${T.ink}-fg}${sanitizeForTags(desc)}{/${T.ink}-fg}`;
+  if (diz.trim()) out += '\n\n' + sanitizeForTags(diz);
+  return out;
+}

@@ -1,0 +1,20 @@
+
+Enter minimum number of times online : 
+List ul/dl bytes instead of location (y/N) NO
+
+Would you like the output also to be copied to a file (y/N) NO
+
+Searching.....
+                                                               - calls : 0
+                                                               - calls : 0
+                                                               - calls : 0
+                                                               - calls : 0
+                                                               - calls : 0
+                                                               - calls : 0
+                                                               - calls : 0
+                                                               - calls : 0
+                                                               - calls : 0
+
+Total number of users found at 0 or less calls : 9
+
+    Thank you for using WarCalls V1.2      Coded by Wardancer/Humane&Vanity    

@@ -1,0 +1,11 @@
+BBSCMD=COSYSOP
+TYPE=TS
+LOCATION=Doors/cosysop-persona
+DESCRIPTION=Choose which co-sysop answers when you page
+MULTINODE=YES
+PRIORITY=SAME
+ACCESS=1
+MIN_COLUMNS=40
+SETTINGS=YES
+SETTINGS_LABEL=Co-sysop
+SETTINGS_SECTION=Communication

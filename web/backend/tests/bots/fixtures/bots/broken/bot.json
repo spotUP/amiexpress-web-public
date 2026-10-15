@@ -1,0 +1,4 @@
+{
+  "id": "broken",
+  "description": "Missing composeService, healthPort, configSchema."
+}

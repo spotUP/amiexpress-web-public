@@ -1,0 +1,108 @@
+/*
+ * IN THE PAGE'S FLOW, not fixed to the viewport.
+ *
+ * `position: fixed` anchors to iOS's LAYOUT viewport - the tall one that runs
+ * under Safari's bars - while the page box is sized from the SMALL viewport
+ * (`100svh`, index.html), which is the one a caller can see. Two coordinate
+ * systems: the page reserved a 260px strip at the bottom of ITS box and the
+ * keyboard drew itself 260px up from the bottom of a taller one, so the strip
+ * landed over the last rows of the grid. The sysop, 2026-09-14: "now its
+ * hidden behind the osd keyboard".
+ *
+ * A flex row in the page's own column cannot disagree with the page about
+ * where the bottom is, and the band left for the terminal is then literally
+ * what is left - no constant to keep in sync with this height.
+ */
+.mobile-bbs-keyboard {
+  flex: 0 0 auto;
+  /*
+   * 260px, with the home indicator's inset INSIDE it as padding.
+   *
+   * The inset was briefly ADDED to this height, to get the bottom row of keys
+   * out from under Safari's toolbar. That was reserving the same band twice:
+   * the page is sized from `visualViewport.height` (TerminalPage), which
+   * already excludes the browser's own UI, so the extra height pushed the
+   * whole strip up off the bottom of the screen - "the osd keyboard is not at
+   * the bottom of the screen now" (sysop, 2026-09-14).
+   *
+   * One reservation, in one place: the PAGE measures the visible band, and
+   * this strip sits at the bottom of it with its keys padded clear of the
+   * home indicator.
+   */
+  height: var(--bbs-onscreen-input-height, 260px);
+  background: #1a1a1a;
+  border-top: 2px solid #444;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 4px 3px;
+  padding-bottom: calc(4px + env(safe-area-inset-bottom));
+  padding-left: calc(3px + env(safe-area-inset-left));
+  padding-right: calc(3px + env(safe-area-inset-right));
+  box-sizing: border-box;
+  z-index: 9999;
+  overflow: hidden;
+}
+
+.mobile-bbs-keyboard__row {
+  display: flex;
+  flex: 1;
+  gap: 3px;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.mobile-bbs-keyboard__key {
+  flex: 1 1 0;       /* allow shrinking below content size */
+  min-width: 0;      /* let flex crush the button if needed */
+  padding: 0;        /* kill browser default button padding */
+  background: #2e2e2e;
+  border: 1px solid #555;
+  border-radius: 5px;
+  color: #e0e0e0;
+  font-family: 'mosoul', monospace;
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+  box-shadow: inset 0 -2px 0 rgba(0, 0, 0, 0.4);
+  transition: background 80ms ease, transform 60ms ease;
+  overflow: hidden;
+}
+
+.mobile-bbs-keyboard__key:active {
+  background: #555;
+  transform: scale(0.94);
+  box-shadow: none;
+}
+
+.mobile-bbs-keyboard__key--nav {
+  background: #3a3a3a;
+  border-color: #666;
+  font-size: 11px;
+}
+
+.mobile-bbs-keyboard__key--nav:active {
+  background: #666;
+}
+
+.mobile-bbs-keyboard__key--wide {
+  flex: 2 1 0;
+}
+
+.mobile-bbs-keyboard__key--shift {
+  background: #3a3a3a;
+  border-color: #666;
+}
+
+.mobile-bbs-keyboard__key--shift-active {
+  background: #0057b8;
+  border-color: #4499ff;
+  color: #fff;
+  box-shadow: inset 0 -2px 0 #003a80;
+}

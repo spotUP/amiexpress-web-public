@@ -1,0 +1,27 @@
+{
+  "name": "magazine",
+  "version": "1.0.0",
+  "description": "The Unknown Frequency reader: stories in newspaper columns, front page, contents, search, bookmarks",
+  "main": "dist/index.js",
+  "bbsCommand": "MAG",
+  "doorType": "TS",
+  "runtime": "server",
+  "accessLevel": 0,
+  "author": "AmiExpress Team",
+  "keywords": [
+    "bbs",
+    "door",
+    "magazine",
+    "news"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "test": "tsx tests/run-tests.ts"
+  },
+  "dependencies": {
+    "@amiexpress/bbs-door-sdk": "file:../../sdk"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.0"
+  }
+}

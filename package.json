@@ -1,0 +1,49 @@
+{
+  "scripts": {
+    "test": "npm run test:sdk && npm run test:backend && npm run test:admin && npm run test:doors && npm run test:doors:suites && npm run test:console",
+    "test:sdk": "cd sdk && npm test",
+    "test:backend": "cd web/backend && npm test",
+    "test:doors": "npx tsx dev/tests/run-tests.ts",
+    "test:console": "cd dev/console && npm test",
+    "dev:doors": "npx ts-node -P dev/scripts/tsconfig.json dev/scripts/watch-doors.ts",
+    "door:doctor": "npx ts-node -P dev/scripts/tsconfig.json dev/scripts/door-doctor.ts",
+    "door:create": "npx ts-node -P dev/scripts/tsconfig.json dev/scripts/create-door-skeleton.ts",
+    "door:doctor:strict": "DOCTOR_RUN=1 DOCTOR_COMPILE_PY=1 npx ts-node -P dev/scripts/tsconfig.json dev/scripts/door-doctor.ts",
+    "door:harness": "npx ts-node -P dev/scripts/tsconfig.json dev/scripts/run-door-harness.ts",
+    "door:ci": "npx ts-node -P dev/scripts/tsconfig.json dev/scripts/sync-fixture-doors.ts && npm run door:doctor:strict && npm run door:harness -- py-hello && npm run door:harness -- rexx-hello",
+    "xim:view": "npx tsx dev/scripts/xim-viewer.ts",
+    "xim:decode": "npx tsx dev/scripts/xim-decode.ts",
+    "xim:live": "npx tsx dev/scripts/xim-viewer.ts --live",
+    "xim:errors": "npx tsx dev/scripts/xim-viewer.ts --errors",
+    "xim:validate": "npx tsx dev/scripts/xim-validate.ts",
+    "xim:monitor": "npx tsx dev/scripts/xim-monitor.ts",
+    "xim:replay": "npx tsx dev/scripts/xim-replay.ts",
+    "xim:flow": "npx tsx dev/scripts/xim-flow.ts",
+    "xim:trace": "npx tsx dev/scripts/xim-trace.ts",
+    "xim:analyze": "npx tsx dev/scripts/xim-analyzer.ts",
+    "xim:diff": "npx tsx dev/scripts/xim-diff.ts",
+    "xim:debug": "npx tsx dev/scripts/xim-debug.ts",
+    "xim:replay:real": "npx tsx dev/scripts/xim-replay-real.ts",
+    "xim:record": "npx tsx dev/scripts/xim-record.ts",
+    "xim:perf": "npx tsx dev/scripts/xim-perf.ts",
+    "xim:report": "npx tsx dev/scripts/xim-report.ts",
+    "xim:regression": "npx tsx dev/scripts/xim-regression.ts",
+    "generate:lvo": "node dev/scripts/generate-lvo-maps.js",
+    "test:doors:suites": "npx tsx dev/scripts/run-door-suites.ts",
+    "test:admin": "cd web/config-app && npm test"
+  },
+  "dependencies": {
+    "axios": "^1.13.2",
+    "socket.io": "^4.8.1",
+    "socket.io-client": "^4.8.1",
+    "yargs": "^18.0.0"
+  },
+  "devDependencies": {
+    "baseline-browser-mapping": "^2.9.16",
+    "chokidar": "^3.6.0",
+    "puppeteer": "^24.34.0",
+    "ts-node": "^10.9.2",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3"
+  }
+}

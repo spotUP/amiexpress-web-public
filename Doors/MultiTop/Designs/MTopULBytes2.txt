@@ -1,0 +1,21 @@
+[4;33m                                                                             [0m
+[4;33;44m No | Name              | Group / Location    | Upload Bytes | Files | Calls [0m
+[0m
+[0m 01. [32mSnuskis             [33m>>> GURU's DREAM <<<  [37m3.078.248.552  [35m 3.664  [36m   996
+[0m 02. [32mZANY                [33m -*- DEBRIS -*-       [33m2.053.392.723  [35m 2.702  [36m 2.251
+[0m 03. [32mBad Karma           [33mnuke kilrah           [31m  785.461.255  [35m   723  [36m 1.102
+[0m 04. [32mYPSiLON             [33m---> HCC / W^Z <---   [36m  617.943.471  [35m   494  [36m   184
+[0m 05. [32mSCREWBALL           [33mGryningstiden..       [36m  588.295.427  [35m   580  [36m   418
+[0m 06. [32mAERO                [33mDBR/SL/FTR/COTG/NSF   [36m  572.586.577  [35m   723  [36m   464
+[0m 07. [32mSNIPER              [33m#ð:. ¡NSANE'95 .:ð#   [36m  518.176.118  [35m   915  [36m   694
+[0m 08. [32mmoocher             [33m[:.rEBELs^fLt^iNTERN  [36m  505.860.307  [35m   617  [36m   826
+[0m 09. [32mUFOk                [33m.-+-{ MsT/LsD }-+-.   [36m  492.548.386  [35m 1.388  [36m   892
+[0m 10. [32mXavier              [33mÉ[tHaT'z RiGhT]»      [36m  468.371.208  [35m   498  [36m   620
+[0m 11. [32mThe Gravedigger     [33mPoWeRFuL aS HeLL!     [36m  409.834.339  [35m   387  [36m   309
+[0m 12. [32mSteel Pulse         [33m-*- DYNAMIC DUO -*-   [36m  406.123.105  [35m   818  [36m 2.097
+[0m 13. [32mCURIOUS             [33m-*- DEBRIS/COTG -*-   [36m  405.513.326  [35m   712  [36m   727
+[0m 14. [32mMr Gang             [33m Killroj was here     [36m  397.524.982  [35m   339  [36m   586
+[0m 15. [32mPetrol Pedro        [33mPLANET ROCK           [36m  395.029.490  [35m   447  [36m   758
+[4;33m                                                                             [0m
+[4;33;44m   UP: 28.875.703.393 bytes /  47.601 files | MultiTop v2.1   By Bobo/Mystic [0m
+[4;33;44m DOWN: 40.526.999.025 bytes /  70.952 files | CALLS: 312.076  Design By EzCo [0m

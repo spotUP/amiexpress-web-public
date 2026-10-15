@@ -1,0 +1,47 @@
+yep actally yes I write doors/utils too. and yes I run a board so if you
+interested you can call my board at 718 318-8315 and the NUP is SWEET
+MEMORIES and just leave me a mail or anything, great.. so lets echange some
+infos. Sor example do you have how to alocate the structure array? like for
+example I have a structure and I want it o be an array to hold all the
+acounts in the memory then so it will be fatser to sort them and so on,
+well what I have now is:
+
+struct  whatever{
+char name[32]
+....
+....
+....
+} whatevereArray[max]
+
+ok well I can set up the number it in like max = 100 or 500 or whatever but
+what if the sysop have more users? and what if he has less of them? well I
+could do it with link lists to alocate the memory as I need it but I dont
+want to do it since alocating memory can take a little time. and if you
+have let say 1000 users and each account is in different place in memory
+and you have to sort them acording to whatever aspect you want it might get
+a litle messy, anyway so what I wanted to do is instead of MAX to put
+somehting like sizeoff and then the user.data size divided by 232 or some
+shit like that. well dont know how to do that.. any idea? ok anyway great
+to see message from you and that it was so fast, eheh.. ok later
+ ----( KOOL FALCO @ 716001 )------------------------------------------
+
+well allocating an array of 1000 users will probably take a lot of memory
+and a lot of time to .. i don't think you loos that much time working with
+link lists becoz it is the most flexible way to sort and rearange ... for
+the rest if you work with an array you have always to give in a SIZE ....
+if not the compiler (at least SASC 6.2+) does not accept it ... which is
+actually normal for arrays .. and it is stupid to allocate something for
+1000 users if you only have 120 or something ... guess linked lists is the
+only (and after all the easiest way i guess) way to do the thing i guess
+...
+ ----( Re/Y\o @ 716001 )----------------------------------------------
+
+Right, I tries so many things and couldnt get it to work, always the
+compiler said error because no number was given for the array, hmm, oh well
+will have to rewrite it so I will have the link lists and you are right its
+much easier and faster to sort them I guess, hehe.. ok thanx for the info
+and later..
+›1;36mK›34mool ›36mF›34malco›0m
+
+--- /XNet v4.5 (716001.LS0001,54,TPT-12.0016)
+* Origin:  -=U.S. /X NET Mail Hub=-  The Edge! BBS - 1-(716)-655-4940 -

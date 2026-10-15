@@ -1,0 +1,55 @@
+# achieve-rows.golden - the rows BOTH ACHIEVE doors must print.
+#
+# The C door (sdk/c/examples/achieve) and its TypeScript twin
+# (Doors/achieve/app.ts) are the same door for a caller, so for one
+# fixture they must produce these strings exactly. Backlog 4.13.
+# tests/test_achieve_rows.c asserts the C side; the twin is asserted by
+# web/backend/tests/doors/achieve-rows-match-the-c-door.test.ts.
+#
+# Data: achieve-board.listing and achieve-catalog.listing, beside this.
+# `wide` is an 80-column caller, `compact` a 40-column one.
+#
+# NOT covered, by the sysop's call of 2026-09-15 (option 3), because the
+# C door cannot do them at all: the twin's profile view and account
+# states, its unlocked mark on a catalogue row (this fixture is rendered
+# with an empty unlocked set), its `== FAMILY ==` grouping lines and the
+# leaderboard's two heading lines. Parity is on the ROWS, which is where
+# a format drifts.
+
+[menu.wide]
+This board's scoreboard
+The global scoreboard
+The catalog, by family
+Account: on the web terminal
+Leave the door
+
+[menu.compact]
+Board scoreboard
+Global scoreboard
+Catalog
+Account: web only
+Leave
+
+[board.wide]
+  1. spot                  1420 pts  37
+  2. a-very-long-handle-i   980 pts  24
+  3. krakken                610 pts   9
+ 12. infant                  75 pts   2
+
+[board.compact]
+  1. spot              1420 pts  37
+  2. a-very-long-hand   980 pts  24
+  3. krakken            610 pts   9
+ 12. infant              75 pts   2
+
+[catalog.wide]
+ [BRZ] First post           Post a message in any conference
+ [SLV] Night owl            Call the board after 3am
+ [GLD] Archivist of the lon Upload fifty files
+ [MYT] ???                  Hidden until it is yours
+
+[catalog.compact]
+ [BRZ] First post
+ [SLV] Night owl
+ [GLD] Archivist of the long shelf
+ [MYT] ???

@@ -1,0 +1,405 @@
+
+[=TAG LINE Adder=] V1.0 - (c)1994  SiNTAX/WøT
+
+No Tag Line added.
+
+                                                                             
+                                                                             
+                                                                             
+                                                                             
+                                                                             
+                                                                             
+                                                                             
+                                                                        
+
+                                                                           
+                                                                            
+                                                                             
+                                                                            
+                                                                               
+                                                                          
+                                                                     
+                                                                              
+                                                                     
+                                                                              
+
+                                                                            
+                                                                         
+                                                                       
+                                                                                
+
+ ._                           ___                                            
+ |S                           /                                              
+                                                                             
+                                                                             
+                                                                             
+                                                                             
+                                                                             
+                                                                        
+
+                                                                           
+                                                                            
+                                                                             
+                                                                            
+                                                                               
+               P P                  MEN                              N/OFF
+               AL                   PAG                              
+               U                    JOI                              SCRIPT   
+ [<      EVI                  [>]            ERE         L]          
+ [S       AU                  [OL             ME         UES                  
+
+                                                                     EDI    
+                  SLO                                                ate 
+                  ORY                                                EW
+   ___            ___                                                           
+
+ ._                     ___   ______                           ___           
+ |S                     /     /                                 _            
+                                              \/           /                 
+                                              /          ___                 
+                                             /           /|.                 
+                                                                             
+                                                                             
+                                                                        
+
+ [U      LOA                  [D]                              MODEM       
+ [N      OW                   [F]                              LTER F       
+         PPY                                                                 
+         AVE                                                                
+         OW                                                                    
+               P P                  MEN   N/O                        N/OFF
+               AL       CET         PAG   YSO                        
+               U                    JOI   ONF                        SCRIPT   
+ [<      EVI                  [>]            ERE         L]          
+ [S       AU                  [OL             ME         UES                  
+
+                                       LL                            EDI    
+                  SLO                  act                           ate 
+                  ORY                  OP                            EW
+   ___            ___         ___                     ___                       
+
+ ._                     ___   ______         ___               ___           
+ |S                     /     /              \__                _            
+ ||                           \__             \/           /    //           
+ |.                                           /          ___   _/            
+ |                                           /           /|.     C           
+                                                                             
+               ___                                                           
+                                                                        
+
+ [U      LOA                  [D]                              MODEM       
+ [N      OW                   [F]                              LTER F       
+         PPY                                    LAG                          
+         AVE                                     US                         
+         OW                                     NGS                            
+         OW HELP P                  MEN   N/O                        N/OFF
+         OW LOCAL       CET         PAG   YSO                        
+         OW MENU                    JOI   ONF                        SCRIPT   
+ [<      EVI                  [>]            ERE         L]          
+ [S       AU                  [OL             ME   GE    UES                  
+
+   X!]                                 LL                            EDI    
+   ] -            SLO                  act                           ate 
+   ] -            ORY                  OP                            EW
+   ___            _________   ___               ___   ___         ___           
+
+ ._                     ___   ______         ___               ___           
+ |S                     /     /              \__                _            
+ ||                           \__         .   \/           /    //           
+ |.                                           /          ___   _/            
+ |                                    o      /           /|.     C           
+                                      /                                      
+               ___               ____/\                                      
+                                                                        
+
+ [U] -   LOA                  [D]                              MODEM       
+ [N] -   OW                   [F]                              LTER F       
+         PPY                                    LAG                          
+         AVE                                     US                         
+         OW                                     NGS                            
+         OW HELP P                  MEN   N/O                        N/OFF
+         OW LOCAL       CET         PAG   YSO                        
+         OW MENU                    JOI   ONF                        SCRIPTION
+ [<      EVI            CE    [>]            ERE         L] - R      
+ [S       AU                  [OL             ME   GE    UEST]                
+
+   X!]   EXO                           LL                         NT EDI    
+   ] -   EW       SLO                  act                        tivate 
+   ] -   EW       ORY                  OP       AD                 VIEW
+   ___            _________   ______         ______   ______      ___           
+
+ ._                     ___   ______   ___   ___               ___           
+ |S                     /     /        ___   \__                _            
+ ||   \__                   ./\____       .   \/           /    //           
+ |.                        //     /           /          ___   _/            
+ |            /            /     /    o      /           /|.     C           
+                                      /           /                   :.     
+               ___         ___   ____/\         _/_                  :::     
+                                                                      .Y
+
+ [U] -   LOAD F               [D]                              MODEM       
+ [N] -   OW NEW               [F]                              LTER F       
+         PPY                                    LAG                CO   STA  
+         AVE                                     US                NE   SG' 
+         OW                                     NGS                TX   HA     
+         OW HELP P            [X]   MEN   N/O                        N/OFF
+         OW LOCAL       CET   [O]   PAG   YSO                        
+         OW MENU              [J]   JOI   ONF                        SCRIPTION
+ [<      EVI         RENCE    [>]            ERE         L] - R      
+ [S       AU                  [OL             ME   GE    UEST]                
+
+   X!]   EXO                      - SHELL                         NT EDI    
+   ] -   EW       SLO             - D-sact                        tivate 
+   ] -   EW       ORY            ]- SYSOP       AD                 VIEW
+   ___            _________   ______         ______   ______   ______           
+
+ ._      ______         ___   ______   ___   ___         ___   ____ _        
+ |S         ___         /     /        ___   \__         ___    _ /s         
+ ||   \__                   ./\____       .   \/           /    //           
+ |.                        //     /           /          _______/            
+ |            /            /     /    o      /           /|.     C           
+                                /     /           /                   :.     
+               ___         __________/\         _/_         ___      :::___  
+                                                                      .Y
+
+ [U] -   LOAD F               [D]                              MODEM       
+ [N] -   OW NEW               [F]                              LTER F       
+         PPY                  [CF]-             LAG                CO   STA  
+         AVE                  [E] -              US                NE   SG' 
+         OW                   [W] -             NGS                TX   HA     
+       SHOW HELP P            [X]   MEN   N/O                        N/OFF
+       SHOW LOCAL       CET   [O]   PAG   YSO                        
+       SHOW MENU              [J]   JOI   ONF                        SCRIPTION
+ [<      EVI         RENCE    [>]         ONFERE         L] - R      
+ [S       AU                  [OL         INE ME   GE    UEST]                
+
+   X!]   EXO                      - SHELL                         NT EDI    
+   ] -   EW       SLO             - D-sact                        tivate 
+   ] -   EW       ORY            ]- SYSOP       AD                 VIEW
+______            _________   _________      ______   ______   ______           
+
+ ._      _________      ___   ______   ___   ___         ___   ____ _   ___  
+ |S         ______      /     /        ___   \__         ___    _ /s      .  
+ ||   \__                   ./\____       .   \/           /    //           
+ |.                        //     /           /          _______/            
+ |            /            /     /    o      /           /|.     C           
+                                /     /           /     /             :.     
+               ___   ___   __________/\         _/_   __    ___      :::___  
+                       \                               \/             .Y
+
+ [U] -   LOAD F               [D] -                )   [R      MODEM       
+ [N] -   OW NEW               [F] -                    [A      LTER F       
+         PPY                  [CF]-             LAG            ULL CO   STATS
+         AVE                  [E] -              US            EAD NE   SG'S
+         OW                   [W] -             NGS            IEW TX   HA FIL 
+       SHOW HELP P            [X]   MEN   N/O          [M      OLO   N/OFF
+       SHOW LOCAL       CET   [O]   PAG   YSO          [G      OG    
+       SHOW MENU              [J]   JOI   ONF          [E      DIT   SCRIPTION
+ [<      EVI    CO   RENCE    [>]         ONFERE         L] - R   GON
+ [S       AU   SIG            [OL         INE ME   GE    UEST]    UES   NNA   
+
+   X!]   EXO                      - SHELL    ESS                  NT EDI    
+   ] -   EW       SLO             - D-sact   ted                  tivate 
+   ] -   EW       ORY            ]- SYSOP    NLOAD                 VIEW
+______            _________   _________      ______   ______   ______           
+
+ ._      _________      ___   ______   ___   ___         ___   ____ _   ____.
+ |S         ______      /     /        ___   \__         ___    _ /s      . |
+ ||   \__                   ./\____       .   \/           /    //        |  
+ |.                        //     /           /          _______/         :  
+ |            /            /     /    o      /           /|.     C      S .  
+                          /     /     /           /     /             :.     
+               ___   ___ /___________/\         _/_   __    ___   ___:::___  
+                       \/                              \/             .Y
+
+ [U] - UPLOAD F               [D] -          FILE(S)   [R      MODEM       
+ [N] - SHOW NEW               [F] -          LIST      [A      LTER F       
+         PPY                  [CF]-          E FLAG            ULL CO   STATS
+         AVE                  [E] -           TO US            EAD NE   SG'S
+         OW                   [W] -          TTINGS            IEW TX   HA FILE
+       SHOW HELP P            [X]   MEN   N/O          [M   - COLO   N/OFF
+       SHOW LOCAL       CET)  [O]   PAG   YSO          [G   - LOG    
+       SHOW MENU              [J]   JOI   ONF          [E   - EDIT   SCRIPTION
+ [<      EVI    CO   RENCE    [>]         ONFERE         L] - R   GON
+ [S       AU   SIG            [OL         INE ME   GE    UEST]    UES   NNA   
+
+   X!]   EXO                      - SHELL    ESS       [1         NT EDI   G
+   ] -   EW       SLO             - D-sact   ted       [4         tivate 
+   ] -   EW       ORY            ]- SYSOP    NLOAD     [V          VIEW
+______      ___   _____________________      ______   ______   ______   ___     
+
+ ._      _________   ______   ______   ___   ___   __    ___   ____ _   ____.
+ |S         ______      /     /        ___   \__    _\   ___    _ /s      . |
+ ||   \__                   ./\____       .   \/           /    //        |  
+ |.                        //     /           /         ________/         :  
+ |            /            /     /    o      /           /|.     C      S .  
+                          /     /     /           /     /             :.    |
+               ___   ___ /___________/\___   ____/_   __    ___   ___:::____|
+                       \/                              \/             .Y
+
+ [U] - UPLOAD F               [D] -          FILE(S)   [RZ]    MODEM       
+ [N] - SHOW NEW               [F] -          LIST      [A]     LTER F      G
+         PPY                  [CF]-          E FLAG            ULL CONF STATS
+         AVE         YSO      [E] -           TO US            EAD NEW MSG'S
+         OW                   [W] -          TTINGS            IEW TXT/LHA FILE
+ [H    SHOW HELP PAGE         [X]   MEN   N/O          [M   - COLOR ON/OFF
+ [T    SHOW LOCAL TIM   CET)  [O]   PAG   YSO          [G   - LOG OFF
+ [?    SHOW MENU              [J]   JOI   ONF          [E   - EDIT DESCRIPTION
+ [<    PREVI    CO   RENCE    [>] -       ONFERE         L] - R   GON
+ [S   ] - AU   SIG            [OLM]       INE ME   GE    UEST]    UES   NNA   
+
+   X!]   EXO                      - SHELL    ESS       [1         NT EDI   G
+   ] -   EW       SLO             - D-sact   ted       [4         tivate 
+   ] -   EW       ORY            ]- SYSOP    NLOAD     [V          VIEW
+______      ___   _____________________      ______   _______________   ___     
+
+ .____   _________   _______________   ___   ___   __    ___   ____ _   ____.
+ |Sk!n      ______      /     /        ___   \__    _\   ___    _ /s      . |
+ ||   \__            __     ./\____       .   \/           /    //        |  
+ |.                   /    //     /           /         ________/         :  
+ |            /      /     /     /    o      /           /|.     C      S .  
+ :/                       /     /     /           /     /             :.    |
+ /_            ___   ___ /___________/\___   ____/______    _________:::____|
+                       \/                              \/             .Y
+
+ [U] - UPLOAD F               [D] - DOW      FILE(S)   [RZ] - ZMODEM UPL   
+ [N] - SHOW NEW               [F] - SHO      LIST      [A]  - ALTER FILE   G
+         PPY                  [CF]- CON      E FLAG    [F      ULL CONF STATS
+         AVE         YSO      [E] - LEA       TO US    [R      EAD NEW MSG'S
+         OW                   [W] - CHA      TTINGS    [V      IEW TXT/LHA FILE
+ [H] - SHOW HELP PAGE         [X]   MEN   N/O          [M]  - COLOR ON/OFF
+ [T] - SHOW LOCAL TIM   CET)  [O]   PAG   YSO          [G]  - LOG OFF
+ [?] - SHOW MENU              [J]   JOI   ONF          [ED] - EDIT DESCRIPTION
+ [<    PREVI    CO   RENCE    [>] - NEX   ONFERE       [RL] - R   GON
+ [S   ] - AU   SIG            [OLM] - O   INE ME   GE  [QUEST]    UES   NNA   
+
+   X!]   EXO                      - SHELL    ESS       [1         NT EDI   G
+   ] -   EW       SLOG            - D-sact   ted       [4         tivate 
+   ] -   EW       ORY            ]- SYSOP    NLOAD     [V          VIEW
+______      ___   ________________________   ______   _______________   ___     
+
+ .____   __________/\_____________________   ________    ___   ____ _   ____.
+ |Sk!n      ______/     /     /     ______   \__    _\   ___    _ /s      . |
+ ||   \__            __     ./\____     \/.   \/           /    //        |  
+ |.                   /    //     /    //     /         ________/         :  
+ |            /      /     /     /    o/     /           /|.     C      S .  
+ :/                 /     /     /     /     /     /     /_||          :.    |
+ /_            _________ /___________/\__________/______ /|__________:::____|
+                       \/                              \/             .Y
+
+ [U] - UPLOAD F   (S)         [D] - DOW      FILE(S)   [RZ] - ZMODEM UPL   
+ [N] - SHOW NEW   LES         [F] - SHO      LIST      [A]  - ALTER FILE   G
+         PPY SE               [CF]- CON      E FLAG    [F      ULL CONF STATS
+         AVE MS      YSO      [E] - LEA       TO US    [R      EAD NEW MSG'S
+         OW STA               [W] - CHA      TTINGS    [V      IEW TXT/LHA FILE
+ [H] - SHOW HELP PAGE         [X]   MEN   N/O          [M]  - COLOR ON/OFF
+ [T] - SHOW LOCAL TIM   CET)  [O]   PAG   YSO          [G]  - LOG OFF
+ [?] - SHOW MENU              [J]   JOI   ONF   NCE    [ED] - EDIT DESCRIPTION
+ [<] - PREVI    CO   RENCE    [>] - NEX   ONFERENCE    [RL] - R   GON
+ [SENT] - AU   SIG            [OLM] - O   INE MESSAGE  [QUEST]    UESTIONNAIRE
+
+ [EX!]   EXO                      - SHELL ACCESS       [1         NT EDI   G
+ [2] -   EW       SLOG            - D-sactivated       [4         tivate 
+ [5] -   EW       ORY            ]- SYSOP DOWNLOAD     [V          VIEW
+______      ___   ________________________   ______   _____________________     
+
+ .____   __________/\_____________________   ________    ___   ____ _   ____.
+ |Sk!n      ______/     /     /     ______   \__    _\   ___    _ /s      . |
+ ||   \__         _____     ./\____     \/.   \/           /    //        | |
+ |.                   /    //     /    //     /         ________/         : |
+ |            /      /     /     /    o/     /           /|.     C      S . |
+ :/     /           /     /     /     /     /     /     /_||          :.    |
+ /_   ______   _________ /___________/\__________/______ /|__________:::____|
+                       \/                              \/             .Y
+
+ [U] - UPLOAD F   (S)         [D] - DOWNLO   FILE(S)   [RZ] - ZMODEM UPLOAD
+ [N] - SHOW NEW   LES         [F] - SHOW F   LIST      [A]  - ALTER FILEFLAG
+   ] -   PPY SEARCH           [CF]- CONFERENCE FLAGS   [F      ULL CONF STATS
+   ] -   AVE MSG TO SYSO      [E] - LEAVE MSG TO USER  [R      EAD NEW MSG'S
+   ] -   OW STATUS            [W] - CHANGE SETTINGS    [V      IEW TXT/LHA FILE
+ [H] - SHOW HELP PAGE         [X] - MEN   N/OFF        [M]  - COLOR ON/OFF
+ [T] - SHOW LOCAL TIM   CET)  [O] - PAG   YSOP         [G]  - LOG OFF
+ [?] - SHOW MENU              [J] - JOI   ONFERENCE    [ED] - EDIT DESCRIPTION
+ [<] - PREVI    CO   RENCE    [>] - NEXT CONFERENCE    [RL] - R   GON
+ [SENT] - AU   SIG            [OLM] - ON LINE MESSAGE  [QUEST]    UESTIONNAIRE
+
+ [EX!]   EXO                      - SHELL ACCESS       [1         NT EDI   G
+ [2] -   EW       SLOG            - D-sactivated       [4         tivate 
+ [5] -   EW       ORY            ]- SYSOP DOWNLOAD     [V          VIEW
+______      ___   ________________________   ______________________________   __
+
+ .____   __________/\______________________/\________    ___   ____ _   ____.
+ |Sk!n      ______/     /     /     ______// \__    _\   ___    _ /s      . |
+ ||   \__         _____     ./\____     \/.   \/    //     /    //        | |
+ |.                   /    //     /    //     /    o/   ________/         : |
+ |            /      /     /     /    o/     /     /     /|.     COMM   S . |
+ :/     /    ./     /     /     /     /     /     /     /_||          :.    |
+ /___________/__________ /___________/\__________/______ /|__________:::____|
+                       \/                              \/             .Y
+
+ [U] - UPLOAD F   (S)         [D] - DOWNLO   FILE(S)   [RZ] - ZMODEM UPLOAD
+ [N] - SHOW NEW   LES         [F] - SHOW F   LIST      [A]  - ALTER FILEFLAG
+   ] - ZIPPY SEARCH           [CF]- CONFERENCE FLAGS   [F   - FULL CONF STATS
+   ] - LEAVE MSG TO SYSOP     [E] - LEAVE MSG TO USER  [R   - READ NEW MSG'S
+   ] - SHOW STATUS            [W] - CHANGE SETTINGS    [V   - VIEW TXT/LHA FILE
+ [H] - SHOW HELP PAGE         [X] - MEN   N/OFF        [M]  - COLOR ON/OFF
+ [T] - SHOW LOCAL TIM   CET)  [O] - PAG   YSOP         [G]  - LOG OFF
+ [?] - SHOW MENU              [J] - JOI   ONFERENCE    [ED] - EDIT DESCRIPTION
+ [<] - PREVI    CONFERENCE    [>] - NEXT CONFERENCE    [RL] - RELOGON
+ [SENT] - AU   SIGN           [OLM] - ON LINE MESSAGE  [QUEST] - QUESTIONNAIRE
+
+ [EX!] - EXO   ST                 - SHELL ACCESS       [1] -   COUNT EDITING
+ [2] - VIEW    LERSLOG            - D-sactivated       [4] -   sactivated
+ [5] - VIEW    ECTORY            ]- SYSOP DOWNLOAD     [VS]-   SOP VIEW
+_________   ______________________________   ______________________________   __
+
+ .____   __________/\______________________/\________   ___________ ________.
+ |Sk!n      ______/     /     /     ______// \__    _\__\___    _ /s      . |
+ ||  _\____       _____     ./\____     \/.   \/    //     /    //        | |
+ |. /     /           /    //     /    //     /    o/   ________/         : |
+ | /     /    /      /     /     /    o/     /     /     /|.     COMMANDS . |
+ :/     /    ./     /     /     /     /     /     /     /_||          :.    |
+ /___________/__________ /___________/\__________/______ /|__________:::____|
+                       \/                              \/             .Y
+
+ [U] - UPLOAD F   (S)         [D] - DOWNLOAD FILE(S)   [RZ] - ZMODEM UPLOAD
+ [N] - SHOW NEW   LES         [F] - SHOW FILELIST      [A]  - ALTER FILEFLAG
+ [Z] - ZIPPY SEARCH           [CF]- CONFERENCE FLAGS   [FS] - FULL CONF STATS
+ [C] - LEAVE MSG TO SYSOP     [E] - LEAVE MSG TO USER  [R]  - READ NEW MSG'S
+ [S] - SHOW STATUS            [W] - CHANGE SETTINGS    [V]  - VIEW TXT/LHA FILE
+ [H] - SHOW HELP PAGE         [X] - MENU ON/OFF        [M]  - COLOR ON/OFF
+ [T] - SHOW LOCAL TIME (CET)  [O] - PAGE SYSOP         [G]  - LOG OFF
+ [?] - SHOW MENU              [J] - JOIN CONFERENCE    [ED] - EDIT DESCRIPTION
+ [<] - PREVI    CONFERENCE    [>] - NEXT CONFERENCE    [RL] - RELOGON
+ [SENT] - AU   SIGN           [OLM] - ON LINE MESSAGE  [QUEST] - QUESTIONNAIRE
+
+ [EX!] - EXORCIST                 - SHELL ACCESS       [1] - ACCOUNT EDITING
+ [2] - VIEW CALLERSLOG            - D-sactivated       [4] - D-sactivated
+ [5] - VIEW DIRECTORY            ]- SYSOP DOWNLOAD     [VS]- SYSOP VIEW
+________________________________________________________________________________
+
+ .____ ____________/\______________________/\________   ___________ ________.
+ |Sk!n/     ______/     /     /     ______// \__    _\__\___    _ /s      . |
+ ||  _\____     \/_____     ./\____     \/.   \/    //     /    //        | |
+ |. /     /     /     /    //     /    //     /    o/   ________/         : |
+ | /     /    //     /     /     /    o/     /     /     /|.     COMMANDS . |
+ :/     /    ./     /     /     /     /     /     /     /_||          :.    |
+ /___________/__________ /___________/\__________/______ /|__________:::____|
+                       \/                              \/             .Y
+
+ [U] - UPLOAD FILE(S)         [D] - DOWNLOAD FILE(S)   [RZ] - ZMODEM UPLOAD
+ [N] - SHOW NEW FILES         [F] - SHOW FILELIST      [A]  - ALTER FILEFLAG
+ [Z] - ZIPPY SEARCH           [CF]- CONFERENCE FLAGS   [FS] - FULL CONF STATS
+ [C] - LEAVE MSG TO SYSOP     [E] - LEAVE MSG TO USER  [R]  - READ NEW MSG'S
+ [S] - SHOW STATUS            [W] - CHANGE SETTINGS    [V]  - VIEW TXT/LHA FILE
+ [H] - SHOW HELP PAGE         [X] - MENU ON/OFF        [M]  - COLOR ON/OFF
+ [T] - SHOW LOCAL TIME (CET)  [O] - PAGE SYSOP         [G]  - LOG OFF
+ [?] - SHOW MENU              [J] - JOIN CONFERENCE    [ED] - EDIT DESCRIPTION
+ [<] - PREVIOUS CONFERENCE    [>] - NEXT CONFERENCE    [RL] - RELOGON
+ [SENT] - AUTO SIGN           [OLM] - ON LINE MESSAGE  [QUEST] - QUESTIONNAIRE
+
+ [EX!] - EXORCIST             [0] - SHELL ACCESS       [1] - ACCOUNT EDITING
+ [2] - VIEW CALLERSLOG        [3] - D-sactivated       [4] - D-sactivated
+ [5] - VIEW DIRECTORY         [DS]- SYSOP DOWNLOAD     [VS]- SYSOP VIEW
+________________________________________________________________________________
+

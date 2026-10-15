@@ -1,0 +1,30 @@
+{
+  "name": "header-dropdown-demo",
+  "version": "1.0.0",
+  "description": "Header dropdown demo (inline menu bar)",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "build:watch": "tsc --watch",
+    "clean": "rm -rf dist"
+  },
+  "author": "AmiExpress",
+  "license": "MIT",
+  "dependencies": {
+    "@amiexpress/bbs-door-sdk": "file:../../sdk"
+  },
+  "devDependencies": {
+    "typescript": "^5.3.0"
+  },
+  "door": {
+    "name": "Header Dropdown Demo",
+    "command": "HDRDROP",
+    "description": "Header dropdown menu bar demo",
+    "category": "UI",
+    "minPlayers": 1,
+    "maxPlayers": 1,
+    "version": "1.0.0",
+    "runtime": "typescript"
+  }
+}

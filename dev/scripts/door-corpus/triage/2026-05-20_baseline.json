@@ -1,0 +1,1028 @@
+{
+  "summary": {
+    "bogus-assertion": 1,
+    "pass": 175,
+    "timeout": 63,
+    "drift": 85,
+    "skip": 0,
+    "other-fail": 0
+  },
+  "categories": {
+    "bogus-assertion": [
+      [
+        "sent_fe",
+        [
+          "EMPiRE"
+        ]
+      ]
+    ],
+    "pass": [
+      "conftop",
+      "easystatus",
+      "newinfo",
+      "fucknature",
+      "autoonline",
+      "skan_status",
+      "super_stats",
+      "sim_5d_news",
+      "sim_5d_comment",
+      "5d_entermsg",
+      "quickansi",
+      "afl_g_logoff",
+      "comment2_afl",
+      "dcn_sent",
+      "5d_logoff",
+      "smart_dsf",
+      "byte_comment",
+      "fileid",
+      "getanswer",
+      "autosent",
+      "tconf2",
+      "tsn_comment",
+      "userinfo",
+      "wildstat",
+      "doorsae_sysinfo",
+      "afl_ustat",
+      "ins_skanstatus",
+      "mth_stats",
+      "afl_newinfo",
+      "heavenstat",
+      "5d_status15",
+      "smk_stats",
+      "psychostats",
+      "mmh_grapestats",
+      "zytes_bytes",
+      "nosnuke",
+      "afl_newfiles1",
+      "dc_axxcheck",
+      "dlt_filedesc_modify",
+      "mst_conftop000",
+      "tel_frontinfo",
+      "afl_newfiles",
+      "killer_comment",
+      "eall",
+      "ecl_exorcist",
+      "ihs_ul_logoff",
+      "noc_coupon",
+      "baud_counter",
+      "shx_grapebooth",
+      "tms_upstats",
+      "killer_baud",
+      "db_fastdupe",
+      "dupecheck042",
+      "lgc_byebyebelch",
+      "mdb_front",
+      "mst_view",
+      "mst_what000",
+      "mts_dupechekk",
+      "dpl_stfc",
+      "nvx_udinfo",
+      "tms_dn",
+      "mst_conftop22",
+      "cnfscn_dl",
+      "noc_who",
+      "dcn_fileid",
+      "ins_sbull",
+      "klr_kcomment",
+      "led_dcspeed",
+      "ptl_sxpager",
+      "trsi_dre_sent",
+      "vsg_page",
+      "vty_warkick",
+      "5d_newfiles",
+      "5d_security",
+      "aq_announcelogon",
+      "bullread",
+      "cd_server",
+      "chatsrc_meter",
+      "dpl_frontavail",
+      "fafcst_chatstarter",
+      "fd_amifront",
+      "ivn_mfmnukelog",
+      "joe_topcall",
+      "jso_paycheck",
+      "lgc_belchview",
+      "mgs_wallhall",
+      "modpager",
+      "mth_ca10_kerocac",
+      "mts_ls03_logonstartup",
+      "5d_dp002_5d_dummypage",
+      "5d_bch_5d_baudcheck",
+      "5d_cs3_fileid",
+      "5d5esa10_5d_sysavail",
+      "5d_sa001_5d_sysopavail",
+      "afl_ud12_flag_adder",
+      "cal_bcon_bestconf",
+      "downmani_dm_extra",
+      "fd_cfg_amisettings",
+      "hbt_pw21_pw_fokkup",
+      "hbt_sb20_smartbii",
+      "ihs_uc11_usercheck",
+      "mst_who_mst_front_who",
+      "tfa_bpxc_ganuaan",
+      "trsi_rep_dre_report",
+      "vty_li13_warlist",
+      "war_cm10_warcomment",
+      "5d_rsrv1_5d_reserve",
+      "976_rs13_rubberstamp",
+      "afl_ud10_updowninfo",
+      "smk_stat_smk_statsv0",
+      "5d_amu20_5d_adimui",
+      "5d_nf022_5d_newfiles",
+      "cd_se103_cd_server",
+      "chatsrc_chat_o_meter",
+      "dpl_fa10_frontavail",
+      "fd_front_amifront",
+      "fafcst20_chatstarter",
+      "ivn_n05_mfm_nukelog",
+      "joe_s_tl_topcall",
+      "lgc_bv13_belchview",
+      "mgs__wh1_wallhall",
+      "modpager_v_mpager",
+      "mst_bk13_bytekiller",
+      "tms_up_tms_upload",
+      "bytekill_bytekiller",
+      "aexsetu_who1",
+      "atx_tcom_tcomm",
+      "crz_bt11_time",
+      "dre__ad_dre_advertis",
+      "ext107_exterminate_",
+      "ins_sd13_smartdsf",
+      "lsdhnews_h_news",
+      "mst_cl10_mst_clock",
+      "supdupe2_superdupe",
+      "trsi_cd1_cd_server",
+      "trsi_sd_showdoors",
+      "tsn_sg10_speedguard",
+      "vty_cm11_meter",
+      "xnetxim_nethelp",
+      "adn_c120_adn_cycle",
+      "aflcom2_comment",
+      "crx_nu12_newuser",
+      "crx_dl13_dirlook",
+      "curselas_curselast",
+      "dive_boa_bitchcheck",
+      "dpl_sp10_speedpass",
+      "dpl_pc10_pwcommand",
+      "lgc_bj09_belchjoin",
+      "nvx_awai_v_await",
+      "sr_kcv10_kconvert",
+      "thx_wh16_thx_who_",
+      "trsi_sd3_showdoors",
+      "cal_pw13_pwcheck",
+      "dlm_hl11_clear_hl",
+      "emt_anwl_anarchywall",
+      "trsi_sv3_superviser",
+      "bd_str20_textstrip",
+      "ns__ss10_smartshow10r1",
+      "psn_xs10_amie_starter",
+      "psn_xs10_ward",
+      "psn_xs10_aia",
+      "dse200_powerpacker",
+      "love_a16_air",
+      "acs_ip10_telnetd",
+      "fld_chat_8",
+      "trsi_msg_textfield",
+      "ops_tu11_today_up",
+      "sentby_sentby",
+      "sck_nubc_nubc",
+      "lgc_jc11_joycomment",
+      "rse_pm10_pm",
+      "cle_uc12_uc_cli",
+      "lzx_idfx_filedescription",
+      "5d_topfa_5d_topfaker",
+      "masmd101_mastermind"
+    ],
+    "timeout": [
+      [
+        "who",
+        "missing \"WHo V2.0\"; missing \"User/PhoneNumber\"; executeDoor(who): timed out after 15000ms",
+        15003
+      ],
+      [
+        "aquawho",
+        "missing \"AquaWho\"; executeDoor(aquawho): timed out after 15000ms",
+        15005
+      ],
+      [
+        "5d_timebank",
+        "executeDoor(5d_timebank): timed out after 15000ms",
+        15004
+      ],
+      [
+        "logoff",
+        "executeDoor(logoff): timed out after 15000ms",
+        15006
+      ],
+      [
+        "5d_zippysearch",
+        "executeDoor(5d_zippysearch): timed out after 15000ms",
+        15005
+      ],
+      [
+        "bull",
+        "executeDoor(bull): timed out after 15000ms",
+        15005
+      ],
+      [
+        "joincnf",
+        "missing \"________________________________________________________________________________\"; executeDoor(joincnf): timed out after 15000ms",
+        15006
+      ],
+      [
+        "ratiorep",
+        "executeDoor(ratiorep): timed out after 15000ms",
+        15010
+      ],
+      [
+        "confsecurity",
+        "executeDoor(confsecurity): timed out after 15000ms",
+        15011
+      ],
+      [
+        "diary",
+        "executeDoor(diary): timed out after 15000ms",
+        15017
+      ],
+      [
+        "mgs_bulls",
+        "executeDoor(mgs_bulls): timed out after 15000ms",
+        15016
+      ],
+      [
+        "wall_mst",
+        "executeDoor(wall_mst): timed out after 15000ms",
+        15021
+      ],
+      [
+        "cdtrans",
+        "executeDoor(cdtrans): timed out after 15000ms",
+        15013
+      ],
+      [
+        "psy_logoff",
+        "executeDoor(psy_logoff): timed out after 15000ms",
+        15008
+      ],
+      [
+        "listspeeder",
+        "executeDoor(listspeeder): timed out after 15000ms",
+        15012
+      ],
+      [
+        "goodbye",
+        "executeDoor(goodbye): timed out after 15000ms",
+        15024
+      ],
+      [
+        "masterview",
+        "executeDoor(masterview): timed out after 15000ms",
+        15011
+      ],
+      [
+        "5d_wall",
+        "executeDoor(5d_wall): timed out after 15000ms",
+        15018
+      ],
+      [
+        "color_wall",
+        "executeDoor(color_wall): timed out after 15000ms",
+        15010
+      ],
+      [
+        "d_lost_bulls",
+        "executeDoor(d_lost_bulls): timed out after 15000ms",
+        15014
+      ],
+      [
+        "mst_wall",
+        "executeDoor(mst_wall): timed out after 15000ms",
+        15007
+      ],
+      [
+        "mst_edit",
+        "executeDoor(mst_edit): timed out after 15000ms",
+        15016
+      ],
+      [
+        "cd_dl",
+        "executeDoor(cd_dl): timed out after 15000ms",
+        15026
+      ],
+      [
+        "quicklogon",
+        "executeDoor(quicklogon): timed out after 15000ms",
+        15031
+      ],
+      [
+        "aehelp",
+        "executeDoor(aehelp): timed out after 15000ms",
+        15006
+      ],
+      [
+        "mdb_confupdater",
+        "executeDoor(mdb_confupdater): timed out after 15000ms",
+        15032
+      ],
+      [
+        "hststat",
+        "executeDoor(hststat): timed out after 15000ms",
+        15011
+      ],
+      [
+        "pwfail",
+        "executeDoor(pwfail): timed out after 15000ms",
+        15007
+      ],
+      [
+        "exorcist",
+        "missing \" [S] - SHOW STATUS            [W] - CHANGE SETTINGS    [V]  - VIEW TXT/LHA FILE\"; executeDoor(exorcist): timed out after 15000ms",
+        15026
+      ],
+      [
+        "turboz",
+        "executeDoor(turboz): timed out after 15000ms",
+        15014
+      ],
+      [
+        "dawall",
+        "executeDoor(dawall): timed out after 15000ms",
+        15028
+      ],
+      [
+        "bossnuke",
+        "executeDoor(bossnuke): timed out after 15000ms",
+        15018
+      ],
+      [
+        "tnconfig",
+        "executeDoor(tnconfig): timed out after 15000ms",
+        15024
+      ],
+      [
+        "turbon",
+        "executeDoor(turbon): timed out after 15000ms",
+        15015
+      ],
+      [
+        "powerudinfo",
+        "executeDoor(powerudinfo): timed out after 15000ms",
+        15046
+      ],
+      [
+        "mgs_userstatus",
+        "executeDoor(mgs_userstatus): timed out after 15000ms",
+        15011
+      ],
+      [
+        "kd_confstats",
+        "executeDoor(kd_confstats): timed out after 15000ms",
+        15026
+      ],
+      [
+        "bbopen",
+        "executeDoor(bbopen): timed out after 15000ms",
+        15012
+      ],
+      [
+        "lgc_belchnet",
+        "executeDoor(lgc_belchnet): timed out after 15000ms",
+        15027
+      ],
+      [
+        "fg_axnewsbase",
+        "executeDoor(fg_axnewsbase): timed out after 15000ms",
+        15032
+      ],
+      [
+        "fg_axnewsbasexim",
+        "executeDoor(fg_axnewsbasexim): timed out after 15000ms",
+        15004
+      ],
+      [
+        "nb_belchlist",
+        "missing \"nK6T547*JYXK)njBaKrHAgOTt*)kIJTtGTH(Pwxk#HjXDOY95V%1djfyuYe#XD*fvJ)CvcHRttQ^b5OR\"; executeDoor(nb_belchlist): timed out after 15000ms",
+        15013
+      ],
+      [
+        "bb_help",
+        "executeDoor(bb_help): timed out after 15000ms",
+        15021
+      ],
+      [
+        "crd_sysopavail",
+        "executeDoor(crd_sysopavail): timed out after 15000ms",
+        15014
+      ],
+      [
+        "5d_amn10_5d_adimenu",
+        "executeDoor(5d_amn10_5d_adimenu): timed out after 15000ms",
+        15033
+      ],
+      [
+        "aekit101_frontend",
+        "executeDoor(aekit101_frontend): timed out after 15000ms",
+        15033
+      ],
+      [
+        "bth_wa02_kerowall",
+        "executeDoor(bth_wa02_kerowall): timed out after 15000ms",
+        15035
+      ],
+      [
+        "m_s_fa6_idadd",
+        "executeDoor(m_s_fa6_idadd): timed out after 15000ms",
+        15021
+      ],
+      [
+        "aexsetu_scan",
+        "executeDoor(aexsetu_scan): timed out after 15000ms",
+        15034
+      ],
+      [
+        "aexsetu_doormenu",
+        "executeDoor(aexsetu_doormenu): timed out after 15000ms",
+        15010
+      ],
+      [
+        "bb_h1o_bbhelp",
+        "executeDoor(bb_h1o_bbhelp): timed out after 15000ms",
+        15056
+      ],
+      [
+        "crd_nu12_sysopavail",
+        "executeDoor(crd_nu12_sysopavail): timed out after 15000ms",
+        15041
+      ],
+      [
+        "slickw20_loggon",
+        "executeDoor(slickw20_loggon): timed out after 15000ms",
+        15034
+      ],
+      [
+        "te_bullm_bullmenue",
+        "executeDoor(te_bullm_bullmenue): timed out after 15000ms",
+        15040
+      ],
+      [
+        "aexsetu_auxed",
+        "executeDoor(aexsetu_auxed): timed out after 15000ms",
+        15013
+      ],
+      [
+        "mgs__r11_autoreward",
+        "executeDoor(mgs__r11_autoreward): timed out after 15000ms",
+        15025
+      ],
+      [
+        "mth_bu1_examine",
+        "executeDoor(mth_bu1_examine): timed out after 15000ms",
+        15039
+      ],
+      [
+        "mth_bu1_setup",
+        "executeDoor(mth_bu1_setup): timed out after 15000ms",
+        15029
+      ],
+      [
+        "rnsc_fe4_frontend",
+        "executeDoor(rnsc_fe4_frontend): timed out after 15000ms",
+        15056
+      ],
+      [
+        "srh_dm14_doormenu",
+        "executeDoor(srh_dm14_doormenu): timed out after 15000ms",
+        15032
+      ],
+      [
+        "mover_mover",
+        "executeDoor(mover_mover): timed out after 15000ms",
+        15038
+      ],
+      [
+        "mdbzs103_mdb_search",
+        "executeDoor(mdbzs103_mdb_search): timed out after 15000ms",
+        15047
+      ],
+      [
+        "5dpage28_5d_page",
+        "executeDoor(5dpage28_5d_page): timed out after 15000ms",
+        15027
+      ]
+    ],
+    "drift": [
+      [
+        "5d_autofree",
+        [
+          "\u25ab\u2580\u2584\u2584\u25ab\u2593\u25aa\u258c\u25a1\u2591\u2592\u25aa\u2580\u2584\u25a1\u25a0\u25a0\u2590\u2588\u25aa\u2591\u258c\u2592\u2592\u2592\u2592\u2591\u2592\u2584\u2584\u2588\u25a1\u2592\u2580\u2584\u2593\u25a0\u2588\u25a0\u2580\u2588\u2590\u2591\u2580\u2588\u2584\u2591\u258c\u2593\u25a0\u2580\u2591\u25a0\u25ab\u25a0\u25aa\u2580\u2584\u2593\u2580\u2588\u25a0\u2590\u2592\u25a0\u2580\u2592\u2591\u2584\u25a1\u2591\u25aa\u25ab\u2588\u2593\u25a1\u25aa\u2584\u2590\u25a1"
+        ]
+      ],
+      [
+        "5d_dupecheck",
+        [
+          "_________________________________________________________      ______   ________"
+        ]
+      ],
+      [
+        "5d_doormenu",
+        [
+          "                                                                ________________"
+        ]
+      ],
+      [
+        "confscan",
+        [
+          "8Zd)0O^XFlG13n!CeJat%ObcWjTPN6SoAix*hJ%sXoX4%3yh%eE!pfRkLE3JtsxRZz!X^6PF$24%oQ88"
+        ]
+      ],
+      [
+        "updowninfo",
+        [
+          "FpglfQucCKZ@j3ITSSN72udKbmVb%C$#SFZ3)rI8DHSk4yenr7@khNhHuBro3Rj@cxD0GOSjqtsTbjG4"
+        ]
+      ],
+      [
+        "confstats",
+        [
+          "________________________________________________________________________________"
+        ]
+      ],
+      [
+        "5d_status",
+        [
+          "P^DAXDQ49blTKPqM0IQHXbiJXE9ji$i6qe^RZOb%Wm(xuLE%l@gB(To&jRHEtdwvuu3INAva8AGVtuy("
+        ]
+      ],
+      [
+        "six_status",
+        [
+          "Sysopvalidatedsysop00AmiExpress-Web255Test Lab00Sysopaway!Sysop10511520011520011"
+        ]
+      ],
+      [
+        "afl_status",
+        [
+          "Sysopvalidatedsysop00AmiExpress-Web255Test Lab00Sysopaway!Sysop10511520011520011"
+        ]
+      ],
+      [
+        "afl_pager",
+        [
+          "EXM9sk6K#!NF3^A@ViNZgR(lyumxBL5rr&q0(4q!8MxHXf$R&StswnloenV8f4d6#)$PM0Z7ayubkwtc"
+        ]
+      ],
+      [
+        "holdcheck",
+        [
+          "                                                                ________________"
+        ]
+      ],
+      [
+        "sim_5d_fileid",
+        [
+          "____\u2591\u2591\u2591\u2591____\u2591\u2591\u2591\u2591____\u2591\u2591\u2591\u2591____\u2591\u2591\u2591\u2591____\u2591\u2591\u2591\u2591____\u2591\u2591\u2591\u2591____\u2591\u2591\u2591\u2591____\u2591\u2591\u2591\u2591____\u2591\u2591\u2591\u2591____\u2591\u2591\u2591\u2591"
+        ]
+      ],
+      [
+        "sim_makecmd",
+        [
+          "                                                                ________________"
+        ]
+      ],
+      [
+        "u_stat",
+        [
+          "                                                                ________________"
+        ]
+      ],
+      [
+        "warpsearch",
+        [
+          "____\u2591\u2591\u2591\u2591____\u2591\u2591\u2591\u2591____\u2591\u2591\u2591\u2591____\u2591\u2591\u2591\u2591____\u2591\u2591\u2591\u2591____\u2591\u2591\u2591\u2591____\u2591\u2591\u2591\u2591____\u2591\u2591\u2591\u2591____\u2591\u2591\u2591\u2591____\u2591\u2591\u2591\u2591"
+        ]
+      ],
+      [
+        "file_description",
+        [
+          " [S] - SHOW STATUS            [W] - CHANGE SETTINGS    [V]  - VIEW TXT/LHA FILE"
+        ]
+      ],
+      [
+        "warcalls",
+        [
+          "GFVqC%UpKYBXhsnbY&1LiuaZW(dYoJfs*T8u&%XpA#*b@uu^KWe!h#^1NN$wcUmCLfDY0DbNCoif^$jt"
+        ]
+      ],
+      [
+        "secchecker",
+        [
+          "Z&X)Tl7%R7F@gGes%x^mTBb!tHGKA6GZtsiGsR1uwQYXOsTeeY)8Girxm9#y9q$I0(*7Do#jXTQfvqO!"
+        ]
+      ],
+      [
+        "superstats",
+        [
+          "            ____________   ___         ___   ___   ___   ___         ______   __"
+        ]
+      ],
+      [
+        "grapestatus",
+        [
+          "_______________   _________   ___      ______   ______   ______         ___   __"
+        ]
+      ],
+      [
+        "ic_status",
+        [
+          "Sysopvalidatedsysop00AmiExpress-Web255Test Lab00Sysopaway!Sysop10511520011520011"
+        ]
+      ],
+      [
+        "nb_status",
+        [
+          "Sysopvalidatedsysop00AmiExpress-Web255Test Lab00Sysopaway!Sysop10511520011520011"
+        ]
+      ],
+      [
+        "lgc_status",
+        [
+          "Sysopvalidatedsysop00AmiExpress-Web255Test Lab00Sysopaway!Sysop10511520011520011"
+        ]
+      ],
+      [
+        "af_status",
+        [
+          "Sysopvalidatedsysop00AmiExpress-Web255Test Lab00Sysopaway!Sysop10511520011520011"
+        ]
+      ],
+      [
+        "afl_security",
+        [
+          "c(q)h5#(xZz2vh#!Z1#t*nUzDHhNZMAEAgyMPA(D5Z#$OC&C(SOwlcN7Exgn!*LP7J*H(l^Qp2s15QVz"
+        ]
+      ],
+      [
+        "fd_magicscan",
+        [
+          "                                                                ________________"
+        ]
+      ],
+      [
+        "jso_timestamp",
+        [
+          "                     _________      ______   ______                  ______   __"
+        ]
+      ],
+      [
+        "afl_ri",
+        [
+          "____\u2591\u2591\u2591\u2591____\u2591\u2591\u2591\u2591____\u2591\u2591\u2591\u2591____\u2591\u2591\u2591\u2591____\u2591\u2591\u2591\u2591____\u2591\u2591\u2591\u2591____\u2591\u2591\u2591\u2591____\u2591\u2591\u2591\u2591____\u2591\u2591\u2591\u2591____\u2591\u2591\u2591\u2591"
+        ]
+      ],
+      [
+        "emp_checknu",
+        [
+          "   ___                                    ___   ___         ___   ___      _____"
+        ]
+      ],
+      [
+        "tms_logon",
+        [
+          "bGEfPpY63C5gAlmq!Vn33aa(Cs98YX5vZJsJJrVKQhtaU8d*Wk8Lpwei2C(%S%ZpCCNf1iDw#@WZhEMy"
+        ]
+      ],
+      [
+        "fld_powerpager",
+        [
+          "\u2592\u25a0\u25a1\u2588\u25a1\u258c\u25ab\u2593\u25ab\u2591\u25ab\u25a0\u2588\u25aa\u25a0\u2591\u2591\u2593\u25aa\u25aa\u25ab\u2591\u25ab\u2590\u2590\u258c\u25aa\u2584\u25aa\u25aa\u25ab\u25ab\u2588\u25aa\u2591\u2592\u2590\u2592\u2591\u2591\u25a0\u2593\u2591\u25a0\u258c\u2584\u25a0\u2593\u25aa\u25ab\u25ab\u2588\u2592\u2584\u2593\u25a0\u2593\u2580\u2591\u2588\u258c\u25aa\u25a1\u2584\u2588\u2590\u2590\u2591\u2588\u2592\u2592\u2588\u2591\u2593\u258c\u2580\u2591\u2591\u2590\u2592"
+        ]
+      ],
+      [
+        "ilt_pumpsafe",
+        [
+          "____\u2591\u2591\u2591\u2591____\u2591\u2591\u2591\u2591____\u2591\u2591\u2591\u2591____\u2591\u2591\u2591\u2591____\u2591\u2591\u2591\u2591____\u2591\u2591\u2591\u2591____\u2591\u2591\u2591\u2591____\u2591\u2591\u2591\u2591____\u2591\u2591\u2591\u2591____\u2591\u2591\u2591\u2591"
+        ]
+      ],
+      [
+        "mst_bytekiller",
+        [
+          "twvgRNmfc$YG3EFxGTuk@rB5I*%Mp0T#LoW3wI)MwI9G%md8aYEgS7bd6v6!RjXzO^rayIE@sMPTltXg"
+        ]
+      ],
+      [
+        "nb_fs28_filessize",
+        [
+          "                                                                ________________"
+        ]
+      ],
+      [
+        "nb_olm09_olm",
+        [
+          "                                                                ________________"
+        ]
+      ],
+      [
+        "rlx_move_move",
+        [
+          "___   _____________________      ______   ____________   ___   ______   ________"
+        ]
+      ],
+      [
+        "wot_atag_sent",
+        [
+          "______      ___   ________________________   ______________________________   __"
+        ]
+      ],
+      [
+        "5d_ms001_5d_multistart",
+        [
+          "         ___               ___      ___               ___         ___   ___   __"
+        ]
+      ],
+      [
+        "5d_usr11_5d_user",
+        [
+          "________________________________________________________________________________"
+        ]
+      ],
+      [
+        "aflwho10_afl_who10",
+        [
+          "7hr1PF1&kyqryjDb2gb$82JcldXJodaPeWq4&Y(D6WAq$pSN7%tDpw7lnlF6PV2)2dLhgos4Oqd(VoQL"
+        ]
+      ],
+      [
+        "afl_pack_autoaxx",
+        [
+          "____\u2591\u2591\u2591\u2591____\u2591\u2591\u2591\u2591____\u2591\u2591\u2591\u2591____\u2591\u2591\u2591\u2591____\u2591\u2591\u2591\u2591____\u2591\u2591\u2591\u2591____\u2591\u2591\u2591\u2591____\u2591\u2591\u2591\u2591____\u2591\u2591\u2591\u2591____\u2591\u2591\u2591\u2591"
+        ]
+      ],
+      [
+        "fld_sw10_superwhofront",
+        [
+          "\u2592\u25ab\u25a0\u25a0\u2584\u2588\u2593\u2584\u2584\u25a0\u2584\u25a0\u2584\u2588\u2584\u25ab\u25a1\u2584\u258c\u2593\u2592\u2591\u2592\u25a0\u25a0\u25a1\u25aa\u2590\u25a0\u25aa\u25ab\u25a1\u258c\u25aa\u25a0\u25ab\u2593\u2590\u2593\u2591\u2593\u25a1\u25ab\u25a1\u25a1\u2584\u2593\u2593\u25ab\u2590\u2590\u25ab\u25a0\u258c\u25ab\u25a1\u25ab\u2591\u2591\u2592\u258c\u2588\u2593\u2591\u2588\u25aa\u2593\u258c\u2580\u2590\u25aa\u2593\u2591\u25a1\u2584\u25aa\u2588\u25a0\u25ab\u258c"
+        ]
+      ],
+      [
+        "lfc_lsty_liquidstyler",
+        [
+          "\u2580\u2593\u2592\u2590\u2591\u2592\u2592\u2592\u2584\u2591\u25aa\u2584\u2584\u2580\u2593\u2591\u258c\u2584\u25ab\u2580\u2590\u25a0\u25a0\u25aa\u25aa\u25aa\u2580\u2580\u25a1\u2592\u2590\u2593\u2593\u2590\u2588\u25ab\u2593\u2584\u2584\u2590\u2580\u25aa\u25a1\u25a0\u2593\u2584\u2590\u258c\u2588\u2584\u2584\u25ab\u2580\u2580\u25a0\u25aa\u2591\u2593\u25a1\u25aa\u2588\u2580\u25a1\u258c\u258c\u2591\u2590\u2592\u2590\u25a1\u25ab\u25ab\u2588\u25a0\u258c\u2588\u2584\u2590\u25aa\u25a0"
+        ]
+      ],
+      [
+        "lgb_bo16_belcholm",
+        [
+          "                                                                ________________"
+        ]
+      ],
+      [
+        "s_x39n2_fileprocessor",
+        [
+          "____\u2591\u2591\u2591\u2591____\u2591\u2591\u2591\u2591____\u2591\u2591\u2591\u2591____\u2591\u2591\u2591\u2591____\u2591\u2591\u2591\u2591____\u2591\u2591\u2591\u2591____\u2591\u2591\u2591\u2591____\u2591\u2591\u2591\u2591____\u2591\u2591\u2591\u2591____\u2591\u2591\u2591\u2591"
+        ]
+      ],
+      [
+        "slkshell_slickshell",
+        [
+          "                                                                ________________"
+        ]
+      ],
+      [
+        "trs_bk22_bytekiller",
+        [
+          "____\u2591\u2591\u2591\u2591____\u2591\u2591\u2591\u2591____\u2591\u2591\u2591\u2591____\u2591\u2591\u2591\u2591____\u2591\u2591\u2591\u2591____\u2591\u2591\u2591\u2591____\u2591\u2591\u2591\u2591____\u2591\u2591\u2591\u2591____\u2591\u2591\u2591\u2591____\u2591\u2591\u2591\u2591"
+        ]
+      ],
+      [
+        "ydl_mens_wm2",
+        [
+          "____\u2591\u2591\u2591\u2591____\u2591\u2591\u2591\u2591____\u2591\u2591\u2591\u2591____\u2591\u2591\u2591\u2591____\u2591\u2591\u2591\u2591____\u2591\u2591\u2591\u2591____\u2591\u2591\u2591\u2591____\u2591\u2591\u2591\u2591____\u2591\u2591\u2591\u2591____\u2591\u2591\u2591\u2591"
+        ]
+      ],
+      [
+        "dc_x107i_aquascan",
+        [
+          "WCx)OMudgrGtCoK@4cBeIxrwchRh5AN&!ANw4O^)ZXqc0bx!cvlN)D1Armmq@J$3&(JiQgtD07%qisF^"
+        ]
+      ],
+      [
+        "5d_se010_5d_security",
+        [
+          "         _________      ___      ___            ______                        __"
+        ]
+      ],
+      [
+        "aqannl10_announcelogon",
+        [
+          "                                                                ________________"
+        ]
+      ],
+      [
+        "bread13_bullread",
+        [
+          "KKc9UT3LMq6P5dU$QTPw*Xygcl2Dby04LrxHMPaVYx$MdE^*BR9)8MO@k)p(Ey6!$@LY0wwmpK2Bv@!F"
+        ]
+      ],
+      [
+        "fld_p014_powerpager",
+        [
+          "                                                                ________________"
+        ]
+      ],
+      [
+        "ilt_ps10_pumpsafe",
+        [
+          "\u25ab\u2590\u2593\u2590\u25ab\u2580\u2590\u25a1\u2580\u2593\u2593\u2593\u25a1\u2580\u25a0\u2591\u258c\u2580\u2591\u25ab\u2588\u25aa\u2584\u2588\u25ab\u2593\u2593\u25a1\u258c\u2588\u2591\u25aa\u25ab\u25ab\u25aa\u25a1\u25ab\u2593\u25a1\u2588\u258c\u2591\u2592\u25a1\u2590\u2591\u2593\u2590\u2584\u2592\u258c\u2592\u2590\u2591\u2584\u2584\u2588\u25aa\u25aa\u2590\u25a0\u258c\u2588\u25a1\u25a0\u258c\u25a0\u25a0\u2591\u2591\u2593\u2592\u25a1\u2592\u2584\u2590\u25ab\u25aa\u25a1\u2588"
+        ]
+      ],
+      [
+        "jso_pc12_paycheck",
+        [
+          "___   ___               ___               ___                        ______   __"
+        ]
+      ],
+      [
+        "nb_olm14_belcholm",
+        [
+          "                                                                ________________"
+        ]
+      ],
+      [
+        "wclock11_world_clock",
+        [
+          "\u2593\u25aa\u2580\u2584\u2592\u2584\u2590\u258c\u2591\u25a1\u25a0\u2591\u25ab\u2592\u2592\u25a1\u25ab\u25a1\u2588\u2591\u25aa\u2593\u2584\u25a1\u25ab\u25aa\u25aa\u25a1\u2580\u2592\u25aa\u2592\u2580\u2584\u258c\u2580\u2592\u25a0\u25a1\u25aa\u25a1\u258c\u2584\u25ab\u2592\u2591\u25ab\u2591\u2588\u25a0\u2580\u2592\u25ab\u25a1\u2580\u25a0\u25aa\u25a0\u25a1\u2592\u2592\u25aa\u2593\u2588\u258c\u2590\u2593\u25a0\u2593\u2591\u2593\u2584\u2590\u2592\u258c\u2592\u2580\u25aa\u258c\u2580"
+        ]
+      ],
+      [
+        "trs_bk22_bytelog",
+        [
+          "                                                                ________________"
+        ]
+      ],
+      [
+        "lgc_bv12_belchview",
+        [
+          "____\u2591\u2591\u2591\u2591____\u2591\u2591\u2591\u2591____\u2591\u2591\u2591\u2591____\u2591\u2591\u2591\u2591____\u2591\u2591\u2591\u2591____\u2591\u2591\u2591\u2591____\u2591\u2591\u2591\u2591____\u2591\u2591\u2591\u2591____\u2591\u2591\u2591\u2591____\u2591\u2591\u2591\u2591"
+        ]
+      ],
+      [
+        "nb_olm13_belcholm",
+        [
+          "                                                                ________________"
+        ]
+      ],
+      [
+        "aflfro11_afl_front11",
+        [
+          "   ___                                                                        __"
+        ]
+      ],
+      [
+        "afl_pack_order",
+        [
+          "_________________________________   ____________________________________________"
+        ]
+      ],
+      [
+        "mgs__lm1_mgzlistman",
+        [
+          "n1(#ZWC@$NlMC2LnPz&LISY*zF^Vkv3V3WT&Ocaqf46WorFgGwtkpBITQ2NQJdfmy$cd0djXV3JL%D%X"
+        ]
+      ],
+      [
+        "mscanv10_rmail",
+        [
+          " [S] - SHOW STATUS            [W] - CHANGE SETTINGS    [V]  - VIEW TXT/LHA FILE"
+        ]
+      ],
+      [
+        "nb_bv1_belchview",
+        [
+          "________________________________________________________________________________"
+        ]
+      ],
+      [
+        "ryl_swh3_swhoulcounter",
+        [
+          "                                                                ________________"
+        ]
+      ],
+      [
+        "srh_tlp2_tlp2",
+        [
+          "   ___            ______   ____________         ___      ______   ______      __"
+        ]
+      ],
+      [
+        "vtl_sc21_syscm",
+        [
+          "#Z5u)vCN93Xxnyu@*J0ofUfiGzbk367&fx79U(D#TB71X5WW$Wd!#WFg7QNEC9OXWH#(VKXHOiMl4WAd"
+        ]
+      ],
+      [
+        "x_frndor_front",
+        [
+          "                                                                ________________"
+        ]
+      ],
+      [
+        "dv_phan_phukansi",
+        [
+          "_________   ______   ___         ____________   ___   ___      ____________   __"
+        ]
+      ],
+      [
+        "nrv_or10_nirvanaorder",
+        [
+          " [S] - SHOW STATUS            [W] - CHANGE SETTINGS    [V]  - VIEW TXT/LHA FILE"
+        ]
+      ],
+      [
+        "rg_frv10_frontavail",
+        [
+          "OgkjMKQ6B7RIxeB@b%c%IrJygMAKyBFSfivufp*kzid3YhyUX8BP%I)cJX0ra8T0n5hnwUNIiFlEyjYX"
+        ]
+      ],
+      [
+        "tvk_di1_dateit",
+        [
+          "YHHxNTKdRYR@f0uwhR1M*eY64afpx7%f2hjLs9xBgI5F31RLtYRnzM7UYm6RihSTd1R6jss1QiazUr5Q"
+        ]
+      ],
+      [
+        "wl7a_wildlist",
+        [
+          "________________________________________________________________________________"
+        ]
+      ],
+      [
+        "ydl_ww04_wwall",
+        [
+          "                                                                ________________"
+        ]
+      ],
+      [
+        "dlt_dl11_dirlook_cps",
+        [
+          "____\u2591\u2591\u2591\u2591____\u2591\u2591\u2591\u2591____\u2591\u2591\u2591\u2591____\u2591\u2591\u2591\u2591____\u2591\u2591\u2591\u2591____\u2591\u2591\u2591\u2591____\u2591\u2591\u2591\u2591____\u2591\u2591\u2591\u2591____\u2591\u2591\u2591\u2591____\u2591\u2591\u2591\u2591"
+        ]
+      ],
+      [
+        "nrv_ba10_nirvanabaud",
+        [
+          "                                                                ________________"
+        ]
+      ],
+      [
+        "tel_tp02_flm",
+        [
+          " |Sk!       ___         /     /         __//        _\\_"
+        ]
+      ],
+      [
+        "at20_copy",
+        [
+          "                                                                ________________"
+        ]
+      ],
+      [
+        "aetop20_aetop",
+        [
+          "         ______            ___            ______   ___   ___      ___      _____"
+        ]
+      ],
+      [
+        "piw_st05_rexxmast",
+        [
+          "\u2580\u2590\u2584\u2591\u2580\u25a1\u2584\u2590\u258c\u2593\u2584\u2592\u2584\u2591\u2590\u25ab\u2590\u258c\u2592\u25aa\u2580\u25a1\u25a0\u258c\u2584\u25aa\u2588\u2590\u2592\u25a0\u25ab\u2588\u2593\u25aa\u2593\u2588\u25a0\u2591\u2580\u25aa\u25aa\u2584\u2580\u25aa\u25a0\u25a0\u2592\u2591\u2588\u2592\u25a0\u2590\u25a0\u2590\u258c\u2591\u2584\u2593\u2580\u2592\u2591\u2580\u25a0\u2593\u258c\u25aa\u25a1\u25aa\u2592\u25aa\u2590\u2588\u25a0\u2591\u2592\u2593\u2588\u25a1\u2592\u2590"
+        ]
+      ],
+      [
+        "mth_nu11_nup",
+        [
+          "____\u2591\u2591\u2591\u2591____\u2591\u2591\u2591\u2591____\u2591\u2591\u2591\u2591____\u2591\u2591\u2591\u2591____\u2591\u2591\u2591\u2591____\u2591\u2591\u2591\u2591____\u2591\u2591\u2591\u2591____\u2591\u2591\u2591\u2591____\u2591\u2591\u2591\u2591____\u2591\u2591\u2591\u2591"
+        ]
+      ],
+      [
+        "god_tf02_top_faker",
+        [
+          "                                                                ________________"
+        ]
+      ],
+      [
+        "dlt_af12_autofree",
+        [
+          "\u25a1\u2584\u2584\u2584\u25a0\u2590\u25ab\u2580\u25aa\u2580\u25a0\u25a1\u2590\u25a1\u25ab\u25a0\u2592\u25a1\u25ab\u25a1\u2593\u25a0\u2580\u258c\u2580\u2592\u25ab\u25ab\u2591\u2593\u2584\u2591\u25aa\u2593\u25aa\u25aa\u25a0\u25aa\u25aa\u25a0\u25a1\u2580\u25a1\u2590\u25a0\u2588\u25ab\u2580\u25a0\u2591\u2590\u258c\u2580\u2590\u2591\u2591\u2584\u2588\u2588\u2588\u2580\u2591\u2584\u2584\u25a1\u2591\u2588\u2591\u25a1\u2590\u2580\u2590\u25aa\u2580\u25ab\u25a0\u25aa\u2592\u25ab\u2584"
+        ]
+      ],
+      [
+        "trsicd1p_guide2docprof",
+        [
+          "                                                                ________________"
+        ]
+      ]
+    ],
+    "skip": [],
+    "other-fail": []
+  }
+}

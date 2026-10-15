@@ -1,0 +1,221 @@
+@database "5th Dynasty - 5D-AdiMenu V1.0"
+@AUTHOR "[tHE aDDiCT/5D!]"
+@(C) "[tHE aDDiCT/5D!]"
+@Ver$ "5th Dynasty - 5D-AdiMenu V1.0 (10-07-94)   
+@HEIGHT 30
+@Node MAIN "5D-AdiMenu V1.0"
+
+.............................................................................
+                                             ..............@{" "link "HIDE"}.................
+                      _/\________________________/\_.........................
+                      \__   ________  ____   I   __/      ...................
+  [tHE aDDiCT/5D!]     _\____    \/    \/         \            ..............
+                      /     !     \     \    T     \               ..........
+  > 5D-/X-dESiGN <   /      ______/_____/____j      \                 .......
+                     \______j                l______/                    ....
+_/\_______ __________ __________ __________ ___________________________/\_ ..
+\______   \\__   I   \\__       \\__   _   \\__   ________  ____   I   __/  .
+ /    |    \/\____    \/    T    \/   _j    \_\____    \/    \/\____    \
+/     !     \    !     \    |     \   l_     \    !     \     \    !     \
+\______      \_________/____l_____/____l_____/__________/_____/_____      \
+      l______/                                                     l______/
+                    5D-AdiMenu V1.0 by [tHE aDDiCT/5D!]
+             _ __ ___ ________________________________ __ _ _
+                     Y    .--------------------.
+                     :    |   @{"  Disclaimer  " link "Disc"}   |
+.                    .    :   @{" Requirements " link "Req"}   : 
+..                   .        @{" Installation " link "Inst"}    
+....                      .   @{" How it works " link "What"}
+.......                   |   @{"   CallNow    " link "CallNow"}   |
+.........                 |   @{"  Greetings   " link "Greet"}   |
+.............             `--------------------'
+..................
+..........................
+.............................................................................
+
+
+@endnode
+
+@node "Disc"
+@toc "Disc"
+
+              5D-AdiMenu was first designed as a Doormenu....
+
+        But it works in a quite strange way, which lets 5D-AdiMenu
+             act like some kind of ~SS_ - replacement... hehe
+
+    Well You can define Textfiles like Commands now, and in this case,
+  You can give them Access-levels and Multi- or Single-command options, 
+                           like in normal doors!
+
+
+                             @{" HALLELUJA! " link "MAIN"}
+
+@endnode
+
+@node "Req" "Requirements"
+@toc "Req"
+
+       Any Amiga (500,600,1000,1200,2000,3000,4000,4000T,5000(?)....
+it should also run on a Sinclair ZX81, but i hadn`t got the  chance to test!
+                   Installed S-Express, /X 2.xx or 3.xx
+                           Some bottles of Bluna
+                       A dead cat (black preferred)
+                        Some chilpi-wongo-wacklers
+                   Some nights playing Gravity Force II
+
+                            @{" BACK TO MAIN MENU? " link "MAIN"}
+
+@endnode
+@node "Inst" "Installing 5D-AdiMenu V1.0"
+@toc "Inst"
+
+Just copy the files
+
+                   5D-AdiMenu
+                   5D-AdiMUI.Guide
+
+          and the drawer
+
+                   @{"TEXT" link "TEXT"}
+
+                   to DOORS:5D-AdiMenu/
+
+-------------------------------------------------------
+/X 2.xx or S-Express:
+
+Copy the drawer 5D-AdiMenu to DOORS:
+
+Edit Your BBS.CMD and snap in the following:
+
+*Nameofdoor      XM001DOORS:5D-AdiMenu/5D-AdiMenu
+-------------------------------------------------------
+/X 3.xx:
+
+Copy the drawer 5D-AdiMenu to DOORS:
+
+Just create an icon and copy it to Your SYSCMD-Directory
+(see the examples inside the archive!!!!)
+
+                            @{" BACK TO MAIN MENU? " link "MAIN"}
+@endnode
+@node "What" "---> What it does: <---"
+@toc "What"
+
+        5D-AdiMenu reads the Commandline, which means it looks for
+       the command it was launched with... Well it`s simple, I just
+     can`t explain how it works, but it`s quite simple.... so... try 
+             it out.. sorry.... a well.. let`s have a drink...
+
+                            @{" YES !" link "MAIN"}
+@endnode
+@node "TEXT" "drawer TEXT"
+@toc "TEXT"
+
+    In the drawer DOORS:5D-ADIMENU/TEXT, there are all those Textfiles,
+                     You assigned the commands to....
+ 
+    E.G. if You have a command called "DOORS", the textfile You want to
+               display must be DOORS:5D-ADIMENU/TEXT/DOORS .
+   This Textfile can contain ANSI-Codes, MCI-messages, Screenclearers or
+                  whatever You want (even Ketchup!).... 
+
+                          @{" Hummhumm " link "Inst"}
+@endnode
+@node "Greet" "---> Greetings <---"
+@toc "Greet"
+
+greetings fly to:
+
+      tHE lIVING dEAD/tHE gIANTS/mUSHROOM/jAKE&eLWOOD <- Caesium `94!
+          Sven the Creator/5D <- You should join my coding conf.!
+                        Joe Cool/M! <- FORMAT BBS:
+                     INNUENDO <- Ja! Maekel mich voll!
+                 [-Treach!] <- Wehting for se next colli!
+           Airworx/5D & SNOW/5D <- Muss doch ma nach beeerlin...
+               Murphy & Intercode/BB <- Yo, test the west !
+                  Bilbo Baggins/M! <- Aehm.. im Urlaub ?
+                      Gonzalez/M! <- Muffig Inc. 94 ?
+                         E.F.A./PARAFiX <- Gruen!
+Jordan/5D <- Bitte blaeh die Archive net so auf, sonst sag ich ORS zu dir!
+                      Spider/ORS <- A propos ORS, hi!
+                         Supergrobi <- Elitelizer
+                    Pater Pink/ARS <- Keep Arise alive!
+        MaD FøRcE/5D <- Weiter so! Mach mir auch mal nen Ansi,thX!
+                            Steel/5D <- Jupsa!
+
+                    to my girl (there can only be one!)
+
+                      and to all the Users of my BBS!
+
+                                 @{" RiGHT ! " link "MAIN"}
+@endnode
+
+@node "CallNow" "CallNow....."
+@toc "CallNow"
+
+¼%¼%¼%¼%¼%¼%¼%¼%¼%¼%¼%¼%¼%¼%¼%¼%¼%¼%¼%¼%¼%¼%¼%¼%¼%¼%¼%¼%¼%¼%¼%¼%¼%¼%¼%¼%¼%¼%¼%
+%               __________/\  ____  /\________________/\                     ¾
+¾              5\_____\  /  \/ _  \/  \   ____/    / /  \                    %
+%              tH/   / \__   \_/   \   \____ \_  \/__    \_                  ¾
+¾              _/   /   \     /     \_  \_ /  /   \_      /                  %
+%              \________/____/_______/___/___/_____/_____/ bOARDS            ¾
+¼%¼%¼%¼%¼%¼%¼%¼%¼%¼%¼%¼%¼%¼%¼%¼%¼%¼%¼%¼%¼%¼%¼%¼%¼%¼%¼%¼%¼%¼%¼%¼%¼%¼%¼%¼%¼%¼%¼%
+%                                                                            ¾
+¾ -=>  cELTIC cROSS ..........[    tHUNDER   ].. +49-333-aSK-4-iT  < WHQ>    %
+% -=>  aNTaRCTICA ............[      sNOW    ].. +49-306-aSK-4-iT  < GHQ>    ¾
+¾ -=>  fACElESS wORLD ........[    aIRwORX   ].. +49-304-aSK-4-iT  < GHQ>    %
+¾ -=>  sCUMwHERE #0 ..........[  tHE aDDICT  ].. +49-711-aSK-4-iT  < GHQ>    %
+%      sCUMwHERE #IsdN .......[  tHE aDDICT  ].. +49-711-aSK-4-iT  < GHQ>    ¾
+¾ -=>  lASERdANCE #0 .........[    jORDAN    ].. +49-210-aSK-4-iT  < GHQ>    %
+%      lASERdANCE #1 .........[    jORDAN    ].. +49-210-aSK-4-iT  < GHQ>    ¾
+¾ -=>  fUNKY tRADING #0 ......[   mAVERICK   ].. +39-828-aSK-4-iT  < IHQ>    %
+%      fUNKY tRADING #1 ......[   mAVERICK   ].. +39-828-aSK-4-iT  < IHQ>    ¾
+¾ -=>  dISoRDER ..............[    mARWIN    ].. +46-456-aSK-4-iT  < SHQ>    %
+% -=>  dREAMsCAPE ............[     sCAN     ].. +31-525-aSK-4-iT  <NLHQ>    ¾
+¾ -=>  wORLD oF wONDER #0 ....[    sTARcAM   ].. + 1-410-aSK-4-iT  <USHQ>    %
+%      wORLD oF wONDER #1 ....[    sTARcAM   ].. + 1-410-aSK-4-iT  <USHQ>    ¾
+¾ -=>  nEEDfUL tHINGS ........[ lELAND gAUNT ].. + 1-508-aSK-4-iT  <USHQ>    %
+%                                                                            ¾
+¼%¼%¼%¼%¼%¼%¼%¼%¼%¼%¼%¼%¼%¼%¼%¼%¼%¼%¼%¼%¼%¼%¼%¼%¼%¼%¼%¼%¼%¼%¼%¼%¼%¼%¼%¼%¼%¼%¼%
+
+                                 @{" ATDT ! " link "MAIN"}
+
+@endnode
+
+@node "HIDE" "hidden Note....."
+@toc "Call"
+
+                       >iSDN cAllERS vERY wElCOME! <
+                       ..............................
+
+
+                                           \
+=====.====\================================)\==.========.======\=======.==
+    /|____)\.      .        .  /     .____/  \/|       /|       \     /|
+   /.      /|  \  /|       /|\/(_____|      // | \    / |_______)\   / |
+  //     //.|__)\/.|__    /.| \      |     //  |_)\  /. |______  \\ /. |
+ /  _____/  ____/ :|  \  // |: \\   :|    // __|   \//__l  /  |___///__l
+ \___  \//  \/  \  :   \//     .\\  |:    /  \___   \ ___)//  _ .\/  ___)
+ / \/  \\\      /  |   /    Y   \\  . .  /\    |    /    \_  .|  \\\    \_
+//______/\  ___/\  ___/ ____|_____\__|  /  \  _|___/______/  :|___ \___  /
+\(========\(=====\(===\(=============| /====\(==========/ ____|===)/aDi)/=
+ \         `      `    \             |/      \          \(        /    /
+                    5th      dYNASTY `  hEADQUAtER!      \
+
+
+     rUNNiNG oN aN A4ooo/o3o/6mb/55ohD   aMi-EXPRESS nEWEST! vERiON!  
+
+     sYSOP: mACHINE  cO`s: [tHE aDDiCT/5D!]   nODE0:   +49-711-lOCAl!
+                           [-sUPERGROBI!]     nODE1:   +49-711-zYXEL 19,2
+                           [-jOE cOOL-]/M!    nODE2+3: +49-711-iSDN 64kB RD
+                 
+    aMiGA oNLY - sPECiAL sEX & /X tOOLS cONF - dEMO & aGA cONFERENCE! 
+
+             ==>>   sPECiAl /X-tOOlS cODiNG cONfERENCE!   <==
+
+     ]=[ iNVITED uSERS oNLY! ]=[ pRiVATE sYSTtEM = nUP rEQUiRED! ]=[ 
+==========================================================================
+
+                             @{" HALLELUJA! " link "MAIN"}
+@endnode

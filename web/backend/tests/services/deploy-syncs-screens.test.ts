@@ -1,0 +1,423 @@
+/**
+ * A screen edited in the repo has to reach a board that already exists.
+ *
+ * Screens were seeded to the persistent volume on FIRST RUN ONLY, so every
+ * change made to `Screens/*.txt` after a board's first boot never arrived:
+ * the volume kept whatever it was initialised with, deploy after deploy.
+ *
+ * Reported 2026-09-07: random wipe animations (`~WX` and friends) were added
+ * to the screen files, worked on localhost, and were invisible on the live
+ * board - live's volume still held the pre-wipe screens. The only remedy was
+ * FORCE_REINIT_SCREENS=1, which `rm -rf`s the directory and takes every
+ * screen the sysop wrote with it.
+ *
+ * Screens now go through sync_tracked, the same three-way reconciliation the
+ * Commands tree uses: the image leads until the sysop takes a file over.
+ * Screens ARE sysop-edited - the admin has a screen editor with revision
+ * history - so "always overwrite" would be the wrong fix and this is the
+ * right one.
+ *
+ * Driven through the real shell out of the real entrypoint: a TypeScript
+ * re-implementation would prove nothing about the script that runs on deploy.
+ */
+
+import { execFileSync } from 'child_process';
+import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
+
+const ENTRYPOINT = path.join(__dirname, '..', '..', '..', '..', 'docker-entrypoint.sh');
+
+function extractFunctions(): string {
+  const source = fs.readFileSync(ENTRYPOINT, 'utf8');
+  const start = source.indexOf('DEPLOY_MANIFEST="$BBS_DATA_DIR/.deployed-manifest"');
+  const end = source.indexOf('# --- end of the deploy sync helpers');
+  if (start === -1 || end === -1 || end < start) {
+    throw new Error('the deploy sync helpers were not found in docker-entrypoint.sh');
+  }
+  return source.slice(start, end);
+}
+
+/** One deploy over a temp image/volume pair, running the real function. */
+function deploy(root: string): string {
+  const script = `
+    set -eu
+    DEFAULT_DATA_DIR="${root}/image"
+    BBS_DATA_DIR="${root}/volume"
+    ${extractFunctions()}
+    TRACKED_CREATED=0; TRACKED_UPDATED=0; TRACKED_KEPT=0; TRACKED_ADOPTED=0; TRACKED_FAILED=0
+    rm -f "$DEPLOY_MANIFEST_NEXT"
+    # The entrypoint's own list. Deciding here which files to sync is how the
+    # conference-root menu stayed stale with every test in this file green.
+    list_tracked_screens | while IFS= read -r rel; do
+      [ -n "$rel" ] || continue
+      sync_tracked_case_aware "$rel"
+    done
+    [ -f "$DEPLOY_MANIFEST_NEXT" ] && mv "$DEPLOY_MANIFEST_NEXT" "$DEPLOY_MANIFEST"
+    echo "created=$TRACKED_CREATED updated=$TRACKED_UPDATED kept=$TRACKED_KEPT adopted=$TRACKED_ADOPTED"
+  `;
+  return execFileSync('sh', ['-c', script], { encoding: 'utf8' }).trim();
+}
+
+let root: string;
+const imageScreens = () => path.join(root, 'image', 'Screens');
+const volumeScreens = () => path.join(root, 'volume', 'Screens');
+
+beforeEach(() => {
+  root = fs.mkdtempSync(path.join(os.tmpdir(), 'screens-sync-'));
+  fs.mkdirSync(imageScreens(), { recursive: true });
+  fs.mkdirSync(volumeScreens(), { recursive: true });
+});
+
+afterEach(() => fs.rmSync(root, { recursive: true, force: true }));
+
+const write = (dir: string, name: string, body: string) =>
+  fs.writeFileSync(path.join(dir, name), body);
+const read = (dir: string, name: string) => fs.readFileSync(path.join(dir, name), 'utf8');
+
+/** The key `screen-revisions.ts` derives from a board-relative path. */
+const revKey = (name: string) =>
+  `Screens/${name}`.toLowerCase().replace(/[\\/]/g, '_').replace(/[^a-zA-Z0-9_.-]/g, '_');
+
+/** A snapshot in the revision store, the way the admin's editor leaves one. */
+function writeRevision(name: string): void {
+  const dir = path.join(root, 'volume', 'Screens', '.Revisions', revKey(name));
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, '2026-09-01T00-00-00.000Z.txt'), 'an older version\n');
+}
+
+/** What the admin's screen editor actually does: revision, `.backup`, write. */
+function adminEdit(name: string, body: string): void {
+  const full = path.join(volumeScreens(), name);
+  writeRevision(name);
+  if (fs.existsSync(full)) fs.copyFileSync(full, `${full}.backup`);
+  fs.writeFileSync(full, body);
+}
+
+test('a wipe added to a screen in the repo reaches a board that already exists', () => {
+  // The board was seeded with the pre-wipe screen on some earlier deploy.
+  write(imageScreens(), 'MENU.TXT', 'Main Menu\n');
+  write(volumeScreens(), 'MENU.TXT', 'Main Menu\n');
+  deploy(root);
+
+  // Now the repo adds the wipe. THIS is what never used to arrive.
+  write(imageScreens(), 'MENU.TXT', '~WXMain Menu\n');
+  deploy(root);
+
+  expect(read(volumeScreens(), 'MENU.TXT')).toBe('~WXMain Menu\n');
+});
+
+test('a screen the sysop edited on the board is NOT overwritten', () => {
+  write(imageScreens(), 'BULLETIN.TXT', 'shipped\n');
+  write(volumeScreens(), 'BULLETIN.TXT', 'shipped\n');
+  deploy(root);
+
+  // The sysop rewrites it through the admin's screen editor, which leaves the
+  // `.backup` sibling and a revision beside every screen it writes.
+  adminEdit('BULLETIN.TXT', 'the sysop wrote this\n');
+  // And the image moves on underneath them.
+  write(imageScreens(), 'BULLETIN.TXT', 'a later version from the repo\n');
+  deploy(root);
+
+  expect(read(volumeScreens(), 'BULLETIN.TXT')).toBe('the sysop wrote this\n');
+});
+
+/**
+ * The live board, exactly: the screens joined the tracked set on a deploy where
+ * the volume ALREADY differed from the image, because it still held whatever
+ * the board was seeded with when it was created.
+ *
+ * Adoption records the IMAGE's hash without copying anything, so from the next
+ * deploy on the divergence reads as a sysop edit and the screen is kept for
+ * ever. The sysop's wipe animations were on origin/main, the deploy fix was
+ * live, and the main menu still did not wipe.
+ *
+ * The board knows the difference. The admin's screen editor leaves a `.backup`
+ * beside every screen it writes and a snapshot in `Screens/.Revisions`, so a
+ * divergence with NO such evidence is not a sysop edit - it is the stale seed.
+ */
+test("a stale screen nobody edited takes the repo's version", () => {
+  write(imageScreens(), 'MENU250.TXT', '~WXMain Menu\n');
+  // What this board was seeded with, years of repo changes ago.
+  write(volumeScreens(), 'MENU250.TXT', 'Main Menu\n');
+
+  deploy(root); // the deploy that first tracks screens
+  deploy(root); // and the one after it
+
+  expect(read(volumeScreens(), 'MENU250.TXT')).toBe('~WXMain Menu\n');
+});
+
+test('an edited screen survives that same first tracking deploy', () => {
+  write(imageScreens(), 'MENU250.TXT', '~WXMain Menu\n');
+  adminEdit('MENU250.TXT', 'the sysop drew this one\n');
+
+  deploy(root);
+  deploy(root);
+
+  expect(read(volumeScreens(), 'MENU250.TXT')).toBe('the sysop drew this one\n');
+});
+
+test('a revision on its own is enough evidence, with no .backup beside it', () => {
+  write(imageScreens(), 'MENU250.TXT', '~WXMain Menu\n');
+  write(volumeScreens(), 'MENU250.TXT', 'the sysop drew this one\n');
+  // An older edit whose `.backup` has since been cleaned away.
+  writeRevision('MENU250.TXT');
+
+  deploy(root);
+  deploy(root);
+
+  expect(read(volumeScreens(), 'MENU250.TXT')).toBe('the sysop drew this one\n');
+});
+
+test('the screen it replaces is recoverable afterwards', () => {
+  write(imageScreens(), 'MENU250.TXT', '~WXMain Menu\n');
+  write(volumeScreens(), 'MENU250.TXT', 'what the board had\n');
+
+  deploy(root);
+
+  // Overwriting is only safe because the old bytes are still there: an edit
+  // made outside the admin leaves no evidence and would otherwise be lost.
+  expect(read(volumeScreens(), 'MENU250.TXT.pre-deploy')).toBe('what the board had\n');
+});
+
+test('a screen the sysop deleted stays deleted across deploys', () => {
+  write(imageScreens(), 'GOODBYE.TXT', 'bye\n');
+  deploy(root);
+  expect(fs.existsSync(path.join(volumeScreens(), 'GOODBYE.TXT'))).toBe(true);
+
+  fs.rmSync(path.join(volumeScreens(), 'GOODBYE.TXT'));
+  deploy(root);
+
+  expect(fs.existsSync(path.join(volumeScreens(), 'GOODBYE.TXT'))).toBe(false);
+});
+
+test('a screen this board has never had arrives', () => {
+  write(imageScreens(), 'NEWSCREEN.TXT', 'hello\n');
+
+  deploy(root);
+
+  expect(read(volumeScreens(), 'NEWSCREEN.TXT')).toBe('hello\n');
+});
+
+/**
+ * The screen the sysop was actually looking at.
+ *
+ * MENU is a CONFERENCE screen and the resolver searches the conference's own
+ * directory FIRST, `Conf<n>/Screens` second
+ * (web/backend/src/screens/screen-resolution.ts:138-144), with
+ * `findSecurityScreen` choosing `MENU250.TXT` for a level-250 caller. So this
+ * board's main menu is `Conf1/MENU250.TXT` - a conference-ROOT file. Syncing
+ * the Screens directories alone never touched it, and the root `Screens/MENU*`
+ * that WAS synced is never reached, because the conference directory wins.
+ *
+ * The wipe was in the repo, the deploy fix was live, and the menu still did not
+ * wipe.
+ */
+describe('the conference-root screens the resolver reads first', () => {
+  const confDir = (side: 'image' | 'volume') => path.join(root, side, 'Conf1');
+
+  beforeEach(() => {
+    fs.mkdirSync(confDir('image'), { recursive: true });
+    fs.mkdirSync(confDir('volume'), { recursive: true });
+  });
+
+  it("takes the repo's menu to a board that already has one", () => {
+    write(confDir('image'), 'MENU250.TXT', '~WXMain Menu\n');
+    write(confDir('volume'), 'MENU250.TXT', 'Main Menu\n');
+
+    deploy(root);
+    deploy(root);
+
+    expect(read(confDir('volume'), 'MENU250.TXT')).toBe('~WXMain Menu\n');
+  });
+
+  it('leaves the conference DATA alone - a DIR listing is not a screen', () => {
+    fs.mkdirSync(path.join(confDir('image'), 'MsgBase'), { recursive: true });
+    write(path.join(confDir('image'), 'MsgBase'), 'HighMsgNum.txt', 'from the image\n');
+    write(confDir('image'), 'DIR1', 'DEMO.LHA      1024  01-01-26  a file\n');
+
+    fs.mkdirSync(path.join(confDir('volume'), 'MsgBase'), { recursive: true });
+    write(path.join(confDir('volume'), 'MsgBase'), 'HighMsgNum.txt', 'the board\'s own\n');
+    write(confDir('volume'), 'DIR1', 'REAL.LHA      2048  02-02-26  the board\'s own listing\n');
+
+    deploy(root);
+    deploy(root);
+
+    // A conference root is mostly not screens. Sweeping it wholesale would
+    // overwrite the board's message base pointers and its file listings.
+    expect(read(path.join(confDir('volume'), 'MsgBase'), 'HighMsgNum.txt')).toBe("the board's own\n");
+    expect(read(confDir('volume'), 'DIR1')).toBe("REAL.LHA      2048  02-02-26  the board's own listing\n");
+  });
+
+  it('carries the .GR variant a graphics caller is served', () => {
+    write(confDir('image'), 'menu250.txt.GR', '~WXgraphics menu\n');
+
+    deploy(root);
+
+    expect(read(confDir('volume'), 'menu250.txt.GR')).toBe('~WXgraphics menu\n');
+  });
+});
+
+/**
+ * Two files, one name, different case.
+ *
+ * The volume is case-sensitive and the resolver is not, so `BBSTITLE.RIP`
+ * beside `bbstitle.rip` means the board serves whichever it reaches first.
+ * Node directories are not tracked by the deploy, and a dynamically created
+ * node copies the pair it was templated from: one case-only rename in the
+ * repo had spread to 327 node directories on the live board, 74 files, and
+ * nothing reported it. Found by the sysop reading the screens page: "same
+ * filenames different casing".
+ */
+/**
+ * Whether this filesystem can hold `A.txt` and `a.txt` at once.
+ *
+ * macOS cannot: the second write lands on the first file, so the situation
+ * under test cannot be built and every assertion here would pass or fail for
+ * the wrong reason. Linux can, which is where CI runs - the rule is proven
+ * there, and skipped honestly here rather than faked with a mock filesystem
+ * that would prove nothing about `ls | sort -f`.
+ */
+function filesystemKeepsCaseApart(): boolean {
+  const probe = fs.mkdtempSync(path.join(os.tmpdir(), 'case-probe-'));
+  try {
+    fs.writeFileSync(path.join(probe, 'A'), 'a');
+    fs.writeFileSync(path.join(probe, 'a'), 'a');
+    return fs.readdirSync(probe).length === 2;
+  } finally {
+    fs.rmSync(probe, { recursive: true, force: true });
+  }
+}
+
+const caseSensitive = filesystemKeepsCaseApart();
+const onCaseSensitiveFs = caseSensitive ? describe : describe.skip;
+
+if (!caseSensitive) {
+  // Loud, because a silently skipped suite is a suite nobody notices is gone.
+  console.warn('[deploy-syncs-screens] case-duplicate tests skipped: this filesystem folds case (macOS). They run in CI.');
+}
+
+onCaseSensitiveFs('case-only duplicates on the volume', () => {
+  /** The dedupe pass alone, over one directory, out of the real entrypoint. */
+  function dedupe(dir: string): string {
+    const script = `
+      set -eu
+      DEFAULT_DATA_DIR="${root}/image"
+      BBS_DATA_DIR="${root}/volume"
+      ${extractFunctions()}
+      CASE_TWINS_REMOVED=0; CASE_TWINS_CONFLICTING=0
+      dedupe_case_twins "${dir}"
+      echo "removed=$CASE_TWINS_REMOVED conflicting=$CASE_TWINS_CONFLICTING"
+    `;
+    return execFileSync('sh', ['-c', script], { encoding: 'utf8' }).trim();
+  }
+
+  const node = () => path.join(root, 'volume', 'Node1');
+
+  beforeEach(() => fs.mkdirSync(node(), { recursive: true }));
+
+  it('removes the duplicate when both copies hold the same bytes', () => {
+    fs.writeFileSync(path.join(node(), 'BBSTITLE.RIP'), 'the same art');
+    fs.writeFileSync(path.join(node(), 'bbstitle.rip'), 'the same art');
+
+    const out = dedupe(node());
+
+    expect(out).toContain('removed=1');
+    expect(fs.readdirSync(node())).toEqual(['BBSTITLE.RIP']);
+  });
+
+  it('keeps both when the bytes differ, because choosing is the sysop\'s call', () => {
+    fs.writeFileSync(path.join(node(), 'BBSTITLE.RIP'), 'the old art');
+    fs.writeFileSync(path.join(node(), 'bbstitle.rip'), 'art somebody redrew');
+
+    const out = dedupe(node());
+
+    expect(out).toContain('removed=0');
+    expect(out).toContain('conflicting=1');
+    expect(fs.readdirSync(node()).sort()).toEqual(['BBSTITLE.RIP', 'bbstitle.rip']);
+  });
+
+  it('leaves files that differ by more than case alone', () => {
+    fs.writeFileSync(path.join(node(), 'BBSTITLE.txt'), 'title');
+    fs.writeFileSync(path.join(node(), 'BBSTITLE.SEQ'), 'title');
+    fs.writeFileSync(path.join(node(), 'MENU.TXT'), 'menu');
+
+    const out = dedupe(node());
+
+    expect(out).toContain('removed=0');
+    expect(fs.readdirSync(node()).sort()).toEqual(['BBSTITLE.SEQ', 'BBSTITLE.txt', 'MENU.TXT']);
+  });
+
+  it('does not touch a non-screen file that happens to have a case twin', () => {
+    // CallersLog and its friends are the board's own data, written at runtime.
+    fs.writeFileSync(path.join(node(), 'CallersLog'), 'calls');
+    fs.writeFileSync(path.join(node(), 'callerslog'), 'calls');
+
+    dedupe(node());
+
+    expect(fs.readdirSync(node()).sort()).toEqual(['CallersLog', 'callerslog']);
+  });
+
+  it('picks the same survivor every run, so a deploy is not a coin toss', () => {
+    fs.writeFileSync(path.join(node(), 'BBSTITLE.RIP'), 'same');
+    fs.writeFileSync(path.join(node(), 'bbstitle.rip'), 'same');
+    dedupe(node());
+    const first = fs.readdirSync(node());
+
+    fs.writeFileSync(path.join(node(), 'bbstitle.rip'), 'same');
+    dedupe(node());
+
+    expect(fs.readdirSync(node())).toEqual(first);
+  });
+});
+
+describe('a node directory is a screen directory', () => {
+  /*
+   * Node screens reached the volume on FIRST RUN ONLY - the directory is
+   * copied whole when it is missing and never looked at again - so a screen
+   * added to `Node1/` after a board's first boot stayed in the image for
+   * ever. Found while shipping the generated PETSCII defaults, most of which
+   * are node screens.
+   */
+  const imageNode = () => path.join(root, 'image', 'Node1');
+  const volumeNode = () => path.join(root, 'volume', 'Node1');
+
+  beforeEach(() => {
+    fs.mkdirSync(imageNode(), { recursive: true });
+    fs.mkdirSync(volumeNode(), { recursive: true });
+  });
+
+  it('carries a new node screen to a board that already exists', () => {
+    fs.writeFileSync(path.join(imageNode(), 'guestlogon.seq'), 'petscii');
+
+    deploy(root);
+
+    // The FILE, not the counter: the counters are incremented inside a
+    // pipeline subshell and the copy is what the board reads.
+    expect(fs.readFileSync(path.join(volumeNode(), 'guestlogon.seq'), 'utf8')).toBe('petscii');
+  });
+
+  it('keeps the screen the sysop drew over the image\'s', () => {
+    fs.writeFileSync(path.join(imageNode(), 'BBSTITLE.SEQ'), 'image title');
+    fs.writeFileSync(path.join(volumeNode(), 'BBSTITLE.SEQ'), 'the sysop\'s own title');
+
+    deploy(root);            // adopts the divergence
+    deploy(root);            // and must still not overwrite it
+
+    expect(fs.readFileSync(path.join(volumeNode(), 'BBSTITLE.SEQ'), 'utf8')).toBe('the sysop\'s own title');
+  });
+
+  it('leaves the board\'s own runtime files in the node directory alone', () => {
+    // A node directory is also where CallersLog, DOOR.SYS and the
+    // questionnaire's Answers live. None of them is a screen.
+    for (const name of ['CallersLog', 'DOOR.SYS', 'Answers', 'DoorLog']) {
+      fs.writeFileSync(path.join(imageNode(), name), 'from the image');
+    }
+
+    deploy(root);
+
+    for (const name of ['CallersLog', 'DOOR.SYS', 'Answers', 'DoorLog']) {
+      expect(fs.existsSync(path.join(volumeNode(), name))).toBe(false);
+    }
+  });
+});

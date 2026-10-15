@@ -1,0 +1,61 @@
+/* Chat Terminal Styles - Responsive Terminal */
+
+/* Container fills viewport with black background */
+.chat-terminal-container {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  width: 100%;
+  height: 100vh;
+  height: 100dvh; /* Dynamic viewport height for mobile */
+  background: #000;
+  display: flex;
+  flex-direction: column;
+  /* Safe area for notches on mobile */
+  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+/* Terminal wrapper fills container */
+.chat-terminal-wrapper {
+  flex: 1;
+  width: 100%;
+  min-height: 0; /* Important for flex children to shrink properly */
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* Ensure xterm fills its container - BOTH dimensions needed for FitAddon */
+.chat-terminal-wrapper .xterm {
+  flex: 1;
+  width: 100% !important;
+  min-height: 0;
+}
+
+/* The viewport and screen also need full dimensions */
+.chat-terminal-wrapper .xterm-viewport,
+.chat-terminal-wrapper .xterm-screen {
+  width: 100% !important;
+}
+
+.chat-terminal-wrapper .xterm-viewport {
+  overflow-y: hidden !important;
+}
+
+/* Mobile: smaller font for more content */
+@media (max-width: 480px) {
+  .chat-terminal-container {
+    padding: 0;
+  }
+}
+
+/* Tablet and larger: some padding */
+@media (min-width: 768px) {
+  .chat-terminal-container {
+    padding: 1rem;
+  }
+}

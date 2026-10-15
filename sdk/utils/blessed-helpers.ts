@@ -1,0 +1,1746 @@
+/**
+ * Neo-Blessed Helper Functions
+ *
+ * These helpers ensure tags are always enabled by default, preventing the common issue
+ * where {gray-fg} and other tags show as literal text instead of being parsed.
+ *
+ * ALWAYS use these helpers instead of calling blessed.* directly.
+ *
+ * IMPORTANT - COLOR SYSTEM:
+ * Neo-blessed only supports 16 standard colors. Do NOT use:
+ * - Raw ANSI codes like \x1b[38;5;196m (256-color) - they get stripped
+ * - Raw ANSI codes like \x1b[31m - use blessed tags instead
+ *
+ * USE THESE INSTEAD:
+ * - Blessed tags in content: {red-fg}text{/red-fg}
+ * - Style properties: style: { fg: 'red', bg: 'black' }
+ * - The colorize() helper: colorize('text', 'red')
+ *
+ * SUPPORTED COLORS: black, red, green, yellow, blue, magenta, cyan, white, gray
+ *
+ * BBS COMPATIBILITY - AUTOMATIC ANSI CODE CONVERSION:
+ * All create* functions automatically convert standard ANSI escape codes to blessed tags.
+ * This means blessed elements can display content from bbs.write() and legacy BBS
+ * doors without manual conversion.
+ *
+ * Example:
+ *   const content = '\x1b[31mError\x1b[0m: Something went wrong';
+ *   const box = createBox({ content });  // Auto-converts to: {red-fg}Error{/}: Something went wrong
+ *
+ * When calling setContent() after creation, use sanitizeContent() or ansiToTags():
+ *   box.setContent(sanitizeContent('\x1b[32mSuccess!\x1b[0m'));
+ */
+
+import blessed from '../engines/ui/blessed';
+import type {
+  ElementOptions,
+  ListOptions,
+  TextboxOptions,
+  ButtonOptions,
+  TableOptions,
+  LogOptions,
+  ScreenOptions
+} from '../engines/ui/blessed/core/types';
+import type { Screen } from '../engines/ui/blessed/core/screen';
+import { isCompactWidth } from '../engines/ui/blessed/core/responsive-constants';
+import type { Box } from '../engines/ui/blessed/widgets/box';
+import { DockablePanel } from '../engines/ui/blessed/widgets/dockable-panel';
+import type { DockablePanelOptions } from '../engines/ui/blessed/widgets/dockable-panel';
+import { Panel } from '../engines/ui/blessed/widgets/panel';
+import type { PanelOptions } from '../engines/ui/blessed/widgets/panel';
+import type { List } from '../engines/ui/blessed/widgets/list';
+import type { Text } from '../engines/ui/blessed/widgets/text';
+import type { Textbox, Textarea } from '../engines/ui/blessed/widgets/textbox';
+import type { Button } from '../engines/ui/blessed/widgets/button';
+import type { Table } from '../engines/ui/blessed/widgets/table';
+import type { Log } from '../engines/ui/blessed/widgets/log';
+
+// Track if we've already warned to avoid spam
+const warnedAbout = new Set<string>();
+
+/**
+ * Warn about common neo-blessed color mistakes (only once per issue type)
+ */
+function warnOnce(key: string, message: string): void {
+  if (!warnedAbout.has(key)) {
+    warnedAbout.add(key);
+    console.warn(`[neo-blessed] ${message}`);
+  }
+}
+
+/**
+ * Check content for unsupported ANSI codes and warn
+ */
+function checkForUnsupportedAnsi(content: string, context: string): void {
+  // Check for 256-color ANSI codes (38;5;N or 48;5;N)
+  if (/\x1b\[(?:38|48);5;\d+m/.test(content)) {
+    warnOnce('256-color',
+      `256-color ANSI codes detected in ${context}. ` +
+      `Neo-blessed only supports 16 colors. Use blessed tags like {red-fg} instead.`
+    );
+  }
+
+  // Check for raw ANSI that won't be converted (remaining after ansiToTags)
+  const afterConversion = ansiToTags(content);
+  if (/\x1b\[/.test(afterConversion)) {
+    warnOnce('unsupported-ansi',
+      `Unsupported ANSI codes in ${context} were not converted. ` +
+      `Use blessed tags like {red-fg}text{/} instead.`
+    );
+  }
+}
+
+/**
+ * Parse a percentage dimension string like "50%", "100%", or "100%-5"
+ * Returns { percent: number, offset: number } or null if not a percentage string
+ */
+function parsePercentageDimension(value: string): { percent: number; offset: number } | null {
+  if (typeof value !== 'string' || !value.includes('%')) return null;
+
+  // Match patterns like "50%", "100%", "100%-5", "50%+10"
+  const match = value.match(/^(\d+)%([+-]\d+)?$/);
+  if (!match) return null;
+
+  const percent = parseInt(match[1], 10) / 100;
+  const offset = match[2] ? parseInt(match[2], 10) : 0;
+  return { percent, offset };
+}
+
+/**
+ * Setup auto-resize handler for elements with percentage widths/heights
+ * Ensures percentage-based dimensions update correctly when screen resizes
+ * Handles formats: "50%", "100%", "100%-5", "50%+10"
+ */
+function setupAutoResize(element: any, options?: any): void {
+  if (!options) return;
+
+  const hasPercentageWidth = typeof options.width === 'string' && options.width.includes('%');
+  const hasPercentageHeight = typeof options.height === 'string' && options.height.includes('%');
+
+  if (!hasPercentageWidth && !hasPercentageHeight) return;
+
+  // Store original percentage values
+  const originalWidth = options.width;
+  const originalHeight = options.height;
+
+  // Wait for element to attach to screen
+  element.once('attach', () => {
+    if (!element.screen) return;
+
+    // Update dimensions on screen resize
+    element.screen.on('resize', () => {
+      if (hasPercentageWidth && element.parent) {
+        const parentWidth = (element.parent as any).width || element.screen.width;
+        const parsed = parsePercentageDimension(originalWidth);
+        if (parsed) {
+          element.position.width = Math.floor(parentWidth * parsed.percent) + parsed.offset;
+        }
+      }
+
+      if (hasPercentageHeight && element.parent) {
+        const parentHeight = (element.parent as any).height || element.screen.height;
+        const parsed = parsePercentageDimension(originalHeight);
+        if (parsed) {
+          element.position.height = Math.floor(parentHeight * parsed.percent) + parsed.offset;
+        }
+      }
+
+      // Trigger render
+      if (element.screen) {
+        element.screen.render();
+      }
+    });
+  });
+}
+
+/**
+ * Fix layout constraints that neo-blessed doesn't handle correctly.
+ *
+ * Neo-blessed widgets don't properly respect 'bottom' and 'right' constraints
+ * when calculating dimensions. This function converts:
+ * - bottom: N (without height) -> height: '100%-N' (accounting for top)
+ * - right: N (without width) -> width: '100%-N' (accounting for left)
+ */
+function fixLayoutConstraints<T extends ElementOptions>(options: T): T {
+  const processed = { ...options } as any;
+
+  // FIX: Convert 'bottom' to explicit height calculation
+  // When bottom is specified without height, calculate height as '100%-N'
+  if (processed.bottom !== undefined && processed.height === undefined) {
+    const top = typeof processed.top === 'number' ? processed.top : 0;
+    const bottom = typeof processed.bottom === 'number' ? processed.bottom : 0;
+    const offset = top + bottom;
+    processed.height = offset > 0 ? `100%-${offset}` : '100%';
+    delete processed.bottom;
+  }
+
+  // FIX: Convert 'right' to explicit width calculation
+  // When right is specified without width, calculate width as '100%-N'
+  if (processed.right !== undefined && processed.width === undefined) {
+    const left = typeof processed.left === 'number' ? processed.left : 0;
+    const right = typeof processed.right === 'number' ? processed.right : 0;
+    const offset = left + right;
+    processed.width = offset > 0 ? `100%-${offset}` : '100%';
+    delete processed.right;
+  }
+
+  return processed as T;
+}
+
+/**
+ * Process options to ensure tags work correctly
+ * - Forces tags: true (cannot be overridden)
+ * - Warns if tags: false was attempted
+ * - Converts ANSI codes in content
+ * - Fixes layout constraints (bottom/right)
+ */
+function processElementOptions<T extends ElementOptions>(
+  options: T | undefined,
+  elementType: string
+): T {
+  const processed = { ...options } as T;
+
+  // Warn if someone tried to disable tags
+  if (options && 'tags' in options && (options as any).tags === false) {
+    warnOnce('tags-false',
+      `tags: false is not allowed in ${elementType}. ` +
+      `Tags are required for color support. Ignoring tags: false.`
+    );
+  }
+
+  // Auto-convert ANSI codes in content
+  if (processed.content && typeof processed.content === 'string') {
+    checkForUnsupportedAnsi(processed.content, elementType);
+    processed.content = ansiToTags(processed.content);
+  }
+
+  // Fix layout constraints (bottom/right -> height/width)
+  return fixLayoutConstraints(processed);
+}
+
+/**
+ * Convert ANSI escape codes to blessed tags
+ *
+ * Enables blessed elements to display content with ANSI codes (from bbs.write(), etc.)
+ * Supports both legacy and modern ANSI formats.
+ *
+ * @example
+ * ansiToTags('\x1b[31mError\x1b[0m')        // Returns: {red-fg}Error{/}
+ * ansiToTags('\x1b[1;36mInfo\x1b[0m')       // Returns: {bold}{cyan-fg}Info{/}
+ * ansiToTags('\x1b[32mOK\x1b[0m')           // Returns: {green-fg}OK{/}
+ *
+ * Supported ANSI codes:
+ * - Colors: 30-37 (fg), 40-47 (bg)
+ * - Styles: 0 (reset), 1 (bold), 4 (underline), 7 (inverse)
+ * - Combined: \x1b[1;31m (bold + red)
+ */
+export function ansiToTags(text: string): string {
+  // ANSI color code mapping
+  const fgColors: Record<number, string> = {
+    30: 'black',
+    31: 'red',
+    32: 'green',
+    33: 'yellow',
+    34: 'blue',
+    35: 'magenta',
+    36: 'cyan',
+    37: 'white',
+    90: 'gray',  // Bright black (gray)
+  };
+
+  const bgColors: Record<number, string> = {
+    40: 'black',
+    41: 'red',
+    42: 'green',
+    43: 'yellow',
+    44: 'blue',
+    45: 'magenta',
+    46: 'cyan',
+    47: 'white',
+  };
+
+  // Replace ANSI codes with blessed tags
+  return text.replace(/\x1b\[([0-9;]+)m/g, (match, codes) => {
+    const parts = codes.split(';').map(Number);
+    let result = '';
+
+    for (const code of parts) {
+      if (code === 0) {
+        // Reset all
+        result += '{/}';
+      } else if (code === 1) {
+        // Bold
+        result += '{bold}';
+      } else if (code === 4) {
+        // Underline
+        result += '{underline}';
+      } else if (code === 7) {
+        // Inverse
+        result += '{inverse}';
+      } else if (code >= 30 && code <= 37 || code === 90) {
+        // Foreground color
+        const color = fgColors[code];
+        if (color) result += `{${color}-fg}`;
+      } else if (code >= 40 && code <= 47) {
+        // Background color
+        const color = bgColors[code];
+        if (color) result += `{${color}-bg}`;
+      }
+    }
+
+    return result;
+  });
+}
+
+// createScreen moved to line 431 (below) - merged with proper default styles
+
+/**
+ * Create a blessed box with tags ALWAYS enabled
+ *
+ * AUTO-CONVERTS ANSI CODES: If content contains ANSI escape codes (like \x1b[31m),
+ * they are automatically converted to blessed tags for proper rendering.
+ *
+ * NOTE: tags: true is FORCED and cannot be disabled. This prevents color bugs.
+ * NOTE: For dialogs/overlays that need opaque backgrounds, explicitly set style.bg.
+ */
+export function createBox(options?: PanelOptions): Panel {
+  const processedOptions = processElementOptions({
+    ...options,
+  } as ElementOptions, 'createBox');
+
+  return new Panel({
+    ...processedOptions,
+    tags: true,
+  } as PanelOptions);
+}
+
+/**
+ * Create a dockable panel with tags ALWAYS enabled
+ *
+ * NOTE: tags: true is FORCED and cannot be disabled. This prevents color bugs.
+ */
+export function createDockablePanel(options?: DockablePanelOptions): DockablePanel {
+  const fixedDefault = options?.fixed ?? (options?.parent instanceof DockablePanel);
+  const processedOptions = processElementOptions({
+    ...options,
+    fixed: fixedDefault,
+  } as ElementOptions, 'createDockablePanel');
+
+  const panel = new DockablePanel({
+    ...processedOptions,
+    tags: true,
+  } as DockablePanelOptions);
+
+  setupAutoResize(panel, options);
+
+  return panel;
+}
+
+/**
+ * Create a blessed list with tags ALWAYS enabled
+ *
+ * AUTO-CONVERTS ANSI CODES: List items with ANSI codes are automatically converted to blessed tags.
+ *
+ * NOTE: tags: true is FORCED and cannot be disabled. This prevents color bugs.
+ * NOTE: For dialogs/overlays that need opaque backgrounds, explicitly set style.bg.
+ */
+export function createList(options?: ListOptions): List {
+  const processedOptions = processElementOptions(options, 'createList');
+
+  // Also convert ANSI codes in list items
+  if (processedOptions.items) {
+    processedOptions.items = processedOptions.items.map(item =>
+      typeof item === 'string' ? ansiToTags(item) : item
+    );
+  }
+
+  // No hover style is injected here.
+  //
+  // This used to force blue-on-white onto every list the SDK built, before
+  // the widget ever saw the options - a colour no theme chose, and the
+  // reason removing the widget's own default changed nothing on screen.
+  // The mouse now moves the real selection rather than painting a second
+  // highlight, so there is nothing left for a hover style to say.
+
+  return blessed.list({
+    ...processedOptions,
+    tags: true,        // FORCED AFTER spread - cannot be overridden
+    focusable: true,   // Enable keyboard navigation (arrow keys, vi keys)
+    keys: true,        // Enable keyboard interaction
+    mouse: true,       // Enable mouse interaction
+    scrollable: true,  // Enable scrolling (including scrollwheel)
+    alwaysScroll: true, // Always show scrollbar and enable scrollwheel
+  });
+}
+
+/**
+ * Create a blessed text element with tags ALWAYS enabled
+ *
+ * AUTO-CONVERTS ANSI CODES: Content with ANSI codes is automatically converted to blessed tags.
+ *
+ * NOTE: tags: true is FORCED and cannot be disabled. This prevents color bugs.
+ * NOTE: For dialogs/overlays that need opaque backgrounds, explicitly set style.bg.
+ */
+export function createText(options?: ElementOptions): Text {
+  const processedOptions = processElementOptions(options, 'createText');
+
+  return blessed.text({
+    ...processedOptions,
+    tags: true,  // FORCED AFTER spread - cannot be overridden
+  });
+}
+
+/**
+ * Create a blessed textbox (single-line input) with tags ALWAYS enabled
+ *
+ * Use this for single-line input fields like username, password, search boxes.
+ * Enter key triggers 'submit' event instead of inserting newline.
+ *
+ * NOTE: tags: true is FORCED and cannot be disabled. This prevents color bugs.
+ * NOTE: For dialogs/overlays that need opaque backgrounds, explicitly set style.bg.
+ * NOTE: Elements with percentage width/height auto-update on screen resize.
+ */
+export function createTextbox(options?: TextboxOptions): Textbox {
+  const processedOptions = processElementOptions(options, 'createTextbox');
+
+  const textbox = blessed.textbox({
+    ...processedOptions,
+    tags: true,        // FORCED AFTER spread - cannot be overridden
+    focusable: true,   // Enable keyboard focus for input fields
+    clickable: true,   // Enable mouse click to focus
+    keys: true,        // Enable keyboard interaction
+    mouse: true,       // Enable mouse interaction
+  });
+
+  // Auto-handle percentage widths/heights on screen resize
+  setupAutoResize(textbox, options);
+
+  return textbox;
+}
+
+/**
+ * Create a blessed textarea (multi-line input) with tags ALWAYS enabled
+ *
+ * Use this for multi-line text areas like message composition.
+ * Enter key inserts newline. Use Shift+Tab to submit.
+ *
+ * AUTO-CONVERTS ANSI CODES: Content with ANSI codes is automatically converted to blessed tags.
+ *
+ * NOTE: tags: true is FORCED and cannot be disabled. This prevents color bugs.
+ * NOTE: For dialogs/overlays that need opaque backgrounds, explicitly set style.bg.
+ * NOTE: Elements with percentage width/height auto-update on screen resize.
+ */
+export function createTextarea(options?: TextboxOptions): Textarea {
+  const processedOptions = processElementOptions(options, 'createTextarea');
+
+  const textarea = blessed.textarea({
+    ...processedOptions,
+    tags: true,        // FORCED AFTER spread - cannot be overridden
+    focusable: true,   // Enable keyboard focus for input fields
+    clickable: true,   // Enable mouse click to focus
+    keys: true,        // Enable keyboard interaction
+    mouse: true,       // Enable mouse interaction
+  });
+
+  // Auto-handle percentage widths/heights on screen resize
+  setupAutoResize(textarea, options);
+
+  return textarea;
+}
+
+/**
+ * Create a blessed log with tags ALWAYS enabled
+ *
+ * AUTO-CONVERTS ANSI CODES: Content with ANSI codes is automatically converted to blessed tags.
+ *
+ * NOTE: tags: true is FORCED and cannot be disabled. This prevents color bugs.
+ * NOTE: For dialogs/overlays that need opaque backgrounds, explicitly set style.bg.
+ * NOTE: Elements with percentage width/height auto-update on screen resize.
+ */
+export function createLog(options?: LogOptions): Log {
+  const processedOptions = processElementOptions(options, 'createLog');
+
+  const log = blessed.log({
+    ...processedOptions,
+    tags: true,  // FORCED AFTER spread - cannot be overridden
+  });
+
+  // Auto-handle percentage widths/heights on screen resize
+  setupAutoResize(log, options);
+
+  return log;
+}
+
+/**
+ * Create a blessed table with tags ALWAYS enabled
+ *
+ * AUTO-CONVERTS ANSI CODES: Content with ANSI codes is automatically converted to blessed tags.
+ *
+ * NOTE: tags: true is FORCED and cannot be disabled. This prevents color bugs.
+ * NOTE: For dialogs/overlays that need opaque backgrounds, explicitly set style.bg.
+ */
+export function createTable(options?: TableOptions): Table {
+  const processedOptions = processElementOptions(options, 'createTable');
+
+  return blessed.table({
+    ...processedOptions,
+    tags: true,        // FORCED AFTER spread - cannot be overridden
+    focusable: true,   // Enable keyboard navigation through table cells
+    keys: true,        // Enable keyboard interaction
+    mouse: true,       // Enable mouse interaction
+  });
+}
+
+/**
+ * Create a blessed button with tags ALWAYS enabled
+ *
+ * AUTO-CONVERTS ANSI CODES: Content with ANSI codes is automatically converted to blessed tags.
+ *
+ * NOTE: tags: true is FORCED and cannot be disabled. This prevents color bugs.
+ * NOTE: For dialogs/overlays that need opaque backgrounds, explicitly set style.bg.
+ */
+export function createButton(options?: ButtonOptions): Button {
+  const processedOptions = processElementOptions(options, 'createButton');
+
+  const button = blessed.button({
+    ...processedOptions,
+    tags: true,        // FORCED AFTER spread - cannot be overridden
+    focusable: true,   // Ensure buttons can receive keyboard focus
+    clickable: true,   // Ensure buttons respond to clicks
+    keys: true,        // Enable keyboard interaction
+    mouse: true,       // Enable mouse interaction
+  });
+
+  // Debug: Log when button receives events
+  button.on('click', () => {
+    console.log('[createButton] Button received click event');
+  });
+  button.on('press', () => {
+    console.log('[createButton] Button received press event');
+  });
+  button.on('mouse', (event: any) => {
+    console.log('[createButton] Button received mouse event:', event.action, event.button);
+  });
+
+  return button;
+}
+
+/**
+ * Create a KanbanBoard with drag-and-drop support
+ *
+ * @example
+ * const board = createKanbanBoard({
+ *   parent: screen,
+ *   columns: [
+ *     { id: 'todo', label: 'TODO', items: ['Task 1', 'Task 2'] },
+ *     { id: 'doing', label: 'IN PROGRESS', items: ['Task 3'] },
+ *     { id: 'done', label: 'DONE', items: [] }
+ *   ]
+ * });
+ *
+ * board.on('move', (data) => {
+ *   console.log(`Moved item from ${data.fromColumn} to ${data.toColumn}`);
+ * });
+ */
+export { KanbanBoard, type KanbanBoardOptions, type KanbanColumn, type KanbanMoveEvent } from '../engines/ui/blessed/widgets/kanban-board';
+
+/**
+ * Common Neo-Blessed color tags for easy reference
+ * Use these in your content strings: `{red-fg}Error{/red-fg}`
+ */
+export const Tags = {
+  // Foreground colors
+  fg: {
+    black: '{black-fg}',
+    red: '{red-fg}',
+    green: '{green-fg}',
+    yellow: '{yellow-fg}',
+    blue: '{blue-fg}',
+    magenta: '{magenta-fg}',
+    cyan: '{cyan-fg}',
+    white: '{white-fg}',
+    gray: '{gray-fg}',
+    grey: '{gray-fg}',  // Alias
+  },
+
+  // Background colors
+  bg: {
+    black: '{black-bg}',
+    red: '{red-bg}',
+    green: '{green-bg}',
+    yellow: '{yellow-bg}',
+    blue: '{blue-bg}',
+    magenta: '{magenta-bg}',
+    cyan: '{cyan-bg}',
+    white: '{white-bg}',
+  },
+
+  // Styles
+  bold: '{bold}',
+  underline: '{underline}',
+  blink: '{blink}',
+  inverse: '{inverse}',
+
+  // Reset
+  reset: '{/}',
+  end: '{/}',  // Alias
+} as const;
+
+/**
+ * Helper to wrap text in a color tag
+ *
+ * @example
+ * colorize('Error message', 'red')  // Returns: {red-fg}Error message{/}
+ */
+export function colorize(text: string, color: keyof typeof Tags.fg): string {
+  return `${Tags.fg[color]}${text}${Tags.reset}`;
+}
+
+/**
+ * Sanitize content for blessed elements - handles both ANSI codes and blessed tags
+ *
+ * Use this when displaying content that might have ANSI codes (from bbs.write(), legacy doors, etc.)
+ * in blessed elements. It converts ANSI codes to blessed tags so they render correctly.
+ *
+ * @example
+ * const content = '\x1b[31mError:\x1b[0m Something went wrong';
+ * createBox({ content: sanitizeContent(content) });
+ * // Displays: {red-fg}Error:{/} Something went wrong
+ */
+export function sanitizeContent(content: string): string {
+  return ansiToTags(content);
+}
+
+/**
+ * CRITICAL: HOW TO CENTER CONTENT IN BLESSED
+ *
+ * ❌ WRONG - {center} tags DO NOT WORK in blessed:
+ *   content: '{center}My Text{/center}'
+ *
+ * ✅ CORRECT - Use align property:
+ *   createBox({
+ *     align: 'center',
+ *     content: 'My Text'
+ *   })
+ *
+ * For multi-line centered content, use valign too:
+ *   createBox({
+ *     align: 'center',
+ *     valign: 'middle',
+ *     content: 'Line 1\nLine 2\nLine 3'
+ *   })
+ *
+ * Supported align values: 'left', 'center', 'right'
+ * Supported valign values: 'top', 'middle', 'bottom'
+ */
+
+/**
+ * Create a blessed screen with proper default styles
+ *
+ * Sets default fg/bg colors to prevent inverted text rendering.
+ * All neo-blessed doors should use this instead of blessed.screen() directly.
+ *
+ * @example
+ * const screen = createScreen(bbs, { title: 'My Door' });
+ * // Or without bbs: const screen = createScreen({ title: 'Test', output: bbs.write });
+ */
+
+/**
+ * Unicode box-drawing to VT100 ACS (Alternate Character Set) mapping.
+ * ACS uses single-byte ASCII chars with ESC(0 prefix, avoiding UTF-8 corruption.
+ * xterm.js interprets these natively as box-drawing characters.
+ */
+const UNICODE_TO_ACS: Record<string, string> = {
+  // Light box drawing
+  '─': 'q', '│': 'x',
+  '┌': 'l', '┐': 'k', '└': 'm', '┘': 'j',
+  '├': 't', '┤': 'u', '┬': 'w', '┴': 'v', '┼': 'n',
+  // Heavy box drawing (map to light equivalents)
+  '━': 'q', '┃': 'x',
+  '┏': 'l', '┓': 'k', '┗': 'm', '┛': 'j',
+  '┣': 't', '┫': 'u', '┳': 'w', '┻': 'v', '╋': 'n',
+  // Double box drawing (map to light equivalents)
+  '═': 'q', '║': 'x',
+  '╔': 'l', '╗': 'k', '╚': 'm', '╝': 'j',
+  '╠': 't', '╣': 'u', '╦': 'w', '╩': 'v', '╬': 'n',
+  // Mixed corners (map to light)
+  '╒': 'l', '╓': 'l', '╕': 'k', '╖': 'k',
+  '╘': 'm', '╙': 'm', '╛': 'j', '╜': 'j',
+  '╞': 't', '╟': 't', '╡': 'u', '╢': 'u',
+  '╤': 'w', '╥': 'w', '╧': 'v', '╨': 'v', '╪': 'n', '╫': 'n',
+};
+
+// Use String.fromCharCode(27) for ESC to survive minification
+// Terser strips literal \x1b from strings
+const ESC = String.fromCharCode(27);
+const ACS_ENTER = ESC + '(0';
+const ACS_EXIT = ESC + '(B';
+
+/**
+ * Converts Unicode box-drawing characters to VT100 ACS escape sequences.
+ * This prevents UTF-8 corruption when multi-byte sequences are split by
+ * the modem emulator or interpreted as Windows-1252.
+ *
+ * Input: "┌─────┐"
+ * Output: "\x1b(0lqqqqqk\x1b(B"
+ */
+export function convertUnicodeBoxToACS(str: string): string {
+  let result = '';
+  let inACS = false;
+
+  for (const char of str) {
+    const acsChar = UNICODE_TO_ACS[char];
+    if (acsChar) {
+      if (!inACS) {
+        result += ACS_ENTER;
+        inACS = true;
+      }
+      result += acsChar;
+    } else {
+      if (inACS) {
+        result += ACS_EXIT;
+        inACS = false;
+      }
+      result += char;
+    }
+  }
+
+  // Close ACS mode if still active
+  if (inACS) {
+    result += ACS_EXIT;
+  }
+
+  return result;
+}
+
+// =============================================================================
+// AMIGA COMPATIBILITY MODE
+// =============================================================================
+// When enabled, replaces Unicode characters with ANSI background colors or ASCII.
+// This ensures compatibility with Amiga terminals and telnet clients that don't
+// support Unicode. Box-drawing is always converted to VT100 ACS (above).
+
+/**
+ * Compatibility mode configuration
+ */
+export interface CompatibilityConfig {
+  /** Enable Amiga/telnet compatibility mode (default: true for BBS) */
+  enabled: boolean;
+  /** Keep braille characters for modern features like webcam (default: true) */
+  keepBraille: boolean;
+  /** Keep sparkline characters for charts (default: false in compat mode) */
+  keepSparklines: boolean;
+}
+
+// Global compatibility mode state (can be changed at runtime)
+let compatConfig: CompatibilityConfig = {
+  enabled: true,      // Default ON for BBS compatibility
+  keepBraille: true,  // Keep braille for webcam demo
+  keepSparklines: false,
+};
+
+/**
+ * Set compatibility mode configuration
+ */
+export function setCompatibilityMode(config: Partial<CompatibilityConfig>): void {
+  compatConfig = { ...compatConfig, ...config };
+}
+
+/**
+ * Get current compatibility mode configuration
+ */
+export function getCompatibilityMode(): CompatibilityConfig {
+  return { ...compatConfig };
+}
+
+/**
+ * Unicode characters that need ANSI background color fallbacks.
+ * Maps to: [fallbackChar, fgColor, bgColor] or just [fallbackChar] for simple replacement
+ * When bgColor is specified, we use a space with that background color.
+ */
+/**
+ * Solid blocks become a filled cell in the colour they were already drawn in.
+ *
+ * A terminal without Unicode cannot draw U+2588, and substituting a glyph
+ * throws the colour away: GRANDMASTER over telnet rendered its playfield as
+ * "#" (reported 2026-09-02), and the mapped block below turned every piece
+ * white regardless of what colour the door had set.
+ *
+ * Reverse video solves both. `ESC[7m` swaps foreground and background for
+ * one space, so the cell fills with whatever colour the door was ALREADY
+ * writing in - the same look the web client gets from the real block - and
+ * `ESC[27m` turns it off again without touching any other attribute. No
+ * colour table, no state tracking, and nothing to keep in step with the
+ * door's own palette.
+ */
+const SOLID_BLOCKS = new Set(['\u2588', '\u25A0']);   // full block, black square
+
+const REVERSE_ON = ESC + '[7m';
+const REVERSE_OFF = ESC + '[27m';
+
+const UNICODE_TO_ANSI_FALLBACK: Record<string, [string, string?, string?]> = {
+  // Block fill characters -> space with background color
+  '█': [' ', undefined, 'white'],   // Full block -> white bg
+  '▓': [' ', undefined, 'gray'],    // Dark shade -> gray bg
+  '▒': [' ', undefined, 'gray'],    // Medium shade -> gray bg
+  '░': [' ', undefined, 'black'],   // Light shade -> dark bg
+  '▄': [' ', undefined, 'white'],   // Lower half -> white bg
+  '▀': [' ', undefined, 'white'],   // Upper half -> white bg
+
+  // Arrows and markers -> ASCII equivalents
+  '▶': ['>'],
+  '◀': ['<'],
+  '▲': ['^'],
+  '▼': ['v'],
+  '►': ['>'],
+  '◄': ['<'],
+  '●': ['*'],
+  '○': ['o'],
+  '◆': ['*'],
+  '◇': ['o'],
+  '■': ['#'],
+  '□': ['o'],
+  '▪': ['*'],
+  '▫': ['.'],
+  '»': ['>>'],
+  '«': ['<<'],
+  '•': ['*'],
+  '·': ['.'],
+  '…': ['...'],
+  '→': ['->'],
+  '←': ['<-'],
+  '↑': ['^'],
+  '↓': ['v'],
+  '✓': ['[OK]'],
+  '✗': ['[X]'],
+  '✔': ['[OK]'],
+  '✘': ['[X]'],
+};
+
+/**
+ * Sparkline characters (vertical bar graph)
+ * Maps to ASCII representation using = and space
+ */
+const SPARKLINE_CHARS = ['▁', '▂', '▃', '▄', '▅', '▆', '▇', '█'];
+const SPARKLINE_ASCII = ['_', '.', '-', '=', '=', '#', '#', '#'];
+
+/**
+ * Braille pattern block (U+2800-U+28FF) - kept for modern features
+ */
+function isBrailleChar(char: string): boolean {
+  const code = char.charCodeAt(0);
+  return code >= 0x2800 && code <= 0x28FF;
+}
+
+/**
+ * Check if character is a sparkline character
+ */
+function isSparklineChar(char: string): boolean {
+  return SPARKLINE_CHARS.includes(char);
+}
+
+/**
+ * Convert Unicode characters to Amiga-compatible equivalents.
+ * Uses ANSI background colors for block characters.
+ *
+ * @param str - Input string with potential Unicode characters
+ * @param inheritBg - Background color to inherit for fills (optional)
+ * @returns Converted string safe for Amiga/telnet
+ */
+export function convertToAmigaCompat(str: string, inheritBg?: string): string {
+  if (!compatConfig.enabled) {
+    return str;
+  }
+
+  let result = '';
+
+  for (const char of str) {
+    // Keep braille if configured
+    if (compatConfig.keepBraille && isBrailleChar(char)) {
+      result += char;
+      continue;
+    }
+
+    // Solid blocks are checked BEFORE sparklines on purpose.
+    //
+    // SPARKLINE_CHARS ends in the full block, so every solid block in every
+    // door - a playfield cell, a bar, a filled panel - was being read as the
+    // top bar of a sparkline and mapped to "#". That is what GRANDMASTER
+    // looked like over telnet (reported 2026-09-02). A full block inside a
+    // real sparkline still reads correctly as a filled cell.
+    if (SOLID_BLOCKS.has(char)) {
+      result += `${REVERSE_ON} ${REVERSE_OFF}`;
+      continue;
+    }
+
+    // Handle sparklines
+    if (isSparklineChar(char)) {
+      if (compatConfig.keepSparklines) {
+        result += char;
+      } else {
+        const idx = SPARKLINE_CHARS.indexOf(char);
+        result += SPARKLINE_ASCII[idx] || char;
+      }
+      continue;
+    }
+
+    // Check for fallback mapping
+    const fallback = UNICODE_TO_ANSI_FALLBACK[char];
+    if (fallback) {
+      const [fallbackChar, _fg, bg] = fallback;
+      if (bg) {
+        // Background only, then default background only.
+        //
+        // This used to close with ESC[0m, a FULL reset, which threw away the
+        // foreground colour and every attribute the door had set - so the
+        // text after any shaded cell lost its colour until the next SGR.
+        // ESC[49m puts the background back and leaves the rest alone.
+        const bgCode = getAnsiColorCode(bg, true);
+        result += `${bgCode}${fallbackChar}${ESC}[49m`;
+      } else {
+        result += fallbackChar;
+      }
+      continue;
+    }
+
+    // Pass through other characters unchanged
+    result += char;
+  }
+
+  return result;
+}
+
+/**
+ * Get ANSI escape code for a color name
+ */
+function getAnsiColorCode(color: string, isBackground: boolean): string {
+  const base = isBackground ? 40 : 30;
+  const colorMap: Record<string, number> = {
+    'black': 0,
+    'red': 1,
+    'green': 2,
+    'yellow': 3,
+    'blue': 4,
+    'magenta': 5,
+    'cyan': 6,
+    'white': 7,
+    'gray': 0,  // Use black for gray in simple mode
+    'grey': 0,
+  };
+  const code = colorMap[color.toLowerCase()] ?? 7;
+  return ESC + `[${base + code}m`;
+}
+
+/**
+ * Combined conversion: Box-drawing to ACS + Unicode to Amiga-compat
+ * This is the main function used by createScreen output handler.
+ */
+export function convertForAmiga(str: string): string {
+  // First convert box-drawing to VT100 ACS (always done)
+  let result = convertUnicodeBoxToACS(str);
+
+  // Then convert other Unicode if compatibility mode enabled
+  if (compatConfig.enabled) {
+    result = convertToAmigaCompat(result);
+  }
+
+  return result;
+}
+
+export function createScreen(
+  bbsOrOptions?: any,
+  optionsIfBbs?: Partial<ScreenOptions>
+): Screen {
+  // Handle both signatures: createScreen(bbs, options) and createScreen(options)
+  const isBbsFirst = bbsOrOptions && typeof bbsOrOptions.write === 'function';
+  const bbs = isBbsFirst ? bbsOrOptions : null;
+  const options = isBbsFirst ? optionsIfBbs : bbsOrOptions;
+
+  // Get initial terminal size from BBS if available
+  const termSize = bbs?.getTerminalSize?.() || { width: 80, height: 25 };
+
+  // Responsive for the two geometries that need it: WIDER than 80 (a
+  // fullscreen browser terminal, as before) and the compact XXS tier (a
+  // 40-column C64/PETSCII canvas, new).
+  //
+  // 41-79 deliberately stays on the legacy fixed-80 pipeline, exactly as it
+  // was: those callers have always been painted at 80 and the backend's prose
+  // wrap clamps a non-PETSCII session to max(80, reported), so a 60-wide
+  // responsive screen would paint at 60 while the BBS still wrapped at 80.
+  // At exactly 80 nothing changes either - proven byte-for-byte by
+  // sdk/tests/unit/eighty-col-baseline.test.ts (Task 2).
+  // Callers can still force either way; `...options` spreads last.
+  const responsive =
+    options?.responsive ?? (termSize.width > 80 || isCompactWidth(termSize.width) || undefined);
+
+  // Check Unicode capability - use Amiga conversion only for non-Unicode terminals
+  // Web terminals always support Unicode (xterm.js)
+  // Telnet/SSH: detected via TTYPE negotiation (modern terminals like xterm, PuTTY get Unicode)
+  const unicodeCapable = bbs?.unicodeCapable ?? (bbs?.connectionType === 'web' || !bbs);
+  const needsAmigaConversion = !unicodeCapable;
+
+  console.log(`[createScreen] connectionType=${bbs?.connectionType}, unicodeCapable=${unicodeCapable}, needsAmigaConversion=${needsAmigaConversion}`);
+
+  // Create output function based on Unicode capability
+  const outputFn = bbs
+    ? needsAmigaConversion
+      ? (data: string) => bbs.write(convertForAmiga(data))
+      : (data: string) => bbs.write(data)
+    : options?.output;
+
+  // Which ALPHABET this caller reads. Unicode capability is not the question:
+  // a web PETSCII session is a browser and reports Unicode, yet its glyphs go
+  // through the transducer to a C64 character ROM. The session knows; ask it.
+  const petscii = typeof (bbs as any)?.isPetsciiMode === 'function'
+    ? (bbs as any).isPetsciiMode() === true
+    : false;
+
+  const screen = blessed.screen({
+    smartCSR: false, // Disabled to prevent jumping/flickering in high-frequency TUI apps
+    dockBorders: false, // Disabled for more stable layout rendering
+    fullUnicode: unicodeCapable, // Unicode for capable terminals, ACS for Amiga/legacy
+    petscii,
+    terminal: 'xterm',
+    tags: true,
+    width: termSize.width,
+    height: termSize.height,
+    responsive,
+    output: outputFn,
+    style: {
+      fg: 'white',
+      bg: 'black'
+    },
+    ...options
+  });
+
+  // Enable mouse support by default for all doors using this helper
+  screen.enableMouse();
+
+  // Enable mouse toggle (F12/Alt+M) to allow users to disable if needed
+  screen.enableMouseToggle();
+
+  // REMOVED: Auto-join lobby room
+  //
+  // This was causing "Chat Room: lobby" text to appear in door backgrounds because:
+  // 1. createScreen() called bbs.joinRoom('lobby')
+  // 2. BBS wrote join messages to terminal BEFORE door took control
+  // 3. Blessed screen rendered on top but didn't clear background
+  // 4. Chat room text showed through in all doors
+  //
+  // FIX: Doors that need room membership (like voice-chat) should explicitly call
+  // bbs.joinRoom() AFTER setting up their screen, not rely on createScreen() to do it.
+  // This prevents unwanted terminal output during door initialization.
+
+  // Listen for resize events from backend if bbs is provided
+  if (bbs && typeof bbs.on === 'function') {
+    console.log('[createScreen] Setting up screen:resize listener via bbs.on()');
+    bbs.on('screen:resize', (size: { cols: number; rows: number }) => {
+      console.log(`[createScreen] Received screen:resize event: ${size.cols}x${size.rows}`);
+      console.log(`[createScreen] Current screen size: ${screen.width}x${screen.height}`);
+
+      // IMPORTANT: Do NOT force-update screen.width/height before calling resize()!
+      // The setters update _width/_height but don't reallocate buffers.
+      // This causes resize() to see dimensions already match and return early,
+      // leaving buffers at the old size - resulting in a black screen.
+
+      console.log(`[createScreen] screen.resize is: ${typeof screen.resize}`);
+      if (typeof screen.resize === 'function') {
+        screen.resize(size.cols, size.rows);
+        console.log(`[createScreen] After resize: ${screen.width}x${screen.height}`);
+      } else {
+        console.error('[createScreen] screen.resize is not a function!');
+      }
+    });
+  } else {
+    console.log('[createScreen] No bbs.on() available - resize events will not be handled');
+  }
+
+  // Forward cursor-style events to frontend for mouse hover feedback
+  if (bbs && typeof bbs.setCursorStyle === 'function') {
+    screen.on('cursor-style', (style: string) => {
+      bbs.setCursorStyle(style);
+    });
+  }
+
+  // Enable slow connection mode for modem emulation
+  // This uses differential rendering (~50-200 chars/frame) instead of full redraws (~1920 chars)
+  // Critical for usable performance when output is throttled character-by-character
+  if (bbs && bbs.modemEmulationEnabled) {
+    const bps = bbs.modemBps || 0;
+    console.log(`[createScreen] Modem emulation detected (${bps} bps) - enabling slow connection mode`);
+    screen.enableSlowConnectionMode();
+  }
+
+  /**
+   * Hand the terminal back the way it was found.
+   *
+   * A door paints the screen in its own colours, and ESC[0m does NOT
+   * unpaint cells that are already coloured - it only affects what is drawn
+   * afterwards. So resetting at the BBS's prompt was never going to be
+   * enough: reported twice, first as telnet doors leaving a blue
+   * background and then as "bg colors still leak when i exit typescript
+   * doors" after the first fix.
+   *
+   * Reset THEN erase, in that order, because ESC[2J erases using the
+   * current background - clearing first would repaint the whole screen in
+   * the very colour being escaped from. That is the same ordering the C
+   * door's ansi.c defends, for the same reason.
+   *
+   * This belongs here rather than in each door's teardown: there are nine
+   * places a door session ends, doors are written by other people, and
+   * every TypeScript door that draws a screen comes through createScreen.
+   */
+  screen.on('destroy', () => {
+    try {
+      const write = bbs?.write ?? options?.output;
+      write?.('\x1b[0m\x1b[2J\x1b[H');
+    } catch {
+      // A door that is already gone cannot be tidied up after; not worth
+      // throwing out of a teardown for.
+    }
+  });
+
+  return screen;
+}
+
+/**
+ * Setup input handler for blessed screen
+ *
+ * Connects terminal input from BBS session to blessed screen.
+ * Handles both raw data and F1 key for help.
+ *
+ * @example
+ * const screen = createScreen(bbs);
+ * setupInputHandler(session, screen, {
+ *   onF1Help: showHelpFn,
+ *   debug: true
+ * });
+ */
+export function setupInputHandler(
+  session: any,
+  screen: Screen,
+  options?: {
+    onF1Help?: () => void;
+    debug?: boolean;
+    debugName?: string;
+    onData?: (data: string) => boolean | void;
+  } | (() => void) // Backward compatibility for onF1Help as 3rd param
+) {
+  if (!session.bbsSession) return;
+
+  // Handle backward compatibility: if options is a function, treat it as onF1Help
+  const config = typeof options === 'function'
+    ? { onF1Help: options }
+    : (options || {});
+
+  const debugName = config.debugName || 'Door';
+
+  session.bbsSession.doorInputHandler = (data: string) => {
+    // 1. Debug logging if enabled
+    if (config.debug) {
+      const hexData = Buffer.from(data).toString('hex');
+      console.log(`[${debugName}] doorInputHandler raw:`, hexData, 'text:', JSON.stringify(data));
+    }
+
+    // 2. Custom data handler (can swallow event)
+    if (config.onData && config.onData(data) === true) {
+      return;
+    }
+
+    // 3. Check for F1 key (help)
+    if (config.onF1Help && (data === ESC + 'OP' || data === ESC + '[11~')) {
+      config.onF1Help();
+      return;
+    }
+
+    // 4. Pass ALL input to blessed screen's program
+    // Neo-blessed's program.ts handles JSON mouse events internally
+    if (screen.program) {
+      screen.program.emit('data', data);
+    }
+  };
+}
+
+/**
+ * Remove input handler from BBS session
+ */
+export function removeInputHandler(session: any) {
+  if (session?.bbsSession) {
+    session.bbsSession.doorInputHandler = null;
+  }
+}
+
+/**
+ * Create cleanup function for blessed door
+ *
+ * Returns a cleanup function that:
+ * - Disables mouse
+ * - Clears input handler
+ * - Destroys screen
+ * - Optionally runs custom cleanup
+ *
+ * @example
+ * const cleanup = createCleanupHandler(screen, session, bbs, {
+ *   onCleanup: () => { socket.emit('disconnect'); }
+ * });
+ * screen.key(['C-q'], cleanup);
+ */
+export function createCleanupHandler(
+  screen: Screen,
+  session: any,
+  bbs: any,
+  options?: {
+    onCleanup?: () => void;
+    exitMessage?: string;
+  }
+) {
+  return () => {
+    // Run custom cleanup first
+    if (options?.onCleanup) {
+      options.onCleanup();
+    }
+
+    // Disable mouse and clean up input handler
+    screen.disableMouse();
+    if (session.bbsSession) {
+      delete session.bbsSession.doorInputHandler;
+    }
+
+    // Destroy screen
+    if (!screen.destroyed) {
+      screen.destroy();
+    }
+
+    // Show exit message
+    if (options?.exitMessage) {
+      // Reset attributes before erasing: an erase fills with the CURRENT
+      // background, so a door that exits with a colour still set would hand
+      // the user a screen painted in it.
+      bbs.write(ESC + '[0m' + ESC + '[2J' + ESC + '[H');
+      bbs.writeLine(options.exitMessage);
+    }
+  };
+}
+
+/**
+ * Setup door lifecycle with proper cleanup handling
+ *
+ * Combines screen creation, input handler, cleanup, and promise-based lifecycle.
+ * Returns { screen, cleanup, promise } for easy door setup.
+ *
+ * @example
+ * const { screen, cleanup } = setupDoorLifecycle(session, bbs, {
+ *   title: 'My Door',
+ *   onCleanup: () => socket.disconnect()
+ * });
+ * screen.key(['C-q'], cleanup);
+ */
+export function setupDoorLifecycle(
+  session: any,
+  bbs: any,
+  options?: {
+    title?: string;
+    onF1Help?: () => void;
+    onCleanup?: () => void;
+    exitMessage?: string;
+  }
+) {
+  const screen = createScreen(bbs, { title: options?.title });
+  setupInputHandler(session, screen, options?.onF1Help);
+
+  const cleanup = createCleanupHandler(screen, session, bbs, {
+    onCleanup: options?.onCleanup,
+    exitMessage: options?.exitMessage
+  });
+
+  // Setup destroy handler
+  screen.on('destroy', () => {
+    if (session.bbsSession) {
+      session.bbsSession.doorInputHandler = null;
+    }
+  });
+
+  // Create promise that resolves when door exits
+  const promise = new Promise<void>((resolve) => {
+    let resolved = false;
+    const onDestroy = () => {
+      if (!resolved) {
+        resolved = true;
+        try {
+          if (!screen.destroyed) {
+            screen.destroy();
+          }
+        } catch (err) {
+          console.error('[Door] Error destroying screen:', err);
+        }
+        resolve();
+      }
+    };
+    screen.on('destroy', onDestroy);
+  });
+
+  return { screen, cleanup, promise };
+}
+
+/**
+ * Modal Manager - Handles modal overlays and z-index layering
+ *
+ * Creates a transparent overlay and provides showModal/hideModal functions
+ * that properly manage z-index to ensure modals appear on top of the overlay.
+ *
+ * @example
+ * const { showModal, hideModal } = createModalManager(screen, inputBox);
+ * const settingsModal = createBox({ ... });
+ * showModal(settingsModal);  // Shows overlay + modal on top
+ * hideModal(settingsModal);  // Hides both and returns focus to inputBox
+ */
+export function createModalManager(screen: Screen, returnFocusElement?: any) {
+  const modalOverlay = blessed.box({
+    parent: screen,
+    top: 0,
+    left: 0,
+    width: '100%',
+    height: '100%',
+    fixed: true,
+    hidden: true,
+    zIndex: 500, // Above normal UI
+    ch: ' ',     // Fill with spaces to ensure opacity
+    style: { bg: 'black' }
+  });
+
+  function showModal(widget: any) {
+    modalOverlay.show();
+    modalOverlay.setFront();  // Bring overlay to front first
+    widget.show();
+    widget.setFront();        // Then bring modal on top of overlay
+    widget.focus();
+    screen.render();
+  }
+
+  function hideModal(widget: any) {
+    modalOverlay.hide();
+    widget.hide();
+    if (returnFocusElement) {
+      returnFocusElement.focus();
+    }
+    screen.render();
+  }
+
+  return { modalOverlay, showModal, hideModal };
+}
+
+/**
+ * Create standard dialog widgets (Message, Prompt, Question)
+ *
+ * Provides showMessageDialog, showPromptDialog, and showConfirmDialog functions
+ * that automatically handle the overlay and cleanup.
+ *
+ * @example
+ * const { showMessageDialog, showPromptDialog, showConfirmDialog } = createDialogs(screen, inputBox);
+ * showMessageDialog('File saved successfully!');
+ * showPromptDialog('Enter your name:', 'Guest', (err, name) => { ... });
+ * showConfirmDialog('Delete this file?', (confirmed) => { ... });
+ */
+/** Enough of a theme for the dialogs to colour themselves from. */
+export interface DialogThemeStyles {
+  frame: { style: { fg?: string; bg?: string; border?: { fg?: string } } };
+  ok?: unknown;
+}
+
+export function createDialogs(
+  screen: Screen,
+  returnFocusElement?: any,
+  /**
+   * The caller's theme styles, from `themeStyles(bbs.getTheme())`.
+   *
+   * These dialogs are drawn on top of whatever the door has on screen, so
+   * they take the `frame` role, which every theme keeps visible - including
+   * the two phosphor ones, where a plain panel's rule is deliberately sunk
+   * into the background.
+   *
+   * Without it they keep their old white-on-blue, which was a colour no
+   * theme ever chose: the same hardcoded-blue problem as the list widget's
+   * hover, in the one place where blending in does the most damage.
+   */
+  themeStyles?: DialogThemeStyles
+) {
+  const { modalOverlay, showModal, hideModal } = createModalManager(screen, returnFocusElement);
+
+  const frame = themeStyles?.frame?.style;
+  const surface = {
+    fg: frame?.fg || 'white',
+    bg: frame?.bg || 'blue',
+  };
+  // One accent per dialog kind is how these have always read - message,
+  // prompt and question are told apart by their border. A theme collapses
+  // them onto its frame colour rather than inventing three of its own.
+  const rule = frame?.border?.fg;
+
+  const messageDialog = blessed.message({
+    parent: screen,
+    top: 'center',
+    left: 'center',
+    width: 50,
+    tags: true,
+    zIndex: 600, // Above overlay
+    ch: ' ',     // Ensure solid background
+    style: { ...surface, transparent: true, border: { fg: rule || 'cyan' } }
+  });
+
+  const promptDialog = blessed.prompt({
+    parent: screen,
+    top: 'center',
+    left: 'center',
+    width: 50,
+    tags: true,
+    zIndex: 600, // Above overlay
+    ch: ' ',     // Ensure solid background
+    style: { ...surface, transparent: true, border: { fg: rule || 'green' } }
+  });
+
+  const questionDialog = blessed.question({
+    parent: screen,
+    top: 'center',
+    left: 'center',
+    width: 45,
+    title: ' Confirm ',
+    tags: true,
+    zIndex: 600, // Above overlay
+    ch: ' ',     // Ensure solid background
+    style: { ...surface, transparent: true, border: { fg: rule || 'yellow' } }
+  });
+
+  function showMessageDialog(text: string, callback?: () => void) {
+    modalOverlay.show();
+    modalOverlay.setFront();
+    messageDialog.show();
+    messageDialog.setFront();
+    messageDialog.focus();
+    messageDialog.once('hide', () => {
+      modalOverlay.hide();
+      if (returnFocusElement) returnFocusElement.focus();
+      screen.render();
+    });
+    messageDialog.display(text, () => {
+      if (callback) callback();
+    });
+  }
+
+  function showPromptDialog(text: string, value: string, callback: (err: Error | null, val?: string) => void) {
+    modalOverlay.show();
+    modalOverlay.setFront();
+    promptDialog.show();
+    promptDialog.setFront();
+    promptDialog.once('hide', () => {
+      modalOverlay.hide();
+      if (returnFocusElement) returnFocusElement.focus();
+      screen.render();
+    });
+    promptDialog.showInput(text, value, (err, val) => {
+      callback(err, val);
+    });
+    // Force the text input to take focus on the next tick — otherwise
+    // focus lands on the dialog itself (or the Cancel button) and the
+    // user has to Tab into the field before typing. Scheduling after the
+    // current event loop lets all of blessed's focus-stack bookkeeping
+    // settle first.
+    setTimeout(() => {
+      const input = (promptDialog as any).inputField;
+      if (input && typeof input.focus === 'function') {
+        input.focus();
+        screen.render();
+      }
+    }, 0);
+  }
+
+  function showConfirmDialog(text: string, callback: (answer: boolean) => void) {
+    modalOverlay.show();
+    modalOverlay.setFront();
+    questionDialog.show();
+    questionDialog.setFront();
+    questionDialog.focus();
+    questionDialog.once('hide', () => {
+      modalOverlay.hide();
+      if (returnFocusElement) returnFocusElement.focus();
+      screen.render();
+    });
+    questionDialog.ask(text, (answer: boolean) => {
+      callback(answer);
+    });
+  }
+
+  return {
+    modalOverlay,
+    showModal,
+    hideModal,
+    messageDialog,
+    promptDialog,
+    questionDialog,
+    showMessageDialog,
+    showPromptDialog,
+    showConfirmDialog
+  };
+}
+
+/**
+ * Disable mouse click selection on an element
+ *
+ * Prevents accidental selections when using mouse for other interactions.
+ * Useful for games with custom mouse handling (e.g., arkanoid paddle control).
+ *
+ * @example
+ * const menu = createList({ items: ['Start', 'Quit'] });
+ * disableMouseSelect(menu);  // Can't click to select, must use keyboard
+ */
+export function disableMouseSelect(element: any): void {
+  if (element) {
+    element.options.clickable = false;
+    element.clickable = false;
+  }
+}
+
+/**
+ * Enable mouse click selection on an element
+ *
+ * Re-enables mouse selection after it was disabled.
+ *
+ * @example
+ * enableMouseSelect(menu);  // Re-enable clicking
+ */
+export function enableMouseSelect(element: any): void {
+  if (element) {
+    element.options.clickable = true;
+    element.clickable = true;
+  }
+}
+
+/**
+ * Add context menu to an element (right-click menu)
+ *
+ * Automatically handles right-click events and shows a popup menu.
+ *
+ * @example
+ * const menu = addContextMenu(myBox, screen, [
+ *   { label: 'Copy', action: () => console.log('Copy') },
+ *   { label: 'Paste', action: () => console.log('Paste'), disabled: true },
+ *   { separator: true },
+ *   { label: 'Delete', action: () => console.log('Delete') }
+ * ]);
+ */
+export function addContextMenu(
+  element: any,
+  screen: any,
+  items: Array<{
+    label: string;
+    action?: () => void;
+    disabled?: boolean;
+    separator?: boolean;
+  }>
+): any {
+  const { ContextMenu } = require('../engines/ui/blessed');
+
+  const contextMenu = new ContextMenu({
+    parent: screen,
+    items,
+  });
+
+  // Show menu on right-click
+  element.on('mousedown', (event: any) => {
+    if (event.button === 'right') {
+      contextMenu.showAt(event.x, event.y);
+    }
+  });
+
+  return contextMenu;
+}
+
+/**
+ * Create a Panel widget for multi-panel layouts
+ *
+ * Features:
+ * - Visual indication when panel is active (has focused child)
+ * - Alt+<number> shortcuts for quick switching
+ * - F6 cycles through panels
+ *
+ * @example
+ * const leftPanel = createPanel({
+ *   parent: screen,
+ *   left: 0,
+ *   top: 0,
+ *   width: '50%',
+ *   height: '100%',
+ *   title: 'Files',
+ *   panelIndex: 1,  // Alt+1 to activate
+ * });
+ *
+ * const rightPanel = createPanel({
+ *   parent: screen,
+ *   left: '50%',
+ *   top: 0,
+ *   width: '50%',
+ *   height: '100%',
+ *   title: 'Preview',
+ *   panelIndex: 2,  // Alt+2 to activate
+ * });
+ */
+export function createPanel(options: any): any {
+  const { Panel } = require('../engines/ui/blessed');
+  return new Panel({
+    tags: true,
+    ...options,
+  });
+}
+
+// Export DoorInputManager for centralized input state management
+export { DoorInputManager, type DoorInputOptions } from './door-input-manager';
+
+/**
+ * Bind keys on a blessed screen and return an `unbind` function that removes
+ * all of them. This prevents the common bug where `screen.key()` handlers
+ * accumulate across dialog/overlay opens because they are never cleaned up.
+ *
+ * Always call `unbind()` inside the dialog's cleanup before `box.destroy()`.
+ *
+ * @example
+ * const unbind = bindKeys(screen, [
+ *   [['escape'],      () => { cleanup(); onCancel(); }],
+ *   [['enter'],       () => { cleanup(); onConfirm(); }],
+ *   [['y', 'Y'],      () => { cleanup(); onYes(); }],
+ * ]);
+ *
+ * function cleanup() {
+ *   unbind();
+ *   box.destroy();
+ *   screen.render();
+ * }
+ */
+export function bindKeys(
+  screen: any,
+  bindings: Array<[string | string[], () => void]>
+): () => void {
+  // Wrap each callback to return true so the screen marks the key as handled.
+  // Without this, after the screen handler runs the focused element (e.g. a
+  // list) ALSO processes the same key — causing double-actions (e.g. left/right
+  // both adjusting amount AND jumping the list selection by 10 items).
+  const wrappedBindings: Array<[string | string[], () => true]> = bindings.map(
+    ([keys, fn]) => [keys, () => { fn(); return true; }]
+  );
+  for (const [keys, fn] of wrappedBindings) {
+    screen.key(Array.isArray(keys) ? keys : [keys], fn);
+  }
+  return function unbind() {
+    for (const [keys, fn] of wrappedBindings) {
+      screen.unkey(Array.isArray(keys) ? keys : [keys], fn);
+    }
+  };
+}
+
+/**
+ * Take a list's own arrow keys away while something else is reading them.
+ *
+ * A blessed List built with `keys: true` binds up/down/j/k at CONSTRUCTION
+ * (blessed's list.js) and acts on them whenever it has focus. A door that
+ * opens a scrollable panel over its menu and scrolls it with `screen.key`
+ * therefore moves BOTH: the panel scrolls and the menu cursor walks behind
+ * it, so leaving the panel lands on a different row than the one that was
+ * opened. Reported against the ACHIEVE door on 2026-09-08, and it is a
+ * property of the pattern rather than of that door.
+ *
+ * `blur()` does not do it: `Screen.rewindFocus` hands focus back to the
+ * previous visible element, which on a one-list screen is the list again.
+ *
+ * Returns the restore function. Restoring re-attaches the listeners in
+ * order and gives the list its focus back, on the row it was left on.
+ *
+ *     const restore = borrowListKeys(list);   // panel opens
+ *     ...
+ *     restore();                              // panel closes
+ */
+/**
+ * Double-submit guard for dialog save paths (2026-09-10).
+ *
+ * Save is reachable from a button, Ctrl+Enter and (via focus) plain
+ * Enter in quick succession, and two interleaved saves store the same
+ * record twice - WHIP showed the task duplicated under one id. The
+ * wrapper drops the second entry while the first is in flight and
+ * re-arms after, so a validation error still allows a retry. Replaces
+ * the hand-rolled `saving` flag every dialog carried.
+ */
+export function guardDoubleSubmit<Args extends unknown[]>(
+  fn: (...args: Args) => Promise<void>
+): (...args: Args) => Promise<void> {
+  let running = false;
+  return async (...args: Args): Promise<void> => {
+    if (running) return;
+    running = true;
+    try {
+      await fn(...args);
+    } finally {
+      running = false;
+    }
+  };
+}
+
+/**
+ * Focus-ring step for modal dialogs (2026-09-10).
+ *
+ * WHIP runs with focusKeys:false (arrows must never yank focus out of
+ * its lists), so the screen's default Tab navigation is off and every
+ * dialog advanced focus itself down a hand-rolled ring - same index
+ * math in each one. The ring stays the door's (order is layout), the
+ * stepping is shared. A focused element missing from the ring restarts
+ * at the front rather than stranding focus.
+ */
+export function advanceFocus(screen: any, ring: any[]): void {
+  if (ring.length === 0) return;
+  const i = ring.indexOf(screen.getFocused?.());
+  if (i < 0) {
+    ring[0].focus();
+  } else {
+    ring[(i + 1) % ring.length].focus();
+  }
+  screen.render();
+}
+
+/**
+ * The same step backwards - including OFF the ring.
+ *
+ * Both functions document "restarts at the front", and advanceFocus did:
+ * indexOf returns -1 and (-1 + 1) % len is 0. The arithmetic did not
+ * survive the sign change here, so the backward step landed on
+ * ring[len - 2] - the second-to-LAST field - whenever focus was outside
+ * the ring (a message box, a dropdown, nothing focused at all). Shift+Tab
+ * out of a dialog's stray element jumped to a field nobody asked for
+ * (2026-09-13). The two are symmetric now: off the ring is the front.
+ */
+export function retreatFocus(screen: any, ring: any[]): void {
+  if (ring.length === 0) return;
+  const i = ring.indexOf(screen.getFocused?.());
+  if (i < 0) {
+    ring[0].focus();
+  } else {
+    ring[(i - 1 + ring.length) % ring.length].focus();
+  }
+  screen.render();
+}
+
+export function borrowListKeys(list: unknown): () => void {
+  const target = list as {
+    listeners?: (event: string) => Array<(...args: unknown[]) => void>;
+    removeAllListeners?: (event: string) => unknown;
+    on?: (event: string, handler: (...args: unknown[]) => void) => unknown;
+    focus?: () => unknown;
+  } | null;
+  const saved = (target?.listeners?.('keypress') ?? []).slice();
+  target?.removeAllListeners?.('keypress');
+  let restored = false;
+  return (): void => {
+    if (restored) return;
+    restored = true;
+    for (const handler of saved) target?.on?.('keypress', handler);
+    // Only if it is not already the focused element: `focus()` blurs the
+    // current one first, and blurring the list we are restoring is how a
+    // restored menu ended up ignoring its own arrow keys.
+    if ((target as { focused?: boolean } | null)?.focused !== true) target?.focus?.();
+  };
+}

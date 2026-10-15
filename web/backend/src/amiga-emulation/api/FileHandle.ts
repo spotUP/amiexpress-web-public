@@ -1,0 +1,536 @@
+/**
+ * FileHandle - Represents an AmigaDOS file handle
+ *
+ * Based on amitools/vamos/lib/dos/FileHandle.py
+ * See: Documentation/3-Developers/AMIGAOS_DOS_FILE_IO_IMPLEMENTATION_GUIDE.md
+ */
+
+import * as fs from 'fs';
+import * as path from 'path';
+import * as amigafs from '../../utils/amigafs';
+import { getSystemTime } from '../../utils/date-time.util';
+
+// Debug log path - uses BBS_DATA_DIR env var or falls back to cwd
+const DEBUG_LOG_PATH = path.join(process.env.BBS_DATA_DIR || process.cwd(), 'logs', 'filehandle-debug.log');
+
+// OFF unless explicitly switched on, like DEBUG_68K and XIM_DEBUG.
+//
+// Ungated, this wrote a line on EVERY memory read. On the live board
+// filehandle-debug.log reached 8.1 GB - 10 percent of the disk - and was still
+// growing while the host sat at 79 percent full. A debug log with no ceiling
+// and no switch is a disk-full outage waiting for a busy day.
+const FH_DEBUG = process.env.FILEHANDLE_DEBUG === '1';
+function fhDebug(line: string): void {
+  if (!FH_DEBUG) return;
+  try {
+    fs.appendFileSync(DEBUG_LOG_PATH, line);
+  } catch {
+    /* logging must never break a door */
+  }
+}
+
+export class FileHandle {
+  /** File descriptor or stream object */
+  private fd: number | null = null;
+
+  /** File name (basename) */
+  public readonly name: string;
+
+  /** AmigaDOS path (e.g., "doors:who/node0.txt") */
+  public readonly amiPath: string;
+
+  /** System filesystem path */
+  public readonly sysPath: string;
+
+  /** BPTR (Byte Pointer = address / 4) */
+  public bAddr: number = 0;
+
+  /** Address of FileHandleStruct in emulator memory */
+  public memAddr: number = 0;
+
+  /** Should this file be closed? (false for stdin/stdout) */
+  public readonly needClose: boolean;
+
+  /** Auto-flush after writes? (true for stdout) */
+  public readonly autoFlush: boolean;
+
+  /** Is this a NULL device (NIL:)? */
+  public readonly isNil: boolean;
+
+  /** Is this a console/stdout? */
+  public readonly isConsole: boolean;
+
+  /** File position for seek operations */
+  private position: number = 0;
+
+  /** Optional in-memory buffer (used for cached read-only files) */
+  private readonly memoryBuffer: Buffer | null = null;
+
+  /** True when operating entirely from memory (no filesystem descriptor) */
+  private isMemoryHandle: boolean = false;
+
+  /** Track open mode to guard invalid seeks */
+  private openMode: 'r' | 'w' | 'rw' | null = null;
+
+  /** Count how many times we've hit EOF and then seeked backwards - for loop detection */
+  private eofSeekBackCount: number = 0;
+
+  /** Track if we just returned EOF (0 bytes) - for loop detection */
+  private justReturnedEof: boolean = false;
+
+  /** Permanently locked to EOF - no more reads allowed */
+  private permanentEof: boolean = false;
+
+  /**
+   * Snapshot of file size at open time (for read-only files).
+   * This prevents infinite loops when reading files that grow during read
+   * (e.g., CallersLog being appended while ByteKillHandler reads it).
+   */
+  private snapshotSize: number | null = null;
+
+  /** Skip snapshotSize - for temp files that may be rewritten by Execute() */
+  private skipSnapshot: boolean = false;
+
+  constructor(
+    amiPath: string,
+    sysPath: string,
+    options: {
+      needClose?: boolean;
+      autoFlush?: boolean;
+      isNil?: boolean;
+      isConsole?: boolean;
+      memoryBuffer?: Buffer;
+      skipSnapshot?: boolean; // Don't snapshot file size - for temp files
+    } = {}
+  ) {
+    this.amiPath = amiPath;
+    this.sysPath = sysPath;
+    this.name = sysPath.split('/').pop() || 'unknown';
+    this.needClose = options.needClose !== undefined ? options.needClose : true;
+    this.autoFlush = options.autoFlush || false;
+    this.isNil = options.isNil || false;
+    this.isConsole = options.isConsole || false;
+    this.memoryBuffer = options.memoryBuffer || null;
+    this.skipSnapshot = options.skipSnapshot || false;
+  }
+
+  /**
+   * Open the file with specified mode
+   */
+  open(mode: 'r' | 'w' | 'rw'): boolean {
+    try {
+      this.openMode = mode;
+      if (this.memoryBuffer) {
+        if (mode === 'w' || mode === 'rw') {
+console.error(`[FileHandle] Cannot open memory-backed handle "${this.amiPath}" for writing`);
+          return false;
+        }
+        this.isMemoryHandle = true;
+        this.fd = -3;
+        this.position = 0;
+        return true;
+      }
+
+      // NIL device - don't actually open
+      if (this.isNil) {
+        this.fd = -1; // Special marker for NULL device
+        return true;
+      }
+
+      // Console/stdout - don't actually open
+      if (this.isConsole) {
+        this.fd = -2; // Special marker for console
+        return true;
+      }
+
+      // Open real file
+      let flags: number;
+      if (mode === 'r') {
+        flags = fs.constants.O_RDONLY;
+      } else if (mode === 'w') {
+        // AmigaDOS MODE_NEWFILE: create or TRUNCATE existing file, exclusive write.
+        // Previously this omitted O_TRUNC as a dRE!WAll-specific workaround, but
+        // that corrupted fixed-record files written by other doors (bytekiller's
+        // Fakelist.N — a 486-byte fixed layout — got partially overwritten with
+        // a short new record, leaving stale bytes in the tail). dRE!WAll is
+        // still broken for unrelated reasons (see dRE_WALL_HANDOFF.md) so the
+        // workaround was net-negative. Back to correct AmigaDOS semantics.
+        flags = fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_TRUNC;
+      } else { // 'rw'
+        flags = fs.constants.O_RDWR | fs.constants.O_CREAT;
+      }
+
+      // AmigaDOS volumes are case-insensitive, so a door's path ("bbs:bulletins/
+      // bull1.txt") reaches us in whatever case the door's config used, while the
+      // real directory is "Bulletins/". Every other DOS entry point goes through
+      // amigafs for exactly this reason - FileManager.open() even checks
+      // amigafs.existsSync(sysPath) and logs "(EXISTS)" - but this open used raw
+      // fs, so on a case-sensitive filesystem (the Linux container) the fd landed
+      // somewhere else than the file the caller was told existed:
+      //   MODE_NEWFILE -> ENOENT on the missing lowercase parent, Open() returns 0,
+      //                   and the bulletin is never regenerated;
+      //   MODE_OLDFILE/MODE_READWRITE carry O_CREAT, so they minted an empty
+      //                   lowercase twin beside the real file and the door then
+      //                   read and rewrote 0 bytes.
+      this.fd = amigafs.openSync(this.sysPath, flags, 0o666);
+      this.position = 0;
+
+      // DEBUG: Check file size after opening
+      if (mode === 'w') {
+        const stats = fs.fstatSync(this.fd);
+console.log(`[FileHandle] After open: "${this.amiPath}" size=${stats.size} bytes (write mode)`);
+      }
+
+      // For read-only files, snapshot the file size at open time.
+      // This prevents infinite loops when reading files that grow during read
+      // (e.g., CallersLog being appended to while ByteKillHandler reads it).
+      // Skip snapshot for temp files (T:) that may be rewritten by Execute().
+      if (mode === 'r' && !this.skipSnapshot) {
+        const stats = fs.fstatSync(this.fd);
+        this.snapshotSize = stats.size;
+      }
+
+      return true;
+    } catch (error) {
+console.error(`[FileHandle] Failed to open ${this.sysPath}:`, error);
+      return false;
+    }
+  }
+
+  /**
+   * Read data from file
+   */
+  read(length: number): Buffer {
+    if (this.fd === null) {
+      throw new Error('File not open');
+    }
+
+    // Check for permanent EOF lock first (applies to all handle types)
+    if (this.permanentEof) {
+      return Buffer.alloc(0);
+    }
+
+    if (this.isMemoryHandle && this.memoryBuffer) {
+      const available = this.memoryBuffer.length - this.position;
+      const bytesToRead = Math.min(length, available);
+      // Log to file for debugging (only if not permanently locked)
+      try {
+        const logLine = `[FileHandle] MEMORY: ${this.amiPath} bufLen=${this.memoryBuffer.length} pos=${this.position} avail=${available} reading=${bytesToRead} eofSeekCount=${this.eofSeekBackCount}\n`;
+        fhDebug( logLine);
+      } catch {}
+
+      // If we've detected an infinite seek loop pattern (hit EOF, seeked back multiple times), force EOF
+      if (this.eofSeekBackCount >= 3) {
+        this.permanentEof = true;
+        try {
+          fhDebug(
+            `[FileHandle] LOOP DETECTED: ${this.amiPath} - LOCKING to permanent EOF after ${this.eofSeekBackCount} seek-back cycles\n`);
+        } catch {}
+        return Buffer.alloc(0);
+      }
+
+      // Track EOF for loop detection
+      if (bytesToRead === 0) {
+        this.justReturnedEof = true;
+      } else {
+        this.justReturnedEof = false;
+      }
+
+      const slice = this.memoryBuffer.subarray(this.position, this.position + bytesToRead);
+      this.position += bytesToRead;
+      return Buffer.from(slice);
+    }
+
+    // NIL device always returns empty
+    if (this.isNil) {
+      return Buffer.alloc(0);
+    }
+
+    // Console input - return empty for now (stdin not implemented yet)
+    if (this.isConsole && this.fd === -2) {
+      return Buffer.alloc(0);
+    }
+
+    try {
+      // If we've detected an infinite seek loop pattern, force EOF
+      if (this.eofSeekBackCount >= 3) {
+        this.permanentEof = true;
+        try {
+          fhDebug(
+            `[FileHandle] FILE LOOP DETECTED: ${this.amiPath} - LOCKING to permanent EOF after ${this.eofSeekBackCount} seek-back cycles\n`);
+        } catch {}
+        return Buffer.alloc(0);
+      }
+
+      // For read-only files with a snapshot size, limit reads to the original file size.
+      // This prevents infinite loops when reading files that grow during read.
+      let effectiveLength = length;
+      if (this.snapshotSize !== null) {
+        const available = this.snapshotSize - this.position;
+        try {
+          const logLine = `[FileHandle] FILE: ${this.amiPath} snapshot=${this.snapshotSize} pos=${this.position} avail=${available} req=${length} eofSeekCount=${this.eofSeekBackCount}\n`;
+          fhDebug( logLine);
+        } catch {}
+        if (available <= 0) {
+          // Already at or past the snapshot EOF - return empty (EOF)
+          this.justReturnedEof = true;
+          try {
+            fhDebug( `[FileHandle] FILE EOF: ${this.amiPath}\n`);
+          } catch {}
+          return Buffer.alloc(0);
+        }
+        effectiveLength = Math.min(length, available);
+      } else {
+        try {
+          const logLine = `[FileHandle] FILE NO-SNAPSHOT: ${this.amiPath} pos=${this.position} req=${length}\n`;
+          fhDebug( logLine);
+        } catch {}
+      }
+
+      const buffer = Buffer.alloc(effectiveLength);
+      const bytesRead = fs.readSync(this.fd, buffer, 0, effectiveLength, this.position);
+      this.position += bytesRead;
+
+      // Track EOF for loop detection
+      if (bytesRead === 0) {
+        this.justReturnedEof = true;
+      } else {
+        this.justReturnedEof = false;
+      }
+
+      return buffer.slice(0, bytesRead);
+    } catch (error) {
+      // Only log errors, not every read operation
+console.error(`[FileHandle] Read error on ${this.sysPath}:`, error);
+      return Buffer.alloc(0);
+    }
+  }
+
+  /**
+   * Write data to file
+   * Returns callback for console output (if console), null otherwise
+   */
+  write(data: Buffer): { bytesWritten: number; consoleData?: Buffer } {
+    if (this.fd === null) {
+      throw new Error('File not open');
+    }
+
+    if (this.isMemoryHandle) {
+console.error('[FileHandle] Attempted write on memory-backed handle');
+      return { bytesWritten: -1 };
+    }
+
+    // NIL device - discard data
+    if (this.isNil) {
+      return { bytesWritten: data.length };
+    }
+
+    // Console output - return data for terminal
+    if (this.isConsole && this.fd === -2) {
+      // Convert bare LF to CR+LF for proper terminal display
+      // Amiga files often use LF only, but terminals expect CR+LF
+      // This fixes bulletin text offset issues in doors like Bulls
+      const text = data.toString('latin1');
+      const convertedText = text.replace(/(?<!\r)\n/g, '\r\n');
+      const convertedData = Buffer.from(convertedText, 'latin1');
+      return { bytesWritten: data.length, consoleData: convertedData };
+    }
+
+    try {
+console.log(`[FileHandle] write ${data.length} bytes to ${this.sysPath}`);
+      try {
+        // Mirror to door log for debugging batch outputs (stable path to repo logs)
+        const logPath = path.resolve(__dirname, '../../../../../logs/door-68k.log');
+        const line = `[FileWrite] ${getSystemTime().toISOString()} ${this.amiPath} -> ${this.sysPath} bytes=${data.length}\n`;
+        require('fs').appendFileSync(logPath, line, { encoding: 'utf8' });
+      } catch {
+        /* ignore */
+      }
+      const bytesWritten = fs.writeSync(this.fd, data, 0, data.length, this.position);
+      this.position += bytesWritten;
+
+      if (this.autoFlush) {
+        fs.fsyncSync(this.fd);
+      }
+
+      return { bytesWritten };
+    } catch (error) {
+console.error(`[FileHandle] Write error:`, error);
+      return { bytesWritten: -1 };
+    }
+  }
+
+  /**
+   * Seek to position in file
+   */
+  seek(position: number, whence: number): number {
+    // If permanently locked to EOF, all seeks fail
+    if (this.permanentEof) {
+      return -1;
+    }
+
+    if (this.isMemoryHandle && this.memoryBuffer) {
+      const size = this.memoryBuffer.length;
+      const oldPos = this.position;
+      let targetPos = this.position;
+      if (whence === 0) {
+        targetPos = position;
+      } else if (whence === 1) {
+        targetPos = this.position + position;
+      } else if (whence === 2) {
+        targetPos = size + position;
+      }
+
+      // Log seeks for debugging
+      try {
+        fhDebug(
+          `[FileHandle] SEEK: ${this.amiPath} from=${oldPos} to=${targetPos} whence=${whence} offset=${position} justEof=${this.justReturnedEof}\n`);
+      } catch {}
+
+      // Detect infinite loop pattern: if we just hit EOF and now we're seeking backwards
+      if (this.justReturnedEof && targetPos < oldPos) {
+        this.eofSeekBackCount++;
+        try {
+          fhDebug(
+            `[FileHandle] EOF-SEEK-BACK: ${this.amiPath} count=${this.eofSeekBackCount} (seeking backwards after EOF)\n`);
+        } catch {}
+        // If excessive seeks, lock to permanent EOF (door may be in seek-only loop)
+        if (this.eofSeekBackCount >= 10) {
+          this.permanentEof = true;
+          try {
+            fhDebug(
+              `[FileHandle] SEEK LOOP LOCK: ${this.amiPath} - excessive seek-back cycles (${this.eofSeekBackCount}), locking to EOF\n`);
+          } catch {}
+          return -1; // Return error to signal EOF/failure
+        }
+      }
+
+      // Guard runaway seeks on read-only memory-backed handles to avoid tight loops
+      if (this.openMode === 'r' && targetPos > size) {
+        console.warn(
+          `[FileHandle] Seek beyond EOF for "${this.amiPath}" (requested=${targetPos}, size=${size})`
+        );
+        return -1;
+      }
+      // Allow seeking past EOF for write handles; clamp negatives
+      this.position = Math.max(0, targetPos);
+      return this.position;
+    }
+
+    if (this.fd === null || this.fd < 0) {
+      return -1;
+    }
+
+    try {
+      const stats = fs.fstatSync(this.fd);
+      const fileSize = stats.size;
+      const oldPos = this.position;
+      // Compute target position first
+      let targetPos = this.position;
+      if (whence === 0) {
+        targetPos = position;
+      } else if (whence === 1) {
+        targetPos = this.position + position;
+      } else if (whence === 2 || whence === -1) {
+        targetPos = stats.size + position;
+      }
+
+      // Log seeks for debugging
+      try {
+        fhDebug(
+          `[FileHandle] FILE SEEK: ${this.amiPath} from=${oldPos} to=${targetPos} whence=${whence} offset=${position} justEof=${this.justReturnedEof}\n`);
+      } catch {}
+
+      // Detect infinite loop pattern: if we just hit EOF and now we're seeking backwards
+      if (this.justReturnedEof && targetPos < oldPos) {
+        this.eofSeekBackCount++;
+        try {
+          fhDebug(
+            `[FileHandle] FILE EOF-SEEK-BACK: ${this.amiPath} count=${this.eofSeekBackCount} (seeking backwards after EOF)\n`);
+        } catch {}
+        // If excessive seeks, lock to permanent EOF (door may be in seek-only loop)
+        if (this.eofSeekBackCount >= 10) {
+          this.permanentEof = true;
+          try {
+            fhDebug(
+              `[FileHandle] FILE SEEK LOOP LOCK: ${this.amiPath} - excessive seek-back cycles (${this.eofSeekBackCount}), locking to EOF\n`);
+          } catch {}
+          return -1; // Return error to signal EOF/failure
+        }
+      }
+
+      // If opened read-only, prevent runaway seeks far past EOF
+      if (this.openMode === 'r' && targetPos > fileSize) {
+        console.warn(
+          `[FileHandle] Seek beyond EOF for "${this.amiPath}" (requested=${targetPos}, size=${fileSize})`
+        );
+        return -1;
+      }
+
+      this.position = targetPos;
+      return this.position;
+    } catch (error) {
+console.error(`[FileHandle] Seek error:`, error);
+      return -1;
+    }
+  }
+
+  /**
+   * Get current file position
+   */
+  tell(): number {
+    return this.position;
+  }
+
+  /**
+   * Current size of the open file on disk, or -1 when there is no file
+   * descriptor (console, NIL, closed, memory-backed).
+   */
+  size(): number {
+    if (this.fd === null || this.fd < 0) return -1;
+    try {
+      return fs.fstatSync(this.fd).size;
+    } catch {
+      return -1;
+    }
+  }
+
+  /**
+   * Truncate or zero-extend the open file to `newSize` bytes (dos.library
+   * SetFileSize). A position past the new end moves to the new end.
+   * Returns false when the handle has no writable file descriptor.
+   */
+  setSize(newSize: number): boolean {
+    if (this.fd === null || this.fd < 0 || this.isMemoryHandle) return false;
+    try {
+      fs.ftruncateSync(this.fd, newSize);
+    } catch (error) {
+console.error(`[FileHandle] setSize error:`, error);
+      return false;
+    }
+    if (this.position > newSize) this.position = newSize;
+    return true;
+  }
+
+  /**
+   * Close the file
+   */
+  close(): void {
+    if (this.needClose && this.fd !== null && this.fd >= 0) {
+      try {
+        fs.closeSync(this.fd);
+      } catch (error) {
+console.error(`[FileHandle] Close error:`, error);
+      }
+    }
+    this.fd = null;
+    this.isMemoryHandle = false;
+  }
+
+  /**
+   * String representation for debugging
+   */
+  toString(): string {
+    return `[FH:'${this.name}'(ami='${this.amiPath}',sys='${this.sysPath}',nc=${this.needClose})@0x${this.memAddr.toString(16)}=B@0x${this.bAddr.toString(16)}]`;
+  }
+}

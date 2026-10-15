@@ -1,0 +1,25 @@
+# ACHIEVE.cfg - where this board's achievements server is, and who this board
+# is to it. The door reads this file from its own directory; with no file, or
+# no Host= and BoardKey=, it says so and leaves rather than showing an empty
+# scoreboard.
+#
+# Rename to ACHIEVE.cfg beside the executable.
+
+# The achievements server. The board's own setting is in the admin under
+# System -> Achievements; this is the same host.
+Host=doors.uprough.net
+
+# 80 unless the sysop runs it elsewhere.
+Port=80
+
+# The key the server minted for this board, as `<board>.<secret>`. It
+# identifies the board on every request - keep this file out of the file
+# areas.
+BoardKey=
+
+# Which board the "board scoreboard" is for. Left empty, the door uses the
+# key's own prefix, which is what the server means by the board id.
+BoardId=
+
+# Seconds. Bounds the connect and every read.
+Timeout=10

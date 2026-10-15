@@ -1,0 +1,197 @@
+/**
+ * Pengo - Game Types
+ * 1982 Sega arcade puzzle game port
+ */
+
+export type GameState =
+  | "menu"
+  | "playing"
+  | "dying"
+  | "levelComplete"
+  | "gameover"
+  | "highscores"
+  | "enterName"
+  | "paused"
+  | "help";
+
+export type Direction = "up" | "down" | "left" | "right";
+
+export type CellType =
+  | "empty"
+  | "ice" // Normal ice block
+  | "diamond" // Diamond block (for bonus)
+  | "wall"; // Outer wall
+
+/**
+ * `crushed` is the moment between the block landing and the Sno-Bee being
+ * gone: it plays its squash animation, and only then is it removed. Without
+ * it a crushed enemy simply stopped being drawn on the same tick the block
+ * arrived - "when i push a block against an enemy it doesn't animate".
+ */
+export type EnemyState = "walking" | "hatching" | "stunned" | "crushed" | "dead";
+
+export interface Position {
+  x: number;
+  y: number;
+}
+
+export interface Pengo {
+  x: number;
+  y: number;
+  direction: Direction;
+  isPushing: boolean;
+  pushFrame: number;
+  isDead: boolean;
+  deathFrame: number;
+}
+
+export interface Enemy {
+  id: number;
+  x: number;
+  y: number;
+  direction: Direction;
+  state: EnemyState;
+  stunTimer: number;
+  /** Ticks left of the squash animation, while `state` is 'crushed'. */
+  crushTimer: number;
+  hatchTimer: number;
+  moveTimer: number;
+  /**
+   * Where this Sno-Bee is currently headed - a point near Pengo, not
+   * Pengo's own cell (see game/ai.ts). Optional and absent until the
+   * first tick that moves this enemy, so every existing Enemy literal in
+   * the test suite stays valid without updating each one.
+   */
+  targetX?: number;
+  targetY?: number;
+  /** Moves spent on the current target, so a stale one gets re-aimed. */
+  targetAge?: number;
+  /**
+   * The last Sno-Bee standing, running for a corner to escape.
+   *
+   * The arcade's own rule: "If a single Sno-Bee remains in the round, a
+   * jingle plays and the Sno-Bee accelerates in an attempt to reach a
+   * corner, where it safely fades away". It is NOT a kill - reaching the
+   * corner ends the round and scores the player nothing for it.
+   */
+  fleeing?: boolean;
+}
+
+export interface Block {
+  x: number;
+  y: number;
+  type: CellType;
+  isSliding: boolean;
+  slideDirection: Direction | null;
+}
+
+/**
+ * A block in flight, between the cell it left and the cell it will stop on.
+ *
+ * A push used to resolve inside a single keypress: the whole slide ran in
+ * one synchronous loop, so a block travelled its entire length in one
+ * frame. Reported in play as blocks disappearing, and diagnosed exactly -
+ * "they move too fast making it a 1 frame animation". Both reference
+ * clones model a pushed block as a moving thing, and so does the arcade;
+ * this is that model.
+ */
+export interface SlidingBlock {
+  x: number;
+  y: number;
+  type: CellType;
+  /** Direction of travel, one cell per SLIDE_TICKS_PER_CELL. */
+  dx: number;
+  dy: number;
+  /** Ticks until the next cell step. */
+  timer: number;
+  /** How many Sno-Bees this one push has caught, for the combo score. */
+  crushed: number;
+}
+
+export interface Egg {
+  x: number;
+  y: number;
+  hatchTimer: number;
+}
+
+export interface HighScore {
+  name: string;
+  score: number;
+  level: number;
+  date: string;
+}
+
+export interface PengoData {
+  state: GameState;
+  score: number;
+  lives: number;
+  level: number;
+  timeRemaining: number;
+
+  pengo: Pengo;
+  enemies: Enemy[];
+  grid: CellType[][];
+  eggs: Egg[];
+  /** Blocks currently in flight from a push. */
+  slidingBlocks: SlidingBlock[];
+
+  diamondsAligned: boolean;
+  enemyIdCounter: number;
+
+  /**
+   * The block push that just happened, for the renderer: the destination
+   * cell plays its 'sliding' animation briefly. Rendering state, not
+   * gameplay - nothing reads it back.
+   */
+  lastSlide?: { x: number; y: number; tick: number };
+  /** Likewise for a wall shake: the frame the walls started rattling. */
+  wallShake?: { tick: number };
+
+  highscores: HighScore[];
+  menuSelection: number;
+  playerName: string;
+
+  lastUpdateTime: number;
+  frameCount: number;
+}
+
+export type InputKey =
+  | "up"
+  | "down"
+  | "left"
+  | "right"
+  | "push"
+  | "space"
+  | "enter"
+  | "escape"
+  | "p"
+  | "q"
+  | "backspace"
+  | string;
+
+export interface LevelConfig {
+  enemies: number;
+  eggs: number;
+  iceBlocks: number;
+  enemySpeed: number;
+  timeLimit: number;
+}
+
+export type SoundEffect =
+  | "push"
+  | "crush"
+  | "stun"
+  | "death"
+  | "hatch"
+  | "diamondBonus"
+  | "levelComplete"
+  | "gameOver";
+
+export interface RPCMethods {
+  getHighscores: () => Promise<HighScore[]>;
+  saveHighscore: (params: {
+    name: string;
+    score: number;
+    level: number;
+  }) => Promise<void>;
+}

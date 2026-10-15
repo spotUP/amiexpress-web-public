@@ -1,0 +1,26 @@
+~
+~CC_ENCRYPT 
+~CC_VAULT 
+~c1  -+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-
+~c5                                     /\/
+                                   / /\ 
+~c6  
+                         AmiExpress purchase info:
+                    AmiExpress current version is 2.20
+                AmiExpress costs $70.00 for intial purchase
+                $20.00 to upgrade from AmiExpress 1.1v-1.1x
+                Free for AmiExpress 2.0+ registered users.
+                  Send moneyorder or post money order to 
+ 
+~c3                          Light Speed Technologies
+                               P.O.Box 3016
+                          RadFord, Virginia 24143
+                                    USA
+~c5 
+                         from author: Joseph Hodge
+ 
+              or call 1-703-639-6114 for further information.
+~c1 
+ -+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-
+ ~q 
+

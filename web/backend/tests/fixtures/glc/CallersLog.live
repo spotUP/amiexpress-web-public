@@ -1,0 +1,54 @@
+**************************************************************
+04-Oct-26 16:43 [1] CALLER2 (LOCAL) Somewhere
+04-Oct-26 16:43 	Joined conference: C64 Demoscene
+04-Oct-26 16:43 Door: S
+04-Oct-26 16:43 Door exit: S
+04-Oct-26 16:43 	Joined conference: Amiga Demoscene!
+04-Oct-26 16:43 Door: CTOP
+04-Oct-26 16:43 Door exit: CTOP
+04-Oct-26 16:44 Door: EXAMINE
+04-Oct-26 16:44 Door exit: EXAMINE
+CALLER2: 	 1 file(s), 351k bytes, 0 minute(s). 43 second(s), 8371 cps, 100% efficiency.
+04-Oct-26 16:45 Door: EXAMINE
+04-Oct-26 16:45 Door exit: EXAMINE
+CALLER2: 	 1 file(s), 309k bytes, 0 minute(s). 12 second(s), 26409 cps, 100% efficiency.
+04-Oct-26 16:55 Input timeout
+10-04-26 (16:58:27) CALLER2 Off Normally
+04-Oct-26 17:36 Door: FRONTEND
+04-Oct-26 17:36 Door exit: FRONTEND
+**************************************************************
+04-Oct-26 17:37 [1] regress (LOCAL) Test Account
+04-Oct-26 17:37 Door: GL
+04-Oct-26 17:37 Door exit: GL
+04-Oct-26 17:37 Door: TIPLOGIN
+04-Oct-26 17:37 Door exit: TIPLOGIN
+04-Oct-26 17:37 	Joined conference: Amiga Demoscene!
+04-Oct-26 17:37 	Joined conference: C64 Demoscene
+04-Oct-26 17:37 	Joined conference: Console Demoscene
+04-Oct-26 17:38 	Joined conference: Requests
+04-Oct-26 17:38 	Joined conference: Up Rough Internal
+04-Oct-26 17:38 	Joined conference: Amiga Demoscene!
+04-Oct-26 17:38 	Joined conference: C64 Demoscene
+04-Oct-26 17:38 	Joined conference: Console Demoscene
+04-Oct-26 17:38 	Joined conference: Requests
+04-Oct-26 17:38 	Joined conference: Up Rough Internal
+04-Oct-26 17:38 	Joined conference: Amiga Demoscene!
+04-Oct-26 17:38 Door: CTOP
+04-Oct-26 17:38 Door exit: CTOP
+04-Oct-26 17:38 Door: S
+04-Oct-26 17:38 Door exit: S
+04-Oct-26 17:38 Door: TEXTTV
+04-Oct-26 17:41 Door exit: TEXTTV
+04-Oct-26 17:41 Door: LOGOFF1
+10-04-26 (17:41:11) regress Off Normally
+04-Oct-26 17:44 Door exit: LOGOFF1
+04-Oct-26 17:47 Door: FRONTEND
+04-Oct-26 17:47 Door exit: FRONTEND
+04-Oct-26 17:48 Door: FRONTEND
+04-Oct-26 17:48 Door exit: FRONTEND
+04-Oct-26 17:58 Door: FRONTEND
+04-Oct-26 17:58 Door exit: FRONTEND
+04-Oct-26 18:03 Door: FRONTEND
+04-Oct-26 18:03 Door exit: FRONTEND
+04-Oct-26 18:13 Input timeout
+04-Oct-26 19:04 Door: FRONTEND

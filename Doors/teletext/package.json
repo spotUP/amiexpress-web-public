@@ -1,0 +1,21 @@
+{
+  "name": "@amiexpress/teletext",
+  "category": "utility",
+  "version": "1.0.0",
+  "description": "Browse installed teletext service packs - Ceefax, Oracle, 4-Tel recoveries",
+  "bbsCommand": "TELETEXT",
+  "main": "dist/index.js",
+  "author": "AmiExpress Team",
+  "scripts": {
+    "test": "tsx tests/run-tests.ts",
+    "build": "tsc",
+    "watch": "tsc --watch"
+  },
+  "dependencies": {
+    "@amiexpress/bbs-door-sdk": "file:../../sdk"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "typescript": "^5.0.0"
+  }
+}

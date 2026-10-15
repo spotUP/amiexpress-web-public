@@ -1,0 +1,493 @@
+/**
+ * Conference Repository
+ * Handles all conference and message base related database operations
+ */
+
+import { conferenceFileManager } from '../services/ConferenceFileManager';
+import { messageFileManager } from '../services/MessageFileManager';
+import type { Conference, MessageBase } from './types';
+import { SysopDebugUtil, DebugSeverity } from '../utils/sysop-debug.util';
+import { BaseRepository } from './BaseRepository';
+import { getSystemTime } from '../utils/date-time.util';
+
+export class ConferenceRepository extends BaseRepository<any> {
+  constructor(db: any) {
+    if (!db) {
+      throw new Error('Database not initialized');
+    }
+
+    // Unwrap database object if needed
+    let actualDb: any;
+    if (db && db.db && typeof db.db.prepare === 'function') {
+      actualDb = db.db;
+    } else if (typeof db.prepare === 'function') {
+      actualDb = db;
+    } else if (db.getDatabase && typeof db.getDatabase === 'function') {
+      const raw = db.getDatabase();
+      if (raw && typeof raw.prepare === 'function') {
+        actualDb = raw;
+      } else {
+        throw new Error('Invalid database object provided to ConferenceRepository');
+      }
+    } else {
+      throw new Error('Invalid database object provided to ConferenceRepository');
+    }
+
+    super(actualDb);
+  }
+
+  async createConference(conf: Omit<Conference, 'id' | 'created' | 'updated'>): Promise<number> {
+
+    const stmt = this.prepare(`
+      INSERT INTO conferences (
+        name, description, ratio, ratiotype, uploads, downloads, bytesupload, bytesdownload
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+    const result = stmt.run(
+      conf.name,
+      conf.description ?? null,
+      conf.ratio ?? 0,
+      conf.ratioType ?? 0,
+      conf.uploads ?? 0,
+      conf.downloads ?? 0,
+      conf.bytesUpload ?? 0,
+      conf.bytesDownload ?? 0
+    );
+    const confId = result.lastInsertRowid as number;
+
+    // CRITICAL: Write to Conf.DB for Amiga door compatibility
+    let slotNumber: number = -1;
+    try {
+      const allConfs = await this.getConferences();
+      slotNumber = allConfs.length - 1;  // 0-indexed
+      const fullConf: Conference = {
+        ...conf,
+        id: confId,
+        ratio: conf.ratio ?? 0,
+        ratioType: conf.ratioType ?? 0,
+        uploads: conf.uploads ?? 0,
+        downloads: conf.downloads ?? 0,
+        bytesUpload: conf.bytesUpload ?? 0,
+        bytesDownload: conf.bytesDownload ?? 0,
+        created: getSystemTime(),
+        updated: getSystemTime()
+      };
+      conferenceFileManager.writeConferenceFile(fullConf, slotNumber);
+console.log(`[Database] Synced conference "${conf.name}" to Conf.DB (slot ${slotNumber})`);
+    } catch (error) {
+      if (process.env.NODE_ENV !== 'test' && process.env.SUPPRESS_CONF_DB_ERRORS !== '1') {
+console.error(`[Database] Failed to sync conference to disk:`, error);
+        SysopDebugUtil.debug(
+          null,
+          null,
+          'Database',
+          `Failed to sync conference "${conf.name}" to Conf.DB`,
+          {
+            error: error instanceof Error ? error.message : String(error),
+            conferenceName: conf.name,
+            slotNumber
+          },
+          DebugSeverity.WARNING
+        );
+      }
+      // Don't throw - DB insert succeeded
+    }
+
+    return confId;
+  }
+
+  /**
+   * The message_bases mirror follows the bases read from disk
+   * (services/message-base-loader.service), by the ids the loader gives them.
+   *
+   * Those ids are what every per-base row is keyed by - conf_base's read and
+   * scan pointers carry a FOREIGN KEY to message_bases(id) - and the table
+   * kept only its three seeded rows. A board whose bases run to id 5 had no
+   * row for 4 or 5, so saving a scan pointer in conference 4 (Requests)
+   * failed with "FOREIGN KEY constraint failed" mid-scan and left the caller
+   * at a reader that answered no key (sysop, 2026-09-30).
+   *
+   * Rows are inserted or brought to the disk's name and conference; none is
+   * removed - a delete would cascade and take callers' pointers with it.
+   */
+  async syncMessageBasesFromDisk(
+    diskBases: { id: number; conferenceId: number; name: string }[],
+  ): Promise<{ inserted: number; updated: number }> {
+    let inserted = 0;
+    let updated = 0;
+    const select = this.prepare('SELECT id, name, conferenceid FROM message_bases WHERE id = ?');
+    const insert = this.prepare('INSERT INTO message_bases (id, name, conferenceid) VALUES (?, ?, ?)');
+    const update = this.prepare('UPDATE message_bases SET name = ?, conferenceid = ? WHERE id = ?');
+    for (const base of diskBases) {
+      if (!base?.id || !base?.conferenceId || !base?.name) continue;
+      const row = select.get(base.id) as { name: string; conferenceid: number } | undefined;
+      try {
+        if (!row) {
+          insert.run(base.id, base.name, base.conferenceId);
+          inserted += 1;
+        } else if (row.name !== base.name || row.conferenceid !== base.conferenceId) {
+          update.run(base.name, base.conferenceId, base.id);
+          updated += 1;
+        }
+      } catch (err: any) {
+        console.warn(`[message_bases] could not mirror base ${base.id} (conf ${base.conferenceId}):`, err?.message || err);
+      }
+    }
+    return { inserted, updated };
+  }
+
+  /**
+   * Sync SQLite `conferences` rows from the disk source of truth
+   * (ConfConfig.info parsed by loadConfConfig). Express.e treats the
+   * disk file as canonical; SQLite is a downstream mirror used by
+   * web-only paths (db.getFileAreas, db.getConferenceById, the
+   * conference list shown in the admin UI).
+   *
+   * Before this method existed, the conferences table held only the 3
+   * seeded defaults (General / Tech Support / Announcements) regardless
+   * of how many conferences ConfConfig.info declared. Web features that
+   * resolved by SQLite conf-id silently came back empty for any disk
+   * conference beyond #3 — see the "still only 4 confs" cascade.
+   *
+   * Behaviour:
+   *  - Conferences with the disk name AND id are left alone.
+   *  - A row matching the disk name at a DIFFERENT id is updated to
+   *    the disk id (rare; happens when an old test seeded the name).
+   *  - A row at the disk id with a DIFFERENT name is renamed to match.
+   *  - Missing rows are inserted with an explicit id matching the disk
+   *    position (1-based).
+   *
+   * Does NOT touch root `BBS:Conf.DB` (the conference list mirror used
+   * by some Amiga tools) — that's a separate concern handled by the
+   * existing createConference / updateConference Conf.DB write paths.
+   * We're syncing FROM disk, not back to it.
+   */
+  async syncConferencesFromDisk(
+    diskConfs: { id: number; name: string; location?: string }[],
+    options: {
+      /**
+       * True when `diskConfs` is the WHOLE board, which is the only case in
+       * which a row missing from it means the conference is gone.
+       *
+       * The boot and admin-write paths pass the complete list read out of
+       * ConfConfig.info. Callers that sync a fragment - the repository's own
+       * tests do, with ids well outside any real board - must not have the
+       * rest of the table deleted underneath them.
+       */
+      complete?: boolean;
+    } = {}
+  ): Promise<{ inserted: number; renamed: number; pruned: number }> {
+    if (!Array.isArray(diskConfs) || diskConfs.length === 0) {
+      return { inserted: 0, renamed: 0, pruned: 0 };
+    }
+    let inserted = 0;
+    let renamed = 0;
+
+    const selectByIdStmt = this.prepare('SELECT id, name FROM conferences WHERE id = ?');
+    const selectByNameStmt = this.prepare('SELECT id, name FROM conferences WHERE LOWER(name) = LOWER(?)');
+    const insertStmt = this.prepare(
+      `INSERT INTO conferences (id, name, description) VALUES (?, ?, ?)`
+    );
+    const renameByIdStmt = this.prepare('UPDATE conferences SET name = ? WHERE id = ?');
+    const reIdByNameStmt = this.prepare('UPDATE conferences SET id = ? WHERE id = ?');
+
+    for (const disk of diskConfs) {
+      if (!disk?.id || !disk?.name) continue;
+      const rowById = selectByIdStmt.get(disk.id) as any;
+      const rowByName = selectByNameStmt.get(disk.name) as any;
+
+      if (rowById && rowById.name === disk.name) {
+        continue; // perfect match
+      }
+
+      if (rowByName && rowByName.id !== disk.id) {
+        // Same name lives at a different id — re-id it to match disk.
+        // Skip if the target id is also occupied by a different name
+        // (would require a merge; defer to admin tooling).
+        if (!rowById) {
+          try {
+            reIdByNameStmt.run(disk.id, rowByName.id);
+            renamed++;
+            continue;
+          } catch (_err) {
+            // UNIQUE collision or similar — fall through to no-op.
+          }
+        }
+      }
+
+      if (rowById && rowById.name !== disk.name) {
+        // Id slot exists with a different name — rename to match disk.
+        try {
+          renameByIdStmt.run(disk.name, disk.id);
+          renamed++;
+        } catch (_err) {
+          // UNIQUE name collision — disk name already used by another
+          // row; leave as-is.
+        }
+        continue;
+      }
+
+      if (!rowById && !rowByName) {
+        try {
+          insertStmt.run(disk.id, disk.name, disk.location || null);
+          inserted++;
+        } catch (_err) {
+          // Should never trip UNIQUE here (we already checked by name);
+          // swallow to keep startup resilient.
+        }
+      }
+    }
+    const pruned = options.complete ? this.pruneConferencesMissingFrom(diskConfs) : 0;
+    return { inserted, renamed, pruned };
+  }
+
+  /**
+   * Make sure the mirror has a row for this conference, and say nothing if it
+   * already does.
+   *
+   * conference_config.conference_id REFERENCES conferences(id)
+   * (database.ts:1650), so the config row cannot exist before the mirror row.
+   * Creating a conference used to work only because the mirror carried rows
+   * for conferences that had been deleted; pruning those turned it into
+   * "FOREIGN KEY constraint failed" on the sysop's next Add Conference.
+   *
+   * The full sync runs moments later off the disk and will correct the name;
+   * this exists so the create does not depend on that having happened yet.
+   */
+  ensureConferenceRow(id: number, name: string, location?: string): void {
+    if (!Number.isInteger(id) || id < 1) return;
+
+    const existing = this.prepare('SELECT id FROM conferences WHERE id = ?').get(id);
+    if (existing) return;
+
+    try {
+      this.prepare('INSERT INTO conferences (id, name, description) VALUES (?, ?, ?)').run(
+        id,
+        name,
+        location || null
+      );
+    } catch (error) {
+      // conferences.name is UNIQUE. A board with two conferences of the same
+      // name is the sysop's business, not a reason to fail the create, so the
+      // row goes in under a name the disk sync will overwrite.
+      try {
+        this.prepare('INSERT INTO conferences (id, name, description) VALUES (?, ?, ?)').run(
+          id,
+          `${name} (${id})`,
+          location || null
+        );
+      } catch (fallbackError) {
+console.error(`[ConferenceRepository] could not mirror conference ${id}:`, fallbackError);
+      }
+    }
+  }
+
+  /**
+   * Drop mirror rows for conferences the disk no longer has.
+   *
+   * This sync inserted and renamed and never removed, so a board that went
+   * from fourteen conferences to twelve kept fourteen rows - and everything
+   * reading the mirror went on offering two conferences that had been
+   * deleted. "my deleted conf still shows in the bbs" was exactly that.
+   *
+   * By membership rather than by "id above the count": a board is normally
+   * numbered 1..NCONFS, but the rule that matters is that the mirror holds
+   * what the disk holds, and counting assumes a contiguity nothing enforces.
+   *
+   * The rows that reference a pruned conference go with it: foreign keys are
+   * ON and four of the six referencing tables have no cascade, so otherwise
+   * the DELETE simply fails and the stale conference stays. They describe a
+   * conference that no longer exists; the messages and files themselves are
+   * on disk, where the removal left them.
+   */
+  private pruneConferencesMissingFrom(diskConfs: { id: number }[]): number {
+    const keyedByConference: Array<[string, string]> = [
+      ['message_bases', 'conferenceid'],
+      ['messages', 'conferenceid'],
+      ['file_areas', 'conferenceid'],
+      ['bulletins', 'conferenceid'],
+      ['mail_stats', 'conference_id'],
+      ['conf_base', 'conference_id'],
+    ];
+
+    const keep = diskConfs.map(c => c.id).filter(id => Number.isInteger(id));
+    if (keep.length === 0) return 0;
+    const placeholders = keep.map(() => '?').join(',');
+
+    try {
+      const stale = this.prepare(
+        `SELECT id FROM conferences WHERE id NOT IN (${placeholders})`
+      ).all(...keep) as Array<{ id: number }>;
+      if (stale.length === 0) return 0;
+
+      for (const [table, column] of keyedByConference) {
+        try {
+          this.prepare(`DELETE FROM ${table} WHERE ${column} NOT IN (${placeholders})`).run(...keep);
+        } catch (childError) {
+console.warn(`[ConferenceRepository] could not prune ${table}:`, childError);
+        }
+      }
+
+      this.prepare(`DELETE FROM conferences WHERE id NOT IN (${placeholders})`).run(...keep);
+console.log(`[ConferenceRepository] Pruned ${stale.length} conference row(s) the disk no longer has: ${stale.map(r => r.id).join(', ')}`);
+      return stale.length;
+    } catch (error) {
+console.warn('[ConferenceRepository] conference prune failed (disk is still the truth):', error);
+      return 0;
+    }
+  }
+
+  async getConferences(): Promise<Conference[]> {
+
+console.log('[ConferenceRepository] getConferences this.db type:', !!this.db, typeof this.db, this.db && this.db.constructor && this.db.constructor.name);
+
+    const stmt = this.prepare('SELECT * FROM conferences ORDER BY id');
+    const rows = stmt.all() as any[];
+    return rows.map(row => ({
+      id: row.id,
+      name: row.name,
+      description: row.description,
+      ratio: Number(row.ratio) || 0,
+      ratioType: Number(row.ratiotype) || 0,
+      uploads: Number(row.uploads) || 0,
+      downloads: Number(row.downloads) || 0,
+      bytesUpload: Number(row.bytesupload) || 0,
+      bytesDownload: Number(row.bytesdownload) || 0,
+      created: new Date(row.created * 1000),
+      updated: new Date(row.updated * 1000)
+    }));
+  }
+
+  async getConferenceById(id: number): Promise<Conference | null> {
+
+    const stmt = this.prepare('SELECT * FROM conferences WHERE id = ?');
+    const row = stmt.get(id) as any;
+    if (!row) return null;
+
+    return {
+      id: row.id,
+      name: row.name,
+      description: row.description,
+      ratio: Number(row.ratio) || 0,
+      ratioType: Number(row.ratiotype) || 0,
+      uploads: Number(row.uploads) || 0,
+      downloads: Number(row.downloads) || 0,
+      bytesUpload: Number(row.bytesupload) || 0,
+      bytesDownload: Number(row.bytesdownload) || 0,
+      created: new Date(row.created * 1000),
+      updated: new Date(row.updated * 1000)
+    };
+  }
+
+  async updateConference(id: number, updates: Partial<Conference>): Promise<void> {
+
+    const fields = Object.keys(updates).filter(key => key !== 'id' && key !== 'created' && key !== 'updated');
+    if (fields.length === 0) return;
+
+    const setClause = fields.map(f => `${f} = ?`).join(', ');
+    const values = fields.map(f => updates[f as keyof Conference]);
+
+    const sql = `UPDATE conferences SET ${setClause} WHERE id = ?`;
+    const stmt = this.prepare(sql);
+    stmt.run(...values, id);
+
+    // CRITICAL: Sync to Conf.DB for Amiga door compatibility
+    try {
+      const selectStmt = this.prepare('SELECT * FROM conferences WHERE id = ?');
+      const row = selectStmt.get(id) as any;
+
+      if (row) {
+        const fullConf: Conference = {
+          id: row.id,
+          name: row.name,
+          description: row.description,
+          ratio: Number(row.ratio) || 0,
+          ratioType: Number(row.ratiotype) || 0,
+          uploads: Number(row.uploads) || 0,
+          downloads: Number(row.downloads) || 0,
+          bytesUpload: Number(row.bytesupload) || 0,
+          bytesDownload: Number(row.bytesdownload) || 0,
+          created: new Date(row.created * 1000),
+          updated: new Date(row.updated * 1000)
+        };
+
+        const allConfs = await this.getConferences();
+        const slotNumber = allConfs.findIndex(c => c.id === id);
+
+        if (slotNumber >= 0) {
+          conferenceFileManager.updateConferenceFile(fullConf, slotNumber);
+console.log(`[Database] Synced updated conference "${row.name}" to Conf.DB (slot ${slotNumber})`);
+        }
+      }
+    } catch (error) {
+      if (process.env.NODE_ENV !== 'test' && process.env.SUPPRESS_CONF_DB_ERRORS !== '1') {
+console.error(`[Database] Failed to sync updated conference to disk:`, error);
+        SysopDebugUtil.debug(
+          null,
+          null,
+          'Database',
+          `Failed to sync updated conference to Conf.DB`,
+          { error: error instanceof Error ? error.message : String(error), conferenceId: id },
+          DebugSeverity.WARNING
+        );
+      }
+    }
+  }
+
+  async createMessageBase(mb: Omit<MessageBase, 'id' | 'created' | 'updated'>): Promise<number> {
+
+    const stmt = this.prepare('INSERT INTO message_bases (name, conferenceid) VALUES (?, ?)');
+    const result = stmt.run(mb.name, mb.conferenceId);
+    const mbId = result.lastInsertRowid as number;
+
+    // CRITICAL: Ensure Messages directory exists for Amiga door compatibility
+    try {
+      messageFileManager.initializeMessageDirs();  // Creates Conf{n}/Messages/ if needed
+console.log(`[Database] Ensured Messages directory for conference ${mb.conferenceId}`);
+    } catch (error) {
+console.error(`[Database] Failed to create Messages directory:`, error);
+      SysopDebugUtil.debug(
+        null,
+        null,
+        'Database',
+        `Failed to create Messages directory for conference ${mb.conferenceId}`,
+        {
+          error: error instanceof Error ? error.message : String(error),
+          conferenceId: mb.conferenceId,
+          messageBaseName: mb.name
+        },
+        DebugSeverity.WARNING
+      );
+    }
+
+    return mbId;
+  }
+
+  async getMessageBases(conferenceId: number): Promise<MessageBase[]> {
+
+    const stmt = this.prepare('SELECT * FROM message_bases WHERE conferenceid = ? ORDER BY id');
+    const rows = stmt.all(conferenceId) as any[];
+    return rows.map(row => ({
+      id: row.id,
+      name: row.name,
+      conferenceId: row.conferenceid,
+      created: new Date(row.created * 1000),
+      updated: new Date(row.updated * 1000)
+    }));
+  }
+
+  async getMessageBaseById(id: number): Promise<MessageBase | null> {
+
+    const stmt = this.prepare('SELECT * FROM message_bases WHERE id = ?');
+    const row = stmt.get(id) as any;
+    if (!row) return null;
+
+    return {
+      id: row.id,
+      name: row.name,
+      conferenceId: row.conferenceid,
+      created: new Date(row.created * 1000),
+      updated: new Date(row.updated * 1000)
+    };
+  }
+}

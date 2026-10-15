@@ -1,0 +1,4 @@
+
+ERROR while opening config file, notify sysop...
+
+    Thank you for using WarComment V1.0           Coded by Wardancer/VTY^HMS    

@@ -1,0 +1,4 @@
+# LHA build artifacts
+bin/lha-release-*
+bin/*.tar.gz
+share/

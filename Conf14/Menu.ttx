@@ -1,0 +1,22 @@
+~WX
+~f
+[0;33m  200  MENU[0m
+[0;36m========================================[0m
+[0;37m  [0;33m[E][0;32m ENTER MSG  [0;33m[FR][0;32m REVERSE[0m
+[0;37m  [0;33m[R][0;32m READ MSGS  [0;33m[N][0;32m NEW SCAN[0m
+[0;37m  [0;33m[C][0;32m COMMENT    [0;33m[F][0;32m FILE LIST[0m
+[0;37m  [0;33m[J][0;32m JOIN CONF  [0;33m[CS][0;32m CONF SCAN[0m
+[0;37m  [0;33m[CF][0;32m CONF FLAGS [0;33m[Z][0;32m ZIPPY SRCH[0m
+[0;37m  [0;33m[WALL][0;32m WALL     [0;33m[REQ][0;32m REQUEST[0m
+[0;37m  [0;33m[TLIST][0;32m BBS LIST [0;33m[ULIST][0;32m USERS[0m
+[0;37m  [0;33m[CHAT][0;32m NODECHAT [0;33m[DD][0;32m DIRS[0m
+[0;37m  [0;33m[NSU][0;32m NEWFILES [0;33m[O][0;32m PAGE SYSOP[0m
+[0;37m  [0;33m[D][0;32m DOWNLOAD  [0;33m[ZOOM][0;32m MAIL[0m
+[0;37m  [0;33m[B][0;32m BULLETINS  [0;33m[U][0;32m UPLOAD[0m
+[0;37m  [0;33m[M][0;32m ANSI      [0;33m[W][0;32m USER INFO[0m
+[0;37m  [0;33m[A][0;32m FILE FLAGS [0;33m[S][0;32m STATS[0m
+[0;37m  [0;33m[G][0;32m GOODBYE    [0;33m[T][0;32m TIME[0m
+[0;36m========================================[0m
+[0;32mNow attending to user[0;37m: ~N
+[0;37m  [0;33m[RZ][0;32m INSTANT UPLD  [0;33m[X][0;32m EXPERT MODE[0m
+[0;36m========================================[0m

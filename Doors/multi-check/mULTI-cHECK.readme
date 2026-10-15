@@ -1,0 +1,18 @@
+Short:    FAME/AMIEX Filechecker V1.2
+Uploader: siegel@deadline.snafu.de (Sascha Pfalz)
+Author:   siegel@deadline.snafu.de (Sascha Pfalz)
+Type:     bbs/amiex
+
+This is a new filechecker which supports adding/stripping/testing of
+LZX, LHA and ZIP archives. Also it is possible to add Uploader's Name and
+Location, Nodenumber, Date and Time of the Upload. Autodetect the BBS-
+system used. Other features:
+
+ - Autodetect the user.datas, no need to use different versions
+ - Fully argument driven, no need of external configurationfiles
+ - very small and fast, check it out!
+
+This Tool runs with every Amiex or FAME System. It should also run under 
+S!Express, but this is not tested yet. Other BBS-Systems should be no
+problems, as long as they have the same way of including filecheckers like
+Amiex or FAME has...

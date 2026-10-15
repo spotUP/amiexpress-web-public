@@ -1,0 +1,3 @@
+SYS:/Votes/Current created!!
+
+Error trying to save users cfg!!

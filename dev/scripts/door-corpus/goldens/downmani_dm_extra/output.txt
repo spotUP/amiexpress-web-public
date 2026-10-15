@@ -1,0 +1,11 @@
+
+  .--- -- -  -   -   -  - -- ---------------------------------------------.
+  | Dowload Mania, v1.01 [CUSTOM UTIL] by P0T-NOoDLE - (C)1994 Gods'Gift |
+  `-------------------------------------------- -- -  -   -   -  - -- ---'
+    | Local Time: Thu, 20:38 ||                                         |
+    `------------------------'`----------------------------------------'
+
+
+Download Mania ABORTED: Directory not found
+Doors:DM/DM.Cfg may be where the problem is.
+

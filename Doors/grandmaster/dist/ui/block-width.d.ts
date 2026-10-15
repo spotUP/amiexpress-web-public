@@ -1,0 +1,87 @@
+/**
+ * How many characters wide one board block is, and how to fit a block into it.
+ *
+ * A block is meant to look SQUARE, and how many characters that takes depends
+ * on the shape of a character. An xterm cell is about half as wide as it is
+ * tall, so two of them make a square - which is why every board in this door
+ * draws blocks as two glyphs. A PETSCII cell is square already (a real C64
+ * stretches it slightly taller than wide, which is nearer square still), so
+ * two of them make a 2:1 rectangle: "its just the tetris games that have
+ * stretched blocks" (2026-09-06).
+ *
+ * The width is applied at the SINK - where a row is assembled - rather than in
+ * the eight things that produce a block (the piece, the ghost, the bone block,
+ * the credit-roll fade, the shine, the glow, the line-clear fade, the
+ * placement and back-to-back effects). They all agree on one canonical form:
+ * two identical glyphs inside blessed colour tags. Projecting that form once,
+ * where characters first become a row, is one rule in one place instead of
+ * eight copies of it that can drift.
+ */
+/** The tier test the rest of this door uses, and no second one. */
+export declare function blockCols(screenWidth: number): 1 | 2;
+/**
+ * A solid cell drawn as a BACKGROUND colour instead of a block glyph.
+ *
+ * `█` is not an Amiga character. A real Amiga terminal has Topaz and nothing
+ * else - "the amiga/telnet had no companion font" (sysop, 2026-09-14) -
+ * RULES.md:492 says the board's own output is "Amiga ASCII only: `_/\|-`. No
+ * PC box-drawing characters", and the telnet and SSH wires are Latin-1, where
+ * `iconv` turns `██` into `??`. Every byte-transport caller has been reading
+ * this door's pieces as question marks; the web only looked right because
+ * xterm's canvas renderer draws U+2580-259F itself, out of its own table
+ * rather than out of the face.
+ *
+ * A space with a background colour is the Amiga way to fill a cell, and it
+ * fills it EXACTLY - no glyph, no font coverage, nothing for a renderer to
+ * round. So `{red-fg}██{/red-fg}` becomes `{red-bg}  {/red-bg}`: same colour,
+ * same two cells, and it survives the wire.
+ *
+ * Only a run that is ENTIRELY solid converts. The bone block (`[]`), the
+ * ghost and anything else with shape in it keeps its glyphs - those are a
+ * separate question, and half of a shape is not a fill.
+ */
+export declare function solidToBackground(cell: string): string;
+/**
+ * A block cell, in `cols` characters, drawn the way this screen can draw it.
+ *
+ * Two projections, in this order. FIRST the fill: a solid run becomes a
+ * background colour where the screen can carry one (see solidToBackground and
+ * cellsCanCarryBackground - PETSCII cannot, and keeps its ink). THEN the
+ * width: tags are kept exactly as they are - they carry no width - and the
+ * visible run is halved, so `{red-fg}██{/red-fg}` becomes `{red-fg}█{/red-fg}`
+ * and the two blanks of an empty cell become one. A run whose glyphs DIFFER
+ * keeps its first half, which is what the bone block (`[]`) and any future
+ * two-glyph pattern needs: half of it, not a mangled pair.
+ */
+export declare function fitCell(cell: string, cols: number, canCarryBackground?: boolean): string;
+/**
+ * The seven pieces, as CELLS - one character per cell, `X` where a block is.
+ *
+ * There were three copies of this art: one in the game screen and two in the
+ * versus screen (next and hold), each written as literal `██` pairs, which is
+ * both a duplicate and a 2-character assumption baked into a string. One
+ * table, drawn at whatever width the screen's block is.
+ */
+export declare const PIECE_CELLS: Record<string, readonly string[]>;
+/**
+ * A piece preview, `cols` characters per cell, in one colour.
+ *
+ * The glyph is the same solid block the boards use; a gap is spaces, so the
+ * rows stay aligned with each other whatever the width.
+ */
+export declare function pieceArt(type: string, cols: number, colour: string): string[];
+/**
+ * Whether a cell on this screen can carry its own BACKGROUND colour.
+ *
+ * PETSCII cannot: the C64 has one screen background and no per-cell one, so
+ * a `{x-bg}` tag is dropped on the way to the glass. Anything that put its
+ * ink in `{black-fg}` and its colour in the background therefore rendered
+ * black on black - invisible, while still occupying the cell. That is what
+ * ate the TetriNET specials and the item cells: "some random pieces
+ * disappeared when i played in petscii mode" (2026-09-06).
+ *
+ * The rule the C64 sprite sheets have followed since they were written -
+ * "never set a background other than 0" - as a question a screen can answer.
+ */
+export declare function cellsCanCarryBackground(screen: unknown): boolean;
+//# sourceMappingURL=block-width.d.ts.map

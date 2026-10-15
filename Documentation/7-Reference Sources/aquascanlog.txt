@@ -1,0 +1,223 @@
+1764890167 run door: Doors:AquaScan/AquaScan.020
+1764890168 msg request: 1
+1764890168 data: 0
+1764890168 string: 
+1764890168 msg request: 104
+1764890168 data: 1
+1764890168 string: 
+1764890168 msg request: 163
+1764890168 data: 0
+1764890168 string: 8
+1764890168 msg request: 525
+1764890168 data: 1
+1764890168 string: 
+1764890168 msg request: 501
+1764890168 data: 1
+1764890168 string: 
+1764890168 msg request: 131
+1764890168 data: 1
+1764890168 string: 
+1764890168 msg request: 152
+1764890168 data: 1
+1764890168 string: FR
+1764890168 msg request: 131
+1764890168 data: 1
+1764890168 string: v5.3
+1764890168 msg request: 122
+1764890168 data: 1
+1764890168 string: FR
+1764890168 msg request: 100
+1764890168 data: 1
+1764890168 string: 29
+1764890168 msg request: 4
+1764890168 data: 1
+1764890168 string: 
+--[ AquaScan v1.0 by Aquarius/Outlaws ]--------------[ 'fr ?' for options ]--
+
+1764890168 msg request: 105
+1764890168 data: 1
+1764890168 string: 
+--[ AquaScan v1.0 by Aquarius/Outlaws ]--------------[ 'fr ?' for options ]--
+
+1764890168 msg request: 127
+1764890168 data: 1
+1764890168 string: 255
+1764890168 msg request: 150
+1764890168 data: 1
+1764890168 string:      Directory Scan with AquaScan by Aquarius
+
+1764890168 msg request: 4
+1764890168 data: 0
+1764890168 string: Reverse-scanning dir 1...
+1764890168 msg request: 4
+1764890168 data: 1
+1764890168 string:  Ok!
+
+1764890168 msg request: 17
+1764890168 data: 1
+1764890168 string:  Ok!
+
+1764890168 msg request: 4
+1764890168 data: 1
+1764890168 string: 
+1764890168 msg request: 17
+1764890168 data: 1
+1764890168 string: 
+1764890168 msg request: 4
+1764890168 data: 1
+1764890168 string:                                             _¸,ø*¤°¬°¤*ø,¸_¸,ø*¤°¬¬°¤*ø,¸_
+1764890168 msg request: 17
+1764890168 data: 1
+1764890168 string:                                             _¸,ø*¤°¬°¤*ø,¸_¸,ø*¤°¬¬°¤*ø,¸_
+1764890168 msg request: 4
+1764890168 data: 1
+1764890168 string:       ¸,ø*¤°¬¯¬°¤*ø,¸_¸,ø*¤°¬°¤*ø, 03-28-25
+1764890168 msg request: 17
+1764890168 data: 1
+1764890168 string:       ¸,ø*¤°¬¯¬°¤*ø,¸_¸,ø*¤°¬°¤*ø, 03-28-25
+1764890168 msg request: 4
+1764890168 data: 1
+1764890168 string: 
+1764890168 msg request: 17
+1764890168 data: 1
+1764890168 string: 
+1764890168 msg request: 4
+1764890168 data: 1
+1764890168 string: [ File #1 ]                    - ---- ---------------------------------- ---- 
+-
+1764890168 msg request: 17
+1764890168 data: 1
+1764890168 string: [ File #1 ]                    - ---- ---------------------------------- ---- 
+-
+1764890168 msg request: 4
+1764890168 data: 1
+1764890168 string: 2bm.lha      P  42980  03-28-25  s
+1764890168 msg request: 17
+1764890168 data: 1
+1764890168 string: 2bm.lha      P  42980  03-28-25  s
+1764890168 msg request: 4
+1764890168 data: 1
+1764890168 string:                                  S Y S O P - [ Phantasm BBS ] - S Y S O P
+1764890168 msg request: 17
+1764890168 data: 1
+1764890168 string:                                  S Y S O P - [ Phantasm BBS ] - S Y S O P
+1764890168 msg request: 4
+1764890168 data: 1
+1764890168 string:                                   ---[16:52:08]---[nODE: 00]---[ LOCAL ]---
+1764890168 msg request: 17
+1764890168 data: 1
+1764890168 string:                                   ---[16:52:08]---[nODE: 00]---[ LOCAL ]---
+1764890168 msg request: 4
+1764890168 data: 1
+1764890168 string: [ File #2 ]                    - ---- ---------------------------------- ---- 
+-
+1764890168 msg request: 17
+1764890168 data: 1
+1764890168 string: [ File #2 ]                    - ---- ---------------------------------- ---- 
+-
+1764890168 msg request: 4
+1764890168 data: 1
+1764890168 string: 2c.lha       P   5567  03-28-25  s
+1764890168 msg request: 17
+1764890168 data: 1
+1764890168 string: 2c.lha       P   5567  03-28-25  s
+1764890168 msg request: 4
+1764890168 data: 1
+1764890168 string:                                  S Y S O P - [ Phantasm BBS ] - S Y S O P
+1764890168 msg request: 17
+1764890168 data: 1
+1764890168 string:                                  S Y S O P - [ Phantasm BBS ] - S Y S O P
+1764890168 msg request: 4
+1764890168 data: 1
+1764890168 string:                                   ---[16:50:03]---[nODE: 00]---[ LOCAL ]---
+1764890168 msg request: 17
+1764890168 data: 1
+1764890168 string:                                   ---[16:50:03]---[nODE: 00]---[ LOCAL ]---
+1764890168 msg request: 4
+1764890168 data: 1
+1764890168 string: [ File #3 ]                    - ---- ---------------------------------- ---- 
+-
+1764890168 msg request: 17
+1764890168 data: 1
+1764890168 string: [ File #3 ]                    - ---- ---------------------------------- ---- 
+-
+1764890168 msg request: 4
+1764890168 data: 1
+1764890168 string: 2b.lha       P   5567  03-28-25  s
+1764890168 msg request: 17
+1764890168 data: 1
+1764890168 string: 2b.lha       P   5567  03-28-25  s
+1764890168 msg request: 4
+1764890168 data: 1
+1764890168 string:                                  S Y S O P - [ Phantasm BBS ] - S Y S O P
+1764890168 msg request: 17
+1764890168 data: 1
+1764890168 string:                                  S Y S O P - [ Phantasm BBS ] - S Y S O P
+1764890168 msg request: 4
+1764890168 data: 1
+1764890168 string:                                   ---[16:49:06]---[nODE: 00]---[ LOCAL ]---
+1764890168 msg request: 17
+1764890168 data: 1
+1764890168 string:                                   ---[16:49:06]---[nODE: 00]---[ LOCAL ]---
+1764890168 msg request: 4
+1764890168 data: 1
+1764890168 string: [ File #4 ]                    - ---- ---------------------------------- ---- 
+-
+1764890168 msg request: 17
+1764890168 data: 1
+1764890168 string: [ File #4 ]                    - ---- ---------------------------------- ---- 
+-
+1764890168 msg request: 4
+1764890168 data: 1
+1764890168 string: amigae.lha   P   4482  03-28-25  ae
+1764890168 msg request: 17
+1764890168 data: 1
+1764890168 string: amigae.lha   P   4482  03-28-25  ae
+1764890168 msg request: 4
+1764890168 data: 1
+1764890168 string:                                  S Y S O P - [ Phantasm BBS ] - S Y S O P
+1764890168 msg request: 17
+1764890168 data: 1
+1764890168 string:                                  S Y S O P - [ Phantasm BBS ] - S Y S O P
+1764890168 msg request: 4
+1764890168 data: 1
+1764890168 string:                                   ---[16:45:20]---[nODE: 00]---[ LOCAL ]---
+1764890168 msg request: 17
+1764890168 data: 1
+1764890168 string:                                   ---[16:45:20]---[nODE: 00]---[ LOCAL ]---
+1764890168 msg request: 4
+1764890168 data: 1
+1764890168 string: [ File #5 ]                    - ---- ---------------------------------- ---- 
+-
+1764890168 msg request: 17
+1764890168 data: 1
+1764890168 string: [ File #5 ]                    - ---- ---------------------------------- ---- 
+-
+1764890168 msg request: 4
+1764890168 data: 1
+1764890168 string: br.lha       P   5567  03-28-25  test
+1764890168 msg request: 17
+1764890168 data: 1
+1764890168 string: br.lha       P   5567  03-28-25  test
+1764890168 msg request: 4
+1764890168 data: 1
+1764890168 string:                                  S Y S O P - [ Phantasm BBS ] - S Y S O P
+1764890168 msg request: 17
+1764890168 data: 1
+1764890168 string:                                  S Y S O P - [ Phantasm BBS ] - S Y S O P
+1764890168 msg request: 4
+1764890168 data: 1
+1764890168 string:                                   ---[16:44:35]---[nODE: 00]---[ LOCAL ]---
+1764890168 msg request: 4
+1764890168 data: 0
+1764890168 string: More? (Y/n/ns), (C)lear, 
+1764890168 msg request: 4
+1764890168 data: 0
+1764890168 string: (F/R) Flag, 
+1764890168 msg request: 4
+1764890168 data: 0
+1764890168 string: (?) Help, (Q)uit: 
+1764890168 msg request: 6
+1764890168 data: 0
+1764890168 string: 
+ 

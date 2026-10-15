@@ -1,0 +1,6 @@
+
+MagicScan Professional (08-Sep-96).
+Copyright (c) 1995,96 Faktor/Independent.
+All rights reserved.
+Missing (Env:MagicScan.prefs).
+

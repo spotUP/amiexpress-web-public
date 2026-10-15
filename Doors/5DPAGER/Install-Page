@@ -1,0 +1,144 @@
+(set @default-dest "FAME:")
+(set @app-name "5D_Page")
+
+(set FAMEPath
+  (askdir
+    (prompt "Where is your FAME directory located?")
+    (help "You have to specify where your FAME is located!")
+    (default @default-dest)
+  )
+)
+
+(set InstallPage
+  (askbool
+    (prompt "5D_Page will be installed into \n\n"
+            (FAMEPath))
+    (help "5D_Page will be installed into '"
+          (tackon (FAMEPath) "Doors/5D/5D_Page")
+          "'.  If that directory does not exist, it will be created."
+          "  To proceed press ok, else press abort installation.")
+    (default 1)
+  )
+)
+
+(if (= InstallPage 1)
+(
+
+  (set InstallGuide
+    (askbool
+      (prompt "Do you want to have 5D_Page.guide installed into '"
+              (tackon (FAMEPath) "Doors/5D/5D_Page")
+              "'?")
+      (help "5D_Page.guide will be installed into '"
+            (tackon (FAMEPath) "Doors/5D/5D_Page")
+            "'. To proceed press ok, else press abort installation.")
+      (default 1)
+    )
+  )
+
+  (set InstallPage_BBSCMD
+    (askbool
+      (prompt "Do you want to have the 'Page' command installed into '"
+              (tackon (FAMEPath) "Settings/Doors/BBSCMD")
+              "'?"
+      )
+      (help "The 'SENT' command will be installed into '"
+            (tackon (FAMEPath) "Settings/Doors/BBSCMD")
+            "'. If that directory does not exist, it will be created. "
+            "To proceed press ok, else press abort installation.")
+      (default 1)
+    )
+  )
+
+  (set InstallDoorConfig
+    (askbool
+      (prompt "Do you want to have the 'Page.dat' installed into '"
+              (tackon (FAMEPath) "Settings/DoorConfig")
+              "'?"
+      )
+      (help "The 'Page.dat' will be installed into '"
+            (tackon (FAMEPath) "Settings/DoorConfig")
+            "'. If that directory does not exist, it will be created. "
+            "To proceed press ok, else press abort installation.")
+      (default 1)
+    )
+  )
+
+  (if (not (exists (tackon (FAMEPath) "Doors")))
+   (makedir (tackon (FAMEPath) "Doors") (infos))
+  )
+  (if (not (exists (tackon (FAMEPath) "Doors/5D")))
+   (makedir (tackon (FAMEPath) "Doors/5D") (infos))
+  )
+  (if (not (exists (tackon (FAMEPath) "Doors/5D/5D_Page")))
+   (makedir (tackon (FAMEPath) "Doors/5D/5D_Page") (infos))
+  )
+  (copyfiles
+    (source "Doors/5D/5D_Page/5D_Page")
+    (dest (tackon (FAMEPath) "Doors/5D/5D_Page"))
+    (all)
+    (infos)
+  )
+
+  (if (= InstallGuide 1)
+  (
+    (copyfiles
+      (source "Doors/5D/5D_Page/5D_Page.guide")
+      (dest (tackon (FAMEPath) "Doors/5D/5D_Page"))
+      (all)
+      (infos)
+    )
+  )
+  )
+
+  (if (= InstallPage_BBSCMD 1)
+  (
+     (if (not (exists (tackon (FAMEPath) "Settings")))
+     (makedir (tackon (FAMEPath) "Settings"))
+    )
+
+    (if (not (exists (tackon (FAMEPath) "Settings/Doors")))
+     (makedir (tackon (FAMEPath) "Settings/Doors"))
+    )
+
+    (if (not (exists (tackon (FAMEPath) "Settings/Doors/BBSCMD")))
+     (makedir (tackon (FAMEPath) "Settings/Doors/BBSCMD"))
+    )
+
+    (copyfiles
+      (source "Settings/Doors/BBSCMD/O")
+      (dest (tackon (FAMEPath) "Settings/Doors/BBSCMD"))
+      (all)
+      (infos)
+    )
+  )
+  )
+
+  (if (= InstallDoorConfig 1)
+  (
+    (if (not (exists (tackon (FAMEPath) "Settings")))
+      (makedir (tackon (FAMEPath) "Settings"))
+    )
+
+    (if (not (exists (tackon (FAMEPath) "Settings/DoorConfig")))
+      (makedir (tackon (FAMEPath) "Settings/DoorConfig"))
+    )
+
+    (if (not (exists (tackon (FAMEPath) "Settings/DoorConfig/Page.dat")))
+      (run "C:Echo >>" (tackon (FAMEPath) "Settings/DoorConfig.lst") " Page"
+      )
+    )
+
+    (copyfiles
+      (source "Settings/DoorConfig/Page.dat")
+      (dest (tackon (FAMEPath) "Settings/DoorConfig"))
+      (all)
+      (infos)
+    )
+
+  )
+  )
+
+)
+)
+

@@ -1,0 +1,131 @@
+/**
+ * Minimal test runner for the Grandmaster door.
+ *
+ * First test harness this door has ever had — added 2026-08-25 after a
+ * session in which the AI's inverted evaluation weights, a hardcoded
+ * 3-opponent CPU battle, and a completely unwired attack/garbage system all
+ * shipped unnoticed, precisely because nothing here was executable as a test.
+ *
+ * Deliberately dependency-free: plain async functions + node assert, run via
+ * tsx (`npm test`). Each test file exports named async functions; a test
+ * fails by throwing. No jest, no config, nothing to drift.
+ */
+
+/* eslint-disable no-console */
+
+const TEST_MODULES = ['./versus-layout.test',
+  // The theme migration: classic untouched, every other theme followed.
+  './theme.test',
+  // The logo: one block, one colour, aligned as drawn.
+  './menu-title.test',
+  // TETRIS ATTACK (Panel de Pon). The panels engine is proved against
+  // panel-attack's own fixtures; see tests/panels/prng.test.ts.
+  './panels/prng.test',
+  './panels/consts.test',
+  './panels/panel.test',
+  './panels/check-matches.test',
+  './panels/stack.test',
+  './panels/codec.test',
+  './panels/legacy-generator.test',
+  './panels/replay.test',
+  './panels/sprites.test',
+  './panels/speed-and-mouse.test',
+  './panels/board-view.test',
+  './panels/board-scale.test',
+  './panels/menu-wiring.test',
+  './panels/menu-input-mode.test',
+  // Press EDGES: what is an edge, on both transports, and what a marked
+  // auto-repeat is not. Unregistered until 2026-09-15, so it had never run.
+  './panels/input-edges.test',
+  './panels/modes.test',
+  './panels/garbage-queue.test',
+  './panels/garbage-board.test',
+  './panels/panel-ai.test',
+  './panels/challenge.test',
+  './panels/match.test',
+  './panels/versus-layout.test',
+  './panels/puzzle.test',
+  './panels/stage-clear.test',
+  './panels/skill-chains.test',
+  './panels/replay-recording.test',
+  './panels/netplay.test',
+  './versus-render.test',
+  './versus-repaint.test',
+  './fullscreen.test',
+  './battle-royale.test',
+  './menu-responsive.test',
+  './leaderboard-responsive.test',
+  './attack-routing.test',
+  './network-wiring.test',
+  './board-clear.test',
+  './petscii-visible-cells.test',
+  './block-width.test',
+  './solid-cells-are-a-background.test',
+  './lockout.test',
+  './hard-drop-blur.test',
+  './gamepad-menu-bindings.test',
+  './tetrinet-line-clear.test',
+  './tetrinet-cell-width.test',
+  './das-arr-timing.test',
+  './input-repeat.test',
+  './lock-flash.test',
+  './gamepad-every-mode.test',
+  './saved-settings-merge.test',
+  './input-hints.test',
+  './tetrinet-bots.test',
+  './tetrinet-routing.test',
+  './tetrinet-lobby.test',
+  './tetrinet-netplay.test',
+  './tetrinet-score-report.test',
+  './tetrinet-hold.test',
+  './tetrinet-specials-input.test',
+  './tetrinet-ai.test',
+  './tetrinet-protocol.test',
+  './tetrinet-winlist.test',
+  './spectator.test',
+  './tetrinet-layout.test',
+  './speed-curve.test',
+  './torikan.test',
+  './rotation-systems.test',
+  './items.test',
+  './items-engine.test',
+  './devil-grade.test',
+  './versus-win-type.test',
+  './hidden-mode.test',
+  './soft-drop-speed.test',
+  './practice-goal.test',
+  './mission-run.test',
+  './mission-mode.test',
+  './mission-briefing.test',
+];
+
+// Blessed screens and engines log freely; keep test output readable.
+const realLog = console.log;
+console.log = () => {};
+
+(async () => {
+  let passed = 0;
+  const failures: Array<{ name: string; error: unknown }> = [];
+
+  for (const mod of TEST_MODULES) {
+    const tests = await import(mod);
+    for (const [name, fn] of Object.entries(tests)) {
+      if (typeof fn !== 'function') continue;
+      try {
+        await (fn as () => Promise<void>)();
+        passed++;
+        realLog(`  [OK] ${mod.replace('./', '')} :: ${name}`);
+      } catch (error) {
+        failures.push({ name: `${mod} :: ${name}`, error });
+        realLog(`  [FAIL] ${mod.replace('./', '')} :: ${name}`);
+        realLog(`         ${error instanceof Error ? error.message : String(error)}`);
+      }
+    }
+  }
+
+  realLog(`\n${passed} passed, ${failures.length} failed`);
+  process.exit(failures.length > 0 ? 1 : 0);
+})().catch(e => {
+  realLog('Test runner crashed:', e);
+  process.exit(1);
+});

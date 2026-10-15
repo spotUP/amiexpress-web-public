@@ -1,0 +1,9 @@
+{
+  "version": 1,
+  "descriptions": { "R": "Read the mail the sysop left for you in this conference" },
+  "wipes": { "open": "", "leave": "", "page": "H", "at40": true },
+  "logos": [
+    { "position": "header", "widthClass": "standard", "levelFloor": 0, "rule": "fixed", "files": ["cat.txt"], "afterSection": 0 },
+    { "position": "header", "widthClass": "c64", "levelFloor": 0, "rule": "fixed", "files": ["cat.seq"], "afterSection": 0 }
+  ]
+}

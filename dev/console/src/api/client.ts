@@ -1,0 +1,1198 @@
+const BASE_URL = process.env['AMIEXPRESS_URL'] ?? 'http://localhost:3001';
+
+/** The address every request goes to, so errors and waiting states can name it. */
+export const backendUrl = BASE_URL;
+
+let _token: string | null = process.env['AMIEXPRESS_CONSOLE_TOKEN'] ?? null;
+
+export function setToken(token: string): void {
+  _token = token;
+}
+
+export function getToken(): string | null {
+  return _token;
+}
+
+export function clearToken(): void {
+  _token = null;
+}
+
+// Every page in this TUI calls request() directly with no shared session
+// concept above it (dev/console had `login()` and nothing else auth-related
+// - no me(), no logout(), no 401 handling anywhere:
+// web-vs-tui-admin-gap-audit.md, Depth Gap 12). Before this, an expired
+// token surfaced as a raw "HTTP 401: ..." on whatever page happened to be
+// open, and the only way back to the login screen was killing the process.
+//
+// One place recognises 401 instead of every page inventing its own: set via
+// useAuth's effect (index.tsx renders LoginPrompt whenever useAuth's token
+// is null), so a 401 from ANY call, on ANY page, drops the whole console
+// back to the login screen with an explanatory message - not a stack of
+// per-page error banners the sysop has to notice and interpret themselves.
+type UnauthorizedHandler = () => void;
+let _onUnauthorized: UnauthorizedHandler | null = null;
+
+export function setUnauthorizedHandler(fn: UnauthorizedHandler | null): void {
+  _onUnauthorized = fn;
+}
+
+// A non-responding backend must not freeze a caller forever: password reset
+// and user creation both have a form with no way out while their submit
+// promise is pending, and this is what makes it eventually settle even if
+// the sysop's own Escape handling didn't already release it.
+const REQUEST_TIMEOUT_MS = 15_000;
+
+async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    ...(options.headers as Record<string, string> ?? {}),
+  };
+  if (_token) headers['Authorization'] = `Bearer ${_token}`;
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  let res: Response;
+  try {
+    res = await fetch(`${BASE_URL}${path}`, { ...options, headers, signal: controller.signal });
+  } catch (err: unknown) {
+    if (err instanceof Error && err.name === 'AbortError') {
+      throw new Error(`Request timed out after ${REQUEST_TIMEOUT_MS / 1000}s: ${path}`);
+    }
+    // undici reports a refused connection as a bare "fetch failed", which
+    // tells a sysop nothing. Name the address that could not be reached.
+    throw Object.assign(
+      new Error(`Cannot reach the backend at ${BASE_URL} - is it running?`),
+      { cause: err, offline: true }
+    );
+  } finally {
+    clearTimeout(timer);
+  }
+
+  if (!res.ok) {
+    if (res.status === 401) {
+      // Clear FIRST, then notify: the handler (useAuth) re-renders straight
+      // to LoginPrompt, and a stale in-memory token must not survive that
+      // swap only to be reused by whatever the sysop types in next.
+      clearToken();
+      _onUnauthorized?.();
+    }
+    const text = await res.text().catch(() => res.statusText);
+    // These are read under time pressure - `HTTP 400: {"success":false,
+    // "message":"..."}` buries the one line that matters inside JSON the
+    // sysop has to parse by eye. Pull `message`/`error` out when the body
+    // is shaped that way; anything else falls back to the raw text.
+    let detail = text;
+    try {
+      const parsed = JSON.parse(text) as { message?: unknown; error?: unknown };
+      if (typeof parsed.message === 'string' && parsed.message) detail = parsed.message;
+      else if (typeof parsed.error === 'string' && parsed.error) detail = parsed.error;
+    } catch {
+      // Not JSON - the raw text is already the best we have.
+    }
+    throw Object.assign(new Error(`HTTP ${res.status}: ${detail}`), { status: res.status });
+  }
+  return res.json() as Promise<T>;
+}
+
+// Backend lists are inconsistent: some endpoints return a bare array,
+// others wrap in { success, data: [...] }. This helper handles both.
+async function requestList<T>(path: string): Promise<T[]> {
+  const res = await request<T[] | { success?: boolean; data?: T[] }>(path);
+  if (Array.isArray(res)) return res;
+  return res.data ?? [];
+}
+
+export async function login(username: string, password: string) {
+  const res = await request<{ accessToken: string; refreshToken?: string; user: { id: string; username: string; secLevel: number } }>(
+    '/auth/login',
+    { method: 'POST', body: JSON.stringify({ username, password }) }
+  );
+  setToken(res.accessToken);
+  // Propagate token to tmux session env so the status strip picks it up
+  if (process.env['TMUX']) {
+    const { execSync } = await import('child_process');
+    try {
+      execSync(`tmux set-environment -t amiexpress AMIEXPRESS_CONSOLE_TOKEN "${res.accessToken}"`);
+    } catch {
+      // non-fatal: strip just retries until env is set
+    }
+  }
+  return { token: res.accessToken, user: res.user };
+}
+
+export async function getNodes() {
+  const res = await request<{ success: boolean; data: import('./types.js').NodeStatus[] }>('/api/nodes/status');
+  return res.data ?? [];
+}
+
+export async function kickNode(nodeId: number) {
+  return request<{ success: boolean }>(`/api/nodes/${nodeId}/kick`, { method: 'POST' });
+}
+
+export async function getUsers() {
+  const res = await request<{ success: boolean; data: import('./types.js').UserRecord[] }>('/api/config/users');
+  return res.data ?? [];
+}
+
+// `password` is not part of UserRecord (GET /users strips passwordHash from
+// every response — config-routes.ts:1663-1667) but PUT accepts it: the
+// backend destructures `{ password, ...updates }` and, when present, hashes
+// it into BOTH the disk record and the database row that login checks
+// (config-routes.ts:1798-1948). Leaving it out of the body keeps the
+// account's current password, matching the web admin's "leave blank to keep
+// current password" field (UsersPage.tsx:404).
+export async function updateUser(
+  id: string,
+  updates: Partial<import('./types.js').UserRecord> & { password?: string },
+) {
+  return request<{ success: boolean }>(`/api/config/users/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(updates),
+  });
+}
+
+export async function deleteUser(id: string) {
+  return request<{ success: boolean }>(`/api/config/users/${id}`, { method: 'DELETE' });
+}
+
+// POST /api/config/users (config-routes.ts:1699-1786): creates the account
+// AND appends it to user.data (database.appendUserToDisk) so it is visible
+// to express.e immediately, not just to the admin's own GET. `password` is
+// required by the backend for a new account.
+export async function createUser(
+  user: Partial<import('./types.js').UserRecord> & { username: string; password: string },
+) {
+  return request<{ success: boolean; data: import('./types.js').UserRecord; message?: string }>(
+    '/api/config/users',
+    { method: 'POST', body: JSON.stringify(user) }
+  );
+}
+
+// Node Configuration — per-node settings (NODESTART tooltypes, chat colours,
+// which logs a node keeps, quiet-hours flags...), distinct from the LIVE
+// status polling NodesTab shows. GET/POST/PUT/DELETE /api/config/nodes*
+// (config-routes.ts:168-243), matching web/config-app/src/api/client.ts:
+// 443-464's getNodeConfigs/getNodeConfig/createNodeConfig/updateNodeConfig/
+// deleteNodeConfig exactly.
+//
+// The backend's rows DO carry a real `id` already — node-config.service.ts:
+// 39-41 sets `id: nodeNum + 1` (1-based) alongside `node_number: nodeNum`
+// (0-based), and every GET/PUT/DELETE /api/config/nodes/:nodeNumber route
+// param is that same 1-based value (node-config.service.ts's
+// getNodeConfig doc comment: "the UI uses nodeNumber as the literal 1-based
+// number" — nodeIndex = nodeNumber - 1 before touching Node<nodeIndex>.info
+// on disk). An earlier version of this file OVERWROTE that real `id` with
+// the raw 0-based `node_number`, on the mistaken belief the schema (which
+// validates writable FIELDS, not the full response shape) meant the
+// response had no id at all — so `[d]` on the row displayed as node 3 sent
+// DELETE /api/config/nodes/3, which unlinks Node2.info (nodeIndex = 3 - 1),
+// the WRONG node, with a CrudList confirmation ("Delete row #3") that gave
+// no way to notice. Trust the backend's `id` as-is; never re-derive it from
+// node_number.
+export async function getNodeConfigs() {
+  return requestList<import('./types.js').NodeConfigRow>('/api/config/nodes');
+}
+
+// `id` here (and below) is the 1-based value above — CrudList always calls
+// update/remove with `selected.id`, never `selected.node_number`.
+export async function getNodeConfig(id: number) {
+  const res = await request<{ success: boolean; data?: import('./types.js').NodeConfigRow }>(`/api/config/nodes/${id}`);
+  return res.data ?? null;
+}
+
+export async function createNodeConfig(config: Partial<import('./types.js').NodeConfigRow>) {
+  return request<{ success: boolean; data: import('./types.js').NodeConfigRow; message?: string }>('/api/config/nodes', {
+    method: 'POST',
+    body: JSON.stringify(config),
+  });
+}
+
+export async function updateNodeConfig(id: number, patch: Partial<import('./types.js').NodeConfigRow>) {
+  return request<{ success: boolean; data: import('./types.js').NodeConfigRow; message?: string }>(`/api/config/nodes/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(patch),
+  });
+}
+
+export async function deleteNodeConfig(id: number) {
+  return request<{ success: boolean; message?: string }>(`/api/config/nodes/${id}`, { method: 'DELETE' });
+}
+
+export async function getConferences() {
+  const res = await request<{ success: boolean; data: import('./types.js').ConferenceConfig[] }>('/api/config/conferences');
+  return res.data ?? [];
+}
+
+export async function getLastCallers(limit = 50) {
+  const res = await request<{ success: boolean; data: import('./types.js').CallerRecord[] }>(`/api/stats/last-callers?limit=${limit}`);
+  return res.data ?? [];
+}
+
+export async function getLastUploads(limit = 20) {
+  const res = await request<{ success: boolean; data: Array<{ id: number; filename: string; size?: number; uploader?: string; uploadDate?: string }> }>(`/api/stats/last-uploads?limit=${limit}`);
+  return res.data ?? [];
+}
+
+export async function getLastDownloads(limit = 20) {
+  const res = await request<{ success: boolean; data: Array<{ id: number; filename: string; size?: number; uploader?: string; downloadCount?: number; areaName?: string }> }>(`/api/stats/last-downloads?limit=${limit}`);
+  return res.data ?? [];
+}
+
+export async function getSystemStats() {
+  const res = await request<{ success: boolean; data: import('./types.js').SystemStats }>('/api/stats/system');
+  return res.data;
+}
+
+// GET /api/config/logs wraps its answer in the usual { success, data }
+// envelope (config-routes.ts:2159-2303's sendResponse), but this used to
+// declare its own return type as the bare { lines, totalLines } and hand
+// that straight back — every call actually read `res.data`, which the
+// declared type doesn't have, so `.lines` was always undefined and the log
+// view rendered permanently empty rows. Also adds the server-side `search`
+// term (matches web's getLogs(type, lines, search, doorLog) —
+// web/config-app/src/api/client.ts:864-872) — the TUI previously only had a
+// client-side substring filter over whatever page was already loaded.
+export async function getLogs(type: 'backend' | 'frontend' | 'door68k', lines = 200, search = '', doorLog?: string) {
+  const params = new URLSearchParams({ type, lines: String(lines) });
+  if (search) params.set('search', search);
+  if (doorLog) params.set('doorLog', doorLog);
+  const res = await request<{ success?: boolean; data?: { lines?: string[]; totalLines?: number; message?: string } }>(`/api/config/logs?${params}`);
+  const d = res.data ?? {};
+  return { lines: d.lines ?? [], totalLines: d.totalLines ?? 0, message: d.message };
+}
+
+export interface DoorLogFile {
+  file: string;
+  label: string;
+  size: number;
+  modifiedAt: string | null;
+}
+
+// GET /api/config/logs/door-68k — every door-68k-*.log file on disk, so a
+// sysop can pick one instead of always seeing the legacy combined
+// door-68k.log. Must be registered BEFORE GET /logs in the backend router
+// (it is: config-routes.ts:2100 precedes :2159), same reasoning as the
+// conference orphan-directories route.
+export async function getDoorLogFiles() {
+  const res = await request<{ success?: boolean; data?: { files?: DoorLogFile[] } }>('/api/config/logs/door-68k');
+  return res.data?.files ?? [];
+}
+
+// DELETE /api/config/logs?type=&doorLog= — truncates the file to empty.
+// Matches web/config-app/src/api/client.ts:878-886.
+export async function clearLogs(type: 'backend' | 'frontend' | 'door68k', doorLog?: string) {
+  const params = new URLSearchParams({ type });
+  if (doorLog) params.set('doorLog', doorLog);
+  return request<{ success: boolean; message?: string }>(`/api/config/logs?${params}`, { method: 'DELETE' });
+}
+
+export async function updateConference(id: number, updates: Record<string, unknown>) {
+  return request<{ success: boolean }>(`/api/config/conferences/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(updates),
+  });
+}
+
+// The id is NOT the caller's to choose — NCONFS is a count, so the backend
+// only accepts conference_id === current-count+1 and rejects anything else
+// (conference-config.service.ts:194-215). The caller computes that count
+// itself (existing conferences' length + 1), matching web's handleAdd()
+// (ConferencesPage.tsx).
+export async function createConference(config: Record<string, unknown>) {
+  return request<{ success: boolean; data: import('./types.js').ConferenceConfig; message?: string }>(
+    '/api/config/conferences',
+    { method: 'POST', body: JSON.stringify(config) }
+  );
+}
+
+// removeFiles is opt-in and sent as a query string flag (not a body field —
+// DELETE bodies are easy to drop in transit), matching
+// web/config-app/src/api/client.ts:508-513 and the backend's own check at
+// config-routes.ts:384-385 (`req.query.removeFiles === 'true'`).
+export async function deleteConference(confNumber: number, removeFiles = false) {
+  const query = removeFiles ? '?removeFiles=true' : '';
+  return request<{
+    success: boolean;
+    message?: string;
+    data?: { deleted: boolean; renumbered: boolean; usersMigrated: number; filesRemoved: string | null; keptOnDisk: string | null };
+  }>(`/api/config/conferences/${confNumber}${query}`, { method: 'DELETE' });
+}
+
+export interface OrphanConferenceDir {
+  dir: string;
+  files: number;
+  bytes: number;
+}
+
+// Conf<n> directories no conference reads any more — LOCATION.n points
+// elsewhere, but the directory (and everything ever posted or uploaded to
+// it) is still on disk. config-routes.ts:284-295, registered BEFORE
+// /conferences/:conferenceId so Express doesn't parse "orphan-directories"
+// as a conference id.
+export async function getOrphanConferenceDirs() {
+  const res = await request<{ success: boolean; data: { orphans: OrphanConferenceDir[]; bytes: number } }>(
+    '/api/config/conferences/orphan-directories'
+  );
+  return res.data ?? { orphans: [], bytes: 0 };
+}
+
+export async function removeOrphanConferenceDir(dir: string) {
+  return request<{ success: boolean; message?: string }>(
+    `/api/config/conferences/orphan-directories/${encodeURIComponent(dir)}`,
+    { method: 'DELETE' }
+  );
+}
+
+export async function getConferenceHealth(id: number) {
+  const res = await request<{ success: boolean; data: import('./types.js').ConferenceHealth }>(`/api/config/conferences/${id}/health`);
+  return res.data;
+}
+
+export async function fixConference(id: number) {
+  return request<{ success: boolean; message?: string }>(`/api/config/conferences/${id}/auto-fix`, {
+    method: 'POST',
+  });
+}
+
+export async function getDoors() {
+  const res = await request<{ success: boolean; data: import('./types.js').DoorInfo[] }>('/api/config/doors');
+  return res.data ?? [];
+}
+
+export async function reloadDoors() {
+  return request<{ success: boolean; message?: string }>('/api/config/doors/reload', {
+    method: 'POST',
+  });
+}
+
+export async function updateDoor(id: string | number, updates: Partial<import('./types.js').DoorInfo>) {
+  return request<{ success: boolean; message?: string }>(`/api/config/doors/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(updates),
+  });
+}
+
+// Identified by COMMAND, not the list-position `id` above — the door list is
+// loaded from disk and numbered by position, so an :id would find nothing or
+// the wrong door. Matches web/config-app/src/api/client.ts's deleteDoor and
+// backend DELETE /api/config/doors/:command (config-routes.ts:721).
+export async function deleteDoor(command: string) {
+  return request<{ success: boolean; message?: string }>(`/api/config/doors/${encodeURIComponent(command)}`, {
+    method: 'DELETE',
+  });
+}
+
+export async function getSystemConfig() {
+  const res = await request<{ success: boolean; data: import('./types.js').SystemConfig }>('/api/config/system');
+  return res.data;
+}
+
+export async function startNode(nodeId: number) {
+  return request<{ success: boolean }>(`/api/nodes/${nodeId}/start`, { method: 'POST' });
+}
+
+export async function exitNode(nodeId: number) {
+  return request<{ success: boolean }>(`/api/nodes/${nodeId}/exit`, { method: 'POST' });
+}
+
+// Body must carry { username } to reserve, or {} to clear an existing
+// reservation (backend toggle/clear path — node-control-routes.ts:150-197).
+// The prior signature took no username at all, so it could only ever hit the
+// clear branch or 400 — it could not actually reserve a node.
+export async function reserveNode(nodeId: number, username?: string) {
+  return request<{ success: boolean; message?: string; reservedFor: string | null }>(
+    `/api/nodes/${nodeId}/reserve`,
+    { method: 'POST', body: JSON.stringify(username ? { username } : {}) }
+  );
+}
+
+export async function sysopLoginNode(nodeId: number) {
+  return request<{ success: boolean }>(`/api/nodes/${nodeId}/sysop-login`, { method: 'POST' });
+}
+
+export async function setQuietMode(enabled: boolean) {
+  return request<{ success: boolean }>('/api/nodes/quiet-mode', {
+    method: 'POST',
+    body: JSON.stringify({ enabled }),
+  });
+}
+
+// ───── Phase B additions ────────────────────────────────────────────
+
+export async function updateSystemConfig(updates: Record<string, unknown>) {
+  return request<{ success: boolean }>('/api/config/system', {
+    method: 'PUT',
+    body: JSON.stringify(updates),
+  });
+}
+
+export interface HealthIssue {
+  category?: string;
+  severity?: 'ok' | 'warning' | 'error' | 'info' | string;
+  message: string;
+  fixable?: boolean;
+  details?: string;
+}
+
+interface RawHealthIssue {
+  severity?: string;
+  category?: string;
+  description?: string;
+  message?: string;
+  path?: string;
+  autoFixable?: boolean;
+  fixable?: boolean;
+  details?: string;
+}
+
+interface RawHealthCategory {
+  category: string;
+  passed?: boolean;
+  issues?: RawHealthIssue[];
+  errorCount?: number;
+  warningCount?: number;
+}
+
+export async function getHealthCheck() {
+  // Backend response shape:
+  //   { success: true, data: { overallStatus, totalIssues, autoFixableIssues,
+  //                            categories: [{ category, issues: [...] }] } }
+  // Flatten the nested issues into a flat list and normalise field names so
+  // the page doesn't have to know about the nesting.
+  const res = await request<{
+    success?: boolean;
+    data?: {
+      overallStatus?: string;
+      totalIssues?: number;
+      autoFixableIssues?: number;
+      categories?: RawHealthCategory[];
+      issues?: RawHealthIssue[];
+    };
+  }>('/api/config/health');
+  const d = res.data ?? {};
+  const flat: HealthIssue[] = [];
+  if (Array.isArray(d.categories)) {
+    for (const cat of d.categories) {
+      for (const it of cat.issues ?? []) {
+        flat.push({
+          category: it.category ?? cat.category,
+          severity: it.severity,
+          message: it.description ?? it.message ?? '',
+          fixable: it.autoFixable ?? it.fixable,
+          details: it.path ?? it.details,
+        });
+      }
+    }
+  } else if (Array.isArray(d.issues)) {
+    for (const it of d.issues) {
+      flat.push({
+        category: it.category,
+        severity: it.severity,
+        message: it.description ?? it.message ?? '',
+        fixable: it.autoFixable ?? it.fixable,
+        details: it.path ?? it.details,
+      });
+    }
+  }
+  return {
+    issues: flat,
+    healthy: d.overallStatus === 'healthy' || d.overallStatus === 'ok' || (d.totalIssues ?? 0) === 0,
+    overallStatus: d.overallStatus,
+    totalIssues: d.totalIssues ?? flat.length,
+    autoFixableIssues: d.autoFixableIssues ?? flat.filter(i => i.fixable).length,
+  };
+}
+
+export async function autoFixHealth() {
+  return request<{ success: boolean; message?: string; data?: { fixed?: number } }>('/api/config/health/auto-fix', {
+    method: 'POST',
+  });
+}
+
+export interface AuditEntry {
+  id: number;
+  table_name: string;
+  record_id: string | number;
+  action: string;
+  changed_by?: string;
+  before?: unknown;
+  after?: unknown;
+  timestamp: string;
+}
+
+// The backend reads req.query.table (config-routes.ts:2012-2017), but this
+// sent `tableName` — the table filter silently matched nothing on every
+// request, on both clients (web/config-app/src/api/client.ts:826-836 had the
+// identical bug). Also adds `recordId`, which the backend already accepts
+// and neither client previously exposed at all.
+export async function getAuditLog(opts: { tableName?: string; recordId?: number | string; limit?: number } = {}) {
+  const params = new URLSearchParams();
+  if (opts.tableName) params.set('table', opts.tableName);
+  if (opts.recordId !== undefined && opts.recordId !== '') params.set('recordId', String(opts.recordId));
+  if (opts.limit) params.set('limit', String(opts.limit));
+  const q = params.toString();
+  const res = await request<{ success: boolean; data: AuditEntry[] }>(`/api/config/audit${q ? '?' + q : ''}`);
+  return res.data ?? [];
+}
+
+export interface SessionInfo {
+  id: string;
+  username?: string;
+  nodeId?: number;
+  startedAt?: string;
+  endedAt?: string | null;
+  active?: boolean;
+}
+
+export async function getSessions() {
+  // Backend returns { sessions: [...] } at /api/sessions (NOT { success, data }).
+  // Each entry shape: { sessionId, startTime, lastActivity, lineCount }.
+  const res = await request<{ sessions?: Array<Record<string, unknown>>; data?: SessionInfo[] }>('/api/sessions');
+  const list = (res.sessions ?? res.data ?? []) as Array<Record<string, unknown>>;
+  return list.map((s): SessionInfo => ({
+    id: String(s['sessionId'] ?? s['id'] ?? ''),
+    username: typeof s['username'] === 'string' ? s['username'] as string : undefined,
+    nodeId: typeof s['nodeId'] === 'number' ? s['nodeId'] as number : undefined,
+    startedAt: typeof s['startTime'] === 'string' ? s['startTime'] as string
+      : typeof s['startedAt'] === 'string' ? s['startedAt'] as string : undefined,
+    endedAt: typeof s['endedAt'] === 'string' ? s['endedAt'] as string : null,
+    active: s['endedAt'] == null,
+  }));
+}
+
+export interface SessionLog {
+  sessionId: string;
+  userId?: string;
+  username?: string;
+  nodeId?: number;
+  startTime?: string;
+  lastActivity?: string;
+  /** Raw terminal output chunks, ANSI codes and all — SessionLogManager.ts:162-185. */
+  output: string[];
+}
+
+// GET /api/sessions/:id/log answers { log } — NOT the { success, data }
+// envelope most /api/config/* routes use (session-logs.handler.ts:36-60 is a
+// bare res.json({ log }), no ApiResponse wrapper at all). The previous
+// version here checked for `.data`, which this response never has, so it
+// always fell through to returning the raw { log: {...} } object — the page
+// then read `.lines`/`.entries` off THAT, neither of which exist; the real
+// content sits one level down at `.log.output`. Matches
+// web/config-app/src/pages/SessionLogsPage.tsx:77's `(logData as any)?.log`.
+export async function getSessionLog(sessionId: string) {
+  const res = await request<{ log?: SessionLog }>(`/api/sessions/${sessionId}/log`);
+  return res.log ?? null;
+}
+
+// GET /api/sessions/:id/log/raw returns text/plain, not JSON — request()
+// always calls res.json(), so this bypasses it the same way web's
+// getSessionLogRaw does (web/config-app/src/api/client.ts:933-941).
+export async function getSessionLogRaw(sessionId: string): Promise<string> {
+  const headers: Record<string, string> = {};
+  if (_token) headers['Authorization'] = `Bearer ${_token}`;
+  const res = await fetch(`${BASE_URL}/api/sessions/${sessionId}/log/raw`, { headers });
+  if (!res.ok) throw new Error(`HTTP ${res.status}: Failed to fetch raw log`);
+  return res.text();
+}
+
+// POST /api/sessions/:id/save — writes the session's log to disk and
+// answers the path (session-logs.handler.ts:115-136), bare { filePath }.
+export async function saveSessionLog(sessionId: string) {
+  return request<{ filePath?: string }>(`/api/sessions/${sessionId}/save`, { method: 'POST' });
+}
+
+export interface SessionStats {
+  totalSessions: number;
+  totalLines: number;
+  oldestSession?: string;
+}
+
+// GET /api/sessions/stats — bare { stats }, same as getSessionLog above.
+export async function getSessionStats() {
+  const res = await request<{ stats?: SessionStats }>('/api/sessions/stats');
+  return res.stats ?? { totalSessions: 0, totalLines: 0 };
+}
+
+export interface OperatorChatConfig {
+  page_timeout_seconds?: number;
+  cooldown_seconds?: number;
+  quiet_hours_start?: string;
+  quiet_hours_end?: string;
+  discord_webhook_url?: string;
+  quick_replies?: string[];
+  [k: string]: unknown;
+}
+
+export async function getOperatorChatConfig() {
+  const res = await request<{ success: boolean; data: OperatorChatConfig }>('/api/config/operator-chat');
+  return res.data;
+}
+
+// ───── Phase C: CRUD pages ──────────────────────────────────────────
+
+// Languages
+export async function getLanguages() {
+  return requestList<import('./types.js').LanguageRow>('/api/config/languages');
+}
+
+export async function createLanguage(row: Partial<import('./types.js').LanguageRow>) {
+  return request<{ success: boolean; data: import('./types.js').LanguageRow }>('/api/config/languages', {
+    method: 'POST', body: JSON.stringify(row),
+  });
+}
+
+export async function updateLanguage(id: number, patch: Partial<import('./types.js').LanguageRow>) {
+  return request<{ success: boolean; data: import('./types.js').LanguageRow }>(`/api/config/languages/${id}`, {
+    method: 'PUT', body: JSON.stringify(patch),
+  });
+}
+
+export async function deleteLanguage(id: number) {
+  return request<{ success: boolean }>(`/api/config/languages/${id}`, { method: 'DELETE' });
+}
+
+// Protocols
+export async function getProtocols() {
+  return requestList<import('./types.js').ProtocolRow>('/api/config/protocols');
+}
+
+export async function createProtocol(row: Partial<import('./types.js').ProtocolRow>) {
+  return request<{ success: boolean; data: import('./types.js').ProtocolRow }>('/api/config/protocols', {
+    method: 'POST', body: JSON.stringify(row),
+  });
+}
+
+export async function updateProtocol(id: number, patch: Partial<import('./types.js').ProtocolRow>) {
+  return request<{ success: boolean; data: import('./types.js').ProtocolRow }>(`/api/config/protocols/${id}`, {
+    method: 'PUT', body: JSON.stringify(patch),
+  });
+}
+
+export async function deleteProtocol(id: number) {
+  return request<{ success: boolean }>(`/api/config/protocols/${id}`, { method: 'DELETE' });
+}
+
+// Computers
+export async function getComputers() {
+  return requestList<import('./types.js').ComputerRow>('/api/config/computers');
+}
+
+export async function createComputer(row: Partial<import('./types.js').ComputerRow>) {
+  return request<{ success: boolean; data: import('./types.js').ComputerRow }>('/api/config/computers', {
+    method: 'POST', body: JSON.stringify(row),
+  });
+}
+
+export async function updateComputer(id: number, patch: Partial<import('./types.js').ComputerRow>) {
+  return request<{ success: boolean; data: import('./types.js').ComputerRow }>(`/api/config/computers/${id}`, {
+    method: 'PUT', body: JSON.stringify(patch),
+  });
+}
+
+export async function deleteComputer(id: number) {
+  return request<{ success: boolean }>(`/api/config/computers/${id}`, { method: 'DELETE' });
+}
+
+// Screen Types
+export async function getScreenTypes() {
+  return requestList<import('./types.js').ScreenTypeRow>('/api/config/screen-types');
+}
+
+export async function createScreenType(row: Partial<import('./types.js').ScreenTypeRow>) {
+  return request<{ success: boolean; data: import('./types.js').ScreenTypeRow }>('/api/config/screen-types', {
+    method: 'POST', body: JSON.stringify(row),
+  });
+}
+
+export async function updateScreenType(id: number, patch: Partial<import('./types.js').ScreenTypeRow>) {
+  return request<{ success: boolean; data: import('./types.js').ScreenTypeRow }>(`/api/config/screen-types/${id}`, {
+    method: 'PUT', body: JSON.stringify(patch),
+  });
+}
+
+export async function deleteScreenType(id: number) {
+  return request<{ success: boolean }>(`/api/config/screen-types/${id}`, { method: 'DELETE' });
+}
+
+// Drives
+export async function getDrives() {
+  return requestList<import('./types.js').DriveRow>('/api/config/drives');
+}
+
+export async function createDrive(row: Partial<import('./types.js').DriveRow>) {
+  return request<{ success: boolean; data: import('./types.js').DriveRow }>('/api/config/drives', {
+    method: 'POST', body: JSON.stringify(row),
+  });
+}
+
+export async function updateDrive(id: number, patch: Partial<import('./types.js').DriveRow>) {
+  return request<{ success: boolean; data: import('./types.js').DriveRow }>(`/api/config/drives/${id}`, {
+    method: 'PUT', body: JSON.stringify(patch),
+  });
+}
+
+export async function deleteDrive(id: number) {
+  return request<{ success: boolean }>(`/api/config/drives/${id}`, { method: 'DELETE' });
+}
+
+// File Checkers
+export async function getFileCheckers() {
+  return requestList<import('./types.js').FileCheckerRow>('/api/config/file-checkers');
+}
+
+export async function createFileChecker(row: Partial<import('./types.js').FileCheckerRow>) {
+  return request<{ success: boolean; data: import('./types.js').FileCheckerRow }>('/api/config/file-checkers', {
+    method: 'POST', body: JSON.stringify(row),
+  });
+}
+
+export async function updateFileChecker(id: number, patch: Partial<import('./types.js').FileCheckerRow>) {
+  return request<{ success: boolean; data: import('./types.js').FileCheckerRow }>(`/api/config/file-checkers/${id}`, {
+    method: 'PUT', body: JSON.stringify(patch),
+  });
+}
+
+export async function deleteFileChecker(id: number) {
+  return request<{ success: boolean }>(`/api/config/file-checkers/${id}`, { method: 'DELETE' });
+}
+
+// File checker error patterns — the specific strings a file-validation
+// command should treat as "archive is bad" (config.schemas.ts's
+// FileCheckerErrorSchema: file_checker_id, error_number, error_pattern).
+// GET/POST nest under the checker; DELETE is its own top-level resource
+// (config-routes.ts:1578-1626), matching
+// web/config-app/src/api/client.ts:779-794 exactly — including the
+// asymmetric path (create nests, delete doesn't).
+export async function getFileCheckerErrors(checkerId: number) {
+  return requestList<import('./types.js').FileCheckerErrorRow>(`/api/config/file-checkers/${checkerId}/errors`);
+}
+
+export async function createFileCheckerError(checkerId: number, row: Partial<import('./types.js').FileCheckerErrorRow>) {
+  return request<{ success: boolean; data: import('./types.js').FileCheckerErrorRow; message?: string }>(
+    `/api/config/file-checkers/${checkerId}/errors`,
+    { method: 'POST', body: JSON.stringify(row) }
+  );
+}
+
+export async function deleteFileCheckerError(id: number) {
+  return request<{ success: boolean; message?: string }>(`/api/config/file-checker-errors/${id}`, { method: 'DELETE' });
+}
+
+// Security levels — Access/ACS.<level>.info, the files express.e actually
+// reads through utils/acs-access-loader. This TUI used to point at
+// /api/config/security/:level, which is CRUD over a SQLite table
+// (security_level_access) the BBS never consults — see
+// web/backend/src/services/config-services/acs-level-file.service.ts:4-9 for
+// the incident that forced the web admin off that table. Match it here.
+export interface AcsLevelsInfo {
+  levels: number[];
+  inUse: Array<{ level: number; users: number; servedBy: number | null }>;
+  permissions: string[];
+}
+
+export interface AcsLevelFlags {
+  level: number;
+  file: string;
+  flags: Record<string, boolean>;
+  ambiguous: string[];
+}
+
+export async function getAcsLevels() {
+  const res = await request<{ success: boolean; data: AcsLevelsInfo }>('/api/config/security/levels');
+  return res.data;
+}
+
+export async function getAcsLevelFlags(level: number) {
+  const res = await request<{ success: boolean; data: AcsLevelFlags }>(`/api/config/security/levels/${level}`);
+  return res.data;
+}
+
+export async function saveAcsLevelFlags(level: number, flags: Record<string, boolean>) {
+  return request<{ success: boolean; data: { level: number; file: string; backupPath: string } }>(
+    `/api/config/security/levels/${level}`,
+    { method: 'PUT', body: JSON.stringify({ flags }) }
+  );
+}
+
+export async function createAcsLevel(level: number, copyFrom?: number) {
+  return request<{ success: boolean; message?: string }>(`/api/config/security/levels/${level}`, {
+    method: 'POST',
+    body: JSON.stringify(copyFrom !== undefined ? { copyFrom } : {}),
+  });
+}
+
+// ───── Phase D: Door install, Import/Export, Batch editor ──────────────
+
+export async function installDoorArchive(archive: { filename?: string; path?: string }) {
+  return request<{ success: boolean; message?: string }>('/api/config/doors/install-archive', {
+    method: 'POST',
+    body: JSON.stringify(archive),
+  });
+}
+
+export interface ImportSession {
+  id: string;
+  filename?: string;
+  status?: string;
+  createdAt?: string;
+  conflicts?: number;
+  totalRows?: number;
+}
+
+export async function getImportSessions() {
+  // Backend returns { success: true, sessions: [...] } — NOT data.
+  const res = await request<{ success: boolean; sessions?: ImportSession[]; data?: ImportSession[] }>('/api/import/sessions');
+  return res.sessions ?? res.data ?? [];
+}
+
+export async function getImportSession(id: string) {
+  const res = await request<{ success: boolean; data: unknown }>(`/api/import/session/${id}`);
+  return res.data;
+}
+
+export async function validateImport(id: string) {
+  return request<{ success: boolean; data?: unknown }>(`/api/import/validate/${id}`, { method: 'POST' });
+}
+
+export async function executeImport(id: string) {
+  return request<{ success: boolean; message?: string }>(`/api/import/execute/${id}`, { method: 'POST' });
+}
+
+export async function cancelImport(id: string) {
+  return request<{ success: boolean }>(`/api/import/cancel/${id}`, { method: 'POST' });
+}
+
+export async function deleteImport(id: string) {
+  return request<{ success: boolean }>(`/api/import/session/${id}`, { method: 'DELETE' });
+}
+
+export async function createExport(opts: { format?: string; includeUsers?: boolean; includeMessages?: boolean; includeFiles?: boolean } = {}) {
+  return request<{ success: boolean; data?: { filename?: string } }>('/api/import/export/create', {
+    method: 'POST',
+    body: JSON.stringify(opts),
+  });
+}
+
+export async function listExports() {
+  // Backend returns { success: true, exports: [...] } — NOT data.
+  const res = await request<{ success: boolean; exports?: Array<{ filename: string; size?: number; createdAt?: string }>; data?: Array<{ filename: string; size?: number; createdAt?: string }> }>('/api/import/export/list');
+  return res.exports ?? res.data ?? [];
+}
+
+export async function listBatches() {
+  return request<{ batches: string[] }>('/api/batches');
+}
+
+export async function getBatch(name: string) {
+  return request<{ name: string; content: string }>(`/api/batches/${name}`);
+}
+
+export async function saveBatch(name: string, content: string) {
+  return request<{ name: string; saved: boolean }>(`/api/batches/${name}`, {
+    method: 'PUT',
+    body: JSON.stringify({ content }),
+  });
+}
+
+export async function validateBatch(name: string, content: string) {
+  return request<{ valid?: boolean; errors?: string[] }>('/api/batches/validate', {
+    method: 'POST',
+    body: JSON.stringify({ name, content }),
+  });
+}
+
+// ───── Phase F: Screens (full management) ────────────────────────────
+
+export interface ScopeResolution {
+  scope: 'node' | 'conf' | 'board';
+  id: number | null;
+  dir: string;
+  dirIsShared: boolean;
+  file: string | null;
+  variants: string[];
+}
+
+export interface ScreenIndexEntry {
+  screen: string;
+  dirType: string;
+  resolutions: ScopeResolution[];
+  missingScopes: number;
+  duplicateGroups: { sha256: string; paths: string[] }[];
+}
+
+export interface SauceFacts {
+  title: string;
+  author: string;
+  group: string;
+  date: string;
+  font: string;
+  colours: number;
+}
+
+export interface ScreenFileFacts {
+  path: string;
+  bytes: number;
+  format: string;
+  sha256: string;
+  readBy: string[];
+  mci: Array<{ code: string; target: string; resolves: boolean }>;
+  sauce: SauceFacts | null;
+  problems: string[];
+}
+
+export interface ConferenceFacts {
+  id: number;
+  name: string;
+  dir: string;
+  fileAreas: number;
+  messageBases: number;
+}
+
+export interface BulletinFacts {
+  number: number;
+  file: string;
+  title?: string;
+}
+
+export interface ScreenIndex {
+  screens: ScreenIndexEntry[];
+  unused: ScreenFileFacts[];
+  files: Record<string, ScreenFileFacts>;
+  conferences: ConferenceFacts[];
+  bulletins: BulletinFacts[];
+  builtAt: string;
+}
+
+export async function getScreenIndex(): Promise<ScreenIndex> {
+  const res = await request<{ success: boolean; data: { screens?: ScreenIndexEntry[]; unused?: ScreenFileFacts[]; files?: Record<string, ScreenFileFacts>; conferences?: ConferenceFacts[]; bulletins?: BulletinFacts[]; builtAt?: string; callersByLevel?: Record<string, number> } }>('/api/screens');
+  const d = res.data ?? {};
+  return {
+    screens: (d.screens ?? []) as ScreenIndexEntry[],
+    unused: (d.unused ?? []) as ScreenFileFacts[],
+    files: (d.files ?? {}) as Record<string, ScreenFileFacts>,
+    conferences: (d.conferences ?? []) as ConferenceFacts[],
+    bulletins: (d.bulletins ?? []) as BulletinFacts[],
+    builtAt: d.builtAt ?? '',
+  };
+}
+
+export async function getScreenFile(path: string) {
+  const res = await request<{ success: boolean; data?: ScreenFileFacts & { content: string } }>(`/api/screens/file?path=${encodeURIComponent(path)}`);
+  return res.data;
+}
+
+/**
+ * Write one screen file.
+ *
+ * The path goes in the QUERY STRING: the backend reads `req.query.path`
+ * (screens-routes.ts:977) and, when it is missing, falls back to writing
+ * `targets: ['']` - an empty path, with a 200 and no error. This function
+ * used to take `path` and drop it on the floor, which nothing noticed only
+ * because no caller had wired it up yet.
+ *
+ * `content` is BASE64 of latin1 bytes. A screen carries Amiga high-bit
+ * bytes and a UTF-8 round trip turns one into U+FFFD, so the caller encodes
+ * from a latin1 buffer and the endpoint decodes the same way.
+ */
+export async function putScreenFile(path: string, content: string, targets?: string[]) {
+  const body: { content: string; targets?: string[] } = { content };
+  if (targets && targets.length) body.targets = targets;
+  const res = await request<{ success: boolean; data?: { written?: string[] } }>(
+    `/api/screens/file?path=${encodeURIComponent(path)}`,
+    {
+      method: 'PUT',
+      body: JSON.stringify(body),
+    },
+  );
+  return res.data ?? {};
+}
+
+export async function deleteScreenFile(path: string) {
+  const res = await request<{ success: boolean; data?: { deleted?: boolean; backup?: string; stopsResolving?: string[] } }>(`/api/screens/file?path=${encodeURIComponent(path)}`, {
+    method: 'DELETE',
+  });
+  return res.data ?? { deleted: false, backup: '', stopsResolving: [] };
+}
+
+export async function repairScreenFile(path: string) {
+  const res = await request<{ success: boolean; data?: { path?: string; backup?: string; repaired?: number } }>('/api/screens/repair', {
+    method: 'POST',
+    body: JSON.stringify({ path }),
+  });
+  return res.data ?? { path: '', backup: '', repaired: 0 };
+}
+
+export interface ScreenRevisionMeta {
+  ts: string;
+  file: string;
+  bytes: number;
+  sha256: string;
+  source: string;
+}
+
+// GET /api/screens/revisions?path=... — every snapshot PUT /file has kept
+// for this screen, newest first. `path` must be the exact string used for
+// GET/PUT/DELETE /file (screen-revisions.ts keys a directory off that raw
+// string). These three plus the write-side hookup (saveRevision called from
+// PUT /file) were added alongside this TUI wiring — the storage engine and
+// the web's ScreenRevisionsPanel/client methods already existed, but no
+// backend route reached them and PUT /file never called the writer, so the
+// whole feature was unreachable from either client. See
+// web/config-app/src/api/client.ts:1047-1064 for the contract this matches.
+export async function getScreenRevisions(path: string) {
+  const res = await request<{ success: boolean; data?: { revisions?: ScreenRevisionMeta[] } }>(
+    `/api/screens/revisions?path=${encodeURIComponent(path)}`
+  );
+  return res.data?.revisions ?? [];
+}
+
+export async function getScreenRevision(path: string, file: string) {
+  const res = await request<{ success: boolean; data?: { content: string; bytes: number } }>(
+    `/api/screens/revision?path=${encodeURIComponent(path)}&file=${encodeURIComponent(file)}`
+  );
+  return res.data ?? null;
+}
+
+export async function restoreScreenRevision(path: string, file: string) {
+  return request<{ success: boolean; message?: string; data?: { restored: string } }>('/api/screens/restore', {
+    method: 'POST',
+    body: JSON.stringify({ path, file }),
+  });
+}
+
+export interface RepairAllResult {
+  dryRun?: boolean;
+  damaged?: string[];
+  repaired?: { path: string; codes: number }[];
+  refused?: { path: string; reason: string }[];
+}
+
+// POST /api/screens/repair-all — every screen the index flags as damaged,
+// repaired in one pass. dryRun=true names them and writes nothing.
+export async function repairAllScreens(dryRun = false) {
+  const res = await request<{ success: boolean; message?: string; data?: RepairAllResult }>('/api/screens/repair-all', {
+    method: 'POST',
+    body: JSON.stringify({ dryRun }),
+  });
+  return { ...(res.data ?? {}), message: res.message };
+}
+
+export async function getSharedScreenDirs() {
+  const res = await request<{ success: boolean; data?: { directories?: Array<{ dir: string; files: string[] }> } }>('/api/screens/shared-directories');
+  return res.data?.directories ?? [];
+}
+
+export async function shareScreens(nodes: number[], sharedDir: string, dryRun?: boolean) {
+  const res = await request<{ success: boolean; data?: { blocked?: string[]; canShare?: boolean; wouldWrite?: string[]; tooltype?: string } }>('/api/screens/share', {
+    method: 'POST',
+    body: JSON.stringify({ nodes, sharedDir, dryRun }),
+  });
+  return res.data ?? {};
+}
+
+// Deployment monitoring (read-only)
+export async function getDeploymentHealth() {
+  return request<{ success?: boolean; data?: unknown; [k: string]: unknown }>('/api/deployment/health');
+}
+
+export async function getDeploymentSystemInfo() {
+  return request<{ data?: unknown; [k: string]: unknown }>('/api/deployment/system-info');
+}
+
+export async function getDeploymentDatabaseStats() {
+  return request<{ data?: unknown; [k: string]: unknown }>('/api/deployment/database-stats');
+}
+
+// Info Editor (.info file tooltypes)
+export interface InfoFileEntry {
+  path: string;
+  name?: string;
+  basename?: string;
+  relativePath?: string;
+  size?: number;
+  modified?: string;
+  type?: string;
+  tooltypes?: InfoTooltype[];
+}
+
+export interface InfoTooltype {
+  key: string;
+  value?: string;
+  commented?: boolean;
+}
+
+export async function getInfoFiles() {
+  // Backend returns { files: [...] } — NOT { data: [...] }.
+  const res = await request<{ files?: InfoFileEntry[]; data?: InfoFileEntry[] }>('/api/info-editor/files');
+  return res.files ?? res.data ?? [];
+}
+
+export async function getInfoFile(relativePath: string) {
+  // Backend returns the file object directly (not wrapped).
+  const res = await request<{ data?: { path: string; tooltypes: InfoTooltype[] }; path?: string; tooltypes?: InfoTooltype[]; [k: string]: unknown }>(`/api/info-editor/file?path=${encodeURIComponent(relativePath)}`);
+  if (res && typeof res === 'object' && 'data' in res && res.data) return res.data;
+  return res as unknown as { path: string; tooltypes: InfoTooltype[] };
+}
+
+export async function updateInfoFile(relativePath: string, tooltypes: InfoTooltype[]) {
+  return request<{ success: boolean }>('/api/info-editor/file', {
+    method: 'PUT',
+    body: JSON.stringify({ path: relativePath, tooltypes }),
+  });
+}
+
+export async function toggleTooltypeComment(relativePath: string, key: string) {
+  return request<{ success: boolean }>('/api/info-editor/toggle', {
+    method: 'POST',
+    body: JSON.stringify({ path: relativePath, key }),
+  });
+}
+
+// Admin Roles — which security level can reach which admin section.
+// GET/PUT /api/admin-permissions (routes-setup.ts:156-159), NOT under
+// /api/config like almost everything else here — matches
+// web/config-app/src/api/client.ts:999-1013 exactly (same two endpoints,
+// same unwrapped { perms, sections } shape — this handler doesn't use the
+// { success, data } envelope most /api/config/* routes do).
+export interface AdminSectionPerm {
+  key: string;
+  label: string;
+  defaultMinLevel: number;
+}
+
+export async function getAdminPermissions() {
+  return request<{ perms: Record<string, number>; sections: AdminSectionPerm[] }>('/api/admin-permissions');
+}
+
+export async function setAdminPermissions(perms: Record<string, number>) {
+  return request<{ perms: Record<string, number>; sections: AdminSectionPerm[] }>('/api/admin-permissions', {
+    method: 'PUT',
+    body: JSON.stringify({ perms }),
+  });
+}
+
+// Operator chat settings
+export async function updateOperatorChatConfig(config: Record<string, unknown>) {
+  return request<{ success: boolean }>('/api/config/operator-chat', {
+    method: 'PUT',
+    body: JSON.stringify(config),
+  });
+}
+
+/**
+ * Is the backend answering yet? The console starts alongside the servers, so
+ * it can come up first; the login screen waits on this instead of offering a
+ * prompt that can only fail.
+ */
+export async function probeBackend(timeoutMs = 2000): Promise<boolean> {
+  const abort = new AbortController();
+  const timer = setTimeout(() => abort.abort(), timeoutMs);
+  try {
+    const res = await fetch(`${BASE_URL}/health`, { signal: abort.signal });
+    return res.ok;
+  } catch {
+    return false;
+  } finally {
+    clearTimeout(timer);
+  }
+}

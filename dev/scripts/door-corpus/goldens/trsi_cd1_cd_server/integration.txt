@@ -1,0 +1,634 @@
+
+
+CD-sERVER V1.00 bY SieGeL & ByteAndi oF (tRSi/X-iNNOVATiON)
+
+
+Program-Icon not found !
+
+
+                                                                             
+                                                                             
+                                                                             
+                                                                             
+                                                                             
+                                                                             
+                                                                             
+                                                                        
+
+                                                                           
+                                                                            
+                                                                             
+                                                                            
+                                                                               
+                                                                          
+                                                                     
+                                                                              
+                                                                     
+                                                                              
+
+                                                                            
+                                                                         
+                                                                       
+                                                                                
+
+                                                                             
+                                                                             
+                                                                             
+                                                                             
+                                                                             
+                                                                             
+                                                                             
+                                                                        
+
+                                                                           
+                                                                            
+                                                                             
+                                                                            
+                                                                               
+                                                                          
+                                                                     
+                                                                              
+                                                                     
+                                                                              
+
+                                                                            
+                                                                         
+                                                                       
+                                                                                
+
+                                                                             
+                                                                             
+                                                                             
+                                                                             
+                                                                             
+                                                                             
+                                                                             
+                                                                        
+
+                                                                           
+                                                                            
+                                                                             
+                                                                            
+                                                                               
+                                                                          
+                                                                     
+                                                                              
+                                                                     
+                                                                              
+
+                                                                            
+                                                                         
+                                                                       
+                                                                                
+
+                                                                             
+                                                                             
+                                                                             
+                                                                             
+                                                                             
+                                                                             
+                                                                             
+                                                                        
+
+                                                                           
+                                                                            
+                                                                             
+                                                                            
+                                                                               
+                                                                          
+                                                                     
+                                                                              
+                                                                     
+                                                                              
+
+                                                                            
+                                                                         
+                                                                       
+                                                                                
+
+                                                                             
+                                                                             
+                                                                             
+                                                                             
+                                                                             
+                                                                             
+                                                                             
+                                                                        
+
+                                                                           
+                                                                            
+                                                                             
+                                                                            
+                                                                               
+                                                                          
+                                                                     
+                                                                              
+                                                                     
+                                                                              
+
+                                                                            
+                                                                         
+                                                                       
+                                                                                
+
+                                                                             
+                                                                             
+                                                                             
+                                                                             
+                                                                             
+                                                                             
+                                                                             
+                                                                        
+
+                                                                           
+                                                                            
+                                                                             
+                                                                            
+                                                                               
+                                                                          
+                                                                     
+                                                                              
+                                                                     
+                                                                              
+
+                                                                            
+                                                                         
+                                                                       
+                                                                                
+
+                                                                             
+                                                                             
+                                                                             
+                                                                             
+                                                                             
+                                                                             
+                                                                             
+                                                                        
+
+                                                                           
+                                                                            
+                                                                             
+                                                                            
+                                                                               
+                                                                          
+                                                                     
+                                                                              
+                                                                     
+                                                                              
+
+                                                                            
+                                                                         
+                                                                       
+                                                                                
+
+                                            \________   ___________ ________.
+                                                    _\__\___    _ /s      . |
+                                                    //     /    //        | |
+                                                        ________/         : |
+                                                           .     COMMANDS . |
+                                                                      :.    |
+                                                                   __:::____|
+                                                                      .Y
+
+                                                                           
+                                                                            
+                                                                             
+                                                                            
+                                                                               
+                                                                          
+                                                                     
+                                                                              
+                                                                     
+                                                                              
+
+                                                                            
+                                                                         
+                                                                       
+                                                                                
+
+                                          _/\________   ___________ ________.
+                                             \__    _\__\___    _ /s      . |
+                                              \/    //     /    //        | |
+                                                   o/   ________/         : |
+                                                   /     /|.     COMMANDS . |
+                                                        /_||          :.    |
+                                                     ___ /|__________:::____|
+                                                       \/             .Y
+
+                                                          ] - ZMODEM UPLOAD
+                                                            - ALTER FILEFLAG
+                                                              FULL CONF STATS
+                                                               EAD NEW MSG'S
+                                                                 W TXT/LHA FILE
+                                                                  R ON/OFF
+                                                                    F
+                                                                      CRIPTION
+                                                                     
+                                                                         NAIRE
+
+                                                                            
+                                                                         
+                                                                       
+                                                                                
+
+                                         __/\________   ___________ ________.
+                                          // \__    _\__\___    _ /s      . |
+                                              \/    //     /    //        | |
+                                              /    o/   ________/         : |
+                                             /     /     /|.     COMMANDS . |
+                                                  /     /_||          :.    |
+                                               __/______ /|__________:::____|
+                                                       \/             .Y
+
+                                                  S)   [RZ] - ZMODEM UPLOAD
+                                                       [A]  - ALTER FILEFLAG
+                                                       [FS] - FULL CONF STATS
+                                                       [R]  - READ NEW MSG'S
+                                                       [V]  - VIEW TXT/LHA FILE
+                                                       [M]  - COLOR ON/OFF
+                                                        G]  - LOG OFF
+                                                         D] - EDIT DESCRIPTION
+                                                          ] - RELOGON
+                                                           ST] - QUESTIONNAIRE
+
+                                                             ACCOUNT EDITING
+                                                              -sactivated
+                                                               SOP VIEW
+                                                                ________________
+
+                                         __/\________   ___________ ________.
+                                          // \__    _\__\___    _ /s      . |
+                                          .   \/    //     /    //        | |
+                                              /    o/   ________/         : |
+                                             /     /     /|.     COMMANDS . |
+                                            /     /     /_||          :.    |
+                                             ____/______ /|__________:::____|
+                                                       \/             .Y
+
+                                              ILE(S)   [RZ] - ZMODEM UPLOAD
+                                               ST      [A]  - ALTER FILEFLAG
+                                               FLAGS   [FS] - FULL CONF STATS
+                                                 USER  [R]  - READ NEW MSG'S
+                                                 GS    [V]  - VIEW TXT/LHA FILE
+                                                       [M]  - COLOR ON/OFF
+                                                       [G]  - LOG OFF
+                                                  E    [ED] - EDIT DESCRIPTION
+                                                       [RL] - RELOGON
+                                                   GE  [QUEST] - QUESTIONNAIRE
+
+                                                       [1] - ACCOUNT EDITING
+                                                       [4] - D-sactivated
+                                                       [VS]- SYSOP VIEW
+                                                      __________________________
+
+                                         __/\________   ___________ ________.
+                                         _// \__    _\__\___    _ /s      . |
+                                         /.   \/    //     /    //        | |
+                                              /    o/   ________/         : |
+                                             /     /     /|.     COMMANDS . |
+                                            /     /     /_||          :.    |
+                                          _______/______ /|__________:::____|
+                                                       \/             .Y
+
+                                           D FILE(S)   [RZ] - ZMODEM UPLOAD
+                                           LELIST      [A]  - ALTER FILEFLAG
+                                            CE FLAGS   [FS] - FULL CONF STATS
+                                            G TO USER  [R]  - READ NEW MSG'S
+                                            ETTINGS    [V]  - VIEW TXT/LHA FILE
+                                             FF        [M]  - COLOR ON/OFF
+                                             P         [G]  - LOG OFF
+                                             ERENCE    [ED] - EDIT DESCRIPTION
+                                             ERENCE    [RL] - RELOGON
+                                              MESSAGE  [QUEST] - QUESTIONNAIRE
+
+                                              SS       [1] - ACCOUNT EDITING
+                                              ed       [4] - D-sactivated
+                                               OAD     [VS]- SYSOP VIEW
+                                               _________________________________
+
+                                        ___/\________   ___________ ________.
+                                        __// \__    _\__\___    _ /s      . |
+                                        \/.   \/    //     /    //        | |
+                                        /     /    o/   ________/         : |
+                                             /     /     /|.     COMMANDS . |
+                                            /     /     /_||          :.    |
+                                        _________/______ /|__________:::____|
+                                                       \/             .Y
+
+                                        LOAD FILE(S)   [RZ] - ZMODEM UPLOAD
+                                         FILELIST      [A]  - ALTER FILEFLAG
+                                        ERENCE FLAGS   [FS] - FULL CONF STATS
+                                        E MSG TO USER  [R]  - READ NEW MSG'S
+                                        GE SETTINGS    [V]  - VIEW TXT/LHA FILE
+                                         ON/OFF        [M]  - COLOR ON/OFF
+                                         SYSOP         [G]  - LOG OFF
+                                         CONFERENCE    [ED] - EDIT DESCRIPTION
+                                         CONFERENCE    [RL] - RELOGON
+                                         LINE MESSAGE  [QUEST] - QUESTIONNAIRE
+
+                                        L ACCESS       [1] - ACCOUNT EDITING
+                                        ctivated       [4] - D-sactivated
+                                        P DOWNLOAD     [VS]- SYSOP VIEW
+                                        ________________________________________
+
+                                        ___/\________   ___________ ________.
+                                        __// \__    _\__\___    _ /s      . |
+                                        \/.   \/    //     /    //        | |
+                                       //     /    o/   ________/         : |
+                                       /     /     /     /|.     COMMANDS . |
+                                            /     /     /_||          :.    |
+                                       __________/______ /|__________:::____|
+                                                       \/             .Y
+
+                                      WNLOAD FILE(S)   [RZ] - ZMODEM UPLOAD
+                                      OW FILELIST      [A]  - ALTER FILEFLAG
+                                     ONFERENCE FLAGS   [FS] - FULL CONF STATS
+                                     EAVE MSG TO USER  [R]  - READ NEW MSG'S
+                                     HANGE SETTINGS    [V]  - VIEW TXT/LHA FILE
+                                    MENU ON/OFF        [M]  - COLOR ON/OFF
+                                    PAGE SYSOP         [G]  - LOG OFF
+                                    JOIN CONFERENCE    [ED] - EDIT DESCRIPTION
+                                    NEXT CONFERENCE    [RL] - RELOGON
+                                    - ON LINE MESSAGE  [QUEST] - QUESTIONNAIRE
+
+                                    SHELL ACCESS       [1] - ACCOUNT EDITING
+                                    D-sactivated       [4] - D-sactivated
+                                  - SYSOP DOWNLOAD     [VS]- SYSOP VIEW
+                                  ______________________________________________
+
+                                        ___/\________   ___________ ________.
+                                       ___// \__    _\__\___    _ /s      . |
+                                        \/.   \/    //     /    //        | |
+                                       //     /    o/   ________/         : |
+                                      o/     /     /     /|.     COMMANDS . |
+                                      /     /     /     /_||          :.    |
+                                    _/\__________/______ /|__________:::____|
+                                                       \/             .Y
+
+                                    DOWNLOAD FILE(S)   [RZ] - ZMODEM UPLOAD
+                                  - SHOW FILELIST      [A]  - ALTER FILEFLAG
+                                  - CONFERENCE FLAGS   [FS] - FULL CONF STATS
+                                  - LEAVE MSG TO USER  [R]  - READ NEW MSG'S
+                                ] - CHANGE SETTINGS    [V]  - VIEW TXT/LHA FILE
+                                ] - MENU ON/OFF        [M]  - COLOR ON/OFF
+                               O] - PAGE SYSOP         [G]  - LOG OFF
+                               J] - JOIN CONFERENCE    [ED] - EDIT DESCRIPTION
+                              [>] - NEXT CONFERENCE    [RL] - RELOGON
+                              [OLM] - ON LINE MESSAGE  [QUEST] - QUESTIONNAIRE
+
+                              [0] - SHELL ACCESS       [1] - ACCOUNT EDITING
+                              [3] - D-sactivated       [4] - D-sactivated
+                              [DS]- SYSOP DOWNLOAD     [VS]- SYSOP VIEW
+                           _____________________________________________________
+
+                                       ____/\________   ___________ ________.
+                                      ____// \__    _\__\___    _ /s      . |
+                                        \/.   \/    //     /    //        | |
+                                       //     /    o/   ________/         : |
+                                      o/     /     /     /|.     COMMANDS . |
+                                      /     /     /     /_||          :.    |
+                                 ____/\__________/______ /|__________:::____|
+                                                       \/             .Y
+
+                              [D] - DOWNLOAD FILE(S)   [RZ] - ZMODEM UPLOAD
+                              [F] - SHOW FILELIST      [A]  - ALTER FILEFLAG
+                              [CF]- CONFERENCE FLAGS   [FS] - FULL CONF STATS
+                              [E] - LEAVE MSG TO USER  [R]  - READ NEW MSG'S
+                              [W] - CHANGE SETTINGS    [V]  - VIEW TXT/LHA FILE
+                              [X] - MENU ON/OFF        [M]  - COLOR ON/OFF
+                        CET)  [O] - PAGE SYSOP         [G]  - LOG OFF
+                              [J] - JOIN CONFERENCE    [ED] - EDIT DESCRIPTION
+                      ENCE    [>] - NEXT CONFERENCE    [RL] - RELOGON
+                              [OLM] - ON LINE MESSAGE  [QUEST] - QUESTIONNAIRE
+
+                              [0] - SHELL ACCESS       [1] - ACCOUNT EDITING
+                  SLOG        [3] - D-sactivated       [4] - D-sactivated
+                 TORY         [DS]- SYSOP DOWNLOAD     [VS]- SYSOP VIEW
+                ________________________________________________________________
+
+                                       ____/\________   ___________ ________.
+                                     _____// \__    _\__\___    _ /s      . |
+                                        \/.   \/    //     /    //        | |
+                                  /    //     /    o/   ________/         : |
+                                 /    o/     /     /     /|.     COMMANDS . |
+                                /     /     /     /     /_||          :.    |
+                            _________/\__________/______ /|__________:::____|
+                                                       \/             .Y
+
+                              [D] - DOWNLOAD FILE(S)   [RZ] - ZMODEM UPLOAD
+                              [F] - SHOW FILELIST      [A]  - ALTER FILEFLAG
+                              [CF]- CONFERENCE FLAGS   [FS] - FULL CONF STATS
+                  O SYSOP     [E] - LEAVE MSG TO USER  [R]  - READ NEW MSG'S
+                US            [W] - CHANGE SETTINGS    [V]  - VIEW TXT/LHA FILE
+               P PAGE         [X] - MENU ON/OFF        [M]  - COLOR ON/OFF
+             OCAL TIME (CET)  [O] - PAGE SYSOP         [G]  - LOG OFF
+            MENU              [J] - JOIN CONFERENCE    [ED] - EDIT DESCRIPTION
+         EVIOUS CONFERENCE    [>] - NEXT CONFERENCE    [RL] - RELOGON
+        - AUTO SIGN           [OLM] - ON LINE MESSAGE  [QUEST] - QUESTIONNAIRE
+
+    !] - EXORCIST             [0] - SHELL ACCESS       [1] - ACCOUNT EDITING
+  2] - VIEW CALLERSLOG        [3] - D-sactivated       [4] - D-sactivated
+ [5] - VIEW DIRECTORY         [DS]- SYSOP DOWNLOAD     [VS]- SYSOP VIEW
+________________________________________________________________________________
+
+                                     ______/\________   ___________ ________.
+                                    ______// \__    _\__\___    _ /s      . |
+                             /\____     \/.   \/    //     /    //        | |
+                           //     /    //     /    o/   ________/         : |
+                           /     /    o/     /     /     /|.     COMMANDS . |
+                    /     /     /     /     /     /     /_||          :.    |
+              __________ /___________/\__________/______ /|__________:::____|
+                       \/                              \/             .Y
+
+   ] - UPLOAD FILE(S)         [D] - DOWNLOAD FILE(S)   [RZ] - ZMODEM UPLOAD
+ [N] - SHOW NEW FILES         [F] - SHOW FILELIST      [A]  - ALTER FILEFLAG
+ [Z] - ZIPPY SEARCH           [CF]- CONFERENCE FLAGS   [FS] - FULL CONF STATS
+ [C] - LEAVE MSG TO SYSOP     [E] - LEAVE MSG TO USER  [R]  - READ NEW MSG'S
+ [S] - SHOW STATUS            [W] - CHANGE SETTINGS    [V]  - VIEW TXT/LHA FILE
+ [H] - SHOW HELP PAGE         [X] - MENU ON/OFF        [M]  - COLOR ON/OFF
+ [T] - SHOW LOCAL TIME (CET)  [O] - PAGE SYSOP         [G]  - LOG OFF
+ [?] - SHOW MENU              [J] - JOIN CONFERENCE    [ED] - EDIT DESCRIPTION
+ [<] - PREVIOUS CONFERENCE    [>] - NEXT CONFERENCE    [RL] - RELOGON
+ [SENT] - AUTO SIGN           [OLM] - ON LINE MESSAGE  [QUEST] - QUESTIONNAIRE
+
+ [EX!] - EXORCIST             [0] - SHELL ACCESS       [1] - ACCOUNT EDITING
+ [2] - VIEW CALLERSLOG        [3] - D-sactivated       [4] - D-sactivated
+ [5] - VIEW DIRECTORY         [DS]- SYSOP DOWNLOAD     [VS]- SYSOP VIEW
+________________________________________________________________________________
+
+ .____ ____________/\______________________/\________   ___________ ________.
+ |Sk!n/     ______/     /     /     ______// \__    _\__\___    _ /s      . |
+ ||  _\____     \/_____     ./\____     \/.   \/    //     /    //        | |
+ |. /     /     /     /    //     /    //     /    o/   ________/         : |
+ | /     /    //     /     /     /    o/     /     /     /|.     COMMANDS . |
+ :/     /    ./     /     /     /     /     /     /     /_||          :.    |
+ /___________/__________ /___________/\__________/______ /|__________:::____|
+                       \/                              \/             .Y
+
+ [U] - UPLOAD FILE(S)         [D] - DOWNLOAD FILE(S)   [RZ] - ZMODEM UPLOAD
+ [N] - SHOW NEW FILES         [F] - SHOW FILELIST      [A]  - ALTER FILEFLAG
+ [Z] - ZIPPY SEARCH           [CF]- CONFERENCE FLAGS   [FS] - FULL CONF STATS
+ [C] - LEAVE MSG TO SYSOP     [E] - LEAVE MSG TO USER  [R]  - READ NEW MSG'S
+ [S] - SHOW STATUS            [W] - CHANGE SETTINGS    [V]  - VIEW TXT/LHA FILE
+ [H] - SHOW HELP PAGE         [X] - MENU ON/OFF        [M]  - COLOR ON/OFF
+ [T] - SHOW LOCAL TIME (CET)  [O] - PAGE SYSOP         [G]  - LOG OFF
+ [?] - SHOW MENU              [J] - JOIN CONFERENCE    [ED] - EDIT DESCRIPTION
+ [<] - PREVIOUS CONFERENCE    [>] - NEXT CONFERENCE    [RL] - RELOGON
+ [SENT] - AUTO SIGN           [OLM] - ON LINE MESSAGE  [QUEST] - QUESTIONNAIRE
+
+ [EX!] - EXORCIST             [0] - SHELL ACCESS       [1] - ACCOUNT EDITING
+ [2] - VIEW CALLERSLOG        [3] - D-sactivated       [4] - D-sactivated
+ [5] - VIEW DIRECTORY         [DS]- SYSOP DOWNLOAD     [VS]- SYSOP VIEW
+________________________________________________________________________________
+
+ .____ ____________/\______________________/\________   ___________ ________.
+ |Sk!n/     ______/     /     /     ______// \__    _\__\___    _ /s      . |
+ ||  _\____     \/_____     ./\____     \/.   \/    //     /    //        | |
+ |. /     /     /     /    //     /    //     /    o/   ________/         : |
+ | /     /    //     /     /     /    o/     /     /     /|.     COMMANDS . |
+ :/     /    ./     /     /     /     /     /     /     /_||          :.    |
+ /___________/__________ /___________/\__________/______ /|__________:::____|
+                       \/                              \/             .Y
+
+ [U] - UPLOAD FILE(S)         [D] - DOWNLOAD FILE(S)   [RZ] - ZMODEM UPLOAD
+ [N] - SHOW NEW FILES         [F] - SHOW FILELIST      [A]  - ALTER FILEFLAG
+ [Z] - ZIPPY SEARCH           [CF]- CONFERENCE FLAGS   [FS] - FULL CONF STATS
+ [C] - LEAVE MSG TO SYSOP     [E] - LEAVE MSG TO USER  [R]  - READ NEW MSG'S
+ [S] - SHOW STATUS            [W] - CHANGE SETTINGS    [V]  - VIEW TXT/LHA FILE
+ [H] - SHOW HELP PAGE         [X] - MENU ON/OFF        [M]  - COLOR ON/OFF
+ [T] - SHOW LOCAL TIME (CET)  [O] - PAGE SYSOP         [G]  - LOG OFF
+ [?] - SHOW MENU              [J] - JOIN CONFERENCE    [ED] - EDIT DESCRIPTION
+ [<] - PREVIOUS CONFERENCE    [>] - NEXT CONFERENCE    [RL] - RELOGON
+ [SENT] - AUTO SIGN           [OLM] - ON LINE MESSAGE  [QUEST] - QUESTIONNAIRE
+
+ [EX!] - EXORCIST             [0] - SHELL ACCESS       [1] - ACCOUNT EDITING
+ [2] - VIEW CALLERSLOG        [3] - D-sactivated       [4] - D-sactivated
+ [5] - VIEW DIRECTORY         [DS]- SYSOP DOWNLOAD     [VS]- SYSOP VIEW
+________________________________________________________________________________
+
+ .____ ____________/\______________________/\________   ___________ ________.
+ |Sk!n/     ______/     /     /     ______// \__    _\__\___    _ /s      . |
+ ||  _\____     \/_____     ./\____     \/.   \/    //     /    //        | |
+ |. /     /     /     /    //     /    //     /    o/   ________/         : |
+ | /     /    //     /     /     /    o/     /     /     /|.     COMMANDS . |
+ :/     /    ./     /     /     /     /     /     /     /_||          :.    |
+ /___________/__________ /___________/\__________/______ /|__________:::____|
+                       \/                              \/             .Y
+
+ [U] - UPLOAD FILE(S)         [D] - DOWNLOAD FILE(S)   [RZ] - ZMODEM UPLOAD
+ [N] - SHOW NEW FILES         [F] - SHOW FILELIST      [A]  - ALTER FILEFLAG
+ [Z] - ZIPPY SEARCH           [CF]- CONFERENCE FLAGS   [FS] - FULL CONF STATS
+ [C] - LEAVE MSG TO SYSOP     [E] - LEAVE MSG TO USER  [R]  - READ NEW MSG'S
+ [S] - SHOW STATUS            [W] - CHANGE SETTINGS    [V]  - VIEW TXT/LHA FILE
+ [H] - SHOW HELP PAGE         [X] - MENU ON/OFF        [M]  - COLOR ON/OFF
+ [T] - SHOW LOCAL TIME (CET)  [O] - PAGE SYSOP         [G]  - LOG OFF
+ [?] - SHOW MENU              [J] - JOIN CONFERENCE    [ED] - EDIT DESCRIPTION
+ [<] - PREVIOUS CONFERENCE    [>] - NEXT CONFERENCE    [RL] - RELOGON
+ [SENT] - AUTO SIGN           [OLM] - ON LINE MESSAGE  [QUEST] - QUESTIONNAIRE
+
+ [EX!] - EXORCIST             [0] - SHELL ACCESS       [1] - ACCOUNT EDITING
+ [2] - VIEW CALLERSLOG        [3] - D-sactivated       [4] - D-sactivated
+ [5] - VIEW DIRECTORY         [DS]- SYSOP DOWNLOAD     [VS]- SYSOP VIEW
+________________________________________________________________________________
+
+ .____ ____________/\______________________/\________   ___________ ________.
+ |Sk!n/     ______/     /     /     ______// \__    _\__\___    _ /s      . |
+ ||  _\____     \/_____     ./\____     \/.   \/    //     /    //        | |
+ |. /     /     /     /    //     /    //     /    o/   ________/         : |
+ | /     /    //     /     /     /    o/     /     /     /|.     COMMANDS . |
+ :/     /    ./     /     /     /     /     /     /     /_||          :.    |
+ /___________/__________ /___________/\__________/______ /|__________:::____|
+                       \/                              \/             .Y
+
+ [U] - UPLOAD FILE(S)         [D] - DOWNLOAD FILE(S)   [RZ] - ZMODEM UPLOAD
+ [N] - SHOW NEW FILES         [F] - SHOW FILELIST      [A]  - ALTER FILEFLAG
+ [Z] - ZIPPY SEARCH           [CF]- CONFERENCE FLAGS   [FS] - FULL CONF STATS
+ [C] - LEAVE MSG TO SYSOP     [E] - LEAVE MSG TO USER  [R]  - READ NEW MSG'S
+ [S] - SHOW STATUS            [W] - CHANGE SETTINGS    [V]  - VIEW TXT/LHA FILE
+ [H] - SHOW HELP PAGE         [X] - MENU ON/OFF        [M]  - COLOR ON/OFF
+ [T] - SHOW LOCAL TIME (CET)  [O] - PAGE SYSOP         [G]  - LOG OFF
+ [?] - SHOW MENU              [J] - JOIN CONFERENCE    [ED] - EDIT DESCRIPTION
+ [<] - PREVIOUS CONFERENCE    [>] - NEXT CONFERENCE    [RL] - RELOGON
+ [SENT] - AUTO SIGN           [OLM] - ON LINE MESSAGE  [QUEST] - QUESTIONNAIRE
+
+ [EX!] - EXORCIST             [0] - SHELL ACCESS       [1] - ACCOUNT EDITING
+ [2] - VIEW CALLERSLOG        [3] - D-sactivated       [4] - D-sactivated
+ [5] - VIEW DIRECTORY         [DS]- SYSOP DOWNLOAD     [VS]- SYSOP VIEW
+________________________________________________________________________________
+
+ .____ ____________/\______________________/\________   ___________ ________.
+ |Sk!n/     ______/     /     /     ______// \__    _\__\___    _ /s      . |
+ ||  _\____     \/_____     ./\____     \/.   \/    //     /    //        | |
+ |. /     /     /     /    //     /    //     /    o/   ________/         : |
+ | /     /    //     /     /     /    o/     /     /     /|.     COMMANDS . |
+ :/     /    ./     /     /     /     /     /     /     /_||          :.    |
+ /___________/__________ /___________/\__________/______ /|__________:::____|
+                       \/                              \/             .Y
+
+ [U] - UPLOAD FILE(S)         [D] - DOWNLOAD FILE(S)   [RZ] - ZMODEM UPLOAD
+ [N] - SHOW NEW FILES         [F] - SHOW FILELIST      [A]  - ALTER FILEFLAG
+ [Z] - ZIPPY SEARCH           [CF]- CONFERENCE FLAGS   [FS] - FULL CONF STATS
+ [C] - LEAVE MSG TO SYSOP     [E] - LEAVE MSG TO USER  [R]  - READ NEW MSG'S
+ [S] - SHOW STATUS            [W] - CHANGE SETTINGS    [V]  - VIEW TXT/LHA FILE
+ [H] - SHOW HELP PAGE         [X] - MENU ON/OFF        [M]  - COLOR ON/OFF
+ [T] - SHOW LOCAL TIME (CET)  [O] - PAGE SYSOP         [G]  - LOG OFF
+ [?] - SHOW MENU              [J] - JOIN CONFERENCE    [ED] - EDIT DESCRIPTION
+ [<] - PREVIOUS CONFERENCE    [>] - NEXT CONFERENCE    [RL] - RELOGON
+ [SENT] - AUTO SIGN           [OLM] - ON LINE MESSAGE  [QUEST] - QUESTIONNAIRE
+
+ [EX!] - EXORCIST             [0] - SHELL ACCESS       [1] - ACCOUNT EDITING
+ [2] - VIEW CALLERSLOG        [3] - D-sactivated       [4] - D-sactivated
+ [5] - VIEW DIRECTORY         [DS]- SYSOP DOWNLOAD     [VS]- SYSOP VIEW
+________________________________________________________________________________
+
+ .____ ____________/\______________________/\________   ___________ ________.
+ |Sk!n/     ______/     /     /     ______// \__    _\__\___    _ /s      . |
+ ||  _\____     \/_____     ./\____     \/.   \/    //     /    //        | |
+ |. /     /     /     /    //     /    //     /    o/   ________/         : |
+ | /     /    //     /     /     /    o/     /     /     /|.     COMMANDS . |
+ :/     /    ./     /     /     /     /     /     /     /_||          :.    |
+ /___________/__________ /___________/\__________/______ /|__________:::____|
+                       \/                              \/             .Y
+
+ [U] - UPLOAD FILE(S)         [D] - DOWNLOAD FILE(S)   [RZ] - ZMODEM UPLOAD
+ [N] - SHOW NEW FILES         [F] - SHOW FILELIST      [A]  - ALTER FILEFLAG
+ [Z] - ZIPPY SEARCH           [CF]- CONFERENCE FLAGS   [FS] - FULL CONF STATS
+ [C] - LEAVE MSG TO SYSOP     [E] - LEAVE MSG TO USER  [R]  - READ NEW MSG'S
+ [S] - SHOW STATUS            [W] - CHANGE SETTINGS    [V]  - VIEW TXT/LHA FILE
+ [H] - SHOW HELP PAGE         [X] - MENU ON/OFF        [M]  - COLOR ON/OFF
+ [T] - SHOW LOCAL TIME (CET)  [O] - PAGE SYSOP         [G]  - LOG OFF
+ [?] - SHOW MENU              [J] - JOIN CONFERENCE    [ED] - EDIT DESCRIPTION
+ [<] - PREVIOUS CONFERENCE    [>] - NEXT CONFERENCE    [RL] - RELOGON
+ [SENT] - AUTO SIGN           [OLM] - ON LINE MESSAGE  [QUEST] - QUESTIONNAIRE
+
+ [EX!] - EXORCIST             [0] - SHELL ACCESS       [1] - ACCOUNT EDITING
+ [2] - VIEW CALLERSLOG        [3] - D-sactivated       [4] - D-sactivated
+ [5] - VIEW DIRECTORY         [DS]- SYSOP DOWNLOAD     [VS]- SYSOP VIEW
+________________________________________________________________________________
+
+ .____ ____________/\______________________/\________   ___________ ________.
+ |Sk!n/     ______/     /     /     ______// \__    _\__\___    _ /s      . |
+ ||  _\____     \/_____     ./\____     \/.   \/    //     /    //        | |
+ |. /     /     /     /    //     /    //     /    o/   ________/         : |
+ | /     /    //     /     /     /    o/     /     /     /|.     COMMANDS . |
+ :/     /    ./     /     /     /     /     /     /     /_||          :.    |
+ /___________/__________ /___________/\__________/______ /|__________:::____|
+                       \/                              \/             .Y
+
+ [U] - UPLOAD FILE(S)         [D] - DOWNLOAD FILE(S)   [RZ] - ZMODEM UPLOAD
+ [N] - SHOW NEW FILES         [F] - SHOW FILELIST      [A]  - ALTER FILEFLAG
+ [Z] - ZIPPY SEARCH           [CF]- CONFERENCE FLAGS   [FS] - FULL CONF STATS
+ [C] - LEAVE MSG TO SYSOP     [E] - LEAVE MSG TO USER  [R]  - READ NEW MSG'S
+ [S] - SHOW STATUS            [W] - CHANGE SETTINGS    [V]  - VIEW TXT/LHA FILE
+ [H] - SHOW HELP PAGE         [X] - MENU ON/OFF        [M]  - COLOR ON/OFF
+ [T] - SHOW LOCAL TIME (CET)  [O] - PAGE SYSOP         [G]  - LOG OFF
+ [?] - SHOW MENU              [J] - JOIN CONFERENCE    [ED] - EDIT DESCRIPTION
+ [<] - PREVIOUS CONFERENCE    [>] - NEXT CONFERENCE    [RL] - RELOGON
+ [SENT] - AUTO SIGN           [OLM] - ON LINE MESSAGE  [QUEST] - QUESTIONNAIRE
+
+ [EX!] - EXORCIST             [0] - SHELL ACCESS       [1] - ACCOUNT EDITING
+ [2] - VIEW CALLERSLOG        [3] - D-sactivated       [4] - D-sactivated
+ [5] - VIEW DIRECTORY         [DS]- SYSOP DOWNLOAD     [VS]- SYSOP VIEW
+________________________________________________________________________________
+
+AmiExpress Web BBS [0:General] Menu (NaN mins. left): 

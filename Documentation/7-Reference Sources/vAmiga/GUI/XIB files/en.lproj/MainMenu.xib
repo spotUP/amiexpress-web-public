@@ -1,0 +1,1003 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<document type="com.apple.InterfaceBuilder3.Cocoa.XIB" version="3.0" toolsVersion="24127" targetRuntime="MacOSX.Cocoa" propertyAccessControl="none" useAutolayout="YES">
+    <dependencies>
+        <deployment identifier="macosx"/>
+        <plugIn identifier="com.apple.InterfaceBuilder.CocoaPlugin" version="24127"/>
+    </dependencies>
+    <objects>
+        <customObject id="-2" userLabel="File's Owner" customClass="NSApplication"/>
+        <customObject id="-1" userLabel="First Responder" customClass="FirstResponder"/>
+        <customObject id="-3" userLabel="Application" customClass="NSObject">
+            <connections>
+                <outlet property="delegate" destination="9vR-C0-Vqf" id="r0s-NL-ZMs"/>
+            </connections>
+        </customObject>
+        <customObject id="9vR-C0-Vqf" customClass="MyAppDelegate" customModule="vAmiga" customModuleProvider="target">
+            <connections>
+                <outlet property="df0ExportRecent" destination="Hkb-4l-9Ts" id="AqN-qM-eay"/>
+                <outlet property="df0Menu" destination="XQm-ka-Db5" id="ZQg-YN-3io"/>
+                <outlet property="df0OpenRecent" destination="vhE-ve-l0K" id="N3B-6r-JOR"/>
+                <outlet property="df1ExportRecent" destination="ZTR-D1-rJ5" id="SIP-og-UUi"/>
+                <outlet property="df1Menu" destination="fYA-pX-q72" id="GdQ-P8-yMU"/>
+                <outlet property="df1OpenRecent" destination="JUv-7d-Kov" id="ZUP-z1-Rib"/>
+                <outlet property="df2ExportRecent" destination="R9H-6V-FXf" id="BZq-eU-7YZ"/>
+                <outlet property="df2Menu" destination="gYR-sU-A3s" id="vfb-ge-033"/>
+                <outlet property="df2OpenRecent" destination="tsI-Ny-Jes" id="drc-QU-4Qe"/>
+                <outlet property="df3ExportRecent" destination="Non-0K-biL" id="gGx-mX-ScZ"/>
+                <outlet property="df3Menu" destination="2h1-jT-0o6" id="dfO-xV-ieM"/>
+                <outlet property="df3OpenRecent" destination="7lX-EE-IhD" id="bLG-cB-7x9"/>
+                <outlet property="hd0ExportRecent" destination="z1v-QA-WrJ" id="TDm-0r-IfB"/>
+                <outlet property="hd0Menu" destination="OYE-xa-ahL" id="ehz-vZ-bPG"/>
+                <outlet property="hd0OpenRecent" destination="hRI-K9-ade" id="XyM-DK-4j7"/>
+                <outlet property="hd1ExportRecent" destination="7Wg-3m-VRk" id="NxV-Y4-h2r"/>
+                <outlet property="hd1Menu" destination="SoY-x2-Dd4" id="exs-xD-zqz"/>
+                <outlet property="hd1OpenRecent" destination="6hN-sv-cg3" id="rtY-uI-5Rn"/>
+                <outlet property="hd2ExportRecent" destination="Wjq-Ug-rnk" id="lIP-0k-Ryj"/>
+                <outlet property="hd2Menu" destination="Cna-Xa-SNM" id="jSm-kb-ROd"/>
+                <outlet property="hd2OpenRecent" destination="7xT-JF-SMY" id="NXj-uj-FOF"/>
+                <outlet property="hd3ExportRecent" destination="yIE-F0-g9J" id="cED-rb-lAm"/>
+                <outlet property="hd3Menu" destination="zgt-H4-oPS" id="AIW-bD-wSR"/>
+                <outlet property="hd3OpenRecent" destination="kf6-jr-Wzq" id="X1s-Ar-nwM"/>
+            </connections>
+        </customObject>
+        <menu title="MainMenu" systemMenu="main" id="29" userLabel="MainMenu">
+            <items>
+                <menuItem title="vAmiga" id="56">
+                    <menu key="submenu" title="vAmiga" systemMenu="apple" id="57">
+                        <items>
+                            <menuItem title="About vAmiga" id="58">
+                                <modifierMask key="keyEquivalentModifierMask"/>
+                                <connections>
+                                    <action selector="orderFrontStandardAboutPanel:" target="-2" id="142"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem isSeparatorItem="YES" id="202">
+                                <modifierMask key="keyEquivalentModifierMask" command="YES"/>
+                            </menuItem>
+                            <menuItem title="Settings..." keyEquivalent="," id="L87-Y8-Gla">
+                                <connections>
+                                    <action selector="settingsAction:" target="-1" id="OfN-2v-Mn8"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem isSeparatorItem="YES" id="l4o-aX-0h9">
+                                <modifierMask key="keyEquivalentModifierMask" command="YES"/>
+                            </menuItem>
+                            <menuItem title="Inspector..." keyEquivalent="" id="C9M-zP-0JY" userLabel="Inspector...">
+                                <modifierMask key="keyEquivalentModifierMask" shift="YES"/>
+                                <connections>
+                                    <action selector="inspectorAction:" target="-1" id="bFo-lj-cxL"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem title="Dashboard..." id="Ckv-dN-xz5" userLabel="Monitor...">
+                                <modifierMask key="keyEquivalentModifierMask"/>
+                                <connections>
+                                    <action selector="dashboardAction:" target="-1" id="Pgm-eD-MhT"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem title="Console..." keyEquivalent="^" id="MAy-lP-T3Q">
+                                <connections>
+                                    <action selector="consoleAction:" target="-1" id="RLe-Qj-nBq"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem isSeparatorItem="YES" id="S4e-Lg-pAW">
+                                <modifierMask key="keyEquivalentModifierMask" command="YES"/>
+                            </menuItem>
+                            <menuItem title="Hide vAmiga" keyEquivalent="h" id="134">
+                                <connections>
+                                    <action selector="hide:" target="-2" id="152"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem title="Hide Others" keyEquivalent="h" id="145">
+                                <modifierMask key="keyEquivalentModifierMask" option="YES" command="YES"/>
+                                <connections>
+                                    <action selector="hideOtherApplications:" target="-2" id="146"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem title="Show All" id="150">
+                                <connections>
+                                    <action selector="unhideAllApplications:" target="-2" id="153"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem isSeparatorItem="YES" id="149">
+                                <modifierMask key="keyEquivalentModifierMask" command="YES"/>
+                            </menuItem>
+                            <menuItem title="Quit vAmiga" keyEquivalent="q" id="136">
+                                <connections>
+                                    <action selector="terminate:" target="-2" id="139"/>
+                                </connections>
+                            </menuItem>
+                        </items>
+                    </menu>
+                </menuItem>
+                <menuItem title="Machine" id="83">
+                    <menu key="submenu" title="Machine" id="81">
+                        <items>
+                            <menuItem title="New" keyEquivalent="n" id="82">
+                                <connections>
+                                    <action selector="newDocument:" target="-1" id="194"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem title="Open…" keyEquivalent="o" id="72">
+                                <connections>
+                                    <action selector="openDocument:" target="-1" id="195"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem title="Open Recent" id="124">
+                                <menu key="submenu" title="Open Recent" systemMenu="recentDocuments" id="125">
+                                    <items>
+                                        <menuItem title="Clear Menu" id="126">
+                                            <connections>
+                                                <action selector="clearRecentDocuments:" target="-1" id="127"/>
+                                            </connections>
+                                        </menuItem>
+                                    </items>
+                                </menu>
+                            </menuItem>
+                            <menuItem isSeparatorItem="YES" id="79">
+                                <modifierMask key="keyEquivalentModifierMask" command="YES"/>
+                            </menuItem>
+                            <menuItem title="Close" keyEquivalent="w" id="73">
+                                <connections>
+                                    <action selector="performClose:" target="-1" id="193"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem title="Save" keyEquivalent="s" id="75">
+                                <connections>
+                                    <action selector="saveDocument:" target="-1" id="196"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem title="Save As…" keyEquivalent="S" id="80">
+                                <connections>
+                                    <action selector="saveDocumentAs:" target="-1" id="197"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem title="Revert" id="112">
+                                <modifierMask key="keyEquivalentModifierMask"/>
+                                <connections>
+                                    <action selector="revertDocumentToSaved:" target="-1" id="198"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem isSeparatorItem="YES" id="aWt-rp-gig"/>
+                            <menuItem title="Load Snapshot..." id="NWi-bo-jmi" userLabel="Browse Snapshots...">
+                                <modifierMask key="keyEquivalentModifierMask"/>
+                                <connections>
+                                    <action selector="loadSnapshotAction:" target="-1" id="fyx-RT-hxT"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem title="Save Snapshot..." id="yVD-hA-FZO" userLabel="Browse Snapshots...">
+                                <modifierMask key="keyEquivalentModifierMask"/>
+                                <connections>
+                                    <action selector="saveSnapshotAction:" target="-1" id="ULN-MC-4bh"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem title="Take Snapshot" keyEquivalent="+" id="BX4-y5-PoI" userLabel="Take Snapshot">
+                                <connections>
+                                    <action selector="takeSnapshotAction:" target="-1" id="eOH-IU-76n"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem title="Restore Latest Snapshot" keyEquivalent="-" id="NXb-gr-Vem" userLabel="Browse Snapshots...">
+                                <connections>
+                                    <action selector="restoreSnapshotAction:" target="-1" id="FOP-1l-x9L"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem title="Browse Snapshots..." id="1Qj-mi-C7u" userLabel="Browse Snapshots...">
+                                <modifierMask key="keyEquivalentModifierMask"/>
+                                <connections>
+                                    <action selector="browseSnapshotsAction:" target="-1" id="GRh-zJ-bZz"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem isSeparatorItem="YES" id="bDU-dO-xxe"/>
+                            <menuItem title="Import script..." id="TX7-U7-EG7">
+                                <modifierMask key="keyEquivalentModifierMask"/>
+                                <connections>
+                                    <action selector="importScriptAction:" target="-1" id="epr-TO-gZp"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem isSeparatorItem="YES" id="5uV-Cr-Apb"/>
+                            <menuItem title="Take Screenshot" keyEquivalent="3" id="fOc-QP-hyG" userLabel="Take Screenshot">
+                                <connections>
+                                    <action selector="takeScreenshotAction:" target="-1" id="bdx-QR-vOK"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem title="Browse Screenshots..." id="qjw-YT-39t" userLabel="Browse Screenshots...">
+                                <modifierMask key="keyEquivalentModifierMask"/>
+                                <connections>
+                                    <action selector="browseScreenshotsAction:" target="-1" id="3HP-fd-Hqk"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem isSeparatorItem="YES" id="MBQ-pb-t04"/>
+                            <menuItem title="Restore Factory Settings" id="I7G-yt-j3x">
+                                <modifierMask key="keyEquivalentModifierMask"/>
+                                <connections>
+                                    <action selector="factorySettingsAction:" target="-1" id="XzW-D3-2Uc"/>
+                                </connections>
+                            </menuItem>
+                        </items>
+                    </menu>
+                </menuItem>
+                <menuItem title="Edit" id="235">
+                    <menu key="submenu" title="Edit" id="236">
+                        <items>
+                            <menuItem title="Undo" keyEquivalent="z" id="239">
+                                <connections>
+                                    <action selector="undo:" target="-1" id="276"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem title="Redo" keyEquivalent="Z" id="241">
+                                <connections>
+                                    <action selector="redo:" target="-1" id="278"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem isSeparatorItem="YES" id="249">
+                                <modifierMask key="keyEquivalentModifierMask" command="YES"/>
+                            </menuItem>
+                            <menuItem title="Cut" keyEquivalent="x" id="255">
+                                <connections>
+                                    <action selector="cut:" target="-1" id="264"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem title="Copy" keyEquivalent="c" id="256">
+                                <connections>
+                                    <action selector="copy:" target="-1" id="269"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem title="Paste" keyEquivalent="v" id="261">
+                                <connections>
+                                    <action selector="paste:" target="-1" id="275"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem isSeparatorItem="YES" id="qq8-Qm-VmD"/>
+                            <menuItem title="Pause" keyEquivalent="y" id="430">
+                                <modifierMask key="keyEquivalentModifierMask" control="YES" command="YES"/>
+                                <connections>
+                                    <action selector="stopAndGoAction:" target="-1" id="MO3-RA-MNi"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem title="Reset" keyEquivalent="r" id="432">
+                                <modifierMask key="keyEquivalentModifierMask" control="YES" command="YES"/>
+                                <connections>
+                                    <action selector="resetAction:" target="-1" id="SV8-EZ-6HI"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem title="Power Off" id="434">
+                                <modifierMask key="keyEquivalentModifierMask"/>
+                                <connections>
+                                    <action selector="powerAction:" target="-1" id="16h-2c-33h"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem isSeparatorItem="YES" id="2Hk-Nm-Uix"/>
+                            <menuItem title="Step Over" keyEquivalent="" id="428">
+                                <modifierMask key="keyEquivalentModifierMask"/>
+                                <connections>
+                                    <action selector="stepOverAction:" target="-1" id="WJR-b6-K0I"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem title="Step Into" keyEquivalent="" id="429">
+                                <modifierMask key="keyEquivalentModifierMask"/>
+                                <connections>
+                                    <action selector="stepIntoAction:" target="-1" id="i9e-j1-AG9"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem title="Finish line" id="7Tr-qM-fs7">
+                                <modifierMask key="keyEquivalentModifierMask"/>
+                                <connections>
+                                    <action selector="finishLineAction:" target="-1" id="Q2n-aH-5yn"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem title="Finish frame" id="cUd-8T-Pjh">
+                                <modifierMask key="keyEquivalentModifierMask"/>
+                                <connections>
+                                    <action selector="finishFrameAction:" target="-1" id="X2x-Rb-yo6"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem isSeparatorItem="YES" id="Nni-8k-nVh"/>
+                            <menuItem title="Toggle Warp Mode" id="UwY-4X-reL">
+                                <string key="keyEquivalent" base64-UTF8="YES">
+CQ
+</string>
+                                <modifierMask key="keyEquivalentModifierMask" control="YES"/>
+                                <connections>
+                                    <action selector="warpAction:" target="-1" id="Oh0-IU-v3E"/>
+                                </connections>
+                            </menuItem>
+                        </items>
+                    </menu>
+                </menuItem>
+                <menuItem title="View" id="Z1T-Si-U7q">
+                    <modifierMask key="keyEquivalentModifierMask"/>
+                    <menu key="submenu" title="View" id="HMH-qt-n0u">
+                        <items>
+                            <menuItem title="Show Toolbar" keyEquivalent="t" id="eql-Kv-nqj">
+                                <modifierMask key="keyEquivalentModifierMask" option="YES" command="YES"/>
+                                <connections>
+                                    <action selector="toggleToolbarShown:" target="-1" id="0Sr-0D-V8H"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem title="Customize Toolbar…" id="iRO-rX-JOm">
+                                <modifierMask key="keyEquivalentModifierMask"/>
+                                <connections>
+                                    <action selector="runToolbarCustomizationPalette:" target="-1" id="BLv-4t-F3C"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem title="Show Status Bar" keyEquivalent="b" id="nZ5-yO-Ch3">
+                                <modifierMask key="keyEquivalentModifierMask" option="YES" command="YES"/>
+                                <connections>
+                                    <action selector="toggleStatusBarAction:" target="-1" id="XV7-PD-saG"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem isSeparatorItem="YES" id="ztM-kT-EyU"/>
+                            <menuItem title="Enter Full Screen" keyEquivalent="f" id="1r4-M9-Ar1">
+                                <modifierMask key="keyEquivalentModifierMask" control="YES" command="YES"/>
+                                <connections>
+                                    <action selector="toggleFullScreen:" target="-1" id="zFC-jn-Li0"/>
+                                </connections>
+                            </menuItem>
+                        </items>
+                    </menu>
+                </menuItem>
+                <menuItem title="Keyboard" id="212">
+                    <menu key="submenu" title="Keyboard" id="213">
+                        <items>
+                            <menuItem title="Show..." keyEquivalent="k" id="q11-Wg-Mnp">
+                                <connections>
+                                    <action selector="stickyKeyboardAction:" target="-1" id="5ZR-vX-Iyg"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem isSeparatorItem="YES" id="9ee-jY-6ug"/>
+                            <menuItem title="Map Left ⌘ Key to Left Amiga Key" id="510">
+                                <modifierMask key="keyEquivalentModifierMask"/>
+                                <connections>
+                                    <action selector="mapLeftCmdKeyAction:" target="-1" id="6t5-eB-ZYU"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem title="Map Right ⌘ Key to Right Amiga Key" id="PbJ-of-yYs">
+                                <modifierMask key="keyEquivalentModifierMask"/>
+                                <connections>
+                                    <action selector="mapRightCmdKeyAction:" target="-1" id="Z3K-od-06m"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem title="Control Warp Mode with Caps Lock Key" id="QzJ-1p-Opa">
+                                <modifierMask key="keyEquivalentModifierMask"/>
+                                <connections>
+                                    <action selector="mapCapsLockWarpAction:" target="-1" id="vaE-LH-iP0"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem isSeparatorItem="YES" id="uWl-cD-ldc"/>
+                            <menuItem title="Reset Keyboard Handler" id="8aX-Ro-7wg">
+                                <modifierMask key="keyEquivalentModifierMask"/>
+                                <connections>
+                                    <action selector="clearKeyboardMatrixAction:" target="-1" id="sGi-3e-BCA"/>
+                                </connections>
+                            </menuItem>
+                        </items>
+                    </menu>
+                </menuItem>
+                <menuItem title="Df0" id="XQm-ka-Db5">
+                    <menu key="submenu" title="Df0" id="Mqn-f5-oGB">
+                        <items>
+                            <menuItem title="New..." id="00r-Lf-ALU">
+                                <modifierMask key="keyEquivalentModifierMask"/>
+                                <connections>
+                                    <action selector="newDiskAction:" target="-1" id="csx-lP-2mG"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem title="Insert..." id="le3-dz-mCC">
+                                <modifierMask key="keyEquivalentModifierMask"/>
+                                <connections>
+                                    <action selector="insertDiskAction:" target="-1" id="qhe-PC-Bq0"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem title="Insert Recent" id="vhE-ve-l0K">
+                                <modifierMask key="keyEquivalentModifierMask"/>
+                                <menu key="submenu" title="Insert Recent" id="fAP-LO-lPG"/>
+                                <connections>
+                                    <action selector="insertRecentDiskDummyAction:" target="-1" id="RgS-Ne-xue"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem isSeparatorItem="YES" id="wq6-oh-IIt"/>
+                            <menuItem title="Eject" id="mVY-LA-phJ">
+                                <modifierMask key="keyEquivalentModifierMask"/>
+                                <connections>
+                                    <action selector="ejectDiskAction:" target="-1" id="6hq-cd-dhx"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem title="Export..." id="inq-yB-iPf" userLabel="Export disk">
+                                <modifierMask key="keyEquivalentModifierMask"/>
+                                <connections>
+                                    <action selector="exportFloppyDiskAction:" target="-1" id="8wy-3G-W4c"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem title="Export To" id="Hkb-4l-9Ts">
+                                <modifierMask key="keyEquivalentModifierMask"/>
+                                <menu key="submenu" title="Export To" id="pDh-nd-HeL">
+                                    <items>
+                                        <menuItem title="0" id="qCl-TJ-dqC">
+                                            <modifierMask key="keyEquivalentModifierMask"/>
+                                            <connections>
+                                                <action selector="exportRecentDiskAction:" target="-1" id="COa-hQ-08A"/>
+                                            </connections>
+                                        </menuItem>
+                                    </items>
+                                </menu>
+                                <connections>
+                                    <action selector="exportRecentDiskDummyAction:" target="-1" id="gkZ-nj-POS"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem isSeparatorItem="YES" id="8fO-nY-y8g"/>
+                            <menuItem title="Inspect Disk..." id="XTb-fA-6qj">
+                                <modifierMask key="keyEquivalentModifierMask"/>
+                                <connections>
+                                    <action selector="inspectFloppyDiskAction:" target="-1" id="Aix-JY-aGG"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem title="Inspect File System..." id="IDW-d2-3zo">
+                                <modifierMask key="keyEquivalentModifierMask"/>
+                                <connections>
+                                    <action selector="inspectDfnVolumeAction:" target="-1" id="dsZ-hU-nj2"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem isSeparatorItem="YES" id="mCe-2p-6gR"/>
+                            <menuItem title="Write Protected" id="vbD-qh-Fhq">
+                                <modifierMask key="keyEquivalentModifierMask"/>
+                                <connections>
+                                    <action selector="writeProtectAction:" target="-1" id="a7T-Ky-RJO"/>
+                                </connections>
+                            </menuItem>
+                        </items>
+                    </menu>
+                </menuItem>
+                <menuItem title="Df1" tag="1" id="fYA-pX-q72">
+                    <menu key="submenu" title="Df1" id="epS-yb-DD5">
+                        <items>
+                            <menuItem title="New..." tag="1" id="rXL-PO-L1N">
+                                <modifierMask key="keyEquivalentModifierMask"/>
+                                <connections>
+                                    <action selector="newDiskAction:" target="-1" id="pbg-ot-FbZ"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem title="Insert..." tag="1" id="ZBw-6F-9jk">
+                                <modifierMask key="keyEquivalentModifierMask"/>
+                                <connections>
+                                    <action selector="insertDiskAction:" target="-1" id="3Xy-MS-NBP"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem title="Insert Recent" tag="1" id="JUv-7d-Kov">
+                                <modifierMask key="keyEquivalentModifierMask"/>
+                                <menu key="submenu" title="Insert Recent" id="zdh-sU-yJe"/>
+                                <connections>
+                                    <action selector="insertRecentDiskDummyAction:" target="-1" id="ahJ-0k-TIL"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem title="Eject" tag="1" id="lHK-n7-8Hz">
+                                <modifierMask key="keyEquivalentModifierMask"/>
+                                <connections>
+                                    <action selector="ejectDiskAction:" target="-1" id="pZE-Kc-IOE"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem isSeparatorItem="YES" id="s4e-XF-Kpr"/>
+                            <menuItem title="Export..." tag="1" id="Qpf-ys-Bkr" userLabel="Export disk">
+                                <modifierMask key="keyEquivalentModifierMask"/>
+                                <connections>
+                                    <action selector="exportFloppyDiskAction:" target="-1" id="Uir-XO-shx"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem title="Export To" tag="1" id="ZTR-D1-rJ5">
+                                <modifierMask key="keyEquivalentModifierMask"/>
+                                <menu key="submenu" title="Export To" id="bgq-nN-pbJ">
+                                    <items>
+                                        <menuItem title="0" tag="10" id="KKB-IG-ytS">
+                                            <modifierMask key="keyEquivalentModifierMask"/>
+                                            <connections>
+                                                <action selector="exportRecentDiskAction:" target="-1" id="vNT-eP-y7y"/>
+                                            </connections>
+                                        </menuItem>
+                                    </items>
+                                </menu>
+                                <connections>
+                                    <action selector="exportRecentDiskDummyAction:" target="-1" id="teB-Fm-xmM"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem isSeparatorItem="YES" id="jyn-pH-Tv0"/>
+                            <menuItem title="Inspect Disk..." tag="1" id="spZ-Jo-VzX">
+                                <modifierMask key="keyEquivalentModifierMask"/>
+                                <connections>
+                                    <action selector="inspectFloppyDiskAction:" target="-1" id="WAG-BP-bGQ"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem title="Inspect File System..." tag="1" id="V5K-J9-aFA">
+                                <modifierMask key="keyEquivalentModifierMask"/>
+                                <connections>
+                                    <action selector="inspectDfnVolumeAction:" target="-1" id="z3g-Is-AfC"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem isSeparatorItem="YES" id="7xn-Rq-hTf"/>
+                            <menuItem title="Write Protected" tag="1" id="s7Y-nU-Hng">
+                                <modifierMask key="keyEquivalentModifierMask"/>
+                                <connections>
+                                    <action selector="writeProtectAction:" target="-1" id="cem-c5-ObV"/>
+                                </connections>
+                            </menuItem>
+                        </items>
+                    </menu>
+                </menuItem>
+                <menuItem title="Df2" tag="2" id="gYR-sU-A3s">
+                    <menu key="submenu" title="Df2" id="5qq-49-FH7">
+                        <items>
+                            <menuItem title="New..." tag="2" id="vTt-kv-JSC">
+                                <modifierMask key="keyEquivalentModifierMask"/>
+                                <connections>
+                                    <action selector="newDiskAction:" target="-1" id="fbD-eL-G5T"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem title="Insert..." tag="2" id="ZfI-M9-QjR">
+                                <modifierMask key="keyEquivalentModifierMask"/>
+                                <connections>
+                                    <action selector="insertDiskAction:" target="-1" id="tnT-cp-Ucy"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem title="Insert Recent" tag="2" id="tsI-Ny-Jes">
+                                <modifierMask key="keyEquivalentModifierMask"/>
+                                <menu key="submenu" title="Insert Recent" id="whL-sI-gQo"/>
+                                <connections>
+                                    <action selector="insertRecentDiskDummyAction:" target="-1" id="XCm-qz-Tls"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem title="Eject" tag="2" id="E2J-Rc-2L4">
+                                <modifierMask key="keyEquivalentModifierMask"/>
+                                <connections>
+                                    <action selector="ejectDiskAction:" target="-1" id="Mty-vo-k95"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem isSeparatorItem="YES" id="X6d-pV-1XU"/>
+                            <menuItem title="Export..." tag="2" id="h74-u0-iEw" userLabel="Export disk">
+                                <modifierMask key="keyEquivalentModifierMask"/>
+                                <connections>
+                                    <action selector="exportFloppyDiskAction:" target="-1" id="TTb-Kw-YEB"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem title="Export To" tag="2" id="R9H-6V-FXf">
+                                <modifierMask key="keyEquivalentModifierMask"/>
+                                <menu key="submenu" title="Export To" id="Yve-kj-w1H">
+                                    <items>
+                                        <menuItem title="0" tag="20" id="EjO-Lp-hf9">
+                                            <modifierMask key="keyEquivalentModifierMask"/>
+                                            <connections>
+                                                <action selector="exportRecentDiskAction:" target="-1" id="O3c-Mv-fbT"/>
+                                            </connections>
+                                        </menuItem>
+                                    </items>
+                                </menu>
+                                <connections>
+                                    <action selector="exportRecentDiskDummyAction:" target="-1" id="SJd-oK-ENN"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem isSeparatorItem="YES" id="0QR-VA-UY0"/>
+                            <menuItem title="Inspect Disk..." tag="2" id="WR6-M4-nqD">
+                                <modifierMask key="keyEquivalentModifierMask"/>
+                                <connections>
+                                    <action selector="inspectFloppyDiskAction:" target="-1" id="QtV-Vz-IeD"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem title="Inspect File System..." tag="2" id="nvt-r8-RWb">
+                                <modifierMask key="keyEquivalentModifierMask"/>
+                                <connections>
+                                    <action selector="inspectDfnVolumeAction:" target="-1" id="i9V-5S-evM"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem isSeparatorItem="YES" id="3ka-fe-IUs"/>
+                            <menuItem title="Write Protected" tag="2" id="NqN-iv-Qgb">
+                                <modifierMask key="keyEquivalentModifierMask"/>
+                                <connections>
+                                    <action selector="writeProtectAction:" target="-1" id="Kyu-Ky-kWh"/>
+                                </connections>
+                            </menuItem>
+                        </items>
+                    </menu>
+                </menuItem>
+                <menuItem title="Df3" tag="2" id="2h1-jT-0o6">
+                    <menu key="submenu" title="Df3" id="hrB-V5-KVF">
+                        <items>
+                            <menuItem title="New..." tag="3" id="9s9-Ip-nEv">
+                                <modifierMask key="keyEquivalentModifierMask"/>
+                                <connections>
+                                    <action selector="newDiskAction:" target="-1" id="t8S-Do-0uq"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem title="Insert..." tag="3" id="iiL-Ys-SrX">
+                                <modifierMask key="keyEquivalentModifierMask"/>
+                                <connections>
+                                    <action selector="insertDiskAction:" target="-1" id="27N-sn-5Di"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem title="Insert Recent" tag="3" id="7lX-EE-IhD">
+                                <modifierMask key="keyEquivalentModifierMask"/>
+                                <menu key="submenu" title="Insert Recent" id="Qqw-GD-95a"/>
+                                <connections>
+                                    <action selector="insertRecentDiskDummyAction:" target="-1" id="mEY-Qy-bzO"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem title="Eject" tag="3" id="O68-v0-Wo8">
+                                <modifierMask key="keyEquivalentModifierMask"/>
+                                <connections>
+                                    <action selector="ejectDiskAction:" target="-1" id="c81-hp-qN3"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem isSeparatorItem="YES" id="AQ0-WP-BCt"/>
+                            <menuItem title="Export..." tag="3" id="hhZ-v4-oPp" userLabel="Export disk">
+                                <modifierMask key="keyEquivalentModifierMask"/>
+                                <connections>
+                                    <action selector="exportFloppyDiskAction:" target="-1" id="o0Q-Id-OGQ"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem title="Export To" tag="3" id="Non-0K-biL">
+                                <modifierMask key="keyEquivalentModifierMask"/>
+                                <menu key="submenu" title="Export To" id="Vfk-95-hI3">
+                                    <items>
+                                        <menuItem title="0" tag="30" id="EAL-ZQ-aF7">
+                                            <modifierMask key="keyEquivalentModifierMask"/>
+                                            <connections>
+                                                <action selector="exportRecentDiskAction:" target="-1" id="4w8-Th-3kW"/>
+                                            </connections>
+                                        </menuItem>
+                                    </items>
+                                </menu>
+                                <connections>
+                                    <action selector="exportRecentDiskDummyAction:" target="-1" id="Z5e-Ri-ZqE"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem isSeparatorItem="YES" id="HcB-7e-MEa"/>
+                            <menuItem title="Inspect Disk..." tag="3" id="xBw-K3-SqT">
+                                <modifierMask key="keyEquivalentModifierMask"/>
+                                <connections>
+                                    <action selector="inspectFloppyDiskAction:" target="-1" id="FL0-7q-nqb"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem title="Inspect File System..." tag="3" id="BBY-R1-DX7">
+                                <modifierMask key="keyEquivalentModifierMask"/>
+                                <connections>
+                                    <action selector="inspectDfnVolumeAction:" target="-1" id="cgL-kc-AP3"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem isSeparatorItem="YES" id="Syk-m4-IU0"/>
+                            <menuItem title="Write Protected" tag="3" id="l5M-Sz-mYQ">
+                                <modifierMask key="keyEquivalentModifierMask"/>
+                                <connections>
+                                    <action selector="writeProtectAction:" target="-1" id="m1q-sc-qto"/>
+                                </connections>
+                            </menuItem>
+                        </items>
+                    </menu>
+                </menuItem>
+                <menuItem title="Hd0" tag="2" id="OYE-xa-ahL">
+                    <menu key="submenu" title="Hd0" id="MOM-vZ-zP1">
+                        <items>
+                            <menuItem title="New..." id="bfU-Wh-UO2">
+                                <modifierMask key="keyEquivalentModifierMask"/>
+                                <connections>
+                                    <action selector="newHdrAction:" target="-1" id="6Z7-Tg-Thv"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem title="Attach..." id="lsx-h5-aEd">
+                                <modifierMask key="keyEquivalentModifierMask"/>
+                                <connections>
+                                    <action selector="attachHdrAction:" target="-1" id="Vwj-lS-Lo5"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem title="Attach Recent" id="hRI-K9-ade">
+                                <modifierMask key="keyEquivalentModifierMask"/>
+                                <menu key="submenu" title="Attach Recent" id="2XC-d7-5Cc"/>
+                                <connections>
+                                    <action selector="attachRecentHdrDummyAction:" target="-1" id="0hy-un-XtJ"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem title="Detach" hidden="YES" id="Ghe-lv-eQW">
+                                <modifierMask key="keyEquivalentModifierMask"/>
+                                <connections>
+                                    <action selector="detachHdrAction:" target="-1" id="zn5-Du-eYl"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem isSeparatorItem="YES" id="EYo-Hq-7ZZ"/>
+                            <menuItem title="Export..." id="d1F-Xo-RfA" userLabel="Export disk">
+                                <modifierMask key="keyEquivalentModifierMask"/>
+                                <connections>
+                                    <action selector="exportHdrAction:" target="-1" id="hFW-6u-FNH"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem title="Export To" id="z1v-QA-WrJ">
+                                <modifierMask key="keyEquivalentModifierMask"/>
+                                <menu key="submenu" title="Export To" id="nGP-5C-NVK"/>
+                                <connections>
+                                    <action selector="exportRecentHdrDummyAction:" target="-1" id="q2u-0n-IZc"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem isSeparatorItem="YES" id="qgs-Zf-fdv"/>
+                            <menuItem title="Properties..." id="m49-PT-hWb" userLabel="Export disk">
+                                <modifierMask key="keyEquivalentModifierMask"/>
+                                <connections>
+                                    <action selector="configureHdrAction:" target="-1" id="VKh-PG-FFo"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem isSeparatorItem="YES" id="ieg-NM-Vj2"/>
+                            <menuItem title="Inspect Disk..." id="1m9-KG-jpf" userLabel="Export disk">
+                                <modifierMask key="keyEquivalentModifierMask"/>
+                                <connections>
+                                    <action selector="inspectHdrDiskAction:" target="-1" id="AVN-YM-7qs"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem title="Inspect File System..." id="TeC-En-Kma" userLabel="Export disk">
+                                <modifierMask key="keyEquivalentModifierMask"/>
+                                <connections>
+                                    <action selector="inspectHdrVolumeAction:" target="-1" id="VOg-UK-uyN"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem isSeparatorItem="YES" id="iOD-qI-pth"/>
+                            <menuItem title="Write Protected" id="73e-Wr-cMm">
+                                <modifierMask key="keyEquivalentModifierMask"/>
+                                <connections>
+                                    <action selector="writeProtectHdrAction:" target="-1" id="WYa-48-cOr"/>
+                                </connections>
+                            </menuItem>
+                        </items>
+                    </menu>
+                </menuItem>
+                <menuItem title="Hd1" tag="2" id="SoY-x2-Dd4">
+                    <menu key="submenu" title="Hd1" id="S1E-qU-fjf">
+                        <items>
+                            <menuItem title="New..." tag="1" id="Ogz-R4-cpt">
+                                <modifierMask key="keyEquivalentModifierMask"/>
+                                <connections>
+                                    <action selector="newHdrAction:" target="-1" id="L8D-og-TNv"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem title="Attach..." tag="1" id="bu7-kg-9fL">
+                                <modifierMask key="keyEquivalentModifierMask"/>
+                                <connections>
+                                    <action selector="attachHdrAction:" target="-1" id="YMi-XB-p5K"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem title="Attach Recent" id="6hN-sv-cg3">
+                                <modifierMask key="keyEquivalentModifierMask"/>
+                                <menu key="submenu" title="Attach Recent" id="w26-SP-RmU"/>
+                                <connections>
+                                    <action selector="attachRecentHdrDummyAction:" target="-1" id="p6v-1N-hrT"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem title="Detach" tag="1" hidden="YES" id="OvU-wa-0sU">
+                                <modifierMask key="keyEquivalentModifierMask"/>
+                                <connections>
+                                    <action selector="detachHdrAction:" target="-1" id="acZ-9y-MZX"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem isSeparatorItem="YES" id="7Qn-79-6BU"/>
+                            <menuItem title="Export..." tag="1" id="ZRo-28-C9R" userLabel="Export disk">
+                                <modifierMask key="keyEquivalentModifierMask"/>
+                                <connections>
+                                    <action selector="exportHdrAction:" target="-1" id="A8m-r4-tB2"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem title="Export To" tag="1" id="7Wg-3m-VRk">
+                                <modifierMask key="keyEquivalentModifierMask"/>
+                                <menu key="submenu" title="Export To" id="0Bi-fu-lwA"/>
+                                <connections>
+                                    <action selector="exportRecentHdrDummyAction:" target="-1" id="3Fh-cI-TsX"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem isSeparatorItem="YES" id="1Vv-nd-7qq"/>
+                            <menuItem title="Properties..." tag="1" id="Uz9-Vd-7b2" userLabel="Export disk">
+                                <modifierMask key="keyEquivalentModifierMask"/>
+                                <connections>
+                                    <action selector="configureHdrAction:" target="-1" id="Kxo-vh-smF"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem isSeparatorItem="YES" id="8e1-0R-Xgb"/>
+                            <menuItem title="Inspect Disk..." tag="1" id="ibt-uo-ppQ" userLabel="Export disk">
+                                <modifierMask key="keyEquivalentModifierMask"/>
+                                <connections>
+                                    <action selector="inspectHdrDiskAction:" target="-1" id="Uzm-x1-eQh"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem title="Inspect File System..." tag="1" id="y1v-r5-qiP" userLabel="Export disk">
+                                <modifierMask key="keyEquivalentModifierMask"/>
+                                <connections>
+                                    <action selector="inspectHdrVolumeAction:" target="-1" id="vbj-E2-1Q8"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem isSeparatorItem="YES" id="ax9-2h-7hk"/>
+                            <menuItem title="Write Protected" tag="1" id="LFK-jK-NPP" userLabel="Export disk">
+                                <modifierMask key="keyEquivalentModifierMask"/>
+                                <connections>
+                                    <action selector="writeProtectHdrAction:" target="-1" id="2qL-bl-h0G"/>
+                                </connections>
+                            </menuItem>
+                        </items>
+                    </menu>
+                </menuItem>
+                <menuItem title="Hd2" tag="2" id="Cna-Xa-SNM">
+                    <menu key="submenu" title="Hd2" id="Pad-Bd-B3D">
+                        <items>
+                            <menuItem title="New..." tag="2" id="74m-nj-pF7">
+                                <modifierMask key="keyEquivalentModifierMask"/>
+                                <connections>
+                                    <action selector="newHdrAction:" target="-1" id="OvR-Vl-ZpQ"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem title="Attach..." tag="2" id="vF9-w2-Sbh">
+                                <modifierMask key="keyEquivalentModifierMask"/>
+                                <connections>
+                                    <action selector="attachHdrAction:" target="-1" id="obP-b2-o70"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem title="Attach Recent" id="7xT-JF-SMY">
+                                <modifierMask key="keyEquivalentModifierMask"/>
+                                <menu key="submenu" title="Attach Recent" id="Qts-fA-Imk"/>
+                                <connections>
+                                    <action selector="attachRecentHdrDummyAction:" target="-1" id="QQA-0r-ffJ"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem title="Detach" tag="2" hidden="YES" id="z3R-XT-dP9">
+                                <modifierMask key="keyEquivalentModifierMask"/>
+                                <connections>
+                                    <action selector="detachHdrAction:" target="-1" id="TZo-e0-Vac"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem isSeparatorItem="YES" id="Scb-0j-ECp"/>
+                            <menuItem title="Export..." tag="2" id="Gzv-Ng-lcw" userLabel="Export disk">
+                                <modifierMask key="keyEquivalentModifierMask"/>
+                                <connections>
+                                    <action selector="exportHdrAction:" target="-1" id="jb3-i3-aFU"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem title="Export To" tag="2" id="Wjq-Ug-rnk">
+                                <modifierMask key="keyEquivalentModifierMask"/>
+                                <menu key="submenu" title="Export To" id="R8W-LO-NPB"/>
+                                <connections>
+                                    <action selector="exportRecentHdrDummyAction:" target="-1" id="RDC-Ub-6Ys"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem isSeparatorItem="YES" id="Qt6-t9-9qM"/>
+                            <menuItem title="Properties..." tag="2" id="aIO-hr-fx9" userLabel="Export disk">
+                                <modifierMask key="keyEquivalentModifierMask"/>
+                                <connections>
+                                    <action selector="configureHdrAction:" target="-1" id="3xX-hv-d6s"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem isSeparatorItem="YES" id="BA5-MK-XXw"/>
+                            <menuItem title="Inspect Disk..." tag="2" id="0E6-C2-ryM" userLabel="Export disk">
+                                <modifierMask key="keyEquivalentModifierMask"/>
+                                <connections>
+                                    <action selector="inspectHdrDiskAction:" target="-1" id="oTJ-KH-poQ"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem title="Inspect File System..." tag="2" id="unW-JQ-lBo" userLabel="Export disk">
+                                <modifierMask key="keyEquivalentModifierMask"/>
+                                <connections>
+                                    <action selector="inspectHdrVolumeAction:" target="-1" id="XFg-QU-xoZ"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem isSeparatorItem="YES" id="1BH-ag-PTI"/>
+                            <menuItem title="Write Protected" tag="2" id="KcH-ih-oZX" userLabel="Export disk">
+                                <modifierMask key="keyEquivalentModifierMask"/>
+                                <connections>
+                                    <action selector="writeProtectHdrAction:" target="-1" id="t5d-Ig-pZJ"/>
+                                </connections>
+                            </menuItem>
+                        </items>
+                    </menu>
+                </menuItem>
+                <menuItem title="Hd3" tag="2" id="zgt-H4-oPS">
+                    <menu key="submenu" title="Hd3" id="Asl-av-cEm">
+                        <items>
+                            <menuItem title="New..." tag="3" id="whu-bJ-VAj">
+                                <modifierMask key="keyEquivalentModifierMask"/>
+                                <connections>
+                                    <action selector="newHdrAction:" target="-1" id="ip9-vZ-Uza"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem title="Attach..." tag="3" id="E8x-Hh-LBK">
+                                <modifierMask key="keyEquivalentModifierMask"/>
+                                <connections>
+                                    <action selector="attachHdrAction:" target="-1" id="Htd-wy-EPM"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem title="Attach Recent" id="kf6-jr-Wzq">
+                                <modifierMask key="keyEquivalentModifierMask"/>
+                                <menu key="submenu" title="Attach Recent" id="dmS-te-RpF"/>
+                                <connections>
+                                    <action selector="attachRecentHdrDummyAction:" target="-1" id="9bY-2s-dOJ"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem title="Detach" tag="3" hidden="YES" id="XId-AG-47L">
+                                <modifierMask key="keyEquivalentModifierMask"/>
+                                <connections>
+                                    <action selector="detachHdrAction:" target="-1" id="IhF-od-mCM"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem isSeparatorItem="YES" id="Qo8-fz-s1e"/>
+                            <menuItem title="Export..." tag="3" id="tKi-by-2CV" userLabel="Export disk">
+                                <modifierMask key="keyEquivalentModifierMask"/>
+                                <connections>
+                                    <action selector="exportHdrAction:" target="-1" id="hK6-xK-wQy"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem title="Export To" tag="3" id="yIE-F0-g9J">
+                                <modifierMask key="keyEquivalentModifierMask"/>
+                                <menu key="submenu" title="Export To" id="r6T-Vb-Sf8"/>
+                                <connections>
+                                    <action selector="exportRecentHdrDummyAction:" target="-1" id="lMV-0X-vDj"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem isSeparatorItem="YES" id="iU8-hM-UzT"/>
+                            <menuItem title="Properties..." tag="3" id="3xW-dg-y8g" userLabel="Export disk">
+                                <modifierMask key="keyEquivalentModifierMask"/>
+                                <connections>
+                                    <action selector="configureHdrAction:" target="-1" id="iyi-4K-1V5"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem isSeparatorItem="YES" id="tzT-rv-xwa"/>
+                            <menuItem title="Inspect Disk..." tag="3" id="pFD-5y-I16" userLabel="Export disk">
+                                <modifierMask key="keyEquivalentModifierMask"/>
+                                <connections>
+                                    <action selector="inspectHdrDiskAction:" target="-1" id="7YU-lu-vRG"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem title="Inspect File System..." tag="3" id="15h-z1-NXW" userLabel="Export disk">
+                                <modifierMask key="keyEquivalentModifierMask"/>
+                                <connections>
+                                    <action selector="inspectHdrVolumeAction:" target="-1" id="GWC-eA-bxI"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem isSeparatorItem="YES" id="Jyn-ik-ww2"/>
+                            <menuItem title="Write Protected" tag="3" id="Xmj-KC-ZiU" userLabel="Export disk">
+                                <modifierMask key="keyEquivalentModifierMask"/>
+                                <connections>
+                                    <action selector="writeProtectHdrAction:" target="-1" id="0rF-yo-ck2"/>
+                                </connections>
+                            </menuItem>
+                        </items>
+                    </menu>
+                </menuItem>
+                <menuItem title="Window" id="19">
+                    <menu key="submenu" title="Window" systemMenu="window" id="24">
+                        <items>
+                            <menuItem title="Adjust" id="nv4-Gy-40B">
+                                <connections>
+                                    <action selector="autoResizeWindow:" target="-1" id="McJ-zg-eYE"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem title="Minimize" keyEquivalent="m" id="23">
+                                <connections>
+                                    <action selector="performMiniaturize:" target="-1" id="37"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem title="Zoom" id="203">
+                                <connections>
+                                    <action selector="performZoom:" target="-1" id="204"/>
+                                </connections>
+                            </menuItem>
+                            <menuItem isSeparatorItem="YES" id="221">
+                                <modifierMask key="keyEquivalentModifierMask" command="YES"/>
+                            </menuItem>
+                            <menuItem title="Bring All to Front" id="5">
+                                <connections>
+                                    <action selector="arrangeInFront:" target="-1" id="39"/>
+                                </connections>
+                            </menuItem>
+                        </items>
+                    </menu>
+                </menuItem>
+                <menuItem title="Help" id="103">
+                    <menu key="submenu" title="Help" id="106">
+                        <items>
+                            <menuItem title="vAmiga Help" hidden="YES" enabled="NO" keyEquivalent="?" id="111">
+                                <connections>
+                                    <action selector="showHelp:" target="-1" id="122"/>
+                                </connections>
+                            </menuItem>
+                        </items>
+                    </menu>
+                </menuItem>
+            </items>
+            <point key="canvasLocation" x="139" y="154"/>
+        </menu>
+    </objects>
+</document>

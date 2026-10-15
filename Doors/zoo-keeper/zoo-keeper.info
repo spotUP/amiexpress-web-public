@@ -1,0 +1,9 @@
+NAME=Zoo Keeper
+COMMAND=ZOOKEEPER
+TYPE=TS
+RUNTIME=hybrid
+ACCESS=0
+DESCRIPTION=Classic 1982 Taito arcade game - contain animals, rescue Zelda!
+AUTHOR=AmiExpress BBS
+VERSION=1.0.0
+CATEGORY=Games/Arcade

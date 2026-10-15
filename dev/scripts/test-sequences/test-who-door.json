@@ -1,0 +1,27 @@
+{
+  "door": "WHO",
+  "description": "Test WHO door - list users and quit",
+  "messages": [
+    {
+      "type": "JH_HK",
+      "param": 13,
+      "data": "\r",
+      "delay": 0,
+      "comment": "Press Enter to start"
+    },
+    {
+      "type": "JH_HK",
+      "param": 13,
+      "data": "\r",
+      "delay": 500,
+      "comment": "Press Enter to see user list"
+    },
+    {
+      "type": "JH_HK",
+      "param": 81,
+      "data": "Q",
+      "delay": 1000,
+      "comment": "Press Q to quit"
+    }
+  ]
+}

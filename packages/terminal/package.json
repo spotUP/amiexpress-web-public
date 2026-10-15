@@ -1,0 +1,59 @@
+{
+  "name": "@amiexpress/terminal",
+  "version": "1.0.0",
+  "description": "Shared terminal components for AmiExpress BBS and SDK",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "type": "module",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "clean": "rm -rf dist"
+  },
+  "keywords": [
+    "terminal",
+    "xterm",
+    "bbs",
+    "ansi"
+  ],
+  "author": "AmiExpress Team",
+  "license": "MIT",
+  "dependencies": {
+    "@amiexpress/bbs-door-sdk": "file:../../sdk",
+    "@types/react": "^18.3.3",
+    "@types/react-dom": "^18.2.17",
+    "@xterm/addon-canvas": "^0.7.0",
+    "@xterm/addon-fit": "^0.11.0",
+    "@xterm/xterm": "^5.5.0",
+    "react": "^18.0.0",
+    "react-dom": "^18.3.1",
+    "socket.io-client": "^4.8.1",
+    "zmodem.js": "^0.1.10"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.2"
+  },
+  "peerDependencies": {
+    "react": "^18.0.0"
+  },
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "require": "./dist/index.js"
+    },
+    "./package.json": "./package.json",
+    "./rip": {
+      "types": "./dist/rip/index.d.ts",
+      "import": "./dist/rip/index.js",
+      "require": "./dist/rip/index.js"
+    },
+    "./rip/*": {
+      "types": "./dist/rip/*.d.ts",
+      "import": "./dist/rip/*.js",
+      "require": "./dist/rip/*.js"
+    }
+  }
+}

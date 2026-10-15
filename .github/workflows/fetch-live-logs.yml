@@ -1,0 +1,350 @@
+name: Fetch Live Logs
+
+# Manual-dispatch workflow for grabbing live BBS logs (backend / xim /
+# preview / arbitrary path under /app/data/logs). Output is streamed
+# into the workflow log itself — fetch with:
+#
+#   gh run watch <run-id> --exit-status   # while it runs
+#   gh run view <run-id> --log            # after it completes
+#
+# Usage:
+#   gh workflow run fetch-live-logs.yml \
+#     -f log=backend -f tail=1000 -f grep="FR|flagPause|Pause"
+
+on:
+  workflow_dispatch:
+    inputs:
+      log:
+        description: 'backend / preview / xim / all-recent / <relative path>'
+        required: false
+        default: 'backend'
+      tail:
+        description: 'Number of trailing lines'
+        required: false
+        default: '1000'
+      grep:
+        description: 'Optional grep -E pattern'
+        required: false
+        default: ''
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: SSH + dump logs to workflow stdout
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.HETZNER_HOST }}
+          username: root
+          key: ${{ secrets.HETZNER_SSH_KEY }}
+          command_timeout: 5m
+          script: |
+            set -euo pipefail
+            LOG_INPUT='${{ inputs.log }}'
+            TAIL_INPUT='${{ inputs.tail }}'
+            GREP_INPUT='${{ inputs.grep }}'
+
+            CID=$(docker ps --filter "name=amiexpress-bbs" --format '{{.ID}}' | head -1)
+            if [ -z "$CID" ]; then
+              echo "ERROR: no amiexpress-bbs container running"
+              exit 1
+            fi
+            echo "================================================="
+            echo "Container: $CID"
+            echo "Started:   $(docker inspect --format '{{.State.StartedAt}}' "$CID")"
+            # SHA was embedded at image build time by deploy-hetzner.yml
+            # (writes /app/.git-sha from the resolved origin/main SHA).
+            # `/app` is a docker artifact, not a git checkout, so
+            # `git rev-parse` returns "unknown" — the file is the
+            # canonical source. Fall back to the rev-parse probe for
+            # older images that predate the embed.
+            echo "Live HEAD: $(docker exec "$CID" sh -lc 'cat /app/.git-sha 2>/dev/null || git -C /app rev-parse HEAD 2>/dev/null || echo unknown')"
+            echo "================================================="
+
+            # Probe both common log dirs — the dev script writes to
+            # ./logs (project-root-relative), but in the container that
+            # resolves to /app/logs OR /app/web/backend/logs depending
+            # on cwd.
+            LOGS_DIR=""
+            for candidate in /app/logs /app/web/backend/logs /app/data/logs; do
+              if docker exec "$CID" test -d "$candidate" 2>/dev/null; then
+                LOGS_DIR="$candidate"
+                break
+              fi
+            done
+            if [ -z "$LOGS_DIR" ]; then
+              echo "ERROR: no logs dir found in container"
+              docker exec "$CID" find /app -maxdepth 3 -name 'backend.log' 2>/dev/null
+              exit 1
+            fi
+            echo "Resolved logs dir: $LOGS_DIR"
+
+            case "$LOG_INPUT" in
+              backend) FILE="$LOGS_DIR/backend.log" ;;
+              preview) FILE="$LOGS_DIR/preview.log" ;;
+              xim)     FILE="$LOGS_DIR/xim-debug.log" ;;
+              all-recent)
+                echo "== $LOGS_DIR (top 20 newest) =="
+                docker exec "$CID" ls -lt "$LOGS_DIR" 2>/dev/null | head -20 || true
+                echo ""
+                FILE="$LOGS_DIR/backend.log"
+                ;;
+              doors)
+                echo "== AquaScan binary on live =="
+                docker exec "$CID" sh -lc 'find /app /app/data -maxdepth 6 -name "AquaScan*" 2>/dev/null' || true
+                echo ""
+                echo "== Doors dir top-level =="
+                docker exec "$CID" sh -lc 'ls -la /app/data/bbs/Doors 2>/dev/null; echo "---"; ls -la /app/Doors 2>/dev/null' || true
+                FILE="$LOGS_DIR/backend.log"
+                ;;
+              dirfiles)
+                echo "== All conference DIR files =="
+                docker exec "$CID" sh -lc '
+                  BBSROOT=/app/data/bbs
+                  for cn in 1 2 3 4 5 6 7 8 9 10 11 12 13 14; do
+                    BASE="$BBSROOT/Conf${cn}"
+                    [ -d "$BASE" ] || continue
+                    found=0
+                    for f in "$BASE"/DIR* "$BASE"/dir*; do
+                      [ -f "$f" ] || continue
+                      found=1
+                    done
+                    if [ "$found" = "0" ]; then
+                      echo "--- Conf${cn}: no DIR files ---"
+                      continue
+                    fi
+                    ndirs_upper=$(cat "$BASE/NDIRS" 2>/dev/null || echo "missing")
+                    ndirs_lower=$(cat "$BASE/ndirs" 2>/dev/null || echo "missing")
+                    echo "--- Conf${cn}: NDIRS(upper)=${ndirs_upper} ndirs(lower)=${ndirs_lower} ---"
+                    ls -lrt "$BASE"/DIR* "$BASE"/dir* 2>/dev/null
+                    if [ -f "$BASE/Upload/FILES.BBS" ]; then
+                      echo "  FILES.BBS: $(wc -l < "$BASE/Upload/FILES.BBS") lines, $(wc -c < "$BASE/Upload/FILES.BBS") bytes"
+                    fi
+                    echo ""
+                  done
+                  echo "--- newest DIR22-DIR24 content (Conf2) ---"
+                  for n in 22 23 24; do
+                    f="/app/data/bbs/Conf2/DIR${n}"
+                    if [ -f "$f" ]; then
+                      echo "=== DIR${n} ==="
+                      cat "$f"
+                    fi
+                  done
+                  echo "--- find sqlite DB ---"
+                  find /app -name "amiexpress.db" 2>/dev/null | head -5
+                  echo "--- file_entries in DB (newest 10) ---"
+                  for db in /app/data/bbs/data/amiexpress.db /app/data/bbs/amiexpress.db /app/data/amiexpress.db /app/web/backend/database.sqlite /app/database.sqlite; do
+                    [ -f "$db" ] || continue
+                    echo "==== $db ===="
+                    sqlite3 "$db" "SELECT id, filename, size, uploader, status, checked, uploadDate, conferenceId FROM file_entries ORDER BY id DESC LIMIT 10;" 2>/dev/null || true
+                  done
+                ' 2>&1 || true
+                FILE="$LOGS_DIR/backend.log"
+                ;;
+              confs)
+                echo "== ConfConfig.info strings on live =="
+                docker exec "$CID" sh -lc 'find /app -maxdepth 4 -iname "ConfConfig.info" 2>/dev/null | head -5' || true
+                echo "---"
+                docker exec "$CID" sh -lc 'for f in /app/data/bbs/ConfConfig.info /app/ConfConfig.info /app/default-data/ConfConfig.info; do echo "==== $f ===="; strings "$f" 2>/dev/null | head -50; done' || true
+                FILE="$LOGS_DIR/backend.log"
+                ;;
+              joincfg)
+                echo "== joincnf.cfg on live =="
+                docker exec "$CID" sh -lc 'find /app -maxdepth 6 -iname "joincnf.cfg" 2>/dev/null' || true
+                echo ""
+                docker exec "$CID" sh -lc 'for f in /app/data/bbs/Doors/emp_tools/joincnf.cfg /app/Doors/emp_tools/joincnf.cfg; do echo "==== $f ===="; cat "$f" 2>/dev/null | head -50; done' || true
+                FILE="$LOGS_DIR/backend.log"
+                ;;
+              regenerate-users)
+                echo "== regenerating user.data/keys/misc from SQLite DB on live =="
+                # Run the existing regenerate-user-files.ts script inside the
+                # container against the live DB. Backs up the lowercase
+                # binary files first so a botched run can be rolled back.
+                docker exec "$CID" sh -lc '
+                  cd /app
+                  ts=$(date -u +%Y%m%dT%H%M%S)
+                  for f in /app/data/bbs/user.data /app/data/bbs/user.keys /app/data/bbs/user.misc; do
+                    if [ -f "$f" ]; then
+                      cp -a "$f" "${f}.before-regen-${ts}.bak"
+                      echo "backed up $f -> ${f}.before-regen-${ts}.bak"
+                    fi
+                  done
+                  npx tsx web/backend/src/scripts/regenerate-user-files.ts 2>&1 | tail -50
+                  echo ""
+                  echo "== after-state file sizes =="
+                  ls -la /app/data/bbs/user.* 2>&1 | head -10
+                ' 2>&1 || true
+                FILE="$LOGS_DIR/backend.log"
+                ;;
+              userdump)
+                echo "== lowercase user.data slot dump (records 0..20) =="
+                docker exec "$CID" sh -lc '
+                  F=/app/data/bbs/user.data
+                  SZ=$(stat -c %s "$F" 2>/dev/null || stat -f %z "$F" 2>/dev/null)
+                  echo "size=$SZ slots=$((SZ/239))"
+                  for i in $(seq 0 20); do
+                    off=$((i*239))
+                    name=$(dd if="$F" bs=1 skip=$off count=20 2>/dev/null | tr -d "\\0" | tr -c "[:print:]" " " | head -c 20)
+                    confhex=$(dd if="$F" bs=1 skip=$((off+136)) count=10 2>/dev/null | xxd -p)
+                    echo "slot $i: name=\"$name\"  confaccess=$confhex"
+                  done
+                ' 2>&1 || true
+                echo ""
+                echo "== capital User.data: search for \"spot\" in first 31 bytes of each slot =="
+                docker exec "$CID" sh -lc '
+                  F=/app/data/bbs/User.data
+                  SZ=$(stat -c %s "$F" 2>/dev/null || stat -f %z "$F" 2>/dev/null)
+                  TOTAL=$((SZ/239))
+                  echo "size=$SZ slots=$TOTAL"
+                  for i in $(seq 0 $((TOTAL-1))); do
+                    off=$((i*239))
+                    name=$(dd if="$F" bs=1 skip=$off count=20 2>/dev/null | tr -d "\\0" | tr -c "[:print:]" " " | head -c 20 | tr "[:upper:]" "[:lower:]")
+                    case "$name" in
+                      *spot*)
+                        confhex=$(dd if="$F" bs=1 skip=$((off+136)) count=10 2>/dev/null | xxd -p)
+                        echo "MATCH slot $i: name=\"$name\"  confaccess=$confhex"
+                        ;;
+                    esac
+                  done
+                ' 2>&1 || true
+                FILE="$LOGS_DIR/backend.log"
+                ;;
+              conferences)
+                echo "== conferences table on live (post-sync from ConfConfig.info) =="
+                docker exec "$CID" sh -lc 'for db in /app/data/bbs/data/amiexpress.db /app/data/amiexpress.db /app/data/bbs/amiexpress.db /app/data/db/amiexpress.db /app/web/backend/data/amiexpress.db; do if [ -f "$db" ]; then echo "==== $db ===="; sqlite3 "$db" "SELECT id, name, description FROM conferences ORDER BY id" 2>/dev/null; fi; done' 2>&1 || true
+                FILE="$LOGS_DIR/backend.log"
+                ;;
+              confdb-access)
+                echo "== per-conf Conf.DB access field for sysop slot (axobjects.e:confBase) =="
+                # confBase is 74B; layout per axobjects.e:136-155:
+                #   handle[16] + dlBCD[8] + ulBCD[8] + newSinceDate[4] +
+                #   confRead[4] + confYM[4] + bytesDL[4] + bytesUL[4] +
+                #   ulTracking[2] + unused[2] + unused2[4] + upload[2] +
+                #   downloads[2] + ratioType[2] + ratio[2] + msgPosted[2] +
+                #   access[2] + active[2]
+                # access field offset = 16+8+8+4+4+4+4+4+2+2+4+2+2+2+2+2 = 70
+                # User slot N → offset (N-1)*74 within Conf.DB
+                # Try sysop slot 25 (current binary), 24 (older), 2 (DB-prep db).
+                docker exec "$CID" sh -lc '
+                  for slot in 25 24 2; do
+                    echo "=== sysop@slot $slot ==="
+                    for cn in 1 2 3 4 5 6 7 8 9 10 11 12 13 14; do
+                      F="/app/Conf${cn}/Conf.DB"
+                      if [ -f "$F" ]; then
+                        access_off=$(( (slot - 1) * 74 + 70 ))
+                        active_off=$(( (slot - 1) * 74 + 72 ))
+                        ah=$(dd if="$F" bs=1 skip=$access_off count=2 2>/dev/null | xxd -p)
+                        tv=$(dd if="$F" bs=1 skip=$active_off count=2 2>/dev/null | xxd -p)
+                        printf "  Conf%-2d access=%s active=%s\\n" "$cn" "$ah" "$tv"
+                      fi
+                    done
+                  done
+                ' 2>&1 || true
+                FILE="$LOGS_DIR/backend.log"
+                ;;
+              sysop-binary)
+                echo "== binary user.data — dump ALL slots with non-empty names + confaccess =="
+                # Record size is 232 bytes (UserFileStruct USER_STRUCT_SIZE).
+                # conferenceAccess[10] starts at offset 133 within each record.
+                # Use od / printf to avoid bash subshell mangling of binary names.
+                docker exec "$CID" sh -lc '
+                  F=/app/data/bbs/user.data
+                  SZ=$(stat -c %s "$F" 2>/dev/null)
+                  TOTAL=$((SZ/232))
+                  echo "size=$SZ slots=$TOTAL (232B records)"
+                  for i in $(seq 0 $((TOTAL-1))); do
+                    off=$((i*232))
+                    # Dump first 16 bytes as ascii (replace non-printable with .)
+                    namehex=$(dd if="$F" bs=1 skip=$off count=16 2>/dev/null | od -An -tx1 -w16 | tr -d " ")
+                    confhex=$(dd if="$F" bs=1 skip=$((off+133)) count=10 2>/dev/null | xxd -p)
+                    # Only print if name has at least one printable letter
+                    if [ -n "$(dd if=\"$F\" bs=1 skip=$off count=12 2>/dev/null | tr -cd \"[:alpha:]\")" ]; then
+                      echo "slot $i: name(hex)=$namehex  confaccess=$confhex"
+                    fi
+                  done
+                ' 2>&1 || true
+                FILE="$LOGS_DIR/backend.log"
+                ;;
+              users)
+                echo "== users table — confaccess strings + lengths =="
+                # Live BBS db has been at /app/data/bbs/data/amiexpress.db
+                # in recent deploys (per conferences-case probe). Cover all
+                # plausible paths.
+                docker exec "$CID" sh -lc 'for db in /app/data/bbs/data/amiexpress.db /app/data/db/amiexpress.db /app/data/amiexpress.db; do if [ -f "$db" ]; then echo "==== $db ===="; sqlite3 "$db" "SELECT username, seclevel, slotnumber, length(confaccess) AS lc, confaccess FROM users ORDER BY slotnumber LIMIT 30;" 2>/dev/null; fi; done' 2>&1 || true
+                echo ""
+                echo "== system_config.new_user_conf_access =="
+                docker exec "$CID" sh -lc 'for db in /app/data/bbs/data/amiexpress.db /app/data/db/amiexpress.db /app/data/amiexpress.db; do if [ -f "$db" ]; then echo "==== $db ===="; sqlite3 "$db" "SELECT length(new_user_conf_access) AS lc, new_user_conf_access FROM system_config LIMIT 1;" 2>/dev/null; fi; done' 2>&1 || true
+                FILE="$LOGS_DIR/backend.log"
+                ;;
+              userdata)
+                echo "== sqlite3 db locations =="
+                docker exec "$CID" sh -lc 'find /app -maxdepth 4 -name "*.db" 2>/dev/null' || true
+                echo ""
+                echo "== users table dump =="
+                docker exec "$CID" sh -lc 'for db in /app/data/bbs/amiexpress.db /app/data/amiexpress.db /app/web/backend/amiexpress.db; do if [ -f "$db" ]; then echo "==== $db ===="; sqlite3 "$db" "SELECT username,seclevel,length(confaccess) AS lc, confaccess, securityflags FROM users LIMIT 10;" 2>/dev/null; fi; done' || true
+                echo ""
+                echo "== user.data files (capital vs lowercase) sizes =="
+                docker exec "$CID" sh -lc 'ls -la /app/data/bbs/user.data /app/data/bbs/User.data 2>&1' || true
+                echo ""
+                echo "== md5sums =="
+                docker exec "$CID" sh -lc 'md5sum /app/data/bbs/user.data /app/data/bbs/User.data 2>&1' || true
+                echo ""
+                echo "== hex dump confaccess area (offsets 119..148 in record 1 — 29 bytes) =="
+                docker exec "$CID" sh -lc 'for f in /app/data/bbs/user.data /app/data/bbs/User.data; do if [ -f "$f" ]; then echo "==== $f record 1 ===="; xxd -s 119 -l 29 "$f" 2>/dev/null; echo "==== $f record 2 ===="; xxd -s $((1024+119)) -l 29 "$f" 2>/dev/null; fi; done' || true
+                FILE="$LOGS_DIR/backend.log"
+                ;;
+              fix-ndirs)
+                echo "== Fixing NDIRS files on live server =="
+                docker exec "$CID" sh -lc "
+                  BBSROOT=/app/data/bbs
+                  for cn in 1 2 3 4 5 6 7 8 9 10 11 12 13 14; do
+                    BASE=\"\$BBSROOT/Conf\${cn}\"
+                    [ -d \"\$BASE\" ] || continue
+                    highest=0
+                    for f in \"\$BASE\"/DIR*; do
+                      [ -f \"\$f\" ] || continue
+                      bn=\$(basename \"\$f\")
+                      num=\${bn#DIR}
+                      [ -z \"\$num\" ] && continue
+                      echo \"\$num\" | grep -qE '^[0-9]+\$' || continue
+                      [ \"\$num\" -gt \"\$highest\" ] && highest=\$num
+                    done
+                    if [ \"\$highest\" -eq 0 ]; then
+                      echo \"Conf\${cn}: no numbered DIR files, skipping\"
+                      continue
+                    fi
+                    current=\$(cat \"\$BASE/NDIRS\" 2>/dev/null || echo missing)
+                    if [ \"\$current\" != \"\$highest\" ]; then
+                      echo \"Conf\${cn}: updating NDIRS \$current -> \$highest\"
+                      printf '%d' \"\$highest\" > \"\$BASE/NDIRS\"
+                    else
+                      echo \"Conf\${cn}: NDIRS already correct (\$highest)\"
+                    fi
+                  done
+                " 2>&1
+                FILE="$LOGS_DIR/backend.log"
+                ;;
+              *) FILE="$LOGS_DIR/$LOG_INPUT" ;;
+            esac
+
+            echo "== $FILE (last $TAIL_INPUT lines${GREP_INPUT:+, grep -E \"$GREP_INPUT\"}) =="
+            FILE_BYTES=$(docker exec "$CID" sh -lc "test -f '$FILE' && wc -c < '$FILE' || echo 0" 2>/dev/null)
+            echo "(file size: $FILE_BYTES bytes)"
+            if [ -n "$GREP_INPUT" ]; then
+              docker exec "$CID" tail -n "$TAIL_INPUT" "$FILE" 2>/dev/null \
+                | grep -aE "$GREP_INPUT" || echo "(no matches in file)"
+            else
+              docker exec "$CID" tail -n "$TAIL_INPUT" "$FILE" 2>/dev/null
+            fi
+
+            # If the file is small / empty, fall back to docker logs (the
+            # container's stdout/stderr — where Node's plain console.log
+            # actually lands when the BBS doesn't tee to a file).
+            # Always grep docker logs — the container stdout can be very large
+            # and an unfiltered tail will timeout the SSH session.
+            if [ "${FILE_BYTES:-0}" -lt 1024 ]; then
+              echo ""
+              DOCKER_GREP="${GREP_INPUT:-Error|error|CAUGHT|throw|TypeError|Cannot read}"
+              echo "== file too small / empty, falling back to docker logs --tail $TAIL_INPUT | grep -E '$DOCKER_GREP' =="
+              docker logs --tail "$TAIL_INPUT" "$CID" 2>&1 | grep -aE "$DOCKER_GREP" || echo "(no matches in docker logs)"
+            fi

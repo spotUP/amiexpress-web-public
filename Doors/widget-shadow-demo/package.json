@@ -1,0 +1,25 @@
+{
+  "name": "widget-shadow-demo",
+  "version": "1.0.0",
+  "description": "Exact replica of blessed widget-shadow.js demo",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch"
+  },
+  "door": {
+    "name": "Widget Shadow Demo",
+    "command": "SHADOWDEMO",
+    "version": "1.0.0",
+    "author": "blessed (ported)",
+    "description": "Demonstrates shadows and transparency - exact replica of blessed widget-shadow.js",
+    "category": "demo",
+    "minAccessLevel": 0
+  },
+  "dependencies": {
+    "@amiexpress/bbs-door-sdk": "file:../../sdk"
+  },
+  "devDependencies": {
+    "typescript": "^5.0.0"
+  }
+}

@@ -1,0 +1,39 @@
+import type { TypingUser } from '../types';
+import { PANEL_BORDER, PANEL_BORDER_FOCUS } from './theme';
+import { color } from '../utils/ansi';
+import { T } from '../door-theme';
+
+/** Create input box config */
+export function inputBoxConfig() {
+  return {
+    label: ' Message ',
+    border: { type: 'line' as const },
+    inputOnFocus: true,
+    tags: true,
+    style: {
+      border: { fg: PANEL_BORDER },
+      focus: { border: { fg: PANEL_BORDER_FOCUS } }
+    }
+  };
+}
+
+/** Format typing indicator */
+export function formatTyping(users: TypingUser[]): string {
+  if (users.length === 0) return '';
+  if (users.length === 1) {
+    return color(`${users[0].username} is typing...`, 'gray');
+  }
+  if (users.length === 2) {
+    return color(`${users[0].username} and ${users[1].username} are typing...`, 'gray');
+  }
+  return color(`${users.length} people are typing...`, 'gray');
+}
+
+/** Create status line config */
+export function statusLineConfig() {
+  return {
+    height: 1,
+    tags: true,
+    style: { fg: T.dim }
+  };
+}

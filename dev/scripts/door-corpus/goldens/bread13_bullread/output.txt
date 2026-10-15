@@ -1,0 +1,5 @@
+
+Error with reading the preferences file for BullRead.
+
+Please inform Sysop
+

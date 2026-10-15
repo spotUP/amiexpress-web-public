@@ -1,0 +1,145 @@
+/**
+ * Restart notice broadcast.
+ *
+ * Deploying recreates the container, which drops every connected session at
+ * once. On 2026-08-26 eight deploys went out in 46 minutes and the user was
+ * thrown out of /chat over and over while trying to test the very fixes being
+ * deployed. This gives everybody a countdown first.
+ *
+ * The signal comes from the deploy workflow as SIGUSR1 (see index.ts), which
+ * is sent AFTER the image has been built and BEFORE the container is
+ * recreated - so the countdown overlaps nothing and costs no extra downtime.
+ *
+ * Delivery is split by who owns the screen:
+ *   - a door is running  -> structured 'system:notice' event, which the door
+ *                           renders through its own notification path
+ *   - plain terminal     -> an ANSI banner on 'ansi-output'
+ *
+ * Writing the banner unconditionally would paint it across a blessed door's
+ * screen; see utils/door-owns-terminal.ts.
+ */
+
+import { AnsiUtil } from '../utils/ansi.util';
+import { wrapForSession } from '../utils/wrap-for-session.util';
+import { doorOwnsTerminal } from '../utils/door-owns-terminal';
+import { sessions } from '../server/session-manager';
+import { emitterForSession } from '../server/session-emitter-registry';
+
+/** Minimal shape of the socket.io server this module needs. */
+export interface RestartNoticeIo {
+  to(socketId: string): { emit(event: string, ...args: any[]): void };
+}
+
+export interface RestartNoticeDeps {
+  sessions: Map<string, any>;
+  /**
+   * The sink that reaches a session. `io.to(getSocketIdByNodeId(n))` found a
+   * web caller only: a telnet or SSH session's id names no socket.io socket,
+   * so a byte caller got no warning before a deploy dropped him
+   * (web-vs-telnet audit item 4, 2026-09-28).
+   */
+  emitterFor: (session: any, nodeId: number, io: RestartNoticeIo) => { emit(event: string, ...args: any[]): unknown } | null;
+}
+
+export interface RestartNoticePayload {
+  kind: 'restart';
+  seconds: number;
+  message: string;
+}
+
+/** Seconds remaining at which a notice is sent, longest first. */
+export const NOTICE_MARKS = [60, 30, 10, 5];
+
+/** Default countdown length; override with RESTART_NOTICE_SECONDS. */
+export const DEFAULT_RESTART_SECONDS = 60;
+
+function defaultDeps(): RestartNoticeDeps {
+  return { sessions, emitterFor: (session, _nodeId, io) => emitterForSession(session, io as never) };
+}
+
+/**
+ * One short sentence. With the banner's `*** ` either side it has to fit an
+ * 80-column row: the longer "You will be reconnected automatically." made the
+ * line 86 wide and it wrapped under the menu prompt (sysop, 2026-09-29).
+ */
+export function restartNoticeText(seconds: number): string {
+  return seconds === 1
+    ? 'SYSTEM UPDATE - restarting in 1 second.'
+    : `SYSTEM UPDATE - restarting in ${seconds} seconds.`;
+}
+
+/**
+ * Send one notice to every live session. Returns how many were reached, split
+ * by delivery path, so the caller can log something meaningful.
+ */
+export function broadcastRestartNotice(
+  io: RestartNoticeIo,
+  seconds: number,
+  deps: RestartNoticeDeps = defaultDeps(),
+): { doors: number; terminals: number } {
+  const message = restartNoticeText(seconds);
+  const banner = '\r\n' + AnsiUtil.warning('*** ' + message + ' ***') + '\r\n';
+  const payload: RestartNoticePayload = { kind: 'restart', seconds, message };
+
+  let doors = 0;
+  let terminals = 0;
+
+  for (const [nodeIdKey, session] of deps.sessions.entries()) {
+    const nodeId = parseInt(nodeIdKey, 10);
+    if (Number.isNaN(nodeId)) continue;
+
+    const sink = deps.emitterFor(session, nodeId, io);
+    if (!sink) continue;
+
+    if (doorOwnsTerminal(session)) {
+      sink.emit('system:notice', payload);
+      doors++;
+    } else {
+      // A C64 or teletext caller is 40 columns wide: word-wrapped there, the
+      // same choke every other board line takes (wrapForSession).
+      sink.emit('ansi-output', wrapForSession(banner, session));
+      terminals++;
+    }
+  }
+
+  // Say how many were actually reached. A silent broadcast that found no
+  // sessions looks identical to one that worked, and the whole point of this
+  // is that people are told before their session dies.
+  console.log(
+    `[RESTART NOTICE] ${seconds}s: notified ${doors} door session(s), ${terminals} terminal session(s)`,
+  );
+
+  return { doors, terminals };
+}
+
+/**
+ * Send the first notice immediately and schedule the rest of the countdown.
+ * Returns the pending timers so a caller (or a test) can cancel them.
+ */
+export function startRestartCountdown(
+  io: RestartNoticeIo,
+  totalSeconds: number = DEFAULT_RESTART_SECONDS,
+  deps: RestartNoticeDeps = defaultDeps(),
+): ReturnType<typeof setTimeout>[] {
+  const marks = NOTICE_MARKS.filter((m) => m <= totalSeconds);
+  if (marks.length === 0) marks.push(totalSeconds);
+
+  const timers: ReturnType<typeof setTimeout>[] = [];
+
+  marks.forEach((mark, index) => {
+    const delayMs = (totalSeconds - mark) * 1000;
+    if (index === 0 && delayMs === 0) {
+      broadcastRestartNotice(io, mark, deps);
+      return;
+    }
+    const timer = setTimeout(() => {
+      broadcastRestartNotice(io, mark, deps);
+    }, delayMs);
+    // Never hold the process open for a countdown - the container is about to
+    // be replaced anyway.
+    (timer as any).unref?.();
+    timers.push(timer);
+  });
+
+  return timers;
+}

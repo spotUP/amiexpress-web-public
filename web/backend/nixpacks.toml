@@ -1,0 +1,5 @@
+# Nixpacks configuration for AmiExpress Backend
+# This tells Render/Nixpacks to install system packages
+
+[phases.setup]
+aptPkgs = ["lha", "unzip", "xdms"]

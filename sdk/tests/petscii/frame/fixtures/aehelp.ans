@@ -1,0 +1,21 @@
+[2J[H 
+ 
+[32m** [33mHelp v0.4 by -= [37mNameless[33m =- of Snarfs' Pub BBS (407) 267-8155 [32m**[0m
+ 
+Below are the available AmiExpress commands with brief descriptions.
+ 
+[32m?   - [0mShow the current conf menu  [32mB   - [0mBulletins
+[32mC   - [0mComment to Sysop            [32mD   - [0mDownload file(s)
+[32mE   - [0mEnter mail/message          [32mF   - [0mList files
+[32mG   - [0mGoodbye                     [32mH   - [0mHelp with bbs
+[32mJ   - [0mJoin a conference           [32mM   - [0mANSI graphics on/off
+[32mN   - [0mNew files                   [32mO   - [0mOperator page, chat
+[32mR   - [0mRead mail                   [32mS   - [0mPrint your stats
+[32mT   - [0mThe current time            [32mU   - [0mUpload a file
+[32mUR  - [0mUpload Resume a file(tm)    [32mV   - [0mView a text file
+[32mW   - [0mWrite your stats            [32mX   - [0mToggle expert mode on/off
+[32mZ   - [0mZippy file search           [32mOPEN- [0mOpen the door menu
+[32mZOOM- [0mGathers all messages since last call for free (D)ownload
+ 
+Enter command you want HELP with [[32mpress <RETURN> to quit[0m]->  
+[33m[68K] HELP exited with code 1[0m

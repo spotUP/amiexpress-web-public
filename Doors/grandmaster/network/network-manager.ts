@@ -1,0 +1,756 @@
+/**
+ * Network Manager
+ *
+ * Wraps SDK NetworkEngine for GRANDMASTER multiplayer
+ * Includes state sync, client prediction, and rollback netcode
+ */
+
+import { NetworkEngine } from '@amiexpress/bbs-door-sdk/engines/network/network-engine';
+import { EventEmitter } from 'events';
+import type { GameState, GameMode, Board } from '../core/types';
+import type { OpponentState } from '../ui/minimap';
+import { StateSyncManager, StateInterpolator, type SyncPacket } from './sync';
+import { PredictionManager, InputEncoder, type InputType } from './prediction';
+import { RollbackManager } from './rollback';
+import type { GameEngine } from '../core/game';
+
+/**
+ * Multiplayer game mode
+ */
+export type MultiplayerMode =
+  | 'versus_1v1' | 'team_2v2' | 'battle_royale'
+  // TETRIS ATTACK, which matchmakes separately: a panel player and a Tetris
+  // player put in the same lobby would each be waiting for a game the other
+  // cannot play.
+  | 'panels_1v1';
+
+/**
+ * Match state
+ */
+export interface MatchState {
+  mode: MultiplayerMode;
+  matchId: string;
+  players: PlayerInfo[];
+  status: 'waiting' | 'countdown' | 'playing' | 'finished';
+  startTime: number | null;
+  winner: string | null;
+}
+
+/**
+ * Player info
+ */
+export interface PlayerInfo {
+  id: string;
+  name: string;
+  rank: number;
+  rating: number;
+  ready: boolean;
+  isBot?: boolean;  // Is this a bot player?
+  botDifficulty?: number;  // Bot difficulty (1-10)
+}
+
+/**
+ * Game update packet
+ */
+export interface GameUpdate {
+  playerId: string;
+  playerName?: string;
+  /** false = this player topped out; receivers drop them from the tracker. */
+  alive?: boolean;
+  /** Absolute cells of the falling piece, so opponents see it in flight. */
+  pieceCells?: Array<{ x: number; y: number; type: string }>;
+  timestamp: number;
+  board: Board;
+  level: number;
+  score: number;
+  grade: string;
+  combo: number;
+  attacking: boolean;
+}
+
+/**
+ * Attack packet
+ */
+export interface AttackPacket {
+  from: string;
+  to: string | null;  // null = random opponent
+  lines: number;
+  type: 'single' | 'double' | 'triple' | 'tetris' | 'tspin' | 'perfect_clear';
+  combo: number;
+  backToBack: boolean;
+}
+
+/**
+ * Grandmaster Network Manager
+ */
+export class GrandmasterNetworkManager extends EventEmitter {
+  private network: NetworkEngine;
+  private matchState: MatchState | null = null;
+  private localPlayerId: string | null = null;
+  /** Distinguishes sessions that have neither a user nor a node. */
+  private static anonymousSeq = 0;
+
+  private localPlayerName: string = 'Player';
+  private localPlayerNumericId: number = 0;
+  private opponentStates: Map<string, OpponentState> = new Map();
+  private updateCallbacks: Set<(update: GameUpdate) => void> = new Set();
+  private attackCallbacks: Set<(attack: AttackPacket) => void> = new Set();
+
+  // Netcode systems (optional, for competitive multiplayer)
+  private syncManager: StateSyncManager | null = null;
+  private predictionManager: PredictionManager | null = null;
+  private rollbackManager: RollbackManager | null = null;
+  private interpolator: StateInterpolator | null = null;
+  private gameEngine: GameEngine | null = null;
+
+  constructor(bbsSession: any) {
+    super();
+    this.network = new NetworkEngine();
+    // Get player info from session
+    // A BBSSession calls it `nodeId`; only the Amiga door session wrapper
+    // calls it `nodeNumber`. Reading just the latter meant every session
+    // fell through to 1 - so "one node per session" was a fiction and two
+    // windows of one account still collided. Both spellings, then the
+    // fallback, and the fallback is now unique per construction rather than
+    // a constant.
+    const nodeId = bbsSession.bbsSession?.nodeNumber
+      ?? bbsSession.bbsSession?.nodeId
+      ?? bbsSession.nodeNumber
+      ?? bbsSession.nodeId
+      ?? 1;
+
+    // A PLAYER IS A SESSION, not an account.
+    //
+    // This used to be the BBS user id alone, and two sessions of one account
+    // - two browsers, which is what anybody testing multiplayer reaches for
+    // first - came out as the same player. The broker then kept them apart
+    // on purpose ("don't match against yourself") and each sat in a lobby of
+    // their own, seeing nobody. Reported live 2026-08-31.
+    //
+    // The node is what makes a session: this board gives each connection its
+    // own node, so <user>@<node> is one seat at one keyboard. It stays
+    // stable for as long as that session lives, which is what the lobby, the
+    // scores and the reconnect all need.
+    this.localPlayerId = bbsSession.user?.id
+      ? `${bbsSession.user.id}@${nodeId}`
+      // No user and no node: still two players, so the fallback carries a
+      // counter as well as a clock. Date.now() alone gave two managers
+      // built in the same millisecond the same identity, which is the very
+      // collision this id exists to avoid.
+      : `player-${nodeId}-${Date.now()}-${++GrandmasterNetworkManager.anonymousSeq}`;
+    console.log(`[GrandmasterNetworkManager] local player ${this.localPlayerId} on node ${nodeId}`);
+    this.localPlayerName = bbsSession.user?.username || 'Player';
+    this.localPlayerNumericId = this.hashStringToNumber(this.localPlayerId);
+
+    // Connect via in-process broker for BBS multiplayer
+    this.network.connectBroker({
+      playerId: this.localPlayerNumericId,
+      playerName: this.localPlayerName,
+      nodeId,
+    });
+
+    this.setupEventListeners();
+  }
+
+  /**
+   * Generate a stable numeric hash from a string ID
+   */
+  private hashStringToNumber(str: string): number {
+    let hash = 0;
+    for (let i = 0; i < str.length; i++) {
+      const char = str.charCodeAt(i);
+      hash = ((hash << 5) - hash) + char;
+      hash = hash & hash; // Convert to 32bit integer
+    }
+    return Math.abs(hash);
+  }
+
+  /**
+   * Setup network event listeners
+   * Hooks into SDK lobby system events to keep matchState in sync
+   */
+  private setupEventListeners(): void {
+    const lobby = this.network.lobby;
+
+    // Lobby created - sync initial state
+    lobby.on('lobby:created', () => {
+      this.syncMatchStateFromLobby();
+    });
+
+    // Lobby joined - sync state
+    lobby.on('lobby:joined', () => {
+      this.syncMatchStateFromLobby();
+    });
+
+    // Lobby updated - resync
+    lobby.on('lobby:updated', () => {
+      this.syncMatchStateFromLobby();
+    });
+
+    // Player joined lobby
+    lobby.on('player:joined', () => {
+      this.syncMatchStateFromLobby();
+    });
+
+    // Player left lobby
+    lobby.on('player:left', (player: any) => {
+      const playerId = String(player?.id ?? player);
+      this.opponentStates.delete(playerId);
+      this.syncMatchStateFromLobby();
+    });
+
+    // Player ready state changed
+    lobby.on('player:ready', () => {
+      this.syncMatchStateFromLobby();
+      // Signal adapter so lobby widget can check auto-start
+      this.emit('player:ready', { playerId: '', ready: true });
+    });
+
+    // Lobby chat: the broker has routed 'lobby:chat' all along - the door
+    // simply never sent to it or listened. Forward incoming messages in the
+    // widget's LobbyChatMessage shape.
+    lobby.on('lobby:chat', (msg: any) => {
+      this.emit('chat:message', {
+        id: msg.id ?? `chat-${Date.now()}`,
+        playerId: String(msg.playerId ?? ''),
+        playerName: msg.username ?? 'Player',
+        text: msg.message ?? '',
+        timestamp: msg.timestamp ? new Date(msg.timestamp).getTime() : Date.now(),
+      });
+    });
+
+    // Game starting — broker fires this on ALL connected nodes
+    lobby.on('game:starting', () => {
+      if (this.matchState) {
+        this.matchState.status = 'countdown';
+      }
+      this.emit('match:starting');
+    });
+
+    // Game started — broker fires this on ALL connected nodes
+    lobby.on('game:start', () => {
+      if (this.matchState) {
+        this.matchState.status = 'playing';
+        this.matchState.startTime = Date.now();
+      }
+      this.emit('match:started');
+    });
+
+    // Game update from opponent (via broker)
+    const socket = this.network.connection.getSocket();
+    if (socket) {
+      socket.on('game:update', (update: GameUpdate) => {
+        // Update opponent state
+        const existing = this.opponentStates.get(update.playerId);
+        if (existing) {
+          existing.board = update.board;
+          existing.level = update.level;
+          existing.grade = update.grade;
+        }
+        this.updateCallbacks.forEach(cb => cb(update));
+      });
+
+      socket.on('game:attack', (attack: AttackPacket) => {
+        this.attackCallbacks.forEach(cb => cb(attack));
+      });
+    }
+
+    // Match finished
+    this.network.on('match:finished', (winnerId: string) => {
+      if (this.matchState) {
+        this.matchState.status = 'finished';
+        this.matchState.winner = winnerId;
+      }
+    });
+  }
+
+  /**
+   * Sync matchState from SDK lobby.current
+   * Translates LobbyPlayer (numeric ID) to PlayerInfo (string ID)
+   */
+  private syncMatchStateFromLobby(): void {
+    const lobby = this.network.lobby.current;
+    if (!lobby) return;
+
+    // Use localPlayerId (BBS user ID) for the local player so the lobby widget's
+    // host-check (state.players[0].id === localPlayerId) resolves correctly.
+    // SDK assigns numeric hashed IDs; translating back here keeps IDs consistent.
+    const humans: PlayerInfo[] = lobby.players.map(p => ({
+      id: p.id === this.localPlayerNumericId && this.localPlayerId
+        ? this.localPlayerId
+        : String(p.id),
+      name: p.username,
+      rank: 1,
+      rating: 1000,
+      ready: p.ready,
+      isBot: false,
+    }));
+
+    // Carry locally-added bots across the sync. Bots are never registered
+    // with the broker, so `lobby.players` only ever contains humans -
+    // rebuilding the array purely from it silently deleted every bot the
+    // host had added. Pressing Start emits lobby:ready, the broker answers
+    // with lobby:updated, and the bots disappeared mid-start; app.ts then
+    // read `players.some(p => p.isBot)` as false and launched
+    // startVersusGame() instead of startCpuBattle(), so the match came up
+    // waiting on a human opponent that did not exist and the AI playfield
+    // just sat there empty (reported live 2026-08-25).
+    const existingBots: PlayerInfo[] = (this.matchState?.players ?? []).filter(p => p.isBot);
+    const players: PlayerInfo[] = [...humans, ...existingBots];
+
+    const prevPlayerIds = new Set((this.matchState?.players ?? []).map(p => p.id));
+
+    if (this.matchState) {
+      this.matchState.players = players;
+      this.matchState.matchId = lobby.id;
+    } else {
+      this.matchState = {
+        mode: (lobby.settings?.mode as MultiplayerMode) || 'versus_1v1',
+        matchId: lobby.id,
+        players,
+        status: lobby.state === 'playing' ? 'playing' : lobby.state === 'countdown' || lobby.state === 'starting' ? 'countdown' : 'waiting',
+        startTime: null,
+        winner: null,
+      };
+    }
+
+    // Update opponent states for non-local players
+    for (const p of lobby.players) {
+      const pid = String(p.id);
+      if (pid !== this.localPlayerId && !this.opponentStates.has(pid)) {
+        this.opponentStates.set(pid, {
+          id: pid,
+          name: p.username,
+          board: {
+            width: 10,
+            height: 20,
+            grid: Array(20).fill(null).map(() => Array(10).fill(0)),
+          },
+          level: 1,
+          grade: '9',
+          alive: true,
+        });
+      }
+    }
+
+    // Emit events so the lobby adapter can update the UI. Compare by id
+    // rather than by array length: bots are appended after the humans, so a
+    // positional slice re-announced an existing bot as "joined" whenever a
+    // human arrived.
+    for (const p of players) {
+      if (!prevPlayerIds.has(p.id)) {
+        this.emit('player:joined', p);
+      }
+    }
+    this.emit('lobby:updated');
+
+    console.log(`[GrandmasterNetworkManager] syncMatchState: ${players.length} players in lobby ${lobby.id}`);
+  }
+
+  /**
+   * Join matchmaking queue
+   * Uses atomic broker matchmaking to find or create a lobby
+   */
+  async joinQueue(mode: MultiplayerMode, maxPlayers?: number): Promise<void> {
+    console.log(`[GrandmasterNetworkManager] joinQueue called, mode=${mode}, localPlayerId=${this.localPlayerId}`);
+
+    const modeMaxPlayers: Record<string, number> = {
+      versus_1v1: 2,
+      team_2v2: 4,
+      battle_royale: 99,
+    };
+
+    const lobby = await this.network.lobby.matchmake({
+      name: 'GRANDMASTER Match',
+      maxPlayers: maxPlayers ?? modeMaxPlayers[mode] ?? 2,
+      isPrivate: false,
+      settings: { mode, customRules: {} },
+    }, mode);
+
+    console.log(`[GrandmasterNetworkManager] Matchmaking result: lobby=${lobby.id}, players=${lobby.players.length}`);
+    // Initialize matchState so getState() is non-null and Ready/settings work immediately
+    this.syncMatchStateFromLobby();
+  }
+
+  /**
+   * Leave matchmaking queue
+   */
+  async leaveQueue(): Promise<void> {
+    await this.network.leaveQueue();
+  }
+
+  /**
+   * Create custom lobby via SDK broker
+   */
+  async createLobby(mode: MultiplayerMode, isPrivate: boolean = false, maxPlayers?: number): Promise<string> {
+    console.log(`[GrandmasterNetworkManager] createLobby called, mode=${mode}, localPlayerId=${this.localPlayerId}`);
+
+    const lobby = await this.network.createLobby({
+      name: 'GRANDMASTER Match',
+      // TetriNET seats six; the versus modes are sized by their rules. A
+      // caller-supplied size wins, otherwise fall back to the mode map -
+      // without this every TetriNET lobby was capped at TWO players.
+      maxPlayers: maxPlayers ?? (mode === 'battle_royale' ? 99 : mode === 'team_2v2' ? 4 : 2),
+      isPrivate,
+      settings: { mode, customRules: {} },
+    });
+
+    console.log(`[GrandmasterNetworkManager] Lobby created: ${lobby.id}, players: ${lobby.players.length}`);
+    // Initialize matchState so getState() is non-null and settings/Ready work immediately
+    this.syncMatchStateFromLobby();
+    return lobby.id;
+  }
+
+  /**
+   * Join lobby by ID
+   */
+  async joinLobby(lobbyId: string): Promise<void> {
+    console.log(`[GrandmasterNetworkManager] joinLobby called, lobbyId=${lobbyId}`);
+    await this.network.joinLobby(lobbyId);
+    // matchState will be synced via lobby:joined event handler
+  }
+
+  /**
+   * Join a lobby to WATCH it.
+   *
+   * A spectator takes no seat, so a full table does not shut them out, and
+   * they may arrive mid-game - which is the only time watching is
+   * interesting. They still receive every game event broadcast to the
+   * lobby, which is what the spectator screen renders.
+   */
+  async spectateLobby(lobbyId: string): Promise<void> {
+    await this.network.joinLobby(lobbyId, undefined, { spectator: true });
+  }
+
+  /**
+   * Leave current lobby
+   */
+  async leaveLobby(): Promise<void> {
+    console.log(`[GrandmasterNetworkManager] leaveLobby called`);
+    await this.network.leaveLobby();
+    this.matchState = null;
+    this.opponentStates.clear();
+  }
+
+  /**
+   * List available lobbies
+   */
+  async listLobbies(
+    options?: { includeInProgress?: boolean }
+  ): Promise<Array<{ id: string; name: string; players: number; maxPlayers: number; mode: string; state: string; playerNames: string[] }>> {
+    const lobbies = await this.network.lobby.listLobbies(options);
+    return lobbies.map(l => {
+      const seated = l.players.filter((p: any) => !p.spectator);
+      return {
+        id: l.id,
+        name: l.name,
+        players: seated.length,
+        maxPlayers: l.maxPlayers,
+        mode: l.settings?.mode || 'unknown',
+        // A watcher needs to know which games are actually running, and who
+        // is in them.
+        state: (l as any).state || 'waiting',
+        playerNames: seated.map((p: any) => p.username),
+      };
+    });
+  }
+
+  /**
+   * Set ready status in lobby
+   */
+  async setReady(ready: boolean): Promise<void> {
+    // Update local state
+    if (this.matchState && this.localPlayerId) {
+      const localPlayer = this.matchState.players.find(p => p.id === this.localPlayerId);
+      if (localPlayer) {
+        localPlayer.ready = ready;
+        console.log(`[GrandmasterNetworkManager] setReady: ${ready} for ${this.localPlayerId}`);
+      }
+    }
+    this.network.setReady(ready);
+  }
+
+  /**
+   * Report that the match is over, so the lobby can host another.
+   *
+   * The broker sets a lobby to 'playing' when the game begins and nothing
+   * ever set it back - so a second game in the same room was impossible and
+   * matchmaking would not offer the room to anybody else. Any player may
+   * send this, not just the host: in a 1v1 the host is as likely to be the
+   * one who lost.
+   */
+  endMatch(): void {
+    console.log('[GrandmasterNetworkManager] endMatch called');
+    this.network.lobby.endGame();
+  }
+
+  /**
+   * Start match (host only)
+   *
+   * Starts the game outright rather than running the lobby's own countdown.
+   * There were TWO: the lobby counted 3 and then the game screen counted
+   * 3-2-1-GO, so every match began with six seconds of waiting and two
+   * different clocks (reported 2026-08-31). The game screen's is the one
+   * worth keeping - it is on the screen the player is about to play on,
+   * and it is where "GO!" belongs.
+   *
+   * The broker's countdown path still exists and is still what a host's
+   * explicit "start in N seconds" would use; nothing here removes it.
+   */
+  async startMatch(): Promise<void> {
+    console.log(`[GrandmasterNetworkManager] startMatch called`);
+    this.network.lobby.startGame();
+  }
+
+  /**
+   * Send game state update
+   */
+  sendUpdate(gameState: GameState, alive: boolean = true, pieceCells?: Array<{ x: number; y: number; type: string }>): void {
+    if (!this.localPlayerId) return;
+
+    const update: GameUpdate = {
+      playerId: this.localPlayerId,
+      playerName: this.localPlayerName,
+      alive,
+      pieceCells,
+      timestamp: Date.now(),
+      board: gameState.board,
+      level: gameState.level,
+      score: gameState.score,
+      grade: gameState.grade,
+      combo: gameState.combo,
+      attacking: gameState.combo > 0,
+    };
+
+    // Must emit on the broker socket, not the NetworkEngine EventEmitter.
+    // NetworkEngine.emit() is local-only; broker delivery requires socket.emit().
+    this.network.connection.getSocket()?.emit('game:update', update);
+  }
+
+  /** Send a lobby chat message via the broker. */
+  sendLobbyChat(message: string): void {
+    this.network.lobby.chat(message);
+  }
+
+  /**
+   * Send attack to opponent(s)
+   */
+  sendAttack(attack: AttackPacket): void {
+    this.network.connection.getSocket()?.emit('game:attack', attack);
+  }
+
+  /**
+   * Send a custom game-channel event to the other members of the lobby.
+   *
+   * The broker's default case broadcasts any unrecognised event to the
+   * lobby (excluding the sender), which is how TetriNET's specials and
+   * garbage travel. Two constraints, both of which silently drop packets:
+   * the event name MUST start with one of the broker client's protocol
+   * namespaces (lobby:, game:, match:, state:, input:) or it never leaves
+   * this process, and emitNetwork() cannot be used at all - it goes through
+   * the NetworkEngine EventEmitter, which is local-only.
+   */
+  sendGameEvent(event: string, payload: unknown): void {
+    this.network.connection.getSocket()?.emit(event, payload);
+  }
+
+  /** Subscribe to a custom game-channel event from other lobby members. */
+  onGameEvent(event: string, callback: (payload: any) => void): () => void {
+    const socket = this.network.connection.getSocket();
+    if (!socket) return () => {};
+    socket.on(event, callback);
+    return () => socket.off?.(event, callback);
+  }
+
+  /** Local player's id, as used in game:update/game:attack packets. */
+  getLocalPlayerId(): string | null {
+    return this.localPlayerId;
+  }
+
+  /**
+   * Get current opponent states
+   */
+  getOpponents(): OpponentState[] {
+    return Array.from(this.opponentStates.values());
+  }
+
+  /**
+   * Subscribe to game updates
+   */
+  onUpdate(callback: (update: GameUpdate) => void): () => void {
+    this.updateCallbacks.add(callback);
+    return () => this.updateCallbacks.delete(callback);
+  }
+
+  /**
+   * Subscribe to attacks
+   */
+  onAttack(callback: (attack: AttackPacket) => void): () => void {
+    this.attackCallbacks.add(callback);
+    return () => this.attackCallbacks.delete(callback);
+  }
+
+  /**
+   * Get match state
+   */
+  getMatchState(): MatchState | null {
+    return this.matchState;
+  }
+
+  /**
+   * Subscribe to network engine events (forwarded, not local)
+   */
+  onNetwork(event: string, callback: (...args: any[]) => void): void {
+    this.network.on(event, callback);
+  }
+
+  /**
+   * Emit to network engine (forwarded to broker)
+   */
+  emitNetwork(event: string, ...args: any[]): void {
+    this.network.emit(event, ...args);
+  }
+
+  /**
+   * Enable competitive netcode (prediction + rollback)
+   * Call this before starting a competitive match
+   */
+  enableNetcode(engine: GameEngine): void {
+    this.gameEngine = engine;
+    this.syncManager = new StateSyncManager();
+    this.predictionManager = new PredictionManager(engine);
+    this.rollbackManager = new RollbackManager(engine, this.predictionManager);
+    this.interpolator = new StateInterpolator();
+
+    // Setup sync packet listeners
+    this.network.on('state:sync', (packet: SyncPacket) => {
+      this.handleSyncPacket(packet);
+    });
+
+    // Setup input acknowledgments
+    this.network.on('input:ack', (data: { inputId: number; serverFrame: number }) => {
+      this.predictionManager?.onInputAck(data.inputId, data.serverFrame);
+    });
+  }
+
+  /**
+   * Disable netcode (back to simple state sync)
+   */
+  disableNetcode(): void {
+    this.syncManager = null;
+    this.predictionManager = null;
+    this.rollbackManager = null;
+    this.interpolator = null;
+    this.gameEngine = null;
+  }
+
+  /**
+   * Handle player input with prediction
+   */
+  handleInput(inputType: InputType, timestamp: number): void {
+    if (!this.predictionManager) {
+      // No prediction, ignore
+      return;
+    }
+
+    // Add to prediction buffer
+    const inputId = this.predictionManager.addInput(inputType, timestamp);
+
+    // Send to server
+    const input = this.predictionManager.getInput(inputId);
+    if (input) {
+      const encoded = InputEncoder.encode(input);
+      this.network.emit('game:input', { input: encoded });
+    }
+  }
+
+  /**
+   * Process predictions (call every frame)
+   */
+  processPredictions(currentTime: number): void {
+    if (!this.predictionManager) return;
+
+    // Apply pending inputs
+    this.predictionManager.processPendingInputs(currentTime);
+
+    // Create snapshot
+    this.predictionManager.createSnapshot();
+  }
+
+  /**
+   * Handle sync packet from server
+   */
+  private handleSyncPacket(packet: SyncPacket): void {
+    if (!this.syncManager || !this.rollbackManager || !this.interpolator) return;
+
+    // Add to interpolation buffer
+    if (packet.type === 'full_state') {
+      this.interpolator.addState(packet.state, packet.timestamp);
+    } else if (packet.type === 'delta_state') {
+      const currentState = this.gameEngine?.getState();
+      if (currentState) {
+        const newState = this.syncManager.applySyncPacket(packet, currentState);
+        this.interpolator.addState(newState, packet.timestamp);
+      }
+    }
+
+    // Check for rollback
+    const currentFrame = this.syncManager.getFrame();
+    this.rollbackManager.handleServerUpdate(packet, currentFrame);
+  }
+
+  /**
+   * Send state sync (server only)
+   */
+  sendStateSync(state: GameState, currentTime: number): void {
+    if (!this.syncManager) return;
+
+    if (this.syncManager.shouldSync(currentTime)) {
+      const packet = this.syncManager.createSyncPacket(state, currentTime);
+      this.network.emit('state:sync', packet);
+    }
+  }
+
+  /**
+   * Get interpolated state for rendering
+   */
+  getInterpolatedState(currentTime: number): GameState | null {
+    if (!this.interpolator) return null;
+    return this.interpolator.getInterpolatedState(currentTime);
+  }
+
+  /**
+   * Get netcode stats
+   */
+  getNetcodeStats(): {
+    sync: any;
+    prediction: any;
+    rollback: any;
+  } | null {
+    if (!this.syncManager || !this.predictionManager || !this.rollbackManager) {
+      return null;
+    }
+
+    return {
+      sync: {
+        frame: this.syncManager.getFrame(),
+      },
+      prediction: this.predictionManager.getStats(),
+      rollback: this.rollbackManager.getStats(),
+    };
+  }
+
+  /**
+   * Is netcode enabled?
+   */
+  isNetcodeEnabled(): boolean {
+    return this.syncManager !== null;
+  }
+
+  /**
+   * Disconnect
+   */
+  disconnect(): void {
+    this.network.disconnect();
+  }
+}

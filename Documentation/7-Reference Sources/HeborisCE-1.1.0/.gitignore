@@ -1,0 +1,20 @@
+# Data files generated when running a WorkingDir package type build in-source
+/config/data
+/replay
+
+# Buildsystem generated files
+/build*
+/pkg/windows/icon.aps
+/out
+/vcpkg_installed
+/CMakeSettings.json
+/.vscode
+/.vs
+/CMakeLists.txt.*
+/*.kdev4
+/*.zip
+/.cache
+/_build/
+/.cproject
+/.project
+/.buildconfig

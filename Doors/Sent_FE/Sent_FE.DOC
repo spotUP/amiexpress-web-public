@@ -1,0 +1,266 @@
+
+                  ###### ###   ## ######  ### ######  ######              
+    _______|\     ###    #### ### ###  ## ### ###  ## ###       /|________
+   |         >    ####   ######## ######  ### ######  ####     <         |
+   | |¯¯¯¯¯|/     ###    ### # ## ###     ### #####   ###       \|¯¯¯¯¯| |
+   | |            ###### ###   ## ###     ### ### ##  ######           | |
+   | |_________________________________________________________________| |
+   |                                                                     |
+   |                          Sent FrontEnd 1.0                          |
+   |                          ~~~~~~~~~~~~~~~~~                          |
+   |                             TYPE:  XIM                              |
+   |                                                                     |
+   |                  ©1994  EMPiRE / MYSTiC /X-DESiGN                   |
+   |                                                                     |
+   |       LaSt OuTpOsT  +31-72-157682 & +31-72-201182  -  HOLLAND       |
+   |                                                                     |
+   |       AmixNet:  @NL0004   -   /X-Fido:  44:100/102     EMPiRE       |
+   |_____________________________________________________________________|
+
+===============================================================================
+
+ PURPOSE:
+ ~~~~~~~~
+  With Sent_FE you are able to start ByteAndi's AutoSent from a Bulletin.
+  This way EVERYBODY has to enter his Private SentBy-Line for use with
+  FILE_ID.DIZ.
+
+  When a valid SentBy-Line already exists then you don't get to see any
+  output of this Door!
+
+
+===============================================================================
+
+ REQUIREMENTS:
+ ~~~~~~~~~~~~~
+  Ami Express 3.xx
+
+
+===============================================================================
+
+ INSTALLATION:
+ ~~~~~~~~~~~~~
+  o Copy the EmP_Tools Directory to DOORS:
+
+  o Sent_FE should be started from a Bulletin:
+
+    as BBS:Bull.txt
+
+--[ start: cut here ]-------------------------
+~CC_FE_Sent
+--[ stop: cut here ]--------------------------
+
+    or with a txtfile (BBS:Bulletins/bull.txt)
+
+--[ start: cut here ]-------------------------
+~SS_BBS:Bulletins/bull.txt|~CC_FE_Sent
+--[ stop: cut here ]--------------------------
+
+
+  AE 3.xx:
+  ~~~~~~~~
+  - Copy Sent_FE.info to BBS:Commands/SYScmd/
+
+    Or add to Sent_FE.info ICON ToolType Info:
+
+      ACCESS=001
+      LOCATION=DOORS:EmP_Tools/Sent_FE
+      MULTINODE=YES
+      PRIORITY=0
+      STACK=50000
+      TYPE=XIM
+
+
+===============================================================================
+
+ ERROR MESSAGES:
+ ~~~~~~~~~~~~~~~
+
+  o ERROR:  DOORS:FILEID/Sent.DAT Not Found !!!
+  |
+  `--> JoinCnf.CFG can't be found in DOORS:EmP_Tools !?
+
+
+===============================================================================
+
+ BUG REPORT & SUGGESTIONS:                                                                   
+ ~~~~~~~~~~~~~~~~~~~~~~~~~
+  It's possible that a mistake will occur.... Nobody is Perfect.
+  If you have any Suggestions or Comments Please Leave a Message on my Board:
+
+   LaSt OuTpOsT  N1: +31-72-157682  N2: +31-72-201182  -  HOLLAND
+   ~~~~~~~~~~~~  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~     ~~~~~~~
+       AmixNet:  @NL0004   -   /X-Fido:  44:100/102   EMPiRE
+       ~~~~~~~~~~~~~~~~~       ~~~~~~~~~~~~~~~~~~~~   ~~~~~~
+
+===============================================================================
+
+ NOTE:
+ ~~~~~
+  o This Program Has been tested on a /X 3.32 Configuration.
+
+  o Sent_FE will startup ByteAndi's AutoSent when:
+
+     - There isn't a Valid SentBy-Line
+     - The User never entered a SentBy-Line
+     - The UserName in Sent.DAT is different to the one he/she is using now.
+
+    else Sent_FE will stay silent and won't put Any text on screen.
+
+
+===============================================================================
+
+ REGISTRATION:
+ ~~~~~~~~~~~~~
+  If YOU use this Program please let me know by Calling Last Outpost or
+  to send me a Message by NetMail @NL0004 - EMPiRE  Coz I want to know
+  how many Sysops are using my Tools!!!
+ 
+
+===============================================================================
+
+ HISTORY:
+ ~~~~~~~~
+  V0.1  01-16-94 - Release Version.
+        01-17-94 - Added NONSTOP TextShowing.
+        01-25-94 - Fixed the '10-Node' BUG.
+
+  V1.0  01-29-94 - Release Version.
+
+
+===============================================================================
+
+ EMPiRE /X DOORS/UTILS COLLECTION UNTIL NOW!:
+ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  - AboStats V0.2                        AIM Door
+  - AutoOnline V1.1                      XIM Door/Util
+  - Bulls V2.0                           XIM Door
+  - CheckNU V1.0                         XIM Door
+  - ConfAccess V1.1                      ServerUtil
+  - CopyDate V1.3                        CLI Util
+  - DlDir V2.0                           XIM Door
+  - DoorKIT 1.01                         XIM Doors/Includes
+  - DMenu V1.0                           AIM Door
+  - DutchNET V1.0  [AmiXnet]             AIM Door
+  - Front V2.0                           XIM Door
+  - JoinCnf V3.4                         XIM Door
+  - LastCalls & TopUps V1.2              LogOffUtil
+  - LastDL V0.1                          LogOffUtil
+  - LastUL V0.1                          LogOffUtil
+  - MakeFree V1.1                        AIM Door
+  - MemberList V1.0                      AIM Door
+  - MonthTopUp V2.0                      ServerUtil
+  - MultiNodeLastCaller V1.1             LogOffUtil
+  - Page V2.0                            XIM Door
+  - PMail V1.1                           AIM Door
+  - Remote Maintenance V1.3              AIM Door
+  - SceneTalk Voter V2.3                 AIM Door
+  - SceneTalk Voter V2.2 [Party]         CLI Door
+  - SecLevChk V1.0                       ServerUtil
+  - Sent FrondEnd 1.0  [Sent_FE]         XIM Door
+  - SysopCommands V1.0                   AIM Door
+  - UserData Cleaner/Repair V2.0         ServerUtil
+  - UserStats V2.0                       ServerUtil
+  - UsrCnfAx V1.1                        CLI Util
+  - View & Check Archive/Text V1.7       AIM Door
+  - WhoNode V1.3                         AIM Door
+
+===============================================================================
+
+ THANX MUST GO TO ALL OFFICIAL BETA-TESTERS:
+ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   Tycoon/Mystic             [Channel X]
+   ByteAndi/Mystic           [Diabolo]
+   JPS                       [Red October]
+   Sal-One/TRSi              [BoonDocks]
+   Sharon/Scx                [The Unknown]
+   Blue Bird/Mystic          [Tau Ceti]
+   Easy Rider/Mystic         [Mamba]
+   Mega Fortress             [MF Enterprise]
+   Beast/Partek              [Sequencial]
+   SpeedDevil/Partek         [Rising Sun]
+
+
+ GREETZ/TNX GO TO:
+ ~~~~~~~~~~~~~~~~~
+   ByteAndi/MST /X-DESiGN  - NewFiles is the best! And Tnx for all ya 'C'
+                             Help & Sources! You're (almost) the Greatest!
+   Killraven/MST /X-DESiGN - For giving me sum Great Pointers/Sources on 'C'
+   CrackDown/MST /X-DESiGN - Nice Doors, Keep it up!
+   JAF/G.O.D.              - For some good REXX ideas
+   Bad Sector/Hidden       - Still Using your Sort-Routine. It's the Fastest!
+   B.O.B./Paradox          - For (Mis)Using/Testing my tools!
+   Aragorn/Vision          - Tnx for Testing in the past
+   Camelot/Complex         - Tnx for Testing in the past
+   Telekinetic/T.F.A.      - Tnx for Testing in the past
+   Alcoholic               - Tnx for Testing in the past
+   Price/T.F.A.            - Great job on your {F}ull {S}creen {E}ditor!
+   Van Damme               - Nice Doors!!!
+   DR.G/IBB                - Hope to see Check'N Add work on a 040
+   SiGMA SEVEN             - Nice job on SiGMA-EXPRESS!
+   911/Movement            - Tnx For ya Ansi Logo's!! You're the Greatest!
+   Mike                    - Tnx for calling!
+   Amicom/TRSi             - Tnx for calling!
+   SkIn                    - Tnx for ya Description Logo! Looks Great!!
+   Shadow Man/S8           - Nice Doors & Tnx for ya greetz! & Calling ofcoz
+   [MAZ!^PHAZE]            - Tnx for calling!
+   Shuyuki Tanaka          - Tnx for your Messages!
+   AGONY/cOmpLeX           - Tnx for calling!
+   HUMANOiD & RU$tY/AFL    - Tnx for calling!
+   LECTOR                  - Tnx for your NetMail
+   Koo Koo Ka Choo         - Tnx for calling!
+   TaRzAN                  - Tnx for your NetMail. Yezz 040 Speed Rulez!!
+   Crayor/Scx              - Tnx for calling!
+   Foxx'n'Lynxx            - Tnx for your BugReports!!!
+   ThE BiRD                - Tnx for your NetMail on UsrCnfAx
+   Dux                     - Tnx for your NetMail
+   dR.dRE!/fAITH           - Tnx for da greetz, Nice Doors btw
+   [-RUNT&SCOTTIE-]        - Tnx for calling!
+   sPAcEcAKe/aF            - Tnx for calling!
+   Freddy Kreuger/GOD      - Tnx for your NetMail on JoinCnf 3.2
+   MF1                     - Tnx for calling!
+   AtomiX/N.A.S.A          - Hope the 'C' archive was sume help for ya!
+   MAD HARLEQUiN [ITPH01]  - Tnx for your Nice AmiXnet Messy's
+   Mike Hoffren  [SF0001]  - Tnx for the BugReport on JoinCnf 3.3 [100+ Cnfs]
+   Galaxy/TFA              - Nice job on da SentCleaner
+
+
+   & Ofcoz to ALL MYSTiC Members all over the Globe!
+
+
+                        ______  __________________                            
+.----------------+-----/    \ \/ / __/_  __/ / __/----------+----------------.
+|                |----/ / / /\  /\  /-/ /-/ / /----[ /X ]---|                |
+|       /\    /\ |-EmP\/ / /-/ /\  /-/ /-/ /\ \--[ DESiGN ]-|       /\    /\ |
+|      /C \  /N/ +-----\/\/--\/--\/--\/--\/--\/-------------+      /C \  /N/ |
+|     /i/\ \/G/  |                                          |     /i/\ \/G/  |
+|    /T/  \ i/   |                                          |    /T/  \ i/   |
+|   /S/   /S \   |   EMPiRE   -   BYTEANDi   -  CRACKDOWN   |   /S/   /S \   |
+|  /Y/   /E/\ \  |   TYCOON   -   KiLLRAVEN  -   SiEGEL     |  /Y/   /E/\ \  |
+| /M/   /D/  \ \ |   FUZZY    -      SPY     -  INCOGNiTO   | /M/   /D/  \ \ |
+| \/    \/    \/ |   RE/Y\o   -     BoBo     -   HARDBYTE   | \/    \/    \/ |
+|                |                                          |                |
+`----------------+----------[  MYSTiC /X DESiGN  ]----------+----------------'
+
+ 
+
+                       ____ _________ _________ ________ _____
+            MYSTiC    /   / \\  /    \\\  /   _\\\  /   \\\  /     MYSTiC
+                     /   /   \\/   /\ \\\/   /___\\/__   \\\/
+         CONSOLE    /   / /\  /   __   \ \____   \   /   /      AMIGA
+                   /   /_/  \/   / /   /_____/   /  /   /
+       WORLD-HQ    \________X___/ /___/\________/   \__/      EURO-HQ
+      ____ _________ ________ _________ _________ _________ ________ _____
+     /    \\\  /   / \\  /   \\\  /    \\\  /    \\\  /   _\\\  /   \\\  /
+    /   /\ \\\/   / /\\\/__   \\\/   /\ \\\/   /\ \\\/   /___\\/__   \\\/
+   /   / /  \/   / /  \   /   / /   _____\/   / /  \ \____   \   /   /
+  /   /_/   /   /_/   /  /   / /   /     /   /_/   /_____/   /  /   /
+  \________X_________/   \__/  \__/      \________/\________/   \__/
+
+
+  AMIGA - SNES - MEGADRIVE - GAMEBOY - GAMEGEAR - PC ENGINE - LYNX - C64
+
+  3.5 Gb ONLINE          SYSOP:  EMPiRE / MYSTiC           3.5 Gb ONLINE
+
+  HOLLAND:          +31-72-157682  &  +31-72-201182             :HOLLAND
+

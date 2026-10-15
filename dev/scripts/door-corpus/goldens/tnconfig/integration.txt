@@ -1,0 +1,288 @@
+
+                 -->  Turbo Toolz Config Menu From Hell v3.2 <--
+                       By Mack Lifeguard/Dual Crew Shining
+
+Config file version: 7
+
+1. Master Sysop Configuration (255 axs required)
+2. Turbo Newscan and Turbo Files Configuration
+3. Show ANSI color definitions used
+4. Exit
+1> 
+
+(ZersHxFveWC4adMuUZOumCbAh#JuYmNNDuDJwzW%A3Bxkcl2Tt$yLdZeXPJkJVf8Odvo9BX@68%p
+FiN2s3EI^rz#ITlP4yoct529PcFaXoQJh!7Ukj8Uzcvrr91BejCHGZBXzv9Pqg%6VaCUEmhi)By5#
+HKvai0*L*$RUI3t%hJh6mP@y1t1e6UjMO(4w#gv%Xlw7@k)B!m^8*jytt^&5glLA7dSHxUbXYZ2j8
+*^b0fp0QxD!DXq4E#!eYO5j9zh)jmgspmocJ&oGzs!XdOwyGLyZHJFnkwFo2SDw5K&!vKyKq$GvCO
+5De6vCsiPEqeDjoE6oO84*fK&@n!FH&Gq7%q9%AkLGx*Oyru6JoAWeAC^rs)WG#c%fDd42)dnFM6C
+1X7KKIJP3GqX2s(tcSh&hSurDG!nlaKRE8cO0sv9vQ2J9vBe4I5O!uh$9r%qN9CIUv@OVg5h^oV(U
+8A^8$*)2Q(cDTwJfULPb45uW$6lf7lKs$mlgIHDWSfkVOnH2H6$SksjnGVNhBoSb7P5ztQyqk0B(J
+Nqsk7oO#rzLJfLM1pVWZkbI@dd2B7uEX(h!Q$y!EDWYZtdG5pOAB4Y%r)f5y8^vyNaUkr%I&
+
+DS#5JEhpczYOP%66FnnLw!Do#4S!Bpq^Av8ruvDsaOKCvhaAl(m0LWW7LHm*L5HVcAU(n25UG0S
+WqAQGklUilVP%so!T1&oMGsmOJDrjj9#B24KgFT7uVxd%DxSCgL%CYHAFCgBapbqK!Lm1E@jUBZp
+Wt3g!Tz0PjXtA@bw#mHoYspwfHTH3Kh!$%s!)YBZ#wMqTegtsr1t4lG*#LIiiZTkv@5dGogTjPc46
+#C8l%^reMfX$a64^yCv#sso@uAjp5t0kEJZegf^A%lkltBXIysA85*5ei(%(AIrAlk9P0W9CQC0K
+n8F%ye!e@iqqoI@#9r!yGPKn1OpQd#S%XCktA)(^FHbYbLU7*pSO2%%k7P(zaggnw#o&G$AmOHZv8bt
+@29gb9#XkLUBVePW^dcmTAP$Jwmm(1cWSYSXjIcafVBz%oj8ZmIKtu5$yX&Fz99au@$E@@u2LH
+u9GXM1T1*WrQV31HO^ttEHB%pf$*DGbozZqQ*24paGvRvn6ARO)j!Vw7(yCfmy&qcg2Br
+$MsZ2TIO&yRauKgMktt4*KKWZqNuwBFp5qW)kI3bgldGOq@1whmLIwGjfm$1m5$iEu@GMTW%BJA&ld
+hpD@*B^W%uE#43bAa@uUNkc&1mMTvmBPWn$iU#l#^)a#mT)39RACjj*zERfRI1(VwgD6S
+rN9r9vvh#635KO0WaKd13s4e6utaa&MVKC)RxW4jDdmUSZ1truPW@ms8@g$xCuT6B9*ns7A4Ad4^4H
+
+vPF0nuEw!soKjONg3heEGoNc7xQ(woMfE$XjzhR^U72znOhpFCMA)(ZApCa!QTlxDxawhqT@9whX
+z$xGNCddw9XveFQmmka3QLCl8yFHLsDtl4knh&cM&%V$lgxxoB(%8Bg#52!GRNTMpS4Xit&Qx
+SFU)F^V5!1@#lkxl61qO4p@*q7j@tn5zOq2zARX&8(tO10HEmes03JKGcxo2zV*%aJh#UQE
+@mT(LtD&R9Uq%On&6qu9JmTuYvXeo*jK4!AXZjn#2QX!SrszIg%NCTA*GwnSA!m^Sdzz)al&xa0*B64T
+
+ .____ ____________/\______________________/\________   ___________ ________.
+ |Sk!n/     ______/     /     /     ______// \__    _\__\___    _ /s      . |
+B*LuBr6EOJcBc2HK0)Z1E5C4KnC%hm%skHQ(511Sbb9pf(e^EfITVSCMWmPAJmy8(I04eO$yhCX@$
+)4LvB7yB63iUE(N3Ny8C@PEt*L6&qTurivSmajPg6OP#0c(ZPg2Fuf7KRi$tR7yh7jCoNLw2lN&Fg
+b7cHfupdv8v#mm8)e#@YO0VpOYfIr1G5ilhw5Hh8PWj53eieD0DwGVnVx42ibQ5F1%ofUI&CWJkgz
+9Ye4ckteAA&6EqHEHAvk!1Fwa&*HISwHJ5uEil%ADVI6h^DYp9bQaL49z96!&6rw&moY%1Kkx*l3e
+^vB^Ln4Z^nyqFab#uWz#KoD1owXiYDj!gSGDy4*O4gm)GJ9ugfhm*!EF4rp0JRp%3#e8!sIm%La0k
+Ia2%e&s)Nx7X5G4fpOMb1GI7qameGkmkQRBOxeg*Swh%iA%v%^6IBeFdm5ctfFfzhXQjgT&g
+
+4)GxC5ixFzQDqGz&mnvJ*e9^#wB65O*uCD@6E7t^I5Mowz8(#IM@C5T&N)fa)rXsBMHhcEEgpAE
+$X$sMZVmqQyZJVv9BZ8j)S%JW$6#Vh4XW2eDIlE93kCtE)z33qNjw8EXh#vKD#sdvUYIm(G(5uW*
+PY5v5Rd0xSrBIG3C^HNM(e47l!d9XQ8CwclIv)H)EN2F(L4)3@y7zvV4fv7e4#7Ury6CEgxmpMAJ(
+rh!CyGOM&Q8gL7g1sLStuKVPrzPs*Hnex09J3JQEn2L95AdCZWY2^Jo5pF1LsmEV$iikx2kv81dD
+Nn0nfRKPV%DOGQqtctgyTPrBfwQFmxGDaQ(Z$gymU%T2BWKJqXOeLuv0rPSwGSjEvVau6noqS3^Pq2P
+MNO@kKkt^J@C#(kU2t@cH9fs%@Q#rpSfba86sfMq1)Lh*waEaTIDB)mNBiNTeoAf82Oc*xiX1*
+KDdiykq)Dlzw@mnXi2Ph5UE%85n5$soUB9hFM@JzS&m7WEhELM#T&YPJ)#gFc2A^1Unoj
+e%I9ceZXalIxlKOEEGQN5FtgP!*244uwsmpTuXbAsdBO@@5#XnK&xkfDXs)pXgD*4mbu*usQ9Lu%*d
+da9*n5Xl23wk*8XL))r&VKdXBMhgAr5)SC#@CIb(mgLpijLV(3!flPxY*3ITws#kH(!Jv
+x5#DwxWCWfu%gi7cKLm38(Pf5ZSpP1gzYolb$WKxhgb5HlUktG&6^vSlGFHqlxJmXncBznuwTDml#E
+
+%zFfwAo9P)rx)0XF0!&@&SJBVG#FZaYlBj0@&yd@0uU*W#S7G33yAPvKmc%FhcbGUVVshKfJZ@Ia
+fZ%qzLuUUd)cTfZCqWQ#uigEdb^ziZ55id$Jk!j28j!gk*R2vVSX5XO)n@OKcH&gYp8tc3LR1
+CaQlI480ZP9ydl0^ul!x3vY^GxY#zw00uOocXxm2w2pn8ac$U%k%Nlfr9Hzthb%^vrRFo9X
+fq$jZePLPgcKM)c@uoy@JBwK6FgWrJC!vsAB7gCD^!@9NRHwAL#3DF)Q0j2nm&aP8(h2FPKtZs2k)mh4
+
+ .____ ____________/\______________________/\________   ___________ ________.
+ |Sk!n/     ______/     /     /     ______// \__    _\__\___    _ /s      . |
+ ||  _\____     \/_____     ./\____     \/.   \/    //     /    //        | |
+ |. /     /     /     /    //     /    //     /    o/   ________/         : |
+ | /     /    //     /     /     /    o/     /     /     /|.     COMMANDS . |
+mlTG@^zTqFq9w18BpheqwJCcs6m*nNrhYj)F0(WnsP6B0)hMiT@%5IT2WhuzpgwObn2tlr3(Fn!St
+X6llAwU%SKbRoLwpzy3%)zx7X@6V3T*A*QvdQoUZrPh6C)lvb%NSCQbzJg^!$1qoZ(YCf^hC!fqu9
+^zrqOwKnKcx&CT%idyOxbGmp)Qpgw05dtj(iEaX!Ns#9Z&9M!(R(YAfeCyP4)p7VxU0%XHmK
+
+7ri%kZlH8GXRxDYP9WlLiKw7dp#$@YzZVAbjIu#MKh$RP!QFAf2r)ZM884gffWk^Ndg@4zdVjN4
+KFD$NeC8K%2ULIylK&btB5XMOXYf02A&K7&%GgIVZV*XaSWv5*rXJHL%*ScihTTkxzAhZU#r58*!
+Mp0ImYkp)o27UYbC9Lg2nxb#1^!Yef#ug@D04sCpWBXtgr6(q2b6WyURf@cczbx43sg*Ok8e&oWX*
+y1)YqYfyKTpalSjKf%rhxj0c@GIyQACVTOgK6AoJzDN$rFHnLeLhUBXstiO!n6yj#CYDoOj2V@9$
+7FsKbef(hZNf8WEwO4lRg$k)w0%R!%zj)^jX6Y*LHSo&hhB^)T@gXTMQ^bYGSebzlkB(IZEGL&EHYfq
+g!vPyTKUcmJEV18ebT@(9mK*2wThe1%sYx8Y#ZctJRvxb864$YiDG###YhbxflW^vA8!ejakgD
+V)^jp07q@Ex%rHMLXUfAO1d38BuVR$F$lr5K%Tsokhem#7qazUY1VMjYCbHssr@6pS^ZO
+pS!s8#d096LTKeQKBTq7@oMB&0WbAeuAaP#C3iV2OPTpsmb8YTGqJqzdZ#Hi)h$wpS26&WBzxa@4Jj
+tQQ*Y2!aC1Ihbbh@JbmMr)bPb39uotOdyBDKv#MaEzUOHat*7C@QazaP@m)nV@l9hmjD#
+0&4zgHC#Z^8R^7!Ds3SrmZEHaOqIn4q(3EgL@068bt$h#q17@u63We#c5oVYr3zwWvLWc3N)XQEGYL
+
+MDa54tPymyL8H*Fl#rc@hBXuZ006Asru(mwoS)CT4z*Pz&KLHk%g5os!mtl)pfcBYQIu1Z&dpmv2
+uNBAeu#FGGLqy&@GZj%b0G#H@96yxtzln!gFG5hs#eWt5c8dRj)Ac0hOJsVt96GU5omI&CNgV
+GKx3A6GyEEgmkrr#JuA4WevqLYeHdujMyKPa!&R3mOe)tlsjZTzC4EkzaqoutoB!%D#j0(4
+cBuJt9Rgj)sw*G)k4jMM2IVl4flr1UIqqE)%hPSKWq7)^4iYdZCeMdxG8IGTpjzIAdhKSnZ&fD7%og(u
+
+ .____ ____________/\______________________/\________   ___________ ________.
+ |Sk!n/     ______/     /     /     ______// \__    _\__\___    _ /s      . |
+ ||  _\____     \/_____     ./\____     \/.   \/    //     /    //        | |
+ |. /     /     /     /    //     /    //     /    o/   ________/         : |
+ | /     /    //     /     /     /    o/     /     /     /|.     COMMANDS . |
+ :/     /    ./     /     /     /     /     /     /     /_||          :.    |
+ /___________/__________ /___________/\__________/______ /|__________:::____|
+YwAacqxhAOqGW)C8tJeyKKGCIf!mdP^#RBL8BuwLCd9r!R@LSIZqpFH12w0JwgCXeCOs9*aW
+
+hNY(cmqlxjP886iL&o(ZVDLyEo!GJYtWV4wwt(!ZB3X6Q3sWuidpZ!dXi5Q4mp!V$Vu8XrzXwd9
+UD8NK!26eGsPBPRd9$X!KMdW3tK(PRlvO4KnlDw2WWJ(%bI*U3#8W1@#N&Z3^mVe#UYkvm0NPIhS
+kNOYicS4diX3u^W5z5PXHpt!g79S@W^V6j0BdMt1sH@P8wn24&YX)MsimE9jl0czJjFTfBxaZ1jsj
+@M@fTFDIin2@4Fl$G7YvGo5AVQXW3J28H#BDbvW3%MjL!M$IjPLMT^74v*zIqjxYqq*@)!7XG(%I
+*PE$HY6zhSNpm2B$&v)aRaa2!syCXYW9uH!c#*%5eWaA!)r4sTpO&tvsTSPyTB3nmoIEwtW7qKn2ivC
+$$X#H1TJUKhID68kAUNZEcmUWN1R7azMCAr$yu2VaA#e&XBxWA5M#QF^ZS0BgVe@vL&DgbIW!S
+JBLVOu)guuu6v&@#$!p&d7I^y8UCxaVnWqYn5p2CRaF^lq*olh$7xcTdQE&HU@pI1yuAU
+oLU8ulG6gJ6SdQNRrtqjYxgzBImx3gUDLAgs1#xL@T#gmWstt$%)RvckVnLtr8YnJbZmjdJ5kV0A16
+pYsxetidR2SKU@e#xtsD&zzlABs*CzmUF$2iVO4sdP0CfnSQBiyNO!0V1awdl6ucCVlHR
+4#C&@!s6izbdU01ejq9bPnBZ0kjEsHY7XiU&m%Q7cWOmn@veCkd#u%rtqJlE31MRsts*OQkD^lVEtK
+
+36F1vcGen#$$n%b9l9B#)1)rWxgO)yGS9zXXOmYUE4NEEkI8Tjg*6pLYTmnnhEKNSP0Atc32upz$
+#wJHMkmgJJtZt@g!)ZbS#hoR2N%JwolPojJGGW%(N#n*%cEde8GTNfO484pkuQ@@N9qYzz7fi
+y%Vz8bhO$irgk4MUcnwhIlu$wnXhJXS6tJj69^)5WZvrP80EkW90i!tyd2zdB&@Ef(0wNm#
+NNb9XFMA8e32nlKXa#oslNYwAjnDlvAHeed90DJZ1sl%^)kWv9mCzAMmHbA1I#!ohoabM5nA^T6Gsnwr
+
+ .____ ____________/\______________________/\________   ___________ ________.
+ |Sk!n/     ______/     /     /     ______// \__    _\__\___    _ /s      . |
+ ||  _\____     \/_____     ./\____     \/.   \/    //     /    //        | |
+ |. /     /     /     /    //     /    //     /    o/   ________/         : |
+ | /     /    //     /     /     /    o/     /     /     /|.     COMMANDS . |
+ :/     /    ./     /     /     /     /     /     /     /_||          :.    |
+ /___________/__________ /___________/\__________/______ /|__________:::____|
+                       \/                              \/             .Y
+
+ [U] - UPLOAD FILE(S)         [D] - DOWNLOAD FILE(S)   [RZ] - ZMODEM UPLOAD
+nQa88Yu@Y@((hwEq&wl8NDR&Q8d($ok4l)KFA$jD^Lft&&SktEK6*iGKHBG4G2nGAhE6u*7MP#jw
+#OEiBY%NQeDUKkWMrJ!K8!OTV&$oOmcJ8^##Rhgv&GBvwbai0MCu^m6dbT65oDGt^6NUQRxsKBYq9
+vIisY#9OIMCbIW^m@@8Y(DI12PwiAutQ*YWt66)^t#Ij1VfcmnLKEYy*5wjYGTm*UDl^VnpaQf!)
+ORSAz7P7BpaA#AVzTW0xPEReLAydRKo&cTmI%Pp!TSJo%K9)BnbVC3eW2oJ@jB7%*vIY^2p9TP4od4p
+HxzNOs8pxeHNi@F^eX6X*S%wukKy*zZRMaVz9M&I0j$i#AaHgsYNK7fRS!jv!FCelCQ0ajJ&bQ
+*R&QELi3jlKwd62Fn1qjvqsu60DHmFx%k2cSIWFvF8OkX*61FgAxCb*oL1rWG74Pc@mIl
+0Q1I#l0QHpSsSD*b0P)(ak7ct90H1kjrwgZZ)40iNC79Q1GeaLLsxeMyFDNVQbOLlwTFez!MbIpDzO
+(rZMxadUVH3C@q(E2s&af4DZLSePCXs3QjFRBBRdElUP@9Hf2u%W8Tf7K2UK2YJubD&MD
+5XmDID3qc$DOsD&TG#QWO^n0Bh63i7RflV0prca!(FU*Vy)Y7NF$e&nta9WGxJpgjur4&Lm99b&qvX
+
+ONNf&VLTuJzaZcnmE4ZD&)SVOrN*zgzq)AiB7SDrs5kR@m@YfaxLYo4jCHGeu4xVLGx5kuNe4Y^L
+iVxWxZ%Bs$F)L!^ZNP@Zj^0dMKoqxSvHwGFY1wer7$U59mCc&4rA4Tuf$m%JMH%Ht(SabKE$B
+9KMetTkKfn!@BQaWguL$XmTXVPG(UpAJTZwZGJF8ZLH95dfI0Idod%xhI2LUjEYtDy%)vnh
+vlwVwlGK!kKHq5YiTIGva27A(Fu*QQo4qggeG9gEk&xL0)f%30Vs*LsD^GMIjBmSD6EULCK8BSQnGLBC
+
+ .____ ____________/\______________________/\________   ___________ ________.
+ |Sk!n/     ______/     /     /     ______// \__    _\__\___    _ /s      . |
+ ||  _\____     \/_____     ./\____     \/.   \/    //     /    //        | |
+ |. /     /     /     /    //     /    //     /    o/   ________/         : |
+ | /     /    //     /     /     /    o/     /     /     /|.     COMMANDS . |
+ :/     /    ./     /     /     /     /     /     /     /_||          :.    |
+ /___________/__________ /___________/\__________/______ /|__________:::____|
+                       \/                              \/             .Y
+
+ [U] - UPLOAD FILE(S)         [D] - DOWNLOAD FILE(S)   [RZ] - ZMODEM UPLOAD
+ [N] - SHOW NEW FILES         [F] - SHOW FILELIST      [A]  - ALTER FILEFLAG
+ [Z] - ZIPPY SEARCH           [CF]- CONFERENCE FLAGS   [FS] - FULL CONF STATS
+ [C] - LEAVE MSG TO SYSOP     [E] - LEAVE MSG TO USER  [R]  - READ NEW MSG'S
+%(sFs)41A4jm5I)XsjGJ56UojCS9!1ATMQ9FnC7rTMC*uhMa%c5BR0cOu#0WY!fyXK#%fmRAsq&PdC@
+4p)PfuSw7QXUX(ApHd7anEhO!gPUqVcX3niFzhka9PyCBjrHrYlsfZ9QuCzC$l3NFmIX#s%fK9
+QtxZS(eRkFvbCWWAIgs)8vuKRuiP@Jp9m6VqJhPfrV1WLNhqt!GDBm1KlZq6e@4#7wDee
+czwVzgEI8R4jX02R7s%GZ29UU#%8LHMM7trYA1LPDZZ0LUy1HFusbSO6Bb$37w7jmYu)lZN82wpV&#
+@28mH^xhV1xFWuM@jam%#ONyly80vFBEtHz0RP^^ZY4y46RnCz0XV$txQ#qepzZWnw9PQ
+GTlNvIme&2Ed5GEuzWO91)5jXHtS(OWUrJS5nX*h%WD!0!f$!QEqd^4X#yymM6fGmI$&H7&K%e0vox
+
+XGH1dMcxv(i#N0KU#4OGKXpmjS!pHI&mWgAkkJIaf8MWnLon4fJ1E$n$e8KeRSp)YpuGiX$NtQP1
+^8zu5c84F@!6!2O(*RiAWj5kRVtMz9^ITPtCvw^KgDktN(6OVgA8@N0zCw%Y0jk7b)w@8zmYS
+#43pq2Aw3UA9tkYG1DXhgo#rIN)8Fnx(uQ23oifL0!a7$hrE3OI7B@R7FOr*3O@WBzBLv%!
+n!QDkGnwldWJAw8NXzb%TCY)ShkV*)5h92*Y1zp9tA9I5Wvcgw5ddceG)v^sZE*RWAi3QrbBnEzf$J*1
+
+ .____ ____________/\______________________/\________   ___________ ________.
+ |Sk!n/     ______/     /     /     ______// \__    _\__\___    _ /s      . |
+ ||  _\____     \/_____     ./\____     \/.   \/    //     /    //        | |
+ |. /     /     /     /    //     /    //     /    o/   ________/         : |
+ | /     /    //     /     /     /    o/     /     /     /|.     COMMANDS . |
+ :/     /    ./     /     /     /     /     /     /     /_||          :.    |
+ /___________/__________ /___________/\__________/______ /|__________:::____|
+                       \/                              \/             .Y
+
+ [U] - UPLOAD FILE(S)         [D] - DOWNLOAD FILE(S)   [RZ] - ZMODEM UPLOAD
+ [N] - SHOW NEW FILES         [F] - SHOW FILELIST      [A]  - ALTER FILEFLAG
+ [Z] - ZIPPY SEARCH           [CF]- CONFERENCE FLAGS   [FS] - FULL CONF STATS
+ [C] - LEAVE MSG TO SYSOP     [E] - LEAVE MSG TO USER  [R]  - READ NEW MSG'S
+ [S] - SHOW STATUS            [W] - CHANGE SETTINGS    [V]  - VIEW TXT/LHA FILE
+ [H] - SHOW HELP PAGE         [X] - MENU ON/OFF        [M]  - COLOR ON/OFF
+%!jfnpd6DF4oXn20%mOWUgxw*L9GK0*0LVOsMT$SP48BqHo7eHueoj6^uGx@Ym@3rypMV
+GPjhfLt%)l7j1d#8YVOt%DdUM6Hq8&0SNB&bx!lVxcFU4VIB)FVjwg6pf*D^ncxWlAp)CGb3505V#R
+fxTg2mRyMGr^ERmTZ5DH*qTC)4qDD5#wouHswRaF!utZ73f@YB$qv$*g3j&nFh)f7GgWT
+vixr@A6aBgoxaocNj^KyhQwdL)5h9fE@hbbx*tlH2!8lLUIm6Q!Xq9HjoroC0T4&U!r1XidR7$g*j@
+
+IDoUP9dnx!tnZ*^k61P@ThfY*bX%8qKORoQ$IEDrjMGF*Lv05jdsr^dJF#mTUsF15qXN5PW8a4L4
+d8lpCP3mTZp6hclN5j1p^ryLqs)jskzH$F77vR7tCrK50qVhA3hs(Yk9(HSHIAbRW)EzDBkuf
+nCCw2WF@u!5cKOzYwhF2Qtxjc#nx1RCpmk*w6Gk1e37!!aInDG@v%SdQ0T3fuhO1d@QMYRX
+PGT94ZczPg&vx@$ekbbtJMOmKF4(OD@EqtNMpcovkdw089uz)09@)HsaCJO%$sq2Y4$8zWM8oC@1afxL
+
+ .____ ____________/\______________________/\________   ___________ ________.
+ |Sk!n/     ______/     /     /     ______// \__    _\__\___    _ /s      . |
+ ||  _\____     \/_____     ./\____     \/.   \/    //     /    //        | |
+ |. /     /     /     /    //     /    //     /    o/   ________/         : |
+ | /     /    //     /     /     /    o/     /     /     /|.     COMMANDS . |
+ :/     /    ./     /     /     /     /     /     /     /_||          :.    |
+ /___________/__________ /___________/\__________/______ /|__________:::____|
+                       \/                              \/             .Y
+
+ [U] - UPLOAD FILE(S)         [D] - DOWNLOAD FILE(S)   [RZ] - ZMODEM UPLOAD
+ [N] - SHOW NEW FILES         [F] - SHOW FILELIST      [A]  - ALTER FILEFLAG
+ [Z] - ZIPPY SEARCH           [CF]- CONFERENCE FLAGS   [FS] - FULL CONF STATS
+ [C] - LEAVE MSG TO SYSOP     [E] - LEAVE MSG TO USER  [R]  - READ NEW MSG'S
+ [S] - SHOW STATUS            [W] - CHANGE SETTINGS    [V]  - VIEW TXT/LHA FILE
+ [H] - SHOW HELP PAGE         [X] - MENU ON/OFF        [M]  - COLOR ON/OFF
+ [T] - SHOW LOCAL TIME (CET)  [O] - PAGE SYSOP         [G]  - LOG OFF
+ [?] - SHOW MENU              [J] - JOIN CONFERENCE    [ED] - EDIT DESCRIPTION
+ [<] - PREVIOUS CONFERENCE    [>] - NEXT CONFERENCE    [RL] - RELOGON
+csJtHGVoe9(fteZT*FJN#T!o!xcdu!!$JNZelju!6RZ#$cf@^fZZkvUn#1%BWK0Zl33f5YQkT20zv1
+
+KCPZz@w$ZVwRmO1hs9ojldFRaynR(qQ8ys6O9qC)gDn3aSzZ$tSH4(JX&Je$NVFB&tEnw%FMddy&
+MW@^SySLAdJBHq9^b8(MdK@JDVd&!O9j1fIoNVSdKwtEvNa9&ztDhfM^uX)LJBX%*@NY(!rd@
+EAbGK1IxRSVvIlEo)AE($q*eZdXKcx23SJPKZdh0vwFJxs%QjaiFqBC5V3HMA#I1jrmb%PL
+IzN&CdBlxnKCpdnAq^1yTdNg0hc40NZ9x5iHoVOfF*2OHRePQB8deR90Aj5wafUQ3qUzPZAzdvp3M^%O
+
+ .____ ____________/\______________________/\________   ___________ ________.
+ |Sk!n/     ______/     /     /     ______// \__    _\__\___    _ /s      . |
+ ||  _\____     \/_____     ./\____     \/.   \/    //     /    //        | |
+ |. /     /     /     /    //     /    //     /    o/   ________/         : |
+ | /     /    //     /     /     /    o/     /     /     /|.     COMMANDS . |
+ :/     /    ./     /     /     /     /     /     /     /_||          :.    |
+ /___________/__________ /___________/\__________/______ /|__________:::____|
+                       \/                              \/             .Y
+
+ [U] - UPLOAD FILE(S)         [D] - DOWNLOAD FILE(S)   [RZ] - ZMODEM UPLOAD
+ [N] - SHOW NEW FILES         [F] - SHOW FILELIST      [A]  - ALTER FILEFLAG
+ [Z] - ZIPPY SEARCH           [CF]- CONFERENCE FLAGS   [FS] - FULL CONF STATS
+ [C] - LEAVE MSG TO SYSOP     [E] - LEAVE MSG TO USER  [R]  - READ NEW MSG'S
+ [S] - SHOW STATUS            [W] - CHANGE SETTINGS    [V]  - VIEW TXT/LHA FILE
+ [H] - SHOW HELP PAGE         [X] - MENU ON/OFF        [M]  - COLOR ON/OFF
+ [T] - SHOW LOCAL TIME (CET)  [O] - PAGE SYSOP         [G]  - LOG OFF
+ [?] - SHOW MENU              [J] - JOIN CONFERENCE    [ED] - EDIT DESCRIPTION
+ [<] - PREVIOUS CONFERENCE    [>] - NEXT CONFERENCE    [RL] - RELOGON
+ [SENT] - AUTO SIGN           [OLM] - ON LINE MESSAGE  [QUEST] - QUESTIONNAIRE
+
+rxNLN#LQ2XRX)d@hnPMHeBt*PVJi0JNRotIqMf3l8r@yG0ZE4dkVi@7pch$tBqLkO2s1xITIx8Mh
+Q^3e3tguSd14vHYYyxWz8b4v1AhQ7WLf#yX%iA2Qu8s(HRPubZ7QK^5e2)0P0^ofvODWxwy(b
+9iWOm3*Kx0$50hSy%j^VrY6)vc6!%nt5%MTPXRxCq(SsvEFoN7V@$&kRg1qOs&X59*JFVgr
+c!2R^VMcY8Z!v9%nRddp6)XkF^FQ8u#Z%SCfkIaBuauvAQVu2#M586VW$BOSncOp)FI%p7znRu0w(HOO
+
+ .____ ____________/\______________________/\________   ___________ ________.
+ |Sk!n/     ______/     /     /     ______// \__    _\__\___    _ /s      . |
+ ||  _\____     \/_____     ./\____     \/.   \/    //     /    //        | |
+ |. /     /     /     /    //     /    //     /    o/   ________/         : |
+ | /     /    //     /     /     /    o/     /     /     /|.     COMMANDS . |
+ :/     /    ./     /     /     /     /     /     /     /_||          :.    |
+ /___________/__________ /___________/\__________/______ /|__________:::____|
+                       \/                              \/             .Y
+
+ [U] - UPLOAD FILE(S)         [D] - DOWNLOAD FILE(S)   [RZ] - ZMODEM UPLOAD
+ [N] - SHOW NEW FILES         [F] - SHOW FILELIST      [A]  - ALTER FILEFLAG
+ [Z] - ZIPPY SEARCH           [CF]- CONFERENCE FLAGS   [FS] - FULL CONF STATS
+ [C] - LEAVE MSG TO SYSOP     [E] - LEAVE MSG TO USER  [R]  - READ NEW MSG'S
+ [S] - SHOW STATUS            [W] - CHANGE SETTINGS    [V]  - VIEW TXT/LHA FILE
+ [H] - SHOW HELP PAGE         [X] - MENU ON/OFF        [M]  - COLOR ON/OFF
+ [T] - SHOW LOCAL TIME (CET)  [O] - PAGE SYSOP         [G]  - LOG OFF
+ [?] - SHOW MENU              [J] - JOIN CONFERENCE    [ED] - EDIT DESCRIPTION
+ [<] - PREVIOUS CONFERENCE    [>] - NEXT CONFERENCE    [RL] - RELOGON
+ [SENT] - AUTO SIGN           [OLM] - ON LINE MESSAGE  [QUEST] - QUESTIONNAIRE
+
+ [EX!] - EXORCIST             [0] - SHELL ACCESS       [1] - ACCOUNT EDITING
+ [2] - VIEW CALLERSLOG        [3] - D-sactivated       [4] - D-sactivated
+ [5] - VIEW DIRECTORY         [DS]- SYSOP DOWNLOAD     [VS]- SYSOP VIEW
+B18ZjmROzAzaJjvIwaI2*73SxBIT^LgiFISFI)1HPaj8F1ds2N%Es1i4pqrBJQpV^q^*%5(^Y3P@b^LQ
+
+ .____ ____________/\______________________/\________   ___________ ________.
+ |Sk!n/     ______/     /     /     ______// \__    _\__\___    _ /s      . |
+ ||  _\____     \/_____     ./\____     \/.   \/    //     /    //        | |
+ |. /     /     /     /    //     /    //     /    o/   ________/         : |
+ | /     /    //     /     /     /    o/     /     /     /|.     COMMANDS . |
+ :/     /    ./     /     /     /     /     /     /     /_||          :.    |
+ /___________/__________ /___________/\__________/______ /|__________:::____|
+                       \/                              \/             .Y
+
+ [U] - UPLOAD FILE(S)         [D] - DOWNLOAD FILE(S)   [RZ] - ZMODEM UPLOAD
+ [N] - SHOW NEW FILES         [F] - SHOW FILELIST      [A]  - ALTER FILEFLAG
+ [Z] - ZIPPY SEARCH           [CF]- CONFERENCE FLAGS   [FS] - FULL CONF STATS
+ [C] - LEAVE MSG TO SYSOP     [E] - LEAVE MSG TO USER  [R]  - READ NEW MSG'S
+ [S] - SHOW STATUS            [W] - CHANGE SETTINGS    [V]  - VIEW TXT/LHA FILE
+ [H] - SHOW HELP PAGE         [X] - MENU ON/OFF        [M]  - COLOR ON/OFF
+ [T] - SHOW LOCAL TIME (CET)  [O] - PAGE SYSOP         [G]  - LOG OFF
+ [?] - SHOW MENU              [J] - JOIN CONFERENCE    [ED] - EDIT DESCRIPTION
+ [<] - PREVIOUS CONFERENCE    [>] - NEXT CONFERENCE    [RL] - RELOGON
+ [SENT] - AUTO SIGN           [OLM] - ON LINE MESSAGE  [QUEST] - QUESTIONNAIRE
+
+ [EX!] - EXORCIST             [0] - SHELL ACCESS       [1] - ACCOUNT EDITING
+ [2] - VIEW CALLERSLOG        [3] - D-sactivated       [4] - D-sactivated
+ [5] - VIEW DIRECTORY         [DS]- SYSOP DOWNLOAD     [VS]- SYSOP VIEW
+________________________________________________________________________________
+
+AmiExpress Web BBS [0:General] Menu (NaN mins. left): 

@@ -1,0 +1,262 @@
+@database SAD-CONFSTAT.guide
+@$VER: 1.0
+@author "graveDancer/sAD (s_bergmann@labyrint.rhein.de)"
+@(c) "(sCEPTIC /X dESIGN 1995/96)"
+@remark cREATED uSING cED 3.5
+@node "Main" "English Doc for Conference Statistics)"
+
+      .:::::::::::::::::::: .:::::::::::::::::::. ::::::::::::::::::.
+      `:::::::::..........  :::::::::: :::::::::: :::::::::: :::::::::.
+      .......... :::::::::: ::::::::::::::::::::: :::::::::: ::::::::::
+      ::::::::::.:::::::::: :::::::::: :::::::::: :::::::::: ::::::::::
+      `:::::::::::::::::::' :::::::::: :::::::::: ::::::::::::::::::::'
+                            ::::::::::
+                        .                            .
+                      .:::. sCEPTIC /X dESIGN 1996 .:::.
+
+                                  pRESENTERA
+
+          Conference Statistics Door by GraveDancer/Sceptic /X Design
+
+                                 @{"Coypright Notes" link "CopyRight" 0}
+                                 @{"Introductions  " link "Introducti" 0}
+                                 @{"Features       " link "Features" 0}
+                                 @{"Install to /X  " link "Install" 0}
+                                 @{"Registration   " link "registration" 0}
+                                 @{"SAD Members    " link "members" 0}
+                                 @{"Contact SAD    " link "contact" 0}
+
+        sAD - wE dON`t oNLY pLAY tHE gAME ... wE lEAD aND dOMINATE iT!
+
+@endnode
+@node "Copyright" "Copyright notes"
+                                @{b}Copyright Notes@{ub}
+
+          pERMISSION iS gRANTED tO fREELY dISTRIBUTE tHIS pRODUCT fOR
+     nON-cOMMERCIAL pURPOSES oNLY, aS lONG aS aLL fILES rEMAIN uNMODIFIED.
+
+              sELLING iS sTRICTLY fORBIDDEN wITHOUT aNY eXCEPTION!
+
+   Conference Statistics is a ..... ©95-96 ................. GraveDancer/sAD
+   Design for this door is a ...... ©96-xx ....................... Mogue/Al!
+   AmiExpress is a ................ ©xx-95 ......... Lightspeed Technologies
+   Cygnus Ed is a ................. ©87-93 ................. Cygnus Software
+   RexxTricks.library is a ........ ©94-95 ................ Jürgen Kohrmeyer
+   RexxSupport.library is a ....... ©xx-94 ....................... Commodore
+   Amiga is a ..................... ©xx-96 ........................ Escom AG
+
+  THERE IS NO LIABILITY TO THIS PROGRAM-PACKAGE, IN REFERENCE TO THE ASSERTED
+     LAWS. THE COPYRIGHT OWNERS, AND/OR A THIRD PARTY, PLACE THIS PROGRAM
+  PACKAGE AT YOUR DISPOSAL "AS IS" (EXCEPT WHERE THIS IS FIXED ANYWHERE ELSE
+    IN A WRITTEN WAY) WITHOUT ANY GUARANTEE IN ANY FORM (INDIRECT OR DIRECT
+    FORM). THE FULL RISK OF QUALITY AND FUNCTIONALITY OF THIS PROGRAM IS AT
+     YOUR OWN. IF THE PROGRAM HAS A BUG, YOU HAVE TO PAY ALL COSTS OF THE
+               NECESSARY SERVICE-WORKS AND REPAIRS FOR YOURSELF.
+
+  UNDER NO CIRCUMSTANCES, THE COPYRIGHT OWNERS OR A THIRD PARTY DISTRIBUTING
+  THIS PROGRAM PACKAGE, AS ALLOWED, JUST BEFORE, CAN NOT BE HELD RESPONSIBLE
+   FOR ANY DAMAGE CAUSED IN ANY USUAL, SPECIAL, OR ACCIDENTAL WAY OR BY THE
+  PROGRAM PACKAGE (SURROUNDING BUT NOT RESTRICTED ARE THE LOSS OF DATA OR NOT
+   CORRECTLY DISPLAYED DATA OR LOSSES CAUSED BY YOU OR A THIRD PARTY OR BY A
+  FAULTY WORK OF THIS PROGRAM PACKAGE WITH OTHER PROGRAMS), ALSO IF THE OWNER
+      OR A THIRD PARTY HAS BEEN POINTED AT SUCH POSSIBILITIES OF DAMAGE.
+
+                      Gravedancer / Sceptic /X Design
+
+     PS: If you want to become a DIST SITE / BETA SITE then get in Contact
+                              with me (the Author)
+
+                                    @{"Main Menu" link "Main" 0}
+@endnode
+@node "Introducti" "Introduction"
+@{b}Introduction@{ub}
+
+Sceptic Conference Statistics is a multi-purpose bulletin creator
+door, which runs during the examine process.
+
+Well ... just have a look on the @{"FEATURES" link "Features" 0} and you`ll be amazed!
+
+                                    @{"Main Menu" link "Main" 0}
+@endnode
+@node "Features" "Features"
+@{b}Features@{ub}
+
+ · Sceptic Conference Statistics runs during examination.
+ · Can create conftop, weektop, uploads today seperated for each conf.
+ · Excellent output design, again thanks to Mogue/Arclite.
+ · Easy to configure - Tooltypes are used.
+
+                                    @{"Main Menu" link "Main" 0}
+@endnode
+
+@node "Install" "Installation to /X"
+@{b}Installation@{ub}
+
+1) Make a dir  named: "DOORS:SCEPTIC" and copy the dir "F!-FIDEnhance" to
+   this location.
+
+2) Copy the "EXAMINE<x>.info" to your SYSCMD/EXAMINE<x>.info
+
+   Make sure to update the tooltypes in F!-START.INFO if you (and you will)
+   change the name of EXAMINE<x>.info !!!
+
+3) Copy the "SENT.info" to your BBSCMD/SENT.info
+
+4) Copy the Dir "F!-START" + F!-Start.info to "doors:sceptic"
+
+   If you have already installed F!-START then copy the Tooltypes from
+   this infofile to the previously installed one!
+
+5) Configure the tooltypes...
+
+   ToolType "ALLTIME.X=<path/bulletin>"  - Write conftop bulletin for conf x
+                                           to file <path/file>.
+
+   ToolType "WEEKTOP.X=<path/bulletin>"  - Write weektop bulletin for conf x
+                                           to file <path/file>.
+
+   ToolType "NEWFILES.X=<path/bulletin>" - Write todayul bulletin for conf x
+                                           to file <path/file>.
+
+   ToolType "Eall=YES/NO"                - Enables/Disables sending of the eall
+                                           message at the end of the week.
+
+
+  In public version only the weektop bull will be created - register !!!
+
+
+                                  @{"Main Menu" link "Main" 0}
+@ENDNODE
+
+@node "Contact" "Contact SAD"
+
+                                 @{b}Contact SAD@{ub}
+
+     please call one of the listed Sceptic AmiExpress Division bbs's below for
+ any kind of suggestions/bug-reports or registration...
+
+
+           *The Pub          - Flite!          - +49-private! - WHq
+            Evil Moon        - Clyde Radcliffe - +49-private! - EHq
+            Raveland         - H2o!            - +49-private! - GHq
+            Silent Service   - Rudolf          - +61-private! - OzHq
+            Forbidden Planet - Green Beret     - +35-private! - IrlHq
+            Greyhound        - Gurgle          - +39-private! - IHq
+            God's Harem      - Lance           - +49-private! - Dst
+            Planet Love      - Mephisto        - +49-private! - Dst
+            Traders Assault  - Starlight       - +49-private! - Dst
+          **Tower of Souls   - Gravedancer     - +49-private! - Dst
+
+                    Reach Me Also On These Fine Systems
+
+            Apocalypse Now   - Stylewars       - +49-PROTEST
+            Brain Crash      - Krypton         - +49-PRIVATE
+          **Endless Pain     - Mogue           - +49-ARCLITE
+            Fairy Land       - Data            - +49-PROTEST
+            Fast File System - Scandic         - +49-DECISION
+            Final Impact     - U-man           - +44-ARCLITE
+          **Homeless         - Slime           - +49-CONTRA
+            Masturbation S.  - Black Peard     - +1-PRIVATE
+            Rebellion in M.  - Dhm             - +47-PRIVATE
+          **Silent Moon      - Tolpan          - +49-SARDONYX
+           *Spirit Of Soul   - Mario           - +49-TRSI
+            Zillion Hours    - Traitor         - +47-PRIVATE
+            Zions Hideout    - Zion            - +1-PRESTIGE
+
+                      !Still searching for more worldwide!
+             Stars Mark Boards I Call Regulary Than The Others
+
+     You can also use S_Bergmann@labyrint.rhein.de for email contact.
+
+                     Send your registration fee to...
+         Sebastian Bergmann, Aulgasse 14, 53721 Siegburg, Germany
+    (Don't Abuse This Address - I Mean No Trading Etc - No Illegals...)
+
+Soon our hompage in http://users.aol.com will be open for you to get the
+latest SAD releases 1 minute after release ...
+
+
+                                  @{"Main Menu" link "Main" 0}
+@endnode
+
+@node "members" "SAD Members"
+
+
+  ................................                  ..............
+  :                              :                  :            :
+  :                              :                  :            :
+  :                              :                  :............:...........
+__:____                   ______ :    ____________._      _______:          :
+\\   __/________ ______   / __  /_:___/  ___   ____|_______\\_____/_  ______  :
+ \\______       / ____/__/_ \\__/      \\_ \\_____\\__      /           / ____/__:_
+..: \\_________/  \\        \\___________/__:___|  |     /__________ /  \\      : \\_
+:            /_____________/(rLf):              |       |     -T!/__________:__/
+:                 ......         :              l_______|                   :
+:....             :    :.....    :                                  ........:
+:...:     ........:         :    :....                              :
+          :...:             :....:   :                              :
+              :                  :...:............                  :
+              :                                  :                  :
+                ........................         :        .....     :
+                :                      :         :........:   :.....:
+            a.M.I.E.X.P.R.E.S.s        :                  :...:
+                :                      :
+                :               d.E.S.I:G.n
+                :......................:
+
+
+@{b}Sceptic /X Design members@{ub}
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+@{b}Fli7e             @{ub}Leader, Rexx Coder, Sysop(WHQ), @{b}Caustic Style Artist@{ub}
+@{b}2fAST             @{ub}Rexx Coder, @{b}Contra Artist@{ub}
+@{b}GraveDancer       @{ub}Rexx Coder, @{b}Protest Artist@{ub}
+@{b}H2o               @{ub}Sysop(GHQ), @{b}Contra@{ub} Artist@{ub}
+@{b}Wigwam            @{ub}Asm Coder
+@{b}Bird              @{ub}Asm Coder
+@{b}Clyde Radcliffe   @{ub}Sysop(EHQ), Asm Coder
+@{b}Starlight         @{ub}Sysop(EDIST)
+@{b}Lance             @{ub}Sysop(GDIST), @{b}Pussy Posse Leader@{ub}
+@{b}X/\D               @{ub}Sysop(IDIST), @{b}Nightfall Leader@{ub}
+@{b}Rudolf H.         @{ub}Sysop(OZDIST)
+@{b}Green Beret       @{ub}Sysop(IRL HQ)
+@{b}Mephisto          @{ub}Sysop(EGDIST), @{b}DG! Leader@{ub}
+@{b}Picard            @{ub}Sysop(GDIST)
+
+No one else! All who claim to be SAD are pure liers if they`re not listed
+in the one above!
+
+                                  @{"Main Menu" link "Main" 0}
+@endnode
+
+@node "Registration" "Registration details - taken from SAD-GDRG.TXT"
+
+REGISTERING
+~~~~~~~~~~~
+From  now  on  i  take  a small fee for a MULTI REGISTRATION KEYFILE which will
+register all my doors to you (the name in the keyfile).
+
+You`ll  get  all  my  new  doors without registering up to V1.o but bugfixed or
+enhanced  versions  are  NOT  given  to the PUBLIC anymore!  If a reg.  user is
+spreading  them,  well ...  I don`t mind ..  because the doors from v1.o+ won`t
+run without a REAL KEYFILE!
+
+What  to  do  is a simple trick:  Send me DM30 / $US20 / £15 and you`ll receive
+your own keyfile.
+
+My address is: Sebastian Bergmann, Aulgasse 14, 53721 Siegburg, Germany !!!
+
+               Don't abuse my address, means no illegal activities and so on,
+               i was, am and will ever be a LEGAL SCENE DUDE !!!
+
+GraveDancer
+
+
+- - -
+
+This door is not 100% usable in public release, only the weektop bulletin
+will be created.
+
+
+                                  @{"Main Menu" link "Main" 0}
+
+@endnode

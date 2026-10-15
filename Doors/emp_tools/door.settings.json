@@ -1,0 +1,973 @@
+{
+  "command": "B",
+  "cfgFile": "Bulls.CFG",
+  "cfgFormat": "empire",
+  "artSections": [
+    {
+      "file": "Bulls.CFG",
+      "section": "title",
+      "label": "Title logo",
+      "maxLines": 20,
+      "maxLineLength": 200,
+      "commands": [
+        "B",
+        "BULLS"
+      ]
+    },
+    {
+      "file": "joincnf.cfg",
+      "section": "title",
+      "label": "Conference list banner",
+      "maxLines": 20,
+      "maxLineLength": 200,
+      "commands": [
+        "J"
+      ]
+    }
+  ],
+  "settings": [
+    {
+      "key": "dual_listing",
+      "commands": [
+        "B",
+        "BULLS"
+      ],
+      "label": "Dual listing (bulletins)",
+      "type": "choice",
+      "group": "Listing",
+      "choices": [
+        {
+          "value": "YES",
+          "label": "Yes \u2014 two listings"
+        },
+        {
+          "value": "NO",
+          "label": "No \u2014 one listing"
+        }
+      ],
+      "default": "YES",
+      "cfgKey": "DUAL_LISTING",
+      "narrowValue": "NO",
+      "help": "Use 2 listings in Bulls.CFG. Bulletin titles hold 31 chars with dual listing, 39 without. Narrow (40-column) sessions always read NO via the file shadow."
+    },
+    {
+      "key": "cursor_keys",
+      "commands": [
+        "B",
+        "BULLS"
+      ],
+      "label": "Cursor keys",
+      "type": "choice",
+      "group": "Listing",
+      "choices": [
+        {
+          "value": "YES",
+          "label": "Yes"
+        },
+        {
+          "value": "NO",
+          "label": "No"
+        }
+      ],
+      "default": "YES",
+      "cfgKey": "CURSOR_KEYS",
+      "help": "Use cursor keys to select a bulletin."
+    },
+    {
+      "key": "conf_1_mask",
+      "commands": [
+        "B",
+        "BULLS"
+      ],
+      "label": "Conference 1 bulletin mask",
+      "type": "string",
+      "group": "Conference access",
+      "pattern": "^[X-]{20}$",
+      "default": "XXXXXX--------------",
+      "cfgRow": {
+        "section": "masks",
+        "row": 0,
+        "field": "mask"
+      },
+      "help": "X shows the bulletin in this conference, - hides it. Exactly 20 characters. Bulletin titles and files live on the Bulls Menu page.",
+      "hidden": true
+    },
+    {
+      "key": "conf_2_mask",
+      "commands": [
+        "B",
+        "BULLS"
+      ],
+      "label": "Conference 2 bulletin mask",
+      "type": "string",
+      "group": "Conference access",
+      "pattern": "^[X-]{20}$",
+      "default": "XXXXXXXXXXXX--------",
+      "cfgRow": {
+        "section": "masks",
+        "row": 1,
+        "field": "mask"
+      },
+      "help": "X shows the bulletin in this conference, - hides it. Exactly 20 characters. Bulletin titles and files live on the Bulls Menu page.",
+      "hidden": true
+    },
+    {
+      "key": "conf_3_mask",
+      "commands": [
+        "B",
+        "BULLS"
+      ],
+      "label": "Conference 3 bulletin mask",
+      "type": "string",
+      "group": "Conference access",
+      "pattern": "^[X-]{20}$",
+      "default": "XXXXXXXXXXXX--------",
+      "cfgRow": {
+        "section": "masks",
+        "row": 2,
+        "field": "mask"
+      },
+      "help": "X shows the bulletin in this conference, - hides it. Exactly 20 characters. Bulletin titles and files live on the Bulls Menu page.",
+      "hidden": true
+    },
+    {
+      "key": "conf_4_mask",
+      "commands": [
+        "B",
+        "BULLS"
+      ],
+      "label": "Conference 4 bulletin mask",
+      "type": "string",
+      "group": "Conference access",
+      "pattern": "^[X-]{20}$",
+      "default": "XXXXXXXXXXXX--------",
+      "cfgRow": {
+        "section": "masks",
+        "row": 3,
+        "field": "mask"
+      },
+      "help": "X shows the bulletin in this conference, - hides it. Exactly 20 characters. Bulletin titles and files live on the Bulls Menu page.",
+      "hidden": true
+    },
+    {
+      "key": "conf_5_mask",
+      "commands": [
+        "B",
+        "BULLS"
+      ],
+      "label": "Conference 5 bulletin mask",
+      "type": "string",
+      "group": "Conference access",
+      "pattern": "^[X-]{20}$",
+      "default": "XXXXXXXXXXXX--------",
+      "cfgRow": {
+        "section": "masks",
+        "row": 4,
+        "field": "mask"
+      },
+      "help": "X shows the bulletin in this conference, - hides it. Exactly 20 characters. Bulletin titles and files live on the Bulls Menu page.",
+      "hidden": true
+    },
+    {
+      "key": "conf_6_mask",
+      "commands": [
+        "B",
+        "BULLS"
+      ],
+      "label": "Conference 6 bulletin mask",
+      "type": "string",
+      "group": "Conference access",
+      "pattern": "^[X-]{20}$",
+      "default": "XXXXXXXXXXXX--------",
+      "cfgRow": {
+        "section": "masks",
+        "row": 5,
+        "field": "mask"
+      },
+      "help": "X shows the bulletin in this conference, - hides it. Exactly 20 characters. Bulletin titles and files live on the Bulls Menu page.",
+      "hidden": true
+    },
+    {
+      "key": "conf_7_mask",
+      "commands": [
+        "B",
+        "BULLS"
+      ],
+      "label": "Conference 7 bulletin mask",
+      "type": "string",
+      "group": "Conference access",
+      "pattern": "^[X-]{20}$",
+      "default": "XXXXXXXXXXXX--------",
+      "cfgRow": {
+        "section": "masks",
+        "row": 6,
+        "field": "mask"
+      },
+      "help": "X shows the bulletin in this conference, - hides it. Exactly 20 characters. Bulletin titles and files live on the Bulls Menu page.",
+      "hidden": true
+    },
+    {
+      "key": "conf_8_mask",
+      "commands": [
+        "B",
+        "BULLS"
+      ],
+      "label": "Conference 8 bulletin mask",
+      "type": "string",
+      "group": "Conference access",
+      "pattern": "^[X-]{20}$",
+      "default": "XXXXXXXXXXXX--------",
+      "cfgRow": {
+        "section": "masks",
+        "row": 7,
+        "field": "mask"
+      },
+      "help": "X shows the bulletin in this conference, - hides it. Exactly 20 characters. Bulletin titles and files live on the Bulls Menu page.",
+      "hidden": true
+    },
+    {
+      "key": "conf_9_mask",
+      "commands": [
+        "B",
+        "BULLS"
+      ],
+      "label": "Conference 9 bulletin mask",
+      "type": "string",
+      "group": "Conference access",
+      "pattern": "^[X-]{20}$",
+      "default": "XXXXXXXXXXXX--------",
+      "cfgRow": {
+        "section": "masks",
+        "row": 8,
+        "field": "mask"
+      },
+      "help": "X shows the bulletin in this conference, - hides it. Exactly 20 characters. Bulletin titles and files live on the Bulls Menu page.",
+      "hidden": true
+    },
+    {
+      "key": "conf_10_mask",
+      "commands": [
+        "B",
+        "BULLS"
+      ],
+      "label": "Conference 10 bulletin mask",
+      "type": "string",
+      "group": "Conference access",
+      "pattern": "^[X-]{20}$",
+      "default": "XXXXXXXXXXXX--------",
+      "cfgRow": {
+        "section": "masks",
+        "row": 9,
+        "field": "mask"
+      },
+      "help": "X shows the bulletin in this conference, - hides it. Exactly 20 characters. Bulletin titles and files live on the Bulls Menu page.",
+      "hidden": true
+    },
+    {
+      "key": "conf_11_mask",
+      "commands": [
+        "B",
+        "BULLS"
+      ],
+      "label": "Conference 11 bulletin mask",
+      "type": "string",
+      "group": "Conference access",
+      "pattern": "^[X-]{20}$",
+      "default": "XXXXXXXXXXXX--------",
+      "cfgRow": {
+        "section": "masks",
+        "row": 10,
+        "field": "mask"
+      },
+      "help": "X shows the bulletin in this conference, - hides it. Exactly 20 characters. Bulletin titles and files live on the Bulls Menu page.",
+      "hidden": true
+    },
+    {
+      "key": "conf_12_mask",
+      "commands": [
+        "B",
+        "BULLS"
+      ],
+      "label": "Conference 12 bulletin mask",
+      "type": "string",
+      "group": "Conference access",
+      "pattern": "^[X-]{20}$",
+      "default": "XXXXXXXXXXXX--------",
+      "cfgRow": {
+        "section": "masks",
+        "row": 11,
+        "field": "mask"
+      },
+      "help": "X shows the bulletin in this conference, - hides it. Exactly 20 characters. Bulletin titles and files live on the Bulls Menu page.",
+      "hidden": true
+    },
+    {
+      "key": "conf_13_mask",
+      "commands": [
+        "B",
+        "BULLS"
+      ],
+      "label": "Conference 13 bulletin mask",
+      "type": "string",
+      "group": "Conference access",
+      "pattern": "^[X-]{20}$",
+      "default": "XXXXXXXXXXXXXXX-----",
+      "cfgRow": {
+        "section": "masks",
+        "row": 12,
+        "field": "mask"
+      },
+      "help": "X shows the bulletin in this conference, - hides it. Exactly 20 characters. Bulletin titles and files live on the Bulls Menu page.",
+      "hidden": true
+    },
+    {
+      "key": "conf_14_mask",
+      "commands": [
+        "B",
+        "BULLS"
+      ],
+      "label": "Conference 14 bulletin mask",
+      "type": "string",
+      "group": "Conference access",
+      "pattern": "^[X-]{20}$",
+      "default": "XXXXXXXXXXXX--------",
+      "cfgRow": {
+        "section": "masks",
+        "row": 13,
+        "field": "mask"
+      },
+      "help": "X shows the bulletin in this conference, - hides it. Exactly 20 characters. Bulletin titles and files live on the Bulls Menu page.",
+      "hidden": true
+    },
+    {
+      "key": "conf_15_mask",
+      "commands": [
+        "B",
+        "BULLS"
+      ],
+      "label": "Conference 15 bulletin mask",
+      "type": "string",
+      "group": "Conference access",
+      "pattern": "^[X-]{20}$",
+      "default": "XXXXXXXX------------",
+      "cfgRow": {
+        "section": "masks",
+        "row": 14,
+        "field": "mask"
+      },
+      "help": "X shows the bulletin in this conference, - hides it. Exactly 20 characters. Bulletin titles and files live on the Bulls Menu page.",
+      "hidden": true
+    },
+    {
+      "key": "conf_16_mask",
+      "commands": [
+        "B",
+        "BULLS"
+      ],
+      "label": "Conference 16 bulletin mask",
+      "type": "string",
+      "group": "Conference access",
+      "pattern": "^[X-]{20}$",
+      "default": "XXXXXXXX------------",
+      "cfgRow": {
+        "section": "masks",
+        "row": 15,
+        "field": "mask"
+      },
+      "help": "X shows the bulletin in this conference, - hides it. Exactly 20 characters. Bulletin titles and files live on the Bulls Menu page.",
+      "hidden": true
+    },
+    {
+      "key": "conf_17_mask",
+      "commands": [
+        "B",
+        "BULLS"
+      ],
+      "label": "Conference 17 bulletin mask",
+      "type": "string",
+      "group": "Conference access",
+      "pattern": "^[X-]{20}$",
+      "default": "XXXXXXXX------------",
+      "cfgRow": {
+        "section": "masks",
+        "row": 16,
+        "field": "mask"
+      },
+      "help": "X shows the bulletin in this conference, - hides it. Exactly 20 characters. Bulletin titles and files live on the Bulls Menu page.",
+      "hidden": true
+    },
+    {
+      "key": "conf_18_mask",
+      "commands": [
+        "B",
+        "BULLS"
+      ],
+      "label": "Conference 18 bulletin mask",
+      "type": "string",
+      "group": "Conference access",
+      "pattern": "^[X-]{20}$",
+      "default": "XXXXXXXX------------",
+      "cfgRow": {
+        "section": "masks",
+        "row": 17,
+        "field": "mask"
+      },
+      "help": "X shows the bulletin in this conference, - hides it. Exactly 20 characters. Bulletin titles and files live on the Bulls Menu page.",
+      "hidden": true
+    },
+    {
+      "key": "conf_19_mask",
+      "commands": [
+        "B",
+        "BULLS"
+      ],
+      "label": "Conference 19 bulletin mask",
+      "type": "string",
+      "group": "Conference access",
+      "pattern": "^[X-]{20}$",
+      "default": "XXXXXXXX------------",
+      "cfgRow": {
+        "section": "masks",
+        "row": 18,
+        "field": "mask"
+      },
+      "help": "X shows the bulletin in this conference, - hides it. Exactly 20 characters. Bulletin titles and files live on the Bulls Menu page.",
+      "hidden": true
+    },
+    {
+      "key": "conf_20_mask",
+      "commands": [
+        "B",
+        "BULLS"
+      ],
+      "label": "Conference 20 bulletin mask",
+      "type": "string",
+      "group": "Conference access",
+      "pattern": "^[X-]{20}$",
+      "default": "--------------------",
+      "cfgRow": {
+        "section": "masks",
+        "row": 19,
+        "field": "mask"
+      },
+      "help": "X shows the bulletin in this conference, - hides it. Exactly 20 characters. Bulletin titles and files live on the Bulls Menu page.",
+      "hidden": true
+    },
+    {
+      "key": "conf_21_mask",
+      "commands": [
+        "B",
+        "BULLS"
+      ],
+      "label": "Conference 21 bulletin mask",
+      "type": "string",
+      "group": "Conference access",
+      "pattern": "^[X-]{20}$",
+      "default": "--------------------",
+      "cfgRow": {
+        "section": "masks",
+        "row": 20,
+        "field": "mask"
+      },
+      "help": "X shows the bulletin in this conference, - hides it. Exactly 20 characters. Bulletin titles and files live on the Bulls Menu page.",
+      "hidden": true
+    },
+    {
+      "key": "conf_22_mask",
+      "commands": [
+        "B",
+        "BULLS"
+      ],
+      "label": "Conference 22 bulletin mask",
+      "type": "string",
+      "group": "Conference access",
+      "pattern": "^[X-]{20}$",
+      "default": "--------------------",
+      "cfgRow": {
+        "section": "masks",
+        "row": 21,
+        "field": "mask"
+      },
+      "help": "X shows the bulletin in this conference, - hides it. Exactly 20 characters. Bulletin titles and files live on the Bulls Menu page.",
+      "hidden": true
+    },
+    {
+      "key": "conf_23_mask",
+      "commands": [
+        "B",
+        "BULLS"
+      ],
+      "label": "Conference 23 bulletin mask",
+      "type": "string",
+      "group": "Conference access",
+      "pattern": "^[X-]{20}$",
+      "default": "--------------------",
+      "cfgRow": {
+        "section": "masks",
+        "row": 22,
+        "field": "mask"
+      },
+      "help": "X shows the bulletin in this conference, - hides it. Exactly 20 characters. Bulletin titles and files live on the Bulls Menu page.",
+      "hidden": true
+    },
+    {
+      "key": "conf_24_mask",
+      "commands": [
+        "B",
+        "BULLS"
+      ],
+      "label": "Conference 24 bulletin mask",
+      "type": "string",
+      "group": "Conference access",
+      "pattern": "^[X-]{20}$",
+      "default": "--------------------",
+      "cfgRow": {
+        "section": "masks",
+        "row": 23,
+        "field": "mask"
+      },
+      "help": "X shows the bulletin in this conference, - hides it. Exactly 20 characters. Bulletin titles and files live on the Bulls Menu page.",
+      "hidden": true
+    },
+    {
+      "key": "conf_25_mask",
+      "commands": [
+        "B",
+        "BULLS"
+      ],
+      "label": "Conference 25 bulletin mask",
+      "type": "string",
+      "group": "Conference access",
+      "pattern": "^[X-]{20}$",
+      "default": "--------------------",
+      "cfgRow": {
+        "section": "masks",
+        "row": 24,
+        "field": "mask"
+      },
+      "help": "X shows the bulletin in this conference, - hides it. Exactly 20 characters. Bulletin titles and files live on the Bulls Menu page.",
+      "hidden": true
+    },
+    {
+      "key": "conf_26_mask",
+      "commands": [
+        "B",
+        "BULLS"
+      ],
+      "label": "Conference 26 bulletin mask",
+      "type": "string",
+      "group": "Conference access",
+      "pattern": "^[X-]{20}$",
+      "default": "--------------------",
+      "cfgRow": {
+        "section": "masks",
+        "row": 25,
+        "field": "mask"
+      },
+      "help": "X shows the bulletin in this conference, - hides it. Exactly 20 characters. Bulletin titles and files live on the Bulls Menu page.",
+      "hidden": true
+    },
+    {
+      "key": "conf_27_mask",
+      "commands": [
+        "B",
+        "BULLS"
+      ],
+      "label": "Conference 27 bulletin mask",
+      "type": "string",
+      "group": "Conference access",
+      "pattern": "^[X-]{20}$",
+      "default": "--------------------",
+      "cfgRow": {
+        "section": "masks",
+        "row": 26,
+        "field": "mask"
+      },
+      "help": "X shows the bulletin in this conference, - hides it. Exactly 20 characters. Bulletin titles and files live on the Bulls Menu page.",
+      "hidden": true
+    },
+    {
+      "key": "conf_28_mask",
+      "commands": [
+        "B",
+        "BULLS"
+      ],
+      "label": "Conference 28 bulletin mask",
+      "type": "string",
+      "group": "Conference access",
+      "pattern": "^[X-]{20}$",
+      "default": "--------------------",
+      "cfgRow": {
+        "section": "masks",
+        "row": 27,
+        "field": "mask"
+      },
+      "help": "X shows the bulletin in this conference, - hides it. Exactly 20 characters. Bulletin titles and files live on the Bulls Menu page.",
+      "hidden": true
+    },
+    {
+      "key": "conf_29_mask",
+      "commands": [
+        "B",
+        "BULLS"
+      ],
+      "label": "Conference 29 bulletin mask",
+      "type": "string",
+      "group": "Conference access",
+      "pattern": "^[X-]{20}$",
+      "default": "--------------------",
+      "cfgRow": {
+        "section": "masks",
+        "row": 28,
+        "field": "mask"
+      },
+      "help": "X shows the bulletin in this conference, - hides it. Exactly 20 characters. Bulletin titles and files live on the Bulls Menu page.",
+      "hidden": true
+    },
+    {
+      "key": "conf_30_mask",
+      "commands": [
+        "B",
+        "BULLS"
+      ],
+      "label": "Conference 30 bulletin mask",
+      "type": "string",
+      "group": "Conference access",
+      "pattern": "^[X-]{20}$",
+      "default": "--------------------",
+      "cfgRow": {
+        "section": "masks",
+        "row": 29,
+        "field": "mask"
+      },
+      "help": "X shows the bulletin in this conference, - hides it. Exactly 20 characters. Bulletin titles and files live on the Bulls Menu page.",
+      "hidden": true
+    },
+    {
+      "key": "conf_31_mask",
+      "commands": [
+        "B",
+        "BULLS"
+      ],
+      "label": "Conference 31 bulletin mask",
+      "type": "string",
+      "group": "Conference access",
+      "pattern": "^[X-]{20}$",
+      "default": "--------------------",
+      "cfgRow": {
+        "section": "masks",
+        "row": 30,
+        "field": "mask"
+      },
+      "help": "X shows the bulletin in this conference, - hides it. Exactly 20 characters. Bulletin titles and files live on the Bulls Menu page.",
+      "hidden": true
+    },
+    {
+      "key": "conf_32_mask",
+      "commands": [
+        "B",
+        "BULLS"
+      ],
+      "label": "Conference 32 bulletin mask",
+      "type": "string",
+      "group": "Conference access",
+      "pattern": "^[X-]{20}$",
+      "default": "--------------------",
+      "cfgRow": {
+        "section": "masks",
+        "row": 31,
+        "field": "mask"
+      },
+      "help": "X shows the bulletin in this conference, - hides it. Exactly 20 characters. Bulletin titles and files live on the Bulls Menu page.",
+      "hidden": true
+    },
+    {
+      "key": "conf_33_mask",
+      "commands": [
+        "B",
+        "BULLS"
+      ],
+      "label": "Conference 33 bulletin mask",
+      "type": "string",
+      "group": "Conference access",
+      "pattern": "^[X-]{20}$",
+      "default": "--------------------",
+      "cfgRow": {
+        "section": "masks",
+        "row": 32,
+        "field": "mask"
+      },
+      "help": "X shows the bulletin in this conference, - hides it. Exactly 20 characters. Bulletin titles and files live on the Bulls Menu page.",
+      "hidden": true
+    },
+    {
+      "key": "conf_34_mask",
+      "commands": [
+        "B",
+        "BULLS"
+      ],
+      "label": "Conference 34 bulletin mask",
+      "type": "string",
+      "group": "Conference access",
+      "pattern": "^[X-]{20}$",
+      "default": "--------------------",
+      "cfgRow": {
+        "section": "masks",
+        "row": 33,
+        "field": "mask"
+      },
+      "help": "X shows the bulletin in this conference, - hides it. Exactly 20 characters. Bulletin titles and files live on the Bulls Menu page.",
+      "hidden": true
+    },
+    {
+      "key": "conf_35_mask",
+      "commands": [
+        "B",
+        "BULLS"
+      ],
+      "label": "Conference 35 bulletin mask",
+      "type": "string",
+      "group": "Conference access",
+      "pattern": "^[X-]{20}$",
+      "default": "--------------------",
+      "cfgRow": {
+        "section": "masks",
+        "row": 34,
+        "field": "mask"
+      },
+      "help": "X shows the bulletin in this conference, - hides it. Exactly 20 characters. Bulletin titles and files live on the Bulls Menu page.",
+      "hidden": true
+    },
+    {
+      "key": "conf_36_mask",
+      "commands": [
+        "B",
+        "BULLS"
+      ],
+      "label": "Conference 36 bulletin mask",
+      "type": "string",
+      "group": "Conference access",
+      "pattern": "^[X-]{20}$",
+      "default": "--------------------",
+      "cfgRow": {
+        "section": "masks",
+        "row": 35,
+        "field": "mask"
+      },
+      "help": "X shows the bulletin in this conference, - hides it. Exactly 20 characters. Bulletin titles and files live on the Bulls Menu page.",
+      "hidden": true
+    },
+    {
+      "key": "conf_37_mask",
+      "commands": [
+        "B",
+        "BULLS"
+      ],
+      "label": "Conference 37 bulletin mask",
+      "type": "string",
+      "group": "Conference access",
+      "pattern": "^[X-]{20}$",
+      "default": "--------------------",
+      "cfgRow": {
+        "section": "masks",
+        "row": 36,
+        "field": "mask"
+      },
+      "help": "X shows the bulletin in this conference, - hides it. Exactly 20 characters. Bulletin titles and files live on the Bulls Menu page.",
+      "hidden": true
+    },
+    {
+      "key": "conf_38_mask",
+      "commands": [
+        "B",
+        "BULLS"
+      ],
+      "label": "Conference 38 bulletin mask",
+      "type": "string",
+      "group": "Conference access",
+      "pattern": "^[X-]{20}$",
+      "default": "--------------------",
+      "cfgRow": {
+        "section": "masks",
+        "row": 37,
+        "field": "mask"
+      },
+      "help": "X shows the bulletin in this conference, - hides it. Exactly 20 characters. Bulletin titles and files live on the Bulls Menu page.",
+      "hidden": true
+    },
+    {
+      "key": "conf_39_mask",
+      "commands": [
+        "B",
+        "BULLS"
+      ],
+      "label": "Conference 39 bulletin mask",
+      "type": "string",
+      "group": "Conference access",
+      "pattern": "^[X-]{20}$",
+      "default": "--------------------",
+      "cfgRow": {
+        "section": "masks",
+        "row": 38,
+        "field": "mask"
+      },
+      "help": "X shows the bulletin in this conference, - hides it. Exactly 20 characters. Bulletin titles and files live on the Bulls Menu page.",
+      "hidden": true
+    },
+    {
+      "key": "conf_40_mask",
+      "commands": [
+        "B",
+        "BULLS"
+      ],
+      "label": "Conference 40 bulletin mask",
+      "type": "string",
+      "group": "Conference access",
+      "pattern": "^[X-]{20}$",
+      "default": "--------------------",
+      "cfgRow": {
+        "section": "masks",
+        "row": 39,
+        "field": "mask"
+      },
+      "help": "X shows the bulletin in this conference, - hides it. Exactly 20 characters. Bulletin titles and files live on the Bulls Menu page.",
+      "hidden": true
+    },
+    {
+      "key": "join_logfile",
+      "commands": [
+        "J"
+      ],
+      "label": "Log file",
+      "type": "string",
+      "group": "Join conferences",
+      "default": "Doors:Doors.LOG",
+      "cfgFile": "joincnf.cfg",
+      "cfgKey": "LOGFILE",
+      "help": "Log File Name for Password Failures"
+    },
+    {
+      "key": "join_dual_listing",
+      "commands": [
+        "J"
+      ],
+      "label": "Dual listing (join)",
+      "type": "choice",
+      "group": "Join conferences",
+      "default": "NO",
+      "cfgFile": "joincnf.cfg",
+      "cfgKey": "DUAL_LISTING",
+      "narrowValue": "NO",
+      "help": "Use 2 listings in joincnf.cfg [YES/NO]. Narrow (40-column) sessions always read NO via the file shadow.",
+      "choices": [
+        {
+          "value": "YES",
+          "label": "Yes"
+        },
+        {
+          "value": "NO",
+          "label": "No"
+        }
+      ]
+    },
+    {
+      "key": "join_current_cnf",
+      "commands": [
+        "J"
+      ],
+      "label": "Show current conferences",
+      "type": "choice",
+      "group": "Join conferences",
+      "default": "YES",
+      "cfgFile": "joincnf.cfg",
+      "cfgKey": "CURRENT_CNF",
+      "help": "Show Current Conferences [YES/NO]",
+      "choices": [
+        {
+          "value": "YES",
+          "label": "Yes"
+        },
+        {
+          "value": "NO",
+          "label": "No"
+        }
+      ]
+    },
+    {
+      "key": "join_cnf_names",
+      "commands": [
+        "J"
+      ],
+      "label": "Conference names from icon",
+      "type": "choice",
+      "group": "Join conferences",
+      "default": "YES",
+      "cfgFile": "joincnf.cfg",
+      "cfgKey": "CNF_NAMES",
+      "help": "Use Names from ConfConfig.info Icon [/X 3.x]",
+      "choices": [
+        {
+          "value": "YES",
+          "label": "Yes"
+        },
+        {
+          "value": "NO",
+          "label": "No"
+        }
+      ]
+    },
+    {
+      "key": "join_nrconflines",
+      "commands": [
+        "J"
+      ],
+      "label": "Conference lines",
+      "type": "number",
+      "group": "Join conferences",
+      "default": 11,
+      "cfgFile": "joincnf.cfg",
+      "cfgKey": "NRCONFLINES",
+      "help": "Nr Lines used for Conferences (>3)",
+      "min": 4
+    },
+    {
+      "key": "join_password_level",
+      "commands": [
+        "J"
+      ],
+      "label": "Password protection below level",
+      "type": "number",
+      "group": "Join conferences",
+      "default": 256,
+      "cfgFile": "joincnf.cfg",
+      "cfgKey": "PASSWORD_LEVEL",
+      "help": "Password Protection Below Level"
+    },
+    {
+      "key": "join_netmail_startcnf",
+      "commands": [
+        "J"
+      ],
+      "label": "First netmail conference",
+      "type": "number",
+      "group": "Join conferences",
+      "default": 24,
+      "cfgFile": "joincnf.cfg",
+      "cfgKey": "NETMAIL_STARTCNF",
+      "help": "First NetMail Conference Number"
+    },
+    {
+      "key": "join_drop_dtr",
+      "commands": [
+        "J"
+      ],
+      "label": "Drop carrier after failures",
+      "type": "number",
+      "group": "Join conferences",
+      "default": 3,
+      "cfgFile": "joincnf.cfg",
+      "cfgKey": "DROP_DTR",
+      "help": "Drop Carrier after 3 Password Failures"
+    }
+  ]
+}

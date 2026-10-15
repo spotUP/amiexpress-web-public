@@ -1,0 +1,22 @@
+                                                                                
+
+               [»«]  /X\ sTATS v1.2 © PLL /X\YTH /X )-sIGN  [»«]                
+
+     yOUR sYSOP: Sysop                 bBS nAME  : AmiExpress-Web           
+     /X vERSION: v5.6                  lOCAL tIME: Thu 14-May-2026 16:58:13 
+
+     uSER nAME       : Sysop                      cALLS     : 0             
+     pHONE nUMbER    :                            pASsWORD  : eNcRyPtEd
+     lOCATION        : Local Console              sLOTnUMBER: 0             
+     tIME lIMIT      : 60                         tIME uSED : 0             
+     lAST cALLED     : Thu 01-Jan-1970 00:00:00   sECURITY  : 255           
+     fILES uPLOADED  : 0                          mESSAGES  : 0             
+     fILES dOWNLOADED: 0                          bAUDrATE  : 115200        
+     bYTES uPLOADED  : 0                                                   
+     bYTES dOWNLOADED: 0           
+     dAILY bYTES     : 0                cURRENT cONFERENCE: 1           
+     dOWNLOADED tODAY: 0                cONFERENCE aCCESS : Sysop       
+                                        rATIO             : dISABLED    
+        sYSOP iS nOT aVAILABLE          rATIO tYPE        : bYTES
+                                                                                
+              [»«]  THANK YOU fOR uSING /X\YTH sTATS v1.2  [»«]                 

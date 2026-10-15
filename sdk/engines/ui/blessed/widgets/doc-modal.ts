@@ -1,0 +1,693 @@
+/**
+ * DocModal - Documentation/Help modal widget
+ *
+ * A full-screen scrollable documentation overlay with:
+ * - Optional bigtext header (hidden on mobile for space)
+ * - Scrollable content area with navigation keys
+ * - Footer with navigation hints
+ * - Proper focus trapping and keyboard handling
+ * - Responsive mobile support with touch gestures
+ *
+ * Navigation:
+ * - Up/Down/j/k: Line scroll
+ * - PageUp/PageDown/Left/Right/b/Space: Page scroll
+ * - Home/End/g/G: Top/bottom
+ * - ESC/Q/F1: Close
+ * - Swipe up/down: Scroll (mobile)
+ * - Tap anywhere: Close (mobile, optional)
+ */
+
+import { Box } from './box';
+import { activeTheme } from '../../theme/live.js';
+import { BigText } from './bigtext';
+import { ScrollableText } from './scrollabletext';
+import type { ElementOptions } from '../core/types';
+import type { ResponsiveState } from '../core/responsive-mixin';
+import type { BreakpointName } from '../core/responsive-constants';
+import {
+  BREAKPOINT_XS,
+  BREAKPOINT_SM,
+  MIN_TOUCH_HEIGHT,
+} from '../core/responsive-constants';
+import { trapModalInput } from '../utils/modal-helpers';
+
+export interface DocModalOptions extends ElementOptions {
+  /** Modal title shown in border label */
+  title?: string;
+  /** Optional bigtext header (e.g., "HELP") - hidden on mobile */
+  header?: string;
+  /** Content to display (supports blessed tags) */
+  content?: string;
+  /** Footer hint text (default shows navigation keys) */
+  footerText?: string;
+  /** Mobile footer text (shorter for small screens) */
+  mobileFooterText?: string;
+  /** Additional close keys beyond ESC/Q/F1 */
+  closeKeys?: string[];
+  /** Callback when modal is closed */
+  onClose?: () => void;
+  /** Style for the header bigtext */
+  headerStyle?: { fg?: string; bg?: string };
+  /** Style for the content area */
+  contentStyle?: { fg?: string; bg?: string };
+  /** Style for the footer */
+  footerStyle?: { fg?: string; bg?: string };
+  /** Enable tap-to-dismiss on mobile (default: true) */
+  tapToDismiss?: boolean;
+  /** Enable swipe gestures for scrolling (default: true) */
+  swipeToScroll?: boolean;
+}
+
+export class DocModal extends Box {
+  private _header: BigText | null = null;
+  private _contentArea: ScrollableText;
+  private _footer: Box;
+  private _onClose?: () => void;
+  private _closeKeys: string[];
+  private _isMobileMode: boolean = false;
+  private _tapToDismiss: boolean;
+  private _swipeToScroll: boolean;
+  private _desktopFooterText: string;
+  private _mobileFooterText: string;
+  private _hasHeader: boolean;
+  private _contentTopDesktop: number;
+  private _swipeStartY: number = 0;
+  private _swipeStartTime: number = 0;
+  private _trapCleanup?: () => void;
+  private _savedFocus?: any;
+  /** Closing is idempotent: see _close(). */
+  private _closed: boolean = false;
+  /**
+   * The geometry the CALLER asked for, or nothing for the full-screen
+   * default. display() and _handleResize both used to re-impose the whole
+   * terminal every time they ran, which quietly undid a caller's box.
+   */
+  private _asked: { top?: any; left?: any; width?: any; height?: any };
+
+  constructor(options: DocModalOptions = {}) {
+    super({
+      ...options,
+      // Full screen is the DEFAULT, not a decree. A door's help screen wants
+      // the whole terminal; a seven-line player profile does not, and one
+      // that takes the lot hides the door's own menu bar - "the player
+      // profile page has no menus or if its a dialog it covers it" (sysop,
+      // 2026-09-14). A caller that asks for a box gets a box.
+      top: options.top ?? 0,
+      left: options.left ?? 0,
+      width: options.width ?? '100%',
+      height: options.height ?? '100%',
+      label: options.title ? ` ${options.title} ` : options.label,
+      border: options.border || { type: 'line' },
+      shadow: false,
+      hidden: true,
+      mouse: true,
+      keys: true,
+      closable: true,
+      trapFocus: true,
+      ch: ' ',
+      zIndex: options.zIndex || 9999,
+      style: {
+        // The theme's, not literals: a modal frame is a border like any
+        // other, and this one is the door's help screen - the thing a
+        // caller opens first and judges the board by.
+        fg: activeTheme().tokens.ink,
+        bg: options.contentStyle?.bg || activeTheme().tokens.ground,
+        border: { fg: activeTheme().tokens.accent },
+        ...options.style,
+      },
+    });
+
+    this._asked = {
+      top: options.top,
+      left: options.left,
+      width: options.width,
+      height: options.height,
+    };
+
+    this._onClose = options.onClose;
+    this._closeKeys = ['escape', 'q', 'f1', ...(options.closeKeys || [])];
+    this._tapToDismiss = options.tapToDismiss !== false;
+    this._swipeToScroll = options.swipeToScroll !== false;
+    this._hasHeader = !!options.header;
+
+    // Footer text - desktop vs mobile
+    this._desktopFooterText = options.footerText !== undefined
+      ? options.footerText
+      : '{bold} Scroll: Arrows/PageUp/PageDown/Left/Right | Top/Bottom: Home/End | Close: ESC/Q/F1 {/bold}';
+    this._mobileFooterText = options.mobileFooterText !== undefined
+      ? options.mobileFooterText
+      : '{bold} Swipe to scroll | Tap to close {/bold}';
+
+    // Calculate content area top position based on header
+    this._contentTopDesktop = 0;
+
+    // Optional bigtext header (hidden on mobile)
+    if (options.header) {
+      this._header = new BigText({
+        parent: this,
+        top: 0,
+        left: 'center',
+        width: 'shrink',
+        height: 'shrink',
+        content: options.header,
+        font: 'simple',
+        ch: ' ',
+        style: {
+          fg: options.headerStyle?.fg || 'cyan',
+          bg: options.headerStyle?.bg || 'black',
+        },
+      });
+      this._contentTopDesktop = 3; // BigText typically takes 3 rows with 'simple' font
+    }
+
+    // Footer with navigation hints
+    this._footer = new Box({
+      parent: this,
+      bottom: 0,
+      left: 0,
+      width: '100%',
+      height: 1,
+      tags: true,
+      style: {
+        fg: options.footerStyle?.fg || 'black',
+        bg: options.footerStyle?.bg || 'cyan',
+      },
+      content: this._desktopFooterText,
+    });
+
+    // Scrollable content area
+    this._contentArea = new ScrollableText({
+      parent: this,
+      top: this._contentTopDesktop,
+      left: 0,
+      width: '100%-2',
+      height: `100%-${this._contentTopDesktop + 3}`, // Account for border, footer
+      tags: true,
+      mouse: true,
+      scrollable: true,
+      alwaysScroll: true,
+      focusable: true,
+      ch: ' ',
+      scrollbar: true,
+      style: {
+        fg: options.contentStyle?.fg || 'white',
+        ...(options.contentStyle?.bg && { bg: options.contentStyle.bg }),
+      },
+      content: options.content || '',
+    });
+
+    this._setupKeyHandlers();
+    this._setupTouchHandlers();
+  }
+
+  /**
+   * Set up keyboard navigation and close handlers
+   */
+  /**
+   * Close the modal. The ONE way it closes.
+   *
+   * `'close'` is an ANNOUNCEMENT, not a command. This widget used to listen
+   * to its own 'close' and call the close routine from it, while the close
+   * routine ended by emitting 'close' - so closing recursed until the stack
+   * died: `RangeError: Maximum call stack size exceeded`, thrown out of the
+   * emit, swallowed by EventEmitter, and printed where nobody looked. Every
+   * caller who read a bulletin in CARDLOBBY and pressed a close key hit it;
+   * the door's own suite was green throughout.
+   *
+   * The guard is the second half. Closing twice used to run the whole
+   * routine twice - releasing a focus trap that was already released and
+   * calling the consumer's `onClose` a second time - and a widget whose
+   * close is not idempotent makes every caller responsible for not asking
+   * twice.
+   */
+  private _close(): void {
+    if (this._closed) return;
+    this._closed = true;
+
+    {
+      // Clean up input trapping
+      if (this._trapCleanup) {
+        this._trapCleanup();
+        this._trapCleanup = undefined;
+      }
+
+      // Restore focus
+      if (this.screen) {
+        if ((this.screen as any).releaseFocusTrap) {
+          (this.screen as any).releaseFocusTrap(this);
+        } else if ((this.screen as any).focusPop) {
+          (this.screen as any).focusPop();
+        }
+        if ((this.screen as any).restoreFocus && this._savedFocus) {
+          (this.screen as any).restoreFocus(this._savedFocus);
+        }
+      }
+
+      this.hide();
+      if (this._onClose) {
+        this._onClose();
+      }
+      this.emit('close');
+    }
+  }
+
+  /**
+   * The [X] closes it the same way every other route does.
+   *
+   * Element.close() - what the closable button's click handler calls - hides
+   * the widget and emits 'close', and nothing else. This widget deliberately
+   * does NOT listen to its own 'close' (that is what made closing recurse
+   * until the stack died), so the button hid the modal and ran NONE of the
+   * close routine: no focus-trap release, and no `onClose`. CARD LOBBY sets
+   * its `modalActive` in that callback, so one click on the [X] left the
+   * door refusing every later window - "theme is dead", "leaders is dead"
+   * (sysop, 2026-09-14), for a door whose menu looked perfectly alive.
+   */
+  close(): void {
+    this._close();
+  }
+
+  private _setupKeyHandlers(): void {
+    const closeModal = () => this._close();
+
+    // Mouse wheel scrolling - on both content area and modal itself
+    const handleWheelUp = () => {
+      this._contentArea.scroll(-3);
+      this.screen?.render();
+    };
+    const handleWheelDown = () => {
+      this._contentArea.scroll(3);
+      this.screen?.render();
+    };
+
+    this._contentArea.on('wheelup', handleWheelUp);
+    this._contentArea.on('wheeldown', handleWheelDown);
+    this.on('wheelup', handleWheelUp);
+    this.on('wheeldown', handleWheelDown);
+
+    // Keyboard navigation on content area (which has focus)
+    this._contentArea.key(['up', 'k'], () => {
+      this._contentArea.scroll(-1);
+      this.screen?.render();
+    });
+
+    this._contentArea.key(['down', 'j'], () => {
+      this._contentArea.scroll(1);
+      this.screen?.render();
+    });
+
+    // Page up/down with multiple key options
+    this._contentArea.key(['pageup', 'left', 'b'], () => {
+      const height = (this._contentArea as any).height || 20;
+      this._contentArea.scroll(-(height - 2));
+      this.screen?.render();
+    });
+
+    this._contentArea.key(['pagedown', 'right', 'space'], () => {
+      const height = (this._contentArea as any).height || 20;
+      this._contentArea.scroll(height - 2);
+      this.screen?.render();
+    });
+
+    // Home/End for top/bottom
+    this._contentArea.key(['home', 'g'], () => {
+      this._contentArea.setScrollPerc(0);
+      this.screen?.render();
+    });
+
+    this._contentArea.key(['end', 'S-g'], () => {
+      this._contentArea.setScrollPerc(100);
+      this.screen?.render();
+    });
+
+    // Close keys on content area (since it has focus)
+    this._contentArea.key(this._closeKeys, () => {
+      closeModal();
+    });
+
+    // Also handle close keys on modal itself (fallback)
+    this.key(this._closeKeys, () => {
+      closeModal();
+    });
+
+    // NO self-listener on 'close'. The comment that used to be here said it
+    // handled "the [X] button" - this widget has no [X] button, and the only
+    // things that emit 'close' are _close() itself and the tap-to-dismiss
+    // path, both of which ARE the close. Listening to it meant closing
+    // called closing.
+  }
+
+  /**
+   * Set up touch/swipe handlers for mobile
+   */
+  private _setupTouchHandlers(): void {
+    // Track mouse/touch events for swipe detection
+    this._contentArea.on('mousedown', (data: any) => {
+      if (!this._swipeToScroll) return;
+      this._swipeStartY = data.y;
+      this._swipeStartTime = Date.now();
+    });
+
+    this._contentArea.on('mouseup', (data: any) => {
+      if (!this._swipeToScroll) return;
+
+      const deltaY = data.y - this._swipeStartY;
+      const deltaTime = Date.now() - this._swipeStartTime;
+
+      // Only register as swipe if quick motion (< 500ms)
+      if (deltaTime < 500 && Math.abs(deltaY) >= 2) {
+        // Swipe up = scroll down, swipe down = scroll up
+        const scrollAmount = deltaY > 0 ? -Math.abs(deltaY) * 2 : Math.abs(deltaY) * 2;
+        this._contentArea.scroll(scrollAmount);
+        this.screen?.render();
+      }
+    });
+
+    // Tap-to-dismiss on the modal background (not content area)
+    this.on('click', (data: any) => {
+      if (!this._isMobileMode || !this._tapToDismiss) return;
+
+      // Check if click was on modal border/background, not content
+      const target = data?.el || data?.element;
+      if (target === this) {
+        // Through the one close routine, not a second copy of it. This
+        // hand-rolled hide/onClose/emit skipped the input-trap cleanup and
+        // the focus restore, so dismissing by tap left the trap installed
+        // and the caller's focus where the modal had put it.
+        this._close();
+      }
+    });
+  }
+
+  /**
+   * Show the modal
+   */
+  display(focusOnClose?: Box | any): void {
+    // Update dimensions to current screen size
+    if (this.screen) {
+      // The caller's box wins; full screen is what it falls back to.
+      this.position.width = this._asked.width ?? this.screen.width;
+      this.position.height = this._asked.height ?? this.screen.height;
+      this.position.top = this._asked.top ?? 0;
+      this.position.left = this._asked.left ?? 0;
+
+      // Check if mobile and apply layout
+      const screenWidth = this.screen.width as number;
+      if (screenWidth < BREAKPOINT_SM) {
+        this._setMobileLayout();
+      } else {
+        this._setDesktopLayout();
+      }
+    }
+
+    // Invalidate coordinate cache
+    this._invalidateCache(this);
+
+    // Opening again arms the close again. Without this a modal that is
+    // reused - opened, closed, opened - would carry `_closed` from the
+    // first close and refuse to shut the second time, which is a worse
+    // bug than the recursion the flag exists to stop.
+    this._closed = false;
+
+    // Store element to focus when closed
+    if (focusOnClose) {
+      const originalOnClose = this._onClose;
+      this._onClose = () => {
+        if (originalOnClose) originalOnClose();
+        focusOnClose.focus?.();
+      };
+    }
+
+    // Save focus and trap input within modal
+    if (this.screen) {
+      if ((this.screen as any).saveFocus) {
+        this._savedFocus = (this.screen as any).saveFocus();
+      }
+      // Use trapFocus to constrain Tab/Shift+Tab cycling within the modal
+      if ((this.screen as any).trapFocus) {
+        (this.screen as any).trapFocus(this);
+      } else if ((this.screen as any).focusPush) {
+        (this.screen as any).focusPush(this);
+      }
+      this._trapCleanup = trapModalInput(this);
+    }
+
+    this.show();
+    this.setFront();
+    this._contentArea?.focus();
+    this.screen?.render();
+  }
+
+  /**
+   * Invalidate coordinate cache for element and children
+   */
+  private _invalidateCache(element: any): void {
+    element._coordsCacheValid = false;
+    if (element.children) {
+      for (const child of element.children) {
+        this._invalidateCache(child);
+      }
+    }
+  }
+
+  // ============================================================================
+  // Responsive Lifecycle Hooks
+  // ============================================================================
+
+  /**
+   * Handle resize - adjust layout for screen size
+   */
+  protected _handleResize(width: number, height: number, state: ResponsiveState): void {
+    super._handleResize?.(width, height, state);
+
+    // Update modal dimensions - again, only the ones the caller left to us.
+    this.position.width = this._asked.width ?? width;
+    this.position.height = this._asked.height ?? height;
+    if (this._asked.top !== undefined) this.position.top = this._asked.top;
+    if (this._asked.left !== undefined) this.position.left = this._asked.left;
+
+    // Adjust layout based on screen width
+    if (width < BREAKPOINT_SM) {
+      this._setMobileLayout();
+    } else {
+      this._setDesktopLayout();
+    }
+
+    this._invalidateCache(this);
+  }
+
+  /**
+   * Handle breakpoint change
+   */
+  protected _handleBreakpointChange(
+    breakpoint: BreakpointName,
+    previousBreakpoint: BreakpointName,
+    state: ResponsiveState
+  ): void {
+    super._handleBreakpointChange?.(breakpoint, previousBreakpoint, state);
+
+    if (state.isMobile || breakpoint === 'xs' || breakpoint === 'small') {
+      this._setMobileLayout();
+    } else {
+      this._setDesktopLayout();
+    }
+
+    this.emit('breakpoint-change', breakpoint, previousBreakpoint);
+  }
+
+  /**
+   * Called when entering mobile mode
+   */
+  protected _enterMobileMode(): void {
+    this._setMobileLayout();
+    this.emit('enter-mobile');
+  }
+
+  /**
+   * Called when exiting mobile mode
+   */
+  protected _exitMobileMode(): void {
+    this._setDesktopLayout();
+    this.emit('exit-mobile');
+  }
+
+  /**
+   * Set mobile-friendly layout
+   */
+  private _setMobileLayout(): void {
+    // Guard: only apply layout if children are initialized
+    if (!this._footer || !this._contentArea) return;
+
+    this._isMobileMode = true;
+
+    // Hide bigtext header on mobile (saves 3 rows of precious screen space)
+    if (this._header) {
+      this._header.hide();
+    }
+
+    // Move content area to top (no header)
+    this._contentArea.position.top = 0;
+    this._contentArea.position.height = '100%-3';
+
+    // Use shorter mobile footer text
+    this._footer.setContent(this._mobileFooterText);
+
+    // Increase footer height for touch targets on very small screens
+    if (this.screen && (this.screen.width as number) < BREAKPOINT_XS) {
+      this._footer.position.height = MIN_TOUCH_HEIGHT;
+      this._contentArea.position.height = `100%-${MIN_TOUCH_HEIGHT + 2}`;
+    }
+
+    this._invalidateCache(this);
+    this.screen?.render();
+  }
+
+  /**
+   * Set desktop layout
+   */
+  private _setDesktopLayout(): void {
+    // Guard: only apply layout if children are initialized
+    if (!this._footer || !this._contentArea) return;
+
+    this._isMobileMode = false;
+
+    // Show bigtext header on desktop
+    if (this._header) {
+      this._header.show();
+    }
+
+    // Restore content area position
+    this._contentArea.position.top = this._contentTopDesktop;
+    this._contentArea.position.height = `100%-${this._contentTopDesktop + 3}`;
+
+    // Restore desktop footer
+    this._footer.setContent(this._desktopFooterText);
+    this._footer.position.height = 1;
+
+    this._invalidateCache(this);
+    this.screen?.render();
+  }
+
+  // ============================================================================
+  // Public API
+  // ============================================================================
+
+  /**
+   * Set content
+   */
+  setContent(content: string): void {
+    if (!this._contentArea) return;
+    this._contentArea.setContent(content);
+  }
+
+  /**
+   * Get content
+   */
+  getContent(): string {
+    if (!this._contentArea) return '';
+    return this._contentArea.getContent();
+  }
+
+  /**
+   * Append content
+   */
+  appendContent(content: string): void {
+    if (!this._contentArea) return;
+    const current = this._contentArea.getContent();
+    this._contentArea.setContent(current + content);
+  }
+
+  /**
+   * Set title
+   */
+  setTitle(title: string): void {
+    this.setLabel(` ${title} `);
+  }
+
+  /**
+   * Set header text (bigtext)
+   */
+  setHeader(text: string): void {
+    if (this._header) {
+      this._header.setContent(text);
+    }
+  }
+
+  /**
+   * Set footer text (desktop)
+   */
+  setFooterText(text: string): void {
+    this._desktopFooterText = text;
+    if (!this._isMobileMode && this._footer) {
+      this._footer.setContent(text);
+    }
+  }
+
+  /**
+   * Set mobile footer text
+   */
+  setMobileFooterText(text: string): void {
+    this._mobileFooterText = text;
+    if (this._isMobileMode && this._footer) {
+      this._footer.setContent(text);
+    }
+  }
+
+  /**
+   * Scroll to top
+   */
+  scrollToTop(): void {
+    if (!this._contentArea) return;
+    this._contentArea.setScrollPerc(0);
+  }
+
+  /**
+   * Scroll to bottom
+   */
+  scrollToBottom(): void {
+    if (!this._contentArea) return;
+    this._contentArea.setScrollPerc(100);
+  }
+
+  /**
+   * Get the content area element (for advanced customization)
+   */
+  getContentArea(): ScrollableText | null {
+    return this._contentArea || null;
+  }
+
+  /**
+   * Set close callback
+   */
+  onClose(callback: () => void): void {
+    this._onClose = callback;
+  }
+
+  /**
+   * Check if in mobile mode
+   */
+  isMobile(): boolean {
+    return this._isMobileMode;
+  }
+
+  /**
+   * Enable/disable tap-to-dismiss
+   */
+  setTapToDismiss(enabled: boolean): void {
+    this._tapToDismiss = enabled;
+  }
+
+  /**
+   * Enable/disable swipe scrolling
+   */
+  setSwipeToScroll(enabled: boolean): void {
+    this._swipeToScroll = enabled;
+  }
+}
+
+/**
+ * Factory function
+ */
+export function docModal(options?: DocModalOptions): DocModal {
+  return new DocModal(options);
+}

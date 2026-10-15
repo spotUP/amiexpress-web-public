@@ -1,0 +1,582 @@
+import {
+  createBox,
+  createList,
+  createTextbox,
+  createButton,
+  guardDoubleSubmit
+} from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
+import blessed from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
+import { modalSize } from './layout';
+import type { Screen } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
+import type { Project, ProjectType, ProjectStatus } from '../types/project';
+import type { UserStats } from '../types/user';
+import { attachWhipMenu, menuBarHeight, type WhipMenuBar } from './menu';
+import type { MenuSelection } from '../types/session';
+import type { DataManager } from '../core/data-manager';
+import type { AchievementManager } from '../core/achievements';
+import { v4 as uuidv4 } from 'uuid';
+import { T } from '../door-theme';
+import { confirmDelete } from './confirm-delete';
+import { attachWhipChrome, type FooterHint } from './chrome';
+
+const PROJECT_TYPES: ProjectType[] = ['demo', 'intro', 'musicdisk', 'graphics', 'music', 'code', 'tools'];
+
+/** The keys this screen answers to, and the same keys shortened for 40 columns. */
+const HINTS: readonly FooterHint[] = [
+  { key: 'N', does: 'New' },
+  { key: 'E', does: 'Edit' },
+  { key: 'D', does: 'Delete' },
+  { key: 'Enter', does: 'Select' },
+  { key: 'Q/ESC', does: 'Back' },
+];
+const COMPACT_HINTS: readonly FooterHint[] = [
+  { key: 'N', does: 'New' },
+  { key: 'E', does: 'Edit' },
+  { key: 'D', does: 'Del' },
+  { key: 'Q', does: 'Back' },
+];
+
+export async function showProjectList(
+  screen: Screen,
+  user: UserStats,
+  dataManager: DataManager,
+  achievementManager: AchievementManager,
+  bbsApi?: any,
+  onNavigate?: (sel: MenuSelection) => void
+): Promise<Project | null> {
+  return new Promise(async (resolve) => {
+    screen.program.enableMouse();
+    screen.clearRegion(0, screen.width, 0, screen.height);
+    screen.alloc();
+    // Note: Removed 200ms artificial delay for better responsiveness
+
+    let projects = await dataManager.loadProjects();
+    let selectedIndex = 0;
+
+    // Menu bar row (ui/menu.ts): header and list slide down one row
+    // when it is up, and stay put below 60 columns.
+    const barH = menuBarHeight(screen.width);
+
+    // Header - NOT focusable
+    const header = createBox({
+      fixed: true,
+      parent: screen,
+      top: barH,
+      left: 0,
+      width: '100%',
+      height: 3,
+      border: { type: 'line' },
+      // Empty: a three-row framed box has ONE interior row, and the chrome's
+      // masthead owns it now. The centred title moved to `title` below.
+      content: '',
+      style: { fg: T.ink, bg: T.ground, border: { fg: T.accent } },
+      tags: true,
+      focusable: false,
+      mouse: false,
+      clickable: false,
+    });
+
+    // Project list container - NOT focusable (list inside is)
+    const listBox = createBox({
+      fixed: true,
+      parent: screen,
+      top: barH + 3,
+      left: 1,
+      width: '98%',
+      height: `100%-${barH + 6}`,
+      border: { type: 'line' },
+      label: ' Projects ',
+      style: {
+        border: { fg: T.accent },
+        bg: T.ground
+      },
+      focusable: false,
+      mouse: false,
+      clickable: false,
+    });
+
+    const list = createList({
+      parent: listBox,
+      top: 0,
+      left: 0,
+      width: '100%',
+      height: '100%',
+      keys: true,
+      vi: true,
+      mouse: true,
+      items: projects.length > 0
+        ? projects.map(p => `{bold}${p.name}{/bold} - ${p.type} (${p.status})`)
+        : [`{${T.dim}-fg}No projects yet. Press N to create one.{/${T.dim}-fg}`],
+      style: {
+        selected: { bg: T.accent, fg: T.ground },
+        item: { fg: T.ink },
+        bg: T.ground
+      }
+    });
+
+    // Footer - NOT focusable
+    const footer = createBox({
+      fixed: true,
+      parent: screen,
+      bottom: 0,
+      left: 0,
+      width: '100%',
+      height: 3,
+      border: { type: 'line' },
+      // Filled by the chrome, from the SDK's hint builder.
+      content: '',
+      style: { fg: T.dim, bg: T.ground, border: { fg: T.dim } },
+      tags: true,
+      focusable: false,
+      mouse: false,
+      clickable: false,
+    });
+
+    // The whole chrome from the door's ONE call.
+    const chrome = attachWhipChrome({
+      screen,
+      header,
+      footer,
+      title: 'ALL PROJECTS',
+      hints: HINTS,
+      compactHints: COMPACT_HINTS,
+      // The project list is the only thing here with rows to spare.
+      glitch: list,
+    });
+
+    const cleanup = () => {
+      // First: a rail timer still writing after these widgets are gone would
+      // paint into a screen that no longer holds them.
+      chrome.stop();
+      if (menu) {
+        menu.destroy();
+        menu = null;
+      }
+      screen.off('keypress', keyHandler);
+      screen.remove(header);
+      screen.remove(listBox);
+      screen.remove(footer);
+    };
+
+    const keyHandler = (ch: any, key: any) => {
+      (async () => {
+        switch (key.name) {
+        case 'n':
+          await createProject(screen, user, dataManager, achievementManager, bbsApi);
+          projects = await dataManager.loadProjects();
+          list.setItems(projects.map(p => `{bold}${p.name}{/bold} - ${p.type} (${p.status})`));
+          screen.render();
+          break;
+
+        case 'e':
+          if (projects.length > 0) {
+            await editProject(screen, projects[list.selected || 0], dataManager, bbsApi);
+            projects = await dataManager.loadProjects();
+            list.setItems(projects.map(p => `{bold}${p.name}{/bold} - ${p.type} (${p.status})`));
+            screen.render();
+          }
+          break;
+
+        case 'd':
+          if (projects.length > 0) {
+            const projectToDelete = projects[list.selected || 0];
+            const confirmed = await confirmDelete(screen, 'project', projectToDelete.name);
+            if (confirmed) {
+              await dataManager.deleteProject(projectToDelete.id);
+
+              // Emit event for deleted project
+              if (bbsApi?.emitCustomEvent) {
+                bbsApi.emitCustomEvent(
+                  'project_deleted',
+                  `Deleted project "${projectToDelete.name}"`,
+                  { projectType: projectToDelete.type, projectId: projectToDelete.id }
+                );
+              }
+
+              projects = await dataManager.loadProjects();
+              list.setItems(projects.length > 0
+                ? projects.map(p => `{bold}${p.name}{/bold} - ${p.type} (${p.status})`)
+                : [`{${T.dim}-fg}No projects yet. Press N to create one.{/${T.dim}-fg}`]);
+              screen.render();
+            }
+          }
+          break;
+
+        case 'enter':
+          if (projects.length > 0) {
+            cleanup();
+            resolve(projects[list.selected || 0]);
+            return;
+          }
+          break;
+
+        case 'q':
+        case 'escape':
+          cleanup();
+          resolve(null);
+          return;
+        }
+      })();
+    };
+
+    screen.on('keypress', keyHandler);
+    list.focus();
+
+    // Menu picks navigate out (the app loop jumps); the pick flow
+    // resolves null alongside so the kanban picker simply cancels.
+    let menu: WhipMenuBar | null = null;
+    const pickFromBar = (value: MenuSelection) => {
+      onNavigate?.(value);
+      cleanup();
+      resolve(null);
+    };
+    menu = attachWhipMenu(screen, pickFromBar, () => list, {
+      reserved: ['N', 'E', 'D', 'Q'],
+    });
+    screen.render();
+  });
+}
+
+export async function createProject(
+  screen: Screen,
+  user: UserStats,
+  dataManager: DataManager,
+  achievementManager: AchievementManager,
+  bbsApi?: any
+): Promise<void> {
+  const newProject: Project = {
+    id: uuidv4(),
+    name: '',
+    type: 'demo',
+    description: '',
+    createdBy: user.userId,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    status: 'planning'
+  };
+
+  await showProjectEditor(screen, newProject, dataManager, true, bbsApi);
+}
+
+async function editProject(
+  screen: Screen,
+  project: Project,
+  dataManager: DataManager,
+  bbsApi?: any
+): Promise<void> {
+  await showProjectEditor(screen, project, dataManager, false, bbsApi);
+}
+
+async function showProjectEditor(
+  screen: Screen,
+  project: Project,
+  dataManager: DataManager,
+  isNew: boolean,
+  bbsApi?: any
+): Promise<void> {
+  return new Promise((resolve) => {
+    screen.program.enableMouse();
+
+    // Modal container - NOT focusable (children are). Never wider than the
+    // screen it opens on (`ui/layout.ts`).
+    const pickerSize = modalSize(70, 22, screen.width, screen.height);
+    const modal = createBox({
+      fixed: true,
+      parent: screen,
+      top: 'center',
+      left: 'center',
+      width: pickerSize.width,
+      height: pickerSize.height,  // 22 at eighty columns, the screen's own below that
+      border: { type: 'line' },
+      style: {
+        border: { fg: T.accentAlt },
+        bg: T.ground
+      },
+      label: isNew ? ' New Project ' : ' Edit Project ',
+      focusable: false,
+      mouse: false,
+      clickable: false,
+    });
+
+    // Name field - label NOT focusable
+    const nameLabel = createBox({
+      fixed: true,
+      parent: modal,
+      top: 1,
+      left: 2,
+      width: '100%-4',
+      height: 1,
+      content: 'Project Name:',
+      // A label, not a framed box: createBox takes Panel's line border when
+      // the caller names none, and a one-row box with a frame has no interior -
+      // these four field labels never painted a word.
+      border: undefined,
+      style: { fg: T.ink, bg: T.ground },
+      focusable: false,
+      mouse: false,
+      clickable: false,
+    });
+
+    const nameInput = createTextbox({
+      parent: modal,
+      top: 2,
+      left: 2,
+      width: '100%-4',
+      height: 1,
+      keys: true,
+      mouse: true,
+      inputOnFocus: true,
+      value: project.name,
+      style: {
+        fg: T.ink,
+        bg: T.bar,
+        focus: { bg: 'lightblue', fg: T.ground }
+      }
+    });
+
+    // Type label - NOT focusable
+    const typeLabel = createBox({
+      fixed: true,
+      parent: modal,
+      top: 4,
+      left: 2,
+      width: 30,
+      height: 1,
+      content: 'Type:',
+      border: undefined,
+      style: { fg: T.ink, bg: T.ground },
+      focusable: false,
+      mouse: false,
+      clickable: false,
+    });
+
+    // Type list
+    const typeList = createList({
+      parent: modal,
+      top: 5,
+      left: 2,
+      width: 30,
+      height: 7,
+      border: { type: 'line' },
+      style: {
+        border: { fg: T.accent },
+        selected: { bg: T.accent, fg: T.ground },
+        item: { fg: T.ink },
+        bg: T.ground
+      },
+      keys: true,
+      vi: true,
+      mouse: true,
+      items: PROJECT_TYPES,
+      selected: PROJECT_TYPES.indexOf(project.type)
+    });
+
+    // Status label - NOT focusable
+    const statusLabel = createBox({
+      fixed: true,
+      parent: modal,
+      top: 4,
+      left: 35,
+      width: 30,
+      height: 1,
+      content: 'Status:',
+      border: undefined,
+      style: { fg: T.ink, bg: T.ground },
+      focusable: false,
+      mouse: false,
+      clickable: false,
+    });
+
+    // Status list
+    const statuses: ProjectStatus[] = ['planning', 'active', 'released'];
+    const statusList = createList({
+      parent: modal,
+      top: 5,
+      left: 35,
+      width: 30,
+      height: 7,
+      border: { type: 'line' },
+      style: {
+        border: { fg: T.accent },
+        selected: { bg: T.accent, fg: T.ground },
+        item: { fg: T.ink },
+        bg: T.ground
+      },
+      keys: true,
+      vi: true,
+      mouse: true,
+      items: statuses,
+      selected: statuses.indexOf(project.status)
+    });
+
+    // Description label - NOT focusable
+    const descLabel = createBox({
+      fixed: true,
+      parent: modal,
+      top: 13,
+      left: 2,
+      width: '100%-4',
+      height: 1,
+      content: 'Description (optional):',
+      border: undefined,
+      style: { fg: T.ink, bg: T.ground },
+      focusable: false,
+      mouse: false,
+      clickable: false,
+    });
+
+    const descInput = createTextbox({
+      parent: modal,
+      top: 14,
+      left: 2,
+      width: '100%-4',
+      height: 1,
+      keys: true,
+      mouse: true,
+      inputOnFocus: true,
+      value: project.description,
+      style: {
+        fg: T.ink,
+        bg: T.bar,
+        focus: { bg: 'lightblue', fg: T.ground }
+      }
+    });
+
+    // Save button
+    const saveBtn = createButton({
+      parent: modal,
+      bottom: 1,
+      left: 15,
+      width: 12,
+      height: 3,
+      content: ' Save ',
+      align: 'center',
+      keys: true,
+      mouse: true,
+      style: {
+        fg: T.ink,
+        bg: T.ok,
+        focus: { bg: 'lightgreen', fg: T.ground },
+        hover: { bg: 'lightgreen', fg: T.ground }
+      }
+    });
+
+    // Cancel button
+    const cancelBtn = createButton({
+      parent: modal,
+      bottom: 1,
+      left: 40,
+      width: 12,
+      height: 3,
+      content: ' Cancel ',
+      align: 'center',
+      keys: true,
+      mouse: true,
+      style: {
+        fg: T.ink,
+        bg: T.alert,
+        focus: { bg: 'lightred', fg: T.ground },
+        hover: { bg: 'lightred', fg: T.ground }
+      }
+    });
+
+    // A closed dialog saves nothing: its removed widgets keep focus, and a
+    // second Enter on Save added the same project again (2026-09-28).
+    let closed = false;
+    const cleanup = () => {
+      if (closed) return;
+      closed = true;
+      screen.off('keypress', keyHandler);
+      screen.remove(modal);
+      screen.render();
+    };
+
+    // Save handler - guarded like the other two editors: two saves at once
+    // store one project object twice.
+    const save = guardDoubleSubmit(async () => {
+      if (closed) return;
+      project.name = nameInput.getValue();
+      project.type = PROJECT_TYPES[typeList.selected!] as ProjectType;
+      project.status = statuses[statusList.selected!];
+      project.description = descInput.getValue();
+
+      if (!project.name.trim()) {
+        const msg = blessed.message({
+          parent: screen,
+          top: 'center',
+          left: 'center',
+          width: 'shrink',
+          height: 'shrink',
+          padding: 2,
+          border: { type: 'line' },
+          style: {
+            border: { fg: T.alert },
+            bg: T.ground
+          },
+          label: ' Error '
+        });
+
+        msg.display('Project name cannot be empty!\n\nPress any key to continue.', () => {
+          screen.remove(msg);
+          screen.render();
+        });
+
+        return;
+      }
+
+      if (isNew) {
+        await dataManager.addProject(project);
+
+        // Emit event for new project
+        if (bbsApi?.emitCustomEvent) {
+          bbsApi.emitCustomEvent(
+            'project_created',
+            `Created new ${project.type} project "${project.name}"`,
+            { projectType: project.type, projectId: project.id, status: project.status }
+          );
+        }
+      } else {
+        project.updatedAt = new Date().toISOString();
+        await dataManager.updateProject(project);
+
+        // Emit event for updated project
+        if (bbsApi?.emitCustomEvent) {
+          bbsApi.emitCustomEvent(
+            'project_updated',
+            `Updated project "${project.name}"`,
+            { projectType: project.type, projectId: project.id, status: project.status }
+          );
+        }
+      }
+
+      cleanup();
+      resolve();
+    });
+
+    saveBtn.on('press', () => {
+      save();
+    });
+
+    cancelBtn.on('press', () => {
+      cleanup();
+      resolve();
+    });
+
+    // Key handler for ESC
+    const keyHandler = (ch: any, key: any) => {
+      if (key.name === 'escape') {
+        cleanup();
+        resolve();
+      } else if (key.name === 'enter' && key.ctrl) {
+        save();
+      }
+    };
+
+    screen.on('keypress', keyHandler);
+
+    // Focus name input initially
+    nameInput.focus();
+    screen.render();
+  });
+}
+

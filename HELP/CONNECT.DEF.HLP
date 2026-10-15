@@ -1,0 +1,25 @@
+The Following is a list of ToolTypes for this ICON:
+
+
+NOTICE: ALL TOOLTYPES ARE CASE SENSITIVE
+
+ABOUT: This ICON is OPTIONAL and should be placed in each NODE directory that
+       has a modem tied to it.
+
+       This ICON allows you to define CONNECT strings that need special baud
+       rates.
+
+
+<connect string>=
+
+
+<connect string>=<baud>
+
+         -Version 3.0
+         -OPTIONAL
+         -Specifies the baud rate to init the serial port based on the
+          incoming connect string.
+
+     CONNECT 2400/ARQ/MNP/LAPM/V42BIS=9600
+
+

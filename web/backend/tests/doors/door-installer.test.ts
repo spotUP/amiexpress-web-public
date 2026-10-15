@@ -1,0 +1,318 @@
+import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
+const AdmZip = require('adm-zip');
+
+jest.mock('../../src/utils/archive-extractor', () => ({
+  getExtractorForFile: jest.fn(),
+}));
+jest.mock('../../src/handlers/door.handler', () => ({
+  initializeDoors: jest.fn().mockResolvedValue(undefined),
+}));
+jest.mock('../../src/doors/amigaDoorManager', () => ({
+  refreshDoorCache: jest.fn().mockResolvedValue(undefined),
+  getAmigaDoorManager: jest.fn(),
+}));
+
+const trackedFiles: Array<{ command: string; entries: any[] }> = [];
+const recordedInstalls: any[] = [];
+jest.mock('../../src/database', () => ({
+  db: { trackDoorFiles: jest.fn((command: string, entries: any[]) => { trackedFiles.push({ command, entries }); }) },
+}));
+jest.mock('../../src/doors/door-installs.repository', () => ({
+  recordInstall: jest.fn((entry: any) => { recordedInstalls.push(entry); }),
+}));
+
+import { DoorInstaller } from '../../src/doors/door-installer';
+import { getExtractorForFile } from '../../src/utils/archive-extractor';
+
+function makeZipWithPackage(pkg: object, extraFiles: Record<string, string> = {}): Buffer {
+  const zip = new AdmZip();
+  zip.addFile('package.json', Buffer.from(JSON.stringify(pkg)));
+  zip.addFile('dist/index.js', Buffer.from('module.exports = {};'));
+  for (const [name, content] of Object.entries(extraFiles)) {
+    zip.addFile(name, Buffer.from(content));
+  }
+  return zip.toBuffer();
+}
+
+function stubExtractor(zipBuf: Buffer) {
+  const zip = new AdmZip(zipBuf);
+  (getExtractorForFile as jest.Mock).mockResolvedValue({
+    getEntries: async () =>
+      zip.getEntries().map((e: any) => ({
+        name: e.entryName,
+        size: e.header.size,
+        data: e.getData(),
+      })),
+  });
+}
+
+describe('DoorInstaller — TypeScript door', () => {
+  let tmpRoot: string;
+  let installer: DoorInstaller;
+
+  beforeEach(() => {
+    tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'door-install-'));
+    installer = new DoorInstaller(tmpRoot);
+    trackedFiles.length = 0;
+    recordedInstalls.length = 0;
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpRoot, { recursive: true, force: true });
+  });
+
+  // Finding: DoorInstaller.install() is the fourth path DOORMAN's [U]pload
+  // key reaches, and it used to record nothing in either table — the exact
+  // failure this branch exists to fix, reached through a different door.
+  test('records the install in both door_installs and door_installed_files', async () => {
+    const pkg = { name: 'mygame', bbsCommand: 'MYGAME', description: 'A game', main: 'dist/index.js' };
+    stubExtractor(makeZipWithPackage(pkg));
+
+    const result = await installer.install('/fake/archives/mygame.zip');
+
+    expect(result.success).toBe(true);
+    expect(recordedInstalls).toHaveLength(1);
+    expect(recordedInstalls[0]).toMatchObject({
+      command: 'MYGAME',
+      archive_name: 'mygame.zip',
+      install_dir: path.join('Doors', 'mygame'),
+    });
+    expect(trackedFiles).toHaveLength(1);
+    expect(trackedFiles[0].command).toBe('MYGAME');
+    expect(trackedFiles[0].entries.map((e: any) => e.filePath))
+      .toContain(path.join('Commands', 'BBSCmd', 'MYGAME.info'));
+  });
+
+  test('installs a zip with bbsCommand in package.json', async () => {
+    const pkg = { name: 'mygame', bbsCommand: 'MYGAME', description: 'A game', main: 'dist/index.js' };
+    stubExtractor(makeZipWithPackage(pkg));
+
+    const result = await installer.install('/fake/mygame.zip');
+
+    expect(result.success).toBe(true);
+    expect(result.doorName).toBe('mygame');
+    expect(result.command).toBe('MYGAME');
+    expect(result.type).toBe('typescript');
+    expect(fs.existsSync(path.join(tmpRoot, 'Doors', 'mygame', 'dist', 'index.js'))).toBe(true);
+    const infoContent = fs.readFileSync(
+      path.join(tmpRoot, 'Commands', 'BBSCmd', 'MYGAME.info'),
+      'utf8',
+    );
+    expect(infoContent).toContain('BBSCMD=MYGAME');
+    expect(infoContent).toContain('LOCATION=Doors/mygame');
+    expect(infoContent).toContain('TYPE=TS');
+  });
+
+  test('installs a zip with amiexpress.command in package.json', async () => {
+    const pkg = {
+      name: 'coolapp',
+      amiexpress: { command: 'COOLAPP' },
+      description: 'Cool app',
+      main: 'dist/index.js',
+    };
+    stubExtractor(makeZipWithPackage(pkg));
+
+    const result = await installer.install('/fake/coolapp.zip');
+
+    expect(result.success).toBe(true);
+    expect(result.command).toBe('COOLAPP');
+  });
+
+  test('strips top-level directory from archive', async () => {
+    const zip = new AdmZip();
+    zip.addFile('mygame/', Buffer.alloc(0));
+    zip.addFile('mygame/package.json', Buffer.from(JSON.stringify({
+      name: 'mygame', bbsCommand: 'MYGAME', main: 'dist/index.js',
+    })));
+    zip.addFile('mygame/dist/index.js', Buffer.from('module.exports = {};'));
+    stubExtractor(zip.toBuffer());
+
+    const result = await installer.install('/fake/mygame.zip');
+
+    expect(result.success).toBe(true);
+    expect(fs.existsSync(path.join(tmpRoot, 'Doors', 'mygame', 'package.json'))).toBe(true);
+  });
+
+  test('returns error if Doors/<name> already exists', async () => {
+    const pkg = { name: 'existing', bbsCommand: 'EXISTING', main: 'dist/index.js' };
+    fs.mkdirSync(path.join(tmpRoot, 'Doors', 'existing'), { recursive: true });
+    stubExtractor(makeZipWithPackage(pkg));
+
+    const result = await installer.install('/fake/existing.zip');
+
+    expect(result.success).toBe(false);
+    expect(result.message).toMatch(/already exists/i);
+  });
+
+  test('returns error with listing if archive type is undetectable', async () => {
+    (getExtractorForFile as jest.Mock).mockResolvedValue({
+      getEntries: async () => [
+        { name: 'readme.txt', size: 10, data: Buffer.from('hello') },
+        { name: 'somefile.bin', size: 5, data: Buffer.from([1, 2, 3]) },
+      ],
+    });
+
+    const result = await installer.install('/fake/unknown.zip');
+
+    expect(result.success).toBe(false);
+    expect(result.message).toMatch(/cannot detect/i);
+    expect(result.message).toContain('readme.txt');
+  });
+});
+
+describe('DoorInstaller — 68K door', () => {
+  let tmpRoot: string;
+  let installer: DoorInstaller;
+
+  beforeEach(() => {
+    tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'door-install-68k-'));
+    installer = new DoorInstaller(tmpRoot);
+    trackedFiles.length = 0;
+    recordedInstalls.length = 0;
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpRoot, { recursive: true, force: true });
+  });
+
+  test('records the install in both door_installs and door_installed_files', async () => {
+    (getExtractorForFile as jest.Mock).mockResolvedValue({
+      getEntries: async () => [
+        { name: 'WHO', size: 5000, data: Buffer.alloc(5000, 0x4e) },
+        {
+          name: 'WHO.info',
+          size: 200,
+          data: Buffer.from(
+            'BBSCMD=WHO\nTYPE=XIM\nLOCATION=DOORS:WHO/WHO\nDESCRIPTION=Who is online\nACCESS=0',
+          ),
+        },
+      ],
+    });
+
+    const result = await installer.install('/fake/archives/who.lha');
+
+    expect(result.success).toBe(true);
+    expect(recordedInstalls).toHaveLength(1);
+    expect(recordedInstalls[0]).toMatchObject({
+      command: 'WHO',
+      archive_name: 'who.lha',
+      install_dir: path.join('Doors', 'who'),
+      door_type: 'XIM',
+    });
+    expect(trackedFiles).toHaveLength(1);
+    expect(trackedFiles[0].command).toBe('WHO');
+    expect(trackedFiles[0].entries.map((e: any) => e.filePath))
+      .toContain(path.join('Doors', 'who', 'WHO'));
+  });
+
+  test('a 68K icon with no ACCESS installs with no ACCESS line (ACCESS=0 would run for nobody)', async () => {
+    (getExtractorForFile as jest.Mock).mockResolvedValue({
+      getEntries: async () => [
+        { name: 'WHO', size: 5000, data: Buffer.alloc(5000, 0x4e) },
+        {
+          name: 'WHO.info',
+          size: 100,
+          data: Buffer.from('BBSCMD=WHO\nTYPE=XIM\nLOCATION=DOORS:WHO/WHO\nDESCRIPTION=Who is online'),
+        },
+      ],
+    });
+    const result = await installer.install('/fake/archives/who.lha');
+    expect(result.success).toBe(true);
+    const written = fs.readFileSync(path.join(tmpRoot, 'Commands', 'BBSCmd', 'WHO.info'), 'utf8');
+    expect(written).not.toMatch(/^ACCESS=/m);
+  });
+
+  test('a 68K icon level is carried over unchanged', async () => {
+    (getExtractorForFile as jest.Mock).mockResolvedValue({
+      getEntries: async () => [
+        { name: 'WHO', size: 5000, data: Buffer.alloc(5000, 0x4e) },
+        {
+          name: 'WHO.info',
+          size: 100,
+          data: Buffer.from('BBSCMD=WHO\nTYPE=XIM\nLOCATION=DOORS:WHO/WHO\nACCESS=25'),
+        },
+      ],
+    });
+    await installer.install('/fake/archives/who.lha');
+    const written = fs.readFileSync(path.join(tmpRoot, 'Commands', 'BBSCmd', 'WHO.info'), 'utf8');
+    expect(written).toMatch(/^ACCESS=25$/m);
+  });
+
+  test('installs a 68K door from LHA entries', async () => {
+    (getExtractorForFile as jest.Mock).mockResolvedValue({
+      getEntries: async () => [
+        { name: 'WHO', size: 5000, data: Buffer.alloc(5000, 0x4e) },
+        {
+          name: 'WHO.info',
+          size: 200,
+          data: Buffer.from(
+            'BBSCMD=WHO\nTYPE=XIM\nLOCATION=DOORS:WHO/WHO\nDESCRIPTION=Who is online\nACCESS=0',
+          ),
+        },
+      ],
+    });
+
+    const result = await installer.install('/fake/who.lha');
+
+    expect(result.success).toBe(true);
+    expect(result.command).toBe('WHO');
+    expect(result.type).toBe('XIM');
+    expect(fs.existsSync(path.join(tmpRoot, 'Doors', 'who', 'WHO'))).toBe(true);
+
+    const infoContent = fs.readFileSync(
+      path.join(tmpRoot, 'Commands', 'BBSCmd', 'WHO.info'),
+      'utf8',
+    );
+    expect(infoContent).toContain('BBSCMD=WHO');
+    expect(infoContent).toContain('LOCATION=Doors/who/WHO');
+  });
+
+  test('picks the LOCATION-named binary over a data file that precedes it in the archive', async () => {
+    (getExtractorForFile as jest.Mock).mockResolvedValue({
+      getEntries: async () => [
+        // No extension, so it also matches the generic "no dot" binary
+        // heuristic, and it comes FIRST in the archive — the bug picked
+        // this file as binEntry and detected doorType off ITS bytes
+        // (defaulting to XIM) instead of the real binary's.
+        { name: 'CONFIG', size: 10, data: Buffer.from('plain data, no IPC marker') },
+        {
+          name: 'WHO',
+          size: 5000,
+          data: Buffer.concat([
+            Buffer.from('FAMEDoorPort'),
+            Buffer.alloc(4988, 0x4e),
+          ]),
+        },
+        {
+          name: 'WHO.info',
+          size: 200,
+          data: Buffer.from(
+            'BBSCMD=WHO\nLOCATION=DOORS:WHO/WHO\nDESCRIPTION=Who is online\nACCESS=0',
+          ),
+        },
+      ],
+    });
+
+    const result = await installer.install('/fake/who.lha');
+
+    expect(result.success).toBe(true);
+    // LOCATION says the binary is "WHO" — must detect FIM off WHO's bytes,
+    // not XIM off CONFIG's (the data file that happened to sort first).
+    expect(result.type).toBe('FIM');
+  });
+
+  test('rejects archive with path traversal', async () => {
+    (getExtractorForFile as jest.Mock).mockResolvedValue({
+      getEntries: async () => [
+        { name: '../escape/evil.sh', size: 10, data: Buffer.from('rm -rf /') },
+      ],
+    });
+
+    const result = await installer.install('/fake/evil.zip');
+
+    expect(result.success).toBe(false);
+    expect(result.message).toMatch(/unsafe path/i);
+  });
+});

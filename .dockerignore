@@ -1,0 +1,121 @@
+# =============================================================================
+# .dockerignore - Only exclude things we KNOW are not needed in the image
+# =============================================================================
+# BBS has hundreds of data files (doors, screens, scripts, configs, binaries)
+# that MUST be included. Use a conservative exclude list.
+
+# Version control
+.git
+.gitignore
+.github
+
+# Dependencies (rebuilt in Docker)
+node_modules
+Doors/**/node_modules
+doors/**/node_modules
+npm-debug.log
+yarn-error.log
+
+# Build outputs (rebuilt in Docker, except Door dist/)
+dist
+!Doors/**/dist
+!doors/**/dist
+build
+.next
+out
+
+# IDE / OS
+.vscode
+.idea
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# Dev-only directories
+dev/scripts
+Documentation
+# ...except the two guides the AI co-sysop retrieves from (handlers/sysop-ai/corpus.ts;
+# the Dockerfile COPYs exactly these two).
+!Documentation/1-Users/USER_GUIDE.md
+!Documentation/2-Sysops/SYSOP_GUIDE.md
+thoughts
+history
+tmp
+temp
+# Agent/session scratch (worktrees, scratchpads) - never part of an image.
+# The bot image build tried to tar another session's live worktree here.
+.claude/
+.scratchpad/
+scratchpad/
+coverage
+.nyc_output
+__tests__
+__mocks__
+mcp-server-debug
+backup-2025-12-27
+backups
+
+# Test files
+*.test.ts
+*.spec.ts
+*.tmp
+
+# Environment files
+.env.local
+.env.development
+.env.test
+
+# Third-party source archives (not needed at runtime)
+amiga-gcc
+elf2hunk
+lha
+vbcc.tar.gz
+ascii-patrol-master
+blessed-contrib-master
+HeborisCE-main
+TetriNET2-master
+AmiExpress-Sources
+
+# Database files (in volume)
+db/*.db
+db/*.sqlite
+database.sqlite
+
+# User data files (gitignored, synced separately)
+bbsConfig.info
+User.data
+User.keys
+user.misc
+*.user
+*.userkeys
+
+# Dev config files
+.eslintrc
+.prettierrc
+jest.config.js
+
+# Large ROM files (copied separately, kept in persistent volume)
+data/amiga-roms/*
+!data/amiga-roms/aros-rom.bin
+!data/amiga-roms/aros-ext.bin
+
+# SSH keys
+ssh_host_rsa_key
+ssh_host_rsa_key.pub
+
+# Misc dev/debug files
+debug
+debug.log
+debug-chat-login.js
+68klog.txt
+reference-board.log
+test-*.sh
+test-*.js
+test-*.ts
+test-results.json
+run-bbs-tests.sh
+ws-dual.mjs
+check_all_doors.sh
+logs

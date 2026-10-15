@@ -1,0 +1,6 @@
+BBSCMD=PUZZLEBOBBLE
+TYPE=TS
+LOCATION=Doors/puzzle-bobble
+DESCRIPTION=Puzzle Bobble (Bust-A-Move) - 1994 Taito bubble-matching puzzle game
+MULTINODE=YES
+PRIORITY=SAME

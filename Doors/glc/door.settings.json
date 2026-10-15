@@ -1,0 +1,86 @@
+{
+  "command": "GLC",
+  "cfgFile": "GLCViewer.cfg",
+  "settings": [
+    {
+      "key": "serverHost",
+      "cfgKey": "SERVERHOST",
+      "label": "Wall server",
+      "type": "string",
+      "default": "scenewall.bbs.io",
+      "group": "Server",
+      "help": "Where the global caller list comes from. The same server GWall uses."
+    },
+    {
+      "key": "serverPort",
+      "cfgKey": "SERVERPORT",
+      "label": "Port",
+      "type": "number",
+      "default": 1541,
+      "min": 1,
+      "max": 65535,
+      "group": "Server"
+    },
+    {
+      "key": "timeout",
+      "cfgKey": "TIMEOUT",
+      "label": "Connect timeout (seconds)",
+      "type": "number",
+      "default": 5,
+      "min": 1,
+      "max": 120,
+      "group": "Server",
+      "help": "How long to wait for the wall server before giving up. A caller sits through this."
+    },
+    {
+      "key": "tempFile",
+      "cfgKey": "TEMPFILE",
+      "label": "Working file",
+      "type": "string",
+      "default": "t:jsondata",
+      "group": "Server",
+      "help": "Where the door parks the JSON it fetched while it draws. An AmigaDOS path: t: is the emulator's temporary assign."
+    },
+    {
+      "key": "lines",
+      "cfgKey": "LINES",
+      "label": "Lines to display",
+      "type": "string",
+      "default": "AUTO",
+      "group": "Display",
+      "help": "AUTO uses the caller's own screen length, which is what a door should do. A number overrides it for every caller alike."
+    },
+    {
+      "key": "screenClear",
+      "cfgKey": "SCREENCLEAR",
+      "label": "Clear the screen first",
+      "type": "choice",
+      "choices": [
+        { "value": "NO", "label": "No - draw under what is there" },
+        { "value": "YES", "label": "Yes - clear before drawing" }
+      ],
+      "default": "NO",
+      "group": "Display",
+      "help": "Whether to wipe the screen before drawing the list, or let it scroll under whatever the caller was looking at."
+    },
+    {
+      "key": "style",
+      "cfgKey": "STYLE",
+      "label": "Style",
+      "type": "string",
+      "default": "1,4,3",
+      "pattern": "^[1-4](,[1-4])*$",
+      "group": "Display",
+      "help": "Four layouts, 1 to 4 - two headers and two footers. A comma-separated list picks one of them at random each time, which is why this board ships 1,4,3."
+    },
+    {
+      "key": "timezone",
+      "cfgKey": "TIMEZONE",
+      "label": "Timezone",
+      "type": "string",
+      "default": "W. Europe Standard Time",
+      "group": "Display",
+      "help": "Used to print call times. Windows timezone naming, not IANA - \"W. Europe Standard Time\", not \"Europe/Stockholm\". The board sends it with every posted call and reads the list in it."
+    }
+  ]
+}

@@ -1,0 +1,141 @@
+/**
+ * Modal CSS - Centered modal with responsive design
+ */
+
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 20px;
+}
+
+.modal-container {
+  background-color: #1a1a1a;
+  border: 2px solid #333;
+  border-radius: 8px;
+  max-width: 500px;
+  width: 100%;
+  max-height: 90vh;
+  overflow-y: auto;
+  position: relative;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+}
+
+.modal-close {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  background: transparent;
+  border: none;
+  font-size: 28px;
+  color: #888;
+  cursor: pointer;
+  padding: 0;
+  width: 30px;
+  height: 30px;
+  line-height: 30px;
+  text-align: center;
+  transition: color 0.2s;
+}
+
+.modal-close:hover {
+  color: #fff;
+}
+
+.modal-header {
+  padding: 20px 50px 10px 20px;
+  border-bottom: 1px solid #333;
+}
+
+.modal-header h2 {
+  margin: 0;
+  font-size: 20px;
+  color: #fff;
+  font-family: 'Courier New', monospace;
+}
+
+.modal-content {
+  padding: 20px;
+  color: #aaa;
+  font-family: 'Courier New', monospace;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.modal-buttons {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+  margin-top: 20px;
+}
+
+.modal-button {
+  padding: 10px 20px;
+  border: 1px solid #555;
+  border-radius: 4px;
+  font-family: 'Courier New', monospace;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.2s;
+  min-width: 80px;
+}
+
+.modal-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.modal-button-primary {
+  background-color: #0066cc;
+  color: #fff;
+  border-color: #0066cc;
+}
+
+.modal-button-primary:hover:not(:disabled) {
+  background-color: #0052a3;
+  border-color: #0052a3;
+}
+
+.modal-button-secondary {
+  background-color: #444;
+  color: #fff;
+  border-color: #666;
+}
+
+.modal-button-secondary:hover:not(:disabled) {
+  background-color: #555;
+  border-color: #777;
+}
+
+.modal-button-danger {
+  background-color: #aa0000;
+  color: #fff;
+  border-color: #aa0000;
+}
+
+.modal-button-danger:hover:not(:disabled) {
+  background-color: #880000;
+  border-color: #880000;
+}
+
+/* Responsive adjustments */
+@media (max-width: 600px) {
+  .modal-container {
+    max-width: 90vw;
+  }
+
+  .modal-buttons {
+    flex-direction: column;
+  }
+
+  .modal-button {
+    width: 100%;
+  }
+}

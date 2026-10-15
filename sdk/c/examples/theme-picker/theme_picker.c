@@ -1,0 +1,483 @@
+/*
+ * THEME - pick how the doors look. In C, on a 68K Amiga.
+ *
+ * The port of Doors/theme-picker (255 lines of TypeScript), and the proof
+ * the C SDK asked for: a real door, drawn with the widgets, reading and
+ * writing through the protocol.
+ *
+ * It is deliberately the SAME door: the caller's current theme is marked
+ * rather than merely highlighted (the highlight follows the cursor and says
+ * nothing about what is saved), the screen is drawn in the theme you are
+ * leaving, and the door says when a change applies rather than leaving
+ * anyone wondering why nothing looks different yet.
+ *
+ * WHAT IT DOES THAT THE TYPESCRIPT ONE CANNOT: nothing. What it does that no
+ * C door could until now: save the choice. AEW_THEME is this board's own
+ * command (sdk/c/include/ae_session.h), so the door asks where it is running
+ * before offering to save at all - on a classic AmiExpress it lists the
+ * themes and says plainly that this board cannot keep one.
+ */
+
+#include <stdio.h>          /* sprintf: a varargs call with no prototype in
+                             scope is undefined behaviour on 68K, not a
+                             warning to live with */
+
+#include "aedoor.h"        /* ae_start, ae_shutdown, ae_put, ae_delay_ticks -
+                             implicitly declared until 2026-09-07, which on
+                             this target means "returns int" */
+#include "ae_host.h"
+#include "ae_session.h"
+#include "ui_ansi.h"
+#include "ui_chrome.h"
+#include "ui_input.h"
+#include "ui_key.h"
+#include "ui_list.h"
+#include "ui_profile.h"
+#include "ui_screen.h"
+#include "ui_theme.h"
+#include "theme_preview.h"
+
+#include <stdlib.h>
+#include <string.h>
+
+/* One frame and one AEDoor message, both owned here: a library that
+   allocated would be a library a door cannot budget for. */
+static char frame_buffer[16384];
+static char session_storage[AE_SESSION_MIN_STORAGE];
+
+/** The id in force when the door opened, so the list can mark it. */
+static char active_theme[32];
+
+/** The caller's saved theme and the one being previewed (theme_preview.h). */
+static theme_preview preview;
+
+/**
+ * LIVE PREVIEW: the highlighted theme is the one the whole door wears.
+ *
+ * "THEME live previews the themes when I navigate the menu, THEMEC doesn't"
+ * (sysop, 2026-10-15). Every cursor move changes theme, so every move is a
+ * full repaint (a palette change changes every cell; measured with
+ * `make probe`, see thoughts/ handoff). The model lives in theme_preview.c so
+ * a host test can prove the palette follows the highlight and that leaving
+ * puts the caller's own theme back; saving happens only on Enter.
+ */
+
+/* The board's ground, painted under everything. A C64 cell cannot carry a
+   background (the screen is black), so there the ground stays the terminal's. */
+static ui_screen *ground_screen;
+static int ground(void)
+{
+    return (ground_screen && ground_screen->profile.cell_backgrounds) ? UI_TOKEN(UI_T_GROUND) : -1;
+}
+
+/** One row: the mark, the name, and the blurb if the screen has room. */
+static const char *theme_row(void *context, int index)
+{
+    static char row[96];
+    const ui_theme *t = ui_theme_at(index);
+    int wide = *(int *)context;
+    const char *mark;
+
+    /* Marked, not highlighted: the highlight is where the cursor is, and
+       this is what is SAVED - the same distinction the TypeScript makes.
+       And the mark carries the theme's ACCENT while the empty one is dim,
+       exactly as buildThemeItems paints them: `s.accent('[*]')` against
+       `s.dim('[ ]')`. Without this every theme but the green one drew a
+       screen of identical grey (sysop, 2026-09-06). */
+    mark = (strcmp(t->id, active_theme) == 0) ? "[*] " : "[ ] ";
+
+    row[0] = '\0';
+    {
+        char pen[4];
+        ui_ink(pen, (strcmp(t->id, active_theme) == 0)
+                    ? UI_TOKEN(UI_T_ACCENT) : UI_TOKEN(UI_T_DIM));
+        strcat(row, pen);
+        strcat(row, mark);
+        ui_ink(pen, UI_TOKEN(UI_T_INK));
+        strcat(row, pen);
+    }
+    /* The NAME, like the TypeScript picker: "Slate & Slash", not
+       "slate-slash" (Doors/theme-picker/app.ts, buildThemeItems). */
+    strncat(row, t->name, sizeof(row) - strlen(row) - 2);
+
+    /* 40 columns: the name alone. A folded row eats the theme underneath
+       it, which is how the C64 lost a third of this list in the TypeScript.
+       At 80 the name is padded to sixteen and the blurb follows, which is
+       what buildThemeItems does - the two doors are one screen. */
+    if (wide) {
+        /* Columns to pad, bytes to write - the row carries colour markers,
+           so its printable width and its length are different numbers.
+           Mixing them truncated every name (measured against the blessed
+           picker, 2026-09-06). */
+        unsigned long cols_now = ui_printable_len(row);
+        unsigned long bytes = strlen(row);
+        unsigned long want = 4 + 16;       /* "[*] " plus the name column */
+
+        while (cols_now < want && bytes < sizeof(row) - 2) {
+            row[bytes++] = ' ';
+            cols_now++;
+        }
+        /* And always one space, because padEnd does not truncate. */
+        if (bytes < sizeof(row) - 2) row[bytes++] = ' ';
+        row[bytes] = '\0';
+        {
+            char pen[4];
+            ui_ink(pen, UI_TOKEN(UI_T_DIM));
+            strcat(row, pen);
+        }
+        strncat(row, t->blurb[0] ? t->blurb : (t->rail[0] ? t->rail : "-"),
+                sizeof(row) - strlen(row) - 2);
+    }
+    return row;
+}
+
+/** A key, read through the board. */
+static int door_key(void *ctx)
+{
+    (void)ctx;
+    return ae_key();
+}
+
+static int door_pending(void *ctx)
+{
+    (void)ctx;
+    return ae_input_pending();
+}
+
+/**
+ * The masthead's slide, and the state it needs.
+ *
+ * A 68K door has one thread and blocks in ae_key(), so there is no timer to
+ * hang an animation on: the rail moves in the idle hook (ui_key.h), which
+ * ui_key_read calls while nothing is typed. Each frame is one XIM message
+ * of about 45ms, so this ticks four times a second rather than the twenty
+ * the browser-side chrome runs at - a slash rail reads as motion either way.
+ *
+ * Set up only where decorative motion is allowed. At 40 columns it is not
+ * (ui_effects_allowed), and the idle hook is left NULL, so the door blocks
+ * in ae_key() exactly as it always did and costs the board nothing.
+ */
+typedef struct {
+    ui_screen *screen;
+    const ui_theme **theme;
+    int *tick;
+    int no_rail;   /* collapsed chrome (40 columns): the full frame draws no rail, so none may animate */
+} rail_anim;
+
+static void door_idle(void *ctx)
+{
+    rail_anim *a = (rail_anim *)ctx;
+
+    if (!a) return;
+    /* Nothing to animate without a rail: the tick would repaint the
+       identical row five times a second and the title flickers under it
+       (ui_chrome.h, ui_masthead_rail_animates). Still yield - the poll loop
+       spins hot on a 68K otherwise. */
+    if (a->no_rail || !ui_masthead_rail_animates((*a->theme)->rail)) { ae_delay_ticks(UI_RAIL_TICK_DELAY); return; }
+    (*a->tick) += UI_RAIL_STEP;
+    /* The RAIL, not the row - see ui_chrome.h. */
+    ui_masthead_rail_tick(&a->screen->buf, 1, 1, a->screen->cols, "DOOR THEME",
+                          (*a->theme)->rail, UI_TOKEN(UI_T_ACCENT),
+                          UI_TOKEN(UI_T_GROUND), *a->tick);
+    ui_screen_flush(a->screen);
+    ae_delay_ticks(UI_RAIL_TICK_DELAY);
+}
+
+static void door_settle(void *ctx)
+{
+    (void)ctx;
+    /* Long enough for the rest of an escape sequence to land, short enough
+       that a lone ESC still feels immediate - the door layer's own probe. */
+    ae_delay_ticks(2);
+}
+
+int main(int argc, char **argv)
+{
+    ae_session session;
+    ui_screen screen;
+    ui_list list;
+    ui_key_source keys;
+    const ae_host_info_t *host;
+    const ui_theme *theme;
+    int pushback = -1;
+    int node = (argc > 1) ? atoi(argv[1]) : 1;
+    int wide;
+    int running = 1;
+    int saved = 0;
+    int rail_tick = 0;
+    rail_anim anim;
+    /* The whole screen on the first frame and after a theme change; a
+       cursor move repaints two rows (RULES.md, "Doors draw smart"). */
+    int full = 1;
+
+    if (ae_start(node) != 0) return 20;
+    if (ae_open_bbs(&session, session_storage, (long)sizeof(session_storage), node) != 0) {
+        ae_shutdown();
+        return 20;
+    }
+
+    ui_screen_open(&screen, &session, frame_buffer, (long)sizeof(frame_buffer));
+    ground_screen = &screen;
+    wide = !ui_is_compact_width(screen.cols);
+
+    /* Drawn in the theme you are LEAVING, so the screen you choose from is
+       itself an example of what you have. */
+    ae_user_theme(&session, active_theme, (int)sizeof(active_theme));
+    theme = ui_theme_by_id(active_theme);
+    {
+        int i, at = 0;
+        for (i = 0; i < ui_theme_count(); i++) {
+            if (ui_theme_at(i) == theme) at = i;
+        }
+        theme_preview_init(&preview, at);
+    }
+    /* The theme's EXACT colours, so this door writes the same bytes the
+       TypeScript one does rather than the nearest of sixteen. */
+    theme_preview_apply(&preview, &screen.buf);
+
+    keys.next = door_key;
+    keys.pending = door_pending;
+    keys.settle = door_settle;
+    keys.idle = 0;
+    keys.flush = 0;
+    keys.ctx = 0;
+
+    ui_list_init(&list);
+    /* Row 3, no frame, hard against the left margin - where the blessed
+       picker puts its list (top: 2 under a masthead row and a blank one).
+       A box was the C door's own invention and the sysop saw it at once. */
+    list.top = 3;
+    list.left = 1;
+    list.width = screen.cols - 1;
+    list.height = ui_theme_count();
+    list.count = ui_theme_count();
+    list.row = theme_row;
+    list.context = &wide;
+    list.label = " THEMES ";
+    /* The TypeScript list has `border: undefined` at every width. */
+    list.borders = 0;
+    list.ground = ground();
+    /* ">>" where a bar will not fit, which is what the TypeScript picker
+       shows on a C64. */
+    /* blessed marks the selected row with a caret at EVERY width - it is
+       the list's own `»`, which reaches a caller as ">>". */
+    list.caret = ">>";
+
+    /* The rail slides only where decorative motion is allowed - never on the
+       40-column tier, where a moving effect leaves stray glyphs mid-row. */
+    /* At EVERY width, this door: it is the showcase, and a still rail on a
+       C64 shows a caller the wrong thing. The tier rule stands for every
+       other door (ui_effects_allowed); the blessed picker sets `showcase`
+       for the same reason. Ten ticks a frame keeps a C64 caller to five XIM
+       messages a second. */
+    anim.screen = &screen;
+    anim.theme = &theme;
+    anim.tick = &rail_tick;
+    anim.no_rail = screen.profile.collapse_chrome;
+    keys.idle = door_idle;
+    keys.flush = 0;
+    keys.ctx = &anim;
+    /* The primary colour carries the chrome, the same rule the TypeScript
+       doors follow since 2026-09-03. */
+    list.chrome = UI_TOKEN(UI_T_ACCENT);
+    list.ink = UI_TOKEN(UI_T_INK);
+    list.selected_fg = UI_TOKEN(UI_T_SELECTION_INK);
+    list.selected_bg = UI_TOKEN(UI_T_SELECTION_BG);
+
+    {
+        int i;
+        for (i = 0; i < ui_theme_count(); i++) {
+            if (strcmp(ui_theme_at(i)->id, active_theme) == 0) ui_list_select(&list, i);
+        }
+    }
+
+    host = ae_host_info();
+
+    while (running && ae_carrier(&session)) {
+        int key;
+        const char *note;
+
+        if (!full) {
+            ui_list_draw_changed(&list, &screen.buf, 0);
+            ui_screen_flush(&screen);
+            key = ui_key_read(&keys, &pushback);
+            if (key < 0) break;
+            goto handle_key;
+        }
+        theme_preview_apply(&preview, &screen.buf);
+        /* The GROUND is painted, never left to the terminal's default: under
+           a preview the old theme's ground would otherwise show through. */
+        ansi_clear_ground(&screen.buf, UI_TOKEN(UI_T_INK), ground());
+        /* At EVERY width. The blessed door keeps its masthead row on a C64
+           and loses only the RAIL - ui_masthead_draw_tick drops that on its
+           own when the title leaves no room for a run. Suppressing the whole
+           row here left a C64 caller looking at a screen with no name on it,
+           which the TypeScript never did (measured side by side,
+           2026-09-06). */
+        /* On the GROUND. The blessed masthead is a row of the theme's own
+           colours on the screen's background - `{ fg: dim, bg: ground }`
+           with the rail and title painted into it - and the C drew it as
+           ground-on-accent, which is a slab of the accent colour with the
+           slashes cut out of it. "the ///// should have black background
+           not light, in all themes" (sysop, 2026-09-07). */
+        ui_masthead_draw_tick(&screen.buf, 1, 1, screen.cols, "DOOR THEME",
+                              screen.profile.collapse_chrome ? "" : theme->rail,
+                              UI_TOKEN(UI_T_ACCENT), UI_TOKEN(UI_T_GROUND),
+                              rail_tick);
+        ui_list_draw(&list, &screen.buf);
+
+        /* Say what will happen, and say the truth about this board - in
+           words that FIT. ansi_text() clips at cols-3, which is 37 cells on
+           a C64, and both of the wide sentences are longer than that: the
+           caller was reading "THIS BOARD CANNOT KEEP A THEME - SHOW", cut
+           mid-word. A shorter sentence is the door saying the same thing in
+           its own words, which is what a 40-column screen is owed; clipping
+           is the door saying half of one. */
+        if (wide) {
+            note = (host->host == AE_HOST_WEB)
+                ? "A theme applies the next time a door draws."
+                : "This board cannot keep a theme - showing them only.";
+        } else {
+            /* The same sentence the TypeScript picker uses at this width
+               (buildNote), so the two screens read alike. */
+            note = (host->host == AE_HOST_WEB)
+                ? "Applies on next door draw."
+                : "This board cannot keep a theme.";
+        }
+        ansi_color(&screen.buf, UI_TOKEN(UI_T_DIM), ground(), 0);
+        /* One blank row under the last theme, like the TypeScript's
+           `top: listRows + 3`. It used to sit at the bottom of the screen,
+           twelve rows away from what it was talking about. */
+        ansi_text(&screen.buf, list.top + ui_theme_count() + 1, 3,
+                  note, screen.cols - 3);
+
+        {
+            char footer[160];
+            const char *optional[2];
+            int n = 0;
+
+            /* Abbreviated at 40, in the TypeScript's own words
+               (buildFooterHints): the same three keys, shorter. */
+            /* Movement first, then the commitment, then the way out - the
+               order buildFooterHints lists them in. */
+            /* `${key(h.key + ':')} ${dim(h.does)}` - the key carries the
+               theme's accent and the verb is dim, which is what footerHints
+               does and what makes a themed footer look themed. */
+            static char h1[40], h2[40], h3[40];
+            char keypen[4], dimpen[4];
+
+            ui_ink(keypen, UI_TOKEN(UI_T_ACCENT));
+            ui_ink(dimpen, UI_TOKEN(UI_T_DIM));
+
+            sprintf(h1, "%s%s %s%s", keypen, wide ? "Up/Down:" : "Up/Dn:",
+                    dimpen, wide ? "Choose" : "Pick");
+            optional[n++] = h1;
+            if (host->host == AE_HOST_WEB) {
+                sprintf(h2, "%s%s %s%s", keypen, wide ? "Enter:" : "Ent:",
+                        dimpen, wide ? "Use it" : "Use");
+                optional[n++] = h2;
+            }
+            sprintf(h3, "%sQ: %s%s", keypen, dimpen, wide ? "Leave" : "Bye");
+            /* ` hints  <rail>` - footerPad plus the branding tail, which is
+               what attachDoorChrome appends (chrome.ts: the rail at the end
+               is branding, not a hint, so it stays dim). */
+            {
+                static char tail[24];
+                if (wide && theme->rail[0]) {
+                    sprintf(tail, "%s%s", dimpen, theme->rail);
+                } else {
+                    tail[0] = '\0';
+                }
+                /* No prefix: ui_footer_build would follow it with its own
+                   two-space separator, and the SDK's footerPad is ONE
+                   space. It goes on below, in front of the whole line. */
+                ui_footer_build(footer, sizeof(footer), screen.cols - 1,
+                                "", optional, n, h3);
+                memmove(footer + 1, footer, strlen(footer) + 1);
+                footer[0] = ' ';
+                if (tail[0] && strlen(footer) + strlen(tail) + 3 < sizeof(footer)) {
+                    strcat(footer, "  ");
+                    strcat(footer, tail);
+                }
+            }
+            if (screen.profile.collapse_chrome) {
+                /* No bar: chrome is collapsed here, so the hints are a line
+                   of dim text like every other line on the screen. */
+                /* -1, not the ground: blessed writes no background for ordinary
+           text and a door that paints one owns every cell it touches. */
+        ansi_color(&screen.buf, UI_TOKEN(UI_T_DIM), ground(), 0);
+                ansi_text(&screen.buf, screen.rows, 1, footer, screen.cols - 1);
+            } else {
+                /* footerStyle(): `{ fg: dim, bg: bar }`. The C had it as
+                   ground-on-accent - the same inversion as the masthead. */
+                ui_bar_draw(&screen.buf, screen.rows, 1, screen.cols,
+                            footer, UI_TOKEN(UI_T_DIM), UI_TOKEN(UI_T_BAR));
+            }
+        }
+
+        ui_screen_flush(&screen);
+        full = 0;
+
+        key = ui_key_read(&keys, &pushback);
+        if (key < 0) break;
+
+handle_key:
+        switch (key) {
+            case UI_KEY_UP:   ui_list_move(&list, -1); break;
+            case UI_KEY_DOWN: ui_list_move(&list, 1); break;
+            case UI_KEY_PGUP: ui_list_move(&list, -ui_list_visible_rows(&list)); break;
+            case UI_KEY_PGDN: ui_list_move(&list, ui_list_visible_rows(&list)); break;
+            case UI_KEY_HOME: ui_list_select(&list, 0); break;
+            case UI_KEY_END:  ui_list_select(&list, list.count - 1); break;
+
+            case UI_KEY_ENTER: {
+                const ui_theme *chosen = ui_theme_at(list.selected);
+
+                /* Only where the board can keep it. Offering to save on a
+                   host that cannot would be a door lying to a sysop. */
+                if (host->host != AE_HOST_WEB) break;
+
+                if (ae_set_user_theme(&session, chosen->id)) {
+                    /* Read back rather than assumed: the board resolves what
+                       it is given, and that answer is the mark's truth. */
+                    ae_user_theme(&session, active_theme, (int)sizeof(active_theme));
+                    theme = ui_theme_by_id(active_theme);
+                    theme_preview_commit(&preview);
+                    theme_preview_apply(&preview, &screen.buf);
+                    full = 1;
+                    list.chrome = UI_TOKEN(UI_T_ACCENT);
+                    list.ink = UI_TOKEN(UI_T_INK);
+                    list.selected_fg = UI_TOKEN(UI_T_SELECTION_INK);
+                    list.selected_bg = UI_TOKEN(UI_T_SELECTION_BG);
+                    saved = 1;
+                }
+                break;
+            }
+
+            case 'q': case 'Q': case UI_KEY_ESC:
+                running = 0;
+                break;
+
+            default:
+                break;
+        }
+
+        /* The highlight moved to another theme: wear it. */
+        if (running && theme_preview_follow(&preview, list.selected)) {
+            theme = theme_preview_shown(&preview);
+            full = 1;
+        }
+    }
+
+    /* Leaving without choosing: the caller's own theme again. */
+    theme_preview_leave(&preview, &screen.buf);
+
+    /* Put the terminal back: attributes reset and the cursor shown, or the
+       board's next prompt is painted in this door's colours. */
+    ui_screen_close(&screen);
+    if (saved) ae_put("Theme saved.\r\n", 0);
+
+    ae_close(&session);
+    ae_shutdown();
+    return 0;
+}

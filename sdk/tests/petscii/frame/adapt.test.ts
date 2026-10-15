@@ -1,0 +1,1364 @@
+import { adaptFrame, adaptRows, chooseRule, cropRow, gutterRow, reflowRow, splitRow, deindentRow, narrowRow, repeatRow, leaderRow, recordFields, statRow, proseRow, isCroppable, applyRule, TRUNCATION_MARK, AdaptRule } from '../../../petscii/frame/adapt';
+import { textToFrame, makeFrame, frameText, Cell, Frame } from '../../../petscii/frame/types';
+import { contentWidth, columnParts } from '../../../petscii/frame/classify';
+import { wrapLineToWidth } from '../../../petscii/wrap';
+
+const row = (s: string) => textToFrame([s], 80, 1).cells[0];
+const str = (cells: ReadonlyArray<Cell>) => cells.map((c) => c.ch).join('').replace(/ +$/, '');
+const words = (s: string) => s.trim().split(/\s+/).filter(Boolean);
+const multiset = (cells: ReadonlyArray<Cell>) => cells.map((c) => c.ch).filter((ch) => ch !== ' ').sort();
+
+const PROSE = 'the quick brown fox jumps over the lazy dog again and again';
+/** Classifies as 'table' (indent < 4, one symbol, three gutters); collapses to exactly 40 characters. */
+const TABLE = 'Sysop            Local Console              1234 calls   ratio 1:3';
+const TABLE_COLLAPSED = 'Sysop Local Console 1234 calls ratio 1:3';
+const WIDE_TABLE = '| Handle: Sysop                      || Location: Local Console              |';
+const ART = '|__|_____|_____|__| cOLORWALL v1.3 (w) bY sHADOW mAN/aFL `94 |__|_____|_____|__|';
+const RULE = '='.repeat(78);
+
+describe('chooseRule', () => {
+  it('fits -> crop; blank right half -> crop; repeated border -> crop; columns -> narrow; prose -> reflow', () => {
+    expect(chooseRule(row('short'), 40)).toBe('crop');
+    expect(chooseRule(row('x'.repeat(40)), 40)).toBe('crop');
+    expect(chooseRule(row(RULE), 40)).toBe('crop');
+    // Both were 'split' / 'gutter' before Phase 3 Task 2: a row with column
+    // structure now narrows in place instead of being cut in half.
+    expect(chooseRule(row(ART), 40)).toBe('narrow');
+    expect(chooseRule(row(TABLE), 40)).toBe('narrow');
+    expect(chooseRule(row(PROSE), 40)).toBe('reflow');
+  });
+
+  /** The ladder, in order: crop (incl. rules) -> deindent -> narrow -> reflow/split. */
+  it('a horizontal rule crops, an over-wide row that fits once de-indented de-indents', () => {
+    expect(chooseRule(row('.' + '-'.repeat(76) + '.'), 40)).toBe('crop');
+    expect(chooseRule(row('`' + '-'.repeat(76) + "'"), 40)).toBe('crop');
+    expect(chooseRule(row(' '.repeat(24) + '----->>>> uSEr StAtS <<<<-----'), 40)).toBe('deindent');
+    expect(chooseRule(row(' '.repeat(30) + 'centred title'), 40)).toBe('deindent');
+    // a rule that lives entirely right of column 40 must not crop to nothing
+    expect(chooseRule(row(' '.repeat(45) + '.-----------------------------.'), 40)).toBe('deindent');
+  });
+
+  /**
+   * The DECLINE path: fifteen three-character columns cannot fit in 40 cells
+   * even at the two-cell floor (15 * 2 + 14 separators = 44), so `narrowRow`
+   * returns null and the ladder falls back to what the row had before -
+   * `gutter` when there are gutters to squeeze, `split` otherwise.
+   */
+  it('a row narrow cannot fit falls back to gutter (or split), never to a dropped column', () => {
+    // The columns are DISTINCT, and that is load-bearing: this case is about a
+    // row with too many columns to shrink, and the guarantee is that no column
+    // is silently dropped because the reader could not tell which one went.
+    // The fixture used to be 'abc' repeated, which since the `repeat` rung
+    // (2026-09-06) exercises a different rung entirely - identical columns are
+    // decoration, and there the reader CAN tell what is missing. That case is
+    // asserted on its own below; this one keeps the original guarantee.
+    const MANY = Array.from({ length: 15 }, (_, i) => `a${i}b`).join('  ');
+    expect(narrowRow(row(MANY), 40)).toBeNull();
+    expect(repeatRow(row(MANY), 40)).toBeNull();
+    expect(chooseRule(row(MANY), 40)).toBe('gutter');
+    expect(applyRule('narrow', row(MANY), 40).applied).toBe('split');   // a PINNED narrow falls back too
+    const bordered = '|' + Array.from({ length: 18 }, (_, i) => `${i}|`).join('');
+    expect(narrowRow(row(bordered), 40)).toBeNull();
+    expect(repeatRow(row(bordered), 40)).toBeNull();
+    expect(chooseRule(row(bordered), 40)).toBe('split');
+  });
+
+  /**
+   * The widened crop is LOSSY for a decorative row: `----->>>>` at 40 columns
+   * keeps its left half and drops the right, with no truncation mark - a rule
+   * carries no content to lose, and spending a second row of a 25-row screen
+   * on the tail of a decoration is the worse trade. Pinned here so the loss is
+   * a decision on the record, not a surprise.
+   */
+  it('cropping a rule drops its right-hand decoration unmarked', () => {
+    const decoration = '-'.repeat(40) + '<<<<' + '>>>>' + '-'.repeat(4);
+    expect(isCroppable(row(decoration), 40)).toBe(false);          // mixed glyphs: the old test says no
+    expect(chooseRule(row(decoration), 40)).toBe('crop');          // the rule test says yes
+    const out = str(cropRow(row(decoration), 40).rows[0]);
+    expect(out).toBe('-'.repeat(40));
+    expect(out).not.toContain('<');                                // '<' and '>' are gone...
+    expect(out).not.toContain('>');                                // ...with no truncation mark to say so
+    expect(multiset(row(decoration)).length).toBeGreaterThan(multiset(cropRow(row(decoration), 40).rows[0]).length);
+  });
+
+  it('a row with no column structure that cannot be de-indented still reflows or splits', () => {
+    expect(chooseRule(row('  ' + PROSE), 40)).toBe('reflow');
+    expect(chooseRule(row('/\\'.repeat(30)), 40)).toBe('crop');            // a rule of its own
+    expect(chooseRule(row('aB'.repeat(30)), 40)).toBe('reflow');
+  });
+
+  it('isCroppable: right half must be blank or one repeated non-alphanumeric glyph', () => {
+    expect(isCroppable(row('a'.repeat(41)), 40)).toBe(false);
+    expect(isCroppable(row('title ' + '-'.repeat(74)), 40)).toBe(true);
+    expect(isCroppable(row('x'.repeat(39) + ' ' + '-'.repeat(39) + '='), 40)).toBe(false);
+  });
+
+  it('isCroppable: a REVERSE-VIDEO border in the right half is content, not a repeated glyph to throw away', () => {
+    const plain = row('x'.repeat(40) + '-'.repeat(40));
+    expect(isCroppable(plain, 40)).toBe(true);
+    const reversed = row('x'.repeat(40) + '-'.repeat(40));
+    for (let x = 40; x < 80; x++) (reversed[x] as Cell).rvs = true;
+    expect(isCroppable(reversed, 40)).toBe(false);
+    expect(chooseRule(reversed, 40)).not.toBe('crop');
+  });
+});
+
+describe('cropRow', () => {
+  it('keeps columns 0-39 and maps the cursor into them', () => {
+    const r = cropRow(row(RULE), 40);
+    expect(r.rows.length).toBe(1);
+    expect(str(r.rows[0])).toBe('='.repeat(40));
+    expect(r.map(5)).toEqual({ row: 0, x: 5 });
+    expect(r.map(70)).toEqual({ row: 0, x: 39 });
+    expect(r.applied).toBe('crop');
+  });
+});
+
+describe('gutterRow', () => {
+  it('collapses gutters to one space and keeps every non-space character', () => {
+    const src = row(TABLE);
+    const r = gutterRow(src, 40);
+    expect(r.rows.length).toBe(1);
+    expect(str(r.rows[0])).toBe(TABLE_COLLAPSED);
+    expect(multiset(r.rows[0])).toEqual(multiset(src));
+    expect(r.applied).toBe('gutter');
+  });
+
+  it('splits a row that is still wide after compression and reports split', () => {
+    const src = row(WIDE_TABLE + ' extra words to keep it over forty columns wide');
+    const r = gutterRow(src, 40);
+    expect(r.rows.length).toBeGreaterThan(1);
+    for (const out of r.rows) expect(contentWidth(out)).toBeLessThanOrEqual(40);
+    expect(r.rows.flatMap(multiset).sort()).toEqual(multiset(src));
+    expect(r.applied).toBe('split');
+  });
+
+  it('maps a cursor inside a collapsed gutter to the surviving space', () => {
+    const r = gutterRow(row('ab      cd'), 40);
+    expect(r.map(0)).toEqual({ row: 0, x: 0 });
+    expect(r.map(4)).toEqual({ row: 0, x: 2 });
+    expect(r.map(8)).toEqual({ row: 0, x: 3 });
+  });
+});
+
+describe('reflowRow (same breaks as wrapLineToWidth in the full-canvas Task 10 tests)', () => {
+  it('wraps at word boundaries, never past the width, keeping word order', () => {
+    const r = reflowRow(row(PROSE), 20);
+    expect(r.rows.map(str)).toEqual(['the quick brown fox', 'jumps over the lazy', 'dog again and again']);
+    expect(words(r.rows.map(str).join(' '))).toEqual(words(PROSE));
+    expect(r.applied).toBe('reflow');
+  });
+
+  /**
+   * The brief's fixture asked for 3 rows from `'A'.repeat(90)` at width 40.
+   * It cannot exist: a Frame row IS 80 cells (`padRow` in types.ts cuts
+   * there), so the 90-character word reaches the rule as 80 A's and 80/40 is
+   * two rows. The rule is right, the fixture was impossible - so the same
+   * hard break is pinned at a width the 80-cell row can actually overflow
+   * three times.
+   */
+  it('hard-breaks a word longer than the width', () => {
+    const r = reflowRow(row('A'.repeat(90)), 40);
+    expect(r.rows.length).toBe(2);
+    expect(str(r.rows[0])).toBe('A'.repeat(40));
+    expect(str(r.rows[1])).toBe('A'.repeat(40));
+
+    const three = reflowRow(row('A'.repeat(90)), 30);
+    expect(three.rows.length).toBe(3);
+    expect(three.rows.map(str)).toEqual(['A'.repeat(30), 'A'.repeat(30), 'A'.repeat(20)]);
+  });
+
+  it('keeps the leading indent on the first row only and carries cell colours with their characters', () => {
+    const src = row('    ' + PROSE);
+    for (let x = 0; x < 80; x++) (src[x] as Cell).fg = x % 16;
+    const r = reflowRow(src, 30);
+    expect(str(r.rows[0]).startsWith('    the')).toBe(true);
+    expect(str(r.rows[1]).startsWith(' ')).toBe(false);
+    const first = r.rows[0][4];
+    expect(first).toMatchObject({ ch: 't', fg: 4 });
+  });
+
+  it('maps the cursor to the wrapped position', () => {
+    const r = reflowRow(row(PROSE), 20);
+    expect(r.map(0)).toEqual({ row: 0, x: 0 });
+    expect(r.map(20)).toEqual({ row: 1, x: 0 });
+    expect(r.map(79)).toEqual({ row: 2, x: 19 });
+  });
+
+  it('a short row is a single row', () => {
+    expect(reflowRow(row('short'), 40).rows.map(str)).toEqual(['short']);
+  });
+});
+
+/**
+ * A reverse-video space PAINTS (a coloured block), so `isBlank` calls it
+ * content. The text wrapper would call it a gap and is free to delete a gap
+ * at a break - which would silently eat a cell. `reflowRow` therefore hands
+ * the wrapper a substituted character for it and re-attaches the original
+ * cells afterwards. These pin that substitution.
+ */
+describe('reflowRow and reverse-video spaces', () => {
+  it('never deletes a reverse space at a break - it is part of its word', () => {
+    const src = row('A'.repeat(20) + ' BBBB');
+    (src[20] as Cell).rvs = true;
+    const r = reflowRow(src, 20);
+    expect(r.rows.length).toBe(2);
+    expect(str(r.rows[0])).toBe('A'.repeat(20));
+    expect(r.rows[1][0]).toMatchObject({ ch: ' ', rvs: true });
+    expect(r.rows[1].slice(1, 5).map((c) => c.ch).join('')).toBe('BBBB');
+    const rvsCount = (cs: ReadonlyArray<Cell>) => cs.filter((c) => c.rvs).length;
+    expect(r.rows.reduce((n, out) => n + rvsCount(out), 0)).toBe(rvsCount(src));
+  });
+
+  it('carries fg AND rvs per output column, following the characters through the wrap', () => {
+    const src = row('alpha BB CC delta and more words here');
+    for (let x = 0; x < 80; x++) (src[x] as Cell).fg = x % 16;
+    for (let x = 6; x <= 11; x++) (src[x] as Cell).rvs = true;   // 'BB CC ' - the two spaces inside PAINT
+    const r = reflowRow(src, 20);
+    expect(r.rows[0].slice(0, 12).map((c) => c.ch).join('')).toBe('alpha BB CC ');
+    for (let x = 0; x <= 11; x++) {
+      expect(r.rows[0][x].fg).toBe(x % 16);
+      expect(r.rows[0][x].rvs).toBe(x >= 6 && x <= 11);
+    }
+    const rvsCount = (cs: ReadonlyArray<Cell>) => cs.filter((c) => c.rvs).length;
+    expect(r.rows.reduce((n, out) => n + rvsCount(out), 0)).toBe(6);
+  });
+});
+
+describe('reflowRow and an indent wider than the screen', () => {
+  it('does not spend a row on nothing (the one deliberate divergence from wrapLineToWidth)', () => {
+    const line = ' '.repeat(25) + 'word more words after a very wide indent';
+    const r = reflowRow(row(line), 20);
+    expect(r.rows.map(str)[0]).toBe('word more words');
+    expect(r.rows.map(str)).not.toContain('');
+    // wrapLineToWidth itself breaks on the unfittable indent and emits an
+    // empty first line; reflowRow drops exactly that one line and nothing else.
+    expect(wrapLineToWidth(line.slice(0, 80), 20)[0]).toBe('');
+    expect(r.rows.map(str)).toEqual(wrapLineToWidth(line.slice(0, 80), 20).slice(1).map((l) => l.replace(/ +$/, '')));
+    for (const out of r.rows) expect(out.length).toBe(20);
+    // the dropped indent columns still map somewhere real
+    expect(r.map(0)).toEqual({ row: 0, x: 0 });
+    expect(r.map(24)).toEqual({ row: 0, x: 0 });
+    expect(r.map(25)).toEqual({ row: 0, x: 0 });
+  });
+});
+
+/**
+ * The plan's binding decision: the cell wrapper does not fork a second
+ * word-wrap algorithm, it consumes wrapLineToWidth's break decisions. These
+ * cases include the exact sentences web/backend/tests/utils/wrap-for-session.util.test.ts
+ * pins (that file re-exports THIS wrapLineToWidth), so the door adapter and
+ * the session-width wrap can never drift.
+ */
+describe('reflowRow == wrapLineToWidth (break-decision equality pin)', () => {
+  const cases: Array<[string, number]> = [
+    [PROSE, 20],
+    [PROSE, 40],
+    ['A'.repeat(90), 40],
+    ['A'.repeat(90), 30],
+    ['short line', 40],
+    ['    ' + PROSE, 30],
+    ['word '.repeat(12).trim(), 20],
+    ['a bb ccc dddd eeeee ffffff ggggggg hhhhhhhh', 12],
+    ['supercalifragilistic ' + PROSE, 15],
+  ];
+  it.each(cases)('%p at width %p breaks exactly where wrapLineToWidth breaks', (line, width) => {
+    const produced = reflowRow(row(line), width).rows.map(str);
+    // slice(0, 80): a Frame row is 80 cells, so that is the text the rule saw.
+    const expected = wrapLineToWidth(line.slice(0, 80), width).map((l) => l.replace(/ +$/, ''));
+    expect(produced).toEqual(expected);
+  });
+});
+
+/**
+ * `deindent` is the LOSSLESS rung of the ladder: it drops leading blanks and
+ * nothing else, which is what saves a centred banner from being split in half.
+ */
+describe('deindentRow', () => {
+  const BANNER = ' '.repeat(24) + '----->>>> uSEr StAtS <<<<-----';
+
+  it('shifts the row left by its indent and keeps every non-blank cell', () => {
+    const r = deindentRow(row(BANNER), 40);
+    expect(r.rows.length).toBe(1);
+    expect(str(r.rows[0])).toBe(BANNER.trim());
+    expect(multiset(r.rows[0])).toEqual(multiset(row(BANNER)));
+    expect(r.applied).toBe('deindent');
+  });
+
+  it('carries the cells themselves, colours and all, and maps the cursor left', () => {
+    const src = row(BANNER);
+    for (let x = 0; x < 80; x++) (src[x] as Cell).fg = x % 16;
+    const r = deindentRow(src, 40);
+    expect(r.rows[0][0]).toMatchObject({ ch: '-', fg: 24 % 16 });
+    expect(r.map(24)).toEqual({ row: 0, x: 0 });
+    expect(r.map(30)).toEqual({ row: 0, x: 6 });
+    expect(r.map(0)).toEqual({ row: 0, x: 0 });          // inside the dropped indent
+    expect(r.map(79)).toEqual({ row: 0, x: 39 });
+  });
+
+  it('a row with no indent is unchanged', () => {
+    expect(str(deindentRow(row('no indent here'), 40).rows[0])).toBe('no indent here');
+  });
+});
+
+/**
+ * `narrow` is the LOSSY rung that keeps a table a table: one row out, every
+ * column still there and in order, paid for in characters. A shortened column
+ * ends in '>' - a plain PETSCII glyph, unlike an ellipsis.
+ */
+describe('narrowRow', () => {
+  const MENU = ' [U] - UPLOAD FILE(S)         [D] - DOWNLOAD FILE(S)   [RZ] - ZMODEM UPLOAD';
+  const partsOf = (line: string) => columnParts(row(line)).map((p) => p.map((c) => c.ch).join(''));
+
+  it('emits exactly one row, no wider than the screen', () => {
+    const r = narrowRow(row(MENU), 40)!;
+    expect(r).not.toBeNull();
+    expect(r.rows.length).toBe(1);
+    expect(r.rows[0].length).toBe(40);
+    expect(contentWidth(r.rows[0])).toBeLessThanOrEqual(40);
+    expect(r.applied).toBe('narrow');
+  });
+
+  it('keeps the number and ORDER of the columns, each a prefix of its source column', () => {
+    const out = str(narrowRow(row(MENU), 40)!.rows[0]);
+    const parts = partsOf(MENU);
+    expect(parts.length).toBe(3);
+    const segments = out.split(' ').length;                    // sanity: the row is not empty
+    expect(segments).toBeGreaterThan(1);
+    let at = 0;
+    for (const p of parts) {
+      const kept = out.indexOf(p.slice(0, 2), at);
+      expect(kept).toBeGreaterThanOrEqual(at);                 // in order
+      at = kept + 1;
+    }
+    for (const seg of out.split(/(?<=>) /)) expect(seg.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("marks a shortened column with '>' and leaves an untouched column unmarked", () => {
+    const r = narrowRow(row('ab  ' + 'X'.repeat(50) + '  cd'), 40)!;
+    const out = str(r.rows[0]);
+    expect(out.length).toBe(40);
+    expect(out).toBe('ab ' + 'X'.repeat(33) + '> cd');         // narrow columns untouched and unmarked
+  });
+
+  /**
+   * ONE gutter is not column structure - a sentence with double spacing has
+   * one too - so a two-column gutter row is left to reflow/split. A BORDER is
+   * structure even with a single column inside it, which is what carries
+   * WHAT's title row (see the single-bordered-column case below).
+   */
+  it('needs two interior gutters, or a border', () => {
+    expect(narrowRow(row('ab  ' + 'X'.repeat(50)), 40)).toBeNull();
+    expect(narrowRow(row('| ' + 'X'.repeat(50) + ' |'), 40)).not.toBeNull();
+  });
+
+  it('shrinks the WIDEST column first, so a short column survives whole', () => {
+    const r = narrowRow(row('short  ' + 'Y'.repeat(30) + '  ' + 'Z'.repeat(30)), 40)!;
+    const out = str(r.rows[0]);
+    expect(out.startsWith('short ')).toBe(true);
+    const [a, b, c] = out.split(' ');
+    expect(a).toBe('short');
+    expect(Math.abs(b.length - c.length)).toBeLessThanOrEqual(1);
+  });
+
+  it('a single bordered column narrows too - the border is the structure', () => {
+    const title = '| WHAT: Transfer Activities v2.0 [REL 2] Copyright (c)1994-95 Bobo/Mystic! |';
+    expect(partsOf(title).length).toBe(1);
+    const out = str(narrowRow(row(title), 40)!.rows[0]);
+    expect(out.length).toBe(40);
+    expect(out.endsWith('>')).toBe(true);
+    expect(title).toContain(out.slice(0, -1));
+  });
+
+  it('DECLINES rather than dropping a column or cutting one below two cells', () => {
+    expect(narrowRow(row('abc  '.repeat(15).trimEnd()), 40)).toBeNull();
+    expect(narrowRow(row(PROSE), 40)).toBeNull();              // no column structure at all
+    expect(narrowRow(row(''), 40)).toBeNull();
+  });
+
+  it('the cursor map is total and lands on the surviving cell of its own column', () => {
+    const r = narrowRow(row(MENU), 40)!;
+    for (let x = 0; x < 80; x++) {
+      const m = r.map(x);
+      expect(m.row).toBe(0);
+      expect(m.x).toBeGreaterThanOrEqual(0);
+      expect(m.x).toBeLessThan(40);
+    }
+    expect(r.map(1).x).toBe(0);                                // '[' of the first column
+  });
+});
+
+describe('splitRow', () => {
+  // RE-PINNED 2026-09-06. Both of these tests were RECORDING THE BUG. `ART`'s
+  // fortieth column falls between the 'b' and the 'Y' of `bY sHADOW mAN`, and
+  // the two pins asserted exactly that: halves at `ART.slice(0, 40)` /
+  // `ART.slice(40)`, and `rows[0][39] === 'b'` with `rows[1][0] === 'Y'`. A
+  // word cut in half at the right-hand edge is indistinguishable from a
+  // terminal folding a row it could not hold, which is what the sysop reported
+  // on 2026-09-06 as "line wrap issues" and "rows fold". The break now moves
+  // back to the start of the word.
+  it('keeps every cell and never cuts through a word', () => {
+    const r = splitRow(row(ART), 40);
+    expect(r.rows.map(str)).toEqual([
+      '|__|_____|_____|__| cOLORWALL v1.3 (w)',        // breaks BEFORE `bY`, not inside it
+      'bY sHADOW mAN/aFL `94 |__|_____|_____|__',
+      '|',
+    ]);
+    expect(r.rows.flatMap(multiset).sort()).toEqual(multiset(row(ART)));
+    expect(splitRow(row('x'.repeat(40)), 40).rows.length).toBe(1);
+    expect(r.map(45)).toEqual({ row: 1, x: 6 });
+    expect(r.applied).toBe('split');
+  });
+
+  it('marks a word too wide for any row instead of folding it silently', () => {
+    // The one case moving the break cannot solve: a 41-character word has no
+    // row it fits on. The house rule is that such a row degrades VISIBLY, so
+    // the break carries the mark and the word continues - no character is lost.
+    const r = splitRow(row('a'.repeat(41)), 40);
+    expect(r.rows.map(str)).toEqual(['a'.repeat(39) + TRUNCATION_MARK, 'aa']);
+    expect(str(r.rows[0]) + str(r.rows[1])).toContain('a'.repeat(39));
+  });
+
+  it('places no continuation glyph where the break is clean', () => {
+    const r = splitRow(row(ART), 40);
+    expect(r.rows[0].map((c) => c.ch).join('')).not.toContain(TRUNCATION_MARK);
+    expect(r.rows[1][0].ch).toBe('b');
+  });
+});
+
+describe('rule invariants over a synthetic row corpus', () => {
+  const corpus: string[] = [
+    '',
+    'short',
+    'x'.repeat(40),
+    RULE,
+    'title ' + '-'.repeat(74),
+    PROSE,
+    '    ' + PROSE,
+    TABLE,
+    WIDE_TABLE,
+    ART,
+    'uSeR nAME: Sysop        cALLS tODaY: 12        dOWNLoADeD tODaY: 0 bYTeS',
+    'a'.repeat(41),
+    'word '.repeat(16).trim(),
+    '  indented prose that runs on well past the fortieth column of the screen',
+    'abc  '.repeat(15).trimEnd(),          // fifteen narrow columns: narrowRow declines, the ladder falls back
+  ];
+  const rules: AdaptRule[] = ['crop', 'deindent', 'gutter', 'narrow', 'reflow', 'split'];
+
+  it.each(corpus)('every rule emits rows of exactly 40 cells for %p', (line) => {
+    for (const rule of rules) {
+      const r = applyRule(rule, row(line), 40);
+      expect(r.rows.length).toBeGreaterThan(0);
+      for (const out of r.rows) {
+        expect(out.length).toBe(40);
+        expect(contentWidth(out)).toBeLessThanOrEqual(40);
+      }
+    }
+  });
+
+  it.each(corpus)('the cursor map is total over columns 0..79 and lands inside the produced rows for %p', (line) => {
+    for (const rule of rules) {
+      const r = applyRule(rule, row(line), 40);
+      for (let x = 0; x < 80; x++) {
+        const m = r.map(x);
+        expect(m.row).toBeGreaterThanOrEqual(0);
+        expect(m.row).toBeLessThan(r.rows.length);
+        expect(m.x).toBeGreaterThanOrEqual(0);
+        expect(m.x).toBeLessThan(40);
+      }
+    }
+  });
+
+  it.each(corpus)('gutter and split preserve the non-space multiset of %p; reflow preserves character order', (line) => {
+    const src = row(line);
+    // RE-PINNED 2026-09-06: `split` - and `gutter`, which falls through to it -
+    // may now add the truncation mark, and only that. It does so for exactly
+    // one row of this corpus, the 41-character word no 40-column row can hold,
+    // and the pin is that everything else is still there: the mark is an
+    // ADDITION, never a substitution for a character that was dropped.
+    const marks = (out: string[]) => out.filter((ch) => ch === TRUNCATION_MARK).length;
+    // A mark is spent only where a WORD - a run of alphanumerics, which is the
+    // predicate the rung itself uses - is too wide for any row. A 74-dash rule
+    // is not a word and is still cut wherever it falls.
+    const unmarkable = /[A-Za-z0-9]{41,}/.test(line) ? 1 : 0;
+    for (const produced of [gutterRow(src, 40).rows.flatMap(multiset).sort(), splitRow(src, 40).rows.flatMap(multiset).sort()]) {
+      expect(produced.filter((ch) => ch !== TRUNCATION_MARK)).toEqual(multiset(src).filter((ch) => ch !== TRUNCATION_MARK));
+      expect(marks(produced)).toBe(marks(multiset(src)) + unmarkable);
+    }
+    // Reflow deletes the whitespace it breaks on and hard-breaks an over-long
+    // word, so the pinned invariant is the non-space character SEQUENCE:
+    // nothing dropped, nothing reordered.
+    const bare = (t: string) => t.replace(/ /g, '');
+    expect(bare(reflowRow(src, 40).rows.map(str).join(''))).toEqual(bare(line.slice(0, 80)));
+    // Word order too, wherever no word is wider than the row.
+    if (!words(line).some((w) => w.length > 40)) {
+      expect(words(reflowRow(src, 40).rows.map(str).join(' '))).toEqual(words(line.slice(0, 80)));
+    }
+  });
+
+  it.each(corpus.filter((l) => isCroppable(row(l), 40)))('crop keeps every distinct glyph of the croppable row %p', (line) => {
+    const src = row(line);
+    const out = cropRow(src, 40).rows[0];
+    expect(new Set(multiset(out))).toEqual(new Set(multiset(src)));
+    if (contentWidth(src) <= 40) expect(multiset(out)).toEqual(multiset(src));
+  });
+});
+
+describe('adaptRows / adaptFrame', () => {
+  const src = textToFrame([RULE, PROSE, TABLE, ART, '', 'Press RETURN:'], 80, 25);
+
+  it('every adapted row fits, rules are recorded per source row, blanks stay blank', () => {
+    const { rows } = adaptRows(src);
+    for (const r of rows) { expect(r.cells.length).toBe(40); expect(contentWidth(r.cells)).toBeLessThanOrEqual(40); }
+    expect(rows.filter((r) => r.source === 0).map((r) => r.rule)).toEqual(['crop']);
+    expect(rows.filter((r) => r.source === 1).map((r) => r.rule)).toEqual(['reflow', 'reflow']);
+    // ART is a '|'-bordered row: it narrows to ONE row now (was ['split', 'split']).
+    expect(rows.filter((r) => r.source === 3).map((r) => r.rule)).toEqual(['narrow']);
+    expect(rows.filter((r) => r.source === 4).length).toBe(1);
+  });
+
+  it('region pins override the automatic rule', () => {
+    const { rows } = adaptRows(src, { regions: [{ rows: [1, 1], rule: 'crop' }, { rows: [3, 3], rule: 'gutter' }] });
+    expect(rows.filter((r) => r.source === 1).map((r) => r.rule)).toEqual(['crop']);
+    expect(str(rows.find((r) => r.source === 1)!.cells)).toBe(PROSE.slice(0, 40).replace(/ +$/, ''));
+    expect(rows.filter((r) => r.source === 3).every((r) => r.rule === 'split' || r.rule === 'gutter')).toBe(true);
+  });
+
+  it('a pinned rule applies unconditionally, including to a row that already fits', () => {
+    const fitting = textToFrame(['Name    Sysop    Node  1'], 80, 1);
+    expect(str(adaptRows(fitting).rows[0].cells)).toBe('Name    Sysop    Node  1');
+    const pinned = adaptRows(fitting, { regions: [{ rows: [0, 0], rule: 'gutter' }] });
+    expect(pinned.rows[0].rule).toBe('gutter');
+    expect(str(pinned.rows[0].cells)).toBe('Name Sysop Node 1');
+  });
+
+  it("an 'auto' pin is the same as no pin at all", () => {
+    const pinned = adaptRows(src, { regions: [{ rows: [0, 24], rule: 'auto' }] });
+    expect(pinned.rows.map((r) => [r.source, r.rule, str(r.cells)])).toEqual(adaptRows(src).rows.map((r) => [r.source, r.rule, str(r.cells)]));
+  });
+
+  it('the cursor follows its source row into adapted coordinates', () => {
+    const f = makeFrame(80, 25, src.cells, { x: 13, y: 5 });
+    const { rows, cursor } = adaptRows(f);
+    const promptRow = rows.findIndex((r) => r.source === 5);
+    expect(cursor).toEqual({ x: 13, y: promptRow });
+  });
+
+  it('adaptFrame pages the LAST 25 rows when splits and reflow overflow, and the cursor stays on its row', () => {
+    const lines = Array.from({ length: 24 }, (_, i) => `${i} ` + PROSE);
+    lines.push('prompt>');
+    const f = makeFrame(80, 25, textToFrame(lines, 80, 25).cells, { x: 7, y: 24 });
+    const out = adaptFrame(f);
+    expect([out.cols, out.rows]).toEqual([40, 25]);
+    expect(frameText(out)[24]).toBe('prompt>');
+    expect(out.cursor).toEqual({ x: 7, y: 24 });
+    expect(frameText(out)[0]).not.toBe('0 the quick brown fox jumps over the');
+  });
+
+  it('adaptFrame shows exactly the tail adaptRows produced, in order', () => {
+    const lines = Array.from({ length: 24 }, (_, i) => `${i} ` + PROSE);
+    lines.push('prompt>');
+    const f = makeFrame(80, 25, textToFrame(lines, 80, 25).cells, { x: 7, y: 24 });
+    const all = adaptRows(f).rows;
+    expect(all.length).toBeGreaterThan(25);
+    expect(frameText(adaptFrame(f))).toEqual(all.slice(all.length - 25).map((r) => str(r.cells)));
+  });
+
+  it('a cursor whose source row scrolled off the top clamps to row 0', () => {
+    const lines = Array.from({ length: 25 }, (_, i) => `${i} ` + PROSE);
+    const f = makeFrame(80, 25, textToFrame(lines, 80, 25).cells, { x: 3, y: 0 });
+    expect(adaptRows(f).cursor).toEqual({ x: 3, y: 0 });
+    expect(adaptFrame(f).cursor).toEqual({ x: 3, y: 0 });
+  });
+
+  it('adaptFrame of a frame that already fits is the identity on text and cursor', () => {
+    const f = makeFrame(80, 25, textToFrame(['fits', 'also fits'], 80, 25).cells, { x: 2, y: 1 });
+    const out = adaptFrame(f);
+    expect(frameText(out).slice(0, 2)).toEqual(['fits', 'also fits']);
+    expect(out.cursor).toEqual({ x: 2, y: 1 });
+  });
+
+  it('honours a non-default cols/rows viewport', () => {
+    const f = textToFrame([RULE, PROSE, TABLE], 80, 25);
+    const out = adaptFrame(f, { cols: 22, rows: 10 });
+    expect([out.cols, out.rows]).toEqual([22, 10]);
+    for (const r of out.cells) expect(r.length).toBe(22);
+  });
+
+  it('never produces content at the bottom-right cell that the renderer would have to skip silently', () => {
+    const f = textToFrame([...Array(24).fill(''), 'x'.repeat(40)], 80, 25);
+    const out = adaptFrame(f);
+    expect(out.cells[24][39].ch).toBe('x');   // the ADAPTER keeps it; renderDiff is what refuses to paint it - documented, not hidden
+  });
+});
+
+/**
+ * The `record` rung: a two-field row, its right-hand field kept flush against
+ * the right margin. Named after the sysop's report on dRE!WAll (2026-09-06):
+ * "use the full 40 columns for the tags/usernames, the usernames are not right
+ * aligned" and "long 80 column comments needs to be split to two lines".
+ *
+ * The three "not a record" cases are the discriminators, taken from real rows
+ * of the 68K corpus, and they are the reason this rung does not eat the rest of
+ * the ladder. All three would otherwise satisfy "one gutter, a field past
+ * column 40".
+ */
+describe('narrow shrinks decoration before content', () => {
+  it('a node that is not there says so, instead of saying NO NODE PRE>', () => {
+    // WarOLM's node table, its own bytes: the USER and LOCATION cells of an
+    // absent node are padded with '=' runs, and those two runs are the widest
+    // columns in the row. Shrinking the WIDEST column first spread the loss
+    // evenly and the caller read `00 ==========> ===========> No Node Pre>` -
+    // the truncation mark inside a value. The '=' runs are decoration and can
+    // afford it; the ACTION field cannot.
+    const node = row('    | 00 | ================= | ======================= | No Node Present  |');
+    expect(chooseRule(node, 40)).toBe('narrow');
+    expect(str(applyRule('narrow', node, 40).rows[0]))
+      .toBe('00 =========> =========> No Node Present');
+  });
+
+  it('a door keeps its own name when the border beside it can pay instead', () => {
+    // color_wall's masthead: four '_'/'|' runs around the title.
+    const masthead = row('|__|_____|_____|__| cOLORWALL v1.3 (w) bY sHADOW mAN/aFL `94 |__|_____|_____|__|');
+    const out = str(applyRule('narrow', masthead, 40).rows[0]);
+    expect(out).toContain('cOLORWALL v1.3');
+    // ...which the widest-first order could not do: it reached `cOLO>`.
+    expect(out).not.toContain('cOLO>');
+  });
+
+  it('no column with content is shortened while a column without content can still pay', () => {
+    // The ordering itself, stated as the property the rung guarantees. A
+    // content column may only be marked once every decoration column is down to
+    // MIN_COLUMN (or was already at or below it).
+    // Split on a space would not do: `No Node Present` has spaces of its own.
+    // The property is stated on the columns instead - every column that carries
+    // an alphanumeric survives WHOLE, and the truncation marks are all on
+    // columns that carry none.
+    const node = row('    | 00 | ================= | ======================= | No Node Present  |');
+    const parts = columnParts(node).map((p) => p.map((c) => c.ch).join('').trim());
+    const out = str(applyRule('narrow', node, 40).rows[0]);
+    const alnum = (t: string) => /[A-Za-z0-9]/.test(t);
+
+    for (const part of parts.filter(alnum)) expect(out).toContain(part);
+    // ...and the row DID have to give up cells, so the decoration paid for all
+    // of it: as many marks as there are decoration columns.
+    expect((out.match(new RegExp(`\\${TRUNCATION_MARK}`, 'g')) ?? []).length)
+      .toBe(parts.filter((p) => !alnum(p)).length);
+  });
+
+  it('a table of content columns is unaffected: there is no decoration to spend', () => {
+    // `who`'s header - every column carries letters, so both passes see the
+    // same set and the order is the old widest-first one.
+    const header = row('  ND#/Calls    User/PhoneNumber                Location/Action');
+    expect(str(applyRule('narrow', header, 40).rows[0])).toBe('ND#/Calls User/PhoneNum> Location/Action');
+  });
+});
+
+describe('record', () => {
+  /** dRE!WAll: message at column 0, author in a 17-column field at column 61. */
+  const wall = (message: string, author: string) =>
+    row(message.padEnd(61, ' ') + author.padEnd(17, ' '));
+
+  it('an entry that fits is ONE row with the author flush against column 40', () => {
+    expect(chooseRule(wall('test 1', 'spot'), 40)).toBe('record');
+    const out = applyRule('record', wall('test 1', 'spot'), 40);
+    expect(out.rows).toHaveLength(1);
+    expect(str(out.rows[0])).toBe('test 1'.padEnd(36, ' ') + 'spot');
+    expect(str(out.rows[0]).length).toBe(40);
+  });
+
+  it('a long comment wraps and the author rides the LAST row, not a row of its own', () => {
+    const message = 'VIRGIN LINE VIRGIN LINE VIRGIN LINE VIRGIN LINE VIRGIN LINE';
+    const out = applyRule('record', wall(message, 'dR.dRE!/tRSi'), 40);
+    expect(out.rows).toHaveLength(2);
+    // every word survives, in order, and nothing is truncated
+    expect(words(out.rows.map(str).join(' ')).slice(0, -1)).toEqual(words(message));
+    expect(str(out.rows[1]).slice(40 - 12)).toBe('dR.dRE!/tRSi');
+    // the continuation row carries no author: that is what tells a reader which
+    // text belongs to which name
+    expect(str(out.rows[0]).endsWith('dR.dRE!/tRSi')).toBe(false);
+  });
+
+  it('the author takes a row of its own only when the reflowed tail leaves no room', () => {
+    const message = 'x'.repeat(20) + ' ' + 'y'.repeat(36);   // the tail wraps to exactly 36 of the 40
+    const out = applyRule('record', wall(message, 'spot'), 40);
+    expect(out.rows).toHaveLength(3);
+    expect(str(out.rows[2])).toBe('spot'.padStart(40, ' '));
+  });
+
+  // ---- not a record --------------------------------------------------------
+
+  it("a message with its own double spaces still wraps: it is typing, not structure", () => {
+    // The sysop's line, 2026-09-06. Two runs of blanks inside the message plus
+    // the author's gutter gave the row four columns, `narrowRow` matched, and
+    // narrow answered first: `yeah! dre!wal> 40 col petscii> now sysop`.
+    const cells = wall('yeah! dre!wall is  40 col petscii ok  now', 'sysop');
+    expect(narrowRow(cells, 40)).not.toBeNull();     // narrow still MATCHES the row
+    expect(chooseRule(cells, 40)).toBe('record');    // record is asked first and wins
+    const out = applyRule('record', cells, 40);
+    expect(out.rows.map(str).join('')).not.toContain(TRUNCATION_MARK);
+    expect(str(out.rows[out.rows.length - 1]).slice(40 - 5)).toBe('sysop');
+    // every character of the message survives, in order
+    expect(out.rows.map(str).join(' ').replace(/\s+/g, ' ').trim())
+      .toBe('yeah! dre!wall is 40 col petscii ok now sysop');
+  });
+
+  it("the row the caller is typing into is not a record: its last gap is typing, not padding", () => {
+    // dRE!WAll's prompt row as the echo grows. `now` is the last blank-free
+    // token past column 40, so without the padding-gutter guard it was read as
+    // an author and right-aligned to column 40 - jumping there as he typed.
+    // A record's field is reached by PADDING and is strictly wider than the
+    // spacing inside the message; here every gap is two blanks.
+    const echo = row('Enter your Line: yeah! dre!wall is  40 col petscii ok  now');
+    expect(recordFields(echo, 40)).toBeNull();
+    expect(chooseRule(echo, 40)).not.toBe('record');
+    // and the padded entry row of the SAME text still is a record
+    expect(chooseRule(wall('yeah! dre!wall is  40 col petscii ok  now', 'sysop'), 40)).toBe('record');
+  });
+
+  it("a table of atoms stays with narrow: a header belongs over its columns", () => {
+    // `who`'s header. Every column is blank-free, so it is column labels and
+    // not a message beside a name - the one row in the corpus where the two
+    // rungs really compete.
+    const header = row('  ND#/Calls    User/PhoneNumber                Location/Action');
+    expect(recordFields(header, 40)).toBeNull();
+    expect(chooseRule(header, 40)).toBe('narrow');
+  });
+
+  it('a global wall comment keeps a two-word handle', () => {
+    // GWall's own bytes, from a 2026-09-06 harness capture of the door: the
+    // comment at column 1, thirty columns of padding, then `-Karyn Roberts`,
+    // the board separator and the acronym, inside the wall's box.
+    //
+    // BEFORE the guard was relaxed the space inside `Karyn Roberts` made the
+    // right field "not an atom", `record` declined, `narrow` took the row -
+    // one bordered column, so it truncated - and the caller read
+    // `Right on, great door archive!          >` with NO AUTHOR AT ALL. The
+    // author is the data; the extra row is the price.
+    const entry = row('|Right on, great door archive!'.padEnd(59, ' ') + '-Karyn Roberts\u00a6TAU|');
+    expect(chooseRule(entry, 40)).toBe('record');
+    const out = applyRule('record', entry, 40);
+    // RE-PINNED 2026-09-06: the wall's box is DROPPED. This pin used to hold
+    // `|Right on...` on the first row and `...\u00a6TAU|` on the second, which is
+    // the sysop's "the blue pipes are cut off in gwall": half a box on every
+    // wrapped comment, a left pipe with no right and then a right with no left.
+    expect(out.rows.map(str)).toEqual([
+      'Right on, great door archive!',
+      '                      -Karyn Roberts\u00a6TAU',
+    ]);
+    // the handle survives whole, flush against column 40
+    expect(str(out.rows[out.rows.length - 1]).endsWith('-Karyn Roberts\u00a6TAU')).toBe(true);
+    expect(out.rows[out.rows.length - 1][39].ch).toBe('U');
+    // ...and a one-word handle on the same wall is unchanged by the relaxation
+    expect(chooseRule(row('|dS!'.padEnd(65, ' ') + '-orlingo\u00a6M\u0009|'), 40)).toBe('record');
+  });
+
+  it("a two-column stat row IS a record now, and that is how its right half survives", () => {
+    // six_status, ratiorep, super_stats all paint this shape, and until
+    // 2026-09-06 this test asserted the OPPOSITE: the right half was called
+    // "prose, not an atom" and the row fell to `split`, which cut it at column
+    // 40 and left the second label hanging at whatever offset it landed on.
+    //
+    // It flipped because the measurement said so, not because it went red.
+    // `Slot Number...........: 0` has ONE blank in it, no run of two, so it is
+    // one field; reading it as one is what puts it flush against column 40 with
+    // every character of both halves intact. Measured over every frame of every
+    // fixture, the shape costs rows and loses nothing: `six_status` 33 -> 35,
+    // `ratiorep` 31 -> 30, `super_stats` 31 -> 28.
+    const stat = row('Byte Limit..........: 0'.padEnd(49, ' ') + 'Slot Number...........: 0');
+    expect(chooseRule(stat, 40)).toBe('record');
+    expect(applyRule('record', stat, 40).rows.map(str)).toEqual([
+      'Byte Limit..........: 0',
+      '               Slot Number...........: 0',
+    ]);
+  });
+
+  it('the field never carries the door\'s own padding, whatever blanks are in it', () => {
+    // What the deleted "no blank at all" guard was FOR, stated as the property
+    // the SEPARATOR RULE already guarantees: the separator is the LAST run of
+    // two or more blanks, so no such run can be left inside the field. A single
+    // space (a two-word handle) is fine; a padded second column is not, and it
+    // cannot occur.
+    //
+    // A row that looks like a padded right half therefore resolves the other
+    // way round: the narrow run INSIDE it becomes the separator, and the guard
+    // that says the separator must be strictly the widest run then declines the
+    // row outright.
+    const twoColumns = row('Byte Limit..........: 0'.padEnd(49, ' ') + 'Slot Number:  0');
+    expect(recordFields(twoColumns, 40)).toBeNull();
+    // ...and where the row IS a record, the field has no run of blanks in it.
+    const fields = recordFields(wall('a comment', 'Karyn Roberts'), 40);
+    expect(fields).not.toBeNull();
+    const [a, b] = (fields as { right: [number, number] }).right;
+    expect(/ {2,}/.test(str(wall('a comment', 'Karyn Roberts').slice(a, b)))).toBe(false);
+  });
+
+  it('an art left field is NOT a record: the row is decoration and split owns it', () => {
+    // rtw's half-painted menu row: 60 columns of block glyphs beside a
+    // blank-free `[E...LEAV`.
+    const art = row('####  -  ####  ###########  ####'.padEnd(62, ' ') + '[E####LEAV');
+    expect(chooseRule(art, 40)).not.toBe('record');
+  });
+
+  it('a field that is only decoration is NOT a record', () => {
+    // super_stats row 18 ends in a lone '.', j rows 8-12 in a lone '|'.
+    expect(chooseRule(row('a sentence that runs on and on and on and on'.padEnd(70, ' ') + '.'), 40)).not.toBe('record');
+  });
+
+  it('a pinned record on a row that is not one falls through to the rule it would have had', () => {
+    expect(applyRule('record', row(PROSE), 40).applied).toBe('reflow');
+    expect(applyRule('record', row(ART), 40).applied).toBe('split');
+  });
+
+  it('the cursor follows its source column into the field', () => {
+    const cells = wall('test 1', 'spot');
+    const out = applyRule('record', cells, 40);
+    expect(out.map(0)).toEqual({ row: 0, x: 0 });
+    expect(out.map(5)).toEqual({ row: 0, x: 5 });
+    expect(out.map(61)).toEqual({ row: 0, x: 36 });     // first cell of the author
+    expect(out.map(64)).toEqual({ row: 0, x: 39 });     // last cell of the author
+  });
+});
+
+/**
+ * The `repeat` rung: a row of IDENTICAL columns is decoration, so whole copies
+ * are kept and the rest dropped, rather than every copy being shortened.
+ * Named after the sysop's second report (2026-09-06), where dRE!WAll's STYLE.1
+ * reached a C64 as `Dre> Dre!> Dre!> Dre!> Dre!> Dre!> Dre!>`.
+ */
+describe('prose', () => {
+  it('the quit line reads as a sentence', () => {
+    // WarOLM's help line, its own bytes. The DOUBLE SPACE before `Q` is enough
+    // for the ladder to read the row as columns, so `narrow` - a TABLE rule -
+    // took it and handed the caller
+    // `Use Cursor Keys To Choose, <-' Enter To>`: a help line that no longer
+    // says how to quit the door.
+    const help = row("    |  Use Cursor Keys To Choose, <-' Enter To Select,  Q or ESC To Quit  |");
+    expect(chooseRule(help, 40)).toBe('prose');
+    expect(applyRule('prose', help, 40).rows.map(str)).toEqual([
+      "Use Cursor Keys To Choose, <-' Enter To",
+      'Select,  Q or ESC To Quit',
+    ]);
+  });
+
+  it('a three-column menu keeps its columns and keeps narrowing', () => {
+    // `rtw`'s command menu. This is the guard that carries the rung: without
+    // "exactly one column" these nine rows wrap and rtw goes from 26 adapted
+    // rows to 35 - the exact doubling `narrow` was added to stop.
+    const menu = row(' [Z] - ZIPPY SEARCH           [CF]- CONFERENCE FLAGS   [FS] - FULL CONF STATS');
+    expect(proseRow(menu, 40)).toBeNull();
+    expect(chooseRule(menu, 40)).toBe('narrow');
+  });
+
+  it('a row of box glyphs is still art, and art is split\'s', () => {
+    // `rtw`'s logo row: one column, wider than the screen, and wrapping it
+    // produces two rows of broken box glyphs.
+    const logo = row(' |Sk!n/     ______/     /     /     ______// \\__    _\\__\\___    _ /s      . |');
+    expect(proseRow(logo, 40)).toBeNull();
+  });
+
+  it('a column that already fits is left to narrow, which prints it whole', () => {
+    const fits = row('               |     ACP Kickstart 40.68 Workbench 40.42       |');
+    expect(proseRow(fits, 40)).toBeNull();
+    expect(str(applyRule('narrow', fits, 40).rows[0])).toBe('ACP Kickstart 40.68 Workbench 40.42');
+  });
+
+  it('a pinned prose on a row that is not one column falls through to narrow', () => {
+    const menu = row(' [Z] - ZIPPY SEARCH           [CF]- CONFERENCE FLAGS   [FS] - FULL CONF STATS');
+    expect(applyRule('prose', menu, 40).applied).toBe('narrow');
+  });
+
+  it('the cursor follows its source column onto the row its words landed on', () => {
+    const help = row("    |  Use Cursor Keys To Choose, <-' Enter To Select,  Q or ESC To Quit  |");
+    const out = applyRule('prose', help, 40);
+    const q = str(help).indexOf('Q or ESC');
+    expect(out.map(q).row).toBe(1);
+    // ...and the border, which the rung drops, maps onto the row beside it
+    expect(out.map(0)).toEqual({ row: 0, x: 0 });
+  });
+});
+
+describe('stat', () => {
+  it('a byte count is not truncated into a wrong number', () => {
+    // ctop's record row, its own bytes: `Top Uploader Record` and `: DeaTure`
+    // and `Bytes:` and `2,020,282,473 Files:` and `61`, five columns the door
+    // padded apart. `narrow` shrank the widest of them until the row fit and
+    // the caller read `Top Uplo> : DeaTure Bytes: 2,020,282> 61`.
+    // `2,020,282>` is not a shortened number. It is a DIFFERENT number.
+    const stat = row('Top Uploader Record     : DeaTure          Bytes:   2,020,282,473 Files:   61');
+    expect(chooseRule(stat, 40)).toBe('stat');
+    expect(applyRule('stat', stat, 40).rows.map(str)).toEqual([
+      'Top Uploader Record : DeaTure',
+      'Bytes: 2,020,282,473 Files: 61',
+    ]);
+  });
+
+  it('a value is never shortened, only the row is made taller', () => {
+    // SysInfo's node row, inside its box: three fields across 78 columns.
+    // `narrow` reached the caller as `Port #0 Init Baud is: > Sysop Status: B>`
+    // - the baud rate deleted outright and the status cut to one letter.
+    const node = row('| Port #0  || Init Baud is: 115200 Baud || Sysop Status: Busy at the Moment! ||');
+    expect(chooseRule(node, 40)).toBe('stat');
+    expect(applyRule('stat', node, 40).rows.map(str)).toEqual([
+      'Port #0 Init Baud is: 115200 Baud',
+      'Sysop Status: Busy at the Moment!',
+    ]);
+  });
+
+  it('a label with its value in the next column travels with it', () => {
+    // ctop pads `Bytes:` and its number into separate columns. Packed
+    // separately, `Bytes:` was stranded at the end of one row with its `0` at
+    // the start of the next.
+    const totals = row('Top Uploader Last Period: NONE             Bytes:               0 Files:    0');
+    const out = applyRule('stat', totals, 40).rows.map(str);
+    expect(out).toEqual(['Top Uploader Last Period: NONE', 'Bytes: 0 Files: 0']);
+    expect(out.some((line) => line.endsWith('Bytes:'))).toBe(false);
+  });
+
+  it('a table has no labels, so it stays with narrow and stays a table', () => {
+    // `who`'s data row shape: columns of atoms, no colon anywhere. Packing a
+    // table column by column stops it lining up with the header above it,
+    // which is the whole reason `narrow` exists.
+    const table = row('  12/34       SomeUser              +44 1234 567890        Uploading a file');
+    expect(statRow(table, 40)).toBeNull();
+    expect(chooseRule(table, 40)).toBe('narrow');
+  });
+
+  it('a row that narrow can fit without shortening anything stays one row', () => {
+    // Two columns of 15 and a wide gutter: `narrow` joins them with one space,
+    // truncates nothing, and one row beats two.
+    const roomy = row('Sysop Name...: X'.padEnd(50, ' ') + 'Chat Flag: OFF');
+    expect(statRow(roomy, 40)).toBeNull();
+    expect(chooseRule(roomy, 40)).not.toBe('stat');
+  });
+
+  it('a column wider than the screen makes the rung decline, and the caller sees the truncation mark', () => {
+    // The honest-degradation case. The rung cannot place a 45-column field on a
+    // 40-column row without cutting it, and cutting it silently is the defect
+    // it exists to remove - so it declines, `narrow` takes the row, and '>'
+    // tells the reader that something was cut.
+    const huge = row('Status: ' + 'x'.repeat(45) + '   Node: 1   Line: 2');
+    expect(statRow(huge, 40)).toBeNull();
+    expect(chooseRule(huge, 40)).toBe('narrow');
+    expect(str(applyRule('narrow', huge, 40).rows[0])).toContain(TRUNCATION_MARK);
+  });
+
+  it('a pinned stat on a row it declines falls through to narrow', () => {
+    expect(applyRule('stat', row(PROSE), 40).applied).not.toBe('stat');
+  });
+
+  it('the cursor follows its source column onto the row its column landed on', () => {
+    const node = row('| Port #0  || Init Baud is: 115200 Baud || Sysop Status: Busy at the Moment! ||');
+    const out = applyRule('stat', node, 40);
+    // the 'B' of "Busy" must land on the SECOND row, after its own label
+    const b = str(node).indexOf('Busy');
+    expect(node[b].ch).toBe('B');
+    expect(out.map(b)).toEqual({ row: 1, x: 'Sysop Status: '.length });
+  });
+});
+
+describe('repeat', () => {
+  const TAGS = '| Dre!Wall | Dre!Wall | Dre!Wall | Dre!Wall | Dre!Wall | Dre!Wall | Dre!Wall |';
+
+  it('keeps whole copies of a repeated tag instead of shortening every one', () => {
+    expect(chooseRule(row(TAGS), 40)).toBe('repeat');
+    const out = applyRule('repeat', row(TAGS), 40);
+    expect(out.rows).toHaveLength(1);
+    expect(str(out.rows[0])).toBe('Dre!Wall Dre!Wall Dre!Wall Dre!Wall');
+    expect(str(out.rows[0])).not.toContain(TRUNCATION_MARK);
+  });
+
+  it('declines when the columns differ, so a real table still narrows', () => {
+    expect(repeatRow(row(TABLE), 40)).toBeNull();
+    expect(chooseRule(row(TABLE), 40)).toBe('narrow');
+    expect(repeatRow(row(WIDE_TABLE), 40)).toBeNull();
+  });
+
+  it('declines when every copy already fits, because narrow then loses nothing', () => {
+    const three = '| ab | ab | ab |'.padEnd(45, ' ') + '|';
+    expect(repeatRow(row(three), 40)).toBeNull();
+  });
+
+  it('a pinned repeat on a row whose columns differ falls through to narrow', () => {
+    expect(applyRule('repeat', row(TABLE), 40).applied).toBe('narrow');
+  });
+
+  it('the cursor follows its source column into a kept copy', () => {
+    const cells = row(TAGS);
+    const out = applyRule('repeat', cells, 40);
+    expect(out.map(2)).toEqual({ row: 0, x: 0 });    // first cell of the first tag
+    expect(out.map(13)).toEqual({ row: 0, x: 9 });   // first cell of the second tag
+  });
+});
+
+/**
+ * BULLS AT 40 COLUMNS, the sysop's 2026-09-13 report. The source rows are the
+ * ones the door really paints when its narrow shadow is in effect
+ * (DUAL_LISTING=NO: one bulletin per row), captured from a live 40-column
+ * session, byte for byte.
+ */
+describe('a marked list keeps one left edge', () => {
+  /**
+   * "the active > arrow shifts the line" - the sysop's 40-column JoinCnf
+   * walk, 2026-09-14.
+   *
+   * JoinCnf marks the selected conference with `> ... <` and pays for the
+   * marker OUT OF THE INDENT, so at eighty columns every number sits in the
+   * same column. Every rung is a row function: `narrow` drops each row's own
+   * padding, so the marked row came out starting at `>` and the rest at `[`,
+   * and the numbers stepped two columns right on whichever row the caller
+   * was standing.
+   *
+   * A list is a BLOCK and a block has ONE left edge. The rows are
+   * de-indented by the block's COMMON indent, not each by its own.
+   */
+  const row80 = (indent: number, body: string) =>
+    '|' + ' '.repeat(indent) + body + ' '.repeat(Math.max(0, 78 - indent - body.length)) + '|';
+
+  function list(): Frame {
+    return textToFrame(
+      [
+        row80(21, '[01] .................. Lamer Zone'),
+        row80(19, '> [02] ................ Amiga Warez! <'),
+        row80(21, '[03] .............. Abandoned Apps'),
+      ],
+      80,
+      3,
+    );
+  }
+
+  const textOf = (cells: ReadonlyArray<Cell>) => cells.map((c) => c.ch).join('').replace(/ +$/, '');
+
+  it('puts every number in the same column, marker or not', () => {
+    const out = adaptRows(list(), { cols: 40 }).rows.map((r) => textOf(r.cells));
+    expect(out).toHaveLength(3);
+    const at = out.map((t) => t.indexOf('['));
+    expect({ columns: at }).toEqual({ columns: [at[0], at[0], at[0]] });
+  });
+
+  it('keeps the marker, and loses no character to the alignment', () => {
+    const out = adaptRows(list(), { cols: 40 }).rows.map((r) => textOf(r.cells));
+    expect(out[1]).toContain('>');
+    expect(out[1]).toContain('<');
+    expect(out[0]).toContain('Lamer Zone');
+    expect(out[1]).toContain('Amiga Warez!');
+    expect(out[2]).toContain('Abandoned Apps');
+    for (const t of out) expect(t.length).toBeLessThanOrEqual(40);
+  });
+
+  it('aligns a list whose rows already fill the screen, by spending one more of the leader', () => {
+    // `Bulls` marks with `>[06]<` and pays for it out of the indent, and its
+    // rows land on exactly 40 columns because `leader` spends the dot run to
+    // fit. There is no column left to shift with, so the first cut of this
+    // declined the whole block and the marked row stayed one to the left.
+    const bull = (n: string, dots: number, label: string) =>
+      ' '.repeat(18) + `[${n}] ` + '.'.repeat(dots) + ' ' + label;
+    const marked = ' '.repeat(17) + '>[02]<' + '.'.repeat(27) + ' Top Downloaders';
+    const f = textToFrame(
+      [
+        bull('01', 25, 'Top Uploaders'),
+        marked,
+        bull('03', 19, 'Top Message Writers'),
+        bull('04', 24, 'Top Upload CPS'),
+      ],
+      80,
+      4,
+    );
+    const out = adaptRows(f, { cols: 40 }).rows.map((r) => str(r.cells));
+    expect(out).toHaveLength(4);
+    for (const t of out) expect(t.length).toBeLessThanOrEqual(40);
+    // Every number in one column, the marker hanging left of it.
+    const at = out.map((t) => t.indexOf('['));
+    expect({ columns: at }).toEqual({ columns: [at[0], at[0], at[0], at[0]] });
+    expect(out[1].startsWith('>')).toBe(true);
+    // ...and the labels all survive: the row paid in DOTS, not in words.
+    expect(out[0]).toContain('Top Uploaders');
+    expect(out[1]).toContain('Top Downloaders');
+    expect(out[2]).toContain('Top Message Writers');
+    expect(out[3]).toContain('Top Upload CPS');
+  });
+
+  it('holds the left edge when the marker is not on screen, so the column never moves', () => {
+    // "the column with the numbers moves one char to the right when the >
+    // appears" (sysop, 2026-09-14). The left edge was computed from the rows
+    // of THIS frame, so a list with no marker on it sat one column left of
+    // the same list with one - and the numbers stepped sideways the moment
+    // the caller pressed a key.
+    //
+    // The gutter belongs to the LIST, not to the frame that happens to show
+    // it. Once a door has marked a row, the room stays reserved.
+    const plain = textToFrame(
+      [
+        row80(18, '[01] .......... Top Uploaders'),
+        row80(18, '[02] ........ Top Downloaders'),
+        row80(18, '[03] .. Top Message Writers'),
+      ],
+      80,
+      3,
+    );
+    const withMarker = textToFrame(
+      [
+        row80(18, '[01] .......... Top Uploaders'),
+        row80(17, '>[02]<...... Top Downloaders'),
+        row80(18, '[03] .. Top Message Writers'),
+      ],
+      80,
+      3,
+    );
+
+    const memo = {};
+    const columnsOf = (f: Frame) =>
+      adaptRows(f, { cols: 40, align: memo }).rows.map((r) => textOf(r.cells).indexOf('['));
+
+    // The marked frame sets the gutter...
+    const marked = columnsOf(withMarker);
+    expect({ marked }).toEqual({ marked: [marked[0], marked[0], marked[0]] });
+    // ...and a frame with no marker on it keeps the same column.
+    expect({ plain: columnsOf(plain) }).toEqual({ plain: marked });
+    // The marker itself still hangs to the LEFT of that column.
+    const out = adaptRows(withMarker, { cols: 40, align: memo }).rows.map((r) => textOf(r.cells));
+    expect(out[1].indexOf('>')).toBe(marked[0] - 1);
+  });
+
+  it('leaves a block alone when padding it would push a row off the screen', () => {
+    // Alignment is never worth a character. These two would need the first
+    // row moved two columns right, and it has no two columns to give.
+    const tight = textToFrame(
+      [
+        row80(21, '[01] ....................... A Very Long Name Ind'),
+        row80(19, '> [02] ................ Amiga Warez! <'),
+      ],
+      80,
+      2,
+    );
+    const out = adaptRows(tight, { cols: 40 }).rows.map((r) => textOf(r.cells));
+    expect(out).toHaveLength(2);
+    for (const t of out) expect(t.length).toBeLessThanOrEqual(40);
+    // Unpadded, so the numbers still step. What `narrow` did to the first
+    // row's own width it did before this pass ran and is not its business;
+    // what matters is that alignment took nothing further.
+    expect(out[1]).toContain('Amiga Warez!');
+    expect(out[1].startsWith('>')).toBe(true);
+    expect(out[0].indexOf('[')).not.toBe(out[1].indexOf('['));
+  });
+});
+
+describe('a rule that ends in a corner', () => {
+  /**
+   * JoinCnf's current-conference row: a label, its value, and then the box's
+   * bottom rule running to the right edge and closing on a corner.
+   *
+   * `isCroppable` asked for ONE repeated glyph past the screen edge and
+   * found two - the dashes and the corner - so the row fell to `split` and
+   * the caller read the value with the rule's tail on the row below. A
+   * corner is the end of the rule, not content: the rule crops, and so does
+   * its corner.
+   */
+  const CORNERED = ':  Amiga Warez!' + '-'.repeat(63) + "'";
+
+  it('crops to one row instead of splitting across two', () => {
+    expect(chooseRule(row(CORNERED), 40)).toBe('crop');
+    const out = applyRule('crop', row(CORNERED), 40);
+    expect(out.rows).toHaveLength(1);
+    expect(str(out.rows[0])).toBe(':  Amiga Warez!' + '-'.repeat(25));
+  });
+
+  it('still refuses to crop a WORD off the right edge', () => {
+    expect(isCroppable(row('Label' + '-'.repeat(40) + 'VALUE'), 40)).toBe(false);
+  });
+
+  it('takes ONE corner, not a second run of something else', () => {
+    expect(isCroppable(row('Label' + '-'.repeat(50) + "'''"), 40)).toBe(false);
+    expect(isCroppable(row('Label' + '-'.repeat(40) + "'" + '='.repeat(10)), 40)).toBe(false);
+  });
+});
+
+describe('leader', () => {
+  /** `Bulls` at an indent of 18, one bulletin per row: 62 columns. */
+  const BULL = ' '.repeat(18) + '[01] ......................... Top Uploaders';
+
+  it('keeps the whole menu row by spending the dots, where split severed it', () => {
+    expect(chooseRule(row(BULL), 40)).toBe('leader');
+    const out = applyRule('leader', row(BULL), 40);
+    expect(out.rows).toHaveLength(1);
+    expect(str(out.rows[0])).toBe('[01] ..................... Top Uploaders');
+    expect(str(out.rows[0])).not.toContain(TRUNCATION_MARK);
+    // Every word survives, in order - only leader dots are gone.
+    expect(words(str(out.rows[0])).filter((w) => !/^\.+$/.test(w)))
+      .toEqual(['[01]', '.....................', 'Top', 'Uploaders'].filter((w) => !/^\.+$/.test(w)));
+  });
+
+  it("keeps a row whose label is a bare '-', which is how Bulls names an unused slot", () => {
+    // Conference 2 lists twelve bulletins and the last three are named '-'.
+    // Asking for a WORD after the leader left exactly these three to `split`.
+    const UNUSED = ' '.repeat(18) + '[10] ..................................... -';
+    expect(chooseRule(row(UNUSED), 40)).toBe('leader');
+    expect(str(applyRule('leader', row(UNUSED), 40).rows[0])).toBe('[10] ................................. -');
+  });
+
+  it('is a DOT leader: a run of dashes or underscores is a rule or art, and stays one', () => {
+    // AquaScan's logo and DoorRepo's box header, both of which this rung ate
+    // while it accepted any repeated glyph.
+    const ART = ' '.repeat(33) + ')_____  Y \'   Y___  Y  |__|  _  Y   ____(';
+    const BOX = '+- REPO (4096) ' + '-'.repeat(12) + '++' + '-'.repeat(50) + '+';
+    expect(leaderRow(row(ART), 40)).toBeNull();
+    expect(leaderRow(row(BOX), 40)).toBeNull();
+  });
+
+  it('declines on a box rule, whose junction belongs to the column below it', () => {
+    // `kd_confstats` row 19: the dashes are the box's own rule and the '+' is a
+    // column junction. Shortening them would move the junction off its column.
+    const BOXED = '|' + '-'.repeat(49) + '+ Up B4 Dn Files:' + ' '.repeat(10) + '|';
+    expect(leaderRow(row(BOXED), 40)).toBeNull();
+  });
+
+  it('declines when the row has no run long enough to be a leader', () => {
+    expect(leaderRow(row(PROSE + ' and again and again'), 40)).toBeNull();
+  });
+
+  it('declines when the run cannot pay the whole difference', () => {
+    // Four dots, and twenty columns to find: what is left would not read as a
+    // leader, and half-fitting a row only hands the rest to `fitRow`.
+    const short = 'Some rather long label here .... and a value that runs past the edge';
+    expect(leaderRow(row(short), 40)).toBeNull();
+  });
+
+  it('declines on a row that fits, and on one de-indenting alone would fit', () => {
+    expect(leaderRow(row('[01] ..... Top Uploaders'), 40)).toBeNull();
+    expect(leaderRow(row(' '.repeat(30) + '[01] ..... Top Uploaders'), 40)).toBeNull();
+  });
+
+  it('a pinned leader on a row with no run falls through to the row\'s own rule', () => {
+    expect(applyRule('leader', row(TABLE), 40).applied).toBe('gutter');
+  });
+
+  it('the cursor follows its source column, and the dropped dots land on the last one kept', () => {
+    const cells = row(BULL);
+    const out = applyRule('leader', cells, 40);
+    expect(out.applied).toBe('leader');                // not the fall-through
+    expect(out.map(18)).toEqual({ row: 0, x: 0 });     // '[' of '[01]'
+    expect(out.map(61)).toEqual({ row: 0, x: 39 });    // 's' of 'Uploaders', the last column
+    expect(out.map(45)).toEqual({ row: 0, x: 25 });    // inside the dropped tail of the run
+  });
+});
+
+/**
+ * The sysop's 2026-09-07 report from the live board, one describe per symptom,
+ * each driven with the SOURCE ROW the door really paints (copied out of the
+ * harness capture in fixtures/, byte for byte) rather than a paraphrase of it.
+ */
+describe("the wall's banner", () => {
+  // Doors/GWall/GWall row 1, verbatim from fixtures/gwall.ans. The door
+  // letter-spaces the banner with '÷'.
+  const MASTHEAD = '.- - ---_\\/_--÷G÷L÷O÷B÷A÷L÷--÷T÷H÷E÷R÷M÷O÷N÷U÷C÷L÷E÷A÷R÷--÷W÷A÷L÷L÷--÷V÷1÷ß÷--.';
+
+  it('does not break inside a word', () => {
+    const out = applyRule(chooseRule(row(MASTHEAD), 40), row(MASTHEAD), 40);
+    const lines = out.rows.map((r) => str(r));
+    // The letters of THERMONUCLEAR, in order, with their spacing removed: they
+    // must all live on ONE of the produced rows.
+    const letters = (t: string) => t.replace(/[^A-Za-z0-9]/g, '');
+    expect(lines.some((l) => letters(l).includes('THERMONUCLEAR'))).toBe(true);
+    expect(lines.some((l) => letters(l).includes('GLOBAL'))).toBe(true);
+    expect(lines.some((l) => letters(l).includes('WALL'))).toBe(true);
+    // ...and no row ends part-way through one of them.
+    expect(lines.map(letters)).not.toContain('THERM');
+  });
+
+  it('spends a row on the whole word rather than folding it', () => {
+    expect(applyRule('split', row(MASTHEAD), 40).rows).toHaveLength(3);
+  });
+
+  it('still cuts at a run of two or more decoration characters', () => {
+    // GLOBAL and THERMONUCLEAR are separated by '--', which is a gap and not
+    // letter-spacing, so the break is allowed to land there.
+    const first = str(applyRule('split', row(MASTHEAD), 40).rows[0]).trimEnd();
+    expect(first.endsWith('L÷--÷')).toBe(true);
+  });
+
+  it('leaves a rule of dashes alone: it carries no word to break', () => {
+    const rule = '-'.repeat(79);
+    expect(applyRule('split', row(rule), 40).rows.map((r) => str(r).trimEnd()))
+      .toEqual(['-'.repeat(40), '-'.repeat(39)]);
+  });
+
+  it('marks a letter-spaced word too wide for any row instead of moving it', () => {
+    const huge = 'x' + Array.from('abcdefghijklmnopqrstuvwxyzabcdefghijklmno').join('.');
+    const out = applyRule('split', row(huge), 40);
+    expect(str(out.rows[0])[39]).toBe(TRUNCATION_MARK);
+  });
+});
+
+describe('a comment row', () => {
+  // fixtures/gwall.ans rows 2 and 4: the wall draws its column HEADER with '!'
+  // and every comment with '|', and both enclose one cell.
+  const HEADER = '!cOMMENt\\/\\/'.padEnd(68, ' ') + 'hANDLE¡bBS!';
+  const COMMENT = '|This site now has links to 3000 Amiga bbs doors'.padEnd(67, ' ') + '-REbEL¦WWW|';
+
+  const railsOf = (line: string) => ({ open: line.trimStart()[0], close: line.trimEnd().slice(-1) });
+
+  it('never shows half a box', () => {
+    for (const src of [HEADER, COMMENT]) {
+      const out = applyRule(chooseRule(row(src), 40), row(src), 40);
+      const lines = out.rows.map((r) => str(r).trimEnd()).filter((l) => l.length > 0);
+      const rail = src.trimStart()[0];
+      const shown = lines.filter((l) => l.startsWith(rail) || l.endsWith(rail));
+      expect({ src: src.slice(0, 12), shown }).toEqual({ src: src.slice(0, 12), shown: [] });
+    }
+  });
+
+  it('drops the header box the same way it drops a comment box, so the wall has one right edge or none', () => {
+    const header = applyRule(chooseRule(row(HEADER), 40), row(HEADER), 40);
+    const comment = applyRule(chooseRule(row(COMMENT), 40), row(COMMENT), 40);
+    expect(railsOf(str(header.rows[header.rows.length - 1])).close)
+      .toBe('S');                                        // ...hANDLE¡bBS, no '!'
+    expect(railsOf(str(comment.rows[comment.rows.length - 1])).close)
+      .toBe('W');                                        // ...-REbEL¦WWW, no '|'
+  });
+
+  it('keeps a box the row can hold whole: both rails or neither, never one', () => {
+    // fixtures/pager5d.ans row 1 - 43 columns at an indent of 4, so 39 columns
+    // of content. `crop` used to drop its closing rail; `deindent` keeps both.
+    const BOXED = '    |       5D_Page v0.01 by sNoW !        |';
+    expect(chooseRule(row(BOXED), 40)).toBe('deindent');
+    const line = str(applyRule('deindent', row(BOXED), 40).rows[0]).trimEnd();
+    expect(line[0]).toBe('|');
+    expect(line[line.length - 1]).toBe('|');
+  });
+});
+
+describe('the empty-conference banner', () => {
+  // fixtures/ctop.ans row 11: Conftop-II centres its empty-table message across
+  // 80 columns and it lands on slot 5.
+  const SLOT5 = ' 5.            - NO UPLOADERS ARE AVAILABLE IN THIS CONFERENCE -';
+
+  it('does not collide with the numbered list', () => {
+    expect(chooseRule(row(SLOT5), 40)).toBe('banner');
+    const lines = applyRule('banner', row(SLOT5), 40).rows.map((r) => str(r).trimEnd());
+    expect(lines[0]).toBe(' 5.');
+    expect(lines.slice(1).join(' ')).toBe('- NO UPLOADERS ARE AVAILABLE IN THIS CONFERENCE -');
+  });
+
+  it('loses nothing but the padding the door centred it with', () => {
+    const lines = applyRule('banner', row(SLOT5), 40).rows.map((r) => str(r));
+    expect(lines.join('').replace(/\s+/g, '')).toBe(SLOT5.replace(/\s+/g, ''));
+  });
+
+  it('declines on a row whose two halves are one sentence, so reflow still owns it', () => {
+    const prose = 'the quick brown fox jumps over  the lazy dog and keeps on running past it';
+    expect(chooseRule(row(prose), 40)).not.toBe('banner');
+  });
+
+  it('declines on ART, so a half-painted menu row still splits', () => {
+    // fixtures/rtw.txt: block glyphs either side of a three-blank gap, which
+    // matches every structural condition the rung has.
+    const art = '▓▓▓▓WNLO▓▓▓▓   [▓▓▓▓ SYS▓▓▓▓IEW'.padEnd(63, '▓');
+    expect(chooseRule(row(art), 40)).not.toBe('banner');
+  });
+
+  it('a pinned banner on a row that is not one falls through to the row own rule', () => {
+    const table = '| aa | bb | cc |'.padEnd(60, ' ') + '| dd |';
+    expect(applyRule('banner', row(table), 40).applied).not.toBe('banner');
+  });
+});

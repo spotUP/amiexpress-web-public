@@ -1,0 +1,319 @@
+AX0001 = /X Test Net
+ @305003
+  @416001
+   @416002
+   @416003
+   @416004
+   @416006
+  @716001
+   @716002
+   @907001
+   @BL0002
+    @BL0001
+   @GR0001
+    @GR0002
+    @GR0003
+    @GR0004
+   @NL0001
+    @NL0002
+     @NL0005
+    @NL0003
+    @NL0004
+   @UK0001
+  @IT0004
+  @SF0001
+-R:Joseph Hodge
+
+AX0002 = /X General Support Net
+ @305003
+  @305001
+  @216001
+  @416001
+   @416002
+   @416003
+   @416004
+  @716001
+   @716002
+   @801001
+   @907001
+   @BL0002
+    @BL0001
+   @GR0001
+    @GR0002
+    @GR0003
+    @GR0004
+   @IT0001
+    @503001
+    @IT0002
+    @IT0003
+   @NL0001
+    @NL0002
+     @NL0005
+    @NL0003
+    @NL0004
+   @UK0001
+  @SF0001
+-A:Joseph Hodge
+
+AX0003 = /XMagNet
+ @305003
+  @305001
+  @416001
+  @716001
+-A:The OutLaw
+
+AX0004 = /X Distributors
+ @305001
+-R:Joseph Hodge
+
+AX0005 = /X Developement Team
+ @305003
+  @416001
+  @716001
+   @716002
+-R:Joseph Hodge
+
+KS0001 = Amiga General Support
+ @416001
+  @416002
+  @416003
+  @416004
+  @305003
+   @216001
+   @716001
+    @716002
+    @801001
+    @907001
+    @BL0002
+     @BL0001
+    @GR0001
+     @GR0002
+     @GR0003
+     @GR0004
+    @IT0001
+     @IT0002
+     @IT0003
+    @NL0001
+     @NL0002
+      @NL0005
+     @NL0003
+     @NL0004
+   @SF0001
+-R:Chris Kawchuk
+
+KS0002 = Amiga Toronto Buy and Sell
+ @416001
+  @416002
+  @416003
+  @416004
+-R:Ron Kawchuk
+
+KS0003 = Amiga Music
+ @416001
+  @416002
+  @416003
+  @416004
+  @305003
+   @716001
+    @716002
+    @BL0002
+     @BL0001
+    @GR0001
+     @GR0002
+     @GR0003
+     @GR0004
+    @NL0001
+     @NL0002
+      @NL0005
+     @NL0003
+     @NL0004
+   @SF0001
+-R:Deryk Piper
+
+KS0004 = Amiga Technical
+ @416001
+  @416002
+  @416003
+  @416004
+  @305003
+   @305001
+   @716001
+    @716002
+    @BL0002
+     @BL0001
+    @GR0001
+     @GR0002
+     @GR0003
+     @GR0004
+    @NL0001
+     @NL0002
+      @NL0005
+     @NL0003
+     @NL0004
+   @SF0001
+-R:Kevin Morwood
+
+KS0005 = Amiga Art
+ @416001
+  @416002
+  @416003
+  @416004
+  @305003
+   @716001
+    @716002
+    @BL0002
+     @BL0001
+    @GR0001
+     @GR0002
+     @GR0003
+     @GR0004
+    @NL0001
+     @NL0002
+      @NL0005
+     @NL0003
+     @NL0004
+   @SF0001
+-R:Stefan Pilipa
+
+KS0006 = Amiga WB 2 0
+ @416001
+  @416002
+  @416003
+  @416004
+  @305003
+   @716001
+    @716002
+    @BL0002
+     @BL0001
+    @GR0001
+     @GR0002
+     @GR0003
+     @GR0004
+    @NL0001
+     @NL0002
+      @NL0005
+     @NL0003
+     @NL0004
+   @SF0001
+-R:Huey Marinuk
+
+KS0007 = Amiga Desktop Publishing
+ @416001
+  @416002
+  @416003
+  @416004
+  @305001
+   @716001
+    @716002
+    @BL0002
+     @BL0001
+    @GR0001
+     @GR0002
+     @GR0003
+     @GR0004
+    @NL0001
+     @NL0002
+      @NL0005
+     @NL0003
+     @NL0004
+   @SF0001
+-R:Chris Kawchuk
+
+KS0020 = Jokes and Humour (alt tasteless jokes)
+ @416001
+  @416003
+-R:Chris Kawchuk
+
+KS0022 = Star Trek Conference
+ @416001
+  @416002
+  @416003
+-R:Chris Kawchuk
+
+KS0031 = Amiga BBS News and Info
+ @416001
+  @416002
+  @416003
+  @416004
+  @305003
+   @716001
+    @716002
+    @BL0002
+     @BL0001
+    @GR0001
+     @GR0002
+     @GR0003
+     @GR0004
+    @NL0001
+     @NL0002
+      @NL0005
+     @NL0003
+     @NL0004
+   @SF0001
+-R:Chris Kawchuk
+
+KS0040 = Sports and Events
+ @416001
+  @416002
+  @416003
+-R:Chris Kawchuk
+
+MM0001 = Amiga Video/Multimedia
+ @416002
+  @416001
+   @305003
+    @SF0001
+   @416003
+-R:Paul Vincente
+
+MM0002 = Car Audio
+ @416002
+-R:Brett Ramdeen
+
+PN0001 = Pirate Net
+ @305003
+  @305002
+  @716001
+   @716002
+   @801001
+   @907001
+   @BL0002
+    @BL0001
+   @GR0001
+    @GR0002
+    @GR0003
+    @GR0004
+   @IT0001
+    @503001
+    @IT0002
+    @IT0003
+   @NL0001
+    @NL0002
+     @NL0005
+    @NL0003
+    @NL0004
+   @UK0001
+  @SF0001
+-A:The OutLaw
+
+=TAGLINES
+@305001 Origin: Last! Amiga BBS - (305) 456-0126 - Public Domain & Fred Fish Online
+@305002 Origin: The 4 Am Club! - (305) 966-0154 - Where The Elite Meet!
+@305003 Origin: LightSpeed Technologies - (305) 964-4263 - /X Support
+@416001 Origin: Kickstart BBS - (416) 279-0907 (416) 566-8198 - Canada's #1 BBS
+@416002 Origin: Midnight Magic - (416) 796-2931 - Are you gonna go my way?
+@416003 Origin: Great Barrier BBS - (416) 841-5343 - Star Trek: TNG atmosphere
+@416004 Origin: Toon Town BBS - (416) 612-0769 - Home of the Sex Shop
+@416006 Origin: BEYOND iNFiNiTY - CRYSTAL CHQ - 416 461-67o2/91o1/5113
+@703001 Origin: LightSpeed Technologies - (703) 639-6114 - /X Developement
+@716001 Origin:- There's only one     The Edge! BBS -
+@BL0001 Origin: Sintax - Belgium
+@BL0002 Origin: Scorpio - Belgium
+@GR0001 Origin: Foxx's Den BBS ¤v¤ TsL +49-2735852 GhQ ¤v¤ Convenient immortal
+@GR0002 Origin: Synergy ** Console/Amiga/Cbm64 3 Nodes ** +49-573-141-982
+@IT0001 Origin: PaRaDiSe DReaMS - ++39 (573) 479575 - Italy's #1 BBS
+@NL0001 Origin: Sleep City bbs  +31-79-219299 - If you got it ,I want it!!
+@NL0002 Origin:  :7Th Heaven BBS: [You write it, We spread it!]
+@NL0003 Origin: netherlands
+@NL0004 Origin: netherlands
+@SF0001 Origin: ThunderStruck BBS

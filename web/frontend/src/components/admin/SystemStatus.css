@@ -1,0 +1,46 @@
+.system-status {
+  padding: 2rem;
+  color: #f8fafc;
+}
+
+.system-status h1 {
+  margin-bottom: 1rem;
+  font-size: 1.5rem;
+  color: #0ea5e9;
+}
+
+.system-status__table-container {
+  max-width: 900px;
+  overflow-x: auto;
+}
+
+.system-status table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.system-status th,
+.system-status td {
+  border: 1px solid rgba(248, 250, 252, 0.25);
+  padding: 0.5rem 0.75rem;
+}
+
+.system-status th {
+  background: rgba(14, 165, 233, 0.15);
+  text-transform: uppercase;
+  font-size: 0.75rem;
+  letter-spacing: 1px;
+}
+
+.system-status td {
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-size: 0.9rem;
+}
+
+.system-status .loading {
+  color: #facc15;
+}
+
+.system-status .error {
+  color: #f87171;
+}

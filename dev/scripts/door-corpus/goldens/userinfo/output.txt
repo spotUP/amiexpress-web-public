@@ -1,0 +1,26 @@
+
+User Name ............: Sysop
+User Location ........: Local Console
+User Phone Number.....: 
+User Access Level ....: 255
+----------------------------------------------------------+---------------------
+Current Conference ...: Main| /X Version ..: v5.6
+Conference Access ....: Sysop
+| Chatflag ....: OFF
+-----------------------------------------------------+----+---------------------
+Ratio ................: 0 DISABLED 
+| Msgs Posted ....; 0
+Ratio Type ...........: 0 Bytes only  DISABLED     
+| Times Called ...: 0
+-----------------------------------------------------+--------------------------
+Upload Files .........: 0
+Upload Bytes .........: 0
+Download Files .......: 0
+Download Bytes .......: 0
+Byte Limit ...........: 0
+--------------------------------------------------------------------------------
+               User Information V1.06 done by AtomiX / TRSI                    
+ 
+--------------------------------------------------------------------------------
+
+

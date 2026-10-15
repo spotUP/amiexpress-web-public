@@ -1,0 +1,296 @@
+# AmiExpress BBS - Docker Compose Configuration
+# Works for both local development and VPS deployment (Hetzner, DigitalOcean, etc.)
+#
+# Usage:
+#   docker compose up -d              # Start BBS
+#   docker compose down               # Stop BBS
+#   docker compose logs -f            # View logs
+#   docker compose up -d --build      # Rebuild and restart
+#   docker compose pull && docker compose up -d --build  # Full update
+
+services:
+  bbs:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        # Embed the commit SHA at build time so the container can report
+        # which git revision it was built from. Set externally by the
+        # deploy workflow (deploy-hetzner.yml passes the resolved SHA);
+        # falls back to "unknown" for local `docker compose up` if the
+        # caller didn't set GIT_SHA.
+        GIT_SHA: ${GIT_SHA:-unknown}
+    container_name: amiexpress-bbs
+    # tini as PID 1: it forwards every signal to the board (the deploy's
+    # SIGUSR1 restart notice included) and reaps the child processes doors and
+    # lrzsz leave behind. See the CMD comment in the Dockerfile.
+    init: true
+    # Pinned, not left to the Docker default (the container ID, which
+    # changes on every --force-recreate or image rebuild). The backend
+    # pooled-storage subsystem (web/backend/src/storage/node-id.ts) reads
+    # HOSTNAME to name its cache directory under Storage/cache/<hostname>/
+    # so a restarted container keeps finding its own staged, not-yet-
+    # uploaded files. See CONFIGURATION.md, "Cache directory and sizing",
+    # for what happens if this value ever changes anyway (the old
+    # directory is abandoned, reported by the orphan sweep, never
+    # auto-recovered). BBS_STORAGE_NODE_ID, if ever set below, wins over
+    # this.
+    hostname: amiexpress-bbs
+    restart: unless-stopped
+    ports:
+      - "3001:3001"     # HTTP/WebSocket (BBS + Admin + SDK)
+      - "64128:64128"   # Telnet (matches TELNET_PORT default in
+                        # web/backend/src/index.ts:821; the prior 2323:2323
+                        # mapping was a dead port — backend was listening on
+                        # 64128 inside the container, so nothing answered
+                        # 2323 externally and 64128 wasn't forwarded.
+                        # A 2026-01 DB migration also forces telnet_port
+                        # back to 64128 on upgrade.)
+      - "31337:31337"   # BBS SSH (matches SSH_PORT default in
+                        # web/backend/src/index.ts:822; 2222:2222 was a
+                        # dead port for the same reason as telnet above).
+      - "1541:1541"     # FTP control (FTP_PORT below, and FTPPORT in
+                        # bbsConfig.info). The server binds 0.0.0.0 inside
+                        # the container whenever the sysop ticks FTP Server
+                        # Enabled; without this line it stops at the
+                        # container edge, which is what "Not connected"
+                        # looked like from Transmit on 2026-09-07.
+                        #
+      - "50101-50107:50101-50107"
+                        # FTP passive data (FTPDATAPORT in bbsConfig.info, and
+                        # FTP_PASSIVE_PORTS below - they must agree). A
+                        # listing does not come back on the control
+                        # connection: the client is told a port and opens a
+                        # second socket to it, so an unpublished range means
+                        # every LIST hangs.
+                        #
+                        # These must be open in the Hetzner CLOUD firewall as
+                        # well - it drops before the packet reaches the host,
+                        # which is what made 1541 look closed for an hour.
+    volumes:
+      # Persistent data volume - survives container rebuilds
+      - bbs-data:/app/data
+      # The TLS material explicit FTPS needs, read-only.
+      #
+      # Without a certificate the FTP server still runs, but `AUTH TLS`
+      # answers 431 and the plaintext policy then refuses every caller who is
+      # not on loopback - the server looks reachable and admits nobody. The
+      # host's Caddy already holds a Let's Encrypt pair for the board, so this
+      # mounts that directory rather than copying keys around.
+      #
+      # NOT Caddy's own directory: it keeps certificates 0600 as the caddy
+      # user, and this container runs as uid 1001, so mounting it gave
+      # `EACCES ... /certs/bbs.uprough.net.crt` and AUTH TLS answered 431
+      # while looking configured. The deploy stages a copy owned by 1001
+      # (deploy-hetzner.yml, "staging FTPS certificate"), and this mounts
+      # that. Point FTP_TLS_DIR at a directory that does not exist and the
+      # server simply starts without TLS - the right behaviour on a
+      # developer's machine.
+      #
+      # Caddy renews in place and the server reads the certificate once, at
+      # boot, so a renewal reaches FTPS at the next deploy or restart.
+      - ${FTP_TLS_DIR:-/app/ftp-certs}:/certs:ro
+    networks:
+      - default
+      - doorserver-net
+    environment:
+      # Core settings
+      - NODE_ENV=production
+      # The board's local time. AmiExpress runs on local time throughout -
+      # the T command, callers log, last callers, MM-DD-YY dates, the 68K
+      # doors' clock - and with TZ unset the container was UTC, two hours
+      # behind Sweden in summer: "It is 09-27-26 13:04:08" at 15:04
+      # (2026-09-27). A zone name, not an offset, so DST follows the rules.
+      # Stored timestamps are unaffected; Date keeps them in UTC.
+      - TZ=${BBS_TIMEZONE:-Europe/Stockholm}
+      - HOST=0.0.0.0
+      - PORT=3001
+      - BACKEND_PORT=3001
+
+      # Database
+      - DATABASE_DIR=/app/data/db
+      - DATABASE_FILE=amiexpress.db
+
+      # BBS paths
+      - BBS_DATA_DIR=/app/data/bbs
+      - ROM_DIR=/app/data/amiga-roms
+
+      # A 68K door waits for the BBS to reply to every JH_xx message it
+      # sends, and that wait used to be a tight loop holding the whole JS
+      # event loop - so while any door was busy, this process answered
+      # NOTHING. It took the board down on 2026-09-13: /health gave no reply
+      # from inside its own container, with fifteen callers queued on the
+      # socket, until a deploy recreated it.
+      #
+      # Measured on localhost 2026-09-14, same board, same door (THEMEC),
+      # /health sampled once a second:
+      #     flag off:  17 of 56 checks got NO answer, one unbroken 28s block
+      #     flag on:    0 of 49 failed, median 0.29 s
+      # The cost is that 0.29 s against 0.02 s idle - each pump iteration
+      # drains XIM before libuv gets its turn. A board that answers slowly is
+      # a different thing from a board that does not answer.
+      #
+      # Safe to run because the two deasync pumps can no longer nest
+      # (api/pump-owner.ts): waitForReply owns the pump and the XIM processor
+      # defers to it. Set to 0 to go back to the old loop.
+      # thoughts/shared/plans/2026-04-21-aedoor-waitforreply-event-loop.md
+      - DOOR_ASYNC_WAIT=${DOOR_ASYNC_WAIT:-1}
+
+      # Telnet/SSH ports — these MUST match the host:container port
+      # mapping above. If a sysop wants different external ports they
+      # need to (a) update the `ports:` block above, (b) set the env
+      # vars below to the new container-side values, (c) update the
+      # ufw rules in deploy/hetzner-setup.sh, (d) restart the stack.
+      # Changing telnet_port/ssh_port via the admin UI alone only
+      # rebinds the internal port — it cannot change Docker port
+      # forwarding, so the UI change without the compose change just
+      # makes the BBS unreachable. This is a known follow-up.
+      - TELNET_PORT=${TELNET_PORT:-64128}
+      - SSH_PORT=${SSH_PORT:-31337}
+
+      # FTP, same rule: this is the CONTAINER-side port and it must match the
+      # "1541:1541" mapping above. It overrides the admin's FTP Port field
+      # (web/backend/src/ftp/start-ftp.ts:44), exactly as TELNET_PORT does -
+      # so that changing the port in the UI alone cannot leave the mapping
+      # pointing at a socket nobody is listening on.
+      - FTP_PORT=${FTP_PORT:-1541}
+      # Read by start-ftp.ts. Both must be present or AUTH TLS answers 431.
+      # These are the FALLBACK pair, used for a client that sends no SNI and
+      # for a name not listed below.
+      - FTP_TLS_CERT=/certs/bbs.uprough.net.crt
+      - FTP_TLS_KEY=/certs/bbs.uprough.net.key
+      # The names this board answers to, in preference order - the FIRST is
+      # the default context. uptown is the address the sysop gives out; bbs is
+      # what everything internal uses. A certificate is issued for ONE name,
+      # so the server carries both and picks by SNI; without this, a caller
+      # dialling uptown is served the bbs certificate and his client rejects
+      # it. Each entry is read as /certs/<host>.crt and /certs/<host>.key,
+      # which is what the deploy stages and how Caddy names them.
+      - FTP_TLS_DIR=/certs
+      - FTP_TLS_HOSTS=uptown.uprough.net,bbs.uprough.net
+      # PASV. The range must match the `ports:` mapping above, and the address
+      # is the PUBLIC one: the container's own is on a docker bridge, and a
+      # caller told to dial that one dials his own network and hangs. There is
+      # no sensible default, so PASV answers 425 rather than guessing.
+      - FTP_PASSIVE_PORTS=${FTP_PASSIVE_PORTS:-50101-50107}
+      - FTP_PASSIVE_ADDRESS=${FTP_PASSIVE_ADDRESS:-203.0.113.10}
+      # OFF again, 2026-09-07, and it should stay off. It was set for one
+      # afternoon because the certificate was unreadable and no client could
+      # get in; with the certificate staged and readable, Transmit logged in
+      # over explicit FTPS on the first try (`234 AUTH TLS successful`,
+      # `230 password accepted`), so there is nothing left to buy by allowing
+      # a password to cross the internet in clear text.
+      #
+      # Setting it to 1 lets a caller off the box log in without AUTH TLS. The
+      # password is his BBS password, which is also his admin password.
+      - FTP_ALLOW_PLAINTEXT=${FTP_ALLOW_PLAINTEXT:-0}
+
+      # Security - MUST override in .env file
+      - JWT_SECRET=${JWT_SECRET:-CHANGE_ME}
+      - JWT_REFRESH_SECRET=${JWT_REFRESH_SECRET:-CHANGE_ME}
+      - SESSION_SECRET=${SESSION_SECRET:-CHANGE_ME}
+
+      # RAM optimization for 4GB+ VPS (Hetzner CX22)
+      - EMULATOR_MEMORY_MB=${EMULATOR_MEMORY_MB:-8}
+      - AMIGA_FILE_CACHE_MB=${AMIGA_FILE_CACHE_MB:-4}
+      - FILE_CACHE_MB=${FILE_CACHE_MB:-8}
+
+      # CORS - add your domain
+      - CORS_ORIGINS=${CORS_ORIGINS:-}
+
+      # How long the countdown runs when the deploy sends SIGUSR1 before
+      # recreating the container (web/backend/src/services/restart-notice.service.ts).
+      # Must stay in step with the `sleep` in .github/workflows/deploy-hetzner.yml.
+      - RESTART_NOTICE_SECONDS=${RESTART_NOTICE_SECONDS:-60}
+
+      # Debug flags
+      - DEBUG=${DEBUG:-false}
+      - XIM_DEBUG=${XIM_DEBUG:-0}
+
+      # Re-initialization flags (set to 1 to force re-copy)
+      - FORCE_REINIT_SCREENS=${FORCE_REINIT_SCREENS:-0}
+      - FORCE_REINIT_ROMS=${FORCE_REINIT_ROMS:-0}
+      - FORCE_REINIT_CONFIG=${FORCE_REINIT_CONFIG:-0}
+      - FORCE_REINIT_DOORS=${FORCE_REINIT_DOORS:-0}
+
+      # Door repo role and URL are NOT listed here on purpose.
+      # A bare `- DOOR_REPO_ROLE` entry resolves to an EMPTY value when the
+      # variable is not set in the shell, and an `environment:` entry SHADOWS
+      # `env_file`, so listing them here silently overrode .env/.env.local and
+      # took the live API offline once (2026-08-17). Set them in `.env` or
+      # `.env.local` instead -- both are loaded via env_file below:
+      #   DOOR_REPO_ROLE=owner   (only on the host that SERVES the repo)
+      #   DOOR_REPO_URL=...      (override the built-in default; "" disables)
+      # The default URL lives in exactly one place in code:
+      # Doors/door-manager/repoDataSource.ts (DEFAULT_DOOR_REPO_URL).
+
+      # The door catalog lives in the standalone door server; this BBS proxies
+      # to it so shipped clients (RepoHost=bbs.uprough.net) keep working.
+      # Unset = the /api/door-repo paths 404, exactly as a disabled feature should.
+      # Reached by service DNS over the shared network - NOT 127.0.0.1, which
+      # inside a container is the container.
+      - DOOR_SERVER_URL=${DOOR_SERVER_URL:-http://doorserver:3010}
+    env_file:
+      - path: .env
+        required: false
+      - path: .env.local
+        required: false
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 120s
+
+  # WHIP Discord mirror bot (plugin). NOT started by default: the admin
+  # Bot page (or `docker compose up -d whip-bot`) starts it once the sysop
+  # has filled its config there. Reads secrets from the admin-written
+  # volume file, never from the image; shares the bbs-data volume
+  # read-only so it sees the same WHIP JSON the board does.
+  whip-bot:
+    build:
+      context: .
+      dockerfile: bots/whip/Dockerfile
+      args:
+        # Same reason as the bbs service above: the deploy verifies what is
+        # running by reading org.opencontainers.image.revision off the
+        # container. Without this the bot builds with GIT_SHA=unknown and
+        # cannot be verified at all.
+        GIT_SHA: ${GIT_SHA:-unknown}
+    container_name: amiexpress-whip-bot
+    hostname: amiexpress-whip-bot
+    restart: unless-stopped
+    depends_on:
+      - bbs
+    volumes:
+      - bbs-data:/app/data:ro
+    networks:
+      - default
+      - doorserver-net
+    environment:
+      - NODE_ENV=production
+      - TZ=${BBS_TIMEZONE:-Europe/Stockholm}
+      - WHIP_API_URL=http://bbs:3001
+      - BOT_ENV_FILE=/app/data/bots/whip.env
+      - HEALTH_PORT=3099
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3099/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    profiles:
+      - bots
+
+networks:
+  # Shared with the amiexpress-doorserver stack so the bbs container can
+  # reach the doorserver container by service DNS. Created once on the host
+  # via `docker network create doorserver-net` - not managed by this compose
+  # file (external: true), since it's shared across two independent compose
+  # projects.
+  doorserver-net:
+    external: true
+
+volumes:
+  bbs-data:
+    name: amiexpress-bbs-data

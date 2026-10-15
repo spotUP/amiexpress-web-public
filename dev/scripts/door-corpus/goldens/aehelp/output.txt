@@ -1,0 +1,21 @@
+ 
+ 
+** Help v0.4 by -= Nameless =- of Snarfs' Pub BBS (407) 267-8155 **
+ 
+Below are the available AmiExpress commands with brief descriptions.
+ 
+?   - Show the current conf menu  B   - Bulletins
+C   - Comment to Sysop            D   - Download file(s)
+E   - Enter mail/message          F   - List files
+G   - Goodbye                     H   - Help with bbs
+J   - Join a conference           M   - ANSI graphics on/off
+N   - New files                   O   - Operator page, chat
+R   - Read mail                   S   - Print your stats
+T   - The current time            U   - Upload a file
+UR  - Upload Resume a file(tm)    V   - View a text file
+W   - Write your stats            X   - Toggle expert mode on/off
+Z   - Zippy file search           OPEN- Open the door menu
+ZOOM- Gathers all messages since last call for free (D)ownload
+ 
+Enter command you want HELP with [press <RETURN> to quit]->  
+[68K] HELP exited with code 1

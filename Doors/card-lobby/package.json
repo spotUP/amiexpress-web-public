@@ -1,0 +1,118 @@
+{
+  "name": "card-lobby",
+  "version": "2.0.0",
+  "description": "Multiplayer card lobby with poker engine and web audio",
+  "main": "dist/server.js",
+  "bbsCommand": "CARDLOBBY",
+  "doorType": "TS",
+  "runtime": "hybrid",
+  "client": {
+    "entry": "./client.ts",
+    "bundle": "./dist/client.bundle.js"
+  },
+  "server": {
+    "entry": "./server.ts"
+  },
+  "accessLevel": 0,
+  "author": "AmiExpress Team",
+  "license": "MIT",
+  "category": "game",
+  "keywords": [
+    "bbs",
+    "door",
+    "cards",
+    "poker",
+    "lobby",
+    "hybrid",
+    "audio"
+  ],
+  "scripts": {
+    "build": "tsc && npm run bundle:client",
+    "bundle:client": "esbuild client.ts --bundle --outfile=dist/client.bundle.js --format=esm --target=es2020 --platform=browser --external:fs --external:path --external:child_process --define:process.env.NODE_ENV='\"production\"' --minify-whitespace",
+    "preview": "cd ../.. && npm run preview doors/card-lobby",
+    "test": "tsx tests/run-tests.ts"
+  },
+  "dependencies": {
+    "@amiexpress/bbs-door-sdk": "file:../../sdk",
+    "tone": "^14.7.77"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "esbuild": "^0.19.0",
+    "typescript": "^5.2.2"
+  },
+  "amiexpress": {
+    "command": "cardlobby",
+    "achievements": [
+      {
+        "id": "door.cardlobby.first_hand",
+        "name": "First Shuffle",
+        "description": "Play a hand in the card lobby",
+        "family": "door.cardlobby",
+        "tier": "bronze",
+        "points": 5,
+        "hidden": false,
+        "rule": {
+          "op": "first",
+          "type": "door.cardlobby.hand"
+        }
+      },
+      {
+        "id": "door.cardlobby.hands_100",
+        "name": "Regular",
+        "description": "Play a hundred hands in the card lobby",
+        "family": "door.cardlobby",
+        "tier": "silver",
+        "points": 10,
+        "hidden": false,
+        "rule": {
+          "op": "count",
+          "type": "door.cardlobby.hand",
+          "n": 100
+        }
+      },
+      {
+        "id": "door.cardlobby.first_win",
+        "name": "Taking the Pot",
+        "description": "Win a hand in the card lobby",
+        "family": "door.cardlobby",
+        "tier": "bronze",
+        "points": 5,
+        "hidden": false,
+        "rule": {
+          "op": "first",
+          "type": "door.cardlobby.win"
+        }
+      },
+      {
+        "id": "door.cardlobby.wins_50",
+        "name": "House Money",
+        "description": "Win fifty hands in the card lobby",
+        "family": "door.cardlobby",
+        "tier": "silver",
+        "points": 10,
+        "hidden": false,
+        "rule": {
+          "op": "count",
+          "type": "door.cardlobby.win",
+          "n": 50
+        }
+      },
+      {
+        "id": "door.cardlobby.all_lobby_awards",
+        "name": "Full House Rules",
+        "description": "Earn every one of the card lobby's own awards",
+        "family": "door.cardlobby",
+        "tier": "gold",
+        "points": 25,
+        "hidden": false,
+        "rule": {
+          "op": "distinct",
+          "type": "door.cardlobby.unlock",
+          "dim": "key",
+          "n": 5
+        }
+      }
+    ]
+  }
+}

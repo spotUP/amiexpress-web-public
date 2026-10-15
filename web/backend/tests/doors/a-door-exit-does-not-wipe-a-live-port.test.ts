@@ -1,0 +1,122 @@
+/**
+ * ONE DOOR'S EXIT MUST NOT WIPE ANOTHER DOOR'S LIVE PORT.
+ *
+ * `clearNode` zeroes a node's entry in every registered emulator, which is
+ * right for the who-is-online view: a door showing the node list must stop
+ * showing a caller who has gone.
+ *
+ * It is wrong for an emulator that IS that node. `singlePort` is where that
+ * emulator's own door keeps its message port, and a wiped port does not make
+ * the door fail - it makes it RETRY, for ever. The board fills with
+ * `[ExecLibrary] Port not found: 0x...` (api/ExecLibrary.ts:5222), the node
+ * never comes back, and every reconnect adds another spinner.
+ *
+ * That is how the sysop's board jammed on 2026-09-15 - "the whole bbs seems
+ * jammed now". His GWall door was live on node 1 when the MultiTop logoff
+ * batch, also node 1, finished and cleared node 1 in ALL emulators.
+ *
+ * Two sessions shared node 1 because `sessionId` fell back to
+ * `session-<nodeId>`: every door on a node was one registry key, overwriting
+ * the last. His log had six registrations, all `session-1`. That is fixed in
+ * AmigaDoorSession (each door session now carries its own id); this pins the
+ * invariant that makes the damage unreachable even when two sessions do share
+ * a node.
+ */
+import { MulticomManager } from '../../src/nodes/MulticomManager';
+import { MULTICOM_MY_NODE_ARRAY, MULTICOM_SINGLE_PORTS } from '../../src/amiga-emulation/memory-map';
+
+const MY_NODE_ARRAY_BASE = MULTICOM_MY_NODE_ARRAY;
+const SINGLE_PORTS_BASE = MULTICOM_SINGLE_PORTS;
+const MY_NODE_SIZE = 124;
+const SINGLE_PORT_SIZE = 512;
+
+/** The address a door's own port occupies for `nodeId`. */
+const singlePortOf = (nodeId: number) => SINGLE_PORTS_BASE + nodeId * SINGLE_PORT_SIZE;
+const myNodeOf = (nodeId: number) => MY_NODE_ARRAY_BASE + nodeId * MY_NODE_SIZE;
+
+/** An emulator that records every byte written, so a wipe is visible. */
+function fakeEmulator() {
+  // Byte-addressed and big-endian, as the 68K's memory is: the node table is
+  // also copied a byte at a time (the shared-table sync).
+  const mem = new Map<number, number>();
+  const rd = (a: number) => mem.get(a) ?? 0;
+  const wr = (a: number, v: number) => { mem.set(a, v & 0xff); };
+  return {
+    mem,
+    writeMemory: wr,
+    writeMemory16: (a: number, v: number) => { wr(a, v >> 8); wr(a + 1, v); },
+    writeMemory32: (a: number, v: number) => { wr(a, v >>> 24); wr(a + 1, v >>> 16); wr(a + 2, v >>> 8); wr(a + 3, v); },
+    readMemory: rd,
+    readMemory16: (a: number) => (rd(a) << 8) | rd(a + 1),
+    readMemory32: (a: number) => ((rd(a) << 24) | (rd(a + 1) << 16) | (rd(a + 2) << 8) | rd(a + 3)) >>> 0,
+    writeString: () => {},
+    readString: () => '',
+  } as any;
+}
+
+/** Registered as a live door on `nodeId`, with a port marked in its own slot. */
+function aLiveDoorOn(manager: MulticomManager, sessionId: string, nodeId: number) {
+  const emulator = fakeEmulator();
+  manager.initializeInEmulator(emulator, sessionId, nodeId);
+  // The door's port, written where ExecLibrary would keep it.
+  const portAddr = singlePortOf(nodeId) + 4;
+  emulator.writeMemory32(portAddr, 0x12230c);
+  return { emulator, portAddr };
+}
+
+describe('one door exiting does not wipe another door on the same node', () => {
+  it("keeps the live door's own port when another session on that node exits", () => {
+    const manager = new MulticomManager();
+    const live = aLiveDoorOn(manager, 'caller-gwall', 1);
+    aLiveDoorOn(manager, 'batch-multitop', 1);
+
+    // The batch finishes and clears node 1, naming itself as the caller.
+    manager.clearNode(1, 'batch-multitop');
+
+    // The caller's door is still running and its port must still be there.
+    // Before the fix this read 0 and GWall span on "Port not found" for ever.
+    expect(live.emulator.readMemory32(live.portAddr)).toBe(0x12230c);
+  });
+
+  it('still clears the node in the emulator that is exiting', () => {
+    const manager = new MulticomManager();
+    const leaving = aLiveDoorOn(manager, 'batch-multitop', 1);
+
+    manager.clearNode(1, 'batch-multitop');
+
+    expect(leaving.emulator.readMemory32(leaving.portAddr)).toBe(0);
+  });
+
+  it('still clears the node in emulators that are OTHER nodes, so who-is-online is right', () => {
+    // The whole point of clearing everywhere: node 3's door must stop showing
+    // node 1 as occupied.
+    const manager = new MulticomManager();
+    const onlooker = aLiveDoorOn(manager, 'caller-node3', 3);
+    const marker = myNodeOf(1);
+    onlooker.emulator.writeMemory32(marker, 0xdeadbeef);
+
+    manager.clearNode(1, 'batch-multitop');
+
+    expect(onlooker.emulator.readMemory32(marker)).toBe(0);
+  });
+});
+
+// ACP's initSemaSemiNodes (ACP.e:2307-2354) is what an empty slot looks like:
+// singlePort status -1 (no node), netSocket -1, offHook TRUE, and the `.s`
+// link kept. The port zeroed the slot, so a door read status 0 - a node at
+// its menu - for every one of the 32 slots, and a cleared node lost its link.
+describe('an empty node slot is what ACP leaves', () => {
+  it('reads as no node (status -1) and keeps its singlePort link', () => {
+    const manager = new MulticomManager();
+    const { emulator } = aLiveDoorOn(manager, 'caller-node1', 1);
+
+    expect(emulator.readMemory32(singlePortOf(5) + 0x52)).toBe(0xffffffff);
+    expect(emulator.readMemory32(myNodeOf(5) + 0x20)).toBe(0xffffffff);
+    expect(emulator.readMemory32(myNodeOf(5) + 0x28)).toBe(0xffffffff);
+    expect(emulator.readMemory32(myNodeOf(5) + 0x74)).toBe(singlePortOf(5));
+
+    manager.clearNode(5);
+    expect(emulator.readMemory32(myNodeOf(5) + 0x74)).toBe(singlePortOf(5));
+    expect(emulator.readMemory32(singlePortOf(5) + 0x52)).toBe(0xffffffff);
+  });
+});

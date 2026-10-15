@@ -1,0 +1,107 @@
+The Following is a list of ToolTypes for this ICON:
+
+
+NOTICE: ALL TOOLTYPES ARE CASE SENSITIVE
+
+ABOUT: This ICON is required in each NODE directory. It specifies the
+       window dimensions for the NODE.
+
+
+WINDOW.LEFTEDGE=
+WINDOW.TOPEDGE=
+WINDOW.HEIGHT=
+WINDOW.WIDTH=
+WINDOW.NUM_COLORS=
+WINDOW.STATBAR
+WINDOW.ICONIFIED
+WINDOW.INTERLACE
+
+
+WINDOW.LEFTEDGE=<num>
+
+         -Version 3.0
+         -OPTIONAL
+         -tells express the left edge coordinates for the NODE window in
+          screen pixels.
+
+     WINDOW.LEFTEDGE=0
+
+
+WINDOW.TOPEDGE=<num>
+
+         -Version 3.0
+         -OPTIONAL
+         -tells express the top edge coordinates for the NODE window in
+          screen pixels.
+
+     WINDOW.TOPEDGE=0
+
+
+WINDOW.HEIGHT=<num>
+
+         -Version 3.0
+         -OPTIONAL
+         -tells express the Height in pixels that the NODE window should be.
+
+     WINDOW.HEIGHT=200
+
+
+WINDOW.WIDTH=<num>
+
+         -Version 3.0
+         -OPTIONAL
+         -tells express the width in pixels that the NODE window should be.
+
+     WINDOW.WIDTH=200
+
+
+WINDOW.NUM_COLORS=<num>
+
+         -Version 3.0
+         -OPTIONAL
+         -tells express the number of colors allowed for the NODE window.
+         -If 0 colors are specified, then express will open the window on
+          the workbench screen.
+
+     WINDOW.NUM_COLORS=8
+
+
+WINDOW.STATBAR
+
+         -Version 3.0
+         -OPTIONAL
+         -tells express that you wish a Status Window to open on the NODE
+          window, which reflects detailed account infomation on users as
+          they logon.
+
+     WINDOW.STATBAR
+
+
+WINDOW.ICONIFIED
+
+         -Version 3.0
+         -OPTIONAL
+         -tells express that you do not want the window open on startup of
+          the NODE.
+
+     WINDOW.ICONIFIED
+
+
+WINDOW.INTERLACE
+
+         -Version 3.0
+         -OPTIONAL
+         -tells express that the NODE window will be in INTERLACE mode.
+
+     WINDOW.INTERLACE
+
+WINDOW.TO_FRONT
+
+         -Version 3.0
+         -OPTIONAL
+         -tells express to bring the NODE SCREEN to the Front of all other
+          Screens active on the System.
+
+     WINDOW.TO_FRONT
+
+

@@ -1,0 +1,11 @@
+{
+  "name": "rexx-hello",
+  "version": "1.0.0",
+  "description": "AREXX hello door",
+  "main": "main.rexx",
+  "bbsCommand": "RXHELLO",
+  "doorType": "AREXX",
+  "scripts": {
+    "run": "rexx main.rexx"
+  }
+}

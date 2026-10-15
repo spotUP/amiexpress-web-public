@@ -1,0 +1,792 @@
+#!/usr/bin/env node
+/**
+ * In-process integration corpus runner.
+ *
+ * For each corpus entry with `integration` config, this:
+ *   1. Constructs a fresh mock BBSSession (skip login flow — wire it
+ *      straight to LOGGEDON/DISPLAY_MENU like a real session would be
+ *      after post-auth).
+ *   2. Builds an EventEmitter-shaped MockSocket that captures every
+ *      `ansi-output` into a buffer + records every other event.
+ *   3. Looks up the Door object in the live registry by command name.
+ *   4. Calls executeDoor() directly — the same entry point the BBS
+ *      command handler uses. Full integration glue runs: subState
+ *      transitions, DoorManager, drop files, post-door cleanup, MCI
+ *      substitution, etc.
+ *   5. Awaits door completion (executeDoor's promise resolves when the
+ *      door has exited and cleanup ran).
+ *   6. Asserts captured output + session state against the entry's
+ *      `integration.assertions` block.
+ *
+ * Why this beats the isolated harness for catching real bugs:
+ *   - The EventEmitter wrapper regression that broke telnet/SSH today
+ *     would surface here (executeDoor → DoorManager → socket.once on
+ *     mock; our MockSocket extends EventEmitter so it works, but if
+ *     someone refactors executeDoor to call a method we don't expose,
+ *     the test fails).
+ *   - The GLC alias gap surfaces because we test by COMMAND, not by
+ *     binary path — if the command isn't registered, no Door is found.
+ *   - subState clobber bugs surface because we assert
+ *     session.subState after executeDoor returns.
+ *
+ * Why this beats end-to-end telnet for speed:
+ *   - No real socket, no process spawn for TS doors, no login flow.
+ *   - 68K doors still hit Moira (in-process WASM/native) — same speed
+ *     as a real BBS session, plus we can crank DOOR_OVERCLOCK.
+ *
+ * Flags:
+ *   --only <id[,id...]>     run only these corpus entries
+ *   --concurrency <N>       parallel doors (default 4; 68K doors share
+ *                           Moira state via process singleton so they
+ *                           serialize automatically inside the lifecycle
+ *                           manager — concurrency is real for TS doors)
+ *   --capture               write captured output as the integration
+ *                           golden instead of asserting
+ *   --keep-ansi             keep raw ANSI in goldens (default: strip)
+ *   --reset                 delete saved progress and start from scratch
+ *   --command-channel-only  restrict input delivery to the 'command'
+ *                           socket channel only (the one production
+ *                           keystrokes actually take, wired here to
+ *                           session.doorInputHandler the same way
+ *                           server/socket-handlers.ts does) and skip
+ *                           'door:input' entirely. Same as setting
+ *                           CORPUS_COMMAND_CHANNEL_ONLY=1. Added for the
+ *                           DD final-review wave (2026-08-16, Critical 1)
+ *                           to certify DD corpus entries against the path
+ *                           that actually hangs live doors otherwise.
+ *
+ * Progress / resume:
+ *   Results are saved to dev/scripts/door-corpus/corpus-progress.json
+ *   after every door. On restart the runner skips doors that already
+ *   have status=pass or status=captured in that file. Failed doors are
+ *   always retried. Use --reset to wipe the checkpoint.
+ *
+ * Goldens: dev/scripts/door-corpus/goldens/<id>/integration.txt
+ */
+
+// MUST be first: redirect verbose service init logs to stderr so test
+// runs stay readable. The BBS modules console.log during import.
+import "./console-to-stderr";
+import "reflect-metadata";
+
+import { EventEmitter } from "events";
+import * as fs from "fs";
+import * as os from "os";
+import * as path from "path";
+
+import type { Door } from "../types";
+import type { BBSSession } from "../index";
+import { BBSState, LoggedOnSubState } from "../constants/bbs-states";
+import { EnvStat } from "../constants/env-codes";
+import { libraryCallLedger } from "../amiga-emulation/instrumentation/library-call-ledger";
+
+// __dirname = web/backend/src/scripts → repo root is four levels up.
+const REPO_ROOT = path.resolve(__dirname, "..", "..", "..", "..");
+const CORPUS = path.join(REPO_ROOT, "dev/scripts/door-corpus/corpus.json");
+const GOLDENS = path.join(REPO_ROOT, "dev/scripts/door-corpus/goldens");
+const PROGRESS_FILE = path.join(REPO_ROOT, "dev/scripts/door-corpus/corpus-progress.json");
+
+const ANSI_STRIP = /\x1b\[[0-9;?]*[A-Za-z]/g;
+
+interface IntegrationConfig {
+  /**
+   * Keypress timeline once the door starts. Each entry fires `data` on
+   * the mock socket as a 'command' event after `delayMs` from door
+   * start (matches what real frontend / telnet bridge would do).
+   */
+  inputs?: Array<{ delayMs: number; data: string }>;
+  /** Hard cap on how long executeDoor is allowed to take. */
+  timeoutMs?: number;
+  /** Skip this door entirely with a documented reason. Used for
+   *  doors that genuinely cannot be driven by the integration
+   *  harness (need filesystem state, hang waiting on missing
+   *  data files, etc.). Honors `skipReason` for visibility. */
+  skip?: boolean;
+  skipReason?: string;
+  /** Assertions against captured state. */
+  assertions?: {
+    /** Strings that MUST appear in ansi-output capture (after ANSI strip). */
+    mustContain?: string[];
+    /** Strings that must NOT appear. */
+    mustNotContain?: string[];
+    /** Expected post-door subState (e.g. "DISPLAY_MENU"). */
+    expectedSubState?: keyof typeof LoggedOnSubState;
+  };
+}
+
+interface CorpusEntry {
+  id: string;
+  name: string;
+  command?: string;
+  binary: string;
+  doorType: string;
+  integration?: IntegrationConfig;
+}
+
+interface RunResult {
+  id: string;
+  status: "pass" | "fail" | "skip" | "captured";
+  wallMs: number;
+  captured?: string;
+  detail?: string;
+  /** Post-door session subState — useful for learning what
+   *  expectedSubState assertion to record for the door. Logged
+   *  when CORPUS_LEARN_SUBSTATE=1 is set. */
+  finalSubState?: string;
+}
+
+interface ProgressEntry {
+  status: "pass" | "fail" | "skip" | "captured";
+  wallMs: number;
+  completedAt: string;
+  detail?: string;
+}
+
+interface ProgressFile {
+  version: 1;
+  startedAt: string;
+  results: Record<string, ProgressEntry>;
+}
+
+function loadProgress(): ProgressFile {
+  if (fs.existsSync(PROGRESS_FILE)) {
+    try {
+      const parsed = JSON.parse(fs.readFileSync(PROGRESS_FILE, "utf8"));
+      if (parsed?.version === 1 && parsed.results) return parsed as ProgressFile;
+    } catch { /* corrupt — start fresh */ }
+  }
+  return { version: 1, startedAt: new Date().toISOString(), results: {} };
+}
+
+function saveOneResult(id: string, entry: ProgressEntry): void {
+  // Re-read from disk so concurrent/external writes (e.g. pre-population)
+  // are preserved — we only add/update the one entry we just finished.
+  const current = loadProgress();
+  current.results[id] = entry;
+  const tmp = PROGRESS_FILE + ".tmp";
+  fs.writeFileSync(tmp, JSON.stringify(current, null, 2));
+  fs.renameSync(tmp, PROGRESS_FILE);
+}
+
+class MockSocket extends EventEmitter {
+  readonly outputBuf: string[] = [];
+  readonly nonAnsiEvents: Array<{ event: string; data: any }> = [];
+  // Telnet/web both eventually call `connected` like socket.io. Default
+  // true so menu code doesn't think carrier dropped mid-test.
+  readonly connected = true;
+  readonly id = "mock-socket";
+
+  emit(event: string, ...args: any[]): boolean {
+    if (event === "ansi-output") {
+      this.outputBuf.push(String(args[0] ?? ""));
+    } else {
+      this.nonAnsiEvents.push({ event, data: args[0] });
+    }
+    return super.emit(event, ...args);
+  }
+
+  disconnect(): void {/* no-op for tests */}
+  end(): void {/* no-op */}
+  destroy(): void {/* no-op */}
+}
+
+function makeSession(nodeId: number): BBSSession {
+  const now = Date.now();
+  // Minimal LOGGEDON session — the same shape post-auth produces. We
+  // skip the actual login flow because we want to test doors, not auth.
+  return {
+    state: BBSState.LOGGEDON,
+    subState: LoggedOnSubState.DISPLAY_MENU,
+    currentConf: 1,
+    conferenceId: 1,
+    currentMsgBase: 1,
+    timeRemaining: 60,
+    lastActivity: now,
+    confRJoin: 1,
+    msgBaseRJoin: 1,
+    commandBuffer: "",
+    menuPause: true,
+    inputBuffer: "",
+    maskInput: false,
+    connectionStart: now,
+    displayFlowPaused: false,
+    inDoorManager: false,
+    doorInputHandler: undefined,
+    relConfNum: 0,
+    currentConfName: "General",
+    cmdShortcuts: false,
+    shortcuts: new Map(),
+    doorExpertMode: false,
+    acsLevel: 255, // sysop — door access checks pass
+    securityFlags: "",
+    secOverride: "",
+    overrideDefaultAccess: false,
+    userSpecificAccess: false,
+    currentStat: EnvStat.IDLE,
+    quietFlag: false,
+    blockOLM: false,
+    loginTime: now,
+    nodeStartTime: now,
+    nodeId,
+    loginRetryCount: 0,
+    lastMsgReadConf: 0,
+    lastNewReadConf: 0,
+    commandHistory: [],
+    historyIndex: 0,
+    historyCycle: 0,
+    connectionType: "web",
+    remoteAddress: "127.0.0.1",
+    connectionHostname: "localhost",
+    connectionPort: 3001,
+    connectionBaud: 0,
+    screenWidth: 80,
+    screenHeight: 24,
+    modemEmulationEnabled: false,
+    modemBps: 0,
+    unicodeCapable: true,
+    user: {
+      id: "1",
+      username: "sysop",
+      location: "Test Lab",
+      secLevel: 255,
+      slotNumber: 1,
+      uploads: 0,
+      bytesUpload: 0,
+      downloads: 0,
+      bytesDownload: 0,
+      messagesPosted: 0,
+      timesCalled: 1,
+      topUploadCPS: 0,
+      topDownloadCPS: 0,
+      calls: 1,
+      lastLogin: new Date(now),
+    } as any,
+  } as BBSSession;
+}
+
+async function withTimeout<T>(
+  p: Promise<T>,
+  ms: number,
+  label: string,
+): Promise<T> {
+  let timer: NodeJS.Timeout;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(
+      () => reject(new Error(`${label}: timed out after ${ms}ms`)),
+      ms,
+    );
+  });
+  try {
+    return await Promise.race([p, timeout]);
+  } finally {
+    clearTimeout(timer!);
+  }
+}
+
+async function runOne(
+  entry: CorpusEntry,
+  executeDoor: (s: any, sess: BBSSession, d: Door) => Promise<void>,
+  findDoor: (command: string, entry: CorpusEntry) => Door | undefined,
+  options: { capture: boolean; keepAnsi: boolean; nodeId: number },
+): Promise<RunResult> {
+  const integration = entry.integration ?? {};
+  if (integration.skip) {
+    return {
+      id: entry.id,
+      status: "skip",
+      wallMs: 0,
+      detail: integration.skipReason ?? "skip: true (no reason given)",
+    };
+  }
+  // Fall back to the corpus id as the command when none is set —
+  // synthesized Doors don't need a real command to dispatch.
+  const command = entry.command ?? entry.id;
+  const door = findDoor(command, entry);
+  if (!door) {
+    return {
+      id: entry.id,
+      status: "skip",
+      wallMs: 0,
+      detail: `no Door registered for command "${command}"`,
+    };
+  }
+
+  // Tier 2 measurement: attribute this door's library calls in the ledger.
+  libraryCallLedger.setCurrentDoor(entry.id);
+
+  const socket = new MockSocket();
+  const session = makeSession(options.nodeId);
+  const started = Date.now();
+
+  // Schedule scripted inputs.
+  //
+  // Default mode fires on BOTH channels:
+  //  - 'command' — the BBS's real per-keystroke socket event in
+  //    production (server/socket-handlers.ts's `socket.on('command', ...)`
+  //    calls `session.doorInputHandler(data)`, which routes through
+  //    routeAmigaDoorInput — the SAME live path every real keystroke
+  //    takes). This harness did NOT wire that up until the DD
+  //    final-review wave (2026-08-16) — 'command' was emitted but nothing
+  //    ever consumed it here, so it was silently dropped (see the
+  //    CORPUS_COMMAND_CHANNEL_ONLY branch below, which is what actually
+  //    wires it).
+  //  - 'door:input' — AmigaDoorSession's OWN socket listener, reachable
+  //    only from test/corpus harnesses in production (the frontend never
+  //    emits it — see door-input-router.ts's header comment). Delegates
+  //    to the SAME routeAmigaDoorInput as of the DD final-review wave, so
+  //    firing both channels in default mode is (post-fix) merely
+  //    redundant, not divergent.
+  //
+  // CORPUS_COMMAND_CHANNEL_ONLY=1 (or --command-channel-only) restricts
+  // this run to ONLY the 'command' channel — the one production actually
+  // uses — by (a) wiring 'command' to session.doorInputHandler here,
+  // mirroring socket-handlers.ts's real listener, since this harness
+  // never had that wiring, and (b) skipping the 'door:input' emission
+  // entirely. This is what certifies a corpus entry against the path a
+  // live caller's keystrokes actually take, instead of the harness's
+  // AmigaDoorSession-internal shortcut.
+  const commandChannelOnly = process.env.CORPUS_COMMAND_CHANNEL_ONLY === "1";
+  if (commandChannelOnly) {
+    socket.on("command", (data: string) => {
+      (session as any).doorInputHandler?.(data);
+    });
+  }
+  const inputTimers: NodeJS.Timeout[] = [];
+  for (const input of integration.inputs ?? []) {
+    inputTimers.push(
+      setTimeout(() => {
+        socket.emit("command", input.data);
+        if (!commandChannelOnly) {
+          socket.emit("door:input", input.data);
+        }
+      }, input.delayMs),
+    );
+  }
+
+  let detail: string | undefined;
+  let timedOut = false;
+  try {
+    await withTimeout(
+      executeDoor(socket, session, door),
+      integration.timeoutMs ?? 30_000,
+      `executeDoor(${entry.id})`,
+    );
+  } catch (err: any) {
+    detail = err?.message ?? String(err);
+    timedOut = /timed out after/.test(detail ?? "");
+  } finally {
+    for (const t of inputTimers) clearTimeout(t);
+  }
+
+  const wallMs = Date.now() - started;
+  let raw = socket.outputBuf.join("");
+  if (!options.keepAnsi) raw = raw.replace(ANSI_STRIP, "");
+
+  if (options.capture) {
+    const dir = path.join(GOLDENS, entry.id);
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, "integration.txt"), raw);
+    return { id: entry.id, status: "captured", wallMs, captured: raw };
+  }
+
+  // Assertions
+  const a = integration.assertions ?? {};
+  const failures: string[] = [];
+  for (const must of a.mustContain ?? []) {
+    if (!raw.includes(must)) failures.push(`missing "${must}"`);
+  }
+  for (const must of a.mustNotContain ?? []) {
+    if (raw.includes(must)) failures.push(`contains forbidden "${must}"`);
+  }
+  // Only assert subState when the door actually completed — a timed-out
+  // door leaves subState=door_running which is meaningless noise on top
+  // of the timeout failure itself.
+  if (
+    !timedOut &&
+    a.expectedSubState &&
+    session.subState !== LoggedOnSubState[a.expectedSubState]
+  ) {
+    failures.push(
+      `subState=${String(session.subState)} expected=${a.expectedSubState}`,
+    );
+  }
+  if (timedOut) failures.push(detail!);
+  // If no assertions configured AND not capturing, treat "did not throw"
+  // as the only signal — useful first pass before assertions are populated.
+  // Resolve the symbolic subState name (DISPLAY_MENU, LOGOFF, etc.)
+  // for both logging and the optional learn mode.
+  const subStateName = Object.entries(LoggedOnSubState).find(
+    ([, v]) => v === session.subState,
+  )?.[0];
+  if (failures.length === 0) {
+    return {
+      id: entry.id,
+      status: "pass",
+      wallMs,
+      captured: raw,
+      finalSubState: subStateName,
+    };
+  }
+  return {
+    id: entry.id,
+    status: "fail",
+    wallMs,
+    captured: raw,
+    detail: failures.join("; "),
+    finalSubState: subStateName,
+  };
+}
+
+async function pool<T, R>(
+  items: T[],
+  concurrency: number,
+  worker: (item: T, idx: number) => Promise<R>,
+): Promise<R[]> {
+  const results: R[] = new Array(items.length);
+  let next = 0;
+  await Promise.all(
+    Array.from({ length: concurrency }, async () => {
+      while (true) {
+        const i = next++;
+        if (i >= items.length) return;
+        results[i] = await worker(items[i], i);
+      }
+    }),
+  );
+  return results;
+}
+
+async function main() {
+  const args = process.argv.slice(2);
+  let only: Set<string> | null = null;
+  // 68K doors (XIM/AIM/SIM/TIM/IIM) share Moira — serialize them.
+  // TS/native/AREXX doors are independent — run as many as CPU allows.
+  const cpus = os.cpus().length;
+  let concurrency68k = 1;
+  let concurrencyTs = Math.max(2, cpus - 2); // leave 2 cores for system
+  let capture = false;
+  let captureAll = false;
+  let keepAnsi = false;
+  let reset = false;
+  for (let i = 0; i < args.length; i++) {
+    const a = args[i];
+    if (a === "--only") only = new Set(args[++i].split(",").map((s) => s.trim()));
+    else if (a === "--concurrency") {
+      concurrency68k = parseInt(args[++i], 10);
+      concurrencyTs = concurrency68k; // honour explicit override for both
+    } else if (a === "--concurrency-68k") concurrency68k = parseInt(args[++i], 10);
+    else if (a === "--concurrency-ts") concurrencyTs = parseInt(args[++i], 10);
+    else if (a === "--capture") capture = true;
+    else if (a === "--capture-all") {
+      capture = true;
+      captureAll = true;
+    } else if (a === "--keep-ansi") keepAnsi = true;
+    else if (a === "--reset") reset = true;
+    else if (a === "--command-channel-only") process.env.CORPUS_COMMAND_CHANNEL_ONLY = "1";
+  }
+
+  if (reset && fs.existsSync(PROGRESS_FILE)) {
+    fs.unlinkSync(PROGRESS_FILE);
+    process.stdout.write("[integration] progress reset — starting from scratch\n");
+  }
+
+  // Boot only the BBS bits we need: door registry. Skip database +
+  // network listeners by setting flags before import.
+  process.env.SKIP_DB_INIT = process.env.SKIP_DB_INIT ?? "1";
+  process.env.SKIP_NETWORK_LISTENERS = process.env.SKIP_NETWORK_LISTENERS ?? "1";
+
+  // Late import so the env vars above take effect on first load.
+  const doorHandler = await import("../handlers/door.handler");
+  const cmdExec = await import("../handlers/command-execution.handler");
+  const { executeDoor, initializeDoors } = doorHandler as any;
+
+  // initializeDoors() reads from commandCache (BBSCmd + SysCmd .info
+  // entries). The cache is loaded by loadCommands() which the BBS
+  // calls at startup before initializeDoors. Replicate that order.
+  (cmdExec as any).loadCommands(REPO_ROOT);
+  await initializeDoors();
+
+  // executeDoor uses module-level helpers (callersLog, etc.) that the
+  // live BBS injects via setHelpers/setConstants during initialization.
+  // We don't want real CallersLog writes from tests, so stub them.
+  if ((doorHandler as any).setHelpers) {
+    const noop = async () => undefined;
+    (doorHandler as any).setHelpers({
+      callersLog: noop,
+      loadFlagged: () => [],
+      loadHistory: () => [],
+      getRecentCallerActivity: () => [],
+    });
+  }
+  if ((doorHandler as any).setConstants) {
+    (doorHandler as any).setConstants({
+      LoggedOnSubState,
+      SCREEN_BULL: 1,
+      SCREEN_NODE_BULL: 2,
+      SCREEN_CONF_BULL: 3,
+    });
+  }
+
+  // Door lookup: first try the live registry by command name (mirrors
+  // command-handler dispatch). If nothing is found, synthesize a Door
+  // straight from the corpus entry's binary path — the BBSCmd/.info
+  // registry is for live command dispatch, but executeDoor() itself
+  // only needs a Door-shaped object pointing at a binary.
+  const findDoor = (command: string, entry: CorpusEntry): Door | undefined => {
+    const allDoors: Door[] = (doorHandler as any).getDoors?.() ?? [];
+    const up = command.toUpperCase();
+    const registered = allDoors.find(
+      (d) => (d.command || "").toUpperCase() === up,
+    );
+    if (registered) return registered;
+    // Synthesize. The corpus declares the door type — XIM/AIM/SIM/TIM/IIM/FIM
+    // are all Amiga 68K binaries (different message protocols — FIM is FAME
+    // BBS's FAMEDoorPort/FIMProtocol variant, see AMIGA_68K_DOOR_TYPES in
+    // door.handler.ts), 'native' in executeDoor's switch means Node.js
+    // scripts which is NOT what a corpus 'native' entry would be. Map
+    // appropriately.
+    const ext = path.extname(entry.binary).toLowerCase();
+    let type: Door["type"] = "native";
+    const dt = (entry.doorType || "").toUpperCase();
+    if (doorHandler.isAmiga68kDoorType(dt)) {
+      type = dt as any; // executeDoor dispatches these to launchAmigaDoor.
+    } else if (dt === "AREXX" || dt === "REXX" || ext === ".rexx") {
+      type = "AREXX" as any;
+    } else if (dt === "TS" || dt === "SDK" || ext === ".ts" || ext === ".js") {
+      type = "typescript";
+    }
+    return {
+      id: entry.id,
+      name: entry.name,
+      description: entry.id,
+      command: command.toUpperCase(),
+      // Relative — executeAmigaDoor re-joins against bbsRoot, so
+      // passing absolute here creates a doubled path that fails
+      // existsSync (`<root>/<root>/Doors/...`).
+      path: entry.binary,
+      accessLevel: 0,
+      enabled: true,
+      type,
+    };
+  };
+
+  const progress = loadProgress();
+
+  const corpus = JSON.parse(fs.readFileSync(CORPUS, "utf8")) as {
+    doors: CorpusEntry[];
+  };
+  let entries = captureAll
+    ? corpus.doors
+    : corpus.doors.filter((e) => e.integration || only?.has(e.id));
+  if (only) entries = entries.filter((e) => only!.has(e.id));
+
+  if (entries.length === 0) {
+    if (only) {
+      // Unknown --only ids must NOT exit 0 — per-door-test.sh reads exit
+      // code 0 as "pass" and a typo'd id would silently green the gate.
+      process.stderr.write(
+        `[integration] ERROR: no corpus entry matches --only ${[...only].join(",")}\n`,
+      );
+      process.exit(2);
+    }
+    process.stdout.write(
+      `[integration] no corpus entries with integration: {} (use --only <id> to force, or add integration: {} to corpus.json)\n`,
+    );
+    process.exit(0);
+  }
+
+  // Skip doors already completed (pass/captured) unless --only was used
+  // to explicitly target them. Failed and skipped doors always re-run.
+  const alreadyDone = entries.filter(
+    (e) => !only?.has(e.id) &&
+      (progress.results[e.id]?.status === "pass" ||
+       progress.results[e.id]?.status === "captured"),
+  );
+  const toRun = entries.filter((e) => !alreadyDone.includes(e));
+
+  if (alreadyDone.length > 0) {
+    process.stdout.write(
+      `[integration] resuming: ${alreadyDone.length} already done, ${toRun.length} remaining\n`,
+    );
+  }
+
+  const is68k = (e: CorpusEntry) =>
+    doorHandler.isAmiga68kDoorType((e.doorType || "").toUpperCase());
+
+  const toRun68k = toRun.filter(is68k);
+  const toRunTs  = toRun.filter((e) => !is68k(e));
+
+  process.stdout.write(
+    `[integration] ${toRun.length} doors to run` +
+    ` (68K:${toRun68k.length}@c=${concurrency68k} TS/native:${toRunTs.length}@c=${concurrencyTs})` +
+    `${capture ? " CAPTURE" : ""}\n`,
+  );
+
+  if (toRun.length === 0) {
+    process.stdout.write("[integration] all doors complete — use --reset to re-run\n");
+    // Still report totals from saved progress
+    const all = Object.values(progress.results);
+    const pass = all.filter((r) => r.status === "pass").length;
+    const fail = all.filter((r) => r.status === "fail").length;
+    const skip = all.filter((r) => r.status === "skip").length;
+    const cap = all.filter((r) => r.status === "captured").length;
+    process.stdout.write(`\n[integration] pass=${pass} fail=${fail} skip=${skip} captured=${cap}\n`);
+    process.exit(fail > 0 ? 1 : 0);
+  }
+
+  const runStart = Date.now();
+  let freshDone = 0;
+  let freshPass = 0;
+  let freshFail = 0;
+  let freshSkip = 0;
+  const totalAll = entries.length;
+
+  function renderBar(): string {
+    const totalDone = alreadyDone.length + freshDone;
+    const pct = Math.floor((totalDone / totalAll) * 100);
+    const BAR = 30;
+    const filled = Math.floor((totalDone / totalAll) * BAR);
+    const bar = "=".repeat(filled) + (filled < BAR ? ">" : "") + " ".repeat(Math.max(0, BAR - filled - 1));
+
+    const elapsed = Date.now() - runStart;
+    const rate = freshDone > 0 ? elapsed / freshDone : 0;
+    const etaMs = rate > 0 ? (toRun.length - freshDone) * rate : 0;
+    const etaStr = etaMs > 0
+      ? etaMs > 3600000
+        ? `${Math.floor(etaMs / 3600000)}h${Math.floor((etaMs % 3600000) / 60000)}m`
+        : etaMs > 60000
+          ? `${Math.floor(etaMs / 60000)}m${Math.floor((etaMs % 60000) / 1000)}s`
+          : `${Math.floor(etaMs / 1000)}s`
+      : "--";
+
+    return `[${bar}] ${pct}% ${totalDone}/${totalAll} | pass:${alreadyDone.length + freshPass} fail:${freshFail} skip:${freshSkip} | ETA:${etaStr}`;
+  }
+
+  // Node ids come from a free-list so concurrent doors get distinct nodes but
+  // ids are reused across sequential runs. The old `nodeCounter++` handed every
+  // door a fresh id, littering the repo root with Node41..Node418 scaffolding
+  // during big sweeps (dirs are created on demand by DoorDropFileManager and
+  // never cleaned). High-water mark == pool concurrency, never the door count.
+  const freeNodeIds: number[] = [];
+  let nodeHighWater = 0;
+  const acquireNodeId = (): number => freeNodeIds.pop() ?? ++nodeHighWater;
+  const releaseNodeId = (id: number): void => { freeNodeIds.push(id); };
+
+  async function runPool(entries: CorpusEntry[], concurrency: number) {
+    return pool(entries, concurrency, async (entry) => {
+    const nodeId = acquireNodeId();
+    let r: Awaited<ReturnType<typeof runOne>>;
+    try {
+      r = await runOne(entry, executeDoor, findDoor, {
+        capture,
+        keepAnsi,
+        nodeId,
+      });
+    } finally {
+      releaseNodeId(nodeId);
+    }
+    // Save progress after every door — merge into disk state so external
+    // pre-population of goldens is never clobbered.
+    saveOneResult(r.id, {
+      status: r.status,
+      wallMs: r.wallMs,
+      completedAt: new Date().toISOString(),
+      detail: r.detail,
+    });
+
+    freshDone++;
+    if (r.status === "pass" || r.status === "captured") freshPass++;
+    else if (r.status === "fail") freshFail++;
+    else freshSkip++;
+
+    const tag =
+      r.status === "pass" ? "PASS" :
+      r.status === "captured" ? `CAPTURED(${r.captured?.length ?? 0}B)` :
+      r.status === "skip" ? `SKIP` :
+      `FAIL`;
+    const subStateSuffix =
+      process.env.CORPUS_LEARN_SUBSTATE === "1" && r.finalSubState
+        ? ` [${r.finalSubState}]`
+        : "";
+    const detail = (r.status === "fail" || r.status === "skip") && r.detail
+      ? ` — ${r.detail.slice(0, 80)}`
+      : "";
+
+    // Clear progress bar line; print FAIL/CAPTURED/SKIP rows — pass is noise.
+    // SKIP rows are load-bearing: per-door-test.sh distinguishes skip from
+    // pass by this row (both exit 0).
+    process.stdout.write(`\r${" ".repeat(100)}\r`);
+    if (r.status === "fail" || r.status === "captured" || r.status === "skip") {
+      process.stdout.write(`  ${tag} ${r.id} (${r.wallMs}ms)${subStateSuffix}${detail}\n`);
+    }
+    process.stdout.write(renderBar());
+
+    return r;
+    });
+  }
+
+  // Run 68K (serialized) and TS/native (parallel) concurrently with each other.
+  const [results68k, resultsTs] = await Promise.all([
+    runPool(toRun68k, concurrency68k),
+    runPool(toRunTs, concurrencyTs),
+  ]);
+  const freshResults = [...results68k, ...resultsTs];
+
+  process.stdout.write("\n");
+
+  // Merge fresh results with previously-completed for final totals
+  const allResults = Object.values(progress.results);
+  const pass = allResults.filter((r) => r.status === "pass").length;
+  const fail = allResults.filter((r) => r.status === "fail").length;
+  const skip = allResults.filter((r) => r.status === "skip").length;
+  const cap = allResults.filter((r) => r.status === "captured").length;
+  process.stdout.write(
+    `\n[integration] pass=${pass} fail=${fail} skip=${skip} captured=${cap} (total across all runs)\n`,
+  );
+
+  // Tier 2 measurement: if LEDGER=1, write the library-call backlog report.
+  if (libraryCallLedger.enabled) {
+    writeLedgerReport();
+  }
+
+  process.exit(freshFail > 0 ? 1 : 0);
+}
+
+/**
+ * Write the library-call ledger: JSON (machine) + a ranked human summary of
+ * what doors called that is stubbed or missing — the Tier 2 implement-me list.
+ */
+function writeLedgerReport(): void {
+  const snap = libraryCallLedger.snapshot();
+  const summary = libraryCallLedger.summary();
+  const outDir = path.join(REPO_ROOT, "dev/scripts/door-corpus/triage");
+  fs.mkdirSync(outDir, { recursive: true });
+  const jsonPath = path.join(outDir, "library-call-ledger.json");
+  fs.writeFileSync(jsonPath, JSON.stringify({ summary, entries: snap }, null, 2) + "\n");
+
+  const backlog = snap.filter((e) => e.resolution !== "real");
+  const lines: string[] = [];
+  lines.push(`# 68K library-call backlog (LEDGER run)`);
+  lines.push(``);
+  lines.push(`Distinct LVOs: real=${summary.real} stub=${summary.stub} missing=${summary.missing}`);
+  lines.push(`Implement-me (stub + missing), ranked by call count:`);
+  lines.push(``);
+  lines.push(`| calls | resolution | library | offset | function | doors |`);
+  lines.push(`|------:|------------|---------|-------:|----------|-------|`);
+  for (const e of backlog) {
+    const doors = e.doors.length <= 4 ? e.doors.join(", ") : `${e.doors.slice(0, 4).join(", ")} +${e.doors.length - 4}`;
+    lines.push(`| ${e.count} | ${e.resolution} | ${e.library} | ${e.offset} | ${e.name} | ${doors} |`);
+  }
+  const mdPath = path.join(outDir, "library-call-ledger.md");
+  fs.writeFileSync(mdPath, lines.join("\n") + "\n");
+
+  process.stdout.write(
+    `\n[ledger] real=${summary.real} stub=${summary.stub} missing=${summary.missing} distinct LVOs; ` +
+      `${backlog.length} in the implement-me backlog\n[ledger] report: ${mdPath}\n`,
+  );
+}
+
+main().catch((e) => {
+  console.error(e);
+  process.exit(1);
+});

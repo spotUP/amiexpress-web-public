@@ -1,0 +1,7 @@
+
+               Asyncronous I/O, double buffered WarpSearch 2.5
+                  Sep 20 1996 22:28:36 by Dres! and Crayor!
+
+Error: Too many arguments. Multiple patterns are not implemented.
+
+

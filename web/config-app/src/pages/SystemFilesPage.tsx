@@ -1,0 +1,331 @@
+import { useState } from 'react';
+import { Modal } from '../components/ui/Modal';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { FileCode, Edit2, X, RefreshCw, FolderOpen } from 'lucide-react';
+import { useAutosave } from '../hooks/useAutosave';
+import { apiClient } from '../api/client';
+import { useNotification } from '../contexts/NotificationContext';
+import { infoFileNote } from './info-file-notes';
+import {
+  toInfoFileItems,
+  infoFileCategories,
+  filterInfoFiles,
+  groupInfoFilesByCategory,
+  type InfoFileItem,
+} from './info-file-list';
+
+interface Tooltype {
+  key: string;
+  value: string;
+  commented: boolean;
+  originalLine: string;
+}
+
+export function SystemFilesPage() {
+  const queryClient = useQueryClient();
+  const { showError } = useNotification();
+
+  // Info editor modal state
+  const [isInfoEditorOpen, setIsInfoEditorOpen] = useState(false);
+  const [editingFile, setEditingFile] = useState<InfoFileItem | null>(null);
+  const [tooltypes, setTooltypes] = useState<Tooltype[]>([]);
+  const [selectedCategory, setSelectedCategory] = useState<string>('All');
+  const [searchTerm, setSearchTerm] = useState<string>('');
+
+  // Fetch all .info files
+  const { data: filesData, isLoading, refetch } = useQuery({
+    queryKey: ['system-info-files'],
+    queryFn: () => apiClient.getInfoFiles(),
+  });
+
+  // Every file the board has, before anything is narrowed.
+  const allFiles: InfoFileItem[] = toInfoFileItems(filesData?.data?.files);
+
+  // The chips describe the BOARD, not the current view - see
+  // infoFileCategories. Deriving them from the filtered list left one chip
+  // standing the moment you clicked one.
+  const categories = infoFileCategories(allFiles);
+
+  const files = filterInfoFiles(allFiles, searchTerm, selectedCategory);
+  const filesByCategory = groupInfoFilesByCategory(files);
+
+  /** Escape, the backdrop and the header's close button all end it the same way. */
+  const closeModal = () => {
+    setIsInfoEditorOpen(false);
+    setEditingFile(null);
+  };
+
+  const handleEditInfo = async (file: InfoFileItem) => {
+    try {
+      const response = await apiClient.getInfoFile(file.path);
+      setTooltypes(response.data?.tooltypes || []);
+      setEditingFile(file);
+      setIsInfoEditorOpen(true);
+    } catch (error) {
+      showError(`Failed to load .info file: ${(error as Error).message}`);
+    }
+  };
+
+  /**
+   * The editor writes itself. No Save button - "i want no save buttons at all
+   * in the admin ui everything should auto save" (sysop, 2026-09-14).
+   *
+   * An `.info` file is tooltypes an Amiga reads, so a half-typed value must
+   * not go out on every keystroke: `useAutosave` waits for the typing to stop.
+   * Closing the editor flushes whatever is still pending rather than
+   * discarding it, which is what Cancel used to do silently.
+   */
+  const autosave = useAutosave<Tooltype[]>({
+    save: async next => {
+      if (!editingFile) return;
+      await apiClient.updateInfoFile(editingFile.path, next);
+      queryClient.invalidateQueries({ queryKey: ['system-info-files'] });
+    },
+    label: () => `${editingFile?.name ?? 'The .info file'} saved`,
+  });
+
+  /** The one way tooltypes change: set them AND schedule the write. */
+  const editTooltypes = (next: Tooltype[]) => {
+    setTooltypes(next);
+    autosave.schedule(next);
+  };
+
+  const closeInfoEditor = async () => {
+    await autosave.flush();
+    setIsInfoEditorOpen(false);
+    setEditingFile(null);
+  };
+
+  const handleTooltypeToggle = (index: number) => {
+    const updated = [...tooltypes];
+    updated[index] = { ...updated[index], commented: !updated[index].commented };
+    editTooltypes(updated);
+  };
+
+  const handleTooltypeUpdate = (index: number, field: 'key' | 'value', newValue: string) => {
+    const updated = [...tooltypes];
+    updated[index] = { ...updated[index], [field]: newValue };
+    editTooltypes(updated);
+  };
+
+  const handleTooltypeAdd = () => {
+    editTooltypes([...tooltypes, { key: '', value: '', commented: false, originalLine: '' }]);
+  };
+
+  const handleTooltypeRemove = (index: number) => {
+    editTooltypes(tooltypes.filter((_, i) => i !== index));
+  };
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-content-primary">Loading system files...</div>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <div className="mb-4">
+        <div className="flex items-center space-x-3 mb-2">
+          <FolderOpen className="text-accent" size={32} />
+        </div>
+      </div>
+
+      {/* Search and Filter Controls */}
+      <div className="mb-6 space-y-4">
+        {/* Search Bar */}
+        <div className="flex items-center space-x-4">
+          <input
+            type="text"
+            placeholder="Search by name or path - try a node, like Node40"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="flex-1 px-4 py-2 bg-surface-2 border border-border rounded text-content-primary"
+          />
+          <button
+            onClick={() => refetch()}
+            className="btn-secondary flex items-center space-x-2"
+            title="Refresh file list"
+          >
+            <RefreshCw size={16} />
+            <span>Refresh</span>
+          </button>
+        </div>
+
+        {/* Category Filter */}
+        <div className="flex flex-wrap gap-2">
+          {categories.map((category) => (
+            <button
+              key={category}
+              onClick={() => setSelectedCategory(category)}
+              className={`px-3 py-1 rounded text-sm ${
+                selectedCategory === category
+                  ? 'bg-accent text-surface-0'
+                  : 'bg-surface-2 text-content-primary hover:bg-surface-2/80'
+              }`}
+            >
+              {category}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* File Count */}
+      <div className="mb-4 text-sm text-content-secondary">
+        Showing {files.length} file{files.length !== 1 ? 's' : ''}
+      </div>
+
+      {/* Files by Category */}
+      {Object.keys(filesByCategory).length === 0 ? (
+        <div className="card text-center py-12">
+          <p className="text-content-secondary">No files found matching your criteria</p>
+        </div>
+      ) : (
+        Object.entries(filesByCategory).map(([category, categoryFiles]) => (
+          <div key={category} className="mb-4">
+            <h2 className="text-xl font-semibold text-content-primary mb-4 border-b border-border pb-2">
+              {category} ({categoryFiles.length})
+            </h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {categoryFiles.map((file) => (
+                <div key={file.path} className="card">
+                  <div className="flex items-start justify-between mb-3">
+                    <div className="flex items-start space-x-3 flex-1 min-w-0">
+                      <div className="p-2 bg-border rounded flex-shrink-0">
+                        <FileCode className="text-accent" size={20} />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <h3 className="text-lg font-semibold text-content-primary truncate">
+                          {file.name}
+                        </h3>
+                        <p className="text-xs text-content-secondary font-mono truncate" title={file.path}>
+                          {file.path}
+                        </p>
+                        {infoFileNote(file.path) && (
+                          <p className="text-xs text-content-secondary mt-1">
+                            {infoFileNote(file.path)}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex space-x-2">
+                    <button
+                      onClick={() => handleEditInfo(file)}
+                      className="btn-secondary flex items-center space-x-1 text-sm flex-1"
+                    >
+                      <Edit2 size={14} />
+                      <span>Edit Tooltypes</span>
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        ))
+      )}
+
+      {/* Info Editor Modal */}
+      {isInfoEditorOpen && editingFile && (
+        <Modal
+          open={isInfoEditorOpen}
+          title={editingFile.name}
+          onClose={closeModal}
+          maxWidth="max-w-4xl"
+          showHeader={false}
+        >
+            {/* Modal Header */}
+            <div className="flex items-center justify-between p-6 border-b border-border">
+              <div>
+                <h2 className="text-2xl font-bold text-accent">{editingFile.name}</h2>
+                <p className="text-sm text-content-secondary font-mono">{editingFile.path}</p>
+              </div>
+              <button
+                onClick={closeModal}
+                className="text-content-secondary hover:text-content-primary"
+              >
+                <X size={24} />
+              </button>
+            </div>
+
+            {/* Modal Body - Tooltypes Editor */}
+            <div className="flex-1 overflow-y-auto p-6">
+              {tooltypes.length === 0 ? (
+                <div className="text-center py-8 text-content-secondary">
+                  <p>No tooltypes defined. Click "Add Tooltype" to create one.</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {tooltypes.map((tooltype, index) => (
+                    <div key={index} className="flex items-start space-x-2 bg-surface-2 p-3 rounded">
+                      <button
+                        onClick={() => handleTooltypeToggle(index)}
+                        className={`mt-1 ${tooltype.commented ? 'text-content-secondary' : 'text-accent'}`}
+                        title={tooltype.commented ? 'Commented (click to enable)' : 'Active (click to comment)'}
+                      >
+                        {tooltype.commented ? '!' : '*'}
+                      </button>
+                      <div className="flex-1 space-y-2">
+                        <input
+                          type="text"
+                          value={tooltype.key}
+                          onChange={(e) => handleTooltypeUpdate(index, 'key', e.target.value)}
+                          placeholder="KEY"
+                          className={`w-full px-3 py-1 bg-border border border-border rounded text-sm font-mono ${
+                            tooltype.commented ? 'text-content-secondary' : 'text-content-primary'
+                          }`}
+                        />
+                        <input
+                          type="text"
+                          value={tooltype.value}
+                          onChange={(e) => handleTooltypeUpdate(index, 'value', e.target.value)}
+                          placeholder="Value"
+                          className={`w-full px-3 py-1 bg-border border border-border rounded text-sm ${
+                            tooltype.commented ? 'text-content-secondary' : 'text-content-primary'
+                          }`}
+                        />
+                      </div>
+                      <button
+                        onClick={() => handleTooltypeRemove(index)}
+                        className="text-status-danger hover:text-status-danger mt-1"
+                        title="Remove tooltype"
+                      >
+                        <X size={20} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <button
+                onClick={handleTooltypeAdd}
+                className="mt-4 btn-secondary w-full"
+              >
+                Add Tooltype
+              </button>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-6 border-t border-border flex items-center justify-between">
+              <div>
+                <span className="text-sm text-content-secondary">
+                  {autosave.saving ? 'Saving...' : 'Changes save themselves'}
+                </span>
+                {autosave.error && (
+                  <span className="text-status-danger text-sm ml-3">{autosave.error}</span>
+                )}
+              </div>
+              <div className="flex space-x-3">
+                {/* No Save button. Close flushes what is still pending. */}
+                <button onClick={() => { void closeInfoEditor(); }} className="btn-primary">
+                  Close
+                </button>
+              </div>
+            </div>
+        </Modal>
+      )}
+    </div>
+  );
+}

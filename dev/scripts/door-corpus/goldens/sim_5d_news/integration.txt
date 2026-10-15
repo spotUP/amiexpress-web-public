@@ -1,0 +1,401 @@
+
+                                                                             
+                                                                             
+                                                                             
+                                                                             
+                                                                             
+                                                                             
+                                                                             
+                                                                        
+
+                                                                           
+                                                                            
+                                                                             
+                                                                            
+                                                                               
+                                                                          
+                                                                     
+                                                                              
+                                                                     
+                                                                              
+
+                                                                            
+                                                                         
+                                                                       
+                                                                                
+
+       __                              ___                                   
+      /                                ___                                   
+                     __                 \/                                   
+                      /                //                                    
+              /      /                 /                                     
+ :/     /                                                                    
+ /_   ___                                                                    
+                                                                        
+
+                                                   )                       
+                                                                            
+                                                            - F              
+                                                            - R             
+                                                            - V                
+       SH                                                   - C           
+       SH                                                   - L      
+       SH                                                   - E               
+                                                                     
+                                                                        NNA   
+
+            RCI                   -    LL                                   
+            CAL                   -    act                               
+            DIR                  ]-    OP                              
+                              ___                                               
+
+       __            ___               ___                                   
+      /                                ___                                   
+                     __                 \/                 /              |  
+                      /                //                ___              :  
+              /      /                 /                 /|.            S .  
+ :/     /    ./                                                              
+ /_   ___   _/_                                                              
+                                                                        
+
+ [U                                             E(S)                       
+ [N                                             T                           
+                                                            - F              
+                                                            - R             
+                                                            - V                
+       SHOW                   [X]                           - COLO        
+       SHOW                   [O]                           - LOG    
+       SHOW                   [J]               NCE         - EDIT            
+                                                                     
+                                                   GE                   NNA   
+
+   X!]      RCI                   -    LL                            EDI    
+   ] -      CAL                   -    act                           ate 
+   ] -      DIR                  ]-    OP                            EW
+      ___                     ___            ___      ___                       
+
+       __         _/\___               ___   ___                             
+      /           /                    ___   \__                             
+ ||                  __                 \/          //     /              |  
+ |.                   /                //          o/    ___              :  
+ |            /      /                 /           /     /|.            S .  
+ :/     /    ./                                                              
+ /_   ___   _/_                                                              
+                                                                        
+
+ [U               (S)                           E(S)     Z]                
+ [N               LES                           T        ]                  
+                                                            - F              
+                                                            - R             
+                                                            - V                
+       SHOW                   [X]                           - COLO        
+       SHOW          E (      [O]                           - LOG    
+       SHOW                   [J]               NCE         - EDIT            
+         EVI                                                         
+          AU                                       GE                   NNA   
+
+   X!]      RCI                   -    LL    ESS                     EDI    
+   ] -      CAL      G            -    act   ted                     ate 
+   ] -      DIR                  ]-    OP    NLO                     EW
+      ___                     ___            ____________               ______  
+
+       __         _/\___               ___   ___               ___           
+      /           /                    ___   \__                _            
+ ||  _               __       \__       \/          //     /    //        |  
+ |. /                 /                //          o/    ___   _/         :  
+ | /          /      /                o/           /     /|.     COMM   S .  
+ :/     /    ./                                                              
+ /_   ___   _/_                                                              
+                                                                        
+
+ [U               (S)                     AD    E(S)     Z]                
+ [N               LES                     ILE   T        ]                  
+                              [CF               LAG         - F              
+                              [E]                US         - R             
+                              [W]               NGS         - V                
+   ] - SHOW                   [X]            FF             - COLO        
+   ] - SHOW          E (      [O]            P              - LOG    
+   ] - SHOW                   [J]            ERENCE         - EDIT            
+ [<      EVI                  [>] -                      L]          
+ [S       AU                  [OLM]                GE    UES            NNA   
+
+   X!]      RCI                   -    LL    ESS                     EDI    
+   ] -      CAL   SLOG            -    act   ted                     ate 
+   ] -      DIR   ORY            ]-    OP    NLO                     EW
+      ___                     ___            ____________               ______  
+
+       __         _/\___            ______   ______      ___   ___           
+      /           /                 ______   \__         ___    _            
+ ||  _               __       \__       \/          //     /    //        |  
+ |. /                 /                //          o/    ___   _/         :  
+ | /          /      /                o/           /     /|.     COMM   S .  
+ :/     /    ./                                          _||                 
+ /_   ___   _/_                                          /|_                 
+                                                                        
+
+ [U               (S)                     AD    E(S)     Z]                
+ [N               LES                     ILE   T        ]                 G
+       ZI      ARC            [CF   CON         LAG         - FULL           
+       LE      G T            [E]   LEA          US         - READ          
+       SH      TUS            [W]   CHA         NGS         - VIEW            E
+ [H] - SHOW                   [X]            FF             - COLO        
+ [T] - SHOW          E (      [O]            P              - LOG    
+ [?] - SHOW                   [J]            ERENCE         - EDIT            
+ [<    PREVI                  [>] -                      L]          
+ [S   ] - AU                  [OLM]                GE    UES            NNAIRE
+
+   X!]      RCI                   -    LL    ESS       [1            EDI    
+   ] -      CAL   SLOG            -    act   ted       [4            ate 
+   ] -      DIR   ORY            ]-    OP    NLO       [V            EW
+      ___                     ___            ____________   ___         ______  
+
+       __      ____/\___            ______   ______      ___   ____ _      _.
+      /        ___/                 ______   \__         ___    _ /s        |
+ ||  _               __       \__       \/          //     /    //        |  
+ |. /                 /                //          o/    ___   _/         :  
+ | /          /      /                o/           /     /|.     COMM   S .  
+ :/     /    ./     /                                    _||                 
+ /_   ___   _/_   ___                                    /|_                 
+                                                                        
+
+ [U] - UP         (S)         [D]         AD FILE(S)     Z]                
+ [N] - SH         LES         [F]         ILELIST        ]                 G
+       ZI      ARCH           [CF   CON   ENC   LAG         - FULL           
+       LE      G TO S         [E]   LEA   MSG    US         - READ          
+       SH      TUS            [W]   CHA    SE   NGS         - VIEW            E
+ [H] - SHOW                   [X]            FF             - COLO        
+ [T] - SHOW          E (      [O]            P              - LOG    
+ [?] - SHOW                   [J]            ERENCE         - EDIT         ION
+ [<    PREVI                  [>] - NEX   ONF            L]    ELO   
+ [S   ] - AU                  [OLM] - O   INE      GE    UES   - Q      NNAIRE
+
+   X!]      RCI                   -    LL    ESS       [1            EDI    
+   ] -      CAL   SLOG            -    act   ted       [4            ate 
+   ] -      DIR   ORY            ]-    OP    NLO       [V            EW
+      ___                     ___      ___   __________________         ______  
+
+       __      ____/\___            ______   ______     ___________ _      _.
+      /        ___/                 ______   \__      __\___    _ /s        |
+ ||  _               __       \____     \/          //     /    //        |  
+ |. /                 /           /    //          o/    ___   _/         :  
+ | /          /      /           /    o/           /     /|.     COMM   S .  
+ :/     /    ./     /                 /                  _||                 
+ /_   ___   _/_   ___               _/\                  /|____   ___        
+                                                                        
+
+ [U] - UP         (S)         [D]         AD FILE(S)     Z]                
+ [N] - SH         LES         [F]         ILELIST        ]                 G
+       ZI      ARCH           [CF   CONFERENC   LAGS   [F   - FULL           
+       LE      G TO S         [E]   LEAVE MSG    USER  [R   - READ          
+       SH      TUS            [W]   CHANGE SE   NGS    [V   - VIEW            E
+ [H] - SHOW                   [X]      U O   FF             - COLO        
+ [T] - SHOW          E (      [O]      E S   P              - LOG    
+ [?] - SHOW                   [J]      N C   ERENCE         - EDIT         ION
+ [<    PREVI    CO            [>] - NEX   ONF   NCE      L]    ELO   
+ [S   ] - AU   SIG            [OLM] - O   INE   SSAGE    UES   - Q      NNAIRE
+
+   X!]   EXORCIST                 -    LL    ESS       [1            EDI    
+   ] -   EW CALLERSLOG            -    act   ted       [4            ate 
+   ] -   EW DIRECTORY            ]-    OP    NLO       [V            EW
+_________               ___   ___      ___   __________________         ______  
+
+ ._    __      ____/\___         _________   ______     ___________ _      _.
+ |S   /        ___/                 ______   \__      __\___    _ /s        |
+ ||  _            _____       \____     \/          //     /    //        |  
+ |. /                 /           /    //          o/    ___   _/         :  
+ | /          /      /           /    o/           /     /|.     COMM   S .  
+ :/     /    ./     /                 /                  _||                 
+ /_   ___   _/_   ___               _/\                  /|__________        
+                                                                        
+
+ [U] - UP      ILE(S)         [D]         AD FILE(S)     Z]          UPL   
+ [N] - SH       FILES         [F]         ILELIST        ]           ILE   G
+   ] - ZI      ARCH           [CF   CONFERENC   LAGS   [F   - FULL           
+   ] - LE      G TO S         [E]   LEAVE MSG    USER  [R   - READ          
+   ] - SH      TUS            [W]   CHANGE SE   NGS    [V   - VIEW            E
+ [H] - SHOW                   [X]      U O   FF          ]  - COLO        
+ [T] - SHOW          E (CET   [O]      E S   P           ]  - LOG    
+ [?] - SHOW                   [J]      N C   ERENCE      D] - EDIT         ION
+ [<    PREVI    CO   REN      [>] - NEXT CONF   NCE      L]    ELO   
+ [S   ] - AU   SIG            [OLM] - ON LINE   SSAGE    UES   - Q      NNAIRE
+
+   X!]   EXORCIST             [0] -    LL    ESS       [1    AC   NT EDI    
+   ] -   EW CALLERSLOG        [3] -    act   ted       [4    D-   tivate 
+   ] -   EW DIRECTORY         [DS]-    OP    NLOAD     [V    SY    VIEW
+_________   ___         ___   ___      ___   __________________         ______  
+
+ .____ _____   ____/\___         _________   ______     ___________ _      _.
+ |Sk!n/        ___/                 ______   \__      __\___    _ /s        |
+ ||  _            _____     ./\____     \/          //     /    //        |  
+ |. /                 /    //     /    //          o/    _______/         :  
+ | /          /      /     /     /    o/           /     /|.     COMM   S .  
+ :/     /    ./     /                 /                  _||                 
+ /_   ___   _/_   ___               _/\___               /|__________        
+                                                                        
+
+ [U] - UPLOA   ILE(S)         [D]         AD FILE(S)     Z]       EM UPL   
+ [N] - SHOW     FILES         [F]         ILELIST        ]        R FILE   G
+   ] - ZI    SEARCH           [CF]- CONFERENC   LAGS   [F   - FULL           
+   ] - LE    MSG TO S         [E] - LEAVE MSG    USER  [R   - READ          
+   ] - SH   STATUS            [W] - CHANGE SE   NGS    [V   - VIEW            E
+ [H] - SHOW                   [X] -    U O   FF          ]  - COLO        
+ [T] - SHOW          E (CET   [O] -    E S   P           ]  - LOG    
+ [?] - SHOW                   [J] -    N C   ERENCE      D] - EDIT         ION
+ [<    PREVI    CONFEREN      [>] - NEXT CONFERENCE      L] - RELO   
+ [S   ] - AU   SIGN           [OLM] - ON LINE MESSAGE    UEST] - Q   TIONNAIRE
+
+   X!]   EXORCIST             [0] -    LL    ESS       [1    AC   NT EDI   G
+   ] -   EW CALLERSLOG        [3] -    act   ted       [4    D-   tivate 
+   ] -   EW DIRECTORY         [DS]-    OP    NLOAD     [V    SY    VIEW
+_________   ___   ___   ___   ___      ___   __________________         ______  
+
+ .____ _____   ____/\_________   _________   ______     ___________ _      _.
+ |Sk!n/        ___/     /           ______   \__      __\___    _ /s        |
+ ||  _\__         _____     ./\____     \/          //     /    //        |  
+ |. /                 /    //     /    //          o/    _______/         :  
+ | /          /      /     /     /    o/           /     /|.     COMM   S .  
+ :/     /    ./     /                 /           /      _||                 
+ /_   ___   _/_   ______            _/\___      _/_      /|__________        
+                       \                                                
+
+ [U] - UPLOA   ILE(S)         [D] -    NLOAD FILE(S)     Z]    MODEM UPL   
+ [N] - SHOW     FILES         [F] -    W FILELIST        ]     LTER FILE   G
+   ] - ZI    SEARCH           [CF]- CONFERENC   LAGS   [F   - FULL CONF      
+   ] - LE    MSG TO SYSO      [E] - LEAVE MSG    USER  [R   - READ NEW M    
+   ] - SH   STATUS            [W] - CHANGE SE   NGS    [V   - VIEW TXT/L      E
+ [H] - SHOW                   [X] -    U O   FF          ]  - COLO   N/O  
+ [T] - SHOW          E (CET)  [O] -    E S   P           ]  - LOG    
+ [?] - SHOW                   [J] -    N C   ERENCE      D] - EDIT   SCR   ION
+ [<] - PREVI    CONFERENCE    [>] - NEXT CONFERENCE      L] - RELO   
+ [SENT] - AU   SIGN           [OLM] - ON LINE MESSAGE    UEST] - Q   TIONNAIRE
+
+   X!]   EXORCIST             [0] -    LL    ESS       [1    AC   NT EDI   G
+   ] -   EW CALLERSLOG        [3] -    act   ted       [4    D-   tivate 
+   ] -   EW DIRECTORY         [DS]-    OP    NLOAD     [V    SY    VIEW
+_________   ___   ___   ___   ___      ___   __________________         ______  
+
+ .____ _____   ____/\_____________________   ______     ___________ _      _.
+ |Sk!n/        ___/     /     /     ______   \__      __\___    _ /s        |
+ ||  _\__         _____     ./\____     \/          //     /    //        |  
+ |. /                 /    //     /    //          o/    _______/         :  
+ | /          /      /     /     /    o/           /     /|.     COMM   S .  
+ :/     /    ./     /           /     /           /     /_||          :.     
+ /_   ___   _/_   ______      _______/\___      _/_   __ /|__________:::     
+                       \                               \/             .Y
+
+ [U] - UPLOAD FILE(S)         [D] - DOWNLOAD FILE(S)     Z] - ZMODEM UPL   
+ [N] - SHOW NEW FILES         [F] - SHOW FILELIST        ]  - ALTER FILE   G
+   ] - ZI    SEARCH           [CF]- CONFERENC   LAGS   [F   - FULL CONF      
+   ] - LE    MSG TO SYSO      [E] - LEAVE MSG    USER  [R   - READ NEW M    
+   ] - SH   STATUS            [W] - CHANGE SE   NGS    [V   - VIEW TXT/L      E
+ [H] - SHOW                   [X] - MENU O   FF        [M]  - COLO   N/OFF
+ [T] - SHOW          E (CET)  [O] - PAGE S   P         [G]  - LOG    
+ [?] - SHOW                   [J] - JOIN C   ERENCE    [ED] - EDIT   SCRIPTION
+ [<] - PREVI    CONFERENCE    [>] - NEXT CONFERENCE    [RL] - RELO   
+ [SENT] - AU   SIGN           [OLM] - ON LINE MESSAGE  [QUEST] - Q   TIONNAIRE
+
+   X!] - EXORCIST             [0] -    LL    ESS       [1    AC   NT EDITING
+   ] - VIEW CALLERSLOG        [3] -    act   ted       [4    D-   tivated
+   ] - VIEW DIRECTORY         [DS]-    OP    NLOAD     [V    SY    VIEW
+_______________   ___   ___   ___   ______   __________________         ______  
+
+ .____ _____   ____/\______________________/\______     ___________ _      _.
+ |Sk!n/        ___/     /     /     ______// \__      __\___    _ /s        |
+ ||  _\____       _____     ./\____     \/          //     /    //        | |
+ |. /     /           /    //     /    //          o/   ________/         : |
+ | /     /    /      /     /     /    o/           /     /|.     COMM   S . |
+ :/     /    ./     /           /     /           /     /_||          :.     
+ /_   _______/__________      _______/\___      _/______ /|__________:::     
+                       \                               \/             .Y
+
+ [U] - UPLOAD FILE(S)         [D] - DOWNLOAD FILE(S)   [RZ] - ZMODEM UPL   
+ [N] - SHOW NEW FILES         [F] - SHOW FILELIST      [A]  - ALTER FILE   G
+   ] - ZIPPY SEARCH           [CF]- CONFERENC   LAGS   [F   - FULL CONF STA  
+   ] - LEAVE MSG TO SYSOP     [E] - LEAVE MSG    USER  [R   - READ NEW MSG' 
+   ] - SHOW STATUS            [W] - CHANGE SE   NGS    [V   - VIEW TXT/LHA    E
+ [H] - SHOW HELP P            [X] - MENU O   FF        [M]  - COLO   N/OFF
+ [T] - SHOW LOCAL    E (CET)  [O] - PAGE S   P         [G]  - LOG    
+ [?] - SHOW MENU              [J] - JOIN C   ERENCE    [ED] - EDIT   SCRIPTION
+ [<] - PREVI    CONFERENCE    [>] - NEXT CONFERENCE    [RL] - RELO   
+ [SENT] - AU   SIGN           [OLM] - ON LINE MESSAGE  [QUEST] - Q   TIONNAIRE
+
+ [EX!] - EXORCIST             [0] -    LL    ESS       [1    AC   NT EDITING
+ [2] - VIEW CALLERSLOG        [3] -    act   ted       [4    D-   tivated
+ [5] - VIEW DIRECTORY         [DS]-    OP    NLOAD     [V    SY    VIEW
+_____________________   ___   ___   ______   __________________      _________  
+
+ .____ ____________/\______________________/\________   ___________ ____   _.
+ |Sk!n/     ______/     /     /     ______// \__    _\__\___    _ /s        |
+ ||  _\____       _____     ./\____     \/    \/    //     /    //        | |
+ |. /     /           /    //     /    //     /    o/   ________/         : |
+ | /     /    /      /     /     /    o/     /     /     /|.     COMM   S . |
+ :/     /    ./     /     /     /     /           /     /_||          :.    |
+ /_   _______/__________ /___________/\___      _/______ /|__________:::   _|
+                       \/                              \/             .Y
+
+ [U] - UPLOAD FILE(S)         [D] - DOWNLOAD FILE(S)   [RZ] - ZMODEM UPL   
+ [N] - SHOW NEW FILES         [F] - SHOW FILELIST      [A]  - ALTER FILE   G
+   ] - ZIPPY SEARCH           [CF]- CONFERENC   LAGS   [FS] - FULL CONF STATS
+   ] - LEAVE MSG TO SYSOP     [E] - LEAVE MSG    USER  [R]  - READ NEW MSG'S
+   ] - SHOW STATUS            [W] - CHANGE SE   NGS    [V]  - VIEW TXT/LHA FILE
+ [H] - SHOW HELP PAGE         [X] - MENU O   FF        [M]  - COLO   N/OFF
+ [T] - SHOW LOCAL TIME (CET)  [O] - PAGE S   P         [G]  - LOG    
+ [?] - SHOW MENU              [J] - JOIN C   ERENCE    [ED] - EDIT   SCRIPTION
+ [<] - PREVI    CONFERENCE    [>] - NEXT CONFERENCE    [RL] - RELOGON
+ [SENT] - AU   SIGN           [OLM] - ON LINE MESSAGE  [QUEST] - QUESTIONNAIRE
+
+ [EX!] - EXORCIST             [0] - SHELL    ESS       [1    AC   NT EDITING
+ [2] - VIEW CALLERSLOG        [3] - D-sact   ted       [4    D-   tivated
+ [5] - VIEW DIRECTORY         [DS]- SYSOP    NLOAD     [V    SY    VIEW
+___________________________   _________________________________      _________  
+
+ .____ ____________/\______________________/\________   ___________ ________.
+ |Sk!n/     ______/     /     /     ______// \__    _\__\___    _ /s      . |
+ ||  _\____     \/_____     ./\____     \/.   \/    //     /    //        | |
+ |. /     /     /     /    //     /    //     /    o/   ________/         : |
+ | /     /    //     /     /     /    o/     /     /     /|.     COMMANDS . |
+ :/     /    ./     /     /     /     /     /     /     /_||          :.    |
+ /_   _______/__________ /___________/\______   _/______ /|__________:::____|
+                       \/                              \/             .Y
+
+ [U] - UPLOAD FILE(S)         [D] - DOWNLOAD FILE(S)   [RZ] - ZMODEM UPLOAD
+ [N] - SHOW NEW FILES         [F] - SHOW FILELIST      [A]  - ALTER FILEFLAG
+ [Z] - ZIPPY SEARCH           [CF]- CONFERENCE FLAGS   [FS] - FULL CONF STATS
+ [C] - LEAVE MSG TO SYSOP     [E] - LEAVE MSG TO USER  [R]  - READ NEW MSG'S
+ [S] - SHOW STATUS            [W] - CHANGE SETTINGS    [V]  - VIEW TXT/LHA FILE
+ [H] - SHOW HELP PAGE         [X] - MENU ON/OFF        [M]  - COLOR ON/OFF
+ [T] - SHOW LOCAL TIME (CET)  [O] - PAGE SYSOP         [G]  - LOG OFF
+ [?] - SHOW MENU              [J] - JOIN CONFERENCE    [ED] - EDIT DESCRIPTION
+ [<] - PREVI    CONFERENCE    [>] - NEXT CONFERENCE    [RL] - RELOGON
+ [SENT] - AU   SIGN           [OLM] - ON LINE MESSAGE  [QUEST] - QUESTIONNAIRE
+
+ [EX!] - EXORCIST             [0] - SHELL ACCESS       [1] - ACCOUNT EDITING
+ [2] - VIEW CALLERSLOG        [3] - D-sactivated       [4] - D-sactivated
+ [5] - VIEW DIRECTORY         [DS]- SYSOP DOWNLOAD     [VS]- SYSOP VIEW
+_______________________________________________________________   ____________  
+
+ .____ ____________/\______________________/\________   ___________ ________.
+ |Sk!n/     ______/     /     /     ______// \__    _\__\___    _ /s      . |
+ ||  _\____     \/_____     ./\____     \/.   \/    //     /    //        | |
+ |. /     /     /     /    //     /    //     /    o/   ________/         : |
+ | /     /    //     /     /     /    o/     /     /     /|.     COMMANDS . |
+ :/     /    ./     /     /     /     /     /     /     /_||          :.    |
+ /___________/__________ /___________/\__________/______ /|__________:::____|
+                       \/                              \/             .Y
+
+ [U] - UPLOAD FILE(S)         [D] - DOWNLOAD FILE(S)   [RZ] - ZMODEM UPLOAD
+ [N] - SHOW NEW FILES         [F] - SHOW FILELIST      [A]  - ALTER FILEFLAG
+ [Z] - ZIPPY SEARCH           [CF]- CONFERENCE FLAGS   [FS] - FULL CONF STATS
+ [C] - LEAVE MSG TO SYSOP     [E] - LEAVE MSG TO USER  [R]  - READ NEW MSG'S
+ [S] - SHOW STATUS            [W] - CHANGE SETTINGS    [V]  - VIEW TXT/LHA FILE
+ [H] - SHOW HELP PAGE         [X] - MENU ON/OFF        [M]  - COLOR ON/OFF
+ [T] - SHOW LOCAL TIME (CET)  [O] - PAGE SYSOP         [G]  - LOG OFF
+ [?] - SHOW MENU              [J] - JOIN CONFERENCE    [ED] - EDIT DESCRIPTION
+ [<] - PREVIOUS CONFERENCE    [>] - NEXT CONFERENCE    [RL] - RELOGON
+ [SENT] - AUTO SIGN           [OLM] - ON LINE MESSAGE  [QUEST] - QUESTIONNAIRE
+
+ [EX!] - EXORCIST             [0] - SHELL ACCESS       [1] - ACCOUNT EDITING
+ [2] - VIEW CALLERSLOG        [3] - D-sactivated       [4] - D-sactivated
+ [5] - VIEW DIRECTORY         [DS]- SYSOP DOWNLOAD     [VS]- SYSOP VIEW
+________________________________________________________________________________
+

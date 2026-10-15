@@ -1,0 +1,22 @@
+                                                                                
+       This is what you are! v1 by Noisy Belch (Not /X.info Compatible!)        
+
+                       Sysop [0] Local Console  
+
+             Last Call Thu 01-Jan-1970 00:00:00
+           Total Calls 0
+        Total Messages 0
+          Access Level 255
+       Conf Accounting Disabled
+   Ratio and RatioType Disabled
+                   __
+              |  ||__)          0 Bytes       0 Files
+      __  __  l__||             0 Bytes       0 Files [Main]
+     |  \|  || . ..\ |          0 Bytes       0 Files
+     |__/l__|l_l_|| \|          0 Bytes       0 Files [Main]
+
+          Active Confs XXXXXXXXXXXXXXXXXXXXXXXXX
+          Current Conf X________________________
+          Active Nodes _________
+          Current Node _X_______ 115200 Connect [115200]
+

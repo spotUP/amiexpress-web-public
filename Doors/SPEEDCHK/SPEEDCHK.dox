@@ -1,0 +1,31 @@
+ ========================= TRANSFER SPEED CHECK V1.0 =========================
+
+COPYRiGHT NOTiCE !!
+
+I HOPE YOU ALL FOLKS CAN COME UPP WHiTH SOME OWN IDEAS AND DONT COPY MINE !
+
+    SPEEDCHK.rexx  = 845 bytes
+    SPEEDCHK.dox   = 692 bytes
+
+Purpose:
+
+PROTECT FROM DOWNLOADS BELOW 1000CPS
+AND STILL HAVE 2400bps USERS.
+
+Requirements:
+
+OS2.0 & AmiExpress 2.x
+
+Installing the door!
+--------------------
+
+Put it into BBS.CMD like this:
+
+------------[CUT HERE]---------------
+*D        RM050DOORS:SPEEDCHK.rexx
+------------[CUT HERE]---------------
+
+Contacting Author:
+
+Thats all for now folks, Look out for more of my /X utils.
+Call my board, DiSNEYLAND, +46-13-138676 - US ROBOTICS DUAL POWER -

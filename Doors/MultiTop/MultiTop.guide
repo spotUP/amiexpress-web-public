@@ -1,0 +1,317 @@
+@DATABASE "MultiTop.Guide"
+@REMARK  .-----------------------------------------------------------.
+@REMARK  | This document should be read with AmigaGuide or MultiView |
+@REMARK  `-----------------------------------------------------------'
+@REMARK  $VER: MultiTop 2.1
+@INDEX MAIN
+@WIDTH 80
+@NODE MAIN "MultiTop v2.1 [RELEASE 3] - Public Release Version!"
+                         MultiTop v2.1 [RELEASE 3]
+                          Public Release Version!
+
+                         All Coding by @{"BOBO/MYSTIC" link Contact}
+
+                           Guide by KILLRAVEN/MST
+                              Logo by BARK/MST
+
+                 ... another fine MYSTiC /X production ...
+
+                       @{" Introduction & New Features " link Introduction}
+                       @{"      Usage & Examples       " link Usage}
+
+                       @{" General Info Designer Files " link DesignGeneral }
+                       @{" Keywords for Designer Files " link DesignKeywords }
+                       @{" Configuring  Designer Files " link DesignPersonalSettings }
+
+                       @{"    How to contact me...     " link Contact}
+@ENDNODE
+
+@NODE Introduction "Introduction & New Features in v2.1 - © 1995 bObO/MST"
+
+   Hi  again, and welcome to another fine product from Mystic-Amiexpress.
+   Here  it  is  -  the  new  update  of MultiTop.  It has been completly
+   rewritten,  and  today  it's  the  DAMN best top utility available for
+   Ami-Express.   It  does  not  only  allow you to make the most of your
+   bulletins, but also with your own created design and much much more!
+
+   New in version 2.1:
+   ~~~~~~~~~~~~~~~~~~~
+   * MultiTop can now generate top upload/download cps rates
+   * MultiTop now using a new load/sort routine =50% faster!
+   * New config program with nicer design and easier to use.
+   * Optimized the code =faster executable!
+
+   Some notable features:
+   ~~~~~~~~~~~~~~~~~~~~~~
+   * MultiTop  has  got a nice built-in config program that allows you to
+     configure your personal settings.
+   * MultiTop lets you use your own design.
+   * MultiTop generates your top uploaders/downloaders (bytes and files),
+     top callers,  top message writers and top upload/download cps rates.
+   * MultiTop has been tested on and works 100% on multinode systems.
+   * MultiTop is written entirely in C for fast code.
+   * MultiTop  comes  in  000 & 0x0 code to get the maximum speed on your
+     system.
+     Please note that the 030 version will also work on A1200s & A4000s.
+   * MultiTop has got everything built-in. No need to create cfgs and
+     such things, you control everything in the config editor.
+   * Each design file can have its own personal configuration.
+   * MultiTop can generate bulletins using your conference databases.
+     (You must have Conference Accounting activated to use this.)
+   * MultiTop  allow wildcards at the design argument.  This means that
+     you can have MultiTop pick random top bulletins.
+   * MultiTop can exclude users you don't want to have listed.
+
+   MultiTop  is  your  final  replacement  for  all  your top makers.  It
+   doesn't  only  allow you to make your top uploaders bulletin, but also
+   top callers and top message writers and much much more.
+
+   As  you  all probably know, there are perhaps fifty other top uploader
+   utils  available for Ami-Express today, and all of them with different
+   designs.  It is always hard to choose between them, because you really
+   don't  know  what design you want to use.  This problem is solved now,
+   because MultiTop lets you use your own created design!
+
+   I  hope  that  some  of  you  ascii/ansi  makers will create some nice
+   designs for this util in the future.  This way there is no need to any
+   other  top utility because all of them really work in the same way but
+   with different designs.
+
+             I HAVE CREATED THE CODE, NOW YOU MAKE THE DESIGN!
+
+                                                            -bObO/mYSTiC-
+
+   ----------------------------------------------------------------------
+
+                             LEGAL MUMBO JUMBO
+
+   This  program was written and developed (c)1993-1995 Bobo/Mystic using
+   SAS/C (c) SAS Institute Inc.  You are free to use this util as long as
+   you  want, but the author is not responsible for any damages caused by
+   this util.
+
+   ----------------------------------------------------------------------
+
+@ENDNODE
+
+@NODE Usage "Usage And Examples - © 1995 by bObO/MYSTiC"
+
+   The  usage  of  MultiTop  is very simple, and it is the only thing you
+   have to "learn", if you don't want to make your own designs!
+
+   Usage: MULTITOP <designfile> <outputfile> [<userdata>] [UKEYS <file>]
+                   [CONFDB <file>] [NOANSI]
+
+   <designfile> : Full path to your designfile. You may use AMIGADOS
+                  wildcards to use random design files. (ie #?)
+
+   <outputfile> : Full path to your outputfile. You may use an asterisk
+                  for output directly to screen. (i.e. "*")
+
+   [<userdata>] : Full path to your userdata.  (BBS:User.data is default)
+
+   [UKEYS <file>]  : The  Userkeys file  is  ONLY  used if the designfile
+                     need  cps  rates  info.  <file>  is the full path to
+                     your userkeys file. (BBS:User.keys is default).
+
+   [CONFDB <file>] : If  you  have  conference accounting activated,  you
+                     can  use  conference database to make the bulletins.
+                     <file>  is  the  full  path to your conf.db file for
+                     that conference.
+
+   [NOANSI] : Write a NO ANSI output. (Ansi is default)
+
+
+   Some examples:
+   ~~~~~~~~~~~~~~
+   MULTITOP Designs/MTopULBytes#?.dsg BBS:Bull.txt SYS:User.data NOANSI
+   --- Generate a random TOP UPLOADERS bulletin using SYS:User.data with
+       NOANSI to BBS:Bull.txt
+
+   MULTITOP Designs/MTopULBytes#?.dsg BBS:Bull.txt CONFDB BBS:Conf2/Conf.db
+   --- Generate a random TOP UPLOADERS bulletin from conference 2 to
+       BBS:Bull.txt
+
+   MULTITOP Designs/MTopDLBytes#?.dsg BBS:Bull.txt UKEYS SYS:User.keys
+   --- Generate a random TOP DOWNLOADERS bulletin using a external Userkeys
+       to BBS:Bull.txt
+
+   MULTITOP Designs/MTopMsgs1.dsg * NOANSI
+   --- Generate a TOP MESSAGES bulletin (design 1) with NOANSI directly to
+       screen.
+@ENDNODE
+
+@NODE DesignGeneral "General Info about the Design files - © 1995 bObO/MST"
+
+   As  you  probably already figured out, MultiTop needs a design file to
+   work.   A  designfile is a normal textfile (ASCII) created in a normal
+   text-editor  with  some keywords in it.  The designfiles can also have
+   its personal config in it.  (explained later)
+
+   PLEASE NOTE
+
+   You  don't have to make your own design if you don't have time or want
+   to.   There are many nice designs delivered with this archive that you
+   can  freely  use, so if you aren't that good at painting etc, just use
+   them.   (This  means  that  you  DON'T have to read the part about the
+   design files)
+@ENDNODE
+
+@NODE DesignKeywords "How to create your own files - © 1995 bObO/MST"
+
+   I  recommend  you  to take a look at the included example design-files
+   while reading this chapter to understand how it works.
+
+
+   LIST OF AVAILABLE KEYWORDS
+
+   USERINFO               BOARDINFO
+   ~~~~~~~~               ~~~~~~~~~
+   UN=UserName            TC=Total Calls
+   LT=Location            TM=Total Msgs
+   UB=Uploaded Bytes      UB=Total Uploaded Bytes
+   UK=Uploaded K          UK=Total Uploaded K
+   UM=Uploaded Megs       UM=Total Uploaded Megs
+   UF=Uploaded Files      UF=Total Uploaded Files
+   DB=Downloaded Bytes    DB=Total Downloaded Bytes
+   DK=Downloaded K        DK=Total Downloaded K
+   DM=Downloaded Megs     DM=Total Downloaded Megs
+   DF=Downloaded Files    DF=Total Downloaded Files
+   UC=Upload CPS Record   SC=System Calls
+   DC=Download CPS Record TU=Total Active Users
+   MS=Messages            LT=Last Updated (Time)
+   CS=Calls               LD=Last Updated (Date)
+   ST=Status              RG=Register Information
+   ---------------------- VT=Version Text
+
+   NOTE: The keyword VT *MUST* be used, or no output will be written.
+         It will insert a string (MultiTop v2.1) of 14 chars long.
+
+
+   USERINFO format:
+   %<pos><center><length><keyword>  Example: %01-10UN
+   |  |     |       |       |
+   |  |     |       |       |> Userinfo Keyword
+   |  |     |       |--------> Number of chars to display of keyword
+   |  |     |----------------> Minus (-) for left, dot (.) for right
+   |  |----------------------> User number from top
+   |-------------------------> Keyword Identifer
+
+   BOARDINFO format:
+   %<center><length><keyword>       Example: %-10VT
+   |   |       |       |
+   |   |       |       |-----> Boardinfo Keyword
+   |   |       |-------------> Number of chars to display of keyword
+   |   |---------------------> Minus (-) for left, dot (.) for right
+   |-------------------------> Keyword Identifer
+
+   Examples
+   ~~~~~~~~
+   Username: [%01-10UN]  Location: [%01.10LT]  Bytes: [%01-10UB]
+
+   The above string would be translated to:
+   Username: [bObO/mYSTi]  Location: [    mYStiC]  Bytes: [1,123,123 ]
+
+
+   Total uploaded bytes: [%-10UB]  files: [%.00UF]
+
+   The above string would be translated to:
+   Total uploaded bytes: [1,123,123]  files: [1,123]
+
+                                PLEASE NOTE!
+
+   All  I  want from you who make the design, is NOT to remove or somehow
+   hide  the  VT-keyword.   I  KNOW there is quite an easy way to hide it
+   with esc- chars (i.e.  set the black color before the keyword) or such
+   things, but PLEASE show me some respect for my work and leave it as it
+   should be - thank you.
+
+       (THIS IS ALL I ASK FROM YOU. YOU DON'T HAVE TO INCLUDE MY NAME OR
+        OTHER THINGS, THE VT-KEYWORD IS ENOUGH)
+
+   See also: @{"Configuring Designer Files" link DesignPersonalSettings}
+
+@ENDNODE
+
+@NODE DesignPersonalSettings "Personal Settings in Designer Files - © 1995 bObO/MST"
+
+   The  design  file(s)  may  have  its  own  config  in  it.  All of the
+   following  keywords  for setting options are optional, but if you want
+   to  make  an  other  output  then  top  ulbytes, you need to use them.
+   Available commands/settings are:
+
+   SEPARATOR=DOT    - Use DOT (.) separator
+             COMMA  - Use COMMA (,) separator
+             NONE   - Donot use any separator
+
+   READUSERKEYS - Read userkeys when using this design - to be able to use
+                  cps rates information.
+
+   SORT=UPLOADEDBYTES    - Sort userlist by Uploaded Bytes (DEFAULT)
+        UPLOADEDFILES    - Sort userlist by Uploaded Files
+        DOWNLOADEDBYTES  - Sort userlist by Downloaded Bytes
+        DOWNLOADEDFILES  - Sort userlist by Downloaded Files
+        CALLS            - Sort userlist by Calls
+        MESSAGES         - Sort userlist by Messages
+        UPLOADCPS        - Sort userlist by Upload CPS
+        DOWNLOADCPS      - Sort userlist by Download CPS
+
+   All lines in the designfile starting with '@' will *NOT* be written in
+   the output. @ followed by an option will activate it. You may also use
+   @ to write comments in the designfile.
+
+
+   EXAMPLES
+   ~~~~~~~~
+   @ This is a comment line
+
+   @SEPARATOR=DOT                   I can write whatever i want out here!
+
+   @SORT=DOWNLOADEDBYTES            I can write whatever i want out here!
+
+
+   For more help and examples, take a look at the included designfiles.
+@ENDNODE
+
+@NODE ConfigProgram "Config Program - © 1995 bObO/MST"
+
+   MultiTop  has  a built-in config program where you configure MultiTop.
+   I  wont  go  into  details  what  every option does, because it's very
+   intuitive to use.  Go and see.
+
+   To  start  the  config program, write "MULTITOP CFG" at the prompt, or
+   start MultiTop from workbench.
+
+   NOTE: If you don't have your userdata located in the default path
+         (BBS:), you may enter "MULTITOP CFG <userdata>"
+
+     IE: MULTITOP CFG SYS:USER.DATA
+@ENDNODE
+
+@NODE Contact "How to reach ... "
+
+   The  easiest  way to contact me, is to write me a message on internet:
+
+                              bobo@everyday.se
+
+   You may also call any of these MYSTiC boards and leave me a messgae:
+
+   The East BBS: +46-8940614  [28.8 DS]      Logon as: GUEST
+                 +46-8940615  [28.8 DS]      Password: GUEST
+                 +46-8940919  [28.8 DS]      Mail to : bObO/mYSTiC
+   Last Outpost: +31-72157682 [28.8 DS]
+                 +31-72201182 [28.8 DS]
+   Undiscovered: +31-22941442 [28.8 DS]      Leave mail to:
+                 +31-22944442 [28.8 DS]      KiLLraVeN/MYSTiC
+
+   If  YOU  are interested to join one of the finest groups in the scene:
+   MYSTiC  -  Make  sure you call one of our headquarters in your nearest
+   country and leave the sysop a message.
+
+   ----------------------------------------------------------------------
+
+           More quality doors/tools will be available very soon!
+                Keep in touch with the best coders - MYSTiC!
+
+   ----------------------------------------------------------------------
+@ENDNODE

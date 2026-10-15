@@ -1,0 +1,21 @@
+{
+  "name": "@amiexpress/beeb",
+  "category": "utility",
+  "version": "1.0.0",
+  "description": "BBC Micro emulator - runs disc images from the board",
+  "bbsCommand": "BEEB",
+  "main": "dist/index.js",
+  "author": "AmiExpress Team",
+  "scripts": {
+    "test": "tsx tests/run-tests.ts",
+    "build": "tsc",
+    "watch": "tsc --watch"
+  },
+  "dependencies": {
+    "@amiexpress/bbs-door-sdk": "file:../../sdk"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "typescript": "^5.0.0"
+  }
+}

@@ -1,0 +1,18 @@
+
+  ---------- ------------- ------ --------- ------ ----- -------- ----- -----
+          s!x-status v0.beta / coded by spider^af / analog future '97 
+  ---------- ------------- ------ --------- ------ ----- -------- ----- -----
+   sysop :                  axx type :              nr calls :          
+   board :                  axx lvl  :              user nr  :          
+   node  :                  axx area :              conf axx :          
+   init  :                
+   baud  :                  handle       :                                 
+   s!x   :                  location     :                                 
+   chat  :                  current conf :                                 
+  ---------- ------------- ------ --------- ------ ----- -------- ----- -----
+   pumped bytes :                      leeched bytes :                    
+   pumped files :                      leeched files :                    
+   bytes avail  :                      leeched today :                    
+   ratio        :                      leech limit   :                    
+  ---------- ------------- ------ --------- ------ ----- -------- ----- -----
+SysopvalidatedSysop00AmiExpress-Web255Local Console00Sysopaway!Sysop001152001152000001152000Mainunlimited!

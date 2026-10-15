@@ -1,0 +1,11 @@
+{
+  "name": "py-hello",
+  "version": "1.0.0",
+  "description": "Python hello door",
+  "main": "main.py",
+  "bbsCommand": "PYHELLO",
+  "doorType": "PY",
+  "scripts": {
+    "run": "python3 main.py"
+  }
+}

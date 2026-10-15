@@ -1,0 +1,130 @@
+"use strict";
+/**
+ * Lobby Screen
+ *
+ * Multiplayer lobby using the SDK's generic MultiplayerLobby widget
+ */
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.LobbyScreen = void 0;
+const blessed_1 = require("@amiexpress/bbs-door-sdk/engines/ui/blessed");
+const broker_lobby_adapter_1 = require("../network/broker-lobby-adapter");
+const bot_lobby_1 = require("../network/bot-lobby");
+const door_theme_1 = require("../door-theme");
+/**
+ * Lobby Screen
+ *
+ * Thin wrapper around SDK's MultiplayerLobby widget
+ */
+class LobbyScreen {
+    constructor(screen, state, sounds, network, localPlayerId) {
+        this.lobby = null;
+        this.screen = screen;
+        this.state = state;
+        this.sounds = sounds;
+        this.network = network;
+        this.localPlayerId = localPlayerId;
+    }
+    /**
+     * Show lobby and wait for result
+     */
+    async show(mode, selectedMode) {
+        // Enable mouse control for lobby interaction
+        this.screen.program.enableMouse();
+        // Create adapter
+        const adapter = new broker_lobby_adapter_1.BrokerLobbyAdapter(this.network, this.localPlayerId);
+        // Create lobby widget
+        this.lobby = new blessed_1.MultiplayerLobby({
+            parent: this.screen,
+            adapter,
+            localPlayerId: this.localPlayerId,
+            title: 'GRANDMASTER LOBBY',
+            features: {
+                bots: true,
+                settingsEditor: true,
+                chat: true,
+                leaderboard: true,
+                readyFlow: false,
+                // Start already bot-fills and launches on its own, and the
+                // "waiting for other players" countdown auto-launches when it
+                // expires - so a Force Start button would just be a second button
+                // doing what Start does.
+                forceStart: false,
+            },
+            autoStartTimeout: 60,
+            gameSettings: [
+                {
+                    key: 'startingLevel',
+                    label: 'Start Level',
+                    type: 'number',
+                    min: 1,
+                    max: 20,
+                    default: 1,
+                    hostOnly: true,
+                },
+                {
+                    key: 'garbage',
+                    // "Garbage Lines" read as "start the boards with garbage in them",
+                    // which is not what it does - it decides whether clearing lines
+                    // SENDS garbage to opponents. Reported as a bug on that reading
+                    // (2026-08-25); the behaviour is right, the name was not.
+                    label: 'Garbage Attacks',
+                    type: 'checkbox',
+                    default: true,
+                    hostOnly: true,
+                },
+            ],
+            defaultBotDifficulty: 5,
+            modes: {
+                versus_1v1: { name: '1v1 Versus', maxPlayers: 2, minPlayers: 2 },
+                team_2v2: { name: '2v2 Team Battle', maxPlayers: 4, minPlayers: 4 },
+                // botFillTarget, not minPlayers: two is what makes the match
+                // STARTABLE and 99 is what the mode IS. Without it "Add Bots" and
+                // the auto-fill both filled to two, so the 99-player battle royale
+                // ran with one CPU ("still only one bot in battle royale",
+                // 2026-09-02) - and the door-side default I fixed first never got a
+                // look in, because the widget always passes a count.
+                battle_royale: {
+                    name: 'Battle Royale (99)', maxPlayers: 99, minPlayers: 2,
+                    botFillTarget: (0, bot_lobby_1.modePlayerTarget)('battle_royale'),
+                },
+            },
+            onSound: (sound) => {
+                // Map SDK sound names to GRANDMASTER sound effects
+                const soundMap = {
+                    select: 'menu_select',
+                    error: 'error',
+                    countdown: 'countdown',
+                    join: 'menu_select',
+                    leave: 'menu_select',
+                    chat: 'menu_select',
+                };
+                const sfx = soundMap[sound];
+                if (sfx) {
+                    this.sounds.playSfx(sfx);
+                }
+            },
+            formatPlayer: (player, isLocal, isHost) => {
+                const hostBadge = isHost ? `{${door_theme_1.T.accent}-fg}[HOST]{/${door_theme_1.T.accent}-fg} ` : '';
+                const youBadge = isLocal ? `{${door_theme_1.T.chrome}-fg}(You){/${door_theme_1.T.chrome}-fg} ` : '';
+                const botBadge = player.isBot
+                    ? `{magenta-fg}[CPU-${player.botDifficulty}]{/magenta-fg} `
+                    : '';
+                return `${hostBadge}${youBadge}${botBadge}{${door_theme_1.T.ink}-fg}${player.name}{/${door_theme_1.T.ink}-fg}`;
+            },
+        });
+        // Convert lobby mode to entry mode
+        const entryMode = mode === 'matchmaking' ? 'matchmaking' : 'custom';
+        // Show and return result. Always detach the adapter afterwards: app.ts
+        // loops back into the lobby after every match, building a new adapter
+        // each time, so leaving the old one attached to the shared network
+        // manager leaks a full set of handlers per visit.
+        try {
+            return await this.lobby.show(entryMode, selectedMode || 'versus_1v1');
+        }
+        finally {
+            adapter.dispose();
+        }
+    }
+}
+exports.LobbyScreen = LobbyScreen;
+//# sourceMappingURL=lobby-screen.js.map

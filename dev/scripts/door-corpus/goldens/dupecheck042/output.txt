@@ -1,0 +1,8 @@
+ 
+[=Duplicate_Check=] V0.42 - ©1993 SiGMA SEVEN! - /X Development Team.
+ 
+Please Wait, Checking for '' in Dir Listing........Done!
+ 
+File '' is NOT a Duplicate Upload. - Passing thru to /X FileChecking
+ 
+Please Wait, Testing File...

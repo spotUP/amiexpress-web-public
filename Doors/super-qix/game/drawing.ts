@@ -1,0 +1,412 @@
+/**
+ * Super Qix - Drawing System
+ * Handles stix drawing, area claiming, and flood fill algorithms
+ */
+
+import {
+  SuperQixData,
+  CellState,
+  Point,
+  ClaimResult,
+  Region
+} from './types';
+import {
+  FIELD_WIDTH,
+  FIELD_HEIGHT,
+  DRAW_BASE_POINTS,
+  SPLIT_QIX_MULTIPLIERS
+} from './constants';
+
+/**
+ * Drawing system for stix and area claiming
+ */
+export class DrawingSystem {
+  private data: SuperQixData;
+
+  constructor(data: SuperQixData) {
+    this.data = data;
+  }
+
+  /**
+   * Extend the current stix to a new point
+   */
+  extendStix(point: Point): boolean {
+    const d = this.data;
+
+    if (!d.currentStix) return false;
+
+    // Check if point is valid
+    if (point.x < 0 || point.x >= FIELD_WIDTH || point.y < 0 || point.y >= FIELD_HEIGHT) {
+      return false;
+    }
+
+    const cell = d.field[point.y][point.x];
+
+    // Can only draw into unclaimed area
+    if (cell !== 'unclaimed') {
+      return false;
+    }
+
+    // Check for self-intersection
+    if (this.stixContains(point)) {
+      return false;  // Would cross own stix - handled as death in engine
+    }
+
+    // Add point to stix
+    d.currentStix.points.push({ ...point });
+    d.field[point.y][point.x] = 'stix';
+
+    return true;
+  }
+
+  /**
+   * Is this the cell the marker came from, one step back along the line?
+   *
+   * FAQ 2.1: "In Super Qix, unlike the original, you ARE allowed to
+   * backtrack along your incomplete lines". Only the immediately previous
+   * point counts - stepping onto any OTHER part of the line is crossing it,
+   * which is still fatal.
+   */
+  isBacktrack(point: Point): boolean {
+    const d = this.data;
+    if (!d.currentStix) return false;
+
+    const points = d.currentStix.points;
+    if (points.length < 2) return false;
+
+    const previous = points[points.length - 2];
+    return previous.x === point.x && previous.y === point.y;
+  }
+
+  /**
+   * Retrace one step, giving the cell the marker leaves back to the field.
+   *
+   * The line shortens rather than the marker walking over itself, so a
+   * player can reverse out of a corner they have drawn themselves into -
+   * the "Spiral Death Trap" the FAQ describes as survivable in Super Qix.
+   */
+  retractStix(): boolean {
+    const d = this.data;
+    if (!d.currentStix) return false;
+
+    const points = d.currentStix.points;
+    if (points.length < 2) return false;
+
+    const abandoned = points.pop()!;
+    if (d.field[abandoned.y][abandoned.x] === 'stix') {
+      d.field[abandoned.y][abandoned.x] = 'unclaimed';
+    }
+
+    return true;
+  }
+
+  /**
+   * Check if stix contains a point
+   */
+  private stixContains(point: Point): boolean {
+    const d = this.data;
+    if (!d.currentStix) return false;
+
+    return d.currentStix.points.some(p => p.x === point.x && p.y === point.y);
+  }
+
+  /**
+   * Complete the stix and claim area
+   */
+  completeStix(endPoint: Point): ClaimResult {
+    const d = this.data;
+
+    if (!d.currentStix || d.currentStix.points.length < 2) {
+      return { success: false };
+    }
+
+    // Add end point to stix
+    d.currentStix.points.push({ ...endPoint });
+
+    // Convert stix to claimed (the line itself)
+    for (const point of d.currentStix.points) {
+      if (d.field[point.y][point.x] === 'stix') {
+        d.field[point.y][point.x] = 'claimed';
+      }
+    }
+
+    // How much there was to dodge, counted BEFORE the claim resolves.
+    //
+    // QUIX pays (area / 2) * quixnum (qarea.c:192): the same ground is worth
+    // more when more Gremlins were loose on it. The count has to be taken
+    // here rather than after, because claimAreaWithoutQix removes any Gremlin
+    // this claim seals in - and a claim that catches one should be paid for
+    // the board it was drawn on, not the emptier one it leaves behind.
+    const gremlinsOnBoard = Math.max(1, d.qixList.length);
+
+    // Find and claim the area without Qix
+    const claimResult = this.claimAreaWithoutQix();
+
+    // Points scale with the size of the section claimed (FAQ 2.4.1).
+    // There is no slow/fast draw in Super Qix (FAQ 2.5.3), so there is
+    // only one base rate. The multiplier is the rejoin bonus the engine
+    // has already worked out for this claim.
+    //
+    // Cutting the divided Gremlin apart used to pay a bonus of its own and
+    // to raise this multiplier permanently, which is neither what the
+    // arcade does - FAQ 2.2, on trapping half of a divided Gremlin: "I
+    // don't think this gets you any bonus points, unfortunately" - nor
+    // compatible with the multiplier meaning what FAQ 2.4.1 says it means.
+    const points = Math.floor(
+      claimResult.percent * DRAW_BASE_POINTS * d.scoreMultiplier * gremlinsOnBoard
+    );
+
+    // Gremlins this claim sealed in. Banked for the level's end rather than
+    // paid now: the tally belongs beside AREA and WORD on the BONUS panel.
+    d.gremlinsCaptured += claimResult.captured;
+
+    // The line just drawn stays on the board. The player cannot walk it
+    // once it is buried, but the Skulls can (FAQ 2.2).
+    d.internalLines.push(d.currentStix.points.map(p => ({ ...p })));
+
+    return {
+      success: true,
+      percent: claimResult.percent,
+      points,
+      filled: claimResult.filled
+    };
+  }
+
+  /**
+   * Claim the area that doesn't contain any Qix
+   */
+  private claimAreaWithoutQix(): { percent: number; filled: Point[]; captured: number } {
+    const d = this.data;
+    const filled: Point[] = [];
+
+    // Find all unclaimed regions
+    const regions = this.findUnclaimedRegions();
+
+    // Find Qix positions
+    const qixPositions = d.qixList.map(q => ({
+      x: Math.floor(q.x),
+      y: Math.floor(q.y)
+    }));
+
+    /**
+     * Which region counts as "Outside"?
+     *
+     * FAQ 2.1: "the area containing the Gremlin is always considered
+     * 'Outside' and the complementary area without the Gremlin is filled
+     * in". FAQ 2.2 settles the case of a divided Gremlin: cut between two
+     * copies and "'Outside' is considered to be the larger of the two areas
+     * and the Gremlin trapped in the smaller area will disappear when it
+     * fills in".
+     *
+     * Both are the same rule: Outside is the LARGEST region holding a
+     * Gremlin. Everything else is claimed, and any Gremlin caught in what
+     * gets claimed is gone.
+     */
+    let outside: Region | null = null;
+    for (const region of regions) {
+      const holdsQix = qixPositions.some(qp =>
+        region.points.some(rp => rp.x === qp.x && rp.y === qp.y)
+      );
+      if (!holdsQix) continue;
+      if (!outside || region.points.length > outside.points.length) {
+        outside = region;
+      }
+    }
+
+    let totalClaimed = 0;
+
+    for (const region of regions) {
+      if (region === outside) continue;
+
+      // Collected, not painted: the engine fills these in over a few
+      // frames so the sweep is visible (see QixEngine's pending fill).
+      for (const point of region.points) {
+        filled.push(point);
+      }
+      totalClaimed += region.points.length;
+    }
+
+    // A Gremlin sealed into ground that is being claimed disappears with it.
+    // It used to disappear silently; the count goes back to the caller now,
+    // because trapping one is a play worth paying for (see CAPTURE_POINTS).
+    let captured = 0;
+    if (outside) {
+      const claimedCells = new Set(filled.map(p => `${p.x},${p.y}`));
+      const survivors = d.qixList.filter(
+        q => !claimedCells.has(`${Math.floor(q.x)},${Math.floor(q.y)}`)
+      );
+      captured = d.qixList.length - survivors.length;
+      d.qixList = survivors;
+    }
+
+    // Calculate percentage of total field
+    const fieldArea = (FIELD_WIDTH - 2) * (FIELD_HEIGHT - 2);  // Exclude borders
+    const percent = (totalClaimed / fieldArea) * 100;
+
+    return { percent, filled, captured };
+  }
+
+  /**
+   * Find all unclaimed regions using flood fill
+   */
+  private findUnclaimedRegions(): Region[] {
+    const d = this.data;
+    const visited = new Set<string>();
+    const regions: Region[] = [];
+
+    for (let y = 1; y < FIELD_HEIGHT - 1; y++) {
+      for (let x = 1; x < FIELD_WIDTH - 1; x++) {
+        const key = `${x},${y}`;
+
+        if (d.field[y][x] === 'unclaimed' && !visited.has(key)) {
+          const region = this.floodFill(x, y, visited);
+          regions.push(region);
+        }
+      }
+    }
+
+    return regions;
+  }
+
+  /**
+   * Flood fill to find connected unclaimed area
+   */
+  private floodFill(startX: number, startY: number, visited: Set<string>): Region {
+    const d = this.data;
+    const points: Point[] = [];
+    const stack: Point[] = [{ x: startX, y: startY }];
+
+    while (stack.length > 0) {
+      const point = stack.pop()!;
+      const key = `${point.x},${point.y}`;
+
+      if (visited.has(key)) continue;
+      if (point.x < 1 || point.x >= FIELD_WIDTH - 1) continue;
+      if (point.y < 1 || point.y >= FIELD_HEIGHT - 1) continue;
+      if (d.field[point.y][point.x] !== 'unclaimed') continue;
+
+      visited.add(key);
+      points.push(point);
+
+      // Add neighbors
+      stack.push({ x: point.x - 1, y: point.y });
+      stack.push({ x: point.x + 1, y: point.y });
+      stack.push({ x: point.x, y: point.y - 1 });
+      stack.push({ x: point.x, y: point.y + 1 });
+    }
+
+    return {
+      points,
+      area: points.length
+    };
+  }
+
+  /**
+   * Count cells of a specific type
+   */
+  private countCells(type: CellState): number {
+    const d = this.data;
+    let count = 0;
+
+    for (let y = 1; y < FIELD_HEIGHT - 1; y++) {
+      for (let x = 1; x < FIELD_WIDTH - 1; x++) {
+        if (d.field[y][x] === type) {
+          count++;
+        }
+      }
+    }
+
+    return count;
+  }
+
+  /**
+   * Calculate total claimed percentage
+   */
+  calculateClaimedPercent(): number {
+    const d = this.data;
+    const fieldArea = (FIELD_WIDTH - 2) * (FIELD_HEIGHT - 2);
+    const claimed = this.countCells('claimed');
+    return (claimed / fieldArea) * 100;
+  }
+
+  /**
+   * Check if a point is on the safe area (border or claimed)
+   */
+  /**
+   * Does this claimed cell sit on the edge of claimed ground?
+   *
+   * "Edge" means it has at least one unclaimed neighbour, so it is part of
+   * the outline of a claimed region rather than buried inside it.
+   */
+  touchesUnclaimed(x: number, y: number): boolean {
+    const d = this.data;
+    const neighbours = [
+      { x: x - 1, y },
+      { x: x + 1, y },
+      { x, y: y - 1 },
+      { x, y: y + 1 },
+    ];
+
+    for (const n of neighbours) {
+      if (n.x < 0 || n.x >= FIELD_WIDTH || n.y < 0 || n.y >= FIELD_HEIGHT) continue;
+      if (d.field[n.y][n.x] === 'unclaimed') return true;
+    }
+
+    return false;
+  }
+
+  /**
+   * May the marker stand here when it is NOT drawing?
+   *
+   * FAQ 2.1: "the joystick moves your marker around the playing field, but
+   * only along either the border (if no area has been claimed in front of
+   * it) or the inside edges of any areas you have successfully marked off",
+   * and FAQ 1: "internal lines become inaccessible".
+   *
+   * So the outer frame is always walkable, and claimed ground is walkable
+   * only where it borders unclaimed area. Without the second half the player
+   * can wander around inside everything they have claimed, which is the
+   * "I can move freely" that was reported.
+   */
+  isWalkable(point: Point): boolean {
+    const d = this.data;
+
+    if (point.x < 0 || point.x >= FIELD_WIDTH || point.y < 0 || point.y >= FIELD_HEIGHT) {
+      return false;
+    }
+
+    const cell = d.field[point.y][point.x];
+    if (cell === 'border') return true;
+    if (cell !== 'claimed') return false;
+
+    return this.touchesUnclaimed(point.x, point.y);
+  }
+
+  isOnSafeArea(point: Point): boolean {
+    const d = this.data;
+
+    if (point.x < 0 || point.x >= FIELD_WIDTH || point.y < 0 || point.y >= FIELD_HEIGHT) {
+      return false;
+    }
+
+    const cell = d.field[point.y][point.x];
+    return cell === 'border' || cell === 'claimed';
+  }
+
+  /**
+   * Find the path from stix start to current position (for fuse)
+   */
+  getStixPath(): Point[] {
+    const d = this.data;
+    return d.currentStix ? [...d.currentStix.points] : [];
+  }
+
+  /**
+   * Get area that would be claimed if stix completed at given point
+   */
+  previewClaimArea(endPoint: Point): number {
+    // This could be used for UI preview
+    // For now, return 0
+    return 0;
+  }
+}

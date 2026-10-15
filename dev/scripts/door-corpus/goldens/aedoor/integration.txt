@@ -1,0 +1,415 @@
+
+
+========================================
+   AEDoor Template (vbcc compiled)
+========================================
+
+This door demonstrates:
+  - XIM protocol communication
+  - vbcc cross-compilation
+  - Message passing to AmiExpress
+
+Door completed successfully!
+
+
+                                                                             
+                                                                             
+                                                                             
+                                                                             
+                                                                             
+                                                                             
+                                                                             
+                                                                        
+
+                                                                           
+                                                                            
+                                                                             
+                                                                            
+                                                                               
+                                                                          
+                                                                     
+                                                                              
+                                                                     
+                                                                              
+
+                                                                            
+                                                                         
+                                                                       
+                                                                                
+
+                                 ___                                         
+                                                                             
+ ||                                                                          
+ |.                                                                          
+ |                                    o                                      
+                                                                             
+                                       ___                                   
+                                                                        
+
+   ] -   LOA                              AD                               
+   ] -   OW                               ILE                               
+ [Z                                          E F                             
+ [C                                           TO                            
+ [S                                          TTI                               
+                                                                          
+                                                                     
+                                                                           ION
+ [<                               -    T C                           
+ [S                              M]    N L                           TIO      
+
+                                                                            
+                                                                         
+                                                AD                     
+                                                ___                             
+
+                        ___      ___      _/\                                
+                        /                 //                                 
+ ||                           \__                                            
+ |.                                                                          
+ |                                    o                                      
+                                      /                                      
+                                    _/\___                                   
+                                                                        
+
+   ] -   LOA                              AD             Z]             OAD
+   ] -   OW                               ILE            ]              FLA 
+ [Z                                          E F                   CO        
+ [C                                           TO                   NE       
+ [S                                          TTI                   TX          
+                                                       [M               FF
+                                                       [G            
+                                                       [E               IPTION
+ [<] -                            - NEXT C             [R            
+ [SENT                           M] - ON L             [Q            TIO      
+
+            RCI                     SHE                              EDI    
+            CAL                     D-s                              ate 
+            DIR                     SYS         AD                   EW
+                                                ___                     ___     
+
+                        ___      ___   ____/\                                
+                        /              ___//                                 
+ ||                  __       \__       \/                                   
+ |.                   /                //                                    
+ |                   /                o/                                     
+                                /     /                                      
+                              ___   _/\___                                   
+                                                                        
+
+   ] -   LOAD F                           AD             Z]             OAD
+   ] -   OW NEW                           ILE            ]              FLA 
+ [Z                                          E F                   CONF STA  
+ [C                                           TO                   NEW MSG' 
+ [S                                          TTI                   TXT/LHA     
+   ] -                                                 [M               FF
+   ] -               E (                               [G            
+   ] -                                          NCE    [E               IPTION
+ [<] -                        [>] - NEXT C             [R            
+ [SENT                        [OLM] - ON L             [Q            TIO      
+
+            RCI                     SHE      ESS                     EDI    
+            CAL                     D-s      ted                     ate 
+            DIR                     SYS      NLOAD                   EW
+                                                ___            ___   _________  
+
+                        ___      ___   ____/\                        ___     
+                        /              ___//                                 
+ ||                  __       \__       \/                                   
+ |.                   /                //                                    
+ |                   /                o/                                     
+                                /     /           /      _||                 
+                     ___      ___   _/\___      _/_      /|_                 
+                       \                                                
+
+ [U] - UPLOAD F   (S)                     AD FIL         Z]             OAD
+ [N] - SHOW NEW   LES                     ILELIS         ]              FLA 
+ [Z                              ]-          E F               ULL CONF STA  
+ [C                               -           TO               EAD NEW MSG' 
+ [S                               -          TTI               IEW TXT/LHA     
+ [H] -                                                 [M   - C         FF
+ [T] -               E (                               [G   - L      
+ [?] -                                          NCE    [E   - E         IPTION
+ [<] -                        [>] - NEXT C      NCE    [R            
+ [SENT                        [OLM] - ON L      SSA    [Q            TIO      
+
+            RCI                     SHE      ESS         ] -         EDITIN 
+            CAL                     D-s      ted         ] -         ated
+            DIR                     SYS      NLOAD       S]-         EW
+                              ___               ___      ___   ___   _________  
+
+                        ______   ___   ____/\   _____                ___     
+                        /              ___//        _\                       
+ ||  _               __       \__       \/                                | |
+ |. /                 /                //                                 : |
+ | /                 /                o/                                S . |
+ :/                             /     /     /     /      _||                 
+ /_                  ___      ___   _/\______   _/_      /|_                 
+                       \                                                
+
+ [U] - UPLOAD F   (S)                     AD FIL         Z]             OAD
+ [N] - SHOW NEW   LES                     ILELIS         ]              FLA 
+ [Z      PPY                     ]-          E F               ULL CONF STA  
+ [C      AVE            P         -           TO               EAD NEW MSG' 
+ [S      OW                       -          TTI               IEW TXT/LHA     
+ [H] -   OW                         MEN                [M   - C         FF
+ [T] -   OW          E (            PAG                [G   - L      
+ [?] -   OW                         JOI         NCE    [E   - E         IPTION
+ [<] -                        [>] - NEXT C      NCE    [R      ELO   
+ [SENT                        [OLM] - ON L      SSA    [Q      - Q   TIO      
+
+         EXORCI                     SHE      ESS       [1] -         EDITIN 
+         EW CAL                     D-s      ted       [4] -         ated
+         EW DIR                     SYS      NLOAD     [VS]-         EW
+            ___               ___               ___      ___   _______________  
+
+                        ____________   ____/\   _____                ___     
+                        /     /        ___//        _\                       
+ ||  _               __       \____     \/    \/                          | |
+ |. /                 /           /    //     /                           : |
+ | /                 /           /    o/     /                          S . |
+ :/                             /     /     /     /      _||                |
+ /_                  ___      ___   _/\______   _/_      /|_               _|
+                       \                                                
+
+ [U] - UPLOAD FILE(S)                     AD FIL         Z]             OAD
+ [N] - SHOW NEW FILES                     ILELIS         ]              FLA 
+ [Z      PPY                     ]-          E F            - FULL CONF STA  
+ [C      AVE            P         -           TO            - READ NEW MSG' 
+ [S      OW                       -          TTI            - VIEW TXT/LHA     
+ [H] -   OW                         MEN                [M   - C   R ON/OFF
+ [T] -   OW          E (   )        PAG                [G   - L   OFF
+ [?] -   OW                         JOI         NCE    [E   - E    DESCRIPTION
+ [<] -      OUS               [>] - NEXT C      NCE    [R      ELO   
+ [SENT      TO                [OLM] - ON L      SSAGE  [Q      - Q   TIO      
+
+ [E      EXORCI                     SHELL    ESS       [1] - ACCOU   EDITING
+ [2      EW CAL                     D-sact   ted       [4] - D-sac   ated
+ [5      EW DIR                     SYSOP    NLOAD     [VS]- SYSOP   EW
+            ___               ___               ______   ___   _______________  
+
+ ._         ___         ____________   ____/\   _____                ___     
+ |S         ___         /     /        ___//        _\                       
+ ||  _               __       \____     \/.   \/           /              | |
+ |. /                 /           /    //     /         ____              : |
+ | /                 /           /    o/     /           /|.            S . |
+ :/                             /     /     /     /      _||                |
+ /_                  ___      ___   _/\______   _/_      /|_            ____|
+                       \                                                
+
+ [U] - UPLOAD FILE(S)         [D]         AD FIL         Z]             OAD
+ [N] - SHOW NEW FILES         [F]         ILELIS         ]              FLA 
+ [Z] -   PPY      H              ]-          E F            - FULL CONF STA  
+ [C] -   AVE      O S   P         -           TO            - READ NEW MSG' 
+ [S] -   OW                       -          TTI            - VIEW TXT/LHA     
+ [H] - SHOW                         MEN                [M   - COLOR ON/OFF
+ [T] - SHOW          E (   )        PAG                [G   - LOG OFF
+ [?] - SHOW                         JOI         NCE    [E   - EDIT DESCRIPTION
+ [<] - PR   OUS   NFE         [>] - NEXT C      NCE    [R      ELO   
+ [SENT] -   TO    N           [OLM] - ON L      SSAGE  [Q      - Q   TIONNA   
+
+ [E      EXORCI                     SHELL    ESS       [1] - ACCOUNT EDITING
+ [2      EW CAL                     D-sact   ted       [4] - D-sactivated
+ [5      EW DIR                     SYSOP    NLOAD     [VS]- SYSOP VIEW
+            ___               ___      ___      ______   ___   _______________  
+
+ ._    __   ___         ____________   ____/\________          ____ ________.
+ |S   /     ___         /     /        ___// \__    _\          _ /s      . |
+ ||  _               __       \____     \/.   \/           /              | |
+ |. /                 /           /    //     /         ____              : |
+ | /                 /           /    o/     /           /|.            S . |
+ :/                 /           /     /     /     /      _||                |
+ /_               ______      ___   _/\______   _/_      /|_            ____|
+                       \                                                
+
+ [U] - UPLOAD FILE(S)         [D]         AD FILE(S)     Z]    MOD      OAD
+ [N] - SHOW NEW FILES         [F]         ILELIST        ]     LTE      FLA 
+ [Z] -   PPY      H              ]-    FER   E F            - FULL CONF STA  
+ [C] -   AVE      O S   P         -    VE     TO            - READ NEW MSG' 
+ [S] -   OW                       -    NGE   TTI            - VIEW TXT/LHA     
+ [H] - SHOW HEL                     MEN                [M   - COLOR ON/OFF
+ [T] - SHOW LOC      E (   )        PAG                [G   - LOG OFF
+ [?] - SHOW MEN                     JOI         NCE    [E   - EDIT DESCRIPTION
+ [<] - PR   OUS   NFE         [>] - NEXT C      NCE    [R      ELO   
+ [SENT] -   TO    N           [OLM] - ON L      SSAGE  [Q      - Q   TIONNA   
+
+ [E      EXORCI                   - SHELL    ESS       [1] - ACCOUNT EDITING
+ [2      EW CAL                   - D-sact   ted       [4] - D-sactivated
+ [5      EW DIR                  ]- SYSOP    NLOAD     [VS]- SYSOP VIEW
+      ___   ___               ___   ______   _________   ___   _______________  
+
+ ._    __   ___   _/\   ____________   ____/\________          ____ ________.
+ |S   /     ___   /     /     /        ___// \__    _\          _ /s      . |
+ ||  _          \/   __       \____     \/.   \/           /              | |
+ |. /           /     /           /    //     /         ____              : |
+ | /           /     /           /    o/     /           /|.      OMM   S . |
+ :/                 /           /     /     /     /      _||          :.    |
+ /_               ______      ___   _/\______   _/_      /|_   ___   :::____|
+                       \                                              .Y
+
+ [U] - UPLOAD FILE(S)         [D]         AD FILE(S)   [RZ]    MOD      OAD
+ [N] - SHOW NEW FILES         [F]         ILELIST      [A]     LTE      FLAG
+ [Z] -   PPY SE   H              ]- CONFERENCE F         S] - FULL CONF STA  
+ [C] -   AVE MS   O S   P         - LEAVE MSG TO         ]  - READ NEW MSG' 
+ [S] -   OW STA                   - CHANGE SETTI         ]  - VIEW TXT/LHA     
+ [H] - SHOW HEL   AGE             - MEN                [M]  - COLOR ON/OFF
+ [T] - SHOW LOC   TIME (   )      - PAG                [G]  - LOG OFF
+ [?] - SHOW MEN                   - JOI         NCE    [ED] - EDIT DESCRIPTION
+ [<] - PR   OUS   NFE         [>] - NEXT C      NCE    [R      ELO   
+ [SENT] -   TO    N           [OLM] - ON L      SSAGE  [Q      - Q   TIONNA   
+
+ [E      EXORCI                   - SHELL    ESS       [1] - ACCOUNT EDITING
+ [2      EW CAL                   - D-sact   ted       [4] - D-sactivated
+ [5      EW DIR                  ]- SYSOP    NLOAD     [VS]- SYSOP VIEW
+   ______   ___            ______   ______   _________   ___   _______________  
+
+ .____ __   ___   _/\   ____________   ____/\________          ____ ________.
+ |Sk!n/     ___   /     /     /        ___// \__    _\          _ /s      . |
+ ||  _          \/   __       \____     \/.   \/           /              | |
+ |. /           /     /           /    //     /         _______           : |
+ | /           /     /           /    o/     /           /|.      OMM   S . |
+ :/     /           /           /     /     /     /      _||          :.    |
+ /_   ___         ______      ___   _/\______   _/_      /|_   ___   :::____|
+                       \                                              .Y
+
+ [U] - UPLOAD FILE(S)         [D]         AD FILE(S)   [RZ]    MOD      OAD
+ [N] - SHOW NEW FILES         [F]         ILELIST      [A]     LTE      FLAG
+ [Z] - ZIPPY SE   H           [CF]- CONFERENCE F       [FS] - FULL CONF STA  
+ [C] - LEAVE MS   O SYSOP     [E] - LEAVE MSG TO       [R]  - READ NEW MSG' 
+ [S] - SHOW STA               [W] - CHANGE SETTI       [V]  - VIEW TXT/LHA     
+ [H] - SHOW HEL   AGE             - MEN                [M]  - COLOR ON/OFF
+ [T] - SHOW LOC   TIME (   )      - PAG                [G]  - LOG OFF
+ [?] - SHOW MEN                   - JOI         NCE    [ED] - EDIT DESCRIPTION
+ [<] - PR   OUS   NFE         [>] - NEXT C      NCE    [R   - RELO   
+ [SENT] -   TO    N           [OLM] - ON L      SSAGE  [Q   T] - Q   TIONNAIRE
+
+ [E    - EXORCI                   - SHELL ACCESS       [1] - ACCOUNT EDITING
+ [2    VIEW CAL   SLO             - D-sactivated       [4] - D-sactivated
+ [5    VIEW DIR   ORY            ]- SYSOP DOWNLOAD     [VS]- SYSOP VIEW
+   ______   ______   ___   _______________   _________   ___   _______________  
+
+ .____ __   ___   _/\_______________   ____/\________       _______ ________.
+ |Sk!n/     ___   /     /     /        ___// \__    _\          _ /s      . |
+ ||  _   __     \/   __       \____     \/.   \/           /              | |
+ |. /     /     /     /           /    //     /         _______           : |
+ | /     /    //     /           /    o/     /           /|.      OMMANDS . |
+ :/     /           /           /     /     /     /      _||          :.    |
+ /_______      _________      ___   _/\______   _/_      /|_   ______:::____|
+                       \                                              .Y
+
+ [U] - UPLOAD FILE(S)         [D]   DOW   AD FILE(S)   [RZ]    MOD   UPLOAD
+ [N] - SHOW NEW FILES         [F]   SHO   ILELIST      [A]     LTE   ILEFLAG
+ [Z] - ZIPPY SEARCH           [CF]- CONFERENCE F       [FS] - FULL CONF STA  
+ [C] - LEAVE MSG TO SYSOP     [E] - LEAVE MSG TO       [R]  - READ NEW MSG' 
+ [S] - SHOW STATUS            [W] - CHANGE SETTI       [V]  - VIEW TXT/LHA     
+ [H] - SHOW HEL   AGE             - MEN                [M]  - COLOR ON/OFF
+ [T] - SHOW LOC   TIME (   )      - PAG                [G]  - LOG OFF
+ [?] - SHOW MEN                   - JOI         NCE    [ED] - EDIT DESCRIPTION
+ [<] - PR   OUS CONFEREN      [>] - NEXT C      NCE    [R   - RELO   
+ [SENT] -   TO SIGN           [OLM] - ON L      SSAGE  [Q   T] - Q   TIONNAIRE
+
+ [E    - EXORCI                   - SHELL ACCESS       [1] - ACCOUNT EDITING
+ [2    VIEW CAL   SLO             - D-sactivated       [4] - D-sactivated
+ [5    VIEW DIR   ORY            ]- SYSOP DOWNLOAD     [VS]- SYSOP VIEW
+   _____________________   _______________   _________   ___   _________________
+
+ .____ __   ___   _/\______________________/\________   ___________ ________.
+ |Sk!n/     ___   /     /     /     ______// \__    _\__\___    _ /s      . |
+ ||  _   __     \/_____       \____     \/.   \/    //     /    //        | |
+ |. /     /     /     /           /    //     /    o/   ________/         : |
+ | /     /    //     /           /    o/     /     /     /|.     COMMANDS . |
+ :/     /           /     /     /     /     /     /     /_||          :.    |
+ /_______      _________ /_   ___   _/\______   _/_   __ /|_   ______:::____|
+                       \/                              \/             .Y
+
+ [U] - UPLOAD FILE(S)         [D] - DOW   AD FILE(S)   [RZ]    MOD   UPLOAD
+ [N] - SHOW NEW FILES         [F] - SHO   ILELIST      [A]     LTE   ILEFLAG
+ [Z] - ZIPPY SEARCH           [CF]- CONFERENCE F   S   [FS] - FULL CONF STA  
+ [C] - LEAVE MSG TO SYSOP     [E] - LEAVE MSG TO   ER  [R]  - READ NEW MSG' 
+ [S] - SHOW STATUS            [W] - CHANGE SETTI       [V]  - VIEW TXT/LHA     
+ [H] - SHOW HELP PAGE             - MEN                [M]  - COLOR ON/OFF
+ [T] - SHOW LOCAL TIME (   )      - PAG                [G]  - LOG OFF
+ [?] - SHOW MENU                  - JOI         NCE    [ED] - EDIT DESCRIPTION
+ [<] - PR   OUS CONFEREN      [>] - NEXT C      NCE    [R   - RELO   
+ [SENT] -   TO SIGN           [OLM] - ON L      SSAGE  [Q   T] - Q   TIONNAIRE
+
+ [EX!] - EXORCI                   - SHELL ACCESS       [1] - ACCOUNT EDITING
+ [2] - VIEW CAL   SLO             - D-sactivated       [4] - D-sactivated
+ [5] - VIEW DIR   ORY            ]- SYSOP DOWNLOAD     [VS]- SYSOP VIEW
+________________________   _______________   _________   ___   _________________
+
+ .____ ____________/\______________________/\________   ___________ ________.
+ |Sk!n/     ______/     /     /     ______// \__    _\__\___    _ /s      . |
+ ||  _\____     \/_____       \____     \/.   \/    //     /    //        | |
+ |. /     /     /     /           /    //     /    o/   ________/         : |
+ | /     /    //     /           /    o/     /     /     /|.     COMMANDS . |
+ :/     /    ./     /     /     /     /     /     /     /_||          :.    |
+ /_______   _/__________ /___________/\__________/______ /|_   ______:::____|
+                       \/                              \/             .Y
+
+ [U] - UPLOAD FILE(S)         [D] - DOW   AD FILE(S)   [RZ]    MOD   UPLOAD
+ [N] - SHOW NEW FILES         [F] - SHO   ILELIST      [A]     LTE   ILEFLAG
+ [Z] - ZIPPY SEARCH           [CF]- CONFERENCE FLAGS   [FS] - FULL CONF STATS
+ [C] - LEAVE MSG TO SYSOP     [E] - LEAVE MSG TO USER  [R]  - READ NEW MSG'S
+ [S] - SHOW STATUS            [W] - CHANGE SETTINGS    [V]  - VIEW TXT/LHA FIL 
+ [H] - SHOW HELP PAGE         [X] - MEN   N/O          [M]  - COLOR ON/OFF
+ [T] - SHOW LOCAL TIME (   )  [O] - PAG   YSO          [G]  - LOG OFF
+ [?] - SHOW MENU              [J] - JOI   ONF   NCE    [ED] - EDIT DESCRIPTION
+ [<] - PR   OUS CONFEREN      [>] - NEXT C   ERENCE    [R   - RELOGON
+ [SENT] -   TO SIGN           [OLM] - ON L    MESSAGE  [Q   T] - QUESTIONNAIRE
+
+ [EX!] - EXORCI                   - SHELL ACCESS       [1] - ACCOUNT EDITING
+ [2] - VIEW CAL   SLO             - D-sactivated       [4] - D-sactivated
+ [5] - VIEW DIR   ORY            ]- SYSOP DOWNLOAD     [VS]- SYSOP VIEW
+________________________   _________________________________   _________________
+
+ .____ ____________/\______________________/\________   ___________ ________.
+ |Sk!n/     ______/     /     /     ______// \__    _\__\___    _ /s      . |
+ ||  _\____     \/_____       \____     \/.   \/    //     /    //        | |
+ |. /     /     /     /           /    //     /    o/   ________/         : |
+ | /     /    //     /           /    o/     /     /     /|.     COMMANDS . |
+ :/     /    ./     /     /     /     /     /     /     /_||          :.    |
+ /_______   _/__________ /___________/\__________/______ /|__________:::____|
+                       \/                              \/             .Y
+
+ [U] - UPLOAD FILE(S)         [D] - DOWNLOAD FILE(S)   [RZ]    MODEM UPLOAD
+ [N] - SHOW NEW FILES         [F] - SHOW FILELIST      [A]     LTER FILEFLAG
+ [Z] - ZIPPY SEARCH           [CF]- CONFERENCE FLAGS   [FS] - FULL CONF STATS
+ [C] - LEAVE MSG TO SYSOP     [E] - LEAVE MSG TO USER  [R]  - READ NEW MSG'S
+ [S] - SHOW STATUS            [W] - CHANGE SETTINGS    [V]  - VIEW TXT/LHA FILE
+ [H] - SHOW HELP PAGE         [X] - MENU ON/OFF        [M]  - COLOR ON/OFF
+ [T] - SHOW LOCAL TIME (   )  [O] - PAGE SYSOP         [G]  - LOG OFF
+ [?] - SHOW MENU              [J] - JOIN CONFERENCE    [ED] - EDIT DESCRIPTION
+ [<] - PREVIOUS CONFEREN      [>] - NEXT CONFERENCE    [RL] - RELOGON
+ [SENT] - AUTO SIGN           [OLM] - ON LINE MESSAGE  [QUEST] - QUESTIONNAIRE
+
+ [EX!] - EXORCIST             [0] - SHELL ACCESS       [1] - ACCOUNT EDITING
+ [2] - VIEW CALLERSLOG        [3] - D-sactivated       [4] - D-sactivated
+ [5] - VIEW DIRECTORY         [DS]- SYSOP DOWNLOAD     [VS]- SYSOP VIEW
+________________________________________________________________________________
+
+ .____ ____________/\______________________/\________   ___________ ________.
+ |Sk!n/     ______/     /     /     ______// \__    _\__\___    _ /s      . |
+ ||  _\____     \/_____     ./\____     \/.   \/    //     /    //        | |
+ |. /     /     /     /    //     /    //     /    o/   ________/         : |
+ | /     /    //     /     /     /    o/     /     /     /|.     COMMANDS . |
+ :/     /    ./     /     /     /     /     /     /     /_||          :.    |
+ /___________/__________ /___________/\__________/______ /|__________:::____|
+                       \/                              \/             .Y
+
+ [U] - UPLOAD FILE(S)         [D] - DOWNLOAD FILE(S)   [RZ] - ZMODEM UPLOAD
+ [N] - SHOW NEW FILES         [F] - SHOW FILELIST      [A]  - ALTER FILEFLAG
+ [Z] - ZIPPY SEARCH           [CF]- CONFERENCE FLAGS   [FS] - FULL CONF STATS
+ [C] - LEAVE MSG TO SYSOP     [E] - LEAVE MSG TO USER  [R]  - READ NEW MSG'S
+ [S] - SHOW STATUS            [W] - CHANGE SETTINGS    [V]  - VIEW TXT/LHA FILE
+ [H] - SHOW HELP PAGE         [X] - MENU ON/OFF        [M]  - COLOR ON/OFF
+ [T] - SHOW LOCAL TIME (CET)  [O] - PAGE SYSOP         [G]  - LOG OFF
+ [?] - SHOW MENU              [J] - JOIN CONFERENCE    [ED] - EDIT DESCRIPTION
+ [<] - PREVIOUS CONFERENCE    [>] - NEXT CONFERENCE    [RL] - RELOGON
+ [SENT] - AUTO SIGN           [OLM] - ON LINE MESSAGE  [QUEST] - QUESTIONNAIRE
+
+ [EX!] - EXORCIST             [0] - SHELL ACCESS       [1] - ACCOUNT EDITING
+ [2] - VIEW CALLERSLOG        [3] - D-sactivated       [4] - D-sactivated
+ [5] - VIEW DIRECTORY         [DS]- SYSOP DOWNLOAD     [VS]- SYSOP VIEW
+________________________________________________________________________________
+
+AmiExpress Web BBS [0:General] Menu (NaN mins. left): 

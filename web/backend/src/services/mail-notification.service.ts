@@ -1,0 +1,505 @@
+/**
+ * Mail Notification Service
+ * 1:1 port from AmiExpress express.e:6689-6745, 24196-24201, 29155-29172
+ *
+ * Handles MAIL_ON_* email notifications to sysop
+ * Config from bbsConfig.info tooltypes:
+ *   SMTP_HOST, SMTP_PORT, SMTP_USERNAME, SMTP_PASSWORD, SMTP_SSL
+ *   SYSOP_EMAIL, BBS_EMAIL
+ *   MAIL_ON_UPLOAD, MAIL_ON_SYSOP_COMMENT, MAIL_ON_LOGON, MAIL_ON_NEW_USER,
+ *   MAIL_ON_LOGOFF, MAIL_ON_SYSOP_PAGE, MAIL_ON_PWD_FAIL
+ */
+
+import nodemailer from 'nodemailer';
+import { db } from '../database';
+import { loadBBSConfig } from './bbs-config-file.service';
+import { config as appConfig } from '../config';
+import { getSystemTime } from '../utils/date-time.util';
+import { substituteUnmappable } from '../utils/wire-encoding.util';
+
+/**
+ * Is this connection implicit TLS?
+ *
+ * The two standard mail ports each answer this themselves, and the flag can
+ * only decide the ones that do not.
+ *
+ * Port 465 is SMTPS: the server expects TLS from the first byte and never
+ * sends a plaintext greeting. Connecting without `secure` there does not
+ * fail - it HANGS, waiting for a banner that will not come, until
+ * nodemailer's greeting timeout. That is the "SMTP test just spins" report:
+ * gmail on 465 with the SSL box unticked.
+ *
+ * Port 587 is submission (RFC 6409), the mirror image: the server greets in
+ * plaintext and upgrades on STARTTLS, so `secure` there aborts on the
+ * greeting. Measured against gmail from the board's own host -
+ *   openssl s_client -connect smtp.gmail.com:587
+ *     -> ssl3_get_record:wrong version number
+ *   openssl s_client -connect smtp.gmail.com:587 -starttls smtp
+ *     -> Verification: OK, 250 SMTPUTF8
+ * That is why uptown never sent a notification: SMTP_PORT=587 with SMTP_SSL
+ * ticked built every transport `secure: true`, and both send paths died in
+ * the handshake - the sysop-facing one with a message, the MAIL_ON_* one
+ * into the log.
+ *
+ * express.e:31814 reads SMTP_SSL as a flag, so the sysop's setting is still
+ * honoured wherever it is the only thing that can decide.
+ */
+export function usesImplicitTls(port: number, sslFlag: boolean): boolean {
+  if (port === 465) return true;
+  if (port === 587) return false;
+  return sslFlag;
+}
+
+/**
+ * How long to wait before calling it a failure.
+ *
+ * nodemailer's defaults are a 2-minute connection timeout and a 10-minute
+ * socket timeout. On a misconfigured port that is indistinguishable from a
+ * hang, and the admin's spinner has nothing to tell the sysop. Ten seconds is
+ * long enough for a real relay and short enough to be an answer.
+ */
+const SMTP_TIMEOUTS = {
+  connectionTimeout: 10_000,
+  greetingTimeout: 10_000,
+  socketTimeout: 20_000,
+} as const;
+
+/**
+ * The transport both callers open.
+ *
+ * The mailer and the admin's "Test SMTP Connection" have to reach the relay
+ * the same way, or the test answers a question nobody asked. They were two
+ * byte-identical literals; the timeouts had already been added to one and
+ * then to the other.
+ *
+ * `requireTLS` on 587: with implicit TLS off, nodemailer will fall back to a
+ * plaintext session if the server does not advertise STARTTLS, and AUTH would
+ * carry the sysop's credentials in the clear. Submission mandates the
+ * upgrade (RFC 6409), so a relay that will not do it is a failure, not a
+ * downgrade. Ports 465 (already encrypted) and 25 (relays that may have no
+ * TLS at all) are left as they were.
+ *
+ * Exported so the transport can be asserted directly: `secure` and
+ * `requireTLS` are decided here and are not visible through any send.
+ */
+export function buildTransportConfig(options: MailOptions): nodemailer.TransportOptions {
+  return {
+    host: options.smtpHost,
+    port: options.smtpPort,
+    secure: usesImplicitTls(options.smtpPort, options.ssl),
+    requireTLS: options.smtpPort === 587,
+    ...SMTP_TIMEOUTS,
+    auth: options.username ? {
+      user: options.username,
+      pass: options.password
+    } : undefined
+  } as nodemailer.TransportOptions;
+}
+
+
+export interface MailOptions {
+  smtpHost: string;
+  smtpPort: number;
+  username?: string;
+  password?: string;
+  ssl: boolean;
+  sysopEmail: string;
+  bbsEmail: string;
+}
+
+export type MailEvent =
+  | 'UPLOAD'
+  | 'SYSOP_COMMENT'
+  | 'LOGON'
+  | 'NEW_USER'
+  | 'LOGOFF'
+  | 'SYSOP_PAGE'
+  | 'PWD_FAIL';
+
+// Cache mail options to avoid repeated DB lookups
+let cachedMailOptions: MailOptions | null = null;
+let cachedMailOnFlags: Map<MailEvent, boolean> = new Map();
+let cacheTime = 0;
+const CACHE_TTL = 60000; // 1 minute
+
+/**
+ * Check if SMTP is configured (for password reset availability check)
+ */
+export async function isSmtpConfigured(): Promise<boolean> {
+  const options = await getMailOptions();
+  return options !== null && !!options.smtpHost;
+}
+
+/**
+ * Get mail configuration from database
+ * express.e:31807-31815 - Read mail tooltypes
+ */
+/**
+ * The board's configuration, from the file the BBS reads.
+ *
+ * This service used to ask the database. The admin writes everything that is
+ * not a secret to bbsConfig.info, so the SMTP host it showed and the SMTP
+ * host this read were two different values - the page said smtp.gmail.com
+ * and "Test SMTP Connection" answered "SMTP server not configured". Mail had
+ * never worked, and the MAIL_ON_* flags were read from the same wrong place.
+ *
+ * Disk first, with the database consulted only for the encrypted secrets it
+ * genuinely holds.
+ */
+function readConfig(): Record<string, unknown> {
+  const disk = loadBBSConfig(appConfig.get('dataDir')) as Record<string, unknown>;
+
+  let secrets: Record<string, unknown> = {};
+  try {
+    // config-source-ok: only for the encrypted SMTP credentials, which are
+    // the values bbsConfig.info does not hold in usable form.
+    secrets = (db.getConfigRepository().getSystemConfig() ?? {}) as Record<string, unknown>;
+  } catch {
+    // A board with no database row still has its configuration on disk.
+  }
+
+  // The credentials are what the disk does not hold in usable form. Both are
+  // in SENSITIVE_FIELDS, so both go to the encrypted database and both are
+  // stripped from bbsConfig.info - merging only the password left SMTP
+  // authenticating with an empty username.
+  const merged = { ...disk } as Record<string, unknown>;
+  if (secrets.smtp_password) merged.smtp_password = secrets.smtp_password;
+  if (secrets.smtp_username) merged.smtp_username = secrets.smtp_username;
+  return merged;
+}
+
+/**
+ * The SMTP settings, disk first and secrets from the encrypted store.
+ *
+ * Exported so the credential merge can be tested directly: whether the
+ * username reaches nodemailer is not visible through isSmtpConfigured(), and
+ * that is exactly the value that was being lost.
+ */
+export async function getMailOptions(): Promise<MailOptions | null> {
+  const now = Date.now();
+  if (cachedMailOptions && (now - cacheTime) < CACHE_TTL) {
+    return cachedMailOptions;
+  }
+
+  try {
+    const sysConfig = readConfig() as any;
+
+    if (!sysConfig?.smtp_server) {
+      cachedMailOptions = null;
+      return null;
+    }
+
+    cachedMailOptions = {
+      smtpHost: sysConfig.smtp_server,
+      smtpPort: sysConfig.smtp_port || 25,
+      username: sysConfig.smtp_username,
+      password: sysConfig.smtp_password,
+      ssl: sysConfig.smtp_ssl || false,
+      sysopEmail: sysConfig.sysop_email || '',
+      bbsEmail: sysConfig.bbs_email || sysConfig.smtp_from_email || ''
+    };
+
+    cacheTime = now;
+    return cachedMailOptions;
+  } catch (error) {
+console.error('[MailService] Error getting mail options:', error);
+    return null;
+  }
+}
+
+/**
+ * Check if MAIL_ON_* event is enabled
+ * express.e:6694, 6705, 6716, 6728, 6739, 24197, 29155
+ */
+export async function isMailEventEnabled(event: MailEvent): Promise<boolean> {
+  const now = Date.now();
+  if ((now - cacheTime) < CACHE_TTL && cachedMailOnFlags.has(event)) {
+    return cachedMailOnFlags.get(event) || false;
+  }
+
+  try {
+    const tooltypeKey = `mail_on_${event.toLowerCase()}`;
+
+    const sysConfig = readConfig();
+    // Check for mail_on_* config key (stored as boolean, string 'true', or integer 1)
+    const value = (sysConfig as any)?.[tooltypeKey];
+    const enabled = value === true || value === 'true' || value === 1;
+
+    cachedMailOnFlags.set(event, enabled);
+    cacheTime = Date.now(); // Update cache time
+    return enabled;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Get BBS name for email subjects
+ */
+export async function getBbsName(): Promise<string> {
+  try {
+    const sysConfig = readConfig() as { bbs_name?: string };
+    return sysConfig?.bbs_name || 'AmiExpress BBS';
+  } catch {
+    return 'AmiExpress BBS';
+  }
+}
+
+/**
+ * Send email using configured SMTP
+ * express.e mailssl.e - sendMail()
+ *
+ * Throws on failure; sendMail() below keeps the MAIL_ON_* wrappers' "log and
+ * go on" contract, sendMailTo() hands the failure to a caller that retries.
+ */
+async function deliverMail(
+  to: string,
+  subject: string,
+  body: string,
+  options: MailOptions,
+  headers?: Record<string, string>
+): Promise<void> {
+  const transporter = nodemailer.createTransport(buildTransportConfig(options));
+
+  await transporter.sendMail({
+    from: options.bbsEmail || `noreply@${options.smtpHost}`,
+    to,
+    subject,
+    text: body,
+    ...(headers ? { headers } : {})
+  });
+
+  console.log(`[MailService] Email sent to ${to}: ${subject}`);
+}
+
+async function sendMail(
+  to: string,
+  subject: string,
+  body: string,
+  options: MailOptions
+): Promise<boolean> {
+  try {
+    await deliverMail(to, subject, body, options);
+    return true;
+  } catch (error: any) {
+    console.error(`[MailService] Failed to send email: ${error.message}`);
+    return false;
+  }
+}
+
+export type SendMailResult = { ok: true } | { ok: false; error: string };
+
+/** Characters Latin-1 cannot hold become their ASCII forms, then '?'; line breaks in header values are removed. */
+function latin1Safe(text: string): string {
+  const mapped = substituteUnmappable(text, 'iso-8859-1');
+  let out = '';
+  for (const ch of mapped) out += (ch.codePointAt(0) ?? 0) <= 0xff ? ch : '?';
+  return out;
+}
+
+/**
+ * Send one plain-text email to any address through the board's SMTP.
+ *
+ * The notification senders (verification codes, NOTIFY email) use this; the
+ * MAIL_ON_* wrappers stay sysop-only. Unlike them it REPORTS failure, because
+ * the dispatcher backs off and retries on one. `headers` is for the
+ * List-Unsubscribe pair (RFC 8058).
+ */
+export async function sendMailTo(
+  to: string,
+  subject: string,
+  text: string,
+  headers?: Record<string, string>
+): Promise<SendMailResult> {
+  const options = await getMailOptions();
+  if (!options?.smtpHost) return { ok: false, error: 'SMTP is not configured' };
+  const safeHeaders: Record<string, string> = {};
+  for (const [k, v] of Object.entries(headers ?? {})) safeHeaders[k] = latin1Safe(v).replace(/[\r\n]+/g, ' ');
+  try {
+    await deliverMail(to, latin1Safe(subject).replace(/[\r\n]+/g, ' '), latin1Safe(text), options, safeHeaders);
+    return { ok: true };
+  } catch (error: any) {
+    return { ok: false, error: String(error?.message ?? error) };
+  }
+}
+
+/**
+ * MAIL_ON_UPLOAD - express.e:6693-6698
+ * Send upload notification to sysop
+ */
+export async function mailOnUpload(username: string, location: string): Promise<void> {
+  if (!await isMailEventEnabled('UPLOAD')) return;
+
+  const options = await getMailOptions();
+  if (!options?.sysopEmail) return;
+
+  const bbsName = await getBbsName();
+  const subject = `${bbsName}: Ami-Express upload notification`;
+  const body = `This is a notification that ${username} from ${location} has uploaded\n\n`;
+
+  await sendMail(options.sysopEmail, subject, body, options);
+}
+
+/**
+ * MAIL_ON_SYSOP_COMMENT - express.e:6705-6709
+ * Send sysop message notification
+ */
+export async function mailOnSysopComment(
+  fromName: string,
+  subject: string,
+  messageBody?: string
+): Promise<void> {
+  if (!await isMailEventEnabled('SYSOP_COMMENT')) return;
+
+  const options = await getMailOptions();
+  if (!options?.sysopEmail) return;
+
+  const bbsName = await getBbsName();
+  const emailSubject = `${bbsName}: Ami-Express sysop message notification`;
+  let body = `This is a notification that ${fromName} has sent you a message.\n\nSubject: ${subject}\n\n`;
+
+  if (messageBody) {
+    body += messageBody;
+  }
+
+  await sendMail(options.sysopEmail, emailSubject, body, options);
+}
+
+/**
+ * MAIL_ON_LOGON - express.e:6716-6720
+ * Send logon notification to sysop
+ */
+export async function mailOnLogon(username: string, location: string): Promise<void> {
+  if (!await isMailEventEnabled('LOGON')) return;
+
+  const options = await getMailOptions();
+  if (!options?.sysopEmail) return;
+
+  const bbsName = await getBbsName();
+  const subject = `${bbsName}: Ami-Express logon notification`;
+  const body = `This is a notification that ${username} from ${location} has logged on\n\n`;
+
+  await sendMail(options.sysopEmail, subject, body, options);
+}
+
+/**
+ * MAIL_ON_NEW_USER - express.e:6728-6732
+ * Send new user notification to sysop
+ */
+export async function mailOnNewUser(username: string, location: string): Promise<void> {
+  if (!await isMailEventEnabled('NEW_USER')) return;
+
+  const options = await getMailOptions();
+  if (!options?.sysopEmail) return;
+
+  const bbsName = await getBbsName();
+  const subject = `${bbsName}: Ami-Express new user notification`;
+  const body = `This is a notification that a new user called ${username} from ${location} has registered.`;
+
+  await sendMail(options.sysopEmail, subject, body, options);
+}
+
+/**
+ * MAIL_ON_LOGOFF - express.e:6739-6743
+ * Send logoff notification to sysop
+ */
+export async function mailOnLogoff(username: string, location: string): Promise<void> {
+  if (!await isMailEventEnabled('LOGOFF')) return;
+
+  const options = await getMailOptions();
+  if (!options?.sysopEmail) return;
+
+  const bbsName = await getBbsName();
+  const subject = `${bbsName}: Ami-Express logoff notification`;
+  const body = `This is a notification that ${username} from ${location} has logged off\n\n`;
+
+  await sendMail(options.sysopEmail, subject, body, options);
+}
+
+/**
+ * MAIL_ON_SYSOP_PAGE - express.e:24197-24201
+ * Send page notification to sysop
+ */
+export async function mailOnSysopPage(username: string): Promise<void> {
+  if (!await isMailEventEnabled('SYSOP_PAGE')) return;
+
+  const options = await getMailOptions();
+  if (!options?.sysopEmail) return;
+
+  const bbsName = await getBbsName();
+  const subject = `${bbsName}: Ami-Express page notification`;
+  const body = `This is a notification that you were paged by ${username}.`;
+
+  await sendMail(options.sysopEmail, subject, body, options);
+}
+
+/**
+ * MAIL_ON_PWD_FAIL - express.e:29155-29172
+ * Send password reset code to user's email
+ * This is different from other MAIL_ON_* - sends to USER, not sysop
+ */
+export async function mailOnPwdFail(
+  userEmail: string,
+  resetCode: string
+): Promise<boolean> {
+  if (!await isMailEventEnabled('PWD_FAIL')) return false;
+
+  const options = await getMailOptions();
+  if (!options?.smtpHost) return false;
+
+  const bbsName = await getBbsName();
+  const subject = `${bbsName}: Ami-Express password failure notification`;
+  const body = `You have forgotten your password and requested a reset code. If you did not request the reset code then please ignore this email
+
+The reset code is : ${resetCode}
+
+You can use this code to reset your password and gain access to the system
+`;
+
+  return await sendMail(userEmail, subject, body, options);
+}
+
+/**
+ * Clear cached mail options (call when config changes)
+ */
+export function clearMailCache(): void {
+  cachedMailOptions = null;
+  cachedMailOnFlags.clear();
+  cacheTime = 0;
+}
+
+/**
+ * Test SMTP connection by sending a test email to sysop
+ * Returns success/failure status with error details
+ */
+export async function testSmtpConnection(): Promise<{ success: boolean; error?: string }> {
+  try {
+    const options = await getMailOptions();
+    if (!options?.smtpHost) {
+      return { success: false, error: 'SMTP server not configured' };
+    }
+    if (!options.sysopEmail) {
+      return { success: false, error: 'Sysop email not configured' };
+    }
+    const transporter = nodemailer.createTransport(buildTransportConfig(options));
+
+    // First verify the connection
+    await transporter.verify();
+
+    // Then send a test email
+    const bbsName = await getBbsName();
+    const now = getSystemTime().toLocaleString();
+    await transporter.sendMail({
+      from: options.bbsEmail || `noreply@${options.smtpHost}`,
+      to: options.sysopEmail,
+      subject: `${bbsName}: SMTP Test`,
+      text: `This is a test email from your AmiExpress BBS SMTP configuration.\n\nSent at: ${now}\n\nIf you received this email, your SMTP settings are working correctly.`
+    });
+
+console.log(`[MailService] SMTP test successful - email sent to ${options.sysopEmail}`);
+    return { success: true };
+  } catch (error: any) {
+console.error(`[MailService] SMTP test failed: ${error.message}`);
+    return { success: false, error: error.message };
+  }
+}

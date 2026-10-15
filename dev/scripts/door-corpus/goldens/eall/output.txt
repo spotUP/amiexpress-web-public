@@ -1,0 +1,10 @@
+
+         EALLs for the MASSES v2.01 - by [DELTAFORCE/DLM/X-pression]
+
+registration: Tokata
+
+ checking user athorization...................access granted!
+
+ sorry, this tool isn't available for disabled users at the moment!
+
+[68K] E exited with ERROR

@@ -1,0 +1,208 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.wrapText = wrapText;
+exports.wrapToInfoPane = wrapToInfoPane;
+exports.clampSelection = clampSelection;
+exports.repoViewCurationAllowed = repoViewCurationAllowed;
+exports.repoViewFooterParts = repoViewFooterParts;
+exports.entryHasDoc = entryHasDoc;
+exports.renderFileLines = renderFileLines;
+exports.formatSuggestedTooltypes = formatSuggestedTooltypes;
+exports.registerRepoViewActionKeys = registerRepoViewActionKeys;
+exports.repoTextBlock = repoTextBlock;
+const door_theme_1 = require("./door-theme");
+const ViewManager_1 = require("./ViewManager");
+/**
+ * Wraps text to the info pane's real width, breaking on spaces.
+ *
+ * Messages used to carry their own line breaks at a guessed width, which
+ * re-broke mid-word whenever the pane was narrower than the guess - the
+ * live BBS showed "fi les" and "thi s platform". Only the pane knows how
+ * wide it is.
+ */
+function wrapText(text, width) {
+    const safeWidth = Math.max(8, Math.floor(width));
+    const out = [];
+    for (const paragraph of text.split('\n')) {
+        let line = '';
+        for (const word of paragraph.split(/\s+/).filter(Boolean)) {
+            if (!line.length) {
+                line = word;
+            }
+            else if (line.length + 1 + word.length <= safeWidth) {
+                line += ` ${word}`;
+            }
+            else {
+                out.push(line);
+                line = word;
+            }
+        }
+        out.push(line);
+    }
+    return out.join('\n');
+}
+function wrapToInfoPane(text, layout) {
+    // -4 for the panel border and the padding the info box already applies.
+    const width = (layout?.infoWidth ?? layout?.width ?? 60) - 4;
+    return wrapText(text, width);
+}
+function clampSelection(index, count) {
+    if (count <= 0)
+        return 0;
+    if (!Number.isFinite(index) || index < 0)
+        return 0;
+    return Math.min(Math.floor(index), count - 1);
+}
+function repoViewCurationAllowed(mode) {
+    return mode.kind !== 'consumer';
+}
+/** RepoView's per-entry footer hint string, gated by repo mode. Byte-
+ * identical to DOORMAN's pre-Task-8 string in owner mode (and disabled
+ * mode, which reads identically) -- only consumer mode differs, by omitting
+ * the Strip hint entirely rather than advertising a key that does nothing. */
+function repoViewFooterParts(mode, opts) {
+    const inst = opts.installed ? 'Uninst' : 'Inst';
+    const curationAllowed = repoViewCurationAllowed(mode);
+    // A 40-column footer (the C64/PETSCII tier) holds five hints at most, and
+    // the nine below run to about eighty characters. Archive, Filter, System
+    // and Strip lose their hint there - the keys still work; the row simply
+    // cannot name them without folding onto the list above it.
+    if (opts.narrow) {
+        const narrowParts = [
+            `{${door_theme_1.T.warn}-fg}R{/${door_theme_1.T.warn}-fg}=${inst}`,
+            opts.hasDoc ? `{${door_theme_1.T.warn}-fg}V{/${door_theme_1.T.warn}-fg}=Doc` : null,
+            curationAllowed ? `{${door_theme_1.T.warn}-fg}D{/${door_theme_1.T.warn}-fg}=Del` : null,
+            `{${door_theme_1.T.warn}-fg}ESC{/${door_theme_1.T.warn}-fg}=Back`,
+            `{${door_theme_1.T.warn}-fg}Q{/${door_theme_1.T.warn}-fg}=Quit`,
+        ].filter(Boolean).join(' ');
+        return `{center}${narrowParts}{/center}`;
+    }
+    // Every hint is "KEY=Label". It used to mix that with bare words whose
+    // active letter was marked only by a colour highlight ("Strip", "Archive",
+    // "Quit") - which is invisible on plenty of real terminals, and led to
+    // "it doesn't say anywhere that S is used to strip".
+    const parts = [
+        `{${door_theme_1.T.warn}-fg}R{/${door_theme_1.T.warn}-fg}=${inst}`,
+        (opts.hasJunk && curationAllowed) ? `{${door_theme_1.T.warn}-fg}S{/${door_theme_1.T.warn}-fg}=Strip` : null,
+        opts.hasDoc ? `{${door_theme_1.T.warn}-fg}V{/${door_theme_1.T.warn}-fg}=Doc` : null,
+        `{${door_theme_1.T.warn}-fg}A{/${door_theme_1.T.warn}-fg}=Archive`,
+        curationAllowed ? `{${door_theme_1.T.warn}-fg}D{/${door_theme_1.T.warn}-fg}=Delete` : null,
+        `{${door_theme_1.T.warn}-fg}F{/${door_theme_1.T.warn}-fg}=Filter`,
+        `{${door_theme_1.T.warn}-fg}C{/${door_theme_1.T.warn}-fg}=System`,
+        `{${door_theme_1.T.warn}-fg}ESC{/${door_theme_1.T.warn}-fg}=Back`,
+        `{${door_theme_1.T.warn}-fg}Q{/${door_theme_1.T.warn}-fg}=Quit`,
+    ].filter(Boolean).join('  ');
+    return `{center}${parts}{/center}`;
+}
+/**
+ * Whether [V]iew doc has anything to open for this entry.
+ *
+ * An owner's row carries the documentation itself (doc_raw). A consumer's
+ * row carries only the manifest's has_doc flag until something fetches the
+ * text - and reading doc_raw alone is what left the footer silent about
+ * [V] on every consumer row, months after the key started working.
+ */
+function entryHasDoc(entry) {
+    if (!entry)
+        return false;
+    return !!entry.doc_raw || entry.has_doc === true;
+}
+function isJunkRow(file) {
+    return file.isJunk === true || file.is_junk === 1 || file.is_junk === true;
+}
+/**
+ * The info pane's file-listing block, identical for both sources: the local
+ * catalog's door_catalog_files rows (owner mode) and the door server's
+ * detail rows (consumer mode). One renderer, so a consumer's listing cannot
+ * drift from an owner's.
+ *
+ * Returns '' for an empty list -- the pane simply shows nothing rather than
+ * an empty box, which is what it did when only the local source existed.
+ */
+function renderFileLines(files, limit = 25) {
+    if (files.length === 0)
+        return '';
+    const junk = files.filter(isJunkRow).length;
+    const junkTag = junk > 0 ? `  {${door_theme_1.T.alert}-fg}${junk} ad files{/${door_theme_1.T.alert}-fg}` : `  {${door_theme_1.T.ok}-fg}clean{/${door_theme_1.T.ok}-fg}`;
+    let out = `\n\n{${door_theme_1.T.dim}-fg}─── ${files.length} files${junkTag}{/${door_theme_1.T.dim}-fg}  {${door_theme_1.T.dim}-fg}──────────────────────{/${door_theme_1.T.dim}-fg}\n`;
+    for (const f of files.slice(0, limit)) {
+        const sz = f.size < 1024 ? `${f.size}b` : `${Math.round(f.size / 1024)}k`;
+        const junkMark = isJunkRow(f) ? `{${door_theme_1.T.alert}-fg}!{/${door_theme_1.T.alert}-fg}` : ' ';
+        const name = f.path.length > 34 ? '<' + f.path.slice(f.path.length - 33) : f.path;
+        out += `${junkMark} ${name.padEnd(34)} ${sz.padStart(5)}\n`;
+    }
+    if (files.length > limit)
+        out += `{${door_theme_1.T.dim}-fg}  ... and ${files.length - limit} more{/${door_theme_1.T.dim}-fg}\n`;
+    return out;
+}
+/**
+ * The catalog's suggested tooltypes, as readable NAME=value lines.
+ *
+ * Stored as a JSON object of tooltype name -> value, read out of whatever
+ * the scanner could find - an archive's own icon, or its documentation.
+ * Plenty of rows are partial or plainly wrong ("LOCATION":"<dir>-",
+ * "TYPE":"XIM."), which is why this is only ever SHOWN to the sysop: an
+ * installed door's .info comes from the archive's own icon, never from
+ * here.
+ *
+ * Anything that is not a JSON object is returned as its own single line, so
+ * a differently-shaped row still tells the sysop something instead of
+ * vanishing.
+ */
+function formatSuggestedTooltypes(raw) {
+    if (!raw)
+        return [];
+    const trimmed = raw.trim();
+    if (!trimmed)
+        return [];
+    let parsed;
+    try {
+        parsed = JSON.parse(trimmed);
+    }
+    catch {
+        return [trimmed];
+    }
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed))
+        return [trimmed];
+    return Object.entries(parsed).map(([key, value]) => `${key}=${value == null ? '' : String(value)}`);
+}
+/** Registers RepoView's per-entry action hotkeys (R/S/V/A/C), gated by repo
+ * mode: consumer mode omits the [S]trip binding entirely -- see
+ * repoViewCurationAllowed. Install/uninstall (R), view doc (V), browse
+ * archive contents (A), and the system-type filter (C) register in every
+ * mode. */
+function registerRepoViewActionKeys(keys, mode, handlers) {
+    keys.key(['r', 'R'], () => handlers.onInstallUninstall());
+    if (repoViewCurationAllowed(mode)) {
+        keys.key(['s', 'S'], () => handlers.onStrip());
+        // Deleting removes the archive from the repository permanently. A
+        // consumer browses somebody else's catalog, so the binding must not
+        // exist for them at all rather than be refused at the far end.
+        keys.key(['d', 'D'], () => handlers.onDelete());
+    }
+    keys.key(['v', 'V'], () => handlers.onViewDoc());
+    keys.key(['a', 'A'], () => handlers.onBrowseArchive());
+    keys.key(['c', 'C'], () => handlers.onCycleFilter());
+}
+/**
+ * A door's repo text for the info panel: its one-line description, then its
+ * FILE_ID.DIZ as authored below it.
+ *
+ * Both, not either: the description says what the door does in the repo's
+ * words, the FILE_ID is the author's own art and credits, and the panel used
+ * to drop the description whenever a FILE_ID existed ("make sure doorman and
+ * doorrepo display the descriptions and file_id's from the door repo", sysop
+ * 2026-09-29). Raw archive text is sanitized, or blessed reads the art as tags.
+ * Empty string when there is neither.
+ */
+function repoTextBlock(description, fileIdDiz) {
+    const desc = (description ?? '').trim();
+    const diz = (fileIdDiz ?? '').replace(/\s+$/, '');
+    let out = '';
+    if (desc)
+        out += `\n\n{${door_theme_1.T.ink}-fg}${(0, ViewManager_1.sanitizeForTags)(desc)}{/${door_theme_1.T.ink}-fg}`;
+    if (diz.trim())
+        out += '\n\n' + (0, ViewManager_1.sanitizeForTags)(diz);
+    return out;
+}
+//# sourceMappingURL=repo-view-helpers.js.map

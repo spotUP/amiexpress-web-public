@@ -1,0 +1,441 @@
+// User types
+export interface User {
+  id: number;
+  username: string;
+  email?: string;
+  secLevel: number;
+  created_at?: string;
+  realname?: string;
+  expert?: string;
+  ansi?: boolean;
+}
+
+// Authentication
+export interface LoginRequest {
+  username: string;
+  password: string;
+  rememberMe?: boolean;
+}
+
+export interface LoginResponse {
+  token: string;
+  user: User;
+}
+
+// Configuration types
+export interface SystemConfig {
+  id: number;
+
+  // Identity
+  bbs_name: string;
+  sysop_name: string;
+  /** REGKEY - the name VER prints: "Registered to <name>." */
+  reg_key: string;
+  location: string;
+  phone: string;
+  email: string;
+  website: string;
+
+  // Security & Authentication
+  min_password_length: number;
+  min_password_strength: number;
+  max_password_fails: number;
+  password_security: string;
+  strict_password_policy: boolean;
+  auto_validate: boolean;
+  confirm_deletions: boolean;
+
+  // Session Settings
+  default_time_limit: number; // -1 unlimited
+  max_session_time: number;   // -1 unlimited
+  idle_timeout: number;
+  web_resume_minutes: number;
+
+  // New User Defaults
+  new_user_sec_level: number;
+  new_user_time_limit: number;
+  new_user_chat_limit: number;
+  new_user_lines_per_screen: number;
+  new_user_expert: boolean;
+  new_user_ansi: boolean;
+  new_user_protocol: string;
+  new_user_screen_type: string;
+  new_user_editor: string;
+  new_user_conf_access: string;
+  new_user_available_chat: boolean;
+  new_user_quiet_node: boolean;
+  new_user_auto_rejoin: boolean;
+
+  // Display Settings
+  ansi_enabled: boolean;
+  /** How many colours the board's callers have: 16, or 8 for the Amiga's pens. */
+  terminal_colours: number;
+  color_scheme: string;
+  allow_custom_screens: boolean;
+
+  // Language
+  language_base: string;
+  default_language: string;
+
+  // Limits
+  max_conferences: number;
+  max_message_bases: number;
+  max_file_areas: number;
+  max_nodes: number;
+
+  // File Management
+  file_check_enabled: boolean;
+  upload_check_virus: boolean;
+  upload_check_dupe: boolean;
+
+  // Mail & SMTP Settings
+  allow_internet_email: boolean;
+  smtp_server: string;
+  smtp_port: number;
+  smtp_username: string;
+  smtp_password: string;
+  achievements_server_url?: string;
+  achievements_board_key?: string;
+  achievements_disabled?: boolean;
+  smtp_ssl: boolean;
+  smtp_from_email: string;
+  sysop_email: string;
+  bbs_email: string;
+
+  // FTP Server Settings
+  ftp_enabled: boolean;
+  ftp_host: string;
+  ftp_port: number;
+  ftp_data_ports: string;
+
+  // HTTP Server Settings
+  http_enabled: boolean;
+  http_host: string;
+  http_port: number;
+
+  // BBS Server Ports
+  telnet_port: number;
+  ssh_port: number;
+
+  // System Behavior
+  quiet_join: boolean;
+  convert_to_mb: boolean;
+
+
+  // Logging
+  debug_mode: boolean;
+  log_level: string;
+  log_retention_days: number;
+  sysop_debug_enabled: boolean;
+
+  // Mail Notifications (MAIL_ON_* flags)
+  mail_on_upload: boolean;
+  mail_on_sysop_comment: boolean;
+  mail_on_logon: boolean;
+  mail_on_new_user: boolean;
+  mail_on_logoff: boolean;
+  mail_on_sysop_page: boolean;
+  mail_on_pwd_fail: boolean;
+
+  // Auto-Validation Settings
+  autoval_delay: number;
+  autoval_preset: string;
+  autoval_password: string;
+
+  // Password Expiry
+  password_expiry_days: number;
+
+  // User Management
+  auto_deactivate_days: number;
+
+  // File Management (additional)
+  filediz_syscmd: string;
+  max_desclines: number;
+  // EXECUTE_ON_* / EXECUTE_ASYNC_ON_* hooks (express.e:6666-6744).
+  execute_on_logon?: string;
+  execute_async_on_logon?: string;
+  execute_on_logoff?: string;
+  execute_async_on_logoff?: string;
+  execute_on_new_user?: string;
+  execute_async_on_new_user?: string;
+  execute_on_upload?: string;
+  execute_async_on_upload?: string;
+  execute_on_connect?: string;
+  execute_async_on_connect?: string;
+  execute_on_status_change?: string;
+  execute_async_on_status_change?: string;
+  execute_on_sysop_comment?: string;
+  execute_async_on_sysop_comment?: string;
+  execute_on_sysop_page?: string;
+  execute_async_on_sysop_page?: string;
+  hold_access_level: number;
+  local_upload_path: string;
+
+  // Metadata
+  created_at: Date;
+  updated_at: Date;
+}
+
+export interface NodeConfig {
+  id: number;
+  node_number: number;
+  node_start: string;
+  priority: number;
+  /** ACP.e:2666-2673 - the node's SCREENS tooltype. Empty means express.e's
+   *  default, `<bbsLoc>/Node<N>/`. Many nodes can share one directory. */
+  screens: string;
+  capitol_files: boolean;
+  /** LOG_HOST - write the caller's address into the CallersLog (express.e:16048). */
+  log_host?: boolean;
+  /** SHOWPWFAIL - log the password actually typed (express.e:30030). */
+  show_password_fails?: boolean;
+  /** USERNUMBER_LOGIN - a caller may log on by slot number (express.e:29598). */
+  usernumber_login?: boolean;
+  telnet: boolean;
+  ftp: boolean;
+  sysop_chat_color: number;
+  user_chat_color: number;
+  nrams: string[];
+  created_at: Date;
+  updated_at: Date;
+}
+
+export interface ConferenceConfig {
+  id: number;
+  conference_id: number;
+  name: string;
+  /** LOCATION.n - the directory this conference reads, and what its file-area paths derive from. */
+  location: string;
+
+  // Directory Settings (1-16)
+  ndirs: number;
+  dlpath_1: string;
+  dlpath_2: string;
+  dlpath_3: string;
+  dlpath_4: string;
+  dlpath_5: string;
+  dlpath_6: string;
+  dlpath_7: string;
+  dlpath_8: string;
+  dlpath_9: string;
+  dlpath_10: string;
+  dlpath_11: string;
+  dlpath_12: string;
+  dlpath_13: string;
+  dlpath_14: string;
+  dlpath_15: string;
+  dlpath_16: string;
+  ulpath_1: string;
+  ulpath_2: string;
+  ulpath_3: string;
+  ulpath_4: string;
+  ulpath_5: string;
+  ulpath_6: string;
+  ulpath_7: string;
+  ulpath_8: string;
+  ulpath_9: string;
+  ulpath_10: string;
+  ulpath_11: string;
+  ulpath_12: string;
+  ulpath_13: string;
+  ulpath_14: string;
+  ulpath_15: string;
+  ulpath_16: string;
+
+  // Conference Settings
+  force_newscan: boolean;
+  exclude_ftp: boolean;
+  ftpdirname?: string;
+  ftp_dir_days?: number;
+  no_ftp_uploads?: boolean;
+  no_newscan?: boolean;
+  show_new_files?: boolean;
+  no_new_files?: boolean;
+  free_downloads?: boolean;
+  use_username?: boolean;
+  use_realname?: boolean;
+  use_internetname?: boolean;
+  menu_prompt?: string;
+  confdb_shared?: number;
+  no_ftp_uploads_text?: string;
+  private_conf: boolean;
+  read_only: boolean;
+
+  // Access Control
+  min_access_level: number;
+  max_access_level: number;
+
+  // Metadata
+  created_at: Date;
+  updated_at: Date;
+}
+
+export interface Door {
+  /**
+   * Per-command flags (express.e:4732-4804 runCommand()), mirroring the
+   * backend Door type. NOT populated by GET /api/config/doors today - these
+   * live on the command's own .info tooltypes (SILENT, EXPERT_MODE,
+   * LOG_INPUTS, QUICKMODE, TRAPON, SCRIPTCHECK, PASS_PARAMETERS, MIMICVER)
+   * and the Doors page edits them there, through the same generic
+   * getInfoFile/updateInfoFile tooltype editor every other command flag uses.
+   */
+  silent?: boolean;
+  expert_only?: boolean;
+  log_inputs?: boolean;
+  quick_mode?: boolean;
+  trap_on?: boolean;
+  script_check?: boolean;
+  pass_params?: number;
+  mimic_version?: string;
+  id: number;
+
+  // Door Identity
+  door_name: string;
+  door_command: string;
+  door_type: 'SYSCMD' | 'BBSCMD' | 'INTERNAL';
+
+  // Execution Settings
+  door_path: string;
+  door_args: string;
+  working_directory: string;
+
+  // Door Options
+  priority: string;  // P0-P4
+  /** MULTINODE - whether a second caller may open it while one is inside. */
+  multi_node?: boolean;
+  /** STACK - the 68K stack a door asks for; 0 for a door that needs none. */
+  stack?: number;
+  door_options: string[];
+  runtime_env: 'AMIGA_68K' | 'NATIVE_NODE' | 'BROWSER';
+
+  // Access Control
+  min_security_level: number;
+  max_security_level: number;
+  required_flags: string;
+
+  // Resource Limits
+  time_limit: number;
+  memory_limit: number;
+
+  // Display Settings
+  title: string;
+  description: string;
+  category: string;
+
+  // Status
+  enabled: boolean;
+
+  /**
+   * Whether the door ships a door.settings.json - whether it describes what a
+   * sysop can set on it. Served by GET /api/config/doors as has_settings; the
+   * door decides it by carrying the file or not.
+   */
+  has_settings?: boolean;
+
+  // Metadata
+  created_at: Date;
+  updated_at: Date;
+}
+
+export interface Language {
+  id: number;
+  language_number: number;  // 1-10
+
+  // Language Identity
+  title: string;
+  language_code: string;
+
+  // File Settings
+  file_path: string;
+
+  // Status
+  enabled: boolean;
+
+  // Metadata
+  created_at: Date;
+  updated_at: Date;
+}
+
+export interface Protocol {
+  id: number;
+
+  // Protocol Identity
+  protocol_name: string;
+  protocol_code: string;
+
+  // Protocol Settings
+  command: string;
+  upload_command: string;
+  download_command: string;
+  batch_upload: boolean;
+  batch_download: boolean;
+  bidirectional: boolean;
+
+  // Status
+  enabled: boolean;
+  is_default: boolean;
+
+  // Metadata
+  created_at: Date;
+  updated_at: Date;
+}
+
+export interface ConfigAuditLog {
+  id: number;
+  table_name: string;
+  record_id: number;
+  action: 'CREATE' | 'UPDATE' | 'DELETE';
+  user_id: number;
+  username: string;
+  old_values: any;
+  new_values: any;
+  ip_address: string;
+  user_agent: string;
+  timestamp: Date;
+}
+
+// Session Log types
+export interface SessionInfo {
+  sessionId: string;
+  userId?: string;
+  username?: string;
+  nodeId?: number;
+  startTime: string;
+  lastActivity: string;
+  lineCount: number;
+}
+
+export interface SessionLog {
+  sessionId: string;
+  userId?: string;
+  username?: string;
+  nodeId?: number;
+  startTime: string;
+  lastActivity: string;
+  output: string[];
+}
+
+export interface SessionStats {
+  totalSessions: number;
+  totalLines: number;
+  oldestSession?: string;
+}
+
+// Screen Type configuration
+export interface ScreenType {
+  id: number;
+  screen_number: number;
+  screen_type: string;    // e.g., "TXT.GR", "IBM", "ASCII"
+  screen_title: string;   // e.g., "Amiga Ansi", "IBM Ansi"
+  enabled: boolean;
+  created_at: Date;
+  updated_at: Date;
+}
+
+// API Response wrapper
+export interface ApiResponse<T = any> {
+  success: boolean;
+  data?: T;
+  message?: string;
+  timestamp: string;
+}

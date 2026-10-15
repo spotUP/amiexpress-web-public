@@ -1,0 +1,26 @@
+
+                      [34;3mThe Top [35m15 [34mBest Downloaders (Files)[0m
+                  - - ----------------------------------- - -
+[35m N#  User                    Location                 DL'ed Files        Calls
+[34m-------------------------------------------------------------------------------[0m
+  1[34m. [33;1mSMITH !                 [0mIndependent                   [36m 4.514  [0m      1.009
+  2[34m. [33mZANY                    [0m -*- DEBRIS -*-               [36m 4.416  [0m      2.251
+  3[34m. [33mPiLGRiM                 [0m[PENTAX/THE GHETTO]           [36m 2.186  [0m      1.263
+  4[34m. [33mSHAN                    [0mGotta get connected!          [36m 2.159  [0m      1.543
+  5[34m. [33m[ TRAiDOR! ]            [0mLONELY AS HELL!               [36m 1.512  [0m        699
+  6[34m. [33mblackwiz                [0mBorlange                      [36m 1.301  [0m        696
+  7[34m. [33mLOOBY                   [0m[#### - iNSANE - ####]        [36m 1.175  [0m      1.143
+  8[34m. [33mKorpen                  [0mHaparanda, Sweden!            [36m 1.168  [0m      1.015
+  9[34m. [33mX-Citing                [0mInternet Surfer!              [36m 1.042  [0m      1.632
+ 10[34m. [33mBeejay                  [0mSTOCKHOLM OPEN                [36m 1.034  [0m        706
+ 11[34m. [33mnECRoPHiLiAC            [0m\X\  NORDlAND  \X\            [36m 1.017  [0m        581
+ 12[34m. [33mTrava                   [0mThe Home Boys                 [36m   967  [0m        342
+ 13[34m. [33mBad Karma               [0mnuke kilrah                   [36m   935  [0m      1.102
+ 14[34m. [33mRasta Man               [0m--**(To BUSY)**--             [36m   838  [0m      1.030
+ 15[34m. [33mStranger                [0mLidingo, Sweden               [36m   817  [0m        489
+[34m-------------------------------------------------------------------------------
+   [36mTotal Downloaded files: [33m[[0m70.952[33m] [35m<-=( )=-> [36mTotal System Calls : [33m[[0m312.076[33m]
+
+                 [36mLast updated on[33m: [35mDate [0m04-13-95 [35mTime [0m11:13:34
+[34m-------------------------------------------------------------------------------
+             [35mMultiTop v2.1  [33m© [34m1995 Bobo/Mystic [0m- [34mDesign by Sandman[0m

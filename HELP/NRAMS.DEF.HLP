@@ -1,0 +1,30 @@
+The Following is a list of ToolTypes for this ICON:
+
+
+NOTICE: ALL TOOLTYPES ARE CASE SENSITIVE
+
+ABOUT: This ICON may be any name you wish it to be. You should find some
+       pre-defined NRAM.DEFS in the STORAGE/NRAMS directory.
+
+       This defines the commands your particular modem requires to perform
+       setting the NRAMS.
+
+       This ICON may be in the NODE/NRAMS directory for any node which is
+       tied to a modem.
+
+
+NRAM.<num>=
+
+
+NRAM.<num>=<string>
+
+         -Version 3.0
+         -OPTIONAL
+         -tells /X what command to send to the modem to set NRAMS
+         -<num> is the nth occurance of the NRAM tooltype.
+
+     NRAM.1=ATZ
+     NRAM.2=AT&A3&K3&G2
+     NRAM.3=AT&W
+     NRAM.4=ATZ
+

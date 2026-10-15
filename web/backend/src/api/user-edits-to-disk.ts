@@ -1,0 +1,129 @@
+/**
+ * A user edit made on the database side, carried to the disk record.
+ *
+ * The admin lists users from BOTH stores: an account with a user.data slot
+ * comes back as `user-<slot>` and an imported one as a database UUID. The
+ * `user-<slot>` branch of PUT /users/:id wrote the disk record; the UUID
+ * branch wrote the database row and stopped. user.data is what express.e and
+ * every runtime consumer read, so a sysop editing a database-side user was
+ * told "User updated successfully" while the board went on using the old
+ * location, security level and time limit.
+ *
+ * The record is read FROM DISK and only the edited fields are applied to it.
+ * Mirroring a whole `User` from the database back through the fixed-width
+ * record is what destroyed -TCB!-: the database does not faithfully hold
+ * every field the record has, so the fields it does not hold get written over
+ * good values on the way back.
+ */
+
+import { userFileManager } from '../services/UserFileManager';
+import { expertLetter } from '../services/expert-mode';
+
+/** The fields the admin's user form can change. */
+export interface UserEdits {
+  username?: string;
+  realname?: string;
+  location?: string;
+  phone?: string;
+  email?: string;
+  secLevel?: number;
+  timeLimit?: number;
+  /**
+   * Which conferences they may join: either an AREA NAME, or the `X`/`_` flag
+   * string, exactly as express.e:8499-8512 reads it. The shape of the value
+   * decides which - see conferences/access-areas.ts - so it is carried
+   * verbatim and never normalised here.
+   */
+  confAccess?: string;
+  /** The admin form's checkbox (boolean) or express.e's CHAR ('X' on, 'N' off). */
+  expert?: boolean | 'X' | 'N';
+  ansi?: boolean;
+  passwordHash?: string;
+  // Lockout state off user.misc (express.e eduser page 1, B/C/D). Named
+  // here so an admin unlock reaches the disk record; absent means keep.
+  accountLocked?: number | boolean;
+  invalidAttempts?: number;
+  forcePwdReset?: number | boolean;
+}
+
+export interface DiskEditOutcome {
+  /** The slot written, or null when this account has no disk record. */
+  slotNumber: number | null;
+  /** Which fields were carried across. */
+  applied: string[];
+}
+
+/**
+ * Apply `edits` to the disk record of the account currently called
+ * `usernameBeforeEdit`.
+ *
+ * The name is taken BEFORE the update because it is the key the slot is found
+ * by - a rename would otherwise look for the new name and find nothing, and
+ * the account's disk record would silently stop being maintained.
+ */
+export function applyUserEditsToDisk(
+  usernameBeforeEdit: string,
+  edits: UserEdits,
+): DiskEditOutcome {
+  const wanted = String(usernameBeforeEdit ?? '').toUpperCase();
+  if (!wanted) return { slotNumber: null, applied: [] };
+
+  const onDisk = (userFileManager.readAllUsers() ?? []).find(
+    (u: { username?: string }) => (u.username ?? '').toUpperCase() === wanted,
+  ) as { slotNumber?: number } | undefined;
+
+  const slotNumber = onDisk?.slotNumber;
+  if (slotNumber === undefined) {
+    // An account that lives only in the database. Not an error: an imported
+    // user need not have a slot, and inventing one would put a stranger into
+    // a numbered position express.e reads by index.
+console.warn(
+      `[Users] ${usernameBeforeEdit} has no user.data record; the change is in ` +
+      `the database only`,
+    );
+    return { slotNumber: null, applied: [] };
+  }
+
+  // Read the CURRENT record. Everything not named in `edits` keeps the value
+  // the disk already holds.
+  const current = userFileManager.readUserBySlot(slotNumber);
+  if (!current) return { slotNumber: null, applied: [] };
+
+  const updated: Record<string, unknown> = {};
+  const applied: string[] = [];
+
+  const carry = <K extends keyof UserEdits>(field: K, target = field as string) => {
+    const value = edits[field];
+    if (value === undefined) return;
+    updated[target] = value;
+    applied.push(target);
+  };
+
+  carry('username');
+  carry('realname');
+  carry('location');
+  carry('phone');
+  carry('email');
+  carry('secLevel');
+  carry('timeLimit');
+  carry('confAccess');
+  // The form sends a checkbox; the record holds express.e's CHAR.
+  if (edits.expert !== undefined) {
+    updated.expert = expertLetter(edits.expert);
+    applied.push('expert');
+  }
+  carry('ansi');
+  carry('accountLocked');
+  carry('invalidAttempts');
+  carry('forcePwdReset');
+  // The disk copy of a password cannot verify a login - the field holds 32 of
+  // a bcrypt hash's 60 characters - but leaving it stale keeps a fragment of
+  // the OLD password on disk, which is worse than keeping it in step.
+  carry('passwordHash');
+
+  if (applied.length === 0) return { slotNumber, applied };
+
+  // Only the fields the edit names: the rest of the record is not rewritten.
+  userFileManager.updateUserDataFile(updated as never, slotNumber);
+  return { slotNumber, applied };
+}

@@ -1,0 +1,306 @@
+/**
+ * Behavior tests for LrzszTransferManager.processStdoutChunk —
+ * the full transport-side pipeline that flows between rz's stdout
+ * and the browser ZMODEM Sentry.
+ *
+ * Pinning the BEHAVIOR (not just the source-grep) of:
+ *   1. Two back-to-back ZRINITs in one stdout chunk → split into
+ *      two transport.send() calls so the Sentry can detect.
+ *   2. Unpatched ZRINIT bytes (flags=0x23, CANFC32 set) → patched in
+ *      every occurrence to flags=0x03 so the browser zmodem.js
+ *      doesn't choke on a CRC32 capability it can't honor.
+ *   3. Duplicate keepalive ZRINITs after the first → suppressed
+ *      (rz emits one per timeout until ZRQINIT/ZFILE arrives).
+ *   4. After a non-ZRINIT frame passes (ZACK / ZRPOS), the next
+ *      ZRINIT — sent post-EOF as "next file or finish?" — IS
+ *      forwarded so the Send session can emit ZFIN and rz exits.
+ *
+ * All four scenarios were live-debugged today; the grep tests pin
+ * the code shape, these pin the end-to-end byte effect.
+ */
+
+import { LrzszTransferManager, LrzszTransport } from '../src/services/lrzsz-transfer.service';
+
+// Each ZRINIT on the wire from rz is 21 bytes including \r \x8a \x11
+// trailer (Forsberg high-bit-LF form, normalized to \r \n \x11 before
+// reaching the browser). Two back-to-back form a 42-byte chunk.
+const ZRINIT_UNPATCHED_RAW = Buffer.from(
+  '2a2a184230313030303030303032336265353030d8a11', // 21B with \r\x8a\x11 trailer ... wait, length wrong
+  'hex'
+);
+
+const ZRINIT_21B = Buffer.from(
+  // **\x18B 01 00000023 be50 \r \x8a \x11   (21 bytes, unpatched)
+  '2a2a184230313030303030303032336265353030d8a11'.replace(/0d8a11$/, '0d8a11'),
+  'hex'
+);
+
+// Build the 21-byte unpatched ZRINIT we actually see on the wire.
+const ZRINIT_RAW_21 = Buffer.concat([
+  Buffer.from('2a2a18423031303030303030323362653530', 'hex'), // 18 bytes header
+  Buffer.from([0x0d, 0x8a, 0x11]), // CR + high-bit LF + XON trailer
+]);
+
+// What a ZRINIT looks like on its way out NOW: the header exactly as `rz`
+// wrote it, and only the trailer normalized (\r \x8a \x11 -> \r \n \x11),
+// which is a delimiter and not a capability.
+const ZRINIT_FORWARDED_21 = Buffer.concat([
+  Buffer.from('2a2a18423031303030303030323362653530', 'hex'),
+  Buffer.from([0x0d, 0x0a, 0x11]),
+]);
+
+// After patchZrinitFlags + normalizeHexHeaderTrailers:
+//   header bytes 12..17 swap "23be50" → "039a32" (clear CANFC32)
+//   trailer byte 19 swaps 0x8a → 0x0a
+const ZRINIT_PATCHED_21 = Buffer.concat([
+  Buffer.from('2a2a18423031303030303030303339613332', 'hex'),
+  Buffer.from([0x0d, 0x0a, 0x11]),
+]);
+
+// A ZACK header (type 03) — 20 bytes, never a ZRINIT.
+const ZACK_RAW_20 = Buffer.concat([
+  Buffer.from('2a2a18423033303130303030303039383636', 'hex'), // 18 B
+  Buffer.from([0x0d, 0x8a]), // 2 B (no XON tail in some rz versions)
+]);
+
+function makeManager(direction: 'upload' | 'download', sent: Buffer[]): any {
+  const transport: LrzszTransport = {
+    type: 'web',
+    send: (buf: Buffer) => sent.push(Buffer.from(buf)),
+  };
+  const session: any = { nodeId: 0 };
+  const mgr = new LrzszTransferManager({
+    session,
+    transport,
+    direction,
+    paths: ['/tmp/playpen-test'],
+  });
+  return mgr;
+}
+
+describe('LrzszTransferManager.processStdoutChunk — behavior', () => {
+  test('splits two concatenated ZRINITs into two transport.send calls', () => {
+    const sent: Buffer[] = [];
+    const mgr = makeManager('upload', sent);
+    // First chunk on spawn: two back-to-back unpatched ZRINITs.
+    const twoZrinits = Buffer.concat([ZRINIT_RAW_21, ZRINIT_RAW_21]);
+    mgr.processStdoutChunk(twoZrinits);
+
+    // 1 forwarded, 1 suppressed (both ZRINITs). Without the split +
+    // suppression, the browser Sentry would see a 42-byte chunk and fail
+    // detection.
+    expect(sent.length).toBe(1);
+    // AND IT GOES OUT AS `rz` WROTE IT. It used to be rewritten to clear
+    // CANFC32, which told the sender "no CRC32" while `rz` went on
+    // verifying as CRC32 - the two then disagreed about every subpacket.
+    // That is the "Bad CRC" loop DiNO's SyncTerm upload died in on
+    // 2026-09-23. See the withdrawn patchZrinitFlags.
+    expect(sent[0]).toEqual(ZRINIT_FORWARDED_21);
+  });
+
+  test('never rewrites the receiver\'s own capabilities', () => {
+    // A sender is told what `rz` can do, by `rz`. Changing those bytes on
+    // the way out leaves the two ends disagreeing about how every later
+    // subpacket is framed, which is not a thing a byte rewrite can fix.
+    const sent: Buffer[] = [];
+    const mgr = makeManager('upload', sent);
+
+    mgr.processStdoutChunk(ZRINIT_RAW_21);
+
+    expect(sent.length).toBe(1);
+    expect(sent[0]).toEqual(ZRINIT_FORWARDED_21);
+    expect(sent[0]).not.toEqual(ZRINIT_PATCHED_21);
+    // The capability byte is `rz`'s own: 0x23, CANFC32 still set.
+    expect(sent[0].slice(0, 18).toString('ascii')).toContain('00000023');
+  });
+
+  test('suppresses duplicate ZRINIT keepalives', () => {
+    const sent: Buffer[] = [];
+    const mgr = makeManager('upload', sent);
+    // rz spam: ZRINIT, ZRINIT, ZRINIT, ZRINIT, ZRINIT (5 separate chunks).
+    for (let i = 0; i < 5; i++) {
+      mgr.processStdoutChunk(ZRINIT_RAW_21);
+    }
+    // Only the first one reaches the browser.
+    expect(sent.length).toBe(1);
+  });
+
+  test('forwards a ZRINIT after non-ZRINIT traffic (post-EOF "next file?")', () => {
+    const sent: Buffer[] = [];
+    const mgr = makeManager('upload', sent);
+    // 1. Initial ZRINIT — forwarded.
+    mgr.processStdoutChunk(ZRINIT_RAW_21);
+    expect(sent.length).toBe(1);
+
+    // 2. ZACK (rz responding to ZSINIT).
+    mgr.processStdoutChunk(ZACK_RAW_20);
+    expect(sent.length).toBe(2);
+
+    // 3. Another ZRINIT — this one is rz asking "next file or finish?"
+    //    after the receiver got ZEOF. Critical: must be forwarded, NOT
+    //    suppressed. Without this the Send session hangs waiting to
+    //    emit ZFIN and rz never exits.
+    mgr.processStdoutChunk(ZRINIT_RAW_21);
+    expect(sent.length).toBe(3);
+  });
+
+  test('forwards larger frames (ZDATA-style) unchanged', () => {
+    const sent: Buffer[] = [];
+    const mgr = makeManager('upload', sent);
+    // Binary header for ZDATA + opaque payload. Length > 28 so
+    // isLoneZrinit returns false and the chunk passes through.
+    const zdataChunk = Buffer.concat([
+      Buffer.from([0x2a, 0x18, 0x41, 0x18, 0x4a]), // ZBIN ZDATA header start
+      Buffer.alloc(1024, 0x42), // pretend payload
+    ]);
+    mgr.processStdoutChunk(zdataChunk);
+
+    expect(sent.length).toBe(1);
+    expect(sent[0].length).toBe(zdataChunk.length);
+  });
+
+  test('drops empty parts (e.g. zero-length chunk)', () => {
+    const sent: Buffer[] = [];
+    const mgr = makeManager('upload', sent);
+    mgr.processStdoutChunk(Buffer.alloc(0));
+    expect(sent.length).toBe(0);
+  });
+});
+
+describe('LrzszTransferManager.normalizeHexHeaderTrailers — JPEG corruption regression', () => {
+  // Regression: a telnet user reported a JPEG download failing with
+  // "Bad Block (Wrong CRC)" + "Garbage count exceeded" + abort. Root
+  // cause: the earlier matcher patched every `\r \x8a` pair, even
+  // inside binary ZDATA payload that happened to contain those bytes
+  // by chance. JPEGs / binaries often do. The fix requires the
+  // `\x11` (XON) follow-byte so only real hex-header trailers match.
+  function callNormalize(mgr: any, buf: Buffer): Buffer {
+    return (mgr as any).normalizeHexHeaderTrailers(buf);
+  }
+
+  test('does NOT patch `0d 8a` when next byte is NOT XON (binary payload safe)', () => {
+    const sent: Buffer[] = [];
+    const mgr = makeManager('download', sent);
+    // Synthetic ZDATA-style payload: random bytes that happen to
+    // contain 0x0d 0x8a but NOT followed by 0x11.
+    const payload = Buffer.from([
+      0xff, 0xd8, 0xff, 0xe0, // JPEG SOI + APP0 marker
+      0x00, 0x10, 0x4a, 0x46, 0x49, 0x46, // JFIF
+      0x0d, 0x8a, 0x42, 0x99, // <-- the problematic pair, NOT a trailer
+      0x55, 0xaa,
+    ]);
+    const original = Buffer.from(payload);
+    const result = callNormalize(mgr, payload);
+    expect(Buffer.compare(result, original)).toBe(0);
+  });
+
+  test('DOES patch `\\r \\x8a \\x11` hex-header trailer to `\\r \\n \\x11`', () => {
+    const sent: Buffer[] = [];
+    const mgr = makeManager('download', sent);
+    // Hex header (ZRQINIT shape) with the Forsberg high-bit-LF trailer.
+    const header = Buffer.concat([
+      Buffer.from('2a2a18423030303030303030303030303030', 'hex'),
+      Buffer.from([0x0d, 0x8a, 0x11]),
+    ]);
+    const result = callNormalize(mgr, header);
+    expect(result[result.length - 3]).toBe(0x0d);
+    expect(result[result.length - 2]).toBe(0x0a); // patched
+    expect(result[result.length - 1]).toBe(0x11);
+  });
+
+  test('does NOT patch a `0d 8a 11` triple that lacks the hex-header preamble', () => {
+    // Adversarial: binary payload that randomly contains `\r \x8a \x11`
+    // but is NOT preceded by `** \x18 B` + 14 ascii-hex chars. The
+    // pre-hardening matcher (only checking the trailer bytes) would
+    // corrupt this. The strict-shape matcher must leave it alone.
+    const sent: Buffer[] = [];
+    const mgr = makeManager('download', sent);
+    const payload = Buffer.from([
+      0xff, 0xd8, 0xff, 0xe0, // JPEG SOI + APP0
+      0x42, 0x55, 0xaa, 0x99, 0xde, 0xad, 0xbe, 0xef, // arbitrary
+      0x0d, 0x8a, 0x11, // <-- the trailer-looking triple, NOT after a header
+      0xc0, 0xff, 0xee,
+    ]);
+    const before = Buffer.from(payload);
+    const result = callNormalize(mgr, payload);
+    expect(Buffer.compare(result, before)).toBe(0);
+  });
+
+  test('does NOT patch a `** \\x18 B` followed by NON-hex chars', () => {
+    // Adversarial: bytes shaped like a hex-header start but where the
+    // 14 "hex chars" aren't valid hex. Should not match.
+    const sent: Buffer[] = [];
+    const mgr = makeManager('download', sent);
+    const buf = Buffer.from([
+      0x2a, 0x2a, 0x18, 0x42, // marker
+      // 14 NON-hex bytes
+      0x47, 0x48, 0x49, 0x4a, 0x4b, 0x4c, 0x4d, 0x4e, 0x4f, 0x50,
+      0x51, 0x52, 0x53, 0x54,
+      0x0d, 0x8a, 0x11, // trailer
+    ]);
+    const before = Buffer.from(buf);
+    const result = callNormalize(mgr, buf);
+    expect(Buffer.compare(result, before)).toBe(0);
+  });
+
+  test('mixed buffer: patches trailer, leaves payload bytes intact', () => {
+    const sent: Buffer[] = [];
+    const mgr = makeManager('download', sent);
+    const buf = Buffer.concat([
+      // Hex header + trailer
+      Buffer.from('2a2a18423031303030303030303030303030', 'hex'),
+      Buffer.from([0x0d, 0x8a, 0x11]),
+      // Then binary payload with the unsafe pair
+      Buffer.from([0xde, 0xad, 0x0d, 0x8a, 0x55, 0xbe, 0xef]),
+    ]);
+    const result = callNormalize(mgr, Buffer.from(buf));
+    // Trailer patched
+    expect(result[18]).toBe(0x0d);
+    expect(result[19]).toBe(0x0a);
+    expect(result[20]).toBe(0x11);
+    // Payload bytes untouched
+    expect(result[23]).toBe(0x0d);
+    expect(result[24]).toBe(0x8a);
+    expect(result[25]).toBe(0x55);
+  });
+});
+
+describe('LrzszTransferManager.processStdoutChunk — telnet/ssh do NOT suppress duplicates', () => {
+  // Regression: a telnet user reported "Waiting for OK to send" after
+  // their client sent ZRQINIT. rz emits a fresh ZRINIT in response,
+  // but our suppression dropped it as a duplicate. Telnet/SSH clients
+  // need every ZRINIT — only the web browser zmodem.js Sentry chokes
+  // on repeats.
+  function makeTelnetManager(sent: Buffer[]): any {
+    const transport: LrzszTransport = {
+      type: 'telnet',
+      send: (buf: Buffer) => sent.push(Buffer.from(buf)),
+    };
+    const session: any = { nodeId: 0 };
+    return new LrzszTransferManager({
+      session,
+      transport,
+      direction: 'upload',
+      paths: ['/tmp/playpen-test'],
+    });
+  }
+
+  test('telnet: every ZRINIT keepalive reaches the wire', () => {
+    const sent: Buffer[] = [];
+    const mgr = makeTelnetManager(sent);
+    for (let i = 0; i < 5; i++) {
+      mgr.processStdoutChunk(ZRINIT_RAW_21);
+    }
+    // All 5 forwarded — telnet clients are tolerant and need every ZRINIT.
+    expect(sent.length).toBe(5);
+  });
+
+  test('telnet: split still applies (two ZRINITs in one chunk → two sends)', () => {
+    const sent: Buffer[] = [];
+    const mgr = makeTelnetManager(sent);
+    const twoZrinits = Buffer.concat([ZRINIT_RAW_21, ZRINIT_RAW_21]);
+    mgr.processStdoutChunk(twoZrinits);
+    // Both reach the wire (suppression off, split still on).
+    expect(sent.length).toBe(2);
+  });
+});

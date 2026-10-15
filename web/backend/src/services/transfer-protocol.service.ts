@@ -1,0 +1,529 @@
+/**
+ * Unified Transfer Protocol Service
+ *
+ * Provides a unified interface for all file transfer protocols:
+ * - ZMODEM (default for modern terminals)
+ * - YMODEM (batch transfers, 1K blocks)
+ * - XMODEM (legacy, 128/1K blocks, checksum or CRC)
+ * - Punter (C64/C128 specific)
+ *
+ * Protocol selection is based on:
+ * 1. User preference (stored in user.protocol)
+ * 2. Terminal type detection (PETSCII mode = Punter/XMODEM)
+ * 3. Explicit command (RZ, RX, RY, RP for receive; SZ, SX, SY, SP for send)
+ */
+
+import { EventEmitter } from 'events';
+import * as path from 'path';
+import { BBSSession } from '../index';
+import { ZmodemTransferManager, TransferTransport, TransferDirection as ZmodemDirection } from './zmodem-transfer.service';
+import { XmodemTransferManager, XmodemMode } from './xmodem-transfer.service';
+import { YmodemTransferManager, FileToSend } from './ymodem-transfer.service';
+import { PunterTransferManager } from './punter-transfer.service';
+
+export type TransferProtocol = 'zmodem' | 'ymodem' | 'xmodem' | 'xmodem-crc' | 'xmodem-1k' | 'punter';
+export type TransferDirection = 'upload' | 'download';
+
+// Protocol name mappings for display
+export const PROTOCOL_NAMES: Record<TransferProtocol, string> = {
+  'zmodem': 'ZMODEM',
+  'ymodem': 'YMODEM (Batch)',
+  'xmodem': 'XMODEM (Checksum)',
+  'xmodem-crc': 'XMODEM-CRC',
+  'xmodem-1k': 'XMODEM-1K',
+  'punter': 'Punter (C64)'
+};
+
+// Protocol IDs for AmiExpress compatibility
+export const PROTOCOL_IDS: Record<TransferProtocol, number> = {
+  'xmodem': 1,
+  'xmodem-crc': 2,
+  'xmodem-1k': 3,
+  'ymodem': 4,
+  'zmodem': 5,
+  'punter': 6
+};
+
+// Reverse mapping
+export const ID_TO_PROTOCOL: Record<number, TransferProtocol> = {
+  1: 'xmodem',
+  2: 'xmodem-crc',
+  3: 'xmodem-1k',
+  4: 'ymodem',
+  5: 'zmodem',
+  6: 'punter'
+};
+
+/**
+ * The line express prints as a transfer starts. A send names the protocol by
+ * its internalName (express.e:15620-15650, printed at 15731-15737), a
+ * receive by fileReceive's own spelling (17977-17994) - "ZModem" going out,
+ * "Zmodem" coming in. Punter is no express protocol; it stands where an xpr
+ * library's title would (15737, 17994).
+ */
+export function readyToTransferLine(protocol: TransferProtocol, direction: TransferDirection): string {
+  const family = protocol.startsWith('xmodem') ? 'xmodem' : protocol;
+  if (direction === 'download') {
+    const sendName: Record<string, string> = { zmodem: 'ZModem', ymodem: 'YModem', xmodem: 'XModem', punter: 'Punter' };
+    return `${sendName[family]}: Ready to Send\r\n`;
+  }
+  const receiveName: Record<string, string> = { zmodem: 'Zmodem', ymodem: 'Ymodem', xmodem: 'Xmodem', punter: 'Punter' };
+  return `\r\n${receiveName[family]}: Ready to Receive\r\n`;
+}
+
+export interface TransferOptions {
+  protocol?: TransferProtocol;
+  direction: TransferDirection;
+  files: string[];  // Paths for download, destination for upload
+  onProgress?: (filename: string, transferred: number, total: number) => void;
+  onFileComplete?: (filename: string, success: boolean) => void;
+  /**
+   * An upload's file is whole on disk, whatever the protocol (express.e
+   * doBgCheck, from xprfclose 13921 and zmuploadcompleted 16825).
+   */
+  onFileReceived?: (fullPath: string) => void;
+  onComplete?: (success: boolean, files: string[]) => void;
+  onError?: (error: string) => void;
+}
+
+export interface TransferResult {
+  success: boolean;
+  files: string[];
+  bytesTransferred: number;
+  protocol: TransferProtocol;
+  error?: string;
+}
+
+/**
+ * Is the caller a real Commodore, rather than a browser drawing Commodore
+ * glyphs?
+ *
+ * `terminalType === 'c64'` is what the TTYPE handshake and the DEL-probe
+ * stamp on a genuine machine (server/telnet-server.ts, utils/c64-detect.util
+ * .ts). A `P` or `P8` answer in the web terminal sets `petsciiMode` and
+ * nothing else - that caller is a browser, and asking him to use Punter
+ * because his font is Commodore denied him ZMODEM for no reason (sysop,
+ * 2026-09-07: "about the transfers, yes fix it for petscii browser users as
+ * well").
+ */
+function isCommodoreHardware(session: BBSSession): boolean {
+  const s = session as any;
+  return s?.terminalType === 'c64' && s?.connectionType !== 'web';
+}
+
+/**
+ * Get the appropriate protocol for a session based on terminal type
+ */
+/**
+ * Stored preferences that are not protocols.
+ *
+ * `W` offers a seventh option, "WebSocket (Browser)", and stores `websocket` -
+ * a value `TransferProtocol` has never had a member for, so it matched nothing
+ * here and the caller silently got whatever the transport default was. What he
+ * was choosing is real, though: the browser's own ZMODEM, over the socket.
+ * So it resolves to ZMODEM rather than being dropped.
+ *
+ * NOT on real Commodore hardware. A C64 cannot do ZMODEM - the sysop's
+ * standing rule, and the reason Punter exists here - so a stored `websocket`
+ * on that session falls through to the transport's own answer below, which
+ * gives it Punter.
+ */
+const PREFERENCE_ALIASES: Record<string, TransferProtocol> = {
+  websocket: 'zmodem',
+};
+
+export function getDefaultProtocol(session: BBSSession): TransferProtocol {
+  // If user has a stored protocol preference, use it
+  if (session.user?.protocol) {
+    const userProtocol = session.user.protocol.toLowerCase();
+    if (userProtocol in PROTOCOL_NAMES) {
+      return userProtocol as TransferProtocol;
+    }
+    const alias = PREFERENCE_ALIASES[userProtocol];
+    if (alias && !isCommodoreHardware(session)) {
+      return alias;
+    }
+    // Try to match by ID
+    const protocolId = parseInt(userProtocol);
+    if (!isNaN(protocolId) && protocolId in ID_TO_PROTOCOL) {
+      return ID_TO_PROTOCOL[protocolId];
+    }
+  }
+
+  // A REAL Commodore prefers Punter. PETSCII is not the question: the web
+  // terminal draws Commodore glyphs on a browser canvas, and a browser does
+  // ZMODEM (packages/terminal ships zmodem.js) - it was being offered Punter
+  // and nothing else because it asked for glyphs. The transport is what can
+  // and cannot carry a protocol, so the transport is what decides.
+  if (isCommodoreHardware(session)) {
+    return 'punter';
+  }
+
+  // Default to ZMODEM for modern terminals
+  return 'zmodem';
+}
+
+/**
+ * Get list of protocols suitable for the current terminal
+ */
+export function getAvailableProtocols(session: BBSSession): TransferProtocol[] {
+  const protocols: TransferProtocol[] = [];
+
+  if (isCommodoreHardware(session)) {
+    // A real C64/C128 on the other end of a byte transport.
+    protocols.push('punter', 'xmodem', 'xmodem-crc');
+  } else {
+    // Every other caller, PETSCII glyphs or not: the browser terminal runs
+    // zmodem.js, and a modern telnet client has its own.
+    protocols.push('zmodem', 'ymodem', 'xmodem-1k', 'xmodem-crc', 'xmodem');
+    // Also offer Punter for testing/compatibility
+    protocols.push('punter');
+  }
+
+  return protocols;
+}
+
+/**
+ * Unified Transfer Protocol Manager
+ * Creates and manages the appropriate protocol handler
+ */
+export class TransferProtocolManager extends EventEmitter {
+  private session: BBSSession;
+  private protocol: TransferProtocol;
+  private direction: TransferDirection;
+  private active: boolean = false;
+  private manager: any;  // Active protocol manager
+  private transport: TransferTransport;
+  private options: TransferOptions;
+  private completedFiles: string[] = [];
+  private bytesTransferred: number = 0;
+
+  constructor(
+    session: BBSSession,
+    transport: TransferTransport,
+    options: TransferOptions
+  ) {
+    super();
+    this.session = session;
+    this.transport = transport;
+    this.options = options;
+    this.protocol = options.protocol || getDefaultProtocol(session);
+    this.direction = options.direction;
+  }
+
+  /**
+   * Start the transfer
+   */
+  async start(): Promise<void> {
+    if (this.active) {
+      throw new Error('Transfer already in progress');
+    }
+
+    this.active = true;
+    this.completedFiles = [];
+    this.bytesTransferred = 0;
+
+console.log(`[TRANSFER] Starting ${this.protocol} ${this.direction}`);
+
+    // Mark session as in raw transfer mode
+    (this.session as any).transferRawActive = true;
+    (this.session as any).transferManager = this;
+
+    try {
+      switch (this.protocol) {
+        case 'zmodem':
+          await this.startZmodem();
+          break;
+        case 'ymodem':
+          await this.startYmodem();
+          break;
+        case 'xmodem':
+        case 'xmodem-crc':
+        case 'xmodem-1k':
+          await this.startXmodem();
+          break;
+        case 'punter':
+          await this.startPunter();
+          break;
+        default:
+          throw new Error(`Unsupported protocol: ${this.protocol}`);
+      }
+    } catch (error: any) {
+      this.finish(false, error.message);
+    }
+  }
+
+  /**
+   * Handle incoming data from remote terminal
+   */
+  handleInput(data: Buffer): void {
+    if (!this.active || !this.manager) {
+      return;
+    }
+
+    this.manager.handleInput(data);
+  }
+
+  /**
+   * Cancel the transfer
+   */
+  cancel(): void {
+    if (!this.active) return;
+
+    if (this.manager && typeof this.manager.cancel === 'function') {
+      this.manager.cancel();
+    } else {
+      this.finish(false, 'Cancelled by user');
+    }
+  }
+
+  /**
+   * Start ZMODEM transfer
+   */
+  private async startZmodem(): Promise<void> {
+    const zmDirection: ZmodemDirection = this.direction === 'upload' ? 'upload' : 'download';
+
+    this.manager = new ZmodemTransferManager({
+      session: this.session,
+      transport: this.transport,
+      direction: zmDirection,
+      paths: this.options.files,
+      onFileReceived: this.options.onFileReceived,
+      onComplete: (success, detail) => {
+        const files = this.direction === 'upload' ? detail.received : detail.sent;
+        this.completedFiles = files;
+        this.finish(success);
+      }
+    });
+
+    (this.session as any).transferRawSink = (buf: Buffer) => this.manager.handleInput(buf);
+    (this.session as any).transferRawSend = this.transport.send;
+
+    this.manager.start();
+  }
+
+  /**
+   * Start YMODEM transfer
+   */
+  private async startYmodem(): Promise<void> {
+    this.manager = new YmodemTransferManager({
+      use1kBlocks: true,
+      // express.e:16831's rule, asked at the header block (xymodem.e:1082) -
+      // the same question the ZMODEM path asks at the ZFILE. Uploads only: a
+      // download has nothing to be a duplicate of.
+      isDuplicate: this.direction === 'upload'
+        ? (name: string) => {
+            const { uploadIsDuplicate } = require('./upload-duplicate.service');
+            const { config } = require('../config');
+            return uploadIsDuplicate({
+              filename: name,
+              conferenceId: (this.session as any)?.currentConf ?? 1,
+              bbsRoot: config.get('dataDir'),
+            });
+          }
+        : undefined,
+      onDuplicate: (name: string) => {
+        // YMODEM cancels the batch rather than skipping one file, so the
+        // caller is told why his transfer stopped.
+        try {
+          this.transport.send(Buffer.from(`\r\n${name} is already on the board - transfer cancelled.\r\n`, 'latin1'));
+        } catch { /* the line is already gone */ }
+      },
+      onProgress: (filename, transferred, total) => {
+        this.bytesTransferred = transferred;
+        if (this.options.onProgress) {
+          this.options.onProgress(filename, transferred, total);
+        }
+      },
+      onFileComplete: (filename, success) => {
+        if (success) {
+          this.completedFiles.push(filename);
+          if (this.direction === 'upload') {
+            this.options.onFileReceived?.(path.join(this.options.files[0], filename));
+          }
+        }
+        if (this.options.onFileComplete) {
+          this.options.onFileComplete(filename, success);
+        }
+      },
+      onComplete: (success, files) => {
+        this.completedFiles = files;
+        this.finish(success);
+      },
+      onError: (error) => {
+        if (this.options.onError) {
+          this.options.onError(error);
+        }
+      }
+    });
+
+    this.manager.setSendCallback(this.transport.send);
+    (this.session as any).transferRawSink = (buf: Buffer) => this.manager.handleInput(buf);
+    (this.session as any).transferRawSend = this.transport.send;
+
+    if (this.direction === 'upload') {
+      // Receive files
+      await this.manager.startReceive(this.options.files[0]);
+    } else {
+      // Send files
+      const filesToSend: FileToSend[] = this.options.files.map(f => ({ path: f }));
+      await this.manager.startSend(filesToSend);
+    }
+  }
+
+  /**
+   * Start XMODEM transfer
+   */
+  private async startXmodem(): Promise<void> {
+    let mode: XmodemMode = 'crc';
+    if (this.protocol === 'xmodem') {
+      mode = 'checksum';
+    } else if (this.protocol === 'xmodem-1k') {
+      mode = '1k';
+    }
+
+    this.manager = new XmodemTransferManager({
+      mode,
+      onFileReceived: this.options.onFileReceived,
+      onProgress: (transferred, total) => {
+        this.bytesTransferred = transferred;
+        if (this.options.onProgress) {
+          const filename = this.options.files[0] || 'file';
+          this.options.onProgress(filename, transferred, total);
+        }
+      },
+      onComplete: (success, transferred) => {
+        this.bytesTransferred = transferred;
+        if (success && this.options.files.length > 0) {
+          this.completedFiles.push(this.options.files[0]);
+        }
+        this.finish(success);
+      },
+      onError: (error) => {
+        if (this.options.onError) {
+          this.options.onError(error);
+        }
+      }
+    });
+
+    this.manager.setSendCallback(this.transport.send);
+    (this.session as any).transferRawSink = (buf: Buffer) => this.manager.handleInput(buf);
+    (this.session as any).transferRawSend = this.transport.send;
+
+    if (this.direction === 'upload') {
+      // Receive file
+      await this.manager.startReceive(this.options.files[0]);
+    } else {
+      // Send file (XMODEM only supports single file)
+      await this.manager.startSend(this.options.files[0]);
+    }
+  }
+
+  /**
+   * Start Punter transfer
+   */
+  private async startPunter(): Promise<void> {
+    this.manager = new PunterTransferManager({
+      onFileReceived: this.options.onFileReceived,
+      onProgress: (transferred, total) => {
+        this.bytesTransferred = transferred;
+        if (this.options.onProgress) {
+          const filename = this.options.files[0] || 'file';
+          this.options.onProgress(filename, transferred, total);
+        }
+      },
+      onComplete: (success, transferred) => {
+        this.bytesTransferred = transferred;
+        if (success && this.options.files.length > 0) {
+          this.completedFiles.push(this.options.files[0]);
+        }
+        this.finish(success);
+      },
+      onError: (error) => {
+        if (this.options.onError) {
+          this.options.onError(error);
+        }
+      }
+    });
+
+    this.manager.setSendCallback(this.transport.send);
+    (this.session as any).transferRawSink = (buf: Buffer) => this.manager.handleInput(buf);
+    (this.session as any).transferRawSend = this.transport.send;
+
+    if (this.direction === 'upload') {
+      // Receive file
+      await this.manager.startReceive(this.options.files[0]);
+    } else {
+      // Send file
+      await this.manager.startSend(this.options.files[0]);
+    }
+  }
+
+  /**
+   * Finish the transfer
+   */
+  private finish(success: boolean, error?: string): void {
+    this.active = false;
+
+    // Clean up session transfer state. NOT `transferRawSend`: that is the
+    // TRANSPORT's sender (transport-session.ts attaches it once, on
+    // connect), not this transfer's, and clearing it left every later
+    // transfer in the call writing into a no-op - one XMODEM transfer and
+    // the next ZMODEM went nowhere. endRawTransfer leaves it alone too.
+    (this.session as any).transferRawActive = false;
+    (this.session as any).transferRawSink = undefined;
+    (this.session as any).transferManager = undefined;
+
+    const result: TransferResult = {
+      success,
+      files: this.completedFiles,
+      bytesTransferred: this.bytesTransferred,
+      protocol: this.protocol,
+      error
+    };
+
+console.log(`[TRANSFER] ${this.protocol} ${this.direction} ${success ? 'complete' : 'failed'}:`, result);
+
+    if (this.options.onComplete) {
+      this.options.onComplete(success, this.completedFiles);
+    }
+
+    this.emit('complete', result);
+  }
+
+  /**
+   * Check if transfer is active
+   */
+  isActive(): boolean {
+    return this.active;
+  }
+
+  /**
+   * Get current protocol
+   */
+  getProtocol(): TransferProtocol {
+    return this.protocol;
+  }
+}
+
+/**
+ * Helper to create a transport from session
+ */
+export function createTransportFromSession(session: BBSSession, socket: any): TransferTransport {
+  const connectionType = (session as any).connectionType;
+
+  let type: TransferTransport['type'] = 'web';
+  if (connectionType === 'ssh') {
+    type = 'ssh';
+  } else if (connectionType === 'telnet') {
+    type = 'telnet';
+  }
+
+  return {
+    type,
+    send: (session as any).transferRawSend ||
+          ((buf: Buffer) => socket.emit('transfer-raw:data', buf))
+  };
+}
+
+export default TransferProtocolManager;

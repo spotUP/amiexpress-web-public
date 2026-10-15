@@ -1,0 +1,14 @@
+{
+  "command": "QUICKNEW",
+  "cfgFile": "QuickNew.Config1",
+  "settings": [],
+  "artSections": [
+    {
+      "file": "QuickNew.Config1",
+      "format": "quicknew",
+      "label": "New-files screen templates",
+      "maxLines": 1,
+      "maxLineLength": 400
+    }
+  ]
+}

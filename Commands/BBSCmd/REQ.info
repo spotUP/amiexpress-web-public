@@ -1,0 +1,10 @@
+BBSCMD=REQ
+NAME=Global Requests
+TYPE=XIM
+LOCATION=Doors/REQUESTS/requests
+DESCRIPTION=Ask the scene for a release to be uploaded or ASCII art to be made
+ACCESS=1
+MULTINODE=YES
+PRIORITY=SAME
+STACK=8192
+C64_ADAPT=40

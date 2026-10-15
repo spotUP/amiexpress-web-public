@@ -1,0 +1,3 @@
+# Explicitly allow reading logs and docs
+!logs/
+!handoff.md

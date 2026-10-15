@@ -1,0 +1,55 @@
+[0m
+[0;35m- --- -----[ [33m5D-ZippySearch v0.03 [35m]----- --- - ---- - ----- -----[ [33msTc/5D [35m]---
+[0m
+[32mEnter search string [35m>: [0mLHA
+[32mEnter dir [35m([33m1[35m-[33m2[35m), ([33mA[35m)[32mll[35m, ([33mU[35m)[32mpload [35m>: [0ma
+[32mScanning directory [33m1 [0m... [32mOk[33m![0m[0m
+[0mtest.lha     [35mN[33m   5000  [32m01-21-26  [0m       Test file for AquaScan[0m
+                                 Sent by: sysop test
+[32mScanning [0m...[K[35m[[33mEND OF DIRECTORY[35m][0m
+[32mZippy Search Options[35m: [33mF[35m,[33mN[35m,[33mQ [35m>: [0m[K[32mScanning directory [33m2 [0m... [32mOk[33m![0m[0m
+[0mAE-KEY.LHA   [35mN[33m   7134  [32m01-21-26  [0m.-- )> cHAMBER oF pAIN  <( --.[0m
+                                 | _____                _____ |
+                                 | \\\\\\___   /\   ___////// |
+                                 |  \______ )_/AE\_( ______/  |
+                                 |        (__/rEGI\__)        |
+                                 |           \STER/           |
+                                 | AmiExpress \  / KeyMaker   |
+                                 |             \/             |
+                                 `- - )> 046-0223-17204 <( - -'
+[32mScanning [0m...[K[0mAXVAL.LHA    [35mN[33m   8218  [32m01-21-26  [0mAX Validation v1.0[0m
+                                 Sent by: sysop
+[32mScanning [0m...[K[0mCB4!ST13.LHA [35mN[33m 119214  [32m01-21-26  [0m[42;34mStrip`n`Add T N G [35mv1.30m[44;3[0m
+                                 [44;32m[-----------------------------------[0m
+                                 [0mTHE BEST MULTISYSTEM CHECKER/STRIPPER/AD[0m
+                                 [0mIDSTRIPPER/IDADDER IN THE AMIGA SCENE !![0m
+                                 [0mWAIT FOR SOME REFRESHING NEWS SOON! :)[0m
+                                 [0mTO GET REGGED WRITE TO:[35mG.M.X@GMX.DE[0m
+                                 [0mNOW W/ ULTRA COOL BBS DESIGN & RAMCOPY F[0m
+                                 [44;32m[-[Version: 1.3]--------------[06.06[0m
+                                 [0m[0m
+[32mScanning [0m...[K[0mCB4!SA60.LHA [35mN[33m  98502  [32m01-21-26  [0m[42;34mStrip`n`Add Final V6.0[44;32m `96 b[0m
+[32mZippy Search Options[35m: [33mF[35m,[33mN[35m,[33mQ [35m>: [0m[K                                 [------------------------------------------]
+                                 THE BEST MULTI-SYSTEM CHECKER/STRIPPER/ADDER
+                                 IDSTRIPPER/IDADDER IN THE WHOLE SCENE !!!!!!
+                                 TO GET REGGED WRITE TO: FLASH@HARDYBOX.GUN.D
+                                 [44;32m[-----------------------------------[0m
+[32mScanning [0m...[K[0mCB4!SA63.LHA [35mN[33m  92470  [32m01-21-26  [0mStrip`n`Add Turbo V6.3 `96 by The Flash/Cb4![0m
+                                 [------------------------------------------]
+                                 THE BEST MULTI-SYSTEM CHECKER/STRIPPER/ADDER
+                                 IDSTRIPPER/IDADDER IN THE AMIGA SCENE !!!!!!
+                                 TO GET REGGED WRITE TO: FLASH@HARDYBOX.GUN.D
+                                    NOW W/ OWN ZIP/LZX STRIP ROUTINES !!!!
+                                 [------------------------------------------]
+[32mScanning [0m...[K[0m5D_AMN10.LHA [35mN[33m  37742  [32m01-21-26  [0m  ________._____________________________.__[0m
+                                 5(___  /  |  ___.  ____  /  ____  ____  |  )
+                                 T/  /  \__   \  |  \  _  \___  \   \ \__   \
+                                 H\___  /___  /  |__/  |__/_____/___/_____  /
+                                 .    \/tG  \/___| \___|                  \/.
+                                 |    5D-AdiMenu V1.0 by [tHE aDDiCT/5D!]   |
+                                 | Handles Textfiles like Commands, so use  |
+                                 :  it as Doormenu, Filemenu or whatever!   |
+                                 |  fully coded in C,  fully configurable!  |
+                                 `------------------------------------------'
+[32mZippy Search Options[35m: [33mF[35m,[33mN[35m,[33mQ [35m>: [0mQuit
+
