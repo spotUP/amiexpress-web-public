@@ -428,9 +428,7 @@ export async function createApp(session: DoorSession) {
       selected: { fg: T.ink, bg: T.accent },
       border: { fg: PANEL_BORDER },
     },
-    scrollbar: {
-      ch: ' ',
-    },
+    scrollbar: true,
     // @ts-ignore - zIndex exists but not in types
     zIndex: 10000,
   });
@@ -705,9 +703,7 @@ export async function createApp(session: DoorSession) {
     vi: true,
     scrollable: true,
     alwaysScroll: true,
-    scrollbar: {
-      ch: '█'
-    },
+    scrollbar: true,
     items: [],
   });
 

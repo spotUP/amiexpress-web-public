@@ -22,7 +22,7 @@ export function createUserList(screen: Screen): List {
       border: { fg: PANEL_BORDER },
       selected: { bg: T.bar, fg: T.ink },
     },
-    scrollbar: { ch: '█' },
+    scrollbar: true,
     tags: true
   });
 }

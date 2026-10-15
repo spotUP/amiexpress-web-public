@@ -111,10 +111,7 @@ export function createChatLog(
     scrollOnInput: true,
     scrollback: 1000,
     tags: true,
-    scrollbar: {
-      ch: '█',
-      style: { fg: T.accent }
-    },
+    scrollbar: true,
     style: {
       fg: T.ink,
       bg: T.ground,

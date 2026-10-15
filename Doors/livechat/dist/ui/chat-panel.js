@@ -14,7 +14,7 @@ function chatPanelConfig() {
         border: { type: 'line' },
         scrollable: true,
         alwaysScroll: true,
-        scrollbar: { ch: '█', track: { ch: '│', style: { fg: door_theme_1.T.dim } }, style: { fg: door_theme_1.T.accent } },
+        scrollbar: true,
         tags: true,
         style: {
             fg: door_theme_1.T.ink,

@@ -775,10 +775,7 @@ class DialogManager {
                 mouse: true,
                 keys: true,
                 vi: true,
-                scrollbar: {
-                    ch: ' ',
-                    style: { bg: lib_1.UI_THEME.topBar.bg },
-                },
+                scrollbar: true,
                 style: { fg: lib_1.UI_THEME.ink, bg: lib_1.UI_THEME.windowBg },
             });
             const cleanup = () => {

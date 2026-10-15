@@ -177,7 +177,7 @@ class DoormanLayout {
         this.doorList = new blessed_1.List({ parent: this.listPanel, ...inset,
             keys: true, vi: false, mouse: true, scrollable: true,
             alwaysScroll: true, tags: true, wrapItems: false,
-            scrollbar: { ch: ' ', style: { bg: door_theme_1.T.bar } },
+            scrollbar: true,
             style: { selected: { bg: door_theme_1.T.bar, fg: door_theme_1.T.ink }, item: { fg: door_theme_1.T.ink } } });
         this.infoPanel = new blessed_1.Panel({ parent: screen, ...infoGeom,
             ...frame,

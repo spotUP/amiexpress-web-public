@@ -166,12 +166,7 @@ door.onStart(async (ctx: DoorContext) => {
     content: `{${T.accentAlt}-fg}No speakers connected{/${T.accentAlt}-fg}`,
     scrollable: true,
     alwaysScroll: true,
-    scrollbar: {
-      ch: ' ',
-      style: {
-        bg: T.dim,
-      },
-    },
+    scrollbar: true,
   });
 
   // Waveform visualization panel

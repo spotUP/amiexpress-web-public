@@ -164,11 +164,7 @@ async function createApp(session) {
         mouse: true,
         scrollable: true,
         alwaysScroll: true,
-        scrollbar: {
-            ch: ' ', // Space with bg color for Amiga compatibility
-            track: { ch: ' ', style: { bg: 'black' } },
-            style: { bg: S.list.style.selected?.bg ?? 'cyan' }
-        },
+        scrollbar: true,
         style: S.list.style,
         items: [
             ' 1. Basic Widgets',
@@ -369,11 +365,7 @@ async function createApp(session) {
             alwaysScroll: true,
             keys: true,
             vi: true,
-            scrollbar: {
-                ch: ' ', // Space with bg color for Amiga compatibility
-                track: { ch: ' ', style: { bg: 'black' } },
-                style: { bg: 'green' }
-            },
+            scrollbar: true,
             style: { fg: 'white', border: { fg: 'green' } },
         });
         for (let i = 1; i <= 20; i++) {
@@ -391,11 +383,7 @@ async function createApp(session) {
             keys: true,
             vi: true,
             alwaysScroll: true,
-            scrollbar: {
-                ch: ' ', // Space with bg color for Amiga compatibility
-                track: { ch: ' ', style: { bg: 'black' } },
-                style: { bg: 'blue' }
-            },
+            scrollbar: true,
             style: { fg: 'white', border: { fg: 'blue' } },
             content: Array.from({ length: 15 }, (_, i) => `Line ${i + 1}: Scrollable text content`).join('\n'),
         });
@@ -684,11 +672,7 @@ async function createApp(session) {
             label: ' Log ', border: { type: 'line' },
             tags: true, scrollable: true, mouse: true,
             keys: true, vi: true,
-            scrollbar: {
-                ch: ' ', // Space with bg color for Amiga compatibility
-                track: { ch: ' ', style: { bg: 'black' } },
-                style: { bg: 'green' }
-            },
+            scrollbar: true,
             style: { fg: 'white', border: { fg: 'green' } },
         });
         let logCount = 0;
@@ -1130,11 +1114,7 @@ async function createApp(session) {
             vi: true,
             scrollable: true,
             alwaysScroll: true,
-            scrollbar: {
-                ch: ' ',
-                track: { ch: ' ', style: { bg: 'black' } },
-                style: { bg: 'cyan' },
-            },
+            scrollbar: true,
             style: { fg: 'white', border: { fg: 'cyan' } },
         });
         // Generate enough content to make scrolling obvious
@@ -1662,11 +1642,7 @@ End of sample markdown.`;
             keys: true,
             vi: true,
             mouse: true,
-            scrollbar: {
-                ch: ' ', // Space with bg color for Amiga compatibility
-                track: { ch: ' ', style: { bg: 'black' } },
-                style: { bg: 'cyan' }
-            },
+            scrollbar: true,
             style: { fg: 'white', border: { fg: 'cyan' } },
         });
         markdown.setMarkdown(sampleMd);
@@ -1851,11 +1827,7 @@ End of sample markdown.`;
             keys: true,
             vi: true,
             style: { fg: 'white', bg: 'black', border: { fg: 'magenta' } },
-            scrollbar: {
-                ch: ' ', // Space with bg color for Amiga compatibility
-                track: { ch: ' ', style: { bg: 'black' } },
-                style: { bg: 'magenta' }
-            },
+            scrollbar: true,
         });
         // Add scrollable content
         for (let i = 1; i <= 20; i++) {
@@ -1891,11 +1863,7 @@ End of sample markdown.`;
             baseLimit: 10, // NEW: Limit scroll to max 10
             style: { fg: 'white', bg: 'black', border: { fg: 'green' }, selected: { fg: 'black', bg: 'green' } },
             items: Array.from({ length: 30 }, (_, i) => `Item ${i + 1} (scroll stops at 10)`),
-            scrollbar: {
-                ch: ' ', // Space with bg color for Amiga compatibility
-                track: { ch: ' ', style: { bg: 'black' } },
-                style: { bg: 'green' }
-            },
+            scrollbar: true,
         });
         addResult('baseLimit', 'pass', 'Scroll limit works');
         // Info box
@@ -2005,11 +1973,7 @@ End of sample markdown.`;
                 'Item 7',
                 'Item 8',
             ],
-            scrollbar: {
-                ch: ' ', // Space with bg color for Amiga compatibility
-                track: { ch: ' ', style: { bg: 'black' } },
-                style: { bg: 'cyan' },
-            },
+            scrollbar: true,
         });
         // Panel 2: Form with inputs
         const form = blessed_1.default.form({
@@ -3292,11 +3256,7 @@ End of sample markdown.`;
             top: 0, left: 0, right: 0, bottom: 0,
             tags: true, scrollable: true, mouse: true,
             keys: true, vi: true, alwaysScroll: true,
-            scrollbar: {
-                ch: ' ', // Space with bg color for Amiga compatibility
-                track: { ch: ' ', style: { bg: 'black' } },
-                style: { bg: 'cyan' }
-            },
+            scrollbar: true,
             content,
             style: { fg: 'white' },
         });

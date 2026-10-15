@@ -77,11 +77,7 @@ async function showAchievements(screen, currentUser, dataManager, onNavigate) {
             label: ' Achievements ',
             scrollable: true,
             alwaysScroll: true,
-            scrollbar: {
-                ch: '|',
-                track: { ch: ':', style: { fg: door_theme_1.T.dim, bg: door_theme_1.T.ground } },
-                style: { fg: door_theme_1.T.accent, bg: door_theme_1.T.ground },
-            },
+            scrollbar: true,
             mouse: true,
             keys: true,
             vi: true,

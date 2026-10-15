@@ -205,11 +205,7 @@ export async function createApp(session: DoorSession) {
     mouse: true,
     scrollable: true,
     alwaysScroll: true,
-    scrollbar: {
-      ch: ' ',  // Space with bg color for Amiga compatibility
-      track: { ch: ' ', style: { bg: 'black' } },
-      style: { bg: S.list.style.selected?.bg ?? 'cyan' }
-    } as any,
+    scrollbar: true as any,
     style: S.list.style as any,
     items: [
       ' 1. Basic Widgets',
@@ -424,11 +420,7 @@ export async function createApp(session: DoorSession) {
       alwaysScroll: true,
       keys: true,
       vi: true,
-      scrollbar: {
-        ch: ' ',  // Space with bg color for Amiga compatibility
-        track: { ch: ' ', style: { bg: 'black' } },
-        style: { bg: 'green' }
-      },
+      scrollbar: true,
       style: { fg: 'white', border: { fg: 'green' } },
     });
     for (let i = 1; i <= 20; i++) {
@@ -447,11 +439,7 @@ export async function createApp(session: DoorSession) {
       keys: true,
       vi: true,
       alwaysScroll: true,
-      scrollbar: {
-        ch: ' ',  // Space with bg color for Amiga compatibility
-        track: { ch: ' ', style: { bg: 'black' } },
-        style: { bg: 'blue' }
-      },
+      scrollbar: true,
       style: { fg: 'white', border: { fg: 'blue' } },
       content: Array.from({ length: 15 }, (_, i) => `Line ${i + 1}: Scrollable text content`).join('\n'),
     });
@@ -773,11 +761,7 @@ export async function createApp(session: DoorSession) {
       label: ' Log ', border: { type: 'line' },
       tags: true, scrollable: true, mouse: true,
       keys: true, vi: true,
-      scrollbar: {
-        ch: ' ',  // Space with bg color for Amiga compatibility
-        track: { ch: ' ', style: { bg: 'black' } },
-        style: { bg: 'green' }
-      },
+      scrollbar: true,
       style: { fg: 'white', border: { fg: 'green' } },
     });
     let logCount = 0;
@@ -1264,11 +1248,7 @@ export async function createApp(session: DoorSession) {
       vi: true,
       scrollable: true,
       alwaysScroll: true,
-      scrollbar: {
-        ch: ' ',
-        track: { ch: ' ', style: { bg: 'black' } },
-        style: { bg: 'cyan' },
-      },
+      scrollbar: true,
       style: { fg: 'white', border: { fg: 'cyan' } },
     });
 
@@ -1870,11 +1850,7 @@ End of sample markdown.`;
       keys: true,
       vi: true,
       mouse: true,
-      scrollbar: {
-        ch: ' ',  // Space with bg color for Amiga compatibility
-        track: { ch: ' ', style: { bg: 'black' } },
-        style: { bg: 'cyan' }
-      },
+      scrollbar: true,
       style: { fg: 'white', border: { fg: 'cyan' } },
     } as any);
     markdown.setMarkdown(sampleMd);
@@ -2078,11 +2054,7 @@ End of sample markdown.`;
       keys: true,
       vi: true,
       style: { fg: 'white', bg: 'black', border: { fg: 'magenta' } },
-      scrollbar: {
-        ch: ' ',  // Space with bg color for Amiga compatibility
-        track: { ch: ' ', style: { bg: 'black' } },
-        style: { bg: 'magenta' }
-      },
+      scrollbar: true,
     });
 
     // Add scrollable content
@@ -2121,11 +2093,7 @@ End of sample markdown.`;
       baseLimit: 10,  // NEW: Limit scroll to max 10
       style: { fg: 'white', bg: 'black', border: { fg: 'green' }, selected: { fg: 'black', bg: 'green' } },
       items: Array.from({ length: 30 }, (_, i) => `Item ${i + 1} (scroll stops at 10)`),
-      scrollbar: {
-        ch: ' ',  // Space with bg color for Amiga compatibility
-        track: { ch: ' ', style: { bg: 'black' } },
-        style: { bg: 'green' }
-      },
+      scrollbar: true,
     } as any);
     addResult('baseLimit', 'pass', 'Scroll limit works');
 
@@ -2243,11 +2211,7 @@ End of sample markdown.`;
         'Item 7',
         'Item 8',
       ],
-      scrollbar: {
-        ch: ' ',  // Space with bg color for Amiga compatibility
-        track: { ch: ' ', style: { bg: 'black' } },
-        style: { bg: 'cyan' },
-      },
+      scrollbar: true,
     });
 
     // Panel 2: Form with inputs
@@ -3689,11 +3653,7 @@ End of sample markdown.`;
       top: 0, left: 0, right: 0, bottom: 0,
       tags: true, scrollable: true, mouse: true,
       keys: true, vi: true, alwaysScroll: true,
-      scrollbar: {
-        ch: ' ',  // Space with bg color for Amiga compatibility
-        track: { ch: ' ', style: { bg: 'black' } },
-        style: { bg: 'cyan' }
-      },
+      scrollbar: true,
       content,
       style: { fg: 'white' },
     });

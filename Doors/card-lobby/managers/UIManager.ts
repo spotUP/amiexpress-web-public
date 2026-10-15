@@ -473,11 +473,7 @@ export class UIManager {
         selected: { fg: UI_THEME.highlightInk, bg: UI_THEME.highlightBg },
         header: { fg: UI_THEME.accent, bold: true },
       } as any,
-      scrollbar: {
-        ch: '|',
-        track: { ch: '|', bg: UI_THEME.windowBg },
-        style: { fg: UI_THEME.accent },
-      } as any,
+      scrollbar: true,
     }) as any;
 
     // The highlight moving is not a decision: it keeps the Table panel
@@ -616,11 +612,7 @@ export class UIManager {
       scrollable: true,
       alwaysScroll: true,
       style: { fg: UI_THEME.ink, border: UI_THEME.windowBorder, bg: UI_THEME.windowBg },
-      scrollbar: {
-        ch: '|',
-        track: { ch: '|', bg: UI_THEME.windowBg },
-        style: { fg: UI_THEME.accent, bg: UI_THEME.accent },
-      } as any,
+      scrollbar: true,
     });
 
     this.buildTablePanels();
@@ -701,7 +693,6 @@ export class UIManager {
   buildTablePanels(): void {
     const panelStyle = { border: UI_THEME.windowBorder, bg: UI_THEME.windowBg };
     const contentStyle = { fg: UI_THEME.ink, bg: UI_THEME.windowBg };
-    const scrollbarStyle = { fg: UI_THEME.accent, bg: UI_THEME.accent };
 
     this.flopPanel = createBox({
       parent: this.tableWindow,
@@ -764,11 +755,7 @@ export class UIManager {
       keys: true,
       mouse: true,
       style: contentStyle,
-      scrollbar: {
-        ch: '|',
-        track: { ch: '|', bg: UI_THEME.windowBg },
-        style: scrollbarStyle,
-      } as any,
+      scrollbar: true,
       content: '',
     });
 
@@ -836,11 +823,7 @@ export class UIManager {
       scrollOnInput: false,
       scrollback: 200,
       style: contentStyle,
-      scrollbar: {
-        ch: '|',
-        track: { ch: '|', bg: UI_THEME.windowBg },
-        style: scrollbarStyle,
-      } as any,
+      scrollbar: true,
       content: '',
     });
 
@@ -880,11 +863,7 @@ export class UIManager {
       scrollOnInput: false,
       scrollback: 200,
       style: contentStyle,
-      scrollbar: {
-        ch: '|',
-        track: { ch: '|', bg: UI_THEME.windowBg },
-        style: scrollbarStyle,
-      } as any,
+      scrollbar: true,
       content: '',
     });
 

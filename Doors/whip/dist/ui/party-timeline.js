@@ -98,13 +98,9 @@ async function showPartyTimeline(screen, user, dataManager, partyCalendar, onNav
             scrollable: true,
             alwaysScroll: true,
             // Visible scrollbar (2026-09-10): the list scrolled invisibly
-            // while the selection moved below the fold. Amiga-ASCII glyphs
-            // only - the terminal renders no block characters.
-            scrollbar: {
-                ch: '|',
-                track: { ch: ':', style: { fg: door_theme_1.T.dim, bg: door_theme_1.T.ground } },
-                style: { fg: door_theme_1.T.accent, bg: door_theme_1.T.ground },
-            },
+            // while the selection moved below the fold. On/off only: the look
+            // is the theme's (sdk renderScrollbar).
+            scrollbar: true,
             mouse: true,
             keys: true,
             vi: true,

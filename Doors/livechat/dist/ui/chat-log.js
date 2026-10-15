@@ -105,10 +105,7 @@ function createChatLog(screen, sidebarWidth) {
         scrollOnInput: true,
         scrollback: 1000,
         tags: true,
-        scrollbar: {
-            ch: '█',
-            style: { fg: door_theme_1.T.accent }
-        },
+        scrollbar: true,
         style: {
             fg: door_theme_1.T.ink,
             bg: door_theme_1.T.ground,

@@ -8,18 +8,7 @@ export declare function chatPanelConfig(): {
     };
     scrollable: boolean;
     alwaysScroll: boolean;
-    scrollbar: {
-        ch: string;
-        track: {
-            ch: string;
-            style: {
-                fg: string;
-            };
-        };
-        style: {
-            fg: string;
-        };
-    };
+    scrollbar: boolean;
     tags: boolean;
     style: {
         fg: string;

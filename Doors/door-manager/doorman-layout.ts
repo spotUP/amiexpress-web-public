@@ -199,7 +199,7 @@ export class DoormanLayout {
     this.doorList = new List({ parent: this.listPanel, ...inset,
       keys: true, vi: false, mouse: true, scrollable: true,
       alwaysScroll: true, tags: true, wrapItems: false,
-      scrollbar: { ch:' ', style:{ bg: T.bar } },
+      scrollbar: true,
       style: { selected:{ bg: T.bar, fg: T.ink }, item:{ fg: T.ink } } } as any);
 
     this.infoPanel = new Panel({ parent: screen, ...infoGeom,

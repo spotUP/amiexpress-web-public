@@ -864,10 +864,7 @@ export class DialogManager {
         mouse: true,
         keys: true,
         vi: true,
-        scrollbar: {
-          ch: ' ',
-          style: { bg: UI_THEME.topBar.bg },
-        },
+        scrollbar: true,
         style: { fg: UI_THEME.ink, bg: UI_THEME.windowBg },
       });
 

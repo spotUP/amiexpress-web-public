@@ -413,11 +413,7 @@ class UIManager {
                 selected: { fg: constants_1.UI_THEME.highlightInk, bg: constants_1.UI_THEME.highlightBg },
                 header: { fg: constants_1.UI_THEME.accent, bold: true },
             },
-            scrollbar: {
-                ch: '|',
-                track: { ch: '|', bg: constants_1.UI_THEME.windowBg },
-                style: { fg: constants_1.UI_THEME.accent },
-            },
+            scrollbar: true,
         });
         // The highlight moving is not a decision: it keeps the Table panel
         // showing whatever row the cursor is on.
@@ -549,11 +545,7 @@ class UIManager {
             scrollable: true,
             alwaysScroll: true,
             style: { fg: constants_1.UI_THEME.ink, border: constants_1.UI_THEME.windowBorder, bg: constants_1.UI_THEME.windowBg },
-            scrollbar: {
-                ch: '|',
-                track: { ch: '|', bg: constants_1.UI_THEME.windowBg },
-                style: { fg: constants_1.UI_THEME.accent, bg: constants_1.UI_THEME.accent },
-            },
+            scrollbar: true,
         });
         this.buildTablePanels();
         // Last, because the glitches are aimed at panes built above this line.
@@ -624,7 +616,6 @@ class UIManager {
     buildTablePanels() {
         const panelStyle = { border: constants_1.UI_THEME.windowBorder, bg: constants_1.UI_THEME.windowBg };
         const contentStyle = { fg: constants_1.UI_THEME.ink, bg: constants_1.UI_THEME.windowBg };
-        const scrollbarStyle = { fg: constants_1.UI_THEME.accent, bg: constants_1.UI_THEME.accent };
         this.flopPanel = (0, blessed_helpers_1.createBox)({
             parent: this.tableWindow,
             top: 1,
@@ -683,11 +674,7 @@ class UIManager {
             keys: true,
             mouse: true,
             style: contentStyle,
-            scrollbar: {
-                ch: '|',
-                track: { ch: '|', bg: constants_1.UI_THEME.windowBg },
-                style: scrollbarStyle,
-            },
+            scrollbar: true,
             content: '',
         });
         this.handPanel = (0, blessed_helpers_1.createBox)({
@@ -751,11 +738,7 @@ class UIManager {
             scrollOnInput: false,
             scrollback: 200,
             style: contentStyle,
-            scrollbar: {
-                ch: '|',
-                track: { ch: '|', bg: constants_1.UI_THEME.windowBg },
-                style: scrollbarStyle,
-            },
+            scrollbar: true,
             content: '',
         });
         // CHAT sits beside ACTIVITY when the table has the room for it: the
@@ -792,11 +775,7 @@ class UIManager {
             scrollOnInput: false,
             scrollback: 200,
             style: contentStyle,
-            scrollbar: {
-                ch: '|',
-                track: { ch: '|', bg: constants_1.UI_THEME.windowBg },
-                style: scrollbarStyle,
-            },
+            scrollbar: true,
             content: '',
         });
         this.layoutTablePanels();

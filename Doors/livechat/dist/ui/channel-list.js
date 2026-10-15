@@ -25,7 +25,7 @@ function createChannelList(screen) {
         },
         keys: true,
         vi: true,
-        scrollbar: { ch: '█' }
+        scrollbar: true
     });
 }
 /** Format channel item for list */

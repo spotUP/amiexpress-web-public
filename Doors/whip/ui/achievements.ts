@@ -93,11 +93,7 @@ export async function showAchievements(
       label: ' Achievements ',
       scrollable: true,
       alwaysScroll: true,
-      scrollbar: {
-        ch: '|',
-        track: { ch: ':', style: { fg: T.dim, bg: T.ground } },
-        style: { fg: T.accent, bg: T.ground },
-      },
+      scrollbar: true,
       mouse: true,
       keys: true,
       vi: true,

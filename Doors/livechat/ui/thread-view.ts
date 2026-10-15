@@ -25,7 +25,7 @@ export function createThreadView(screen: Screen, threadData: any) {
     vi: true,
     mouse: true,
     scrollable: true,
-    scrollbar: { ch: '█' },
+    scrollbar: true,
     focusable: true,
     hidden: true,
     trapFocus: true,

@@ -140,11 +140,7 @@ async function execute(session) {
         keys: true,
         mouse: true,
         vi: true,
-        scrollbar: {
-            ch: '█',
-            track: { ch: '│' },
-            style: { fg: T.accent }
-        },
+        scrollbar: true,
         style: {
             selected: {
                 bg: T.bar,

@@ -601,10 +601,7 @@ export class BugTrackerApp {
       keys: true,
       vi: true,
       mouse: true,
-      scrollbar: {
-        ch: ' ',
-        style: { bg: T.accent },
-      },
+      scrollbar: true,
       padding: { left: 1 },
     });
 

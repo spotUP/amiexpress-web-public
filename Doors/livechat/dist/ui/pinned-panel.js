@@ -25,7 +25,7 @@ function createPinnedPanel(screen, pinnedMessages) {
         vi: true,
         mouse: true,
         scrollable: true,
-        scrollbar: { ch: '█' },
+        scrollbar: true,
         focusable: true,
         hidden: true,
         trapFocus: true,

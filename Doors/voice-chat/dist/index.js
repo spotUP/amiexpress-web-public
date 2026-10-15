@@ -155,12 +155,7 @@ door.onStart(async (ctx) => {
         content: `{${door_theme_1.T.accentAlt}-fg}No speakers connected{/${door_theme_1.T.accentAlt}-fg}`,
         scrollable: true,
         alwaysScroll: true,
-        scrollbar: {
-            ch: ' ',
-            style: {
-                bg: door_theme_1.T.dim,
-            },
-        },
+        scrollbar: true,
     });
     // Waveform visualization panel
     const waveformBox = blessed_1.default.box({

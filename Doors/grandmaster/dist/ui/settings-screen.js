@@ -133,10 +133,7 @@ class SettingsScreen {
                 label: ' Settings ',
                 scrollable: true,
                 alwaysScroll: true,
-                scrollbar: {
-                    ch: ' ',
-                    style: { bg: door_theme_1.T.chrome },
-                },
+                scrollbar: true,
                 style: {
                     border: { fg: door_theme_1.T.chrome },
                     selected: { bg: door_theme_1.T.chrome, fg: door_theme_1.T.ground },

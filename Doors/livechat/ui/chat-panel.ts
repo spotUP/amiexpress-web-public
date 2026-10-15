@@ -12,7 +12,7 @@ export function chatPanelConfig() {
     border: { type: 'line' as const },
     scrollable: true,
     alwaysScroll: true,
-    scrollbar: { ch: '█', track: { ch: '│', style: { fg: T.dim } }, style: { fg: T.accent } },
+    scrollbar: true,
     tags: true,
     style: {
       fg: T.ink,

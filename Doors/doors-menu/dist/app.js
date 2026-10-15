@@ -351,12 +351,7 @@ async function createApp(session) {
         mouse: true,
         scrollable: true,
         alwaysScroll: true,
-        scrollbar: {
-            ch: ' ',
-            style: {
-                bg: theme.tokens.selectionBg
-            }
-        },
+        scrollbar: true,
         style: {
             selected: s.list.style.selected,
             item: { fg: theme.tokens.ink }

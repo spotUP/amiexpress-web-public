@@ -22,7 +22,7 @@ export function createChannelList(screen: Screen): List {
     },
     keys: true,
     vi: true,
-    scrollbar: { ch: '█' }
+    scrollbar: true
   });
 }
 

@@ -24,7 +24,7 @@ function createUserList(screen) {
             border: { fg: theme_1.PANEL_BORDER },
             selected: { bg: door_theme_1.T.bar, fg: door_theme_1.T.ink },
         },
-        scrollbar: { ch: '█' },
+        scrollbar: true,
         tags: true
     });
 }

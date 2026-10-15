@@ -160,10 +160,7 @@ export class SettingsScreen {
         label: ' Settings ',
         scrollable: true,
         alwaysScroll: true,
-        scrollbar: {
-          ch: ' ',
-          style: { bg: T.chrome },
-        },
+        scrollbar: true,
         style: {
           border: { fg: T.chrome },
           selected: { bg: T.chrome, fg: T.ground },

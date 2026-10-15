@@ -369,9 +369,7 @@ async function createApp(session) {
             selected: { fg: door_theme_1.T.ink, bg: door_theme_1.T.accent },
             border: { fg: theme_2.PANEL_BORDER },
         },
-        scrollbar: {
-            ch: ' ',
-        },
+        scrollbar: true,
         // @ts-ignore - zIndex exists but not in types
         zIndex: 10000,
     });
@@ -619,9 +617,7 @@ async function createApp(session) {
         vi: true,
         scrollable: true,
         alwaysScroll: true,
-        scrollbar: {
-            ch: '█'
-        },
+        scrollbar: true,
         items: [],
     });
     channelList.on('mouseenter', () => {

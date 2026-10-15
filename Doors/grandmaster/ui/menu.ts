@@ -228,7 +228,7 @@ export class MenuScreen {
         width: compact ? panelWidth - 2 : 22,
         height: panelHeight - 2,
         scrollable: true,
-        scrollbar: compact ? undefined : { ch: ' ', style: { bg: T.chrome } },
+        scrollbar: compact ? undefined : true,
         style: {
           border: { fg: T.chrome },
           selected: { bg: T.chrome, fg: T.ground },

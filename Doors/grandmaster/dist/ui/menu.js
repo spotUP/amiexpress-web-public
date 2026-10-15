@@ -190,7 +190,7 @@ class MenuScreen {
                 width: compact ? panelWidth - 2 : 22,
                 height: panelHeight - 2,
                 scrollable: true,
-                scrollbar: compact ? undefined : { ch: ' ', style: { bg: door_theme_1.T.chrome } },
+                scrollbar: compact ? undefined : true,
                 style: {
                     border: { fg: door_theme_1.T.chrome },
                     selected: { bg: door_theme_1.T.chrome, fg: door_theme_1.T.ground },
