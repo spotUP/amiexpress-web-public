@@ -28,7 +28,7 @@ typedef struct {
     int top, left, height, width;
     int entry_count, section_count;
     const int *entry_section;              /* section of entry i; entries are in section order */
-    ui_grid_text_fn key, label, section_title;
+    ui_grid_text_fn key, label, section_title;   /* section_title 0: no header rows */
     ui_grid_text_fn right;                 /* may be 0 */
     ui_grid_text_fn flags;                 /* may be 0; 'C' current, 'G' greyed, 'L' has a list under it */
     int max_columns;                       /* 0 = 4 */

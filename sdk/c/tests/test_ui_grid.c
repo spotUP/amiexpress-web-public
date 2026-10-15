@@ -107,16 +107,20 @@ static void a_page_turn_repaints_the_box_and_a_move_inside_does_not(void)
     assert(ui_grid_draw_changed(&g, &b) == 1);
 }
 
-static void scroll_follows_a_page_at_a_time(void)
+static void scroll_follows_one_row_at_a_time(void)
 {
+    /* sysop 2026-10-15: Down past the bottom moves the window one line, Up past the top brings the header back. */
     ui_grid g = a_grid(40, 5, UI_GRID_SCROLL);
-    int before;
+    int before, moved = 0;
     drawn(&g);
-    while (ui_grid_band_row(&g) == 0 && g.selected < 9) {
+    while (g.selected < 9) {
         before = g.offset;
         ui_grid_move(&g, UI_KEY_DOWN);
-        if (g.offset != before) { assert(g.offset - before >= 2); break; }
+        if (g.offset != before) { assert(g.offset - before == 1 || g.offset - before == 2); moved++; }   /* 2 only when a section header comes along */
     }
+    assert(moved >= 2);
+    while (g.selected > 0) ui_grid_move(&g, UI_KEY_UP);
+    assert(g.offset == 0);
 }
 
 static void the_hit_test_answers_the_entry_under_the_mouse(void)
@@ -267,7 +271,7 @@ int main(void)
     pages_never_end_on_a_header();
     a_page_that_would_end_on_a_header_ends_a_line_earlier();
     a_page_turn_repaints_the_box_and_a_move_inside_does_not();
-    scroll_follows_a_page_at_a_time();
+    scroll_follows_one_row_at_a_time();
     the_hit_test_answers_the_entry_under_the_mouse();
     the_right_column_the_marker_and_a_greyed_row_are_drawn();
     a_band_takes_its_rows_after_its_section();

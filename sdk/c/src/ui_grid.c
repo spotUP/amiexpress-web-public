@@ -80,7 +80,7 @@ static void build_lines(ui_grid *g)
         int first = e;
         while (e < n && g->entry_section && g->entry_section[e] == s) e++;
         if (e == first) continue;                      /* a section with no entries has no header */
-        push(g, UI_GL_HEADER, s, 0);
+        if (g->section_title) push(g, UI_GL_HEADER, s, 0);   /* no section_title: entries only, no header rows */
         for (r = first; r < e; r += g->columns)
             push(g, UI_GL_ITEMS, r, imin(g->columns, e - r));
         if (s == g->band_after_section)
@@ -165,11 +165,12 @@ static void follow(ui_grid *g)
     if (g->mode == UI_GRID_PAGES) { g->offset = g->page_start[ui_grid_page(g)]; return; }
     maxoff = imax(0, g->line_count - h);
     if (l >= 0) {
-        if (l < g->offset) g->offset = imax(0, l - h + 1);
-        else if (l >= g->offset + h) {
+        /* The window follows the selection one line at a time (sysop 2026-10-15: scroll a row, not a page): Down
+           past the bottom brings the line to the bottom, Up past the top brings it to the top with its header. */
+        if (l < g->offset) {
             g->offset = l;
             if (l > 0 && g->lines[l - 1].kind == UI_GL_HEADER) g->offset = l - 1;
-        }
+        } else if (l >= g->offset + h) g->offset = l - h + 1;
     }
     if (g->offset > maxoff) g->offset = maxoff;
     if (g->offset < 0) g->offset = 0;
@@ -256,6 +257,9 @@ int ui_grid_move(ui_grid *g, int key)
                 cur = next;
             }
             target = cur;
+            /* follow() moves the window only as far as the selection needs; a page key turns the page itself,
+               so the window moves with the selection and does not wait for it to reach the edge. */
+            g->offset = imax(0, imin(imax(0, g->line_count - g->height), g->offset + dir * imax(1, g->height - 1)));
         }
         break; }
     default: return 0;
