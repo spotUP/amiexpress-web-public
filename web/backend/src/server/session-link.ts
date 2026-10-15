@@ -182,7 +182,7 @@ export function createSessionLink(first: Socket, initial?: SessionLinkHooks): Se
 
   const members: LinkMembers = {
     emit,
-    send: (...args) => { emit('message', ...args); return proxy; },
+    send: (...args) => { proxy.emit('message', ...args); return proxy; },
     on,
     addListener: on,
     once: (event, fn) => {
@@ -228,17 +228,46 @@ export function createSessionLink(first: Socket, initial?: SessionLinkHooks): Se
     get id() { return raw.id; },
     get connected() { return live() && raw.connected; },
   };
-  const target = members as LinkMembers & Record<string | symbol, unknown>;
-  Object.defineProperty(target, LINK, { value: true });
+  Object.defineProperty(members, LINK, { value: true, configurable: true });
 
-  const proxy: SessionLink = new Proxy(target, {
-    get(t, p) {
-      if (p in t) return t[p];
-      const v = (raw as unknown as Record<string | symbol, unknown>)[p];
+  // Two layers, like a socket.io Socket: `members` is the prototype-level base
+  // (never written to from outside), `shadow` holds what callers assign ONTO
+  // the link (a wrapper installed on `emit`, `session`, `_modemEmulator` ...)
+  // - the link's "own properties". hasOwnProperty / delete / Object.keys see
+  // only the shadow, so `hadOwn ? restore : delete` code (door.handler.ts,
+  // c64-door-adapter.ts) reverts to the base member. An object INHERITING from
+  // the link (Object.create(link), the door socket wrapper) that assigns
+  // `emit` or `id` gets an own property of its own and never touches the link.
+  const shadow = new Map<string | symbol, PropertyDescriptor>();
+  const baseMembers = members as unknown as Record<string | symbol, unknown>;
+  const rawMembers = (): Record<string | symbol, unknown> => raw as unknown as Record<string | symbol, unknown>;
+  const plain = (v: unknown): PropertyDescriptor => ({ value: v, writable: true, enumerable: true, configurable: true });
+
+  const proxy: SessionLink = new Proxy({} as object, {
+    get(_t, p, receiver) {
+      const d = shadow.get(p);
+      if (d) return 'value' in d ? d.value : d.get?.call(receiver);
+      if (p in baseMembers) return baseMembers[p];
+      if (p in Object.prototype) return Reflect.get(Object.prototype, p, receiver);   // not bound to the raw socket
+      const v = rawMembers()[p];
       return typeof v === 'function' ? (v as (...a: unknown[]) => unknown).bind(raw) : v;
     },
-    set(t, p, v) { t[p] = v; return true; },          // emit wrappers, `session`, `_modemEmulator` live on the link
-    has(t, p) { return p in t || p in (raw as object); },
+    set(_t, p, v, receiver) {
+      if (receiver !== proxy) return Reflect.defineProperty(receiver as object, p, plain(v));   // an inheritor owns what it assigns
+      const d = shadow.get(p);
+      if (d && d.set) { d.set.call(receiver, v); return true; }
+      shadow.set(p, plain(v));
+      return true;
+    },
+    has: (_t, p) => shadow.has(p) || p in baseMembers || p in (raw as object),
+    getOwnPropertyDescriptor: (_t, p) => { const d = shadow.get(p); return d ? { ...d, configurable: true } : undefined; },
+    defineProperty: (_t, p, desc) => {
+      if (desc.configurable === false) return false;
+      shadow.set(p, { ...desc, configurable: true });
+      return true;
+    },
+    deleteProperty: (_t, p) => { shadow.delete(p); return true; },
+    ownKeys: () => [...shadow.keys()],
   }) as unknown as SessionLink;
   bind(first);
   return proxy;

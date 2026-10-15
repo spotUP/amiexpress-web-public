@@ -233,3 +233,67 @@ describe('the tracked members of the facade follow the link across attach', () =
     expect(link.takeHeld().chunks).toHaveLength(1);
   });
 });
+
+describe('the link behaves like a socket for objects that inherit from it or assign onto it', () => {
+  it('an object created from the link assigns emit, id, on and once onto itself and leaves the link alone', () => {
+    const a = fakeRaw('A'); const link: any = createSessionLink(a);
+    const child = Object.create(link);
+    const wrapper = jest.fn(() => 'wrapped');
+    child.emit = wrapper; child.id = 'child-id'; child.on = 'x'; child.once = 'y';
+    expect(child.emit).toBe(wrapper); expect(child.id).toBe('child-id');
+    expect(Object.prototype.hasOwnProperty.call(child, 'emit')).toBe(true);
+    link.emit('ansi-output', 'hi');                       // no recursion, no wrapper
+    expect(wrapper).not.toHaveBeenCalled();
+    expect(a.sent).toEqual([['ansi-output', ['hi']]]);
+    expect(link.id).toBe('A');
+    expect(typeof link.on).toBe('function'); expect(typeof link.once).toBe('function');
+    delete child.emit;
+    expect(child.emit).toBe(link.emit);                   // back to the link's own
+  });
+
+  it('hasOwnProperty, assignment, delete and Object.keys on the link read like a plain socket', () => {
+    const a = fakeRaw('A'); const link: any = createSessionLink(a);
+    const base = link.emit;
+    expect(Object.prototype.hasOwnProperty.call(link, 'emit')).toBe(false);
+    const w = (e: string, ...x: unknown[]) => base(e, ...x);
+    link.emit = w;
+    expect(Object.prototype.hasOwnProperty.call(link, 'emit')).toBe(true);
+    expect(Object.keys(link)).toEqual(['emit']);
+    expect(link.emit).toBe(w);
+    link.emit('ansi-output', 'a');
+    expect(a.sent).toEqual([['ansi-output', ['a']]]);
+    delete link.emit;
+    expect(Object.prototype.hasOwnProperty.call(link, 'emit')).toBe(false);
+    expect(link.emit).toBe(base);
+    link.id = 'override'; expect(link.id).toBe('override');
+    expect(link.hasOwnProperty('nonsense')).toBe(false);  // Object.prototype's, not the raw's
+  });
+
+  it('send goes through an emit wrapper installed on the link', () => {
+    const a = fakeRaw('A'); const link: any = createSessionLink(a);
+    const base = link.emit;
+    link.emit = (e: string, ...x: unknown[]) => base(e, ...x.map((v) => `[${v}]`));
+    link.send('m');
+    expect(a.sent).toEqual([['message', ['[m]']]]);
+  });
+
+  it("the door's socket wrapper over a link emits to the raw socket without recursion", () => {
+    const a = fakeRaw('A'); const link: any = createSessionLink(a);
+    // Loaded here: door.handler pulls in the database module graph.
+    const { createDoorSocketWrapper } = require('../../src/handlers/door.handler');
+    const w = createDoorSocketWrapper(link, { nodeId: 1 } as any, {} as any);
+    w.emit('ansi-output', 'from the door');
+    expect(a.sent).toContainEqual(['ansi-output', ['from the door']]);
+    link.emit('ansi-output', 'from the board');           // the link's own emit is not the wrapper
+    expect(a.sent).toContainEqual(['ansi-output', ['from the board']]);
+    expect(w.id).toBe('A');
+  });
+
+  it("a menu collector made with Object.create(link) takes its own id", () => {
+    const a = fakeRaw('A'); const link: any = createSessionLink(a);
+    const collector = Object.create(link);
+    expect(() => { collector.id = `${link.id}:w-menu`; }).not.toThrow();
+    expect(collector.id).toBe('A:w-menu');
+    expect(link.id).toBe('A');
+  });
+});
