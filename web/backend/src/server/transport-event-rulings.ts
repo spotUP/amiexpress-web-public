@@ -729,6 +729,14 @@ const NAMED_RULINGS: Readonly<Record<string, EventRuling>> = {
     "`disconnect()` method, which closes the connection " +
     "(server/connection-emitter.ts:175).",
   },
+  "disconnecting": {
+    kind: "not-transport",
+    owner: "SessionLink",
+    note:
+    "socket.io's own `disconnecting` session event, re-raised to the " +
+    "session's listeners by the web caller's link (server/session-link.ts). " +
+    "Never written to a client; a byte transport has no such event.",
+  },
   "door-active": {
     kind: "translate",
     note:

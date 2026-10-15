@@ -253,6 +253,12 @@ export const FORWARDING_EMIT_SITES: ReadonlyArray<VariableEmitSite & { readonly 
       why: "`emitInternal` on the door API's own EventEmitter - server-side notification to the door, not a socket write.",
     },
     {
+      file: "web/backend/src/server/session-link.ts",
+      line: 178,
+      expression: "?.emit(event",
+      why: "The session link's emit forwards to the CURRENT raw socket (or holds the emit while parked): a pass-through of names its callers already pass as literals, which the census reads.",
+    },
+    {
       file: "web/backend/src/server/session-rooms.ts",
       line: 53,
       expression: "emitter.emit(event",
