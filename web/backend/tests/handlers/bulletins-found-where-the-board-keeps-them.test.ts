@@ -23,6 +23,16 @@ import {
   setDisplayFileCommandsDependencies,
 } from '../../src/handlers/commands/display-file-commands.handler';
 import { config } from '../../src/config';
+import { resetAcsLoader } from '../../src/utils/acs-access-loader';
+
+/** The sysop's access file, on the tmp board: checkSecurity reads ACS from boardRoot(). */
+function seedAccess(board: string): void {
+  fs.mkdirSync(path.join(board, 'Access'), { recursive: true });
+  fs.copyFileSync(
+    path.join(__dirname, '..', '..', '..', '..', 'Access', 'ACS.255.info'),
+    path.join(board, 'Access', 'ACS.255.info'),
+  );
+}
 
 function makeBoard(where: 'root' | 'conference'): string {
   const board = fs.mkdtempSync(path.join(os.tmpdir(), 'bulletins-'));
@@ -30,6 +40,7 @@ function makeBoard(where: 'root' | 'conference'): string {
     ? path.join(board, 'Bulletins')
     : path.join(board, 'Conf1', 'Screens', 'Bulletins');
   fs.mkdirSync(dir, { recursive: true });
+  seedAccess(board);
   fs.writeFileSync(path.join(dir, 'BullHelp.txt'), 'THE BULLETINS\n#1 One\n');
   fs.writeFileSync(path.join(dir, 'Bull1.txt'), 'the first bulletin\n');
   if (where === 'root') {
@@ -79,7 +90,9 @@ function makeSocket() {
 describe('where the bulletin tier looks', () => {
   const original = config.getConfig().dataDir;
   let board = '';
+  beforeEach(() => resetAcsLoader());
   afterEach(() => {
+    resetAcsLoader();
     config.set('dataDir', original);
     if (board) fs.rmSync(board, { recursive: true, force: true });
     board = '';
@@ -110,6 +123,7 @@ describe('where the bulletin tier looks', () => {
 
   test('a board with no bulletins anywhere still says so', () => {
     board = fs.mkdtempSync(path.join(os.tmpdir(), 'bulletins-none-'));
+    seedAccess(board);
     config.set('dataDir', board);
     wire();
     const socket = makeSocket();
