@@ -27,7 +27,7 @@ beforeEach(() => {
 
 const declared = [doorEventDef('door.bugs.update', 'A bug I reported was updated', 'Someone changed or commented on your bug.')!];
 const apiDeps = (over: Partial<NotificationsDeps> = {}): NotificationsDeps => ({
-  rawDb: () => handle, now: () => 1_000_000, smtpConfigured: async () => true, pushAvailable: () => true,
+  rawDb: () => handle, now: () => 1_000_000, smtpConfigured: async () => true, pushAvailable: () => true, vapidKey: () => null, pushSender: async () => ({ ok: true }),
   conferences: async () => [], hasConfAccess: () => true, isSysop: () => false,
   verify: { send: async () => ({ ok: true }), now: () => 1_000_000, makeCode: () => '123456', bbsName: async () => 'Test' },
   emailSender: async () => ({ ok: true }), boardZone: () => 'UTC', doorEvents: () => declared, ...over,

@@ -87,7 +87,7 @@ describe('a password never reaches a log', () => {
       jest.spyOn(console, 'error').mockImplementation(take),
       jest.spyOn(console, 'warn').mockImplementation(take),
       // The debug ring only keeps a registered node; capture what is pushed to it.
-      jest.spyOn(debugRegistry, 'pushXIM').mockImplementation((_n: number, entry: unknown) => { ring.push(JSON.stringify(entry)); }),
+      jest.spyOn(debugRegistry, 'pushXIM').mockImplementation((...args: unknown[]) => { const entry = args[1]; ring.push(JSON.stringify(entry)); }),
     ];
   });
   afterEach(() => { spies.forEach((s) => s.mockRestore()); });

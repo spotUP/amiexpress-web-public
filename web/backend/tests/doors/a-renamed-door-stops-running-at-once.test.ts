@@ -23,6 +23,7 @@ installDispatchHarness();
 async function adminRenames(from: string, to: string) {
   const def = commandCache.bbscmd.get(from);
   commandCache.bbscmd.delete(from);
+  if (!def) throw new Error(`no door ${from}`);
   commandCache.bbscmd.set(to, { ...def, name: to });
   await initializeDoors();
 }

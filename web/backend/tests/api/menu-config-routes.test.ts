@@ -29,7 +29,7 @@ let bodyLimit = '1mb';
 function appFor(secLevel = 255) {
   const app = express();
   app.use(express.json({ limit: bodyLimit }));
-  app.use('/api/config/menus', (req: any, _res, next) => { req.user = { secLevel }; next(); }, requireSysop(), createMenuConfigRouter(root), menuConfigBodyError);
+  app.use('/api/config/menus', (req: express.Request & { user?: { secLevel: number } }, _res: express.Response, next: express.NextFunction) => { req.user = { secLevel }; next(); }, requireSysop(), createMenuConfigRouter(root), menuConfigBodyError);
   return app;
 }
 const door = (command: string, t: Record<string, string> = {}) => ({ name: command, type: 'XIM', location: `Doors/${command}/x`, access: undefined, toolTypes: t });

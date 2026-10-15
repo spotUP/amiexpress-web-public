@@ -46,6 +46,8 @@ function fakeApi(over: { push?: boolean; doorEvents?: number } = {}): Fake {
     startEmailVerification: async () => ({ ok: true, email: 'a@b.c', expiresAt: 1 }),
     confirmEmail: async () => ({ ok: true, email: 'a@b.c' }),
     test: async () => ({ ok: true, detail: 'ok' }),
+    enablePush: async () => ({ ok: true, detail: 'ok' }),
+    disablePush: async () => ({ ok: true, detail: 'ok' }),
   };
   return { api, sets, follows };
 }

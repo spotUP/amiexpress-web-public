@@ -237,7 +237,8 @@ test('a freshly registered caller gets a resume token for THIS session, and it r
   } finally { spies.forEach((sp) => sp.mockRestore()); }
 
   const success = socket._emits.find((e: any) => e.event === 'login-success');
-  const token = success.payload.resumeToken;
+  expect(success).toBeDefined();
+  const token = success!.payload.resumeToken;
   expect(typeof token).toBe('string');
   const found = lookupResumeToken(token);
   expect(found.ok && found.bound.session).toBe(session);

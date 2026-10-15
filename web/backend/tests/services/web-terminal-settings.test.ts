@@ -1,5 +1,5 @@
 const changeAccount = jest.fn(async (s: any, u: any) => { Object.assign(s.user, u); });
-jest.mock('../../src/services/account.service', () => ({ changeAccount: (...a: unknown[]) => changeAccount(...(a as [])) }));
+jest.mock('../../src/services/account.service', () => ({ changeAccount: (...a: Parameters<typeof changeAccount>) => changeAccount(...a) }));
 const emulator = { install: jest.fn(), enable: jest.fn(), disable: jest.fn() };
 jest.mock('../../src/utils/modem-emulator.util', () => ({ getModemEmulator: () => emulator }));
 const buffer = { setFlushDelay: jest.fn() };

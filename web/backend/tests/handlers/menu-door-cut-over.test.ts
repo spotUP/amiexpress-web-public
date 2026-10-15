@@ -259,8 +259,9 @@ describe('a parked MENU relaunch (the exit-tail drain)', () => {
   });
 });
 
+const seat = (session: any, keys: boolean) => { if (keys) exit.noteCallerInput(session, 'x'); exit.enterExitTail(session); exit.leaveExitTail(session); };
+
 describe('review round 3', () => {
-  const seat = (session: any, keys: boolean) => { if (keys) exit.noteCallerInput(session, 'x'); exit.enterExitTail(session); exit.leaveExitTail(session); };
 
   test('the caller hanging up while a parked MENU relaunch throws gets no menu drawn', async () => {
     register(); const c = caller();
