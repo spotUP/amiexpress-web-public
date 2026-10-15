@@ -45,12 +45,30 @@ test('every gate is a real ACSPermission key, SYSOP, or none', () => {
   }
 });
 
-test("every express.e row's gate is checked inside that express.e procedure", () => {
+test("every express.e row's gate is the FIRST checkSecurity that refuses outright in that procedure", () => {
+  // `checkSecurity(ACS_X)=FALSE ... THEN RETURN RESULT_NOT_ALLOWED`, in source order.
+  const refusals = (body: string) =>
+    [...body.matchAll(/checkSecurity\(ACS_(\w+)\)[\s)]*=FALSE[^\n]*THEN RETURN RESULT_NOT_ALLOWED/g)].map(m => m[1]);
+  const anyGate = (body: string) => /checkSecurity\(ACS_(\w+)/.exec(body)?.[1];
+  const POSITIVE_WRAP = new Set(['Q', 'WHO', 'WHD', '0', '1', '2']);
+  const bad: string[] = [];
+  let checked = 0;
   for (const row of INTERNAL_COMMANDS) {
     const m = /^express\.e:\d+ (internalCommand\w+)$/.exec(row.source);
     if (!m || row.gate === null) continue;
-    expect(proc(m[1])).toContain(`checkSecurity(ACS_${row.gate})`);
+    const gates = refusals(proc(m[1]));
+    // O: the first refusal (COMMENT_TO_SYSOP, express.e:25378) sits inside IF(pagesAllowed=0);
+    // the gate that applies to a caller who may page is the second, PAGE_SYSOP (express.e:25387).
+    // Q WHO WHD 0 1 2: express.e wraps the body in `IF checkSecurity(ACS_X)` and has no outright
+    // refusal, so the gate is the FIRST checkSecurity of any shape (and no refusal may precede it).
+    const first = row.code === 'O' ? gates[1]
+      : gates.length === 0 && POSITIVE_WRAP.has(row.code) ? anyGate(proc(m[1]))
+      : gates[0];
+    if (first !== row.gate) bad.push(`${row.code} gate=${row.gate} refusals=${gates}`);
+    checked++;
   }
+  expect(bad).toEqual([]);
+  expect(checked).toBeGreaterThan(20);
 });
 
 test('labels are full words and fit a 40-column row beside the longest key', () => {

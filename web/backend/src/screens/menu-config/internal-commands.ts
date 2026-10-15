@@ -54,6 +54,7 @@ export const INTERNAL_COMMANDS: readonly InternalCommandRow[] = [
   row('OLM', 'Online Message', 'messages', 'OLM', 'express.e:25406 internalCommandOLM', 'Send a short message to a caller on another node'),
   row('LIVECHAT', 'Live Chat', 'messages', null, 'board:chat/chat-commands.handler.ts handleLiveChatCommand', 'Chat live with callers on the other nodes'),
   row('ROOM', 'Chat Rooms', 'messages', null, 'board:chat/room-commands.handler.ts handleRoomCommand', 'Join a group chat room'),
+  // O: PAGE_SYSOP is the gate for a caller who may page (express.e:25387); the first checkSecurity, COMMENT_TO_SYSOP (25376), sits inside IF(pagesAllowed=0).
   row('O', 'Page Sysop', 'messages', 'PAGE_SYSOP', 'express.e:25372 internalCommandO', 'Ask the sysop for a chat'),
   row('B', 'Bulletins', 'messages', 'READ_BULLETINS', 'express.e:24607 internalCommandB', 'Read the board bulletins'),
   // Files
