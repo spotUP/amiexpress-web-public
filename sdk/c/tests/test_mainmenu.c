@@ -78,12 +78,16 @@ int main(void)
     invoked_name = "MENU";
     drive("\r", 1, &rc);                                    /* Enter on the first entry */
     assert(rc == 0 && strstr(requests, "OPEN MAIN|") == requests && strstr(requests, "RUN R|"));
-    assert(strstr(screen_text, "Read Mail") && strstr(screen_text, "Esc Prompt"));
+    assert(strstr(screen_text, "Read Mail") && strstr(screen_text, "Esc/q Prompt"));
     printf("  [OK] an entry picked in the door runs its key through the board\n");
 
     drive("ms\r", 3, &rc);                                  /* a typed line */
     assert(rc == 0 && strstr(requests, "RUN ms|"));
     printf("  [OK] a typed line runs as typed\n");
+
+    drive("qms\r", 4, &rc);                                 /* q on an empty line leaves; nothing after it is read */
+    assert(rc == 0 && !strstr(requests, "RUN"));
+    printf("  [OK] q on an empty line leaves the door without running anything\n");
 
     invoked_name = "MENUSETTINGS";
     drive("\x1b", 1, &rc);
