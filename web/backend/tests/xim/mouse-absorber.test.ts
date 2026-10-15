@@ -29,9 +29,9 @@ test('presses and releases queue (up to 8) behind a motion, each with its own pl
     { kind: 'M', col: 2, row: 2 }, { kind: 'P', col: 4, row: 4 }, { kind: 'R', col: 4, row: 4 }, null]);
 });
 
-test('wheel reports are U and D; an ESC that is not a mouse report passes untouched', () => {
+test('wheel reports are U and D; an arrow key passes untouched', () => {
   const m = new MouseAbsorber();
-  expect(m.absorb('\x1b[<64;1;1M\x1b[<65;1;1M\x1b[A\x1b')).toBe(MOUSE_WAKE + '\x1b[A\x1b');
+  expect(m.absorb('\x1b[<64;1;1M\x1b[<65;1;1M\x1b[A')).toBe(MOUSE_WAKE + '\x1b[A');
   expect([m.next()!.kind, m.next()!.kind]).toEqual(['U', 'D']);
 });
 
@@ -54,4 +54,74 @@ test('TRACE_DOOR_INPUT names a mouse report and withholds a secret, like the oth
   setSecretInput(s, true);
   expect(doorInputTraceLine(s, 'door:input', 'hunter2')).not.toContain('hunter2');
   setSecretInput(s, false);
+});
+
+describe('a report split anywhere across chunks', () => {
+  const REPORT = '\x1b[<35;10;5M';
+  afterEach(() => jest.useRealTimers());
+
+  test('ESC | [<35;10;5M and ESC[ | <35;10;5M leak nothing to the key queue', () => {
+    for (const cut of [['x\x1b', '[<35;10;5M'], ['x\x1b[', '<35;10;5M']]) {
+      const m = new MouseAbsorber();
+      const out = m.absorb(cut[0]) + m.absorb(cut[1]);
+      expect(out).toBe('x' + MOUSE_WAKE);
+      expect(m.next()).toEqual({ kind: 'M', col: 10, row: 5 });
+      expect(m.next()).toBeNull();
+    }
+  });
+
+  test('every byte boundary of a full report gives one wake, one event, no stray bytes', () => {
+    for (let i = 0; i <= REPORT.length; i++) {
+      const m = new MouseAbsorber();
+      const out = m.absorb('a' + REPORT.slice(0, i)) + m.absorb(REPORT.slice(i) + 'b');
+      expect(out).toBe('a' + MOUSE_WAKE + 'b');
+      expect(m.next()).toEqual({ kind: 'M', col: 10, row: 5 });
+      expect(m.next()).toBeNull();
+    }
+  });
+
+  test('a lone ESC reaches the door as an Esc key after the settle window, not before', () => {
+    jest.useFakeTimers();
+    const settled: string[] = [];
+    const m = new MouseAbsorber((k) => settled.push(k), 50);
+    expect(m.absorb('\x1b')).toBe('');
+    jest.advanceTimersByTime(49);
+    expect(settled).toEqual([]);
+    jest.advanceTimersByTime(1);
+    expect(settled).toEqual(['\x1b']);
+    expect(m.absorb('[<35;10;5M')).toBe('[<35;10;5M');
+  });
+
+  test('ESC + [A (an arrow split across chunks) is preserved in order and nothing settles later', () => {
+    jest.useFakeTimers();
+    const settled: string[] = [];
+    const m = new MouseAbsorber((k) => settled.push(k), 50);
+    expect(m.absorb('q\x1b') + m.absorb('[Ax')).toBe('q\x1b[Ax');
+    jest.advanceTimersByTime(500);
+    expect(settled).toEqual([]);
+  });
+
+  test('Alt-key (ESC then a letter) passes through in order', () => {
+    const m = new MouseAbsorber();
+    expect(m.absorb('\x1b') + m.absorb('x')).toBe('\x1bx');
+  });
+
+  test('mouse OFF (no absorber) carries nothing: XIMProtocol only calls absorb while armed', () => {
+    const m = new MouseAbsorber();
+    m.reset();
+    expect(m.absorb('\x1bq')).toBe('\x1bq');
+  });
+});
+
+describe('events arrive in order', () => {
+  test('press then move is delivered press first', () => {
+    const m = new MouseAbsorber();
+    m.absorb('\x1b[<0;1;1M\x1b[<35;2;2M');
+    expect([m.next(), m.next(), m.next()]).toEqual([{ kind: 'P', col: 1, row: 1 }, { kind: 'M', col: 2, row: 2 }, null]);
+  });
+  test('move, move, press is the latest move then the press', () => {
+    const m = new MouseAbsorber();
+    m.absorb('\x1b[<35;2;2M\x1b[<35;3;3M\x1b[<0;4;4M');
+    expect([m.next(), m.next(), m.next()]).toEqual([{ kind: 'M', col: 3, row: 3 }, { kind: 'P', col: 4, row: 4 }, null]);
+  });
 });

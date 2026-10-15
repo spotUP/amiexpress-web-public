@@ -14,14 +14,28 @@ export interface MouseEvent { kind: 'P' | 'R' | 'M' | 'U' | 'D'; col: number; ro
 const REPORT = /^\x1b\[<(\d+);(\d+);(\d+)([Mm])/;
 const PARTIAL = /^\x1b(\[(<(\d+(;(\d+(;\d*)?)?)?)?)?)?$/;
 const MAX_BUTTONS = 8;
+/**
+ * How long a chunk tail that COULD be the start of a report (ESC, ESC[, ESC[<..)
+ * is held for the rest to arrive. A TCP chunk can end anywhere inside a report;
+ * a real Esc key is a lone ESC and must still reach the door, so after this
+ * window the held bytes are handed on as keys. (No lone-ESC settle exists
+ * elsewhere in the backend; this is the same setTimeout pattern as io.ts's
+ * hotkey timer.)
+ */
+export const CARRY_SETTLE_MS = 50;
 
 export class MouseAbsorber {
   private carry = '';
-  private motion: MouseEvent | null = null;
-  private buttons: MouseEvent[] = [];
+  private timer: ReturnType<typeof setTimeout> | null = null;
+  /** Arrival order; consecutive motion reports coalesce into the latest. */
+  private events: MouseEvent[] = [];
   private woken = false;
 
+  /** @param onSettle receives held bytes that turned out not to be a report. */
+  constructor(private readonly onSettle: (keys: string) => void = () => {}, private readonly settleMs = CARRY_SETTLE_MS) {}
+
   absorb(data: string): string {
+    this.clearTimer();
     let s = this.carry + data;
     this.carry = '';
     let out = '';
@@ -38,28 +52,45 @@ export class MouseAbsorber {
         if (!this.woken) { this.woken = true; out += MOUSE_WAKE; }
         continue;
       }
-      if (PARTIAL.test(s) && s.startsWith('\x1b[<')) { this.carry = s; break; }
+      if (PARTIAL.test(s)) { this.hold(s); break; }
       out += '\x1b'; s = s.slice(1);
     }
     return out;
   }
 
+  private hold(tail: string): void {
+    this.carry = tail;
+    this.timer = setTimeout(() => {
+      this.timer = null;
+      const keys = this.carry;
+      this.carry = '';
+      if (keys) this.onSettle(keys);
+    }, this.settleMs);
+    this.timer.unref?.();
+  }
+  private clearTimer(): void { if (this.timer) { clearTimeout(this.timer); this.timer = null; } }
+
   /** A typed 0x1E must never pose as a wake byte. */
   private typed(text: string): string { return text.split(MOUSE_WAKE).join(''); }
 
   next(): MouseEvent | null {
-    const e = this.motion ?? this.buttons.shift() ?? null;
-    if (e === this.motion) this.motion = null;
-    if (!this.motion && this.buttons.length === 0) this.woken = false;
+    const e = this.events.shift() ?? null;
+    if (this.events.length === 0) this.woken = false;
     return e;
   }
 
-  reset(): void { this.carry = ''; this.motion = null; this.buttons = []; this.woken = false; }
+  reset(): void { this.clearTimer(); this.carry = ''; this.events = []; this.woken = false; }
 
   private store(b: number, col: number, row: number, release: boolean): void {
     if (b === 64 || b === 65) { this.push({ kind: b === 64 ? 'U' : 'D', col, row }); return; }
-    if (b & 32) { this.motion = { kind: 'M', col, row }; return; }
+    if (b & 32) {
+      const last = this.events[this.events.length - 1];
+      if (last && last.kind === 'M') { last.col = col; last.row = row; } else this.events.push({ kind: 'M', col, row });
+      return;
+    }
     this.push({ kind: release ? 'R' : 'P', col, row });
   }
-  private push(e: MouseEvent): void { if (this.buttons.length < MAX_BUTTONS) this.buttons.push(e); }
+  private push(e: MouseEvent): void {
+    if (this.events.filter((x) => x.kind !== 'M').length < MAX_BUTTONS) this.events.push(e);
+  }
 }

@@ -304,6 +304,7 @@ debugLog(`[XIMProtocol] Updating port address from 0x${this.doorPort.toString(16
 
   /** AEW_SCREEN state ends with the door. */
   private releaseBoardScreen(): void {
+    this.mouse?.reset();
     this.mouse = null;
     this.state.wipeCapture = null;
   }
@@ -1085,7 +1086,7 @@ debugLog(`[XIMProtocol]   Wrote tooltype value="${tooltypeValue}", StringPtr not
         try {
           answer = await boardScreenAnswer(String(msg.string || ''), {
             session: this.bbsSession, socket: this.socket, state: this.state, mouse: this.mouse,
-            armMouse: (on: boolean) => { this.mouse = on ? new MouseAbsorber() : null; },
+            armMouse: (on: boolean) => { this.mouse?.reset(); this.mouse = on ? new MouseAbsorber((keys) => this.ioHandler.queueInput(keys)) : null; },
             columns: () => responsiveDoorGeometry(this.bbsSession as never).cols,
           });
         } catch (err) {
