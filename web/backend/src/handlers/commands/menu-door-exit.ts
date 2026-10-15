@@ -38,6 +38,22 @@ const launching = new WeakSet<object>();
 const failed = new WeakSet<object>();
 const reentered = new WeakSet<object>();
 const launchStart = new WeakMap<object, number>();
+const inputs = new WeakMap<object, number>();
+const lastSelfExit = new WeakMap<object, number>();
+
+/**
+ * A MENU door that reaches its exit tail by itself (the caller sent it nothing) inside this window is a
+ * door that starts and quits: two in a row latch the session onto the art menu (plan M19 review).
+ * A caller who presses Esc, picks or types is never affected - they sent input - and a slow caller is
+ * past the window anyway.
+ */
+export const MENU_SELF_EXIT_WINDOW_MS = 2000;
+/** The caller sent the running door a key (door.handler's door input handler). */
+export function noteCallerInput(session: object): void { inputs.set(session, (inputs.get(session) ?? 0) + 1); }
+/** Forget a parked door by name (a latched MENU must not be relaunched by an entry its own tail parked). */
+export function unparkDoor(session: object, command: string): void {
+  const q = parked.get(session); if (q) parked.set(session, q.filter((c) => c !== command));
+}
 
 export function enterExitTail(session: object): void {
   depth.set(session, (depth.get(session) ?? 0) + 1);
@@ -94,11 +110,14 @@ export function doorBinaryExists(location: string): boolean {
 export async function runMenuDoor(socket: unknown, session: BBSSession): Promise<'ran' | 'handled' | 'failed'> {
   // eslint-disable-next-line @typescript-eslint/no-var-requires
   const { commandCache } = require('../command-execution.handler');
+  if (menuDoorFailed(session)) return 'failed';
   const def = commandCache.bbscmd.get('MENU');
   if (!def || !doorBinaryExists(def.location)) return 'failed';
   // eslint-disable-next-line @typescript-eslint/no-var-requires
   const { processCommand } = require('../command.handler') as typeof import('../command.handler');
   const tailsBefore = exitTailsEntered(session);
+  const inputsBefore = inputs.get(session) ?? 0;
+  const startedAt = Date.now();
   setMenuLaunchInFlight(session, true);
   try {
     await processCommand(socket as never, session, 'MENU', '');
@@ -111,6 +130,21 @@ export async function runMenuDoor(socket: unknown, session: BBSSession): Promise
   if (exitTailsEntered(session) === tailsBefore) {
     markMenuDoorFailed(session);
     return wasReentered ? 'handled' : 'failed';
+  }
+  // The door reached its tail. One that did so by itself, fast, twice running, is a door that starts and
+  // quits: latch it, and drop the relaunch its own tail just parked.
+  const endedAt = Date.now();
+  const selfExit = endedAt - startedAt < MENU_SELF_EXIT_WINDOW_MS && (inputs.get(session) ?? 0) === inputsBefore;
+  if (selfExit) {
+    const previous = lastSelfExit.get(session);
+    lastSelfExit.set(session, endedAt);
+    if (previous !== undefined && startedAt - previous < MENU_SELF_EXIT_WINDOW_MS) {
+      markMenuDoorFailed(session);
+      unparkDoor(session, 'MENU');
+      return 'failed';
+    }
+  } else {
+    lastSelfExit.delete(session);
   }
   return 'ran';
 }
@@ -135,6 +169,8 @@ export async function drainParkedDoors(socket: unknown, session: BBSSession): Pr
       if (next === 'MENU') {
         // One guarded path for every MENU launch: a crashing relaunch is tried once, then the art menu serves.
         if ((await runMenuDoor(socket, session)) === 'failed') {
+          // The caller may have hung up while the door threw: a dead session gets no menu.
+          if (theCallerIsLeaving(session)) { parked.delete(session); break; }
           // eslint-disable-next-line @typescript-eslint/no-var-requires
           const { displayMainMenu } = require('../command-handler/menu') as typeof import('../command-handler/menu');
           await displayMainMenu(socket as never, session, false, true);

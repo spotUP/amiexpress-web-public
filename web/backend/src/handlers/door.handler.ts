@@ -3069,6 +3069,7 @@ console.log(`[executeAmigaDoor] doorInputHandler received: "${data}" (len=${data
             data
           )}`
         );
+        menuTail.noteCallerInput(session);   // a MENU door the caller never touched is not a door that ran (menu-door-exit)
         routeAmigaDoorInput(shared, data);
       } catch (err) {
 console.error('[executeAmigaDoor] Error routing door input:', err);
@@ -3351,7 +3352,9 @@ console.error(`[executeAmigaDoor] Error executing Amiga door:`, error);
     if (!theCallerIsLeaving(session)) {
       session.subState = LoggedOnSubState.DISPLAY_MENU;
       if (session.state === BBSState.LOGGEDON && session.user) {
-        await displayMainMenu(socket, session);
+        // WEB_: the explicit failure-handler marker (last argument): only this call may draw while the
+        // MENU door's own launch is in flight; any other displayMainMenu then leaves the screen to the door.
+        await displayMainMenu(socket, session, false, true, true);
       }
     }
   }

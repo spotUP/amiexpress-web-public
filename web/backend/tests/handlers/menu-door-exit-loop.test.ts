@@ -12,6 +12,7 @@ jest.mock('../../src/handlers/command.handler', () => ({
     depth++; maxDepth = Math.max(maxDepth, depth); launched.push(cmd);
     // a stand-in door: its exit tail parks the next relaunch, as the real tail does
     const exit = require('../../src/handlers/commands/menu-door-exit');
+    exit.noteCallerInput(session);   // a caller who is using the door; an untouched, instantly-quitting one latches (M19)
     exit.enterExitTail(session);
     if (launched.length < 6) exit.parkDoor(session, 'MENU');
     exit.leaveExitTail(session);

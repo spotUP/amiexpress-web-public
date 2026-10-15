@@ -86,7 +86,13 @@ export async function displayMainMenu(
   session: BBSSession,
   forceMenuDisplay: boolean = false,
   bypassDebounce: boolean = false,
+  /** WEB_: true only from executeAmigaDoor's catch - the one caller allowed to draw while the MENU door's launch is in flight. */
+  failureHandler: boolean = false,
 ) {
+  // A foreign caller (timer, olm, another handler) while the MENU door is still starting or running:
+  // the door owns the screen, so there is nothing to draw (plan M19 review).
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  if (!failureHandler && require('../commands/menu-door-exit').menuLaunchUnstarted(session)) return;
   // Skip during conference scan - doors complete after each conference but we only
   // want to show the menu once after the entire scan finishes
   if ((session as any).inConfScan && !forceMenuDisplay) {
