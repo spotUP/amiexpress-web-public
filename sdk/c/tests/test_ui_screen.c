@@ -45,6 +45,14 @@ void ae_put(const char *text, int newline)
 /* The session pointer is never dereferenced here: ui_screen only passes it
    back to these four. It must be non-NULL, because to_session refuses to
    write for a door that has no session at all. */
+/* ui_screen_open_responsive asks AEW_SCREEN; this board is silent. */
+int ae_field_exchange(int field, const char *request, char *out, int cap)
+{
+    (void)field; (void)request;
+    if (out && cap > 0) out[0] = '\0';
+    return 0;
+}
+
 int ae_carrier(const ae_session *s) { (void)s; return carrier; }
 int ae_screen_cols(ae_session *s) { (void)s; return 80; }
 int ae_screen_rows(ae_session *s) { (void)s; return 25; }

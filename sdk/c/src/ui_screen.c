@@ -9,6 +9,7 @@
 #include "ui_screen.h"
 #include "ui_ansi.h"
 #include "aedoor.h"
+#include "ae_board_screen.h"
 
 #include <string.h>
 
@@ -62,12 +63,40 @@ int ui_screen_open(ui_screen *sc, ae_session *s, char *frame, long cap)
     return 0;
 }
 
+/*
+ * The caller's REAL size (plan Decision 26), for a door that lays itself out
+ * for any width. ui_screen_open asks BB_SCRWIDTH, which a board answers 80
+ * for every ANSI caller because classic doors assume 80; a door that is
+ * responsive asks AEW_SCREEN instead and falls back to that answer.
+ */
+int ui_screen_open_responsive(ui_screen *sc, ae_session *s, char *frame, long cap)
+{
+    int cols, rows;
+
+    if (ui_screen_open(sc, s, frame, cap) != 0) return -1;
+    sc->responsive = 1;
+    if (ae_bs_size(&cols, &rows) == 1) {
+        sc->cols = cols;
+        sc->rows = rows;
+        sc->profile = ui_profile_for(cols);
+        ansi_set_cell_backgrounds(&sc->buf, sc->profile.cell_backgrounds);
+    }
+    return 0;
+}
+
 void ui_screen_measure(ui_screen *sc)
 {
+    int cols, rows;
+
     if (!sc) return;
 
     sc->cols = sc->session ? ae_screen_cols(sc->session) : AE_DEFAULT_COLS;
     sc->rows = sc->session ? ae_screen_rows(sc->session) : AE_DEFAULT_ROWS;
+    /* A responsive screen keeps the real size when it measures again. */
+    if (sc->responsive && ae_bs_size(&cols, &rows) == 1) {
+        sc->cols = cols;
+        sc->rows = rows;
+    }
     /* The tier follows the size, always - a door that asked once at startup
        and then widened would draw an 80-column layout into 40 cells. */
     sc->profile = ui_profile_for(sc->cols);

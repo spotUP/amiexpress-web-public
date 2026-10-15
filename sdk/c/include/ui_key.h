@@ -61,6 +61,15 @@ extern "C" {
 #define UI_KEY_LEFT  1008
 #define UI_KEY_RIGHT 1009
 
+/*
+ * A mouse event is waiting on the board (AEW_SCREEN MOUSE?). The board
+ * absorbs the SGR reports and wakes the door with ONE byte, 0x1E, when its
+ * mouse slot goes from empty to non-empty; ui_key_read turns that byte into
+ * UI_KEY_MOUSE and the door fetches the events with ae_bs_mouse_drain.
+ */
+#define UI_KEY_MOUSE 1010
+#define UI_MOUSE_WAKE 0x1E
+
 /**
  * Where a door's keys come from.
  *

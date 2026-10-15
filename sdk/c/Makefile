@@ -37,7 +37,7 @@ AMIGA_CFLAGS = +aos68k -c99 -DAMIGA -Iinclude -I"$(VBCC)/targets/m68k-amigaos/in
 # ae_dos_amiga is the dos.library backend - the same split as
 # ae_transport_amiga, whose host twin is likewise absent from this list because
 # the host is not what `lib` builds.
-MODULES = ae_host ae_out ae_box ae_session ui_profile ui_ansi ui_screen ui_list ui_chrome ui_key ui_input ui_editor ui_doc ui_grid ui_theme ui_settings json_lite ae_chunk ae_transport_amiga ae_session_bbs ae_net ae_http ae_achieve ae_request ae_msgbase ae_dos ae_dos_amiga ae_userfield
+MODULES = ae_host ae_out ae_box ae_session ui_profile ui_ansi ui_screen ui_list ui_chrome ui_key ui_input ui_editor ui_doc ui_grid ui_theme ui_settings json_lite ae_chunk ae_transport_amiga ae_session_bbs ae_net ae_http ae_achieve ae_request ae_msgbase ae_dos ae_dos_amiga ae_userfield ae_board_screen
 AMIGA_OBJS = $(patsubst %,build/amiga/%.o,$(MODULES))
 
 .PHONY: door-sources-compile all test amiga lib measure settings clean
@@ -48,7 +48,7 @@ all: test
 # Tests (host)
 # ---------------------------------------------------------------------
 
-test: door-sources-compile build/write-message build/test_ae_host build/test_ae_session build/test_ui_profile build/test_ui_list build/test_ui_chrome build/test_ui_screen build/test_ui_input build/test_ui_editor build/test_frame_budget build/test_ui_theme build/test_ui_settings build/test_ui_doc build/test_ui_grid build/test_ae_http build/test_ae_achieve build/test_ae_request build/test_ae_msgbase build/test_ae_dos build/test_texttv build/test_subs_scan build/test_achieve_rows build/test_requests_bulletin build/test_ae_userfield build/test_us_model build/test_theme_preview build/test_ansi_sgr
+test: door-sources-compile build/write-message build/test_ae_host build/test_ae_session build/test_ui_profile build/test_ui_list build/test_ui_chrome build/test_ui_screen build/test_ui_input build/test_ui_editor build/test_frame_budget build/test_ui_theme build/test_ui_settings build/test_ui_doc build/test_ui_grid build/test_ae_http build/test_ae_achieve build/test_ae_request build/test_ae_msgbase build/test_ae_dos build/test_texttv build/test_subs_scan build/test_achieve_rows build/test_requests_bulletin build/test_ae_userfield build/test_us_model build/test_theme_preview build/test_ansi_sgr build/test_ae_board_screen
 	./build/test_ae_host
 	./build/test_ae_session
 	./build/test_ui_profile
@@ -75,6 +75,7 @@ test: door-sources-compile build/write-message build/test_ae_host build/test_ae_
 	./build/test_us_model
 	./build/test_theme_preview
 	./build/test_ansi_sgr
+	./build/test_ae_board_screen
 
 # Every door's own .c, syntax-checked with the host compiler.
 #
@@ -159,9 +160,13 @@ build/test_ui_list: src/ui_ansi.c src/ui_list.c src/ui_profile.c src/ui_theme.c 
 	@mkdir -p build
 	$(CC) $(HOST_CFLAGS) src/ui_ansi.c src/ui_list.c src/ui_profile.c src/ui_theme.c tests/test_ui_list.c -o $@
 
-build/test_ui_screen: src/ui_ansi.c src/ui_screen.c src/ui_profile.c tests/test_ui_screen.c include/ui_screen.h
+build/test_ui_screen: src/ui_ansi.c src/ui_screen.c src/ui_profile.c src/ae_board_screen.c tests/test_ui_screen.c include/ui_screen.h
 	@mkdir -p build
-	$(CC) $(HOST_CFLAGS) src/ui_ansi.c src/ui_screen.c src/ui_profile.c tests/test_ui_screen.c -o $@
+	$(CC) $(HOST_CFLAGS) src/ui_ansi.c src/ui_screen.c src/ui_profile.c src/ae_board_screen.c tests/test_ui_screen.c -o $@
+
+build/test_ae_board_screen: src/ae_board_screen.c src/ae_transport_native.c src/ui_key.c src/ui_screen.c src/ui_profile.c src/ui_ansi.c src/ae_session.c tests/test_ae_board_screen.c include/ae_board_screen.h include/ui_key.h include/ui_screen.h
+	@mkdir -p build
+	$(CC) $(HOST_CFLAGS) src/ae_board_screen.c src/ae_transport_native.c src/ui_key.c src/ui_screen.c src/ui_profile.c src/ui_ansi.c src/ae_session.c tests/test_ae_board_screen.c -o $@
 
 build/test_ui_chrome: src/ui_ansi.c src/ui_chrome.c tests/test_ui_chrome.c include/ui_chrome.h
 	@mkdir -p build

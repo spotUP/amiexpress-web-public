@@ -29,6 +29,8 @@ typedef struct {
     ae_session *session;
     /** The tier this size belongs to, refreshed with the size. */
     ui_profile profile;
+    /** Set by ui_screen_open_responsive: measuring asks AEW_SCREEN, not BB_SCRWIDTH. */
+    int responsive;
 } ui_screen;
 
 /**
@@ -39,6 +41,16 @@ typedef struct {
  * cannot work. Allocates nothing.
  */
 int ui_screen_open(ui_screen *sc, ae_session *s, char *frame, long cap);
+
+/**
+ * ui_screen_open for a door that lays itself out for any width.
+ *
+ * ui_screen_open asks BB_SCRWIDTH, which the board answers 80 for every ANSI
+ * caller because classic doors assume 80. This asks AEW_SCREEN for the
+ * caller's REAL size and falls back to ui_screen_open's answer when the board
+ * is silent.
+ */
+int ui_screen_open_responsive(ui_screen *sc, ae_session *s, char *frame, long cap);
 
 /** Ask the board for the size again - after a resize, or on a hunch. */
 void ui_screen_measure(ui_screen *sc);

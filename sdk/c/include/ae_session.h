@@ -181,8 +181,18 @@ typedef enum {
      * ae_userfield.h for the verbs. A board that does not know it answers
      * nothing and the door leaves.
      */
-    AE_FIELD_USERFIELD      = 10600  /* AEW_USERFIELD */
+    AE_FIELD_USERFIELD      = 10600, /* AEW_USERFIELD */
     /* 10700 is RESERVED for the J (join conference) door's AEW_CONFLIST; do not take it. */
+
+    /*
+     * ALSO THIS BOARD'S OWN: any C door's screen conversation (AEW_SCREEN) -
+     * the caller's real size, board wipes around a screen, and mouse events.
+     * A request in String, the answer in String. See ae_board_screen.h.
+     */
+    AE_FIELD_SCREEN         = 10800, /* AEW_SCREEN */
+
+    /* The menu doors' catalogue and actions (AEW_MENU); the client is a later task. */
+    AE_FIELD_MENU           = 10900  /* AEW_MENU */
 } ae_field;
 
 /**

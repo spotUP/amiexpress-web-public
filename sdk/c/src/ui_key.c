@@ -40,6 +40,21 @@ int ui_decode_escape(const ui_key_source *src, int *pushback)
         return c;
     }
     switch (c) {
+    case '<': {
+        /*
+         * The tail of an SGR mouse report whose ESC [ reached the door in a
+         * chunk of its own (the board holds a split report only from ESC [ <).
+         * Swallow it up to the final M or m: stray digits and semicolons must
+         * never be delivered as keys. Not a key, so 0, like any unknown
+         * sequence.
+         */
+        for (;;) {
+            c = src->next(src->ctx);
+            if (c < 0) return c;
+            if (c == 'M' || c == 'm') break;
+            if (!((c >= '0' && c <= '9') || c == ';')) { *pushback = c; break; }
+        }
+        return 0; }
     case 'A': return UI_KEY_UP;
     case 'B': return UI_KEY_DOWN;
     case 'C': return UI_KEY_RIGHT;
@@ -106,6 +121,8 @@ int ui_key_read(const ui_key_source *src, int *pushback)
     if (c == AE_ARROW_RIGHT) return UI_KEY_RIGHT;
     if (c == AE_ARROW_UP)    return UI_KEY_UP;
     if (c == AE_ARROW_DOWN)  return UI_KEY_DOWN;
+
+    if (c == UI_MOUSE_WAKE) return UI_KEY_MOUSE;
 
     if (c == 0x1b) return ui_decode_escape(src, pushback);
 
