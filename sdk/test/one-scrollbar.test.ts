@@ -1,11 +1,11 @@
 /**
  * One scrollbar for the whole board (sysop, 2026-10-15): solid colour bars.
- * Track is a space on the theme's DIM, thumb a space on its BAR, hover INK.
+ * Track is a space on the theme's DIM, thumb a space on its INK, hover ACCENT.
  * No glyphs. A door's own scrollbar options never reach the paint.
  */
 import { describe, it, expect } from '@jest/globals';
 import { Screen, List } from '../engines/ui/blessed';
-import { themeById, setActiveTheme, retintTree, scrollbarRoles } from '../engines/ui/theme';
+import { themeById, setActiveTheme, retintTree, scrollbarRoles, THEMES } from '../engines/ui/theme';
 import { thumbGeometry } from '../engines/ui/blessed/core/scrollbar';
 
 const items = Array.from({ length: 40 }, (_, i) => `row ${i}`);
@@ -26,8 +26,8 @@ function barCells(screen: any, list: any): Array<[number, string]> {
 }
 
 describe('the one scrollbar', () => {
-  for (const id of ['classic', 'uprough-neon']) {
-    it(`draws track on DIM and thumb on BAR with no glyph (${id})`, () => {
+  for (const id of THEMES.map((t) => t.id)) {
+    it(`draws track on DIM and thumb on INK with no glyph (${id})`, () => {
       const theme = themeById(id);
       setActiveTheme(theme);
       const { screen, list } = build();
@@ -40,6 +40,13 @@ describe('the one scrollbar', () => {
         expect(ch).toBe(' ');
         expect(attr).toBe(y >= g.start && y < g.start + g.size ? thumb : track);
       });
+      // The thumb is the theme's INK background, on every shipped theme.
+      expect(roles.thumb).toBe(theme.tokens.ink);
+      expect(thumb).toBe(list.sattr({ fg: theme.tokens.ink, bg: theme.tokens.ink }));
+      // Invisible-thumb regression: BAR is the ground in six themes, and a
+      // thumb painted on it vanished. It must differ from the ground and from the track.
+      expect(thumb).not.toBe(list.sattr({ fg: theme.tokens.ground, bg: theme.tokens.ground }));
+      expect(thumb).not.toBe(track);
       expect(cells.some(([a]) => a === thumb)).toBe(true);
       expect(cells.some(([a]) => a === track)).toBe(true);
       screen.destroy();

@@ -85,17 +85,19 @@ export interface ScrollbarRoles {
   track: string;
   /** A space painted on this: the handle. */
   thumb: string;
-  /** The handle while the mouse is over it. */
+  /** The handle while the mouse is over it (ACCENT). */
   hover: string;
 }
 
 /**
  * THE ONE SCROLLBAR (sysop, 2026-10-15): solid colour bars, no glyphs.
- * Track = DIM, thumb = BAR, hover = INK. The C SDK's ui_list.c draws the
- * same three roles from the same tokens (sdk/c/tests agree with this file).
+ * Track = DIM, thumb = INK, hover = ACCENT. The thumb was BAR first, but BAR
+ * is black (the ground) in six of seven themes, which made it invisible;
+ * INK is the brightest thing a theme has and is never the ground. The C
+ * SDK's ui_list.c draws the same roles from the same tokens.
  */
 export function scrollbarRoles(theme: Theme): ScrollbarRoles {
-  return { track: theme.tokens.dim, thumb: theme.tokens.bar, hover: theme.tokens.ink };
+  return { track: theme.tokens.dim, thumb: theme.tokens.ink, hover: theme.tokens.accent };
 }
 
 /**

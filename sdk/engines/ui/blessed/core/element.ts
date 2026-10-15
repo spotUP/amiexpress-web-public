@@ -2739,7 +2739,7 @@ export class Element extends EventEmitter {
 
     // ONE look for every scrollbar on the board (sysop, 2026-10-15): solid
     // colour bars - track a space on the theme's DIM, thumb a space on its
-    // BAR, hover INK. No glyphs, so it is identical in Topaz and latin1. A
+    // INK, hover ACCENT. No glyphs, so it is identical in Topaz and latin1. A
     // door's own ch/track/style options are ignored on purpose: the option
     // only switches the bar on, the theme says how it looks. Resolved here at
     // paint time, so a theme switch recolours it with no tree walk.
