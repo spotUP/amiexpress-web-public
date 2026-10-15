@@ -83,8 +83,8 @@ static void layout_puts_things_where_the_screen_has_room(void)
     reset();
     logo("header", 3, 40, 0);
     md_layout(&menu, 80, 25, &o);
-    assert(o.header_rows == 3 && o.header_top == 1 && o.divider_row == 4 && o.rail_row == 4 && o.grid_top == 5 && o.masthead_row == 0);   /* logo 1-3, divider 4: no title row */
-    assert(o.status_row == 24 && o.prompt_row == 25 && o.grid_height == 18 && o.grid_width == 80);
+    assert(o.header_rows == 3 && o.header_top == 1 && o.divider_row == 5 && o.rail_row == 5 && o.grid_top == 7 && o.masthead_row == 0);   /* logo 1-3, divider 4: no title row */
+    assert(o.status_row == 24 && o.prompt_row == 25 && o.grid_height == 15 && o.grid_width == 80);   /* logo 1-3, blank, divider, blank, grid 7-21, blank 22 */
 
     reset();
     logo("side", 10, 30, 0);
@@ -101,15 +101,15 @@ static void layout_puts_things_where_the_screen_has_room(void)
     assert(o.header_rows == 0 && o.grid_top == 2 && o.divider_row == 0 && o.rail_row == 1 && o.masthead_row == 1);   /* no logo: the title row, the rail on row 1 */
 
     reset();
-    logo("header", 13, 78, 0);                                               /* sysop 2026-10-15: the list adapts to the logo size */
+    logo("header", 11, 78, 0);                                               /* sysop 2026-10-15: the list adapts to the logo size */
     md_layout(&menu, 80, 25, &o);
-    assert(o.header_rows == 13 && o.grid_top == 15 && o.grid_height == 8 && o.divider_row == 14);
+    assert(o.header_rows == 11 && o.grid_top == 15 && o.grid_height == 7 && o.divider_row == 13);
     reset();
-    logo("header", 15, 78, 0);                                               /* leaves 6 = MD_MIN_GRID_ROWS: kept */
+    logo("header", 12, 78, 0);                                               /* leaves 6 = MD_MIN_GRID_ROWS: kept */
     md_layout(&menu, 80, 25, &o);
-    assert(o.header_rows == 15 && o.grid_height == MD_MIN_GRID_ROWS);
+    assert(o.header_rows == 12 && o.grid_height == MD_MIN_GRID_ROWS);
     reset();
-    logo("header", 16, 78, 0);                                               /* 5 < MD_MIN_GRID_ROWS: dropped */
+    logo("header", 13, 78, 0);                                               /* 5 < MD_MIN_GRID_ROWS: dropped */
     md_layout(&menu, 80, 25, &o);
     assert(o.header_rows == 0 && o.grid_top == 2);
 
@@ -160,7 +160,7 @@ static void write_catalogue(const char *text)
 static char requests[4096];
 static int mouse_queue, silent_board;
 static const char *size_reply = "80\t25";
-static const char *mouse_reply = "M\t1\t6";
+static const char *mouse_reply = "M\t1\t8";
 static int activations, typed_calls;
 static char typed_line[80];
 static int activated_entry = -1;
@@ -300,9 +300,9 @@ static void hovering_moves_the_real_selection_and_esc_leaves(void)
 
 static void a_click_selects_and_runs_the_entry_under_it(void)
 {
-    mouse_queue = 1; silent_board = 0; mouse_reply = "P\t1\t6";
+    mouse_queue = 1; silent_board = 0; mouse_reply = "P\t1\t8";
     assert(DRIVE("\x1e") == 0);
-    mouse_reply = "M\t1\t6";
+    mouse_reply = "M\t1\t8";
     assert(activations == 1 && activated_entry == 0 && strstr(requests, "RUN R|"));
     printf("  [OK] a click selects and runs the entry under it\n");
 }
@@ -326,9 +326,9 @@ static void a_click_on_a_greyed_entry_still_clears_the_typed_line_on_screen(void
 {
     char *last_typed, *after;
     write_catalogue(CATALOGUE);
-    mouse_queue = 1; silent_board = 0; mouse_reply = "P\t1\t8";          /* the greyed File Listings */
+    mouse_queue = 1; silent_board = 0; mouse_reply = "P\t1\t10";         /* the greyed File Listings */
     assert(DRIVE("x\x1e\x1b") == 0);
-    mouse_reply = "M\t1\t6";
+    mouse_reply = "M\t1\t8";
     assert(activations == 0 && strstr(screen_text, "You cannot choose that."));
     last_typed = strstr(screen_text, "Menu: x");
     assert(last_typed);
@@ -1309,7 +1309,7 @@ static void a_header_logo_is_followed_by_the_rail_as_a_divider_and_the_grid_star
     static const int HEIGHT[2] = { 3, 6 };
     int ci, hi, r;
     for (ci = 0; ci < 3; ci++) for (hi = 0; hi < 2; hi++) {
-        int cols = COLS[ci], h = HEIGHT[hi], rows = 25, div = 1 + h;
+        int cols = COLS[ci], h = HEIGHT[hi], rows = 25, div = 2 + h;
         int rail = cols >= 80;                                   /* effects: none at 40 columns */
         md_layout_out with, without;
         char title_row[160];
@@ -1319,8 +1319,8 @@ static void a_header_logo_is_followed_by_the_rail_as_a_divider_and_the_grid_star
         md_layout(&menu, cols, rows, &with);
         reset();
         md_layout(&menu, cols, rows, &without);
-        assert(with.divider_row == div && with.rail_row == div && with.grid_top == 2 + h && with.masthead_row == 0);
-        assert(with.grid_height == without.grid_height - h);                       /* the logo takes the title row and h - 1 more, the divider one */
+        assert(with.divider_row == div && with.rail_row == div && with.grid_top == 4 + h && with.masthead_row == 0);
+        assert(with.grid_height == without.grid_height - h - 3);                   /* the logo takes the title row and h - 1 more; the divider, its two blank rows and the blank row above the status row four */
         assert(without.divider_row == 0 && without.rail_row == 1 && without.grid_top == 2);
 
         tm_after("\x1b[B");
@@ -1329,7 +1329,9 @@ static void a_header_logo_is_followed_by_the_rail_as_a_divider_and_the_grid_star
         for (r = 1; r < 1 + h; r++) assert(tm_nonblank(r, cols) == 0);          /* the logo rows are the board's: not drawn here */
         if (rail) assert(tm_nonblank(div, cols) >= cols / 2);    /* the rail runs the width of the divider row */
         else for (r = 0; r < cols; r++) assert(tm_cell[div][r] == '-');         /* no rail: a static rule, never blank */
-        assert(strstr(tm_cell[2 + h], "Messages"));              /* the first section header sits right under the divider */
+        assert(tm_nonblank(1 + h, cols) == 0 && tm_nonblank(3 + h, cols) == 0);  /* sysop 2026-10-15: one empty row over and under the rail */
+        assert(tm_nonblank(rows - 2, cols) == 0);                /* and one between the list and the status row */
+        assert(strstr(tm_cell[4 + h], "Messages"));              /* the first section header sits under the blank row */
         assert(!strstr(tm_cell[div], "Messages"));
         assert(strstr(tm_cell[rows - 1], "Page") || tm_nonblank(rows - 1, cols) > 0);   /* status row unchanged */
         assert(strstr(tm_cell[rows], "Go: ") || tm_nonblank(rows, cols) > 0);          /* prompt row unchanged */
@@ -1338,14 +1340,14 @@ static void a_header_logo_is_followed_by_the_rail_as_a_divider_and_the_grid_star
     printf("  [OK] a header logo is followed by the rail as a divider (a static rule without one) and the grid starts under it, at 80, 132 and 40\n");
 }
 
-/* ---- sysop 2026-10-15: the list adapts to the logo; a long list under a 13-row header scrolls in a 7-row grid ---- */
+/* ---- sysop 2026-10-15: the list adapts to the logo; a long list under a 10-row header scrolls in an 8-row grid ---- */
 
 static void a_long_list_under_a_tall_header_scrolls_in_the_short_grid(void)
 {
     char cat[8192], line[160];
     int i;
     mouse_queue = 0; silent_board = 0; theme_name = ""; size_reply = "80\t25";
-    sprintf(cat, "AEMENU 1\nK MAIN\t-\nT MAIN MENU\nP Go: \nO scroll\nW -\t-\t-\nR 0\nL header\t13\t78\t0\nS Everything\n");
+    sprintf(cat, "AEMENU 1\nK MAIN\t-\nT MAIN MENU\nP Go: \nO scroll\nW -\t-\t-\nR 0\nL header\t10\t78\t0\nS Everything\n");
     for (i = 1; i <= 34; i++) {
         sprintf(line, "E Z%02d\tItem %02d\tDescription %02d\t\t\n", i, i, i);
         strcat(cat, line);
@@ -1358,42 +1360,42 @@ static void a_long_list_under_a_tall_header_scrolls_in_the_short_grid(void)
         int r;
         for (r = 1; r <= 25; r++) assert(!strstr(tm_cell[r], "Everything"));   /* sysop 2026-10-15: a lone section under a logo has no header row */
     }
-    assert(strstr(tm_cell[15], "Item 01") && strstr(tm_cell[22], "Item 29"));  /* grid_top 15: four columns, 9 lines, the 8-row window starts right under the divider */
+    assert(strstr(tm_cell[14], "Item 01") && strstr(tm_cell[21], "Item 29"));  /* grid_top 14: four columns, 9 lines, the 8-row window starts right under the divider */
     {
         int r, seen = 0;
-        for (r = 15; r <= 22; r++) if (strstr(tm_cell[r], "Item 34")) seen = 1;
+        for (r = 14; r <= 21; r++) if (strstr(tm_cell[r], "Item 34")) seen = 1;
         assert(!seen);                                                   /* the last entry is off the 8-row window */
     }
     tm_after("\x1b[B\x1b[B\x1b[B\x1b[B\x1b[B\x1b[B\x1b[B\x1b[B");    /* Down 8: the line of Item 33, one past the window */
-    assert(strstr(tm_cell[15], "Item 05") && strstr(tm_cell[22], "Item 33"));  /* sysop 2026-10-15: the window moved ONE row, not a page */
+    assert(strstr(tm_cell[14], "Item 05") && strstr(tm_cell[21], "Item 33"));  /* sysop 2026-10-15: the window moved ONE row, not a page */
     {
         int r, seen;
         tm_after("\x1b[F");                                              /* End */
-        for (seen = 0, r = 15; r <= 22; r++) if (strstr(tm_cell[r], "Item 34")) seen = 1;
+        for (seen = 0, r = 14; r <= 21; r++) if (strstr(tm_cell[r], "Item 34")) seen = 1;
         assert(seen);
-        for (seen = 0, r = 15; r <= 22; r++) if (strstr(tm_cell[r], "Item 01")) seen = 1;
+        for (seen = 0, r = 14; r <= 21; r++) if (strstr(tm_cell[r], "Item 01")) seen = 1;
         assert(!seen);
         tm_after("\x1b[F\x1b[H");                                        /* Home comes back */
-        for (seen = 0, r = 15; r <= 22; r++) if (strstr(tm_cell[r], "Item 01")) seen = 1;
+        for (seen = 0, r = 14; r <= 21; r++) if (strstr(tm_cell[r], "Item 01")) seen = 1;
         assert(seen);
         {
             char downs[128] = "";
             for (i = 0; i < 20; i++) strcat(downs, "\x1b[B");           /* Down past the last visible row, to the end */
             tm_after(downs);
-            for (seen = 0, r = 15; r <= 22; r++) if (strstr(tm_cell[r], "Item 34")) seen = 1;
+            for (seen = 0, r = 14; r <= 21; r++) if (strstr(tm_cell[r], "Item 34")) seen = 1;
             assert(seen);
         }
         tm_after("\x1b[6~");                                             /* PgDn from the top */
-        for (seen = 0, r = 15; r <= 22; r++) if (strstr(tm_cell[r], "Item 01")) seen = 1;
+        for (seen = 0, r = 14; r <= 21; r++) if (strstr(tm_cell[r], "Item 01")) seen = 1;
         assert(!seen);
         tm_after("Z34");                                                 /* type-ahead to an entry off the window: named in the status row */
         assert(strstr(tm_cell[24], "Z34") || strstr(tm_cell[24], "Item 34"));
         tm_after("Z34\t");                                               /* Tab brings the window to it */
-        for (seen = 0, r = 15; r <= 22; r++) if (strstr(tm_cell[r], "Item 34")) seen = 1;
+        for (seen = 0, r = 14; r <= 21; r++) if (strstr(tm_cell[r], "Item 34")) seen = 1;
         assert(seen);
     }
     restore_screen();
-    printf("  [OK] a 34-entry list under a 13-row header scrolls in the 8-row grid: Down, PgDn, Home, End and type-ahead reach every entry\n");
+    printf("  [OK] a 34-entry list under a 10-row header scrolls in the 8-row grid: Down, PgDn, Home, End and type-ahead reach every entry\n");
 }
 
 static void without_a_header_logo_the_rail_stays_on_the_masthead_row_and_no_row_is_added(void)
@@ -1415,8 +1417,8 @@ static void a_theme_without_a_rail_gets_a_static_divider_under_a_logo(void)
     int c;
     use_screen(80, 25, "", 3, "-\t-\t-", "scroll");               /* "" is a board with no themes: no rail */
     tm_after("\x1b[B");
-    for (c = 0; c < 80; c++) assert(tm_cell[4][c] == '-');
-    assert(strstr(tm_cell[5], "Messages"));
+    for (c = 0; c < 80; c++) assert(tm_cell[5][c] == '-');     /* logo 1-3, blank 4, divider 5 */
+    assert(strstr(tm_cell[7], "Messages"));
     assert(!strstr(screen_text, "\0337"));                        /* nothing animates: no tick at all */
     restore_screen();
     printf("  [OK] a theme without a rail gets a static divider rule under a logo\n");
@@ -1437,7 +1439,7 @@ static void the_idle_tick_touches_the_divider_row_only_under_a_header_logo(void)
             assert(end && end < stop && end - p < 300);
             for (q = p; q < end; q++) {
                 int r = 0, c = 0, n = 0;
-                if (q[0] == '\033' && q[1] == '[' && sscanf(q + 2, "%d;%d%n", &r, &c, &n) == 2 && q[2 + n] == 'H') assert(r == 1 + HEIGHT[hi]);
+                if (q[0] == '\033' && q[1] == '[' && sscanf(q + 2, "%d;%d%n", &r, &c, &n) == 2 && q[2 + n] == 'H') assert(r == 2 + HEIGHT[hi]);
             }
             ticks++;
         }
@@ -1471,7 +1473,7 @@ static void hit_testing_uses_the_grid_origin_below_the_divider(void)
     int hi;
     char reply[24];
     for (hi = 0; hi < 2; hi++) {
-        int h = HEIGHT[hi], first = 3 + h;                       /* first entry row: logo h, divider, section header */
+        int h = HEIGHT[hi], first = 5 + h;                       /* first entry row: logo h, blank, divider, blank, section header */
         use_screen(80, 25, "", h, "-\t-\t-", "scroll");
 #define HOVER(col, row, want) do { mouse_queue = 1; sprintf(reply, "M\t%d\t%d", (col), (row)); mouse_reply = reply; \
         assert(DRIVE("\x1e\x1b") == 0 && has(requests, want)); } while (0)
@@ -1479,11 +1481,11 @@ static void hit_testing_uses_the_grid_origin_below_the_divider(void)
         HOVER(1, first + 1, "ROW 2|");                           /* MS: one row down */
         HOVER(1, first + 4, "ROW 5|");                           /* F, under the Files header */
         HOVER(1, first + 9, "ROW 13|");                          /* G: the last visible entry row */
-        HOVER(1, 1 + h, "ROW 0|");                               /* the divider is not a grid row: nothing is selected */
+        HOVER(1, 2 + h, "ROW 0|");                               /* the divider is not a grid row: nothing is selected */
         HOVER(50, first + 3, "ROW 0|");                          /* the Files section header: no entry under it */
 #undef HOVER
     }
-    mouse_reply = "M\t1\t6";
+    mouse_reply = "M\t1\t8";
     restore_screen();
     printf("  [OK] hover hit tests use the grid origin below the divider (first, last visible row, divider, section header)\n");
 }

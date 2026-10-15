@@ -85,7 +85,8 @@ static int logo_fits(const ae_menu_logo *l, int cols, int max_rows)
     return l && l->rows > 0 && l->cols > 0 && l->cols <= cols && l->rows <= max_rows;
 }
 
-static int grid_rows(int rows, int top, int footer_rows) { return rows - top - 2 - footer_rows; }
+/* With a header logo one empty row also sits between the list (or footer logo) and the status row (sysop 2026-10-15). */
+static int grid_rows(int rows, int top, int footer_rows, int gap) { return rows - top - 2 - footer_rows - gap; }
 
 void md_layout(const ae_menu *m, int cols, int rows, md_layout_out *o)
 {
@@ -102,21 +103,21 @@ void md_layout(const ae_menu *m, int cols, int rows, md_layout_out *o)
        still has MD_MIN_GRID_ROWS rows below it; the grid takes whatever rows remain and a longer list scrolls. */
     if (!logo_fits(header, cols, rows)) header = 0;
     if (!logo_fits(footer, cols, rows)) footer = 0;
-    o->grid_top = header ? 2 + header->rows : 2;          /* logo 1..h, divider 1+h, grid 2+h: the logo replaces the title */
-    o->grid_height = grid_rows(rows, o->grid_top, footer ? footer->rows : 0);
+    o->grid_top = header ? 4 + header->rows : 2;          /* logo 1..h, blank, divider 2+h, blank, grid 4+h (sysop 2026-10-15: air around the rail) */
+    o->grid_height = grid_rows(rows, o->grid_top, footer ? footer->rows : 0, header != 0);
     if (o->grid_height < MD_MIN_GRID_ROWS && footer) {    /* the grid is never squeezed: logos give way, footer first */
         footer = 0;
-        o->grid_height = grid_rows(rows, o->grid_top, 0);
+        o->grid_height = grid_rows(rows, o->grid_top, 0, header != 0);
     }
     if (o->grid_height < MD_MIN_GRID_ROWS && header) {
         header = 0;
         o->grid_top = 2;
-        o->grid_height = grid_rows(rows, 2, 0);
+        o->grid_height = grid_rows(rows, 2, 0, 0);
     }
     if (o->grid_height < 0) o->grid_height = 0;           /* a terminal too short for a grid draws none */
     if (header) {                                         /* sysop 2026-10-15: no title row above a header logo */
         o->masthead_row = 0;
-        o->header_top = 1; o->header_rows = header->rows; o->header_cols = cols; o->divider_row = 1 + header->rows;
+        o->header_top = 1; o->header_rows = header->rows; o->header_cols = cols; o->divider_row = 2 + header->rows;
     }
     o->rail_row = o->divider_row ? o->divider_row : o->masthead_row;
     if (footer) { o->footer_top = o->grid_top + o->grid_height; o->footer_rows = footer->rows; o->footer_cols = cols; }
