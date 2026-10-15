@@ -1,3 +1,30 @@
+/**
+ * SessionLink: a socket-shaped facade that outlives the raw socket under it.
+ *
+ * Every holder of the session (BBSApi, door sessions, modem emulator, idle
+ * timer ...) holds the LINK, never the raw socket, so a transport change
+ * (park, then attach a new raw socket) needs no holder to be re-pointed.
+ *
+ * Members the link provides itself, TRACKED across attach: emit, send, on,
+ * once, off, addListener, removeListener, prependListener, removeAllListeners,
+ * listeners, listenerCount, onAny, offAny, onAnyOutgoing, offAnyOutgoing, join,
+ * leave, disconnect, id, connected, plus the control surface (raw, parked,
+ * ended, attach, end, takeHeld, setHooks).
+ *
+ * Members NOT provided fall through to the CURRENT raw socket, bound to it, and
+ * are NOT re-bound at attach: emitWithAck, timeout, volatile, compress,
+ * broadcast, to(), in(), handshake, request, nsp, data. In particular
+ * `rooms` is the current raw's set (empty while parked: the link re-joins the
+ * rooms it tracked on attach) and `handshake` is the current raw's (S5: read
+ * the caller's address from the link at use time, never cache it across an
+ * attach; the first raw's address is not the new one's).
+ *
+ * Output while parked is held below every emit wrapper. Observers installed
+ * with onAnyOutgoing run when an emit reaches a raw socket, so a held emit is
+ * seen by them at REPLAY time (when the board re-emits it on the new raw), not
+ * at park time. An acknowledgement callback (a trailing function argument) is
+ * never held: it would fire on a different transport, or never.
+ */
 import { EventEmitter } from 'events';
 import type { Socket } from 'socket.io';
 
@@ -11,7 +38,50 @@ export interface SessionLinkControl {
 }
 export type SessionLink = SessionLinkControl & Socket;
 
-type Listener = (...args: any[]) => void;
+type Listener = (...args: unknown[]) => void;
+
+/** The raw-socket surface the link drives (socket.io's typed overloads do not take dynamic names). */
+interface RawLike {
+  readonly id: string;
+  readonly connected: boolean;
+  emit(event: string, ...args: unknown[]): boolean;
+  on(event: string, fn: Listener): unknown;
+  prependListener(event: string, fn: Listener): unknown;
+  off(event: string, fn: Listener): unknown;
+  onAny(fn: Listener): unknown;
+  offAny(fn?: Listener): unknown;
+  onAnyOutgoing(fn: Listener): unknown;
+  offAnyOutgoing(fn?: Listener): unknown;
+  join(room: string): unknown;
+  leave(room: string): unknown;
+  disconnect(close?: boolean): unknown;
+}
+const asRaw = (s: Socket): RawLike => s as unknown as RawLike;
+
+/** The members the link provides itself; the Proxy target is typed so a missing one fails tsc. */
+interface LinkMembers extends SessionLinkControl {
+  readonly id: string;
+  readonly connected: boolean;
+  emit(event: string, ...args: unknown[]): boolean;
+  send(...args: unknown[]): SessionLink;
+  on(event: string, fn: Listener): SessionLink;
+  addListener(event: string, fn: Listener): SessionLink;
+  once(event: string, fn: Listener): SessionLink;
+  prependListener(event: string, fn: Listener): SessionLink;
+  off(event: string, fn: Listener): SessionLink;
+  removeListener(event: string, fn: Listener): SessionLink;
+  removeAllListeners(event?: string): SessionLink;
+  listeners(event: string): Listener[];
+  listenerCount(event: string): number;
+  onAny(fn: Listener): SessionLink;
+  offAny(fn?: Listener): SessionLink;
+  onAnyOutgoing(fn: Listener): SessionLink;
+  offAnyOutgoing(fn?: Listener): SessionLink;
+  join(room: string): void;
+  leave(room: string): void;
+  disconnect(close?: boolean): SessionLink;
+}
+
 const LINK = Symbol('sessionLink');
 /** The session's own end - never forwarded from a transport. */
 const SESSION_EVENTS = new Set(['disconnect', 'disconnecting']);
@@ -30,33 +100,44 @@ export function isSessionLink(x: unknown): x is SessionLink {
   return !!x && (x as Record<symbol, unknown>)[LINK] === true;
 }
 
+interface Tracked { event: string; fn: Listener; orig: Listener; prepend: boolean }
+
 export function createSessionLink(first: Socket, initial?: SessionLinkHooks): SessionLink {
   let raw: Socket = first;
   let parked = false;
   let ended = false;
   let hooks: SessionLinkHooks = initial ?? { onDrop: () => 'end' };
   const own = new EventEmitter(); own.setMaxListeners(0);
-  const tracked: Array<{ event: string; fn: Listener; orig: Listener }> = [];
+  const tracked: Tracked[] = [];
   const anys: Listener[] = [];
+  const outgoing: Listener[] = [];
   const rooms = new Set<string>();
   let held: Array<[string, unknown[]]> = []; let heldBytes = 0; let overflowed = false;
+  const live = () => !parked && !ended;
 
   const rawDisconnect = new WeakMap<Socket, Listener>();
   const bind = (s: Socket) => {
-    for (const t of tracked) s.on(t.event, t.fn);
-    for (const f of anys) s.onAny(f);
-    for (const r of rooms) s.join(r);
-    const onDrop: Listener = (reason: string) => {
-      if (s !== raw || ended || parked) return;      // an old socket, or already parked
-      if (hooks.onDrop(reason) === 'park') { parked = true; unbind(s); } else end(reason);
+    const r = asRaw(s);
+    // Registration order is replayed, so a prepended listener keeps its place.
+    for (const t of tracked) { if (t.prepend) r.prependListener(t.event, t.fn); else r.on(t.event, t.fn); }
+    for (const f of anys) r.onAny(f);
+    for (const f of outgoing) r.onAnyOutgoing(f);
+    for (const room of rooms) r.join(room);
+    const onDrop: Listener = (reason) => {
+      // An old socket, or already parked. Reachable: EventEmitter clones its
+      // listener array per emit, so a listener unbound during a dispatch still runs.
+      if (s !== raw || ended || parked) return;
+      if (hooks.onDrop(String(reason)) === 'park') { parked = true; unbind(s); } else end(String(reason));
     };
     rawDisconnect.set(s, onDrop);
-    s.on('disconnect', onDrop);
+    r.on('disconnect', onDrop);
   };
   const unbind = (s: Socket) => {
-    for (const t of tracked) s.off(t.event, t.fn);
-    for (const f of anys) s.offAny(f);
-    const d = rawDisconnect.get(s); if (d) s.off('disconnect', d);
+    const r = asRaw(s);
+    for (const t of tracked) r.off(t.event, t.fn);
+    for (const f of anys) r.offAny(f);
+    for (const f of outgoing) r.offAnyOutgoing(f);
+    const d = rawDisconnect.get(s); if (d) r.off('disconnect', d);
   };
   const hold = (event: string, args: unknown[]) => {
     if (overflowed) return;
@@ -72,70 +153,89 @@ export function createSessionLink(first: Socket, initial?: SessionLinkHooks): Se
     own.emit('disconnect', reason);
   }
 
-  const target: Record<string | symbol, unknown> = {
-    [LINK]: true,
-    emit: (event: string, ...args: unknown[]): boolean => {
-      if (ended) return false;
-      if (parked) { hold(event, args); return true; }
-      return raw.emit(event, ...(args as []));
-    },
-    on: (event: string, fn: Listener) => {
-      if (SESSION_EVENTS.has(event)) own.on(event, fn);
-      else { tracked.push({ event, fn, orig: fn }); if (!parked && !ended) raw.on(event, fn); }
-      return proxy;
-    },
-    once: (event: string, fn: Listener) => {
+  const add = (event: string, fn: Listener, prepend: boolean, wrapped?: Listener): SessionLink => {
+    if (SESSION_EVENTS.has(event)) { if (prepend) own.prependListener(event, fn); else own.on(event, fn); return proxy; }
+    const w = wrapped ?? fn;
+    tracked.push({ event, fn: w, orig: fn, prepend });
+    if (live()) { if (prepend) asRaw(raw).prependListener(event, w); else asRaw(raw).on(event, w); }
+    return proxy;
+  };
+  const remove = (event: string, fn: Listener): SessionLink => {
+    if (SESSION_EVENTS.has(event)) { own.off(event, fn); return proxy; }
+    for (let i = tracked.length - 1; i >= 0; i--) {
+      const t = tracked[i];
+      if (t.event === event && (t.orig === fn || t.fn === fn)) { asRaw(raw).off(event, t.fn); tracked.splice(i, 1); }
+    }
+    return proxy;
+  };
+  const emit = (event: string, ...args: unknown[]): boolean => {
+    if (ended) return false;
+    if (parked) {
+      const last = args[args.length - 1];
+      hold(event, typeof last === 'function' ? args.slice(0, -1) : args);   // never replay an ack callback
+      return true;
+    }
+    return asRaw(raw).emit(event, ...args);
+  };
+  const on = (event: string, fn: Listener) => add(event, fn, false);
+  const off = remove;
+
+  const members: LinkMembers = {
+    emit,
+    send: (...args) => { emit('message', ...args); return proxy; },
+    on,
+    addListener: on,
+    once: (event, fn) => {
       if (SESSION_EVENTS.has(event)) { own.once(event, fn); return proxy; }
-      const w: Listener = (...a) => { (target.off as Function)(event, fn); fn(...a); };
-      tracked.push({ event, fn: w, orig: fn }); if (!parked && !ended) raw.on(event, w);
-      return proxy;
+      const w: Listener = (...a) => { remove(event, fn); fn(...a); };
+      return add(event, fn, false, w);
     },
-    off: (event: string, fn: Listener) => {
-      if (SESSION_EVENTS.has(event)) { own.off(event, fn); return proxy; }
-      for (let i = tracked.length - 1; i >= 0; i--) {
-        const t = tracked[i];
-        if (t.event === event && (t.orig === fn || t.fn === fn)) { raw.off(event, t.fn); tracked.splice(i, 1); }
-      }
-      return proxy;
-    },
-    removeAllListeners: (event?: string) => {
-      for (const t of [...tracked]) if (event === undefined || t.event === event) (target.off as Function)(t.event, t.fn);
+    prependListener: (event, fn) => add(event, fn, true),
+    off,
+    removeListener: off,
+    removeAllListeners: (event) => {
+      for (const t of [...tracked]) if (event === undefined || t.event === event) remove(t.event, t.fn);
       if (event === undefined || SESSION_EVENTS.has(event)) own.removeAllListeners(event);
       return proxy;
     },
-    listeners: (event: string) => SESSION_EVENTS.has(event) ? own.listeners(event) : tracked.filter((t) => t.event === event).map((t) => t.orig),
-    listenerCount: (event: string) => (target.listeners as Function)(event).length,
-    onAny: (f: Listener) => { anys.push(f); if (!parked && !ended) raw.onAny(f); return proxy; },
-    offAny: (f?: Listener) => { for (const x of [...anys]) if (!f || x === f) { anys.splice(anys.indexOf(x), 1); raw.offAny(x); } return proxy; },
-    join: (room: string) => { rooms.add(room); if (!parked && !ended) raw.join(room); },
-    leave: (room: string) => { rooms.delete(room); if (!parked && !ended) raw.leave(room); },
-    disconnect: (close?: boolean) => {
+    listeners: (event) => SESSION_EVENTS.has(event) ? (own.listeners(event) as Listener[]) : tracked.filter((t) => t.event === event).map((t) => t.orig),
+    listenerCount: (event) => members.listeners(event).length,
+    onAny: (f) => { anys.push(f); if (live()) asRaw(raw).onAny(f); return proxy; },
+    offAny: (f) => { for (const x of [...anys]) if (!f || x === f) { anys.splice(anys.indexOf(x), 1); asRaw(raw).offAny(x); } return proxy; },
+    onAnyOutgoing: (f) => { outgoing.push(f); if (live()) asRaw(raw).onAnyOutgoing(f); return proxy; },
+    offAnyOutgoing: (f) => { for (const x of [...outgoing]) if (!f || x === f) { outgoing.splice(outgoing.indexOf(x), 1); asRaw(raw).offAnyOutgoing(x); } return proxy; },
+    join: (room) => { rooms.add(room); if (live()) asRaw(raw).join(room); },
+    leave: (room) => { rooms.delete(room); if (live()) asRaw(raw).leave(room); },
+    disconnect: (close) => {
       if (ended) return proxy;
-      if (parked) end('server namespace disconnect'); else raw.disconnect(close);
+      if (parked) end('server namespace disconnect'); else asRaw(raw).disconnect(close);
       return proxy;
     },
-    attach: (next: Socket) => {
+    attach: (next) => {
       if (ended) throw new Error('attach to an ended session link');
       if (next === raw && !parked) return;
       unbind(raw);
-      if (raw.connected && raw !== next) raw.disconnect(true);  // takeover: unbound first, so we never hear it
+      if (raw.connected && raw !== next) asRaw(raw).disconnect(true);  // takeover: unbound first, so we never hear it
       raw = next; parked = false;
       bind(next);
     },
     end,
-    takeHeld: (): HeldOutput => { const out = { chunks: held, overflowed }; held = []; heldBytes = 0; overflowed = false; return out; },
-    setHooks: (h: SessionLinkHooks) => { hooks = h; },
+    takeHeld: () => { const out = { chunks: held, overflowed }; held = []; heldBytes = 0; overflowed = false; return out; },
+    setHooks: (h) => { hooks = h; },
+    get raw() { return raw; },
+    get parked() { return parked; },
+    get ended() { return ended; },
+    get id() { return raw.id; },
+    get connected() { return live() && raw.connected; },
   };
-  Object.defineProperties(target, {
-    raw: { get: () => raw }, parked: { get: () => parked }, ended: { get: () => ended },
-    id: { get: () => raw.id }, connected: { get: () => !parked && !ended && raw.connected },
-  });
+  const target = members as LinkMembers & Record<string | symbol, unknown>;
+  Object.defineProperty(target, LINK, { value: true });
 
-  const proxy = new Proxy(target, {
+  const proxy: SessionLink = new Proxy(target, {
     get(t, p) {
       if (p in t) return t[p];
       const v = (raw as unknown as Record<string | symbol, unknown>)[p];
-      return typeof v === 'function' ? (v as Function).bind(raw) : v;
+      return typeof v === 'function' ? (v as (...a: unknown[]) => unknown).bind(raw) : v;
     },
     set(t, p, v) { t[p] = v; return true; },          // emit wrappers, `session`, `_modemEmulator` live on the link
     has(t, p) { return p in t || p in (raw as object); },
