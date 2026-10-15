@@ -37,3 +37,12 @@ test('playback emits one event per frame with the pre-paced marker and waits the
   expect(sent[1][1]).toContain('\x1b[0m');
   expect(Date.now() - t0).toBeGreaterThanOrEqual(18);
 });
+
+test('opts.emit overrides the socket emitter', async () => {
+  const viaSocket: string[] = [];
+  const viaOpts: string[] = [];
+  const socket = { _directEmit: (_e: string, d: string) => viaSocket.push(d) };
+  await playWipeFrames(socket, [{ content: 'z', delay: 0 }], { eventName: 'ansi-output', emit: (_e, d) => viaOpts.push(d) });
+  expect(viaOpts).toHaveLength(1);
+  expect(viaSocket).toHaveLength(0);
+});

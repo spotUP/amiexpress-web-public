@@ -281,3 +281,22 @@ export function applyWindowSizeReport(
   }
   return { geometryTaken: true, detectedFromSize: false };
 }
+
+/**
+ * The size a RESPONSIVE C door may draw at (Decision 26) - asked through
+ * AEW_SCREEN SIZE, never through BB_SCRWIDTH, which stays 80 for every ANSI
+ * door because classic doors assume it. A C64 or teletext caller is the
+ * mode's size, exactly as doorScreenWidth/Height answer.
+ */
+export const RESPONSIVE_MAX_COLS = 160;
+export const RESPONSIVE_MAX_ROWS = 50;
+export function responsiveDoorGeometry(
+  session: (ScreenHeightSource & { wireWidth?: number; wireHeight?: number }) | null | undefined,
+): { cols: number; rows: number } {
+  if (!session || session.petsciiMode === true || session.texttvMode === true) {
+    return { cols: doorScreenWidth(session, DEFAULT_DOOR_COLUMNS), rows: doorScreenHeight(session, 25) };
+  }
+  const cols = Math.min(RESPONSIVE_MAX_COLS, Math.max(DEFAULT_DOOR_COLUMNS, session.wireWidth || session.screenWidth || DEFAULT_DOOR_COLUMNS));
+  const rows = Math.min(RESPONSIVE_MAX_ROWS, Math.max(24, session.wireHeight || doorScreenHeight(session, 25)));
+  return { cols, rows };
+}

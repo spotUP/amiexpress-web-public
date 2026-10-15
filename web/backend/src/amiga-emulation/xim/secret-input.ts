@@ -20,7 +20,7 @@ export function isSecretInput(session: object | null | undefined): boolean {
   return !!session && secret.has(session);
 }
 
-/** What a keystroke trace may say about `data`: its content, or only its size while a secret is typed. */
+/** What a keystroke trace may say about `data`: its content, or only its size while a secret is typed. A mouse report (AEW_SCREEN MOUSE ON) is named, never printed: a hover is dozens a second. */
 export function inputForTrace(session: object | null | undefined, data: string, render: (s: string) => string): string {
-  return isSecretInput(session) ? `<${data.length} bytes withheld>` : render(data);
+  return isSecretInput(session) ? `<${data.length} bytes withheld>` : render(data.replace(/\x1b\[<\d+;\d+;\d+[Mm]/g, '<mouse>'));
 }

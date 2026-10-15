@@ -52,7 +52,7 @@ import { DebugLogger } from '../utils/debug-logger.util';
 import { formatBytes as formatBytesUtil } from '../utils/byte-format.util';
 import { parseWipeMCI, getWipeFrames, wipeEffectsEnabled, type WipeType } from '../utils/screen-wipe.util';
 import { sessionColumns } from '../utils/door-min-columns.util';
-import { PRE_PACED, fromCharset, pacedFromCharset, type OutputAttributes } from '../utils/output-pacing';
+import { fromCharset, type OutputAttributes } from '../utils/output-pacing';
 import { playWipeFrames } from '../utils/wipe-playback';
 import { emitText, emitPrompt, flushOutput } from '../utils/output.util';
 import { fileCache } from '../utils/file-cache.util';

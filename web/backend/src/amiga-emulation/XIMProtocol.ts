@@ -41,6 +41,9 @@ import { debugRegistry } from '../debug/DebugRegistry';
 import * as net from 'net';
 import { amigaGaps, doorOf } from './instrumentation/amiga-gaps';
 import { XIM_DOOR_COMMAND_ADDR } from './memory-map';
+import { boardScreenAnswer } from './xim/board-screen';
+import { MouseAbsorber } from './xim/mouse-absorber';
+import { responsiveDoorGeometry } from './xim/screen-width.util';
 
 export { XIMCommand } from './xim/types';
 
@@ -51,6 +54,8 @@ export class XIMProtocol {
   private doorPort: number;
   private doorReplyPort: number = 0;
   private bbsSession: BBSSessionData;
+  /** Armed by AEW_SCREEN MOUSE ON; cleared when the door ends. */
+  private mouse: MouseAbsorber | null = null;
   private state: XIMState;
   private doorCommand: string = ''; // Command name used to launch this door (e.g., "FR")
   private doorCommandAddr: number = 0; // Persistent memory address for door command string
@@ -296,7 +301,16 @@ debugLog(`[XIMProtocol] Updating port address from 0x${this.doorPort.toString(16
     return this.ioHandler.isWaitingForCaller() || this.systemCommandsHandler.isEditingForCaller();
   }
 
+  /** AEW_SCREEN state ends with the door. */
+  private releaseBoardScreen(): void {
+    this.mouse = null;
+    this.state.wipeCapture = null;
+  }
+
   queueInput(data: string): void {
+    // AEW_SCREEN MOUSE ON: SGR reports never reach the key queue (xim/mouse-absorber.ts).
+    if (this.mouse) data = this.mouse.absorb(data);
+    if (!data) return;
     this.ioHandler.queueInput(data);
   }
 
@@ -680,6 +694,8 @@ debugLog(`[XIMProtocol]   ${label} has NULL reply port - skipping ReplyMsg (corr
     }
     // Handle system commands first (register/shutdown and others)
     if (this.isSystemCommand(msg.command)) {
+      // The door is ending: drop the mouse absorber and any held wipe (door exit already switches reporting off).
+      if (msg.command === XIMCommand.JH_SHUTDOWN) this.releaseBoardScreen();
       this.handleSystemCommand(msg);
       return;
     }
@@ -1058,6 +1074,26 @@ debugLog(`[XIMProtocol]   Wrote tooltype value="${tooltypeValue}", StringPtr not
         // (the confirm copy) must not stay in door memory behind a short answer.
         this.messageParser.writeMessageString(msg.msgAddr, answer);
         debugLog(`[XIMProtocol] AEW_USERFIELD ${loggableXimString(msg.command, msg.data, msg.string).split(' ')[0]} -> ${answer.length} bytes`);
+        this.sendReply(msg, answer.length);
+        break;
+      }
+
+      /** AEW_SCREEN (10800): size, wipes, mouse - xim/board-screen.ts. */
+      case XIMCommand.AEW_SCREEN: {
+        let answer = '';
+        try {
+          answer = await boardScreenAnswer(String(msg.string || ''), {
+            session: this.bbsSession, socket: this.socket, state: this.state, mouse: this.mouse,
+            armMouse: (on: boolean) => { this.mouse = on ? new MouseAbsorber() : null; },
+            columns: () => responsiveDoorGeometry(this.bbsSession as never).cols,
+          });
+        } catch (err) {
+          // Empty = "this board cannot answer": the SDK falls back to BB_SCRWIDTH, no wipes, no mouse.
+          // A held wipe is released so the door's next output is not swallowed.
+          this.state.wipeCapture = null;
+          debugLog(`[XIMProtocol] AEW_SCREEN failed: ${err instanceof Error ? err.message : 'error'}`);
+        }
+        this.messageParser.writeMessageString(msg.msgAddr, answer);
         this.sendReply(msg, answer.length);
         break;
       }

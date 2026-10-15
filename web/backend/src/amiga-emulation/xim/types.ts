@@ -362,6 +362,16 @@ export enum XIMCommand {
   /** This board's own: the W door's field conversation - xim/userfield.ts. */
   AEW_USERFIELD = 10600,
 
+  /**
+   * 10700 is RESERVED for the J (join conference) door's list verb,
+   * AEW_CONFLIST (thoughts/shared/research/2026-10-15_join-conference-door.md
+   * section 5.2). Do not take it for anything else.
+   */
+  /** This board's own: size, wipes and mouse for a C door - xim/board-screen.ts. */
+  AEW_SCREEN = 10800,
+  /** This board's own: a menu door's catalogue and actions - xim/menu.ts. */
+  AEW_MENU = 10900,
+
   NETUPLOAD = 10001,
   NETDOWNLOAD = 10002,
 }
@@ -451,6 +461,8 @@ export interface XIMState {
   carrierDropped: boolean;
   rawArrow: boolean;  // When true, pass raw escape sequences; when false, convert to arrow codes
   transfering: boolean; // When true, file transfer in progress - suppress JH_WRITE output (express.e:3383)
+  /** AEW_SCREEN WIPE IN/OUT: the door's text is held here until WIPE END plays it (Decision 27). */
+  wipeCapture?: { kind: 'in' | 'out'; letter: string; text: string[] } | null;
   doorSilent: boolean;  // When true, door output suppressed - used by silent doors (express.e:3383)
   ximPortAddr?: number;
   aePortAddr?: number;

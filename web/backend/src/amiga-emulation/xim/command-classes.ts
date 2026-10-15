@@ -50,6 +50,10 @@ export function isIOCommand(command: number): boolean {
     // AEW_USERFIELD saves the account and reads the user files - async, like
     // the two above, and the line the comment at the top of this list warns about.
     XIMCommand.AEW_USERFIELD,
+    // AEW_SCREEN plays a wipe (awaits the frames) and AEW_MENU writes the
+    // catalogue file - both asynchronous, both need ASYNC_OUTPUT_COMMANDS too.
+    XIMCommand.AEW_SCREEN,
+    XIMCommand.AEW_MENU,
     // Note: PG_SM, PG_UD, PG_US were removed - they don't exist in axcommon.e
     // and conflicted with JH_REGISTER (1), JH_FLAGFILE (13), JH_SHOWFLAGS (14)
   ];

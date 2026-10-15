@@ -25,7 +25,7 @@ export function buildCatalogue(source: MenuSource, caller: MenuCaller, config: M
   const rank = (k: string) => { const i = exception.order.indexOf(k); return i < 0 ? exception.order.length : i; };
 
   let sections: CatalogueSection[];
-  const c64 = caller.columns <= 40 && parentKey === undefined ? levelEntry(config.c64Menus, level) : undefined;
+  const c64 = widthClassOf(caller.columns) === 'c64' && parentKey === undefined ? levelEntry(config.c64Menus, level) : undefined;
   if (c64) {
     sections = c64.sections.map((s, i) => ({ id: `c64-${i}`, title: s.title, entries: s.keys.map(k => byKey.get(k)).filter((e): e is CatalogueEntry => !!e) }));
   } else {

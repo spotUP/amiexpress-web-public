@@ -4,16 +4,17 @@ import { ACSPermission } from '../../constants/acs-permissions';
 import { checkSecurity } from '../../utils/acs.util';
 import { PermissionsUtil } from '../../utils/permissions.util';
 import { checkAcsPermission, findAcsLevel } from '../../utils/acs-access-loader';
-import { doorRefusedForWidth, sessionColumns } from '../../utils/door-min-columns.util';
-import { doorScreenHeight } from '../../amiga-emulation/xim/screen-width.util';
+import { doorRefusedForWidth } from '../../utils/door-min-columns.util';
+import { responsiveDoorGeometry } from '../../amiga-emulation/xim/screen-width.util';
 import { displayModeOf } from '../../amiga-emulation/xim/display-mode.util';
 
 export function menuCallerFromSession(session: BBSSession): MenuCaller {
   const user = session.user as any;
+  // WEB_: the real terminal size (AEW_SCREEN SIZE answers the same), not the board's 80-column model.
+  const geometry = responsiveDoorGeometry(session as never);
   return {
     secLevel: user?.secLevel ?? 0, conference: session.currentConf || 1, node: session.nodeId || 0,
-    // M5 replaces this with responsiveDoorGeometry(session) (the real terminal width).
-    columns: sessionColumns(session as never), rows: doorScreenHeight(session as never, 25), displayMode: displayModeOf(session as never),
+    columns: geometry.cols, rows: geometry.rows, displayMode: displayModeOf(session as never),
     may: (k: string) => checkSecurity(user, ACSPermission[k as keyof typeof ACSPermission]),
     isSysop: PermissionsUtil.isSysop(user),
     widthRefuses: (door: object) => doorRefusedForWidth(door as never, session as never),
