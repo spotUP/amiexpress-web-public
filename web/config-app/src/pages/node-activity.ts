@@ -22,6 +22,7 @@ const EXACT: Record<string, string> = {
   process_command: 'Running a command',
   waiting: 'Idle',
   logoff: 'Logging off',
+  goodbye_confirm: 'Logging off',
   callerslog_node_input: 'Reading the callers log',
   conf_scan: 'Scanning conferences',
   auto_rejoin: 'Rejoining their conference',
@@ -62,6 +63,7 @@ const EXACT: Record<string, string> = {
 
   exec_quicknew: 'Looking for new files',
   view_file_input: 'Viewing a file',
+  view_file_show: 'Viewing a file',
   batch_download_confirm: 'Downloading',
   command_password_input: 'At a password prompt',
   bulletin_input: 'Reading a bulletin',
