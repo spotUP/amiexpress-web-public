@@ -40,55 +40,15 @@ jest.mock('../../../src/services/account.service', () => ({
   saveAccount: jest.fn(async () => undefined),
 }));
 
-import { CaptureSocket, beforeTeardown, c64Rows } from './door-capture';
+import { beforeTeardown, c64Rows, driveDoor, type Step } from './door-capture';
 
 const REPO = path.resolve(__dirname, '../../../../..');
 const DOOR = path.join(REPO, 'Doors', 'USERSETTINGS', 'usersettings');
 const EIGHTY = path.join(__dirname, 'fixtures', 'usersettings-80.ans');
 
-/**
- * `at` is a time in ms, or 'idle': the door has painted and then been quiet for a second since the
- * previous idle key went in (load-proof). Idle steps run IN ORDER, one after the other, each waiting
- * for the door to answer the one before; a fixed time only suits a step that needs no answer.
- */
-interface Step { at: number | 'idle'; keys: string }
-const QUIET_MS = 1000;
-
 async function driveFull(cols: number, steps: Step[], rows = 25): Promise<{ ansi: string; user: any }> {
-  const { AmigaDoorSession } = require('../../../src/amiga-emulation/AmigaDoorSession');
-  const socket = new CaptureSocket();
-  const petscii = cols < 80;
-  const user = {
-    id: 7, username: 'Spot', realname: 'Johan', internetName: 'spot', email: 'spot@example.com',
-    location: 'Old Town', phone: '555-1234', secLevel: 255, securityFlags: 'T'.repeat(128), userFlags: 0,
-    editor: 'Prompt', zoomType: 0, availableForChat: true, protocol: 'zmodem', linesPerScreen: 0 };
-  const session = new AmigaDoorSession(socket as any, {
-    executablePath: DOOR, doorType: 'XIM', timeout: 30, args: ['1'], assigns: {}, toolTypes: {},
-    bbsSession: {
-      user,
-      nodeId: 1, nodeNumber: 1, bbsName: 'AmiExpress-Web', sysopName: 'Sysop', timeRemaining: 60,
-      doorCommand: 'W', doorId: 'W', petsciiMode: petscii, terminalType: petscii ? 'c64' : 'modern',
-      screenWidth: cols, screenHeight: rows,
-    },
-  });
-  const timers: NodeJS.Timeout[] = steps.filter(st => st.at !== 'idle').map(st => setTimeout(() => socket.emit('door:input', st.keys), st.at as number));
-  let ended = false;
-  const idleKeys = steps.filter(x => x.at === 'idle');
-  // Wait until the door has painted something and then said nothing for QUIET_MS, then type the next key.
-  const typist = (async () => {
-    for (const st of idleKeys) {
-      let seen = 0, quietSince = Date.now();
-      while (!ended) {
-        await new Promise(r => setTimeout(r, 100));
-        if (socket.ansi.length !== seen) { seen = socket.ansi.length; quietSince = Date.now(); continue; }
-        if (seen > 0 && Date.now() - quietSince >= QUIET_MS) break;
-      }
-      if (ended) return;
-      socket.emit('door:input', st.keys);
-    }
-  })();
-  try { await session.start(); } finally { ended = true; await typist; timers.forEach(t => { clearTimeout(t); clearInterval(t); }); }
-  return { ansi: socket.ansi.join(''), user };
+  const { ansi, user } = await driveDoor(DOOR, { cols, rows, steps, command: 'W' });
+  return { ansi, user };
 }
 
 const drive = async (cols: number, steps: Step[], rows = 25): Promise<string> => (await driveFull(cols, steps, rows)).ansi;
