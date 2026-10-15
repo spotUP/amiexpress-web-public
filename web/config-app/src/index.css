@@ -161,8 +161,10 @@
    *
    * An icon sits inside it, so it lays out as a row and carries its own gap.
    */
+  /* A button label is one line: in a flex row beside long text the button
+     would otherwise shrink and break its label over several lines. */
   .btn-small {
-    @apply inline-flex items-center gap-1 text-sm py-1 px-2 rounded transition-colors;
+    @apply inline-flex shrink-0 items-center gap-1 whitespace-nowrap text-sm py-1 px-2 rounded transition-colors;
   }
 
   /* Disabled reads as disabled on every variant, not per call site. */
