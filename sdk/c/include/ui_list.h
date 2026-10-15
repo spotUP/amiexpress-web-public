@@ -97,7 +97,7 @@ typedef struct {
     /**
      * THE ONE SCROLLBAR (sysop, 2026-10-15): solid colour bars, no glyphs.
      * The track is a space on `scroll_track`, the thumb a space on
-     * `scroll_thumb`; ui_list_init sets them to the theme's DIM and BAR
+     * `scroll_thumb`; ui_list_init sets them to the theme's DIM and INK
      * tokens, the same roles Element.renderScrollbar reads
      * (sdk/engines/ui/theme/styles.ts, scrollbarRoles). A door does not pick
      * a glyph or a colour for its bar. On a C64 (no per-cell background)

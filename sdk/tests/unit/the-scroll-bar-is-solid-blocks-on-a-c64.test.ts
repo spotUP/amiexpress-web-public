@@ -2,7 +2,7 @@
  * The one scrollbar on a C64 (sysop, 2026-10-15): a reverse-video space.
  *
  * The bytes below are what the C SDK's ui_list_draw writes for a 30-row list
- * on a screen without cell backgrounds (classic palette: thumb = BAR blue,
+ * on a screen without cell backgrounds (classic palette: thumb = INK white,
  * track = DIM gray), captured from sdk/c/src/ui_list.c. They go through the
  * board's real transducer into the KERNAL oracle: a bar cell must come out
  * as screen code $A0 (reverse space = a solid block), in the role's colour,
@@ -15,7 +15,7 @@ import { PetsciiMachine } from '../../petscii/petscii-machine';
 const E = '\x1b';
 // thumb cell (row 1) then two track cells (rows 2, 3), column 10.
 const frame =
-  `${E}[0;38;2;0;0;170m${E}[7m${E}[1;10H ${E}[27m` +
+  `${E}[0;38;2;170;170;170m${E}[7m${E}[1;10H ${E}[27m` +
   `${E}[0;37m${E}[2;1Hr1       ${E}[1;38;2;85;85;85m${E}[7m${E}[2;10H ${E}[27m` +
   `${E}[0;37m${E}[3;1Hr2       ${E}[1;38;2;85;85;85m${E}[7m${E}[3;10H ${E}[27m`;
 

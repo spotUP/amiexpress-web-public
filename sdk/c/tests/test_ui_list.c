@@ -578,7 +578,7 @@ static void a_cursor_move_leaves_the_scroll_bar_alone(void)
 
 /**
  * THE ONE SCROLLBAR (sysop, 2026-10-15): solid colour bars, no glyphs.
- * Track on the theme's DIM, thumb on its BAR - the roles the TypeScript
+ * Track on the theme's DIM, thumb on its INK - the roles the TypeScript
  * scrollbarRoles() names, from the same tokens.
  */
 static void the_scroll_bar_is_solid_colour_with_no_glyph(void)
@@ -595,7 +595,7 @@ static void the_scroll_bar_is_solid_colour_with_no_glyph(void)
     printf("  [OK] the scroll bar draws no glyph\n");
 }
 
-static void the_scroll_bar_defaults_to_the_themes_dim_and_bar(void)
+static void the_scroll_bar_defaults_to_the_themes_dim_and_ink(void)
 {
     const ui_theme *theme = ui_theme_by_id("uprough-neon");
     ui_list list;
@@ -604,7 +604,7 @@ static void the_scroll_bar_defaults_to_the_themes_dim_and_bar(void)
 
     ui_list_init(&list);
     assert(list.scroll_track == UI_TOKEN(UI_T_DIM));
-    assert(list.scroll_thumb == UI_TOKEN(UI_T_BAR));
+    assert(list.scroll_thumb == UI_TOKEN(UI_T_INK));
 
     list.top = 1; list.left = 1; list.height = 10; list.width = 20;
     list.count = 50; list.row = numbered_row; list.borders = 0;
@@ -616,11 +616,11 @@ static void the_scroll_bar_defaults_to_the_themes_dim_and_bar(void)
 
     sprintf(want_track, "48;2;%lu;%lu;%lu", (theme->rgb[UI_T_DIM] >> 16) & 0xff,
             (theme->rgb[UI_T_DIM] >> 8) & 0xff, theme->rgb[UI_T_DIM] & 0xff);
-    sprintf(want_thumb, "48;2;%lu;%lu;%lu", (theme->rgb[UI_T_BAR] >> 16) & 0xff,
-            (theme->rgb[UI_T_BAR] >> 8) & 0xff, theme->rgb[UI_T_BAR] & 0xff);
+    sprintf(want_thumb, "48;2;%lu;%lu;%lu", (theme->rgb[UI_T_INK] >> 16) & 0xff,
+            (theme->rgb[UI_T_INK] >> 8) & 0xff, theme->rgb[UI_T_INK] & 0xff);
     assert(strstr(frame, want_track) != 0);
     assert(strstr(frame, want_thumb) != 0);
-    printf("  [OK] the scroll bar is DIM and BAR from the theme\n");
+    printf("  [OK] the scroll bar is DIM and INK from the theme\n");
 }
 
 static void on_a_c64_each_scroll_bar_cell_is_a_reverse_video_space(void)
@@ -667,7 +667,7 @@ int main(void)
     a_caret_bar_fills_the_whole_selected_row();
     a_cursor_move_leaves_the_scroll_bar_alone();
     the_scroll_bar_is_solid_colour_with_no_glyph();
-    the_scroll_bar_defaults_to_the_themes_dim_and_bar();
+    the_scroll_bar_defaults_to_the_themes_dim_and_ink();
     on_a_c64_each_scroll_bar_cell_is_a_reverse_video_space();
     printf("ui_list: all passed\n");
     return 0;

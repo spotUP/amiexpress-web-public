@@ -33,7 +33,7 @@ void ui_list_init(ui_list *list)
     list->borders = 1;
     list->ground = -1;
     list->scroll_track = UI_TOKEN(UI_T_DIM);
-    list->scroll_thumb = UI_TOKEN(UI_T_BAR);
+    list->scroll_thumb = UI_TOKEN(UI_T_INK);
 }
 
 int ui_list_visible_rows(const ui_list *list)
