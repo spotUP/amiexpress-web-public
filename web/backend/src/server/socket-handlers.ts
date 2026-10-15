@@ -53,6 +53,7 @@ import { disarmIdleTimeout } from '../services/idle-timeout.service';
 import { initializeSecurity } from '../utils/security.util';
 import { triggerSamiLogRefresh, updateStoreFromCallersLog } from '../services/SamiLogService';
 import { SysopDebugUtil, DebugSeverity } from '../utils/sysop-debug.util';
+import { AnsiUtil } from '../utils/ansi.util';
 import { startObserving, observeOutput, observeInput, stopObserving } from './session-observers';
 import { KeyRepeatManager, keyToChar } from '../services/KeyRepeatManager';
 import { emitUserLogout } from '../services/bbs-event-emitter';
@@ -170,7 +171,14 @@ console.log(`Client connected from ${clientIp}`);
   // Wrap socket.emit to capture all terminal output
   const originalEmit = socket.emit.bind(socket);
   socket.emit = ((event: string, ...args: any[]) => {
-    if (event === 'ansi-output') observeOutput(socket.id, getSession(socket.id)?.nodeId, args[0]);
+    if (event === 'ansi-output') {
+      // express.e aePuts2 (1663-1690): ANSI colour off (M) strips the SGR
+      // codes. This wrapper is installed at connection, before the modem
+      // pacer and the door wrapper, so it is the innermost choke - the same
+      // place connection-emitter.ts filters for telnet/SSH.
+      args[0] = AnsiUtil.forCaller(getSession(socket.id), args[0]);
+      observeOutput(socket.id, getSession(socket.id)?.nodeId, args[0]);
+    }
     return originalEmit(event, ...args);
   }) as any;
 

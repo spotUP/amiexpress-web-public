@@ -30,6 +30,7 @@ import { encodeForWire } from "../utils/wire-encoding.util";
 import type { OutputAttributes } from "../utils/output-pacing";
 import { foldForWire } from "../utils/wrap-for-session.util";
 import { observeOutput } from "./session-observers";
+import { AnsiUtil } from "../utils/ansi.util";
 
 /**
  * Flush the session's PETSCII transducer's held bytes straight to the wire
@@ -129,14 +130,19 @@ export function buildConnectionEmitter(connection: TelnetConnection | SSHConnect
       // passes; the third argument the wipe path already sends (PRE_PACED,
       // utils/output-pacing.ts) rides through untouched, as it does today, and
       // TP-5 reads it for the payload's source charset.
-      const data: any = args[0];
+      const session = connection.session;
+      // express.e's aePuts2 (1663-1690): a caller who turned ANSI colour off
+      // with M is sent the text without its colour codes. This is the one
+      // place every telnet/SSH/terminal string passes, so it is the one place
+      // that filters - upstream wrappers (modem pacer, door sockets, the
+      // CRLF/fold step below) cannot route around it.
+      const data: any = event === "ansi-output" ? AnsiUtil.forCaller(session, args[0]) : args[0];
       // TP-5: the payload's OWN attributes, on the third argument the wipe
       // path already sends (utils/output-pacing.ts). `sourceCharset` says
       // which charset a screen file's characters were decoded FROM; absent
       // means the text was composed by a handler and has none.
       const attrs: Readonly<OutputAttributes> | undefined =
         args[1] !== null && typeof args[1] === "object" ? (args[1] as Readonly<OutputAttributes>) : undefined;
-      const session = connection.session;
       // The sysop's tools see what the caller sees (server/session-observers.ts)
       // - the session-log viewer and the MCP tap were web-only.
       if (event === "ansi-output") observeOutput(connection.sessionId, session?.nodeId, data);

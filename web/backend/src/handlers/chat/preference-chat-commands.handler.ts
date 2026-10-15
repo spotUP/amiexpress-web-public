@@ -54,26 +54,17 @@ export function setPreferenceChatCommandsDependencies(deps: {
  * Toggles ANSI color output for the current session.
  */
 export function handleAnsiModeCommand(socket: any, session: BBSSession): void {
-  const before = session.user?.ansi ?? session.ansiMode ?? true;
-  const next = !before;
-
+  // express.e:25241-25246 flips ONE global, `ansiColour`, for the rest of this
+  // call: it is not the account's ANSI flag and is never saved (it is set
+  // TRUE again at every logon, express.e:8273/29072). The strip itself is the
+  // output choke's (AnsiUtil.forCaller, applied where each transport writes),
+  // not this command's. The message below is sent AFTER the flip, so it is
+  // the first text a caller who just turned colour off receives plain.
+  const next = !(session.ansiMode ?? session.user?.ansi ?? true);
   session.ansiMode = next;
-  if (session.user) {
-    session.user.ansi = next;
-  }
 
   // express.e:25241-25246 - plain text, no color codes, no pause
-  if (!next) {
-    socket.emit('ansi-output', '\r\nAnsi Color Off\r\n');
-  } else {
-    socket.emit('ansi-output', '\r\nAnsi Color On\r\n');
-  }
-
-  if (_db && session.user?.id) {
-    _db.updateUser(session.user.id, { ansi: next }).catch(() => {
-      /* ignore persistence errors here */
-    });
-  }
+  socket.emit('ansi-output', next ? '\r\nAnsi Color On\r\n' : '\r\nAnsi Color Off\r\n');
 
   session.subState = LoggedOnSubState.DISPLAY_MENU;
 }

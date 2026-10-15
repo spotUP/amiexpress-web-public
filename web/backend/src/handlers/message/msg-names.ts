@@ -58,7 +58,7 @@ export function useWildcards(_session: BBSSession): boolean {
 
 /** express.e ansiColour, as the M command keeps it. */
 function ansiColour(session: BBSSession): boolean {
-  return (session.user as any)?.ansi ?? (session as any).ansiMode ?? true;
+  return session.ansiMode ?? (session.user as any)?.ansi ?? true;
 }
 
 /** The session's confNameType (set on join, express.e:5017-5024). */

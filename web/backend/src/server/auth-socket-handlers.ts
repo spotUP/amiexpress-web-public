@@ -43,10 +43,9 @@ export function registerAuthHandlers(socket: Socket) {
   if (!initialSession) return;
   let session: BBSSession = initialSession;
 
-  // installAnsiFilter moved to services/login-post.service.ts so both web
-  // and telnet/SSH wrap their emit() identically. Kept the AnsiUtil
-  // import for other handlers in this file that strip ANSI for plain
-  // displays.
+  // ANSI colour off (M) is filtered at each transport's innermost output
+  // choke (AnsiUtil.forCaller: connection-emitter.ts for telnet/SSH,
+  // socket-handlers.ts for the web socket), not by a wrapper installed here.
 
   const getMaxPasswordFails = () => {
     try {

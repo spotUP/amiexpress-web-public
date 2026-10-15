@@ -26,7 +26,6 @@ import { loadAccount, rowFieldsFromAccount } from "./load-account";
 import { callersLogManager, SOCKET_CONNECT_STRING } from "./CallersLogManager";
 import { initializeSecurity, setEnvStat } from "../utils/security.util";
 import { EnvStat } from "../constants/env-codes";
-import { AnsiUtil } from "../utils/ansi.util";
 import {
   sessions,
   userSessions,
@@ -87,33 +86,6 @@ export type PostAuthResult =
         | "quick-logon-handled"
         | "chat-only-handled";
     };
-
-/**
- * Install an emit() wrapper that strips ANSI codes when the session
- * user has disabled ANSI. Idempotent per socket (guarded by
- * `_ansiFilterInstalled`). Works against both real socket.io sockets
- * and the telnet/SSH wrapper because both expose `emit` as a writable
- * property and structurally satisfy `LoginEmitter`.
- *
- * Ported from `auth-socket-handlers.ts:80-93`.
- */
-function installAnsiFilter(emitter: LoginEmitter, sess: BBSSession): void {
-  if ((emitter as any)._ansiFilterInstalled) return;
-  const originalEmit = emitter.emit.bind(emitter);
-  (emitter as any).emit = ((event: string, ...args: unknown[]) => {
-    if (
-      event === "ansi-output" &&
-      (sess.ansiMode === false || (sess.user as any)?.ansi === false)
-    ) {
-      const filtered = args.map((arg) =>
-        typeof arg === "string" ? AnsiUtil.stripAnsiForPlainText(arg) : arg,
-      );
-      return originalEmit(event, ...filtered);
-    }
-    return originalEmit(event, ...args);
-  }) as any;
-  (emitter as any)._ansiFilterInstalled = true;
-}
 
 /**
  * The unified post-authentication pipeline.
@@ -315,7 +287,6 @@ export async function runPostAuthLogin(
   session.newSinceFlag = false;
   session.accountSavedAtLogoff = false;
   session.ansiMode = user.ansi;
-  installAnsiFilter(emitter, session);
 
   // Modem emulation (user.baud=0 → full speed). Works on web and
   // telnet/SSH alike — the emitter wrapper has its own `emit` we wrap.

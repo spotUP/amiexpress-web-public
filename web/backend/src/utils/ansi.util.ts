@@ -32,6 +32,27 @@ export function clearScreenFor(session: { petsciiMode?: boolean; texttvMode?: bo
 
 export class AnsiUtil {
   /**
+   * What a caller is sent: the text itself, or - when the caller has turned
+   * ANSI colour off with M (`ansiMode === false`) - the text with its SGR
+   * colour codes removed.
+   *
+   * express.e keeps one global, `ansiColour` (express.e:118, flipped by
+   * internalCommandM, 25239-25248), and `aePuts2` (1663-1690) runs every
+   * string through `stripAnsi` (MiscFuncs.e:656) when it is FALSE. That strip
+   * removes `ESC [ ... m` and leaves every other sequence (cursor moves)
+   * alone, which is exactly `stripAnsiForPlainText`. Only strings are
+   * filtered: binary payloads (ZMODEM) pass untouched. Called once, at the
+   * innermost output choke of each transport, so nothing that writes can
+   * route around it.
+   */
+  static forCaller<T>(session: { ansiMode?: boolean } | null | undefined, data: T): T | string {
+    if (session?.ansiMode === false && typeof data === 'string') {
+      return this.stripAnsiForPlainText(data);
+    }
+    return data;
+  }
+
+  /**
    * Map color names to ANSI codes
    */
   private static readonly COLOR_MAP: { [key: string]: string } = {
