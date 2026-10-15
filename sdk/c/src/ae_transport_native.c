@@ -258,7 +258,20 @@ void ae_delay_ticks(int ticks)
  * door gives the real BBS - then one byte is peeked with getchar()/ungetc()
  * so that end-of-file reads as "nothing pending" rather than as a byte.
  * ungetc() of one character is guaranteed by C89, and stdin is unbuffered
- * (ae_start) so the descriptor and the stream agree. */
+ * (ae_start) so the descriptor and the stream agree.
+ *
+ * END OF FILE IS A LOST CARRIER. A scripted run whose keys ran out has no
+ * caller left, exactly as on the board when carrier drops: the Amiga backend
+ * then answers with an error from ae_key(), and ui_key_read's idle loop
+ * (`while (!pending) idle()`) must be allowed to reach that read. If EOF
+ * reported "nothing pending" forever, a key script that did not end in a
+ * leaving key spun in that loop for ever and hung `make test`. So the first
+ * EOF answers 0 - a lone ESC at the end of a script still reads as ESC, the
+ * "did anything follow it" question - and every later EOF answers 1, so the
+ * next ae_key() returns -1. Only the native build; the Amiga path is
+ * untouched. */
+static int eof_seen;
+
 int ae_input_pending(void)
 {
     fd_set readable;
@@ -275,8 +288,13 @@ int ae_input_pending(void)
     }
     c = getchar();
     if (c == EOF) {
-        return 0;
+        if (!eof_seen) {
+            eof_seen = 1;
+            return 0;
+        }
+        return 1;
     }
+    eof_seen = 0;
     ungetc(c, stdin);
     return 1;
 }
@@ -289,6 +307,7 @@ int ae_key(void)
     if (c == EOF) {
         return -1;
     }
+    eof_seen = 0;
     return c;
 }
 

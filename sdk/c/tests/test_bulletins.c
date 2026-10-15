@@ -1,5 +1,5 @@
-/* test_bulletins.c - the BULLETINS door's own two answers, driven through its real main():
-   an entry runs its key, a typed line runs as typed, and the second registration opens the settings screen. */
+/* test_bulletins.c - the BULLETINS door's own answers, driven through its real main():
+   an entry runs its key, a typed line runs as typed, and q or Esc leaves. Bulletins has one registration. */
 #define main bulletins_main
 #include "../examples/bulletins/bulletins.c"
 #undef main
@@ -91,6 +91,10 @@ int main(void)
     assert(rc == 0 && !strstr(requests, "SHOW"));
     assert(strstr(screen_text, "Esc/q Leave") && !strstr(screen_text, "Esc Prompt"));
     printf("  [OK] q and Esc leave, and the key bar says both\n");
+
+    drive("x", 1, &rc);                                     /* a script that runs out of keys is a lost carrier: the door ends, not spins */
+    assert(rc == 0);
+    printf("  [OK] a key script with no leaving key ends the door at end of input\n");
 
     cat_answers = 0;                                        /* an old board that does not know AEW_MENU */
     drive("", 0, &rc);
