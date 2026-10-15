@@ -14,6 +14,7 @@ import * as path from 'path';
 import request from 'supertest';
 
 import { config } from '../../src/config';
+import { userFileManager } from '../../src/services/UserFileManager';
 import { clearThemeRegistryCache, readThemeRegistry, writeTheme } from '../../src/screens/theme-registry';
 
 let root: string;
@@ -39,10 +40,15 @@ beforeEach(() => {
   root = fs.mkdtempSync(path.join(os.tmpdir(), 'theme-routes-'));
   previousDataDir = config.get('dataDir');
   config.set('dataDir', root);
+  // The owner check reads the worker's shared board user.data, which earlier
+  // suites in the same worker leave filled. An empty list is "no opinion"
+  // (resolveOwner), so these cases do not depend on what ran before.
+  jest.spyOn(userFileManager, 'readAllUsers').mockReturnValue([]);
   clearThemeRegistryCache();
 });
 
 afterEach(() => {
+  jest.restoreAllMocks();
   config.set('dataDir', previousDataDir);
   fs.rmSync(root, { recursive: true, force: true });
 });
