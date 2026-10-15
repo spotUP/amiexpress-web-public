@@ -1,9 +1,0 @@
-BBSCMD=AVHBC
-NAME=AVH-BaudCheck v0.1
-TYPE=DD
-LOCATION=Doors:AVHBaudCheck/AVH-BaudCheck
-DESCRIPTION=Van Helsing's BaudChecker by pSy! - DayDream minimum-baud gate door
-MULTINODE=YES
-PRIORITY=SAME
-STACK=8192
-C64_ADAPT=40

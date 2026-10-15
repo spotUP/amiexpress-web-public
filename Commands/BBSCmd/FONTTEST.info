@@ -1,4 +1,0 @@
-COMMAND=FONTTEST
-DESCRIPTION=Font Alignment Test Door
-PRIORITY=BBSCMD
-DOOR=fonttest

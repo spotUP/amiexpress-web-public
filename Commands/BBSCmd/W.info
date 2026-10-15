@@ -1,7 +1,0 @@
-LOCATION=Doors/USERSETTINGS/usersettings
-TYPE=XIM
-NAME=User settings
-MULTINODE=YES
-DESCRIPTION=Your account and display settings, and the board's settings doors
-STACK=8192
-MIN_COLUMNS=40

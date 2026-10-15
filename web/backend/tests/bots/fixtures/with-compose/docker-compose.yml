@@ -1,5 +1,0 @@
-# Fixture compose file: presence is what composeAvailable() checks.
-version: "3"
-services:
-  whip-bot:
-    image: fixture

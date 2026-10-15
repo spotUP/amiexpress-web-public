@@ -1,4 +1,0 @@
-No NewsStats!
-
- Can't open DOORS:NEWS/NEWS.CFG !
-

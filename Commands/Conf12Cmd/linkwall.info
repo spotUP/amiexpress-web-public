@@ -1,8 +1,0 @@
-BBSCMD=LINKWALL
-TYPE=TS
-LOCATION=Doors/bbslinkwall
-DESCRIPTION=BBSLink Wall - One-liner wall for BBS messages
-ACCESS=100
-MULTINODE=YES
-PRIORITY=SAME
-CATEGORY=Communication

@@ -1,3 +1,0 @@
-GetAnswer v1.0 by Agamemnon/Hardcore Design
-¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯
-Enter handle/usernr >: 

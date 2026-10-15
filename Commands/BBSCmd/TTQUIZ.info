@@ -1,9 +1,0 @@
-BBSCMD=TTQUIZ
-TYPE=TS
-LOCATION=Doors/teletext-quiz
-DESCRIPTION=Four coloured keys, a concealed answer, and a score the board remembers
-MULTINODE=YES
-PRIORITY=SAME
-NAME=Teletext Quiz - Bamboozle-style quiz on teletext pages
-ACCESS=1
-MIN_COLUMNS=40

@@ -1,8 +1,0 @@
-BBSCMD=TIPLOGIN
-TYPE=typescript
-LOCATION=Doors/tip-of-day
-DESCRIPTION=One tip per login: door spotlights, board facts, how-tos
-MULTINODE=YES
-PRIORITY=SAME
-MIN_COLUMNS=40
-NAME=TIPLOGIN

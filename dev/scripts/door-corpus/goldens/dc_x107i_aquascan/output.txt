@@ -1,4 +1,0 @@
-
---[ AquaScan v1.1 by Aquarius/Outlaws ]----------------[ ' ?' for options ]--
-
-Config error: Tooltype DOORUSE. missing!

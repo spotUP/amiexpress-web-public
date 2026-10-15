@@ -1,4 +1,0 @@
-
-               SLICK-SHELL V1.3 by BUGBYTE for Ami Express!
-
-ERROR Reading doors:slickshell/config/Shellpassword.CFG

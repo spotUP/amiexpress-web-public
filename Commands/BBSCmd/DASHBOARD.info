@@ -1,8 +1,0 @@
-CMDNAME=DASHBOARD
-CMDCODE=DASHBOARD
-LOCATION=Doors/bbs-dashboard
-TYPE=TS
-SECLEVEL=0
-DESCRIPTION=BBS SysOp Dashboard - Real-time monitoring with neo-blessed UI
-CATEGORY=SysOp
-MIN_COLUMNS=40

@@ -1,4 +1,0 @@
-
-Do U realy whish to logoff? (Y/n) n
-Aborting!
-

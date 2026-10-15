@@ -1,6 +1,0 @@
-/* ShutDown Express */
-parse arg node
-options results
-nodeid = 'AmiExpress_Node.'node
-address value nodeid
-syscmd term

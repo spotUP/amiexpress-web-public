@@ -1,9 +1,0 @@
-BBSCMD=USERLIST
-NAME=Mael-Userlist
-TYPE=DD
-LOCATION=Doors:Mael-Userlist/Mael-Userlist
-DESCRIPTION=Mael userlist door (untested — batch-registered from Archives/DayDream for exploratory manual testing)
-MULTINODE=YES
-PRIORITY=SAME
-STACK=8192
-C64_ADAPT=40

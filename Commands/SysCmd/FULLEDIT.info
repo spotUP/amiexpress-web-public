@@ -1,5 +1,0 @@
-TYPE=TS
-LOCATION=Doors/ansi-editor
-DESCRIPTION=Full-screen message editor (ansi-edit), express.e edit() FULLEDIT
-MULTINODE=YES
-PRIORITY=SAME

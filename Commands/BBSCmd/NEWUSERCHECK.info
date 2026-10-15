@@ -1,9 +1,0 @@
-BBSCMD=NEWUSERCHECK
-NAME=Mael-NewUserCheck
-TYPE=DD
-LOCATION=Doors:Mael-NewUserCheck/Mael-NewUserCheck
-DESCRIPTION=Mael new-user check door (untested — batch-registered from Archives/DayDream for exploratory manual testing)
-MULTINODE=YES
-PRIORITY=SAME
-STACK=8192
-C64_ADAPT=40

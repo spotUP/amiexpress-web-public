@@ -1,2 +1,0 @@
-ANSI MENU - plain text fallback for callers without teletext mode.
-~CC_MENU

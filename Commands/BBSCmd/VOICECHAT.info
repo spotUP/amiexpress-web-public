@@ -1,6 +1,0 @@
-BBSCMD=VOICECHAT
-TYPE=TS
-LOCATION=Doors/voice-chat
-DESCRIPTION=Multi-party voice chat with adaptive quality management
-MULTINODE=YES
-PRIORITY=SAME

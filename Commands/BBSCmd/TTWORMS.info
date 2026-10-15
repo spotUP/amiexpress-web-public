@@ -1,9 +1,0 @@
-BBSCMD=TTWORMS
-TYPE=TS
-LOCATION=Doors/teletext-worms
-DESCRIPTION=Two teams, an 80x60 mosaic battlefield, wind, and two-caller matches
-MULTINODE=YES
-PRIORITY=SAME
-NAME=Teletext Worms - turn-based artillery on teletext pages
-ACCESS=1
-MIN_COLUMNS=40

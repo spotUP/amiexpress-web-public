@@ -1,9 +1,0 @@
-BBSCMD=MEGATOP
-NAME=MegaTop
-TYPE=DD
-LOCATION=Doors:MegaTop/MegaTop
-DESCRIPTION=MegaTop stats door (untested — batch-registered from Archives/DayDream for exploratory manual testing)
-MULTINODE=YES
-PRIORITY=SAME
-STACK=8192
-C64_ADAPT=40

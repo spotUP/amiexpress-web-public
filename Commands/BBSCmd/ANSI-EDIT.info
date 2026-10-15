@@ -1,7 +1,0 @@
-BBSCMD=ANSI-EDIT
-TYPE=TS
-LOCATION=Doors/ansi-editor
-DESCRIPTION=ANSI Screen Editor Door for AmiExpress-Web
-MULTINODE=YES
-PRIORITY=SAME
-CATEGORY=Utilities

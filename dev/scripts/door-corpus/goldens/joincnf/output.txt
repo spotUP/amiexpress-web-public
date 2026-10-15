@@ -1,3 +1,0 @@
-
- ERROR:  UnKnown Keyword:  NRCONFLINES in JoinCnf.cfg
-

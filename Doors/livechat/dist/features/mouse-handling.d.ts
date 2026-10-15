@@ -1,1 +1,0 @@
-export declare function setupMouseHandling(s: any, cm: any, hcm: () => void, stb: any, ssb: (t: string) => void, ib: any, cl: any, scm: (x: number, y: number, t: 'user' | 'chat' | 'channel', tgt?: string) => void, ul: any, un: string, chl: any, ci: any[], jsc: () => void): void;

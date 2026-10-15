@@ -1,2 +1,0 @@
-Could not find C.info in any of the command directories!
-

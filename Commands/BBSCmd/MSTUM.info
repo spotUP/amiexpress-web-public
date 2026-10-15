@@ -1,9 +1,0 @@
-BBSCMD=MSTUM
-NAME=MST-UM
-TYPE=DD
-LOCATION=Doors:MST-UM/MST-UM
-DESCRIPTION=MasterSuite door (untested — batch-registered from Archives/DayDream for exploratory manual testing)
-MULTINODE=YES
-PRIORITY=SAME
-STACK=8192
-C64_ADAPT=40

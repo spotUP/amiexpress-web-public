@@ -1,9 +1,0 @@
-LOCATION=Doors/MAINMENU/mainmenu
-TYPE=XIM
-MULTINODE=YES
-MIN_COLUMNS=40
-STACK=8192
-SETTINGS=YES
-SETTINGS_LABEL=Long menus
-SETTINGS_SECTION=Appearance
-DESCRIPTION=Scroll long menus, or show them a page at a time

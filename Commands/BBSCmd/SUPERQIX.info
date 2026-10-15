@@ -1,7 +1,0 @@
-BBSCMD=SUPERQIX
-TYPE=TS
-LOCATION=Doors/super-qix
-DESCRIPTION=Super Qix arcade game - claim territory by drawing lines
-MULTINODE=YES
-PRIORITY=SAME
-CATEGORY=Games/Arcade

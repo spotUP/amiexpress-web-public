@@ -1,7 +1,0 @@
-BBSCMD=RIP
-TYPE=TS
-LOCATION=Doors/rip-browser
-DESCRIPTION=RIP Graphics Browser - Interactive gallery
-MULTINODE=YES
-PRIORITY=SAME
-SHOWPRELOADER=YES

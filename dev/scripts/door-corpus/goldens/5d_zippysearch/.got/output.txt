@@ -1,4 +1,0 @@
-
-- --- -----[ 5D-ZippySearch v0.03 ]----- --- - ---- - ----- -----[ sTc/5D ]---
-
-Enter search string >: 

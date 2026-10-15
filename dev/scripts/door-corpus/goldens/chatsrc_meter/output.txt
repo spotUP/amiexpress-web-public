@@ -1,2 +1,0 @@
-Chat-O-Meter ERROR! Could not lock command icon.
-

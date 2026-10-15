@@ -1,3 +1,0 @@
-                                                                              
- File Description (Version 1.0) [RELEASE 1]  Copyright (c)1994 Bobo of Mystic 
-Cannot open configfile: Filedescription.config
