@@ -48,7 +48,31 @@ const EIGHTY = path.join(__dirname, 'fixtures', 'mainmenu-80.ans');
 
 (db as any).updateUser = async () => undefined;   // OVERFLOW stores the caller's choice; no database here
 
-const UP = '\x1b[A', DOWN = '\x1b[B', ESC = '\x1b';
+/*
+ * driveDoor points the process at each run's temp board: BBS_DATA_DIR, the config's dataDir and the board's global
+ * command cache. A suite that leaves them there hands the next test file in this worker somebody else's board.
+ * Captured before the first run, put back (and the temp directories removed) after the last.
+ */
+const TEMP_ROOTS: string[] = [];
+let ORIGINAL: { env: string | undefined; dataDir: unknown; bbscmd: Map<string, unknown>; syscmd: Map<string, unknown> } | undefined;
+beforeAll(() => {
+  const { config } = require('../../../src/config');
+  const { commandCache } = require('../../../src/handlers/command-execution.handler');
+  ORIGINAL = { env: process.env.BBS_DATA_DIR, dataDir: config.get('dataDir'), bbscmd: new Map(commandCache.bbscmd), syscmd: new Map(commandCache.syscmd) };
+});
+afterAll(() => {
+  const { config } = require('../../../src/config');
+  const { commandCache } = require('../../../src/handlers/command-execution.handler');
+  if (ORIGINAL) {
+    if (ORIGINAL.env === undefined) delete process.env.BBS_DATA_DIR; else process.env.BBS_DATA_DIR = ORIGINAL.env;
+    config.set('dataDir', ORIGINAL.dataDir);
+    commandCache.bbscmd.clear(); ORIGINAL.bbscmd.forEach((v, k) => commandCache.bbscmd.set(k, v));
+    commandCache.syscmd.clear(); ORIGINAL.syscmd.forEach((v, k) => commandCache.syscmd.set(k, v));
+  }
+  for (const dir of [...TEMP_ROOTS, LOGS]) fs.rmSync(dir, { recursive: true, force: true });
+});
+
+const UP = '\x1b[A', DOWN = '\x1b[B', ESC = '\x1b', BS = '\x7f';
 const idle = (keys: string, paints = true, quietMs?: number): Step => ({ at: 'idle', keys, paints, quietMs });
 const mouse = (button: number, col: number, row: number, up = false) => `\x1b[<${button};${col};${row}${up ? 'm' : 'M'}`;
 const bytes = (chunks: string[]) => chunks.reduce((n, c) => n + Buffer.byteLength(c, 'latin1'), 0);
@@ -58,6 +82,7 @@ const answer = (r: DriveResult, i: number): string[] => r.chunks.slice(r.marks[i
 /** A temp copy of the fixture board, with `Menus/MAIN.json` edited by `edit` when given. */
 function tempBoard(edit?: (menu: any) => void): string {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'mainmenu-board-'));
+  TEMP_ROOTS.push(root);
   fs.cpSync(BOARD, root, { recursive: true });
   if (edit) {
     const file = path.join(root, 'Menus', 'MAIN.json');
@@ -100,6 +125,12 @@ const keys80 = () => runOnce('keys80', async () => {
   const [hover, again] = [entries[4]!, entries[6]!];
   return run(S80, [idle(DOWN), idle(mouse(35, 10, hover.row)), idle(mouse(35, 10, again.row)), idle(mouse(0, 10, again.row) + mouse(0, 10, again.row, true))]);
 });
+/** 80x25: `m` jumps the highlight to Colour Mode, past the window (a scroll); `e` and `s` leave it there; three Backspaces empty the line. */
+const typing80 = () => runOnce('typing80', () => run(S80, [idle('m'), idle('e'), idle('s'), idle(BS), idle(BS), idle(BS), idle(ESC, false)]));
+/** 40x25: `r` is the entry already selected, `e` matches nothing more: the highlight never moves. */
+const typing40 = () => runOnce('typing40', () => run(S40, [idle('r'), idle('e'), idle(BS), idle(BS), idle(ESC, false)]));
+/** The rows a stretch of the door's output addresses, once each. */
+const rowsOf = (chunks: string[]): number[] => [...new Set([...chunks.join('').matchAll(/\x1b\[(\d+);\d+H/g)].map(m => Number(m[1])))].sort((a, b) => a - b);
 const typed80 = () => runOnce('typed80', () => run(S80, [idle('j'), idle(' 2'), idle('\r')]));
 const esc40 = () => runOnce('esc40', () => run(S40, [idle(ESC)], { user: { themePreference: 'uprough-neon' } }));
 /** 40x25 with no mouse and no PgDn (the board converts arrows only, io.ts handleFetchKey): Down past the last entry of page 1 turns it. */
@@ -213,7 +244,7 @@ describe('MAINMENU on three screens', () => {
       expect(down.join('')).not.toContain('\x1b[2J');
       const rows = new Set([...down.join('').matchAll(/\x1b\[(\d+);\d+H/g)].map(m => Number(m[1])));
       expect([...rows].sort((a, b) => a - b)).toEqual([entries[0]!.row, entries[1]!.row, 24]);   // the old cell, the new cell, the status row: the hint row is not touched
-      expect(bytes(down)).toBeLessThan(600);
+      expect(bytes(down)).toBeLessThanOrEqual(300);
       // the selection colours moved with it
       const after = replayCells(r.chunks.slice(0, r.marks[1]!.at).join(''), 80, 25);
       const selected = first[entries[0]!.row - 1]![3]!.sgr, plain = first[entries[2]!.row - 1]![3]!.sgr;
@@ -223,16 +254,18 @@ describe('MAINMENU on three screens', () => {
     });
 
     /*
-     * OPEN FINDING (plan M15, F1): the plan's budget is 300 bytes and 2 XIM messages for a Down. The door
-     * repaints two cells and the status row; at 80 columns a cell is the whole row (label plus a 55-space tail
-     * that clears the selection bar), so a Down costs 304-344 bytes in 2 messages - the messages are within
-     * budget, the bytes are 1-15% over. Erase-to-end-of-line for the tail would cut it to ~240. This test goes
-     * red (test.failing) the day the repaint is cheap enough; then the .failing comes off.
+     * The plan's budget (Decisions, Measurements): a Down is at most 300 bytes in at most 2 XIM messages. It repaints the
+     * old cell, the new cell and the status row; the old cell's blank tail is one erase-to-end-of-line (CSI K) and not
+     * 55 spaces (measured 344 bytes before, 292 after).
      */
-    test.failing('Down repaints at most 300 bytes in at most 2 XIM messages', async () => {
+    test('Down repaints at most 300 bytes in at most 2 XIM messages, the cell it left ending in an erase', async () => {
       const r = await keys80();
-      expect(bytes(answer(r, 0))).toBeLessThanOrEqual(300);
-      expect(answer(r, 0).length).toBeLessThanOrEqual(2);
+      const down = answer(r, 0);
+      expect(bytes(down)).toBeLessThanOrEqual(300);
+      expect(down.length).toBeLessThanOrEqual(2);
+      expect(down.join('')).toContain('\x1b[K');                                   // the sentinel: the tail was erased, not written
+      expect(/ {20}/.test(down.join(''))).toBe(true);                             // the selection bar is still painted whole (79 columns)
+      expect(down.join('').match(/ {20,}/g)!.length).toBe(1);                     // ...and it is the only long run of blanks
     });
 
     test('a mouse report over another entry moves the selection to it, in the selection colours', async () => {
@@ -242,7 +275,7 @@ describe('MAINMENU on three screens', () => {
       const selected = first[entriesOf(gridText(first))[0]!.row - 1]![3]!.sgr;
       const now = replayCells(r.chunks.slice(0, r.marks[2]!.at).join(''), 80, 25);
       expect(now[target.row - 1]![3]!.sgr).toBe(selected);
-      expect(bytes(answer(r, 1))).toBeLessThan(600);
+      expect(bytes(answer(r, 1))).toBeLessThanOrEqual(300);   // hover: the wake + the old and new cell + the status row (336 before the erase)
       expect(answer(r, 1).join('')).not.toContain('\x1b[2J');
     });
 
@@ -265,6 +298,69 @@ describe('MAINMENU on three screens', () => {
     test('typing j 2 and Enter exits with that line, run as typed', async () => {
       const r = await typed80();
       expect(takeMenuExit(r.session)).toEqual({ run: { text: 'j 2', runAs: 'typed' } });
+    });
+  });
+
+  describe('typing (a typed character costs the character; a highlight jump costs only what it changes)', () => {
+    test('80x25: the first character jumps the highlight past the window - one rewrite of the grid box, no clear, no blank pass under a row', async () => {
+      const r = await typing80();
+      const first = replayCells(firstFrame(r), 80, 25);
+      const plain = first[entriesOf(gridText(first))[2]!.row - 1]![3]!.sgr, selected = first[entriesOf(gridText(first))[0]!.row - 1]![3]!.sgr;
+      const m = answer(r, 0);
+      const after = replayCells(r.chunks.slice(0, r.marks[1]!.at).join(''), 80, 25);
+      const colour = entriesOf(gridText(after)).find(e => e.key === 'M');
+      expect(colour).toBeDefined();                                                // the sentinel: the highlight DID jump to M Colour Mode
+      expect(after[colour!.row - 1]![3]!.sgr).toBe(selected);
+      expect(selected).not.toBe(plain);
+      expect(m.join('')).not.toContain('\x1b[2J');
+      expect(m.join('')).not.toMatch(/\x1b\[\?25l[^]*\x1b\[\?25l/);                  // the cursor is not hidden and shown again around the window
+      const rows = rowsOf(m);
+      expect(rows.every(row => (row >= 5 && row <= 22) || row === 24 || row === 25)).toBe(true);   // the grid box, the status row, the prompt row
+      expect(bytes(m)).toBeLessThanOrEqual(1850);                                  // measured 1679 (4062 and 23 messages with a blank pass under each row)
+      expect(m.length).toBeLessThanOrEqual(11);                                    // measured 10 (23)
+      for (let row = 5; row <= 22; row++) expect((m.join('').match(new RegExp(`\\x1b\\[${row};1H`, 'g')) ?? []).length).toBeLessThanOrEqual(1);   // each row written once: no blank pass under it
+    });
+
+    test('80x25: the next characters leave the highlight where it is and cost only the character on the prompt row', async () => {
+      const r = await typing80();
+      for (const i of [1, 2]) {                                                    // e, s
+        const a = answer(r, i);
+        expect(rowsOf(a)).toEqual([25]);                                           // no cell, no status row
+        expect(bytes(a)).toBeLessThanOrEqual(i === 1 ? 44 : 24);                   // measured 40 (the first character after the row was drawn also resets the pen) and 22
+        expect(a.length).toBe(1);
+        expect(a.join('')).not.toContain('\x1b[?25');
+      }
+    });
+
+    test('80x25: Backspace costs a character too, and the last one returns the row to the hint (one row, nothing else)', async () => {
+      const r = await typing80();
+      expect(rowsOf(answer(r, 3))).toEqual([25]); expect(bytes(answer(r, 3))).toBeLessThanOrEqual(130);   // measured 118: the typing key bar comes back, so the row is drawn whole
+      expect(rowsOf(answer(r, 4))).toEqual([25]); expect(bytes(answer(r, 4))).toBeLessThanOrEqual(44);    // measured 40
+      const last = answer(r, 5);
+      expect(rowsOf(last)).toEqual([25]);
+      expect(bytes(last)).toBeLessThanOrEqual(140);                                // measured 127
+      expect(gridText(replayCells(r.chunks.slice(0, r.marks[6]!.at).join(''), 80, 25))[24]).toContain('Arrows and Enter, or type a command');
+    });
+
+    test('40x25: typing a character that does not move the highlight costs the character, no screen', async () => {
+      const r = await typing40();
+      expect(r.chunks.slice(r.marks[0]!.at, r.marks[4]!.at).join('')).not.toContain('\x1b[2J');   // up to the leaving Esc: the door's closing clear is not a repaint
+      for (const i of [0, 1, 2, 3]) expect(rowsOf(answer(r, i))).toEqual([25]);
+      expect(bytes(answer(r, 0))).toBeLessThanOrEqual(90);                         // measured 81: the row becomes the prompt
+      for (const i of [1, 2]) expect(bytes(answer(r, i))).toBeLessThanOrEqual(20); // measured 18
+      expect(bytes(answer(r, 3))).toBeLessThanOrEqual(100);                        // measured 89: back to the hint
+    });
+  });
+
+  describe('idle animation at one message per tick', () => {
+    test('a rail tick is ONE message that saves the cursor, paints the rail and restores it - the restore is not a message of its own', async () => {
+      const r = await rail80();
+      const idleChunks = r.chunks.slice(0, r.marks[0]!.at);
+      const ticks = idleChunks.filter(c => c.startsWith('\x1b7'));
+      expect(ticks.length).toBeGreaterThanOrEqual(2);
+      for (const t of ticks) { expect(t.endsWith('\x1b8')).toBe(true); expect(t.length).toBeLessThanOrEqual(120); }   // measured 111
+      expect(idleChunks.filter(c => c === '\x1b8')).toEqual([]);
+      for (const t of ticks) expect(t.match(/\x1b7/g)!.length).toBe(1);             // one save per tick
     });
   });
 
@@ -339,12 +435,27 @@ describe('MAINMENU on three screens', () => {
       return fs.existsSync(log) ? (fs.readFileSync(log, 'utf8').match(/"string": "WIPE END"/g) ?? []).length : 0;
     };
 
-    test('40x25 (pages is the C64 default): the status row says which page, Down past the page\'s last entry turns it, and no wipe plays (effects are off at 40)', async () => {
+    test('40x25 (pages is the C64 default): the status row says which page, Down past the page\'s last entry turns it, and the page wipe plays (the board\'s wipes are on at 40 by default)', async () => {
       const before = wipeEnds();
       const r = await pages40();
       expect(gridText(replayCells(firstFrame(r), 40, 25))[23]).toMatch(/Page 1 of \d+$/);
       expect(gridText(replayCells(r.chunks.slice(0, r.marks[1]!.at).join(''), 40, 25))[23]).toMatch(/Page 2 of \d+$/);
+      expect(wipeEnds() - before).toBe(1);                                         // the door follows the catalogue's wipe letters at every width
+    });
+
+    test('40x25: when the sysop turns the 40-column wipes off the board sends none, and none plays', async () => {
+      const board = tempBoard(menu => { menu.wipes.at40 = false; });
+      const before = wipeEnds();
+      const onPage = entriesOf(gridText(replayCells(firstFrame(await esc40()), 40, 25))).length;
+      await run(S40, [idle(DOWN.repeat(onPage)), idle(ESC, false, 30000)], { board });
       expect(wipeEnds() - before).toBe(0);
+    });
+
+    test('40x25: the board\'s opening wipe plays around the first frame', async () => {
+      const board = tempBoard(menu => { menu.wipes.open = 'H'; });
+      const before = wipeEnds();
+      await run(S40, [idle(ESC)], { board });
+      expect(wipeEnds() - before).toBe(1);
     });
 
     test('80x25 with the caller\'s own choice of pages (the W setting): a page turn plays the page wipe ONCE', async () => {

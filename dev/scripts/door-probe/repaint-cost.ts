@@ -28,6 +28,7 @@ process.env.SKIP_DB_INIT = '1';
 import * as path from 'path';
 import { EventEmitter } from 'events';
 import { claimHarnessPorts } from './harness-ports';
+import { isRailTick } from './rail-tick';
 
 // Loading the backend below starts the whole board: keep it off the sysop's local ports (3001/2323/2222).
 const PORTS = claimHarnessPorts();
@@ -67,10 +68,8 @@ function parseArgs(argv: string[]) {
   return opts;
 }
 
-/* A rail tick (the idle animation of the SDK doors) is "save cursor, the rail on row 1, restore cursor": its first
- * message opens with ESC 7 and the restore is a lone ESC 8. Chunks arrive one XIM message at a time (<= 198 bytes),
- * so only that opening marks a tick - never "row 1" alone, which a frame's first message also is. */
-const isTick = (chunk: string) => chunk === '\x1b8' || chunk.startsWith('\x1b7');
+/* A rail tick (the idle animation of the SDK doors): the definition is shared with the jest harness, rail-tick.ts. */
+const isTick = isRailTick;
 
 class CaptureSocket extends EventEmitter {
   bytes = 0;
@@ -157,17 +156,17 @@ async function main() {
   const firstMsgs = sock.msgs;
 
   const idleMs = opts.idleWindow || opts.window;   // a door whose idle hook is slow needs a longer look to see a tick
-  const idleWork = sock.workBytes, idleTickBytes = sock.tickBytes, idleTicks = sock.ticks;
+  const idleWork = sock.workBytes, idleTickBytes = sock.tickBytes, idleTicks = sock.ticks, idleTickMsgs0 = sock.tickMsgs;
   await sleep(idleMs);
   const idleBytes = (sock.workBytes - idleWork) + (sock.tickBytes - idleTickBytes);
-  const idleNonTick = sock.workBytes - idleWork, idleTickCost = sock.tickBytes - idleTickBytes, idleTickCount = sock.ticks - idleTicks;
+  const idleNonTick = sock.workBytes - idleWork, idleTickCost = sock.tickBytes - idleTickBytes, idleTickCount = sock.ticks - idleTicks, idleTickMsgs = sock.tickMsgs - idleTickMsgs0;
 
   const costs: KeyCost[] = [];
   const header = () => {
     console.log(`${path.basename(opts.binary)} at ${opts.cols} columns, up to ${opts.window} ms per key, quiet ${opts.settle} ms`);
     console.log(`boot to first byte  ${bootMs} ms`);
     console.log(`first frame         ${firstFrame} bytes (${firstMsgs} xim msgs)`);
-    console.log(`idle (animation)    ${idleBytes} bytes per ${idleMs} ms window: ${idleTickCount} rail ticks (${idleTickCost} bytes${idleTickCount ? `, ${Math.round(idleTickCost / idleTickCount)} per tick` : ''}), ${idleNonTick} bytes of other animation`);
+    console.log(`idle (animation)    ${idleBytes} bytes per ${idleMs} ms window: ${idleTickCount} rail ticks (${idleTickCost} bytes in ${idleTickMsgs} xim msgs${idleTickCount ? `, ${Math.round(idleTickCost / idleTickCount)} bytes and ${(idleTickMsgs / idleTickCount).toFixed(1)} msgs per tick` : ''}), ${idleNonTick} bytes of other animation`);
     console.log('key         gross    net   xim msgs   first byte ms');
   };
   if (!opts.json) header();   // a key line is printed as it completes: a run cut short by a timeout still reports what it measured
@@ -193,7 +192,7 @@ async function main() {
   if (running) { console.error(`[WARN] the door did not exit on ${opts.leave}`); }
 
   if (opts.json) {
-    console.log(JSON.stringify({ binary: opts.binary, cols: opts.cols, window: opts.window, bootMs, firstFrame, firstMsgs, idleBytes, idleTicks: idleTickCount, idleTickBytes: idleTickCost, idleNonTickBytes: idleNonTick, costs }, null, 2));
+    console.log(JSON.stringify({ binary: opts.binary, cols: opts.cols, window: opts.window, bootMs, firstFrame, firstMsgs, idleBytes, idleTicks: idleTickCount, idleTickBytes: idleTickCost, idleTickMsgs, idleNonTickBytes: idleNonTick, costs }, null, 2));
   } else {
     const worst = costs.reduce((m, c) => Math.max(m, c.net), 0);
     console.log(worst > 600 ? `[WARN] a keypress cost ${worst} bytes net of animation - that is a screen, not a row` : `[OK] no keypress cost more than ${worst} bytes net of animation`);

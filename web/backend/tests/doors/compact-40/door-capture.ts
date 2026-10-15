@@ -8,6 +8,7 @@
  */
 import { EventEmitter } from 'events';
 import { AnsiToPetsciiTransducer } from '@amiexpress/bbs-door-sdk/petscii';
+import { isRailTick } from '../../../../../dev/scripts/door-probe/rail-tick';
 
 /** The socket a door is handed: everything it paints, in order. */
 export class CaptureSocket extends EventEmitter {
@@ -122,18 +123,8 @@ export interface Step {
 }
 export const QUIET_MS = 1000;
 
-/**
- * A chunk of the idle animation of a sibling door: the rail tick is "save cursor, the rail on row 1, restore
- * cursor" (ui_masthead_rail_tick), so a message that opens with a cursor save and addresses nothing but row 1,
- * or the lone restore. A chunk is one XIM message (at most 198 bytes), so a frame's first message can end
- * while still on row 1: only the save marks a tick, never "row 1" alone.
- */
-export function isRailTick(chunk: string): boolean {
-  if (chunk === '\x1b8') return true;
-  if (!chunk.startsWith('\x1b7')) return false;
-  const rows = [...chunk.matchAll(/\x1b\[(\d+);\d+H/g)].map(m => Number(m[1]));
-  return rows.every(r => r === 1);
-}
+/** A chunk of the idle animation (the masthead rail): one definition, shared with the repaint-cost probe. */
+export { isRailTick };
 
 export interface DriveOptions {
   cols: number;
