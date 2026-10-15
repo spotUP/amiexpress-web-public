@@ -83,8 +83,8 @@ static void layout_puts_things_where_the_screen_has_room(void)
     reset();
     logo("header", 3, 40, 0);
     md_layout(&menu, 80, 25, &o);
-    assert(o.header_rows == 3 && o.header_top == 2 && o.grid_top == 5);      /* masthead 1, logo 2-4 */
-    assert(o.status_row == 24 && o.prompt_row == 25 && o.grid_height == 18 && o.grid_width == 80);
+    assert(o.header_rows == 3 && o.header_top == 2 && o.divider_row == 5 && o.rail_row == 5 && o.grid_top == 6);   /* masthead 1, logo 2-4, divider 5 */
+    assert(o.status_row == 24 && o.prompt_row == 25 && o.grid_height == 17 && o.grid_width == 80);
 
     reset();
     logo("side", 10, 30, 0);
@@ -98,7 +98,7 @@ static void layout_puts_things_where_the_screen_has_room(void)
     reset();
     logo("header", 9, 40, 0);                                                /* taller than 25 / 3 */
     md_layout(&menu, 80, 25, &o);
-    assert(o.header_rows == 0 && o.grid_top == 2);
+    assert(o.header_rows == 0 && o.grid_top == 2 && o.divider_row == 0 && o.rail_row == 1);   /* no logo: no divider, the rail stays on row 1 */
 
     reset();
     logo("header", 8, 40, 0); logo("footer", 8, 40, 0);                      /* both allowed alone, never both: grid >= 6 */
@@ -147,7 +147,7 @@ static void write_catalogue(const char *text)
 static char requests[4096];
 static int mouse_queue, silent_board;
 static const char *size_reply = "80\t25";
-static const char *mouse_reply = "M\t1\t6";
+static const char *mouse_reply = "M\t1\t7";
 static int activations, typed_calls;
 static char typed_line[80];
 static int activated_entry = -1;
@@ -161,12 +161,16 @@ static int answer(const char *text, char *out, int cap)
     return n;
 }
 
+/* What the real board's replay does to the terminal: the last frame of a wipe ends with SGR 0 and SHOW CURSOR
+   (wipe-playback.ts). A logo is plain art; `logo_shows_cursor` lets a test prove the door re-asserts after one too. */
+static int logo_shows_cursor;
 static int board(void *ctx, int field, const char *request, char *out, int cap)
 {
     (void)ctx;
     out[0] = '\0';
     if (field == AE_FIELD_SCREEN) {
         strcat(requests, request); strcat(requests, "|");
+        if (strcmp(request, "WIPE END") == 0) ae_put("\033[0m\033[?25h", 0);
         if (strcmp(request, "SIZE") == 0) return answer(size_reply, out, cap);
         if (strncmp(request, "WIPE", 4) == 0 || strncmp(request, "MOUSE O", 7) == 0) return answer("OK", out, cap);
         if (strcmp(request, "MOUSE?") == 0 && mouse_queue > 0) { mouse_queue--; return answer(mouse_reply, out, cap); }
@@ -179,7 +183,7 @@ static int board(void *ctx, int field, const char *request, char *out, int cap)
     if (strcmp(request, "OVERFLOW?") == 0) return answer("default\tpages", out, cap);
     if (strncmp(request, "OVERFLOW ", 9) == 0) return answer("OK\tpages", out, cap);
     if (strncmp(request, "OPEN ", 5) == 0) return answer("OK\t" CAT_PATH, out, cap);
-    if (strncmp(request, "LOGO ", 5) == 0) return answer("OK\t3", out, cap);
+    if (strncmp(request, "LOGO ", 5) == 0) { if (logo_shows_cursor) ae_put("\033[0m\033[?25h", 0); return answer("OK\t3", out, cap); }
     if (strncmp(request, "ROW ", 4) == 0 || strncmp(request, "RUN ", 4) == 0) return answer("OK", out, cap);
     return 0;
 }
@@ -273,7 +277,7 @@ static void a_greyed_entry_cannot_be_chosen_and_a_typed_line_goes_to_the_door(vo
 static void hovering_moves_the_real_selection_and_esc_leaves(void)
 {
     mouse_queue = 1; silent_board = 0;
-    /* Down (entry 3, greyed), the wake byte (a hover at row 6 column 1 = entry 0), Esc. */
+    /* Down (entry 3, greyed), the wake byte (a hover at row 7 column 1 = entry 0), Esc. */
     assert(DRIVE("\x1b[B\x1e\x1b") == 0);
     assert(activations == 0 && typed_calls == 0);
     assert(strstr(requests, "MOUSE?|"));
@@ -283,9 +287,9 @@ static void hovering_moves_the_real_selection_and_esc_leaves(void)
 
 static void a_click_selects_and_runs_the_entry_under_it(void)
 {
-    mouse_queue = 1; silent_board = 0; mouse_reply = "P\t1\t6";
+    mouse_queue = 1; silent_board = 0; mouse_reply = "P\t1\t7";
     assert(DRIVE("\x1e") == 0);
-    mouse_reply = "M\t1\t6";
+    mouse_reply = "M\t1\t7";
     assert(activations == 1 && activated_entry == 0 && strstr(requests, "RUN R|"));
     printf("  [OK] a click selects and runs the entry under it\n");
 }
@@ -309,9 +313,9 @@ static void a_click_on_a_greyed_entry_still_clears_the_typed_line_on_screen(void
 {
     char *last_typed, *after;
     write_catalogue(CATALOGUE);
-    mouse_queue = 1; silent_board = 0; mouse_reply = "P\t1\t8";          /* the greyed File Listings */
+    mouse_queue = 1; silent_board = 0; mouse_reply = "P\t1\t9";          /* the greyed File Listings */
     assert(DRIVE("x\x1e\x1b") == 0);
-    mouse_reply = "M\t1\t6";
+    mouse_reply = "M\t1\t7";
     assert(activations == 0 && strstr(screen_text, "You cannot choose that."));
     last_typed = strstr(screen_text, "Menu: x");
     assert(last_typed);
@@ -487,6 +491,7 @@ static char big_catalogue[4096];
 static int big_long_label;                                     /* 1: one entry has a 26-character label and a 10-character right column: the grid is one column wide at 80 */
 static const char *big_wipes = "-\t-\t-";                         /* the catalogue's W line: open, leave, page */
 static const char *big_prompt = "AmiExpress Web BBS [1:Demoscene] Menu (99 mins. left): ";
+static int big_header_rows, big_header_cols;                   /* >0: the catalogue carries a header logo of that size */
 static int big_row;                                            /* the catalogue's last-selected row ("R n"): where a fresh frame highlights */
 static void write_big_catalogue(const char *pages)
 {
@@ -500,6 +505,7 @@ static void write_big_catalogue(const char *pages)
     strcat(big_catalogue, pages);
     sprintf(line, "\nW %s\nR %d\n", big_wipes, big_row);
     strcat(big_catalogue, line);
+    if (big_header_rows > 0) { sprintf(line, "L header\t%d\t%d\t0\n", big_header_rows, big_header_cols); strcat(big_catalogue, line); }
     for (i = 0; i < 14; i++) {
         const char *label = (big_long_label && i == 13) ? "Goodbye and leave for good" : LABEL[i];
         if (i == 0 || i == 5 || i == 9) { sprintf(line, "S %s\n", SECTION[i == 0 ? 0 : i == 5 ? 1 : 2]); strcat(big_catalogue, line); }
@@ -669,7 +675,11 @@ static void the_prompt_row_is_a_hint_until_something_is_typed(void)
     row = last_prompt_row();
     assert(row && strstr(row, MENUDOOR_HINT_WIDE) && strstr(row, "Esc/q Prompt"));
     assert(!strstr(row, "BBS [1:Main] Menu: "));
-    assert(strstr(row, "\033[?25l") && !strstr(row, "\033[?25h"));
+    {   /* the board's wipe replay shows the cursor behind the door; the LAST word on it is the door's hide */
+        const char *q, *last_hide = 0, *last_show = 0;
+        for (q = row; (q = strstr(q, "\033[?25")) != 0; q += 2) { if (q[5] == 'l') last_hide = q; else last_show = q; }
+        assert(last_hide && (!last_show || last_show < last_hide));
+    }
 
     /* Typing: the first printable character makes the row the prompt, with the typed text, the typing bar, the cursor. */
     wrote("m");
@@ -741,6 +751,7 @@ static char tm_cell[TM_ROWS + 1][TM_COLS + 2];
 static tm_pen tm_att[TM_ROWS + 1][TM_COLS + 1];
 static tm_pen tm_cur, tm_saved_pen;
 static int tm_row, tm_col, tm_saved_row, tm_saved_col, tm_addresses, tm_erases;
+static int tm_cursor = 1;                                      /* ESC[?25h / ESC[?25l: a terminal starts with its cursor shown */
 
 static void tm_clear(void)
 {
@@ -796,6 +807,7 @@ static void tm_play(const char *text, const char *to)
                 q++;
             }
             n = have ? n + 1 : 0;
+            if (priv && (*q == 'h' || *q == 'l') && n > 0 && args[0] == 25) tm_cursor = *q == 'h';
             if (!priv && *q == 'H') { tm_row = n > 0 && args[0] ? args[0] : 1; tm_col = n > 1 && args[1] ? args[1] : 1; tm_addresses++; }
             else if (!priv && *q == 'J' && n > 0 && args[0] == 2) { int r = tm_row, c = tm_col, a = tm_addresses; tm_clear(); tm_row = r; tm_col = c; tm_addresses = a; }
             else if (!priv && *q == 'K' && (n == 0 || args[0] == 0)) {                /* EL: cursor to the end of the row, in the CURRENT colours */
@@ -828,6 +840,7 @@ static void tm_after(const char *keys)
     wrote(keys);
     memset(&tm_cur, 0, sizeof tm_cur);
     tm_clear();
+    tm_cursor = 1;
     tm_erases = 0;
     tm_play(screen_text, closing_clear());
 }
@@ -1252,6 +1265,200 @@ static void the_typing_key_bar_names_tab_and_shortens_itself_to_fit_forty_column
     printf("  [OK] the typing key bar says Tab Show where it fits, and drops to Tab Show / Esc Clear where it does not\n");
 }
 
+
+/* ---- 2026-10-15 sysop: the masthead rail is the DIVIDER under the header logo; the cursor is hidden in navigation mode --- */
+
+static void use_screen(int cols, int rows, const char *theme, int logo_rows, const char *wipes, const char *pages)
+{
+    static char size[16];
+    sprintf(size, "%d\t%d", cols, rows);
+    size_reply = size; theme_name = theme; mouse_queue = 0; silent_board = 0;
+    big_header_rows = logo_rows; big_header_cols = cols; big_wipes = wipes; big_prompt = "Go: ";
+    write_big_catalogue(pages);
+}
+
+static void restore_screen(void)
+{
+    size_reply = "80\t25"; theme_name = ""; big_header_rows = 0; big_wipes = "-\t-\t-";
+    big_prompt = "AmiExpress Web BBS [1:Demoscene] Menu (99 mins. left): "; logo_shows_cursor = 0;
+}
+
+static int tm_nonblank(int row, int cols)
+{
+    int c, n = 0;
+    for (c = 0; c < cols; c++) if (tm_cell[row][c] != ' ') n++;
+    return n;
+}
+
+static void a_header_logo_is_followed_by_the_rail_as_a_divider_and_the_grid_starts_under_it(void)
+{
+    static const int COLS[3] = { 80, 132, 40 };
+    static const int HEIGHT[2] = { 3, 6 };
+    int ci, hi, r;
+    for (ci = 0; ci < 3; ci++) for (hi = 0; hi < 2; hi++) {
+        int cols = COLS[ci], h = HEIGHT[hi], rows = 25, div = 2 + h;
+        int rail = cols >= 80;                                   /* effects: none at 40 columns */
+        md_layout_out with, without;
+        char title_row[160];
+
+        use_screen(cols, rows, rail ? "uprough-neon" : "", h, "-\t-\t-", "scroll");
+        reset(); logo("header", h, cols, 0);
+        md_layout(&menu, cols, rows, &with);
+        reset();
+        md_layout(&menu, cols, rows, &without);
+        assert(with.divider_row == div && with.rail_row == div && with.grid_top == 3 + h);
+        assert(with.grid_height == without.grid_height - 1 - h);                   /* the logo takes h rows, the divider one more */
+        assert(without.divider_row == 0 && without.rail_row == 1 && without.grid_top == 2);
+
+        tm_after("\x1b[B");
+        assert(tm_nonblank(1, cols) > 0);
+        sprintf(title_row, "%.*s", cols, tm_cell[1]);
+        assert(strstr(title_row, "MAIN MENU"));
+        assert(tm_nonblank(1, cols) == 8);                       /* row 1 is the title alone: no rail beside it */
+        for (r = 2; r < 2 + h; r++) assert(tm_nonblank(r, cols) == 0);          /* the logo rows are the board's: not drawn here */
+        if (rail) assert(tm_nonblank(div, cols) >= cols / 2);    /* the rail runs the width of the divider row */
+        else for (r = 0; r < cols; r++) assert(tm_cell[div][r] == '-');         /* no rail: a static rule, never blank */
+        assert(strstr(tm_cell[3 + h], "Messages"));              /* the first section header sits right under the divider */
+        assert(!strstr(tm_cell[div], "Messages"));
+        assert(strstr(tm_cell[rows - 1], "Page") || tm_nonblank(rows - 1, cols) > 0);   /* status row unchanged */
+        assert(strstr(tm_cell[rows], "Go: ") || tm_nonblank(rows, cols) > 0);          /* prompt row unchanged */
+    }
+    restore_screen();
+    printf("  [OK] a header logo is followed by the rail as a divider (a static rule without one) and the grid starts under it, at 80, 132 and 40\n");
+}
+
+static void without_a_header_logo_the_rail_stays_on_the_masthead_row_and_no_row_is_added(void)
+{
+    static const int COLS[2] = { 80, 132 };
+    int ci;
+    for (ci = 0; ci < 2; ci++) {
+        use_screen(COLS[ci], 25, "uprough-neon", 0, "-\t-\t-", "scroll");
+        tm_after("\x1b[B");
+        assert(tm_nonblank(1, COLS[ci]) > 8);                   /* the rail beside the title, as before */
+        assert(strstr(tm_cell[2], "Messages"));                  /* and the grid directly under the masthead */
+    }
+    restore_screen();
+    printf("  [OK] without a header logo the rail stays on row one and the grid starts on row two\n");
+}
+
+static void a_theme_without_a_rail_gets_a_static_divider_under_a_logo(void)
+{
+    int c;
+    use_screen(80, 25, "", 3, "-\t-\t-", "scroll");               /* "" is a board with no themes: no rail */
+    tm_after("\x1b[B");
+    for (c = 0; c < 80; c++) assert(tm_cell[5][c] == '-');
+    assert(strstr(tm_cell[6], "Messages"));
+    assert(!strstr(screen_text, "\0337"));                        /* nothing animates: no tick at all */
+    restore_screen();
+    printf("  [OK] a theme without a rail gets a static divider rule under a logo\n");
+}
+
+static void the_idle_tick_touches_the_divider_row_only_under_a_header_logo(void)
+{
+    static const int COLS[2] = { 80, 132 };
+    static const int HEIGHT[2] = { 3, 6 };
+    int ci, hi, ticks = 0;
+    for (ci = 0; ci < 2; ci++) for (hi = 0; hi < 2; hi++) {
+        const char *p, *stop;
+        use_screen(COLS[ci], 25, "uprough-neon", HEIGHT[hi], "-\t-\t-", "scroll");
+        wrote("\x1b[B\x1b[B");
+        stop = closing_clear();
+        for (p = screen_text; (p = strstr(p, "\0337")) != 0 && p < stop; p++) {
+            const char *end = strstr(p, "\0338"), *q;
+            assert(end && end < stop && end - p < 300);
+            for (q = p; q < end; q++) {
+                int r = 0, c = 0, n = 0;
+                if (q[0] == '\033' && q[1] == '[' && sscanf(q + 2, "%d;%d%n", &r, &c, &n) == 2 && q[2 + n] == 'H') assert(r == 2 + HEIGHT[hi]);
+            }
+            ticks++;
+        }
+    }
+    assert(ticks >= 4);                                           /* the sentinel: ticks ran under every logo size, each checked */
+    restore_screen();
+    printf("  [OK] every idle tick (%d) addresses the divider row only under a header logo\n", ticks);
+}
+
+static void the_first_frame_with_a_logo_costs_at_most_the_divider_row_more(void)
+{
+    long with, without, down_plain, type_plain;
+    use_screen(80, 25, "uprough-neon", 0, "-\t-\t-", "scroll");
+    without = wrote("\x1b");
+    big_header_rows = 3; big_header_cols = 80; write_big_catalogue("scroll");
+    with = wrote("\x1b");
+    assert(with - without <= 250);                                /* a rule/rail row, not a repaint of the grid */
+    big_header_rows = 0; write_big_catalogue("scroll");
+    down_plain = key_cost("", "\x1b[B", "\x1b"); type_plain = key_cost("x", "y", "\x1b");
+    big_header_rows = 3; write_big_catalogue("scroll");
+    assert(key_cost("", "\x1b[B", "\x1b") <= down_plain + 4);   /* Down: the same two cells and status text (a row number may gain a digit) */
+    assert(key_cost("x", "y", "\x1b") <= type_plain + 2);        /* typing: still the character */
+    restore_screen();
+    printf("  [OK] a header logo adds at most the divider row to the first frame; Down and typing cost what they did\n");
+}
+
+static void hit_testing_uses_the_grid_origin_below_the_divider(void)
+{
+    /* The big catalogue is two columns at 80: R E / MS OLM / ZOOM, Files header, F D / U WHO, Community header, ... G. */
+    static const int HEIGHT[2] = { 3, 6 };
+    int hi;
+    char reply[24];
+    for (hi = 0; hi < 2; hi++) {
+        int h = HEIGHT[hi], first = 4 + h;                       /* first entry row: masthead 1, logo h, divider, section header */
+        use_screen(80, 25, "", h, "-\t-\t-", "scroll");
+#define HOVER(col, row, want) do { mouse_queue = 1; sprintf(reply, "M\t%d\t%d", (col), (row)); mouse_reply = reply; \
+        assert(DRIVE("\x1e\x1b") == 0 && has(requests, want)); } while (0)
+        HOVER(50, first, "ROW 1|");                              /* the first visible entry row, second column: E */
+        HOVER(1, first + 1, "ROW 2|");                           /* MS: one row down */
+        HOVER(1, first + 4, "ROW 5|");                           /* F, under the Files header */
+        HOVER(1, first + 9, "ROW 13|");                          /* G: the last visible entry row */
+        HOVER(1, 2 + h, "ROW 0|");                               /* the divider is not a grid row: nothing is selected */
+        HOVER(50, first + 3, "ROW 0|");                          /* the Files section header: no entry under it */
+#undef HOVER
+    }
+    mouse_reply = "M\t1\t7";
+    restore_screen();
+    printf("  [OK] hover hit tests use the grid origin below the divider (first, last visible row, divider, section header)\n");
+}
+
+/* The final cursor state a script leaves, read off the terminal model before the door's closing clear. */
+static void cursor_ends(const char *keys, int visible, int prompt_row)
+{
+    tm_after(keys);
+    assert(tm_cursor == visible);
+    if (visible) assert(tm_row == prompt_row);
+}
+
+static void the_cursor_is_hidden_in_navigation_mode_after_every_board_write_and_parked_when_typing(void)
+{
+    static const int COLS[3] = { 80, 132, 40 };
+    int ci, wipes = 0;
+    for (ci = 0; ci < 3; ci++) {
+        int cols = COLS[ci];
+        const char *theme = cols >= 80 ? "uprough-neon" : "";
+        /* the opening wipe: the board's replay ends with SHOW CURSOR */
+        use_screen(cols, 25, theme, 3, "X\tV\t-", "scroll");
+        cursor_ends("\x1b[B", 0, 0);                              /* navigation: hidden again */
+        assert(has(requests, "WIPE IN X|") && has(requests, "WIPE END|")); wipes++;
+        cursor_ends("x", 1, 25);                                  /* typing: visible, parked on the prompt row */
+        /* a page-turn wipe in pages mode */
+        big_long_label = 1;                                       /* one column: the menu needs pages at 12 rows */
+        use_screen(cols, 12, theme, 0, "-\t-\tH", "pages");
+        cursor_ends("\x1b[6~", 0, 0);
+        assert(has(requests, "WIPE IN H|")); wipes++;
+        cursor_ends("g\t", 1, 12);
+        big_long_label = 0;
+        /* a logo draw (no wipe at all) that shows the cursor */
+        use_screen(cols, 25, theme, 3, "-\t-\t-", "scroll");
+        logo_shows_cursor = 1;
+        cursor_ends("\x1b[B", 0, 0);
+        assert(!has(requests, "WIPE")); wipes++;
+        cursor_ends("x", 1, 25);
+        logo_shows_cursor = 0;
+    }
+    assert(wipes == 9);                                           /* the sentinel: every case ran */
+    restore_screen();
+    printf("  [OK] the cursor is hidden in navigation mode after the open wipe, a page wipe and a logo draw, and parked when typing, at 80, 132 and 40\n");
+}
+
 int main(void)
 {
     ae_native_set_exchange(board, 0);
@@ -1297,6 +1504,13 @@ int main(void)
     at_forty_columns_the_description_is_still_readable_beside_the_pager();
     type_ahead_to_an_entry_below_the_window_names_it_in_the_status_row_and_repaints_no_grid();
     the_typing_key_bar_names_tab_and_shortens_itself_to_fit_forty_columns();
+    a_header_logo_is_followed_by_the_rail_as_a_divider_and_the_grid_starts_under_it();
+    without_a_header_logo_the_rail_stays_on_the_masthead_row_and_no_row_is_added();
+    a_theme_without_a_rail_gets_a_static_divider_under_a_logo();
+    the_idle_tick_touches_the_divider_row_only_under_a_header_logo();
+    the_first_frame_with_a_logo_costs_at_most_the_divider_row_more();
+    hit_testing_uses_the_grid_origin_below_the_divider();
+    the_cursor_is_hidden_in_navigation_mode_after_every_board_write_and_parked_when_typing();
     remove(CAT_PATH); remove("build/test_menudoor_keys.bin"); remove("build/test_menudoor_screen.bin");
     puts("test_menudoor_model: OK");
     return 0;

@@ -8,6 +8,8 @@
 
 typedef struct {
     int masthead_row;
+    int divider_row;                              /* the row under the header logo (masthead rail / static rule); 0 = no header logo */
+    int rail_row;                                 /* where the masthead rail lives: the divider under a header logo, else the masthead row */
     int header_top, header_rows, header_cols;     /* rows 0 = no header logo */
     int footer_top, footer_rows, footer_cols;
     int side_top, side_left, side_rows, side_cols;   /* cols 0 = no side logo */

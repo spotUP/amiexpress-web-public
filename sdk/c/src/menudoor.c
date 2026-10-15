@@ -101,7 +101,7 @@ void md_layout(const ae_menu *m, int cols, int rows, md_layout_out *o)
     footer = find_logo(m, "footer");
     if (!logo_fits(header, cols, third)) header = 0;      /* taller than a third of the screen: dropped */
     if (!logo_fits(footer, cols, third)) footer = 0;
-    o->grid_top = 2 + (header ? header->rows : 0);
+    o->grid_top = header ? 3 + header->rows : 2;          /* masthead 1, logo 2..1+h, divider 2+h, grid 3+h */
     o->grid_height = grid_rows(rows, o->grid_top, footer ? footer->rows : 0);
     if (o->grid_height < MD_MIN_GRID_ROWS && footer) {    /* the grid is never squeezed: logos give way, footer first */
         footer = 0;
@@ -113,7 +113,8 @@ void md_layout(const ae_menu *m, int cols, int rows, md_layout_out *o)
         o->grid_height = grid_rows(rows, 2, 0);
     }
     if (o->grid_height < 0) o->grid_height = 0;           /* a terminal too short for a grid draws none */
-    if (header) { o->header_top = 2; o->header_rows = header->rows; o->header_cols = cols; }
+    if (header) { o->header_top = 2; o->header_rows = header->rows; o->header_cols = cols; o->divider_row = 2 + header->rows; }
+    o->rail_row = o->divider_row ? o->divider_row : o->masthead_row;
     if (footer) { o->footer_top = o->grid_top + o->grid_height; o->footer_rows = footer->rows; o->footer_cols = cols; }
     o->grid_width = cols;
     side = find_logo(m, "side");
@@ -209,10 +210,33 @@ static void configure(struct menudoor *d, level *lv, int selected)
     ui_grid_select(g, selected);
 }
 
+/* Under a header logo the rail is the DIVIDER between logo and grid (sysop, 2026-10-15) and row 1 carries the title
+   alone; without a logo the rail stays on row 1 beside the title. Without a rail (40 columns, effects off, a theme
+   with none) the divider is a static rule in the accent token, so a logo is still separated. */
+static void draw_divider(struct menudoor *d)
+{
+    ui_screen *sc = &d->screen;
+    int row = cur(d)->lay.divider_row;
+    char rule[256];
+    int n = sc->cols < (int)sizeof rule - 1 ? sc->cols : (int)sizeof rule - 1;
+
+    if (!row) return;
+    if (d->rail[0]) {
+        ui_masthead_draw_tick(&sc->buf, row, 1, sc->cols, "", d->rail, UI_TOKEN(UI_T_BAR_INK), UI_TOKEN(UI_T_BAR), d->rail_tick);
+        return;
+    }
+    memset(rule, '-', (size_t)n); rule[n] = '\0';
+    ansi_color(&sc->buf, UI_TOKEN(UI_T_ACCENT), ground(d), 0);
+    ansi_text_raw(&sc->buf, row, 1, rule, n);
+}
+
 static void draw_masthead(struct menudoor *d)
 {
     ui_screen *sc = &d->screen;
-    ui_masthead_draw_tick(&sc->buf, 1, 1, sc->cols, d->title, d->rail, UI_TOKEN(UI_T_BAR_INK), UI_TOKEN(UI_T_BAR), d->rail_tick);
+    int under_logo = cur(d)->lay.divider_row != 0;
+    ui_masthead_draw_tick(&sc->buf, 1, 1, sc->cols, d->title, under_logo ? "" : d->rail,
+                          UI_TOKEN(UI_T_BAR_INK), UI_TOKEN(UI_T_BAR), d->rail_tick);
+    draw_divider(d);
 }
 
 /* The status row follows the selection. Drawn smart: a row already showing this text is not sent again, and a
@@ -350,10 +374,10 @@ static void draw_prompt(struct menudoor *d)
     }
     ansi_text_raw(&sc->buf, row, 1, line, room);
     if (d->typed_len == 0) {
-        ansi_cursor(&sc->buf, 0);
+        ui_screen_cursor(sc, 0);
     } else {
         ansi_goto(&sc->buf, row, 1 + plen);
-        ansi_cursor(&sc->buf, 1);
+        ui_screen_cursor(sc, 1);
     }
 }
 
@@ -421,7 +445,8 @@ static void show_frame(struct menudoor *d, char wipe, int conceal)
     compose_all(d);
     ui_screen_flush(&d->screen);
     draw_logos(d);
-    if (capturing) ae_bs_wipe_end();
+    if (capturing) ui_screen_wipe_end(&d->screen);
+    else ui_screen_cursor_reassert(&d->screen);
     park_cursor(d);
     ui_screen_flush(&d->screen);
 }
@@ -441,7 +466,8 @@ static void repaint_grid(struct menudoor *d)
     park_cursor(d);
     ui_screen_flush(&d->screen);
     if (full) draw_between(d);
-    if (capturing) ae_bs_wipe_end();
+    if (capturing) ui_screen_wipe_end(&d->screen);
+    else if (full) ui_screen_cursor_reassert(&d->screen);
     if (full) { park_cursor(d); ui_screen_flush(&d->screen); }
 }
 
@@ -482,8 +508,11 @@ static void door_idle(void *ctx)
     d->rail_tick += UI_RAIL_STEP;
     /* The rail, not the row. The tick saves and restores the caller's cursor itself (it sits in the prompt while they
        type), so a second save here would only send four more bytes. */
-    ui_masthead_rail_tick(&d->screen.buf, 1, 1, d->screen.cols, d->title, d->rail,
-                          UI_TOKEN(UI_T_BAR_INK), UI_TOKEN(UI_T_BAR), d->rail_tick);
+    {
+        const md_layout_out *lay = &cur(d)->lay;
+        ui_masthead_rail_tick(&d->screen.buf, lay->rail_row, 1, d->screen.cols, lay->divider_row ? "" : d->title, d->rail,
+                              UI_TOKEN(UI_T_BAR_INK), UI_TOKEN(UI_T_BAR), d->rail_tick);
+    }
     ui_screen_flush(&d->screen);
     ae_delay_ticks(UI_RAIL_TICK_DELAY);
 }
@@ -870,7 +899,7 @@ static int run_settings_started(struct menudoor *d, ae_session *session)
     ui_status_draw(&sc->buf, status_row, 1, sc->cols,
                    sc->cols >= 80 ? " Arrows Move  Enter Choose  Esc/q Back" : " Enter Choose  Esc/q Back", "",
                    UI_TOKEN(UI_T_BAR_INK), UI_TOKEN(UI_T_BAR));
-    ansi_cursor(&sc->buf, 0);
+    ui_screen_cursor(sc, 0);
     ui_screen_flush(sc);
 
     for (;;) {
