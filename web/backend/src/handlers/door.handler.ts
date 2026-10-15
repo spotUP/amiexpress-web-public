@@ -4492,7 +4492,7 @@ console.log(`[executeClientDoor] Emitted game-mode=true to frontend`);
       // pointer sample while a game door runs (60+/s), so it stays quiet
       // unless DOOR_DEBUG is on - the log line itself was measurable noise.
       if (process.env.DOOR_DEBUG === '1') {
-        console.log(`[executeClientDoor] No-op doorInputHandler called with:`, JSON.stringify(data));
+        console.log(`[executeClientDoor] No-op doorInputHandler called with:`, inputForTrace(session, data, (s) => JSON.stringify(s)));
       }
     };
 console.log(`[executeClientDoor] Set doorInputHandler (no-op)`);

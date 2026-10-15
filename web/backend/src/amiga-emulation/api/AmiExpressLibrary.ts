@@ -1,4 +1,5 @@
 import { MoiraEmulator, CPURegister } from '../cpu/MoiraEmulator';
+import { inputForTrace } from '../xim/secret-input';
 
 /**
  * AmiExpress BBS Library
@@ -75,7 +76,7 @@ console.log('[AmiExpress Library] Initialized');
 console.log(`[AmiExpress Library] Raw input queued: <buffer ${data.length}>`);
     } else {
       this.inputQueue.push(data);
-console.log(`[AmiExpress Library] Input queued: "${data}"`);
+console.log(`[AmiExpress Library] Input queued: "${inputForTrace(this.session, data, (s) => s)}"`);
     }
   }
 
@@ -312,7 +313,7 @@ console.log('[AmiExpress] aeGets() no input available');
 
       // Return length
       this.emulator.setRegister(CPURegister.D0, length);
-console.log(`[AmiExpress] aeGets() returned: "${input}" (${length} bytes)`);
+console.log(`[AmiExpress] aeGets() returned: "${inputForTrace(this.session, input, (s) => s)}" (${length} bytes)`);
     } catch (error) {
 console.error('[AmiExpress] aeGets() error:', error);
       this.emulator.setRegister(CPURegister.D0, -1);

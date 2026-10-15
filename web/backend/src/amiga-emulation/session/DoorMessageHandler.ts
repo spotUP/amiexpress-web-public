@@ -30,6 +30,7 @@ import * as net from "net";
 import { amigaGaps, doorOf } from '../instrumentation/amiga-gaps';
 import { toAmigaTime, encodeAmigaDate } from '../../utils/date-time.util';
 import { calcSizeText } from '../../utils/byte-format.util';
+import { inputForTrace } from '../xim/secret-input';
 
 // Telnet session state for TELNET_CONNECT command (express.e:3051-3302)
 interface TelnetSessionState {
@@ -206,7 +207,7 @@ debugLog("[DoorMessageHandler] door:input received but no active input request")
       }
 
       const { msgAddr, maxlen, command, replyPortAddr, resumeCallback, onInput } = this.activeInput;
-debugLog(`[DoorMessageHandler] door:input: "${data}" for command ${command}`);
+debugLog(`[DoorMessageHandler] door:input: "${inputForTrace(this.config.bbsSession, data, (s) => s)}" for command ${command}`);
 
       // Trim to maxlen
       const trimmed = data.slice(0, maxlen);
@@ -226,7 +227,7 @@ debugLog(`[DoorMessageHandler] door:input: "${data}" for command ${command}`);
         1
       );
 
-debugLog(`[DoorMessageHandler] Wrote input "${trimmed}" to message`);
+debugLog(`[DoorMessageHandler] Wrote input "${inputForTrace(this.config.bbsSession, trimmed, (s) => s)}" to message`);
 
       // Reply to door (express.e:4232 - ReplyMsg after processing)
       this.execLibrary.putMsg(replyPortAddr, msgAddr, {

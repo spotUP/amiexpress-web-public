@@ -6,6 +6,7 @@ import { User } from '../database';
 import { AREXXInterpreter } from '../services/arexx.service';
 import { doorDropFileManager } from '../services/DoorDropFileManager';
 import { boardRoot } from '../utils/board-root.util';
+import { inputForTrace } from './xim/secret-input';
 
 /**
  * AREXXDoorSession - Manages AREXX door execution
@@ -70,7 +71,7 @@ console.log('[AREXXDoorSession] Setting up socket handlers');
     // Handle user input
     this.socket.on('door:input', (data: string) => {
       if (this.isRunning && this.interpreter) {
-console.log(`[AREXXDoorSession] Received input: "${data}"`);
+console.log(`[AREXXDoorSession] Received input: "${inputForTrace(this.config.bbsSession, data, (s) => s)}"`);
 
         // Store input for BBSREAD() to retrieve
         if (this.interpreter['context']) {

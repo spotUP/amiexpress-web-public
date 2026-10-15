@@ -6,6 +6,7 @@ import * as path from 'path';
 import { doorDropFileManager } from '../services/DoorDropFileManager';
 import { User } from '../database';
 import { boardRoot } from '../utils/board-root.util';
+import { inputForTrace } from './xim/secret-input';
 
 /**
  * PythonDoorSession - Manages Python door execution
@@ -75,7 +76,7 @@ console.log('[PythonDoorSession] Setting up socket handlers');
     // Handle user input
     this.socket.on('door:input', (data: string) => {
       if (this.isRunning && this.process && this.process.stdin) {
-console.log(`[PythonDoorSession] Received input: "${data}"`);
+console.log(`[PythonDoorSession] Received input: "${inputForTrace(this.config.bbsSession, data, (s) => s)}"`);
 
         // Write to Python process stdin
         try {

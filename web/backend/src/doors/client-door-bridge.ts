@@ -5,6 +5,7 @@
 
 import { Socket } from 'socket.io';
 import { debugLog } from '../utils/debug-log';
+import { inputForTrace } from '../amiga-emulation/xim/secret-input';
 import { newMotionThrottle, shouldForwardInput } from './input-motion-throttle';
 import { repeatReachesDoor } from '../services/game-mode.service';
 import type { BBSSession } from '../index';
@@ -217,11 +218,11 @@ console.log(`[ClientDoorBridge] Starting session ${sessionId} for door ${doorId}
 
       if (!shouldForwardInput(motionThrottle, data, Date.now())) return;
 
-      debugLog(`[ClientDoorBridge] inputHandler called with data:`, JSON.stringify(data));
+      debugLog(`[ClientDoorBridge] inputHandler called with data:`, inputForTrace(doorSession.bbsSession, data, (s) => JSON.stringify(s)));
 
       // Parse key data and create enhanced key event
       const parsedKey = this.parseKeyInput(data);
-      debugLog(`[ClientDoorBridge] Parsed key:`, parsedKey);
+      debugLog(`[ClientDoorBridge] Parsed key:`, inputForTrace(doorSession.bbsSession, data, (s) => JSON.stringify(this.parseKeyInput(s))));
 
       // Send to door
       this.sendMessage(doorSession, {

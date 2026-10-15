@@ -16,6 +16,7 @@ import * as path from "path";
 import * as amigafs from "../../utils/amigafs.js";
 import { getSystemTime } from '../../utils/date-time.util';
 import { debugLog } from '../../utils/debug-log';
+import { inputForTrace } from '../xim/secret-input';
 
 export class TIMDoorMessageHandler {
   private emulator: MoiraEmulator;
@@ -54,6 +55,11 @@ export class TIMDoorMessageHandler {
     return this.waitingForLineInput || this.waitingForHotkey || this.waitingForPause;
   }
 
+  /** What a debug line may say about typed input: the text, or only its size while the door has declared a secret (xim/secret-input). */
+  private traceInput(data: string): string {
+    return inputForTrace(this.config.bbsSession, data, (s) => s);
+  }
+
   /**
    * Queue user input for processing
    */
@@ -71,7 +77,7 @@ export class TIMDoorMessageHandler {
       }
       this.waitingForPause = false;
       this.socket.emit('ansi-output', '\x1b[1A\x1b[K'); // Clear pause prompt
-debugLog(`[TIMDoorHandler] Pause input received: "${data}"`);
+debugLog(`[TIMDoorHandler] Pause input received: "${this.traceInput(data)}"`);
       return;
     }
 
@@ -83,7 +89,7 @@ debugLog(`[TIMDoorHandler] Pause input received: "${data}"`);
         this.setCarrier(this.pendingMsgAddr, false);
       }
       this.waitingForHotkey = false;
-debugLog(`[TIMDoorHandler] Hotkey input received: "${char}"`);
+debugLog(`[TIMDoorHandler] Hotkey input received: "${this.traceInput(char)}"`);
       return;
     }
 
@@ -98,7 +104,7 @@ debugLog(`[TIMDoorHandler] Hotkey input received: "${char}"`);
         }
         this.waitingForLineInput = false;
         this.lineInputBuffer = '';
-debugLog(`[TIMDoorHandler] Line input completed: "${input}"`);
+debugLog(`[TIMDoorHandler] Line input completed: "${this.traceInput(input)}"`);
       } else {
         // Accumulate input
         this.lineInputBuffer += data;
@@ -109,7 +115,7 @@ debugLog(`[TIMDoorHandler] Line input completed: "${input}"`);
 
     // Not waiting for anything special - queue for later
     this.inputQueue.push(data);
-debugLog(`[TIMDoorHandler] Input queued: "${data}"`);
+debugLog(`[TIMDoorHandler] Input queued: "${this.traceInput(data)}"`);
   }
 
   /**
@@ -413,7 +419,7 @@ debugLog(`[TIMDoorHandler] PG_HK: Hot key "${msg.str}"`);
           const char = input.charAt(0);
           this.setString(msgAddr, char);
           this.setCarrier(msgAddr, false);
-debugLog(`[TIMDoorHandler] PG_HK: Immediate key "${char}"`);
+debugLog(`[TIMDoorHandler] PG_HK: Immediate key "${this.traceInput(char)}"`);
         } else {
           // Wait for single key
           this.waitingForHotkey = true;
