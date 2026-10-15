@@ -5,6 +5,7 @@
  * Files live in Screens/menus/<kind>/logos/ (menuLogoDir) and are read through
  * amigafs as latin1: `.txt` is Amiga ANSI, `.seq` is PETSCII for the C64.
  */
+import * as crypto from 'crypto';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as amigafs from '../../utils/amigafs';
@@ -139,7 +140,7 @@ export function writeMenuLogo(bbsRoot: string, kind: MenuKind, file: string, byt
   const dir = menuLogoDir(bbsRoot, kind);
   mkdirOwned(dir);
   // Measured from a sibling temp file (measureLogo reads files, and picks the alphabet by extension), so a refused upload never replaces a logo in use.
-  const tmp = path.join(dir, `.upload-${process.pid}${path.extname(file)}`);
+  const tmp = path.join(dir, `.upload-${process.pid}-${crypto.randomBytes(6).toString('hex')}${path.extname(file)}`);
   fs.writeFileSync(tmp, bytes);
   try {
     const size = measureLogo(tmp);

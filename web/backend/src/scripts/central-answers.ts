@@ -29,6 +29,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { applyTooltypes } from '../utils/info-file.util';
 import { boardRoot } from '../utils/board-root.util';
+import { chownToBoard } from '../utils/board-owner.util';
 import { UserFileManager } from '../services/UserFileManager';
 
 const args = process.argv.slice(2);
@@ -40,9 +41,7 @@ const opt = (name: string): string | undefined => {
 const root = opt('--root') || process.env.BBS_DATA_DIR || boardRoot();
 const date = opt('--date') || new Date().toISOString().slice(0, 10).replace(/-/g, '');
 
-function own(p: string): void {
-  if (process.getuid?.() === 0) fs.chownSync(p, 1001, 1001);
-}
+const own = chownToBoard;
 
 /** The blocks of one Answers file, each with the caller its header names. */
 export function splitAnswers(text: string): Array<{ name: string | null; block: string }> {

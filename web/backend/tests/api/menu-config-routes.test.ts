@@ -14,7 +14,7 @@ import * as os from 'os';
 import * as path from 'path';
 import express from 'express';
 import request from 'supertest';
-import { createMenuConfigRouter } from '../../src/api/menu-config-routes';
+import { createMenuConfigRouter, menuConfigBodyError } from '../../src/api/menu-config-routes';
 import { requireSysop } from '../../src/middleware/auth.middleware';
 import { config } from '../../src/config';
 import { commandCache } from '../../src/handlers/command-execution.handler';
@@ -25,16 +25,18 @@ const FIX = path.join(__dirname, '../fixtures');
 let root: string;
 let previousDataDir: string;
 
+let bodyLimit = '1mb';
 function appFor(secLevel = 255) {
   const app = express();
-  app.use(express.json({ limit: '1mb' }));
-  app.use('/api/config/menus', (req: any, _res, next) => { req.user = { secLevel }; next(); }, requireSysop(), createMenuConfigRouter(root));
+  app.use(express.json({ limit: bodyLimit }));
+  app.use('/api/config/menus', (req: any, _res, next) => { req.user = { secLevel }; next(); }, requireSysop(), createMenuConfigRouter(root), menuConfigBodyError);
   return app;
 }
 const door = (command: string, t: Record<string, string> = {}) => ({ name: command, type: 'XIM', location: `Doors/${command}/x`, access: undefined, toolTypes: t });
 const b64 = (name: string) => fs.readFileSync(path.join(FIX, 'menu-logos', name)).toString('base64');
 
 beforeEach(() => {
+  bodyLimit = '1mb';
   root = fs.mkdtempSync(path.join(os.tmpdir(), 'menu-routes-'));
   fs.mkdirSync(path.join(root, 'Commands', 'BBSCmd'), { recursive: true });
   fs.mkdirSync(path.join(root, 'Doors', 'FROGGER'), { recursive: true });
@@ -220,4 +222,15 @@ test('every admin write is handed to the board: the config, its backup, a logo',
     path.join(root, 'Menus', 'MAIN.json.bak'),
     path.join(root, 'Screens/menus/main/logos/cat.txt'),
   ]));
+});
+
+test('a body the global parser refuses answers our envelope, not the default error page', async () => {
+  bodyLimit = '100kb';   // the app's global express.json() default
+  const big = await request(appFor()).put('/api/config/menus/MAIN/logos/big.txt').send({ base64: Buffer.alloc(80 * 1024, 0x41).toString('base64') });
+  expect(big.status).toBe(413);
+  expect(big.body).toMatchObject({ success: false, message: expect.stringMatching(/64 KB/) });
+  expect(big.body.timestamp).toEqual(expect.any(String));
+  const bad = await request(appFor()).put('/api/config/menus/MAIN').set('Content-Type', 'application/json').send('{oops');
+  expect(bad.status).toBe(400);
+  expect(bad.body.success).toBe(false);
 });

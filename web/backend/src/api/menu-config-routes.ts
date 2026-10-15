@@ -10,7 +10,7 @@
  * Errors answer { success: false, message } in our own words; filesystem
  * detail goes to the log only (bulls-routes.ts fail()).
  */
-import express, { Request, Response } from 'express';
+import express, { NextFunction, Request, Response } from 'express';
 import { getSystemTime } from '../utils/date-time.util';
 import { MENU_KINDS, LOGO_FILE_RE, type MenuKind } from '../screens/menu-config/menu-config';
 import { readMenuConfig, writeMenuConfig } from '../services/menu-config.service';
@@ -31,6 +31,19 @@ function entrySource(kind: MenuKind, e: CatalogueEntry): EntrySource {
   if (e.runAs === 'syscmd') return 'syscmd';
   // Decision 35: a door that shadows an internal key is the door's entry (dispatch order).
   return commandCache.bbscmd.has(e.key) || !internalCommandRow(e.key) ? 'door' : 'internal';
+}
+
+/**
+ * A body the global JSON parser refused never reaches the router, so Express's
+ * default HTML error page would answer it. Mounted right after the router
+ * (routes-setup), this gives the admin the same envelope as every other answer.
+ */
+export function menuConfigBodyError(err: { type?: string }, _req: Request, res: Response, next: NextFunction): void {
+  if (err?.type === 'entity.too.large') {
+    res.status(413).json({ success: false, message: 'The request is too large; a logo file is at most 64 KB.', timestamp: getSystemTime().toISOString() });
+  } else if (err?.type === 'entity.parse.failed') {
+    res.status(400).json({ success: false, message: 'The request body is not valid JSON.', timestamp: getSystemTime().toISOString() });
+  } else next(err);
 }
 
 export function createMenuConfigRouter(bbsRoot: string): ReturnType<typeof express.Router> {
