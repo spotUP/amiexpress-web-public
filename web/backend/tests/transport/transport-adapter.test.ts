@@ -186,6 +186,7 @@ const PINNED_EVENT_NAMES: ReadonlyArray<string> = [
   'matchmaking:join',
   'matchmaking:leave',
   'matchmaking:queue_population',
+  'message',
   'modem-speed',
   'network-pong',
   'notify:push-subscribe',
@@ -619,7 +620,9 @@ describe('TP-3 - the adapter: one ruling for every event name', () => {
     // Enable push asking the caller's browser to subscribe (notify/push.ts).
     // 248 as of 2026-10-15: `disconnecting`, not-transport - the session link re-raises
     // socket.io's own event to its listeners (server/session-link.ts).
-    expect(ruled.length).toBe(248);
+    // 249 as of 2026-10-15: `message`, not-transport - the session link's `send` forwards
+    // socket.io's stock message event (server/session-link.ts).
+    expect(ruled.length).toBe(249);
 
     // (c) every ruling's note is non-empty - the point of the table is the
     // written reason, not the classification.
@@ -692,7 +695,8 @@ describe('TP-3 - the adapter: one ruling for every event name', () => {
       // 105 (2026-09-24): `terminal-type-settled`, the telnet connection's
       // own end-of-TTYPE signal to its session start.
       // 106 (2026-10-15): `disconnecting`, the session link's re-raise of socket.io's own event.
-      'not-transport': 106,
+      // 107 (2026-10-15): `message`, the session link's `send` shorthand.
+      'not-transport': 107,
     });
   });
 

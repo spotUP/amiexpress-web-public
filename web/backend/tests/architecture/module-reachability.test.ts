@@ -64,6 +64,7 @@ const KNOWN_UNREACHABLE = new Map<string, string>([
 
   ['src/handlers/door-handler/door-types.ts', 'types for a door handler split that never landed'],
   ['src/handlers/examples/modern-handler.example.ts', 'documentation: the example src/handlers/examples/README.md walks through, for a DI pattern the live handlers do use'],
+  ['src/server/session-link.ts', 'the web caller session link: its wiring (the connection handler wrapping the socket) was reverted in ee0af8322 because it broke door launches; tests/server/session-link.test.ts covers it until it is re-landed'],
   ['src/nodes/index.ts', 'barrel: every consumer imports NodeStatusManager/MulticomManager directly'],
 
 ]);

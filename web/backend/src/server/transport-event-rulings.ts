@@ -990,6 +990,15 @@ const NAMED_RULINGS: Readonly<Record<string, EventRuling>> = {
     "TP-8/TP-9a's to fold in; this ruling gives the seventeen emit-only sites " +
     "their effect.",
   },
+  "message": {
+    kind: "not-transport",
+    owner: "SessionLink",
+    note:
+    "socket.io's own `send` shorthand: the session link's `send` forwards " +
+    "its arguments to the raw socket as a `message` event (server/session-link.ts). " +
+    "No handler or client in the tree names it; it is the stock socket.io " +
+    "convention, not a board event, and a byte transport has no such event.",
+  },
   "modem-speed": {
     kind: "translate",
     note:
