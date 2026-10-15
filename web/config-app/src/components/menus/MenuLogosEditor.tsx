@@ -109,7 +109,7 @@ function FilesPanel({ kind, files, loading, error, reload }: { kind: MenuKind; f
         rowActions={f => (
           <>
             {f.file.toLowerCase().endsWith('.txt') && (
-              <button className={BUTTON_CLASS} onClick={() => setStudio(f.file)} aria-label={`Open ${f.file} in the ANSI Studio`}>Open in the ANSI Studio</button>
+              <button className={BUTTON_CLASS} onClick={() => setStudio(f.file)} aria-label={`Open ${f.file} in the Screen Designer`}>Open in the Screen Designer</button>
             )}
             <button className={BUTTON_CLASS} onClick={() => remove(f.file)} aria-label={`Delete ${f.file}`}>Delete</button>
           </>
