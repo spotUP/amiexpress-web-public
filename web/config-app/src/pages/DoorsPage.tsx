@@ -1051,10 +1051,6 @@ export function DoorsPage() {
                 </div>
               )}
 
-              {editingDoor && (
-                <DoorArtSection command={editingDoor.door_command} menuKind={editingDoor.menu_kind} />
-              )}
-
               {/*
                 THE WAY TO THE TOOLTYPES, from the dialog a sysop actually
                 opens. The .info editor has always existed - it is the second
@@ -1114,6 +1110,17 @@ export function DoorsPage() {
                 </button>
               </div>
             </form>
+
+            {/*
+              Outside the form on purpose: the art saves on its own, and its
+              buttons and inputs inside the door form would submit it - the
+              dialog saved and closed and the editor never opened.
+            */}
+            {editingDoor && (
+              <div className="px-6 pb-6">
+                <DoorArtSection command={editingDoor.door_command} menuKind={editingDoor.menu_kind} />
+              </div>
+            )}
         </Modal>
       )}
 

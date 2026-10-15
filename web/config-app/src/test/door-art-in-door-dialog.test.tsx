@@ -42,12 +42,14 @@ vi.mock('../api/client', async importOriginal => ({
     saveDoorSettings: vi.fn(),
     updateDoor: vi.fn(),
     listDoorArt: () => listDoorArt(),
+    getDoorArt: vi.fn(async () => ({ success: true, data: { sections: [] } })),
+    getDoorArtVariant: vi.fn(async () => ({ success: true, data: { content: '' } })),
     getMenuConfig: (k: string) => getMenuConfig(k),
     saveMenuConfig: (k: string, c: unknown) => saveMenuConfig(k, c),
     listMenuLogos: (k: string) => listMenuLogos(k),
     uploadMenuLogo: (k: string, f: string, b: string) => uploadMenuLogo(k, f, b),
     deleteMenuLogo: vi.fn(),
-    getScreenFile: vi.fn(),
+    getScreenFile: vi.fn(async () => ({ success: true, data: { content: '' } })),
   },
 }));
 vi.mock('../contexts/NotificationContext', () => ({
@@ -92,6 +94,23 @@ describe('door art in the door dialog', () => {
       { position: 'header', widthClass: 'standard', levelFloor: 0, rule: 'fixed', files: ['cat.txt'], afterSection: 0 },
     ]), { timeout: 4000 });
     expect(saveMenuConfig).toHaveBeenCalledWith('BULLETINS', expect.anything());
+  });
+
+  it('opens the editors from the Edit Door dialog without saving or closing it', async () => {
+    const user = userEvent.setup();
+    renderIn(<DoorsPage />);
+    await user.click(await screen.findByLabelText('Edit B'));
+
+    await user.click(await screen.findByRole('button', { name: 'Open in ANSI editor' }));
+    expect(await screen.findByRole('dialog', { name: 'Bulletins - Bulletins title' })).toBeTruthy();
+    expect(screen.getAllByText('Edit Door').length).toBeGreaterThan(0);
+    await user.keyboard('{Escape}');
+
+    await user.click(await screen.findByLabelText('Open cat.txt in the Screen Designer'));
+    expect(await screen.findByRole('dialog', { name: 'cat.txt' })).toBeTruthy();
+    expect(screen.getAllByText('Edit Door').length).toBeGreaterThan(0);
+    const { apiClient } = await import('../api/client');
+    expect(apiClient.updateDoor).not.toHaveBeenCalled();
   });
 
   it('is in the .info editor too: the Bulletins door shows its art and the BULLETINS logos there', async () => {
