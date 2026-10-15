@@ -2555,6 +2555,7 @@ console.error(`[executeNativeGccDoor] Process error: ${err.message}`);
 }
 
 async function executeAmigaDoor(socket: any, session: BBSSession, door: any, doorSession: DoorSession) {
+  menuTail.takeMenuExit(session);   // a pick armed by an earlier run that never reached its tail is stale
   const __doorT0 = Date.now();
   (session as any).__doorT0 = __doorT0;
 console.log(`[TIMING] executeAmigaDoor ENTRY door=${door.name} t=0ms`);
@@ -3322,6 +3323,9 @@ console.warn('[executeAmigaDoor] sysop page-wait flow failed:', err);
     // A bulletin that paused owns the screen until it is answered; a parked reopen owns what comes next.
     if (menuExit.show) await menuTail.showBulletinThenReopen(socket, session, menuExit.show);
     if (!menuTail.hasParkedDoor(session) && !menuExit.show) await applyPostDoorMenuAction(socket, session);
+    } catch (tailError) {
+      menuTail.clearParkedDoors(session);   // a failed tail must not leave a door parked for the next exit to run
+      throw tailError;
     } finally {
       menuTail.leaveExitTail(session);
     }
@@ -3329,6 +3333,7 @@ console.warn('[executeAmigaDoor] sysop page-wait flow failed:', err);
 
   } catch (error) {
 console.error(`[executeAmigaDoor] Error executing Amiga door:`, error);
+    menuTail.takeMenuExit(session);   // whatever the door armed before it failed must not run at the next exit
     // runDoor reports nothing when a door fails (express.e:4336-4343); logged above.
     session.inDoorManager = false;
     session.mouseEventsEnabled = false; // Reset mouse events when door exits

@@ -42,6 +42,8 @@ export function parkDoor(session: object, command: string): void {
   if (!q.includes(command)) q.push(command);
   parked.set(session, q);
 }
+/** Forget every parked door: a failed tail or relaunch must not leave one for an unrelated door's exit to run. */
+export function clearParkedDoors(session: object): void { parked.delete(session); }
 export function hasParkedDoor(session: object): boolean { return (parked.get(session)?.length ?? 0) > 0; }
 export function markMenuDoorDismissed(session: object): void { dismissed.add(session); }
 export function takeMenuDoorDismissed(session: object): boolean { const had = dismissed.has(session); dismissed.delete(session); return had; }
@@ -65,6 +67,9 @@ export async function drainParkedDoors(socket: unknown, session: BBSSession): Pr
       if (theCallerIsLeaving(session)) { parked.delete(session); break; }
       await processCommand(socket as never, session, next, '');
     }
+  } catch (err) {
+    clearParkedDoors(session);
+    throw err;
   } finally {
     draining.delete(session);
   }
@@ -80,7 +85,12 @@ export async function showBulletinThenReopen(socket: unknown, session: BBSSessio
   // eslint-disable-next-line @typescript-eslint/no-var-requires
   const { continueAfterScreen } = require('../screen.handler') as typeof import('../screen.handler');
   const wipe = readMenuConfig(boardRoot(), show.kind).config.wipes.leave;
-  await showBulletin(socket as never, session, Number(show.key), wipe);
+  try {
+    await showBulletin(socket as never, session, Number(show.key), wipe);
+  } catch (err) {
+    // The caller must not be left without a screen: B reopens even when the bulletin could not be shown.
+    console.warn('[menu-door-exit] bulletin could not be shown:', err);
+  }
   await continueAfterScreen(socket as never, session, async () => {
     parkDoor(session, show.command);
     await drainParkedDoors(socket, session);

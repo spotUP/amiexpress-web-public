@@ -5,8 +5,10 @@
 const launched: string[] = [];
 let depth = 0;
 let maxDepth = 0;
+const failOn = { command: '' };
 jest.mock('../../src/handlers/command.handler', () => ({
   processCommand: jest.fn(async (s: any, session: any, cmd: string) => {
+    if (cmd === failOn.command) throw new Error('door failed');
     depth++; maxDepth = Math.max(maxDepth, depth); launched.push(cmd);
     // a stand-in door: its exit tail parks the next relaunch, as the real tail does
     const exit = require('../../src/handlers/commands/menu-door-exit');
@@ -39,7 +41,7 @@ jest.mock('../../src/utils/board-root.util', () => ({ boardRoot: () => '/nowhere
 import * as exit from '../../src/handlers/commands/menu-door-exit';
 
 beforeEach(() => {
-  launched.length = 0; depth = 0; maxDepth = 0; screen.defer = false; screen.deferred = null; showBulletin.mockClear();
+  launched.length = 0; depth = 0; maxDepth = 0; screen.defer = false; screen.deferred = null; failOn.command = ''; showBulletin.mockReset(); showBulletin.mockResolvedValue(true);
 });
 
 test('five menu relaunches run one after another at the same depth', async () => {
@@ -100,4 +102,21 @@ test('a caller who is leaving gets no relaunch', async () => {
   expect(launched).toEqual([]);
   expect(exit.hasParkedDoor(session)).toBe(false);
   spy.mockRestore();
+});
+
+test('a relaunch that throws drops the rest of the parked queue, so the next unrelated exit starts clean', async () => {
+  const session: any = {};
+  failOn.command = 'MENU';
+  exit.parkDoor(session, 'MENU');
+  exit.parkDoor(session, 'B');
+  await expect(exit.drainParkedDoors({}, session)).rejects.toThrow('door failed');
+  expect(exit.hasParkedDoor(session)).toBe(false);
+  expect(exit.inExitTail(session)).toBe(false);
+});
+
+test('a bulletin that cannot be shown still reopens B, so the caller is not left without a screen', async () => {
+  const session: any = {};
+  showBulletin.mockRejectedValueOnce(new Error('unreadable'));
+  await exit.showBulletinThenReopen({}, session, { kind: 'BULLETINS', key: '3', command: 'B' });
+  expect(launched[0]).toBe('B');
 });

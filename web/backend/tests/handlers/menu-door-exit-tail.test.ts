@@ -46,6 +46,15 @@ jest.mock('../../src/amiga-emulation/xim/secret-input', () => {
   return { ...actual, inputForTrace: jest.fn(actual.inputForTrace), doorInputTraceLine: jest.fn(actual.doorInputTraceLine) };
 });
 
+const tailFault = { hasParkedThrows: false };
+jest.mock('../../src/handlers/commands/menu-door-exit', () => {
+  const actual = jest.requireActual('../../src/handlers/commands/menu-door-exit');
+  return { ...actual, hasParkedDoor: jest.fn((s: object) => {
+    if (tailFault.hasParkedThrows) { tailFault.hasParkedThrows = false; throw new Error('tail failed'); }
+    return actual.hasParkedDoor(s);
+  }) };
+});
+
 const order: string[] = [];
 jest.mock('../../src/handlers/command-handler/menu', () => ({
   ...jest.requireActual('../../src/handlers/command-handler/menu'),
@@ -89,7 +98,7 @@ describe('a menu door exit tail', () => {
     fs.mkdirSync(path.join(root, 'Doors', 'MAINMENU'), { recursive: true });
     fs.writeFileSync(path.join(root, 'Doors', 'MAINMENU', 'mainmenu'), Buffer.from([0x00, 0x00, 0x03, 0xf3]));
     order.length = 0; showBulletin.mockClear(); callersLog.mockClear();
-    fake.arm = () => undefined; fake.returnCommand = undefined;
+    fake.arm = () => undefined; fake.returnCommand = undefined; tailFault.hasParkedThrows = false;
     consoleLines = [];
     for (const m of ['log', 'warn', 'error', 'info', 'debug'] as const) {
       jest.spyOn(console, m).mockImplementation((...a: unknown[]) => { consoleLines.push(a.map(String).join(' ')); });
@@ -99,11 +108,14 @@ describe('a menu door exit tail', () => {
   afterEach(() => { jest.restoreAllMocks(); fs.rmSync(root, { recursive: true, force: true }); });
 
   async function runMenuDoor(command = 'MENU'): Promise<any> {
-    const session: any = {
+    return runMenuDoorWith({}, command);
+  }
+  async function runMenuDoorWith(base: any, command: string): Promise<any> {
+    const session: any = Object.assign(base, {
       state: BBSState.LOGGEDON, subState: LoggedOnSubState.PROCESS_COMMAND, nodeId: 1, currentConf: 1,
       screenWidth: 80, tempData: {}, commandHistory: ['M'],
       user: { id: 1, username: 'CALLER', secLevel: 100, slotNumber: 1, confAccess: 'X'.repeat(25) },
-    };
+    });
     const door = {
       id: 'mainmenu', name: 'MAINMENU', description: '', command, path: 'Doors/MAINMENU/mainmenu',
       accessLevel: 0, enabled: true, type: 'FIM',
@@ -156,6 +168,32 @@ describe('a menu door exit tail', () => {
     expect(showBulletin.mock.calls[0][2]).toBe(3);
     expect(order).toEqual(['bulletin']);
     expect(processSpy.mock.calls.map(c => c[2])).toContain('B');
+  });
+
+  test('a stale armed pick is dropped when the next door starts: a non-menu door never runs it', async () => {
+    const stale: any = {};
+    menuExit.armMenuRun(stale, { text: 'STALE', runAs: 'typed' });
+    fake.arm = () => undefined;
+    // the same session object is the one the next door runs with
+    const session: any = await runMenuDoorWith(stale, 'W');
+    expect(processSpy).not.toHaveBeenCalled();
+    expect(menuExit.takeMenuExit(session)).toEqual({});
+  });
+
+  test('a menu door that arms a pick and then fails leaves nothing armed for the next door', async () => {
+    const s: any = { };
+    fake.arm = x => { menuExit.armMenuRun(x, { text: 'M', runAs: 'typed' }); throw new Error('door crashed'); };
+    await runMenuDoorWith(s, 'MENU');
+    expect(menuExit.takeMenuExit(s)).toEqual({});
+  });
+
+  test('a tail that throws after a door was parked leaves no parked door behind', async () => {
+    const s: any = {};
+    fake.arm = x => menuExit.armMenuRun(x, { text: 'M', runAs: 'typed' });
+    processSpy.mockImplementation(async (_so: unknown, sess: any) => { menuExit.parkDoor(sess, 'MENU'); return 'SUCCESS'; });
+    tailFault.hasParkedThrows = true;
+    await runMenuDoorWith(s, 'MENU');
+    expect(menuExit.hasParkedDoor(s)).toBe(false);
   });
 
   describe('the picked line is withheld from every sink', () => {
