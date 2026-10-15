@@ -34,8 +34,18 @@ typedef struct menudoor_spec {
 
 /** The door's main(): returns the exit code. */
 int menudoor_run(const menudoor_spec *spec, int node);
+/**
+ * The door's main() when ONE binary is registered under two names (plan Decision 23): opens the board once, asks which
+ * registration the caller used, and runs the settings screen when it is `settings_name` (0 = this door has none),
+ * the menu otherwise.
+ */
+int menudoor_main(const menudoor_spec *spec, const char *settings_name, int node);
 /** The MENUSETTINGS screen (plan Decision 23): scroll, pages, or the board's default. */
 int menudoor_settings_run(int node);
+
+/** What the key bar says about Esc inside a second-level list: it goes back up, not out to the prompt. */
+#define MENUDOOR_CHILD_KEYBAR_WIDE   "Arrows Move  Enter Run  Esc Back"
+#define MENUDOOR_CHILD_KEYBAR_NARROW "Enter Run  Esc Back"
 
 /* For the activate / typed callbacks. */
 const ae_menu_entry *menudoor_entry(struct menudoor *d, int entry);

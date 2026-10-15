@@ -13,7 +13,14 @@
 
 /* The AEDoor field round trip has no host backend: a stand-in board that answers no session field, so the
    door sees the 80x25 defaults and the board's own screen answers (AEW_SCREEN) decide the rest. */
-int ae_field_read(int field, char *out, int cap) { (void)field; if (cap > 0) out[0] = '\0'; return 0; }
+static const char *invoked_name = "";
+int ae_field_read(int field, char *out, int cap)
+{
+    int n = (field == 605) ? (int)strlen(invoked_name) : 0;      /* AE_FIELD_MENU_COMMAND: the registration used */
+    if (n > cap - 1) n = cap - 1;
+    if (cap > 0) { memcpy(out, invoked_name, (size_t)n); out[n] = '\0'; }
+    return n;
+}
 int ae_field_write(int field, const char *value) { (void)field; (void)value; return 0; }
 int ae_query_bit(int acs) { (void)acs; return 1; }
 
@@ -201,6 +208,7 @@ static char screen_text[65536];
 static int (*door)(void);
 static int run_menu(void) { return menudoor_run(&SPEC, 1); }
 static int run_settings(void) { return menudoor_settings_run(1); }
+static int run_main(void) { return menudoor_main(&SPEC, "MENUSETTINGS", 1); }
 
 static int drive(const char *keys, size_t key_len)
 {
@@ -365,6 +373,63 @@ static void a_silent_board_runs_the_fallback_and_draws_nothing(void)
     printf("  [OK] a silent board runs the fallback command and draws nothing\n");
 }
 
+static const char *CATALOGUE_WITH_LIST =
+    "AEMENU 1\nK MAIN\t-\nT MAIN MENU\nP Go: \nO scroll\nW -\t-\t-\nR 0\nS Messages\n"
+    "E R\tRead Mail\tRead your mail\t\tL\nE E\tEnter Message\tWrite a message\t\t\n.\n";
+
+static void the_key_bar_says_what_escape_does_at_each_depth(void)
+{
+    const char *top, *child;
+    write_catalogue(CATALOGUE_WITH_LIST);
+    mouse_queue = 0; silent_board = 0;
+    assert(DRIVE("\r\x1bz\r") == 0);              /* Enter opens the list, Esc goes back up, a typed line leaves */
+    top = strstr(screen_text, "Esc Prompt");
+    child = strstr(screen_text, "Esc Back");
+    assert(top && child && top < child);            /* the top level leaves to the prompt; the list says Back */
+    assert(strstr(child + 1, "Esc Prompt"));         /* and the parent's bar is drawn again after Esc */
+    assert(strstr(MENUDOOR_CHILD_KEYBAR_NARROW, "Esc Back"));
+    write_catalogue(CATALOGUE);
+    printf("  [OK] the key bar says Esc leaves at the top and goes back in a list\n");
+}
+
+static void a_one_row_terminal_puts_the_settings_status_on_row_one(void)
+{
+    const char *p;
+    mouse_queue = 0; silent_board = 0; size_reply = "80\t1";
+    door = run_settings;
+    assert(DRIVE("\x1b") == 0);
+    door = run_menu;
+    size_reply = "80\t25";
+    for (p = screen_text; (p = strstr(p, "\x1b[")) != 0; p += 2) {
+        int r = 0, c = 0, n = 0;
+        if (sscanf(p + 2, "%d;%d%n", &r, &c, &n) == 2 && p[2 + n] == 'H') assert(r >= 1);
+    }
+    printf("  [OK] a one-row terminal never gets a cursor at row 0 on the settings screen\n");
+}
+
+static void one_binary_runs_the_settings_under_its_second_name_and_the_menu_otherwise(void)
+{
+    write_catalogue(CATALOGUE);
+    mouse_queue = 0; silent_board = 0;
+    door = run_main;
+
+    invoked_name = "MENUSETTINGS";
+    assert(DRIVE("\x1b") == 0);
+    assert(strstr(requests, "OVERFLOW?|") && !strstr(requests, "OPEN"));
+    assert(strstr(screen_text, "LONG MENUS"));
+
+    invoked_name = "MENU";
+    assert(DRIVE("\x1b") == 0);
+    assert(strstr(requests, "OPEN MAIN|") && !strstr(screen_text, "LONG MENUS"));
+
+    invoked_name = "";                                /* a board that does not say: the menu, never the settings */
+    assert(DRIVE("\x1b") == 0);
+    assert(strstr(requests, "OPEN MAIN|") && !strstr(screen_text, "LONG MENUS"));
+
+    door = run_menu;
+    printf("  [OK] one binary: settings under its second name, the menu under any other\n");
+}
+
 int main(void)
 {
     ae_native_set_exchange(board, 0);
@@ -382,6 +447,9 @@ int main(void)
     no_screen_draws_outside_its_box_however_short();
     the_settings_screen_asks_without_opening_a_catalogue();
     a_silent_board_runs_the_fallback_and_draws_nothing();
+    the_key_bar_says_what_escape_does_at_each_depth();
+    a_one_row_terminal_puts_the_settings_status_on_row_one();
+    one_binary_runs_the_settings_under_its_second_name_and_the_menu_otherwise();
     remove(CAT_PATH); remove("build/test_menudoor_keys.bin"); remove("build/test_menudoor_screen.bin");
     puts("test_menudoor_model: OK");
     return 0;

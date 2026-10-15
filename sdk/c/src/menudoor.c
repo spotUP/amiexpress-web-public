@@ -221,7 +221,10 @@ static void draw_prompt(struct menudoor *d)
     ui_screen *sc = &d->screen;
     const menudoor_spec *spec = d->spec;
     char line[TYPED_MAX + 80];
-    const char *bar = sc->cols >= 80 ? spec->keybar_wide : spec->keybar_narrow;
+    int wide = sc->cols >= 80;
+    /* Esc leaves to the prompt at the top and goes up a level in a child list: the bar says which. */
+    const char *bar = d->depth > 0 ? (wide ? MENUDOOR_CHILD_KEYBAR_WIDE : MENUDOOR_CHILD_KEYBAR_NARROW)
+                                   : (wide ? spec->keybar_wide : spec->keybar_narrow);
     int row = lv->lay.prompt_row, room = sc->cols - 1, plen, blen;
 
     line[0] = '\0';
@@ -557,15 +560,11 @@ static void start_screen(struct menudoor *d, ae_session *session)
     d->pushback = -1;
 }
 
-int menudoor_run(const menudoor_spec *spec, int node)
+static int run_menu_started(struct menudoor *d, ae_session *session, const menudoor_spec *spec)
 {
-    static ae_session session;
-    struct menudoor *d = &shell;
     level *top;
     int rc;
 
-    if (!spec || !spec->kind) return 20;
-    if ((rc = begin(d, &session, node)) != 0) return rc;
     d->spec = spec;
     top = &d->lv[0];
 
@@ -577,7 +576,7 @@ int menudoor_run(const menudoor_spec *spec, int node)
         return 0;
     }
 
-    start_screen(d, &session);
+    start_screen(d, session);
     set_title(d, top->menu.title);
     configure(d, top, top->menu.last_row);
     show_frame(d, top->menu.wipe_open, 0);
@@ -594,6 +593,17 @@ int menudoor_run(const menudoor_spec *spec, int node)
     ui_screen_close(&d->screen);
     ae_shutdown();
     return 0;
+}
+
+int menudoor_run(const menudoor_spec *spec, int node)
+{
+    static ae_session session;
+    struct menudoor *d = &shell;
+    int rc;
+
+    if (!spec || !spec->kind) return 20;
+    if ((rc = begin(d, &session, node)) != 0) return rc;
+    return run_menu_started(d, &session, spec);
 }
 
 /* --------------------------------------------------------------- settings */
@@ -626,18 +636,15 @@ static void settings_read(void)
     settings_rows();
 }
 
-int menudoor_settings_run(int node)
+static int run_settings_started(struct menudoor *d, ae_session *session)
 {
-    static ae_session session;
     static const char *const MODE[3] = { "scroll", "pages", "default" };
-    struct menudoor *d = &shell;
     ui_screen *sc;
     ui_list list;
-    int rc, key, status_row;
+    int key, status_row;
 
-    if ((rc = begin(d, &session, node)) != 0) return rc;
     d->spec = 0;
-    start_screen(d, &session);
+    start_screen(d, session);
     sc = &d->screen;
     strcpy(d->title, "LONG MENUS");
     settings_read();
@@ -650,7 +657,7 @@ int menudoor_settings_run(int node)
     list.selected_fg = UI_TOKEN(UI_T_SELECTION_INK); list.selected_bg = UI_TOKEN(UI_T_SELECTION_BG);
     list.ground = ground(d);
     ui_list_select(&list, settings_stored);
-    status_row = sc->rows - 1;
+    status_row = sc->rows > 1 ? sc->rows - 1 : 1;            /* a one-row terminal: never row 0 */
 
     ansi_clear_ground(&sc->buf, UI_TOKEN(UI_T_INK), ground(d));
     ui_masthead_draw_tick(&sc->buf, 1, 1, sc->cols, d->title, d->rail, UI_TOKEN(UI_T_BAR_INK), UI_TOKEN(UI_T_BAR), 0);
@@ -678,4 +685,29 @@ int menudoor_settings_run(int node)
     ui_screen_close(sc);
     ae_shutdown();
     return 0;
+}
+
+int menudoor_settings_run(int node)
+{
+    static ae_session session;
+    struct menudoor *d = &shell;
+    int rc;
+
+    if ((rc = begin(d, &session, node)) != 0) return rc;
+    return run_settings_started(d, &session);
+}
+
+int menudoor_main(const menudoor_spec *spec, const char *settings_name, int node)
+{
+    static ae_session session;
+    struct menudoor *d = &shell;
+    char invoked[24];
+    int rc;
+
+    if (!spec || !spec->kind) return 20;
+    if ((rc = begin(d, &session, node)) != 0) return rc;
+    invoked[0] = '\0';
+    if (settings_name && ae_menu_command(&session, invoked, (int)sizeof invoked) > 0 && strcmp(invoked, settings_name) == 0)
+        return run_settings_started(d, &session);
+    return run_menu_started(d, &session, spec);
 }
