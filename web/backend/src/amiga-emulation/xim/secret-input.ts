@@ -60,3 +60,21 @@ export function setMenuDoorSession(session: object | null | undefined, on: boole
 export function isMenuDoorSession(session: object | null | undefined): boolean {
   return !!session && menuDoor.has(session);
 }
+
+/**
+ * An SDK door (one that speaks AEW_MENU or AEW_SCREEN) decodes the board's own
+ * navigation bytes for Home, End, Page Up and Page Down (xim/types.ts
+ * NavigationKeyCodes). A classic door has no use for them and keeps getting
+ * nothing for those keys, exactly as before. Set when the door first speaks
+ * AEW_MENU or AEW_SCREEN (XIMProtocol), cleared when the door session ends.
+ */
+const sdkDoor = new WeakSet<object>();
+
+export function setSdkDoorSession(session: object | null | undefined, on: boolean): void {
+  if (!session) return;
+  if (on) sdkDoor.add(session); else sdkDoor.delete(session);
+}
+
+export function isSdkDoorSession(session: object | null | undefined): boolean {
+  return !!session && sdkDoor.has(session);
+}

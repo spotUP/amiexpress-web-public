@@ -21,8 +21,8 @@ import { Socket } from 'socket.io';
 import { XIMCommand, BBSSessionData, XIMState, XIMMessage, isCommandInfoRequestCommand } from './xim/types';
 import { DoorConstants } from './DoorTypes';
 import { XIMMessageParser } from './xim/messages';
-import { loggableXimString } from './xim/redact';
-import { isMenuDoorSession, setMenuDoorSession } from './xim/secret-input';
+import { loggableXimString, logXimString, TEXT_WITHHELD } from './xim/redact';
+import { inputForTrace, isMenuDoorSession, setMenuDoorSession, setSdkDoorSession } from './xim/secret-input';
 import { DEFAULT_PAUSE_LINES } from '../screens/screen-rows';
 import { XIMIOHandler } from './xim/io';
 import { XIMDataQueryHandler } from './xim/data-query';
@@ -36,7 +36,7 @@ import type { BBSSession } from '../index';
 import { ximDebugLogger } from './xim/debug-logger';
 import { getDoorLogger, DoorLogger } from './DoorLogger';
 import { ximLogger } from '../utils/XIMLogger';
-import { debugLog } from '../utils/debug-log';
+import { debugLog, isDebugEnabled } from '../utils/debug-log';
 import * as amigafs from '../utils/amigafs';
 import { debugRegistry } from '../debug/DebugRegistry';
 import * as net from 'net';
@@ -334,7 +334,7 @@ debugLog(`[XIMProtocol] Updating port address from 0x${this.doorPort.toString(16
    * The door's next GetMsg() call will receive the keystroke.
    */
   injectInputToNativeDoor(keyChar: string): void {
-console.log(`[XIMProtocol] injectInputToNativeDoor CALLED with '${keyChar}' (0x${keyChar.charCodeAt(0).toString(16)}) registered=${this.state.registered} doorPort=0x${this.doorPort.toString(16)}`);
+console.log(`[XIMProtocol] injectInputToNativeDoor CALLED registered=${this.state.registered} doorPort=0x${this.doorPort.toString(16)}`);
     if (!this.state.registered) {
 console.log('[XIMProtocol] Cannot inject input - door not registered');
 debugLog('[XIMProtocol] Cannot inject input - door not registered');
@@ -347,8 +347,8 @@ debugLog('[XIMProtocol] Cannot inject input - no door port address');
       return;
     }
 
-console.log(`[XIMProtocol] Injecting input '${keyChar}' (0x${keyChar.charCodeAt(0).toString(16)}) to AEDoorPort 0x${this.doorPort.toString(16)}`);
-debugLog(`[XIMProtocol] Injecting input '${keyChar}' (0x${keyChar.charCodeAt(0).toString(16)}) to AEDoorPort 0x${this.doorPort.toString(16)}`);
+console.log(`[XIMProtocol] Injecting input to AEDoorPort 0x${this.doorPort.toString(16)}`);
+debugLog(`[XIMProtocol] Injecting input ${inputForTrace(this.bbsSession, `'${keyChar}' (0x${keyChar.charCodeAt(0).toString(16)})`, (t) => t)} to AEDoorPort 0x${this.doorPort.toString(16)}`);
 
     // Allocate memory for jhMessage structure
     const MEMF_PUBLIC_CLEAR = 0x10001;
@@ -400,7 +400,7 @@ debugLog(`[XIMProtocol] Allocated message at 0x${msgAddr.toString(16)}`);
       type: 'JH_HK',
       typeCode: XIMCommand.JH_HK,
       param: keyCode,
-      data: keyChar,
+      data: inputForTrace(this.bbsSession, keyChar, (k) => (isDebugEnabled() ? k : TEXT_WITHHELD)),
     }, {
       msgAddr: `0x${msgAddr.toString(16)}`,
       message: 'Injected input to native door via PutMsg',
@@ -539,7 +539,7 @@ debugLog('[XIMProtocol] Discovered door reply port: 0x' + msg.replyPort.toString
 
     const humanName = this.messageParser.getCommandName(msg.command);
     // What every log below says the String was: a password is withheld (redact.ts).
-    const logged = loggableXimString(msg.command, msg.data, msg.string, isMenuDoorSession(this.bbsSession));
+    const logged = logXimString(msg.command, msg.data, msg.string, isMenuDoorSession(this.bbsSession));
     console.log(`[XIMProtocol] handleMessage: cmd=${msg.command} (${humanName}) usedXimInput=${this.state.usedXimInput} string="${logged.substring(0, 50)}"`);
 
     // Push onto the live debug ring buffer (dev-only, no-op in production).
@@ -1092,6 +1092,7 @@ debugLog(`[XIMProtocol]   Wrote tooltype value="${tooltypeValue}", StringPtr not
 
       /** AEW_SCREEN (10800): size, wipes, mouse - xim/board-screen.ts. */
       case XIMCommand.AEW_SCREEN: {
+        setSdkDoorSession(this.bbsSession, true);   // an SDK door decodes Home/End/Page keys (xim/secret-input.ts)
         let answer = '';
         try {
           answer = await boardScreenAnswer(String(msg.string || ''), {
@@ -1114,6 +1115,7 @@ debugLog(`[XIMProtocol]   Wrote tooltype value="${tooltypeValue}", StringPtr not
       case XIMCommand.AEW_MENU: {
         // From here on the door's screen writes carry the caller's typed line: no log may show them.
         setMenuDoorSession(this.bbsSession, true);
+        setSdkDoorSession(this.bbsSession, true);
         let answer = '';
         try {
           answer = await menuAnswer(String(msg.string || ''), {

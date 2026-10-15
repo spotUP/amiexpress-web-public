@@ -7,7 +7,7 @@
 import { MoiraEmulator } from "../cpu/MoiraEmulator";
 import { DoorConstants } from "../DoorTypes";
 import { XIMMessage, XIMCommand } from "./types";
-import { loggableXimString, mayDumpRawString } from "./redact";
+import { logXimString, mayDumpRawStringFor } from "./redact";
 
 export class XIMMessageParser {
   private emulator: MoiraEmulator;
@@ -112,7 +112,7 @@ export class XIMMessageParser {
 
     // DEBUG: Dump raw bytes at string offset to trace "D" issue
     // A password is in this String for two commands: never dump its bytes.
-    if (mayDumpRawString(command)) {
+    if (mayDumpRawStringFor(command, this.withholdScreenWrites())) {
       const strBytes: number[] = [];
       for (let i = 0; i < 16; i++) {
         strBytes.push(this.emulator.readMemory(stringAddr + i) & 0xff);
@@ -155,7 +155,7 @@ console.log(`  Signal: ${signal}, Task: 0x${task.toString(16)}`);
 console.log(`  Semi: ${this.formatHex(semaphore)}`);
 console.log(`  Filler1: ${this.formatHex(filler1)}, Filler2: ${this.formatHex(filler2)}`);
 console.log(`  StrPtr: ${this.formatHex(stringPtr)}, Filler3: ${this.formatHex(filler3)}`);
-console.log(`  String: "${loggableXimString(command, data, messageString, this.withholdScreenWrites())}"`);
+console.log(`  String: "${logXimString(command, data, messageString, this.withholdScreenWrites())}"`);
     if (layout === 'short') {
       const dumpBase = msgAddr + offsets.data;
       const raw: number[] = [];
