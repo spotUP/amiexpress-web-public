@@ -180,9 +180,9 @@
   ],
   "bytes": 1287,
   "sha256": "a1e50298ce14b082c96733ee5aec35014f726859b3a780ba7750984d3f078d2f",
-  "harness": "printf '%s\\n' '3000 \\r' '6000 \\r' '9000 q\\r' | npx tsx src/scripts/run-amiga-door.ts $REPO/Doors/EmP_Tools/Bulls 1 --doortype XIM --command B --timeout 25 > b.ans",
+  "harness": "printf '%s\\n' '3000 \\r' '6000 \\r' '9000 q\\r' | npx tsx src/scripts/run-amiga-door.ts $REPO/Doors/EmP_Tools/Bulls 1 --doortype XIM --command BULLS --timeout 25 > b.ans",
   "cwd": "web/backend",
-  "installed": "B",
+  "installed": "BULLS",
   "notes": "Bulls 2.2 (EMPiRE), the board's B command. Cursor-addressed menu (ESC[H ESC[9B, ESC[59C) over a five-row ASCII logo; the six bulletin entries are three-column rows that split into two 40-column rows each. Marked C64_ADAPT=40 on 2026-09-03."
  },
  "j": {

@@ -5,7 +5,7 @@
  *   npx tsx --tsconfig web/backend/tsconfig.json \
  *     web/backend/src/scripts/register-menu-doors.ts --root . --only bulls
  *
- * Steps are added by the tasks that own them (bulls: M18).
+ * Steps are added by the tasks that own them (bulls: M18, menu: M19, bulletins: M20).
  */
 import * as fs from 'fs';
 import * as path from 'path';
@@ -72,6 +72,30 @@ export const STEPS: Record<string, Step> = {
       STACK: '8192',
       DESCRIPTION: 'The main menu',
     });
+  },
+  // B is the bulletins door (M20). Unlike a new registration, B.info already exists on
+  // every board and is a binary Workbench icon with sysop-owned tooltypes, so it is
+  // edited ONLY through applyTooltypes (icon image and every other tooltype kept),
+  // never rewritten by writeNewDoorRegistration. The new door is native at forty
+  // columns, so the frame adapter tooltypes go. A rerun changes nothing.
+  bulletins: (root) => {
+    const infoPath = path.join(root, 'Commands', 'BBSCmd', 'B.info');
+    if (!fs.existsSync(infoPath)) {
+      writeNewDoorRegistration(root, {
+        door_command: 'B',
+        door_type: 'XIM',
+        door_path: 'Doors/BULLETINS/bulletins',
+        min_security_level: 1,
+      });
+    }
+    applyTooltypes(infoPath, Object.entries({
+      LOCATION: 'Doors/BULLETINS/bulletins',
+      FALLBACK: 'BULLS',
+      MIN_COLUMNS: '40',
+      MULTINODE: 'YES',
+      STACK: '8192',
+    }), { removeKeys: (k) => k === 'C64_ADAPT' || k === 'REDACTED' });
+    return infoPath;
   },
 };
 
