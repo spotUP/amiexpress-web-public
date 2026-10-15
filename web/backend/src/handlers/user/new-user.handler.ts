@@ -12,6 +12,7 @@
  * - Summary and confirmation
  */
 
+import { issueResumeTokenForLogin } from '../../server/resume-tokens';
 import { linesCountdown, LINES_PROMPT } from '../../utils/lines-test.util';
 import { Socket } from 'socket.io';
 import { autoLinesFor } from '../../utils/auto-lines.util';
@@ -995,7 +996,9 @@ async function enterBoard(socket: Socket, session: any): Promise<void> {
   // leave the caller - and the browser learns it is logged on only now.
   session.state = BBSState.LOGGEDON;
   session.subState = LoggedOnSubState.DISPLAY_BULL;
+  const resumeToken = issueResumeTokenForLogin(session, String(newUser.id));
   socket.emit('login-success', {
+    resumeToken,
     user: {
       id: newUser.id,
       username: newUser.username,

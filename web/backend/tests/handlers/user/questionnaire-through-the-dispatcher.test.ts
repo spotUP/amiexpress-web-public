@@ -221,3 +221,28 @@ test('a CENTRAL_ANSWERS node files the answers under the account\'s own slot', a
   expect(fs.readFileSync(filed, 'latin1')).toMatch(/\[9\] newbie/);
   expect(fs.existsSync(path.join(root, 'Answers', '1'))).toBe(false);
 });
+
+test('a freshly registered caller gets a resume token for THIS session, and it reaches no console sink', async () => {
+  const { lookupResumeToken, tokenFingerprint } = require('../../../src/server/resume-tokens');
+  const lines: string[] = [];
+  const spies = (['log', 'info', 'warn', 'error'] as const).map((m) =>
+    jest.spyOn(console, m).mockImplementation((...a: unknown[]) => { lines.push(a.map(String).join(' ')); }));
+  const socket = makeSocket();
+  const session = makeSession();
+  try {
+    await key(socket, session, 'Y');
+    await type(socket, session, 'Spot Up');
+    await type(socket, session, 'a friend');
+    await type(socket, session, 'Y');
+  } finally { spies.forEach((sp) => sp.mockRestore()); }
+
+  const success = socket._emits.find((e: any) => e.event === 'login-success');
+  const token = success.payload.resumeToken;
+  expect(typeof token).toBe('string');
+  const found = lookupResumeToken(token);
+  expect(found.ok && found.bound.session).toBe(session);
+  expect(found.ok && found.bound.nodeId).toBe(1);
+  // The sink carried the fingerprint line, and the token itself is in none.
+  expect(lines.some((l) => l.includes(tokenFingerprint(token)))).toBe(true);
+  expect(lines.filter((l) => l.includes(token))).toEqual([]);
+});

@@ -18,7 +18,7 @@
 import type { BBSSession } from "../index";
 import { resolveCallerTheme } from '../screens/caller-theme';
 import { config } from '../config';
-import { issueResumeToken, tokenFingerprint } from "../server/resume-tokens";
+import { issueResumeTokenForLogin } from "../server/resume-tokens";
 import type { LoginEmitter } from "../types/login-emitter";
 import { BBSState, LoggedOnSubState } from "../constants/bbs-states";
 import { db } from "../database";
@@ -177,10 +177,8 @@ export async function runPostAuthLogin(
     try {
       const accessToken = await db.generateAccessToken(user);
       const refreshToken = await db.generateRefreshToken(user);
-      // Opens THIS session again after a dropped socket, and nothing else
-      // (server/resume-tokens.ts). Never logged: only its fingerprint is.
-      const resumeToken = issueResumeToken(session, String(user.id), session.nodeId ?? 0);
-      console.log(`[LOGIN] node ${session.nodeId ?? 0}: resume token issued (fingerprint ${tokenFingerprint(resumeToken)})`);
+      // Opens THIS session again after a dropped socket (server/resume-tokens.ts).
+      const resumeToken = issueResumeTokenForLogin(session, String(user.id));
       emitter.emit("login-success", {
         user: {
           id: user.id,

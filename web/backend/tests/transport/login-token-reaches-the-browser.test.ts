@@ -142,6 +142,14 @@ describe('the resume token a web caller needs to get a dropped session back', ()
     expect(found.ok && found.bound.nodeId).toBe(1);
   });
 
+  it('a session with no node gets no resume token, and the login still succeeds', async () => {
+    const sess = session('web'); sess.nodeId = 0;
+    const socket = await loginOn('web', sess);
+    const success = socket.emitted.find((e: any) => e.event === 'login-success');
+    expect(success).toBeDefined();
+    expect(success.data.resumeToken).toBeUndefined();
+  });
+
   it('a telnet caller gets no resume token (it has no reconnect path)', async () => {
     const socket = await loginOn('telnet');
     expect(JSON.stringify(socket.emitted)).not.toContain('resumeToken');
