@@ -9,6 +9,8 @@ import { MenuSectionsEditor } from '../components/menus/MenuSectionsEditor';
 import { MenuLevelsEditor } from '../components/menus/MenuLevelsEditor';
 import { MenuWipesCard } from '../components/menus/MenuWipesCard';
 import { MenuOverflowCard } from '../components/menus/MenuOverflowCard';
+import { MenuLogosEditor } from '../components/menus/MenuLogosEditor';
+import { MenuC64Builder } from '../components/menus/MenuC64Builder';
 import { MenuPreview } from '../components/menus/MenuPreview';
 
 const KIND_LABEL: Record<MenuKind, string> = { MAIN: 'Main menu', BULLETINS: 'Bulletins' };
@@ -29,9 +31,11 @@ function MenuKindPanel({ kind }: { kind: MenuKind }) {
   if (!config) return status ? <p className="text-sm text-status-danger">{status}</p> : <SkeletonRows rows={6} />;
 
   const parts: TabDefinition[] = [
-    { id: 'entries', label: 'Entries', render: () => <MenuEntriesEditor config={config} rows={rows} loading={rowsLoading} error={rowsError} onRetry={loadRows} update={update} /> },
+    { id: 'entries', label: kind === 'BULLETINS' ? 'Bulletins' : 'Entries', render: () => <MenuEntriesEditor kind={kind} config={config} rows={rows} loading={rowsLoading} error={rowsError} onRetry={loadRows} update={update} /> },
     { id: 'sections', label: 'Sections', render: () => <MenuSectionsEditor config={config} rows={rows} rowsReady={!rowsLoading && !rowsError} update={update} /> },
     { id: 'levels', label: 'Levels', render: () => <MenuLevelsEditor config={config} rows={rows} update={update} /> },
+    { id: 'logos', label: 'Logos', render: () => <MenuLogosEditor kind={kind} config={config} update={update} /> },
+    { id: 'c64', label: 'C64 menu', render: () => <MenuC64Builder config={config} rows={rows} update={update} /> },
     { id: 'wipes', label: 'Wipes', render: () => <MenuWipesCard config={config} update={update} /> },
     { id: 'overflow', label: 'Overflow', render: () => <MenuOverflowCard config={config} update={update} /> },
   ];

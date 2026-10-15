@@ -1,10 +1,11 @@
-import { DESCRIPTION_MAX, type MenuConfig } from '@bbs/screens/menu-config/menu-config';
+import { DESCRIPTION_MAX, type MenuConfig, type MenuKind } from '@bbs/screens/menu-config/menu-config';
 import { DataTable, type DataTableColumn } from '../ui/DataTable';
 import type { MenuEntryRow } from '../../api/client';
 import { setDescription, setLabel, setPlacement } from './menu-edit';
 import { INPUT_CLASS } from './menu-styles';
 
 interface Props {
+  kind: MenuKind;
   config: MenuConfig;
   rows: MenuEntryRow[];
   loading: boolean;
@@ -18,14 +19,16 @@ const SOURCE_WORDS: Record<MenuEntryRow['source'], string> = {
 };
 
 /** One row per command the kind can list. Empty text means "use the default shown as the placeholder". */
-export function MenuEntriesEditor({ config, rows, loading, error, onRetry, update }: Props) {
+export function MenuEntriesEditor({ kind, config, rows, loading, error, onRetry, update }: Props) {
+  // A bulletin has a title, not a label; the board's default comes from Bulls.CFG.
+  const word = kind === 'BULLETINS' ? 'Title' : 'Label';
   const columns: DataTableColumn<MenuEntryRow>[] = [
     { id: 'key', header: 'Key', value: r => r.key, mono: true },
     {
-      id: 'label', header: 'Label', sortable: false,
+      id: 'label', header: word, sortable: false,
       cell: r => (
         <input
-          aria-label={`Label for ${r.key}`}
+          aria-label={`${word} for ${r.key}`}
           className={INPUT_CLASS}
           value={config.labels[r.key] ?? ''}
           placeholder={r.label}
