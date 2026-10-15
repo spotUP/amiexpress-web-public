@@ -34,7 +34,9 @@ export function wrapLine(line: string, width: number): string[] {
     // Handle ANSI escape sequences (don't count toward visible width)
     if (line[i] === '\x1b') {
       const remainder = line.slice(i);
-      const escMatch = remainder.match(/^\x1b\[[0-9;]*[A-Za-z]/);
+      // The whole CSI grammar: parameter bytes (0x30-0x3F, so `?` of ESC[?25l), intermediates, a final byte.
+      // Other escapes are zero-width too: ESC 7, ESC 8, ESC c, a designation ESC ( B (intermediates, then a final byte).
+      const escMatch = remainder.match(/^\x1b(?:\[[0-?]*[ -/]*[@-~]|[ -/]*[0-Z\\-~])/);
       if (escMatch) {
         current += escMatch[0];
         i += escMatch[0].length;
@@ -52,19 +54,18 @@ export function wrapLine(line: string, width: number): string[] {
       current += line[i];
       visibleCount += tabWidth;
       i += 1;
-      if (visibleCount >= width) {
-        flushCurrent();
-      }
       continue;
     }
 
-    current += line[i];
-    visibleCount += 1;
-    i += 1;
-
+    // The wrap is LAZY: a full row is only broken when another visible character needs a place. A zero-width
+    // sequence after an exact fit (a key bar ending at the last column, then ESC[?25l) stays on that row; breaking
+    // before it scrolled a door's bottom row.
     if (visibleCount >= width) {
       flushCurrent();
     }
+    current += line[i];
+    visibleCount += 1;
+    i += 1;
   }
 
   if (current.length > 0 || segments.length === 0) {
