@@ -10,6 +10,7 @@ import { checkSecurity } from '../utils/acs.util';
 import { ACSPermission } from '../constants/acs-permissions';
 import express, { Request, Response, NextFunction } from 'express';
 import * as fsSync from 'fs';
+import { menuKindOfCommand } from '../screens/menu-config/menu-config';
 import { parseInfoFile, writeInfoFile } from '../utils/info-file.util';
 import { applyDoorFieldsToTooltypes, applyEnabledToTooltypes, findDoorInfoFile, doorDisplayName, isDoorEnabled, doorNormalAccessLevel, resolveRenamedInfoPath, DoorCommandRenameError } from '../services/config-services/door-info-file.service';
 import { doorDirectoryFor, hasAdminContent, readManifestFromDir, readDoorSettingsView, writeDoorSettings, UnknownDoorSettingError, readDoorArtSections, writeDoorArtSection, readDoorArtVariant, writeDoorArtVariant, listDoorArtSections, DoorSettingsPayloadSchema } from '../doors/door-settings.service';
@@ -647,7 +648,10 @@ console.log(`[DoorsAPI] getDoors() returned ${backendDoors.length} doors`);
           } catch {
             return false;
           }
-        })()
+        })(),
+        // Which menu this registered command IS the door of (MENU -> MAIN, B -> BULLETINS),
+        // so the Doors dialog can host that menu's logos without a second command table.
+        menu_kind: menuKindOfCommand(door.command)
       }));
 
 console.log(`[DoorsAPI] Sending ${frontendDoors.length} doors to frontend`);

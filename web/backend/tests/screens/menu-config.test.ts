@@ -1,4 +1,4 @@
-import { defaultMenuConfig, validateMenuConfig, levelEntry, widthClassOf, cleanText, MENU_KINDS, MENU_KIND_COMMAND } from '../../src/screens/menu-config/menu-config';
+import { defaultMenuConfig, validateMenuConfig, levelEntry, widthClassOf, cleanText, MENU_KINDS, MENU_KIND_COMMAND, menuKindOfCommand } from '../../src/screens/menu-config/menu-config';
 
 test('an absent config is the derived menu with the default wipes and overflow (Decisions 31, 33)', () => {
   const c = defaultMenuConfig('MAIN');
@@ -76,4 +76,12 @@ test('a second logo set for the same position, width class and level floor is dr
   const { config, problems } = validateMenuConfig('MAIN', { logos: [set(0), set(2), set(2, 10)] });
   expect(config.logos.map(l => [l.levelFloor, l.afterSection])).toEqual([[0, 0], [10, 2]]);
   expect(problems).toContain('logos: a second between set for standard at level 0 was dropped');
+});
+
+describe('menuKindOfCommand', () => {
+  it('names the kind whose door a command is, whatever its case, and null for any other door', () => {
+    expect(menuKindOfCommand('MENU')).toBe('MAIN');
+    expect(menuKindOfCommand('b')).toBe('BULLETINS');
+    expect(menuKindOfCommand('BULLS')).toBeNull();
+  });
 });

@@ -13,6 +13,11 @@ import { WIPE_CODES } from '../wipe-codes';
 export type MenuKind = 'MAIN' | 'BULLETINS';
 export const MENU_KINDS: readonly MenuKind[] = ['MAIN', 'BULLETINS'];
 export const MENU_KIND_COMMAND: Record<MenuKind, string> = { MAIN: 'MENU', BULLETINS: 'B' };
+/** The menu kind whose door a registered command is, or null for every other door. */
+export function menuKindOfCommand(command: string): MenuKind | null {
+  const upper = command.toUpperCase();
+  return MENU_KINDS.find(kind => MENU_KIND_COMMAND[kind] === upper) ?? null;
+}
 export type OverflowMode = 'scroll' | 'pages';
 export type WidthClass = 'c64' | 'standard' | 'wide';
 export type LogoPosition = 'header' | 'footer' | 'side' | 'between';
