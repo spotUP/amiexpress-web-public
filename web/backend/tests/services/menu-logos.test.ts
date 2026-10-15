@@ -65,5 +65,6 @@ test('a C64 logo crosses the transducer back into the same screen codes (Decisio
   const petscii = Buffer.from(new AnsiToPetsciiTransducer().transduce(ansi));
   expect(petscii.includes(0xa6)).toBe(true);
   expect(petscii.includes(0xb0)).toBe(true);
+  expect(petscii.includes(0x1e)).toBe(true);                              // cat.seq's green ($1E) comes back as the same colour byte
   expect(petscii.includes(0x3f)).toBe(false);                             // no '?': nothing was unmappable
 });

@@ -215,8 +215,8 @@ export function promptDebounceBlocks(session: BBSSession, force = false, now = D
  * The built-in menu prompt as text: `BBS [conf:name] Menu (n mins. left):` for
  * an 80-column caller, its 40-column form for a PETSCII one. AEW_MENU hands it
  * to the menu door (xim/menu.ts) so the door's prompt row is the board's.
- * A conference MENU_PROMPT tooltype is MCI and asynchronous: displayMenuPrompt
- * draws that one itself, so this answers the built-in form.
+ * A conference MENU_PROMPT tooltype is MCI and asynchronous: menuPromptTextAsync
+ * answers that one; this is the built-in form.
  */
 export function menuPromptText(session: BBSSession): string {
   const config = getConfig();
@@ -247,6 +247,18 @@ export function menuPromptText(session: BBSSession): string {
     },
     session
   );
+}
+
+/**
+ * The prompt the board would draw right now, as text: the conference's
+ * MENU_PROMPT tooltype through the MCI engine when it has one (express.e:28409-28412),
+ * else the built-in form. The menu door's prompt row is this, so it matches the board's.
+ */
+export async function menuPromptTextAsync(session: BBSSession): Promise<string> {
+  const custom = getConferenceToolFlags(session.relConfNum || 1).menuPrompt;
+  if (!custom || custom.length === 0) return menuPromptText(session);
+  try { return (await parseMciCodes(custom, session)).parsed + ' '; }
+  catch { return custom + ' '; }
 }
 
 export function displayMenuPrompt(socket: any, session: BBSSession, force = false) {
@@ -322,12 +334,9 @@ console.log('  - timeRemaining:', session.timeRemaining);
   const confToolFlags = getConferenceToolFlags(session.relConfNum || 1);
   if (confToolFlags.menuPrompt && confToolFlags.menuPrompt.length > 0) {
     emitText(socket, '\x1b[0m');
-    // parseMciCodes is async; resolve the parsed string and append ' ' (express.e:28412)
-    parseMciCodes(confToolFlags.menuPrompt, session).then((result) => {
-      emitPrompt(socket, recordPromptColumn(session as any, result.parsed + ' '));
-      emitText(socket, SAVE_CURSOR);
-    }).catch(() => {
-      emitPrompt(socket, recordPromptColumn(session as any, confToolFlags.menuPrompt + ' '));
+    // MCI is async; the parsed string plus ' ' (express.e:28412) - menuPromptTextAsync, shared with the menu door
+    menuPromptTextAsync(session).then((text) => {
+      emitPrompt(socket, recordPromptColumn(session as any, text));
       emitText(socket, SAVE_CURSOR);
     });
     return;

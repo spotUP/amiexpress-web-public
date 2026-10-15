@@ -1,4 +1,6 @@
 jest.mock('../../src/utils/acs-access-loader');
+const updateUser = jest.fn(async (..._a: unknown[]) => undefined);
+jest.mock('../../src/database', () => ({ ...jest.requireActual('../../src/database'), db: { updateUser: (...a: unknown[]) => updateUser(...a) } }));
 const permissionDenied = jest.fn();
 jest.mock('../../src/utils/error-handling.util', () => ({ ErrorHandler: { permissionDenied: (...a: unknown[]) => permissionDenied(...a) } }));
 import * as fs from 'fs';
@@ -73,7 +75,7 @@ test('RUN of a typed line runs as typed; a picked listed SysCmd runs as a SysCmd
 });
 
 test('a RUN line never reaches a log: the loggable form withholds it', () => {
-  expect(loggableXimString(XIMCommand.AEW_MENU, 1, 'RUN J 5 secretpass')).toBe('RUN [14 bytes withheld]');
+  expect(loggableXimString(XIMCommand.AEW_MENU, 1, 'RUN J 5 secretpass')).toBe('RUN [withheld]');
   expect(loggableXimString(XIMCommand.AEW_MENU, 1, 'OPEN MAIN')).toBe('OPEN MAIN');
 });
 
@@ -122,4 +124,26 @@ test('RUN of a listed entry runs its runText, which may differ from its key (J\'
     expect(await menuAnswer('RUN 3.2', ctx(s))).toBe('OK');
     expect(takeMenuExit(s).run).toEqual({ text: 'J 3.2', runAs: 'typed' });
   } finally { registerMenuSource(original); }
+});
+
+test('a failed write leaves the caller\'s choice in memory as it was', async () => {
+  updateUser.mockImplementationOnce(() => Promise.reject(new Error('disk full')));
+  try {
+    const s = session({ user: { ...session().user, menuOverflow: 'scroll' } });
+    await menuAnswer('OPEN MAIN', ctx(s));
+    await expect(menuAnswer('OVERFLOW pages', ctx(s))).rejects.toThrow('disk full');
+    expect(s.user.menuOverflow).toBe('scroll');
+  } finally { updateUser.mockReset(); updateUser.mockImplementation(async () => undefined); }
+});
+
+test('OVERFLOW and OPEN resolve the effective mode by the one rule (a level-based board default applies to both)', async () => {
+  fs.mkdirSync(path.join(root, 'Menus'), { recursive: true });
+  fs.writeFileSync(path.join(root, 'Menus/MAIN.json'), JSON.stringify({ overflow: { standard: { '0': 'scroll', '100': 'pages' } } }));
+  try {
+    const s = session({ user: { ...session().user, secLevel: 150 } });
+    await menuAnswer('OPEN MAIN', ctx(s));
+    expect(lastCatalogueOf(s, 'MAIN')!.overflow).toBe('pages');
+    expect(await menuAnswer('OVERFLOW default', ctx(s))).toBe('OK\tpages');
+    expect(await menuAnswer('OVERFLOW scroll', ctx(s))).toBe('OK\tscroll');
+  } finally { fs.rmSync(path.join(root, 'Menus'), { recursive: true, force: true }); }
 });

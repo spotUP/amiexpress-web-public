@@ -17,7 +17,7 @@ export function loggableXimString(command: number, data: number, text: string | 
   if (command === XIMCommand.AEW_USERFIELD && /^(PASSWORD|SET 6)\b/.test(s)) return 'PASSWORD [withheld]';
   // AEW_MENU RUN carries a typed command line, which can carry a password (a
   // conference or command password typed as a parameter) - never logged.
-  if (command === XIMCommand.AEW_MENU && /^RUN\b/.test(s)) return `RUN [${Math.max(0, s.length - 4)} bytes withheld]`;
+  if (command === XIMCommand.AEW_MENU && /^RUN\b/.test(s)) return 'RUN [withheld]';   // not even the length: a short line is a short password
   return s;
 }
 

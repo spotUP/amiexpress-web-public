@@ -8,16 +8,16 @@
  * fallback (Menu.txt for MAIN via the board, BULLS for B - M18).
  */
 import { menuSourceFor } from '../../services/menu-catalogue/registry';
-import { buildCatalogue } from '../../services/menu-catalogue/build';
+import { buildCatalogue, effectiveOverflow } from '../../services/menu-catalogue/build';
 import { writeCatalogueFile } from '../../services/menu-catalogue/catalogue-file';
 import { menuCallerFromSession } from '../../services/menu-catalogue/caller';
 import { chooseLogos, renderLogoAt } from '../../services/menu-catalogue/logos';
 import type { Catalogue } from '../../services/menu-catalogue/types';
 import { readMenuConfig } from '../../services/menu-config.service';
-import { levelEntry, widthClassOf, MENU_KIND_COMMAND, type MenuKind } from '../../screens/menu-config/menu-config';
+import { MENU_KIND_COMMAND, type MenuKind, type OverflowMode } from '../../screens/menu-config/menu-config';
 import { ErrorHandler } from '../../utils/error-handling.util';
 import { boardRoot } from '../../utils/board-root.util';
-import { menuPromptText } from '../../handlers/command-handler/menu';
+import { menuPromptTextAsync } from '../../handlers/command-handler/menu';
 import { armMenuRun, armMenuShow, rememberMenuRow, menuRowOf } from '../../handlers/commands/menu-door-exit';
 import { db } from '../../database';
 
@@ -52,7 +52,7 @@ async function open(rest: string, ctx: MenuContext): Promise<string> {
     if (print) { print(ctx.socket); return 'NO'; }
     return `NO\t${built.refusal}`.slice(0, WIRE_MAX);
   }
-  if (kind === 'MAIN') built.prompt = menuPromptText(ctx.session);
+  if (kind === 'MAIN') built.prompt = await menuPromptTextAsync(ctx.session);
   if (parent === undefined) built.logos = chooseLogos(config, kind, caller, root);
   last.set(ctx.session, built);
   return `OK\t${writeCatalogueFile(root, caller.node, built, menuRowOf(ctx.session, kind))}`;
@@ -60,15 +60,14 @@ async function open(rest: string, ctx: MenuContext): Promise<string> {
 
 async function overflow(want: string, cat: Catalogue | undefined, ctx: MenuContext): Promise<string> {
   if (!['scroll', 'pages', 'default'].includes(want) || !ctx.session.user) return '';
-  const stored = want === 'default' ? '' : want;
-  ctx.session.user.menuOverflow = stored;
+  const stored = want === 'default' ? '' : (want as OverflowMode);
   // A board-own preference like themePreference: the row, never user.data (express.e has no such field).
-  await db.updateUser(ctx.session.user.id, { menuOverflow: stored as '' | 'scroll' | 'pages' });
+  // Memory follows the row: a failed write leaves the session as it was.
+  await db.updateUser(ctx.session.user.id, { menuOverflow: stored });
+  ctx.session.user.menuOverflow = stored;
   const kind: MenuKind = cat?.kind ?? 'MAIN';
-  const cls = widthClassOf(menuCallerFromSession(ctx.session).columns);
-  const level = ctx.session.user.secLevel ?? 0;
-  const effective = stored || levelEntry(readMenuConfig(boardRoot(), kind).config.overflow[cls], level) || (cls === 'c64' ? 'pages' : 'scroll');
-  if (cat) cat.overflow = effective as Catalogue['overflow'];
+  const effective = effectiveOverflow(menuCallerFromSession(ctx.session), readMenuConfig(boardRoot(), kind).config);
+  if (cat) cat.overflow = effective;
   return `OK\t${effective}`;
 }
 

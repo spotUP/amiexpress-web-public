@@ -1,5 +1,11 @@
 import type { Catalogue, CatalogueEntry, CatalogueSection, MenuCaller, MenuSource } from './types';
-import { levelEntry, widthClassOf, cleanText, LABEL_MAX, DESCRIPTION_MAX, type MenuConfig } from '../../screens/menu-config/menu-config';
+import { levelEntry, widthClassOf, cleanText, LABEL_MAX, DESCRIPTION_MAX, type MenuConfig, type OverflowMode } from '../../screens/menu-config/menu-config';
+
+/** The ONE rule for how a long menu behaves: the caller's own choice, else the board default for their width and level. */
+export function effectiveOverflow(caller: MenuCaller, config: MenuConfig): OverflowMode {
+  const cls = widthClassOf(caller.columns);
+  return caller.overflowPref || levelEntry(config.overflow[cls], caller.secLevel) || (cls === 'c64' ? 'pages' : 'scroll');
+}
 
 export function buildCatalogue(source: MenuSource, caller: MenuCaller, config: MenuConfig, parentKey?: string): Catalogue | { refusal: string } {
   const gate = source.gate(caller);
@@ -38,7 +44,7 @@ export function buildCatalogue(source: MenuSource, caller: MenuCaller, config: M
   sections = sections.filter(s => s.entries.length > 0);
 
   const cls = widthClassOf(caller.columns);
-  const overflow = caller.overflowPref || levelEntry(config.overflow[cls], level) || (cls === 'c64' ? 'pages' : 'scroll');
+  const overflow = effectiveOverflow(caller, config);
   const wipesOn = cls !== 'c64' || config.wipes.at40;
   return {
     kind: source.kind, parent: parentKey ?? '', title: source.title(caller), prompt: source.prompt(caller),

@@ -155,8 +155,11 @@ describe('a password never reaches a log', () => {
       expect([name, text.includes(SECRET)]).toEqual([name, false]);
     }
     // The harmless AEW_MENU request IS printed where sinks print the String: the RUN line is withheld, not AEW_MENU.
-    expect(sinks.console).toContain('OVERFLOW?');
-    expect(sinks.debugLog).toContain('OVERFLOW?');
+    // Every sink that prints the String carried it; none of them carried the RUN line.
+    for (const name of ['console', 'debugLog', 'ring', 'ximDebugLogFile', 'jsonLogFile']) {
+      expect([name, sinks[name].includes('OVERFLOW?')]).toEqual([name, true]);
+      expect([name, sinks[name].includes('J 5')]).toEqual([name, false]);
+    }
   });
 
   test('the parser\'s own dump of a password message carries neither the text nor its hex', () => {

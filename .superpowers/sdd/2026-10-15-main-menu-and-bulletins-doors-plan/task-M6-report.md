@@ -19,3 +19,13 @@ Deviations / concerns:
 4. vicToSgr256 is not exported from the SDK petscii index; C64 logos use vicToSgrForeground (truecolor), which the transducer maps back exactly (exact palette hit wins).
 5. menuPromptText answers the built-in prompt only; a conference MENU_PROMPT tooltype (async MCI) stays in displayMenuPrompt.
 6. Password test: the seven-sink check had to extend the existing test, not a new one (the stream loggers close once per process).
+
+## Fix round 1/5
+
+1. Conference MENU_PROMPT: `menuPromptTextAsync` (handlers/command-handler/menu.ts) is the one MCI path; displayMenuPrompt's tooltype branch and xim/menu.ts open both use it. Test: tests/xim/menu-command-prompt.test.ts.
+2. Colour round trip: menu-logos test asserts cat.seq's green comes back as $1E. It already held with truecolor (exact palette hit), so logos.ts is unchanged.
+3. `effectiveOverflow(caller, config)` in menu-catalogue/build.ts is the single rule; buildCatalogue and AEW_MENU OVERFLOW both use it (level from the caller). Test: level-based default via OPEN and OVERFLOW.
+4. redact: 'RUN [withheld]' (no length); test updated.
+5. Seven-sink test: console, debugLog, ring, ximDebugLogFile, jsonLogFile each shown to carry 'OVERFLOW?' before the RUN secret is asserted absent.
+6. OVERFLOW sets session.user.menuOverflow after db.updateUser succeeds; test: a rejecting write leaves memory unchanged.
+RED: write-before-await, built-in-only prompt and length-leaking redaction each failed their tests, then restored.
