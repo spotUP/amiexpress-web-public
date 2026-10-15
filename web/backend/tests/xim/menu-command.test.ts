@@ -108,3 +108,18 @@ test('SHOW answers NO for a key that is not a bulletin entry', async () => {
   expect(await menuAnswer('SHOW 3', ctx(s))).toBe('NO');
   expect(takeMenuExit(s)).toEqual({});
 });
+
+test('RUN of a listed entry runs its runText, which may differ from its key (J\'s child entry 3.2 runs `J 3.2`)', async () => {
+  const { menuSourceFor, registerMenuSource } = require('../../src/services/menu-catalogue/registry');
+  const original = menuSourceFor('MAIN');
+  registerMenuSource({
+    ...original,
+    entries: () => [{ key: '3.2', label: 'Third Base', description: '', right: '', flags: '', runText: 'J 3.2', runAs: 'typed', section: 'doors' }],
+  });
+  try {
+    const s = session();
+    await menuAnswer('OPEN MAIN', ctx(s));
+    expect(await menuAnswer('RUN 3.2', ctx(s))).toBe('OK');
+    expect(takeMenuExit(s).run).toEqual({ text: 'J 3.2', runAs: 'typed' });
+  } finally { registerMenuSource(original); }
+});
