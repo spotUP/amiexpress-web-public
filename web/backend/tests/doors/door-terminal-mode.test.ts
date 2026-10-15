@@ -36,7 +36,6 @@ const DOORS: Array<[string, string]> = [
   ['bug-tracker', 'app.ts'],
   ['bbs-dashboard', 'index.ts'],
   ['doors-menu', 'app.ts'],
-  ['theme-picker', 'app.ts'],
   ['scrollwars', 'index.ts'],
 ];
 

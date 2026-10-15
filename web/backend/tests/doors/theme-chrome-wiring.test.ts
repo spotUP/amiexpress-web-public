@@ -99,7 +99,7 @@ describe('every theme-using door reaches the SDK chrome entry point', () => {
     // is the failure mode of a test like this one.
     expect(doors.length).toBeGreaterThanOrEqual(12);
     expect(doors.map((d) => d.door)).toEqual(expect.arrayContaining([
-      'doors-menu', 'door-manager', 'theme-picker', 'bbs-dashboard',
+      'doors-menu', 'door-manager', 'bbs-dashboard',
     ]));
   });
 

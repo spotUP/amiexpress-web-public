@@ -36,7 +36,6 @@ const THEME_AWARE_DOORS = [
   'bug-tracker',
   'bbs-dashboard',
   'doors-menu',
-  'theme-picker',
   'rip-browser',
   'sprite-editor',
   'ansi-editor',

@@ -51,7 +51,6 @@ const MIGRATED = [
   'rip-browser',
   'ansi-editor',
   'sprite-editor',
-  'theme-picker',
 ];
 
 // Bright variants included: `lightyellow` slipped through the first pass

@@ -389,15 +389,6 @@ describe('40-column sweep: the adapted doors', () => {
     ]);
   });
 
-  it('theme-picker: theme rows, note, footer hints', () => {
-    const { getCompactProfile } = require('../../../sdk/engines/ui/blessed/core/responsive-constants');
-    const { buildThemeItems, buildNote, buildFooterHints } = require('../../../Doors/theme-picker/app');
-    const compact = getCompactProfile(40);
-    fits(buildThemeItems([{ id: 'a', name: LONG, blurb: LONG }], 'a', PLAIN_STYLES, compact, 40));
-    fits([buildNote(PLAIN_STYLES, compact)]);
-    fits(buildFooterHints(compact).map((h: any) => `${h.key}: ${h.does}`));
-  });
-
   it('tip-of-the-day: frame rows for a long tip at 40', () => {
     const { buildTipFrame } = require('../../../Doors/tip-of-day/layout');
     const tip = {
