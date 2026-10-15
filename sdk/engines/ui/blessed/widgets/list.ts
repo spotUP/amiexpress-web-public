@@ -42,19 +42,6 @@ export class List extends Element {
   private _swipeStartScroll: number = 0;
 
   constructor(options: ListOptions = {}) {
-    // Build scrollbar config: merge user options with defaults
-    // Use space with background colors for Amiga compatibility (no special chars needed)
-    let scrollbarConfig: any = undefined;
-    if ((options.scrollbar as any) !== false) {
-      const userScrollbar = typeof options.scrollbar === 'object' ? options.scrollbar : {};
-      scrollbarConfig = {
-        ch: userScrollbar.ch || ' ',  // Space with bg color (Amiga-safe)
-        track: userScrollbar.track || { ch: ' ', style: { bg: 'black' } },  // Space with dark bg for track
-        style: userScrollbar.style || { bg: 'cyan' },  // Cyan background for thumb
-        ...userScrollbar,  // Spread user options to preserve any extra properties
-      };
-    }
-
     super({
       scrollable: true,
       focusable: true,
@@ -63,7 +50,8 @@ export class List extends Element {
       mouse: true,
       wrap: false, // List items should not wrap
       ...options,
-      scrollbar: scrollbarConfig,
+      // On/off only: the look is the theme's (renderScrollbar).
+      scrollbar: (options.scrollbar as unknown) === false ? undefined : true,
     });
 
     this.items = options.items || [];

@@ -17,12 +17,8 @@ export class ScrollableText extends Text {
       ...options,
       scrollable: true,
       alwaysScroll: options.alwaysScroll !== false,
-      // Amiga-safe scrollbar: space with bg colors (no Unicode needed)
-      scrollbar: options.scrollbar === undefined || options.scrollbar ? {
-        ch: ' ',
-        track: { ch: ' ', style: { bg: 'black' } },
-        style: (options.scrollbar && typeof options.scrollbar === 'object' ? options.scrollbar.style : undefined) || { bg: 'cyan' },
-      } : undefined,
+      // On/off only: the look is the theme's (renderScrollbar).
+      scrollbar: options.scrollbar === false ? undefined : true,
     });
 
     // Force non-clickable so this internal content area doesn't swallow

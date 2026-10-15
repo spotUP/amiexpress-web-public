@@ -10,6 +10,9 @@ import { Box } from '../../blessed/widgets/box';
 import type { EditorState } from '../core/editor-state';
 import type { ViewportInfo } from '../types';
 import { ANSIUtils } from '../core/ansi-utils';
+import { activeTheme } from '../../theme/live';
+import { scrollbarRoles } from '../../theme/styles';
+import { thumbGeometry } from '../../blessed/core/scrollbar';
 
 export interface ViewportOptions {
   parent: Screen;
@@ -434,16 +437,15 @@ export class Viewport {
       return;
     }
 
+    // The one scrollbar (sysop, 2026-10-15): a space on the theme's DIM for
+    // the track, a space on its BAR for the thumb - same geometry function
+    // and same roles as Element.renderScrollbar.
+    const roles = scrollbarRoles(activeTheme());
+    const thumb = thumbGeometry(totalLines, height, this.viewport.scrollTop);
     const scrollbarLines: string[] = [];
-    const thumbHeight = Math.max(1, Math.floor((this.viewport.height / totalLines) * height));
-    const thumbPosition = Math.floor((this.viewport.scrollTop / totalLines) * height);
-
     for (let i = 0; i < height; i++) {
-      if (i >= thumbPosition && i < thumbPosition + thumbHeight) {
-        scrollbarLines.push('{cyan-bg} {/}');
-      } else {
-        scrollbarLines.push('{blue-fg}│{/}');
-      }
+      const onThumb = !!thumb && i >= thumb.start && i < thumb.start + thumb.size;
+      scrollbarLines.push(`{${onThumb ? roles.thumb : roles.track}-bg} {/}`);
     }
 
     this.scrollbarBox.setContent(scrollbarLines.join('\n'));

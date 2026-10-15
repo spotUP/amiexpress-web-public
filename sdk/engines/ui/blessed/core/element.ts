@@ -18,6 +18,9 @@ import { applyResponsiveMixin, ResponsiveBehavior, type ResponsiveState } from '
 import { borderCharsFor } from './border-chars';
 import { wrapAnsiText } from './wrap-text';
 import { puaToUnicode } from '../../../../petscii/pua';
+import { activeTheme } from '../../theme/live';
+import { scrollbarRoles } from '../../theme/styles';
+import { thumbGeometry } from './scrollbar';
 import type { BreakpointName } from './responsive-constants';
 import type { SwipeOptions, LongPressOptions } from './touch-gestures';
 
@@ -2734,24 +2737,16 @@ export class Element extends EventEmitter {
     const pos = this._getCoords();
     if (!pos) return;
 
-    const scrollbarOptions = this.options.scrollbar as any;
-
-    // Get track style - use track.style if provided, otherwise dark background
-    // Using space with bg color for Amiga compatibility (no Unicode chars needed)
-    const trackStyleObj = scrollbarOptions?.track?.style || { fg: 'black', bg: 'black' };
-    const trackAttr = this.sattr(trackStyleObj);
-
-    // Get thumb style - use scrollbar.style for the thumb (the draggable part)
-    // Default: cyan background for visibility (Amiga-safe, no Unicode needed)
-    let thumbStyleObj = scrollbarOptions?.style || { fg: 'cyan', bg: 'cyan' };
-
-    // Apply hover style to scrollbar thumb if mouse is over it
-    if (this._scrollbarHovered) {
-      // Use high-contrast yellow background for hover feedback (Amiga-safe)
-      thumbStyleObj = { ...thumbStyleObj, fg: 'yellow', bg: 'yellow', bold: true };
-    }
-
-    const thumbAttr = this.sattr(thumbStyleObj);
+    // ONE look for every scrollbar on the board (sysop, 2026-10-15): solid
+    // colour bars - track a space on the theme's DIM, thumb a space on its
+    // BAR, hover INK. No glyphs, so it is identical in Topaz and latin1. A
+    // door's own ch/track/style options are ignored on purpose: the option
+    // only switches the bar on, the theme says how it looks. Resolved here at
+    // paint time, so a theme switch recolours it with no tree walk.
+    const roles = scrollbarRoles(activeTheme());
+    const trackAttr = this.sattr({ fg: roles.track, bg: roles.track });
+    const thumbColour = this._scrollbarHovered ? roles.hover : roles.thumb;
+    const thumbAttr = this.sattr({ fg: thumbColour, bg: thumbColour });
 
     const border = this.hasBorder() ? 1 : 0;
 
@@ -2769,31 +2764,17 @@ export class Element extends EventEmitter {
     // If no content or view, don't render scrollbar
     if (contentHeight <= 0 || viewHeight <= 0) return;
 
-    // Default to space character with background colors for Amiga compatibility
-    // The style attributes (trackAttr/thumbAttr) handle the colors via bg property
-    const trackChar = typeof scrollbarOptions?.track === 'string'
-      ? scrollbarOptions.track
-      : scrollbarOptions?.track?.ch || ' ';  // Space with bg color (Amiga-safe)
-    const thumbChar = typeof scrollbarOptions?.thumb === 'string'
-      ? scrollbarOptions.thumb
-      : scrollbarOptions?.thumb?.ch || scrollbarOptions?.ch || ' ';  // Space with bg color (Amiga-safe)
+    const trackChar = ' ';
+    const thumbChar = ' ';
 
     // Only render scrollbar (track + thumb) if content overflows
-    if (contentHeight > viewHeight) {
-      // Render scrollbar track (subtle/dim style)
+    const thumb = thumbGeometry(contentHeight, viewHeight, this.childBase);
+    if (thumb) {
       for (let y = pos.yi + border; y < pos.yl - border; y++) {
         (this.screen as any).fillRegion(trackAttr, trackChar, scrollbarX, scrollbarX + 1, y, y + 1);
       }
-
-      // Render scrollbar thumb
-      const scrollbarHeight = Math.max(1, Math.floor((viewHeight / contentHeight) * viewHeight));
-      const maxScroll = contentHeight - viewHeight;
-      const scrollRatio = maxScroll > 0 ? this.childBase / maxScroll : 0;
-      const scrollbarY = Math.floor(scrollRatio * (viewHeight - scrollbarHeight));
-
-      // Render scrollbar thumb (highlighted style)
-      for (let i = 0; i < scrollbarHeight; i++) {
-        const y = pos.yi + border + scrollbarY + i;
+      for (let i = 0; i < thumb.size; i++) {
+        const y = pos.yi + border + thumb.start + i;
         if (y >= pos.yi + border && y < pos.yl - border) {
           (this.screen as any).fillRegion(thumbAttr, thumbChar, scrollbarX, scrollbarX + 1, y, y + 1);
         }

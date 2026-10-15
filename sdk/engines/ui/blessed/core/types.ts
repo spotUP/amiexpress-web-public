@@ -97,7 +97,6 @@ export interface ElementOptions {
   // Style
   style?: Colors & {
     border?: Colors;
-    scrollbar?: Colors;
     focus?: StateColors;
     hover?: StateColors;
     active?: StateColors;
@@ -135,17 +134,8 @@ export interface ElementOptions {
   // Scrolling
   scrollable?: boolean;
   alwaysScroll?: boolean;
-  scrollbar?: {
-    ch?: string;
-    thumb?: {
-      ch?: string;
-    };
-    track?: {
-      ch?: string;
-      style?: Colors;
-    };
-    style?: Colors;
-  };
+  /** On or off. The look is the theme's: track DIM, thumb BAR, hover INK. */
+  scrollbar?: boolean;
   baseLimit?: number;
 
   // Mouse
@@ -459,7 +449,6 @@ export interface Element {
   options: ElementOptions;
   style: Colors & {
     border?: Colors;
-    scrollbar?: Colors;
     focus?: StateColors;
     hover?: StateColors;
     active?: StateColors;

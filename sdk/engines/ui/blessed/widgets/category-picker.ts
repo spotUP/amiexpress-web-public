@@ -191,7 +191,7 @@ export class CategoryPicker extends Box {
       vi: true,
       keys: true,
       tags: true,
-      scrollbar: { ch: ' ', style: { bg: 'gray' } },
+      scrollbar: true,
       style: {
         fg: itemStyle.fg || 'white',
         bg: itemStyle.bg || 'black',

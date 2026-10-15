@@ -633,20 +633,9 @@ export class UIHelpers {
       keys: true,
       vi: true,
       mouse: true,
-      scrollbar: {
-        ch: ' ',
-        track: {
-          bg: 'cyan',
-        },
-        style: {
-          inverse: true,
-        },
-      },
+      scrollbar: true,
       style: {
         border: { fg: 'cyan' },
-        scrollbar: {
-          bg: 'blue',
-        },
         ...(options.style || {}),
       },
     });

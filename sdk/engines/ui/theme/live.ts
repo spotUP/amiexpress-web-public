@@ -136,6 +136,10 @@ export interface RetintResult {
 export function retintTree(root: unknown, from: Theme, to: Theme): RetintResult {
   const map = tokenMap(from, to);
   const result: RetintResult = { styles: 0, contents: 0 };
+  // Scrollbars (and every widget that reads activeTheme at paint time) take
+  // their colours from the active theme, not from a style field this walk
+  // could rewrite: the switch itself is what recolours them.
+  setActiveTheme(to);
   if (map.size === 0) return result;
 
   const visit = (node: TreeNode | undefined): void => {

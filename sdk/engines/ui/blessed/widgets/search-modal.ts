@@ -172,10 +172,7 @@ export class SearchModal extends Box {
       mouse: true,
       interactive: true,
       scrollable: true,
-      scrollbar: {
-        ch: ' ',
-        style: { bg: 'gray' }
-      },
+      scrollbar: true,
       style: {
         fg: 'white',
         bg: 'black',

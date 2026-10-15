@@ -36,12 +36,8 @@ export class Markdown extends Box {
   constructor(options: MarkdownOptions = {}) {
     super({
       ...options,
-      // Amiga-safe scrollbar: space with bg colors (no Unicode needed)
-      scrollbar: options.scrollable && (options.scrollbar === undefined || options.scrollbar) ? {
-        ch: ' ',
-        track: { ch: ' ', style: { bg: 'black' } },
-        style: (options.scrollbar && typeof options.scrollbar === 'object' ? options.scrollbar.style : undefined) || { bg: 'cyan' },
-      } : options.scrollbar,
+      // On/off only: the look is the theme's (renderScrollbar).
+      scrollbar: options.scrollable && options.scrollbar !== false ? true : options.scrollbar,
     });
 
     this.markdownOptions = {

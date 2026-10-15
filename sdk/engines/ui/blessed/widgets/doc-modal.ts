@@ -188,10 +188,7 @@ export class DocModal extends Box {
       alwaysScroll: true,
       focusable: true,
       ch: ' ',
-      scrollbar: {
-        ch: ' ',
-        style: { bg: 'cyan' },
-      },
+      scrollbar: true,
       style: {
         fg: options.contentStyle?.fg || 'white',
         ...(options.contentStyle?.bg && { bg: options.contentStyle.bg }),

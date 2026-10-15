@@ -126,11 +126,7 @@ export class CharacterPicker {
       keys: true,
       mouse: true,
       vi: true,
-      scrollbar: {
-        style: {
-          bg: 'cyan'
-        }
-      },
+      scrollbar: true,
       style: {
         selected: {
           bg: 'cyan',

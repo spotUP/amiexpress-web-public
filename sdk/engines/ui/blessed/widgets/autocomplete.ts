@@ -60,12 +60,7 @@ export class Autocomplete extends Box {
           bg: 'cyan',
         },
       },
-      scrollbar: {
-        ch: ' ',
-        style: {
-          bg: 'cyan',
-        },
-      },
+      scrollbar: true,
     } as any);
 
     // Handle selection

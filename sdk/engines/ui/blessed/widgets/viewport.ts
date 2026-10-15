@@ -15,8 +15,6 @@ import { SCROLL_MOMENTUM_DECAY, MIN_SCROLL_VELOCITY } from '../core/responsive-c
 export interface ViewportOptions extends BoxOptions {
   alwaysScroll?: boolean;
   baseLimit?: number;
-  scrollbarBg?: string;
-  scrollbarFg?: string;
   /** Enable swipe scrolling on mobile (default: true) */
   swipeScrolling?: boolean;
   /** Enable momentum/inertia scrolling (default: true) */
@@ -43,8 +41,6 @@ export class Viewport extends Box {
     const {
       alwaysScroll,
       baseLimit,
-      scrollbarBg,
-      scrollbarFg,
       swipeScrolling,
       momentumScrolling,
       mobileScrollSpeed,
@@ -59,12 +55,8 @@ export class Viewport extends Box {
       // The Element base defaults focusable to false; override unless caller explicitly
       // sets focusable: false.
       focusable: boxOptions.focusable !== false,
-      // Amiga-safe scrollbar: space with bg colors (no Unicode needed)
-      scrollbar: options.scrollbar !== undefined ? options.scrollbar : {
-        ch: ' ',
-        track: { ch: ' ', style: { bg: 'black' } },
-        style: { bg: scrollbarBg || 'cyan' },
-      },
+      // On/off only: the look is the theme's (renderScrollbar).
+      scrollbar: options.scrollbar !== undefined ? options.scrollbar : true,
     });
 
     this.alwaysScroll = alwaysScroll !== false;

@@ -70,10 +70,32 @@ export interface ThemeStyles {
   /** A key cap: the letter a hint tells the user to press. */
   key(text: string): string;
 
+  /** The scrollbar every widget draws. */
+  scrollbar: ScrollbarRoles;
+
   /** The theme's branding mark, or '' when it has none. */
   rail: string;
   /** The border characters this theme wants, for doors drawing their own. */
   borderStyle: Theme['border'];
+}
+
+/** The three colours of the one scrollbar look, by role. */
+export interface ScrollbarRoles {
+  /** A space painted on this: the rail. */
+  track: string;
+  /** A space painted on this: the handle. */
+  thumb: string;
+  /** The handle while the mouse is over it. */
+  hover: string;
+}
+
+/**
+ * THE ONE SCROLLBAR (sysop, 2026-10-15): solid colour bars, no glyphs.
+ * Track = DIM, thumb = BAR, hover = INK. The C SDK's ui_list.c draws the
+ * same three roles from the same tokens (sdk/c/tests agree with this file).
+ */
+export function scrollbarRoles(theme: Theme): ScrollbarRoles {
+  return { track: theme.tokens.dim, thumb: theme.tokens.bar, hover: theme.tokens.ink };
 }
 
 /**
@@ -191,6 +213,7 @@ export function themeStyles(theme: Theme): ThemeStyles {
     alert: (text) => tag(t.alert, text),
     key: (text) => tag(t.accent, text, true),
 
+    scrollbar: scrollbarRoles(theme),
     rail: theme.rail,
     borderStyle: theme.border,
   };

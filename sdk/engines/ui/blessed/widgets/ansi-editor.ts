@@ -5035,10 +5035,7 @@ BBS Door SDK v2.0{/gray-fg}
       keys: true,
       tags: true,
       scrollable: true,
-      scrollbar: {
-        ch: ' ',
-        style: { bg: 'magenta' },
-      },
+      scrollbar: true,
       style: {
         fg: 'white',
         bg: 'blue',

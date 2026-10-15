@@ -15,31 +15,14 @@ export class Log extends Element {
   private scrollOnInput: boolean = false;
 
   constructor(options: LogOptions = {}) {
-    // Amiga-safe scrollbar: space with bg colors (no Unicode needed)
-    let scrollbarConfig: any;
-    if (options.scrollbar && typeof options.scrollbar === 'object') {
-      // User provided scrollbar config - merge with Amiga-safe defaults
-      scrollbarConfig = {
-        ch: options.scrollbar.ch || ' ',
-        track: options.scrollbar.track || { ch: ' ', style: { bg: 'black' } },
-        style: options.scrollbar.style || { bg: 'cyan' },
-      };
-    } else {
-      // No scrollbar config provided - use Amiga-safe defaults
-      scrollbarConfig = {
-        ch: ' ',
-        track: { ch: ' ', style: { bg: 'black' } },
-        style: { bg: 'cyan' },
-      };
-    }
-
     super({
       scrollable: true,
       alwaysScroll: true,
       clickable: true,
       mouse: true,
       ...options,
-      scrollbar: scrollbarConfig,
+      // On/off only: the look is the theme's (renderScrollbar).
+      scrollbar: options.scrollbar === false ? undefined : true,
     });
 
     this.scrollback = options.scrollback || 1000;

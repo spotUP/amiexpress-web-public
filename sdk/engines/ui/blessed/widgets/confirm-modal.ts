@@ -199,10 +199,7 @@ export class ConfirmModal extends Box {
       mouse: true,
       keys: true,
       content: options.message || '',
-      scrollbar: {
-        ch: ' ',
-        style: { bg: 'gray' }
-      },
+      scrollbar: true,
       style: {
         fg: 'white',
         bg: 'black',

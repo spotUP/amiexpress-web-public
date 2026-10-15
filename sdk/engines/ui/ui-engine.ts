@@ -128,10 +128,6 @@ export interface WidgetStyle {
     fg?: string;
     bg?: string;
   };
-  scrollbar?: {
-    fg?: string;
-    bg?: string;
-  };
   focus?: {
     fg?: string;
     bg?: string;
