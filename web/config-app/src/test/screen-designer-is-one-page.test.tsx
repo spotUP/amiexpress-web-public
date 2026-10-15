@@ -71,6 +71,10 @@ const envelope = (data: unknown) => Promise.resolve({
 vi.stubGlobal('fetch', vi.fn((input: RequestInfo | URL) => {
   const url = String(input);
   if (url.includes('/config/users')) return envelope({ users: [] });
+  // The real route (theme-routes.ts GET /:slug/validation) always carries coverage.
+  if (/\/api\/themes\/[^/]+\/validation/.test(url)) {
+    return envelope({ slug: 'x', blocking: [], advisory: [], publishable: true, coverage: { provided: 1, total: 44 } });
+  }
   if (url.includes('/api/themes')) return envelope(THEMES);
   if (url.includes('/api/screens/file')) {
     return envelope({ ...index().files['Node1/BBSTITLE.txt'], content: base64(ansi) });

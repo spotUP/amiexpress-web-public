@@ -58,6 +58,10 @@ vi.stubGlobal('fetch', vi.fn((input: RequestInfo | URL) => {
   if (url.includes('/screens/shared-directories')) return envelope({ directories: [] });
   if (url.includes('/api/screens/file')) return envelope({ content: base64(art), format: 'ansi', bytes: art.length, mci: [] });
   if (url.includes('/config/users')) return envelope({ users: [{ username: 'sysop' }] });
+  // The real route (theme-routes.ts GET /:slug/validation) always carries coverage.
+  if (/\/api\/themes\/[^/]+\/validation/.test(url)) {
+    return envelope({ slug: 'x', blocking: [], advisory: [], publishable: true, coverage: { provided: 1, total: 44 } });
+  }
   if (url.includes('/api/themes')) return envelope(themesPayload);
   if (url.includes('/api/mci')) return envelope({ codes: [] });
   return envelope(index);
