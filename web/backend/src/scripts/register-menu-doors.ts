@@ -1,0 +1,46 @@
+/**
+ * Registers the main-menu and bulletins doors through the admin's own writers
+ * (writeNewDoorRegistration + applyTooltypes) - never a hand-written .info.
+ *
+ *   npx tsx --tsconfig web/backend/tsconfig.json \
+ *     web/backend/src/scripts/register-menu-doors.ts --root . --only bulls
+ *
+ * Steps are added by the tasks that own them (bulls: M18).
+ */
+import * as path from 'path';
+import { writeNewDoorRegistration } from '../services/config-services/door-info-file.service';
+import { applyTooltypes } from '../utils/info-file.util';
+
+type Step = (root: string) => string;
+
+const STEPS: Record<string, Step> = {
+  // Old Bulls, re-registered as BULLS: the fallback FALLBACK=BULLS on B reaches
+  // while the new bulletins door is absent. Tooltypes as the former B.info.
+  bulls: (root) => {
+    const infoPath = writeNewDoorRegistration(root, {
+      door_command: 'BULLS',
+      door_type: 'XIM',
+      door_path: 'DOORS:EmP_Tools/Bulls',
+      min_security_level: 1,
+    });
+    applyTooltypes(infoPath, Object.entries({
+      MULTINODE: 'NO',
+      STACK: '50000',
+      C64_ADAPT: '40',
+      REDACTED: '1',
+    }));
+    return infoPath;
+  },
+};
+
+function arg(name: string): string | undefined {
+  const i = process.argv.indexOf(`--${name}`);
+  return i >= 0 ? process.argv[i + 1] : undefined;
+}
+
+const root = path.resolve(arg('root') ?? '.');
+const only = arg('only');
+for (const [name, step] of Object.entries(STEPS)) {
+  if (only && only !== name) continue;
+  console.log(`[OK] ${name}: ${step(root)}`);
+}

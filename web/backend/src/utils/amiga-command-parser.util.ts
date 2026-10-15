@@ -947,6 +947,8 @@ export function scanCommandDirectory(
 ): Map<string, CommandDefinition> {
   const commands = new Map<string, CommandDefinition>();
   const skipped: string[] = [];
+  // Dropped registrations that name a FALLBACK (resolved after the main loop).
+  const dropped = new Map<string, CommandDefinition>();
 
   // Build search paths in priority order — shared with the freshness check
   // in command-execution.handler.ts, which must watch exactly the
@@ -975,6 +977,7 @@ export function scanCommandDirectory(
           // again. See commandLocationIsLive.
           if (!commandLocationIsLive(baseDir, cmd)) {
             skipped.push(`${cmd.name} -> ${cmd.location}`);
+            if (cmd.toolTypes?.FALLBACK && !dropped.has(cmd.name)) dropped.set(cmd.name, cmd);
             continue;
           }
 
@@ -986,6 +989,32 @@ export function scanCommandDirectory(
           }
         }
       }
+    }
+  }
+
+  // FALLBACK=<COMMAND>: a registration whose own binary is missing hands its
+  // command to the registration FALLBACK names (Bulls answers B while the
+  // bulletins door is absent). One hop only: a target that carries a FALLBACK
+  // of its own is not followed, and a self/loop reference registers nothing.
+  const looped = new Set<string>();
+  for (const [name, def] of dropped) {
+    const seen = new Set<string>([name]);
+    let next = def.toolTypes?.FALLBACK?.toUpperCase();
+    while (next && dropped.has(next)) {
+      if (seen.has(next)) { for (const n of seen) looped.add(n); break; }
+      seen.add(next);
+      next = dropped.get(next)?.toolTypes?.FALLBACK?.toUpperCase();
+    }
+    if (next === name) looped.add(name);
+  }
+  if (looped.size > 0) {
+    console.warn(`  [${commandType}] FALLBACK loop, no registration for: ${[...looped].join(', ')}`);
+  }
+  for (const [name, def] of dropped) {
+    if (looped.has(name) || commands.has(name)) continue;
+    const target = commands.get(def.toolTypes!.FALLBACK.toUpperCase());
+    if (target && target.toolTypes?.FALLBACK === undefined) {
+      commands.set(name, { ...target, name, toolTypes: { ...target.toolTypes } });
     }
   }
 
