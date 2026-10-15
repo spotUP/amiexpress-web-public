@@ -13,6 +13,7 @@ import { DoorsPage } from './pages/DoorsPage';
 import { AdminRolesPage } from './pages/AdminRolesPage';
 import { SpriteManagerPage } from './pages/SpriteManagerPage';
 import { BullsInfoPage } from './pages/BullsInfoPage';
+import { MenusPage } from './pages/MenusPage';
 import { MagazinePage } from './pages/MagazinePage';
 import { LoginSequencePage } from './pages/LoginSequencePage';
 import { AuditLogPage } from './pages/AuditLogPage';
@@ -161,6 +162,7 @@ function App() {
         <Route path="sprite-manager" element={<LevelRoute><SpriteManagerPage /></LevelRoute>} />
         <Route path="login-sequence" element={<LevelRoute><LoginSequencePage /></LevelRoute>} />
         <Route path="bulls" element={<LevelRoute><BullsInfoPage /></LevelRoute>} />
+        <Route path="menus" element={<LevelRoute><MenusPage /></LevelRoute>} />
         <Route path="magazine" element={<LevelRoute><MagazinePage /></LevelRoute>} />
 
         {/* System — sysop-only */}

@@ -1,5 +1,6 @@
 import type { ApiResponse, User } from '../types';
 import type { MagazineFrontData, MagazineStoryBody } from '../types/magazine';
+import type { MenuConfig, MenuKind } from '@bbs/screens/menu-config/menu-config';
 import {
   readAdminToken, writeAdminToken, readAdminRefreshToken, writeAdminRefreshToken,
 } from './auth-token';
@@ -31,6 +32,19 @@ function filenameFromContentDisposition(header: string | null): string | null {
   const name = raw.replace(/^["']|["']$/g, '');
   return name && !name.includes('/') && !name.includes('\\') ? name : null;
 }
+
+export interface MenuConfigAnswer { config: MenuConfig; problems: string[] }
+export interface MenuEntryRow { key: string; label: string; description: string; section: string; source: 'internal' | 'door' | 'syscmd' | 'bulletin' }
+export interface MenuLogoFile { file: string; rows: number; cols: number; alphabet?: 'ansi' | 'petscii' }
+export interface MenuPreviewEntry { key: string; label: string; description: string; right?: string; flags?: string }
+export type MenuPreviewView =
+  | { refusal: string }
+  | {
+      sections: Array<{ id: string; title: string; entries: MenuPreviewEntry[] }>;
+      overflow: 'scroll' | 'pages';
+      wipes: { open: string; leave: string; page: string };
+      logos: Array<{ position: string; file: string; rows: number; cols: number }>;
+    };
 
 export class ApiError extends Error {
   constructor(
@@ -101,7 +115,9 @@ class ApiClient {
       writeAdminRefreshToken(null);
       this.unauthorizedHandler?.();
     }
-    return new ApiError(body.error || body.message || fallback || statusWords(status), status, body.data);
+    // The menu logo delete answers 409 with `usedBy` beside `message`, not under `data`.
+    const detail = body.data ?? ('usedBy' in body ? { usedBy: (body as { usedBy: unknown }).usedBy } : undefined);
+    return new ApiError(body.error || body.message || fallback || statusWords(status), status, detail);
   }
 
   constructor() {
@@ -270,6 +286,8 @@ class ApiClient {
           throw this.failed(response.status, error, response.statusText);
         }
 
+        // An answer with no body (the menu logo delete's 204) has nothing to parse.
+        if (response.status === 204) return undefined as T;
         const data = await response.json();
         return data;
       } catch (error) {
@@ -1512,6 +1530,49 @@ class ApiClient {
       method: 'PUT',
       body: JSON.stringify({ ids }),
     });
+  }
+
+  // Menu doors (main menu, bulletins): /api/config/menus/:kind. Answers are {success, data}; read .data.
+  async getMenuConfig(kind: MenuKind) {
+    const res = await this.request<{ data: MenuConfigAnswer }>(`${API_BASE}/config/menus/${kind}`);
+    return res.data;
+  }
+
+  async saveMenuConfig(kind: MenuKind, config: MenuConfig) {
+    const res = await this.request<{ data: MenuConfigAnswer }>(`${API_BASE}/config/menus/${kind}`, {
+      method: 'PUT',
+      body: JSON.stringify(config),
+    });
+    return res.data;
+  }
+
+  async previewMenu(kind: MenuKind, q: { level: number; columns: number; conference: number; mode: 'ansi' | 'petscii' }) {
+    const query = new URLSearchParams({ level: String(q.level), columns: String(q.columns), conference: String(q.conference), mode: q.mode });
+    const res = await this.request<{ data: MenuPreviewView }>(`${API_BASE}/config/menus/${kind}/preview?${query}`);
+    return res.data;
+  }
+
+  async menuEntries(kind: MenuKind) {
+    const res = await this.request<{ data: MenuEntryRow[] }>(`${API_BASE}/config/menus/${kind}/entries`);
+    return res.data;
+  }
+
+  async listMenuLogos(kind: MenuKind) {
+    const res = await this.request<{ data: MenuLogoFile[] }>(`${API_BASE}/config/menus/${kind}/logos`);
+    return res.data;
+  }
+
+  async uploadMenuLogo(kind: MenuKind, file: string, base64: string) {
+    const res = await this.request<{ data: MenuLogoFile }>(`${API_BASE}/config/menus/${kind}/logos/${encodeURIComponent(file)}`, {
+      method: 'PUT',
+      body: JSON.stringify({ base64 }),
+    });
+    return res.data;
+  }
+
+  /** A 409 (the menu still shows the logo) throws an ApiError whose `data.usedBy` lists the positions. */
+  async deleteMenuLogo(kind: MenuKind, file: string): Promise<void> {
+    await this.request<void>(`${API_BASE}/config/menus/${kind}/logos/${encodeURIComponent(file)}`, { method: 'DELETE' });
   }
 
   // Bulls Menu (Bulls.CFG for the 68K Bulls door)

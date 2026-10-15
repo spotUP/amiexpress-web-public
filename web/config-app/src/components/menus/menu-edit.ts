@@ -1,0 +1,141 @@
+/**
+ * What an edit does to a menu config - pure, so the page only wires controls to
+ * these. Every function returns a new config (or the same one when the edit
+ * would change nothing) and applies the limits the server's validateMenuConfig
+ * applies, so the sysop sees the cut text rather than learning of it after the save.
+ */
+import {
+  cleanText, DESCRIPTION_MAX, LABEL_MAX, SECTION_TITLE_MAX,
+  type MenuConfig, type OverflowMode, type WidthClass,
+} from '@bbs/screens/menu-config/menu-config';
+import { WIPE_CODES } from '@bbs/screens/wipe-codes';
+
+export type WipeEvent = 'open' | 'leave' | 'page';
+
+const upper = (key: string) => key.trim().toUpperCase();
+const isFloor = (n: number) => Number.isInteger(n) && n >= 0 && n <= 65535;
+
+function withoutKey<T>(map: Record<string, T>, key: string): Record<string, T> {
+  const { [key]: _gone, ...rest } = map;
+  return rest;
+}
+
+function setText(map: Record<string, string>, key: string, text: string, max: number): Record<string, string> {
+  const k = upper(key);
+  const clean = cleanText(text, max);
+  return clean ? { ...map, [k]: clean } : withoutKey(map, k);
+}
+
+export const setDescription = (c: MenuConfig, key: string, text: string): MenuConfig =>
+  ({ ...c, descriptions: setText(c.descriptions, key, text, DESCRIPTION_MAX) });
+
+export const setLabel = (c: MenuConfig, key: string, text: string): MenuConfig =>
+  ({ ...c, labels: setText(c.labels, key, text, LABEL_MAX) });
+
+/** An empty section id puts the command back where the board would put it. */
+export function setPlacement(c: MenuConfig, key: string, sectionId: string): MenuConfig {
+  const k = upper(key);
+  return { ...c, placement: sectionId ? { ...c.placement, [k]: sectionId } : withoutKey(c.placement, k) };
+}
+
+export function moveSection(c: MenuConfig, index: number, direction: -1 | 1): MenuConfig {
+  const to = index + direction;
+  if (index < 0 || index >= c.sections.length || to < 0 || to >= c.sections.length) return c;
+  const sections = c.sections.slice();
+  [sections[index], sections[to]] = [sections[to], sections[index]];
+  return { ...c, sections };
+}
+
+export function renameSection(c: MenuConfig, id: string, title: string): MenuConfig {
+  return { ...c, sections: c.sections.map(s => (s.id === id ? { ...s, title: cleanText(title, SECTION_TITLE_MAX) } : s)) };
+}
+
+export function addSection(c: MenuConfig): MenuConfig {
+  const taken = new Set(c.sections.map(s => s.id));
+  let n = c.sections.length + 1;
+  while (taken.has(`section-${n}`)) n++;
+  return { ...c, sections: [...c.sections, { id: `section-${n}`, title: `Section ${n}` }] };
+}
+
+export interface EntryPlacementRow { key: string; section: string }
+
+/** Where a command shows: the sysop's placement, else the board's own choice. */
+const sectionOf = (c: MenuConfig, row: EntryPlacementRow) => c.placement[upper(row.key)] ?? row.section;
+
+/** Empty as the widest caller (level 255) sees it - the rows are that caller's list. */
+export const sectionIsEmpty = (c: MenuConfig, rows: EntryPlacementRow[], id: string): boolean =>
+  !rows.some(r => sectionOf(c, r) === id);
+
+/** Only an empty section goes; the placements that pointed into it go with it. */
+export function removeSection(c: MenuConfig, rows: EntryPlacementRow[], id: string): MenuConfig {
+  if (!sectionIsEmpty(c, rows, id)) return c;
+  const placement = Object.fromEntries(Object.entries(c.placement).filter(([, section]) => section !== id));
+  return { ...c, sections: c.sections.filter(s => s.id !== id), placement };
+}
+
+function withLevel(c: MenuConfig, floor: number, change: (l: MenuConfig['levels'][string]) => MenuConfig['levels'][string]): MenuConfig {
+  const level = c.levels[String(floor)];
+  return level ? { ...c, levels: { ...c.levels, [String(floor)]: change(level) } } : c;
+}
+
+export function addLevel(c: MenuConfig, floor: number): MenuConfig {
+  if (!isFloor(floor) || c.levels[String(floor)]) return c;
+  return { ...c, levels: { ...c.levels, [String(floor)]: { hide: [], rename: {}, order: [] } } };
+}
+export const removeLevel = (c: MenuConfig, floor: number): MenuConfig => ({ ...c, levels: withoutKey(c.levels, String(floor)) });
+
+export const toggleHidden = (c: MenuConfig, floor: number, key: string): MenuConfig =>
+  withLevel(c, floor, l => ({ ...l, hide: l.hide.includes(upper(key)) ? l.hide.filter(k => k !== upper(key)) : [...l.hide, upper(key)] }));
+
+export const setRename = (c: MenuConfig, floor: number, key: string, label: string): MenuConfig =>
+  withLevel(c, floor, l => ({ ...l, rename: { ...l.rename, [upper(key)]: cleanText(label, LABEL_MAX) } }));
+export const removeRename = (c: MenuConfig, floor: number, key: string): MenuConfig =>
+  withLevel(c, floor, l => ({ ...l, rename: withoutKey(l.rename, upper(key)) }));
+
+export function moveKey(keys: string[], index: number, direction: -1 | 1): string[] {
+  const to = index + direction;
+  if (index < 0 || index >= keys.length || to < 0 || to >= keys.length) return keys;
+  const next = keys.slice();
+  [next[index], next[to]] = [next[to], next[index]];
+  return next;
+}
+export const reorderKeys = (c: MenuConfig, floor: number, index: number, direction: -1 | 1): MenuConfig =>
+  withLevel(c, floor, l => ({ ...l, order: moveKey(l.order, index, direction) }));
+export const addOrderKey = (c: MenuConfig, floor: number, key: string): MenuConfig =>
+  withLevel(c, floor, l => (l.order.includes(upper(key)) ? l : { ...l, order: [...l.order, upper(key)] }));
+export const removeOrderKey = (c: MenuConfig, floor: number, key: string): MenuConfig =>
+  withLevel(c, floor, l => ({ ...l, order: l.order.filter(k => k !== upper(key)) }));
+
+export const setWipe = (c: MenuConfig, event: WipeEvent, code: string): MenuConfig => ({ ...c, wipes: { ...c.wipes, [event]: code } });
+export const setWipeAt40 = (c: MenuConfig, on: boolean): MenuConfig => ({ ...c, wipes: { ...c.wipes, at40: on } });
+
+/** The names the MCI catalogue gives the `~W?` codes (screen-wipe.util.ts header). */
+const WIPE_NAMES: Record<string, string> = {
+  M: 'Matrix rain', H: 'Horizontal blinds', V: 'Vertical blinds', S: 'Spiral', C: 'Checkerboard',
+  R: 'Radar sweep', B: 'Random blocks', N: 'Noise fade', T: 'Typewriter', E: 'Explode',
+};
+
+/** None, Random, then the rest by name - built from WIPE_CODES, so a new code cannot be missing here unnoticed. */
+export function wipeOptions(): Array<{ code: string; name: string }> {
+  const named = Object.keys(WIPE_CODES).filter(code => code !== 'X').map(code => ({ code, name: WIPE_NAMES[code] ?? code }));
+  return [{ code: '', name: 'None' }, { code: 'X', name: 'Random' }, ...named];
+}
+
+export const setOverflowMode = (c: MenuConfig, cls: WidthClass, floor: number, mode: OverflowMode): MenuConfig =>
+  ({ ...c, overflow: { ...c.overflow, [cls]: { ...c.overflow[cls], [String(floor)]: mode } } });
+
+export function addOverflowFloor(c: MenuConfig, cls: WidthClass, floor: number): MenuConfig {
+  if (!isFloor(floor) || c.overflow[cls][String(floor)]) return c;
+  return setOverflowMode(c, cls, floor, 'scroll');
+}
+
+/** The 0 floor is what every caller falls back to; it stays. */
+export function removeOverflowFloor(c: MenuConfig, cls: WidthClass, floor: number): MenuConfig {
+  if (floor === 0) return c;
+  return { ...c, overflow: { ...c.overflow, [cls]: withoutKey(c.overflow[cls], String(floor)) } };
+}
+
+export const PREVIEW_WIDTHS = [40, 80, 132] as const;
+export function previewDefaults(columns: number): { columns: number; mode: 'ansi' | 'petscii' } {
+  return { columns, mode: columns <= 40 ? 'petscii' : 'ansi' };
+}
