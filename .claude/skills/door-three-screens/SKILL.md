@@ -224,9 +224,23 @@ Compare it side by side with THEMEC / SUBS / NOTIFY.
 - **Scrollbars are the SDK's, one look** (sysop, 2026-10-15): solid colour
   bars, track = a space on DIM, thumb = a space on BAR, no glyphs (identical in
   Topaz/latin1 and as reverse space in PETSCII), hover INK where the mouse is
-  supported. A door never passes its own scrollbar glyphs or colours. SDK
-  unification is in progress: until it lands, do NOT add door-local scrollbar
-  options.
+  supported. A door never passes its own scrollbar glyphs or colours: the
+  unification has LANDED, and the `scrollbar` option is `boolean` (on/off), so
+  a glyph or colour object does not type-check. Write `scrollbar: true` and
+  nothing else. Reference implementations:
+  - TypeScript: `Element.renderScrollbar` (`sdk/engines/ui/blessed/core/element.ts:2734`)
+    reads the roles from `scrollbarRoles(activeTheme())`
+    (`sdk/engines/ui/theme/styles.ts:97`: track = DIM, thumb = BAR, hover = INK)
+    and the thumb from `thumbGeometry` (`sdk/engines/ui/blessed/core/scrollbar.ts:23`).
+    A theme switch recolours it because `retintTree` activates the new theme
+    (`sdk/engines/ui/theme/live.ts`). The ANSI editor's tagged-box bar uses the
+    same two functions (`sdk/engines/ui/ansi-editor/rendering/viewport.ts`).
+  - C: `draw_row` in `sdk/c/src/ui_list.c` (the `scroll_track` / `scroll_thumb`
+    fields, defaulting to the DIM and BAR tokens). A screen with no cell
+    backgrounds gets a reverse-video space; a cursor move at the same offset
+    does not rewrite the bar.
+  - Proof: `sdk/test/one-scrollbar.test.ts`, `sdk/c/tests/test_ui_list.c`,
+    `sdk/tests/unit/the-scroll-bar-is-solid-blocks-on-a-c64.test.ts`.
 
 ## 5b. 40-column traps (each one shipped broken once)
 
