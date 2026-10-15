@@ -7,6 +7,8 @@ jest.mock('../../src/index', () => {
   return { BBSState: states.BBSState, LoggedOnSubState: states.LoggedOnSubState, BBSSession: {} };
 });
 jest.mock('../../src/utils/acs-access-loader');
+// The W menu reads the board's door list; this suite is about the password path, not the door runner.
+jest.mock('../../src/handlers/door.handler', () => ({ getDoors: () => [], executeDoor: jest.fn() }));
 jest.mock('../../src/database', () => ({ db: { updateUser: jest.fn(async () => undefined) } }));
 jest.mock('../../src/utils/output.util', () => ({
   emitText: jest.fn(), emitPrompt: jest.fn(), emitLine: jest.fn(), flushOutput: jest.fn(),

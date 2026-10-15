@@ -10,6 +10,8 @@
 process.env.SKIP_DB_INIT = '1';
 
 jest.mock('../../src/database', () => ({ db: { updateUser: jest.fn(), getUserById: jest.fn() } }));
+// The W menu reads the board's door list; this suite is about the font gate, not the door runner.
+jest.mock('../../src/handlers/door.handler', () => ({ getDoors: () => [], executeDoor: jest.fn() }));
 
 import { handleWOptionSelectInput } from '../../src/handlers/commands/info-commands.handler';
 import { flushOutput } from '../../src/utils/output.util';
