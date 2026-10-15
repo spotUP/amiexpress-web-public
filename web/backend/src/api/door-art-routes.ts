@@ -162,6 +162,7 @@ console.error('Door art API error:', error);
        * name - and a directory with no manifest, or no art in it, is skipped
        * exactly as before.
        */
+      const registered = new Set(doors().map(d => String(d.command).toUpperCase()));
       try {
         const doorsRoot = path.join(config.get('dataDir'), 'Doors');
         for (const entry of fs.readdirSync(doorsRoot, { withFileTypes: true })) {
@@ -173,7 +174,10 @@ console.error('Door art API error:', error);
               fs.readFileSync(path.join(doorDir, 'door.settings.json'), 'utf8')
             ) as { command?: string };
             const command = (manifest.command || entry.name).toUpperCase();
-            if (seen.has(command)) continue;
+            // A registered command is that door's, art or none: the old 68K
+            // Bulls tools still name B, but B is the Bulletins door now, and
+            // the card listed under B opened B's own directory and failed.
+            if (seen.has(command) || registered.has(command)) continue;
             const sections = listDoorArtSections(doorDir, command);
             if (sections.length === 0) continue;
             seen.add(command);

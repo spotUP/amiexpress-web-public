@@ -80,6 +80,26 @@ describe('art belonging to a door nobody types', () => {
   });
 });
 
+describe('a command registered to another door', () => {
+  // The old 68K Bulls tools (Doors/emp_tools) still name B in their manifest.
+  // B is the Bulletins door now, with no art manifest of its own: the list put
+  // the old Bulls title under B, and opening it asked B's own directory and
+  // answered "This door does not declare any settings".
+  it('is not given the art of a directory that names the same command', async () => {
+    const app = express();
+    app.use(express.json());
+    app.use('/api/door-art', createDoorArtRouter({
+      getDoors: () => [{ command: 'B', name: 'Bulletins', path: 'Doors/bulletins-without-art' } as any],
+    }));
+
+    const res = await request(app).get('/api/door-art');
+    expect(res.status).toBe(200);
+    const commands = (res.body.data ?? []).map((d: any) => d.command);
+    expect(commands).not.toContain('B');
+    expect(commands).toContain('QUICKNEW');
+  });
+});
+
 describe('the upload advert of the multi-check file checker', () => {
   // A file checker is run by the upload path, never typed: no Commands/BBSCmd
   // icon. The Studio listed its card, but opening or saving it asked the
