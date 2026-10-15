@@ -64,7 +64,9 @@ export const setLogoFloor = (c: MenuConfig, index: number, floor: number): MenuC
 };
 
 /** Files already in a set that no longer fit the set's narrowest screen (re-uploaded or edited wider), or have gone. */
-export function logoWidthWarnings(c: MenuConfig, files: MenuLogoFile[]): string[] {
+export function logoWidthWarnings(c: MenuConfig, files: MenuLogoFile[], loaded: boolean): string[] {
+  // Before the list has answered (or when it failed) nothing is known, so nothing is reported gone or too wide.
+  if (!loaded) return [];
   const out: string[] = [];
   c.logos.forEach((set, i) => {
     for (const name of set.files) {

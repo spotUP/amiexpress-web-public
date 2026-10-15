@@ -132,4 +132,29 @@ describe('the Menu Doors logo, C64 and bulletin parts', () => {
     await user.click(within(row).getByRole('button', { name: 'Delete cat.txt' }));
     expect(await screen.findByText('Used by: header, footer')).toBeTruthy();
   });
+
+  it('makes no false "no longer on the board" claim while the logo list is pending or has failed', async () => {
+    const withSet = () => {
+      const c = defaultMenuConfig('MAIN');
+      c.logos = [{ position: 'header', widthClass: 'standard', levelFloor: 0, rule: 'fixed', files: ['cat.txt'], afterSection: 0 }];
+      return { config: c, problems: [] as string[] };
+    };
+    let release: (f: typeof FILES) => void = () => undefined;
+    getMenuConfig.mockResolvedValueOnce(withSet());
+    listMenuLogos.mockImplementationOnce(() => new Promise<typeof FILES>(r => { release = r; }));
+    const { unmount } = renderPage('?part=logos');
+    await screen.findByLabelText('Rule of header set 1');
+    expect(screen.queryByText(/no longer on the board/)).toBeNull();
+    release(FILES);
+    await screen.findByRole('cell', { name: 'cat.txt' });
+    unmount();
+
+    getMenuConfig.mockResolvedValueOnce(withSet());
+    listMenuLogos.mockRejectedValueOnce(new Error('list down'));
+    renderPage('?part=logos');
+    await screen.findByLabelText('Rule of header set 1');
+    await waitFor(() => expect(listMenuLogos).toHaveBeenCalledTimes(2));
+    await new Promise(r => setTimeout(r, 100));
+    expect(screen.queryByText(/no longer on the board/)).toBeNull();
+  });
 });

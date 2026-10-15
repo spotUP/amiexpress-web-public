@@ -62,7 +62,7 @@ export function chooseLogos(config: MenuConfig, kind: MenuKind, caller: MenuCall
   for (const position of ['header', 'footer', 'side', 'between'] as const) {
     if (position === 'side' && cls !== 'wide') continue;           // Decision 16: side panels are for wide screens
     const byFloor: Record<string, LogoSet> = {};
-    for (const set of config.logos) if (set.position === position && set.widthClass === cls) byFloor[String(set.levelFloor)] = set;
+    for (const set of config.logos) if (set.position === position && set.widthClass === cls && !(String(set.levelFloor) in byFloor)) byFloor[String(set.levelFloor)] = set;   // first wins, as validateMenuConfig keeps the first
     const set = levelEntry(byFloor, caller.secLevel);
     if (!set) continue;
     // Decision 16: a logo wider than the screen is never drawn, so it is never a candidate.

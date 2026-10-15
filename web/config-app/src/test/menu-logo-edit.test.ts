@@ -91,9 +91,10 @@ describe('one set per position, width class and level floor', () => {
 describe('files that stopped fitting', () => {
   it('warns about a listed file that became wider than its width class, or is gone', () => {
     const c = addLogoSet(base(), FILES, 'header', 'standard', 'cat.txt');
-    expect(logoWidthWarnings(c, FILES)).toEqual([]);
-    expect(logoWidthWarnings(c, [{ file: 'cat.txt', rows: 6, cols: 100 }])[0]).toMatch(/cat\.txt in header set 1 is 100 columns wide - wider than this screen/);
-    expect(logoWidthWarnings(c, [])[0]).toMatch(/no longer on the board/);
+    expect(logoWidthWarnings(c, FILES, true)).toEqual([]);
+    expect(logoWidthWarnings(c, [{ file: 'cat.txt', rows: 6, cols: 100 }], true)[0]).toMatch(/cat\.txt in header set 1 is 100 columns wide - wider than this screen/);
+    expect(logoWidthWarnings(c, [], true)[0]).toMatch(/no longer on the board/);
+    expect(logoWidthWarnings(c, [], false)).toEqual([]);
   });
 });
 

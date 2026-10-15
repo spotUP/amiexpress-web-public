@@ -210,7 +210,7 @@ export function MenuLogosEditor({ kind, config, update }: { kind: MenuKind; conf
       <p className="text-xs text-content-secondary">
         A logo set says which logos a position shows for one screen width and for callers at a level and above. A logo wider than the narrowest screen of its width (40, 80 or 120 columns) is never drawn, so it cannot be added.
       </p>
-      {logoWidthWarnings(config, files).map(w => <p key={w} role="alert" className="text-sm text-status-danger">{w}</p>)}
+      {logoWidthWarnings(config, files, !loading && !error).map(w => <p key={w} role="alert" className="text-sm text-status-danger">{w}</p>)}
       {POSITIONS.map(({ position, title, note }) => (
         <fieldset key={position} className="border border-border rounded p-3 space-y-2">
           <legend className="px-1 text-sm text-content-primary">{title}{note ? ` - ${note.toLowerCase()}` : ''}</legend>

@@ -68,3 +68,12 @@ test('a C64 logo crosses the transducer back into the same screen codes (Decisio
   expect(petscii.includes(0x1e)).toBe(true);                              // cat.seq's green ($1E) comes back as the same colour byte
   expect(petscii.includes(0x3f)).toBe(false);                             // no '?': nothing was unmappable
 });
+
+test('when a hand-edited config holds two sets for one slot the first draws, as validateMenuConfig keeps the first', () => {
+  const base = cfg([]);
+  const c = { ...base, logos: [
+    { position: 'header' as const, widthClass: 'wide' as const, levelFloor: 0, rule: 'fixed' as const, files: ['cat.txt'], afterSection: 0 },
+    { position: 'header' as const, widthClass: 'wide' as const, levelFloor: 0, rule: 'fixed' as const, files: ['wide.txt'], afterSection: 0 },
+  ] };
+  expect(chooseLogos(c, 'MAIN', caller(120), root)[0].file).toBe('cat.txt');
+});
