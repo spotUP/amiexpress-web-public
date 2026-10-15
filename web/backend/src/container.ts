@@ -16,7 +16,6 @@ export const DI_TOKENS = {
   Conferences: Symbol.for('Conferences'),
   MessageBases: Symbol.for('MessageBases'),
   FileAreas: Symbol.for('FileAreas'),
-  Doors: Symbol.for('Doors'),
   ProcessOlmMessageQueue: Symbol.for('ProcessOlmMessageQueue'),
   CheckSecurity: Symbol.for('CheckSecurity'),
   SetEnvStat: Symbol.for('SetEnvStat'),
@@ -34,7 +33,6 @@ export function initializeContainer(dependencies: {
   conferences?: any[];
   messageBases?: any[];
   fileAreas?: any[];
-  doors?: any[];
   processOlmMessageQueue?: any;
   checkSecurity?: any;
   setEnvStat?: any;
@@ -52,7 +50,6 @@ export function initializeContainer(dependencies: {
   container.registerInstance(DI_TOKENS.Conferences, dependencies.conferences || []);
   container.registerInstance(DI_TOKENS.MessageBases, dependencies.messageBases || []);
   container.registerInstance(DI_TOKENS.FileAreas, dependencies.fileAreas || []);
-  container.registerInstance(DI_TOKENS.Doors, dependencies.doors || []);
 
   // Register function dependencies
   if (dependencies.processOlmMessageQueue) {

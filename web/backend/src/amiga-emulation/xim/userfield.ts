@@ -27,7 +27,7 @@ import {
 import { setSecretInput } from './secret-input';
 import { changeWPassword } from '../../services/user-settings/w-password';
 import { settingsDoorsFor } from '../../handlers/commands/w-settings-doors';
-import { getDoors } from '../../handlers/command-handler/dependency-injection';
+import { getDoors } from '../../handlers/door.handler';
 import { armSettingsResume, takeSettingsResumeRow } from '../../handlers/commands/settings-resume';
 
 export const USERFIELD_WIRE_MAX = 198;

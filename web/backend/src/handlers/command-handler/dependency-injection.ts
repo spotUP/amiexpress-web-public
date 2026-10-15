@@ -65,15 +65,6 @@ export function getFileAreas(): any[] {
   }
 }
 
-export function getDoors(): any[] {
-  try {
-    return container.resolve(DI_TOKENS.Doors) as any[];
-  } catch {
-    // Return empty array if not yet initialized
-    return [];
-  }
-}
-
 export function getProcessOlmMessageQueue() {
   try {
     return container.resolve(DI_TOKENS.ProcessOlmMessageQueue);
@@ -137,10 +128,6 @@ export function setMessageBases(bases: any[]) {
 
 export function setFileAreas(areas: any[]) {
   container.registerInstance(DI_TOKENS.FileAreas, areas);
-}
-
-export function setDoors(doorsList: any[]) {
-  container.registerInstance(DI_TOKENS.Doors, doorsList);
 }
 
 export function setProcessOlmMessageQueue(fn: any) {

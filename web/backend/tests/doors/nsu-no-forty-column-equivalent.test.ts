@@ -65,7 +65,6 @@ jest.mock('../../src/doors/amigaDoorManager', () => ({
 
 import { executeDoor, initializeDoors, getDoors, setHelpers } from '../../src/handlers/door.handler';
 import { handleCommand, processBBSCommand } from '../../src/handlers/command.handler';
-import { setDoors as setDoorsForCommandHandler } from '../../src/handlers/command-handler/dependency-injection';
 import { setCommandExecutionDependencies, commandCache } from '../../src/handlers/command-execution.handler';
 import { doorDropFileManager } from '../../src/services/DoorDropFileManager';
 import { DOOR_NEEDS_80_NOTICE } from '../../src/utils/door-min-columns.util';
@@ -96,7 +95,6 @@ async function register(...defs: any[]) {
   commandCache.bbscmd.clear();
   for (const d of defs) commandCache.bbscmd.set(d.name.toUpperCase(), d);
   await initializeDoors();
-  setDoorsForCommandHandler(getDoors());
   setCommandExecutionDependencies(executeDoor, processBBSCommand);
 }
 

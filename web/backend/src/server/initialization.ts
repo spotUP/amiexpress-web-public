@@ -96,7 +96,6 @@ import { setFileMaintenanceDependencies } from '../handlers/file/file-maintenanc
 import { setMessageEntryDependencies } from '../handlers/message/message-entry.handler';
 import { setDatabase as setDatabaseForAccountHandler } from '../handlers/user/account.handler';
 import {
-  setDoors,
   getDoors,
   setDoorSessions,
   getDoorSessions,
@@ -123,7 +122,6 @@ import {
   setCheckSecurity,
   setSetEnvStat,
   setGetRecentCallerActivity as setGetRecentCallerActivityForCommandHandler,
-  setDoors as setDoorsForCommandHandler,
   setConstants as setConstantsForCommandHandler,
   loadCommands,
   setCommandExecutionDependencies,
@@ -756,8 +754,6 @@ export async function initializeData(io?: SocketIOServer) {
     }
 
     // Inject dependencies into door handler
-    // Note: initializeDoors() already sets the doors internally, so we use getDoors()
-    setDoors(getDoors());
     setDoorSessions(getDoorSessions());
     setDatabaseForDoorHandler(db);
     setHelpersForDoorHandler({ callersLog, getRecentCallerActivity });
@@ -896,7 +892,6 @@ export async function initializeData(io?: SocketIOServer) {
       conferences,
       messageBases,
       fileAreas,
-      doors: getDoors(),
       processOlmMessageQueue,
       checkSecurity,
       setEnvStat,
@@ -914,7 +909,6 @@ export async function initializeData(io?: SocketIOServer) {
     setCheckSecurity(checkSecurity);
     setSetEnvStat(setEnvStat);
     setGetRecentCallerActivityForCommandHandler(getRecentCallerActivity);
-    setDoorsForCommandHandler(getDoors());
     setConstantsForCommandHandler({ SCREEN_MENU });
     setConstantsForMenuDependencies({ SCREEN_MENU });
 

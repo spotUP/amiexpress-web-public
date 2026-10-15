@@ -12,12 +12,8 @@ jest.mock('../../src/index', () => {
 });
 
 const executeDoor = jest.fn(async (_socket: unknown, _session: unknown, _door: unknown) => undefined);
-jest.mock('../../src/handlers/door.handler', () => ({ executeDoor }));
-
 const doors: any[] = [];
-jest.mock('../../src/handlers/command-handler/dependency-injection', () => ({
-  getDoors: () => doors,
-}));
+jest.mock('../../src/handlers/door.handler', () => ({ executeDoor, getDoors: () => doors }));
 
 jest.mock('../../src/database', () => ({ db: { updateUser: jest.fn(async () => undefined) } }));
 

@@ -89,8 +89,7 @@ jest.mock('../../src/index', () => {
   const states = require('../../src/constants/bbs-states');
   return { BBSState: states.BBSState, LoggedOnSubState: states.LoggedOnSubState, BBSSession: {} };
 });
-jest.mock('../../src/handlers/door.handler', () => ({ executeDoor: jest.fn() }));
-jest.mock('../../src/handlers/command-handler/dependency-injection', () => ({ getDoors: () => [] }));
+jest.mock('../../src/handlers/door.handler', () => ({ executeDoor: jest.fn(), getDoors: () => [] }));
 jest.mock('../../src/database', () => ({ db: { updateUser: jest.fn(async () => undefined) } }));
 jest.mock('../../src/utils/acs.util', () => {
   const actual = jest.requireActual('../../src/utils/acs.util');

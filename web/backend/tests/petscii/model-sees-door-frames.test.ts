@@ -110,7 +110,6 @@ jest.mock('../../src/amiga-emulation/AmigaDoorSession', () => ({
 import { AnsiToPetsciiTransducer, PetsciiMachine } from '@amiexpress/bbs-door-sdk/petscii';
 import { executeDoor, initializeDoors, getDoors, setHelpers } from '../../src/handlers/door.handler';
 import { handleCommand } from '../../src/handlers/command.handler';
-import { setDoors as setDoorsForCommandHandler } from '../../src/handlers/command-handler/dependency-injection';
 import { displayScreen } from '../../src/handlers/screen.handler';
 import { petsciiMachineFor } from '../../src/handlers/petscii-screen.render';
 import { installPetsciiModelChoke } from '../../src/utils/petscii-session-model';
@@ -164,7 +163,6 @@ async function register(defs: any[]) {
   await initializeDoors();
   // server/initialization.ts:660 - the live handoff from the door registry to
   // the command dispatcher. Without it, Enter can never find the door.
-  setDoorsForCommandHandler(getDoors());
 }
 
 beforeEach(async () => {

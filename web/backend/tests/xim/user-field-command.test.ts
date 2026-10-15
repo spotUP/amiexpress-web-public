@@ -16,7 +16,7 @@ jest.mock('../../src/services/user-settings/w-fields', () => {
   return { ...actual, applyWField: jest.fn(actual.applyWField), wFieldChoices: jest.fn(actual.wFieldChoices) };
 });
 const doors: any[] = [];
-jest.mock('../../src/handlers/command-handler/dependency-injection', () => ({ getDoors: () => doors }));
+jest.mock('../../src/handlers/door.handler', () => ({ getDoors: () => doors }));
 
 import { userFieldAnswer, USERFIELD_WIRE_MAX } from '../../src/amiga-emulation/xim/userfield';
 import { XIMDataQueryHandler } from '../../src/amiga-emulation/xim/data-query';

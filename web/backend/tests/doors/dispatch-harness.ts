@@ -1,7 +1,7 @@
 /**
  * The real command-dispatch chain, wired for a test.
  *
- *   initializeDoors -> getDoors -> setDoors -> setCommandExecutionDependencies
+ *   initializeDoors -> setCommandExecutionDependencies
  *   -> handleCommand -> processCommand -> executeDoor
  *
  * Extracted from width-gate-fall-through.test.ts so the W-door tests (W7, W10,
@@ -37,7 +37,6 @@ jest.mock('../../src/doors/amigaDoorManager', () => ({
 
 import { executeDoor, initializeDoors, getDoors, setHelpers } from '../../src/handlers/door.handler';
 import { processBBSCommand } from '../../src/handlers/command.handler';
-import { setDoors as setDoorsForCommandHandler } from '../../src/handlers/command-handler/dependency-injection';
 import { setCommandExecutionDependencies, commandCache } from '../../src/handlers/command-execution.handler';
 import { doorDropFileManager } from '../../src/services/DoorDropFileManager';
 import { config } from '../../src/config';
@@ -67,9 +66,8 @@ export async function register(...defs: any[]) {
   commandCache.bbscmd.clear();
   for (const d of defs) commandCache.bbscmd.set(d.name.toUpperCase(), d);
   await initializeDoors();
-  // server/initialization.ts:660 + :757 - the two handoffs that make a typed
-  // command find the door AND make BBSCMD outrank the internal switch.
-  setDoorsForCommandHandler(getDoors());
+  // server/initialization.ts hands the executors over: that makes BBSCMD
+  // outrank the internal switch. The door list itself is door.handler's alone.
   setCommandExecutionDependencies(executeDoor, processBBSCommand);
 }
 

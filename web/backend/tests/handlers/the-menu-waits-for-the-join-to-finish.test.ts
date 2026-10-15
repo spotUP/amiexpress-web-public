@@ -38,7 +38,7 @@ jest.mock('../../src/handlers/command-handler/menu', () => ({
 }));
 
 import { handleCommand } from '../../src/handlers/command.handler';
-import { setDoors } from '../../src/handlers/command-handler/dependency-injection';
+import { setDoors } from '../../src/handlers/door.handler';
 
 interface Emit { event: string; data: string }
 

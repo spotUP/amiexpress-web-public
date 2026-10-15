@@ -90,7 +90,6 @@ import {
   setHelpers,
 } from '../../src/handlers/door.handler';
 import { handleCommand } from '../../src/handlers/command.handler';
-import { setDoors as setDoorsForCommandHandler } from '../../src/handlers/command-handler/dependency-injection';
 import { doorDropFileManager } from '../../src/services/DoorDropFileManager';
 import { config } from '../../src/config';
 import { LoggedOnSubState } from '../../src/constants/bbs-states';
@@ -130,7 +129,6 @@ beforeEach(async () => {
   await initializeDoors();
   // server/initialization.ts:660 - the live handoff from the door registry to
   // the command dispatcher. Without it, Enter can never find the door.
-  setDoorsForCommandHandler(getDoors());
 });
 
 afterEach(() => {
@@ -202,7 +200,6 @@ describe('the [40] marker and the gate read one MIN_COLUMNS source', () => {
     commandCache.bbscmd.clear();
     commandCache.bbscmd.set('PLAIN', { ...bbsCmdDefinition, name: 'PLAIN' });
     await initializeDoors();
-    setDoorsForCommandHandler(getDoors());
 
     const door = getDoors().find((d) => d.command === 'PLAIN');
     expect((door as any).minColumns).toBeUndefined();
@@ -308,7 +305,6 @@ describe('a C64_ADAPT door reached through the real Enter dispatch', () => {
     commandCache.bbscmd.clear();
     for (const d of defs) commandCache.bbscmd.set(d.name, d);
     await initializeDoors();
-    setDoorsForCommandHandler(getDoors());
   }
 
   beforeEach(async () => {
@@ -538,7 +534,6 @@ describe('the marked doors open for a C64 from their real .info bytes', () => {
     fs.writeFileSync(full, Buffer.from([0x00, 0x00, 0x03, 0xf3]));
     loadCommands(root);
     await initializeDoors();
-    setDoorsForCommandHandler(getDoors());
   }
 
   function definitionFromDisk(command: string) {
@@ -579,7 +574,6 @@ describe('the marked doors open for a C64 from their real .info bytes', () => {
     }
     loadCommands(root);
     await initializeDoors();
-    setDoorsForCommandHandler(getDoors());
   }
 
   /** ACCESS=20 on WHO/RTW/WHAT, 010 on S, 50 on GWall - a sysop clears them all. */

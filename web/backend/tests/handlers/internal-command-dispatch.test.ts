@@ -34,7 +34,6 @@ jest.mock('../../src/handlers/command-handler/dependency-injection', () => ({
   getMessageBases: jest.fn().mockReturnValue([]),
   getProcessOlmMessageQueue: jest.fn().mockReturnValue(jest.fn()),
   getScreenMenu: jest.fn().mockReturnValue(null),
-  getDoors: jest.fn().mockReturnValue([]),
   getDatabase: jest.fn().mockReturnValue({
     getActiveSessions: jest.fn().mockResolvedValue([]),
     getUsers: jest.fn().mockResolvedValue([]),
@@ -95,6 +94,7 @@ jest.mock('../../src/handlers/door.handler', () => ({
   executeDoor: jest.fn().mockResolvedValue(undefined),
   handleDoorCommand: jest.fn().mockResolvedValue(undefined),
   displayDoorMenu: jest.fn().mockResolvedValue(undefined),
+  getDoors: jest.fn().mockReturnValue([]),
 }));
 
 jest.mock('../../src/handlers/commands/system-commands.handler', () => ({

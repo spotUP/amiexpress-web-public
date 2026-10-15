@@ -211,7 +211,6 @@ import {
   setCheckSecurity,
   setSetEnvStat,
   setGetRecentCallerActivity as setGetRecentCallerActivityForCommandHandler,
-  setDoors as setDoorsForCommandHandler,
   setConstants as setConstantsForCommandHandler,
   loadCommands,
   setCommandExecutionDependencies,

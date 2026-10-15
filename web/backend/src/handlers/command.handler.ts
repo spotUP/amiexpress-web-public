@@ -33,7 +33,7 @@ import { displayMainMenu as menuDisplayMainMenu, displayMenuPrompt as menuDispla
 import { routeStateInput, isRoutedState } from './command-handler/state-router';
 import { INTERNAL_COMMAND_NAMES } from './command-handler/internal-command-names';
 import { displayModeOf } from '../amiga-emulation/xim/display-mode.util';
-import { displayDoorMenu, executeDoor, doorAvailableTo } from './door.handler';
+import { displayDoorMenu, executeDoor, doorAvailableTo, getDoors } from './door.handler';
 import { startSysopPage } from './chat/chat.handler';
 import {
   displayNewFiles,
@@ -212,8 +212,7 @@ import {
   getConfig,
   getConferences,
   getMessageBases,
-  getFileAreas,
-  getDoors
+  getFileAreas
 } from './command-handler/dependency-injection';
 import { loginNamePrompt, loginPasswordPrompt, logonNamePromptText } from '../utils/node-tooltypes.util';
 import { feedInputWaiter, readLineAhead } from '../utils/await-input';
@@ -231,7 +230,6 @@ export {
   setCheckSecurity,
   setSetEnvStat,
   setGetRecentCallerActivity,
-  setDoors,
   setConstants
 } from './command-handler/dependency-injection';
 

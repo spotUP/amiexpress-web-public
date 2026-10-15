@@ -442,7 +442,7 @@ export const FIRST_SETTINGS_DOOR_OPTION = 23;
 
 /** The settings doors this caller may open, from the board's own door list. */
 export function settingsDoorEntries(session: BBSSession): SettingsDoorEntry[] {
-  const { getDoors } = require('../command-handler/dependency-injection');
+  const { getDoors } = require('../door.handler');
   // WEB_: this menu draws the web terminal settings itself (rows 17-22: modem speed, font, data,
   // erasure, PETSCII colours and character set), so the WEBTERM door that is the same six
   // settings in the W door is not offered a second time. No express.e counterpart.
