@@ -33,6 +33,7 @@ void ui_grid_init(ui_grid *g)
     memset(g, 0, sizeof(*g));
     g->max_columns = 4;
     g->band_after_section = -1;
+    g->ground = -1;
     g->ink = UI_TOKEN(UI_T_INK);
     g->accent = UI_TOKEN(UI_T_ACCENT);
     g->dim = UI_TOKEN(UI_T_DIM);
@@ -83,7 +84,7 @@ static void build_lines(ui_grid *g)
         for (r = first; r < e; r += g->columns)
             push(g, UI_GL_ITEMS, r, imin(g->columns, e - r));
         if (s == g->band_after_section)
-            for (r = 0; r < g->band_height; r++) push(g, UI_GL_BAND, r, 0);
+            for (r = 0; r < g->band_rows; r++) push(g, UI_GL_BAND, r, 0);
     }
 }
 
@@ -98,8 +99,10 @@ static void build_pages(ui_grid *g)
     }
     while (start < g->line_count) {
         int end = start + h, again = 1;
+        /* The last page (the UI_GRID_MAX_PAGES-1'th) takes the rest, however long: the page table is
+           fixed-size, so a catalogue that needs more pages gets one overlong final page, never a lost entry. */
         if (g->page_count >= UI_GRID_MAX_PAGES - 1 || end >= g->line_count) {
-            end = g->line_count;                       /* the last page takes the rest */
+            end = g->line_count;
         } else {
             while (again) {
                 again = 0;
@@ -179,7 +182,9 @@ void ui_grid_layout(ui_grid *g)
     }
     g->col_width = g->width / g->columns;
     if (cw > g->col_width) g->label_width = imax(4, g->label_width - (cw - g->col_width));
-    if (g->band_height > g->height) g->band_height = 0;   /* a band taller than the box can never show */
+    /* A band taller than the box can never show. Computed, so the caller's band_height is left alone
+       and the band comes back when the box grows. */
+    g->band_rows = g->band_height > g->height ? 0 : g->band_height;
     build_lines(g);
     build_pages(g);
     last = last_entry(g);
@@ -217,9 +222,11 @@ void ui_grid_select(ui_grid *g, int index)
 
 int ui_grid_move(ui_grid *g, int key)
 {
-    int before_sel = g->selected, before_off = g->offset, target = -1, i;
+    int before_sel, before_off, target = -1, i;
 
     if (!g || g->line_count == 0) return 0;
+    before_sel = g->selected;
+    before_off = g->offset;
     switch (key) {
     case UI_KEY_UP:    target = step_row(g, g->selected, -1); break;
     case UI_KEY_DOWN:  target = step_row(g, g->selected, 1); break;
@@ -290,19 +297,19 @@ static void draw_cell(ui_grid *g, ansi_buf *b, int entry, int row, int col)
     compose(g, entry, chosen, buf, cw);
     if (chosen) {
         /* A bar in the selection's colours; with a caret, the caret IS the mark and no bar is painted. */
-        if (g->caret) ansi_color(b, g->selected_fg, -1, 1);
+        if (g->caret) ansi_color(b, g->selected_fg, g->ground, 1);
         else          ansi_color(b, g->selected_fg, g->selected_bg, 1);
         ansi_text(b, row, col, buf, cw);
         return;
     }
     if (key_end > cw) key_end = cw;
     if (lab_end > cw) lab_end = cw;
-    ansi_color(b, grey ? g->dim : g->accent, -1, 0);
+    ansi_color(b, grey ? g->dim : g->accent, g->ground, 0);
     ansi_text(b, row, col, buf, key_end);
-    ansi_color(b, grey ? g->dim : g->ink, -1, 0);
+    ansi_color(b, grey ? g->dim : g->ink, g->ground, 0);
     ansi_text(b, row, col + key_end, buf + key_end, lab_end - key_end);
     if (cw > lab_end) {
-        ansi_color(b, g->dim, -1, 0);
+        ansi_color(b, g->dim, g->ground, 0);
         ansi_text(b, row, col + lab_end, buf + lab_end, cw - lab_end);
     }
 }
@@ -317,19 +324,19 @@ static void draw_header(ui_grid *g, ansi_buf *b, int section, int row)
     while (*t && tl < w - 3) title[tl++] = *t++;
     title[tl++] = ' ';
     title[tl] = '\0';
-    ansi_color(b, g->accent, -1, 1);
+    ansi_color(b, g->accent, g->ground, 1);
     ansi_text(b, row, g->left + 1, title, tl);
     if (w - 1 - tl > 0) {
         memset(rule, '-', (size_t)(w - 1 - tl));
         rule[w - 1 - tl] = '\0';
-        ansi_color(b, g->dim, -1, 0);
+        ansi_color(b, g->dim, g->ground, 0);
         ansi_text(b, row, g->left + 1 + tl, rule, w - 1 - tl);
     }
 }
 
 static void blank_row(ui_grid *g, ansi_buf *b, int row)
 {
-    ansi_color(b, g->ink, -1, 0);
+    ansi_color(b, g->ink, g->ground, 0);
     ansi_text(b, row, g->left, "", g->width);
 }
 

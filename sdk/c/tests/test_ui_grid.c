@@ -186,6 +186,78 @@ static void a_band_is_never_split_across_pages(void)
         assert(!(g.lines[g.page_start[p]].kind == UI_GL_BAND && g.lines[g.page_start[p] - 1].kind == UI_GL_BAND));
 }
 
+static void a_null_grid_is_refused_before_anything_is_read(void)
+{
+    assert(ui_grid_move(0, UI_KEY_DOWN) == 0);
+}
+
+static void a_band_taller_than_the_box_leaves_the_callers_height_alone(void)
+{
+    ui_grid g = a_grid(80, 6, UI_GRID_SCROLL);
+    g.band_after_section = 0; g.band_height = 10;
+    ui_grid_layout(&g);
+    assert(g.band_rows == 0 && ui_grid_band_row(&g) == 0);   /* it can never show here */
+    assert(g.band_height == 10);                             /* but the caller's field is not rewritten */
+    g.height = 20;                                           /* the terminal grows */
+    ui_grid_layout(&g);
+    assert(g.band_rows == 10);
+    assert(ui_grid_band_row(&g) > 0);                        /* the band comes back */
+}
+
+static void the_ground_is_painted_under_every_cell_and_never_left_to_the_terminal(void)
+{
+    ui_grid g = a_grid(80, 20, UI_GRID_SCROLL);
+    char plain[32768];
+    strcpy(plain, drawn(&g));
+    g.ground = 4;                                            /* blue, a door's own background */
+    ui_grid_layout(&g);
+    assert(strcmp(drawn(&g), plain) != 0);
+    assert(strstr(drawn(&g), "44") != 0);
+    assert(strstr(plain, "44") == 0);                        /* -1 stays the terminal's own */
+}
+
+static void a_caret_marks_the_selection_at_forty_columns_without_a_bar(void)
+{
+    ui_grid g = a_grid(40, 20, UI_GRID_PAGES);
+    g.caret = ">>";
+    ui_grid_select(&g, 0);
+    ui_grid_layout(&g);
+    assert(strstr(drawn(&g), ">>") != 0);
+    assert(strstr(drawn(&g), ">> R") != 0 || strstr(drawn(&g), ">>R") != 0);
+    ui_grid_select(&g, 1);
+    {
+        const char *s = drawn(&g);
+        assert(strstr(s, ">> E") != 0 || strstr(s, ">>E") != 0);
+        assert(strstr(s, ">> R") == 0);                      /* the mark moved with the selection */
+    }
+}
+
+static void three_and_four_columns_each_answer_their_own_hit(void)
+{
+    int width, want, c;
+    for (want = 3; want <= 4; want++) {
+        ui_grid g;
+        width = want == 3 ? 120 : 160;
+        g = a_grid(width, 20, UI_GRID_SCROLL);
+        assert(g.columns == want);
+        for (c = 0; c < want; c++)
+            assert(ui_grid_hit(&g, 6, g.left + c * g.col_width + 3) == 3 + c);   /* the Files row: entries 3.. */
+        assert(ui_grid_hit(&g, 6, g.left + g.width) == -1);                  /* right of the box */
+    }
+}
+
+static void max_columns_caps_the_columns_and_zero_means_four(void)
+{
+    ui_grid g = a_grid(160, 20, UI_GRID_SCROLL);
+    assert(g.columns == 4);                                  /* the default cap */
+    g.max_columns = 2;
+    ui_grid_layout(&g);
+    assert(g.columns == 2);
+    g.max_columns = 0;
+    ui_grid_layout(&g);
+    assert(g.columns == 4);
+}
+
 int main(void)
 {
     eighty_columns_lay_entries_out_side_by_side();
@@ -202,6 +274,12 @@ int main(void)
     an_empty_grid_is_not_a_crash();
     nothing_is_drawn_outside_the_box();
     a_band_is_never_split_across_pages();
+    a_null_grid_is_refused_before_anything_is_read();
+    a_band_taller_than_the_box_leaves_the_callers_height_alone();
+    the_ground_is_painted_under_every_cell_and_never_left_to_the_terminal();
+    a_caret_marks_the_selection_at_forty_columns_without_a_bar();
+    three_and_four_columns_each_answer_their_own_hit();
+    max_columns_caps_the_columns_and_zero_means_four();
     puts("test_ui_grid: OK");
     return 0;
 }

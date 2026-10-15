@@ -35,10 +35,13 @@ typedef struct {
     int band_after_section, band_height;   /* -1, 0: no band */
     int mode;                              /* UI_GRID_SCROLL or UI_GRID_PAGES */
     int ink, accent, dim, selected_fg, selected_bg;
+    /** The background every cell is drawn on (the door's ground), or -1 for the terminal's own (ui_grid_init). */
+    int ground;
     const char *caret;                     /* 0 = paint a bar; ">>" at 40 columns */
     void *ctx;
     /* computed by ui_grid_layout - read, never set */
     int key_width, label_width, right_width, columns, col_width;
+    int band_rows;                         /* band_height, or 0 when the box is too short to show it */
     ui_grid_line lines[UI_GRID_MAX_LINES];
     int line_count;
     int page_start[UI_GRID_MAX_PAGES + 1];
