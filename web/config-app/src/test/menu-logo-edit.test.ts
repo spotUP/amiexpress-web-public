@@ -1,9 +1,9 @@
 /** What the logo-set and C64-menu edits do to a menu config - pure, no page. */
 import { describe, expect, it } from 'vitest';
-import { defaultMenuConfig } from '@bbs/screens/menu-config/menu-config';
+import { defaultMenuConfig, NARROWEST_COLUMNS } from '@bbs/screens/menu-config/menu-config';
 import {
-  addLogoFile, addLogoSet, logoOffers, moveLogoFile, removeLogoFile, removeLogoSet, setLogoRule,
-  NARROWEST_COLUMNS, positionWidths, WIDER_NOTE,
+  addLogoFile, addLogoSet, logoOffers, moveLogoFile, removeLogoFile, removeLogoSet, setLogoRule, setLogoAfterSection,
+  positionWidths, WIDER_NOTE, logoSlotConflict, setLogoFloor, logoWidthWarnings,
 } from '../components/menus/menu-logo-edit';
 import {
   addC64Floor, addC64Key, addC64Section, moveC64Key, removeC64Key, removeC64Section, renameC64Section, c64KeyChoices,
@@ -22,7 +22,10 @@ describe('logo offers', () => {
     expect(logoOffers(FILES, 'standard').map(o => o.file)).toEqual(['cat.txt', 'huge.txt']);
   });
   it('marks a logo wider than the narrowest screen of the class as never drawn', () => {
-    expect(NARROWEST_COLUMNS).toEqual({ c64: 40, standard: 80, wide: 120 });
+    const edge = (cls: 'c64' | 'standard' | 'wide', cols: number) => logoOffers([{ file: 'e.txt', rows: 1, cols }], cls)[0]?.fits;
+    expect(edge('standard', NARROWEST_COLUMNS.standard)).toBe(true);
+    expect(edge('standard', NARROWEST_COLUMNS.standard + 1)).toBe(false);
+    expect(edge('wide', NARROWEST_COLUMNS.wide + 1)).toBe(false);
     const offers = logoOffers(FILES, 'standard');
     expect(offers.find(o => o.file === 'huge.txt')).toMatchObject({ fits: false, note: WIDER_NOTE });
     expect(offers.find(o => o.file === 'cat.txt')).toMatchObject({ fits: true });
@@ -60,6 +63,37 @@ describe('logo sets', () => {
     c = removeLogoFile(c, 0, 'dog.txt');
     expect(removeLogoFile(c, 0, 'cat.txt')).toBe(c);
     expect(removeLogoSet(c, 0).logos).toEqual([]);
+  });
+});
+
+describe('one set per position, width class and level floor', () => {
+  const two = [...FILES, { file: 'dog.txt', rows: 3, cols: 20, alphabet: 'ansi' as const }];
+  it('refuses a second set at the same floor, with a reason', () => {
+    const c = addLogoSet(base(), two, 'header', 'standard', 'cat.txt');
+    expect(addLogoSet(c, two, 'header', 'standard', 'dog.txt')).toBe(c);
+    expect(logoSlotConflict(c, 'header', 'standard', 0)).toMatch(/already exists/);
+    expect(logoSlotConflict(c, 'header', 'wide', 0)).toBeNull();
+    expect(addLogoSet(c, two, 'footer', 'standard', 'dog.txt').logos).toHaveLength(2);
+  });
+  it('refuses moving a set onto another set\'s floor, and allows a free floor', () => {
+    let c = addLogoSet(base(), two, 'header', 'standard', 'cat.txt');
+    c = setLogoFloor(addLogoSet(c, two, 'header', 'standard', 'dog.txt'), 0, 10);
+    c = addLogoSet(c, two, 'header', 'standard', 'dog.txt');
+    expect(c.logos.map(l => l.levelFloor)).toEqual([10, 0]);
+    expect(setLogoFloor(c, 1, 10)).toBe(c);
+  });
+  it('treats two between-sections sets at one floor as a clash whatever the afterSection', () => {
+    const c = addLogoSet(base(), two, 'between', 'standard', 'cat.txt');
+    expect(logoSlotConflict(setLogoAfterSection(c, 0, 2), 'between', 'standard', 0)).toMatch(/between-sections/);
+  });
+});
+
+describe('files that stopped fitting', () => {
+  it('warns about a listed file that became wider than its width class, or is gone', () => {
+    const c = addLogoSet(base(), FILES, 'header', 'standard', 'cat.txt');
+    expect(logoWidthWarnings(c, FILES)).toEqual([]);
+    expect(logoWidthWarnings(c, [{ file: 'cat.txt', rows: 6, cols: 100 }])[0]).toMatch(/cat\.txt in header set 1 is 100 columns wide - wider than this screen/);
+    expect(logoWidthWarnings(c, [])[0]).toMatch(/no longer on the board/);
   });
 });
 

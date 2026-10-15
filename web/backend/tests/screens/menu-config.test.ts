@@ -70,3 +70,10 @@ test('a duplicate section id is dropped with a problem line, the first one wins'
   expect(config.sections).toEqual([{ id: 'a', title: 'First' }, { id: 'b', title: 'Two' }]);
   expect(problems).toContain('sections: duplicate id "a" dropped');
 });
+
+test('a second logo set for the same position, width class and level floor is dropped with a reason', () => {
+  const set = (afterSection: number, floor = 0) => ({ position: 'between', widthClass: 'standard', levelFloor: floor, rule: 'fixed', files: ['a.txt'], afterSection });
+  const { config, problems } = validateMenuConfig('MAIN', { logos: [set(0), set(2), set(2, 10)] });
+  expect(config.logos.map(l => [l.levelFloor, l.afterSection])).toEqual([[0, 0], [10, 2]]);
+  expect(problems).toContain('logos: a second between set for standard at level 0 was dropped');
+});

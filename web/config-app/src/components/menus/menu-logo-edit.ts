@@ -5,10 +5,9 @@
  * cannot check at save time: a file wider than the narrowest screen of its width
  * class is never drawn, so it cannot be added.
  */
-import type { LogoPosition, LogoRule, MenuConfig, WidthClass } from '@bbs/screens/menu-config/menu-config';
+import { NARROWEST_COLUMNS, type LogoPosition, type LogoRule, type MenuConfig, type WidthClass } from '@bbs/screens/menu-config/menu-config';
 import type { MenuLogoFile } from '../../api/client';
 
-export const NARROWEST_COLUMNS: Record<WidthClass, number> = { c64: 40, standard: 80, wide: 120 };
 export const WIDER_NOTE = 'Wider than this screen - never drawn';
 
 export interface LogoOffer { file: string; rows: number; cols: number; fits: boolean; note: string }
@@ -32,8 +31,22 @@ export function positionWidths(position: LogoPosition): WidthClass[] {
 const usable = (files: MenuLogoFile[], cls: WidthClass, file: string) =>
   logoOffers(files, cls).some(o => o.file === file && o.fits);
 
+const POSITION_WORDS: Record<LogoPosition, string> = { header: 'header', footer: 'footer', side: 'side panel', between: 'between-sections' };
+const CLASS_WORDS: Record<WidthClass, string> = { c64: 'C64', standard: 'Standard', wide: 'Wide' };
+
+/**
+ * The board keeps one set per position, width class and level floor (the later would silently win and the
+ * earlier never draw), so the editor refuses a second and says why. `except` is the set being changed.
+ */
+export function logoSlotConflict(c: MenuConfig, position: LogoPosition, cls: WidthClass, floor: number, except = -1): string | null {
+  const clash = c.logos.some((s, i) => i !== except && s.position === position && s.widthClass === cls && s.levelFloor === floor);
+  return clash
+    ? `A ${POSITION_WORDS[position]} set for ${CLASS_WORDS[cls]} from level ${floor} already exists; give this one another level or add the file to that set.`
+    : null;
+}
+
 export function addLogoSet(c: MenuConfig, files: MenuLogoFile[], position: LogoPosition, cls: WidthClass, file: string): MenuConfig {
-  if (!positionWidths(position).includes(cls) || !usable(files, cls, file)) return c;
+  if (!positionWidths(position).includes(cls) || !usable(files, cls, file) || logoSlotConflict(c, position, cls, 0)) return c;
   return { ...c, logos: [...c.logos, { position, widthClass: cls, levelFloor: 0, rule: 'fixed', files: [file], afterSection: 0 }] };
 }
 
@@ -44,8 +57,24 @@ function withSet(c: MenuConfig, index: number, change: (s: MenuConfig['logos'][n
 
 export const removeLogoSet = (c: MenuConfig, index: number): MenuConfig => ({ ...c, logos: c.logos.filter((_, i) => i !== index) });
 export const setLogoRule = (c: MenuConfig, index: number, rule: LogoRule): MenuConfig => withSet(c, index, s => ({ ...s, rule }));
-export const setLogoFloor = (c: MenuConfig, index: number, floor: number): MenuConfig =>
-  Number.isInteger(floor) && floor >= 0 && floor <= 65535 ? withSet(c, index, s => ({ ...s, levelFloor: floor })) : c;
+export const setLogoFloor = (c: MenuConfig, index: number, floor: number): MenuConfig => {
+  const set = c.logos[index];
+  if (!set || !Number.isInteger(floor) || floor < 0 || floor > 65535 || logoSlotConflict(c, set.position, set.widthClass, floor, index)) return c;
+  return withSet(c, index, s => ({ ...s, levelFloor: floor }));
+};
+
+/** Files already in a set that no longer fit the set's narrowest screen (re-uploaded or edited wider), or have gone. */
+export function logoWidthWarnings(c: MenuConfig, files: MenuLogoFile[]): string[] {
+  const out: string[] = [];
+  c.logos.forEach((set, i) => {
+    for (const name of set.files) {
+      const f = files.find(x => x.file === name);
+      if (!f) out.push(`${name} in ${POSITION_WORDS[set.position]} set ${i + 1} is no longer on the board - never drawn`);
+      else if (f.cols > NARROWEST_COLUMNS[set.widthClass]) out.push(`${name} in ${POSITION_WORDS[set.position]} set ${i + 1} is ${f.cols} columns wide - ${WIDER_NOTE.toLowerCase()}`);
+    }
+  });
+  return out;
+}
 export const setLogoAfterSection = (c: MenuConfig, index: number, after: number): MenuConfig =>
   Number.isInteger(after) && after >= 0 ? withSet(c, index, s => ({ ...s, afterSection: after })) : c;
 

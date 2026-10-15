@@ -31,7 +31,8 @@ const uploadMenuLogo = vi.fn(async (_kind: string, file: string, _base64: string
 const deleteMenuLogo = vi.fn(async (_kind: string, _file: string): Promise<void> => undefined);
 const confirm = vi.fn(async () => true);
 
-vi.mock('../api/client', () => ({
+vi.mock('../api/client', async importOriginal => ({
+  ...(await importOriginal<typeof import('../api/client')>()),
   apiClient: {
     getMenuConfig: (k: string) => getMenuConfig(k),
     saveMenuConfig: (k: string, c: unknown) => saveMenuConfig(k, c),
@@ -121,7 +122,11 @@ describe('the Menu Doors logo, C64 and bulletin parts', () => {
 
   it('says which parts of the menu still use a logo that cannot be deleted', async () => {
     const user = userEvent.setup();
-    deleteMenuLogo.mockRejectedValueOnce(Object.assign(new Error('The menu still shows this logo'), { status: 409, data: { usedBy: ['header', 'footer'] } }));
+    // The real mapping: the board answers 409 with usedBy at the top level, client.ts failed() turns it into an ApiError.
+    const { apiClient: real } = await vi.importActual<typeof import('../api/client')>('../api/client');
+    const refusal = (real as unknown as { failed(s: number, b: object, f: string): Error })
+      .failed(409, { success: false, message: 'The menu still shows this logo', usedBy: ['header', 'footer'] }, 'Failed');
+    deleteMenuLogo.mockRejectedValueOnce(refusal);
     renderPage('?part=logos');
     const row = (await screen.findByRole('cell', { name: 'cat.txt' })).closest('tr')!;
     await user.click(within(row).getByRole('button', { name: 'Delete cat.txt' }));

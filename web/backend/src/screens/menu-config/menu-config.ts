@@ -43,6 +43,12 @@ const POSITIONS: LogoPosition[] = ['header', 'footer', 'side', 'between'];
 const CLASSES: WidthClass[] = ['c64', 'standard', 'wide'];
 const RULES: LogoRule[] = ['fixed', 'rotate', 'random'];
 
+/**
+ * The narrowest screen the board serves in each width class (an ANSI caller is never below 80 columns,
+ * the C64 is 40, wide starts at 120): a logo wider than this is not drawn at every width of the class.
+ */
+export const NARROWEST_COLUMNS: Record<WidthClass, number> = { c64: 40, standard: 80, wide: 120 };
+
 export function widthClassOf(columns: number): WidthClass {
   if (columns <= 40) return 'c64';
   return columns >= 120 ? 'wide' : 'standard';
@@ -165,6 +171,8 @@ export function validateMenuConfig(kind: MenuKind, raw: unknown): { config: Menu
     else if (raw.wipes.at40 !== undefined) problems.push('wipes at40: not true/false');
   }
   if (Array.isArray(raw.logos)) {
+    // The board keeps one set per position, width class and level floor (chooseLogos), so a second is dropped, never left to win silently.
+    const taken = new Set<string>();
     for (const l of raw.logos) {
       const ok = isObj(l) && POSITIONS.includes(l.position as LogoPosition) && CLASSES.includes(l.widthClass as WidthClass)
         && RULES.includes(l.rule as LogoRule) && Number.isInteger(l.levelFloor) && (l.levelFloor as number) >= 0
@@ -173,6 +181,9 @@ export function validateMenuConfig(kind: MenuKind, raw: unknown): { config: Menu
       if (l.widthClass === 'c64' && (l.files as string[]).some(f => !f.endsWith('.seq'))) { problems.push('logos: a C64 logo must be a .seq'); continue; }
       if (l.widthClass !== 'c64' && (l.files as string[]).some(f => !f.endsWith('.txt'))) { problems.push('logos: an ANSI logo must be a .txt'); continue; }
       if (l.position === 'side' && l.widthClass !== 'wide') { problems.push('logos: a side logo is for wide screens only'); continue; }
+      const slot = `${l.position}|${l.widthClass}|${l.levelFloor}`;
+      if (taken.has(slot)) { problems.push(`logos: a second ${l.position} set for ${l.widthClass} at level ${l.levelFloor} was dropped`); continue; }
+      taken.add(slot);
       config.logos.push({ position: l.position as LogoPosition, widthClass: l.widthClass as WidthClass, levelFloor: l.levelFloor as number,
         rule: l.rule as LogoRule, files: l.files as string[], afterSection: Number.isInteger(l.afterSection) ? (l.afterSection as number) : 0 });
     }

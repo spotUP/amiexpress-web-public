@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { LOGO_FILE_RE, type LogoPosition, type LogoRule, type MenuConfig, type MenuKind, type WidthClass } from '@bbs/screens/menu-config/menu-config';
-import { apiClient, type MenuLogoFile } from '../../api/client';
+import { apiClient, ApiError, type MenuLogoFile } from '../../api/client';
 import { useNotification } from '../../contexts/NotificationContext';
 import { DataTable, type DataTableColumn } from '../ui/DataTable';
 import { Modal } from '../ui/Modal';
@@ -9,7 +9,7 @@ import { ScreenEditor } from '../ScreenEditor';
 import { createSurface, type EditorSurface } from '../../pages/screen-editor-state';
 import { screenToCanvas } from '../../pages/screen-bytes';
 import {
-  addLogoFile, addLogoSet, logoOffers, moveLogoFile, positionWidths, removeLogoFile, removeLogoSet,
+  addLogoFile, addLogoSet, logoOffers, logoSlotConflict, logoWidthWarnings, moveLogoFile, positionWidths, removeLogoFile, removeLogoSet,
   setLogoAfterSection, setLogoFloor, setLogoRule, usedByText,
 } from './menu-logo-edit';
 import { BUTTON_CLASS, INPUT_CLASS } from './menu-styles';
@@ -80,8 +80,8 @@ function FilesPanel({ kind, files, loading, error, reload }: { kind: MenuKind; f
     if (!ok) return;
     try { await apiClient.deleteMenuLogo(kind, file); reload(); }
     catch (e: unknown) {
-      const data = e instanceof Error ? (e as { data?: { usedBy?: unknown } }).data : undefined;
-      setNote(data?.usedBy ? usedByText(data.usedBy) : e instanceof Error ? e.message : 'Failed to delete the logo');
+      const usedBy = e instanceof ApiError ? (e.data as { usedBy?: unknown } | undefined)?.usedBy : undefined;
+      setNote(usedBy ? usedByText(usedBy) : e instanceof Error ? e.message : 'Failed to delete the logo');
     }
   };
 
@@ -120,11 +120,12 @@ function FilesPanel({ kind, files, loading, error, reload }: { kind: MenuKind; f
   );
 }
 
-function NewSetRow({ position, files, update }: { position: LogoPosition; files: MenuLogoFile[]; update: Update }) {
+function NewSetRow({ position, config, files, update }: { position: LogoPosition; config: MenuConfig; files: MenuLogoFile[]; update: Update }) {
   const widths = positionWidths(position);
   const [cls, setCls] = useState<WidthClass>(widths[0]);
   const [file, setFile] = useState('');
   const offers = logoOffers(files, cls);
+  const conflict = logoSlotConflict(config, position, cls, 0);
   const name = position === 'between' ? 'between sections' : position === 'side' ? 'side panel' : position;
   return (
     <div className="flex flex-wrap items-center gap-2">
@@ -135,13 +136,15 @@ function NewSetRow({ position, files, update }: { position: LogoPosition; files:
         <option value="">Choose a file</option>
         {offers.map(o => <option key={o.file} value={o.file} disabled={!o.fits}>{o.file}{o.fits ? '' : ` - ${o.note}`}</option>)}
       </select>
-      <button className={BUTTON_CLASS} disabled={!file} aria-label={`Add ${name} set`} onClick={() => { update(c => addLogoSet(c, files, position, cls, file)); setFile(''); }}>Add set</button>
+      <button className={BUTTON_CLASS} disabled={!file || !!conflict} aria-label={`Add ${name} set`} onClick={() => { update(c => addLogoSet(c, files, position, cls, file)); setFile(''); }}>Add set</button>
+      {conflict && <p role="alert" className="w-full text-xs text-status-danger">{conflict}</p>}
     </div>
   );
 }
 
 function SetRow({ index, config, files, update }: { index: number; config: MenuConfig; files: MenuLogoFile[]; update: Update }) {
   const set = config.logos[index];
+  const [floorNote, setFloorNote] = useState<string | null>(null);
   const addable = logoOffers(files, set.widthClass).filter(o => !set.files.includes(o.file));
   return (
     <div className="border border-border rounded p-2 space-y-2 text-sm text-content-primary">
@@ -149,7 +152,12 @@ function SetRow({ index, config, files, update }: { index: number; config: MenuC
         <span className="w-20">{WIDTH_WORDS[set.widthClass]}</span>
         <label className="flex items-center gap-1">From level
           <input aria-label={`From level of ${set.position} set ${index + 1}`} className={`${INPUT_CLASS} !w-24`} type="number" min={0} max={65535}
-            value={set.levelFloor} onChange={e => update(c => setLogoFloor(c, index, Number(e.target.value)))} />
+            value={set.levelFloor} onChange={e => {
+              const floor = Number(e.target.value);
+              const reason = logoSlotConflict(config, set.position, set.widthClass, floor, index);
+              setFloorNote(reason);
+              if (!reason) update(c => setLogoFloor(c, index, floor));
+            }} />
         </label>
         <select aria-label={`Rule of ${set.position} set ${index + 1}`} className={`${INPUT_CLASS} !w-auto`} value={set.rule}
           onChange={e => update(c => setLogoRule(c, index, e.target.value as LogoRule))}>
@@ -163,6 +171,7 @@ function SetRow({ index, config, files, update }: { index: number; config: MenuC
         )}
         <button className={BUTTON_CLASS} onClick={() => update(c => removeLogoSet(c, index))}>Remove set</button>
       </div>
+      {floorNote && <p role="alert" className="text-xs text-status-danger">{floorNote}</p>}
       <ol className="space-y-1">
         {set.files.map((f, i) => (
           <li key={f} className="flex items-center gap-2">
@@ -201,11 +210,12 @@ export function MenuLogosEditor({ kind, config, update }: { kind: MenuKind; conf
       <p className="text-xs text-content-secondary">
         A logo set says which logos a position shows for one screen width and for callers at a level and above. A logo wider than the narrowest screen of its width (40, 80 or 120 columns) is never drawn, so it cannot be added.
       </p>
+      {logoWidthWarnings(config, files).map(w => <p key={w} role="alert" className="text-sm text-status-danger">{w}</p>)}
       {POSITIONS.map(({ position, title, note }) => (
         <fieldset key={position} className="border border-border rounded p-3 space-y-2">
           <legend className="px-1 text-sm text-content-primary">{title}{note ? ` - ${note.toLowerCase()}` : ''}</legend>
           {config.logos.map((s, i) => (s.position === position ? <SetRow key={i} index={i} config={config} files={files} update={update} /> : null))}
-          <NewSetRow position={position} files={files} update={update} />
+          <NewSetRow position={position} config={config} files={files} update={update} />
         </fieldset>
       ))}
     </div>
