@@ -35,7 +35,6 @@ export class MouseAbsorber {
   constructor(private readonly onSettle: (keys: string) => void = () => {}, private readonly settleMs = CARRY_SETTLE_MS) {}
 
   absorb(data: string): string {
-    this.clearTimer();
     let s = this.carry + data;
     this.carry = '';
     let out = '';
@@ -52,14 +51,15 @@ export class MouseAbsorber {
         if (!this.woken) { this.woken = true; out += MOUSE_WAKE; }
         continue;
       }
-      if (PARTIAL.test(s)) { this.hold(s); break; }
+      if (PARTIAL.test(s)) { this.carry = s; break; }
       out += '\x1b'; s = s.slice(1);
     }
+    // The bound runs from the FIRST held byte: a drip of partial chunks must not keep restarting it.
+    if (!this.carry) this.clearTimer(); else if (!this.timer) this.startTimer();
     return out;
   }
 
-  private hold(tail: string): void {
-    this.carry = tail;
+  private startTimer(): void {
     this.timer = setTimeout(() => {
       this.timer = null;
       const keys = this.carry;
@@ -79,6 +79,10 @@ export class MouseAbsorber {
     return e;
   }
 
+  /** Hand on what is held (a lone Esc the caller pressed) and stop the timer; for MOUSE OFF / re-arm. */
+  flush(): string { this.clearTimer(); const keys = this.carry; this.carry = ''; return keys; }
+
+  /** Discard everything, held bytes included; for door exit and carrier loss. */
   reset(): void { this.clearTimer(); this.carry = ''; this.events = []; this.woken = false; }
 
   private store(b: number, col: number, row: number, release: boolean): void {

@@ -106,10 +106,31 @@ describe('a report split anywhere across chunks', () => {
     expect(m.absorb('\x1b') + m.absorb('x')).toBe('\x1bx');
   });
 
-  test('mouse OFF (no absorber) carries nothing: XIMProtocol only calls absorb while armed', () => {
-    const m = new MouseAbsorber();
+  test('a drip of partial chunks is flushed 50 ms after the FIRST held byte, not restarted by each chunk', () => {
+    jest.useFakeTimers();
+    const settled: string[] = [];
+    const m = new MouseAbsorber((k) => settled.push(k), 50);
+    m.absorb('\x1b');
+    jest.advanceTimersByTime(30);
+    m.absorb('[<3');
+    jest.advanceTimersByTime(19);
+    expect(settled).toEqual([]);
+    jest.advanceTimersByTime(1);
+    expect(settled).toEqual(['\x1b[<3']);
+  });
+
+  test('flush hands on a held lone ESC and stops the timer; reset discards it', () => {
+    jest.useFakeTimers();
+    const settled: string[] = [];
+    const m = new MouseAbsorber((k) => settled.push(k), 50);
+    m.absorb('\x1b');
+    expect(m.flush()).toBe('\x1b');
+    expect(m.flush()).toBe('');
+    m.absorb('\x1b[<3');
     m.reset();
-    expect(m.absorb('\x1bq')).toBe('\x1bq');
+    jest.advanceTimersByTime(500);
+    expect(settled).toEqual([]);
+    expect(m.flush()).toBe('');
   });
 });
 

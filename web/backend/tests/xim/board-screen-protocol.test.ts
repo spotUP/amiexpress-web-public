@@ -47,3 +47,35 @@ test('a door that writes while a wipe is held has it held, with the break msg.da
   expect(p.state.wipeCapture.text.join('')).toMatch(/^line one\r?\na\r?\nb$/);
   expect(p.socket.emit).not.toHaveBeenCalledWith('ansi-output', expect.stringContaining('line one'), expect.anything());
 });
+
+test('through the real XIMProtocol: a lone ESC after MOUSE ON reaches the key queue as Esc after the settle window', async () => {
+  jest.useFakeTimers();
+  try {
+    const p = makeProtocol();
+    const queue = jest.spyOn(p.ioHandler, 'queueInput').mockImplementation(() => undefined);
+    await ask(p, 'MOUSE ON');
+    p.queueInput('\x1b');
+    expect(queue).not.toHaveBeenCalled();
+    jest.advanceTimersByTime(200);
+    expect(queue).toHaveBeenCalledWith('\x1b');
+  } finally { jest.useRealTimers(); }
+});
+
+test('through the real XIMProtocol: MOUSE OFF right after a lone ESC still delivers the Esc key, and carrier loss drops the timer', async () => {
+  jest.useFakeTimers();
+  try {
+    const p = makeProtocol();
+    const queue = jest.spyOn(p.ioHandler, 'queueInput').mockImplementation(() => undefined);
+    await ask(p, 'MOUSE ON');
+    p.queueInput('\x1b');
+    await ask(p, 'MOUSE OFF');
+    expect(queue).toHaveBeenCalledWith('\x1b');
+    expect(p.mouse).toBeNull();
+    await ask(p, 'MOUSE ON');
+    queue.mockClear();
+    p.queueInput('\x1b');
+    p.markCarrierDropped();
+    jest.advanceTimersByTime(500);
+    expect(queue).not.toHaveBeenCalled();
+  } finally { jest.useRealTimers(); }
+});

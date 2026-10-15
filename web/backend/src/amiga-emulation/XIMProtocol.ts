@@ -303,6 +303,13 @@ debugLog(`[XIMProtocol] Updating port address from 0x${this.doorPort.toString(16
   }
 
   /** AEW_SCREEN state ends with the door. */
+  /** MOUSE OFF / re-arm: a held lone Esc is the caller's key, not the door's to lose. */
+  private flushMouseCarry(): void {
+    const held = this.mouse?.flush();
+    this.mouse?.reset();
+    if (held) this.ioHandler.queueInput(held);
+  }
+
   private releaseBoardScreen(): void {
     this.mouse?.reset();
     this.mouse = null;
@@ -500,6 +507,7 @@ console.log(`[XIMProtocol] shouldInjectNativeInput: registered=${isRegistered} w
    */
   markCarrierDropped(): void {
     this.state.carrierDropped = true;
+    this.mouse?.reset();   // the settle timer must not outlive the session
     this.ioHandler.markCarrierDropped();
   }
 
@@ -1086,7 +1094,7 @@ debugLog(`[XIMProtocol]   Wrote tooltype value="${tooltypeValue}", StringPtr not
         try {
           answer = await boardScreenAnswer(String(msg.string || ''), {
             session: this.bbsSession, socket: this.socket, state: this.state, mouse: this.mouse,
-            armMouse: (on: boolean) => { this.mouse?.reset(); this.mouse = on ? new MouseAbsorber((keys) => this.ioHandler.queueInput(keys)) : null; },
+            armMouse: (on: boolean) => { this.flushMouseCarry(); this.mouse = on ? new MouseAbsorber((keys) => this.ioHandler.queueInput(keys)) : null; },
             columns: () => responsiveDoorGeometry(this.bbsSession as never).cols,
           });
         } catch (err) {
