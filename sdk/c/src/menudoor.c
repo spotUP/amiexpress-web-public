@@ -90,7 +90,6 @@ static int grid_rows(int rows, int top, int footer_rows) { return rows - top - 2
 void md_layout(const ae_menu *m, int cols, int rows, md_layout_out *o)
 {
     const ae_menu_logo *header, *footer, *side, *between;
-    int third = rows / 3;
 
     memset(o, 0, sizeof *o);
     o->masthead_row = 1;
@@ -99,8 +98,10 @@ void md_layout(const ae_menu *m, int cols, int rows, md_layout_out *o)
     o->grid_left = 1;
     header = find_logo(m, "header");
     footer = find_logo(m, "footer");
-    if (!logo_fits(header, cols, third)) header = 0;      /* taller than a third of the screen: dropped */
-    if (!logo_fits(footer, cols, third)) footer = 0;
+    /* The list adapts to the logos (sysop ruling 2026-10-15): a logo is kept when it fits the width and the grid
+       still has MD_MIN_GRID_ROWS rows below it; the grid takes whatever rows remain and a longer list scrolls. */
+    if (!logo_fits(header, cols, rows)) header = 0;
+    if (!logo_fits(footer, cols, rows)) footer = 0;
     o->grid_top = header ? 3 + header->rows : 2;          /* masthead 1, logo 2..1+h, divider 2+h, grid 3+h */
     o->grid_height = grid_rows(rows, o->grid_top, footer ? footer->rows : 0);
     if (o->grid_height < MD_MIN_GRID_ROWS && footer) {    /* the grid is never squeezed: logos give way, footer first */

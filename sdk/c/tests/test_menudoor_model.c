@@ -96,9 +96,22 @@ static void layout_puts_things_where_the_screen_has_room(void)
     assert(o.side_cols == 30 && o.grid_width == 132 - 32 && o.side_left == 132 - 30 + 1 && o.side_top == o.grid_top);
 
     reset();
-    logo("header", 9, 40, 0);                                                /* taller than 25 / 3 */
+    logo("header", 17, 40, 0);                                               /* grid would be 25-20-2 = 3 < MD_MIN_GRID_ROWS */
     md_layout(&menu, 80, 25, &o);
     assert(o.header_rows == 0 && o.grid_top == 2 && o.divider_row == 0 && o.rail_row == 1);   /* no logo: no divider, the rail stays on row 1 */
+
+    reset();
+    logo("header", 13, 78, 0);                                               /* sysop 2026-10-15: the list adapts to the logo size */
+    md_layout(&menu, 80, 25, &o);
+    assert(o.header_rows == 13 && o.grid_top == 16 && o.grid_height == 7 && o.divider_row == 15);
+    reset();
+    logo("header", 14, 78, 0);                                               /* one more row would leave 6 = MD_MIN_GRID_ROWS: kept */
+    md_layout(&menu, 80, 25, &o);
+    assert(o.header_rows == 14 && o.grid_height == MD_MIN_GRID_ROWS);
+    reset();
+    logo("header", 15, 78, 0);                                               /* 5 < MD_MIN_GRID_ROWS: dropped */
+    md_layout(&menu, 80, 25, &o);
+    assert(o.header_rows == 0 && o.grid_top == 2);
 
     reset();
     logo("header", 8, 40, 0); logo("footer", 8, 40, 0);                      /* both allowed alone, never both: grid >= 6 */
@@ -1327,6 +1340,59 @@ static void a_header_logo_is_followed_by_the_rail_as_a_divider_and_the_grid_star
     printf("  [OK] a header logo is followed by the rail as a divider (a static rule without one) and the grid starts under it, at 80, 132 and 40\n");
 }
 
+/* ---- sysop 2026-10-15: the list adapts to the logo; a long list under a 13-row header scrolls in a 7-row grid ---- */
+
+static void a_long_list_under_a_tall_header_scrolls_in_the_short_grid(void)
+{
+    char cat[8192], line[160];
+    int i;
+    mouse_queue = 0; silent_board = 0; theme_name = ""; size_reply = "80\t25";
+    sprintf(cat, "AEMENU 1\nK MAIN\t-\nT MAIN MENU\nP Go: \nO scroll\nW -\t-\t-\nR 0\nL header\t13\t78\t0\nS Everything\n");
+    for (i = 1; i <= 34; i++) {
+        sprintf(line, "E Z%02d\tItem %02d\tDescription %02d\t\t\n", i, i, i);
+        strcat(cat, line);
+    }
+    strcat(cat, ".\n");
+    write_catalogue(cat);
+
+    tm_after("\x1b[B");
+    assert(strstr(tm_cell[16], "Everything"));                           /* grid_top 16: the section header sits right under the divider */
+    assert(strstr(tm_cell[17], "Item 01") && !strstr(tm_cell[17], "Item 34"));
+    {
+        int r, seen = 0;
+        for (r = 16; r <= 22; r++) if (strstr(tm_cell[r], "Item 34")) seen = 1;
+        assert(!seen);                                                   /* the last entry is off the 7-row window */
+    }
+    {
+        int r, seen;
+        tm_after("\x1b[F");                                              /* End */
+        for (seen = 0, r = 16; r <= 22; r++) if (strstr(tm_cell[r], "Item 34")) seen = 1;
+        assert(seen);
+        for (seen = 0, r = 16; r <= 22; r++) if (strstr(tm_cell[r], "Item 01")) seen = 1;
+        assert(!seen);
+        tm_after("\x1b[F\x1b[H");                                        /* Home comes back */
+        for (seen = 0, r = 16; r <= 22; r++) if (strstr(tm_cell[r], "Item 01")) seen = 1;
+        assert(seen);
+        {
+            char downs[128] = "";
+            for (i = 0; i < 20; i++) strcat(downs, "\x1b[B");           /* Down past the last visible row, to the end */
+            tm_after(downs);
+            for (seen = 0, r = 16; r <= 22; r++) if (strstr(tm_cell[r], "Item 34")) seen = 1;
+            assert(seen);
+        }
+        tm_after("\x1b[6~");                                             /* PgDn from the top */
+        for (seen = 0, r = 16; r <= 22; r++) if (strstr(tm_cell[r], "Item 01")) seen = 1;
+        assert(!seen);
+        tm_after("Z30");                                                 /* type-ahead to an entry off the window: named in the status row */
+        assert(strstr(tm_cell[24], "Z30") || strstr(tm_cell[24], "Item 30"));
+        tm_after("Z30\t");                                               /* Tab brings the window to it */
+        for (seen = 0, r = 16; r <= 22; r++) if (strstr(tm_cell[r], "Item 30")) seen = 1;
+        assert(seen);
+    }
+    restore_screen();
+    printf("  [OK] a 34-entry list under a 13-row header scrolls in the 7-row grid: Down, PgDn, Home, End and type-ahead reach every entry\n");
+}
+
 static void without_a_header_logo_the_rail_stays_on_the_masthead_row_and_no_row_is_added(void)
 {
     static const int COLS[2] = { 80, 132 };
@@ -1505,6 +1571,7 @@ int main(void)
     type_ahead_to_an_entry_below_the_window_names_it_in_the_status_row_and_repaints_no_grid();
     the_typing_key_bar_names_tab_and_shortens_itself_to_fit_forty_columns();
     a_header_logo_is_followed_by_the_rail_as_a_divider_and_the_grid_starts_under_it();
+    a_long_list_under_a_tall_header_scrolls_in_the_short_grid();
     without_a_header_logo_the_rail_stays_on_the_masthead_row_and_no_row_is_added();
     a_theme_without_a_rail_gets_a_static_divider_under_a_logo();
     the_idle_tick_touches_the_divider_row_only_under_a_header_logo();
