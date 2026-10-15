@@ -60,7 +60,7 @@ async function drive(cols: number, keys: string[] = []): Promise<string> {
     bbsSession: {
       user: { id: '1', username: 'Sysop', location: 'Local Console', secLevel: 255 },
       nodeId: 1, nodeNumber: 1, bbsName: 'AmiExpress-Web', sysopName: 'Sysop',
-      timeRemaining: 60, doorCommand: 'THEMEC', doorId: 'THEMEC',
+      timeRemaining: 60, doorCommand: 'THEME', doorId: 'THEME',
       petsciiMode: petscii,
       terminalType: petscii ? 'c64' : 'modern',
       screenWidth: cols,
@@ -116,11 +116,11 @@ const THEMES = [
   'UPROUGH NEON (MUTED)', 'QUIET PHOSPHOR', 'QUIET PHOSPHOR (MUTED)',
 ];
 
-describe('THEMEC opens on a 40-column caller', () => {
+describe('THEME (the C picker, Doors/THEMEC/themec) opens on a 40-column caller', () => {
   jest.setTimeout(120000);
 
   it('the shipped .info marks the door 40-ok, so the gate lets a C64 in', () => {
-    const info = fs.readFileSync(path.join(REPO, 'Commands', 'BBSCmd', 'THEMEC.info'), 'latin1');
+    const info = fs.readFileSync(path.join(REPO, 'Commands', 'BBSCmd', 'THEME.info'), 'latin1');
     expect(info).toContain('MIN_COLUMNS=40');
     // The mark it must NOT carry: C64_ADAPT would put the frame adapter on
     // the socket and crop a screen that is already forty columns wide.

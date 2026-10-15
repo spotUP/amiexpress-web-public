@@ -93,8 +93,9 @@ describe('a settings door says which section it belongs in', () => {
  * pinned board value.
  *
  * WHICH doors: the ones that change what the BOARD does for this caller and
- * whose change outlives the door. The three theme pickers (THEMEC, THEME,
- * SCREENTHEME - sysop, 2026-10-14), NOTIFY, COSYSOP and ACHIEVE; the last
+ * whose change outlives the door. The two theme pickers (THEME, the C
+ * door, and SCREENTHEME - sysop, 2026-10-14; the TypeScript THEME and the
+ * THEMEC command were retired on the live board 2026-10-15), NOTIFY, COSYSOP and ACHIEVE; the last
  * three are also the doors the signup SCRIPT questionnaire runs
  * (`~CC_ACHIEVE`, `~CC_COSYSOP`, `~CC_SCREENTHEME`, `~CC_THEME`).
  */
@@ -109,8 +110,7 @@ describe("the board's shipped settings doors", () => {
   };
 
   it.each([
-    ['THEMEC', 'Door colours (C version)', 'Appearance'],
-    ['THEME', 'Door colours', 'Appearance'],
+    ['THEME', 'Door colours (C version)', 'Appearance'],
     ['SCREENTHEME', 'Screen artwork', 'Appearance'],
     ['NOTIFY', 'Notifications', 'Communication'],
     ['COSYSOP', 'Co-sysop', 'Communication'],

@@ -57,7 +57,7 @@ describe('one-shot: the record dies unless the W door itself exits with a return
     const session: any = {};
     armSettingsResume(session, 'W', 4);
     settleSettingsResume(session, 'w', true);          // W door's exit
-    settleSettingsResume(session, 'THEMEC', false);    // the returned settings door's exit
+    settleSettingsResume(session, 'THEME', false);    // the returned settings door's exit
     expect(settingsResumeOf(session)).toMatchObject({ row: 4, phase: 'returning' });
     expect(await resumeSettingsHub({}, session)).toBe(true);
   });
@@ -115,7 +115,7 @@ describe('each W -> settings door -> W round trip does not nest the call stack',
       enter(); wRuns++;
       if (wRuns <= roundTrips) {
         armSettingsResume(session, 'W', 17);
-        session.returnCommand = 'THEMEC';
+        session.returnCommand = 'THEME';
         settleSettingsResume(session, 'W', true);
         await runReturnedCommand({}, session, session.returnCommand, runCommand);   // the tail
       } else {
@@ -123,7 +123,7 @@ describe('each W -> settings door -> W round trip does not nest the call stack',
       }
       depth--;
     };
-    const runCommand = async () => { enter(); settingsRuns++; settleSettingsResume(session, 'THEMEC', false); depth--; };
+    const runCommand = async () => { enter(); settingsRuns++; settleSettingsResume(session, 'THEME', false); depth--; };
     processCommand.mockImplementation(wDoor as never);
     await wDoor();          // the first W, opened from the menu
     return { maxDepth, settingsRuns, wRuns };
@@ -143,7 +143,7 @@ describe('each W -> settings door -> W round trip does not nest the call stack',
     const session: any = {};
     armSettingsResume(session, 'W', 4);
     settleSettingsResume(session, 'W', true);
-    await expect(runReturnedCommand({}, session, 'THEMEC', async () => { throw new Error('boom'); })).rejects.toThrow('boom');
+    await expect(runReturnedCommand({}, session, 'THEME', async () => { throw new Error('boom'); })).rejects.toThrow('boom');
     expect(settingsResumeOf(session)).toBeUndefined();
   });
 });

@@ -153,11 +153,11 @@ describe('every BBS command registration answers to its own filename', () => {
   });
 });
 
-describe('THEMEC specifically - the registration merge 1b773d8ff re-broke', () => {
-  const themec = path.join(COMMANDS_DIR, 'BBSCmd', 'THEMEC.info');
+describe('THEME (the C picker) specifically - the registration merge 1b773d8ff re-broke it as THEMEC', () => {
+  const themec = path.join(COMMANDS_DIR, 'BBSCmd', 'THEME.info');
 
-  it('registers THEMEC, not DOORREPO', () => {
-    expect(readTooltypeMap(themec).get('BBSCMD')).toBe('THEMEC');
+  it('registers THEME, not DOORREPO', () => {
+    expect(readTooltypeMap(themec).get('BBSCMD')).toBe('THEME');
   });
 
   it('points at an executable that exists', () => {

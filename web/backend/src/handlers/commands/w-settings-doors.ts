@@ -132,8 +132,8 @@ export function settingsDoorsFor(
  *                   the same ruling. If either ever gains a per-caller on/off,
  *                   it belongs here.
  *
- * THEMEC - listed beside THEME since 2026-10-14: the sysop ruled that all
- * three theme pickers declare themselves. NOTIFY and COSYSOP joined with the
+ * THEME (the C door; the TypeScript THEME and the THEMEC command were retired
+ * 2026-10-15) and SCREENTHEME declare themselves: the sysop ruled so 2026-10-14. NOTIFY and COSYSOP joined with the
  * sections (Appearance, Communication, Board features).
  *
  * The board's own settings - font, transfer protocol, PETSCII palette, the

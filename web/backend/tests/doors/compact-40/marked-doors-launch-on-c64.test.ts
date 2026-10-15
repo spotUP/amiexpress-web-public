@@ -90,7 +90,8 @@ const BBSCMD = path.resolve(__dirname, '../../../../../Commands/BBSCmd');
  * squeezed. See tests/doors/compact-40/tetris-attack.test.ts.
  */
 /*
- * THEMEC is the one 68K binary on this list, added 2026-09-06. It earns
+ * THEME (the C door, Doors/THEMEC/themec; registered as THEMEC until
+ * 2026-10-15) is the one 68K binary on this list, added 2026-09-06. It earns
  * MIN_COLUMNS rather than C64_ADAPT because it lays ITSELF out at 40: it asks
  * the board for the caller's width (BB_SCRWIDTH, express.e:3865) and folds
  * through the C SDK's own tier, `ui_profile_for()`, the twin of the
@@ -107,7 +108,7 @@ const BBSCMD = path.resolve(__dirname, '../../../../../Commands/BBSCmd');
  */
 /*
  * SUBS is the second 68K binary here, added 2026-09-08, and it earns the mark
- * the same way THEMEC does: it asks the board for the caller's width and lays
+ * the same way THEME does: it asks the board for the caller's width and lays
  * ITSELF out through `ui_profile_for()`, so at 40 the date column and the
  * sender's full name go and the SUBJECT survives - proven on a real
  * PetsciiMachine in tests/doors/compact-40/subs-40.test.ts.
@@ -124,7 +125,7 @@ const BBSCMD = path.resolve(__dirname, '../../../../../Commands/BBSCmd');
  * header unfixable at forty columns - six labels over five fields, no rung
  * able to put a label above the column it names. It is a TypeScript port now
  * (`Doors/ctop-viewer`) with a forty-column layout of its own, so it earns
- * MIN_COLUMNS the way THEMEC does rather than the adapter's mark.
+ * MIN_COLUMNS the way THEME does rather than the adapter's mark.
  */
 /*
  * WHIP is the newest, 2026-09-22, and it is here because the sysop named it:
@@ -163,7 +164,7 @@ const BBSCMD = path.resolve(__dirname, '../../../../../Commands/BBSCmd');
  * fixes they got are kept - see `bbslink-doors-tell-the-truth.test.ts` -
  * because they were wrong at EVERY width.
  */
-const ADAPTED = ['THEME', 'SCREENTHEME', 'DOORS', 'BUGS', 'DOORMAN', 'STRIP', 'PHREAKWARS', 'GMASTER', 'THEMEC', 'ACHIEVE', 'SUBS', 'TIP', 'CTOP', 'WHIP', 'DASHBOARD', 'PROMPTCOMPLETE', 'LIVECHAT', 'IRC', 'PETSCII-EDIT', 'AE', 'MAG', 'NOTIFY', 'WEBTERM', 'W'];
+const ADAPTED = ['THEME', 'SCREENTHEME', 'DOORS', 'BUGS', 'DOORMAN', 'STRIP', 'PHREAKWARS', 'GMASTER', 'ACHIEVE', 'SUBS', 'TIP', 'CTOP', 'WHIP', 'DASHBOARD', 'PROMPTCOMPLETE', 'LIVECHAT', 'IRC', 'PETSCII-EDIT', 'AE', 'MAG', 'NOTIFY', 'WEBTERM', 'W'];
 
 const UNROUTED = 'unrouted-gate-test-type' as unknown as Door['type'];
 
