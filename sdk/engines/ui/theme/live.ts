@@ -57,11 +57,20 @@ const ROLE_PRIORITY: Array<keyof ThemeTokens> = [
  */
 export function tokenMap(from: Theme, to: Theme): Map<string, string> {
   const map = new Map<string, string>();
+  // A colour is CLAIMED by the first role that holds it, whether or not that
+  // role changes. Skipping an unchanged role before claiming let a later,
+  // changing role take the colour instead: every theme has ground 'black',
+  // and `bar`/`selectionBg`/`selectionInk` are 'black' in several, so a
+  // switch to classic sent every black ground to the bar's blue, and a
+  // switch to phosphor-muted sent it to selectionInk's lime (sysop,
+  // 2026-10-15). The ground must stay the ground.
+  const claimed = new Set<string>();
   for (const role of ROLE_PRIORITY) {
     const was = from.tokens[role];
     const now = to.tokens[role];
-    if (!was || !now || was === now) continue;
-    if (!map.has(was)) map.set(was, now);
+    if (!was || !now || claimed.has(was)) continue;
+    claimed.add(was);
+    if (was !== now) map.set(was, now);
   }
   return map;
 }
