@@ -126,3 +126,14 @@ export function listBulletins(
   }
   return [...seen.values()].sort((a, b) => a.number - b.number);
 }
+
+/**
+ * express.e:24616-24621 - "this conference has bulletins" is BullHelp present
+ * in the bulletin directory. Any variant counts: a board whose bulletin menu
+ * is authored as teletext has bulletins just as much as one whose menu is a
+ * .txt. B's handler and the bulletins menu door ask this one question.
+ */
+export function conferenceHasBulletins(dataDir: string, conferenceScreenDir: string): boolean {
+  const base = path.join(bulletinDirFor(dataDir, conferenceScreenDir), 'BullHelp');
+  return ['.txt', '.ttx', '.seq', '.TXT'].some((ext) => amigafs.existsSync(base + ext));
+}

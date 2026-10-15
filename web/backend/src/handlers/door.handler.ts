@@ -26,7 +26,7 @@ import { BBSState } from '../index';
 import { SysopDebugUtil, DebugSeverity } from '../utils/sysop-debug.util';
 import { DebugLogger } from '../utils/debug-logger.util';
 import { emitText, emitPrompt, emitLine, flushOutput } from '../utils/output.util';
-import { resolveDoorMinColumns, declaredMinColumns, resolveDoorAdaptColumns, doorOpensForC64, doorDropsOldestAt40, doorDropsLastAt40, doorViewportsAt40, doorMarkerColumns, doorShowsC64Mark, doorNeedsBrowser, type MinColumnsDoorShape, ADAPTED_DOOR_TYPES, DEFAULT_MIN_COLUMNS, sessionColumns, DOOR_NEEDS_80_NOTICE, noWidthEquivalentNotice, DOOR_NEEDS_BROWSER_NOTICE, DOOR_NEEDS_BROWSER_MARK } from '../utils/door-min-columns.util';
+import { resolveDoorMinColumns, declaredMinColumns, resolveDoorAdaptColumns, doorOpensForC64, doorRefusedForWidth, doorDropsOldestAt40, doorDropsLastAt40, doorViewportsAt40, doorMarkerColumns, doorShowsC64Mark, doorNeedsBrowser, type MinColumnsDoorShape, ADAPTED_DOOR_TYPES, DEFAULT_MIN_COLUMNS, sessionColumns, DOOR_NEEDS_80_NOTICE, noWidthEquivalentNotice, DOOR_NEEDS_BROWSER_NOTICE, DOOR_NEEDS_BROWSER_MARK } from '../utils/door-min-columns.util';
 import { transportCapabilities } from '../server/transport-adapter';
 import { installC64DoorAdapter, uninstallC64DoorAdapter } from '../server/c64-door-adapter';
 import { isNarrow, NARROW_WIDTH, narrowClip } from '../utils/table-format.util';
@@ -1474,14 +1474,11 @@ console.log('Executing door:', door.name);
   const widthHasNoEquivalent = session.widthGateFallThrough === 'NO_EQUIVALENT';
   if (widthFallThroughArmed || widthHasNoEquivalent) session.widthGateFallThrough = undefined;
 
-  if (
-    sessionColumns(session) < resolveDoorMinColumns(door as any) &&
-    !doorOpensForC64(door as any, session)
-    // No teletext exemption: a 40-column T caller gates exactly like a
-    // 40-column C64 (sysop). Unadapted wide doors are refused with the
-    // notice below; C64_ADAPT doors run through the frame adapter, which
-    // reduces ANSI to 40 the same way for both (no PETSCII transducer).
-  ) {
+  // No teletext exemption: a 40-column T caller gates exactly like a
+  // 40-column C64 (sysop). Unadapted wide doors are refused with the
+  // notice below; C64_ADAPT doors run through the frame adapter, which
+  // reduces ANSI to 40 the same way for both (no PETSCII transducer).
+  if (doorRefusedForWidth(door as any, session)) {
     if (widthFallThroughArmed) {
       session.widthGateFallThrough = 'REFUSED';
       return;

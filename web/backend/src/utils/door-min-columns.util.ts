@@ -394,6 +394,16 @@ export function doorOpensForC64(
 }
 
 /**
+ * THE width gate, as one predicate: is this door too wide for this caller?
+ * door.handler.ts's launch gate and every menu that lists doors ask the same
+ * question, so it is answered here once (a copy is how the DOORS marker and
+ * the gate came to disagree - doorShowsC64Mark's comment).
+ */
+export function doorRefusedForWidth(door: MinColumnsDoorShape, session: Parameters<typeof sessionColumns>[0]): boolean {
+  return sessionColumns(session) < resolveDoorMinColumns(door) && !doorOpensForC64(door, session as never);
+}
+
+/**
  * The door half of doorOpensForC64(), on its own: the type is one the adapter
  * seam actually sees AND the claim parses. Null when either fails, so the two
  * readers below share these clauses instead of restating them - a copy is

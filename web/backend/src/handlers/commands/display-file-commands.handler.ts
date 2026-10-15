@@ -26,6 +26,7 @@ import * as amigafs from '../../utils/amigafs';
 import { finalizeCommand } from '../../utils/command-response.util';
 import { displayMainMenu } from '../command-handler/menu';
 import { config } from '../../config';
+import { conferenceHasBulletins } from '../../services/bulletin-list';
 import { userScreenTypeExtension } from '../../screens/screen-metadata';
 
 /**
@@ -288,9 +289,10 @@ setEnvStat(session, EnvStat.BULLETINS);
   // Any variant counts as "this conference has bulletins": a board whose
   // bulletin menu is authored as teletext has bulletins just as much as one
   // whose menu is a .txt.
-  const bullHelpBase = path.join(bulletinDir(session), 'BullHelp');
-  const hasBullHelp = ['.txt', '.ttx', '.seq', '.TXT']
-    .some((ext) => amigafs.existsSync(bullHelpBase + ext));
+  const hasBullHelp = conferenceHasBulletins(
+    config.get('dataDir'),
+    conferenceSubdir(config.get('dataDir'), session.currentConf || 1, 'Screens'),
+  );
   if (!hasBullHelp) {
     // express.e:8544-8545 myError(ERR_NO_BULLS): '\b\nNo bulletins are available in this conference!\b\n\b\n'
     socket.emit('ansi-output', '\r\nNo bulletins are available in this conference!\r\n\r\n');
