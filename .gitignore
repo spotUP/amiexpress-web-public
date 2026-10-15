@@ -635,3 +635,6 @@ Beeb/software/**
 
 # amiscan parts (virus database, unpackers), fetched by the updater
 /AmiScan/
+
+# Menu door configs: the sysop's live data (Decision 31)
+/Menus/
