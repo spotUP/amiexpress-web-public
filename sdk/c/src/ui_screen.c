@@ -58,7 +58,7 @@ int ui_screen_open(ui_screen *sc, ae_session *s, char *frame, long cap)
      * that DO want a cursor - ui_input, ui_doc - turn it on for as long as
      * they own the keyboard and off again after.
      */
-    ansi_cursor(&sc->buf, 0);
+    ui_screen_cursor(sc, 0);
     ui_screen_measure(sc);
     return 0;
 }
@@ -105,6 +105,25 @@ void ui_screen_measure(ui_screen *sc)
     ansi_set_cell_backgrounds(&sc->buf, sc->profile.cell_backgrounds);
 }
 
+void ui_screen_cursor(ui_screen *sc, int visible)
+{
+    if (!sc) return;
+    sc->cursor_visible = visible ? 1 : 0;
+    ansi_cursor(&sc->buf, sc->cursor_visible);
+}
+
+void ui_screen_cursor_reassert(ui_screen *sc)
+{
+    if (sc && !sc->cursor_visible) ansi_cursor(&sc->buf, 0);
+}
+
+int ui_screen_wipe_end(ui_screen *sc)
+{
+    int r = ae_bs_wipe_end();
+    if (r == 1) ui_screen_cursor_reassert(sc);     /* the replay ran: its last frame showed the cursor */
+    return r;
+}
+
 void ui_screen_flush(ui_screen *sc)
 {
     if (!sc) return;
@@ -121,6 +140,6 @@ void ui_screen_close(ui_screen *sc)
        the transducer's own rule for "back to black". */
     ansi_reset(&sc->buf);
     ansi_clear(&sc->buf);
-    ansi_cursor(&sc->buf, 1);
+    ui_screen_cursor(sc, 1);
     ui_screen_flush(sc);
 }

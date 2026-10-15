@@ -46,10 +46,16 @@ void ae_put(const char *text, int newline)
    back to these four. It must be non-NULL, because to_session refuses to
    write for a door that has no session at all. */
 /* ui_screen_open_responsive asks AEW_SCREEN; this board is silent. */
+static int board_wipes = 0;     /* 1: the board plays a wipe and answers OK, its replay ending with SHOW CURSOR (wipe-playback.ts) */
 int ae_field_exchange(int field, const char *request, char *out, int cap)
 {
-    (void)field; (void)request;
+    (void)field;
     if (out && cap > 0) out[0] = '\0';
+    if (board_wipes && request && strcmp(request, "WIPE END") == 0 && out && cap > 2) {
+        ae_put("\033[0m\033[?25h", 0);
+        strcpy(out, "OK");
+        return 2;
+    }
     return 0;
 }
 
@@ -130,6 +136,68 @@ static void a_dropped_carrier_is_not_written_to(void)
     printf("  [OK] a door whose caller hung up writes nothing\n");
 }
 
+static const char *last_cursor_word(const char *text)
+{
+    const char *q, *last = 0;
+    for (q = text; (q = strstr(q, "\033[?25")) != 0; q += 2) last = q;
+    return last;
+}
+
+static void a_wipe_end_puts_a_hidden_cursor_back_after_the_boards_replay(void)
+{
+    /* The board's replay ends its last frame with ESC[?25h. A door that hid the cursor must not be left with it shown. */
+    ui_screen sc;
+    char frame[2048];
+    const char *last;
+
+    board_wipes = 1;
+    wire_clear();
+    ui_screen_open(&sc, (ae_session *)1, frame, (long)sizeof frame);
+    ui_screen_flush(&sc);
+    wire_clear();
+    assert(ui_screen_wipe_end(&sc) == 1);
+    ui_screen_flush(&sc);
+    last = last_cursor_word(wire);
+    assert(last && last[5] == 'l');                       /* the LAST word on the cursor is the hide, after the replay's show */
+    assert(strstr(wire, "\033[?25h") && strstr(wire, "\033[?25h") < last);
+
+    ui_screen_cursor(&sc, 1);                             /* a door that shows it (typing) keeps it shown: nothing extra */
+    ui_screen_flush(&sc);
+    wire_clear();
+    assert(ui_screen_wipe_end(&sc) == 1);
+    ui_screen_flush(&sc);
+    assert(strcmp(wire, "\033[0m\033[?25h") == 0);
+
+    board_wipes = 0;                                      /* no wipe played: nothing replayed, nothing re-asserted */
+    ui_screen_cursor(&sc, 0);
+    ui_screen_flush(&sc);
+    wire_clear();
+    assert(ui_screen_wipe_end(&sc) == 0);
+    ui_screen_flush(&sc);
+    assert(wire_len == 0);
+    printf("  [OK] a wipe end re-hides a hidden cursor after the board's replay and adds nothing for a shown one\n");
+}
+
+static void a_reassert_after_a_board_drawn_logo_hides_only_a_hidden_cursor(void)
+{
+    ui_screen sc;
+    char frame[2048];
+
+    ui_screen_open(&sc, (ae_session *)1, frame, (long)sizeof frame);
+    ui_screen_flush(&sc);
+    wire_clear();
+    ui_screen_cursor_reassert(&sc);
+    ui_screen_flush(&sc);
+    assert(strcmp(wire, "\033[?25l") == 0);
+    ui_screen_cursor(&sc, 1);
+    ui_screen_flush(&sc);
+    wire_clear();
+    ui_screen_cursor_reassert(&sc);
+    ui_screen_flush(&sc);
+    assert(wire_len == 0);
+    printf("  [OK] re-asserting after a board-drawn write hides a hidden cursor and does nothing for a shown one\n");
+}
+
 int main(void)
 {
     printf("a door's screen\n");
@@ -137,6 +205,8 @@ int main(void)
     leaving_gives_it_back();
     the_hide_is_in_the_first_frame_not_a_later_one();
     a_dropped_carrier_is_not_written_to();
+    a_wipe_end_puts_a_hidden_cursor_back_after_the_boards_replay();
+    a_reassert_after_a_board_drawn_logo_hides_only_a_hidden_cursor();
     printf("a door's screen: all passed\n");
     return 0;
 }

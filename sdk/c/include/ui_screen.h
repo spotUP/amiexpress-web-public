@@ -7,6 +7,9 @@
  * cell separately, about a hundred round trips per frame, and redraw was
  * visibly slow on every keystroke.
  *
+ * THE SCREEN OWNS THE CURSOR STATE; BOARD-DRAWN WRITES RE-ASSERT IT. The board's wipe replay ends with ESC[?25h behind the
+ * door's back: ui_screen_wipe_end puts the remembered state back (see ui_screen_cursor).
+ *
  * The screen owns its size, which it asks the session for once. A door that
  * redraws on a resize asks again with ui_screen_measure().
  */
@@ -31,6 +34,8 @@ typedef struct {
     ui_profile profile;
     /** Set by ui_screen_open_responsive: measuring asks AEW_SCREEN, not BB_SCRWIDTH. */
     int responsive;
+    /** Whether the caller's cursor is shown. THE SCREEN OWNS THE CURSOR STATE; board-drawn writes re-assert it. */
+    int cursor_visible;
 } ui_screen;
 
 /**
@@ -54,6 +59,24 @@ int ui_screen_open_responsive(ui_screen *sc, ae_session *s, char *frame, long ca
 
 /** Ask the board for the size again - after a resize, or on a hunch. */
 void ui_screen_measure(ui_screen *sc);
+
+/**
+ * Show or hide the caller's cursor, and REMEMBER which (ui_screen_open hides it).
+ *
+ * The screen owns the cursor state. A write the BOARD makes into the door's output path (a wipe replay, a logo) can
+ * flip the terminal's cursor behind the door's back - the board's wipe replay ends its last frame with ESC[?25h - so
+ * those writes go through ui_screen_wipe_end / ui_screen_cursor_reassert, which put the remembered state back.
+ */
+void ui_screen_cursor(ui_screen *sc, int visible);
+
+/** Queue the remembered state again after a board-drawn write: a hidden cursor is hidden again, a visible one needs nothing. */
+void ui_screen_cursor_reassert(ui_screen *sc);
+
+/**
+ * End a board wipe (ae_bs_wipe_end) and re-assert the cursor state the replay overrode. The re-assert is queued in the
+ * frame buffer: the next ui_screen_flush sends it. Returns what ae_bs_wipe_end returned.
+ */
+int ui_screen_wipe_end(ui_screen *sc);
 
 /** Send what has been drawn. One write, then the buffer is empty again. */
 void ui_screen_flush(ui_screen *sc);
