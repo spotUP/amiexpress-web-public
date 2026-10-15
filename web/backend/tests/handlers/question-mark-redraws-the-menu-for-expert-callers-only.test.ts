@@ -18,7 +18,7 @@ jest.mock('../../src/handlers/screen.handler', () => ({
   doPause: (_s: unknown, _sess: unknown, done: () => void) => done(),
 }));
 jest.mock('../../src/achievements/reporter', () => ({ report: () => undefined }));
-jest.mock('../../src/handlers/command-handler/menu', () => ({ displayMainMenu: jest.fn(async () => undefined) }));
+jest.mock('../../src/handlers/command-handler/menu', () => ({ displayMainMenu: jest.fn(async () => undefined), launchMenuDoor: jest.fn(async () => 'fallback') }));
 
 /* eslint-disable @typescript-eslint/no-var-requires */
 const { processBBSCommand } = require('../../src/handlers/command.handler');

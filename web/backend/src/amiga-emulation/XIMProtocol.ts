@@ -302,7 +302,6 @@ debugLog(`[XIMProtocol] Updating port address from 0x${this.doorPort.toString(16
     return this.ioHandler.isWaitingForCaller() || this.systemCommandsHandler.isEditingForCaller();
   }
 
-  /** AEW_SCREEN state ends with the door. */
   /** MOUSE OFF / re-arm: a held lone Esc is the caller's key, not the door's to lose. */
   private flushMouseCarry(): void {
     const held = this.mouse?.flush();
@@ -310,6 +309,7 @@ debugLog(`[XIMProtocol] Updating port address from 0x${this.doorPort.toString(16
     if (held) this.ioHandler.queueInput(held);
   }
 
+  /** AEW_SCREEN state ends with the door. */
   private releaseBoardScreen(): void {
     this.mouse?.reset();
     this.mouse = null;

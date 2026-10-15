@@ -24,7 +24,7 @@ import path from 'path';
 import fs from 'fs';
 import * as amigafs from '../../utils/amigafs';
 import { finalizeCommand } from '../../utils/command-response.util';
-import { displayMainMenu } from '../command-handler/menu';
+import { displayMainMenu, launchMenuDoor } from '../command-handler/menu';
 import { config } from '../../config';
 import { conferenceHasBulletins } from '../../services/bulletin-list';
 import { userScreenTypeExtension } from '../../screens/screen-metadata';
@@ -110,6 +110,10 @@ export function setDisplayFileCommandsDependencies(deps: {
  * In normal mode, does nothing (menu is always visible).
  */
 export async function handleQuestionMarkCommand(socket: any, session: BBSSession): Promise<void> {
+  // WEB_: `?` opens the MENU door for every caller, expert or not (the sysop: "`?` redraws it");
+  // express.e:24594-24599 redraws only for experts. Nothing registered = today's code below.
+  if ((await launchMenuDoor(socket, session, 'question-mark')) === 'ran') return;
+
   const isExpert = session.user?.expert === 'X';
   if (!isExpert) {
     // In non-expert mode the menu is already visible; nothing to do.

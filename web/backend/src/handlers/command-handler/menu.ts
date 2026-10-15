@@ -25,6 +25,40 @@ import { setEnvStat } from '../../utils/acs.util';
 import { EnvStat } from '../../constants/env-codes';
 import { drainAchievementNotices } from '../../achievements/notices';
 import { drainNotifyInbox } from '../../notify/board';
+import { displayModeOf } from '../../amiga-emulation/xim/display-mode.util';
+import { doorRefusedForWidth } from '../../utils/door-min-columns.util';
+
+/**
+ * The main menu is a door when one is registered (plan M19, sysop 2026-10-15:
+ * "the door IS the BBS main menu"); Menu.txt is the fallback when it is not
+ * installed or cannot run for this caller. Returns 'ran' when the door ran (or
+ * was parked for the exit-tail loop, M7) - the caller then draws nothing.
+ *
+ * WEB_: board-own; express.e:28586 draws SCREEN_MENU and `?` (express.e:24594-24599)
+ * only redraws it for experts.
+ */
+export async function launchMenuDoor(socket: any, session: BBSSession, site: 'display-flow' | 'question-mark'): Promise<'ran' | 'dismissed' | 'fallback'> {
+  /* eslint-disable @typescript-eslint/no-var-requires */
+  const { commandCache, revalidateBbsCommandsIfChanged, doorLevelForCommandAccess } = require('../command-execution.handler');
+  const exit = require('../commands/menu-door-exit');
+  const { config } = require('../../config');
+  /* eslint-enable @typescript-eslint/no-var-requires */
+  if ((session as any).inConfScan) return 'fallback';
+  const mode = displayModeOf(session as never);
+  if (mode === 'teletext' || mode === 'rip') return 'fallback';                  // Sysop review 2
+  revalidateBbsCommandsIfChanged(config.get('dataDir'), session.currentConf, session.nodeId ?? 0);
+  const def = commandCache.bbscmd.get('MENU');
+  if (!def) return 'fallback';
+  if (doorLevelForCommandAccess(def.access) > (session.user?.secLevel ?? 0)) return 'fallback';
+  if (doorRefusedForWidth(def as never, session as never)) return 'fallback';
+  if (site === 'display-flow' && exit.takeMenuDoorDismissed(session)) return 'dismissed';
+  if (site === 'question-mark') exit.takeMenuDoorDismissed(session);
+  if (exit.inExitTail(session)) { exit.parkDoor(session, 'MENU'); return 'ran'; }
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { processCommand } = require('../command.handler');
+  await processCommand(socket, session, 'MENU', '');
+  return 'ran';
+}
 
 /**
  * Display main menu (express.e:28586)
@@ -106,7 +140,12 @@ console.log('[menu] displayMainMenu SKIPPED (debounce - last menu was', now - la
 
   let screenDisplayed = false;
   if (shouldDisplayMenu) {
-    screenDisplayed = await displayScreen(socket, session, SCREEN_MENU);
+    // WEB_: the main menu is the MENU door when one is registered and can run for this
+    // caller (plan M19); express.e:28586 draws SCREEN_MENU here, which stays the fallback.
+    // 'dismissed' = the caller left the door with Esc: prompt only, once (Decision 37).
+    const handover = await launchMenuDoor(socket, session, 'display-flow');
+    if (handover === 'ran') return;
+    if (handover !== 'dismissed') screenDisplayed = await displayScreen(socket, session, SCREEN_MENU);
 
     // Clear any pagination that displayScreen might have set up - the menu prompt
     // handles input, not paginated screen continuation. This fixes the "enter twice" bug

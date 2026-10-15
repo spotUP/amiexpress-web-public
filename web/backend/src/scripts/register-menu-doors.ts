@@ -7,29 +7,71 @@
  *
  * Steps are added by the tasks that own them (bulls: M18).
  */
+import * as fs from 'fs';
 import * as path from 'path';
 import { writeNewDoorRegistration } from '../services/config-services/door-info-file.service';
 import { applyTooltypes } from '../utils/info-file.util';
 
 type Step = (root: string) => string;
 
-const STEPS: Record<string, Step> = {
+type Registration = Parameters<typeof writeNewDoorRegistration>[1];
+
+/**
+ * writeNewDoorRegistration OVERWRITES an existing .info (writeFileSync), so a
+ * rerun would put back what a sysop edited since (ACCESS, DESCRIPTION, ...).
+ * A registration that already exists is left exactly as it is.
+ */
+function registerOnce(root: string, door: Registration, tooltypes: Record<string, string>): string {
+  const infoPath = path.join(root, 'Commands', door.door_type === 'SYSCMD' ? 'SysCmd' : 'BBSCmd', `${door.door_command}.info`);
+  if (fs.existsSync(infoPath)) return infoPath;
+  writeNewDoorRegistration(root, door);
+  applyTooltypes(infoPath, Object.entries(tooltypes));
+  return infoPath;
+}
+
+export const STEPS: Record<string, Step> = {
   // Old Bulls, re-registered as BULLS: the fallback FALLBACK=BULLS on B reaches
   // while the new bulletins door is absent. Tooltypes as the former B.info.
-  bulls: (root) => {
-    const infoPath = writeNewDoorRegistration(root, {
-      door_command: 'BULLS',
+  bulls: (root) => registerOnce(root, {
+    door_command: 'BULLS',
+    door_type: 'XIM',
+    door_path: 'DOORS:EmP_Tools/Bulls',
+    min_security_level: 1,
+  }, {
+    MULTINODE: 'NO',
+    STACK: '50000',
+    C64_ADAPT: '40',
+    REDACTED: '1',
+  }),
+  // The main menu (M19): the board's MENU command is this door. MENUSETTINGS is the
+  // same binary under the W settings registration (the door tells them apart with
+  // ae_menu_command()). Decisions 23.
+  menu: (root) => {
+    registerOnce(root, {
+      door_command: 'MENUSETTINGS',
       door_type: 'XIM',
-      door_path: 'DOORS:EmP_Tools/Bulls',
-      min_security_level: 1,
+      door_path: 'Doors/MAINMENU/mainmenu',
+      min_security_level: 0,
+    }, {
+      MIN_COLUMNS: '40',
+      MULTINODE: 'YES',
+      STACK: '8192',
+      SETTINGS: 'YES',
+      SETTINGS_LABEL: 'Long menus',
+      SETTINGS_SECTION: 'Appearance',
+      DESCRIPTION: 'Scroll long menus, or show them a page at a time',
     });
-    applyTooltypes(infoPath, Object.entries({
-      MULTINODE: 'NO',
-      STACK: '50000',
-      C64_ADAPT: '40',
-      REDACTED: '1',
-    }));
-    return infoPath;
+    return registerOnce(root, {
+      door_command: 'MENU',
+      door_type: 'XIM',
+      door_path: 'Doors/MAINMENU/mainmenu',
+      min_security_level: 0,
+    }, {
+      MIN_COLUMNS: '40',
+      MULTINODE: 'YES',
+      STACK: '8192',
+      DESCRIPTION: 'The main menu',
+    });
   },
 };
 
@@ -38,9 +80,11 @@ function arg(name: string): string | undefined {
   return i >= 0 ? process.argv[i + 1] : undefined;
 }
 
-const root = path.resolve(arg('root') ?? '.');
-const only = arg('only');
-for (const [name, step] of Object.entries(STEPS)) {
-  if (only && only !== name) continue;
-  console.log(`[OK] ${name}: ${step(root)}`);
+if (require.main === module) {
+  const root = path.resolve(arg('root') ?? '.');
+  const only = arg('only');
+  for (const [name, step] of Object.entries(STEPS)) {
+    if (only && only !== name) continue;
+    console.log(`[OK] ${name}: ${step(root)}`);
+  }
 }
