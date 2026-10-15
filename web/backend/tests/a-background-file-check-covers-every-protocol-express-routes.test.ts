@@ -90,6 +90,7 @@ describe('BGFILECHECK on every protocol express.e routes through fileReceive', (
   let root: string;
   let playpen: string;
   let previousDataDir: string;
+  const callers: any[] = [];
 
   beforeEach(() => {
     root = fs.mkdtempSync(path.join(os.tmpdir(), 'bgproto-'));
@@ -100,6 +101,10 @@ describe('BGFILECHECK on every protocol express.e routes through fileReceive', (
     checked.mockClear();
   });
   afterEach(() => {
+    // A transfer left waiting (YMODEM waits for the batch-end block) keeps its
+    // timeout armed past the suite; end it so the timer cannot fire after teardown.
+    for (const c of callers) c.transferManager?.cancel?.();
+    callers.length = 0;
     config.set('dataDir', previousDataDir);
     clearNodeTooltypeCache();
     fs.rmSync(root, { recursive: true, force: true });
@@ -116,6 +121,7 @@ describe('BGFILECHECK on every protocol express.e routes through fileReceive', (
         fileArea: { id: 1, conferenceId: 1, name: 'Uploads', path: 'Conf1/Files' },
       },
     };
+    callers.push(session);
     const socket: any = { id: 'bg-1', emit: () => true, on: () => {}, once: () => {} };
     return { session, socket };
   }
