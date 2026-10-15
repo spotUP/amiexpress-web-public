@@ -140,9 +140,9 @@ build/test_ui_profile: src/ui_profile.c tests/test_ui_profile.c include/ui_profi
 	@mkdir -p build
 	$(CC) $(HOST_CFLAGS) src/ui_profile.c tests/test_ui_profile.c -o $@
 
-build/test_ui_list: src/ui_ansi.c src/ui_list.c src/ui_profile.c tests/test_ui_list.c include/ui_list.h include/ui_profile.h
+build/test_ui_list: src/ui_ansi.c src/ui_list.c src/ui_profile.c src/ui_theme.c tests/test_ui_list.c include/ui_list.h include/ui_profile.h include/ui_theme.h
 	@mkdir -p build
-	$(CC) $(HOST_CFLAGS) src/ui_ansi.c src/ui_list.c src/ui_profile.c tests/test_ui_list.c -o $@
+	$(CC) $(HOST_CFLAGS) src/ui_ansi.c src/ui_list.c src/ui_profile.c src/ui_theme.c tests/test_ui_list.c -o $@
 
 build/test_ui_screen: src/ui_ansi.c src/ui_screen.c src/ui_profile.c tests/test_ui_screen.c include/ui_screen.h
 	@mkdir -p build

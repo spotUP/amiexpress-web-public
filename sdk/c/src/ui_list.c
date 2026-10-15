@@ -14,6 +14,7 @@
  */
 
 #include "ui_list.h"
+#include "ui_theme.h"
 
 #include <string.h>
 
@@ -31,6 +32,8 @@ void ui_list_init(ui_list *list)
     list->drawn_offset = -1;
     list->borders = 1;
     list->ground = -1;
+    list->scroll_track = UI_TOKEN(UI_T_DIM);
+    list->scroll_thumb = UI_TOKEN(UI_T_BAR);
 }
 
 int ui_list_visible_rows(const ui_list *list)
@@ -208,9 +211,23 @@ static void draw_row(ui_list *list, ansi_buf *b, int row, int inner_left,
        address, glyph) for a cell that cannot have changed. */
     if (scrolls && bar) {
     int on_thumb = (row >= thumb_start) && (row < thumb_start + thumb_size);
-        ansi_color(b, list->chrome, list->ground >= 0 ? list->ground : ANSI_BLACK, 0);
-        ansi_text_raw(b, screen_row, inner_left + inner_width,
-                      on_thumb ? "#" : "|", 1);
+        /* A space on a solid colour: no glyph, so Topaz and latin1 agree, and
+           a C64 gets a reverse-video space from ansi_color. */
+        int colour = on_thumb ? list->scroll_thumb : list->scroll_track;
+        if (b->cell_backgrounds) {
+            ansi_color(b, colour, colour, 0);
+            ansi_text_raw(b, screen_row, inner_left + inner_width, " ", 1);
+        } else {
+            /* A C64 has no per-cell background, and ansi_color() only turns a
+               background into reverse when it is above black and not in the
+               bright half - the theme's DIM is both. So the bar says what it
+               means directly: the colour as the pen, reverse video on, a
+               space. A solid block in the same colour either way. */
+            ansi_color(b, colour, ANSI_BLACK, 0);
+            ansi_reverse(b, 1);
+            ansi_text_raw(b, screen_row, inner_left + inner_width, " ", 1);
+            ansi_reverse(b, 0);
+        }
     }
     }
 

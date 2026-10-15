@@ -9,6 +9,7 @@
 
 #include "../include/ui_list.h"
 #include "../include/ui_profile.h"
+#include "../include/ui_theme.h"
 
 #include <assert.h>
 #include <stdio.h>
@@ -36,6 +37,9 @@ static ui_list a_list(int count, int height)
     list.width = 20;
     list.count = count;
     list.row = numbered_row;
+    /* Distinct plain colours so a test can tell track from thumb by SGR. */
+    list.scroll_track = ANSI_RED;       /* 41 */
+    list.scroll_thumb = ANSI_GREEN;     /* 42 */
     return list;
 }
 
@@ -178,10 +182,10 @@ static void the_scroll_bar_appears_only_when_it_can_move(void)
     ui_list scrolling = a_list(50, 10);
     ui_list fitting = a_list(3, 10);
 
-    /* '#' is the thumb, '|' the track - but '|' is also the box's own side,
-       so the thumb is what tells them apart. */
-    assert(strchr(drawn(&scrolling), '#') != 0);
-    assert(strchr(drawn(&fitting), '#') == 0);
+    /* The thumb is a space on the thumb colour (42 here): no glyph. */
+    assert(strstr(drawn(&scrolling), "42m") != 0);
+    assert(strstr(drawn(&fitting), "42m") == 0);
+    assert(strstr(drawn(&fitting), "41m") == 0);
 
     /* A list that fits keeps the column the bar would have taken: its rows
        are one character wider. */
@@ -198,11 +202,11 @@ static void the_thumb_moves_with_the_window(void)
     ui_list_select(&list, 0);
     out = drawn(&list);
     strcpy(top, out);
-    for (i = 0; top[i]; i++) if (top[i] == '#') { top_row = i; break; }
+    for (i = 0; top[i]; i++) if (top[i] == '4' && top[i+1] == '2' && top[i+2] == 'm') { top_row = i; break; }
 
     ui_list_select(&list, 99);
     out = drawn(&list);
-    for (i = 0; out[i]; i++) if (out[i] == '#') { bottom_row = i; break; }
+    for (i = 0; out[i]; i++) if (out[i] == '4' && out[i+1] == '2' && out[i+2] == 'm') { bottom_row = i; break; }
 
     /* At the end of a hundred rows the thumb is further into the frame than
        it was at the start - the bar reports where you are. */
@@ -563,13 +567,77 @@ static void a_cursor_move_leaves_the_scroll_bar_alone(void)
     ansi_begin(&b, frame, (long)sizeof(frame));
     ui_list_draw(&list, &b);
     frame[b.len] = '\0';
-    assert(strchr(frame, '#') != 0);            /* the full draw paints the thumb */
+    assert(strstr(frame, "42m") != 0);        /* the full draw paints the thumb */
     ui_list_move(&list, 1);
     ansi_begin(&b, frame, (long)sizeof(frame));
     ui_list_draw_changed(&list, &b, 0);
     frame[b.len] = '\0';
-    assert(strchr(frame, '#') == 0 && strchr(frame, '|') == 0);   /* a move at the same offset cannot move it */
+    assert(strstr(frame, "42m") == 0 && strstr(frame, "41m") == 0);   /* a move at the same offset cannot move it */
     printf("  [OK] a cursor move does not rewrite the scroll bar\n");
+}
+
+/**
+ * THE ONE SCROLLBAR (sysop, 2026-10-15): solid colour bars, no glyphs.
+ * Track on the theme's DIM, thumb on its BAR - the roles the TypeScript
+ * scrollbarRoles() names, from the same tokens.
+ */
+static void the_scroll_bar_is_solid_colour_with_no_glyph(void)
+{
+    ui_list list = a_list(50, 10);
+    const char *out;
+
+    list.borders = 0;
+    ui_list_select(&list, 0);
+    out = drawn(&list);
+    /* No '#' glyph and no '|' track glyph anywhere in the frame. */
+    assert(strchr(out, '#') == 0);
+    assert(strchr(out, '|') == 0);
+    printf("  [OK] the scroll bar draws no glyph\n");
+}
+
+static void the_scroll_bar_defaults_to_the_themes_dim_and_bar(void)
+{
+    const ui_theme *theme = ui_theme_by_id("uprough-neon");
+    ui_list list;
+    static ansi_buf b;
+    char want_track[40], want_thumb[40];
+
+    ui_list_init(&list);
+    assert(list.scroll_track == UI_TOKEN(UI_T_DIM));
+    assert(list.scroll_thumb == UI_TOKEN(UI_T_BAR));
+
+    list.top = 1; list.left = 1; list.height = 10; list.width = 20;
+    list.count = 50; list.row = numbered_row; list.borders = 0;
+    ui_list_select(&list, 0);
+    ansi_begin(&b, frame, (long)sizeof(frame));
+    ansi_set_palette(&b, theme->rgb, theme->idx, UI_TOKEN_COUNT);
+    ui_list_draw(&list, &b);
+    frame[b.len] = '\0';
+
+    sprintf(want_track, "48;2;%lu;%lu;%lu", (theme->rgb[UI_T_DIM] >> 16) & 0xff,
+            (theme->rgb[UI_T_DIM] >> 8) & 0xff, theme->rgb[UI_T_DIM] & 0xff);
+    sprintf(want_thumb, "48;2;%lu;%lu;%lu", (theme->rgb[UI_T_BAR] >> 16) & 0xff,
+            (theme->rgb[UI_T_BAR] >> 8) & 0xff, theme->rgb[UI_T_BAR] & 0xff);
+    assert(strstr(frame, want_track) != 0);
+    assert(strstr(frame, want_thumb) != 0);
+    printf("  [OK] the scroll bar is DIM and BAR from the theme\n");
+}
+
+static void on_a_c64_each_scroll_bar_cell_is_a_reverse_video_space(void)
+{
+    ui_list list = a_list(50, 10);
+    const char *out;
+    const char *bar;
+
+    list.borders = 0;
+    ui_list_select(&list, 0);
+    out = drawn_without_backgrounds(&list);
+    /* The thumb colour (green) becomes the pen, with SGR 7 latched: the
+       transducer turns that into $12 and a space - a solid block. */
+    bar = strstr(out, "32m");
+    assert(bar != 0);
+    assert(strstr(out, "\033[7m") != 0);
+    printf("  [OK] a C64 gets reverse-video spaces for the scroll bar\n");
 }
 
 int main(void)
@@ -598,6 +666,9 @@ int main(void)
     a_row_can_carry_a_label_ink_and_a_value_ink();
     a_caret_bar_fills_the_whole_selected_row();
     a_cursor_move_leaves_the_scroll_bar_alone();
+    the_scroll_bar_is_solid_colour_with_no_glyph();
+    the_scroll_bar_defaults_to_the_themes_dim_and_bar();
+    on_a_c64_each_scroll_bar_cell_is_a_reverse_video_space();
     printf("ui_list: all passed\n");
     return 0;
 }
