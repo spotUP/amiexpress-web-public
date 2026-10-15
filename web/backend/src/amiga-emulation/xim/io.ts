@@ -1534,9 +1534,6 @@ debugLog('[XIMIOHandler] PG_SM: Redirecting to Serial Output handler');
     pendingMsg?: XIMMessage,
     pauseSite: boolean = autoPause
   ): number {
-    // AEW_SCREEN WIPE IN/OUT: the door's frame is held for the wipe, not sent
-    // (Decision 27). The door still sees every byte written.
-    if (this.state.wipeCapture) { this.state.wipeCapture.text.push(text); return text.length; }
     // Convert raw Amiga output text to web-terminal-safe ANSI (see io-ansi-util.ts).
     const rawResult = processRawText(text, this.ansiBuffer, this.state.nonStopText, !!pendingMsg);
     this.ansiBuffer = rawResult.ansiBuffer;
@@ -1569,6 +1566,19 @@ debugLog('[XIMIOHandler] PG_SM: Redirecting to Serial Output handler');
     // to prevent double line breaks
     if (hasTrailingNewline && rawLines.length > 0 && rawLines[rawLines.length - 1] === '') {
       rawLines.pop();
+    }
+
+    // AEW_SCREEN WIPE IN/OUT: the door's frame is held for the wipe, not sent
+    // (Decision 27). It is held AFTER the conversion above and through the
+    // same line preparation as a live write, so the replay carries the
+    // break msg.data asked for and the newline mode's line endings.
+    const capture = this.state.wipeCapture;
+    if (capture) {
+      const held = emitPreparedLines(
+        { lines: rawLines, hasTrailingNewline, trackLines: false, autoPause: false },
+        { lineWrap: this.state.lineWrap, write: (t) => { capture.text.push(t); }, countRow: () => {}, resetRows: () => {}, pauseDue: () => false },
+      );
+      return held.bytes;
     }
 
     let bytesSent = 0;

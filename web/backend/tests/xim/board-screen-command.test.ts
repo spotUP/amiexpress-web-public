@@ -74,3 +74,24 @@ test('a throwing handler answers empty and releases a held wipe', async () => {
 test('an unknown request answers empty', async () => {
   expect(await boardScreenAnswer('BOGUS 1', ctx({}))).toBe('');
 });
+
+import { capWipeFrames, WIPE_BUDGET_MS } from '../../src/amiga-emulation/xim/board-screen';
+
+test('a wipe longer than the budget drops to its final frame instead of nearing the 5 s deadline', () => {
+  const frames = Array.from({ length: 200 }, (_, i) => ({ content: String(i), delay: 100 }));
+  const kept = capWipeFrames(frames);
+  expect(kept[kept.length - 1].content).toBe('199');
+  expect(kept.slice(0, -1).reduce((a, f) => a + Math.max(16, f.delay), 0)).toBeLessThanOrEqual(WIPE_BUDGET_MS);
+  expect(kept.length).toBeLessThan(40);
+  const short = [{ content: 'a', delay: 20 }, { content: 'b', delay: 0 }];
+  expect(capWipeFrames(short)).toEqual(short);
+});
+
+test('a second WIPE IN while one is held plays the held one first', async () => {
+  const c = ctx({ screenWidth: 80 });
+  await boardScreenAnswer('WIPE IN H', c);
+  c.state.wipeCapture!.text.push('FIRST SCREEN');
+  expect(await boardScreenAnswer('WIPE OUT H', c)).toBe('OK');
+  expect(sent.join('')).toContain('FIRST SCREEN');
+  expect(c.state.wipeCapture).toEqual({ kind: 'out', letter: 'H', text: [] });
+});

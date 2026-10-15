@@ -45,3 +45,13 @@ test('a trace names a mouse report and never prints its bytes', () => {
   expect(inputForTrace({}, 'a\x1b[<35;10;5Mb', (s) => s)).toBe('a<mouse>b');
   expect(inputForTrace({}, '\x1b[A', (s) => s)).toBe('\x1b[A');
 });
+
+import { doorInputTraceLine, setSecretInput } from '../../src/amiga-emulation/xim/secret-input';
+
+test('TRACE_DOOR_INPUT names a mouse report and withholds a secret, like the other two traces', () => {
+  const s = { nodeId: 2 };
+  expect(doorInputTraceLine(s, 'door:input', '\x1b[<35;4;4M')).toContain('data="<mouse>"');
+  setSecretInput(s, true);
+  expect(doorInputTraceLine(s, 'door:input', 'hunter2')).not.toContain('hunter2');
+  setSecretInput(s, false);
+});

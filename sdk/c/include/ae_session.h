@@ -182,6 +182,7 @@ typedef enum {
      * nothing and the door leaves.
      */
     AE_FIELD_USERFIELD      = 10600  /* AEW_USERFIELD */
+    /* 10700 is RESERVED for the J (join conference) door's AEW_CONFLIST; do not take it. */
 } ae_field;
 
 /**

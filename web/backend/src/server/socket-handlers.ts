@@ -8,6 +8,7 @@
  * provides a central location for all Socket.IO event registration.
  */
 
+import { doorInputTraceLine } from '../amiga-emulation/xim/secret-input';
 import { Server as SocketIOServer, Socket } from 'socket.io';
 import { keyBytesFor } from './composed-key';
 import { db } from '../database';
@@ -372,10 +373,7 @@ console.error('[SOCKET-DEBUG] PING TEST RECEIVED!', data);
      * container's log. That is not a thing to leave running.
      */
     if (!process.env.TRACE_DOOR_INPUT) return;
-    console.log(
-      `[DOOR-INPUT] route=${route} data=${JSON.stringify(data)} node=${session.nodeId}` +
-      ` door=${String((session as any).currentDoorName ?? '')} petscii=${session.petsciiMode ? 'Y' : 'N'}`,
-    );
+    console.log(doorInputTraceLine(session as never, route, data));
   };
 
   // Handle door input (for TypeScript doors)

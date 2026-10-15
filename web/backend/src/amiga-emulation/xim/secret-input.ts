@@ -24,3 +24,9 @@ export function isSecretInput(session: object | null | undefined): boolean {
 export function inputForTrace(session: object | null | undefined, data: string, render: (s: string) => string): string {
   return isSecretInput(session) ? `<${data.length} bytes withheld>` : render(data.replace(/\x1b\[<\d+;\d+;\d+[Mm]/g, '<mouse>'));
 }
+
+/** The TRACE_DOOR_INPUT line (socket-handlers traceDoorInput): the same redaction as the other two input traces. */
+export function doorInputTraceLine(session: { nodeId?: number; petsciiMode?: boolean; currentDoorName?: unknown } | null | undefined, route: string, data: string): string {
+  return `[DOOR-INPUT] route=${route} data=${inputForTrace(session, data, (s) => JSON.stringify(s))} node=${session?.nodeId}` +
+    ` door=${String(session?.currentDoorName ?? '')} petscii=${session?.petsciiMode ? 'Y' : 'N'}`;
+}
