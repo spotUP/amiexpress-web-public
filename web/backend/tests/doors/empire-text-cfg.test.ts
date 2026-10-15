@@ -30,6 +30,20 @@ const repoRoot = path.resolve(__dirname, '..', '..', '..', '..');
 const bullsCfg = fs.readFileSync(path.join(repoRoot, 'Doors', 'emp_tools', 'Bulls.CFG'));
 const joinCfg = fs.readFileSync(path.join(repoRoot, 'Doors', 'emp_tools', 'joincnf.cfg'));
 
+/*
+ * The shipped Bulls.CFG is the live board's file and the sysop edits it, so
+ * its row counts and mask text change over time. Nothing below pins a tally:
+ * the expected values are read from the parsed section bodies (the structure
+ * that produces them), and the tests assert the properties that must hold for
+ * ANY valid file - bulletin N sits on row N, a mask row has twenty flags, the
+ * getters agree with the sections.
+ */
+const MASK_FLAGS = 20;
+function sectionLines(raw: Buffer, name: string, kind: 'bull' | 'mask') {
+  const sec = parseEmpireFile(raw).sections.find((s) => s.name === name);
+  return (sec?.body ?? []).filter((l) => l.kind === kind);
+}
+
 describe('Empire text-cfg driver', () => {
   test('Bulls.CFG round-trips byte-identical', () => {
     expect(serializeEmpireFile(parseEmpireFile(bullsCfg))).toBe(bullsCfg.toString('latin1'));
@@ -61,24 +75,42 @@ describe('Empire text-cfg driver', () => {
   test('bull rows map title and file by index', () => {
     const file = parseEmpireFile(bullsCfg);
     const rows = getBullRows(file);
-    expect(rows.length).toBe(20);
-    expect(rows[0]).toEqual({ title: 'Top Uploaders', file: 'bull1.txt' });
+    const parsed = sectionLines(bullsCfg, 'bullnames_end', 'bull');
+    expect(parsed.length).toBeGreaterThan(0);
+    expect(rows).toHaveLength(parsed.length);
+    // A mask row has twenty flags, so a 21st name could never be switched on.
+    expect(rows.length).toBeLessThanOrEqual(MASK_FLAGS);
+    // Position is identity: row i is bulletin i+1.
+    rows.forEach((r, i) => expect(r.file).toBe(`bull${i + 1}.txt`));
+    const [first, second] = rows;
     expect(setBullRow(file, 0, { title: 'New Uploads' })).toBe(true);
     expect(setBullRow(file, 1, { file: 'bull2new.txt' })).toBe(true);
-    expect(getBullRows(file)[0]).toEqual({ title: 'New Uploads', file: 'bull1.txt' });
-    expect(getBullRows(file)[1]).toEqual({ title: 'Top Downloaders', file: 'bull2new.txt' });
+    expect(getBullRows(file)[0]).toEqual({ title: 'New Uploads', file: first.file });
+    expect(getBullRows(file)[1]).toEqual({ title: second.title, file: 'bull2new.txt' });
     // Out of range is refused, never scaffolded silently.
+    expect(setBullRow(file, rows.length, { title: 'x' })).toBe(false);
     expect(setBullRow(file, 99, { title: 'x' })).toBe(false);
   });
 
   test('mask rows keep their Conference comments (numbering quirks included)', () => {
     const file = parseEmpireFile(bullsCfg);
     const masks = getMaskRows(file);
-    expect(masks.length).toBeGreaterThan(30);
-    expect(masks[0]).toBe('XXXXXX--------------');
-    expect(setMaskRow(file, 0, 'XXXXXXXXXXXXXXXXXXXX')).toBe(true);
+    const parsed = sectionLines(bullsCfg, 'cnfaccess_end', 'mask');
+    expect(parsed.length).toBeGreaterThan(30);
+    expect(masks).toHaveLength(parsed.length);
+    for (const m of masks) {
+      expect(m).toHaveLength(MASK_FLAGS);
+      expect(m).toMatch(/^[X-]+$/);
+    }
+    const original = parsed[0] as { maskRaw: string; comment: string };
+    expect(masks[0]).toBe(original.maskRaw.trim());
+    expect(original.comment).toContain('Conference 1');
+    expect(setMaskRow(file, 0, 'X'.repeat(MASK_FLAGS))).toBe(true);
     const out = serializeEmpireFile(file);
-    expect(out).toContain('XXXXXXXXXXXXXXXXXXXX                               ; Conference 1');
+    const row = new RegExp(`^X{${MASK_FLAGS}} +; Conference 1\\s*$`, 'm').exec(out);
+    expect(row).not.toBeNull();
+    // The edit pads in place: the comment column does not move.
+    expect(row![0].indexOf(';')).toBe(original.maskRaw.length);
     expect(setMaskRow(file, 999, 'X')).toBe(false);
   });
 
@@ -110,8 +142,9 @@ describe('Empire text-cfg driver', () => {
 
   test('append helpers grow short files canonically', () => {
     const file = parseEmpireFile(bullsCfg);
+    const bullsBefore = getBullRows(file).length;
     expect(appendBullRow(file, { title: 'Extra', file: 'bull20.txt' })).toBe(true);
-    expect(getBullRows(file)).toHaveLength(21);
+    expect(getBullRows(file)).toHaveLength(bullsBefore + 1);
     expect(appendMaskRow(file, '--------------------', '; Conference 41')).toBe(true);
     expect(getMaskRows(file)).toHaveLength(getMaskRows(parseEmpireFile(bullsCfg)).length + 1);
   });

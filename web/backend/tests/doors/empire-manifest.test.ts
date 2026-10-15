@@ -16,6 +16,7 @@ import {
   readDoorSettingsView,
   writeDoorSettings,
 } from '../../src/doors/door-settings.service';
+import { parseEmpireFile, getMaskRows } from '../../src/doors/text-cfg/empire';
 
 const repoEmp = path.resolve(__dirname, '..', '..', '..', '..', 'Doors', 'emp_tools');
 
@@ -49,7 +50,15 @@ describe('emp_tools door.settings.json', () => {
       expect(view.manifest.settings.length).toBeGreaterThan(40);
       expect(view.values.dual_listing).toBe('YES');
       expect(view.values.cursor_keys).toBe('YES');
-      expect(view.values.conf_1_mask).toBe('XXXXXX--------------');
+      /*
+       * Each conf_N_mask reads mask row N of the file. The expected rows come
+       * from parsing the staged Bulls.CFG, not from typed-in text: the sysop
+       * edits the masks on the live board, so the text is theirs to change;
+       * what this pins is that the setting for conference N is row N.
+       */
+      const fileMasks = getMaskRows(parseEmpireFile(fs.readFileSync(path.join(dir, 'Bulls.CFG'))));
+      expect(fileMasks.length).toBeGreaterThan(0);
+      expect(view.values.conf_1_mask).toBe(fileMasks[0]);
       expect(view.values.conf_10_mask).toBeDefined();
       expect(view.values.join_dual_listing).toBe('NO');
       expect(view.values.join_nrconflines).toBe(11);
@@ -82,6 +91,7 @@ describe('emp_tools door.settings.json', () => {
       expect(masked).toEqual(Array.from({ length: masked.length }, (_, i) => i + 1));
       // The one the mapping bug dropped, named so the regression is legible.
       expect(masked).toContain(9);
+      for (const n of masked) expect(view.values[`conf_${n}_mask`]).toBe(fileMasks[n - 1]);
       // Art rides to the Studio, not the form. Two of them now: emp_tools is
       // two doors in one directory, and each has a logo in its own file -
       // Bulls.CFG's title and joincnf.cfg's conference banner. Asked as one
