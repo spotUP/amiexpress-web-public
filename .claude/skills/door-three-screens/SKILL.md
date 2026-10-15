@@ -27,7 +27,7 @@ finished designing.
 
 **68K door (C SDK).** Every 198 bytes is one XIM message, ~45 ms of emulation.
 A full repaint of a seven-row list is ~1,900 bytes - ten messages, half a
-second, on every keypress. THEMEC did exactly that until 2026-09-07 and the
+second, on every keypress. THEME (C) did exactly that until 2026-09-07 and the
 sysop's report was "its slow".
 
 - Keep `drawn_*` state per widget; on a keypress repaint only the cells that
@@ -63,7 +63,7 @@ not to defeat it:
     make -C sdk/c probe     # both widths against the proof door
 
 It drives the real binary through the board's emulator and prints, per key,
-the bytes net of animation and the XIM message count. THEMEC after the fix:
+the bytes net of animation and the XIM message count. THEME (C) after the fix:
 ~210 bytes, 2 messages, first byte in 100-250 ms. **More than a few hundred
 bytes for a cursor move means the door is not drawing smart** - fix it before
 shipping, and put the measurement in the handoff.
@@ -141,7 +141,7 @@ The C64 shows what the transducer (`sdk/petscii/ansi-to-petscii.ts`) can map:
 ## 5. Proof - the tests a door ships with
 
 Put them in `web/backend/tests/doors/compact-40/<door>.test.ts` (see
-`doorman-layout.test.ts`, `theme-picker.test.ts`):
+`doorman-layout.test.ts`, `screen-theme-picker.test.ts`):
 
 1. **80-column identity** - capture the (glyph, SGR) grid of the rendered 80x24
    screen from the code BEFORE your change, pin it, and keep it green after.
@@ -188,7 +188,7 @@ regenerate the eighty-col snapshot.
 ## 5a. Look-and-feel parity with the sibling doors
 
 A door passes this checklist at 80, wide and 40 before it is called done.
-Compare it side by side with THEMEC / SUBS / NOTIFY.
+Compare it side by side with THEME (C) / SUBS / NOTIFY.
 
 - **Animate the masthead rail while idle** - a door that sits still looks
   dead next to its siblings. C: `ui_key` `idle` hook calling

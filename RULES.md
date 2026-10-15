@@ -830,7 +830,7 @@ A door repaints what changed, never the screen. This is a hard rule for
 
 Why: on a 68K door every 198 bytes is one XIM message costing ~45ms of
 emulation. A full repaint of a seven-row list is ~1,900 bytes - ten
-messages, half a second - and THEMEC did that on every keypress until
+messages, half a second - and THEME (C) did that on every keypress until
 2026-09-07 ("its slow"). Repainting the two rows the cursor touched is
 ~150 bytes. The same rule keeps a 2400-baud caller usable.
 
@@ -846,7 +846,7 @@ How:
   `npx tsx --tsconfig web/backend/tsconfig.json dev/scripts/door-probe/repaint-cost.ts <binary> --cols 80`
   (also `--cols 40`; `make probe` in sdk/c runs both on the proof door).
   It drives the binary through the board's emulator and prints, per key,
-  the bytes net of animation and the XIM message count. THEMEC on
+  the bytes net of animation and the XIM message count. THEME (C) on
   2026-09-07: ~210 bytes, 2 messages, first byte in 100-250 ms. More than
   a few hundred bytes for a cursor move means the door is not drawing smart.
 
