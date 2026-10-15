@@ -96,7 +96,7 @@ static void layout_puts_things_where_the_screen_has_room(void)
     assert(o.side_cols == 30 && o.grid_width == 132 - 32 && o.side_left == 132 - 30 + 1 && o.side_top == o.grid_top);
 
     reset();
-    logo("header", 17, 40, 0);                                               /* grid would be 25-19-2 = 4 < MD_MIN_GRID_ROWS */
+    logo("header", 17, 40, 0);                                               /* grid would be 25-21-3 = 1 < MD_MIN_GRID_ROWS */
     md_layout(&menu, 80, 25, &o);
     assert(o.header_rows == 0 && o.grid_top == 2 && o.divider_row == 0 && o.rail_row == 1 && o.masthead_row == 1);   /* no logo: the title row, the rail on row 1 */
 
@@ -105,11 +105,15 @@ static void layout_puts_things_where_the_screen_has_room(void)
     md_layout(&menu, 80, 25, &o);
     assert(o.header_rows == 11 && o.grid_top == 15 && o.grid_height == 7 && o.divider_row == 13);
     reset();
-    logo("header", 12, 78, 0);                                               /* leaves 6 = MD_MIN_GRID_ROWS: kept */
+    logo("header", 13, 78, 0);                                               /* leaves 5 = MD_MIN_GRID_ROWS: kept */
     md_layout(&menu, 80, 25, &o);
-    assert(o.header_rows == 12 && o.grid_height == MD_MIN_GRID_ROWS);
+    assert(o.header_rows == 13 && o.grid_height == MD_MIN_GRID_ROWS);
     reset();
-    logo("header", 13, 78, 0);                                               /* 5 < MD_MIN_GRID_ROWS: dropped */
+    logo("header", 12, 78, 0);                                               /* sysop 2026-10-15: the 12-row Bulletins logo on the 24-row web terminal stays */
+    md_layout(&menu, 80, 24, &o);
+    assert(o.header_rows == 12 && o.grid_top == 16 && o.grid_height == 5 && o.status_row == 23);
+    reset();
+    logo("header", 14, 78, 0);                                               /* 4 < MD_MIN_GRID_ROWS: dropped */
     md_layout(&menu, 80, 25, &o);
     assert(o.header_rows == 0 && o.grid_top == 2);
 

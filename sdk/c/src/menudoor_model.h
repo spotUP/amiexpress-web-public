@@ -3,7 +3,7 @@
 #define MENUDOOR_MODEL_H
 #include "ae_menu.h"
 
-#define MD_MIN_GRID_ROWS 6     /* never squeeze the grid below this: the logos give way first */
+#define MD_MIN_GRID_ROWS 5     /* never squeeze the grid below this: the logos give way first (sysop 2026-10-15: 5 keeps a 12-row logo on a 24-row web terminal) */
 #define MD_WIDE_COLS     120   /* plan Decision 30: the side logo is for wide screens only */
 
 typedef struct {

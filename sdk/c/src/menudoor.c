@@ -203,8 +203,8 @@ static void configure(struct menudoor *d, level *lv, int selected)
     g->entry_count = lv->menu.entry_count; g->section_count = lv->menu.section_count;
     g->entry_section = lv->menu.entry_section;
     g->key = g_key; g->label = g_label; g->section_title = g_section; g->right = g_right; g->flags = g_flags;
-    /* Under a header logo a lone section's header only repeats the logo (sysop 2026-10-15): the list starts at once. */
-    if (lv->lay.header_rows && lv->menu.section_count == 1) g->section_title = 0;
+    /* A lone section's header only repeats the masthead or the logo (sysop 2026-10-15): the list starts at once. */
+    if (lv->menu.section_count == 1) g->section_title = 0;
     g->band_after_section = lv->lay.band_after_section; g->band_height = lv->lay.band_height;
     g->mode = lv->menu.pages ? UI_GRID_PAGES : UI_GRID_SCROLL;
     g->ink = UI_TOKEN(UI_T_INK); g->accent = UI_TOKEN(UI_T_ACCENT); g->dim = UI_TOKEN(UI_T_DIM);
