@@ -386,10 +386,76 @@ static void an_animation_frame_leaves_the_cursor_where_it_found_it(void)
     printf("  [OK] an animation frame leaves the cursor where it found it\n");
 }
 
+/**
+ * EVERY animation frame paints the rail in the rail's colour.
+ *
+ * The first tick did; the second and every later one wrote the run in the
+ * CALLER's colour (sysop, live: magenta slashes after a key press repaints
+ * the masthead, grey on each idle tick). The frame brackets itself in
+ * DECSC/DECRC, and DECRC puts the terminal's colour back to what it was at
+ * the save - but the buffer's colour cache kept "the rail's colour", so the
+ * next frame's ansi_color() was judged redundant and skipped.
+ */
+static int segment_sets_colour(const char *seg_start, const char *seg_end, const char *sgr_part)
+{
+    const char *at;
+    for (at = seg_start; at < seg_end; at++) {
+        if (at[0] == '\033' && at[1] == '[') {
+            const char *q = at + 2;
+            while (q < seg_end && *q != 'm' && *q != 'H') q++;
+            if (q < seg_end && *q == 'm') {
+                char tmp[32];
+                unsigned long n = (unsigned long)(q - (at + 2));
+                if (n < sizeof tmp) {
+                    memcpy(tmp, at + 2, n);
+                    tmp[n] = '\0';
+                    if (strstr(tmp, sgr_part) != 0) return 1;
+                }
+            }
+        }
+    }
+    return 0;
+}
+
+static void every_animation_frame_paints_the_rail_in_the_rail_colour(void)
+{
+    ansi_buf b;
+    int tick;
+    unsigned long after_first = 0;
+
+    memset(frame, 0, sizeof frame);
+    ansi_begin(&b, frame, (long)sizeof frame);
+    /* Rail ink 5 (magenta), the caller's own pen 7 (grey). */
+    ui_masthead_draw_tick(&b, 1, 1, 80, "DOOR THEME", "///", 5, 0, 0);
+    ansi_color(&b, 7, 0, 0);
+    after_first = (unsigned long)b.len;
+    for (tick = 1; tick <= 3; tick++) {
+        unsigned long from = (unsigned long)b.len;
+        const char *save;
+        const char *restore;
+        ui_masthead_rail_tick(&b, 1, 1, 80, "DOOR THEME", "///", 5, 0, tick);
+        frame[b.len] = '\0';
+        save = frame + from;
+        restore = frame + b.len;
+        assert(segment_sets_colour(save, restore, "35"));
+    }
+    (void)after_first;
+
+    /* And the caller's colour is still known to be 7: DECRC put it back, so
+       asking for it again must cost nothing. */
+    {
+        long before = b.len;
+        ansi_color(&b, 7, 0, 0);
+        assert(b.len == before);
+    }
+    printf("  [OK] every animation frame paints the rail in the rail's colour\n");
+}
+
 int main(void)
 {
     printf("ui_chrome\n");
     an_animation_frame_leaves_the_cursor_where_it_found_it();
+    every_animation_frame_paints_the_rail_in_the_rail_colour();
     the_rail_stream_matches_the_typescript();
     the_rail_travels();
     a_wide_screen_shows_every_key();

@@ -87,6 +87,11 @@ typedef struct {
     int last_bold;
     /** Reverse video as last emitted; -1 after a reset, so it re-emits. */
     int last_reverse;
+    /** The colour state at ansi_save_cursor, handed back by ansi_restore_cursor. */
+    int saved_fg;
+    int saved_bg;
+    int saved_bold;
+    int saved_reverse;
     /**
      * A cell on this terminal may carry its own background colour.
      *

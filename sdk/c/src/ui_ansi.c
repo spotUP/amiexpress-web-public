@@ -69,6 +69,10 @@ void ansi_begin(ansi_buf *b, char *storage, long capacity)
        KNOWN to be off. Leaving it unknown put a redundant ESC[27m at the
        head of every 80-column frame. */
     b->last_reverse = 0;
+    b->saved_fg = -1;
+    b->saved_bg = -1;
+    b->saved_bold = -1;
+    b->saved_reverse = -1;
     /* An ANSI terminal until something says otherwise, which is what every
        existing caller has always been. */
     b->cell_backgrounds = 1;
@@ -302,13 +306,27 @@ void ansi_cursor(ansi_buf *b, int visible)
     put_str(b, visible ? "\033[?25h" : "\033[?25l");
 }
 
+/* DECSC saves the cursor AND the terminal's colour/reverse state; DECRC puts
+   all of it back. The colour cache has to follow, or it describes a colour
+   the terminal no longer shows: the next ansi_color() asking for the colour
+   written inside the save..restore span is judged redundant and skipped, and
+   the text lands in the caller's colour (the masthead rail went grey on every
+   idle tick after the first). */
 void ansi_save_cursor(ansi_buf *b)
 {
+    b->saved_fg = b->last_fg;
+    b->saved_bg = b->last_bg;
+    b->saved_bold = b->last_bold;
+    b->saved_reverse = b->last_reverse;
     put_str(b, "\0337");
 }
 
 void ansi_restore_cursor(ansi_buf *b)
 {
+    b->last_fg = b->saved_fg;
+    b->last_bg = b->saved_bg;
+    b->last_bold = b->saved_bold;
+    b->last_reverse = b->saved_reverse;
     put_str(b, "\0338");
 }
 
