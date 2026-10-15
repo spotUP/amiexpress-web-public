@@ -35,6 +35,7 @@ import { handleCommand, processBBSCommand } from '../../src/handlers/command.han
 import {
   setCommandExecutionDependencies,
   commandCache,
+  revalidateBbsCommandsIfChanged,
   commandAccessVerdict,
 } from '../../src/handlers/command-execution.handler';
 import { doorDropFileManager } from '../../src/services/DoorDropFileManager';
@@ -65,6 +66,13 @@ const dirLine = (filename: string, desc: string) =>
   `${filename.padEnd(12)} P   12K  23-Oct-25  ${desc}`;
 
 async function register(...defs: any[]) {
+  // A command lookup re-reads the BBSCmd directories whenever their stamp
+  // moved since the last check (6db5bfa47), and a door launch or a listing
+  // touches the board root. A cache seeded only in memory would then be
+  // replaced by the (empty) disk on the NEXT test's first command. Take the
+  // pending reload now, before seeding, so the stamp the handler compares is
+  // the current one.
+  revalidateBbsCommandsIfChanged(root, undefined, 1);
   commandCache.bbscmd.clear();
   for (const d of defs) commandCache.bbscmd.set(d.name.toUpperCase(), d);
   await initializeDoors();
