@@ -40,7 +40,7 @@ beforeEach(() => {
   root = fs.mkdtempSync(path.join(os.tmpdir(), 'menu-routes-'));
   fs.mkdirSync(path.join(root, 'Commands', 'BBSCmd'), { recursive: true });
   fs.mkdirSync(path.join(root, 'Doors', 'FROGGER'), { recursive: true });
-  fs.writeFileSync(path.join(root, 'Commands', 'BBSCmd', 'FROGGER.info'), 'TYPE=XIM\nLOCATION=Doors/FROGGER/frog\nDESCRIPTION=Cross the road\n');
+  fs.writeFileSync(path.join(root, 'Commands', 'BBSCmd', 'FROGGER.info'), 'TYPE=XIM\nLOCATION=Doors/frogger/frog\nDESCRIPTION=Cross the road\n');
   fs.writeFileSync(path.join(root, 'Doors', 'FROGGER', 'frog'), 'x');
   fs.mkdirSync(path.join(root, 'Bulletins'), { recursive: true });
   fs.writeFileSync(path.join(root, 'Bulletins', 'bull1.txt'), 'one');
@@ -142,7 +142,7 @@ test('entries lists every listed internal command plus FROGGER, each with its so
 });
 
 test('entries of a SysCmd say so, and a door that shadows an internal key says door; bulletins say bulletin', async () => {
-  fs.writeFileSync(path.join(root, 'Commands', 'BBSCmd', 'W.info'), 'TYPE=XIM\nLOCATION=Doors/FROGGER/frog\n');   // registrations are read from the board's disk
+  fs.writeFileSync(path.join(root, 'Commands', 'BBSCmd', 'W.info'), 'TYPE=XIM\nLOCATION=Doors/frogger/frog\n');   // registrations are read from the board's disk
   commandCache.syscmd.set('SHUTDOWN', door('SHUTDOWN', { DESCRIPTION: 'Stop' }) as any);
   const rows: any[] = (await request(appFor()).get('/api/config/menus/MAIN/entries')).body.data;
   expect(rows.find(r => r.key === 'W').source).toBe('door');
