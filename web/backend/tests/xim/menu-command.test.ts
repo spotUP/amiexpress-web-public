@@ -53,6 +53,14 @@ test('ROW is remembered per kind and comes back in the next catalogue', async ()
   expect(fs.readFileSync(path.join(root, 'Node3/menu-main.cat'), 'latin1')).toContain('\nR 5\n');
 });
 
+test('a settings door that never opened a catalogue is answered OVERFLOW? with the caller\'s stored mode and the board\'s effective mode', async () => {
+  const s = session({ user: { id: 7, secLevel: 10, securityFlags: 'T'.repeat(128), menuOverflow: 'pages' } });
+  expect(await menuAnswer('OVERFLOW?', ctx(s))).toBe('pages\tpages');
+  const t = session();
+  expect(await menuAnswer('OVERFLOW?', ctx(t))).toBe('default\tscroll');
+  expect(await menuAnswer('OVERFLOW?', ctx(session({ user: undefined })))).toBe('');
+});
+
 test('OVERFLOW stores the caller choice and answers the effective mode', async () => {
   const s = session();
   await menuAnswer('OPEN MAIN', ctx(s));

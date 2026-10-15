@@ -89,8 +89,8 @@ void md_layout(const ae_menu *m, int cols, int rows, md_layout_out *o)
 
     memset(o, 0, sizeof *o);
     o->masthead_row = 1;
-    o->status_row = rows - 1;
-    o->prompt_row = rows;
+    o->status_row = rows > 1 ? rows - 1 : 1;               /* a one-row terminal stacks the rows: never row 0 */
+    o->prompt_row = rows > 0 ? rows : 1;
     o->grid_left = 1;
     header = find_logo(m, "header");
     footer = find_logo(m, "footer");
@@ -107,6 +107,7 @@ void md_layout(const ae_menu *m, int cols, int rows, md_layout_out *o)
         o->grid_top = 2;
         o->grid_height = grid_rows(rows, 2, 0);
     }
+    if (o->grid_height < 0) o->grid_height = 0;           /* a terminal too short for a grid draws none */
     if (header) { o->header_top = 2; o->header_rows = header->rows; o->header_cols = cols; }
     if (footer) { o->footer_top = o->grid_top + o->grid_height; o->footer_rows = footer->rows; o->footer_cols = cols; }
     o->grid_width = cols;
@@ -437,7 +438,11 @@ static menudoor_result on_mouse(struct menudoor *d)
             if (hit < 0) continue;
             if (hit != cur(d)->grid.selected) select_entry(d, hit);      /* hover moves the real selection */
             if (evs[i].kind == 'P') {
-                d->typed[0] = '\0'; d->typed_len = 0;
+                if (d->typed_len > 0) {                         /* the line is dropped: the prompt row says so too */
+                    d->typed[0] = '\0'; d->typed_len = 0;
+                    draw_prompt(d);
+                    ui_screen_flush(&d->screen);
+                }
                 r = press_entry(d, hit);
                 if (r == MENUDOOR_LEAVE) return r;
             }
@@ -448,6 +453,13 @@ static menudoor_result on_mouse(struct menudoor *d)
 
 static int printable(int key) { return (key >= 32 && key < 127) || (key >= 160 && key <= 255); }
 
+/* What the caller can see: the columns left after the prompt (one stays free), never more than the buffer. */
+static int typed_room(struct menudoor *d)
+{
+    int room = d->screen.cols - 1 - (int)strlen(cur(d)->menu.prompt);
+    return room < TYPED_MAX ? room : TYPED_MAX;
+}
+
 static menudoor_result typed_key(struct menudoor *d, int key)
 {
     int idx;
@@ -456,7 +468,7 @@ static menudoor_result typed_key(struct menudoor *d, int key)
         d->typed[--d->typed_len] = '\0';
     } else if (key == 21) {
         d->typed[0] = '\0'; d->typed_len = 0;
-    } else if (printable(key) && d->typed_len < TYPED_MAX && !(key == ' ' && d->typed_len == 0)) {
+    } else if (printable(key) && d->typed_len < typed_room(d) && !(key == ' ' && d->typed_len == 0)) {
         d->typed[d->typed_len++] = (char)key;
         d->typed[d->typed_len] = '\0';
         if (d->spec->digits_show_at_once) {
@@ -628,8 +640,6 @@ int menudoor_settings_run(int node)
     start_screen(d, &session);
     sc = &d->screen;
     strcpy(d->title, "LONG MENUS");
-    /* The board answers OVERFLOW only once a catalogue is open: open the main menu's, unshown. */
-    ae_menu_open("MAIN", 0, &d->lv[0].menu);
     settings_read();
 
     ui_list_init(&list);

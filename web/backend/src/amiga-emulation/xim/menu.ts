@@ -92,8 +92,10 @@ export async function menuAnswer(request: string, ctx: MenuContext): Promise<str
       return 'OK';
     }
     case 'OVERFLOW?': {
-      if (!cat) return '';
-      return `${ctx.session.user?.menuOverflow || 'default'}\t${cat.overflow}`;
+      // The settings door asks before any catalogue is open: answer for MAIN, as OVERFLOW <m> does.
+      if (!cat && !ctx.session.user) return '';
+      const effective = cat?.overflow ?? effectiveOverflow(menuCallerFromSession(ctx.session), readMenuConfig(boardRoot(), 'MAIN').config);
+      return `${ctx.session.user?.menuOverflow || 'default'}\t${effective}`;
     }
     case 'OVERFLOW': return overflow(rest.trim(), cat, ctx);
     case 'RUN': {

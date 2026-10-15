@@ -166,6 +166,8 @@ static int board(void *ctx, int field, const char *request, char *out, int cap)
     if (field != AE_FIELD_MENU) return 0;
     strcat(requests, request); strcat(requests, "|");
     if (silent_board) return 0;
+    if (strcmp(request, "OVERFLOW?") == 0) return answer("default\tpages", out, cap);
+    if (strncmp(request, "OVERFLOW ", 9) == 0) return answer("OK\tpages", out, cap);
     if (strncmp(request, "OPEN ", 5) == 0) return answer("OK\t" CAT_PATH, out, cap);
     if (strncmp(request, "LOGO ", 5) == 0) return answer("OK\t3", out, cap);
     if (strncmp(request, "ROW ", 4) == 0 || strncmp(request, "RUN ", 4) == 0) return answer("OK", out, cap);
@@ -196,6 +198,10 @@ static const menudoor_spec SPEC = { "MAIN", "MAIN MENU", "BULLS", "Arrows Move  
 static char screen_text[65536];
 
 /* One door run: `keys` on stdin, everything the door wrote captured. Returns the door's exit code. */
+static int (*door)(void);
+static int run_menu(void) { return menudoor_run(&SPEC, 1); }
+static int run_settings(void) { return menudoor_settings_run(1); }
+
 static int drive(const char *keys, size_t key_len)
 {
     FILE *f;
@@ -207,7 +213,7 @@ static int drive(const char *keys, size_t key_len)
     fflush(stdout);
     assert(freopen("build/test_menudoor_screen.bin", "wb", stdout));
     assert(freopen("build/test_menudoor_keys.bin", "rb", stdin));
-    rc = menudoor_run(&SPEC, 1);
+    rc = door();
     fflush(stdout);
     dup2(saved, 1); close(saved);
     clearerr(stdout);
@@ -286,6 +292,69 @@ static void forty_columns_get_the_caret_the_short_key_bar_and_one_column(void)
     printf("  [OK] 40 columns get the caret and the short key bar\n");
 }
 
+static void a_click_on_a_greyed_entry_still_clears_the_typed_line_on_screen(void)
+{
+    char *last_typed, *after;
+    write_catalogue(CATALOGUE);
+    mouse_queue = 1; silent_board = 0; mouse_reply = "P\t1\t8";          /* the greyed File Listings */
+    assert(DRIVE("x\x1e\x1b") == 0);
+    mouse_reply = "M\t1\t6";
+    assert(activations == 0 && strstr(screen_text, "You cannot choose that."));
+    last_typed = strstr(screen_text, "Menu: x");
+    assert(last_typed);
+    after = strstr(last_typed + 1, "Menu: ");                              /* the prompt was drawn again, without the x */
+    assert(after && after[6] != 'x' && after < strstr(screen_text, "You cannot choose that."));   /* before the notice */
+    printf("  [OK] a click clears the typed line on screen as well as in the model\n");
+}
+
+static void typing_stops_at_what_the_caller_can_see(void)
+{
+    char keys[64];
+    memset(keys, 'a', 40); keys[40] = '\r'; keys[41] = '\0';
+    write_catalogue(CATALOGUE_SHORT_PROMPT);
+    mouse_queue = 0; silent_board = 0; size_reply = "40\t25";
+    assert(drive(keys, 41) == 0);
+    assert(typed_calls == 1 && strlen(typed_line) == 40 - 1 - strlen("Go: "));   /* 35, not 40 */
+    size_reply = "80\t25";
+    write_catalogue(CATALOGUE);
+    printf("  [OK] typing stops at the columns the caller can see\n");
+}
+
+static void no_screen_draws_outside_its_box_however_short(void)
+{
+    static const char *sizes[] = { "80\t6", "40\t5", "40\t3", "80\t1" };
+    int i;
+    write_catalogue(CATALOGUE);
+    for (i = 0; i < 4; i++) {
+        int rows = atoi(strchr(sizes[i], '\t') + 1), cols = atoi(sizes[i]);
+        const char *p;
+        size_reply = sizes[i]; mouse_queue = 0;
+        assert(DRIVE("\x1b") == 0);
+        for (p = screen_text; (p = strstr(p, "\x1b[")) != 0; p += 2) {
+            int r = 0, c = 0, n = 0;
+            if (sscanf(p + 2, "%d;%d%n", &r, &c, &n) == 2 && p[2 + n] == 'H') {   /* a cursor position */
+                if (!(r >= 1 && r <= rows && c >= 1 && c <= cols)) fprintf(stderr, "%s: row %d col %d\n", sizes[i], r, c);
+                assert(r >= 1 && r <= rows && c >= 1 && c <= cols);
+            }
+        }
+    }
+    size_reply = "80\t25";
+    printf("  [OK] no screen draws outside its box however short\n");
+}
+
+static void the_settings_screen_asks_without_opening_a_catalogue(void)
+{
+    mouse_queue = 0; silent_board = 0;
+    door = run_settings;
+    assert(DRIVE("\x1b[A\r\x1b") == 0);
+    door = run_menu;
+    assert(strstr(requests, "OVERFLOW?|"));
+    assert(!strstr(requests, "OPEN"));
+    assert(strstr(requests, "OVERFLOW pages|"));
+    assert(strstr(screen_text, "LONG MENUS") && strstr(screen_text, "Board default (pages)"));
+    printf("  [OK] the settings screen asks OVERFLOW? without opening a catalogue\n");
+}
+
 static void a_silent_board_runs_the_fallback_and_draws_nothing(void)
 {
     mouse_queue = 0; silent_board = 1;
@@ -299,6 +368,7 @@ static void a_silent_board_runs_the_fallback_and_draws_nothing(void)
 int main(void)
 {
     ae_native_set_exchange(board, 0);
+    door = run_menu;
     type_ahead_prefers_the_exact_key_and_ignores_case();
     digits_act_at_once_only_when_nothing_else_could_follow();
     layout_puts_things_where_the_screen_has_room();
@@ -307,6 +377,10 @@ int main(void)
     hovering_moves_the_real_selection_and_esc_leaves();
     a_click_selects_and_runs_the_entry_under_it();
     forty_columns_get_the_caret_the_short_key_bar_and_one_column();
+    a_click_on_a_greyed_entry_still_clears_the_typed_line_on_screen();
+    typing_stops_at_what_the_caller_can_see();
+    no_screen_draws_outside_its_box_however_short();
+    the_settings_screen_asks_without_opening_a_catalogue();
     a_silent_board_runs_the_fallback_and_draws_nothing();
     remove(CAT_PATH); remove("build/test_menudoor_keys.bin"); remove("build/test_menudoor_screen.bin");
     puts("test_menudoor_model: OK");
