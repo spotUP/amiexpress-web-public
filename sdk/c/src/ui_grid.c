@@ -286,13 +286,18 @@ static void compose(const ui_grid *g, int entry, int selected, char *buf, int cw
     buf[cw] = '\0';
 }
 
-static void draw_cell(ui_grid *g, ansi_buf *b, int entry, int row, int col)
+/* An erase goes to the right edge of the screen, so only the LAST cell of a line may use one: nothing is to its right. */
+static int erases(const ui_grid *g) { return g->erase_tail && g->ground != -1;   /* -1: the terminal's own background, which an erase cannot be told to use */ }
+
+/* `last_in_line`: no cell is to the right of this one. `rest_of_row`: nothing is under this cell but stale paint (a
+   window scroll draws without a blank pass), so the cell also takes the cells its own text does not reach. */
+static void draw_cell(ui_grid *g, ansi_buf *b, int entry, int row, int col, int last_in_line, int rest_of_row)
 {
     char buf[CELL_BUF], line[CELL_BUF + 16], pen[4];
     int cw = imin(g->col_width - 1, CELL_BUF - 1), chosen = entry == g->selected;
     const char *flags = text_of(g->flags, g->ctx, entry);
     int grey = strchr(flags, 'G') != 0, key_end = 2 + g->key_width + 2, lab_end = key_end + g->label_width;
-    int key_pen, lab_pen, i, tail_blank = 1, at = 0;
+    int key_pen, lab_pen, i, tail_blank = 1, at = 0, last, el = erases(g) && last_in_line;
 
     if (cw < 1) return;
     compose(g, entry, chosen, buf, cw);
@@ -301,6 +306,10 @@ static void draw_cell(ui_grid *g, ansi_buf *b, int entry, int row, int col)
         if (g->caret) ansi_color(b, g->selected_fg, g->ground, 1);
         else          ansi_color(b, g->selected_fg, g->selected_bg, 1);
         ansi_text(b, row, col, buf, cw);
+        if (el && rest_of_row) {                      /* the bar stops one cell short of the edge: the rest is the ground's */
+            ansi_color(b, g->ink, g->ground, 0);
+            ansi_erase_to_eol(b);
+        }
         return;
     }
     if (key_end > cw) key_end = cw;
@@ -313,36 +322,54 @@ static void draw_cell(ui_grid *g, ansi_buf *b, int entry, int row, int col)
        three of each (the key, the label and the right column were separate ansi_text calls, 14 bytes of goto and
        20 of colour apiece). An empty right column takes the label's pen - spaces have no colour to change. */
     ansi_color(b, key_pen, g->ground, 0);
-    memcpy(line + at, buf, (size_t)key_end); at += key_end;
-    if (lab_pen != key_pen) { ui_ink(pen, lab_pen); strcpy(line + at, pen); at += (int)strlen(pen); }
-    memcpy(line + at, buf + key_end, (size_t)(lab_end - key_end)); at += lab_end - key_end;
-    if (cw > lab_end) {
-        if (!tail_blank && g->dim != lab_pen) { ui_ink(pen, g->dim); strcpy(line + at, pen); at += (int)strlen(pen); }
-        memcpy(line + at, buf + lab_end, (size_t)(cw - lab_end)); at += cw - lab_end;
+    /* With an erase, the cell is written only as far as its last visible character and the rest of the row is erased
+       in the ground (the pen's background is the ground): a 79-column cell with a short label was ~55 spaces. */
+    last = cw;
+    if (el && tail_blank) {
+        last = lab_end;
+        while (last > 1 && buf[last - 1] == ' ') last--;
+    }
+    {
+        int k = imin(key_end, last), m;
+        memcpy(line + at, buf, (size_t)k); at += k;
+        if (last > key_end) {
+            if (lab_pen != key_pen) { ui_ink(pen, lab_pen); strcpy(line + at, pen); at += (int)strlen(pen); }
+            m = imin(lab_end, last);
+            memcpy(line + at, buf + key_end, (size_t)(m - key_end)); at += m - key_end;
+        }
+        if (last > lab_end) {
+            if (!tail_blank && g->dim != lab_pen) { ui_ink(pen, g->dim); strcpy(line + at, pen); at += (int)strlen(pen); }
+            memcpy(line + at, buf + lab_end, (size_t)(last - lab_end)); at += last - lab_end;
+        }
     }
     line[at] = '\0';
-    /* Raw: the line is exactly `cw` columns, so there is nothing to pad - and ansi_text would end with an SGR putting the
+    /* Raw: the line is exactly `last` columns, so there is nothing to pad - and ansi_text would end with an SGR putting the
        first pen back, 17 bytes on every cell for a colour the next ansi_color call overwrites anyway. */
-    ansi_text_raw(b, row, col, line, cw);
+    ansi_text_raw(b, row, col, line, last);
+    if (el && (tail_blank || rest_of_row)) ansi_erase_to_eol(b);   /* the pen's background is the ground */
 }
 
-static void draw_header(ui_grid *g, ansi_buf *b, int section, int row)
+/* A section header: " Title ----". `whole_row`: nothing is under it but stale paint, so the row starts at the grid's
+   first column with one more space - the header then covers every column of the box itself and needs no blank pass
+   under it (an 80-space write and its pen, for a row that is rewritten in full a moment later). */
+static void draw_header(ui_grid *g, ansi_buf *b, int section, int row, int whole_row)
 {
     char title[CELL_BUF], rule[CELL_BUF];
     const char *t = text_of(g->section_title, g->ctx, section);
-    int w = imin(g->width, CELL_BUF - 1), tl = 0;
+    int w = imin(g->width, CELL_BUF - 1), tl = 0, lead = whole_row ? 1 : 0;
 
+    if (whole_row) title[tl++] = ' ';
     title[tl++] = ' ';
-    while (*t && tl < w - 3) title[tl++] = *t++;
+    while (*t && tl < w - 3 + lead) title[tl++] = *t++;
     title[tl++] = ' ';
     title[tl] = '\0';
     ansi_color(b, g->accent, g->ground, 1);
-    ansi_text(b, row, g->left + 1, title, tl);
-    if (w - 1 - tl > 0) {
-        memset(rule, '-', (size_t)(w - 1 - tl));
-        rule[w - 1 - tl] = '\0';
+    ansi_text(b, row, g->left + 1 - lead, title, tl);
+    if (w - 1 - (tl - lead) > 0) {
+        memset(rule, '-', (size_t)(w - 1 - (tl - lead)));
+        rule[w - 1 - (tl - lead)] = '\0';
         ansi_color(b, g->dim, g->ground, 0);
-        ansi_text(b, row, g->left + 1 + tl, rule, w - 1 - tl);
+        ansi_text(b, row, g->left + 1 + (tl - lead), rule, w - 1 - (tl - lead));
     }
 }
 
@@ -355,14 +382,17 @@ static void blank_row(ui_grid *g, ansi_buf *b, int row)
 static void draw_line(ui_grid *g, ansi_buf *b, int li, int row, int blank)
 {
     const ui_grid_line *l;
-    int c;
+    int c, rest;
 
     if (li < 0 || li >= g->line_count) { if (blank) blank_row(g, b, row); return; }
     l = &g->lines[li];
-    if (blank) blank_row(g, b, row);
-    if (l->kind == UI_GL_HEADER) draw_header(g, b, l->first, row);
+    /* A one-column row that erases to its end is written whole (text, then an erase), so the blank pass under it
+       would be the same row sent twice. */
+    rest = blank && l->kind == UI_GL_ITEMS && erases(g) && g->columns == 1;
+    if (blank && !rest && l->kind != UI_GL_HEADER) blank_row(g, b, row);
+    if (l->kind == UI_GL_HEADER) draw_header(g, b, l->first, row, blank);
     else if (l->kind == UI_GL_ITEMS)
-        for (c = 0; c < l->count; c++) draw_cell(g, b, l->first + c, row, g->left + c * g->col_width);
+        for (c = 0; c < l->count; c++) draw_cell(g, b, l->first + c, row, g->left + c * g->col_width, c == l->count - 1, rest);
     /* BAND: left blank - the board draws the logo over it after the flush. */
 }
 
@@ -382,7 +412,7 @@ static void redraw_entry(ui_grid *g, ansi_buf *b, int entry)
 {
     int col, l = line_of(g, entry, &col);
     if (l < g->offset || l >= g->offset + g->height) return;
-    draw_cell(g, b, entry, g->top + l - g->offset, g->left + col * g->col_width);
+    draw_cell(g, b, entry, g->top + l - g->offset, g->left + col * g->col_width, col == g->lines[l].count - 1, 0);
 }
 
 int ui_grid_draw_changed(ui_grid *g, ansi_buf *b)

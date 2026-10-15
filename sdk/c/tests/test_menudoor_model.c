@@ -484,6 +484,10 @@ static void the_settings_bar_names_q_because_q_leaves(void)
 
 /* A board-sized catalogue: three sections, fourteen entries, descriptions. No wipes: the board plays those. */
 static char big_catalogue[4096];
+static int big_long_label;                                     /* 1: one entry has a 26-character label and a 10-character right column: the grid is one column wide at 80 */
+static const char *big_wipes = "-\t-\t-";                         /* the catalogue's W line: open, leave, page */
+static const char *big_prompt = "AmiExpress Web BBS [1:Demoscene] Menu (99 mins. left): ";
+static int big_row;                                            /* the catalogue's last-selected row ("R n"): where a fresh frame highlights */
 static void write_big_catalogue(const char *pages)
 {
     static const char *const SECTION[3] = { "Messages", "Files", "Community" };
@@ -492,12 +496,14 @@ static void write_big_catalogue(const char *pages)
     static const char *const KEY[14] = { "R", "E", "MS", "OLM", "ZOOM", "F", "D", "U", "WHO", "LIVECHAT", "B", "DOORS", "STATS", "G" };
     char line[160];
     int i;
-    strcpy(big_catalogue, "AEMENU 1\nK MAIN\t-\nT MAIN MENU\nP AmiExpress Web BBS [1:Demoscene] Menu (99 mins. left): \nO ");
+    sprintf(big_catalogue, "AEMENU 1\nK MAIN\t-\nT MAIN MENU\nP %s\nO ", big_prompt);
     strcat(big_catalogue, pages);
-    strcat(big_catalogue, "\nW -\t-\t-\nR 0\n");
+    sprintf(line, "\nW %s\nR %d\n", big_wipes, big_row);
+    strcat(big_catalogue, line);
     for (i = 0; i < 14; i++) {
+        const char *label = (big_long_label && i == 13) ? "Goodbye and leave for good" : LABEL[i];
         if (i == 0 || i == 5 || i == 9) { sprintf(line, "S %s\n", SECTION[i == 0 ? 0 : i == 5 ? 1 : 2]); strcat(big_catalogue, line); }
-        sprintf(line, "E %s\t%s\tDescription of %s for the caller\t\t\n", KEY[i], LABEL[i], LABEL[i]);
+        sprintf(line, "E %s\t%s\tDescription of %s for the caller\t%s\t\n", KEY[i], label, LABEL[i], (big_long_label && i == 13) ? "0123456789" : "");
         strcat(big_catalogue, line);
     }
     strcat(big_catalogue, ".\n");
@@ -529,7 +535,7 @@ static void the_first_frame_sends_nothing_twice(void)
     size_reply = "80\t25"; write_big_catalogue("scroll");
     frame80 = wrote("\x1b");
     assert(count_of(screen_text, "\033[2J") == 2);           /* the frame's clear and the door's closing clear: not a second one per frame */
-    assert(frame80 < 2100);                                   /* was 4673: every row blank-then-written, every bar filled-then-written */
+    assert(frame80 < 2082);                                   /* measured 1892 (was 4673: every row blank-then-written, every bar filled-then-written; 2100 before the tails were erased) */
     size_reply = "40\t25"; write_big_catalogue("pages");
     frame40 = wrote("\x1b");
     assert(count_of(screen_text, "\033[2J") == 2);
@@ -729,35 +735,81 @@ static void the_row_text_fits_forty_columns_in_both_states(void)
 
 #define TM_ROWS 25
 #define TM_COLS 132
+/* The attributes a cell was painted with: what two screens must agree on to look the same. */
+typedef struct { long fg, bg; int bold, rev; } tm_pen;
 static char tm_cell[TM_ROWS + 1][TM_COLS + 2];
-static int tm_row, tm_col, tm_saved_row, tm_saved_col, tm_addresses;
+static tm_pen tm_att[TM_ROWS + 1][TM_COLS + 1];
+static tm_pen tm_cur, tm_saved_pen;
+static int tm_row, tm_col, tm_saved_row, tm_saved_col, tm_addresses, tm_erases;
 
 static void tm_clear(void)
 {
-    int r;
-    for (r = 0; r <= TM_ROWS; r++) { memset(tm_cell[r], ' ', TM_COLS); tm_cell[r][TM_COLS] = '\0'; }
+    int r, c;
+    for (r = 0; r <= TM_ROWS; r++) {
+        memset(tm_cell[r], ' ', TM_COLS); tm_cell[r][TM_COLS] = '\0';
+        for (c = 0; c <= TM_COLS; c++) tm_att[r][c] = tm_cur;     /* a clear erases in the colours in force */
+    }
     tm_row = 1; tm_col = 1; tm_addresses = 0;
 }
 
-/* Plays bytes [from, to) of `text`: cursor addressing, save/restore, clear, printable characters. SGR and modes are ignored. */
+/* SGR: only what the door uses - reset, bold, reverse, default fg/bg, 16/256/true colours. */
+static void tm_sgr(const int *p, int n)
+{
+    int i;
+    if (n == 0) { memset(&tm_cur, 0, sizeof tm_cur); return; }
+    for (i = 0; i < n; i++) {
+        int v = p[i];
+        if (v == 0) memset(&tm_cur, 0, sizeof tm_cur);
+        else if (v == 1) tm_cur.bold = 1;
+        else if (v == 22) tm_cur.bold = 0;
+        else if (v == 7) tm_cur.rev = 1;
+        else if (v == 27) tm_cur.rev = 0;
+        else if (v == 39) tm_cur.fg = 0;
+        else if (v == 49) tm_cur.bg = 0;
+        else if ((v == 38 || v == 48) && i + 4 < n && p[i + 1] == 2) {
+            long rgb = 0x1000000L | ((long)p[i + 2] << 16) | ((long)p[i + 3] << 8) | p[i + 4];
+            if (v == 38) tm_cur.fg = rgb; else tm_cur.bg = rgb;
+            i += 4;
+        } else if ((v == 38 || v == 48) && i + 2 < n && p[i + 1] == 5) {
+            if (v == 38) tm_cur.fg = 0x2000000L + p[i + 2]; else tm_cur.bg = 0x2000000L + p[i + 2];
+            i += 2;
+        } else if ((v >= 30 && v <= 37) || (v >= 90 && v <= 97)) tm_cur.fg = 0x3000000L + v;
+        else if ((v >= 40 && v <= 47) || (v >= 100 && v <= 107)) tm_cur.bg = 0x3000000L + v;
+    }
+}
+
+/* Plays bytes [from, to) of `text`: cursor addressing, save/restore, clear, erase-to-end-of-line, colours, printable characters. */
 static void tm_play(const char *text, const char *to)
 {
     const char *p = text;
     while (p < to) {
-        if (*p == '\033' && p[1] == '7') { tm_saved_row = tm_row; tm_saved_col = tm_col; p += 2; }
-        else if (*p == '\033' && p[1] == '8') { tm_row = tm_saved_row; tm_col = tm_saved_col; p += 2; }
+        if (*p == '\033' && p[1] == '7') { tm_saved_row = tm_row; tm_saved_col = tm_col; tm_saved_pen = tm_cur; p += 2; }
+        else if (*p == '\033' && p[1] == '8') { tm_row = tm_saved_row; tm_col = tm_saved_col; tm_cur = tm_saved_pen; p += 2; }
         else if (*p == '\033' && p[1] == '[') {
             const char *q = p + 2;
-            int a = 0, b = 0, have_b = 0, priv = 0;
+            int args[16], n = 0, have = 0, priv = 0;
             if (*q == '?') { priv = 1; q++; }
-            while (*q >= '0' && *q <= '9') a = a * 10 + (*q++ - '0');
-            if (*q == ';') { q++; have_b = 1; while (*q >= '0' && *q <= '9') b = b * 10 + (*q++ - '0'); }
-            while (*q && ((*q >= '0' && *q <= '9') || *q == ';')) q++;
-            if (!priv && *q == 'H') { tm_row = a ? a : 1; tm_col = have_b && b ? b : 1; tm_addresses++; }
-            else if (!priv && *q == 'J' && a == 2) { int r = tm_row, c = tm_col, n = tm_addresses; tm_clear(); tm_row = r; tm_col = c; tm_addresses = n; }
+            args[0] = 0;
+            while ((*q >= '0' && *q <= '9') || *q == ';') {
+                if (*q == ';') { if (n < 15) n++; args[n] = 0; have = 1; }
+                else { args[n] = args[n] * 10 + (*q - '0'); have = 1; }
+                q++;
+            }
+            n = have ? n + 1 : 0;
+            if (!priv && *q == 'H') { tm_row = n > 0 && args[0] ? args[0] : 1; tm_col = n > 1 && args[1] ? args[1] : 1; tm_addresses++; }
+            else if (!priv && *q == 'J' && n > 0 && args[0] == 2) { int r = tm_row, c = tm_col, a = tm_addresses; tm_clear(); tm_row = r; tm_col = c; tm_addresses = a; }
+            else if (!priv && *q == 'K' && (n == 0 || args[0] == 0)) {                /* EL: cursor to the end of the row, in the CURRENT colours */
+                int c;
+                tm_erases++;
+                for (c = tm_col; c <= TM_COLS; c++) if (tm_row >= 1 && tm_row <= TM_ROWS) { tm_cell[tm_row][c - 1] = ' '; tm_att[tm_row][c - 1] = tm_cur; tm_att[tm_row][c - 1].fg = 0; }
+            }
+            else if (!priv && *q == 'm') tm_sgr(args, n);
             p = *q ? q + 1 : q;
         } else {
-            if ((unsigned char)*p >= 32 && tm_row >= 1 && tm_row <= TM_ROWS && tm_col >= 1 && tm_col <= TM_COLS) tm_cell[tm_row][tm_col - 1] = *p;
+            if ((unsigned char)*p >= 32 && tm_row >= 1 && tm_row <= TM_ROWS && tm_col >= 1 && tm_col <= TM_COLS) {
+                tm_cell[tm_row][tm_col - 1] = *p;
+                tm_att[tm_row][tm_col - 1] = tm_cur;
+            }
             tm_col++; p++;
         }
     }
@@ -774,7 +826,9 @@ static const char *closing_clear(void)
 static void tm_after(const char *keys)
 {
     wrote(keys);
+    memset(&tm_cur, 0, sizeof tm_cur);
     tm_clear();
+    tm_erases = 0;
     tm_play(screen_text, closing_clear());
 }
 
@@ -902,6 +956,210 @@ static void a_long_board_prompt_is_clipped_once_for_drawing_parking_and_room(voi
     printf("  [OK] a 100-character board prompt is clipped once: drawing, cursor and typing room agree\n");
 }
 
+/* ---- plan M15 follow-ups: the cell tail is ERASED, and the screen is the same screen -------------------------- */
+
+/* Runs of 20 or more spaces: what a blank tail looks like on the wire. */
+static int long_space_runs(const char *s)
+{
+    int n = 0, run = 0;
+    for (;; s++) {
+        if (*s == ' ') run++;
+        else { if (run >= 20) n++; run = 0; if (!*s) break; }
+    }
+    return n;
+}
+
+static void a_cell_tail_is_erased_to_the_end_of_the_line_not_written_as_spaces(void)
+{
+    mouse_queue = 0; silent_board = 0; theme_name = ""; big_row = 0; big_long_label = 1;
+    size_reply = "80\t25"; write_big_catalogue("scroll");
+    key_bytes("", "\x1b[B", "\x1b");
+    assert(strstr(delta_text, "\033[K"));                      /* the sentinel: the erase ran */
+    assert(long_space_runs(delta_text) <= 1);                  /* the selection bar is painted whole; the cell it left is not: a 55-space tail twice per key is what this replaced */
+    size_reply = "40\t25"; write_big_catalogue("pages");      /* a C64 cannot erase in a colour: it keeps the spaces it always sent */
+    key_bytes("", "\x1b[B", "\x1b");
+    assert(!strstr(delta_text, "\033[K"));
+    size_reply = "80\t25"; big_long_label = 0;
+    printf("  [OK] a cell's tail is erased to the end of the line at 80 columns, and still spaces at 40\n");
+}
+
+/* The whole screen as a caller sees it: glyph and the attributes that show (a blank shows its background and reverse only). */
+typedef struct { char ch[TM_ROWS + 1][TM_COLS + 2]; tm_pen att[TM_ROWS + 1][TM_COLS + 1]; } tm_shot;
+static tm_shot shot_a, shot_b;
+static void tm_snap(tm_shot *to, int cols)
+{
+    int r, c;
+    memset(to, 0, sizeof *to);
+    for (r = 1; r <= TM_ROWS; r++) for (c = 0; c < cols; c++) {
+        to->ch[r][c] = tm_cell[r][c];
+        to->att[r][c] = tm_att[r][c];
+        if (tm_cell[r][c] == ' ') { to->att[r][c].fg = 0; to->att[r][c].bold = 0; if (!to->att[r][c].rev) to->att[r][c].fg = 0; }
+    }
+}
+static int tm_first_difference(int cols)
+{
+    int r, c;
+    for (r = 1; r <= TM_ROWS; r++) for (c = 0; c < cols; c++)
+        if (shot_a.ch[r][c] != shot_b.ch[r][c] || memcmp(&shot_a.att[r][c], &shot_b.att[r][c], sizeof(tm_pen)) != 0) return r * 1000 + c + 1;
+    return 0;
+}
+
+/* `keys` on a catalogue that starts on row 0 must leave exactly the screen a fresh frame shows for the entry the keys land on. */
+static void same_screen_as_a_fresh_frame(const char *pages, const char *size, int rows, const char *keys, int lands_on)
+{
+    int cols = strcmp(size, "40\t25") == 0 ? 40 : 80, diff;
+    char size_text[16];
+    sprintf(size_text, "%d\t%d", cols, rows);
+    size_reply = size_text; big_row = 0; write_big_catalogue(pages);
+    tm_after(keys); tm_snap(&shot_a, cols);
+    big_row = lands_on; write_big_catalogue(pages);
+    tm_after("\x1b"); tm_snap(&shot_b, cols);
+    big_row = 0;
+    diff = tm_first_difference(cols);
+    if (diff) printf("  screens differ at row %d col %d after keys of length %d (%dx%d)\n", diff / 1000, diff % 1000, (int)strlen(keys), cols, rows);
+    assert(diff == 0);
+    size_reply = "80\t25";
+}
+
+static void a_moved_selection_leaves_the_screen_a_fresh_frame_would_show(void)
+{
+    const char *R = "\x1b[C", *L = "\x1b[D";
+    char to_the_first_scroll[64], mix[64];   /* to_the_first_scroll: the keys that scroll the short screen once (its name is old) */
+    int one_column, i;
+    mouse_queue = 0; silent_board = 0; theme_name = "";
+    to_the_first_scroll[0] = '\0'; for (i = 0; i < 6; i++) strcat(to_the_first_scroll, R);
+    strcpy(mix, R); strcat(mix, R); strcat(mix, R); strcat(mix, L);
+    for (one_column = 0; one_column < 2; one_column++) {          /* a grid of several columns (the last cell of a line erases) and of one (the whole row does) */
+        big_long_label = one_column;
+        same_screen_as_a_fresh_frame("scroll", "80\t25", 25, R, 1);
+        same_screen_as_a_fresh_frame("scroll", "80\t25", 25, mix, 2);
+        if (one_column) same_screen_as_a_fresh_frame("scroll", "80\t25", 25, "\x1b[B\x1b[B\x1b[A", 1);   /* Down walks a row: one entry in a one-column grid */
+        same_screen_as_a_fresh_frame("scroll", "80\t12", 12, to_the_first_scroll, 6);
+        if (one_column) assert(strstr(shot_a.ch[2], "Download"));                 /* the sentinel: the window DID scroll */              /* a short screen scrolls ONCE: the window moves, and lands where a fresh frame puts it */
+    }
+    big_long_label = 0;
+    same_screen_as_a_fresh_frame("pages", "40\t25", 25, "\x1b[B\x1b[B\x1b[A", 1);
+    printf("  [OK] a moved selection leaves the same screen a fresh frame shows (glyphs and colours), at 80 columns in one and several columns, scrolled, and at 40\n");
+}
+
+/* ---- plan M15 follow-up 5: a typed character costs the character, a jump costs only the cells (or window) it changes ---- */
+
+static int has(const char *haystack, const char *needle) { return strstr(haystack, needle) != 0; }
+/* a measured cost against its bound; the number is printed when it is over, so a bound is never guessed */
+#define AT_MOST(what, got, bound) do { if ((got) > (bound)) printf("  %s: %ld bytes, bound %d\n", what, (long)(got), (bound)); assert((got) <= (bound)); } while (0)
+
+/* Typing "wh" then "o": WHO is on the first window of the one-column grid; "d" jumps to Download, which is past a 12-row window. */
+static void typing_costs_the_character_and_a_jump_costs_what_it_changes(void)
+{
+    long same_match, first_on_window, jump_scrolls, back_to_hint, one_more, bar_goes;
+    mouse_queue = 0; silent_board = 0; theme_name = ""; big_long_label = 1; big_row = 0;
+    size_reply = "80\t25"; write_big_catalogue("scroll");
+
+    key_bytes("", "w", "\x1b");                                  /* first character: prompt row + old cell + new cell + status */
+    first_on_window = (long)strlen(delta_text);
+    assert(!has(delta_text, "\033[2J"));
+    AT_MOST("first character", first_on_window, 625);
+
+    key_bytes("w", "h", "\x1b");                                  /* WHO still: the highlight did not move */
+    same_match = (long)strlen(delta_text);
+    assert(addresses_in(delta_text) <= 2);                       /* the typed text, then the cursor parked - no cell, no status */
+    assert(!has(delta_text, "\033[24;") && !has(delta_text, "\033[?25"));
+    AT_MOST("same match", same_match, 20);
+
+    back_to_hint = key_cost("w", "\x08", "");                    /* back to an empty line: the hint row, the highlight stays */
+    AT_MOST("back to the hint", back_to_hint, 165);
+
+    size_reply = "80\t12"; write_big_catalogue("scroll");        /* a short window: Download is off it */
+    key_bytes("", "d", "\x1b");
+    jump_scrolls = (long)strlen(delta_text);
+    assert(!has(delta_text, "\033[2J"));                         /* no clear between: the window is written over itself */
+    assert(!has(delta_text, "\033[?25l\033[?25h"));
+    AT_MOST("jump past the window", jump_scrolls, 1160);
+
+    size_reply = "80\t25"; write_big_catalogue("scroll");
+    key_bytes("wh", "o", "\x1b");
+    one_more = (long)strlen(delta_text);
+    key_bytes("who", "x", "\x1b");                               /* the 4th character: the typing key bar has no room left and goes */
+    bar_goes = (long)strlen(delta_text);
+    assert(has(delta_text, "\033[K"));                           /* the typed text and an erase over the bar, not the row again */
+    AT_MOST("the key bar going away", bar_goes, 26);
+    tm_after("whox");
+    assert(strncmp(&tm_cell[25][strlen(big_prompt)], "whox", 4) == 0 && !strstr(tm_cell[25], "Esc Clear"));
+    AT_MOST("a further character", one_more, 24);
+
+    size_reply = "80\t25";
+    big_long_label = 0;
+    printf("  [OK] typing at 80 columns: first character %ld, same match %ld, back to the hint %ld, a jump past the window %ld bytes\n",
+           first_on_window, same_match, back_to_hint, jump_scrolls);
+
+    /* 40 columns: the same rules on the C64's grid (pages, caret, no erase). */
+    size_reply = "40\t25"; big_prompt = "Go: "; write_big_catalogue("pages");   /* a 40-column row cannot hold the board's long prompt AND typing */
+    key_bytes("", "w", "\x1b");
+    first_on_window = (long)strlen(delta_text);
+    assert(!has(delta_text, "\033[K"));
+    AT_MOST("first character at 40", first_on_window, 475);
+    key_bytes("w", "h", "\x1b");
+    AT_MOST("same match at 40", (long)strlen(delta_text), 18);
+    key_bytes("", "g", "\x1b");                                  /* the last entry: on a later page of the 40-column pages */
+    assert(!has(delta_text, "\033[2J"));
+    AT_MOST("a match on another page at 40", (long)strlen(delta_text), 475);
+    size_reply = "80\t25"; big_prompt = "AmiExpress Web BBS [1:Demoscene] Menu (99 mins. left): ";
+}
+
+/* ---- plan M15 follow-up 2: the door plays the BOARD's wipes at every width (the board zeroes them when the sysop turns
+        "Play wipes for 40-column callers" off); only the masthead rail is a 40-column exception ------------------- */
+
+static void the_door_plays_the_catalogues_wipes_at_forty_columns_as_at_eighty(void)
+{
+    int width;
+    mouse_queue = 0; silent_board = 0; theme_name = "";
+    for (width = 40; width <= 80; width += 40) {
+        char size[16];
+        sprintf(size, "%d\t25", width);
+        size_reply = size;
+        write_catalogue(CATALOGUE);                              /* W X V H: wipe in X, out V, page H */
+        assert(DRIVE("\x1b") == 0);
+        assert(has(requests, "WIPE IN X|") && has(requests, "WIPE END|"));            /* the opening wipe begins and ends around the frame */
+        assert(has(requests, "WIPE OUT V|"));                                          /* and the leaving wipe */
+        assert(count_of(requests, "WIPE END|") == 2);
+        big_wipes = "-\t-\t-";
+        write_catalogue("AEMENU 1\nK MAIN\t-\nT MAIN MENU\nP Go: \nO scroll\nW -\t-\t-\nR 0\nS Messages\nE R\tRead Mail\tRead your mail\t\t\n.\n");
+        assert(DRIVE("\x1b") == 0);
+        assert(!has(requests, "WIPE"));                                                /* a board with no wipes (the 40-column switch off zeroes them) plays none */
+        /* pages mode: a page turn plays the page wipe, at 40 as at 80 */
+        sprintf(size, "%d\t12", width);                                              /* a screen too short for the whole menu: it has pages */
+        big_wipes = "-\t-\tH"; big_long_label = 1; big_prompt = "Go: "; write_big_catalogue("pages");
+        assert(DRIVE("g\x1b") == 0);
+        assert(has(requests, "WIPE IN H|"));
+        big_wipes = "-\t-\t-"; big_long_label = 0; big_prompt = "AmiExpress Web BBS [1:Demoscene] Menu (99 mins. left): ";
+    }
+    size_reply = "80\t25";
+    printf("  [OK] the board's wipes play at 40 columns as at 80 (open, leave, page), and none when the board has none\n");
+}
+
+/* ---- plan M15 follow-up 4: at 40 columns the pager takes the right of the status row, and the description that is
+        left is the start of the sentence, whole words at the edge of what shows, never a collision ---------------- */
+static void at_forty_columns_the_description_is_still_readable_beside_the_pager(void)
+{
+    char row[TM_COLS + 2];
+    int pager_at, i, shown;
+    mouse_queue = 0; silent_board = 0; theme_name = ""; big_long_label = 0; big_prompt = "Go: ";
+    size_reply = "40\t12"; write_big_catalogue("pages");
+    tm_after("\x1b");
+    memcpy(row, tm_cell[11], 40); row[40] = '\0';                  /* the status row of a 12-row screen */
+    assert(strstr(row, "Page 1 of "));
+    pager_at = (int)(strstr(row, "Page 1 of ") - row);
+    assert(strncmp(row, " Description of Read Mail", 25) == 0);   /* the lead of the sentence is there... */
+    for (i = pager_at - 1; i >= 0 && row[i] == ' '; i--) ;
+    shown = i + 1;                                                 /* ...up to the last visible character before the pager */
+    assert(shown >= 20 && shown <= pager_at - 1);                  /* at least 20 columns of description, and a gap before the pager */
+    assert(row[39] != ' ');                                        /* the pager ends the row: nothing past it, nothing under it */
+    /* the clipped text is a prefix of the description, never a second copy or a torn row */
+    assert(strncmp(row + 1, "Description of Read Mail for the caller", (size_t)(shown - 1)) == 0);
+    big_prompt = "AmiExpress Web BBS [1:Demoscene] Menu (99 mins. left): "; size_reply = "80\t25";
+    printf("  [OK] at 40 columns %d columns of description stay readable beside the pager\n", shown);
+}
+
 int main(void)
 {
     ae_native_set_exchange(board, 0);
@@ -940,6 +1198,11 @@ int main(void)
     a_cell_is_one_cursor_move_and_one_run();
     every_idle_tick_stays_on_the_masthead_row();
     a_long_board_prompt_is_clipped_once_for_drawing_parking_and_room();
+    a_cell_tail_is_erased_to_the_end_of_the_line_not_written_as_spaces();
+    a_moved_selection_leaves_the_screen_a_fresh_frame_would_show();
+    typing_costs_the_character_and_a_jump_costs_what_it_changes();
+    the_door_plays_the_catalogues_wipes_at_forty_columns_as_at_eighty();
+    at_forty_columns_the_description_is_still_readable_beside_the_pager();
     remove(CAT_PATH); remove("build/test_menudoor_keys.bin"); remove("build/test_menudoor_screen.bin");
     puts("test_menudoor_model: OK");
     return 0;

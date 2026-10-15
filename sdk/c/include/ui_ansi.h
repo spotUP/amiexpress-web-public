@@ -252,6 +252,13 @@ void ansi_cursor(ansi_buf *b, int visible);
  * bytes costs a second XIM message.
  */
 void ansi_save_cursor(ansi_buf *b);
+
+/**
+ * Erase from the cursor to the end of the row (CSI 0 K, EL - standard ANSI, and the Amiga console.device has it).
+ * The erased cells take the CURRENT background, so set the pen whose background the tail should have first. Three
+ * bytes for what would be dozens of spaces; callers gate it on ui_profile.line_erase.
+ */
+void ansi_erase_to_eol(ansi_buf *b);
 void ansi_restore_cursor(ansi_buf *b);
 
 /* Writes `text` at (row, col), truncated to `maxlen` columns and padded

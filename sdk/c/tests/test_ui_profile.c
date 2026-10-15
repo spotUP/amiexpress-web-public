@@ -62,6 +62,16 @@ static void a_width_nobody_asked_about_still_answers(void)
     printf("  [OK] an unmeasured width falls to the safe tier\n");
 }
 
+static void only_an_ansi_terminal_erases_to_the_end_of_a_line(void)
+{
+    /* A cell's blank tail is one CSI K at 80 columns; the C64 tier keeps writing spaces. */
+    assert(!ui_profile_for(40).line_erase);
+    assert(ui_profile_for(41).line_erase);
+    assert(ui_profile_for(80).line_erase);
+    assert(ui_profile_for(132).line_erase);
+    printf("  [OK] line erase is an ANSI-tier capability, not a C64 one\n");
+}
+
 int main(void)
 {
     printf("ui_profile\n");
@@ -69,6 +79,7 @@ int main(void)
     a_c64_gets_no_borders_and_no_decoration();
     eighty_columns_gets_the_lot();
     a_width_nobody_asked_about_still_answers();
+    only_an_ansi_terminal_erases_to_the_end_of_a_line();
     printf("ui_profile: all passed\n");
     return 0;
 }

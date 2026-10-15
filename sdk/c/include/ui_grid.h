@@ -37,6 +37,12 @@ typedef struct {
     int ink, accent, dim, selected_fg, selected_bg;
     /** The background every cell is drawn on (the door's ground), or -1 for the terminal's own (ui_grid_init). */
     int ground;
+    /**
+     * A cell's blank tail may be one erase-to-end-of-line (CSI K) instead of spaces: set by a door whose terminal has
+     * it (ui_profile.line_erase) and whose grid runs to the right edge of the screen (an erase goes to the edge, so
+     * a side logo there would go with it). Used for the last cell of a line, where nothing is to its right.
+     */
+    int erase_tail;
     const char *caret;                     /* 0 = paint a bar; ">>" at 40 columns */
     void *ctx;
     /* computed by ui_grid_layout - read, never set */

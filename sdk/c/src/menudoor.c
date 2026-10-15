@@ -201,6 +201,7 @@ static void configure(struct menudoor *d, level *lv, int selected)
     g->ink = UI_TOKEN(UI_T_INK); g->accent = UI_TOKEN(UI_T_ACCENT); g->dim = UI_TOKEN(UI_T_DIM);
     g->selected_fg = UI_TOKEN(UI_T_SELECTION_INK); g->selected_bg = UI_TOKEN(UI_T_SELECTION_BG);
     g->ground = ground(d);
+    g->erase_tail = sc->profile.line_erase && lv->lay.grid_left == 1 && lv->lay.grid_width == sc->cols;
     g->caret = sc->cols <= 40 ? ">>" : 0;
     g->ctx = &lv->menu;
     ui_grid_layout(g);
@@ -394,11 +395,13 @@ static void draw_logos(struct menudoor *d)
     draw_between(d);
 }
 
-/* A whole frame, inside a board wipe when there is one: compose, flush, logos (they join the capture), end. */
+/* A whole frame, inside a board wipe when there is one. The wipe letters are the BOARD's (the catalogue zeroes them for
+   a 40-column caller when the sysop turned that switch off): the door plays what it is given at every width, and only
+   the masthead rail is a wide-screen effect.
+   Compose, flush, logos (they join the capture), end. */
 static void show_frame(struct menudoor *d, char wipe, int conceal)
 {
     int capturing;
-    if (!ui_effects_allowed(d->screen.cols)) wipe = 0;      /* no effects at 40 columns: the wipe replays the frame in dozens of messages */
     capturing = wipe && ae_bs_wipe_begin(wipe, conceal) == 1;
     compose_all(d);
     ui_screen_flush(&d->screen);
@@ -415,7 +418,7 @@ static void repaint_grid(struct menudoor *d)
     level *lv = cur(d);
     ui_grid *g = &lv->grid;
     int full = g->drawn_offset < 0 || g->offset != g->drawn_offset;
-    char wipe = (full && g->mode == UI_GRID_PAGES && g->drawn_offset >= 0 && ui_effects_allowed(d->screen.cols)) ? lv->menu.wipe_page : 0;
+    char wipe = (full && g->mode == UI_GRID_PAGES && g->drawn_offset >= 0) ? lv->menu.wipe_page : 0;
     int capturing = wipe && ae_bs_wipe_begin(wipe, 0) == 1;
 
     ui_grid_draw_changed(g, &d->screen.buf);
@@ -597,9 +600,22 @@ static void draw_prompt_after_edit(struct menudoor *d, int was_len)
 {
     level *lv = cur(d);
     ui_screen *sc = &d->screen;
-    int plen = prompt_len(lv), width;
+    int plen = prompt_len(lv), width, was_bar, bar;
 
-    if (was_len == 0 || d->typed_len == 0 || bar_fits(d, was_len) != bar_fits(d, d->typed_len)) { draw_prompt(d); return; }
+    if (was_len == 0 || d->typed_len == 0) { draw_prompt(d); return; }
+    was_bar = bar_fits(d, was_len);
+    bar = bar_fits(d, d->typed_len);
+    /* The key bar at the right is in the way of an erase (it would go with the tail), and a bar that APPEARS has to
+       be drawn: both are the whole row. When there is none before or after - or it has just gone - the typed text
+       and one erase to the end of the line are the whole change: three bytes instead of the row's blank padding. */
+    if (sc->profile.line_erase && !bar) {
+        ansi_color(&sc->buf, UI_TOKEN(UI_T_INK), ground(d), 0);
+        ansi_text_raw(&sc->buf, lv->lay.prompt_row, 1 + plen, d->typed, d->typed_len);
+        ansi_erase_to_eol(&sc->buf);
+        park_cursor(d);
+        return;
+    }
+    if (was_bar != bar) { draw_prompt(d); return; }
     width = d->typed_len > was_len ? d->typed_len : was_len;
     ansi_color(&sc->buf, UI_TOKEN(UI_T_INK), ground(d), 0);
     ansi_text(&sc->buf, lv->lay.prompt_row, 1 + plen, d->typed, width);

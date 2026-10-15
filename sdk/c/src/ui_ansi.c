@@ -359,6 +359,11 @@ void ansi_save_cursor(ansi_buf *b)
     put_str(b, "\0337");
 }
 
+void ansi_erase_to_eol(ansi_buf *b)
+{
+    put_str(b, "\033[K");
+}
+
 void ansi_restore_cursor(ansi_buf *b)
 {
     b->last_fg = b->saved_fg;

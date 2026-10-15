@@ -55,6 +55,13 @@ typedef struct {
      * the TypeScript doors use ">>" instead.
      */
     int caret_selection;
+    /**
+     * The terminal erases to the end of a line in the colour in force (CSI K), so a cell's blank tail can be one
+     * erase instead of dozens of spaces. True where cell_backgrounds is: an ANSI terminal. False at 40 columns -
+     * the C64 transducer fills an erase with its own idea of the colour, and the 40-column grid has no tail worth
+     * saving - so a door there keeps writing the spaces.
+     */
+    int line_erase;
 } ui_profile;
 
 /** The tier for a width. Always pass the LIVE width, never a constant. */

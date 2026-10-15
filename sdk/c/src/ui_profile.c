@@ -31,6 +31,7 @@ ui_profile ui_profile_for(int width)
     p.padding = xxs ? UI_MOBILE_PADDING : UI_DEFAULT_PADDING;
     p.cell_backgrounds = !xxs;
     p.caret_selection = xxs;
+    p.line_erase = !xxs;
     return p;
 }
 
