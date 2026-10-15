@@ -152,9 +152,6 @@ export const SystemConfigSchema = z.object({
   // System Behavior (TOOLTYPE_BBSCONFIG)
   quiet_join: z.boolean().optional(),
   convert_to_mb: z.boolean().optional(),
-  // P3-1: SYS_RELATIVE_CONFS (RELATIVE_CONFERENCES) - number conferences
-  // relative to the caller's own access rather than absolutely.
-  relative_confs: z.boolean().optional(),
   // P3-3: SYS_DEFAULT_MENU (DEFAULT_MENUNAME) - fallback SCREEN_MENU name;
   // blank means the express.e default of 'MENU' (express.e:31824).
   default_menu: z.string().max(100).optional(),

@@ -8,8 +8,7 @@
  * because a relative conference number would no longer match it. This
  * port showed Area Name unconditionally, and separately read the toggle
  * from a tooltype name ('CONFRELATIVE') nothing ever wrote — the real key,
- * written by axSetupTool/frmSettingsEdit.e:696 and consumed by
- * ACP.e:2698-2703, is RELATIVE_CONFERENCES.
+ * read by ACP.e:2693-2703 from the CONFCONFIG icon, is RELATIVE_CONFERENCES.
  *
  * (P2-20, the Protocol line on this same screen, landed upstream as
  * 2a56bf709 and is not covered here.)
@@ -84,7 +83,7 @@ describe('handleUserStatsCommand — Area Name line (P3-1 SYS_RELATIVE_CONFS)', 
   });
 
   it('hides Area Name once SYS_RELATIVE_CONFS is on (express.e:25554)', () => {
-    fs.writeFileSync(path.join(bbsRoot, 'bbsConfig.info.txt'), 'RELATIVE_CONFERENCES\n');
+    fs.writeFileSync(path.join(bbsRoot, 'ConfConfig.info'), 'NCONFS=1\nNAME.1=Main\nLOCATION.1=BBS:Conf1/\nRELATIVE_CONFERENCES\n');
     const socket = fakeSocket();
     const session = baseSession(bbsRoot);
 

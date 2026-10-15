@@ -10,6 +10,8 @@ export interface ConfConfigEntry {
 export interface ConfConfigData {
   confCount: number;
   entries: ConfConfigEntry[];
+  /** RELATIVE_CONFERENCES present (ACP.e:2693-2703, presence = on). */
+  relative: boolean;
 }
 
 /**
@@ -55,7 +57,7 @@ export function loadConfConfig(bbsRoot: string): ConfConfigData | null {
       entries.push({ name, location });
     }
 
-    const data: ConfConfigData = { confCount, entries };
+    const data: ConfConfigData = { confCount, entries, relative: toolTypes.has('RELATIVE_CONFERENCES') };
     confConfigCache.set(bbsRoot, { stamp, data });
     return data;
   } catch (error) {

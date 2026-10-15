@@ -163,12 +163,6 @@ export interface BBSConfigData {
   convert_to_mb?: boolean;
   // express.e:sopt.toggles[TOGGLES_CREDITBYKB] — count UL/DL bytes in kilobytes instead of bytes
   credit_by_kb?: boolean;
-  // SYS_RELATIVE_CONFS (axSetupTool/frmSettingsEdit.e:250,696 writes
-  // RELATIVE_CONFERENCES). ACP.e:2698-2703 sets sopt.toggles[TOGGLES_CONFRELATIVE]
-  // from it; express.e:5593,5613,8563,8572,25554 read that toggle to number
-  // conferences relative to the caller's own access instead of absolutely.
-  // P3-1.
-  relative_confs?: boolean;
   // SYS_DEFAULT_MENU (express.e:31823-31824 DEFAULT_MENUNAME, falls back to
   // 'MENU' when blank/absent). The fallback screen name used for SCREEN_MENU
   // when no per-conference/~SM_ override is active (express.e:6558-6562).
@@ -460,11 +454,6 @@ const TOOLTYPE_MAP: Record<string, keyof BBSConfigData> = {
   'CONVERT_TO_MB': 'convert_to_mb',
   // express.e sopt.toggles[TOGGLES_CREDITBYKB] — counts UL/DL in KB instead of bytes
   'CREDIT_BY_KBYTES': 'credit_by_kb',  // ACP.e:3030 - CREDITBYKB is an index (axcommon.e:385)
-  // ACP.e:2698 sets sopt.toggles[TOGGLES_CONFRELATIVE] from this key on the
-  // CONFCONFIG icon; axSetupTool writes the same key name to bbsConfig.info
-  // (frmSettingsEdit.e:696) so it is read from the one config file this port
-  // keeps. P3-1.
-  'RELATIVE_CONFERENCES': 'relative_confs',
   // express.e:31823 DEFAULT_MENUNAME. P3-3.
   'DEFAULT_MENUNAME': 'default_menu',
   // ACP.e:3092 NO_SAVESTATE (on the ACP icon in real AmiExpress; this port
@@ -1164,8 +1153,6 @@ function getDefaultConfig(): BBSConfigData {
     ssh_port: 2222,
     quiet_join: false,
     convert_to_mb: false,
-    // ACP.e:2698-2703 - absent means absolute conference numbering.
-    relative_confs: false,
     // ACP.e:3091 persistState:=TRUE by default; the tooltype only ever
     // turns saving OFF, never on, so absent means "do save" like real
     // AmiExpress.

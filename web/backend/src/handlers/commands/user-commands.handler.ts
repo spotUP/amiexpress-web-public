@@ -1016,20 +1016,19 @@ export function relConf(cn: number, user: any, confRelative: boolean = getConfRe
 }
 
 /**
- * P3-1: Read the SYS_RELATIVE_CONFS toggle from bbsConfig.info.
- * In express.e this is sopt.toggles[TOGGLES_CONFRELATIVE], set by
- * ACP.e:2698-2703 from the RELATIVE_CONFERENCES tooltype. The setup tool
- * writes that same key name to bbsConfig.info (axSetupTool/frmSettingsEdit.e:696),
- * so it is read through the shared bbs-config-file.service (relative_confs)
- * rather than a bespoke tooltype name/parse of this file.
- * Returns false if not found (default = absolute numbering).
+ * sopt.toggles[TOGGLES_CONFRELATIVE]: express.e ACP.e:2693-2703 sets it when
+ * the CONFCONFIG icon carries RELATIVE_CONFERENCES (presence = on). Read from
+ * ConfConfig.info - where the live board and JoinCnf keep it - through the
+ * same memoised reader the conference list comes from.
+ * WEB_: ACP reads it once at start; this reads it per call (mtime-memoised),
+ * so a sysop's edit applies without a restart.
  */
 export function getConfRelativeToggle(session: BBSSession): boolean {
   try {
     const { config } = require('../../config');
-    const { getBoardConfig } = require('../../services/bbs-config-file.service');
+    const { loadConfConfig } = require('../../services/conf-config.service');
     const bbsRoot = (session as any).bbsPath || config.get('dataDir') || process.cwd();
-    return !!getBoardConfig(bbsRoot).relative_confs;
+    return !!loadConfConfig(bbsRoot)?.relative;
   } catch {
     return false;
   }
