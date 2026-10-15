@@ -211,6 +211,44 @@ export function promptDebounceBlocks(session: BBSSession, force = false, now = D
   return false;
 }
 
+/**
+ * The built-in menu prompt as text: `BBS [conf:name] Menu (n mins. left):` for
+ * an 80-column caller, its 40-column form for a PETSCII one. AEW_MENU hands it
+ * to the menu door (xim/menu.ts) so the door's prompt row is the board's.
+ * A conference MENU_PROMPT tooltype is MCI and asynchronous: displayMenuPrompt
+ * draws that one itself, so this answers the built-in form.
+ */
+export function menuPromptText(session: BBSSession): string {
+  const config = getConfig();
+  const messageBases = getMessageBases() || [];
+  // Like AmiExpress: Use BBS name, relative conference number, conference name
+  const bbsName = config.get('bbsName');
+  // Calculate time remaining in minutes (express.e:28417,28419)
+  const timeLeft = getTimeRemainingMinutes(session);
+
+  // Check if multiple message bases in conference (like getConfMsgBaseCount in AmiExpress)
+  const msgBasesInConf = messageBases.filter(mb => mb.conferenceId === session.currentConf);
+  const currentMsgBase = messageBases.find(mb => mb.id === session.currentMsgBase);
+
+  // express.e:28417-28420: [0m[35m{bbsName} [0m[[36m{confNum}[34m:[36m{confName}[0m] Menu ([33m{time}[0m mins. left):
+  // buildMenuPrompt owns the format. It returns those bytes unchanged for
+  // every 80-column caller and a 40-column form without the board name for a
+  // PETSCII one - C64/40-col plan, Task 4b (sysop, 2026-09-02).
+  const displayName =
+    msgBasesInConf.length > 1 && currentMsgBase
+      ? `${session.currentConfName} - ${currentMsgBase.name}`
+      : `${session.currentConfName}`;
+  return buildMenuPrompt(
+    {
+      bbsName,
+      relConfNum: session.relConfNum,
+      confDisplayName: displayName,
+      timeLeft,
+    },
+    session
+  );
+}
+
 export function displayMenuPrompt(socket: any, session: BBSSession, force = false) {
   // Put the colours back, unconditionally and before anything else.
   //
@@ -295,38 +333,7 @@ console.log('  - timeRemaining:', session.timeRemaining);
     return;
   }
 
-  // Like AmiExpress: Use BBS name, relative conference number, conference name
-  const bbsName = config.get('bbsName');
-  // Calculate time remaining in minutes (express.e:28417,28419)
-  const timeLeft = getTimeRemainingMinutes(session);
-
-  // Check if multiple message bases in conference (like getConfMsgBaseCount in AmiExpress)
-  const msgBasesInConf = messageBases.filter(mb => mb.conferenceId === session.currentConf);
-  const currentMsgBase = messageBases.find(mb => mb.id === session.currentMsgBase);
-
-console.log('  - msgBasesInConf.length:', msgBasesInConf.length);
-console.log('  - currentMsgBase found:', !!currentMsgBase);
-
-  // express.e:28417-28420: [0m[35m{bbsName} [0m[[36m{confNum}[34m:[36m{confName}[0m] Menu ([33m{time}[0m mins. left):
-  // buildMenuPrompt owns the format. It returns those bytes unchanged for
-  // every 80-column caller and a 40-column form without the board name for a
-  // PETSCII one - C64/40-col plan, Task 4b (sysop, 2026-09-02).
-  const displayName =
-    msgBasesInConf.length > 1 && currentMsgBase
-      ? `${session.currentConfName} - ${currentMsgBase.name}`
-      : `${session.currentConfName}`;
-  emitPrompt(
-    socket,
-    recordPromptColumn(session as any, buildMenuPrompt(
-      {
-        bbsName,
-        relConfNum: session.relConfNum,
-        confDisplayName: displayName,
-        timeLeft,
-      },
-      session
-    ))
-  );
+  emitPrompt(socket, recordPromptColumn(session as any, menuPromptText(session)));
   emitText(socket, SAVE_CURSOR);
 
 }

@@ -137,18 +137,26 @@ describe('a password never reaches a log', () => {
   }
 
   /** Both password messages go through the one door; the stream loggers close once, after both. */
-  test('a DT_PASSWORD write and the W door\'s PASSWORD request leave no trace in any of the seven sinks', async () => {
+  test('a DT_PASSWORD write and the W door\'s PASSWORD request and an AEW_MENU RUN line leave no trace in any of the seven sinks', async () => {
     await sendThroughHandleMessage(XIMCommand.DT_PASSWORD, 0, SECRET);
     await sendThroughHandleMessage(XIMCommand.AEW_USERFIELD, 1, `PASSWORD ${SECRET}\t${SECRET}`);
+    // AEW_MENU RUN hands back a typed command line, which can carry a password (a conference or
+    // command password given as a parameter). A harmless AEW_MENU request goes first, so the
+    // absence below is checked against sinks that are shown to carry AEW_MENU text.
+    await sendThroughHandleMessage(XIMCommand.AEW_MENU, 0, 'OVERFLOW?');
+    await sendThroughHandleMessage(XIMCommand.AEW_MENU, 0, `RUN J 5 ${SECRET}`);
     const sinks = await sinkTexts();
     for (const [name, text] of Object.entries(sinks)) {
       // The sink is alive and saw each message (the Amiga log names the number).
       const seen = name === 'amigaLogFile'
-        ? [`msg request: ${XIMCommand.DT_PASSWORD}`, `msg request: ${XIMCommand.AEW_USERFIELD}`]
-        : ['DT_PASSWORD', 'AEW_USERFIELD'];
+        ? [`msg request: ${XIMCommand.DT_PASSWORD}`, `msg request: ${XIMCommand.AEW_USERFIELD}`, `msg request: ${XIMCommand.AEW_MENU}`]
+        : ['DT_PASSWORD', 'AEW_USERFIELD', 'AEW_MENU'];
       for (const marker of seen) expect([name, marker, text.includes(marker)]).toEqual([name, marker, true]);
       expect([name, text.includes(SECRET)]).toEqual([name, false]);
     }
+    // The harmless AEW_MENU request IS printed where sinks print the String: the RUN line is withheld, not AEW_MENU.
+    expect(sinks.console).toContain('OVERFLOW?');
+    expect(sinks.debugLog).toContain('OVERFLOW?');
   });
 
   test('the parser\'s own dump of a password message carries neither the text nor its hex', () => {

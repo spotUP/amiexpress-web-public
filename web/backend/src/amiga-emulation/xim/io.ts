@@ -626,6 +626,15 @@ debugLog('[XIMIOHandler] Line input completed, reply sent, resuming emulator');
    * Handle door write request (JH_WRITE)
    * From E sources (express.e:3382-3385)
    */
+  /**
+   * Text the BOARD draws into the door's screen (AEW_MENU LOGO, Decision 29):
+   * the same path as the door's own JH_WRITE text, so a wipe capture holds it
+   * and PETSCII transduction applies. No break added, no line counting.
+   */
+  emitDoorText(text: string): void {
+    this.emitText(text, false, false, false);
+  }
+
   handleWrite(msg: XIMMessage): void {
     const text = this.getMessageString(msg);
     // NOTE: msg.data is NOT a newline flag - express.e just calls aePuts(msg.string)

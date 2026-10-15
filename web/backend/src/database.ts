@@ -438,6 +438,11 @@ console.log('✓ Added petsciipalette column');
 console.log('✓ Added themepreference column');
       }
 
+      if (!columnNames.includes('menuoverflow')) {
+        // A caller's own choice for long menus: '' (board default), 'scroll' or 'pages' (plan M6).
+        this.db.exec("ALTER TABLE users ADD COLUMN menuoverflow TEXT DEFAULT ''");
+      }
+
       if (!columnNames.includes('screentheme')) {
         // The SCREEN theme - which set of board art this caller wears - and
         // not the same thing as `themepreference`, which is the DOOR theme.

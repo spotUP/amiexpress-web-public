@@ -15,10 +15,15 @@ export function loggableXimString(command: number, data: number, text: string | 
   if (command === XIMCommand.DT_PASSWORD && data === 0) return s ? '[password withheld]' : '';
   // SET 6 is refused (the password is PASSWORD's) but still carries plaintext.
   if (command === XIMCommand.AEW_USERFIELD && /^(PASSWORD|SET 6)\b/.test(s)) return 'PASSWORD [withheld]';
+  // AEW_MENU RUN carries a typed command line, which can carry a password (a
+  // conference or command password typed as a parameter) - never logged.
+  if (command === XIMCommand.AEW_MENU && /^RUN\b/.test(s)) return `RUN [${Math.max(0, s.length - 4)} bytes withheld]`;
   return s;
 }
 
-/** The parser's hex dump runs before the message is understood: skip it for these two. */
+/** The parser's hex dump runs before the message is understood: skip it for these three. */
 export function mayDumpRawString(command: number): boolean {
-  return command !== XIMCommand.DT_PASSWORD && command !== XIMCommand.AEW_USERFIELD;
+  // AEW_MENU: its String is a request, and a RUN request carries a typed line; the dump runs before
+  // the verb is known, so the whole command is skipped.
+  return command !== XIMCommand.DT_PASSWORD && command !== XIMCommand.AEW_USERFIELD && command !== XIMCommand.AEW_MENU;
 }

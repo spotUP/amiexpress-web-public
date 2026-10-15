@@ -346,6 +346,7 @@ console.error(`[Database] Failed to append BBS user to disk:`, error);
       petsciiPalette: user.petsciipalette === 'vic' ? 'vic' : 'vdc',
       petsciiCharset: user.petsciicharset === 'swedish' ? 'swedish' : 'standard',
       themePreference: user.themepreference || 'classic',        // Door theme; classic is today's look
+      menuOverflow: user.menuoverflow || '',                      // Long-menu choice: '' = board default (plan M6)
       // SCREEN theme - which set of board art this caller wears. Empty is
       // "no preference", which resolves to the board default and then to the
       // board's own screens. NOT the same preference as themePreference above.

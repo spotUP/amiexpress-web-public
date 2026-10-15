@@ -42,6 +42,7 @@ import * as net from 'net';
 import { amigaGaps, doorOf } from './instrumentation/amiga-gaps';
 import { XIM_DOOR_COMMAND_ADDR } from './memory-map';
 import { boardScreenAnswer } from './xim/board-screen';
+import { menuAnswer } from './xim/menu';
 import { MouseAbsorber } from './xim/mouse-absorber';
 import { responsiveDoorGeometry } from './xim/screen-width.util';
 
@@ -1094,6 +1095,25 @@ debugLog(`[XIMProtocol]   Wrote tooltype value="${tooltypeValue}", StringPtr not
           debugLog(`[XIMProtocol] AEW_SCREEN failed: ${err instanceof Error ? err.message : 'error'}`);
         }
         this.messageParser.writeMessageString(msg.msgAddr, answer);
+        this.sendReply(msg, answer.length);
+        break;
+      }
+
+      /** AEW_MENU (10900): a menu door's catalogue and actions - xim/menu.ts. */
+      case XIMCommand.AEW_MENU: {
+        let answer = '';
+        try {
+          answer = await menuAnswer(String(msg.string || ''), {
+            session: this.bbsSession, socket: this.socket,
+            emitDoorText: (text: string) => this.ioHandler.emitDoorText(text),
+          });
+        } catch (err) {
+          // Empty = "this board cannot answer": the door falls back to its plain menu. The error
+          // text is the message only - never the request, which may carry a typed command line.
+          debugLog(`[XIMProtocol] AEW_MENU failed: ${err instanceof Error ? err.message : 'error'}`);
+        }
+        this.messageParser.writeMessageString(msg.msgAddr, answer);
+        debugLog(`[XIMProtocol] AEW_MENU ${loggableXimString(msg.command, msg.data, msg.string).split(' ')[0]} -> ${answer.length} bytes`);
         this.sendReply(msg, answer.length);
         break;
       }
