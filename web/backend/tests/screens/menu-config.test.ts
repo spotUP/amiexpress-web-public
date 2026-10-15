@@ -59,3 +59,14 @@ test('placement to a section that does not exist falls back to the default secti
   expect(config.placement).toEqual({ F: 'messages' });
   expect(problems).toContain('placement R: no section "nowhere"');
 });
+
+test('a C1 control (8-bit CSI 0x9B) is stripped from a label while printable latin1 stays', () => {
+  expect(cleanText('Re\x9b31mad\x80\x9fX', 26)).toBe('Re31madX');
+  expect(cleanText('K\xf6ra \xe5t', 26)).toBe('K\xf6ra \xe5t');
+});
+
+test('a duplicate section id is dropped with a problem line, the first one wins', () => {
+  const { config, problems } = validateMenuConfig('MAIN', { sections: [{ id: 'a', title: 'First' }, { id: 'b', title: 'Two' }, { id: 'a', title: 'Again' }] });
+  expect(config.sections).toEqual([{ id: 'a', title: 'First' }, { id: 'b', title: 'Two' }]);
+  expect(problems).toContain('sections: duplicate id "a" dropped');
+});

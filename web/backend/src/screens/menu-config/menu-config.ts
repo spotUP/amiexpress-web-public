@@ -57,9 +57,9 @@ export function levelEntry<T>(map: LevelMap<T>, level: number): T | undefined {
   return best < 0 ? undefined : map[String(best)];
 }
 
-/** No C0, no DEL, no escape sequence: a description reaches the door's screen. */
+/** No C0, no DEL, no C1 (0x9B is 8-bit CSI on a latin1 board), no escape sequence: a description reaches the door's screen. */
 export function cleanText(raw: string, max: number): string {
-  return String(raw).replace(/\x1b\[[0-9;?]*[ -/]*[@-~]/g, '').replace(/[\x00-\x1f\x7f]/g, '').slice(0, max);
+  return String(raw).replace(/\x1b\[[0-9;?]*[ -/]*[@-~]/g, '').replace(/[\x00-\x1f\x7f-\x9f]/g, '').slice(0, max);
 }
 
 export function defaultMenuConfig(kind: MenuKind): MenuConfig {
@@ -102,11 +102,18 @@ export function validateMenuConfig(kind: MenuKind, raw: unknown): { config: Menu
   if (!isObj(raw)) return { config, problems: ['not a JSON object'] };
 
   if (Array.isArray(raw.sections)) {
+    let duplicates = 0;
     const sections = raw.sections
       .filter((s): s is { id: string; title: string } => isObj(s) && typeof s.id === 'string' && /^[a-z0-9-]{1,24}$/.test(s.id) && typeof s.title === 'string')
       .map(s => ({ id: s.id, title: cleanText(s.title, SECTION_TITLE_MAX) }))
-      .filter(s => s.title);
-    if (sections.length !== raw.sections.length) problems.push('sections: some sections were dropped');
+      .filter(s => s.title)
+      .filter((s, i, all) => {
+        if (all.findIndex(o => o.id === s.id) === i) return true;
+        problems.push(`sections: duplicate id "${s.id}" dropped`);
+        duplicates++;
+        return false;
+      });
+    if (sections.length + duplicates !== raw.sections.length) problems.push('sections: some sections were dropped');
     if (sections.length) config.sections = sections;
   }
   const ids = new Set(config.sections.map(s => s.id));
@@ -117,7 +124,7 @@ export function validateMenuConfig(kind: MenuKind, raw: unknown): { config: Menu
       config.placement[k.toUpperCase()] = v;
     }
   }
-  config.labels = textMap(raw.labels, 26, 'labels', problems);
+  config.labels = textMap(raw.labels, LABEL_MAX, 'labels', problems);
   config.descriptions = textMap(raw.descriptions, DESCRIPTION_MAX, 'descriptions', problems);
 
   if (isObj(raw.levels)) {
