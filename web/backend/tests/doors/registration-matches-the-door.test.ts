@@ -128,6 +128,13 @@ const DECLARED_ALIASES = new Map<string, string>([
    */
   ['j.info', 'B'],
   /*
+   * BULLS is where B.info hands its command when the bulletins door is not
+   * installed (FALLBACK=BULLS, 55979f592): the same Bulls drawer and the same
+   * manifest (command B) under the name the Bulls binary was registered as
+   * first. Declared on purpose - the SUBSCAN shape, not GWWALL's.
+   */
+  ['bulls.info', 'B'],
+  /*
    * TIPLOGIN is TIP run at login, on purpose (c578f1a1d, sysop 2026-09-29):
    * the same Doors/tip-of-day under a second command, so the door can tell
    * the login tip (which a caller may switch off) from a tip he asked for by
