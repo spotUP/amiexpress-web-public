@@ -112,10 +112,16 @@ describe('shipped door manifests', () => {
     // A manifest that only declares NOTIFY events has no settings for a door to read.
     if (!manifest.cfgFile && manifest.settings.length === 0 && manifest.notifications?.length) return;
 
+    // A manifest of ART slots only (mULTI-cHECK's advert) binds no value to a
+    // reader: each slot names a FILE in the door's folder, the Studio writes
+    // the drawing and the binary reads that file. There is no cfg key and no
+    // SDK call to look for.
+    if (!manifest.cfgFile && manifest.settings.length > 0 && manifest.settings.every((s: any) => s.art)) return;
+
     if (manifest.cfgFile) {
       // The 68K route: the board writes <cfgFile>, the door parses it. Its
       // source has to name each cfgKey, or that key reaches nothing.
-      const source = cSourceFor(manifest.command);
+      const source = cSourceFor(manifest.cfgFile);
       if (source === null) {
         // Binary-only door (Bulls): no source in the tree to name the keys,
         // so the proof is the file the binary parses — every bound setting
@@ -157,13 +163,27 @@ function typescriptSourcesUnder(dir: string, found: string[] = []): string[] {
   return found;
 }
 
-/** A C door's source, which lives in the SDK's examples rather than beside it. */
-function cSourceFor(command: string): string | null {
-  const dir = path.join(__dirname, '../../../../sdk/c/examples', String(command).toLowerCase());
-  if (!fs.existsSync(dir)) return null;
-  const sources = fs.readdirSync(dir).filter(name => name.endsWith('.c'));
-  if (sources.length === 0) return null;
-  return sources.map(name => fs.readFileSync(path.join(dir, name), 'utf8')).join('\n');
+/**
+ * A C door's source, which lives in the SDK's examples rather than beside it.
+ *
+ * Found by the file it opens, not by its name: the example directory, the
+ * Doors folder and the command differ (examples/achieve is Doors/ACHIEVEC,
+ * command ACHIEVEC; examples/requests is command REQ). Matching the command
+ * found neither, so both fell to the binary-only check, which reads the
+ * board-rendered cfg - a gitignored file that only exists after a boot.
+ */
+function cSourceFor(cfgFile: string): string | null {
+  const examples = path.join(__dirname, '../../../../sdk/c/examples');
+  const opens = `"PROGDIR:${cfgFile}"`;
+  for (const entry of fs.readdirSync(examples, { withFileTypes: true })) {
+    if (!entry.isDirectory()) continue;
+    const dir = path.join(examples, entry.name);
+    const sources = fs.readdirSync(dir)
+      .filter(name => name.endsWith('.c'))
+      .map(name => fs.readFileSync(path.join(dir, name), 'utf8'));
+    if (sources.some(text => text.includes(opens))) return sources.join('\n');
+  }
+  return null;
 }
 
 /**
