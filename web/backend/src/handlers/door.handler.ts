@@ -35,6 +35,7 @@ import { declaredKeyRepeatMode, emitKeyRepeatMode } from '../services/game-mode.
 import { displayMainMenu } from './command-handler/menu';
 import { emitDoorActivity } from '../services/bbs-event-emitter';
 import { doorCategoryAt } from '../doors/door-category';
+import { isListedDoor } from '../doors/unlisted-commands';
 import { getSystemTime, encodeAmigaDate } from '../utils/date-time.util';
 import { logDoorStart, logDoorExit, doorLogTypeNumber } from '../utils/node-logs.util';
 import {
@@ -716,9 +717,10 @@ function resolveDoorExecutionUser(session: BBSSession): { user: User; isGuest: b
  * own conference.
  */
 export function doorAvailableTo(
-  door: { enabled?: boolean; accessLevel?: number; conferenceId?: number | null },
+  door: { enabled?: boolean; accessLevel?: number; conferenceId?: number | null; command?: string; id?: string },
   session: BBSSession,
 ): boolean {
+  if (!isListedDoor(door)) return false;
   if (door.enabled === false) return false;
   if (door.conferenceId && door.conferenceId !== session.currentConf) return false;
   return (session.user?.secLevel || 0) >= (door.accessLevel ?? 0);

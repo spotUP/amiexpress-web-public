@@ -9,9 +9,10 @@ import { cleanText, LABEL_MAX, DESCRIPTION_MAX } from '../../../screens/menu-con
 import { commandCache, revalidateBbsCommandsIfChanged, doorLevelForCommandAccess } from '../../../handlers/command-execution.handler';
 import { COMPLETER_TOOLTYPE } from '../../../handlers/command-handler/prompt-completion';
 import { config } from '../../../config';
+import { MENU_SHELL_COMMANDS } from '../../../doors/unlisted-commands';
 
 /** Decision 36: the menu's own registrations, the prompt completer and the Bulls fallback are not commands a caller picks. */
-const NOT_LISTED = new Set(['MENU', 'MENUSETTINGS', 'BULLS']);
+const NOT_LISTED = new Set([...MENU_SHELL_COMMANDS, 'BULLS']);
 
 function doorEntry(key: string, def: any, caller: MenuCaller, runAs: 'typed' | 'syscmd'): CatalogueEntry | null {
   if (NOT_LISTED.has(key)) return null;
