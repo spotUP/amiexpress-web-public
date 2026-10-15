@@ -47,6 +47,19 @@ int menudoor_settings_run(int node);
 #define MENUDOOR_CHILD_KEYBAR_WIDE   "Arrows Move  Enter Run  Esc Back"
 #define MENUDOOR_CHILD_KEYBAR_NARROW "Enter Run  Esc Back"
 
+/**
+ * The bottom row has two states. Navigation (nothing typed): a hint, the key bar, no cursor. Typing (from the first
+ * character): the board's prompt, the typed text, this key bar if it fits, the cursor. Esc clears the line and returns
+ * to navigation; Esc on an empty line leaves (or goes back up in a child list).
+ */
+#define MENUDOOR_HINT_WIDE           "Arrows and Enter, or type a command"
+#define MENUDOOR_HINT_NARROW         "Arrows or type"
+/* A door whose typing is numbers (digits_show_at_once) says so instead. */
+#define MENUDOOR_HINT_NUMBER_WIDE    "Arrows and Enter, or type a number"
+#define MENUDOOR_HINT_NUMBER_NARROW  "Type a number"
+#define MENUDOOR_TYPING_KEYBAR_WIDE   "Enter Run  Esc Clear"
+#define MENUDOOR_TYPING_KEYBAR_NARROW "Enter Run  Esc Clear"
+
 /* For the activate / typed callbacks. */
 const ae_menu_entry *menudoor_entry(struct menudoor *d, int entry);
 /** Says `text` (<= 39 characters) in the status row until the next key: a typed line that matched nothing. */

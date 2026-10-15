@@ -100,11 +100,10 @@ void ui_bar_draw(ansi_buf *b, int row, int left, int cols,
 {
     if (!b || cols <= 0) return;
 
-    /* Fill first, then write: a bar drawn as coloured text alone ends where
-       the words end, which reads as a half-painted screen. */
-    ansi_fill(b, row, left, cols, fg, bg);
+    /* ONE write, not fill-then-text. ansi_text pads to `cols`, so the text alone paints the whole bar; a fill first
+       sent every bar twice (80 bytes of spaces under 80 bytes of text, on every keypress that moved a status row). */
     ansi_color(b, fg, bg, 0);
-    if (text && *text) ansi_text(b, row, left, text, cols);
+    ansi_text(b, row, left, text ? text : "", cols);
 }
 
 /* The ring the window slides along. See ui_chrome.h: this is railStream()

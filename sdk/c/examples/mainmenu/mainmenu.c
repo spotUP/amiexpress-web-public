@@ -28,7 +28,7 @@ static menudoor_result run_line(struct menudoor *d, const char *line)
 
 static const menudoor_spec MAIN_MENU = {
     "MAIN", "MAIN MENU", 0,
-    "Arrows Move  Enter Run  Type a Command  Esc Prompt",
+    "Arrows Move  Enter Run  Esc Prompt",             /* typing is the hint's: "Arrows and Enter, or type a command" */
     "Enter Run  Esc Prompt",
     0, run_entry, run_line
 };

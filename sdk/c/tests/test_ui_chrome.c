@@ -236,7 +236,9 @@ static void a_themeless_masthead_has_nothing_to_animate(void)
     ansi_begin(&b, frame_b, (long)sizeof frame_b);
     ui_masthead_draw_tick(&a, 1, 1, 80, "GLOBAL REQUESTS", "", 7, 0, 3);
     ui_masthead_draw_tick(&b, 1, 1, 80, "GLOBAL REQUESTS", "", 7, 0, 97);
-    assert(strcmp(frame_a, frame_b) == 0);
+    frame_a[a.len] = '\0';        /* the buffers are not terminated by ansi_begin: compare what was written, not the stack behind it */
+    frame_b[b.len] = '\0';
+    assert(a.len == b.len && strcmp(frame_a, frame_b) == 0);
     printf("  [OK] without a rail every tick is the same row, so the idle hook may skip it\n");
 }
 

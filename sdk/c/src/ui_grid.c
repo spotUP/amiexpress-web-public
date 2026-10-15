@@ -288,10 +288,11 @@ static void compose(const ui_grid *g, int entry, int selected, char *buf, int cw
 
 static void draw_cell(ui_grid *g, ansi_buf *b, int entry, int row, int col)
 {
-    char buf[CELL_BUF];
+    char buf[CELL_BUF], line[CELL_BUF + 16], pen[4];
     int cw = imin(g->col_width - 1, CELL_BUF - 1), chosen = entry == g->selected;
     const char *flags = text_of(g->flags, g->ctx, entry);
     int grey = strchr(flags, 'G') != 0, key_end = 2 + g->key_width + 2, lab_end = key_end + g->label_width;
+    int key_pen, lab_pen, i, tail_blank = 1, at = 0;
 
     if (cw < 1) return;
     compose(g, entry, chosen, buf, cw);
@@ -304,14 +305,25 @@ static void draw_cell(ui_grid *g, ansi_buf *b, int entry, int row, int col)
     }
     if (key_end > cw) key_end = cw;
     if (lab_end > cw) lab_end = cw;
-    ansi_color(b, grey ? g->dim : g->accent, g->ground, 0);
-    ansi_text(b, row, col, buf, key_end);
-    ansi_color(b, grey ? g->dim : g->ink, g->ground, 0);
-    ansi_text(b, row, col + key_end, buf + key_end, lab_end - key_end);
+    key_pen = grey ? g->dim : g->accent;
+    lab_pen = grey ? g->dim : g->ink;
+    for (i = lab_end; i < cw; i++) if (buf[i] != ' ') tail_blank = 0;
+
+    /* ONE write per cell: the three pens are inline markers, so the cell is one cursor move and one run instead of
+       three of each (the key, the label and the right column were separate ansi_text calls, 14 bytes of goto and
+       20 of colour apiece). An empty right column takes the label's pen - spaces have no colour to change. */
+    ansi_color(b, key_pen, g->ground, 0);
+    memcpy(line + at, buf, (size_t)key_end); at += key_end;
+    if (lab_pen != key_pen) { ui_ink(pen, lab_pen); strcpy(line + at, pen); at += (int)strlen(pen); }
+    memcpy(line + at, buf + key_end, (size_t)(lab_end - key_end)); at += lab_end - key_end;
     if (cw > lab_end) {
-        ansi_color(b, g->dim, g->ground, 0);
-        ansi_text(b, row, col + lab_end, buf + lab_end, cw - lab_end);
+        if (!tail_blank && g->dim != lab_pen) { ui_ink(pen, g->dim); strcpy(line + at, pen); at += (int)strlen(pen); }
+        memcpy(line + at, buf + lab_end, (size_t)(cw - lab_end)); at += cw - lab_end;
     }
+    line[at] = '\0';
+    /* Raw: the line is exactly `cw` columns, so there is nothing to pad - and ansi_text would end with an SGR putting the
+       first pen back, 17 bytes on every cell for a colour the next ansi_color call overwrites anyway. */
+    ansi_text_raw(b, row, col, line, cw);
 }
 
 static void draw_header(ui_grid *g, ansi_buf *b, int section, int row)
@@ -340,28 +352,31 @@ static void blank_row(ui_grid *g, ansi_buf *b, int row)
     ansi_text(b, row, g->left, "", g->width);
 }
 
-static void draw_line(ui_grid *g, ansi_buf *b, int li, int row)
+static void draw_line(ui_grid *g, ansi_buf *b, int li, int row, int blank)
 {
     const ui_grid_line *l;
     int c;
 
-    if (li < 0 || li >= g->line_count) { blank_row(g, b, row); return; }
+    if (li < 0 || li >= g->line_count) { if (blank) blank_row(g, b, row); return; }
     l = &g->lines[li];
-    blank_row(g, b, row);
+    if (blank) blank_row(g, b, row);
     if (l->kind == UI_GL_HEADER) draw_header(g, b, l->first, row);
     else if (l->kind == UI_GL_ITEMS)
         for (c = 0; c < l->count; c++) draw_cell(g, b, l->first + c, row, g->left + c * g->col_width);
     /* BAND: left blank - the board draws the logo over it after the flush. */
 }
 
-void ui_grid_draw(ui_grid *g, ansi_buf *b)
+static void draw_box(ui_grid *g, ansi_buf *b, int blank)
 {
     int r;
     if (!g || !b || g->width < 1 || g->height < 1) return;
-    for (r = 0; r < g->height; r++) draw_line(g, b, g->offset + r, g->top + r);
+    for (r = 0; r < g->height; r++) draw_line(g, b, g->offset + r, g->top + r, blank);
     g->drawn_selected = g->selected;
     g->drawn_offset = g->offset;
 }
+
+void ui_grid_draw(ui_grid *g, ansi_buf *b) { draw_box(g, b, 1); }
+void ui_grid_draw_on_ground(ui_grid *g, ansi_buf *b) { draw_box(g, b, 0); }
 
 static void redraw_entry(ui_grid *g, ansi_buf *b, int entry)
 {

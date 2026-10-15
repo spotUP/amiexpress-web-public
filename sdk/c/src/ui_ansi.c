@@ -119,7 +119,9 @@ void ansi_clear(ansi_buf *b)
 void ansi_clear_ground(ansi_buf *b, int fg, int bg)
 {
     if (bg < 0 || !b->cell_backgrounds) { ansi_clear(b); return; }
-    ansi_clear(b);
+    /* Reset, paint the ground, clear once: ESC[2J fills with the current background, so the old
+       clear-reset-colour-clear sent a second screen-wide erase for nothing. */
+    ansi_reset(b);
     ansi_color(b, fg, bg, 0);
     put_str(b, "\033[2J\033[H");
 }

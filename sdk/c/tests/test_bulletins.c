@@ -90,7 +90,8 @@ int main(void)
     drive("\x1b", 1, &rc);
     assert(rc == 0 && !strstr(requests, "SHOW"));
     assert(strstr(screen_text, "Esc/q Leave") && !strstr(screen_text, "Esc Prompt"));
-    printf("  [OK] q and Esc leave, and the key bar says both\n");
+    assert(strstr(screen_text, MENUDOOR_HINT_NUMBER_WIDE) && !strstr(screen_text, MENUDOOR_HINT_WIDE));   /* its typing is numbers */
+    printf("  [OK] q and Esc leave, and the key bar says both; the hint says number\n");
 
     drive("x", 1, &rc);                                     /* a script that runs out of keys is a lost carrier: the door ends, not spins */
     assert(rc == 0);

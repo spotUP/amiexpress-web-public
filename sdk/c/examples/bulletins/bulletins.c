@@ -30,7 +30,7 @@ static menudoor_result show_typed(struct menudoor *d, const char *line)
 
 static const menudoor_spec BULLETINS = {
     "BULLETINS", "BULLETINS", "BULLS",
-    "Arrows Move  Enter Read  Type a Number  Esc Leave",
+    "Arrows Move  Enter Read  Esc Leave",
     "Enter Read  Esc Leave",
     1, show_entry, show_typed
 };

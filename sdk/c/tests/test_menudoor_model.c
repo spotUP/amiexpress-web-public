@@ -14,11 +14,13 @@
 /* The AEDoor field round trip has no host backend: a stand-in board that answers no session field, so the
    door sees the 80x25 defaults and the board's own screen answers (AEW_SCREEN) decide the rest. */
 static const char *invoked_name = "";
+static const char *theme_name = "";                           /* what AEW_THEME answers: "" is a board with no themes */
 int ae_field_read(int field, char *out, int cap)
 {
-    int n = (field == 605) ? (int)strlen(invoked_name) : 0;      /* AE_FIELD_MENU_COMMAND: the registration used */
+    const char *text = field == 10100 ? theme_name : invoked_name;     /* 10100 AE_FIELD_THEME; 605 AE_FIELD_MENU_COMMAND */
+    int n = (field == 605 || field == 10100) ? (int)strlen(text) : 0;
     if (n > cap - 1) n = cap - 1;
-    if (cap > 0) { memcpy(out, invoked_name, (size_t)n); out[n] = '\0'; }
+    if (cap > 0) { memcpy(out, text, (size_t)n); out[n] = '\0'; }
     return n;
 }
 int ae_field_write(int field, const char *value) { (void)field; (void)value; return 0; }
@@ -170,6 +172,7 @@ static int board(void *ctx, int field, const char *request, char *out, int cap)
         if (strcmp(request, "MOUSE?") == 0 && mouse_queue > 0) { mouse_queue--; return answer(mouse_reply, out, cap); }
         return 0;
     }
+    if (field == AE_FIELD_THEME) return answer(theme_name, out, cap);
     if (field != AE_FIELD_MENU) return 0;
     strcat(requests, request); strcat(requests, "|");
     if (silent_board) return 0;
@@ -249,7 +252,8 @@ static void a_picked_entry_runs_through_the_whole_shell(void)
     assert(strstr(requests, "ROW 2|"));                                      /* on leave */
     assert(strstr(requests, "WIPE OUT V|") && strstr(requests, "MOUSE OFF|"));
     assert(strstr(screen_text, "MAIN MENU") && strstr(screen_text, "Read Mail") && strstr(screen_text, "Scan for new mail"));
-    assert(strstr(screen_text, "BBS [1:Main] Menu: "));
+    assert(!strstr(screen_text, "BBS [1:Main] Menu: "));                       /* nothing typed: the hint, not the prompt */
+    assert(strstr(screen_text, MENUDOOR_HINT_WIDE));
     assert(strstr(screen_text, "Arrows Move  Enter Run  Esc/q Prompt"));       /* the key bar at 80 columns */
     printf("  [OK] a picked entry runs through the whole shell: open, wipe in, logo, mouse, run, row, wipe out\n");
 }
@@ -289,8 +293,9 @@ static void a_click_selects_and_runs_the_entry_under_it(void)
 static void forty_columns_get_the_caret_the_short_key_bar_and_one_column(void)
 {
     mouse_queue = 0; silent_board = 0; size_reply = "40\t25";
-    assert(DRIVE("\x1b") == 0);                                            /* the long prompt leaves no room for a bar */
-    assert(strstr(screen_text, "BBS [1:Main] Menu: ") && !strstr(screen_text, "Esc Prompt"));
+    assert(DRIVE("\x1b") == 0);
+    assert(strstr(screen_text, MENUDOOR_HINT_NARROW) && !strstr(screen_text, MENUDOOR_HINT_WIDE));   /* the short hint at 40 */
+    assert(strlen(MENUDOOR_HINT_NARROW) <= 39);
     write_catalogue(CATALOGUE_SHORT_PROMPT);
     assert(DRIVE("\x1b") == 0);
     write_catalogue(CATALOGUE);
@@ -310,8 +315,8 @@ static void a_click_on_a_greyed_entry_still_clears_the_typed_line_on_screen(void
     assert(activations == 0 && strstr(screen_text, "You cannot choose that."));
     last_typed = strstr(screen_text, "Menu: x");
     assert(last_typed);
-    after = strstr(last_typed + 1, "Menu: ");                              /* the prompt was drawn again, without the x */
-    assert(after && after[6] != 'x' && after < strstr(screen_text, "You cannot choose that."));   /* before the notice */
+    after = strstr(last_typed + 1, MENUDOOR_HINT_WIDE);                    /* the row went back to the hint, without the x */
+    assert(after && after < strstr(screen_text, "You cannot choose that."));   /* before the notice */
     printf("  [OK] a click clears the typed line on screen as well as in the model\n");
 }
 
@@ -475,6 +480,226 @@ static void the_settings_bar_names_q_because_q_leaves(void)
     printf("  [OK] the settings bar names q, which leaves\n");
 }
 
+/* ------------------------------------------------------- what the screen costs */
+
+/* A board-sized catalogue: three sections, fourteen entries, descriptions. No wipes: the board plays those. */
+static char big_catalogue[4096];
+static void write_big_catalogue(const char *pages)
+{
+    static const char *const SECTION[3] = { "Messages", "Files", "Community" };
+    static const char *const LABEL[14] = { "Read Mail", "Enter Message", "Mail Scan", "Online Messages", "Zoom Mail",
+        "File Listings", "Download", "Upload", "Who is Online", "Live Chat", "Bulletins", "Door Games", "Statistics", "Goodbye" };
+    static const char *const KEY[14] = { "R", "E", "MS", "OLM", "ZOOM", "F", "D", "U", "WHO", "LIVECHAT", "B", "DOORS", "STATS", "G" };
+    char line[160];
+    int i;
+    strcpy(big_catalogue, "AEMENU 1\nK MAIN\t-\nT MAIN MENU\nP AmiExpress Web BBS [1:Demoscene] Menu (99 mins. left): \nO ");
+    strcat(big_catalogue, pages);
+    strcat(big_catalogue, "\nW -\t-\t-\nR 0\n");
+    for (i = 0; i < 14; i++) {
+        if (i == 0 || i == 5 || i == 9) { sprintf(line, "S %s\n", SECTION[i == 0 ? 0 : i == 5 ? 1 : 2]); strcat(big_catalogue, line); }
+        sprintf(line, "E %s\t%s\tDescription of %s for the caller\t\t\n", KEY[i], LABEL[i], LABEL[i]);
+        strcat(big_catalogue, line);
+    }
+    strcat(big_catalogue, ".\n");
+    write_catalogue(big_catalogue);
+}
+
+/* Bytes the door writes for a script of keys, and what ONE more key adds: the run's constant part cancels. */
+static long wrote(const char *keys) { assert(drive(keys, strlen(keys)) == 0); return (long)strlen(screen_text); }
+static long key_cost(const char *before, const char *key, const char *after)
+{
+    char a[96], b[96];
+    sprintf(a, "%s%s", before, after);
+    sprintf(b, "%s%s%s", before, key, after);
+    return wrote(b) - wrote(a);
+}
+
+static int count_of(const char *haystack, const char *needle)
+{
+    int n = 0;
+    const char *p = haystack;
+    while ((p = strstr(p, needle)) != 0) { n++; p += strlen(needle); }
+    return n;
+}
+
+static void the_first_frame_sends_nothing_twice(void)
+{
+    long frame80, frame40;
+    mouse_queue = 0; silent_board = 0; theme_name = "";
+    size_reply = "80\t25"; write_big_catalogue("scroll");
+    frame80 = wrote("\x1b");
+    assert(count_of(screen_text, "\033[2J") == 2);           /* the frame's clear and the door's closing clear: not a second one per frame */
+    assert(frame80 < 2100);                                   /* was 4673: every row blank-then-written, every bar filled-then-written */
+    size_reply = "40\t25"; write_big_catalogue("pages");
+    frame40 = wrote("\x1b");
+    assert(count_of(screen_text, "\033[2J") == 2);
+    assert(frame40 < 1850);                                   /* was 3597 */
+    size_reply = "80\t25";
+    printf("  [OK] the first frame sends nothing twice: %ld bytes at 80 columns, %ld at 40\n", frame80, frame40);
+}
+
+static void a_key_repaints_two_cells_and_the_description_only(void)
+{
+    long down80, up80, down40;
+    mouse_queue = 0; silent_board = 0; theme_name = "";
+    size_reply = "80\t25"; write_big_catalogue("scroll");
+    down80 = key_cost("", "\x1b[B", "\x1b");
+    up80 = key_cost("\x1b[B", "\x1b[A", "\x1b");
+    assert(down80 > 0 && down80 <= 280);                      /* was 406 */
+    assert(up80 > 0 && up80 <= 280);
+    assert(strstr(screen_text, "Description of Read Mail for the caller"));     /* the status row followed the selection back */
+    size_reply = "40\t25"; write_big_catalogue("pages");
+    down40 = key_cost("", "\x1b[B", "\x1b");
+    assert(down40 > 0 && down40 <= 240);                      /* was 311 */
+    size_reply = "80\t25";
+    printf("  [OK] a key repaints two cells and the description: down %ld, up %ld bytes at 80 columns, down %ld at 40\n", down80, up80, down40);
+}
+
+static void nothing_is_sent_when_nothing_changed(void)
+{
+    char downs[64];
+    int i;
+    mouse_queue = 0; silent_board = 0; theme_name = "";
+    size_reply = "80\t25"; write_big_catalogue("scroll");
+    assert(key_cost("", "\x1b[A", "\x1b") == 0);               /* Up on the first entry */
+    for (i = 0; i < 13; i++) memcpy(downs + i * 3, "\x1b[B", 3);
+    downs[39] = '\0';
+    assert(key_cost(downs, "\x1b[B", "\x1b") == 0);            /* Down on the last */
+    assert(key_cost("", "\x1b[D", "\x1b") == 0);               /* Left in a one-column grid */
+    printf("  [OK] a key that moves nothing sends nothing\n");
+}
+
+static void a_typed_character_costs_the_character_not_the_row(void)
+{
+    long second;
+    mouse_queue = 0; silent_board = 0; theme_name = "";
+    size_reply = "80\t25"; write_big_catalogue("scroll");
+    second = key_cost("x", "y", "\x1b");                       /* no entry starts with x or xy: the highlight stays */
+    assert(second > 0 && second <= 30);                        /* was a 200-byte row */
+    printf("  [OK] a second typed character costs %ld bytes, not the row\n", second);
+}
+
+/* The last write to the prompt row, before the door's closing clear. */
+static const char *last_prompt_row(void)
+{
+    const char *close = 0, *q = screen_text, *row = 0;
+    while ((q = strstr(q, "\033[0m\033[2J\033[H")) != 0) { close = q; q++; }
+    static char cut[1024];
+    size_t n;
+    for (q = screen_text; (q = strstr(q, "\033[25;1H")) != 0; q++) if (!close || q < close) row = q;
+    if (!row) return 0;
+    n = close ? (size_t)(close - row) : strlen(row);           /* up to the door's closing clear, which shows the cursor again */
+    if (n >= sizeof cut) n = sizeof cut - 1;
+    memcpy(cut, row, n); cut[n] = '\0';
+    return cut;
+}
+
+static void the_idle_tick_touches_the_masthead_rail_only(void)
+{
+    const char *tick = 0, *q;
+    char one[512];
+    mouse_queue = 0; silent_board = 0; size_reply = "80\t25";
+    write_big_catalogue("scroll");
+    theme_name = "uprough-neon";                               /* a theme with a rail */
+    wrote("\x1b[B");                                           /* the script ends, the door idles once, the line drops */
+    for (q = screen_text; (q = strstr(q, "\0337")) != 0; q++) tick = q;
+    assert(tick);                                              /* the sentinel: the idle hook RAN */
+    {
+        const char *end = strstr(tick, "\0338");
+        size_t n;
+        assert(end);
+        n = (size_t)(end + 2 - tick);
+        assert(n < 120 && n < sizeof one);                     /* the rail run, a few dozen bytes: it was never the grid */
+        memcpy(one, tick, n); one[n] = '\0';
+        for (q = one; (q = strstr(q, "\033[")) != 0; q += 2) {
+            int r = 0, c = 0;
+            if (sscanf(q + 2, "%d;%d", &r, &c) == 2) assert(r == 1);          /* every cursor move is on the masthead row */
+        }
+        assert(!strstr(one, "Read Mail") && !strstr(one, "Description"));
+    }
+    size_reply = "40\t25";                                     /* no effects at 40 columns: no tick at all */
+    write_big_catalogue("pages");
+    wrote("\x1b[B");
+    assert(!strstr(screen_text, "\0337"));
+    size_reply = "80\t25"; theme_name = "";
+    write_big_catalogue("scroll");
+    wrote("\x1b[B");
+    assert(!strstr(screen_text, "\0337"));                     /* a theme with no rail has nothing to animate */
+    printf("  [OK] the idle tick touches the masthead rail only, and not at all at 40 columns or without a rail\n");
+}
+
+static void the_prompt_row_is_a_hint_until_something_is_typed(void)
+{
+    const char *row;
+    mouse_queue = 0; silent_board = 0; theme_name = ""; size_reply = "80\t25";
+    write_catalogue(CATALOGUE);
+
+    /* Navigation: the hint, the key bar, no prompt, cursor hidden and not shown again after the row. */
+    wrote("\x1b[B");
+    row = last_prompt_row();
+    assert(row && strstr(row, MENUDOOR_HINT_WIDE) && strstr(row, "Esc/q Prompt"));
+    assert(!strstr(row, "BBS [1:Main] Menu: "));
+    assert(strstr(row, "\033[?25l") && !strstr(row, "\033[?25h"));
+
+    /* Typing: the first printable character makes the row the prompt, with the typed text, the typing bar, the cursor. */
+    wrote("m");
+    row = last_prompt_row();
+    assert(row && strstr(row, "BBS [1:Main] Menu: m") && !strstr(row, MENUDOOR_HINT_WIDE));
+    assert(strstr(row, "Enter Run  Esc Clear") && !strstr(row, "Esc/q"));      /* the bar is true for THIS mode: q is text now */
+    assert(strstr(row, "\033[?25h"));
+    printf("  [OK] the prompt row is a hint with a hidden cursor until a character is typed, then the prompt with the cursor\n");
+}
+
+static void esc_clears_the_line_and_only_an_empty_line_leaves(void)
+{
+    const char *row;
+    mouse_queue = 0; silent_board = 0; theme_name = ""; size_reply = "80\t25";
+    write_catalogue(CATALOGUE);
+
+    assert(DRIVE("m\x1b") == 0);                               /* type-ahead moved to MS; Esc clears the line */
+    assert(!strstr(requests, "ROW"));                          /* the door did NOT leave (ROW is asked on leaving only) */
+    row = last_prompt_row();
+    assert(row && strstr(row, MENUDOOR_HINT_WIDE) && strstr(row, "\033[?25l") && !strstr(row, "Menu: m"));
+
+    assert(DRIVE("m\x08\x1b") == 0);                           /* the line is empty again (two Esc bytes in one script read as one key): Esc leaves */
+    assert(strstr(requests, "ROW 2|"));                        /* with the type-ahead's highlight kept */
+
+    assert(DRIVE("ms\x1b\r") == 0);                            /* Esc dropped the text; Enter now runs the highlighted entry */
+    assert(typed_calls == 0 && activations == 1 && activated_entry == 2);
+
+    assert(DRIVE("ms\r") == 0);                                /* Enter with text runs the text */
+    assert(typed_calls == 1 && strcmp(typed_line, "ms") == 0 && activations == 0);
+
+    printf("  [OK] Esc clears the typed line and returns to navigation; only Esc on an empty line leaves\n");
+}
+
+static void backspacing_to_an_empty_line_returns_to_the_hint(void)
+{
+    const char *row;
+    mouse_queue = 0; silent_board = 0; theme_name = ""; size_reply = "80\t25";
+    write_catalogue(CATALOGUE);
+    wrote("m\x08");
+    row = last_prompt_row();
+    assert(row && strstr(row, MENUDOOR_HINT_WIDE) && strstr(row, "\033[?25l"));
+    printf("  [OK] backspacing the last character returns the row to the hint\n");
+}
+
+static void the_row_text_fits_forty_columns_in_both_states(void)
+{
+    const char *row;
+    mouse_queue = 0; silent_board = 0; theme_name = ""; size_reply = "40\t25";
+    write_catalogue(CATALOGUE_SHORT_PROMPT);
+    wrote("\x1b[B");
+    row = last_prompt_row();
+    assert(row && strstr(row, MENUDOOR_HINT_NARROW) && strstr(row, "Enter Run  Esc/q Prompt"));
+    assert(strlen(MENUDOOR_HINT_NARROW) + 2 + strlen("Enter Run  Esc/q Prompt") <= 39);     /* hint and bar share 39 columns */
+    wrote("r");
+    row = last_prompt_row();
+    assert(row && strstr(row, "Go: r") && strstr(row, "Esc Clear") && strstr(row, "\033[?25h"));
+    size_reply = "80\t25";
+    printf("  [OK] the row text fits 39 columns in both states at 40 columns\n");
+}
+
 int main(void)
 {
     ae_native_set_exchange(board, 0);
@@ -497,6 +722,15 @@ int main(void)
     one_binary_runs_the_settings_under_its_second_name_and_the_menu_otherwise();
     q_on_an_empty_line_leaves_only_when_no_entry_starts_with_q();
     the_settings_bar_names_q_because_q_leaves();
+    the_first_frame_sends_nothing_twice();
+    a_key_repaints_two_cells_and_the_description_only();
+    nothing_is_sent_when_nothing_changed();
+    a_typed_character_costs_the_character_not_the_row();
+    the_idle_tick_touches_the_masthead_rail_only();
+    the_prompt_row_is_a_hint_until_something_is_typed();
+    esc_clears_the_line_and_only_an_empty_line_leaves();
+    backspacing_to_an_empty_line_returns_to_the_hint();
+    the_row_text_fits_forty_columns_in_both_states();
     remove(CAT_PATH); remove("build/test_menudoor_keys.bin"); remove("build/test_menudoor_screen.bin");
     puts("test_menudoor_model: OK");
     return 0;

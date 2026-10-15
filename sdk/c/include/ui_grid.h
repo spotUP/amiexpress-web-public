@@ -59,6 +59,8 @@ int  ui_grid_move(ui_grid *g, int key);
 void ui_grid_select(ui_grid *g, int index);
 int  ui_grid_page(const ui_grid *g);                     /* page of the selection, 0-based (PAGES mode) */
 void ui_grid_draw(ui_grid *g, ansi_buf *b);
+/** The same, for a box whose rows were just cleared to `ground` (ansi_clear_ground): no blank pass, so no row goes out twice. */
+void ui_grid_draw_on_ground(ui_grid *g, ansi_buf *b);
 /** Repaint what changed. Returns 1 when the whole box was redrawn (a scroll or a page turn) - the door wraps that in a page wipe. */
 int  ui_grid_draw_changed(ui_grid *g, ansi_buf *b);
 /** The entry under screen cell (row, col), or -1. */

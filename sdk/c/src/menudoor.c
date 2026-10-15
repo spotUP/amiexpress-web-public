@@ -152,6 +152,8 @@ struct menudoor {
     char typed[TYPED_MAX + 1];
     int typed_len;
     char notice[40];                  /* shown in the status row instead of the description, until the next key */
+    char status_drawn[100];           /* the status row as the caller sees it; "" until a frame has drawn it */
+    int status_valid;                 /* 0 = the row is not on the glass (a fresh frame is about to draw it) */
     char title[32];
     int rail_tick;
     int gone;                         /* the caller hung up */
@@ -202,12 +204,16 @@ static void draw_masthead(struct menudoor *d)
     ui_masthead_draw_tick(&sc->buf, 1, 1, sc->cols, d->title, d->rail, UI_TOKEN(UI_T_BAR_INK), UI_TOKEN(UI_T_BAR), d->rail_tick);
 }
 
-static void draw_status(struct menudoor *d)
+/* The status row follows the selection. Drawn smart: a row already showing this text is not sent again, and a
+   changed one is written only as far as the longer of the old and new text (the rest of the bar is untouched
+   bar). `full` is a fresh frame, where the whole bar goes out once. */
+static void draw_status(struct menudoor *d, int full)
 {
     level *lv = cur(d);
     ui_screen *sc = &d->screen;
     char line[100];
     const char *text = "";
+    int width;
 
     if (d->notice[0]) text = d->notice;
     else if (lv->menu.entry_count > 0 && lv->grid.selected < lv->menu.entry_count)
@@ -215,59 +221,109 @@ static void draw_status(struct menudoor *d)
     line[0] = ' ';
     strncpy(line + 1, text, sizeof line - 2);
     line[sizeof line - 1] = '\0';
-    ui_status_draw(&sc->buf, lv->lay.status_row, 1, sc->cols, line, "", UI_TOKEN(UI_T_BAR_INK), UI_TOKEN(UI_T_BAR));
+    if (full || !d->status_valid) {
+        ui_status_draw(&sc->buf, lv->lay.status_row, 1, sc->cols, line, "", UI_TOKEN(UI_T_BAR_INK), UI_TOKEN(UI_T_BAR));
+    } else {
+        if (strcmp(line, d->status_drawn) == 0) return;
+        width = (int)strlen(line) > (int)strlen(d->status_drawn) ? (int)strlen(line) : (int)strlen(d->status_drawn);
+        if (width > sc->cols) width = sc->cols;
+        ansi_color(&sc->buf, UI_TOKEN(UI_T_BAR_INK), UI_TOKEN(UI_T_BAR), 0);
+        ansi_text(&sc->buf, lv->lay.status_row, 1, line, width);
+    }
+    strcpy(d->status_drawn, line);
+    d->status_valid = 1;
 }
 
-/* The prompt row: the board's prompt, what is typed, and (nothing typed) the key bar at the right. The cursor ends
-   after the typed text. One column is left free: the last cell of the last row scrolls a C64. */
-static void draw_prompt(struct menudoor *d)
+/* The prompt row has two states (sysop decision 2026-10-15). NAVIGATION, nothing typed: a short hint in a theme
+   colour and the key bar at the right, cursor hidden - the row reads as a door, not as a BBS prompt. TYPING, from the
+   first character: the board's prompt, what is typed, the typing key bar if it fits, cursor shown. One column stays
+   free: the last cell of the last row scrolls a C64. */
+static const char *hint_text(const struct menudoor *d, const char *bar, int room)
+{
+    int numbers = d->spec->digits_show_at_once;
+    const char *wide = numbers ? MENUDOOR_HINT_NUMBER_WIDE : MENUDOOR_HINT_WIDE;
+    if (d->screen.cols >= 80 && (int)strlen(wide) + 2 + (bar ? (int)strlen(bar) : 0) <= room) return wide;
+    return numbers ? MENUDOOR_HINT_NUMBER_NARROW : MENUDOOR_HINT_NARROW;
+}
+
+/* What Esc and Enter do NOW: the key bar for the mode the row is in. */
+static const char *mode_bar(struct menudoor *d, char *out, size_t cap)
 {
     level *lv = cur(d);
-    ui_screen *sc = &d->screen;
+    int wide = d->screen.cols >= 80;
     const menudoor_spec *spec = d->spec;
-    char line[TYPED_MAX + 80];
-    int wide = sc->cols >= 80;
-    /* Esc leaves to the prompt at the top and goes up a level in a child list: the bar says which. */
-    const char *bar = d->depth > 0 ? (wide ? MENUDOOR_CHILD_KEYBAR_WIDE : MENUDOOR_CHILD_KEYBAR_NARROW)
-                                   : (wide ? spec->keybar_wide : spec->keybar_narrow);
-    char bar_q[96];
-    const char *esc;
-    int row = lv->lay.prompt_row, room = sc->cols - 1, plen, blen;
+    const char *bar, *esc;
 
+    if (d->typed_len > 0) return wide ? MENUDOOR_TYPING_KEYBAR_WIDE : MENUDOOR_TYPING_KEYBAR_NARROW;
+    /* Esc leaves to the prompt at the top and goes up a level in a child list: the bar says which. */
+    bar = d->depth > 0 ? (wide ? MENUDOOR_CHILD_KEYBAR_WIDE : MENUDOOR_CHILD_KEYBAR_NARROW)
+                       : (wide ? spec->keybar_wide : spec->keybar_narrow);
     /* Where q leaves too (top level, no Q entry), the bar says so: "Esc Prompt" becomes "Esc/q Prompt", and a door
        whose Esc says "Leave" (BULLETINS) gets "Esc/q Leave". */
     if (bar && d->depth == 0 && md_q_leaves(&lv->menu)
         && ((esc = strstr(bar, "Esc Prompt")) != 0 || (esc = strstr(bar, "Esc Leave")) != 0)
-        && strlen(bar) + 3 < sizeof bar_q) {
+        && strlen(bar) + 3 < cap) {
         const char *word = esc + strlen("Esc ");            /* "Prompt" or "Leave" */
-        memcpy(bar_q, bar, (size_t)(esc - bar));
-        bar_q[esc - bar] = '\0';
-        strcat(bar_q, "Esc/q ");
-        strcat(bar_q, word);
-        bar = bar_q;
+        memcpy(out, bar, (size_t)(esc - bar));
+        out[esc - bar] = '\0';
+        strcat(out, "Esc/q ");
+        strcat(out, word);
+        bar = out;
     }
-    line[0] = '\0';
-    strncat(line, lv->menu.prompt, 72);
-    strncat(line, d->typed, TYPED_MAX);
-    plen = (int)strlen(line);
-    if (plen > room) plen = room;
-    ansi_color(&sc->buf, UI_TOKEN(UI_T_INK), ground(d), 0);
-    ansi_text(&sc->buf, row, 1, line, room);
-    if (d->typed_len == 0 && bar && bar[0]) {
-        blen = (int)strlen(bar);
-        if (plen + 2 + blen <= room) {
-            ansi_color(&sc->buf, UI_TOKEN(UI_T_DIM), ground(d), 0);
-            ansi_text_raw(&sc->buf, row, room - blen + 1, bar, blen);
-        }
-    }
-    ansi_goto(&sc->buf, row, 1 + plen);
-    ansi_cursor(&sc->buf, 1);
+    return bar;
 }
 
+static void draw_prompt(struct menudoor *d)
+{
+    level *lv = cur(d);
+    ui_screen *sc = &d->screen;
+    char line[512], bar_q[96], pen[4];                       /* room + two pens + the bar: a 255-column screen fits */
+    const char *bar = mode_bar(d, bar_q, sizeof bar_q), *lead;
+    int row = lv->lay.prompt_row, room = sc->cols - 1 < 400 ? sc->cols - 1 : 400, plen, blen = bar ? (int)strlen(bar) : 0, gap, at;
+
+    ansi_color(&sc->buf, UI_TOKEN(UI_T_INK), ground(d), 0);
+    if (d->typed_len == 0) {
+        lead = hint_text(d, bar, room);
+        plen = (int)strlen(lead);
+        ui_ink(pen, UI_TOKEN(UI_T_ACCENT_ALT));
+        strcpy(line, pen);
+        strncat(line, lead, (size_t)room);
+    } else {
+        line[0] = '\0';
+        strncat(line, lv->menu.prompt, 72);
+        strncat(line, d->typed, TYPED_MAX);
+        plen = (int)strlen(line);
+        if (plen > room) plen = room;
+    }
+    at = (int)strlen(line);
+    /* The row is built to exactly `room` columns - text, spaces, then the bar right-aligned in its own pen - and
+       written raw, so no padding pass ends the row with a colour reset. */
+    if (bar && bar[0] && plen + 2 + blen <= room) {
+        gap = room - blen - plen;
+        memset(line + at, ' ', (size_t)gap); at += gap;
+        ui_ink(pen, UI_TOKEN(UI_T_DIM));
+        strcpy(line + at, pen); at += (int)strlen(pen);
+        strcpy(line + at, bar);
+    } else if (plen < room) {
+        memset(line + at, ' ', (size_t)(room - plen)); at += room - plen;
+        line[at] = '\0';
+    }
+    ansi_text_raw(&sc->buf, row, 1, line, room);
+    if (d->typed_len == 0) {
+        ansi_cursor(&sc->buf, 0);
+    } else {
+        ansi_goto(&sc->buf, row, 1 + plen);
+        ansi_cursor(&sc->buf, 1);
+    }
+}
+
+/* Typing mode keeps the caller's cursor in the prompt; navigation mode has none to keep. */
 static void park_cursor(struct menudoor *d)
 {
     level *lv = cur(d);
-    int plen = (int)strlen(lv->menu.prompt) + d->typed_len;
+    int plen;
+    if (d->typed_len == 0) return;
+    plen = (int)strlen(lv->menu.prompt) + d->typed_len;
     if (plen > d->screen.cols - 1) plen = d->screen.cols - 1;
     ansi_goto(&d->screen.buf, lv->lay.prompt_row, 1 + plen);
 }
@@ -277,8 +333,8 @@ static void compose_all(struct menudoor *d)
     level *lv = cur(d);
     ansi_clear_ground(&d->screen.buf, UI_TOKEN(UI_T_INK), ground(d));
     draw_masthead(d);
-    ui_grid_draw(&lv->grid, &d->screen.buf);
-    draw_status(d);
+    ui_grid_draw_on_ground(&lv->grid, &d->screen.buf);       /* the screen was just cleared to the ground: no blank pass */
+    draw_status(d, 1);
     draw_prompt(d);
 }
 
@@ -303,7 +359,9 @@ static void draw_logos(struct menudoor *d)
 /* A whole frame, inside a board wipe when there is one: compose, flush, logos (they join the capture), end. */
 static void show_frame(struct menudoor *d, char wipe, int conceal)
 {
-    int capturing = wipe && ae_bs_wipe_begin(wipe, conceal) == 1;
+    int capturing;
+    if (!ui_effects_allowed(d->screen.cols)) wipe = 0;      /* no effects at 40 columns: the wipe replays the frame in dozens of messages */
+    capturing = wipe && ae_bs_wipe_begin(wipe, conceal) == 1;
     compose_all(d);
     ui_screen_flush(&d->screen);
     draw_logos(d);
@@ -319,11 +377,11 @@ static void repaint_grid(struct menudoor *d)
     level *lv = cur(d);
     ui_grid *g = &lv->grid;
     int full = g->drawn_offset < 0 || g->offset != g->drawn_offset;
-    char wipe = (full && g->mode == UI_GRID_PAGES && g->drawn_offset >= 0) ? lv->menu.wipe_page : 0;
+    char wipe = (full && g->mode == UI_GRID_PAGES && g->drawn_offset >= 0 && ui_effects_allowed(d->screen.cols)) ? lv->menu.wipe_page : 0;
     int capturing = wipe && ae_bs_wipe_begin(wipe, 0) == 1;
 
     ui_grid_draw_changed(g, &d->screen.buf);
-    draw_status(d);
+    draw_status(d, 0);
     park_cursor(d);
     ui_screen_flush(&d->screen);
     if (full) draw_between(d);
@@ -343,7 +401,7 @@ static void say(struct menudoor *d, const char *text)
 {
     strncpy(d->notice, text, sizeof d->notice - 1);
     d->notice[sizeof d->notice - 1] = '\0';
-    draw_status(d);
+    draw_status(d, 0);
     park_cursor(d);
     ui_screen_flush(&d->screen);
 }
@@ -366,11 +424,10 @@ static void door_idle(void *ctx)
     struct menudoor *d = (struct menudoor *)ctx;
     if (!d->rail[0]) { ae_delay_ticks(UI_RAIL_TICK_DELAY); return; }
     d->rail_tick += UI_RAIL_STEP;
-    /* The rail, not the row, and the caller's cursor is put back: it sits in the prompt while they type. */
-    ansi_save_cursor(&d->screen.buf);
+    /* The rail, not the row. The tick saves and restores the caller's cursor itself (it sits in the prompt while they
+       type), so a second save here would only send four more bytes. */
     ui_masthead_rail_tick(&d->screen.buf, 1, 1, d->screen.cols, d->title, d->rail,
                           UI_TOKEN(UI_T_BAR_INK), UI_TOKEN(UI_T_BAR), d->rail_tick);
-    ansi_restore_cursor(&d->screen.buf);
     ui_screen_flush(&d->screen);
     ae_delay_ticks(UI_RAIL_TICK_DELAY);
 }
@@ -487,9 +544,33 @@ static int typed_room(struct menudoor *d)
     return room < TYPED_MAX ? room : TYPED_MAX;
 }
 
+/* The typed text alone, when the row was already in typing mode and the key bar stays as it was: a character costs
+   itself, not the row. Returns 0 when the whole row has to be drawn (mode change, or the bar appears or goes). */
+static int bar_fits(struct menudoor *d, int typed_len)
+{
+    char bar_q[96];
+    const char *bar = typed_len > 0 ? (d->screen.cols >= 80 ? MENUDOOR_TYPING_KEYBAR_WIDE : MENUDOOR_TYPING_KEYBAR_NARROW)
+                                    : mode_bar(d, bar_q, sizeof bar_q);
+    int room = d->screen.cols - 1, plen = (int)strlen(cur(d)->menu.prompt) + typed_len;
+    return bar && bar[0] && plen + 2 + (int)strlen(bar) <= room;
+}
+
+static void draw_prompt_after_edit(struct menudoor *d, int was_len)
+{
+    level *lv = cur(d);
+    ui_screen *sc = &d->screen;
+    int plen = (int)strlen(lv->menu.prompt), width;
+
+    if (was_len == 0 || d->typed_len == 0 || bar_fits(d, was_len) != bar_fits(d, d->typed_len)) { draw_prompt(d); return; }
+    width = d->typed_len > was_len ? d->typed_len : was_len;
+    ansi_color(&sc->buf, UI_TOKEN(UI_T_INK), ground(d), 0);
+    ansi_text(&sc->buf, lv->lay.prompt_row, 1 + plen, d->typed, width);
+    park_cursor(d);
+}
+
 static menudoor_result typed_key(struct menudoor *d, int key)
 {
-    int idx;
+    int idx, was_len = d->typed_len;
     if (key == 8 || key == 127) {
         if (d->typed_len == 0) return MENUDOOR_STAY;
         d->typed[--d->typed_len] = '\0';
@@ -513,7 +594,7 @@ static menudoor_result typed_key(struct menudoor *d, int key)
     }
     idx = md_typeahead(&cur(d)->menu, d->typed);
     if (idx >= 0) select_entry(d, idx);
-    draw_prompt(d);
+    draw_prompt_after_edit(d, was_len);
     ui_screen_flush(&d->screen);
     return MENUDOOR_STAY;
 }
@@ -526,7 +607,7 @@ static menudoor_result loop(struct menudoor *d)
     for (;;) {
         key = ui_key_read(&d->keys, &d->pushback);
         if (key < 0) { d->gone = 1; return MENUDOOR_LEAVE; }
-        if (d->notice[0]) { d->notice[0] = '\0'; draw_status(d); park_cursor(d); ui_screen_flush(&d->screen); }
+        if (d->notice[0]) { d->notice[0] = '\0'; draw_status(d, 0); park_cursor(d); ui_screen_flush(&d->screen); }
         r = MENUDOOR_STAY;
         switch (key) {
         case UI_KEY_UP: case UI_KEY_DOWN: case UI_KEY_LEFT: case UI_KEY_RIGHT:
