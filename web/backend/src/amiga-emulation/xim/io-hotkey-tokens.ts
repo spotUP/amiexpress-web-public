@@ -12,8 +12,9 @@ import { debugLog } from '../../utils/debug-log';
 /**
  * Convert a single input token to the character the 68K door expects.
  * Returns '' to signal "ignore this token and wait for more input".
+ * `navKeys`: the door is an SDK door (secret-input.ts isSdkDoorSession), so Home/End/Page Up/Page Down convert; for any other door they are dropped.
  */
-export function processHotkeyToken(token: string): string {
+export function processHotkeyToken(token: string, navKeys = false): string {
   if (token.length === 1) {
     const code = token.charCodeAt(0);
 
@@ -53,7 +54,8 @@ export function processHotkeyToken(token: string): string {
     '\x1b[6~': NavigationKeyCodes.PGDN,
   };
 
-  if (arrowMap[token] !== undefined) {
+  const navCodes: number[] = Object.values(NavigationKeyCodes);
+  if (arrowMap[token] !== undefined && (navKeys || !navCodes.includes(arrowMap[token]))) {
     const arrowCode = arrowMap[token];
     debugLog(`[XIMIOHandler] Cursor/navigation key: ${JSON.stringify(token)} -> code ${arrowCode}`);
     return String.fromCharCode(arrowCode);

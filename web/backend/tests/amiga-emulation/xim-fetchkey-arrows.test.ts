@@ -22,6 +22,7 @@
  * selection one row.
  */
 import { XIMIOHandler } from '../../src/amiga-emulation/xim/io';
+import { setSdkDoorSession } from '../../src/amiga-emulation/xim/secret-input';
 
 /**
  * handleFetchKey touches only the input queue, the message parser and the
@@ -139,13 +140,17 @@ describe('JH_FetchKey arrow reporting', () => {
  * path a caller's keystroke takes; the arrows are the reference form: ONE
  * converted byte, never an escape sequence.
  */
-describe('Home, End, Page Up and Page Down reach a door as one converted byte', () => {
-  function typeAndFetch(typed: string): number[] {
+describe('Home, End, Page Up and Page Down reach an SDK door as one converted byte', () => {
+  // An SDK door is a session whose door has spoken AEW_MENU or AEW_SCREEN (XIMProtocol sets the flag).
+  const sdkSession = {};
+  beforeAll(() => { setSdkDoorSession(sdkSession, true); });
+
+  function typeAndFetch(typed: string, session: object | undefined = sdkSession): number[] {
     const written: number[] = [];
     const ctx: any = {
       inputQueue: [] as string[],
       state: { carrierDropped: false },
-      bbsSession: undefined,
+      bbsSession: session,
       waitingForPause: false,
       waitingForHotkey: false,
       hotkeyMessage: null,
@@ -193,5 +198,41 @@ describe('Home, End, Page Up and Page Down reach a door as one converted byte', 
   test('an unrelated escape sequence is still ignored', () => {
     expect(typeAndFetch('\x1b[2~')).toEqual([0]);   // Insert
     expect(typeAndFetch('\x1b[15~')).toEqual([0]);  // F5
+  });
+});
+
+describe('a classic door keeps getting nothing for those keys', () => {
+  const sdk = {};
+  const classic = {};
+  const other = {};
+  beforeAll(() => { setSdkDoorSession(sdk, true); });
+  const fetchFor = (session: object, typed: string): number[] => {
+    const written: number[] = [];
+    const proto = XIMIOHandler.prototype as any;
+    const ctx: any = {
+      inputQueue: [] as string[], state: { carrierDropped: false }, bbsSession: session,
+      waitingForPause: false, waitingForHotkey: false, hotkeyMessage: null, waitingForExtHotkey: false, extHotkeyMessage: null, waitingForLineInput: false,
+      messageParser: { writeCommand: (_a: number, v: number) => { written.push(v); } }, reply: () => undefined,
+      parseInputTokens: proto.parseInputTokens, processHotkeyToken: proto.processHotkeyToken,
+    };
+    proto.queueInput.call(ctx, typed);
+    while (ctx.inputQueue.length > 0) proto.handleFetchKey.call(ctx, { msgAddr: 0x1000 });
+    return written;
+  };
+
+  test('PgDn, PgUp, Home and End are dropped for a session that never spoke AEW_*', () => {
+    for (const key of ['\x1b[6~', '\x1b[5~', '\x1b[H', '\x1b[F', '\x1b[1~', '\x1b[4~']) {
+      expect(fetchFor(classic, key)).toEqual([0]);   // "no input", as before the nav codes existed
+    }
+  });
+  test('the same keys reach an SDK door, arrows are identical for both', () => {
+    expect(fetchFor(sdk, '\x1b[6~')).toEqual([0x19]);
+    expect(fetchFor(sdk, '\x1b[A\x1b[B')).toEqual([4, 5]);
+    expect(fetchFor(classic, '\x1b[A\x1b[B')).toEqual([4, 5]);
+  });
+  test('the flag is per session and clears', () => {
+    expect(fetchFor(other, '\x1b[6~')).toEqual([0]);   // another session beside an SDK one
+    setSdkDoorSession(sdk, false);                      // what terminate() does
+    expect(fetchFor(sdk, '\x1b[6~')).toEqual([0]);
   });
 });

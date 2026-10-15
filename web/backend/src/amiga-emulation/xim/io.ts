@@ -21,7 +21,7 @@ import { SysopDebugUtil } from '../../utils/sysop-debug.util';
 import { getNewlineMode, normalizeNewlines } from './newline-mode.util';
 import { ximLogger } from '../../utils/XIMLogger';
 import { debugLog } from '../../utils/debug-log';
-import { inputForTrace, isMenuDoorSession, isSecretInput } from './secret-input';
+import { inputForTrace, isMenuDoorSession, isSdkDoorSession, isSecretInput } from './secret-input';
 import { handleUserData as handleUserDataFn, handleUserString as handleUserStringFn } from './user-info-handlers';
 import { handleMCI as handleMCIFn } from './mci-handler';
 import { processHotkeyToken as processHotkeyTokenFn } from './io-hotkey-tokens';
@@ -853,7 +853,7 @@ debugLog(
    * @returns Single character code to return to door
    */
   private processHotkeyToken(token: string): string {
-    return processHotkeyTokenFn(token);
+    return processHotkeyTokenFn(token, isSdkDoorSession(this.bbsSession));
   }
 
   /**
