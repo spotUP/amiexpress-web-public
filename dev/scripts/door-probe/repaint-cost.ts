@@ -41,7 +41,7 @@ interface KeyCost { key: string; gross: number; net: number; firstByteMs: number
 
 const KEY_BYTES: Record<string, string> = {
   up: '\x1b[A', down: '\x1b[B', right: '\x1b[C', left: '\x1b[D',
-  bs: '\x7f', pgdn: '\x1b[6~', pgup: '\x1b[5~', enter: '\r', esc: '\x1b', space: ' ',
+  bs: '\x7f', tab: '\t', pgdn: '\x1b[6~', pgup: '\x1b[5~', enter: '\r', esc: '\x1b', space: ' ',
 };
 
 function parseArgs(argv: string[]) {

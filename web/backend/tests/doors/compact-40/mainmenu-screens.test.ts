@@ -72,7 +72,7 @@ afterAll(() => {
   for (const dir of [...TEMP_ROOTS, LOGS]) fs.rmSync(dir, { recursive: true, force: true });
 });
 
-const UP = '\x1b[A', DOWN = '\x1b[B', ESC = '\x1b', BS = '\x7f';
+const UP = '\x1b[A', DOWN = '\x1b[B', ESC = '\x1b', BS = '\x7f', TAB = '\t';
 const idle = (keys: string, paints = true, quietMs?: number): Step => ({ at: 'idle', keys, paints, quietMs });
 const mouse = (button: number, col: number, row: number, up = false) => `\x1b[<${button};${col};${row}${up ? 'm' : 'M'}`;
 const bytes = (chunks: string[]) => chunks.reduce((n, c) => n + Buffer.byteLength(c, 'latin1'), 0);
@@ -125,8 +125,10 @@ const keys80 = () => runOnce('keys80', async () => {
   const [hover, again] = [entries[4]!, entries[6]!];
   return run(S80, [idle(DOWN), idle(mouse(35, 10, hover.row)), idle(mouse(35, 10, again.row)), idle(mouse(0, 10, again.row) + mouse(0, 10, again.row, true))]);
 });
-/** 80x25: `m` jumps the highlight to Colour Mode, past the window (a scroll); `e` and `s` leave it there; three Backspaces empty the line. */
-const typing80 = () => runOnce('typing80', () => run(S80, [idle('m'), idle('e'), idle('s'), idle(BS), idle(BS), idle(BS), idle(ESC, false)]));
+/** 80x25: `9` matches no entry, so typing it moves nothing and names nothing; Backspace three times empties the line. */
+const typing80 = () => runOnce('typing80', () => run(S80, [idle('9'), idle('9'), idle('9'), idle(BS), idle(BS), idle(BS), idle(ESC, false)]));
+/** 80x25: `m` is an entry BELOW the window (M Colour Mode): it is named in the status row; Tab shows it; Backspace empties the line. */
+const offWindow80 = () => runOnce('offWindow80', () => run(S80, [idle('m'), idle(TAB), idle(BS), idle(ESC, false)]));
 /** 40x25: `r` is the entry already selected, `e` matches nothing more: the highlight never moves. */
 const typing40 = () => runOnce('typing40', () => run(S40, [idle('r'), idle('e'), idle(BS), idle(BS), idle(ESC, false)]));
 /** The rows a stretch of the door's output addresses, once each. */
@@ -302,43 +304,50 @@ describe('MAINMENU on three screens', () => {
   });
 
   describe('typing (a typed character costs the character; a highlight jump costs only what it changes)', () => {
-    test('80x25: the first character jumps the highlight past the window - one rewrite of the grid box, no clear, no blank pass under a row', async () => {
-      const r = await typing80();
+    test('80x25: a first letter that names an entry BELOW the window repaints no grid row: the status row names it, the highlight stays', async () => {
+      const r = await offWindow80();
       const first = replayCells(firstFrame(r), 80, 25);
-      const plain = first[entriesOf(gridText(first))[2]!.row - 1]![3]!.sgr, selected = first[entriesOf(gridText(first))[0]!.row - 1]![3]!.sgr;
+      const entries = entriesOf(gridText(first));
       const m = answer(r, 0);
-      const after = replayCells(r.chunks.slice(0, r.marks[1]!.at).join(''), 80, 25);
-      const colour = entriesOf(gridText(after)).find(e => e.key === 'M');
-      expect(colour).toBeDefined();                                                // the sentinel: the highlight DID jump to M Colour Mode
-      expect(after[colour!.row - 1]![3]!.sgr).toBe(selected);
-      expect(selected).not.toBe(plain);
+      expect(rowsOf(m).every(row => row === 24 || row === 25)).toBe(true);        // no cursor address in a grid row
       expect(m.join('')).not.toContain('\x1b[2J');
-      expect(m.join('')).not.toMatch(/\x1b\[\?25l[^]*\x1b\[\?25l/);                  // the cursor is not hidden and shown again around the window
-      const rows = rowsOf(m);
-      expect(rows.every(row => (row >= 5 && row <= 22) || row === 24 || row === 25)).toBe(true);   // the grid box, the status row, the prompt row
-      expect(bytes(m)).toBeLessThanOrEqual(1850);                                  // measured 1679 (4062 and 23 messages with a blank pass under each row)
-      expect(m.length).toBeLessThanOrEqual(11);                                    // measured 10 (23)
-      for (let row = 5; row <= 22; row++) expect((m.join('').match(new RegExp(`\\x1b\\[${row};1H`, 'g')) ?? []).length).toBeLessThanOrEqual(1);   // each row written once: no blank pass under it
+      expect(bytes(m)).toBeLessThanOrEqual(270);                                   // measured 244 (1,679 bytes in 10 messages when typing scrolled the window)
+      expect(m.length).toBeLessThanOrEqual(2);
+      const rows = gridText(replayCells(r.chunks.slice(0, r.marks[1]!.at).join(''), 80, 25));
+      expect(rows[23]).toMatch(/Enter runs: M +Colour Mode/);                      // the match, in the status row's slot
+      expect(rows[24]).toContain('m');                                             // the typed text stays on the prompt row
+      expect(rows[4]).toBe(gridText(first)[4]);                                    // the window is where it was
+      expect(entriesOf(rows)[0]!.key).toBe(entries[0]!.key);
     });
 
-    test('80x25: the next characters leave the highlight where it is and cost only the character on the prompt row', async () => {
+    test('80x25: Tab shows the match: one window rewrite - no clear, no blank pass - and the highlight lands on it', async () => {
+      const r = await offWindow80();
+      const first = replayCells(firstFrame(r), 80, 25);
+      const selected = first[entriesOf(gridText(first))[0]!.row - 1]![3]!.sgr;
+      const tab = answer(r, 1);
+      expect(tab.join('')).not.toContain('\x1b[2J');
+      expect(rowsOf(tab).every(row => (row >= 5 && row <= 22) || row === 24 || row === 25)).toBe(true);
+      for (let row = 5; row <= 22; row++) expect((tab.join('').match(new RegExp(`\\x1b\\[${row};1H`, 'g')) ?? []).length).toBeLessThanOrEqual(1);
+      expect(bytes(tab)).toBeLessThanOrEqual(1650);                                // measured 1,498
+      expect(tab.length).toBeLessThanOrEqual(10);                                  // measured 9
+      const after = replayCells(r.chunks.slice(0, r.marks[2]!.at).join(''), 80, 25);
+      const colour = entriesOf(gridText(after)).find(e => e.key === 'M');
+      expect(colour).toBeDefined();                                                // the sentinel: the window DID move to M Colour Mode
+      expect(after[colour!.row - 1]![3]!.sgr).toBe(selected);
+      expect(gridText(after)[23]).toContain('Turn ANSI colour on or off');         // the status row is the description again
+    });
+
+    test('80x25: a character that matches nothing costs the character on the prompt row; Backspace re-evaluates', async () => {
       const r = await typing80();
-      for (const i of [1, 2]) {                                                    // e, s
+      for (const i of [1, 2]) {                                                    // y, z
         const a = answer(r, i);
         expect(rowsOf(a)).toEqual([25]);                                           // no cell, no status row
-        expect(bytes(a)).toBeLessThanOrEqual(i === 1 ? 44 : 24);                   // measured 40 (the first character after the row was drawn also resets the pen) and 22
         expect(a.length).toBe(1);
         expect(a.join('')).not.toContain('\x1b[?25');
       }
-    });
-
-    test('80x25: Backspace costs a character too, and the last one returns the row to the hint (one row, nothing else)', async () => {
-      const r = await typing80();
-      expect(rowsOf(answer(r, 3))).toEqual([25]); expect(bytes(answer(r, 3))).toBeLessThanOrEqual(130);   // measured 118: the typing key bar comes back, so the row is drawn whole
-      expect(rowsOf(answer(r, 4))).toEqual([25]); expect(bytes(answer(r, 4))).toBeLessThanOrEqual(44);    // measured 40
+      expect(rowsOf(answer(r, 0))).toEqual([25]);                                  // the first one: the row becomes the prompt
       const last = answer(r, 5);
-      expect(rowsOf(last)).toEqual([25]);
-      expect(bytes(last)).toBeLessThanOrEqual(140);                                // measured 127
+      expect(rowsOf(last)).toEqual([25]);                                          // back to the hint: one row, nothing else
       expect(gridText(replayCells(r.chunks.slice(0, r.marks[6]!.at).join(''), 80, 25))[24]).toContain('Arrows and Enter, or type a command');
     });
 
