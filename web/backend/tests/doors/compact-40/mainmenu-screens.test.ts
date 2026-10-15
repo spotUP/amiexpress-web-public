@@ -397,16 +397,16 @@ describe('MAINMENU on three screens', () => {
     });
 
     /*
-     * OPEN FINDING (plan M15): the door ECHOES what the caller types on its prompt row, and the board's generic
-     * door-output traces (JH_SM debug lines, on with XIM_DEBUG / DEBUG_68K) log every screen write - so with
-     * the debug switches on, the typed line is in the console and the XIM debug log as door OUTPUT. The W door
-     * avoids this for a password because it masks the echo and sends AEW_USERFIELD SECRET; a menu door cannot
-     * tell a command from a secret. Off by default (those switches are debugging aids). When the traces learn
-     * to withhold a prompt echo, this goes green and the .failing comes off.
+     * The door ECHOES what the caller types on its prompt row as JH_SM output, and the board logs every message's
+     * String: the console and the parser's dump do so with NO debug switch on (measured on the live container log,
+     * 2026-10-15: 2961 `Parsed jhMessage` blocks and every `handleMessage` line with DEBUG_68K unset), the rest with
+     * XIM_DEBUG / DEBUG_68K. A menu door cannot tell a command from a secret, so the board withholds a menu door's
+     * screen writes from every log (xim/secret-input.ts isMenuDoorSession, xim/redact.ts). The unit half is in
+     * tests/xim/redact.test.ts.
      */
-    test.failing('with every debug switch on, the typed text appears in no sink even as door output', async () => {
+    test('with every debug switch on, the typed text appears in no sink even as door output', async () => {
       for (const [name, text] of Object.entries(await sinksOf())) {
-        expect({ name, leaks: text.split('\n').filter(l => l.includes('secretpass')).length }).toEqual({ name, leaks: 0 });
+        expect({ name, leaks: text.split('\n').filter(l => l.includes('secretpass')).map(l=>l.slice(0,260)) }).toEqual({ name, leaks: [] });
       }
     });
   });

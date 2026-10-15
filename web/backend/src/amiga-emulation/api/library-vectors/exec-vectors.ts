@@ -6,6 +6,7 @@
 import { LibraryVector } from "./types";
 import { ExecLibrary } from "../ExecLibrary";
 import { debugLog } from "../../../utils/debug-log";
+import { loggableXimString } from "../../xim/redact";
 import * as fs from "fs";
 import * as path from "path";
 import { getSystemTime } from '../../../utils/date-time.util';
@@ -866,7 +867,9 @@ console.log(
         debugLog(`  msgAddr=0x${result.toString(16)} ln_Type=${msgType} (6=NT_REPLYMSG)`);
         debugLog(`  Command=${command} (at 0xE0)`);
         debugLog(`  Data=${data} (at 0xDC)`);
-        debugLog(`  String="${str}" (at 0x14)`);
+        // No session here to say the door is a menu door whose screen writes carry the caller's typed line
+        // (xim/secret-input.ts), so a screen write's text is never dumped at this site: the board's own String logs show it.
+        debugLog(`  String="${loggableXimString(command, data, str, true)}" (at 0x14)`);
         // DEBUG dRE!WAll: dump raw bytes at offsets 0x00, 0x14, 0x100 to rule out field confusion
         if (process.env.DREWALL_TRACE === '1' && command === 100) {
           const dump = (off: number, len: number) => {

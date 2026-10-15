@@ -35,3 +35,28 @@ export function doorInputTraceLine(session: { nodeId?: number; petsciiMode?: boo
   return `[DOOR-INPUT] route=${route} data=${inputForTrace(session, data, (s) => JSON.stringify(s))} node=${session?.nodeId}` +
     ` door=${String(session?.currentDoorName ?? '')} petscii=${session?.petsciiMode ? 'Y' : 'N'}`;
 }
+
+/**
+ * A MENU door's screen writes carry what the caller types.
+ *
+ * The menu door echoes the typed command line on its prompt row, and a caller
+ * can type anything at a command line (a conference or command password as a
+ * parameter, a mistyped credential). The door cannot declare the line secret
+ * - it is not, usually - so the board withholds the door's SCREEN WRITES
+ * (JH_SM and the other output commands) from every log while the door is a menu
+ * door: redact.ts loggableXimString, called with this flag. Set when the door
+ * first speaks AEW_MENU (XIMProtocol), cleared when the door session ends.
+ * Measured 2026-10-15: the board's console logs every message's String with
+ * NO debug switch on (XIMProtocol handleMessage, XIMMessageParser), so this is
+ * production behaviour, not a debugging aid.
+ */
+const menuDoor = new WeakSet<object>();
+
+export function setMenuDoorSession(session: object | null | undefined, on: boolean): void {
+  if (!session) return;
+  if (on) menuDoor.add(session); else menuDoor.delete(session);
+}
+
+export function isMenuDoorSession(session: object | null | undefined): boolean {
+  return !!session && menuDoor.has(session);
+}

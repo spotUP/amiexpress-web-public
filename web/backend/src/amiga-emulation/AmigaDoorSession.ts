@@ -26,7 +26,7 @@ import { SysopDebugUtil } from "../utils/sysop-debug.util.js";
 import { debugRegistry } from "../debug/DebugRegistry.js";
 import { parseInfoFile } from "../utils/amiga-command-parser.util";
 import { debugLog } from '../utils/debug-log';
-import { inputForTrace, setSecretInput } from './xim/secret-input';
+import { inputForTrace, setMenuDoorSession, setSecretInput } from './xim/secret-input';
 import { closeUserField } from './xim/userfield';
 import { DOOR_CLI_ADDR, DOOR_CLI_ARGS_ADDR, assertMemoryMapFits } from "./memory-map";
 import { setEnvStat } from "../utils/acs.util";
@@ -1130,6 +1130,7 @@ debugLog("[AmigaDoorSession] Terminating refactored door session...");
     this.isRunning = false;
     // First, so a throw further down cannot leave the traces withholding for the next door (AEW_USERFIELD SECRET).
     setSecretInput(this.config.bbsSession, false);
+    setMenuDoorSession(this.config.bbsSession, false);
     closeUserField(this.config.bbsSession);   // the next door on this session must OPEN again
     this.removeSocketHandlers();
 

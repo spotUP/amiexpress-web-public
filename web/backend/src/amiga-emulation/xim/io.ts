@@ -21,7 +21,7 @@ import { SysopDebugUtil } from '../../utils/sysop-debug.util';
 import { getNewlineMode, normalizeNewlines } from './newline-mode.util';
 import { ximLogger } from '../../utils/XIMLogger';
 import { debugLog } from '../../utils/debug-log';
-import { inputForTrace, isSecretInput } from './secret-input';
+import { inputForTrace, isMenuDoorSession, isSecretInput } from './secret-input';
 import { handleUserData as handleUserDataFn, handleUserString as handleUserStringFn } from './user-info-handlers';
 import { handleMCI as handleMCIFn } from './mci-handler';
 import { processHotkeyToken as processHotkeyTokenFn } from './io-hotkey-tokens';
@@ -742,10 +742,13 @@ debugLog(
       rawBytes.push(byte);
     }
     const rawStr = rawBytes.map(b => b >= 32 && b < 127 ? String.fromCharCode(b) : `.`).join('');
+    // A menu door's screen writes carry the caller's typed line: none of this is logged for it (secret-input.ts).
+    if (!isMenuDoorSession(this.bbsSession)) {
 debugLog(`[XIMIOHandler] JH_SM DEBUG: msgAddr=0x${msg.msgAddr.toString(16)} stringAddr=0x${stringAddr.toString(16)}`);
 debugLog(`[XIMIOHandler] JH_SM DEBUG: rawBytes[0..${rawBytes.length}] = "${rawStr}"`);
 debugLog(`[XIMIOHandler] JH_SM DEBUG: msg.string="${msg.string}" msg.stringPtr=0x${(msg.stringPtr || 0).toString(16)}`);
 debugLog(`[XIMIOHandler] JH_SM: "${text.substring(0, 40)}${text.length > 40 ? '...' : ''}" (msg.data=${msg.data}, len=${text.length})`);
+    }
 
     // express.e:3406-3411: IF msg.data THEN aePuts('\b\n'); checkForPause()
     // express.e pauses HERE unconditionally; `autoPauseEnabled` is this board's

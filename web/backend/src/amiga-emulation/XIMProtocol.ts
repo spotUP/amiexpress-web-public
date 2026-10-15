@@ -22,6 +22,7 @@ import { XIMCommand, BBSSessionData, XIMState, XIMMessage, isCommandInfoRequestC
 import { DoorConstants } from './DoorTypes';
 import { XIMMessageParser } from './xim/messages';
 import { loggableXimString } from './xim/redact';
+import { isMenuDoorSession, setMenuDoorSession } from './xim/secret-input';
 import { DEFAULT_PAUSE_LINES } from '../screens/screen-rows';
 import { XIMIOHandler } from './xim/io';
 import { XIMDataQueryHandler } from './xim/data-query';
@@ -196,6 +197,7 @@ debugLog(`[XIMProtocol] Creating state object with debugId: ${stateDebugId}`);
 
     // Initialize specialized handlers
     this.messageParser = new XIMMessageParser(emulator);
+    this.messageParser.withholdScreenWrites = () => isMenuDoorSession(this.bbsSession);
     this.ioHandler = new XIMIOHandler(
       emulator,
       execLibrary,
@@ -537,7 +539,7 @@ debugLog('[XIMProtocol] Discovered door reply port: 0x' + msg.replyPort.toString
 
     const humanName = this.messageParser.getCommandName(msg.command);
     // What every log below says the String was: a password is withheld (redact.ts).
-    const logged = loggableXimString(msg.command, msg.data, msg.string);
+    const logged = loggableXimString(msg.command, msg.data, msg.string, isMenuDoorSession(this.bbsSession));
     console.log(`[XIMProtocol] handleMessage: cmd=${msg.command} (${humanName}) usedXimInput=${this.state.usedXimInput} string="${logged.substring(0, 50)}"`);
 
     // Push onto the live debug ring buffer (dev-only, no-op in production).
@@ -1110,6 +1112,8 @@ debugLog(`[XIMProtocol]   Wrote tooltype value="${tooltypeValue}", StringPtr not
 
       /** AEW_MENU (10900): a menu door's catalogue and actions - xim/menu.ts. */
       case XIMCommand.AEW_MENU: {
+        // From here on the door's screen writes carry the caller's typed line: no log may show them.
+        setMenuDoorSession(this.bbsSession, true);
         let answer = '';
         try {
           answer = await menuAnswer(String(msg.string || ''), {

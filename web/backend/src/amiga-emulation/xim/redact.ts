@@ -10,8 +10,16 @@
  */
 import { XIMCommand } from './types';
 
-export function loggableXimString(command: number, data: number, text: string | undefined): string {
+/** The commands whose String is screen output: what the caller sees, which a menu door's prompt echo is part of. */
+const SCREEN_WRITE_COMMANDS: ReadonlySet<number> = new Set([XIMCommand.JH_SM, XIMCommand.JH_SMPTR, XIMCommand.JH_WRITE, XIMCommand.JH_CO]);
+
+/**
+ * @param withholdScreenWrites true while the door is a menu door (secret-input.ts isMenuDoorSession): its prompt row
+ *   echoes the caller's typed command line, so a screen write is logged as the fact of a write, never its text or length.
+ */
+export function loggableXimString(command: number, data: number, text: string | undefined, withholdScreenWrites = false): string {
   const s = text ?? '';
+  if (withholdScreenWrites && SCREEN_WRITE_COMMANDS.has(command)) return s ? '[menu screen write withheld]' : '';
   if (command === XIMCommand.DT_PASSWORD && data === 0) return s ? '[password withheld]' : '';
   // SET 6 is refused (the password is PASSWORD's) but still carries plaintext.
   if (command === XIMCommand.AEW_USERFIELD && /^(PASSWORD|SET 6)\b/.test(s)) return 'PASSWORD [withheld]';

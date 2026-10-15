@@ -11,6 +11,8 @@ import { loggableXimString, mayDumpRawString } from "./redact";
 
 export class XIMMessageParser {
   private emulator: MoiraEmulator;
+  /** Asked at every String log: true while the door is a menu door (secret-input.ts isMenuDoorSession). Set by XIMProtocol, which knows the session. */
+  withholdScreenWrites: () => boolean = () => false;
 
   constructor(emulator: MoiraEmulator) {
     this.emulator = emulator;
@@ -153,7 +155,7 @@ console.log(`  Signal: ${signal}, Task: 0x${task.toString(16)}`);
 console.log(`  Semi: ${this.formatHex(semaphore)}`);
 console.log(`  Filler1: ${this.formatHex(filler1)}, Filler2: ${this.formatHex(filler2)}`);
 console.log(`  StrPtr: ${this.formatHex(stringPtr)}, Filler3: ${this.formatHex(filler3)}`);
-console.log(`  String: "${loggableXimString(command, data, messageString)}"`);
+console.log(`  String: "${loggableXimString(command, data, messageString, this.withholdScreenWrites())}"`);
     if (layout === 'short') {
       const dumpBase = msgAddr + offsets.data;
       const raw: number[] = [];
