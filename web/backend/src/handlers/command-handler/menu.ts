@@ -4,6 +4,7 @@
  * Based on express.e:28555-28648
  */
 
+import * as path from 'path';
 import { BBSSession } from '../../index';
 import { LoggedOnSubState } from '../../constants/bbs-states';
 import { displayScreen, doPause, hasKeysFile, hasKeysFileForResolvedPath } from '../screen.handler';
@@ -44,20 +45,62 @@ export async function launchMenuDoor(socket: any, session: BBSSession, site: 'di
   const { config } = require('../../config');
   /* eslint-enable @typescript-eslint/no-var-requires */
   if ((session as any).inConfScan) return 'fallback';
+  // WEB_: express.e:28586 draws SCREEN_MENU as a file and has no door; a teletext or RIP caller keeps
+  // the art menu (Sysop review 2), which is the same SCREEN_MENU lookup that picks their own variant.
   const mode = displayModeOf(session as never);
-  if (mode === 'teletext' || mode === 'rip') return 'fallback';                  // Sysop review 2
+  if (mode === 'teletext' || mode === 'rip') return 'fallback';
+  if (exit.menuDoorFailed(session)) return 'fallback';                            // it already failed once this session
   revalidateBbsCommandsIfChanged(config.get('dataDir'), session.currentConf, session.nodeId ?? 0);
   const def = commandCache.bbscmd.get('MENU');
   if (!def) return 'fallback';
   if (doorLevelForCommandAccess(def.access) > (session.user?.secLevel ?? 0)) return 'fallback';
   if (doorRefusedForWidth(def as never, session as never)) return 'fallback';
   if (site === 'display-flow' && exit.takeMenuDoorDismissed(session)) return 'dismissed';
+  // WEB_: `?` means "open it", so a pending Esc from the last visit is spent here (Decision 37).
   if (site === 'question-mark') exit.takeMenuDoorDismissed(session);
-  if (exit.inExitTail(session)) { exit.parkDoor(session, 'MENU'); return 'ran'; }
+  if (exit.inExitTail(session)) {
+    if (!doorBinaryExists(def.location)) return 'fallback';
+    exit.parkDoor(session, 'MENU');
+    return 'ran';
+  }
+  // A launch from inside a launch is a failure handler redrawing the menu (executeAmigaDoor's catch):
+  // the art menu serves it, and the door is not entered again.
+  if (exit.menuLaunchInFlight(session)) { exit.markMenuReentered(session); return 'fallback'; }
+  // Decision 12: Menu.txt is the fallback when the door cannot run. A missing binary makes the
+  // dispatcher return "without a word" (express.e:4257-4262), which would leave the caller no prompt.
+  if (!doorBinaryExists(def.location)) return 'fallback';
   // eslint-disable-next-line @typescript-eslint/no-var-requires
   const { processCommand } = require('../command.handler');
-  await processCommand(socket, session, 'MENU', '');
+  const tailsBefore = exit.exitTailsEntered(session);
+  exit.setMenuLaunchInFlight(session, true);
+  try {
+    await processCommand(socket, session, 'MENU', '');
+  } catch (err) {
+    console.error('[menu] MENU door threw:', err);
+  } finally {
+    exit.setMenuLaunchInFlight(session, false);
+  }
+  // The door ran when it reached its exit tail. Anything else (a crash before the tail, a launch that
+  // returned without a word) leaves the caller without a menu: latch and let the art menu draw.
+  const reentered = exit.takeMenuReentered(session);
+  if (exit.exitTailsEntered(session) === tailsBefore) {
+    exit.markMenuDoorFailed(session);
+    return reentered ? 'ran' : 'fallback';   // when reentered, the failure handler already drew the menu and prompt
+  }
   return 'ran';
+}
+
+/** The door's executable is on the board's volume, resolved case-insensitively the way executeAmigaDoor does. */
+function doorBinaryExists(location: string): boolean {
+  /* eslint-disable @typescript-eslint/no-var-requires */
+  const amigafs = require('../../utils/amigafs');
+  const { boardRoot } = require('../../utils/board-root.util');
+  /* eslint-enable @typescript-eslint/no-var-requires */
+  const rel = String(location || '').replace(/:/g, '/').replace(/\\/g, '/').split('/').filter((c: string) => c.length > 0);
+  if (rel.length === 0) return false;
+  const root: string = boardRoot();
+  const tries = [path.join(root, ...rel), path.join(root, 'Doors', ...rel)];
+  return tries.some((p) => { try { return amigafs.existsSync(p); } catch { return false; } });
 }
 
 /**
@@ -170,6 +213,11 @@ console.log('[menu] displayMainMenu SKIPPED (debounce - last menu was', now - la
         }
       }
     }
+  } else {
+    // WEB_: an expert who opened the door with `?` and left it with Esc is not shown it here;
+    // the flag is spent now so a later forced display still opens the door (Decision 37).
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    require('../commands/menu-door-exit').takeMenuDoorDismissed(session);
   }
 
   // express.e:28588 - doorExpertMode:=FALSE; aePuts('\b\n')

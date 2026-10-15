@@ -12,27 +12,39 @@ import * as path from 'path';
 import { writeNewDoorRegistration } from '../services/config-services/door-info-file.service';
 import { applyTooltypes } from '../utils/info-file.util';
 
-type Step = (root: string) => string;
+type Step = (root: string, force?: boolean) => string;
 
 type Registration = Parameters<typeof writeNewDoorRegistration>[1];
 
 /**
  * writeNewDoorRegistration OVERWRITES an existing .info (writeFileSync), so a
  * rerun would put back what a sysop edited since (ACCESS, DESCRIPTION, ...).
- * A registration that already exists is left exactly as it is.
+ * A registration that already exists is left exactly as it is, unless `force`
+ * (--force-repair) asks for it to be rewritten.
+ *
+ * The file is built in a scratch directory and moved into place only when both
+ * writers succeeded, so a failure between them cannot leave a half-written
+ * .info that every later run would skip.
  */
-function registerOnce(root: string, door: Registration, tooltypes: Record<string, string>): string {
+function registerOnce(root: string, door: Registration, tooltypes: Record<string, string>, force = false): string {
   const infoPath = path.join(root, 'Commands', door.door_type === 'SYSCMD' ? 'SysCmd' : 'BBSCmd', `${door.door_command}.info`);
-  if (fs.existsSync(infoPath)) return infoPath;
-  writeNewDoorRegistration(root, door);
-  applyTooltypes(infoPath, Object.entries(tooltypes));
+  if (!force && fs.existsSync(infoPath)) return infoPath;
+  const scratch = fs.mkdtempSync(path.join(root, '.register-'));
+  try {
+    const built = writeNewDoorRegistration(scratch, door);
+    applyTooltypes(built, Object.entries(tooltypes));
+    fs.mkdirSync(path.dirname(infoPath), { recursive: true });
+    fs.renameSync(built, infoPath);
+  } finally {
+    fs.rmSync(scratch, { recursive: true, force: true });
+  }
   return infoPath;
 }
 
 export const STEPS: Record<string, Step> = {
   // Old Bulls, re-registered as BULLS: the fallback FALLBACK=BULLS on B reaches
   // while the new bulletins door is absent. Tooltypes as the former B.info.
-  bulls: (root) => registerOnce(root, {
+  bulls: (root, force) => registerOnce(root, {
     door_command: 'BULLS',
     door_type: 'XIM',
     door_path: 'DOORS:EmP_Tools/Bulls',
@@ -42,11 +54,11 @@ export const STEPS: Record<string, Step> = {
     STACK: '50000',
     C64_ADAPT: '40',
     REDACTED: '1',
-  }),
+  }, force),
   // The main menu (M19): the board's MENU command is this door. MENUSETTINGS is the
   // same binary under the W settings registration (the door tells them apart with
   // ae_menu_command()). Decisions 23.
-  menu: (root) => {
+  menu: (root, force) => {
     registerOnce(root, {
       door_command: 'MENUSETTINGS',
       door_type: 'XIM',
@@ -60,7 +72,7 @@ export const STEPS: Record<string, Step> = {
       SETTINGS_LABEL: 'Long menus',
       SETTINGS_SECTION: 'Appearance',
       DESCRIPTION: 'Scroll long menus, or show them a page at a time',
-    });
+    }, force);
     return registerOnce(root, {
       door_command: 'MENU',
       door_type: 'XIM',
@@ -71,7 +83,7 @@ export const STEPS: Record<string, Step> = {
       MULTINODE: 'YES',
       STACK: '8192',
       DESCRIPTION: 'The main menu',
-    });
+    }, force);
   },
   // B is the bulletins door (M20). Unlike a new registration, B.info already exists on
   // every board and is a binary Workbench icon with sysop-owned tooltypes, so it is
@@ -109,6 +121,6 @@ if (require.main === module) {
   const only = arg('only');
   for (const [name, step] of Object.entries(STEPS)) {
     if (only && only !== name) continue;
-    console.log(`[OK] ${name}: ${step(root)}`);
+    console.log(`[OK] ${name}: ${step(root, process.argv.includes('--force-repair'))}`);
   }
 }

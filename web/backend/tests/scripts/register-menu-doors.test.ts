@@ -5,6 +5,11 @@
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
+const fail = { on: false };
+jest.mock('../../src/utils/info-file.util', () => {
+  const actual = jest.requireActual('../../src/utils/info-file.util');
+  return { ...actual, applyTooltypes: (...a: unknown[]) => { if (fail.on) throw new Error('disk full'); return (actual.applyTooltypes as (...x: unknown[]) => void)(...a); } };
+});
 import { STEPS } from '../../src/scripts/register-menu-doors';
 import { parseInfoFile } from '../../src/utils/info-file.util';
 
@@ -27,4 +32,23 @@ test('a rerun keeps a sysop edit and the exact bytes', () => {
   STEPS.menu(root);
   expect(fs.readFileSync(info('MENU')).equals(edited)).toBe(true);
   expect(fs.readFileSync(info('MENUSETTINGS')).length).toBeGreaterThan(0);
+});
+
+test('a failure between the two writers leaves no half-written .info, and the next run completes it', () => {
+  const r = fs.mkdtempSync(path.join(os.tmpdir(), 'rmd2-'));
+  try {
+    fail.on = true;
+    expect(() => STEPS.menu(r)).toThrow('disk full');
+    expect(fs.existsSync(path.join(r, 'Commands', 'BBSCmd', 'MENUSETTINGS.info'))).toBe(false);
+    expect(fs.readdirSync(r).filter((n) => n.startsWith('.register-'))).toEqual([]);
+    fail.on = false;
+    STEPS.menu(r);
+    expect(fs.existsSync(path.join(r, 'Commands', 'BBSCmd', 'MENU.info'))).toBe(true);
+  } finally { fail.on = false; fs.rmSync(r, { recursive: true, force: true }); }
+});
+
+test('--force-repair rewrites an existing registration', () => {
+  fs.writeFileSync(info('MENU'), 'garbage\r\n');
+  STEPS.menu(root, true);
+  expect(tt('MENU').DESCRIPTION).toBe('The main menu');
 });

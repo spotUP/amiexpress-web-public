@@ -33,8 +33,26 @@ const depth = new WeakMap<object, number>();
 const parked = new WeakMap<object, string[]>();
 const draining = new WeakSet<object>();
 const dismissed = new WeakSet<object>();
+const tailsEntered = new WeakMap<object, number>();
+const launching = new WeakSet<object>();
+const failed = new WeakSet<object>();
+const reentered = new WeakSet<object>();
 
-export function enterExitTail(session: object): void { depth.set(session, (depth.get(session) ?? 0) + 1); }
+export function enterExitTail(session: object): void {
+  depth.set(session, (depth.get(session) ?? 0) + 1);
+  tailsEntered.set(session, (tailsEntered.get(session) ?? 0) + 1);
+}
+/** How many exit tails this session has ever entered: a door that ran reaches its tail, one that failed to start does not (M19). */
+export function exitTailsEntered(session: object): number { return tailsEntered.get(session) ?? 0; }
+/** A MENU launch is in flight: a second launch from inside it (a crash handler's menu redraw) must not re-enter the door. */
+export function menuLaunchInFlight(session: object): boolean { return launching.has(session); }
+export function setMenuLaunchInFlight(session: object, on: boolean): void { if (on) launching.add(session); else launching.delete(session); }
+/** The MENU door failed to run for this session; the board's art menu serves the rest of it. */
+export function markMenuDoorFailed(session: object): void { failed.add(session); }
+/** A launch was refused while one was in flight (the failure handler drew the art menu itself). Read once. */
+export function markMenuReentered(session: object): void { reentered.add(session); }
+export function takeMenuReentered(session: object): boolean { const had = reentered.has(session); reentered.delete(session); return had; }
+export function menuDoorFailed(session: object): boolean { return failed.has(session); }
 export function leaveExitTail(session: object): void { depth.set(session, Math.max(0, (depth.get(session) ?? 0) - 1)); }
 export function inExitTail(session: object): boolean { return (depth.get(session) ?? 0) > 0 || draining.has(session); }
 export function parkDoor(session: object, command: string): void {

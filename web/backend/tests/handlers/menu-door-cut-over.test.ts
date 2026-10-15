@@ -9,8 +9,12 @@ jest.mock('../../src/handlers/command-execution.handler', () => ({
   revalidateBbsCommandsIfChanged: jest.fn(),
   doorLevelForCommandAccess: (a: number | undefined) => (a === 0 ? 99999 : a && a > 0 ? a : 0),
 }));
-jest.mock('../../src/config', () => ({ config: { get: () => '/nowhere' } }));
-const processCommand = jest.fn(async () => 'SUCCESS');
+// A stand-in door that runs: it reaches its exit tail, as executeAmigaDoor does at door.handler.ts:~3147.
+let doorBehaviour: (s: any, session: any) => Promise<unknown> = async (_s, session) => {
+  const e = require('../../src/handlers/commands/menu-door-exit');
+  e.enterExitTail(session); e.leaveExitTail(session); return 'SUCCESS';
+};
+const processCommand = jest.fn(async (s: any, session: any) => doorBehaviour(s, session));
 jest.mock('../../src/handlers/command.handler', () => ({ processCommand: (...a: unknown[]) => (processCommand as any)(...a) }));
 const displayScreen = jest.fn(async () => false);
 jest.mock('../../src/handlers/screen.handler', () => ({
@@ -36,6 +40,10 @@ jest.mock('../../src/utils/door-min-columns.util', () => ({
   doorRefusedForWidth: () => false,
 }));
 
+import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
+import { setBoardRoot } from '../helpers/board-root';
 import { LoggedOnSubState } from '../../src/constants/bbs-states';
 import { displayMainMenu } from '../../src/handlers/command-handler/menu';
 import { handleQuestionMarkCommand } from '../../src/handlers/commands/display-file-commands.handler';
@@ -50,11 +58,19 @@ function caller(over: any = {}, user: any = {}) {
   };
   return { socket, session };
 }
-const register = (access?: number) => commandCache.bbscmd.set('MENU', { access });
+const board = fs.mkdtempSync(path.join(os.tmpdir(), 'mcut-'));
+const binary = path.join(board, 'Doors', 'MAINMENU', 'mainmenu');
+fs.mkdirSync(path.dirname(binary), { recursive: true });
+fs.writeFileSync(binary, 'x');
+const restoreRoot = setBoardRoot(board);
+afterAll(() => { restoreRoot(); fs.rmSync(board, { recursive: true, force: true }); });
+const register = (access?: number) => commandCache.bbscmd.set('MENU', { access, location: 'Doors/MAINMENU/mainmenu' });
 
 beforeEach(() => {
   jest.clearAllMocks();
   commandCache.bbscmd.clear();
+  fs.writeFileSync(binary, 'x');
+  doorBehaviour = async (_s, session) => { exit.enterExitTail(session); exit.leaveExitTail(session); return 'SUCCESS'; };
 });
 
 describe('display flow', () => {
@@ -104,12 +120,55 @@ describe('display flow', () => {
     expect(exit.hasParkedDoor(c.session)).toBe(true);
     exit.clearParkedDoors(c.session);
   });
+  test('a registered MENU whose binary is missing: Menu.txt is drawn and the caller gets a prompt', async () => {
+    register(); fs.rmSync(binary); const c = caller();
+    await displayMainMenu(c.socket, c.session, false, true);
+    expect(processCommand).not.toHaveBeenCalled();
+    expect(displayScreen).toHaveBeenCalledWith(c.socket, c.session, 'MENU');
+    expect(emitPrompt).toHaveBeenCalled();
+  });
+  test('a launch that returns without the door running falls back once and latches', async () => {
+    register(); const c = caller();
+    doorBehaviour = async () => 'SUCCESS';   // returned without a word, never reached a tail
+    await displayMainMenu(c.socket, c.session, false, true);
+    expect(processCommand).toHaveBeenCalledTimes(1);
+    expect(displayScreen).toHaveBeenCalledWith(c.socket, c.session, 'MENU');
+    expect(emitPrompt).toHaveBeenCalled();
+    await displayMainMenu(c.socket, c.session, false, true);
+    expect(processCommand).toHaveBeenCalledTimes(1);   // latched: the door is not tried again this session
+    expect(displayScreen).toHaveBeenCalledTimes(2);
+  });
+  test('a door that throws before its tail: one attempt, then Menu.txt, no recursion', async () => {
+    register(); const c = caller();
+    doorBehaviour = async () => { throw new Error('boom'); };
+    await displayMainMenu(c.socket, c.session, false, true);
+    expect(processCommand).toHaveBeenCalledTimes(1);
+    expect(displayScreen).toHaveBeenCalledTimes(1);
+    expect(emitPrompt).toHaveBeenCalled();
+  });
+  test('executeAmigaDoor catch redrawing the menu mid-launch does not relaunch the door', async () => {
+    register(); const c = caller();
+    doorBehaviour = async (s, session) => { await displayMainMenu(s, session, false, true); return 'SUCCESS'; };  // the crash handler
+    await displayMainMenu(c.socket, c.session, false, true);
+    expect(processCommand).toHaveBeenCalledTimes(1);
+    expect(displayScreen).toHaveBeenCalledTimes(1);     // drawn once, by the handler, not again by the outer call
+    expect(emitPrompt).toHaveBeenCalledTimes(1);
+  });
   test('an expert caller keeps expert mode: no door at the prompt', async () => {
     register(); const c = caller({}, { expert: 'X' });
     await displayMainMenu(c.socket, c.session, false, true);
     expect(processCommand).not.toHaveBeenCalled();
     expect(displayScreen).not.toHaveBeenCalled();
   });
+});
+
+test('an expert who left the door with Esc after ? does not skip the next forced display', async () => {
+  register(); const c = caller({}, { expert: 'X' });
+  exit.markMenuDoorDismissed(c.session);
+  await displayMainMenu(c.socket, c.session, false, true);   // post-door display for an expert: nothing shown
+  expect(processCommand).not.toHaveBeenCalled();
+  await displayMainMenu(c.socket, c.session, true, true);    // a forced display
+  expect(processCommand).toHaveBeenCalledTimes(1);
 });
 
 describe('?', () => {
