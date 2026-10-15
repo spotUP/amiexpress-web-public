@@ -8,7 +8,7 @@ import {
   cleanText, DESCRIPTION_MAX, LABEL_MAX, SECTION_TITLE_MAX,
   type MenuConfig, type OverflowMode, type WidthClass,
 } from '@bbs/screens/menu-config/menu-config';
-import { WIPE_CODES } from '@bbs/screens/wipe-codes';
+import { WIPE_CODES, type WipeType } from '@bbs/screens/wipe-codes';
 
 export type WipeEvent = 'open' | 'leave' | 'page';
 
@@ -46,8 +46,10 @@ export function moveSection(c: MenuConfig, index: number, direction: -1 | 1): Me
   return { ...c, sections };
 }
 
+/** A section needs a title: an empty or blank one is refused and the old title stays. */
 export function renameSection(c: MenuConfig, id: string, title: string): MenuConfig {
-  return { ...c, sections: c.sections.map(s => (s.id === id ? { ...s, title: cleanText(title, SECTION_TITLE_MAX) } : s)) };
+  if (!cleanText(title, SECTION_TITLE_MAX).trim()) return c;
+  return { ...c, sections: c.sections.map(s => (s.id === id ? { ...s, title: cleanText(title, SECTION_TITLE_MAX).trim() } : s)) };
 }
 
 export function addSection(c: MenuConfig): MenuConfig {
@@ -62,13 +64,16 @@ export interface EntryPlacementRow { key: string; section: string }
 /** Where a command shows: the sysop's placement, else the board's own choice. */
 const sectionOf = (c: MenuConfig, row: EntryPlacementRow) => c.placement[upper(row.key)] ?? row.section;
 
-/** Empty as the widest caller (level 255) sees it - the rows are that caller's list. */
-export const sectionIsEmpty = (c: MenuConfig, rows: EntryPlacementRow[], id: string): boolean =>
-  !rows.some(r => sectionOf(c, r) === id);
+/**
+ * Empty as the widest caller (level 255) sees it - the rows are that caller's list.
+ * Before the rows have loaded (or when loading failed) nothing is known, so nothing is empty.
+ */
+export const sectionIsEmpty = (c: MenuConfig, rows: EntryPlacementRow[], id: string, loaded: boolean): boolean =>
+  loaded && !rows.some(r => sectionOf(c, r) === id);
 
 /** Only an empty section goes; the placements that pointed into it go with it. */
-export function removeSection(c: MenuConfig, rows: EntryPlacementRow[], id: string): MenuConfig {
-  if (!sectionIsEmpty(c, rows, id)) return c;
+export function removeSection(c: MenuConfig, rows: EntryPlacementRow[], id: string, loaded: boolean): MenuConfig {
+  if (!sectionIsEmpty(c, rows, id, loaded)) return c;
   const placement = Object.fromEntries(Object.entries(c.placement).filter(([, section]) => section !== id));
   return { ...c, sections: c.sections.filter(s => s.id !== id), placement };
 }
@@ -109,16 +114,28 @@ export const removeOrderKey = (c: MenuConfig, floor: number, key: string): MenuC
 export const setWipe = (c: MenuConfig, event: WipeEvent, code: string): MenuConfig => ({ ...c, wipes: { ...c.wipes, [event]: code } });
 export const setWipeAt40 = (c: MenuConfig, on: boolean): MenuConfig => ({ ...c, wipes: { ...c.wipes, at40: on } });
 
-/** The names the MCI catalogue gives the `~W?` codes (screen-wipe.util.ts header). */
-const WIPE_NAMES: Record<string, string> = {
-  M: 'Matrix rain', H: 'Horizontal blinds', V: 'Vertical blinds', S: 'Spiral', C: 'Checkerboard',
-  R: 'Radar sweep', B: 'Random blocks', N: 'Noise fade', T: 'Typewriter', E: 'Explode',
+/**
+ * The sysop-facing name of each wipe. Keyed by WipeType, so a new wipe fails to
+ * compile here until it is named. (screen-wipe.util.ts's header words are the
+ * MCI wording; these are the same wipes in plain sentence case.)
+ */
+const WIPE_NAMES: Record<Exclude<WipeType, 'random'>, string> = {
+  matrix: 'Matrix rain', hblinds: 'Horizontal blinds', vblinds: 'Vertical blinds', spiral: 'Spiral', checker: 'Checkerboard',
+  radial: 'Radar sweep', blocks: 'Random blocks', noise: 'Noise fade', typewriter: 'Typewriter', explode: 'Explode',
 };
 
-/** None, Random, then the rest by name - built from WIPE_CODES, so a new code cannot be missing here unnoticed. */
+/** None, Random, then the rest by name. */
 export function wipeOptions(): Array<{ code: string; name: string }> {
-  const named = Object.keys(WIPE_CODES).filter(code => code !== 'X').map(code => ({ code, name: WIPE_NAMES[code] ?? code }));
+  const named = Object.entries(WIPE_CODES)
+    .filter((entry): entry is [string, Exclude<WipeType, 'random'>] => entry[1] !== 'random')
+    .map(([code, type]) => ({ code, name: WIPE_NAMES[type] }));
   return [{ code: '', name: 'None' }, { code: 'X', name: 'Random' }, ...named];
+}
+
+/** The command keys whose text contains the query (case-insensitive); a blank query keeps all. */
+export function filterKeys(keys: string[], query: string): string[] {
+  const q = query.trim().toUpperCase();
+  return q ? keys.filter(k => k.toUpperCase().includes(q)) : keys;
 }
 
 export const setOverflowMode = (c: MenuConfig, cls: WidthClass, floor: number, mode: OverflowMode): MenuConfig =>

@@ -4,10 +4,11 @@
  */
 import { describe, expect, it } from 'vitest';
 import { defaultMenuConfig } from '@bbs/screens/menu-config/menu-config';
+import { WIPE_CODES } from '@bbs/screens/wipe-codes';
 import {
   setDescription, setLabel, setPlacement, moveSection, addSection, removeSection, sectionIsEmpty,
   addLevel, removeLevel, toggleHidden, setRename, removeRename, moveKey, addOrderKey, removeOrderKey,
-  setWipe, setWipeAt40, setOverflowMode, addOverflowFloor, removeOverflowFloor, wipeOptions, previewDefaults,
+  setWipe, setWipeAt40, setOverflowMode, addOverflowFloor, removeOverflowFloor, wipeOptions, renameSection, filterKeys, previewDefaults,
 } from '../components/menus/menu-edit';
 
 const base = () => defaultMenuConfig('MAIN');
@@ -57,16 +58,16 @@ describe('sections', () => {
   it('removes only an empty section and forgets placements into it', () => {
     const rows = [{ key: 'R', section: 'messages' }, { key: 'FROGGER', section: 'doors' }];
     let c = setPlacement(base(), 'FROGGER', 'messages');
-    expect(sectionIsEmpty(c, rows, 'doors')).toBe(true);
-    expect(sectionIsEmpty(c, rows, 'messages')).toBe(false);
-    expect(removeSection(c, rows, 'messages')).toBe(c);
-    c = removeSection(c, rows, 'doors');
+    expect(sectionIsEmpty(c, rows, 'doors', true)).toBe(true);
+    expect(sectionIsEmpty(c, rows, 'messages', true)).toBe(false);
+    expect(removeSection(c, rows, 'messages', true)).toBe(c);
+    c = removeSection(c, rows, 'doors', true);
     expect(c.sections.map(s => s.id)).not.toContain('doors');
   });
   it('drops placements that pointed into a removed section', () => {
     const rows: Array<{ key: string; section: string }> = [];
     const c = setPlacement(base(), 'FROGGER', 'doors');
-    expect(removeSection(c, rows, 'doors').placement).toEqual({});
+    expect(removeSection(c, rows, 'doors', true).placement).toEqual({});
   });
 });
 
@@ -138,5 +139,38 @@ describe('preview defaults', () => {
   it('asks for PETSCII at 40 columns and ANSI wider', () => {
     expect(previewDefaults(40)).toEqual({ columns: 40, mode: 'petscii' });
     expect(previewDefaults(132)).toEqual({ columns: 132, mode: 'ansi' });
+  });
+});
+
+describe('sections before the entries are known', () => {
+  it('treats no section as empty until the entries have loaded, and removes nothing', () => {
+    const c = base();
+    expect(sectionIsEmpty(c, [], 'doors', false)).toBe(false);
+    expect(removeSection(c, [], 'doors', false)).toBe(c);
+    expect(sectionIsEmpty(c, [], 'doors', true)).toBe(true);
+  });
+});
+
+describe('section titles', () => {
+  it('keeps the old title when the new one is empty or blank, trims otherwise', () => {
+    const c = base();
+    expect(renameSection(c, 'files', '   ')).toBe(c);
+    expect(renameSection(c, 'files', '')).toBe(c);
+    expect(renameSection(c, 'files', '  Downloads ').sections.find(s => s.id === 'files')?.title).toBe('Downloads');
+  });
+});
+
+describe('wipe names', () => {
+  it('names every code but None and Random with something other than its letter', () => {
+    const named = wipeOptions().filter(o => o.code && o.code !== 'X');
+    expect(named).toHaveLength(Object.keys(WIPE_CODES).length - 1);
+    expect(named.every(o => o.name.length > 1)).toBe(true);
+  });
+});
+
+describe('finding a command', () => {
+  it('filters keys case-insensitively and keeps all on a blank query', () => {
+    expect(filterKeys(['R', 'FROGGER', 'T'], 'rog')).toEqual(['FROGGER']);
+    expect(filterKeys(['R', 'T'], '  ')).toEqual(['R', 'T']);
   });
 });

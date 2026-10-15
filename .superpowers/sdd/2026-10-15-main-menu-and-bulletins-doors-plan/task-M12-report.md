@@ -9,3 +9,10 @@ Landed 7a9ff2cfd (web/config-app only).
 - Selecting preview width 40 also selects PETSCII (mode picker still free).
 - Tests: menu-edit 20, menus-page 7 (one reachability test), menus-client 2. RED first (modules missing); revert-check of the 204/usedBy and placement fixes failed 3 tests. design-system-usage, nav-routes, nav-search green; tsc 0 errors; vite build ok (not a typecheck).
 - Not done / for M13: logo UI (client methods exist, untested against a page).
+
+## Fix round 1
+1. Remove on a section is disabled until the entries have loaded without error (sectionIsEmpty/removeSection take `loaded`); the tooltip says why.
+2. WIPE_NAMES is Record<WipeType minus random, string>, no fallback; test that every code is named. Names documented as the sysop-facing sentence-case wording of the screen-wipe.util.ts header.
+3. Hidden control is a search box over a scrollable checked list with a "Hidden (n of total)" count; filterKeys is pure and tested. No existing multi-select component in components/ui (grepped), so it is local to MenuLevelsEditor.
+4. renameSection refuses an empty or blank title and trims; the input keeps a local draft, writes only non-empty titles, shows a hint, and restores the old title on blur.
+RED: reverting the loaded guard, the page wiring and the title guard failed 3 tests.

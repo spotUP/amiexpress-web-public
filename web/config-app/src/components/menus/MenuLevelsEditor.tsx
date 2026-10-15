@@ -2,7 +2,7 @@ import { useState } from 'react';
 import type { MenuConfig } from '@bbs/screens/menu-config/menu-config';
 import type { MenuEntryRow } from '../../api/client';
 import {
-  addLevel, addOrderKey, removeLevel, removeOrderKey, removeRename, reorderKeys, setRename, toggleHidden,
+  addLevel, addOrderKey, filterKeys, removeLevel, removeOrderKey, removeRename, reorderKeys, setRename, toggleHidden,
 } from './menu-edit';
 import { BUTTON_CLASS, INPUT_CLASS } from './menu-styles';
 
@@ -10,6 +10,25 @@ interface Props {
   config: MenuConfig;
   rows: MenuEntryRow[];
   update: (change: (c: MenuConfig) => MenuConfig) => void;
+}
+
+/** A search box over a scrollable checked list, so a level with ~200 commands stays usable. */
+function HiddenPicker({ floor, keys, hidden, onToggle }: { floor: number; keys: string[]; hidden: string[]; onToggle: (key: string) => void }) {
+  const [query, setQuery] = useState('');
+  return (
+    <div>
+      <div className="text-sm text-content-secondary mb-1">Hidden ({hidden.length} of {keys.length})</div>
+      <input aria-label={`Find a command to hide at level ${floor}`} className={INPUT_CLASS} placeholder="Find a command..." value={query} onChange={e => setQuery(e.target.value)} />
+      <div className="mt-1 max-h-40 overflow-y-auto flex flex-wrap gap-x-3 gap-y-1">
+        {filterKeys(keys, query).map(k => (
+          <label key={k} className="flex items-center gap-1 text-sm text-content-primary">
+            <input type="checkbox" aria-label={`Hide ${k} at level ${floor}`} checked={hidden.includes(k)} onChange={() => onToggle(k)} />
+            <span className="font-mono">{k}</span>
+          </label>
+        ))}
+      </div>
+    </div>
+  );
 }
 
 export function MenuLevelsEditor({ config, rows, update }: Props) {
@@ -48,15 +67,7 @@ export function MenuLevelsEditor({ config, rows, update }: Props) {
             <legend className="px-1 text-sm text-content-primary">Level {floor} and above</legend>
 
             <div>
-              <div className="text-sm text-content-secondary mb-1">Hidden</div>
-              <div className="flex flex-wrap gap-x-3 gap-y-1">
-                {keys.map(k => (
-                  <label key={k} className="flex items-center gap-1 text-sm text-content-primary">
-                    <input type="checkbox" aria-label={`Hide ${k} at level ${floor}`} checked={level.hide.includes(k)} onChange={() => update(c => toggleHidden(c, floor, k))} />
-                    <span className="font-mono">{k}</span>
-                  </label>
-                ))}
-              </div>
+                            <HiddenPicker floor={floor} keys={keys} hidden={level.hide} onToggle={k => update(c => toggleHidden(c, floor, k))} />
             </div>
 
             <div>

@@ -109,6 +109,24 @@ describe('the Menu Doors page', () => {
     await waitFor(() => expect(previewMenu).toHaveBeenCalledWith('MAIN', expect.objectContaining({ columns: 40, mode: 'petscii' })));
   });
 
+  it('does not let a section be removed while the entries failed to load', async () => {
+    menuEntries.mockRejectedValueOnce(new Error('entries down'));
+    renderPage('?part=sections');
+    await screen.findByLabelText('Title of section 1');
+    await waitFor(() => expect(menuEntries).toHaveBeenCalled());
+    for (const b of screen.getAllByRole('button', { name: 'Remove' })) expect((b as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it('keeps the section title when it is cleared', async () => {
+    const user = userEvent.setup();
+    renderPage('?part=sections');
+    const box = await screen.findByLabelText('Title of section 1');
+    await user.clear(box);
+    expect(await screen.findByText(/needs a title/)).toBeTruthy();
+    await new Promise(r => setTimeout(r, 900));
+    expect(saveMenuConfig).not.toHaveBeenCalled();
+  });
+
   it('shows the entries as a design-system table and names nothing with an abbreviation', async () => {
     const { container } = renderPage();
     await screen.findByLabelText('Description for R');

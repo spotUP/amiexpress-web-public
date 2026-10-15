@@ -30,7 +30,7 @@ function MenuKindPanel({ kind }: { kind: MenuKind }) {
 
   const parts: TabDefinition[] = [
     { id: 'entries', label: 'Entries', render: () => <MenuEntriesEditor config={config} rows={rows} loading={rowsLoading} error={rowsError} onRetry={loadRows} update={update} /> },
-    { id: 'sections', label: 'Sections', render: () => <MenuSectionsEditor config={config} rows={rows} update={update} /> },
+    { id: 'sections', label: 'Sections', render: () => <MenuSectionsEditor config={config} rows={rows} rowsReady={!rowsLoading && !rowsError} update={update} /> },
     { id: 'levels', label: 'Levels', render: () => <MenuLevelsEditor config={config} rows={rows} update={update} /> },
     { id: 'wipes', label: 'Wipes', render: () => <MenuWipesCard config={config} update={update} /> },
     { id: 'overflow', label: 'Overflow', render: () => <MenuOverflowCard config={config} update={update} /> },
