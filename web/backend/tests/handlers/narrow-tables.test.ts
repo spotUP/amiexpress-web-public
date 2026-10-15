@@ -698,6 +698,19 @@ describe('5d new-user computer picker (new-user.handler.ts handleLinesInput)', (
 describe('5d file status (file-status.handler.ts handleFileStatusCommand)', () => {
   async function driveFileStatus(driver: Driver) {
     const { FileStatusHandler } = require('../../src/handlers/file/file-status.handler');
+    // The conference column is relConf (express.e relConf), which asks the injected
+    // checkConfAccess; the board injects the real one at startup, so the test does too.
+    const { setUserCommandsDependencies } = require('../../src/handlers/commands/user-commands.handler');
+    const { checkConfAccess } = require('../../src/handlers/message/message-scan.handler');
+    setUserCommandsDependencies({
+      conferences: [{ id: 1, name: 'General' }] as any,
+      messageBases: [] as any,
+      db: {} as any,
+      joinConference: jest.fn() as any,
+      checkConfAccess,
+      displayScreen: jest.fn() as any,
+      displayUploadInterface: jest.fn() as any,
+    });
     // Under conference accounting FS prints the caller's own Conf.DB record
     // (express.e:24166-24180), not the conference row.
     const mpfm = require('../../src/services/MessagePointerFileManager');
@@ -735,7 +748,7 @@ describe('5d file status (file-status.handler.ts handleFileStatusCommand)', () =
     expect(out).toContain(
       '\x1b[33m    ' + '   1' + '\x1b[0m> ' + '\x1b[33m' +
       '12'.padEnd(7) + '  ' + '1234567'.padStart(14) + ' ' +
-      '34'.padEnd(7) + '  ' + '7654321'.padStart(14) + '   ' +
+      '34'.padStart(7) + '  ' + '7654321'.padStart(14) + '   ' +
       'Infinite'.padStart(9) + '   3\x1b[0m:\x1b[33m1\r\n'
     );
   });
@@ -750,7 +763,7 @@ describe('5d file status (file-status.handler.ts handleFileStatusCommand)', () =
     // Exact stacked block for the one conference.
     expect(out).toContain('\x1b[33m   1>\x1b[0m\r\n');
     expect(out).toContain(` UL ${'12'.padEnd(7)} ${'1234567'.padStart(14)}\r\n`);
-    expect(out).toContain(` DL ${'34'.padEnd(7)} ${'7654321'.padStart(14)}\r\n`);
+    expect(out).toContain(` DL ${'34'.padStart(7)} ${'7654321'.padStart(14)}\r\n`);
     expect(out).toContain(' Avail Infinite  3:1\r\n');
   });
 });
