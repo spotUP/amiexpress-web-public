@@ -4,7 +4,6 @@
  * Based on express.e:28555-28648
  */
 
-import * as path from 'path';
 import { BBSSession } from '../../index';
 import { LoggedOnSubState } from '../../constants/bbs-states';
 import { displayScreen, doPause, hasKeysFile, hasKeysFileForResolvedPath } from '../screen.handler';
@@ -58,49 +57,20 @@ export async function launchMenuDoor(socket: any, session: BBSSession, site: 'di
   if (site === 'display-flow' && exit.takeMenuDoorDismissed(session)) return 'dismissed';
   // WEB_: `?` means "open it", so a pending Esc from the last visit is spent here (Decision 37).
   if (site === 'question-mark') exit.takeMenuDoorDismissed(session);
+  // A launch whose door has not reached its tail yet is a failure handler redrawing the menu
+  // (executeAmigaDoor's catch), also while a parked relaunch is draining: the art menu serves it and
+  // the door is not entered or parked again.
+  if (exit.menuLaunchUnstarted(session)) { exit.markMenuReentered(session); return 'fallback'; }
   if (exit.inExitTail(session)) {
-    if (!doorBinaryExists(def.location)) return 'fallback';
+    if (!exit.doorBinaryExists(def.location)) return 'fallback';
     exit.parkDoor(session, 'MENU');
     return 'ran';
   }
-  // A launch from inside a launch is a failure handler redrawing the menu (executeAmigaDoor's catch):
-  // the art menu serves it, and the door is not entered again.
   if (exit.menuLaunchInFlight(session)) { exit.markMenuReentered(session); return 'fallback'; }
-  // Decision 12: Menu.txt is the fallback when the door cannot run. A missing binary makes the
-  // dispatcher return "without a word" (express.e:4257-4262), which would leave the caller no prompt.
-  if (!doorBinaryExists(def.location)) return 'fallback';
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
-  const { processCommand } = require('../command.handler');
-  const tailsBefore = exit.exitTailsEntered(session);
-  exit.setMenuLaunchInFlight(session, true);
-  try {
-    await processCommand(socket, session, 'MENU', '');
-  } catch (err) {
-    console.error('[menu] MENU door threw:', err);
-  } finally {
-    exit.setMenuLaunchInFlight(session, false);
-  }
-  // The door ran when it reached its exit tail. Anything else (a crash before the tail, a launch that
-  // returned without a word) leaves the caller without a menu: latch and let the art menu draw.
-  const reentered = exit.takeMenuReentered(session);
-  if (exit.exitTailsEntered(session) === tailsBefore) {
-    exit.markMenuDoorFailed(session);
-    return reentered ? 'ran' : 'fallback';   // when reentered, the failure handler already drew the menu and prompt
-  }
-  return 'ran';
-}
-
-/** The door's executable is on the board's volume, resolved case-insensitively the way executeAmigaDoor does. */
-function doorBinaryExists(location: string): boolean {
-  /* eslint-disable @typescript-eslint/no-var-requires */
-  const amigafs = require('../../utils/amigafs');
-  const { boardRoot } = require('../../utils/board-root.util');
-  /* eslint-enable @typescript-eslint/no-var-requires */
-  const rel = String(location || '').replace(/:/g, '/').replace(/\\/g, '/').split('/').filter((c: string) => c.length > 0);
-  if (rel.length === 0) return false;
-  const root: string = boardRoot();
-  const tries = [path.join(root, ...rel), path.join(root, 'Doors', ...rel)];
-  return tries.some((p) => { try { return amigafs.existsSync(p); } catch { return false; } });
+  // Decision 12: Menu.txt is the fallback when the door cannot run (binary missing, crash, or a launch that
+  // returns without a word, express.e:4257-4262). One guarded launch, shared with the parked relaunch.
+  const outcome = await exit.runMenuDoor(socket, session);
+  return outcome === 'failed' ? 'fallback' : 'ran';
 }
 
 /**

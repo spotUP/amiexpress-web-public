@@ -68,3 +68,13 @@ test('ACCESS=0 parks the door at the disabled level and ACCESS=50 refuses a leve
     expect(await launchMenuDoor({}, session(50), 'display-flow')).toBe('ran');
   } finally { fs.writeFileSync(infoPath, saved, 'latin1'); }
 });
+
+test('a DOORS: assign LOCATION resolves to the binary the way the dispatcher does', async () => {
+  const saved = fs.readFileSync(infoPath, 'latin1');
+  try {
+    (commandCache.bbscmd.get('MENU') as { location: string }).location = 'DOORS:MAINMENU/mainmenu';   // the Amiga assign spelling
+    expect(await launchMenuDoor({}, session(10), 'display-flow')).toBe('ran');
+    fs.rmSync(binary);
+    expect(await launchMenuDoor({}, session(10), 'display-flow')).toBe('fallback');
+  } finally { fs.writeFileSync(infoPath, saved, 'latin1'); fs.writeFileSync(binary, 'x'); }
+});

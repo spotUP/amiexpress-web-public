@@ -40,6 +40,7 @@ jest.mock('../../src/utils/door-min-columns.util', () => ({
   doorRefusedForWidth: () => false,
 }));
 
+jest.mock('../../src/handlers/door.handler', () => ({ theCallerIsLeaving: () => false }));
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
@@ -193,5 +194,65 @@ describe('?', () => {
     await handleQuestionMarkCommand(c.socket, c.session);
     expect(processCommand).toHaveBeenCalledTimes(1);
     expect(exit.takeMenuDoorDismissed(c.session)).toBe(false);
+  });
+});
+
+describe('a parked MENU relaunch (the exit-tail drain)', () => {
+  const HARD_CAP = 6;
+  /** park a MENU relaunch the way a door's exit tail does, then let the outermost tail drain it */
+  async function parkAndDrain(c: { socket: any; session: any }) {
+    exit.enterExitTail(c.session);
+    await displayMainMenu(c.socket, c.session, false, true);
+    expect(exit.hasParkedDoor(c.session)).toBe(true);
+    exit.leaveExitTail(c.session);
+    await exit.drainParkedDoors(c.socket, c.session);
+  }
+  test('a relaunch that throws before its tail is tried once, then Menu.txt and a prompt', async () => {
+    register(); const c = caller();
+    doorBehaviour = async () => { if (processCommand.mock.calls.length > HARD_CAP) return 'STOP'; throw new Error('boom'); };
+    await parkAndDrain(c);
+    expect(processCommand).toHaveBeenCalledTimes(1);
+    expect(displayScreen).toHaveBeenCalledWith(c.socket, c.session, 'MENU');
+    expect(emitPrompt).toHaveBeenCalledTimes(1);
+    expect(exit.hasParkedDoor(c.session)).toBe(false);
+  });
+  test('a relaunch whose crash handler redraws the menu does not loop', async () => {
+    register(); const c = caller();
+    doorBehaviour = async (s, session) => {
+      if (processCommand.mock.calls.length > HARD_CAP) return 'STOP';
+      await new Promise((r) => setTimeout(r, 0));
+      await displayMainMenu(s, session, false, true);   // executeAmigaDoor's catch
+      return 'SUCCESS';
+    };
+    await parkAndDrain(c);
+    expect(processCommand).toHaveBeenCalledTimes(1);
+    expect(displayScreen).toHaveBeenCalledTimes(1);
+    expect(emitPrompt).toHaveBeenCalledTimes(1);
+  });
+  test('a relaunch that returns silently without a tail is latched: art menu and a prompt', async () => {
+    register(); const c = caller();
+    doorBehaviour = async () => 'SUCCESS';
+    await parkAndDrain(c);
+    expect(processCommand).toHaveBeenCalledTimes(1);
+    expect(displayScreen).toHaveBeenCalledTimes(1);
+    expect(emitPrompt).toHaveBeenCalledTimes(1);
+    expect(exit.menuDoorFailed(c.session)).toBe(true);
+  });
+  test('a latched session never parks again', async () => {
+    register(); const c = caller();
+    exit.markMenuDoorFailed(c.session);
+    exit.enterExitTail(c.session);
+    await displayMainMenu(c.socket, c.session, false, true);
+    exit.leaveExitTail(c.session);
+    expect(exit.hasParkedDoor(c.session)).toBe(false);
+    expect(displayScreen).toHaveBeenCalledWith(c.socket, c.session, 'MENU');
+  });
+  test('the latch is per session: another session still launches', async () => {
+    register(); const a = caller(); const b = caller();
+    exit.markMenuDoorFailed(a.session);
+    await displayMainMenu(a.socket, a.session, false, true);
+    expect(processCommand).not.toHaveBeenCalled();
+    await displayMainMenu(b.socket, b.session, false, true);
+    expect(processCommand).toHaveBeenCalledTimes(1);
   });
 });

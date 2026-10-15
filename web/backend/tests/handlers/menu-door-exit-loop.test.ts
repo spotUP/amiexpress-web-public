@@ -36,7 +36,15 @@ jest.mock('../../src/handlers/screen.handler', () => ({
 jest.mock('../../src/services/menu-config.service', () => ({
   readMenuConfig: () => ({ config: { wipes: { open: '', leave: 'H', page: '' } } }),
 }));
-jest.mock('../../src/utils/board-root.util', () => ({ boardRoot: () => '/nowhere' }));
+// The MENU relaunch goes through the guarded launch: a registered MENU with a binary on the board.
+jest.mock('../../src/handlers/command-execution.handler', () => ({
+  commandCache: { bbscmd: new Map([['MENU', { location: 'Doors/MAINMENU/mainmenu' }]]), syscmd: new Map() },
+}));
+const mockBoard = require('fs').mkdtempSync(require('path').join(require('os').tmpdir(), 'mloop-'));
+require('fs').mkdirSync(require('path').join(mockBoard, 'Doors', 'MAINMENU'), { recursive: true });
+require('fs').writeFileSync(require('path').join(mockBoard, 'Doors', 'MAINMENU', 'mainmenu'), 'x');
+jest.mock('../../src/utils/board-root.util', () => ({ boardRoot: () => mockBoard }));
+afterAll(() => require('fs').rmSync(mockBoard, { recursive: true, force: true }));
 
 import * as exit from '../../src/handlers/commands/menu-door-exit';
 
@@ -106,9 +114,9 @@ test('a caller who is leaving gets no relaunch', async () => {
 
 test('a relaunch that throws drops the rest of the parked queue, so the next unrelated exit starts clean', async () => {
   const session: any = {};
-  failOn.command = 'MENU';
-  exit.parkDoor(session, 'MENU');
+  failOn.command = 'B';
   exit.parkDoor(session, 'B');
+  exit.parkDoor(session, 'MENU');
   await expect(exit.drainParkedDoors({}, session)).rejects.toThrow('door failed');
   expect(exit.hasParkedDoor(session)).toBe(false);
   expect(exit.inExitTail(session)).toBe(false);
