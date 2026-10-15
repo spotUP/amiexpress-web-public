@@ -53,3 +53,52 @@ export function c64Rows(ansi: string): string[] {
   }
   return out;
 }
+
+export type Cell = { ch: string; bg: string };
+
+const NAMED = ['black', 'red', 'green', 'yellow', 'blue', 'magenta', 'cyan', 'white'];
+
+/** Replay a CSI/text stream into a width x height grid of {ch, bg}. */
+export function replay(stream: string, width: number, height: number): Cell[][] {
+  const grid: Cell[][] = Array.from({ length: height }, () =>
+    Array.from({ length: width }, () => ({ ch: ' ', bg: 'unpainted' })));
+  let x = 0, y = 0, bg = 'default';
+  const re = /\x1b\[([0-9;?]*)([A-Za-z])|([^\x1b])/g;
+  let m: RegExpExecArray | null;
+  const color = (n: number): string => (n < 8 ? NAMED[n] : n < 16 ? 'bright' + NAMED[n - 8] : 'idx' + n);
+  while ((m = re.exec(stream))) {
+    if (m[3] !== undefined) {
+      const c = m[3];
+      if (c === '\r') x = 0;
+      else if (c === '\n') y = Math.min(height - 1, y + 1);
+      else if (y < height && x < width) { grid[y][x] = { ch: c, bg }; x++; }
+      continue;
+    }
+    const args = m[1].split(';').filter(a => a !== '' && a[0] !== '?').map(Number);
+    switch (m[2]) {
+      case 'H': case 'f': y = (args[0] || 1) - 1; x = (args[1] || 1) - 1; break;
+      case 'C': x += args[0] || 1; break;
+      case 'D': x = Math.max(0, x - (args[0] || 1)); break;
+      case 'A': y = Math.max(0, y - (args[0] || 1)); break;
+      case 'B': y = Math.min(height - 1, y + (args[0] || 1)); break;
+      case 'G': x = (args[0] || 1) - 1; break;
+      case 'J': if (args[0] === 2 || args.length === 0) for (const r of grid) for (let i = 0; i < width; i++) r[i] = { ch: ' ', bg }; break;
+      case 'K': for (let i = x; i < width; i++) grid[y][i] = { ch: ' ', bg }; break;
+      case 'm': {
+        const a = args.length ? args : [0];
+        for (let i = 0; i < a.length; i++) {
+          const v = a[i];
+          if (v === 0 || v === 49) bg = v === 0 ? 'default' : 'black';
+          else if (v >= 40 && v <= 47) bg = NAMED[v - 40];
+          else if (v >= 100 && v <= 107) bg = 'bright' + NAMED[v - 100];
+          else if (v === 48 && a[i + 1] === 5) { bg = color(a[i + 2]); i += 2; }
+          else if (v === 48 && a[i + 1] === 2) { bg = `rgb${a[i + 2]},${a[i + 3]},${a[i + 4]}`; i += 4; }
+          else if (v === 38 && a[i + 1] === 5) i += 2;
+          else if (v === 38 && a[i + 1] === 2) i += 4;
+        }
+        break;
+      }
+    }
+  }
+  return grid;
+}

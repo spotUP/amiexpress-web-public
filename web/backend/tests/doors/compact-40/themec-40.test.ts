@@ -32,7 +32,7 @@ import 'reflect-metadata';
 import * as fs from 'fs';
 import * as path from 'path';
 import { AnsiToPetsciiTransducer } from '@amiexpress/bbs-door-sdk/petscii';
-import { CaptureSocket, beforeTeardown, screenCodeToChar } from './door-capture';
+import { CaptureSocket, beforeTeardown, screenCodeToChar, replay } from './door-capture';
 
 const REPO = path.resolve(__dirname, '../../../../..');
 const THEMEC = path.join(REPO, 'Doors', 'THEMEC', 'themec');
@@ -46,7 +46,7 @@ const EIGHTY_BEFORE = path.join(__dirname, 'fixtures', 'themec-80-before.ans');
  * and BB_SCRHEIGHT answer from them, and the door lays itself out from the
  * answer.
  */
-async function drive(cols: number): Promise<string> {
+async function drive(cols: number, keys: string[] = []): Promise<string> {
   const { AmigaDoorSession } = require('../../../src/amiga-emulation/AmigaDoorSession');
   const socket = new CaptureSocket();
   const petscii = cols < 80;
@@ -71,11 +71,14 @@ async function drive(cols: number): Promise<string> {
   // One frame, then leave. The door draws on entry and redraws after every
   // key, so a single Q is enough to prove the screen and still exit cleanly
   // through ui_screen_close() + JH_SHUTDOWN.
-  const quit = setTimeout(() => socket.emit('door:input', 'q'), 4000);
+  // `keys` are sent after the first screen has settled, 700 ms apart, and
+  // the door is left a beat after the last one.
+  const timers = keys.map((k, i) => setTimeout(() => socket.emit('door:input', k), 3500 + i * 700));
+  timers.push(setTimeout(() => socket.emit('door:input', 'q'), keys.length ? 3500 + keys.length * 700 + 1500 : 4000));
   try {
     await session.start();
   } finally {
-    clearTimeout(quit);
+    timers.forEach(clearTimeout);
   }
   return socket.ansi.join('');
 }
@@ -208,6 +211,11 @@ describe('THEMEC opens on a 40-column caller', () => {
    * main since. The bytes below are the door as of the caret rule; any LATER
    * 40-column work still cannot move them, which is what the pin is for.
    */
+  /**
+   * REFRESHED 2026-10-15 for the live preview: the door now paints its theme's
+   * GROUND (ESC[48;2;..] clear) instead of leaving the terminal default, so
+   * the preview of another theme cannot leak the old one's background.
+   */
   it('an 80-column caller sees the door byte-for-byte as it was before the 40-column work', async () => {
     const ansi = await drive(80);
     const before = fs.readFileSync(EIGHTY_BEFORE, 'latin1');
@@ -230,5 +238,52 @@ describe('THEMEC opens on a 40-column caller', () => {
       return screen.replace(/\x1b\[0m\x1b\[0m\x1b\[2J\x1b\[H\x1b\[\?25h$/, '');
     };
     expect(firstScreen(ansi)).toBe(firstScreen(before));
+  });
+});
+
+/**
+ * LIVE PREVIEW (sysop, 2026-10-15: "THEME live previews the themes when I
+ * navigate the menu, THEMEC doesn't"). Moving the cursor re-colours the whole
+ * door in the highlighted theme, on the theme's GROUND - never the terminal's
+ * default background, which is the leak the TypeScript door fixed the same day.
+ */
+describe('THEMEC previews the highlighted theme', () => {
+  jest.setTimeout(120000);
+  const DOWN = '\x1b[B';
+  const GROUND = 'rgb0,0,0'; // every shipped theme's ground resolves to rgb 0,0,0
+  const fgs = (ansi: string) => new Set([...ansi.matchAll(/38;2;(\d+;\d+;\d+)/g)].map((m) => m[1]));
+
+  it('after a cursor move the GROUND cells carry the highlighted theme ground and the pen colours are the new theme', async () => {
+    const ansi = await drive(80, [DOWN, DOWN, DOWN, DOWN, DOWN]);
+    const cut = beforeTeardown(ansi);
+    // Quiet Phosphor is five themes down; its pens are not Classic's.
+    const lastFrame = cut.slice(cut.lastIndexOf('\x1b[2J'));
+    const opening = cut.slice(0, cut.indexOf('\x1b[2J', cut.indexOf('\x1b[2J') + 1));
+    expect(lastFrame.length).toBeGreaterThan(500);
+    const before = fgs(opening);
+    const after = fgs(lastFrame);
+    expect([...after].filter((c) => !before.has(c)).length).toBeGreaterThan(0);
+
+    const grid = replay(cut, 80, 25);
+    // Blank rows between the masthead and the list, and under the note.
+    for (const y of [1, ...Array.from({ length: 12 }, (_, i) => 11 + i)]) {
+      for (let x = 0; x < 80; x++) expect({ y, x, bg: grid[y][x].bg }).toEqual({ y, x, bg: GROUND });
+    }
+  });
+
+  it('at 40 columns a cursor move repaints in the highlighted theme and still renders', async () => {
+    const ansi = await drive(40, [DOWN, DOWN]);
+    const { rows } = petsciiScreen(ansi);
+    expect(rows).toHaveLength(25);
+    for (const row of rows) expect(row).toHaveLength(40);
+    expect(rows[0].trim()).toBe('DOOR THEME');
+    expect(rows.join('\n')).toContain('>>');
+    expect(rows.join('')).not.toContain('?');
+    // The last full frame wears another theme's pens than the opening one.
+    const cut = beforeTeardown(ansi);
+    const lastFrame = cut.slice(cut.lastIndexOf('\x1b[2J'));
+    const opening = cut.slice(0, cut.indexOf('\x1b[2J', cut.indexOf('\x1b[2J') + 1));
+    const before = fgs(opening);
+    expect([...fgs(lastFrame)].filter((c) => !before.has(c)).length).toBeGreaterThan(0);
   });
 });

@@ -48,7 +48,7 @@ all: test
 # Tests (host)
 # ---------------------------------------------------------------------
 
-test: door-sources-compile build/write-message build/test_ae_host build/test_ae_session build/test_ui_profile build/test_ui_list build/test_ui_chrome build/test_ui_screen build/test_ui_input build/test_ui_editor build/test_frame_budget build/test_ui_theme build/test_ui_settings build/test_ui_doc build/test_ae_http build/test_ae_achieve build/test_ae_request build/test_ae_msgbase build/test_ae_dos build/test_texttv build/test_subs_scan build/test_achieve_rows build/test_requests_bulletin build/test_ae_userfield build/test_us_model
+test: door-sources-compile build/write-message build/test_ae_host build/test_ae_session build/test_ui_profile build/test_ui_list build/test_ui_chrome build/test_ui_screen build/test_ui_input build/test_ui_editor build/test_frame_budget build/test_ui_theme build/test_ui_settings build/test_ui_doc build/test_ae_http build/test_ae_achieve build/test_ae_request build/test_ae_msgbase build/test_ae_dos build/test_texttv build/test_subs_scan build/test_achieve_rows build/test_requests_bulletin build/test_ae_userfield build/test_us_model build/test_theme_preview
 	./build/test_ae_host
 	./build/test_ae_session
 	./build/test_ui_profile
@@ -72,6 +72,7 @@ test: door-sources-compile build/write-message build/test_ae_host build/test_ae_
 	./build/test_requests_bulletin
 	./build/test_ae_userfield
 	./build/test_us_model
+	./build/test_theme_preview
 
 # Every door's own .c, syntax-checked with the host compiler.
 #
@@ -94,6 +95,10 @@ build/test_ae_userfield: src/ae_userfield.c src/ae_transport_native.c tests/test
 build/test_us_model: examples/usersettings/us_model.c tests/test_us_model.c examples/usersettings/us_model.h include/ae_userfield.h
 	@mkdir -p build
 	$(CC) $(HOST_CFLAGS) -I examples/usersettings -I include examples/usersettings/us_model.c tests/test_us_model.c -o $@
+
+build/test_theme_preview: examples/theme-picker/theme_preview.c tests/test_theme_preview.c examples/theme-picker/theme_preview.h src/ui_ansi.c src/ui_theme.c
+	@mkdir -p build
+	$(CC) $(HOST_CFLAGS) -I include examples/theme-picker/theme_preview.c src/ui_ansi.c src/ui_theme.c tests/test_theme_preview.c -o $@
 
 build/test_ae_host: src/ae_host.c tests/test_ae_host.c include/ae_host.h
 	@mkdir -p build
@@ -278,9 +283,9 @@ build/amiga/hello_list: examples/hello/hello_list.c build/amiga/libae.lib
 
 # The proof door: a real one, drawn with the widgets, reading and writing
 # through the protocol.
-build/amiga/theme-picker: examples/theme-picker/theme_picker.c build/amiga/libae.lib
+build/amiga/theme-picker: examples/theme-picker/theme_picker.c examples/theme-picker/theme_preview.c examples/theme-picker/theme_preview.h build/amiga/libae.lib
 	@mkdir -p build/amiga
-	$(VC) $(AMIGA_CFLAGS) $< build/amiga/libae.lib -lauto -o $@
+	$(VC) $(AMIGA_CFLAGS) -Iexamples/theme-picker examples/theme-picker/theme_picker.c examples/theme-picker/theme_preview.c build/amiga/libae.lib -lauto -o $@
 
 # W: the caller's settings (express.e internalCommandW) and the settings hub.
 build/amiga/usersettings: examples/usersettings/usersettings.c examples/usersettings/us_model.c examples/usersettings/us_model.h build/amiga/libae.lib

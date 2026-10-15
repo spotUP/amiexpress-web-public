@@ -35,6 +35,7 @@
 #include "ui_profile.h"
 #include "ui_screen.h"
 #include "ui_theme.h"
+#include "theme_preview.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -47,58 +48,26 @@ static char session_storage[AE_SESSION_MIN_STORAGE];
 /** The id in force when the door opened, so the list can mark it. */
 static char active_theme[32];
 
-/** The theme the rows are painted in; the door re-points this when it changes. */
-static const ui_theme *row_theme;
+/** The caller's saved theme and the one being previewed (theme_preview.h). */
+static theme_preview preview;
 
 /**
- * THE SWATCH: the row under the cursor, repainted in ITS OWN theme's colours.
+ * LIVE PREVIEW: the highlighted theme is the one the whole door wears.
  *
- * "it doesnt live update the theme when i navigate like theme does either"
- * (sysop, 2026-09-07). A whole-screen preview is a whole-screen repaint -
- * measured with `make probe`, 1,949 bytes and ten XIM messages per keypress
- * at 80 columns against 216 and two - which is the "its slow" the two-row
- * repaint had been written to cure that same morning. A palette change
- * changes every cell; there is no cheaper way to show a whole screen. So one
- * ROW shows the theme instead.
- *
- * The palette, not the pen. A plain colour marker is resolved through
- * whatever palette the buffer carries (ui_ansi.h), so writing `t->accent`
- * gives the ACTIVE theme's shade - measured on a capture: every row came out
- * `38;2;170;170;170`. The exact colours live in the theme's own `rgb`/`idx`
- * tables and reach the wire only as TOKENS, so the swatch swaps the buffer's
- * palette for the length of one row and puts it back.
- *
- * Called after the list has drawn, so the row the cursor LEFT has already
- * been repainted in the screen's palette and needs nothing here.
+ * "THEME live previews the themes when I navigate the menu, THEMEC doesn't"
+ * (sysop, 2026-10-15). Every cursor move changes theme, so every move is a
+ * full repaint (a palette change changes every cell; measured with
+ * `make probe`, see thoughts/ handoff). The model lives in theme_preview.c so
+ * a host test can prove the palette follows the highlight and that leaving
+ * puts the caller's own theme back; saving happens only on Enter.
  */
-static void draw_swatch(ui_screen *screen, ui_list *list,
-                        const ui_theme *active, int wide)
+
+/* The board's ground, painted under everything. A C64 cell cannot carry a
+   background (the screen is black), so there the ground stays the terminal's. */
+static ui_screen *ground_screen;
+static int ground(void)
 {
-    const ui_theme *t;
-    int row, lead;
-
-    if (!screen || !list || list->count <= 0) return;
-    t = ui_theme_at(list->selected);
-    if (!t || t == active) return;      /* the screen already wears it */
-
-    /* This door's list is borderless, unscrolled and offset-free (height ==
-       count), so the row is its index and the text starts after the caret. */
-    row = list->top + (list->selected - list->offset);
-    lead = list->caret ? (int) ui_printable_len(list->caret) : 0;
-
-    /* THE MARK AND THE NAME, not the blurb. At 80 columns the blurb is fifty
-       of the row's seventy-six cells and rewriting it in a second palette
-       cost 746 bytes and four XIM messages a keypress (`make probe`); the
-       twenty cells the eye is actually on cost 572 and three. At 40 there is
-       no blurb, so the whole row is the name and this is the same thing. */
-    { int span = wide ? 20 : list->width - lead;
-      if (span > list->width - lead) span = list->width - lead;
-
-      ansi_set_palette(&screen->buf, t->rgb, t->idx, UI_TOKEN_COUNT);
-      ansi_color(&screen->buf, UI_TOKEN(UI_T_INK), -1, 0);
-      ansi_text(&screen->buf, row, list->left + lead,
-                list->row(list->context, list->selected), span);
-      ansi_set_palette(&screen->buf, active->rgb, active->idx, UI_TOKEN_COUNT); }
+    return (ground_screen && ground_screen->profile.cell_backgrounds) ? UI_TOKEN(UI_T_GROUND) : -1;
 }
 
 /** One row: the mark, the name, and the blurb if the screen has room. */
@@ -192,6 +161,7 @@ typedef struct {
     ui_screen *screen;
     const ui_theme **theme;
     int *tick;
+    int no_rail;   /* collapsed chrome (40 columns): the full frame draws no rail, so none may animate */
 } rail_anim;
 
 static void door_idle(void *ctx)
@@ -203,7 +173,7 @@ static void door_idle(void *ctx)
        identical row five times a second and the title flickers under it
        (ui_chrome.h, ui_masthead_rail_animates). Still yield - the poll loop
        spins hot on a 68K otherwise. */
-    if (!ui_masthead_rail_animates((*a->theme)->rail)) { ae_delay_ticks(UI_RAIL_TICK_DELAY); return; }
+    if (a->no_rail || !ui_masthead_rail_animates((*a->theme)->rail)) { ae_delay_ticks(UI_RAIL_TICK_DELAY); return; }
     (*a->tick) += UI_RAIL_STEP;
     /* The RAIL, not the row - see ui_chrome.h. */
     ui_masthead_rail_tick(&a->screen->buf, 1, 1, a->screen->cols, "DOOR THEME",
@@ -247,16 +217,23 @@ int main(int argc, char **argv)
     }
 
     ui_screen_open(&screen, &session, frame_buffer, (long)sizeof(frame_buffer));
+    ground_screen = &screen;
     wide = !ui_is_compact_width(screen.cols);
 
     /* Drawn in the theme you are LEAVING, so the screen you choose from is
        itself an example of what you have. */
     ae_user_theme(&session, active_theme, (int)sizeof(active_theme));
     theme = ui_theme_by_id(active_theme);
-    row_theme = theme;
+    {
+        int i, at = 0;
+        for (i = 0; i < ui_theme_count(); i++) {
+            if (ui_theme_at(i) == theme) at = i;
+        }
+        theme_preview_init(&preview, at);
+    }
     /* The theme's EXACT colours, so this door writes the same bytes the
        TypeScript one does rather than the nearest of sixteen. */
-    ansi_set_palette(&screen.buf, theme->rgb, theme->idx, UI_TOKEN_COUNT);
+    theme_preview_apply(&preview, &screen.buf);
 
     keys.next = door_key;
     keys.pending = door_pending;
@@ -279,6 +256,7 @@ int main(int argc, char **argv)
     list.label = " THEMES ";
     /* The TypeScript list has `border: undefined` at every width. */
     list.borders = 0;
+    list.ground = ground();
     /* ">>" where a bar will not fit, which is what the TypeScript picker
        shows on a C64. */
     /* blessed marks the selected row with a caret at EVERY width - it is
@@ -295,6 +273,7 @@ int main(int argc, char **argv)
     anim.screen = &screen;
     anim.theme = &theme;
     anim.tick = &rail_tick;
+    anim.no_rail = screen.profile.collapse_chrome;
     keys.idle = door_idle;
     keys.flush = 0;
     keys.ctx = &anim;
@@ -320,13 +299,15 @@ int main(int argc, char **argv)
 
         if (!full) {
             ui_list_draw_changed(&list, &screen.buf, 0);
-            draw_swatch(&screen, &list, theme, wide);
             ui_screen_flush(&screen);
             key = ui_key_read(&keys, &pushback);
             if (key < 0) break;
             goto handle_key;
         }
-        ansi_clear(&screen.buf);
+        theme_preview_apply(&preview, &screen.buf);
+        /* The GROUND is painted, never left to the terminal's default: under
+           a preview the old theme's ground would otherwise show through. */
+        ansi_clear_ground(&screen.buf, UI_TOKEN(UI_T_INK), ground());
         /* At EVERY width. The blessed door keeps its masthead row on a C64
            and loses only the RAIL - ui_masthead_draw_tick drops that on its
            own when the title leaves no room for a run. Suppressing the whole
@@ -344,7 +325,6 @@ int main(int argc, char **argv)
                               UI_TOKEN(UI_T_ACCENT), UI_TOKEN(UI_T_GROUND),
                               rail_tick);
         ui_list_draw(&list, &screen.buf);
-        draw_swatch(&screen, &list, theme, wide);
 
         /* Say what will happen, and say the truth about this board - in
            words that FIT. ansi_text() clips at cols-3, which is 37 cells on
@@ -364,7 +344,7 @@ int main(int argc, char **argv)
                 ? "Applies on next door draw."
                 : "This board cannot keep a theme.";
         }
-        ansi_color(&screen.buf, theme->dim, theme->ground, 0);
+        ansi_color(&screen.buf, UI_TOKEN(UI_T_DIM), ground(), 0);
         /* One blank row under the last theme, like the TypeScript's
            `top: listRows + 3`. It used to sit at the bottom of the screen,
            twelve rows away from what it was talking about. */
@@ -425,7 +405,7 @@ int main(int argc, char **argv)
                    of dim text like every other line on the screen. */
                 /* -1, not the ground: blessed writes no background for ordinary
            text and a door that paints one owns every cell it touches. */
-        ansi_color(&screen.buf, UI_TOKEN(UI_T_DIM), -1, 0);
+        ansi_color(&screen.buf, UI_TOKEN(UI_T_DIM), ground(), 0);
                 ansi_text(&screen.buf, screen.rows, 1, footer, screen.cols - 1);
             } else {
                 /* footerStyle(): `{ fg: dim, bg: bar }`. The C had it as
@@ -462,8 +442,8 @@ handle_key:
                        it is given, and that answer is the mark's truth. */
                     ae_user_theme(&session, active_theme, (int)sizeof(active_theme));
                     theme = ui_theme_by_id(active_theme);
-                    row_theme = theme;
-                    ansi_set_palette(&screen.buf, theme->rgb, theme->idx, UI_TOKEN_COUNT);
+                    theme_preview_commit(&preview);
+                    theme_preview_apply(&preview, &screen.buf);
                     full = 1;
                     list.chrome = UI_TOKEN(UI_T_ACCENT);
                     list.ink = UI_TOKEN(UI_T_INK);
@@ -481,7 +461,16 @@ handle_key:
             default:
                 break;
         }
+
+        /* The highlight moved to another theme: wear it. */
+        if (running && theme_preview_follow(&preview, list.selected)) {
+            theme = theme_preview_shown(&preview);
+            full = 1;
+        }
     }
+
+    /* Leaving without choosing: the caller's own theme again. */
+    theme_preview_leave(&preview, &screen.buf);
 
     /* Put the terminal back: attributes reset and the cursor shown, or the
        board's next prompt is painted in this door's colours. */
