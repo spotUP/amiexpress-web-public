@@ -175,9 +175,9 @@ describe('MAINMENU on three screens', () => {
       fs.writeFileSync(process.env.MAINMENU_WRITE_FIXTURE_TO || EIGHTY, firstFrame(await esc80()), 'latin1');
     });
 
-    test('the masthead reads MAIN MENU, the sections are headed, and R Read Mail is listed', async () => {
+    test('with a header logo there is no MAIN MENU title row, the sections are headed, and R Read Mail is listed', async () => {
       const rows = await frame80();
-      expect(rows[0]!.trim()).toBe('MAIN MENU');
+      expect(rows.some(r => r.includes('MAIN MENU'))).toBe(false);   // the logo replaces the title (sysop ruling 2026-10-15, 735e21399)
       expect(rows.some(r => /^ {2}Messages -+$/.test(r.trimEnd()))).toBe(true);
       expect(rows.some(r => /^ {2}Files -+$/.test(r.trimEnd()))).toBe(true);
       expect(rows.some(r => /^ {2}R {12}Read Mail\s*$/.test(r))).toBe(true);
@@ -194,11 +194,11 @@ describe('MAINMENU on three screens', () => {
       expect(rows[23]).toContain('Read the mail the sysop left for you in this conference');
     });
 
-    test('the header logo\'s glyphs are on rows 2 to 4 (the sysop\'s cat.txt)', async () => {
+    test('the header logo\'s glyphs are on rows 1 to 3 (the sysop\'s cat.txt)', async () => {
       const rows = await frame80();
-      expect(rows[1]).toMatch(/^ \/\\_\/\\/);
-      expect(rows[2]).toMatch(/^=\(o\.o\)=/);
-      expect(rows[3]).toMatch(/^ > \^ </);
+      expect(rows[0]).toMatch(/^ \/\\_\/\\/);
+      expect(rows[1]).toMatch(/^=\(o\.o\)=/);
+      expect(rows[2]).toMatch(/^ > \^ </);
     });
 
     test('no row is longer than 80 and no cursor address is past column 80 or row 25', async () => {
@@ -418,17 +418,17 @@ describe('MAINMENU on three screens', () => {
         expect(Number(m[2])).toBeLessThanOrEqual(40);
       }
       const rows = c64Rows(ansi);
-      expect(rows[0]!.trim()).toBe('MAIN MENU');
+      expect(rows.join('')).not.toContain('MAIN MENU');                            // the logo replaces the title
       expect(rows.filter(l => l.startsWith('>>')).length).toBe(1);                 // exactly one selection, the first entry
       expect(rows.find(l => l.startsWith('>>'))).toMatch(/^>>R {12}READ MAIL/);
       expect(rows.some(l => /^ {2}E {12}ENTER MESSAGE\s*$/.test(l))).toBe(true);   // one entry per row
       expect(rows.join('')).not.toContain('?');
     });
 
-    test('the C64 logo (cat.seq, not the ANSI cat.txt) is on rows 2 to 4', async () => {
+    test('the C64 logo (cat.seq, not the ANSI cat.txt) is on rows 1 to 3', async () => {
       const rows = c64Rows(beforeTeardown((await esc40()).ansi));
-      expect(rows[1]).toMatch(/^CAT/);
-      expect(rows[2]).toMatch(/^ABC/);
+      expect(rows[0]).toMatch(/^CAT/);
+      expect(rows[1]).toMatch(/^ABC/);
     });
 
     test('no rail animation even for a theme that has one: row 1 and every other row are unchanged while the caller is idle', async () => {
