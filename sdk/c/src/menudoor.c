@@ -234,12 +234,16 @@ static void draw_prompt(struct menudoor *d)
     const char *esc;
     int row = lv->lay.prompt_row, room = sc->cols - 1, plen, blen;
 
-    /* Where q leaves too (top level, no Q entry), the bar says so: "Esc Prompt" becomes "Esc/q Prompt". */
-    if (bar && d->depth == 0 && md_q_leaves(&lv->menu) && (esc = strstr(bar, "Esc Prompt")) != 0
+    /* Where q leaves too (top level, no Q entry), the bar says so: "Esc Prompt" becomes "Esc/q Prompt", and a door
+       whose Esc says "Leave" (BULLETINS) gets "Esc/q Leave". */
+    if (bar && d->depth == 0 && md_q_leaves(&lv->menu)
+        && ((esc = strstr(bar, "Esc Prompt")) != 0 || (esc = strstr(bar, "Esc Leave")) != 0)
         && strlen(bar) + 3 < sizeof bar_q) {
+        const char *word = esc + strlen("Esc ");            /* "Prompt" or "Leave" */
         memcpy(bar_q, bar, (size_t)(esc - bar));
-        strcpy(bar_q + (esc - bar), "Esc/q Prompt");
-        strcat(bar_q, esc + strlen("Esc Prompt"));
+        bar_q[esc - bar] = '\0';
+        strcat(bar_q, "Esc/q ");
+        strcat(bar_q, word);
         bar = bar_q;
     }
     line[0] = '\0';
@@ -342,6 +346,11 @@ static void say(struct menudoor *d, const char *text)
     draw_status(d);
     park_cursor(d);
     ui_screen_flush(&d->screen);
+}
+
+void menudoor_status(struct menudoor *d, const char *text)
+{
+    if (d && text) say(d, text);
 }
 
 const ae_menu_entry *menudoor_entry(struct menudoor *d, int entry)

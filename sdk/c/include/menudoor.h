@@ -49,6 +49,8 @@ int menudoor_settings_run(int node);
 
 /* For the activate / typed callbacks. */
 const ae_menu_entry *menudoor_entry(struct menudoor *d, int entry);
+/** Says `text` (<= 39 characters) in the status row until the next key: a typed line that matched nothing. */
+void menudoor_status(struct menudoor *d, const char *text);
 /** Decision 42: Enter on an 'L' entry opens its child list. Returns what the callback should hand back: LEAVE when the caller picked something below. */
 menudoor_result menudoor_open_child(struct menudoor *d, int entry);
 

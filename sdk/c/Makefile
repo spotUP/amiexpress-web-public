@@ -48,7 +48,7 @@ all: test
 # Tests (host)
 # ---------------------------------------------------------------------
 
-test: door-sources-compile build/write-message build/test_ae_host build/test_ae_session build/test_ui_profile build/test_ui_list build/test_ui_chrome build/test_ui_screen build/test_ui_input build/test_ui_editor build/test_frame_budget build/test_ui_theme build/test_ui_settings build/test_ui_doc build/test_ui_grid build/test_ae_http build/test_ae_achieve build/test_ae_request build/test_ae_msgbase build/test_ae_dos build/test_texttv build/test_subs_scan build/test_achieve_rows build/test_requests_bulletin build/test_ae_userfield build/test_us_model build/test_theme_preview build/test_ansi_sgr build/test_ae_board_screen build/test_ae_menu build/test_menudoor_model build/test_mainmenu
+test: door-sources-compile build/write-message build/test_ae_host build/test_ae_session build/test_ui_profile build/test_ui_list build/test_ui_chrome build/test_ui_screen build/test_ui_input build/test_ui_editor build/test_frame_budget build/test_ui_theme build/test_ui_settings build/test_ui_doc build/test_ui_grid build/test_ae_http build/test_ae_achieve build/test_ae_request build/test_ae_msgbase build/test_ae_dos build/test_texttv build/test_subs_scan build/test_achieve_rows build/test_requests_bulletin build/test_ae_userfield build/test_us_model build/test_theme_preview build/test_ansi_sgr build/test_ae_board_screen build/test_ae_menu build/test_menudoor_model build/test_mainmenu build/test_bulletins
 	./build/test_ae_host
 	./build/test_ae_session
 	./build/test_ui_profile
@@ -79,6 +79,7 @@ test: door-sources-compile build/write-message build/test_ae_host build/test_ae_
 	./build/test_ae_menu
 	./build/test_menudoor_model
 	./build/test_mainmenu
+	./build/test_bulletins
 
 # Every door's own .c, syntax-checked with the host compiler.
 #
@@ -174,6 +175,10 @@ build/test_ae_menu: src/ae_menu.c src/ae_dos.c src/ae_dos_native.c src/ae_transp
 build/test_mainmenu: examples/mainmenu/mainmenu.c tests/test_mainmenu.c src/menudoor.c src/ae_menu.c src/ae_dos.c src/ae_dos_native.c src/ae_transport_native.c src/ae_session.c src/ae_session_bbs.c src/ae_board_screen.c src/ui_ansi.c src/ui_chrome.c src/ui_grid.c src/ui_key.c src/ui_list.c src/ui_profile.c src/ui_screen.c src/ui_theme.c include/menudoor.h
 	@mkdir -p build
 	$(CC) $(HOST_CFLAGS) -Isrc src/menudoor.c src/ae_menu.c src/ae_dos.c src/ae_dos_native.c src/ae_transport_native.c src/ae_session.c src/ae_session_bbs.c src/ae_board_screen.c src/ui_ansi.c src/ui_chrome.c src/ui_grid.c src/ui_key.c src/ui_list.c src/ui_profile.c src/ui_screen.c src/ui_theme.c tests/test_mainmenu.c -o $@
+build/test_bulletins: examples/bulletins/bulletins.c tests/test_bulletins.c src/menudoor.c src/ae_menu.c src/ae_dos.c src/ae_dos_native.c src/ae_transport_native.c src/ae_session.c src/ae_session_bbs.c src/ae_board_screen.c src/ui_ansi.c src/ui_chrome.c src/ui_grid.c src/ui_key.c src/ui_list.c src/ui_profile.c src/ui_screen.c src/ui_theme.c include/menudoor.h
+	@mkdir -p build
+	$(CC) $(HOST_CFLAGS) -Isrc src/menudoor.c src/ae_menu.c src/ae_dos.c src/ae_dos_native.c src/ae_transport_native.c src/ae_session.c src/ae_session_bbs.c src/ae_board_screen.c src/ui_ansi.c src/ui_chrome.c src/ui_grid.c src/ui_key.c src/ui_list.c src/ui_profile.c src/ui_screen.c src/ui_theme.c tests/test_bulletins.c -o $@
+
 
 build/test_menudoor_model: src/menudoor.c src/ae_menu.c src/ae_dos.c src/ae_dos_native.c src/ae_transport_native.c src/ae_session.c src/ae_session_bbs.c src/ae_board_screen.c src/ui_ansi.c src/ui_chrome.c src/ui_grid.c src/ui_key.c src/ui_list.c src/ui_profile.c src/ui_screen.c src/ui_theme.c tests/test_menudoor_model.c src/menudoor_model.h include/menudoor.h include/ae_menu.h
 	@mkdir -p build
@@ -251,7 +256,7 @@ check-themes:
 # The 68K library and the two yardstick doors
 # ---------------------------------------------------------------------
 
-amiga: lib build/amiga/hello build/amiga/hello_box build/amiga/hello_list build/amiga/theme-picker build/amiga/achieve build/amiga/requests build/amiga/subs build/amiga/texttv build/amiga/usersettings build/amiga/mainmenu build/amiga/bench_repaint build/amiga/bench_repaint11
+amiga: lib build/amiga/hello build/amiga/hello_box build/amiga/hello_list build/amiga/theme-picker build/amiga/achieve build/amiga/requests build/amiga/subs build/amiga/texttv build/amiga/usersettings build/amiga/mainmenu build/amiga/bulletins build/amiga/bench_repaint build/amiga/bench_repaint11
 
 lib: build/amiga/libae.lib
 
@@ -325,6 +330,10 @@ build/amiga/usersettings: examples/usersettings/usersettings.c examples/usersett
 build/amiga/mainmenu: examples/mainmenu/mainmenu.c include/menudoor.h build/amiga/libae.lib
 	@mkdir -p build/amiga
 	$(VC) $(AMIGA_CFLAGS) examples/mainmenu/mainmenu.c build/amiga/libae.lib -lauto -o $@
+
+build/amiga/bulletins: examples/bulletins/bulletins.c include/menudoor.h build/amiga/libae.lib
+	@mkdir -p build/amiga
+	$(VC) $(AMIGA_CFLAGS) examples/bulletins/bulletins.c build/amiga/libae.lib -lauto -o $@
 
 build/amiga/achieve: examples/achieve/achieve.c examples/achieve/achieve_rows.c examples/achieve/achieve_rows.h build/amiga/libae.lib
 	@mkdir -p build/amiga
