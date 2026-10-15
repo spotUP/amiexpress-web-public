@@ -100,10 +100,11 @@ describe('JH_FetchKey arrow reporting', () => {
   });
 
   test('a sequence with no key code reports "nothing", not a zero keypress', () => {
-    // Home/End/PgUp/PgDn convert to the empty string. JH_HK waits for the
-    // next real key; JH_FetchKey cannot wait - it is defined as never
-    // blocking - so it must say "no input" and let the door poll again.
-    const h = makeHandler(['\x1b[5~']);
+    // An unmapped sequence (Insert, a function key) converts to the empty
+    // string. JH_HK waits for the next real key; JH_FetchKey cannot wait - it
+    // is defined as never blocking - so it must say "no input" and let the
+    // door poll again.
+    const h = makeHandler(['\x1b[2~']);
 
     h.call();
 
@@ -125,5 +126,72 @@ describe('JH_FetchKey arrow reporting', () => {
 
     expect(h.written).toEqual([0]);
     expect(h.replies[0].data).toBe(-1);
+  });
+});
+
+/**
+ * Home, End, Page Up and Page Down reach a door the way the arrows do.
+ *
+ * Found by the M15 measurements: the C menu door decodes UI_KEY_PGUP/PGDN/
+ * HOME/END, but the board converted only the arrows and dropped every other
+ * escape sequence, so the page keys were dead on the live board. The keys are
+ * driven through the real queueInput (tokenising) and handleFetchKey, the
+ * path a caller's keystroke takes; the arrows are the reference form: ONE
+ * converted byte, never an escape sequence.
+ */
+describe('Home, End, Page Up and Page Down reach a door as one converted byte', () => {
+  function typeAndFetch(typed: string): number[] {
+    const written: number[] = [];
+    const ctx: any = {
+      inputQueue: [] as string[],
+      state: { carrierDropped: false },
+      bbsSession: undefined,
+      waitingForPause: false,
+      waitingForHotkey: false,
+      hotkeyMessage: null,
+      waitingForExtHotkey: false,
+      extHotkeyMessage: null,
+      waitingForLineInput: false,
+      messageParser: { writeCommand: (_a: number, v: number) => { written.push(v); } },
+      reply: () => undefined,
+    };
+    const proto = XIMIOHandler.prototype as any;
+    ctx.parseInputTokens = proto.parseInputTokens;
+    ctx.processHotkeyToken = proto.processHotkeyToken;
+    proto.queueInput.call(ctx, typed);
+    while (ctx.inputQueue.length > 0) proto.handleFetchKey.call(ctx, { msgAddr: 0x1000 });
+    return written;
+  }
+
+  test('PgDn, PgUp, Home and End each arrive as a single byte, in every spelling', () => {
+    const cases: Array<[string, number]> = [
+      ['\x1b[6~', 0x19], // PgDn
+      ['\x1b[5~', 0x1f], // PgUp
+      ['\x1b[H', 0x1c], ['\x1b[1~', 0x1c], ['\x1b[7~', 0x1c], // Home
+      ['\x1b[F', 0x1d], ['\x1b[4~', 0x1d], ['\x1b[8~', 0x1d], // End
+    ];
+    for (const [typed, code] of cases) {
+      expect(typeAndFetch(typed)).toEqual([code]);
+    }
+  });
+
+  test('they arrive in the same form the arrows do: one byte below 0x20, not ESC', () => {
+    const arrow = typeAndFetch('\x1b[B');
+    const page = typeAndFetch('\x1b[6~');
+    expect(arrow).toEqual([5]);
+    expect(page).toHaveLength(arrow.length);
+    expect(page[0]).toBeGreaterThan(0);
+    expect(page[0]).toBeLessThan(0x20);
+    expect(page[0]).not.toBe(0x1b);
+  });
+
+  test('arrows are unchanged and mixed keys keep their order', () => {
+    expect(typeAndFetch('\x1b[A\x1b[B\x1b[C\x1b[D')).toEqual([4, 5, 3, 2]);
+    expect(typeAndFetch('a\x1b[6~\x1b[Bb')).toEqual([97, 0x19, 5, 98]);
+  });
+
+  test('an unrelated escape sequence is still ignored', () => {
+    expect(typeAndFetch('\x1b[2~')).toEqual([0]);   // Insert
+    expect(typeAndFetch('\x1b[15~')).toEqual([0]);  // F5
   });
 });

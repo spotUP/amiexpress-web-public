@@ -121,6 +121,10 @@ int ui_key_read(const ui_key_source *src, int *pushback)
     if (c == AE_ARROW_RIGHT) return UI_KEY_RIGHT;
     if (c == AE_ARROW_UP)    return UI_KEY_UP;
     if (c == AE_ARROW_DOWN)  return UI_KEY_DOWN;
+    if (c == AE_KEY_HOME)    return UI_KEY_HOME;
+    if (c == AE_KEY_END)     return UI_KEY_END;
+    if (c == AE_KEY_PGUP)    return UI_KEY_PGUP;
+    if (c == AE_KEY_PGDN)    return UI_KEY_PGDN;
 
     if (c == UI_MOUSE_WAKE) return UI_KEY_MOUSE;
 

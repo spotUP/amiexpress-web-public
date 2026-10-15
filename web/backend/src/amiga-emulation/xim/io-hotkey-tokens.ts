@@ -6,7 +6,7 @@
  * Extracted from XIMIOHandler to keep io.ts under the 2000-line limit.
  */
 
-import { ArrowKeyCodes } from './types';
+import { ArrowKeyCodes, NavigationKeyCodes } from './types';
 import { debugLog } from '../../utils/debug-log';
 
 /**
@@ -31,22 +31,35 @@ export function processHotkeyToken(token: string): string {
     return token;
   }
 
-  // Check for arrow key escape sequences - ALWAYS convert to codes
-  // This matches express.e behavior where ch:=UPARROW etc regardless of rawArrow
+  // Cursor and navigation keys - ALWAYS converted to codes.
+  // Arrows match express.e behavior where ch:=UPARROW etc regardless of rawArrow.
+  // Home/End/Page Up/Page Down have no express.e code; they use the board's
+  // NavigationKeyCodes under the same conditions, so a door reads every one of
+  // these keys the same way: as a single byte, never as an escape sequence.
+  // The spellings: xterm (ESC[H, ESC[F, ESC[5~, ESC[6~) and the VT220/linux
+  // telnet forms (ESC[1~ Home, ESC[4~ End, ESC[7~ Home, ESC[8~ End).
   const arrowMap: { [key: string]: number } = {
     '\x1b[A': ArrowKeyCodes.UPARROW,    // 4
     '\x1b[B': ArrowKeyCodes.DOWNARROW,  // 5
     '\x1b[C': ArrowKeyCodes.RIGHTARROW, // 3
     '\x1b[D': ArrowKeyCodes.LEFTARROW,  // 2
+    '\x1b[H': NavigationKeyCodes.HOME,
+    '\x1b[1~': NavigationKeyCodes.HOME,
+    '\x1b[7~': NavigationKeyCodes.HOME,
+    '\x1b[F': NavigationKeyCodes.END,
+    '\x1b[4~': NavigationKeyCodes.END,
+    '\x1b[8~': NavigationKeyCodes.END,
+    '\x1b[5~': NavigationKeyCodes.PGUP,
+    '\x1b[6~': NavigationKeyCodes.PGDN,
   };
 
   if (arrowMap[token] !== undefined) {
     const arrowCode = arrowMap[token];
-    debugLog(`[XIMIOHandler] Arrow key: ${JSON.stringify(token)} -> code ${arrowCode}`);
+    debugLog(`[XIMIOHandler] Cursor/navigation key: ${JSON.stringify(token)} -> code ${arrowCode}`);
     return String.fromCharCode(arrowCode);
   }
 
-  // Ignore unrecognized escape sequences (Home, End, Insert, Delete, Page Up/Down, etc.)
+  // Ignore unrecognized escape sequences (Insert, Delete, function keys, etc.)
   // These would confuse 68K doors if we passed ESC or partial sequences
   if (token.length > 1 && token.startsWith('\x1b')) {
     debugLog(`[XIMIOHandler] Ignoring unrecognized escape sequence: ${JSON.stringify(token)}`);

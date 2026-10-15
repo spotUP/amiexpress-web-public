@@ -119,6 +119,21 @@ static void the_boards_own_arrow_codes_decode(void)
     printf("  [OK] the board's own arrow codes decode\n");
 }
 
+/* Home, End, Page Up, Page Down as the board delivers them: one converted byte each,
+ * the same form as the arrows (xim/io-hotkey-tokens.ts NavigationKeyCodes). */
+static void the_boards_own_page_and_home_codes_decode(void)
+{
+    typist t; ui_key_source src; int pushback = -1;
+    t.keys = "\x1f\x19\x1c\x1d"; t.at = 0; t.overrun = 0;
+    src = source_for(&t);
+
+    assert(ui_key_read(&src, &pushback) == UI_KEY_PGUP);
+    assert(ui_key_read(&src, &pushback) == UI_KEY_PGDN);
+    assert(ui_key_read(&src, &pushback) == UI_KEY_HOME);
+    assert(ui_key_read(&src, &pushback) == UI_KEY_END);
+    printf("  [OK] the board's own page and home codes decode\n");
+}
+
 /**
  * And an ordinary key is still itself: the four codes are control bytes no
  * caller types, but CTRL-B and CTRL-E reach a door as 2 and 5, so this is
@@ -354,6 +369,7 @@ int main(void)
     both_line_endings_mean_enter();
     the_arrows_decode();
     the_boards_own_arrow_codes_decode();
+    the_boards_own_page_and_home_codes_decode();
     an_ordinary_key_is_untouched();
     an_escape_alone_is_an_escape();
     escape_then_a_key_delivers_both();

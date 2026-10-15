@@ -496,6 +496,21 @@ export const ArrowKeyCodes = {
 } as const;
 
 /**
+ * Navigation key codes this board hands a door for Home, End, Page Up and
+ * Page Down. express.e has no code for them (readChar converts only the
+ * arrows, 7514-7528) so these are the board's own, chosen from the control
+ * bytes nothing else uses: not BS/TAB/CR/ESC, not the arrows 2-5, not the
+ * XON/XOFF pair, not the mouse wake byte 0x1E. The C SDK mirrors them as
+ * AE_KEY_* in sdk/c/include/ui_key.h; change both together.
+ */
+export const NavigationKeyCodes = {
+  HOME: 0x1c,
+  END: 0x1d,
+  PGUP: 0x1f,
+  PGDN: 0x19,
+} as const;
+
+/**
  * Environment status values from aedoor.i
  * Used with ENVSTAT command to report current user activity
  */

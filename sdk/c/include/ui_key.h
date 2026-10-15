@@ -41,6 +41,15 @@ extern "C" {
 #define AE_ARROW_UP    4
 #define AE_ARROW_DOWN  5
 
+/* Home, End, Page Up and Page Down arrive the same way: one byte, converted by
+ * the board (web/backend/src/amiga-emulation/xim/types.ts NavigationKeyCodes -
+ * keep both in step). express.e has no code for them, so these are the
+ * board's own control bytes. */
+#define AE_KEY_HOME 0x1c
+#define AE_KEY_END  0x1d
+#define AE_KEY_PGUP 0x1f
+#define AE_KEY_PGDN 0x19
+
 #define UI_KEY_UP    1000
 #define UI_KEY_DOWN  1001
 #define UI_KEY_PGUP  1002

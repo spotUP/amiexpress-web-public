@@ -569,6 +569,30 @@ static void nothing_is_sent_when_nothing_changed(void)
     printf("  [OK] a key that moves nothing sends nothing\n");
 }
 
+/* The bytes a real board delivers for Page Down / Page Up / Home / End (it converts them like the
+ * arrows) must turn the page exactly as the escape sequences do: the page keys were dead on the
+ * live board because the board dropped them. */
+static void the_boards_page_bytes_turn_the_page(void)
+{
+    long esc, board;
+    mouse_queue = 0; silent_board = 0; theme_name = "";
+    size_reply = "80\t25"; write_big_catalogue("scroll");
+    esc = key_cost("", "\x1b[6~", "\x1b");
+    board = key_cost("", "\x19", "\x1b");
+    assert(esc > 0);
+    assert(board == esc);
+    esc = key_cost("\x1b[6~", "\x1b[5~", "\x1b");
+    board = key_cost("\x19", "\x1f", "\x1b");
+    assert(esc > 0 && board == esc);
+    esc = key_cost("", "\x1b[F", "\x1b");
+    board = key_cost("", "\x1d", "\x1b");
+    assert(esc > 0 && board == esc);
+    esc = key_cost("\x1b[F", "\x1b[H", "\x1b");
+    board = key_cost("\x1d", "\x1c", "\x1b");
+    assert(esc > 0 && board == esc);
+    printf("  [OK] the board's page bytes turn the page like the escape sequences\n");
+}
+
 static void a_typed_character_costs_the_character_not_the_row(void)
 {
     long second;
@@ -902,6 +926,7 @@ int main(void)
     the_settings_bar_names_q_because_q_leaves();
     the_first_frame_sends_nothing_twice();
     a_key_repaints_two_cells_and_the_description_only();
+    the_boards_page_bytes_turn_the_page();
     nothing_is_sent_when_nothing_changed();
     a_typed_character_costs_the_character_not_the_row();
     the_idle_tick_touches_the_masthead_rail_only();
