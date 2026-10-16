@@ -17,6 +17,12 @@
  */
 process.env.SKIP_DB_INIT = '1';
 
+// userfield.ts imports the door list; this suite never opens one, so the board (src/index.ts, and the
+// real SQLite it opens) is not booted just to answer a theme query.
+jest.mock('../../src/handlers/door.handler', () => ({ getDoors: () => [] }));
+// The write persists through db.updateUser; a clean checkout has no board database to answer it.
+jest.mock('../../src/database', () => ({ ...jest.requireActual('../../src/database'), db: { updateUser: jest.fn().mockResolvedValue(undefined) } }));
+
 import { XIMProtocol } from '../../src/amiga-emulation/XIMProtocol';
 import { XIMCommand } from '../../src/amiga-emulation/xim/types';
 import { isDataQueryCommand } from '../../src/amiga-emulation/xim/command-classes';

@@ -12,6 +12,9 @@ process.env.SKIP_DB_INIT = '1';
 
 const updateUser = jest.fn();
 jest.mock('../../src/database', () => ({ db: { updateUser: (...a: unknown[]) => updateUser(...a) } }));
+// The W menu lists the board's settings doors; this suite is about the font rows, so the door list is empty
+// rather than booting the whole board (src/index.ts) against a one-method database stub.
+jest.mock('../../src/handlers/door.handler', () => ({ getDoors: () => [] }));
 
 import { TERMINAL_FONTS } from '../../src/constants/terminal-fonts';
 import { BBS_FONTS } from '../../../../packages/terminal/src/utils/session-font';
