@@ -18,7 +18,10 @@ import {
   renderDoorCfg,
 } from '../../src/doors/door-settings.service';
 
-const repoEmp = path.resolve(__dirname, '..', '..', '..', '..', 'Doors', 'emp_tools');
+// Frozen copy of the board's CFG files. The live Doors/emp_tools/Bulls.CFG is the
+// board's own data (taken from the live board, commit 7e3add850) and changes with
+// the board; this test pins the read/write mechanics, not the board's content.
+const repoEmp = path.resolve(__dirname, 'fixtures', 'empire');
 
 function stage(): string {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'empire-settings-'));
