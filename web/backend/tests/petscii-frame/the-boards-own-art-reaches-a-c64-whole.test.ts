@@ -28,6 +28,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { asciiToPetsciiByte } from '@amiexpress/bbs-door-sdk/petscii';
 import { readAmigaTextFileWithTransforms } from '../../src/utils/amiga-text-decode.util';
+import { loadFiller } from '../../../../Doors/magazine/filler';
 import { conferenceDir, conferenceNumbers } from '../../src/conferences/conference-paths';
 
 const BOARD = path.resolve(__dirname, '../../../..');
@@ -59,6 +60,17 @@ const isC1Control = (cp: number): boolean => cp >= 0x80 && cp <= 0x9f;
 /** An Amiga executable's hunk magic - code bytes are not art. */
 const isExecutable = (buf: Buffer): boolean => buf.length >= 4 && buf.readUInt32BE(0) === 0x000003f3;
 
+/**
+ * The magazine's clipart fill is chosen per caller: a PETSCII caller gets only
+ * the pieces that map (`loadFiller(..., true)`), the rest are never sent to a
+ * C64. So the pieces that do not map are not "art the board puts on a C64
+ * screen"; the product's own filter decides, not a copy of it here.
+ */
+const MAGAZINE_ART = path.join(BOARD, 'Doors', 'magazine', 'art');
+const sentToPetscii = new Set(loadFiller({ shippedDir: MAGAZINE_ART }, true).map((p) => p.file));
+const isFillNeverSentToPetscii = (file: string): boolean =>
+  path.dirname(file) === path.join(MAGAZINE_ART, 'fill') && !sentToPetscii.has(path.basename(file));
+
 function artFiles(): string[] {
   const out: string[] = [];
   const walk = (dir: string, depth: number): void => {
@@ -78,6 +90,7 @@ function artFiles(): string[] {
       }
       if (!/\.(txt|ans|asc|scr)$/i.test(e.name)) continue;
       if (/\.backup|FILE_ID/i.test(e.name)) continue;
+      if (isFillNeverSentToPetscii(p)) continue;
       out.push(p);
     }
   };
