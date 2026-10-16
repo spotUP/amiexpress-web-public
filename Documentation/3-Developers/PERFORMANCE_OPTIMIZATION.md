@@ -116,7 +116,6 @@ export const sessions = new Map<string, BBSSession>();        // Node ID → Ses
 export const userSessions = new Map<string, BBSSession>();    // User ID → Session
 export const socketToNodeId = new Map<string, number>();      // Socket ID → Node ID
 export const socketToUser = new Map<string, string>();        // Socket ID → User ID
-export const pendingDisconnects = new Map<...>();             // Disconnect tracking
 ```
 
 **Strengths:**

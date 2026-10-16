@@ -7,6 +7,7 @@ import express, { Request, Response, NextFunction } from "express";
 import cors from "cors";
 import { createServer } from "http";
 import { Server } from "socket.io";
+import { SOCKET_IO_OPTIONS } from "./server/socket-io-options";
 import { readFileSync, existsSync } from "fs";
 import { join } from "path";
 import multer from "multer";
@@ -792,28 +793,9 @@ const io = new Server(server, {
     origin: config.get("corsOrigins"),
     methods: ["GET", "POST"],
   },
-  // ROBUST CONNECTION SETTINGS - Tolerate temporary network issues
-  pingTimeout: 120000, // Wait 2 minutes for pong before considering connection dead (increased from 60s)
-  pingInterval: 25000, // Send ping every 25s to keep connection alive
-  // File uploads now go via HTTP multipart POST to /api/upload (multer
-  // saves to playpen, frontend then emits a small `file-upload-ready`
-  // event with metadata only). Before that migration, BBSTerminal emitted
-  // the file body as a JSON-serialized number array — at ~3x inflation
-  // a 10MB file became ~30MB on the wire and tripped the old 1MB cap (#11).
-  // With binary moved off the socket the cap can be small. Keep 4MB so
-  // ANSI screens, AREXX I/O, and any other large emit can still flow
-  // without truncation, but anything pathological is caught early.
-  maxHttpBufferSize: 4 * 1024 * 1024, // 4MB
-  // Connection state recovery - helps maintain sessions across brief disconnects
-  connectionStateRecovery: {
-    maxDisconnectionDuration: 2 * 60 * 1000, // 2 minutes - keep session state during brief disconnects
-    skipMiddlewares: true, // Skip auth middleware on recovery (session already authenticated)
-  },
-  transports: ["websocket", "polling"], // Prefer websocket, fallback to polling
-  allowEIO3: true, // Support older Socket.io clients
-  perMessageDeflate: false, // Disable compression to reduce CPU usage
-  httpCompression: false, // Disable HTTP compression to reduce CPU usage
-  connectTimeout: 60000, // 60s connection timeout (increased from 45s)
+  // Every other option (pingTimeout 20 s per Decision 9, no
+  // connectionStateRecovery per Decision 10) lives in socket-io-options.ts.
+  ...SOCKET_IO_OPTIONS,
 });
 
 // Initialize BBS event emitter for LiveChat integration

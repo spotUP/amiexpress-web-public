@@ -167,7 +167,7 @@ function socketCarrying(session: BBSSession, io?: IOServer | null): Socket | nul
  *    unregister it. A registered emitter therefore means a live transport.
  *  - web has no registered emitter; its socket must still be in the
  *    namespace. Socket.IO removes it on disconnect, so membership IS the
- *    liveness test - the same one `reclaimGraceGhost` already uses.
+ *    liveness test.
  *  - a session with neither is not reachable by definition, and refusing a
  *    login on its behalf is the bug.
  *

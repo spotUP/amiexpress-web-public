@@ -4,20 +4,19 @@
  *
  * A caller who said G and logged straight back in was refused as "already on
  * another node": his own session was still waiting out the disconnect grace.
- * Three pieces, each asserted where it runs:
+ * The grace timers are gone (session-persistence S7: one mechanism, parking).
+ * Two pieces, each asserted where it runs:
  *
  * 1. G (the real handleGoodbyeCommand) marks session.cleanLogoff on the
  *    normal logout - and not on relogon, where the same socket keeps living.
- * 2. The real disconnect handler (registerDisconnectHandler, the technique of
- *    tests/petscii/render-ctx-disposal.test.ts) honours the flag at BOTH
- *    grace periods: no 3 s reconnect wait, and no 15 s pending logoff.
- * 3. The real runPostAuthLogin (the mock set of
+ *    That flag is what makes a G drop end at once instead of parking:
+ *    tests/server/a-parked-session-ends-for-good.test.ts ("G (cleanLogoff)").
+ * 2. The real runPostAuthLogin (the mock set of
  *    tests/server/login-refuses-deleted-and-double-login.test.ts) ends the
  *    caller's own PARKED session (session-parking.ts) BEFORE the already-on
  *    check reads the board.
  *
- * The semantics of wantsImmediateTeardown / reclaimGraceGhost are in
- * tests/server/disconnect-grace.test.ts; the same-socket re-auth skip is in
+ * The same-socket re-auth skip is in
  * tests/server/login-refuses-deleted-and-double-login.test.ts ("replaces
  * instead of refusing when the socket never let them go").
  */
@@ -71,10 +70,8 @@ import { BBSState, LoggedOnSubState } from '../../src/constants/bbs-states';
 import { handleGoodbyeCommand, setSystemCommandsDependencies } from '../../src/handlers/commands/system-commands.handler';
 import { registerDisconnectHandler } from '../../src/server/socket-handlers';
 import {
-  setSession, deleteSession, pendingDisconnects, clearPendingDisconnect,
-  userSessions, socketToUser,
+  setSession, deleteSession, userSessions, socketToUser,
 } from '../../src/server/session-manager';
-import { registerConnectionEmitter } from '../../src/server/session-emitter-registry';
 
 afterEach(() => {
   jest.clearAllTimers();
@@ -106,52 +103,6 @@ describe('G marks a deliberate logoff', () => {
     expect(session.state).toBe(BBSState.LOGON);
     expect(session.cleanLogoff).toBeUndefined();
   });
-});
-
-describe('disconnects honor the flag at both grace periods', () => {
-  function makeSocket(id: string) {
-    const handlers = new Map<string, (...args: any[]) => any>();
-    const socket: any = {
-      id, handshake: { address: '127.0.0.1' }, connected: true,
-      emit: () => true, join: () => {}, leave: () => {}, disconnect: () => {}, onAny: () => {},
-      once: (e: string, h: any) => { handlers.set(e, h); return socket; },
-      on: (e: string, h: any) => { handlers.set(e, h); return socket; },
-      removeAllListeners: () => socket, removeListener: () => socket, listenerCount: () => 0,
-    };
-    return { socket, handlers };
-  }
-
-  test('a G caller\'s socket closing waits out neither grace period', async () => {
-    const socketId = `clean-g-${Date.now()}`;
-    const session: any = {
-      nodeId: 93, tempData: {}, currentConfName: 'Main',
-      user: { id: 'u-clean', username: 'spot' },
-      cleanLogoff: true,
-    };
-    setSession(socketId, session);
-    // The same account is live on another connection, so the final cleanup
-    // stops after its "still on the board" check: the teardown under test is
-    // the grace decision, not the logoff paperwork.
-    const elsewhere: any = { nodeId: 94, user: { id: 'u-clean' } };
-    registerConnectionEmitter(elsewhere, { emit: () => true } as any);
-    userSessions.set('u-clean', elsewhere);
-
-    const { socket, handlers } = makeSocket(socketId);
-    registerDisconnectHandler(socket);
-    const started = Date.now();
-    try {
-      await handlers.get('disconnect')!('transport close');
-      // 3 s reconnect wait skipped.
-      expect(Date.now() - started).toBeLessThan(2500);
-      // 15 s disconnect grace skipped: no pending logoff was scheduled.
-      expect(pendingDisconnects.has('u-clean')).toBe(false);
-    } finally {
-      clearPendingDisconnect('u-clean');
-      userSessions.delete('u-clean');
-      socketToUser.delete(socketId);
-      deleteSession(socketId);
-    }
-  }, 10000);
 });
 
 describe('fresh login ends its own parked session first', () => {

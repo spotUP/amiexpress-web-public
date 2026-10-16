@@ -20,7 +20,7 @@
 
 import express, { Request, Response } from 'express';
 import { Server as SocketIOServer } from 'socket.io';
-import { sessions, socketToNodeId, getSocketIdByNodeId, clearPendingDisconnect } from '../server/session-manager';
+import { sessions, socketToNodeId, getSocketIdByNodeId } from '../server/session-manager';
 import { userSessions, socketToUser } from '../server/session-manager';
 import { nodeFileManager } from '../services/NodeFileManager';
 import { emitterForNodeId, unregisterConnectionEmitter } from '../server/session-emitter-registry';
@@ -81,7 +81,6 @@ function clearKickPresence(
   const key = nodeId.toString();
   if (sessions.get(key) === (victim as unknown)) sessions.delete(key);
   unregisterConnectionEmitter(victim as never);
-  if (userId !== undefined) clearPendingDisconnect(userId);
   try {
     const { multicomManager } = require('../nodes/MulticomManager.js');
     multicomManager.clearNode(nodeId);

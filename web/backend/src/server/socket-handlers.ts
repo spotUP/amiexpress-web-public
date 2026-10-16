@@ -24,7 +24,6 @@ import {
   socketToUser,
   socketToNodeId,
   userSessions,
-  pendingDisconnects,
   allNodesBusyNotice } from './session-manager';
 import { noteSessionEnding, isParked } from './session-parking';
 import { revokeResumeToken } from './resume-tokens';
@@ -843,22 +842,6 @@ export function logoffReason(
 }
 
 /**
- * Whether this session tears down the moment its socket dies, skipping
- * every grace period. Two cases, both deliberate ends:
- * - sysopKicked: the sysop threw the caller off via NM.
- * - cleanLogoff: the caller said goodbye with G (ghostlogoff 2026-09-10 -
- *   a 15 s wait only serves drops, and a fast re-login reads its own
- *   not-yet-cleaned session as "already on another node").
- * Anything else (drops, timeouts, bumps) keeps the grace so a blip does
- * not become a logoff.
- */
-export function wantsImmediateTeardown(
-  session: { sysopKicked?: boolean; cleanLogoff?: boolean } | null | undefined,
-): boolean {
-  return session?.sysopKicked === true || session?.cleanLogoff === true;
-}
-
-/**
  * Register disconnect handler.
  *
  * Exported so a test can drive the real teardown path
@@ -1001,9 +984,6 @@ export async function finalizeDisconnectCleanup(socket: Socket, session: BBSSess
    * other node is untouched.
    */
 console.log(`[DISCONNECT] finalizeDisconnectCleanup: userId=${userId || '-'}, node=${session.nodeId}`);
-  if (userId) {
-    pendingDisconnects.delete(userId);
-  }
 
   // OFF THE BOARD FIRST, THEN THE PAPERWORK.
   //
