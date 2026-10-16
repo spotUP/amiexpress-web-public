@@ -34,6 +34,8 @@ module.exports = function driveDoor({ dist, makeBbs, extra = () => ({}), callerI
     writeLine: (d) => { captured.push(String(d) + '\r\n'); },
     on: () => {}, off: () => {}, emit: () => {},
     isPetsciiMode: () => session.petsciiMode === true,
+    // "colour": false is a caller with ANSI colour off: the board strips every SGR.
+    isAnsiMode: () => spec.colour !== false,
     ...makeBbs(spec, captured),
   };
 
@@ -71,5 +73,11 @@ module.exports = function driveDoor({ dist, makeBbs, extra = () => ({}), callerI
 
     process.stdout.write(JSON.stringify({ captured, errors, ended, ...extra() }));
     process.exit(0);
-  })();
+  })().catch((e) => {
+    // A door that cannot even load (no sdk/dist, a bad bundle) still answers
+    // with its error; an uncaught rejection here used to exit 0 with no output.
+    errors.push(String((e && e.stack) || e));
+    process.stdout.write(JSON.stringify({ captured, errors, ended: false, ...extra() }));
+    process.exit(0);
+  });
 };

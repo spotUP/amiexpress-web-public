@@ -30,6 +30,17 @@ export class ColorPicker extends Box {
     this.selectedColor = options.color || 'white';
 
     this.setupGrid();
+    this.nameCurrentPen();
+  }
+
+  /**
+   * Colour off: a swatch is a background colour alone, so each holds its
+   * index (hex digit) and the label names the current pen (`Pen: 5 green`).
+   */
+  private nameCurrentPen(): void {
+    if (this.screen?.colour !== false) return;
+    const index = ColorPicker.ANSI_COLORS.indexOf(this.selectedColor);
+    this.setLabel(` Pen: ${index.toString(16).toUpperCase()} ${this.selectedColor} `);
   }
 
   private setupGrid(): void {
@@ -47,7 +58,7 @@ export class ColorPicker extends Box {
         left: col * itemWidth,
         width: itemWidth,
         height: itemHeight,
-        content: '  ',
+        content: this.screen?.colour === false ? `${index.toString(16).toUpperCase()} ` : '  ',
         style: {
           bg: color,
           focus: {
@@ -71,6 +82,7 @@ export class ColorPicker extends Box {
    */
   selectColor(color: string): void {
     this.selectedColor = color;
+    this.nameCurrentPen();
     this.emit('select', color);
     this.screen?.render();
   }

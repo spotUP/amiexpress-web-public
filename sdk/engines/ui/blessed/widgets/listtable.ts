@@ -8,6 +8,7 @@
  */
 
 import { Box } from './box';
+import { menuRowMarker, withLeadingMarker } from '../utils/colour-off-markers';
 import type { ElementOptions, KeyEvent } from '../core/types';
 import type { ResponsiveState } from '../core/responsive-mixin';
 import type { BreakpointName } from '../core/responsive-constants';
@@ -213,9 +214,14 @@ export class ListTable extends Box {
     for (let rowIdx = 0; rowIdx < this.rows.length; rowIdx++) {
       const row = this.rows[rowIdx];
       const cells = row.map((cell, i) => this.formatCell(cell, i));
+      const selected = this.interactive && rowIdx === this.selectedRow;
+      // Colour off: the style is stripped, so the first cell's padding carries a caret.
+      if (selected && this.screen?.colour === false && cells.length > 0) {
+        cells[0] = withLeadingMarker(cells[0], menuRowMarker(true, false, this.focused));
+      }
       const line = border + cells.join(border) + border;
 
-      if (this.interactive && rowIdx === this.selectedRow) {
+      if (selected) {
         // Highlight selected row: High contrast when focused, subtle when not
         const style = this.focused ? '{black-fg}{yellow-bg}' : '{white-fg}{blue-bg}';
         lines.push(`${style}${line}{/}`);

@@ -2764,8 +2764,11 @@ export class Element extends EventEmitter {
     // If no content or view, don't render scrollbar
     if (contentHeight <= 0 || viewHeight <= 0) return;
 
-    const trackChar = ' ';
-    const thumbChar = ' ';
+    // Colour off: the board strips every SGR, so the bar would vanish.
+    // `#` on a `|` track keeps the thumb readable.
+    const noColour = this.screen.colour === false;
+    const trackChar = noColour ? '|' : ' ';
+    const thumbChar = noColour ? '#' : ' ';
 
     // Only render scrollbar (track + thumb) if content overflows
     const thumb = thumbGeometry(contentHeight, viewHeight, this.childBase);

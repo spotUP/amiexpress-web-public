@@ -61,11 +61,14 @@ export class ProgressBar extends Element {
 
     // Get fill color from style (default cyan)
     const fillBg = (this.options.style as any)?.fg || 'cyan';
+    // Colour off: the fill is a background colour alone and would vanish, so
+    // it is drawn with `#` (a door's own `ch` is kept when it is not blank).
+    const fillCh = this.screen?.colour === false && this.ch === ' ' ? '#' : this.ch;
 
     if (this.orientation === 'horizontal') {
       const filledWidth = Math.floor((width * this.filled) / 100);
       // Use blessed tags for filled portion with background color (Amiga-safe)
-      const filledPart = filledWidth > 0 ? `{${fillBg}-bg}${this.ch.repeat(filledWidth)}{/${fillBg}-bg}` : '';
+      const filledPart = filledWidth > 0 ? `{${fillBg}-bg}${fillCh.repeat(filledWidth)}{/${fillBg}-bg}` : '';
       const emptyPart = this.pch.repeat(width - filledWidth);
       this.setContent(filledPart + emptyPart);
     } else {
@@ -77,7 +80,7 @@ export class ProgressBar extends Element {
           lines.push(this.pch.repeat(width));
         } else {
           // Use blessed tags for filled portion with background color
-          lines.push(`{${fillBg}-bg}${this.ch.repeat(width)}{/${fillBg}-bg}`);
+          lines.push(`{${fillBg}-bg}${fillCh.repeat(width)}{/${fillBg}-bg}`);
         }
       }
 

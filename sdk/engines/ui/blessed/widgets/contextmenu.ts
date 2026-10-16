@@ -4,6 +4,7 @@
 
 import { Element } from '../core/element';
 import type { Screen } from '../core/screen';
+import { menuRowMarker } from '../utils/colour-off-markers';
 import type { ResponsiveState } from '../core/responsive-mixin';
 import type { BreakpointName } from '../core/responsive-constants';
 
@@ -116,7 +117,9 @@ export class ContextMenu extends Element {
         lines.push('─'.repeat(18));
       } else {
         const selected = index === this.selectedIndex;
-        const prefix = selected ? '> ' : '  ';
+        const prefix = this.screen?.colour === false
+          ? menuRowMarker(selected, !!item.disabled)
+          : selected ? '> ' : '  ';
         const label = item.disabled ? `{gray-fg}${item.label}{/gray-fg}` : item.label;
         const line = prefix + label;
         lines.push(line);
