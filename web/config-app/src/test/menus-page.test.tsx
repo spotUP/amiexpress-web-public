@@ -1,5 +1,5 @@
 /**
- * The Menu Doors admin page: reachable, and writing what the sysop edits.
+ * The Main Menu and Bulletins admin page: reachable, and writing what the sysop edits.
  * The reachability test drives the real route table through the sidebar entry;
  * what each edit does to the config is tested in menu-edit.test.ts.
  */
@@ -53,14 +53,14 @@ function renderPage(search = '') {
 const lastSaved = () => saveMenuConfig.mock.calls[saveMenuConfig.mock.calls.length - 1][1] as ReturnType<typeof defaultMenuConfig>;
 const SAVED = { timeout: 4000 };
 
-describe('the Menu Doors page', () => {
+describe('the Main Menu and Bulletins page', () => {
   beforeEach(() => { vi.clearAllMocks(); });
 
   it('is reachable: a sidebar entry and a route lead to it, and it loads the menu through the API', async () => {
     const app = readFileSync(resolve(__dirname, '..', 'App.tsx'), 'utf8');
     expect(app).toMatch(/<Route path="menus" element=\{<LevelRoute><MenusPage \/><\/LevelRoute>\} \/>/);
     const { NAV_ITEMS } = await import('../components/AppShell/nav-config');
-    expect(NAV_ITEMS.find(i => i.path === 'menus')?.label).toBe('Menu Doors');
+    expect(NAV_ITEMS.find(i => i.path === 'menus')?.label).toBe('Main Menu and Bulletins');
     renderPage();
     await screen.findByRole('tab', { name: 'Main menu' });
     expect(screen.getByRole('tab', { name: 'Bulletins' })).toBeTruthy();

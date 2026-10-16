@@ -1,5 +1,5 @@
 /**
- * The Menu Doors page's logo, C64 menu and bulletin-title parts: reachable through
+ * The Main Menu and Bulletins page's logo, C64 menu and bulletin-title parts: reachable through
  * the real page and writing what the sysop edits. What each edit does to the
  * config is tested in menu-logo-edit.test.ts; this is the one wiring test.
  */
@@ -51,7 +51,7 @@ function renderPage(search = '') {
 const lastSaved = () => saveMenuConfig.mock.calls[saveMenuConfig.mock.calls.length - 1][1] as ReturnType<typeof defaultMenuConfig>;
 const SAVED = { timeout: 4000 };
 
-describe('the Menu Doors logo, C64 and bulletin parts', () => {
+describe('the Main Menu and Bulletins logo, C64 and bulletin parts', () => {
   beforeEach(() => { vi.clearAllMocks(); });
 
   it('is reachable: builds a C64 menu', async () => {

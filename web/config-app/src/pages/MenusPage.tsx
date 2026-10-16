@@ -59,7 +59,7 @@ export function MenusPage() {
   return (
     <div className="space-y-4">
       <div>
-        <h2 className="text-xl font-semibold text-content-primary">Menu Doors</h2>
+        <h2 className="text-xl font-semibold text-content-primary">Main Menu and Bulletins</h2>
         <p className="text-xs text-content-secondary mt-1">
           The main menu and the bulletins menu the caller sees as doors: what they list, how it is grouped, who sees what, and how it changes screen. Changes save themselves.
         </p>
