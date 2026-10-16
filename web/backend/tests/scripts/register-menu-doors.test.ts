@@ -54,3 +54,19 @@ test('--force-repair rewrites an existing registration', () => {
   STEPS.menu(root, true);
   expect(tt('MENU').DESCRIPTION).toBe('The main menu');
 });
+
+// The live board is seeded from the committed Commands/BBSCmd, not from this script.
+// A registration the menu step writes but the repo lacks never reaches a board
+// (PALETTE shipped that way: Ctrl-K said "Palette not installed" on live).
+test('every registration the menu step writes is committed to the repo', () => {
+  const fresh = fs.mkdtempSync(path.join(os.tmpdir(), 'rmd-repo-'));
+  try {
+    STEPS.menu(fresh);
+    const repoCmds = path.resolve(__dirname, '../../../../Commands/BBSCmd');
+    const written = fs.readdirSync(path.join(fresh, 'Commands', 'BBSCmd'));
+    expect(written).toEqual(expect.arrayContaining(['MENU.info', 'MENUSETTINGS.info', 'PALETTE.info']));
+    for (const name of written) expect(fs.existsSync(path.join(repoCmds, name))).toBe(true);
+  } finally {
+    fs.rmSync(fresh, { recursive: true, force: true });
+  }
+});
