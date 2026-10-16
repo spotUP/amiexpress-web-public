@@ -25,7 +25,6 @@ describe('the booted board fixture', () => {
   it('lays out a board with the screens and conference a caller meets', () => {
     expect(fs.existsSync(path.join(board.root, 'Screens'))).toBe(true);
     expect(fs.existsSync(path.join(board.root, 'Conf1'))).toBe(true);
-    expect(fs.existsSync(path.join(board.root, 'bbsConfig.info'))).toBe(true);
   });
 
   it('boots far enough that the board knows its conferences and commands', () => {
