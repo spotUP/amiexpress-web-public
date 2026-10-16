@@ -67,7 +67,9 @@ function session(connectionType: 'web' | 'telnet'): any {
   };
 }
 
-const USER = { id: 'u-9', username: 'newcomer', slotNumber: 0, calls: 0, callsToday: 0, ansi: true };
+// A live slot: slotNumber 0 is a deleted account (express.e:29701), refused
+// before the call is counted.
+const USER = { id: 'u-9', username: 'newcomer', slotNumber: 9, calls: 0, callsToday: 0, ansi: true };
 
 beforeEach(() => {
   jest.clearAllMocks();

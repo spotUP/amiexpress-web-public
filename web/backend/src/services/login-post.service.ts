@@ -160,6 +160,154 @@ export async function runPostAuthLogin(
     ? (user.lastLogin ?? new Date(0))
     : ctx.lastLoginBeforeUpdate;
 
+  /*
+   * THE GATES BEFORE ANY LOGON PAPERWORK (express.e:29701-29727).
+   *
+   * processLogon (express.e:29456) refuses a deleted account (29701) and an
+   * account already on another node (29715) right after loading it, and
+   * only later writes the logon line and counts the call
+   * (displayUserToCallersLog(0) at 29752 -> 16045). They ran after the
+   * call bump, the node files, the login event and the CallersLog logon
+   * line, so a refused caller left a ghost logon and one call too many.
+   */
+  // Who this socket held BEFORE this login (ghostlogoff 2026-09-10): the
+  // already-on check below must know whether the user is re-authenticating
+  // on a socket that never let them go (reload -> restore -> submit),
+  // because the session.user assignment below overwrites the evidence. Snapshot first.
+  session.entryUserId = (session.user as any)?.id;
+  /**
+   * express.e:29701-29711 - a deleted account.
+   *
+   * Deleting a user does not remove the record: the sysop's DELETE sets
+   * `slotNumber := 0` (express.e:21365) and leaves the row where it was. So
+   * the account still authenticates, still has a password, and express refuses
+   * it at exactly this point in the logon - after the credentials are
+   * accepted, before anything is loaded - with one line and a disconnect.
+   *
+   * This port had the guard nowhere. A deleted user could log in.
+   *
+   * It comes BEFORE the lockout check because that is express's order: 29701
+   * then 29775.
+   */
+  // The record's own slotNumber field is what express.e tests (29701); the
+  // position stays the account's, so a deleted account can be re-activated.
+  if (isAccountDeleted(user)) {
+    emitter.emit("ansi-output", "\r\nThat account has been deleted.\r\n");
+    beginLogoff(emitter as any, session, { message: "" });
+    return { ok: false, terminated: "deleted-account" };
+  }
+
+  /**
+   * express.e:29715-29727 - the same account on two nodes at once.
+   *
+   *     stat := checkUserOnLine(1)
+   *     IF stat = FALSE
+   *       callersLog('User <name> already on another node!')
+   *       IF displayScreen(SCREEN_ONENODE) = FALSE
+   *         aePuts('You are already logged into another node!')
+   *       state := STATE_LOGGING_OFF
+   *
+   * `userAlreadyOnNode` has been sitting imported at the top of this file,
+   * fully written and documented, and never called - so on a 24-node board one
+   * account could hold every node it could open a connection to.
+   *
+   * Between the deleted-account gate (29701) and the lockout (29775), which is
+   * express's order.
+   */
+  /**
+   * PARKED SESSION: a re-login while the account's previous web session is
+   * parked (its phone dropped; session-parking.ts) would meet that session
+   * in the already-on check below and be refused. The parked session ends
+   * first, through the normal finalize, so the check reads the board as it
+   * is. A live tab is never touched: only a parked session is ended.
+   */
+  // The caller's own namespace, which is where every OTHER web socket lives
+  // too - so it answers "is that node's caller still reachable" for the
+  // duplicate-login guard further down.
+  const nspSockets = (emitter as any)?.nsp?.sockets as
+    | { has?: (id: string) => boolean }
+    | undefined;
+  {
+    const userKey = String((user as any)?.id ?? '');
+    if (userKey !== '') {
+      // A fresh login of an account with a parked session ends the parked
+      // one first (its Loss Carrier is written by the usual finalize), so
+      // one account never holds two nodes. Interim rule until the
+      // session-persistence plan's S9.
+      await endParkedSessionsFor(userKey);
+    }
+  }
+
+  // Same socket re-authenticating as the user it already held on entry
+  // (reload -> restore -> login form -> submit): the session never left,
+  // so there is nothing to refuse - fall through and re-register over it.
+  // A socket that held nobody takes the check as before, so a genuine
+  // second tab is still refused per express.e:29715-29727 (ghostlogoff).
+  const reauthenticating =
+    (session.entryUserId as any) !== undefined &&
+    String(session.entryUserId) === String((user as any)?.id);
+
+  /*
+   * RAPID TESTS ONLY. The scripted telnet suite logs the same account in and
+   * out many times a minute, and a call it had to drop leaves a session in
+   * its reconnect grace - so the next call met "already logged in" and the
+   * rest of the run failed on that, not on what it was testing (the sysop,
+   * 2026-09-27: "if you are going to do rapid tests i think you need a flag
+   * to disable that"). Never in production: the live container runs with
+   * NODE_ENV=production, and the check is express.e:29715-29727 parity.
+   */
+  const devAllowsTwice = process.env.BBS_DEV_ALLOW_SAME_USER_TWICE === '1'
+    && process.env.NODE_ENV !== 'production';
+
+  if (!reauthenticating && !devAllowsTwice) {
+    // The one already-online rule, asked by FTP's logon too
+    // (services/logon-gates). It also sees this account on an FTP node.
+    const alreadyOn = accountOnlineElsewhere(
+      user.username,
+      session.nodeId ?? 0,
+      // Liveness: REACHABILITY, not map membership.
+      //
+      // This asked `sessions.has(nodeId)`, and a session object outlives its
+      // transport - so a caller whose connection had gone still held the node
+      // and their own next login was refused against their own corpse. That
+      // is the reported bug: `infant` refused on the live board, `spot` and
+      // `sysop` repeatedly, 28 refusals in the node CallersLogs with the most
+      // recent AFTER the three previous attempts at this.
+      //
+      // `nodeHasReachableCaller` asks whether anything can still be SENT to
+      // that node: a registered emitter for telnet/SSH (both teardown and the
+      // admin's kick unregister it), or a socket still in the namespace for
+      // web. A stale node file with nobody behind it is cleaned up by
+      // userAlreadyOnNode's onStale, exactly as before.
+      (id) => nspSockets?.has?.(id) === true,
+      appConfig.get('dataDir'),
+    );
+    if (alreadyOn !== null) {
+      try {
+        const { callersLogManager } = require("./CallersLogManager");
+        callersLogManager.logActivity(
+          session.nodeId || 1,
+          `User ${user.username} already on another node!`,
+        );
+      } catch (err) {
+        console.warn("[LOGIN] could not log already-on-another-node:", err);
+      }
+
+      // express falls back to a line of its own when the board has no ONENODE
+      // screen, rather than showing nothing.
+      const shown = await displayScreen(emitter as any, session, "ONENODE", false);
+      if (!shown) {
+        emitter.emit(
+          "ansi-output",
+          "\r\nYou are already logged into another node!\r\n",
+        );
+      }
+
+      beginLogoff(emitter as any, session, { message: "" });
+      return { ok: false, terminated: "already-on-another-node" };
+    }
+  }
+
   /**
    * THE BROWSER'S SESSION TOKEN.
    *
@@ -276,11 +424,6 @@ export async function runPostAuthLogin(
   // Set session user data
   session.state = BBSState.LOGGEDON;
   session.subState = LoggedOnSubState.EXEC_QUICKNEW;
-  // Who this socket held BEFORE this login (ghostlogoff 2026-09-10): the
-  // already-on check below must know whether the user is re-authenticating
-  // on a socket that never let them go (reload -> restore -> submit),
-  // because this assignment overwrites the evidence. Snapshot first.
-  session.entryUserId = (session.user as any)?.id;
   // Without the record's deleted state: the gate below reads it off `user`,
   // and a session that carries `false` would write it back at logoff over a
   // DELETE the sysop made while the caller was on.
@@ -494,139 +637,6 @@ export async function runPostAuthLogin(
 
   // Read disk-backed user.misc (accountLocked / forcePwdReset / pwdLastUpdated).
   const logonMisc = readLogonMisc(user.slotNumber);
-
-  /**
-   * express.e:29701-29711 - a deleted account.
-   *
-   * Deleting a user does not remove the record: the sysop's DELETE sets
-   * `slotNumber := 0` (express.e:21365) and leaves the row where it was. So
-   * the account still authenticates, still has a password, and express refuses
-   * it at exactly this point in the logon - after the credentials are
-   * accepted, before anything is loaded - with one line and a disconnect.
-   *
-   * This port had the guard nowhere. A deleted user could log in.
-   *
-   * It comes BEFORE the lockout check because that is express's order: 29701
-   * then 29775.
-   */
-  // The record's own slotNumber field is what express.e tests (29701); the
-  // position stays the account's, so a deleted account can be re-activated.
-  if (isAccountDeleted(user)) {
-    emitter.emit("ansi-output", "\r\nThat account has been deleted.\r\n");
-    beginLogoff(emitter as any, session, { message: "" });
-    return { ok: false, terminated: "deleted-account" };
-  }
-
-  /**
-   * express.e:29715-29727 - the same account on two nodes at once.
-   *
-   *     stat := checkUserOnLine(1)
-   *     IF stat = FALSE
-   *       callersLog('User <name> already on another node!')
-   *       IF displayScreen(SCREEN_ONENODE) = FALSE
-   *         aePuts('You are already logged into another node!')
-   *       state := STATE_LOGGING_OFF
-   *
-   * `userAlreadyOnNode` has been sitting imported at the top of this file,
-   * fully written and documented, and never called - so on a 24-node board one
-   * account could hold every node it could open a connection to.
-   *
-   * Between the deleted-account gate (29701) and the lockout (29775), which is
-   * express's order.
-   */
-  /**
-   * PARKED SESSION: a re-login while the account's previous web session is
-   * parked (its phone dropped; session-parking.ts) would meet that session
-   * in the already-on check below and be refused. The parked session ends
-   * first, through the normal finalize, so the check reads the board as it
-   * is. A live tab is never touched: only a parked session is ended.
-   */
-  // The caller's own namespace, which is where every OTHER web socket lives
-  // too - so it answers "is that node's caller still reachable" for the
-  // duplicate-login guard further down.
-  const nspSockets = (emitter as any)?.nsp?.sockets as
-    | { has?: (id: string) => boolean }
-    | undefined;
-  {
-    const userKey = String((user as any)?.id ?? '');
-    if (userKey !== '') {
-      // A fresh login of an account with a parked session ends the parked
-      // one first (its Loss Carrier is written by the usual finalize), so
-      // one account never holds two nodes. Interim rule until the
-      // session-persistence plan's S9.
-      await endParkedSessionsFor(userKey);
-    }
-  }
-
-  // Same socket re-authenticating as the user it already held on entry
-  // (reload -> restore -> login form -> submit): the session never left,
-  // so there is nothing to refuse - fall through and re-register over it.
-  // A socket that held nobody takes the check as before, so a genuine
-  // second tab is still refused per express.e:29715-29727 (ghostlogoff).
-  const reauthenticating =
-    (session.entryUserId as any) !== undefined &&
-    String(session.entryUserId) === String((user as any)?.id);
-
-  /*
-   * RAPID TESTS ONLY. The scripted telnet suite logs the same account in and
-   * out many times a minute, and a call it had to drop leaves a session in
-   * its reconnect grace - so the next call met "already logged in" and the
-   * rest of the run failed on that, not on what it was testing (the sysop,
-   * 2026-09-27: "if you are going to do rapid tests i think you need a flag
-   * to disable that"). Never in production: the live container runs with
-   * NODE_ENV=production, and the check is express.e:29715-29727 parity.
-   */
-  const devAllowsTwice = process.env.BBS_DEV_ALLOW_SAME_USER_TWICE === '1'
-    && process.env.NODE_ENV !== 'production';
-
-  if (!reauthenticating && !devAllowsTwice) {
-    // The one already-online rule, asked by FTP's logon too
-    // (services/logon-gates). It also sees this account on an FTP node.
-    const alreadyOn = accountOnlineElsewhere(
-      user.username,
-      session.nodeId ?? 0,
-      // Liveness: REACHABILITY, not map membership.
-      //
-      // This asked `sessions.has(nodeId)`, and a session object outlives its
-      // transport - so a caller whose connection had gone still held the node
-      // and their own next login was refused against their own corpse. That
-      // is the reported bug: `infant` refused on the live board, `spot` and
-      // `sysop` repeatedly, 28 refusals in the node CallersLogs with the most
-      // recent AFTER the three previous attempts at this.
-      //
-      // `nodeHasReachableCaller` asks whether anything can still be SENT to
-      // that node: a registered emitter for telnet/SSH (both teardown and the
-      // admin's kick unregister it), or a socket still in the namespace for
-      // web. A stale node file with nobody behind it is cleaned up by
-      // userAlreadyOnNode's onStale, exactly as before.
-      (id) => nspSockets?.has?.(id) === true,
-      appConfig.get('dataDir'),
-    );
-    if (alreadyOn !== null) {
-      try {
-        const { callersLogManager } = require("./CallersLogManager");
-        callersLogManager.logActivity(
-          session.nodeId || 1,
-          `User ${user.username} already on another node!`,
-        );
-      } catch (err) {
-        console.warn("[LOGIN] could not log already-on-another-node:", err);
-      }
-
-      // express falls back to a line of its own when the board has no ONENODE
-      // screen, rather than showing nothing.
-      const shown = await displayScreen(emitter as any, session, "ONENODE", false);
-      if (!shown) {
-        emitter.emit(
-          "ansi-output",
-          "\r\nYou are already logged into another node!\r\n",
-        );
-      }
-
-      beginLogoff(emitter as any, session, { message: "" });
-      return { ok: false, terminated: "already-on-another-node" };
-    }
-  }
 
   // express.e:29775-29782 — accountLocked.
   if (logonMisc.accountLocked) {
