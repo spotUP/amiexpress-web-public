@@ -194,6 +194,9 @@ static void paint_line(void *context, const char *start, int len)
     char row[256];
     int room = (int) sizeof(row) - 1;
     int copy = len;
+    int selected;
+    int marker = 0;
+    int left;
 
     if (c->index < c->top_line || c->drawn >= c->st->height) {
         c->index++;
@@ -214,6 +217,20 @@ static void paint_line(void *context, const char *start, int len)
         return;
     }
 
+    selected = c->index == c->sel_line
+               || dh_bottom_of(start, len, c->index, c->sel_line);
+    /* With colour off the board strips the inverted bar with every other
+       SGR, so the selected headline is marked by ">>" in its first two
+       columns - taking the row's own two-space pad when it has one, so the
+       text does not move (ui_ansi.h, colour; the same rule as ui_list.c). */
+    if (selected && !c->b->colour && c->st->width > 2) {
+        marker = 2;
+        if (copy >= 2 && start[0] == ' ' && start[1] == ' ') {
+            start += 2;
+            copy -= 2;
+        }
+    }
+
     if (copy > room) copy = room;
     /* Clamp by COLUMNS, not bytes. A pen marker is UI_INK plus one byte and
        reaches the screen as nothing, so a coloured row is longer in bytes
@@ -222,7 +239,7 @@ static void paint_line(void *context, const char *start, int len)
     {
         int bytes = 0;
         int cols = 0;
-        while (bytes < copy && cols < c->st->width) {
+        while (bytes < copy && cols < c->st->width - marker) {
             int esc;
             if (start[bytes] == UI_INK && bytes + 1 < copy) {
                 bytes += ((start[bytes + 1] == 'T' || start[bytes + 1] == 'H')
@@ -243,7 +260,7 @@ static void paint_line(void *context, const char *start, int len)
     memcpy(row, start, (size_t) copy);
     row[copy] = '\0';
 
-    if (c->index == c->sel_line || dh_bottom_of(start, copy, c->index, c->sel_line)) {
+    if (selected) {
         /* The selected headline, inverted: ground and ink swapped.
            A double-height headline is TWO rows and one line, so the row
            carrying its bottom half is selected with it - highlighting only
@@ -253,8 +270,10 @@ static void paint_line(void *context, const char *start, int len)
     } else {
         ansi_color(c->b, c->st->fg, c->st->bg, 0);
     }
+    left = c->st->left + (c->st->frameless ? 0 : 1);
+    if (marker) ansi_text_raw(c->b, c->st->top + 1 + c->drawn, left, ">>", 2);
     ansi_text(c->b, c->st->top + 1 + c->drawn,
-              c->st->left + (c->st->frameless ? 0 : 1), row, c->st->width);
+              left + marker, row, c->st->width - marker);
     ansi_color(c->b, c->st->fg, c->st->bg, 0);
 
     c->index++;

@@ -271,8 +271,21 @@ int ui_grid_move(ui_grid *g, int key)
 
 /* ---- drawing --------------------------------------------------------- */
 
-/* The cell as exactly `cw` characters: mark, key, label, right. */
-static void compose(const ui_grid *g, int entry, int selected, char *buf, int cw)
+/*
+ * The caret this grid draws with: its own, or ">>" when the caller has no
+ * colour and a bar would be the only mark (the board strips it with every
+ * other SGR - ui_ansi.h, colour).
+ */
+static const char *caret_of(const ui_grid *g, const ansi_buf *b)
+{
+    return g->caret ? g->caret : (b->colour ? 0 : ">>");
+}
+
+/* The cell as exactly `cw` characters: mark, key, label, right. `caret` is
+   caret_of(): when set, a grey (G) entry is also marked " -", because the
+   screen that draws carets cannot be trusted to show grey as grey - and
+   with colour off the board strips the dim ink altogether. */
+static void compose(const ui_grid *g, int entry, int selected, const char *caret, char *buf, int cw)
 {
     const char *key = text_of(g->key, g->ctx, entry);
     const char *label = text_of(g->label, g->ctx, entry);
@@ -282,10 +295,12 @@ static void compose(const ui_grid *g, int entry, int selected, char *buf, int cw
 
     if (cw > CELL_BUF - 1) cw = CELL_BUF - 1;
     memset(buf, ' ', (size_t)cw);
-    if (selected && g->caret) {
-        for (i = 0; g->caret[i] && i < 2 && i < cw; i++) buf[i] = g->caret[i];
+    if (selected && caret) {
+        for (i = 0; caret[i] && i < 2 && i < cw; i++) buf[i] = caret[i];
     } else if (strchr(flags, 'C') && cw > 0) {
         buf[0] = '*';
+    } else if (caret && strchr(flags, 'G') && cw > 1) {
+        buf[1] = '-';
     }
     for (i = 0; key[i] && i < g->key_width && 2 + i < cw; i++) buf[2 + i] = key[i];
     lab_at = 2 + g->key_width + 2;
@@ -312,10 +327,10 @@ static void draw_cell(ui_grid *g, ansi_buf *b, int entry, int row, int col, int 
     int key_pen, lab_pen, i, tail_blank = 1, at = 0, last, el = erases(g) && last_in_line;
 
     if (cw < 1) return;
-    compose(g, entry, chosen, buf, cw);
+    compose(g, entry, chosen, caret_of(g, b), buf, cw);
     if (chosen) {
         /* A bar in the selection's colours; with a caret, the caret IS the mark and no bar is painted. */
-        if (g->caret) ansi_color(b, g->selected_fg, g->ground, 1);
+        if (caret_of(g, b)) ansi_color(b, g->selected_fg, g->ground, 1);
         else          ansi_color(b, g->selected_fg, g->selected_bg, 1);
         ansi_text(b, row, col, buf, cw);
         if (el && rest_of_row) {                      /* the bar stops one cell short of the edge: the rest is the ground's */

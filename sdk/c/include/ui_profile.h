@@ -62,6 +62,18 @@ typedef struct {
      * saving - so a door there keeps writing the spaces.
      */
     int line_erase;
+    /**
+     * The caller takes colour. The board answers it from session.ansiMode
+     * (DT_ISANSI, field 541), and M at the prompt turns it off.
+     *
+     * With colour off the board strips every SGR on the way out - inverse
+     * too, the way express.e's aePuts2 does - so a bar or a reverse cell is
+     * gone and only characters are left. ui_screen asks once, at open, and
+     * keeps the answer across every later measure; when it is 0 the screen
+     * also forces caret_selection, so a selected row is marked with ">>".
+     * ui_profile_for answers 1: width alone cannot know.
+     */
+    int colour;
 } ui_profile;
 
 /** The tier for a width. Always pass the LIVE width, never a constant. */

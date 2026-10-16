@@ -652,6 +652,30 @@ static void on_a_c64_each_scroll_bar_cell_is_a_reverse_video_space(void)
     printf("  [OK] a C64 gets reverse-video spaces for the scroll bar\n");
 }
 
+/* Colour off: the board strips every SGR, so the bar and the solid-colour
+   scroll bar are gone. The selected row falls back to ">>" and the thumb is
+   "#" on a "|" track - characters, which survive. */
+static void colour_off_draws_the_caret_and_the_thumb_in_characters(void)
+{
+    ui_list list = a_list(50, 10);
+    static ansi_buf b;
+    const char *s;
+
+    ansi_begin(&b, frame, (long)sizeof(frame));
+    ansi_set_colour(&b, 0);
+    ui_list_draw(&list, &b);
+    frame[b.len] = '\0';
+    s = frame;
+    assert(strstr(s, ">>") != 0);
+    assert(strchr(s, '#') != 0);
+    assert(strchr(s, '|') != 0);
+
+    s = drawn(&list);
+    assert(strstr(s, ">>") == 0);
+    assert(strchr(s, '#') == 0);
+    printf("  [OK] colour off draws the caret and a # thumb on a | track\n");
+}
+
 int main(void)
 {
     printf("ui_list\n");
@@ -679,6 +703,7 @@ int main(void)
     a_caret_bar_fills_the_whole_selected_row();
     a_cursor_move_leaves_the_scroll_bar_alone();
     the_scroll_bar_is_solid_colour_with_no_glyph();
+    colour_off_draws_the_caret_and_the_thumb_in_characters();
     the_scroll_bar_defaults_to_the_themes_dim_and_ink();
     on_a_c64_each_scroll_bar_cell_is_a_reverse_video_space();
     printf("ui_list: all passed\n");

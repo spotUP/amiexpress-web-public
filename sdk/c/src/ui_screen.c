@@ -20,6 +20,23 @@
  * what adds it - so this is deliberately the one place that will change when
  * it does, rather than every door.
  */
+/*
+ * The tier for this width, plus what width cannot know: whether the caller
+ * takes colour. That answer was asked once, at open, and is kept across
+ * every measure. Without colour a bar is invisible, so a selected row
+ * needs its caret at any width.
+ */
+static void apply_profile(ui_screen *sc, int cols)
+{
+    int colour = sc->profile.colour;
+
+    sc->profile = ui_profile_for(cols);
+    sc->profile.colour = colour;
+    if (!colour) sc->profile.caret_selection = 1;
+    ansi_set_cell_backgrounds(&sc->buf, sc->profile.cell_backgrounds);
+    ansi_set_colour(&sc->buf, colour);
+}
+
 static void to_session(void *context, const char *bytes, long len)
 {
     ae_session *s = (ae_session *)context;
@@ -43,6 +60,9 @@ int ui_screen_open(ui_screen *sc, ae_session *s, char *frame, long cap)
     memset(sc, 0, sizeof(*sc));
     sc->session = s;
     ansi_begin(&sc->buf, frame, cap);
+    /* One question, asked once: M at the prompt is not a resize. No
+       session (a test, a sandbox) is a colour caller. */
+    sc->profile.colour = s ? ae_user_is_ansi(s) : 1;
     /*
      * THE CALLER'S CURSOR IS NOT PART OF THE DOOR'S DRAWING.
      *
@@ -78,8 +98,7 @@ int ui_screen_open_responsive(ui_screen *sc, ae_session *s, char *frame, long ca
     if (ae_bs_size(&cols, &rows) == 1) {
         sc->cols = cols;
         sc->rows = rows;
-        sc->profile = ui_profile_for(cols);
-        ansi_set_cell_backgrounds(&sc->buf, sc->profile.cell_backgrounds);
+        apply_profile(sc, cols);
     }
     return 0;
 }
@@ -99,10 +118,9 @@ void ui_screen_measure(ui_screen *sc)
     }
     /* The tier follows the size, always - a door that asked once at startup
        and then widened would draw an 80-column layout into 40 cells. */
-    sc->profile = ui_profile_for(sc->cols);
     /* And the writer is told what this screen can paint, so every bar,
        status line and selected row gets it without asking. */
-    ansi_set_cell_backgrounds(&sc->buf, sc->profile.cell_backgrounds);
+    apply_profile(sc, sc->cols);
 }
 
 void ui_screen_cursor(ui_screen *sc, int visible)

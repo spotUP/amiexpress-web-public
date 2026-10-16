@@ -211,7 +211,7 @@ static void configure(struct menudoor *d, level *lv, int selected)
     g->selected_fg = UI_TOKEN(UI_T_SELECTION_INK); g->selected_bg = UI_TOKEN(UI_T_SELECTION_BG);
     g->ground = ground(d);
     g->erase_tail = sc->profile.line_erase && lv->lay.grid_left == 1 && lv->lay.grid_width == sc->cols;
-    g->caret = sc->cols <= 40 ? ">>" : 0;
+    g->caret = sc->profile.caret_selection ? ">>" : 0;
     g->ctx = &lv->menu;
     ui_grid_layout(g);
     ui_grid_select(g, selected);

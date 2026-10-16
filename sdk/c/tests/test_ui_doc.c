@@ -794,6 +794,44 @@ static void a_messages_own_colour_reaches_the_screen(void)
     printf("  [OK] a message's own colour reaches the screen as colour\n");
 }
 
+/* Colour off: the board strips the inverted bar, so the selected headline
+   carries ">>" in its first two columns - and only that headline. */
+static void colour_off_marks_the_selected_headline_in_characters(void)
+{
+    static char storage[16384];
+    ansi_buf b;
+    typist t; ui_key_source src; int pushback = -1;
+    ui_doc_style st;
+    const char *text =
+        "one headline\n   101\n\ntwo headline\n   102\n\nthree headline\n   103";
+    const int lines[3] = { 0, 3, 6 };
+    int cur = 1;
+    const char *mark;
+
+    ui_doc_style_init(&st);
+    st.height = 8; st.width = 40; st.top = 1; st.left = 1;
+
+    t.keys = "q"; t.at = 0;
+    src = source_for(&t);
+    ansi_begin(&b, storage, (long) sizeof(storage));
+    ansi_set_colour(&b, 0);
+    assert(ui_doc_pick(&b, &src, &pushback, &st, " INDEX ", text, lines, 3, &cur) == 0);
+    storage[b.len] = '\0';
+    mark = strstr(storage, ">>");
+    assert(mark != 0);
+    assert(strstr(mark + 2, ">>") == 0);                     /* one mark */
+    assert(strstr(mark, "two headline") != 0);
+    assert(strstr(mark, "one headline") == 0);               /* on the selected row */
+
+    t.keys = "q"; t.at = 0;
+    src = source_for(&t);
+    ansi_begin(&b, storage, (long) sizeof(storage));
+    assert(ui_doc_pick(&b, &src, &pushback, &st, " INDEX ", text, lines, 3, &cur) == 0);
+    storage[b.len] = '\0';
+    assert(strstr(storage, ">>") == 0);                      /* colour on: the bar is the mark */
+    printf("  [OK] colour off marks the selected headline >> and only that one\n");
+}
+
 int main(void)
 {
     printf("ui_doc\n");
@@ -810,6 +848,7 @@ int main(void)
     a_lost_caller_is_not_a_page_turn();
     a_cursor_picks_a_line_and_costs_two_rows();
     a_frameless_reader_uses_every_column();
+    colour_off_marks_the_selected_headline_in_characters();
     a_coloured_row_keeps_its_tail();
     left_and_right_page_unless_the_caller_wants_them();
     h_is_the_way_home_for_a_caller_that_walks();

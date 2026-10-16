@@ -236,6 +236,33 @@ static void a_caret_marks_the_selection_at_forty_columns_without_a_bar(void)
     }
 }
 
+/* Colour off: the board strips the bar and the grey ink, so with no caret
+   of its own the grid marks the selection ">>" and a greyed entry " -". */
+static const char *drawn_colourless(ui_grid *g)
+{
+    static ansi_buf b;
+    ansi_begin(&b, frame, (long)sizeof(frame));
+    ansi_set_colour(&b, 0);
+    ui_grid_draw(g, &b);
+    frame[b.len] = '\0';
+    return frame;
+}
+
+static void colour_off_marks_the_selection_and_a_grey_entry_in_characters(void)
+{
+    ui_grid g = a_grid(80, 20, UI_GRID_SCROLL);
+    const char *s;
+
+    ui_grid_select(&g, 0);
+    ui_grid_layout(&g);
+    s = drawn_colourless(&g);
+    assert(strstr(s, ">>R") != 0 || strstr(s, ">> R") != 0);
+    assert(strstr(s, " -CF") != 0 || strstr(s, " - CF") != 0);
+    s = drawn(&g);
+    assert(strstr(s, ">>") == 0);                            /* colour on: the bar is the mark */
+    assert(strstr(s, " -CF") == 0 && strstr(s, " - CF") == 0);
+}
+
 static void three_and_four_columns_each_answer_their_own_hit(void)
 {
     int width, want, c;
@@ -282,6 +309,7 @@ int main(void)
     a_band_taller_than_the_box_leaves_the_callers_height_alone();
     the_ground_is_painted_under_every_cell_and_never_left_to_the_terminal();
     a_caret_marks_the_selection_at_forty_columns_without_a_bar();
+    colour_off_marks_the_selection_and_a_grey_entry_in_characters();
     three_and_four_columns_each_answer_their_own_hit();
     max_columns_caps_the_columns_and_zero_means_four();
     puts("test_ui_grid: OK");

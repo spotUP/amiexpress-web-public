@@ -62,6 +62,9 @@ int ae_field_exchange(int field, const char *request, char *out, int cap)
 int ae_carrier(const ae_session *s) { (void)s; return carrier; }
 int ae_screen_cols(ae_session *s) { (void)s; return 80; }
 int ae_screen_rows(ae_session *s) { (void)s; return 25; }
+/* Field 541: 1 for a colour caller, 0 after M or for a caller with no ANSI. */
+static int caller_ansi = 1;
+int ae_user_is_ansi(ae_session *s) { (void)s; return caller_ansi; }
 
 static void wire_clear(void) { wire_len = 0; wire[0] = '\0'; }
 
@@ -198,6 +201,35 @@ static void a_reassert_after_a_board_drawn_logo_hides_only_a_hidden_cursor(void)
     printf("  [OK] re-asserting after a board-drawn write hides a hidden cursor and does nothing for a shown one\n");
 }
 
+/* Colour off is asked once, at open, and survives every re-measure: a
+   resize does not turn colour back on. With no colour the selection has to
+   be a caret, so caret_selection is forced at any width. */
+static void colour_off_is_asked_once_and_kept_across_a_measure(void)
+{
+    ui_screen sc;
+    char frame[2048];
+
+    caller_ansi = 0;
+    ui_screen_open(&sc, (ae_session *)1, frame, (long)sizeof frame);
+    assert(sc.profile.colour == 0);
+    assert(sc.buf.colour == 0);
+    assert(sc.profile.caret_selection == 1);
+    ui_screen_measure(&sc);
+    assert(sc.profile.colour == 0);
+    assert(sc.buf.colour == 0);
+    assert(sc.profile.caret_selection == 1);
+    ui_screen_close(&sc);
+
+    caller_ansi = 1;
+    ui_screen_open(&sc, (ae_session *)1, frame, (long)sizeof frame);
+    ui_screen_measure(&sc);
+    assert(sc.profile.colour == 1);
+    assert(sc.buf.colour == 1);
+    assert(sc.profile.caret_selection == 0);
+    ui_screen_close(&sc);
+    printf("  [OK] colour off comes from field 541 once, survives a measure, and forces caret selection\n");
+}
+
 int main(void)
 {
     printf("a door's screen\n");
@@ -207,6 +239,7 @@ int main(void)
     a_dropped_carrier_is_not_written_to();
     a_wipe_end_puts_a_hidden_cursor_back_after_the_boards_replay();
     a_reassert_after_a_board_drawn_logo_hides_only_a_hidden_cursor();
+    colour_off_is_asked_once_and_kept_across_a_measure();
     printf("a door's screen: all passed\n");
     return 0;
 }

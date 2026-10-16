@@ -76,6 +76,7 @@ void ansi_begin(ansi_buf *b, char *storage, long capacity)
     /* An ANSI terminal until something says otherwise, which is what every
        existing caller has always been. */
     b->cell_backgrounds = 1;
+    b->colour = 1;
     b->palette = 0;
     b->palette_idx = 0;
     b->palette_len = 0;
@@ -310,6 +311,12 @@ void ansi_set_cell_backgrounds(ansi_buf *b, int can)
 {
     if (!b) return;
     b->cell_backgrounds = can ? 1 : 0;
+}
+
+void ansi_set_colour(ansi_buf *b, int on)
+{
+    if (!b) return;
+    b->colour = on ? 1 : 0;
 }
 
 void ansi_reverse(ansi_buf *b, int on)

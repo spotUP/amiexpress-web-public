@@ -122,6 +122,10 @@ static void draw_row(ui_list *list, ansi_buf *b, int row, int inner_left,
     int screen_row = (list->borders ? list->top + 1 : list->top) + row;
     int chosen = (index == list->selected) && (list->count > 0);
     const char *text = "";
+    /* With colour off the board strips the bar along with every other SGR,
+       so a list with no caret of its own falls back to ">>": the selected
+       row has to be marked by something that survives (ui_ansi.h, colour). */
+    const char *caret = list->caret ? list->caret : (b->colour ? 0 : ">>");
 
     if (index < list->count && list->row) {
     text = list->row(list->context, index);
@@ -131,17 +135,17 @@ static void draw_row(ui_list *list, ansi_buf *b, int row, int inner_left,
     /* The selected row is a filled bar, not just coloured text: a
        highlight that stops at the end of the word leaves the eye
        hunting for where the selection is. */
-    if (chosen && list->caret && list->caret_bar) {
+    if (chosen && caret && list->caret_bar) {
         /* No separate fill: the caret and the padded text below cover the row once. */
         ansi_color(b, list->selected_fg, list->selected_bg, 1);
-        ansi_text_raw(b, screen_row, inner_left, list->caret,
-                      (int) strlen(list->caret));
-    } else if (chosen && list->caret) {
+        ansi_text_raw(b, screen_row, inner_left, caret,
+                      (int) strlen(caret));
+    } else if (chosen && caret) {
     /* A caret, and the row in the selection's ink beside it. No
            bar: the caret IS the mark. */
         ansi_color(b, list->ink, list->ground, 1);
-        ansi_text_raw(b, screen_row, inner_left, list->caret,
-                      (int) strlen(list->caret));
+        ansi_text_raw(b, screen_row, inner_left, caret,
+                      (int) strlen(caret));
     } else if (chosen) {
     /* Ink on a bar. On a screen whose cells cannot carry a
            background, ansi_color turns this into reverse video in the
@@ -163,7 +167,7 @@ static void draw_row(ui_list *list, ansi_buf *b, int row, int inner_left,
        caret; every other row starts where the caret would have been, so
        the list does not shuffle sideways as the cursor moves. */
     {
-    int lead = list->caret ? (int) ui_printable_len(list->caret) : 0;
+    int lead = caret ? (int) ui_printable_len(caret) : 0;
 
         /* ERASE THE CARET CELLS ON A ROW THAT NO LONGER CARRIES IT.
          *
@@ -214,7 +218,12 @@ static void draw_row(ui_list *list, ansi_buf *b, int row, int inner_left,
         /* A space on a solid colour: no glyph, so Topaz and latin1 agree, and
            a C64 gets a reverse-video space from ansi_color. */
         int colour = on_thumb ? list->scroll_thumb : list->scroll_track;
-        if (b->cell_backgrounds) {
+        if (!b->colour) {
+            /* Colour off: a coloured space is a space. The thumb is a glyph
+               on a track glyph, plain ASCII so Topaz and a C64 agree. */
+            ansi_text_raw(b, screen_row, inner_left + inner_width,
+                          on_thumb ? "#" : "|", 1);
+        } else if (b->cell_backgrounds) {
             ansi_color(b, colour, colour, 0);
             ansi_text_raw(b, screen_row, inner_left + inner_width, " ", 1);
         } else {

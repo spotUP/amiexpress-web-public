@@ -108,6 +108,15 @@ typedef struct {
      */
     int cell_backgrounds;
     /**
+     * The caller takes colour (1) or the board strips every SGR (0).
+     *
+     * Like cell_backgrounds it lives on the writer, so every widget that
+     * draws into this buffer can see it: with 0 a selection bar, a reverse
+     * thumb or an inverted headline is invisible, and the widget marks the
+     * state with characters (">>", "#") instead. Default 1.
+     */
+    int colour;
+    /**
      * The theme's exact colours, or NULL for the terminal's sixteen.
      *
      * When it is set, a colour of UI_TOKEN(n) or a UI_INK marker naming a
@@ -226,6 +235,10 @@ void ansi_set_palette(ansi_buf *b, const unsigned long *rgb,
 /* Say whether this terminal's cells can carry a background (see the field).
  * Call once, after ansi_begin, from whatever knows the screen. */
 void ansi_set_cell_backgrounds(ansi_buf *b, int can);
+
+/* Say whether this caller takes colour (see the field). ui_screen calls it
+ * wherever it applies the profile. */
+void ansi_set_colour(ansi_buf *b, int on);
 
 /* Reverse video on or off (SGR 7 / 27).
  *

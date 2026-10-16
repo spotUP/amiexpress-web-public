@@ -32,6 +32,7 @@ ui_profile ui_profile_for(int width)
     p.cell_backgrounds = !xxs;
     p.caret_selection = xxs;
     p.line_erase = !xxs;
+    p.colour = 1;
     return p;
 }
 
