@@ -474,6 +474,8 @@ export interface BBSSession {
   webLink?: import('./server/session-link').SessionLink;
   /** When the caller's raw socket dropped and the session was parked (S6). */
   detachedAt?: number;
+  /** The board clock at that drop: the CallersLog off time of a park that never resumes (S8). */
+  detachedBoardTime?: Date;
   bbsApi?: any; // Active BBS API instance for doors (used to rebind socket on reconnect)
   keyState?: Record<string, boolean>; // Current key state for simultaneous input (which keys are pressed)
   gameModeEnabled?: boolean; // Whether game mode is active (raw keydown/keyup events)

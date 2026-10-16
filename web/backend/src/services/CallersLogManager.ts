@@ -212,8 +212,10 @@ console.error(`[CallersLog] Error writing to Node${nodeId}/CallersLog:`, error);
    *   'N...'  -> '\s (\s) \s Off Normally'
    *   other   -> '\s (\s) \s Off \s'      ('Loss Carrier', 'UUCP feed completed')
    */
-  logLogoff(nodeId: number, username: string, stat: string = 'N'): void {
-    const now = getSystemTime();
+  logLogoff(nodeId: number, username: string, stat: string = 'N', at?: Date): void {
+    // WEB_: a parked call that never came back went off when it dropped, not
+    // when its resume window closed - `at` is that drop time.
+    const now = at ?? getSystemTime();
     const reason = stat[0] === 'N' ? 'Off Normally' : `Off ${stat}`;
     this.logActivity(nodeId, `${formatLongDate(now)} (${formatLongTime(now)}) ${username} ${reason}`);
   }
@@ -229,12 +231,12 @@ console.error(`[CallersLog] Error writing to Node${nodeId}/CallersLog:`, error);
    * so both write it first; whichever comes first writes it.
    */
   logLogoffOnce(
-    session: { nodeId?: number; user?: { username: string } | null; logoffLogged?: boolean },
+    session: { nodeId?: number; user?: { username: string } | null; logoffLogged?: boolean; detachedBoardTime?: Date },
     stat: string,
   ): void {
     if (!session.user || session.logoffLogged) return;
     session.logoffLogged = true;
-    this.logLogoff(session.nodeId || 0, session.user.username, stat);
+    this.logLogoff(session.nodeId || 0, session.user.username, stat, session.detachedBoardTime);
   }
 
   /**

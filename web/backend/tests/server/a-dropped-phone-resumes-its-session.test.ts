@@ -49,6 +49,8 @@ import { sessions, getSession } from '../../src/server/session-manager';
 import { BBSState } from '../../src/constants/bbs-states';
 import { socketToUser } from '../../src/server/session-manager';
 import { db } from '../../src/database';
+import { callersLogManager } from '../../src/services/CallersLogManager';
+import { formatLongDate, formatLongTime } from '../../src/utils/date-time.util';
 
 function fakeRaw(id: string) {
   const ee: any = new EventEmitter();
@@ -351,5 +353,41 @@ describe('the parking rules (session-parking.ts)', () => {
     expect(link.raw).toBe(b);
     expect(sessions.get('3')).toBe(session);
     expect(finalized).not.toHaveBeenCalled();
+  });
+});
+
+describe('the CallersLog off time of a parked call (S8)', () => {
+  const T = new Date(2026, 9, 16, 21, 15, 7);
+  let lines: string[];
+  beforeEach(() => {
+    jest.useFakeTimers();
+    jest.setSystemTime(T);
+    lines = [];
+    jest.spyOn(callersLogManager, 'logActivity').mockImplementation((_n, s) => { lines.push(s); });
+  });
+  afterEach(() => { jest.restoreAllMocks(); jest.useRealTimers(); });
+
+  it('a park whose window runs out is logged off at the time it dropped', () => {
+    const { a, session, finalized } = loggedOn();
+    session.user.username = 'spot';
+    a.connected = false; a.fire('disconnect', 'transport close');
+    jest.advanceTimersByTime(10 * 60_000 + 1);
+    expect(finalized).toHaveBeenCalledTimes(1);
+    callersLogManager.logLogoffOnce(session, 'Loss Carrier');
+    expect(lines).toEqual([`${formatLongDate(T)} (${formatLongTime(T)}) spot Off Loss Carrier`]);
+  });
+
+  it('a resumed call that later says G is logged off at the G', async () => {
+    const { a, session } = loggedOn();
+    session.user.username = 'spot';
+    const token = issueResumeToken(session, '7', 3);
+    a.connected = false; a.fire('disconnect', 'transport close');
+    jest.advanceTimersByTime(60_000);
+    expect((await resumeParked(fakeRaw('B'), token)).ok).toBe(true);
+    jest.advanceTimersByTime(5 * 60_000);
+    const g = new Date();
+    callersLogManager.logLogoffOnce(session, 'N');
+    expect(formatLongTime(g)).not.toBe(formatLongTime(T));
+    expect(lines).toEqual([`${formatLongDate(g)} (${formatLongTime(g)}) spot Off Normally`]);
   });
 });

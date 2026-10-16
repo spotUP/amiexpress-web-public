@@ -26,6 +26,7 @@ import {
 } from './resume-tokens';
 import { sessions, socketToNodeId, socketToUser, setSession } from './session-manager';
 import { startObserving, stopObserving } from './session-observers';
+import { getSystemTime } from '../utils/date-time.util';
 import { cleanupTransfer } from '../utils/raw-transfer-teardown.util';
 import { sessionWantsPetscii, disposePetsciiSessionModel } from '../utils/petscii-session-model';
 
@@ -106,6 +107,7 @@ export function installParking(link: SessionLink, session: BBSSession): void {
       const d = parkDecision(session as unknown as ParkableSession, reason, windowMs);
       if (d !== 'park') return d;
       session.detachedAt = Date.now();
+      session.detachedBoardTime = getSystemTime();   // the CallersLog off time if the window runs out (S8)
       cleanupTransfer(session);                      // a ZMODEM cannot cross sockets (Decision 16)
       setResumeExpiry(session, session.detachedAt + windowMs);
       armWindow(link, session, session.detachedAt + windowMs);
@@ -197,6 +199,7 @@ async function attachResumed(
   startObserving(raw.id);
 
   session.detachedAt = undefined;
+  session.detachedBoardTime = undefined;
   setResumeExpiry(session, null);
   const next = rotateResumeToken(session);
 
