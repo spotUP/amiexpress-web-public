@@ -26,6 +26,9 @@ jest.mock('../src/index', () => {
 
 import { flushOutput } from '../src/utils/output.util';
 import { getACSConfig, setACSConfig, ToggleFlags } from '../src/utils/acs.util';
+import { injectBoardConfAccess } from './helpers/board-conf-access';
+
+beforeAll(injectBoardConfAccess);
 
 const KB_HEADER = 'Conf  Files    KBytes         Files    KBytes         KBytes Avail Ratio';
 const BYTES_HEADER = 'Conf  Files    Bytes          Files    Bytes          Bytes Avail  Ratio';

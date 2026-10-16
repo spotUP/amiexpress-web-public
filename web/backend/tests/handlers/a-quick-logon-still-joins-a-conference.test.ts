@@ -29,6 +29,9 @@ import { setConferences, setMessageBases, setHelpers, setConstants } from '../..
 import { advanceDisplayFlow } from '../../src/handlers/command.handler';
 import { LoggedOnSubState } from '../../src/constants/bbs-states';
 import { displayScreen } from '../../src/handlers/screen.handler';
+import { injectBoardConfAccess } from '../helpers/board-conf-access';
+
+beforeAll(injectBoardConfAccess);
 
 const displayScreenMock = displayScreen as unknown as jest.Mock;
 

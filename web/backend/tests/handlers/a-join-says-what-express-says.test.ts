@@ -31,6 +31,9 @@ jest.mock('../../src/utils/message-pointers.util', () => ({
 import { joinConference, setConferences, setMessageBases, setHelpers, setConstants, FORCE_MAILSCAN_SKIP } from '../../src/handlers/operations/conference.handler';
 import { advanceDisplayFlow } from '../../src/handlers/command.handler';
 import { LoggedOnSubState } from '../../src/constants/bbs-states';
+import { injectBoardConfAccess } from '../helpers/board-conf-access';
+
+beforeAll(injectBoardConfAccess);
 
 beforeAll(() => {
   setConferences([{ id: 1, name: 'Amiga Demoscene!' }, { id: 2, name: 'C64 Demoscene' }] as any);

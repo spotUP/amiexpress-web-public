@@ -26,6 +26,9 @@ import { processBBSCommand } from '../../src/handlers/command.handler';
 import { LoggedOnSubState } from '../../src/constants/bbs-states';
 import { flushOutput } from '../../src/utils/output.util';
 import { container, DI_TOKENS } from '../../src/container';
+import { injectBoardConfAccess } from '../helpers/board-conf-access';
+
+beforeAll(injectBoardConfAccess);
 
 function caller(flags: string) {
   const wire: string[] = [];

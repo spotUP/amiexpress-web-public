@@ -14,6 +14,9 @@ jest.mock('../../src/index', () => {
 });
 
 import { flushOutput } from '../../src/utils/output.util';
+import { injectBoardConfAccess } from '../helpers/board-conf-access';
+
+beforeAll(injectBoardConfAccess);
 
 async function bytesAvailShown(user: Record<string, unknown>): Promise<string> {
   const emitted: string[] = [];

@@ -13,6 +13,9 @@ import { handleUserStatsCommand } from '../../src/handlers/commands/user-command
 import { handlePageSysopCommand } from '../../src/handlers/command-handler/page-sysop-command';
 import { SysopAvailability } from '../../src/types/operator-chat.types';
 import { flushOutput } from '../../src/utils/output.util';
+import { injectBoardConfAccess } from '../helpers/board-conf-access';
+
+beforeAll(injectBoardConfAccess);
 
 function aCaller(secLevel = 20) {
   const wire: string[] = [];

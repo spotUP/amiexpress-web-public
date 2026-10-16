@@ -6,6 +6,9 @@
 import { handleUserStatsCommand } from '../../src/handlers/commands/user-commands.handler';
 import { flushOutput } from '../../src/utils/output.util';
 import { getSystemTime } from '../../src/utils/date-time.util';
+import { injectBoardConfAccess } from '../helpers/board-conf-access';
+
+beforeAll(injectBoardConfAccess);
 
 function statsFor(lastLogin: Date, callsToday: number): string {
   const wire: string[] = [];
