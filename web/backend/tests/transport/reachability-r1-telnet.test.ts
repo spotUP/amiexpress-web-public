@@ -43,7 +43,9 @@ import { openWindow } from './helpers/wire-quiet';
 jest.setTimeout(60000);
 
 const REPO_ROOT = path.resolve(__dirname, '..', '..', '..', '..');
-const SCREEN = path.join(REPO_ROOT, 'Screens', 'BBSTITLE.TXT');
+// BBSTITLE is a NODE screen; the board reads Node<n>/BBSTITLE.txt. The Screens/ copy went in
+// 5a3ec9bf7 (screens the board never reads).
+const SCREEN = path.join(REPO_ROOT, 'Node1', 'BBSTITLE.txt');
 const STEP_01_SENTINEL = 'A/R/P/P8/T/N';
 
 const deps = (): TransportSessionDeps => ({
@@ -72,7 +74,7 @@ describe('R1 - a real telnet socket, and a screen file on the wire through it', 
     if (!fs.existsSync(SCREEN) || fs.statSync(SCREEN).size === 0) {
       throw new Error(
         `R1 needs the real screen: ${SCREEN} is absent or EMPTY. A 0-byte screen ` +
-        `is a kill mid-write - restore it (Node1/BBSTITLE.TXT carries the same art).`,
+        `is a kill mid-write - restore it from git.`,
       );
     }
 

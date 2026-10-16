@@ -618,6 +618,19 @@ describe('40-column sweep: the driven surfaces', () => {
   it('the file-status block (file-status.handler.ts)', async () => {
     const d = drive();
     const { FileStatusHandler } = require('../src/handlers/file/file-status.handler');
+    // The conference column is relConf (express.e relConf), which asks the injected
+    // checkConfAccess; the board injects the real one at startup, so the test does too.
+    const { setUserCommandsDependencies } = require('../src/handlers/commands/user-commands.handler');
+    const { checkConfAccess } = require('../src/handlers/message/message-scan.handler');
+    setUserCommandsDependencies({
+      conferences: [{ id: 999, name: LONG }] as any,
+      messageBases: [] as any,
+      db: {} as any,
+      joinConference: jest.fn() as any,
+      checkConfAccess,
+      displayScreen: jest.fn() as any,
+      displayUploadInterface: jest.fn() as any,
+    });
     d.session.user = {
       id: 'u1',
       username: LONG,
