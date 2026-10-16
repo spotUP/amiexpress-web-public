@@ -17,6 +17,7 @@
 import * as path from 'path';
 
 import * as amigafs from '../utils/amigafs';
+import { feedBulletinTitle } from './news-bulletins';
 
 export interface Bulletin {
   /** The number a caller types. */
@@ -136,7 +137,7 @@ export function listBulletins(
     if (!bulletinHasContent(path.join(dir, entry))) continue;
     seen.set(number, {
       number,
-      title: titles.get(number) ?? `Bulletin ${number}`,
+      title: titles.get(number) ?? feedBulletinTitle(number) ?? `Bulletin ${number}`,
       base: `bull${number}`,
     });
   }

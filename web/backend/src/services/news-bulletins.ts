@@ -136,6 +136,11 @@ export const NEWS_BULLETIN_SOURCES: NewsBulletinSource[] = [
 
 ];
 
+/** The feed definition's title for bulletin `number` (bullN.txt), or undefined when no feed writes that number. */
+export function feedBulletinTitle(number: number): string | undefined {
+  return NEWS_BULLETIN_SOURCES.find((s) => s.file === `bull${number}.txt`)?.title;
+}
+
 export interface NewsBulletinDeps {
   baseDir: () => string;
   fetchPage: (page: string) => Promise<string | null>;
