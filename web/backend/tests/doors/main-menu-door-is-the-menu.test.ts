@@ -115,7 +115,9 @@ describe('the main menu door through the board', () => {
       currentConfName: 'General', tempData: {}, commandHistory: [], historyIndex: 0, historyCycle: 0, commandText: '' };
     const socket = new CaptureSocket();
     const out = () => socket.ansi.join('');
-    const frames = () => out().split('MAIN MENU').length - 1;
+    // One frame = one paint of the Messages section's 'Page Sysop' row. The fixture has a header logo, which replaces the
+    // 'MAIN MENU' title (rulings 735e21399/9291ac6f2), so the title cannot count frames.
+    const frames = () => out().split('Page Sysop').length - 1;
     // The board's own path for a caller's key: the socket handler hands it to the running door's doorInputHandler.
     const send = (keys: string) => session.doorInputHandler(keys);
     const time = nav.handleTimeCommand as jest.Mock;
