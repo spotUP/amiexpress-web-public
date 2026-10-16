@@ -235,6 +235,15 @@ export class BBSApi {
   }
 
   /**
+   * False when the caller has ANSI colour off (M, or a terminal without ANSI).
+   * The board then strips every SGR on the way out (AnsiUtil.forCaller), so a
+   * door must show each state with a character, not a colour.
+   */
+  isAnsiMode(): boolean {
+    return this.session?.ansiMode !== false;
+  }
+
+  /**
    * Get terminal dimensions (40x25 for PETSCII, 80x25 for ANSI).
    *
    * This is the ONLY geometry a TypeScript door ever sees: the SDK's

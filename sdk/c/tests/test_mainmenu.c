@@ -11,11 +11,15 @@
 #include <unistd.h>
 
 static const char *invoked_name = "";
+static const char *is_ansi = "";     /* 541: "" is a silent board, which ae_user_is_ansi reads as colour off */
+static int ansi_asks;
 int ae_field_read(int field, char *out, int cap)
 {
-    int n = (field == 605) ? (int)strlen(invoked_name) : 0;
+    const char *text = field == 605 ? invoked_name : field == 541 ? is_ansi : "";
+    int n = (int)strlen(text);
+    if (field == 541) ansi_asks++;
     if (n > cap - 1) n = cap - 1;
-    if (cap > 0) { memcpy(out, invoked_name, (size_t)n); out[n] = '\0'; }
+    if (cap > 0) { memcpy(out, text, (size_t)n); out[n] = '\0'; }
     return n;
 }
 int ae_field_write(int field, const char *value) { (void)field; (void)value; return 0; }
@@ -85,6 +89,18 @@ int main(void)
     drive("ms\r", 3, &rc);                                  /* a typed line */
     assert(rc == 0 && strstr(requests, "RUN ms|"));
     printf("  [OK] a typed line runs as typed\n");
+
+    /* Colour off (541 = 0) at 80 columns: the board strips every SGR, so the
+       selected entry must carry a character marker. The door's own screen
+       measure asks the board; with colour on there is no marker at 80. */
+    is_ansi = "0"; ansi_asks = 0;
+    drive("\x1b", 1, &rc);
+    assert(rc == 0 && ansi_asks >= 1 && strstr(screen_text, ">>R"));
+    is_ansi = "1"; ansi_asks = 0;
+    drive("\x1b", 1, &rc);
+    assert(rc == 0 && ansi_asks >= 1 && !strstr(screen_text, ">>"));
+    is_ansi = "";
+    printf("  [OK] colour off marks the selected entry with >> at 80 columns; colour on does not\n");
 
     drive("qms\r", 4, &rc);                                 /* q on an empty line leaves; nothing after it is read */
     assert(rc == 0 && !strstr(requests, "RUN"));

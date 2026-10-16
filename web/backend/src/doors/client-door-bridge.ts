@@ -163,7 +163,7 @@ console.log(`[ClientDoorBridge] Starting session ${sessionId} for door ${doorId}
         node: session.nodeId || 1,
         securityLevel: session.user?.secLevel || 0,
         timeLeft: session.timeRemaining || 3600,
-        graphicsMode: 'ANSI',
+        graphicsMode: session.ansiMode === false ? 'ASCII' : 'ANSI',
         termWidth: 80,
         termHeight: 24,
         data: {},

@@ -114,11 +114,20 @@ export class Screen extends Element {
    */
   public petscii: boolean = false;
 
+  /**
+   * False when the caller has ANSI colour off: the board strips every SGR, so
+   * a widget whose state is shown by colour alone must draw a character
+   * marker instead (`>>` on the selected row, `[Label]` on a focused button,
+   * `#` on a scroll thumb). Read as `this.screen.colour === false`.
+   */
+  public colour: boolean = true;
+
   constructor(options: ScreenOptions & {
     input?: any;
     output?: (data: string) => void;
     responsive?: boolean;
     petscii?: boolean;
+    colour?: boolean;
   } = {}) {
     // BBS Terminal Constraints (when not in responsive mode):
     // - Width: 80 columns (classic BBS standard)
@@ -147,6 +156,7 @@ export class Screen extends Element {
     this._height = bbsHeight;
     this._responsive = options.responsive || false;
     this.petscii = options.petscii === true;
+    this.colour = options.colour !== false;
     this.screen = this;
 
     console.log(`[Screen] Created: ${bbsWidth}x${bbsHeight}, responsive=${this._responsive}, options.width=${options.width}, options.height=${options.height}`);

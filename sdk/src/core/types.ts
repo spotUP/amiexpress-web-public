@@ -272,6 +272,10 @@ export interface StorageAPI {
 // ===== BBS API (Advanced) =====
 
 export interface BBSApi {
+  /** True when the caller reads PETSCII (a C64 alphabet), not ASCII. Optional: an older backend has no such method. */
+  isPetsciiMode?(): boolean;
+  /** False when the caller has ANSI colour off: the board strips every colour code, so each state needs a character marker. Optional: an older backend has no such method (treat as true). */
+  isAnsiMode?(): boolean;
   /** W's web terminal rows (modem speed, font, PETSCII palette and character set) as the caller has them now. Optional: an older backend has no such method. */
   webTerminalSettings?(): import('../../core/types').WebTerminalState;
   /** The modem emulation speed labels, in the order chooseModemSpeed numbers them. Optional: an older backend has no such method. */
