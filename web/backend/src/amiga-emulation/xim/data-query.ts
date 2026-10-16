@@ -819,15 +819,14 @@ debugLog(`  [READ] DT_ISANSI: ${replyData}`);
       case XIMCommand.DT_ANSICOLOR:
         {
           // express.e:3904-3906: the door switches this call's colour -
-          // ansiColour := data<>0, and data=2 is RIP. The session only; M is
-          // what saves a caller's choice.
+          // ansiColour := data<>0, and data=2 is RIP. This call only: express.e
+          // never stores ansiColour in the account (logon sets it TRUE, 29072).
           const session = this.bbsSession as { ansiMode?: boolean; ripMode?: boolean } | undefined;
           const on = msg.data !== 0;
           if (session) {
             session.ansiMode = on;
             if (msg.data === 2) session.ripMode = true;
           }
-          if (user) user.ansi = on;
 debugLog(`  [WRITE] DT_ANSICOLOR: ${msg.data}`);
         }
         break;

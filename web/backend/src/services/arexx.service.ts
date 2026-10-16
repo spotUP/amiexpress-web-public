@@ -1694,7 +1694,8 @@ console.error('BBSCREATEDROPFILE error:', error);
       146: (v) => { (user as any).confAccess = String(v); },
       527: (v) => { (user as any).language = Number(v) || 0; },
       528: (v) => { (user as any).quickFlag = String(v) === '1' || v === 1 || v === true; },
-      530: (v) => { user.ansi = String(v) === '1' || v === 1 || v === true; },
+      // DT_ANSICOLOR switches this call's colour (express.e:3904-3906), never the account.
+      530: (v) => { if (session) session.ansiMode = String(v) === '1' || v === 1 || v === true; },
       606: (v) => { user.realname = String(v); user.realName = String(v); },
       637: (v) => { (user as any).internetName = String(v); user.email = String(v); },
       // Sysop chat flag — handled at the BBS level, not user-level.
@@ -1983,7 +1984,8 @@ console.error('BBSCREATEDROPFILE error:', error);
     const callsToday = getTodaysCalls(u); // express.e:28425-28432
     const linesPerScreen = u.linesPerScreen ?? u.lineLength ?? 80;
     const expertOn = u.expert === 'X' || u.expert === true || u.expert === 1;
-    const ansiOn = u.ansi === true || u.ansi === 'Y' || u.ansiColor === true;
+    // express.e:3908 reads ansiColour, this call's flag, not the account.
+    const ansiOn = session?.ansiMode !== false;
     const internetName = u.internetName || u.email || '';
 
     switch (fieldId) {

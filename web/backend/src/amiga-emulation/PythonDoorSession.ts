@@ -205,7 +205,8 @@ console.error('[PythonDoorSession] Failed to start door:', error);
       env.BBS_USER_NAME = user.username;
       env.BBS_USER_ID = String(user.id || 1);
       env.BBS_SECURITY_LEVEL = String(user.secLevel);
-      env.BBS_ANSI_ENABLED = user.ansi ? '1' : '0';
+      // This call's colour (express.e ansiColour), not the stored account flag.
+      env.BBS_ANSI_ENABLED = this.config.bbsSession?.ansiMode === false ? '0' : '1';
       env.BBS_EXPERT_MODE = user.expert ? '1' : '0';
       env.BBS_REAL_NAME = user.realname || user.username;
       env.BBS_LOCATION = user.location || '';

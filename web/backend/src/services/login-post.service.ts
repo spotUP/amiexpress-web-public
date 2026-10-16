@@ -290,7 +290,9 @@ export async function runPostAuthLogin(
   // this call's account is not saved yet (account.service).
   session.newSinceFlag = false;
   session.accountSavedAtLogoff = false;
-  session.ansiMode = user.ansi;
+  // express.e:29072 ansiColour:=TRUE - every call starts in colour. M and a
+  // door's DT_ANSICOLOR switch this call only; the stored flag never seeds it.
+  session.ansiMode = true;
 
   // Modem emulation (user.baud=0 → full speed). Works on web and
   // telnet/SSH alike — the emitter wrapper has its own `emit` we wrap.

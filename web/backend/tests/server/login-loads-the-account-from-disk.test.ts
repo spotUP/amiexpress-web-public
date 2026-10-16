@@ -167,6 +167,22 @@ describe('a login', () => {
     expect(userFileManager.readUserBySlot(slot)!.username).toBe('somebodyelse');
   });
 
+  it('starts every call in colour, whatever the account last had', async () => {
+    // express.e:29072 ansiColour:=TRUE at logon; M (25241) and DT_ANSICOLOR
+    // change this call only. The port seeded the call from the stored flag, so
+    // one M off left the caller without colour on every later call.
+    const slot = 904;
+    writeRecord('somebodyelse2', slot);
+    const { runPostAuthLogin } = require('../../src/services/login-post.service');
+    const s = session();
+    const plain = { ...row('wasplain', slot), ansi: false };
+
+    await runPostAuthLogin(emitter(), s, plain, { lastLoginBeforeUpdate: plain.lastLogin });
+
+    expect(s.user.username).toBe('wasplain');
+    expect(s.ansiMode).toBe(true);
+  });
+
   it('refuses an account whose record is deleted, at the position it still holds', async () => {
     const slot = 903;
     writeRecord('deletedcaller', slot, { accountDeleted: true });
