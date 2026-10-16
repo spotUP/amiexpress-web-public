@@ -25,6 +25,7 @@
  * ```
  */
 
+import { syncColourOffInput } from '../utils/colour-off-focus';
 import { Element } from '../core/element';
 import { List } from './list';
 import { Box } from './box';
@@ -305,6 +306,8 @@ export class AutocompleteTextbox extends Element {
     }
 
     this.setContent(display);
+    // Colour off: the real cursor shows the caret.
+    syncColourOffInput(this, { x: this.ileft + (this.cursorPos - this.viewOffset), y: this.itop }, 0);
     if (this.screen) this.screen.render();
   }
 

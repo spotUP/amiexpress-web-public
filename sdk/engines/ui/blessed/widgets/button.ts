@@ -12,6 +12,7 @@ import type { ButtonOptions, KeyEvent, Colors } from '../core/types';
 import type { ResponsiveState } from '../core/responsive-mixin';
 import type { BreakpointName } from '../core/responsive-constants';
 import { MIN_TOUCH_HEIGHT } from '../core/responsive-constants';
+import { markLabelLine } from '../utils/colour-off-focus';
 
 export interface ExtendedButtonOptions extends ButtonOptions {
   /** Enable tap feedback flash (default: true) */
@@ -49,6 +50,8 @@ export class Button extends Element {
   /** Compact, not a touch target: `inline` survives a breakpoint change. */
   private _inline = false;
   private _originalStyle: Colors;
+  /** Active without being focused (the selected tab of a bar of buttons). */
+  private _marked = false;
 
   constructor(options: ExtendedButtonOptions = {}) {
     const baseStyle = options.style ?? {};
@@ -130,16 +133,40 @@ export class Button extends Element {
 
     // Focus/blur handlers - trigger re-render to show focus style
     this.on('focus', () => {
+      this._refreshMarker();
       if (this.screen) {
         this.screen.render();
       }
     });
 
     this.on('blur', () => {
+      this._refreshMarker();
       if (this.screen) {
         this.screen.render();
       }
     });
+  }
+
+  /**
+   * Colour off: the focus colours are stripped, so the focused (or marked)
+   * button is drawn `[Label]` and the others ` Label `. The label is
+   * re-marked when the content is laid out, so the caller's own text is kept.
+   */
+  parseContent(content?: string): string[] {
+    const lines = super.parseContent(content);
+    if (this.screen?.colour !== false) return lines;
+    const active = this.focused || this._marked;
+    return lines.map((line) => markLabelLine(line, active));
+  }
+
+  /** Mark a button active without focus (colour-off tab / bar selection). */
+  setMarked(marked: boolean): void {
+    this._marked = marked;
+    this._refreshMarker();
+  }
+
+  private _refreshMarker(): void {
+    if (this.screen?.colour === false) this.setContent(this.getContent());
   }
 
   private _onKeypress(ch: any, key: KeyEvent): boolean {

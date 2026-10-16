@@ -591,6 +591,8 @@ export class MultiplayerLobby extends EventEmitter {
         tags: true,
       } as any);
       this.tabButtons = [tab1Btn, tab2Btn];
+      // Colour off: the active tab's colours are stripped, so it is bracketed.
+      tab1Btn.setMarked(true);
 
       tab1Btn.on('press', () => this.switchTab(0));
       tab2Btn.on('press', () => this.switchTab(1));
@@ -1217,6 +1219,7 @@ export class MultiplayerLobby extends EventEmitter {
 
     // Update tab button styles
     this.tabButtons.forEach((btn, idx) => {
+      btn.setMarked(idx === tabIndex);
       if (idx === tabIndex) {
         btn.style.bg = 'blue';
         btn.style.fg = 'white';

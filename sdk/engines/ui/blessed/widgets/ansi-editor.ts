@@ -1400,7 +1400,7 @@ export class ANSIEditor extends Box {
         left: col * 3,
         width: 3,
         height: 1,
-        content: '   ',
+        content: this.screen?.colour === false ? ` ${i.toString(16)} ` : '   ',
         style: { bg: colors[i] },
         mouse: true,
         clickable: true,
@@ -1458,7 +1458,9 @@ export class ANSIEditor extends Box {
         left: 0,
         width: 6,
         height: 1,
-        content: (isSelected ? '{inverse}' : '') + t.label + (isSelected ? '{/inverse}' : ''),
+        content: this.screen?.colour === false
+          ? (isSelected ? '>' : ' ') + t.label
+          : (isSelected ? '{inverse}' : '') + t.label + (isSelected ? '{/inverse}' : ''),
         style: { bg: 'black', fg: 'white', hover: { bg: 'blue' } },
         tags: true,
         mouse: true,
@@ -1695,7 +1697,9 @@ export class ANSIEditor extends Box {
         left: 0,
         width: 6,
         height: 1,
-        content: (isActive ? '{inverse}' : '') + `${visIcon}${lockIcon}${layer.name.slice(0, 4)}` + (isActive ? '{/inverse}' : ''),
+        content: this.screen?.colour === false
+          ? `${isActive ? '>' : ' '}${visIcon}${lockIcon}${layer.name.slice(0, 3)}`
+          : (isActive ? '{inverse}' : '') + `${visIcon}${lockIcon}${layer.name.slice(0, 4)}` + (isActive ? '{/inverse}' : ''),
         style: { bg: 'black', fg: 'white', hover: { bg: 'blue' } },
         tags: true,
         mouse: true,
@@ -2771,7 +2775,9 @@ BBS Door SDK v2.0{/gray-fg}
         const isSelected = this.currentTool === tools[idx];
         const shortcut = labels[idx][0];
         const rest = labels[idx].slice(1);
-        child.setContent((isSelected ? '{inverse}' : '') + `{yellow-fg}${shortcut}{/yellow-fg}${rest}` + (isSelected ? '{/inverse}' : ''));
+        child.setContent(this.screen?.colour === false
+          ? (isSelected ? '>' : ' ') + `{yellow-fg}${shortcut}{/yellow-fg}${rest}`
+          : (isSelected ? '{inverse}' : '') + `{yellow-fg}${shortcut}{/yellow-fg}${rest}` + (isSelected ? '{/inverse}' : ''));
       }
     });
 
@@ -4852,7 +4858,7 @@ BBS Door SDK v2.0{/gray-fg}
         width: 2,
         height: 1,
         mouse: true,
-        content: '  ',
+        content: this.screen?.colour === false ? `${isSelected ? '>' : ' '}${i.toString(16)}` : '  ',
         style: { bg: colorCodes[i], inverse: isSelected },
       });
       swatch.on('click', () => {
@@ -4876,7 +4882,7 @@ BBS Door SDK v2.0{/gray-fg}
         width: 2,
         height: 1,
         mouse: true,
-        content: '  ',
+        content: this.screen?.colour === false ? `${isSelected ? '>' : ' '}${i.toString(16)}` : '  ',
         style: { bg: colorCodes[i], inverse: isSelected },
       });
       swatch.on('click', () => {
@@ -4894,10 +4900,12 @@ BBS Door SDK v2.0{/gray-fg}
       // Update FG swatches
       fgSwatches.forEach((s, i) => {
         (s.style as any).inverse = (i === selectedFg);
+        if (this.screen?.colour === false) s.setContent(`${i === selectedFg ? '>' : ' '}${i.toString(16)}`);
       });
       // Update BG swatches
       bgSwatches.forEach((s, i) => {
         (s.style as any).inverse = (i === selectedBg);
+        if (this.screen?.colour === false) s.setContent(`${i === selectedBg ? '>' : ' '}${i.toString(16)}`);
       });
       // Update labels to show which is active
       (fgLabel.style as any).fg = editingFg ? 'cyan' : 'gray';

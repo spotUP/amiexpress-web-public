@@ -6,6 +6,7 @@
  * - Auto-resize handling
  */
 
+import { syncColourOffInput } from '../utils/colour-off-focus';
 import { Element } from '../core/element';
 import type { TextboxOptions, KeyEvent } from '../core/types';
 import type { ResponsiveState } from '../core/responsive-mixin';
@@ -795,6 +796,7 @@ export class Textbox extends Element {
     }
 
     this.setContent(display);
+    this._syncColourOff();
     if (this.screen) this.screen.render();
   }
 
@@ -817,6 +819,13 @@ export class Textbox extends Element {
     // and the same pair the click handler converts a column with.
     const column = this.ileft + (this.cursorPos - this.viewOffset);
     screen.setCursorTarget(column, this.itop);
+    this._syncColourOff();
+  }
+
+  /** Colour off: the real cursor shows the caret and the label counts a selection. */
+  private _syncColourOff(): void {
+    const selected = this.hasSelection() ? Math.abs(this.selectionEnd - this.selectionStart) : 0;
+    syncColourOffInput(this, { x: this.ileft + (this.cursorPos - this.viewOffset), y: this.itop }, selected);
   }
 
   insertChar(ch: string): void {
@@ -1528,6 +1537,12 @@ export class Textarea extends Element {
     }
 
     this.setContent(display);
+    // Colour off: the real cursor shows the caret, the label counts a selection.
+    syncColourOffInput(
+      this,
+      { x: this.ileft + cursorCol, y: this.itop + cursorLine - this.viewOffsetY },
+      hasSelection ? selEnd - selStart : 0,
+    );
     if (this.screen) {
       this.screen.render();
     }

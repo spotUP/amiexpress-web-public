@@ -3,6 +3,7 @@
  * Based on ANSI Editor implementation
  */
 
+import { markLabel } from '../utils/colour-off-focus';
 import { Element } from '../core/element';
 import { snapToReadable } from '../core/contrast';
 import { activeTheme } from '../../theme/live.js';
@@ -173,6 +174,14 @@ export class MenuBar extends Element {
       });
 
       this.menuButtons.push(button);
+
+      // Colour off: the focus colours are stripped, so the active menu is
+      // drawn `[File]` and the others ` File `.
+      const mark = (active: boolean) => {
+        if (screen.colour === false) button.setContent(markLabel(item.label, active));
+      };
+      button.on('focus', () => { mark(true); screen.render(); });
+      button.on('blur', () => { mark(false); screen.render(); });
 
       // Dropdown menu
       const dropdown = new DropdownMenu({

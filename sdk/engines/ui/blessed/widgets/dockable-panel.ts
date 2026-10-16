@@ -2011,6 +2011,7 @@ export class DockablePanel extends Panel {
     this.tabs.forEach((panel, index) => {
       const label = panel.options.label || (panel.options as any).title || `Tab ${index + 1}`;
       const isActive = index === this.activeTab;
+      const noColour = this.screen?.colour === false;
 
       const btn = new Button({
         parent: this,
@@ -2018,13 +2019,18 @@ export class DockablePanel extends Panel {
         left: currentX,
         width: String(label).length + 2,
         height: 1,
-        content: isActive ? `{white-bg}{black-fg}${label}{/}` : label,
+        // Colour off: the active tab is drawn `[Label]` by Button itself, in
+        // the two columns its padding would take, so the content stays plain.
+        content: noColour ? String(label) : isActive ? `{white-bg}{black-fg}${label}{/}` : label,
+        ...(noColour ? { padding: 0 } : {}),
         tags: true,
         style: {
           bg: isActive ? 'white' : 'blue',
           fg: isActive ? 'black' : 'white',
         },
       });
+
+      if (noColour) btn.setMarked(isActive);
 
       btn.on('press', () => {
         this.switchTab(index);

@@ -835,11 +835,18 @@ export class PetsciiEditor extends Box {
    * of colour names.
    */
   private toolsText(): string {
+    const tool = PETSCII_TOOL_LABELS[this.tool];
+    const reverse = this.brush.reverse ? ' Reverse' : '';
+    if (this.screen?.colour === false) {
+      // Colour off: the pen colour is stripped, so each swatch holds its index
+      // digit and the pen in hand is named.
+      const digits = PETSCII_COLOUR_NAMES.map((_name, vic) => vic.toString(16)).join('');
+      const pen = this.brush.color & 0x0f;
+      return `${digits} Pen: ${pen.toString(16)} ${PETSCII_COLOUR_NAMES[pen]} ${tool}${reverse}`;
+    }
     const swatches = PETSCII_COLOUR_NAMES
       .map((_name, vic) => colourMarker(vic) + puaForScreenCode(0xa0))
       .join('');
-    const tool = PETSCII_TOOL_LABELS[this.tool];
-    const reverse = this.brush.reverse ? ' Reverse' : '';
     return `${swatches}${colourMarker(this.brush.color & 0x0f)} ${tool}${reverse}`;
   }
 

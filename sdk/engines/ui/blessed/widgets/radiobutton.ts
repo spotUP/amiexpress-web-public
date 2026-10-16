@@ -89,10 +89,12 @@ export class RadioButton extends Box {
 
     // Focus/blur handlers
     this.on('focus', () => {
+      if (this.screen?.colour === false) this.updateContent();
       this.screen?.render();
     });
 
     this.on('blur', () => {
+      if (this.screen?.colour === false) this.updateContent();
       this.screen?.render();
     });
   }
@@ -115,7 +117,12 @@ export class RadioButton extends Box {
    * Update radio button display
    */
   private updateContent(): void {
-    const radio = `(${this._checked ? this.checkChar : this.uncheckChar})`;
+    // Colour off: the focus colour is stripped, so the focused box swaps its
+    // () for <> (same width).
+    const marked = this.screen?.colour === false && this.focused;
+    const open = marked ? '<' : '(';
+    const close = marked ? '>' : ')';
+    const radio = `${open}${this._checked ? this.checkChar : this.uncheckChar}${close}`;
     this.setContent(this._text ? `${radio} ${this._text}` : radio);
   }
 

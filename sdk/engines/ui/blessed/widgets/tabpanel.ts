@@ -147,10 +147,12 @@ export class TabPanel extends Box {
     // Update styles
     if (this.tabButtons[prevIndex]) {
       this.tabButtons[prevIndex].setStyle(this.tabStyle);
+      this.tabButtons[prevIndex].setMarked(false);
       this.tabContents[prevIndex].hide();
     }
 
     this.tabButtons[index].setStyle(this.activeTabStyle);
+    this.tabButtons[index].setMarked(true);
     this.tabContents[index].show();
 
     this.emit('tab-change', index, prevIndex);

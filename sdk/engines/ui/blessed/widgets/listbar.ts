@@ -313,6 +313,7 @@ export class Listbar extends Box {
       if (!entry) return;
       const style = index === this.selectedIndex ? this.activeStyle : this.inactiveStyle;
       entry.button.setStyle(style);
+      entry.button.setMarked(index === this.selectedIndex);
     });
   }
 
