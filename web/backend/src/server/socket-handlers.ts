@@ -25,7 +25,9 @@ import {
   socketToNodeId,
   userSessions,
   pendingDisconnects,
-  trackPendingDisconnect, reboundSince, allNodesBusyNotice } from './session-manager';
+  allNodesBusyNotice } from './session-manager';
+import { noteSessionEnding, isParked } from './session-parking';
+import { revokeResumeToken } from './resume-tokens';
 import { callersLog, getRecentCallerActivity } from './database-helpers';
 import { nodeManager } from '../services/node-manager.service';
 // Use the real interpreter (full REXX semantics) instead of the simulated
@@ -61,8 +63,6 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { getSystemTime } from '../utils/date-time.util';
 import { applyClientReportedGeometry, applyCallerResize } from '../amiga-emulation/xim/screen-width.util';
-
-const DISCONNECT_GRACE_MS = 15000;
 
 // Game-mode helpers live in services/game-mode.service.ts so lighter consumers
 // (BBSApi, tests) can pull them in without the full socket-dispatch graph.
@@ -865,36 +865,24 @@ export function wantsImmediateTeardown(
  * (`tests/petscii/render-ctx-disposal.test.ts`) without registering the
  * whole socket surface; production still reaches it only through
  * `registerSocketHandlers`.
+ *
+ * The link says `disconnect` once, when the session ends (session-link.ts);
+ * a drop that parks says nothing (session-parking.ts). So there is no grace
+ * wait here any more: when this runs, the session is over, and it is torn
+ * down at once. The running finalize is registered with the parking module
+ * so `endParkedSessionsFor` can wait for it.
  */
 export function registerDisconnectHandler(socket: Socket) {
-  socket.on('disconnect', async (reason) => {
+  socket.on('disconnect', (reason) => {
 console.log(`[DISCONNECT] Client disconnected, reason: ${reason}, socket: ${socket.id}`);
+    const ending = getSession(socket.id);
+    const run = endDisconnectedSession(socket);
+    if (ending) noteSessionEnding(ending, run);
+    return run;
+  });
+}
 
-    // GRACE PERIOD: Wait 3 seconds for potential reconnection before cleanup
-    // This prevents kicking users out during brief network hiccups
-    // Skip grace period if sysop explicitly kicked the user via NM command,
-    // or the caller said goodbye with G (cleanLogoff - a deliberate leave
-    // waits for nothing; ghostlogoff 2026-09-10).
-    const reconnectGracePeriod = 3000; // 3 seconds
-    const sessionBeforeDelay = getSession(socket.id);
-
-console.log(`[DISCONNECT] sessionBeforeDelay.sysopKicked=${sessionBeforeDelay?.sysopKicked}, cleanLogoff=${sessionBeforeDelay?.cleanLogoff}, nodeId=${sessionBeforeDelay?.nodeId}`);
-    if (sessionBeforeDelay && !wantsImmediateTeardown(sessionBeforeDelay)) {
-console.log(`[DISCONNECT] Waiting ${reconnectGracePeriod}ms for potential reconnection...`);
-      await new Promise(resolve => setTimeout(resolve, reconnectGracePeriod));
-
-      // Reconnected during the grace period? Only if the session now names a
-      // DIFFERENT socket - the restore rebinds it. A session still holding
-      // this dead socket's id is a ghost (see reboundSince).
-      const sessionAfterDelay = getSession(socket.id);
-      if (reboundSince(sessionAfterDelay, socket.id)) {
-console.log(`[DISCONNECT] User reconnected during grace period on socket ${sessionAfterDelay!.socketId}, skipping cleanup`);
-        return; // User reconnected, skip cleanup
-      }
-    } else if (sessionBeforeDelay && wantsImmediateTeardown(sessionBeforeDelay)) {
-console.log(`[DISCONNECT] Immediate teardown (kicked or clean G logoff), skipping grace period`);
-    }
-
+async function endDisconnectedSession(socket: Socket): Promise<void> {
     // End session log tracking
     stopObserving(socket.id);
 
@@ -909,9 +897,20 @@ console.log(`[DISCONNECT] Immediate teardown (kicked or clean G logoff), skippin
     // The same three a byte transport releases (TP-13b), one copy.
     await releaseSessionResources(socket, session);
 
+    // A PARKED session that ends here is the end of THAT session - its window
+    // ran out, the caller logged in afresh, an account refusal, an idle
+    // timeout - and it is always finalized: node freed, Loss Carrier written,
+    // token revoked. The multi-tab shortcut below is for a LIVE socket of a
+    // session the account still holds elsewhere; a fresh login's socket is
+    // already mapped to the account when it ends the parked one
+    // (login-post.service.ts), and the shortcut kept that node for ever
+    // (S6 review B1).
+    const endsParkedSession = isParked(session);
+
     const userId = session.user?.id ? String(session.user.id) : '';
     if (userId) {
-      const hasOtherSockets = Array.from(socketToUser.entries()).some(([id, uid]) => uid === userId && id !== socket.id);
+      const hasOtherSockets = !endsParkedSession &&
+        Array.from(socketToUser.entries()).some(([id, uid]) => uid === userId && id !== socket.id);
 
 console.log(`[DISCONNECT] Removing socket ${socket.id} mapping for user ${userId}`);
       // Multi-tab fanout: leave user:<id> room symmetrically with the join in auth-socket-handlers.
@@ -926,28 +925,9 @@ console.log(`[DISCONNECT] Removing socket ${socket.id} mapping for user ${userId
 console.log(`[DISCONNECT] User ${userId} still has other sockets connected - keeping user session`);
         return;
       }
-
-      // Skip 15-second grace period if sysop explicitly kicked the user,
-      // or the caller said goodbye with G (cleanLogoff - same shape:
-      // a deliberate end waits for nothing).
-      if (wantsImmediateTeardown(session)) {
-console.log(`[DISCONNECT] Immediate teardown (kicked or clean G logoff) for user ${userId}, skipping disconnect grace period`);
-        await finalizeDisconnectCleanup(socket, session, socket.id);
-        return;
-      }
-
-      const nodeId = session.nodeId || 0;
-      const timer = setTimeout(() => {
-        void finalizeDisconnectCleanup(socket, session, socket.id);
-      }, DISCONNECT_GRACE_MS);
-      trackPendingDisconnect(userId, socket.id, nodeId, timer);
-
-console.log(`[DISCONNECT] Scheduled logoff for user ${userId} in ${DISCONNECT_GRACE_MS}ms`);
-      return;
     }
 
     await finalizeDisconnectCleanup(socket, session, socket.id);
-  });
 }
 
 /**
@@ -991,10 +971,12 @@ export async function releaseSessionResources(
  * A byte transport's session ends here - the same finalize the browser
  * reaches, with the same resource release in front of it.
  *
- * There is no grace period: `restore-session` is registered only inside
- * `registerSocketHandlers`, which `setupTelnetSSHHandler` never calls, so a
- * telnet or SSH caller has no reconnect path to wait for. Waiting would
- * hold their node for nothing.
+ * There is no parking: only a web session's link parks (session-parking.ts,
+ * installed by `acceptWebConnection`), so a telnet or SSH caller has no
+ * resume path to wait for. Waiting would hold their node for nothing. A new
+ * TCP connection is a new call, so telnet, SSH and /ws/terminal never park,
+ * by design (thoughts/shared/plans/2026-10-15-session-persistence-plan.md,
+ * Decision 12).
  */
 export async function endTransportSession(
   emitter: any,
@@ -1037,6 +1019,8 @@ console.log(`[DISCONNECT] finalizeDisconnectCleanup: userId=${userId || '-'}, no
   // before anything that can be slow or throw. The bookkeeping below holds
   // its own `session` object and needs no map entry.
   forgetSession(session, socketId, userId);
+  // The call is over: its resume token must never bring it back.
+  revokeResumeToken(session);
 
   // A pending W resume belongs to this call only; drop it before anything
   // that can await or throw (settings-resume.ts).

@@ -809,8 +809,8 @@ const NAMED_RULINGS: Readonly<Record<string, EventRuling>> = {
     kind: "web-only",
     note:
     "WHICH client door is already running, re-announced to a browser that " +
-    "reconnected into a restored session. Emitted at " +
-    "server/auth-socket-handlers.ts (restore-session); consumer " +
+    "reconnected into a parked session. Emitted by `resumeParked` " +
+    "(server/session-parking.ts); consumer " +
     "packages/terminal/src/components/BBSTerminal.tsx. It carries no bundle " +
     "URL and starts nothing - door:load-client did that before the drop - so " +
     "a byte transport losing it loses only the browser's on-screen controls, " +
@@ -1568,16 +1568,17 @@ const NAMED_RULINGS: Readonly<Record<string, EventRuling>> = {
   "session-restore-failed": {
     kind: "web-only",
     note:
-    "Emitted at server/auth-socket-handlers.ts:103, " +
-    "server/auth-socket-handlers.ts:110, server/auth-socket-handlers.ts:118. " +
-    "Same reason as session-restored.",
+    "Emitted by `acceptWebConnection` (server/web-connection.ts) when " +
+    "`resumeParked` refuses a handshake resume token, before the fresh " +
+    "connection path runs. Same reason as session-restored.",
   },
   "session-restored": {
     kind: "web-only",
     note:
-    "Emitted at server/auth-socket-handlers.ts:226. Session restore is a " +
-    "browser reconnect concept: `restore-session` is registered only inside " +
-    "registerSocketHandlers, which the telnet/SSH entry point never calls.",
+    "Emitted by `resumeParked` (server/session-parking.ts), reached from " +
+    "`acceptWebConnection`. Resume is a browser reconnect concept: only a " +
+    "web session's link parks, and telnet/SSH never park (a new TCP " +
+    "connection is a new call).",
   },
   "set-font": {
     kind: "web-only",

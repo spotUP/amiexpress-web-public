@@ -259,6 +259,12 @@ export const FORWARDING_EMIT_SITES: ReadonlyArray<VariableEmitSite & { readonly 
       why: "The session link's emit forwards to the CURRENT raw socket (or holds the emit while parked): a pass-through of names its callers already pass as literals, which the census reads.",
     },
     {
+      file: "web/backend/src/server/session-parking.ts",
+      line: 198,
+      expression: "raw.emit(e",
+      why: "A resume replays the output the parked link held, onto the new raw socket: the same names the link's emit forwarded, which its callers already pass as literals.",
+    },
+    {
       file: "web/backend/src/server/session-rooms.ts",
       line: 53,
       expression: "emitter.emit(event",

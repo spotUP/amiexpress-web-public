@@ -780,7 +780,8 @@ describe('TP-3 - the adapter: one ruling for every event name', () => {
     // 7 as of 2026-09-28: server/session-rooms.ts emitToMembers, the chat and
     // room forwarder whose names grep A now reads from its call sites.
     // 8 as of 2026-10-15: server/session-link.ts, the web caller's link forwarding to its raw socket.
-    expect(FORWARDING_EMIT_SITES.length).toBe(8);
+    // 9 as of 2026-10-16: server/session-parking.ts, a resume replaying the held output.
+    expect(FORWARDING_EMIT_SITES.length).toBe(9);
     for (const s of FORWARDING_EMIT_SITES) expect(s.why.length).toBeGreaterThan(20);
     for (const p of PATTERN_RULINGS) expect(p.ruling.note.length).toBeGreaterThan(40);
   });

@@ -33,6 +33,7 @@ import { getSystemTime } from "../utils/date-time.util";
 import { setSession, allNodesBusyNotice, createSession } from "./session-manager";
 import { registerSocketHandlers, applyPendingGeometry } from "./socket-handlers";
 import { createSessionLink } from "./session-link";
+import { installParking, resumeParked } from "./session-parking";
 
 /** What the handler closed over in index.ts, passed in so a test can drive it. */
 export interface WebConnectionDeps {
@@ -46,6 +47,18 @@ export async function acceptWebConnection(
   deps: WebConnectionDeps,
 ): Promise<void> {
   const { nodeManager, chatState } = deps;
+  // A caller coming back with a resume token rejoins his parked session:
+  // no node, no welcome. The fresh link is made only after this, because a
+  // resume attaches the PARKED link to `raw`, and a second link over the same
+  // raw would dispatch every event twice. A refusal is said first, then the
+  // fresh path runs, so the browser never hangs (Decision 21).
+  const offered = (raw.handshake as { auth?: { resume?: unknown } }).auth?.resume;
+  if (offered !== undefined) {
+    const r = await resumeParked(raw, offered);
+    if (r.ok) return;
+    raw.emit("session-restore-failed", { reason: r.reason });
+  }
+
   const clientIp = raw.handshake.address;
   const socket = createSessionLink(raw);
 
@@ -112,6 +125,7 @@ console.log(
     connectionBaud: DEFAULT_CONNECTION_BAUD
   });
   session.webLink = socket;
+  installParking(socket, session);
   /*
    * THE THEME THIS BROWSER LAST WORE, for the screens drawn before login.
    *

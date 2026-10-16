@@ -182,45 +182,6 @@ describe('socket events ask who is calling', () => {
     expect(answer).toBe('no answer');
   });
 
-  it("does not hand a visitor a dropped caller's session for naming its user id", async () => {
-    // The victim's session: logged on, its socket gone (a phone that locked,
-    // a telnet caller - whose socket is never in this namespace).
-    const victim = { nodeId: 290, socketId: 'gone-socket', user: { id: 7, username: 'victim' }, state: BBSState.LOGGEDON } as never;
-    sessions.set('290', victim);
-    userSessions.set('7', victim);
-    mockDb.getUserById = jest.fn(async () => ({ id: 7, username: 'victim', baud: 0 }));
-    try {
-      const visitor = await connect({});
-      const got = await collect(visitor, 1200, () =>
-        visitor.emit('restore-session', { userId: '7', username: 'victim', savedAt: Date.now() }));
-      expect(got.map((g) => g.event)).not.toContain('session-restored');
-      expect(got.map((g) => g.event)).toContain('session-restore-failed');
-      expect(socketToNodeId.get(visitor.id ?? '')).not.toBe(290);
-    } finally {
-      sessions.delete('290');
-      userSessions.delete('7');
-    }
-  });
-
-  it('still restores the session of a browser whose token says it is that caller', async () => {
-    const own = { nodeId: 291, socketId: 'gone-socket-2', user: { id: 8, username: 'owner' }, state: BBSState.LOGGEDON } as never;
-    sessions.set('291', own);
-    userSessions.set('8', own);
-    mockDb.getUserById = jest.fn(async () => ({ id: 8, username: 'owner', baud: 0 }));
-    const verify = mockDb.verifyAccessToken = jest.fn(async () => ({ userId: '8', username: 'owner', secLevel: 20 }));
-    try {
-      const caller = await connect({});
-      const got = await collect(caller, 1500, () =>
-        caller.emit('restore-session', { token: 'the-tabs-token', userId: '999', username: 'owner', savedAt: Date.now() }));
-      expect(verify).toHaveBeenCalledWith('the-tabs-token');
-      expect(got.map((g) => g.event)).toContain('session-restored');
-    } finally {
-      sessions.delete('291');
-      userSessions.delete('8');
-      socketToUser.clear();
-    }
-  });
-
   it('does not run a chat event for a visitor, and does for a logged-on caller', async () => {
     const visitor = await connect({});
     await collect(visitor, 300, () => visitor.emit('room:message', { message: 'from nobody' }));

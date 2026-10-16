@@ -12,8 +12,9 @@
  *    tests/petscii/render-ctx-disposal.test.ts) honours the flag at BOTH
  *    grace periods: no 3 s reconnect wait, and no 15 s pending logoff.
  * 3. The real runPostAuthLogin (the mock set of
- *    tests/server/login-refuses-deleted-and-double-login.test.ts) reclaims the
- *    caller's own grace ghost BEFORE the already-on check reads the board.
+ *    tests/server/login-refuses-deleted-and-double-login.test.ts) ends the
+ *    caller's own PARKED session (session-parking.ts) BEFORE the already-on
+ *    check reads the board.
  *
  * The semantics of wantsImmediateTeardown / reclaimGraceGhost are in
  * tests/server/disconnect-grace.test.ts; the same-socket re-auth skip is in
@@ -34,13 +35,15 @@ jest.mock('../../src/server/logoff', () => ({
   beginLogoff: jest.fn(),
 }));
 
-// Records what the board looked like at the moment the already-on check ran.
+// Records whether a PARKED session of the account was still on the board at
+// the moment the already-on check ran (the fresh login's own session is on
+// the board too, holding the same account).
 const mockGhostPendingWhenChecked: boolean[] = [];
 jest.mock('../../src/services/user-already-online', () => ({
   ...jest.requireActual('../../src/services/user-already-online'),
   userAlreadyOnNode: jest.fn(() => {
-    const { pendingDisconnects } = require('../../src/server/session-manager');
-    mockGhostPendingWhenChecked.push(pendingDisconnects.has('u-ghost'));
+    const { sessions } = require('../../src/server/session-manager');
+    mockGhostPendingWhenChecked.push([...sessions.values()].some((x: any) => x.user?.id === 'u-ghost' && x.detachedAt !== undefined));
     return null;
   }),
 }));
@@ -69,7 +72,7 @@ import { handleGoodbyeCommand, setSystemCommandsDependencies } from '../../src/h
 import { registerDisconnectHandler } from '../../src/server/socket-handlers';
 import {
   setSession, deleteSession, pendingDisconnects, clearPendingDisconnect,
-  trackPendingDisconnect, userSessions, socketToUser,
+  userSessions, socketToUser,
 } from '../../src/server/session-manager';
 import { registerConnectionEmitter } from '../../src/server/session-emitter-registry';
 
@@ -151,12 +154,47 @@ describe('disconnects honor the flag at both grace periods', () => {
   }, 10000);
 });
 
-describe('fresh login reclaims its own grace-ghost first', () => {
-  test('the ghost is gone by the time the already-on check reads the board', async () => {
-    // A web caller dropped; his logoff is pending on a socket that no longer
-    // exists (the emitter below has no namespace, so nothing is alive).
-    const timer = setTimeout(() => {}, 60000);
-    trackPendingDisconnect('u-ghost', 'dead-socket', 4, timer);
+describe('fresh login ends its own parked session first', () => {
+  /** A raw socket.io socket, enough for a SessionLink to bind to. */
+  function fakeRaw(id: string) {
+    const { EventEmitter } = require('events');
+    const ee: any = new EventEmitter();
+    ee.id = id; ee.connected = true; ee.handshake = { address: '127.0.0.1', headers: {}, auth: {} };
+    ee.join = () => {}; ee.leave = () => {}; ee.onAny = () => {}; ee.offAny = () => {};
+    ee.onAnyOutgoing = () => {}; ee.offAnyOutgoing = () => {};
+    ee.fire = (e: string, ...a: unknown[]) => EventEmitter.prototype.emit.call(ee, e, ...a);
+    ee.emit = () => true;
+    ee.disconnect = () => { ee.connected = false; ee.fire('disconnect', 'server namespace disconnect'); };
+    return ee;
+  }
+
+  test('a fresh WEB login ends the parked session for good: node freed, token dead, before the already-on check', async () => {
+    // B1 (S6 review): login-post maps the fresh socket to the account
+    // (socketToUser) before it ends the parked session, and the disconnect
+    // handler's multi-tab shortcut used to see that mapping and keep the
+    // parked node for ever. The parked session is built the way production
+    // builds it: a real link, the real parking rule, the real disconnect
+    // handler, the real socketToUser mapping of its first login.
+    const { sessions } = require('../../src/server/session-manager');
+    const { createSessionLink } = require('../../src/server/session-link');
+    const { installParking, isParked } = require('../../src/server/session-parking');
+    const { issueResumeToken, lookupResumeToken } = require('../../src/server/resume-tokens');
+    const old = fakeRaw('parked-socket');
+    const link = createSessionLink(old);
+    const parked: any = {
+      nodeId: 4, tempData: {}, state: BBSState.LOGGEDON, connectionType: 'web',
+      user: { id: 'u-ghost', username: 'spot' }, webLink: link,
+    };
+    installParking(link, parked);
+    registerDisconnectHandler(link);
+    setSession('parked-socket', parked);
+    socketToUser.set('parked-socket', 'u-ghost');
+    const token = issueResumeToken(parked, 'u-ghost', 4);
+    old.connected = false; old.fire('disconnect', 'transport close');
+    expect(isParked(parked)).toBe(true);
+
+    const fresh: any = { state: BBSState.LOGON, subState: LoggedOnSubState.READ_COMMAND, connectionType: 'web', nodeId: 5, tempData: {} };
+    setSession('fresh-socket', fresh);
     mockGhostPendingWhenChecked.length = 0;
     const { runPostAuthLogin } = require('../../src/services/login-post.service');
     const emitter: any = {
@@ -165,14 +203,21 @@ describe('fresh login reclaims its own grace-ghost first', () => {
     };
     try {
       await runPostAuthLogin(
-        emitter,
-        { state: BBSState.LOGON, subState: LoggedOnSubState.READ_COMMAND, connectionType: 'telnet', nodeId: 4, tempData: {} },
+        emitter, fresh,
         { id: 'u-ghost', username: 'spot', slotNumber: 7, calls: 0, callsToday: 0, ansi: true },
         { lastLoginBeforeUpdate: new Date(0) },
       );
+      expect(link.ended).toBe(true);
+      expect(sessions.has('4')).toBe(false);                      // the node is free
+      expect(lookupResumeToken(token)).toEqual({ ok: false, reason: 'unknown' });
+      expect(socketToUser.get('fresh-socket')).toBe('u-ghost');   // the new login keeps its mapping
+      expect(sessions.get('5')).toBe(fresh);
       expect(mockGhostPendingWhenChecked).toEqual([false]);
     } finally {
-      clearPendingDisconnect('u-ghost');
+      sessions.delete('4');
+      deleteSession('fresh-socket');
+      socketToUser.delete('fresh-socket');
+      userSessions.delete('u-ghost');
     }
   });
 });

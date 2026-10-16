@@ -31,8 +31,8 @@ import {
   sessions,
   userSessions,
   socketToUser,
-  reclaimGraceGhost,
 } from "../server/session-manager";
+import { endParkedSessionsFor } from "../server/session-parking";
 import { callersLog } from "../server/database-helpers";
 import { triggerSamiLogRefresh } from "../services/SamiLogService";
 import { displayScreen, doPause } from "../handlers/screen.handler";
@@ -535,16 +535,14 @@ export async function runPostAuthLogin(
    * express's order.
    */
   /**
-   * GHOST RECLAIM (ghostlogoff 2026-09-10): a re-login landing while the
-   * previous socket's disconnect grace is still pending meets its own
-   * ghost - the maps still name the dead socket, the already-on check
-   * below refuses, and the pending timer would later wipe the fresh
-   * login's maps. Reclaim first (only what still names the dead socket;
-   * a live tab is never touched), so the check reads the board as it is.
+   * PARKED SESSION: a re-login while the account's previous web session is
+   * parked (its phone dropped; session-parking.ts) would meet that session
+   * in the already-on check below and be refused. The parked session ends
+   * first, through the normal finalize, so the check reads the board as it
+   * is. A live tab is never touched: only a parked session is ended.
    */
   // The caller's own namespace, which is where every OTHER web socket lives
-  // too - so it answers both "is the ghost's socket still here" for the
-  // reclaim below and "is that node's caller still reachable" for the
+  // too - so it answers "is that node's caller still reachable" for the
   // duplicate-login guard further down.
   const nspSockets = (emitter as any)?.nsp?.sockets as
     | { has?: (id: string) => boolean }
@@ -552,7 +550,11 @@ export async function runPostAuthLogin(
   {
     const userKey = String((user as any)?.id ?? '');
     if (userKey !== '') {
-      reclaimGraceGhost(userKey, (id) => nspSockets?.has?.(id) === true);
+      // A fresh login of an account with a parked session ends the parked
+      // one first (its Loss Carrier is written by the usual finalize), so
+      // one account never holds two nodes. Interim rule until the
+      // session-persistence plan's S9.
+      await endParkedSessionsFor(userKey);
     }
   }
 

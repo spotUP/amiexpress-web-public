@@ -39,7 +39,10 @@ export type VideoMode =
 export const DEFAULT_VIDEO_MODE: VideoMode = 'color';
 
 // Global cache for temporal smoothing (stabilizes flickering pixels)
-const lumaCache = new Map<string, Float32Array>();
+// Keyed by the socket object, not socket.id: a web session's link keeps
+// its object across a resume while its id moves to the new raw socket
+// (session-parking.ts), so an id key would orphan the entry.
+const lumaCache = new WeakMap<object, Float32Array>();
 
 // 4x4 Bayer Threshold Matrix for ordered dithering
 const BAYER_4X4 = [
@@ -110,7 +113,7 @@ export function registerAudioVideoHandlers(socket: Socket, io: SocketIOServer, s
   
   // Cleanup cache on disconnect
   socket.on('disconnect', () => {
-    lumaCache.delete(socket.id);
+    lumaCache.delete(socket);
   });
 
   // ========== AUDIO HANDLERS ==========
@@ -490,14 +493,14 @@ console.log(`[Audio][stutter] ${who}`, JSON.stringify(stats ?? {}));
     // ========== TEMPORAL SMOOTHING (Exponential Moving Average) ==========
     const applyTemporalSmoothing = (
       currentLuma: Float32Array,
-      socketId: string,
+      socketKey: object,
       alpha: number = 0.65 // 65% current, 35% previous (reduces flicker)
     ): Float32Array => {
-      const cached = lumaCache.get(socketId);
+      const cached = lumaCache.get(socketKey);
 
       if (!cached || cached.length !== currentLuma.length) {
         // First frame or size changed - just cache and return
-        lumaCache.set(socketId, new Float32Array(currentLuma));
+        lumaCache.set(socketKey, new Float32Array(currentLuma));
         return currentLuma;
       }
 
@@ -508,7 +511,7 @@ console.log(`[Audio][stutter] ${who}`, JSON.stringify(stats ?? {}));
       }
 
       // Update cache
-      lumaCache.set(socketId, new Float32Array(smoothed));
+      lumaCache.set(socketKey, new Float32Array(smoothed));
 
       return smoothed;
     };
@@ -654,7 +657,7 @@ console.log(`[Audio][stutter] ${who}`, JSON.stringify(stats ?? {}));
       }
 
       // Apply temporal smoothing
-      const smoothedLuma = applyTemporalSmoothing(lumaMap, socket.id);
+      const smoothedLuma = applyTemporalSmoothing(lumaMap, socket);
 
       // Process in 2x4 blocks
       for (let y = 0; y < height; y += 4) {
@@ -744,7 +747,7 @@ console.log(`[Audio][stutter] ${who}`, JSON.stringify(stats ?? {}));
       }
 
       // Apply temporal smoothing to reduce flicker
-      const smoothedLuma = applyTemporalSmoothing(lumaMap, socket.id);
+      const smoothedLuma = applyTemporalSmoothing(lumaMap, socket);
 
       // Process in 2x2 blocks for 4x effective resolution
       for (let y = 0; y < height; y += 2) {
@@ -973,7 +976,7 @@ console.log(`[Audio][stutter] ${who}`, JSON.stringify(stats ?? {}));
       }
 
       // PASS 2: Apply temporal smoothing to reduce flicker
-      const smoothedLuma = applyTemporalSmoothing(lumaMap, socket.id);
+      const smoothedLuma = applyTemporalSmoothing(lumaMap, socket);
 
       // PASS 2.5: Histogram-based contrast stretching for better black usage
       // Find min/max luminance (ignore extreme outliers)
