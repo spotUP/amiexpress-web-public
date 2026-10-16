@@ -72,7 +72,11 @@ describe('the FRONTEND step of the connect flow', () => {
     await connect();
     const failed = error.mock.calls.find((c) => String(c[0]).includes('FRONTEND syscmd failed:'));
     expect(failed?.[1]).toBe(cause);
-    expect(logged(log) + logged(error)).not.toContain('not found');
+    // Only the FRONTEND step's own lines: other startup lines (BBSConfig on a checkout with no
+    // gitignored bbsConfig.info) may say "not found" about something else.
+    const frontendLines = (logged(log) + '\n' + logged(error)).split('\n').filter((l) => l.includes('FRONTEND'));
+    expect(frontendLines.length).toBeGreaterThan(0);
+    expect(frontendLines.join('\n')).not.toContain('not found');
   });
 
   it('names the cache it looked in, not just the answer it got', async () => {
