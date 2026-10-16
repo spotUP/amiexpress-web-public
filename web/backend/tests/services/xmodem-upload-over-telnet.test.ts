@@ -16,6 +16,10 @@
 process.env.SKIP_DB_INIT = '1';
 
 jest.mock('../../src/services/post-upload.service', () => ({ runPostUpload: jest.fn(async () => {}) }));
+jest.mock('../../src/services/upload-filing.service', () => {
+  const actual = jest.requireActual('../../src/services/upload-filing.service');
+  return { ...actual, fileUploadedFile: jest.fn(actual.fileUploadedFile) };
+});
 jest.mock('../../src/services/resume-stuff.service', () => ({
   startResumeStuff: (_s: any, _sess: any, _p: string, _c: any, done: (r: any) => void) => done({ resumed: 0 }),
 }));
@@ -90,7 +94,10 @@ describe('an XMODEM upload over telnet', () => {
     const screen = out.join('');
     expect(screen).toContain('HELLO.TXT');
     expect(screen).not.toMatch(/Please enter a description/);
-    expect(session.tempData?.uploadBatch?.[0]?.description ?? '').toBe('a test');
+    // The batch is reset for the filing pass (the description travels on in
+    // tempData.describedBefore), so assert the outcome: what the filing received.
+    const filedSpy = jest.requireMock('../../src/services/upload-filing.service').fileUploadedFile as jest.Mock;
+    expect(filedSpy).toHaveBeenCalledWith(expect.objectContaining({ filename: 'HELLO.TXT', description: 'a test' }));
   });
 
   it('is filed with the description typed before it even when the DIZ extraction throws', async () => {
