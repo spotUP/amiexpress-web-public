@@ -22,7 +22,7 @@ import { doorDropFileManager } from '../services/DoorDropFileManager';
 import { userDatabaseManager } from '../services/UserDatabaseManager';
 import { loadBBSConfig } from '../services/bbs-config-file.service';
 import { config } from '../config';
-import { BBSState } from '../index';
+import { BBSState } from '../constants/bbs-states';
 import { SysopDebugUtil, DebugSeverity } from '../utils/sysop-debug.util';
 import { DebugLogger } from '../utils/debug-logger.util';
 import { emitText, emitPrompt, emitLine, flushOutput } from '../utils/output.util';
