@@ -28,6 +28,7 @@ import { displayScreen, doPause } from '../handlers/screen.handler';
 import { mailOnPwdFail, isMailEventEnabled, isSmtpConfigured } from '../services/mail-notification.service';
 import { SysopDebugUtil, DebugSeverity } from '../utils/sysop-debug.util';
 import { sessionLogManager } from '../services/SessionLogManager';
+import { isSessionLink } from './session-link';
 import { getSystemTime } from '../utils/date-time.util';
 import { beginLogoff } from './logoff';
 import { getBoardConfig } from '../services/bbs-config-file.service';
@@ -144,8 +145,18 @@ console.log('[Session Restore] Found existing session for user, rebinding to new
         // Lets DM/invite handlers io.to('user:'+id).emit() reach all tabs.
         try { socket.join('user:' + String(user.id)); } catch (_) {}
 
-        // Update session with new socket ID
+        // Update session with new socket ID - and the link with it. A web
+        // session's `webLink` is the link of the socket it lives on, and the
+        // session-emitter registry answers it ahead of `socketId`
+        // (session-emitter-registry.ts emitterForSession/socketIoSocketFor).
+        // The old link ended when the old socket dropped, so leaving it here
+        // would send every registry write to a restored caller into a dead
+        // link and land his room joins on the dead socket. `socket` is the
+        // new connection's link (web-connection.ts hands it to every
+        // handler); a socket that came in without one leaves no link, so the
+        // registry falls back to `socketId`.
         existingSession.socketId = socket.id;
+        existingSession.webLink = isSessionLink(socket) ? socket : undefined;
         setSession(socket.id, existingSession);
 
         // A GUARANTEED no-op, kept as the invariant's marker rather than as

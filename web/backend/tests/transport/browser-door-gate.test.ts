@@ -49,6 +49,7 @@ import {
   displayDoorMenu,
   formatDoorLine,
   setDoors,
+  getDoors,
   setHelpers,
   type Door,
 } from '../../src/handlers/door.handler';
@@ -538,4 +539,210 @@ describe('TP-6 - the R answer at the graphics prompt', () => {
       cleanup();
     }
   }, 20000);
+});
+
+/**
+ * Session persistence S5: every web caller's socket is a SessionLink (a Proxy
+ * facade, server/session-link.ts). The first landing broke every web door: the
+ * Proxy's set trap ignored the receiver, so the door socket wrapper
+ * (Object.create(link), createDoorSocketWrapper) wrote its `emit` ONTO the
+ * link, and the link's emit called itself until "Maximum call stack size
+ * exceeded". These rows drive the real door runner and the real W menu on a
+ * link, the way acceptWebConnection hands it to every handler.
+ */
+describe('S5 - a web caller on a session link', () => {
+  const { createSessionLink } = require('../../src/server/session-link') as typeof import('../../src/server/session-link');
+  const { handleWriteUserParamsCommand } = require('../../src/handlers/commands/info-commands.handler') as typeof import('../../src/handlers/commands/info-commands.handler');
+
+  function linkedWebCaller(nodeId: number) {
+    const sent: Array<[string, unknown[]]> = [];
+    const raw = new EventEmitter() as EventEmitter & Record<string, unknown>;
+    Object.assign(raw, {
+      id: `link-raw-${nodeId}`, connected: true, rooms: new Set<string>(),
+      handshake: { address: '127.0.0.1', headers: {}, auth: {} },
+      nsp: { sockets: new Map() },
+      join: () => undefined, leave: () => undefined, disconnect: () => undefined,
+      onAny: () => undefined, offAny: () => undefined,
+      onAnyOutgoing: () => undefined, offAnyOutgoing: () => undefined,
+    });
+    raw.emit = (event: string | symbol, ...args: unknown[]) => { sent.push([String(event), args]); return true; };
+    const link = createSessionLink(raw as never);
+    const session = baseSession(nodeId, { connectionType: 'web' });
+    (session as unknown as { webLink: unknown }).webLink = link;
+    const text = () => sent.filter(([e]) => e === 'ansi-output').map(([, a]) => String(a[0])).join('');
+    return { raw, link, session, sent, text };
+  }
+
+  /** A legacy runDoor door: the path that hands the door createDoorSocketWrapper's object. */
+  function installEchoDoor(root: string): Door {
+    const door = installDoor(root, 'LinkEcho', { main: 'index.js' });
+    const file = path.join(root, 'Doors', 'LinkEcho', 'index.js');
+    fs.writeFileSync(file, "exports.runDoor = async ({ socket }) => { socket.emit('ansi-output', 'LINK-DOOR-RAN\\r\\n'); };\n");
+    // The runner imports `file://<path>?t=<now>` in dev, which jest cannot
+    // resolve. In production there is no cache-buster, so the import names a
+    // fixed URL a virtual module can answer - with the door's own exports.
+    const previousEnv = process.env.NODE_ENV;
+    process.env.NODE_ENV = 'production';
+    restoreEnv = () => { process.env.NODE_ENV = previousEnv; };
+    const exportsOf = { runDoor: async ({ socket }: { socket: { emit: (e: string, d: string) => void } }) => { socket.emit('ansi-output', 'LINK-DOOR-RAN\r\n'); } };
+    for (const p of new Set([file, fs.realpathSync(file)])) jest.doMock(`file://${p}`, () => exportsOf, { virtual: true });
+    return door;
+  }
+  let restoreEnv = () => undefined as void;
+  afterEach(() => { restoreEnv(); });
+
+  it('a web door launches on a link: the wrapper owns its emit and the output reaches the socket', async () => {
+    const { root, cleanup } = tempBbsRoot('s5-door-');
+    const door = installEchoDoor(root);
+    const { link, session, text } = linkedWebCaller(90);
+    const linkEmit = link.emit;
+    try {
+      await executeDoor(link, session, door);
+      flushAllBuffers();
+      expect(text()).toContain('LINK-DOOR-RAN');
+      // The wrapper's emit never landed on the link itself.
+      expect(link.emit).toBe(linkEmit);
+      expect(Object.prototype.hasOwnProperty.call(link, 'emit')).toBe(false);
+    } finally {
+      cleanup();
+    }
+  }, 30000);
+
+  it('the W menu paints on a link', () => {
+    const { link, session, text } = linkedWebCaller(91);
+    handleWriteUserParamsCommand(link, session);
+    flushAllBuffers();
+    expect(text().length).toBeGreaterThan(0);
+  });
+
+  it('door, then W, then the board writes again on one link: no stack overflow, every write arrives once', async () => {
+    const { root, cleanup } = tempBbsRoot('s5-walk-');
+    const door = installEchoDoor(root);
+    const { link, session, text } = linkedWebCaller(92);
+    const errors: unknown[] = [];
+    const realError = console.error;
+    jest.spyOn(console, 'error').mockImplementation((...a: unknown[]) => { errors.push(a); });
+    try {
+      await executeDoor(link, session, door);
+      flushAllBuffers();
+      const afterDoor = text().length;
+      handleWriteUserParamsCommand(link, session);
+      flushAllBuffers();
+      expect(text().length).toBeGreaterThan(afterDoor);
+      link.emit('ansi-output', 'AFTER-W\r\n');
+      expect(text().split('AFTER-W').length - 1).toBe(1);
+      expect(text().split('LINK-DOOR-RAN').length - 1).toBe(1);
+      expect(JSON.stringify(errors, (_k, v) => (v instanceof Error ? String(v) : v))).not.toContain('Maximum call stack size exceeded');
+    } finally {
+      console.error = realError;
+      cleanup();
+    }
+  }, 30000);
+
+  /*
+   * THE WHOLE CALL, through the browser caller's real entry point. The rows
+   * above drive the door runner and the W menu by hand; this one hands a raw
+   * socket to acceptWebConnection exactly as index.ts's io.on('connection')
+   * does, and types every step as a socket.io 'command' event into the
+   * handlers acceptWebConnection registered on the link. Only the password
+   * exchange is stood in for (the session is put where the post-auth pipeline
+   * leaves a caller: logged on, at the command prompt): the rest is the real
+   * pre-login connect, the real command handler, the real door runner.
+   */
+  it('a whole web call on a link: connect, logged on, WHO, a door, W, G - every step answers and G ends it', async () => {
+    const { acceptWebConnection } = require('../../src/server/web-connection') as typeof import('../../src/server/web-connection');
+    const { getSession, sessions } = require('../../src/server/session-manager') as typeof import('../../src/server/session-manager');
+    const { setSystemCommandsDependencies } = require('../../src/handlers/commands/system-commands.handler') as typeof import('../../src/handlers/commands/system-commands.handler');
+    const { findSecurityScreen } = require('../../src/utils/screen-security.util') as typeof import('../../src/utils/screen-security.util');
+    // What server/initialization.ts injects at boot; G paints the Logoff screen through it.
+    setSystemCommandsDependencies({ displayScreen: displayScreen as never, findSecurityScreen: findSecurityScreen as never });
+    const { root, cleanup } = tempBbsRoot('s5-call-');
+    const door = installEchoDoor(root);
+    const previousDoors = getDoors();
+    setDoors([door]);
+
+    const sent: Array<[string, unknown[]]> = [];
+    const raw = new EventEmitter() as EventEmitter & Record<string, unknown>;
+    const disconnect = jest.fn();
+    Object.assign(raw, {
+      id: 'link-call-raw', connected: true, rooms: new Set<string>(),
+      handshake: { address: '127.0.0.1', headers: {}, auth: {} },
+      nsp: { sockets: new Map() },
+      join: () => undefined, leave: () => undefined, disconnect,
+      onAny: () => undefined, offAny: () => undefined,
+      onAnyOutgoing: () => undefined, offAnyOutgoing: () => undefined,
+    });
+    raw.emit = (event: string | symbol, ...args: unknown[]) => { sent.push([String(event), args]); return true; };
+    /** What the browser sends: a socket.io event INTO the server's listeners. */
+    const type = (data: string) => EventEmitter.prototype.emit.call(raw, 'command', data);
+    const text = () => sent.filter(([e]) => e === 'ansi-output').map(([, a]) => String(a[0])).join('');
+    const settle = async () => { await new Promise((r) => setTimeout(r, 300)); flushAllBuffers(); };
+
+    const errors: unknown[] = [];
+    jest.spyOn(console, 'error').mockImplementation((...a: unknown[]) => { errors.push(a); });
+    const processErrors: unknown[] = [];
+    const onProcessError = (e: unknown) => { processErrors.push(e); };
+    process.on('uncaughtException', onProcessError);
+    process.on('unhandledRejection', onProcessError);
+    try {
+      await acceptWebConnection({ sockets: { sockets: new Map() } } as never, raw as never, {
+        nodeManager: { assignSessionToNode: async () => ({ nodeId: 93 }) } as never,
+        chatState: { sessions: [], messages: [] } as never,
+      });
+      flushAllBuffers();
+      const session = getSession('link-call-raw')!;
+      expect(session.webLink?.raw).toBe(raw);
+      const steps = { connect: text().length };
+      const outputs: Record<string, string> = {};
+
+      // Logged on, at the prompt (the password exchange is not this row's).
+      Object.assign(session, baseSession(93, { connectionType: 'web' }), {
+        webLink: session.webLink, subState: LoggedOnSubState.READ_COMMAND, commandBuffer: '',
+        // Every ACS flag granted, so WHO and W answer with their own screens, not "requires higher access".
+        user: { id: 93, username: 'CALLER93', secLevel: 255, securityFlags: 'T'.repeat(200) },
+      });
+
+      const step = async (name: string, line: string) => {
+        const before = text().length;
+        type(line + '\r');
+        await settle();
+        outputs[name] = text().slice(before);
+      };
+      await step('WHO', 'WHO');
+      await step('door', door.command);
+      expect(text()).toContain('LINK-DOOR-RAN');
+      session.subState = LoggedOnSubState.READ_COMMAND;
+      session.commandBuffer = '';
+      await step('W', 'W');
+      session.subState = LoggedOnSubState.READ_COMMAND;
+      session.commandBuffer = '';
+      await step('G', 'G Y');
+      // G runs the LOGOFF sys-commands (up to a 3 s grace) and hangs up 2 s after NO CARRIER.
+      for (let waited = 0; disconnect.mock.calls.length === 0 && waited < 10000; waited += 100) {
+        await new Promise((r) => setTimeout(r, 100));
+      }
+      flushAllBuffers();
+
+      // Each step answered with its own screen, not merely the echo of what was typed.
+      expect(text().slice(0, steps.connect)).toContain('Welcome to AmiExpress');
+      expect(outputs.WHO).toContain('Name/Handle');
+      expect(outputs.door).toContain('LINK-DOOR-RAN');
+      expect(outputs.W).toContain('USER CONFIGURATION');
+      expect(outputs.G).toContain('NO CARRIER');
+      expect(text().split('LINK-DOOR-RAN').length - 1).toBe(1);
+      // G ends the call: the board hangs up the caller's socket.
+      expect(text()).toContain('NO CARRIER');
+      expect(sent.some(([e]) => e === 'force-disconnect')).toBe(true);
+      expect(disconnect).toHaveBeenCalled();
+      const all = JSON.stringify([errors, processErrors], (_k, v) => (v instanceof Error ? `${v.name}: ${v.message}` : v));
+      expect(all).not.toContain('Maximum call stack size exceeded');
+      expect(processErrors).toEqual([]);
+    } finally {
+      process.off('uncaughtException', onProcessError);
+      process.off('unhandledRejection', onProcessError);
+      setDoors(previousDoors);
+      sessions.clear();
+      cleanup();
+    }
+  }, 60000);
 });

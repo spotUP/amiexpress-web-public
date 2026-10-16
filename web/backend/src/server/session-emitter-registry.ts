@@ -101,6 +101,10 @@ export function emitterForSession(
   io?: IOServer | null,
 ): SessionEmitter | null {
   if (!session) return null;
+  // A web caller's session carries the link over his socket (server/web-connection.ts):
+  // the link outlives the raw socket under it, so it is THE answer, ahead of
+  // the namespace lookups below which can only ever find a raw socket.
+  if (session.webLink) return session.webLink;
   const registered = (session as SessionWithEmitter).connectionEmitter;
   if (registered) return registered;
 
@@ -230,6 +234,9 @@ export function socketIoSocketFor(
   // A registered connection emitter means a byte transport: it is not in the
   // io namespace and must never be handed a room operation.
   if ((target as SessionWithEmitter).connectionEmitter) return null;
+  // A web caller with a link: the raw socket under it, or none while the link
+  // is parked (a room operation has no socket to land on).
+  if (target.webLink) return target.webLink.parked ? null : target.webLink.raw;
   return liveSocket(target.socketId, io);
 }
 
