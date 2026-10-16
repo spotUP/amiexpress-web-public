@@ -50,6 +50,8 @@ export function buildCatalogue(source: MenuSource, caller: MenuCaller, config: M
     kind: source.kind, parent: parentKey ?? '', title: source.title(caller), prompt: source.prompt(caller),
     sections, overflow,
     wipes: wipesOn ? { open: config.wipes.open, leave: config.wipes.leave, page: config.wipes.page } : { open: '', leave: '', page: '' },
+    // Decision D9: the slide is characters, so colour does not matter, but 40 columns and PETSCII never slide.
+    drill: { enabled: config.drill.enabled, slide: config.drill.slide && cls !== 'c64' && caller.displayMode !== 'petscii' },
     logos: [],   // chosen by M6 (logos need the board's files and the rotation counter)
   };
 }

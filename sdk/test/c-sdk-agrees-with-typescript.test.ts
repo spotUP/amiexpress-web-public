@@ -121,6 +121,8 @@ describe('the C SDK', () => {
       ['AE_FIELD_MSGBASE_LOC', 'MSGBASE_LOC'],
       ['AE_FIELD_LAST_READ', 'LAST_READ'],
       ['AE_FIELD_LAST_SCANNED', 'LAST_SCANNED'],
+      // The palette's starting filter rides on the launch line.
+      ['AE_FIELD_MAIN_LINE', 'BB_MAINLINE'],
     ];
 
     for (const [cName, boardName] of pairs) {

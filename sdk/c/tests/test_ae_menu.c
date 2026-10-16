@@ -105,6 +105,20 @@ static void a_child_catalogue_keeps_its_parent_and_crlf_is_tolerated(void)
     printf("  [OK] a child catalogue keeps its parent; CRLF is tolerated\n");
 }
 
+static void the_drill_line_sets_both_flags_and_its_absence_leaves_them_off(void)
+{
+    assert(parse("AEMENU 1\nK MAIN\t-\nD 1\t0\nS A\nE k\tl\td\t\t\n.\n") == 1);
+    assert(menu.drill == 1 && menu.drill_slide == 0);
+    assert(parse("AEMENU 1\nK MAIN\t-\nD 1\t1\nS A\nE k\tl\td\t\t\n.\n") == 1);
+    assert(menu.drill == 1 && menu.drill_slide == 1);
+    assert(parse("AEMENU 1\nK MAIN\t-\nS A\nE k\tl\td\t\t\n.\n") == 1);
+    assert(menu.drill == 0 && menu.drill_slide == 0);
+    assert(parse("AEMENU 1\nK MAIN\t-\nD 1\n.\n") == 0);
+    assert(parse("AEMENU 1\nK MAIN\t-\nD 2\t1\n.\n") == 0);
+    assert(parse("AEMENU 1\nK MAIN\t-\nD 1\t1\t1\n.\n") == 0);
+    printf("  [OK] the D line sets drill-down and slide; without it both are off\n");
+}
+
 static void a_malformed_file_is_refused(void)
 {
     assert(parse("MENU 1\nK MAIN\t-\nS A\nE k\tl\td\t\t\n.\n") == 0);                 /* missing magic */
@@ -227,6 +241,7 @@ int main(void)
     ae_native_set_exchange(stand_in, 0);
     a_whole_catalogue_is_parsed_field_for_field();
     a_child_catalogue_keeps_its_parent_and_crlf_is_tolerated();
+    the_drill_line_sets_both_flags_and_its_absence_leaves_them_off();
     a_malformed_file_is_refused();
     too_many_entries_are_cut_and_flagged();
     too_many_sections_and_logos_are_cut_and_flagged();

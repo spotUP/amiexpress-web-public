@@ -3,7 +3,7 @@
  * Tests BBS screen wipe animations (10 different types)
  */
 
-import { getWipeFrames, parseWipeMCI, WipeType } from '../../src/utils/screen-wipe.util';
+import { getWipeFrames, getRegionSlideFrames, parseWipeMCI, WipeType } from '../../src/utils/screen-wipe.util';
 
 describe('screen-wipe.util', () => {
   const testContent = 'Hello BBS World!\nLine 2\nLine 3';
@@ -458,6 +458,43 @@ describe('screen-wipe.util', () => {
       // Final frame must contain both color codes
       expect(lastFrame.content).toContain('\x1b[32m');
       expect(lastFrame.content).toContain('\x1b[31m');
+    });
+  });
+
+  describe('getRegionSlideFrames (push wipe P)', () => {
+    const screen = Array.from({ length: 20 }, (_, i) => `row${i + 1} text`).join('\r\n');
+    const region = { top: 4, rows: 10, forward: true };
+    const cupRows = (frame: string): number[] => [...frame.matchAll(/\x1b\[(\d+);1H/g)].map(m => Number(m[1]));
+
+    it('plays 3-4 frames, each writing only rows inside the range', () => {
+      const frames = getRegionSlideFrames(screen, 80, region);
+      expect(frames.length).toBeGreaterThanOrEqual(3);
+      expect(frames.length).toBeLessThanOrEqual(4);
+      for (const f of frames) {
+        const rows = cupRows(f.content);
+        expect(rows).toHaveLength(10);
+        expect(Math.min(...rows)).toBe(4);
+        expect(Math.max(...rows)).toBe(13);
+        expect(f.content).not.toContain('\x1b[2J');
+        expect(f.content).not.toMatch(/\x1b\[H/);
+        expect(f.content).not.toContain('row3 ');
+        expect(f.content).not.toContain('row14 ');
+      }
+    });
+
+    it('ends on the target rows; forward and back differ', () => {
+      const fwd = getRegionSlideFrames(screen, 80, region);
+      const back = getRegionSlideFrames(screen, 80, { ...region, forward: false });
+      const last = fwd[fwd.length - 1].content;
+      expect(last).toContain('row4 text');
+      expect(last).toContain('row13 text');
+      expect(back[back.length - 1].content).toBe(last);
+      expect(fwd[0].content).not.toBe(back[0].content);
+      expect(fwd[0].content).toMatch(/;1H(\x1b\[0m)? {60}/);
+    });
+
+    it('a whole-screen getWipeFrames with the push letter has no animation', () => {
+      expect(getWipeFrames('P' as WipeType, screen)).toEqual([]);
     });
   });
 });

@@ -85,3 +85,18 @@ describe('menuKindOfCommand', () => {
     expect(menuKindOfCommand('BULLS')).toBeNull();
   });
 });
+
+describe('drill', () => {
+  it('defaults to off with the slide on, and a missing field gets the default', () => {
+    expect(defaultMenuConfig('MAIN').drill).toEqual({ enabled: false, slide: true });
+    expect(validateMenuConfig('MAIN', {}).config.drill).toEqual({ enabled: false, slide: true });
+    expect(validateMenuConfig('MAIN', { drill: { enabled: true } }).config.drill).toEqual({ enabled: true, slide: true });
+  });
+  it('rejects values that are not true/false and keeps the default', () => {
+    const { config, problems } = validateMenuConfig('MAIN', { drill: { enabled: 'yes', slide: 1 } });
+    expect(config.drill).toEqual({ enabled: false, slide: true });
+    expect(problems).toContain('drill enabled: not true/false');
+    expect(problems).toContain('drill slide: not true/false');
+    expect(validateMenuConfig('MAIN', { drill: 'on' }).problems).toContain('drill: not an object');
+  });
+});

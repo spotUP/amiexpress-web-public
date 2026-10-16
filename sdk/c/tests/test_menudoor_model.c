@@ -45,6 +45,33 @@ static void logo(const char *position, int rows, int cols, int after)
 
 static void reset(void) { memset(&menu, 0, sizeof menu); menu.section_count = 1; }
 
+static void the_palette_ranks_key_then_label_then_description_and_keeps_catalogue_order_in_ties(void)
+{
+    int order[8], n;
+    reset();
+    entry(0, 0, "MA", "Mail Area");                      /* key prefix of "m", label prefix of "ma" */
+    entry(1, 0, "R", "Read Mail");                       /* label substring of "mail" */
+    entry(2, 0, "MAIL", "Inbox");                        /* exact key of "mail" */
+    entry(3, 0, "E", "Enter Message");
+    strcpy(menu.entries[3].description, "Write MAIL to someone");  /* description substring only */
+    entry(4, 0, "G", "Goodbye");
+
+    n = md_palette_rank(&menu, "mail", order, 8);
+    assert(n == 4);
+    assert(order[0] == 2);                               /* exact key */
+    assert(order[1] == 0);                               /* label prefix "Mail Area" */
+    assert(order[2] == 1);                               /* label substring */
+    assert(order[3] == 3);                               /* description substring, any case */
+
+    n = md_palette_rank(&menu, "M", order, 8);           /* two key prefixes: catalogue order between them */
+    assert(n >= 2 && order[0] == 0 && order[1] == 2);
+
+    n = md_palette_rank(&menu, "", order, 8);            /* empty: everything, catalogue order */
+    assert(n == 5 && order[0] == 0 && order[4] == 4);
+    assert(md_palette_rank(&menu, "zzz", order, 8) == 0);
+    assert(md_palette_rank(&menu, "", order, 2) == 2);   /* never past cap */
+}
+
 static void type_ahead_prefers_the_exact_key_and_ignores_case(void)
 {
     reset();
@@ -224,7 +251,7 @@ static menudoor_result on_typed(struct menudoor *d, const char *line)
 }
 
 static const menudoor_spec SPEC = { "MAIN", "MAIN MENU", "BULLS", "Arrows Move  Enter Run  Esc Prompt", "Enter Run  Esc Prompt",
-                                    0, on_activate, on_typed };
+                                    0, on_activate, on_typed, 0 };
 
 static char screen_text[65536];
 
@@ -397,6 +424,103 @@ static void a_silent_board_runs_the_fallback_and_draws_nothing(void)
     assert(!strstr(screen_text, "\x1b[2J"));
     silent_board = 0;
     printf("  [OK] a silent board runs the fallback command and draws nothing\n");
+}
+
+/* The same catalogue with drill-down and its slide switched on by the sysop. */
+static const char *CATALOGUE_DRILL =
+    "AEMENU 1\nK MAIN\t-\nT MAIN MENU\nP Go: \nO scroll\nW -\t-\t-\nR 0\nD 1\t1\n"
+    "S Messages\n"
+    "E R\tRead Mail\tRead your mail\t\t\n"
+    "E E\tEnter Message\tWrite a message\t\t\n"
+    "E MS\tMail Scan\tScan for new mail\t\t\n"
+    "S Files\n"
+    "E F\tFile Listings\tNot for you\t\tG\n"
+    "E D\tDownload\tDownload a file\t\t\n"
+    ".\n";
+
+static void drill_opens_sections_slides_between_levels_and_remembers_the_catalogue_row(void)
+{
+    const char *f, *b;
+    write_catalogue(CATALOGUE_DRILL);
+    mouse_queue = 0; silent_board = 0;
+    /* Enter opens the first section from the catalogue already read (no second OPEN), Enter runs its first entry. */
+    assert(DRIVE("\r\r") == 0);
+    assert(strstr(requests, "OPEN MAIN|") == requests && !strstr(requests + 1, "OPEN "));
+    assert(strstr(screen_text, "Read Mail, Enter Message, Mail Scan"));      /* the section row lists its entries */
+    assert(strstr(screen_text, "MAIN MENU > Messages"));                       /* the breadcrumb */
+    assert(strstr(screen_text, "Enter Open"));                                 /* the sections key bar */
+    f = strstr(requests, "WIPE IN P ");
+    assert(f && strstr(f, " F|"));                                             /* forward slide into the section */
+    assert(activations == 1 && strstr(requests, "RUN R|"));
+    /* Down to Files, open, Esc back (a backward slide), q leaves: the board keeps the catalogue row of Files' first entry. */
+    assert(DRIVE("\x1b[B\r\x1bq") == 0);
+    assert(strstr(screen_text, "MAIN MENU > Files"));
+    b = strstr(requests, " B|");
+    assert(b && strstr(requests, "WIPE IN P ") < b);
+    assert(strstr(requests, "ROW 3|"));
+    assert(activations == 0);
+    write_catalogue(CATALOGUE);
+    printf("  [OK] drill opens sections, slides forward and back, and leaves on the catalogue row\n");
+}
+
+/* A level change repaints the list region once, inside the slide: at 80x25 that is one region of cells plus the fixed
+   rows, under one and a half screens. Painting it twice (a show_frame and the slide) or the whole screen per step fails. */
+static void a_drill_level_change_paints_the_list_region_once(void)
+{
+    size_t open_only, two_changes;
+    write_catalogue(CATALOGUE_DRILL);
+    mouse_queue = 0; silent_board = 0;
+    assert(DRIVE("q") == 0);
+    open_only = strlen(screen_text);
+    assert(DRIVE("\r\x1bq") == 0);
+    two_changes = strlen(screen_text) - open_only;
+    assert(two_changes > 0 && two_changes / 2 < 80 * 25 * 3 / 2);
+    write_catalogue(CATALOGUE);
+    printf("  [OK] a drill level change paints the list region once (%zu bytes for two at 80x25)\n", two_changes);
+}
+
+/* Drill has three levels: sections, a section's entries, and an L entry's child list, the crumb naming all three. */
+static const char *CATALOGUE_DRILL_LIST =
+    "AEMENU 1\nK MAIN\t-\nT MAIN MENU\nP Go: \nO scroll\nW -\t-\t-\nR 0\nD 1\t0\n"
+    "S Messages\nE R\tRead Mail\tRead your mail\t\tL\nE E\tEnter Message\tWrite a message\t\t\n"
+    "S Files\nE D\tDownload\tDownload a file\t\t\n.\n";
+
+static void drill_reaches_a_child_list_below_a_section(void)
+{
+    write_catalogue(CATALOGUE_DRILL_LIST);
+    mouse_queue = 0; silent_board = 0;
+    assert(DRIVE("\r\r\x1b\x1bq") == 0);
+    assert(strstr(screen_text, "MAIN MENU > Messages > Read Mail"));
+    assert(strstr(requests, "OPEN MAIN|") && strstr(requests, "OPEN MAIN R|"));
+    write_catalogue(CATALOGUE);
+    printf("  [OK] drill reaches an L entry's list below a section and the crumb names all three levels\n");
+}
+
+/* At 40 columns the door plays no effects: the sysop's slide flag is on, the level still changes, no slide is asked for. */
+static void drill_at_40_columns_asks_for_no_slide(void)
+{
+    write_catalogue(CATALOGUE_DRILL);
+    mouse_queue = 0; silent_board = 0; size_reply = "40\t25";
+    assert(DRIVE("\r\x1bq") == 0);
+    assert(strstr(screen_text, "Messages") && !strstr(requests, "WIPE IN P "));
+    size_reply = "80\t25";
+    write_catalogue(CATALOGUE);
+    printf("  [OK] drill at 40 columns changes level without a slide\n");
+}
+
+static void drill_without_the_slide_repaints_and_asks_for_no_wipe(void)
+{
+    char cat[1024];
+    strcpy(cat, CATALOGUE_DRILL);
+    *strstr(cat, "D 1\t1") = '\0';
+    strcat(cat, "D 1\t0\n");
+    strcat(cat, strstr(CATALOGUE_DRILL, "S Messages"));
+    write_catalogue(cat);
+    mouse_queue = 0; silent_board = 0;
+    assert(DRIVE("\r\x1bq") == 0);
+    assert(strstr(screen_text, "MAIN MENU > Messages") && !strstr(requests, "WIPE IN P "));
+    write_catalogue(CATALOGUE);
+    printf("  [OK] drill with the slide off repaints the level and asks the board for no slide\n");
 }
 
 static const char *CATALOGUE_WITH_LIST =
@@ -1538,6 +1662,7 @@ int main(void)
 {
     ae_native_set_exchange(board, 0);
     door = run_menu;
+    the_palette_ranks_key_then_label_then_description_and_keeps_catalogue_order_in_ties();
     type_ahead_prefers_the_exact_key_and_ignores_case();
     digits_act_at_once_only_when_nothing_else_could_follow();
     layout_puts_things_where_the_screen_has_room();
@@ -1587,6 +1712,11 @@ int main(void)
     the_first_frame_with_a_logo_costs_at_most_the_divider_row_more();
     hit_testing_uses_the_grid_origin_below_the_divider();
     the_cursor_is_hidden_in_navigation_mode_after_every_board_write_and_parked_when_typing();
+    drill_opens_sections_slides_between_levels_and_remembers_the_catalogue_row();
+    drill_without_the_slide_repaints_and_asks_for_no_wipe();
+    drill_at_40_columns_asks_for_no_slide();
+    a_drill_level_change_paints_the_list_region_once();
+    drill_reaches_a_child_list_below_a_section();
     remove(CAT_PATH); remove("build/test_menudoor_keys.bin"); remove("build/test_menudoor_screen.bin");
     puts("test_menudoor_model: OK");
     return 0;

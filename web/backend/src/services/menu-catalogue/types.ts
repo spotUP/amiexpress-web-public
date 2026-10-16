@@ -3,7 +3,7 @@ import type { MenuKind, OverflowMode, LogoPosition } from '../../screens/menu-co
 export interface CatalogueEntry { key: string; label: string; description: string; right: string; flags: string; runText: string; runAs: 'typed' | 'syscmd'; section: string }
 export interface CatalogueSection { id: string; title: string; entries: CatalogueEntry[] }
 export interface ChosenLogo { position: LogoPosition; file: string; rows: number; cols: number; afterSection: number }
-export interface Catalogue { kind: MenuKind; parent: string; title: string; prompt: string; sections: CatalogueSection[]; overflow: OverflowMode; wipes: { open: string; leave: string; page: string }; logos: ChosenLogo[] }
+export interface Catalogue { kind: MenuKind; parent: string; title: string; prompt: string; sections: CatalogueSection[]; overflow: OverflowMode; wipes: { open: string; leave: string; page: string }; drill: { enabled: boolean; slide: boolean }; logos: ChosenLogo[] }
 export interface MenuCaller {
   secLevel: number; conference: number; node: number; columns: number; rows: number;
   displayMode: 'ansi' | 'petscii' | 'teletext' | 'rip';

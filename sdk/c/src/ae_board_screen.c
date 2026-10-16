@@ -80,6 +80,18 @@ int ae_bs_wipe_begin(char letter, int conceal)
     return strcmp(reply, "OK") == 0 ? 1 : 0;
 }
 
+int ae_bs_slide_begin(int forward, int top, int rows)
+{
+    char req[40], reply[AE_MAX_LINE + 1];
+    int n;
+
+    if (top < 1 || rows < 1 || top > 999 || rows > 999) return 0;
+    sprintf(req, "WIPE IN P %d %d %c", top, rows, forward ? 'F' : 'B');
+    n = ask(req, reply, (int)sizeof(reply));
+    if (n < 0) return AE_BS_GONE;
+    return strcmp(reply, "OK") == 0 ? 1 : 0;
+}
+
 int ae_bs_wipe_end(void)
 {
     char reply[AE_MAX_LINE + 1];

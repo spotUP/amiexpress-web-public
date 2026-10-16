@@ -903,6 +903,30 @@ export function returnToMenuAfterThrow(socket: any, session: BBSSession): void {
 }
 
 /**
+ * A command line leaves READ_COMMAND: Enter on a typed line, and Ctrl-K's PALETTE.
+ * It runs in the next event cycle from PROCESS_COMMAND (express.e:28638).
+ */
+function submitCommandLine(socket: any, session: BBSSession, line: string): void {
+  /*
+   * A SUBMITTED COMMAND ENDS THE MANUAL MENU'S TURN.
+   *
+   * displayMainMenu sets skipNextDisplayFlowMenu so a flow pass in the
+   * SAME turn does not draw a second menu. Nothing cleared it once the
+   * caller typed on, so it swallowed the next real one: after T or S
+   * the flow logged "skipping duplicate MENU display" and the caller
+   * got no prompt (found by the telnet regression suite, 2026-09-27).
+   * The J path cleared it by hand for the same reason.
+   */
+  session.skipNextDisplayFlowMenu = false;
+  session.commandText = line.toUpperCase();
+console.log(' Command text stored:', session.commandText);
+  session.subState = LoggedOnSubState.PROCESS_COMMAND;
+  setTimeout(() => {
+    handleCommand(socket, session, '');  // Trigger process command
+  }, 0);
+}
+
+/**
  * Return to the menu after command execution when the command did not change state.
  * menuPauseDefault mirrors express.e: TRUE for line input commands, FALSE for shortcuts.
  */
@@ -3264,6 +3288,30 @@ console.log(' In READ_COMMAND state, reading line input');
 console.log('[CommandHistory] History cleared by user (Ctrl-B)');
       return;
     }
+    // Ctrl-K - the search palette (plan 2026-10-16 D4). Not in express.e: the board
+    // only summons the menu door's PALETTE registration, the same path as typing
+    // PALETTE, with the line typed so far as the palette's starting filter (the door
+    // reads it back from BB_MAINLINE).
+    else if (data === '\x0b') {
+      const typed = (session.inputBuffer || '').trim();
+      session.inputBuffer = '';
+      (session as any)._readCommandCurpos = 0;
+      (session as any)._promptGhostShown = false;
+      (session as any)._promptCycle = undefined;
+      const { commandCache } = require('./command-execution.handler');
+      if (!commandCache.bbscmd.get('PALETTE')) {
+        emitText(socket, '\r\nPalette not installed\r\n');
+        flushOutput(socket);
+        session.menuPause = false;
+        session.subState = LoggedOnSubState.DISPLAY_MENU;
+        await menuDisplayMainMenu(socket, session, false, /* bypassDebounce */ true);
+        return;
+      }
+      emitText(socket, '\r\n');
+      flushOutput(socket);
+      submitCommandLine(socket, session, typed ? `PALETTE ${typed}` : 'PALETTE');
+      return;
+    }
 
     // Buffer characters until Enter is pressed
     if (data === '\r' || data === '\n') {
@@ -3312,26 +3360,7 @@ console.log('[CommandHistory] History cleared by user (Ctrl-B)');
         const { addToHistory } = require('../utils/command-history.util');
         addToHistory(session, input);
 
-        /*
-         * A SUBMITTED COMMAND ENDS THE MANUAL MENU'S TURN.
-         *
-         * displayMainMenu sets skipNextDisplayFlowMenu so a flow pass in the
-         * SAME turn does not draw a second menu. Nothing cleared it once the
-         * caller typed on, so it swallowed the next real one: after T or S
-         * the flow logged "skipping duplicate MENU display" and the caller
-         * got no prompt (found by the telnet regression suite, 2026-09-27).
-         * The J path cleared it by hand for the same reason.
-         */
-        session.skipNextDisplayFlowMenu = false;
-        // Store command text in session for PROCESS_COMMAND state
-        session.commandText = input.toUpperCase();
-console.log(' Command text stored:', session.commandText);
-        // Transition to PROCESS_COMMAND (express.e:28638)
-        session.subState = LoggedOnSubState.PROCESS_COMMAND;
-        // Process the command in the next event cycle
-        setTimeout(() => {
-          handleCommand(socket, session, '');  // Trigger process command
-        }, 0);
+        submitCommandLine(socket, session, input);
       } else {
         /*
          * express.e:28228 - Empty command, just redisplay menu.

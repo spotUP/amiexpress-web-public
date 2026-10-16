@@ -113,6 +113,8 @@ export const removeOrderKey = (c: MenuConfig, floor: number, key: string): MenuC
 
 export const setWipe = (c: MenuConfig, event: WipeEvent, code: string): MenuConfig => ({ ...c, wipes: { ...c.wipes, [event]: code } });
 export const setWipeAt40 = (c: MenuConfig, on: boolean): MenuConfig => ({ ...c, wipes: { ...c.wipes, at40: on } });
+export const setDrillEnabled = (c: MenuConfig, on: boolean): MenuConfig => ({ ...c, drill: { ...c.drill, enabled: on } });
+export const setDrillSlide = (c: MenuConfig, on: boolean): MenuConfig => ({ ...c, drill: { ...c.drill, slide: on } });
 
 /**
  * The sysop-facing name of each wipe. Keyed by WipeType, so a new wipe fails to

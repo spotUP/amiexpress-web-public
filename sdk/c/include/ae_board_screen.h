@@ -34,6 +34,10 @@ int ae_bs_size(int *cols, int *rows);
 /** 1 capturing (draw now, then ae_bs_wipe_end), 0 no wipe (draw normally), AE_BS_GONE.
     `conceal` 0 plays the screen in, 1 plays it out; `letter` is the board's wipe code, 0 = none. */
 int ae_bs_wipe_begin(char letter, int conceal);
+/** As ae_bs_wipe_begin, for the board's region slide: only screen rows top..top+rows-1 (1-based) move, the new content
+    entering from the right when `forward`, from the left when not. Draw only that region, then ae_bs_wipe_end.
+    1 capturing, 0 no slide (draw normally), AE_BS_GONE. */
+int ae_bs_slide_begin(int forward, int top, int rows);
 /** 1 played, 0 not, AE_BS_GONE. */
 int ae_bs_wipe_end(void);
 /** 1 on, 0 not available, AE_BS_GONE. */

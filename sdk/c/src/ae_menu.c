@@ -86,6 +86,12 @@ static int parse_line(const char *p, const char *end, ae_menu *m, int *in_sectio
         m->wipe_leave = p[2] == '-' ? 0 : p[2];
         m->wipe_page = p[4] == '-' ? 0 : p[4];
         return 1;
+    case 'D':
+        /* Two flags, "1 TAB 0": drill-down on, slide off. The board writes the line only when drill-down is on. */
+        if (end - p != 3 || p[1] != '\t' || (p[0] != '0' && p[0] != '1') || (p[2] != '0' && p[2] != '1')) return 0;
+        m->drill = p[0] == '1';
+        m->drill_slide = p[2] == '1';
+        return 1;
     case 'R': return number(p, end, &m->last_row);
     case 'L': {
         ae_menu_logo l;

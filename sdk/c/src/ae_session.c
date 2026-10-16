@@ -420,6 +420,13 @@ int ae_menu_command(ae_session *s, char *out, int n)
     return got > 0 ? got : 0;
 }
 
+int ae_main_line(ae_session *s, char *out, int n)
+{
+    int got = ask(s, AE_FIELD_MAIN_LINE, out, n);
+
+    return got > 0 ? got : 0;
+}
+
 int ae_set_user_theme(ae_session *s, const char *theme_id)
 {
     char round_trip[64];

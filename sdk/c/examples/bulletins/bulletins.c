@@ -32,7 +32,7 @@ static const menudoor_spec BULLETINS = {
     "BULLETINS", "BULLETINS", "BULLS",
     "Arrows Move  Enter Read  Esc Leave",
     "Enter Read  Esc Leave",
-    1, show_entry, show_typed
+    1, show_entry, show_typed, 0
 };
 
 int main(int argc, char **argv)

@@ -453,3 +453,11 @@ Potential future improvements:
 - `Documentation/5-SysOps/MCI_CODES.md` - All MCI codes reference
 - `web/backend/src/utils/screen-wipe.util.ts` - Implementation source
 - `web/backend/src/handlers/screen.handler.ts` - Screen display logic
+
+## Region wipe P (push) - door request only
+
+`P` is not a `~W` screen code and is not offered in any picker. A door asks the board for it over the XIM board-screen channel:
+
+    WIPE IN P <top> <rows> <F|B>
+
+`top` is the 1-based screen row, `rows` the region height, `F` slides the new rows in from the right (forward), `B` from the left (back). The door then draws ONE frame and sends `WIPE END`; the board plays 4 frames that move only those rows (cursor-addressed, never a screen clear). The part the new rows have not reached yet is blank, since the board does not know what the region held. A missing or out-of-range field, or `WIPE OUT P`, answers `NO`. Code: `REGION_WIPE_CODES` (screens/wipe-codes.ts), `getRegionSlideFrames` (utils/screen-wipe.util.ts).

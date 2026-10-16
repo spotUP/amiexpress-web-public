@@ -24,6 +24,10 @@ int  md_typeahead(const ae_menu *m, const char *typed);
 int  md_q_leaves(const ae_menu *m);
 /** The entry to act on at once for typed digits: exactly one key equals them and no other starts with them; -1 wait. */
 int  md_digits_act(const ae_menu *m, const char *typed);
+/** D12: the palette's matches for `typed`, best first, into order[] (entry indexes, at most cap); returns how many.
+ *  Rank: exact key, key prefix, label prefix, label substring, description substring; ties keep catalogue order;
+ *  case-insensitive. An empty `typed` matches every entry in catalogue order. */
+int  md_palette_rank(const ae_menu *m, const char *typed, int *order, int cap);
 /** Where everything goes at cols x rows. */
 void md_layout(const ae_menu *m, int cols, int rows, md_layout_out *o);
 

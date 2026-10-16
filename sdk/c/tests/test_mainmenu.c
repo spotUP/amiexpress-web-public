@@ -1,5 +1,6 @@
-/* test_mainmenu.c - the MAINMENU door's own two answers, driven through its real main():
-   an entry runs its key, a typed line runs as typed, and the second registration opens the settings screen. */
+/* test_mainmenu.c - the MAINMENU door's own answers, driven through its real main():
+   an entry runs its key, a typed line runs as typed, the second registration opens the settings screen,
+   a drill-down catalogue opens a section before it runs, and the PALETTE registration is the search palette. */
 #define main mainmenu_main
 #include "../examples/mainmenu/mainmenu.c"
 #undef main
@@ -11,11 +12,12 @@
 #include <unistd.h>
 
 static const char *invoked_name = "";
+static const char *main_line = "";   /* 131: what the caller typed at the board prompt, the palette's starting filter */
 static const char *is_ansi = "";     /* 541: "" is a silent board, which ae_user_is_ansi reads as colour off */
 static int ansi_asks;
 int ae_field_read(int field, char *out, int cap)
 {
-    const char *text = field == 605 ? invoked_name : field == 541 ? is_ansi : "";
+    const char *text = field == 605 ? invoked_name : field == AE_FIELD_MAIN_LINE ? main_line : field == 541 ? is_ansi : "";
     int n = (int)strlen(text);
     if (field == 541) ansi_asks++;
     if (n > cap - 1) n = cap - 1;
@@ -132,6 +134,39 @@ int main(void)
     drive("\x1b", 1, &rc);
     assert(rc == 0 && !strstr(screen_text, "Page "));
     printf("  [OK] scroll mode shows no page number\n");
+
+    /* Drill-down (D 1, slide off): Enter opens the section, the second Enter runs its first entry. */
+    f = fopen(CAT_PATH, "wb");
+    assert(f);
+    fputs("AEMENU 1\nK MAIN\t-\nT MAIN MENU\nP Menu: \nO scroll\nW -\t-\t-\nD 1\t0\nR 0\nS Messages\n"
+          "E R\tRead Mail\tRead your mail\t\t\nS Conferences\nE J\tJoin Conference\tJoin another conference\t\t\n.\n", f);
+    fclose(f);
+    invoked_name = "MENU";
+    drive("\r", 1, &rc);
+    assert(rc == 0 && !strstr(requests, "RUN") && strstr(screen_text, "Conferences"));
+    drive("\r\r", 2, &rc);
+    assert(rc == 0 && strstr(requests, "RUN R|") && strstr(screen_text, "MAIN MENU > Messages"));
+    printf("  [OK] drill opens a section first and runs its entry on the next Enter\n");
+
+    /* The palette: the same catalogue flattened, the board's main line after the name is the filter. */
+    invoked_name = "PALETTE";
+    main_line = "PALETTE join";
+    drive("\r", 1, &rc);
+    assert(rc == 0 && strstr(requests, "OPEN MAIN|") && strstr(requests, "RUN J|") && strstr(screen_text, "1 of 2"));
+    printf("  [OK] the palette starts from the board's main line and Enter runs the match\n");
+    main_line = "PALETTE";
+    drive("mail\x1b\x1b", 6, &rc);                       /* Esc clears the text, the second Esc leaves */
+    assert(rc == 0 && !strstr(requests, "RUN") && !strstr(requests, "ROW") && strstr(screen_text, "Type to search")
+           && strstr(screen_text, "2 of 2"));
+    drive("q\x1b\x1b", 3, &rc);                           /* q types; it does not leave */
+    assert(rc == 0 && !strstr(requests, "RUN"));
+    printf("  [OK] the palette counts its matches, q is a letter, and Esc leaves without running\n");
+    drive("r\r", 2, &rc);                                  /* the exact key beats a label that contains it */
+    assert(rc == 0 && strstr(requests, "RUN R|"));
+    drive("J 3.1\r", 6, &rc);                              /* nothing matches: the line runs as typed */
+    assert(rc == 0 && strstr(requests, "RUN J 3.1|") && strstr(screen_text, "Nothing matches"));
+    printf("  [OK] Enter runs the exact key first, and an unlisted line runs as typed\n");
+    main_line = "";
 
     invoked_name = "MENUSETTINGS";
     drive("\x1b", 1, &rc);

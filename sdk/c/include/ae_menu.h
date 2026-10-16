@@ -39,6 +39,7 @@ typedef struct {
     char kind[16]; char parent[16]; char title[31]; char prompt[73];
     int pages;                               /* 1 = PAGES mode */
     char wipe_open, wipe_leave, wipe_page;   /* 0 = none */
+    int drill, drill_slide;                  /* "D 1\t1": sections first, Enter opens one; slide on level change */
     int last_row;
     int section_count, entry_count, logo_count, truncated;
     char section_title[AE_MENU_MAX_SECTIONS][31];

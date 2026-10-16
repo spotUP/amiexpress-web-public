@@ -95,3 +95,23 @@ test('a second WIPE IN while one is held plays the held one first', async () => 
   expect(sent.join('')).toContain('FIRST SCREEN');
   expect(c.state.wipeCapture).toEqual({ kind: 'out', letter: 'H', text: [] });
 });
+
+test('WIPE IN P <top> <rows> <F|B> stores the region and END plays region frames only; bad ranges answer NO', async () => {
+  const c = ctx({ screenWidth: 80 });
+  expect(await boardScreenAnswer('WIPE IN P 4 10 F', c)).toBe('OK');
+  expect(c.state.wipeCapture).toEqual({ kind: 'in', letter: 'P', text: [], region: { top: 4, rows: 10, forward: true } });
+  c.state.wipeCapture!.text.push('\x1b[2J\x1b[H' + Array.from({ length: 20 }, (_, i) => `line${i + 1}`).join('\r\n'));
+  expect(await boardScreenAnswer('WIPE END', c)).toBe('OK');
+  const out = sent.join('');
+  expect(out).toContain('line4');
+  expect(out).not.toContain('\x1b[2J');
+  expect(out).not.toContain('line3');
+  for (const bad of ['WIPE IN P', 'WIPE IN P 4 10', 'WIPE IN P 0 5 F', 'WIPE IN P 4 0 F', 'WIPE IN P 20 10 F', 'WIPE IN P 4 x F', 'WIPE IN P 4 10 X', 'WIPE OUT P 4 10 F']) {
+    const b = ctx({ screenWidth: 80 });
+    expect(await boardScreenAnswer(bad, b)).toBe('NO');
+    expect(b.state.wipeCapture).toBeNull();
+  }
+  const x = ctx({ screenWidth: 80 });
+  expect(await boardScreenAnswer('WIPE IN X', x)).toBe('OK');
+  expect(x.state.wipeCapture).toEqual({ kind: 'in', letter: 'X', text: [] });
+});

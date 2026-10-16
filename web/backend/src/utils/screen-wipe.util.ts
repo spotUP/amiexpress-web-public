@@ -1030,6 +1030,56 @@ export function getWipeFrames(
   return frames;
 }
 
+/** The rows a region wipe repaints: 1-based `top`, `rows` tall; `forward` = new rows enter from the right. */
+export interface WipeRegion {
+  top: number;
+  rows: number;
+  forward: boolean;
+}
+
+const REGION_SLIDE_STEPS = 4;
+const REGION_SLIDE_DELAY_MS = 40;
+
+/**
+ * The push wipe (`P`): the captured frame's rows top..top+rows-1 slide in
+ * horizontally, in REGION_SLIDE_STEPS frames, the last one the target rows
+ * exactly. The board does not know what the region held before, so the part
+ * the new rows have not reached yet is blank.
+ *
+ * Separate from getWipeFrames because it has a different frame model:
+ * framesFromGrids opens with CLEAR_HOME and repaints the whole screen, which
+ * a push must never do. Every row is cursor-addressed (CUP) and no row
+ * outside the region is ever written. Like renderGridAt the frame ends on a
+ * reset (SGR 0); the cursor is left at the end of the last row written.
+ */
+export function getRegionSlideFrames(
+  content: string,
+  columns: number,
+  region: WipeRegion,
+): WipeFrame[] {
+  const grid = parseAnsiToGrid(content, columns);
+  const target: Cell[][] = [];
+  for (let y = 0; y < region.rows; y++) {
+    const row = (grid[region.top - 1 + y] ?? []).slice(0, columns);
+    while (row.length < columns) row.push(BLANK);
+    target.push(row);
+  }
+  const frames: WipeFrame[] = [];
+  for (let step = 1; step <= REGION_SLIDE_STEPS; step++) {
+    const shown = Math.round((columns * step) / REGION_SLIDE_STEPS);
+    let out = '';
+    for (let y = 0; y < region.rows; y++) {
+      const blank = Array<Cell>(columns - shown).fill(BLANK);
+      const row = region.forward
+        ? [...blank, ...target[y].slice(0, shown)]
+        : [...target[y].slice(columns - shown), ...blank];
+      out += `\x1b[${region.top + y};1H` + gridToAnsi([row]);
+    }
+    frames.push({ content: out, delay: step === REGION_SLIDE_STEPS ? 0 : REGION_SLIDE_DELAY_MS });
+  }
+  return frames;
+}
+
 /**
  * The reveal played backwards: the screen goes away in the wipe's own
  * pattern and the caller is left on a blank one (Decision 27, "leaving to a

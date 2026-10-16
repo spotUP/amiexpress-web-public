@@ -36,6 +36,8 @@ export interface MenuConfig {
   c64Menus: LevelMap<C64Menu>;
   overflow: Record<WidthClass, LevelMap<OverflowMode>>;
   wipes: { open: string; leave: string; page: string; at40: boolean };
+  /** Drill-down layout: the menu door shows the sections first. `slide` animates between levels; it only acts when `enabled`. */
+  drill: { enabled: boolean; slide: boolean };
   logos: LogoSet[];
 }
 
@@ -80,6 +82,7 @@ export function defaultMenuConfig(kind: MenuKind): MenuConfig {
     placement: {}, labels: {}, descriptions: {}, levels: {}, c64Menus: {},
     overflow: { c64: { '0': 'pages' }, standard: { '0': 'scroll' }, wide: { '0': 'scroll' } },
     wipes: { open: 'X', leave: '', page: 'H', at40: true },
+    drill: { enabled: false, slide: true },
     logos: [],
   };
 }
@@ -175,6 +178,12 @@ export function validateMenuConfig(kind: MenuKind, raw: unknown): { config: Menu
     if (typeof raw.wipes.at40 === 'boolean') config.wipes.at40 = raw.wipes.at40;
     else if (raw.wipes.at40 !== undefined) problems.push('wipes at40: not true/false');
   }
+  if (isObj(raw.drill)) {
+    for (const k of ['enabled', 'slide'] as const) {
+      if (typeof raw.drill[k] === 'boolean') config.drill[k] = raw.drill[k] as boolean;
+      else if (raw.drill[k] !== undefined) problems.push(`drill ${k}: not true/false`);
+    }
+  } else if (raw.drill !== undefined) problems.push('drill: not an object');
   if (Array.isArray(raw.logos)) {
     // The board keeps one set per position, width class and level floor (chooseLogos), so a second is dropped, never left to win silently.
     const taken = new Set<string>();

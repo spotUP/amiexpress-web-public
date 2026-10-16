@@ -8,6 +8,7 @@ import { MenuEntriesEditor } from '../components/menus/MenuEntriesEditor';
 import { MenuSectionsEditor } from '../components/menus/MenuSectionsEditor';
 import { MenuLevelsEditor } from '../components/menus/MenuLevelsEditor';
 import { MenuWipesCard } from '../components/menus/MenuWipesCard';
+import { MenuDrillCard } from '../components/menus/MenuDrillCard';
 import { MenuOverflowCard } from '../components/menus/MenuOverflowCard';
 import { MenuC64Builder } from '../components/menus/MenuC64Builder';
 import { MenuPreview } from '../components/menus/MenuPreview';
@@ -35,6 +36,7 @@ function MenuKindPanel({ kind }: { kind: MenuKind }) {
     { id: 'levels', label: 'Levels', render: () => <MenuLevelsEditor config={config} rows={rows} update={update} /> },
     { id: 'c64', label: 'C64 menu', render: () => <MenuC64Builder config={config} rows={rows} update={update} /> },
     { id: 'wipes', label: 'Wipes', render: () => <MenuWipesCard config={config} update={update} /> },
+    { id: 'drill', label: 'Drill-down', render: () => <MenuDrillCard config={config} update={update} /> },
     { id: 'overflow', label: 'Overflow', render: () => <MenuOverflowCard config={config} update={update} /> },
   ];
 

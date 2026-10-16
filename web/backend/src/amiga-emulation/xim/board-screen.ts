@@ -4,8 +4,8 @@
  * plan M5. Degradation: a board without 10800 answers nothing; the SDK then
  * uses BB_SCRWIDTH, draws without wipes and without a mouse.
  */
-import { WIPE_CODES, type WipeType } from '../../screens/wipe-codes';
-import { getWipeFrames, getWipeOutFrames, wipeEffectsEnabled } from '../../utils/screen-wipe.util';
+import { WIPE_CODES, REGION_WIPE_CODES, type WipeType } from '../../screens/wipe-codes';
+import { getWipeFrames, getWipeOutFrames, getRegionSlideFrames, wipeEffectsEnabled, type WipeRegion } from '../../utils/screen-wipe.util';
 import { playWipeFrames } from '../../utils/wipe-playback';
 import { MOUSE_REPORTING_OFF } from '../../utils/terminal-modes';
 import { responsiveDoorGeometry } from './screen-width.util';
@@ -13,7 +13,7 @@ import type { MouseAbsorber } from './mouse-absorber';
 
 export interface BoardScreenContext {
   session: any; socket: any;
-  state: { wipeCapture?: { kind: 'in' | 'out'; letter: string; text: string[] } | null };
+  state: { wipeCapture?: { kind: 'in' | 'out'; letter: string; text: string[]; region?: WipeRegion } | null };
   mouse: MouseAbsorber | null;
   armMouse(on: boolean): void;
   columns(): number;
@@ -49,14 +49,31 @@ async function playCapture(ctx: BoardScreenContext): Promise<void> {
   const cap = ctx.state.wipeCapture;
   ctx.state.wipeCapture = null;
   if (!cap || cap.text.length === 0) return;
-  const type = WIPE_CODES[cap.letter] as WipeType;
   const content = cap.text.join('');
+  if (cap.region) {
+    await playWipeFrames(ctx.socket, capWipeFrames(getRegionSlideFrames(content, ctx.columns(), cap.region)), { eventName: 'ansi-output' });
+    return;
+  }
+  const type = WIPE_CODES[cap.letter] as WipeType;
   const frames = cap.kind === 'in' ? getWipeFrames(type, content, ctx.columns()) : getWipeOutFrames(type, content, ctx.columns());
   await playWipeFrames(ctx.socket, capWipeFrames(frames), { eventName: 'ansi-output' });
 }
 
+/**
+ * `P <top> <rows> <F|B>` after `WIPE IN`: the region of a push wipe, or null
+ * when a field is missing, not an integer, or the rows leave the screen.
+ */
+function parseRegion(fields: string[], screenRows: number): WipeRegion | null {
+  const [topText, rowsText, dir] = fields;
+  if (fields.length !== 3 || !/^\d+$/.test(topText ?? '') || !/^\d+$/.test(rowsText ?? '') || (dir !== 'F' && dir !== 'B')) return null;
+  const top = Number(topText);
+  const rows = Number(rowsText);
+  if (top < 1 || rows < 1 || top + rows - 1 > screenRows) return null;
+  return { top, rows, forward: dir === 'F' };
+}
+
 export async function boardScreenAnswer(request: string, ctx: BoardScreenContext): Promise<string> {
-  const [verb, arg = '', letter = ''] = request.trim().split(/\s+/);
+  const [verb, arg = '', letter = '', ...extra] = request.trim().split(/\s+/);
   switch (verb) {
     case 'SIZE': {
       const g = responsiveDoorGeometry(ctx.session);
@@ -64,10 +81,18 @@ export async function boardScreenAnswer(request: string, ctx: BoardScreenContext
     }
     case 'WIPE': {
       if (arg === 'END') { await playCapture(ctx); return 'OK'; }
-      if ((arg !== 'IN' && arg !== 'OUT') || !letter || !WIPE_CODES[letter.toUpperCase()] || !wipeEffectsEnabled(ctx.session)) return 'NO';
+      const isRegion = REGION_WIPE_CODES[letter.toUpperCase()] !== undefined;
+      let region: WipeRegion | undefined;
+      if (isRegion) {
+        if (arg !== 'IN' || !wipeEffectsEnabled(ctx.session)) return 'NO';
+        const parsed = parseRegion(extra, responsiveDoorGeometry(ctx.session).rows);
+        if (!parsed) return 'NO';
+        region = parsed;
+      }
+      if (!isRegion && ((arg !== 'IN' && arg !== 'OUT') || !letter || !WIPE_CODES[letter.toUpperCase()] || !wipeEffectsEnabled(ctx.session))) return 'NO';
       // A wipe still held is played first, never dropped (the door forgot WIPE END).
       await playCapture(ctx);
-      ctx.state.wipeCapture = { kind: arg === 'IN' ? 'in' : 'out', letter: letter.toUpperCase(), text: [] };
+      ctx.state.wipeCapture = { kind: arg === 'IN' ? 'in' : 'out', letter: letter.toUpperCase(), text: [], ...(region ? { region } : {}) };
       return 'OK';
     }
     case 'MOUSE': {

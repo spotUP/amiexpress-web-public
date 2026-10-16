@@ -102,6 +102,15 @@ describe('the Main Menu and Bulletins page', () => {
     await waitFor(() => expect(lastSaved().wipes.page).toBe('V'), SAVED);
   });
 
+  it('writes the drill-down switch and keeps the slide disabled while it is off', async () => {
+    const user = userEvent.setup();
+    renderPage('?part=drill');
+    expect(await screen.findByLabelText('Slide between levels')).toBeDisabled();
+    await user.click(screen.getByLabelText('Drill-down layout'));
+    await waitFor(() => expect(lastSaved().drill.enabled).toBe(true), SAVED);
+    expect(screen.getByLabelText('Slide between levels')).toBeEnabled();
+  });
+
   it('asks the preview for PETSCII at 40 columns', async () => {
     const user = userEvent.setup();
     renderPage();

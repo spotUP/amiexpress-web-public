@@ -5,8 +5,9 @@
  * wipes, the logos, the mouse, the masthead. What is MAIN about it is two
  * answers: an entry runs its command, and a typed line runs exactly as the
  * main prompt would run it (sysop, 2026-10-15). The board decides how
- * (AEW_MENU RUN, plan Decision 34). Registered twice - MENU and MENUSETTINGS
- * (Decision 23) - and menudoor_main tells the two apart with ae_menu_command.
+ * (AEW_MENU RUN, plan Decision 34). Registered three times - MENU, MENUSETTINGS
+ * (Decision 23) and PALETTE (the search palette, plan P4) - and menudoor_main
+ * tells them apart with ae_menu_command.
  */
 #include <stdlib.h>
 #include "aedoor.h"
@@ -30,7 +31,8 @@ static const menudoor_spec MAIN_MENU = {
     "MAIN", "MAIN MENU", 0,
     "Arrows Move  Enter Run  Esc Prompt",             /* typing is the hint's: "Arrows and Enter, or type a command" */
     "Enter Run  Esc Prompt",
-    0, run_entry, run_line
+    0, run_entry, run_line,
+    "PALETTE"                                         /* Ctrl-K at a board prompt (plan P5) */
 };
 
 int main(int argc, char **argv)

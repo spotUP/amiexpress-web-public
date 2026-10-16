@@ -95,6 +95,19 @@ static void a_wipe_sends_exactly_the_verb_and_a_missing_one_sends_nothing(void)
     printf("  [OK] a wipe sends exactly its verb; no letter sends nothing\n");
 }
 
+static void a_slide_sends_its_region_and_direction(void)
+{
+    silent = 0; requests = 0;
+    assert(ae_bs_slide_begin(1, 4, 18) == 1 && strcmp(last_request, "WIPE IN P 4 18 F") == 0);
+    assert(ae_bs_slide_begin(0, 7, 3) == 1 && strcmp(last_request, "WIPE IN P 7 3 B") == 0);
+    requests = 0;
+    assert(ae_bs_slide_begin(1, 0, 5) == 0 && ae_bs_slide_begin(1, 3, 0) == 0 && requests == 0);
+    silent = 1;
+    assert(ae_bs_slide_begin(1, 4, 18) == 0);
+    silent = 0;
+    printf("  [OK] a slide sends its rows and direction; an empty region sends nothing\n");
+}
+
 static void the_mouse_is_switched_on_and_events_come_one_by_one(void)
 {
     ae_mouse_event ev;
@@ -229,6 +242,7 @@ int main(void)
     a_silent_board_leaves_the_outputs_alone();
     the_size_parser_is_strict();
     a_wipe_sends_exactly_the_verb_and_a_missing_one_sends_nothing();
+    a_slide_sends_its_region_and_direction();
     the_mouse_is_switched_on_and_events_come_one_by_one();
     the_mouse_parser_is_strict();
     a_wake_is_answered_by_asking_until_the_board_says_empty();

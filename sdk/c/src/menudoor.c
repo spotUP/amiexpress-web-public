@@ -51,6 +51,34 @@ int md_typeahead(const ae_menu *m, const char *typed)
     return -1;
 }
 
+static int icontains(const char *s, const char *needle)
+{
+    for (; *s; s++) if (istarts(s, needle)) return 1;
+    return 0;
+}
+
+/** Which D12 class entry `e` falls in for `typed`: 0 best .. 4, or -1 no match. */
+static int palette_class(const ae_menu_entry *e, const char *typed)
+{
+    if (ieq(e->key, typed)) return 0;
+    if (istarts(e->key, typed)) return 1;
+    if (istarts(e->label, typed)) return 2;
+    if (icontains(e->label, typed)) return 3;
+    if (icontains(e->description, typed)) return 4;
+    return -1;
+}
+
+int md_palette_rank(const ae_menu *m, const char *typed, int *order, int cap)
+{
+    int cls, i, n = 0;
+    if (!m || !order || cap <= 0) return 0;
+    if (!typed) typed = "";
+    for (cls = 0; cls <= 4; cls++)                       /* one pass per class keeps catalogue order inside each */
+        for (i = 0; i < m->entry_count && n < cap; i++)
+            if ((typed[0] ? palette_class(&m->entries[i], typed) : 0) == cls) order[n++] = i;
+    return n;
+}
+
 int md_q_leaves(const ae_menu *m)
 {
     return m && md_typeahead(m, "q") < 0;          /* typeahead: an exact Q, else any key that starts with Q */
@@ -140,7 +168,7 @@ void md_layout(const ae_menu *m, int cols, int rows, md_layout_out *o)
 
 /* ------------------------------------------------------------------ shell */
 
-#define LEVELS 2
+#define LEVELS 3                      /* drill: sections, entries, an entry's child list */
 #define TYPED_MAX 60
 #define MOUSE_BATCH 8
 
@@ -162,12 +190,21 @@ struct menudoor {
     char status_drawn[100];           /* the status row as the caller sees it; "" until a frame has drawn it */
     int status_valid;                 /* 0 = the row is not on the glass (a fresh frame is about to draw it) */
     char pager_drawn[24];             /* the "Page n of m" at the right of the status row; "" when none */
-    char title[32];
+    char title[80];                   /* what the masthead shows: the breadcrumb in drill, clipped from the left */
+    char crumb[80];                   /* drill: the whole path, "MAIN MENU > Messages > Bases" */
+    int drill;                        /* the top level shows the catalogue's sections; Enter opens one */
+    int drill_slide;                  /* a level change slides the list region (the board may still refuse) */
+    int drill_row;                    /* drill: the catalogue row the board remembers on leave */
+    int section_first;                /* drill: the catalogue index of the open section's first entry */
+    int palette;                      /* the search palette: lv[0] is the catalogue filtered by the typed text */
+    int palette_total;                /* palette: the catalogue's entry count, the M of "N of M" */
     int rail_tick;
     int gone;                         /* the caller hung up */
 };
 
 static struct menudoor shell;
+static ae_menu drill_source;          /* drill: the whole catalogue, while lv[0] shows its sections; palette: before the filter */
+static int drill_section[AE_MENU_MAX_SECTIONS];   /* drill: lv[0] entry -> catalogue section */
 static char frame_buffer[49152];      /* Decision 26 */
 static char session_storage[AE_SESSION_MIN_STORAGE];
 
@@ -213,6 +250,7 @@ static void configure(struct menudoor *d, level *lv, int selected)
     g->erase_tail = sc->profile.line_erase && lv->lay.grid_left == 1 && lv->lay.grid_width == sc->cols;
     g->caret = sc->profile.caret_selection ? ">>" : 0;
     g->ctx = &lv->menu;
+    if (d->drill && lv == &d->lv[0]) g->max_columns = 1;   /* drill: one section per row, read top to bottom */
     ui_grid_layout(g);
     ui_grid_select(g, selected);
 }
@@ -220,6 +258,9 @@ static void configure(struct menudoor *d, level *lv, int selected)
 /* Under a header logo the rail is the DIVIDER between logo and grid (sysop, 2026-10-15) and the logo takes row 1:
    no title row above it; without a logo the rail stays on row 1 beside the title. Without a rail (40 columns, effects off, a theme
    with none) the divider is a static rule in the accent token, so a logo is still separated. */
+/* Under a header logo the title shows nowhere - except in drill, where the breadcrumb is how a caller finds their way back. */
+static const char *divider_title(const struct menudoor *d) { return d->drill ? d->title : ""; }
+
 static void draw_divider(struct menudoor *d)
 {
     ui_screen *sc = &d->screen;
@@ -229,10 +270,18 @@ static void draw_divider(struct menudoor *d)
 
     if (!row) return;
     if (d->rail[0]) {
-        ui_masthead_draw_tick(&sc->buf, row, 1, sc->cols, "", d->rail, UI_TOKEN(UI_T_BAR_INK), UI_TOKEN(UI_T_BAR), d->rail_tick);
+        ui_masthead_draw_tick(&sc->buf, row, 1, sc->cols, divider_title(d), d->rail, UI_TOKEN(UI_T_BAR_INK), UI_TOKEN(UI_T_BAR), d->rail_tick);
         return;
     }
     memset(rule, '-', (size_t)n); rule[n] = '\0';
+    /* Drill: the breadcrumb is the only place a caller under a header logo learns where they are. */
+    if (d->drill && n > 6) {
+        int t = (int)strlen(d->title);
+        if (t > n - 6) t = n - 6;
+        rule[2] = ' ';
+        memcpy(rule + 3, d->title, (size_t)t);
+        rule[3 + t] = ' ';
+    }
     ansi_color(&sc->buf, UI_TOKEN(UI_T_ACCENT), ground(d), 0);
     ansi_text_raw(&sc->buf, row, 1, rule, n);
 }
@@ -257,6 +306,7 @@ static void draw_status(struct menudoor *d, int full)
     int width, first, room;
 
     if (d->notice[0]) text = d->notice;
+    else if (d->palette && lv->menu.entry_count == 0) text = d->typed_len > 0 ? "Nothing matches: Enter runs it as typed" : "";
     else if (d->typed_len > 0 && d->offwindow >= 0 && d->offwindow < lv->menu.entry_count) {
         /* The match is not on the glass and the window does not move for typing: say what Enter will find, and that Tab shows it. */
         sprintf(offtext, "Enter runs: %s  %s", lv->menu.entries[d->offwindow].key, lv->menu.entries[d->offwindow].label);
@@ -270,7 +320,9 @@ static void draw_status(struct menudoor *d, int full)
     /* A caller who reads a menu a page at a time must be told which page: the number outranks the description,
        which gives way to it (a C64 row has no room for both in full). */
     pager[0] = '\0';
-    if (lv->grid.mode == UI_GRID_PAGES && lv->grid.page_count > 1)
+    if (d->palette)
+        sprintf(pager, "%d of %d", lv->menu.entry_count, d->palette_total);
+    else if (lv->grid.mode == UI_GRID_PAGES && lv->grid.page_count > 1)
         sprintf(pager, "Page %d of %d", ui_grid_page(&lv->grid) + 1, lv->grid.page_count);
     room = sc->cols - (int)strlen(pager) - 2;
     if (pager[0] && room > 0 && (int)strlen(line) > room) line[room] = '\0';
@@ -303,6 +355,11 @@ static const char *hint_text(const struct menudoor *d, const char *bar, int room
 {
     int numbers = d->spec->digits_show_at_once;
     const char *wide = numbers ? MENUDOOR_HINT_NUMBER_WIDE : MENUDOOR_HINT_WIDE;
+    if (d->palette) {
+        wide = MENUDOOR_PALETTE_HINT_WIDE;
+        return d->screen.cols >= 80 && (int)strlen(wide) + 2 + (bar ? (int)strlen(bar) : 0) <= room ? wide : MENUDOOR_PALETTE_HINT_NARROW;
+    }
+    wide = numbers ? MENUDOOR_HINT_NUMBER_WIDE : MENUDOOR_HINT_WIDE;
     if (d->screen.cols >= 80 && (int)strlen(wide) + 2 + (bar ? (int)strlen(bar) : 0) <= room) return wide;
     return numbers ? MENUDOOR_HINT_NUMBER_NARROW : MENUDOOR_HINT_NARROW;
 }
@@ -311,8 +368,10 @@ static const char *hint_text(const struct menudoor *d, const char *bar, int room
 static const char *typing_bar(const struct menudoor *d, int typed_len)
 {
     int room = d->screen.cols - 1, plen = prompt_len(&d->lv[d->depth]) + typed_len;
-    if (plen + 2 + (int)strlen(MENUDOOR_TYPING_KEYBAR_WIDE) <= room) return MENUDOOR_TYPING_KEYBAR_WIDE;
-    if (plen + 2 + (int)strlen(MENUDOOR_TYPING_KEYBAR_NARROW) <= room) return MENUDOOR_TYPING_KEYBAR_NARROW;
+    const char *wide = d->palette ? MENUDOOR_PALETTE_KEYBAR_WIDE : MENUDOOR_TYPING_KEYBAR_WIDE;
+    const char *narrow = d->palette ? MENUDOOR_PALETTE_KEYBAR_NARROW : MENUDOOR_TYPING_KEYBAR_NARROW;
+    if (plen + 2 + (int)strlen(wide) <= room) return wide;
+    if (plen + 2 + (int)strlen(narrow) <= room) return narrow;
     return 0;
 }
 
@@ -327,10 +386,11 @@ static const char *mode_bar(struct menudoor *d, char *out, size_t cap)
     if (d->typed_len > 0) return typing_bar(d, d->typed_len);
     /* Esc leaves to the prompt at the top and goes up a level in a child list: the bar says which. */
     bar = d->depth > 0 ? (wide ? MENUDOOR_CHILD_KEYBAR_WIDE : MENUDOOR_CHILD_KEYBAR_NARROW)
+        : d->drill     ? (wide ? MENUDOOR_SECTIONS_KEYBAR_WIDE : MENUDOOR_SECTIONS_KEYBAR_NARROW)
                        : (wide ? spec->keybar_wide : spec->keybar_narrow);
     /* Where q leaves too (top level, no Q entry), the bar says so: "Esc Prompt" becomes "Esc/q Prompt", and a door
        whose Esc says "Leave" (BULLETINS) gets "Esc/q Leave". */
-    if (bar && d->depth == 0 && md_q_leaves(&lv->menu)
+    if (bar && d->depth == 0 && !d->palette && md_q_leaves(&lv->menu)
         && ((esc = strstr(bar, "Esc Prompt")) != 0 || (esc = strstr(bar, "Esc Leave")) != 0)
         && strlen(bar) + 3 < cap) {
         const char *word = esc + strlen("Esc ");            /* "Prompt" or "Leave" */
@@ -516,7 +576,7 @@ static void door_idle(void *ctx)
        type), so a second save here would only send four more bytes. */
     {
         const md_layout_out *lay = &cur(d)->lay;
-        ui_masthead_rail_tick(&d->screen.buf, lay->rail_row, 1, d->screen.cols, lay->divider_row ? "" : d->title, d->rail,
+        ui_masthead_rail_tick(&d->screen.buf, lay->rail_row, 1, d->screen.cols, lay->divider_row ? divider_title(d) : d->title, d->rail,
                               UI_TOKEN(UI_T_BAR_INK), UI_TOKEN(UI_T_BAR), d->rail_tick);
     }
     ui_screen_flush(&d->screen);
@@ -535,14 +595,97 @@ static void set_title(struct menudoor *d, const char *text)
 
 static menudoor_result loop(struct menudoor *d);
 
+/* Drill: the breadcrumb, clipped from the left so the end of the path (where the caller is) always shows. */
+static void set_crumb(struct menudoor *d, const char *crumb)
+{
+    int n = (int)strlen(crumb), max = d->screen.cols / 2;
+    if (max > (int)sizeof d->title - 1) max = (int)sizeof d->title - 1;
+    if (max < 8) max = 8;
+    strncpy(d->crumb, crumb, sizeof d->crumb - 1);
+    d->crumb[sizeof d->crumb - 1] = '\0';
+    if (n <= max) { strcpy(d->title, d->crumb); return; }
+    strcpy(d->title, "..");
+    strcat(d->title, crumb + n - (max - 2));
+}
+
+/* A slide moves only the list region: the parent and the child must put it on the same rows. */
+static int can_slide(const struct menudoor *d, const level *from, const level *to)
+{
+    return d->drill_slide && ui_effects_allowed(d->screen.cols)
+        && from->lay.grid_top == to->lay.grid_top && from->lay.grid_height == to->lay.grid_height && to->lay.grid_height > 0;
+}
+
+/* A level change in drill. The rows that do not move (title or divider, status, prompt) are drawn first and outside
+   the capture; then the list region, side and between logos inside the board's region slide. Refused (an old board,
+   a C64): the same region simply repaints. */
+static void slide_frame(struct menudoor *d, int forward)
+{
+    level *lv = cur(d);
+    int capturing;
+
+    draw_masthead(d);
+    draw_status(d, 1);
+    draw_prompt(d);
+    ui_screen_flush(&d->screen);
+    capturing = ae_bs_slide_begin(forward, lv->lay.grid_top, lv->lay.grid_height) == 1;
+    ui_grid_draw(&lv->grid, &d->screen.buf);
+    ui_screen_flush(&d->screen);
+    if (lv->lay.side_cols) ae_menu_logo_draw("side", lv->lay.side_top, lv->lay.side_left, lv->lay.side_rows, lv->lay.side_cols);
+    draw_between(d);
+    if (capturing) ui_screen_wipe_end(&d->screen);
+    else ui_screen_cursor_reassert(&d->screen);
+    park_cursor(d);
+    ui_screen_flush(&d->screen);
+}
+
+/* The deepest level a door may open: an entry's child list sits one level below the top, or below a section in drill. */
+static int deepest(const struct menudoor *d) { return d->drill ? 2 : 1; }
+
+/* Down into d->lv[depth + 1], already filled; back up when its loop ends. The parent keeps its selection and typed text. */
+static menudoor_result enter_level(struct menudoor *d, const char *label)
+{
+    level *parent = cur(d), *child = &d->lv[d->depth + 1];
+    char parent_title[sizeof d->title], parent_crumb[sizeof d->crumb], saved_typed[TYPED_MAX + 1], crumb[sizeof d->crumb];
+    int saved_len, saved_off, slide;
+    menudoor_result result;
+
+    strcpy(parent_title, d->title);
+    strcpy(parent_crumb, d->crumb);
+    strcpy(saved_typed, d->typed);
+    saved_len = d->typed_len;
+    saved_off = d->offwindow;
+    d->typed[0] = '\0'; d->typed_len = 0; d->offwindow = -1;
+    d->depth++;
+    if (d->drill) {
+        strcpy(crumb, parent_crumb);
+        strncat(crumb, " > ", sizeof crumb - 1 - strlen(crumb));
+        strncat(crumb, label, sizeof crumb - 1 - strlen(crumb));
+        set_crumb(d, crumb);
+    } else {
+        set_title(d, label);
+    }
+    configure(d, child, child->menu.last_row);
+    slide = can_slide(d, parent, child);
+    if (slide) slide_frame(d, 1); else show_frame(d, 0, 0);
+    result = loop(d);
+    if (d->drill && d->depth == 1) d->drill_row = d->section_first + child->grid.selected;
+    d->depth--;
+    if (result == MENUDOOR_LEAVE) return MENUDOOR_LEAVE;
+    strcpy(d->title, parent_title);                        /* Esc: back to the parent, its selection kept */
+    strcpy(d->crumb, parent_crumb);
+    strcpy(d->typed, saved_typed);
+    d->typed_len = saved_len;
+    d->offwindow = saved_off;
+    if (slide) slide_frame(d, 0); else show_frame(d, 0, 0);
+    return MENUDOOR_STAY;
+}
+
 menudoor_result menudoor_open_child(struct menudoor *d, int entry)
 {
     level *parent = cur(d), *child;
-    char parent_title[32], saved_typed[TYPED_MAX + 1];
-    int rc, saved_len, saved_off;
-    menudoor_result result;
+    int rc;
 
-    if (!d || d->depth + 1 >= LEVELS || entry < 0 || entry >= parent->menu.entry_count) return MENUDOOR_STAY;
+    if (!d || d->depth + 1 > deepest(d) || entry < 0 || entry >= parent->menu.entry_count) return MENUDOOR_STAY;
     child = &d->lv[d->depth + 1];
     rc = ae_menu_open(d->spec->kind, parent->menu.entries[entry].key, &child->menu);
     if (rc == AE_MENU_GONE) { d->gone = 1; return MENUDOOR_LEAVE; }
@@ -550,24 +693,76 @@ menudoor_result menudoor_open_child(struct menudoor *d, int entry)
         say(d, rc == 0 ? "That list is not available." : "The board did not answer.");
         return MENUDOOR_STAY;
     }
-    strcpy(parent_title, d->title);
-    strcpy(saved_typed, d->typed);
-    saved_len = d->typed_len;
-    saved_off = d->offwindow;
-    d->typed[0] = '\0'; d->typed_len = 0; d->offwindow = -1;
-    d->depth++;
-    set_title(d, parent->menu.entries[entry].label);
-    configure(d, child, child->menu.last_row);
-    show_frame(d, 0, 0);
-    result = loop(d);
-    d->depth--;
-    if (result == MENUDOOR_LEAVE) return MENUDOOR_LEAVE;
-    strcpy(d->title, parent_title);                        /* Esc: back to the parent, its selection kept */
-    strcpy(d->typed, saved_typed);
-    d->typed_len = saved_len;
-    d->offwindow = saved_off;
-    show_frame(d, 0, 0);
-    return MENUDOOR_STAY;
+    return enter_level(d, parent->menu.entries[entry].label);
+}
+
+/* ------------------------------------------------------------------ drill */
+
+static void drop_logo(ae_menu *m, const char *position)
+{
+    int i, n = 0;
+    for (i = 0; i < m->logo_count; i++) if (strcmp(m->logos[i].position, position) != 0) m->logos[n++] = m->logos[i];
+    m->logo_count = n;
+}
+
+/* A level of ONE section: no header row, and no between logo (it sits between sections). */
+static void one_section(ae_menu *m, const char *title)
+{
+    int i;
+    for (i = 0; i < m->entry_count; i++) m->entry_section[i] = 0;
+    m->section_count = 1;
+    strncpy(m->section_title[0], title, sizeof m->section_title[0] - 1);
+    m->section_title[0][sizeof m->section_title[0] - 1] = '\0';
+    drop_logo(m, "between");
+}
+
+/* lv[0] becomes the catalogue's sections, built from the same catalogue (no second request): one entry per section
+   that has entries, its description the entries' labels and its right column their count. */
+static void drill_sections(struct menudoor *d)
+{
+    const ae_menu *src = &drill_source;
+    ae_menu *m = &d->lv[0].menu;
+    int s, i, n = 0, selected = 0;
+
+    memcpy(&drill_source, m, sizeof drill_source);
+    for (s = 0; s < src->section_count; s++) {
+        ae_menu_entry *e = &m->entries[n];
+        int count = 0;
+        memset(e, 0, sizeof *e);
+        for (i = 0; i < src->entry_count; i++) {
+            if (src->entry_section[i] != s) continue;
+            if (count > 0) strncat(e->description, ", ", sizeof e->description - 1 - strlen(e->description));
+            strncat(e->description, src->entries[i].label, sizeof e->description - 1 - strlen(e->description));
+            count++;
+        }
+        if (!count) continue;
+        strncpy(e->label, src->section_title[s], sizeof e->label - 1);
+        sprintf(e->right, "%d", count);
+        strcpy(e->flags, "L");
+        if (src->last_row >= 0 && src->last_row < src->entry_count && src->entry_section[src->last_row] == s) selected = n;
+        drill_section[n++] = s;
+    }
+    m->entry_count = n;
+    one_section(m, src->title);
+    m->last_row = selected;
+}
+
+/* Enter on a section: its entries, cut from the catalogue already here. */
+static menudoor_result open_section(struct menudoor *d, int entry)
+{
+    const ae_menu *src = &drill_source;
+    ae_menu *m = &d->lv[1].menu;
+    int s = drill_section[entry], first, n = 0;
+
+    for (first = 0; first < src->entry_count && src->entry_section[first] != s; first++) {}
+    while (first + n < src->entry_count && src->entry_section[first + n] == s) n++;
+    memcpy(m, src, sizeof *m);
+    memmove(m->entries, &src->entries[first], (size_t)n * sizeof m->entries[0]);
+    m->entry_count = n;
+    one_section(m, src->section_title[s]);
+    m->last_row = src->last_row >= first && src->last_row < first + n ? src->last_row - first : 0;
+    d->section_first = first;
+    return enter_level(d, src->section_title[s]);
 }
 
 /* Enter (or a click) on an entry: a list opens, a greyed entry says so, anything else is the door's. */
@@ -575,16 +770,39 @@ static menudoor_result press_entry(struct menudoor *d, int entry)
 {
     const ae_menu_entry *e = menudoor_entry(d, entry);
     if (!e) return MENUDOOR_STAY;
-    if (strchr(e->flags, 'L') && d->depth == 0) return menudoor_open_child(d, entry);
+    if (d->palette) {                                    /* a flat list: an 'L' entry runs its key like any other */
+        if (strchr(e->flags, 'G')) { say(d, "You cannot choose that."); return MENUDOOR_STAY; }
+        return d->spec->activate ? d->spec->activate(d, entry) : MENUDOOR_STAY;
+    }
+    if (d->drill && d->depth == 0) return open_section(d, entry);
+    if (strchr(e->flags, 'L') && d->depth == deepest(d) - 1) return menudoor_open_child(d, entry);
     if (strchr(e->flags, 'G')) { say(d, "You cannot choose that."); return MENUDOOR_STAY; }
     return d->spec->activate ? d->spec->activate(d, entry) : MENUDOOR_STAY;
 }
 
 static void drop_line(struct menudoor *d);
+static void palette_refresh(struct menudoor *d, int was_len);
+
+/* Decision 11: the exact key, else the highlighted match, else the line as typed (an unlisted "J 3.1" still runs).
+   The exact key ranks first (D12), so it is entry 0 of the filtered list. */
+static menudoor_result palette_enter(struct menudoor *d)
+{
+    level *lv = cur(d);
+    char line[TYPED_MAX + 1];
+
+    if (lv->menu.entry_count > 0) {
+        if (d->typed_len > 0 && palette_class(&lv->menu.entries[0], d->typed) == 0) return press_entry(d, 0);
+        return press_entry(d, lv->grid.selected);
+    }
+    if (d->typed_len == 0) return MENUDOOR_STAY;
+    strcpy(line, d->typed);
+    return d->spec->typed ? d->spec->typed(d, line) : MENUDOOR_STAY;
+}
 
 static menudoor_result press_enter(struct menudoor *d)
 {
     menudoor_result r;
+    if (d->palette) return palette_enter(d);
     if (d->typed_len > 0) {
         char line[TYPED_MAX + 1];
         strcpy(line, d->typed);
@@ -685,7 +903,9 @@ static void follow_typed(struct menudoor *d)
 /* The line is dropped (Esc, a click): the prompt row says so, and so does the status row if it was naming a match. */
 static void drop_line(struct menudoor *d)
 {
+    int was_len = d->typed_len;
     d->typed[0] = '\0'; d->typed_len = 0;
+    if (d->palette) { palette_refresh(d, was_len); return; }
     if (d->offwindow >= 0) { d->offwindow = -1; draw_status(d, 0); }
     draw_prompt(d);
     ui_screen_flush(&d->screen);
@@ -700,6 +920,34 @@ static void show_match(struct menudoor *d)
     select_entry(d, idx);                                /* the one allowed window rewrite: one batch, no clear */
 }
 
+/* The palette's list: the catalogue ranked by the typed text (D12), copied into lv[0] so the grid, the mouse and
+   menudoor_entry see only the matches. */
+static void palette_filter(struct menudoor *d)
+{
+    static int order[AE_MENU_MAX_ENTRIES];
+    ae_menu *m = &d->lv[0].menu;
+    int n = md_palette_rank(&drill_source, d->typed, order, AE_MENU_MAX_ENTRIES), i;
+
+    for (i = 0; i < n; i++) { m->entries[i] = drill_source.entries[order[i]]; m->entry_section[i] = 0; }
+    m->entry_count = n;
+}
+
+/* After an edit: the list region again, the best match selected. The rows around it stay; a list that changes the
+   layout (a logo that no longer fits beside it) is a whole frame. */
+static void palette_refresh(struct menudoor *d, int was_len)
+{
+    level *lv = &d->lv[0];
+    md_layout_out was = lv->lay;
+
+    palette_filter(d);
+    configure(d, lv, 0);
+    if (memcmp(&was, &lv->lay, sizeof was) != 0) { show_frame(d, 0, 0); return; }
+    ui_grid_draw(&lv->grid, &d->screen.buf);
+    draw_status(d, 0);
+    draw_prompt_after_edit(d, was_len);
+    ui_screen_flush(&d->screen);
+}
+
 static menudoor_result typed_key(struct menudoor *d, int key)
 {
     int idx, was_len = d->typed_len;
@@ -711,7 +959,7 @@ static menudoor_result typed_key(struct menudoor *d, int key)
     } else if (printable(key) && d->typed_len < typed_room(d) && !(key == ' ' && d->typed_len == 0)) {
         d->typed[d->typed_len++] = (char)key;
         d->typed[d->typed_len] = '\0';
-        if (d->spec->digits_show_at_once) {
+        if (d->spec->digits_show_at_once && !d->palette) {
             idx = md_digits_act(&cur(d)->menu, d->typed);
             if (idx >= 0) {                                    /* a unique number acts without Enter (Decision 38) */
                 d->typed[0] = '\0'; d->typed_len = 0;
@@ -724,6 +972,7 @@ static menudoor_result typed_key(struct menudoor *d, int key)
     } else {
         return MENUDOOR_STAY;
     }
+    if (d->palette) { palette_refresh(d, was_len); return MENUDOOR_STAY; }
     follow_typed(d);
     draw_prompt_after_edit(d, was_len);
     ui_screen_flush(&d->screen);
@@ -763,7 +1012,7 @@ static menudoor_result loop(struct menudoor *d)
             break;
         default:
             /* Decision 37: q on an empty line leaves to the prompt, unless an entry key starts with Q (then q is a command). */
-            if ((key == 'q' || key == 'Q') && d->typed_len == 0 && d->depth == 0 && md_q_leaves(&cur(d)->menu)) return MENUDOOR_LEAVE;
+            if ((key == 'q' || key == 'Q') && d->typed_len == 0 && d->depth == 0 && !d->palette && md_q_leaves(&cur(d)->menu)) return MENUDOOR_LEAVE;
             if (key < 1000) r = typed_key(d, key);
             break;
         }
@@ -818,6 +1067,14 @@ static int run_menu_started(struct menudoor *d, ae_session *session, const menud
 
     start_screen(d, session);
     set_title(d, top->menu.title);
+    /* Drill (a sysop setting per menu): sections first. One section has nothing to drill into. */
+    if (top->menu.drill && top->menu.section_count > 1 && top->menu.entry_count > 0) {
+        d->drill = 1;
+        d->drill_slide = top->menu.drill_slide;
+        d->drill_row = top->menu.last_row;
+        drill_sections(d);
+        set_crumb(d, top->menu.title);
+    }
     configure(d, top, top->menu.last_row);
     show_frame(d, top->menu.wipe_open, 0);
     ae_bs_mouse(1);                                            /* an ANSI caller; ignored otherwise */
@@ -825,10 +1082,57 @@ static int run_menu_started(struct menudoor *d, ae_session *session, const menud
     loop(d);
 
     if (!d->gone) {
-        ae_menu_row(top->grid.selected);                       /* one round trip, on leave only */
+        ae_menu_row(d->drill ? d->drill_row : top->grid.selected);   /* one round trip, on leave only; drill: a catalogue row */
         d->depth = 0;
         if (top->menu.wipe_leave) show_frame(d, top->menu.wipe_leave, 1);
     }
+    ae_bs_mouse(0);
+    ui_screen_close(&d->screen);
+    ae_shutdown();
+    return 0;
+}
+
+/* The search palette (plan P4): MAIN flattened, filtered as the caller types. The board's main line is
+   "<palette name> <what was typed at the prompt>"; the rest after the name is the starting filter. */
+static int run_palette_started(struct menudoor *d, ae_session *session, const menudoor_spec *spec)
+{
+    level *top = &d->lv[0];
+    char line[128];
+    const char *start = line;
+    int rc, n = (int)strlen(spec->palette_name);
+
+    d->spec = spec;
+    d->palette = 1;
+    rc = ae_menu_open(spec->kind, 0, &top->menu);
+    if (rc != 1) {
+        if (rc == AE_MENU_SILENT && spec->fallback_command) ae_return_command(spec->fallback_command);
+        ae_shutdown();
+        return 0;
+    }
+    start_screen(d, session);
+    one_section(&top->menu, top->menu.title);
+    strcpy(top->menu.prompt, "Search: ");
+    memcpy(&drill_source, &top->menu, sizeof drill_source);
+    d->palette_total = drill_source.entry_count;
+    set_title(d, "SEARCH");
+
+    line[0] = '\0';
+    ae_main_line(session, line, (int)sizeof line);
+    while (*start == ' ') start++;
+    if (istarts(start, spec->palette_name) && (start[n] == ' ' || start[n] == '\0')) start += n;
+    while (*start == ' ') start++;
+    while (*start && d->typed_len < typed_room(d)) {
+        if (printable((unsigned char)*start)) d->typed[d->typed_len++] = *start;
+        start++;
+    }
+    while (d->typed_len > 0 && d->typed[d->typed_len - 1] == ' ') d->typed_len--;
+    d->typed[d->typed_len] = '\0';
+
+    palette_filter(d);
+    configure(d, top, 0);
+    show_frame(d, 0, 0);
+    ae_bs_mouse(1);
+    loop(d);                                              /* no ROW on leave: a filtered row is not the menu's */
     ae_bs_mouse(0);
     ui_screen_close(&d->screen);
     ae_shutdown();
@@ -947,7 +1251,9 @@ int menudoor_main(const menudoor_spec *spec, const char *settings_name, int node
     if (!spec || !spec->kind) return 20;
     if ((rc = begin(d, &session, node)) != 0) return rc;
     invoked[0] = '\0';
-    if (settings_name && ae_menu_command(&session, invoked, (int)sizeof invoked) > 0 && strcmp(invoked, settings_name) == 0)
-        return run_settings_started(d, &session);
+    if ((settings_name || spec->palette_name) && ae_menu_command(&session, invoked, (int)sizeof invoked) > 0) {
+        if (settings_name && strcmp(invoked, settings_name) == 0) return run_settings_started(d, &session);
+        if (spec->palette_name && strcmp(invoked, spec->palette_name) == 0) return run_palette_started(d, &session, spec);
+    }
     return run_menu_started(d, &session, spec);
 }

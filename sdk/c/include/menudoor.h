@@ -30,6 +30,7 @@ typedef struct menudoor_spec {
     int digits_show_at_once;                   /* BULLETINS: a unique number acts without Enter */
     menudoor_result (*activate)(struct menudoor *d, int entry);      /* Enter / click on an entry */
     menudoor_result (*typed)(struct menudoor *d, const char *line);  /* Enter on a typed line */
+    const char *palette_name;                  /* the registration that opens the search palette (Ctrl-K), or 0 */
 } menudoor_spec;
 
 /** The door's main(): returns the exit code. */
@@ -40,12 +41,20 @@ int menudoor_run(const menudoor_spec *spec, int node);
  * the menu otherwise.
  */
 int menudoor_main(const menudoor_spec *spec, const char *settings_name, int node);
+/*
+ * Invoked under spec->palette_name (plan D11-D13) the same binary is a search palette: the catalogue flattened, the
+ * typed text filters it (md_palette_rank), the status row counts "N of M", and Enter runs the exact key, else the
+ * highlighted match, else the line as typed. The board's main line after the name is the starting filter.
+ */
 /** The MENUSETTINGS screen (plan Decision 23): scroll, pages, or the board's default. */
 int menudoor_settings_run(int node);
 
 /** What the key bar says about Esc inside a second-level list: it goes back up, not out to the prompt. */
 #define MENUDOOR_CHILD_KEYBAR_WIDE   "Arrows Move  Enter Run  Esc Back"
 #define MENUDOOR_CHILD_KEYBAR_NARROW "Enter Run  Esc Back"
+/** Drill: the top level lists sections; Enter opens one, Esc still leaves to the prompt. */
+#define MENUDOOR_SECTIONS_KEYBAR_WIDE   "Arrows Move  Enter Open  Esc Prompt"
+#define MENUDOOR_SECTIONS_KEYBAR_NARROW "Enter Open  Esc Prompt"
 
 /**
  * The bottom row has two states. Navigation (nothing typed): a hint, the key bar, no cursor. Typing (from the first
@@ -61,6 +70,11 @@ int menudoor_settings_run(int node);
    The full bar says so; where it does not fit, the shorter one keeps Tab (Enter is the obvious key) - see typing_bar(). */
 #define MENUDOOR_TYPING_KEYBAR_WIDE   "Enter Run  Tab Show  Esc Clear"
 #define MENUDOOR_TYPING_KEYBAR_NARROW "Tab Show  Esc Clear"
+/* The palette: every key types, the list follows the text, so there is no Tab and no q. */
+#define MENUDOOR_PALETTE_HINT_WIDE    "Type to search the menu"
+#define MENUDOOR_PALETTE_HINT_NARROW  "Type to search"
+#define MENUDOOR_PALETTE_KEYBAR_WIDE  "Arrows Move  Enter Run  Esc Clear"
+#define MENUDOOR_PALETTE_KEYBAR_NARROW "Enter Run  Esc Clear"
 
 /* For the activate / typed callbacks. */
 const ae_menu_entry *menudoor_entry(struct menudoor *d, int entry);

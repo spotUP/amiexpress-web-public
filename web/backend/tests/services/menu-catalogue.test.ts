@@ -129,3 +129,26 @@ test('the registry answers the two kinds and a later one', () => {
   registerMenuSource({ ...mainMenuSource, kind: 'CONFERENCES' as any });
   expect(menuSourceFor('CONFERENCES')).toBeDefined();
 });
+
+describe('drill-down line', () => {
+  const dLine = (cfgDrill: unknown, over: Partial<MenuCaller> = {}) => {
+    const { config } = validateMenuConfig('MAIN', { drill: cfgDrill });
+    return formatCatalogue(buildCatalogue(mainMenuSource, caller(over), config), 0).split('\n').filter(l => l.startsWith('D '));
+  };
+  test('no D line by default, so a drill-off catalogue is unchanged', () => {
+    expect(dLine(undefined)).toEqual([]);
+    expect(formatCatalogue(buildCatalogue(mainMenuSource, caller(), defaultMenuConfig('MAIN')), 0)).not.toMatch(/^D /m);
+  });
+  test('D 1 TAB 1 when enabled, placed after W and before R', () => {
+    expect(dLine({ enabled: true, slide: true })).toEqual(['D 1\t1']);
+    const lines = formatCatalogue(buildCatalogue(mainMenuSource, caller(), validateMenuConfig('MAIN', { drill: { enabled: true } }).config), 0).split('\n');
+    const i = lines.indexOf('D 1\t1');
+    expect(lines[i - 1]).toMatch(/^W /);
+    expect(lines[i + 1]).toMatch(/^R /);
+  });
+  test('slide is 0 at 40 columns, in PETSCII, and when slide is off', () => {
+    expect(dLine({ enabled: true, slide: true }, { columns: 40 })).toEqual(['D 1\t0']);
+    expect(dLine({ enabled: true, slide: true }, { columns: 80, displayMode: 'petscii' })).toEqual(['D 1\t0']);
+    expect(dLine({ enabled: true, slide: false })).toEqual(['D 1\t0']);
+  });
+});

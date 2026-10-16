@@ -8,7 +8,7 @@ import { WIPE_CODES } from '@bbs/screens/wipe-codes';
 import {
   setDescription, setLabel, setPlacement, moveSection, addSection, removeSection, sectionIsEmpty,
   addLevel, removeLevel, toggleHidden, setRename, removeRename, moveKey, addOrderKey, removeOrderKey,
-  setWipe, setWipeAt40, setOverflowMode, addOverflowFloor, removeOverflowFloor, wipeOptions, renameSection, filterKeys, previewDefaults,
+  setWipe, setWipeAt40, setDrillEnabled, setDrillSlide, setOverflowMode, addOverflowFloor, removeOverflowFloor, wipeOptions, renameSection, filterKeys, previewDefaults,
 } from '../components/menus/menu-edit';
 
 const base = () => defaultMenuConfig('MAIN');
@@ -108,6 +108,13 @@ describe('per-level exceptions', () => {
     c = addOrderKey(c, 10, 'G');
     expect(c.levels['10'].order).toEqual(['G']);
     expect(removeOrderKey(c, 10, 'G').levels['10'].order).toEqual([]);
+  });
+});
+
+describe('drill-down', () => {
+  it('sets the switch and the slide independently', () => {
+    expect(setDrillEnabled(base(), true).drill).toEqual({ enabled: true, slide: true });
+    expect(setDrillSlide(base(), false).drill).toEqual({ enabled: false, slide: false });
   });
 });
 

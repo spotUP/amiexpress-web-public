@@ -57,8 +57,20 @@ export const STEPS: Record<string, Step> = {
   }, force),
   // The main menu (M19): the board's MENU command is this door. MENUSETTINGS is the
   // same binary under the W settings registration (the door tells them apart with
-  // ae_menu_command()). Decisions 23.
+  // ae_menu_command()). Decisions 23. PALETTE is the same binary again as the search
+  // palette that Ctrl-K opens at a board prompt (plan 2026-10-16 P4/P5).
   menu: (root, force) => {
+    registerOnce(root, {
+      door_command: 'PALETTE',
+      door_type: 'XIM',
+      door_path: 'Doors/MAINMENU/mainmenu',
+      min_security_level: 0,
+    }, {
+      MIN_COLUMNS: '40',
+      MULTINODE: 'YES',
+      STACK: '8192',
+      DESCRIPTION: 'Search the menu (Ctrl-K)',
+    }, force);
     registerOnce(root, {
       door_command: 'MENUSETTINGS',
       door_type: 'XIM',

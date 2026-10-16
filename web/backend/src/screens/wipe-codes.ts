@@ -33,3 +33,17 @@ export const WIPE_CODES: Readonly<Record<string, WipeType>> = {
   E: 'explode',
   X: 'random',
 };
+
+/**
+ * The REGION wipes: letters a door may ask the board for over the XIM
+ * `WIPE IN <letter> <top> <rows> <F|B>` request, never a `~W` screen code.
+ * Kept out of WIPE_CODES (and out of WipeType) on purpose: every consumer of
+ * that table - the MCI catalogue, the screen parser, the menu wipe pickers -
+ * lists whole-screen wipes, and a push needs a row range to mean anything.
+ */
+export type RegionWipeType =
+  | 'push';      // P: new rows slide in over a row range (F from the right, B from the left)
+
+export const REGION_WIPE_CODES: Readonly<Record<string, RegionWipeType>> = {
+  P: 'push',
+};

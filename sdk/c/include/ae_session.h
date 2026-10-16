@@ -88,6 +88,13 @@ typedef enum {
      */
     AE_FIELD_MENU_COMMAND   = 605,  /* GET_CUSTOM_MSGBASE_MENUCMD */
     /*
+     * THE WHOLE LINE THAT LAUNCHED THE DOOR, command and parameters:
+     * express.e:3794-3800 answers "<command> <params>", or the command alone.
+     * MENU_COMMAND above is the name only; this is what carries what the
+     * caller typed after it (the palette's starting filter).
+     */
+    AE_FIELD_MAIN_LINE      = 131,  /* BB_MAINLINE */
+    /*
      * WHY THIS DOOR WAS LAUNCHED, when the launch was a conference handing
      * over its message base - express.e:3959-3962, both answered in Data:
      *
@@ -499,6 +506,12 @@ int ae_display_mode(ae_session *s, char *out, int n);
  * single argument string and argv[1] is already the node number.
  */
 int ae_menu_command(ae_session *s, char *out, int n);
+
+/**
+ * The full command line that launched the door, e.g. "PALETTE mail", or ""
+ * where the board does not say. Returns its length.
+ */
+int ae_main_line(ae_session *s, char *out, int n);
 
 /**
  * Change the caller's theme, and have the board remember it.
