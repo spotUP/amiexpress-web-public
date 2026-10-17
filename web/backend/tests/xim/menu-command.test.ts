@@ -55,8 +55,8 @@ test('ROW is remembered per kind and comes back in the next catalogue', async ()
 });
 
 test('a settings door that never opened a catalogue is answered OVERFLOW? with the caller\'s stored mode and the board\'s effective mode', async () => {
-  const s = session({ user: { id: 7, secLevel: 10, securityFlags: 'T'.repeat(128), menuStyle: 'pages' } });
-  expect(await menuAnswer('OVERFLOW?', ctx(s))).toBe('pages\tpages');
+  const s = session({ user: { id: 7, secLevel: 10, securityFlags: 'T'.repeat(128), menuStyle: 'scroll' } });
+  expect(await menuAnswer('OVERFLOW?', ctx(s))).toBe('scroll\tscroll');
   const t = session();
   expect(await menuAnswer('OVERFLOW?', ctx(t))).toBe('default\tdefault');
   expect(await menuAnswer('OVERFLOW?', ctx(session({ user: undefined })))).toBe('');
@@ -66,7 +66,7 @@ test('STYLE? answers the stored style (blank is "default") and the effective one
   expect(await menuAnswer('STYLE?', ctx(session()))).toBe('default\tcoverflow\t1');
   expect(await menuAnswer('STYLE?', ctx(session({ screenWidth: 40, user: { ...session().user, menuStyle: '' } })))).toMatch(/^default\t/);
   // A 40-column PETSCII caller never slides (D9).
-  expect(await menuAnswer('STYLE?', ctx(session({ petsciiMode: true, petsciiColumns: 40 })))).toBe('default\tpages\t0');
+  expect(await menuAnswer('STYLE?', ctx(session({ petsciiMode: true, petsciiColumns: 40 })))).toBe('default\tscroll\t0');
   expect(await menuAnswer('STYLE?', ctx(session({ user: { ...session().user, menuStyle: 'classic' } })))).toBe('classic\tclassic\t1');
   expect(await menuAnswer('STYLE?', ctx(session({ user: undefined })))).toBe('');
 });
@@ -82,10 +82,10 @@ test('STYLE? carries the sysop\'s cover flow slide setting, so a door with no ca
   }
 });
 
-test('STYLE stores each of the four styles and default, and refuses anything else', async () => {
+test('STYLE stores each of the three styles and default, and refuses anything else', async () => {
   const s = session();
   await menuAnswer('OPEN MAIN', ctx(s));
-  for (const m of ['classic', 'scroll', 'pages', 'coverflow'] as const) {
+  for (const m of ['classic', 'scroll', 'coverflow'] as const) {
     expect(await menuAnswer(`STYLE ${m}`, ctx(s))).toBe(`OK\t${m}`);
     expect(s.user.menuStyle).toBe(m);
     expect(updateUser).toHaveBeenLastCalledWith(7, { menuStyle: m });
@@ -99,6 +99,19 @@ test('STYLE stores each of the four styles and default, and refuses anything els
   expect(await menuAnswer('STYLE ', ctx(s))).toBe('');
 });
 
+test('STYLE+ stores the style after the one the door shows, in the board\'s one order; classic arms the classic exit', async () => {
+  const s = session();
+  await menuAnswer('OPEN MAIN', ctx(s));
+  expect(await menuAnswer('STYLE+ scroll', ctx(s))).toBe('OK\tcoverflow');
+  // A door built before Pages was retired may still show it: pages reads as scroll, so the next is cover flow.
+  expect(await menuAnswer('STYLE+ pages', ctx(s))).toBe('OK\tcoverflow');
+  expect(takeMenuExit(s)).toEqual({});
+  expect(await menuAnswer('STYLE+ coverflow', ctx(s))).toBe('OK\tclassic');
+  expect(s.user.menuStyle).toBe('classic');
+  expect(updateUser).toHaveBeenLastCalledWith(7, { menuStyle: 'classic' });
+  expect(takeMenuExit(s)).toEqual({ classic: true });
+});
+
 test('the legacy OVERFLOW verbs read cover flow and classic as default, and cannot store them', async () => {
   const s = session({ user: { ...session().user, menuStyle: 'classic' } });
   expect(await menuAnswer('OVERFLOW?', ctx(s))).toBe('default\tdefault');
@@ -110,8 +123,8 @@ test('the legacy OVERFLOW verbs read cover flow and classic as default, and cann
 test('OVERFLOW stores the caller choice and answers the effective mode', async () => {
   const s = session();
   await menuAnswer('OPEN MAIN', ctx(s));
-  expect(await menuAnswer('OVERFLOW pages', ctx(s))).toBe('OK\tpages');
-  expect(s.user.menuStyle).toBe('pages');
+  expect(await menuAnswer('OVERFLOW scroll', ctx(s))).toBe('OK\tscroll');
+  expect(s.user.menuStyle).toBe('scroll');
   expect(await menuAnswer('OVERFLOW default', ctx(s))).toBe('OK\tdefault');
   expect(await menuAnswer('OVERFLOW?', ctx(s))).toBe('default\tdefault');
   expect(await menuAnswer('OVERFLOW sideways', ctx(s))).toBe('');
@@ -209,19 +222,32 @@ test('a failed write leaves the caller\'s choice in memory as it was', async () 
   try {
     const s = session({ user: { ...session().user, menuStyle: 'scroll' } });
     await menuAnswer('OPEN MAIN', ctx(s));
-    await expect(menuAnswer('OVERFLOW pages', ctx(s))).rejects.toThrow('disk full');
+    await expect(menuAnswer('OVERFLOW default', ctx(s))).rejects.toThrow('disk full');
     expect(s.user.menuStyle).toBe('scroll');
   } finally { updateUser.mockReset(); updateUser.mockImplementation(async () => undefined); }
 });
 
+test('a stored pages style (retired) reads as scroll everywhere: caller pref, level entry, legacy OVERFLOW verb', async () => {
+  const s = session({ user: { ...session().user, menuStyle: 'pages' } });
+  expect(await menuAnswer('STYLE?', ctx(s))).toBe('scroll\tscroll\t1');
+  await menuAnswer('OPEN MAIN', ctx(s));
+  expect(lastCatalogueOf(s, 'MAIN')!.style).toBe('scroll');
+  const t = session();
+  await menuAnswer('OPEN MAIN', ctx(t));
+  expect(await menuAnswer('OVERFLOW pages', ctx(t))).toBe('OK\tscroll');
+  expect(t.user.menuStyle).toBe('scroll');
+});
+
 test('OVERFLOW and OPEN resolve the effective mode by the one rule (a level-based board default applies to both)', async () => {
   fs.mkdirSync(path.join(root, 'Menus'), { recursive: true });
-  fs.writeFileSync(path.join(root, 'Menus/MAIN.json'), JSON.stringify({ overflow: { standard: { '0': 'scroll', '100': 'pages' } } }));
+  fs.writeFileSync(path.join(root, 'Menus/MAIN.json'), JSON.stringify({ style: { standard: { '0': 'coverflow', '100': 'pages' } } }));
   try {
     const s = session({ user: { ...session().user, secLevel: 150 } });
     await menuAnswer('OPEN MAIN', ctx(s));
-    expect(lastCatalogueOf(s, 'MAIN')!.style).toBe('pages');
-    expect(await menuAnswer('OVERFLOW default', ctx(s))).toBe('OK\tpages');
+    // A level entry still saying the retired pages reads as scroll.
+    expect(lastCatalogueOf(s, 'MAIN')!.style).toBe('scroll');
+    expect(await menuAnswer('OVERFLOW default', ctx(s))).toBe('OK\tscroll');
+    expect(await menuAnswer('OVERFLOW coverflow', ctx(s))).toBe('');
     expect(await menuAnswer('OVERFLOW scroll', ctx(s))).toBe('OK\tscroll');
   } finally { fs.rmSync(path.join(root, 'Menus'), { recursive: true, force: true }); }
 });

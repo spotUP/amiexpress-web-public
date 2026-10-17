@@ -3,7 +3,7 @@ import { buildCatalogue, effectiveStyle, catalogueStyle } from '../../src/servic
 import { formatCatalogue } from '../../src/services/menu-catalogue/catalogue-file';
 import { mainMenuSource } from '../../src/services/menu-catalogue/sources/main';
 import { registerMenuSource, menuSourceFor } from '../../src/services/menu-catalogue/registry';
-import { defaultMenuConfig, validateMenuConfig } from '../../src/screens/menu-config/menu-config';
+import { defaultMenuConfig, validateMenuConfig, nextMenuStyle, menuStyleTabLine, MENU_STYLES } from '../../src/screens/menu-config/menu-config';
 import { commandCache } from '../../src/handlers/command-execution.handler';
 import type { Catalogue, MenuCaller, MenuSource } from '../../src/services/menu-catalogue/types';
 
@@ -91,9 +91,9 @@ test('at 40 columns a C64 menu for the level replaces the derived one, still fil
 });
 
 test('the caller\'s style beats the board default; the default follows width and level', () => {
-  expect(built(mainMenuSource, caller({ columns: 40, displayMode: 'petscii' }), defaultMenuConfig('MAIN')).style).toBe('pages');
+  expect(built(mainMenuSource, caller({ columns: 40, displayMode: 'petscii' }), defaultMenuConfig('MAIN')).style).toBe('scroll');
   expect(built(mainMenuSource, caller(), defaultMenuConfig('MAIN')).style).toBe('coverflow');
-  expect(built(mainMenuSource, caller({ stylePref: 'pages' }), defaultMenuConfig('MAIN')).style).toBe('pages');
+  expect(built(mainMenuSource, caller({ stylePref: 'scroll' }), defaultMenuConfig('MAIN')).style).toBe('scroll');
   // The board default is the classic menu screen at every width (sysop 2026-10-17); a door that runs anyway gets its fallback above.
   expect(effectiveStyle(caller(), defaultMenuConfig('MAIN'))).toBe('classic');
   expect(effectiveStyle(caller({ columns: 40, displayMode: 'petscii' }), defaultMenuConfig('MAIN'))).toBe('classic');
@@ -104,7 +104,7 @@ describe('effective style', () => {
   test.each([
     [{}, 'scroll'],
     [{ secLevel: 100 }, 'classic'],
-    [{ stylePref: 'pages' as const, secLevel: 100 }, 'pages'],
+    [{ stylePref: 'scroll' as const, secLevel: 100 }, 'scroll'],
     [{ columns: 40, displayMode: 'petscii' as const }, 'classic'],
     [{ stylePref: 'coverflow' as const }, 'coverflow'],
   ])('%j gives %s', (over, want) => {
@@ -112,7 +112,7 @@ describe('effective style', () => {
   });
   test('classic never reaches the catalogue: it stands for the door fallback there', () => {
     expect(catalogueStyle('classic', 'standard')).toBe('coverflow');
-    expect(catalogueStyle('classic', 'c64')).toBe('pages');
+    expect(catalogueStyle('classic', 'c64')).toBe('scroll');
     expect(catalogueStyle('scroll', 'standard')).toBe('scroll');
     expect(built(mainMenuSource, caller({ secLevel: 100 }), cfg).style).toBe('coverflow');
   });
@@ -121,6 +121,19 @@ describe('effective style', () => {
 test('wipes are off at 40 when the sysop switched at40 off', () => {
   const { config } = validateMenuConfig('MAIN', { wipes: { open: 'X', leave: 'H', page: 'V', at40: false } });
   expect((buildCatalogue(mainMenuSource, caller({ columns: 40, displayMode: 'petscii' }), config) as any).wipes).toEqual({ open: '', leave: '', page: '' });
+});
+
+test('the catalogue file carries the one-off notice as an N line after R, and no N line without one', () => {
+  const c: any = buildCatalogue(mainMenuSource, caller(), defaultMenuConfig('MAIN'));
+  expect(formatCatalogue(c, 0).split('\n').some(l => l.startsWith('N '))).toBe(false);
+  const lines = formatCatalogue({ ...c, notice: 'Menu style: Scroll' }, 0).split('\n');
+  expect(lines[lines.indexOf('R 0') + 1]).toBe('N Menu style: Scroll');
+});
+
+test('the menu style cycle is Classic, Scroll, Cover flow and wraps, with no Pages; the board names the next one', () => {
+  expect(MENU_STYLES).toEqual(['classic', 'scroll', 'coverflow']);
+  expect((['classic', 'scroll', 'coverflow'] as const).map(nextMenuStyle)).toEqual(['scroll', 'coverflow', 'classic']);
+  expect(menuStyleTabLine('classic')).toBe('Menu style: Classic. Tab for Scroll.');
 });
 
 test('the catalogue file: TAB-safe fields, cut at their widths, never the key', () => {

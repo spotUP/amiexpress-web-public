@@ -142,7 +142,7 @@ describe('wipes and menu style', () => {
     expect(removeStyleFloor(c, 'standard', 0)).toBe(c);
   });
   it('names every style in full words', () => {
-    expect(MENU_STYLE_NAMES).toEqual({ classic: 'Classic screen', scroll: 'Grid scroll', pages: 'Grid pages', coverflow: 'Cover flow' });
+    expect(MENU_STYLE_NAMES).toEqual({ classic: 'Classic screen', scroll: 'Grid scroll', coverflow: 'Cover flow' });
   });
 });
 

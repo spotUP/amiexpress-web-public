@@ -1,6 +1,7 @@
 import type { BBSSession } from '../../index';
 import type { MenuCaller } from './types';
-import { isMenuStyle } from '../../screens/menu-config/menu-config';
+import { readMenuStyle, type MenuStylePref } from '../../screens/menu-config/menu-config';
+import { db } from '../../database';
 import { ACSPermission } from '../../constants/acs-permissions';
 import { checkSecurity } from '../../utils/acs.util';
 import { PermissionsUtil } from '../../utils/permissions.util';
@@ -28,7 +29,7 @@ export function menuCallerFromSession(session: BBSSession): MenuCaller {
     may: (k: string) => checkSecurity(user, ACSPermission[bareGateKey(k) as keyof typeof ACSPermission]),
     isSysop: PermissionsUtil.isSysop(user),
     widthRefuses: (door: object) => doorRefusedForWidth(door as never, session as never),
-    stylePref: isMenuStyle(user?.menuStyle) ? user.menuStyle : '',
+    stylePref: readMenuStyle(user?.menuStyle) ?? '',   // a stored 'pages' (retired) reads as scroll
   };
 }
 
@@ -43,4 +44,13 @@ export function menuCallerForPreview(level: number, columns: number, conference:
     widthRefuses: (door: object) => doorRefusedForWidth(door as never, fake),
     stylePref: '',
   };
+}
+
+/** Store a caller's menu style. A board-own preference like themePreference: the row, never user.data (express.e
+    has no such field). Memory follows the row: a failed write throws and leaves the session as it was. The menu
+    door's STYLE (xim/menu.ts) and the prompt's Tab (command.handler.ts) both store through here. */
+export async function storeMenuStylePref(session: BBSSession, stored: MenuStylePref): Promise<void> {
+  if (!session.user) return;
+  await db.updateUser(session.user.id, { menuStyle: stored });
+  session.user.menuStyle = stored;
 }

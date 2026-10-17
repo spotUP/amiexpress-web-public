@@ -19,13 +19,31 @@ export function menuKindOfCommand(command: string): MenuKind | null {
   return MENU_KINDS.find(kind => MENU_KIND_COMMAND[kind] === upper) ?? null;
 }
 /** How the menu door lays a menu out. `classic` shows the board's own menu screen with no door (express.e:28586). */
-export type MenuStyle = 'classic' | 'scroll' | 'pages' | 'coverflow';
-export const MENU_STYLES: readonly MenuStyle[] = ['classic', 'scroll', 'pages', 'coverflow'];
+export type MenuStyle = 'classic' | 'scroll' | 'coverflow';
+/** Also the Tab cycle's order (nextMenuStyle). Pages was retired (sysop 2026-10-17: "uglier and slower than scroll"). */
+export const MENU_STYLES: readonly MenuStyle[] = ['classic', 'scroll', 'coverflow'];
 /** A caller's stored choice: '' is the board default. */
 export type MenuStylePref = '' | MenuStyle;
 export function isMenuStyle(v: unknown): v is MenuStyle {
   return typeof v === 'string' && (MENU_STYLES as readonly string[]).includes(v);
 }
+/** A STORED style read back (caller column, menu config, an old door's request): the retired 'pages' reads as scroll,
+    so no stored value needs rewriting. Anything else that is not a style is undefined. */
+export function readMenuStyle(v: unknown): MenuStyle | undefined {
+  if (v === 'pages') return 'scroll';
+  return isMenuStyle(v) ? v : undefined;
+}
+/** What a caller calls each style (the menu door's Tab line, the board's line under its own menu screen). */
+export const MENU_STYLE_NAMES: Record<MenuStyle, string> = { classic: 'Classic', scroll: 'Scroll', coverflow: 'Cover flow' };
+/** The Tab cycle (sysop 2026-10-17), the same at every width: MENU_STYLES' order, after cover flow back to classic.
+    The one copy: the menu door asks the board for the next style (AEW_MENU STYLE+), the prompt's Tab reads it here. */
+export function nextMenuStyle(style: MenuStyle): MenuStyle {
+  return MENU_STYLES[(MENU_STYLES.indexOf(style) + 1) % MENU_STYLES.length];
+}
+/** The line a style change is named with: "Menu style: Scroll". */
+export function menuStyleNotice(style: MenuStyle): string { return `Menu style: ${MENU_STYLE_NAMES[style]}`; }
+/** The notice plus what Tab does next: "Menu style: Classic. Tab for Scroll." (under the board's own menu screen). */
+export function menuStyleTabLine(style: MenuStyle): string { return `${menuStyleNotice(style)}. Tab for ${MENU_STYLE_NAMES[nextMenuStyle(style)]}.`; }
 export type WidthClass = 'c64' | 'standard' | 'wide';
 export type LogoPosition = 'header' | 'footer' | 'side' | 'between';
 export type LogoRule = 'fixed' | 'rotate' | 'random';
@@ -111,8 +129,8 @@ export function cleanColouredText(raw: string, cols: number, maxBytes = 255): st
 /** The board's own default per width class: the classic menu screen everywhere (sysop 2026-10-17); a caller or the sysop picks a door style. */
 export const DEFAULT_MENU_STYLE: Record<WidthClass, MenuStyle> = { c64: 'classic', standard: 'classic', wide: 'classic' };
 /** The layout a door draws when it runs for a classic caller anyway (the palette, a typed MENU): cover flow at 80 columns
-    and wider, pages on the C64 (plan decision 5). */
-export const DOOR_FALLBACK_STYLE: Record<WidthClass, Exclude<MenuStyle, 'classic'>> = { c64: 'pages', standard: 'coverflow', wide: 'coverflow' };
+    and wider, scroll on the C64 (plan decision 5; pages until it was retired). */
+export const DOOR_FALLBACK_STYLE: Record<WidthClass, Exclude<MenuStyle, 'classic'>> = { c64: 'scroll', standard: 'coverflow', wide: 'coverflow' };
 const DEFAULT_STYLE_MAP = (): Record<WidthClass, LevelMap<MenuStyle>> =>
   ({ c64: { '0': DEFAULT_MENU_STYLE.c64 }, standard: { '0': DEFAULT_MENU_STYLE.standard }, wide: { '0': DEFAULT_MENU_STYLE.wide } });
 
@@ -207,7 +225,8 @@ export function validateMenuConfig(kind: MenuKind, raw: unknown): { config: Menu
       if (m === undefined) continue;
       const good: LevelMap<MenuStyle> = {};
       if (isObj(m)) for (const [k, v] of Object.entries(m)) {
-        if (isFloor(k) && isMenuStyle(v)) good[k] = v; else problems.push(`style ${cls} ${k}: dropped`);
+        const style = readMenuStyle(v);
+        if (isFloor(k) && style) good[k] = style; else problems.push(`style ${cls} ${k}: dropped`);
       }
       if (Object.keys(good).length) config.style[cls] = good;
     }
@@ -230,7 +249,8 @@ export function validateMenuConfig(kind: MenuKind, raw: unknown): { config: Menu
   if (isObj(raw.drill)) {
     if (raw.coverflow === undefined && typeof raw.drill.slide === 'boolean') config.coverflow.slide = raw.drill.slide;
     if (raw.drill.enabled === true) {
-      for (const cls of CLASSES) if (cls !== 'c64' && config.style[cls]['0'] !== 'pages') config.style[cls] = { ...config.style[cls], '0': 'coverflow' };
+      const choseRetiredPages = (cls: WidthClass): boolean => isObj(rawStyle) && isObj(rawStyle[cls]) && rawStyle[cls]['0'] === 'pages';
+      for (const cls of CLASSES) if (cls !== 'c64' && !choseRetiredPages(cls)) config.style[cls] = { ...config.style[cls], '0': 'coverflow' };
     }
   } else if (raw.drill !== undefined) problems.push('drill: not an object');
   if (Array.isArray(raw.logos)) {

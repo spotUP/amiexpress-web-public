@@ -8,7 +8,7 @@
  *   LOGO <pos> <t> <l> <r> <c> -> "OK TAB <rows>" | "NONE"   (the board draws it)
  *   ROW <n>                  -> "OK"     (the selected row, kept for the next open)
  *   STYLE? / STYLE <m>       -> "<stored> TAB <effective>" / "OK TAB <effective>"
- *                               m: classic|scroll|pages|coverflow|default (a stored '' arrives as "default")
+ *                               m: classic|scroll|coverflow|default (a stored '' arrives as "default")
  *   RUN <line>               -> "OK"     (run after this door exits, as typed)
  *   SHOW <key>               -> "OK" | "NO"
  *
@@ -29,9 +29,8 @@ extern "C" {
 #define AE_MENU_MAX_LOGOS    4
 #define AE_MENU_SILENT 6
 #define AE_MENU_GONE  (-1)
-#define AE_MENU_STYLE_SCROLL    0
-#define AE_MENU_STYLE_PAGES     1
-#define AE_MENU_STYLE_COVERFLOW 2
+#define AE_MENU_STYLE_SCROLL    0         /* an "O pages" line (the retired Pages style) reads as scroll */
+#define AE_MENU_STYLE_COVERFLOW 1
 #define AE_MENU_STYLE_CAP 16                  /* style buffers hold at least this many bytes */
 
 typedef struct {
@@ -43,10 +42,10 @@ typedef struct { char position[8]; int rows, cols, after_section; } ae_menu_logo
 typedef struct {
     char kind[16]; char parent[16]; char title[31]; char prompt[256];   /* 72 columns plus the board's colours */
     int style;                               /* AE_MENU_STYLE_*, the catalogue's O line */
-    int pages;                               /* 1 = PAGES mode (style == AE_MENU_STYLE_PAGES) */
     int slide;                               /* "F 1": cover flow slides between pages */
-    char wipe_open, wipe_leave, wipe_page;   /* 0 = none */
+    char wipe_open, wipe_leave, wipe_page;   /* 0 = none; wipe_page went with the Pages style and is only parsed */
     int last_row;
+    char notice[41];                         /* "N <text>": a line the door says once as it opens, "" none */
     int section_count, entry_count, logo_count, truncated;
     char section_title[AE_MENU_MAX_SECTIONS][31];
     int entry_section[AE_MENU_MAX_ENTRIES];
@@ -68,10 +67,13 @@ int ae_menu_style_get(char *stored, char *effective);
 /** ae_menu_style_get plus `slide` (may be 0): 1 when a cover flow page turn slides for this caller (the sysop's
     setting, never at 40 columns or PETSCII), the same rule as the catalogue's F line. 1 answered, 0 silent, AE_MENU_GONE. */
 int ae_menu_style_query(char *stored, char *effective, int *slide);
-/** Stores mode (classic|scroll|pages|coverflow|default); `effective` (AE_MENU_STYLE_CAP, may be 0) receives the style
+/** Stores mode (classic|scroll|coverflow|default); `effective` (AE_MENU_STYLE_CAP, may be 0) receives the style
     in force. 1 stored, 0 refused or silent, AE_MENU_GONE. */
 int ae_menu_style(const char *mode, char *effective);
-/** Wrapper over ae_menu_style / ae_menu_style_get. mode "scroll", "pages", "default" stores; 0 asks. `effective` receives the mode in force. 1 answered, 0 silent, AE_MENU_GONE. */
+/** Tab's next style: the board stores the one after `shown` (the style on screen) in its one cycle order and
+    `effective` (AE_MENU_STYLE_CAP, may be 0) receives it; "classic" means leave the door. 1 stored, 0 refused or silent, AE_MENU_GONE. */
+int ae_menu_style_next(const char *shown, char *effective);
+/** Wrapper over ae_menu_style / ae_menu_style_get. mode "scroll", "coverflow", "default" stores; 0 asks. `effective` receives the mode in force. 1 answered, 0 silent, AE_MENU_GONE. */
 int ae_menu_overflow(const char *mode, char *effective, int cap);
 /** Wrapper over ae_menu_style_get with caller-sized buffers. */
 int ae_menu_overflow_get(char *stored, int scap, char *effective, int ecap);

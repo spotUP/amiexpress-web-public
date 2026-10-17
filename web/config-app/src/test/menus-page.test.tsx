@@ -113,7 +113,7 @@ describe('the Main Menu and Bulletins page', () => {
     const user = userEvent.setup();
     renderPage('?part=style');
     const select = await screen.findByLabelText('Standard (80 columns) at level 0');
-    expect([...(select as HTMLSelectElement).options].map(o => o.text)).toEqual(['Classic screen', 'Grid scroll', 'Grid pages', 'Cover flow']);
+    expect([...(select as HTMLSelectElement).options].map(o => o.text)).toEqual(['Classic screen', 'Grid scroll', 'Cover flow']);
     await user.selectOptions(select, 'Classic screen');
     await waitFor(() => expect(lastSaved().style.standard['0']).toBe('classic'), SAVED);
   });

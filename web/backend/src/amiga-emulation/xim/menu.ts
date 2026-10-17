@@ -10,16 +10,15 @@
 import { menuSourceFor } from '../../services/menu-catalogue/registry';
 import { buildCatalogue, catalogueStyle, coverflowSlides, effectiveStyle } from '../../services/menu-catalogue/build';
 import { writeCatalogueFile } from '../../services/menu-catalogue/catalogue-file';
-import { menuCallerFromSession } from '../../services/menu-catalogue/caller';
+import { menuCallerFromSession, storeMenuStylePref } from '../../services/menu-catalogue/caller';
 import { chooseLogos, renderLogoAt } from '../../services/menu-catalogue/logos';
 import type { Catalogue } from '../../services/menu-catalogue/types';
 import { readMenuConfig } from '../../services/menu-config.service';
-import { MENU_KIND_COMMAND, isMenuStyle, widthClassOf, type MenuKind, type MenuStyle, type MenuStylePref } from '../../screens/menu-config/menu-config';
+import { MENU_KIND_COMMAND, isMenuStyle, readMenuStyle, nextMenuStyle, widthClassOf, type MenuKind, type MenuStyle, type MenuStylePref } from '../../screens/menu-config/menu-config';
 import { ErrorHandler } from '../../utils/error-handling.util';
 import { boardRoot } from '../../utils/board-root.util';
 import { menuPromptTextAsync } from '../../handlers/command-handler/menu';
-import { armMenuRun, armMenuShow, rememberMenuRow, menuRowOf } from '../../handlers/commands/menu-door-exit';
-import { db } from '../../database';
+import { armMenuRun, armMenuShow, armMenuClassic, takeMenuNotice, rememberMenuRow, menuRowOf } from '../../handlers/commands/menu-door-exit';
 
 export interface MenuContext { session: any; socket: any; emitDoorText(text: string): void }
 
@@ -58,7 +57,7 @@ async function open(rest: string, ctx: MenuContext): Promise<string> {
   }
   if (kind === 'MAIN') built.prompt = await menuPromptTextAsync(ctx.session);
   if (parent === undefined) built.logos = chooseLogos(config, kind, caller, root);
-  if (parent === undefined) { last.set(ctx.session, built); child.delete(ctx.session); }
+  if (parent === undefined) { last.set(ctx.session, built); child.delete(ctx.session); built.notice = takeMenuNotice(ctx.session); }
   else child.set(ctx.session, built);
   return `OK\t${writeCatalogueFile(root, caller.node, built, menuRowOf(ctx.session, kind))}`;
 }
@@ -73,16 +72,15 @@ function slideNow(cat: Catalogue | undefined, ctx: MenuContext): boolean {
   return coverflowSlides(menuCallerFromSession(ctx.session), readMenuConfig(boardRoot(), cat?.kind ?? 'MAIN').config);
 }
 
-/** OVERFLOW?/OVERFLOW are the pre-menu-style wire (plan P4): a door built before it knows only scroll, pages and default. */
-const legacyOverflow = (m: string): string => (m === 'scroll' || m === 'pages' ? m : 'default');
+/** OVERFLOW?/OVERFLOW are the pre-menu-style wire (plan P4): a door built before it knows only scroll, pages and default.
+    Pages is retired, so such a door is told scroll. */
+const legacyOverflow = (m: string): string => (m === 'scroll' ? m : 'default');
 
 async function setStyle(want: string, cat: Catalogue | undefined, ctx: MenuContext): Promise<MenuStyle | null> {
-  if ((want !== 'default' && !isMenuStyle(want)) || !ctx.session.user) return null;
-  const stored: MenuStylePref = want === 'default' ? '' : want;
-  // A board-own preference like themePreference: the row, never user.data (express.e has no such field).
-  // Memory follows the row: a failed write leaves the session as it was.
-  await db.updateUser(ctx.session.user.id, { menuStyle: stored });
-  ctx.session.user.menuStyle = stored;
+  const style = want === 'default' ? '' : readMenuStyle(want);   // an old door's 'pages' (retired) stores scroll
+  if (style === undefined || !ctx.session.user) return null;
+  const stored: MenuStylePref = style;
+  await storeMenuStylePref(ctx.session, stored);
   const effective = styleNow(cat, ctx);
   if (cat) cat.style = catalogueStyle(effective, widthClassOf(menuCallerFromSession(ctx.session).columns));
   return effective;
@@ -107,12 +105,22 @@ export async function menuAnswer(request: string, ctx: MenuContext): Promise<str
     case 'OVERFLOW?': {
       // The settings door asks before any catalogue is open: answer for MAIN, as STYLE <m> does.
       if (!cat && !ctx.session.user) return '';
-      const stored = ctx.session.user?.menuStyle || 'default';
+      const stored = readMenuStyle(ctx.session.user?.menuStyle) || 'default';   // a stored 'pages' (retired) reads as scroll
       const effective = styleNow(cat, ctx);
       return verb === 'STYLE?' ? `${stored}\t${effective}\t${slideNow(cat, ctx) ? 1 : 0}` : `${legacyOverflow(stored)}\t${legacyOverflow(effective)}`;
     }
     case 'STYLE': {
       const effective = await setStyle(rest.trim(), cat, ctx);
+      return effective ? `OK\t${effective}` : '';
+    }
+    case 'STYLE+': {
+      // Tab on the menu door's empty line: the style after the one the door SHOWS (a one-section cover flow
+      // scrolls, a classic caller's door draws the fallback), in the one cycle order (nextMenuStyle).
+      // Classic leaves the door: the exit tail draws the board's own menu screen and names the style.
+      const shown = rest.trim();
+      const next = nextMenuStyle(readMenuStyle(shown) ?? styleNow(cat, ctx));
+      const effective = await setStyle(next, cat, ctx);
+      if (effective === 'classic') armMenuClassic(ctx.session);
       return effective ? `OK\t${effective}` : '';
     }
     case 'OVERFLOW': {

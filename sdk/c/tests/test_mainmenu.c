@@ -122,7 +122,7 @@ int main(void)
     assert(rc == 0 && !strstr(requests, "RUN"));
     printf("  [OK] q on an empty line leaves the door without running anything\n");
 
-    /* Pages mode: the status row says which page the caller is on, and the description gives way to it. */
+    /* A catalogue still on disk with the retired Pages style (O pages) scrolls: no page number, PgDn scrolls. */
     f = fopen(CAT_PATH, "wb");
     assert(f);
     fputs("AEMENU 1\nK MAIN\t-\nT MAIN MENU\nP Menu: \nO pages\nW -\t-\t-\nR 0\nS Messages\n", f);
@@ -135,11 +135,10 @@ int main(void)
     size_text = "40\t25";
     invoked_name = "MENU";
     drive("\x1b", 1, &rc);
-    assert(rc == 0 && strstr(screen_text, "Page 1 of 2"));
-    printf("  [OK] pages mode names the page in the status row\n");
-    drive("\x1b[6~\x1b", 5, &rc);                          /* PgDn turns the page: the status row follows */
-    assert(rc == 0 && strstr(screen_text, "Page 2 of 2"));
-    printf("  [OK] a page turn updates the page number\n");
+    assert(rc == 0 && strstr(screen_text, "Label 0") && !strstr(screen_text, "Page 1 of"));
+    drive("\x1b[6~\x1b", 5, &rc);
+    assert(rc == 0 && !strstr(screen_text, "Page 2 of"));
+    printf("  [OK] an O pages catalogue (Pages was retired) scrolls: no page number\n");
     size_text = "80\t25";
     f = fopen(CAT_PATH, "wb");
     assert(f);

@@ -156,7 +156,7 @@ export function removeStyleFloor(c: MenuConfig, cls: WidthClass, floor: number):
 
 /** The sysop-facing name of each style, keyed by MenuStyle so a new style fails to compile until it is named. */
 export const MENU_STYLE_NAMES: Record<MenuStyle, string> = {
-  classic: 'Classic screen', scroll: 'Grid scroll', pages: 'Grid pages', coverflow: 'Cover flow',
+  classic: 'Classic screen', scroll: 'Grid scroll', coverflow: 'Cover flow',
 };
 
 export const PREVIEW_WIDTHS = [40, 80, 132] as const;

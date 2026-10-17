@@ -103,7 +103,7 @@ test('preview: level 10 at 80 columns lists Read Mail and FROGGER; the 40-column
   expect(c64.status).toBe(200);
   expect(keys(c64.body.data.sections)).toContain('R');
   expect(keys(c64.body.data.sections)).not.toContain('FROGGER');
-  expect(c64.body.data.style).toBe('pages');
+  expect(c64.body.data.style).toBe('scroll');
 });
 
 test('preview of BULLETINS lists bulletin 1 titled from Bulls.CFG', async () => {

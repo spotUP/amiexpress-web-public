@@ -83,7 +83,7 @@ export const STEPS: Record<string, Step> = {
       SETTINGS: 'YES',
       SETTINGS_LABEL: 'Menu style',
       SETTINGS_SECTION: 'Appearance',
-      DESCRIPTION: 'Classic screen, grid scroll, grid pages or cover flow',
+      DESCRIPTION: 'Classic screen, grid scroll or cover flow',
     }, force);
     return registerOnce(root, {
       door_command: 'MENU',

@@ -3193,6 +3193,10 @@ console.log(
         if (menuExit.run) {
           (session as any).returnCommand = menuExit.run.text;
           (session as any).returnCommandRunAs = menuExit.run.runAs;
+        } else if (menuExit.classic) {
+          // WEB_MENU_STYLE: Tab from cover flow stored classic - the board's own menu screen at once, not the
+          // plain prompt a door left with Esc gets (sysop 2026-10-17).
+          menuTail.markMenuClassicLanded(session);
         } else if (!menuExit.show && invoking === 'MENU') {
           menuTail.markMenuDoorDismissed(session);
         }

@@ -90,7 +90,7 @@ export interface User {
   petsciiCharset?: string;
   themePreference?: string; // Door colour theme (web extension); '' or an unknown id = the board default
   /** The caller's own menu style; '' = the board's default for their width and level (web extension, column menustyle). */
-  menuStyle?: '' | 'classic' | 'scroll' | 'pages' | 'coverflow';
+  menuStyle?: '' | 'classic' | 'scroll' | 'coverflow';   // a row may still hold the retired 'pages': readMenuStyle reads it as scroll
   editorType?: number;     // 0=line, 1=simple, 2=fullscreen (express.e loggedOnUser.editorType)
   internetName?: string;   // Internet/email name (express.e loggedOnUserMisc.internetName)
   /** Co-sysop persona slug the caller chose - '' for board default, 'random', or a preset/board slug. */

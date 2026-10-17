@@ -8,12 +8,23 @@ import type { MenuKind } from '../../screens/menu-config/menu-config';
 export interface MenuRun { text: string; runAs: 'typed' | 'syscmd' }
 export interface MenuShow { kind: MenuKind; key: string; command: string }
 
-const exits = new WeakMap<object, { run?: MenuRun; show?: MenuShow }>();
+/** classic: the door's Tab stored the classic style; the exit tail draws the board's own menu screen and names it. */
+export interface MenuExit { run?: MenuRun; show?: MenuShow; classic?: true }
+const exits = new WeakMap<object, MenuExit>();
+const notices = new WeakMap<object, string>();
+const classicLanded = new WeakSet<object>();
+/** The door's Tab landed on classic (door.handler's exit tail): the next menu display draws the screen and names the style. */
+export function markMenuClassicLanded(session: object): void { classicLanded.add(session); }
+export function takeMenuClassicLanded(session: object): boolean { const had = classicLanded.has(session); classicLanded.delete(session); return had; }
 const rows = new WeakMap<object, Map<string, number>>();
 
 export function armMenuRun(session: object, run: MenuRun): void { exits.set(session, { run }); }
 export function armMenuShow(session: object, show: MenuShow): void { exits.set(session, { show }); }
-export function takeMenuExit(session: object): { run?: MenuRun; show?: MenuShow } {
+export function armMenuClassic(session: object): void { exits.set(session, { classic: true }); }
+/** A line the menu door says once as it next opens a top-level catalogue (the catalogue's N line). */
+export function armMenuNotice(session: object, text: string): void { notices.set(session, text); }
+export function takeMenuNotice(session: object): string | undefined { const n = notices.get(session); notices.delete(session); return n; }
+export function takeMenuExit(session: object): MenuExit {
   const e = exits.get(session) ?? {};
   exits.delete(session);
   return e;

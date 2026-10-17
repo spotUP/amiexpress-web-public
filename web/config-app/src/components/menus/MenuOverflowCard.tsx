@@ -45,7 +45,7 @@ export function MenuOverflowCard({ config, update }: Props) {
   return (
     <div className="space-y-3">
       <p className="text-xs text-content-secondary">
-        How the main menu is shown: the classic menu screen, a grid that scrolls, a grid a page at a time, or cover flow
+        How the main menu is shown: the classic menu screen, a grid that scrolls, or cover flow
         (sections first, Enter opens one, Escape goes back). These are the defaults; callers can change this for
         themselves under W, Appearance, Menu style.
       </p>

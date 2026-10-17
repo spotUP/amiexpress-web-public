@@ -13,7 +13,8 @@ import { BaseRepository } from './BaseRepository';
 import { changedRecordFields, RECORD_FIELDS } from '../services/load-account';
 
 /**
- * The menu style column (plan 2026-10-17 S2): '' (board default), 'classic', 'scroll', 'pages' or 'coverflow'.
+ * The menu style column (plan 2026-10-17 S2): '' (board default), 'classic', 'scroll' or 'coverflow'. A row holding the
+ * retired 'pages' is left as it is: readMenuStyle reads it as scroll.
  * It replaces menuoverflow by copy: scroll/pages keep their spelling, so no value is rewritten. menuoverflow stays
  * until the copy is verified on live; nothing reads it after this.
  */

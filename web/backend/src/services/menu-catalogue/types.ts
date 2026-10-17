@@ -5,7 +5,7 @@ export interface CatalogueSection { id: string; title: string; entries: Catalogu
 export interface ChosenLogo { position: LogoPosition; file: string; rows: number; cols: number; afterSection: number }
 /** A style the menu door draws: classic never reaches a catalogue, the board shows its own screen first. */
 export type CatalogueStyle = Exclude<MenuStyle, 'classic'>;
-export interface Catalogue { kind: MenuKind; parent: string; title: string; prompt: string; sections: CatalogueSection[]; style: CatalogueStyle; wipes: { open: string; leave: string; page: string }; coverflow: { slide: boolean }; logos: ChosenLogo[] }
+export interface Catalogue { kind: MenuKind; parent: string; title: string; prompt: string; sections: CatalogueSection[]; style: CatalogueStyle; wipes: { open: string; leave: string; page: string }; coverflow: { slide: boolean }; logos: ChosenLogo[]; notice?: string }
 export interface MenuCaller {
   secLevel: number; conference: number; node: number; columns: number; rows: number;
   displayMode: 'ansi' | 'petscii' | 'teletext' | 'rip';

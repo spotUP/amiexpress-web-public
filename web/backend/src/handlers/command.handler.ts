@@ -30,7 +30,7 @@ import * as amigafs from '../utils/amigafs';
 // Import from other handlers
 import { displayScreen, doPause } from './screen.handler';
 import { displayConferenceBulletins, joinConference, FORCE_MAILSCAN_SKIP } from './operations/conference.handler';
-import { displayMainMenu as menuDisplayMainMenu, displayMenuPrompt as menuDisplayMenuPrompt } from './command-handler/menu';
+import { displayMainMenu as menuDisplayMainMenu, displayMenuPrompt as menuDisplayMenuPrompt, promptTabLeavesClassic } from './command-handler/menu';
 import { routeStateInput, isRoutedState } from './command-handler/state-router';
 import { INTERNAL_COMMAND_NAMES } from './command-handler/internal-command-names';
 import { displayModeOf } from '../amiga-emulation/xim/display-mode.util';
@@ -3395,6 +3395,17 @@ console.log(' Empty command, redisplaying menu');
     // on a real Amiga alike (express.e's lineInput has no TAB case), so
     // this adds a meaning rather than changing one.
     if (data === '\t') {
+      // WEB_MENU_STYLE: nothing typed and the caller's menu is the classic screen: Tab is the menu style cycle's
+      // next step, the menu door at Scroll, which names the style as it opens (sysop 2026-10-17).
+      if (!session.inputBuffer && (await promptTabLeavesClassic(session))) {
+        (session as any)._readCommandCurpos = 0;
+        (session as any)._promptGhostShown = false;
+        (session as any)._promptCycle = undefined;
+        emitText(socket, '\r\n');
+        flushOutput(socket);
+        submitCommandLine(socket, session, 'MENU');
+        return;
+      }
       const { promptCompleteNth, promptGhost, renderGhost } = require('./command-handler/prompt-completion');
 
       // Pressing TAB again on the SAME word advances to the next candidate

@@ -88,14 +88,14 @@ describe('menuKindOfCommand', () => {
 });
 
 describe('menu style', () => {
-  it('accepts the four styles per class and level, and never the caller-only "default"', () => {
+  it('accepts the three styles per class and level, reads the retired pages as scroll, and never the caller-only "default"', () => {
     const { config, problems } = validateMenuConfig('MAIN', { style: { standard: { '0': 'classic', '50': 'scroll', '100': 'pages', '200': 'coverflow', '300': '', '400': 'default' } } });
-    expect(config.style.standard).toEqual({ '0': 'classic', '50': 'scroll', '100': 'pages', '200': 'coverflow' });
+    expect(config.style.standard).toEqual({ '0': 'classic', '50': 'scroll', '100': 'scroll', '200': 'coverflow' });
     expect(problems).toEqual(['style standard 300: dropped', 'style standard 400: dropped']);
   });
   it('reads a file written with the old overflow key, and saves it back as style', () => {
     const { config } = validateMenuConfig('MAIN', { overflow: { standard: { '0': 'scroll', '100': 'pages' } } });
-    expect(config.style.standard).toEqual({ '0': 'scroll', '100': 'pages' });
+    expect(config.style.standard).toEqual({ '0': 'scroll', '100': 'scroll' });
     expect(config.style.c64).toEqual({ '0': 'classic' });
     expect(Object.keys(config)).not.toContain('overflow');
   });
@@ -111,7 +111,7 @@ describe('cover flow slide and the drill-down migration', () => {
   });
   it('a drill-down menu becomes cover flow at 80 columns and wider unless the sysop chose pages, and its slide carries over', () => {
     const { config } = validateMenuConfig('MAIN', { overflow: { standard: { '0': 'scroll' }, wide: { '0': 'pages' } }, drill: { enabled: true, slide: false } });
-    expect(config.style).toEqual({ c64: { '0': 'classic' }, standard: { '0': 'coverflow' }, wide: { '0': 'pages' } });
+    expect(config.style).toEqual({ c64: { '0': 'classic' }, standard: { '0': 'coverflow' }, wide: { '0': 'scroll' } });
     expect(config.coverflow).toEqual({ slide: false });
     expect(Object.keys(config)).not.toContain('drill');
   });

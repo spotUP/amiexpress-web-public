@@ -77,11 +77,11 @@ static int parse_line(const char *p, const char *end, ae_menu *m, int *in_sectio
     case 'P': take(p, end, m->prompt, (int)sizeof m->prompt); return 1;
     case 'O':
         /* The style the board decided (the caller's choice or the board default); the door only obeys it. */
-        if (end - p == 5 && memcmp(p, "pages", 5) == 0) m->style = AE_MENU_STYLE_PAGES;
+        /* "pages" is the retired Pages style (sysop 2026-10-17): a catalogue still on disk with it scrolls. */
+        if (end - p == 5 && memcmp(p, "pages", 5) == 0) m->style = AE_MENU_STYLE_SCROLL;
         else if (end - p == 6 && memcmp(p, "scroll", 6) == 0) m->style = AE_MENU_STYLE_SCROLL;
         else if (end - p == 9 && memcmp(p, "coverflow", 9) == 0) m->style = AE_MENU_STYLE_COVERFLOW;
         else return 0;
-        m->pages = m->style == AE_MENU_STYLE_PAGES;
         return 1;
     case 'F':
         /* One flag: cover flow slides between pages. */
@@ -99,9 +99,10 @@ static int parse_line(const char *p, const char *end, ae_menu *m, int *in_sectio
         /* Legacy, read for one release: "1 TAB 0" was drill-down on, slide off. Drill-down is now the cover flow style,
            and the board wrote D after O, so it wins. Remove once no catalogue on disk carries a D line. */
         if (end - p != 3 || p[1] != '\t' || (p[0] != '0' && p[0] != '1') || (p[2] != '0' && p[2] != '1')) return 0;
-        if (p[0] == '1') { m->style = AE_MENU_STYLE_COVERFLOW; m->pages = 0; m->slide = p[2] == '1'; }
+        if (p[0] == '1') { m->style = AE_MENU_STYLE_COVERFLOW; m->slide = p[2] == '1'; }
         return 1;
     case 'R': return number(p, end, &m->last_row);
+    case 'N': take(p, end, m->notice, (int)sizeof m->notice); return 1;
     case 'L': {
         ae_menu_logo l;
         q = take(p, end, l.position, (int)sizeof l.position);
@@ -257,20 +258,24 @@ int ae_menu_style_get(char *stored, char *effective)
     return ae_menu_style_query(stored, effective, 0);
 }
 
-int ae_menu_style(const char *mode, char *effective)
+static int store_style(const char *verb, const char *mode, char *effective)
 {
     char request[40], reply[AE_MAX_LINE + 1];
     int n;
 
     if (effective) effective[0] = '\0';
     if (!mode) return 0;
-    sprintf(request, "STYLE %.12s", mode);
+    sprintf(request, "%s %.12s", verb, mode);
     n = ask(request, reply, (int)sizeof reply);
     if (n < 0) return AE_MENU_GONE;
     if (strncmp(reply, "OK\t", 3) != 0) return 0;
     if (effective) take(reply + 3, reply + n, effective, AE_MENU_STYLE_CAP);
     return 1;
 }
+
+int ae_menu_style(const char *mode, char *effective) { return store_style("STYLE", mode, effective); }
+
+int ae_menu_style_next(const char *shown, char *effective) { return store_style("STYLE+", shown, effective); }
 
 static void cut(char *to, int cap, const char *from)
 {

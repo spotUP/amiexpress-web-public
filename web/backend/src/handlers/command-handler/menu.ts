@@ -28,7 +28,8 @@ import { drainNotifyInbox } from '../../notify/board';
 import { displayModeOf } from '../../amiga-emulation/xim/display-mode.util';
 import { doorRefusedForWidth } from '../../utils/door-min-columns.util';
 import { effectiveStyle } from '../../services/menu-catalogue/build';
-import { menuCallerFromSession } from '../../services/menu-catalogue/caller';
+import { menuCallerFromSession, storeMenuStylePref } from '../../services/menu-catalogue/caller';
+import { menuStyleNotice, menuStyleTabLine, nextMenuStyle } from '../../screens/menu-config/menu-config';
 import { readMenuConfig } from '../../services/menu-config.service';
 import { boardRoot } from '../../utils/board-root.util';
 
@@ -81,6 +82,25 @@ export async function launchMenuDoor(socket: any, session: BBSSession, site: 'di
 }
 
 /**
+ * WEB_MENU_STYLE: Tab on an empty command line while the caller's style is classic (sysop 2026-10-17) stores the
+ * next style in the cycle and arms the menu door to name it as it opens; the caller then runs MENU. False (Tab
+ * keeps its completion meaning) for any other style, or when no MENU door is registered. express.e's lineInput
+ * has no Tab case, so this adds a meaning rather than changing one.
+ */
+export async function promptTabLeavesClassic(session: BBSSession): Promise<boolean> {
+  /* eslint-disable @typescript-eslint/no-var-requires */
+  const { commandCache } = require('../command-execution.handler');
+  const exit = require('../commands/menu-door-exit');
+  /* eslint-enable @typescript-eslint/no-var-requires */
+  if (!session.user || !commandCache.bbscmd.get('MENU')) return false;
+  if (effectiveStyle(menuCallerFromSession(session), readMenuConfig(boardRoot(), 'MAIN').config) !== 'classic') return false;
+  const next = nextMenuStyle('classic');
+  await storeMenuStylePref(session, next);
+  exit.armMenuNotice(session, menuStyleNotice(next));
+  return true;
+}
+
+/**
  * Display main menu (express.e:28586)
  * menuPause controls whether we show a pause prompt before the menu; display is gated by expert/door flags.
  * forceMenuDisplay bypasses expert-mode suppression (used by ? command).
@@ -100,6 +120,11 @@ export async function displayMainMenu(
   // the door owns the screen, so there is nothing to draw (plan M19 review).
   // eslint-disable-next-line @typescript-eslint/no-var-requires
   if (!failureHandler && require('../commands/menu-door-exit').menuLaunchUnstarted(session)) return;
+  // WEB_MENU_STYLE: the menu door's Tab just stored classic: the screen is drawn whatever the expert flag says,
+  // with the line naming the style under it (sysop 2026-10-17).
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const classicLanded: boolean = require('../commands/menu-door-exit').takeMenuClassicLanded(session);
+  if (classicLanded) { forceMenuDisplay = true; bypassDebounce = true; }
   // Skip during conference scan - doors complete after each conference but we only
   // want to show the menu once after the entire scan finishes
   if ((session as any).inConfScan && !forceMenuDisplay) {
@@ -172,6 +197,7 @@ console.log('[menu] displayMainMenu SKIPPED (debounce - last menu was', now - la
     const handover = await launchMenuDoor(socket, session, 'display-flow');
     if (handover === 'ran') return;
     if (handover !== 'dismissed') screenDisplayed = await displayScreen(socket, session, SCREEN_MENU);
+    if (classicLanded) emitText(socket, `\r\n\x1b[36m${menuStyleTabLine('classic')}\x1b[0m`);
 
     // Clear any pagination that displayScreen might have set up - the menu prompt
     // handles input, not paginated screen continuation. This fixes the "enter twice" bug

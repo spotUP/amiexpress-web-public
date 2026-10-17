@@ -241,6 +241,14 @@ static int board(void *ctx, int field, const char *request, char *out, int cap)
     if (silent_board) return 0;
     if (strcmp(request, "STYLE?") == 0) return answer("default\tpages", out, cap);
     if (strncmp(request, "STYLE ", 6) == 0) { restyle_catalogue(request + 6); return answer("OK\tpages", out, cap); }
+    if (strncmp(request, "STYLE+ ", 7) == 0) {                   /* the board's one cycle: classic, scroll, cover flow */
+        const char *shown = request + 7;
+        const char *next = strcmp(shown, "scroll") == 0 ? "coverflow" : strcmp(shown, "coverflow") == 0 ? "classic" : "scroll";
+        char ok[24];
+        restyle_catalogue(next);
+        sprintf(ok, "OK\t%s", next);
+        return answer(ok, out, cap);
+    }
     if (strncmp(request, "OPEN ", 5) == 0) return answer("OK\t" CAT_PATH, out, cap);
     if (strncmp(request, "LOGO ", 5) == 0) { if (logo_shows_cursor) ae_put("\033[0m\033[?25h", 0); return answer("OK\t3", out, cap); }
     if (strncmp(request, "ROW ", 4) == 0 || strncmp(request, "RUN ", 4) == 0) return answer("OK", out, cap);
@@ -431,7 +439,8 @@ static void the_settings_screen_asks_without_opening_a_catalogue(void)
     assert(!strstr(requests, "OPEN"));
     assert(strstr(requests, "STYLE coverflow|"));                         /* Up from Board default is Cover flow */
     assert(strstr(screen_text, "MENU STYLE") && strstr(screen_text, "Board default (pages)"));
-    assert(strstr(screen_text, "Classic screen") && strstr(screen_text, "Grid scroll") && strstr(screen_text, "Grid pages"));
+    assert(strstr(screen_text, "Classic screen") && strstr(screen_text, "Grid scroll") && strstr(screen_text, "Cover flow"));
+    assert(!strstr(screen_text, "Grid pages"));                           /* Pages was retired (sysop 2026-10-17) */
     printf("  [OK] the settings screen asks STYLE? without opening a catalogue\n");
 }
 
@@ -488,25 +497,47 @@ static void cover_flow_turns_a_page_with_right_and_one_slide(void)
     printf("  [OK] cover flow: the position bar's thumb follows the page, Right and Left\n");
 }
 
-/* Tab on an empty line (sysop 2026-10-17): scroll, pages, cover flow, scroll - stored for the caller, shown at once. */
+/* Tab on an empty line (sysop 2026-10-17): Classic, Scroll, Cover flow, Classic (Pages was retired). The door names the style it
+   shows (STYLE+) and the board owns the order; Classic leaves the door so the board draws its own menu screen. */
 static void tab_cycles_the_menu_style(void)
 {
     const char *at;
     write_catalogue(CATALOGUE_FLOW);
     restyle_catalogue("scroll");
     mouse_queue = 0; silent_board = 0;
-    assert(DRIVE("\t\t\tq") == 0);
-    at = strstr(requests, "STYLE pages|OPEN MAIN|");
-    assert(at && (at = strstr(at, "STYLE coverflow|OPEN MAIN|")) != NULL && strstr(at, "STYLE scroll|OPEN MAIN|"));
-    assert(count_of(requests, "OPEN MAIN|") == 4);
-    at = strstr(screen_text, "Menu style: Pages");
-    assert(at && (at = strstr(at, "< 1/3 Messages >")) != NULL);           /* cover flow's first page, then its notice */
-    assert((at = strstr(at, "Menu style: Cover flow")) != NULL && strstr(at, "Menu style: Scroll"));
+    assert(DRIVE("\t\t") == 0);                                         /* the second Tab leaves: no q needed */
+    at = strstr(requests, "STYLE+ scroll|OPEN MAIN|");
+    assert(at && strstr(at, "STYLE+ coverflow|"));
+    assert(count_of(requests, "OPEN MAIN|") == 2);                         /* classic opens nothing: the door is gone */
+    assert(count_of(requests, "STYLE+ ") == 2);
+    assert(!strstr(requests, "STYLE "));                                   /* the door never names a style to store */
+    assert(!strstr(requests, "pages") && !strstr(screen_text, "Pages"));   /* the cycle has no Pages */
+    at = strstr(screen_text, "< 1/3 Messages >");
+    assert(at && strstr(at, "Menu style: Cover flow") != NULL);            /* cover flow's first page, then its notice */
+    assert(!strstr(screen_text, "Menu style: Classic"));                   /* the board names Classic, below its screen */
     restyle_catalogue("scroll");                                          /* typed text: Tab keeps the type-ahead match */
     assert(DRIVE("r\t\x1bq") == 0);
-    assert(!strstr(requests, "STYLE "));
+    assert(!strstr(requests, "STYLE"));
     write_catalogue(CATALOGUE);
-    printf("  [OK] Tab on an empty line cycles scroll, pages, cover flow and stores each for the caller\n");
+    printf("  [OK] Tab on an empty line asks the board for the next style; Classic leaves the door\n");
+}
+
+/* The board's one-off line (N): the prompt's Tab from Classic opens the door, which names the style once. */
+static void catalogue_notice_is_said_on_open(void)
+{
+    char text[2048], *r;
+    strcpy(text, CATALOGUE);
+    r = strstr(text, "\nR 0\n"); assert(r);
+    memmove(r + 5 + 21, r + 5, strlen(r + 5) + 1);
+    memcpy(r + 5, "N Menu style: Scroll\n", 21);
+    write_catalogue(text);
+    mouse_queue = 0; silent_board = 0;
+    assert(DRIVE("q") == 0);
+    assert(strstr(screen_text, "Menu style: Scroll"));
+    write_catalogue(CATALOGUE);
+    assert(DRIVE("q") == 0);
+    assert(!strstr(screen_text, "Menu style:"));
+    printf("  [OK] the catalogue's N line is said once as the door opens\n");
 }
 
 /* Cover flow is one column (sysop 2026-10-17): Down moves within the page, Right turns it from any row. */
@@ -1444,38 +1475,9 @@ static void the_door_plays_the_catalogues_wipes_at_forty_columns_as_at_eighty(vo
         write_catalogue("AEMENU 1\nK MAIN\t-\nT MAIN MENU\nP Go: \nO scroll\nW -\t-\t-\nR 0\nS Messages\nE R\tRead Mail\tRead your mail\t\t\n.\n");
         assert(DRIVE("\x1b") == 0);
         assert(!has(requests, "WIPE"));                                                /* a board with no wipes (the 40-column switch off zeroes them) plays none */
-        /* pages mode: a page turn plays the page wipe, at 40 as at 80 */
-        sprintf(size, "%d\t12", width);                                              /* a screen too short for the whole menu: it has pages */
-        big_wipes = "-\t-\tH"; big_long_label = 1; big_prompt = "Go: "; write_big_catalogue("pages");
-        assert(DRIVE("g\t\x1b") == 0);                                              /* Tab is the page turn: typing alone does not move the window */
-        assert(has(requests, "WIPE IN H|"));
-        big_wipes = "-\t-\t-"; big_long_label = 0; big_prompt = "AmiExpress Web BBS [1:Demoscene] Menu (99 mins. left): ";
     }
     size_reply = "80\t25";
-    printf("  [OK] the board's wipes play at 40 columns as at 80 (open, leave, page), and none when the board has none\n");
-}
-
-/* ---- plan M15 follow-up 4: at 40 columns the pager takes the right of the status row, and the description that is
-        left is the start of the sentence, whole words at the edge of what shows, never a collision ---------------- */
-static void at_forty_columns_the_description_is_still_readable_beside_the_pager(void)
-{
-    char row[TM_COLS + 2];
-    int pager_at, i, shown;
-    mouse_queue = 0; silent_board = 0; theme_name = ""; big_long_label = 0; big_prompt = "Go: ";
-    size_reply = "40\t12"; write_big_catalogue("pages");
-    tm_after("\x1b");
-    memcpy(row, tm_cell[11], 40); row[40] = '\0';                  /* the status row of a 12-row screen */
-    assert(strstr(row, "Page 1 of "));
-    pager_at = (int)(strstr(row, "Page 1 of ") - row);
-    assert(strncmp(row, " Description of Read Mail", 25) == 0);   /* the lead of the sentence is there... */
-    for (i = pager_at - 1; i >= 0 && row[i] == ' '; i--) ;
-    shown = i + 1;                                                 /* ...up to the last visible character before the pager */
-    assert(shown >= 20 && shown <= pager_at - 1);                  /* at least 20 columns of description, and a gap before the pager */
-    assert(row[39] != ' ');                                        /* the pager ends the row: nothing past it, nothing under it */
-    /* the clipped text is a prefix of the description, never a second copy or a torn row */
-    assert(strncmp(row + 1, "Description of Read Mail for the caller", (size_t)(shown - 1)) == 0);
-    big_prompt = "AmiExpress Web BBS [1:Demoscene] Menu (99 mins. left): "; size_reply = "80\t25";
-    printf("  [OK] at 40 columns %d columns of description stay readable beside the pager\n", shown);
+    printf("  [OK] the board's wipes play at 40 columns as at 80 (open, leave), and none when the board has none\n");
 }
 
 /* ---- plan M15 follow-up (sysop ruling): type-ahead never scrolls or repaints the window. The highlight follows a match
@@ -1491,7 +1493,7 @@ static void type_ahead_to_an_entry_below_the_window_names_it_in_the_status_row_a
         sprintf(size, "%d\t12", width);
         size_reply = size;
         big_long_label = width == 80; big_prompt = "Go: ";
-        write_big_catalogue(width == 80 ? "scroll" : "pages");
+        write_big_catalogue("scroll");                                      /* 40 was pages until Pages was retired */
         /* 12 rows: grid rows 2..9, status row 11, prompt row 12; Download (80) / Goodbye (40) is below the window */
         key_bytes("", width == 80 ? "d" : "g", "");
         first = (long)strlen(delta_text);
@@ -1517,7 +1519,7 @@ static void type_ahead_to_an_entry_below_the_window_names_it_in_the_status_row_a
         key_bytes(width == 80 ? "d" : "g", "\t", "");
         tab = (long)strlen(delta_text);
         assert(!has(delta_text, "\033[2J") && has(delta_text, "\033[2;1H"));
-        AT_MOST("Tab to the off-window match", tab, width == 80 ? 845 : 640);
+        AT_MOST("Tab to the off-window match", tab, width == 80 ? 845 : 1150);   /* 40: a scrolled two-column window, 1110 measured */
         assert(DRIVE(width == 80 ? "d\t\x08\x1b" : "g\t\x08\x1b") == 0);
         assert(strstr(requests, width == 80 ? "ROW 6|" : "ROW 13|"));
         /* Tab with the match already in view moves nothing */
@@ -1791,13 +1793,6 @@ static void the_cursor_is_hidden_in_navigation_mode_after_every_board_write_and_
         cursor_ends("\x1b[B", 0, 0);                              /* navigation: hidden again */
         assert(has(requests, "WIPE IN X|") && has(requests, "WIPE END|")); wipes++;
         cursor_ends("x", 1, 25);                                  /* typing: visible, parked on the prompt row */
-        /* a page-turn wipe in pages mode */
-        big_long_label = 1;                                       /* one column: the menu needs pages at 12 rows */
-        use_screen(cols, 12, theme, 0, "-\t-\tH", "pages");
-        cursor_ends("\x1b[6~", 0, 0);
-        assert(has(requests, "WIPE IN H|")); wipes++;
-        cursor_ends("g\t", 1, 12);
-        big_long_label = 0;
         /* a logo draw (no wipe at all) that shows the cursor */
         use_screen(cols, 25, theme, 3, "-\t-\t-", "scroll");
         logo_shows_cursor = 1;
@@ -1806,9 +1801,9 @@ static void the_cursor_is_hidden_in_navigation_mode_after_every_board_write_and_
         cursor_ends("x", 1, 25);
         logo_shows_cursor = 0;
     }
-    assert(wipes == 9);                                           /* the sentinel: every case ran */
+    assert(wipes == 6);                                           /* the sentinel: every case ran (the page wipe went with Pages) */
     restore_screen();
-    printf("  [OK] the cursor is hidden in navigation mode after the open wipe, a page wipe and a logo draw, and parked when typing, at 80, 132 and 40\n");
+    printf("  [OK] the cursor is hidden in navigation mode after the open wipe and a logo draw, and parked when typing, at 80, 132 and 40\n");
 }
 
 int main(void)
@@ -1855,7 +1850,6 @@ int main(void)
     a_moved_selection_leaves_the_screen_a_fresh_frame_would_show();
     typing_costs_the_character_and_a_jump_costs_what_it_changes();
     the_door_plays_the_catalogues_wipes_at_forty_columns_as_at_eighty();
-    at_forty_columns_the_description_is_still_readable_beside_the_pager();
     type_ahead_to_an_entry_below_the_window_names_it_in_the_status_row_and_repaints_no_grid();
     the_typing_key_bar_names_tab_and_shortens_itself_to_fit_forty_columns();
     a_header_logo_is_followed_by_the_rail_as_a_divider_and_the_grid_starts_under_it();
@@ -1869,6 +1863,7 @@ int main(void)
     cover_flow_turns_a_page_with_right_and_one_slide();
     cover_flow_is_one_column_and_pages_wrap();
     tab_cycles_the_menu_style();
+    catalogue_notice_is_said_on_open();
     a_page_turn_paints_the_region_once();
     cover_flow_without_the_slide_or_with_one_section();
     remove(CAT_PATH); remove("build/test_menudoor_keys.bin"); remove("build/test_menudoor_screen.bin");

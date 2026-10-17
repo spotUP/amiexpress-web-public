@@ -255,7 +255,7 @@ static void configure(struct menudoor *d, level *lv, int selected)
     /* A lone section's header only repeats the masthead or the logo (sysop 2026-10-15): the list starts at once. */
     if (lv->menu.section_count == 1) g->section_title = 0;
     g->band_after_section = lv->lay.band_after_section; g->band_height = lv->lay.band_height;
-    g->mode = lv->menu.pages ? UI_GRID_PAGES : UI_GRID_SCROLL;
+    g->mode = UI_GRID_SCROLL;                     /* the Pages style was retired (sysop 2026-10-17) */
     /* Cover flow is one column of the page's section (sysop 2026-10-17): Left/Right turn the page, Up/Down scroll. */
     if (d->coverflow && lv == &d->lv[0]) { g->mode = UI_GRID_SCROLL; g->max_columns = 1; }
     g->ink = UI_TOKEN(UI_T_INK); g->accent = UI_TOKEN(UI_T_ACCENT); g->dim = UI_TOKEN(UI_T_DIM);
@@ -493,8 +493,6 @@ static void draw_status(struct menudoor *d, int full)
         sprintf(pager, "%d of %d", lv->menu.entry_count, d->palette_total);
     else if (d->coverflow && d->depth == 0)
         ui_pages_indicator(&d->pages, pager, (int)sizeof pager);
-    else if (lv->grid.mode == UI_GRID_PAGES && lv->grid.page_count > 1)
-        sprintf(pager, "Page %d of %d", ui_grid_page(&lv->grid) + 1, lv->grid.page_count);
     room = sc->cols - (int)strlen(pager) - 2;
     if (pager[0] && room > 0 && (int)strlen(line) > room) line[room] = '\0';
     if (full || !d->status_valid || strcmp(pager, d->pager_drawn) != 0) {
@@ -692,23 +690,20 @@ static void show_frame(struct menudoor *d, char wipe, int conceal)
     ui_screen_flush(&d->screen);
 }
 
-/* The grid after a selection or window change: two cells for a move, the whole box for a scroll or a page turn
-   (a PAGES turn inside the paging wipe). The status row follows the selection. */
+/* The grid after a selection or window change: two cells for a move, the whole box for a scroll.
+   The status row follows the selection. */
 static void repaint_grid(struct menudoor *d)
 {
     level *lv = cur(d);
     ui_grid *g = &lv->grid;
     int full = g->drawn_offset < 0 || g->offset != g->drawn_offset;
-    char wipe = (full && g->mode == UI_GRID_PAGES && g->drawn_offset >= 0) ? lv->menu.wipe_page : 0;
-    int capturing = wipe && ae_bs_wipe_begin(wipe, 0) == 1;
 
     ui_grid_draw_changed(g, &d->screen.buf);
     draw_status(d, 0);
     park_cursor(d);
     ui_screen_flush(&d->screen);
     if (full) draw_between(d);
-    if (capturing) ui_screen_wipe_end(&d->screen);
-    else if (full) ui_screen_cursor_reassert(&d->screen);
+    if (full) ui_screen_cursor_reassert(&d->screen);
     if (full) { park_cursor(d); ui_screen_flush(&d->screen); }
 }
 
@@ -1101,29 +1096,36 @@ static void show_match(struct menudoor *d)
     select_entry(d, idx);                                /* the one allowed window rewrite: one batch, no clear */
 }
 
-/* Tab on an empty line at the top (sysop 2026-10-17): the next door style, stored for the caller and shown at once.
-   Classic is not in the cycle: it leaves the door, and Tab could not bring it back. The catalogue is opened again
-   so the board's answer (one section never flips, a refused style) decides what shows; the selected row stays. */
-static void next_style(struct menudoor *d)
+/* Tab on an empty line at the top (sysop 2026-10-17): the next style, stored for the caller and shown at once.
+   The board owns the cycle (Classic, Scroll, Cover flow): the door names the style it SHOWS and obeys the
+   answer. Classic leaves the door (1): the board draws its own menu screen and names the style. Otherwise the
+   catalogue is opened again so the board's answer (one section never flips) decides what shows; the row stays. */
+static int next_style(struct menudoor *d)
 {
-    static const char *const cycle[3] = { "pages", "coverflow", "scroll" };   /* after scroll, pages, coverflow */
-    static const char *const named[3] = { "Scroll", "Pages", "Cover flow" };
+    static const char *const shown_as[2] = { "scroll", "coverflow" };   /* by AE_MENU_STYLE_* */
+    static const char *const named[2] = { "Scroll", "Cover flow" };
     level *top = &d->lv[0];
     int row = d->coverflow ? d->section_first + top->grid.selected : top->grid.selected;
-    int style = d->coverflow ? AE_MENU_STYLE_COVERFLOW : top->menu.style;
-    char line[40];
+    int style = d->coverflow ? AE_MENU_STYLE_COVERFLOW : AE_MENU_STYLE_SCROLL;
+    char line[40], effective[AE_MENU_STYLE_CAP];
 
-    if (ae_menu_style(cycle[style], 0) != 1 || ae_menu_open(d->spec->kind, 0, &top->menu) != 1) {
+    if (ae_menu_style_next(shown_as[style], effective) != 1) {
         say(d, "Could not change the menu style.");
-        return;
+        return 0;
+    }
+    if (strcmp(effective, "classic") == 0) return 1;
+    if (ae_menu_open(d->spec->kind, 0, &top->menu) != 1) {
+        say(d, "Could not change the menu style.");
+        return 0;
     }
     top->menu.last_row = row;
     d->coverflow = 0;
     if (top->menu.style != AE_MENU_STYLE_COVERFLOW || !start_coverflow(d))
         configure(d, top, row);
     show_frame(d, 0, 0);
-    sprintf(line, "Menu style: %s", named[d->coverflow ? AE_MENU_STYLE_COVERFLOW : top->menu.pages ? AE_MENU_STYLE_PAGES : AE_MENU_STYLE_SCROLL]);
+    sprintf(line, "Menu style: %s", named[d->coverflow ? AE_MENU_STYLE_COVERFLOW : AE_MENU_STYLE_SCROLL]);
     say(d, line);
+    return 0;
 }
 
 /* The palette's list: the catalogue ranked by the typed text (D12), copied into lv[0] so the grid, the mouse and
@@ -1218,7 +1220,7 @@ static menudoor_result loop(struct menudoor *d)
             r = on_mouse(d);
             break;
         case 9:                                            /* Tab: the type-ahead match the window does not show; empty: the next style */
-            if (d->typed_len == 0 && d->depth == 0 && !d->palette) next_style(d);
+            if (d->typed_len == 0 && d->depth == 0 && !d->palette) { if (next_style(d)) return MENUDOOR_LEAVE; }
             else show_match(d);
             break;
         case UI_KEY_ESC:
@@ -1290,6 +1292,7 @@ static int run_menu_started(struct menudoor *d, ae_session *session, const menud
     if (top->menu.style != AE_MENU_STYLE_COVERFLOW || !start_coverflow(d))
         configure(d, top, top->menu.last_row);
     show_frame(d, top->menu.wipe_open, 0);
+    if (top->menu.notice[0]) say(d, top->menu.notice);         /* the board's one-off line: the prompt's Tab names the style */
     ae_bs_mouse(1);                                            /* an ANSI caller; ignored otherwise */
 
     loop(d);
@@ -1373,10 +1376,10 @@ int menudoor_run(const menudoor_spec *spec, int node)
 
 /* --------------------------------------------------------------- settings */
 
-#define SETTINGS_ROWS 5
-static const char *const MODE[SETTINGS_ROWS] = { "classic", "scroll", "pages", "coverflow", "default" };
+#define SETTINGS_ROWS 4
+static const char *const MODE[SETTINGS_ROWS] = { "classic", "scroll", "coverflow", "default" };
 static char settings_row[SETTINGS_ROWS][48];
-static int settings_stored;                       /* an index into MODE; 4 = the board's default */
+static int settings_stored;                       /* an index into MODE; 3 = the board's default */
 static char settings_effective[AE_MENU_STYLE_CAP];
 
 static const char *settings_text(void *ctx, int index)
@@ -1387,7 +1390,7 @@ static const char *settings_text(void *ctx, int index)
 
 static void settings_rows(void)
 {
-    static const char *const LABEL[SETTINGS_ROWS - 1] = { "Classic screen", "Grid scroll", "Grid pages", "Cover flow" };
+    static const char *const LABEL[SETTINGS_ROWS - 1] = { "Classic screen", "Grid scroll", "Cover flow" };
     int i;
     for (i = 0; i < SETTINGS_ROWS - 1; i++) sprintf(settings_row[i], "%s %s", settings_stored == i ? "[*]" : "[ ]", LABEL[i]);
     sprintf(settings_row[i], "%s Board default (%.12s)", settings_stored == i ? "[*]" : "[ ]", settings_effective);

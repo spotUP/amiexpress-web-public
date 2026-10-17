@@ -87,7 +87,7 @@ static void a_whole_catalogue_is_parsed_field_for_field(void)
     assert(menu.entry_section[0] == 0 && menu.entry_section[1] == 0 && menu.entry_section[2] == 0
            && menu.entry_section[3] == 1 && menu.entry_section[4] == 1);
     assert(strcmp(menu.section_title[1], "Files") == 0);
-    assert(menu.pages == 1);
+    assert(menu.style == AE_MENU_STYLE_SCROLL);                        /* "O pages": the retired Pages style scrolls */
     assert(menu.wipe_open == 'X' && menu.wipe_leave == 0 && menu.wipe_page == 'H');
     assert(menu.last_row == 4);
     assert(menu.logo_count == 2 && menu.logos[1].after_section == 1 && menu.logos[1].cols == 80);
@@ -110,21 +110,21 @@ static void a_child_catalogue_keeps_its_parent_and_crlf_is_tolerated(void)
 static void the_style_lines_set_the_style_and_the_legacy_drill_line_means_cover_flow(void)
 {
     assert(parse("AEMENU 1\nK MAIN\t-\nO coverflow\nF 1\nS A\nE k\tl\td\t\t\n.\n") == 1);
-    assert(menu.style == AE_MENU_STYLE_COVERFLOW && menu.slide == 1 && menu.pages == 0);
+    assert(menu.style == AE_MENU_STYLE_COVERFLOW && menu.slide == 1);
     assert(parse("AEMENU 1\nK MAIN\t-\nO pages\nF 0\nS A\nE k\tl\td\t\t\n.\n") == 1);
-    assert(menu.style == AE_MENU_STYLE_PAGES && menu.slide == 0 && menu.pages == 1);
+    assert(menu.style == AE_MENU_STYLE_SCROLL && menu.slide == 0);          /* Pages was retired: it reads as scroll */
     assert(parse("AEMENU 1\nK MAIN\t-\nS A\nE k\tl\td\t\t\n.\n") == 1);
-    assert(menu.style == AE_MENU_STYLE_SCROLL && menu.slide == 0 && menu.pages == 0);
+    assert(menu.style == AE_MENU_STYLE_SCROLL && menu.slide == 0);
     assert(parse("AEMENU 1\nK MAIN\t-\nO classic\n.\n") == 0);              /* classic never reaches the grid door */
     assert(parse("AEMENU 1\nK MAIN\t-\nF 2\n.\n") == 0);
     assert(parse("AEMENU 1\nK MAIN\t-\nF 1\t1\n.\n") == 0);
     /* Legacy D, read for one release: drill on is cover flow, its second flag the slide; drill off changes nothing. */
     assert(parse("AEMENU 1\nK MAIN\t-\nO pages\nD 1\t0\nS A\nE k\tl\td\t\t\n.\n") == 1);
-    assert(menu.style == AE_MENU_STYLE_COVERFLOW && menu.slide == 0 && menu.pages == 0);
+    assert(menu.style == AE_MENU_STYLE_COVERFLOW && menu.slide == 0);
     assert(parse("AEMENU 1\nK MAIN\t-\nO scroll\nD 1\t1\nS A\nE k\tl\td\t\t\n.\n") == 1);
     assert(menu.style == AE_MENU_STYLE_COVERFLOW && menu.slide == 1);
     assert(parse("AEMENU 1\nK MAIN\t-\nO pages\nD 0\t1\nS A\nE k\tl\td\t\t\n.\n") == 1);
-    assert(menu.style == AE_MENU_STYLE_PAGES && menu.slide == 0);
+    assert(menu.style == AE_MENU_STYLE_SCROLL && menu.slide == 0);
     assert(parse("AEMENU 1\nK MAIN\t-\nD 1\n.\n") == 0);
     assert(parse("AEMENU 1\nK MAIN\t-\nD 2\t1\n.\n") == 0);
     assert(parse("AEMENU 1\nK MAIN\t-\nD 1\t1\t1\n.\n") == 0);
