@@ -14,6 +14,9 @@
  * before each case: the animation is then a pure function of the screen and
  * the wipe, and the frame bytes are reproducible.
  *
+ * 2026-10-18: checker and noise hashes moved on purpose (CP437 block glyphs
+ * replaced by ISO-8859-1 glyphs; byte counts and frame counts unchanged).
+ *
  * Nothing here may be edited to make a refactor pass - a changed hash IS the
  * regression.
  *
@@ -83,30 +86,30 @@ const PINS: Record<string, Pin> = {
   'screens-menu.txt/hblinds': { frames: 9, bytes: 12165, sha256: '1bd00386820e31187240424ed2175784fa3c63ae007cbae5d2ea82a3977eec53' },
   'screens-menu.txt/vblinds': { frames: 18, bytes: 15660, sha256: '2323206a0991ba5f85ccff414fd91a2f2e8cd29546935a87e1c9c4cc7bcda068' },
   'screens-menu.txt/spiral': { frames: 22, bytes: 14181, sha256: '34072bd0f116a685137581c38bda35d8917d69741324a3ad68d0e7dc10945931' },
-  'screens-menu.txt/checker': { frames: 3, bytes: 15911, sha256: '7dfe8fda0beecdd822aa751b3a6babe9f8b9a97b72d7f9214180f64660277443' },
+  'screens-menu.txt/checker': { frames: 3, bytes: 15911, sha256: '1516630d6fed57200e9264bcb445962b94aaef5f5e98b937fb70056c0f77be73' },
   'screens-menu.txt/radial': { frames: 26, bytes: 16464, sha256: '7ebb43a0e65373c069ee3d66cf30ea72f08d1956e9d541c1aca9bf97441682e4' },
   'screens-menu.txt/blocks': { frames: 17, bytes: 17884, sha256: '60c28f647b98f14cf4565256ab1a0c39bfa916c87d733347871c0234e7a134b5' },
-  'screens-menu.txt/noise': { frames: 14, bytes: 34602, sha256: '4ced2d84e767429adfa74a6030fb6e7431751232a1e4540494bb44795b3dde00' },
+  'screens-menu.txt/noise': { frames: 14, bytes: 34602, sha256: '7a6a4b8583a6327b7d910232a2b4487143d2b5ab359f8cd60f007370cc4885e6' },
   'screens-menu.txt/typewriter': { frames: 12, bytes: 10520, sha256: '26fcc544fd1f168231baf2fa6fc4afa3de35742372ed15eae4db342743e241c5' },
   'screens-menu.txt/explode': { frames: 17, bytes: 17946, sha256: '27d7b1950194007e33a5e2567975c139ea57d3d121651eeae2579f975169b190' },
   'screens-menu250.txt/matrix': { frames: 12, bytes: 34656, sha256: '937e307e1d670b568c0044541cd8eeafa62427c5fa3c8426553a68d90f39e7b6' },
   'screens-menu250.txt/hblinds': { frames: 10, bytes: 8859, sha256: '3ebb336b52cd2e0d819fda4e65a1b29e52f626a7cf2853988ca7f1fe47970c7e' },
   'screens-menu250.txt/vblinds': { frames: 18, bytes: 13110, sha256: '96442187e3108d729e4c6f33aa3b5c7bbcde02b46a880f6de27b5fa1c19d66f7' },
   'screens-menu250.txt/spiral': { frames: 22, bytes: 11020, sha256: 'b4aa5b3b1cee2c8b9db79cb2834db8c47a8230b0dabf947d0e161b1ab195aa7c' },
-  'screens-menu250.txt/checker': { frames: 3, bytes: 13249, sha256: '9bf49b8e2a5c4161fca514d7104d0f61f89dd4b9f5183053324292fcefeb4c65' },
+  'screens-menu250.txt/checker': { frames: 3, bytes: 13249, sha256: '902bc992c02aa1d7938f321e377d356c8c6059b909090a1a50846581d3e4cf41' },
   'screens-menu250.txt/radial': { frames: 26, bytes: 13910, sha256: '6d6475d2ceef658e1b3ac97880d9cf18de68604650c560eb1f3ec49d6f69bdca' },
   'screens-menu250.txt/blocks': { frames: 17, bytes: 15656, sha256: '4bf15d61a87fd4ac58736299b47f072c0337232db71f4af9369ee53cbd433662' },
-  'screens-menu250.txt/noise': { frames: 14, bytes: 35183, sha256: '1e268f5957b7b5a74ceef2d34032655ddeb8a78ebcea2e883504361380b0ae95' },
+  'screens-menu250.txt/noise': { frames: 14, bytes: 35183, sha256: '845de2531e30c68ed4ce951b84f7e6f34c5cbb8f1111f8e3385556e2ced1e04e' },
   'screens-menu250.txt/typewriter': { frames: 14, bytes: 6979, sha256: '08b846513f71a6a8fbc899d0c0c9df29123c2318720360fb306b262f663a586f' },
   'screens-menu250.txt/explode': { frames: 17, bytes: 15487, sha256: '1d3e80a68211067dc65775df81e15118fdbc8b110258dedb338f062702e00c00' },
   'conf1-menu.txt/matrix': { frames: 11, bytes: 31735, sha256: 'a5a023829fd762f5068aa4681440f524476fd906db81f9b9386bc49e1c02b642' },
   'conf1-menu.txt/hblinds': { frames: 9, bytes: 8709, sha256: '8c3444ff1215522b68627ea03f08859218bd0550ac5065056d055de528a50985' },
   'conf1-menu.txt/vblinds': { frames: 18, bytes: 12162, sha256: 'dfaed24ab3705041a30deaac16524b2f75bb5651f78a4802bcd04ebe087eb298' },
   'conf1-menu.txt/spiral': { frames: 22, bytes: 10688, sha256: 'd451cad1a70525f240fa9ccb2cb98f6f82057fe8c64093a498c6f38ca50c8ac4' },
-  'conf1-menu.txt/checker': { frames: 3, bytes: 12581, sha256: '721a980279780f6e5bd388455f022497517459b37fef26fdd47c4c443bce8aab' },
+  'conf1-menu.txt/checker': { frames: 3, bytes: 12581, sha256: 'dd468e4d5fa0e1f8621fd4d8cca63b012d60155f5f1230846e8a3711df7f37d5' },
   'conf1-menu.txt/radial': { frames: 26, bytes: 13109, sha256: 'aa27166217dcbfef6afe469bddadacde29ba66da9ccb64365a8a7a7268b1c16d' },
   'conf1-menu.txt/blocks': { frames: 17, bytes: 14369, sha256: 'f234b4604581b45fbd2b3762280f5dc3dbc5ddf087ae7da33cc7e7db19c35a86' },
-  'conf1-menu.txt/noise': { frames: 14, bytes: 32386, sha256: '6824d6aede20472afdf70182acd87726e28fe3d0b5ba01ad0162fd6249a305dc' },
+  'conf1-menu.txt/noise': { frames: 14, bytes: 32386, sha256: '55a68b2c4d0f612c083d6db1e849bbd7165e0f2732eaf4d88457036735771b07' },
   'conf1-menu.txt/typewriter': { frames: 13, bytes: 6981, sha256: 'c3c8d1adaeecb46f59bf9b269ec669449b3f49d1305a5ecf88bdfffcceb1eb7d' },
   'conf1-menu.txt/explode': { frames: 17, bytes: 14303, sha256: '5c4783c753235089df314422a20df7af32fb771eefd003975c7fc101e6d746d1' },
 };

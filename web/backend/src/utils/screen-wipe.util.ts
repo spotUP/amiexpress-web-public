@@ -35,7 +35,7 @@ export interface WipeFrame {
 }
 
 const MATRIX_CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*()';
-const NOISE_CHARS = '░▒▓█▄▌▐▀■□▪▫';
+const NOISE_CHARS = '.:;+*#%@x·°¤×'; // ISO-8859-1 only: board art is Amiga ANSI (Topaz), never CP437 block glyphs
 
 /** Every animation frame repaints the whole screen from the top-left. */
 const CLEAR_HOME = '\x1b[2J\x1b[H';
@@ -976,7 +976,7 @@ function checkerboardWipe(content: string, columns: number): WipeGrids {
         const isWhiteSquare = (rowSquare % 2 === colSquare % 2);
 
         const shouldReveal = (phase === 0 && isWhiteSquare) || (phase === 1);
-        return shouldReveal ? cell : { char: '░', ansi: '\x1b[0;90m' }; // Gray block (complete state)
+        return shouldReveal ? cell : { char: '·', ansi: '\x1b[0;90m' }; // Dark-grey middle dot, ISO-8859-1 (complete state)
       })
     );
 
