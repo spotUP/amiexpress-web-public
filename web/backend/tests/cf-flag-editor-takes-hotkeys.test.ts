@@ -154,4 +154,21 @@ describe('CF flag editor (express.e:24672-24841)', () => {
     expect(row.indexOf('[    2]') + 8).toBe(header.lastIndexOf('M A F Z'));
     expect(lines.some(l => l.startsWith('[    3]         Console Demoscene      '))).toBe(true);
   });
+
+  test("'*' alone on the conference line flips the picked flag on every accessible conference", async () => {
+    const { socket, session, wire } = aCaller();
+    flags.set(2, MAIL_SCAN_MASK); // already on: '*' must flip it OFF, the others ON
+    await type(socket, session, 'cf\r');
+    await settle(() => session.subState === LoggedOnSubState.CF_FLAG_SELECT_INPUT);
+    wire();
+    await type(socket, session, 'M');
+    await type(socket, session, '*\r');
+    expect(flags.get(1)).toBe(MAIL_SCAN_MASK);
+    expect(flags.get(2) ?? 0).toBe(0);
+    expect(flags.get(3)).toBe(MAIL_SCAN_MASK);
+    const redraw = plain(wire());
+    expect(redraw).toContain('[    1] *       Amiga Demoscene!');
+    expect(redraw).toContain('[    3] *       Console Demoscene');
+    expect(session.subState).toBe(LoggedOnSubState.CF_FLAG_SELECT_INPUT);
+  });
 });

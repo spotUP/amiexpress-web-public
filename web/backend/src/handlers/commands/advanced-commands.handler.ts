@@ -309,25 +309,16 @@ export async function handleCFConfSelectInput(socket: any, session: BBSSession, 
     return;
   }
 
-  // express.e:24759-24767 - '+' = all on
-  if (confNums === '+') {
+  // '+' = all on (set), '-' = all off (clear), '*' = toggle all (flip each).
+  // Same toggleScanFlag the number list uses; '*' alone only.
+  if (confNums === '+' || confNums === '-' || confNums === '*') {
+    const mode = confNums === '*' ? null : confNums === '+';
     for (const conf of _conferences) {
       if (!_checkConfAccess(session.user, conf.id)) continue;
 
       const msgBases = await db.getMessageBases(conf.id);
       for (const msgBase of msgBases) {
-        await toggleScanFlag(session.user.id, conf.id, msgBase.id, editMask, true);
-      }
-    }
-  }
-  // express.e:24768-24776 - '-' = all off
-  else if (confNums === '-') {
-    for (const conf of _conferences) {
-      if (!_checkConfAccess(session.user, conf.id)) continue;
-
-      const msgBases = await db.getMessageBases(conf.id);
-      for (const msgBase of msgBases) {
-        await toggleScanFlag(session.user.id, conf.id, msgBase.id, editMask, false);
+        await toggleScanFlag(session.user.id, conf.id, msgBase.id, editMask, mode);
       }
     }
   }
