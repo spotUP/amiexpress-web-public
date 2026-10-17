@@ -2173,41 +2173,13 @@ console.error(`[loadScreenFile]     (error reading file: ${(error as Error).mess
     attemptNum++;
     screenDebug(`[loadScreenFile]   [${attemptNum}] ${filePath}`);
 
-    // For assign paths (bbs:, node:, work:), also honor security-numbered variants (LOGON20.TXT, etc.)
-    if (isAssignPath) {
-      const baseWithoutExt = filePath.replace(/\.[^/.]+$/, '');
-      const secPath = findSecurityScreen(baseWithoutExt, userSecLevel, userScreenTypeExt, session?.ripMode ?? false, false, servesPetsciiArt(session),
-        session?.texttvMode ?? false, { hollow });
-      if (secPath) {
-        screenDebug(`[loadScreenFile]  Found security screen for assign path: ${secPath}`);
-        try {
-          if (isPetsciiSeqFile(secPath)) {
-            const petsciiBuffer = readScreenBuffer(secPath);
-            const content = convertPetsciiToPetMe64(petsciiBuffer);
-            return { content, isPetscii: true, isRip: false, filePath: secPath, petsciiBuffer };
-          }
-            if (isRipFile(secPath)) {
-              return { content: readScreenText(secPath), isPetscii: false, isRip: true, filePath: secPath };
-            }
-            // Native packet teletext renders server-side; unrenderable
-            // packets fall through past this block to the assign-path walk
-            // below (which probes the .ttx twin) - never served raw.
-            if (isNativeTtiName(secPath)) {
-              const native = tryNativeTtiFile(secPath);
-              if (native) {
-                screenDebug(`[loadScreenFile] Native .tti rendered for ${screenName}`);
-                return { content: native.ansi, isPetscii: false, isRip: false, isTeletext: true, filePath: secPath };
-              }
-            } else {
-              const decodedSecPath = readScreenWithTransforms(secPath);
-              return { content: decodedSecPath.text, isPetscii: false, isRip: false, isTeletext: isTeletextFile(secPath) || undefined, filePath: secPath, sourceEncoding: sourceCharsetOf(decodedSecPath) };
-            }
-        } catch (error) {
-          SysopDebugUtil.debugFileError(null, session, 'read', secPath, error as Error, DebugSeverity.WARNING);
-console.error(`[loadScreenFile]     (error reading security screen: ${(error as Error).message})`);
-        }
-      }
-    }
+    // An assign path names one file. `~SS_BBS:Bulletins/bull1.txt` is
+    // displayFile(cmd) (express.e:5496-5502), and displayFile just opens that
+    // name (express.e:6746): no security-level walk. The walk belongs to the
+    // callers that ask for it by name (B: express.e:24648-24650, the port's
+    // showBulletin; screens by name: the search loop above). Walking here
+    // made the login's `~SS_BBS:Bulletins/bull1.txt` show bull15.txt (the
+    // Exploit-DB feed) to every caller at level 5+ (live, 2026-10-17).
 
     try {
       const candidatePath = resolveAlphabetTwin(filePath, session);
