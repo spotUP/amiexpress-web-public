@@ -61,6 +61,14 @@ describe('who is online', () => {
     ]);
   });
 
+  it('marks a parked session detached, and active again after a resume', () => {
+    sessions.set('4', { nodeId: 4, user: { username: 'Randy' }, detachedAt: Date.now() } as never);
+    expect(listOnlineNodes()[0].status).toBe('detached');
+
+    (sessions.get('4') as { detachedAt?: number }).detachedAt = undefined;
+    expect(listOnlineNodes()[0].status).toBe('active');
+  });
+
   it('leaves out a connection that has not logged in', () => {
     // A socket in AWAIT has a session and no user. It is not "online" and
     // must not take a row on the node table.

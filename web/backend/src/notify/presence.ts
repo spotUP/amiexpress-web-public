@@ -12,8 +12,10 @@
  */
 import { BBSState } from '../constants/bbs-states';
 import { userSessions } from '../server/session-manager';
+import { isParked } from '../server/session-parking';
 
 export function isLoggedOn(userId: string | number): boolean {
   const session = userSessions.get(String(userId));
-  return !!session && session.state === BBSState.LOGGEDON && !!session.user;
+  // A parked session (dropped, waiting for its resume) is away: nobody is at the prompt.
+  return !!session && session.state === BBSState.LOGGEDON && !!session.user && !isParked(session);
 }

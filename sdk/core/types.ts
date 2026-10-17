@@ -643,7 +643,8 @@ export interface OnlineNode {
   username: string;
   location: string;
   ipAddress: string;
-  status: 'active';
+  /** `detached`: a dropped web session parked inside its resume window. */
+  status: 'active' | 'detached';
 }
 
 /**

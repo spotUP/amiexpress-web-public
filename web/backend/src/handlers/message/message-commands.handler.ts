@@ -31,6 +31,7 @@ import { getActivityFromSubState } from '../../server/session-manager';
 import { emitterForNodeId } from '../../server/session-emitter-registry';
 import { EnvStat } from '../../constants/env-codes';
 import { WHO_TABLE_TOP, WHO_TABLE_BOTTOM, whoRow, whoEntry } from '../../utils/who-table.util';
+import { isParked } from '../../server/session-parking';
 import { YES_NO_PROMPT } from '../../utils/await-input';
 
 import type { BBSSession } from '../../index';
@@ -333,7 +334,7 @@ function displayNodeStatus(socket: any, session: BBSSession): void {
     let rowLocation = location;
     if (nodeSess.state === BBSState.LOGGEDON) {
       // express.e:24257-24369 - the shared SELECT (who-table.util whoEntry)
-      const e = whoEntry(status, handle, location, { isSelf: nodeSess === session, hideFiles: checkSecurity(session.user, ACSPermission.HIDE_FILES) });
+      const e = whoEntry(status, handle, location, { isSelf: nodeSess === session, hideFiles: checkSecurity(session.user, ACSPermission.HIDE_FILES), parked: isParked(nodeSess) });
       action = e.action;
       rowName = e.name;
       rowLocation = e.location;

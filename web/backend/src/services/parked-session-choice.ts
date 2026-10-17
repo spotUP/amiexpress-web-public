@@ -25,7 +25,7 @@ export type ParkedChoice = "resume" | "end" | "quit";
 
 /** The question, ASCII and in full words. */
 export function parkedChoicePrompt(parked: BBSSession, web: boolean): string {
-  const activity = whoEntry(parked.currentStat ?? EnvStat.IDLE, "", "", { isSelf: false, hideFiles: false }).action;
+  const activity = whoEntry(parked.currentStat ?? EnvStat.IDLE, "", "", { isSelf: false, hideFiles: false, parked: false }).action;
   const head = `\r\nYou have a session waiting on node ${parked.nodeId} (${activity}). `;
   return web
     ? `${head}[R]esume it here or [E]nd it and log in fresh? `

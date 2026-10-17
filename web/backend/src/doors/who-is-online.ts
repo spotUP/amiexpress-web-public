@@ -17,6 +17,7 @@
  */
 
 import { sessions } from '../server/session-manager';
+import { isParked } from '../server/session-parking';
 import type { OnlineNode } from '@amiexpress/bbs-door-sdk/core/types';
 
 // The row shape is the SDK's, so a door and the board cannot disagree about
@@ -59,7 +60,7 @@ export function listOnlineNodes(): OnlineNode[] {
           || user.ip
           || 'PRIVATE',
       ),
-      status: 'active',
+      status: isParked(session as { detachedAt?: number }) ? 'detached' : 'active',
     });
   }
 

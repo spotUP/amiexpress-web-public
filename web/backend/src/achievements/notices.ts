@@ -34,6 +34,8 @@ export interface NoticeSession {
   /** 40 (a C64) or 80 (the web terminal's wide PETSCII screen). Absent = 40. */
   petsciiColumns?: number;
   terminalType?: string;
+  /** Set while the session is parked (server/session-parking.ts isParked). */
+  detachedAt?: number;
 }
 
 export interface NoticeDeps {

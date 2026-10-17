@@ -12,6 +12,7 @@ import { doorRepoCors, isDoorRepoPath } from './door-repo-cors';
 import { getSystemTime } from '../utils/date-time.util';
 import { getRepoRevision } from './repo-revision';
 import { sessions } from './session-manager';
+import { isParked } from './session-parking';
 import { ftpCallersOnline } from '../ftp/ftp-presence';
 import { batchQueueDepth } from '../services/batch-scheduler';
 import { BBSState } from '../constants/bbs-states';
@@ -261,13 +262,18 @@ app.get('/health', (req, res) => {
   const loggedOn = Array.from(sessions.values()).filter(
     (session) => session.state === BBSState.LOGGEDON && session.user
   );
+  // A parked web session (dropped, inside its resume window) is listed apart:
+  // nobody is attached to it, so `callers` counts only attached callers.
+  const attached = loggedOn.filter((session) => !isParked(session));
+  const detached = loggedOn.length - attached.length;
   const ftp = ftpCallersOnline();
 
   res.json({
     status: 'ok',
     timestamp: getSystemTime().toISOString(),
     revision: getRepoRevision(),
-    callers: loggedOn.length + ftp.length,
+    callers: attached.length + ftp.length,
+    detached,
     /*
      * `batch` is here for the same reason `callers` is: so a DEPLOY can
      * refuse to interrupt something.

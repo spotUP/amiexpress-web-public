@@ -31,7 +31,7 @@ import { cleanupTransfer } from '../utils/raw-transfer-teardown.util';
 import { sessionWantsPetscii, disposePetsciiSessionModel } from '../utils/petscii-session-model';
 
 /** The node action a parked session shows (WHO, the sysop node list). */
-export const PARKED_ACTION = 'Detached';
+export { PARKED_ACTION } from '../utils/who-table.util';
 export type ResumeRefusal = 'unknown' | 'expired' | 'ended' | 'account';
 
 /** What `parkDecision` reads; a BBSSession satisfies it. */

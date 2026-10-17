@@ -16,6 +16,7 @@ import { config as appConfig } from '../../config';
 import { ACSPermission } from '../../constants/acs-permissions';
 import { ftpCallersOnline } from '../../ftp/ftp-presence';
 import { WHO_TABLE_TOP, WHO_TABLE_BOTTOM, whoRow, whoEntry, whoListsNode } from '../../utils/who-table.util';
+import { isParked } from '../../server/session-parking';
 import { checkSecurity, setEnvStat } from '../../utils/acs.util';
 import { EnvStat } from '../../constants/env-codes';
 import { AnsiUtil } from '../../utils/ansi.util';
@@ -131,7 +132,7 @@ function printWho(socket: any, session: BBSSession): void {
     const status = sess.currentStat ?? EnvStat.IDLE;
     // express.e:24370 - RESERVE, SHUTDOWN and NOTACTIVE nodes are the sysop's to see
     if (!whoListsNode(status, viewerIsSysop)) continue;
-    const e = whoEntry(status, sess.user.username, sess.user.location || '', { isSelf: sess === session, hideFiles });
+    const e = whoEntry(status, sess.user.username, sess.user.location || '', { isSelf: sess === session, hideFiles, parked: isParked(sess) });
     // express.e:24252-24254 - the Chat column is the node's blockOLM, not the account's quiet flag
     rows.push({ nodeId: sess.nodeId || 0, line: whoRow(sess.nodeId || 0, e.name, e.location, e.action, !sess.blockOLM) });
   }

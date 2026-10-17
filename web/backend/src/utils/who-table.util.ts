@@ -53,8 +53,18 @@ const WHO_ACTIONS: Record<number, string> = {
 };
 const WHO_BLANK_NAME = new Set([11, 18, 22, 24, 26, 27]);
 
-export function whoEntry(status: number, name: string, location: string, ctx: { isSelf: boolean; hideFiles: boolean }): { name: string; location: string; action: string } {
+/**
+ * WEB_: no express.e equivalent. A parked web session (dropped, inside its
+ * resume window - server/session-parking.ts) keeps its node; its row keeps
+ * the name and location and says this in the action column (19 wide,
+ * express.e:24370 `\l\s[19]`). Express ends a call on carrier loss, so it
+ * never has such a row.
+ */
+export const PARKED_ACTION = 'Detached';
+
+export function whoEntry(status: number, name: string, location: string, ctx: { isSelf: boolean; hideFiles: boolean; parked: boolean }): { name: string; location: string; action: string } {
   let action: string;
+  if (ctx.parked) return { name, location, action: PARKED_ACTION };
   if (status === 1) action = ctx.hideFiles ? 'DOWNLOADING' : 'BEGINNING DL';
   else if (status === 2) action = ctx.hideFiles ? 'UPLOADING' : 'BEGINNING UL';
   else if (status === 3) action = ctx.isSelf ? 'WHO' : 'MODULE';

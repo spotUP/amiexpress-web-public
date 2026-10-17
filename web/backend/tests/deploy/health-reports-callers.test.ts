@@ -52,6 +52,20 @@ afterAll(() => {
 });
 
 describe('what /health says about the board', () => {
+  it('counts a parked caller as detached, not as a caller, until he resumes', async () => {
+    addSession(2, BBSState.LOGGEDON, 'randy');
+    (sessions.get('2') as { detachedAt?: number }).detachedAt = Date.now();
+
+    let body = (await health()) as { callers: number; detached?: number };
+    expect(body.callers).toBe(0);
+    expect(body.detached).toBe(1);
+
+    (sessions.get('2') as { detachedAt?: number }).detachedAt = undefined;
+    body = (await health()) as { callers: number; detached?: number };
+    expect(body.callers).toBe(1);
+    expect(body.detached).toBe(0);
+  });
+
   it('reports nobody when the board is empty', async () => {
     const body = await health();
 

@@ -18,6 +18,7 @@ import type { NotifyItem } from '@amiexpress/bbs-door-sdk/formats/notify';
 import { atThePrompt, defaultNoticeDeps, noticeBytes } from '../achievements/notices';
 import type { NoticeDeps, NoticeSession } from '../achievements/notices';
 import { emitterForUserId } from '../server/session-emitter-registry';
+import { isParked } from '../server/session-parking';
 import { addInbox, markOffered, needsOffer, takeInbox } from './repository';
 
 /** The command that opens the Notifications door. */
@@ -44,7 +45,8 @@ export function drainNotifyInbox(
   try {
     const userId = session.user?.id;
     const handle = deps.rawDb();
-    if (userId === undefined || userId === null || !handle) return 0;
+    // A parked session has nobody at the screen: the inbox waits for the resume.
+    if (userId === undefined || userId === null || !handle || isParked(session)) return 0;
     const items = takeInbox(handle, String(userId));
     for (const item of items) socket.emit('ansi-output', noticeBytes(session, toNotice(item)));
     // Once per caller, ever: the first menu after logon of someone who never
@@ -68,7 +70,7 @@ export function deliverBoard(io: unknown, userId: string, item: NotifyItem, deps
   if (!handle) return 'dropped';
   try {
     const live = emitterForUserId(userId, io as any);
-    if (live && atThePrompt(live.session as unknown as NoticeSession)) {
+    if (live && !isParked(live.session) && atThePrompt(live.session as unknown as NoticeSession)) {
       // A prompt ends mid-line: start the toast on a line of its own, in the
       // same write (see deliverNotice).
       live.emitter.emit('ansi-output', '\r\n' + noticeBytes(live.session as unknown as NoticeSession, toNotice(item)));

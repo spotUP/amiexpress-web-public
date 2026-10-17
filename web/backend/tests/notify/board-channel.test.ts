@@ -136,6 +136,26 @@ describe('Board channel', () => {
     }
   });
 
+  it('a parked caller is away: the notice is kept and the inbox is not drained until he resumes', () => {
+    const session = makeSession({ subState: LoggedOnSubState.READ_COMMAND, detachedAt: NOW_MS });
+    const emitter = { emit: jest.fn() };
+    registerConnectionEmitter(session, emitter as any);
+    userSessions.set('u-caller', session);
+    try {
+      expect(deliverBoard(null, 'u-caller', item, { rawDb: () => db, now: () => NOW_MS })).toBe('kept');
+      expect(emitter.emit).not.toHaveBeenCalled();
+      expect(drainNotifyInbox(socketOf(), session)).toBe(0);
+      expect(inboxCount(db, 'u-caller')).toBe(1);
+
+      session.detachedAt = undefined;
+      const socket = socketOf();
+      expect(drainNotifyInbox(socket, session)).toBeGreaterThanOrEqual(1);
+      expect(toasts(socket)).toHaveLength(1);
+    } finally {
+      unregisterConnectionEmitter(session);
+    }
+  });
+
   it('a caller mid-read is not interrupted: it waits for the menu', () => {
     const session = makeSession({ subState: LoggedOnSubState.READ_MESSAGES });
     const emitter = { emit: jest.fn() };
