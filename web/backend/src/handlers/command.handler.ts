@@ -1930,7 +1930,7 @@ function endPasswordMask(socket: any, session: BBSSession): void {
           const lastLoginBeforeUpdate = user.lastLogin ? new Date(user.lastLogin) : new Date(0);
           endPasswordMask(socket, session);
           const { runPostAuthLogin } = await import('../services/login-post.service');
-          await runPostAuthLogin(socket, session, user, { io, lastLoginBeforeUpdate });
+          await runPostAuthLogin(socket, session, user, { io, lastLoginBeforeUpdate, typedPassword: true });
         };
 
         // Authenticate using use case service (Clean Architecture)

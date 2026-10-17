@@ -19,14 +19,17 @@ import type { LoginEmitter } from "../types/login-emitter";
 import { emitPrompt } from "../utils/output.util";
 import { whoEntry } from "../utils/who-table.util";
 import { EnvStat } from "../constants/env-codes";
-import { isParked, moveParkedTo, endParkedSessionsFor, type AttachUser } from "../server/session-parking";
+import { isParked, moveParkedTo, endParkedSessionsFor, endLiveSession, type AttachUser } from "../server/session-parking";
 
 export type ParkedChoice = "resume" | "end" | "quit";
 
 /** The question, ASCII and in full words. */
 export function parkedChoicePrompt(parked: BBSSession, web: boolean): string {
   const activity = whoEntry(parked.currentStat ?? EnvStat.IDLE, "", "", { isSelf: false, hideFiles: false, parked: false }).action;
-  const head = `\r\nYou have a session waiting on node ${parked.nodeId} (${activity}). `;
+  // S15: the same question for a session still open in another window.
+  const head = isParked(parked)
+    ? `\r\nYou have a session waiting on node ${parked.nodeId} (${activity}). `
+    : `\r\nYou are logged in on node ${parked.nodeId} (${activity}) in another window. `;
   return web
     ? `${head}[R]esume it here or [E]nd it and log in fresh? `
     : `${head}[E]nd it and log in here, or [Q]uit? `;
@@ -101,8 +104,14 @@ export async function resumeParkedHere(
   return moved;
 }
 
-/** [E]nd: the parked session ends through its usual finalize (one Loss Carrier). */
+/**
+ * [E]nd: a parked session ends through its usual finalize (one Loss
+ * Carrier); a live one (S15) the way the admin kick ends it (one logoff).
+ */
 export async function endParkedHere(parked: BBSSession): Promise<void> {
-  if (!isParked(parked)) return;
+  if (!isParked(parked)) {
+    await endLiveSession(parked);
+    return;
+  }
   await endParkedSessionsFor(String((parked.user as { id?: unknown } | undefined)?.id ?? ""));
 }

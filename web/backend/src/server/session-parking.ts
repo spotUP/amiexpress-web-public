@@ -313,15 +313,22 @@ export async function moveParkedTo(
   raw: Socket, session: BBSSession, user: AttachUser, forget: () => Promise<void>,
 ): Promise<'moved' | 'gone' | 'lost'> {
   const link = session.webLink;
-  const live = () => isParked(session) && !!link && !link.ended && sessions.get(String(session.nodeId)) === session;
+  // S15: a session still attached in another window moves the same way; its
+  // old socket hears one line, then `link.attach` unbinds and disconnects it
+  // (session-link.ts), so its late `disconnect` never reaches the session.
+  const live = () => !!link && !link.ended && sessions.get(String(session.nodeId)) === session;
   if (!live() || resuming.has(session)) return 'gone';
   resuming.add(session);
   clearWindow(session);
   try {
     await forget();
     if (!live()) return 'lost';
+    const old = link!.raw;
+    if (!isParked(session) && old && old !== raw && old.connected) {
+      old.emit('system-message', { text: '\r\nThis session moved to another window.\r\n' });
+    }
     attachParkedTo(raw, session, user);
-    console.log(`[RESUME] node ${session.nodeId} resumed from another device`);
+    console.log(`[RESUME] node ${session.nodeId} moved from another window or device`);
     return 'moved';
   } finally {
     resuming.delete(session);
@@ -334,6 +341,48 @@ export function parkedSessionOf(userId: string): BBSSession | null {
     if (isParked(s) && s.webLink && !s.webLink.ended && String((s.user as { id?: unknown } | undefined)?.id) === String(userId)) return s;
   }
   return null;
+}
+
+/**
+ * S15: the account's session that is still attached on another node (web
+ * with a connected socket, or a telnet/SSH line), other than `self`. A
+ * password login is offered to take it over instead of meeting ONENODE.
+ */
+export function liveSessionOf(userId: string, self: BBSSession): BBSSession | null {
+  for (const s of sessions.values()) {
+    if (s === self || isParked(s)) continue;
+    if (String((s.user as { id?: unknown } | undefined)?.id) !== String(userId)) continue;
+    const reachable = s.connectionEmitter
+      ? true
+      : !!s.webLink && !s.webLink.ended && s.webLink.connected;
+    if (reachable) return s;
+  }
+  return null;
+}
+
+/**
+ * S15 [E]nd for a live session: it ends the way the admin kick ends one
+ * (`sysopKicked`, so its finalize writes one normal logoff line), and this
+ * waits until it is off the board. Bounded: a transport that never says
+ * `disconnect` leaves it there, and the already-on check then refuses as
+ * before.
+ */
+export async function endLiveSession(session: BBSSession, waitMs = 5000): Promise<void> {
+  if (sessions.get(String(session.nodeId)) !== session) return;
+  const forgotten = new Promise<void>((resolve) => forgottenWaiters.set(session, resolve));
+  (session as { sysopKicked?: boolean }).sysopKicked = true;
+  const text = '\r\nThis session was ended by a login in another window.\r\n';
+  const emitter = (session.connectionEmitter ?? session.webLink) as
+    { emit: (e: string, d: unknown) => void; disconnect: (close?: boolean) => void } | undefined;
+  emitter?.emit('system-message', { text });
+  emitter?.disconnect(true);
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<void>((resolve) => { timer = setTimeout(resolve, waitMs); });
+  await Promise.race([forgotten, timeout]);
+  const ending = endings.get(session);
+  if (ending) await Promise.race([ending, timeout]);
+  if (timer) clearTimeout(timer);
+  forgottenWaiters.delete(session);
 }
 
 /** End every parked session of `userId` and wait for each finalize. Returns the count. */

@@ -32,7 +32,7 @@ import {
   userSessions,
   socketToUser,
 } from "../server/session-manager";
-import { parkedSessionOf } from "../server/session-parking";
+import { parkedSessionOf, liveSessionOf, isParked } from "../server/session-parking";
 import { askParkedChoice, resumeParkedHere, endParkedHere } from "./parked-session-choice";
 import { callersLog } from "../server/database-helpers";
 import { triggerSamiLogRefresh } from "../services/SamiLogService";
@@ -71,6 +71,12 @@ export interface PostAuthContext {
    * pipeline doesn't need to read+write the same DB row in two places.
    */
   lastLoginBeforeUpdate: Date;
+  /**
+   * S15: the caller typed the account's password on this connection (not a
+   * token). Only such a login may take over a session still open in
+   * another window; a token belongs to one window (S12 refuses `in-use`).
+   */
+  typedPassword?: boolean;
 }
 
 export type PostAuthResult =
@@ -235,9 +241,13 @@ export async function runPostAuthLogin(
     | undefined;
   {
     const userKey = String((user as any)?.id ?? '');
-    const parked = userKey !== '' ? parkedSessionOf(userKey) : null;
+    // S15: a typed password also offers a session still open in another
+    // window. R needs a web session on both sides; telnet/SSH get E or Q.
+    const parked = userKey === '' ? null
+      : parkedSessionOf(userKey) ?? (ctx.typedPassword ? liveSessionOf(userKey, session) : null);
     if (parked) {
-      const choice = await askParkedChoice(emitter, session, parked, isWeb);
+      const heldIsWeb = isParked(parked) || (!!parked.webLink && !parked.connectionEmitter);
+      const choice = await askParkedChoice(emitter, session, parked, isWeb && heldIsWeb);
       if (choice === "quit") {
         beginLogoff(emitter as any, session, { message: "" });
         return { ok: false, terminated: "parked-session-quit" };
