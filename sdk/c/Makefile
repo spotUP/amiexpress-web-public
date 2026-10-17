@@ -37,7 +37,7 @@ AMIGA_CFLAGS = +aos68k -c99 -DAMIGA -Iinclude -I"$(VBCC)/targets/m68k-amigaos/in
 # ae_dos_amiga is the dos.library backend - the same split as
 # ae_transport_amiga, whose host twin is likewise absent from this list because
 # the host is not what `lib` builds.
-MODULES = ae_host ae_out ae_box ae_session ui_profile ui_ansi ui_screen ui_list ui_chrome ui_key ui_input ui_editor ui_doc ui_grid ui_theme ui_settings json_lite ae_chunk ae_transport_amiga ae_session_bbs ae_net ae_http ae_achieve ae_request ae_msgbase ae_dos ae_dos_amiga ae_userfield ae_board_screen ae_menu ui_pages menudoor
+MODULES = ae_host ae_out ae_box ae_session ui_profile ui_ansi ui_screen ui_list ui_chrome ui_key ui_input ui_editor ui_doc ui_grid ui_theme ui_settings json_lite ae_chunk ae_field_shape ae_transport_amiga ae_session_bbs ae_net ae_http ae_achieve ae_request ae_msgbase ae_dos ae_dos_amiga ae_userfield ae_board_screen ae_menu ui_pages menudoor
 AMIGA_OBJS = $(patsubst %,build/amiga/%.o,$(MODULES))
 
 .PHONY: door-sources-compile all test amiga lib measure settings clean
@@ -52,7 +52,7 @@ all: test
 # for ever, so each runs under a 20 s ceiling where the host has timeout(1).
 DOOR_TEST_GUARD := $(shell command -v timeout 2>/dev/null || command -v gtimeout 2>/dev/null) $(if $(shell command -v timeout 2>/dev/null || command -v gtimeout 2>/dev/null),20,)
 
-test: door-sources-compile build/write-message build/test_ae_host build/test_ae_session build/test_ae_chunk build/test_ui_profile build/test_ui_list build/test_ui_chrome build/test_ui_screen build/test_ui_input build/test_ui_editor build/test_frame_budget build/test_ui_theme build/test_ui_settings build/test_ui_doc build/test_ui_grid build/test_ui_pages build/test_ae_http build/test_ae_achieve build/test_ae_request build/test_ae_msgbase build/test_ae_dos build/test_texttv build/test_subs_scan build/test_achieve_rows build/test_requests_bulletin build/test_ae_userfield build/test_us_model build/test_theme_preview build/test_ansi_sgr build/test_ae_board_screen build/test_ae_board_screen_save build/test_ae_menu build/test_menudoor_model build/test_mainmenu build/test_bulletins
+test: door-sources-compile build/write-message build/test_ae_host build/test_ae_session build/test_ae_chunk build/test_ui_profile build/test_ui_list build/test_ui_chrome build/test_ui_screen build/test_ui_input build/test_ui_editor build/test_frame_budget build/test_ui_theme build/test_ui_settings build/test_ui_doc build/test_ui_grid build/test_ui_pages build/test_ae_http build/test_ae_achieve build/test_ae_request build/test_ae_msgbase build/test_ae_dos build/test_ae_field_shape build/test_texttv build/test_subs_scan build/test_achieve_rows build/test_requests_bulletin build/test_ae_userfield build/test_us_model build/test_theme_preview build/test_ansi_sgr build/test_ae_board_screen build/test_ae_board_screen_save build/test_ae_menu build/test_menudoor_model build/test_mainmenu build/test_bulletins
 	./build/test_ae_host
 	./build/test_ae_session
 	./build/test_ae_chunk
@@ -73,6 +73,7 @@ test: door-sources-compile build/write-message build/test_ae_host build/test_ae_
 	./build/test_ae_request
 	./build/test_ae_msgbase
 	./build/test_ae_dos
+	./build/test_ae_field_shape
 	./build/test_texttv
 	./build/test_subs_scan
 	./build/test_achieve_rows
@@ -158,6 +159,12 @@ build/test_requests_bulletin: examples/requests/requests_bulletin.c tests/test_r
 build/test_subs_scan: examples/subs/subs_scan.c tests/test_subs_scan.c examples/subs/subs_scan.h include/ae_msgbase.h
 	@mkdir -p build
 	$(CC) $(HOST_CFLAGS) -I examples/subs -I include examples/subs/subs_scan.c tests/test_subs_scan.c -o $@
+
+# The Data-or-String field list ae_transport_amiga reads every field by: the
+# platform-free half of the transport, so the list is testable on the host.
+build/test_ae_field_shape: src/ae_field_shape.c tests/test_ae_field_shape.c include/ae_field_shape.h include/ae_session.h
+	@mkdir -p build
+	$(CC) $(HOST_CFLAGS) src/ae_field_shape.c tests/test_ae_field_shape.c -o $@
 
 build/test_ae_dos: src/ae_dos.c src/ae_dos_native.c tests/test_ae_dos.c include/ae_dos.h
 	@mkdir -p build

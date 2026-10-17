@@ -464,13 +464,14 @@ static void cover_flow_turns_a_page_with_right_and_one_slide(void)
     printf("  [OK] cover flow: Right turns to page 2/3 with one slide and leaves on the catalogue row\n");
 }
 
-static void cover_flow_moves_in_the_grid_before_it_turns_and_pages_wrap(void)
+/* Cover flow is one column (sysop 2026-10-17): Down moves within the page, Right turns it from any row. */
+static void cover_flow_is_one_column_and_pages_wrap(void)
 {
     write_catalogue(CATALOGUE_FLOW_WIDE);
     mouse_queue = 0; silent_board = 0;
-    assert(DRIVE("\x1b[Cq") == 0);                                         /* within the grid: no turn */
+    assert(DRIVE("\x1b[Bq") == 0);                                         /* within the column: no turn */
     assert(!strstr(requests, "WIPE IN P ") && strstr(requests, "ROW 1|"));
-    assert(DRIVE("\x1b[C\x1b[Cq") == 0);                                   /* the second Right is at the edge */
+    assert(DRIVE("\x1b[B\x1b[Cq") == 0);                                   /* Right on the second row turns at once */
     assert(count_of(requests, "WIPE IN P ") == 1 && strstr(screen_text, "< 2/2 Files >"));
     write_catalogue(CATALOGUE_FLOW);
     assert(DRIVE("\x1b[5~q") == 0);                                        /* PageUp from page 1 wraps to the last */
@@ -478,7 +479,7 @@ static void cover_flow_moves_in_the_grid_before_it_turns_and_pages_wrap(void)
     assert(DRIVE("\x1b[6~\x1b[6~\x1b[6~q") == 0);                           /* three PageDowns come back to page 1 */
     assert(count_of(requests, "WIPE IN P ") == 3 && strstr(requests, "ROW 0|"));
     write_catalogue(CATALOGUE);
-    printf("  [OK] cover flow moves within the grid first, PageUp and PageDown turn and wrap\n");
+    printf("  [OK] cover flow is one column: Down moves, Right turns from any row, PageUp and PageDown wrap\n");
 }
 
 /* C7 budgets: a page turn repaints the status row and the grid region once. */
@@ -1772,7 +1773,7 @@ int main(void)
     hit_testing_uses_the_grid_origin_below_the_divider();
     the_cursor_is_hidden_in_navigation_mode_after_every_board_write_and_parked_when_typing();
     cover_flow_turns_a_page_with_right_and_one_slide();
-    cover_flow_moves_in_the_grid_before_it_turns_and_pages_wrap();
+    cover_flow_is_one_column_and_pages_wrap();
     a_page_turn_paints_the_region_once();
     cover_flow_without_the_slide_or_with_one_section();
     remove(CAT_PATH); remove("build/test_menudoor_keys.bin"); remove("build/test_menudoor_screen.bin");

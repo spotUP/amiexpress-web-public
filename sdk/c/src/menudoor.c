@@ -245,6 +245,8 @@ static void configure(struct menudoor *d, level *lv, int selected)
     if (lv->menu.section_count == 1) g->section_title = 0;
     g->band_after_section = lv->lay.band_after_section; g->band_height = lv->lay.band_height;
     g->mode = lv->menu.pages ? UI_GRID_PAGES : UI_GRID_SCROLL;
+    /* Cover flow is one column of the page's section (sysop 2026-10-17): Left/Right turn the page, Up/Down scroll. */
+    if (d->coverflow && lv == &d->lv[0]) { g->mode = UI_GRID_SCROLL; g->max_columns = 1; }
     g->ink = UI_TOKEN(UI_T_INK); g->accent = UI_TOKEN(UI_T_ACCENT); g->dim = UI_TOKEN(UI_T_DIM);
     g->selected_fg = UI_TOKEN(UI_T_SELECTION_INK); g->selected_bg = UI_TOKEN(UI_T_SELECTION_BG);
     g->ground = ground(d);

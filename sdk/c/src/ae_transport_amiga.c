@@ -41,6 +41,7 @@
 
 #include "aedoor.h"
 #include "ae_chunk.h"
+#include "ae_field_shape.h"
 
 /* struct Process is only ever held here as an opaque pointer (JHMessage's
  * "task" field, BB_GETTASK result) -- never dereferenced -- so a forward
@@ -138,22 +139,6 @@ struct jh_size_check { int flag : (sizeof(struct JHMessage) == 264) ? 1 : -1; };
  * unnoticed here because this project's emulator delivers arrows to a door
  * whether or not rawArrow is set. */
 #define RAWARROW  501
-
-/* Screen geometry. axcommon.e's BB_ block (research doc); handled at
- * express.e:3861-3868, where every one of the four answers in msg.data. */
-#define BB_SCRLEFT   518
-#define BB_SCRTOP    519
-#define BB_SCRWIDTH  520
-#define BB_SCRHEIGHT 521
-
-/* The caller's message pointers. Both answer in Data, not String
- * (express.e:3963-3966) - see field_answers_in_data() below. */
-#define LAST_READ    602
-#define LAST_SCANNED 603
-
-/* The custom message-base pair, also answered in Data (express.e:3959-3962). */
-#define MSGBASE_FUNC 600
-#define MSGBASE_CONF 601
 
 /* RETURNCOMMAND: hand a command back for the BBS to run once this door has
  * exited (express.e:3492-3493; xim/types.ts RETURNCOMMAND = 136). */
@@ -436,64 +421,7 @@ int ae_key(void)
  * it is worth stating rather than inferring.
  */
 
-/*
- * The screen-geometry fields answer in Data, not String.
- *
- * express.e:3861-3868 is explicit about it:
- *
- *     CASE BB_SCRLEFT   -> msg.data:=screen.leftedge
- *     CASE BB_SCRTOP    -> msg.data:=screen.topedge
- *     CASE BB_SCRWIDTH  -> msg.data:=screen.width
- *     CASE BB_SCRHEIGHT -> msg.data:=screen.height
- *
- * and it writes nothing into String for any of them. Every OTHER field this
- * SDK asks for is a DT_ field, which express.e answers with StringF into the
- * message's String - including the ones that look numeric (BB_CONFNUM is
- * express.e:3832's StringF(tempstring,'\d',currentConf-1), a string).
- *
- * AN EXPLICIT LIST, not a range and not "String came back empty". A range
- * would be wrong at the first field it met: DT_ISANSI is 541, inside the
- * 5xx band, and answers in String. And "empty String means read Data" is
- * worse than wrong - a DT_ read that legitimately answers with nothing
- * (an empty location) leaves Data holding the 1 this door put there as the
- * read flag, so the door would be handed the string "1" as the caller's
- * home town.
- *
- * The cost of getting this wrong was measured, not imagined: ae_screen_cols()
- * answered 80 on every board and every caller, because the board's 40 went
- * into Data and this function only ever looked at String. Every C door's
- * 40-column tier was therefore dead code - THEMEC drew an 80-column list
- * onto a C64's screen and the sysop was told, correctly, that the door
- * needed an 80-column screen.
- */
-static int field_answers_in_data(int field)
-{
-    switch (field) {
-        case BB_SCRLEFT:
-        case BB_SCRTOP:
-        case BB_SCRWIDTH:
-        case BB_SCRHEIGHT:
-        /* express.e:3963-3966 answers both of these in Data and writes
-         * nothing into String:
-         *
-         *     CASE LAST_READ    -> msg.data:=lastMsgReadConf
-         *     CASE LAST_SCANNED -> msg.data:=lastNewReadConf
-         *
-         * Without them here ae_field_read(LAST_SCANNED, ...) would render the
-         * String buffer - whatever the previous round trip left in it - and
-         * hand the door junk. Same class of bug as the four above, which made
-         * ae_screen_cols() answer 80 for every C door on every board until
-         * this function landed. */
-        case LAST_READ:
-        case LAST_SCANNED:
-        /* express.e:3959-3962, the same shape: `msg.data:=customMsgParam1`. */
-        case MSGBASE_FUNC:
-        case MSGBASE_CONF:
-            return 1;
-        default:
-            return 0;
-    }
-}
+/* Which fields answer in Data, not String: ae_field_shape.c holds the list and the express.e lines behind it. */
 
 int ae_field_read(int field, char *out, int cap)
 {
@@ -519,7 +447,7 @@ int ae_field_read(int field, char *out, int cap)
     /* A geometry field: the answer is the number in Data (express.e:3865),
      * rendered here as text so ae_session's one transport seam keeps one
      * shape. ask_int() atoi()s it straight back. */
-    if (field_answers_in_data(field)) {
+    if (ae_field_answers_in_data(field)) {
         char digits[16];
 
         sprintf(digits, "%ld", (long)msg->Data);

@@ -108,7 +108,7 @@ CORE_SOURCES = flow.c config.c http.c $(SDK_C)/src/ae_http.c listtxt.c md5.c sha
 HEADERS = flow.h config.h http.h $(SDK_C)/include/ae_http.h $(SDK_C)/include/ae_net.h listtxt.h md5.h sha256.h guide.h $(SDK_C)/include/aedoor.h ansi.h $(SDK_C)/include/ui_ansi.h infocache.h shell.h $(SDK_C)/include/json_lite.h owner_auth.h dirlist.h
 
 NATIVE_SOURCES = doorrepo.c $(CORE_SOURCES) $(SDK_C)/src/ae_net.c $(SDK_C)/src/ae_transport_native.c shell_native.c dirlist_native.c
-AMIGA_SOURCES = doorrepo.c $(CORE_SOURCES) $(SDK_C)/src/ae_net.c $(SDK_C)/src/ae_transport_amiga.c shell_amiga.c dirlist_amiga.c
+AMIGA_SOURCES = doorrepo.c $(CORE_SOURCES) $(SDK_C)/src/ae_net.c $(SDK_C)/src/ae_field_shape.c $(SDK_C)/src/ae_transport_amiga.c shell_amiga.c dirlist_amiga.c
 
 # tools/probe_fetch.c is a head-less diagnostic, not part of the door: it
 # pulls one archive through the same ae_http.c/ae_net.c path with no catalog and

@@ -1,6 +1,6 @@
 /* test_mainmenu.c - the MAINMENU door's own answers, driven through its real main():
    an entry runs its key, a typed line runs as typed, the second registration opens the settings screen,
-   a cover flow catalogue (the legacy D line) turns a page with Right, and the PALETTE registration is the search palette. */
+   a cover flow catalogue (the legacy D line) is one column and turns a page with Right, and the PALETTE registration is the search palette. */
 #define main mainmenu_main
 #include "../examples/mainmenu/mainmenu.c"
 #undef main
@@ -139,7 +139,7 @@ int main(void)
     f = fopen(CAT_PATH, "wb");
     assert(f);
     fputs("AEMENU 1\nK MAIN\t-\nT MAIN MENU\nP Menu: \nO scroll\nW -\t-\t-\nD 1\t0\nR 0\nS Messages\n"
-          "E R\tRead Mail\tRead your mail\t\t\nS Conferences\nE J\tJoin Conference\tJoin another conference\t\t\n.\n", f);
+          "E R\tRead Mail\tRead your mail\t\t\nE E\tEnter Message\tWrite a message\t\t\nS Conferences\nE J\tJoin Conference\tJoin another conference\t\t\n.\n", f);
     fclose(f);
     invoked_name = "MENU";
     drive("\r", 1, &rc);
@@ -147,17 +147,18 @@ int main(void)
     drive("\x1b[C\r", 4, &rc);
     assert(rc == 0 && strstr(requests, "RUN J|") && strstr(screen_text, "< 2/2 Conferences >") && !strstr(requests, "WIPE IN P "));
     printf("  [OK] the legacy drill line opens cover flow: Enter runs, Right turns the page\n");
+    printf("  [OK] cover flow is one column: Right on a page of two entries turns the page, it does not step sideways\n");
 
     /* The palette: the same catalogue flattened, the board's main line after the name is the filter. */
     invoked_name = "PALETTE";
     main_line = "PALETTE join";
     drive("\r", 1, &rc);
-    assert(rc == 0 && strstr(requests, "OPEN MAIN|") && strstr(requests, "RUN J|") && strstr(screen_text, "1 of 2"));
+    assert(rc == 0 && strstr(requests, "OPEN MAIN|") && strstr(requests, "RUN J|") && strstr(screen_text, "1 of 3"));
     printf("  [OK] the palette starts from the board's main line and Enter runs the match\n");
     main_line = "PALETTE";
     drive("mail\x1b\x1b", 6, &rc);                       /* Esc clears the text, the second Esc leaves */
     assert(rc == 0 && !strstr(requests, "RUN") && !strstr(requests, "ROW") && strstr(screen_text, "Type to search")
-           && strstr(screen_text, "2 of 2"));
+           && strstr(screen_text, "3 of 3"));
     drive("q\x1b\x1b", 3, &rc);                           /* q types; it does not leave */
     assert(rc == 0 && !strstr(requests, "RUN"));
     printf("  [OK] the palette counts its matches, q is a letter, and Esc leaves without running\n");
