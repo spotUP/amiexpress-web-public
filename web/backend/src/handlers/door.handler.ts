@@ -1340,15 +1340,29 @@ export function postDoorMenuAction(session: BBSSession): PostDoorAction {
   // the menu door was painted over by the menu a second later (sysop,
   // 2026-10-17). Direct import, not the setConstants-injected alias: this
   // helper must work before dependency injection runs (and in tests).
-  const sub = session.subState;
-  const atRest = sub === undefined
+  return subStateIsAtRest(session.subState) ? 'menu' : 'interactive';
+}
+
+/**
+ * Whether the board is back at rest after a door: no prompt owns the next
+ * key, so the menu may take over. Anything else is a prompt a returned
+ * command (RETURNCOMMAND, or the menu door's AEW_MENU RUN) stopped at - FM's
+ * "Enter filename(s)", CF's "Edit which flags", J's conference number - and
+ * that command's own state machine owns the input until the caller answers.
+ * The ONE test both door-exit decisions make (postDoorMenuAction and
+ * executeDoor's closing subState write); each used to keep its own list, and
+ * the hand-kept one in executeDoor named only the upload/download prompts,
+ * so CF picked from the menu door was reset to DISPLAY_MENU and its M ran the
+ * board's M command (sysop, 2026-10-17).
+ */
+export function subStateIsAtRest(sub: BBSSession['subState']): boolean {
+  return sub === undefined
     || isDisplayFlowState(sub)
     || sub === LoggedOnSubStateImport.READ_COMMAND
     || sub === LoggedOnSubStateImport.READ_SHORTCUTS
     || sub === LoggedOnSubStateImport.PROCESS_COMMAND
     // Left over from a door that has finished (a live one is 'door' above).
     || sub === LoggedOnSubStateImport.DOOR_RUNNING;
-  return atRest ? 'menu' : 'interactive';
 }
 
 /**
@@ -1803,15 +1817,7 @@ console.log(`[executeDoor] Door ${door.name} completed during segment processing
 console.error('[executeDoor] Error arming the pause after the door:', error);
         }
       }
-    } else if (
-      session.subState === LoggedOnSubState.FILES_UPLOAD ||
-      session.subState === LoggedOnSubState.FILES_DOWNLOAD ||
-      session.subState === LoggedOnSubState.UPLOAD_RESUME_PROMPT ||
-      session.subState === LoggedOnSubState.UPLOAD_RESUME_DELETE ||
-      session.subState === LoggedOnSubState.UPLOAD_RENAME_PROMPT ||
-      session.subState === LoggedOnSubState.DOWNLOAD_FILENAME_INPUT ||
-      session.subState === LoggedOnSubState.DOWNLOAD_CONFIRM_INPUT
-    ) {
+    } else if (!subStateIsAtRest(session.subState)) {
       // Door's RETURNCOMMAND chain parked us in an interactive prompt state.
       // Do NOT overwrite — the prompt's own state machine owns the next input.
       console.log(`[executeDoor] interactive prompt active (${session.subState}), skipping menu transition`);
