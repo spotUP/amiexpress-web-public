@@ -1,5 +1,5 @@
 jest.mock('../../src/utils/acs-access-loader');
-import { buildCatalogue } from '../../src/services/menu-catalogue/build';
+import { buildCatalogue, effectiveStyle, catalogueStyle } from '../../src/services/menu-catalogue/build';
 import { formatCatalogue } from '../../src/services/menu-catalogue/catalogue-file';
 import { mainMenuSource } from '../../src/services/menu-catalogue/sources/main';
 import { registerMenuSource, menuSourceFor } from '../../src/services/menu-catalogue/registry';
@@ -10,7 +10,7 @@ import type { MenuCaller, MenuSource } from '../../src/services/menu-catalogue/t
 const caller = (over: Partial<MenuCaller> = {}): MenuCaller => ({
   secLevel: 10, conference: 1, node: 1, columns: 80, rows: 25, displayMode: 'ansi',
   may: (k: string) => !['SYSOP_COMMANDS', 'REMOTE_SHELL', 'ACCOUNT_EDITING', 'LIST_NODES', 'EDIT_DIRS', 'EDIT_FILES'].includes(k),
-  isSysop: false, widthRefuses: () => false, overflowPref: '', ...over,
+  isSysop: false, widthRefuses: () => false, stylePref: '', ...over,
 });
 const door = (command: string, t: Record<string, string> = {}, extra: Record<string, unknown> = {}) =>
   ({ name: command, type: 'XIM', location: `Doors/${command}/x`, access: undefined, toolTypes: t, ...extra });
@@ -83,10 +83,29 @@ test('at 40 columns a C64 menu for the level replaces the derived one, still fil
   expect(keys(c)).toEqual(['R', 'G']);
 });
 
-test('the caller\'s overflow choice beats the board default; the default follows width and level', () => {
-  expect((buildCatalogue(mainMenuSource, caller({ columns: 40, displayMode: 'petscii' }), defaultMenuConfig('MAIN')) as any).overflow).toBe('pages');
-  expect((buildCatalogue(mainMenuSource, caller(), defaultMenuConfig('MAIN')) as any).overflow).toBe('scroll');
-  expect((buildCatalogue(mainMenuSource, caller({ overflowPref: 'pages' }), defaultMenuConfig('MAIN')) as any).overflow).toBe('pages');
+test('the caller\'s style beats the board default; the default follows width and level', () => {
+  expect(buildCatalogue(mainMenuSource, caller({ columns: 40, displayMode: 'petscii' }), defaultMenuConfig('MAIN')).style).toBe('pages');
+  expect(buildCatalogue(mainMenuSource, caller(), defaultMenuConfig('MAIN')).style).toBe('coverflow');
+  expect(buildCatalogue(mainMenuSource, caller({ stylePref: 'pages' }), defaultMenuConfig('MAIN')).style).toBe('pages');
+});
+
+describe('effective style', () => {
+  const cfg = validateMenuConfig('MAIN', { style: { standard: { '0': 'scroll', '100': 'classic' } } }).config;
+  test.each([
+    [{}, 'scroll'],
+    [{ secLevel: 100 }, 'classic'],
+    [{ stylePref: 'pages' as const, secLevel: 100 }, 'pages'],
+    [{ columns: 40, displayMode: 'petscii' as const }, 'pages'],
+    [{ stylePref: 'coverflow' as const }, 'coverflow'],
+  ])('%j gives %s', (over, want) => {
+    expect(effectiveStyle(caller(over as Partial<MenuCaller>), cfg)).toBe(want);
+  });
+  test('classic never reaches the catalogue: it stands for the class default there', () => {
+    expect(catalogueStyle('classic', 'standard')).toBe('coverflow');
+    expect(catalogueStyle('classic', 'c64')).toBe('pages');
+    expect(catalogueStyle('scroll', 'standard')).toBe('scroll');
+    expect(buildCatalogue(mainMenuSource, caller({ secLevel: 100 }), cfg).style).toBe('coverflow');
+  });
 });
 
 test('wipes are off at 40 when the sysop switched at40 off', () => {
@@ -130,25 +149,22 @@ test('the registry answers the two kinds and a later one', () => {
   expect(menuSourceFor('CONFERENCES')).toBeDefined();
 });
 
-describe('drill-down line', () => {
-  const dLine = (cfgDrill: unknown, over: Partial<MenuCaller> = {}) => {
-    const { config } = validateMenuConfig('MAIN', { drill: cfgDrill });
-    return formatCatalogue(buildCatalogue(mainMenuSource, caller(over), config), 0).split('\n').filter(l => l.startsWith('D '));
+describe('style and slide lines', () => {
+  const lines = (cfg: unknown, over: Partial<MenuCaller> = {}) => {
+    const { config } = validateMenuConfig('MAIN', cfg);
+    return formatCatalogue(buildCatalogue(mainMenuSource, caller(over), config), 0).split('\n');
   };
-  test('no D line by default, so a drill-off catalogue is unchanged', () => {
-    expect(dLine(undefined)).toEqual([]);
-    expect(formatCatalogue(buildCatalogue(mainMenuSource, caller(), defaultMenuConfig('MAIN')), 0)).not.toMatch(/^D /m);
-  });
-  test('D 1 TAB 1 when enabled, placed after W and before R', () => {
-    expect(dLine({ enabled: true, slide: true })).toEqual(['D 1\t1']);
-    const lines = formatCatalogue(buildCatalogue(mainMenuSource, caller(), validateMenuConfig('MAIN', { drill: { enabled: true } }).config), 0).split('\n');
-    const i = lines.indexOf('D 1\t1');
-    expect(lines[i - 1]).toMatch(/^W /);
-    expect(lines[i + 1]).toMatch(/^R /);
+  test('O and F are always written, O before W, F after W and before R, and no D line', () => {
+    const l = lines({});
+    const w = l.findIndex(x => x.startsWith('W '));
+    expect(l[w - 1]).toBe('O coverflow');
+    expect(l[w + 1]).toBe('F 1');
+    expect(l[w + 2]).toMatch(/^R /);
+    expect(l.some(x => x.startsWith('D '))).toBe(false);
   });
   test('slide is 0 at 40 columns, in PETSCII, and when slide is off', () => {
-    expect(dLine({ enabled: true, slide: true }, { columns: 40 })).toEqual(['D 1\t0']);
-    expect(dLine({ enabled: true, slide: true }, { columns: 80, displayMode: 'petscii' })).toEqual(['D 1\t0']);
-    expect(dLine({ enabled: true, slide: false })).toEqual(['D 1\t0']);
+    expect(lines({}, { columns: 40 })).toContain('F 0');
+    expect(lines({}, { columns: 80, displayMode: 'petscii' })).toContain('F 0');
+    expect(lines({ coverflow: { slide: false } })).toContain('F 0');
   });
 });

@@ -19,7 +19,7 @@ const BULLETINS = [{ key: '1', label: 'Top Uploaders', description: 'Who gave mo
 
 const getMenuConfig = vi.fn(async (kind: string) => ({ config: defaultMenuConfig(kind as 'MAIN'), problems: [] as string[] }));
 const saveMenuConfig = vi.fn(async (_kind: string, config: unknown) => ({ config, problems: [] as string[] }));
-const previewMenu = vi.fn(async () => ({ sections: [], overflow: 'scroll', wipes: { open: 'X', leave: '', page: 'H' }, logos: [] }));
+const previewMenu = vi.fn(async () => ({ sections: [], style: 'coverflow', wipes: { open: 'X', leave: '', page: 'H' }, logos: [] }));
 const menuEntries = vi.fn(async (kind: string) => (kind === 'BULLETINS' ? BULLETINS : ROWS));
 const confirm = vi.fn(async () => true);
 

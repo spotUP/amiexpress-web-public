@@ -1,10 +1,17 @@
-import type { Catalogue, CatalogueEntry, CatalogueSection, MenuCaller, MenuSource } from './types';
-import { levelEntry, widthClassOf, cleanText, LABEL_MAX, DESCRIPTION_MAX, type MenuConfig, type OverflowMode } from '../../screens/menu-config/menu-config';
+import type { Catalogue, CatalogueEntry, CatalogueSection, CatalogueStyle, MenuCaller, MenuSource } from './types';
+import { levelEntry, widthClassOf, cleanText, LABEL_MAX, DESCRIPTION_MAX, DEFAULT_MENU_STYLE, type MenuConfig, type MenuStyle, type WidthClass } from '../../screens/menu-config/menu-config';
 
-/** The ONE rule for how a long menu behaves: the caller's own choice, else the board default for their width and level. */
-export function effectiveOverflow(caller: MenuCaller, config: MenuConfig): OverflowMode {
+/** The ONE rule for the menu style: the caller's own choice, else the board default for their width and level. */
+export function effectiveStyle(caller: MenuCaller, config: MenuConfig): MenuStyle {
   const cls = widthClassOf(caller.columns);
-  return caller.overflowPref || levelEntry(config.overflow[cls], caller.secLevel) || (cls === 'c64' ? 'pages' : 'scroll');
+  return caller.stylePref || levelEntry(config.style[cls], caller.secLevel) || DEFAULT_MENU_STYLE[cls];
+}
+
+/** The style a catalogue carries: classic is decided on the board before any door, so a door that asks anyway gets the class default. */
+export function catalogueStyle(style: MenuStyle, cls: WidthClass): CatalogueStyle {
+  if (style !== 'classic') return style;
+  const base = DEFAULT_MENU_STYLE[cls];
+  return base === 'classic' ? 'pages' : base;
 }
 
 export function buildCatalogue(source: MenuSource, caller: MenuCaller, config: MenuConfig, parentKey?: string): Catalogue | { refusal: string } {
@@ -44,14 +51,14 @@ export function buildCatalogue(source: MenuSource, caller: MenuCaller, config: M
   sections = sections.filter(s => s.entries.length > 0);
 
   const cls = widthClassOf(caller.columns);
-  const overflow = effectiveOverflow(caller, config);
+  const style = catalogueStyle(effectiveStyle(caller, config), cls);
   const wipesOn = cls !== 'c64' || config.wipes.at40;
   return {
     kind: source.kind, parent: parentKey ?? '', title: source.title(caller), prompt: source.prompt(caller),
-    sections, overflow,
+    sections, style,
     wipes: wipesOn ? { open: config.wipes.open, leave: config.wipes.leave, page: config.wipes.page } : { open: '', leave: '', page: '' },
     // Decision D9: the slide is characters, so colour does not matter, but 40 columns and PETSCII never slide.
-    drill: { enabled: config.drill.enabled, slide: config.drill.slide && cls !== 'c64' && caller.displayMode !== 'petscii' },
+    coverflow: { slide: config.coverflow.slide && cls !== 'c64' && caller.displayMode !== 'petscii' },
     logos: [],   // chosen by M6 (logos need the board's files and the rotation counter)
   };
 }

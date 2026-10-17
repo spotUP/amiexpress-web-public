@@ -1,5 +1,6 @@
 import type { BBSSession } from '../../index';
 import type { MenuCaller } from './types';
+import { isMenuStyle } from '../../screens/menu-config/menu-config';
 import { ACSPermission } from '../../constants/acs-permissions';
 import { checkSecurity } from '../../utils/acs.util';
 import { PermissionsUtil } from '../../utils/permissions.util';
@@ -27,7 +28,7 @@ export function menuCallerFromSession(session: BBSSession): MenuCaller {
     may: (k: string) => checkSecurity(user, ACSPermission[bareGateKey(k) as keyof typeof ACSPermission]),
     isSysop: PermissionsUtil.isSysop(user),
     widthRefuses: (door: object) => doorRefusedForWidth(door as never, session as never),
-    overflowPref: user?.menuOverflow === 'scroll' || user?.menuOverflow === 'pages' ? user.menuOverflow : '',
+    stylePref: isMenuStyle(user?.menuStyle) ? user.menuStyle : '',
   };
 }
 
@@ -40,6 +41,6 @@ export function menuCallerForPreview(level: number, columns: number, conference:
     may: (k: string) => checkAcsPermission(acsLevel, `ACS.${bareGateKey(k)}`),
     isSysop: level >= 255,
     widthRefuses: (door: object) => doorRefusedForWidth(door as never, fake),
-    overflowPref: '',
+    stylePref: '',
   };
 }

@@ -6,7 +6,7 @@
  */
 import {
   cleanText, DESCRIPTION_MAX, LABEL_MAX, SECTION_TITLE_MAX,
-  type MenuConfig, type OverflowMode, type WidthClass,
+  DEFAULT_MENU_STYLE, type MenuConfig, type MenuStyle, type WidthClass,
 } from '@bbs/screens/menu-config/menu-config';
 import { WIPE_CODES, type WipeType } from '@bbs/screens/wipe-codes';
 
@@ -113,8 +113,7 @@ export const removeOrderKey = (c: MenuConfig, floor: number, key: string): MenuC
 
 export const setWipe = (c: MenuConfig, event: WipeEvent, code: string): MenuConfig => ({ ...c, wipes: { ...c.wipes, [event]: code } });
 export const setWipeAt40 = (c: MenuConfig, on: boolean): MenuConfig => ({ ...c, wipes: { ...c.wipes, at40: on } });
-export const setDrillEnabled = (c: MenuConfig, on: boolean): MenuConfig => ({ ...c, drill: { ...c.drill, enabled: on } });
-export const setDrillSlide = (c: MenuConfig, on: boolean): MenuConfig => ({ ...c, drill: { ...c.drill, slide: on } });
+export const setCoverFlowSlide = (c: MenuConfig, on: boolean): MenuConfig => ({ ...c, coverflow: { ...c.coverflow, slide: on } });
 
 /**
  * The sysop-facing name of each wipe. Keyed by WipeType, so a new wipe fails to
@@ -140,19 +139,25 @@ export function filterKeys(keys: string[], query: string): string[] {
   return q ? keys.filter(k => k.toUpperCase().includes(q)) : keys;
 }
 
-export const setOverflowMode = (c: MenuConfig, cls: WidthClass, floor: number, mode: OverflowMode): MenuConfig =>
-  ({ ...c, overflow: { ...c.overflow, [cls]: { ...c.overflow[cls], [String(floor)]: mode } } });
+export const setMenuStyle = (c: MenuConfig, cls: WidthClass, floor: number, style: MenuStyle): MenuConfig =>
+  ({ ...c, style: { ...c.style, [cls]: { ...c.style[cls], [String(floor)]: style } } });
 
-export function addOverflowFloor(c: MenuConfig, cls: WidthClass, floor: number): MenuConfig {
-  if (!isFloor(floor) || c.overflow[cls][String(floor)]) return c;
-  return setOverflowMode(c, cls, floor, 'scroll');
+/** A new floor starts at the width class's own default style. */
+export function addStyleFloor(c: MenuConfig, cls: WidthClass, floor: number): MenuConfig {
+  if (!isFloor(floor) || c.style[cls][String(floor)]) return c;
+  return setMenuStyle(c, cls, floor, DEFAULT_MENU_STYLE[cls]);
 }
 
 /** The 0 floor is what every caller falls back to; it stays. */
-export function removeOverflowFloor(c: MenuConfig, cls: WidthClass, floor: number): MenuConfig {
+export function removeStyleFloor(c: MenuConfig, cls: WidthClass, floor: number): MenuConfig {
   if (floor === 0) return c;
-  return { ...c, overflow: { ...c.overflow, [cls]: withoutKey(c.overflow[cls], String(floor)) } };
+  return { ...c, style: { ...c.style, [cls]: withoutKey(c.style[cls], String(floor)) } };
 }
+
+/** The sysop-facing name of each style, keyed by MenuStyle so a new style fails to compile until it is named. */
+export const MENU_STYLE_NAMES: Record<MenuStyle, string> = {
+  classic: 'Classic screen', scroll: 'Grid scroll', pages: 'Grid pages', coverflow: 'Cover flow',
+};
 
 export const PREVIEW_WIDTHS = [40, 80, 132] as const;
 export function previewDefaults(columns: number): { columns: number; mode: 'ansi' | 'petscii' } {

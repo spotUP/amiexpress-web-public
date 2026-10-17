@@ -23,7 +23,7 @@ const getMenuConfig = vi.fn(async (kind: string) => ({ config: defaultMenuConfig
 const saveMenuConfig = vi.fn(async (_kind: string, config: unknown) => ({ config, problems: ['placement X: cleaned'] }));
 const previewMenu = vi.fn(async (_kind: string, _q: unknown) => ({
   sections: [{ id: 'messages', title: 'Messages', entries: [{ key: 'R', label: 'Read Mail', description: 'Read your mail' }] }],
-  overflow: 'scroll', wipes: { open: 'X', leave: '', page: 'H' }, logos: [],
+  style: 'coverflow', wipes: { open: 'X', leave: '', page: 'H' }, logos: [],
 }));
 const menuEntries = vi.fn(async (_kind: string) => ROWS);
 
@@ -102,13 +102,20 @@ describe('the Main Menu and Bulletins page', () => {
     await waitFor(() => expect(lastSaved().wipes.page).toBe('V'), SAVED);
   });
 
-  it('writes the drill-down switch and keeps the slide disabled while it is off', async () => {
+  it('writes the cover flow slide switch', async () => {
     const user = userEvent.setup();
-    renderPage('?part=drill');
-    expect(await screen.findByLabelText('Slide between levels')).toBeDisabled();
-    await user.click(screen.getByLabelText('Drill-down layout'));
-    await waitFor(() => expect(lastSaved().drill.enabled).toBe(true), SAVED);
-    expect(screen.getByLabelText('Slide between levels')).toBeEnabled();
+    renderPage('?part=coverflow');
+    await user.click(await screen.findByLabelText('Slide between pages'));
+    await waitFor(() => expect(lastSaved().coverflow.slide).toBe(false), SAVED);
+  });
+
+  it('offers the four menu styles by name and writes the chosen one', async () => {
+    const user = userEvent.setup();
+    renderPage('?part=style');
+    const select = await screen.findByLabelText('Standard (80 columns) at level 0');
+    expect([...(select as HTMLSelectElement).options].map(o => o.text)).toEqual(['Classic screen', 'Grid scroll', 'Grid pages', 'Cover flow']);
+    await user.selectOptions(select, 'Classic screen');
+    await waitFor(() => expect(lastSaved().style.standard['0']).toBe('classic'), SAVED);
   });
 
   it('asks the preview for PETSCII at 40 columns', async () => {

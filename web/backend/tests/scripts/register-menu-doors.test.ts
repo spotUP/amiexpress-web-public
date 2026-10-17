@@ -21,7 +21,7 @@ const tt = (n: string) => Object.fromEntries(parseInfoFile(info(n)).tooltypes.ma
 test('the menu step writes MENU and the W settings registration', () => {
   STEPS.menu(root);
   expect(tt('MENU')).toMatchObject({ LOCATION: 'Doors/MAINMENU/mainmenu', DESCRIPTION: 'The main menu', MIN_COLUMNS: '40', MULTINODE: 'YES', STACK: '8192' });
-  expect(tt('MENUSETTINGS')).toMatchObject({ SETTINGS: 'YES', SETTINGS_LABEL: 'Long menus', SETTINGS_SECTION: 'Appearance', LOCATION: 'Doors/MAINMENU/mainmenu' });
+  expect(tt('MENUSETTINGS')).toMatchObject({ SETTINGS: 'YES', SETTINGS_LABEL: 'Menu style', SETTINGS_SECTION: 'Appearance', LOCATION: 'Doors/MAINMENU/mainmenu' });
   expect(tt('PALETTE')).toMatchObject({ LOCATION: 'Doors/MAINMENU/mainmenu', MULTINODE: 'YES', STACK: '8192' });
   expect(tt('PALETTE').SETTINGS).toBeUndefined();
 });

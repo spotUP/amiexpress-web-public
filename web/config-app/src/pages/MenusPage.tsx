@@ -36,8 +36,8 @@ function MenuKindPanel({ kind }: { kind: MenuKind }) {
     { id: 'levels', label: 'Levels', render: () => <MenuLevelsEditor config={config} rows={rows} update={update} /> },
     { id: 'c64', label: 'C64 menu', render: () => <MenuC64Builder config={config} rows={rows} update={update} /> },
     { id: 'wipes', label: 'Wipes', render: () => <MenuWipesCard config={config} update={update} /> },
-    { id: 'drill', label: 'Drill-down', render: () => <MenuDrillCard config={config} update={update} /> },
-    { id: 'overflow', label: 'Overflow', render: () => <MenuOverflowCard config={config} update={update} /> },
+    { id: 'style', label: 'Menu style', render: () => <MenuOverflowCard config={config} update={update} /> },
+    { id: 'coverflow', label: 'Cover flow', render: () => <MenuDrillCard config={config} update={update} /> },
   ];
 
   return (

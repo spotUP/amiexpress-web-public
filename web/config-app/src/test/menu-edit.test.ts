@@ -8,7 +8,7 @@ import { WIPE_CODES } from '@bbs/screens/wipe-codes';
 import {
   setDescription, setLabel, setPlacement, moveSection, addSection, removeSection, sectionIsEmpty,
   addLevel, removeLevel, toggleHidden, setRename, removeRename, moveKey, addOrderKey, removeOrderKey,
-  setWipe, setWipeAt40, setDrillEnabled, setDrillSlide, setOverflowMode, addOverflowFloor, removeOverflowFloor, wipeOptions, renameSection, filterKeys, previewDefaults,
+  setWipe, setWipeAt40, setCoverFlowSlide, setMenuStyle, addStyleFloor, removeStyleFloor, MENU_STYLE_NAMES, wipeOptions, renameSection, filterKeys, previewDefaults,
 } from '../components/menus/menu-edit';
 
 const base = () => defaultMenuConfig('MAIN');
@@ -111,14 +111,14 @@ describe('per-level exceptions', () => {
   });
 });
 
-describe('drill-down', () => {
-  it('sets the switch and the slide independently', () => {
-    expect(setDrillEnabled(base(), true).drill).toEqual({ enabled: true, slide: true });
-    expect(setDrillSlide(base(), false).drill).toEqual({ enabled: false, slide: false });
+describe('cover flow', () => {
+  it('sets the slide', () => {
+    expect(setCoverFlowSlide(base(), false).coverflow).toEqual({ slide: false });
+    expect(setCoverFlowSlide(base(), true).coverflow).toEqual({ slide: true });
   });
 });
 
-describe('wipes and overflow', () => {
+describe('wipes and menu style', () => {
   it('sets a wipe per event and the 40-column switch', () => {
     expect(setWipe(base(), 'page', 'H').wipes.page).toBe('H');
     expect(setWipe(base(), 'leave', '').wipes.leave).toBe('');
@@ -131,14 +131,18 @@ describe('wipes and overflow', () => {
     expect(o.find(w => w.code === 'H')?.name).toBe('Horizontal blinds');
     expect(o.every(w => w.name.length > 1)).toBe(true);
   });
-  it('sets a mode at a floor, adds floors once and keeps the 0 floor', () => {
-    let c = setOverflowMode(base(), 'standard', 0, 'pages');
-    expect(c.overflow.standard).toEqual({ '0': 'pages' });
-    c = addOverflowFloor(c, 'standard', 100);
-    expect(c.overflow.standard).toEqual({ '0': 'pages', '100': 'scroll' });
-    expect(addOverflowFloor(c, 'standard', 100)).toBe(c);
-    expect(removeOverflowFloor(c, 'standard', 100).overflow.standard).toEqual({ '0': 'pages' });
-    expect(removeOverflowFloor(c, 'standard', 0)).toBe(c);
+  it('sets a style at a floor, adds floors once at the class default and keeps the 0 floor', () => {
+    let c = setMenuStyle(base(), 'standard', 0, 'classic');
+    expect(c.style.standard).toEqual({ '0': 'classic' });
+    c = addStyleFloor(c, 'standard', 100);
+    expect(c.style.standard).toEqual({ '0': 'classic', '100': 'coverflow' });
+    expect(addStyleFloor(c, 'c64', 100).style.c64).toEqual({ '0': 'pages', '100': 'pages' });
+    expect(addStyleFloor(c, 'standard', 100)).toBe(c);
+    expect(removeStyleFloor(c, 'standard', 100).style.standard).toEqual({ '0': 'classic' });
+    expect(removeStyleFloor(c, 'standard', 0)).toBe(c);
+  });
+  it('names every style in full words', () => {
+    expect(MENU_STYLE_NAMES).toEqual({ classic: 'Classic screen', scroll: 'Grid scroll', pages: 'Grid pages', coverflow: 'Cover flow' });
   });
 });
 

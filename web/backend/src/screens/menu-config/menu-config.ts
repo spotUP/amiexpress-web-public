@@ -18,7 +18,14 @@ export function menuKindOfCommand(command: string): MenuKind | null {
   const upper = command.toUpperCase();
   return MENU_KINDS.find(kind => MENU_KIND_COMMAND[kind] === upper) ?? null;
 }
-export type OverflowMode = 'scroll' | 'pages';
+/** How the menu door lays a menu out. `classic` shows the board's own menu screen with no door (express.e:28586). */
+export type MenuStyle = 'classic' | 'scroll' | 'pages' | 'coverflow';
+export const MENU_STYLES: readonly MenuStyle[] = ['classic', 'scroll', 'pages', 'coverflow'];
+/** A caller's stored choice: '' is the board default. */
+export type MenuStylePref = '' | MenuStyle;
+export function isMenuStyle(v: unknown): v is MenuStyle {
+  return typeof v === 'string' && (MENU_STYLES as readonly string[]).includes(v);
+}
 export type WidthClass = 'c64' | 'standard' | 'wide';
 export type LogoPosition = 'header' | 'footer' | 'side' | 'between';
 export type LogoRule = 'fixed' | 'rotate' | 'random';
@@ -34,10 +41,10 @@ export interface MenuConfig {
   descriptions: Record<string, string>;
   levels: LevelMap<LevelException>;
   c64Menus: LevelMap<C64Menu>;
-  overflow: Record<WidthClass, LevelMap<OverflowMode>>;
+  style: Record<WidthClass, LevelMap<MenuStyle>>;
   wipes: { open: string; leave: string; page: string; at40: boolean };
-  /** Drill-down layout: the menu door shows the sections first. `slide` animates between levels; it only acts when `enabled`. */
-  drill: { enabled: boolean; slide: boolean };
+  /** Cover flow: `slide` animates the page turn (Left/Right). */
+  coverflow: { slide: boolean };
   logos: LogoSet[];
 }
 
@@ -75,14 +82,19 @@ export function cleanText(raw: string, max: number): string {
   return String(raw).replace(/\x1b\[[0-9;?]*[ -/]*[@-~]/g, '').replace(/[\x00-\x1f\x7f-\x9f]/g, '').slice(0, max);
 }
 
+/** The board's own default per width class: cover flow at 80 columns and wider, pages on the C64 (plan decision 5). */
+export const DEFAULT_MENU_STYLE: Record<WidthClass, MenuStyle> = { c64: 'pages', standard: 'coverflow', wide: 'coverflow' };
+const DEFAULT_STYLE_MAP = (): Record<WidthClass, LevelMap<MenuStyle>> =>
+  ({ c64: { '0': DEFAULT_MENU_STYLE.c64 }, standard: { '0': DEFAULT_MENU_STYLE.standard }, wide: { '0': DEFAULT_MENU_STYLE.wide } });
+
 export function defaultMenuConfig(kind: MenuKind): MenuConfig {
   return {
     version: 1,
     sections: kind === 'MAIN' ? DEFAULT_SECTIONS.map(s => ({ id: s.id, title: s.title })) : [{ id: 'bulletins', title: 'Bulletins' }],
     placement: {}, labels: {}, descriptions: {}, levels: {}, c64Menus: {},
-    overflow: { c64: { '0': 'pages' }, standard: { '0': 'scroll' }, wide: { '0': 'scroll' } },
+    style: DEFAULT_STYLE_MAP(),
     wipes: { open: 'X', leave: '', page: 'H', at40: true },
-    drill: { enabled: false, slide: true },
+    coverflow: { slide: true },
     logos: [],
   };
 }
@@ -158,15 +170,17 @@ export function validateMenuConfig(kind: MenuKind, raw: unknown): { config: Menu
       config.c64Menus[k] = { sections: sections!.map(s => ({ title: cleanText((s as any).title, SECTION_TITLE_MAX), keys: keyList((s as any).keys)! })) };
     }
   }
-  if (isObj(raw.overflow)) {
+  // `overflow` is the key files written before the menu style setting used; read once, saved back as `style`.
+  const rawStyle = raw.style !== undefined ? raw.style : raw.overflow;
+  if (isObj(rawStyle)) {
     for (const cls of CLASSES) {
-      const m = raw.overflow[cls];
+      const m = rawStyle[cls];
       if (m === undefined) continue;
-      const good: LevelMap<OverflowMode> = {};
+      const good: LevelMap<MenuStyle> = {};
       if (isObj(m)) for (const [k, v] of Object.entries(m)) {
-        if (isFloor(k) && (v === 'scroll' || v === 'pages')) good[k] = v; else problems.push(`overflow ${cls} ${k}: dropped`);
+        if (isFloor(k) && isMenuStyle(v)) good[k] = v; else problems.push(`style ${cls} ${k}: dropped`);
       }
-      if (Object.keys(good).length) config.overflow[cls] = good;
+      if (Object.keys(good).length) config.style[cls] = good;
     }
   }
   if (isObj(raw.wipes)) {
@@ -178,10 +192,16 @@ export function validateMenuConfig(kind: MenuKind, raw: unknown): { config: Menu
     if (typeof raw.wipes.at40 === 'boolean') config.wipes.at40 = raw.wipes.at40;
     else if (raw.wipes.at40 !== undefined) problems.push('wipes at40: not true/false');
   }
+  if (isObj(raw.coverflow)) {
+    if (typeof raw.coverflow.slide === 'boolean') config.coverflow.slide = raw.coverflow.slide;
+    else if (raw.coverflow.slide !== undefined) problems.push('coverflow slide: not true/false');
+  } else if (raw.coverflow !== undefined) problems.push('coverflow: not an object');
+  // Legacy drill-down (plan decision 6): its slide is the cover flow slide, and a drill-down menu becomes a cover flow menu
+  // in every class whose base default is not pages (the C64 keeps pages unless the sysop changes it).
   if (isObj(raw.drill)) {
-    for (const k of ['enabled', 'slide'] as const) {
-      if (typeof raw.drill[k] === 'boolean') config.drill[k] = raw.drill[k] as boolean;
-      else if (raw.drill[k] !== undefined) problems.push(`drill ${k}: not true/false`);
+    if (raw.coverflow === undefined && typeof raw.drill.slide === 'boolean') config.coverflow.slide = raw.drill.slide;
+    if (raw.drill.enabled === true) {
+      for (const cls of CLASSES) if (config.style[cls]['0'] !== 'pages') config.style[cls] = { ...config.style[cls], '0': 'coverflow' };
     }
   } else if (raw.drill !== undefined) problems.push('drill: not an object');
   if (Array.isArray(raw.logos)) {

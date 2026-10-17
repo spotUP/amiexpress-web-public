@@ -132,7 +132,7 @@ export interface DriveOptions {
   steps: Step[];
   /** Merged over the fake BBS session (wireWidth, wireHeight, petsciiMode, themePreference, ...). */
   session?: Record<string, unknown>;
-  /** Merged over the fake user (secLevel, menuOverflow, ...). */
+  /** Merged over the fake user (secLevel, menuStyle, ...). */
   user?: Record<string, unknown>;
   /** The board for this run (BBS_DATA_DIR / config dataDir); omitted = whatever the process has. */
   boardRoot?: string;

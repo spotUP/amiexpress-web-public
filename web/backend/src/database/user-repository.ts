@@ -12,6 +12,16 @@ import { SysopDebugUtil, DebugSeverity } from '../utils/sysop-debug.util';
 import { BaseRepository } from './BaseRepository';
 import { changedRecordFields, RECORD_FIELDS } from '../services/load-account';
 
+/**
+ * The menu style column (plan 2026-10-17 S2): '' (board default), 'classic', 'scroll', 'pages' or 'coverflow'.
+ * It replaces menuoverflow by copy: scroll/pages keep their spelling, so no value is rewritten. menuoverflow stays
+ * until the copy is verified on live; nothing reads it after this.
+ */
+export function addMenuStyleColumn(db: { exec(sql: string): unknown }): void {
+  db.exec("ALTER TABLE users ADD COLUMN menustyle TEXT DEFAULT ''");
+  db.exec("UPDATE users SET menustyle = COALESCE(menuoverflow, '')");
+}
+
 // Helper function to map field names to column names
 function fieldToColumn(field: string): string {
   const map: { [key: string]: string } = {
@@ -346,7 +356,7 @@ console.error(`[Database] Failed to append BBS user to disk:`, error);
       petsciiPalette: user.petsciipalette === 'vic' ? 'vic' : 'vdc',
       petsciiCharset: user.petsciicharset === 'swedish' ? 'swedish' : 'standard',
       themePreference: user.themepreference || 'classic',        // Door theme; classic is today's look
-      menuOverflow: user.menuoverflow || '',                      // Long-menu choice: '' = board default (plan M6)
+      menuStyle: user.menustyle || '',                            // Menu style: '' = board default (plan 2026-10-17 S2)
       // SCREEN theme - which set of board art this caller wears. Empty is
       // "no preference", which resolves to the board default and then to the
       // board's own screens. NOT the same preference as themePreference above.

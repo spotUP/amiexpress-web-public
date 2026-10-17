@@ -18,7 +18,7 @@ import { commandCache } from '../../src/handlers/command-execution.handler';
 
 const drawn: string[] = [];
 const session = (over: any = {}): any => ({ nodeId: 3, currentConf: 1, screenWidth: 80,
-  user: { id: 7, secLevel: 10, securityFlags: 'T'.repeat(128), menuOverflow: '' }, ...over });
+  user: { id: 7, secLevel: 10, securityFlags: 'T'.repeat(128), menuStyle: '' }, ...over });
 const ctx = (s: any) => ({ session: s, socket: { emit: jest.fn() }, emitDoorText: (t: string) => drawn.push(t) });
 beforeEach(() => { drawn.length = 0; permissionDenied.mockClear(); commandCache.bbscmd.clear(); commandCache.syscmd.clear(); });
 
@@ -54,20 +54,52 @@ test('ROW is remembered per kind and comes back in the next catalogue', async ()
 });
 
 test('a settings door that never opened a catalogue is answered OVERFLOW? with the caller\'s stored mode and the board\'s effective mode', async () => {
-  const s = session({ user: { id: 7, secLevel: 10, securityFlags: 'T'.repeat(128), menuOverflow: 'pages' } });
+  const s = session({ user: { id: 7, secLevel: 10, securityFlags: 'T'.repeat(128), menuStyle: 'pages' } });
   expect(await menuAnswer('OVERFLOW?', ctx(s))).toBe('pages\tpages');
   const t = session();
-  expect(await menuAnswer('OVERFLOW?', ctx(t))).toBe('default\tscroll');
+  expect(await menuAnswer('OVERFLOW?', ctx(t))).toBe('default\tdefault');
   expect(await menuAnswer('OVERFLOW?', ctx(session({ user: undefined })))).toBe('');
+});
+
+test('STYLE? answers the stored style (blank is "default") and the effective one', async () => {
+  expect(await menuAnswer('STYLE?', ctx(session()))).toBe('default\tcoverflow');
+  expect(await menuAnswer('STYLE?', ctx(session({ screenWidth: 40, user: { ...session().user, menuStyle: '' } })))).toMatch(/^default\t/);
+  expect(await menuAnswer('STYLE?', ctx(session({ user: { ...session().user, menuStyle: 'classic' } })))).toBe('classic\tclassic');
+  expect(await menuAnswer('STYLE?', ctx(session({ user: undefined })))).toBe('');
+});
+
+test('STYLE stores each of the four styles and default, and refuses anything else', async () => {
+  const s = session();
+  await menuAnswer('OPEN MAIN', ctx(s));
+  for (const m of ['classic', 'scroll', 'pages', 'coverflow'] as const) {
+    expect(await menuAnswer(`STYLE ${m}`, ctx(s))).toBe(`OK\t${m}`);
+    expect(s.user.menuStyle).toBe(m);
+    expect(updateUser).toHaveBeenLastCalledWith(7, { menuStyle: m });
+  }
+  expect(lastCatalogueOf(s, 'MAIN')!.style).toBe('coverflow');
+  await menuAnswer('STYLE classic', ctx(s));
+  expect(lastCatalogueOf(s, 'MAIN')!.style).toBe('coverflow');
+  expect(await menuAnswer('STYLE default', ctx(s))).toBe('OK\tcoverflow');
+  expect(s.user.menuStyle).toBe('');
+  expect(await menuAnswer('STYLE sideways', ctx(s))).toBe('');
+  expect(await menuAnswer('STYLE ', ctx(s))).toBe('');
+});
+
+test('the legacy OVERFLOW verbs read cover flow and classic as default, and cannot store them', async () => {
+  const s = session({ user: { ...session().user, menuStyle: 'classic' } });
+  expect(await menuAnswer('OVERFLOW?', ctx(s))).toBe('default\tdefault');
+  expect(await menuAnswer('OVERFLOW coverflow', ctx(s))).toBe('');
+  expect(await menuAnswer('OVERFLOW classic', ctx(s))).toBe('');
+  expect(s.user.menuStyle).toBe('classic');
 });
 
 test('OVERFLOW stores the caller choice and answers the effective mode', async () => {
   const s = session();
   await menuAnswer('OPEN MAIN', ctx(s));
   expect(await menuAnswer('OVERFLOW pages', ctx(s))).toBe('OK\tpages');
-  expect(s.user.menuOverflow).toBe('pages');
-  expect(await menuAnswer('OVERFLOW default', ctx(s))).toBe('OK\tscroll');
-  expect(await menuAnswer('OVERFLOW?', ctx(s))).toBe('default\tscroll');
+  expect(s.user.menuStyle).toBe('pages');
+  expect(await menuAnswer('OVERFLOW default', ctx(s))).toBe('OK\tdefault');
+  expect(await menuAnswer('OVERFLOW?', ctx(s))).toBe('default\tdefault');
   expect(await menuAnswer('OVERFLOW sideways', ctx(s))).toBe('');
 });
 
@@ -161,10 +193,10 @@ test('a child OPEN does not replace the top-level catalogue: RUN of a top-level 
 test('a failed write leaves the caller\'s choice in memory as it was', async () => {
   updateUser.mockImplementationOnce(() => Promise.reject(new Error('disk full')));
   try {
-    const s = session({ user: { ...session().user, menuOverflow: 'scroll' } });
+    const s = session({ user: { ...session().user, menuStyle: 'scroll' } });
     await menuAnswer('OPEN MAIN', ctx(s));
     await expect(menuAnswer('OVERFLOW pages', ctx(s))).rejects.toThrow('disk full');
-    expect(s.user.menuOverflow).toBe('scroll');
+    expect(s.user.menuStyle).toBe('scroll');
   } finally { updateUser.mockReset(); updateUser.mockImplementation(async () => undefined); }
 });
 
@@ -174,7 +206,7 @@ test('OVERFLOW and OPEN resolve the effective mode by the one rule (a level-base
   try {
     const s = session({ user: { ...session().user, secLevel: 150 } });
     await menuAnswer('OPEN MAIN', ctx(s));
-    expect(lastCatalogueOf(s, 'MAIN')!.overflow).toBe('pages');
+    expect(lastCatalogueOf(s, 'MAIN')!.style).toBe('pages');
     expect(await menuAnswer('OVERFLOW default', ctx(s))).toBe('OK\tpages');
     expect(await menuAnswer('OVERFLOW scroll', ctx(s))).toBe('OK\tscroll');
   } finally { fs.rmSync(path.join(root, 'Menus'), { recursive: true, force: true }); }

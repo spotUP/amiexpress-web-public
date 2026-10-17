@@ -33,7 +33,7 @@ import type {
 } from './types';
 
 // Import repository modules
-import { UserRepository } from './database/user-repository';
+import { UserRepository, addMenuStyleColumn } from './database/user-repository';
 import { ConferenceRepository } from './database/conference-repository';
 import { MessageRepository } from './database/message-repository';
 import { FileRepository } from './database/file-repository';
@@ -442,6 +442,8 @@ console.log('✓ Added themepreference column');
         // A caller's own choice for long menus: '' (board default), 'scroll' or 'pages' (plan M6).
         this.db.exec("ALTER TABLE users ADD COLUMN menuoverflow TEXT DEFAULT ''");
       }
+
+      if (!columnNames.includes('menustyle')) addMenuStyleColumn(this.db);
 
       if (!columnNames.includes('screentheme')) {
         // The SCREEN theme - which set of board art this caller wears - and

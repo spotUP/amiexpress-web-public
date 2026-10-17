@@ -27,6 +27,10 @@ import { drainAchievementNotices } from '../../achievements/notices';
 import { drainNotifyInbox } from '../../notify/board';
 import { displayModeOf } from '../../amiga-emulation/xim/display-mode.util';
 import { doorRefusedForWidth } from '../../utils/door-min-columns.util';
+import { effectiveStyle } from '../../services/menu-catalogue/build';
+import { menuCallerFromSession } from '../../services/menu-catalogue/caller';
+import { readMenuConfig } from '../../services/menu-config.service';
+import { boardRoot } from '../../utils/board-root.util';
 
 /**
  * The main menu is a door when one is registered (plan M19, sysop 2026-10-15:
@@ -54,6 +58,9 @@ export async function launchMenuDoor(socket: any, session: BBSSession, site: 'di
   if (!def) return 'fallback';
   if (doorLevelForCommandAccess(def.access) > (session.user?.secLevel ?? 0)) return 'fallback';
   if (doorRefusedForWidth(def as never, session as never)) return 'fallback';
+  // WEB_MENU_STYLE: a caller (or board default) on "Classic screen" gets express.e's own menu: express.e:28586
+  // draws SCREEN_MENU with no door. Decided after the MENU-def/access checks, so a missing door logs as before.
+  if (effectiveStyle(menuCallerFromSession(session), readMenuConfig(boardRoot(), 'MAIN').config) === 'classic') return 'fallback';
   if (site === 'display-flow' && exit.takeMenuDoorDismissed(session)) return 'dismissed';
   // WEB_: `?` means "open it", so a pending Esc from the last visit is spent here (Decision 37).
   if (site === 'question-mark') exit.takeMenuDoorDismissed(session);

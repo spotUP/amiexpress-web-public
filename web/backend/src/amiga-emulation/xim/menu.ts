@@ -8,13 +8,13 @@
  * fallback (Menu.txt for MAIN via the board, BULLS for B - M18).
  */
 import { menuSourceFor } from '../../services/menu-catalogue/registry';
-import { buildCatalogue, effectiveOverflow } from '../../services/menu-catalogue/build';
+import { buildCatalogue, catalogueStyle, effectiveStyle } from '../../services/menu-catalogue/build';
 import { writeCatalogueFile } from '../../services/menu-catalogue/catalogue-file';
 import { menuCallerFromSession } from '../../services/menu-catalogue/caller';
 import { chooseLogos, renderLogoAt } from '../../services/menu-catalogue/logos';
 import type { Catalogue } from '../../services/menu-catalogue/types';
 import { readMenuConfig } from '../../services/menu-config.service';
-import { MENU_KIND_COMMAND, type MenuKind, type OverflowMode } from '../../screens/menu-config/menu-config';
+import { MENU_KIND_COMMAND, isMenuStyle, widthClassOf, type MenuKind, type MenuStyle, type MenuStylePref } from '../../screens/menu-config/menu-config';
 import { ErrorHandler } from '../../utils/error-handling.util';
 import { boardRoot } from '../../utils/board-root.util';
 import { menuPromptTextAsync } from '../../handlers/command-handler/menu';
@@ -63,17 +63,24 @@ async function open(rest: string, ctx: MenuContext): Promise<string> {
   return `OK\t${writeCatalogueFile(root, caller.node, built, menuRowOf(ctx.session, kind))}`;
 }
 
-async function overflow(want: string, cat: Catalogue | undefined, ctx: MenuContext): Promise<string> {
-  if (!['scroll', 'pages', 'default'].includes(want) || !ctx.session.user) return '';
-  const stored = want === 'default' ? '' : (want as OverflowMode);
+/** The caller's effective menu style for the kind on screen (MAIN before any catalogue is open). */
+function styleNow(cat: Catalogue | undefined, ctx: MenuContext): MenuStyle {
+  return effectiveStyle(menuCallerFromSession(ctx.session), readMenuConfig(boardRoot(), cat?.kind ?? 'MAIN').config);
+}
+
+/** OVERFLOW?/OVERFLOW are the pre-menu-style wire (plan P4): a door built before it knows only scroll, pages and default. */
+const legacyOverflow = (m: string): string => (m === 'scroll' || m === 'pages' ? m : 'default');
+
+async function setStyle(want: string, cat: Catalogue | undefined, ctx: MenuContext): Promise<MenuStyle | null> {
+  if ((want !== 'default' && !isMenuStyle(want)) || !ctx.session.user) return null;
+  const stored: MenuStylePref = want === 'default' ? '' : want;
   // A board-own preference like themePreference: the row, never user.data (express.e has no such field).
   // Memory follows the row: a failed write leaves the session as it was.
-  await db.updateUser(ctx.session.user.id, { menuOverflow: stored });
-  ctx.session.user.menuOverflow = stored;
-  const kind: MenuKind = cat?.kind ?? 'MAIN';
-  const effective = effectiveOverflow(menuCallerFromSession(ctx.session), readMenuConfig(boardRoot(), kind).config);
-  if (cat) cat.overflow = effective;
-  return `OK\t${effective}`;
+  await db.updateUser(ctx.session.user.id, { menuStyle: stored });
+  ctx.session.user.menuStyle = stored;
+  const effective = styleNow(cat, ctx);
+  if (cat) cat.style = catalogueStyle(effective, widthClassOf(menuCallerFromSession(ctx.session).columns));
+  return effective;
 }
 
 export async function menuAnswer(request: string, ctx: MenuContext): Promise<string> {
@@ -91,13 +98,24 @@ export async function menuAnswer(request: string, ctx: MenuContext): Promise<str
       rememberMenuRow(ctx.session, cat.kind, row);
       return 'OK';
     }
+    case 'STYLE?':
     case 'OVERFLOW?': {
-      // The settings door asks before any catalogue is open: answer for MAIN, as OVERFLOW <m> does.
+      // The settings door asks before any catalogue is open: answer for MAIN, as STYLE <m> does.
       if (!cat && !ctx.session.user) return '';
-      const effective = cat?.overflow ?? effectiveOverflow(menuCallerFromSession(ctx.session), readMenuConfig(boardRoot(), 'MAIN').config);
-      return `${ctx.session.user?.menuOverflow || 'default'}\t${effective}`;
+      const stored = ctx.session.user?.menuStyle || 'default';
+      const effective = styleNow(cat, ctx);
+      return verb === 'STYLE?' ? `${stored}\t${effective}` : `${legacyOverflow(stored)}\t${legacyOverflow(effective)}`;
     }
-    case 'OVERFLOW': return overflow(rest.trim(), cat, ctx);
+    case 'STYLE': {
+      const effective = await setStyle(rest.trim(), cat, ctx);
+      return effective ? `OK\t${effective}` : '';
+    }
+    case 'OVERFLOW': {
+      const want = rest.trim();
+      if (want !== 'scroll' && want !== 'pages' && want !== 'default') return '';
+      const effective = await setStyle(want, cat, ctx);
+      return effective ? `OK\t${legacyOverflow(effective)}` : '';
+    }
     case 'RUN': {
       const line = rest.replace(/[\x00-\x1f\x7f]/g, '').trim();
       if (!line || !cat) return '';

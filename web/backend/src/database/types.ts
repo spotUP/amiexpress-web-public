@@ -89,8 +89,8 @@ export interface User {
   /** 'standard' or 'swedish' - which character ROM the PETSCII screen draws. */
   petsciiCharset?: string;
   themePreference?: string; // Door colour theme (web extension); 'classic' is the board as it was
-  /** The caller's own choice for long menus; '' = the board's default for their width and level (web extension). */
-  menuOverflow?: '' | 'scroll' | 'pages';
+  /** The caller's own menu style; '' = the board's default for their width and level (web extension, column menustyle). */
+  menuStyle?: '' | 'classic' | 'scroll' | 'pages' | 'coverflow';
   editorType?: number;     // 0=line, 1=simple, 2=fullscreen (express.e loggedOnUser.editorType)
   internetName?: string;   // Internet/email name (express.e loggedOnUserMisc.internetName)
   /** Co-sysop persona slug the caller chose - '' for board default, 'random', or a preset/board slug. */

@@ -97,7 +97,7 @@ export function createMenuConfigRouter(bbsRoot: string): ReturnType<typeof expre
       const built = buildCatalogue(source, caller, config);
       if ('refusal' in built) { res.json({ success: true, data: { refusal: built.refusal }, timestamp: stamp() }); return; }
       const logos = chooseLogos(config, kind, caller, bbsRoot, false);
-      res.json({ success: true, data: { sections: built.sections, overflow: built.overflow, wipes: built.wipes, logos }, timestamp: stamp() });
+      res.json({ success: true, data: { sections: built.sections, style: built.style, wipes: built.wipes, logos }, timestamp: stamp() });
     } catch (error) { fail(res, `GET ${kind} preview`, 500, 'Failed to build the preview', error); }
   });
 

@@ -81,9 +81,9 @@ export const STEPS: Record<string, Step> = {
       MULTINODE: 'YES',
       STACK: '8192',
       SETTINGS: 'YES',
-      SETTINGS_LABEL: 'Long menus',
+      SETTINGS_LABEL: 'Menu style',
       SETTINGS_SECTION: 'Appearance',
-      DESCRIPTION: 'Scroll long menus, or show them a page at a time',
+      DESCRIPTION: 'Classic screen, grid scroll, grid pages or cover flow',
     }, force);
     return registerOnce(root, {
       door_command: 'MENU',

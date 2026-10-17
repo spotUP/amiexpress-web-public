@@ -98,12 +98,12 @@ test('preview: level 10 at 80 columns lists Read Mail and FROGGER; the 40-column
   const wide = await request(app).get('/api/config/menus/MAIN/preview?level=10&columns=80&conference=1&mode=ansi');
   expect(wide.status).toBe(200);
   expect(keys(wide.body.data.sections)).toEqual(expect.arrayContaining(['R', 'FROGGER']));
-  expect(wide.body.data.overflow).toBe('scroll');
+  expect(wide.body.data.style).toBe('coverflow');
   const c64 = await request(app).get('/api/config/menus/MAIN/preview?level=10&columns=40&conference=1&mode=petscii');
   expect(c64.status).toBe(200);
   expect(keys(c64.body.data.sections)).toContain('R');
   expect(keys(c64.body.data.sections)).not.toContain('FROGGER');
-  expect(c64.body.data.overflow).toBe('pages');
+  expect(c64.body.data.style).toBe('pages');
 });
 
 test('preview of BULLETINS lists bulletin 1 titled from Bulls.CFG', async () => {

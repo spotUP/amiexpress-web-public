@@ -41,7 +41,7 @@ export type MenuPreviewView =
   | { refusal: string }
   | {
       sections: Array<{ id: string; title: string; entries: MenuPreviewEntry[] }>;
-      overflow: 'scroll' | 'pages';
+      style: 'scroll' | 'pages' | 'coverflow';
       wipes: { open: string; leave: string; page: string };
       logos: Array<{ position: string; file: string; rows: number; cols: number }>;
     };

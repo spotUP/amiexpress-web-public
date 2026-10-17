@@ -142,7 +142,7 @@ const pages40 = () => runOnce('pages40', async () => {
   return run(S40, [idle(DOWN.repeat(onPage)), idle(ESC, false, 30000)]);
 });
 const pages80 = () => runOnce('pages80', async () => {
-  const user = { menuOverflow: 'pages' };
+  const user = { menuStyle: 'pages' };
   const onPage = entriesOf(gridText(replayCells(firstFrame(await run(S80, [idle(ESC)], { user })), 80, 25))).length;
   return run(S80, [idle(DOWN.repeat(onPage)), idle(ESC, false, 30000)], { user });
 });
@@ -536,7 +536,7 @@ describe('MAINMENU on three screens', () => {
     test('opens as LONG MENUS, and choosing Pages stores the caller\'s choice', async () => {
       const r = await run(S80, [idle(UP), idle('\r'), idle(ESC)], { command: 'MENUSETTINGS' });
       expect(gridText(replayCells(firstFrame(r), 80, 25))[0]!.trim()).toBe('LONG MENUS');
-      expect(r.session.user.menuOverflow).toBe('pages');
+      expect(r.session.user.menuStyle).toBe('pages');
     });
   });
 });
