@@ -18,6 +18,16 @@ export type WipeType =
   | 'noise'      // ~WN
   | 'typewriter' // ~WT
   | 'explode'    // ~WE
+  | 'sweep'      // ~WW
+  | 'diagonal'   // ~WD
+  | 'iris'       // ~WI
+  | 'curtain'    // ~WO
+  | 'interlace'  // ~WL
+  | 'melt'       // ~WU
+  | 'zoom'       // ~WZ
+  | 'dissolve'   // ~WF
+  | 'wave'       // ~WY
+  | 'snake'      // ~WK
   | 'random';    // ~WX
 
 export const WIPE_CODES: Readonly<Record<string, WipeType>> = {
@@ -31,6 +41,16 @@ export const WIPE_CODES: Readonly<Record<string, WipeType>> = {
   N: 'noise',
   T: 'typewriter',
   E: 'explode',
+  W: 'sweep',
+  D: 'diagonal',
+  I: 'iris',
+  O: 'curtain',
+  L: 'interlace',
+  U: 'melt',
+  Z: 'zoom',
+  F: 'dissolve',
+  Y: 'wave',
+  K: 'snake',
   X: 'random',
 };
 

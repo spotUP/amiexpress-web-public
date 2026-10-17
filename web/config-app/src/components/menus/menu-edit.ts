@@ -123,6 +123,8 @@ export const setCoverFlowSlide = (c: MenuConfig, on: boolean): MenuConfig => ({ 
 const WIPE_NAMES: Record<Exclude<WipeType, 'random'>, string> = {
   matrix: 'Matrix rain', hblinds: 'Horizontal blinds', vblinds: 'Vertical blinds', spiral: 'Spiral', checker: 'Checkerboard',
   radial: 'Radar sweep', blocks: 'Random blocks', noise: 'Noise fade', typewriter: 'Typewriter', explode: 'Explode',
+  sweep: 'Sweep', diagonal: 'Diagonal', iris: 'Iris', curtain: 'Curtain', interlace: 'Interlace',
+  melt: 'Melt', zoom: 'Zoom', dissolve: 'Dissolve', wave: 'Wave', snake: 'Snake',
 };
 
 /** None, Random, then the rest by name. */

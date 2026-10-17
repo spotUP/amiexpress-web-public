@@ -91,7 +91,7 @@ describe('screen-wipe.util', () => {
     });
 
     it('should return null for invalid wipe code', () => {
-      const result = parseWipeMCI('~WZINVALID');
+      const result = parseWipeMCI('~WQINVALID');
       expect(result.wipeType).toBeNull();
     });
 

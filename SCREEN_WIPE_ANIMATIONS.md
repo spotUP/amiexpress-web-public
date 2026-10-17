@@ -128,9 +128,89 @@ Place these codes anywhere in your screen files (`.TXT` in `Screens/` directory)
 [Your screen content here]
 ```
 
+### ~WW - Sweep
+- Columns revealed left to right in bands
+
+```
+~WW
+[Your screen content here]
+```
+
+### ~WD - Diagonal
+- Reveal along anti-diagonals from the top-left to the bottom-right
+
+```
+~WD
+[Your screen content here]
+```
+
+### ~WI - Iris
+- A diamond opens from the centre
+
+```
+~WI
+[Your screen content here]
+```
+
+### ~WO - Curtain
+- Two halves open from the centre column outward
+
+```
+~WO
+[Your screen content here]
+```
+
+### ~WL - Interlace
+- Even rows top-down, then odd rows top-down
+
+```
+~WL
+[Your screen content here]
+```
+
+### ~WU - Melt
+- Each column drops in from the top after a random delay
+
+```
+~WU
+[Your screen content here]
+```
+
+### ~WZ - Zoom
+- A rectangle opens outward from the centre
+
+```
+~WZ
+[Your screen content here]
+```
+
+### ~WF - Dissolve
+- Cells appear in random order across 10 batches
+
+```
+~WF
+[Your screen content here]
+```
+
+### ~WY - Wave
+- A left-to-right front whose edge is a sine curve
+
+```
+~WY
+[Your screen content here]
+```
+
+### ~WK - Snake
+- Row bands revealed in alternating directions
+
+```
+~WK
+[Your screen content here]
+```
+
 ### ~WX - Random Wipe
 **Surprise Me!**
-- Randomly selects one of the 10 wipe effects above
+- Randomly selects one of the 20 wipe effects above
 - Different animation every time the screen loads
 - Perfect for: Any screen where variety adds excitement
 - Duration: Varies (depends on randomly selected wipe)
@@ -220,7 +300,7 @@ File: `Screens/GAME_INTRO.TXT`
 
 ### How It Works
 
-1. **Detection**: When a screen file is loaded, the system checks for `~W[MHVSCRBNTEX]` MCI codes
+1. **Detection**: When a screen file is loaded, the system checks for `~W[MHVSCRBNTEXWDIOLUZFYK]` MCI codes
 2. **Parsing**: The wipe code is extracted and removed from the content
 3. **Frame Generation**: The animation utility generates a series of frames based on the wipe type
 4. **Playback**: Each frame is sent to the terminal with appropriate timing

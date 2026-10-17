@@ -1,7 +1,7 @@
 /**
  * Screen Wipe Animation Utility
  *
- * Provides 10 different screen wipe animations for BBS screen transitions.
+ * Provides 20 different screen wipe animations for BBS screen transitions.
  * Each animation returns an array of frames with timing information.
  *
  * MCI Commands:
@@ -15,7 +15,17 @@
  * ~WN - Noise Fade (static resolves to content)
  * ~WT - Typewriter (types out line by line)
  * ~WE - Explode (from center outward)
- * ~WX - Random (picks one of the above)
+ * ~WW - Sweep (columns left to right in bands)
+ * ~WD - Diagonal (anti-diagonals, top-left to bottom-right)
+ * ~WI - Iris (diamond opens from the centre)
+ * ~WO - Curtain (two halves open from the centre column)
+ * ~WL - Interlace (even rows, then odd rows)
+ * ~WU - Melt (columns drop in with random delays)
+ * ~WZ - Zoom (rectangle opens from the centre)
+ * ~WF - Dissolve (cells in random order, 10 batches)
+ * ~WY - Wave (sine-curved front, left to right)
+ * ~WK - Snake (row bands, alternating direction)
+ * ~WX - Random (picks any of the above)
  *
  * A wipe is a sequence of {content, delay} frames. The FIRST frame clears
  * and paints the whole screen; every frame after it carries only the cells
@@ -1177,6 +1187,102 @@ function explodeWipe(content: string, columns: number): WipeGrids {
 }
 
 /**
+ * The shared shape of the ten step wipes (~WW ~WD ~WI ~WO ~WL ~WU ~WZ ~WF ~WY
+ * ~WK): every cell gets the animation step it appears on (`stepOf`, clamped to
+ * 1..N), frame 0 is the blank screen, frame f shows the cells whose step is
+ * <= f, and frame N shows the whole grid. A cell never hides once shown, so
+ * the reveal is monotonic by construction. Hidden cells are BLANK, as in
+ * every other wipe.
+ */
+function stepWipe(
+  content: string,
+  columns: number,
+  delay: number,
+  stepOf: (y: number, x: number, height: number, width: number) => number,
+): WipeGrids {
+  const grid = parseAnsiToGrid(content, columns);
+  const height = grid.length;
+  const width = gridWidth(grid);
+  const steps = grid.map((row, y) => row.map((_cell, x) => Math.max(1, Math.round(stepOf(y, x, height, width)))));
+  const last = steps.reduce((m, row) => row.reduce((a, s) => Math.max(a, s), m), 0);
+  const grids: Cell[][][] = [];
+  for (let f = 0; f <= last; f++) {
+    grids.push(grid.map((row, y) => row.map((cell, x) => (steps[y][x] <= f ? cell : BLANK))));
+  }
+  return { grids, delay };
+}
+
+/** Where a value in [0, max] falls among `count` evenly spaced steps (1..count). */
+function scaled(value: number, max: number, count: number): number {
+  return max <= 0 ? 1 : 1 + (value / max) * (count - 1);
+}
+
+/** ~WW - Sweep: columns revealed left to right in bands. */
+function sweepWipe(content: string, columns: number): WipeGrids {
+  return stepWipe(content, columns, 30, (_y, x, _h, w) => 1 + Math.floor(x / Math.max(1, Math.ceil(w / 20))));
+}
+
+/** ~WD - Diagonal: anti-diagonals from the top-left to the bottom-right (a row is two columns tall). */
+function diagonalWipe(content: string, columns: number): WipeGrids {
+  return stepWipe(content, columns, 30, (y, x, h, w) => scaled(x / 2 + y, w / 2 + h, 20));
+}
+
+/** ~WI - Iris: a diamond (Manhattan distance, 2:1 cells) opens from the centre. */
+function irisWipe(content: string, columns: number): WipeGrids {
+  return stepWipe(content, columns, 35, (y, x, h, w) =>
+    scaled(Math.abs(x - w / 2) + 2 * Math.abs(y - h / 2), w / 2 + h, 16));
+}
+
+/** ~WO - Curtain: two halves open from the centre column outward. */
+function curtainWipe(content: string, columns: number): WipeGrids {
+  return stepWipe(content, columns, 35, (_y, x, _h, w) => scaled(Math.abs(x - w / 2), w / 2, 16));
+}
+
+/** ~WL - Interlace: the even rows top-down, then the odd rows top-down. */
+function interlaceWipe(content: string, columns: number): WipeGrids {
+  return stepWipe(content, columns, 30, (y, _x, h) => {
+    const evenRows = Math.ceil(h / 2);
+    return y % 2 === 0 ? 1 + y / 2 : evenRows + 1 + (y - 1) / 2;
+  });
+}
+
+/** ~WU - Melt: each column drops in from the top after its own random delay. */
+function meltWipe(content: string, columns: number): WipeGrids {
+  const lag: number[] = [];
+  return stepWipe(content, columns, 35, (y, x) => {
+    if (lag[x] === undefined) lag[x] = Math.floor(Math.random() * 9);
+    return 1 + lag[x] + Math.floor(y / 2);
+  });
+}
+
+/** ~WZ - Zoom: a rectangle opens outward from the centre (Chebyshev distance, 2:1 cells). */
+function zoomWipe(content: string, columns: number): WipeGrids {
+  return stepWipe(content, columns, 35, (y, x, h, w) =>
+    scaled(Math.max(Math.abs(x - w / 2), 2 * Math.abs(y - h / 2)), Math.max(w / 2, h), 16));
+}
+
+/** ~WF - Dissolve: cells appear in random order across 10 batches. */
+function dissolveWipe(content: string, columns: number): WipeGrids {
+  return stepWipe(content, columns, 60, () => 1 + Math.floor(Math.random() * 10));
+}
+
+/** ~WY - Wave: a front sweeps left to right, its edge a sine curve over the rows. */
+function waveWipe(content: string, columns: number): WipeGrids {
+  const amplitude = 6;
+  return stepWipe(content, columns, 30, (y, x, _h, w) =>
+    scaled(Math.max(0, x - amplitude * Math.sin(y * 0.5) + amplitude), w + 2 * amplitude, 20));
+}
+
+/** ~WK - Snake: bands of three rows, each swept across in thirds, alternating direction. */
+function snakeWipe(content: string, columns: number): WipeGrids {
+  return stepWipe(content, columns, 30, (y, x, _h, w) => {
+    const band = Math.floor(y / 3);
+    const along = band % 2 === 0 ? x : w - 1 - x;
+    return 1 + band * 3 + Math.min(2, Math.floor((along * 3) / Math.max(1, w)));
+  });
+}
+
+/**
  * The grids of one wipe. ONE switch for both directions: the reveal plays
  * them forwards (`getWipeFrames`), the conceal backwards (`getWipeOutFrames`).
  * `null` for a code that is not a wipe.
@@ -1184,10 +1290,7 @@ function explodeWipe(content: string, columns: number): WipeGrids {
 function wipeGrids(wipeType: WipeType, content: string, columns: number): WipeGrids | null {
   // Handle random selection
   if (wipeType === 'random') {
-    const types: WipeType[] = [
-      'matrix', 'hblinds', 'vblinds', 'spiral', 'checker',
-      'radial', 'blocks', 'noise', 'typewriter', 'explode'
-    ];
+    const types = [...new Set(Object.values(WIPE_CODES))].filter((t) => t !== 'random');
     wipeType = types[Math.floor(Math.random() * types.length)];
   }
 
@@ -1212,6 +1315,26 @@ function wipeGrids(wipeType: WipeType, content: string, columns: number): WipeGr
       return typewriterWipe(content, columns);
     case 'explode':
       return explodeWipe(content, columns);
+    case 'sweep':
+      return sweepWipe(content, columns);
+    case 'diagonal':
+      return diagonalWipe(content, columns);
+    case 'iris':
+      return irisWipe(content, columns);
+    case 'curtain':
+      return curtainWipe(content, columns);
+    case 'interlace':
+      return interlaceWipe(content, columns);
+    case 'melt':
+      return meltWipe(content, columns);
+    case 'zoom':
+      return zoomWipe(content, columns);
+    case 'dissolve':
+      return dissolveWipe(content, columns);
+    case 'wave':
+      return waveWipe(content, columns);
+    case 'snake':
+      return snakeWipe(content, columns);
     default:
       return null;
   }

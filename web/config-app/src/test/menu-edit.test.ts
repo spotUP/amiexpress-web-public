@@ -127,7 +127,7 @@ describe('wipes and menu style', () => {
   it('offers None, Random, then every other wipe by name', () => {
     const o = wipeOptions();
     expect(o.slice(0, 2)).toEqual([{ code: '', name: 'None' }, { code: 'X', name: 'Random' }]);
-    expect(o).toHaveLength(12);
+    expect(o).toHaveLength(22);
     expect(o.find(w => w.code === 'H')?.name).toBe('Horizontal blinds');
     expect(o.every(w => w.name.length > 1)).toBe(true);
   });
