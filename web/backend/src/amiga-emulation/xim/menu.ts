@@ -8,7 +8,7 @@
  * fallback (Menu.txt for MAIN via the board, BULLS for B - M18).
  */
 import { menuSourceFor } from '../../services/menu-catalogue/registry';
-import { buildCatalogue, catalogueStyle, effectiveStyle } from '../../services/menu-catalogue/build';
+import { buildCatalogue, catalogueStyle, coverflowSlides, effectiveStyle } from '../../services/menu-catalogue/build';
 import { writeCatalogueFile } from '../../services/menu-catalogue/catalogue-file';
 import { menuCallerFromSession } from '../../services/menu-catalogue/caller';
 import { chooseLogos, renderLogoAt } from '../../services/menu-catalogue/logos';
@@ -68,6 +68,11 @@ function styleNow(cat: Catalogue | undefined, ctx: MenuContext): MenuStyle {
   return effectiveStyle(menuCallerFromSession(ctx.session), readMenuConfig(boardRoot(), cat?.kind ?? 'MAIN').config);
 }
 
+/** The third STYLE? field: a door with no catalogue (W) learns the sysop's slide setting here, as the F line tells the menu. */
+function slideNow(cat: Catalogue | undefined, ctx: MenuContext): boolean {
+  return coverflowSlides(menuCallerFromSession(ctx.session), readMenuConfig(boardRoot(), cat?.kind ?? 'MAIN').config);
+}
+
 /** OVERFLOW?/OVERFLOW are the pre-menu-style wire (plan P4): a door built before it knows only scroll, pages and default. */
 const legacyOverflow = (m: string): string => (m === 'scroll' || m === 'pages' ? m : 'default');
 
@@ -104,7 +109,7 @@ export async function menuAnswer(request: string, ctx: MenuContext): Promise<str
       if (!cat && !ctx.session.user) return '';
       const stored = ctx.session.user?.menuStyle || 'default';
       const effective = styleNow(cat, ctx);
-      return verb === 'STYLE?' ? `${stored}\t${effective}` : `${legacyOverflow(stored)}\t${legacyOverflow(effective)}`;
+      return verb === 'STYLE?' ? `${stored}\t${effective}\t${slideNow(cat, ctx) ? 1 : 0}` : `${legacyOverflow(stored)}\t${legacyOverflow(effective)}`;
     }
     case 'STYLE': {
       const effective = await setStyle(rest.trim(), cat, ctx);

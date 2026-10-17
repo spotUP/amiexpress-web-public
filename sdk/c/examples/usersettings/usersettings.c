@@ -411,7 +411,7 @@ int main(int argc, char **argv)
     char stored[AE_MENU_STYLE_CAP], effective[AE_MENU_STYLE_CAP];
     ae_session session;
     int node = (argc > 1) ? atoi(argv[1]) : 1;
-    int running = 1, full = 1, n, d, jump_pending = -1, resume;
+    int running = 1, full = 1, n, d, jump_pending = -1, resume, slide = 1;
     const char *leave_for = 0;
 
     if (ae_start(node) != 0) return 20;
@@ -463,10 +463,10 @@ int main(int argc, char **argv)
     list.selected_bg = UI_TOKEN(UI_T_SELECTION_BG);
 
     /* Cover flow only when the caller's menu style says so and there is more than one page; else today's list. */
-    coverflow = ae_menu_style_get(stored, effective) == 1 && strcmp(effective, "coverflow") == 0 && us_page_count(&model) > 1;
+    coverflow = ae_menu_style_query(stored, effective, &slide) == 1 && strcmp(effective, "coverflow") == 0 && us_page_count(&model) > 1;
     if (coverflow) {
         ui_pages_init(&pages, us_page_count(&model), 0, 0);
-        pages.slide = 1;                              /* the board gates it: more than 40 columns, its own setting */
+        pages.slide = slide;                          /* the sysop's setting; the board answers 0 at 40 columns and PETSCII */
         pages.cols = screen.cols - 1;
         pages.top = list.top;
         pages.height = list.height;

@@ -15,6 +15,7 @@ import { takeMenuExit, menuRowOf } from '../../src/handlers/commands/menu-door-e
 import { loggableXimString } from '../../src/amiga-emulation/xim/redact';
 import { XIMCommand } from '../../src/amiga-emulation/xim/types';
 import { commandCache } from '../../src/handlers/command-execution.handler';
+import { menuConfigPath, readMenuConfig, writeMenuConfig } from '../../src/services/menu-config.service';
 
 const drawn: string[] = [];
 const session = (over: any = {}): any => ({ nodeId: 3, currentConf: 1, screenWidth: 80,
@@ -62,10 +63,23 @@ test('a settings door that never opened a catalogue is answered OVERFLOW? with t
 });
 
 test('STYLE? answers the stored style (blank is "default") and the effective one', async () => {
-  expect(await menuAnswer('STYLE?', ctx(session()))).toBe('default\tcoverflow');
+  expect(await menuAnswer('STYLE?', ctx(session()))).toBe('default\tcoverflow\t1');
   expect(await menuAnswer('STYLE?', ctx(session({ screenWidth: 40, user: { ...session().user, menuStyle: '' } })))).toMatch(/^default\t/);
-  expect(await menuAnswer('STYLE?', ctx(session({ user: { ...session().user, menuStyle: 'classic' } })))).toBe('classic\tclassic');
+  // A 40-column PETSCII caller never slides (D9).
+  expect(await menuAnswer('STYLE?', ctx(session({ petsciiMode: true, petsciiColumns: 40 })))).toBe('default\tpages\t0');
+  expect(await menuAnswer('STYLE?', ctx(session({ user: { ...session().user, menuStyle: 'classic' } })))).toBe('classic\tclassic\t1');
   expect(await menuAnswer('STYLE?', ctx(session({ user: undefined })))).toBe('');
+});
+
+test('STYLE? carries the sysop\'s cover flow slide setting, so a door with no catalogue (W) honours it', async () => {
+  const file = menuConfigPath(root, 'MAIN');
+  const before = fs.existsSync(file) ? fs.readFileSync(file) : null;
+  writeMenuConfig(root, 'MAIN', { ...readMenuConfig(root, 'MAIN').config, coverflow: { slide: false } });
+  try {
+    expect(await menuAnswer('STYLE?', ctx(session()))).toBe('default\tcoverflow\t0');
+  } finally {
+    if (before) fs.writeFileSync(file, before); else fs.rmSync(file);
+  }
 });
 
 test('STYLE stores each of the four styles and default, and refuses anything else', async () => {

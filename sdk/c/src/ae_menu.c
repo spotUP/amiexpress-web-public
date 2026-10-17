@@ -227,23 +227,34 @@ int ae_menu_row(int row)
     return ok_or_not(request);
 }
 
-int ae_menu_style_get(char *stored, char *effective)
+int ae_menu_style_query(char *stored, char *effective, int *slide)
 {
-    char reply[AE_MAX_LINE + 1], s[AE_MENU_STYLE_CAP], e[AE_MENU_STYLE_CAP];
+    char reply[AE_MAX_LINE + 1], s[AE_MENU_STYLE_CAP], e[AE_MENU_STYLE_CAP], f[4];
     const char *p;
     int n;
 
     if (stored) stored[0] = '\0';
     if (effective) effective[0] = '\0';
+    if (slide) *slide = 1;
     n = ask("STYLE?", reply, (int)sizeof reply);
     if (n < 0) return AE_MENU_GONE;
     if (n == 0) return 0;
     p = take(reply, reply + n, s, (int)sizeof s);
     if (!p) return 0;
-    take(p, reply + n, e, (int)sizeof e);
+    p = take(p, reply + n, e, (int)sizeof e);
+    /* A board before the slide field answers two fields: it always slid, so 1 stays. */
+    if (p) {
+        take(p, reply + n, f, (int)sizeof f);
+        if (f[0] && slide) *slide = f[0] != '0';
+    }
     if (stored) strcpy(stored, s);
     if (effective) strcpy(effective, e);
     return 1;
+}
+
+int ae_menu_style_get(char *stored, char *effective)
+{
+    return ae_menu_style_query(stored, effective, 0);
 }
 
 int ae_menu_style(const char *mode, char *effective)

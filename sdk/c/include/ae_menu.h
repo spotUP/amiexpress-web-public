@@ -65,6 +65,9 @@ int ae_menu_row(int row);
 /** The caller's stored style and the style in force; both buffers AE_MENU_STYLE_CAP bytes (either may be 0).
     1 answered, 0 silent, AE_MENU_GONE. */
 int ae_menu_style_get(char *stored, char *effective);
+/** ae_menu_style_get plus `slide` (may be 0): 1 when a cover flow page turn slides for this caller (the sysop's
+    setting, never at 40 columns or PETSCII), the same rule as the catalogue's F line. 1 answered, 0 silent, AE_MENU_GONE. */
+int ae_menu_style_query(char *stored, char *effective, int *slide);
 /** Stores mode (classic|scroll|pages|coverflow|default); `effective` (AE_MENU_STYLE_CAP, may be 0) receives the style
     in force. 1 stored, 0 refused or silent, AE_MENU_GONE. */
 int ae_menu_style(const char *mode, char *effective);

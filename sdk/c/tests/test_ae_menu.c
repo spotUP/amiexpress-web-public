@@ -29,6 +29,8 @@ static const char *GOOD =
     ".\n";
 
 static char last_request[256];
+/* What the stub board answers to STYLE?: two fields is a board before the slide field. */
+static const char *style_reply = "default\tpages";
 static int requests;
 static const char *open_answer = "OK\t" CAT_PATH;   /* what OPEN gets */
 static int gone, silent;
@@ -55,7 +57,7 @@ static int stand_in(void *ctx, int field, const char *request, char *out, int ca
     if (strncmp(request, "LOGO header", 11) == 0) return answer("OK\t3", out, cap);
     if (strncmp(request, "LOGO ", 5) == 0) return answer("NONE", out, cap);
     if (strncmp(request, "ROW ", 4) == 0) return answer("OK", out, cap);
-    if (strcmp(request, "STYLE?") == 0) return answer("default\tpages", out, cap);
+    if (strcmp(request, "STYLE?") == 0) return answer(style_reply, out, cap);
     if (strncmp(request, "STYLE ", 6) == 0) return answer("OK\tcoverflow", out, cap);
     if (strncmp(request, "RUN ", 4) == 0) return answer("OK", out, cap);
     if (strncmp(request, "SHOW 3", 6) == 0) return answer("OK", out, cap);
@@ -236,6 +238,16 @@ static void actions_send_exactly_their_verb(void)
     assert(ae_menu_logo_draw("footer", 20, 1, 3, 80) == 0);
     assert(ae_menu_style_get(stored, eff) == 1 && strcmp(last_request, "STYLE?") == 0
            && strcmp(stored, "default") == 0 && strcmp(eff, "pages") == 0);
+    {
+        int slide = -1;
+        /* A board before the slide field always slid. */
+        assert(ae_menu_style_query(stored, eff, &slide) == 1 && slide == 1 && strcmp(eff, "pages") == 0);
+        style_reply = "default\tcoverflow\t0";
+        assert(ae_menu_style_query(stored, eff, &slide) == 1 && slide == 0 && strcmp(eff, "coverflow") == 0);
+        style_reply = "default\tcoverflow\t1";
+        assert(ae_menu_style_query(stored, eff, &slide) == 1 && slide == 1);
+        style_reply = "default\tpages";
+    }
     assert(ae_menu_style("coverflow", eff) == 1 && strcmp(last_request, "STYLE coverflow") == 0 && strcmp(eff, "coverflow") == 0);
     /* The overflow calls are thin wrappers over the style calls. */
     assert(ae_menu_overflow(0, eff, (int)sizeof eff) == 1 && strcmp(last_request, "STYLE?") == 0 && strcmp(eff, "pages") == 0);

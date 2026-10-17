@@ -5,7 +5,14 @@ import { mainMenuSource } from '../../src/services/menu-catalogue/sources/main';
 import { registerMenuSource, menuSourceFor } from '../../src/services/menu-catalogue/registry';
 import { defaultMenuConfig, validateMenuConfig } from '../../src/screens/menu-config/menu-config';
 import { commandCache } from '../../src/handlers/command-execution.handler';
-import type { MenuCaller, MenuSource } from '../../src/services/menu-catalogue/types';
+import type { Catalogue, MenuCaller, MenuSource } from '../../src/services/menu-catalogue/types';
+
+/** buildCatalogue for a request that must not be refused. */
+function built(...args: Parameters<typeof buildCatalogue>): Catalogue {
+  const c = buildCatalogue(...args);
+  if ('refusal' in c) throw new Error(c.refusal);
+  return c;
+}
 
 const caller = (over: Partial<MenuCaller> = {}): MenuCaller => ({
   secLevel: 10, conference: 1, node: 1, columns: 80, rows: 25, displayMode: 'ansi',
@@ -84,9 +91,9 @@ test('at 40 columns a C64 menu for the level replaces the derived one, still fil
 });
 
 test('the caller\'s style beats the board default; the default follows width and level', () => {
-  expect(buildCatalogue(mainMenuSource, caller({ columns: 40, displayMode: 'petscii' }), defaultMenuConfig('MAIN')).style).toBe('pages');
-  expect(buildCatalogue(mainMenuSource, caller(), defaultMenuConfig('MAIN')).style).toBe('coverflow');
-  expect(buildCatalogue(mainMenuSource, caller({ stylePref: 'pages' }), defaultMenuConfig('MAIN')).style).toBe('pages');
+  expect(built(mainMenuSource, caller({ columns: 40, displayMode: 'petscii' }), defaultMenuConfig('MAIN')).style).toBe('pages');
+  expect(built(mainMenuSource, caller(), defaultMenuConfig('MAIN')).style).toBe('coverflow');
+  expect(built(mainMenuSource, caller({ stylePref: 'pages' }), defaultMenuConfig('MAIN')).style).toBe('pages');
 });
 
 describe('effective style', () => {
@@ -104,7 +111,7 @@ describe('effective style', () => {
     expect(catalogueStyle('classic', 'standard')).toBe('coverflow');
     expect(catalogueStyle('classic', 'c64')).toBe('pages');
     expect(catalogueStyle('scroll', 'standard')).toBe('scroll');
-    expect(buildCatalogue(mainMenuSource, caller({ secLevel: 100 }), cfg).style).toBe('coverflow');
+    expect(built(mainMenuSource, caller({ secLevel: 100 }), cfg).style).toBe('coverflow');
   });
 });
 
@@ -152,7 +159,7 @@ test('the registry answers the two kinds and a later one', () => {
 describe('style and slide lines', () => {
   const lines = (cfg: unknown, over: Partial<MenuCaller> = {}) => {
     const { config } = validateMenuConfig('MAIN', cfg);
-    return formatCatalogue(buildCatalogue(mainMenuSource, caller(over), config), 0).split('\n');
+    return formatCatalogue(built(mainMenuSource, caller(over), config), 0).split('\n');
   };
   test('O and F are always written, O before W, F after W and before R, and no D line', () => {
     const l = lines({});
