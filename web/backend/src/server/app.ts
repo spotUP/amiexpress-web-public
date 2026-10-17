@@ -302,6 +302,10 @@ app.get('/health', (req, res) => {
         // `regress` stayed listed for 50 minutes after its logoff and
         // blocked every deploy); this is what tells the two apart.
         since: session.connectionStart ? new Date(session.connectionStart).toISOString() : null,
+        // A parked session (dropped, inside its resume window): listed so the
+        // sysop sees it, flagged so the deploy guard does not wait for it
+        // (deploy/caller-guard.sh; session-persistence plan, Decision 22).
+        detached: isParked(session),
       })),
       ...ftp.map((caller) => ({
         username: caller.username,

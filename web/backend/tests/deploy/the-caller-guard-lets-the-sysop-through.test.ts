@@ -74,6 +74,25 @@ describe('who stops a deploy', () => {
     expect(toProtect('not json at all')).toBe(0);
   });
 
+  it('a parked caller does not - nobody is attached to him (plan Decision 22)', () => {
+    // /health lists a parked web session in `online` with detached:true and
+    // leaves it out of `callers`; he resumes after the deploy like after any drop.
+    const health = {
+      status: 'ok',
+      callers: 1,
+      detached: 1,
+      online: [
+        { username: 'sysop', nodeId: 1, transport: 'web', since: null, detached: false },
+        { username: 'tango', nodeId: 2, transport: 'web', since: null, detached: true },
+      ],
+    };
+    expect(toProtect(health)).toBe(0);
+    // An attached real caller beside him still does.
+    health.callers = 2;
+    health.online.push({ username: 'jucke', nodeId: 3, transport: 'web', since: null, detached: false });
+    expect(toProtect(health)).toBe(1);
+  });
+
   it('the names it ignores can be changed without touching the workflow', () => {
     expect(toProtect(online({ username: 'ansiguy' }), 'ansiguy')).toBe(0);
     expect(toProtect(online({ username: 'sysop' }), 'ansiguy')).toBe(1);

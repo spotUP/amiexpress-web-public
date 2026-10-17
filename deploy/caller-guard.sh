@@ -21,7 +21,12 @@ callers_to_protect() {
   CALLERS=${CALLERS:-0}
   [ "$CALLERS" -gt 0 ] 2>/dev/null || { echo 0; return 0; }
 
-  ONLINE=$(printf '%s' "$HEALTH" | tr ',' '\n' | sed -n 's/.*"username":"\([^"]*\)".*/\1/p')
+  # One line per `online` row (each row is its own JSON object), so a row's
+  # flags travel with its name. A row marked "detached":true is a parked web
+  # session: nobody is attached, `callers` already leaves it out, and the
+  # caller resumes after the deploy as after any drop (session-persistence
+  # plan, Decision 22) - so it protects nobody.
+  ONLINE=$(printf '%s' "$HEALTH" | tr '{' '\n' | sed -n -e '/"detached":true/d' -e 's/.*"username":"\([^"]*\)".*/\1/p')
 
   NAMED=0
   OTHERS=0

@@ -56,14 +56,17 @@ describe('what /health says about the board', () => {
     addSession(2, BBSState.LOGGEDON, 'randy');
     (sessions.get('2') as { detachedAt?: number }).detachedAt = Date.now();
 
-    let body = (await health()) as { callers: number; detached?: number };
+    let body = (await health()) as { callers: number; detached?: number; online: Array<{ detached?: boolean }> };
     expect(body.callers).toBe(0);
     expect(body.detached).toBe(1);
+    // Each row says so too: the deploy guard reads the rows, not the count.
+    expect(body.online[0].detached).toBe(true);
 
     (sessions.get('2') as { detachedAt?: number }).detachedAt = undefined;
-    body = (await health()) as { callers: number; detached?: number };
+    body = (await health()) as { callers: number; detached?: number; online: Array<{ detached?: boolean }> };
     expect(body.callers).toBe(1);
     expect(body.detached).toBe(0);
+    expect(body.online[0].detached).toBe(false);
   });
 
   it('reports nobody when the board is empty', async () => {
