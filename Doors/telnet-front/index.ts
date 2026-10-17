@@ -157,7 +157,7 @@ async function displayFrontend(socket: any, user: any, bbs: any): Promise<void> 
 
   // Get all nodes (now with real user data from backend)
   const nodes = getNodes(bbs, nodeNumber, userIp);
-  const activeCount = nodes.filter(n => n.status === 'active' || n.status === 'connecting').length;
+  const activeCount = nodes.filter(n => n.status === 'active' || n.status === 'detached' || n.status === 'connecting').length;
   let displayedCount = 0;
 
   // Display each node
@@ -186,7 +186,7 @@ async function displayFrontend(socket: any, user: any, bbs: any): Promise<void> 
     }
 
     // Only show active/connecting nodes (skip awaiting/inactive for cleaner display)
-    if (node.status === 'active' || node.status === 'connecting' || displayedCount < 2) {
+    if (node.status === 'active' || node.status === 'detached' || node.status === 'connecting' || displayedCount < 2) {
       displayedCount++;
 
       // Center text in columns
