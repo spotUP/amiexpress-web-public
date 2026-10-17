@@ -22,7 +22,7 @@ export interface OnlineNode {
   username: string;
   location: string;
   ipAddress: string;
-  status: 'active';
+  status: 'active' | 'detached';
 }
 
 export interface User {
