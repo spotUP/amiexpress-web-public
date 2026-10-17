@@ -10,7 +10,6 @@
 import { LoggedOnSubState } from '../../constants/bbs-states';
 import { ACSPermission } from '../../constants/acs-permissions';
 import { checkSecurity } from '../../utils/acs.util';
-import { AnsiUtil } from '../../utils/ansi.util';
 import { ErrorHandler } from '../../utils/error-handling.util';
 import { getConferenceToolFlags } from '../../utils/conference-tooltypes.util';
 
@@ -190,6 +189,8 @@ async function displayConferenceFlagsMenu(socket: any, session: BBSSession): Pro
 
   // express.e:24692-24731 - List all accessible conferences with flags
   const { db } = require('../../database');
+  const { relConf, getConfRelativeToggle } = require('./user-commands.handler');
+  const confRelative: boolean = getConfRelativeToggle(session);
   let n = 0;
 
   for (const conf of _conferences) {
@@ -230,24 +231,16 @@ async function displayConferenceFlagsMenu(socket: any, session: BBSSession): Pro
       const allFlag = (scanFlags & MAILSCAN_ALL) ? '*' : ' ';
       const zoomFlag = (scanFlags & ZOOM_SCAN_MASK) ? '*' : ' ';
 
-      // express.e:24728-24730 - Format conference name
-      let confStr: string;
-      let confTitle: string;
-
-      if (msgBases.length > 1) {
-        confStr = `${conf.id}.${m + 1}`;
-        confTitle = `${conf.name} - ${msgBase.name}`;
-      } else {
-        confStr = `${conf.id}`;
-        confTitle = conf.name;
-      }
-
-      // express.e:24731 - Output formatted line
-      const line = AnsiUtil.colorize('[', 'blue') +
-        confStr.padEnd(5) +
-        AnsiUtil.colorize('] ', 'blue') +
-        AnsiUtil.colorize(`${mailFlag} ${allFlag} ${fileFlag} ${zoomFlag} `, 'cyan') +
-        confTitle.substring(0, 23);
+      // express.e:24728-24736 - one 40-column cell: '[34m[[0m\r\d[5][34m] [36m\c \c \c \c [0m\l\s[23]'.
+      // The number (relConf, or "n.m" for a multi-base conference) is
+      // RIGHT-justified in 5 and the title LEFT-justified and cut to 23, so
+      // both cells of a row sit under the two "M A F Z Conference" headings.
+      const shown = relConf(conf.id, session.user, confRelative);
+      const confStr = msgBases.length > 1 ? `${shown}.${m + 1}` : `${shown}`;
+      const confTitle = msgBases.length > 1 ? `${conf.name} - ${msgBase.name}` : conf.name;
+      const line = '\x1b[34m[\x1b[0m' + confStr.padStart(5).substring(0, 5) +
+        '\x1b[34m] \x1b[36m' + `${mailFlag} ${allFlag} ${fileFlag} ${zoomFlag} ` + '\x1b[0m' +
+        confTitle.substring(0, 23).padEnd(23);
 
       socket.emit('ansi-output', line);
 
@@ -269,33 +262,28 @@ async function displayConferenceFlagsMenu(socket: any, session: BBSSession): Pro
 }
 
 /**
- * Handle flag selection input (M/A/F/Z)
- * express.e:24738-24750
+ * The flag choice: ONE key (express.e:24750 readChar - no Enter).
+ *
+ * express.e:24751-24766: M/F/Z/A pick the mask; ANY other key (Enter
+ * included) ends the CF loop. Whichever key it was is echoed, then a line
+ * break, before either the conference prompt or the return to the menu.
  */
-export async function handleCFFlagSelectInput(socket: any, session: BBSSession, input: string): Promise<void> {
-  const ch = input.trim().toUpperCase();
-  let editMask: number;
+export async function handleCFFlagSelectInput(socket: any, session: BBSSession, key: string): Promise<void> {
+  const ch = key.charAt(0);
+  const editMask = ({ M: MAIL_SCAN_MASK, F: FILE_SCAN_MASK, Z: ZOOM_SCAN_MASK, A: MAILSCAN_ALL } as Record<string, number>)[ch.toUpperCase()];
 
-  // express.e:24738-24747
-  if (ch === 'M') {
-    editMask = MAIL_SCAN_MASK;
-  } else if (ch === 'F') {
-    editMask = FILE_SCAN_MASK;
-  } else if (ch === 'Z') {
-    editMask = ZOOM_SCAN_MASK;
-  } else if (ch === 'A') {
-    editMask = MAILSCAN_ALL;
-  } else {
-    // express.e:24748-24750 - Exit if invalid
+  // express.e:24763-24766 tempstr[0]:=ch; aePuts(tempstr); aePuts('\b\n')
+  socket.emit('ansi-output', (ch >= ' ' && ch <= '~' ? ch : '') + '\r\n');
+
+  if (editMask === undefined) {
+    // express.e:24759-24761 editmask:=-1, loop:=FALSE
     session.tempData.cfLoop = false;
     session.menuPause = true;
     session.subState = LoggedOnSubState.DISPLAY_MENU;
     return;
   }
 
-  socket.emit('ansi-output', ch + '\r\n');
-
-  // express.e:24769 "Enter Conference Numbers,'*' toggle all,'-' All off,'+' All on >: "
+  // express.e:24769 - then 24770 lineInput (LINE_PROMPT_SUBSTATES collects it)
   socket.emit('ansi-output', "Enter Conference Numbers,'*' toggle all,'-' All off,'+' All on >: ");
 
   session.tempData.cfEditMask = editMask;
@@ -343,33 +331,22 @@ export async function handleCFConfSelectInput(socket: any, session: BBSSession, 
       }
     }
   }
-  // express.e:24777-24834 - Parse comma-separated list
+  // express.e:24793-24837 - each comma-separated entry, trimmed, is compared
+  // as a STRING with "v" (single base) or "v.m" (v = getInverse(i)) for every
+  // accessible conference, and each match is Eor'd. "2,2" toggles twice, as there.
   else {
-    const confList = confNums.split(',').map(s => s.trim()).filter(s => s.length > 0);
-
-    for (const confStr of confList) {
-      // Check if it's a conference.base format (e.g., "1.2")
-      const parts = confStr.split('.');
-      const confId = parseInt(parts[0]);
-      const baseNum = parts.length > 1 ? parseInt(parts[1]) : null;
-
-      if (isNaN(confId)) continue;
-
-      const conf = _conferences.find(c => c.id === confId);
-      if (!conf || !_checkConfAccess(session.user, confId)) continue;
-
-      const msgBases = await db.getMessageBases(confId);
-
-      if (baseNum !== null) {
-        // Specific message base
-        const msgBase = msgBases[baseNum - 1];
-        if (msgBase) {
-          await toggleScanFlag(session.user.id, confId, msgBase.id, editMask, null); // XOR toggle
-        }
-      } else {
-        // All message bases in conference
-        for (const msgBase of msgBases) {
-          await toggleScanFlag(session.user.id, confId, msgBase.id, editMask, null); // XOR toggle
+    const { getInverse, getConfRelativeToggle } = require('./user-commands.handler');
+    const confRelative: boolean = getConfRelativeToggle(session);
+    for (const entry of confNums.split(',').map(t => t.trim())) {
+      for (const conf of _conferences) {
+        if (!_checkConfAccess(session.user, conf.id)) continue;
+        const v = getInverse(conf.id, session.user, confRelative);
+        const msgBases = await db.getMessageBases(conf.id);
+        for (let m = 0; m < msgBases.length; m++) {
+          const label = msgBases.length === 1 ? `${v}` : `${v}.${m + 1}`;
+          if (label === entry) {
+            await toggleScanFlag(session.user.id, conf.id, msgBases[m].id, editMask, null);
+          }
         }
       }
     }

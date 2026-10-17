@@ -233,6 +233,10 @@ export const LINE_PROMPT_SUBSTATES: ReadonlyMap<string, LineInputOptions> = new 
   [LoggedOnSubState.OLM_NODE_INPUT, { maxLen: 2, echoNewline: true }],
   // express.e:25145 J's 'Conference Number (1-n): ' - five characters.
   [LoggedOnSubState.JOIN_CONF_INPUT, { maxLen: 5, echoNewline: true }],
+  // express.e:24770 CF's "Enter Conference Numbers,..." - lineInput of 200.
+  // handleCFConfSelectInput prints lineInput's line break itself. (CF's flag
+  // choice before it, 24750, is a readChar and is deliberately NOT listed.)
+  [LoggedOnSubState.CF_CONF_SELECT_INPUT, { maxLen: 200 }],
 ]);
 
 /**

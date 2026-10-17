@@ -1136,6 +1136,9 @@ console.log('session.subState:', session.subState);
     data !== '' && !session.executingScreenCommand
       ? LINE_PROMPT_SUBSTATES.get(session.subState as string)
       : undefined;
+  // True only when a caller's Enter just completed a line prompt - an empty
+  // `data` is then an empty answer, not a state-machine nudge.
+  let lineWasEntered = false;
   if (linePrompt) {
     let completedLine: string | undefined;
     const lineIsComplete = await collectLine(
@@ -1149,6 +1152,7 @@ console.log('session.subState:', session.subState);
     // not reach any branch below.
     if (!lineIsComplete) return;
     data = completedLine ?? '';
+    lineWasEntered = true;
   }
 
   const trimmedScreenCommand = (data || '').trim();
@@ -3165,33 +3169,20 @@ console.log(' In RL confirmation state');
   // CF Command (Conference Flags) Input Handlers
   // express.e:24672-24841
 
+  // express.e:24750 the flag choice is readChar(): the key itself is the
+  // answer. (These branches used to buffer keystrokes silently until Enter,
+  // so every key looked dead - sysop, 2026-10-17: "i cant do anything here".)
   if (session.subState === LoggedOnSubState.CF_FLAG_SELECT_INPUT) {
-    // M/A/F/Z flag type selection
-    if (!session.inputBuffer) session.inputBuffer = '';
-    if (data === '\r' || data === '\n') {
-      const input = session.inputBuffer;
-      session.inputBuffer = '';
-      await handleCFFlagSelectInput(socket, session, input);
-    } else if (data === '\x7f') {
-      if (session.inputBuffer.length > 0) session.inputBuffer = session.inputBuffer.slice(0, -1);
-    } else if (data.length === 1 && data >= ' ' && data <= '~') {
-      session.inputBuffer += data;
-    }
+    if (data === '') return; // a nudge tick, not a key
+    await handleCFFlagSelectInput(socket, session, data);
     return;
   }
 
+  // express.e:24770 lineInput: collected (echoed, Enter-terminated) by
+  // LINE_PROMPT_SUBSTATES above, so `data` is the whole line here.
   if (session.subState === LoggedOnSubState.CF_CONF_SELECT_INPUT) {
-    // Conference numbers input
-    if (!session.inputBuffer) session.inputBuffer = '';
-    if (data === '\r' || data === '\n') {
-      const input = session.inputBuffer;
-      session.inputBuffer = '';
-      await handleCFConfSelectInput(socket, session, input);
-    } else if (data === '\x7f') {
-      if (session.inputBuffer.length > 0) session.inputBuffer = session.inputBuffer.slice(0, -1);
-    } else if (data.length === 1 && data >= ' ' && data <= '~') {
-      session.inputBuffer += data;
-    }
+    if (!lineWasEntered) return; // a nudge tick, not the caller's Enter
+    await handleCFConfSelectInput(socket, session, data);
     return;
   }
 

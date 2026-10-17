@@ -287,6 +287,7 @@ describe('the line-prompt table is the one declaration', () => {
     expect([...LINE_PROMPT_SUBSTATES.keys()].sort()).toEqual(
       [
         LoggedOnSubState.CALLERSLOG_NODE_INPUT,
+        LoggedOnSubState.CF_CONF_SELECT_INPUT,
         LoggedOnSubState.FILE_LIST_DIR_INPUT,
         LoggedOnSubState.JM_INPUT,
         LoggedOnSubState.JOIN_CONF_INPUT,
@@ -306,6 +307,8 @@ describe('the line-prompt table is the one declaration', () => {
     for (const singleKey of [
       LoggedOnSubState.DOWNLOAD_CONFIRM_INPUT,
       LoggedOnSubState.GOODBYE_CONFIRM,
+      // express.e:24750 CF's flag choice is a readChar
+      LoggedOnSubState.CF_FLAG_SELECT_INPUT,
     ]) {
       expect(LINE_PROMPT_SUBSTATES.has(singleKey)).toBe(false);
     }
