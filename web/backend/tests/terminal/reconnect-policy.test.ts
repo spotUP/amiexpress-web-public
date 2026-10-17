@@ -78,7 +78,9 @@ describe('the component actually uses it', () => {
   const source = fs.readFileSync(TERMINAL_SRC, 'utf8');
 
   it('builds its socket options from the policy', () => {
-    expect(source).toContain('...reconnectPolicy(isDevelopment)');
+    // The options are built by connectOptions (session-resume.ts), which
+    // spreads the policy; session-resume.test.ts pins what it returns.
+    expect(source).toContain('io(finalBackendUrl, connectOptions(');
     expect(source).not.toContain('reconnectionAttempts: isDevelopment ? 5 : 30');
   });
 

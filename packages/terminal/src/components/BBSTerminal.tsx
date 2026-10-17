@@ -2,7 +2,15 @@ import React, { useEffect, useRef, forwardRef, useImperativeHandle, useCallback,
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { io, Socket } from 'socket.io-client';
-import { reconnectPolicy, shouldReconnectNow } from '../utils/reconnect-policy';
+import { shouldReconnectNow } from '../utils/reconnect-policy';
+import {
+  browserResumeStorage,
+  clearResume,
+  connectOptions,
+  resumeFailedText,
+  resumeTokenToOffer,
+  saveResume,
+} from '../utils/session-resume';
 import { browserPushEnv, subscribeThisBrowser } from '../utils/push-subscribe';
 import { createLoginCredentials, type LoginCredentials } from '../utils/login-credentials';
 import '@xterm/xterm/css/xterm.css';
@@ -703,35 +711,34 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
         nodeId: sessionData.nodeId,
         socketId: sessionData.socketId,
         currentConf: sessionData.currentConf,
-        savedAt: Date.now(),
       };
       sessionStorage.setItem(SESSION_STATE_KEY, JSON.stringify(sessionState));
-      console.log('[Session Persistence] Session state saved:', sessionState);
+      // Never the resume token (session-persistence plan, Decision 23).
+      console.log('[Session Persistence] Session state saved:', {
+        userId: sessionState.userId,
+        username: sessionState.username,
+        nodeId: sessionState.nodeId,
+      });
+      // The resume token rides every connect (connectOptions); the board
+      // decides how long it stays good, so nothing here ages it out.
+      const resumeStorage = browserResumeStorage();
+      if (resumeStorage && typeof sessionData.resumeToken === 'string' && sessionData.resumeToken) {
+        saveResume(resumeStorage, {
+          token: sessionData.resumeToken,
+          userId: String(sessionState.userId ?? ''),
+          nodeId: Number(sessionState.nodeId),
+        });
+      }
     } catch (error) {
       console.error('[Session Persistence] Failed to save session state:', error);
     }
   }, []);
 
-  const getStoredSessionState = useCallback(() => {
-    if (typeof window === 'undefined') return null;
-    try {
-      const stored = sessionStorage.getItem(SESSION_STATE_KEY);
-      if (!stored) return null;
-      const sessionState = JSON.parse(stored);
-      // Only use session if it's less than 2 minutes old (connection state recovery window)
-      if (Date.now() - sessionState.savedAt > 120000) {
-        sessionStorage.removeItem(SESSION_STATE_KEY);
-        return null;
-      }
-      return sessionState;
-    } catch (error) {
-      console.error('[Session Persistence] Failed to load session state:', error);
-      return null;
-    }
-  }, []);
-
   const clearSessionState = useCallback(() => {
     if (typeof window === 'undefined') return;
+    // This tab's resume token goes with its session state; other tabs keep theirs.
+    const resumeStorage = browserResumeStorage();
+    if (resumeStorage) clearResume(resumeStorage);
     sessionStorage.removeItem(SESSION_STATE_KEY);
     sessionStorage.removeItem(BBS_AUTH_TOKEN_KEY);
     sessionStorage.removeItem(SHARED_AUTH_TOKEN_KEY);
@@ -1968,16 +1975,17 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
     // free-tier servers, which meant every keystroke rode an HTTP request
     // until the upgrade completed - unusable for an action game. socket.io
     // falls back on its own if the WebSocket handshake fails.
-    const socket = io(finalBackendUrl, {
-      transports: ['websocket', 'polling'],
-      timeout: 20000,
-      upgrade: true,
-      rememberUpgrade: true,
-      // Retry until it works or the tab closes - see reconnect-policy.ts.
-      // This used to stop after 5 attempts on localhost, about eleven
-      // seconds, which is shorter than a dev backend takes to restart.
-      ...reconnectPolicy(isDevelopment),
-    });
+    // Retry until it works or the tab closes - see reconnect-policy.ts.
+    // This used to stop after 5 attempts on localhost, about eleven
+    // seconds, which is shorter than a dev backend takes to restart.
+    // `auth` is asked again on every (re)connect, so the handshake always
+    // carries this tab's CURRENT resume token and the board decides at the
+    // connection whether it rejoins a parked session (session-resume.ts).
+    const resumeStorage = browserResumeStorage();
+    const socket = io(finalBackendUrl, connectOptions(
+      isDevelopment,
+      () => (resumeStorage ? resumeTokenToOffer(resumeStorage) : undefined),
+    ));
     socketRef.current = socket;
     loginCredentials.current = createLoginCredentials((line) => socket.emit('command', line));
 
@@ -2103,21 +2111,15 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
       });
       keyRepeatTimers.current = {};
 
-      // Try session restoration first (if we have a saved session).
-      // Do NOT flip loginState to 'logging-in' here — if the server decides
-      // the restore can't happen (e.g. after a backend restart), it will
-      // emit `session-restore-failed` AFTER already starting its fresh
-      // welcome/ANSI-prompt sequence. Any keypress during that window
-      // would be dropped by onData's logging-in guard. Stay in 'waiting'
-      // until we've actually submitted credentials; session-restored will
-      // jump us straight to 'loggedin' on success.
-      const savedSession = getStoredSessionState();
-      if (savedSession && reconnectPending.current) {
-        console.log('[Session Persistence] Attempting session restoration for user:', savedSession.username);
-        // The token is who this tab is: the board takes the caller from it,
-        // never from the ids saved beside it (open-surface audit, 2026-10-04).
-        socket.emit('restore-session', { ...savedSession, token: getStoredSharedToken() });
-      } else if (reconnectPending.current) {
+      // Resuming is decided by the board at the connection, from the token
+      // the handshake carried (connectOptions): it answers with
+      // `session-restored` or `session-restore-failed`, so nothing is asked
+      // here. Do NOT flip loginState to 'logging-in' - a refused resume
+      // runs the fresh welcome at once, and onData's logging-in guard would
+      // drop keys typed into it. A connect that offered no token falls back
+      // to the token login below.
+      const offeredResume = resumeStorage ? resumeTokenToOffer(resumeStorage) !== undefined : false;
+      if (!offeredResume && reconnectPending.current) {
         reconnectPending.current = false;
         attemptTokenLogin();
       }
@@ -3076,7 +3078,8 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
     });
 
     socket.on('login-success', (data: any) => {
-      console.log('Login successful:', data);
+      // Never `data` itself: it carries the resume token (Decision 23).
+      console.log('Login successful:', { userId: data?.userId ?? data?.user?.id, nodeId: data?.nodeId });
       loginCredentials.current!.onLoginSuccess();
       loginState.current = 'loggedin';
       reconnectPending.current = false;
@@ -3130,6 +3133,7 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
         nodeId: data.nodeId,
         socketId: socket.id,
         currentConf: data.currentConf,
+        resumeToken: data.resumeToken,
       });
 
       /**
@@ -3150,7 +3154,8 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
     });
 
     socket.on('session-restored', (data: any) => {
-      console.log('[Session Persistence] Session restored successfully:', data);
+      // Never `data` itself: it carries the rotated resume token (Decision 23).
+      console.log('[Session Persistence] Session restored successfully:', { userId: data?.userId, nodeId: data?.nodeId });
       loginState.current = 'loggedin';
       reconnectPending.current = false;
 
@@ -3161,6 +3166,7 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
         nodeId: data.nodeId,
         socketId: socket.id,
         currentConf: data.currentConf,
+        resumeToken: data.resumeToken,
       });
 
       writeTerm('\r\n\x1b[32m[Session Restored] Welcome back!\x1b[0m\r\n');
@@ -3172,8 +3178,9 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
       focusSurface();
     });
 
-    socket.on('session-restore-failed', (reason: string) => {
+    socket.on('session-restore-failed', (reason: unknown) => {
       console.log('[Session Persistence] Session restoration failed:', reason);
+      writeTerm(`\r\n\x1b[33m[Session ended] ${resumeFailedText(reason)}\x1b[0m\r\n`);
       // The restore failed, so the backend is about to start a genuinely
       // fresh session (a new graphics prompt, or the token-login fallback
       // below) - not a continuation of whatever session (PETSCII or not)
