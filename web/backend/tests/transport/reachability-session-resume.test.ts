@@ -15,8 +15,17 @@
  *
  * The login is the real `login` event with a token (auth-socket-handlers ->
  * runPostAuthLogin); only `db` is wrapped in a Proxy (verifyAccessToken,
- * getUserById, token minting), because SKIP_DB_INIT leaves no SQL behind it,
- * and `src/index.ts` is mocked away because it starts servers on import.
+ * getUserById, token minting), so no account row is needed, and `src/index.ts`
+ * is mocked away because it starts servers on import.
+ *
+ * DATABASE: the import chain (web-connection -> socket-handlers ->
+ * command.handler -> login-connect.service -> SamiLogService) creates the
+ * board's `db` singleton at import time, BEFORE tests/setup.ts's beforeAll
+ * points DATABASE_DIR at its scratch board. Left alone it would open
+ * process.cwd()/data/amiexpress.db, the developer's real database. The
+ * `src/database` mock factory below runs first in that chain, so it points
+ * DATABASE_DIR at a fresh mkdtemp directory before the actual module is
+ * loaded; afterAll closes the db and removes the directory.
  *
  * Time: "sits > 2 min" and "returns after 30 s" move `Date.now` (the old
  * gates compared `Date.now()` with `savedAt`); the test itself takes seconds.
@@ -28,13 +37,23 @@
  *
  * The resume token is a credential: nothing here prints it.
  */
-// No SKIP_DB_INIT: the logon pipeline reads the message bases, so tests/setup.ts builds a schema.
+// No SKIP_DB_INIT: the logon pipeline reads the message bases, so beforeAll gives the temp database a schema.
 
 // Numeric, as the board's SQL ids are: the resume looks the account up by Number(userId).
 const S13_USER_ID = '9131';
 
 jest.mock('../../src/index', () => ({}));
 jest.mock('../../src/database', () => {
+  /* eslint-disable @typescript-eslint/no-require-imports */
+  const fs = require('fs') as typeof import('fs');
+  const os = require('os') as typeof import('os');
+  const path = require('path') as typeof import('path');
+  /* eslint-enable @typescript-eslint/no-require-imports */
+  // Before requireActual: the singleton reads DATABASE_DIR when it is first touched.
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'aew-s13-db-'));
+  process.env.DATABASE_DIR = dir;
+  process.env.DATABASE_FILE = 's13.db';
+  process.env.S13_DB_DIR = dir;
   const actual = jest.requireActual('../../src/database') as { db: object };
   const when = new Date(Date.now() - 86400 * 1000);
   const user = {
@@ -84,6 +103,10 @@ import { callersLogManager } from '../../src/services/CallersLogManager';
 import { userFileManager } from '../../src/services/UserFileManager';
 import { db } from '../../src/database';
 import { disarmIdleTimeout } from '../../src/services/idle-timeout.service';
+import { startObserving, stopObserving } from '../../src/server/session-observers';
+import { ANSI_GRAPHICS_PROMPT } from '../../src/services/login-connect.service';
+import * as fs from 'fs';
+import * as path from 'path';
 import { connectOptions, type ResumeOffer } from '../../../../packages/terminal/src/utils/session-resume';
 
 jest.setTimeout(60000);
@@ -127,8 +150,9 @@ describe('S13 - a real socket.io caller is restored to the same node through acc
 
   beforeAll(async () => {
     const { s13User } = jest.requireMock('../../src/database') as { s13User: { slotNumber: number } };
-    // The board's singleton may have opened its file before tests/setup.ts
-    // pointed DATABASE_DIR at the scratch one; give whichever it opened a schema.
+    // The singleton opened the temp file the database mock chose (see header); give it a schema.
+    const dbDir = process.env.S13_DB_DIR as string;
+    expect(fs.existsSync(path.join(dbDir, 's13.db'))).toBe(true);
     await db.init();
     userFileManager.writeUserFiles(s13User as never, s13User.slotNumber);
 
@@ -159,6 +183,9 @@ describe('S13 - a real socket.io caller is restored to the same node through acc
       const done = setTimeout(resolve, 2000);
       server.close(() => { clearTimeout(done); resolve(); });
     });
+    try { await db.close(); } catch { /* already closed */ }
+    const dbDir = process.env.S13_DB_DIR;
+    if (dbDir) fs.rmSync(dbDir, { recursive: true, force: true });
   });
 
   it('logs in, sits 150 s, drops, comes back 30 s later: same node, same session, the door ran throughout', async () => {
@@ -176,23 +203,33 @@ describe('S13 - a real socket.io caller is restored to the same node through acc
       // 1. Connect, let the pre-login sequence finish, log in with a token.
       await once<void>(client, 'connect', 15000);
       const firstId = client.id as string;
-      await until('the pre-login prompt', () => {
+      // runPreLoginConnect sends the graphics prompt after the banner's delay.
+      await until('the pre-login graphics prompt', () => {
         const s = getSession(firstId) as unknown as SessionView | undefined;
-        return s !== undefined && output.length > 0;
+        return s !== undefined && output.join('').includes(ANSI_GRAPHICS_PROMPT);
       }, 15000);
-      await wait(3500); // runPreLoginConnect's postBannerDelayMs (3000) before the prompt
       const loggedIn = once<LoginSuccess>(client, 'login-success', 15000);
       client.emit('login', { token: 'jwt-s13' });
       const login = await loggedIn;
       expect(typeof login.resumeToken).toBe('string');
       offered = login.resumeToken;
       const session = getSession(firstId) as unknown as SessionView;
-      // The logon screens pause for RETURN; the caller answers them as a person would.
-      const enter = setInterval(() => { client.emit('command', '\r'); }, 250);
+      // The logon screens pause for RETURN; the caller answers them as a person
+      // would: only once the board has answered the previous key (new output),
+      // and never once LOGGEDON, so no stray RETURN reaches the menu.
+      let seenAtEnter = -1;
+      const enter = setInterval(() => {
+        if (session.state === BBSState.LOGGEDON || output.length === seenAtEnter) return;
+        seenAtEnter = output.length;
+        client.emit('command', '\r');
+      }, 250);
       try {
         await until(`LOGGEDON (state ${session.state})`, () => session.state === BBSState.LOGGEDON, 20000);
       } finally { clearInterval(enter); }
       expect(session.nodeId).toBe(S13_NODE);
+      expect(startObserving).toHaveBeenCalledWith(firstId);
+      (startObserving as jest.Mock).mockClear();
+      (stopObserving as jest.Mock).mockClear();
 
       // 2. A TypeScript door stand-in on the session's link, through the real BBSApi.
       const link = session.webLink as LinkView;
@@ -234,6 +271,10 @@ describe('S13 - a real socket.io caller is restored to the same node through acc
       expect(client.id).not.toBe(firstId);
       expect(getSession(client.id as string)).toBe(session as never);
       expect(link.parked).toBe(false);
+      // The session log is re-keyed from the old socket id to the new one (session-parking).
+      expect(stopObserving).toHaveBeenCalledWith(firstId);
+      expect(startObserving).toHaveBeenCalledWith(client.id);
+      expect(startObserving).not.toHaveBeenCalledWith(firstId);
       expect(logLogoff).not.toHaveBeenCalled();
       const mine = [...sessions.values()].filter(
         (s) => String((s as unknown as SessionView).user?.id) === S13_USER_ID);
