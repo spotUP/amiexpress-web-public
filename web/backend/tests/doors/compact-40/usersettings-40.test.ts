@@ -118,6 +118,11 @@ describe('the W door on three screens', () => {
     expect(ansi).toMatch(/< 2\/\d+ /);
   });
 
+  test('a cover flow caller turns W\'s pages with the mouse wheel (W3: mouse is on only in cover flow)', async () => {
+    const { ansi } = await driveFull(80, [{ at: 'idle', keys: '\x1b[<65;10;10M' }, { at: 'idle', keys: 'q' }], 25, { menuStyle: 'coverflow' });
+    expect(ansi).toMatch(/< 2\/\d+ /);
+  });
+
   test('a scroll caller keeps the one long list: no page indicator', async () => {
     const ansi = beforeTeardown((await driveFull(80, QUIT, 25, { menuStyle: 'scroll' })).ansi);
     expect(ansi).not.toContain('Left/Right: Page');
