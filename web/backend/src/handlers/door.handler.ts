@@ -2506,8 +2506,10 @@ console.log(`[executeNativeGccDoor] Starting GCC door: ${doorConfig.executablePa
   session.doorKeyRepeatMode = declaredKeyRepeatMode(door);
   enableGameMode(socket, session, 'XIM');
 
-  // Move to fresh line
-  emitText(socket, '\r\n');
+  // No line break of the door's own: express.e's runDoor (4231-4250) prints nothing but a colour reset
+  // before the door runs. The command line already ended with lineInput's break (command.handler,
+  // express.e:2378), so a break here was a second one - a ghost Enter that pushed the cursor down
+  // before every door opened (sysop 2026-10-17, Tab from Classic into the menu door).
 
   session.inDoorManager = true;
   session.subState = LoggedOnSubState.DOOR_RUNNING;
@@ -3059,8 +3061,10 @@ console.log(`[executeAmigaDoor] Detected GCC-compiled executable, running native
       });
     }
 
-    // Move to a fresh line before the door renders any output (prevents menu prompt overlap)
-    emitText(socket, '\r\n');
+    // No line break of the door's own: express.e's runDoor (4231-4250) prints nothing but a colour reset
+    // before the door runs. The command line already ended with lineInput's break (command.handler,
+    // express.e:2378), so a break here was a second one - a ghost Enter that pushed the cursor down
+    // before every door opened (sysop 2026-10-17, Tab from Classic into the menu door).
 
     // Wire user input into the Amiga door while it runs
     session.inDoorManager = true;
@@ -4126,14 +4130,10 @@ console.log(`[executeARexxDoor] Door path: ${door.path}`);
       path: door.path,
     };
 console.log(`[executeARexxDoor] Executing script: ${doorPath} (${scriptText.length} bytes)`);
-    // Drop to a fresh line before the script's first emission. The
-    // user's command line ends with `<cmd><enter>`; without an
-    // explicit \r\n here, the script's first TR/SS lands directly
-    // beside the typed command (e.g. "avail  SYSOP AVAILABLE..."
-    // share a row). express.e doors get this for free because the
-    // command echo path emits \r\n on dispatch — the AREXX path
-    // never did.
-    emitText(socket, '\r\n');
+    // No line break of the door's own: express.e's runDoor (4231-4250) prints nothing but a colour reset
+    // before the door runs. The command line already ended with lineInput's break (command.handler,
+    // express.e:2378), so a break here was a second one - a ghost Enter that pushed the cursor down
+    // before every door opened (sysop 2026-10-17, Tab from Classic into the menu door).
     await arexxEngine.executeScript(arexxScript, arexxContext);
 
     doorRunEnds(socket);

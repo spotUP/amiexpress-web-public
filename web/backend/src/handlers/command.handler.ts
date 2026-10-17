@@ -3401,8 +3401,9 @@ console.log(' Empty command, redisplaying menu');
         (session as any)._readCommandCurpos = 0;
         (session as any)._promptGhostShown = false;
         (session as any)._promptCycle = undefined;
-        emitText(socket, '\r\n');
-        flushOutput(socket);
+        // No line break: Tab ends no line (it is not lineInput's Enter), and the door's first frame clears
+        // and positions the whole screen itself. Anything here is a ghost Enter the caller sees while the
+        // door starts (sysop 2026-10-17).
         submitCommandLine(socket, session, 'MENU');
         return;
       }

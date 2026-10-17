@@ -111,6 +111,11 @@ describe('Classic in the menu style Tab cycle, through the board', () => {
     expect(catalogues).toHaveLength(1);
     expect(catalogues[0]).toMatch(/^N Menu style: Scroll$/m);
     await until(() => out().includes('Menu style: Scroll'), 30000, 'the door naming the style');
+    // No ghost Enter: Tab ends no line, and the door launch prints no break of its own (express.e runDoor prints
+    // only a colour reset), so nothing moves the cursor between the keypress and the door's first frame.
+    const firstFrame = out().indexOf('\x1b[2J');
+    expect(firstFrame).toBeGreaterThan(-1);
+    expect(JSON.stringify(out().slice(0, firstFrame))).not.toMatch(/\\r|\\n/);
 
     // 2. Tab in the door: Scroll -> Cover flow (the door stays), Cover flow -> Classic (the door leaves).
     send('\t');
