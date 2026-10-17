@@ -114,3 +114,33 @@ describe('an arrow key, which is what a game is played with', () => {
     }
   });
 });
+
+describe('Ctrl+K while a door runs', () => {
+  it('opens the palette over the door instead of reaching it', () => {
+    const route = routeDoorInput('\x0b', { ...running, paletteKeyAllowed: true });
+    expect(route.openPalette).toBe(true);
+    expect(route.toDoorHandler).toBe(false);
+  });
+
+  it('reaches the door when the board has no palette', () => {
+    const route = routeDoorInput('\x0b', running);
+    expect(route.openPalette).toBe(false);
+    expect(route.toDoorHandler).toBe(true);
+  });
+
+  it('stays with the board while the door has lent it the terminal', () => {
+    const route = routeDoorInput('\x0b', { ...running, paletteKeyAllowed: true, boardHoldsTerminal: true });
+    expect(route.openPalette).toBe(false);
+    expect(route.toBbs).toBe(true);
+  });
+
+  it('gives every key to the open palette and none to the paused door', () => {
+    for (const key of ['x', '\x1b', '\r', '\x0b']) {
+      const route = routeDoorInput(key, { ...running, paletteOpen: true, paletteKeyAllowed: true, hasCommandListener: true });
+      expect(route.toPalette).toBe(true);
+      expect(route.toDoorHandler).toBe(false);
+      expect(route.toCommandListeners).toBe(false);
+      expect(route.openPalette).toBe(false);
+    }
+  });
+});

@@ -110,3 +110,30 @@ export function takeScreenRestore(connectionId: string): string | null {
   screen.snapshot = null;
   return renderSnapshot(snap, screen.grid.columns);
 }
+
+/*
+ * The whole-screen hold: the board covers EVERYTHING the caller sees (the
+ * command palette over a running door) and must give it back exactly. A slot
+ * of its own, apart from `snapshot`, because what runs on top (the palette's
+ * own AEW_SCREEN SAVE/RESTORE) uses that one.
+ */
+const held = new Map<string, ScreenSnapshot>();
+
+/** Hold the caller's whole screen. False when there is no screen yet. */
+export function holdWholeScreen(connectionId: string): boolean {
+  const screen = screens.get(connectionId);
+  if (!screen || screen.grid.height === undefined) return false;
+  const snap = snapshotRegion(screen.grid, 1, 1, screen.grid.height, screen.grid.columns);
+  if (!snap) return false;
+  held.set(connectionId, snap);
+  return true;
+}
+
+/** The bytes that repaint the held whole screen (the hold is released), or null when nothing is held. */
+export function takeHeldScreen(connectionId: string): string | null {
+  const snap = held.get(connectionId);
+  if (!snap) return null;
+  held.delete(connectionId);
+  const screen = screens.get(connectionId);
+  return renderSnapshot(snap, screen?.grid.columns ?? snap.cols);
+}

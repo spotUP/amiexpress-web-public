@@ -42,6 +42,13 @@ export interface DoorInputRoute {
    * cursor key belongs to the door and is left alone.
    */
   pan: PanDirection | null;
+  /**
+   * The command palette is open over this door: the key is the palette's.
+   * The door is paused underneath and sees nothing until the palette closes.
+   */
+  toPalette: boolean;
+  /** Ctrl+K: open the command palette over the running door. */
+  openPalette: boolean;
 }
 
 /** Which way the window moves. */
@@ -70,7 +77,14 @@ export interface DoorInputState {
    * so the cursor keys pan it instead of reaching the door.
    */
   viewportPan?: boolean;
+  /** The command palette is open over this door and owns every key. */
+  paletteOpen?: boolean;
+  /** Ctrl+K may open the palette over this door (the board has a PALETTE). */
+  paletteKeyAllowed?: boolean;
 }
+
+/** Ctrl+K, the key that opens the command palette anywhere on the board. */
+export const PALETTE_KEY = '\x0b';
 
 /**
  * ENTER or SPACE - the keys a pause is dismissed with.
@@ -113,6 +127,8 @@ export function routeDoorInput(input: string, state: DoorInputState): DoorInputR
     toBbs: false,
     toDoorInputEvent: false,
     pan: null,
+    toPalette: false,
+    openPalette: false,
   };
 
   if (!state.doorActive) {
@@ -120,8 +136,19 @@ export function routeDoorInput(input: string, state: DoorInputState): DoorInputR
     return route;
   }
 
+  // The palette is a run of its own over the paused door: every key is its.
+  if (state.paletteOpen) {
+    route.toPalette = true;
+    return route;
+  }
+
   if (state.boardHoldsTerminal) {
     route.toBbs = true;
+    return route;
+  }
+
+  if (state.paletteKeyAllowed && input === PALETTE_KEY) {
+    route.openPalette = true;
     return route;
   }
 

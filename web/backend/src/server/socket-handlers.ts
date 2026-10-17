@@ -73,7 +73,8 @@ import { deliversKeyEvents } from '../services/key-event-capable';
 import { reportLogout } from '../achievements/sites';
 import { cleanupTransfer } from '../utils/raw-transfer-teardown.util';
 import { c64AdapterFor } from './c64-door-adapter';
-import { routeDoorInput } from '../services/door-input-routing';
+import { routeDoorInput, PALETTE_KEY } from '../services/door-input-routing';
+import { isPaletteOpen, paletteInstalled, openPaletteOverDoor, deliverToPalette } from '../services/palette-over-door';
 import { onLevel, SYSOP_LEVEL } from './socket-guard';
 import { ensureDoorLogLine } from '../utils/door-logging.util';
 
@@ -525,6 +526,30 @@ console.log('[socket-handlers] keys:state received:', data);
     const session = getSession(socket.id);
     if (!session) return;
 
+    // Ctrl+K and the open palette, as the 'command' path routes them: a door
+    // in game mode gets its keys here, never through 'command'. The paused
+    // door's key state is not touched.
+    if (session.inDoorManager || isPaletteOpen(session)) {
+      const char = data.key.length === 1
+        ? (data.ctrl ? String.fromCharCode(data.key.toUpperCase().charCodeAt(0) & 0x1f) : data.key)
+        : keyToChar(data.key);
+      if (char) {
+        const route = routeDoorInput(char, {
+          doorActive: true,
+          hasDoorInputHandler: Boolean(session.doorInputHandler),
+          hasCommandListener: false,
+          bbsPauseActive: false,
+          boardHoldsTerminal: Boolean(session.doorLentTerminal),
+          paletteOpen: isPaletteOpen(session),
+          paletteKeyAllowed: char === PALETTE_KEY && paletteInstalled(),
+        });
+        if (route.toPalette) { deliverToPalette(session, char); return; }
+        if (route.openPalette) { openPaletteOverDoor(socket, session); return; }
+      } else if (isPaletteOpen(session)) {
+        return;
+      }
+    }
+
     // Initialize key state if needed
     if (!session.keyState) {
       session.keyState = {};
@@ -729,7 +754,17 @@ console.error('No session found for socket:', socket.id);
         bbsPauseActive: session.paginatedScreen?.kind === 'bbs',
         boardHoldsTerminal: Boolean(session.doorLentTerminal),
         viewportPan: viewport !== null,
+        paletteOpen: isPaletteOpen(session),
+        paletteKeyAllowed: data === PALETTE_KEY && paletteInstalled(),
       });
+      if (route.toPalette) {
+        deliverToPalette(session, data);
+        return;
+      }
+      if (route.openPalette) {
+        openPaletteOverDoor(socket, session);
+        return;
+      }
       if (route.pan) {
         if (route.pan === 'home') viewport?.panHome();
         else viewport?.pan(route.pan === 'right' ? VIEWPORT_PAN_COLUMNS : -VIEWPORT_PAN_COLUMNS);

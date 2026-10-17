@@ -33,7 +33,8 @@ import {
 } from "./session-emitter-registry";
 import { sessionWantsSwedishPetscii, sessionWantsPetscii, togglePetsciiCase } from "../utils/petscii-session-model";
 import { PETSCII_CASE_TOGGLE } from "@amiexpress/bbs-door-sdk/petscii";
-import { routeDoorInput } from "../services/door-input-routing";
+import { routeDoorInput, PALETTE_KEY } from "../services/door-input-routing";
+import { isPaletteOpen, paletteInstalled, openPaletteOverDoor, deliverToPalette } from "../services/palette-over-door";
 import { c64AdapterFor } from "./c64-door-adapter";
 
 /**
@@ -412,7 +413,21 @@ console.log(
         // A door shown through the adapter's WINDOW gives its cursor keys to
         // the window (C64_VIEWPORT, the adapter's rule 6).
         viewportPan: viewportAdapter() !== null,
+        paletteOpen: isPaletteOpen(session),
+        paletteKeyAllowed: input === PALETTE_KEY && paletteInstalled(),
       });
+
+      // Ctrl+K: the command palette over the door, and every key while it is
+      // open (services/palette-over-door.ts). `emitter` is what the door
+      // handler calls `socket` on telnet, so the palette's run goes there too.
+      if (route.toPalette) {
+        deliverToPalette(session, input);
+        return;
+      }
+      if (route.openPalette) {
+        openPaletteOverDoor(emitter, session);
+        return;
+      }
 
       if (route.pan) {
         const adapter = viewportAdapter();

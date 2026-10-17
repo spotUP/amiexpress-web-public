@@ -609,6 +609,12 @@ export interface BBSSession {
    * it back; the door is paused waiting for its reply.
    */
   doorLentTerminal?: boolean;
+  /**
+   * The running door can be held still: no input, no CPU, no time. Set by the
+   * door runner while a door runs; the command palette opened over the door
+   * (services/palette-over-door.ts) pauses it and resumes it on close.
+   */
+  doorHold?: { pause: () => void; resume: () => void };
   /** An express.e lineInput / readChar a ported procedure is awaiting (utils/await-input). */
   inputWaiter?: import('./utils/await-input').InputWaitingSession['inputWaiter'];
   /** Keys held for a ported procedure that owns the input (utils/await-input holdInput). */

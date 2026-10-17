@@ -679,6 +679,17 @@ console.log(`[DoorLifecycleManager] alive: paused=${this.emulator.isPaused()} pc
           if (ENABLE_PROFILING) profileYieldTime += Date.now() - yieldStart;
         }
 
+        // === STEP 0: Held by the board (pause()) ===
+        // The command palette is open over this door: no CPU, no input, until
+        // resume(). The fuse is touched so a long look at the palette is not
+        // the door going idle. Not emulator.pause(): that is the door's own
+        // input wait, which the input path ends.
+        if (this.isPaused) {
+          this.inactivityFuse?.touch();
+          await new Promise((resolve) => setTimeout(resolve, 20));
+          continue;
+        }
+
         // === STEP 1: Check if paused (async input) ===
         if (this.emulator.isPaused()) {
           await this.exitDetector.handlePausedState();

@@ -516,6 +516,7 @@ import { boardRoot } from '../utils/board-root.util';
 import { ensureDoorLogLine } from '../utils/door-logging.util';
 import { inputForTrace } from '../amiga-emulation/xim/secret-input';
 import * as menuTail from './commands/menu-door-exit';
+import { isPaletteShadow, notePaletteExit } from '../services/palette-over-door';
 export { MOUSE_REPORTING_OFF };
 
 export function isAmiga68kDoorType(t: string): boolean {
@@ -3078,6 +3079,10 @@ console.log(`[executeAmigaDoor] Set session.inDoorManager=true, door-active: tru
     // const doorType2 = door.type || 'XIM';
     // enableGameMode(socket, session, doorType2);
 
+    // The palette over a door (services/palette-over-door.ts) holds the door
+    // still through this: the lifecycle loop stops stepping the CPU.
+    session.doorHold = { pause: () => amigaSession.pause(), resume: () => amigaSession.resume() };
+
     session.doorInputHandler = (data: string) => {
       try {
         const shared: any = (amigaSession as any).sharedState || {};
@@ -3159,7 +3164,17 @@ console.log(`[executeAmigaDoor] Door execution completed`);
     session.mouseEventsEnabled = false; // Reset mouse events when door exits
     socket.emit('door-active', false);
     delete session.doorInputHandler;
+    delete session.doorHold;
     session.subState = LoggedOnSubState.DISPLAY_MENU;
+
+    // The command palette ran as a shadow over a paused door: its exit is
+    // not a return to the menu. The outer door still owns the terminal, so
+    // the tail (the pick, RETURNCOMMAND, the menu redraw) does not run here;
+    // the palette takes what was picked and closes (palette-over-door.ts).
+    if (isPaletteShadow(session)) {
+      notePaletteExit(session, menuTail.takeMenuExit(session));
+      return;
+    }
 
     // The exit tail (plan M7): every command, bulletin and reopen a door asks for runs inside it. A menu
     // door launched while ANY tail runs is parked, and the OUTERMOST tail launches it after this one has
