@@ -67,4 +67,30 @@ describe('MenuLogosEditor', () => {
     await new Promise(r => setTimeout(r, 100));
     expect(screen.queryByText(/no longer on the board/)).toBeNull();
   });
+  /*
+   * Live 2026-10-17: the sysop uploaded mainmenu2.ans (6 x 80) for the main menu and it never showed - the
+   * board had no Menus/MAIN.json, so no set ever named it. Every new-set row opened on C64, where only a .seq
+   * is offered, so the .ans was not in the file list until the width was changed by hand.
+   */
+  it('offers an uploaded .ans in the header row at once and adds it as a Standard set', async () => {
+    const user = userEvent.setup();
+    listMenuLogos.mockResolvedValueOnce([{ file: 'mainmenu2.ans', rows: 6, cols: 80, alphabet: 'ansi' }]);
+    let config = defaultMenuConfig('MAIN');
+    const update = vi.fn((change: (c: typeof config) => typeof config) => { config = change(config); });
+    render(<MenuLogosEditor kind="MAIN" config={config} update={update} />);
+    const pick = screen.getByLabelText('File for a new header set') as HTMLSelectElement;
+    await waitFor(() => expect(within(pick).queryByRole('option', { name: 'mainmenu2.ans' })).toBeTruthy());
+    await user.selectOptions(pick, 'mainmenu2.ans');
+    await user.click(screen.getByRole('button', { name: 'Add header set' }));
+    expect(config.logos).toEqual([expect.objectContaining({ position: 'header', widthClass: 'standard', files: ['mainmenu2.ans'] })]);
+  });
+
+  it('says a logo no set names is not shown, and where one that is named shows', async () => {
+    listMenuLogos.mockResolvedValueOnce([...FILES, { file: 'mainmenu2.ans', rows: 6, cols: 80, alphabet: 'ansi' }]);
+    render(<MenuLogosEditor kind="MAIN" config={withSet()} update={vi.fn()} />);
+    const loose = (await screen.findByRole('cell', { name: 'mainmenu2.ans' })).closest('tr')!;
+    expect(within(loose).getByText(/Not shown/)).toBeTruthy();
+    const used = screen.getByRole('cell', { name: 'cat.txt' }).closest('tr')!;
+    expect(within(used).getByText('Header, Standard')).toBeTruthy();
+  });
 });

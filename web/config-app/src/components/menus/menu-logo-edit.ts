@@ -31,8 +31,24 @@ export function positionWidths(position: LogoPosition): WidthClass[] {
 const usable = (files: MenuLogoFile[], cls: WidthClass, file: string) =>
   logoOffers(files, cls).some(o => o.file === file && o.fits);
 
+/**
+ * The width a new-set row opens on: the first of the position's widths that has a drawable file and a free
+ * level-0 slot. Opening on C64 regardless hid every .txt/.ans upload (only a .seq is offered there), so a
+ * sysop who uploaded an ANSI logo found nothing to pick and the logo was never shown (live, 2026-10-17).
+ */
+export function newSetWidth(c: MenuConfig, files: MenuLogoFile[], position: LogoPosition): WidthClass {
+  const widths = positionWidths(position);
+  return widths.find(w => logoOffers(files, w).some(o => o.fits) && !logoSlotConflict(c, position, w, 0)) ?? widths[0];
+}
+
 const POSITION_WORDS: Record<LogoPosition, string> = { header: 'header', footer: 'footer', side: 'side panel', between: 'between-sections' };
 const CLASS_WORDS: Record<WidthClass, string> = { c64: 'C64', standard: 'Standard', wide: 'Wide' };
+
+/** Where a file shows, as "Header, Standard" per set naming it; empty when no set does, so the board never draws it. */
+export function logoShownIn(c: MenuConfig, file: string): string[] {
+  return c.logos.filter(s => s.files.includes(file))
+    .map(s => `${POSITION_WORDS[s.position][0].toUpperCase()}${POSITION_WORDS[s.position].slice(1)}, ${CLASS_WORDS[s.widthClass]}${s.levelFloor ? ` from level ${s.levelFloor}` : ''}`);
+}
 
 /**
  * The board keeps one set per position, width class and level floor (the later would silently win and the

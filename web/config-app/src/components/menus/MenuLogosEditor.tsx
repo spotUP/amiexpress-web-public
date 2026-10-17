@@ -9,7 +9,7 @@ import { ScreenEditor } from '../ScreenEditor';
 import { createSurface, type EditorSurface } from '../../pages/screen-editor-state';
 import { screenToCanvas } from '../../pages/screen-bytes';
 import {
-  addLogoFile, addLogoSet, logoOffers, logoSlotConflict, logoWidthWarnings, moveLogoFile, positionWidths, removeLogoFile, removeLogoSet,
+  addLogoFile, addLogoSet, logoOffers, logoShownIn, logoSlotConflict, logoWidthWarnings, moveLogoFile, newSetWidth, positionWidths, removeLogoFile, removeLogoSet,
   setLogoAfterSection, setLogoFloor, setLogoRule, usedByText,
 } from './menu-logo-edit';
 import { BUTTON_CLASS, INPUT_CLASS } from './menu-styles';
@@ -25,6 +25,7 @@ const POSITIONS: Array<{ position: LogoPosition; title: string; note?: string }>
   { position: 'between', title: 'Between sections' },
 ];
 const logoPath = (kind: MenuKind, file: string) => `Screens/menus/${kind.toLowerCase()}/logos/${file}`;
+const NOT_SHOWN = 'Not shown - add it to a logo set below';
 const alphabetWord = (f: MenuLogoFile) => ((f.alphabet ?? logoAlphabet(f.file)) === 'petscii' ? 'PETSCII' : 'Amiga ANSI');
 
 /** An existing Amiga ANSI logo, opened in the same editor the screens use; Save writes it back through the logo route. */
@@ -62,7 +63,7 @@ function LogoStudio({ kind, file, onClose, onSaved }: { kind: MenuKind; file: st
   );
 }
 
-function FilesPanel({ kind, files, loading, error, reload }: { kind: MenuKind; files: MenuLogoFile[]; loading: boolean; error: Error | null; reload: () => void }) {
+function FilesPanel({ kind, config, files, loading, error, reload }: { kind: MenuKind; config: MenuConfig; files: MenuLogoFile[]; loading: boolean; error: Error | null; reload: () => void }) {
   const { confirm } = useNotification();
   const [note, setNote] = useState<string | null>(null);
   const [studio, setStudio] = useState<string | null>(null);
@@ -89,6 +90,8 @@ function FilesPanel({ kind, files, loading, error, reload }: { kind: MenuKind; f
     { id: 'file', header: 'File', value: f => f.file, mono: true },
     { id: 'size', header: 'Size', value: f => f.rows * f.cols, cell: f => `${f.rows} x ${f.cols}` },
     { id: 'alphabet', header: 'Alphabet', value: f => alphabetWord(f) },
+    // An upload only adds the file; the menu draws it once a logo set below names it, so say which files no set names.
+    { id: 'shown', header: 'Shown', value: f => logoShownIn(config, f.file).join('; ') || NOT_SHOWN },
   ];
 
   return (
@@ -122,7 +125,9 @@ function FilesPanel({ kind, files, loading, error, reload }: { kind: MenuKind; f
 
 function NewSetRow({ position, config, files, update }: { position: LogoPosition; config: MenuConfig; files: MenuLogoFile[]; update: Update }) {
   const widths = positionWidths(position);
-  const [cls, setCls] = useState<WidthClass>(widths[0]);
+  // Until the sysop picks a width, the row follows the files (they load after the first render) - see newSetWidth.
+  const [picked, setCls] = useState<WidthClass | null>(null);
+  const cls = picked ?? newSetWidth(config, files, position);
   const [file, setFile] = useState('');
   const offers = logoOffers(files, cls);
   const conflict = logoSlotConflict(config, position, cls, 0);
@@ -206,7 +211,7 @@ export function MenuLogosEditor({ kind, config, update }: { kind: MenuKind; conf
 
   return (
     <div className="space-y-4">
-      <FilesPanel kind={kind} files={files} loading={loading} error={error} reload={load} />
+      <FilesPanel kind={kind} config={config} files={files} loading={loading} error={error} reload={load} />
       <p className="text-xs text-content-secondary">
         A logo set says which logos a position shows for one screen width and for callers at a level and above. A logo wider than the narrowest screen of its width (40, 80 or 120 columns) is never drawn, so it cannot be added.
       </p>
