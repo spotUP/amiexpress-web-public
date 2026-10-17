@@ -22,7 +22,7 @@ import { BBSState } from '../constants/bbs-states';
 import type { BBSSession } from '../index';
 import type { DropDecision, SessionLink } from './session-link';
 import {
-  lookupResumeToken, rotateResumeToken, setResumeExpiry, tokenFingerprint,
+  issueResumeToken, lookupResumeToken, setResumeExpiry, tokenFingerprint,
 } from './resume-tokens';
 import { sessions, socketToNodeId, socketToUser, setSession } from './session-manager';
 import { startObserving, stopObserving } from './session-observers';
@@ -169,7 +169,7 @@ async function attachResumed(
 ): Promise<Resumed> {
   const { db } = require('../database');
   const { tokenHolderRefusal } = require('../services/logon-gates');
-  let user: { id: number; username: string; baud?: unknown; realname?: string; secLevel?: number; expert?: unknown; ansi?: unknown } | null;
+  let user: AttachUser | null;
   try {
     user = await db.getUserById(Number(userId));
   } catch (err) {
@@ -187,12 +187,34 @@ async function attachResumed(
     return { ok: false, reason: 'account' };
   }
 
+  attachParkedTo(raw, session, user);
+  console.log(`[RESUME] node ${session.nodeId} resumed (token ${tokenFingerprint(String(token))})`);
+  return { ok: true, session };
+}
+
+/** The account fields a reattached session re-announces to the browser. */
+export interface AttachUser {
+  id: number | string; username: string; baud?: unknown; realname?: string; secLevel?: number; expert?: unknown; ansi?: unknown;
+}
+
+/**
+ * Move a parked session's link onto `raw` and re-key everything that names
+ * the old socket: the session maps, the node manager, the session log. Then
+ * clear the park, rotate the token, re-announce the modem speed and the
+ * client door, send `session-restored`, and replay the held output.
+ *
+ * Shared by a handshake resume (`resumeParked`) and a second device that
+ * answers [R]esume at the login prompt (services/parked-session-choice.ts).
+ */
+export function attachParkedTo(raw: Socket, session: BBSSession, user: AttachUser): void {
+  const link = session.webLink!;
+  clearWindow(session);
   const oldId = link.id;
   link.attach(raw);
   socketToNodeId.delete(oldId);
   socketToUser.delete(oldId);
   setSession(raw.id, session);
-  socketToUser.set(raw.id, userId);
+  socketToUser.set(raw.id, String(user.id));
   const { nodeManager } = require('../services/node-manager.service');
   nodeManager.rekeySession(oldId, raw.id);
   stopObserving(oldId);
@@ -201,7 +223,9 @@ async function attachResumed(
   session.detachedAt = undefined;
   session.detachedBoardTime = undefined;
   setResumeExpiry(session, null);
-  const next = rotateResumeToken(session);
+  // A fresh token for this socket; the old one stops working at once. Issued,
+  // not rotated: a session moved from another device (S9) may hold none.
+  const next = issueResumeToken(session, String(user.id), session.nodeId);
 
   const userBaud = Number(user.baud) || 0;
   session.modemBps = userBaud;
@@ -242,8 +266,42 @@ async function attachResumed(
     for (const [e, a] of held.chunks) raw.emit(e, ...a);
   }
 
-  console.log(`[RESUME] node ${session.nodeId} resumed (token ${tokenFingerprint(String(token))})`);
-  return { ok: true, session };
+}
+
+/**
+ * S9: the caller at `raw` answered [R]esume at the login prompt. `forget`
+ * drops the provisional session that socket logged in on (its maps and its
+ * node); then the parked session moves onto the socket. The session is
+ * claimed and its window stopped first, so neither a handshake resume nor
+ * the window can take it during `forget`. False when there was nothing to
+ * move: `gone` when the parked session had already ended (or was being
+ * resumed) and nothing was touched, `lost` when it ended during `forget`.
+ */
+export async function moveParkedTo(
+  raw: Socket, session: BBSSession, user: AttachUser, forget: () => Promise<void>,
+): Promise<'moved' | 'gone' | 'lost'> {
+  const link = session.webLink;
+  const live = () => isParked(session) && !!link && !link.ended && sessions.get(String(session.nodeId)) === session;
+  if (!live() || resuming.has(session)) return 'gone';
+  resuming.add(session);
+  clearWindow(session);
+  try {
+    await forget();
+    if (!live()) return 'lost';
+    attachParkedTo(raw, session, user);
+    console.log(`[RESUME] node ${session.nodeId} resumed from another device`);
+    return 'moved';
+  } finally {
+    resuming.delete(session);
+  }
+}
+
+/** The account's parked session, if it has one (S9 asks before taking it). */
+export function parkedSessionOf(userId: string): BBSSession | null {
+  for (const s of sessions.values()) {
+    if (isParked(s) && s.webLink && !s.webLink.ended && String((s.user as { id?: unknown } | undefined)?.id) === String(userId)) return s;
+  }
+  return null;
 }
 
 /** End every parked session of `userId` and wait for each finalize. Returns the count. */

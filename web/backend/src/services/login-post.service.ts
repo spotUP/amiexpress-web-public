@@ -32,7 +32,8 @@ import {
   userSessions,
   socketToUser,
 } from "../server/session-manager";
-import { endParkedSessionsFor } from "../server/session-parking";
+import { parkedSessionOf } from "../server/session-parking";
+import { askParkedChoice, resumeParkedHere, endParkedHere } from "./parked-session-choice";
 import { callersLog } from "../server/database-helpers";
 import { triggerSamiLogRefresh } from "../services/SamiLogService";
 import { displayScreen, doPause } from "../handlers/screen.handler";
@@ -85,7 +86,10 @@ export type PostAuthResult =
         | "pwd-change-denied"
         | "pwd-change-pending"
         | "quick-logon-handled"
-        | "chat-only-handled";
+        | "chat-only-handled"
+        | "parked-session-quit"
+        | "parked-session-resumed"
+        | "parked-session-lost";
     };
 
 /**
@@ -217,9 +221,11 @@ export async function runPostAuthLogin(
   /**
    * PARKED SESSION: a re-login while the account's previous web session is
    * parked (its phone dropped; session-parking.ts) would meet that session
-   * in the already-on check below and be refused. The parked session ends
-   * first, through the normal finalize, so the check reads the board as it
-   * is. A live tab is never touched: only a parked session is ended.
+   * in the already-on check below and be refused. The caller is asked first
+   * (services/parked-session-choice.ts): a web caller can resume it on this
+   * socket or end it; telnet/SSH can end it or quit. An ended parked session
+   * goes through the normal finalize, so the check reads the board as it is.
+   * A live tab is never touched: only a parked session is offered.
    */
   // The caller's own namespace, which is where every OTHER web socket lives
   // too - so it answers "is that node's caller still reachable" for the
@@ -229,12 +235,21 @@ export async function runPostAuthLogin(
     | undefined;
   {
     const userKey = String((user as any)?.id ?? '');
-    if (userKey !== '') {
-      // A fresh login of an account with a parked session ends the parked
-      // one first (its Loss Carrier is written by the usual finalize), so
-      // one account never holds two nodes. Interim rule until the
-      // session-persistence plan's S9.
-      await endParkedSessionsFor(userKey);
+    const parked = userKey !== '' ? parkedSessionOf(userKey) : null;
+    if (parked) {
+      const choice = await askParkedChoice(emitter, session, parked, isWeb);
+      if (choice === "quit") {
+        beginLogoff(emitter as any, session, { message: "" });
+        return { ok: false, terminated: "parked-session-quit" };
+      }
+      if (choice === "resume") {
+        const moved = await resumeParkedHere(session, parked, user);
+        if (moved === "moved") return { ok: false, terminated: "parked-session-resumed" };
+        if (moved === "lost") return { ok: false, terminated: "parked-session-lost" };
+        // "gone": it ended while the question was up - log in as usual.
+      } else {
+        await endParkedHere(parked);
+      }
     }
   }
 
