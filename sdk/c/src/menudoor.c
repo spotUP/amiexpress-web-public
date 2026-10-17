@@ -80,9 +80,9 @@ int md_palette_rank(const ae_menu *m, const char *typed, int *order, int cap)
     return n;
 }
 
-int md_q_leaves(const ae_menu *m)
+int md_key_unclaimed(const ae_menu *m, const char *key)
 {
-    return m && md_typeahead(m, "q") < 0;          /* typeahead: an exact Q, else any key that starts with Q */
+    return m && md_typeahead(m, key) < 0;          /* typeahead: an exact key, else any key that starts with it */
 }
 
 int md_digits_act(const ae_menu *m, const char *typed)
@@ -573,7 +573,7 @@ static const char *mode_bar(struct menudoor *d, char *out, size_t cap)
                        : (wide ? spec->keybar_wide : spec->keybar_narrow);
     /* Where q leaves too (top level, no Q entry), the bar says so: "Esc Prompt" becomes "Esc/q Prompt", and a door
        whose Esc says "Leave" (BULLETINS) gets "Esc/q Leave". */
-    if (bar && d->depth == 0 && !d->palette && md_q_leaves(&lv->menu)
+    if (bar && d->depth == 0 && !d->palette && md_key_unclaimed(&lv->menu, "q")
         && ((esc = strstr(bar, "Esc Prompt")) != 0 || (esc = strstr(bar, "Esc Leave")) != 0)
         && strlen(bar) + 3 < cap) {
         const char *word = esc + strlen("Esc ");            /* "Prompt" or "Leave" */
@@ -1305,7 +1305,13 @@ static menudoor_result loop(struct menudoor *d)
             break;
         default:
             /* Decision 37: q on an empty line leaves to the prompt, unless an entry key starts with Q (then q is a command). */
-            if ((key == 'q' || key == 'Q') && d->typed_len == 0 && d->depth == 0 && !d->palette && md_q_leaves(&cur(d)->menu)) return MENUDOOR_LEAVE;
+            if ((key == 'q' || key == 'Q') && d->typed_len == 0 && d->depth == 0 && !d->palette && md_key_unclaimed(&cur(d)->menu, "q")) return MENUDOOR_LEAVE;
+            /* ? on an empty line is the board's "show the menu"; inside the menu it shows the next style, as Tab does
+               (sysop 2026-10-18), unless an entry key starts with ? (then ? is a command). */
+            if (key == '?' && d->typed_len == 0 && d->depth == 0 && !d->palette && md_key_unclaimed(&cur(d)->menu, "?")) {
+                if (next_style(d)) return MENUDOOR_LEAVE;
+                break;
+            }
             if (key < 1000) r = typed_key(d, key);
             break;
         }

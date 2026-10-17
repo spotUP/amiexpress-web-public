@@ -81,6 +81,9 @@ static void type_ahead_prefers_the_exact_key_and_ignores_case(void)
     assert(md_typeahead(&menu, "q") == 2);
     assert(md_typeahead(&menu, "f") == 1);
     assert(md_typeahead(&menu, "Z") == -1 && md_typeahead(&menu, "") == -1 && md_typeahead(&menu, 0) == -1);
+    assert(!md_key_unclaimed(&menu, "q") && md_key_unclaimed(&menu, "?"));   /* Q is a command here; ? is free */
+    entry(3, 0, "?", "Help");
+    assert(!md_key_unclaimed(&menu, "?"));                                    /* a ? entry keeps ? a command */
     reset();
     entry(0, 0, "FR", "File Requests"); entry(1, 0, "FX", "Fax");
     assert(md_typeahead(&menu, "F") == 0);                       /* no exact key: the first that starts with it */
@@ -519,8 +522,14 @@ static void tab_cycles_the_menu_style(void)
     restyle_catalogue("scroll");                                          /* typed text: Tab keeps the type-ahead match */
     assert(DRIVE("r\t\x1bq") == 0);
     assert(!strstr(requests, "STYLE"));
+    restyle_catalogue("scroll");                                          /* ? on an empty line is Tab (sysop 2026-10-18) */
+    assert(DRIVE("??") == 0);
+    at = strstr(requests, "STYLE+ scroll|OPEN MAIN|");
+    assert(at && strstr(at, "STYLE+ coverflow|"));
+    assert(count_of(requests, "STYLE+ ") == 2);
     write_catalogue(CATALOGUE);
     printf("  [OK] Tab on an empty line asks the board for the next style; Classic leaves the door\n");
+    printf("  [OK] ? on an empty line cycles the style as Tab does\n");
 }
 
 /* The board's one-off line (N): the prompt's Tab from Classic opens the door, which names the style once. */
