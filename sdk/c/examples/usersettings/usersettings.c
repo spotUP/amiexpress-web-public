@@ -20,6 +20,9 @@
 #include "ui_input.h"
 #include "ui_key.h"
 #include "ui_list.h"
+#include "ui_pages.h"
+#include "ae_menu.h"
+#include "ae_board_screen.h"
 #include "ui_profile.h"
 #include "ui_screen.h"
 #include "ui_theme.h"
@@ -36,12 +39,21 @@ static const ui_theme *theme;
 static int pushback = -1;
 static int message_lines = 0;     /* message rows that hold text: only those are ever cleared */
 
+/* Cover flow (the caller's menu style, ae_menu_style_get effective): one header run per page, the list showing
+   only that run. page_first is the model row of the list's index 0; 0 outside cover flow, so there the list
+   index IS the model row. */
+static int coverflow;
+static int page_first;
+static ui_pages pages;
+static int at(int index) { return index + page_first; }        /* list index to model row */
+static int view(int row) { return row - page_first; }          /* model row to list index */
+
 static int door_key(void *ctx) { (void)ctx; return ae_key(); }
 static int door_pending(void *ctx) { (void)ctx; return ae_input_pending(); }
 static void door_settle(void *ctx) { (void)ctx; ae_delay_ticks(2); }
 static void door_flush(void *ctx) { (void)ctx; ui_screen_flush(&screen); }
 
-static const char *row_text(void *ctx, int index) { (void)ctx; return us_row_text(&model, index); }
+static const char *row_text(void *ctx, int index) { (void)ctx; return us_row_text(&model, at(index)); }
 
 /* The board's ground, painted under everything. A C64 cell cannot carry a background (the screen is
    black), so there the ground stays the terminal's own. */
@@ -56,6 +68,7 @@ static void clear_screen(void) { ansi_clear_ground(&screen.buf, UI_TOKEN(UI_T_IN
 static int row_style(void *ctx, int index, int *head, int *tail)
 {
     (void)ctx;
+    index = at(index);
     *head = *tail = UI_TOKEN(UI_T_INK);
     switch (model.row[index].kind) {
         case US_ROW_HEADER: *head = UI_TOKEN(UI_T_ACCENT); return 0;
@@ -124,16 +137,23 @@ static void show_message(const char *text, int token)
 
 static void draw_key_bar(const char *primary, const char *last, int jump)
 {
-    char footer[160];
+    char footer[160], ind[UI_PAGES_INDICATOR_MAX];
     const char *optional[1];
+    int n = coverflow ? ui_pages_indicator(&pages, ind, (int)sizeof ind) : 0;
     optional[0] = "0-16: Jump";
-    ui_footer_build(footer, sizeof(footer), screen.cols - 1, primary, optional,
+    ui_footer_build(footer, sizeof(footer), screen.cols - 1 - (n ? n + 1 : 0), primary, optional,
                     (jump && !screen.profile.collapse_chrome) ? 1 : 0, last);
     if (screen.profile.collapse_chrome) {
         ansi_color(&screen.buf, UI_TOKEN(UI_T_DIM), ground(), 0);
         ansi_text(&screen.buf, screen.rows, 1, footer, screen.cols - 1);
     } else {
         ui_bar_draw(&screen.buf, screen.rows, 1, screen.cols, footer, UI_TOKEN(UI_T_BAR_INK), UI_TOKEN(UI_T_BAR));
+    }
+    /* The page indicator, right-aligned where ui_pages_hit looks for it (pages.cols, the last cell left free). */
+    if (n) {
+        if (screen.profile.collapse_chrome) ansi_color(&screen.buf, UI_TOKEN(UI_T_DIM), ground(), 0);
+        else ansi_color(&screen.buf, UI_TOKEN(UI_T_BAR_INK), UI_TOKEN(UI_T_BAR), 0);
+        ansi_text(&screen.buf, screen.rows, pages.cols - n + 1, ind, n);
     }
 }
 
@@ -143,7 +163,7 @@ static void draw_full(void)
     message_lines = 0;
     draw_masthead("USER CONFIGURATION");
     ui_list_draw(&list, &screen.buf);
-    draw_key_bar("Up/Down: Move  Enter: Change", "Q: Leave", 1);
+    draw_key_bar(coverflow ? "Up/Down: Move  Left/Right: Page  Enter: Change" : "Up/Down: Move  Enter: Change", "Q: Leave", 1);
     /* Leave the pen in the list's ink: the first keypress then opens with a row, not a colour change. */
     pen_ink();
 }
@@ -153,17 +173,76 @@ static void refresh_field(int n)
 {
     int r;
     if (ae_uf_get(n, &model.field[n]) < 0) return;
-    r = us_row_of_field(&model, n);
-    if (r < 0) return;
+    r = view(us_row_of_field(&model, n));
+    if (r < 0 || r >= list.count || us_row_of_field(&model, n) < 0) return;    /* not on the page shown */
     ui_list_draw_row(&list, &screen.buf, r);
     if (model.stacked) ui_list_draw_row(&list, &screen.buf, r + 1);
+}
+
+/* ------------------------------------------------------------- cover flow pages */
+
+/** Make `page` the list's content: its header run, from list index 0. */
+static void show_page(int page)
+{
+    int first = 0, last = model.row_count - 1;
+    if (coverflow && us_page_rows(&model, page, &first, &last)) pages.current = page;
+    page_first = coverflow ? first : 0;
+    list.count = last - first + 1;
+    list.offset = 0;
+}
+
+static const char *page_title(void *ctx, int page) { (void)ctx; return us_page_title(&model, page); }
+
+static void page_show(void *ctx, int page)
+{
+    int first, last, r;
+    (void)ctx;
+    show_page(page);
+    us_page_rows(&model, page, &first, &last);
+    r = us_step(&model, first, 1);                     /* the first row to select: past the header */
+    ui_list_select(&list, view(r >= first && r <= last ? r : first));
+}
+
+static void page_fixed(void *ctx, int sliding)
+{
+    (void)ctx; (void)sliding;
+    show_message("", UI_TOKEN(UI_T_INK));        /* a message belongs to the page it was said on */
+    draw_key_bar("Up/Down: Move  Left/Right: Page  Enter: Change", "Q: Leave", 1);
+    pen_ink();
+}
+
+static void page_region(void *ctx) { (void)ctx; ui_list_draw(&list, &screen.buf); pen_ink(); }
+
+static void page_finish(void *ctx, int captured)
+{
+    (void)ctx;
+    if (captured) ae_bs_wipe_end();
+    ui_screen_flush(&screen);
+}
+
+/** Select model row `r`, turning to its page first in cover flow. 1 when the page changed (repaint all). */
+static int select_row(int r)
+{
+    int turned = 0;
+    if (r < 0) return 0;
+    if (coverflow && us_page_of_row(&model, r) != pages.current) { show_page(us_page_of_row(&model, r)); turned = 1; }
+    ui_list_select(&list, view(r));
+    return turned;
+}
+
+/** us_step that stays on the page shown in cover flow. */
+static int step_on_page(int r, int delta)
+{
+    int s = us_step(&model, r, delta), first, last;
+    if (!coverflow || !us_page_rows(&model, pages.current, &first, &last)) return s;
+    return (s >= first && s <= last) ? s : r;
 }
 
 /** Where the editor sits: its text lands exactly where the row draws the value (us_editor_left, ruling C3). */
 static void editor_style(ui_input_style *st, int r, int mask)
 {
     ui_input_style_init(st);
-    st->row = list.top + ((model.stacked ? r + 1 : r) - list.offset);   /* follow_extra keeps r+1 in the window */
+    st->row = list.top + ((model.stacked ? r + 1 : r) - page_first - list.offset);   /* follow_extra keeps r+1 in the window */
     st->left = us_editor_left(&model);
     st->cols = screen.cols - st->left - 1;     /* the scroll bar's column stays the list's */
     st->fg = UI_TOKEN(UI_T_SELECTION_INK);
@@ -329,6 +408,7 @@ static int cycle(const ae_uf_field *f)
 
 int main(int argc, char **argv)
 {
+    char stored[AE_MENU_STYLE_CAP], effective[AE_MENU_STYLE_CAP];
     ae_session session;
     int node = (argc > 1) ? atoi(argv[1]) : 1;
     int running = 1, full = 1, n, d, jump_pending = -1, resume;
@@ -382,8 +462,26 @@ int main(int argc, char **argv)
     list.selected_fg = UI_TOKEN(UI_T_SELECTION_INK);
     list.selected_bg = UI_TOKEN(UI_T_SELECTION_BG);
 
+    /* Cover flow only when the caller's menu style says so and there is more than one page; else today's list. */
+    coverflow = ae_menu_style_get(stored, effective) == 1 && strcmp(effective, "coverflow") == 0 && us_page_count(&model) > 1;
+    if (coverflow) {
+        ui_pages_init(&pages, us_page_count(&model), 0, 0);
+        pages.slide = 1;                              /* the board gates it: more than 40 columns, its own setting */
+        pages.cols = screen.cols - 1;
+        pages.top = list.top;
+        pages.height = list.height;
+        pages.status_row = screen.rows;
+        pages.title = page_title;
+        pages.show = page_show;
+        pages.draw_fixed = page_fixed;
+        pages.draw_region = page_region;
+        pages.finish = page_finish;
+        ae_bs_mouse(1);
+    }
+
     resume = ae_uf_resume_take();
-    ui_list_select(&list, (resume >= 0 && us_row_selectable(&model, resume)) ? resume : us_first(&model));
+    show_page(0);
+    select_row((resume >= 0 && us_row_selectable(&model, resume)) ? resume : us_first(&model));
 
     while (running && ae_carrier(&session)) {
         int key, r;
@@ -397,17 +495,29 @@ int main(int argc, char **argv)
         if (key >= '0' && key <= '9') {
             n = us_jump(&jump_pending, key);
             r = (n >= 0) ? us_row_of_field(&model, n) : -1;
-            if (r >= 0) ui_list_select(&list, r);
+            if (select_row(r)) full = 1;
             continue;
         }
         jump_pending = -1;
-        r = list.selected;
+        r = at(list.selected);
         row = &model.row[r];
+        if (coverflow && key == UI_KEY_MOUSE) {
+            ae_mouse_event evs[8];
+            int i, hit, got = ae_bs_mouse_drain(evs, 8);
+            if (got < 0) break;
+            for (i = 0; i < got; i++) {
+                if (evs[i].kind == 'U') ui_pages_turn(&pages, -1);
+                else if (evs[i].kind == 'D') ui_pages_turn(&pages, 1);
+                else if (evs[i].kind == 'P' && (hit = ui_pages_hit(&pages, evs[i].row, evs[i].col)) != 0) ui_pages_turn(&pages, hit);
+            }
+            continue;
+        }
+        if (coverflow && (n = ui_pages_step(&pages, key, 0, 1)) != 0) { ui_pages_turn(&pages, n); continue; }
         switch (key) {
-            case UI_KEY_UP:   ui_list_select(&list, us_step(&model, r, -1)); break;
-            case UI_KEY_DOWN: ui_list_select(&list, us_step(&model, r, 1)); break;
-            case UI_KEY_PGUP: ui_list_select(&list, us_step(&model, r, -ui_list_visible_rows(&list))); break;
-            case UI_KEY_PGDN: ui_list_select(&list, us_step(&model, r, ui_list_visible_rows(&list))); break;
+            case UI_KEY_UP:   ui_list_select(&list, view(step_on_page(r, -1))); break;
+            case UI_KEY_DOWN: ui_list_select(&list, view(step_on_page(r, 1))); break;
+            case UI_KEY_PGUP: ui_list_select(&list, view(us_step(&model, r, -ui_list_visible_rows(&list)))); break;
+            case UI_KEY_PGDN: ui_list_select(&list, view(us_step(&model, r, ui_list_visible_rows(&list)))); break;
             case 'q': case 'Q': case UI_KEY_ESC: running = 0; break;
             case ' ': case UI_KEY_ENTER:
                 if (row->kind == US_ROW_DOOR) {
@@ -448,6 +558,7 @@ int main(int argc, char **argv)
         }
     }
 
+    if (coverflow) ae_bs_mouse(0);
     ui_screen_close(&screen);
     if (leave_for) ae_return_command(leave_for);
     ae_close(&session);

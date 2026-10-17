@@ -225,6 +225,35 @@ static void a_value_row_splits_after_its_label(void)
     printf("  [OK] a wide row splits exactly where its value starts\n");
 }
 
+/* W4: cover flow pages are the runs between header rows. ACHIEVE, NOTIFY and THEME each name a section, so the
+   empty Board settings run is no page, and every page fits the 40x25 list (rows 25 - top 2 - 4 footer = 19). */
+static void pages_are_the_runs_between_headers(void)
+{
+    static const char *cmd[3] = { "ACHIEVE", "NOTIFY", "THEME" };
+    static const char *sec[3] = { "Achievements", "Communication", "Appearance" };
+    int p, first, last, i, n, headers = 0;
+    fill(3);
+    for (n = 0; n < 3; n++) { strcpy(m.door[n].command, cmd[n]); strcpy(m.door[n].section, sec[n]); }
+    us_model_layout(&m, 40);
+    for (i = 0; i < m.row_count; i++) if (m.row[i].kind == US_ROW_HEADER) headers++;
+    n = us_page_count(&m);
+    assert(n == headers - 1);                         /* Board settings holds nothing of its own */
+    assert(!us_page_rows(&m, n, &first, &last) && !us_page_rows(&m, -1, &first, &last));
+    for (p = 0; p < n; p++) {
+        assert(us_page_rows(&m, p, &first, &last));
+        assert(m.row[first].kind == US_ROW_HEADER && m.row[last].kind != US_ROW_BLANK);
+        assert(last + 1 == m.row_count || m.row[last + 1].kind == US_ROW_BLANK);
+        assert(last - first + 1 <= 19);
+        for (i = first + 1; i <= last; i++) assert(m.row[i].kind != US_ROW_HEADER);
+        for (i = first; i <= last; i++) assert(us_page_of_row(&m, i) == p);
+        assert(strcmp(us_page_title(&m, p), us_row_text(&m, first)) == 0);
+    }
+    assert(strcmp(us_page_title(&m, n - 3), "Achievements") == 0);
+    assert(strcmp(us_page_title(&m, n - 2), "Appearance") == 0);
+    assert(strcmp(us_page_title(&m, n - 1), "Communication") == 0);
+    printf("  [OK] cover flow pages are the header runs and each fits the 40x25 list\n");
+}
+
 int main(void)
 {
     printf("us_model\n");
@@ -241,6 +270,7 @@ int main(void)
     sections_are_separated_by_one_empty_row();
     moving_and_jumping_skip_blank_rows();
     a_value_row_splits_after_its_label();
+    pages_are_the_runs_between_headers();
     printf("us_model: all passed\n");
     return 0;
 }

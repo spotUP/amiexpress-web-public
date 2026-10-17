@@ -37,7 +37,7 @@ AMIGA_CFLAGS = +aos68k -c99 -DAMIGA -Iinclude -I"$(VBCC)/targets/m68k-amigaos/in
 # ae_dos_amiga is the dos.library backend - the same split as
 # ae_transport_amiga, whose host twin is likewise absent from this list because
 # the host is not what `lib` builds.
-MODULES = ae_host ae_out ae_box ae_session ui_profile ui_ansi ui_screen ui_list ui_chrome ui_key ui_input ui_editor ui_doc ui_grid ui_theme ui_settings json_lite ae_chunk ae_transport_amiga ae_session_bbs ae_net ae_http ae_achieve ae_request ae_msgbase ae_dos ae_dos_amiga ae_userfield ae_board_screen ae_menu menudoor
+MODULES = ae_host ae_out ae_box ae_session ui_profile ui_ansi ui_screen ui_list ui_chrome ui_key ui_input ui_editor ui_doc ui_grid ui_theme ui_settings json_lite ae_chunk ae_transport_amiga ae_session_bbs ae_net ae_http ae_achieve ae_request ae_msgbase ae_dos ae_dos_amiga ae_userfield ae_board_screen ae_menu ui_pages menudoor
 AMIGA_OBJS = $(patsubst %,build/amiga/%.o,$(MODULES))
 
 .PHONY: door-sources-compile all test amiga lib measure settings clean
@@ -52,7 +52,7 @@ all: test
 # for ever, so each runs under a 20 s ceiling where the host has timeout(1).
 DOOR_TEST_GUARD := $(shell command -v timeout 2>/dev/null || command -v gtimeout 2>/dev/null) $(if $(shell command -v timeout 2>/dev/null || command -v gtimeout 2>/dev/null),20,)
 
-test: door-sources-compile build/write-message build/test_ae_host build/test_ae_session build/test_ae_chunk build/test_ui_profile build/test_ui_list build/test_ui_chrome build/test_ui_screen build/test_ui_input build/test_ui_editor build/test_frame_budget build/test_ui_theme build/test_ui_settings build/test_ui_doc build/test_ui_grid build/test_ae_http build/test_ae_achieve build/test_ae_request build/test_ae_msgbase build/test_ae_dos build/test_texttv build/test_subs_scan build/test_achieve_rows build/test_requests_bulletin build/test_ae_userfield build/test_us_model build/test_theme_preview build/test_ansi_sgr build/test_ae_board_screen build/test_ae_menu build/test_menudoor_model build/test_mainmenu build/test_bulletins
+test: door-sources-compile build/write-message build/test_ae_host build/test_ae_session build/test_ae_chunk build/test_ui_profile build/test_ui_list build/test_ui_chrome build/test_ui_screen build/test_ui_input build/test_ui_editor build/test_frame_budget build/test_ui_theme build/test_ui_settings build/test_ui_doc build/test_ui_grid build/test_ui_pages build/test_ae_http build/test_ae_achieve build/test_ae_request build/test_ae_msgbase build/test_ae_dos build/test_texttv build/test_subs_scan build/test_achieve_rows build/test_requests_bulletin build/test_ae_userfield build/test_us_model build/test_theme_preview build/test_ansi_sgr build/test_ae_board_screen build/test_ae_menu build/test_menudoor_model build/test_mainmenu build/test_bulletins
 	./build/test_ae_host
 	./build/test_ae_session
 	./build/test_ae_chunk
@@ -67,6 +67,7 @@ test: door-sources-compile build/write-message build/test_ae_host build/test_ae_
 	./build/test_ui_settings
 	./build/test_ui_doc
 	./build/test_ui_grid
+	./build/test_ui_pages
 	./build/test_ae_http
 	./build/test_ae_achieve
 	./build/test_ae_request
@@ -99,6 +100,10 @@ door-sources-compile:
 		$(CC) -fsyntax-only -Iinclude -I$$(dirname $$f) $$f || exit 1; \
 	done
 	@echo "door sources: all compile"
+
+build/test_ui_pages: src/ui_pages.c src/ui_profile.c tests/test_ui_pages.c include/ui_pages.h include/ui_profile.h
+	@mkdir -p build
+	$(CC) $(HOST_CFLAGS) src/ui_pages.c src/ui_profile.c tests/test_ui_pages.c -o $@
 
 build/test_ui_grid: src/ui_ansi.c src/ui_grid.c tests/test_ui_grid.c include/ui_grid.h include/ui_key.h
 	@mkdir -p build
@@ -181,16 +186,16 @@ build/test_ae_menu: src/ae_menu.c src/ae_dos.c src/ae_dos_native.c src/ae_transp
 	@mkdir -p build
 	$(CC) $(HOST_CFLAGS) src/ae_menu.c src/ae_dos.c src/ae_dos_native.c src/ae_transport_native.c tests/test_ae_menu.c -o $@
 
-build/test_mainmenu: examples/mainmenu/mainmenu.c tests/test_mainmenu.c src/menudoor.c src/ae_menu.c src/ae_dos.c src/ae_dos_native.c src/ae_transport_native.c src/ae_session.c src/ae_session_bbs.c src/ae_board_screen.c src/ui_ansi.c src/ui_chrome.c src/ui_grid.c src/ui_key.c src/ui_list.c src/ui_profile.c src/ui_screen.c src/ui_theme.c include/menudoor.h
+build/test_mainmenu: examples/mainmenu/mainmenu.c tests/test_mainmenu.c src/menudoor.c src/ae_menu.c src/ae_dos.c src/ae_dos_native.c src/ae_transport_native.c src/ae_session.c src/ae_session_bbs.c src/ae_board_screen.c src/ui_ansi.c src/ui_chrome.c src/ui_grid.c src/ui_pages.c src/ui_key.c src/ui_list.c src/ui_profile.c src/ui_screen.c src/ui_theme.c include/menudoor.h
 	@mkdir -p build
-	$(CC) $(HOST_CFLAGS) -Isrc src/menudoor.c src/ae_menu.c src/ae_dos.c src/ae_dos_native.c src/ae_transport_native.c src/ae_session.c src/ae_session_bbs.c src/ae_board_screen.c src/ui_ansi.c src/ui_chrome.c src/ui_grid.c src/ui_key.c src/ui_list.c src/ui_profile.c src/ui_screen.c src/ui_theme.c tests/test_mainmenu.c -o $@
-build/test_bulletins: examples/bulletins/bulletins.c tests/test_bulletins.c src/menudoor.c src/ae_menu.c src/ae_dos.c src/ae_dos_native.c src/ae_transport_native.c src/ae_session.c src/ae_session_bbs.c src/ae_board_screen.c src/ui_ansi.c src/ui_chrome.c src/ui_grid.c src/ui_key.c src/ui_list.c src/ui_profile.c src/ui_screen.c src/ui_theme.c include/menudoor.h
+	$(CC) $(HOST_CFLAGS) -Isrc src/menudoor.c src/ae_menu.c src/ae_dos.c src/ae_dos_native.c src/ae_transport_native.c src/ae_session.c src/ae_session_bbs.c src/ae_board_screen.c src/ui_ansi.c src/ui_chrome.c src/ui_grid.c src/ui_pages.c src/ui_key.c src/ui_list.c src/ui_profile.c src/ui_screen.c src/ui_theme.c tests/test_mainmenu.c -o $@
+build/test_bulletins: examples/bulletins/bulletins.c tests/test_bulletins.c src/menudoor.c src/ae_menu.c src/ae_dos.c src/ae_dos_native.c src/ae_transport_native.c src/ae_session.c src/ae_session_bbs.c src/ae_board_screen.c src/ui_ansi.c src/ui_chrome.c src/ui_grid.c src/ui_pages.c src/ui_key.c src/ui_list.c src/ui_profile.c src/ui_screen.c src/ui_theme.c include/menudoor.h
 	@mkdir -p build
-	$(CC) $(HOST_CFLAGS) -Isrc src/menudoor.c src/ae_menu.c src/ae_dos.c src/ae_dos_native.c src/ae_transport_native.c src/ae_session.c src/ae_session_bbs.c src/ae_board_screen.c src/ui_ansi.c src/ui_chrome.c src/ui_grid.c src/ui_key.c src/ui_list.c src/ui_profile.c src/ui_screen.c src/ui_theme.c tests/test_bulletins.c -o $@
+	$(CC) $(HOST_CFLAGS) -Isrc src/menudoor.c src/ae_menu.c src/ae_dos.c src/ae_dos_native.c src/ae_transport_native.c src/ae_session.c src/ae_session_bbs.c src/ae_board_screen.c src/ui_ansi.c src/ui_chrome.c src/ui_grid.c src/ui_pages.c src/ui_key.c src/ui_list.c src/ui_profile.c src/ui_screen.c src/ui_theme.c tests/test_bulletins.c -o $@
 
-build/test_menudoor_model: src/menudoor.c src/ae_menu.c src/ae_dos.c src/ae_dos_native.c src/ae_transport_native.c src/ae_session.c src/ae_session_bbs.c src/ae_board_screen.c src/ui_ansi.c src/ui_chrome.c src/ui_grid.c src/ui_key.c src/ui_list.c src/ui_profile.c src/ui_screen.c src/ui_theme.c tests/test_menudoor_model.c src/menudoor_model.h include/menudoor.h include/ae_menu.h
+build/test_menudoor_model: src/menudoor.c src/ae_menu.c src/ae_dos.c src/ae_dos_native.c src/ae_transport_native.c src/ae_session.c src/ae_session_bbs.c src/ae_board_screen.c src/ui_ansi.c src/ui_chrome.c src/ui_grid.c src/ui_pages.c src/ui_key.c src/ui_list.c src/ui_profile.c src/ui_screen.c src/ui_theme.c tests/test_menudoor_model.c src/menudoor_model.h include/menudoor.h include/ae_menu.h
 	@mkdir -p build
-	$(CC) $(HOST_CFLAGS) -Isrc src/menudoor.c src/ae_menu.c src/ae_dos.c src/ae_dos_native.c src/ae_transport_native.c src/ae_session.c src/ae_session_bbs.c src/ae_board_screen.c src/ui_ansi.c src/ui_chrome.c src/ui_grid.c src/ui_key.c src/ui_list.c src/ui_profile.c src/ui_screen.c src/ui_theme.c tests/test_menudoor_model.c -o $@
+	$(CC) $(HOST_CFLAGS) -Isrc src/menudoor.c src/ae_menu.c src/ae_dos.c src/ae_dos_native.c src/ae_transport_native.c src/ae_session.c src/ae_session_bbs.c src/ae_board_screen.c src/ui_ansi.c src/ui_chrome.c src/ui_grid.c src/ui_pages.c src/ui_key.c src/ui_list.c src/ui_profile.c src/ui_screen.c src/ui_theme.c tests/test_menudoor_model.c -o $@
 
 build/test_ae_board_screen: src/ae_board_screen.c src/ae_transport_native.c src/ui_key.c src/ui_screen.c src/ui_profile.c src/ui_ansi.c src/ae_session.c tests/test_ae_board_screen.c include/ae_board_screen.h include/ui_key.h include/ui_screen.h
 	@mkdir -p build

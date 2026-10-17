@@ -20,6 +20,7 @@
 #include "ui_grid.h"
 #include "ui_key.h"
 #include "ui_list.h"
+#include "ui_pages.h"
 #include "ui_profile.h"
 #include "ui_screen.h"
 #include "ui_theme.h"
@@ -168,7 +169,7 @@ void md_layout(const ae_menu *m, int cols, int rows, md_layout_out *o)
 
 /* ------------------------------------------------------------------ shell */
 
-#define LEVELS 3                      /* drill: sections, entries, an entry's child list */
+#define LEVELS 2                      /* the menu (in cover flow: one section, a page) and an entry's child list */
 #define TYPED_MAX 60
 #define MOUSE_BATCH 8
 
@@ -189,13 +190,11 @@ struct menudoor {
     char notice[40];                  /* shown in the status row instead of the description, until the next key */
     char status_drawn[100];           /* the status row as the caller sees it; "" until a frame has drawn it */
     int status_valid;                 /* 0 = the row is not on the glass (a fresh frame is about to draw it) */
-    char pager_drawn[24];             /* the "Page n of m" at the right of the status row; "" when none */
-    char title[80];                   /* what the masthead shows: the breadcrumb in drill, clipped from the left */
-    char crumb[80];                   /* drill: the whole path, "MAIN MENU > Messages > Bases" */
-    int drill;                        /* the top level shows the catalogue's sections; Enter opens one */
-    int drill_slide;                  /* a level change slides the list region (the board may still refuse) */
-    int drill_row;                    /* drill: the catalogue row the board remembers on leave */
-    int section_first;                /* drill: the catalogue index of the open section's first entry */
+    char pager_drawn[UI_PAGES_INDICATOR_MAX];             /* the "Page n of m" at the right of the status row; "" when none */
+    char title[80];                   /* what the masthead shows */
+    int coverflow;                    /* the catalogue's style: lv[0] shows one section of `catalogue` at a time */
+    int section_first;                /* cover flow: the catalogue index of the shown page's first entry */
+    ui_pages pages;                   /* cover flow: the page key rule, indicator and turn */
     int palette;                      /* the search palette: lv[0] is the catalogue filtered by the typed text */
     int palette_total;                /* palette: the catalogue's entry count, the M of "N of M" */
     int rail_tick;
@@ -203,8 +202,8 @@ struct menudoor {
 };
 
 static struct menudoor shell;
-static ae_menu drill_source;          /* drill: the whole catalogue, while lv[0] shows its sections; palette: before the filter */
-static int drill_section[AE_MENU_MAX_SECTIONS];   /* drill: lv[0] entry -> catalogue section */
+static ae_menu catalogue;             /* cover flow: the whole catalogue, while lv[0] shows one page; palette: before the filter */
+static int page_section[AE_MENU_MAX_SECTIONS];    /* cover flow: page -> catalogue section */
 static char frame_buffer[49152];      /* Decision 26 */
 static char session_storage[AE_SESSION_MIN_STORAGE];
 
@@ -250,7 +249,6 @@ static void configure(struct menudoor *d, level *lv, int selected)
     g->erase_tail = sc->profile.line_erase && lv->lay.grid_left == 1 && lv->lay.grid_width == sc->cols;
     g->caret = sc->profile.caret_selection ? ">>" : 0;
     g->ctx = &lv->menu;
-    if (d->drill && lv == &d->lv[0]) g->max_columns = 1;   /* drill: one section per row, read top to bottom */
     ui_grid_layout(g);
     ui_grid_select(g, selected);
 }
@@ -258,8 +256,7 @@ static void configure(struct menudoor *d, level *lv, int selected)
 /* Under a header logo the rail is the DIVIDER between logo and grid (sysop, 2026-10-15) and the logo takes row 1:
    no title row above it; without a logo the rail stays on row 1 beside the title. Without a rail (40 columns, effects off, a theme
    with none) the divider is a static rule in the accent token, so a logo is still separated. */
-/* Under a header logo the title shows nowhere - except in drill, where the breadcrumb is how a caller finds their way back. */
-static const char *divider_title(const struct menudoor *d) { return d->drill ? d->title : ""; }
+/* Under a header logo the title shows nowhere. */
 
 static void draw_divider(struct menudoor *d)
 {
@@ -270,18 +267,10 @@ static void draw_divider(struct menudoor *d)
 
     if (!row) return;
     if (d->rail[0]) {
-        ui_masthead_draw_tick(&sc->buf, row, 1, sc->cols, divider_title(d), d->rail, UI_TOKEN(UI_T_BAR_INK), UI_TOKEN(UI_T_BAR), d->rail_tick);
+        ui_masthead_draw_tick(&sc->buf, row, 1, sc->cols, "", d->rail, UI_TOKEN(UI_T_BAR_INK), UI_TOKEN(UI_T_BAR), d->rail_tick);
         return;
     }
     memset(rule, '-', (size_t)n); rule[n] = '\0';
-    /* Drill: the breadcrumb is the only place a caller under a header logo learns where they are. */
-    if (d->drill && n > 6) {
-        int t = (int)strlen(d->title);
-        if (t > n - 6) t = n - 6;
-        rule[2] = ' ';
-        memcpy(rule + 3, d->title, (size_t)t);
-        rule[3 + t] = ' ';
-    }
     ansi_color(&sc->buf, UI_TOKEN(UI_T_ACCENT), ground(d), 0);
     ansi_text_raw(&sc->buf, row, 1, rule, n);
 }
@@ -301,7 +290,7 @@ static void draw_status(struct menudoor *d, int full)
 {
     level *lv = cur(d);
     ui_screen *sc = &d->screen;
-    char line[100], pager[24], offtext[64];
+    char line[100], pager[UI_PAGES_INDICATOR_MAX], offtext[64];
     const char *text = "";
     int width, first, room;
 
@@ -322,6 +311,8 @@ static void draw_status(struct menudoor *d, int full)
     pager[0] = '\0';
     if (d->palette)
         sprintf(pager, "%d of %d", lv->menu.entry_count, d->palette_total);
+    else if (d->coverflow && d->depth == 0)
+        ui_pages_indicator(&d->pages, pager, (int)sizeof pager);
     else if (lv->grid.mode == UI_GRID_PAGES && lv->grid.page_count > 1)
         sprintf(pager, "Page %d of %d", ui_grid_page(&lv->grid) + 1, lv->grid.page_count);
     room = sc->cols - (int)strlen(pager) - 2;
@@ -386,7 +377,6 @@ static const char *mode_bar(struct menudoor *d, char *out, size_t cap)
     if (d->typed_len > 0) return typing_bar(d, d->typed_len);
     /* Esc leaves to the prompt at the top and goes up a level in a child list: the bar says which. */
     bar = d->depth > 0 ? (wide ? MENUDOOR_CHILD_KEYBAR_WIDE : MENUDOOR_CHILD_KEYBAR_NARROW)
-        : d->drill     ? (wide ? MENUDOOR_SECTIONS_KEYBAR_WIDE : MENUDOOR_SECTIONS_KEYBAR_NARROW)
                        : (wide ? spec->keybar_wide : spec->keybar_narrow);
     /* Where q leaves too (top level, no Q entry), the bar says so: "Esc Prompt" becomes "Esc/q Prompt", and a door
        whose Esc says "Leave" (BULLETINS) gets "Esc/q Leave". */
@@ -576,7 +566,7 @@ static void door_idle(void *ctx)
        type), so a second save here would only send four more bytes. */
     {
         const md_layout_out *lay = &cur(d)->lay;
-        ui_masthead_rail_tick(&d->screen.buf, lay->rail_row, 1, d->screen.cols, lay->divider_row ? divider_title(d) : d->title, d->rail,
+        ui_masthead_rail_tick(&d->screen.buf, lay->rail_row, 1, d->screen.cols, lay->divider_row ? "" : d->title, d->rail,
                               UI_TOKEN(UI_T_BAR_INK), UI_TOKEN(UI_T_BAR), d->rail_tick);
     }
     ui_screen_flush(&d->screen);
@@ -595,88 +585,38 @@ static void set_title(struct menudoor *d, const char *text)
 
 static menudoor_result loop(struct menudoor *d);
 
-/* Drill: the breadcrumb, clipped from the left so the end of the path (where the caller is) always shows. */
-static void set_crumb(struct menudoor *d, const char *crumb)
-{
-    int n = (int)strlen(crumb), max = d->screen.cols / 2;
-    if (max > (int)sizeof d->title - 1) max = (int)sizeof d->title - 1;
-    if (max < 8) max = 8;
-    strncpy(d->crumb, crumb, sizeof d->crumb - 1);
-    d->crumb[sizeof d->crumb - 1] = '\0';
-    if (n <= max) { strcpy(d->title, d->crumb); return; }
-    strcpy(d->title, "..");
-    strcat(d->title, crumb + n - (max - 2));
-}
 
-/* A slide moves only the list region: the parent and the child must put it on the same rows. */
-static int can_slide(const struct menudoor *d, const level *from, const level *to)
-{
-    return d->drill_slide && ui_effects_allowed(d->screen.cols)
-        && from->lay.grid_top == to->lay.grid_top && from->lay.grid_height == to->lay.grid_height && to->lay.grid_height > 0;
-}
 
-/* A level change in drill. The rows that do not move (title or divider, status, prompt) are drawn first and outside
-   the capture; then the list region, side and between logos inside the board's region slide. Refused (an old board,
-   a C64): the same region simply repaints. */
-static void slide_frame(struct menudoor *d, int forward)
-{
-    level *lv = cur(d);
-    int capturing;
 
-    draw_masthead(d);
-    draw_status(d, 1);
-    draw_prompt(d);
-    ui_screen_flush(&d->screen);
-    capturing = ae_bs_slide_begin(forward, lv->lay.grid_top, lv->lay.grid_height) == 1;
-    ui_grid_draw(&lv->grid, &d->screen.buf);
-    ui_screen_flush(&d->screen);
-    if (lv->lay.side_cols) ae_menu_logo_draw("side", lv->lay.side_top, lv->lay.side_left, lv->lay.side_rows, lv->lay.side_cols);
-    draw_between(d);
-    if (capturing) ui_screen_wipe_end(&d->screen);
-    else ui_screen_cursor_reassert(&d->screen);
-    park_cursor(d);
-    ui_screen_flush(&d->screen);
-}
-
-/* The deepest level a door may open: an entry's child list sits one level below the top, or below a section in drill. */
-static int deepest(const struct menudoor *d) { return d->drill ? 2 : 1; }
+/* The deepest level a door may open: an entry's child list, one level below the menu. */
+#define DEEPEST 1
 
 /* Down into d->lv[depth + 1], already filled; back up when its loop ends. The parent keeps its selection and typed text. */
 static menudoor_result enter_level(struct menudoor *d, const char *label)
 {
     level *parent = cur(d), *child = &d->lv[d->depth + 1];
-    char parent_title[sizeof d->title], parent_crumb[sizeof d->crumb], saved_typed[TYPED_MAX + 1], crumb[sizeof d->crumb];
-    int saved_len, saved_off, slide;
+    char parent_title[sizeof d->title], saved_typed[TYPED_MAX + 1];
+    int saved_len, saved_off;
     menudoor_result result;
 
     strcpy(parent_title, d->title);
-    strcpy(parent_crumb, d->crumb);
     strcpy(saved_typed, d->typed);
     saved_len = d->typed_len;
     saved_off = d->offwindow;
     d->typed[0] = '\0'; d->typed_len = 0; d->offwindow = -1;
     d->depth++;
-    if (d->drill) {
-        strcpy(crumb, parent_crumb);
-        strncat(crumb, " > ", sizeof crumb - 1 - strlen(crumb));
-        strncat(crumb, label, sizeof crumb - 1 - strlen(crumb));
-        set_crumb(d, crumb);
-    } else {
-        set_title(d, label);
-    }
+    set_title(d, label);
     configure(d, child, child->menu.last_row);
-    slide = can_slide(d, parent, child);
-    if (slide) slide_frame(d, 1); else show_frame(d, 0, 0);
+    show_frame(d, 0, 0);
     result = loop(d);
-    if (d->drill && d->depth == 1) d->drill_row = d->section_first + child->grid.selected;
     d->depth--;
     if (result == MENUDOOR_LEAVE) return MENUDOOR_LEAVE;
     strcpy(d->title, parent_title);                        /* Esc: back to the parent, its selection kept */
-    strcpy(d->crumb, parent_crumb);
     strcpy(d->typed, saved_typed);
     d->typed_len = saved_len;
     d->offwindow = saved_off;
-    if (slide) slide_frame(d, 0); else show_frame(d, 0, 0);
+    (void)parent;
+    show_frame(d, 0, 0);
     return MENUDOOR_STAY;
 }
 
@@ -685,7 +625,7 @@ menudoor_result menudoor_open_child(struct menudoor *d, int entry)
     level *parent = cur(d), *child;
     int rc;
 
-    if (!d || d->depth + 1 > deepest(d) || entry < 0 || entry >= parent->menu.entry_count) return MENUDOOR_STAY;
+    if (!d || d->depth + 1 > DEEPEST || entry < 0 || entry >= parent->menu.entry_count) return MENUDOOR_STAY;
     child = &d->lv[d->depth + 1];
     rc = ae_menu_open(d->spec->kind, parent->menu.entries[entry].key, &child->menu);
     if (rc == AE_MENU_GONE) { d->gone = 1; return MENUDOOR_LEAVE; }
@@ -696,7 +636,7 @@ menudoor_result menudoor_open_child(struct menudoor *d, int entry)
     return enter_level(d, parent->menu.entries[entry].label);
 }
 
-/* ------------------------------------------------------------------ drill */
+/* ------------------------------------------------------------------ cover flow */
 
 static void drop_logo(ae_menu *m, const char *position)
 {
@@ -716,53 +656,93 @@ static void one_section(ae_menu *m, const char *title)
     drop_logo(m, "between");
 }
 
-/* lv[0] becomes the catalogue's sections, built from the same catalogue (no second request): one entry per section
-   that has entries, its description the entries' labels and its right column their count. */
-static void drill_sections(struct menudoor *d)
+/* Cover flow: one page per catalogue section that has entries. The page the caller left on (the catalogue's last
+   row) opens first. Returns the page count. */
+static int coverflow_pages(int *current)
 {
-    const ae_menu *src = &drill_source;
-    ae_menu *m = &d->lv[0].menu;
-    int s, i, n = 0, selected = 0;
-
-    memcpy(&drill_source, m, sizeof drill_source);
-    for (s = 0; s < src->section_count; s++) {
-        ae_menu_entry *e = &m->entries[n];
-        int count = 0;
-        memset(e, 0, sizeof *e);
-        for (i = 0; i < src->entry_count; i++) {
-            if (src->entry_section[i] != s) continue;
-            if (count > 0) strncat(e->description, ", ", sizeof e->description - 1 - strlen(e->description));
-            strncat(e->description, src->entries[i].label, sizeof e->description - 1 - strlen(e->description));
-            count++;
-        }
-        if (!count) continue;
-        strncpy(e->label, src->section_title[s], sizeof e->label - 1);
-        sprintf(e->right, "%d", count);
-        strcpy(e->flags, "L");
-        if (src->last_row >= 0 && src->last_row < src->entry_count && src->entry_section[src->last_row] == s) selected = n;
-        drill_section[n++] = s;
+    int sec, i, n = 0;
+    *current = 0;
+    for (sec = 0; sec < catalogue.section_count; sec++) {
+        for (i = 0; i < catalogue.entry_count && catalogue.entry_section[i] != sec; i++) {}
+        if (i == catalogue.entry_count) continue;
+        if (catalogue.last_row >= 0 && catalogue.last_row < catalogue.entry_count && catalogue.entry_section[catalogue.last_row] == sec)
+            *current = n;
+        page_section[n++] = sec;
     }
-    m->entry_count = n;
-    one_section(m, src->title);
-    m->last_row = selected;
+    return n;
 }
 
-/* Enter on a section: its entries, cut from the catalogue already here. */
-static menudoor_result open_section(struct menudoor *d, int entry)
+/* lv[0] becomes page `page`: that section's entries, cut from the catalogue already here (no second request). */
+static void show_page(struct menudoor *d, int page)
 {
-    const ae_menu *src = &drill_source;
-    ae_menu *m = &d->lv[1].menu;
-    int s = drill_section[entry], first, n = 0;
+    const ae_menu *src = &catalogue;
+    ae_menu *m = &d->lv[0].menu;
+    int sec = page_section[page], first, n = 0;
 
-    for (first = 0; first < src->entry_count && src->entry_section[first] != s; first++) {}
-    while (first + n < src->entry_count && src->entry_section[first + n] == s) n++;
+    for (first = 0; first < src->entry_count && src->entry_section[first] != sec; first++) {}
+    while (first + n < src->entry_count && src->entry_section[first + n] == sec) n++;
     memcpy(m, src, sizeof *m);
     memmove(m->entries, &src->entries[first], (size_t)n * sizeof m->entries[0]);
     m->entry_count = n;
-    one_section(m, src->section_title[s]);
+    one_section(m, src->section_title[sec]);
     m->last_row = src->last_row >= first && src->last_row < first + n ? src->last_row - first : 0;
     d->section_first = first;
-    return enter_level(d, src->section_title[s]);
+    d->typed[0] = '\0'; d->typed_len = 0; d->offwindow = -1;
+    configure(d, &d->lv[0], m->last_row);
+    d->pages.top = d->lv[0].lay.grid_top;
+    d->pages.height = d->lv[0].lay.grid_height;
+    d->pages.status_row = d->lv[0].lay.status_row;
+}
+
+static const char *page_title(void *ctx, int page) { (void)ctx; return catalogue.section_title[page_section[page]]; }
+static void page_show(void *ctx, int page) { show_page((struct menudoor *)ctx, page); }
+
+/* The rows outside the region: only the status row changes (its indicator); the masthead and prompt stay. */
+static void page_fixed(void *ctx, int sliding)
+{
+    struct menudoor *d = (struct menudoor *)ctx;
+    (void)sliding;
+    draw_status(d, 0);
+    ui_screen_flush(&d->screen);
+}
+
+static void page_region(void *ctx)
+{
+    struct menudoor *d = (struct menudoor *)ctx;
+    level *lv = cur(d);
+    ui_grid_draw(&lv->grid, &d->screen.buf);
+    ui_screen_flush(&d->screen);
+    if (lv->lay.side_cols) ae_menu_logo_draw("side", lv->lay.side_top, lv->lay.side_left, lv->lay.side_rows, lv->lay.side_cols);
+    draw_between(d);
+}
+
+static void page_finish(void *ctx, int captured)
+{
+    struct menudoor *d = (struct menudoor *)ctx;
+    if (captured) ui_screen_wipe_end(&d->screen);
+    else ui_screen_cursor_reassert(&d->screen);
+    park_cursor(d);
+    ui_screen_flush(&d->screen);
+}
+
+/* Cover flow from the catalogue in lv[0]: 0 when it has fewer than two pages (then the menu scrolls). */
+static int start_coverflow(struct menudoor *d)
+{
+    int current, count;
+    memcpy(&catalogue, &d->lv[0].menu, sizeof catalogue);
+    count = coverflow_pages(&current);
+    if (count < 2) return 0;
+    ui_pages_init(&d->pages, count, current, d);
+    d->pages.slide = catalogue.slide;
+    d->pages.cols = d->screen.cols;
+    d->pages.title = page_title;
+    d->pages.show = page_show;
+    d->pages.draw_fixed = page_fixed;
+    d->pages.draw_region = page_region;
+    d->pages.finish = page_finish;
+    d->coverflow = 1;
+    show_page(d, current);
+    return 1;
 }
 
 /* Enter (or a click) on an entry: a list opens, a greyed entry says so, anything else is the door's. */
@@ -774,8 +754,7 @@ static menudoor_result press_entry(struct menudoor *d, int entry)
         if (strchr(e->flags, 'G')) { say(d, "You cannot choose that."); return MENUDOOR_STAY; }
         return d->spec->activate ? d->spec->activate(d, entry) : MENUDOOR_STAY;
     }
-    if (d->drill && d->depth == 0) return open_section(d, entry);
-    if (strchr(e->flags, 'L') && d->depth == deepest(d) - 1) return menudoor_open_child(d, entry);
+    if (strchr(e->flags, 'L') && d->depth == DEEPEST - 1) return menudoor_open_child(d, entry);
     if (strchr(e->flags, 'G')) { say(d, "You cannot choose that."); return MENUDOOR_STAY; }
     return d->spec->activate ? d->spec->activate(d, entry) : MENUDOOR_STAY;
 }
@@ -821,6 +800,16 @@ static void move_key(struct menudoor *d, int key)
     if (ui_grid_move(&cur(d)->grid, key)) repaint_grid(d);
 }
 
+/* Cover flow owns Left/Right at the grid's edge and PageUp/PageDown (ui_pages_step); everything else moves the grid. */
+static void page_or_move(struct menudoor *d, int key)
+{
+    int step = 0;
+    if (d->coverflow && d->depth == 0 && !d->palette)
+        step = ui_pages_step(&d->pages, key, d->typed_len, ui_grid_at_edge(&cur(d)->grid, key));
+    if (step) ui_pages_turn(&d->pages, step);
+    else move_key(d, key);
+}
+
 static menudoor_result on_mouse(struct menudoor *d)
 {
     ae_mouse_event evs[MOUSE_BATCH];
@@ -829,9 +818,13 @@ static menudoor_result on_mouse(struct menudoor *d)
 
     if (n < 0) return MENUDOOR_STAY;
     for (i = 0; i < n; i++) {
-        if (evs[i].kind == 'U') move_key(d, UI_KEY_PGUP);
-        else if (evs[i].kind == 'D') move_key(d, UI_KEY_PGDN);
+        if (evs[i].kind == 'U') page_or_move(d, UI_KEY_PGUP);
+        else if (evs[i].kind == 'D') page_or_move(d, UI_KEY_PGDN);
         else if (evs[i].kind == 'M' || evs[i].kind == 'P') {
+            if (d->coverflow && d->depth == 0 && !d->palette && (hit = ui_pages_hit(&d->pages, evs[i].row, evs[i].col)) != 0) {
+                if (evs[i].kind == 'P') ui_pages_turn(&d->pages, hit);     /* a click on the indicator's arrow */
+                continue;
+            }
             hit = ui_grid_hit(&cur(d)->grid, evs[i].row, evs[i].col);
             if (hit < 0) continue;
             if (hit != cur(d)->grid.selected) select_entry(d, hit);      /* hover moves the real selection */
@@ -926,9 +919,9 @@ static void palette_filter(struct menudoor *d)
 {
     static int order[AE_MENU_MAX_ENTRIES];
     ae_menu *m = &d->lv[0].menu;
-    int n = md_palette_rank(&drill_source, d->typed, order, AE_MENU_MAX_ENTRIES), i;
+    int n = md_palette_rank(&catalogue, d->typed, order, AE_MENU_MAX_ENTRIES), i;
 
-    for (i = 0; i < n; i++) { m->entries[i] = drill_source.entries[order[i]]; m->entry_section[i] = 0; }
+    for (i = 0; i < n; i++) { m->entries[i] = catalogue.entries[order[i]]; m->entry_section[i] = 0; }
     m->entry_count = n;
 }
 
@@ -992,7 +985,7 @@ static menudoor_result loop(struct menudoor *d)
         switch (key) {
         case UI_KEY_UP: case UI_KEY_DOWN: case UI_KEY_LEFT: case UI_KEY_RIGHT:
         case UI_KEY_PGUP: case UI_KEY_PGDN: case UI_KEY_HOME: case UI_KEY_END:
-            move_key(d, key);
+            page_or_move(d, key);
             break;
         case UI_KEY_ENTER: case '\r': case '\n':
             r = press_enter(d);
@@ -1067,22 +1060,16 @@ static int run_menu_started(struct menudoor *d, ae_session *session, const menud
 
     start_screen(d, session);
     set_title(d, top->menu.title);
-    /* Drill (a sysop setting per menu): sections first. One section has nothing to drill into. */
-    if (top->menu.drill && top->menu.section_count > 1 && top->menu.entry_count > 0) {
-        d->drill = 1;
-        d->drill_slide = top->menu.drill_slide;
-        d->drill_row = top->menu.last_row;
-        drill_sections(d);
-        set_crumb(d, top->menu.title);
-    }
-    configure(d, top, top->menu.last_row);
+    /* Cover flow (the style the board decided): one section per page. One section has nothing to flip: it scrolls. */
+    if (top->menu.style != AE_MENU_STYLE_COVERFLOW || !start_coverflow(d))
+        configure(d, top, top->menu.last_row);
     show_frame(d, top->menu.wipe_open, 0);
     ae_bs_mouse(1);                                            /* an ANSI caller; ignored otherwise */
 
     loop(d);
 
     if (!d->gone) {
-        ae_menu_row(d->drill ? d->drill_row : top->grid.selected);   /* one round trip, on leave only; drill: a catalogue row */
+        ae_menu_row(d->coverflow ? d->section_first + top->grid.selected : top->grid.selected);   /* on leave only; cover flow: a catalogue row */
         d->depth = 0;
         if (top->menu.wipe_leave) show_frame(d, top->menu.wipe_leave, 1);
     }
@@ -1112,8 +1099,8 @@ static int run_palette_started(struct menudoor *d, ae_session *session, const me
     start_screen(d, session);
     one_section(&top->menu, top->menu.title);
     strcpy(top->menu.prompt, "Search: ");
-    memcpy(&drill_source, &top->menu, sizeof drill_source);
-    d->palette_total = drill_source.entry_count;
+    memcpy(&catalogue, &top->menu, sizeof catalogue);
+    d->palette_total = catalogue.entry_count;
     set_title(d, "SEARCH");
 
     line[0] = '\0';
@@ -1152,9 +1139,11 @@ int menudoor_run(const menudoor_spec *spec, int node)
 
 /* --------------------------------------------------------------- settings */
 
-static char settings_row[3][48];
-static int settings_stored;                       /* 0 scroll, 1 pages, 2 board default */
-static char settings_effective[16];
+#define SETTINGS_ROWS 5
+static const char *const MODE[SETTINGS_ROWS] = { "classic", "scroll", "pages", "coverflow", "default" };
+static char settings_row[SETTINGS_ROWS][48];
+static int settings_stored;                       /* an index into MODE; 4 = the board's default */
+static char settings_effective[AE_MENU_STYLE_CAP];
 
 static const char *settings_text(void *ctx, int index)
 {
@@ -1164,25 +1153,25 @@ static const char *settings_text(void *ctx, int index)
 
 static void settings_rows(void)
 {
-    sprintf(settings_row[0], "%s Scroll", settings_stored == 0 ? "[*]" : "[ ]");
-    sprintf(settings_row[1], "%s Pages", settings_stored == 1 ? "[*]" : "[ ]");
-    sprintf(settings_row[2], "%s Board default (%.12s)", settings_stored == 2 ? "[*]" : "[ ]", settings_effective);
+    static const char *const LABEL[SETTINGS_ROWS - 1] = { "Classic screen", "Grid scroll", "Grid pages", "Cover flow" };
+    int i;
+    for (i = 0; i < SETTINGS_ROWS - 1; i++) sprintf(settings_row[i], "%s %s", settings_stored == i ? "[*]" : "[ ]", LABEL[i]);
+    sprintf(settings_row[i], "%s Board default (%.12s)", settings_stored == i ? "[*]" : "[ ]", settings_effective);
 }
 
 static void settings_read(void)
 {
-    char stored[16];
+    char stored[AE_MENU_STYLE_CAP];
     stored[0] = '\0';
     settings_effective[0] = '\0';
-    ae_menu_overflow_get(stored, (int)sizeof stored, settings_effective, (int)sizeof settings_effective);
-    settings_stored = strcmp(stored, "scroll") == 0 ? 0 : strcmp(stored, "pages") == 0 ? 1 : 2;
+    ae_menu_style_get(stored, settings_effective);
+    for (settings_stored = 0; settings_stored < SETTINGS_ROWS - 1 && strcmp(stored, MODE[settings_stored]) != 0; settings_stored++) {}
     if (!settings_effective[0]) strcpy(settings_effective, "scroll");
     settings_rows();
 }
 
 static int run_settings_started(struct menudoor *d, ae_session *session)
 {
-    static const char *const MODE[3] = { "scroll", "pages", "default" };
     ui_screen *sc;
     ui_list list;
     int key, status_row;
@@ -1190,11 +1179,11 @@ static int run_settings_started(struct menudoor *d, ae_session *session)
     d->spec = 0;
     start_screen(d, session);
     sc = &d->screen;
-    strcpy(d->title, "LONG MENUS");
+    strcpy(d->title, "MENU STYLE");
     settings_read();
 
     ui_list_init(&list);
-    list.top = 3; list.left = 1; list.width = sc->cols - 1; list.height = 3; list.count = 3;
+    list.top = 3; list.left = 1; list.width = sc->cols - 1; list.height = SETTINGS_ROWS; list.count = SETTINGS_ROWS;
     list.row = settings_text; list.context = 0; list.borders = 0;
     list.caret = ">>";
     list.chrome = UI_TOKEN(UI_T_ACCENT); list.ink = UI_TOKEN(UI_T_INK);
@@ -1218,8 +1207,8 @@ static int run_settings_started(struct menudoor *d, ae_session *session)
         if (key == UI_KEY_UP) { ui_list_move(&list, -1); ui_list_draw_changed(&list, &sc->buf, 0); ui_screen_flush(sc); }
         else if (key == UI_KEY_DOWN) { ui_list_move(&list, 1); ui_list_draw_changed(&list, &sc->buf, 0); ui_screen_flush(sc); }
         else if (key == UI_KEY_ENTER || key == '\r' || key == ' ') {
-            char effective[16];
-            const char *said = ae_menu_overflow(MODE[list.selected], effective, (int)sizeof effective) == 1 ? " Saved." : " Could not save.";
+            char effective[AE_MENU_STYLE_CAP];
+            const char *said = ae_menu_style(MODE[list.selected], effective) == 1 ? " Saved." : " Could not save.";
             settings_read();
             ui_list_draw(&list, &sc->buf);
             ui_status_draw(&sc->buf, status_row, 1, sc->cols, said, "", UI_TOKEN(UI_T_BAR_INK), UI_TOKEN(UI_T_BAR));

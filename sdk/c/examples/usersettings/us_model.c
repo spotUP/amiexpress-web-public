@@ -101,6 +101,50 @@ void us_model_layout(us_model *m, int cols)
     }
 }
 
+/* The n-th header run with something to select: its header row and last row. */
+static int page_run(const us_model *m, int page, int *first, int *last)
+{
+    int h, end, i, n = 0;
+    for (h = 0; h < m->row_count; h = end + 1) {
+        int selectable = 0;
+        while (h < m->row_count && m->row[h].kind != US_ROW_HEADER) h++;
+        if (h >= m->row_count) break;
+        for (end = h; end + 1 < m->row_count && m->row[end + 1].kind != US_ROW_HEADER; end++) {}
+        i = end;
+        while (i > h && m->row[i].kind == US_ROW_BLANK) i--;
+        for (end = h; end <= i; end++) if (us_row_selectable(m, end)) selectable = 1;
+        end = i;
+        if (!selectable) continue;
+        if (n++ == page) { *first = h; *last = i; return 1; }
+    }
+    return 0;
+}
+
+int us_page_count(const us_model *m)
+{
+    int n = 0, first, last;
+    while (page_run(m, n, &first, &last)) n++;
+    return n;
+}
+
+int us_page_rows(const us_model *m, int page, int *first, int *last)
+{
+    return page >= 0 && page_run(m, page, first, last);
+}
+
+int us_page_of_row(const us_model *m, int row)
+{
+    int page, first, last;
+    for (page = 0; page_run(m, page, &first, &last); page++) if (row >= first && row <= last) return page;
+    return 0;
+}
+
+const char *us_page_title(const us_model *m, int page)
+{
+    int first, last;
+    return page_run(m, page, &first, &last) ? m->header[m->row[first].ref] : "";
+}
+
 int us_row_selectable(const us_model *m, int index)
 {
     if (index < 0 || index >= m->row_count) return 0;

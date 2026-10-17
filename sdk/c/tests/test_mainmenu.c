@@ -1,6 +1,6 @@
 /* test_mainmenu.c - the MAINMENU door's own answers, driven through its real main():
    an entry runs its key, a typed line runs as typed, the second registration opens the settings screen,
-   a drill-down catalogue opens a section before it runs, and the PALETTE registration is the search palette. */
+   a cover flow catalogue (the legacy D line) turns a page with Right, and the PALETTE registration is the search palette. */
 #define main mainmenu_main
 #include "../examples/mainmenu/mainmenu.c"
 #undef main
@@ -47,7 +47,7 @@ static int board(void *ctx, int field, const char *request, char *out, int cap)
     if (field != AE_FIELD_MENU && field != AE_FIELD_SCREEN) return 0;
     strcat(requests, request); strcat(requests, "|");
     if (field == AE_FIELD_SCREEN) return strcmp(request, "SIZE") == 0 ? answer(size_text, out, cap) : 0;
-    if (strcmp(request, "OVERFLOW?") == 0) return answer("default\tpages", out, cap);
+    if (strcmp(request, "STYLE?") == 0) return answer("default\tpages", out, cap);
     if (strncmp(request, "OPEN ", 5) == 0) return answer("OK\t" CAT_PATH, out, cap);
     if (strncmp(request, "RUN ", 4) == 0) return answer("OK", out, cap);
     return 0;
@@ -135,7 +135,7 @@ int main(void)
     assert(rc == 0 && !strstr(screen_text, "Page "));
     printf("  [OK] scroll mode shows no page number\n");
 
-    /* Drill-down (D 1, slide off): Enter opens the section, the second Enter runs its first entry. */
+    /* The legacy drill line (D 1, slide off) means cover flow: Enter runs the page's entry, Right turns to page 2. */
     f = fopen(CAT_PATH, "wb");
     assert(f);
     fputs("AEMENU 1\nK MAIN\t-\nT MAIN MENU\nP Menu: \nO scroll\nW -\t-\t-\nD 1\t0\nR 0\nS Messages\n"
@@ -143,10 +143,10 @@ int main(void)
     fclose(f);
     invoked_name = "MENU";
     drive("\r", 1, &rc);
-    assert(rc == 0 && !strstr(requests, "RUN") && strstr(screen_text, "Conferences"));
-    drive("\r\r", 2, &rc);
-    assert(rc == 0 && strstr(requests, "RUN R|") && strstr(screen_text, "MAIN MENU > Messages"));
-    printf("  [OK] drill opens a section first and runs its entry on the next Enter\n");
+    assert(rc == 0 && strstr(requests, "RUN R|") && strstr(screen_text, "< 1/2 Messages >"));
+    drive("\x1b[C\r", 4, &rc);
+    assert(rc == 0 && strstr(requests, "RUN J|") && strstr(screen_text, "< 2/2 Conferences >") && !strstr(requests, "WIPE IN P "));
+    printf("  [OK] the legacy drill line opens cover flow: Enter runs, Right turns the page\n");
 
     /* The palette: the same catalogue flattened, the board's main line after the name is the filter. */
     invoked_name = "PALETTE";
@@ -170,7 +170,7 @@ int main(void)
 
     invoked_name = "MENUSETTINGS";
     drive("\x1b", 1, &rc);
-    assert(rc == 0 && strstr(requests, "OVERFLOW?|") && !strstr(requests, "OPEN") && strstr(screen_text, "LONG MENUS"));
+    assert(rc == 0 && strstr(requests, "STYLE?|") && !strstr(requests, "OPEN") && strstr(screen_text, "MENU STYLE"));
     printf("  [OK] the second registration name opens the settings, not the menu\n");
 
     remove(CAT_PATH); remove("build/test_mainmenu_keys.bin"); remove("build/test_mainmenu_screen.bin");

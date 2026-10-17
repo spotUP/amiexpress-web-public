@@ -65,6 +65,10 @@ int  ui_grid_move(ui_grid *g, int key);
 void ui_grid_select(ui_grid *g, int index);
 /** 1 when `entry` is drawn in the box as it stands (its line is inside the window): a selection of it needs no scroll. */
 int  ui_grid_visible(const ui_grid *g, int entry);
+/** 1 when the selection cannot move further in the direction of `key` (UI_KEY_LEFT: the first column of its row;
+    UI_KEY_RIGHT: the last), so the key belongs to whoever holds the grid (cover flow turns the page). Also 1 for an
+    empty grid; 0 for any other key. */
+int  ui_grid_at_edge(const ui_grid *g, int key);
 int  ui_grid_page(const ui_grid *g);                     /* page of the selection, 0-based (PAGES mode) */
 void ui_grid_draw(ui_grid *g, ansi_buf *b);
 /** The same, for a box whose rows were just cleared to `ground` (ansi_clear_ground): no blank pass, so no row goes out twice. */

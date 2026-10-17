@@ -140,6 +140,16 @@ static int line_of(const ui_grid *g, int entry, int *col)
     return -1;
 }
 
+int ui_grid_at_edge(const ui_grid *g, int key)
+{
+    int col = 0, l;
+    if (!g || (key != UI_KEY_LEFT && key != UI_KEY_RIGHT)) return 0;
+    if (g->entry_count <= 0) return 1;
+    l = line_of(g, g->selected, &col);
+    if (l < 0) return 1;
+    return key == UI_KEY_LEFT ? col == 0 : col == g->lines[l].count - 1;
+}
+
 int ui_grid_visible(const ui_grid *g, int entry)
 {
     int l;

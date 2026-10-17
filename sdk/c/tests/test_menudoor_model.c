@@ -224,8 +224,8 @@ static int board(void *ctx, int field, const char *request, char *out, int cap)
     if (field != AE_FIELD_MENU) return 0;
     strcat(requests, request); strcat(requests, "|");
     if (silent_board) return 0;
-    if (strcmp(request, "OVERFLOW?") == 0) return answer("default\tpages", out, cap);
-    if (strncmp(request, "OVERFLOW ", 9) == 0) return answer("OK\tpages", out, cap);
+    if (strcmp(request, "STYLE?") == 0) return answer("default\tpages", out, cap);
+    if (strncmp(request, "STYLE ", 6) == 0) return answer("OK\tpages", out, cap);
     if (strncmp(request, "OPEN ", 5) == 0) return answer("OK\t" CAT_PATH, out, cap);
     if (strncmp(request, "LOGO ", 5) == 0) { if (logo_shows_cursor) ae_put("\033[0m\033[?25h", 0); return answer("OK\t3", out, cap); }
     if (strncmp(request, "ROW ", 4) == 0 || strncmp(request, "RUN ", 4) == 0) return answer("OK", out, cap);
@@ -409,11 +409,12 @@ static void the_settings_screen_asks_without_opening_a_catalogue(void)
     door = run_settings;
     assert(DRIVE("\x1b[A\r\x1b") == 0);
     door = run_menu;
-    assert(strstr(requests, "OVERFLOW?|"));
+    assert(strstr(requests, "STYLE?|"));
     assert(!strstr(requests, "OPEN"));
-    assert(strstr(requests, "OVERFLOW pages|"));
-    assert(strstr(screen_text, "LONG MENUS") && strstr(screen_text, "Board default (pages)"));
-    printf("  [OK] the settings screen asks OVERFLOW? without opening a catalogue\n");
+    assert(strstr(requests, "STYLE coverflow|"));                         /* Up from Board default is Cover flow */
+    assert(strstr(screen_text, "MENU STYLE") && strstr(screen_text, "Board default (pages)"));
+    assert(strstr(screen_text, "Classic screen") && strstr(screen_text, "Grid scroll") && strstr(screen_text, "Grid pages"));
+    printf("  [OK] the settings screen asks STYLE? without opening a catalogue\n");
 }
 
 static void a_silent_board_runs_the_fallback_and_draws_nothing(void)
@@ -426,101 +427,94 @@ static void a_silent_board_runs_the_fallback_and_draws_nothing(void)
     printf("  [OK] a silent board runs the fallback command and draws nothing\n");
 }
 
-/* The same catalogue with drill-down and its slide switched on by the sysop. */
-static const char *CATALOGUE_DRILL =
-    "AEMENU 1\nK MAIN\t-\nT MAIN MENU\nP Go: \nO scroll\nW -\t-\t-\nR 0\nD 1\t1\n"
-    "S Messages\n"
-    "E R\tRead Mail\tRead your mail\t\t\n"
-    "E E\tEnter Message\tWrite a message\t\t\n"
-    "E MS\tMail Scan\tScan for new mail\t\t\n"
-    "S Files\n"
-    "E F\tFile Listings\tNot for you\t\tG\n"
-    "E D\tDownload\tDownload a file\t\t\n"
+/* Cover flow (the board's O line) with the slide on: one section per page, one entry each, so Right is at the edge. */
+static const char *CATALOGUE_FLOW =
+    "AEMENU 1\nK MAIN\t-\nT MAIN MENU\nP Go: \nO coverflow\nF 1\nW -\t-\t-\nR 0\n"
+    "S Messages\nE R\tRead Mail\tRead your mail\t\t\n"
+    "S Files\nE D\tDownload\tDownload a file\t\t\n"
+    "S System\nE G\tGoodbye\tLog off\t\t\n"
     ".\n";
 
-static void drill_opens_sections_slides_between_levels_and_remembers_the_catalogue_row(void)
+/* Two entries in the first section: Right moves within the grid before it turns the page. */
+static const char *CATALOGUE_FLOW_WIDE =
+    "AEMENU 1\nK MAIN\t-\nT MAIN MENU\nP Go: \nO coverflow\nF 1\nW -\t-\t-\nR 0\n"
+    "S Messages\nE R\tRead Mail\tRead your mail\t\t\nE E\tEnter Message\tWrite a message\t\t\n"
+    "S Files\nE D\tDownload\tDownload a file\t\t\n"
+    ".\n";
+
+static int count_of(const char *haystack, const char *needle);
+
+/* R1: through menudoor_main, Right on a one-column page turns to page 2 with one slide, and the board keeps its row. */
+static void cover_flow_turns_a_page_with_right_and_one_slide(void)
 {
-    const char *f, *b;
-    write_catalogue(CATALOGUE_DRILL);
+    write_catalogue(CATALOGUE_FLOW);
     mouse_queue = 0; silent_board = 0;
-    /* Enter opens the first section from the catalogue already read (no second OPEN), Enter runs its first entry. */
-    assert(DRIVE("\r\r") == 0);
+    assert(DRIVE("\x1b[Cq") == 0);
     assert(strstr(requests, "OPEN MAIN|") == requests && !strstr(requests + 1, "OPEN "));
-    assert(strstr(screen_text, "Read Mail, Enter Message, Mail Scan"));      /* the section row lists its entries */
-    assert(strstr(screen_text, "MAIN MENU > Messages"));                       /* the breadcrumb */
-    assert(strstr(screen_text, "Enter Open"));                                 /* the sections key bar */
-    f = strstr(requests, "WIPE IN P ");
-    assert(f && strstr(f, " F|"));                                             /* forward slide into the section */
-    assert(activations == 1 && strstr(requests, "RUN R|"));
-    /* Down to Files, open, Esc back (a backward slide), q leaves: the board keeps the catalogue row of Files' first entry. */
-    assert(DRIVE("\x1b[B\r\x1bq") == 0);
-    assert(strstr(screen_text, "MAIN MENU > Files"));
-    b = strstr(requests, " B|");
-    assert(b && strstr(requests, "WIPE IN P ") < b);
-    assert(strstr(requests, "ROW 3|"));
-    assert(activations == 0);
+    assert(count_of(requests, "WIPE IN P ") == 1 && strstr(strstr(requests, "WIPE IN P "), " F|"));
+    assert(strstr(screen_text, "< 2/3 Files >"));
+    assert(strstr(screen_text, "Download"));
+    assert(strstr(requests, "ROW 1|"));                                    /* a catalogue row, not a page row */
     write_catalogue(CATALOGUE);
-    printf("  [OK] drill opens sections, slides forward and back, and leaves on the catalogue row\n");
+    printf("  [OK] cover flow: Right turns to page 2/3 with one slide and leaves on the catalogue row\n");
 }
 
-/* A level change repaints the list region once, inside the slide: at 80x25 that is one region of cells plus the fixed
-   rows, under one and a half screens. Painting it twice (a show_frame and the slide) or the whole screen per step fails. */
-static void a_drill_level_change_paints_the_list_region_once(void)
+static void cover_flow_moves_in_the_grid_before_it_turns_and_pages_wrap(void)
 {
-    size_t open_only, two_changes;
-    write_catalogue(CATALOGUE_DRILL);
+    write_catalogue(CATALOGUE_FLOW_WIDE);
+    mouse_queue = 0; silent_board = 0;
+    assert(DRIVE("\x1b[Cq") == 0);                                         /* within the grid: no turn */
+    assert(!strstr(requests, "WIPE IN P ") && strstr(requests, "ROW 1|"));
+    assert(DRIVE("\x1b[C\x1b[Cq") == 0);                                   /* the second Right is at the edge */
+    assert(count_of(requests, "WIPE IN P ") == 1 && strstr(screen_text, "< 2/2 Files >"));
+    write_catalogue(CATALOGUE_FLOW);
+    assert(DRIVE("\x1b[5~q") == 0);                                        /* PageUp from page 1 wraps to the last */
+    assert(strstr(screen_text, "< 3/3 System >") && strstr(strstr(requests, "WIPE IN P "), " B|"));
+    assert(DRIVE("\x1b[6~\x1b[6~\x1b[6~q") == 0);                           /* three PageDowns come back to page 1 */
+    assert(count_of(requests, "WIPE IN P ") == 3 && strstr(requests, "ROW 0|"));
+    write_catalogue(CATALOGUE);
+    printf("  [OK] cover flow moves within the grid first, PageUp and PageDown turn and wrap\n");
+}
+
+/* C7 budgets: a page turn repaints the status row and the grid region once. */
+static void a_page_turn_paints_the_region_once(void)
+{
+    size_t open_only, turn;
+    write_catalogue(CATALOGUE_FLOW);
     mouse_queue = 0; silent_board = 0;
     assert(DRIVE("q") == 0);
     open_only = strlen(screen_text);
-    assert(DRIVE("\r\x1bq") == 0);
-    two_changes = strlen(screen_text) - open_only;
-    assert(two_changes > 0 && two_changes / 2 < 80 * 25 * 3 / 2);
-    write_catalogue(CATALOGUE);
-    printf("  [OK] a drill level change paints the list region once (%zu bytes for two at 80x25)\n", two_changes);
-}
-
-/* Drill has three levels: sections, a section's entries, and an L entry's child list, the crumb naming all three. */
-static const char *CATALOGUE_DRILL_LIST =
-    "AEMENU 1\nK MAIN\t-\nT MAIN MENU\nP Go: \nO scroll\nW -\t-\t-\nR 0\nD 1\t0\n"
-    "S Messages\nE R\tRead Mail\tRead your mail\t\tL\nE E\tEnter Message\tWrite a message\t\t\n"
-    "S Files\nE D\tDownload\tDownload a file\t\t\n.\n";
-
-static void drill_reaches_a_child_list_below_a_section(void)
-{
-    write_catalogue(CATALOGUE_DRILL_LIST);
-    mouse_queue = 0; silent_board = 0;
-    assert(DRIVE("\r\r\x1b\x1bq") == 0);
-    assert(strstr(screen_text, "MAIN MENU > Messages > Read Mail"));
-    assert(strstr(requests, "OPEN MAIN|") && strstr(requests, "OPEN MAIN R|"));
-    write_catalogue(CATALOGUE);
-    printf("  [OK] drill reaches an L entry's list below a section and the crumb names all three levels\n");
-}
-
-/* At 40 columns the door plays no effects: the sysop's slide flag is on, the level still changes, no slide is asked for. */
-static void drill_at_40_columns_asks_for_no_slide(void)
-{
-    write_catalogue(CATALOGUE_DRILL);
-    mouse_queue = 0; silent_board = 0; size_reply = "40\t25";
-    assert(DRIVE("\r\x1bq") == 0);
-    assert(strstr(screen_text, "Messages") && !strstr(requests, "WIPE IN P "));
+    assert(DRIVE("\x1b[Cq") == 0);
+    turn = strlen(screen_text) - open_only;
+    assert(turn > 0 && turn <= 2360);
+    printf("  [OK] a page turn at 80x25 paints the region once (%zu bytes)\n", turn);
+    size_reply = "40\t25";
+    assert(DRIVE("q") == 0);
+    open_only = strlen(screen_text);
+    assert(DRIVE("\x1b[Cq") == 0);
+    turn = strlen(screen_text) - open_only;
+    assert(turn > 0 && turn < 1200);
+    assert(!strstr(requests, "WIPE IN P ") && strstr(screen_text, "< 2/3 Files >"));   /* no slide at 40 columns */
     size_reply = "80\t25";
     write_catalogue(CATALOGUE);
-    printf("  [OK] drill at 40 columns changes level without a slide\n");
+    printf("  [OK] a page turn at 40x25 asks for no slide and paints %zu bytes\n", turn);
 }
 
-static void drill_without_the_slide_repaints_and_asks_for_no_wipe(void)
+static void cover_flow_without_the_slide_or_with_one_section(void)
 {
     char cat[1024];
-    strcpy(cat, CATALOGUE_DRILL);
-    *strstr(cat, "D 1\t1") = '\0';
-    strcat(cat, "D 1\t0\n");
-    strcat(cat, strstr(CATALOGUE_DRILL, "S Messages"));
+    strcpy(cat, CATALOGUE_FLOW);
+    strstr(cat, "F 1")[2] = '0';
     write_catalogue(cat);
     mouse_queue = 0; silent_board = 0;
-    assert(DRIVE("\r\x1bq") == 0);
-    assert(strstr(screen_text, "MAIN MENU > Messages") && !strstr(requests, "WIPE IN P "));
+    assert(DRIVE("\x1b[Cq") == 0);
+    assert(strstr(screen_text, "< 2/3 Files >") && !strstr(requests, "WIPE IN P "));
+    write_catalogue("AEMENU 1\nK MAIN\t-\nT MAIN MENU\nP Go: \nO coverflow\nF 1\nW -\t-\t-\nR 0\n"
+                    "S Messages\nE R\tRead Mail\tRead your mail\t\t\nE E\tEnter Message\tWrite a message\t\t\n.\n");
+    assert(DRIVE("\x1b[C\x1b[Cq") == 0);                                   /* one section: it scrolls, no pages */
+    assert(!strstr(requests, "WIPE IN P ") && !strstr(screen_text, "1/1"));
     write_catalogue(CATALOGUE);
-    printf("  [OK] drill with the slide off repaints the level and asks the board for no slide\n");
+    printf("  [OK] cover flow with the slide off asks for no wipe; one section falls back to scroll\n");
 }
 
 static const char *CATALOGUE_WITH_LIST =
@@ -565,16 +559,16 @@ static void one_binary_runs_the_settings_under_its_second_name_and_the_menu_othe
 
     invoked_name = "MENUSETTINGS";
     assert(DRIVE("\x1b") == 0);
-    assert(strstr(requests, "OVERFLOW?|") && !strstr(requests, "OPEN"));
-    assert(strstr(screen_text, "LONG MENUS"));
+    assert(strstr(requests, "STYLE?|") && !strstr(requests, "OPEN"));
+    assert(strstr(screen_text, "MENU STYLE"));
 
     invoked_name = "MENU";
     assert(DRIVE("\x1b") == 0);
-    assert(strstr(requests, "OPEN MAIN|") && !strstr(screen_text, "LONG MENUS"));
+    assert(strstr(requests, "OPEN MAIN|") && !strstr(screen_text, "MENU STYLE"));
 
     invoked_name = "";                                /* a board that does not say: the menu, never the settings */
     assert(DRIVE("\x1b") == 0);
-    assert(strstr(requests, "OPEN MAIN|") && !strstr(screen_text, "LONG MENUS"));
+    assert(strstr(requests, "OPEN MAIN|") && !strstr(screen_text, "MENU STYLE"));
 
     door = run_menu;
     printf("  [OK] one binary: settings under its second name, the menu under any other\n");
@@ -1712,11 +1706,10 @@ int main(void)
     the_first_frame_with_a_logo_costs_at_most_the_divider_row_more();
     hit_testing_uses_the_grid_origin_below_the_divider();
     the_cursor_is_hidden_in_navigation_mode_after_every_board_write_and_parked_when_typing();
-    drill_opens_sections_slides_between_levels_and_remembers_the_catalogue_row();
-    drill_without_the_slide_repaints_and_asks_for_no_wipe();
-    drill_at_40_columns_asks_for_no_slide();
-    a_drill_level_change_paints_the_list_region_once();
-    drill_reaches_a_child_list_below_a_section();
+    cover_flow_turns_a_page_with_right_and_one_slide();
+    cover_flow_moves_in_the_grid_before_it_turns_and_pages_wrap();
+    a_page_turn_paints_the_region_once();
+    cover_flow_without_the_slide_or_with_one_section();
     remove(CAT_PATH); remove("build/test_menudoor_keys.bin"); remove("build/test_menudoor_screen.bin");
     puts("test_menudoor_model: OK");
     return 0;

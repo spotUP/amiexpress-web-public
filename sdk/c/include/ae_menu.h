@@ -7,7 +7,8 @@
  *   OPEN <kind> [<parent>]   -> "OK TAB <amiga path>" | "NO" (the board printed why) | "" (not listening)
  *   LOGO <pos> <t> <l> <r> <c> -> "OK TAB <rows>" | "NONE"   (the board draws it)
  *   ROW <n>                  -> "OK"     (the selected row, kept for the next open)
- *   OVERFLOW? / OVERFLOW <m> -> "<stored> TAB <effective>" / "OK TAB <effective>"
+ *   STYLE? / STYLE <m>       -> "<stored> TAB <effective>" / "OK TAB <effective>"
+ *                               m: classic|scroll|pages|coverflow|default (a stored '' arrives as "default")
  *   RUN <line>               -> "OK"     (run after this door exits, as typed)
  *   SHOW <key>               -> "OK" | "NO"
  *
@@ -28,6 +29,10 @@ extern "C" {
 #define AE_MENU_MAX_LOGOS    4
 #define AE_MENU_SILENT 6
 #define AE_MENU_GONE  (-1)
+#define AE_MENU_STYLE_SCROLL    0
+#define AE_MENU_STYLE_PAGES     1
+#define AE_MENU_STYLE_COVERFLOW 2
+#define AE_MENU_STYLE_CAP 16                  /* style buffers hold at least this many bytes */
 
 typedef struct {
     char key[16]; char label[27]; char description[77]; char right[11]; char flags[5];
@@ -37,9 +42,10 @@ typedef struct { char position[8]; int rows, cols, after_section; } ae_menu_logo
 
 typedef struct {
     char kind[16]; char parent[16]; char title[31]; char prompt[73];
-    int pages;                               /* 1 = PAGES mode */
+    int style;                               /* AE_MENU_STYLE_*, the catalogue's O line */
+    int pages;                               /* 1 = PAGES mode (style == AE_MENU_STYLE_PAGES) */
+    int slide;                               /* "F 1": cover flow slides between pages */
     char wipe_open, wipe_leave, wipe_page;   /* 0 = none */
-    int drill, drill_slide;                  /* "D 1\t1": sections first, Enter opens one; slide on level change */
     int last_row;
     int section_count, entry_count, logo_count, truncated;
     char section_title[AE_MENU_MAX_SECTIONS][31];
@@ -56,9 +62,15 @@ int ae_menu_parse(const char *text, long len, ae_menu *m);
 int ae_menu_logo_draw(const char *position, int top, int left, int rows, int cols);
 /** 1 stored, 0 not, AE_MENU_GONE. Sent on leave only. */
 int ae_menu_row(int row);
-/** mode "scroll", "pages", "default" stores; 0 asks. `effective` receives the mode in force. 1 answered, 0 silent, AE_MENU_GONE. */
+/** The caller's stored style and the style in force; both buffers AE_MENU_STYLE_CAP bytes (either may be 0).
+    1 answered, 0 silent, AE_MENU_GONE. */
+int ae_menu_style_get(char *stored, char *effective);
+/** Stores mode (classic|scroll|pages|coverflow|default); `effective` (AE_MENU_STYLE_CAP, may be 0) receives the style
+    in force. 1 stored, 0 refused or silent, AE_MENU_GONE. */
+int ae_menu_style(const char *mode, char *effective);
+/** Wrapper over ae_menu_style / ae_menu_style_get. mode "scroll", "pages", "default" stores; 0 asks. `effective` receives the mode in force. 1 answered, 0 silent, AE_MENU_GONE. */
 int ae_menu_overflow(const char *mode, char *effective, int cap);
-/** The caller's own choice ("scroll", "pages", "default") as well as the effective mode; as ae_menu_overflow(0, ...). */
+/** Wrapper over ae_menu_style_get with caller-sized buffers. */
 int ae_menu_overflow_get(char *stored, int scap, char *effective, int ecap);
 /** 1 the board will run `line` once this door exits, 0 refused, AE_MENU_GONE. */
 int ae_menu_run(const char *line);

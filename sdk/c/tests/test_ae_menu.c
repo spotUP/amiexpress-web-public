@@ -55,8 +55,8 @@ static int stand_in(void *ctx, int field, const char *request, char *out, int ca
     if (strncmp(request, "LOGO header", 11) == 0) return answer("OK\t3", out, cap);
     if (strncmp(request, "LOGO ", 5) == 0) return answer("NONE", out, cap);
     if (strncmp(request, "ROW ", 4) == 0) return answer("OK", out, cap);
-    if (strcmp(request, "OVERFLOW?") == 0) return answer("default\tpages", out, cap);
-    if (strncmp(request, "OVERFLOW ", 9) == 0) return answer("OK\tscroll", out, cap);
+    if (strcmp(request, "STYLE?") == 0) return answer("default\tpages", out, cap);
+    if (strncmp(request, "STYLE ", 6) == 0) return answer("OK\tcoverflow", out, cap);
     if (strncmp(request, "RUN ", 4) == 0) return answer("OK", out, cap);
     if (strncmp(request, "SHOW 3", 6) == 0) return answer("OK", out, cap);
     if (strncmp(request, "SHOW ", 5) == 0) return answer("NO", out, cap);
@@ -105,18 +105,28 @@ static void a_child_catalogue_keeps_its_parent_and_crlf_is_tolerated(void)
     printf("  [OK] a child catalogue keeps its parent; CRLF is tolerated\n");
 }
 
-static void the_drill_line_sets_both_flags_and_its_absence_leaves_them_off(void)
+static void the_style_lines_set_the_style_and_the_legacy_drill_line_means_cover_flow(void)
 {
-    assert(parse("AEMENU 1\nK MAIN\t-\nD 1\t0\nS A\nE k\tl\td\t\t\n.\n") == 1);
-    assert(menu.drill == 1 && menu.drill_slide == 0);
-    assert(parse("AEMENU 1\nK MAIN\t-\nD 1\t1\nS A\nE k\tl\td\t\t\n.\n") == 1);
-    assert(menu.drill == 1 && menu.drill_slide == 1);
+    assert(parse("AEMENU 1\nK MAIN\t-\nO coverflow\nF 1\nS A\nE k\tl\td\t\t\n.\n") == 1);
+    assert(menu.style == AE_MENU_STYLE_COVERFLOW && menu.slide == 1 && menu.pages == 0);
+    assert(parse("AEMENU 1\nK MAIN\t-\nO pages\nF 0\nS A\nE k\tl\td\t\t\n.\n") == 1);
+    assert(menu.style == AE_MENU_STYLE_PAGES && menu.slide == 0 && menu.pages == 1);
     assert(parse("AEMENU 1\nK MAIN\t-\nS A\nE k\tl\td\t\t\n.\n") == 1);
-    assert(menu.drill == 0 && menu.drill_slide == 0);
+    assert(menu.style == AE_MENU_STYLE_SCROLL && menu.slide == 0 && menu.pages == 0);
+    assert(parse("AEMENU 1\nK MAIN\t-\nO classic\n.\n") == 0);              /* classic never reaches the grid door */
+    assert(parse("AEMENU 1\nK MAIN\t-\nF 2\n.\n") == 0);
+    assert(parse("AEMENU 1\nK MAIN\t-\nF 1\t1\n.\n") == 0);
+    /* Legacy D, read for one release: drill on is cover flow, its second flag the slide; drill off changes nothing. */
+    assert(parse("AEMENU 1\nK MAIN\t-\nO pages\nD 1\t0\nS A\nE k\tl\td\t\t\n.\n") == 1);
+    assert(menu.style == AE_MENU_STYLE_COVERFLOW && menu.slide == 0 && menu.pages == 0);
+    assert(parse("AEMENU 1\nK MAIN\t-\nO scroll\nD 1\t1\nS A\nE k\tl\td\t\t\n.\n") == 1);
+    assert(menu.style == AE_MENU_STYLE_COVERFLOW && menu.slide == 1);
+    assert(parse("AEMENU 1\nK MAIN\t-\nO pages\nD 0\t1\nS A\nE k\tl\td\t\t\n.\n") == 1);
+    assert(menu.style == AE_MENU_STYLE_PAGES && menu.slide == 0);
     assert(parse("AEMENU 1\nK MAIN\t-\nD 1\n.\n") == 0);
     assert(parse("AEMENU 1\nK MAIN\t-\nD 2\t1\n.\n") == 0);
     assert(parse("AEMENU 1\nK MAIN\t-\nD 1\t1\t1\n.\n") == 0);
-    printf("  [OK] the D line sets drill-down and slide; without it both are off\n");
+    printf("  [OK] O and F set the style and slide; a legacy D 1 line is cover flow\n");
 }
 
 static void a_malformed_file_is_refused(void)
@@ -224,16 +234,20 @@ static void actions_send_exactly_their_verb(void)
     assert(ae_menu_show("9") == 0);
     assert(ae_menu_logo_draw("header", 2, 1, 3, 80) == 3 && strcmp(last_request, "LOGO header 2 1 3 80") == 0);
     assert(ae_menu_logo_draw("footer", 20, 1, 3, 80) == 0);
-    assert(ae_menu_overflow(0, eff, (int)sizeof eff) == 1 && strcmp(last_request, "OVERFLOW?") == 0 && strcmp(eff, "pages") == 0);
+    assert(ae_menu_style_get(stored, eff) == 1 && strcmp(last_request, "STYLE?") == 0
+           && strcmp(stored, "default") == 0 && strcmp(eff, "pages") == 0);
+    assert(ae_menu_style("coverflow", eff) == 1 && strcmp(last_request, "STYLE coverflow") == 0 && strcmp(eff, "coverflow") == 0);
+    /* The overflow calls are thin wrappers over the style calls. */
+    assert(ae_menu_overflow(0, eff, (int)sizeof eff) == 1 && strcmp(last_request, "STYLE?") == 0 && strcmp(eff, "pages") == 0);
     assert(ae_menu_overflow_get(stored, (int)sizeof stored, eff, (int)sizeof eff) == 1
            && strcmp(stored, "default") == 0 && strcmp(eff, "pages") == 0);
-    assert(ae_menu_overflow("scroll", eff, (int)sizeof eff) == 1 && strcmp(last_request, "OVERFLOW scroll") == 0 && strcmp(eff, "scroll") == 0);
+    assert(ae_menu_overflow("scroll", eff, (int)sizeof eff) == 1 && strcmp(last_request, "STYLE scroll") == 0);
     silent = 1;
     assert(ae_menu_run("M") == 0 && ae_menu_row(1) == 0 && ae_menu_overflow(0, eff, (int)sizeof eff) == 0);
     silent = 0; gone = 1;
     assert(ae_menu_run("M") == AE_MENU_GONE && ae_menu_row(1) == AE_MENU_GONE && ae_menu_logo_draw("header", 1, 1, 1, 1) == AE_MENU_GONE);
     gone = 0;
-    printf("  [OK] RUN, ROW, SHOW, LOGO and OVERFLOW send exactly their verb\n");
+    printf("  [OK] RUN, ROW, SHOW, LOGO and STYLE send exactly their verb\n");
 }
 
 int main(void)
@@ -241,7 +255,7 @@ int main(void)
     ae_native_set_exchange(stand_in, 0);
     a_whole_catalogue_is_parsed_field_for_field();
     a_child_catalogue_keeps_its_parent_and_crlf_is_tolerated();
-    the_drill_line_sets_both_flags_and_its_absence_leaves_them_off();
+    the_style_lines_set_the_style_and_the_legacy_drill_line_means_cover_flow();
     a_malformed_file_is_refused();
     too_many_entries_are_cut_and_flagged();
     too_many_sections_and_logos_are_cut_and_flagged();

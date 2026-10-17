@@ -74,6 +74,20 @@ static void right_walks_reading_order_and_left_clamps(void)
     assert(ui_grid_move(&g, UI_KEY_LEFT) == 0);
 }
 
+/* Cover flow turns the page only where Left/Right would not move: the first or last column of a line. */
+static void the_edge_is_the_first_and_last_column(void)
+{
+    ui_grid g = a_grid(80, 20, UI_GRID_SCROLL);
+    ui_grid_select(&g, 0);
+    assert(ui_grid_at_edge(&g, UI_KEY_LEFT) == 1 && ui_grid_at_edge(&g, UI_KEY_RIGHT) == 0);
+    ui_grid_select(&g, 1);
+    assert(ui_grid_at_edge(&g, UI_KEY_LEFT) == 0);
+    assert(ui_grid_at_edge(&g, UI_KEY_UP) == 0);
+    g = a_grid(40, 20, UI_GRID_SCROLL);                 /* one column: both sides are the edge */
+    ui_grid_select(&g, 1);
+    assert(ui_grid_at_edge(&g, UI_KEY_LEFT) == 1 && ui_grid_at_edge(&g, UI_KEY_RIGHT) == 1);
+}
+
 static void pages_never_end_on_a_header(void)
 {
     int p;
@@ -295,6 +309,7 @@ int main(void)
     forty_columns_are_one_column();
     down_keeps_the_column_and_crosses_a_header();
     right_walks_reading_order_and_left_clamps();
+    the_edge_is_the_first_and_last_column();
     pages_never_end_on_a_header();
     a_page_that_would_end_on_a_header_ends_a_line_earlier();
     a_page_turn_repaints_the_box_and_a_move_inside_does_not();

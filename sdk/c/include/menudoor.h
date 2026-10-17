@@ -52,9 +52,6 @@ int menudoor_settings_run(int node);
 /** What the key bar says about Esc inside a second-level list: it goes back up, not out to the prompt. */
 #define MENUDOOR_CHILD_KEYBAR_WIDE   "Arrows Move  Enter Run  Esc Back"
 #define MENUDOOR_CHILD_KEYBAR_NARROW "Enter Run  Esc Back"
-/** Drill: the top level lists sections; Enter opens one, Esc still leaves to the prompt. */
-#define MENUDOOR_SECTIONS_KEYBAR_WIDE   "Arrows Move  Enter Open  Esc Prompt"
-#define MENUDOOR_SECTIONS_KEYBAR_NARROW "Enter Open  Esc Prompt"
 
 /**
  * The bottom row has two states. Navigation (nothing typed): a hint, the key bar, no cursor. Typing (from the first

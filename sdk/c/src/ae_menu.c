@@ -76,9 +76,18 @@ static int parse_line(const char *p, const char *end, ae_menu *m, int *in_sectio
     case 'T': take(p, end, m->title, (int)sizeof m->title); return 1;
     case 'P': take(p, end, m->prompt, (int)sizeof m->prompt); return 1;
     case 'O':
-        if (end - p == 5 && memcmp(p, "pages", 5) == 0) { m->pages = 1; return 1; }
-        if (end - p == 6 && memcmp(p, "scroll", 6) == 0) { m->pages = 0; return 1; }
-        return 0;
+        /* The style the board decided (the caller's choice or the board default); the door only obeys it. */
+        if (end - p == 5 && memcmp(p, "pages", 5) == 0) m->style = AE_MENU_STYLE_PAGES;
+        else if (end - p == 6 && memcmp(p, "scroll", 6) == 0) m->style = AE_MENU_STYLE_SCROLL;
+        else if (end - p == 9 && memcmp(p, "coverflow", 9) == 0) m->style = AE_MENU_STYLE_COVERFLOW;
+        else return 0;
+        m->pages = m->style == AE_MENU_STYLE_PAGES;
+        return 1;
+    case 'F':
+        /* One flag: cover flow slides between pages. */
+        if (end - p != 1 || (p[0] != '0' && p[0] != '1')) return 0;
+        m->slide = p[0] == '1';
+        return 1;
     case 'W':
         /* Three one-character codes, "-" for none: "X TAB - TAB H". */
         if (end - p != 5 || p[1] != '\t' || p[3] != '\t') return 0;
@@ -87,10 +96,10 @@ static int parse_line(const char *p, const char *end, ae_menu *m, int *in_sectio
         m->wipe_page = p[4] == '-' ? 0 : p[4];
         return 1;
     case 'D':
-        /* Two flags, "1 TAB 0": drill-down on, slide off. The board writes the line only when drill-down is on. */
+        /* Legacy, read for one release: "1 TAB 0" was drill-down on, slide off. Drill-down is now the cover flow style,
+           and the board wrote D after O, so it wins. Remove once no catalogue on disk carries a D line. */
         if (end - p != 3 || p[1] != '\t' || (p[0] != '0' && p[0] != '1') || (p[2] != '0' && p[2] != '1')) return 0;
-        m->drill = p[0] == '1';
-        m->drill_slide = p[2] == '1';
+        if (p[0] == '1') { m->style = AE_MENU_STYLE_COVERFLOW; m->pages = 0; m->slide = p[2] == '1'; }
         return 1;
     case 'R': return number(p, end, &m->last_row);
     case 'L': {
@@ -218,34 +227,67 @@ int ae_menu_row(int row)
     return ok_or_not(request);
 }
 
-int ae_menu_overflow_get(char *stored, int scap, char *effective, int ecap)
+int ae_menu_style_get(char *stored, char *effective)
 {
-    char reply[AE_MAX_LINE + 1];
+    char reply[AE_MAX_LINE + 1], s[AE_MENU_STYLE_CAP], e[AE_MENU_STYLE_CAP];
     const char *p;
-    int n = ask("OVERFLOW?", reply, (int)sizeof reply);
+    int n;
 
+    if (stored) stored[0] = '\0';
+    if (effective) effective[0] = '\0';
+    n = ask("STYLE?", reply, (int)sizeof reply);
     if (n < 0) return AE_MENU_GONE;
     if (n == 0) return 0;
-    p = take(reply, reply + n, stored, scap);
+    p = take(reply, reply + n, s, (int)sizeof s);
     if (!p) return 0;
-    take(p, reply + n, effective, ecap);
+    take(p, reply + n, e, (int)sizeof e);
+    if (stored) strcpy(stored, s);
+    if (effective) strcpy(effective, e);
     return 1;
+}
+
+int ae_menu_style(const char *mode, char *effective)
+{
+    char request[40], reply[AE_MAX_LINE + 1];
+    int n;
+
+    if (effective) effective[0] = '\0';
+    if (!mode) return 0;
+    sprintf(request, "STYLE %.12s", mode);
+    n = ask(request, reply, (int)sizeof reply);
+    if (n < 0) return AE_MENU_GONE;
+    if (strncmp(reply, "OK\t", 3) != 0) return 0;
+    if (effective) take(reply + 3, reply + n, effective, AE_MENU_STYLE_CAP);
+    return 1;
+}
+
+static void cut(char *to, int cap, const char *from)
+{
+    int n = (int)strlen(from);
+    if (!to || cap < 1) return;
+    if (n > cap - 1) n = cap - 1;
+    memcpy(to, from, (size_t)n);
+    to[n] = '\0';
+}
+
+int ae_menu_overflow_get(char *stored, int scap, char *effective, int ecap)
+{
+    char s[AE_MENU_STYLE_CAP], e[AE_MENU_STYLE_CAP];
+    int rc = ae_menu_style_get(s, e);
+    cut(stored, scap, rc == 1 ? s : "");
+    cut(effective, ecap, rc == 1 ? e : "");
+    return rc;
 }
 
 int ae_menu_overflow(const char *mode, char *effective, int cap)
 {
-    char request[40], reply[AE_MAX_LINE + 1], stored[16];
-    int n;
+    char s[AE_MENU_STYLE_CAP], e[AE_MENU_STYLE_CAP];
+    int rc;
 
     if (!effective || cap < 1) return 0;
-    effective[0] = '\0';
-    if (!mode) return ae_menu_overflow_get(stored, (int)sizeof stored, effective, cap);
-    sprintf(request, "OVERFLOW %.12s", mode);
-    n = ask(request, reply, (int)sizeof reply);
-    if (n < 0) return AE_MENU_GONE;
-    if (strncmp(reply, "OK\t", 3) != 0) return 0;
-    take(reply + 3, reply + n, effective, cap);
-    return 1;
+    rc = mode ? ae_menu_style(mode, e) : ae_menu_style_get(s, e);
+    cut(effective, cap, rc == 1 ? e : "");
+    return rc;
 }
 
 int ae_menu_run(const char *line)

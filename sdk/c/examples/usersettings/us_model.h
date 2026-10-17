@@ -46,6 +46,13 @@ int us_editor_left(const us_model *m);
 /* The 1-based screen column where a field's value is drawn: the ONE number
    both the row text and the editor use (ruling C3). */
 int us_value_column(const us_model *m);
+/* Cover flow pages: the runs between header rows (the 5 built-in sections, Board settings, then one per door
+   SETTINGS_SECTION), each from its header to its last row (the blank before the next header is not on it).
+   A run with nothing to select (Board settings when every door names a section) is no page. */
+int us_page_count(const us_model *m);
+int us_page_rows(const us_model *m, int page, int *first, int *last);   /* 1, or 0 for no such page */
+int us_page_of_row(const us_model *m, int row);                         /* the page holding `row`, or 0 */
+const char *us_page_title(const us_model *m, int page);
 int us_jump(int *pending, int key);       /* field number to select, or -1 */
 int us_wrap(const char *text, int width, char lines[][81], int max_lines);
 
