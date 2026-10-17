@@ -17,7 +17,8 @@ static void every_theme_is_a_theme(void)
 {
     int i;
 
-    assert(ui_theme_count() == 7);
+    assert(ui_theme_count() == 6);
+    assert(strcmp(ui_theme_at(0)->id, "uprough-neon") == 0);
     for (i = 0; i < ui_theme_count(); i++) {
         const ui_theme *t = ui_theme_at(i);
 
@@ -41,21 +42,23 @@ static void every_theme_is_a_theme(void)
     printf("  [OK] every theme is a theme, in colours a terminal has\n");
 }
 
-static void an_unknown_id_is_classic(void)
+static void an_unknown_id_is_the_default(void)
 {
     /* The same answer themeById() gives, and the same rule ae_host takes for
-       a host it has never heard of. */
-    assert(strcmp(ui_theme_by_id("no-such-theme")->id, "classic") == 0);
-    assert(strcmp(ui_theme_by_id("")->id, "classic") == 0);
-    assert(strcmp(ui_theme_by_id(0)->id, "classic") == 0);
-    printf("  [OK] an unknown id is classic, and never NULL\n");
+       a host it has never heard of. Classic was removed (sysop, 2026-10-17),
+       so a saved "classic" is an unknown id too. */
+    assert(strcmp(ui_theme_by_id("no-such-theme")->id, "uprough-neon") == 0);
+    assert(strcmp(ui_theme_by_id("")->id, "uprough-neon") == 0);
+    assert(strcmp(ui_theme_by_id(0)->id, "uprough-neon") == 0);
+    assert(strcmp(ui_theme_by_id("classic")->id, "uprough-neon") == 0);
+    printf("  [OK] an unknown id is uprough-neon, and never NULL\n");
 }
 
 static void the_ids_match_the_typescript(void)
 {
     /* If a theme is added or renamed on the TypeScript side, the generated
        table changes and this is where a stale expectation shows up. */
-    assert(strcmp(ui_theme_by_id("classic")->id, "classic") == 0);
+    assert(strcmp(ui_theme_by_id("slate-slash")->id, "slate-slash") == 0);
     assert(strcmp(ui_theme_by_id("uprough-neon")->id, "uprough-neon") == 0);
     assert(strcmp(ui_theme_by_id("quiet-phosphor")->id, "quiet-phosphor") == 0);
     printf("  [OK] the ids are the TypeScript's ids\n");
@@ -73,8 +76,7 @@ static void each_theme_keeps_its_identity(void)
     #define BASE(c) ((c) & 7)
     assert(BASE(ui_theme_by_id("uprough-neon")->accent) == ANSI_MAGENTA);
     assert(BASE(ui_theme_by_id("quiet-phosphor")->accent) == ANSI_GREEN);
-    assert(BASE(ui_theme_by_id("classic")->accent) == ANSI_YELLOW);
-    assert(BASE(ui_theme_by_id("classic")->chrome) == ANSI_CYAN);
+    assert(BASE(ui_theme_by_id("uprough-neon")->chrome) == ANSI_CYAN);
     /* And a light theme colour really is on the bright row, or the C door
        draws a demoscene pink as the dull magenta nobody chose. */
     assert(ui_theme_by_id("uprough-neon")->accent >= ANSI_BRIGHT);
@@ -102,7 +104,7 @@ int main(void)
 {
     printf("ui_theme\n");
     every_theme_is_a_theme();
-    an_unknown_id_is_classic();
+    an_unknown_id_is_the_default();
     the_ids_match_the_typescript();
     each_theme_keeps_its_identity();
     nothing_dim_disappears_into_the_ground();

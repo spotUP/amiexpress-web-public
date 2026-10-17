@@ -145,10 +145,10 @@ static int fake_write(void *context, ae_field field, const char *value)
     if (field != AE_FIELD_THEME) return -1;
 
     b->writes += 1;
-    if (strcmp(value, "uprough-neon") == 0 || strcmp(value, "classic") == 0) {
+    if (strcmp(value, "uprough-neon") == 0 || strcmp(value, "slate-slash") == 0) {
         strcpy(b->theme, value);
     } else {
-        strcpy(b->theme, "classic");   /* what the board does with an unknown id */
+        strcpy(b->theme, "uprough-neon");   /* what the board does with an unknown id */
     }
     return 0;
 }
@@ -179,7 +179,7 @@ static fake_board a_board(void)
     b.last_read = "141";
     b.last_scanned = "138";
     b.can_write = 1;
-    strcpy(b.theme, "classic");
+    strcpy(b.theme, "slate-slash");
     return b;
 }
 
@@ -323,7 +323,7 @@ static void a_door_can_read_and_change_the_theme(void)
     ae_set_writer(&s, fake_write);
 
     assert(ae_user_theme(&s, theme, (int)sizeof(theme)) > 0);
-    assert(strcmp(theme, "classic") == 0);
+    assert(strcmp(theme, "slate-slash") == 0);
 
     assert(ae_set_user_theme(&s, "uprough-neon") == 1);
     assert(b.writes == 1);
@@ -331,10 +331,11 @@ static void a_door_can_read_and_change_the_theme(void)
     assert(strcmp(theme, "uprough-neon") == 0);
 
     /* The board RESOLVES what it is given, so a door must read back rather
-       than assume: an id this board does not have becomes classic. */
+       than assume: an id this board does not have becomes the default. */
+    assert(ae_set_user_theme(&s, "slate-slash") == 1);
     assert(ae_set_user_theme(&s, "no-such-theme") == 1);
     assert(ae_user_theme(&s, theme, (int)sizeof(theme)) > 0);
-    assert(strcmp(theme, "classic") == 0);
+    assert(strcmp(theme, "uprough-neon") == 0);
     printf("  [OK] a door can read the theme, and change it\n");
 }
 

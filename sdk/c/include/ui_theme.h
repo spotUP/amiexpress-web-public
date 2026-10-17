@@ -92,11 +92,12 @@ typedef enum {
 } ui_token;
 
 /**
- * A theme by id, or CLASSIC for an id this board does not have.
+ * A theme by id, or the default (entry 0, Uprough Neon) for an id this
+ * board does not have.
  *
  * Never NULL: a door asks once at startup and then reads tokens off the
  * result, and a null check at every one of those would be noise around a
- * case that means "draw the board as it always looked".
+ * case that means "draw the board's default".
  */
 const ui_theme *ui_theme_by_id(const char *id);
 

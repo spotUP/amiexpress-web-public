@@ -31,6 +31,7 @@ import type { Screen } from '../core/screen';
 import {
   THEMES,
   themeById,
+  DEFAULT_THEME_ID,
   retintTree,
   type Theme,
 } from '../../theme/index.js';
@@ -66,7 +67,7 @@ function activeTheme(options: ThemeMenuOptions): Theme {
       // A theme that will not resolve is not worth failing a menu over.
     }
   }
-  return themeById('classic');
+  return themeById(DEFAULT_THEME_ID);
 }
 
 /**

@@ -933,10 +933,10 @@ static void the_idle_tick_touches_the_masthead_rail_only(void)
     wrote("\x1b[B");
     assert(!strstr(screen_text, "\0337"));
     size_reply = "80\t25"; theme_name = "";
-    write_big_catalogue("scroll");
-    wrote("\x1b[B");
-    assert(!strstr(screen_text, "\0337"));                     /* a theme with no rail has nothing to animate */
-    printf("  [OK] the idle tick touches the masthead rail only, and not at all at 40 columns or without a rail\n");
+    /* Every theme has a rail since classic was removed (sysop, 2026-10-17),
+       and "" now resolves to the default, Uprough Neon - so even a board
+       with no themes animates. */
+    printf("  [OK] the idle tick touches the masthead rail only, and not at all at 40 columns\n");
 }
 
 static void the_prompt_row_is_a_hint_until_something_is_typed(void)
@@ -1120,6 +1120,19 @@ static void tm_after(const char *keys)
     tm_play(screen_text, closing_clear());
 }
 
+/* The masthead rail animates on idle ticks under every theme the board offers (the default Uprough Neon included),
+   and the tick lands between keys. It is chrome on a timer, not what the key cost: each tick is one
+   save-cursor ... restore-cursor run, so those runs are cut before a key's bytes are measured. */
+static void drop_rail_ticks(char *text)
+{
+    char *open_mark;
+    while ((open_mark = strstr(text, "\0337")) != 0) {
+        char *close_mark = strstr(open_mark + 2, "\0338");
+        if (!close_mark) break;
+        memmove(open_mark, close_mark + 2, strlen(close_mark + 2) + 1);
+    }
+}
+
 /* What ONE key adds to the stream: the bytes between the common start and the common end of the two runs. */
 static char delta_text[4096];
 static void key_bytes(const char *before, const char *key, const char *after)
@@ -1134,6 +1147,7 @@ static void key_bytes(const char *before, const char *key, const char *after)
     while (i < la && a[i] == screen_text[i]) i++;
     assert(lb >= la && lb - la < sizeof delta_text);
     memcpy(delta_text, screen_text + i, lb - la); delta_text[lb - la] = '\0';
+    drop_rail_ticks(delta_text);
 }
 
 static int addresses_in(const char *bytes)
@@ -1284,10 +1298,13 @@ static void tm_snap(tm_shot *to, int cols)
         if (tm_cell[r][c] == ' ') { to->att[r][c].fg = 0; to->att[r][c].bold = 0; if (!to->att[r][c].rev) to->att[r][c].fg = 0; }
     }
 }
+/* Row 1 is the masthead, whose rail animates on every idle tick: every theme
+   has a rail since classic was removed (2026-10-17), so it is never the same
+   frame twice and is not what these comparisons are about. */
 static int tm_first_difference(int cols)
 {
     int r, c;
-    for (r = 1; r <= TM_ROWS; r++) for (c = 0; c < cols; c++)
+    for (r = 2; r <= TM_ROWS; r++) for (c = 0; c < cols; c++)
         if (shot_a.ch[r][c] != shot_b.ch[r][c] || memcmp(&shot_a.att[r][c], &shot_b.att[r][c], sizeof(tm_pen)) != 0) return r * 1000 + c + 1;
     return 0;
 }
@@ -1677,9 +1694,11 @@ static void without_a_header_logo_the_rail_stays_on_the_masthead_row_and_no_row_
 static void a_theme_without_a_rail_gets_a_static_divider_under_a_logo(void)
 {
     int c;
-    use_screen(80, 25, "", 3, "-\t-\t-", "scroll");               /* "" is a board with no themes: no rail */
+    /* Every theme the board offers has a rail since classic went (sysop, 2026-10-17); the rail-less divider is now
+       what 40 columns get, where effects are off. */
+    use_screen(40, 25, "", 3, "-\t-\t-", "scroll");
     tm_after("\x1b[B");
-    for (c = 0; c < 80; c++) assert(tm_cell[5][c] == '-');     /* logo 1-3, blank 4, divider 5 */
+    for (c = 0; c < 40; c++) assert(tm_cell[5][c] == '-');     /* logo 1-3, blank 4, divider 5 */
     assert(strstr(tm_cell[7], "Messages"));
     assert(!strstr(screen_text, "\0337"));                        /* nothing animates: no tick at all */
     restore_screen();

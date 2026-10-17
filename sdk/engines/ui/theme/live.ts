@@ -182,7 +182,7 @@ export function retintTree(root: unknown, from: Theme, to: Theme): RetintResult 
 /**
  * What a door was handed: a theme, a BBS handle that knows one, or a theme
  * id. Returns null when none of those is true - an older host, a test
- * double, a board with no theme - which is a door's cue to keep the classic
+ * double, a board with no theme - which is a door's cue to keep the board
  * default rather than fail.
  *
  * Eight doors each carried their own copy of this resolution, all reading
@@ -220,8 +220,7 @@ export function resolveTheme(source: unknown): Theme | null {
  * theme is, so the door says it once and every widget built afterwards
  * follows.
  *
- * Classic until told otherwise, which is what a door that never sets it
- * always drew.
+ * The board default (Uprough Neon) until told otherwise.
  */
 let current: Theme | null = null;
 
@@ -230,7 +229,7 @@ export function setActiveTheme(theme: Theme | null | undefined): void {
   if (theme?.tokens) current = theme;
 }
 
-/** The active theme, or classic. Never null, so a widget can just read it. */
+/** The active theme, or the default. Never null, so a widget can just read it. */
 export function activeTheme(): Theme {
   return current ?? themeById(DEFAULT_THEME_ID);
 }

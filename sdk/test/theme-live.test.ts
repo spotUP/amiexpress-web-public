@@ -13,40 +13,39 @@ import { describe, it, expect } from '@jest/globals';
 import { Screen, Box, List, openThemeMenu } from '../engines/ui/blessed';
 import { themeById, tokenMap, retintTags, retintTree, THEMES } from '../engines/ui/theme';
 
-const CLASSIC = themeById('classic');
+const PHOSPHOR = themeById('quiet-phosphor');
 const NEON = themeById('uprough-neon');
 
 describe('tokenMap', () => {
   it('maps a role to the same role in the other theme', () => {
-    const map = tokenMap(CLASSIC, NEON);
-    expect(map.get(CLASSIC.tokens.chrome)).toBe(NEON.tokens.chrome);
-    expect(map.get(CLASSIC.tokens.accent)).toBe(NEON.tokens.accent);
+    const map = tokenMap(PHOSPHOR, NEON);
+    expect(map.get(PHOSPHOR.tokens.chrome)).toBe(NEON.tokens.chrome);
+    expect(map.get(PHOSPHOR.tokens.accent)).toBe(NEON.tokens.accent);
   });
 
   it('is empty between a theme and itself, so a re-tint is a no-op', () => {
-    expect(tokenMap(CLASSIC, CLASSIC).size).toBe(0);
+    expect(tokenMap(PHOSPHOR, PHOSPHOR).size).toBe(0);
   });
 
   it('gives an ambiguous colour to the role that measured commonest', () => {
-    // classic paints body text, bar text and selected text all in 'white',
-    // and bars and the selection both in 'blue'. tokens.ts counted the uses:
-    // white is body text 44 times, blue is a bar 20 times.
-    const map = tokenMap(CLASSIC, NEON);
-    expect(map.get(CLASSIC.tokens.ink)).toBe(NEON.tokens.ink);
-    expect(map.get(CLASSIC.tokens.bar)).toBe(NEON.tokens.bar);
+    // phosphor paints body text and bar text in the same colour; body text is
+    // the commoner use (tokens.ts counted them), so the colour follows ink.
+    expect(PHOSPHOR.tokens.barInk).toBe(PHOSPHOR.tokens.ink);
+    const map = tokenMap(PHOSPHOR, NEON);
+    expect(map.get(PHOSPHOR.tokens.ink)).toBe(NEON.tokens.ink);
   });
 });
 
 describe('retintTags', () => {
-  const map = tokenMap(CLASSIC, NEON);
+  const map = tokenMap(PHOSPHOR, NEON);
 
   it('rewrites an opening tag and the tag that closes it', () => {
-    const out = retintTags(`{${CLASSIC.tokens.accent}-fg}READY{/${CLASSIC.tokens.accent}-fg}`, map);
+    const out = retintTags(`{${PHOSPHOR.tokens.accent}-fg}READY{/${PHOSPHOR.tokens.accent}-fg}`, map);
     expect(out).toBe(`{${NEON.tokens.accent}-fg}READY{/${NEON.tokens.accent}-fg}`);
   });
 
   it('rewrites backgrounds as well as foregrounds', () => {
-    expect(retintTags(`{${CLASSIC.tokens.chrome}-bg}`, map)).toBe(`{${NEON.tokens.chrome}-bg}`);
+    expect(retintTags(`{${PHOSPHOR.tokens.chrome}-bg}`, map)).toBe(`{${NEON.tokens.chrome}-bg}`);
   });
 
   it('leaves a colour word in prose alone', () => {
@@ -61,15 +60,15 @@ describe('retintTree', () => {
       parent: screen,
       width: 20, height: 5,
       border: { type: 'line' },
-      style: { fg: CLASSIC.tokens.ink, bg: CLASSIC.tokens.ground, border: { fg: CLASSIC.tokens.chrome } },
+      style: { fg: PHOSPHOR.tokens.ink, bg: PHOSPHOR.tokens.ground, border: { fg: PHOSPHOR.tokens.chrome } },
     } as any);
     const label = new Box({
       parent: panel,
       tags: true,
-      content: `{${CLASSIC.tokens.accent}-fg}CHIPS{/${CLASSIC.tokens.accent}-fg}`,
+      content: `{${PHOSPHOR.tokens.accent}-fg}CHIPS{/${PHOSPHOR.tokens.accent}-fg}`,
     } as any);
 
-    const result = retintTree(screen, CLASSIC, NEON);
+    const result = retintTree(screen, PHOSPHOR, NEON);
 
     expect((panel as any).style.border.fg).toBe(NEON.tokens.chrome);
     expect((panel as any).style.fg).toBe(NEON.tokens.ink);
@@ -84,11 +83,11 @@ describe('retintTree', () => {
     const list = new List({
       parent: screen,
       width: 20, height: 5,
-      items: [`{${CLASSIC.tokens.accent}-fg}One{/${CLASSIC.tokens.accent}-fg}`, 'Two'],
+      items: [`{${PHOSPHOR.tokens.accent}-fg}One{/${PHOSPHOR.tokens.accent}-fg}`, 'Two'],
     } as any);
     (list as any).select(1);
 
-    retintTree(screen, CLASSIC, NEON);
+    retintTree(screen, PHOSPHOR, NEON);
 
     expect((list as any).items[0]).toContain(NEON.tokens.accent);
     expect((list as any).selected).toBe(1);
@@ -97,9 +96,9 @@ describe('retintTree', () => {
 
   it('changes nothing when the theme has not changed', () => {
     const screen = new Screen({ smartCSR: true } as any);
-    const box = new Box({ parent: screen, style: { fg: CLASSIC.tokens.ink } } as any);
-    expect(retintTree(screen, CLASSIC, CLASSIC)).toEqual({ styles: 0, contents: 0 });
-    expect((box as any).style.fg).toBe(CLASSIC.tokens.ink);
+    const box = new Box({ parent: screen, style: { fg: PHOSPHOR.tokens.ink } } as any);
+    expect(retintTree(screen, PHOSPHOR, PHOSPHOR)).toEqual({ styles: 0, contents: 0 });
+    expect((box as any).style.fg).toBe(PHOSPHOR.tokens.ink);
     screen.destroy();
   });
 });
@@ -116,13 +115,13 @@ describe('openThemeMenu', () => {
     const board = new Box({
       parent: screen,
       width: 20, height: 5,
-      style: { fg: CLASSIC.tokens.ink, border: { fg: CLASSIC.tokens.chrome } },
+      style: { fg: NEON.tokens.ink, border: { fg: NEON.tokens.chrome } },
     } as any);
 
     const saved: string[] = [];
     const applied: string[] = [];
     const bbs = {
-      getTheme: () => CLASSIC,
+      getTheme: () => NEON,
       setTheme: async (id: string) => { saved.push(id); return id; },
     };
 
@@ -150,12 +149,12 @@ describe('openThemeMenu', () => {
     const board = new Box({
       parent: screen,
       width: 20, height: 5,
-      style: { fg: CLASSIC.tokens.ink, border: { fg: CLASSIC.tokens.chrome } },
+      style: { fg: NEON.tokens.ink, border: { fg: NEON.tokens.chrome } },
     } as any);
 
     const saved: string[] = [];
     const bbs = {
-      getTheme: () => CLASSIC,
+      getTheme: () => NEON,
       setTheme: async (id: string) => { saved.push(id); return id; },
     };
 
@@ -166,8 +165,8 @@ describe('openThemeMenu', () => {
     press(screen, 'escape');
 
     const chosen = await closed;
-    expect(chosen.id).toBe(CLASSIC.id);
-    expect((board as any).style.border.fg).toBe(CLASSIC.tokens.chrome);
+    expect(chosen.id).toBe(NEON.id);
+    expect((board as any).style.border.fg).toBe(NEON.tokens.chrome);
     expect(saved).toEqual([]);
     screen.destroy();
   });

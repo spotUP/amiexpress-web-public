@@ -15,32 +15,56 @@
 #ifndef UI_THEME_TABLES_H
 #define UI_THEME_TABLES_H
 
-#define UI_THEME_COUNT 7
+#define UI_THEME_COUNT 6
 
 static const ui_theme UI_THEME_TABLE[UI_THEME_COUNT] = {
     {
-        "classic",
-        "Classic",
-        "The board as it has always looked.",
+        "uprough-neon",
+        "Uprough Neon",
+        "Demoscene magenta and cyan, double-ruled, masthead slashes.",
         /* ground        */ ANSI_BLACK,    /* black -> 0 */
-        /* ink           */ ANSI_WHITE,    /* white -> 7 */
-        /* chrome        */ ANSI_CYAN,     /* cyan -> 6 */
-        /* dim           */ ANSI_GRAY,     /* gray -> 8 */
-        /* bar           */ ANSI_BLUE,     /* blue -> 4 */
-        /* bar_ink       */ ANSI_WHITE,    /* white -> 7 */
-        /* accent        */ ANSI_YELLOW,   /* yellow -> 3 */
-        /* accent_alt    */ ANSI_CYAN,     /* cyan -> 6 */
-        /* selection_bg  */ ANSI_BLUE,     /* blue -> 4 */
-        /* selection_ink */ ANSI_WHITE,    /* white -> 7 */
-        /* ok            */ ANSI_GREEN,    /* green -> 2 */
-        /* warn          */ ANSI_YELLOW,   /* yellow -> 3 */
-        /* alert         */ ANSI_RED,      /* red -> 1 */
+        /* ink           */ ANSI_BRIGHT_WHITE, /* #E4ECFA -> 15 */
+        /* chrome        */ ANSI_BRIGHT_CYAN, /* #4DE0F0 -> 14 */
+        /* dim           */ ANSI_GRAY,     /* #48566E -> 8 */
+        /* bar           */ ANSI_BLACK,    /* black -> 0 */
+        /* bar_ink       */ ANSI_BRIGHT_MAGENTA, /* #FF3D9A -> 13 */
+        /* accent        */ ANSI_BRIGHT_MAGENTA, /* #FF3D9A -> 13 */
+        /* accent_alt    */ ANSI_BRIGHT_YELLOW, /* #F5C451 -> 11 */
+        /* selection_bg  */ ANSI_MAGENTA,  /* magenta -> 5 */
+        /* selection_ink */ ANSI_BLACK,    /* black -> 0 */
+        /* ok            */ ANSI_BRIGHT_GREEN, /* #57E389 -> 10 */
+        /* warn          */ ANSI_BRIGHT_YELLOW, /* #F5C451 -> 11 */
+        /* alert         */ ANSI_BRIGHT_RED, /* #FF5C7A -> 9 */
         /* The exact colours, in ui_token order. */
-        { 0x000000UL, 0xaaaaaaUL, 0x00aaaaUL, 0x555555UL, 0x0000aaUL, 0xaaaaaaUL, 0xaa5500UL, 0x00aaaaUL, 0x0000aaUL, 0xaaaaaaUL, 0x00aa00UL, 0xaa5500UL, 0xaa0000UL },
+        { 0x000000UL, 0xe4ecfaUL, 0x4de0f0UL, 0x48566eUL, 0x000000UL, 0xff3d9aUL, 0xff3d9aUL, 0xf5c451UL, 0xaa00aaUL, 0x000000UL, 0x57e389UL, 0xf5c451UL, 0xff5c7aUL },
         /* And the nearest of sixteen, same order, for a screen with no palette. */
-        { 0, 7, 6, 8, 4, 7, 3, 6, 4, 7, 2, 3, 1 },
+        { 0, 15, 14, 8, 0, 13, 13, 11, 5, 0, 10, 11, 9 },
         UI_BORDER_LINE,
-        ""
+        "/////"
+    },
+    {
+        "neon-muted",
+        "Uprough Neon (muted)",
+        "The neon frame, but the colour spent only where it counts.",
+        /* ground        */ ANSI_BLACK,    /* black -> 0 */
+        /* ink           */ ANSI_WHITE,    /* #A8B4C8 -> 7 */
+        /* chrome        */ ANSI_CYAN,     /* #2E6E7A -> 6 */
+        /* dim           */ ANSI_GRAY,     /* #5A6474 -> 8 */
+        /* bar           */ ANSI_BLACK,    /* black -> 0 */
+        /* bar_ink       */ ANSI_BRIGHT_MAGENTA, /* #FF3D9A -> 13 */
+        /* accent        */ ANSI_BRIGHT_MAGENTA, /* #FF3D9A -> 13 */
+        /* accent_alt    */ ANSI_GRAY,     /* #5A6474 -> 8 */
+        /* selection_bg  */ ANSI_MAGENTA,  /* magenta -> 5 */
+        /* selection_ink */ ANSI_BLACK,    /* black -> 0 */
+        /* ok            */ ANSI_WHITE,    /* #A8B4C8 -> 7 */
+        /* warn          */ ANSI_WHITE,    /* #A8B4C8 -> 7 */
+        /* alert         */ ANSI_BRIGHT_MAGENTA, /* #FF3D9A -> 13 */
+        /* The exact colours, in ui_token order. */
+        { 0x000000UL, 0xa8b4c8UL, 0x2e6e7aUL, 0x5a6474UL, 0x000000UL, 0xff3d9aUL, 0xff3d9aUL, 0x5a6474UL, 0xaa00aaUL, 0x000000UL, 0xa8b4c8UL, 0xa8b4c8UL, 0xff3d9aUL },
+        /* And the nearest of sixteen, same order, for a screen with no palette. */
+        { 0, 7, 6, 8, 0, 13, 13, 8, 5, 0, 7, 7, 13 },
+        UI_BORDER_LINE,
+        "/////"
     },
     {
         "slate-slash",
@@ -89,54 +113,6 @@ static const ui_theme UI_THEME_TABLE[UI_THEME_COUNT] = {
         { 0, 7, 8, 8, 0, 13, 13, 8, 5, 0, 7, 7, 13 },
         UI_BORDER_LINE,
         "///"
-    },
-    {
-        "uprough-neon",
-        "Uprough Neon",
-        "Demoscene magenta and cyan, double-ruled, masthead slashes.",
-        /* ground        */ ANSI_BLACK,    /* black -> 0 */
-        /* ink           */ ANSI_BRIGHT_WHITE, /* #E4ECFA -> 15 */
-        /* chrome        */ ANSI_BRIGHT_CYAN, /* #4DE0F0 -> 14 */
-        /* dim           */ ANSI_GRAY,     /* #48566E -> 8 */
-        /* bar           */ ANSI_BLACK,    /* black -> 0 */
-        /* bar_ink       */ ANSI_BRIGHT_MAGENTA, /* #FF3D9A -> 13 */
-        /* accent        */ ANSI_BRIGHT_MAGENTA, /* #FF3D9A -> 13 */
-        /* accent_alt    */ ANSI_BRIGHT_YELLOW, /* #F5C451 -> 11 */
-        /* selection_bg  */ ANSI_MAGENTA,  /* magenta -> 5 */
-        /* selection_ink */ ANSI_BLACK,    /* black -> 0 */
-        /* ok            */ ANSI_BRIGHT_GREEN, /* #57E389 -> 10 */
-        /* warn          */ ANSI_BRIGHT_YELLOW, /* #F5C451 -> 11 */
-        /* alert         */ ANSI_BRIGHT_RED, /* #FF5C7A -> 9 */
-        /* The exact colours, in ui_token order. */
-        { 0x000000UL, 0xe4ecfaUL, 0x4de0f0UL, 0x48566eUL, 0x000000UL, 0xff3d9aUL, 0xff3d9aUL, 0xf5c451UL, 0xaa00aaUL, 0x000000UL, 0x57e389UL, 0xf5c451UL, 0xff5c7aUL },
-        /* And the nearest of sixteen, same order, for a screen with no palette. */
-        { 0, 15, 14, 8, 0, 13, 13, 11, 5, 0, 10, 11, 9 },
-        UI_BORDER_LINE,
-        "/////"
-    },
-    {
-        "neon-muted",
-        "Uprough Neon (muted)",
-        "The neon frame, but the colour spent only where it counts.",
-        /* ground        */ ANSI_BLACK,    /* black -> 0 */
-        /* ink           */ ANSI_WHITE,    /* #A8B4C8 -> 7 */
-        /* chrome        */ ANSI_CYAN,     /* #2E6E7A -> 6 */
-        /* dim           */ ANSI_GRAY,     /* #5A6474 -> 8 */
-        /* bar           */ ANSI_BLACK,    /* black -> 0 */
-        /* bar_ink       */ ANSI_BRIGHT_MAGENTA, /* #FF3D9A -> 13 */
-        /* accent        */ ANSI_BRIGHT_MAGENTA, /* #FF3D9A -> 13 */
-        /* accent_alt    */ ANSI_GRAY,     /* #5A6474 -> 8 */
-        /* selection_bg  */ ANSI_MAGENTA,  /* magenta -> 5 */
-        /* selection_ink */ ANSI_BLACK,    /* black -> 0 */
-        /* ok            */ ANSI_WHITE,    /* #A8B4C8 -> 7 */
-        /* warn          */ ANSI_WHITE,    /* #A8B4C8 -> 7 */
-        /* alert         */ ANSI_BRIGHT_MAGENTA, /* #FF3D9A -> 13 */
-        /* The exact colours, in ui_token order. */
-        { 0x000000UL, 0xa8b4c8UL, 0x2e6e7aUL, 0x5a6474UL, 0x000000UL, 0xff3d9aUL, 0xff3d9aUL, 0x5a6474UL, 0xaa00aaUL, 0x000000UL, 0xa8b4c8UL, 0xa8b4c8UL, 0xff3d9aUL },
-        /* And the nearest of sixteen, same order, for a screen with no palette. */
-        { 0, 7, 6, 8, 0, 13, 13, 8, 5, 0, 7, 7, 13 },
-        UI_BORDER_LINE,
-        "/////"
     },
     {
         "quiet-phosphor",

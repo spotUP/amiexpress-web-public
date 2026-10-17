@@ -6,9 +6,10 @@
  * (borders), `bg: 'blue'` 20 (bars), `fg: 'yellow'` 12 (labels) and
  * `fg: 'gray'` 8 (dim). The token names below are those roles, not an
  * invented vocabulary: they were read off what the doors already do, so
- * `classic` can reproduce today's screens exactly.
+ * the first theme (`classic`) could reproduce the old screens exactly.
  *
- * **`classic` was the default and no redesign.** That held until 2026-09-03,
+ * **`classic` is gone.** It was the default and no redesign until
+ * 2026-09-03,
  * when the sysop asked for one rule across every themed door: "the menu bg
  * color should be the primary theme color and the texts and slashes black.
  * all borders in the app needs to use the themes primary color as well."
@@ -25,9 +26,12 @@
  * sixteen named backgrounds since it existed, and they are known to work,
  * so that is what the themes use. Foregrounds carry the palette.
  *
- * Colour values are blessed colour names in `classic` - the same strings the
- * doors pass today, so the theme cannot shift a shade by accident - and hex
- * in the others, which xterm.js renders directly. These themes are for
+ * On 2026-10-17 the sysop removed it outright: "set up rough neon as the
+ * default door theme and remove the default theme it's not nice". Uprough
+ * Neon is the default now, and any saved, configured or hardcoded `classic`
+ * is just an unknown id, so themeById() answers it with Uprough Neon.
+ *
+ * Foreground colour values are hex, which xterm.js renders directly. These themes are for
  * TypeScript doors on the web board; a 68K door draws its own ANSI and is
  * not affected by any of this.
  */
@@ -87,37 +91,6 @@ export interface Theme {
   glitches: boolean;
 }
 
-/**
- * The board as it is today.
- *
- * Values are the blessed colour NAMES the doors already pass, not hex
- * equivalents, so switching a door onto tokens cannot change a single pixel
- * for anyone still on this theme.
- */
-export const CLASSIC: Theme = {
-  id: 'classic',
-  name: 'Classic',
-  blurb: 'The board as it has always looked.',
-  border: 'line',
-  rail: '',
-  glitches: false,
-  tokens: {
-    ground: 'black',
-    ink: 'white',
-    chrome: 'cyan',
-    dim: 'gray',
-    bar: 'blue',
-    barInk: 'white',
-    accent: 'yellow',
-    accentAlt: 'cyan',
-    selectionBg: 'blue',
-    selectionInk: 'white',
-    ok: 'green',
-    warn: 'yellow',
-    alert: 'red',
-  },
-};
-
 /** Direction A: Crush read straight. Quiet chrome, one accent. */
 export const SLATE_SLASH: Theme = {
   id: 'slate-slash',
@@ -158,7 +131,7 @@ export const UPROUGH_NEON: Theme = {
     dim: '#48566E',
     // The masthead sits ON the ground, not in a filled bar. The mockup for
     // this direction is magenta text and slashes over black; a blue bar was
-    // borrowed from CLASSIC while converting backgrounds to named colours
+    // borrowed from the old classic theme while converting backgrounds to named colours
     // and is not part of the design.
     bar: 'black',
     barInk: '#FF3D9A',
@@ -309,28 +282,33 @@ export const PHOSPHOR_MUTED: Theme = {
   },
 };
 
-/** Every theme, in the order a picker should show them. Classic leads. */
+/**
+ * Every theme, in the order a picker should show them. The default leads:
+ * the C SDK's table is generated from this list and its lookup falls back
+ * to entry 0, so the first entry IS the default on both sides.
+ */
 export const THEMES: readonly Theme[] = [
-  CLASSIC,
-  SLATE_SLASH,
-  SLATE_MUTED,
   UPROUGH_NEON,
   NEON_MUTED,
+  SLATE_SLASH,
+  SLATE_MUTED,
   QUIET_PHOSPHOR,
   PHOSPHOR_MUTED,
 ];
 
-export const DEFAULT_THEME_ID = CLASSIC.id;
+/** The board's door theme for a caller who has not picked one. */
+export const DEFAULT_THEME: Theme = THEMES[0];
+export const DEFAULT_THEME_ID = DEFAULT_THEME.id;
 
 /**
- * The theme with this id, or CLASSIC.
+ * The theme with this id, or DEFAULT_THEME (Uprough Neon).
  *
  * Never throws and never returns undefined: an unknown id is a stale
  * setting or a typo in a config, and the answer to both is the board's
  * normal appearance rather than a door that will not start.
  */
 export function themeById(id: string | null | undefined): Theme {
-  if (!id) return CLASSIC;
+  if (!id) return DEFAULT_THEME;
   const wanted = id.trim().toLowerCase();
-  return THEMES.find(t => t.id === wanted) ?? CLASSIC;
+  return THEMES.find(t => t.id === wanted) ?? DEFAULT_THEME;
 }

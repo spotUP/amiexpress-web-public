@@ -552,7 +552,7 @@ static void scan_listing(void)
      * the listing can be written in the caller's theme while the board still
      * owns the screen around it - no palette to install, no chrome to draw,
      * nothing to clear. A board that will not say which theme he wears
-     * answers "" and ui_theme_by_id hands back CLASSIC, so there is always a
+     * answers "" and ui_theme_by_id hands back the default, so there is always a
      * colour to write.
      */
     {

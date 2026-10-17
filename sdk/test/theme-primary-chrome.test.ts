@@ -58,16 +58,3 @@ describe('every theme', () => {
     });
   }
 });
-
-describe('classic, which used to promise it would never change', () => {
-  it('now takes the same rule as the rest', () => {
-    const classic = THEMES.find((theme) => theme.id === 'classic')!;
-    const s = themeStyles(classic);
-
-    // Was blue with white text; the sysop asked for the primary colour
-    // across every themed door, and classic is not exempt from that.
-    expect(s.bar.style.bg).toBe('yellow');
-    expect(s.bar.style.fg).toBe('black');
-    expect(s.panel.style.border?.fg).toBe('yellow');
-  });
-});

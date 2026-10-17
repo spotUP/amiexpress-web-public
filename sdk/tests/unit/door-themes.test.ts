@@ -1,16 +1,15 @@
 /**
  * Door themes, and the glitches some of them switch on.
  *
- * Two things are being protected here. One is that a sysop who wants the
- * board to look as it always has sees NOTHING change - `classic` is not a
- * redesign and must reproduce the exact colour strings the doors pass today.
- * The other is that the glitches stay charming rather than becoming a fault
+ * Two things are being protected here. One is that every caller gets the
+ * board's default theme, Uprough Neon, unless they picked another - the
+ * sysop removed `classic` on 2026-10-17 ("set up rough neon as the default
+ * door theme and remove the default theme it's not nice"). The other is that the glitches stay charming rather than becoming a fault
  * report: rare, one row, never while somebody is typing, and never able to
  * leave the screen wrong.
  */
 import {
   THEMES,
-  CLASSIC,
   DEFAULT_THEME_ID,
   themeById,
   type Theme,
@@ -32,50 +31,43 @@ function scripted(...values: number[]): Random {
   return () => values[Math.min(i++, values.length - 1)];
 }
 
-describe('the purists keep their board', () => {
-  it('defaults to classic', () => {
-    expect(DEFAULT_THEME_ID).toBe('classic');
-    expect(themeById(undefined).id).toBe('classic');
-    expect(themeById(null).id).toBe('classic');
-    expect(themeById('').id).toBe('classic');
+/**
+ * Not a board theme: the default with its rail and glitches switched off,
+ * for the engine paths a theme that did not ask for them takes (a 40-column
+ * screen, or a door that turns effects off).
+ */
+const EFFECTS_OFF: Theme = { ...themeById('uprough-neon'), id: 'effects-off', rail: '', glitches: false };
+
+describe('uprough neon is the board default (sysop, 2026-10-17)', () => {
+  it('gives a caller with no saved theme, and a caller still saved on classic, uprough neon', () => {
+    // The regression: classic was the default and is gone. A caller who
+    // never picked, and a caller whose row still says 'classic', both get
+    // Uprough Neon - and classic is no longer a theme anybody can pick.
+    expect(DEFAULT_THEME_ID).toBe('uprough-neon');
+    expect(themeById(undefined).id).toBe('uprough-neon');
+    expect(themeById(null).id).toBe('uprough-neon');
+    expect(themeById('').id).toBe('uprough-neon');
+    expect(themeById('classic').id).toBe('uprough-neon');
+    expect(THEMES.map((t: Theme) => t.id)).not.toContain('classic');
   });
 
-  it('falls back to classic rather than failing', () => {
+  it('falls back to the default rather than failing', () => {
     // A stale setting or a typo in a config must produce the board's normal
     // appearance, not a door that will not start.
-    expect(themeById('no-such-theme').id).toBe('classic');
+    expect(themeById('no-such-theme').id).toBe('uprough-neon');
   });
 
-  it('uses the colour names the doors already pass', () => {
-    // Not hex equivalents. Switching a door onto tokens must not be able to
-    // shift a single shade for anyone still on classic.
-    expect(CLASSIC.tokens.ground).toBe('black');
-    expect(CLASSIC.tokens.ink).toBe('white');
-    expect(CLASSIC.tokens.chrome).toBe('cyan');
-    expect(CLASSIC.tokens.bar).toBe('blue');
-    expect(CLASSIC.tokens.accent).toBe('yellow');
-    expect(CLASSIC.tokens.dim).toBe('gray');
-  });
-
-  it('never glitches', () => {
-    // Classic is the only theme that does not. Everything else opts in -
-    // including the phosphor themes, which the pitch had opted out on the
-    // argument that they were the calm direction, and which the sysop
-    // overruled.
-    expect(CLASSIC.glitches).toBe(false);
-    expect(CLASSIC.rail).toBe('');
-
-    const others = THEMES.filter((t: any) => t.id !== 'classic');
-    expect(others.every((t: any) => t.glitches)).toBe(true);
+  it('switches glitches on for every theme the board offers', () => {
+    expect(THEMES.every((t: any) => t.glitches)).toBe(true);
   });
 
   it('leads the list, so it is what a picker offers first', () => {
-    expect(THEMES[0].id).toBe('classic');
+    expect(THEMES[0].id).toBe('uprough-neon');
   });
 });
 
 describe('every theme is complete', () => {
-  const tokenNames = Object.keys(CLASSIC.tokens) as Array<keyof Theme['tokens']>;
+  const tokenNames = Object.keys(THEMES[0].tokens) as Array<keyof Theme['tokens']>;
 
   it.each(THEMES.map(t => [t.id, t] as const))('%s sets every token', (_id, theme) => {
     // A missing token renders as the terminal's default, which is the one
@@ -265,18 +257,6 @@ describe('doors name a role, not a colour', () => {
   const { themeStyles } = require('../../engines/ui/theme/styles');
   const { UPROUGH_NEON } = require('../../engines/ui/theme/tokens');
 
-  it('gives classic exactly what the doors pass today', () => {
-    // The migration has to be verifiable: a door moved onto tokens must
-    // render identically until somebody picks another theme.
-    const s = themeStyles(CLASSIC);
-    expect(s.panel.style.fg).toBe('white');
-    expect(s.panel.style.bg).toBe('black');
-    // Since b19f9fd45 the theme's PRIMARY colour carries every border, so
-    // classic's frames are its yellow, not the old cyan chrome.
-    expect(s.panel.style.border!.fg).toBe('yellow');
-    expect(s.bar.style.bg).toBe('yellow');
-  });
-
   it('closes every tag it opens', () => {
     // An unclosed tag bleeds its colour into everything after it, which is
     // the bug class that turned a whole screen blue once already.
@@ -321,38 +301,6 @@ describe('doors name a role, not a colour', () => {
   });
 });
 
-describe('a migrated door renders identically on classic', () => {
-  const { themeStyles } = require('../../engines/ui/theme/styles');
-
-  it('emits the same tags the door used to hardcode', () => {
-    // The promise that makes migrating safe: DOORS-MENU passed these exact
-    // strings before it was moved onto tokens, so anyone still on classic
-    // must get them back byte for byte.
-    const s = themeStyles(CLASSIC);
-    expect(s.accent('Filter:')).toBe('{yellow-fg}Filter:{/yellow-fg}');
-    expect(s.accentAlt('Location:')).toBe('{cyan-fg}Location:{/cyan-fg}');
-    expect(s.dim('[..]')).toBe('{gray-fg}[..]{/gray-fg}');
-    expect(s.ink('View All Doors')).toBe('{white-fg}View All Doors{/white-fg}');
-    expect(s.ok('DOORREPO')).toBe('{green-fg}DOORREPO{/green-fg}');
-  });
-
-  it('gives the same structural styles the door used to pass', () => {
-    const s = themeStyles(CLASSIC);
-    // The bar IS the theme's colour with the ground on top of it
-    // (b19f9fd45); on classic that reads yellow-on-black, not the old
-    // white-on-blue.
-    expect(s.bar.style).toEqual({ fg: 'black', bg: 'yellow' });
-    expect(s.list.style.selected!.bg).toBe('blue');
-    expect(s.list.style.selected!.fg).toBe('white');
-  });
-
-  it('adds no branding to classic', () => {
-    // The rail is part of the new looks. On classic the footer must be what
-    // it always was.
-    expect(themeStyles(CLASSIC).rail).toBe('');
-  });
-});
-
 describe('backgrounds stay on the sixteen named colours', () => {
   const NAMED = new Set([
     'black', 'red', 'green', 'yellow', 'blue', 'magenta', 'cyan', 'white',
@@ -394,10 +342,6 @@ describe('a theme draws the rules it asked for', () => {
     expect(themeStyles(UPROUGH_NEON).list.border.type).toBe('double');
   });
 
-  it('leaves classic on single rules', () => {
-    expect(themeStyles(CLASSIC).panel.border.type).toBe('line');
-  });
-
   it('keeps a borderless theme inside its box model', () => {
     // Quiet Phosphor shows no rule, but removing the widget's border would
     // move every child by a column. It stays a border and takes the ground
@@ -422,13 +366,13 @@ describe('a glitch is put on screen and taken off again', () => {
   }
 
   it('does nothing whatsoever on a theme that did not ask', () => {
-    // A board on classic must not even start a timer.
+    // A theme with glitches off must not even start a timer.
     const t = target('a\nb\nc');
     // No fake timers here on purpose: the point is that NOTHING was
     // scheduled, so there is nothing to advance. Calling the timer API
     // without faking it is an error in modern jest and was destabilising
     // whichever suite happened to run next.
-    const stop = attachGlitches(t, CLASSIC, () => {}, { random: () => 0.01 });
+    const stop = attachGlitches(t, EFFECTS_OFF, () => {}, { random: () => 0.01 });
     expect(t.content).toBe('a\nb\nc');
     stop();
   });
@@ -727,14 +671,13 @@ describe('the chrome the mockups specified', () => {
       // mark to say where the cursor is. The others do not.
       expect(selectionMark(QUIET_PHOSPHOR)).toBe('▍');
       expect(selectionMark(UPROUGH_NEON)).toBe('');
-      expect(selectionMark(CLASSIC)).toBe('');
     });
   });
 
   describe('running the rail', () => {
     it('starts no timer for a theme with no rail', () => {
       let drawn = 0;
-      const stop = attachRail({ setContent: () => { drawn++; } }, CLASSIC, () => {}, {
+      const stop = attachRail({ setContent: () => { drawn++; } }, EFFECTS_OFF, () => {}, {
         line: (r: string) => r,
       });
       expect(drawn).toBe(0);
@@ -982,8 +925,8 @@ describe('the muted themes spend colour in one place', () => {
   it('offers both versions of each direction in the picker', () => {
     const ids = THEMES.map((t: any) => t.id);
     expect(ids).toEqual([
-      'classic', 'slate-slash', 'slate-muted',
-      'uprough-neon', 'neon-muted', 'quiet-phosphor', 'phosphor-muted',
+      'uprough-neon', 'neon-muted', 'slate-slash', 'slate-muted',
+      'quiet-phosphor', 'phosphor-muted',
     ]);
   });
 
@@ -1123,7 +1066,7 @@ describe('the frame role stays visible', () => {
 
   it('covers every theme the board ships', () => {
     // A loop over an empty list would pass every assertion below.
-    expect(THEMES.length).toBeGreaterThanOrEqual(7);
+    expect(THEMES.length).toBeGreaterThanOrEqual(6);
   });
 
   for (const theme of require('../../engines/ui/theme').THEMES) {
@@ -1160,7 +1103,7 @@ describe('dialogs under a borderless theme', () => {
   const { themeStyles, themeById } = require('../../engines/ui/theme');
   const { ConfirmModal } = require('../../engines/ui/blessed/widgets/confirm-modal');
 
-  for (const id of ['quiet-phosphor', 'phosphor-muted', 'classic']) {
+  for (const id of ['quiet-phosphor', 'phosphor-muted']) {
     it(`gives a modal a border distinct from its own surface under ${id}`, () => {
       const s = themeStyles(themeById(id));
       const modal: any = new ConfirmModal({ themeStyles: s, message: 'Delete this file?' });
@@ -1204,13 +1147,13 @@ describe('attachMasthead', () => {
   it('draws the plain title and starts no timer when the theme has no rail', () => {
     const t = target();
     let renders = 0;
-    const stop = attachMasthead(t, themeById('classic'), {
+    const stop = attachMasthead(t, EFFECTS_OFF, {
       title: 'DASHBOARD', width: 80,
       rail: (s: string) => s, ink: (s: string) => s,
       render: () => { renders++; },
     });
 
-    // classic pays nothing for this existing.
+    // a theme with no rail pays nothing for this existing.
     expect(t.drawn).toEqual([' DASHBOARD ']);
     expect(renders).toBe(1);
     stop();

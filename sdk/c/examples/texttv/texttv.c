@@ -766,12 +766,10 @@ int main(int argc, char **argv)
         screen_is_teletext = strcmp(mode, "teletext") == 0;
     }
 
-    /* Classic fallback: a board that answers the theme field with nothing
-       is a real AmiExpress (or a harness), and classic is the answer. */
+    /* A board that answers the theme field with nothing is a real
+       AmiExpress (or a harness); "" gives the default theme. */
     theme_id[0] = '\0';
     ae_user_theme(&session, theme_id, (int)sizeof(theme_id));
-    if (theme_id[0] == '\0')
-        strcpy(theme_id, "classic");
     theme = ui_theme_by_id(theme_id);
     ansi_set_palette(&screen.buf, theme->rgb, theme->idx, UI_TOKEN_COUNT);
 

@@ -222,12 +222,17 @@ debugLog(`  [WRITE] DT_LOCATION: "${newLocation}"`);
        *
        * The write goes through the same resolve-then-store the TypeScript
        * setTheme does (doors/BBSApi.ts): an id this board does not have
-       * becomes classic rather than being stored, so a door cannot leave a
-       * value in the row that nothing can render.
+       * becomes the board default rather than being stored, so a door cannot
+       * leave a value in the row that nothing can render.
+       *
+       * The read resolves too: a row still holding a theme the board no longer
+       * has (classic, removed 2026-10-17) reaches the door as the default's id,
+       * so a door built with an older table never draws the removed theme.
        */
       case XIMCommand.AEW_THEME:
         if (isRead) {
-          const themeId = String((user as any)?.themePreference || 'classic');
+          const { themeById } = require('@amiexpress/bbs-door-sdk/engines/ui/theme');
+          const themeId = String(themeById((user as any)?.themePreference).id);
           this.messageParser.writeMessageString(msg.msgAddr, themeId);
           for (let i = themeId.length + 1; i < 32; i++) {
             this.emulator.writeMemory(stringAddr + i, 0);

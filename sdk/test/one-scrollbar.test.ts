@@ -54,7 +54,7 @@ describe('the one scrollbar', () => {
   }
 
   it('ignores a door-supplied glyph and style', () => {
-    setActiveTheme(themeById('classic'));
+    setActiveTheme(themeById('slate-slash'));
     const plain = build();
     const baseline = barCells(plain.screen, plain.list);
     plain.screen.destroy();
@@ -72,7 +72,7 @@ describe('the one scrollbar', () => {
   });
 
   it('recolours on a theme switch', () => {
-    const from = themeById('classic');
+    const from = themeById('slate-slash');
     const to = themeById('uprough-neon');
     setActiveTheme(from);
     const { screen, list } = build();

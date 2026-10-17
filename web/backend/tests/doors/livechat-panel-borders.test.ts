@@ -41,11 +41,11 @@ describe('the theme', () => {
     // 2026-09-03: "livechat doesnt look themed at all", then "all bordes in
     // the app needs to use the themes primary color as well" (sysop). They
     // are the theme's own two now - accent for an idle border, ink for the
-    // focused one - and classic's accent/ink ARE gray and white, so the
-    // door a caller with no theme sees is unchanged.
-    const classic = themeById('classic').tokens;
-    expect(PANEL_BORDER).toBe(classic.accent);
-    expect(PANEL_BORDER_FOCUS).toBe(classic.ink);
+    // focused one - taken from the board default (Uprough Neon since the
+    // sysop removed classic, 2026-10-17).
+    const board = themeById('uprough-neon').tokens;
+    expect(PANEL_BORDER).toBe(board.accent);
+    expect(PANEL_BORDER_FOCUS).toBe(board.ink);
   });
 
   it('never uses the dark blue that could not be seen', () => {

@@ -432,9 +432,10 @@ console.log('✓ Added petsciipalette column');
       if (!columnNames.includes('themepreference')) {
         // Web-only, and deliberately NOT in user.data: that file's layout has
         // to stay byte-compatible with real AmiExpress, and a door theme is
-        // not something express.e has ever heard of. Defaults to the board's
-        // existing appearance, so an upgrade changes nobody's screen.
-        this.db.exec('ALTER TABLE users ADD COLUMN themepreference TEXT DEFAULT \'classic\'');
+        // not something express.e has ever heard of. Empty means "no pick":
+        // themeById resolves it to the board default (Uprough Neon since the
+        // sysop removed classic, 2026-10-17).
+        this.db.exec('ALTER TABLE users ADD COLUMN themepreference TEXT DEFAULT \'\'');
 console.log('✓ Added themepreference column');
       }
 

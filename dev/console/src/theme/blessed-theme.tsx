@@ -30,31 +30,6 @@ export interface Theme {
   glitches: boolean;
 }
 
-// Classic — the board as it has always looked. Uses blessed colour names.
-export const CLASSIC: Theme = {
-  id: 'classic',
-  name: 'Classic',
-  blurb: 'The board as it has always looked.',
-  border: 'line',
-  rail: '',
-  glitches: false,
-  tokens: {
-    ground: 'black',
-    ink: 'white',
-    chrome: 'cyan',
-    dim: 'gray',
-    bar: 'blue',
-    barInk: 'white',
-    accent: 'yellow',
-    accentAlt: 'cyan',
-    selectionBg: 'blue',
-    selectionInk: 'white',
-    ok: 'green',
-    warn: 'yellow',
-    alert: 'red',
-  },
-};
-
 // Slate & Slash — quiet slate chrome, magenta accent, room to breathe.
 export const SLATE_SLASH: Theme = {
   id: 'slate-slash',
