@@ -17,6 +17,7 @@ import { Server as SSHServer, Connection, AcceptConnection } from 'ssh2';
 import { EventEmitter } from 'events';
 import { MOUSE_REPORTING_OFF } from '../utils/terminal-modes';
 import { createSession, getNextAvailableNodeId, checkConnectionLimit, setSession } from './session-manager';
+import { reclaimedNodeId } from './session-parking';
 import { BBSSession } from '../index';
 import { config } from '../config';
 import { DEFAULT_CONNECTION_BAUD } from '../constants/modem';
@@ -330,7 +331,10 @@ console.warn('[SSH Server] Or manually: ssh-keygen -t rsa -b 4096 -f data/ssh/ss
            */
           keepaliveInterval: 60000,
           keepaliveCountMax: 3,
-        } as any, this.handleConnection.bind(this));
+        } as any, (client: Connection) => {
+          this.handleConnection(client).catch((err: unknown) =>
+            console.error('[SSH Server] Connection setup failed:', err instanceof Error ? err.message : err));
+        });
 
         this.server.on('error', this.handleError.bind(this));
 
@@ -372,7 +376,7 @@ console.log('[SSH Server] Stopped');
   /**
    * Handle incoming SSH connection
    */
-  private handleConnection(client: Connection): void {
+  private async handleConnection(client: Connection): Promise<void> {
     const remoteAddress = (client as any)._sock?.remoteAddress || 'unknown';
 console.log(`[SSH Server] New connection from ${remoteAddress}`);
 
@@ -389,9 +393,10 @@ console.warn(`[SSH Server] Rate limit exceeded for ${remoteAddress}`);
       return;
     }
 
-    // A node first, as the web and telnet paths take one. An SSH client is
-    // still authenticating here, so a full board just closes it.
-    const nodeId = getNextAvailableNodeId();
+    // A node first, as the web and telnet paths take one. A full board first
+    // ends the session parked longest (S11); an SSH client is still
+    // authenticating here, so a board still full just closes it.
+    const nodeId = getNextAvailableNodeId() ?? await reclaimedNodeId();
     if (nodeId === null) {
 console.warn(`[SSH Server] All nodes busy - refusing ${remoteAddress}`);
       client.end();

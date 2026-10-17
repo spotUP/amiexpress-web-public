@@ -17,6 +17,7 @@ import { ANSI_GRAPHICS_PROMPT } from '../services/login-connect.service';
 import { EventEmitter } from 'events';
 import { MOUSE_REPORTING_OFF } from '../utils/terminal-modes';
 import { createSession, getNextAvailableNodeId, checkConnectionLimit, setSession, allNodesBusyNotice } from './session-manager';
+import { reclaimedNodeId } from './session-parking';
 import { LOCALHOST_IPS } from '../constants/localhost-ips';
 import { BBSSession } from '../index';
 import { config } from '../config';
@@ -774,7 +775,10 @@ export class TelnetServer extends EventEmitter {
     this.petsciiDefault = !!options?.petsciiDefault;
     this.server = new NetServer();
 
-    this.server.on('connection', this.handleConnection.bind(this));
+    this.server.on('connection', (socket: Socket) => {
+      this.handleConnection(socket).catch((err: unknown) =>
+        console.error('[Telnet Server] Connection setup failed:', err instanceof Error ? err.message : err));
+    });
     this.server.on('error', this.handleError.bind(this));
   }
 
@@ -844,7 +848,7 @@ console.log('[Telnet Server] Stopped');
    * Handle incoming telnet connection
    * Based on express.e:1024-1055 (acceptIncomingConnection)
    */
-  private handleConnection(socket: Socket): void {
+  private async handleConnection(socket: Socket): Promise<void> {
     const remoteAddress = socket.remoteAddress || 'unknown';
 
     // Silently ignore localhost probe connections (Render.com internal health checks/service discovery)
@@ -905,9 +909,14 @@ console.log('[Telnet Server] Stopped');
       return;
     }
 
-    // A node first, as the web path takes one: a full board says so and
-    // hangs up rather than seating a second caller on somebody's node.
-    const nodeId = getNextAvailableNodeId();
+    // A node first, as the web path takes one: a full board first ends the
+    // session parked longest (S11), and only then says so and hangs up rather
+    // than seating a second caller on somebody's node. A free node never waits.
+    const nodeId = getNextAvailableNodeId() ?? await reclaimedNodeId();
+    if (nodeId !== null && socket.destroyed) {
+      console.warn(`[Telnet Server] ${remoteAddress} hung up while a node was freed`);
+      return;
+    }
     if (nodeId === null) {
       console.warn(`[Telnet Server] All nodes busy - refusing ${remoteAddress}`);
       socket.write(allNodesBusyNotice());

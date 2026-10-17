@@ -33,7 +33,7 @@ import { getSystemTime } from "../utils/date-time.util";
 import { setSession, allNodesBusyNotice, createSession } from "./session-manager";
 import { registerSocketHandlers, applyPendingGeometry } from "./socket-handlers";
 import { createSessionLink } from "./session-link";
-import { installParking, resumeParked } from "./session-parking";
+import { installParking, resumeParked, reclaimParkedNode } from "./session-parking";
 
 /** What the handler closed over in index.ts, passed in so a test can drive it. */
 export interface WebConnectionDeps {
@@ -65,7 +65,12 @@ export async function acceptWebConnection(
   // Initialize session with multi-node support
   let nodeSession;
   try {
-    nodeSession = await nodeManager.assignSessionToNode(socket.id, socket.id);
+    nodeSession = await nodeManager.assignSessionToNode(socket.id, socket.id)
+      .catch(async (full: unknown) => {
+        // A full board ends the session parked longest and tries once more (S11).
+        if (await reclaimParkedNode()) return nodeManager.assignSessionToNode(socket.id, socket.id);
+        throw full;
+      });
   } catch (error) {
 console.error("Failed to assign node to session:", error);
     socket.emit("ansi-output", allNodesBusyNotice());

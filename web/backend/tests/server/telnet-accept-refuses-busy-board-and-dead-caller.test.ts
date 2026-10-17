@@ -36,10 +36,10 @@ describe('TelnetServer.handleConnection (acceptIncomingConnection)', () => {
   });
   afterEach(() => jest.restoreAllMocks());
 
-  it('tells a second caller the board is busy and hangs up when no node is free', () => {
+  it('tells a second caller the board is busy and hangs up when no node is free', async () => {
     nodeSpy.mockReturnValue(null);
     const s = fakeSocket('10.9.0.1', false);
-    (server as any).handleConnection(s);
+    await (server as any).handleConnection(s);   // a full board first looks for a parked session (S11)
     expect(s.write).toHaveBeenCalledWith(sessionManager.allNodesBusyNotice());
     expect(s.end).toHaveBeenCalled();
     expect((server as any).connections.size).toBe(0);

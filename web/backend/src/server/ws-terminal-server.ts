@@ -31,6 +31,7 @@ type WSLike = {
 
 import { BBSSession } from "../index";
 import { getNextAvailableNodeId, allNodesBusyNotice } from "./session-manager";
+import { reclaimedNodeId } from "./session-parking";
 
 export class WSTerminalConnection extends EventEmitter {
   private ws: WSLike;
@@ -134,15 +135,16 @@ export function attachWSTerminalServer(
     });
   });
 
-  wss.on("connection", (ws: WSLike, req: any) => {
+  wss.on("connection", async (ws: WSLike, req: any) => {
     const remoteAddress =
       (req?.headers?.["x-forwarded-for"] as string | undefined)
         ?.split(",")[0]
         ?.trim() ||
       req?.socket?.remoteAddress ||
       "unknown";
-    // A node first, as every other transport takes one; a full board says so.
-    const nodeId = getNextAvailableNodeId();
+    // A node first, as every other transport takes one; a full board first
+    // ends the session parked longest (S11), then says so.
+    const nodeId = getNextAvailableNodeId() ?? await reclaimedNodeId();
     if (nodeId === null) {
       console.warn(`[WS-Terminal] All nodes busy - refusing ${remoteAddress}`);
       try { ws.send(allNodesBusyNotice()); } catch { /* already gone */ }

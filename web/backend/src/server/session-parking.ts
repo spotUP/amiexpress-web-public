@@ -24,7 +24,7 @@ import type { DropDecision, SessionLink } from './session-link';
 import {
   issueResumeToken, lookupResumeToken, setResumeExpiry, tokenFingerprint,
 } from './resume-tokens';
-import { sessions, socketToNodeId, socketToUser, setSession } from './session-manager';
+import { sessions, socketToNodeId, socketToUser, setSession, getNextAvailableNodeId } from './session-manager';
 import { startObserving, stopObserving } from './session-observers';
 import { getSystemTime } from '../utils/date-time.util';
 import { cleanupTransfer } from '../utils/raw-transfer-teardown.util';
@@ -315,11 +315,46 @@ export async function endParkedSessionsFor(userId: string): Promise<number> {
   return parked.length;
 }
 
-/** The session parked longest (S11 uses it to free a node). */
+/**
+ * The session parked longest (S11 uses it to free a node). A session whose
+ * caller is coming back right now (`resuming`) is not a candidate: a caller
+ * who is here beats a caller who might come back, and that one is here.
+ */
 export function oldestParkedSession(): BBSSession | null {
   let best: BBSSession | null = null;
   for (const s of sessions.values()) {
-    if (isParked(s) && (best === null || s.detachedAt! < best.detachedAt!)) best = s;
+    if (!isParked(s) || !s.webLink || s.webLink.ended || resuming.has(s)) continue;
+    if (best === null || s.detachedAt! < best.detachedAt!) best = s;
   }
   return best;
+}
+
+/**
+ * A full board frees a node before it turns a caller away (plan Decision 17):
+ * the session parked longest ends through the one disconnect handler - the
+ * same `Loss Carrier` finalize its window would have run, stamped with the
+ * drop time (S8), account saved, token revoked, node released - and this
+ * waits for that finalize. False when nothing is parked: the caller is
+ * refused as before.
+ *
+ * WEB_: express.e has no parked state; a dropped carrier there is already a
+ * logoff (express.e:8160-8166), so its node was free all along.
+ */
+export async function reclaimParkedNode(): Promise<boolean> {
+  const s = oldestParkedSession();
+  if (!s) return false;
+  console.log(`[RECLAIM] board full: ending the session parked longest, node ${s.nodeId}`);
+  s.webLink!.end('transport close');
+  await endings.get(s);
+  return true;
+}
+
+/**
+ * The node a reclaim gave back, or null when nothing was parked and the board
+ * is still full. The byte transports call it only after their allocator said
+ * null, so a board with a free node never waits:
+ * `getNextAvailableNodeId() ?? await reclaimedNodeId()`.
+ */
+export async function reclaimedNodeId(): Promise<number | null> {
+  return (await reclaimParkedNode()) ? getNextAvailableNodeId() : null;
 }
