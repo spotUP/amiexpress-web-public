@@ -25,6 +25,9 @@ import { setEnvStat } from '../../src/utils/acs.util';
 import { installParking, attachParkedTo } from '../../src/server/session-parking';
 import { EnvStat, PARKED_NODE_STATUS } from '../../src/constants/env-codes';
 import { BBSState } from '../../src/constants/bbs-states';
+import { DoorMessageHandler } from '../../src/amiga-emulation/session/DoorMessageHandler';
+import { DoorConstants } from '../../src/amiga-emulation/DoorTypes';
+import { XIMCommand } from '../../src/amiga-emulation/xim/types';
 
 const NODE = 7;
 const statusAt = MULTICOM_SINGLE_PORTS + NODE * 512 + 0x52;
@@ -115,5 +118,51 @@ describe('WHO doors see the caller\'s action', () => {
     attachParkedTo(raw, session, { id: 42, username: 'spot', baud: 0 } as any);
 
     expect(emu.readMemory32(statusAt)).toBe(EnvStat.FILES);
+  });
+
+  it('a parked node inside a door reads carrier lost (31), and a resume shows DOORS again', () => {
+    const session = caller();
+    setEnvStat(session, EnvStat.DOORS);
+    expect(emu.readMemory32(statusAt)).toBe(EnvStat.DOORS);
+
+    const link = fakeLink();
+    session.webLink = link;
+    installParking(link as any, session);
+    expect(link.drop('transport close')).toBe('park');
+    expect(PARKED_NODE_STATUS).toBe(31);
+    expect(emu.readMemory32(statusAt)).toBe(31);
+
+    attachParkedTo({ id: 'new-socket', emit: jest.fn() } as any, session, { id: 42, username: 'spot', baud: 0 } as any);
+    expect(emu.readMemory32(statusAt)).toBe(EnvStat.DOORS);
+  });
+
+  describe('the door ENVSTAT command (express.e:3677-3683)', () => {
+    const MSG = 0x2000;
+
+    async function envstat(session: any, data: number, str: string, doorEmu: any) {
+      const handler = new DoorMessageHandler(
+        doorEmu, { on: jest.fn(), emit: jest.fn() } as any, { putMsg: jest.fn() } as any,
+        { executablePath: '/x/door', doorId: 'who', bbsSession: session } as any,
+      );
+      await (handler as any).processCommand(XIMCommand.ENVSTAT, data, str, MSG, 0);
+    }
+
+    it('SET moves the singlePort status bytes the WHO doors read', async () => {
+      const session = caller();
+      await envstat(session, 0, String(EnvStat.BULLETINS), byteEmulator());
+      expect(session.currentStat).toBe(EnvStat.BULLETINS);
+      expect(emu.readMemory32(statusAt)).toBe(EnvStat.BULLETINS);
+    });
+
+    it('GET returns the session\'s currentStat', async () => {
+      const session = caller();
+      setEnvStat(session, EnvStat.MAIL);
+      const doorEmu = byteEmulator();
+      await envstat(session, 1, '', doorEmu);
+      const at = MSG + DoorConstants.MESSAGE_STRING_OFFSET;
+      let out = '';
+      for (let i = 0; doorEmu.readMemory(at + i) !== 0; i++) out += String.fromCharCode(doorEmu.readMemory(at + i));
+      expect(out).toBe(String(EnvStat.MAIL));
+    });
   });
 });

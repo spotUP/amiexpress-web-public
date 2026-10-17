@@ -227,7 +227,7 @@ export class MulticomManager {
       return;
     }
 
-    console.error(`[MulticomManager] updateNode called: nodeId=${nodeId}, username="${username}", emulators.size=${this.emulators.size}`);
+    debugLog(`[MulticomManager] updateNode called: nodeId=${nodeId}, username="${username}", emulators.size=${this.emulators.size}`);
 
     // Update in-memory tracking
     this.nodes.set(nodeId, {
@@ -240,7 +240,7 @@ export class MulticomManager {
 
     // Update ALL active emulators
     for (const reg of this.emulators.values()) {
-      console.error(`[MulticomManager] Writing to emulator session ${reg.sessionId}`);
+      debugLog(`[MulticomManager] Writing to emulator session ${reg.sessionId}`);
       if (reg.initialized) {
         try {
           this.writeNodeToEmulator(reg.emulator, nodeId);
@@ -250,7 +250,7 @@ export class MulticomManager {
       }
     }
 
-    console.error(`[MulticomManager] Node ${nodeId} updated in ${this.emulators.size} emulator(s)`);
+    debugLog(`[MulticomManager] Node ${nodeId} updated in ${this.emulators.size} emulator(s)`);
   }
 
   /**

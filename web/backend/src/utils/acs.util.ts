@@ -9,11 +9,11 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { ACSPermission, ACS_PERMISSION_NAMES } from '../constants/acs-permissions';
-import { EnvStat } from '../constants/env-codes';
+import { EnvStat, PARKED_NODE_STATUS } from '../constants/env-codes';
 import type { User } from '../database';
 import { boardRoot } from './board-root.util';
+import { debugLog } from './debug-log';
 import { multicomManager } from '../nodes/MulticomManager';
-import { PARKED_NODE_STATUS } from '../constants/env-codes';
 import {
   loadAcsAccessFiles,
   isAcsLoaded,
@@ -140,7 +140,7 @@ function writeEnvStatus(nodeId: number, username: string, envStat: EnvStat): voi
   const status = `${paddedName}-${code}`;
   const filePath = path.join(envDir, `STATS@${nodeId}`);
 
-console.log(`[EnvStat] Writing ${filePath} (node ${nodeId}, stat ${envStat})`);
+debugLog(`[EnvStat] Writing ${filePath} (node ${nodeId}, stat ${envStat})`);
   fs.writeFileSync(filePath, status, { encoding: 'ascii' });
 }
 

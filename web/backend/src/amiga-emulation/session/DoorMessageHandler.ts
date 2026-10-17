@@ -31,6 +31,7 @@ import { amigaGaps, doorOf } from '../instrumentation/amiga-gaps';
 import { toAmigaTime, encodeAmigaDate } from '../../utils/date-time.util';
 import { calcSizeText } from '../../utils/byte-format.util';
 import { inputForTrace } from '../xim/secret-input';
+import { setEnvStat } from '../../utils/acs.util';
 
 // Telnet session state for TELNET_CONNECT command (express.e:3051-3302)
 interface TelnetSessionState {
@@ -1697,15 +1698,15 @@ debugLog(`[DoorMessageHandler]   BB_DROPDTR: Dropping DTR (hangup)`);
         // express.e:3677-3683: Get/set environment status
         if (data !== 0) {
           // Read: return current stat (default to 0 = idle)
-          const currentStat = (this.config.bbsSession as any)?.envStat || 0;
+          const currentStat = (this.config.bbsSession as any)?.currentStat ?? 0;
 debugLog(`[DoorMessageHandler]   ENVSTAT GET: ${currentStat}`);
           this.writeStringToMessage(msgAddr, String(currentStat));
         } else {
           // Write: set environment status
-          const newStat = parseInt(str) || 0;
+          const newStat = parseInt(str, 10);
 debugLog(`[DoorMessageHandler]   ENVSTAT SET: ${newStat}`);
-          if ((this.config.bbsSession as any)) {
-            (this.config.bbsSession as any).envStat = newStat;
+          if (this.config.bbsSession && !Number.isNaN(newStat)) {
+            setEnvStat(this.config.bbsSession, newStat); // express.e:3682
           }
         }
         break;

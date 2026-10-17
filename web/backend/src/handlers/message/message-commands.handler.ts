@@ -490,7 +490,7 @@ export function handleNMConfirm(socket: any, session: BBSSession, input: string)
         const offlineSession = _sessions.get(nodeNum.toString());
         if (offlineSession) {
           // express.e:25328-25337 sends SV_EXITNODE and prints nothing.
-          offlineSession.currentStat = EnvStat.SHUTDOWN;
+          setEnvStat(offlineSession, EnvStat.SHUTDOWN);
         }
         break;
 
