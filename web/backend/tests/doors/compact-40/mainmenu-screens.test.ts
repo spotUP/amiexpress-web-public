@@ -72,7 +72,7 @@ afterAll(() => {
   for (const dir of [...TEMP_ROOTS, LOGS]) fs.rmSync(dir, { recursive: true, force: true });
 });
 
-const UP = '\x1b[A', DOWN = '\x1b[B', ESC = '\x1b', BS = '\x7f', TAB = '\t';
+const UP = '\x1b[A', PGDN = '\x1b[6~', DOWN = '\x1b[B', ESC = '\x1b', BS = '\x7f', TAB = '\t';
 const idle = (keys: string, paints = true, quietMs?: number): Step => ({ at: 'idle', keys, paints, quietMs });
 const mouse = (button: number, col: number, row: number, up = false) => `\x1b[<${button};${col};${row}${up ? 'm' : 'M'}`;
 const bytes = (chunks: string[]) => chunks.reduce((n, c) => n + Buffer.byteLength(c, 'latin1'), 0);
@@ -114,26 +114,29 @@ const runOnce = (key: string, make: () => Promise<DriveResult>): Promise<DriveRe
 
 // ---- the runs (each one emulator session) --------------------------------------------------------------
 
+/** The grid tests pin the caller to Grid scroll: the board default at 80 columns and wider is Cover flow (decision 5, 2026-10-17). */
+const GRID = { menuStyle: 'scroll' };
+
 /** 80x25 classic theme: the first frame, then Esc. */
-const esc80 = () => runOnce('esc80', () => run(S80, [idle(ESC)]));
+const esc80 = () => runOnce('esc80', () => run(S80, [idle(ESC)], { user: GRID }));
 /** 80x25 with a theme that has a rail (the board's default, Classic, has none): the idle animation. */
-const rail80 = () => runOnce('rail80', () => run(S80, [idle(ESC)], { user: { themePreference: 'uprough-neon' } }));
+const rail80 = () => runOnce('rail80', () => run(S80, [idle(ESC)], { user: { ...GRID, themePreference: 'uprough-neon' } }));
 /** 80x25: Down, hover over the fifth entry, hover over the seventh, click it. */
 const keys80 = () => runOnce('keys80', async () => {
   const first = await esc80();
   const entries = entriesOf(gridText(replayCells(firstFrame(first), 80, 25)));
   const [hover, again] = [entries[4]!, entries[6]!];
-  return run(S80, [idle(DOWN), idle(mouse(35, 10, hover.row)), idle(mouse(35, 10, again.row)), idle(mouse(0, 10, again.row) + mouse(0, 10, again.row, true))]);
+  return run(S80, [idle(DOWN), idle(mouse(35, 10, hover.row)), idle(mouse(35, 10, again.row)), idle(mouse(0, 10, again.row) + mouse(0, 10, again.row, true))], { user: GRID });
 });
 /** 80x25: `9` matches no entry, so typing it moves nothing and names nothing; Backspace three times empties the line. */
-const typing80 = () => runOnce('typing80', () => run(S80, [idle('9'), idle('9'), idle('9'), idle(BS), idle(BS), idle(BS), idle(ESC, false)]));
+const typing80 = () => runOnce('typing80', () => run(S80, [idle('9'), idle('9'), idle('9'), idle(BS), idle(BS), idle(BS), idle(ESC, false)], { user: GRID }));
 /** 80x25: `m` is an entry BELOW the window (M Colour Mode): it is named in the status row; Tab shows it; Backspace empties the line. */
-const offWindow80 = () => runOnce('offWindow80', () => run(S80, [idle('m'), idle(TAB), idle(BS), idle(ESC, false)]));
+const offWindow80 = () => runOnce('offWindow80', () => run(S80, [idle('m'), idle(TAB), idle(BS), idle(ESC, false)], { user: GRID }));
 /** 40x25: `r` is the entry already selected, `e` matches nothing more: the highlight never moves. */
 const typing40 = () => runOnce('typing40', () => run(S40, [idle('r'), idle('e'), idle(BS), idle(BS), idle(ESC, false)]));
 /** The rows a stretch of the door's output addresses, once each. */
 const rowsOf = (chunks: string[]): number[] => [...new Set([...chunks.join('').matchAll(/\x1b\[(\d+);\d+H/g)].map(m => Number(m[1])))].sort((a, b) => a - b);
-const typed80 = () => runOnce('typed80', () => run(S80, [idle('j'), idle(' 2'), idle('\r')]));
+const typed80 = () => runOnce('typed80', () => run(S80, [idle('j'), idle(' 2'), idle('\r')], { user: GRID }));
 const esc40 = () => runOnce('esc40', () => run(S40, [idle(ESC)], { user: { themePreference: 'uprough-neon' } }));
 /** 40x25 with no mouse and no PgDn (the board converts arrows only, io.ts handleFetchKey): Down past the last entry of page 1 turns it. */
 const pages40 = () => runOnce('pages40', async () => {
@@ -146,7 +149,9 @@ const pages80 = () => runOnce('pages80', async () => {
   const onPage = entriesOf(gridText(replayCells(firstFrame(await run(S80, [idle(ESC)], { user })), 80, 25))).length;
   return run(S80, [idle(DOWN.repeat(onPage)), idle(ESC, false, 30000)], { user });
 });
-const esc132 = () => runOnce('esc132', () => run(S132, [idle(ESC)]));
+/** 80x25 with no stored style: the board default (Cover flow at 80, decision 5); Right at the grid's edge turns the section. */
+const flow80 = () => runOnce('flow80', () => run(S80, [idle(PGDN), idle(ESC, false)]));
+const esc132 = () => runOnce('esc132', () => run(S132, [idle(ESC)], { user: GRID }));
 
 /** The entry rows of a painted 80/132-column screen: `  KEY   Label` under a section header. */
 function entriesOf(rows: string[]): Array<{ row: number; key: string; label: string }> {
@@ -180,7 +185,7 @@ describe('MAINMENU on three screens', () => {
       expect(rows.some(r => r.includes('MAIN MENU'))).toBe(false);   // the logo replaces the title (sysop ruling 2026-10-15, 735e21399)
       expect(rows.some(r => /^ {2}Messages -+$/.test(r.trimEnd()))).toBe(true);
       expect(rows.some(r => /^ {2}Files -+$/.test(r.trimEnd()))).toBe(true);
-      expect(rows.some(r => /^ {2}R {12}Read Mail\s*$/.test(r))).toBe(true);
+      expect(rows.some(r => /^(?: {2}|>>)R {12}Read Mail\s*$/.test(r))).toBe(true);
     });
 
     test('the bottom row is a hint in full words with the key bar at its right (nothing typed yet)', async () => {
@@ -474,6 +479,17 @@ describe('MAINMENU on three screens', () => {
       expect(gridText(replayCells(firstFrame(r), 80, 25))[23]).toMatch(/Page 1 of \d+$/);
       expect(gridText(replayCells(r.chunks.slice(0, r.marks[1]!.at).join(''), 80, 25))[23]).toMatch(/Page 2 of \d+$/);
       expect(wipeEnds() - before).toBe(1);                                         // the page wipe (open and leave are off in the fixture)
+    });
+  });
+
+  describe('cover flow (the board default at 80 columns)', () => {
+    test('a caller with no stored style opens on one section with the page indicator, and Page Down turns to the next section (Right moves in the grid first)', async () => {
+      const r = await flow80();
+      const first = gridText(replayCells(firstFrame(r), 80, 25));
+      expect(first.some(row => /< 1\/\d+/.test(row))).toBe(true);                // drawn only by ui_pages_indicator
+      const turned = gridText(replayCells(r.chunks.slice(0, r.marks[1]!.at).join(''), 80, 25));
+      expect(turned.some(row => /< 2\/\d+/.test(row))).toBe(true);
+      expect(turned).not.toEqual(first);
     });
   });
 

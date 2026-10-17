@@ -46,20 +46,22 @@ const REPO = path.resolve(__dirname, '../../../../..');
 const DOOR = path.join(REPO, 'Doors', 'USERSETTINGS', 'usersettings');
 const EIGHTY = path.join(__dirname, 'fixtures', 'usersettings-80.ans');
 
-async function driveFull(cols: number, steps: Step[], rows = 25): Promise<{ ansi: string; user: any }> {
-  const { ansi, user } = await driveDoor(DOOR, { cols, rows, steps, command: 'W' });
+async function driveFull(cols: number, steps: Step[], rows = 25, caller?: Record<string, unknown>): Promise<{ ansi: string; user: any }> {
+  const { ansi, user } = await driveDoor(DOOR, { cols, rows, steps, command: 'W', user: caller });
   return { ansi, user };
 }
 
 const drive = async (cols: number, steps: Step[], rows = 25): Promise<string> => (await driveFull(cols, steps, rows)).ansi;
 
 const QUIT: Step[] = [{ at: 'idle', keys: 'q' }];
+/** The fixture was frozen with Grid scroll; the board default at 80 columns is now Cover flow (decision 5, 2026-10-17). */
+const SCROLL = { menuStyle: 'scroll' };
 
 describe('the W door on three screens', () => {
   jest.setTimeout(90000);
 
   test('80 columns paints what it painted when the fixture was frozen', async () => {
-    const ansi = beforeTeardown(await drive(80, QUIT));
+    const ansi = beforeTeardown((await driveFull(80, QUIT, 25, SCROLL)).ansi);
     expect(fs.existsSync(EIGHTY)).toBe(true);   // never written by this test: see the header
     expect(ansi).toBe(fs.readFileSync(EIGHTY, 'latin1'));
     expect(ansi).toContain('USER CONFIGURATION');
@@ -67,7 +69,7 @@ describe('the W door on three screens', () => {
   });
 
   (process.env.USERSETTINGS_WRITE_FIXTURE ? test : test.skip)('writes the fixture (deliberate, flagged)', async () => {
-    fs.writeFileSync(process.env.USERSETTINGS_WRITE_FIXTURE_TO || EIGHTY, beforeTeardown(await drive(80, QUIT)), 'latin1');
+    fs.writeFileSync(process.env.USERSETTINGS_WRITE_FIXTURE_TO || EIGHTY, beforeTeardown((await driveFull(80, QUIT, 25, SCROLL)).ansi), 'latin1');
   });
 
   test('40 columns: nothing is addressed off a C64 screen, the value sits under its label, no "?" glyph', async () => {
@@ -106,6 +108,20 @@ describe('the W door on three screens', () => {
     expect(ansi).not.toMatch(/\x1b\[\d+;(13[3-9]|1[4-9]\d|[2-9]\d\d)H/);
     const longestRun = Math.max(...ansi.split(/\x1b\[[0-9;?]*[A-Za-z]/).map(run => run.length));
     expect(longestRun).toBeLessThanOrEqual(80);
+  });
+
+  // W2/W3: the caller's menu style reaches W through STYLE?; cover flow shows one header run per page.
+  test('a cover flow caller turns W\'s pages with Right, and the key bar and indicator say so', async () => {
+    const { ansi } = await driveFull(80, [{ at: 'idle', keys: '\x1b[C' }, { at: 'idle', keys: 'q' }], 25, { menuStyle: 'coverflow' });
+    expect(ansi).toContain('Left/Right: Page');
+    expect(ansi).toMatch(/< 1\/\d+ /);
+    expect(ansi).toMatch(/< 2\/\d+ /);
+  });
+
+  test('a scroll caller keeps the one long list: no page indicator', async () => {
+    const ansi = beforeTeardown((await driveFull(80, QUIT, 25, { menuStyle: 'scroll' })).ansi);
+    expect(ansi).not.toContain('Left/Right: Page');
+    expect(ansi).not.toMatch(/< 1\/\d+ /);
   });
 
   /*
