@@ -121,6 +121,8 @@ Use `./dev/scripts/start-servers.sh` and `./dev/scripts/kill-servers.sh`. Rules:
 4. If you inherit zombies, clean up first and document in `handoff.md`.
 5. Never skip `kill-servers.sh` before ending a task that started a server.
 
+A web session outlives its socket: `server/session-link.ts`; never hold the raw socket.io socket for a session, take `session.webLink`.
+
 ### Stuck-Door Sweep (start of every debug-MCP session)
 
 Before using the debug MCP, call `GET /debug/api/sessions` and check `activeDoors[]`. Any entry with `ageMs` > ~60s that you didn't launch is almost certainly a stuck 68K door. Kill with `POST /debug/api/sessions/<nodeId>/kill-door`. 68K doors get stuck often (blocked on input, library calls, etc.) and stale DebugRegistry entries hide real state.
