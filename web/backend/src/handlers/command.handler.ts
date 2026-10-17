@@ -12,7 +12,7 @@ import { keysForLog } from '../utils/keys-for-log.util';
 import { loggableCommandParams } from './commands/menu-door-exit';
 import { BBSSession } from '../index';
 import { petsciiColumnsOf } from '../amiga-emulation/xim/screen-width.util';
-import { BBSState, LoggedOnSubState } from '../constants/bbs-states';
+import { BBSState, LoggedOnSubState, displayFlowStates, isDisplayFlowState } from '../constants/bbs-states';
 import { RESULT_NOT_ALLOWED, InternalCommandResult } from '../constants/command-results';
 import { higherAccess } from '../utils/error-handling.util';
 import { inputKeys } from '../utils/input-chunks.util';
@@ -243,16 +243,6 @@ let SCREEN_MENU: string = 'MENU';
 /** express.e:29156 `IF(tries>2)`: three password tries per call. */
 const PASSWORD_TRIES_PER_CALL = 3;
 
-const displayFlowStates = new Set<LoggedOnSubState>([
-  LoggedOnSubState.DISPLAY_BULL,
-  LoggedOnSubState.DISPLAY_NODE_BULL,
-  LoggedOnSubState.DISPLAY_ACHIEVE_BULL,
-  LoggedOnSubState.EXEC_QUICKNEW,
-  LoggedOnSubState.CONF_SCAN,
-  LoggedOnSubState.DISPLAY_CONF_BULL,
-  LoggedOnSubState.AUTO_REJOIN,  // express.e:5066-5088 - auto-rejoin with S stats
-  LoggedOnSubState.DISPLAY_MENU,
-]);
 console.log('[command.handler] displayFlowStates:', Array.from(displayFlowStates));
 const DISPLAY_FLOW_LOG_ENABLED = process.env.SCREEN_DEBUG !== '0';
 const displayFlowLog = (...args: any[]) => {
@@ -261,9 +251,7 @@ console.log('[DISPLAY FLOW]', ...args);
   }
 };
 
-export function isDisplayFlowState(subState?: LoggedOnSubState) {
-  return typeof subState !== 'undefined' && displayFlowStates.has(subState);
-}
+export { isDisplayFlowState };
 
 /** The account editor's sub-states, dispatched through handleMessageEntryInput's switch. */
 const accountEditorSubStates = new Set<string>([

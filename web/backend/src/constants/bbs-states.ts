@@ -215,3 +215,24 @@ export enum SessionStatus {
   IDLE = 'idle',
   DISCONNECTED = 'disconnected'
 }
+
+/**
+ * The sub-states the board's display flow walks on its way to the command
+ * prompt (express.e's main loop: bulletins, conference scan, DISPLAY_MENU).
+ * A command that leaves the session in one of these hands control back to
+ * the board; any other sub-state is a prompt the command still owns.
+ */
+export const displayFlowStates: ReadonlySet<LoggedOnSubState> = new Set<LoggedOnSubState>([
+  LoggedOnSubState.DISPLAY_BULL,
+  LoggedOnSubState.DISPLAY_NODE_BULL,
+  LoggedOnSubState.DISPLAY_ACHIEVE_BULL,
+  LoggedOnSubState.EXEC_QUICKNEW,
+  LoggedOnSubState.CONF_SCAN,
+  LoggedOnSubState.DISPLAY_CONF_BULL,
+  LoggedOnSubState.AUTO_REJOIN,  // express.e:5066-5088 - auto-rejoin with S stats
+  LoggedOnSubState.DISPLAY_MENU,
+]);
+
+export function isDisplayFlowState(subState?: LoggedOnSubState) {
+  return typeof subState !== 'undefined' && displayFlowStates.has(subState);
+}

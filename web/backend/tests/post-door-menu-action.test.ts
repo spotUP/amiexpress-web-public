@@ -68,6 +68,24 @@ describe("postDoorMenuAction", () => {
     }
   });
 
+  it("FM picked from the menu door keeps its filename prompt instead of the menu painting over it", () => {
+    // The exit tail parks the session at DISPLAY_MENU, then RETURNCOMMAND FM
+    // runs and stops at "Enter filename(s)" (FM_FILENAME_INPUT).
+    expect(postDoorMenuAction(session({ subState: LoggedOnSubState.FM_FILENAME_INPUT }))).toBe("interactive");
+  });
+
+  it("a returned command that hands back to the board is followed by the menu", () => {
+    for (const sub of [
+      LoggedOnSubState.DISPLAY_MENU,
+      LoggedOnSubState.READ_COMMAND,
+      LoggedOnSubState.PROCESS_COMMAND,
+      LoggedOnSubState.DOOR_RUNNING,
+      LoggedOnSubState.CONF_SCAN,
+    ]) {
+      expect(postDoorMenuAction(session({ subState: sub }))).toBe("menu");
+    }
+  });
+
   it("plain door completion returns to the menu", () => {
     expect(postDoorMenuAction(session())).toBe("menu");
   });

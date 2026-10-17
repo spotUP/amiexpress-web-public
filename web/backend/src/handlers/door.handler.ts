@@ -41,6 +41,7 @@ import { logDoorStart, logDoorExit, doorLogTypeNumber } from '../utils/node-logs
 import {
   LoggedOnSubState as LoggedOnSubStateImport,
   BBSState as BBSStateImport,
+  isDisplayFlowState,
 } from '../constants/bbs-states';
 import { dateTimeToDateStamp } from '../utils/date-time.util';
 import { joinVoiceChannel, leaveVoiceChannel, setVoiceMute, setVoiceVideo } from './voice-channel.handler';
@@ -1328,21 +1329,26 @@ export function postDoorMenuAction(session: BBSSession): PostDoorAction {
   if (session.paginatedScreen) {
     return 'pause';
   }
-  // Use the direct import, not the setConstants-injected alias — this
+  // A returned command (RETURNCOMMAND) that stopped at its own prompt owns
+  // the input until the caller answers it - FM's "Enter filename(s)", an
+  // upload's resume question. The exit tail parks the session at
+  // DISPLAY_MENU before the command runs, so a command that hands back
+  // leaves it there or in another display-flow state; anything else is a
+  // prompt the command still owns. The same test the command prompt makes
+  // after processCommand (command.handler PROCESS_COMMAND). A hand-kept list
+  // of prompt states named only the upload/download ones, so FM picked from
+  // the menu door was painted over by the menu a second later (sysop,
+  // 2026-10-17). Direct import, not the setConstants-injected alias: this
   // helper must work before dependency injection runs (and in tests).
   const sub = session.subState;
-  if (
-    sub === LoggedOnSubStateImport.FILES_UPLOAD ||
-    sub === LoggedOnSubStateImport.FILES_DOWNLOAD ||
-    sub === LoggedOnSubStateImport.UPLOAD_RESUME_PROMPT ||
-    sub === LoggedOnSubStateImport.UPLOAD_RESUME_DELETE ||
-    sub === LoggedOnSubStateImport.UPLOAD_RENAME_PROMPT ||
-    sub === LoggedOnSubStateImport.DOWNLOAD_FILENAME_INPUT ||
-    sub === LoggedOnSubStateImport.DOWNLOAD_CONFIRM_INPUT
-  ) {
-    return 'interactive';
-  }
-  return 'menu';
+  const atRest = sub === undefined
+    || isDisplayFlowState(sub)
+    || sub === LoggedOnSubStateImport.READ_COMMAND
+    || sub === LoggedOnSubStateImport.READ_SHORTCUTS
+    || sub === LoggedOnSubStateImport.PROCESS_COMMAND
+    // Left over from a door that has finished (a live one is 'door' above).
+    || sub === LoggedOnSubStateImport.DOOR_RUNNING;
+  return atRest ? 'menu' : 'interactive';
 }
 
 /**
