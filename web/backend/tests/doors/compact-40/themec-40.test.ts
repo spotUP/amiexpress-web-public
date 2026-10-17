@@ -112,7 +112,7 @@ function petsciiScreen(ansi: string): { rows: string[]; painted: number } {
  * a C64 screen shows.
  */
 const THEMES = [
-  'CLASSIC', 'SLATE & SLASH', 'SLATE & SLASH (MUTED)', 'UPROUGH NEON',
+  'SLATE & SLASH', 'SLATE & SLASH (MUTED)', 'UPROUGH NEON',
   'UPROUGH NEON (MUTED)', 'QUIET PHOSPHOR', 'QUIET PHOSPHOR (MUTED)',
 ];
 

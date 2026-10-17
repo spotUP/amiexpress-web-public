@@ -139,12 +139,7 @@ const typing40 = () => runOnce('typing40', () => run(S40, [idle('r'), idle('e'),
 const rowsOf = (chunks: string[]): number[] => [...new Set([...chunks.join('').matchAll(/\x1b\[(\d+);\d+H/g)].map(m => Number(m[1])))].sort((a, b) => a - b);
 const typed80 = () => runOnce('typed80', () => run(S80, [idle('j'), idle(' 2'), idle('\r')], { user: GRID }));
 const esc40 = () => runOnce('esc40', () => run(S40, [idle(ESC)], { user: { themePreference: 'uprough-neon' } }));
-/** 40x25 with no mouse and no PgDn (the board converts arrows only, io.ts handleFetchKey): Down past the last entry of page 1 turns it. */
-const pages40 = () => runOnce('pages40', async () => {
-  const onPage = entriesOf(gridText(replayCells(firstFrame(await esc40()), 40, 25))).length;
-  // the burst is answered key by key and the emulator may stall between two of them: wait long before leaving
-  return run(S40, [idle(DOWN.repeat(onPage)), idle(ESC, false, 30000)]);
-});
+/** A caller whose stored style is the retired pages: the board reads it as scroll. Down past the window's last entry scrolls. */
 const pages80 = () => runOnce('pages80', async () => {
   const user = { menuStyle: 'pages' };
   const onPage = entriesOf(gridText(replayCells(firstFrame(await run(S80, [idle(ESC)], { user })), 80, 25))).length;
@@ -445,27 +440,11 @@ describe('MAINMENU on three screens', () => {
     });
   });
 
-  describe('pages mode', () => {
+  describe('wipes, and the retired Pages style', () => {
     const wipeEnds = () => {
       const log = path.join(LOGS, 'xim-debug.log');
       return fs.existsSync(log) ? (fs.readFileSync(log, 'utf8').match(/"string": "WIPE END"/g) ?? []).length : 0;
     };
-
-    test('40x25 (pages is the C64 default): the status row says which page, Down past the page\'s last entry turns it, and the page wipe plays (the board\'s wipes are on at 40 by default)', async () => {
-      const before = wipeEnds();
-      const r = await pages40();
-      expect(gridText(replayCells(firstFrame(r), 40, 25))[23]).toMatch(/Page 1 of \d+$/);
-      expect(gridText(replayCells(r.chunks.slice(0, r.marks[1]!.at).join(''), 40, 25))[23]).toMatch(/Page 2 of \d+$/);
-      expect(wipeEnds() - before).toBe(1);                                         // the door follows the catalogue's wipe letters at every width
-    });
-
-    test('40x25: when the sysop turns the 40-column wipes off the board sends none, and none plays', async () => {
-      const board = tempBoard(menu => { menu.wipes.at40 = false; });
-      const before = wipeEnds();
-      const onPage = entriesOf(gridText(replayCells(firstFrame(await esc40()), 40, 25))).length;
-      await run(S40, [idle(DOWN.repeat(onPage)), idle(ESC, false, 30000)], { board });
-      expect(wipeEnds() - before).toBe(0);
-    });
 
     test('40x25: the board\'s opening wipe plays around the first frame', async () => {
       const board = tempBoard(menu => { menu.wipes.open = 'H'; });
@@ -474,12 +453,19 @@ describe('MAINMENU on three screens', () => {
       expect(wipeEnds() - before).toBe(1);
     });
 
-    test('80x25 with the caller\'s own choice of pages (the W setting): a page turn plays the page wipe ONCE', async () => {
+    test('40x25: when the sysop turns the 40-column wipes off the board sends none, and none plays', async () => {
+      const board = tempBoard(menu => { menu.wipes.open = 'H'; menu.wipes.at40 = false; });
+      const before = wipeEnds();
+      await run(S40, [idle(ESC)], { board });
+      expect(wipeEnds() - before).toBe(0);
+    });
+
+    test('80x25 with a stored pages style (retired): the menu scrolls, with no page number and no page wipe', async () => {
       const before = wipeEnds();
       const r = await pages80();
-      expect(gridText(replayCells(firstFrame(r), 80, 25))[23]).toMatch(/Page 1 of \d+$/);
-      expect(gridText(replayCells(r.chunks.slice(0, r.marks[1]!.at).join(''), 80, 25))[23]).toMatch(/Page 2 of \d+$/);
-      expect(wipeEnds() - before).toBe(1);                                         // the page wipe (open and leave are off in the fixture)
+      expect(gridText(replayCells(firstFrame(r), 80, 25))[23]).not.toMatch(/Page \d+ of \d+/);
+      expect(gridText(replayCells(r.chunks.slice(0, r.marks[1]!.at).join(''), 80, 25)).join('\n')).not.toMatch(/Page \d+ of \d+/);
+      expect(wipeEnds() - before).toBe(0);
     });
   });
 
@@ -581,7 +567,8 @@ describe('MAINMENU on three screens', () => {
   describe('MENUSETTINGS (the same binary under the W settings registration)', () => {
     test('opens as MENU STYLE, and Up from Board default (wrapping to Cover flow) stores the caller\'s choice', async () => {
       const r = await run(S80, [idle(UP), idle('\r'), idle(ESC)], { command: 'MENUSETTINGS' });
-      expect(gridText(replayCells(firstFrame(r), 80, 25))[0]!.trim()).toBe('MENU STYLE');
+      // The default theme's rail runs beside the title on row 1, so the title is the row's end.
+      expect(gridText(replayCells(firstFrame(r), 80, 25))[0]!.trim()).toMatch(/(^|\s)MENU STYLE$/);
       expect(r.session.user.menuStyle).toBe('coverflow');
     });
   });
