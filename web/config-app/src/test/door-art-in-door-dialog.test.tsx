@@ -87,9 +87,8 @@ describe('door art in the door dialog', () => {
     await user.upload(screen.getByLabelText('Upload a logo'), new File(['x'], 'cat.txt', { type: 'text/plain' }));
     await waitFor(() => expect(uploadMenuLogo).toHaveBeenCalledWith('BULLETINS', 'cat.txt', 'eA=='));
 
-    await user.selectOptions(screen.getByLabelText('Width for a new header set'), 'Standard');
-    await user.selectOptions(screen.getByLabelText('File for a new header set'), 'cat.txt');
-    await user.click(screen.getByRole('button', { name: 'Add header set' }));
+    // One step (sysop decision 2026-10-17): the upload asks where the logo goes, Header and the measured width preselected.
+    await user.click(await screen.findByRole('button', { name: 'Show on the menu' }));
     await waitFor(() => expect(lastSaved().logos).toEqual([
       { position: 'header', widthClass: 'standard', levelFloor: 0, rule: 'fixed', files: ['cat.txt'], afterSection: 0 },
     ]), { timeout: 4000 });

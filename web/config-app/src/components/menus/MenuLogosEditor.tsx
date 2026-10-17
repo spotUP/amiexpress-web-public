@@ -10,7 +10,7 @@ import { createSurface, type EditorSurface } from '../../pages/screen-editor-sta
 import { screenToCanvas } from '../../pages/screen-bytes';
 import {
   addLogoFile, addLogoSet, logoOffers, logoShownIn, logoSlotConflict, logoWidthWarnings, moveLogoFile, newSetWidth, positionWidths, removeLogoFile, removeLogoSet,
-  setLogoAfterSection, setLogoFloor, setLogoRule, usedByText,
+  setLogoAfterSection, setLogoFloor, setLogoRule, showUploadedLogo, uploadPlacement, uploadWidths, usedByText,
 } from './menu-logo-edit';
 import { BUTTON_CLASS, INPUT_CLASS } from './menu-styles';
 
@@ -63,15 +63,58 @@ function LogoStudio({ kind, file, onClose, onSaved }: { kind: MenuKind; file: st
   );
 }
 
-function FilesPanel({ kind, config, files, loading, error, reload }: { kind: MenuKind; config: MenuConfig; files: MenuLogoFile[]; loading: boolean; error: Error | null; reload: () => void }) {
+/**
+ * Asked right after an upload: where the logo shows. Header and the width its measured size names are
+ * preselected, so one click puts it on the menu (sysop decision 2026-10-17); the choice goes through the same
+ * update/autosave as every other set edit, so the board's save route validates it.
+ */
+function PlaceUploadDialog({ uploaded, config, update, onClose }: { uploaded: MenuLogoFile; config: MenuConfig; update: Update; onClose: () => void }) {
+  const [position, setPosition] = useState<LogoPosition>('header');
+  const [cls, setCls] = useState<WidthClass | null>(uploadPlacement('header', uploaded));
+  const widths = uploadWidths(position, uploaded);
+  const replaced = cls ? config.logos.find(s => s.position === position && s.widthClass === cls && s.levelFloor === 0)?.files.filter(f => f !== uploaded.file) ?? [] : [];
+  const show = () => {
+    if (cls) update(c => showUploadedLogo(c, uploaded, position, cls));
+    onClose();
+  };
+  return (
+    <Modal open onClose={onClose} title={`Show ${uploaded.file} on the menu`} maxWidth="max-w-lg">
+      <div className="p-4 space-y-3 text-sm text-content-primary">
+        <p>{uploaded.file} is {uploaded.rows} rows by {uploaded.cols} columns. Where does it go?</p>
+        <label className="flex items-center gap-2">Position
+          <select aria-label="Position for the uploaded logo" className={`${INPUT_CLASS} !w-auto`} value={position}
+            onChange={e => { const p = e.target.value as LogoPosition; setPosition(p); setCls(uploadPlacement(p, uploaded)); }}>
+            {POSITIONS.map(p => <option key={p.position} value={p.position}>{p.title}</option>)}
+          </select>
+        </label>
+        <label className="flex items-center gap-2">Screen width
+          <select aria-label="Screen width for the uploaded logo" className={`${INPUT_CLASS} !w-auto`} value={cls ?? ''} disabled={!widths.length}
+            onChange={e => setCls(e.target.value as WidthClass)}>
+            {widths.map(w => <option key={w} value={w}>{WIDTH_WORDS[w]}</option>)}
+          </select>
+        </label>
+        {!widths.length && <p role="alert" className="text-status-danger">This logo cannot be drawn in that position; pick another.</p>}
+        {replaced.length > 0 && <p className="text-content-secondary">It takes the place of {replaced.join(', ')} in that set.</p>}
+        <div className="flex justify-end gap-2">
+          <button className={BUTTON_CLASS} onClick={onClose}>Only keep the file</button>
+          <button className={BUTTON_CLASS} disabled={!cls} onClick={show}>Show on the menu</button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+function FilesPanel({ kind, config, update, files, loading, error, reload }: { kind: MenuKind; config: MenuConfig; update: Update; files: MenuLogoFile[]; loading: boolean; error: Error | null; reload: () => void }) {
   const { confirm } = useNotification();
   const [note, setNote] = useState<string | null>(null);
   const [studio, setStudio] = useState<string | null>(null);
+  const [placing, setPlacing] = useState<MenuLogoFile | null>(null);
 
   const upload = async (base64: string, chosen: File) => {
     setNote(null);
     if (!LOGO_FILE_RE.test(chosen.name)) { setNote(LOGO_NAME_RULE); return; }
-    try { await apiClient.uploadMenuLogo(kind, chosen.name, base64); reload(); }
+    // The board measures the stored file; the dialog preselects from that size, never from a second parser here.
+    try { setPlacing(await apiClient.uploadMenuLogo(kind, chosen.name, base64)); reload(); }
     catch (e: unknown) { setNote(e instanceof Error ? e.message : 'Failed to save the logo'); }
   };
 
@@ -90,7 +133,7 @@ function FilesPanel({ kind, config, files, loading, error, reload }: { kind: Men
     { id: 'file', header: 'File', value: f => f.file, mono: true },
     { id: 'size', header: 'Size', value: f => f.rows * f.cols, cell: f => `${f.rows} x ${f.cols}` },
     { id: 'alphabet', header: 'Alphabet', value: f => alphabetWord(f) },
-    // An upload only adds the file; the menu draws it once a logo set below names it, so say which files no set names.
+    // A file the sysop kept without showing (or took out of every set) is never drawn; say which files no set names.
     { id: 'shown', header: 'Shown', value: f => logoShownIn(config, f.file).join('; ') || NOT_SHOWN },
   ];
 
@@ -119,6 +162,7 @@ function FilesPanel({ kind, config, files, loading, error, reload }: { kind: Men
         )}
       />
       {studio && <LogoStudio kind={kind} file={studio} onClose={() => setStudio(null)} onSaved={reload} />}
+      {placing && <PlaceUploadDialog uploaded={placing} config={config} update={update} onClose={() => setPlacing(null)} />}
     </div>
   );
 }
@@ -211,7 +255,7 @@ export function MenuLogosEditor({ kind, config, update }: { kind: MenuKind; conf
 
   return (
     <div className="space-y-4">
-      <FilesPanel kind={kind} config={config} files={files} loading={loading} error={error} reload={load} />
+      <FilesPanel kind={kind} config={config} update={update} files={files} loading={loading} error={error} reload={load} />
       <p className="text-xs text-content-secondary">
         A logo set says which logos a position shows for one screen width and for callers at a level and above. A logo wider than the narrowest screen of its width (40, 80 or 120 columns) is never drawn, so it cannot be added.
       </p>

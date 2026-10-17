@@ -12,13 +12,14 @@ import { defaultMenuConfig } from '@bbs/screens/menu-config/menu-config';
 const FILES = [{ file: 'cat.txt', rows: 6, cols: 60, alphabet: 'ansi' }];
 
 const listMenuLogos = vi.fn(async (_kind: string) => FILES);
+const uploadMenuLogo = vi.fn(async (_kind: string, file: string, _base64: string) => ({ file, rows: 6, cols: 80 }));
 const deleteMenuLogo = vi.fn(async (_kind: string, _file: string): Promise<void> => undefined);
 
 vi.mock('../api/client', async importOriginal => ({
   ...(await importOriginal<typeof import('../api/client')>()),
   apiClient: {
     listMenuLogos: (k: string) => listMenuLogos(k),
-    uploadMenuLogo: vi.fn(),
+    uploadMenuLogo: (k: string, f: string, b: string) => uploadMenuLogo(k, f, b),
     deleteMenuLogo: (k: string, f: string) => deleteMenuLogo(k, f),
   },
 }));
@@ -92,5 +93,39 @@ describe('MenuLogosEditor', () => {
     expect(within(loose).getByText(/Not shown/)).toBeTruthy();
     const used = screen.getByRole('cell', { name: 'cat.txt' }).closest('tr')!;
     expect(within(used).getByText('Header, Standard')).toBeTruthy();
+  });
+
+  /*
+   * Sysop decision 2026-10-17: an upload puts the logo on screen in one step. Before, the upload only stored
+   * the file (live had no Menus/MAIN.json, so nothing ever named it). The dialog opens on Header and the width
+   * the board measured (80 columns = Standard); one click writes the set through the autosaving update.
+   */
+  it('an upload asks where the logo goes and one click puts it in the header set for its measured width', async () => {
+    const user = userEvent.setup();
+    let config = defaultMenuConfig('MAIN');
+    config.logos = [{ position: 'header', widthClass: 'standard', levelFloor: 0, rule: 'fixed', files: ['logo-a.txt'], afterSection: 0 }];
+    const update = vi.fn((change: (c: typeof config) => typeof config) => { config = change(config); });
+    const { container } = render(<MenuLogosEditor kind="MAIN" config={config} update={update} />);
+    const input = container.querySelector('input[type="file"]') as HTMLInputElement;
+    await user.upload(input, new File(['\x1b[1mLOGO'], 'mainmenu2.ans'));
+    await waitFor(() => expect(uploadMenuLogo).toHaveBeenCalledWith('MAIN', 'mainmenu2.ans', expect.any(String)));
+    expect((await screen.findByLabelText('Position for the uploaded logo') as HTMLSelectElement).value).toBe('header');
+    expect((screen.getByLabelText('Screen width for the uploaded logo') as HTMLSelectElement).value).toBe('standard');
+    expect(screen.getByText(/takes the place of logo-a.txt/)).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: 'Show on the menu' }));
+    expect(config.logos).toEqual([expect.objectContaining({ position: 'header', widthClass: 'standard', levelFloor: 0, files: ['mainmenu2.ans'] })]);
+  });
+
+  it('a wide logo opens on Wide with Standard not offered, and keeping the file only changes no set', async () => {
+    const user = userEvent.setup();
+    uploadMenuLogo.mockResolvedValueOnce({ file: 'big.ans', rows: 8, cols: 110 });
+    const update = vi.fn();
+    const { container } = render(<MenuLogosEditor kind="MAIN" config={defaultMenuConfig('MAIN')} update={update} />);
+    await user.upload(container.querySelector('input[type="file"]') as HTMLInputElement, new File(['x'], 'big.ans'));
+    const width = await screen.findByLabelText('Screen width for the uploaded logo') as HTMLSelectElement;
+    expect(width.value).toBe('wide');
+    expect(within(width).queryByRole('option', { name: 'Standard' })).toBeNull();   // 110 columns never fits 80
+    await user.click(screen.getByRole('button', { name: 'Only keep the file' }));
+    expect(update).not.toHaveBeenCalled();
   });
 });
