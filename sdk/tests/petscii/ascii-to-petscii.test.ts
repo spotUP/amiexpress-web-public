@@ -114,10 +114,41 @@ describe('petsciiMoveTo', () => {
 
   it('walks back up and left with $91 / $9D', () => {
     const m = new PetsciiMachine();
-    m.feed([0x11, 0x11, 0x11, 0x1D, 0x1D, 0x1D]); // row 3, col 3
+    m.feed([0x11, 0x11, 0x11, 0x11, 0x11, 0x1D, 0x1D, 0x1D]); // row 5, col 3
     const out: number[] = [];
-    petsciiMoveTo(m.state, 1, 1, out);
+    petsciiMoveTo(m.state, 1, 3, out); // 4 steps back beat HOME's 1 + 3 + 1
     expect(out).toEqual([0x91, 0x91, 0x9D, 0x9D]);
+  });
+
+  // A 40-column box over the menu jumps edge to edge on every row: the walk
+  // along the row cost ~36 bytes a jump and put the Ctrl-K palette at 1998
+  // bytes against plan K5's 900. Each case replays the transducer's bytes on
+  // a fresh machine, so the cheaper path must land where the CUP asked.
+  const replay = (ansi: string) => {
+    const bytes = new AnsiToPetsciiTransducer().transduce(ansi);
+    const m = new PetsciiMachine();
+    m.feed(Array.from(bytes));
+    return { bytes, state: m.state };
+  };
+
+  it('left edge to right edge of one row wraps back over the row start, not 36 steps along it', () => {
+    const lead = replay('\x1b[7;2H|').bytes.length;
+    const { bytes, state } = replay('\x1b[7;2H|\x1b[7;39H|');
+    expect(bytes.length - lead).toBeLessThanOrEqual(1 + 4);
+    expect([state.cursorX, state.cursorY]).toEqual([39, 6]);
+  });
+
+  it('right edge to the next row\'s left edge is a shift-RETURN that keeps reverse on', () => {
+    const lead = replay('\x1b[6;30H\x1b[7mX').bytes.length;
+    const { bytes, state } = replay('\x1b[6;30H\x1b[7mX\x1b[7;2HY');
+    expect(Array.from(bytes.slice(lead))).toEqual([0x8D, 0x1D, 0xD9]);
+    expect(state.reverse).toBe(true);
+    expect([state.cursorX, state.cursorY]).toEqual([2, 6]);
+  });
+
+  it('RETURN from a linked row lands after the whole logical line', () => {
+    const { state } = replay(`${'A'.repeat(45)}\x1b[1;5H\x1b[3;2HZ`);
+    expect([state.cursorX, state.cursorY]).toEqual([2, 2]);
   });
 });
 
@@ -142,8 +173,10 @@ describe('transducer byte-identity pins (captured before the extraction)', () =>
 
   it('inverse glyphs, cursor moves and bank state are byte-identical', () => {
     const mixed = 'Hi \\_^|{}~`\u2588\x1b[5;3HX\x1b[H\x1b[10;5Hy';
+    // ESC[5;3H from column 12 of row 0 was 4 downs and 10 lefts; since the
+    // walk picks its cheapest start it is shift-RETURN, 3 downs, 2 rights.
     expect(hex(new AnsiToPetsciiTransducer().transduce(mixed))).toBe(
-      '0e c8 49 20 2f a4 5e dd 28 29 2d 27 12 20 92 11 11 11 11 9d 9d 9d 9d 9d 9d 9d 9d 9d 9d d8 13 ' +
+      '0e c8 49 20 2f a4 5e dd 28 29 2d 27 12 20 92 8d 11 11 11 1d 1d d8 13 ' +
       '11 11 11 11 11 11 11 11 11 1d 1d 1d 1d 59',
     );
   });

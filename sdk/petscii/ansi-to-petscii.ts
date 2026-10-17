@@ -133,16 +133,50 @@ export function xterm256ToRgb(n: number, palette: readonly string[] = C64_PALETT
  * bytes this appends. Deltas never wrap or scroll: the target is inside
  * 40x25, so $1D stops before column 40, $11 stops before row 25, and $9D/$91
  * are only emitted when the cursor is right of / below the target.
+ *
+ * The walk is the cheapest of three starts: from the cursor, from HOME ($13,
+ * row 0 column 0), or from a shift-RETURN ($8D). From each start it may also
+ * wrap: $9D at column 0 lands on the last column of the row above and $1D at the
+ * last column on column 0 of the row below, so the screen is one line that
+ * $1D/$9D step along by 1 and $11/$91 by a row. A box painted at 40 columns
+ * jumps between its left and right edges on every row; a walk along the row
+ * costs ~36 bytes there, a wrap or a $8D costs 2-3. $8D, not $0D: $0D also
+ * turns reverse off, $8D keeps it. RETURN lands on the row after the
+ * cursor's LOGICAL line, which only the machine knows, so the caller passes
+ * it as `returnRow`; it leaves it out when RETURN would scroll (the logical
+ * line ends on the last row) and $8D is then never chosen. Rows move first,
+ * so every cell the walk passes lies between two on-screen cells and no step
+ * scrolls; equal costs keep the plain row-then-column walk.
  */
-export function petsciiMoveTo(state: PetsciiMachineState, x: number, y: number, out: number[]): void {
+export function petsciiMoveTo(state: PetsciiMachineState, x: number, y: number, out: number[], returnRow?: number): void {
   if (x === 0 && y === 0) {
     if (state.cursorX !== 0 || state.cursorY !== 0) out.push(0x13);
     return;
   }
-  for (let row = state.cursorY; row < y; row++) out.push(0x11);
-  for (let row = state.cursorY; row > y; row--) out.push(0x91);
-  for (let col = state.cursorX; col < x; col++) out.push(0x1D);
-  for (let col = state.cursorX; col > x; col--) out.push(0x9D);
+  const { cols, rows } = state;
+  const target = y * cols + x;
+  const plan = (lead: number | null, fromX: number, fromY: number) => {
+    const distance = target - (fromY * cols + fromX);
+    let best = { lead, rows: y - fromY, steps: x - fromX };
+    for (const down of [Math.floor(distance / cols), Math.ceil(distance / cols)]) {
+      const steps = distance - down * cols;
+      if (fromY + down < 0 || fromY + down >= rows) continue;
+      if (Math.abs(down) + Math.abs(steps) < Math.abs(best.rows) + Math.abs(best.steps)) best = { lead, rows: down, steps };
+    }
+    return { ...best, cost: (lead === null ? 0 : 1) + Math.abs(best.rows) + Math.abs(best.steps) };
+  };
+  let best = plan(null, state.cursorX, state.cursorY);
+  const home = plan(0x13, 0, 0);
+  if (home.cost < best.cost) best = home;
+  if (returnRow !== undefined) {
+    const ret = plan(0x8D, 0, returnRow);
+    if (ret.cost < best.cost) best = ret;
+  }
+  if (best.lead !== null) out.push(best.lead);
+  for (let i = 0; i < best.rows; i++) out.push(0x11);
+  for (let i = 0; i > best.rows; i--) out.push(0x91);
+  for (let i = 0; i < best.steps; i++) out.push(0x1D);
+  for (let i = 0; i > best.steps; i--) out.push(0x9D);
 }
 
 /** State of the deferred-wrap latch; see `AnsiToPetsciiTransducer.pendingWrap`. */
@@ -896,7 +930,8 @@ export class AnsiToPetsciiTransducer {
   private moveTo(x: number, y: number, out: number[]): void {
     this.pendingWrap = 'none'; // any explicit cursor move settles the deferred wrap
     const start = out.length;
-    petsciiMoveTo(this.machine.state, x, y, out);
+    const returnRow = this.machine.logicalLineEndRow(this.machine.state.cursorY) + 1;
+    petsciiMoveTo(this.machine.state, x, y, out, returnRow < this.rows ? returnRow : undefined);
     if (out.length > start) this.machine.feed(out.slice(start));
   }
 
