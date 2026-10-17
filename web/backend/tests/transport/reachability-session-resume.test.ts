@@ -69,8 +69,14 @@ jest.mock('../../src/database', () => {
     topUploadCPS: 0, topDownloadCPS: 0, byteLimit: 0, userFlags: 0, baud: 0,
     created: when, updated: when,
   };
+  // S15: a second account that logs in by TYPED password (name, then password).
+  const typist = { ...user, id: 9132, username: 'S15Caller', slotNumber: 932, realname: 'Takeover Caller' };
   const overrides: Record<string, unknown> = {
-    getUserById: async (id: string) => (String(id) === String(user.id) ? { ...user } : null),
+    getUserById: async (id: string) => (String(id) === String(user.id) ? { ...user }
+      : String(id) === String(typist.id) ? { ...typist } : null),
+    getUserByUsername: async (name: string) => (name === typist.username ? { ...typist } : null),
+    authenticateUser: async (name: string, password: string) =>
+      (name === typist.username && password === 's15 test password' ? { ...typist } : null),
     verifyAccessToken: async () => ({ userId: user.id, username: user.username, secLevel: 20 }),
     generateAccessToken: async () => 'access-s13',
     generateRefreshToken: async () => 'refresh-s13',
@@ -78,6 +84,7 @@ jest.mock('../../src/database', () => {
   return {
     ...actual,
     s13User: user,
+    s15User: typist,
     db: new Proxy(actual.db, {
       get(target: object, prop: string | symbol) {
         if (typeof prop === 'string' && prop in overrides) return overrides[prop];
@@ -105,6 +112,7 @@ import { db } from '../../src/database';
 import { disarmIdleTimeout } from '../../src/services/idle-timeout.service';
 import { startObserving, stopObserving } from '../../src/server/session-observers';
 import { ANSI_GRAPHICS_PROMPT } from '../../src/services/login-connect.service';
+import { setDatabase } from '../../src/handlers/command-handler/dependency-injection';
 import * as fs from 'fs';
 import * as path from 'path';
 import { connectOptions, type ResumeOffer } from '../../../../packages/terminal/src/utils/session-resume';
@@ -112,6 +120,10 @@ import { connectOptions, type ResumeOffer } from '../../../../packages/terminal/
 jest.setTimeout(60000);
 
 const S13_NODE = 9;
+/** The node the next connection is given; S15 gives its two windows two nodes. */
+let nextNode = S13_NODE;
+const S15_USER_ID = '9132';
+const S15_PASSWORD = 's15 test password';
 
 interface Restored { nodeId?: number; resumeToken?: string }
 interface LoginSuccess { resumeToken?: string }
@@ -133,6 +145,30 @@ async function until(what: string, ok: () => boolean, ms = 2000): Promise<void> 
   }
 }
 
+/**
+ * Answer the pre-login screens with RETURN until the name prompt, then type
+ * the name and the password as a caller does. Each RETURN waits for the
+ * board to answer the previous one.
+ */
+async function typedPasswordLogin(client: ClientSocket, output: string[]): Promise<void> {
+  const id = client.id as string;
+  await until('the pre-login graphics prompt', () =>
+    getSession(id) !== undefined && output.join('').includes(ANSI_GRAPHICS_PROMPT), 15000);
+  let named = false;
+  client.once('prompt-login', () => { named = true; });
+  let seen = -1;
+  const enter = setInterval(() => {
+    if (named || output.length === seen) return;
+    seen = output.length;
+    client.emit('command', '\r');
+  }, 250);
+  try { await until('the name prompt', () => named, 15000); } finally { clearInterval(enter); }
+  const session = getSession(id) as unknown as { tempData?: { loginPhase?: string } };
+  client.emit('command', 'S15Caller\r');
+  await until('the password prompt', () => session.tempData?.loginPhase === 'password', 5000);
+  client.emit('command', `${S15_PASSWORD}\r`);
+}
+
 function once<T>(client: ClientSocket, event: string, ms: number): Promise<T> {
   return new Promise((resolve, reject) => {
     const t = setTimeout(() => reject(new Error(`no ${event} within ${ms} ms`)), ms);
@@ -149,18 +185,21 @@ describe('S13 - a real socket.io caller is restored to the same node through acc
   let offset = 0;
 
   beforeAll(async () => {
-    const { s13User } = jest.requireMock('../../src/database') as { s13User: { slotNumber: number } };
+    const { s13User, s15User } = jest.requireMock('../../src/database') as {
+      s13User: { slotNumber: number }; s15User: { slotNumber: number };
+    };
     // The singleton opened the temp file the database mock chose (see header); give it a schema.
     const dbDir = process.env.S13_DB_DIR as string;
     expect(fs.existsSync(path.join(dbDir, 's13.db'))).toBe(true);
     await db.init();
     userFileManager.writeUserFiles(s13User as never, s13User.slotNumber);
+    userFileManager.writeUserFiles(s15User as never, s15User.slotNumber);
 
     server = http.createServer();
     server.on('connection', (s) => { tcp.add(s); s.on('close', () => tcp.delete(s)); });
     io = new SocketIOServer(server, { cors: { origin: '*' } });
     const deps: WebConnectionDeps = {
-      nodeManager: { assignSessionToNode: async () => ({ nodeId: S13_NODE }) } as never,
+      nodeManager: { assignSessionToNode: async () => ({ nodeId: nextNode }) } as never,
       chatState: { sessions: [], messages: [] } as never,
     };
     io.on('connection', (raw: ServerSocket) => { void acceptWebConnection(io, raw, deps); });
@@ -293,6 +332,98 @@ describe('S13 - a real socket.io caller is restored to the same node through acc
       if (door) clearInterval(door);
       client.io.reconnection(false);
       client.close();
+    }
+  });
+
+  /**
+   * S15: a window that never drops (the frozen phone) is taken over by a
+   * password typed in a second window. Without S15 the second login meets
+   * the already-on refusal (ONENODE). SENTINEL: the takeover question, which
+   * only the S15 branch of runPostAuthLogin asks for a session that is not
+   * parked.
+   */
+  it('S15: a password login in a second window takes over a window that never dropped', async () => {
+    // The typed-password path reads the board's database through the DI
+    // container, which src/index.ts (mocked away here) fills at boot.
+    setDatabase(db);
+    const logLogoff = jest.spyOn(callersLogManager, 'logLogoff');
+    const phone: ClientSocket = ioClient(`http://127.0.0.1:${port}`, { forceNew: true, reconnection: false, autoConnect: false });
+    const desk: ClientSocket = ioClient(`http://127.0.0.1:${port}`, { forceNew: true, reconnection: false, autoConnect: false });
+    const phoneOut: string[] = [];
+    const deskOut: string[] = [];
+    const phoneSaid: string[] = [];
+    let phoneDropped: string | undefined;
+    phone.on('ansi-output', (d: unknown) => { phoneOut.push(String(d)); });
+    phone.on('system-message', (m: { text?: unknown }) => { phoneSaid.push(String(m?.text)); });
+    phone.on('disconnect', (reason: string) => { phoneDropped = reason; });
+    desk.on('ansi-output', (d: unknown) => { deskOut.push(String(d)); });
+
+    try {
+      // 1. The phone logs in by password on node 11 and stays connected.
+      nextNode = 11;
+      phone.connect();
+      await once<void>(phone, 'connect', 15000);
+      const phoneId = phone.id as string;
+      await typedPasswordLogin(phone, phoneOut);
+      const session = getSession(phoneId) as unknown as SessionView;
+      let seen = -1;
+      const enter = setInterval(() => {
+        if (session.state === BBSState.LOGGEDON || phoneOut.length === seen) return;
+        seen = phoneOut.length;
+        phone.emit('command', '\r');
+      }, 250);
+      try {
+        await until(`phone LOGGEDON (state ${session.state})`, () => session.state === BBSState.LOGGEDON, 20000);
+      } finally { clearInterval(enter); }
+      expect(session.nodeId).toBe(11);
+      expect(phone.connected).toBe(true);
+
+      // 2. The desk window, given node 12, logs in by password as the same account.
+      nextNode = 12;
+      desk.connect();
+      await once<void>(desk, 'connect', 15000);
+      await typedPasswordLogin(desk, deskOut);
+
+      // 3. It is asked the S15 question (not ONENODE), and answers R.
+      const question = 'You are logged in on node 11';
+      // Before S15 this login met ONENODE: the activity line below, then a hang-up.
+      const activity = jest.spyOn(callersLogManager, 'logActivity');
+      let deskDropped = false;
+      desk.once('disconnect', () => { deskDropped = true; });
+      await until('the takeover question or a refusal',
+        () => deskOut.join('').includes(question) || deskDropped, 10000);
+      expect(activity.mock.calls.map((c) => String(c[1])))
+        .not.toContain('User S15Caller already on another node!');
+      expect(deskDropped).toBe(false);
+      expect(deskOut.join('')).toContain('in another window. [R]esume it here or [E]nd it and log in fresh? ');
+      const restored = once<Restored>(desk, 'session-restored', 10000);
+      desk.emit('command', 'R');
+      const moved = await restored;
+
+      // 4. The desk is on the phone's node, holding the same session object.
+      expect(moved.nodeId).toBe(11);
+      expect(getSession(desk.id as string)).toBe(session as never);
+      expect(session.webLink?.parked).toBe(false);
+
+      // 5. The phone was told and disconnected by the server; it does not come back.
+      await until('the phone to be dropped', () => phoneDropped !== undefined, 5000);
+      expect(phoneSaid.join('')).toContain('This session moved to another window.');
+      expect(phoneDropped).toBe('io server disconnect');
+      expect(getSession(phoneId)).toBeUndefined();
+
+      // 6. No logoff written for this account or its two nodes (the S13
+      // caller above may still end on node 9 meanwhile); one session for it.
+      const ours = logLogoff.mock.calls.filter(
+        ([node, name]) => name === 'S15Caller' || node === 11 || node === 12);
+      expect(ours).toEqual([]);
+      const mine = [...sessions.values()].filter(
+        (s) => String((s as unknown as SessionView).user?.id) === S15_USER_ID);
+      expect(mine).toHaveLength(1);
+      expect(mine[0]).toBe(session as never);
+    } finally {
+      nextNode = S13_NODE;
+      phone.close();
+      desk.close();
     }
   });
 });
