@@ -145,7 +145,7 @@ export function buildConnectionEmitter(connection: TelnetConnection | SSHConnect
         args[1] !== null && typeof args[1] === "object" ? (args[1] as Readonly<OutputAttributes>) : undefined;
       // The sysop's tools see what the caller sees (server/session-observers.ts)
       // - the session-log viewer and the MCP tap were web-only.
-      if (event === "ansi-output") observeOutput(connection.sessionId, session?.nodeId, data);
+      if (event === "ansi-output") observeOutput(connection.sessionId, session?.nodeId, data, session);
       if (event === "ansi-output") {
         if (sessionWantsPetscii(session)) {
           // C64 caller: the ANSI stream (prompts, menus, blessed door frames)

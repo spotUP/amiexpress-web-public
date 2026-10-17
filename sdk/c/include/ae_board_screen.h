@@ -12,6 +12,12 @@
  *   WIPE END        -> "OK" (the held output has been played)
  *   MOUSE ON / OFF  -> "OK" | "NO" (not an ANSI caller)
  *   MOUSE?          -> "kind TAB col TAB row" (1-based), "" when none queued
+ *   SAVE t l r c    -> "OK" (the board holds rows t..t+r-1, columns l..l+c-1,
+ *                      1-based, plus the cursor and colours) | "NO" (off the
+ *                      screen, or nothing drawn yet)
+ *   RESTORE         -> "OK" (the board has repainted the held region and put
+ *                      the cursor and colours back, and released it) | "NO"
+ *                      (nothing held)
  *
  * A board that does not know the field answers nothing: every call then says
  * "not available" and the door carries on as it did.
@@ -38,6 +44,13 @@ int ae_bs_wipe_begin(char letter, int conceal);
     entering from the right when `forward`, from the left when not. Draw only that region, then ae_bs_wipe_end.
     1 capturing, 0 no slide (draw normally), AE_BS_GONE. */
 int ae_bs_slide_begin(int forward, int top, int rows);
+/** Ask the board to keep what the caller now sees in the region top..top+rows-1 by left..left+cols-1
+    (1-based), so an overlay drawn over it can be taken away with ae_bs_restore. One region is held at a time;
+    a new save replaces it. 1 held, 0 not (draw the old screen back yourself), AE_BS_GONE. */
+int ae_bs_save(int top, int left, int rows, int cols);
+/** Repaint the region held by ae_bs_save, cursor and colours included, and release it.
+    1 repainted, 0 nothing held, AE_BS_GONE. */
+int ae_bs_restore(void);
 /** 1 played, 0 not, AE_BS_GONE. */
 int ae_bs_wipe_end(void);
 /** 1 on, 0 not available, AE_BS_GONE. */

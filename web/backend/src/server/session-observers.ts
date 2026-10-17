@@ -10,16 +10,22 @@
  * these now.
  */
 import { sessionLogManager } from '../services/SessionLogManager';
+import { feedScreenModel, dropScreenModel, type ScreenModelSession } from '../services/screen-model/screen-model';
 
 /** A caller's connection opened: the session log starts recording it. */
 export function startObserving(connectionId: string): void {
   sessionLogManager.startSession(connectionId);
 }
 
-/** Text the board sent this caller. */
-export function observeOutput(connectionId: string, nodeId: number | undefined, text: unknown): void {
+/**
+ * Text the board sent this caller. `session` sizes the board's screen model
+ * (services/screen-model), which every transport feeds here, on the live board
+ * too: AEW_SCREEN SAVE/RESTORE reads it.
+ */
+export function observeOutput(connectionId: string, nodeId: number | undefined, text: unknown, session?: ScreenModelSession): void {
   if (typeof text !== 'string' || text.length === 0) return;
   sessionLogManager.captureOutput(connectionId, text);
+  feedScreenModel(connectionId, session, text);
   // The MCP tap is a dev tool; it is not loaded on the live board.
   if (process.env.NODE_ENV !== 'production' && typeof nodeId === 'number' && nodeId > 0) {
     try {
@@ -39,4 +45,5 @@ export function observeInput(connectionId: string, text: unknown): void {
 /** The connection closed: the session log closes its record. */
 export function stopObserving(connectionId: string): void {
   sessionLogManager.endSession(connectionId);
+  dropScreenModel(connectionId);
 }

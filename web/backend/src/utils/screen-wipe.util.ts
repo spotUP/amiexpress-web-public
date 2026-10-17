@@ -188,154 +188,385 @@ function applySgr(params: string, attrs: Attributes): void {
  * looking at never depends on this model being bit-exact.
  */
 export function parseAnsiToGrid(content: string, columns: number = DEFAULT_GRID_COLUMNS): Cell[][] {
-  const rows: Cell[][] = [[]];
-  const attrs = defaultAttributes();
-  let ansi = RESET;
-  let row = 0;
-  let col = 0;
-  let saved = { row: 0, col: 0 };
+  const grid = new AnsiGrid(columns);
+  grid.feed(content);
+  // Trailing untouched cells carry no information; dropping them keeps the
+  // frames the size they were before this model existed.
+  return grid.rows.map(trimRow);
+}
 
-  const ensureRow = (y: number): void => {
-    while (rows.length <= y) rows.push([]);
-  };
-  const padTo = (r: Cell[], x: number): void => {
-    while (r.length <= x) r.push(BLANK);
-  };
-  const moveTo = (y: number, x: number): void => {
-    row = Math.max(0, Math.min(y, MAX_GRID_ROWS));
-    col = Math.max(0, Math.min(x, columns - 1));
-    ensureRow(row);
-  };
+/** A cell of the grid: one glyph and its COMPLETE SGR state (see Attributes). */
+export type GridCell = Cell;
 
-  let i = 0;
-  while (i < content.length) {
-    const ch = content[i];
+/** Grow a row with blanks until index `x` exists. */
+function padRow(r: Cell[], x: number): void {
+  while (r.length <= x) r.push(BLANK);
+}
 
-    /*
-     * C1 CONTROLS, READ AS THE TERMINAL READS THEM (ECMA-48 8.3).
-     *
-     * Amiga art carries them: Screens/Conf/downloadmsg.txt opens with
-     * `\x9d\r\n\x9d\r\n\x0c\r\n`. 0x9D is OSC, the start of a control
-     * STRING, and the terminal swallows everything to its end - the line
-     * breaks included - so the art starts three rows higher than a model that
-     * prints 0x9D as a cell. The wipe painted there, the settle frame (the
-     * file's own bytes) painted where the terminal put it, and the caller got
-     * the logo twice (sysop, 2026-09-29). A string ends at BEL or ST (0x9C,
-     * ESC \); any ESC ends it too, and is then read itself.
-     */
-    if (ch === '\x90' || ch === '\x98' || ch === '\x9d' || ch === '\x9e' || ch === '\x9f') {
-      let j = i + 1;
-      while (j < content.length && content[j] !== '\x07' && content[j] !== '\x9c' && content[j] !== '\x1b') j++;
-      i = j < content.length && content[j] !== '\x1b' ? j + 1 : j;
-      if (content[j] === '\x1b' && content[j + 1] === '\\') i = j + 2;
-      continue;
+/** The longest unfinished escape a chunk may leave for the next one; longer is garbage and dropped. */
+const MAX_PENDING_ESCAPE = 4096;
+
+/**
+ * The cursor-and-cells step the board's ANSI runs through, one chunk at a time.
+ *
+ * Two users. `parseAnsiToGrid` feeds a whole screen file to a grid built
+ * without `height`, and every step is exactly what that parser always did
+ * (no scrolling, rows up to MAX_GRID_ROWS, erases to the default blank, an
+ * unfinished sequence at the end ends the parse). The per-session screen model
+ * (services/screen-model) passes the caller's `height` and gets a terminal:
+ * the cursor stays on the screen, a line feed or a wrap on the bottom row of
+ * the scroll region scrolls it, erases paint the current background (xterm's
+ * BCE), the controls a door's screen library sends (DECSTBM, IND/RI/NEL,
+ * DECSC/DECRC, RIS, SU/SD, IL/DL, ICH/DCH, ECH, VPA) are applied, and an
+ * escape split across two writes is finished by the next one.
+ *
+ * Not modelled: origin mode, insert mode, the pending-wrap column after a
+ * CUB/BS, double-width glyphs. A screen that uses them restores slightly off;
+ * the door's next full paint corrects it.
+ */
+export class AnsiGrid {
+  readonly rows: Cell[][] = [[]];
+  /** The SGR in force, as one self-contained sequence. */
+  ansi = RESET;
+  row = 0;
+  col = 0;
+  private readonly attrs = defaultAttributes();
+  private saved = { row: 0, col: 0 };
+  private savedDec: { row: number; col: number; attrs: Attributes } | null = null;
+  private scrollTop = 0;
+  private scrollBottom: number;
+  private pending = '';
+
+  constructor(public columns: number = DEFAULT_GRID_COLUMNS, public height?: number) {
+    this.scrollBottom = this.lastRow;
+  }
+
+  private get model(): boolean { return this.height !== undefined; }
+  private get lastRow(): number { return this.height === undefined ? MAX_GRID_ROWS : this.height - 1; }
+
+  /** The cell at (y, x), 0-based; a blank where nothing was painted. */
+  cellAt(y: number, x: number): Cell {
+    return cellAt(this.rows, y, x);
+  }
+
+  /** The terminal changed size (model): the bottom of the screen and the cursor are kept, the rest cut to fit. */
+  resize(columns: number, height: number): void {
+    if (columns === this.columns && height === this.height) return;
+    const shift = Math.max(0, this.row - (height - 1));
+    this.rows.splice(0, shift);
+    if (this.rows.length > height) this.rows.length = height;
+    for (const r of this.rows) if (r.length > columns) r.length = columns;
+    if (this.rows.length === 0) this.rows.push([]);
+    this.columns = columns;
+    this.height = height;
+    this.scrollTop = 0;
+    this.scrollBottom = this.lastRow;
+    this.row = Math.min(this.row - shift, this.lastRow);
+    this.col = Math.min(this.col, columns - 1);
+  }
+
+  private ensureRow(y: number): void {
+    while (this.rows.length <= y) this.rows.push([]);
+  }
+
+  private moveTo(y: number, x: number): void {
+    this.row = Math.max(0, Math.min(y, this.lastRow));
+    this.col = Math.max(0, Math.min(x, this.columns - 1));
+    this.ensureRow(this.row);
+  }
+
+  /** What an erase leaves: the current background on a terminal, the default blank in a parsed file. */
+  private eraseCell(): Cell {
+    if (!this.model || this.attrs.bg === '') return BLANK;
+    return { char: ' ', ansi: attributesToAnsi({ ...defaultAttributes(), bg: this.attrs.bg }) };
+  }
+
+  private blankRow(): Cell[] {
+    const fill = this.eraseCell();
+    return fill === BLANK ? [] : new Array<Cell>(this.columns).fill(fill);
+  }
+
+  /** Erase [x0, x1) of row y (model). */
+  private erase(y: number, x0: number, x1: number): void {
+    this.ensureRow(y);
+    const r = this.rows[y];
+    const fill = this.eraseCell();
+    const end = Math.min(x1, this.columns);
+    if (fill === BLANK && end >= this.columns) {
+      if (r.length > x0) r.length = x0;
+      return;
     }
-    const csiAt = ch === '\x9b' ? i + 1 : ch === '\x1b' && content[i + 1] === '[' ? i + 2 : -1;
-    if (ch >= '\x80' && ch <= '\x9f' && csiAt < 0) { i++; continue; } // no width
+    if (end <= x0) return;
+    padRow(r, end - 1);
+    for (let x = x0; x < end; x++) r[x] = fill;
+  }
 
-    if (csiAt >= 0 || ch === '\x1b') {
-      if (csiAt >= 0) {
-        let j = csiAt;
-        while (j < content.length && !isCsiFinalByte(content[j])) j++;
-        if (j >= content.length) break; // truncated sequence: nothing left to paint
-        const params = content.substring(csiAt, j);
-        const final = content[j];
-        i = j + 1;
+  /** Scroll [from, scrollBottom] up by n (the top lines leave). */
+  private scrollUp(n: number, from: number = this.scrollTop): void {
+    this.ensureRow(this.scrollBottom);
+    const count = Math.min(n, this.scrollBottom - from + 1);
+    for (let k = 0; k < count; k++) {
+      this.rows.splice(from, 1);
+      this.rows.splice(this.scrollBottom, 0, this.blankRow());
+    }
+  }
 
-        if (final === 'm') {
-          applySgr(params, attrs);
-          ansi = attributesToAnsi(attrs);
+  /** Scroll [from, scrollBottom] down by n (blank lines enter at `from`). */
+  private scrollDown(n: number, from: number = this.scrollTop): void {
+    this.ensureRow(this.scrollBottom);
+    const count = Math.min(n, this.scrollBottom - from + 1);
+    for (let k = 0; k < count; k++) {
+      this.rows.splice(this.scrollBottom, 1);
+      this.rows.splice(from, 0, this.blankRow());
+    }
+  }
+
+  /** Down one line; on a terminal the bottom of the scroll region scrolls. */
+  private index(): void {
+    if (this.model && this.row === this.scrollBottom) { this.scrollUp(1); return; }
+    this.moveTo(this.row + 1, this.col);
+  }
+
+  /** Run a chunk of output against the grid. */
+  feed(chunk: string): void {
+    const content = this.pending + chunk;
+    this.pending = '';
+    const hold = (from: number): void => {
+      if (this.model && content.length - from <= MAX_PENDING_ESCAPE) this.pending = content.slice(from);
+    };
+
+    let i = 0;
+    while (i < content.length) {
+      const ch = content[i];
+
+      /*
+       * C1 CONTROLS, READ AS THE TERMINAL READS THEM (ECMA-48 8.3).
+       *
+       * Amiga art carries them: Screens/Conf/downloadmsg.txt opens with
+       * `\x9d\r\n\x9d\r\n\x0c\r\n`. 0x9D is OSC, the start of a control
+       * STRING, and the terminal swallows everything to its end - the line
+       * breaks included - so the art starts three rows higher than a model that
+       * prints 0x9D as a cell. The wipe painted there, the settle frame (the
+       * file's own bytes) painted where the terminal put it, and the caller got
+       * the logo twice (sysop, 2026-09-29). A string ends at BEL or ST (0x9C,
+       * ESC \); any ESC ends it too, and is then read itself.
+       */
+      if (ch === '\x90' || ch === '\x98' || ch === '\x9d' || ch === '\x9e' || ch === '\x9f') {
+        let j = i + 1;
+        while (j < content.length && content[j] !== '\x07' && content[j] !== '\x9c' && content[j] !== '\x1b') j++;
+        if (j >= content.length && this.model) { hold(i); return; }
+        i = j < content.length && content[j] !== '\x1b' ? j + 1 : j;
+        if (content[j] === '\x1b' && content[j + 1] === '\\') i = j + 2;
+        continue;
+      }
+      const csiAt = ch === '\x9b' ? i + 1 : ch === '\x1b' && content[i + 1] === '[' ? i + 2 : -1;
+      if (ch >= '\x80' && ch <= '\x9f' && csiAt < 0) { i++; continue; } // no width
+
+      if (csiAt >= 0 || ch === '\x1b') {
+        if (csiAt >= 0) {
+          let j = csiAt;
+          while (j < content.length && !isCsiFinalByte(content[j])) j++;
+          if (j >= content.length) { hold(i); return; } // truncated: nothing left to paint (a terminal waits for the rest)
+          const params = content.substring(csiAt, j);
+          const final = content[j];
+          i = j + 1;
+          this.csi(params, final);
           continue;
         }
 
-        // Positional and erase controls. Anything else (mode set/reset,
-        // device queries, scroll regions) is not part of the grid model.
-        const numeric = params.replace(/[^0-9;]/g, '');
-        const args = numeric.split(';').map(p => (p === '' ? NaN : parseInt(p, 10)));
-        const arg = (idx: number, dflt: number): number =>
-          (args[idx] === undefined || Number.isNaN(args[idx]) ? dflt : args[idx]);
-        const positional = !/[?<>=]/.test(params);
-
-        if (!positional) continue;
-
-        switch (final) {
-          case 'A': moveTo(row - arg(0, 1), col); break;
-          case 'B': moveTo(row + arg(0, 1), col); break;
-          case 'C': moveTo(row, col + arg(0, 1)); break;
-          case 'D': moveTo(row, col - arg(0, 1)); break;
-          case 'E': moveTo(row + arg(0, 1), 0); break;
-          case 'F': moveTo(row - arg(0, 1), 0); break;
-          case 'G': moveTo(row, arg(0, 1) - 1); break;
-          case 'H':
-          case 'f': moveTo(arg(0, 1) - 1, arg(1, 1) - 1); break;
-          case 'J': {
-            const mode = arg(0, 0);
-            if (mode === 0) {
-              ensureRow(row);
-              rows[row] = rows[row].slice(0, col);
-              rows.length = row + 1;
-            } else if (mode === 1) {
-              ensureRow(row);
-              padTo(rows[row], col);
-              for (let x = 0; x <= col; x++) rows[row][x] = BLANK;
-              for (let y = 0; y < row; y++) rows[y] = [];
-            } else {
-              for (let y = 0; y < rows.length; y++) rows[y] = [];
-            }
-            break;
-          }
-          case 'K': {
-            const mode = arg(0, 0);
-            ensureRow(row);
-            if (mode === 0) {
-              rows[row] = rows[row].slice(0, col);
-            } else if (mode === 1) {
-              padTo(rows[row], col);
-              for (let x = 0; x <= col; x++) rows[row][x] = BLANK;
-            } else {
-              rows[row] = [];
-            }
-            break;
-          }
-          case 's': saved = { row, col }; break;
-          case 'u': moveTo(saved.row, saved.col); break;
-          default: break;
-        }
+        // Non-CSI escape (ESC 7, ESC (B, ...). Consume it so the ESC byte
+        // never lands in the grid as a printable glyph.
+        const next = content[i + 1];
+        const length = next !== undefined && '()#%'.includes(next) ? 3 : 2;
+        if (this.model && i + length > content.length) { hold(i); return; }
+        if (this.model) this.escape(next);
+        i += length;
         continue;
       }
 
-      // Non-CSI escape (ESC 7, ESC (B, ...). Consume it so the ESC byte
-      // never lands in the grid as a printable glyph.
-      const next = content[i + 1];
-      i += next !== undefined && '()#%'.includes(next) ? 3 : 2;
-      continue;
-    }
+      if (ch === '\r') { this.col = 0; i++; continue; }
+      // FF and VT move down a line as LF does (xterm; the web terminal's
+      // convertEol makes LF a new line), and print nothing.
+      if (ch === '\n' || ch === '\x0c' || ch === '\x0b') { this.index(); this.col = 0; i++; continue; }
+      if (ch === '\t') { this.moveTo(this.row, Math.min(this.columns - 1, (Math.floor(this.col / 8) + 1) * 8)); i++; continue; }
+      if (ch === '\b') { this.col = Math.max(0, this.col - 1); i++; continue; }
+      if (ch === '\x07' || ch === '\x00') { i++; continue; }
 
-    if (ch === '\r') { col = 0; i++; continue; }
-    // FF and VT move down a line as LF does (xterm; the web terminal's
-    // convertEol makes LF a new line), and print nothing.
-    if (ch === '\n' || ch === '\x0c' || ch === '\x0b') { moveTo(row + 1, 0); i++; continue; }
-    if (ch === '\t') { moveTo(row, Math.min(columns - 1, (Math.floor(col / 8) + 1) * 8)); i++; continue; }
-    if (ch === '\b') { col = Math.max(0, col - 1); i++; continue; }
-    if (ch === '\x07' || ch === '\x00') { i++; continue; }
-
-    if (col >= columns) {
-      // Wrap exactly where the terminal wraps.
-      if (row >= MAX_GRID_ROWS) { i++; continue; }
-      row++;
-      col = 0;
-      ensureRow(row);
+      if (this.col >= this.columns) {
+        // Wrap exactly where the terminal wraps.
+        if (this.model) {
+          this.index();
+        } else {
+          if (this.row >= MAX_GRID_ROWS) { i++; continue; }
+          this.row++;
+        }
+        this.col = 0;
+        this.ensureRow(this.row);
+      }
+      this.ensureRow(this.row);
+      padRow(this.rows[this.row], this.col);
+      this.rows[this.row][this.col] = { char: ch, ansi: this.ansi };
+      this.col++;
+      i++;
     }
-    ensureRow(row);
-    padTo(rows[row], col);
-    rows[row][col] = { char: ch, ansi };
-    col++;
-    i++;
   }
 
-  // Trailing untouched cells carry no information; dropping them keeps the
-  // frames the size they were before this model existed.
-  return rows.map(trimRow);
+  /** One CSI sequence: SGR, the positional and erase controls, and (model) the terminal's line controls. */
+  private csi(params: string, final: string): void {
+    if (final === 'm') {
+      applySgr(params, this.attrs);
+      this.ansi = attributesToAnsi(this.attrs);
+      return;
+    }
+
+    // Positional and erase controls. Anything else (mode set/reset,
+    // device queries) is not part of the grid model.
+    const numeric = params.replace(/[^0-9;]/g, '');
+    const args = numeric.split(';').map(p => (p === '' ? NaN : parseInt(p, 10)));
+    const arg = (idx: number, dflt: number): number =>
+      (args[idx] === undefined || Number.isNaN(args[idx]) ? dflt : args[idx]);
+    const positional = !/[?<>=]/.test(params);
+
+    if (!positional) return;
+    const { row, col } = this;
+
+    switch (final) {
+      case 'A': this.moveTo(row - arg(0, 1), col); return;
+      case 'B': this.moveTo(row + arg(0, 1), col); return;
+      case 'C': this.moveTo(row, col + arg(0, 1)); return;
+      case 'D': this.moveTo(row, col - arg(0, 1)); return;
+      case 'E': this.moveTo(row + arg(0, 1), 0); return;
+      case 'F': this.moveTo(row - arg(0, 1), 0); return;
+      case 'G': this.moveTo(row, arg(0, 1) - 1); return;
+      case 'H':
+      case 'f': this.moveTo(arg(0, 1) - 1, arg(1, 1) - 1); return;
+      case 'J': this.model ? this.eraseDisplayModel(arg(0, 0)) : this.eraseDisplay(arg(0, 0)); return;
+      case 'K': {
+        const mode = arg(0, 0);
+        if (this.model) {
+          if (mode === 0) this.erase(row, col, this.columns);
+          else if (mode === 1) this.erase(row, 0, col + 1);
+          else this.erase(row, 0, this.columns);
+          return;
+        }
+        this.ensureRow(row);
+        if (mode === 0) {
+          this.rows[row] = this.rows[row].slice(0, col);
+        } else if (mode === 1) {
+          padRow(this.rows[row], col);
+          for (let x = 0; x <= col; x++) this.rows[row][x] = BLANK;
+        } else {
+          this.rows[row] = [];
+        }
+        return;
+      }
+      case 's': this.saved = { row, col }; return;
+      case 'u': this.moveTo(this.saved.row, this.saved.col); return;
+      default: break;
+    }
+    if (!this.model) return;
+
+    const n = Math.max(1, arg(0, 1));
+    const inRegion = row >= this.scrollTop && row <= this.scrollBottom;
+    switch (final) {
+      case 'd': this.moveTo(arg(0, 1) - 1, col); return;
+      case 'S': this.scrollUp(n); return;
+      case 'T': this.scrollDown(n); return;
+      case 'L': if (inRegion) this.scrollDown(n, row); this.col = 0; return;
+      case 'M': if (inRegion) this.scrollUp(n, row); this.col = 0; return;
+      case 'X': this.erase(row, col, col + n); return;
+      case '@': {
+        this.ensureRow(row);
+        const r = this.rows[row];
+        if (r.length <= col) return;
+        r.splice(col, 0, ...new Array<Cell>(n).fill(this.eraseCell()));
+        if (r.length > this.columns) r.length = this.columns;
+        return;
+      }
+      case 'P': {
+        this.ensureRow(row);
+        this.rows[row].splice(col, n);
+        return;
+      }
+      case 'r': {
+        const top = arg(0, 1) - 1;
+        const bottom = Math.min(arg(1, this.lastRow + 1), this.lastRow + 1) - 1;
+        if (top < bottom) { this.scrollTop = top; this.scrollBottom = bottom; } else { this.scrollTop = 0; this.scrollBottom = this.lastRow; }
+        this.moveTo(0, 0);
+        return;
+      }
+      default: return;
+    }
+  }
+
+  /** ED in a parsed file: what parseAnsiToGrid always did. */
+  private eraseDisplay(mode: number): void {
+    const { rows, row, col } = this;
+    if (mode === 0) {
+      this.ensureRow(row);
+      rows[row] = rows[row].slice(0, col);
+      rows.length = row + 1;
+    } else if (mode === 1) {
+      this.ensureRow(row);
+      padRow(rows[row], col);
+      for (let x = 0; x <= col; x++) rows[row][x] = BLANK;
+      for (let y = 0; y < row; y++) rows[y] = [];
+    } else {
+      for (let y = 0; y < rows.length; y++) rows[y] = [];
+    }
+  }
+
+  /** ED on a terminal: the screen only (3, the scrollback, leaves it alone), in the current background. */
+  private eraseDisplayModel(mode: number): void {
+    const { row, col } = this;
+    if (mode === 0) {
+      this.erase(row, col, this.columns);
+      for (let y = row + 1; y <= this.lastRow; y++) this.erase(y, 0, this.columns);
+    } else if (mode === 1) {
+      for (let y = 0; y < row; y++) this.erase(y, 0, this.columns);
+      this.erase(row, 0, col + 1);
+    } else if (mode === 2) {
+      for (let y = 0; y <= this.lastRow; y++) this.erase(y, 0, this.columns);
+    }
+    if (this.eraseCell() === BLANK) this.trimTrailingRows();
+  }
+
+  private trimTrailingRows(): void {
+    let end = this.rows.length;
+    while (end > this.row + 1 && this.rows[end - 1].length === 0) end--;
+    this.rows.length = end;
+  }
+
+  /** A two-byte escape on a terminal (model only). */
+  private escape(next: string | undefined): void {
+    switch (next) {
+      case '7': this.savedDec = { row: this.row, col: this.col, attrs: { ...this.attrs } }; return;
+      case '8': {
+        const s = this.savedDec;
+        if (!s) { this.moveTo(0, 0); return; }
+        Object.assign(this.attrs, s.attrs);
+        this.ansi = attributesToAnsi(this.attrs);
+        this.moveTo(s.row, s.col);
+        return;
+      }
+      case 'D': this.index(); return;
+      case 'E': this.index(); this.col = 0; return;
+      case 'M':
+        if (this.row === this.scrollTop) this.scrollDown(1); else this.moveTo(this.row - 1, this.col);
+        return;
+      case 'c':
+        this.rows.length = 0;
+        this.rows.push([]);
+        Object.assign(this.attrs, defaultAttributes());
+        this.ansi = RESET;
+        this.scrollTop = 0;
+        this.scrollBottom = this.lastRow;
+        this.savedDec = null;
+        this.moveTo(0, 0);
+        return;
+      default: return;
+    }
+  }
 }
 
 function trimRow(row: Cell[]): Cell[] {
@@ -437,13 +668,20 @@ export function gridSize(grid: Cell[][]): { rows: number; cols: number } {
  * A grid painted inside a box: every row cursor-addressed at (top + i, left),
  * nothing past `maxRows` x `maxCols`. For a logo the board draws into a door's
  * screen (Decision 29) - a door's frame is not cleared around it.
+ *
+ * `opaque`: every cell of the box is painted, blanks included - a restore
+ * (AEW_SCREEN RESTORE) has to cover what was drawn over the region, and a
+ * trimmed row would leave the overlay's tail standing.
  */
-export function renderGridAt(grid: Cell[][], top: number, left: number, maxRows: number, maxCols: number): string {
-  const { rows } = gridSize(grid);
+export function renderGridAt(grid: Cell[][], top: number, left: number, maxRows: number, maxCols: number, opts: { opaque?: boolean } = {}): string {
+  const rows = opts.opaque ? maxRows : gridSize(grid).rows;
   let out = '';
   for (let y = 0; y < Math.min(rows, maxRows); y++) {
     out += `\x1b[${top + y};${left}H`;
-    out += gridToAnsi([trimRow(grid[y]).slice(0, maxCols)]);
+    const row = opts.opaque
+      ? Array.from({ length: maxCols }, (_, x) => cellAt(grid, y, x))
+      : trimRow(grid[y]).slice(0, maxCols);
+    out += gridToAnsi([row]);
   }
   return out + '\x1b[0m';
 }

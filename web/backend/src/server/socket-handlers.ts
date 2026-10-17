@@ -176,7 +176,8 @@ console.log(`Client connected from ${clientIp}`);
       // pacer and the door wrapper, so it is the innermost choke - the same
       // place connection-emitter.ts filters for telnet/SSH.
       args[0] = AnsiUtil.forCaller(getSession(socket.id), args[0]);
-      observeOutput(socket.id, getSession(socket.id)?.nodeId, args[0]);
+      const observed = getSession(socket.id);
+      observeOutput(socket.id, observed?.nodeId, args[0], observed);
     }
     return originalEmit(event, ...args);
   }) as any;

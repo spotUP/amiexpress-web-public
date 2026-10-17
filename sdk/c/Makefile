@@ -52,7 +52,7 @@ all: test
 # for ever, so each runs under a 20 s ceiling where the host has timeout(1).
 DOOR_TEST_GUARD := $(shell command -v timeout 2>/dev/null || command -v gtimeout 2>/dev/null) $(if $(shell command -v timeout 2>/dev/null || command -v gtimeout 2>/dev/null),20,)
 
-test: door-sources-compile build/write-message build/test_ae_host build/test_ae_session build/test_ae_chunk build/test_ui_profile build/test_ui_list build/test_ui_chrome build/test_ui_screen build/test_ui_input build/test_ui_editor build/test_frame_budget build/test_ui_theme build/test_ui_settings build/test_ui_doc build/test_ui_grid build/test_ui_pages build/test_ae_http build/test_ae_achieve build/test_ae_request build/test_ae_msgbase build/test_ae_dos build/test_texttv build/test_subs_scan build/test_achieve_rows build/test_requests_bulletin build/test_ae_userfield build/test_us_model build/test_theme_preview build/test_ansi_sgr build/test_ae_board_screen build/test_ae_menu build/test_menudoor_model build/test_mainmenu build/test_bulletins
+test: door-sources-compile build/write-message build/test_ae_host build/test_ae_session build/test_ae_chunk build/test_ui_profile build/test_ui_list build/test_ui_chrome build/test_ui_screen build/test_ui_input build/test_ui_editor build/test_frame_budget build/test_ui_theme build/test_ui_settings build/test_ui_doc build/test_ui_grid build/test_ui_pages build/test_ae_http build/test_ae_achieve build/test_ae_request build/test_ae_msgbase build/test_ae_dos build/test_texttv build/test_subs_scan build/test_achieve_rows build/test_requests_bulletin build/test_ae_userfield build/test_us_model build/test_theme_preview build/test_ansi_sgr build/test_ae_board_screen build/test_ae_board_screen_save build/test_ae_menu build/test_menudoor_model build/test_mainmenu build/test_bulletins
 	./build/test_ae_host
 	./build/test_ae_session
 	./build/test_ae_chunk
@@ -82,6 +82,7 @@ test: door-sources-compile build/write-message build/test_ae_host build/test_ae_
 	./build/test_theme_preview
 	./build/test_ansi_sgr
 	./build/test_ae_board_screen
+	./build/test_ae_board_screen_save
 	./build/test_ae_menu
 	$(DOOR_TEST_GUARD) ./build/test_menudoor_model
 	$(DOOR_TEST_GUARD) ./build/test_mainmenu
@@ -200,6 +201,10 @@ build/test_menudoor_model: src/menudoor.c src/ae_menu.c src/ae_dos.c src/ae_dos_
 build/test_ae_board_screen: src/ae_board_screen.c src/ae_transport_native.c src/ui_key.c src/ui_screen.c src/ui_profile.c src/ui_ansi.c src/ae_session.c tests/test_ae_board_screen.c include/ae_board_screen.h include/ui_key.h include/ui_screen.h
 	@mkdir -p build
 	$(CC) $(HOST_CFLAGS) src/ae_board_screen.c src/ae_transport_native.c src/ui_key.c src/ui_screen.c src/ui_profile.c src/ui_ansi.c src/ae_session.c tests/test_ae_board_screen.c -o $@
+
+build/test_ae_board_screen_save: src/ae_board_screen.c src/ae_transport_native.c src/ui_key.c src/ui_screen.c src/ui_profile.c src/ui_ansi.c src/ae_session.c tests/test_ae_board_screen_save.c include/ae_board_screen.h
+	@mkdir -p build
+	$(CC) $(HOST_CFLAGS) src/ae_board_screen.c src/ae_transport_native.c src/ui_key.c src/ui_screen.c src/ui_profile.c src/ui_ansi.c src/ae_session.c tests/test_ae_board_screen_save.c -o $@
 
 build/test_ui_chrome: src/ui_ansi.c src/ui_chrome.c tests/test_ui_chrome.c include/ui_chrome.h
 	@mkdir -p build

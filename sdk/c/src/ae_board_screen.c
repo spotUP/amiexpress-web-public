@@ -92,6 +92,28 @@ int ae_bs_slide_begin(int forward, int top, int rows)
     return strcmp(reply, "OK") == 0 ? 1 : 0;
 }
 
+int ae_bs_save(int top, int left, int rows, int cols)
+{
+    char req[48], reply[AE_MAX_LINE + 1];
+    int n;
+
+    if (top < 1 || left < 1 || rows < 1 || cols < 1) return 0;
+    if (top > 999 || left > 999 || rows > 999 || cols > 999) return 0;
+    sprintf(req, "SAVE %d %d %d %d", top, left, rows, cols);
+    n = ask(req, reply, (int)sizeof(reply));
+    if (n < 0) return AE_BS_GONE;
+    return strcmp(reply, "OK") == 0 ? 1 : 0;
+}
+
+int ae_bs_restore(void)
+{
+    char reply[AE_MAX_LINE + 1];
+    int n = ask("RESTORE", reply, (int)sizeof(reply));
+
+    if (n < 0) return AE_BS_GONE;
+    return strcmp(reply, "OK") == 0 ? 1 : 0;
+}
+
 int ae_bs_wipe_end(void)
 {
     char reply[AE_MAX_LINE + 1];

@@ -115,3 +115,38 @@ test('WIPE IN P <top> <rows> <F|B> stores the region and END plays region frames
   expect(await boardScreenAnswer('WIPE IN X', x)).toBe('OK');
   expect(x.state.wipeCapture).toEqual({ kind: 'in', letter: 'X', text: [] });
 });
+
+import { feedScreenModel, dropScreenModel } from '../../src/services/screen-model/screen-model';
+import { AnsiGrid } from '../../src/utils/screen-wipe.util';
+
+test('SAVE <top> <left> <rows> <cols> holds a region of the caller screen; RESTORE repaints it once', async () => {
+  const session = { screenWidth: 80, wireWidth: 80, wireHeight: 25 };
+  const withId = (): BoardScreenContext => {
+    const c = ctx(session);
+    (c.socket as unknown as { id: string }).id = 'sock-save';
+    return c;
+  };
+  dropScreenModel('sock-save');
+  // No screen drawn yet.
+  expect(await boardScreenAnswer('SAVE 1 1 3 10', withId())).toBe('NO');
+  const art = '\x1b[2J\x1b[H\x1b[1;36mMAIN MENU\x1b[0m\r\n\x1b[44m [J] Join \x1b[0m';
+  feedScreenModel('sock-save', session, art);
+  expect(await boardScreenAnswer('SAVE 1 1', withId())).toBe('NO');
+  expect(await boardScreenAnswer('SAVE 1 1 3 x', withId())).toBe('NO');
+  expect(await boardScreenAnswer('SAVE 24 1 5 10', withId())).toBe('NO');
+  expect(await boardScreenAnswer('RESTORE', withId())).toBe('NO');
+  expect(await boardScreenAnswer('SAVE 1 1 3 20', withId())).toBe('OK');
+  feedScreenModel('sock-save', session, '\x1b[1;1H\x1b[41m====================\r\n====================');
+  expect(await boardScreenAnswer('RESTORE', withId())).toBe('OK');
+  expect(sent).toHaveLength(1);
+  // The bytes the board emitted bring back exactly the screen that was saved.
+  const original = new AnsiGrid(80, 25);
+  original.feed(art);
+  const repainted = new AnsiGrid(80, 25);
+  repainted.feed(art + '\x1b[1;1H\x1b[41m====================\r\n====================' + sent[0]);
+  for (let y = 0; y < 3; y++) for (let x = 0; x < 20; x++) expect(repainted.cellAt(y, x)).toEqual(original.cellAt(y, x));
+  expect(await boardScreenAnswer('RESTORE', withId())).toBe('NO');
+  // A socket without an id has no screen.
+  expect(await boardScreenAnswer('SAVE 1 1 3 20', ctx(session))).toBe('NO');
+  dropScreenModel('sock-save');
+});

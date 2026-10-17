@@ -3,6 +3,14 @@
  * board - its real size, the board's own wipes, and the mouse. Wire table:
  * plan M5. Degradation: a board without 10800 answers nothing; the SDK then
  * uses BB_SCRWIDTH, draws without wipes and without a mouse.
+ *
+ * SAVE <top> <left> <rows> <cols> / RESTORE (plan 2026-10-17 menu styles, P9):
+ * an overlay's way back. SAVE copies the region (1-based, inside the screen)
+ * from the board's model of the caller's screen (services/screen-model) and
+ * answers OK, or NO when the region leaves the screen or the board has no
+ * screen for this caller. RESTORE repaints the held region, every cell, then
+ * puts back the cursor and SGR that were in force at SAVE, and answers OK; NO
+ * when nothing is held. A RESTORE releases the hold.
  */
 import { WIPE_CODES, REGION_WIPE_CODES, type WipeType } from '../../screens/wipe-codes';
 import { getWipeFrames, getWipeOutFrames, getRegionSlideFrames, wipeEffectsEnabled, type WipeRegion } from '../../utils/screen-wipe.util';
@@ -10,6 +18,7 @@ import { playWipeFrames } from '../../utils/wipe-playback';
 import { MOUSE_REPORTING_OFF } from '../../utils/terminal-modes';
 import { responsiveDoorGeometry } from './screen-width.util';
 import type { MouseAbsorber } from './mouse-absorber';
+import { saveScreenRegion, takeScreenRestore } from '../../services/screen-model/screen-model';
 
 export interface BoardScreenContext {
   session: any; socket: any;
@@ -103,6 +112,22 @@ export async function boardScreenAnswer(request: string, ctx: BoardScreenContext
       }
       if (arg === 'OFF') { emit(ctx, MOUSE_REPORTING_OFF); ctx.armMouse(false); return 'OK'; }
       return '';
+    }
+    case 'SAVE': {
+      const fields = request.trim().split(/\s+/).slice(1);
+      if (fields.length !== 4 || !fields.every(f => /^\d{1,4}$/.test(f))) return 'NO';
+      const [top, left, rows, cols] = fields.map(Number);
+      const id = ctx.socket?.id;
+      return typeof id === 'string' && saveScreenRegion(id, top, left, rows, cols) ? 'OK' : 'NO';
+    }
+    case 'RESTORE': {
+      const id = ctx.socket?.id;
+      const bytes = typeof id === 'string' ? takeScreenRestore(id) : null;
+      if (bytes === null) return 'NO';
+      // Through the socket's own emit, behind the door's paced output and past
+      // the observers, so the model sees its own repaint.
+      ctx.socket.emit('ansi-output', bytes);
+      return 'OK';
     }
     case 'MOUSE?': {
       const e = ctx.mouse?.next();
