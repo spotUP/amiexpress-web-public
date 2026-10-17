@@ -533,10 +533,10 @@ describe('MAINMENU on three screens', () => {
   });
 
   describe('MENUSETTINGS (the same binary under the W settings registration)', () => {
-    test('opens as LONG MENUS, and choosing Pages stores the caller\'s choice', async () => {
+    test('opens as MENU STYLE, and Up from Board default (wrapping to Cover flow) stores the caller\'s choice', async () => {
       const r = await run(S80, [idle(UP), idle('\r'), idle(ESC)], { command: 'MENUSETTINGS' });
-      expect(gridText(replayCells(firstFrame(r), 80, 25))[0]!.trim()).toBe('LONG MENUS');
-      expect(r.session.user.menuStyle).toBe('pages');
+      expect(gridText(replayCells(firstFrame(r), 80, 25))[0]!.trim()).toBe('MENU STYLE');
+      expect(r.session.user.menuStyle).toBe('coverflow');
     });
   });
 });
