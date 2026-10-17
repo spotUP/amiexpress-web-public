@@ -195,6 +195,31 @@ int main(void)
     assert(rc == 0 && !strstr(screen_text, "Page "));
     printf("  [OK] scroll mode shows no page number\n");
 
+    /* Scroll: Left and Right page at every width, not only on a one-column grid (sysop 2026-10-17). Short labels
+       make the 80-column grid several columns wide; Right must land where PageDown lands, not on the cell beside. */
+    {
+        char paged[64], rightward[64];
+        int i;
+        f = fopen(CAT_PATH, "wb");
+        assert(f);
+        fputs("AEMENU 1\nK MAIN\t-\nT MAIN MENU\nP Menu: \nO scroll\nW -\t-\t-\nR 0\nS Many\n", f);
+        for (i = 0; i < 120; i++) fprintf(f, "E K%d\tN%d\t\t\t\n", i, i);
+        fputs(".\n", f);
+        fclose(f);
+        invoked_name = "MENU";
+        drive("\x1b[6~\r", 5, &rc);
+        assert(rc == 0 && strstr(requests, "RUN K"));
+        snprintf(paged, sizeof paged, "%s", strstr(requests, "RUN K"));
+        *strchr(paged, '|') = '\0';
+        drive("\x1b[C\r", 4, &rc);
+        assert(rc == 0 && strstr(requests, "RUN K"));
+        snprintf(rightward, sizeof rightward, "%s", strstr(requests, "RUN K"));
+        *strchr(rightward, '|') = '\0';
+        assert(strcmp(paged, "RUN K0") != 0 && strcmp(paged, "RUN K1") != 0);   /* a screen, not a row or a cell */
+        assert(strcmp(rightward, paged) == 0);
+        printf("  [OK] a multi-column Scroll grid: Right pages like PageDown, it does not step to the cell beside\n");
+    }
+
     /* The legacy drill line (D 1, slide off) means cover flow: Enter runs the page's entry, Right turns to page 2. */
     f = fopen(CAT_PATH, "wb");
     assert(f);

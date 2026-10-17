@@ -316,16 +316,17 @@ static void a_picked_entry_runs_through_the_whole_shell(void)
     write_catalogue(CATALOGUE);
     mouse_queue = 0; silent_board = 0;
 
-    /* Right, Right, Enter: the third entry, MS. */
-    assert(DRIVE("\x1b[C\x1b[C\r") == 0);
+    /* End, Up, Enter: the last entry (D, second cell of the Files row), then the cell above it, E. Left/Right page in
+       Scroll at every width (sysop 2026-10-17), so they no longer step to the cell beside. */
+    assert(DRIVE("\x1b[F\x1b[A\r") == 0);
     assert(strstr(requests, "OPEN MAIN|") == requests);                      /* the very first thing asked */
     assert(strstr(requests, "WIPE IN X|") && strstr(requests, "LOGO header 1 1 3 80|"));
     assert(strstr(requests, "MOUSE ON|"));
-    assert(activations == 1 && activated_entry == 2);                        /* the sentinel: the callback RAN */
-    assert(strstr(requests, "RUN MS|"));
-    assert(strstr(requests, "ROW 2|"));                                      /* on leave */
+    assert(activations == 1 && activated_entry == 1);                        /* the sentinel: the callback RAN */
+    assert(strstr(requests, "RUN E|"));
+    assert(strstr(requests, "ROW 1|"));                                      /* on leave: the picked entry */
     assert(strstr(requests, "WIPE OUT V|") && strstr(requests, "MOUSE OFF|"));
-    assert(!strstr(screen_text, "MAIN MENU") && strstr(screen_text, "Read Mail") && strstr(screen_text, "Scan for new mail"));   /* the logo replaces the title */
+    assert(!strstr(screen_text, "MAIN MENU") && strstr(screen_text, "Read Mail") && strstr(screen_text, "Write a message"));   /* the logo replaces the title */
     assert(!strstr(screen_text, "BBS [1:Main] Menu: "));                       /* nothing typed: the hint, not the prompt */
     assert(strstr(screen_text, MENUDOOR_HINT_WIDE));
     assert(strstr(screen_text, "Arrows Move  Enter Run  Esc/q Prompt"));       /* the key bar at 80 columns */
@@ -1197,15 +1198,18 @@ static int addresses_in(const char *bytes)
 static const char *CATALOGUE_DESCRIPTIONS =
     "AEMENU 1\nK MAIN\t-\nT MAIN MENU\nP Go: \nO scroll\nW -\t-\t-\nR 0\nS Messages\n"
     "E R\tRead\tA very long description of the first entry, which is long\t\t\n"
+    "S Writing\n"
     "E E\tEnter\tShort\t\t\n"
+    "S Mail\n"
     "E M\tMail\tShort\t\t\n"
     ".\n";
+/* One entry to a section, so Down and Up step from entry to entry: Left/Right page in Scroll (sysop 2026-10-17). */
 
 static void an_identical_description_is_not_sent_again(void)
 {
     mouse_queue = 0; silent_board = 0; theme_name = ""; size_reply = "80\t25";
     write_catalogue(CATALOGUE_DESCRIPTIONS);
-    key_bytes("\x1b[C", "\x1b[C", "\x1b");                      /* Enter -> Mail: both say "Short" */
+    key_bytes("\x1b[B", "\x1b[B", "\x1b");                      /* Enter -> Mail, a row down each: both say "Short" */
     assert(addresses_in(delta_text) == 2);                     /* the two cells, and NOT the status row */
     assert(!strstr(delta_text, "\033[24;"));
     printf("  [OK] an identical description is not sent again\n");
@@ -1215,12 +1219,12 @@ static void a_shorter_description_leaves_no_tail_of_the_longer_one(void)
 {
     mouse_queue = 0; silent_board = 0; theme_name = ""; size_reply = "80\t25";
     write_catalogue(CATALOGUE_DESCRIPTIONS);
-    tm_after("\x1b[C");                                         /* long -> Short */
+    tm_after("\x1b[B");                                         /* long -> Short */
     assert(strncmp(&tm_cell[24][0], " Short", 6) == 0);
     assert(strspn(&tm_cell[24][6], " ") >= (size_t)(80 - 6));  /* nothing of the long text remains, on 80 columns */
-    tm_after("\x1b[C\x1b[D");                                   /* and back to the long one, then it is all there */
+    tm_after("\x1b[B\x1b[A");                                   /* and back to the long one, then it is all there */
     assert(strncmp(&tm_cell[24][0], " A very long description of the first entry, which is long", 58) == 0);
-    tm_after("\x1b[C\x1b[D\x1b[C");
+    tm_after("\x1b[B\x1b[A\x1b[B");
     assert(strncmp(&tm_cell[24][0], " Short", 6) == 0 && strspn(&tm_cell[24][6], " ") >= (size_t)(80 - 6));
     printf("  [OK] a shorter description leaves no tail of the longer one on the glass\n");
 }
@@ -1365,14 +1369,16 @@ static void a_moved_selection_leaves_the_screen_a_fresh_frame_would_show(void)
     mouse_queue = 0; silent_board = 0; theme_name = "";
     for (one_column = 0; one_column < 2; one_column++) {          /* a grid of several columns (the last cell of a line erases) and of one (the whole row does) */
         big_long_label = one_column;
-        /* In a one-column Scroll list Left/Right page (sysop 2026-10-17): one entry is Down/Up there. */
-        R = one_column ? "\x1b[B" : "\x1b[C"; L = one_column ? "\x1b[A" : "\x1b[D";
+        /* Left/Right page in Scroll at every width (sysop 2026-10-17), so the selection walks by rows: Down/Up. In the
+           two-column grid a row is two entries (Messages 0-1, 2-3, 4; Files 5-6, 7-8; Community 9-10, 11-12, 13), and a
+           section's short last row hands Down to the next section's first cell. */
+        R = "\x1b[B"; L = "\x1b[A";
         to_the_first_scroll[0] = '\0'; for (i = 0; i < 6; i++) strcat(to_the_first_scroll, R);
         strcpy(mix, R); strcat(mix, R); strcat(mix, R); strcat(mix, L);
-        same_screen_as_a_fresh_frame("scroll", "80\t25", 25, R, 1);
-        same_screen_as_a_fresh_frame("scroll", "80\t25", 25, mix, 2);
+        same_screen_as_a_fresh_frame("scroll", "80\t25", 25, R, one_column ? 1 : 2);
+        same_screen_as_a_fresh_frame("scroll", "80\t25", 25, mix, one_column ? 2 : 4);
         if (one_column) same_screen_as_a_fresh_frame("scroll", "80\t25", 25, "\x1b[B\x1b[B\x1b[A", 1);   /* Down walks a row: one entry in a one-column grid */
-        same_screen_as_a_fresh_frame("scroll", "80\t12", 12, to_the_first_scroll, 6);
+        same_screen_as_a_fresh_frame("scroll", "80\t12", 12, to_the_first_scroll, one_column ? 6 : 11);
         if (one_column) assert(strstr(shot_a.ch[2], "Read Mail") && strstr(shot_a.ch[9], "Download"));   /* the sentinel: the window scrolled ONE row (the Messages header left), Download sits on the last row */              /* a short screen scrolls ONCE: the window moves, and lands where a fresh frame puts it */
     }
     big_long_label = 0;

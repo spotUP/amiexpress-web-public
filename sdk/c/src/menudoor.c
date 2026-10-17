@@ -1000,13 +1000,13 @@ static void move_key(struct menudoor *d, int key)
 }
 
 /* Cover flow owns Left/Right at the grid's edge and PageUp/PageDown (ui_pages_step); everything else moves the grid.
-   The palette is one column with Up/Down for a row, so Left/Right turn its page. */
+   The palette and Scroll turn a screen of rows on Left/Right. */
 static void page_or_move(struct menudoor *d, int key)
 {
     int step = 0;
-    /* The palette and a one-column Scroll list are read by rows: Left/Right turn a screen of rows, as PageUp/PageDown
-       (sysop 2026-10-17). A wider Scroll grid keeps Left/Right for the cell beside; Cover flow, for its pages. */
-    if ((d->palette || (!d->coverflow && cur(d)->grid.columns == 1)) && (key == UI_KEY_LEFT || key == UI_KEY_RIGHT)) key = key == UI_KEY_LEFT ? UI_KEY_PGUP : UI_KEY_PGDN;
+    /* The palette and Scroll are read by rows: Left/Right turn a screen of rows, as PageUp/PageDown, at every width and
+       however many columns the Scroll grid has (sysop 2026-10-17). Cover flow keeps Left/Right for its pages. */
+    if ((d->palette || !d->coverflow) && (key == UI_KEY_LEFT || key == UI_KEY_RIGHT)) key = key == UI_KEY_LEFT ? UI_KEY_PGUP : UI_KEY_PGDN;
     if (d->coverflow && d->depth == 0 && !d->palette)
         step = ui_pages_step(&d->pages, key, d->typed_len, ui_grid_at_edge(&cur(d)->grid, key));
     if (step) ui_pages_turn(&d->pages, step);
