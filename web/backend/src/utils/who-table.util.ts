@@ -64,8 +64,8 @@ export const PARKED_ACTION = 'Detached';
 
 export function whoEntry(status: number, name: string, location: string, ctx: { isSelf: boolean; hideFiles: boolean; parked: boolean }): { name: string; location: string; action: string } {
   let action: string;
-  if (ctx.parked) return { name, location, action: PARKED_ACTION };
-  if (status === 1) action = ctx.hideFiles ? 'DOWNLOADING' : 'BEGINNING DL';
+  if (ctx.parked) action = PARKED_ACTION;
+  else if (status === 1) action = ctx.hideFiles ? 'DOWNLOADING' : 'BEGINNING DL';
   else if (status === 2) action = ctx.hideFiles ? 'UPLOADING' : 'BEGINNING UL';
   else if (status === 3) action = ctx.isSelf ? 'WHO' : 'MODULE';
   else action = WHO_ACTIONS[status] ?? '';

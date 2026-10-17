@@ -18,6 +18,7 @@ import { BBSState, LoggedOnSubState } from '../../src/constants/bbs-states';
 import { flushOutput } from '../../src/utils/output.util';
 import { userSessions } from '../../src/server/session-manager';
 import { isLoggedOn } from '../../src/notify/presence';
+import { whoEntry, PARKED_ACTION } from '../../src/utils/who-table.util';
 
 const visible = (s: string) => s.replace(/\x1b\[[0-9;]*m/g, '');
 
@@ -44,6 +45,15 @@ function rowOf(text: string, name: string): string {
 }
 
 describe('a parked session is shown as away', () => {
+  it('a parked node whose status blanks the name stays blank, saying Detached', () => {
+    // express.e:24370 blanks name and location for SUSPENDED (26) and the
+    // other WHO_BLANK_NAME states; being parked must not bring them back.
+    expect(whoEntry(26, 'randy', 'Gothenburg', { isSelf: false, hideFiles: false, parked: true }))
+      .toEqual({ name: '', location: '', action: PARKED_ACTION });
+    expect(whoEntry(0, 'randy', 'Gothenburg', { isSelf: false, hideFiles: false, parked: true }))
+      .toEqual({ name: 'randy', location: 'Gothenburg', action: PARKED_ACTION });
+  });
+
   it('WHO says Detached for a parked caller and his activity again after a resume', () => {
     const me = caller(1, 'spot');
     const parked = caller(2, 'randy', { detachedAt: Date.now() });
