@@ -123,6 +123,38 @@ static int palette_runs_on_top(const char *text, int top, int left, int rows, in
     return runs;
 }
 
+/* The last byte written at a cell, over the whole stream (no box bounds): what the caller sees there at the end. */
+static int last_glyph(const char *text, int row, int col)
+{
+    const unsigned char *p = (const unsigned char *)text;
+    const char *close = text, *at, *from = text;
+    int r = 1, c = 1, sr = 1, sc = 1, g = 0;
+    while ((at = strstr(from, "\x1b[2J\x1b[H\x1b[?25h")) != 0) { close = at; from = at + 1; }   /* the door's closing clear is not what the caller saw */
+    while (*p && (const char *)p < close) {
+        if (*p == 0x1b && p[1] == '[') {
+            int a = 0, b = 0, which = 0;
+            p += 2;
+            if (*p == '?') p++;
+            while ((*p >= '0' && *p <= '9') || *p == ';') {
+                if (*p == ';') which++; else if (which == 0) a = a * 10 + (*p - '0'); else b = b * 10 + (*p - '0');
+                p++;
+            }
+            if (*p == 'H' || *p == 'f') { r = a ? a : 1; c = b ? b : 1; }
+            else if (*p == 's') { sr = r; sc = c; }
+            else if (*p == 'u') { r = sr; c = sc; }
+            else if (*p == 'J' && a == 2) g = 0;
+            if (*p) p++;
+            continue;
+        }
+        if (*p == 0x1b && (p[1] == '7' || p[1] == '8')) { if (p[1] == '7') { sr = r; sc = c; } else { r = sr; c = sc; } p += 2; continue; }
+        if (*p == '\r') { c = 1; p++; continue; }
+        if (*p == '\n') { r++; p++; continue; }
+        if (*p >= 32 && *p != 127) { if (r == row && c == col) g = *p; c++; }
+        p++;
+    }
+    return g;
+}
+
 /* The box keeps its ordinary border on all four sides; with a rail it is the first row INSIDE the box. */
 static void palette_rail_is_inside_the_box(int top, int left, int rows, int cols, int rail)
 {
@@ -289,6 +321,19 @@ int main(void)
     size_text = "80\t25";
     printf("  [OK] the palette is a modal: nothing outside the box, and its top line is the animated rail\n");
     main_line = "";
+
+    invoked_name = "MENU";
+    drive("\x0b", 1, &rc);
+                                  /* Ctrl-K in the menu: the palette box opens over it, in this process */
+    assert(rc == 0 && !strstr(requests, "RUN") && last_glyph(screen_text, 5, 11) == '+' && last_glyph(screen_text, 5, 70) == '+'
+           && strstr(screen_text, "Type to search"));
+    drive("\x0b\x1b", 2, &rc);                             /* Esc closes it: the menu is painted whole again, the box is gone */
+    assert(rc == 0 && last_glyph(screen_text, 5, 11) != '+' && strstr(strstr(screen_text, "Type to search"), "MAIN MENU"));
+    drive("\x0b\x1b\r", 3, &rc);                          /* the door is still running: Enter runs the menu's first entry */
+    assert(rc == 0 && strstr(requests, "RUN R|") && last_glyph(screen_text, 5, 11) != '+');
+    drive("\x0bjoin\r", 6, &rc);                          /* a pick in the palette runs like a menu pick */
+    assert(rc == 0 && strstr(requests, "RUN J|"));
+    printf("  [OK] Ctrl-K in the menu opens the palette over it, Esc repaints the menu and the door runs on, a pick runs\n");
 
     invoked_name = "MENUSETTINGS";
     drive("\x1b", 1, &rc);

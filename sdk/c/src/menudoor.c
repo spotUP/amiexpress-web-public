@@ -1218,6 +1218,55 @@ static menudoor_result typed_key(struct menudoor *d, int key)
     return MENUDOOR_STAY;
 }
 
+static menudoor_result loop(struct menudoor *d);
+
+/* Ctrl-K in the menu (sysop 2026-10-18): the search palette opens over the menu screen, in this process. The board's
+   Ctrl-K only reaches a command prompt; while this door runs the key is the door's. The same palette code runs (the
+   catalogue flattened, filtered by the typed text) as a nested loop; Esc closes it and the menu is repainted whole,
+   a pick runs through the spec's own activate and leaves the door as a pick from the menu does. The menu's state is
+   saved whole and put back, but for the screen, the key source and the rail, which are live and not the menu's. */
+static menudoor_result palette_over_menu(struct menudoor *d)
+{
+    static struct menudoor saved;
+    static ae_menu saved_catalogue;
+    level *top = &d->lv[0];
+    ui_screen screen;
+    ui_key_source keys;
+    int pushback, gone;
+    menudoor_result r;
+
+    saved = *d;
+    saved_catalogue = catalogue;
+    d->palette = 1; d->depth = 0; d->coverflow = 0; d->escaped = 0;
+    d->typed[0] = '\0'; d->typed_len = 0; d->offwindow = -1; d->notice[0] = '\0'; d->status_valid = 0;
+    if (ae_menu_open(d->spec->kind, 0, &top->menu) != 1) {
+        *d = saved;
+        return MENUDOOR_STAY;
+    }
+    strcpy(top->menu.prompt, "Search: ");
+    memcpy(&catalogue, &top->menu, sizeof catalogue);
+    d->palette_total = catalogue.entry_count;
+    overlay_place(d);
+    palette_filter(d);
+    overlay_configure(d, top, 0);
+    show_frame(d, 0, 0);
+
+    r = loop(d);
+
+    screen = d->screen; keys = d->keys; pushback = d->pushback; gone = d->gone;
+    {
+        int escaped = d->escaped;
+        *d = saved;
+        catalogue = saved_catalogue;
+        d->screen = screen; d->keys = keys; d->pushback = pushback; d->gone = gone;
+        if (gone) return MENUDOOR_LEAVE;
+        if (!escaped) return r;                        /* a pick: the menu's own row goes back to the board */
+    }
+    show_frame(d, 0, 0);                               /* Esc: the whole menu screen again, as it was */
+    ae_bs_mouse(1);
+    return MENUDOOR_STAY;
+}
+
 static menudoor_result loop(struct menudoor *d)
 {
     menudoor_result r;
@@ -1238,6 +1287,9 @@ static menudoor_result loop(struct menudoor *d)
             break;
         case UI_KEY_MOUSE:
             r = on_mouse(d);
+            break;
+        case 11:                                           /* Ctrl-K: the search palette, over this menu (only where the spec has one) */
+            if (!d->palette && d->spec->palette_name) r = palette_over_menu(d);
             break;
         case 9:                                            /* Tab: the type-ahead match the window does not show; empty: the next style */
             if (d->typed_len == 0 && d->depth == 0 && !d->palette) { if (next_style(d)) return MENUDOOR_LEAVE; }
