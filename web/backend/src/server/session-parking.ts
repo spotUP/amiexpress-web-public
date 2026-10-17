@@ -200,7 +200,7 @@ export interface AttachUser {
 /**
  * Move a parked session's link onto `raw` and re-key everything that names
  * the old socket: the session maps, the node manager, the session log. Then
- * clear the park, rotate the token, re-announce the modem speed and the
+ * clear the park, issue a fresh token, re-announce the modem speed and the
  * client door, send `session-restored`, and replay the held output.
  *
  * Shared by a handshake resume (`resumeParked`) and a second device that

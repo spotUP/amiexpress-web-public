@@ -105,7 +105,7 @@ describe('G marks a deliberate logoff', () => {
   });
 });
 
-describe('fresh login ends its own parked session first', () => {
+describe('fresh login ends its own parked session on E', () => {
   /** A raw socket.io socket, enough for a SessionLink to bind to. */
   function fakeRaw(id: string) {
     const { EventEmitter } = require('events');
@@ -119,7 +119,7 @@ describe('fresh login ends its own parked session first', () => {
     return ee;
   }
 
-  test('a fresh WEB login ends the parked session for good: node freed, token dead, before the already-on check', async () => {
+  test('a fresh WEB login that answers E ends the parked session for good: node freed, token dead, before the already-on check', async () => {
     // B1 (S6 review): login-post maps the fresh socket to the account
     // (socketToUser) before it ends the parked session, and the disconnect
     // handler's multi-tab shortcut used to see that mapping and keep the
@@ -153,11 +153,15 @@ describe('fresh login ends its own parked session first', () => {
       emit() { return true; }, on() { return this; }, join() { return this; },
     };
     try {
-      await runPostAuthLogin(
+      // S9: the fresh login now asks R/E about the parked session; E ends it.
+      const login = runPostAuthLogin(
         emitter, fresh,
         { id: 'u-ghost', username: 'spot', slotNumber: 7, calls: 0, callsToday: 0, ansi: true },
         { lastLoginBeforeUpdate: new Date(0) },
       );
+      await new Promise((r) => setImmediate(r));
+      fresh.loginInputHandler('E');
+      await login;
       expect(link.ended).toBe(true);
       expect(sessions.has('4')).toBe(false);                      // the node is free
       expect(lookupResumeToken(token)).toEqual({ ok: false, reason: 'unknown' });

@@ -1,4 +1,4 @@
-import { issueResumeToken, rotateResumeToken, lookupResumeToken, setResumeExpiry, revokeResumeToken, tokenFingerprint, _resetResumeTokensForTests, _setRefFactoryForTests, sweepResumeTokens, resumeTokenCount, issueResumeTokenForLogin } from '../../src/server/resume-tokens';
+import { issueResumeToken, lookupResumeToken, setResumeExpiry, revokeResumeToken, tokenFingerprint, _resetResumeTokensForTests, _setRefFactoryForTests, sweepResumeTokens, resumeTokenCount, issueResumeTokenForLogin } from '../../src/server/resume-tokens';
 
 beforeEach(() => { _setRefFactoryForTests(null); _resetResumeTokensForTests(); });
 
@@ -16,9 +16,9 @@ describe('a resume token opens only its own parked session', () => {
     setResumeExpiry(s, 1000);
     expect(lookupResumeToken(t, 1001)).toEqual({ ok: false, reason: 'expired' });
   });
-  it('refuses the token a resume rotated out, and accepts the new one', () => {
+  it('refuses the token a fresh issue replaced, and accepts the new one', () => {
     const s = {}; const old = issueResumeToken(s, '7', 3);
-    const next = rotateResumeToken(s);
+    const next = issueResumeToken(s, '7', 3);
     expect(next).not.toBe(old);
     expect(lookupResumeToken(old)).toEqual({ ok: false, reason: 'unknown' });
     expect(lookupResumeToken(next).ok).toBe(true);
@@ -42,9 +42,6 @@ describe('a resume token opens only its own parked session', () => {
     const t = issueResumeToken({}, '7', 3);
     expect(tokenFingerprint(t)).toMatch(/^[0-9a-f]{8}$/);
     expect(t.includes(tokenFingerprint(t))).toBe(false);
-  });
-  it('rotating a session with no token throws', () => {
-    expect(() => rotateResumeToken({})).toThrow();
   });
 });
 

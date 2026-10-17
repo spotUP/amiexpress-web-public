@@ -84,13 +84,6 @@ export function issueResumeToken(session: object, userId: string, nodeId: number
   return token;
 }
 
-/** A resume swaps the token: the old one stops working at once. */
-export function rotateResumeToken(session: object): string {
-  const rec = bySession.get(session);
-  if (!rec) throw new Error('rotate: session has no resume token');
-  return issueResumeToken(session, rec.userId, rec.nodeId);
-}
-
 /**
  * Lookup is by the sha256 of the offered token in a Map. The offered value is
  * hashed first, so what is compared is never the secret itself and the lookup
