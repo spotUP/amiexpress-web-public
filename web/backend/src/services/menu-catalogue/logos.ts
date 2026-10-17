@@ -11,6 +11,7 @@ import * as path from 'path';
 import * as amigafs from '../../utils/amigafs';
 import { chownToBoard, mkdirOwned } from '../../utils/board-owner.util';
 import { parseAnsiToGrid, gridSize, renderGridAt } from '../../utils/screen-wipe.util';
+import { parseSauceMetadata, stripSauceMetadata } from '../../utils/amiga-text-decode.util';
 import { menuLogoDir } from '../menu-config.service';
 import { levelEntry, widthClassOf, LOGO_FILE_RE, LOGO_NAME_RULE, logoAlphabet, type MenuConfig, type MenuKind, type LogoSet } from '../../screens/menu-config/menu-config';
 import { PetsciiMachine, PUA_BANK0, PUA_BANK1, vicToSgrForeground } from '@amiexpress/bbs-door-sdk/petscii';
@@ -23,7 +24,19 @@ const SCREEN_CODE_SPACE = 0x20;
 const rotation = new Map<string, number>();
 
 const isSeq = (file: string) => logoAlphabet(file) === 'petscii';
-const readLatin1 = (file: string): string => (amigafs.readFileSync(file, 'latin1') as string);
+
+/**
+ * An ANSI logo as the grid its artist drew. An art program (Moebius) writes a
+ * full-width row with no line break after it and appends ^Z plus a SAUCE
+ * record naming the canvas width, so the rows wrap at that width and the
+ * record is not art. Without SAUCE the file's own line breaks shape it, on a
+ * canvas `columns` wide.
+ */
+function ansiLogoGrid(bytes: Buffer, columns = ANSI_LOGO_COLUMNS) {
+  const canvas = parseSauceMetadata(bytes).tInfo1;
+  return parseAnsiToGrid(stripSauceMetadata(bytes).toString('latin1'), canvas ? Math.min(canvas, columns) : columns);
+}
+const readAnsiLogo = (file: string) => ansiLogoGrid(amigafs.readFileSync(file) as Buffer);
 
 /** A PETSCII file as the screen it paints: the KERNAL model, not a byte count. */
 function seqScreen(file: string): PetsciiMachine {
@@ -43,7 +56,7 @@ function seqExtent(machine: PetsciiMachine): { rows: number; cols: number } {
 }
 
 export function measureLogo(file: string): { rows: number; cols: number } {
-  return isSeq(file) ? seqExtent(seqScreen(file)) : gridSize(parseAnsiToGrid(readLatin1(file), ANSI_LOGO_COLUMNS));
+  return isSeq(file) ? seqExtent(seqScreen(file)) : gridSize(readAnsiLogo(file));
 }
 
 function pick(set: LogoSet, key: string, usable: string[], advance: boolean): string {
@@ -106,7 +119,7 @@ export function renderLogoAt(bbsRoot: string, kind: MenuKind, logo: ChosenLogo, 
   const file = path.join(menuLogoDir(bbsRoot, kind), logo.file);
   try {
     if (isSeq(file)) return seqToAnsi(seqScreen(file), top, left, logo.rows, logo.cols);
-    return renderGridAt(parseAnsiToGrid(readLatin1(file), ANSI_LOGO_COLUMNS), top, left, logo.rows, logo.cols);
+    return renderGridAt(readAnsiLogo(file), top, left, logo.rows, logo.cols);
   } catch { return null; }
 }
 
@@ -134,7 +147,7 @@ export function writeMenuLogo(bbsRoot: string, kind: MenuKind, file: string, byt
   if (!LOGO_FILE_RE.test(file)) throw new MenuLogoError(LOGO_NAME_RULE);
   if (bytes.length === 0) throw new MenuLogoError('The logo file is empty.');
   if (bytes.length > LOGO_MAX_BYTES) throw new MenuLogoError('A logo file is at most 64 KB.');
-  if (!isSeq(file) && gridSize(parseAnsiToGrid(bytes.toString('latin1'), ANSI_LOGO_COLUMNS + 1)).cols > ANSI_LOGO_COLUMNS) {
+  if (!isSeq(file) && gridSize(ansiLogoGrid(bytes, ANSI_LOGO_COLUMNS + 1)).cols > ANSI_LOGO_COLUMNS) {
     throw new MenuLogoError(`An ANSI logo is at most ${ANSI_LOGO_COLUMNS} columns wide.`);
   }
   const dir = menuLogoDir(bbsRoot, kind);

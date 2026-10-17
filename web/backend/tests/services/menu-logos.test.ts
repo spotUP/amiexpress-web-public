@@ -1,7 +1,7 @@
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { chooseLogos, renderLogoAt, measureLogo } from '../../src/services/menu-catalogue/logos';
+import { chooseLogos, renderLogoAt, measureLogo, writeMenuLogo } from '../../src/services/menu-catalogue/logos';
 import { validateMenuConfig } from '../../src/screens/menu-config/menu-config';
 import { AnsiToPetsciiTransducer } from '@amiexpress/bbs-door-sdk/petscii';
 
@@ -76,4 +76,30 @@ test('when a hand-edited config holds two sets for one slot the first draws, as 
     { position: 'header' as const, widthClass: 'wide' as const, levelFloor: 0, rule: 'fixed' as const, files: ['wide.txt'], afterSection: 0 },
   ] };
   expect(chooseLogos(c, 'MAIN', caller(120), root)[0].file).toBe('cat.txt');
+});
+
+/** What Moebius saves: full 80-column rows with no line break between them, then ^Z and a SAUCE record naming the canvas. */
+function moebiusLogo(rows: string[], width: number): Buffer {
+  const sauce = Buffer.alloc(128, 0);
+  sauce.write('SAUCE00', 0, 'latin1');
+  sauce.write('A logo'.padEnd(35), 7, 'latin1');
+  sauce[94] = 1; sauce[95] = 1;                              // Character / ANSi
+  sauce.writeUInt16LE(width, 96);
+  sauce.writeUInt16LE(rows.length, 98);
+  sauce.write('IBM VGA', 106, 'latin1');
+  return Buffer.concat([Buffer.from(rows.map((r, i) => `\x1b[${31 + i % 7}m${r}`).join('') + '\x1b[0m', 'latin1'), Buffer.from([0x1a]), sauce]);
+}
+
+test('an 80x7 Moebius logo (no line breaks, SAUCE record) uploads as 80x7 and draws its rows in place', () => {
+  const rows = Array.from({ length: 7 }, (_, i) => `ROW${i}`.padEnd(80, String(i)));
+  const saved = writeMenuLogo(root, 'MAIN', 'moebius.ans', moebiusLogo(rows, 80));
+  expect(saved).toEqual({ file: 'moebius.ans', rows: 7, cols: 80 });
+  const drawn = renderLogoAt(root, 'MAIN', { position: 'header', file: 'moebius.ans', rows: 7, cols: 80, afterSection: 0 }, 1, 1, 7, 80)!;
+  const text = drawn.replace(/\x1b\[[0-9;]*[A-Za-z]/g, '|');
+  for (const row of rows) expect(text).toContain(row);
+  expect(text).not.toContain('SAUCE');
+});
+
+test('a logo whose SAUCE canvas is wider than 200 columns is still refused', () => {
+  expect(() => writeMenuLogo(root, 'MAIN', 'huge.ans', moebiusLogo(['X'.repeat(240)], 240))).toThrow('An ANSI logo is at most 200 columns wide.');
 });
