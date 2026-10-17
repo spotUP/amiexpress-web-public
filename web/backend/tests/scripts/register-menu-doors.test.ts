@@ -66,6 +66,12 @@ test('every registration the menu step writes is committed to the repo', () => {
     const written = fs.readdirSync(path.join(fresh, 'Commands', 'BBSCmd'));
     expect(written).toEqual(expect.arrayContaining(['MENU.info', 'MENUSETTINGS.info', 'PALETTE.info']));
     for (const name of written) expect(fs.existsSync(path.join(repoCmds, name))).toBe(true);
+    // Committed is not enough: a label changed in the script but not regenerated
+    // (MENUSETTINGS kept "Long menus" on live) must fail here too.
+    const tooltypes = (file: string) => parseInfoFile(file).tooltypes.map((t: { key: string; value: string }) => [t.key, t.value]);
+    for (const name of written) {
+      expect([name, tooltypes(path.join(repoCmds, name))]).toEqual([name, tooltypes(path.join(fresh, 'Commands', 'BBSCmd', name))]);
+    }
   } finally {
     fs.rmSync(fresh, { recursive: true, force: true });
   }
