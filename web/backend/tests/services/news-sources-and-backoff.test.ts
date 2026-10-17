@@ -40,7 +40,7 @@ describe('news sources', () => {
     expect(byFile('bull14.txt')!.title).toBe('Crackmes - new challenges to reverse');
     expect(byFile('bull44.txt')!.title).toMatch(/urbex/);
     // textfiles.com has no HTTPS and no blog.xml; Jason Scott's blog feed lives on ascii.textfiles.com.
-    expect(byFile('bull45.txt')!.url).toBe('https://ascii.textfiles.com/feed');
+    expect(byFile('bull54.txt')!.url).toBe('https://ascii.textfiles.com/feed');
   });
 
   it('BullHelp lists exactly the sources that exist', () => {

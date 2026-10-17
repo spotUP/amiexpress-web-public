@@ -90,13 +90,38 @@ export const REDDIT_INTERVAL_MS = 3 * 60 * MINUTE;
  */
 export const OWNED_BULLETIN_NUMBERS = new Set([1, 2, 3, 4, 5, 6, 9, 11]);
 
+/**
+ * A feed number must not read as `<another bulletin><a security level>`.
+ * express.e's findSecurityScreen (express.e:6246, levels walked down in steps
+ * of 5 to 5) and the B command (express.e:24648) look for `Bull<N><level>`
+ * before `Bull<N>`, so a feed at bull15 was shown as bulletin 1 to every
+ * caller at level 5 or more. Returns the numbers that would be shadowed.
+ */
+export function shadowedBulletinNumbers(feed: number, others: Iterable<number>): number[] {
+  const text = String(feed);
+  const hits: number[] = [];
+  for (const other of others) {
+    const prefix = String(other);
+    if (other === feed || !text.startsWith(prefix) || text.length === prefix.length) continue;
+    const rest = text.slice(prefix.length);
+    if (rest.startsWith('0')) continue;
+    const level = Number(rest);
+    if (level >= 5 && level <= 255 && level % 5 === 0) hits.push(other);
+  }
+  return hits;
+}
+
+function bulletinNumberOf(file: string): number {
+  return parseInt(file.replace(/\D/g, ''), 10);
+}
+
 export const NEWS_BULLETIN_SOURCES: NewsBulletinSource[] = [
   { kind: 'teletext', page: '100', file: 'bull7.txt', title: 'SVT Text news headlines', source: 'SVT Text via texttv.nu (unofficial mirror)' },
   { kind: 'teletext', page: '300', file: 'bull8.txt', title: 'SVT Text sports headlines', source: 'SVT Text via texttv.nu (unofficial mirror)' },
 
   // --- the magazine. 13 upward: Bulls.CFG reserves 13-20, the files do not exist.
   { kind: 'rss', url: 'https://crackmes.one/rss', file: 'bull14.txt', title: 'Crackmes - new challenges to reverse', source: 'crackmes.one', hostGapMs: 5000 },
-  { kind: 'rss', url: 'https://gitlab.com/exploit-database/exploitdb/-/commits/main.atom', file: 'bull15.txt', title: 'Exploit-DB - fresh public exploits', source: 'Exploit Database (OffSec)', hostGapMs: 5000 },
+  { kind: 'rss', url: 'https://gitlab.com/exploit-database/exploitdb/-/commits/main.atom', file: 'bull51.txt', title: 'Exploit-DB - fresh public exploits', source: 'Exploit Database (OffSec)', hostGapMs: 5000 },
   { kind: 'rss', url: 'https://seclists.org/rss/oss-sec.rss', file: 'bull16.txt', title: 'oss-security - the open wall', source: 'Openwall oss-security', hostGapMs: 15000 },
 
   { kind: 'rss', url: 'https://feeds.feedburner.com/TheHackersNews', file: 'bull18.txt', title: 'The Hacker News', source: 'thehackernews.com', hostGapMs: 5000 },
@@ -107,7 +132,7 @@ export const NEWS_BULLETIN_SOURCES: NewsBulletinSource[] = [
   { kind: 'rss', url: 'https://feeds.arstechnica.com/arstechnica/index', file: 'bull23.txt', title: 'Ars Technica', source: 'arstechnica.com', hostGapMs: 5000 },
   { kind: 'json', url: 'https://hn.algolia.com/api/v1/search_by_date?tags=story&hitsPerPage=20', file: 'bull24.txt', title: 'Hacker News - newest stories', source: 'news.ycombinator.com via Algolia', hostGapMs: 5000, intervalMs: 5 * MINUTE, listPath: 'hits', urlPath: 'url', idPath: 'objectID', fallbackUrl: 'https://news.ycombinator.com/item?id={id}', fields: [{ label: '', path: 'title' }, { label: 'points', path: 'points' }] },
 
-  { kind: 'rss', url: 'https://rtl-sdr.com/feed/', file: 'bull25.txt', title: 'RTL-SDR - decoding closed signals', source: 'rtl-sdr.com', hostGapMs: 5000 },
+  { kind: 'rss', url: 'https://rtl-sdr.com/feed/', file: 'bull52.txt', title: 'RTL-SDR - decoding closed signals', source: 'rtl-sdr.com', hostGapMs: 5000 },
   { kind: 'rss', url: 'https://hackaday.com/tag/phreaking/feed/', file: 'bull26.txt', title: 'Hackaday - phreaking and comms', source: 'hackaday.com', hostGapMs: 5000 },
   { kind: 'rss', url: 'https://hackaday.com/feed/', file: 'bull27.txt', title: 'Hackaday - hardware hacking', source: 'hackaday.com', hostGapMs: 5000 },
 
@@ -120,7 +145,7 @@ export const NEWS_BULLETIN_SOURCES: NewsBulletinSource[] = [
 
   { kind: 'rss', url: 'https://www.reddit.com/r/Amiga/.rss', file: 'bull33.txt', title: 'r/Amiga', source: 'reddit.com', hostGapMs: REDDIT_HOST_GAP_MS, intervalMs: REDDIT_INTERVAL_MS },
   { kind: 'rss', url: 'https://www.reddit.com/r/reverseengineering/.rss', file: 'bull34.txt', title: 'r/reverseengineering', source: 'reddit.com', hostGapMs: REDDIT_HOST_GAP_MS, intervalMs: REDDIT_INTERVAL_MS },
-  { kind: 'rss', url: 'https://www.reddit.com/r/demoscene/.rss', file: 'bull35.txt', title: 'r/demoscene', source: 'reddit.com', hostGapMs: REDDIT_HOST_GAP_MS, intervalMs: REDDIT_INTERVAL_MS },
+  { kind: 'rss', url: 'https://www.reddit.com/r/demoscene/.rss', file: 'bull53.txt', title: 'r/demoscene', source: 'reddit.com', hostGapMs: REDDIT_HOST_GAP_MS, intervalMs: REDDIT_INTERVAL_MS },
   { kind: 'rss', url: 'https://www.reddit.com/r/phreaking/.rss', file: 'bull36.txt', title: 'r/phreaking', source: 'reddit.com', hostGapMs: REDDIT_HOST_GAP_MS, intervalMs: REDDIT_INTERVAL_MS },
   { kind: 'rss', url: 'https://www.reddit.com/r/sdr/.rss', file: 'bull37.txt', title: 'r/SDR - software defined radio', source: 'reddit.com', hostGapMs: REDDIT_HOST_GAP_MS, intervalMs: REDDIT_INTERVAL_MS },
   { kind: 'rss', url: 'https://www.reddit.com/r/radionerds/.rss', file: 'bull38.txt', title: 'r/radionerds', source: 'reddit.com', hostGapMs: REDDIT_HOST_GAP_MS, intervalMs: REDDIT_INTERVAL_MS },
@@ -132,7 +157,7 @@ export const NEWS_BULLETIN_SOURCES: NewsBulletinSource[] = [
   { kind: 'rss', url: 'https://www.reddit.com/r/urbanexploration/.rss', file: 'bull44.txt', title: 'r/urbanexploration - urbex', source: 'reddit.com', hostGapMs: REDDIT_HOST_GAP_MS, intervalMs: REDDIT_INTERVAL_MS },
   // Jason Scott's ASCII blog. textfiles.com itself serves no HTTPS and has no blog.xml (404);
   // the feed is WordPress at ascii.textfiles.com, full posts in content:encoded (checked 2026-10-14).
-  { kind: 'rss', url: 'https://ascii.textfiles.com/feed', file: 'bull45.txt', title: 'Jason Scott - preserving old text', source: 'ascii.textfiles.com', hostGapMs: 15000, intervalMs: 6 * 60 * MINUTE },
+  { kind: 'rss', url: 'https://ascii.textfiles.com/feed', file: 'bull54.txt', title: 'Jason Scott - preserving old text', source: 'ascii.textfiles.com', hostGapMs: 15000, intervalMs: 6 * 60 * MINUTE },
 
 ];
 
@@ -1095,6 +1120,14 @@ export async function refreshNewsBulletins(
     const num = parseInt(src.file.replace(/\D/g, ''), 10);
     if (Number.isFinite(num) && OWNED_BULLETIN_NUMBERS.has(num)) {
       deps.log(`[WARN] news-bulletins: ${src.file} is another door's number; refusing to write it`);
+      continue;
+    }
+    const shadowed = shadowedBulletinNumbers(
+      num,
+      [...OWNED_BULLETIN_NUMBERS, ...NEWS_BULLETIN_SOURCES.map((s) => bulletinNumberOf(s.file))],
+    );
+    if (shadowed.length > 0) {
+      deps.log(`[WARN] news-bulletins: ${src.file} reads as a security screen of bulletin ${shadowed.join(', ')}; refusing to write it`);
       continue;
     }
     // A source with its own interval runs on it; `due` is false while it waits.
