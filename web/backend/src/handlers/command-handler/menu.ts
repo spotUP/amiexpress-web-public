@@ -100,6 +100,12 @@ export async function promptTabLeavesClassic(session: BBSSession): Promise<boole
   return true;
 }
 
+/** This call draws the prompt itself: a display-flow pass still pending for DISPLAY_MENU is a duplicate. */
+function armDisplayFlowSkip(session: BBSSession): void {
+  session.skipNextDisplayFlowMenu = true;
+  session.manualMenuTargetState = LoggedOnSubState.READ_COMMAND;
+}
+
 /**
  * Display main menu (express.e:28586)
  * menuPause controls whether we show a pause prompt before the menu; display is gated by expert/door flags.
@@ -158,8 +164,6 @@ console.log('[menu] displayMainMenu SKIPPED (debounce - last menu was', now - la
   session.lastScreenHadPause = false;
 
   const shouldDisplayMenu = forceMenuDisplay || (((session.user?.expert || 'N') === 'N' && !session.doorExpertMode) || forceMenus);
-  session.skipNextDisplayFlowMenu = true;
-  session.manualMenuTargetState = LoggedOnSubState.READ_COMMAND;
 
   // Default to line input unless a MENU.keys is loaded below
   session.cmdShortcuts = false;
@@ -195,7 +199,10 @@ console.log('[menu] displayMainMenu SKIPPED (debounce - last menu was', now - la
     // caller (plan M19); express.e:28586 draws SCREEN_MENU here, which stays the fallback.
     // 'dismissed' = the caller left the door with Esc: prompt only, once (Decision 37).
     const handover = await launchMenuDoor(socket, session, 'display-flow');
+    // The door owns the screen and draws no prompt here, so the duplicate guard below is not armed: armed, it
+    // outlived the door and swallowed the prompt after a picked command (R, then Enter at the reader's end).
     if (handover === 'ran') return;
+    armDisplayFlowSkip(session);
     if (handover !== 'dismissed') screenDisplayed = await displayScreen(socket, session, SCREEN_MENU);
     if (classicLanded) emitText(socket, `\r\n\x1b[36m${menuStyleTabLine('classic')}\x1b[0m`);
 
@@ -223,6 +230,7 @@ console.log('[menu] displayMainMenu SKIPPED (debounce - last menu was', now - la
       }
     }
   } else {
+    armDisplayFlowSkip(session);
     // WEB_: an expert who opened the door with `?` and left it with Esc is not shown it here;
     // the flag is spent now so a later forced display still opens the door (Decision 37).
     // eslint-disable-next-line @typescript-eslint/no-var-requires
