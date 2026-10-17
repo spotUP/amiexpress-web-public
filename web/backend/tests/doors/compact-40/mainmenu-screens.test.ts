@@ -35,6 +35,7 @@ jest.mock('../../../src/services/account.service', () => ({
   saveAccount: jest.fn(async () => undefined),
 }));
 
+import { AnsiToPetsciiTransducer } from '@amiexpress/bbs-door-sdk/petscii';
 import { db } from '../../../src/database';
 import { takeMenuExit } from '../../../src/handlers/commands/menu-door-exit';
 import {
@@ -479,6 +480,35 @@ describe('MAINMENU on three screens', () => {
       expect(gridText(replayCells(firstFrame(r), 80, 25))[23]).toMatch(/Page 1 of \d+$/);
       expect(gridText(replayCells(r.chunks.slice(0, r.marks[1]!.at).join(''), 80, 25))[23]).toMatch(/Page 2 of \d+$/);
       expect(wipeEnds() - before).toBe(1);                                         // the page wipe (open and leave are off in the fixture)
+    });
+  });
+
+  describe('search palette (Ctrl-K): a box over the board\'s screen, given back on Esc (plan K3-K5, R1)', () => {
+    const MENU_SCREEN = fs.readFileSync(path.join(__dirname, 'fixtures', 'mainmenu-80.ans'), 'latin1');
+
+    test('80x25: the box is drawn over the screen the caller had, and Esc gives those cells back without a clear', async () => {
+      const r = await driveDoor(DOOR, {
+        cols: 80, rows: 25, steps: [idle(ESC)], command: 'PALETTE', preface: MENU_SCREEN,
+        session: { currentConf: 1, currentConfName: 'General', relConfNum: 1 }, boardRoot: tempBoard(),
+      });
+      const leaving = answer(r, 0).join('');
+      expect(leaving).not.toContain('\x1b[2J');                                       // RESTORE answered, so no closing clear
+      const shown = gridText(replayCells(MENU_SCREEN + r.ansi, 80, 25));
+      const before = gridText(replayCells(MENU_SCREEN, 80, 25));
+      const drawn = gridText(replayCells(MENU_SCREEN + firstFrame(r), 80, 25));
+      expect(drawn.slice(4, 20)).not.toEqual(before.slice(4, 20));                     // the box covered rows 5..20
+      expect(shown).toEqual(before);                                                   // and the board put them back
+    });
+
+    test('40x25: the first paint costs at most 900 bytes on the PETSCII wire', async () => {
+      const r = await driveDoor(DOOR, {
+        cols: 40, rows: 25, steps: [idle(ESC)], command: 'PALETTE',
+        session: { currentConf: 1, currentConfName: 'General', relConfNum: 1 }, boardRoot: tempBoard(),
+      });
+      const wire = new AnsiToPetsciiTransducer();
+      const paint = r.chunks.slice(0, r.marks[0]!.at).reduce((n, c) => n + wire.transduce(c).length, 0);
+      expect(paint).toBeGreaterThan(0);
+      expect(paint).toBeLessThanOrEqual(900);
     });
   });
 

@@ -11,12 +11,20 @@ import { AnsiToPetsciiTransducer } from '@amiexpress/bbs-door-sdk/petscii';
 import { isRailTick } from '../../../../../dev/scripts/door-probe/rail-tick';
 
 /** The socket a door is handed: everything it paints, in order. */
+let captureSockets = 0;
 export class CaptureSocket extends EventEmitter {
+  readonly id = `capture-${process.pid}-${++captureSockets}`;
   readonly ansi: string[] = [];
   /** When each write arrived (ms since the epoch), parallel to `ansi`: tells one answer from the next. */
   readonly times: number[] = [];
+  /** The session whose screen model this socket feeds, as socket-handlers' emit wrap does (AEW_SCREEN SAVE needs it). */
+  observed: { nodeId?: number } | null = null;
   emit(event: string, data?: any): boolean {
-    if (event === 'ansi-output') { this.ansi.push(typeof data === 'string' ? data : String(data ?? '')); this.times.push(Date.now()); }
+    if (event === 'ansi-output') {
+      const text = typeof data === 'string' ? data : String(data ?? '');
+      this.ansi.push(text); this.times.push(Date.now());
+      if (this.observed) require('../../../src/server/session-observers').observeOutput(this.id, this.observed.nodeId, text, this.observed);
+    }
     return super.emit(event, data);
   }
 }
@@ -138,6 +146,8 @@ export interface DriveOptions {
   boardRoot?: string;
   /** What the board's command word was: `ae_menu_command()` answers it (one binary, several registrations). Default 'W'. */
   command?: string;
+  /** What the caller's screen showed before the door started: fed to the board's screen model only (not in `chunks`). */
+  preface?: string;
 }
 
 export interface DriveResult {
@@ -185,6 +195,8 @@ export async function driveDoor(binary: string, opts: DriveOptions): Promise<Dri
     doorCommand: command, doorId: command, petsciiMode: petscii, terminalType: petscii ? 'c64' : 'modern',
     screenWidth: cols, screenHeight: rows, currentConf: 1, ...opts.session,
   };
+  socket.observed = bbsSession;
+  if (opts.preface) require('../../../src/server/session-observers').observeOutput(socket.id, bbsSession.nodeId, opts.preface, bbsSession);
   const session = new AmigaDoorSession(socket as any, {
     executablePath: binary, doorType: 'XIM', timeout: 30, args: ['1'], assigns: {}, toolTypes: {}, bbsSession,
   });
@@ -211,7 +223,10 @@ export async function driveDoor(binary: string, opts: DriveOptions): Promise<Dri
       send(st.keys);
     }
   })();
-  try { await session.start(); } finally { ended = true; await typist; timers.forEach(t => { clearTimeout(t); clearInterval(t); }); }
+  try { await session.start(); } finally {
+    ended = true; await typist; timers.forEach(t => { clearTimeout(t); clearInterval(t); });
+    require('../../../src/server/session-observers').stopObserving(socket.id);
+  }
   return { ansi: socket.ansi.join(''), session: bbsSession, user, logDir: process.env.XIM_LOG_DIR ?? '', chunks: socket.ansi, times: socket.times, marks };
 }
 

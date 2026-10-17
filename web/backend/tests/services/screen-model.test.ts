@@ -3,6 +3,8 @@
  * menu styles K1/K6): the terminal step it runs, and that a saved region
  * repainted onto a second screen reproduces the first one cell for cell.
  */
+import { readFileSync } from 'fs';
+import { join } from 'path';
 import { AnsiGrid } from '../../src/utils/screen-wipe.util';
 import {
   feedScreenModel, dropScreenModel, screenModelFor, snapshotRegion, renderSnapshot,
@@ -77,6 +79,14 @@ test('a saved region repainted onto a second screen reproduces the cells that dr
   // A region off the screen is refused.
   expect(snapshotRegion(first, 24, 1, 3, 10)).toBeNull();
   expect(snapshotRegion(first, 1, 75, 1, 10)).toBeNull();
+});
+
+test('restoring the palette box over the real main menu costs at most 12 bytes a cell (plan K5)', () => {
+  const menu = readFileSync(join(__dirname, '../doors/compact-40/fixtures/mainmenu-80.ans'), 'latin1');
+  const screen = new AnsiGrid(80, 25);
+  screen.feed(menu);
+  const snap = snapshotRegion(screen, 5, 11, 16, 60)!; // the box menudoor asks for at 80x25 (SAVE 5 11 16 60)
+  expect(Buffer.byteLength(renderSnapshot(snap, 80), 'latin1')).toBeLessThanOrEqual(16 * 60 * 12);
 });
 
 test('per connection: fed by observeOutput at the caller size, released on RESTORE, dropped when the connection ends', () => {

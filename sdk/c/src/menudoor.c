@@ -197,6 +197,8 @@ struct menudoor {
     ui_pages pages;                   /* cover flow: the page key rule, indicator and turn */
     int palette;                      /* the search palette: lv[0] is the catalogue filtered by the typed text */
     int palette_total;                /* palette: the catalogue's entry count, the M of "N of M" */
+    int ov_top, ov_left, ov_rows, ov_cols;    /* palette: the overlay box, 1-based (plan K3) */
+    int escaped;                      /* palette: left by Esc, so the board's screen under the box comes back */
     int rail_tick;
     int gone;                         /* the caller hung up */
 };
@@ -283,6 +285,158 @@ static void draw_masthead(struct menudoor *d)
     draw_divider(d);
 }
 
+/* ------------------------------------------------------------- the palette overlay (plan K3) */
+
+/* The palette is a box over whatever the board was showing, not a screen of its own: 60x16 centred on a wide screen,
+   the width less one column each side and 14 rows on a narrow one. Inside: the search field, the filtered list (the
+   grid, one column), and the highlighted entry's description. No masthead: an overlay has no title row. */
+#define OVERLAY_WIDE_COLS 60
+#define OVERLAY_WIDE_ROWS 16
+#define OVERLAY_NARROW_ROWS 14
+#define OVERLAY_LABEL "Search"
+#define OVERLAY_NOTHING_WIDE "Nothing matches: Enter runs it as typed"
+#define OVERLAY_NOTHING_NARROW "No match: Enter runs it as typed"
+#define OVERLAY_PAGER_ROOM 12                             /* " 999 of 999 ": the count at the field's right */
+
+static void overlay_place(struct menudoor *d)
+{
+    int cols = d->screen.cols, rows = d->screen.rows;
+    int w = cols >= OVERLAY_WIDE_COLS + 2 ? OVERLAY_WIDE_COLS : cols - 2;
+    int h = cols >= OVERLAY_WIDE_COLS + 2 ? OVERLAY_WIDE_ROWS : OVERLAY_NARROW_ROWS;
+    if (w < 4) w = cols;
+    if (h > rows) h = rows;
+    d->ov_cols = w; d->ov_rows = h;
+    d->ov_left = (cols - w) / 2 + 1;
+    d->ov_top = (rows - h) / 2 + 1;
+}
+
+/* The grid as the overlay's list: the rows between the field and the description, one column, no header or band. */
+static void overlay_configure(struct menudoor *d, level *lv, int selected)
+{
+    ui_grid *g = &lv->grid;
+    configure(d, lv, selected);                           /* the theme's inks, the texts, the caret: the grid as everywhere */
+    g->top = d->ov_top + 2; g->left = d->ov_left + 1;
+    g->height = d->ov_rows - 4; g->width = d->ov_cols - 2;
+    g->section_title = 0; g->band_after_section = -1; g->band_height = 0;
+    g->mode = UI_GRID_SCROLL; g->max_columns = 1;
+    g->erase_tail = 0;                                    /* an erase would take the board's screen beside the box */
+    ui_grid_layout(g);
+    ui_grid_select(g, selected);
+}
+
+static int overlay_typed_room(const struct menudoor *d)
+{
+    int room = d->ov_cols - 2 - 1 - prompt_len(&d->lv[0]) - OVERLAY_PAGER_ROOM;
+    return room < 0 ? 0 : room < TYPED_MAX ? room : TYPED_MAX;
+}
+
+static int overlay_caret_column(const struct menudoor *d)
+{
+    return d->ov_left + 1 + 1 + prompt_len(&d->lv[0]) + d->typed_len;
+}
+
+/* The search field: the hint until something is typed, then "Search: <typed>"; the match count at the right. One run
+   of exactly the box's inner width, pens inline, written raw (no padding pass, no reset). */
+static void overlay_field(struct menudoor *d)
+{
+    ui_screen *sc = &d->screen;
+    level *lv = &d->lv[0];
+    int inner = d->ov_cols - 2, plen, at, gap, plen_pager;
+    char line[400], pager[32], pen[4];
+    const char *hint;
+
+    if (inner < 1 || inner > 300) return;
+    sprintf(pager, "%d of %d", lv->menu.entry_count, d->palette_total);
+    plen_pager = (int)strlen(pager);
+    line[0] = ' '; line[1] = '\0';
+    if (d->typed_len == 0) {
+        hint = (int)strlen(MENUDOOR_PALETTE_HINT_WIDE) + 3 + plen_pager <= inner ? MENUDOOR_PALETTE_HINT_WIDE
+                                                                                : MENUDOOR_PALETTE_HINT_NARROW;
+        ui_ink(pen, UI_TOKEN(UI_T_ACCENT_ALT)); strcat(line, pen);
+        strncat(line, hint, (size_t)(inner - 1));
+        plen = 1 + (int)strlen(hint);
+    } else {
+        ui_ink(pen, UI_TOKEN(UI_T_DIM)); strcat(line, pen);
+        strncat(line, lv->menu.prompt, PROMPT_SHOWN);
+        ui_ink(pen, UI_TOKEN(UI_T_INK)); strcat(line, pen);
+        strncat(line, d->typed, TYPED_MAX);
+        plen = 1 + prompt_len(lv) + d->typed_len;
+    }
+    if (plen > inner) plen = inner;
+    at = (int)strlen(line);
+    gap = inner - plen - plen_pager - 1;
+    if (gap >= 1) {
+        memset(line + at, ' ', (size_t)gap); at += gap;
+        ui_ink(pen, UI_TOKEN(UI_T_DIM)); strcpy(line + at, pen); at += (int)strlen(pen);
+        strcpy(line + at, pager); at += plen_pager;
+        line[at++] = ' '; line[at] = '\0';
+    } else if (plen < inner) {
+        memset(line + at, ' ', (size_t)(inner - plen)); at += inner - plen;
+        line[at] = '\0';
+    }
+    ansi_color(&sc->buf, UI_TOKEN(UI_T_INK), ground(d), 0);
+    ansi_text_raw(&sc->buf, d->ov_top + 1, d->ov_left + 1, line, inner);
+    if (d->typed_len == 0) {
+        ui_screen_cursor(sc, 0);
+    } else {
+        ansi_goto(&sc->buf, d->ov_top + 1, overlay_caret_column(d));
+        ui_screen_cursor(sc, 1);
+    }
+}
+
+/* The description row: a notice, else "nothing matches", else the highlighted entry's description. A row already
+   showing this text is not sent again; `full` is a fresh frame. */
+static void overlay_description(struct menudoor *d, int full)
+{
+    level *lv = &d->lv[0];
+    int inner = d->ov_cols - 2, n;
+    char line[100];
+    const char *text = "";
+
+    if (inner < 1 || inner > (int)sizeof line - 1) return;
+    if (d->notice[0]) text = d->notice;
+    else if (lv->menu.entry_count == 0)
+        text = d->typed_len == 0 ? "" : (int)strlen(OVERLAY_NOTHING_WIDE) + 1 <= inner ? OVERLAY_NOTHING_WIDE : OVERLAY_NOTHING_NARROW;
+    else if (lv->grid.selected >= 0 && lv->grid.selected < lv->menu.entry_count)
+        text = lv->menu.entries[lv->grid.selected].description;
+    line[0] = ' ';
+    strncpy(line + 1, text, sizeof line - 2);
+    line[sizeof line - 1] = '\0';
+    n = (int)strlen(line);
+    if (n > inner) n = inner;
+    memset(line + n, ' ', (size_t)(inner - n));
+    line[inner] = '\0';
+    if (!full && d->status_valid && strcmp(line, d->status_drawn) == 0) return;
+    ansi_color(&d->screen.buf, UI_TOKEN(UI_T_DIM), ground(d), 0);
+    ansi_text_raw(&d->screen.buf, d->ov_top + d->ov_rows - 2, d->ov_left + 1, line, inner);
+    strcpy(d->status_drawn, line);
+    d->status_valid = 1;
+}
+
+/* The first paint: the frame, then every inner cell exactly once. The grid draws its rows without the blank pass (each
+   row is written over once, not blanked and then written: half the bytes); what that leaves is filled here - the
+   one column a cell keeps free at its right, and the list rows below the last entry. Later repaints use the blank
+   pass, which covers exactly the inner width. */
+static void overlay_compose(struct menudoor *d)
+{
+    ui_grid *g = &d->lv[0].grid;
+    char blank[300];
+    int inner = d->ov_cols - 2, row, shown = g->entry_count - g->offset;
+
+    ansi_box(&d->screen.buf, d->ov_top, d->ov_left, d->ov_rows, d->ov_cols, UI_TOKEN(UI_T_CHROME), OVERLAY_LABEL);
+    overlay_field(d);
+    ui_grid_draw_on_ground(g, &d->screen.buf);
+    if (inner > 0 && inner < (int)sizeof blank) {
+        memset(blank, ' ', (size_t)inner); blank[inner] = '\0';
+        ansi_color(&d->screen.buf, UI_TOKEN(UI_T_INK), ground(d), 0);
+        for (row = 0; row < g->height; row++) {
+            if (row < shown) ansi_text_raw(&d->screen.buf, g->top + row, d->ov_left + inner, " ", 1);
+            else ansi_text_raw(&d->screen.buf, g->top + row, d->ov_left + 1, blank, inner);
+        }
+    }
+    overlay_description(d, 1);
+}
+
 /* The status row follows the selection. Drawn smart: a row already showing this text is not sent again, and a
    changed one is written only as far as the longer of the old and new text (the rest of the bar is untouched
    bar). `full` is a fresh frame, where the whole bar goes out once. */
@@ -294,6 +448,7 @@ static void draw_status(struct menudoor *d, int full)
     const char *text = "";
     int width, first, room;
 
+    if (d->palette) { overlay_description(d, full); return; }
     if (d->notice[0]) text = d->notice;
     else if (d->palette && lv->menu.entry_count == 0) text = d->typed_len > 0 ? "Nothing matches: Enter runs it as typed" : "";
     else if (d->typed_len > 0 && d->offwindow >= 0 && d->offwindow < lv->menu.entry_count) {
@@ -401,6 +556,7 @@ static void draw_prompt(struct menudoor *d)
     const char *bar = mode_bar(d, bar_q, sizeof bar_q), *lead;
     int row = lv->lay.prompt_row, room = sc->cols - 1 < 400 ? sc->cols - 1 : 400, plen, blen = bar ? (int)strlen(bar) : 0, gap, at;
 
+    if (d->palette) { overlay_field(d); return; }
     ansi_color(&sc->buf, UI_TOKEN(UI_T_INK), ground(d), 0);
     if (d->typed_len == 0) {
         lead = hint_text(d, bar, room);
@@ -443,6 +599,7 @@ static void park_cursor(struct menudoor *d)
     level *lv = cur(d);
     int plen;
     if (d->typed_len == 0) return;
+    if (d->palette) { ansi_goto(&d->screen.buf, d->ov_top + 1, overlay_caret_column(d)); return; }
     plen = prompt_len(lv) + d->typed_len;
     if (plen > d->screen.cols - 1) plen = d->screen.cols - 1;
     ansi_goto(&d->screen.buf, lv->lay.prompt_row, 1 + plen);
@@ -451,6 +608,7 @@ static void park_cursor(struct menudoor *d)
 static void compose_all(struct menudoor *d)
 {
     level *lv = cur(d);
+    if (d->palette) { overlay_compose(d); return; }       /* an overlay: the board's screen stays round the box */
     ansi_clear_ground(&d->screen.buf, UI_TOKEN(UI_T_INK), ground(d));
     draw_masthead(d);
     ui_grid_draw_on_ground(&lv->grid, &d->screen.buf);       /* the screen was just cleared to the ground: no blank pass */
@@ -484,6 +642,7 @@ static void draw_between(struct menudoor *d)
 static void draw_logos(struct menudoor *d)
 {
     level *lv = cur(d);
+    if (d->palette) return;                               /* the overlay has no logos */
     if (lv->lay.header_rows) ae_menu_logo_draw("header", lv->lay.header_top, 1, lv->lay.header_rows, lv->lay.header_cols);
     if (lv->lay.footer_rows) ae_menu_logo_draw("footer", lv->lay.footer_top, 1, lv->lay.footer_rows, lv->lay.footer_cols);
     if (lv->lay.side_cols) ae_menu_logo_draw("side", lv->lay.side_top, lv->lay.side_left, lv->lay.side_rows, lv->lay.side_cols);
@@ -844,6 +1003,7 @@ static int printable(int key) { return (key >= 32 && key < 127) || (key >= 160 &
 static int typed_room(struct menudoor *d)
 {
     int room = d->screen.cols - 1 - prompt_len(cur(d));
+    if (d->palette) return overlay_typed_room(d);
     return room < TYPED_MAX ? room : TYPED_MAX;
 }
 
@@ -856,7 +1016,7 @@ static void draw_prompt_after_edit(struct menudoor *d, int was_len)
     int plen = prompt_len(lv), width;
     const char *was_bar, *bar;
 
-    if (was_len == 0 || d->typed_len == 0) { draw_prompt(d); return; }
+    if (was_len == 0 || d->typed_len == 0 || d->palette) { draw_prompt(d); return; }
     was_bar = typing_bar(d, was_len);                     /* the bar's identity: a different bar (or none) is a different row */
     bar = typing_bar(d, d->typed_len);
     /* The key bar at the right is in the way of an erase (it would go with the tail), and a bar that APPEARS has to
@@ -930,14 +1090,13 @@ static void palette_filter(struct menudoor *d)
 static void palette_refresh(struct menudoor *d, int was_len)
 {
     level *lv = &d->lv[0];
-    md_layout_out was = lv->lay;
 
+    (void)was_len;                                        /* the field is one run inside the box: drawn whole */
     palette_filter(d);
-    configure(d, lv, 0);
-    if (memcmp(&was, &lv->lay, sizeof was) != 0) { show_frame(d, 0, 0); return; }
+    overlay_configure(d, lv, 0);                          /* the box does not move: no layout change, no new frame */
     ui_grid_draw(&lv->grid, &d->screen.buf);
-    draw_status(d, 0);
-    draw_prompt_after_edit(d, was_len);
+    overlay_description(d, 0);
+    overlay_field(d);
     ui_screen_flush(&d->screen);
 }
 
@@ -1000,6 +1159,7 @@ static menudoor_result loop(struct menudoor *d)
             if (d->typed_len > 0) {
                 drop_line(d);
             } else {
+                if (d->depth == 0 && d->palette) d->escaped = 1;  /* the board's screen under the box comes back (plan K4) */
                 return d->depth > 0 ? MENUDOOR_STAY : MENUDOOR_LEAVE;
             }
             break;
@@ -1101,7 +1261,7 @@ static int run_palette_started(struct menudoor *d, ae_session *session, const me
     strcpy(top->menu.prompt, "Search: ");
     memcpy(&catalogue, &top->menu, sizeof catalogue);
     d->palette_total = catalogue.entry_count;
-    set_title(d, "SEARCH");
+    overlay_place(d);
 
     line[0] = '\0';
     ae_main_line(session, line, (int)sizeof line);
@@ -1116,11 +1276,20 @@ static int run_palette_started(struct menudoor *d, ae_session *session, const me
     d->typed[d->typed_len] = '\0';
 
     palette_filter(d);
-    configure(d, top, 0);
+    overlay_configure(d, top, 0);
+    /* The board keeps the cells under the box, so Esc can give them back (plan K3/K4). Not held (0): the palette
+       still runs, and leaving closes with a clear as it always did. */
+    if (ae_bs_save(d->ov_top, d->ov_left, d->ov_rows, d->ov_cols) == AE_BS_GONE) { ae_shutdown(); return 0; }
     show_frame(d, 0, 0);
     ae_bs_mouse(1);
     loop(d);                                              /* no ROW on leave: a filtered row is not the menu's */
     ae_bs_mouse(0);
+    if (!d->gone && d->escaped) {
+        ui_screen_cursor(&d->screen, 1);
+        ansi_reset(&d->screen.buf);
+        ui_screen_flush(&d->screen);
+        if (ae_bs_restore() == 1) { ae_shutdown(); return 0; }  /* no close: its clear would wipe what came back */
+    }
     ui_screen_close(&d->screen);
     ae_shutdown();
     return 0;

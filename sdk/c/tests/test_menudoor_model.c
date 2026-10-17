@@ -208,6 +208,7 @@ static int answer(const char *text, char *out, int cap)
 /* What the real board's replay does to the terminal: the last frame of a wipe ends with SGR 0 and SHOW CURSOR
    (wipe-playback.ts). A logo is plain art; `logo_shows_cursor` lets a test prove the door re-asserts after one too. */
 static int logo_shows_cursor;
+static int board_holds_cells;                                  /* answers SAVE and RESTORE: the board keeps the cells under an overlay */
 static int board(void *ctx, int field, const char *request, char *out, int cap)
 {
     (void)ctx;
@@ -217,6 +218,7 @@ static int board(void *ctx, int field, const char *request, char *out, int cap)
         if (strcmp(request, "WIPE END") == 0) ae_put("\033[0m\033[?25h", 0);
         if (strcmp(request, "SIZE") == 0) return answer(size_reply, out, cap);
         if (strncmp(request, "WIPE", 4) == 0 || strncmp(request, "MOUSE O", 7) == 0) return answer("OK", out, cap);
+        if (board_holds_cells && (strncmp(request, "SAVE ", 5) == 0 || strcmp(request, "RESTORE") == 0)) return answer("OK", out, cap);
         if (strcmp(request, "MOUSE?") == 0 && mouse_queue > 0) { mouse_queue--; return answer(mouse_reply, out, cap); }
         return 0;
     }
@@ -260,6 +262,9 @@ static int (*door)(void);
 static int run_menu(void) { return menudoor_run(&SPEC, 1); }
 static int run_settings(void) { return menudoor_settings_run(1); }
 static int run_main(void) { return menudoor_main(&SPEC, "MENUSETTINGS", 1); }
+static const menudoor_spec PALETTE_SPEC = { "MAIN", "MAIN MENU", "BULLS", "Arrows Move  Enter Run  Esc Prompt", "Enter Run  Esc Prompt",
+                                            0, on_activate, on_typed, "PALETTE" };
+static int run_palette(void) { return menudoor_main(&PALETTE_SPEC, "MENUSETTINGS", 1); }
 
 static int drive(const char *keys, size_t key_len)
 {
@@ -683,6 +688,65 @@ static void the_first_frame_sends_nothing_twice(void)
     assert(frame40 < 1850);                                   /* was 3597 */
     size_reply = "80\t25";
     printf("  [OK] the first frame sends nothing twice: %ld bytes at 80 columns, %ld at 40\n", frame80, frame40);
+}
+
+/* Every cursor address in `text` lies on rows top..last and columns left..right; a bare home (row 1) counts too. */
+static int addresses_inside(const char *text, int top, int last, int left, int right)
+{
+    const char *p = text;
+    int row, col, used;
+    while ((p = strstr(p, "\033[")) != 0) {
+        p += 2;
+        if (*p == 'H') return top <= 1 && left <= 1;
+        if (sscanf(p, "%d;%d%n", &row, &col, &used) == 2 && p[used] == 'H') {
+            if (row < top || row > last || col < left || col > right) return 0;
+        }
+    }
+    return 1;
+}
+
+/* Plan K3-K5: the search palette is a box over the board's screen. The board keeps the cells under it (SAVE before the
+   first paint), the paint stays inside the box and within its byte budget, and Esc gives the cells back (RESTORE)
+   instead of clearing the screen. A board that does not hold the cells gets the old closing clear. */
+static void the_palette_is_an_overlay_the_board_gives_back(void)
+{
+    long paint80, paint40;
+    mouse_queue = 0; silent_board = 0; theme_name = ""; board_holds_cells = 1;
+    door = run_palette; invoked_name = "PALETTE";
+
+    size_reply = "80\t25"; write_big_catalogue("scroll");
+    paint80 = wrote("\x1b");
+    assert(strstr(requests, "SAVE 5 11 16 60|"));            /* 60x16 centred at 80x25 */
+    assert(strstr(requests, "RESTORE|"));
+    assert(strstr(requests, "SAVE") < strstr(requests, "RESTORE"));
+    assert(!strstr(screen_text, "\033[2J"));                 /* no clear: not on entry, not on Esc */
+    assert(!strstr(screen_text, "\033[K"));                  /* no erase to the end of a row: it would cut through the board's screen */
+    assert(addresses_inside(screen_text, 5, 20, 11, 70));
+    assert(strstr(screen_text, "Search") && strstr(screen_text, "Type to search the menu") && strstr(screen_text, "14 of 14"));
+    assert(strstr(screen_text, "Description of Read Mail"));
+    assert(!strstr(screen_text, "SEARCH"));                   /* no masthead title */
+    assert(paint80 <= 2048);                                  /* plan K5; measured 1931 */
+
+    size_reply = "40\t25"; write_big_catalogue("scroll");
+    paint40 = wrote("\x1b");
+    assert(strstr(requests, "SAVE 6 2 14 38|") && strstr(requests, "RESTORE|"));
+    assert(!strstr(screen_text, "\033[2J") && !strstr(screen_text, "\033[K"));
+    assert(addresses_inside(screen_text, 6, 19, 2, 39));
+    /* Plan K5's 900 bytes at 40x25 is the PETSCII wire, where each 24-bit pen becomes one colour byte; it is measured
+       through the board's transducer in mainmenu-screens.test.ts. This pins the door's ANSI side (measured 1373). */
+    assert(paint40 <= 1400);
+
+    size_reply = "80\t25";
+    assert(wrote("mail\x15\x1b") > 0);                      /* typed, filtered, cleared (Ctrl-U), then Esc leaves */
+    assert(count_of(requests, "RESTORE|") == 1 && !strstr(screen_text, "\033[2J"));
+    assert(addresses_inside(screen_text, 5, 20, 11, 70) && !strstr(screen_text, "\033[K"));     /* the filter repaints stay in the box */
+
+    board_holds_cells = 0;                                    /* a board that keeps nothing: the door closes with a clear */
+    assert(wrote("\x1b") > 0);
+    assert(strstr(screen_text, "\033[2J"));
+
+    door = run_menu; invoked_name = "";
+    printf("  [OK] the palette is an overlay the board gives back: first paint %ld bytes at 80 columns, %ld at 40\n", paint80, paint40);
 }
 
 static void a_key_repaints_two_cells_and_the_description_only(void)
@@ -1676,6 +1740,7 @@ int main(void)
     q_on_an_empty_line_leaves_only_when_no_entry_starts_with_q();
     the_settings_bar_names_q_because_q_leaves();
     the_first_frame_sends_nothing_twice();
+    the_palette_is_an_overlay_the_board_gives_back();
     a_key_repaints_two_cells_and_the_description_only();
     the_boards_page_bytes_turn_the_page();
     nothing_is_sent_when_nothing_changed();
