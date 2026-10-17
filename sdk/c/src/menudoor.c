@@ -425,6 +425,21 @@ static void overlay_description(struct menudoor *d, int full)
     d->status_valid = 1;
 }
 
+/* The box's top line. With a rail (an 80-column caller, effects on, a theme that has one) it is the masthead the
+   full-screen menu draws on row 1, at the box's width: the rail sliding in, "Search" at its end - the palette is a
+   modal, so its chrome lives in the box and nothing is painted outside it (sysop 2026-10-17). Without a rail
+   (40 columns, PETSCII, effects off) the frame's own labelled edge stays. */
+static void overlay_frame(struct menudoor *d)
+{
+    if (!ui_masthead_rail_animates(d->rail)) {
+        ansi_box(&d->screen.buf, d->ov_top, d->ov_left, d->ov_rows, d->ov_cols, UI_TOKEN(UI_T_CHROME), OVERLAY_LABEL);
+        return;
+    }
+    ui_masthead_draw_tick(&d->screen.buf, d->ov_top, d->ov_left, d->ov_cols, OVERLAY_LABEL, d->rail,
+                          UI_TOKEN(UI_T_BAR_INK), ground(d), d->rail_tick);
+    ansi_box_open(&d->screen.buf, d->ov_top, d->ov_left, d->ov_rows, d->ov_cols, UI_TOKEN(UI_T_CHROME));
+}
+
 /* The first paint: the frame, then every inner cell exactly once. The grid draws its rows without the blank pass (each
    row is written over once, not blanked and then written: half the bytes); what that leaves is filled here - the
    one column a cell keeps free at its right, and the list rows below the last entry. Later repaints use the blank
@@ -435,7 +450,7 @@ static void overlay_compose(struct menudoor *d)
     char blank[300];
     int inner = d->ov_cols - 2, row, shown = g->entry_count - g->offset;
 
-    ansi_box(&d->screen.buf, d->ov_top, d->ov_left, d->ov_rows, d->ov_cols, UI_TOKEN(UI_T_CHROME), OVERLAY_LABEL);
+    overlay_frame(d);
     overlay_field(d);
     ui_grid_draw_on_ground(g, &d->screen.buf);
     if (inner > 0 && inner < (int)sizeof blank) {
@@ -743,8 +758,12 @@ static void door_idle(void *ctx)
     if (!d->rail[0]) { ae_delay_ticks(UI_RAIL_TICK_DELAY); return; }
     d->rail_tick += UI_RAIL_STEP;
     /* The rail, not the row. The tick saves and restores the caller's cursor itself (it sits in the prompt while they
-       type), so a second save here would only send four more bytes. */
-    {
+       type), so a second save here would only send four more bytes. The palette's rail is the box's top line: the
+       screen's row 1 belongs to the board's screen under the modal. */
+    if (d->palette) {
+        ui_masthead_rail_tick(&d->screen.buf, d->ov_top, d->ov_left, d->ov_cols, OVERLAY_LABEL, d->rail,
+                              UI_TOKEN(UI_T_BAR_INK), ground(d), d->rail_tick);
+    } else {
         const md_layout_out *lay = &cur(d)->lay;
         ui_masthead_rail_tick(&d->screen.buf, lay->rail_row, 1, d->screen.cols, lay->divider_row ? "" : d->title, d->rail,
                               UI_TOKEN(UI_T_BAR_INK), UI_TOKEN(UI_T_BAR), d->rail_tick);

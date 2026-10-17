@@ -316,6 +316,11 @@ void ansi_fill(ansi_buf *b, int row, int col, int width, int fg, int bg);
  * written into the top edge as " label ", where blessed puts a panel label. */
 void ansi_box(ansi_buf *b, int top, int left, int height, int width, int fg, const char *label);
 
+/* The same box without its top edge: the sides and the bottom. For a box whose
+ * top line is something else (the search palette's rail), so that row is
+ * written once, not drawn as an edge and then written over. */
+void ansi_box_open(ansi_buf *b, int top, int left, int height, int width, int fg);
+
 /* ansi_box that paints its interior first, so a dialog drawn over the
  * browser hides what is behind it instead of letting it read through. */
 void ansi_panel(ansi_buf *b, int top, int left, int height, int width,

@@ -803,7 +803,7 @@ static void the_palette_is_an_overlay_the_board_gives_back(void)
     assert(strstr(screen_text, "Description of Read Mail"));
     assert(!strstr(screen_text, "SEARCH"));                   /* no masthead title */
     assert(strstr(screen_text, "Messages") && strstr(screen_text, "Messages") < strstr(screen_text, "Read Mail"));   /* entries under their section */
-    assert(paint80 <= 2048);                                  /* plan K5; measured 1979 with section headers */
+    assert(paint80 <= 2048);                                  /* plan K5; measured 2035 with the rail as the top line */
 
     size_reply = "40\t25"; write_big_catalogue("scroll");
     paint40 = wrote("\x1b");

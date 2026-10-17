@@ -569,9 +569,12 @@ static void write_text(ansi_buf *b, int row, int col, const char *text, int maxl
         n++;
         at++;
     }
-    if (pad) {
+    if (pad && n < maxlen) {
         /* Padding is the CALLER's colour, not whatever the last marker left
-           behind: a row that ends mid-accent would trail a coloured bar. */
+           behind: a row that ends mid-accent would trail a coloured bar.
+           A row the text already filled has no padding, and a pen sent for
+           none is 19 bytes of nothing (the palette's rail ends in its
+           title at the box's last column). */
         ansi_color(b, base_fg, base_bg, base_bold);
         while (n < maxlen) {
             put_char(b, ' ');
@@ -715,6 +718,19 @@ void ansi_box(ansi_buf *b, int top, int left, int height, int width, int fg, con
         }
     }
     put_char(b, '+');
+    ansi_box_open(b, top, left, height, width, fg);
+}
+
+void ansi_box_open(ansi_buf *b, int top, int left, int height, int width, int fg)
+{
+    int i;
+    int inner;
+
+    if (width < 2 || height < 2) {
+        return;
+    }
+    inner = width - 2;
+    ansi_color(b, fg, -1, 0);
 
     /* Sides only - the interior is written by whoever owns it, so redrawing
      * the frame never erases the content inside it. */

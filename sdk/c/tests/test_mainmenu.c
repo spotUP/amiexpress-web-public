@@ -71,6 +71,53 @@ static void drive(const char *keys, size_t n, int *rc)
     got = fread(screen_text, 1, sizeof screen_text - 1, f); screen_text[got] = '\0'; fclose(f);
 }
 
+
+/* The palette is a modal box (sysop 2026-10-17): every printable byte the door sends lands inside the box, nothing
+   clears or erases a row, and the box's top line is the theme's animated rail. A small terminal walk: cursor
+   addresses, save/restore, CR/LF; printables advance the column; the walk ends at the closing clear. Returns the number of separate runs written on
+   the top row that carry a '/', or -1 when a byte lands outside the box or the screen is cleared. */
+static int palette_runs_on_top(const char *text, int top, int left, int rows, int cols)
+{
+    const unsigned char *p = (const unsigned char *)text;
+    int row = 1, col = 1, srow = 1, scol = 1, runs = 0, in_run = 0, slash = 0;
+    while (*p) {
+        if (*p == 0x1b && p[1] == '[') {
+            int a = 0, b = 0, which = 0;
+            p += 2;
+            if (*p == '?') p++;
+            while ((*p >= '0' && *p <= '9') || *p == ';') {
+                if (*p == ';') which++;
+                else if (which == 0) a = a * 10 + (*p - '0');
+                else b = b * 10 + (*p - '0');
+                p++;
+            }
+            if (*p == 'H' || *p == 'f') { row = a ? a : 1; col = b ? b : 1; }
+            else if (*p == 's') { srow = row; scol = col; }
+            else if (*p == 'u') { row = srow; col = scol; }
+            else if (*p == 'J') break;                   /* the close after the caller has gone (this board holds no cells) */
+            else if (*p == 'K') return -1;
+            if (*p) p++;
+            if (in_run && slash) runs++;
+            in_run = 0; slash = 0;
+            continue;
+        }
+        if (*p == 0x1b && (p[1] == '7' || p[1] == '8')) {
+            if (p[1] == '7') { srow = row; scol = col; } else { row = srow; col = scol; }
+            p += 2; continue;
+        }
+        if (*p == '\r') { col = 1; p++; continue; }
+        if (*p == '\n') { row++; p++; continue; }
+        if (*p >= 32 && *p != 127) {
+            if (row < top || row >= top + rows || col < left || col >= left + cols) return -1;
+            if (row == top) { in_run = 1; if (*p == '/') slash = 1; }
+            col++;
+        }
+        p++;
+    }
+    if (in_run && slash) runs++;
+    return runs;
+}
+
 int main(void)
 {
     FILE *f;
@@ -180,6 +227,13 @@ int main(void)
     drive("J 3.1\r", 6, &rc);                              /* nothing matches: the line runs as typed */
     assert(rc == 0 && strstr(requests, "RUN J 3.1|") && strstr(screen_text, "Nothing matches"));
     printf("  [OK] Enter runs the exact key first, and an unlisted line runs as typed\n");
+    drive("mail", 4, &rc);                                 /* no leaving key: the wait before the lost carrier ticks the rail */
+    assert(rc == 0 && strstr(requests, "SAVE 5 11 16 60|") && palette_runs_on_top(screen_text, 5, 11, 16, 60) >= 2);
+    size_text = "40\t25";
+    drive("mail", 4, &rc);                                 /* 40 columns: no rail, the static frame, still only the box */
+    assert(rc == 0 && strstr(requests, "SAVE 6 2 14 38|") && palette_runs_on_top(screen_text, 6, 2, 14, 38) >= 0);
+    size_text = "80\t25";
+    printf("  [OK] the palette is a modal: nothing outside the box, and its top line is the animated rail\n");
     main_line = "";
 
     invoked_name = "MENUSETTINGS";
