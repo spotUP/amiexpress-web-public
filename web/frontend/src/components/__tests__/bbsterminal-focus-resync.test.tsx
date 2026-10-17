@@ -274,3 +274,50 @@ describe('a plain load into a window that is already focused', () => {
     expect(term.element.classList.contains('focus')).toBe(true);
   });
 });
+
+/**
+ * S15 review: a password login in another window took this window's session
+ * over. The board told this socket "This session moved to another window."
+ * and closed it (`io server disconnect`). Bringing the losing window to the
+ * front used to reconnect it: with no resume token left it ran a token
+ * login, met ONENODE against its own moved session, and fought the window
+ * that had just taken over.
+ */
+describe('a window the board closed', () => {
+  function connectCounter() {
+    const s = rec.socket as FakeSocket;
+    let connects = 0;
+    s.connect = () => { connects++; return s; };
+    return () => connects;
+  }
+
+  it('stays closed when it comes back to the front', async () => {
+    render(<BBSTerminal backendUrl="http://localhost:3001" />);
+    const connects = connectCounter();
+    const s = rec.socket as FakeSocket;
+    await act(async () => {
+      s.connected = false;
+      s.fire('disconnect', 'io server disconnect');
+    });
+    await act(async () => {
+      window.dispatchEvent(new Event('focus'));
+      window.dispatchEvent(new Event('online'));
+      window.dispatchEvent(new Event('pageshow'));
+      document.dispatchEvent(new Event('visibilitychange'));
+    });
+    expect(connects()).toBe(0);
+  });
+
+  it('still reconnects at once after a network drop', async () => {
+    // The control: the wake path itself is not what got switched off.
+    render(<BBSTerminal backendUrl="http://localhost:3001" />);
+    const connects = connectCounter();
+    const s = rec.socket as FakeSocket;
+    await act(async () => {
+      s.connected = false;
+      s.fire('disconnect', 'transport close');
+    });
+    await act(async () => { window.dispatchEvent(new Event('focus')); });
+    expect(connects()).toBe(1);
+  });
+});

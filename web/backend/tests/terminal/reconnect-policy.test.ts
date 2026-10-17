@@ -24,6 +24,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 import {
+  boardClosedTheSocket,
   reconnectPolicy,
   shouldReconnectNow,
 } from '../../../../packages/terminal/src/utils/reconnect-policy';
@@ -101,5 +102,21 @@ describe('the component actually uses it', () => {
       expect({ event, cleaned: source.includes(`removeEventListener('${event}', wakeSocket)`) })
         .toEqual({ event, cleaned: true });
     }
+  });
+});
+
+describe('a socket the board closed itself', () => {
+  // S15: a password login elsewhere took the session over and the board
+  // closed this window. Waking it would token-login into ONENODE.
+  it('is not woken by the tab coming back', () => {
+    const closed = boardClosedTheSocket('io server disconnect');
+    expect(closed).toBe(true);
+    expect(shouldReconnectNow(false, true, true, closed)).toBe(false);
+  });
+
+  it('a network drop is still woken', () => {
+    const closed = boardClosedTheSocket('transport close');
+    expect(closed).toBe(false);
+    expect(shouldReconnectNow(false, true, true, closed)).toBe(true);
   });
 });

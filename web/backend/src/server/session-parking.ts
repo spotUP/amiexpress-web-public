@@ -64,7 +64,28 @@ const endings = new WeakMap<object, Promise<void>>();
  * maps and frees the node first, then does slow paperwork (logoff batches
  * run a 68K door); a reclaim needs only the first part.
  */
-const forgottenWaiters = new WeakMap<object, () => void>();
+const forgottenWaiters = new WeakMap<object, Array<() => void>>();
+
+/**
+ * Wait until `session` leaves the maps. Several callers can wait on one
+ * session (two [E]nd answers for the same holder); each gets woken, and
+ * `stop` drops only its own waiter.
+ */
+function waitForgotten(session: object): { forgotten: Promise<void>; stop: () => void } {
+  let wake!: () => void;
+  const forgotten = new Promise<void>((resolve) => { wake = resolve; });
+  const list = forgottenWaiters.get(session) ?? [];
+  list.push(wake);
+  forgottenWaiters.set(session, list);
+  const stop = () => {
+    const now = forgottenWaiters.get(session);
+    if (!now) return;
+    const rest = now.filter((w) => w !== wake);
+    if (rest.length) forgottenWaiters.set(session, rest);
+    else forgottenWaiters.delete(session);
+  };
+  return { forgotten, stop };
+}
 
 /** `web_resume_minutes` (WEB_RESUME_MINUTES) in ms; default 10 min, 0 = never park. */
 export function resumeWindowMs(): number {
@@ -135,9 +156,9 @@ export function installParking(link: SessionLink, session: BBSSession): void {
  * after it does.
  */
 export function noteSessionForgotten(session: object): void {
-  const wake = forgottenWaiters.get(session);
+  const waiting = forgottenWaiters.get(session) ?? [];
   forgottenWaiters.delete(session);
-  wake?.();
+  for (const wake of waiting) wake();
 }
 
 /** The disconnect handler registers the finalize it runs, so `endParkedSessionsFor` can wait for it. */
@@ -369,7 +390,8 @@ export function liveSessionOf(userId: string, self: BBSSession): BBSSession | nu
  */
 export async function endLiveSession(session: BBSSession, waitMs = 5000): Promise<void> {
   if (sessions.get(String(session.nodeId)) !== session) return;
-  const forgotten = new Promise<void>((resolve) => forgottenWaiters.set(session, resolve));
+  const { forgotten, stop } = waitForgotten(session);
+  const kickedBefore = (session as { sysopKicked?: boolean }).sysopKicked;
   (session as { sysopKicked?: boolean }).sysopKicked = true;
   const text = '\r\nThis session was ended by a login in another window.\r\n';
   const emitter = (session.connectionEmitter ?? session.webLink) as
@@ -382,7 +404,13 @@ export async function endLiveSession(session: BBSSession, waitMs = 5000): Promis
   const ending = endings.get(session);
   if (ending) await Promise.race([ending, timeout]);
   if (timer) clearTimeout(timer);
-  forgottenWaiters.delete(session);
+  stop();
+  // The timeout won and the session is still on the board: its transport
+  // never said `disconnect`. It is not being ended after all, so its later
+  // real drop must not log a kick or be refused a park (parkDecision).
+  if (sessions.get(String(session.nodeId)) === session) {
+    (session as { sysopKicked?: boolean }).sysopKicked = kickedBefore;
+  }
 }
 
 /** End every parked session of `userId` and wait for each finalize. Returns the count. */
@@ -429,11 +457,11 @@ export async function reclaimParkedNode(): Promise<boolean> {
   // Wait for the node, not the paperwork: the finalize wakes this as soon as
   // the session has left the maps. A finalize that ends (or throws) before
   // that point also ends the wait.
-  const forgotten = new Promise<void>((resolve) => forgottenWaiters.set(s, resolve));
+  const { forgotten, stop } = waitForgotten(s);
   s.webLink!.end('transport close');
   const ending = endings.get(s);
   if (ending) await Promise.race([forgotten, ending.catch(() => undefined)]);
-  forgottenWaiters.delete(s);
+  stop();
   return true;
 }
 

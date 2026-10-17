@@ -2,7 +2,7 @@ import React, { useEffect, useRef, forwardRef, useImperativeHandle, useCallback,
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { io, Socket } from 'socket.io-client';
-import { shouldReconnectNow } from '../utils/reconnect-policy';
+import { boardClosedTheSocket, shouldReconnectNow } from '../utils/reconnect-policy';
 import {
   browserResumeStorage,
   browserTabChannel,
@@ -343,6 +343,9 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
    */
   const [doorOwnsScreen, setDoorOwnsScreen] = useState(false);
   const reconnectPending = useRef<boolean>(false);
+  // The board closed this socket itself (`io server disconnect`); the wake
+  // events leave it closed until something connects it again.
+  const closedByBoard = useRef<boolean>(false);
   const forcedDisconnectRef = useRef<boolean>(false);  // Track server-initiated disconnect (logoff)
   const doorReadyMap = useRef<Record<string, boolean>>({});
   const doorMessageBuffer = useRef<Record<string, any[]>>({});
@@ -1953,7 +1956,7 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
       if (!live) return;
       const visible = typeof document === 'undefined' || document.visibilityState === 'visible';
       const online = typeof navigator === 'undefined' || navigator.onLine !== false;
-      if (!shouldReconnectNow(live.connected, visible, online)) return;
+      if (!shouldReconnectNow(live.connected, visible, online, closedByBoard.current)) return;
       console.log('[Terminal] Tab is back and the socket is not - reconnecting now');
       live.connect();
     };
@@ -2100,6 +2103,7 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
 
     // Socket event handlers
     socket.on('connect', () => {
+      closedByBoard.current = false;
       console.log('[Terminal] Connected to BBS backend');
       loginCredentials.current!.onConnect();
       stopGuruAnimation();
@@ -2499,10 +2503,18 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
       } else {
         // The board closed this socket itself: the session is gone, and
         // socket.io does not reconnect, so this tab's token opens nothing.
-        if (reason === 'io server disconnect' && resumeStorage) clearResume(resumeStorage);
-        // Network issue or transport close - preserve session state for restoration
-        console.log('[DISCONNECT] Network disconnect - preserving session state for reconnection');
-        reconnectPending.current = true;
+        // It is not a network drop: nothing is pending, and the wake events
+        // must not reconnect it into a token login against the session the
+        // board just moved elsewhere. Not the force-disconnect path either:
+        // that removes bbs_auth_token, which every tab shares.
+        const boardClosed = boardClosedTheSocket(reason);
+        if (boardClosed && resumeStorage) clearResume(resumeStorage);
+        closedByBoard.current = boardClosed;
+        if (!boardClosed) {
+          // Network issue or transport close - preserve session state for restoration
+          console.log('[DISCONNECT] Network disconnect - preserving session state for reconnection');
+        }
+        reconnectPending.current = !boardClosed;
         loginState.current = 'server-driven';
         tokenLoginPending.current = false;
         // DO NOT clear session state - it will be used on reconnect

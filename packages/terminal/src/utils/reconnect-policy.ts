@@ -62,17 +62,36 @@ export function reconnectPolicy(isDevelopment: boolean): ReconnectPolicy {
  * @param connected  socket.connected
  * @param pageVisible document.visibilityState === 'visible'
  * @param online     navigator.onLine
+ * @param closedByBoard the board closed this socket itself (see
+ *                      boardClosedTheSocket) and nobody has connected since
  */
 export function shouldReconnectNow(
   connected: boolean,
   pageVisible: boolean,
-  online: boolean
+  online: boolean,
+  closedByBoard: boolean = false
 ): boolean {
   if (connected) return false;
+  // The board ended this window on purpose - most often because a password
+  // login in another window took the session over. Waking it would run a
+  // token login that meets ONENODE against the session it just lost and
+  // fights the window that took it. It stays closed until the user starts
+  // over (a reload).
+  if (closedByBoard) return false;
   // Reconnecting while the tab is hidden buys nothing the backoff would not
   // get to anyway, and browsers throttle it regardless.
   if (!pageVisible) return false;
   // No network yet: let the 'online' event bring us back rather than burning
   // an attempt that cannot succeed.
   return online;
+}
+
+/**
+ * Whether a disconnect reason means the board closed the socket itself.
+ *
+ * socket.io never reconnects after `io server disconnect`, and the wake
+ * events must not do it behind its back either (shouldReconnectNow).
+ */
+export function boardClosedTheSocket(reason: string): boolean {
+  return reason === 'io server disconnect';
 }

@@ -54,7 +54,7 @@ jest.mock('../../src/services/logon-gates', () => ({
   ...jest.requireActual('../../src/services/logon-gates'),
   tokenHolderRefusal: () => ({ refusal: null }),
 }));
-jest.mock('../../src/services/node-manager.service', () => ({ nodeManager: { rekeySession: jest.fn(), releaseSession: jest.fn(async () => undefined) } }));
+jest.mock('../../src/services/node-manager.service', () => ({ nodeManager: { rekeySession: jest.fn(), releaseSession: jest.fn(async () => undefined), reservedNodeIds: () => [], configuredNodeIds: () => [] } }));
 jest.mock('../../src/config', () => {
   const dir: string = require('fs').mkdtempSync(require('path').join(require('os').tmpdir(), 's15-live-'));
   return {
@@ -74,10 +74,12 @@ jest.mock('../../src/server/database-helpers', () => ({
 }));
 
 import { acceptWebConnection } from '../../src/server/web-connection';
-import { isParked, resumeParked } from '../../src/server/session-parking';
+import { endLiveSession, isParked, parkDecision, resumeParked } from '../../src/server/session-parking';
 import { _resetResumeTokensForTests, issueResumeToken } from '../../src/server/resume-tokens';
 import { disarmIdleTimeout } from '../../src/services/idle-timeout.service';
-import { sessions, getSession } from '../../src/server/session-manager';
+import { sessions, getSession, setSession } from '../../src/server/session-manager';
+import { TelnetConnection } from '../../src/server/telnet-server';
+import { setupTelnetSSHHandler } from '../../src/server/transport-session';
 import { BBSState, LoggedOnSubState } from '../../src/constants/bbs-states';
 import { runPostAuthLogin } from '../../src/services/login-post.service';
 import { beginLogoff } from '../../src/server/logoff';
@@ -143,13 +145,13 @@ async function liveWindow() {
 }
 
 /** Window B on node 4 has just typed the password and is in the post-auth login. */
-async function passwordLogin(id = 'B', node = 4) {
+async function passwordLogin(id = 'B', node = 4, extra: object = {}) {
   const b = browser(id);
   await acceptWebConnection(io, b as never, deps(node) as never);
   const session: any = getSession(id);
   opened.push(session);
   Object.assign(session, { state: BBSState.LOGON, subState: LoggedOnSubState.READ_COMMAND, tempData: {} });
-  const login = runPostAuthLogin(session.webLink, session, user() as any, { lastLoginBeforeUpdate: new Date(0), typedPassword: true });
+  const login = runPostAuthLogin(session.webLink, session, { ...user(), ...extra } as any, { lastLoginBeforeUpdate: new Date(0), typedPassword: true });
   await new Promise((r) => setImmediate(r));
   return { b, session, login };
 }
@@ -249,4 +251,83 @@ it('a token login is not offered a live session (only a typed password is)', asy
   expect(await runPostAuthLogin(session.webLink, session, user() as any, { lastLoginBeforeUpdate: new Date(0) }))
     .toEqual({ ok: false, terminated: 'already-on-another-node' });
   expect(text(b)).not.toContain('in another window');
+});
+
+/**
+ * A telnet line on the real byte transport: TelnetConnection over a socket
+ * stub that, like a net.Socket, says 'close' after end(). Bound through
+ * setupTelnetSSHHandler, the production entry point for every telnet caller.
+ */
+class ClosingNetSocket extends EventEmitter {
+  remoteAddress = '127.0.0.1';
+  destroyed = false;
+  writable = true;
+  ended = 0;
+  write(): boolean { return true; }
+  end(): void { this.ended += 1; this.writable = false; setImmediate(() => this.emit('close')); }
+}
+function telnetHolder(nodeId: number) {
+  const socket = new ClosingNetSocket();
+  const connection = new TelnetConnection(socket as never);
+  const id = connection as unknown as { sessionId: string; nodeId: number };
+  id.nodeId = nodeId; id.sessionId = `telnet-${nodeId}-test`;
+  const held: any = {
+    state: BBSState.LOGGEDON, subState: LoggedOnSubState.DISPLAY_MENU, user: { id: 7, username: 'phone', secLevel: 10 },
+    nodeId, currentConf: 1, connectionType: 'telnet', terminalType: 'ansi', screenWidth: 80, screenHeight: 24, tempData: {},
+  };
+  connection.session = held;
+  setSession(connection.sessionId, held);
+  setupTelnetSSHHandler(connection, 'telnet', {
+    io: { sockets: { sockets: new Map() } }, sessions,
+    nodeManager: { releaseSession: async () => undefined }, handleCommand: () => undefined,
+  } as never);
+  return { socket, held };
+}
+
+describe('S15 review: E against holders', () => {
+  it('E on a telnet holder hangs up the real line: its finalize runs, one logoff line, and the login is not left waiting', async () => {
+    const { socket, held } = await Promise.resolve(telnetHolder(5));
+    expect(sessions.get('5')).toBe(held);
+    const { session, login } = await passwordLogin();
+    const started = Date.now();
+    session.loginInputHandler('e');
+    expect(await login).toEqual({ ok: false, terminated: 'already-on-another-node' });
+    // The waiter was woken by the finalize, not by the 5 s bound.
+    expect(Date.now() - started).toBeLessThan(2000);
+    expect(socket.ended).toBeGreaterThanOrEqual(1);
+    expect(sessions.get('5')).toBeUndefined();
+    expect(logoffs.mock.calls.map((c) => [c[0], c[1], c[2]])).toEqual([[5, 'phone', 'N']]);
+  });
+
+  it('E then a clear already-on check: the login reaches LOGGEDON on the new node and the old node is free', async () => {
+    const { live } = await liveWindow();
+    // Consent already given, so nothing after the already-on check stops it.
+    const { session, login } = await passwordLogin('B', 4, { gdprConsentAt: new Date(0) });
+    (userAlreadyOnNode as jest.Mock).mockImplementation(() => (sessions.get('3') ? 3 : null));
+    (ftpCallersOnline as jest.Mock).mockReturnValue([]);
+    session.loginInputHandler('e');
+    expect(await login).toEqual({ ok: true });
+    expect(session.state).toBe(BBSState.LOGGEDON);
+    expect(sessions.get('4')).toBe(session);
+    expect(sessions.get('3')).toBeUndefined();
+    expect(live.webLink.ended).toBe(true);
+  });
+
+  it('two E answers for one holder both return as soon as it leaves', async () => {
+    const { live } = await liveWindow();
+    const started = Date.now();
+    await Promise.all([endLiveSession(live, 3000), endLiveSession(live, 3000)]);
+    expect(Date.now() - started).toBeLessThan(1000);
+    expect(sessions.get('3')).toBeUndefined();
+  });
+
+  it('a holder whose line never drops is not left marked as kicked when the wait gives up', async () => {
+    const { live } = await liveWindow();
+    live.webLink.disconnect = () => undefined; // the transport never says disconnect
+    await endLiveSession(live, 30);
+    expect(sessions.get('3')).toBe(live);
+    expect(live.sysopKicked).toBeFalsy();
+    // Its later real drop parks it like any other web session.
+    expect(parkDecision(live, 'transport close', 60_000)).toBe('park');
+  });
 });
