@@ -64,6 +64,13 @@ export function screenModelFor(connectionId: string): AnsiGrid | undefined {
   return screens.get(connectionId)?.grid;
 }
 
+/** The caller's rows top..top+rows-1 (1-based), `cols` wide, blank past what the board drew; [] when it has no screen for him. */
+export function screenRows(connectionId: string, top: number, rows: number, cols: number): GridCell[][] {
+  const grid = screenModelFor(connectionId);
+  if (!grid) return [];
+  return Array.from({ length: rows }, (_, y) => Array.from({ length: cols }, (_, x) => grid.cellAt(top - 1 + y, x)));
+}
+
 /** Copy a region (1-based, inside the screen) out of a grid; null when it leaves the screen. */
 export function snapshotRegion(grid: AnsiGrid, top: number, left: number, rows: number, cols: number): ScreenSnapshot | null {
   const height = grid.height ?? 0;

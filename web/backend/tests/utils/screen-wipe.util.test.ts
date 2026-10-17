@@ -493,17 +493,21 @@ describe('screen-wipe.util', () => {
       expect(fwd[0].content).toMatch(/;1H(\x1b\[0m)? {60}/);
     });
 
-    it('a backward push of a left-aligned page shows its text in every frame, like a forward one', () => {
-      const page = Array.from({ length: 6 }, (_, i) => `  ${String.fromCharCode(65 + i)}  Entry ${i + 1}`).join('\r\n');
-      const area = { top: 1, rows: 6 };
-      const visible = (frame: string) => frame.replace(/\x1b\[[0-9;]*[A-Za-z]/g, '').replace(/\s/g, '').length;
-      for (const forward of [true, false]) {
-        const frames = getRegionSlideFrames(page, 80, { ...area, forward });
-        for (const f of frames.slice(0, -1)) expect(visible(f.content)).toBeGreaterThan(0);
-        expect(frames[frames.length - 1].content).toContain('A  Entry 1');
-      }
-      const back = getRegionSlideFrames(page, 80, { ...area, forward: false });
-      expect(back[0].content).toMatch(/;1H(\x1b\[0m)?[^ \x1b]/);   // the text's right end enters at the left edge
+    it('cover flow Left: the new page crosses the full width and pushes the old one out to the right', () => {
+      const parse = (frame: string) => frame.split(/\x1b\[\d+;1H/).slice(1).map(r => r.replace(/\x1b\[[0-9;]*m/g, ''));
+      const page = (word: string) => Array.from({ length: 6 }, () => word.padEnd(80)).map(r => [...r].map(char => ({ char, ansi: '\x1b[0m' })));
+      const content = Array.from({ length: 6 }, () => 'NEWPAGE').join('\r\n');
+      const back = getRegionSlideFrames(content, 80, { top: 1, rows: 6, forward: false }, page('OLDPAGE'));
+      const at = (rows: string[], word: string) => rows[0].indexOf(word);
+      // The old page moves right a quarter of the width per frame and is gone at the end.
+      expect(back.slice(0, -1).map(f => at(parse(f.content), 'OLDPAGE'))).toEqual([20, 40, 60]);
+      expect(parse(back[0].content)[0].slice(0, 20).trim()).toBe('');   // the new page's blank right side leads
+      const last = parse(back[back.length - 1].content);
+      expect(at(last, 'NEWPAGE')).toBe(0);
+      expect(at(last, 'OLDPAGE')).toBe(-1);
+      const fwd = parse(getRegionSlideFrames(content, 80, { top: 1, rows: 6, forward: true }, page('OLDPAGE'))[0].content);
+      expect(at(fwd, 'NEWPAGE')).toBe(60);     // forward: enters from the right edge
+      expect(at(fwd, 'OLDPAGE')).toBe(-1);     // and the old page left to the left
     });
 
     it('a whole-screen getWipeFrames with the push letter has no animation', () => {

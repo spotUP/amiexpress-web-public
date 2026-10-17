@@ -1279,16 +1279,15 @@ const REGION_SLIDE_STEPS = 4;
 const REGION_SLIDE_DELAY_MS = 40;
 
 /**
- * The push wipe (`P`): the captured frame's rows top..top+rows-1 slide in
- * horizontally, in REGION_SLIDE_STEPS frames, the last one the target rows
- * exactly. The board does not know what the region held before, so the part
- * the new rows have not reached yet is blank.
+ * The push wipe (`P`): the new rows push the old ones out sideways, both
+ * crossing the full width in REGION_SLIDE_STEPS frames, the last one the
+ * target rows exactly. Forward, the new rows enter from the right and the old
+ * ones leave to the left; backward, the other way round.
  *
- * The rows travel by the span their text covers, not by the full width: a
- * region drawn in one left-aligned column (cover flow) is mostly blank on the
- * right, so a backward push measured by the full width would lead with that
- * blank and show nothing until the last frame. Forward, the text enters from
- * the right edge; backward, its right end enters from the left edge.
+ * Each frame row is a window over one strip: old+new forward, new+old
+ * backward, the window moving by the full width either way. `old` is what
+ * the region showed before (the board's model of the caller's screen); rows
+ * it does not cover are blank.
  *
  * Separate from getWipeFrames because it has a different frame model:
  * framesFromGrids opens with CLEAR_HOME and repaints the whole screen, which
@@ -1300,26 +1299,27 @@ export function getRegionSlideFrames(
   content: string,
   columns: number,
   region: WipeRegion,
+  old: Cell[][] = [],
 ): WipeFrame[] {
   const grid = parseAnsiToGrid(content, columns);
-  const target: Cell[][] = [];
+  const fit = (row: Cell[] | undefined): Cell[] => {
+    const out = (row ?? []).slice(0, columns);
+    while (out.length < columns) out.push(BLANK);
+    return out;
+  };
+  const strips: Cell[][] = [];
   for (let y = 0; y < region.rows; y++) {
-    const row = (grid[region.top - 1 + y] ?? []).slice(0, columns);
-    while (row.length < columns) row.push(BLANK);
-    target.push(row);
+    const before = fit(old[y]);
+    const after = fit(grid[region.top - 1 + y]);
+    strips.push(region.forward ? [...before, ...after] : [...after, ...before]);
   }
-  let first = columns, end = 0;   // the columns the text covers, every row together
-  for (const row of target) row.forEach((cell, x) => { if (cell.char !== ' ') { first = Math.min(first, x); end = Math.max(end, x + 1); } });
-  if (end === 0) { first = 0; end = columns; }
-  const travel = region.forward ? columns - first : end;
   const frames: WipeFrame[] = [];
   for (let step = 1; step <= REGION_SLIDE_STEPS; step++) {
-    const left = Math.round((travel * (REGION_SLIDE_STEPS - step)) / REGION_SLIDE_STEPS);
-    const shift = region.forward ? left : -left;
+    const moved = Math.round((columns * step) / REGION_SLIDE_STEPS);
+    const offset = region.forward ? moved : columns - moved;
     let out = '';
     for (let y = 0; y < region.rows; y++) {
-      const row = Array.from({ length: columns }, (_, x) => target[y][x - shift] ?? BLANK);
-      out += `\x1b[${region.top + y};1H` + gridToAnsi([row]);
+      out += `\x1b[${region.top + y};1H` + gridToAnsi([strips[y].slice(offset, offset + columns)]);
     }
     frames.push({ content: out, delay: step === REGION_SLIDE_STEPS ? 0 : REGION_SLIDE_DELAY_MS });
   }

@@ -13,16 +13,16 @@
  * when nothing is held. A RESTORE releases the hold.
  */
 import { WIPE_CODES, REGION_WIPE_CODES, type WipeType } from '../../screens/wipe-codes';
-import { getWipeFrames, getWipeOutFrames, getRegionSlideFrames, wipeEffectsEnabled, type WipeRegion } from '../../utils/screen-wipe.util';
+import { getWipeFrames, getWipeOutFrames, getRegionSlideFrames, wipeEffectsEnabled, type GridCell, type WipeRegion } from '../../utils/screen-wipe.util';
 import { playWipeFrames } from '../../utils/wipe-playback';
 import { MOUSE_REPORTING_OFF } from '../../utils/terminal-modes';
 import { responsiveDoorGeometry } from './screen-width.util';
 import type { MouseAbsorber } from './mouse-absorber';
-import { saveScreenRegion, takeScreenRestore } from '../../services/screen-model/screen-model';
+import { saveScreenRegion, screenRows, takeScreenRestore } from '../../services/screen-model/screen-model';
 
 export interface BoardScreenContext {
   session: any; socket: any;
-  state: { wipeCapture?: { kind: 'in' | 'out'; letter: string; text: string[]; region?: WipeRegion } | null };
+  state: { wipeCapture?: { kind: 'in' | 'out'; letter: string; text: string[]; region?: WipeRegion; old?: GridCell[][] } | null };
   mouse: MouseAbsorber | null;
   armMouse(on: boolean): void;
   columns(): number;
@@ -60,7 +60,7 @@ async function playCapture(ctx: BoardScreenContext): Promise<void> {
   if (!cap || cap.text.length === 0) return;
   const content = cap.text.join('');
   if (cap.region) {
-    await playWipeFrames(ctx.socket, capWipeFrames(getRegionSlideFrames(content, ctx.columns(), cap.region)), { eventName: 'ansi-output' });
+    await playWipeFrames(ctx.socket, capWipeFrames(getRegionSlideFrames(content, ctx.columns(), cap.region, cap.old)), { eventName: 'ansi-output' });
     return;
   }
   const type = WIPE_CODES[cap.letter] as WipeType;
@@ -79,6 +79,12 @@ function parseRegion(fields: string[], screenRows: number): WipeRegion | null {
   const rows = Number(rowsText);
   if (top < 1 || rows < 1 || top + rows - 1 > screenRows) return null;
   return { top, rows, forward: dir === 'F' };
+}
+
+/** What the push region shows now, before the door draws the new page: the rows the push moves out. */
+function oldRows(ctx: BoardScreenContext, region: WipeRegion): GridCell[][] {
+  const id = ctx.socket?.id;
+  return typeof id === 'string' ? screenRows(id, region.top, region.rows, ctx.columns()) : [];
 }
 
 export async function boardScreenAnswer(request: string, ctx: BoardScreenContext): Promise<string> {
@@ -101,7 +107,7 @@ export async function boardScreenAnswer(request: string, ctx: BoardScreenContext
       if (!isRegion && ((arg !== 'IN' && arg !== 'OUT') || !letter || !WIPE_CODES[letter.toUpperCase()] || !wipeEffectsEnabled(ctx.session))) return 'NO';
       // A wipe still held is played first, never dropped (the door forgot WIPE END).
       await playCapture(ctx);
-      ctx.state.wipeCapture = { kind: arg === 'IN' ? 'in' : 'out', letter: letter.toUpperCase(), text: [], ...(region ? { region } : {}) };
+      ctx.state.wipeCapture = { kind: arg === 'IN' ? 'in' : 'out', letter: letter.toUpperCase(), text: [], ...(region ? { region, old: oldRows(ctx, region) } : {}) };
       return 'OK';
     }
     case 'MOUSE': {

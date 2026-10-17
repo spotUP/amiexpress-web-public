@@ -99,7 +99,7 @@ test('a second WIPE IN while one is held plays the held one first', async () => 
 test('WIPE IN P <top> <rows> <F|B> stores the region and END plays region frames only; bad ranges answer NO', async () => {
   const c = ctx({ screenWidth: 80 });
   expect(await boardScreenAnswer('WIPE IN P 4 10 F', c)).toBe('OK');
-  expect(c.state.wipeCapture).toEqual({ kind: 'in', letter: 'P', text: [], region: { top: 4, rows: 10, forward: true } });
+  expect(c.state.wipeCapture).toEqual({ kind: 'in', letter: 'P', text: [], region: { top: 4, rows: 10, forward: true }, old: [] });
   c.state.wipeCapture!.text.push('\x1b[2J\x1b[H' + Array.from({ length: 20 }, (_, i) => `line${i + 1}`).join('\r\n'));
   expect(await boardScreenAnswer('WIPE END', c)).toBe('OK');
   const out = sent.join('');
@@ -149,4 +149,18 @@ test('SAVE <top> <left> <rows> <cols> holds a region of the caller screen; RESTO
   // A socket without an id has no screen.
   expect(await boardScreenAnswer('SAVE 1 1 3 20', ctx(session))).toBe('NO');
   dropScreenModel('sock-save');
+});
+
+test('a push wipe moves the page the caller sees out of the region (cover flow Left pushes the old page away)', async () => {
+  const session = { screenWidth: 80, wireWidth: 80, wireHeight: 25 };
+  const c = ctx(session);
+  (c.socket as unknown as { id: string }).id = 'sock-push';
+  dropScreenModel('sock-push');
+  feedScreenModel('sock-push', session, '\x1b[2J\x1b[H' + Array.from({ length: 6 }, () => 'OLDPAGE').join('\r\n'));
+  expect(await boardScreenAnswer('WIPE IN P 1 6 B', c)).toBe('OK');
+  c.state.wipeCapture!.text.push('\x1b[2J\x1b[H' + Array.from({ length: 6 }, () => 'NEWPAGE').join('\r\n'));
+  expect(await boardScreenAnswer('WIPE END', c)).toBe('OK');
+  const firstFrame = sent[0].split(/\x1b\[\d+;1H/)[1].replace(/\x1b\[[0-9;]*m/g, '');
+  expect(firstFrame.indexOf('OLDPAGE')).toBe(20);
+  dropScreenModel('sock-push');
 });
