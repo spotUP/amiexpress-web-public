@@ -91,6 +91,28 @@ static void the_hit_test(void)
     printf("  [OK] a click on the indicator's arrows turns back or forward\n");
 }
 
+static void the_position_bar(void)
+{
+    ui_pages p;
+    int start, size;
+    make(&p, 3, 0, 80, 1);
+    ui_pages_bar(&p, 80, &start, &size);
+    assert(start == 0 && size == 26);                            /* a third of the row, at the left edge */
+    p.current = 1;
+    ui_pages_bar(&p, 80, &start, &size);
+    assert(start == 27 && size == 26);                           /* the middle */
+    p.current = 2;
+    ui_pages_bar(&p, 80, &start, &size);
+    assert(start + size == 80);                                  /* the last page ends at the right edge */
+    make(&p, 100, 99, 40, 1);
+    ui_pages_bar(&p, 40, &start, &size);
+    assert(size == 1 && start == 39);                            /* more pages than cells: one cell, still visible */
+    make(&p, 1, 0, 80, 1);
+    ui_pages_bar(&p, 80, &start, &size);
+    assert(start == 0 && size == 80);                            /* one page fills the row */
+    printf("  [OK] the position bar is one page's share of the row and runs edge to edge\n");
+}
+
 static void slide_only_above_40_columns(void)
 {
     ui_pages p;
@@ -116,6 +138,7 @@ int main(void)
     pages_wrap();
     the_indicator();
     the_hit_test();
+    the_position_bar();
     slide_only_above_40_columns();
     return 0;
 }

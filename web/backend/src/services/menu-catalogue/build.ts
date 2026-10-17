@@ -1,5 +1,5 @@
 import type { Catalogue, CatalogueEntry, CatalogueSection, CatalogueStyle, MenuCaller, MenuSource } from './types';
-import { levelEntry, widthClassOf, cleanText, LABEL_MAX, DESCRIPTION_MAX, DEFAULT_MENU_STYLE, type MenuConfig, type MenuStyle, type WidthClass } from '../../screens/menu-config/menu-config';
+import { levelEntry, widthClassOf, cleanText, LABEL_MAX, DESCRIPTION_MAX, DEFAULT_MENU_STYLE, DOOR_FALLBACK_STYLE, type MenuConfig, type MenuStyle, type WidthClass } from '../../screens/menu-config/menu-config';
 
 /** The ONE rule for the menu style: the caller's own choice, else the board default for their width and level. */
 export function effectiveStyle(caller: MenuCaller, config: MenuConfig): MenuStyle {
@@ -7,11 +7,9 @@ export function effectiveStyle(caller: MenuCaller, config: MenuConfig): MenuStyl
   return caller.stylePref || levelEntry(config.style[cls], caller.secLevel) || DEFAULT_MENU_STYLE[cls];
 }
 
-/** The style a catalogue carries: classic is decided on the board before any door, so a door that asks anyway gets the class default. */
+/** The style a catalogue carries: classic is decided on the board before any door, so a door that asks anyway gets the door fallback for the class. */
 export function catalogueStyle(style: MenuStyle, cls: WidthClass): CatalogueStyle {
-  if (style !== 'classic') return style;
-  const base = DEFAULT_MENU_STYLE[cls];
-  return base === 'classic' ? 'pages' : base;
+  return style !== 'classic' ? style : DOOR_FALLBACK_STYLE[cls];
 }
 
 /** Whether a cover flow page turn slides for this caller. Decision D9: the slide is characters, so colour does not

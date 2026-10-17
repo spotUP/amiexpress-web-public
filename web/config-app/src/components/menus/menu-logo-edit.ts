@@ -1,23 +1,23 @@
 /**
  * What an edit does to a menu's logo sets - pure, like menu-edit.ts. The rules
  * are the ones validateMenuConfig applies on the board (a C64 set is .seq, every
- * other set .txt, a side logo is for wide screens only), plus the one the board
+ * other set .txt or .ans, a side logo is for wide screens only), plus the one the board
  * cannot check at save time: a file wider than the narrowest screen of its width
  * class is never drawn, so it cannot be added.
  */
-import { NARROWEST_COLUMNS, type LogoPosition, type LogoRule, type MenuConfig, type WidthClass } from '@bbs/screens/menu-config/menu-config';
+import { NARROWEST_COLUMNS, logoAlphabet, type LogoPosition, type LogoRule, type MenuConfig, type WidthClass } from '@bbs/screens/menu-config/menu-config';
 import type { MenuLogoFile } from '../../api/client';
 
 export const WIDER_NOTE = 'Wider than this screen - never drawn';
 
 export interface LogoOffer { file: string; rows: number; cols: number; fits: boolean; note: string }
 
-const extensionOf = (cls: WidthClass) => (cls === 'c64' ? '.seq' : '.txt');
+const alphabetOf = (cls: WidthClass) => (cls === 'c64' ? 'petscii' : 'ansi');
 
 /** The files a set of this width class can use, in file order, each marked drawable or not. */
 export function logoOffers(files: MenuLogoFile[], cls: WidthClass): LogoOffer[] {
   return files
-    .filter(f => f.file.toLowerCase().endsWith(extensionOf(cls)))
+    .filter(f => logoAlphabet(f.file) === alphabetOf(cls))
     .map(f => {
       const fits = f.cols <= NARROWEST_COLUMNS[cls];
       return { file: f.file, rows: f.rows, cols: f.cols, fits, note: fits ? '' : WIDER_NOTE };

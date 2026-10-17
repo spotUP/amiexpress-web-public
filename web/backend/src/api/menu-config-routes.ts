@@ -4,7 +4,7 @@
  * Sysop-only like /api/config/bulls (routes-setup mounts it behind
  * authenticateToken + requireSysop). The kind's config is Menus/<KIND>.json,
  * its logo art Screens/menus/<kind>/logos; nothing else is reachable - a logo
- * name is a bare `name.txt|.seq` (LOGO_FILE_RE, the one rule the store also
+ * name is a bare `name.txt|.ans|.seq` (LOGO_FILE_RE, the one rule the store also
  * uses), never a path.
  *
  * Errors answer { success: false, message } in our own words; filesystem
@@ -12,7 +12,7 @@
  */
 import express, { NextFunction, Request, Response } from 'express';
 import { getSystemTime } from '../utils/date-time.util';
-import { MENU_KINDS, LOGO_FILE_RE, type MenuKind } from '../screens/menu-config/menu-config';
+import { MENU_KINDS, LOGO_FILE_RE, LOGO_NAME_RULE, type MenuKind } from '../screens/menu-config/menu-config';
 import { readMenuConfig, writeMenuConfig } from '../services/menu-config.service';
 import { menuSourceFor } from '../services/menu-catalogue/registry';
 import { buildCatalogue } from '../services/menu-catalogue/build';
@@ -124,7 +124,7 @@ export function createMenuConfigRouter(bbsRoot: string): ReturnType<typeof expre
     const { file } = req.params;
     const { base64 } = req.body ?? {};
     if (!LOGO_FILE_RE.test(file)) {
-      res.status(400).json({ success: false, message: 'A logo file name is letters, digits, - and _, then .txt or .seq.' });
+      res.status(400).json({ success: false, message: LOGO_NAME_RULE });
       return;
     }
     if (typeof base64 !== 'string' || !base64) {
@@ -143,7 +143,7 @@ export function createMenuConfigRouter(bbsRoot: string): ReturnType<typeof expre
     const kind = kindOf(req, res); if (!kind) return;
     const { file } = req.params;
     if (!LOGO_FILE_RE.test(file)) {
-      res.status(400).json({ success: false, message: 'A logo file name is letters, digits, - and _, then .txt or .seq.' });
+      res.status(400).json({ success: false, message: LOGO_NAME_RULE });
       return;
     }
     try {

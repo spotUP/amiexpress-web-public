@@ -493,6 +493,19 @@ describe('screen-wipe.util', () => {
       expect(fwd[0].content).toMatch(/;1H(\x1b\[0m)? {60}/);
     });
 
+    it('a backward push of a left-aligned page shows its text in every frame, like a forward one', () => {
+      const page = Array.from({ length: 6 }, (_, i) => `  ${String.fromCharCode(65 + i)}  Entry ${i + 1}`).join('\r\n');
+      const area = { top: 1, rows: 6 };
+      const visible = (frame: string) => frame.replace(/\x1b\[[0-9;]*[A-Za-z]/g, '').replace(/\s/g, '').length;
+      for (const forward of [true, false]) {
+        const frames = getRegionSlideFrames(page, 80, { ...area, forward });
+        for (const f of frames.slice(0, -1)) expect(visible(f.content)).toBeGreaterThan(0);
+        expect(frames[frames.length - 1].content).toContain('A  Entry 1');
+      }
+      const back = getRegionSlideFrames(page, 80, { ...area, forward: false });
+      expect(back[0].content).toMatch(/;1H(\x1b\[0m)?[^ \x1b]/);   // the text's right end enters at the left edge
+    });
+
     it('a whole-screen getWipeFrames with the push letter has no animation', () => {
       expect(getWipeFrames('P' as WipeType, screen)).toEqual([]);
     });

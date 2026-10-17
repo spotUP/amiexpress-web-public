@@ -332,6 +332,26 @@ void ansi_reverse(ansi_buf *b, int on)
     put_str(b, on ? "\033[7m" : "\033[27m");
 }
 
+void ansi_bar_cells(ansi_buf *b, int row, int col, int count, int colour, char plain)
+{
+    char run[256];
+    if (!b || count < 1) return;
+    if (count > (int)sizeof run - 1) count = (int)sizeof run - 1;
+    memset(run, b->colour ? ' ' : plain, (size_t)count);
+    run[count] = '\0';
+    if (!b->colour) {
+        ansi_text_raw(b, row, col, run, count);
+    } else if (b->cell_backgrounds) {
+        ansi_color(b, colour, colour, 0);
+        ansi_text_raw(b, row, col, run, count);
+    } else {
+        ansi_color(b, colour, ANSI_BLACK, 0);
+        ansi_reverse(b, 1);
+        ansi_text_raw(b, row, col, run, count);
+        ansi_reverse(b, 0);
+    }
+}
+
 void ansi_reset(ansi_buf *b)
 {
     put_str(b, "\033[0m");
@@ -378,6 +398,79 @@ void ansi_restore_cursor(ansi_buf *b)
     b->last_bold = b->saved_bold;
     b->last_reverse = b->saved_reverse;
     put_str(b, "\0338");
+}
+
+/* Does the SGR whose parameters run [p, end) leave the default background
+ * behind? A reset (`0`, or no parameters at all) and `49` do; one that names
+ * its own background does not - that is the caller's colour, and it stays. */
+static int sgr_drops_ground(const char *p, const char *end)
+{
+    int v[16], n = 0, i, drops = (p == end);
+
+    while (p <= end && n < 16) {
+        int x = 0;
+        while (p < end && *p >= '0' && *p <= '9') x = x * 10 + (*p++ - '0');
+        v[n++] = x;                  /* an empty parameter is 0, which is a reset */
+        if (p >= end) break;
+        p++;                         /* ';' or ':' */
+    }
+    for (i = 0; i < n; i++) {
+        if (v[i] == 38) { i += (i + 1 < n && v[i + 1] == 5) ? 2 : 4; continue; }   /* 38;5;n / 38;2;r;g;b */
+        if (v[i] == 0 || v[i] == 49) drops = 1;
+        else if ((v[i] >= 40 && v[i] <= 48) || (v[i] >= 100 && v[i] <= 107)) return 0;
+    }
+    return drops;
+}
+
+/* The background alone, as ansi_color would write it. */
+static void put_ground(ansi_buf *b, int bg)
+{
+    long rgb = token_rgb(b, bg);
+
+    if (bg >= UI_TOKEN_BASE) {
+        int n = bg - UI_TOKEN_BASE;
+        bg = (b->palette_idx && n < b->palette_len) ? b->palette_idx[n] : ANSI_BLACK;
+    }
+    if (bg >= ANSI_BRIGHT && bg < UI_TOKEN_BASE) bg -= ANSI_BRIGHT;
+    put_str(b, "\033[");
+    if (rgb >= 0) put_rgb(b, 48, (unsigned long) rgb);
+    else put_int(b, 40 + bg);
+    put_char(b, 'm');
+}
+
+int ansi_escape_len(const char *p)
+{
+    int n;
+
+    if (p[0] != 0x1b || p[1] != '[') return 0;
+    n = 2;
+    while (p[n] && ((unsigned char)p[n] < 0x40 || (unsigned char)p[n] > 0x7e)) n++;
+    return p[n] ? n + 1 : n;
+}
+
+int ansi_text_cols(const char *text)
+{
+    int cols = 0, esc;
+
+    while (*text) {
+        if ((esc = ansi_escape_len(text)) > 0) { text += esc; continue; }
+        cols++;
+        text++;
+    }
+    return cols;
+}
+
+int ansi_text_bytes(const char *text, int cols)
+{
+    int at = 0, used = 0, esc;
+
+    while (text[at]) {
+        if ((esc = ansi_escape_len(text + at)) > 0) { at += esc; continue; }
+        if (used == cols) break;
+        used++;
+        at++;
+    }
+    return at;
 }
 
 static void write_text(ansi_buf *b, int row, int col, const char *text, int maxlen, int pad)
@@ -458,6 +551,11 @@ static void write_text(ansi_buf *b, int row, int col, const char *text, int maxl
                 b->last_fg = -1;
                 b->last_bg = -1;
                 b->last_bold = -1;
+                /* A reset takes the row's ground with it: the board prompt
+                   opens with `ESC[0m`, and on a themed row that punched the
+                   terminal's own black under every coloured word. The
+                   caller's colour stays; the ground comes back. */
+                if (sgr_drops_ground(at + 2, q) && b->cell_backgrounds && base_bg >= 0) put_ground(b, base_bg);
             }
             at = *q ? q + 1 : q;
             continue;

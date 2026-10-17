@@ -94,6 +94,9 @@ test('the caller\'s style beats the board default; the default follows width and
   expect(built(mainMenuSource, caller({ columns: 40, displayMode: 'petscii' }), defaultMenuConfig('MAIN')).style).toBe('pages');
   expect(built(mainMenuSource, caller(), defaultMenuConfig('MAIN')).style).toBe('coverflow');
   expect(built(mainMenuSource, caller({ stylePref: 'pages' }), defaultMenuConfig('MAIN')).style).toBe('pages');
+  // The board default is the classic menu screen at every width (sysop 2026-10-17); a door that runs anyway gets its fallback above.
+  expect(effectiveStyle(caller(), defaultMenuConfig('MAIN'))).toBe('classic');
+  expect(effectiveStyle(caller({ columns: 40, displayMode: 'petscii' }), defaultMenuConfig('MAIN'))).toBe('classic');
 });
 
 describe('effective style', () => {
@@ -102,12 +105,12 @@ describe('effective style', () => {
     [{}, 'scroll'],
     [{ secLevel: 100 }, 'classic'],
     [{ stylePref: 'pages' as const, secLevel: 100 }, 'pages'],
-    [{ columns: 40, displayMode: 'petscii' as const }, 'pages'],
+    [{ columns: 40, displayMode: 'petscii' as const }, 'classic'],
     [{ stylePref: 'coverflow' as const }, 'coverflow'],
   ])('%j gives %s', (over, want) => {
     expect(effectiveStyle(caller(over as Partial<MenuCaller>), cfg)).toBe(want);
   });
-  test('classic never reaches the catalogue: it stands for the class default there', () => {
+  test('classic never reaches the catalogue: it stands for the door fallback there', () => {
     expect(catalogueStyle('classic', 'standard')).toBe('coverflow');
     expect(catalogueStyle('classic', 'c64')).toBe('pages');
     expect(catalogueStyle('scroll', 'standard')).toBe('scroll');
@@ -133,6 +136,15 @@ test('the catalogue file: TAB-safe fields, cut at their widths, never the key', 
   const frogger = lines.find(l => l.startsWith('E FROGGER\t'))!;
   expect(frogger).not.toMatch(/\x1b|\r/);
   expect(frogger.split('\t')).toHaveLength(5);
+});
+
+test('the board prompt keeps its colours in the catalogue, cut at 72 columns the caller sees', () => {
+  const c: any = buildCatalogue(mainMenuSource, caller(), defaultMenuConfig('MAIN'));
+  c.prompt = '\x1b[0m\x1b[35mUprough BBS \x1b[0m[\x1b[36m1\x1b[34m:\x1b[36mMain\x1b[0m] Menu (\x1b[33m60\x1b[0m mins. left):\x1b[2J\x07' + 'z'.repeat(80);
+  const p = formatCatalogue(c, 0).split('\n').find(l => l.startsWith('P '))!.slice(2);
+  expect(p.startsWith('\x1b[0m\x1b[35mUprough BBS \x1b[0m[\x1b[36m1')).toBe(true);
+  expect(p).not.toMatch(/\x1b\[2J|\x07/);
+  expect(p.replace(/\x1b\[[0-9;]*m/g, '')).toHaveLength(72);
 });
 
 test('a source with second-level lists builds a child catalogue (the J contract, Decision 42)', () => {

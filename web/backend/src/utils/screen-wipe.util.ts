@@ -1284,6 +1284,12 @@ const REGION_SLIDE_DELAY_MS = 40;
  * exactly. The board does not know what the region held before, so the part
  * the new rows have not reached yet is blank.
  *
+ * The rows travel by the span their text covers, not by the full width: a
+ * region drawn in one left-aligned column (cover flow) is mostly blank on the
+ * right, so a backward push measured by the full width would lead with that
+ * blank and show nothing until the last frame. Forward, the text enters from
+ * the right edge; backward, its right end enters from the left edge.
+ *
  * Separate from getWipeFrames because it has a different frame model:
  * framesFromGrids opens with CLEAR_HOME and repaints the whole screen, which
  * a push must never do. Every row is cursor-addressed (CUP) and no row
@@ -1302,15 +1308,17 @@ export function getRegionSlideFrames(
     while (row.length < columns) row.push(BLANK);
     target.push(row);
   }
+  let first = columns, end = 0;   // the columns the text covers, every row together
+  for (const row of target) row.forEach((cell, x) => { if (cell.char !== ' ') { first = Math.min(first, x); end = Math.max(end, x + 1); } });
+  if (end === 0) { first = 0; end = columns; }
+  const travel = region.forward ? columns - first : end;
   const frames: WipeFrame[] = [];
   for (let step = 1; step <= REGION_SLIDE_STEPS; step++) {
-    const shown = Math.round((columns * step) / REGION_SLIDE_STEPS);
+    const left = Math.round((travel * (REGION_SLIDE_STEPS - step)) / REGION_SLIDE_STEPS);
+    const shift = region.forward ? left : -left;
     let out = '';
     for (let y = 0; y < region.rows; y++) {
-      const blank = Array<Cell>(columns - shown).fill(BLANK);
-      const row = region.forward
-        ? [...blank, ...target[y].slice(0, shown)]
-        : [...target[y].slice(columns - shown), ...blank];
+      const row = Array.from({ length: columns }, (_, x) => target[y][x - shift] ?? BLANK);
       out += `\x1b[${region.top + y};1H` + gridToAnsi([row]);
     }
     frames.push({ content: out, delay: step === REGION_SLIDE_STEPS ? 0 : REGION_SLIDE_DELAY_MS });

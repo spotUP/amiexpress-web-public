@@ -162,6 +162,19 @@ test('logo upload answers the measured size; the list shows it with its alphabet
   expect(fs.readdirSync(path.join(root, 'Screens/menus/main/logos')).filter(f => f.startsWith('.'))).toEqual([]);
 });
 
+test('an .ans logo uploads as Amiga ANSI, any case, and a standard set draws it', async () => {
+  const app = appFor();
+  const up = await request(app).put('/api/config/menus/MAIN/logos/cat.ans').send({ base64: b64('cat.txt') });
+  expect(up.status).toBe(200);
+  expect(up.body.data).toEqual({ file: 'cat.ans', rows: 3, cols: 7 });
+  expect((await request(app).put('/api/config/menus/MAIN/logos/DOS.ANS').send({ base64: b64('cat.txt') })).status).toBe(200);
+  const list = await request(app).get('/api/config/menus/MAIN/logos');
+  expect(list.body.data.map((l: any) => [l.file, l.alphabet])).toEqual([['DOS.ANS', 'ansi'], ['cat.ans', 'ansi']]);
+  await request(app).put('/api/config/menus/MAIN').send({ logos: [{ position: 'header', widthClass: 'standard', levelFloor: 0, rule: 'fixed', files: ['cat.ans'] }] });
+  const preview = await request(app).get('/api/config/menus/MAIN/preview?level=10&columns=80');
+  expect(preview.body.data.logos.map((l: any) => l.file)).toEqual(['cat.ans']);
+});
+
 test('a bad logo name, a wrong extension, an oversize file and an over-wide ANSI logo are 400 and write nothing', async () => {
   const app = appFor();
   const dir = path.join(root, 'Screens/menus/main/logos');

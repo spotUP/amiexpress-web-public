@@ -52,7 +52,10 @@ export const LABEL_MAX = 26;
 export const DESCRIPTION_MAX = 76;
 export const SECTION_TITLE_MAX = 30;
 const KEY_RE = /^[A-Z0-9<>^?_.-]{1,16}$/i;
-export const LOGO_FILE_RE = /^[A-Za-z0-9_-]{1,40}\.(txt|seq)$/;   // a bare name in the kind's logo dir, never a path
+export const LOGO_FILE_RE = /^[A-Za-z0-9_-]{1,40}\.(txt|ans|seq)$/i;   // a bare name in the kind's logo dir, never a path
+export const LOGO_NAME_RULE = 'A logo file name is letters, digits, - and _, then .txt, .ans or .seq.';
+/** The one rule for a logo's alphabet: .seq is PETSCII for the C64, .txt and .ans are Amiga ANSI for 80 columns and wider. */
+export const logoAlphabet = (file: string): 'ansi' | 'petscii' => (file.toLowerCase().endsWith('.seq') ? 'petscii' : 'ansi');
 const POSITIONS: LogoPosition[] = ['header', 'footer', 'side', 'between'];
 const CLASSES: WidthClass[] = ['c64', 'standard', 'wide'];
 const RULES: LogoRule[] = ['fixed', 'rotate', 'random'];
@@ -82,8 +85,34 @@ export function cleanText(raw: string, max: number): string {
   return String(raw).replace(/\x1b\[[0-9;?]*[ -/]*[@-~]/g, '').replace(/[\x00-\x1f\x7f-\x9f]/g, '').slice(0, max);
 }
 
-/** The board's own default per width class: cover flow at 80 columns and wider, pages on the C64 (plan decision 5). */
-export const DEFAULT_MENU_STYLE: Record<WidthClass, MenuStyle> = { c64: 'pages', standard: 'coverflow', wide: 'coverflow' };
+/**
+ * cleanText for the board prompt, which carries its colours (express.e:28417-28420): an SGR (`ESC [ ... m`) stays,
+ * every other escape and control byte goes, and `cols` counts the columns the caller sees, not the bytes. The door
+ * measures it the same way (ansi_text_cols) and holds 255 bytes.
+ */
+export function cleanColouredText(raw: string, cols: number, maxBytes = 255): string {
+  const parts = String(raw).replace(/\x1b\[(?![0-9;]*m)[0-9;?]*[ -/]*[@-~]/g, '').split(/(\x1b\[[0-9;]*m)/);
+  let out = '';
+  let shown = 0;
+  for (let i = 0; i < parts.length; i++) {
+    if (i % 2 === 1) {
+      if (out.length + parts[i].length > maxBytes) break;
+      out += parts[i];
+      continue;
+    }
+    const text = parts[i].replace(/[\x00-\x1f\x7f-\x9f]/g, '').slice(0, Math.max(0, cols - shown));
+    if (out.length + text.length > maxBytes) break;
+    out += text;
+    shown += text.length;
+  }
+  return out;
+}
+
+/** The board's own default per width class: the classic menu screen everywhere (sysop 2026-10-17); a caller or the sysop picks a door style. */
+export const DEFAULT_MENU_STYLE: Record<WidthClass, MenuStyle> = { c64: 'classic', standard: 'classic', wide: 'classic' };
+/** The layout a door draws when it runs for a classic caller anyway (the palette, a typed MENU): cover flow at 80 columns
+    and wider, pages on the C64 (plan decision 5). */
+export const DOOR_FALLBACK_STYLE: Record<WidthClass, Exclude<MenuStyle, 'classic'>> = { c64: 'pages', standard: 'coverflow', wide: 'coverflow' };
 const DEFAULT_STYLE_MAP = (): Record<WidthClass, LevelMap<MenuStyle>> =>
   ({ c64: { '0': DEFAULT_MENU_STYLE.c64 }, standard: { '0': DEFAULT_MENU_STYLE.standard }, wide: { '0': DEFAULT_MENU_STYLE.wide } });
 
@@ -197,11 +226,11 @@ export function validateMenuConfig(kind: MenuKind, raw: unknown): { config: Menu
     else if (raw.coverflow.slide !== undefined) problems.push('coverflow slide: not true/false');
   } else if (raw.coverflow !== undefined) problems.push('coverflow: not an object');
   // Legacy drill-down (plan decision 6): its slide is the cover flow slide, and a drill-down menu becomes a cover flow menu
-  // in every class whose base default is not pages (the C64 keeps pages unless the sysop changes it).
+  // at 80 columns and wider, except where the sysop chose pages (the C64 keeps its default unless the sysop changes it).
   if (isObj(raw.drill)) {
     if (raw.coverflow === undefined && typeof raw.drill.slide === 'boolean') config.coverflow.slide = raw.drill.slide;
     if (raw.drill.enabled === true) {
-      for (const cls of CLASSES) if (config.style[cls]['0'] !== 'pages') config.style[cls] = { ...config.style[cls], '0': 'coverflow' };
+      for (const cls of CLASSES) if (cls !== 'c64' && config.style[cls]['0'] !== 'pages') config.style[cls] = { ...config.style[cls], '0': 'coverflow' };
     }
   } else if (raw.drill !== undefined) problems.push('drill: not an object');
   if (Array.isArray(raw.logos)) {
@@ -212,8 +241,8 @@ export function validateMenuConfig(kind: MenuKind, raw: unknown): { config: Menu
         && RULES.includes(l.rule as LogoRule) && Number.isInteger(l.levelFloor) && (l.levelFloor as number) >= 0
         && Array.isArray(l.files) && l.files.length > 0 && l.files.every(f => typeof f === 'string' && LOGO_FILE_RE.test(f));
       if (!ok) { problems.push('logos: a logo set was dropped'); continue; }
-      if (l.widthClass === 'c64' && (l.files as string[]).some(f => !f.endsWith('.seq'))) { problems.push('logos: a C64 logo must be a .seq'); continue; }
-      if (l.widthClass !== 'c64' && (l.files as string[]).some(f => !f.endsWith('.txt'))) { problems.push('logos: an ANSI logo must be a .txt'); continue; }
+      if (l.widthClass === 'c64' && (l.files as string[]).some(f => logoAlphabet(f) !== 'petscii')) { problems.push('logos: a C64 logo must be a .seq'); continue; }
+      if (l.widthClass !== 'c64' && (l.files as string[]).some(f => logoAlphabet(f) !== 'ansi')) { problems.push('logos: an ANSI logo must be a .txt or .ans'); continue; }
       if (l.position === 'side' && l.widthClass !== 'wide') { problems.push('logos: a side logo is for wide screens only'); continue; }
       const slot = `${l.position}|${l.widthClass}|${l.levelFloor}`;
       if (taken.has(slot)) { problems.push(`logos: a second ${l.position} set for ${l.widthClass} at level ${l.levelFloor} was dropped`); continue; }

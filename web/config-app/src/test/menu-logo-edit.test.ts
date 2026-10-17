@@ -13,13 +13,14 @@ const FILES = [
   { file: 'cat.txt', rows: 6, cols: 60, alphabet: 'ansi' as const },
   { file: 'huge.txt', rows: 6, cols: 100, alphabet: 'ansi' as const },
   { file: 'pet.seq', rows: 5, cols: 40, alphabet: 'petscii' as const },
+  { file: 'dos.ANS', rows: 4, cols: 50, alphabet: 'ansi' as const },
 ];
 const base = () => defaultMenuConfig('MAIN');
 
 describe('logo offers', () => {
-  it('offers .seq to a C64 set and .txt to the others', () => {
+  it('offers .seq to a C64 set and .txt or .ans to the others', () => {
     expect(logoOffers(FILES, 'c64').map(o => o.file)).toEqual(['pet.seq']);
-    expect(logoOffers(FILES, 'standard').map(o => o.file)).toEqual(['cat.txt', 'huge.txt']);
+    expect(logoOffers(FILES, 'standard').map(o => o.file)).toEqual(['cat.txt', 'huge.txt', 'dos.ANS']);
   });
   it('marks a logo wider than the narrowest screen of the class as never drawn', () => {
     const edge = (cls: 'c64' | 'standard' | 'wide', cols: number) => logoOffers([{ file: 'e.txt', rows: 1, cols }], cls)[0]?.fits;

@@ -135,8 +135,8 @@ describe('wipes and menu style', () => {
     let c = setMenuStyle(base(), 'standard', 0, 'classic');
     expect(c.style.standard).toEqual({ '0': 'classic' });
     c = addStyleFloor(c, 'standard', 100);
-    expect(c.style.standard).toEqual({ '0': 'classic', '100': 'coverflow' });
-    expect(addStyleFloor(c, 'c64', 100).style.c64).toEqual({ '0': 'pages', '100': 'pages' });
+    expect(c.style.standard).toEqual({ '0': 'classic', '100': 'classic' });
+    expect(addStyleFloor(c, 'c64', 100).style.c64).toEqual({ '0': 'classic', '100': 'classic' });
     expect(addStyleFloor(c, 'standard', 100)).toBe(c);
     expect(removeStyleFloor(c, 'standard', 100).style.standard).toEqual({ '0': 'classic' });
     expect(removeStyleFloor(c, 'standard', 0)).toBe(c);

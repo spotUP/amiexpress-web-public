@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { LOGO_FILE_RE, type LogoPosition, type LogoRule, type MenuConfig, type MenuKind, type WidthClass } from '@bbs/screens/menu-config/menu-config';
+import { LOGO_FILE_RE, LOGO_NAME_RULE, logoAlphabet, type LogoPosition, type LogoRule, type MenuConfig, type MenuKind, type WidthClass } from '@bbs/screens/menu-config/menu-config';
 import { apiClient, ApiError, type MenuLogoFile } from '../../api/client';
 import { useNotification } from '../../contexts/NotificationContext';
 import { DataTable, type DataTableColumn } from '../ui/DataTable';
@@ -25,7 +25,7 @@ const POSITIONS: Array<{ position: LogoPosition; title: string; note?: string }>
   { position: 'between', title: 'Between sections' },
 ];
 const logoPath = (kind: MenuKind, file: string) => `Screens/menus/${kind.toLowerCase()}/logos/${file}`;
-const alphabetWord = (f: MenuLogoFile) => ((f.alphabet ?? (f.file.toLowerCase().endsWith('.seq') ? 'petscii' : 'ansi')) === 'petscii' ? 'PETSCII' : 'Amiga ANSI');
+const alphabetWord = (f: MenuLogoFile) => ((f.alphabet ?? logoAlphabet(f.file)) === 'petscii' ? 'PETSCII' : 'Amiga ANSI');
 
 /** An existing Amiga ANSI logo, opened in the same editor the screens use; Save writes it back through the logo route. */
 function LogoStudio({ kind, file, onClose, onSaved }: { kind: MenuKind; file: string; onClose: () => void; onSaved: () => void }) {
@@ -69,7 +69,7 @@ function FilesPanel({ kind, files, loading, error, reload }: { kind: MenuKind; f
 
   const upload = async (base64: string, chosen: File) => {
     setNote(null);
-    if (!LOGO_FILE_RE.test(chosen.name)) { setNote('A logo file name is letters, digits, - and _, then .txt or .seq.'); return; }
+    if (!LOGO_FILE_RE.test(chosen.name)) { setNote(LOGO_NAME_RULE); return; }
     try { await apiClient.uploadMenuLogo(kind, chosen.name, base64); reload(); }
     catch (e: unknown) { setNote(e instanceof Error ? e.message : 'Failed to save the logo'); }
   };
@@ -94,8 +94,8 @@ function FilesPanel({ kind, files, loading, error, reload }: { kind: MenuKind; f
   return (
     <div className="space-y-2">
       <div className="flex items-center gap-3">
-        <ArtUploadButton label="Upload a logo" accept=".txt,.seq" onPick={upload} />
-        <span className="text-xs text-content-secondary">Amiga ANSI as .txt for 80 columns and wider, PETSCII as .seq for the C64. The name is letters, digits, - and _.</span>
+        <ArtUploadButton label="Upload a logo" accept=".txt,.ans,.seq" onPick={upload} />
+        <span className="text-xs text-content-secondary">Amiga ANSI as .txt or .ans for 80 columns and wider, PETSCII as .seq for the C64. The name is letters, digits, - and _.</span>
       </div>
       {note && <p role="alert" className="text-sm text-status-danger">{note}</p>}
       <DataTable
@@ -108,7 +108,7 @@ function FilesPanel({ kind, files, loading, error, reload }: { kind: MenuKind; f
         emptyMessage="No logo files yet. Upload one to use it in a logo set."
         rowActions={f => (
           <>
-            {f.file.toLowerCase().endsWith('.txt') && (
+            {logoAlphabet(f.file) === 'ansi' && (
               <button className={BUTTON_CLASS} onClick={() => setStudio(f.file)} aria-label={`Open ${f.file} in the Screen Designer`}>Open in the Screen Designer</button>
             )}
             <button className={BUTTON_CLASS} onClick={() => remove(f.file)} aria-label={`Delete ${f.file}`}>Delete</button>

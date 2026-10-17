@@ -318,7 +318,7 @@ describe('MAINMENU on three screens', () => {
       const m = answer(r, 0);
       expect(rowsOf(m).every(row => row === 24 || row === 25)).toBe(true);        // no cursor address in a grid row
       expect(m.join('')).not.toContain('\x1b[2J');
-      expect(bytes(m)).toBeLessThanOrEqual(270);                                   // measured 244 (1,679 bytes in 10 messages when typing scrolled the window)
+      expect(bytes(m)).toBeLessThanOrEqual(400);                                   // measured 369 with the coloured board prompt (1,679 bytes in 10 messages when typing scrolled the window)
       expect(m.length).toBeLessThanOrEqual(2);
       const rows = gridText(replayCells(r.chunks.slice(0, r.marks[1]!.at).join(''), 80, 25));
       expect(rows[23]).toMatch(/Enter runs: M +Colour Mode/);                      // the match, in the status row's slot
@@ -362,7 +362,7 @@ describe('MAINMENU on three screens', () => {
       const r = await typing40();
       expect(r.chunks.slice(r.marks[0]!.at, r.marks[4]!.at).join('')).not.toContain('\x1b[2J');   // up to the leaving Esc: the door's closing clear is not a repaint
       for (const i of [0, 1, 2, 3]) expect(rowsOf(answer(r, i))).toEqual([25]);
-      expect(bytes(answer(r, 0))).toBeLessThanOrEqual(90);                         // measured 81: the row becomes the prompt
+      expect(bytes(answer(r, 0))).toBeLessThanOrEqual(150);                        // measured 134 with the coloured board prompt: the row becomes the prompt
       for (const i of [1, 2]) expect(bytes(answer(r, i))).toBeLessThanOrEqual(20); // measured 18
       expect(bytes(answer(r, 3))).toBeLessThanOrEqual(100);                        // measured 89: back to the hint
     });

@@ -104,6 +104,20 @@ int main(void)
     is_ansi = "";
     printf("  [OK] colour off marks the selected entry with >> at 80 columns; colour on does not\n");
 
+    /* The board prompt keeps its colours in the typing row (express.e:28417-28420),
+       and the cursor sits after the columns the caller sees, not after the bytes. */
+    f = fopen(CAT_PATH, "wb");
+    assert(f);
+    fputs("AEMENU 1\nK MAIN\t-\nT MAIN MENU\nP \x1b[35mBBS \x1b[36m1\x1b[0m: \nO scroll\nW -\t-\t-\nR 0\nS Messages\n"
+          "E R\tRead Mail\tRead your mail\t\t\n.\n", f);
+    fclose(f);
+    is_ansi = "1";
+    drive("ms\r", 3, &rc);
+    assert(rc == 0 && strstr(requests, "RUN ms|") && strstr(screen_text, "\x1b[35mBBS \x1b[36m1\x1b[0m"));
+    assert(strstr(screen_text, ";10H"));                    /* "BBS 1: " is 7 columns, "ms" 2: the cursor is at column 10 */
+    is_ansi = "";
+    printf("  [OK] the board prompt keeps its colours and the cursor follows its visible width\n");
+
     drive("qms\r", 4, &rc);                                 /* q on an empty line leaves; nothing after it is read */
     assert(rc == 0 && !strstr(requests, "RUN"));
     printf("  [OK] q on an empty line leaves the door without running anything\n");

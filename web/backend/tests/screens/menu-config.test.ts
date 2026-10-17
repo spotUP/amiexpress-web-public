@@ -4,9 +4,9 @@ test('an absent config is the derived menu with the default wipes and overflow (
   const c = defaultMenuConfig('MAIN');
   expect(c.sections.map(s => s.title)).toEqual(['Messages', 'Files', 'Conferences', 'Doors', 'Account', 'System']);
   expect(c.wipes).toEqual({ open: 'X', leave: '', page: 'H', at40: true });
-  expect(levelEntry(c.style.c64, 10)).toBe('pages');
-  expect(levelEntry(c.style.standard, 10)).toBe('coverflow');
-  expect(levelEntry(c.style.wide, 10)).toBe('coverflow');
+  expect(levelEntry(c.style.c64, 10)).toBe('classic');
+  expect(levelEntry(c.style.standard, 10)).toBe('classic');
+  expect(levelEntry(c.style.wide, 10)).toBe('classic');
   expect(c.logos).toEqual([]);
   expect(defaultMenuConfig('BULLETINS').sections).toEqual([{ id: 'bulletins', title: 'Bulletins' }]);
   expect(MENU_KINDS).toEqual(['MAIN', 'BULLETINS']);
@@ -50,7 +50,7 @@ test('a bad file is repaired field by field, and every repair is named', () => {
   expect(config.labels).toEqual({ R: 'ReadMail' });
   expect(config.descriptions).toEqual({});
   expect(Object.keys(config.levels)).toEqual([]);
-  expect(levelEntry(config.style.c64, 0)).toBe('pages');
+  expect(levelEntry(config.style.c64, 0)).toBe('classic');
   expect(config.logos).toEqual([]);
   expect(problems.length).toBeGreaterThanOrEqual(7);
 });
@@ -96,7 +96,7 @@ describe('menu style', () => {
   it('reads a file written with the old overflow key, and saves it back as style', () => {
     const { config } = validateMenuConfig('MAIN', { overflow: { standard: { '0': 'scroll', '100': 'pages' } } });
     expect(config.style.standard).toEqual({ '0': 'scroll', '100': 'pages' });
-    expect(config.style.c64).toEqual({ '0': 'pages' });
+    expect(config.style.c64).toEqual({ '0': 'classic' });
     expect(Object.keys(config)).not.toContain('overflow');
   });
 });
@@ -109,9 +109,9 @@ describe('cover flow slide and the drill-down migration', () => {
     expect(problems).toContain('coverflow slide: not true/false');
     expect(validateMenuConfig('MAIN', { coverflow: 'on' }).problems).toContain('coverflow: not an object');
   });
-  it('a drill-down menu becomes cover flow in every class whose default is not pages, and its slide carries over', () => {
+  it('a drill-down menu becomes cover flow at 80 columns and wider unless the sysop chose pages, and its slide carries over', () => {
     const { config } = validateMenuConfig('MAIN', { overflow: { standard: { '0': 'scroll' }, wide: { '0': 'pages' } }, drill: { enabled: true, slide: false } });
-    expect(config.style).toEqual({ c64: { '0': 'pages' }, standard: { '0': 'coverflow' }, wide: { '0': 'pages' } });
+    expect(config.style).toEqual({ c64: { '0': 'classic' }, standard: { '0': 'coverflow' }, wide: { '0': 'pages' } });
     expect(config.coverflow).toEqual({ slide: false });
     expect(Object.keys(config)).not.toContain('drill');
   });

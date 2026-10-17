@@ -45,6 +45,9 @@ int  ui_pages_turn(ui_pages *p, int step);
 int  ui_pages_indicator(const ui_pages *p, char *buf, int cap);
 /** A click at (row, col) on the drawn indicator: -1 on "<", +1 on ">", else 0. */
 int  ui_pages_hit(const ui_pages *p, int row, int col);
+/** The position bar across `width` cells: the thumb's first cell (0-based) and its size. One page's share of the
+    width (at least one cell), first page at the left edge, last page at the right. */
+void ui_pages_bar(const ui_pages *p, int width, int *start, int *size);
 
 #ifdef __cplusplus
 }

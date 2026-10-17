@@ -3,7 +3,7 @@
  * sysop's sets, measured, and drawn by the board into the door's screen.
  *
  * Files live in Screens/menus/<kind>/logos/ (menuLogoDir) and are read through
- * amigafs as latin1: `.txt` is Amiga ANSI, `.seq` is PETSCII for the C64.
+ * amigafs as latin1: `.txt` and `.ans` are Amiga ANSI, `.seq` is PETSCII for the C64.
  */
 import * as crypto from 'crypto';
 import * as fs from 'fs';
@@ -12,7 +12,7 @@ import * as amigafs from '../../utils/amigafs';
 import { chownToBoard, mkdirOwned } from '../../utils/board-owner.util';
 import { parseAnsiToGrid, gridSize, renderGridAt } from '../../utils/screen-wipe.util';
 import { menuLogoDir } from '../menu-config.service';
-import { levelEntry, widthClassOf, LOGO_FILE_RE, type MenuConfig, type MenuKind, type LogoSet } from '../../screens/menu-config/menu-config';
+import { levelEntry, widthClassOf, LOGO_FILE_RE, LOGO_NAME_RULE, logoAlphabet, type MenuConfig, type MenuKind, type LogoSet } from '../../screens/menu-config/menu-config';
 import { PetsciiMachine, PUA_BANK0, PUA_BANK1, vicToSgrForeground } from '@amiexpress/bbs-door-sdk/petscii';
 import type { ChosenLogo, MenuCaller } from './types';
 
@@ -22,7 +22,7 @@ const SCREEN_CODE_SPACE = 0x20;
 /** "Rotate in order": board-wide, in memory, reset at restart (Decision 30). */
 const rotation = new Map<string, number>();
 
-const isSeq = (file: string) => file.toLowerCase().endsWith('.seq');
+const isSeq = (file: string) => logoAlphabet(file) === 'petscii';
 const readLatin1 = (file: string): string => (amigafs.readFileSync(file, 'latin1') as string);
 
 /** A PETSCII file as the screen it paints: the KERNAL model, not a byte count. */
@@ -125,13 +125,13 @@ export function listMenuLogos(bbsRoot: string, kind: MenuKind): MenuLogoInfo[] {
   try { names = fs.readdirSync(dir); } catch { return []; }
   const out: MenuLogoInfo[] = [];
   for (const file of names.filter(n => LOGO_FILE_RE.test(n)).sort()) {
-    try { out.push({ file, ...measureLogo(path.join(dir, file)), alphabet: isSeq(file) ? 'petscii' : 'ansi' }); } catch { /* unreadable: not offered */ }
+    try { out.push({ file, ...measureLogo(path.join(dir, file)), alphabet: logoAlphabet(file) }); } catch { /* unreadable: not offered */ }
   }
   return out;
 }
 
 export function writeMenuLogo(bbsRoot: string, kind: MenuKind, file: string, bytes: Buffer): { file: string; rows: number; cols: number } {
-  if (!LOGO_FILE_RE.test(file)) throw new MenuLogoError('A logo file name is letters, digits, - and _, then .txt or .seq.');
+  if (!LOGO_FILE_RE.test(file)) throw new MenuLogoError(LOGO_NAME_RULE);
   if (bytes.length === 0) throw new MenuLogoError('The logo file is empty.');
   if (bytes.length > LOGO_MAX_BYTES) throw new MenuLogoError('A logo file is at most 64 KB.');
   if (!isSeq(file) && gridSize(parseAnsiToGrid(bytes.toString('latin1'), ANSI_LOGO_COLUMNS + 1)).cols > ANSI_LOGO_COLUMNS) {
@@ -161,7 +161,7 @@ export function logoUsedBy(config: MenuConfig, file: string): string[] {
 }
 
 export function deleteMenuLogo(bbsRoot: string, kind: MenuKind, file: string): boolean {
-  if (!LOGO_FILE_RE.test(file)) throw new MenuLogoError('A logo file name is letters, digits, - and _, then .txt or .seq.');
+  if (!LOGO_FILE_RE.test(file)) throw new MenuLogoError(LOGO_NAME_RULE);
   const target = path.join(menuLogoDir(bbsRoot, kind), file);
   if (!fs.existsSync(target)) return false;
   fs.rmSync(target);

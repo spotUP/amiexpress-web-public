@@ -209,12 +209,23 @@ static int page_section[AE_MENU_MAX_SECTIONS];    /* cover flow: page -> catalog
 static char frame_buffer[49152];      /* Decision 26 */
 static char session_storage[AE_SESSION_MIN_STORAGE];
 
-/* The board's prompt as the row shows it: clipped to 72, and the ONE length drawing, parking and the typing room all use. */
+/* The board's prompt as the row shows it: clipped to 72 COLUMNS, and the ONE length drawing, parking and the typing
+   room all use. It carries the board's own colours (express.e:28417), so its length is its columns, not strlen. */
 #define PROMPT_SHOWN 72
 static int prompt_len(const level *lv)
 {
-    int n = (int)strlen(lv->menu.prompt);
+    int n = ansi_text_cols(lv->menu.prompt);
     return n < PROMPT_SHOWN ? n : PROMPT_SHOWN;
+}
+
+/* The prompt clipped to PROMPT_SHOWN columns, its escapes kept whole, and the pen back to the row's ink after it:
+   the prompt's last colour is not the caller's typing. */
+static void add_prompt(char *line, const level *lv)
+{
+    char pen[4];
+    strncat(line, lv->menu.prompt, (size_t)ansi_text_bytes(lv->menu.prompt, PROMPT_SHOWN));
+    ui_ink(pen, UI_TOKEN(UI_T_INK));
+    strcat(line, pen);
 }
 
 static level *cur(struct menudoor *d) { return &d->lv[d->depth]; }
@@ -312,14 +323,14 @@ static void overlay_place(struct menudoor *d)
     d->ov_top = (rows - h) / 2 + 1;
 }
 
-/* The grid as the overlay's list: the rows between the field and the description, one column, no header or band. */
+/* The grid as the overlay's list: the rows between the field and the description, one column, section headers, no band. */
 static void overlay_configure(struct menudoor *d, level *lv, int selected)
 {
     ui_grid *g = &lv->grid;
     configure(d, lv, selected);                           /* the theme's inks, the texts, the caret: the grid as everywhere */
     g->top = d->ov_top + 2; g->left = d->ov_left + 1;
     g->height = d->ov_rows - 4; g->width = d->ov_cols - 2;
-    g->section_title = 0; g->band_after_section = -1; g->band_height = 0;
+    g->band_after_section = -1; g->band_height = 0;      /* section headers as configure() set them: none for one section */
     g->mode = UI_GRID_SCROLL; g->max_columns = 1;
     g->erase_tail = 0;                                    /* an erase would take the board's screen beside the box */
     ui_grid_layout(g);
@@ -344,7 +355,7 @@ static void overlay_field(struct menudoor *d)
     ui_screen *sc = &d->screen;
     level *lv = &d->lv[0];
     int inner = d->ov_cols - 2, plen, at, gap, plen_pager;
-    char line[400], pager[32], pen[4];
+    char line[640], pager[32], pen[4];   /* inner + the prompt's colours + pens */
     const char *hint;
 
     if (inner < 1 || inner > 300) return;
@@ -359,8 +370,7 @@ static void overlay_field(struct menudoor *d)
         plen = 1 + (int)strlen(hint);
     } else {
         ui_ink(pen, UI_TOKEN(UI_T_DIM)); strcat(line, pen);
-        strncat(line, lv->menu.prompt, PROMPT_SHOWN);
-        ui_ink(pen, UI_TOKEN(UI_T_INK)); strcat(line, pen);
+        add_prompt(line, lv);
         strncat(line, d->typed, TYPED_MAX);
         plen = 1 + prompt_len(lv) + d->typed_len;
     }
@@ -439,6 +449,19 @@ static void overlay_compose(struct menudoor *d)
     overlay_description(d, 1);
 }
 
+/* Cover flow: a line across the row above the status bar says where the caller is among the pages, the way a
+   scrollbar says where a list is (sysop 2026-10-17). Track DIM, thumb INK, as ui_list's bar. That row is md_layout's
+   gap, blank in every layout, and a cell that did not change is not sent again. */
+static void draw_pages_bar(struct menudoor *d)
+{
+    ui_screen *sc = &d->screen;
+    int row = cur(d)->lay.status_row - 1, start, size;
+    ui_pages_bar(&d->pages, sc->cols, &start, &size);
+    ansi_bar_cells(&sc->buf, row, 1, start, UI_TOKEN(UI_T_DIM), '-');
+    ansi_bar_cells(&sc->buf, row, 1 + start, size, UI_TOKEN(UI_T_INK), '#');
+    ansi_bar_cells(&sc->buf, row, 1 + start + size, sc->cols - start - size, UI_TOKEN(UI_T_DIM), '-');
+}
+
 /* The status row follows the selection. Drawn smart: a row already showing this text is not sent again, and a
    changed one is written only as far as the longer of the old and new text (the rest of the bar is untouched
    bar). `full` is a fresh frame, where the whole bar goes out once. */
@@ -490,6 +513,7 @@ static void draw_status(struct menudoor *d, int full)
             ansi_text(&sc->buf, lv->lay.status_row, 1 + first, line + (first < (int)strlen(line) ? first : (int)strlen(line)), width - first);
         }
     }
+    if (d->coverflow && d->depth == 0) draw_pages_bar(d);
     strcpy(d->status_drawn, line);
     strcpy(d->pager_drawn, pager);
     d->status_valid = 1;
@@ -554,7 +578,7 @@ static void draw_prompt(struct menudoor *d)
 {
     level *lv = cur(d);
     ui_screen *sc = &d->screen;
-    char line[512], bar_q[96], pen[4];                       /* room + two pens + the bar: a 255-column screen fits */
+    char line[768], bar_q[96], pen[4];                       /* room + the prompt's colours + pens + the bar */
     const char *bar = mode_bar(d, bar_q, sizeof bar_q), *lead;
     int row = lv->lay.prompt_row, room = sc->cols - 1 < 400 ? sc->cols - 1 : 400, plen, blen = bar ? (int)strlen(bar) : 0, gap, at;
 
@@ -568,9 +592,9 @@ static void draw_prompt(struct menudoor *d)
         strncat(line, lead, (size_t)room);
     } else {
         line[0] = '\0';
-        strncat(line, lv->menu.prompt, PROMPT_SHOWN);
+        add_prompt(line, lv);
         strncat(line, d->typed, TYPED_MAX);
-        plen = (int)strlen(line);
+        plen = prompt_len(lv) + d->typed_len;
         if (plen > room) plen = room;
     }
     at = (int)strlen(line);
@@ -961,10 +985,12 @@ static void move_key(struct menudoor *d, int key)
     if (ui_grid_move(&cur(d)->grid, key)) repaint_grid(d);
 }
 
-/* Cover flow owns Left/Right at the grid's edge and PageUp/PageDown (ui_pages_step); everything else moves the grid. */
+/* Cover flow owns Left/Right at the grid's edge and PageUp/PageDown (ui_pages_step); everything else moves the grid.
+   The palette is one column with Up/Down for a row, so Left/Right turn its page. */
 static void page_or_move(struct menudoor *d, int key)
 {
     int step = 0;
+    if (d->palette && (key == UI_KEY_LEFT || key == UI_KEY_RIGHT)) key = key == UI_KEY_LEFT ? UI_KEY_PGUP : UI_KEY_PGDN;
     if (d->coverflow && d->depth == 0 && !d->palette)
         step = ui_pages_step(&d->pages, key, d->typed_len, ui_grid_at_edge(&cur(d)->grid, key));
     if (step) ui_pages_turn(&d->pages, step);
@@ -1075,16 +1101,53 @@ static void show_match(struct menudoor *d)
     select_entry(d, idx);                                /* the one allowed window rewrite: one batch, no clear */
 }
 
+/* Tab on an empty line at the top (sysop 2026-10-17): the next door style, stored for the caller and shown at once.
+   Classic is not in the cycle: it leaves the door, and Tab could not bring it back. The catalogue is opened again
+   so the board's answer (one section never flips, a refused style) decides what shows; the selected row stays. */
+static void next_style(struct menudoor *d)
+{
+    static const char *const cycle[3] = { "pages", "coverflow", "scroll" };   /* after scroll, pages, coverflow */
+    static const char *const named[3] = { "Scroll", "Pages", "Cover flow" };
+    level *top = &d->lv[0];
+    int row = d->coverflow ? d->section_first + top->grid.selected : top->grid.selected;
+    int style = d->coverflow ? AE_MENU_STYLE_COVERFLOW : top->menu.style;
+    char line[40];
+
+    if (ae_menu_style(cycle[style], 0) != 1 || ae_menu_open(d->spec->kind, 0, &top->menu) != 1) {
+        say(d, "Could not change the menu style.");
+        return;
+    }
+    top->menu.last_row = row;
+    d->coverflow = 0;
+    if (top->menu.style != AE_MENU_STYLE_COVERFLOW || !start_coverflow(d))
+        configure(d, top, row);
+    show_frame(d, 0, 0);
+    sprintf(line, "Menu style: %s", named[d->coverflow ? AE_MENU_STYLE_COVERFLOW : top->menu.pages ? AE_MENU_STYLE_PAGES : AE_MENU_STYLE_SCROLL]);
+    say(d, line);
+}
+
 /* The palette's list: the catalogue ranked by the typed text (D12), copied into lv[0] so the grid, the mouse and
-   menudoor_entry see only the matches. */
+   menudoor_entry see only the matches. The matches sit under their catalogue section's header; a section comes in
+   the order of its best match and keeps the rank order inside, so entry 0 is still the best match of all. */
 static void palette_filter(struct menudoor *d)
 {
     static int order[AE_MENU_MAX_ENTRIES];
     ae_menu *m = &d->lv[0].menu;
-    int n = md_palette_rank(&catalogue, d->typed, order, AE_MENU_MAX_ENTRIES), i;
+    int n = md_palette_rank(&catalogue, d->typed, order, AE_MENU_MAX_ENTRIES), i, g, out = 0;
+    int groups[AE_MENU_MAX_SECTIONS], group_count = 0, sec;
 
-    for (i = 0; i < n; i++) { m->entries[i] = catalogue.entries[order[i]]; m->entry_section[i] = 0; }
-    m->entry_count = n;
+    for (i = 0; i < n; i++) {
+        sec = catalogue.entry_section[order[i]];
+        for (g = 0; g < group_count && groups[g] != sec; g++) {}
+        if (g == group_count && group_count < AE_MENU_MAX_SECTIONS) groups[group_count++] = sec;
+    }
+    for (g = 0; g < group_count; g++) {
+        strcpy(m->section_title[g], catalogue.section_title[groups[g]]);
+        for (i = 0; i < n; i++)
+            if (catalogue.entry_section[order[i]] == groups[g]) { m->entries[out] = catalogue.entries[order[i]]; m->entry_section[out++] = g; }
+    }
+    m->entry_count = out;
+    m->section_count = group_count;
 }
 
 /* After an edit: the list region again, the best match selected. The rows around it stay; a list that changes the
@@ -1154,8 +1217,9 @@ static menudoor_result loop(struct menudoor *d)
         case UI_KEY_MOUSE:
             r = on_mouse(d);
             break;
-        case 9:                                            /* Tab: show the type-ahead match the window does not */
-            show_match(d);
+        case 9:                                            /* Tab: the type-ahead match the window does not show; empty: the next style */
+            if (d->typed_len == 0 && d->depth == 0 && !d->palette) next_style(d);
+            else show_match(d);
             break;
         case UI_KEY_ESC:
             if (d->typed_len > 0) {
@@ -1259,8 +1323,7 @@ static int run_palette_started(struct menudoor *d, ae_session *session, const me
         return 0;
     }
     start_screen(d, session);
-    one_section(&top->menu, top->menu.title);
-    strcpy(top->menu.prompt, "Search: ");
+    strcpy(top->menu.prompt, "Search: ");             /* the catalogue keeps its sections: palette_filter groups by them */
     memcpy(&catalogue, &top->menu, sizeof catalogue);
     d->palette_total = catalogue.entry_count;
     overlay_place(d);

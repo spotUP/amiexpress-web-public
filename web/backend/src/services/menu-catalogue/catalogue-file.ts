@@ -1,7 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import type { Catalogue } from './types';
-import { cleanText } from '../../screens/menu-config/menu-config';
+import { cleanColouredText, cleanText } from '../../screens/menu-config/menu-config';
 
 export const CATALOGUE_MAGIC = 'AEMENU 1';
 const f = (s: string, max: number) => cleanText(s, max);
@@ -10,10 +10,11 @@ const w = (code: string) => code || '-';
 /**
  * Line order: K, T, P, O, W, F, R, L*, then S/E per section, then ".".
  * O <scroll|pages|coverflow> is the menu style (classic never gets here: the board shows its own screen).
+ * P keeps the board prompt's colours (cleanColouredText); every other field is plain text.
  * F <0|1> is the cover flow slide, always written (already 0 at 40 columns and on PETSCII).
  */
 export function formatCatalogue(c: Catalogue, lastRow: number): string {
-  const lines = [CATALOGUE_MAGIC, `K ${c.kind}\t${c.parent || '-'}`, `T ${f(c.title, 30)}`, `P ${f(c.prompt, 72)}`,
+  const lines = [CATALOGUE_MAGIC, `K ${c.kind}\t${c.parent || '-'}`, `T ${f(c.title, 30)}`, `P ${cleanColouredText(c.prompt, 72)}`,
     `O ${c.style}`, `W ${w(c.wipes.open)}\t${w(c.wipes.leave)}\t${w(c.wipes.page)}`, `F ${c.coverflow.slide ? 1 : 0}`];
   lines.push(`R ${Math.max(0, lastRow | 0)}`);
   for (const l of c.logos) lines.push(`L ${l.position}\t${l.rows}\t${l.cols}\t${l.afterSection}`);

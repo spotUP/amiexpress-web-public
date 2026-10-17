@@ -248,6 +248,13 @@ void ansi_set_colour(ansi_buf *b, int on);
  * two reach the caller as $12 and $92 (sdk/petscii/ansi-to-petscii.ts). */
 void ansi_reverse(ansi_buf *b, int on);
 
+/* `count` cells of a bar (a scrollbar's track or thumb, a pager's position
+ * line), one run: spaces on a solid `colour`, so Topaz and latin1 agree. With per-cell
+ * backgrounds the cell is that colour; a C64 gets the colour as the pen with
+ * reverse video on (the theme's DIM is dark, and ansi_color() only turns a
+ * light background into reverse). With colour off each cell is the ASCII `plain`. */
+void ansi_bar_cells(ansi_buf *b, int row, int col, int count, int colour, char plain);
+
 /* Hides/shows the hardware cursor. */
 void ansi_cursor(ansi_buf *b, int visible);
 
@@ -286,6 +293,21 @@ void ansi_text(ansi_buf *b, int row, int col, const char *text, int maxlen);
 /* Same, but does NOT pad - use where trailing cells must keep their
  * existing contents. */
 void ansi_text_raw(ansi_buf *b, int row, int col, const char *text, int maxlen);
+
+/* CSI is `ESC [`, then any number of parameter/intermediate bytes, then one
+ * final byte in 0x40-0x7E. Returns its length in bytes, 0 when `p` does not
+ * start one. A lone `ESC` that starts nothing is one byte and one column,
+ * which is what it looks like on screen. An unterminated run is all of it. */
+int ansi_escape_len(const char *p);
+
+/* The columns `text` fills on screen: a CSI escape costs none. The board's
+ * own prompt carries its colours (express.e:28417), so its length is not
+ * strlen. */
+int ansi_text_cols(const char *text);
+
+/* The bytes of `text` that fill at most `cols` columns, escapes inside the
+ * cut kept whole - so a clipped coloured string never ends half an escape. */
+int ansi_text_bytes(const char *text, int cols);
 
 /* Fills `width` columns at (row, col) with spaces in the given colours. */
 void ansi_fill(ansi_buf *b, int row, int col, int width, int fg, int bg);

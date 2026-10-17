@@ -87,3 +87,13 @@ int ui_pages_hit(const ui_pages *p, int row, int col)
     if (col >= start + n - 2 && col <= start + n - 1) return 1;
     return 0;
 }
+
+void ui_pages_bar(const ui_pages *p, int width, int *start, int *size)
+{
+    *start = 0;
+    *size = width;
+    if (p->count < 2 || width < 1) return;
+    *size = width / p->count;
+    if (*size < 1) *size = 1;
+    *start = p->current * (width - *size) / (p->count - 1);
+}

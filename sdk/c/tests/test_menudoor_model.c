@@ -182,10 +182,23 @@ static const char *CATALOGUE_SHORT_PROMPT =
     "AEMENU 1\nK MAIN\t-\nT MAIN MENU\nP Go: \nO pages\nW -\t-\t-\nR 0\nS Messages\n"
     "E R\tRead Mail\tRead your mail\t\t\nE E\tEnter Message\tWrite a message\t\t\n.\n";
 
+static char catalogue_text[2048];
 static void write_catalogue(const char *text)
 {
     FILE *f = fopen(CAT_PATH, "wb");
     assert(f); fputs(text, f); fclose(f);
+    if (text != catalogue_text) { strncpy(catalogue_text, text, sizeof catalogue_text - 1); catalogue_text[sizeof catalogue_text - 1] = '\0'; }
+}
+
+/* What the board does on STYLE <mode>: the next OPEN carries the stored style on its O line. */
+static void restyle_catalogue(const char *mode)
+{
+    char out[2048], *o = strstr(catalogue_text, "\nO "), *end;
+    if (!o || strcmp(mode, "default") == 0 || strcmp(mode, "classic") == 0) return;
+    end = strchr(o + 1, '\n');
+    sprintf(out, "%.*s\nO %s%s", (int)(o - catalogue_text), catalogue_text, mode, end);
+    strcpy(catalogue_text, out);
+    write_catalogue(catalogue_text);
 }
 
 static char requests[4096];
@@ -227,7 +240,7 @@ static int board(void *ctx, int field, const char *request, char *out, int cap)
     strcat(requests, request); strcat(requests, "|");
     if (silent_board) return 0;
     if (strcmp(request, "STYLE?") == 0) return answer("default\tpages", out, cap);
-    if (strncmp(request, "STYLE ", 6) == 0) return answer("OK\tpages", out, cap);
+    if (strncmp(request, "STYLE ", 6) == 0) { restyle_catalogue(request + 6); return answer("OK\tpages", out, cap); }
     if (strncmp(request, "OPEN ", 5) == 0) return answer("OK\t" CAT_PATH, out, cap);
     if (strncmp(request, "LOGO ", 5) == 0) { if (logo_shows_cursor) ae_put("\033[0m\033[?25h", 0); return answer("OK\t3", out, cap); }
     if (strncmp(request, "ROW ", 4) == 0 || strncmp(request, "RUN ", 4) == 0) return answer("OK", out, cap);
@@ -460,8 +473,40 @@ static void cover_flow_turns_a_page_with_right_and_one_slide(void)
     assert(strstr(screen_text, "< 2/3 Files >"));
     assert(strstr(screen_text, "Download"));
     assert(strstr(requests, "ROW 1|"));                                    /* a catalogue row, not a page row */
+    /* The position bar on the row above the status bar (colour off here: '#' thumb on a '-' track): a third of 80
+       columns, at the left edge on page 1, moved to the middle on page 2. */
+    assert(strstr(screen_text, "\x1b[23;1H##########################\x1b[23;27H-"));
+    assert(strstr(screen_text, "\x1b[23;28H##########################"));
+    assert(DRIVE("\x1b[C\x1b[Dq") == 0);                                  /* Left turns back: the thumb follows */
+    {
+        const char *back = strstr(screen_text, "< 2/3 Files >");
+        assert(back && (back = strstr(back, "< 1/3 Messages >")) != NULL);
+        assert(strstr(back, "\x1b[23;1H##########################"));     /* back at the left edge */
+    }
     write_catalogue(CATALOGUE);
     printf("  [OK] cover flow: Right turns to page 2/3 with one slide and leaves on the catalogue row\n");
+    printf("  [OK] cover flow: the position bar's thumb follows the page, Right and Left\n");
+}
+
+/* Tab on an empty line (sysop 2026-10-17): scroll, pages, cover flow, scroll - stored for the caller, shown at once. */
+static void tab_cycles_the_menu_style(void)
+{
+    const char *at;
+    write_catalogue(CATALOGUE_FLOW);
+    restyle_catalogue("scroll");
+    mouse_queue = 0; silent_board = 0;
+    assert(DRIVE("\t\t\tq") == 0);
+    at = strstr(requests, "STYLE pages|OPEN MAIN|");
+    assert(at && (at = strstr(at, "STYLE coverflow|OPEN MAIN|")) != NULL && strstr(at, "STYLE scroll|OPEN MAIN|"));
+    assert(count_of(requests, "OPEN MAIN|") == 4);
+    at = strstr(screen_text, "Menu style: Pages");
+    assert(at && (at = strstr(at, "< 1/3 Messages >")) != NULL);           /* cover flow's first page, then its notice */
+    assert((at = strstr(at, "Menu style: Cover flow")) != NULL && strstr(at, "Menu style: Scroll"));
+    restyle_catalogue("scroll");                                          /* typed text: Tab keeps the type-ahead match */
+    assert(DRIVE("r\t\x1bq") == 0);
+    assert(!strstr(requests, "STYLE "));
+    write_catalogue(CATALOGUE);
+    printf("  [OK] Tab on an empty line cycles scroll, pages, cover flow and stores each for the caller\n");
 }
 
 /* Cover flow is one column (sysop 2026-10-17): Down moves within the page, Right turns it from any row. */
@@ -499,7 +544,7 @@ static void a_page_turn_paints_the_region_once(void)
     open_only = strlen(screen_text);
     assert(DRIVE("\x1b[Cq") == 0);
     turn = strlen(screen_text) - open_only;
-    assert(turn > 0 && turn < 1200);
+    assert(turn > 0 && turn < 1300);                                     /* measured 1256 with the position bar */
     assert(!strstr(requests, "WIPE IN P ") && strstr(screen_text, "< 2/3 Files >"));   /* no slide at 40 columns */
     size_reply = "80\t25";
     write_catalogue(CATALOGUE);
@@ -726,7 +771,8 @@ static void the_palette_is_an_overlay_the_board_gives_back(void)
     assert(strstr(screen_text, "Search") && strstr(screen_text, "Type to search the menu") && strstr(screen_text, "14 of 14"));
     assert(strstr(screen_text, "Description of Read Mail"));
     assert(!strstr(screen_text, "SEARCH"));                   /* no masthead title */
-    assert(paint80 <= 2048);                                  /* plan K5; measured 1931 */
+    assert(strstr(screen_text, "Messages") && strstr(screen_text, "Messages") < strstr(screen_text, "Read Mail"));   /* entries under their section */
+    assert(paint80 <= 2048);                                  /* plan K5; measured 1979 with section headers */
 
     size_reply = "40\t25"; write_big_catalogue("scroll");
     paint40 = wrote("\x1b");
@@ -734,13 +780,42 @@ static void the_palette_is_an_overlay_the_board_gives_back(void)
     assert(!strstr(screen_text, "\033[2J") && !strstr(screen_text, "\033[K"));
     assert(addresses_inside(screen_text, 6, 19, 2, 39));
     /* Plan K5's 900 bytes at 40x25 is the PETSCII wire, where each 24-bit pen becomes one colour byte; it is measured
-       through the board's transducer in mainmenu-screens.test.ts. This pins the door's ANSI side (measured 1373). */
+       through the board's transducer in mainmenu-screens.test.ts. This pins the door's ANSI side (measured 1382). */
     assert(paint40 <= 1400);
 
     size_reply = "80\t25";
     assert(wrote("mail\x15\x1b") > 0);                      /* typed, filtered, cleared (Ctrl-U), then Esc leaves */
     assert(count_of(requests, "RESTORE|") == 1 && !strstr(screen_text, "\033[2J"));
     assert(addresses_inside(screen_text, 5, 20, 11, 70) && !strstr(screen_text, "\033[K"));     /* the filter repaints stay in the box */
+
+    {   /* Left/Right in the palette turn a page like PageUp/PageDown, never one row like Up/Down */
+        static char right[65536], pgdn[65536], down[65536], back[65536], pgup[65536];
+        wrote("\x1b[C\x1b"); strcpy(right, screen_text);
+        wrote("\x1b[6~\x1b"); strcpy(pgdn, screen_text);
+        wrote("\x1b[B\x1b"); strcpy(down, screen_text);
+        wrote("\x1b[C\x1b[D\x1b"); strcpy(back, screen_text);
+        wrote("\x1b[6~\x1b[5~\x1b"); strcpy(pgup, screen_text);
+        assert(strcmp(right, pgdn) == 0 && strcmp(right, down) != 0 && strcmp(back, pgup) == 0);
+    }
+
+    wrote("live\x1b");
+    {   /* A flush sends changed cells only, in row order: the field row, then the grid below it. After "l" every entry
+           still matches, LIVECHAT best (its key starts with L): its section leads, the others follow in catalogue order. */
+        static char plain[65536], grid[65536];
+        const char *s, *from, *to;
+        char *o = plain;
+        for (s = screen_text; *s; s++) {                      /* colours off: the prompt and the typed text differ in ink */
+            if (*s == '\033' && s[1] == '[' && strchr(s + 2, 'm') && strspn(s + 2, "0123456789;") == (size_t)(strchr(s + 2, 'm') - (s + 2))) { s = strchr(s + 2, 'm'); continue; }
+            *o++ = *s;
+        }
+        *o = 0;
+        from = strstr(plain, "Search: l"); to = from ? strstr(from, "Search: li") : 0;
+        assert(from && to);
+        memcpy(grid, from, (size_t)(to - from)); grid[to - from] = 0;
+        assert(strstr(grid, "Community") && strstr(grid, "Messages") && strstr(grid, "Files"));
+        assert(strstr(grid, "Community") < strstr(grid, "Live Chat") && strstr(grid, "Live Chat") < strstr(grid, "Messages"));
+        assert(strstr(grid, "Messages") < strstr(grid, "Files"));
+    }
 
     board_holds_cells = 0;                                    /* a board that keeps nothing: the door closes with a clear */
     assert(wrote("\x1b") > 0);
@@ -1774,6 +1849,7 @@ int main(void)
     the_cursor_is_hidden_in_navigation_mode_after_every_board_write_and_parked_when_typing();
     cover_flow_turns_a_page_with_right_and_one_slide();
     cover_flow_is_one_column_and_pages_wrap();
+    tab_cycles_the_menu_style();
     a_page_turn_paints_the_region_once();
     cover_flow_without_the_slide_or_with_one_section();
     remove(CAT_PATH); remove("build/test_menudoor_keys.bin"); remove("build/test_menudoor_screen.bin");

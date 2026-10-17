@@ -41,7 +41,7 @@ typedef struct {
 typedef struct { char position[8]; int rows, cols, after_section; } ae_menu_logo;
 
 typedef struct {
-    char kind[16]; char parent[16]; char title[31]; char prompt[73];
+    char kind[16]; char parent[16]; char title[31]; char prompt[256];   /* 72 columns plus the board's colours */
     int style;                               /* AE_MENU_STYLE_*, the catalogue's O line */
     int pages;                               /* 1 = PAGES mode (style == AE_MENU_STYLE_PAGES) */
     int slide;                               /* "F 1": cover flow slides between pages */

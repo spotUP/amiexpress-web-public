@@ -38,19 +38,9 @@ void ui_doc_style_init(ui_doc_style *style)
  * two characters short on every coloured row and a bare `[32m12.` printed as
  * text where the ESC had been left on the line above (2026-09-14).
  *
- * CSI is `ESC [`, then any number of parameter/intermediate bytes, then one
- * final byte in 0x40-0x7E. A lone `ESC` that starts nothing is one byte and
- * one column, which is what it looks like on screen.
+ * ansi_escape_len (ui_ansi.h) measures one; the menu door's prompt row needs
+ * the same measure, so it lives with the writer.
  */
-static int ansi_escape_len(const char *p)
-{
-    int n;
-
-    if (p[0] != 0x1b || p[1] != '[') return 0;
-    n = 2;
-    while (p[n] && ((unsigned char)p[n] < 0x40 || (unsigned char)p[n] > 0x7e)) n++;
-    return p[n] ? n + 1 : n;       /* an unterminated run is all of it */
-}
 
 int ui_doc_wrap(const char *text, int width,
                 void (*line)(void *context, const char *start, int len),
