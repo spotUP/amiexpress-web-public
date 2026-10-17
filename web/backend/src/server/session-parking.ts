@@ -53,6 +53,12 @@ const windowDeadlines = new WeakMap<object, number>();
 const resuming = new WeakSet<object>();
 /** The finalize a session's end is running, so a caller can wait for it. */
 const endings = new WeakMap<object, Promise<void>>();
+/**
+ * Who waits for a session to leave the maps (S11). The finalize clears the
+ * maps and frees the node first, then does slow paperwork (logoff batches
+ * run a 68K door); a reclaim needs only the first part.
+ */
+const forgottenWaiters = new WeakMap<object, () => void>();
 
 /** `web_resume_minutes` (WEB_RESUME_MINUTES) in ms; default 10 min, 0 = never park. */
 export function resumeWindowMs(): number {
@@ -115,6 +121,17 @@ export function installParking(link: SessionLink, session: BBSSession): void {
       return 'park';
     },
   });
+}
+
+/**
+ * The finalize calls this right after the session left the maps and its
+ * token was revoked: its node is free from here on, whatever the paperwork
+ * after it does.
+ */
+export function noteSessionForgotten(session: object): void {
+  const wake = forgottenWaiters.get(session);
+  forgottenWaiters.delete(session);
+  wake?.();
 }
 
 /** The disconnect handler registers the finalize it runs, so `endParkedSessionsFor` can wait for it. */
@@ -334,7 +351,8 @@ export function oldestParkedSession(): BBSSession | null {
  * the session parked longest ends through the one disconnect handler - the
  * same `Loss Carrier` finalize its window would have run, stamped with the
  * drop time (S8), account saved, token revoked, node released - and this
- * waits for that finalize. False when nothing is parked: the caller is
+ * waits until that finalize has taken the session off the maps (not for its
+ * logoff batches, which can run a door for seconds). False when nothing is parked: the caller is
  * refused as before.
  *
  * WEB_: express.e has no parked state; a dropped carrier there is already a
@@ -344,8 +362,14 @@ export async function reclaimParkedNode(): Promise<boolean> {
   const s = oldestParkedSession();
   if (!s) return false;
   console.log(`[RECLAIM] board full: ending the session parked longest, node ${s.nodeId}`);
+  // Wait for the node, not the paperwork: the finalize wakes this as soon as
+  // the session has left the maps. A finalize that ends (or throws) before
+  // that point also ends the wait.
+  const forgotten = new Promise<void>((resolve) => forgottenWaiters.set(s, resolve));
   s.webLink!.end('transport close');
-  await endings.get(s);
+  const ending = endings.get(s);
+  if (ending) await Promise.race([forgotten, ending.catch(() => undefined)]);
+  forgottenWaiters.delete(s);
   return true;
 }
 

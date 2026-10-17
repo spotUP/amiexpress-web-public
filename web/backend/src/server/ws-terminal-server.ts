@@ -49,14 +49,7 @@ export class WSTerminalConnection extends EventEmitter {
     this.sessionId = `wsterm-${this.nodeId}-${Date.now()}`;
     this._remoteAddress = remoteAddress;
 
-    ws.on("message", (chunk: Buffer | string) => {
-      // Browsers and CLI WS clients send text frames; tunneled binary
-      // is treated as raw bytes too. Coerce to Buffer for consistency
-      // with TelnetConnection's 'data' contract.
-      const buf =
-        typeof chunk === "string" ? Buffer.from(chunk, "utf-8") : chunk;
-      this.emit("data", buf);
-    });
+    ws.on("message", (chunk: Buffer | string) => this.receive(chunk));
 
     ws.on("close", () => {
       this.emit("close");
@@ -65,6 +58,17 @@ export class WSTerminalConnection extends EventEmitter {
     ws.on("error", (err: Error) => {
       this.emit("error", err);
     });
+  }
+
+  /**
+   * One frame from the caller. Browsers and CLI WS clients send text
+   * frames; tunneled binary is treated as raw bytes too. Coerce to Buffer
+   * for consistency with TelnetConnection's 'data' contract.
+   */
+  receive(chunk: Buffer | string): void {
+    const buf =
+      typeof chunk === "string" ? Buffer.from(chunk, "utf-8") : chunk;
+    this.emit("data", buf);
   }
 
   private _remoteAddress: string;
@@ -135,27 +139,11 @@ export function attachWSTerminalServer(
     });
   });
 
-  wss.on("connection", async (ws: WSLike, req: any) => {
-    const remoteAddress =
-      (req?.headers?.["x-forwarded-for"] as string | undefined)
-        ?.split(",")[0]
-        ?.trim() ||
-      req?.socket?.remoteAddress ||
-      "unknown";
-    // A node first, as every other transport takes one; a full board first
-    // ends the session parked longest (S11), then says so.
-    const nodeId = getNextAvailableNodeId() ?? await reclaimedNodeId();
-    if (nodeId === null) {
-      console.warn(`[WS-Terminal] All nodes busy - refusing ${remoteAddress}`);
-      try { ws.send(allNodesBusyNotice()); } catch { /* already gone */ }
+  wss.on("connection", (ws: WSLike, req: any) => {
+    acceptWSTerminal(ws, req, connectionHandler).catch((err: unknown) => {
+      console.error("[WS-Terminal] Connection setup failed:", err instanceof Error ? err.message : err);
       try { ws.close(); } catch { /* already gone */ }
-      return;
-    }
-    const conn = new WSTerminalConnection(ws, remoteAddress, nodeId);
-    console.log(
-      `[WS-Terminal] Connection from ${remoteAddress} on node ${conn.nodeId}`,
-    );
-    connectionHandler(conn);
+    });
   });
 
   wss.on("error", (err: Error) => {
@@ -164,4 +152,42 @@ export function attachWSTerminalServer(
 
   console.log("[WS-Terminal] Endpoint ready at /ws/terminal");
   return wss;
+}
+
+async function acceptWSTerminal(
+  ws: WSLike,
+  req: any,
+  connectionHandler: (conn: WSTerminalConnection) => void,
+): Promise<void> {
+  const remoteAddress =
+    (req?.headers?.["x-forwarded-for"] as string | undefined)
+      ?.split(",")[0]
+      ?.trim() ||
+    req?.socket?.remoteAddress ||
+    "unknown";
+  // A node first, as every other transport takes one; a full board first
+  // ends the session parked longest (S11), then says so. Frames that
+  // arrive while the reclaim runs are held and handed to the connection
+  // once it exists, in order (a paused telnet socket keeps them the same
+  // way); errors meanwhile are logged rather than left unheard.
+  const early: Array<Buffer | string> = [];
+  let holding = true;
+  ws.on("message", (chunk: Buffer | string) => { if (holding) early.push(chunk); });
+  ws.on("error", (err: Error) => {
+    if (holding) console.warn(`[WS-Terminal] ${remoteAddress} failed while a node was freed: ${err.message}`);
+  });
+  const nodeId = getNextAvailableNodeId() ?? await reclaimedNodeId();
+  if (nodeId === null) {
+    console.warn(`[WS-Terminal] All nodes busy - refusing ${remoteAddress}`);
+    try { ws.send(allNodesBusyNotice()); } catch { /* already gone */ }
+    try { ws.close(); } catch { /* already gone */ }
+    return;
+  }
+  const conn = new WSTerminalConnection(ws, remoteAddress, nodeId);
+  console.log(
+    `[WS-Terminal] Connection from ${remoteAddress} on node ${conn.nodeId}`,
+  );
+  connectionHandler(conn);
+  holding = false;
+  for (const chunk of early.splice(0)) conn.receive(chunk);
 }

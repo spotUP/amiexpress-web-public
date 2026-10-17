@@ -332,8 +332,10 @@ console.warn('[SSH Server] Or manually: ssh-keygen -t rsa -b 4096 -f data/ssh/ss
           keepaliveInterval: 60000,
           keepaliveCountMax: 3,
         } as any, (client: Connection) => {
-          this.handleConnection(client).catch((err: unknown) =>
-            console.error('[SSH Server] Connection setup failed:', err instanceof Error ? err.message : err));
+          this.handleConnection(client).catch((err: unknown) => {
+            console.error('[SSH Server] Connection setup failed:', err instanceof Error ? err.message : err);
+            client.end();   // a half-seated caller must not hold the line open
+          });
         });
 
         this.server.on('error', this.handleError.bind(this));
@@ -396,7 +398,25 @@ console.warn(`[SSH Server] Rate limit exceeded for ${remoteAddress}`);
     // A node first, as the web and telnet paths take one. A full board first
     // ends the session parked longest (S11); an SSH client is still
     // authenticating here, so a board still full just closes it.
+    //
+    // SSHConnection attaches the client's 'error' listener only once a node
+    // is in hand; a reset during the reclaim would be an uncaught 'error'
+    // that takes the server down. These hold the client until then, and
+    // note a client that died meanwhile so it is not seated as a ghost.
+    let gone = false;
+    const earlyError = (err: Error) =>
+      console.warn(`[SSH Server] ${remoteAddress} failed while a node was freed: ${err.message}`);
+    const earlyClose = () => { gone = true; };
+    client.on('error', earlyError);
+    client.on('close', earlyClose);
     const nodeId = getNextAvailableNodeId() ?? await reclaimedNodeId();
+    client.off('close', earlyClose);
+    if (gone) {
+console.warn(`[SSH Server] ${remoteAddress} hung up while a node was freed`);
+      client.off('error', earlyError);
+      return;
+    }
+    if (nodeId !== null) client.off('error', earlyError);
     if (nodeId === null) {
 console.warn(`[SSH Server] All nodes busy - refusing ${remoteAddress}`);
       client.end();

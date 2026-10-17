@@ -25,7 +25,7 @@ import {
   socketToNodeId,
   userSessions,
   allNodesBusyNotice } from './session-manager';
-import { noteSessionEnding, isParked } from './session-parking';
+import { noteSessionEnding, noteSessionForgotten, isParked } from './session-parking';
 import { revokeResumeToken } from './resume-tokens';
 import { callersLog, getRecentCallerActivity } from './database-helpers';
 import { nodeManager } from '../services/node-manager.service';
@@ -1001,6 +1001,8 @@ console.log(`[DISCONNECT] finalizeDisconnectCleanup: userId=${userId || '-'}, no
   forgetSession(session, socketId, userId);
   // The call is over: its resume token must never bring it back.
   revokeResumeToken(session);
+  // Its node is free now; a full board waiting to reclaim it goes on (S11).
+  noteSessionForgotten(session);
 
   // A pending W resume belongs to this call only; drop it before anything
   // that can await or throw (settings-resume.ts).

@@ -776,8 +776,10 @@ export class TelnetServer extends EventEmitter {
     this.server = new NetServer();
 
     this.server.on('connection', (socket: Socket) => {
-      this.handleConnection(socket).catch((err: unknown) =>
-        console.error('[Telnet Server] Connection setup failed:', err instanceof Error ? err.message : err));
+      this.handleConnection(socket).catch((err: unknown) => {
+        console.error('[Telnet Server] Connection setup failed:', err instanceof Error ? err.message : err);
+        socket.destroy();   // a half-seated caller must not hold the line open
+      });
     });
     this.server.on('error', this.handleError.bind(this));
   }
@@ -912,7 +914,16 @@ console.log('[Telnet Server] Stopped');
     // A node first, as the web path takes one: a full board first ends the
     // session parked longest (S11), and only then says so and hangs up rather
     // than seating a second caller on somebody's node. A free node never waits.
+    //
+    // The reclaim awaits, and TelnetConnection attaches the socket's 'error'
+    // listener only once a node is in hand: a reset in between would be an
+    // uncaught 'error' that takes the whole server down. This one holds the
+    // socket until the connection takes over (or the caller is refused).
+    const earlyError = (err: Error) =>
+      console.warn(`[Telnet Server] ${remoteAddress} failed while a node was freed: ${err.message}`);
+    socket.on('error', earlyError);
     const nodeId = getNextAvailableNodeId() ?? await reclaimedNodeId();
+    if (nodeId !== null) socket.off('error', earlyError);
     if (nodeId !== null && socket.destroyed) {
       console.warn(`[Telnet Server] ${remoteAddress} hung up while a node was freed`);
       return;

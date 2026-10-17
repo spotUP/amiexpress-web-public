@@ -46,6 +46,18 @@ jest.mock('../../src/services/bbs-config-file.service', () => ({
   loadBBSConfig: () => ({}),
 }));
 
+// The logoff batches run a 68K door; a test can make one hang (S11 review #2).
+jest.mock('../../src/services/batch-scheduler', () => ({
+  ...jest.requireActual('../../src/services/batch-scheduler'),
+  runLogoffBatches: jest.fn().mockResolvedValue(undefined),
+}));
+
+// The byte transports' reclaim, so a test can hold it open (S11 review #1).
+jest.mock('../../src/server/session-parking', () => {
+  const actual = jest.requireActual('../../src/server/session-parking');
+  return { ...actual, reclaimedNodeId: jest.fn() };
+});
+
 import { createSessionLink } from '../../src/server/session-link';
 import { installParking, isParked } from '../../src/server/session-parking';
 import { registerDisconnectHandler } from '../../src/server/socket-handlers';
@@ -56,6 +68,10 @@ import { sessions, getSession, setSession, socketToUser, userSessions, allNodesB
 import { BBSState } from '../../src/constants/bbs-states';
 import { callersLogManager } from '../../src/services/CallersLogManager';
 import { TelnetServer } from '../../src/server/telnet-server';
+import { SSHServerImpl } from '../../src/server/ssh-server';
+import { attachWSTerminalServer, WSTerminalConnection } from '../../src/server/ws-terminal-server';
+import * as parking from '../../src/server/session-parking';
+import { runLogoffBatches } from '../../src/services/batch-scheduler';
 
 function fakeRaw(id: string) {
   const ee: any = new EventEmitter();
@@ -109,6 +125,8 @@ const io = { sockets: { sockets: new Map() } } as never;
 let logoffSpy: jest.SpyInstance;
 const opened: any[] = [];
 beforeEach(() => {
+  (parking.reclaimedNodeId as jest.Mock).mockReset()
+    .mockImplementation(jest.requireActual('../../src/server/session-parking').reclaimedNodeId);
   sessions.clear();
   _resetResumeTokensForTests();
   logoffSpy = jest.spyOn(callersLogManager, 'logLogoffOnce').mockImplementation(() => undefined as never);
@@ -165,6 +183,35 @@ describe('a full board reclaims a parked node (web, through acceptWebConnection)
     expect(getSession('N')!.nodeId).toBe(3);
   });
 
+  it('two parked, oldest inserted first: still the one parked longest goes', async () => {
+    const older = parkedCaller(3, 2_000, '7');
+    const newer = parkedCaller(4, 9_000, '8');
+
+    const n = fakeRaw('N');
+    await acceptWebConnection(io, n as never, webDeps(null, 3) as never);
+    opened.push(getSession('N'));
+
+    expect(older.link.ended).toBe(true);
+    expect(newer.link.ended).toBe(false);
+    expect(getSession('N')!.nodeId).toBe(3);
+  });
+
+  it('a logoff batch that never ends does not hold the new caller: the node is his once the maps are clear', async () => {
+    (runLogoffBatches as jest.Mock).mockImplementationOnce(() => new Promise(() => {}));
+    liveCaller(4);
+    const { link } = parkedCaller(3, 1_000, '7');
+
+    const n = fakeRaw('N');
+    const accepted = acceptWebConnection(io, n as never, webDeps(null, 3) as never).then(() => 'seated');
+    const timeout = new Promise((r) => setTimeout(() => r('still waiting'), 500));
+    expect(await Promise.race([accepted, timeout])).toBe('seated');
+    opened.push(getSession('N'));
+
+    expect(link.ended).toBe(true);
+    expect(runLogoffBatches).toHaveBeenCalled();   // the hang was really in the way
+    expect(getSession('N')!.nodeId).toBe(3);
+  });
+
   it('nothing parked: refused with the busy notice, as before', async () => {
     liveCaller(3); liveCaller(4);
     const n = fakeRaw('N');
@@ -183,7 +230,7 @@ describe('a full board reclaims a parked node (telnet, through TelnetServer.hand
     return {
       remoteAddress: '10.9.0.9', destroyed: false,
       setNoDelay: jest.fn(), setKeepAlive: jest.fn(), setTimeout: jest.fn(),
-      write: jest.fn(), end: jest.fn(), destroy: jest.fn(), on: jest.fn(), once: jest.fn(),
+      write: jest.fn(), end: jest.fn(), destroy: jest.fn(), on: jest.fn(), once: jest.fn(), off: jest.fn(),
     };
   }
 
@@ -217,5 +264,101 @@ describe('a full board reclaims a parked node (telnet, through TelnetServer.hand
     expect(s.write).toHaveBeenCalledWith(allNodesBusyNotice());
     expect(s.end).toHaveBeenCalled();
     expect((server as any).connections.size).toBe(0);
+  });
+});
+
+/** A reclaim the test lets finish when it chooses. */
+function heldReclaim(): { release: (node: number | null) => void } {
+  let release!: (node: number | null) => void;
+  const p = new Promise<number | null>((r) => { release = r; });
+  (parking.reclaimedNodeId as jest.Mock).mockReturnValueOnce(p);
+  return { release };
+}
+const tick = () => new Promise((r) => setImmediate(r));
+
+describe('a caller who fails while a node is freed (S11 review #1, #3, #4)', () => {
+  function emitterSocket() {
+    const s: any = new EventEmitter();
+    Object.assign(s, {
+      remoteAddress: '10.9.0.9', destroyed: false,
+      setNoDelay: jest.fn(), setKeepAlive: jest.fn(), setTimeout: jest.fn(),
+      write: jest.fn(), end: jest.fn(), destroy: jest.fn(() => { s.destroyed = true; }),
+    });
+    return s;
+  }
+
+  it('telnet: a reset during the reclaim is heard, and a caller gone by then is not seated', async () => {
+    liveCaller(3); liveCaller(4);
+    const held = heldReclaim();
+    const server = new TelnetServer(0);
+    const s = emitterSocket();
+    const accepting = (server as any).handleConnection(s);
+    expect(() => s.emit('error', Object.assign(new Error('read ECONNRESET'), { code: 'ECONNRESET' }))).not.toThrow();
+    s.destroyed = true; s.emit('close');
+    held.release(3);
+    await accepting;
+    expect((server as any).connections.size).toBe(0);
+  });
+
+  it('telnet: a connection that fails to set up is hung up, not left open', async () => {
+    liveCaller(3); liveCaller(4);
+    (parking.reclaimedNodeId as jest.Mock).mockRejectedValueOnce(new Error('boom'));
+    const server = new TelnetServer(0);
+    const s = emitterSocket();
+    (server as any).server.emit('connection', s);
+    await tick();
+    expect(s.destroy).toHaveBeenCalled();
+  });
+
+  it('SSH: a reset during the reclaim is heard, and a client gone by then is not kept', async () => {
+    liveCaller(3); liveCaller(4);
+    const held = heldReclaim();
+    const server = new SSHServerImpl(0);
+    const c: any = new EventEmitter();
+    c._sock = { remoteAddress: '10.9.0.8' };
+    c.end = jest.fn();
+    const accepting = (server as any).handleConnection(c);
+    expect(() => c.emit('error', new Error('read ECONNRESET'))).not.toThrow();
+    c.emit('close');
+    held.release(3);
+    await accepting;
+    expect((server as any).connections.size).toBe(0);
+  });
+
+  function fakeWs() {
+    const w: any = new EventEmitter();
+    Object.assign(w, { readyState: 1, OPEN: 1, send: jest.fn(), close: jest.fn() });
+    return w;
+  }
+
+  it('/ws/terminal: keys typed while a node is freed reach the session, in order', async () => {
+    liveCaller(3); liveCaller(4);
+    const held = heldReclaim();
+    const got: string[] = [];
+    const wss = attachWSTerminalServer(new EventEmitter() as never, (conn: WSTerminalConnection) => {
+      conn.on('data', (b: Buffer) => got.push(b.toString()));
+    });
+    const w = fakeWs();
+    wss.emit('connection', w, { headers: {}, socket: { remoteAddress: '10.9.0.7' } });
+    w.emit('message', 'ab');
+    w.emit('message', Buffer.from('c'));
+    expect(() => w.emit('error', new Error('reset'))).not.toThrow();
+    held.release(3);
+    await tick();
+    w.emit('message', 'd');
+    expect(got.join('')).toBe('abcd');
+    wss.close();
+  });
+
+  it('/ws/terminal: a connection that fails to set up is closed and logged, not an unhandled rejection', async () => {
+    liveCaller(3); liveCaller(4);
+    (parking.reclaimedNodeId as jest.Mock).mockRejectedValueOnce(new Error('boom'));
+    const wss = attachWSTerminalServer(new EventEmitter() as never, () => {});
+    const w = fakeWs();
+    wss.emit('connection', w, { headers: {} });
+    await tick();
+    expect(w.close).toHaveBeenCalled();
+    expect(console.error).toHaveBeenCalledWith('[WS-Terminal] Connection setup failed:', 'boom');
+    wss.close();
   });
 });
