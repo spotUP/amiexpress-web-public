@@ -27,6 +27,7 @@ import {
 import { sessions, socketToNodeId, socketToUser, setSession, getNextAvailableNodeId } from './session-manager';
 import { startObserving, stopObserving } from './session-observers';
 import { getSystemTime } from '../utils/date-time.util';
+import { publishNodeStatus } from '../utils/acs.util';
 import { cleanupTransfer } from '../utils/raw-transfer-teardown.util';
 import { sessionWantsPetscii, disposePetsciiSessionModel } from '../utils/petscii-session-model';
 
@@ -144,6 +145,7 @@ export function installParking(link: SessionLink, session: BBSSession): void {
       cleanupTransfer(session);                      // a ZMODEM cannot cross sockets (Decision 16)
       setResumeExpiry(session, session.detachedAt + windowMs);
       armWindow(link, session, session.detachedAt + windowMs);
+      publishNodeStatus(session);                    // WHO doors: carrier lost
       console.log(`[PARK] node ${session.nodeId} parked for ${windowMs / 60000} min (${reason})`);
       return 'park';
     },
@@ -276,6 +278,7 @@ export function attachParkedTo(raw: Socket, session: BBSSession, user: AttachUse
   session.detachedAt = undefined;
   session.detachedBoardTime = undefined;
   setResumeExpiry(session, null);
+  publishNodeStatus(session);                        // WHO doors: its action again
   // A fresh token for this socket; the old one stops working at once. Issued,
   // not rotated: a session moved from another device (S9) may hold none.
   const next = issueResumeToken(session, String(user.id), session.nodeId);

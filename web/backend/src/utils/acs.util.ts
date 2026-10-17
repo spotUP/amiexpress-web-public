@@ -12,6 +12,8 @@ import { ACSPermission, ACS_PERMISSION_NAMES } from '../constants/acs-permission
 import { EnvStat } from '../constants/env-codes';
 import type { User } from '../database';
 import { boardRoot } from './board-root.util';
+import { multicomManager } from '../nodes/MulticomManager';
+import { PARKED_NODE_STATUS } from '../constants/env-codes';
 import {
   loadAcsAccessFiles,
   isAcsLoaded,
@@ -441,7 +443,11 @@ export function clearOverride(session: any): void {
 }
 
 /**
- * Set environment status (what user is currently doing)
+ * Set environment status (what user is currently doing).
+ *
+ * express.e:13184 setEnvStat - the one action setter. It sets currentStat and,
+ * on a MULTICOM board, writes the node's singlePort (handle, location, status)
+ * that WHO doors such as rTW read. Here that is publishNodeStatus.
  */
 export function setEnvStat(session: any, envStat: EnvStat): void {
   session.currentStat = envStat;
@@ -453,6 +459,36 @@ export function setEnvStat(session: any, envStat: EnvStat): void {
     writeEnvStatus(nodeId, username, envStat);
   } catch (error) {
 console.error(`[EnvStat] Failed to write STATS@${nodeId}:`, error);
+  }
+
+  publishNodeStatus(session);
+}
+
+/**
+ * The singlePort status a session shows other nodes: its current action, the
+ * carrier-lost status while it is parked (session-parking), and express.e's
+ * quiet-node encoding `0-(statCode+2)` (express.e:13212) on top.
+ */
+export function nodeStatusOf(session: any): number {
+  const stat = typeof session?.detachedAt === 'number'
+    ? PARKED_NODE_STATUS
+    : (session?.currentStat ?? EnvStat.IDLE);
+  return session?.quietFlag ? 0 - (stat + 2) : stat;
+}
+
+/**
+ * Write the session's node (handle, location, status) to the MULTICOM table
+ * every emulator reads - express.e setEnvStat's singleNode block. Parking and
+ * resume call this too, so there is one writer of a caller's node status.
+ * A session with no logged-on user has no node to show yet.
+ */
+export function publishNodeStatus(session: any): void {
+  const user = session?.user;
+  if (!user || typeof session?.nodeId !== 'number') return;
+  try {
+    multicomManager.updateNode(session.nodeId, user.username || '', user.location || '', nodeStatusOf(session));
+  } catch (error) {
+    console.error(`[EnvStat] Failed to publish node ${session.nodeId} status:`, error);
   }
 }
 

@@ -30,6 +30,7 @@ import { debugLog } from '../../utils/debug-log';
 import type { BBSSession } from '../../index';
 import { convertAmigaTextForTerminal } from '../../utils/ansi-conversion.util';
 import { getConferenceToolFlags } from '../../utils/conference-tooltypes.util';
+import { setEnvStat } from '../../utils/acs.util';
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const iconv = require('iconv-lite');
 
@@ -568,7 +569,7 @@ debugLog(`  [READ] Status: ${status}`);
     } else {
       const value = this.getMessageString(msg);
       if (value.length > 0) {
-        (this.bbsSession as any).currentStat = parseInt(value) || ENVStatus.ENV_IDLE;
+        setEnvStat(this.bbsSession, parseInt(value) || ENVStatus.ENV_IDLE); // express.e:3682
 debugLog(`  [WRITE] Set status: ${value}`);
       }
     }

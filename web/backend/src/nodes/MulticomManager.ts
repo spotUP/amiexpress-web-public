@@ -24,13 +24,8 @@ import { MULTICOM_BASE, MULTICOM_MY_NODE_ARRAY, MULTICOM_SINGLE_PORTS } from '..
  * - MULTICOM_SINGLE_PORTS: singlePort structures (32 nodes x 512 bytes = 16,384 bytes)
  */
 
-// Status codes from express.e
-export const ENV_MENU = 0;        // At main menu
-export const ENV_READING = 1;     // Reading messages
-export const ENV_WRITING = 2;     // Writing messages
-export const ENV_DOORS = 3;       // In a door
-export const ENV_FILES = 4;       // In file areas
-export const ENV_CONFERENCE = 5;  // Changing conferences
+// Status codes: constants/env-codes.ts EnvStat (axcommon.e:23-26), written by
+// utils/acs.util.ts setEnvStat - the one action setter, as in express.e.
 
 const MASTER_NODE_BASE = MULTICOM_BASE;
 const MY_NODE_ARRAY_BASE = MULTICOM_MY_NODE_ARRAY;

@@ -30,7 +30,7 @@ import { inputForTrace, setMenuDoorSession, setSdkDoorSession, setSecretInput } 
 import { closeUserField } from './xim/userfield';
 import { DOOR_CLI_ADDR, DOOR_CLI_ARGS_ADDR, assertMemoryMapFits } from "./memory-map";
 import { setEnvStat } from "../utils/acs.util";
-import { multicomManager, ENV_DOORS } from "../nodes/MulticomManager";
+import { multicomManager } from "../nodes/MulticomManager";
 import { EnvStat } from "../constants/env-codes";
 import { c64AdapterFor, uninstallC64DoorAdapter } from "../server/c64-door-adapter";
 
@@ -735,15 +735,13 @@ debugLog(
       multicomManager.initializeInEmulator(this.emulator, sessionId, nodeId);
       this.logger.log('MULTICOM', `initializeInEmulator called`);
 
-      // Update with current user info (status = ENV_DOORS since we're launching a door)
-      multicomManager.updateNode(nodeId, username, location, ENV_DOORS);
-      this.logger.log('MULTICOM', `updateNode called`);
-
-      // Mirror the DOORS status into ENV:STATS@<nodeId> so file-based pollers
-      // (WarOLM, MultiTop, Bulls, etc.) see the user as "Using A Door" instead
-      // of "Idle". MulticomManager only touches singlePort memory.
+      // ENV_DOORS through the one action setter: it writes STATS@<nodeId>
+      // for file pollers and publishes the node to every emulator. A headless
+      // runner has no board session, so its node is written here directly.
       if (this.config.bbsSession) {
         setEnvStat(this.config.bbsSession, EnvStat.DOORS);
+      } else {
+        multicomManager.updateNode(nodeId, username, location, EnvStat.DOORS);
       }
 
       this.logger.log('MULTICOM', `initialized for node ${nodeId}: ${username} @ ${location}`);

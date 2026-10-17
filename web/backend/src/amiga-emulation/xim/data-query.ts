@@ -21,7 +21,7 @@ import { getSystemTime, toAmigaTime, encodeAmigaDate } from '../../utils/date-ti
 import { ximLogger } from '../../utils/XIMLogger';
 import { debugLog } from '../../utils/debug-log';
 import * as amigafs from '../../utils/amigafs';
-import { checkSecurity, setUserPermission } from '../../utils/acs.util';
+import { checkSecurity, setUserPermission, setEnvStat } from '../../utils/acs.util';
 import { formatCDateTime } from '../../utils/date-time.util';
 import { getTodaysCalls } from '../../utils/time-tracking.util';
 import { calcSizeText } from '../../utils/byte-format.util';
@@ -350,7 +350,7 @@ debugLog(`  [READ] ENVSTAT: ${envStat}`);
           }
         } else {
           const newStat = parseInt(this.messageParser.readString(stringAddr, 200)) || ENVStatus.ENV_IDLE;
-          (this.bbsSession as any).currentStat = newStat;
+          setEnvStat(this.bbsSession, newStat); // express.e:3682
 debugLog(`  [WRITE] ENVSTAT: ${newStat}`);
         }
         break;

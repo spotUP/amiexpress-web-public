@@ -496,21 +496,9 @@ export async function runPostAuthLogin(
     console.error("[LOGIN] ansi-buffer install failed:", err);
   }
 
-  // Register node with MULTICOM manager (WHO doors). Now runs on all
-  // transports — previously web-only.
-  try {
-    const { multicomManager, ENV_MENU } = await import(
-      "../nodes/MulticomManager.js"
-    );
-    multicomManager.updateNode(
-      session.nodeId,
-      user.username,
-      user.location || "Unknown",
-      ENV_MENU,
-    );
-  } catch (error) {
-    console.error("[LOGIN] Failed to register node with MULTICOM:", error);
-  }
+  // Register node with MULTICOM (WHO doors) on all transports, through the
+  // one action setter (express.e setEnvStat writes the singleNode).
+  setEnvStat(session, EnvStat.IDLE);
 
   // Load command history.
   try {

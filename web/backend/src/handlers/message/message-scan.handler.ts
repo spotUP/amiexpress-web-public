@@ -5,7 +5,8 @@
  */
 
 import { isConfAccessAreaName as isAccessFieldAreaName } from '../../conferences/access-areas';
-import { checkSecurity } from '../../utils/acs.util';
+import { checkSecurity, setEnvStat } from '../../utils/acs.util';
+import { EnvStat } from '../../constants/env-codes';
 import { narrowMailRow } from '../../utils/table-format.util';
 import { ACSPermission } from '../../constants/acs-permissions';
 import { getConferenceToolFlags } from '../../utils/conference-tooltypes.util';
@@ -391,7 +392,7 @@ export async function performConferenceScan(socket: any, session: any): Promise<
   const user = session.user;
   if (!user) return 0;
 
-  session.currentStat = 9; // ENV_SCANNING (28071)
+  setEnvStat(session, EnvStat.SCANNING); // express.e:28071
   if (!session.tempData) session.tempData = {};
   session.tempData.lineCount = 0;
   session.inConfScan = true;

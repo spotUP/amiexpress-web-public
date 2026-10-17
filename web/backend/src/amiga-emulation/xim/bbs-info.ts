@@ -30,6 +30,7 @@ import { debugLog } from '../../utils/debug-log';
 import { doorScreenWidth, doorScreenHeight } from './screen-width.util';
 import { boardRoot } from '../../utils/board-root.util';
 import { INTUITION_WINDOW_HANDLE, MULTICOM_MY_NODE_ARRAY, MULTICOM_SINGLE_PORTS } from '../memory-map';
+import { setEnvStat } from '../../utils/acs.util';
 
 export class XIMBBSInfoHandler {
   private emulator: MoiraEmulator;
@@ -318,7 +319,7 @@ debugLog(`[XIMBBSInfo] ENVSTAT [READ]: ${status}`);
           // Write status: update currentStat
           const newStatus = parseInt(msg.string.trim(), 10);
           if (!Number.isNaN(newStatus)) {
-            (this.bbsSession as any).currentStat = newStatus;
+            setEnvStat(this.bbsSession, newStatus); // express.e:3682
 debugLog(`[XIMBBSInfo] ENVSTAT [WRITE]: ${newStatus}`);
           }
         }

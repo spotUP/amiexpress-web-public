@@ -15,7 +15,8 @@ import {
   CommandType,
   DoorType
 } from '../utils/amiga-command-parser.util';
-import { checkSecurity } from '../utils/acs.util';
+import { checkSecurity, setEnvStat } from '../utils/acs.util';
+import { EnvStat } from '../constants/env-codes';
 import { ACSPermission } from '../constants/acs-permissions';
 import { AnsiUtil } from '../utils/ansi.util';
 import { ErrorHandler, higherAccess } from '../utils/error-handling.util';
@@ -576,7 +577,7 @@ async function runCommand(
   // This is critical for doors like AquaScan to know the BBS context
   const isFileScanCommand = ['FR', 'F', 'N', 'CS', 'SCAN', 'NSU'].includes(cmdUpper);
   if (isFileScanCommand) {
-    session.currentStat = 8; // ENV_FILES
+    setEnvStat(session, EnvStat.FILES);
   }
 
   // Execute the door using the door handler

@@ -46,6 +46,21 @@ export enum EnvStat {
 }
 
 /**
+ * The node status a PARKED web session publishes in its MULTICOM singlePort.
+ *
+ * express.e has no parked state: a lost carrier ends the call. The web board
+ * keeps the node for the resume window, so WHO doors must show it as a node
+ * whose caller dropped. rTW (Doors/RTW/rtw, WHO) prints its own text table,
+ * selected by singlePort.status in a SELECT at code hunk +0x6a4:
+ *   cmp.l #99,d0 / bcc  -> no action text (99+ and negative = quiet node)
+ *   jump table +0x6c4: 0..28 -> its 29 action strings, 98 -> "dOOR!",
+ *   29..97 -> +0xaa6 lea "cARRIER lOST :-(" (data hunk +0x3bc).
+ * 31 is the first value past axcommon.e's ENV_* range (0..30) inside that
+ * band, so no door can read it as a real action.
+ */
+export const PARKED_NODE_STATUS = 31;
+
+/**
  * ENV Status Display Names
  * Human-readable names for each status code
  */
