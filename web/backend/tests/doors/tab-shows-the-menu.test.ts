@@ -1,6 +1,6 @@
 /**
- * WEB_: an expert caller (expert 'X') never sees the menu after a command, so Tab on an empty command prompt shows it
- * once by running `?` (sysop 2026-10-18). Driven through the board's real entry point, handleCommand, with the MENU
+ * WEB_: Tab on an empty command prompt opens the menu door by running `?`, for an expert (who never sees the menu
+ * after a command) and a novice who left the door with no pick alike (sysop 2026-10-18). Driven through the board's real entry point, handleCommand, with the MENU
  * door registered and the caller on the Scroll style (Classic takes the style-cycle branch instead, see
  * classic-in-the-tab-cycle.test.ts). Sentinel: handleQuestionMarkCommand, stubbed so no emulator starts.
  */
@@ -35,16 +35,16 @@ installDispatchHarness(root => {
 });
 
 class CaptureSocket extends EventEmitter {
-  id = 'expert-tab';
+  id = 'prompt-tab';
   connected = true;
 }
 
-function caller(expert: 'X' | 'N'): any {
+function caller(expert: 'X' | 'N', inputBuffer = ''): any {
   const user = { id: 'u1', username: 'Spot', slotNumber: 1, secLevel: 255, securityFlags: 'T'.repeat(128),
     userFlags: 0, expert, menuStyle: 'scroll' };
   return { state: 'loggedon', subState: LoggedOnSubState.READ_COMMAND, user, nodeId: 1, terminalType: 'ansi',
     petsciiMode: false, screenWidth: 80, screenHeight: 25, currentConf: 1, relConfNum: 1, currentConfName: 'General',
-    tempData: {}, commandHistory: [], historyIndex: 0, historyCycle: 0, commandText: '', inputBuffer: '' };
+    tempData: {}, commandHistory: [], historyIndex: 0, historyCycle: 0, commandText: '', inputBuffer };
 }
 
 async function until(pred: () => boolean, ms: number): Promise<boolean> {
@@ -53,7 +53,7 @@ async function until(pred: () => boolean, ms: number): Promise<boolean> {
   return pred();
 }
 
-describe('Tab on an empty prompt shows the menu to an expert', () => {
+describe('Tab on an empty prompt shows the menu', () => {
   beforeAll(async () => {
     const menuTypes = Object.fromEntries(readTooltypeMap(path.join(REPO, 'Commands', 'BBSCmd', 'MENU.info')));
     await register({ ...doorOver('MENU', menuTypes), type: 'XIM', location: menuTypes.LOCATION });
@@ -66,8 +66,14 @@ describe('Tab on an empty prompt shows the menu to an expert', () => {
     expect(display.handleQuestionMarkCommand).toHaveBeenCalledTimes(1);
   });
 
-  test('a non-expert already sees the menu: Tab does not run ?', async () => {
+  test('a novice at a bare prompt (left the door with no pick): Tab runs ? once', async () => {
     await handleCommand(new CaptureSocket() as any, caller('N'), '\t');
+    expect(await until(() => display.handleQuestionMarkCommand.mock.calls.length > 0, 2000)).toBe(true);
+    expect(display.handleQuestionMarkCommand).toHaveBeenCalledTimes(1);
+  });
+
+  test('Tab after typed text keeps its completion meaning: no ?', async () => {
+    await handleCommand(new CaptureSocket() as any, caller('N', 'zz'), '\t');
     expect(await until(() => display.handleQuestionMarkCommand.mock.calls.length > 0, 500)).toBe(false);
   });
 });

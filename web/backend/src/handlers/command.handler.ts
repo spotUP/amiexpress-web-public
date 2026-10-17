@@ -3407,10 +3407,10 @@ console.log(' Empty command, redisplaying menu');
         submitCommandLine(socket, session, 'MENU');
         return;
       }
-      // WEB_: an expert never sees the menu after a command, so Tab on an empty line shows it once: it runs `?`,
-      // the expert's own "show the menu" command (express.e:24594-24599), which opens the menu door in the
-      // caller's style (sysop 2026-10-18). A classic expert took the branch above and already got the door.
-      if (!session.inputBuffer && session.user?.expert === 'X') {
+      // WEB_: Tab on an empty line opens the menu door for every caller (sysop 2026-10-18): an expert never sees it
+      // after a command, and a novice who left it with no pick is at a bare prompt too. It runs `?`
+      // (express.e:24594-24599), which opens the door in the caller's style. Classic took the branch above.
+      if (!session.inputBuffer) {
         (session as any)._readCommandCurpos = 0;
         (session as any)._promptGhostShown = false;
         (session as any)._promptCycle = undefined;
