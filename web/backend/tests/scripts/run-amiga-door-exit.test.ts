@@ -1,9 +1,7 @@
 /**
  * Regression: run-amiga-door.ts must process.exit(0) once the door
- * session resolves. Several XIM handlers (notably JH_MCI's dynamic
- * import of screen.handler) transitively load index.ts, whose
- * top-level IIFE spins up the database + Telnet + HTTP servers and
- * keeps the Node event loop alive indefinitely. Before the explicit
+ * session resolves. The loaded modules (emulator, MulticomManager, the
+ * database pool) hold handles that keep the Node event loop alive. Before the explicit
  * exit, doors that issued JH_MCI (e.g. MDB-ConfUpdater, Hststat)
  * timed out in the corpus runner even though they sent JH_SHUTDOWN
  * cleanly.
@@ -20,7 +18,11 @@ import * as path from 'path';
 
 const doorOutcome: { fail: Error | null } = { fail: null };
 
-jest.mock('../../src/scripts/console-to-stderr', () => ({}));
+jest.mock('../../src/scripts/console-to-stderr', () => ({
+  // The door's Output() writer: the real one writes the runner's fd 1.
+  writeDoorOutput: (data: string, done?: () => void) =>
+    done ? process.stdout.write(data, done) : process.stdout.write(data),
+}));
 jest.mock('../../src/amiga-emulation/AmigaDoorSession', () => ({
   AmigaDoorSession: class {
     async start(): Promise<void> {

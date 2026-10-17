@@ -20,7 +20,8 @@
  * credit lists, and a bulk editor that wrote the wrong fields.
  */
 
-import { BBSSession, LoggedOnSubState } from '../../index';
+import type { BBSSession } from '../../index';
+import { LoggedOnSubState } from '../../constants/bbs-states';
 import type { User } from '../../database/types';
 import { emitText, flushOutput, clearTheScreen, send017 } from '../../utils/output.util';
 import { lineInput, readChar, eValRead, holdInput, checkInput, purgeLine, takeTypeAhead } from '../../utils/await-input';

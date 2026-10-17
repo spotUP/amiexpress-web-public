@@ -13,7 +13,8 @@
  */
 
 import * as path from 'path';
-import { BBSSession, LoggedOnSubState } from '../../index';
+import type { BBSSession } from '../../index';
+import { LoggedOnSubState } from '../../constants/bbs-states';
 import { getTodaysCalls } from '../../utils/time-tracking.util';
 import { formatLongDateTime } from '../../utils/date-time.util';
 import { clearTheScreen } from '../../utils/output.util';

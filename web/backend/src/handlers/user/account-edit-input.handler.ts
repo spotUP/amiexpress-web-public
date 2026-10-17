@@ -6,7 +6,8 @@
 
 import { messagePointerFileManager, accountedBytes, type ConfBaseRecord } from '../../services/MessagePointerFileManager';
 import { writePackedBCD } from '../../utils/bcd-math.util';
-import { BBSSession, LoggedOnSubState } from '../../index';
+import type { BBSSession } from '../../index';
+import { LoggedOnSubState } from '../../constants/bbs-states';
 import type { User } from '../../database/types';
 import { displayAccount, displayAccountInfo } from './account.handler';
 import { formatLongDate, formatLongTime } from '../../utils/date-time.util';

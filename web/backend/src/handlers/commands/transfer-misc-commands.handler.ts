@@ -4,7 +4,8 @@
  * 1:1 port from AmiExpress express.e commands
  */
 
-import { BBSSession, LoggedOnSubState } from '../../index';
+import type { BBSSession } from '../../index';
+import { LoggedOnSubState } from '../../constants/bbs-states';
 import { negotiateBinaryForTransfer } from '../file/file-delivery';
 import { checkSecurity, setEnvStat } from '../../utils/acs.util';
 import { ACSPermission } from '../../constants/acs-permissions';

@@ -1,7 +1,7 @@
 // MUST be first: redirects console.* to stderr before any module initializes.
 // AmigaDoorSession (and transitively config.ts) fires console.log during import;
 // without this first the logs land in the door's stdout redirect file (quicknew.txt etc.).
-import "./console-to-stderr";
+import { writeDoorOutput } from "./console-to-stderr";
 import "reflect-metadata";
 import path from "path";
 import { EventEmitter } from "events";
@@ -11,7 +11,7 @@ import { libraryCallLedger } from "../amiga-emulation/instrumentation/library-ca
 class MockSocket extends EventEmitter {
   emit(event: string, data?: any): boolean {
     if (event === "ansi-output") {
-      process.stdout.write(data || "");
+      writeDoorOutput(data || "");
     } else {
       process.stderr.write(`[SOCKET:${event}] ${JSON.stringify(data)}\n`);
     }
@@ -250,10 +250,10 @@ for (const sig of ["SIGTERM", "SIGINT"] as const) {
 
 main().then(() => {
   dumpLedgerIfEnabled();
-  // Force-exit after the door session resolves. Some XIM handlers
-  // (notably JH_MCI's dynamic import of screen.handler) transitively
-  // pull in the full BBS via index.ts, whose top-level IIFE spins up
-  // database/Telnet/HTTP servers that keep Node alive forever. The
+  // Force-exit after the door session resolves. Loaded modules (the
+  // emulator, MulticomManager, the database pool) hold timers and handles
+  // that keep Node alive. (index.ts, the server entry, must never be in
+  // this graph: tests/scripts/runner-graph-skips-the-server.test.ts.) The
   // headless harness has no use for those listeners, so once the door
   // has terminated we drop the process explicitly.
   //
@@ -262,7 +262,7 @@ main().then(() => {
   // exit can drop the door's final lines on the floor (regressed the
   // `who` golden 2026-05-14). Flush via an empty write+callback so
   // the pipe drains before we drop.
-  process.stdout.write("", () => process.exit(0));
+  writeDoorOutput("", () => process.exit(0));
 }).catch((error) => {
   console.error("[run-amiga-door] Door execution failed:", error);
   process.exit(1);
