@@ -469,6 +469,26 @@ describe('MAINMENU on three screens', () => {
     });
   });
 
+  describe('Scroll: Left and Right turn a screen of rows (sysop 2026-10-17)', () => {
+    test('80x25 Scroll: Right moves the selection a screen down, Left back; Up/Down stay per row', async () => {
+      const r = await run(S80, [idle('\x1b[C'), idle('\x1b[D'), idle('\x1b[B'), idle(ESC, false)], { user: GRID });
+      // The caller's selection after the first n keys: the entry on the row painted with the selection bar (magenta ground).
+      const keyAfter = (n: number): string => {
+        const grid = replayCells(r.chunks.slice(0, r.marks[n]?.at ?? r.chunks.length).join(''), 80, 25);
+        const bar = grid.map((row, i) => (row[10]!.sgr.includes('|170,0,170') ? i + 1 : 0)).filter(Boolean);
+        expect(bar).toHaveLength(1);
+        return entriesOf(gridText(grid)).find(e => e.row === bar[0])!.key;
+      };
+      const onScreen = entriesOf(gridText(replayCells(firstFrame(r), 80, 25))).map(e => e.key);
+      const start = keyAfter(0), afterRight = keyAfter(1), afterLeft = keyAfter(2), afterDown = keyAfter(3);
+      expect(onScreen.indexOf(start)).toBe(0);
+      expect(afterRight).not.toBe(onScreen[1]);          // a row would be the second entry; a screen is further
+      expect(onScreen.length).toBeGreaterThan(5);
+      expect(afterLeft).toBe(start);                     // Left is the way back, clamped at the first entry
+      expect(afterDown).toBe(onScreen[1]);               // Down is still one row
+    });
+  });
+
   describe('search palette (Ctrl-K): a box over the board\'s screen, given back on Esc (plan K3-K5, R1)', () => {
     const MENU_SCREEN = fs.readFileSync(path.join(__dirname, 'fixtures', 'mainmenu-80.ans'), 'latin1');
 

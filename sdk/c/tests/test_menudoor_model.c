@@ -1359,14 +1359,16 @@ static void same_screen_as_a_fresh_frame(const char *pages, const char *size, in
 
 static void a_moved_selection_leaves_the_screen_a_fresh_frame_would_show(void)
 {
-    const char *R = "\x1b[C", *L = "\x1b[D";
+    const char *R, *L;
     char to_the_first_scroll[64], mix[64];   /* to_the_first_scroll: the keys that scroll the short screen once (its name is old) */
     int one_column, i;
     mouse_queue = 0; silent_board = 0; theme_name = "";
-    to_the_first_scroll[0] = '\0'; for (i = 0; i < 6; i++) strcat(to_the_first_scroll, R);
-    strcpy(mix, R); strcat(mix, R); strcat(mix, R); strcat(mix, L);
     for (one_column = 0; one_column < 2; one_column++) {          /* a grid of several columns (the last cell of a line erases) and of one (the whole row does) */
         big_long_label = one_column;
+        /* In a one-column Scroll list Left/Right page (sysop 2026-10-17): one entry is Down/Up there. */
+        R = one_column ? "\x1b[B" : "\x1b[C"; L = one_column ? "\x1b[A" : "\x1b[D";
+        to_the_first_scroll[0] = '\0'; for (i = 0; i < 6; i++) strcat(to_the_first_scroll, R);
+        strcpy(mix, R); strcat(mix, R); strcat(mix, R); strcat(mix, L);
         same_screen_as_a_fresh_frame("scroll", "80\t25", 25, R, 1);
         same_screen_as_a_fresh_frame("scroll", "80\t25", 25, mix, 2);
         if (one_column) same_screen_as_a_fresh_frame("scroll", "80\t25", 25, "\x1b[B\x1b[B\x1b[A", 1);   /* Down walks a row: one entry in a one-column grid */
