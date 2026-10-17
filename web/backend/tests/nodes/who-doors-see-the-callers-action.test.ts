@@ -136,6 +136,30 @@ describe('WHO doors see the caller\'s action', () => {
     expect(emu.readMemory32(statusAt)).toBe(EnvStat.DOORS);
   });
 
+  it('a WHO door started on another node AFTER the park reads carrier lost', () => {
+    // Live 2026-10-17: the emulator rTW runs in is built at door start
+    // (AmigaDoorSession: initializeInEmulator, then setEnvStat(DOORS)), so a
+    // park published while no door ran must reach it through the canonical copy.
+    const session = caller();
+    setEnvStat(session, EnvStat.IDLE);
+    const link = fakeLink();
+    session.webLink = link;
+    installParking(link as any, session);
+    expect(link.drop('transport close')).toBe('park');
+
+    const whoEmu = byteEmulator();
+    const other: any = { ...caller(), nodeId: NODE + 1, user: { id: 7, username: 'linetest', location: 'x' } };
+    multicomManager.initializeInEmulator(whoEmu, 'who-door-after-park', NODE + 1);
+    try {
+      setEnvStat(other, EnvStat.DOORS);
+      multicomManager.syncFromEmulator(whoEmu, Date.now() + 60_000);
+      expect(whoEmu.readMemory32(statusAt)).toBe(PARKED_NODE_STATUS);
+    } finally {
+      multicomManager.clearNode(NODE + 1, 'who-door-after-park');
+      multicomManager.unregisterEmulator('who-door-after-park');
+    }
+  });
+
   describe('the door ENVSTAT command (express.e:3677-3683)', () => {
     const MSG = 0x2000;
 
