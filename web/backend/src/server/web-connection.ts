@@ -52,9 +52,12 @@ export async function acceptWebConnection(
   // resume attaches the PARKED link to `raw`, and a second link over the same
   // raw would dispatch every event twice. A refusal is said first, then the
   // fresh path runs, so the browser never hangs (Decision 21).
-  const offered = (raw.handshake as { auth?: { resume?: unknown } }).auth?.resume;
+  // `claim`: the offer is not the tab's own token, so it may resume only a
+  // parked session, never take over a live one (Decision 7).
+  const auth = (raw.handshake as { auth?: { resume?: unknown; claim?: unknown } }).auth;
+  const offered = auth?.resume;
   if (offered !== undefined) {
-    const r = await resumeParked(raw, offered);
+    const r = await resumeParked(raw, offered, { claim: auth?.claim === true });
     if (r.ok) return;
     raw.emit("session-restore-failed", { reason: r.reason });
   }

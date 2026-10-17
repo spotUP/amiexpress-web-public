@@ -21,10 +21,27 @@ export interface ResumeStorage {
   tab: Pick<Storage, 'getItem' | 'setItem'>;
 }
 
+/**
+ * What a connect offers the board. `claim`: the token is not this tab's own
+ * (a tab that lost its id, or whose id is not yet known to be its alone), so
+ * the board may resume only a PARKED session with it, never take over a live
+ * one (Decision 7).
+ */
+export interface ResumeOffer { resume: string; claim?: true }
+
 /** localStorage: Record<tabId, ResumeEntry>. */
 export const RESUME_KEY = 'bbs_resume_v1';
 /** sessionStorage: which tab this is. */
 export const TAB_ID_KEY = 'bbs_tab_id';
+/**
+ * sessionStorage: the tab id whose entry this tab offered last, so a refused
+ * offer can be forgotten (never the token itself).
+ */
+export const OFFERED_KEY = 'bbs_resume_offered';
+/** BroadcastChannel on which tabs ask who holds a tab id. */
+export const TAB_CHANNEL_NAME = 'bbs_tab_id_v1';
+/** How long a tab waits for another to say it holds the same id. */
+export const TAB_ID_CHECK_MS = 300;
 /** The longest default detach window plus a minute; only for pruning. */
 export const RESUME_KEEP_MS = 11 * 60_000;
 /**
@@ -112,31 +129,137 @@ export function saveResume(s: ResumeStorage, e: Omit<ResumeEntry, 'savedAt'>, no
   writeAll(s, all);
 }
 
+type Picked = { offer: ResumeOffer; from: string };
+
 /**
- * The token to offer on this connect: this tab's own. A tab with no id (its
- * sessionStorage was lost) offers the newest entry, but only once that entry
+ * What to offer on this connect, and whose entry it is. A tab offers its own
+ * entry; while its id is not yet confirmed as its alone (a duplicated tab
+ * copies sessionStorage), that offer is a claim. A tab with no id (its
+ * sessionStorage was lost) claims the newest entry, but only once that entry
  * has gone quiet - a fresh one belongs to a sibling tab that is still live.
  */
-export function resumeTokenToOffer(s: ResumeStorage, now: number = Date.now()): string | undefined {
+function pickOffer(s: ResumeStorage, now: number, idConfirmed: boolean): Picked | undefined {
   const all = prune(readAll(s), now);
   const id = readTabId(s);
-  if (id) return all[id]?.token;
-  let newest: ResumeEntry | undefined;
-  for (const e of Object.values(all)) {
-    if (!newest || e.savedAt > newest.savedAt) newest = e;
+  if (id) {
+    const own = all[id];
+    if (!own) return undefined;
+    return { offer: idConfirmed ? { resume: own.token } : { resume: own.token, claim: true }, from: id };
   }
-  if (!newest || now - newest.savedAt < CLAIM_MIN_AGE_MS) return undefined;
-  return newest.token;
+  let newest: [string, ResumeEntry] | undefined;
+  for (const pair of Object.entries(all)) {
+    if (!newest || pair[1].savedAt > newest[1].savedAt) newest = pair;
+  }
+  if (!newest || now - newest[1].savedAt < CLAIM_MIN_AGE_MS) return undefined;
+  return { offer: { resume: newest[1].token, claim: true }, from: newest[0] };
+}
+
+/** The token this tab would offer now (no record kept). */
+export function resumeTokenToOffer(s: ResumeStorage, now: number = Date.now()): string | undefined {
+  return pickOffer(s, now, true)?.offer.resume;
+}
+
+/**
+ * The offer for this connect, remembering whose entry it came from so a
+ * refusal can forget that entry (`forgetRefusedOffer`).
+ */
+export function takeResumeOffer(s: ResumeStorage, idConfirmed: boolean = true, now: number = Date.now()): ResumeOffer | undefined {
+  const picked = pickOffer(s, now, idConfirmed);
+  try { s.tab.setItem(OFFERED_KEY, picked ? picked.from : ''); } catch { /* nothing to forget later */ }
+  return picked?.offer;
+}
+
+function removeEntry(s: ResumeStorage, id: string): void {
+  const all = readAll(s);
+  if (!(id in all)) return;
+  delete all[id];
+  writeAll(s, all);
 }
 
 /** Forget this tab's token; other tabs keep theirs. */
 export function clearResume(s: ResumeStorage): void {
   const id = readTabId(s);
-  if (!id) return;
-  const all = readAll(s);
-  if (!(id in all)) return;
-  delete all[id];
-  writeAll(s, all);
+  if (id) removeEntry(s, id);
+}
+
+/**
+ * The board refused the last offer: forget the entry it came from, so the
+ * next reconnect does not offer the same dead token again. `in-use` is the
+ * one refusal that leaves the entry: it belongs to a tab that is still live.
+ */
+export function forgetRefusedOffer(s: ResumeStorage, refusal: unknown): void {
+  if (refusalReason(refusal) === 'in-use') return;
+  let from: string | null = null;
+  try { from = s.tab.getItem(OFFERED_KEY); } catch { /* nothing recorded */ }
+  if (from) removeEntry(s, from);
+}
+
+/** The one part of BroadcastChannel the tab id check uses. */
+export interface TabIdChannel {
+  postMessage(message: unknown): void;
+  addEventListener(type: 'message', listener: (ev: { data: unknown }) => void): void;
+  close(): void;
+}
+
+export interface TabIdGuard {
+  /** True once no other open tab has said it holds this tab's id. */
+  confirmed(): boolean;
+  close(): void;
+}
+
+type TabIdMessage = { type: 'who-holds' | 'held'; id: string; nonce: string };
+
+function isTabIdMessage(v: unknown): v is TabIdMessage {
+  if (typeof v !== 'object' || v === null) return false;
+  const m = v as Record<string, unknown>;
+  return (m.type === 'who-holds' || m.type === 'held') && typeof m.id === 'string' && typeof m.nonce === 'string';
+}
+
+/**
+ * Duplicate Tab and window.open copy sessionStorage, so a second tab can start
+ * with the first one's id and the two would take the session from each other.
+ * At startup a tab with an id asks the other tabs who holds it; an answer
+ * means this tab is the copy, and it mints an id of its own. Until the wait
+ * ends unanswered its offers are claims (the board then resumes only a parked
+ * session). Every tab answers for its own id. Without BroadcastChannel the id
+ * is taken as this tab's own, as before.
+ */
+export function guardTabId(
+  s: ResumeStorage,
+  channel: TabIdChannel | undefined,
+  opts: { waitMs?: number; newId?: () => string; schedule?: (fn: () => void, ms: number) => unknown } = {},
+): TabIdGuard {
+  if (!channel) return { confirmed: () => true, close: () => {} };
+  const newId = opts.newId ?? randomId;
+  const schedule = opts.schedule ?? ((fn: () => void, ms: number) => setTimeout(fn, ms));
+  const nonce = randomId();
+  const asked = readTabId(s);
+  let confirmed = asked === null;
+  channel.addEventListener('message', (ev) => {
+    const m = ev.data;
+    if (!isTabIdMessage(m)) return;
+    if (m.type === 'who-holds') {
+      if (m.nonce !== nonce && m.id === readTabId(s)) channel.postMessage({ type: 'held', id: m.id, nonce: m.nonce });
+    } else if (m.nonce === nonce && m.id === asked && readTabId(s) === asked) {
+      try { s.tab.setItem(TAB_ID_KEY, newId()); } catch { /* keeps the copied id */ }
+      confirmed = true;
+    }
+  });
+  if (asked !== null) {
+    channel.postMessage({ type: 'who-holds', id: asked, nonce });
+    schedule(() => { confirmed = true; }, opts.waitMs ?? TAB_ID_CHECK_MS);
+  }
+  return { confirmed: () => confirmed, close: () => channel.close() };
+}
+
+/** The browser's BroadcastChannel for the tab id check, or undefined where there is none. */
+export function browserTabChannel(): TabIdChannel | undefined {
+  try {
+    if (typeof BroadcastChannel === 'undefined') return undefined;
+    return new BroadcastChannel(TAB_CHANNEL_NAME);
+  } catch {
+    return undefined;
+  }
 }
 
 /** The browser's own storages, or undefined where there is no window. */
@@ -149,7 +272,7 @@ export function browserResumeStorage(): ResumeStorage | undefined {
   }
 }
 
-export type AuthCallback = (cb: (data: { resume?: string }) => void) => void;
+export type AuthCallback = (cb: (data: Partial<ResumeOffer>) => void) => void;
 
 export interface ConnectOptions extends ReconnectPolicy {
   transports: string[];
@@ -164,7 +287,7 @@ export interface ConnectOptions extends ReconnectPolicy {
  * asked again on every reconnect and always carries the CURRENT token.
  * `handshake.auth.token` stays the admin/chat JWT; `resume` is its own key.
  */
-export function connectOptions(isDevelopment: boolean, offer: () => string | undefined): ConnectOptions {
+export function connectOptions(isDevelopment: boolean, offer: () => ResumeOffer | undefined): ConnectOptions {
   return {
     // WebSocket first, polling as socket.io's own fallback.
     transports: ['websocket', 'polling'],
@@ -174,17 +297,22 @@ export function connectOptions(isDevelopment: boolean, offer: () => string | und
     // Retry until it works or the tab closes - see reconnect-policy.ts.
     ...reconnectPolicy(isDevelopment),
     auth: (cb) => {
-      const token = offer();
-      cb(token ? { resume: token } : {});
+      const o = offer();
+      cb(o ? { ...o } : {});
     },
   };
 }
 
 /** The line a tab prints when the board could not resume its session. */
-export function resumeFailedText(reason: unknown): string {
-  const r = typeof reason === 'object' && reason !== null
+function refusalReason(reason: unknown): unknown {
+  return typeof reason === 'object' && reason !== null
     ? (reason as { reason?: unknown }).reason
     : reason;
+}
+
+export function resumeFailedText(reason: unknown): string {
+  const r = refusalReason(reason);
+  if (r === 'in-use') return 'That session is still open in another window, so this window starts a new one.';
   if (r === 'expired') return 'Your previous session waited longer than the board allows. Please log in again.';
   if (r === 'account') return 'Your previous session could not be resumed for this account.';
   return 'Your previous session has ended (the board restarted or the call timed out). Please log in again.';

@@ -32,7 +32,13 @@ import { sessionWantsPetscii, disposePetsciiSessionModel } from '../utils/petsci
 
 /** The node action a parked session shows (WHO, the sysop node list). */
 export { PARKED_ACTION } from '../utils/who-table.util';
-export type ResumeRefusal = 'unknown' | 'expired' | 'ended' | 'account';
+/**
+ * Why a resume was refused. `in-use`: a claim (an offer from a tab that is
+ * not the one the token was handed to) met a session that is still connected;
+ * a claim may only resume a PARKED session, never take over a live one
+ * (Decision 7).
+ */
+export type ResumeRefusal = 'unknown' | 'expired' | 'ended' | 'account' | 'in-use';
 
 /** What `parkDecision` reads; a BBSSession satisfies it. */
 export interface ParkableSession {
@@ -146,12 +152,17 @@ type Resumed = { ok: true; session: BBSSession } | { ok: false; reason: ResumeRe
  * Refusals leave the session as it was, except a refused ACCOUNT, which also
  * ends the parked session: a banned or deleted caller must not keep a node.
  *
+ * `claim`: the browser offered a token that is not its own tab's (a tab that
+ * lost or duplicated its tab id). A claim resumes only a PARKED session; the
+ * token's own tab may still replace a frozen-but-connected socket (a half-open
+ * phone socket), a claim never takes over a live one.
+ *
  * One token, one resume: the session is claimed before the first await, so a
  * second resume with the same token in the same moment (a socket.io retry
  * beside a wake) meets `unknown`, as it would after the rotation (plan,
  * Review focus 2).
  */
-export async function resumeParked(raw: Socket, token: unknown): Promise<Resumed> {
+export async function resumeParked(raw: Socket, token: unknown, opts: { claim?: boolean } = {}): Promise<Resumed> {
   const found = lookupResumeToken(token);
   if (!found.ok) {
     console.log(`[RESUME] refused (${found.reason})`);
@@ -168,6 +179,10 @@ export async function resumeParked(raw: Socket, token: unknown): Promise<Resumed
   if (!live()) {
     console.log(`[RESUME] refused (ended) for node ${nodeId}`);
     return { ok: false, reason: 'ended' };
+  }
+  if (opts.claim === true && !isParked(session)) {
+    console.log(`[RESUME] refused (in-use): node ${nodeId} is still connected and the offer was a claim`);
+    return { ok: false, reason: 'in-use' };
   }
   // Before any await: claim the session, and stop the window clock so the
   // window cannot end while the account is read.

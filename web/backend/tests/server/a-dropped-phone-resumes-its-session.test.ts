@@ -83,9 +83,10 @@ function loggedOn(state = BBSState.LOGGEDON) {
 beforeEach(() => { sessions.clear(); _resetResumeTokensForTests(); (runPreLoginConnect as jest.Mock).mockClear(); });
 
 /** A browser's raw socket as acceptWebConnection receives it; `resume` is handshake.auth.resume. */
-function browser(id: string, resume?: unknown) {
+function browser(id: string, resume?: unknown, claim?: boolean) {
   const raw = fakeRaw(id);
-  raw.handshake = { address: '127.0.0.1', headers: {}, auth: resume === undefined ? {} : { resume } };
+  const auth = resume === undefined ? {} : claim === undefined ? { resume } : { resume, claim };
+  raw.handshake = { address: '127.0.0.1', headers: {}, auth };
   raw.nsp = { sockets: new Map() };
   return raw;
 }
@@ -162,6 +163,37 @@ describe('a dropped phone resumes its session, through acceptWebConnection', () 
     expect(c.sent[0]).toEqual(['session-restore-failed', [{ reason: 'unknown' }]]);
     expect(getSession('B')).toBe(session);
     expect(link.raw).toBe(b);
+  });
+
+  /** A caller connected through the entry point and logged on, still connected. */
+  async function liveCaller() {
+    const a = browser('A');
+    await acceptWebConnection(io, a as never, connectDeps(3) as never);
+    const session: any = getSession('A');
+    opened.push(session);
+    Object.assign(session, { state: BBSState.LOGGEDON, user: { id: 7 }, currentConf: 1 });
+    const token = issueResumeTokenForLogin(session, '7')!;
+    return { a, session, token };
+  }
+
+  it('a claim never takes over a live session: refused as in use, the first tab keeps it, the claimer gets a fresh call', async () => {
+    const { a, session, token } = await liveCaller();
+    const b = browser('B', token, true);
+    await acceptWebConnection(io, b as never, connectDeps(4) as never);
+    expect(b.sent).toContainEqual(['session-restore-failed', [{ reason: 'in-use' }]]);
+    expect(eventNames(b)).not.toContain('session-restored');
+    expect(a.connected).toBe(true);
+    expect(session.webLink.ended).toBe(false);
+    expect(isParked(session)).toBe(false);
+    opened.push(getSession('B'));
+  });
+
+  it('a claim resumes a PARKED session', async () => {
+    const { session, token } = await droppedCaller();
+    const b = browser('B', token, true);
+    await acceptWebConnection(io, b as never, connectDeps(4) as never);
+    expect(eventNames(b)).toContain('session-restored');
+    expect(isParked(session)).toBe(false);
   });
 
   it('an unknown token is refused first, then the fresh call runs; the parked session stays parked', async () => {

@@ -5,11 +5,15 @@ import { io, Socket } from 'socket.io-client';
 import { shouldReconnectNow } from '../utils/reconnect-policy';
 import {
   browserResumeStorage,
+  browserTabChannel,
   clearResume,
+  forgetRefusedOffer,
+  guardTabId,
   connectOptions,
   resumeFailedText,
   resumeTokenToOffer,
   saveResume,
+  takeResumeOffer,
 } from '../utils/session-resume';
 import { browserPushEnv, subscribeThisBrowser } from '../utils/push-subscribe';
 import { createLoginCredentials, type LoginCredentials } from '../utils/login-credentials';
@@ -734,11 +738,13 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
     }
   }, []);
 
-  const clearSessionState = useCallback(() => {
+  const clearSessionState = useCallback((opts: { keepResume?: boolean } = {}) => {
     if (typeof window === 'undefined') return;
-    // This tab's resume token goes with its session state; other tabs keep theirs.
+    // This tab's resume token goes with its session state; other tabs keep
+    // theirs. `keepResume`: the caller has already settled the entry (a
+    // refused offer, see forgetRefusedOffer).
     const resumeStorage = browserResumeStorage();
-    if (resumeStorage) clearResume(resumeStorage);
+    if (resumeStorage && !opts.keepResume) clearResume(resumeStorage);
     sessionStorage.removeItem(SESSION_STATE_KEY);
     sessionStorage.removeItem(BBS_AUTH_TOKEN_KEY);
     sessionStorage.removeItem(SHARED_AUTH_TOKEN_KEY);
@@ -1981,10 +1987,13 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
     // `auth` is asked again on every (re)connect, so the handshake always
     // carries this tab's CURRENT resume token and the board decides at the
     // connection whether it rejoins a parked session (session-resume.ts).
+    // A tab that is a copy (Duplicate Tab) starts with the first tab's id;
+    // the guard finds that out and gives it its own (session-resume.ts).
     const resumeStorage = browserResumeStorage();
+    const tabIdGuard = resumeStorage ? guardTabId(resumeStorage, browserTabChannel()) : undefined;
     const socket = io(finalBackendUrl, connectOptions(
       isDevelopment,
-      () => (resumeStorage ? resumeTokenToOffer(resumeStorage) : undefined),
+      () => (resumeStorage ? takeResumeOffer(resumeStorage, tabIdGuard?.confirmed() ?? true) : undefined),
     ));
     socketRef.current = socket;
     loginCredentials.current = createLoginCredentials((line) => socket.emit('command', line));
@@ -2488,6 +2497,9 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
         clearSessionState();
         reconnectPending.current = false;
       } else {
+        // The board closed this socket itself: the session is gone, and
+        // socket.io does not reconnect, so this tab's token opens nothing.
+        if (reason === 'io server disconnect' && resumeStorage) clearResume(resumeStorage);
         // Network issue or transport close - preserve session state for restoration
         console.log('[DISCONNECT] Network disconnect - preserving session state for reconnection');
         reconnectPending.current = true;
@@ -3181,6 +3193,9 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
     socket.on('session-restore-failed', (reason: unknown) => {
       console.log('[Session Persistence] Session restoration failed:', reason);
       writeTerm(`\r\n\x1b[33m[Session ended] ${resumeFailedText(reason)}\x1b[0m\r\n`);
+      // Forget the entry the refused offer came from (this tab's own, or the
+      // one a tab without an id claimed), so no reconnect offers it again.
+      if (resumeStorage) forgetRefusedOffer(resumeStorage, reason);
       // The restore failed, so the backend is about to start a genuinely
       // fresh session (a new graphics prompt, or the token-login fallback
       // below) - not a continuation of whatever session (PETSCII or not)
@@ -3190,7 +3205,7 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
       // belt-and-suspenders, since it also runs when there's no token to
       // fall back on).
       clearPetsciiSession();
-      clearSessionState();
+      clearSessionState({ keepResume: true });
       reconnectPending.current = false;
       // Fall back to token login
       loginState.current = 'server-driven';
@@ -3625,6 +3640,7 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
         gamepadManagerRef.current = null;
       }
       socket.disconnect();
+      tabIdGuard?.close();
       socket.offAny(handleDoorMessageEvent);
       term.dispose();
       terminalInstance.current = null;

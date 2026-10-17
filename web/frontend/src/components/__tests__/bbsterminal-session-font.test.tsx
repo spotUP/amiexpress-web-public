@@ -32,6 +32,8 @@ const rec = vi.hoisted(() => ({
   terminals: [] as any[],
   /** The socket the component will be handed on its next `io()` call. */
   socket: null as any,
+  /** The options of the last `io()` call (its `auth` carries the resume offer). */
+  ioOpts: null as any,
 }));
 
 vi.mock('../../../../../packages/terminal/node_modules/@xterm/xterm', () => {
@@ -97,7 +99,7 @@ vi.mock('../../../../../packages/terminal/node_modules/@xterm/addon-fit', () => 
 }));
 vi.mock('../../../../../packages/terminal/node_modules/zmodem.js/dist/zmodem', () => ({}));
 vi.mock('../../../../../packages/terminal/node_modules/socket.io-client', () => ({
-  io: () => rec.socket,
+  io: (_url: string, opts: unknown) => { rec.ioOpts = opts; return rec.socket; },
   Socket: class {},
 }));
 
@@ -109,6 +111,7 @@ import {
   FONT_CACHE_KEY,
   fontFamilyFor,
 } from '../../../../../packages/terminal/src/utils/session-font';
+import { RESUME_KEY, TAB_ID_KEY } from '../../../../../packages/terminal/src/utils/session-resume';
 // The socket.io-client double, shared with the other BBSTerminal tests.
 import { FakeSocket } from './helpers/fake-socket';
 
@@ -222,37 +225,36 @@ describe('a restored session re-applies the saved font', () => {
  * logged-in session. The restore path never asked for the font and the
  * server never volunteered it, so the whole session ran in the font xterm
  * was constructed with. This drives that exact sequence:
- * disconnect (network) -> connect -> restore-session -> session-restored.
+ * disconnect (network) -> connect (offering the resume token) -> session-restored.
  */
 describe('a reconnected session', () => {
-  /** A session state fresh enough for getStoredSessionState's 2-minute window. */
-  function seedSavedSession() {
-    window.sessionStorage.setItem(
-      'bbs_session_state',
-      JSON.stringify({
-        userId: 1,
-        username: 'Sysop',
-        nodeId: 1,
-        socketId: 'old-socket',
-        currentConf: 1,
-        savedAt: Date.now(),
-      }),
-    );
+  const TOKEN = 'R'.repeat(43);
+  /** This tab's resume entry (session-resume.ts), as login-success leaves it. */
+  function seedResumeEntry() {
+    window.sessionStorage.setItem(TAB_ID_KEY, 'tab-a');
+    window.localStorage.setItem(RESUME_KEY, JSON.stringify({
+      'tab-a': { token: TOKEN, userId: '1', nodeId: 1, savedAt: Date.now() },
+    }));
+  }
+  /** What the handshake's `auth` callback hands the board on this connect. */
+  function offered(): { resume?: string } {
+    let data: { resume?: string } = {};
+    rec.ioOpts.auth((d: { resume?: string }) => { data = d; });
+    return data;
   }
 
   afterEach(() => window.sessionStorage.clear());
 
   it('a reconnected session gets its font back', async () => {
-    seedSavedSession();
+    seedResumeEntry();
     mount();
 
-    // The tab lost the socket: a network disconnect arms the restore.
+    // The tab lost the socket; the reconnect offers the resume token.
     await act(async () => { socket.fire('disconnect', 'transport close'); });
-    // ...and the reconnect asks the server to restore the session.
+    expect(offered().resume).toBe(TOKEN);
     await act(async () => { socket.fire('connect'); });
-    expect(socket.didEmit('restore-session')).toBe(true);
 
-    // The server restores it. THIS is where the font used to be lost.
+    // The board restores it. THIS is where the font used to be lost.
     await act(async () => {
       socket.fire('session-restored', { userId: 1, username: 'Sysop', nodeId: 1, currentConf: 1 });
     });
@@ -260,6 +262,14 @@ describe('a reconnected session', () => {
 
     await act(async () => { socket.fire('font-preference', { font: 'Topaz_a500' }); });
     expect(rec.terminals[0].options.fontFamily).toBe(fontFamilyFor('Topaz_a500'));
+  });
+
+  it('a socket the board closed itself forgets this tab\'s resume token', async () => {
+    seedResumeEntry();
+    mount();
+    await act(async () => { socket.fire('disconnect', 'io server disconnect'); });
+    expect(window.localStorage.getItem(RESUME_KEY)).toBeNull();
+    expect(offered().resume).toBeUndefined();
   });
 });
 

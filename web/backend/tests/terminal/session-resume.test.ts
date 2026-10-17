@@ -21,6 +21,10 @@ import {
   clearResume,
   connectOptions,
   resumeFailedText,
+  takeResumeOffer,
+  forgetRefusedOffer,
+  guardTabId,
+  type TabIdChannel,
 } from '../../../../packages/terminal/src/utils/session-resume';
 
 class MemStorage {
@@ -119,12 +123,110 @@ describe('session-resume storage', () => {
   });
 });
 
+describe('claims (Decision 7: a claim resumes only a parked session)', () => {
+  it('a tab offers its own token plainly, a tab without an id offers the newest as a claim', () => {
+    const local = new MemStorage();
+    const a = mem(local);
+    tabId(a, () => 'tab-a');
+    saveResume(a, { token: T, userId: '7', nodeId: 3 }, 0);
+    expect(takeResumeOffer(a, true, 10_000)).toEqual({ resume: T });
+    const lost = mem(local);
+    expect(takeResumeOffer(lost, true, 10_000)).toEqual({ resume: T, claim: true });
+  });
+
+  it('a tab whose id is not yet confirmed as its own offers a claim', () => {
+    const s = mem();
+    tabId(s, () => 'tab-a');
+    saveResume(s, { token: T, userId: '7', nodeId: 3 }, 0);
+    expect(takeResumeOffer(s, false, 1000)).toEqual({ resume: T, claim: true });
+  });
+
+  it('a refused claim forgets the entry it claimed, so the next connect offers nothing', () => {
+    const local = new MemStorage();
+    const a = mem(local);
+    tabId(a, () => 'tab-a');
+    saveResume(a, { token: T, userId: '7', nodeId: 3 }, 0);
+    const lost = mem(local);
+    expect(takeResumeOffer(lost, true, 10_000)).toEqual({ resume: T, claim: true });
+    forgetRefusedOffer(lost, { reason: 'ended' });
+    expect(takeResumeOffer(lost, true, 11_000)).toBeUndefined();
+    expect(local.getItem(RESUME_KEY)).toBeNull();
+  });
+
+  it('a claim refused as in use leaves the live tab\'s entry alone', () => {
+    const local = new MemStorage();
+    const a = mem(local);
+    tabId(a, () => 'tab-a');
+    saveResume(a, { token: T, userId: '7', nodeId: 3 }, 0);
+    const lost = mem(local);
+    takeResumeOffer(lost, true, 10_000);
+    forgetRefusedOffer(lost, { reason: 'in-use' });
+    expect(resumeTokenToOffer(a, 11_000)).toBe(T);
+  });
+});
+
+/** Two ends of one BroadcastChannel name, delivering to every OTHER end, as the browser does. */
+function channelHub() {
+  const ends: Array<{ listeners: Array<(ev: { data: unknown }) => void>; closed: boolean }> = [];
+  return (): TabIdChannel => {
+    const me = { listeners: [] as Array<(ev: { data: unknown }) => void>, closed: false };
+    ends.push(me);
+    return {
+      postMessage(data: unknown) {
+        for (const e of ends) if (e !== me && !e.closed) e.listeners.forEach((l) => l({ data }));
+      },
+      addEventListener(_t: 'message', l: (ev: { data: unknown }) => void) { me.listeners.push(l); },
+      close() { me.closed = true; },
+    };
+  };
+}
+
+describe('guardTabId (Duplicate Tab copies sessionStorage)', () => {
+  const never = () => undefined;
+
+  it('a duplicated tab finds the first tab holds its id and mints its own', () => {
+    const hub = channelHub();
+    const local = new MemStorage();
+    const first = mem(local);
+    tabId(first, () => 'tab-a');
+    saveResume(first, { token: T, userId: '7', nodeId: 3 }, 0);
+    guardTabId(first, hub(), { schedule: never });
+    const copy = mem(local);
+    copy.tab.setItem(TAB_ID_KEY, 'tab-a'); // what Duplicate Tab copies
+    const g = guardTabId(copy, hub(), { schedule: never, newId: () => 'tab-b' });
+    expect(copy.tab.getItem(TAB_ID_KEY)).toBe('tab-b');
+    expect(first.tab.getItem(TAB_ID_KEY)).toBe('tab-a');
+    expect(g.confirmed()).toBe(true);
+    expect(takeResumeOffer(copy, g.confirmed(), 1000)).toBeUndefined();
+    expect(takeResumeOffer(first, true, 1000)).toEqual({ resume: T });
+  });
+
+  it('a reloaded tab nobody answers keeps its id, and is confirmed when the wait ends', () => {
+    const hub = channelHub();
+    const s = mem();
+    tabId(s, () => 'tab-a');
+    let fire: () => void = () => {};
+    const g = guardTabId(s, hub(), { schedule: (fn) => { fire = fn; } });
+    expect(g.confirmed()).toBe(false);
+    fire();
+    expect(g.confirmed()).toBe(true);
+    expect(s.tab.getItem(TAB_ID_KEY)).toBe('tab-a');
+  });
+
+  it('without BroadcastChannel the id is taken as this tab\'s own', () => {
+    const s = mem();
+    tabId(s, () => 'tab-a');
+    expect(guardTabId(s, undefined).confirmed()).toBe(true);
+    expect(s.tab.getItem(TAB_ID_KEY)).toBe('tab-a');
+  });
+});
+
 describe('connectOptions', () => {
   it('auth hands the CURRENT token on each connect', () => {
     const s = mem();
     tabId(s, () => 'tab-a');
     let now = 0;
-    const opts = connectOptions(false, () => resumeTokenToOffer(s, now));
+    const opts = connectOptions(false, () => takeResumeOffer(s, true, now));
     const seen: Array<{ resume?: string }> = [];
     opts.auth((d) => seen.push(d));
     saveResume(s, { token: T, userId: '7', nodeId: 3 }, 0);
@@ -145,5 +247,6 @@ describe('resumeFailedText', () => {
     expect(resumeFailedText({ reason: 'ended' })).toMatch(/has ended/);
     expect(resumeFailedText({ reason: 'expired' })).toMatch(/waited longer/);
     expect(resumeFailedText({ reason: 'account' })).toMatch(/this account/);
+    expect(resumeFailedText({ reason: 'in-use' })).toMatch(/still open in another window/);
   });
 });
