@@ -197,7 +197,7 @@ struct menudoor {
     ui_pages pages;                   /* cover flow: the page key rule, indicator and turn */
     int palette;                      /* the search palette: lv[0] is the catalogue filtered by the typed text */
     int palette_total;                /* palette: the catalogue's entry count, the M of "N of M" */
-    int ov_top, ov_left, ov_rows, ov_cols;    /* palette: the overlay box, 1-based (plan K3) */
+    int ov_top, ov_left, ov_rows, ov_cols, ov_rail;    /* palette: the overlay box, 1-based (plan K3) */
     int escaped;                      /* palette: left by Esc, so the board's screen under the box comes back */
     int rail_tick;
     int gone;                         /* the caller hung up */
@@ -321,6 +321,9 @@ static void overlay_place(struct menudoor *d)
     d->ov_cols = w; d->ov_rows = h;
     d->ov_left = (cols - w) / 2 + 1;
     d->ov_top = (rows - h) / 2 + 1;
+    /* The rail is the first row INSIDE the box, under an ordinary top border. The box keeps its size (the 80x25 first
+       paint is budgeted at 2048 bytes and the board saves exactly this rectangle), so the list gives the row up. */
+    d->ov_rail = ui_masthead_rail_animates(d->rail) && h >= 8;
 }
 
 /* The grid as the overlay's list: the rows between the field and the description, one column, section headers, no band. */
@@ -328,8 +331,8 @@ static void overlay_configure(struct menudoor *d, level *lv, int selected)
 {
     ui_grid *g = &lv->grid;
     configure(d, lv, selected);                           /* the theme's inks, the texts, the caret: the grid as everywhere */
-    g->top = d->ov_top + 2; g->left = d->ov_left + 1;
-    g->height = d->ov_rows - 4; g->width = d->ov_cols - 2;
+    g->top = d->ov_top + 2 + d->ov_rail; g->left = d->ov_left + 1;
+    g->height = d->ov_rows - 4 - d->ov_rail; g->width = d->ov_cols - 2;
     g->band_after_section = -1; g->band_height = 0;      /* section headers as configure() set them: none for one section */
     g->mode = UI_GRID_SCROLL; g->max_columns = 1;
     g->erase_tail = 0;                                    /* an erase would take the board's screen beside the box */
@@ -387,11 +390,11 @@ static void overlay_field(struct menudoor *d)
         line[at] = '\0';
     }
     ansi_color(&sc->buf, UI_TOKEN(UI_T_INK), ground(d), 0);
-    ansi_text_raw(&sc->buf, d->ov_top + 1, d->ov_left + 1, line, inner);
+    ansi_text_raw(&sc->buf, d->ov_top + 1 + d->ov_rail, d->ov_left + 1, line, inner);
     if (d->typed_len == 0) {
         ui_screen_cursor(sc, 0);
     } else {
-        ansi_goto(&sc->buf, d->ov_top + 1, overlay_caret_column(d));
+        ansi_goto(&sc->buf, d->ov_top + 1 + d->ov_rail, overlay_caret_column(d));
         ui_screen_cursor(sc, 1);
     }
 }
@@ -425,19 +428,15 @@ static void overlay_description(struct menudoor *d, int full)
     d->status_valid = 1;
 }
 
-/* The box's top line. With a rail (an 80-column caller, effects on, a theme that has one) it is the masthead the
-   full-screen menu draws on row 1, at the box's width: the rail sliding in, "Search" at its end - the palette is a
-   modal, so its chrome lives in the box and nothing is painted outside it (sysop 2026-10-17). Without a rail
-   (40 columns, PETSCII, effects off) the frame's own labelled edge stays. */
+/* The box: an ordinary labelled frame, corners and all four borders. With a rail (an 80-column caller, effects on, a
+   theme that has one) the masthead's rail runs along the first row INSIDE it, between the side borders, with the
+   label at its end; nothing is painted outside the box (sysop 2026-10-18: the rail replaced the top border). */
 static void overlay_frame(struct menudoor *d)
 {
-    if (!ui_masthead_rail_animates(d->rail)) {
-        ansi_box(&d->screen.buf, d->ov_top, d->ov_left, d->ov_rows, d->ov_cols, UI_TOKEN(UI_T_CHROME), OVERLAY_LABEL);
-        return;
-    }
-    ui_masthead_draw_tick(&d->screen.buf, d->ov_top, d->ov_left, d->ov_cols, OVERLAY_LABEL, d->rail,
+    ansi_box(&d->screen.buf, d->ov_top, d->ov_left, d->ov_rows, d->ov_cols, UI_TOKEN(UI_T_CHROME), d->ov_rail ? "" : OVERLAY_LABEL);
+    if (!d->ov_rail) return;
+    ui_masthead_draw_tick(&d->screen.buf, d->ov_top + 1, d->ov_left + 1, d->ov_cols - 2, OVERLAY_LABEL, d->rail,
                           UI_TOKEN(UI_T_BAR_INK), ground(d), d->rail_tick);
-    ansi_box_open(&d->screen.buf, d->ov_top, d->ov_left, d->ov_rows, d->ov_cols, UI_TOKEN(UI_T_CHROME));
 }
 
 /* The first paint: the frame, then every inner cell exactly once. The grid draws its rows without the blank pass (each
@@ -638,7 +637,7 @@ static void park_cursor(struct menudoor *d)
     level *lv = cur(d);
     int plen;
     if (d->typed_len == 0) return;
-    if (d->palette) { ansi_goto(&d->screen.buf, d->ov_top + 1, overlay_caret_column(d)); return; }
+    if (d->palette) { ansi_goto(&d->screen.buf, d->ov_top + 1 + d->ov_rail, overlay_caret_column(d)); return; }
     plen = prompt_len(lv) + d->typed_len;
     if (plen > d->screen.cols - 1) plen = d->screen.cols - 1;
     ansi_goto(&d->screen.buf, lv->lay.prompt_row, 1 + plen);
@@ -761,7 +760,7 @@ static void door_idle(void *ctx)
        type), so a second save here would only send four more bytes. The palette's rail is the box's top line: the
        screen's row 1 belongs to the board's screen under the modal. */
     if (d->palette) {
-        ui_masthead_rail_tick(&d->screen.buf, d->ov_top, d->ov_left, d->ov_cols, OVERLAY_LABEL, d->rail,
+        ui_masthead_rail_tick(&d->screen.buf, d->ov_top + 1, d->ov_left + 1, d->ov_cols - 2, OVERLAY_LABEL, d->rail,
                               UI_TOKEN(UI_T_BAR_INK), ground(d), d->rail_tick);
     } else {
         const md_layout_out *lay = &cur(d)->lay;

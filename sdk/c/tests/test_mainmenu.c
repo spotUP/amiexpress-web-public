@@ -76,10 +76,14 @@ static void drive(const char *keys, size_t n, int *rc)
    clears or erases a row, and the box's top line is the theme's animated rail. A small terminal walk: cursor
    addresses, save/restore, CR/LF; printables advance the column; the walk ends at the closing clear. Returns the number of separate runs written on
    the top row that carry a '/', or -1 when a byte lands outside the box or the screen is cleared. */
+static unsigned char pal_glyph[40][100];   /* the last byte written at each cell of the walk, [row][col] */
+static int pal_writes[40][100];            /* how many times each cell was written */
+
 static int palette_runs_on_top(const char *text, int top, int left, int rows, int cols)
 {
     const unsigned char *p = (const unsigned char *)text;
     int row = 1, col = 1, srow = 1, scol = 1, runs = 0, in_run = 0, slash = 0;
+    memset(pal_glyph, 0, sizeof pal_glyph); memset(pal_writes, 0, sizeof pal_writes);
     while (*p) {
         if (*p == 0x1b && p[1] == '[') {
             int a = 0, b = 0, which = 0;
@@ -109,13 +113,36 @@ static int palette_runs_on_top(const char *text, int top, int left, int rows, in
         if (*p == '\n') { row++; p++; continue; }
         if (*p >= 32 && *p != 127) {
             if (row < top || row >= top + rows || col < left || col >= left + cols) return -1;
-            if (row == top) { in_run = 1; if (*p == '/') slash = 1; }
+            pal_glyph[row][col] = *p; pal_writes[row][col]++;
+            if (row == top + 1) { in_run = 1; if (*p == '/') slash = 1; }
             col++;
         }
         p++;
     }
     if (in_run && slash) runs++;
     return runs;
+}
+
+/* The box keeps its ordinary border on all four sides; with a rail it is the first row INSIDE the box. */
+static void palette_rail_is_inside_the_box(int top, int left, int rows, int cols, int rail)
+{
+    int c, r;
+    assert(pal_glyph[top][left] == '+' && pal_glyph[top][left + cols - 1] == '+');       /* corners intact */
+    assert(pal_glyph[top + rows - 1][left] == '+' && pal_glyph[top + rows - 1][left + cols - 1] == '+');
+    for (c = left + 1; c < left + cols - 1; c++) {                  /* the top border is the border glyph, never a rail glyph */
+        assert(pal_glyph[top][c] == '-' || pal_glyph[top][c] == ' ' || (pal_glyph[top][c] >= 'A' && pal_glyph[top][c] <= 'z'));
+        assert(pal_glyph[top][c] != '/');
+    }
+    for (r = top + 1; r < top + rows - 1; r++)                      /* the side borders */
+        assert(pal_glyph[r][left] == '|' && pal_glyph[r][left + cols - 1] == '|');
+    if (rail) {
+        int slashes = 0;
+        for (c = left + 1; c < left + cols - 1; c++) if (pal_glyph[top + 1][c] == '/') slashes++;
+        assert(slashes > 0);                                        /* rail glyphs between the side borders on the row below */
+    }
+    /* Every border cell was written exactly once (the first paint): a rail tick wrote none of them. */
+    for (c = left; c < left + cols; c++) assert(pal_writes[top][c] == 1 && pal_writes[top + rows - 1][c] == 1);
+    for (r = top; r < top + rows; r++) assert(pal_writes[r][left] == 1 && pal_writes[r][left + cols - 1] == 1);
 }
 
 int main(void)
@@ -254,9 +281,11 @@ int main(void)
     printf("  [OK] Enter runs the exact key first, and an unlisted line runs as typed\n");
     drive("mail", 4, &rc);                                 /* no leaving key: the wait before the lost carrier ticks the rail */
     assert(rc == 0 && strstr(requests, "SAVE 5 11 16 60|") && palette_runs_on_top(screen_text, 5, 11, 16, 60) >= 2);
+    palette_rail_is_inside_the_box(5, 11, 16, 60, 1);
     size_text = "40\t25";
     drive("mail", 4, &rc);                                 /* 40 columns: no rail, the static frame, still only the box */
     assert(rc == 0 && strstr(requests, "SAVE 6 2 14 38|") && palette_runs_on_top(screen_text, 6, 2, 14, 38) >= 0);
+    palette_rail_is_inside_the_box(6, 2, 14, 38, 0);
     size_text = "80\t25";
     printf("  [OK] the palette is a modal: nothing outside the box, and its top line is the animated rail\n");
     main_line = "";
