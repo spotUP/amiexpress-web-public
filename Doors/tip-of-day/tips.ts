@@ -49,16 +49,24 @@ export const FALLBACK_TIP: Tip = {
   body: 'Type ? at the menu for the command list. Everything here answers to a single key.',
 };
 
+// A catalog description is a .info line, often without a full stop. The
+// command is not repeated here: the frame's hint already says "Run X at the
+// menu." for any tip with a command (layout.ts).
+function sentence(text: string): string {
+  return /[.!?]$/.test(text) ? text : `${text}.`;
+}
+
 function doorTips(catalog: DoorEntry[]): Tip[] {
-  return catalog.map((d) => ({
-    id: `door:${d.command}`,
-    kind: 'door' as const,
-    title: `Try ${d.command}`,
-    body: d.inHouse
-      ? `${d.description || 'A door on this board.'} Run ${d.command} at the menu.`
-      : `${d.description || 'A door on this board.'} (Ported - run ${d.command} at the menu.)`,
-    command: d.command,
-  }));
+  return catalog.map((d) => {
+    const description = sentence(d.description || 'A door on this board');
+    return {
+      id: `door:${d.command}`,
+      kind: 'door' as const,
+      title: `Try ${d.command}`,
+      body: d.inHouse ? description : `${description} (Ported.)`,
+      command: d.command,
+    };
+  });
 }
 
 function factTips(facts: BoardFacts): Tip[] {

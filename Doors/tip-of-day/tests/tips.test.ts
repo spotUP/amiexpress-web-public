@@ -33,6 +33,14 @@ export async function doorSpotlightNamesTheCommand(): Promise<void> {
   assert.ok(tip.id.startsWith('door:'));
 }
 
+export async function doorBodySaysTheCommandOnlyInTheHint(): Promise<void> {
+  // Live 2026-10-18: "your data Run WEBTERM at the menu." in the body, then
+  // "Run WEBTERM at the menu. Any key continues..." in the hint below it.
+  const tip = pickTip(CATALOG.slice(0, 1), EMPTY_FACTS, [], new Set(), { ...WEIGHTS, fact: 0, howto: 0, event: 0 }, () => 0);
+  assert.strictEqual(tip.body, 'Demo-scene projects.');
+  assert.strictEqual(tip.command, 'WHIP');
+}
+
 export async function unseenFirstCyclesTheCatalog(): Promise<void> {
   const seen = new Set(['door:WHIP', 'door:ARKANOID']);
   const tip = pickTip(CATALOG, EMPTY_FACTS, [], seen, { ...WEIGHTS, fact: 0, howto: 0, event: 0 }, () => 0);

@@ -18,7 +18,7 @@ const TIP: Tip = {
   id: 'door:WHIP',
   kind: 'door',
   title: 'Try WHIP',
-  body: 'Demo-scene project management with kanban boards, parties, and a leaderboard. Run WHIP at the menu.',
+  body: 'Demo-scene project management with kanban boards, parties, and a leaderboard.',
   command: 'WHIP',
 };
 
@@ -37,7 +37,7 @@ describe('tip-of-the-day layout', () => {
       title: 'Tip of the day - Try WHIP'.slice(0, 60),
       body: [
         'Demo-scene project management with kanban boards, parties,',
-        'and a leaderboard. Run WHIP at the menu.',
+        'and a leaderboard.',
       ],
       hint: 'Run WHIP at the menu. Any key continues...',
     });

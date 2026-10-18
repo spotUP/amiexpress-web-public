@@ -14,7 +14,7 @@ const TIP: Tip = {
   id: 'door:WHIP',
   kind: 'door',
   title: 'Try WHIP',
-  body: 'Demo-scene project management with kanban boards, parties, and a leaderboard. Run WHIP at the menu.',
+  body: 'Demo-scene project management with kanban boards, parties, and a leaderboard.',
   command: 'WHIP',
 };
 
@@ -31,7 +31,7 @@ export async function eightyColumnFrameIsPinned(): Promise<void> {
   assert.strictEqual(frame.innerWidth, 60);
   assert.deepStrictEqual(frame.body, [
     'Demo-scene project management with kanban boards, parties,',
-    'and a leaderboard. Run WHIP at the menu.',
+    'and a leaderboard.',
   ]);
   assert.strictEqual(frame.hint, 'Run WHIP at the menu. Any key continues...');
 }
