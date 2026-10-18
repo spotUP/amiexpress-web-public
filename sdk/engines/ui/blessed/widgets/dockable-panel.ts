@@ -443,6 +443,18 @@ export class DockablePanel extends Panel {
     this._invalidateCoords();
   }
 
+  /**
+   * A movable panel's title bar takes the first row inside the border. That
+   * row is reserved here, so a child placed at top 0 starts below the bar
+   * instead of being drawn under it, and '100%' fills only what is left.
+   * The bar itself (and its buttons, which are its children) keep row 0.
+   * Static panels have no bar and reserve nothing.
+   */
+  override contentInsetTop(child: Element): number {
+    if (!this.titleBar || this.titleBar.hidden || child === this.titleBar) return 0;
+    return 1;
+  }
+
   private setupTitleBar(options: DockablePanelOptions): void {
     if (!options.label && !options.title && !options.showMinimizeButton && !options.showCloseButton) {
       return;

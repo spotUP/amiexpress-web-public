@@ -2285,7 +2285,7 @@ End of sample markdown.`;
         });
         blessed_1.default.text({
             parent: float,
-            top: 1, left: 1,
+            top: 0, left: 1,
             content: 'Drag me around!\nThis panel floats above others.',
         });
         // Docked Bottom
@@ -2299,7 +2299,7 @@ End of sample markdown.`;
         });
         blessed_1.default.text({
             parent: footer,
-            top: 1, left: 'center',
+            top: 0, left: 'center',
             content: 'Status: Ready',
         });
         addResult('DockablePanel', 'pass', 'Docking and floating work');

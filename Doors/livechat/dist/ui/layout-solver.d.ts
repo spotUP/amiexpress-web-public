@@ -24,10 +24,13 @@ export interface SolvedLayout {
     /** Null when there is no room for it, whatever the user asked for. */
     sidebar: Rect | null;
     chat: Rect;
-    /** Inner log area, inside the chat panel's border. */
+    /**
+     * Inner log width, inside the chat panel's border. The height is the
+     * panel's: the log fills whatever rows the panel gives its content, which
+     * on a movable panel excludes the title bar row.
+     */
     chatLog: {
         width: number;
-        height: number;
     };
     input: {
         width: number;

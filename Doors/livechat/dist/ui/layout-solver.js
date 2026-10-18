@@ -111,7 +111,6 @@ function solveLayout(request, constants) {
     // for the scrollbar, which Element draws at the log's own last column.
     const chatLog = {
         width: atLeastOne(chatWidth - 3),
-        height: atLeastOne(contentHeight - 2),
     };
     // The emoji button gives up its corner rather than push the input to
     // nothing - on a very narrow window, typing matters more than the button.

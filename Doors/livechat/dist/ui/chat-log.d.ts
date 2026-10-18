@@ -8,7 +8,6 @@ export { TYPING_HEIGHT };
 export declare function createChatLog(screen: Screen, sidebarWidth: number): {
     panel: DockablePanel;
     log: Log;
-    titleRows: number;
 };
 export declare function updateChatHeader(chatLog: Log, channelName: string): void;
 /**

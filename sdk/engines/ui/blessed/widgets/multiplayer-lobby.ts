@@ -1371,7 +1371,8 @@ export class MultiplayerLobby extends EventEmitter {
 
     this.tableListWidget = new ListTable({
       parent: this.tableBrowserBox,
-      top: 1,
+      // Top 0 of a movable panel is already below its title bar.
+      top: 0,
       left: 0,
       width: 74,
       height: tableListHeight - 3,

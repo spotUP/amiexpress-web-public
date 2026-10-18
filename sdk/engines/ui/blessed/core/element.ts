@@ -467,6 +467,16 @@ export class Element extends EventEmitter {
     // redraw on every geometry change cost 2336 bytes for the same move.
   }
 
+  /**
+   * Rows at the top of this element's inner area that are not given to
+   * `child`. Children are positioned (and their percentage heights measured)
+   * below them. 0 for a plain element; a widget that draws its own chrome
+   * inside its border overrides this so callers never offset by hand.
+   */
+  contentInsetTop(_child: Element): number {
+    return 0;
+  }
+
   _getCoords(get?: boolean, noscroll?: boolean): Position | undefined {
     if (this.destroyed) return undefined;
 
@@ -489,7 +499,11 @@ export class Element extends EventEmitter {
 
     const parentContentXi = parentPos.xi + parentBorder + parentPadding.left;
     const parentContentXl = parentPos.xl - parentBorder - parentPadding.right;
-    const parentContentYi = parentPos.yi + parentBorder + parentPadding.top;
+    // A parent may reserve rows at the top of its inner area for its own
+    // chrome (DockablePanel's title bar): a child placed at top 0 starts
+    // below them, and percentage heights measure what is left.
+    const parentInsetTop = parent?.contentInsetTop?.(this) ?? 0;
+    const parentContentYi = parentPos.yi + parentBorder + parentPadding.top + parentInsetTop;
     const parentContentYl = parentPos.yl - parentBorder - parentPadding.bottom;
 
     const parentWidth = parentContentXl - parentContentXi;

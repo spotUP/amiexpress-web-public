@@ -49,8 +49,12 @@ export interface SolvedLayout {
   /** Null when there is no room for it, whatever the user asked for. */
   sidebar: Rect | null;
   chat: Rect;
-  /** Inner log area, inside the chat panel's border. */
-  chatLog: { width: number; height: number };
+  /**
+   * Inner log width, inside the chat panel's border. The height is the
+   * panel's: the log fills whatever rows the panel gives its content, which
+   * on a movable panel excludes the title bar row.
+   */
+  chatLog: { width: number };
   input: { width: number; height: number };
   /** Zero when the window is too short to afford them. */
   statusHeight: number;
@@ -168,7 +172,6 @@ export function solveLayout(request: LayoutRequest, constants: LayoutConstants):
   // for the scrollbar, which Element draws at the log's own last column.
   const chatLog = {
     width: atLeastOne(chatWidth - 3),
-    height: atLeastOne(contentHeight - 2),
   };
 
   // The emoji button gives up its corner rather than push the input to

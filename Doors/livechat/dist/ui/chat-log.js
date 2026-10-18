@@ -25,13 +25,6 @@ function createChatLog(screen, sidebarWidth) {
     // Account for sidebar width - no additional subtraction needed
     // Sidebar is 18 chars (including its border), screen is 80, so chat panel gets 62 chars
     const chatPanelWidth = screenWidth - sidebarWidth;
-    // DockablePanel gives a panel that can move a one-row title bar (its drag
-    // handle) as the FIRST ROW of its content; a static panel keeps its label
-    // on the border instead. The log has to start below that row, or the bar
-    // is drawn over the log's first line - "*** Joined #main (1 users) ***"
-    // sat under " Chat " and was never seen (the sysop, 2026-10-18).
-    const movable = !(0, bbs_door_sdk_1.isCompactWidth)(screenWidth);
-    const titleRows = movable ? 1 : 0;
     const chatPanel = new blessed_1.DockablePanel({
         parent: screen,
         title: ' Chat ',
@@ -57,8 +50,8 @@ function createChatLog(screen, sidebarWidth) {
          * the affordances go, rather than being made smaller - a C64 caller has
          * no way to put a panel back where it was.
          */
-        resizable: movable,
-        draggable: movable,
+        resizable: !(0, bbs_door_sdk_1.isCompactWidth)(screenWidth),
+        draggable: !(0, bbs_door_sdk_1.isCompactWidth)(screenWidth),
         minWidth: 40,
         minHeight: 10,
         zIndex: 1,
@@ -96,12 +89,13 @@ function createChatLog(screen, sidebarWidth) {
     // Use Log widget for proper chat functionality with type safety
     const chatLog = (0, blessed_helpers_1.createLog)({
         parent: chatPanel,
-        top: titleRows,
+        top: 0,
         left: 0,
-        // Matches updateLayout(): borders plus the scrollbar column, and the
-        // title bar row when the panel has one.
+        // Matches updateLayout(): borders plus the scrollbar column.
         width: '100%-3',
-        height: `100%-${2 + titleRows}`,
+        // All the rows the panel gives its content. A movable panel reserves its
+        // title bar row itself, so top 0 / 100% start below it.
+        height: '100%',
         label: '',
         border: { type: 'none' },
         mouse: true,
@@ -119,7 +113,7 @@ function createChatLog(screen, sidebarWidth) {
             bg: door_theme_1.T.ground,
         },
     });
-    return { panel: chatPanel, log: chatLog, titleRows };
+    return { panel: chatPanel, log: chatLog };
 }
 function updateChatHeader(chatLog, channelName) {
     chatLog.setLabel(` ${channelName} `);

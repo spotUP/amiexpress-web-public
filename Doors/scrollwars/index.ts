@@ -321,7 +321,7 @@ door.onStart(async (ctx: DoorContext) => {
 
   const userPanel = createBox({
     parent: userPanelDock,
-    top: 1, left: 1, width: '100%-2', height: '100%-2',
+    top: 0, left: 1, width: '100%-2', height: '100%-1',
     tags: true,
     focusable: false, mouse: false, clickable: false,
   });
@@ -337,7 +337,7 @@ door.onStart(async (ctx: DoorContext) => {
 
   const chatPanel = createBox({
     parent: chatPanelDock,
-    top: 1, left: 1, width: '100%-2', height: '100%-2',
+    top: 0, left: 1, width: '100%-2', height: '100%-1',
     tags: true,
     focusable: false, mouse: false, clickable: false,
   });

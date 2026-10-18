@@ -2543,7 +2543,7 @@ End of sample markdown.`;
     });
     blessed.text({
       parent: float,
-      top: 1, left: 1,
+      top: 0, left: 1,
       content: 'Drag me around!\nThis panel floats above others.',
     });
 
@@ -2558,7 +2558,7 @@ End of sample markdown.`;
     });
     blessed.text({
       parent: footer,
-      top: 1, left: 'center',
+      top: 0, left: 'center',
       content: 'Status: Ready',
     });
 
