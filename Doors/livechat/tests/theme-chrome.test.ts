@@ -104,14 +104,22 @@ export async function theFocusStyleIsReadWhenAWidgetIsBuilt(): Promise<void> {
   // PANEL_FOCUS_STYLE is spread into a widget's style at build time, which
   // is after the theme is known - so it has to be a getter, not a value
   // frozen at import.
+  // Two themes whose focus colour (ink) differs, or the check proves nothing:
+  // 'classic' is no SDK theme (themeById falls back to uprough-neon), so a
+  // classic/neon pair compared neon with neon.
   const { PANEL_FOCUS_STYLE } = await import('../ui/theme');
-  applyTheme(themeById('classic'));
+  assert.notStrictEqual(
+    themeById('quiet-phosphor').tokens.ink,
+    themeById('uprough-neon').tokens.ink,
+    'the two themes must differ in ink',
+  );
+  applyTheme(themeById('quiet-phosphor'));
   refreshPanelChrome();
-  const classic = { ...PANEL_FOCUS_STYLE }.focus.border.fg;
+  const phosphor = { ...PANEL_FOCUS_STYLE }.focus.border.fg;
 
   applyTheme(themeById('uprough-neon'));
   refreshPanelChrome();
   const neon = { ...PANEL_FOCUS_STYLE }.focus.border.fg;
 
-  assert.notStrictEqual(classic, neon, 'the spread reads the theme in force');
+  assert.notStrictEqual(phosphor, neon, 'the spread reads the theme in force');
 }
