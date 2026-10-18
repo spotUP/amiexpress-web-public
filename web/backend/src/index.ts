@@ -454,6 +454,15 @@ export interface BBSSession {
     | null; // Door key state handler for simultaneous key input
   doorReconnectHandler?: (() => void) | null; // Door reconnect handler to force redraw after socket reconnect
   pendingDoorCommands?: string[]; // Commands queued by doors to run after exit
+  /**
+   * True for exactly the life of a TypeScript door's execute(): set by
+   * executeTypeScriptDoor before the call, cleared in its finally. The backend
+   * owns it; inDoorManager does not do this job, because the SDK clears it in
+   * dispose() while the door is still inside execute() (DOORS does, before it
+   * hands the caller's pick to executeCommand). BBSApi.executeCommand queues
+   * while this is set, so a door's command runs after the door has returned.
+   */
+  doorExecuting?: boolean;
   socket?: any; // Active socket instance (used for reconnect-safe output)
   socketId?: string; // Active socket id for this session
   /**

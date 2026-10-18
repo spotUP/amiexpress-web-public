@@ -1762,6 +1762,13 @@ console.error('[BBSApi] Error listing rooms:', error);
   /**
    * Execute a BBS command (same path as user-typed commands)
    * If a door is active, queue the command to run after the door exits.
+   *
+   * "A door is active" is session.doorExecuting, which executeTypeScriptDoor
+   * holds for the whole of execute(). inDoorManager alone is not enough: the
+   * SDK's dispose() clears it while the door is still inside execute(), and a
+   * command run from there starts before the door returns (DOORS picking
+   * PHREAKWARS: the menu door came back over it). inDoorManager still counts
+   * for the runners that set only it (ARexx).
    */
   async executeCommand(command: string, params?: string | string[]): Promise<void> {
     const trimmed = (command || '').trim();
@@ -1770,7 +1777,7 @@ console.error('[BBSApi] Error listing rooms:', error);
     const paramText = Array.isArray(params) ? params.join(' ') : (params || '').trim();
     const commandLine = paramText ? `${trimmed} ${paramText}` : trimmed;
 
-    if (this.session.inDoorManager) {
+    if (this.session.doorExecuting || this.session.inDoorManager) {
       if (!this.session.pendingDoorCommands) {
         this.session.pendingDoorCommands = [];
       }

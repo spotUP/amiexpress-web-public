@@ -2291,6 +2291,11 @@ console.log(`[executeTypeScriptDoor] Registered hybrid RPC handler: ${method}`);
       }
     }
 
+    // Held for exactly the life of execute(), whatever the door does to
+    // inDoorManager: BBSApi.executeCommand queues on it, and the queue is
+    // drained below once the door has returned.
+    session.doorExecuting = true;
+    try {
     if (isHybridRPCOnly) {
       // Server is RPC-only — client bundle drives the session.
       // RPC handlers are already registered above; nothing else to execute.
@@ -2314,6 +2319,9 @@ console.log(`[executeTypeScriptDoor] Hybrid RPC-only door — waiting for client
         bbs: bbsApi,
         params: door.parameters || []
       });
+    }
+    } finally {
+      session.doorExecuting = false;
     }
 
 console.log(`[executeTypeScriptDoor] Door.execute() returned`);
