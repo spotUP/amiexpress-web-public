@@ -137,3 +137,36 @@ export function takeHeldScreen(connectionId: string): string | null {
   const screen = screens.get(connectionId);
   return renderSnapshot(snap, screen?.grid.columns ?? snap.cols);
 }
+
+/**
+ * The caller moved to another socket (a resume, or a move from another
+ * window): the same screen now belongs to `toId`. Mirrors
+ * nodeManager.rekeySession. Without it the old id's stopObserving drops the
+ * model with the old socket and the new terminal has nothing to repaint from.
+ */
+export function rekeyScreenModel(fromId: string, toId: string): void {
+  if (fromId === toId) return;
+  const screen = screens.get(fromId);
+  if (!screen) return;
+  screens.delete(fromId);
+  screens.set(toId, screen);
+  const heldScreen = held.get(fromId);
+  if (heldScreen) {
+    held.delete(fromId);
+    held.set(toId, heldScreen);
+  }
+}
+
+/**
+ * The bytes that repaint this caller's whole screen on a blank terminal
+ * (every cell, then cursor and SGR), without releasing any hold. Null when the
+ * board has drawn nothing visible for him.
+ */
+export function renderWholeScreen(connectionId: string): string | null {
+  const screen = screens.get(connectionId);
+  if (!screen || screen.grid.height === undefined) return null;
+  const snap = snapshotRegion(screen.grid, 1, 1, screen.grid.height, screen.grid.columns);
+  if (!snap) return null;
+  if (!snap.cells.some(row => row.some(cell => cell.char.trim() !== ''))) return null;
+  return renderSnapshot(snap, screen.grid.columns);
+}

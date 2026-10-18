@@ -26,6 +26,7 @@ import {
 } from './resume-tokens';
 import { sessions, socketToNodeId, socketToUser, setSession, getNextAvailableNodeId } from './session-manager';
 import { startObserving, stopObserving } from './session-observers';
+import { rekeyScreenModel, renderWholeScreen } from '../services/screen-model/screen-model';
 import { getSystemTime } from '../utils/date-time.util';
 import { publishNodeStatus } from '../utils/acs.util';
 import { cleanupTransfer } from '../utils/raw-transfer-teardown.util';
@@ -275,6 +276,9 @@ export function attachParkedTo(raw: Socket, session: BBSSession, user: AttachUse
   socketToUser.set(raw.id, String(user.id));
   const { nodeManager } = require('../services/node-manager.service');
   nodeManager.rekeySession(oldId, raw.id);
+  // The screen model moves with the caller BEFORE stopObserving(oldId), which
+  // would drop it: it is what repaints the new terminal below.
+  rekeyScreenModel(oldId, raw.id);
   stopObserving(oldId);
   startObserving(raw.id);
 
@@ -314,7 +318,20 @@ export function attachParkedTo(raw: Socket, session: BBSSession, user: AttachUse
   });
 
   const held = link.takeHeld();
-  if (held.overflowed || sessionWantsPetscii(session)) {
+  // One source for the repaint: the screen model, which saw everything the
+  // board sent this caller, held output included (observeOutput runs on every
+  // send, parked or not). So when it has a screen, the held chunks are NOT
+  // replayed on top (that would draw the same output twice); the terminal is
+  // cleared and given the whole screen. A move from a still-attached window
+  // was never parked and holds nothing, which is why held output alone left a
+  // blank screen. PETSCII keeps its own model path below.
+  const whole = sessionWantsPetscii(session) ? null : renderWholeScreen(raw.id);
+  if (whole !== null) {
+    raw.emit('ansi-output', '\x1b[2J\x1b[H');
+    raw.emit('ansi-output', whole);
+    const geo = session as unknown as { screenWidth?: number; screenHeight?: number };
+    session.bbsApi?.emitInternal?.('screen:resize', { cols: geo.screenWidth ?? 80, rows: geo.screenHeight ?? 25 });
+  } else if (held.overflowed || sessionWantsPetscii(session)) {
     // Held output is incomplete, or a PETSCII model describes a screen the
     // rebuilt browser canvas no longer has: start the screen over instead.
     disposePetsciiSessionModel(session);

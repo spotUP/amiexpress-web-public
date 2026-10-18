@@ -150,7 +150,9 @@ describe('a dropped phone resumes its session, through acceptWebConnection', () 
     expect(eventNames(b)).toEqual(expect.arrayContaining(['session-restored', 'door:active-client']));
     expect(eventNames(b)).not.toContain('session-restore-failed');
     expect(b.sent).toContainEqual(['door:active-client', [{ doorId: 'beeb' }]]);
-    expect(b.sent).toContainEqual(['ansi-output', ['door frame while away']]);
+    // The screen model repaints the whole screen after a clear (one source; the held chunk is not replayed on top).
+    expect(b.sent).toContainEqual(['ansi-output', ['\x1b[2J\x1b[H']]);
+    expect(b.sent.filter(([e, [t]]: [string, [string]]) => e === 'ansi-output' && t.includes('door frame while away'))).toHaveLength(1);
     const restored = b.sent.find(([e]: [string]) => e === 'session-restored')[1][0];
     expect(restored.nodeId).toBe(3);
     expect(restored.resumeToken).toEqual(expect.any(String));
@@ -291,7 +293,7 @@ describe('the parking rules (session-parking.ts)', () => {
     expect(b.sent).toEqual([]);
   });
 
-  it('after a held-output overflow the resume clears the screen and asks the door to repaint, replaying nothing', async () => {
+  it('after a held-output overflow the resume clears the screen and asks the door to repaint, repainting from the screen model, replaying nothing', async () => {
     const { a, link, session } = loggedOn();
     const emitInternal = jest.fn();
     Object.assign(session, { bbsApi: { emitInternal }, screenWidth: 40, screenHeight: 25 });
@@ -301,7 +303,11 @@ describe('the parking rules (session-parking.ts)', () => {
     const b = fakeRaw('B');
     expect((await resumeParked(b, token)).ok).toBe(true);
     expect(b.sent).toContainEqual(['ansi-output', ['\x1b[2J\x1b[H']]);
-    expect(b.sent.filter(([e]: [string]) => e === 'ansi-output')).toHaveLength(1);
+    // The held output is incomplete, so nothing is replayed; the screen model supplies the whole screen.
+    const out = b.sent.filter(([e]: [string]) => e === 'ansi-output');
+    expect(out).toHaveLength(2);
+    expect(out[1][1][0]).toContain('door frame while away');
+    expect(out.map(([, [t]]: [string, [string]]) => t).join('')).not.toContain('xxxx');
     expect(emitInternal).toHaveBeenCalledWith('screen:resize', { cols: 40, rows: 25 });
   });
 
