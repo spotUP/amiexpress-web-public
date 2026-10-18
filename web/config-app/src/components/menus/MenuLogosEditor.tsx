@@ -26,7 +26,7 @@ const POSITIONS: Array<{ position: LogoPosition; title: string; note?: string }>
   { position: 'between', title: 'Between sections' },
 ];
 const logoPath = (kind: MenuKind, file: string) => `Screens/menus/${kind.toLowerCase()}/logos/${file}`;
-const NOT_SHOWN = 'Not shown - add it to a logo set below';
+const NOT_SHOWN = 'Not shown';
 const alphabetWord = (f: MenuLogoFile) => ((f.alphabet ?? logoAlphabet(f.file)) === 'petscii' ? 'PETSCII' : 'Amiga ANSI');
 
 /** An existing Amiga ANSI logo, opened in the same editor the screens use; Save writes it back through the logo route. */
@@ -65,9 +65,11 @@ function LogoStudio({ kind, file, onClose, onSaved }: { kind: MenuKind; file: st
 }
 
 /**
- * Asked right after an upload: where the logo shows. Header and the width its measured size names are
- * preselected, so one click puts it on the menu (sysop decision 2026-10-17). The board places it (the
- * placement route runs the shared placeLogo); "Only keep the file" leaves the file unplaced.
+ * Asked right after an upload, and from "Show on the menu" on a stored file no set names: where the logo
+ * shows. Header and the width its measured size names are preselected, so one click puts it on the menu
+ * (sysop decision 2026-10-17; a file stored before that decision had no way onto the menu but the set
+ * editor, 2026-10-19). The board places it (the placement route runs the shared placeLogo); "Only keep
+ * the file" leaves the file unplaced.
  */
 function PlaceUploadDialog({ uploaded, config, placeLogo, onClose }: { uploaded: MenuLogoFile; config: MenuConfig; placeLogo: PlaceLogo; onClose: () => void }) {
   const [failed, setFailed] = useState<string | null>(null);
@@ -160,6 +162,9 @@ function FilesPanel({ kind, config, placeLogo, files, loading, error, reload }: 
         emptyMessage="No logo files yet. Upload one to use it in a logo set."
         rowActions={f => (
           <>
+            {logoShownIn(config, f.file).length === 0 && (
+              <button className={BUTTON_CLASS} onClick={() => setPlacing(f)} aria-label={`Show ${f.file} on the menu`}>Show on the menu</button>
+            )}
             {logoAlphabet(f.file) === 'ansi' && (
               <button className={BUTTON_CLASS} onClick={() => setStudio(f.file)} aria-label={`Open ${f.file} in the Screen Designer`}>Open in the Screen Designer</button>
             )}
@@ -178,20 +183,20 @@ function NewSetRow({ position, config, files, update }: { position: LogoPosition
   // Until the sysop picks a width, the row follows the files (they load after the first render) - see newSetWidth.
   const [picked, setCls] = useState<WidthClass | null>(null);
   const cls = picked ?? newSetWidth(config, files, position);
-  const [file, setFile] = useState('');
   const offers = logoOffers(files, cls);
   const conflict = logoSlotConflict(config, position, cls, 0);
   const name = position === 'between' ? 'between sections' : position === 'side' ? 'side panel' : position;
   return (
     <div className="flex flex-wrap items-center gap-2">
-      <select aria-label={`Width for a new ${name} set`} className={`${INPUT_CLASS} !w-auto`} value={cls} onChange={e => { setCls(e.target.value as WidthClass); setFile(''); }}>
+      <select aria-label={`Width for a new ${name} set`} className={`${INPUT_CLASS} !w-auto`} value={cls} onChange={e => setCls(e.target.value as WidthClass)}>
         {widths.map(w => <option key={w} value={w}>{WIDTH_WORDS[w]}</option>)}
       </select>
-      <select aria-label={`File for a new ${name} set`} className={`${INPUT_CLASS} !w-auto`} value={file} onChange={e => setFile(e.target.value)}>
-        <option value="">Choose a file</option>
+      {/* Picking the file IS adding the set: a second "Add set" click after the pick was missed on live (sysop, 2026-10-19). */}
+      <select aria-label={`File for a new ${name} set`} className={`${INPUT_CLASS} !w-auto`} value="" disabled={!!conflict}
+        onChange={e => { const file = e.target.value; if (file) update(c => addLogoSet(c, files, position, cls, file)); }}>
+        <option value="">Add a set with the file</option>
         {offers.map(o => <option key={o.file} value={o.file} disabled={!o.fits}>{o.file}{o.fits ? '' : ` - ${o.note}`}</option>)}
       </select>
-      <button className={BUTTON_CLASS} disabled={!file || !!conflict} aria-label={`Add ${name} set`} onClick={() => { update(c => addLogoSet(c, files, position, cls, file)); setFile(''); }}>Add set</button>
       {conflict && <p role="alert" className="w-full text-xs text-status-danger">{conflict}</p>}
     </div>
   );
@@ -203,8 +208,10 @@ function SetRow({ index, config, files, update }: { index: number; config: MenuC
   const addable = logoOffers(files, set.widthClass).filter(o => !set.files.includes(o.file));
   return (
     <div className="border border-border rounded p-2 space-y-2 text-sm text-content-primary">
+      {/* One label column for the width word and the file names, so every row's controls start at the same x
+          and every Remove sits at the right edge (sysop screenshot 2026-10-19: three rows, three x-offsets). */}
       <div className="flex flex-wrap items-center gap-2">
-        <span className="w-20">{WIDTH_WORDS[set.widthClass]}</span>
+        <span className="w-48">{WIDTH_WORDS[set.widthClass]}</span>
         <label className="flex items-center gap-1">From level
           <input aria-label={`From level of ${set.position} set ${index + 1}`} className={`${INPUT_CLASS} !w-24`} type="number" min={0} max={65535}
             value={set.levelFloor} onChange={e => {
@@ -224,7 +231,7 @@ function SetRow({ index, config, files, update }: { index: number; config: MenuC
             {config.sections.map((s, i) => <option key={s.id} value={i}>After the section {s.title}</option>)}
           </select>
         )}
-        <button className={BUTTON_CLASS} onClick={() => update(c => removeLogoSet(c, index))}>Remove set</button>
+        <button className={`${BUTTON_CLASS} ml-auto`} onClick={() => update(c => removeLogoSet(c, index))}>Remove set</button>
       </div>
       {floorNote && <p role="alert" className="text-xs text-status-danger">{floorNote}</p>}
       <ol className="space-y-1">
@@ -233,15 +240,18 @@ function SetRow({ index, config, files, update }: { index: number; config: MenuC
             <span className="font-mono w-48 truncate">{f}</span>
             <button className={BUTTON_CLASS} disabled={i === 0} aria-label={`Move ${f} up`} onClick={() => update(c => moveLogoFile(c, index, i, -1))}>Move up</button>
             <button className={BUTTON_CLASS} disabled={i === set.files.length - 1} aria-label={`Move ${f} down`} onClick={() => update(c => moveLogoFile(c, index, i, 1))}>Move down</button>
-            <button className={BUTTON_CLASS} disabled={set.files.length < 2} aria-label={`Remove ${f}`} onClick={() => update(c => removeLogoFile(c, index, f))}>Remove</button>
+            <button className={`${BUTTON_CLASS} ml-auto`} disabled={set.files.length < 2} aria-label={`Remove ${f}`} onClick={() => update(c => removeLogoFile(c, index, f))}>Remove</button>
           </li>
         ))}
+        <li className="flex items-center gap-2">
+          <span className="w-48" aria-hidden="true" />
+          <select aria-label={`Add a file to ${set.position} set ${index + 1}`} className={`${INPUT_CLASS} !w-auto`} value=""
+            onChange={e => e.target.value && update(c => addLogoFile(c, files, index, e.target.value))}>
+            <option value="">Add a file</option>
+            {addable.map(o => <option key={o.file} value={o.file} disabled={!o.fits}>{o.file}{o.fits ? '' : ` - ${o.note}`}</option>)}
+          </select>
+        </li>
       </ol>
-      <select aria-label={`Add a file to ${set.position} set ${index + 1}`} className={`${INPUT_CLASS} !w-auto`} value=""
-        onChange={e => e.target.value && update(c => addLogoFile(c, files, index, e.target.value))}>
-        <option value="">Add a file</option>
-        {addable.map(o => <option key={o.file} value={o.file} disabled={!o.fits}>{o.file}{o.fits ? '' : ` - ${o.note}`}</option>)}
-      </select>
     </div>
   );
 }
