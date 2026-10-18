@@ -63,6 +63,20 @@ const C64_FLAG_TOOLTYPES: Array<{ key: string; label: string; help: string }> = 
 ];
 
 /**
+ * Board keys a door can keep for itself. Every door gives them up by default,
+ * so each switch is the NEGATIVE (a tooltype boolean cannot default to true)
+ * and is read TRUTHY like the C64 switches: `doorOptsOutOfPalette` in
+ * web/backend/src/services/door-input-routing.ts. Ticking writes `1`.
+ */
+const KEY_FLAG_TOOLTYPES: Array<{ key: string; label: string; help: string }> = [
+  {
+    key: 'NO_PALETTE',
+    label: 'Keep Ctrl+K for the door',
+    help: 'The command palette does not open over this door; Ctrl+K goes to the door instead. For doors that use the key themselves, such as full-screen editors.',
+  },
+];
+
+/**
  * The W settings menu's declaration (handlers/commands/w-settings-doors.ts).
  * The box is ticked by the board's own parse (declaresSettings: '' / YES /
  * TRUE / 1, so a hand-written `SETTINGS=` is ticked too) - one reader, not a
@@ -402,6 +416,29 @@ export function DoorsPage() {
                         {field.help} <code className="opacity-60">{field.key}</code>
                       </p>
                     </div>
+                  ))}
+                </div>
+              </div>
+              <div className="mb-6 border-b border-border/40 pb-6">
+                <h3 className="text-lg text-accent mb-1">Keys</h3>
+                <p className="text-content-secondary text-sm mb-4">
+                  Board keys this door keeps for itself while it runs.
+                </p>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {KEY_FLAG_TOOLTYPES.map((flag) => (
+                    <label key={flag.key} className="flex items-start gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={isTruthyFlagSet(flag.key)}
+                        onChange={(e) => setTruthyFlag(flag.key, e.target.checked)}
+                        className="mt-0.5 h-4 w-4 accent-accent"
+                      />
+                      <span>
+                        <span className="block text-content-primary text-sm">{flag.label}</span>
+                        <span className="block text-content-secondary text-xs">{flag.help}</span>
+                        <code className="block text-content-secondary text-[10px] opacity-60">{flag.key}</code>
+                      </span>
+                    </label>
                   ))}
                 </div>
               </div>
