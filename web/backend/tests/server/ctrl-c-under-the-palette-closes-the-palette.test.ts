@@ -7,9 +7,9 @@
  * door:terminate ended the 68K door underneath, and an ARexx script was
  * aborted before routing ever saw the palette.
  *
- * Now Ctrl+C is the palette's while it is open: it closes it as Esc does, on
- * the typed key and on the web client's door:terminate, and the door under it
- * is not ended.
+ * Now Ctrl+C is the palette's while it is open: it closes it as Esc does, and
+ * the door under it is not ended. The web client's door:terminate takes the
+ * same route (ctrl-c-from-the-web-client-ends-a-typescript-door.test.ts).
  */
 import { EventEmitter } from 'events';
 
@@ -32,14 +32,13 @@ beforeEach(() => {
 function caller() {
   const socket: any = new EventEmitter();
   socket.id = 'palette-ctrlc-' + Math.random();
-  const raise = EventEmitter.prototype.emit.bind(socket);
   socket.emit = () => true;
   const session: any = {
     doorHold: { pause: jest.fn(), resume: jest.fn() },
     closeRunningTsDoor: jest.fn(),
     scriptAbortHandler: jest.fn(),
   };
-  return { socket, session, raise };
+  return { socket, session };
 }
 
 test('a typed Ctrl+C closes the palette and leaves the door running', async () => {
@@ -53,15 +52,4 @@ test('a typed Ctrl+C closes the palette and leaves the door running', async () =
   expect(session.closeRunningTsDoor).not.toHaveBeenCalled();
   expect(session.scriptAbortHandler).not.toHaveBeenCalled();
   expect(session.doorHold.resume).toHaveBeenCalledTimes(1);
-});
-
-test("the web client's Ctrl+C (door:terminate) closes the palette too", async () => {
-  const { socket, session, raise } = caller();
-  openPaletteOverDoor(socket, session);
-  await settle();
-  raise('door:terminate');
-  await settle(); await settle();
-  expect(keys).toEqual(['\x1b']);
-  expect(isPaletteOpen(session)).toBe(false);
-  expect(socket.listenerCount('door:terminate')).toBe(0);
 });

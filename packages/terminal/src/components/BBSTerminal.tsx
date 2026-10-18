@@ -1891,11 +1891,12 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
         return;
       }
 
-      // Ctrl+C while door/game is active: terminate the door
+      // Ctrl+C while door/game is active: terminate the door. Nothing is
+      // written here: the screen is the door's, and the board decides what
+      // Ctrl+C does (it may close the palette, or the door may keep the key).
       if (ev.ctrlKey && ev.key === 'c' && (doorActive.current || gameMode.current) && socketRef.current?.connected) {
         ev.preventDefault();
         console.log('[BBSTerminal] Ctrl+C pressed in game mode - sending door:terminate');
-        writeTermRef.current('\r\n\x1b[33m[Aborting door...]\x1b[0m\r\n');
         socketRef.current.emit('door:terminate');
         return;
       }
@@ -3577,7 +3578,6 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
       if (gameMode.current) return; // keydown/keyup are sent separately in game mode
       if (data === '\x03' && doorActive.current) {
         console.log('[BBSTerminal] Ctrl+C pressed while door active - sending door:terminate');
-        writeTerm('\r\n\x1b[33m[Aborting door...]\x1b[0m\r\n');
         socket.emit('door:terminate');
         return;
       }

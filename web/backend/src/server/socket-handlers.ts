@@ -73,7 +73,7 @@ import { deliversKeyEvents } from '../services/key-event-capable';
 import { reportLogout } from '../achievements/sites';
 import { cleanupTransfer } from '../utils/raw-transfer-teardown.util';
 import { c64AdapterFor } from './c64-door-adapter';
-import { routeDoorInput, PALETTE_KEY } from '../services/door-input-routing';
+import { routeDoorInput, PALETTE_KEY, END_DOOR_KEY } from '../services/door-input-routing';
 import { isPaletteOpen, paletteInstalled, openPaletteOverDoor, deliverToPalette } from '../services/palette-over-door';
 import { onLevel, SYSOP_LEVEL } from './socket-guard';
 import { ensureDoorLogLine } from '../utils/door-logging.util';
@@ -519,6 +519,27 @@ console.log('[socket-handlers] keys:state received:', data);
       // documented DOORMAN-freeze mechanism.
       session.doorKeyStateHandler(data);
     }
+  });
+
+  // The web client sends Ctrl+C inside a door as 'door:terminate', never as
+  // the key (packages/terminal BBSTerminal). It is the same Ctrl+C, so it asks
+  // the same rule the typed key does: under the palette it closes the palette,
+  // in a TypeScript door that honours the close it ends the door. A 68K door
+  // hears the event itself (AmigaDoorSession), and the route leaves it alone.
+  socket.on('door:terminate', () => {
+    const session = getSession(socket.id);
+    if (!session || !(session.inDoorManager || isPaletteOpen(session))) return;
+    const route = routeDoorInput(END_DOOR_KEY, {
+      doorActive: true,
+      hasDoorInputHandler: Boolean(session.doorInputHandler),
+      hasCommandListener: false,
+      bbsPauseActive: false,
+      boardHoldsTerminal: Boolean(session.doorLentTerminal),
+      paletteOpen: isPaletteOpen(session),
+      ctrlCEndsDoor: Boolean(session.closeRunningTsDoor),
+    });
+    if (route.toPalette) { deliverToPalette(session, END_DOOR_KEY); return; }
+    if (route.endDoor) session.closeRunningTsDoor?.();
   });
 
   // Handle individual key-down events (game mode - bypasses OS key repeat delay)

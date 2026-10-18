@@ -178,10 +178,6 @@ export function openPaletteOverDoor(socket: PaletteSocket, session: PaletteSessi
   // The caller hanging up ends the palette's door too.
   const onDisconnect = (...args: unknown[]) => { (shadowSocket as unknown as EventEmitter).emit('disconnect', ...args); };
   socket.on?.('disconnect', onDisconnect);
-  // The web client sends Ctrl+C inside a door as door:terminate. While the
-  // palette is open it closes the palette, as Esc does (the held door ignores it).
-  const onTerminate = () => deliverToPalette(session, END_DOOR_KEY);
-  socket.on?.('door:terminate', onTerminate);
 
   const run: PaletteRun = { shadowSession, shadowSocket, exit: null };
   runs.set(session, run);
@@ -190,7 +186,6 @@ export function openPaletteOverDoor(socket: PaletteSocket, session: PaletteSessi
 
   const close = () => {
     socket.removeListener?.('disconnect', onDisconnect);
-    socket.removeListener?.('door:terminate', onTerminate);
     runs.delete(session);
     if (run.exit) lastExits.set(session, run.exit);
     session.inDoorManager = saved.inDoorManager;
