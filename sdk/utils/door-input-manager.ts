@@ -41,7 +41,7 @@
  */
 
 import type { Screen } from '../engines/ui/blessed';
-import { setupInputHandler, removeInputHandler } from './blessed-helpers';
+import { setupInputHandler, removeInputHandler, honourDoorClose } from './blessed-helpers';
 
 /**
  * The part of the BBS host object held-key tracking needs.
@@ -110,6 +110,17 @@ export interface DoorInputOptions {
   trackHeldKeys?: boolean;
 
   /**
+   * The door's own quit - the function its quit key / exit menu runs, which
+   * stops its timers, disables this manager and destroys the screen.
+   *
+   * Given, the board's close (Ctrl+C, a Ctrl+K palette pick) runs it, so the
+   * door ends exactly as it ends itself (blessed-helpers honourDoorClose).
+   * Left out, the board never takes Ctrl+C from the door: the key reaches
+   * the door like any other.
+   */
+  onClose?: () => void;
+
+  /**
    * Enable debug logging
    */
   debug?: boolean;
@@ -138,7 +149,11 @@ export interface RepeatOptions {
 export class DoorInputManager {
   private session: any;
   private screen: Screen;
-  private options: Required<DoorInputOptions>;
+  private options: Required<Omit<DoorInputOptions, 'onClose'>>;
+  /** The door's own quit, run by the board's close (see DoorInputOptions.onClose). */
+  private readonly onClose?: () => void;
+  /** Withdraws the board's close; set while it is armed. */
+  private withdrawDoorClose: (() => void) | null = null;
   private enabled: boolean = false;
   private suspended: boolean = false;
   private autoSuspended: boolean = false;  // Track auto-suspend separately from manual suspend
@@ -168,6 +183,7 @@ export class DoorInputManager {
       debugName: options.debugName ?? 'DoorInputManager'
     };
     this.autoSuspendEnabled = this.options.enableAutoSuspend;
+    this.onClose = options.onClose;
   }
 
   /**
@@ -227,6 +243,11 @@ export class DoorInputManager {
         debugName: this.options.debugName
       });
       this.log('✓ Input handler connected');
+    }
+
+    // 5a. Let the board end the door through the door's own quit
+    if (this.onClose && !this.withdrawDoorClose) {
+      this.withdrawDoorClose = honourDoorClose(this.session, this.screen, this.onClose);
     }
 
     // 5b. Track held keys from real key-down/key-up edges
@@ -403,6 +424,10 @@ export class DoorInputManager {
     this.log('Disabling door input...');
 
     // Disable in REVERSE order of enable
+
+    // 5a. The board's close no longer reaches a door that is leaving
+    this.withdrawDoorClose?.();
+    this.withdrawDoorClose = null;
 
     // 5. Remove input handler
     if (this.session.bbsSession && this.session.bbsSession.doorInputHandler) {

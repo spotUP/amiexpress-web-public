@@ -173,6 +173,14 @@ console.error('[DoorSocket] Local handler error for', event, err);
   const wrappedSocket = Object.create(socket);
 
   wrappedSocket.emit = (event: string, ...args: any[]) => {
+    // The door says whether it will honour 'door:close' (sdk/utils/
+    // blessed-helpers.ts honourDoorClose). The board's business only -
+    // executeTypeScriptDoor decides from it whether Ctrl+C may end the door.
+    if (event === 'door:honours-close') {
+      wrappedSocket._onHonoursClose?.(Boolean(args[0]));
+      return true;
+    }
+
     // Intercept room: and chat: events that need to be handled server-side
     if (event === 'room:join') {
       const data = args[0] || {};
@@ -2341,15 +2349,24 @@ console.log(`[executeTypeScriptDoor] Registered hybrid RPC handler: ${method}`);
     // drained below once the door has returned.
     session.doorExecuting = true;
     // Ctrl+C ends this door (services/door-input-routing.ts), unless it
-    // declared KEEP_CTRL_C. 'door:close' is what ends it: an onInput door's
-    // SDK input loop hears it (sdk/src/core/Door.ts runInputLoop), and a
-    // blessed door's key bridge destroys its screen on it
-    // (sdk/utils/blessed-helpers.ts setupInputHandler), which returns the
-    // start() that holds execute() open. A hybrid RPC-only door is driven by
+    // declared KEEP_CTRL_C - and only while the door will honour the close,
+    // or the key is swallowed and nothing happens. 'door:close' is what ends
+    // it, and two things hear it: an onInput door's SDK input loop
+    // (sdk/src/core/Door.ts runInputLoop), known from the door before it
+    // starts, and a blessed door's own quit, which the door arms while it
+    // runs (DoorInputManager onClose -> honourDoorClose) and announces as
+    // 'door:honours-close'. Any other door (no onInput, no quit handed to
+    // the SDK) keeps Ctrl+C as a key. A hybrid RPC-only door is driven by
     // the client and left alone.
     if (!isHybridRPCOnly && !doorKeepsCtrlC(door as any)) {
       const closing = wrappedSocket;
-      session.closeRunningTsDoor = () => closing._closeDoor();
+      const sdkInputLoopRuns = ((doorInstance as any)?.inputHandlers?.length ?? 0) > 0;
+      const offerClose = () => { session.closeRunningTsDoor = () => closing._closeDoor(); };
+      if (sdkInputLoopRuns) offerClose();
+      closing._onHonoursClose = (honours: boolean) => {
+        if (honours) offerClose();
+        else if (!sdkInputLoopRuns) delete session.closeRunningTsDoor;
+      };
     }
     // The palette over this door (Ctrl+K) holds it: its keys already go to the
     // palette, and what it writes meanwhile is held and replayed after the
@@ -2390,6 +2407,8 @@ console.log(`[executeTypeScriptDoor] Hybrid RPC-only door — waiting for client
     } finally {
       session.doorExecuting = false;
       delete session.closeRunningTsDoor;
+      // A door that announces after it returned must not touch the next one.
+      if (wrappedSocket) delete wrappedSocket._onHonoursClose;
       if (tsDoorHold && session.doorHold === tsDoorHold) delete session.doorHold;
     }
 

@@ -408,7 +408,9 @@ class ANSIEditorDoor {
             enableGrabKeys: false,
             enableMouse: true,
             debug: false,
-            debugName: 'ANSI-EDITOR'
+            debugName: 'ANSI-EDITOR',
+            // Ctrl+C and a Ctrl+K palette pick end the editor through its own quit.
+            onClose: () => this.cleanup(),
         });
         // The 80x25 / responsive switch, created HERE because the editor's own
         // menu asks for it the moment the door opens. It used to be created

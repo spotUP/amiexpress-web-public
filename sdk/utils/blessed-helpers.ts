@@ -1163,30 +1163,48 @@ export function setupInputHandler(
     }
   };
 
-  endScreenOnDoorClose(session, screen);
 }
 
-/** Screens already listening for the board's close, so a re-enable adds no second listener. */
-const screensHearingDoorClose = new WeakSet<object>();
-
 /**
- * The board ends a TypeScript door by firing 'door:close' at the door's own
+ * Let the board end this door through the door's own quit.
+ *
+ * The board ends a TypeScript door by firing 'door:close' at the door's
  * socket (Ctrl+C, a Ctrl+K palette pick). CoreDoor's input loop hears it, but
  * a blessed door with no onInput never runs that loop: it holds execute()
- * open on its screen's 'destroy'. So the bridge that hands the board's keys
- * to the screen also hands it the board's close - destroying the screen is
- * how every blessed door leaves, so the door's start() returns, its onClose
- * runs and execute() ends the normal way.
+ * open on its screen's 'destroy', and it tears itself down in its own quit
+ * (timers, room state, terminal mode) before destroying that screen. So the
+ * close has to run that quit, not just destroy the screen - a board-ordered
+ * close and the door's own quit are one path.
+ *
+ * The board may only take Ctrl+C from a door that will honour the close, so
+ * the door announces it: 'door:honours-close' true while the listener is
+ * armed, false once it is withdrawn. executeTypeScriptDoor reads that
+ * (web/backend/src/handlers/door.handler.ts createDoorSocketWrapper); a door
+ * that never announces keeps getting Ctrl+C as a key.
+ *
+ * Withdrawn when the screen is destroyed, when the close fires, or by the
+ * returned function (DoorInputManager.disable).
  */
-function endScreenOnDoorClose(session: any, screen: Screen): void {
+export function honourDoorClose(session: any, screen: Screen, quit: () => void): () => void {
   const socket = session?.socket;
-  if (!socket || typeof socket.once !== 'function' || screensHearingDoorClose.has(screen)) return;
-  screensHearingDoorClose.add(screen);
-  const onDoorClose = () => {
-    if (!(screen as any).destroyed) screen.destroy();
+  if (!socket || typeof socket.on !== 'function') return () => undefined;
+  let armed = true;
+  const withdraw = () => {
+    if (!armed) return;
+    armed = false;
+    socket.off?.('door:close', onDoorClose);
+    screen.removeListener?.('destroy', withdraw);
+    socket.emit?.('door:honours-close', false);
   };
-  socket.once('door:close', onDoorClose);
-  screen.once('destroy', () => socket.off?.('door:close', onDoorClose));
+  const onDoorClose = () => {
+    if (!armed) return;
+    withdraw();
+    quit();
+  };
+  socket.on('door:close', onDoorClose);
+  screen.on('destroy', withdraw);
+  socket.emit?.('door:honours-close', true);
+  return withdraw;
 }
 
 /**
