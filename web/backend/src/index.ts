@@ -276,6 +276,8 @@ export interface UploadSessionContext {
   [key: string]: any;
 }
 
+export interface DoorHold { pause: () => void; resume: (opts?: { dropHeldOutput?: boolean }) => void }
+
 export interface BBSSession {
   /**
    * The screen theme this session has ALREADY been judged fit to wear.
@@ -630,8 +632,10 @@ export interface BBSSession {
    * The running door can be held still: no input, no CPU, no time. Set by the
    * door runner while a door runs; the command palette opened over the door
    * (services/palette-over-door.ts) pauses it and resumes it on close.
+   * dropHeldOutput: the door is being ended (a pick), what it wrote while
+   * held is not shown.
    */
-  doorHold?: { pause: () => void; resume: () => void };
+  doorHold?: DoorHold;
   /** Ends the running 68K door the way a lost carrier does (set by executeAmigaDoor). */
   dropDoorCarrier?: () => void;
   /** An express.e lineInput / readChar a ported procedure is awaiting (utils/await-input). */

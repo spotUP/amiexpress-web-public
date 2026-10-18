@@ -374,6 +374,7 @@ console.log(
       if (
         (session.inDoorManager || session.subState === LoggedOnSubState.DOOR_RUNNING) &&
         session.scriptAbortHandler &&
+        !isPaletteOpen(session) &&   // Ctrl+C under the palette closes the palette
         input.length > 0 &&
         input.charCodeAt(0) === 3
       ) {

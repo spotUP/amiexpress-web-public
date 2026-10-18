@@ -11,6 +11,7 @@ import { formatCDateTime, formatLongDateTime, getSystemTime } from '../utils/dat
 import { doorScreenWidth } from '../amiga-emulation/xim/screen-width.util';
 import { getTodaysCalls } from '../utils/time-tracking.util';
 import { calcSizeText } from '../utils/byte-format.util';
+import { holdDoorOutput } from './palette-over-door';
 
 /**
  * AREXX Variable Storage
@@ -2439,7 +2440,28 @@ export class AREXXInterpreter {
    * real compute it yields one macrotask turn; past MAX_BUSY_MS of
    * accumulated compute it aborts the script exactly as Ctrl+C would.
    */
+  /** Held by the command palette over the script: the next clause waits for release. */
+  private executionHold: Promise<void> | null = null;
+  private releaseHold: (() => void) | null = null;
+  holdExecution(): void {
+    if (this.executionHold) return;
+    this.executionHold = new Promise<void>((resolve) => { this.releaseHold = resolve; });
+  }
+  releaseExecution(): void {
+    const release = this.releaseHold;
+    this.executionHold = null;
+    this.releaseHold = null;
+    release?.();
+  }
+
   private async yieldIfBusy(): Promise<void> {
+    if (this.executionHold) {
+      await this.executionHold;
+      // The held time was never busy: start the budget fresh.
+      this.lastYieldCheckAt = Date.now();
+      this.busyMsAccumulated = 0;
+      return;
+    }
     if (this.lastYieldCheckAt === 0) {
       this.lastYieldCheckAt = Date.now();
       return;
@@ -5415,13 +5437,30 @@ console.error('[AREXX] native dispatch failed, falling back to TS:', err);
         session.scriptAbortHandler = () =>
           maybeAbortInterpreter({ interpreter }, 'CTRLC');
       }
+      // The command palette over a running script (Ctrl+K) holds it: the
+      // interpreter stops at its next clause, and what it already queued to
+      // the caller is held and replayed after the palette's repaint.
+      const prevHold = session?.doorHold;
+      if (session) {
+        let release: ReturnType<typeof holdDoorOutput> | null = null;
+        session.doorHold = {
+          pause: () => {
+            interpreter.holdExecution();
+            if (!release && context.socket) release = holdDoorOutput(context.socket);
+          },
+          resume: (opts?: { dropHeldOutput?: boolean }) => {
+            const r = release; release = null; r?.(opts);
+            interpreter.releaseExecution();
+          },
+        };
+      }
 
       // Execute script code
       let result;
       try {
         result = await interpreter.execute(script.script || '');
       } finally {
-        if (session) session.scriptAbortHandler = prevAbort;
+        if (session) { session.scriptAbortHandler = prevAbort; session.doorHold = prevHold; }
       }
 
       // Log execution

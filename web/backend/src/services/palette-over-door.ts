@@ -24,6 +24,8 @@
 import { EventEmitter } from 'events';
 import { holdWholeScreen, takeHeldScreen } from './screen-model/screen-model';
 import { armMenuExit, takeMenuExit, type MenuExit } from '../handlers/commands/menu-door-exit';
+import { createHeldOutput } from '../server/session-link';
+import { END_DOOR_KEY } from './door-input-routing';
 import type { BBSSession } from '../index';
 
 /** The socket surface the shadow needs from the real one. */
@@ -105,9 +107,45 @@ function shadowSocketOver(real: PaletteSocket): PaletteSocket {
   }
   shadow.emit = (event: string, ...args: unknown[]) => {
     if (HELD_FROM_CLIENT.has(event)) return true;
-    return real.emit(event, ...args);
+    return asPalette(() => real.emit(event, ...args));
   };
   return shadow;
+}
+
+/* Depth of emits made by the palette (its shadow, its repaint): a held door's
+ * output gate lets these through, everything else the door writes is held. */
+let paletteEmitting = 0;
+function asPalette<T>(fn: () => T): T {
+  paletteEmitting++;
+  try { return fn(); } finally { paletteEmitting--; }
+}
+
+/**
+ * Hold what a door writes to `socket` while it is held under the palette
+ * (TypeScript and ARexx doors keep running JavaScript; a 68K door's CPU is
+ * stopped instead). Layered over socket.emit like every other emit wrapper
+ * and taken off only while it is still the live one. The returned release
+ * replays the held output in order (after the palette's repaint), or drops
+ * it when the door is being ended. An acknowledgement callback is never held.
+ */
+export function holdDoorOutput(socket: { emit: (event: string, ...args: any[]) => unknown }): (opts?: { dropHeldOutput?: boolean }) => void {
+  const target = socket as Record<string, unknown> & { emit: (event: string, ...args: any[]) => unknown };
+  const hadOwn = Object.prototype.hasOwnProperty.call(target, 'emit');
+  const below = target.emit;
+  const held = createHeldOutput();
+  const gate = (event: string, ...args: unknown[]) => {
+    if (paletteEmitting > 0 || typeof args[args.length - 1] === 'function') return below.call(socket, event, ...args);
+    held.hold(event, args);
+    return true;
+  };
+  target.emit = gate;
+  return (opts) => {
+    if (target.emit === gate) { if (hadOwn) target.emit = below; else delete (target as Partial<typeof target>).emit; }
+    const { chunks, overflowed } = held.take();
+    if (opts?.dropHeldOutput) return;
+    if (overflowed) console.warn('[palette-over-door] a held door wrote more than the hold keeps; its output under the palette is lost');
+    for (const [event, args] of chunks) socket.emit(event, ...args);
+  };
 }
 
 /**
@@ -140,6 +178,10 @@ export function openPaletteOverDoor(socket: PaletteSocket, session: PaletteSessi
   // The caller hanging up ends the palette's door too.
   const onDisconnect = (...args: unknown[]) => { (shadowSocket as unknown as EventEmitter).emit('disconnect', ...args); };
   socket.on?.('disconnect', onDisconnect);
+  // The web client sends Ctrl+C inside a door as door:terminate. While the
+  // palette is open it closes the palette, as Esc does (the held door ignores it).
+  const onTerminate = () => deliverToPalette(session, END_DOOR_KEY);
+  socket.on?.('door:terminate', onTerminate);
 
   const run: PaletteRun = { shadowSession, shadowSocket, exit: null };
   runs.set(session, run);
@@ -148,6 +190,7 @@ export function openPaletteOverDoor(socket: PaletteSocket, session: PaletteSessi
 
   const close = () => {
     socket.removeListener?.('disconnect', onDisconnect);
+    socket.removeListener?.('door:terminate', onTerminate);
     runs.delete(session);
     if (run.exit) lastExits.set(session, run.exit);
     session.inDoorManager = saved.inDoorManager;
@@ -162,14 +205,16 @@ export function openPaletteOverDoor(socket: PaletteSocket, session: PaletteSessi
       // not given back - the next thing the caller sees is the picked command.
       armMenuExit(session, pick);
       if (endRunningDoor(session)) {
-        hold?.resume();   // a paused 68K loop has to step to see the carrier gone
+        // A paused 68K loop has to step to see the carrier gone; what a held
+        // door wrote under the palette is not shown - the pick comes next.
+        hold?.resume({ dropHeldOutput: true });
         return;
       }
       // No end path for this door: the pick cannot run, the door comes back.
       takeMenuExit(session);
       console.warn('[palette-over-door] the running door has no end path; the pick is dropped');
     }
-    if (repaint) socket.emit('ansi-output', repaint);
+    if (repaint) asPalette(() => socket.emit('ansi-output', repaint));
     hold?.resume();
   };
 
@@ -199,5 +244,7 @@ export function endRunningDoor(session: PaletteSession): boolean {
 /** A key the caller typed while the palette is open: it is the palette's. */
 export function deliverToPalette(session: object, data: string): void {
   const run = runs.get(session);
-  run?.shadowSession.doorInputHandler?.(data);
+  // Ctrl+C under the palette is the palette's: it closes it as Esc does
+  // (the menu door closes on Esc; it would end the door underneath otherwise).
+  run?.shadowSession.doorInputHandler?.(data === END_DOOR_KEY ? '\x1b' : data);
 }

@@ -525,7 +525,7 @@ import { boardRoot } from '../utils/board-root.util';
 import { ensureDoorLogLine } from '../utils/door-logging.util';
 import { inputForTrace } from '../amiga-emulation/xim/secret-input';
 import * as menuTail from './commands/menu-door-exit';
-import { isPaletteShadow, notePaletteExit } from '../services/palette-over-door';
+import { isPaletteShadow, notePaletteExit, holdDoorOutput } from '../services/palette-over-door';
 import { doorKeepsCtrlC, doorOptsOutOfPalette } from '../services/door-input-routing';
 export { MOUSE_REPORTING_OFF };
 
@@ -1382,10 +1382,17 @@ export function subStateIsAtRest(sub: BBSSession['subState']): boolean {
  * the menu door's pick runs (as typed, or as a listed SysCmd; the typed line
  * stays out of the logs) and the caller lands at the menu after it. The 68K
  * exit tail runs its pick itself (menuExit.run in executeAmigaDoor); every
- * other door kind's tail comes here. True when there was a pick to run.
+ * other door kind's tail comes here. True when there was a pick to run or a
+ * bulletin to show.
  */
 export async function runPickLeftByTheDoor(socket: any, session: BBSSession): Promise<boolean> {
   const exit = menuTail.takeMenuExit(session);
+  if (exit.show) {
+    // A bulletin picked from the palette: shown, then the menu comes back -
+    // the 68K tail does the same with menuExit.show.
+    await menuTail.showBulletinThenReopen(socket, session, exit.show);
+    return true;
+  }
   if (!exit.run) return false;
   const parts = exit.run.text.trim().split(/\s+/);
   const command = (parts[0] || '').toUpperCase();
@@ -2344,6 +2351,17 @@ console.log(`[executeTypeScriptDoor] Registered hybrid RPC handler: ${method}`);
       const closing = wrappedSocket;
       session.closeRunningTsDoor = () => closing._closeDoor();
     }
+    // The palette over this door (Ctrl+K) holds it: its keys already go to the
+    // palette, and what it writes meanwhile is held and replayed after the
+    // palette's repaint. A hybrid door's screen is the client's, not held here.
+    const tsDoorHold: BBSSession['doorHold'] = isHybridRPCOnly ? undefined : (() => {
+      let release: ReturnType<typeof holdDoorOutput> | null = null;
+      return {
+        pause: () => { if (!release) release = holdDoorOutput(socket); },
+        resume: (opts?: { dropHeldOutput?: boolean }) => { const r = release; release = null; r?.(opts); },
+      };
+    })();
+    if (tsDoorHold) session.doorHold = tsDoorHold;
     try {
     if (isHybridRPCOnly) {
       // Server is RPC-only — client bundle drives the session.
@@ -2372,6 +2390,7 @@ console.log(`[executeTypeScriptDoor] Hybrid RPC-only door — waiting for client
     } finally {
       session.doorExecuting = false;
       delete session.closeRunningTsDoor;
+      if (tsDoorHold && session.doorHold === tsDoorHold) delete session.doorHold;
     }
 
 console.log(`[executeTypeScriptDoor] Door.execute() returned`);

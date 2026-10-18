@@ -78,6 +78,8 @@ export class AmigaDoorSession {
   private libraryManager: LibraryManager | null = null;
   private doorLoader: DoorLoader | null = null;
   private lifecycleManager: DoorLifecycleManager | null = null;
+  /** Held by session.doorHold (pause/resume): door:terminate is not ours then. */
+  private held = false;
   private messageHandler: DoorMessageHandler | null = null;
   private timHandler: TIMDoorMessageHandler | null = null;
 
@@ -322,6 +324,10 @@ debugLog("[AmigaDoorSession] Socket disconnected, terminating door");
 
     // Handle explicit termination request
     this.onDoorTerminate = () => {
+      // A held door (the command palette open over it) does not own the
+      // caller's Ctrl+C: the web client sends it as door:terminate, and while
+      // the palette is open it closes the palette, not the door underneath.
+      if (this.held) return;
 debugLog("[AmigaDoorSession] Termination requested by user");
       this.dropCarrier();
     };
@@ -1309,6 +1315,7 @@ debugLog(`[AmigaDoorSession] getExitState: ximProtocol=${!!this.sharedState.ximP
    * Pause execution (for input handling)
    */
   pause(): void {
+    this.held = true;
     if (this.lifecycleManager) {
       this.lifecycleManager.pause();
     }
@@ -1318,6 +1325,7 @@ debugLog(`[AmigaDoorSession] getExitState: ximProtocol=${!!this.sharedState.ximP
    * Resume execution
    */
   resume(): void {
+    this.held = false;
     if (this.lifecycleManager) {
       this.lifecycleManager.resume();
     }

@@ -96,6 +96,24 @@ function sizeOf(args: unknown[]): number {
   return n;
 }
 
+/**
+ * Output held while nobody may see it (a parked link, a door held under the
+ * command palette), replayed later in order. Past HELD_OUTPUT_LIMIT bytes the
+ * whole hold is dropped and `overflowed` says so: the caller repaints instead.
+ */
+export function createHeldOutput(): { hold(event: string, args: unknown[]): void; take(): HeldOutput } {
+  let held: Array<[string, unknown[]]> = []; let heldBytes = 0; let overflowed = false;
+  return {
+    hold(event, args) {
+      if (overflowed) return;
+      const n = sizeOf(args);
+      if (heldBytes + n > HELD_OUTPUT_LIMIT) { held = []; heldBytes = 0; overflowed = true; return; }
+      held.push([event, args]); heldBytes += n;
+    },
+    take() { const out = { chunks: held, overflowed }; held = []; heldBytes = 0; overflowed = false; return out; },
+  };
+}
+
 export function isSessionLink(x: unknown): x is SessionLink {
   return !!x && (x as Record<symbol, unknown>)[LINK] === true;
 }
@@ -112,7 +130,7 @@ export function createSessionLink(first: Socket, initial?: SessionLinkHooks): Se
   const anys: Listener[] = [];
   const outgoing: Listener[] = [];
   const rooms = new Set<string>();
-  let held: Array<[string, unknown[]]> = []; let heldBytes = 0; let overflowed = false;
+  const heldOutput = createHeldOutput();
   const live = () => !parked && !ended;
 
   const rawDisconnect = new WeakMap<Socket, Listener>();
@@ -139,12 +157,7 @@ export function createSessionLink(first: Socket, initial?: SessionLinkHooks): Se
     for (const f of outgoing) r.offAnyOutgoing(f);
     const d = rawDisconnect.get(s); if (d) r.off('disconnect', d);
   };
-  const hold = (event: string, args: unknown[]) => {
-    if (overflowed) return;
-    const n = sizeOf(args);
-    if (heldBytes + n > HELD_OUTPUT_LIMIT) { held = []; heldBytes = 0; overflowed = true; return; }
-    held.push([event, args]); heldBytes += n;
-  };
+  const hold = heldOutput.hold;
   function end(reason: string): void {
     if (ended) return;
     ended = true; parked = false;
@@ -220,7 +233,7 @@ export function createSessionLink(first: Socket, initial?: SessionLinkHooks): Se
       bind(next);
     },
     end,
-    takeHeld: () => { const out = { chunks: held, overflowed }; held = []; heldBytes = 0; overflowed = false; return out; },
+    takeHeld: heldOutput.take,
     setHooks: (h) => { hooks = h; },
     get raw() { return raw; },
     get parked() { return parked; },

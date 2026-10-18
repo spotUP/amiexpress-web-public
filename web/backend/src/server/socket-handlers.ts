@@ -718,6 +718,7 @@ console.error('No session found for socket:', socket.id);
     if (
       (session.inDoorManager || session.subState === LoggedOnSubState.DOOR_RUNNING) &&
       session.scriptAbortHandler &&
+      !isPaletteOpen(session) &&   // Ctrl+C under the palette closes the palette
       data.length > 0 &&
       data.charCodeAt(0) === 3
     ) {
