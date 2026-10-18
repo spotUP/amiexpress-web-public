@@ -619,6 +619,12 @@ export interface BBSSession {
    */
   doorLentTerminal?: boolean;
   /**
+   * Ends the running TypeScript door through its own close path. Set for the
+   * life of a TS door's execute() unless the door declared KEEP_CTRL_C; its
+   * presence is what makes Ctrl+C leave the door (door-input-routing.ts).
+   */
+  closeRunningTsDoor?: () => void;
+  /**
    * The running door can be held still: no input, no CPU, no time. Set by the
    * door runner while a door runs; the command palette opened over the door
    * (services/palette-over-door.ts) pauses it and resumes it on close.

@@ -415,7 +415,14 @@ console.log(
         viewportPan: viewportAdapter() !== null,
         paletteOpen: isPaletteOpen(session),
         paletteKeyAllowed: input === PALETTE_KEY && paletteInstalled(),
+        ctrlCEndsDoor: Boolean(session.closeRunningTsDoor),
       });
+
+      // Ctrl+C leaves a TypeScript door through the door's own close path.
+      if (route.endDoor) {
+        session.closeRunningTsDoor?.();
+        return;
+      }
 
       // Ctrl+K: the command palette over the door, and every key while it is
       // open (services/palette-over-door.ts). `emitter` is what the door

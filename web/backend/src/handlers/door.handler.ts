@@ -441,6 +441,15 @@ console.log(`[DoorSocket][Video] User ${session.user?.username} stopped video st
     cleanupOutgoing?.();
   };
 
+  // End the door the way a door ends itself: 'door:close' is the SDK's own
+  // close signal (sdk/src/core/Door.ts runInputLoop), so the input loop
+  // resolves, the door's onClose handlers run, execute() returns and
+  // executeTypeScriptDoor restores the board. Delivered to the door's own
+  // listeners only - the real socket and the client never see it.
+  wrappedSocket._closeDoor = () => {
+    dispatchLocal('door:close');
+  };
+
   return wrappedSocket;
 }
 
@@ -517,6 +526,7 @@ import { ensureDoorLogLine } from '../utils/door-logging.util';
 import { inputForTrace } from '../amiga-emulation/xim/secret-input';
 import * as menuTail from './commands/menu-door-exit';
 import { isPaletteShadow, notePaletteExit } from '../services/palette-over-door';
+import { doorKeepsCtrlC } from '../services/door-input-routing';
 export { MOUSE_REPORTING_OFF };
 
 export function isAmiga68kDoorType(t: string): boolean {
@@ -2295,6 +2305,17 @@ console.log(`[executeTypeScriptDoor] Registered hybrid RPC handler: ${method}`);
     // inDoorManager: BBSApi.executeCommand queues on it, and the queue is
     // drained below once the door has returned.
     session.doorExecuting = true;
+    // Ctrl+C ends this door (services/door-input-routing.ts), unless it
+    // declared KEEP_CTRL_C. Only a door whose SDK input loop runs: that loop
+    // is what 'door:close' ends (sdk/src/core/Door.ts:130, 265). A blessed
+    // door with no onInput holds execute() on its screen's 'destroy' and does
+    // not hear 'door:close', so it keeps getting the key and leaves by its own
+    // rule. A hybrid RPC-only door is driven by the client and left alone.
+    const sdkInputLoopRuns = ((doorInstance as any)?.inputHandlers?.length ?? 0) > 0;
+    if (!isHybridRPCOnly && sdkInputLoopRuns && !doorKeepsCtrlC(door as any)) {
+      const closing = wrappedSocket;
+      session.closeRunningTsDoor = () => closing._closeDoor();
+    }
     try {
     if (isHybridRPCOnly) {
       // Server is RPC-only — client bundle drives the session.
@@ -2322,6 +2343,7 @@ console.log(`[executeTypeScriptDoor] Hybrid RPC-only door — waiting for client
     }
     } finally {
       session.doorExecuting = false;
+      delete session.closeRunningTsDoor;
     }
 
 console.log(`[executeTypeScriptDoor] Door.execute() returned`);

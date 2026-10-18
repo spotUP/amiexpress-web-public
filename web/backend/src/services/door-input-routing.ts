@@ -49,6 +49,11 @@ export interface DoorInputRoute {
   toPalette: boolean;
   /** Ctrl+K: open the command palette over the running door. */
   openPalette: boolean;
+  /**
+   * Ctrl+C: end the running TypeScript door, through its own close path.
+   * Nobody else sees the key.
+   */
+  endDoor: boolean;
 }
 
 /** Which way the window moves. */
@@ -81,10 +86,35 @@ export interface DoorInputState {
   paletteOpen?: boolean;
   /** Ctrl+K may open the palette over this door (the board has a PALETTE). */
   paletteKeyAllowed?: boolean;
+  /**
+   * Ctrl+C ends this door: a TypeScript door is running and did not declare
+   * KEEP_CTRL_C. A 68K door, an ARexx script and a door that keeps the key
+   * leave this false, and the byte reaches them as before.
+   */
+  ctrlCEndsDoor?: boolean;
 }
 
 /** Ctrl+K, the key that opens the command palette anywhere on the board. */
 export const PALETTE_KEY = '\x0b';
+
+/** Ctrl+C, the key that leaves any TypeScript door (sysop ruling 2026-10-18). */
+export const END_DOOR_KEY = '\x03';
+
+/**
+ * Does this door keep Ctrl+C for itself?
+ *
+ * Every TypeScript door ends on Ctrl+C, so the declaration is the NEGATIVE:
+ * a boolean tooltype cannot default to true, and the doors that use the key
+ * (LiveChat cancels with it, Sprite Studio copies a frame) are the exception.
+ * `KEEP_CTRL_C=1` in the door's BBSCmd .info, read where C64_VIEWPORT is.
+ */
+export function doorKeepsCtrlC(
+  door: { toolTypes?: Record<string, string>; doorInfo?: { toolTypes?: Record<string, string> } } | null | undefined,
+): boolean {
+  if (!door) return false;
+  const raw = door.toolTypes?.['KEEP_CTRL_C'] ?? door.doorInfo?.toolTypes?.['KEEP_CTRL_C'];
+  return /^(1|yes|true)$/i.test(String(raw ?? '').trim());
+}
 
 /**
  * ENTER or SPACE - the keys a pause is dismissed with.
@@ -129,6 +159,7 @@ export function routeDoorInput(input: string, state: DoorInputState): DoorInputR
     pan: null,
     toPalette: false,
     openPalette: false,
+    endDoor: false,
   };
 
   if (!state.doorActive) {
@@ -149,6 +180,13 @@ export function routeDoorInput(input: string, state: DoorInputState): DoorInputR
 
   if (state.paletteKeyAllowed && input === PALETTE_KEY) {
     route.openPalette = true;
+    return route;
+  }
+
+  // Ctrl+C leaves a TypeScript door, whatever the door would have done with
+  // it - unless the door declared KEEP_CTRL_C, and then it is the door's key.
+  if (state.ctrlCEndsDoor && input === END_DOOR_KEY) {
+    route.endDoor = true;
     return route;
   }
 
