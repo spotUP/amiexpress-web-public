@@ -15,7 +15,7 @@
  * Original: dev/docs/AmiExpressEDoorSources/TelnetFront/telnetfront.e
  */
 
-import { ServerDoor, DoorContext } from '@amiexpress/bbs-door-sdk';
+import { ServerDoor, DoorContext, honourDoorClose } from '@amiexpress/bbs-door-sdk';
 import { loadConfig, boardAddress } from './config';
 import * as os from 'os';
 
@@ -247,17 +247,22 @@ door.onStart(async (ctx: DoorContext) => {
   // For logged-in users, wait briefly for any key to continue (or auto-continue after 500ms)
   await new Promise<void>((resolve) => {
     const timeout = setTimeout(() => {
+      withdrawDoorClose();
       delete bbsSession.doorInputHandler;
       resolve();
     }, 500); // Reduced from 2000ms to 500ms
 
-    const handleInput = (data: string) => {
+    // Any key, Ctrl+C and a Ctrl+K palette pick all continue at once.
+    const continueNow = () => {
+      withdrawDoorClose();
       clearTimeout(timeout);
       delete bbsSession.doorInputHandler;
       resolve();
     };
+    const handleInput = (_data: string) => continueNow();
 
     bbsSession.doorInputHandler = handleInput;
+    const withdrawDoorClose = honourDoorClose(ctx, null, continueNow);
   });
 });
 

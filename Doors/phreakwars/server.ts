@@ -8,7 +8,7 @@
  * - Portable and self-contained
  */
 
-import { ServerDoor, DoorContext, KeyPress } from '@amiexpress/bbs-door-sdk';
+import { ServerDoor, DoorContext, KeyPress, honourDoorClose } from '@amiexpress/bbs-door-sdk';
 
 // Metadata
 export const metadata = {
@@ -36,7 +36,8 @@ import {
   handleMessageChoice,
   handleWaiting,
   handleStatsMenu,
-  handleDeleteConfirmation
+  handleDeleteConfirmation,
+  recordLeaving
 } from './lib/handlers';
 import { handleTextMinigame } from './lib/minigames';
 import { setAchievementReporter, award } from './lib/achievements';
@@ -113,6 +114,14 @@ door.onStart(async (ctx: DoorContext) => {
   // The input loop is this door's stay-alive: it holds `execute()` open until
   // the socket disconnects, the BBS sends `door:close`, or the door itself
   // says it is finished (see the quit path in onInput below).
+  //
+  // Ctrl+C and a Ctrl+K palette pick end it through the same leaving as Q:
+  // what leaving records, then ctx.close(). Armed only now, once any handle
+  // prompt above has returned, so a close never strands that prompt.
+  (ctx as any).withdrawDoorClose = honourDoorClose(ctx, null, () => {
+    recordLeaving((ctx as any).gameState);
+    ctx.close();
+  });
 });
 
 door.onInput(async (ctx: DoorContext, key: KeyPress) => {
@@ -188,6 +197,7 @@ door.onInput(async (ctx: DoorContext, key: KeyPress) => {
   // then resolves on the next keystroke (sdk/src/core/Door.ts:212-217), which
   // is exactly the "Press any key to exit..." the quit handler prints.
   if (gameState.currentMode === 'quit') {
+    (ctx as any).withdrawDoorClose?.();
     await ctx.close();
   }
 });

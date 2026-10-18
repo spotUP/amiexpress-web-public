@@ -79,6 +79,17 @@ export const shadowMessageTemplates = [
 /**
  * Handle main menu input
  */
+/**
+ * What leaving records, whichever way the player leaves: Q from the main
+ * menu, or the board ending the door (Ctrl+C, a Ctrl+K palette pick).
+ * Achievements (SP3): the empire as the player leaves it. A bucket key
+ * rather than a raw amount, because the rule operators count events and
+ * sum them - they do not threshold one event's value.
+ */
+export function recordLeaving(gameState: PhreakWarsGameState): void {
+  if (gameState.player.money >= 10000) award('door.phreakwars.wealth', { key: '10k' });
+}
+
 export function handleMainMenu(socket: Socket, gameState: PhreakWarsGameState, input: string): void {
   switch (input) {
     case 'P':
@@ -114,10 +125,7 @@ export function handleMainMenu(socket: Socket, gameState: PhreakWarsGameState, i
       displayHelp(socket, gameState);
       break;
     case 'Q':
-      // Achievements (SP3): the empire as the player leaves it. A bucket key
-      // rather than a raw amount, because the rule operators count events and
-      // sum them - they do not threshold one event's value.
-      if (gameState.player.money >= 10000) award('door.phreakwars.wealth', { key: '10k' });
+      recordLeaving(gameState);
       say(socket, gameState, '\r\n\x1b[33mThanks for playing Phreak Wars!\x1b[0m\r\n');
       say(socket, gameState, '\x1b[36m"2600 Hz is the key to the kingdom..."\x1b[0m\r\n\r\n');
       say(socket, gameState, '\x1b[32mPress any key to exit...\x1b[0m');

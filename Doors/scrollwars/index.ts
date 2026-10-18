@@ -6,7 +6,7 @@
  */
 
 import { ServerDoor, DoorContext, KeyPress } from '@amiexpress/bbs-door-sdk';
-import { createBox, createScreen } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
+import { createBox, createScreen, honourDoorClose } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
 import { DockablePanel, StatusBar } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import type { StatusBarSection, StatusBarOptions } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import { createTerminalModeSwitch } from '@amiexpress/bbs-door-sdk/utils/terminal-mode';
@@ -380,6 +380,9 @@ door.onStart(async (ctx: DoorContext) => {
       cleanup();
     }
   });
+
+  // Ctrl+C and a Ctrl+K palette pick leave through the same cleanup as Esc.
+  honourDoorClose(ctx, screen, cleanup);
 
   startCursorTimer();
   refreshAllLines(true);

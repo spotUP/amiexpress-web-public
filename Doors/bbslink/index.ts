@@ -17,7 +17,7 @@
  * Original: Documentation/7-Reference Sources/AmiExpressEDoorSources/BBSLink/bbslink.e
  */
 
-import { ServerDoor, DoorContext } from '@amiexpress/bbs-door-sdk';
+import { ServerDoor, DoorContext, honourDoorClose } from '@amiexpress/bbs-door-sdk';
 import { BBSLinkConfig, loadConfig } from './config';
 import * as crypto from 'crypto';
 import * as http from 'http';
@@ -196,13 +196,18 @@ async function connectToGame(socket: any, config: BBSLinkConfig, userSlot: numbe
       socket.emit('ansi-output', translated);
     });
     telnetSocket.on('error', (err) => {
+      withdrawDoorClose();
       socket.emit('ansi-output', `\r\n\x1b[31mConnection error: ${err.message}\x1b[0m\r\n`);
       resolve();
     });
     telnetSocket.on('close', () => {
+      withdrawDoorClose();
       socket.emit('ansi-output', '\r\n\x1b[33mConnection closed.\x1b[0m\r\n');
       resolve();
     });
+    // Ctrl+C and a Ctrl+K palette pick end the door the way the remote game
+    // does: the connection closes and 'close' above finishes the door.
+    const withdrawDoorClose = honourDoorClose({ socket }, null, () => telnetSocket.destroy());
     const inputHandler = (data: string) => {
       if (connected && !telnetSocket.destroyed) telnetSocket.write(data);
     };

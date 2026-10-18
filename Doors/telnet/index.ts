@@ -12,7 +12,7 @@
  * Original: dev/docs/AmiExpressEDoorSources/telnetConnect/telnetdoor.e
  */
 
-import { ServerDoor, DoorContext } from '@amiexpress/bbs-door-sdk';
+import { ServerDoor, DoorContext, honourDoorClose } from '@amiexpress/bbs-door-sdk';
 import { TelnetConfig, loadConfig } from './config';
 import * as net from 'net';
 import * as fs from 'fs';
@@ -70,6 +70,17 @@ door.onStart(async (ctx: DoorContext) => {
   const configs = loadConfig();
   let running = true;
 
+  // Ctrl+C and a Ctrl+K palette pick end the door the way Q does. Whatever
+  // the door is waiting on (the menu, the manual prompt, a live connection)
+  // registers how to stop waiting in `stopWaiting`; the close stops the loop
+  // and runs it, and the loop falls out to the same exit as Q.
+  let stopWaiting: (() => void) | null = null;
+  const setStopWaiting = (stop: (() => void) | null) => { stopWaiting = stop; };
+  const withdrawDoorClose = honourDoorClose(ctx, null, () => {
+    running = false;
+    stopWaiting?.();
+  });
+
   while (running) {
     displayMenu(socket, configs);
 
@@ -78,29 +89,32 @@ door.onStart(async (ctx: DoorContext) => {
         delete bbsSession.doorInputHandler;
         resolve(data.trim().toUpperCase());
       };
+      setStopWaiting(() => handleInput('Q'));
       bbsSession.doorInputHandler = handleInput;
     });
 
-    if (choice === 'Q' || !choice) {
+    if (choice === 'Q' || !choice || !running) {
       running = false;
       break;
     }
 
     if (choice === 'M') {
-      const manualConfig = await getManualConnection(socket, bbsSession);
-      if (manualConfig) {
-        await connectTelnet(socket, manualConfig, user?.username || 'Guest', bbsSession);
+      const manualConfig = await getManualConnection(socket, bbsSession, setStopWaiting);
+      if (manualConfig && running) {
+        await connectTelnet(socket, manualConfig, user?.username || 'Guest', bbsSession, setStopWaiting);
       }
     } else {
       const index = parseInt(choice) - 1;
       if (index >= 0 && index < configs.length) {
-        await connectTelnet(socket, configs[index], user?.username || 'Guest', bbsSession);
+        await connectTelnet(socket, configs[index], user?.username || 'Guest', bbsSession, setStopWaiting);
       } else {
         socket.emit('ansi-output', '\r\n\x1b[31mInvalid selection.\x1b[0m\r\n');
         await new Promise(resolve => setTimeout(resolve, 1500));
       }
     }
+    setStopWaiting(null);
   }
+  withdrawDoorClose();
 
   socket.emit('ansi-output', '\r\n\x1b[32mReturning to menu...\x1b[0m\r\n');
 });
@@ -109,7 +123,8 @@ async function connectTelnet(
   ioSocket: any,
   config: TelnetConfig,
   currentUsername: string,
-  bbsSession: any
+  bbsSession: any,
+  setStopWaiting: (stop: (() => void) | null) => void
 ): Promise<void> {
   return new Promise((resolve) => {
     ioSocket.emit('ansi-output', `\r\n\x1b[36mConnecting to ${config.serverHost}:${config.telnetPort}...\x1b[0m\r\n`);
@@ -158,6 +173,8 @@ async function connectTelnet(
     };
 
     bbsSession.doorInputHandler = handleInput;
+    // A board close ends the connection; 'close' below finishes the wait.
+    setStopWaiting(() => telnetSocket.destroy());
 
     telnetSocket.on('close', () => {
       delete bbsSession.doorInputHandler;
@@ -173,7 +190,11 @@ async function connectTelnet(
   });
 }
 
-async function getManualConnection(socket: any, bbsSession: any): Promise<TelnetConfig | null> {
+async function getManualConnection(
+  socket: any,
+  bbsSession: any,
+  setStopWaiting: (stop: (() => void) | null) => void
+): Promise<TelnetConfig | null> {
   return new Promise((resolve) => {
     const config: Partial<TelnetConfig> = {};
     let step = 0;
@@ -205,6 +226,11 @@ async function getManualConnection(socket: any, bbsSession: any): Promise<Telnet
           break;
       }
     };
+    // A board close cancels the prompt the way an empty hostname does.
+    setStopWaiting(() => {
+      delete bbsSession.doorInputHandler;
+      resolve(null);
+    });
     bbsSession.doorInputHandler = handleInput;
   });
 }

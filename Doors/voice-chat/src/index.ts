@@ -19,7 +19,7 @@
  * - Client emits 'voice:speaking' -> Backend broadcasts to room
  */
 
-import { CoreDoor as Door, createScreen } from '@amiexpress/bbs-door-sdk';
+import { CoreDoor as Door, createScreen, honourDoorClose } from '@amiexpress/bbs-door-sdk';
 import type { DoorContext } from '@amiexpress/bbs-door-sdk';
 import blessed, { renderAudioLevel } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import {
@@ -465,6 +465,8 @@ door.onStart(async (ctx: DoorContext) => {
     // so every way out of this door goes through the same teardown.
     screen.destroy();
   });
+  // Ctrl+C and a Ctrl+K palette pick leave through the same quit as Q.
+  honourDoorClose(ctx, screen, () => screen.destroy());
 
   // Focus management
   screen.focusPush(mainBox as any);

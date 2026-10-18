@@ -183,6 +183,7 @@ async function getUserInput(socket, bbsSession, prompt, maxLen) {
             }
             // Handle enter
             if (data === '\r' || data === '\n') {
+                withdrawDoorClose();
                 delete bbsSession.doorInputHandler;
                 socket.emit('ansi-output', '\r\n');
                 resolve(input);
@@ -198,8 +199,15 @@ async function getUserInput(socket, bbsSession, prompt, maxLen) {
             }
         };
         bbsSession.doorInputHandler = handleInput;
+        // Ctrl+C and a Ctrl+K palette pick leave the way a timeout does: no
+        // input, and the door returns to the board.
+        const withdrawDoorClose = (0, bbs_door_sdk_1.honourDoorClose)({ socket }, null, () => {
+            delete bbsSession.doorInputHandler;
+            resolve(null);
+        });
         // Timeout after 5 minutes
         setTimeout(() => {
+            withdrawDoorClose();
             delete bbsSession.doorInputHandler;
             resolve(null);
         }, 300000);
@@ -213,17 +221,25 @@ async function getYesNo(socket, bbsSession) {
         const handleInput = (data) => {
             const key = data.toLowerCase();
             if (key === 'y') {
+                withdrawDoorClose();
                 delete bbsSession.doorInputHandler;
                 socket.emit('ansi-output', 'Y\r\n');
                 resolve(true);
             }
             else if (key === 'n') {
+                withdrawDoorClose();
                 delete bbsSession.doorInputHandler;
                 socket.emit('ansi-output', 'N\r\n');
                 resolve(false);
             }
         };
         bbsSession.doorInputHandler = handleInput;
+        // Ctrl+C and a Ctrl+K palette pick answer N: the door's own way out.
+        const withdrawDoorClose = (0, bbs_door_sdk_1.honourDoorClose)({ socket }, null, () => {
+            delete bbsSession.doorInputHandler;
+            socket.emit('ansi-output', 'N\r\n');
+            resolve(false);
+        });
     });
 }
 /**

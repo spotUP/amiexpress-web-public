@@ -17,6 +17,14 @@ export declare const shadowMessageTemplates: {
 /**
  * Handle main menu input
  */
+/**
+ * What leaving records, whichever way the player leaves: Q from the main
+ * menu, or the board ending the door (Ctrl+C, a Ctrl+K palette pick).
+ * Achievements (SP3): the empire as the player leaves it. A bucket key
+ * rather than a raw amount, because the rule operators count events and
+ * sum them - they do not threshold one event's value.
+ */
+export declare function recordLeaving(gameState: PhreakWarsGameState): void;
 export declare function handleMainMenu(socket: Socket, gameState: PhreakWarsGameState, input: string): void;
 /**
  * Ask for the hacker handle and keep asking until one is accepted.

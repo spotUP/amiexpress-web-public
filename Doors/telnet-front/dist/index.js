@@ -208,15 +208,20 @@ door.onStart(async (ctx) => {
     // For logged-in users, wait briefly for any key to continue (or auto-continue after 500ms)
     await new Promise((resolve) => {
         const timeout = setTimeout(() => {
+            withdrawDoorClose();
             delete bbsSession.doorInputHandler;
             resolve();
         }, 500); // Reduced from 2000ms to 500ms
-        const handleInput = (data) => {
+        // Any key, Ctrl+C and a Ctrl+K palette pick all continue at once.
+        const continueNow = () => {
+            withdrawDoorClose();
             clearTimeout(timeout);
             delete bbsSession.doorInputHandler;
             resolve();
         };
+        const handleInput = (_data) => continueNow();
         bbsSession.doorInputHandler = handleInput;
+        const withdrawDoorClose = (0, bbs_door_sdk_1.honourDoorClose)(ctx, null, continueNow);
     });
 });
 exports.default = door;

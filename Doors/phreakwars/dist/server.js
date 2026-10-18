@@ -7,7 +7,7 @@
  * - Socket.IO input handling
  * - Portable and self-contained
  */
-import { ServerDoor } from '@amiexpress/bbs-door-sdk';
+import { ServerDoor, honourDoorClose } from '@amiexpress/bbs-door-sdk';
 // Metadata
 export const metadata = {
     name: 'Phreak Wars',
@@ -18,7 +18,7 @@ export const metadata = {
 };
 import { gameStates, createNewGameState, checkAndResetDailyLimits } from './lib/player';
 import { displayMainMenu, titleBox, stateWidth, say } from './lib/ui';
-import { handleMainMenu, askForHandle, handlePhreaking, handleBBSExploration, handleProgramming, handleTrading, handleRomance, handleMultiplayer, handleUpgrades, handleMessageChoice, handleWaiting, handleStatsMenu, handleDeleteConfirmation } from './lib/handlers';
+import { handleMainMenu, askForHandle, handlePhreaking, handleBBSExploration, handleProgramming, handleTrading, handleRomance, handleMultiplayer, handleUpgrades, handleMessageChoice, handleWaiting, handleStatsMenu, handleDeleteConfirmation, recordLeaving } from './lib/handlers';
 import { handleTextMinigame } from './lib/minigames';
 import { setAchievementReporter, award } from './lib/achievements';
 /**
@@ -85,6 +85,14 @@ door.onStart(async (ctx) => {
     // The input loop is this door's stay-alive: it holds `execute()` open until
     // the socket disconnects, the BBS sends `door:close`, or the door itself
     // says it is finished (see the quit path in onInput below).
+    //
+    // Ctrl+C and a Ctrl+K palette pick end it through the same leaving as Q:
+    // what leaving records, then ctx.close(). Armed only now, once any handle
+    // prompt above has returned, so a close never strands that prompt.
+    ctx.withdrawDoorClose = honourDoorClose(ctx, null, () => {
+        recordLeaving(ctx.gameState);
+        ctx.close();
+    });
 });
 door.onInput(async (ctx, key) => {
     const gameState = ctx.gameState;
@@ -157,6 +165,7 @@ door.onInput(async (ctx, key) => {
     // then resolves on the next keystroke (sdk/src/core/Door.ts:212-217), which
     // is exactly the "Press any key to exit..." the quit handler prints.
     if (gameState.currentMode === 'quit') {
+        ctx.withdrawDoorClose?.();
         await ctx.close();
     }
 });

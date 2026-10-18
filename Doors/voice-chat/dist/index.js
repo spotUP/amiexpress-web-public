@@ -422,6 +422,8 @@ door.onStart(async (ctx) => {
         // so every way out of this door goes through the same teardown.
         screen.destroy();
     });
+    // Ctrl+C and a Ctrl+K palette pick leave through the same quit as Q.
+    (0, bbs_door_sdk_1.honourDoorClose)(ctx, screen, () => screen.destroy());
     // Focus management
     screen.focusPush(mainBox);
     // Keep the door running until closed.

@@ -17,7 +17,7 @@
  * Original: dev/docs/AmiExpressEDoorSources/BBSLink/bbslinkwall.e
  */
 
-import { ServerDoor, DoorContext } from '@amiexpress/bbs-door-sdk';
+import { ServerDoor, DoorContext, honourDoorClose } from '@amiexpress/bbs-door-sdk';
 import { BBSLinkWallConfig, loadConfig } from './config';
 import { banner, screenColumns, widthNotice } from './layout';
 import * as fs from 'fs';
@@ -180,6 +180,7 @@ async function getUserInput(socket: any, bbsSession: any, prompt: string, maxLen
 
       // Handle enter
       if (data === '\r' || data === '\n') {
+        withdrawDoorClose();
         delete bbsSession.doorInputHandler;
         socket.emit('ansi-output', '\r\n');
         resolve(input);
@@ -197,9 +198,16 @@ async function getUserInput(socket: any, bbsSession: any, prompt: string, maxLen
     };
 
     bbsSession.doorInputHandler = handleInput;
+    // Ctrl+C and a Ctrl+K palette pick leave the way a timeout does: no
+    // input, and the door returns to the board.
+    const withdrawDoorClose = honourDoorClose({ socket }, null, () => {
+      delete bbsSession.doorInputHandler;
+      resolve(null);
+    });
 
     // Timeout after 5 minutes
     setTimeout(() => {
+      withdrawDoorClose();
       delete bbsSession.doorInputHandler;
       resolve(null);
     }, 300000);
@@ -214,10 +222,12 @@ async function getYesNo(socket: any, bbsSession: any): Promise<boolean> {
     const handleInput = (data: string) => {
       const key = data.toLowerCase();
       if (key === 'y') {
+        withdrawDoorClose();
         delete bbsSession.doorInputHandler;
         socket.emit('ansi-output', 'Y\r\n');
         resolve(true);
       } else if (key === 'n') {
+        withdrawDoorClose();
         delete bbsSession.doorInputHandler;
         socket.emit('ansi-output', 'N\r\n');
         resolve(false);
@@ -225,6 +235,12 @@ async function getYesNo(socket: any, bbsSession: any): Promise<boolean> {
     };
 
     bbsSession.doorInputHandler = handleInput;
+    // Ctrl+C and a Ctrl+K palette pick answer N: the door's own way out.
+    const withdrawDoorClose = honourDoorClose({ socket }, null, () => {
+      delete bbsSession.doorInputHandler;
+      socket.emit('ansi-output', 'N\r\n');
+      resolve(false);
+    });
   });
 }
 

@@ -88,6 +88,16 @@ door.onStart(async (ctx) => {
     const { socket, user, bbsSession } = ctx;
     const configs = (0, config_1.loadConfig)();
     let running = true;
+    // Ctrl+C and a Ctrl+K palette pick end the door the way Q does. Whatever
+    // the door is waiting on (the menu, the manual prompt, a live connection)
+    // registers how to stop waiting in `stopWaiting`; the close stops the loop
+    // and runs it, and the loop falls out to the same exit as Q.
+    let stopWaiting = null;
+    const setStopWaiting = (stop) => { stopWaiting = stop; };
+    const withdrawDoorClose = (0, bbs_door_sdk_1.honourDoorClose)(ctx, null, () => {
+        running = false;
+        stopWaiting?.();
+    });
     while (running) {
         displayMenu(socket, configs);
         const choice = await new Promise((resolve) => {
@@ -95,32 +105,35 @@ door.onStart(async (ctx) => {
                 delete bbsSession.doorInputHandler;
                 resolve(data.trim().toUpperCase());
             };
+            setStopWaiting(() => handleInput('Q'));
             bbsSession.doorInputHandler = handleInput;
         });
-        if (choice === 'Q' || !choice) {
+        if (choice === 'Q' || !choice || !running) {
             running = false;
             break;
         }
         if (choice === 'M') {
-            const manualConfig = await getManualConnection(socket, bbsSession);
-            if (manualConfig) {
-                await connectTelnet(socket, manualConfig, user?.username || 'Guest', bbsSession);
+            const manualConfig = await getManualConnection(socket, bbsSession, setStopWaiting);
+            if (manualConfig && running) {
+                await connectTelnet(socket, manualConfig, user?.username || 'Guest', bbsSession, setStopWaiting);
             }
         }
         else {
             const index = parseInt(choice) - 1;
             if (index >= 0 && index < configs.length) {
-                await connectTelnet(socket, configs[index], user?.username || 'Guest', bbsSession);
+                await connectTelnet(socket, configs[index], user?.username || 'Guest', bbsSession, setStopWaiting);
             }
             else {
                 socket.emit('ansi-output', '\r\n\x1b[31mInvalid selection.\x1b[0m\r\n');
                 await new Promise(resolve => setTimeout(resolve, 1500));
             }
         }
+        setStopWaiting(null);
     }
+    withdrawDoorClose();
     socket.emit('ansi-output', '\r\n\x1b[32mReturning to menu...\x1b[0m\r\n');
 });
-async function connectTelnet(ioSocket, config, currentUsername, bbsSession) {
+async function connectTelnet(ioSocket, config, currentUsername, bbsSession, setStopWaiting) {
     return new Promise((resolve) => {
         ioSocket.emit('ansi-output', `\r\n\x1b[36mConnecting to ${config.serverHost}:${config.telnetPort}...\x1b[0m\r\n`);
         const telnetSocket = net.createConnection({
@@ -162,6 +175,8 @@ async function connectTelnet(ioSocket, config, currentUsername, bbsSession) {
             }
         };
         bbsSession.doorInputHandler = handleInput;
+        // A board close ends the connection; 'close' below finishes the wait.
+        setStopWaiting(() => telnetSocket.destroy());
         telnetSocket.on('close', () => {
             delete bbsSession.doorInputHandler;
             ioSocket.emit('ansi-output', '\r\n\x1b[33mConnection closed.\x1b[0m\r\n');
@@ -174,7 +189,7 @@ async function connectTelnet(ioSocket, config, currentUsername, bbsSession) {
         });
     });
 }
-async function getManualConnection(socket, bbsSession) {
+async function getManualConnection(socket, bbsSession, setStopWaiting) {
     return new Promise((resolve) => {
         const config = {};
         let step = 0;
@@ -204,6 +219,11 @@ async function getManualConnection(socket, bbsSession) {
                     break;
             }
         };
+        // A board close cancels the prompt the way an empty hostname does.
+        setStopWaiting(() => {
+            delete bbsSession.doorInputHandler;
+            resolve(null);
+        });
         bbsSession.doorInputHandler = handleInput;
     });
 }

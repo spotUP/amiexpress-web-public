@@ -218,13 +218,18 @@ async function connectToGame(socket, config, userSlot, bbsSession) {
             socket.emit('ansi-output', translated);
         });
         telnetSocket.on('error', (err) => {
+            withdrawDoorClose();
             socket.emit('ansi-output', `\r\n\x1b[31mConnection error: ${err.message}\x1b[0m\r\n`);
             resolve();
         });
         telnetSocket.on('close', () => {
+            withdrawDoorClose();
             socket.emit('ansi-output', '\r\n\x1b[33mConnection closed.\x1b[0m\r\n');
             resolve();
         });
+        // Ctrl+C and a Ctrl+K palette pick end the door the way the remote game
+        // does: the connection closes and 'close' above finishes the door.
+        const withdrawDoorClose = (0, bbs_door_sdk_1.honourDoorClose)({ socket }, null, () => telnetSocket.destroy());
         const inputHandler = (data) => {
             if (connected && !telnetSocket.destroyed)
                 telnetSocket.write(data);
