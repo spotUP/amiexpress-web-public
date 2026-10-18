@@ -1758,7 +1758,9 @@ function endPasswordMask(socket: any, session: BBSSession): void {
           // system-password gate and the forced-password-change adapter mask
           // through the same switch as the password phase rather than each
           // testing a phase name of its own.
-          emitText(socket, session.maskInput ? '*' : char);
+          // A password line typed while the logon it started still runs
+          // stays masked too (the run ended the mask for its own prompts).
+          emitText(socket, session.maskInput || session.tempData.logonRunning ? '*' : char);
         }
       }
     }
@@ -1773,6 +1775,12 @@ function endPasswordMask(socket: any, session: BBSSession): void {
     if (isLineEnding) {
       const input = session.tempData.inputBuffer || '';
       session.tempData.inputBuffer = '';
+
+      // SINGLE FLIGHT: a line typed while this connection's logon still runs
+      // (a takeover can hold it) never starts a second one. It used to: the
+      // caller retyped the password, the second run logged on and entered a
+      // door, and the first woke later and logged on over it.
+      if (session.tempData.logonRunning) return;
 
       if (phase === 'username') {
         const typed = input.trim();
@@ -1921,9 +1929,17 @@ function endPasswordMask(socket: any, session: BBSSession): void {
         const enterLogon = async (user: any): Promise<void> => {
           const lastLoginBeforeUpdate = user.lastLogin ? new Date(user.lastLogin) : new Date(0);
           endPasswordMask(socket, session);
-          const { runPostAuthLogin } = await import('../services/login-post.service');
-          await runPostAuthLogin(socket, session, user, { io, lastLoginBeforeUpdate, typedPassword: true });
+          session.tempData.logonRunning = true;
+          try {
+            const { runPostAuthLogin } = await import('../services/login-post.service');
+            await runPostAuthLogin(socket, session, user, { io, lastLoginBeforeUpdate, typedPassword: true });
+          } finally {
+            session.tempData.logonRunning = false;
+          }
         };
+
+        // The password check below awaits too: the same single flight.
+        session.tempData.logonRunning = true;
 
         // Authenticate using use case service (Clean Architecture)
         try {
@@ -2056,6 +2072,8 @@ console.error('[LOGIN] Error during login:', err?.message || err);
           emitPrompt(socket, `\r\n\x1b[31mLogin failed, please try again.\x1b[0m\r\n${loginNamePrompt(session.nodeId ?? 0)} `);
           session.tempData.loginPhase = 'username';
           session.tempData.loginUsername = '';
+        } finally {
+          session.tempData.logonRunning = false;
         }
         return;
       }

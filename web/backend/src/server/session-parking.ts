@@ -403,9 +403,11 @@ export async function endLiveSession(session: BBSSession, waitMs = 5000): Promis
   emitter?.disconnect(true);
   let timer: ReturnType<typeof setTimeout> | undefined;
   const timeout = new Promise<void>((resolve) => { timer = setTimeout(resolve, waitMs); });
-  await Promise.race([forgotten, timeout]);
-  const ending = endings.get(session);
-  if (ending) await Promise.race([ending, timeout]);
+  // Off the board is enough: the login that asked goes on while the old
+  // node's paperwork (logoff batches run a 68K door) finishes behind it. A
+  // finalize that ends or throws before that point also ends the wait.
+  const ending = endings.get(session)?.catch(() => undefined);
+  await Promise.race(ending ? [forgotten, ending, timeout] : [forgotten, timeout]);
   if (timer) clearTimeout(timer);
   stop();
   // The timeout won and the session is still on the board: its transport
@@ -416,13 +418,21 @@ export async function endLiveSession(session: BBSSession, waitMs = 5000): Promis
   }
 }
 
-/** End every parked session of `userId` and wait for each finalize. Returns the count. */
+/**
+ * End every parked session of `userId` and wait until each is off the board
+ * (`reclaimParkedNode`'s wait), not for its paperwork: the logoff batches can
+ * run a 68K door for a minute, and the login waiting here held its caller at
+ * a dead prompt that long. Returns the count.
+ */
 export async function endParkedSessionsFor(userId: string): Promise<number> {
   const parked = [...sessions.values()].filter((s) =>
     isParked(s) && s.webLink && !s.webLink.ended && String((s.user as { id?: unknown } | undefined)?.id) === String(userId));
   for (const s of parked) {
+    const { forgotten, stop } = waitForgotten(s);
     s.webLink!.end('transport close');
-    await endings.get(s);
+    const ending = endings.get(s);
+    if (ending) await Promise.race([forgotten, ending.catch(() => undefined)]);
+    stop();
   }
   return parked.length;
 }

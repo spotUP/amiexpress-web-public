@@ -95,7 +95,8 @@ export type PostAuthResult =
         | "chat-only-handled"
         | "parked-session-quit"
         | "parked-session-resumed"
-        | "parked-session-lost";
+        | "parked-session-lost"
+        | "superseded";
     };
 
 /**
@@ -112,12 +113,25 @@ export type PostAuthResult =
  * `auth-socket-handlers.ts:588-1052`. Telnet/SSH duplicate at
  * `command.handler.ts:1723-1893` is removed in commit 3.
  */
+/** Each session's latest post-auth run, so a run that waited can tell it is stale. */
+const loginAttempts = new WeakMap<object, number>();
+
 export async function runPostAuthLogin(
   emitter: LoginEmitter,
   session: BBSSession,
   userArg: any,
   ctx: PostAuthContext,
 ): Promise<PostAuthResult> {
+  // ONE CONNECTION, ONE LOGIN. A run that waits (the takeover below can) is
+  // stale when it wakes if another run started since, or the session moved
+  // on without it (logged on, logged off). It must stop there: going on
+  // issued a second resume token, ran LOGON twice and painted the bulletins
+  // over a door the newer login had already entered (GMASTER, 2026-10-18).
+  const attempt = (loginAttempts.get(session) ?? 0) + 1;
+  loginAttempts.set(session, attempt);
+  const stateAtEntry = session.state;
+  const superseded = (): boolean =>
+    loginAttempts.get(session) !== attempt || session.state !== stateAtEntry;
   // Reassignable so the forced-pwd-change adapter can refresh the
   // hash after the password is updated mid-flow.
   let user = userArg;
@@ -260,6 +274,7 @@ export async function runPostAuthLogin(
       } else {
         await endParkedHere(parked);
       }
+      if (superseded()) return { ok: false, terminated: "superseded" };
     }
   }
 

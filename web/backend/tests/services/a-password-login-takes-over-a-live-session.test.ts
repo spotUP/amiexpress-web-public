@@ -33,6 +33,20 @@ jest.mock('../../src/handlers/screen.handler', () => ({
   doPause: jest.fn(async () => undefined),
 }));
 jest.mock('../../src/index', () => ({}));
+// The typed-password path (command.handler.ts) authenticates through the container.
+jest.mock('../../src/container', () => ({
+  container: { resolve: () => ({ authenticate: jest.fn(async () => ({ success: true, user: { id: 7, username: 'phone', slotNumber: 7, calls: 3, callsToday: 0, ansi: true, gdprConsentAt: new Date(0) } })) }) },
+}));
+jest.mock('../../src/services/use-cases/authentication.use-case', () => ({ AuthenticationUseCase: class {} }));
+// Counted pass-throughs: the one-logon tests count resume tokens and LOGON runs.
+jest.mock('../../src/server/resume-tokens', () => {
+  const actual = jest.requireActual('../../src/server/resume-tokens');
+  return { ...actual, issueResumeTokenForLogin: jest.fn((...a: unknown[]) => actual.issueResumeTokenForLogin(...a)) };
+});
+jest.mock('../../src/handlers/command-execution.handler', () => {
+  const actual = jest.requireActual('../../src/handlers/command-execution.handler');
+  return { ...actual, runSysCommand: jest.fn((...a: unknown[]) => actual.runSysCommand(...a)) };
+});
 jest.mock('../../src/database', () => ({
   db: {
     getUserById: jest.fn(async () => null),
@@ -87,6 +101,12 @@ import { userAlreadyOnNode } from '../../src/services/user-already-online';
 import { ftpCallersOnline } from '../../src/ftp/ftp-presence';
 import { callersLogManager } from '../../src/services/CallersLogManager';
 import { registerDisconnectHandler } from '../../src/server/socket-handlers';
+import { handleCommand } from '../../src/handlers/command.handler';
+import { endParkedHere } from '../../src/services/parked-session-choice';
+import { callersLog } from '../../src/server/database-helpers';
+import { displayScreen } from '../../src/handlers/screen.handler';
+import { issueResumeTokenForLogin } from '../../src/server/resume-tokens';
+import { runSysCommand } from '../../src/handlers/command-execution.handler';
 
 function browser(id: string) {
   const ee: any = new EventEmitter();
@@ -329,5 +349,130 @@ describe('S15 review: E against holders', () => {
     expect(live.sysopKicked).toBeFalsy();
     // Its later real drop parks it like any other web session.
     expect(parkDecision(live, 'transport close', 60_000)).toBe('park');
+  });
+});
+
+/**
+ * GMASTER, 2026-10-18: login #1 answered [E]nd and waited a minute while the
+ * old node ran its logoff batches; the password prompt stayed open, the
+ * caller retyped the password, login #2 logged on and entered a door, and
+ * login #1 woke and logged on again over it (second resume token, LOGON
+ * again, bulletins and a pause painted over the door).
+ */
+describe('one connection runs one logon', () => {
+  const until = async (cond: () => boolean, ms = 4000) => {
+    const end = Date.now() + ms;
+    while (!cond()) {
+      if (Date.now() > end) throw new Error('timed out waiting');
+      await new Promise((r) => setTimeout(r, 5));
+    }
+  };
+  /** The old node's paperwork (its callers-log line, then its logoff batches) is held until released. */
+  function holdPaperwork() {
+    let release!: () => void;
+    const held = new Promise<void>((r) => { release = r; });
+    (callersLog as jest.Mock).mockImplementation((_id: unknown, _name: unknown, what: string) =>
+      (what === 'Logged off' ? held : Promise.resolve()));
+    return release;
+  }
+  const bullsPainted = () => (displayScreen as jest.Mock).mock.calls.filter((c) => c[2] === 'BULL').length;
+  afterEach(() => { (callersLog as jest.Mock).mockImplementation(async () => undefined); });
+
+  /** Window B types the password, answers E, and its logon is held at LOGON. */
+  async function typedPasswordTakeover() {
+    await liveWindow();
+    (userAlreadyOnNode as jest.Mock).mockImplementation(() => (sessions.get('3') ? 3 : null));
+    (ftpCallersOnline as jest.Mock).mockReturnValue([]);
+    const releasePaperwork = holdPaperwork();
+    let releaseLogon!: () => void;
+    const logonHeld = new Promise<void>((r) => { releaseLogon = r; });
+    const logons = runSysCommand as unknown as jest.Mock;
+    const passThrough = logons.getMockImplementation()!;
+    logons.mockImplementation(async (...a: unknown[]) => {
+      if (a[2] === 'LOGON') { await logonHeld; return undefined; }
+      return passThrough(...a);
+    });
+    const tokens = issueResumeTokenForLogin as unknown as jest.Mock;
+    const b = browser('B');
+    await acceptWebConnection(io, b as never, deps(4) as never);
+    const session: any = getSession('B');
+    opened.push(session);
+    Object.assign(session, { state: BBSState.LOGON, maskInput: true, tempData: { loginPhase: 'password', loginUsername: 'phone' } });
+    const runs: Array<Promise<unknown>> = [handleCommand(b, session, 'secret\r', io)];
+    await until(() => typeof session.loginInputHandler === 'function');
+    runs.push(handleCommand(b, session, 'e', io));
+    await until(() => sessions.get('3') === undefined);   // the old node is off the board
+    const restore = () => { logons.mockImplementation(passThrough); };
+    return { b, session, runs, releasePaperwork, releaseLogon, logons, tokens, restore };
+  }
+
+  it('a password retyped while the takeover waits starts no second logon, and nothing paints over the door after', async () => {
+    const t = await typedPasswordTakeover();
+    try {
+      t.runs.push(handleCommand(t.b, t.session, 'secret\r', io));
+      await until(() => t.logons.mock.calls.some((c) => c[2] === 'LOGON'));
+      t.releaseLogon();
+      await until(() => bullsPainted() > 0);
+      await new Promise((r) => setTimeout(r, 50));
+      // The caller is in a door now.
+      Object.assign(t.session, { subState: LoggedOnSubState.DOOR_RUNNING, inDoorManager: true });
+      const subState = t.session.subState;
+      const painted = bullsPainted();
+      t.releasePaperwork();
+      await Promise.race([Promise.all(t.runs), new Promise((r) => setTimeout(r, 6000))]);
+      expect(t.tokens).toHaveBeenCalledTimes(1);
+      expect(t.logons.mock.calls.filter((c) => c[2] === 'LOGON')).toHaveLength(1);
+      expect(bullsPainted()).toBe(painted);
+      expect(t.session.subState).toBe(subState);
+      expect(t.session.inDoorManager).toBe(true);
+    } finally { t.releasePaperwork(); t.releaseLogon(); t.restore(); }
+  });
+
+  it('keys typed while the takeover waits echo as *, never the password, and start nothing', async () => {
+    const { live } = await liveWindow();
+    // The old window's transport is slow to say disconnect: the takeover waits.
+    const disconnect = live.webLink.disconnect.bind(live.webLink);
+    live.webLink.disconnect = () => undefined;
+    const b = browser('B');
+    await acceptWebConnection(io, b as never, deps(4) as never);
+    const session: any = getSession('B');
+    opened.push(session);
+    Object.assign(session, { state: BBSState.LOGON, maskInput: true, tempData: { loginPhase: 'password', loginUsername: 'phone' } });
+    const first = handleCommand(b, session, 'secret\r', io);
+    await until(() => typeof session.loginInputHandler === 'function');
+    await handleCommand(b, session, 'e', io);
+    const before = text(b).length;
+    await handleCommand(b, session, 'pw9\r', io);
+    await new Promise((r) => setTimeout(r, 50));   // the output buffer flushes
+    expect(session.state).toBe(BBSState.LOGON);
+    expect(text(b).slice(before)).toBe('***');
+    // A second run would have met the holder again and asked again.
+    expect(session.loginInputHandler).toBeUndefined();
+    disconnect(true);
+    await first;
+  });
+
+  it('[E]nd returns once the holder is off the board, not after its held logoff paperwork', async () => {
+    const { live } = await liveWindow();
+    const release = holdPaperwork();
+    try {
+      const started = Date.now();
+      await endParkedHere(live);
+      expect(Date.now() - started).toBeLessThan(1000);
+      expect(sessions.get('3')).toBeUndefined();
+    } finally { release(); }
+  });
+
+  it('[E]nd on a parked holder returns once it is off the board, not after its held logoff paperwork', async () => {
+    const { a, live } = await liveWindow();
+    a.connected = false;
+    a.fire('disconnect', 'transport close');
+    await until(() => isParked(live));
+    const release = holdPaperwork();
+    try {
+      const ended = await Promise.race([endParkedHere(live).then(() => 'ended'), new Promise((r) => setTimeout(() => r('held'), 1500))]);
+      expect(ended).toBe('ended');
+      expect(sessions.get('3')).toBeUndefined();
+    } finally { release(); }
   });
 });
