@@ -12,6 +12,11 @@
 # `npm rebuild` fetches the matching prebuilt binary (about 2 s per door) and
 # falls back to compiling with the image's build-base.
 #
+# Only the packages that hold an addon are named. A bare `npm rebuild` also
+# runs the door's OWN install scripts, and grandmaster's is a tsc build that
+# fails inside the image: the addon was rebuilt, the command still exited 1,
+# the stamp was never written and every boot logged a false [ERROR].
+#
 # Usage: rebuild-door-natives.sh <doors-dir>
 # NODE_ABI and NPM_BIN override the running ABI and npm, for the test only.
 
@@ -28,8 +33,11 @@ for modules in "$doors_dir"/*/node_modules; do
     door="$(basename "$door_dir")"
 
     # Only a door that ships a compiled addon depends on the ABI.
-    addon="$(find "$modules" -name '*.node' -path '*/build/*' 2>/dev/null | head -n 1)"
-    [ -n "$addon" ] || continue
+    # The package that holds each addon: the path after the LAST node_modules/
+    # up to /build/, so a nested or scoped (@scope/name) package names itself.
+    packages="$(find "$modules" -name '*.node' -path '*/build/*' 2>/dev/null \
+        | sed -e 's#.*/node_modules/##' -e 's#/build/.*##' | sort -u)"
+    [ -n "$packages" ] || continue
 
     stamp="$modules/$stamp_name"
     if [ -f "$stamp" ] && [ "$(cat "$stamp")" = "$abi" ]; then
@@ -37,7 +45,7 @@ for modules in "$doors_dir"/*/node_modules; do
     fi
 
     echo "[Natives] Doors/$door: rebuilding native addons for Node ABI $abi"
-    if (cd "$door_dir" && "$npm_bin" rebuild --no-audit --no-fund >/dev/null 2>&1); then
+    if (cd "$door_dir" && "$npm_bin" rebuild $packages --no-audit --no-fund >/dev/null 2>&1); then
         echo "$abi" > "$stamp"
         echo "[Natives] [OK] Doors/$door"
     else

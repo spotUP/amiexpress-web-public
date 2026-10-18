@@ -76,4 +76,17 @@ describe('a door addon is rebuilt when node changes', () => {
     expect(out).toContain('[ERROR] Doors/grandmaster');
     expect(fs.readFileSync(path.join(modules, '.amiexpress-node-abi'), 'utf8').trim()).toBe('115');
   });
+
+  it("names only the addon packages, so the door's own failing build script cannot fail it", () => {
+    // Live, 2026-10-18: a bare `npm rebuild` in grandmaster rebuilt
+    // better-sqlite3 and then ran the door's tsc install script, which
+    // exits 1 in the image. This npm fails the same way unless it is told
+    // which packages to rebuild.
+    const modules = makeDoor(doorsDir, 'grandmaster', { addon: true, stamp: '115' });
+    fs.writeFileSync(fakeNpm, `#!/bin/sh\necho "$*" >> "${calls}"\n[ "$2" = better-sqlite3 ] || exit 1\n`);
+    const out = run(doorsDir, fakeNpm, '137');
+    expect(fs.readFileSync(calls, 'utf8')).toContain('rebuild better-sqlite3 ');
+    expect(out).toContain('[OK] Doors/grandmaster');
+    expect(fs.readFileSync(path.join(modules, '.amiexpress-node-abi'), 'utf8').trim()).toBe('137');
+  });
 });
