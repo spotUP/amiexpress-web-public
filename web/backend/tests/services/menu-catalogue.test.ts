@@ -3,7 +3,7 @@ import { buildCatalogue, effectiveStyle, catalogueStyle } from '../../src/servic
 import { formatCatalogue } from '../../src/services/menu-catalogue/catalogue-file';
 import { mainMenuSource } from '../../src/services/menu-catalogue/sources/main';
 import { registerMenuSource, menuSourceFor } from '../../src/services/menu-catalogue/registry';
-import { defaultMenuConfig, validateMenuConfig, nextMenuStyle, menuStyleTabLine, MENU_STYLES } from '../../src/screens/menu-config/menu-config';
+import { defaultMenuConfig, validateMenuConfig, nextMenuStyle, MENU_STYLES } from '../../src/screens/menu-config/menu-config';
 import { commandCache } from '../../src/handlers/command-execution.handler';
 import type { Catalogue, MenuCaller, MenuSource } from '../../src/services/menu-catalogue/types';
 
@@ -130,10 +130,9 @@ test('the catalogue file carries the one-off notice as an N line after R, and no
   expect(lines[lines.indexOf('R 0') + 1]).toBe('N Menu style: Scroll');
 });
 
-test('the menu style cycle is Classic, Scroll, Cover flow and wraps, with no Pages; the board names the next one', () => {
+test('the menu style cycle is Classic, Scroll, Cover flow and wraps, with no Pages', () => {
   expect(MENU_STYLES).toEqual(['classic', 'scroll', 'coverflow']);
   expect((['classic', 'scroll', 'coverflow'] as const).map(nextMenuStyle)).toEqual(['scroll', 'coverflow', 'classic']);
-  expect(menuStyleTabLine('classic')).toBe('Menu style: Classic. Tab for Scroll.');
 });
 
 test('the catalogue file: TAB-safe fields, cut at their widths, never the key', () => {

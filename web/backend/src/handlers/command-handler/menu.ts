@@ -29,7 +29,7 @@ import { displayModeOf } from '../../amiga-emulation/xim/display-mode.util';
 import { doorRefusedForWidth } from '../../utils/door-min-columns.util';
 import { effectiveStyle } from '../../services/menu-catalogue/build';
 import { menuCallerFromSession, storeMenuStylePref } from '../../services/menu-catalogue/caller';
-import { menuStyleNotice, menuStyleTabLine, nextMenuStyle } from '../../screens/menu-config/menu-config';
+import { menuStyleNotice, nextMenuStyle } from '../../screens/menu-config/menu-config';
 import { readMenuConfig } from '../../services/menu-config.service';
 import { boardRoot } from '../../utils/board-root.util';
 
@@ -204,7 +204,6 @@ console.log('[menu] displayMainMenu SKIPPED (debounce - last menu was', now - la
     if (handover === 'ran') return;
     armDisplayFlowSkip(session);
     if (handover !== 'dismissed') screenDisplayed = await displayScreen(socket, session, SCREEN_MENU);
-    if (classicLanded) emitText(socket, `\r\n\x1b[36m${menuStyleTabLine('classic')}\x1b[0m`);
 
     // Clear any pagination that displayScreen might have set up - the menu prompt
     // handles input, not paginated screen continuation. This fixes the "enter twice" bug

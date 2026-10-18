@@ -42,8 +42,6 @@ export function nextMenuStyle(style: MenuStyle): MenuStyle {
 }
 /** The line a style change is named with: "Menu style: Scroll". */
 export function menuStyleNotice(style: MenuStyle): string { return `Menu style: ${MENU_STYLE_NAMES[style]}`; }
-/** The notice plus what Tab does next: "Menu style: Classic. Tab for Scroll." (under the board's own menu screen). */
-export function menuStyleTabLine(style: MenuStyle): string { return `${menuStyleNotice(style)}. Tab for ${MENU_STYLE_NAMES[nextMenuStyle(style)]}.`; }
 export type WidthClass = 'c64' | 'standard' | 'wide';
 export type LogoPosition = 'header' | 'footer' | 'side' | 'between';
 export type LogoRule = 'fixed' | 'rotate' | 'random';

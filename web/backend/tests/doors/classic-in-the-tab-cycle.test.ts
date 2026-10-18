@@ -6,7 +6,7 @@
  *  1. A classic caller presses Tab on an empty command prompt: promptTabLeavesClassic stores Scroll, arms the notice,
  *     and MENU opens the door, whose catalogue carries "N Menu style: Scroll".
  *  2. Tab twice inside the door: STYLE+ scroll -> Cover flow, STYLE+ coverflow -> Classic. Classic leaves the door; the
- *     board draws its own MENU screen, then "Menu style: Classic. Tab for Scroll.", then the prompt.
+ *     board draws its own MENU screen, then the prompt (no "Tab for Scroll" line).
  *
  * Sentinels are pass-through mocks (call counts, arguments), the same trick as main-menu-door-is-the-menu.test.ts.
  */
@@ -126,12 +126,12 @@ describe('Classic in the menu style Tab cycle, through the board', () => {
     await until(() => /Menu \(.*mins\. left\)/.test(out().slice(before)), 60000, 'the prompt after Classic');
     expect(styleAsks()).toEqual(['STYLE+ scroll', 'STYLE+ coverflow']);
 
-    // The board's MENU screen, then the Tab line, then the prompt - in that order.
+    // The board's MENU screen, then the prompt; no "Tab for ..." line (Tab is an entry in the MENU art itself).
     const tail = out().slice(before);
     expect((screens.displayScreen as jest.Mock).mock.calls.some((c: unknown[]) => String(c[2]).toUpperCase() === 'MENU')).toBe(true);
-    const tabLine = tail.indexOf('Menu style: Classic. Tab for Scroll.');
-    expect(tabLine).toBeGreaterThan(-1);
-    expect(tail.slice(tabLine)).toMatch(/Menu \(.*mins\. left\)/);
+    expect(tail).not.toContain('Tab for Scroll');
+    expect(tail).not.toContain('Menu style: Classic');
+    expect(tail).toMatch(/Menu \(.*mins\. left\)/);
     // Classic is the board's screen, not the door: nothing asks the door's verbs after the step to Classic.
     const asks = xim.menuAnswer.mock.calls.map((c: unknown[]) => String(c[0]));
     expect(asks.slice(asks.lastIndexOf('STYLE+ coverflow') + 1).filter((r: string) => /^OPEN /.test(r))).toEqual([]);
