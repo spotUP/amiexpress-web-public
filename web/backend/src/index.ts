@@ -506,6 +506,8 @@ export interface BBSSession {
    * filters could not match.
    */
   currentDoorName?: string;
+  /** The running door declared NO_PALETTE: Ctrl+K goes to it, not to the palette. */
+  doorRefusesPalette?: boolean;
   keyRepeatManager?:
     | import("./services/KeyRepeatManager").KeyRepeatManager
     | null; // Backend key repeat for 68K doors
@@ -630,6 +632,8 @@ export interface BBSSession {
    * (services/palette-over-door.ts) pauses it and resumes it on close.
    */
   doorHold?: { pause: () => void; resume: () => void };
+  /** Ends the running 68K door the way a lost carrier does (set by executeAmigaDoor). */
+  dropDoorCarrier?: () => void;
   /** An express.e lineInput / readChar a ported procedure is awaiting (utils/await-input). */
   inputWaiter?: import('./utils/await-input').InputWaitingSession['inputWaiter'];
   /** Keys held for a ported procedure that owns the input (utils/await-input holdInput). */

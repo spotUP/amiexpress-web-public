@@ -323,12 +323,22 @@ debugLog("[AmigaDoorSession] Socket disconnected, terminating door");
     // Handle explicit termination request
     this.onDoorTerminate = () => {
 debugLog("[AmigaDoorSession] Termination requested by user");
-      if (this.sharedState.ximProtocol) {
-        this.sharedState.ximProtocol.markCarrierDropped();
-      }
-      this.terminate();
+      this.dropCarrier();
     };
     this.socket.on("door:terminate", this.onDoorTerminate);
+  }
+
+  /**
+   * End the door the way a lost carrier does: the door sees carrier gone on
+   * its next XIM call and runs its own exit, then the session terminates.
+   * The board's own reasons to end a door (door:terminate, a palette pick
+   * over the door) all come through here.
+   */
+  public dropCarrier(): void {
+    if (this.sharedState.ximProtocol) {
+      this.sharedState.ximProtocol.markCarrierDropped();
+    }
+    this.terminate();
   }
 
   /**

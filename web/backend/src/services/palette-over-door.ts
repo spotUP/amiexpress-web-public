@@ -23,7 +23,7 @@
  */
 import { EventEmitter } from 'events';
 import { holdWholeScreen, takeHeldScreen } from './screen-model/screen-model';
-import type { MenuExit } from '../handlers/commands/menu-door-exit';
+import { armMenuExit, takeMenuExit, type MenuExit } from '../handlers/commands/menu-door-exit';
 import type { BBSSession } from '../index';
 
 /** The socket surface the shadow needs from the real one. */
@@ -155,6 +155,20 @@ export function openPaletteOverDoor(socket: PaletteSocket, session: PaletteSessi
     session.doorHold = saved.doorHold;
     session.subState = saved.subState;
     const repaint = takeHeldScreen(socket.id);
+    const pick = run.exit && (run.exit.run || run.exit.show) ? run.exit : null;
+    if (pick) {
+      // A pick: the door ends through its own end path and its exit tail runs
+      // the pick the way it runs one from the menu door. The door's screen is
+      // not given back - the next thing the caller sees is the picked command.
+      armMenuExit(session, pick);
+      if (endRunningDoor(session)) {
+        hold?.resume();   // a paused 68K loop has to step to see the carrier gone
+        return;
+      }
+      // No end path for this door: the pick cannot run, the door comes back.
+      takeMenuExit(session);
+      console.warn('[palette-over-door] the running door has no end path; the pick is dropped');
+    }
     if (repaint) socket.emit('ansi-output', repaint);
     hold?.resume();
   };
@@ -166,6 +180,20 @@ export function openPaletteOverDoor(socket: PaletteSocket, session: PaletteSessi
     .then(() => runBbsCommand(shadowSocket, shadowSession, 'PALETTE', ''))
     .catch((err: unknown) => console.error('[palette-over-door] palette run failed:', err))
     .finally(close);
+}
+
+/**
+ * End the running door through the path its kind already has for the board
+ * ending it: a 68K door loses its carrier (AmigaDoorSession.dropCarrier), a
+ * TypeScript door is closed as Ctrl+C closes it (closeRunningTsDoor), an
+ * ARexx script is aborted as Ctrl+C aborts it (scriptAbortHandler). False
+ * when the running door has none of them.
+ */
+export function endRunningDoor(session: PaletteSession): boolean {
+  if (session.dropDoorCarrier) { session.dropDoorCarrier(); return true; }
+  if (session.closeRunningTsDoor) { session.closeRunningTsDoor(); return true; }
+  if (session.scriptAbortHandler) { session.scriptAbortHandler(); return true; }
+  return false;
 }
 
 /** A key the caller typed while the palette is open: it is the palette's. */

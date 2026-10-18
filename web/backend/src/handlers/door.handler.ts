@@ -526,7 +526,7 @@ import { ensureDoorLogLine } from '../utils/door-logging.util';
 import { inputForTrace } from '../amiga-emulation/xim/secret-input';
 import * as menuTail from './commands/menu-door-exit';
 import { isPaletteShadow, notePaletteExit } from '../services/palette-over-door';
-import { doorKeepsCtrlC } from '../services/door-input-routing';
+import { doorKeepsCtrlC, doorOptsOutOfPalette } from '../services/door-input-routing';
 export { MOUSE_REPORTING_OFF };
 
 export function isAmiga68kDoorType(t: string): boolean {
@@ -1377,6 +1377,28 @@ export function subStateIsAtRest(sub: BBSSession['subState']): boolean {
 }
 
 /**
+ * The common tail of a pick from the command palette over a door (palette-over-door.ts):
+ * the door has ended through its own end path, now the picked command runs as
+ * the menu door's pick runs (as typed, or as a listed SysCmd; the typed line
+ * stays out of the logs) and the caller lands at the menu after it. The 68K
+ * exit tail runs its pick itself (menuExit.run in executeAmigaDoor); every
+ * other door kind's tail comes here. True when there was a pick to run.
+ */
+export async function runPickLeftByTheDoor(socket: any, session: BBSSession): Promise<boolean> {
+  const exit = menuTail.takeMenuExit(session);
+  if (!exit.run) return false;
+  const parts = exit.run.text.trim().split(/\s+/);
+  const command = (parts[0] || '').toUpperCase();
+  if (!command) return false;
+  const params = parts.slice(1).join(' ').toUpperCase();
+  const syscmd = exit.run.runAs === 'syscmd';
+  const { processCommand } = require('./command.handler');
+  await menuTail.runRedacted(session, true, () => processCommand(socket, session, command, params, syscmd));
+  await applyPostDoorMenuAction(socket, session);
+  return true;
+}
+
+/**
  * Apply the decision from postDoorMenuAction() — the ONLY place that
  * decides whether to repaint the main menu after a door exits.
  *
@@ -1544,6 +1566,8 @@ console.log('Executing door:', door.name);
   // the user typed. session.commandText carries aliases and arguments, and
   // per-door webhook filters match the door name exactly.
   session.currentDoorName = door.command || door.id;
+  // NO_PALETTE: Ctrl+K stays this door's key (socket-handlers / transport-session route on it).
+  session.doorRefusesPalette = doorOptsOutOfPalette(door as any);
 
   const nodeId = session.nodeId || 0;
   let doorSession: DoorSession | null = null;
@@ -1780,6 +1804,10 @@ console.error(`Unknown door type: ${door.type}`);
       doorSession.endTime = getSystemTime();
       doorSession.status = 'completed';
     }
+
+    // A pick from the command palette over a door whose own tail does not run
+    // it (ARexx and the other kinds; the 68K and TypeScript tails already have).
+    if (await runPickLeftByTheDoor(socket, session)) return;
 
     // After door completes, check if we're in segment processing (~SP handling)
     // If so, DON'T change state - let segment processing continue
@@ -2396,6 +2424,9 @@ console.log(`[executeTypeScriptDoor] Sent door:status: stopped, door-active: fal
     // or if we STARTED in a display flow state (inline ~CC_ command)
     // express.e processSysCommand just runs the command and returns - no menu display
     session.menuPause = false;
+
+    // A pick from the command palette over this door: the door was closed for it.
+    if (await runPickLeftByTheDoor(socket, session)) return;
 
     if (session.pendingDoorCommands && session.pendingDoorCommands.length > 0) {
       const { handleCommand } = require('./command.handler');
@@ -3112,6 +3143,9 @@ console.log(`[executeAmigaDoor] Set session.inDoorManager=true, door-active: tru
     // The palette over a door (services/palette-over-door.ts) holds the door
     // still through this: the lifecycle loop stops stepping the CPU.
     session.doorHold = { pause: () => amigaSession.pause(), resume: () => amigaSession.resume() };
+    // A pick from that palette ends the door through its carrier-drop path,
+    // then the exit tail below runs the pick (endRunningDoor in palette-over-door.ts).
+    session.dropDoorCarrier = () => amigaSession.dropCarrier();
 
     session.doorInputHandler = (data: string) => {
       try {
@@ -3195,6 +3229,7 @@ console.log(`[executeAmigaDoor] Door execution completed`);
     socket.emit('door-active', false);
     delete session.doorInputHandler;
     delete session.doorHold;
+    delete session.dropDoorCarrier;
     session.subState = LoggedOnSubState.DISPLAY_MENU;
 
     // The command palette ran as a shadow over a paused door: its exit is

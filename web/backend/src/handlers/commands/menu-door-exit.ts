@@ -21,6 +21,8 @@ const rows = new WeakMap<object, Map<string, number>>();
 export function armMenuRun(session: object, run: MenuRun): void { exits.set(session, { run }); }
 export function armMenuShow(session: object, show: MenuShow): void { exits.set(session, { show }); }
 export function armMenuClassic(session: object): void { exits.set(session, { classic: true }); }
+/** Arm a whole exit taken from another run (the palette over a door hands its pick to the door's own tail). */
+export function armMenuExit(session: object, exit: MenuExit): void { exits.set(session, exit); }
 /** A line the menu door says once as it next opens a top-level catalogue (the catalogue's N line). */
 export function armMenuNotice(session: object, text: string): void { notices.set(session, text); }
 export function takeMenuNotice(session: object): string | undefined { const n = notices.get(session); notices.delete(session); return n; }

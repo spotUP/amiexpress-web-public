@@ -117,6 +117,20 @@ export function doorKeepsCtrlC(
 }
 
 /**
+ * A door that keeps Ctrl+K for itself: the command palette does not open over
+ * it. Every door takes the palette, so the declaration is the NEGATIVE, read
+ * the same way as KEEP_CTRL_C: `NO_PALETTE=YES` in the door's .info. The
+ * palette's own door and the full-screen editors carry it.
+ */
+export function doorOptsOutOfPalette(
+  door: { toolTypes?: Record<string, string>; doorInfo?: { toolTypes?: Record<string, string> } } | null | undefined,
+): boolean {
+  if (!door) return false;
+  const raw = door.toolTypes?.['NO_PALETTE'] ?? door.doorInfo?.toolTypes?.['NO_PALETTE'];
+  return /^(1|yes|true)$/i.test(String(raw ?? '').trim());
+}
+
+/**
  * ENTER or SPACE - the keys a pause is dismissed with.
  *
  * A pause takes these and nothing else; every other key belongs to the door,

@@ -541,7 +541,7 @@ console.log('[socket-handlers] keys:state received:', data);
           bbsPauseActive: false,
           boardHoldsTerminal: Boolean(session.doorLentTerminal),
           paletteOpen: isPaletteOpen(session),
-          paletteKeyAllowed: char === PALETTE_KEY && paletteInstalled(),
+          paletteKeyAllowed: char === PALETTE_KEY && !session.doorRefusesPalette && paletteInstalled(),
           ctrlCEndsDoor: Boolean(session.closeRunningTsDoor),
         });
         if (route.toPalette) { deliverToPalette(session, char); return; }
@@ -757,7 +757,7 @@ console.error('No session found for socket:', socket.id);
         boardHoldsTerminal: Boolean(session.doorLentTerminal),
         viewportPan: viewport !== null,
         paletteOpen: isPaletteOpen(session),
-        paletteKeyAllowed: data === PALETTE_KEY && paletteInstalled(),
+        paletteKeyAllowed: data === PALETTE_KEY && !session.doorRefusesPalette && paletteInstalled(),
         ctrlCEndsDoor: Boolean(session.closeRunningTsDoor),
       });
       if (route.toPalette) {

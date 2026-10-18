@@ -414,7 +414,7 @@ console.log(
         // the window (C64_VIEWPORT, the adapter's rule 6).
         viewportPan: viewportAdapter() !== null,
         paletteOpen: isPaletteOpen(session),
-        paletteKeyAllowed: input === PALETTE_KEY && paletteInstalled(),
+        paletteKeyAllowed: input === PALETTE_KEY && !session.doorRefusesPalette && paletteInstalled(),
         ctrlCEndsDoor: Boolean(session.closeRunningTsDoor),
       });
 
