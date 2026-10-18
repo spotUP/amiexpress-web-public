@@ -1184,8 +1184,17 @@ export function setupInputHandler(
  *
  * Withdrawn when the screen is destroyed, when the close fires, or by the
  * returned function (DoorInputManager.disable).
+ *
+ * A door with no blessed screen (a raw doorInputHandler door: bbslink,
+ * telnet, phreakwars) passes null for the screen. Nothing destroys a screen
+ * for it, so it calls the returned function from its own quit when it ends
+ * some other way.
  */
-export function honourDoorClose(session: any, screen: Screen, quit: () => void): () => void {
+export function honourDoorClose(
+  session: any,
+  screen: Screen | null | undefined,
+  quit: () => void,
+): () => void {
   const socket = session?.socket;
   if (!socket || typeof socket.on !== 'function') return () => undefined;
   let armed = true;
@@ -1193,7 +1202,7 @@ export function honourDoorClose(session: any, screen: Screen, quit: () => void):
     if (!armed) return;
     armed = false;
     socket.off?.('door:close', onDoorClose);
-    screen.removeListener?.('destroy', withdraw);
+    screen?.removeListener?.('destroy', withdraw);
     socket.emit?.('door:honours-close', false);
   };
   const onDoorClose = () => {
@@ -1202,7 +1211,7 @@ export function honourDoorClose(session: any, screen: Screen, quit: () => void):
     quit();
   };
   socket.on('door:close', onDoorClose);
-  screen.on('destroy', withdraw);
+  screen?.on('destroy', withdraw);
   socket.emit?.('door:honours-close', true);
   return withdraw;
 }
