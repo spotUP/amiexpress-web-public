@@ -231,7 +231,7 @@ async function createApp(session) {
     const menuBar = (0, menu_bar_1.createMenuBar)(screen);
     // ========== CHAT LOG (Main Area) - CREATE FIRST so it renders behind fixed UI ==========
     // Chat log fills from sidebar to right edge
-    const { panel: chatPanel, log: chatLog } = (0, chat_log_1.createChatLog)(screen, SIDEBAR_WIDTH);
+    const { panel: chatPanel, log: chatLog, titleRows: chatTitleRows } = (0, chat_log_1.createChatLog)(screen, SIDEBAR_WIDTH);
     // Connect animation manager to chat log (done later after animationManager is created)
     // We'll use a deferred connection pattern
     // ========== STATUS BAR (at very bottom) ==========
@@ -1003,7 +1003,8 @@ async function createApp(session) {
         chatPanel.position.height = solved.chat.height;
         // 3. Inner Chat Log Layout
         chatLog.position.width = solved.chatLog.width;
-        chatLog.position.height = solved.chatLog.height;
+        // The log starts below the panel's title bar, so it is that much shorter.
+        chatLog.position.height = Math.max(1, solved.chatLog.height - chatTitleRows);
         // 4. Footer & Overlays
         statusBar.position.width = solved.statusBar.width;
         inputBox.position.width = solved.input.width;

@@ -18,7 +18,7 @@ export { TYPING_HEIGHT };
 export function createChatLog(
   screen: Screen,
   sidebarWidth: number
-): { panel: DockablePanel; log: Log } {
+): { panel: DockablePanel; log: Log; titleRows: number } {
   // Create dockable panel for chat
   const screenWidth = (screen as any).width || 80;
   const screenHeight = (screen as any).height || 24;
@@ -26,6 +26,14 @@ export function createChatLog(
   // Account for sidebar width - no additional subtraction needed
   // Sidebar is 18 chars (including its border), screen is 80, so chat panel gets 62 chars
   const chatPanelWidth = screenWidth - sidebarWidth;
+
+  // DockablePanel gives a panel that can move a one-row title bar (its drag
+  // handle) as the FIRST ROW of its content; a static panel keeps its label
+  // on the border instead. The log has to start below that row, or the bar
+  // is drawn over the log's first line - "*** Joined #main (1 users) ***"
+  // sat under " Chat " and was never seen (the sysop, 2026-10-18).
+  const movable = !isCompactWidth(screenWidth);
+  const titleRows = movable ? 1 : 0;
 
   const chatPanel = new DockablePanel({
     parent: screen,
@@ -52,8 +60,8 @@ export function createChatLog(
      * the affordances go, rather than being made smaller - a C64 caller has
      * no way to put a panel back where it was.
      */
-    resizable: !isCompactWidth(screenWidth),
-    draggable: !isCompactWidth(screenWidth),
+    resizable: movable,
+    draggable: movable,
     minWidth: 40,
     minHeight: 10,
     zIndex: 1,
@@ -95,11 +103,12 @@ export function createChatLog(
   // Use Log widget for proper chat functionality with type safety
   const chatLog = createLog({
     parent: chatPanel,
-    top: 0,
+    top: titleRows,
     left: 0,
-    // Matches updateLayout(): borders plus the scrollbar column.
+    // Matches updateLayout(): borders plus the scrollbar column, and the
+    // title bar row when the panel has one.
     width: '100%-3',
-    height: '100%-2',
+    height: `100%-${2 + titleRows}`,
     label: '',
     border: { type: 'none' },
     mouse: true,
@@ -118,7 +127,7 @@ export function createChatLog(
     },
   });
 
-  return { panel: chatPanel, log: chatLog };
+  return { panel: chatPanel, log: chatLog, titleRows };
 }
 
 export function updateChatHeader(

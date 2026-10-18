@@ -16,7 +16,10 @@
 import assert from 'assert';
 import { createApp } from '../server';
 
-export async function aJoinNoticeIsDrawnOnlyInTheChatLog(): Promise<void> {
+/** The door opened headless at 80x25 on a stub, with a way to fire socket events. */
+async function openDoor(): Promise<{
+  screen: any; fire: (event: string, ...args: unknown[]) => void; settle: () => Promise<unknown>;
+}> {
   const handlers = new Map<string, Array<(...a: any[]) => void>>();
   const bbs: any = {
     write: () => {}, writeLine: () => {}, on: () => {},
@@ -41,7 +44,11 @@ export async function aJoinNoticeIsDrawnOnlyInTheChatLog(): Promise<void> {
   const settle = () => new Promise(resolve => setTimeout(resolve, 100));
 
   const app: any = await createApp(session);
-  const screen: any = app.screen;
+  return { screen: app.screen, fire, settle };
+}
+
+export async function aJoinNoticeIsDrawnOnlyInTheChatLog(): Promise<void> {
+  const { screen, fire, settle } = await openDoor();
   fire('room:joined', {
     roomId: 'r1', roomName: 'main', memberCount: 1,
     members: [{ user_id: 'u1', username: 'spot', is_online: true }],
@@ -69,6 +76,33 @@ export async function aJoinNoticeIsDrawnOnlyInTheChatLog(): Promise<void> {
   assert.ok(row, 'the join notice must be on the screen');
   assert.ok(row.includes(notice), `the whole notice must be readable, got "${row.trim()}"`);
   assert.ok(row.indexOf(notice) >= sidebarEnd, 'and it must be drawn in the chat log, right of the sidebar');
+
+  fire('disconnect', 'transport close');
+}
+
+/**
+ * "the first line of the chat log is hidden under the Chat heading" (the
+ * sysop, 2026-10-18).
+ *
+ * A chat panel that can be dragged gets a one-row title bar as the first row
+ * of its content. The log was placed at row 0 of that same content, so the
+ * bar was drawn over the log's first line: "*** Joined #main (1 users) ***"
+ * was in the log and never on the screen.
+ */
+export async function theChatHeadingHidesNoLogLine(): Promise<void> {
+  const { screen, fire, settle } = await openDoor();
+  fire('room:joined', {
+    roomId: 'r1', roomName: 'main', memberCount: 1,
+    members: [{ user_id: 'u1', username: 'spot', is_online: true }],
+  });
+  await settle();
+  screen.render();
+
+  const rows: string[] = screen.buffer.map((row: Array<[number, string]>) => row.map(cell => cell[1]).join(''));
+  const heading = rows.findIndex(r => r.includes(' Chat '));
+  const notice = rows.findIndex(r => r.includes('*** Joined #main (1 users) ***'));
+  assert.ok(notice >= 0, `the log's first line must be on the screen, got:\n${rows.slice(1, 5).join('\n')}`);
+  assert.ok(heading < 0 || notice > heading, 'and it must be below the heading, not under it');
 
   fire('disconnect', 'transport close');
 }
