@@ -364,6 +364,9 @@ export async function runPostAuthLogin(
         token: accessToken,
         refreshToken,
         resumeToken,
+        // The browser stores this beside the token; an entry without a numeric
+        // node is dropped on read and no resume is ever offered.
+        nodeId: session.nodeId,
         /*
          * THE THEME THIS CALLER WEARS, so the browser can remember it.
          *

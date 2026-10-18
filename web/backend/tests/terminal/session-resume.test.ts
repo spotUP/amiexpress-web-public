@@ -123,6 +123,25 @@ describe('session-resume storage', () => {
   });
 });
 
+describe('saving the login-success payload', () => {
+  it('a payload with a token and a nodeId is offered on the next connect', () => {
+    const s = mem();
+    const data = { resumeToken: T, nodeId: 3, user: { id: '7' } };
+    saveResume(s, { token: data.resumeToken, userId: String(data.user.id), nodeId: Number(data.nodeId) }, 0);
+    expect(takeResumeOffer(s, true, 1000)).toEqual({ resume: T });
+  });
+
+  it('a payload with no nodeId warns and stores nothing', () => {
+    const s = mem();
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    const data: { resumeToken: string; nodeId?: number } = { resumeToken: T };
+    saveResume(s, { token: data.resumeToken, userId: '7', nodeId: Number(data.nodeId) }, 0);
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('nodeId'));
+    expect(s.localMem.getItem(RESUME_KEY)).toBeNull();
+    warn.mockRestore();
+  });
+});
+
 describe('claims (Decision 7: a claim resumes only a parked session)', () => {
   it('a tab offers its own token plainly, a tab without an id offers the newest as a claim', () => {
     const local = new MemStorage();

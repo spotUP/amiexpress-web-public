@@ -142,6 +142,14 @@ describe('the resume token a web caller needs to get a dropped session back', ()
     expect(found.ok && found.bound.nodeId).toBe(1);
   });
 
+  it('login-success carries the session nodeId, which the browser stores beside the token', async () => {
+    const sess = session('web');
+    const socket = await loginOn('web', sess);
+    const success = socket.emitted.find((e: any) => e.event === 'login-success');
+    expect(success?.data?.nodeId).toBe(sess.nodeId);
+    expect(typeof success?.data?.nodeId).toBe('number');
+  });
+
   it('a session with no node gets no resume token, and the login still succeeds', async () => {
     const sess = session('web'); sess.nodeId = 0;
     const socket = await loginOn('web', sess);

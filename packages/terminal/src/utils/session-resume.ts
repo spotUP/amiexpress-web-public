@@ -120,6 +120,11 @@ export function tabId(s: ResumeStorage, newId: () => string = randomId): string 
  * session, one entry.
  */
 export function saveResume(s: ResumeStorage, e: Omit<ResumeEntry, 'savedAt'>, now: number = Date.now()): void {
+  if (typeof e.nodeId !== 'number' || !Number.isFinite(e.nodeId)) {
+    // isEntry drops such an entry on read, so storing it would lose the resume in silence.
+    console.warn('[resume] not saving the resume token: the board sent no numeric nodeId (got ' + String(e.nodeId) + ')');
+    return;
+  }
   const id = tabId(s);
   const all = prune(readAll(s), now);
   for (const [other, entry] of Object.entries(all)) {
