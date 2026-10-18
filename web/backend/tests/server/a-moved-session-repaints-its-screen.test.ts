@@ -10,11 +10,13 @@ process.env.SKIP_DB_INIT = '1';
 
 jest.mock('../../src/index', () => ({}));
 jest.mock('../../src/services/node-manager.service', () => ({ nodeManager: { rekeySession: jest.fn() } }));
+const mockDisplayMainMenu = jest.fn(async () => undefined);
+jest.mock('../../src/handlers/command-handler/menu', () => ({ displayMainMenu: (...a: unknown[]) => mockDisplayMainMenu(...(a as [])) }));
 
 import { installParking, attachParkedTo, moveParkedTo } from '../../src/server/session-parking';
 import { feedScreenModel, dropScreenModel } from '../../src/services/screen-model/screen-model';
 import { sessions } from '../../src/server/session-manager';
-import { BBSState } from '../../src/constants/bbs-states';
+import { BBSState, LoggedOnSubState } from '../../src/constants/bbs-states';
 
 const NODE = 9;
 const USER = { id: 42, username: 'spot', baud: 0 } as any;
@@ -76,5 +78,26 @@ describe('a resumed or moved session repaints its screen', () => {
     const raw: any = { id: 'new-a', emit: jest.fn() };
     attachParkedTo(raw, session, USER);
     expect(sent(raw)).toEqual(['HELD CHUNK']);
+  });
+
+  it('a C64 caller resumed at the board prompt gets the menu and prompt back, not a blank screen', () => {
+    const { session, link } = setup('old-a');
+    session.petsciiMode = true;
+    session.subState = LoggedOnSubState.READ_COMMAND;
+    expect(link.drop('transport close')).toBe('park');
+    mockDisplayMainMenu.mockClear();
+    attachParkedTo({ id: 'new-a', emit: jest.fn() } as any, session, USER);
+    expect(mockDisplayMainMenu).toHaveBeenCalledTimes(1);
+    expect(mockDisplayMainMenu).toHaveBeenCalledWith(link, session, true, true);
+  });
+
+  it('a C64 caller resumed inside a door leaves the repaint to the door', () => {
+    const { session, link } = setup('old-a');
+    session.petsciiMode = true;
+    session.subState = LoggedOnSubState.DOOR_RUNNING;
+    expect(link.drop('transport close')).toBe('park');
+    mockDisplayMainMenu.mockClear();
+    attachParkedTo({ id: 'new-a', emit: jest.fn() } as any, session, USER);
+    expect(mockDisplayMainMenu).not.toHaveBeenCalled();
   });
 });

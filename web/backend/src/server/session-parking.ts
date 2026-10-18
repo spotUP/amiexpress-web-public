@@ -18,7 +18,7 @@
  * required lazily so tests that mock the connection path keep working.
  */
 import type { Socket } from 'socket.io';
-import { BBSState } from '../constants/bbs-states';
+import { BBSState, LoggedOnSubState } from '../constants/bbs-states';
 import type { BBSSession } from '../index';
 import type { DropDecision, SessionLink } from './session-link';
 import {
@@ -338,6 +338,15 @@ export function attachParkedTo(raw: Socket, session: BBSSession, user: AttachUse
     raw.emit('ansi-output', '\x1b[2J\x1b[H');
     const geo = session as unknown as { screenWidth?: number; screenHeight?: number };
     session.bbsApi?.emitInternal?.('screen:resize', { cols: geo.screenWidth ?? 80, rows: geo.screenHeight ?? 25 });
+    // WEB_: the resize repaints a running door only. At the board's own
+    // prompt no door is listening, so the cleared canvas stayed blank with a
+    // bare cursor: the board draws its menu and prompt again itself.
+    if (session.subState === LoggedOnSubState.READ_COMMAND) {
+      const { displayMainMenu } = require('../handlers/command-handler/menu');
+      Promise.resolve(displayMainMenu(link, session, true, true)).catch((err: unknown) => {
+        console.error(`[RESUME] node ${session.nodeId}: could not redraw the menu:`, err);
+      });
+    }
   } else {
     for (const [e, a] of held.chunks) raw.emit(e, ...a);
   }
