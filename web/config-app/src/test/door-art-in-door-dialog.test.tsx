@@ -10,6 +10,7 @@ import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import { defaultMenuConfig } from '@bbs/screens/menu-config/menu-config';
+import { placeLogo } from '@bbs/screens/menu-config/logo-placement';
 
 const door = (id: number, command: string, menu_kind: 'MAIN' | 'BULLETINS' | null) => ({
   id, door_name: command, door_command: command, door_type: 'BBSCMD',
@@ -30,7 +31,10 @@ const listDoorArt = vi.fn(async () => ({ success: true, data: ART }));
 const getMenuConfig = vi.fn(async (kind: string) => ({ config: defaultMenuConfig(kind as 'MAIN'), problems: [] as string[] }));
 const saveMenuConfig = vi.fn(async (_kind: string, config: unknown) => ({ config, problems: [] as string[] }));
 const listMenuLogos = vi.fn(async (_kind: string) => FILES);
-const uploadMenuLogo = vi.fn(async (_kind: string, file: string, _base64: string) => ({ file, rows: 1, cols: 1 }));
+const uploadMenuLogo = vi.fn(async (_kind: string, file: string, _base64: string, _place: boolean) => ({ file, rows: 1, cols: 1, shown: false }));
+// The board's placement route: the shared placeLogo over the stored config.
+const placeMenuLogo = vi.fn(async (kind: string, file: string, position: 'header', cls: 'standard') =>
+  ({ config: placeLogo(defaultMenuConfig(kind as 'MAIN'), position, cls, file), problems: [] as string[] }));
 
 vi.mock('../api/client', async importOriginal => ({
   ...(await importOriginal<typeof import('../api/client')>()),
@@ -47,7 +51,8 @@ vi.mock('../api/client', async importOriginal => ({
     getMenuConfig: (k: string) => getMenuConfig(k),
     saveMenuConfig: (k: string, c: unknown) => saveMenuConfig(k, c),
     listMenuLogos: (k: string) => listMenuLogos(k),
-    uploadMenuLogo: (k: string, f: string, b: string) => uploadMenuLogo(k, f, b),
+    uploadMenuLogo: (k: string, f: string, b: string, p: boolean) => uploadMenuLogo(k, f, b, p),
+    placeMenuLogo: (k: string, f: string, p: 'header', c: 'standard') => placeMenuLogo(k, f, p, c),
     deleteMenuLogo: vi.fn(),
     getScreenFile: vi.fn(async () => ({ success: true, data: { content: '' } })),
   },
@@ -85,14 +90,16 @@ describe('door art in the door dialog', () => {
     expect(listMenuLogos).toHaveBeenCalledWith('BULLETINS');
 
     await user.upload(screen.getByLabelText('Upload a logo'), new File(['x'], 'cat.txt', { type: 'text/plain' }));
-    await waitFor(() => expect(uploadMenuLogo).toHaveBeenCalledWith('BULLETINS', 'cat.txt', 'eA=='));
+    await waitFor(() => expect(uploadMenuLogo).toHaveBeenCalledWith('BULLETINS', 'cat.txt', 'eA==', false));
 
     // One step (sysop decision 2026-10-17): the upload asks where the logo goes, Header and the measured width preselected.
+    // The board places it; its saved config becomes the local copy, so the next autosave keeps the set.
     await user.click(await screen.findByRole('button', { name: 'Show on the menu' }));
+    await waitFor(() => expect(placeMenuLogo).toHaveBeenCalledWith('BULLETINS', 'cat.txt', 'header', 'standard'));
+    await user.selectOptions(await screen.findByLabelText('Rule of header set 1'), 'rotate');
     await waitFor(() => expect(lastSaved().logos).toEqual([
-      { position: 'header', widthClass: 'standard', levelFloor: 0, rule: 'fixed', files: ['cat.txt'], afterSection: 0 },
+      { position: 'header', widthClass: 'standard', levelFloor: 0, rule: 'rotate', files: ['cat.txt'], afterSection: 0 },
     ]), { timeout: 4000 });
-    expect(saveMenuConfig).toHaveBeenCalledWith('BULLETINS', expect.anything());
   });
 
   it('opens the editors from the Edit Door dialog without saving or closing it', async () => {

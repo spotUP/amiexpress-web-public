@@ -13,9 +13,9 @@ export interface DoorArtSectionProps {
 
 /** The menu's logo files and placement rules; mounted only for the door that owns the menu. */
 function MenuLogosOfDoor({ kind }: { kind: MenuKind }) {
-  const { config, update, status } = useMenuConfig(kind);
+  const { config, update, placeLogo, status } = useMenuConfig(kind);
   if (!config) return status ? <p className="text-sm text-status-danger">{status}</p> : <SkeletonRows rows={3} />;
-  return <MenuLogosEditor kind={kind} config={config} update={update} />;
+  return <MenuLogosEditor kind={kind} config={config} update={update} placeLogo={placeLogo} />;
 }
 
 /**

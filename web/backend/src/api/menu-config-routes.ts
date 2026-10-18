@@ -12,12 +12,12 @@
  */
 import express, { NextFunction, Request, Response } from 'express';
 import { getSystemTime } from '../utils/date-time.util';
-import { MENU_KINDS, LOGO_FILE_RE, LOGO_NAME_RULE, type MenuKind } from '../screens/menu-config/menu-config';
+import { MENU_KINDS, LOGO_FILE_RE, LOGO_NAME_RULE, LOGO_POSITIONS, WIDTH_CLASSES, type LogoPosition, type MenuKind, type WidthClass } from '../screens/menu-config/menu-config';
 import { readMenuConfig, writeMenuConfig } from '../services/menu-config.service';
 import { menuSourceFor } from '../services/menu-catalogue/registry';
 import { buildCatalogue } from '../services/menu-catalogue/build';
 import { menuCallerForPreview } from '../services/menu-catalogue/caller';
-import { chooseLogos, listMenuLogos, writeMenuLogo, deleteMenuLogo, logoUsedBy, MenuLogoError } from '../services/menu-catalogue/logos';
+import { chooseLogos, listMenuLogos, writeMenuLogo, placeMenuLogo, deleteMenuLogo, logoUsedBy, MenuLogoError } from '../services/menu-catalogue/logos';
 import { internalCommandRow } from '../screens/menu-config/internal-commands';
 import { commandCache } from '../handlers/command-execution.handler';
 import type { CatalogueEntry } from '../services/menu-catalogue/types';
@@ -119,10 +119,17 @@ export function createMenuConfigRouter(bbsRoot: string): ReturnType<typeof expre
     catch (error) { fail(res, `GET ${kind} logos`, 500, 'Failed to list the logos', error); }
   });
 
+  /*
+   * An upload goes on screen at once (sysop decision 2026-10-17): the file is
+   * written and, unless the body says `place: false` (the admin dialog's
+   * "Only keep the file", and the Screen Designer re-saving a file in place),
+   * placed in the header set for its measured width in the same request.
+   * `shown` says whether it was (a logo no set can draw is only stored).
+   */
   router.put('/:kind/logos/:file', (req: Request, res: Response) => {
     const kind = kindOf(req, res); if (!kind) return;
     const { file } = req.params;
-    const { base64 } = req.body ?? {};
+    const { base64, place } = req.body ?? {};
     if (!LOGO_FILE_RE.test(file)) {
       res.status(400).json({ success: false, message: LOGO_NAME_RULE });
       return;
@@ -132,10 +139,32 @@ export function createMenuConfigRouter(bbsRoot: string): ReturnType<typeof expre
       return;
     }
     try {
-      res.json({ success: true, data: writeMenuLogo(bbsRoot, kind, file, Buffer.from(base64, 'base64')), timestamp: stamp() });
+      const written = writeMenuLogo(bbsRoot, kind, file, Buffer.from(base64, 'base64'));
+      const shown = place === false ? null : placeMenuLogo(bbsRoot, kind, file);
+      res.json({ success: true, data: { ...written, shown: shown !== null }, timestamp: stamp() });
     } catch (error) {
       if (error instanceof MenuLogoError) { res.status(400).json({ success: false, message: error.message }); return; }
       fail(res, `PUT ${kind} logo ${file}`, 500, 'Failed to save the logo', error);
+    }
+  });
+
+  // A stored logo shown in the chosen slot (the upload dialog's "Show on the menu"); answers the saved config.
+  router.put('/:kind/logos/:file/placement', (req: Request, res: Response) => {
+    const kind = kindOf(req, res); if (!kind) return;
+    const { file } = req.params;
+    const { position, widthClass } = req.body ?? {};
+    if (!LOGO_FILE_RE.test(file)) { res.status(400).json({ success: false, message: LOGO_NAME_RULE }); return; }
+    if (!LOGO_POSITIONS.includes(position) || !WIDTH_CLASSES.includes(widthClass)) {
+      res.status(400).json({ success: false, message: 'position is header, footer, side or between; widthClass c64, standard or wide' });
+      return;
+    }
+    try {
+      const saved = placeMenuLogo(bbsRoot, kind, file, position as LogoPosition, widthClass as WidthClass);
+      if (!saved) { res.status(400).json({ success: false, message: 'This logo cannot be drawn in that position and screen width.' }); return; }
+      res.json({ success: true, data: saved, timestamp: stamp() });
+    } catch (error) {
+      if (error instanceof MenuLogoError) { res.status(400).json({ success: false, message: error.message }); return; }
+      fail(res, `PUT ${kind} logo ${file} placement`, 500, 'Failed to show the logo', error);
     }
   });
 

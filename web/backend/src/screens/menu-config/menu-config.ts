@@ -72,8 +72,8 @@ export const LOGO_FILE_RE = /^[A-Za-z0-9_-]{1,40}\.(txt|ans|seq)$/i;   // a bare
 export const LOGO_NAME_RULE = 'A logo file name is letters, digits, - and _, then .txt, .ans or .seq.';
 /** The one rule for a logo's alphabet: .seq is PETSCII for the C64, .txt and .ans are Amiga ANSI for 80 columns and wider. */
 export const logoAlphabet = (file: string): 'ansi' | 'petscii' => (file.toLowerCase().endsWith('.seq') ? 'petscii' : 'ansi');
-const POSITIONS: LogoPosition[] = ['header', 'footer', 'side', 'between'];
-const CLASSES: WidthClass[] = ['c64', 'standard', 'wide'];
+export const LOGO_POSITIONS: readonly LogoPosition[] = ['header', 'footer', 'side', 'between'];
+export const WIDTH_CLASSES: readonly WidthClass[] = ['c64', 'standard', 'wide'];
 const RULES: LogoRule[] = ['fixed', 'rotate', 'random'];
 
 /**
@@ -218,7 +218,7 @@ export function validateMenuConfig(kind: MenuKind, raw: unknown): { config: Menu
   // `overflow` is the key files written before the menu style setting used; read once, saved back as `style`.
   const rawStyle = raw.style !== undefined ? raw.style : raw.overflow;
   if (isObj(rawStyle)) {
-    for (const cls of CLASSES) {
+    for (const cls of WIDTH_CLASSES) {
       const m = rawStyle[cls];
       if (m === undefined) continue;
       const good: LevelMap<MenuStyle> = {};
@@ -248,14 +248,14 @@ export function validateMenuConfig(kind: MenuKind, raw: unknown): { config: Menu
     if (raw.coverflow === undefined && typeof raw.drill.slide === 'boolean') config.coverflow.slide = raw.drill.slide;
     if (raw.drill.enabled === true) {
       const choseRetiredPages = (cls: WidthClass): boolean => isObj(rawStyle) && isObj(rawStyle[cls]) && rawStyle[cls]['0'] === 'pages';
-      for (const cls of CLASSES) if (cls !== 'c64' && !choseRetiredPages(cls)) config.style[cls] = { ...config.style[cls], '0': 'coverflow' };
+      for (const cls of WIDTH_CLASSES) if (cls !== 'c64' && !choseRetiredPages(cls)) config.style[cls] = { ...config.style[cls], '0': 'coverflow' };
     }
   } else if (raw.drill !== undefined) problems.push('drill: not an object');
   if (Array.isArray(raw.logos)) {
     // The board keeps one set per position, width class and level floor (chooseLogos), so a second is dropped, never left to win silently.
     const taken = new Set<string>();
     for (const l of raw.logos) {
-      const ok = isObj(l) && POSITIONS.includes(l.position as LogoPosition) && CLASSES.includes(l.widthClass as WidthClass)
+      const ok = isObj(l) && LOGO_POSITIONS.includes(l.position as LogoPosition) && WIDTH_CLASSES.includes(l.widthClass as WidthClass)
         && RULES.includes(l.rule as LogoRule) && Number.isInteger(l.levelFloor) && (l.levelFloor as number) >= 0
         && Array.isArray(l.files) && l.files.length > 0 && l.files.every(f => typeof f === 'string' && LOGO_FILE_RE.test(f));
       if (!ok) { problems.push('logos: a logo set was dropped'); continue; }

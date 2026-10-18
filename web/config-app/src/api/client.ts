@@ -1,6 +1,6 @@
 import type { ApiResponse, User } from '../types';
 import type { MagazineFrontData, MagazineStoryBody } from '../types/magazine';
-import type { MenuConfig, MenuKind } from '@bbs/screens/menu-config/menu-config';
+import type { LogoPosition, MenuConfig, MenuKind, WidthClass } from '@bbs/screens/menu-config/menu-config';
 import {
   readAdminToken, writeAdminToken, readAdminRefreshToken, writeAdminRefreshToken,
 } from './auth-token';
@@ -1562,10 +1562,20 @@ class ApiClient {
     return res.data;
   }
 
-  async uploadMenuLogo(kind: MenuKind, file: string, base64: string) {
-    const res = await this.request<{ data: MenuLogoFile }>(`${API_BASE}/config/menus/${kind}/logos/${encodeURIComponent(file)}`, {
+  /** `place: false` only stores the file; otherwise the board also makes it the header logo of its measured width (`shown`). */
+  async uploadMenuLogo(kind: MenuKind, file: string, base64: string, place: boolean) {
+    const res = await this.request<{ data: MenuLogoFile & { shown: boolean } }>(`${API_BASE}/config/menus/${kind}/logos/${encodeURIComponent(file)}`, {
       method: 'PUT',
-      body: JSON.stringify({ base64 }),
+      body: JSON.stringify({ base64, place }),
+    });
+    return res.data;
+  }
+
+  /** The board makes a stored logo the base set's logo in that slot (placeLogo) and answers the saved config; 400 when the slot cannot draw it. */
+  async placeMenuLogo(kind: MenuKind, file: string, position: LogoPosition, widthClass: WidthClass) {
+    const res = await this.request<{ data: MenuConfigAnswer }>(`${API_BASE}/config/menus/${kind}/logos/${encodeURIComponent(file)}/placement`, {
+      method: 'PUT',
+      body: JSON.stringify({ position, widthClass }),
     });
     return res.data;
   }

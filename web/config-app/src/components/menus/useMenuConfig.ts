@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { apiClient } from '../../api/client';
 import { useAutosave } from '../../hooks/useAutosave';
-import type { MenuConfig, MenuKind } from '@bbs/screens/menu-config/menu-config';
+import type { LogoPosition, MenuConfig, MenuKind, WidthClass } from '@bbs/screens/menu-config/menu-config';
 
 export interface MenuConfigState {
   config: MenuConfig | null;
@@ -9,6 +9,11 @@ export interface MenuConfigState {
   problems: string[];
   /** Apply a change locally and schedule the write of the whole config. */
   update(change: (c: MenuConfig) => MenuConfig): void;
+  /**
+   * Show a stored logo in a slot. The board places it (placeLogo, the one home of that rule) and its saved
+   * config becomes the local copy, so a later autosave cannot drop the placement. Pending edits land first.
+   */
+  placeLogo(file: string, position: LogoPosition, widthClass: WidthClass): Promise<void>;
   status: string | null;
   /** Counts the writes that landed; the preview reads the stored config, so it refreshes on this. */
   saves: number;
@@ -62,5 +67,14 @@ export function useMenuConfig(kind: MenuKind): MenuConfigState {
     autosave.schedule(next, kind);
   };
 
-  return { config, problems, update, status: status ?? (autosave.error ? `Error: ${autosave.error}` : null), saves };
+  const placeLogo = async (file: string, position: LogoPosition, widthClass: WidthClass) => {
+    await autosave.flush(kind);
+    const answer = await apiClient.placeMenuLogo(kind, file, position, widthClass);
+    latest.current = answer.config;
+    setConfig(answer.config);
+    setProblems(answer.problems);
+    setSaves(n => n + 1);
+  };
+
+  return { config, problems, update, placeLogo, status: status ?? (autosave.error ? `Error: ${autosave.error}` : null), saves };
 }

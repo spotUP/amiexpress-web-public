@@ -12,8 +12,9 @@ import * as amigafs from '../../utils/amigafs';
 import { chownToBoard, mkdirOwned } from '../../utils/board-owner.util';
 import { parseAnsiToGrid, gridSize, renderGridAt } from '../../utils/screen-wipe.util';
 import { parseSauceMetadata, stripSauceMetadata } from '../../utils/amiga-text-decode.util';
-import { menuLogoDir } from '../menu-config.service';
-import { levelEntry, widthClassOf, LOGO_FILE_RE, LOGO_NAME_RULE, logoAlphabet, type MenuConfig, type MenuKind, type LogoSet } from '../../screens/menu-config/menu-config';
+import { menuLogoDir, readMenuConfig, writeMenuConfig } from '../menu-config.service';
+import { drawableWidths, placeLogo, uploadWidthClass } from '../../screens/menu-config/logo-placement';
+import { levelEntry, widthClassOf, LOGO_FILE_RE, LOGO_NAME_RULE, logoAlphabet, type MenuConfig, type MenuKind, type LogoSet, type LogoPosition, type WidthClass } from '../../screens/menu-config/menu-config';
 import { PetsciiMachine, PUA_BANK0, PUA_BANK1, vicToSgrForeground } from '@amiexpress/bbs-door-sdk/petscii';
 import type { ChosenLogo, MenuCaller } from './types';
 
@@ -166,6 +167,32 @@ export function writeMenuLogo(bbsRoot: string, kind: MenuKind, file: string, byt
     fs.rmSync(tmp, { force: true });
     throw error;
   }
+}
+
+/**
+ * Put a stored logo on the menu: it becomes the logo of the base (level 0) set
+ * for this position and width class (placeLogo), written through the same
+ * validating save as every other config edit. The width defaults to the one
+ * the file's measured size names (uploadWidthClass). Null, and nothing
+ * written, where the logo cannot be drawn (wrong alphabet for the class, or
+ * wider than its narrowest screen).
+ *
+ * The board owns Menus/<KIND>.json, so placement lives here and not in the
+ * admin client: before, the upload route only wrote the file and the admin
+ * browser placed it with a second whole-config save, so an upload that never
+ * got that follow-up (live: Menus/MAIN.json absent, 2026-10-19) was stored and
+ * never drawn.
+ */
+export function placeMenuLogo(
+  bbsRoot: string, kind: MenuKind, file: string, position: LogoPosition = 'header', widthClass?: WidthClass,
+): { config: MenuConfig; problems: string[] } | null {
+  if (!LOGO_FILE_RE.test(file)) throw new MenuLogoError(LOGO_NAME_RULE);
+  const where = path.join(menuLogoDir(bbsRoot, kind), file);
+  if (!fs.existsSync(where)) throw new MenuLogoError('No such logo.');
+  const { cols } = measureLogo(where);
+  const cls = widthClass ?? uploadWidthClass(file, cols);
+  if (!drawableWidths(position, file, cols).includes(cls)) return null;
+  return writeMenuConfig(bbsRoot, kind, placeLogo(readMenuConfig(bbsRoot, kind).config, position, cls, file));
 }
 
 /** Which logo sets of this config name the file, by position. */

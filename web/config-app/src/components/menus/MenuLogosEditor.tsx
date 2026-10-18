@@ -10,11 +10,12 @@ import { createSurface, type EditorSurface } from '../../pages/screen-editor-sta
 import { screenToCanvas } from '../../pages/screen-bytes';
 import {
   addLogoFile, addLogoSet, logoOffers, logoShownIn, logoSlotConflict, logoWidthWarnings, moveLogoFile, newSetWidth, positionWidths, removeLogoFile, removeLogoSet,
-  setLogoAfterSection, setLogoFloor, setLogoRule, showUploadedLogo, uploadPlacement, uploadWidths, usedByText,
+  setLogoAfterSection, setLogoFloor, setLogoRule, uploadPlacement, uploadWidths, usedByText,
 } from './menu-logo-edit';
 import { BUTTON_CLASS, INPUT_CLASS } from './menu-styles';
 
 type Update = (change: (c: MenuConfig) => MenuConfig) => void;
+type PlaceLogo = (file: string, position: LogoPosition, widthClass: WidthClass) => Promise<void>;
 
 const WIDTH_WORDS: Record<WidthClass, string> = { c64: 'C64', standard: 'Standard', wide: 'Wide' };
 const RULE_WORDS: Record<LogoRule, string> = { fixed: 'One fixed logo', rotate: 'Rotate in order', random: 'Random each time' };
@@ -45,7 +46,7 @@ function LogoStudio({ kind, file, onClose, onSaved }: { kind: MenuKind; file: st
 
   const save = async (base64: string) => {
     try {
-      await apiClient.uploadMenuLogo(kind, file, base64);
+      await apiClient.uploadMenuLogo(kind, file, base64, false);
       onSaved();
       onClose();
     } catch (e: unknown) { setStatus(`Error: ${e instanceof Error ? e.message : 'Save failed'}`); }
@@ -65,17 +66,20 @@ function LogoStudio({ kind, file, onClose, onSaved }: { kind: MenuKind; file: st
 
 /**
  * Asked right after an upload: where the logo shows. Header and the width its measured size names are
- * preselected, so one click puts it on the menu (sysop decision 2026-10-17); the choice goes through the same
- * update/autosave as every other set edit, so the board's save route validates it.
+ * preselected, so one click puts it on the menu (sysop decision 2026-10-17). The board places it (the
+ * placement route runs the shared placeLogo); "Only keep the file" leaves the file unplaced.
  */
-function PlaceUploadDialog({ uploaded, config, update, onClose }: { uploaded: MenuLogoFile; config: MenuConfig; update: Update; onClose: () => void }) {
+function PlaceUploadDialog({ uploaded, config, placeLogo, onClose }: { uploaded: MenuLogoFile; config: MenuConfig; placeLogo: PlaceLogo; onClose: () => void }) {
+  const [failed, setFailed] = useState<string | null>(null);
   const [position, setPosition] = useState<LogoPosition>('header');
   const [cls, setCls] = useState<WidthClass | null>(uploadPlacement('header', uploaded));
   const widths = uploadWidths(position, uploaded);
   const replaced = cls ? config.logos.find(s => s.position === position && s.widthClass === cls && s.levelFloor === 0)?.files.filter(f => f !== uploaded.file) ?? [] : [];
-  const show = () => {
-    if (cls) update(c => showUploadedLogo(c, uploaded, position, cls));
-    onClose();
+  const show = async () => {
+    if (!cls) return;
+    setFailed(null);
+    try { await placeLogo(uploaded.file, position, cls); onClose(); }
+    catch (e: unknown) { setFailed(e instanceof Error ? e.message : 'Failed to show the logo'); }
   };
   return (
     <Modal open onClose={onClose} title={`Show ${uploaded.file} on the menu`} maxWidth="max-w-lg">
@@ -94,17 +98,18 @@ function PlaceUploadDialog({ uploaded, config, update, onClose }: { uploaded: Me
           </select>
         </label>
         {!widths.length && <p role="alert" className="text-status-danger">This logo cannot be drawn in that position; pick another.</p>}
+        {failed && <p role="alert" className="text-status-danger">{failed}</p>}
         {replaced.length > 0 && <p className="text-content-secondary">It takes the place of {replaced.join(', ')} in that set.</p>}
         <div className="flex justify-end gap-2">
           <button className={BUTTON_CLASS} onClick={onClose}>Only keep the file</button>
-          <button className={BUTTON_CLASS} disabled={!cls} onClick={show}>Show on the menu</button>
+          <button className={BUTTON_CLASS} disabled={!cls} onClick={() => void show()}>Show on the menu</button>
         </div>
       </div>
     </Modal>
   );
 }
 
-function FilesPanel({ kind, config, update, files, loading, error, reload }: { kind: MenuKind; config: MenuConfig; update: Update; files: MenuLogoFile[]; loading: boolean; error: Error | null; reload: () => void }) {
+function FilesPanel({ kind, config, placeLogo, files, loading, error, reload }: { kind: MenuKind; config: MenuConfig; placeLogo: PlaceLogo; files: MenuLogoFile[]; loading: boolean; error: Error | null; reload: () => void }) {
   const { confirm } = useNotification();
   const [note, setNote] = useState<string | null>(null);
   const [studio, setStudio] = useState<string | null>(null);
@@ -113,8 +118,9 @@ function FilesPanel({ kind, config, update, files, loading, error, reload }: { k
   const upload = async (base64: string, chosen: File) => {
     setNote(null);
     if (!LOGO_FILE_RE.test(chosen.name)) { setNote(LOGO_NAME_RULE); return; }
-    // The board measures the stored file; the dialog preselects from that size, never from a second parser here.
-    try { setPlacing(await apiClient.uploadMenuLogo(kind, chosen.name, base64)); reload(); }
+    // Stored only: the dialog asks where it goes. The board measures the stored file; the dialog preselects
+    // from that size, never from a second parser here.
+    try { setPlacing(await apiClient.uploadMenuLogo(kind, chosen.name, base64, false)); reload(); }
     catch (e: unknown) { setNote(e instanceof Error ? e.message : 'Failed to save the logo'); }
   };
 
@@ -162,7 +168,7 @@ function FilesPanel({ kind, config, update, files, loading, error, reload }: { k
         )}
       />
       {studio && <LogoStudio kind={kind} file={studio} onClose={() => setStudio(null)} onSaved={reload} />}
-      {placing && <PlaceUploadDialog uploaded={placing} config={config} update={update} onClose={() => setPlacing(null)} />}
+      {placing && <PlaceUploadDialog uploaded={placing} config={config} placeLogo={placeLogo} onClose={() => setPlacing(null)} />}
     </div>
   );
 }
@@ -241,7 +247,7 @@ function SetRow({ index, config, files, update }: { index: number; config: MenuC
 }
 
 /** The kind's logo files, then the logo sets: where each logo shows, for which screen width and caller level. */
-export function MenuLogosEditor({ kind, config, update }: { kind: MenuKind; config: MenuConfig; update: Update }) {
+export function MenuLogosEditor({ kind, config, update, placeLogo }: { kind: MenuKind; config: MenuConfig; update: Update; placeLogo: PlaceLogo }) {
   const [files, setFiles] = useState<MenuLogoFile[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
@@ -255,7 +261,7 @@ export function MenuLogosEditor({ kind, config, update }: { kind: MenuKind; conf
 
   return (
     <div className="space-y-4">
-      <FilesPanel kind={kind} config={config} update={update} files={files} loading={loading} error={error} reload={load} />
+      <FilesPanel kind={kind} config={config} placeLogo={placeLogo} files={files} loading={loading} error={error} reload={load} />
       <p className="text-xs text-content-secondary">
         A logo set says which logos a position shows for one screen width and for callers at a level and above. A logo wider than the narrowest screen of its width (40, 80 or 120 columns) is never drawn, so it cannot be added.
       </p>

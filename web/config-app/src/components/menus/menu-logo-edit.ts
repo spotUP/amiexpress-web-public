@@ -6,7 +6,7 @@
  * class is never drawn, so it cannot be added.
  */
 import { NARROWEST_COLUMNS, logoAlphabet, type LogoPosition, type LogoRule, type MenuConfig, type WidthClass } from '@bbs/screens/menu-config/menu-config';
-import { placeLogo, uploadWidthClass } from '@bbs/screens/menu-config/logo-placement';
+import { drawableWidths, positionWidths, uploadWidthClass } from '@bbs/screens/menu-config/logo-placement';
 import type { MenuLogoFile } from '../../api/client';
 
 export const WIDER_NOTE = 'Wider than this screen - never drawn';
@@ -25,9 +25,7 @@ export function logoOffers(files: MenuLogoFile[], cls: WidthClass): LogoOffer[] 
     });
 }
 
-export function positionWidths(position: LogoPosition): WidthClass[] {
-  return position === 'side' ? ['wide'] : ['c64', 'standard', 'wide'];
-}
+export { positionWidths };
 
 const usable = (files: MenuLogoFile[], cls: WidthClass, file: string) =>
   logoOffers(files, cls).some(o => o.file === file && o.fits);
@@ -44,7 +42,7 @@ export function newSetWidth(c: MenuConfig, files: MenuLogoFile[], position: Logo
 
 /** The widths a just-uploaded file can show at in this position: its alphabet's, and only where it fits the narrowest screen. */
 export function uploadWidths(position: LogoPosition, uploaded: MenuLogoFile): WidthClass[] {
-  return positionWidths(position).filter(w => logoOffers([uploaded], w).some(o => o.fits));
+  return drawableWidths(position, uploaded.file, uploaded.cols);
 }
 
 /** The width the upload dialog opens on: the one the measured size names (uploadWidthClass), else the first that can draw it; null when none can. */
@@ -52,11 +50,6 @@ export function uploadPlacement(position: LogoPosition, uploaded: MenuLogoFile):
   const widths = uploadWidths(position, uploaded);
   const measured = uploadWidthClass(uploaded.file, uploaded.cols);
   return widths.includes(measured) ? measured : widths[0] ?? null;
-}
-
-/** The upload dialog's "Show on the menu": the file becomes the base set's logo there (placeLogo), refused where it cannot be drawn. */
-export function showUploadedLogo(c: MenuConfig, uploaded: MenuLogoFile, position: LogoPosition, cls: WidthClass): MenuConfig {
-  return uploadWidths(position, uploaded).includes(cls) ? placeLogo(c, position, cls, uploaded.file) : c;
 }
 
 const POSITION_WORDS: Record<LogoPosition, string> = { header: 'header', footer: 'footer', side: 'side panel', between: 'between-sections' };

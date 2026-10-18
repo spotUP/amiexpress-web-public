@@ -1,8 +1,9 @@
 /**
  * Where an uploaded logo goes (sysop decision 2026-10-17: an upload puts the
- * logo on screen in one step). Pure, shared by the admin's upload dialog
- * (config-app, via @bbs/screens) and the tests that carry its answer through
- * the save route to the menu the caller is sent.
+ * logo on screen in one step). Pure, shared by the board's logo routes
+ * (placeMenuLogo, the one writer of a placement) and the admin's upload dialog
+ * (config-app, via @bbs/screens), which offers only the widths drawableWidths
+ * allows.
  *
  * Before this an upload only stored the file; the logo sets were edited
  * separately, so on live (no Menus/MAIN.json at all) the sysop's upload never
@@ -19,6 +20,20 @@ import { NARROWEST_COLUMNS, logoAlphabet, type LogoPosition, type MenuConfig, ty
 export function uploadWidthClass(file: string, cols: number): WidthClass {
   if (logoAlphabet(file) === 'petscii') return 'c64';
   return cols <= NARROWEST_COLUMNS.standard ? 'standard' : 'wide';
+}
+
+export function positionWidths(position: LogoPosition): WidthClass[] {
+  return position === 'side' ? ['wide'] : ['c64', 'standard', 'wide'];
+}
+
+/**
+ * The widths a logo of this name and measured width can show at in this
+ * position: its alphabet's (a C64 set draws only .seq), and only where it fits
+ * the narrowest screen of the class - a wider logo is never drawn.
+ */
+export function drawableWidths(position: LogoPosition, file: string, cols: number): WidthClass[] {
+  const alphabet = logoAlphabet(file);
+  return positionWidths(position).filter(w => (w === 'c64') === (alphabet === 'petscii') && cols <= NARROWEST_COLUMNS[w]);
 }
 
 /**
