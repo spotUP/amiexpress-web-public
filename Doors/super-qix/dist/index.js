@@ -608,7 +608,7 @@ async function startGame() {
         // place that sees them all.
         if (sfx && engine)
             sfx.flush(engine.cues);
-    });
+    }, () => inputManager?.now() ?? Date.now());
     await applyLevelBackground(1);
     engine.initLevel(1);
     // Start game loop

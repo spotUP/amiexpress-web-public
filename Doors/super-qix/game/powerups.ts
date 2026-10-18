@@ -39,7 +39,11 @@ export class PowerUpSystem {
 
   private data: SuperQixData;
 
-  constructor(data: SuperQixData) {
+  constructor(
+    data: SuperQixData,
+    /** Game time (the engine's clock): stands still under the Ctrl+K palette. */
+    private readonly clock: () => number = Date.now
+  ) {
     this.data = data;
   }
 
@@ -69,7 +73,7 @@ export class PowerUpSystem {
       x: position.x,
       y: position.y,
       collected: false,
-      spawnTime: Date.now()
+      spawnTime: this.clock()
     };
 
     // For letter type, assign a letter from the level word
@@ -461,7 +465,7 @@ export class PowerUpSystem {
         // it up". Reaching it while open is what advances the level; picking
         // the power-up up does not by itself.
         this.cues.push('teleport');
-        d.warp = { x: powerUp.x, y: powerUp.y, openedAt: Date.now() };
+        d.warp = { x: powerUp.x, y: powerUp.y, openedAt: this.clock() };
         break;
 
       case 'oneUp':
@@ -599,7 +603,7 @@ export class PowerUpSystem {
     });
 
     // Clean up old power-ups (expire after 30 seconds)
-    const now = Date.now();
+    const now = this.clock();
     d.powerUps = d.powerUps.filter(p =>
       p.collected || (now - p.spawnTime) < 30000
     );

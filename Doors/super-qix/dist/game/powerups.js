@@ -8,7 +8,10 @@ import { SfxCues } from '@amiexpress/bbs-door-sdk/engines/ui/arcade';
  * Power-up system for spawning and managing power-ups
  */
 export class PowerUpSystem {
-    constructor(data) {
+    constructor(data, 
+    /** Game time (the engine's clock): stands still under the Ctrl+K palette. */
+    clock = Date.now) {
+        this.clock = clock;
         /**
          * What just happened here, drained by QixEngine each tick.
          *
@@ -41,7 +44,7 @@ export class PowerUpSystem {
             x: position.x,
             y: position.y,
             collected: false,
-            spawnTime: Date.now()
+            spawnTime: this.clock()
         };
         // For letter type, assign a letter from the level word
         if (type === 'letter') {
@@ -381,7 +384,7 @@ export class PowerUpSystem {
                 // it up". Reaching it while open is what advances the level; picking
                 // the power-up up does not by itself.
                 this.cues.push('teleport');
-                d.warp = { x: powerUp.x, y: powerUp.y, openedAt: Date.now() };
+                d.warp = { x: powerUp.x, y: powerUp.y, openedAt: this.clock() };
                 break;
             case 'oneUp':
                 // FAQ 2.3.1: "An extremely rare bonus, which gives you one free life."
@@ -499,7 +502,7 @@ export class PowerUpSystem {
             return effect.remainingTime > 0;
         });
         // Clean up old power-ups (expire after 30 seconds)
-        const now = Date.now();
+        const now = this.clock();
         d.powerUps = d.powerUps.filter(p => p.collected || (now - p.spawnTime) < 30000);
     }
     /**

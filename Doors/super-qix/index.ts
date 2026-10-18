@@ -708,7 +708,7 @@ async function startGame(): Promise<void> {
     // Every event that changes the board repaints it, so this is the one
     // place that sees them all.
     if (sfx && engine) sfx.flush(engine.cues);
-  });
+  }, () => inputManager?.now() ?? Date.now());
 
   await applyLevelBackground(1);
   engine.initLevel(1);

@@ -7,8 +7,12 @@ import { SuperQixData, Qix, Sparx, Point, LevelConfig } from './types';
  * Enemy system managing Qix, Sparx, and Fuse
  */
 export declare class EnemySystem {
+    /** Game time (the engine's clock): stands still under the Ctrl+K palette. */
+    private readonly clock;
     private data;
-    constructor(data: SuperQixData);
+    constructor(data: SuperQixData, 
+    /** Game time (the engine's clock): stands still under the Ctrl+K palette. */
+    clock?: () => number);
     /**
      * Initialize enemies for a level
      */

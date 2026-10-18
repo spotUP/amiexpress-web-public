@@ -7,7 +7,10 @@ import { FIELD_WIDTH, FIELD_HEIGHT, QIX_BASE_SPEED, QIX_BASE_PULL, QIX_LEVEL_PUL
  * Enemy system managing Qix, Sparx, and Fuse
  */
 export class EnemySystem {
-    constructor(data) {
+    constructor(data, 
+    /** Game time (the engine's clock): stands still under the Ctrl+K palette. */
+    clock = Date.now) {
+        this.clock = clock;
         this.data = data;
     }
     /**
@@ -481,7 +484,7 @@ export class EnemySystem {
      * immediately turn around and chase you)". A reversal is therefore
      * refused while one is still fresh.
      */
-    reverseSkull(sparx, now = Date.now()) {
+    reverseSkull(sparx, now = this.clock()) {
         if (now - sparx.lastReversedAt < SKULL_REVERSE_COOLDOWN_MS)
             return false;
         sparx.direction = sparx.direction === 1 ? -1 : 1;

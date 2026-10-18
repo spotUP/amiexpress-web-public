@@ -37,7 +37,11 @@ import {
 export class EnemySystem {
   private data: SuperQixData;
 
-  constructor(data: SuperQixData) {
+  constructor(
+    data: SuperQixData,
+    /** Game time (the engine's clock): stands still under the Ctrl+K palette. */
+    private readonly clock: () => number = Date.now
+  ) {
     this.data = data;
   }
 
@@ -555,7 +559,7 @@ export class EnemySystem {
    * immediately turn around and chase you)". A reversal is therefore
    * refused while one is still fresh.
    */
-  reverseSkull(sparx: Sparx, now: number = Date.now()): boolean {
+  reverseSkull(sparx: Sparx, now: number = this.clock()): boolean {
     if (now - sparx.lastReversedAt < SKULL_REVERSE_COOLDOWN_MS) return false;
 
     sparx.direction = sparx.direction === 1 ? -1 : 1;

@@ -12,7 +12,10 @@ import { PowerUpSystem } from './powerups';
  * Main game engine for Super Qix
  */
 export class QixEngine {
-    constructor(data, renderCallback) {
+    constructor(data, renderCallback, 
+    /** Game time (DoorInputManager.now): stands still under the Ctrl+K palette. */
+    clock = Date.now) {
+        this.clock = clock;
         this.lastMoveTime = 0;
         /**
          * What just happened, for whoever is listening.
@@ -51,8 +54,8 @@ export class QixEngine {
         this.data = data;
         this.renderCallback = renderCallback;
         this.drawingSystem = new DrawingSystem(data);
-        this.enemySystem = new EnemySystem(data);
-        this.powerUpSystem = new PowerUpSystem(data);
+        this.enemySystem = new EnemySystem(data, clock);
+        this.powerUpSystem = new PowerUpSystem(data, clock);
     }
     /**
      * Set the picture revealed as area is claimed.
@@ -78,7 +81,7 @@ export class QixEngine {
         d.levelWord = config.word;
         d.collectedLetters = [];
         d.activeEffects = [];
-        d.levelStartTime = Date.now();
+        d.levelStartTime = this.clock();
         d.stopTimer = 0;
         d.timeMeter = 0;
         // What THIS level catches, not a running total across the game.
@@ -176,7 +179,7 @@ export class QixEngine {
         const d = this.data;
         if (d.state !== 'playing')
             return;
-        const now = Date.now();
+        const now = this.clock();
         d.frameCount++;
         // Paint in any claim still sweeping across the field
         this.advanceFill();
@@ -267,7 +270,7 @@ export class QixEngine {
      * FAQ 2.3.1: it "takes a second or two to open, remains open for another
      * second or so, then closes".
      */
-    isWarpOpen(now = Date.now()) {
+    isWarpOpen(now = this.clock()) {
         const warp = this.data.warp;
         if (!warp)
             return false;
@@ -288,7 +291,7 @@ export class QixEngine {
         const warp = d.warp;
         if (!warp || !this.isWarpOpen()) {
             // A doorway that has closed is simply gone.
-            if (warp && Date.now() - warp.openedAt >= WARP_OPENING_MS + WARP_OPEN_MS) {
+            if (warp && this.clock() - warp.openedAt >= WARP_OPENING_MS + WARP_OPEN_MS) {
                 d.warp = null;
             }
             return false;
@@ -324,7 +327,7 @@ export class QixEngine {
             d.lastMultiplier = 1;
             return;
         }
-        const now = Date.now();
+        const now = this.clock();
         const chained = d.lastMultiplier >= MULTIPLIER_FIRST &&
             now - d.lastMultiplierAt <= MULTIPLIER_CHAIN_MS;
         // A rejoin is a deliberate piece of skill worth 20x or 30x, and it is
@@ -658,7 +661,7 @@ export class QixEngine {
      */
     handleDirection(dir) {
         const d = this.data;
-        const now = Date.now();
+        const now = this.clock();
         // Rate limit movement
         const moveDelay = d.marker.speedBoost ? 25 : 50;
         if (now - this.lastMoveTime < moveDelay)
@@ -885,7 +888,7 @@ export class QixEngine {
         d.marker.isDrawing = true;
         d.currentStix = {
             points: [{ x: d.marker.x, y: d.marker.y }],
-            startTime: Date.now()
+            startTime: this.clock()
         };
         d.stopTimer = 0;
     }
@@ -964,7 +967,7 @@ export class QixEngine {
         // A moment's grace after a death. The enemy that killed you has not
         // moved, so without this it kills you again on the next frame, and
         // again on the one after: every life goes in a tenth of a second.
-        if (Date.now() < (d.invulnerableUntil ?? 0))
+        if (this.clock() < (d.invulnerableUntil ?? 0))
             return false;
         // The Gremlin, while drawing. FAQ 2.3.1 is explicit that the Shield
         // "will NOT protect you from the Gremlin hitting either you or your
@@ -1003,7 +1006,7 @@ export class QixEngine {
         const d = this.data;
         this.cues.push('death');
         d.lives--;
-        d.invulnerableUntil = Date.now() + RESPAWN_INVULNERABLE_MS;
+        d.invulnerableUntil = this.clock() + RESPAWN_INVULNERABLE_MS;
         // Where the marker goes back to.
         //
         // NOT the level's spawn point. Losing a life in a far corner and being
@@ -1265,7 +1268,7 @@ export class QixEngine {
             const cycle = MARKER_CYCLE[Math.floor(d.frameCount / MARKER_CYCLE_FRAMES) % MARKER_CYCLE.length];
             // Blink while it cannot be hurt, so the grace period is something the
             // player can see rather than guess at.
-            const safe = Date.now() < (d.invulnerableUntil ?? 0);
+            const safe = this.clock() < (d.invulnerableUntil ?? 0);
             const showing = !safe ||
                 Math.floor(d.frameCount / INVULNERABLE_BLINK_FRAMES) % 2 === 0;
             if (showing)

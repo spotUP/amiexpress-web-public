@@ -8,6 +8,8 @@ import { SfxCues } from '@amiexpress/bbs-door-sdk/engines/ui/arcade';
  * Power-up system for spawning and managing power-ups
  */
 export declare class PowerUpSystem {
+    /** Game time (the engine's clock): stands still under the Ctrl+K palette. */
+    private readonly clock;
     /**
      * What just happened here, drained by QixEngine each tick.
      *
@@ -16,7 +18,9 @@ export declare class PowerUpSystem {
      */
     readonly cues: SfxCues;
     private data;
-    constructor(data: SuperQixData);
+    constructor(data: SuperQixData, 
+    /** Game time (the engine's clock): stands still under the Ctrl+K palette. */
+    clock?: () => number);
     /**
      * Try to spawn a power-up after claiming area
      */

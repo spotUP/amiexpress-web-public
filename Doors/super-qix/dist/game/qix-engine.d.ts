@@ -10,6 +10,8 @@ type RenderCallback = (content: string) => void;
  * Main game engine for Super Qix
  */
 export declare class QixEngine {
+    /** Game time (DoorInputManager.now): stands still under the Ctrl+K palette. */
+    private readonly clock;
     private data;
     private renderCallback;
     private drawingSystem;
@@ -50,7 +52,9 @@ export declare class QixEngine {
      *   intro  - the empty field announces what the next round needs.
      */
     private outro;
-    constructor(data: SuperQixData, renderCallback: RenderCallback);
+    constructor(data: SuperQixData, renderCallback: RenderCallback, 
+    /** Game time (DoorInputManager.now): stands still under the Ctrl+K palette. */
+    clock?: () => number);
     /**
      * Set the picture revealed as area is claimed.
      *
