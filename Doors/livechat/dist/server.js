@@ -1095,6 +1095,14 @@ async function createApp(session) {
     sidebarPanel.on('dock', updateLayout);
     sidebarPanel.on('hide', updateLayout);
     sidebarPanel.on('show', updateLayout);
+    // The sidebar is fit-to-content: on its first render it grows from the
+    // configured width to its widest line (15 -> 22 with the default lists),
+    // AFTER the layout above was solved. Without this the chat panel stayed
+    // at the old left edge, underneath the wider sidebar, and every line in
+    // the chat log lost its first characters behind it - "the status messages
+    // are not echoed in the log, they are offset to the left" (the sysop).
+    // The panel has already rendered itself when it emits, so render again.
+    sidebarPanel.on('fit-content', () => { updateLayout(); screen.render(); });
     // UI sounds for panel events
     sidebarPanel.on('dock', () => audio.playSound('dock'));
     sidebarPanel.on('minimize', () => audio.playSound('minimize'));
