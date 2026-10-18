@@ -224,9 +224,20 @@ int main(void)
         assert(sgr > screen_text);
         assert(strncmp(sgr, "\x1b[0;38;2;0;0;0m", 15) != 0 && strncmp(sgr, "\x1b[1;38;2;0;0;0m", 15) != 0);
         assert(strncmp(sgr, "\x1b[0;30m", 7) != 0 && strncmp(sgr, "\x1b[1;30m", 7) != 0);
+        /* ...and it is a bar: reverse video is on at the caret, the C64's inverted characters, since its cells
+           carry no background. The caret alone left the row unmarked but for two characters (sysop, 2026-10-18). */
+        {
+            const char *p, *on = 0, *off = 0;
+            for (p = screen_text; p < caret; p++) {
+                if (!strncmp(p, "\x1b[7m", 4)) on = p;
+                else if (!strncmp(p, "\x1b[27m", 5)) off = p;
+            }
+            assert(on && (!off || off < on));
+            assert(strncmp(sgr, "\x1b[0;", 4) != 0 || strncmp(sgr, "\x1b[0;7;", 6) == 0);   /* a colour after it keeps it */
+        }
     }
     size_text = "80\t25"; is_ansi = "";
-    printf("  [OK] the selected row at 40 columns is not drawn in black\n");
+    printf("  [OK] the selected row at 40 columns is a reverse bar, never drawn in black\n");
 
     /* The board prompt keeps its colours in the typing row (express.e:28417-28420),
        and the cursor sits after the columns the caller sees, not after the bytes. */

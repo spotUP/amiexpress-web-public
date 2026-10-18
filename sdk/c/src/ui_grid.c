@@ -339,11 +339,12 @@ static void draw_cell(ui_grid *g, ansi_buf *b, int entry, int row, int col, int 
     if (cw < 1) return;
     compose(g, entry, chosen, caret_of(g, b), buf, cw);
     if (chosen) {
-        /* A bar in the selection's colours; with a caret, the caret IS the mark and no bar is painted,
-           so the row is the ink on the ground (as ui_list's caret row). The selection ink is ink FOR the
-           bar: black in five themes, and on a C64's black screen the row vanished. */
-        if (caret_of(g, b)) ansi_color(b, g->ink, g->ground, 1);
-        else          ansi_color(b, g->selected_fg, g->selected_bg, 1);
+        /* A bar in the selection's colours, caret or not. On a screen with no cell backgrounds (a C64)
+           ansi_color sends the bar as reverse video in the bar's colour, the C64's own inverted
+           characters; with colour off the board strips it and the caret is the mark that is left. A caret
+           row in the ink on the ground left the C64's selected row with no bar at all (sysop, 2026-10-18:
+           "no bg color on selected rows still for petscii"). */
+        ansi_color(b, g->selected_fg, g->selected_bg, 1);
         ansi_text(b, row, col, buf, cw);
         if (el && rest_of_row) {                      /* the bar stops one cell short of the edge: the rest is the ground's */
             ansi_color(b, g->ink, g->ground, 0);

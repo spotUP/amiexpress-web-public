@@ -135,7 +135,9 @@ static void draw_row(ui_list *list, ansi_buf *b, int row, int inner_left,
     /* The selected row is a filled bar, not just coloured text: a
        highlight that stops at the end of the word leaves the eye
        hunting for where the selection is. */
-    if (chosen && caret && list->caret_bar) {
+    /* A screen with no cell backgrounds (a C64) takes the bar as reverse video, so a caret row there
+       is a bar too: the caret alone left the selected row unmarked but for two characters. */
+    if (chosen && caret && (list->caret_bar || (b->colour && !b->cell_backgrounds))) {
         /* No separate fill: the caret and the padded text below cover the row once. */
         ansi_color(b, list->selected_fg, list->selected_bg, 1);
         ansi_text_raw(b, screen_row, inner_left, caret,

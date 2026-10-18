@@ -569,6 +569,29 @@ static void a_caret_bar_fills_the_whole_selected_row(void)
     printf("  [OK] a caret bar paints the selection colours under the caret too\n");
 }
 
+static void a_caret_row_on_a_c64_is_a_reverse_bar(void)
+{
+    ui_list list = a_list(3, 10);
+    static ansi_buf b;
+    const char *caret, *on;
+
+    /* A screen with colour and no cell backgrounds (a C64): a caret alone left the selected row unmarked but for
+       two characters (sysop, 2026-10-18). The row is a bar, which goes out as the C64's inverted characters. */
+    list.borders = 0;
+    list.caret = ">>";
+    list.selected_fg = ANSI_WHITE;
+    list.selected_bg = ANSI_MAGENTA;
+    ui_list_select(&list, 1);
+    ansi_begin(&b, frame, (long)sizeof(frame));
+    ansi_set_cell_backgrounds(&b, 0);
+    ui_list_draw(&list, &b);
+    frame[b.len] = '\0';
+    caret = strstr(frame, ">>");
+    on = strstr(frame, "\033[7m");
+    assert(caret != 0 && on != 0 && on < caret);
+    printf("  [OK] a caret row on a screen with no cell backgrounds is a reverse bar\n");
+}
+
 static void a_cursor_move_leaves_the_scroll_bar_alone(void)
 {
     ui_list list = a_list(50, 10);
@@ -701,6 +724,7 @@ int main(void)
     follow_extra_keeps_rows_below_the_selection_visible();
     a_row_can_carry_a_label_ink_and_a_value_ink();
     a_caret_bar_fills_the_whole_selected_row();
+    a_caret_row_on_a_c64_is_a_reverse_bar();
     a_cursor_move_leaves_the_scroll_bar_alone();
     the_scroll_bar_is_solid_colour_with_no_glyph();
     colour_off_draws_the_caret_and_the_thumb_in_characters();

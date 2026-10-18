@@ -821,9 +821,9 @@ static void the_palette_is_an_overlay_the_board_gives_back(void)
     assert(!strstr(screen_text, "\033[2J") && !strstr(screen_text, "\033[K"));
     assert(addresses_inside(screen_text, 6, 19, 2, 39));
     /* Plan K5's 900 bytes at 40x25 is the PETSCII wire, where each 24-bit pen becomes one colour byte; it is measured
-       through the board's transducer in mainmenu-screens.test.ts. This pins the door's ANSI side (measured 1406: the
-       caret row is drawn in the ink, its own pen, since the selection ink was black on a C64's black screen). */
-    assert(paint40 <= 1410);
+       through the board's transducer in mainmenu-screens.test.ts. This pins the door's ANSI side (measured 1415: the
+       caret row is a bar, which a screen with no cell backgrounds takes as reverse video, on and off). */
+    assert(paint40 <= 1420);
 
     size_reply = "80\t25";
     assert(wrote("mail\x15\x1b") > 0);                      /* typed, filtered, cleared (Ctrl-U), then Esc leaves */
