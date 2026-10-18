@@ -64,6 +64,12 @@ const COMMODORE_KEYS: { [code: string]: number } = {
 const BOARD_CONTROL_KEYS: { [code: string]: number } = {
   KeyL: 0x0C,
   KeyW: 0x17,
+  // CTRL+K: the board's command palette, the same VT byte an ASCII keyboard
+  // sends (web/backend/src/services/door-input-routing.ts PALETTE_KEY). Not a
+  // C*Base key; without it the canvas let the chord go to the browser and the
+  // palette never opened ("ctrl+k does nothing in petscii mode", the sysop,
+  // 2026-10-18).
+  KeyK: 0x0B,
 };
 
 /** RVS ON / RVS OFF, the only fill a C64 has. */

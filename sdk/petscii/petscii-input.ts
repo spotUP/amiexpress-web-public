@@ -35,6 +35,12 @@ const CONTROL_KEYS: { [byte: number]: string } = {
   // ASCII keyboard sends for the same chord, and the line editor takes it
   // (handlers/message/message-entry.handler.ts).
   0x17: '\x17',
+  // CTRL+K: the board's command palette (PALETTE_KEY in
+  // web/backend/src/services/door-input-routing.ts). A C64 sends `$0B` for
+  // the chord and it means nothing on its screen, so it is free to carry the
+  // same VT byte an ASCII keyboard sends; dropped here, the palette could not
+  // be opened from a PETSCII session at all.
+  0x0B: '\x0b',
   0x14: '\x7f', 0x7F: '\x7f',
   0x91: '\x1b[A', 0x11: '\x1b[B', 0x1D: '\x1b[C', 0x9D: '\x1b[D',
   0x13: '\x1b[H', 0x94: '\x1b[2~',
