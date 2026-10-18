@@ -1162,6 +1162,31 @@ export function setupInputHandler(
       screen.program.emit('data', data);
     }
   };
+
+  endScreenOnDoorClose(session, screen);
+}
+
+/** Screens already listening for the board's close, so a re-enable adds no second listener. */
+const screensHearingDoorClose = new WeakSet<object>();
+
+/**
+ * The board ends a TypeScript door by firing 'door:close' at the door's own
+ * socket (Ctrl+C, a Ctrl+K palette pick). CoreDoor's input loop hears it, but
+ * a blessed door with no onInput never runs that loop: it holds execute()
+ * open on its screen's 'destroy'. So the bridge that hands the board's keys
+ * to the screen also hands it the board's close - destroying the screen is
+ * how every blessed door leaves, so the door's start() returns, its onClose
+ * runs and execute() ends the normal way.
+ */
+function endScreenOnDoorClose(session: any, screen: Screen): void {
+  const socket = session?.socket;
+  if (!socket || typeof socket.once !== 'function' || screensHearingDoorClose.has(screen)) return;
+  screensHearingDoorClose.add(screen);
+  const onDoorClose = () => {
+    if (!(screen as any).destroyed) screen.destroy();
+  };
+  socket.once('door:close', onDoorClose);
+  screen.once('destroy', () => socket.off?.('door:close', onDoorClose));
 }
 
 /**

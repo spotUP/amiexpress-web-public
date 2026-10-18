@@ -2341,13 +2341,13 @@ console.log(`[executeTypeScriptDoor] Registered hybrid RPC handler: ${method}`);
     // drained below once the door has returned.
     session.doorExecuting = true;
     // Ctrl+C ends this door (services/door-input-routing.ts), unless it
-    // declared KEEP_CTRL_C. Only a door whose SDK input loop runs: that loop
-    // is what 'door:close' ends (sdk/src/core/Door.ts:130, 265). A blessed
-    // door with no onInput holds execute() on its screen's 'destroy' and does
-    // not hear 'door:close', so it keeps getting the key and leaves by its own
-    // rule. A hybrid RPC-only door is driven by the client and left alone.
-    const sdkInputLoopRuns = ((doorInstance as any)?.inputHandlers?.length ?? 0) > 0;
-    if (!isHybridRPCOnly && sdkInputLoopRuns && !doorKeepsCtrlC(door as any)) {
+    // declared KEEP_CTRL_C. 'door:close' is what ends it: an onInput door's
+    // SDK input loop hears it (sdk/src/core/Door.ts runInputLoop), and a
+    // blessed door's key bridge destroys its screen on it
+    // (sdk/utils/blessed-helpers.ts setupInputHandler), which returns the
+    // start() that holds execute() open. A hybrid RPC-only door is driven by
+    // the client and left alone.
+    if (!isHybridRPCOnly && !doorKeepsCtrlC(door as any)) {
       const closing = wrappedSocket;
       session.closeRunningTsDoor = () => closing._closeDoor();
     }
