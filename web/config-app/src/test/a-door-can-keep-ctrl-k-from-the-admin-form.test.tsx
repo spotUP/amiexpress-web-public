@@ -92,4 +92,34 @@ describe('a door can keep Ctrl+K from the admin form', () => {
 
     expect(await screen.findByRole('checkbox', { name: /Keep Ctrl\+K for the door/ })).toBeChecked();
   });
+
+  it('ticking "Keep Ctrl+C for the door" writes KEEP_CTRL_C=1', async () => {
+    existingTooltypes = [{ key: 'NAME', value: 'BBSLink', commented: false, originalLine: 'NAME=BBSLink' }];
+    const user = userEvent.setup();
+    renderPage();
+    await openInfoEditor(user);
+
+    const box = await screen.findByRole('checkbox', { name: /Keep Ctrl\+C for the door/ });
+    expect(box).not.toBeChecked();
+    await user.click(box);
+    await user.click(screen.getByRole('button', { name: /save changes/i }));
+    await waitFor(() => expect(updateInfoFile).toHaveBeenCalled());
+    const [, on] = updateInfoFile.mock.calls[0] as [string, Array<{ key: string; value: string; commented: boolean }>];
+    expect(on.find((t) => t.key === 'KEEP_CTRL_C')).toMatchObject({ value: '1', commented: false });
+  });
+
+  it('unticking "Keep Ctrl+C for the door" removes KEEP_CTRL_C', async () => {
+    existingTooltypes = [{ key: 'KEEP_CTRL_C', value: '1', commented: false, originalLine: 'KEEP_CTRL_C=1' }];
+    const user = userEvent.setup();
+    renderPage();
+    await openInfoEditor(user);
+
+    const box = await screen.findByRole('checkbox', { name: /Keep Ctrl\+C for the door/ });
+    expect(box).toBeChecked();
+    await user.click(box);
+    await user.click(screen.getByRole('button', { name: /save changes/i }));
+    await waitFor(() => expect(updateInfoFile).toHaveBeenCalled());
+    const [, off] = updateInfoFile.mock.calls[0] as [string, Array<{ key: string; value: string; commented: boolean }>];
+    expect(off.some((t) => t.key === 'KEEP_CTRL_C' && !t.commented)).toBe(false);
+  });
 });

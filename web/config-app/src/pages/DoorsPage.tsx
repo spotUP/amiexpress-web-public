@@ -74,6 +74,11 @@ const KEY_FLAG_TOOLTYPES: Array<{ key: string; label: string; help: string }> = 
     label: 'Keep Ctrl+K for the door',
     help: 'The command palette does not open over this door; Ctrl+K goes to the door instead. For doors that use the key themselves, such as full-screen editors.',
   },
+  {
+    key: 'KEEP_CTRL_C',
+    label: 'Keep Ctrl+C for the door',
+    help: 'Ctrl+C reaches the door as a key instead of ending it. For doors that use the key themselves, such as a chat that cancels with it.',
+  },
 ];
 
 /**
