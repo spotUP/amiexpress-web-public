@@ -77,8 +77,9 @@ const UP = '\x1b[A', PGDN = '\x1b[6~', DOWN = '\x1b[B', ESC = '\x1b', BS = '\x7f
 const idle = (keys: string, paints = true, quietMs?: number): Step => ({ at: 'idle', keys, paints, quietMs });
 const mouse = (button: number, col: number, row: number, up = false) => `\x1b[<${button};${col};${row}${up ? 'm' : 'M'}`;
 const bytes = (chunks: string[]) => chunks.reduce((n, c) => n + Buffer.byteLength(c, 'latin1'), 0);
-/** What the door painted in answer to the key at marks[i]: up to the next key (or the end). */
-const answer = (r: DriveResult, i: number): string[] => r.chunks.slice(r.marks[i]!.at, r.marks[i + 1]?.at ?? r.chunks.length);
+/** What the door painted in answer to the key at marks[i]: up to the next key (or the end). The default theme
+ *  (Uprough Neon) has a rail, so its idle ticks fall inside a key's window; they are not part of the answer. */
+const answer = (r: DriveResult, i: number): string[] => r.chunks.slice(r.marks[i]!.at, r.marks[i + 1]?.at ?? r.chunks.length).filter(c => !isRailTick(c));
 
 /** A temp copy of the fixture board, with `Menus/MAIN.json` edited by `edit` when given. */
 function tempBoard(edit?: (menu: any) => void): string {
@@ -118,9 +119,9 @@ const runOnce = (key: string, make: () => Promise<DriveResult>): Promise<DriveRe
 /** The grid tests pin the caller to Grid scroll: the board default at 80 columns and wider is Cover flow (decision 5, 2026-10-17). */
 const GRID = { menuStyle: 'scroll' };
 
-/** 80x25 classic theme: the first frame, then Esc. */
+/** 80x25 in the board's default theme (Uprough Neon): the first frame, then Esc. */
 const esc80 = () => runOnce('esc80', () => run(S80, [idle(ESC)], { user: GRID }));
-/** 80x25 with a theme that has a rail (the board's default, Classic, has none): the idle animation. */
+/** 80x25 with the rail's theme named outright, so the idle animation stays pinned if the default changes. */
 const rail80 = () => runOnce('rail80', () => run(S80, [idle(ESC)], { user: { ...GRID, themePreference: 'uprough-neon' } }));
 /** 80x25: Down, hover over the fifth entry, hover over the seventh, click it. */
 const keys80 = () => runOnce('keys80', async () => {
@@ -209,11 +210,6 @@ describe('MAINMENU on three screens', () => {
         expect(Number(m[2])).toBeLessThanOrEqual(80);
       }
       for (const row of await frame80()) expect(row.length).toBe(80);
-    });
-
-    test('with the board\'s default theme (Classic, which has no rail) nothing animates while the caller is idle', async () => {
-      const r = await esc80();
-      expect(r.chunks.slice(0, r.marks[0]!.at).filter(isRailTick)).toEqual([]);
     });
 
     test('Esc leaves with nothing to run: the board marks the dismissal', async () => {
@@ -318,7 +314,7 @@ describe('MAINMENU on three screens', () => {
       const rows = gridText(replayCells(r.chunks.slice(0, r.marks[1]!.at).join(''), 80, 25));
       expect(rows[23]).toMatch(/Enter runs: M +Colour Mode/);                      // the match, in the status row's slot
       expect(rows[24]).toContain('m');                                             // the typed text stays on the prompt row
-      expect(rows[4]).toBe(gridText(first)[4]);                                    // the window is where it was
+      expect(rows.slice(5, 22)).toEqual(gridText(first).slice(5, 22));             // the window is where it was (row 5 is the rail, which ticks)
       expect(entriesOf(rows)[0]!.key).toBe(entries[0]!.key);
     });
 
@@ -389,12 +385,11 @@ describe('MAINMENU on three screens', () => {
       }
     });
 
-    test('the masthead spans all 132 columns on one bar colour', async () => {
+    test('the masthead spans all 132 columns on one ground: the rail, then the title at the right end', async () => {
       const r = await esc132();
       const row = replayCells(firstFrame(r), 132, 40)[0]!;
-      expect(row.map(c => c.sgr).every(s => s === row[0]!.sgr)).toBe(true);
-      expect(row[0]!.sgr.split('|')[1]).not.toBe('');                              // it IS a bar, not the terminal's own ground
-      expect(gridText([row])[0]!.trim()).toBe('MAIN MENU');
+      expect(new Set(row.map(c => c.sgr.split('|')[1])).size).toBe(1);            // one ground the whole width (Neon has no filled bar)
+      expect(gridText([row])[0]!).toMatch(/^[\/ ]+MAIN MENU$/);
     });
 
     test('every section is headed, the door from the board\'s Commands is listed, and the key bar is in full words', async () => {
