@@ -204,7 +204,7 @@ export async function resumeParked(raw: Socket, token: unknown, opts: { claim?: 
     return { ok: false, reason: 'ended' };
   }
   if (opts.claim === true && !isParked(session)) {
-    console.log(`[RESUME] refused (in-use): node ${nodeId} is still connected and the offer was a claim`);
+    console.log(`[RESUME] refused (in-use): node ${nodeId} is still connected and the offer was a claim (old socket ${link.raw.id}, connected=${String(link.raw.connected)}, offer=claim)`);
     return { ok: false, reason: 'in-use' };
   }
   // Before any await: claim the session, and stop the window clock so the
@@ -226,7 +226,7 @@ async function attachResumed(
   const { tokenHolderRefusal } = require('../services/logon-gates');
   let user: AttachUser | null;
   try {
-    user = await db.getUserById(Number(userId));
+    user = await db.getUserById(userId);
   } catch (err) {
     // The board could not read the account: that says nothing about the
     // account, so this resume is refused and the session stays parked until
@@ -236,8 +236,11 @@ async function attachResumed(
     return { ok: false, reason: 'unknown' };
   }
   if (!live()) return { ok: false, reason: 'ended' };
-  if (!user || tokenHolderRefusal(user).refusal !== null) {
-    console.log(`[RESUME] refused (account) for node ${nodeId}; ending its parked session`);
+  const standing = user ? tokenHolderRefusal(user).refusal : null;
+  if (!user || standing !== null) {
+    console.log(user
+      ? `[RESUME] refused (account) for node ${nodeId}: standing refusal "${String(standing)}"; ending its parked session`
+      : `[RESUME] refused (account) for node ${nodeId}: no user row for id ${userId}; ending its parked session`);
     link.end('server namespace disconnect');
     return { ok: false, reason: 'account' };
   }

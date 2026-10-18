@@ -39,8 +39,8 @@
  */
 // No SKIP_DB_INIT: the logon pipeline reads the message bases, so beforeAll gives the temp database a schema.
 
-// Numeric, as the board's SQL ids are: the resume looks the account up by Number(userId).
-const S13_USER_ID = '9131';
+// UUID strings, as the board's user ids are: the resume must look the account up by the string id.
+const S13_USER_ID = '5b0e7c1a-9131-4c2e-8f4a-0d1e2f3a4b5c';
 
 jest.mock('../../src/index', () => ({}));
 jest.mock('../../src/database', () => {
@@ -57,7 +57,7 @@ jest.mock('../../src/database', () => {
   const actual = jest.requireActual('../../src/database') as { db: object };
   const when = new Date(Date.now() - 86400 * 1000);
   const user = {
-    id: 9131, username: 'S13Caller', slotNumber: 931, passwordHash: 'hash',
+    id: '5b0e7c1a-9131-4c2e-8f4a-0d1e2f3a4b5c', username: 'S13Caller', slotNumber: 931, passwordHash: 'hash',
     realname: 'Resume Caller', location: 'Here', phone: '', email: '',
     secLevel: 20, uploads: 0, downloads: 0, bytesUpload: 0, bytesDownload: 0,
     ratio: 0, ratioType: 0, timeTotal: 3600, timeLimit: 3600, timeUsed: 0,
@@ -70,10 +70,10 @@ jest.mock('../../src/database', () => {
     created: when, updated: when,
   };
   // S15: a second account that logs in by TYPED password (name, then password).
-  const typist = { ...user, id: 9132, username: 'S15Caller', slotNumber: 932, realname: 'Takeover Caller' };
+  const typist = { ...user, id: '5b0e7c1a-9132-4c2e-8f4a-0d1e2f3a4b5c', username: 'S15Caller', slotNumber: 932, realname: 'Takeover Caller' };
   const overrides: Record<string, unknown> = {
-    getUserById: async (id: string) => (String(id) === String(user.id) ? { ...user }
-      : String(id) === String(typist.id) ? { ...typist } : null),
+    getUserById: async (id: string) => (id === user.id ? { ...user }
+      : id === typist.id ? { ...typist } : null),
     getUserByUsername: async (name: string) => (name === typist.username ? { ...typist } : null),
     authenticateUser: async (name: string, password: string) =>
       (name === typist.username && password === 's15 test password' ? { ...typist } : null),
@@ -122,7 +122,7 @@ jest.setTimeout(60000);
 const S13_NODE = 9;
 /** The node the next connection is given; S15 gives its two windows two nodes. */
 let nextNode = S13_NODE;
-const S15_USER_ID = '9132';
+const S15_USER_ID = '5b0e7c1a-9132-4c2e-8f4a-0d1e2f3a4b5c';
 const S15_PASSWORD = 's15 test password';
 
 interface Restored { nodeId?: number; resumeToken?: string }
