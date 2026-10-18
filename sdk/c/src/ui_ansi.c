@@ -77,6 +77,7 @@ void ansi_begin(ansi_buf *b, char *storage, long capacity)
        existing caller has always been. */
     b->cell_backgrounds = 1;
     b->colour = 1;
+    b->line_graphics = 0;
     b->palette = 0;
     b->palette_idx = 0;
     b->palette_len = 0;
@@ -316,6 +317,12 @@ void ansi_set_cell_backgrounds(ansi_buf *b, int can)
 {
     if (!b) return;
     b->cell_backgrounds = can ? 1 : 0;
+}
+
+void ansi_set_line_graphics(ansi_buf *b, int on)
+{
+    if (!b) return;
+    b->line_graphics = on ? 1 : 0;
 }
 
 void ansi_set_colour(ansi_buf *b, int on)
@@ -681,8 +688,53 @@ void ansi_panel(ansi_buf *b, int top, int left, int height, int width,
     ansi_box(b, top, left, height, width, fg, label);
 }
 
+/*
+ * ONE PLACE PICKS A LINE GLYPH.
+ *
+ * `dec` is the DEC special graphics letter for the piece (q across, x down,
+ * l k m j the corners), `ascii` what an Amiga ANSI terminal gets instead.
+ * On a line-graphics terminal the first piece of a run selects the DEC set
+ * and line_end() releases it, so a run of rule costs six bytes of switching
+ * however long it is. A cursor move or a pen change between pieces does not
+ * touch G0, so a whole frame is one run.
+ */
+static void put_line(ansi_buf *b, char dec, char ascii, int *in_dec)
+{
+    if (!b->line_graphics) {
+        put_char(b, ascii);
+        return;
+    }
+    if (!*in_dec) {
+        put_str(b, "\033(0");
+        *in_dec = 1;
+    }
+    put_char(b, dec);
+}
+
+static void line_end(ansi_buf *b, int *in_dec)
+{
+    if (*in_dec) {
+        put_str(b, "\033(B");
+        *in_dec = 0;
+    }
+}
+
+void ansi_hline(ansi_buf *b, int row, int col, int count)
+{
+    int i;
+    int in_dec = 0;
+
+    if (!b || count <= 0) return;
+    ansi_goto(b, row, col);
+    for (i = 0; i < count; i++) {
+        put_line(b, 'q', '-', &in_dec);
+    }
+    line_end(b, &in_dec);
+}
+
 void ansi_box(ansi_buf *b, int top, int left, int height, int width, int fg, const char *label)
 {
+    int in_dec = 0;
     int i;
     int inner;
     int labellen;
@@ -706,23 +758,25 @@ void ansi_box(ansi_buf *b, int top, int left, int height, int width, int fg, con
 
     /* Top edge, with the label written into it the way blessed does. */
     ansi_goto(b, top, left);
-    put_char(b, '+');
+    put_line(b, 'l', '+', &in_dec);
     if (labellen > 0) {
-        put_char(b, '-');
+        put_line(b, 'q', '-', &in_dec);
+        line_end(b, &in_dec);
         put_char(b, ' ');
         for (i = 0; i < labellen; i++) {
             put_char(b, label[i]);
         }
         put_char(b, ' ');
         for (i = labellen + 3; i < inner; i++) {
-            put_char(b, '-');
+            put_line(b, 'q', '-', &in_dec);
         }
     } else {
         for (i = 0; i < inner; i++) {
-            put_char(b, '-');
+            put_line(b, 'q', '-', &in_dec);
         }
     }
-    put_char(b, '+');
+    put_line(b, 'k', '+', &in_dec);
+    line_end(b, &in_dec);
     ansi_box_open(b, top, left, height, width, fg);
 }
 
@@ -730,6 +784,7 @@ void ansi_box_open(ansi_buf *b, int top, int left, int height, int width, int fg
 {
     int i;
     int inner;
+    int in_dec = 0;
 
     if (width < 2 || height < 2) {
         return;
@@ -741,17 +796,18 @@ void ansi_box_open(ansi_buf *b, int top, int left, int height, int width, int fg
      * the frame never erases the content inside it. */
     for (i = 1; i < height - 1; i++) {
         ansi_goto(b, top + i, left);
-        put_char(b, '|');
+        put_line(b, 'x', '|', &in_dec);
         ansi_goto(b, top + i, left + width - 1);
-        put_char(b, '|');
+        put_line(b, 'x', '|', &in_dec);
     }
 
     ansi_goto(b, top + height - 1, left);
-    put_char(b, '+');
+    put_line(b, 'm', '+', &in_dec);
     for (i = 0; i < inner; i++) {
-        put_char(b, '-');
+        put_line(b, 'q', '-', &in_dec);
     }
-    put_char(b, '+');
+    put_line(b, 'j', '+', &in_dec);
+    line_end(b, &in_dec);
 }
 
 void ansi_center(ansi_buf *b, int row, int col, int width, const char *text)

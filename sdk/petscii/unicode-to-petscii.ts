@@ -33,6 +33,25 @@
  */
 const R = (byte: number) => ({ rvs: byte });
 
+/**
+ * DEC SPECIAL GRAPHICS: the VT100 line-drawing set, selected into G0 by
+ * `ESC ( 0` and released by `ESC ( B`. While it is selected these ASCII
+ * letters draw lines, not letters.
+ *
+ * A 68K door can only send bytes, and the Amiga ANSI it speaks has no line
+ * glyphs below 0x80, so its UI kit drew every box and rule as `+ - |`. On a
+ * C64 that looked like ASCII art on a machine whose ROM has real lines - the
+ * sysop: "it tries to look like ascii make it proper petscii" (2026-10-18).
+ * The kit now sends this standard switch on a PETSCII screen, and both
+ * parsers (the transducer and the frame reconstructor) map the letters onto
+ * the box codepoints above, so a line has ONE path to its PETSCII glyph.
+ */
+export const DEC_SPECIAL_GRAPHICS: ReadonlyMap<string, string> = new Map<string, string>([
+  ['q', '─'], ['x', '│'], ['n', '┼'],
+  ['l', '┌'], ['k', '┐'], ['m', '└'], ['j', '┘'],
+  ['t', '├'], ['u', '┤'], ['w', '┬'], ['v', '┴'],
+]);
+
 export const UNICODE_TO_PETSCII: ReadonlyMap<string, number | { rvs: number }> = new Map<string, number | { rvs: number }>([
   // single-line box drawing (screen codes $40, $5D, $5B, $70, $6E, $6D, $7D, $6B, $73, $72, $71)
   ['─', 0xC0], ['│', 0xDD], ['┼', 0xDB],

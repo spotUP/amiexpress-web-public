@@ -186,32 +186,32 @@ build/test_ui_list: src/ui_ansi.c src/ui_list.c src/ui_profile.c src/ui_theme.c 
 	@mkdir -p build
 	$(CC) $(HOST_CFLAGS) src/ui_ansi.c src/ui_list.c src/ui_profile.c src/ui_theme.c tests/test_ui_list.c -o $@
 
-build/test_ui_screen: src/ui_ansi.c src/ui_screen.c src/ui_profile.c src/ae_board_screen.c tests/test_ui_screen.c include/ui_screen.h
+build/test_ui_screen: src/ui_ansi.c src/ui_screen.c src/ae_host.c src/ui_profile.c src/ae_board_screen.c tests/test_ui_screen.c include/ui_screen.h
 	@mkdir -p build
-	$(CC) $(HOST_CFLAGS) src/ui_ansi.c src/ui_screen.c src/ui_profile.c src/ae_board_screen.c tests/test_ui_screen.c -o $@
+	$(CC) $(HOST_CFLAGS) src/ui_ansi.c src/ui_screen.c src/ae_host.c src/ui_profile.c src/ae_board_screen.c tests/test_ui_screen.c -o $@
 
 build/test_ae_menu: src/ae_menu.c src/ae_dos.c src/ae_dos_native.c src/ae_transport_native.c tests/test_ae_menu.c include/ae_menu.h include/ae_dos.h
 	@mkdir -p build
 	$(CC) $(HOST_CFLAGS) src/ae_menu.c src/ae_dos.c src/ae_dos_native.c src/ae_transport_native.c tests/test_ae_menu.c -o $@
 
-build/test_mainmenu: examples/mainmenu/mainmenu.c tests/test_mainmenu.c src/menudoor.c src/ae_menu.c src/ae_dos.c src/ae_dos_native.c src/ae_transport_native.c src/ae_session.c src/ae_session_bbs.c src/ae_board_screen.c src/ui_ansi.c src/ui_chrome.c src/ui_grid.c src/ui_pages.c src/ui_key.c src/ui_list.c src/ui_profile.c src/ui_screen.c src/ui_theme.c include/menudoor.h
+build/test_mainmenu: examples/mainmenu/mainmenu.c tests/test_mainmenu.c src/menudoor.c src/ae_menu.c src/ae_dos.c src/ae_dos_native.c src/ae_transport_native.c src/ae_session.c src/ae_session_bbs.c src/ae_board_screen.c src/ui_ansi.c src/ui_chrome.c src/ui_grid.c src/ui_pages.c src/ui_key.c src/ui_list.c src/ui_profile.c src/ui_screen.c src/ae_host.c src/ui_theme.c include/menudoor.h
 	@mkdir -p build
-	$(CC) $(HOST_CFLAGS) -Isrc src/menudoor.c src/ae_menu.c src/ae_dos.c src/ae_dos_native.c src/ae_transport_native.c src/ae_session.c src/ae_session_bbs.c src/ae_board_screen.c src/ui_ansi.c src/ui_chrome.c src/ui_grid.c src/ui_pages.c src/ui_key.c src/ui_list.c src/ui_profile.c src/ui_screen.c src/ui_theme.c tests/test_mainmenu.c -o $@
-build/test_bulletins: examples/bulletins/bulletins.c tests/test_bulletins.c src/menudoor.c src/ae_menu.c src/ae_dos.c src/ae_dos_native.c src/ae_transport_native.c src/ae_session.c src/ae_session_bbs.c src/ae_board_screen.c src/ui_ansi.c src/ui_chrome.c src/ui_grid.c src/ui_pages.c src/ui_key.c src/ui_list.c src/ui_profile.c src/ui_screen.c src/ui_theme.c include/menudoor.h
+	$(CC) $(HOST_CFLAGS) -Isrc src/menudoor.c src/ae_menu.c src/ae_dos.c src/ae_dos_native.c src/ae_transport_native.c src/ae_session.c src/ae_session_bbs.c src/ae_board_screen.c src/ui_ansi.c src/ui_chrome.c src/ui_grid.c src/ui_pages.c src/ui_key.c src/ui_list.c src/ui_profile.c src/ui_screen.c src/ae_host.c src/ui_theme.c tests/test_mainmenu.c -o $@
+build/test_bulletins: examples/bulletins/bulletins.c tests/test_bulletins.c src/menudoor.c src/ae_menu.c src/ae_dos.c src/ae_dos_native.c src/ae_transport_native.c src/ae_session.c src/ae_session_bbs.c src/ae_board_screen.c src/ui_ansi.c src/ui_chrome.c src/ui_grid.c src/ui_pages.c src/ui_key.c src/ui_list.c src/ui_profile.c src/ui_screen.c src/ae_host.c src/ui_theme.c include/menudoor.h
 	@mkdir -p build
-	$(CC) $(HOST_CFLAGS) -Isrc src/menudoor.c src/ae_menu.c src/ae_dos.c src/ae_dos_native.c src/ae_transport_native.c src/ae_session.c src/ae_session_bbs.c src/ae_board_screen.c src/ui_ansi.c src/ui_chrome.c src/ui_grid.c src/ui_pages.c src/ui_key.c src/ui_list.c src/ui_profile.c src/ui_screen.c src/ui_theme.c tests/test_bulletins.c -o $@
+	$(CC) $(HOST_CFLAGS) -Isrc src/menudoor.c src/ae_menu.c src/ae_dos.c src/ae_dos_native.c src/ae_transport_native.c src/ae_session.c src/ae_session_bbs.c src/ae_board_screen.c src/ui_ansi.c src/ui_chrome.c src/ui_grid.c src/ui_pages.c src/ui_key.c src/ui_list.c src/ui_profile.c src/ui_screen.c src/ae_host.c src/ui_theme.c tests/test_bulletins.c -o $@
 
-build/test_menudoor_model: src/menudoor.c src/ae_menu.c src/ae_dos.c src/ae_dos_native.c src/ae_transport_native.c src/ae_session.c src/ae_session_bbs.c src/ae_board_screen.c src/ui_ansi.c src/ui_chrome.c src/ui_grid.c src/ui_pages.c src/ui_key.c src/ui_list.c src/ui_profile.c src/ui_screen.c src/ui_theme.c tests/test_menudoor_model.c src/menudoor_model.h include/menudoor.h include/ae_menu.h
+build/test_menudoor_model: src/menudoor.c src/ae_menu.c src/ae_dos.c src/ae_dos_native.c src/ae_transport_native.c src/ae_session.c src/ae_session_bbs.c src/ae_board_screen.c src/ui_ansi.c src/ui_chrome.c src/ui_grid.c src/ui_pages.c src/ui_key.c src/ui_list.c src/ui_profile.c src/ui_screen.c src/ae_host.c src/ui_theme.c tests/test_menudoor_model.c src/menudoor_model.h include/menudoor.h include/ae_menu.h
 	@mkdir -p build
-	$(CC) $(HOST_CFLAGS) -Isrc src/menudoor.c src/ae_menu.c src/ae_dos.c src/ae_dos_native.c src/ae_transport_native.c src/ae_session.c src/ae_session_bbs.c src/ae_board_screen.c src/ui_ansi.c src/ui_chrome.c src/ui_grid.c src/ui_pages.c src/ui_key.c src/ui_list.c src/ui_profile.c src/ui_screen.c src/ui_theme.c tests/test_menudoor_model.c -o $@
+	$(CC) $(HOST_CFLAGS) -Isrc src/menudoor.c src/ae_menu.c src/ae_dos.c src/ae_dos_native.c src/ae_transport_native.c src/ae_session.c src/ae_session_bbs.c src/ae_board_screen.c src/ui_ansi.c src/ui_chrome.c src/ui_grid.c src/ui_pages.c src/ui_key.c src/ui_list.c src/ui_profile.c src/ui_screen.c src/ae_host.c src/ui_theme.c tests/test_menudoor_model.c -o $@
 
-build/test_ae_board_screen: src/ae_board_screen.c src/ae_transport_native.c src/ui_key.c src/ui_screen.c src/ui_profile.c src/ui_ansi.c src/ae_session.c tests/test_ae_board_screen.c include/ae_board_screen.h include/ui_key.h include/ui_screen.h
+build/test_ae_board_screen: src/ae_board_screen.c src/ae_transport_native.c src/ui_key.c src/ui_screen.c src/ae_host.c src/ui_profile.c src/ui_ansi.c src/ae_session.c tests/test_ae_board_screen.c include/ae_board_screen.h include/ui_key.h include/ui_screen.h
 	@mkdir -p build
-	$(CC) $(HOST_CFLAGS) src/ae_board_screen.c src/ae_transport_native.c src/ui_key.c src/ui_screen.c src/ui_profile.c src/ui_ansi.c src/ae_session.c tests/test_ae_board_screen.c -o $@
+	$(CC) $(HOST_CFLAGS) src/ae_board_screen.c src/ae_transport_native.c src/ui_key.c src/ui_screen.c src/ae_host.c src/ui_profile.c src/ui_ansi.c src/ae_session.c tests/test_ae_board_screen.c -o $@
 
-build/test_ae_board_screen_save: src/ae_board_screen.c src/ae_transport_native.c src/ui_key.c src/ui_screen.c src/ui_profile.c src/ui_ansi.c src/ae_session.c tests/test_ae_board_screen_save.c include/ae_board_screen.h
+build/test_ae_board_screen_save: src/ae_board_screen.c src/ae_transport_native.c src/ui_key.c src/ui_screen.c src/ae_host.c src/ui_profile.c src/ui_ansi.c src/ae_session.c tests/test_ae_board_screen_save.c include/ae_board_screen.h
 	@mkdir -p build
-	$(CC) $(HOST_CFLAGS) src/ae_board_screen.c src/ae_transport_native.c src/ui_key.c src/ui_screen.c src/ui_profile.c src/ui_ansi.c src/ae_session.c tests/test_ae_board_screen_save.c -o $@
+	$(CC) $(HOST_CFLAGS) src/ae_board_screen.c src/ae_transport_native.c src/ui_key.c src/ui_screen.c src/ae_host.c src/ui_profile.c src/ui_ansi.c src/ae_session.c tests/test_ae_board_screen_save.c -o $@
 
 build/test_ui_chrome: src/ui_ansi.c src/ui_chrome.c tests/test_ui_chrome.c include/ui_chrome.h
 	@mkdir -p build

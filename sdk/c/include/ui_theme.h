@@ -11,7 +11,7 @@
  * the header is stale, so the two cannot drift in silence.
  *
  * What does not survive the reduction, and why that is honest: `double`
- * borders (ansi_box draws + - |, so double degrades to line) and the exact
+ * borders (ansi_box draws one weight of line, so double degrades to line) and the exact
  * shades (a hex ramp has no 8-colour equivalent). What DOES survive is the
  * identity - phosphor stays green, neon stays magenta - which is the part a
  * caller recognises.

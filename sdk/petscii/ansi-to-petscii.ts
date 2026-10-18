@@ -24,6 +24,7 @@ export { nearestVicForRgb };
 import { swedishPetsciiFor } from './swedish-charset';
 import { printablePetsciiToScreenCode, screenCodeToPetscii } from './screen-codes';
 import { asciiToPetsciiByte } from './ascii-to-petscii';
+import { DEC_SPECIAL_GRAPHICS } from './unicode-to-petscii';
 
 const ESC = '\x1b';
 /**
@@ -190,6 +191,8 @@ export class AnsiToPetsciiTransducer {
   private readonly palette: readonly string[];
   /** ROM 325018-02: a-ring and the umlauts where the bracket trio sits. */
   private swedish = false;
+  /** G0 is DEC special graphics (`ESC ( 0`): the letters in DEC_SPECIAL_GRAPHICS draw lines. */
+  private decGraphics = false;
   /** The set the caller chose with CTRL+L; see `AnsiToPetsciiOptions.caseBank`. */
   private chosenBank: 0 | 1 = 1;
   /** Incomplete escape sequence or trailing CR held until the next chunk. */
@@ -332,6 +335,7 @@ export class AnsiToPetsciiTransducer {
     this.bold = false;
     this.ansiReverse = false;
     this.savedCursor = null;
+    this.decGraphics = false;
     this.pendingWrap = 'none';
     this.ansiBg = null;
     this.ansiPen = 1;
@@ -433,7 +437,8 @@ export class AnsiToPetsciiTransducer {
         i++;
         continue;
       }
-      this.printChar(out, code);
+      const line = this.decGraphics ? DEC_SPECIAL_GRAPHICS.get(ch) : undefined;
+      this.printChar(out, line === undefined ? code : (line.codePointAt(0) as number));
       i += code > 0xFFFF ? 2 : 1;
     }
     return Uint8Array.from(out);
@@ -831,7 +836,14 @@ export class AnsiToPetsciiTransducer {
       // stalling every byte behind it for ever.
       return s.length - i > STRING_SEQUENCE_MAX ? s.length - i : 0;
     }
-    if (next === '(' || next === ')' || next === '*' || next === '+') return s[i + 2] === undefined ? 0 : 3; // charset designation
+    if (next === '(' || next === ')' || next === '*' || next === '+') {
+      if (s[i + 2] === undefined) return 0;
+      // G0 is the set printed text uses: `ESC ( 0` selects DEC line drawing
+      // (DEC_SPECIAL_GRAPHICS), any other G0 designation releases it. G1-G3
+      // are never shifted in, so their designations stay no-ops.
+      if (next === '(') this.decGraphics = s[i + 2] === '0';
+      return 3;
+    }
     if (next === '7') { this.savedCursor = this.ansiCursor(); return 2; }
     if (next === '8') { if (this.savedCursor) this.moveTo(this.savedCursor.x, this.savedCursor.y, out); return 2; }
     // RI: up one row, column kept. On row 0 an ANSI terminal scrolls the screen

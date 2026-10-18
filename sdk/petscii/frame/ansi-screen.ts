@@ -22,6 +22,7 @@
  */
 import { nearestVicForRgb, sgrColorToVic, xterm256ToRgb } from '../ansi-to-petscii';
 import { C64_PALETTE_COLODORE } from '../c64-palette';
+import { DEC_SPECIAL_GRAPHICS } from '../unicode-to-petscii';
 import { Cell, Cursor, Frame, DEFAULT_BG, DEFAULT_FG, blankCell, cloneCell } from './types';
 
 const ESC = '\x1b';
@@ -67,6 +68,8 @@ export class FrameReconstructor {
   private attrs: Attrs = { fg: DEFAULT_FG, bg: DEFAULT_BG, bold: false, rvs: false };
   private saved: Cursor | null = null;
   private pending = '';
+  /** G0 is DEC special graphics (`ESC ( 0`), as in AnsiToPetsciiTransducer. */
+  private decGraphics = false;
   private dirty = new Set<number>();
   private readonly onRetire?: (line: string) => void;
 
@@ -93,6 +96,7 @@ export class FrameReconstructor {
     this.attrs = { fg: DEFAULT_FG, bg: DEFAULT_BG, bold: false, rvs: false };
     this.saved = null;
     this.pending = '';
+    this.decGraphics = false;
     this.dirty = new Set<number>();
     for (let y = 0; y < this.rows; y++) this.dirty.add(y);
   }
@@ -133,7 +137,8 @@ export class FrameReconstructor {
       // a door that prints DEL means "nothing", and treating it as a move would
       // shift a whole row of a frame that xterm would have left alone.
       if (code < 0x20 || code === 0x7F) { i++; continue; }
-      this.put(String.fromCodePoint(code));
+      const glyph = String.fromCodePoint(code);
+      this.put((this.decGraphics ? DEC_SPECIAL_GRAPHICS.get(glyph) : undefined) ?? glyph);
       i += code > 0xFFFF ? 2 : 1;
     }
   }
@@ -248,7 +253,12 @@ export class FrameReconstructor {
       }
       return s.length - i > STRING_SEQUENCE_MAX ? s.length - i : 0;
     }
-    if (next === '(' || next === ')' || next === '*' || next === '+') return s[i + 2] === undefined ? 0 : 3;
+    if (next === '(' || next === ')' || next === '*' || next === '+') {
+      if (s[i + 2] === undefined) return 0;
+      // Same G0 rule as the transducer: `ESC ( 0` selects DEC line drawing.
+      if (next === '(') this.decGraphics = s[i + 2] === '0';
+      return 3;
+    }
     if (next === '7') { this.saved = { x: this.x, y: this.y }; return 2; }
     if (next === '8') { if (this.saved) this.moveTo(this.saved.x, this.saved.y); return 2; }
     if (next === 'M') { this.pendingWrap = false; if (this.y > 0) this.y--; else this.scrollDown(); return 2; }

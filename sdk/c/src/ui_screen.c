@@ -10,6 +10,7 @@
 #include "ui_ansi.h"
 #include "aedoor.h"
 #include "ae_board_screen.h"
+#include "ae_host.h"
 
 #include <string.h>
 
@@ -63,6 +64,9 @@ int ui_screen_open(ui_screen *sc, ae_session *s, char *frame, long cap)
     /* One question, asked once: M at the prompt is not a resize. No
        session (a test, a sandbox) is a colour caller. */
     sc->profile.colour = s ? ae_user_is_ansi(s) : 1;
+    /* A C64 has real line glyphs, and the board's transducer reaches them
+       through DEC special graphics; nobody else is sent the switch. */
+    ansi_set_line_graphics(&sc->buf, ae_host_info()->client == AE_CLIENT_PETSCII);
     /*
      * THE CALLER'S CURSOR IS NOT PART OF THE DOOR'S DRAWING.
      *

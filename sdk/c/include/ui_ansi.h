@@ -117,6 +117,17 @@ typedef struct {
      */
     int colour;
     /**
+     * The terminal draws real lines: borders and rules go out as DEC
+     * special graphics (`ESC ( 0` ... `ESC ( B`) instead of `+ - |`.
+     *
+     * 1 only for a C64 caller (AE_CLIENT=petscii, set by ui_screen_open).
+     * The board's PETSCII transducer maps the DEC letters onto the ROM's
+     * own line glyphs (sdk/petscii/unicode-to-petscii.ts,
+     * DEC_SPECIAL_GRAPHICS); an Amiga ANSI terminal has no such set, so
+     * every other caller keeps the ASCII it always had. Default 0.
+     */
+    int line_graphics;
+    /**
      * The theme's exact colours, or NULL for the terminal's sixteen.
      *
      * When it is set, a colour of UI_TOKEN(n) or a UI_INK marker naming a
@@ -235,6 +246,12 @@ void ansi_set_palette(ansi_buf *b, const unsigned long *rgb,
 /* Say whether this terminal's cells can carry a background (see the field).
  * Call once, after ansi_begin, from whatever knows the screen. */
 void ansi_set_cell_backgrounds(ansi_buf *b, int can);
+
+/** Draw borders and rules as DEC line graphics (see ansi_buf.line_graphics). */
+void ansi_set_line_graphics(ansi_buf *b, int on);
+
+/** A horizontal rule of `count` cells at (row, col) in the current pen: a line where the terminal has one, `-` else. */
+void ansi_hline(ansi_buf *b, int row, int col, int count);
 
 /* Say whether this caller takes colour (see the field). ui_screen calls it
  * wherever it applies the profile. */

@@ -277,17 +277,13 @@ static void draw_divider(struct menudoor *d)
 {
     ui_screen *sc = &d->screen;
     int row = cur(d)->lay.divider_row;
-    char rule[256];
-    int n = sc->cols < (int)sizeof rule - 1 ? sc->cols : (int)sizeof rule - 1;
-
     if (!row) return;
     if (d->rail[0]) {
         ui_masthead_draw_tick(&sc->buf, row, 1, sc->cols, "", d->rail, UI_TOKEN(UI_T_BAR_INK), UI_TOKEN(UI_T_BAR), d->rail_tick);
         return;
     }
-    memset(rule, '-', (size_t)n); rule[n] = '\0';
     ansi_color(&sc->buf, UI_TOKEN(UI_T_ACCENT), ground(d), 0);
-    ansi_text_raw(&sc->buf, row, 1, rule, n);
+    ansi_hline(&sc->buf, row, 1, sc->cols);
 }
 
 static void draw_masthead(struct menudoor *d)

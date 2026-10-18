@@ -46,7 +46,7 @@ export {
   type PetsciiByteMapping,
   type EncodePetsciiValueOptions,
 } from './ascii-to-petscii';
-export { LATIN1_TO_PETSCII_FOLD, UNICODE_TO_PETSCII } from './unicode-to-petscii';
+export { DEC_SPECIAL_GRAPHICS, LATIN1_TO_PETSCII_FOLD, UNICODE_TO_PETSCII } from './unicode-to-petscii';
 export { petsciiInputToAscii, PETSCII_CASE_TOGGLE } from './petscii-input';
 export { printableLength, wrapLineToWidth } from './wrap';
 export { SCREENCODE_TO_UNICODE } from './screencode-unicode';

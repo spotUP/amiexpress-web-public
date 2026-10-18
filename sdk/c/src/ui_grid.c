@@ -394,7 +394,7 @@ static void draw_cell(ui_grid *g, ansi_buf *b, int entry, int row, int col, int 
    under it (an 80-space write and its pen, for a row that is rewritten in full a moment later). */
 static void draw_header(ui_grid *g, ansi_buf *b, int section, int row, int whole_row)
 {
-    char title[CELL_BUF], rule[CELL_BUF];
+    char title[CELL_BUF];
     const char *t = text_of(g->section_title, g->ctx, section);
     int w = imin(g->width, CELL_BUF - 1), tl = 0, lead = whole_row ? 1 : 0;
 
@@ -406,10 +406,8 @@ static void draw_header(ui_grid *g, ansi_buf *b, int section, int row, int whole
     ansi_color(b, g->accent, g->ground, 1);
     ansi_text(b, row, g->left + 1 - lead, title, tl);
     if (w - 1 - (tl - lead) > 0) {
-        memset(rule, '-', (size_t)(w - 1 - (tl - lead)));
-        rule[w - 1 - (tl - lead)] = '\0';
         ansi_color(b, g->dim, g->ground, 0);
-        ansi_text(b, row, g->left + 1 + (tl - lead), rule, w - 1 - (tl - lead));
+        ansi_hline(b, row, g->left + 1 + (tl - lead), w - 1 - (tl - lead));
     }
 }
 

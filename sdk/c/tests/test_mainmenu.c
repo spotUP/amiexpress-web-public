@@ -6,9 +6,11 @@
 #undef main
 #include "../include/ae_transport_native.h"
 #include "../include/ae_session.h"
+#include "../include/ae_host.h"
 #include <assert.h>
 #include <stdio.h>
 #include <string.h>
+#include <stdlib.h>
 #include <unistd.h>
 
 static const char *invoked_name = "";
@@ -363,6 +365,23 @@ int main(void)
     drive("\x0bjoin\r", 6, &rc);                          /* a pick in the palette runs like a menu pick */
     assert(rc == 0 && strstr(requests, "RUN J|"));
     printf("  [OK] Ctrl-K in the menu opens the palette over it, Esc repaints the menu and the door runs on, a pick runs\n");
+
+    /* A C64 caller: the web board says AE_CLIENT=petscii, and the menu's lines and the palette's box go out as
+       DEC special graphics, which the board's transducer turns into the C64's own line glyphs. The menu had drawn
+       them in '-', '|' and '+' and looked like ASCII (sysop, 2026-10-18). Nobody else is sent the switch. */
+    {
+        const char *saved_size = size_text;
+        size_text = "40\t25"; is_ansi = "1";
+        setenv("AE_HOST", "amiexpress-web", 1); setenv("AE_CLIENT", "petscii", 1); ae_host_reset();
+        drive("\x0b", 1, &rc);
+        assert(rc == 0 && strstr(screen_text, "\x1b(0lq") && strstr(screen_text, "\x1b(B"));
+        unsetenv("AE_CLIENT"); ae_host_reset();
+        drive("\x0b", 1, &rc);
+        assert(rc == 0 && !strstr(screen_text, "\x1b(0") && strstr(screen_text, "+-"));
+        unsetenv("AE_HOST"); ae_host_reset();
+        size_text = saved_size; is_ansi = "";
+    }
+    printf("  [OK] a C64 caller gets the menu's lines and boxes as line glyphs; an ANSI caller keeps + - |\n");
 
     invoked_name = "MENUSETTINGS";
     drive("\x1b", 1, &rc);
