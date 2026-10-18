@@ -232,6 +232,25 @@ describe('guardTabId (Duplicate Tab copies sessionStorage)', () => {
     expect(s.tab.getItem(TAB_ID_KEY)).toBe('tab-a');
   });
 
+  it('a reloaded tab connects only after the guard settles, and then offers a resume, not a claim', async () => {
+    const hub = channelHub();
+    const s = mem();
+    tabId(s, () => 'tab-a');
+    saveResume(s, { token: T, userId: '7', nodeId: 3 }, 0);
+    let fire: () => void = () => {};
+    const g = guardTabId(s, hub(), { schedule: (fn) => { fire = fn; } });
+    // What BBSTerminal does: connect, and so build the offer, only when settled.
+    const offers: Array<ReturnType<typeof takeResumeOffer>> = [];
+    void g.settled.then(() => { offers.push(takeResumeOffer(s, g.confirmed(), 1000)); });
+    await Promise.resolve();
+    expect(offers).toEqual([]);
+    fire();
+    await g.settled;
+    await Promise.resolve();
+    expect(offers).toEqual([{ resume: T }]);
+    expect(offers[0]).not.toHaveProperty('claim');
+  });
+
   it('without BroadcastChannel the id is taken as this tab\'s own', () => {
     const s = mem();
     tabId(s, () => 'tab-a');

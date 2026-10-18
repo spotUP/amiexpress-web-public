@@ -209,6 +209,8 @@ export interface TabIdChannel {
 export interface TabIdGuard {
   /** True once no other open tab has said it holds this tab's id. */
   confirmed(): boolean;
+  /** Resolves once the id is settled: confirmed as this tab's alone, or replaced because another tab held it. */
+  settled: Promise<void>;
   close(): void;
 }
 
@@ -234,12 +236,15 @@ export function guardTabId(
   channel: TabIdChannel | undefined,
   opts: { waitMs?: number; newId?: () => string; schedule?: (fn: () => void, ms: number) => unknown } = {},
 ): TabIdGuard {
-  if (!channel) return { confirmed: () => true, close: () => {} };
+  if (!channel) return { confirmed: () => true, settled: Promise.resolve(), close: () => {} };
   const newId = opts.newId ?? randomId;
   const schedule = opts.schedule ?? ((fn: () => void, ms: number) => setTimeout(fn, ms));
   const nonce = randomId();
   const asked = readTabId(s);
   let confirmed = asked === null;
+  let settle: () => void = () => {};
+  const settled = new Promise<void>((resolve) => { settle = resolve; });
+  if (confirmed) settle();
   channel.addEventListener('message', (ev) => {
     const m = ev.data;
     if (!isTabIdMessage(m)) return;
@@ -248,13 +253,14 @@ export function guardTabId(
     } else if (m.nonce === nonce && m.id === asked && readTabId(s) === asked) {
       try { s.tab.setItem(TAB_ID_KEY, newId()); } catch { /* keeps the copied id */ }
       confirmed = true;
+      settle();
     }
   });
   if (asked !== null) {
     channel.postMessage({ type: 'who-holds', id: asked, nonce });
-    schedule(() => { confirmed = true; }, opts.waitMs ?? TAB_ID_CHECK_MS);
+    schedule(() => { confirmed = true; settle(); }, opts.waitMs ?? TAB_ID_CHECK_MS);
   }
-  return { confirmed: () => confirmed, close: () => channel.close() };
+  return { confirmed: () => confirmed, settled, close: () => channel.close() };
 }
 
 /** The browser's BroadcastChannel for the tab id check, or undefined where there is none. */
