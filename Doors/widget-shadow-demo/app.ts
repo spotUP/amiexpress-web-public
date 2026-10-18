@@ -70,7 +70,7 @@ export async function createApp(session: DoorSession) {
   // The board's theme, before any widget reads a colour from it.
   applyTheme(bbs);
 
-  let screen;
+  let screen: Screen;
   try {
     // Create responsive screen with BBS output
     screen = new Screen({
