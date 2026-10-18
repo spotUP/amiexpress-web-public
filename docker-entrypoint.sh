@@ -1290,6 +1290,9 @@ EOF
     find "$BBS_DATA_DIR/Doors" -maxdepth 2 -name "*.ts" -not -path "*/node_modules/*" -not -path "*/dist/*" -delete 2>/dev/null || true
     echo "[Entrypoint]   Cleaned .ts source files from Doors"
 
+    # Door node_modules outlive the image; their addons must match its Node.
+    sh /usr/local/bin/rebuild-door-natives.sh "$BBS_DATA_DIR/Doors"
+
     # A door's dist/ belongs to the IMAGE, so it is mirrored, not merged.
     #
     # The sync above extracts a tar stream, and extraction only ever WRITES:

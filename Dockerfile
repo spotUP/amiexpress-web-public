@@ -569,6 +569,8 @@ RUN find /app/default-data \( \
 
 # Copy entrypoint script
 COPY docker-entrypoint.sh /app/docker-entrypoint.sh
+# Rebuilds a door's native addons when the image's Node ABI changes.
+COPY docker/rebuild-door-natives.sh /usr/local/bin/rebuild-door-natives.sh
 
 # Set permissions
 RUN chown -R bbsuser:bbsuser /app && chmod +x /app/docker-entrypoint.sh
