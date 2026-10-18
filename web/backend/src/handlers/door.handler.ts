@@ -2438,6 +2438,15 @@ console.log(`[executeTypeScriptDoor] Door.execute() returned`);
 
 console.log(`[executeTypeScriptDoor] Door completed successfully`);
 
+    // A hybrid door's client half ends with its server half, here. Left to the
+    // client's own DISCONNECT, the bridge ended it after the next door had
+    // started and wiped that door's inDoorManager and doorInputHandler (live
+    // 2026-10-18: Ctrl+K in Galaga, pick a menu entry, the menu took no keys).
+    if (hybridSessionId) {
+      const { getClientDoorBridge } = require('../doors/client-door-bridge');
+      getClientDoorBridge().endSession(hybridSessionId);
+    }
+
     // Disable game mode when door exits
     disableGameMode(socket, session);
     restoreFixedTerminal(socket, session);
