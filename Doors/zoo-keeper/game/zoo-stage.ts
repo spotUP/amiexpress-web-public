@@ -188,7 +188,6 @@ export class ZooKeeperGame {
    * Main update loop
    */
   update(): void {
-    const now = Date.now();
     const d = this.data;
 
     if (d.state !== 'playing') return;
