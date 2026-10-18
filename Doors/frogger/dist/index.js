@@ -951,9 +951,6 @@ door.onStart(async (ctx) => {
         debugName: 'Frogger'
     });
     inputManager.enable();
-    // The lane-4 speed-up counts from frogStartTime: a palette pause is not frog time.
-    inputManager.onUnpause((pausedMs) => { if (gameData)
-        gameData.frogStartTime += pausedMs; });
     // Set up gamepad support
     gamepadManager = new gamepad_input_manager_1.GamepadInputManager(ctx.session);
     // D-pad for frog movement

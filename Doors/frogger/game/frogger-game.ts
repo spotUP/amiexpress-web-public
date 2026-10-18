@@ -128,7 +128,7 @@ export class FroggerGame {
 
     d.timeRemaining = INITIAL_TIME;
     d.frameCount = 0;
-    d.frogStartTime = Date.now();
+    d.frogStartTime = this.clock();
 
     // Lanes, straight out of LANE_CONFIG. Lane 4 carries the table's
     // fast/slow marking in its stored speed; the timed speed-up on top of
@@ -409,7 +409,7 @@ export class FroggerGame {
     const config = getLevelConfig(this.data.level);
     if (config.lane4Fast) return 1;
 
-    const elapsed = Date.now() - this.data.frogStartTime;
+    const elapsed = this.clock() - this.data.frogStartTime;
     return elapsed >= LANE4_SPEEDUP_AFTER_MS ? LANE4_FAST_MULTIPLIER : 1;
   }
 
@@ -478,7 +478,7 @@ export class FroggerGame {
    */
   update(): void {
     const d = this.data;
-    d.lastUpdateTime = Date.now();
+    d.lastUpdateTime = this.clock();
     d.frameCount++;
 
     // One second per twenty ticks.
@@ -957,7 +957,7 @@ export class FroggerGame {
     d.timeRemaining = INITIAL_TIME;
     d.furthestRow = GRID_HEIGHT - 1;
     d.hopPointsThisHome = 0;
-    d.frogStartTime = Date.now();
+    d.frogStartTime = this.clock();
     d.carryingLadyFrog = false;
   }
 

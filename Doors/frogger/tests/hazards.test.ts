@@ -11,7 +11,7 @@ import { RiverObject } from '../game/types';
 import {
   OBJECT_WIDTHS, HOME_CENTRE_OFFSET, INITIAL_TIME,
   RIVER_HURRY_AFTER_SECONDS, LANE4_SPEEDUP_AFTER_MS,
-  TURTLE_WARNING_MS, GAME_OVER_BLINK_FRAMES,
+  TURTLE_WARNING_MS, GAME_OVER_BLINK_FRAMES, GAME_TICK_MS,
 } from '../game/constants';
 
 /**
@@ -259,7 +259,8 @@ export async function laneFourPicksUpSpeedAfterAWhile(): Promise<void> {
 
   const atStart = game.lane4SpeedScale();
 
-  data.frogStartTime = Date.now() - (LANE4_SPEEDUP_AFTER_MS + 1000);
+  // The frog clock is game time (frames), so play on rather than back-date it.
+  data.frameCount += (LANE4_SPEEDUP_AFTER_MS + 1000) / GAME_TICK_MS;
   const later = game.lane4SpeedScale();
 
   assert.ok(later > atStart, `lane 4 should pick up: ${atStart} then ${later}`);
@@ -270,7 +271,8 @@ export async function aLaneAlreadyFastDoesNotSpeedUpTwice(): Promise<void> {
   const { game, data } = startedLevel(1);   // level 1's lane 4 is marked FAST
 
   const atStart = game.lane4SpeedScale();
-  data.frogStartTime = Date.now() - (LANE4_SPEEDUP_AFTER_MS + 1000);
+  // The frog clock is game time (frames), so play on rather than back-date it.
+  data.frameCount += (LANE4_SPEEDUP_AFTER_MS + 1000) / GAME_TICK_MS;
 
   assert.strictEqual(game.lane4SpeedScale(), atStart);
 }
