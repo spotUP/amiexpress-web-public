@@ -339,8 +339,10 @@ static void draw_cell(ui_grid *g, ansi_buf *b, int entry, int row, int col, int 
     if (cw < 1) return;
     compose(g, entry, chosen, caret_of(g, b), buf, cw);
     if (chosen) {
-        /* A bar in the selection's colours; with a caret, the caret IS the mark and no bar is painted. */
-        if (caret_of(g, b)) ansi_color(b, g->selected_fg, g->ground, 1);
+        /* A bar in the selection's colours; with a caret, the caret IS the mark and no bar is painted,
+           so the row is the ink on the ground (as ui_list's caret row). The selection ink is ink FOR the
+           bar: black in five themes, and on a C64's black screen the row vanished. */
+        if (caret_of(g, b)) ansi_color(b, g->ink, g->ground, 1);
         else          ansi_color(b, g->selected_fg, g->selected_bg, 1);
         ansi_text(b, row, col, buf, cw);
         if (el && rest_of_row) {                      /* the bar stops one cell short of the edge: the rest is the ground's */

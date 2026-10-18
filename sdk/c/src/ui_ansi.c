@@ -193,7 +193,8 @@ void ansi_color(ansi_buf *b, int fg, int bg, int bold)
        than the TypeScript's. */
     if (fg >= ANSI_BRIGHT && fg < UI_TOKEN_BASE) { bold = 1; fg -= ANSI_BRIGHT; }
     else if (fg_rgb >= 0) { bold = 0; }
-    if (bg >= ANSI_BRIGHT && bg < UI_TOKEN_BASE) { bg -= ANSI_BRIGHT; }
+    int bg_bright = bg >= ANSI_BRIGHT && bg < UI_TOKEN_BASE;
+    if (bg_bright) { bg -= ANSI_BRIGHT; }
     pen = fg;
 
     /* Already showing exactly this? Then the sequence is bytes for
@@ -255,7 +256,11 @@ void ansi_color(ansi_buf *b, int fg, int bg, int bold)
      * no reverse and the ink is the pen, exactly as before. */
     if (!b->cell_backgrounds) {
         if (bg > ANSI_BLACK) {
+            /* The pen IS the bar here, in every form it goes out in: the
+               exact colour when there is a palette, else the sixteen. */
             pen = bg;
+            fg_rgb = bg_rgb;
+            bold = bg_rgb >= 0 ? 0 : bg_bright;
             want_reverse = 1;
         }
     }

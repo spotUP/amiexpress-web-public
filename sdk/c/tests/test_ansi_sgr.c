@@ -98,8 +98,28 @@ static void a_dropped_background_resets(void)
     assert(strncmp(since(&b, mark), "\033[0;", 4) == 0);
 }
 
+/* A C64 has no cell backgrounds: a bar is reverse video in the BAR's colour.
+   With the theme's palette the exact colour went out as the INK (black in
+   five themes), so the selected row was black on black. */
+static void a_bar_without_backgrounds_is_reverse_in_the_bar_colour(void)
+{
+    static const unsigned long theme[2] = { 0x000000UL, 0xAA00AAUL };   /* selection ink, selection bar */
+    static const unsigned char near[2] = { 0, 5 };
+    ansi_buf b = fresh();
+    ansi_set_cell_backgrounds(&b, 0);
+    ansi_set_palette(&b, theme, near, 2);
+    ansi_color(&b, UI_TOKEN(0), UI_TOKEN(1), 1);
+    assert(strstr(since(&b, 0), "\033[7m") != 0);
+    assert(strstr(since(&b, 0), "38;2;170;0;170") != 0);
+    assert(strstr(since(&b, 0), "38;2;0;0;0") == 0);
+    /* a background of the screen's own colour is no bar: the ink stays the pen */
+    ansi_color(&b, UI_TOKEN(1), ANSI_BLACK, 0);
+    assert(strstr(since(&b, 0), "\033[27m") != 0);
+}
+
 int main(void)
 {
+    a_bar_without_backgrounds_is_reverse_in_the_bar_colour();
     a_foreground_change_repeats_no_background();
     a_background_change_repeats_no_foreground();
     an_unknown_cache_writes_the_whole_sgr();

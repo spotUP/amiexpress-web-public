@@ -210,6 +210,24 @@ int main(void)
     is_ansi = "";
     printf("  [OK] colour off marks the selected entry with >> at 80 columns; colour on does not\n");
 
+    /* A C64 caller (40 columns, no cell backgrounds): the caret row is the
+       mark, drawn in a pen that shows on the black screen - never the
+       selection ink, which is black in five themes and made the row vanish. */
+    size_text = "40\t25"; is_ansi = "1";
+    drive("\x1b", 1, &rc);
+    {
+        const char *caret = strstr(screen_text, ">>");
+        const char *sgr = caret;
+        assert(rc == 0 && caret);
+        /* the colour the caret row is drawn in: the last SGR before it (a cursor move may sit between) */
+        while (sgr > screen_text && !(sgr[0] == '\x1b' && sgr[1] == '[' && strcspn(sgr + 2, "ABCDHJKm") == strspn(sgr + 2, "0123456789;") && sgr[2 + strspn(sgr + 2, "0123456789;")] == 'm')) sgr--;
+        assert(sgr > screen_text);
+        assert(strncmp(sgr, "\x1b[0;38;2;0;0;0m", 15) != 0 && strncmp(sgr, "\x1b[1;38;2;0;0;0m", 15) != 0);
+        assert(strncmp(sgr, "\x1b[0;30m", 7) != 0 && strncmp(sgr, "\x1b[1;30m", 7) != 0);
+    }
+    size_text = "80\t25"; is_ansi = "";
+    printf("  [OK] the selected row at 40 columns is not drawn in black\n");
+
     /* The board prompt keeps its colours in the typing row (express.e:28417-28420),
        and the cursor sits after the columns the caller sees, not after the bytes. */
     f = fopen(CAT_PATH, "wb");
