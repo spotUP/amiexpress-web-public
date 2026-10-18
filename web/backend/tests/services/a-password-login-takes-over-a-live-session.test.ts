@@ -180,7 +180,7 @@ it('R moves the live web session here: same node, same session, the old window i
   const { a, live, finalized } = await liveWindow();
   const { b, session, login } = await passwordLogin();
   expect(text(b)).toContain('You are logged in on node 3');
-  expect(text(b)).toContain('in another window. [R]esume it here or [E]nd it and log in fresh? ');
+  expect(text(b)).toContain('in another window.\r\n[R]esume it here or [E]nd it and log in fresh? ');
 
   session.loginInputHandler('R');
   expect(await login).toEqual({ ok: false, terminated: 'parked-session-resumed' });

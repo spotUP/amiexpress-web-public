@@ -395,7 +395,7 @@ describe('S13 - a real socket.io caller is restored to the same node through acc
       expect(activity.mock.calls.map((c) => String(c[1])))
         .not.toContain('User S15Caller already on another node!');
       expect(deskDropped).toBe(false);
-      expect(deskOut.join('')).toContain('in another window. [R]esume it here or [E]nd it and log in fresh? ');
+      expect(deskOut.join('')).toContain('in another window.\r\n[R]esume it here or [E]nd it and log in fresh? ');
       const restored = once<Restored>(desk, 'session-restored', 10000);
       desk.emit('command', 'R');
       const moved = await restored;

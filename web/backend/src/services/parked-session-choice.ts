@@ -23,13 +23,23 @@ import { isParked, moveParkedTo, endParkedSessionsFor, endLiveSession, type Atta
 
 export type ParkedChoice = "resume" | "end" | "quit";
 
+/** Longest visible line the prompt may print: one under an 80-column screen's width. */
+const PROMPT_COLUMNS = 79;
+
 /** The question, ASCII and in full words. */
 export function parkedChoicePrompt(parked: BBSSession, web: boolean): string {
   const activity = whoEntry(parked.currentStat ?? EnvStat.IDLE, "", "", { isSelf: false, hideFiles: false, parked: false }).action;
   // S15: the same question for a session still open in another window.
-  const head = isParked(parked)
-    ? `\r\nYou have a session waiting on node ${parked.nodeId} (${activity}). `
-    : `\r\nYou are logged in on node ${parked.nodeId} (${activity}) in another window. `;
+  // The sentence ends its line and the question sits on its own, so neither
+  // wraps mid-word at 80 columns; the activity is cut so the sentence fits 79.
+  const node = String(parked.nodeId);
+  const waiting = isParked(parked);
+  const [before, after] = waiting
+    ? [`You have a session waiting on node ${node} (`, `).`]
+    : [`You are logged in on node ${node} (`, `) in another window.`];
+  const room = Math.max(1, PROMPT_COLUMNS - before.length - after.length);
+  const shown = activity.length > room ? `${activity.slice(0, room - 3)}...` : activity;
+  const head = `\r\n${before}${shown}${after}\r\n`;
   return web
     ? `${head}[R]esume it here or [E]nd it and log in fresh? `
     : `${head}[E]nd it and log in here, or [Q]uit? `;
