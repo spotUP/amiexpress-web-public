@@ -41,7 +41,7 @@
  */
 
 import type { Screen } from '../engines/ui/blessed';
-import { setupInputHandler, removeInputHandler, honourDoorClose, honourDoorHold, type DoorHold } from './blessed-helpers';
+import { setupInputHandler, removeInputHandler, honourDoorClose, honourDoorHold, DoorClock, type DoorHold } from './blessed-helpers';
 
 /**
  * The part of the BBS host object held-key tracking needs.
@@ -156,8 +156,8 @@ export class DoorInputManager {
   private withdrawDoorClose: (() => void) | null = null;
   /** The board's pause of this door (Ctrl+K palette); set while enabled. */
   private doorHold: DoorHold | null = null;
-  /** Run when the board resumes the door, with how long it was paused. */
-  private unpauseHandlers: Array<(pausedMs: number) => void> = [];
+  /** Game time that stands still while the board holds the door; outlives enable/disable. */
+  private readonly clock = new DoorClock();
   private enabled: boolean = false;
   private suspended: boolean = false;
   private autoSuspended: boolean = false;  // Track auto-suspend separately from manual suspend
@@ -259,7 +259,7 @@ export class DoorInputManager {
     if (!this.doorHold) {
       this.doorHold = honourDoorHold(this.session, {
         onPause: () => this.clearHeldKeys(),
-        onResume: (pausedMs) => { for (const cb of this.unpauseHandlers) cb(pausedMs); },
+        clock: this.clock,
       });
     }
 
@@ -498,11 +498,13 @@ export class DoorInputManager {
   }
 
   /**
-   * Run cb when the board resumes the door, with how long it stood still -
-   * for a door that keeps a wall-clock deadline (shift it by pausedMs).
+   * Pause-aware game time in ms: Date.now() less the time the board held the
+   * door (Ctrl+K palette), frozen while it is held. A real-time door reads its
+   * game deadlines (invulnerability, power-up lifetimes, level and frog timers)
+   * from this instead of Date.now(), so a palette pause does not age them.
    */
-  onUnpause(cb: (pausedMs: number) => void): void {
-    this.unpauseHandlers.push(cb);
+  now(): number {
+    return this.clock.now();
   }
 
   /**

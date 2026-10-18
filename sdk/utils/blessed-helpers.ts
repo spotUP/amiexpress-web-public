@@ -1216,18 +1216,63 @@ export function honourDoorClose(
   return withdraw;
 }
 
+/**
+ * A door's game clock: wall time minus the time the board held the door.
+ *
+ * A door that keeps game deadlines as timestamps (invulnerability until,
+ * power-up spawned at, frog started at) reads them from this instead of
+ * Date.now(), so a Ctrl+K palette pause does not age them: while paused the
+ * clock stands still, and on resume it carries on from where it stopped.
+ */
+export class DoorClock {
+  private pausedAt: number | null = null;
+  private pausedTotal = 0;
+
+  constructor(private readonly wall: () => number = Date.now) {}
+
+  /** Stop the clock (idempotent). */
+  pause(): void {
+    if (this.pausedAt === null) this.pausedAt = this.wall();
+  }
+
+  /** Restart the clock; returns how long this pause lasted (0 if not paused). */
+  resume(): number {
+    if (this.pausedAt === null) return 0;
+    const pausedMs = Math.max(0, this.wall() - this.pausedAt);
+    this.pausedAt = null;
+    this.pausedTotal += pausedMs;
+    return pausedMs;
+  }
+
+  isPaused(): boolean {
+    return this.pausedAt !== null;
+  }
+
+  /** Game time in ms: Date.now() less every paused span, frozen while paused. */
+  now(): number {
+    return (this.pausedAt ?? this.wall()) - this.pausedTotal;
+  }
+}
+
 /** What a door does when the board pauses / resumes it (see {@link honourDoorHold}). */
 export interface DoorHoldHandlers {
   /** The board paused the door (Ctrl+K palette opened over it). */
   onPause?: () => void;
   /** The board resumed the door; pausedMs is how long it stood still. */
   onResume?: (pausedMs: number) => void;
+  /**
+   * The clock the hold stops and restarts. Pass one that outlives the hold
+   * (DoorInputManager does) so game time stays continuous across re-arming.
+   */
+  clock?: DoorClock;
 }
 
 /** A door's view of the board's hold. */
 export interface DoorHold {
   /** True while the board holds the door: its game loops should not advance. */
   isPaused(): boolean;
+  /** Pause-aware game time (see {@link DoorClock}); use it for game deadlines. */
+  now(): number;
   /** Stop listening (the door is leaving). Leaves the door unpaused. */
   withdraw(): void;
 }
@@ -1241,23 +1286,25 @@ export interface DoorHold {
  * fires 'door:pause' / 'door:resume' at the door's socket (door.handler.ts
  * tsDoorHold, door-local like 'door:close'); this turns them into a flag the
  * door's loops consult - `if (hold.isPaused()) return;` at the top of a tick -
+ * and a clock (`hold.now()`) whose game time does not advance while paused,
  * so the game stands still and continues from the same state on Esc.
  *
- * DoorInputManager arms this itself (isPaused / onUnpause); a door without
- * one calls it with its ctx (anything carrying the door's `socket`).
+ * DoorInputManager arms this itself (isPaused / now / onUnpause); a door
+ * without one calls it with its ctx (anything carrying the door's `socket`).
  */
 export function honourDoorHold(session: any, handlers: DoorHoldHandlers = {}): DoorHold {
   const socket = session?.socket;
-  let pausedAt: number | null = null;
+  const clock = handlers.clock ?? new DoorClock();
   const onPause = () => {
-    if (pausedAt !== null) return;
-    pausedAt = Date.now();
+    if (clock.isPaused()) return;
+    clock.pause();
     handlers.onPause?.();
   };
   const onResume = () => {
-    if (pausedAt === null) return;
-    const pausedMs = Math.max(0, Date.now() - pausedAt);
-    pausedAt = null;
+    if (!clock.isPaused()) return;
+    // Resume first, outside the optional call: `f?.(clock.resume())` skips its
+    // argument when there is no handler, and the clock would never restart.
+    const pausedMs = clock.resume();
     handlers.onResume?.(pausedMs);
   };
   const armed = !!socket && typeof socket.on === 'function';
@@ -1266,9 +1313,10 @@ export function honourDoorHold(session: any, handlers: DoorHoldHandlers = {}): D
     socket.on('door:resume', onResume);
   }
   return {
-    isPaused: () => pausedAt !== null,
+    isPaused: () => clock.isPaused(),
+    now: () => clock.now(),
     withdraw: () => {
-      pausedAt = null;
+      clock.resume();
       if (!armed) return;
       socket.off?.('door:pause', onPause);
       socket.off?.('door:resume', onResume);
