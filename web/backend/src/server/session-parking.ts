@@ -204,7 +204,7 @@ export async function resumeParked(raw: Socket, token: unknown, opts: { claim?: 
     return { ok: false, reason: 'ended' };
   }
   if (opts.claim === true && !isParked(session)) {
-    console.log(`[RESUME] refused (in-use): node ${nodeId} is still connected and the offer was a claim (old socket ${link.raw.id}, connected=${String(link.raw.connected)}, offer=claim)`);
+    console.log(`[RESUME] refused (in-use): node ${nodeId} is still connected and the offer was a claim (old socket ${link?.raw.id}, connected=${String(link?.raw.connected)}, offer=claim)`);
     return { ok: false, reason: 'in-use' };
   }
   // Before any await: claim the session, and stop the window clock so the
