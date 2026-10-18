@@ -488,9 +488,99 @@ def case_c64_connect(args: argparse.Namespace) -> str:
         s.close()
 
 
+def petscii_keys(text: str) -> bytes:
+    """What a C64 keyboard sends for `text`: capitals are SHIFT ($C1-$DA),
+    lower case and punctuation go as they are (`petsciiInputToAscii`)."""
+    return bytes((ord(c) + 0x80) if "A" <= c <= "Z" else ord(c) for c in text)
+
+
+def case_c64_case_toggle(args: argparse.Namespace) -> str:
+    """CTRL+L ($0C) from a PETSCII caller switches the whole screen's case:
+    the board answers $8E (upper case/graphics) and its next prompt comes in
+    that set - `C64 DEMOSCENE` with its capitals as $41-$5A, no SHIFTed
+    $C1-$DA - and a second CTRL+L answers $0E and the capitals are $C1-$DA
+    again (`\xc364 \xc4EMOSCENE`). Bank 1 (lower case) is the
+    default. Plan 2026-10-04-petscii-ctrl-l-case-toggle P3.3."""
+    from bbs_telnet import Session, plain
+    s = Session(args.host, args.port, log=args.log, watch=args.watch)
+    raw = b""
+
+    def wait(found: Callable[[bytes], bool], what: str, idle: float = 20.0) -> bytes:
+        nonlocal raw
+        got, end = b"", time.time() + idle
+        while not found(got) and time.time() < end:
+            chunk = s.pump(0.5)
+            got += chunk
+            raw += chunk
+            if chunk:
+                end = time.time() + idle
+        if not found(got):
+            raise Failed(f"no {what}: {petscii_plain(got)[-200:]!r}")
+        return got
+
+    def tail(data: bytes) -> str:
+        # Colour and control bytes sit between the words: `(\x9e9999\x05 MINS)`.
+        text = petscii_plain(bytes(c for c in data if 0x20 <= c < 0x80 or c >= 0xA0))
+        return text[-200:].rstrip()
+
+    try:
+        wait(lambda d: re.search(r"\(A/R/P/P8/T/N\).*\?\s*$", plain(d), re.S) is not None,
+             "graphics prompt")
+        s.note("graphics: PETSCII, quick")
+        s.sock.sendall(b"PQ\r")
+        wait(lambda d: tail(d).endswith(("NAME:", "NAME")), "username prompt")
+        s.note("username")
+        s.sock.sendall(petscii_keys(args.user) + b"\r")
+        wait(lambda d: "PASSWORD" in tail(d), "password prompt")
+        s.note("password")
+        s.sock.sendall(petscii_keys(args.password) + b"\r")
+        # Answer the pauses a quick login still has until the menu prompt,
+        # which a 40-column caller sees as `[2:C64 DEMOSCENE] (9999 MINS):`.
+        end = time.time() + 90
+        seen = b""
+        while time.time() < end:
+            seen += wait(lambda d: d != b"", "board output after the password", 30.0)
+            t = tail(seen)
+            if re.search(r"\(\d+ MINS?\.?( LEFT)?\):\s*$", t):
+                break
+            if re.search(r"(SPACE TO RESUME:?|MORE\(Y/N/NS\)\?|PRESS (RETURN|ANY KEY).*|ANY KEY CONTINUES\.*)\s*$", t):
+                s.note("pause")
+                s.sock.sendall(b"\r")
+                seen = b""
+        else:
+            raise Failed(f"no menu prompt: {tail(seen)!r}")
+
+        def toggle(answer: int) -> None:
+            upper = answer == 0x8E
+            s.note(f"CTRL+L, expecting ${answer:02X}")
+            s.sock.sendall(b"\x0c")
+            wait(lambda d: bytes([answer]) in d, f"${answer:02X} after CTRL+L", 10.0)
+            s.note("RETURN, the prompt again")
+            s.sock.sendall(b"\r")
+            got = wait(lambda d: b"MINS): " in d, "menu prompt after the switch", 15.0)
+            prompt = got[got.rfind(b"\r", 0, got.rfind(b"MINS): ")):]
+            shifted = any(0xC1 <= c <= 0xDA for c in prompt)
+            if shifted == upper:
+                raise Failed(f"prompt not in the {'upper' if upper else 'lower'} case set: {prompt!r}")
+
+        toggle(0x8E)
+        toggle(0x0E)
+        return "CTRL+L answered $8E then an upper case prompt; again $0E then the lower case set"
+    finally:
+        try:
+            s.sock.sendall(b"G\r")
+            s.pump(1.0)
+            s.sock.sendall(b"Y")
+            s.pump(1.0)
+        except OSError:
+            pass
+        s.close()
+
+
 # Cases that make their own connection instead of logging in through call().
 RAW_CASES: dict[str, Callable[[argparse.Namespace], str]] = {
     "c64-connect": case_c64_connect,
+    "c64-case-toggle": case_c64_case_toggle,
 }
 
 CASES: list[tuple[str, Callable[[Board, str], str]]] = [
@@ -508,6 +598,7 @@ CASES: list[tuple[str, Callable[[Board, str], str]]] = [
     ("xmodem-upload", case_xmodem_upload),
     ("xmodem-download", case_xmodem_download),
     ("c64-connect", lambda _b, _t: ""),  # runs from RAW_CASES
+    ("c64-case-toggle", lambda _b, _t: ""),  # runs from RAW_CASES
 ]
 TRANSFER_CASES = {n for n, _ in CASES if "modem" in n}
 

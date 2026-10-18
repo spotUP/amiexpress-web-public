@@ -59,8 +59,14 @@ KNOWN_PROMPTS = [
     # question holds the scan on screen the way the pause does when no mail.
     # yesNo() is a hotkey: a trailing CR would answer the next conference Yes.
     (re.compile(r"Would you like to read it now \(Y/n\)\?$", re.I), "n", "mail found"),
-    # The tip of the day is a modal: its title holds the cursor, any key ends it.
-    (re.compile(r"^\s*TIP OF THE DAY$"), "\r", "press a key"),
+]
+# Screens a caller answers by what the whole screen says, not the cursor's
+# row. The tip of the day parks the cursor inside its animated title rail on
+# row 0, and its "Any key: continues" hint sits on the bottom row - so the
+# cursor's row never holds the question. Source: Doors/tip-of-day/app.ts
+# (title, footer hints), and the live login of 2026-10-18.
+KNOWN_SCREENS = [
+    (re.compile(r"TIP OF THE DAY.*Any key:? continues", re.S), "\r", "press a key"),
 ]
 MENU_PROMPT = re.compile(r"\]\s*Menu \(\d+ mins?\. left\):$", re.I)
 # The menu door (MAINMENU) stands in front of the main prompt when the board
@@ -145,13 +151,26 @@ class Board:
                 self.stream.feed(as_glyphs(decoded))
                 self.last_byte = time.time()
 
-    def settle(self, quiet: float = 0.8, limit: float = 10.0) -> None:
-        """Wait until the board has been silent for `quiet` seconds."""
+    def settle(self, quiet: float = 0.8, limit: float = 10.0, until=None) -> None:
+        """Wait until the board has been silent for `quiet` seconds, or until
+        `until()` says the screen already asks something: an animated door
+        never goes silent, and waiting it out lets the door time out first."""
         start = time.time()
         while time.time() - start < limit:
             if time.time() - self.last_byte >= quiet:
                 return
+            if until and until():
+                return
             time.sleep(0.05)
+
+    def known_screen(self):
+        """The (keys, why) of a whole-screen question this knows, or None."""
+        with self.lock:
+            text = "\n".join(line.rstrip() for line in self.screen.display)
+        for pattern, keys, why in KNOWN_SCREENS:
+            if pattern.search(text):
+                return keys, why
+        return None
 
     def render(self) -> str:
         with self.lock:
@@ -196,18 +215,23 @@ class Board:
         which is handed back rather than guessed at."""
         log = []
         for _ in range(limit):
-            self.settle(1.2, 30.0)
+            self.settle(1.2, 30.0, until=self.known_screen)
             here = self.prompt()
+            screen = self.known_screen()
             # An empty cursor row is not a question: a door is still thinking
             # (a 68K door can sit silent for seconds). Give it time before
             # calling it anything.
             waited = 0.0
-            while not here and waited < 30.0 and not MENU_DOOR_ROW.search(self.row()):
+            while not here and not screen and waited < 30.0 and not MENU_DOOR_ROW.search(self.row()):
                 self.settle(2.0, 10.0)
                 waited += 2.0
                 here = self.prompt()
             answer = None
-            for pattern, keys, why in KNOWN_PROMPTS:
+            if screen:
+                keys, why = screen
+                answer = keys
+                log.append(f"[{why}] whole screen -> {answer!r}")
+            for pattern, keys, why in KNOWN_PROMPTS if answer is None else []:
                 if pattern.search(here):
                     answer = keys.replace("{user}", user).replace("{password}", password)
                     shown = "<password>" if "{password}" in keys else repr(answer)
@@ -230,6 +254,11 @@ class Board:
                 with self.lock:
                     self.pauses.append("\n".join(line.rstrip() for line in self.screen.display))
             self.send(answer, secret="{password}" in keys)
+            if screen:
+                # The answered screen stays drawn until the door clears it;
+                # read again before then and the same key goes out twice,
+                # landing on whatever the board asks next.
+                self.settle(1.2, 10.0, until=lambda: not self.known_screen())
         return "\n".join(log) + "\n" + self.render()
 
     def send(self, keys: str, secret: bool = False) -> None:

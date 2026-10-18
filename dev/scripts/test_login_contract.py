@@ -122,5 +122,66 @@ class MenuDoorAtTheMainPrompt(unittest.TestCase):
         self.assertFalse(Board.at_menu(self.FakeBoard(self.NAVIGATING, self.NAVIGATING)))
 
 
+class TipOfTheDayScreen(unittest.TestCase):
+    """The tip door's opening bytes from the live login of 2026-10-18. The
+    driver read only the cursor's row, which sits in the animated title rail,
+    so it never answered and the door's 30 s timeout ended the tip."""
+
+    class Replay:
+        def __init__(self):
+            import threading
+            import pyte
+            from bbs_screen import as_glyphs
+            self.lock = threading.Lock()
+            self.screen = pyte.Screen(80, 25)
+            path = os.path.join(os.path.dirname(__file__), "fixtures", "tip-of-day-live.ans")
+            with open(path, "rb") as f:
+                pyte.Stream(self.screen).feed(as_glyphs(f.read().decode("latin1")))
+
+    def test_the_cursor_row_holds_no_question(self):
+        from bbs_screen import KNOWN_PROMPTS, Board
+        here = Board.prompt(self.Replay())
+        self.assertFalse([why for pattern, _k, why in KNOWN_PROMPTS if pattern.search(here)], here)
+
+    def test_the_whole_screen_is_the_tip_and_any_key_ends_it(self):
+        from bbs_screen import Board
+        self.assertEqual(Board.known_screen(self.Replay()), ("\r", "press a key"))
+
+    def test_settle_stops_waiting_on_an_animated_screen(self):
+        import time
+        from bbs_screen import Board
+        b = self.Replay()
+        b.last_byte = time.time() + 60  # the rail never goes quiet
+        start = time.time()
+        Board.settle(b, 1.2, 5.0, until=lambda: Board.known_screen(b))
+        self.assertLess(time.time() - start, 1.0)
+
+    def test_the_tip_is_answered_once(self):
+        # The door clears its screen a moment after the key; a second read
+        # before then sent another CR, which answered the mail scan's
+        # "read it now (Y/n)?" Yes on the live board (2026-10-18).
+        import threading
+        import time
+        import pyte
+        from bbs_screen import Board
+        b = Board.__new__(Board)
+        replay = self.Replay()
+        b.lock, b.screen, b.pauses, b.closed = replay.lock, replay.screen, [], False
+        b.last_byte = time.time()
+        sent = []
+
+        def send(keys, secret=False):
+            sent.append(keys)
+            b.last_byte = time.time()
+
+            def leave():
+                pyte.Stream(b.screen).feed("\x1b[2J\x1b[H[Main] Menu (59 mins. left):")
+                b.last_byte = time.time()
+            threading.Timer(0.3, leave).start()
+        b.send = send
+        Board.advance(b, "regress", "secret", limit=5)
+        self.assertEqual(sent, ["\r"])
+
+
 if __name__ == "__main__":
     unittest.main()
