@@ -104,6 +104,10 @@ export class PetsciiStudioDoor {
       enableMouse: true,
       debug: false,
       debugName: 'PETSCII-EDIT',
+      // Ctrl+C and a Ctrl+K palette pick end the studio the way leave() does
+      // once it is past its unsaved-work question: the board has already
+      // decided, so there is no one to ask.
+      onClose: () => { this.destroy(); this.exitResolve?.(); },
     });
 
     this.screen.render();

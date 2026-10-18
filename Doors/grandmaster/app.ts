@@ -283,6 +283,8 @@ const GAMEPAD_MAPPING: Partial<Record<GameAction, GamepadTrigger[]>> = {
 export class GrandmasterApp {
   private session: DoorSession;
   private screen: Screen;
+  /** Settles when the screen is destroyed - by quit(), whoever ran it. */
+  readonly ended: Promise<void>;
   /**
    * 80x25 like the board, or the caller's whole terminal.
    *
@@ -415,8 +417,13 @@ export class GrandmasterApp {
       // (Buffer→hex + console.log per key) - synchronous stdout writes in
       // the input path, the same back-pressure class that froze DOORMAN.
       debug: false,
-      debugName: 'GRANDMASTER'
+      debugName: 'GRANDMASTER',
+      // Ctrl+C and a Ctrl+K palette pick end GRANDMASTER through its own quit.
+      onClose: () => { void this.quit(); },
     });
+    // The board's close can land while run() waits on a menu that will never
+    // answer; the screen going is the end of the door either way.
+    this.ended = new Promise<void>((resolve) => { this.screen.once('destroy', () => resolve()); });
 
     // Alt+Enter, in every door that has a size to change. Fixed to start:
     // a player opts into the room, and gets the board's 80 columns back on
@@ -4557,5 +4564,5 @@ export class GrandmasterApp {
  */
 export async function createApp(session: DoorSession, initialMode?: string): Promise<void> {
   const app = new GrandmasterApp(session);
-  await app.run(initialMode);
+  await Promise.race([app.run(initialMode), app.ended]);
 }

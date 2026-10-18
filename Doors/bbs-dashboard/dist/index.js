@@ -303,7 +303,9 @@ class BBSDashboard {
             enableGrabKeys: false, // Blessed focus system handles keys
             enableMouse: true, // Enable mouse events
             debug: false,
-            debugName: 'BBSDashboard'
+            debugName: 'BBSDashboard',
+            // Ctrl+C and a Ctrl+K palette pick end the dashboard through its own quit.
+            onClose: () => this.cleanup(),
         });
         this.inputManager.enable();
         // Key handlers

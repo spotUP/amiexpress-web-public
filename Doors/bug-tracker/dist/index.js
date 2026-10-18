@@ -871,7 +871,9 @@ var BugTrackerApp = class {
       enableGrabKeys: true,
       enableMouse: true,
       debug: false,
-      debugName: "BugTracker"
+      debugName: "BugTracker",
+      // Ctrl+C and a Ctrl+K palette pick end the tracker through its own quit.
+      onClose: () => this.quit()
     });
   }
   // ==========================================================================

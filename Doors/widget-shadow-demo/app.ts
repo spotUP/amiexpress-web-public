@@ -91,6 +91,8 @@ export async function createApp(session: DoorSession) {
     enableGameMode: false,  // Demo UI, not a game
     enableGrabKeys: false,  // Blessed widgets handle their own input
     enableMouse: true,      // Door has mouse dragging
+    // Ctrl+C and a Ctrl+K palette pick leave the way Q does.
+    onClose: () => quit(),
   });
 
   // Enable input (handles mouse events automatically)
@@ -235,8 +237,11 @@ export async function createApp(session: DoorSession) {
   overPanel.focus();
 
   // Quit handler (EXACT from neo-blessed)
+  function quit(): void {
+    screen.destroy();
+  }
   screen.key('q', function() {
-    return screen.destroy();
+    return quit();
   });
 
   // Set content AFTER creating boxes (EXACT from neo-blessed)

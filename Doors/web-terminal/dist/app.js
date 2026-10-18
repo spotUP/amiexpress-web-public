@@ -34,7 +34,11 @@ async function startWebTerminal(session) {
     const compact = (0, blessed_1.getCompactProfile)(width);
     const rowWidth = Math.max(20, width - 1);
     const terminalMode = (0, terminal_mode_1.createTerminalModeSwitch)({ bbs, screen, start: 'fixed', onRelayout: () => { screen.render(); } });
-    const input = new door_input_manager_1.DoorInputManager(session, screen, { enableGameMode: false, enableGrabKeys: false, enableMouse: true });
+    const input = new door_input_manager_1.DoorInputManager(session, screen, {
+        enableGameMode: false, enableGrabKeys: false, enableMouse: true,
+        // Ctrl+C and a Ctrl+K palette pick leave through the door's own leave().
+        onClose: () => leaveNow(),
+    });
     input.enable();
     const statusRows = compact.collapseChrome ? 1 : 2;
     const masthead = (0, blessed_helpers_1.createBox)({

@@ -81,6 +81,8 @@ async function createApp(session) {
         enableGameMode: false, // Demo UI, not a game
         enableGrabKeys: false, // Blessed widgets handle their own input
         enableMouse: true, // Door has mouse dragging
+        // Ctrl+C and a Ctrl+K palette pick leave the way Q does.
+        onClose: () => quit(),
     });
     // Enable input (handles mouse events automatically)
     inputManager.enable();
@@ -210,8 +212,11 @@ async function createApp(session) {
     // Focus the draggable panel
     overPanel.focus();
     // Quit handler (EXACT from neo-blessed)
+    function quit() {
+        screen.destroy();
+    }
     screen.key('q', function () {
-        return screen.destroy();
+        return quit();
     });
     // Set content AFTER creating boxes (EXACT from neo-blessed)
     bg.setContent(lorem);

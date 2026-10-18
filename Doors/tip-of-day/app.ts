@@ -14,6 +14,7 @@ import {
   themeById,
 } from '@amiexpress/bbs-door-sdk/engines/ui/theme';
 import { DoorInputManager } from '@amiexpress/bbs-door-sdk/utils/door-input-manager';
+import { honourDoorClose } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
 import { readDoorSettings } from '@amiexpress/bbs-door-sdk/settings';
 import { loadDoorCatalog, resolveBoardRoot, type DoorEntry } from './catalog';
 import { buildTipFrame, tipBoxRows } from './layout';
@@ -231,10 +232,13 @@ export async function createApp(session: DoorSession): Promise<void> {
       resolve();
     };
     const timer = setTimeout(done, 30000);
-    (screen as any).key(['enter', 'space', 'escape', 'q', 'Q'], () => {
+    const quit = () => {
       clearTimeout(timer);
       done();
-    });
+    };
+    (screen as any).key(['enter', 'space', 'escape', 'q', 'Q'], quit);
+    // Ctrl+C and a Ctrl+K palette pick leave through the same quit as Q.
+    honourDoorClose(session, screen, quit);
     // Any other key also continues: blessed only fires listed keys, so
     // the input manager forwards the rest through the screen's keypress.
     // N / L change the login choice on the way out.

@@ -385,7 +385,10 @@ export class CardLobbyApp {
       // it buried the sysop's own session on 2026-09-14. Turn it on with
       // DOOR_LOG_INPUT=1 when diagnosing input, the way List's debug works.
       debug: process.env.DOOR_LOG_INPUT === '1',
-      debugName: 'CardLobby'
+      debugName: 'CardLobby',
+      // Ctrl+C and a Ctrl+K palette pick leave the lobby through its own quit
+      // (leaves the table, stops the refresh timer).
+      onClose: () => this.exitDoor(),
     });
     this.inputManager.enable();
 

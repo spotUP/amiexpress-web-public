@@ -53,6 +53,8 @@ door.onStart(async (ctx: DoorContext) => {
     enableGameMode: false,  // Menu UI, not a game
     enableGrabKeys: false,  // Blessed widgets handle their own input
     enableMouse: true,      // Door has dropdown menu mouse support
+    // Ctrl+C and a Ctrl+K palette pick leave the way Q does.
+    onClose: () => quit(),
   });
 
   // 3. Enable input (handles all input setup automatically)
@@ -146,7 +148,7 @@ door.onStart(async (ctx: DoorContext) => {
         { label: 'Open' },
         { label: 'Save' },
         { label: '─', separator: true },
-        { label: 'Exit', action: () => screen.destroy() },
+        { label: 'Exit', action: () => quit() },
       ],
     },
     {
@@ -324,10 +326,13 @@ door.onStart(async (ctx: DoorContext) => {
     closeActiveMenu();
   });
 
-  screen.key(['q', 'Q'], () => {
+  /** Leave the demo: Q, the Exit item and the board's close. */
+  function quit(): void {
     try { chrome.stop(); } catch { /* leaving anyway */ }
     screen.destroy();
-  });
+  }
+
+  screen.key(['q', 'Q'], () => quit());
 
   updateLabelStyles();
   focusLabel(0);

@@ -69,6 +69,8 @@ export async function execute(session: any) {
     enableGameMode: false,  // Browser UI, not a game
     enableGrabKeys: false,  // Blessed widgets handle their own input
     enableMouse: true,      // List has mouse support
+    // Ctrl+C and a Ctrl+K palette pick leave the way Q does.
+    onClose: () => quit(),
   });
 
   // Enable input
@@ -300,7 +302,8 @@ export async function execute(session: any) {
     }
   });
 
-  screen.key(['q', 'C-c', 'escape'], () => {
+  /** Leave the browser: Q, Escape and the board's close. */
+  function quit(): void {
     // Stop the chrome first: a timer writing to a destroyed screen is how
     // a door takes the session with it, and stop() also puts back any row a
     // glitch was in the middle of damaging.
@@ -309,7 +312,9 @@ export async function execute(session: any) {
     if (session.close) {
       session.close();
     }
-  });
+  }
+
+  screen.key(['q', 'C-c', 'escape'], () => quit());
 
   // ========== INITIALIZATION ========== 
 

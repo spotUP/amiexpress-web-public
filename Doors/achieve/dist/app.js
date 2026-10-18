@@ -31,6 +31,7 @@ const terminal_mode_1 = require("@amiexpress/bbs-door-sdk/utils/terminal-mode");
 const blessed_helpers_1 = require("@amiexpress/bbs-door-sdk/utils/blessed-helpers");
 const theme_1 = require("@amiexpress/bbs-door-sdk/engines/ui/theme");
 const door_input_manager_1 = require("@amiexpress/bbs-door-sdk/utils/door-input-manager");
+const blessed_helpers_2 = require("@amiexpress/bbs-door-sdk/utils/blessed-helpers");
 const blessed_1 = require("@amiexpress/bbs-door-sdk/engines/ui/blessed");
 // ---------------------------------------------------------------------------
 // Pure builders - what the panel and the menu say, tested at 40 and 80.
@@ -452,6 +453,8 @@ async function createApp(session) {
             catch { /* leaving anyway */ }
             resolve();
         };
+        // Ctrl+C and a Ctrl+K palette pick leave through the same quit as Q.
+        (0, blessed_helpers_2.honourDoorClose)(session, screen, done);
         list.on('select', async (_item, index) => {
             const chosen = items[index];
             if (!chosen || chosen.id === 'quit')

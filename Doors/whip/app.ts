@@ -46,6 +46,8 @@ export class WhipApp {
   // to leave the session nowhere, so the next Kanban opened Backlog (or a
   // picker) and a task made in a hurry "vanished" - it was in Backlog.
   private lastProjectId?: string;
+  /** Settles when the screen is destroyed, so a board close ends run() even mid-menu. */
+  readonly ended: Promise<void>;
 
   constructor(session: DoorSession) {
     this.session = session;
@@ -65,8 +67,11 @@ export class WhipApp {
       enableGrabKeys: true,
       enableMouse: true,
       debug: false,
-      debugName: 'WHIP'
+      debugName: 'WHIP',
+      // Ctrl+C and a Ctrl+K palette pick leave through the door's own quit.
+      onClose: () => { void this.quit(); },
     });
+    this.ended = new Promise<void>((resolve) => { this.screen.once('destroy', () => resolve()); });
 
     this.dataManager = getSharedDataManager();
     this.achievementManager = new AchievementManager(this.dataManager);

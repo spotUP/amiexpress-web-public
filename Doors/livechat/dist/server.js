@@ -191,7 +191,11 @@ async function createApp(session) {
         enableGrabKeys: false, // Blessed focus system handles keys
         enableMouse: true, // See WEB_ note above — required for clicks
         debug: false,
-        debugName: 'LiveChat'
+        debugName: 'LiveChat',
+        // A Ctrl+K palette pick (and Ctrl+C, if the door ever gives up
+        // KEEP_CTRL_C) ends LiveChat through its own cleanup: leaves the room,
+        // stops the timers, hands the columns back.
+        onClose: () => cleanup(),
     });
     let showHelpFn = null;
     // Enable door input FIRST (this calls setupInputHandler which installs its

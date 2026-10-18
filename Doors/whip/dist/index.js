@@ -13,6 +13,7 @@ exports.metadata = {
 const door = new bbs_door_sdk_1.ServerDoor(exports.metadata);
 door.onStart(async (ctx) => {
     const app = new app_1.WhipApp(ctx);
-    await app.run();
+    // A board close destroys the screen while run() may still await a menu.
+    await Promise.race([app.run(), app.ended]);
 });
 exports.default = door;

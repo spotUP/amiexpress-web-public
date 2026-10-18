@@ -29,6 +29,8 @@ export async function createApp(ctx: DoorContext, server: DopewarsServer): Promi
     enableGameMode: false,  // game mode intercepts keys before neo-blessed screen.key() — must be off
     enableGrabKeys: true,
     enableMouse:    true,
+    // Ctrl+C and a Ctrl+K palette pick leave the game the way Q does.
+    onClose: () => { void runAction(quit); },
   });
 
   let state:       PlayerState;
@@ -233,16 +235,19 @@ export async function createApp(ctx: DoorContext, server: DopewarsServer): Promi
     });
   });
 
+  /** Leave the game: Q, and the board's close. */
+  async function quit(): Promise<void> {
+    server.removeListener('state:' + id, onStateUpdate);
+    if (lastPresenceListener && lastLocation >= 0) {
+      server.removeListener('presence:' + lastLocation, lastPresenceListener);
+    }
+    await server.leaveGame(id);
+    inputManager.disable();
+    screen.destroy();
+  }
+
   screen.key(['q','Q'], () => {
-    runAction(async () => {
-      server.removeListener('state:' + id, onStateUpdate);
-      if (lastPresenceListener && lastLocation >= 0) {
-        server.removeListener('presence:' + lastLocation, lastPresenceListener);
-      }
-      await server.leaveGame(id);
-      inputManager.disable();
-      screen.destroy();
-    });
+    runAction(quit);
   });
 
   /* -- Boot ------------------------------------------------------- */

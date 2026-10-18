@@ -28,6 +28,7 @@ import {
   themeStyles, themeById, attachDoorChrome, footerStyle, type Theme,
 } from '@amiexpress/bbs-door-sdk/engines/ui/theme';
 import { DoorInputManager } from '@amiexpress/bbs-door-sdk/utils/door-input-manager';
+import { honourDoorClose } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
 import { getCompactProfile } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import type { CompactProfile } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 
@@ -263,6 +264,8 @@ export async function createApp(session: DoorSession): Promise<void> {
       try { bbs.write('\x1b[0m\x1b[2J\x1b[H\x1b[?25h'); } catch { /* leaving anyway */ }
       resolve();
     };
+    // Ctrl+C and a Ctrl+K palette pick leave through the same quit as Q.
+    honourDoorClose(session, screen, done);
 
     (list as any).on('select', async (_item: any, index: number) => {
       const chosen = personas[index];

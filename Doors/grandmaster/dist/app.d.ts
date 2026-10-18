@@ -41,6 +41,8 @@ export declare const MENU_ACTION_KEYS: Partial<Record<GameAction, {
 export declare class GrandmasterApp {
     private session;
     private screen;
+    /** Settles when the screen is destroyed - by quit(), whoever ran it. */
+    readonly ended: Promise<void>;
     /**
      * 80x25 like the board, or the caller's whole terminal.
      *

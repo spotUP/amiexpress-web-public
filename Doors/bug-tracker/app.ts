@@ -97,6 +97,8 @@ export class BugTrackerApp {
       enableMouse: true,
       debug: false,
       debugName: 'BugTracker',
+      // Ctrl+C and a Ctrl+K palette pick end the tracker through its own quit.
+      onClose: () => this.quit(),
     });
   }
 

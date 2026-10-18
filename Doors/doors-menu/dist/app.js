@@ -272,6 +272,8 @@ async function createApp(session) {
         enableGameMode: false, // Menu-based UI, not a game
         enableGrabKeys: false, // Blessed widgets handle their own input
         enableMouse: true, // Door has mouse support
+        // Ctrl+C and a Ctrl+K palette pick leave the menu the way Q does at the top.
+        onClose: () => quit(),
     });
     // Enable input
     inputManager.enable();
@@ -733,15 +735,19 @@ async function createApp(session) {
     screen.key(['t', 'T'], () => {
         cycleTypeFilter();
     });
+    // Leave the menu: Q at the top level, and the board's close.
+    function quit() {
+        terminalMode?.dispose();
+        terminalMode = null;
+        screen.destroy();
+    }
     // Handle quit
     screen.key(['q', 'Q', 'escape'], () => {
         if (currentPath.length > 0 || viewMode === 'doors') {
             goBack();
         }
         else {
-            terminalMode?.dispose();
-            terminalMode = null;
-            screen.destroy();
+            quit();
         }
     });
     // Handle screen destroy

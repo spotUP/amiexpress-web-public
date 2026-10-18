@@ -64,7 +64,11 @@ export async function startNotify(session: DoorSession): Promise<Notify> {
   const rowWidth = Math.max(20, width - 1);
 
   const terminalMode = createTerminalModeSwitch({ bbs, screen, start: 'fixed', onRelayout: () => { screen.render(); } });
-  const input = new DoorInputManager(session as any, screen, { enableGameMode: false, enableGrabKeys: false, enableMouse: true });
+  const input = new DoorInputManager(session as any, screen, {
+    enableGameMode: false, enableGrabKeys: false, enableMouse: true,
+    // Ctrl+C and a Ctrl+K palette pick leave through the door's own leave().
+    onClose: () => leaveNow(),
+  });
   input.enable();
 
   // Rows: masthead, [column heads], body, status (2 rows; 1 at 40), footer.

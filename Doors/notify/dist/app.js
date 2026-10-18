@@ -41,7 +41,11 @@ async function startNotify(session) {
     const plan = (0, layout_1.columnPlan)(width);
     const rowWidth = Math.max(20, width - 1);
     const terminalMode = (0, terminal_mode_1.createTerminalModeSwitch)({ bbs, screen, start: 'fixed', onRelayout: () => { screen.render(); } });
-    const input = new door_input_manager_1.DoorInputManager(session, screen, { enableGameMode: false, enableGrabKeys: false, enableMouse: true });
+    const input = new door_input_manager_1.DoorInputManager(session, screen, {
+        enableGameMode: false, enableGrabKeys: false, enableMouse: true,
+        // Ctrl+C and a Ctrl+K palette pick leave through the door's own leave().
+        onClose: () => leaveNow(),
+    });
     input.enable();
     // Rows: masthead, [column heads], body, status (2 rows; 1 at 40), footer.
     const headRows = plan.compact ? 0 : 1;

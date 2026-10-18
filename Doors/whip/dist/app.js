@@ -52,8 +52,11 @@ class WhipApp {
             enableGrabKeys: true,
             enableMouse: true,
             debug: false,
-            debugName: 'WHIP'
+            debugName: 'WHIP',
+            // Ctrl+C and a Ctrl+K palette pick leave through the door's own quit.
+            onClose: () => { void this.quit(); },
         });
+        this.ended = new Promise((resolve) => { this.screen.once('destroy', () => resolve()); });
         this.dataManager = (0, data_manager_1.getSharedDataManager)();
         this.achievementManager = new achievements_1.AchievementManager(this.dataManager);
         this.partyCalendar = new party_calendar_1.PartyCalendar(this.dataManager);

@@ -13,7 +13,8 @@ const door = new ServerDoor(metadata);
 
 door.onStart(async (ctx: DoorContext) => {
   const app = new WhipApp(ctx as any);
-  await app.run();
+  // A board close destroys the screen while run() may still await a menu.
+  await Promise.race([app.run(), app.ended]);
 });
 
 export default door;

@@ -297,7 +297,7 @@ class InstalledView extends ViewManager_1.BaseView {
         }
         this.vm.push(new FileExplorerOverlayView(this.layout, doorPath));
     }
-    /** Close the view. Q and a queued ENTER both end here. */
+    /** Close the view. Q, a queued ENTER and the board's close all end here. */
     shutdown() {
         clearTimeout(this.statusTimer);
         this.vm.destroy();
@@ -1396,7 +1396,11 @@ async function createApp(session) {
     // at a width nobody had. An 80x24 caller gets exactly what it got before,
     // glyph for glyph (tests/doors/compact-40/doorman-layout.test.ts).
     const screen = (0, blessed_helpers_1.createScreen)(bbs, { smartCSR: true, fullUnicode: true, title: 'DOORMAN v2' });
-    const inputManager = new blessed_helpers_1.DoorInputManager(session, screen, { enableGameMode: false, enableGrabKeys: false, enableMouse: true });
+    const inputManager = new blessed_helpers_1.DoorInputManager(session, screen, {
+        enableGameMode: false, enableGrabKeys: false, enableMouse: true,
+        // Ctrl+C and a Ctrl+K palette pick end DOORMAN through its own Q.
+        onClose: () => root.shutdown(),
+    });
     inputManager.enable();
     const nodeId = session.bbsSession?.nodeId ?? '?';
     const layout = new doorman_layout_1.DoormanLayout(screen, nodeId);
@@ -1418,7 +1422,8 @@ async function createApp(session) {
         inputManager.disable();
         bbs.write('\x1b[?25h');
     });
-    vm.push(new InstalledView(layout, bbs, doors));
+    const root = new InstalledView(layout, bbs, doors);
+    vm.push(root);
     await new Promise(resolve => { screen.on('destroy', resolve); });
 }
 //# sourceMappingURL=app.js.map

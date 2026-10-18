@@ -149,7 +149,9 @@ export async function createApp(session: DoorSession) {
     enableGrabKeys: false,  // Blessed widgets handle their own input
     enableMouse: true,      // Door has extensive mouse support
     debug: false,
-    debugName: 'NEO-BLESSED-SHOWCASE'
+    debugName: 'NEO-BLESSED-SHOWCASE',
+    // Ctrl+C and a Ctrl+K palette pick leave through the same cleanup as Q.
+    onClose: () => cleanup(),
   });
 
   // Enable input (handles game mode, inDoorManager flag, input handler, mouse)

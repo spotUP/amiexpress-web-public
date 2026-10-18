@@ -21,6 +21,8 @@ async function createApp(ctx, server) {
         enableGameMode: false, // game mode intercepts keys before neo-blessed screen.key() — must be off
         enableGrabKeys: true,
         enableMouse: true,
+        // Ctrl+C and a Ctrl+K palette pick leave the game the way Q does.
+        onClose: () => { void runAction(quit); },
     });
     let state;
     let marketState;
@@ -221,16 +223,18 @@ async function createApp(ctx, server) {
             (0, actions_1.showHighScores)(screen, await server.getHighScores(), () => fullRender());
         });
     });
+    /** Leave the game: Q, and the board's close. */
+    async function quit() {
+        server.removeListener('state:' + id, onStateUpdate);
+        if (lastPresenceListener && lastLocation >= 0) {
+            server.removeListener('presence:' + lastLocation, lastPresenceListener);
+        }
+        await server.leaveGame(id);
+        inputManager.disable();
+        screen.destroy();
+    }
     screen.key(['q', 'Q'], () => {
-        runAction(async () => {
-            server.removeListener('state:' + id, onStateUpdate);
-            if (lastPresenceListener && lastLocation >= 0) {
-                server.removeListener('presence:' + lastLocation, lastPresenceListener);
-            }
-            await server.leaveGame(id);
-            inputManager.disable();
-            screen.destroy();
-        });
+        runAction(quit);
     });
     /* -- Boot ------------------------------------------------------- */
     inputManager.enable();

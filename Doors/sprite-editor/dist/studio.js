@@ -282,6 +282,9 @@ class SpriteStudioDoor {
             enableMouse: true,
             debug: false,
             debugName: 'SPRITED',
+            // Ctrl+C and a Ctrl+K palette pick leave as close() does past its
+            // unsaved-changes confirm: the board has already decided to end the door.
+            onClose: () => { this.destroy(); this.exitResolve?.(); },
         });
         this.screen.render();
     }

@@ -213,6 +213,9 @@ async function startReader(session, options = {}) {
         enableGameMode: false,
         enableGrabKeys: false,
         enableMouse: false,
+        // Ctrl+C and a Ctrl+K palette pick end the call at once through the
+        // same teardown Q reaches after its goodbye art.
+        onClose: () => finish(),
     });
     input.enable();
     const row = (top, extra = {}) => (0, blessed_helpers_1.createBox)({
