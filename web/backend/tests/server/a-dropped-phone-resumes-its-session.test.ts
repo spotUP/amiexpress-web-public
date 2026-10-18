@@ -11,7 +11,8 @@ import { EventEmitter } from 'events';
 
 jest.mock('../../src/index', () => ({}));
 jest.mock('../../src/database', () => ({
-  db: { getUserById: jest.fn(async (id: number) => (id === 7 ? { id: 7, username: 'phone', baud: 0, secLevel: 20 } : null)) },
+  // Board user ids are UUID text; the lookup gets the token's string id as-is.
+  db: { getUserById: jest.fn(async (id: string) => (id === '7' ? { id: '7', username: 'phone', baud: 0, secLevel: 20 } : null)) },
 }));
 jest.mock('../../src/services/login-connect.service', () => ({
   runPreLoginConnect: jest.fn(async () => ({ passwordResetActive: false })),
