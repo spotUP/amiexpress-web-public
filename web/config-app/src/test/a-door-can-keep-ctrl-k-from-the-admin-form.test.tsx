@@ -76,9 +76,8 @@ describe('a door can keep Ctrl+K from the admin form', () => {
     const box = await screen.findByRole('checkbox', { name: /Keep Ctrl\+K for the door/ });
     expect(box).not.toBeChecked();
     await user.click(box);
-    await user.click(screen.getByRole('button', { name: /save changes/i }));
 
-    await waitFor(() => expect(updateInfoFile).toHaveBeenCalled());
+    await waitFor(() => expect(updateInfoFile).toHaveBeenCalled(), { timeout: 3000 });
     const [, tooltypes] = updateInfoFile.mock.calls[0] as [string, Array<{ key: string; value: string; commented: boolean }>];
     expect(tooltypes.find((t) => t.key === 'NO_PALETTE')).toMatchObject({ value: '1', commented: false });
     expect(tooltypes.some((t) => t.key === 'NAME' && t.value === 'BBSLink')).toBe(true);
@@ -102,8 +101,7 @@ describe('a door can keep Ctrl+K from the admin form', () => {
     const box = await screen.findByRole('checkbox', { name: /Keep Ctrl\+C for the door/ });
     expect(box).not.toBeChecked();
     await user.click(box);
-    await user.click(screen.getByRole('button', { name: /save changes/i }));
-    await waitFor(() => expect(updateInfoFile).toHaveBeenCalled());
+    await waitFor(() => expect(updateInfoFile).toHaveBeenCalled(), { timeout: 3000 });
     const [, on] = updateInfoFile.mock.calls[0] as [string, Array<{ key: string; value: string; commented: boolean }>];
     expect(on.find((t) => t.key === 'KEEP_CTRL_C')).toMatchObject({ value: '1', commented: false });
   });
@@ -117,8 +115,7 @@ describe('a door can keep Ctrl+K from the admin form', () => {
     const box = await screen.findByRole('checkbox', { name: /Keep Ctrl\+C for the door/ });
     expect(box).toBeChecked();
     await user.click(box);
-    await user.click(screen.getByRole('button', { name: /save changes/i }));
-    await waitFor(() => expect(updateInfoFile).toHaveBeenCalled());
+    await waitFor(() => expect(updateInfoFile).toHaveBeenCalled(), { timeout: 3000 });
     const [, off] = updateInfoFile.mock.calls[0] as [string, Array<{ key: string; value: string; commented: boolean }>];
     expect(off.some((t) => t.key === 'KEEP_CTRL_C' && !t.commented)).toBe(false);
   });

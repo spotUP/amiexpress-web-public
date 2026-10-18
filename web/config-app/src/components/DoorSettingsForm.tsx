@@ -11,10 +11,9 @@
  */
 
 import { useEffect, useState } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Save, Loader2 } from 'lucide-react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../api/client';
-import { useNotification } from '../contexts/NotificationContext';
+import { useAutosave } from '../hooks/useAutosave';
 
 export interface DoorSetting {
   key: string;
@@ -34,16 +33,6 @@ export interface DoorSetting {
 
 export interface DoorSettingsFormProps {
   command: string;
-  /**
-   * Handed a function that saves whatever the sysop has typed here, or null
-   * when there is nothing unsaved.
-   *
-   * The dialog this sits in has its own Update Door button, and a sysop who
-   * types an address and presses THAT loses it - two save buttons in one
-   * dialog is a trap, and the first sysop to use this feature fell in it.
-   * The page saves the settings alongside the door instead.
-   */
-  onPendingChange?: (save: (() => Promise<unknown>) | null) => void;
 }
 
 type Values = Record<string, string | number | boolean>;
@@ -65,9 +54,8 @@ function stepFor(setting: DoorSetting): number | 'any' {
   return declared.some(v => !Number.isInteger(v)) ? 'any' : 1;
 }
 
-export function DoorSettingsForm({ command, onPendingChange }: DoorSettingsFormProps) {
+export function DoorSettingsForm({ command }: DoorSettingsFormProps) {
   const queryClient = useQueryClient();
-  const { showSuccess, showError } = useNotification();
   const [values, setValues] = useState<Values>({});
   /**
    * Which keys the sysop actually touched.
@@ -95,28 +83,21 @@ export function DoorSettingsForm({ command, onPendingChange }: DoorSettingsFormP
     if (view && !dirty) setValues(view.values ?? {});
   }, [view, dirty]);
 
-  /** What to send: the keys that were edited, nothing else. */
-  const changedValues = (): Values =>
-    Object.fromEntries([...touched].map(key => [key, values[key]])) as Values;
-
-  const saveMutation = useMutation({
-    mutationFn: () => apiClient.saveDoorSettings(command, changedValues()),
-    onSuccess: () => {
-      setTouched(new Set());
+  /*
+   * No save button: "i want no save buttons at all in the admin ui everything
+   * should auto save" (sysop, 2026-09-14, repeated for the door dialog
+   * 2026-10-19). The debounce covers typing an address; the hook shows the
+   * board's refusal, which names the setting ("Port must be at most 65535").
+   * Closing the dialog unmounts this form, and the hook writes what is pending
+   * on the way out.
+   */
+  const autosave = useAutosave<Values>({
+    save: async (changed) => {
+      await apiClient.saveDoorSettings(command, changed);
       queryClient.invalidateQueries({ queryKey: ['door-settings', command] });
-      showSuccess(`${command} settings saved`);
     },
-    // The message names the setting - "Port must be at most 65535", "Not a
-    // setting this door declares: nosuchkey" - so it is worth showing whole.
-    onError: (error: Error) => showError(error.message),
+    label: () => `${command} settings saved`,
   });
-
-  // Tell the page whether there is anything to save, and how.
-  useEffect(() => {
-    if (!onPendingChange) return;
-    onPendingChange(dirty ? () => saveMutation.mutateAsync() : null);
-    return () => onPendingChange(null);
-  }, [dirty, onPendingChange, saveMutation]);
 
   if (settingsQuery.isLoading) {
     return <div className="p-4 text-content-secondary text-sm">Reading what this door declares...</div>;
@@ -133,8 +114,14 @@ export function DoorSettingsForm({ command, onPendingChange }: DoorSettingsFormP
   }
 
   const set = (key: string, value: string | number | boolean) => {
-    setTouched(prev => new Set(prev).add(key));
-    setValues(prev => ({ ...prev, [key]: value }));
+    const nextTouched = new Set(touched).add(key);
+    const nextValues = { ...values, [key]: value };
+    setTouched(nextTouched);
+    setValues(nextValues);
+    autosave.schedule(
+      Object.fromEntries([...nextTouched].map(k => [k, nextValues[k]])) as Values,
+      'settings',
+    );
   };
 
   const artSections = (view.manifest as { artSections?: Array<{ label: string }> }).artSections ?? [];
@@ -242,18 +229,6 @@ export function DoorSettingsForm({ command, onPendingChange }: DoorSettingsFormP
           </div>
         );
       })}
-
-      <button
-        type="button"
-        onClick={() => saveMutation.mutate()}
-        disabled={!dirty || saveMutation.isPending}
-        className="btn-secondary inline-flex items-center gap-2 disabled:opacity-50"
-      >
-        {saveMutation.isPending
-          ? <Loader2 className="h-4 w-4 animate-spin" />
-          : <Save className="h-4 w-4" />}
-        Save settings
-      </button>
     </div>
   );
 }

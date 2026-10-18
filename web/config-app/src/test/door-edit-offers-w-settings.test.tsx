@@ -40,8 +40,7 @@ describe('a door listed under W', () => {
     await renderPage();
     await user.click(await screen.findByLabelText('Edit GWall'));
     await user.type(await screen.findByLabelText('Section'), 'Communication');
-    await user.click(screen.getByRole('button', { name: 'Update Door' }));
-    await waitFor(() => expect(updateInfoFile).toHaveBeenCalled());
+    await waitFor(() => expect(updateInfoFile).toHaveBeenCalled(), { timeout: 3000 });
     const [, written] = updateInfoFile.mock.calls[0] as unknown as [string, Array<{ key: string; value: string }>];
     expect(written.find((t) => t.key === 'SETTINGS_SECTION')?.value).toBe('Communication');
   });
@@ -56,8 +55,7 @@ describe('a door listed under W', () => {
     await waitFor(() => expect((field as HTMLInputElement).value).toBe('Appearance'));
     await user.clear(field);
     await user.type(field, 'Communication');
-    await user.click(screen.getByRole('button', { name: 'Update Door' }));
-    await waitFor(() => expect(updateInfoFile).toHaveBeenCalled());
+    await waitFor(() => expect(updateInfoFile).toHaveBeenCalled(), { timeout: 3000 });
     const [, written] = updateInfoFile.mock.calls[0] as unknown as [string, Array<{ key: string; value: string }>];
     expect(written.filter((t) => t.key === 'SETTINGS_SECTION')).toEqual([expect.objectContaining({ value: 'Communication' })]);
   });

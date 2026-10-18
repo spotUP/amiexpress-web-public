@@ -88,9 +88,8 @@ describe("a command's per-command flags", () => {
     await openInfoEditor(user);
 
     await user.click(await screen.findByRole('checkbox', { name: /Quick Mode/ }));
-    await user.click(screen.getByRole('button', { name: /save changes/i }));
 
-    await waitFor(() => expect(updateInfoFile).toHaveBeenCalled());
+    await waitFor(() => expect(updateInfoFile).toHaveBeenCalled(), { timeout: 3000 });
     const [path, tooltypes] = updateInfoFile.mock.calls[0] as [string, Array<{ key: string; value: string; commented: boolean }>];
 
     expect(path).toBe('Commands/BBSCmd/BBSLINK.info');
@@ -106,9 +105,8 @@ describe("a command's per-command flags", () => {
     await openInfoEditor(user);
 
     await user.click(await screen.findByRole('checkbox', { name: /Silent/ }));
-    await user.click(screen.getByRole('button', { name: /save changes/i }));
 
-    await waitFor(() => expect(updateInfoFile).toHaveBeenCalled());
+    await waitFor(() => expect(updateInfoFile).toHaveBeenCalled(), { timeout: 3000 });
     const [, tooltypes] = updateInfoFile.mock.calls[0] as [string, Array<{ key: string }>];
 
     expect(tooltypes.some((t) => t.key === 'SILENT')).toBe(false);
@@ -121,9 +119,8 @@ describe("a command's per-command flags", () => {
     await openInfoEditor(user);
 
     await user.type(await screen.findByLabelText('Mimic Version'), '5.0.0');
-    await user.click(screen.getByRole('button', { name: /save changes/i }));
 
-    await waitFor(() => expect(updateInfoFile).toHaveBeenCalled());
+    await waitFor(() => expect(updateInfoFile).toHaveBeenCalled(), { timeout: 3000 });
     const [, tooltypes] = updateInfoFile.mock.calls[0] as [string, Array<{ key: string; value: string }>];
 
     expect(tooltypes.find((t) => t.key === 'MIMICVER')?.value).toBe('5.0.0');
@@ -134,11 +131,10 @@ describe("a command's per-command flags", () => {
     renderPage();
     await openInfoEditor(user);
 
-    // Touch an unrelated flag so Save Changes is enabled at all.
+    // Touch an unrelated flag: a write only follows an edit.
     await user.click(await screen.findByRole('checkbox', { name: /Trap On/ }));
-    await user.click(screen.getByRole('button', { name: /save changes/i }));
 
-    await waitFor(() => expect(updateInfoFile).toHaveBeenCalled());
+    await waitFor(() => expect(updateInfoFile).toHaveBeenCalled(), { timeout: 3000 });
     const [, tooltypes] = updateInfoFile.mock.calls[0] as [string, Array<{ key: string }>];
 
     expect(tooltypes.some((t) => t.key === 'PASS_PARAMETERS')).toBe(false);

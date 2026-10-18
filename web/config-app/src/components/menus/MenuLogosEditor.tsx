@@ -139,7 +139,7 @@ function FilesPanel({ kind, config, placeLogo, files, loading, error, reload }: 
 
   const columns: DataTableColumn<MenuLogoFile>[] = [
     { id: 'file', header: 'File', value: f => f.file, mono: true },
-    { id: 'size', header: 'Size', value: f => f.rows * f.cols, cell: f => `${f.rows} x ${f.cols}` },
+    { id: 'size', header: 'Size', value: f => f.rows * f.cols, cell: f => `${f.rows} x ${f.cols}`, cellClassName: 'whitespace-nowrap' },
     { id: 'alphabet', header: 'Alphabet', value: f => alphabetWord(f) },
     // A file the sysop kept without showing (or took out of every set) is never drawn; say which files no set names.
     { id: 'shown', header: 'Shown', value: f => logoShownIn(config, f.file).join('; ') || NOT_SHOWN },

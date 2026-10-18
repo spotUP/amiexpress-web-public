@@ -112,7 +112,7 @@ describe('the doors list', () => {
 
   // The first attempt put the section after the footer. The modal is capped at
   // 90vh and scrolls, so on a door with a full form the settings were below
-  // the Cancel/Update buttons and off-screen - reported as "nope, still not
+  // the Close button and off-screen - reported as "nope, still not
   // there". Order is the assertion: settings before the buttons.
   it('puts the settings above the modal buttons, not below them', async () => {
     const user = userEvent.setup();
@@ -121,7 +121,7 @@ describe('the doors list', () => {
     await user.click(await screen.findByLabelText('Edit BBSLink'));
 
     const heading = await screen.findByText('Door settings');
-    const update = screen.getByRole('button', { name: /update door/i });
+    const update = screen.getByRole('button', { name: 'Close' });
     expect(heading.compareDocumentPosition(update) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
@@ -141,10 +141,8 @@ describe('the doors list', () => {
     expect(container).toBeTruthy();
   });
 
-  // Two save buttons in one dialog is a trap, and the first sysop to use the
-  // feature fell in it: typed a board address, pressed Update Door, and the
-  // value never reached the disk.
-  it('saves the door settings when the sysop presses Update Door', async () => {
+  // The door settings save themselves, like everything else in the dialog.
+  it('saves the door settings once the sysop stops typing', async () => {
     const user = userEvent.setup();
     renderPage();
 
@@ -153,10 +151,8 @@ describe('the doors list', () => {
     await user.clear(channel);
     await user.type(channel, 'uprough');
 
-    await user.click(screen.getByRole('button', { name: /update door/i }));
-
     const { apiClient } = await import('../api/client');
-    await waitFor(() => expect(apiClient.saveDoorSettings).toHaveBeenCalled());
+    await waitFor(() => expect(apiClient.saveDoorSettings).toHaveBeenCalled(), { timeout: 3000 });
     const [command, values] = (apiClient.saveDoorSettings as any).mock.calls[0];
     expect(command).toBe('BBSLINK');
     expect(values.defaultChannel).toBe('uprough');
@@ -168,7 +164,7 @@ describe('the doors list', () => {
 
     await user.click(await screen.findByLabelText('Edit BBSLink'));
     await screen.findByText('Door settings');
-    await user.click(screen.getByRole('button', { name: /update door/i }));
+    await user.click(screen.getByRole('button', { name: 'Close' }));
 
     const { apiClient } = await import('../api/client');
     expect(apiClient.saveDoorSettings).not.toHaveBeenCalled();

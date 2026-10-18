@@ -3,11 +3,13 @@ import { Modal } from '../components/ui/Modal';
 import { DoorSettingsForm } from '../components/DoorSettingsForm';
 import { DoorArtSection } from '../components/DoorArtSection';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Edit2, Trash2, Plus, X, FileCode, Save, Power, PowerOff, Search, Upload, SlidersHorizontal } from 'lucide-react';
+import { Edit2, Trash2, Plus, X, FileCode, Power, PowerOff, Search, Upload, SlidersHorizontal } from 'lucide-react';
 import { apiClient } from '../api/client';
 import { declaresSettings } from '@bbs/settings-doors';
 import type { Door } from '../types';
 import { useNotification } from '../contexts/NotificationContext';
+import { useAutosave } from '../hooks/useAutosave';
+import { AutosaveStatus } from '../components/ui/AutosaveStatus';
 import { DataTable, type DataTableColumn } from '../components/ui/DataTable';
 
 /** A stable fallback: a fresh array each render invalidates the row model. */
@@ -173,7 +175,6 @@ export function DoorsPage() {
   const [isInfoEditorOpen, setIsInfoEditorOpen] = useState(false);
   const [editingInfoDoor, setEditingInfoDoor] = useState<Door | null>(null);
   const [tooltypes, setTooltypes] = useState<Tooltype[]>([]);
-  const [infoDirty, setInfoDirty] = useState(false);
 
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ['doors'],
@@ -201,17 +202,40 @@ export function DoorsPage() {
       // a new one.
       updates: Partial<DoorFormData> & { original_command?: string };
     }) => apiClient.updateDoor(id, updates),
+    // The dialog stays open: an edit autosaves, and the hook reports the
+    // outcome, so there is no toast or close here.
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['doors'] });
-      showSuccess('Door updated successfully');
-      setIsModalOpen(false);
-      setEditingDoor(null);
-      resetForm();
-    },
-    onError: (error: Error) => {
-      showError(`Failed to update door: ${error.message}`);
     },
   });
+
+  /*
+   * "i want no save buttons at all in the admin ui everything should auto
+   * save" (sysop, 2026-09-14), repeated for this dialog 2026-10-19. Key 'door'
+   * is the registration, 'flags' the door's flags in the Edit dialog, 'info'
+   * the raw .info editor; one timer each, so none swallows another.
+   */
+  const doorAutosave = useAutosave<{ id: number; updates: Partial<DoorFormData> & { original_command: string } }>({
+    save: async ({ id, updates }) => {
+      await updateMutation.mutateAsync({ id, updates });
+      // The command the dialog opened on is the one the server now knows.
+      setEditingDoor(prev => (prev && prev.id === id && updates.door_command ? { ...prev, door_command: updates.door_command } : prev));
+    },
+    label: () => 'Door saved',
+  });
+
+  const infoAutosave = useAutosave<{ command: string; tooltypes: Tooltype[] }>({
+    save: async ({ command, tooltypes: next }) => {
+      await apiClient.updateInfoFile(`Commands/BBSCmd/${command}.info`, next);
+      queryClient.invalidateQueries({ queryKey: ['doors'] });
+    },
+    label: (_value, key) => (key === 'flags' ? 'Door flags saved' : 'Door .info file saved'),
+  });
+
+  /** Write what is pending now: closing a dialog must not lose an edit. */
+  const flushAutosaves = async () => {
+    await Promise.all([doorAutosave.flush('door'), infoAutosave.flush('flags'), infoAutosave.flush('info')]);
+  };
 
   const deleteMutation = useMutation({
     mutationFn: (command: string) => apiClient.deleteDoor(command),
@@ -237,23 +261,17 @@ export function DoorsPage() {
 
   /** Escape, the backdrop and the header's close button all end it the same way. */
   const closeDoorModal = () => {
+    void flushAutosaves();
     setIsModalOpen(false);
     setEditingDoor(null);
     resetForm();
   };
 
-  /** The .info editor asks before throwing away unsaved tooltypes. */
+  /** Edits in the .info editor are already saved or pending; closing writes the pending one. */
   const closeInfoEditor = () => {
-    if (infoDirty) {
-      if (window.confirm('You have unsaved changes. Discard them?')) {
-        setIsInfoEditorOpen(false);
-        setEditingInfoDoor(null);
-        setInfoDirty(false);
-      }
-    } else {
-      setIsInfoEditorOpen(false);
-      setEditingInfoDoor(null);
-    }
+    void infoAutosave.flush('info');
+    setIsInfoEditorOpen(false);
+    setEditingInfoDoor(null);
   };
 
   const handleAdd = () => {
@@ -277,10 +295,8 @@ export function DoorsPage() {
       try {
         const response = await apiClient.getInfoFile(`Commands/BBSCmd/${door.door_command}.info`);
         setTooltypes(response.data?.tooltypes || []);
-        setInfoDirty(false);
       } catch {
         setTooltypes([]);
-        setInfoDirty(false);
       }
     })();
     setFormData({
@@ -294,16 +310,6 @@ export function DoorsPage() {
     setEditingDoor(door);
     setIsModalOpen(true);
   };
-
-  /**
-   * Whatever the door-settings section has unsaved, if anything.
-   *
-   * The dialog has two save buttons - Update Door for the registration, Save
-   * settings for the door's own settings - and the first sysop to use the
-   * feature typed an address, pressed Update Door, and lost it. Update Door
-   * saves both now; the settings button stays for saving those alone.
-   */
-  const pendingSettingsSave = useRef<(() => Promise<unknown>) | null>(null);
 
   /**
    * The door's SETTINGS, rendered wherever a sysop is looking at that door.
@@ -487,46 +493,14 @@ export function DoorsPage() {
     </>
   );
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  /** Only a door that does not exist yet is submitted; an existing one has already autosaved. */
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-
-    // Settings first: if they fail, the message names the setting, and the
-    // door's own fields have not been touched yet.
-    /*
-     * The flags save with the door, for the reason the settings already do:
-     * "the dialog has two save buttons ... the first sysop to use the feature
-     * typed an address, pressed Update Door, and lost it". A sysop who ticks
-     * a C64 box and presses Update Door must not lose the tick.
-     */
-    const saveFlags = editingDoor && infoDirty
-      ? apiClient.updateInfoFile(`Commands/BBSCmd/${editingDoor.door_command}.info`, tooltypes)
-      : null;
-
-    const saveSettings = pendingSettingsSave.current;
-    if (saveFlags) {
-      await saveFlags;
-      setInfoDirty(false);
-    }
-    if (saveSettings) {
-      try {
-        await saveSettings();
-      } catch {
-        return; // The form has already reported which setting the API refused.
-      }
-    }
-
     if (editingDoor) {
-      // The command the dialog opened on identifies the door on disk, so the
-      // Command box is free to hold a new name: without this the save looked
-      // the door up by what was just typed, and renaming a command reported
-      // the new name as a door that does not exist.
-      updateMutation.mutate({
-        id: editingDoor.id,
-        updates: { ...formData, original_command: editingDoor.door_command },
-      });
-    } else {
-      createMutation.mutate(formData);
+      void flushAutosaves();
+      return;
     }
+    createMutation.mutate(formData);
   };
 
   const handleDelete = async (door: Door) => {
@@ -584,52 +558,56 @@ export function DoorsPage() {
 
       setTooltypes(response.data?.tooltypes || []);
       setEditingInfoDoor(door);
-      setInfoDirty(false);
       setIsInfoEditorOpen(true);
     } catch (error) {
       showError(`Failed to load .info file: ${(error as Error).message}`);
     }
   };
 
-  const handleInfoSave = async () => {
-    if (!editingInfoDoor) return;
+  /**
+   * The one way a tooltype list changes: set it AND schedule the write, to the
+   * .info file of whichever dialog the sysop is in (flags in Edit Door, or the
+   * raw editor).
+   */
+  const editTooltypes = (next: Tooltype[]) => {
+    setTooltypes(next);
+    if (editingInfoDoor) {
+      infoAutosave.schedule({ command: editingInfoDoor.door_command, tooltypes: next }, 'info');
+    } else if (editingDoor) {
+      infoAutosave.schedule({ command: editingDoor.door_command, tooltypes: next }, 'flags');
+    }
+  };
 
-    try {
-      const infoPath = `Commands/BBSCmd/${editingInfoDoor.door_command}.info`;
-      await apiClient.updateInfoFile(infoPath, tooltypes);
-
-      showSuccess('Door .info file saved successfully');
-      setInfoDirty(false);
-      setIsInfoEditorOpen(false);
-      setEditingInfoDoor(null);
-      queryClient.invalidateQueries({ queryKey: ['doors'] });
-    } catch (error) {
-      showError(`Failed to save .info file: ${(error as Error).message}`);
+  /** The one way a registration field changes: set it AND, for an existing door, schedule the write. */
+  const editField = (next: DoorFormData) => {
+    setFormData(next);
+    // A half-typed name, command or path is not a door the board can store.
+    if (editingDoor && next.door_name.trim() && next.door_command.trim() && next.door_path.trim()) {
+      doorAutosave.schedule(
+        { id: editingDoor.id, updates: { ...next, original_command: editingDoor.door_command } },
+        'door',
+      );
     }
   };
 
   const handleTooltypeToggle = (index: number) => {
     const updated = [...tooltypes];
     updated[index] = { ...updated[index], commented: !updated[index].commented };
-    setTooltypes(updated);
-    setInfoDirty(true);
+    editTooltypes(updated);
   };
 
   const handleTooltypeUpdate = (index: number, field: 'key' | 'value', newValue: string) => {
     const updated = [...tooltypes];
     updated[index] = { ...updated[index], [field]: newValue };
-    setTooltypes(updated);
-    setInfoDirty(true);
+    editTooltypes(updated);
   };
 
   const handleTooltypeAdd = () => {
-    setTooltypes([...tooltypes, { key: '', value: '', commented: false, originalLine: '' }]);
-    setInfoDirty(true);
+    editTooltypes([...tooltypes, { key: '', value: '', commented: false, originalLine: '' }]);
   };
 
   const handleTooltypeRemove = (index: number) => {
-    setTooltypes(tooltypes.filter((_, i) => i !== index));
-    setInfoDirty(true);
+    editTooltypes(tooltypes.filter((_, i) => i !== index));
   };
 
   /**
@@ -654,15 +632,14 @@ export function DoorsPage() {
       if (idx !== -1) {
         const updated = [...tooltypes];
         updated[idx] = { ...updated[idx], commented: false };
-        setTooltypes(updated);
+        editTooltypes(updated);
       } else {
-        setTooltypes([...tooltypes, { key, value: '', commented: false, originalLine: `${key}=` }]);
+        editTooltypes([...tooltypes, { key, value: '', commented: false, originalLine: `${key}=` }]);
       }
     } else {
       if (idx === -1) return;
-      setTooltypes(tooltypes.filter((_, i) => i !== idx));
+      editTooltypes(tooltypes.filter((_, i) => i !== idx));
     }
-    setInfoDirty(true);
   };
 
   /** PASS_PARAMETERS and MIMICVER carry a real value, not just presence. */
@@ -685,18 +662,16 @@ export function DoorsPage() {
     const idx = findCommandFlagIndex(key);
     if (!value) {
       if (idx === -1) return;
-      setTooltypes(tooltypes.filter((_, i) => i !== idx));
-      setInfoDirty(true);
+      editTooltypes(tooltypes.filter((_, i) => i !== idx));
       return;
     }
     if (idx === -1) {
-      setTooltypes([...tooltypes, { key, value, commented: false, originalLine: `${key}=${value}` }]);
+      editTooltypes([...tooltypes, { key, value, commented: false, originalLine: `${key}=${value}` }]);
     } else {
       const updated = [...tooltypes];
       updated[idx] = { ...updated[idx], value, commented: false };
-      setTooltypes(updated);
+      editTooltypes(updated);
     }
-    setInfoDirty(true);
   };
 
   const doors: Door[] = data?.data ?? EMPTY_DOORS;
@@ -944,7 +919,7 @@ export function DoorsPage() {
           open={isModalOpen}
           title={editingDoor ? 'Edit Door' : 'Add Door'}
           onClose={closeDoorModal}
-          maxWidth="max-w-2xl"
+          maxWidth="max-w-5xl"
           showHeader={false}
         >
             <div className="sticky top-0 bg-surface-0 border-b border-border p-6 flex justify-between items-center">
@@ -967,7 +942,7 @@ export function DoorsPage() {
                     id="door_name"
                     type="text"
                     value={formData.door_name}
-                    onChange={(e) => setFormData({ ...formData, door_name: e.target.value })}
+                    onChange={(e) => editField({ ...formData, door_name: e.target.value })}
                     className="input-field w-full"
                     required
                   />
@@ -979,7 +954,7 @@ export function DoorsPage() {
                     id="door_command"
                     type="text"
                     value={formData.door_command}
-                    onChange={(e) => setFormData({ ...formData, door_command: e.target.value })}
+                    onChange={(e) => editField({ ...formData, door_command: e.target.value })}
                     className="input-field w-full"
                     required
                   />
@@ -990,7 +965,7 @@ export function DoorsPage() {
                   <select
                     id="door_type"
                     value={formData.door_type}
-                    onChange={(e) => setFormData({ ...formData, door_type: e.target.value })}
+                    onChange={(e) => editField({ ...formData, door_type: e.target.value })}
                     className="input-field w-full"
                     required
                   >
@@ -1019,7 +994,7 @@ export function DoorsPage() {
                     id="door_path"
                     type="text"
                     value={formData.door_path}
-                    onChange={(e) => setFormData({ ...formData, door_path: e.target.value })}
+                    onChange={(e) => editField({ ...formData, door_path: e.target.value })}
                     className="input-field w-full"
                     placeholder="BBS:Doors/MyDoor/MyDoor"
                     required
@@ -1040,7 +1015,7 @@ export function DoorsPage() {
                     min="0"
                     max="255"
                     value={formData.min_security_level}
-                    onChange={(e) => setFormData({ ...formData, min_security_level: parseInt(e.target.value, 10) || 0 })}
+                    onChange={(e) => editField({ ...formData, min_security_level: parseInt(e.target.value, 10) || 0 })}
                     className="input-field w-full"
                     required
                   />
@@ -1051,7 +1026,7 @@ export function DoorsPage() {
                     <input
                       type="checkbox"
                       checked={formData.enabled}
-                      onChange={(e) => setFormData({ ...formData, enabled: e.target.checked })}
+                      onChange={(e) => editField({ ...formData, enabled: e.target.checked })}
                       className="form-checkbox h-5 w-5 text-accent"
                     />
                     <span className="text-content-primary">Enabled</span>
@@ -1077,7 +1052,7 @@ export function DoorsPage() {
                 Everything above is the door's REGISTRATION - command, path,
                 access level, what AmiExpress reads from the .info file. What
                 the door itself can be told is a separate file it ships
-                (door.settings.json) with its own save button, so a door that
+                (door.settings.json) which saves itself, so a door that
                 declares none sees no change here at all.
               */}
               {editingDoor?.has_settings && (
@@ -1088,7 +1063,6 @@ export function DoorsPage() {
                   </p>
                   <DoorSettingsForm
                     command={editingDoor.door_command}
-                    onPendingChange={save => { pendingSettingsSave.current = save; }}
                   />
                 </div>
               )}
@@ -1117,11 +1091,12 @@ export function DoorsPage() {
                   </p>
                   <button
                     type="button"
-                    onClick={() => {
-                      setIsModalOpen(false);
-                      setEditingDoor(null);
-                      resetForm();
-                      void handleEditInfo(editingDoor);
+                    onClick={async () => {
+                      const door = editingDoor;
+                      // Write the flags before the raw editor reads the file back.
+                      await flushAutosaves();
+                      closeDoorModal();
+                      void handleEditInfo(door);
                     }}
                     className="btn-secondary mt-2 flex items-center space-x-1 text-sm"
                   >
@@ -1131,25 +1106,31 @@ export function DoorsPage() {
                 </div>
               )}
 
-              <div className="flex justify-end space-x-4 pt-6 border-t border-border">
+              <div className="flex items-center justify-end gap-4 pt-6 border-t border-border">
+                {editingDoor && (
+                  <AutosaveStatus
+                    saving={doorAutosave.saving || infoAutosave.saving}
+                    saved={doorAutosave.saved || infoAutosave.saved}
+                    error={doorAutosave.error ?? infoAutosave.error}
+                  />
+                )}
                 <button
                   type="button"
-                  onClick={() => {
-                    setIsModalOpen(false);
-                    setEditingDoor(null);
-                    resetForm();
-                  }}
+                  onClick={closeDoorModal}
                   className="btn-secondary"
                 >
-                  Cancel
+                  {editingDoor ? 'Close' : 'Cancel'}
                 </button>
-                <button
-                  type="submit"
-                  className="btn-primary"
-                  disabled={createMutation.isPending || updateMutation.isPending}
-                >
-                  {createMutation.isPending || updateMutation.isPending ? 'Saving...' : editingDoor ? 'Update Door' : 'Create Door'}
-                </button>
+                {/* Only the Add dialog submits: a door that does not exist yet has nothing to autosave into. */}
+                {!editingDoor && (
+                  <button
+                    type="submit"
+                    className="btn-primary"
+                    disabled={createMutation.isPending}
+                  >
+                    {createMutation.isPending ? 'Saving...' : 'Create Door'}
+                  </button>
+                )}
               </div>
             </form>
 
@@ -1172,7 +1153,7 @@ export function DoorsPage() {
           open={Boolean(isInfoEditorOpen && editingInfoDoor)}
           title="Edit .info File"
           onClose={closeInfoEditor}
-          maxWidth="max-w-4xl"
+          maxWidth="max-w-6xl"
           showHeader={false}
         >
             <div className="sticky top-0 bg-surface-0 border-b border-border p-6 flex justify-between items-center">
@@ -1236,7 +1217,7 @@ export function DoorsPage() {
                   <thead className="bg-border">
                     <tr>
                       <th className="text-left p-3 text-content-primary font-semibold w-12">Active</th>
-                      <th className="text-left p-3 text-content-primary font-semibold">Key</th>
+                      <th className="text-left p-3 text-content-primary font-semibold w-56">Key</th>
                       <th className="text-left p-3 text-content-primary font-semibold">Value</th>
                       <th className="text-left p-3 text-content-primary font-semibold w-20">Actions</th>
                     </tr>
@@ -1302,31 +1283,10 @@ export function DoorsPage() {
                 </table>
               </div>
 
-              <div className="flex justify-end space-x-4 pt-6 border-t border-border mt-6">
-                <button
-                  onClick={() => {
-                    if (infoDirty) {
-                      if (window.confirm('You have unsaved changes. Discard them?')) {
-                        setIsInfoEditorOpen(false);
-                        setEditingInfoDoor(null);
-                        setInfoDirty(false);
-                      }
-                    } else {
-                      setIsInfoEditorOpen(false);
-                      setEditingInfoDoor(null);
-                    }
-                  }}
-                  className="btn-secondary"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleInfoSave}
-                  className="btn-primary flex items-center space-x-2"
-                  disabled={!infoDirty}
-                >
-                  <Save size={16} />
-                  <span>{infoDirty ? 'Save Changes' : 'No Changes'}</span>
+              <div className="flex items-center justify-end gap-4 pt-6 border-t border-border mt-6">
+                <AutosaveStatus saving={infoAutosave.saving} saved={infoAutosave.saved} error={infoAutosave.error} />
+                <button onClick={closeInfoEditor} className="btn-secondary">
+                  Close
                 </button>
               </div>
             </div>

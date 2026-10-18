@@ -31,6 +31,12 @@ export interface Autosave<T> {
   /** Write now, cancelling the pending timer. For a control that means "now". */
   flush: (key?: string) => Promise<void>;
   saving: boolean;
+  /**
+   * The last write succeeded and nothing has been edited since. A dialog shows
+   * this where the sysop is looking: the toast alone sits in a corner and
+   * leaves on its own, so a save inside a dialog went unnoticed.
+   */
+  saved: boolean;
   /** The board's last refusal, or null. */
   error: string | null;
 }
@@ -39,6 +45,7 @@ export function useAutosave<T>({ save, label, delayMs = DEFAULT_DELAY_MS }: Auto
   const { showSuccess, showError } = useNotification();
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [saved, setSaved] = useState(false);
 
   /**
    * One timer and one pending value PER KEY, so two subjects cannot cancel
@@ -63,10 +70,12 @@ export function useAutosave<T>({ save, label, delayMs = DEFAULT_DELAY_MS }: Auto
     setError(null);
     try {
       await saveRef.current(value, key);
+      setSaved(true);
       showSuccess(labelRef.current ? labelRef.current(value, key) : 'Saved');
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       setError(message);
+      setSaved(false);
       showError(message);
     } finally {
       setSaving(false);
@@ -77,6 +86,7 @@ export function useAutosave<T>({ save, label, delayMs = DEFAULT_DELAY_MS }: Auto
     const slot = key ?? '';
     clearTimeout(timers.current.get(slot));
     pending.current.set(slot, value);
+    setSaved(false);
     timers.current.set(slot, setTimeout(() => {
       timers.current.delete(slot);
       void write(slot, value, key);
@@ -112,5 +122,5 @@ export function useAutosave<T>({ save, label, delayMs = DEFAULT_DELAY_MS }: Auto
     };
   }, []);
 
-  return { schedule, flush, saving, error };
+  return { schedule, flush, saving, saved, error };
 }

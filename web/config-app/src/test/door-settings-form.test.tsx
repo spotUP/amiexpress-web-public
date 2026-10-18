@@ -108,9 +108,8 @@ describe('the door settings form', () => {
     const server = await screen.findByLabelText('Server') as HTMLInputElement;
     await user.clear(server);
     await user.type(server, 'wall.uprough.net');
-    await user.click(screen.getByRole('button', { name: /save settings/i }));
 
-    await waitFor(() => expect(saveDoorSettings).toHaveBeenCalled());
+    await waitFor(() => expect(saveDoorSettings).toHaveBeenCalled(), { timeout: 3000 });
     const [command, values] = saveDoorSettings.mock.calls[0] as unknown as [string, Record<string, unknown>];
     expect(command).toBe('TESTDOOR');
     expect(values.server).toBe('wall.uprough.net');
@@ -154,9 +153,8 @@ describe('the door settings form', () => {
 
     const one = await screen.findByRole('radio', { name: 'One' });
     await user.click(one);
-    await user.click(screen.getByRole('button', { name: /save settings/i }));
 
-    await waitFor(() => expect(saveDoorSettings).toHaveBeenCalled());
+    await waitFor(() => expect(saveDoorSettings).toHaveBeenCalled(), { timeout: 3000 });
     const [, values] = saveDoorSettings.mock.calls[0] as unknown as [string, Record<string, unknown>];
     expect(values).toEqual({ style: '1' });
   });
@@ -188,9 +186,8 @@ describe('the door settings form', () => {
     const server = await screen.findByLabelText('Server') as HTMLInputElement;
     await user.clear(server);
     await user.type(server, 'wall.uprough.net');
-    await user.click(screen.getByRole('button', { name: /save settings/i }));
 
-    await waitFor(() => expect(saveDoorSettings).toHaveBeenCalled());
+    await waitFor(() => expect(saveDoorSettings).toHaveBeenCalled(), { timeout: 3000 });
     const [, values] = saveDoorSettings.mock.calls[0] as unknown as [string, Record<string, unknown>];
     expect(Object.keys(values)).toEqual(['server']);
     expect(values.port).toBeUndefined();

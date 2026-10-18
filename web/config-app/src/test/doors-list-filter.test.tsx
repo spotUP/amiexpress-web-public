@@ -156,6 +156,7 @@ describe('filtering the doors list', () => {
 
     await userEvent.click(screen.getByText('Global Requests'));
 
-    expect(await screen.findByText('Update Door')).toBeInTheDocument();
+    // The dialog title renders twice (visible and screen-reader copy).
+    expect((await screen.findAllByRole('heading', { name: 'Edit Door' })).length).toBeGreaterThan(0);
   });
 });
