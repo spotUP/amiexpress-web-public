@@ -5,6 +5,8 @@
 import { GalagaData } from './types';
 import { SfxCues } from '@amiexpress/bbs-door-sdk/engines/ui/arcade';
 export declare class GalagaGame {
+    /** Game time (DoorInputManager.now): stands still under the Ctrl+K palette. */
+    private readonly clock;
     private data;
     private renderCallback;
     private lastDiveTime;
@@ -17,7 +19,9 @@ export declare class GalagaGame {
      * a test with no audio anywhere near it.
      */
     readonly cues: SfxCues;
-    constructor(data: GalagaData, onRender: (content: string) => void);
+    constructor(data: GalagaData, onRender: (content: string) => void, 
+    /** Game time (DoorInputManager.now): stands still under the Ctrl+K palette. */
+    clock?: () => number);
     /**
      * Initialize a new stage
      */

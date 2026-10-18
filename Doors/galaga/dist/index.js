@@ -252,7 +252,7 @@ function startGame() {
         // one place that sees them all.
         if (sfx && game)
             sfx.flush(game.cues);
-    });
+    }, () => inputManager?.now() ?? Date.now());
     game.initStage();
     if (gameLoop)
         clearInterval(gameLoop);

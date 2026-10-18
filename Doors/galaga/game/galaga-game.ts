@@ -54,7 +54,12 @@ export class GalagaGame {
    */
   readonly cues = new SfxCues();
 
-  constructor(data: GalagaData, onRender: (content: string) => void) {
+  constructor(
+    data: GalagaData,
+    onRender: (content: string) => void,
+    /** Game time (DoorInputManager.now): stands still under the Ctrl+K palette. */
+    private readonly clock: () => number = Date.now
+  ) {
     this.data = data;
     this.renderCallback = onRender;
   }
@@ -218,7 +223,7 @@ export class GalagaGame {
    * Main game update
    */
   update(): void {
-    const now = Date.now();
+    const now = this.clock();
     this.data.lastUpdateTime = now;
     this.data.frameCount++;
 
@@ -402,7 +407,7 @@ export class GalagaGame {
     if (this.data.isChallengingStage) return;
 
     const config = getStageConfig(this.data.stage);
-    const now = Date.now();
+    const now = this.clock();
 
     if (now - this.lastDiveTime < config.diveFrequency) return;
 

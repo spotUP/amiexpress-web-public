@@ -9,7 +9,10 @@ const sprites_1 = require("./sprites");
 const constants_1 = require("./constants");
 const arcade_1 = require("@amiexpress/bbs-door-sdk/engines/ui/arcade");
 class GalagaGame {
-    constructor(data, onRender) {
+    constructor(data, onRender, 
+    /** Game time (DoorInputManager.now): stands still under the Ctrl+K palette. */
+    clock = Date.now) {
+        this.clock = clock;
         this.lastDiveTime = 0;
         this.heldKeys = new Set();
         /**
@@ -169,7 +172,7 @@ class GalagaGame {
      * Main game update
      */
     update() {
-        const now = Date.now();
+        const now = this.clock();
         this.data.lastUpdateTime = now;
         this.data.frameCount++;
         // Handle continuous movement
@@ -328,7 +331,7 @@ class GalagaGame {
         if (this.data.isChallengingStage)
             return;
         const config = (0, constants_1.getStageConfig)(this.data.stage);
-        const now = Date.now();
+        const now = this.clock();
         if (now - this.lastDiveTime < config.diveFrequency)
             return;
         // Find aliens in formation that can dive

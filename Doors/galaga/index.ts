@@ -286,7 +286,7 @@ function startGame(): void {
     // Every event that changes the board repaints it, so this is the
     // one place that sees them all.
     if (sfx && game) sfx.flush(game.cues);
-  });
+  }, () => inputManager?.now() ?? Date.now());
 
   game.initStage();
 
