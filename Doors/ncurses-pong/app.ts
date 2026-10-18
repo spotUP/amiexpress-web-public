@@ -17,6 +17,7 @@
  *   `switch (getch())`. See the report referenced in index.ts for why.
  */
 
+import type { DoorHold } from "@amiexpress/bbs-door-sdk/utils/blessed-helpers";
 import {
   // Initialization
   initscr,
@@ -129,6 +130,9 @@ export class PongDoor {
    */
   private held: Set<string> = new Set();
 
+  /** The board's pause (Ctrl+K palette over the door): tick() stands still while held. */
+  hold: DoorHold | null = null;
+
   /**
    * True once a real key-down edge has arrived, i.e. this caller's transport
    * sends key events at all. Telnet does not, and there the character path
@@ -213,6 +217,7 @@ export class PongDoor {
    */
   tick(): void {
     if (this.phase !== "playing") return;
+    if (this.hold?.isPaused()) return;   // the palette is over the door: time stands still
 
     const { b1, b2, ball: b } = this;
     const scrX = this.scrX;
@@ -361,6 +366,8 @@ export class PongDoor {
       clearInterval(this.loop);
       this.loop = null;
     }
+    this.hold?.withdraw();
+    this.hold = null;
     this.phase = "finished";
     this.held.clear();
     this.keyEdges = false;

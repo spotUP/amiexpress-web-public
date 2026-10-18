@@ -22,6 +22,7 @@
 
 import { ServerDoor, DoorContext, KeyPress } from '@amiexpress/bbs-door-sdk';
 import { PongDoor } from './app.js';
+import { honourDoorHold } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
 
 /** Door metadata */
 export const metadata = {
@@ -145,6 +146,7 @@ door.onStart(async (ctx: DoorContext) => {
   keys?.onKeyDown?.((key: string) => pong.holdKey(key));
   keys?.onKeyUp?.((key: string) => pong.releaseKey(key));
 
+  pong.hold = honourDoorHold(ctx);
   pong.start(ncursesContext(socket), () => {
     // ESC. `ctx.close()` (sdk/src/core/Door.ts:227) only drops this node's
     // running-session entry; the SDK input loop then resolves on the NEXT

@@ -41,7 +41,7 @@
  */
 
 import type { Screen } from '../engines/ui/blessed';
-import { setupInputHandler, removeInputHandler, honourDoorClose } from './blessed-helpers';
+import { setupInputHandler, removeInputHandler, honourDoorClose, honourDoorHold, type DoorHold } from './blessed-helpers';
 
 /**
  * The part of the BBS host object held-key tracking needs.
@@ -154,6 +154,10 @@ export class DoorInputManager {
   private readonly onClose?: () => void;
   /** Withdraws the board's close; set while it is armed. */
   private withdrawDoorClose: (() => void) | null = null;
+  /** The board's pause of this door (Ctrl+K palette); set while enabled. */
+  private doorHold: DoorHold | null = null;
+  /** Run when the board resumes the door, with how long it was paused. */
+  private unpauseHandlers: Array<(pausedMs: number) => void> = [];
   private enabled: boolean = false;
   private suspended: boolean = false;
   private autoSuspended: boolean = false;  // Track auto-suspend separately from manual suspend
@@ -248,6 +252,15 @@ export class DoorInputManager {
     // 5a. Let the board end the door through the door's own quit
     if (this.onClose && !this.withdrawDoorClose) {
       this.withdrawDoorClose = honourDoorClose(this.session, this.screen, this.onClose);
+    }
+
+    // 5a2. Hear the board's pause (Ctrl+K palette over the door). A key held
+    // when the palette opened gets no key-up while it is open: forget it.
+    if (!this.doorHold) {
+      this.doorHold = honourDoorHold(this.session, {
+        onPause: () => this.clearHeldKeys(),
+        onResume: (pausedMs) => { for (const cb of this.unpauseHandlers) cb(pausedMs); },
+      });
     }
 
     // 5b. Track held keys from real key-down/key-up edges
@@ -428,6 +441,8 @@ export class DoorInputManager {
     // 5a. The board's close no longer reaches a door that is leaving
     this.withdrawDoorClose?.();
     this.withdrawDoorClose = null;
+    this.doorHold?.withdraw();
+    this.doorHold = null;
 
     // 5. Remove input handler
     if (this.session.bbsSession && this.session.bbsSession.doorInputHandler) {
@@ -471,6 +486,23 @@ export class DoorInputManager {
     this.keyStateActive = false;
     this.clearHeldKeys();
     this.log('Door input disabled');
+  }
+
+  /**
+   * True while the board holds this door (the Ctrl+K palette is over it).
+   * A real-time door's tick returns early while this is true, so its game
+   * stands still and continues from the same state when the palette closes.
+   */
+  isPaused(): boolean {
+    return this.doorHold?.isPaused() ?? false;
+  }
+
+  /**
+   * Run cb when the board resumes the door, with how long it stood still -
+   * for a door that keeps a wall-clock deadline (shift it by pausedMs).
+   */
+  onUnpause(cb: (pausedMs: number) => void): void {
+    this.unpauseHandlers.push(cb);
   }
 
   /**

@@ -458,6 +458,18 @@ console.log(`[DoorSocket][Video] User ${session.user?.username} stopped video st
     dispatchLocal('door:close');
   };
 
+  // Hold the door's own time while the Ctrl+K palette is over it (tsDoorHold
+  // below). Only output is held by the board; the door's timers are its own,
+  // so the SDK (utils/blessed-helpers.ts honourDoorHold, DoorInputManager)
+  // turns these into a pause its game loops consult. Door-local, like
+  // 'door:close'.
+  wrappedSocket._pauseDoor = () => {
+    dispatchLocal('door:pause');
+  };
+  wrappedSocket._resumeDoor = () => {
+    dispatchLocal('door:resume');
+  };
+
   return wrappedSocket;
 }
 
@@ -2369,13 +2381,23 @@ console.log(`[executeTypeScriptDoor] Registered hybrid RPC handler: ${method}`);
       };
     }
     // The palette over this door (Ctrl+K) holds it: its keys already go to the
-    // palette, and what it writes meanwhile is held and replayed after the
-    // palette's repaint. A hybrid door's screen is the client's, not held here.
+    // palette, what it writes meanwhile is held and replayed after the
+    // palette's repaint, and its game loops stand still ('door:pause').
+    // A hybrid door's screen is the client's, not held here.
     const tsDoorHold: BBSSession['doorHold'] = isHybridRPCOnly ? undefined : (() => {
       let release: ReturnType<typeof holdDoorOutput> | null = null;
       return {
-        pause: () => { if (!release) release = holdDoorOutput(socket); },
-        resume: (opts?: { dropHeldOutput?: boolean }) => { const r = release; release = null; r?.(opts); },
+        pause: () => {
+          if (release) return;
+          release = holdDoorOutput(socket);
+          wrappedSocket?._pauseDoor?.();     // and the door's own clock stops
+        },
+        resume: (opts?: { dropHeldOutput?: boolean }) => {
+          const r = release; release = null;
+          if (!r) return;
+          wrappedSocket?._resumeDoor?.();
+          r(opts);
+        },
       };
     })();
     if (tsDoorHold) session.doorHold = tsDoorHold;

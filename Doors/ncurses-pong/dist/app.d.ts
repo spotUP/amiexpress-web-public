@@ -16,6 +16,7 @@
  *   one iteration of the old loop body; `handleKey()` is the old
  *   `switch (getch())`. See the report referenced in index.ts for why.
  */
+import type { DoorHold } from "@amiexpress/bbs-door-sdk/utils/blessed-helpers";
 /**
  * One tick of the game loop.
  *
@@ -44,6 +45,8 @@ export declare class PongDoor {
      * the key state, step once per frame - and this is that state.
      */
     private held;
+    /** The board's pause (Ctrl+K palette over the door): tick() stands still while held. */
+    hold: DoorHold | null;
     /**
      * True once a real key-down edge has arrived, i.e. this caller's transport
      * sends key events at all. Telnet does not, and there the character path

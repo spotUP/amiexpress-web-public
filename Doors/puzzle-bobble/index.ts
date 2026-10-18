@@ -5,6 +5,7 @@
 
 import { CoreDoor as Door } from "@amiexpress/bbs-door-sdk";
 import blessed from "@amiexpress/bbs-door-sdk/engines/ui/blessed";
+import { honourDoorHold, type DoorHold } from "@amiexpress/bbs-door-sdk/utils/blessed-helpers";
 import { arcadeMenu, moveSelection, ArcadeSfx, createMenuGate} from "@amiexpress/bbs-door-sdk/engines/ui/arcade";
 import { PuzzleBobbleGame } from "./game/puzzle-bobble-game";
 import { createInitialGameData } from "./game/initial-data";
@@ -263,6 +264,8 @@ function startGame(): void {
 
   if (gameLoop) clearInterval(gameLoop);
   gameLoop = setInterval(() => {
+    // The Ctrl+K palette is over the door: its time stands still.
+    if (doorHold?.isPaused()) return;
     if (gameData.state === "playing") game?.update();
     // The state can change inside update() - a wave finished, a last life
     // lost - and those paths return before the game repaints. Draining here
@@ -542,6 +545,8 @@ async function handleNameEntryInput(key: InputKey): Promise<void> {
 }
 
 let keepAlive: ReturnType<typeof setInterval> | null = null;
+/** The board's pause (Ctrl+K palette over the door); the game loop stands still while held. */
+let doorHold: DoorHold | null = null;
 // doorContext already declared above
 
 /**
@@ -562,6 +567,8 @@ function cleanup(): void {
     clearInterval(gameLoop);
     gameLoop = null;
   }
+  doorHold?.withdraw();
+  doorHold = null;
   if (keepAlive) {
     clearInterval(keepAlive);
     keepAlive = null;
@@ -579,6 +586,8 @@ door.onStart(async (ctx: any) => {
 
   doorContext = ctx;
   gameData = createInitialGameData();
+  doorHold?.withdraw();
+  doorHold = honourDoorHold(ctx);
 
   // Prevent event loop from emptying
   keepAlive = setInterval(() => {}, 60000);

@@ -719,6 +719,8 @@ async function startGame(): Promise<void> {
   }
 
   gameLoop = setInterval(() => {
+    // The Ctrl+K palette is over the door: its time stands still.
+    if (inputManager?.isPaused()) return;
     if (gameData.state === "playing") {
       // Drive movement from the keys actually held down, the way Arkanoid
       // does: one step per frame while a direction is held, with no wait

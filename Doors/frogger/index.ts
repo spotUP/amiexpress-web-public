@@ -592,6 +592,8 @@ function startGame(): void {
   if (gameLoop) clearInterval(gameLoop);
 
   gameLoop = setInterval(() => {
+    // The Ctrl+K palette is over the door: its time stands still.
+    if (inputManager?.isPaused()) return;
     if (gameData.state === "playing") {
       pollHeldDirections();
       game?.update();
@@ -1054,6 +1056,8 @@ door.onStart(async (ctx: any) => {
     debugName: 'Frogger'
   });
   inputManager.enable();
+  // The lane-4 speed-up counts from frogStartTime: a palette pause is not frog time.
+  inputManager.onUnpause((pausedMs) => { if (gameData) gameData.frogStartTime += pausedMs; });
 
   // Set up gamepad support
   gamepadManager = new GamepadInputManager(ctx.session);

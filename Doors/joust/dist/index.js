@@ -238,6 +238,9 @@ function startGame() {
     if (gameLoop)
         clearInterval(gameLoop);
     gameLoop = setInterval(() => {
+        // The Ctrl+K palette is over the door: its time stands still.
+        if (inputManager?.isPaused())
+            return;
         if (gameData.state === "playing") {
             pollHeldDirections();
             game?.update();

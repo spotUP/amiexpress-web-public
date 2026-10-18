@@ -1216,6 +1216,66 @@ export function honourDoorClose(
   return withdraw;
 }
 
+/** What a door does when the board pauses / resumes it (see {@link honourDoorHold}). */
+export interface DoorHoldHandlers {
+  /** The board paused the door (Ctrl+K palette opened over it). */
+  onPause?: () => void;
+  /** The board resumed the door; pausedMs is how long it stood still. */
+  onResume?: (pausedMs: number) => void;
+}
+
+/** A door's view of the board's hold. */
+export interface DoorHold {
+  /** True while the board holds the door: its game loops should not advance. */
+  isPaused(): boolean;
+  /** Stop listening (the door is leaving). Leaves the door unpaused. */
+  withdraw(): void;
+}
+
+/**
+ * Hear the board's pause / resume of this door.
+ *
+ * The Ctrl+K palette over a TypeScript door holds the door's OUTPUT on the
+ * board, but the door's timers are its own: a real-time game played on behind
+ * the palette and the player died while choosing a command. The board now
+ * fires 'door:pause' / 'door:resume' at the door's socket (door.handler.ts
+ * tsDoorHold, door-local like 'door:close'); this turns them into a flag the
+ * door's loops consult - `if (hold.isPaused()) return;` at the top of a tick -
+ * so the game stands still and continues from the same state on Esc.
+ *
+ * DoorInputManager arms this itself (isPaused / onUnpause); a door without
+ * one calls it with its ctx (anything carrying the door's `socket`).
+ */
+export function honourDoorHold(session: any, handlers: DoorHoldHandlers = {}): DoorHold {
+  const socket = session?.socket;
+  let pausedAt: number | null = null;
+  const onPause = () => {
+    if (pausedAt !== null) return;
+    pausedAt = Date.now();
+    handlers.onPause?.();
+  };
+  const onResume = () => {
+    if (pausedAt === null) return;
+    const pausedMs = Math.max(0, Date.now() - pausedAt);
+    pausedAt = null;
+    handlers.onResume?.(pausedMs);
+  };
+  const armed = !!socket && typeof socket.on === 'function';
+  if (armed) {
+    socket.on('door:pause', onPause);
+    socket.on('door:resume', onResume);
+  }
+  return {
+    isPaused: () => pausedAt !== null,
+    withdraw: () => {
+      pausedAt = null;
+      if (!armed) return;
+      socket.off?.('door:pause', onPause);
+      socket.off?.('door:resume', onResume);
+    },
+  };
+}
+
 /**
  * Remove input handler from BBS session
  */
