@@ -156,8 +156,10 @@ class GameScreen {
             this.engine.start();
             this.running = true;
             this.sounds.playMusic('master_1', true);
-            // Game loop using setInterval
-            let lastUpdate = Date.now();
+            // Game loop using setInterval. Time comes from the engine's game clock,
+            // which stands still while the board holds the door (Ctrl+K palette):
+            // deltaTime is 0 then, so nothing advances and play resumes in place.
+            let lastUpdate = this.engine.now();
             const gameLoop = setInterval(() => {
                 if (!this.running) {
                     clearInterval(gameLoop);
@@ -174,7 +176,7 @@ class GameScreen {
                     }
                     return;
                 }
-                const now = Date.now();
+                const now = this.engine.now();
                 const deltaTime = now - lastUpdate;
                 lastUpdate = now;
                 // Update game (always at 60Hz logic)
@@ -377,7 +379,7 @@ class GameScreen {
      */
     triggerLockFlash() {
         const gameState = this.engine.getState();
-        const lockTime = Date.now();
+        const lockTime = this.engine.now(); // the clock cell.lockTime was stamped with
         const cells = [];
         for (let y = 0; y < gameState.board.height; y++) {
             for (let x = 0; x < gameState.board.width; x++) {
@@ -888,7 +890,7 @@ class GameScreen {
     getPPS(state) {
         if (!state.startTime || state.piecesPlaced === 0)
             return '0.00';
-        const elapsed = (Date.now() - state.startTime) / 1000;
+        const elapsed = (this.engine.now() - state.startTime) / 1000;
         if (elapsed < 0.1)
             return '0.00';
         return (state.piecesPlaced / elapsed).toFixed(2);
@@ -1442,7 +1444,7 @@ class GameScreen {
                     }
                     else if (isMasterRoll && cell.lockTime) {
                         // Apply TGM3 authentic credit roll fade
-                        const age = Date.now() - cell.lockTime;
+                        const age = this.engine.now() - cell.lockTime;
                         const fadeStage = creditRoll.getFadeStage(cell.lockTime);
                         if (fadeStage === 'full') {
                             char = this.getBlockChar(cell.color, rotationSystem);
@@ -1642,7 +1644,7 @@ class GameScreen {
      */
     showPauseMenu() {
         const state = this.engine.getState();
-        const elapsed = state.startTime ? Math.floor((Date.now() - state.startTime) / 1000) : 0;
+        const elapsed = state.startTime ? Math.floor((this.engine.now() - state.startTime) / 1000) : 0;
         const mins = Math.floor(elapsed / 60);
         const secs = (elapsed % 60).toString().padStart(2, '0');
         const pps = this.getPPS(state);

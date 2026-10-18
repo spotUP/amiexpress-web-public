@@ -30,8 +30,12 @@ export type FadeStage = 'full' | 'bright' | 'medium' | 'faint' | 'invisible';
  * Handles the invisible challenge at game end
  */
 export declare class CreditRollManager {
+    /** Game time (DoorInputManager.now): stands still under the Ctrl+K palette. */
+    private readonly clock;
     private state;
-    constructor();
+    constructor(
+    /** Game time (DoorInputManager.now): stands still under the Ctrl+K palette. */
+    clock?: () => number);
     /**
      * Start credit roll
      * @param level Starting level (999 for Master, 1300 for Shirase)

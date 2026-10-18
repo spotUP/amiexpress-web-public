@@ -188,6 +188,11 @@ export class GradeManager {
   private regretCount: number = 0;
   private decayTimer: number = 0; // gtime in HeborisCE
 
+  constructor(
+    /** Game time (DoorInputManager.now): stands still under the Ctrl+K palette. */
+    private readonly clock: () => number = Date.now
+  ) {}
+
   /**
    * Get combo multiplier based on combo count and line type
    */
@@ -312,7 +317,7 @@ export class GradeManager {
    * From HeborisCE: gmflag1 at 300, gmflag2 at 500, gmflag3 at 700
    */
   private checkGMFlags(level: number): void {
-    const elapsed = (Date.now() - this.gameStartTime) / 1000;  // seconds
+    const elapsed = (this.clock() - this.gameStartTime) / 1000;  // seconds
 
     // Level 300 gate: must reach in under 4:15 (255 seconds)
     if (level >= 300 && this.level300Time === null) {
@@ -436,7 +441,7 @@ export class GradeManager {
     this.internalGrade = 0;
     this.currentGrade = '9';
     this.gradeIndex = 0;
-    this.gameStartTime = Date.now();
+    this.gameStartTime = this.clock();
     this.gmFlags = { flag1: false, flag2: false, flag3: false };
     this.level300Time = null;
     this.level500Time = null;

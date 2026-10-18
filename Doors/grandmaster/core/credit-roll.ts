@@ -35,7 +35,10 @@ export type FadeStage = 'full' | 'bright' | 'medium' | 'faint' | 'invisible';
 export class CreditRollManager {
   private state: CreditRollState;
 
-  constructor() {
+  constructor(
+    /** Game time (DoorInputManager.now): stands still under the Ctrl+K palette. */
+    private readonly clock: () => number = Date.now
+  ) {
     this.state = {
       active: false,
       startTime: null,
@@ -53,7 +56,7 @@ export class CreditRollManager {
    */
   start(level: number): void {
     this.state.active = true;
-    this.state.startTime = Date.now();
+    this.state.startTime = this.clock();
     // TGM3 roll duration: ~60s for Master, ~90s for Shirase
     this.state.duration = level >= 1300 ? 90000 : 60000;
     this.state.timeRemaining = this.state.duration;
@@ -134,7 +137,7 @@ export class CreditRollManager {
       return 'full';
     }
 
-    const elapsedMs = Date.now() - lockTime;
+    const elapsedMs = this.clock() - lockTime;
     const elapsedFrames = (elapsedMs / 1000) * 60;
 
     // 1:1 HeborisCE/TGM3 Fade Stages:

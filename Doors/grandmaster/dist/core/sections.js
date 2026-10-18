@@ -21,10 +21,13 @@ const BORDER_TIME_FRAMES = {
  * Section manager
  */
 class SectionManager {
-    constructor() {
+    constructor(
+    /** Game time (DoorInputManager.now): stands still under the Ctrl+K palette. */
+    clock = Date.now) {
+        this.clock = clock;
         this.sections = [];
         this.borderRank = 0; // border_rank in HeborisCE
-        this.startTime = Date.now();
+        this.startTime = this.clock();
         this.currentSection = this.createSection(0);
     }
     /**
@@ -33,7 +36,7 @@ class SectionManager {
     createSection(sectionNumber) {
         return {
             section: sectionNumber,
-            startTime: Date.now(),
+            startTime: this.clock(),
             endTime: null,
             duration: null,
             result: null,
@@ -48,7 +51,7 @@ class SectionManager {
         const levelInSection = currentLevel % 100;
         // HeborisCE: Quality COOL check between level 80 and 98
         if (levelInSection >= 80 && levelInSection <= 98 && this.currentSection.result === null) {
-            const elapsedFrames = ((Date.now() - this.currentSection.startTime) / 1000) * 60;
+            const elapsedFrames = ((this.clock() - this.currentSection.startTime) / 1000) * 60;
             const avgFramesPerLevel = elapsedFrames / levelInSection;
             const targetFrames = BORDER_TIME_FRAMES[this.borderRank] || 13;
             if (avgFramesPerLevel < targetFrames) {
@@ -73,7 +76,7 @@ class SectionManager {
      * Complete current section and check for REGRET
      */
     completeSection(currentLevel) {
-        const endTime = Date.now();
+        const endTime = this.clock();
         const duration = (endTime - this.currentSection.startTime) / 1000;
         const frames = duration * 60;
         const avgFramesPerLevel = frames / 100;
@@ -102,7 +105,7 @@ class SectionManager {
      * Get current section time (seconds)
      */
     getCurrentSectionTime() {
-        return (Date.now() - this.currentSection.startTime) / 1000;
+        return (this.clock() - this.currentSection.startTime) / 1000;
     }
     /**
      * Get section history
@@ -150,7 +153,7 @@ class SectionManager {
      */
     reset() {
         this.sections = [];
-        this.startTime = Date.now();
+        this.startTime = this.clock();
         this.currentSection = this.createSection(0);
     }
 }

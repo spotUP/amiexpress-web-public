@@ -119,7 +119,9 @@ export class InputHandler {
   constructor(
     private screen: Screen,
     private session: DoorSession,
-    config: KeyConfig = DEFAULT_KEYS
+    config: KeyConfig = DEFAULT_KEYS,
+    /** Game time (DoorInputManager.now): stands still under the Ctrl+K palette. */
+    private readonly clock: () => number = Date.now
   ) {
     this.config = config;
     this.state = {
@@ -243,7 +245,7 @@ export class InputHandler {
   /** Shared press-edge logic for both input paths. */
   private handleKeyEdge(keyName: string): void {
     for (const handler of this.keyEdgeHandlers) handler(keyName);
-    const now = Date.now();
+    const now = this.clock();
     if (this.config.left.includes(keyName)) {
       this.rightPressed = false;
       this.leftPressed = true;
@@ -300,19 +302,19 @@ export class InputHandler {
         if (!this.leftPressed) {
           this.handleKeyEdge(keyName);
         } else {
-          this.lastLeftPress = Date.now(); // keep-alive for release timeout
+          this.lastLeftPress = this.clock(); // keep-alive for release timeout
         }
       } else if (this.config.right.includes(keyName)) {
         if (!this.rightPressed) {
           this.handleKeyEdge(keyName);
         } else {
-          this.lastRightPress = Date.now();
+          this.lastRightPress = this.clock();
         }
       } else if (this.config.softDrop.includes(keyName)) {
         if (!this.downPressed) {
           this.handleKeyEdge(keyName);
         } else {
-          this.lastDownPress = Date.now();
+          this.lastDownPress = this.clock();
         }
       } else {
         this.handleKeyEdge(keyName);
@@ -350,7 +352,7 @@ export class InputHandler {
    * Update input state (call every frame)
    */
   update(deltaTime: number): void {
-    const now = Date.now();
+    const now = this.clock();
     if (this.lastUpdate === 0) {
       this.lastUpdate = now;
       return;

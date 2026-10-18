@@ -413,7 +413,7 @@ class GrandmasterApp {
             onRelayout: () => this.relayout(),
         });
         // Create input handler with user's key bindings
-        this.inputHandler = new handler_1.InputHandler(this.screen, session, this.state.settings.keyBindings);
+        this.inputHandler = new handler_1.InputHandler(this.screen, session, this.state.settings.keyBindings, () => this.inputManager.now());
         // The player's movement timing. Applied here AND after loadSettings,
         // because the handler is built before their saved settings are read.
         this.inputHandler.setTiming(this.state.settings.das, this.state.settings.arr, (0, soft_drop_1.softDropIntervalMs)(this.state.settings.softDropSpeed, this.state.settings.rotationSystem));
@@ -908,7 +908,9 @@ class GrandmasterApp {
         // Disable mouse control during gameplay
         this.screen.program.disableMouse();
         // Create game engine
-        this.gameEngine = new game_1.GameEngine(mode, this.state.settings, this.sounds, undefined, startLevel);
+        // Single player: the game clock stands still under the Ctrl+K palette.
+        // Versus engines keep the wall clock: a networked match cannot stop for one player.
+        this.gameEngine = new game_1.GameEngine(mode, this.state.settings, this.sounds, undefined, startLevel, () => this.inputManager.now());
         // PRACTICE goal (training only) - set before start(), which the game
         // screen calls, so the run knows its finish line from the first piece.
         this.gameEngine.setPracticeGoal(practiceGoal);
@@ -1393,6 +1395,7 @@ class GrandmasterApp {
                     sheet,
                     sounds: this.sounds,
                     readInput,
+                    clock: () => this.inputManager.now(),
                 })
                 : new panels_screen_1.PanelsScreen({
                     screen: this.screen,
@@ -1400,6 +1403,7 @@ class GrandmasterApp {
                     sheet,
                     sounds: this.sounds,
                     readInput,
+                    clock: () => this.inputManager.now(),
                     recorder,
                 });
             const onEscape = () => panels.quit();
@@ -1462,6 +1466,7 @@ class GrandmasterApp {
                 sheet,
                 sounds: this.sounds,
                 readInput,
+                clock: () => this.inputManager.now(),
             });
             const onEscape = () => panels.quit();
             const onUndo = () => panels.requestUndo();
@@ -1535,6 +1540,7 @@ class GrandmasterApp {
             sheet,
             sounds: this.sounds,
             readInput,
+            clock: () => this.inputManager.now(),
             onStep: () => game.run(),
             isOver: () => game.result() !== 'playing',
         });
@@ -1565,6 +1571,7 @@ class GrandmasterApp {
             sheet,
             sounds: this.sounds,
             readInput,
+            clock: () => this.inputManager.now(),
         });
         const onEscape = () => panels.quit();
         this.screen.key(['escape', 'q', 'Q'], onEscape);
@@ -1614,6 +1621,7 @@ class GrandmasterApp {
             screen: this.screen,
             player: session.localStack(),
             opponent: session.remoteStack(),
+            // No game clock: a networked match cannot stand still for one player's palette.
             sheet,
             sounds: this.sounds,
             readInput,
@@ -1666,6 +1674,7 @@ class GrandmasterApp {
             sheet,
             sounds: this.sounds,
             readInput,
+            clock: () => this.inputManager.now(),
             playback: true,
         });
         const onEscape = () => panels.quit();

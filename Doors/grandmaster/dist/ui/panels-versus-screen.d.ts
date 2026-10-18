@@ -44,6 +44,8 @@ export interface PanelsVersusOptions {
     stepper?: (localInput: string) => boolean;
     /** Is the match over? Asked alongside the boards' own end conditions. */
     isOver?: () => boolean;
+    /** Game time (DoorInputManager.now): stands still under the Ctrl+K palette. Default Date.now. */
+    clock?: () => number;
 }
 export interface VersusResult {
     playerWon: boolean;
@@ -70,6 +72,7 @@ export declare class PanelsVersusScreen {
     private centreBox?;
     private opponentBox?;
     private loop?;
+    private readonly clock;
     private lastTick;
     private frameAccumulator;
     private lastRender;

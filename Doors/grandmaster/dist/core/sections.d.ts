@@ -23,11 +23,15 @@ export interface SectionData {
  * Section manager
  */
 export declare class SectionManager {
+    /** Game time (DoorInputManager.now): stands still under the Ctrl+K palette. */
+    private readonly clock;
     private sections;
     private currentSection;
     private startTime;
     private borderRank;
-    constructor();
+    constructor(
+    /** Game time (DoorInputManager.now): stands still under the Ctrl+K palette. */
+    clock?: () => number);
     /**
      * Create new section
      */

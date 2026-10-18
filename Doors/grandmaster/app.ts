@@ -439,7 +439,8 @@ export class GrandmasterApp {
     this.inputHandler = new InputHandler(
       this.screen,
       session,
-      this.state.settings.keyBindings as any
+      this.state.settings.keyBindings as any,
+      () => this.inputManager.now()
     );
     // The player's movement timing. Applied here AND after loadSettings,
     // because the handler is built before their saved settings are read.
@@ -1010,7 +1011,9 @@ export class GrandmasterApp {
     this.screen.program.disableMouse();
 
     // Create game engine
-    this.gameEngine = new GameEngine(mode, this.state.settings, this.sounds, undefined, startLevel);
+    // Single player: the game clock stands still under the Ctrl+K palette.
+    // Versus engines keep the wall clock: a networked match cannot stop for one player.
+    this.gameEngine = new GameEngine(mode, this.state.settings, this.sounds, undefined, startLevel, () => this.inputManager.now());
 
     // PRACTICE goal (training only) - set before start(), which the game
     // screen calls, so the run knows its finish line from the first piece.
@@ -1572,6 +1575,7 @@ export class GrandmasterApp {
         sheet,
         sounds: this.sounds,
         readInput,
+        clock: () => this.inputManager.now(),
       })
       : new PanelsScreen({
         screen: this.screen,
@@ -1579,6 +1583,7 @@ export class GrandmasterApp {
         sheet,
         sounds: this.sounds,
         readInput,
+        clock: () => this.inputManager.now(),
         recorder,
       });
 
@@ -1648,6 +1653,7 @@ export class GrandmasterApp {
         sheet,
         sounds: this.sounds,
         readInput,
+        clock: () => this.inputManager.now(),
       });
 
       const onEscape = () => panels.quit();
@@ -1741,6 +1747,7 @@ export class GrandmasterApp {
       sheet,
       sounds: this.sounds,
       readInput,
+      clock: () => this.inputManager.now(),
       onStep: () => game.run(),
       isOver: () => game.result() !== 'playing',
     });
@@ -1778,6 +1785,7 @@ export class GrandmasterApp {
       sheet,
       sounds: this.sounds,
       readInput,
+      clock: () => this.inputManager.now(),
     });
 
     const onEscape = () => panels.quit();
@@ -1843,6 +1851,7 @@ export class GrandmasterApp {
       screen: this.screen,
       player: session.localStack(),
       opponent: session.remoteStack(),
+      // No game clock: a networked match cannot stand still for one player's palette.
       sheet,
       sounds: this.sounds,
       readInput,
@@ -1902,6 +1911,7 @@ export class GrandmasterApp {
       sheet,
       sounds: this.sounds,
       readInput,
+      clock: () => this.inputManager.now(),
       playback: true,
     });
 

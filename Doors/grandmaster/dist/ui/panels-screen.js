@@ -62,6 +62,7 @@ class PanelsScreen {
         this.quitting = false;
         /** Set by the caller's undo key; acted on at the top of the next frame. */
         this.undoRequested = false;
+        this.clock = options.clock ?? Date.now;
         this.screen = options.screen;
         this.puzzle = options.puzzle;
         this.soloStack = options.stack;
@@ -291,7 +292,7 @@ class PanelsScreen {
     run() {
         this.setupUI();
         this.repaint();
-        this.lastTick = Date.now();
+        this.lastTick = this.clock();
         this.lastRender = 0;
         return new Promise((resolve) => {
             const finish = () => {
@@ -304,7 +305,7 @@ class PanelsScreen {
                 });
             };
             this.loop = setInterval(() => {
-                const now = Date.now();
+                const now = this.clock();
                 const delta = now - this.lastTick;
                 this.lastTick = now;
                 // Catch up, but only so far - see MAX_CATCHUP_FRAMES.

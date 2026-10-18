@@ -101,6 +101,8 @@ export interface PanelsScreenOptions {
   variant?: BoardVariant;
   /** Called when the player asks to leave. */
   onQuit?: () => void;
+  /** Game time (DoorInputManager.now): stands still under the Ctrl+K palette. Default Date.now. */
+  clock?: () => number;
 }
 
 export interface PanelsResult {
@@ -133,6 +135,7 @@ export class PanelsScreen {
   private boardBox?: ReturnType<typeof createBox>;
   private hudBox?: ReturnType<typeof createBox>;
   private loop?: ReturnType<typeof setInterval>;
+  private readonly clock: () => number;
   private lastTick = 0;
   private frameAccumulator = 0;
   private lastRender = 0;
@@ -153,6 +156,7 @@ export class PanelsScreen {
   }
 
   constructor(options: PanelsScreenOptions) {
+    this.clock = options.clock ?? Date.now;
     this.screen = options.screen;
     this.puzzle = options.puzzle;
     this.soloStack = options.stack;
@@ -399,7 +403,7 @@ export class PanelsScreen {
   run(): Promise<PanelsResult> {
     this.setupUI();
     this.repaint();
-    this.lastTick = Date.now();
+    this.lastTick = this.clock();
     this.lastRender = 0;
 
     return new Promise<PanelsResult>((resolve) => {
@@ -414,7 +418,7 @@ export class PanelsScreen {
       };
 
       this.loop = setInterval(() => {
-        const now = Date.now();
+        const now = this.clock();
         const delta = now - this.lastTick;
         this.lastTick = now;
 

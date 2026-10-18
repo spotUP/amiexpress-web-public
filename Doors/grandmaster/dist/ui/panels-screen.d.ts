@@ -82,6 +82,8 @@ export interface PanelsScreenOptions {
     variant?: BoardVariant;
     /** Called when the player asks to leave. */
     onQuit?: () => void;
+    /** Game time (DoorInputManager.now): stands still under the Ctrl+K palette. Default Date.now. */
+    clock?: () => number;
 }
 export interface PanelsResult {
     score: number;
@@ -111,6 +113,7 @@ export declare class PanelsScreen {
     private boardBox?;
     private hudBox?;
     private loop?;
+    private readonly clock;
     private lastTick;
     private frameAccumulator;
     private lastRender;

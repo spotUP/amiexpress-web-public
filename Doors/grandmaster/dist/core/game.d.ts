@@ -18,6 +18,8 @@ import { BlockGlowManager } from '../effects/block-glow';
 import { type ItemPresetName, type ItemEffectResult } from './items';
 export declare class GameEngine {
     private sounds;
+    /** Game time (DoorInputManager.now): stands still under the Ctrl+K palette. */
+    private readonly clock;
     private state;
     private pieceManager;
     private settings;
@@ -120,7 +122,9 @@ export declare class GameEngine {
     /** Frames since ROLL ROLL was collected (gamestart.c's gametime % 30). */
     private rollRollFrame;
     private readonly startLevel;
-    constructor(mode: GameMode, settings: PlayerSettings, sounds: SoundEngine, attackManager?: AttackManager, startLevel?: number);
+    constructor(mode: GameMode, settings: PlayerSettings, sounds: SoundEngine, attackManager?: AttackManager, startLevel?: number, 
+    /** Game time (DoorInputManager.now): stands still under the Ctrl+K palette. */
+    clock?: () => number);
     /**
      * Give a training run a finish line (gamestart.c's p_goaltype). Call
      * before start(); 'none' or a zero value leaves the run endless.
@@ -418,6 +422,8 @@ export declare class GameEngine {
     insertHardBlockNext(): void;
     /** Board accessor for cross-engine item effects (mirror/exchg/laser/etc). */
     getBoard(): GameState['board'];
+    /** Game time in ms (pause-aware; see the clock constructor parameter). */
+    now(): number;
     /**
      * Pause game
      */

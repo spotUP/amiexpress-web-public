@@ -25,9 +25,12 @@ class InputHandler {
     heldKeys() {
         return this.state.heldKeys;
     }
-    constructor(screen, session, config = config_1.DEFAULT_KEYS) {
+    constructor(screen, session, config = config_1.DEFAULT_KEYS, 
+    /** Game time (DoorInputManager.now): stands still under the Ctrl+K palette. */
+    clock = Date.now) {
         this.screen = screen;
         this.session = session;
+        this.clock = clock;
         this.lastUpdate = 0;
         this.enabled = true;
         // Directional state (for DAS/ARR)
@@ -216,7 +219,7 @@ class InputHandler {
     handleKeyEdge(keyName) {
         for (const handler of this.keyEdgeHandlers)
             handler(keyName);
-        const now = Date.now();
+        const now = this.clock();
         if (this.config.left.includes(keyName)) {
             this.rightPressed = false;
             this.leftPressed = true;
@@ -277,7 +280,7 @@ class InputHandler {
                     this.handleKeyEdge(keyName);
                 }
                 else {
-                    this.lastLeftPress = Date.now(); // keep-alive for release timeout
+                    this.lastLeftPress = this.clock(); // keep-alive for release timeout
                 }
             }
             else if (this.config.right.includes(keyName)) {
@@ -285,7 +288,7 @@ class InputHandler {
                     this.handleKeyEdge(keyName);
                 }
                 else {
-                    this.lastRightPress = Date.now();
+                    this.lastRightPress = this.clock();
                 }
             }
             else if (this.config.softDrop.includes(keyName)) {
@@ -293,7 +296,7 @@ class InputHandler {
                     this.handleKeyEdge(keyName);
                 }
                 else {
-                    this.lastDownPress = Date.now();
+                    this.lastDownPress = this.clock();
                 }
             }
             else {
@@ -328,7 +331,7 @@ class InputHandler {
      * Update input state (call every frame)
      */
     update(deltaTime) {
-        const now = Date.now();
+        const now = this.clock();
         if (this.lastUpdate === 0) {
             this.lastUpdate = now;
             return;

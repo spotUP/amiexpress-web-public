@@ -23,6 +23,8 @@ interface DoorSession {
 export declare class InputHandler {
     private screen;
     private session;
+    /** Game time (DoorInputManager.now): stands still under the Ctrl+K palette. */
+    private readonly clock;
     private state;
     private config;
     private lastUpdate;
@@ -93,7 +95,9 @@ export declare class InputHandler {
      * PlayerSettings.softDropSpeed did nothing at all.
      */
     private softDropRate;
-    constructor(screen: Screen, session: DoorSession, config?: KeyConfig);
+    constructor(screen: Screen, session: DoorSession, config?: KeyConfig, 
+    /** Game time (DoorInputManager.now): stands still under the Ctrl+K palette. */
+    clock?: () => number);
     /** Map browser KeyboardEvent.key names onto blessed-style config names. */
     private static browserKeyName;
     private setupKeyStateHandlers;

@@ -17,7 +17,10 @@ exports.InvisiblePieceManager = exports.CreditRollManager = void 0;
  * Handles the invisible challenge at game end
  */
 class CreditRollManager {
-    constructor() {
+    constructor(
+    /** Game time (DoorInputManager.now): stands still under the Ctrl+K palette. */
+    clock = Date.now) {
+        this.clock = clock;
         this.state = {
             active: false,
             startTime: null,
@@ -34,7 +37,7 @@ class CreditRollManager {
      */
     start(level) {
         this.state.active = true;
-        this.state.startTime = Date.now();
+        this.state.startTime = this.clock();
         // TGM3 roll duration: ~60s for Master, ~90s for Shirase
         this.state.duration = level >= 1300 ? 90000 : 60000;
         this.state.timeRemaining = this.state.duration;
@@ -103,7 +106,7 @@ class CreditRollManager {
         if (!this.state.active) {
             return 'full';
         }
-        const elapsedMs = Date.now() - lockTime;
+        const elapsedMs = this.clock() - lockTime;
         const elapsedFrames = (elapsedMs / 1000) * 60;
         // 1:1 HeborisCE/TGM3 Fade Stages:
         // Solid: 0-10 frames

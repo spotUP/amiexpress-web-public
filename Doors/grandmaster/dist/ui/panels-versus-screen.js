@@ -40,6 +40,7 @@ class PanelsVersusScreen {
         this.quitting = false;
         /** Set by the caller when its session reports a lost connection. */
         this.desynced = false;
+        this.clock = options.clock ?? Date.now;
         this.screen = options.screen;
         this.player = options.player;
         this.opponent = options.opponent;
@@ -146,7 +147,7 @@ class PanelsVersusScreen {
     run() {
         this.setupUI();
         this.repaint();
-        this.lastTick = Date.now();
+        this.lastTick = this.clock();
         this.lastRender = 0;
         return new Promise((resolve) => {
             const finish = () => {
@@ -162,7 +163,7 @@ class PanelsVersusScreen {
                 });
             };
             this.loop = setInterval(() => {
-                const now = Date.now();
+                const now = this.clock();
                 const delta = now - this.lastTick;
                 this.lastTick = now;
                 this.frameAccumulator = Math.min(this.frameAccumulator + delta, FRAME_TIME * MAX_CATCHUP_FRAMES);

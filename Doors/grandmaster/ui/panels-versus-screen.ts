@@ -57,6 +57,8 @@ export interface PanelsVersusOptions {
   stepper?: (localInput: string) => boolean;
   /** Is the match over? Asked alongside the boards' own end conditions. */
   isOver?: () => boolean;
+  /** Game time (DoorInputManager.now): stands still under the Ctrl+K palette. Default Date.now. */
+  clock?: () => number;
 }
 
 export interface VersusResult {
@@ -86,6 +88,7 @@ export class PanelsVersusScreen {
   private centreBox?: ReturnType<typeof createBox>;
   private opponentBox?: ReturnType<typeof createBox>;
   private loop?: ReturnType<typeof setInterval>;
+  private readonly clock: () => number;
   private lastTick = 0;
   private frameAccumulator = 0;
   private lastRender = 0;
@@ -94,6 +97,7 @@ export class PanelsVersusScreen {
   desynced = false;
 
   constructor(options: PanelsVersusOptions) {
+    this.clock = options.clock ?? Date.now;
     this.screen = options.screen;
     this.player = options.player;
     this.opponent = options.opponent;
@@ -220,7 +224,7 @@ export class PanelsVersusScreen {
   run(): Promise<VersusResult> {
     this.setupUI();
     this.repaint();
-    this.lastTick = Date.now();
+    this.lastTick = this.clock();
     this.lastRender = 0;
 
     return new Promise<VersusResult>((resolve) => {
@@ -238,7 +242,7 @@ export class PanelsVersusScreen {
       };
 
       this.loop = setInterval(() => {
-        const now = Date.now();
+        const now = this.clock();
         const delta = now - this.lastTick;
         this.lastTick = now;
 

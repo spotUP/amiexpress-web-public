@@ -31,6 +31,8 @@ export declare const GRADE_REQUIREMENTS: GradeRequirement[];
  * Grade manager
  */
 export declare class GradeManager {
+    /** Game time (DoorInputManager.now): stands still under the Ctrl+K palette. */
+    private readonly clock;
     private internalGrade;
     private currentGrade;
     private gradeIndex;
@@ -42,6 +44,9 @@ export declare class GradeManager {
     private coolCount;
     private regretCount;
     private decayTimer;
+    constructor(
+    /** Game time (DoorInputManager.now): stands still under the Ctrl+K palette. */
+    clock?: () => number);
     /**
      * Get combo multiplier based on combo count and line type
      */

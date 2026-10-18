@@ -199,7 +199,9 @@ export class GameEngine {
     settings: PlayerSettings,
     private sounds: SoundEngine,
     attackManager?: AttackManager,
-    startLevel: number = 0
+    startLevel: number = 0,
+    /** Game time (DoorInputManager.now): stands still under the Ctrl+K palette. */
+    private readonly clock: () => number = Date.now
   ) {
     this.startLevel = startLevel;
     this.settings = settings;
@@ -207,10 +209,10 @@ export class GameEngine {
     this.animations = new AnimationManager();
     this.glowManager = new BlockGlowManager();
     this.pieceManager = new PieceManager(settings.rotationSystem);
-    this.sectionManager = new SectionManager();
-    this.gradeManager = new GradeManager();
+    this.sectionManager = new SectionManager(clock);
+    this.gradeManager = new GradeManager(clock);
     this.medalManager = new MedalManager();  // HeborisCE medal system
-    this.creditRollManager = new CreditRollManager();
+    this.creditRollManager = new CreditRollManager(clock);
     this.invisiblePieceManager = new InvisiblePieceManager();
     this.finesseEvaluator = new FinesseEvaluator();
     this.attackManager = attackManager;
@@ -246,7 +248,7 @@ export class GameEngine {
     if (!this.practiceGoal || this.state.status !== 'playing') return false;
 
     const elapsedSeconds = this.state.startTime
-      ? (Date.now() - this.state.startTime) / 1000
+      ? (this.clock() - this.state.startTime) / 1000
       : 0;
     const reached = practiceGoalReached(this.practiceGoal, {
       level: this.state.level,
@@ -257,7 +259,7 @@ export class GameEngine {
     if (!reached) return false;
 
     this.state.status = 'complete';
-    this.state.endTime = Date.now();
+    this.state.endTime = this.clock();
     return true;
   }
 
@@ -554,7 +556,7 @@ export class GameEngine {
    */
   start(): void {
     this.state.status = 'playing';
-    this.state.startTime = Date.now();
+    this.state.startTime = this.clock();
     // A restarted engine starts both combo counters at zero, like the state
     // object it is about to play with.
     this.comboIgnoringSingles = 0;
@@ -733,7 +735,7 @@ export class GameEngine {
     const shape = this.pieceManager.getShape(pieceType, initialRotation, big);
     if (checkCollision(this.state.board, shape, spawnPos.x, spawnPos.y)) {
       this.state.status = 'gameover';
-      this.state.endTime = Date.now();
+      this.state.endTime = this.clock();
       return;
     }
 
@@ -839,7 +841,7 @@ export class GameEngine {
       if (this.state.ultraTimeRemaining <= 0) {
         this.state.ultraTimeRemaining = 0;
         this.state.status = 'complete';
-        this.state.endTime = Date.now();
+        this.state.endTime = this.clock();
         return;
       }
     }
@@ -1336,7 +1338,7 @@ export class GameEngine {
     }
 
     // Place piece on board with timestamp for credit roll fade
-    const lockTime = Date.now();
+    const lockTime = this.clock();
     this.placePieceWithTimestamp(shape, piece.x, piece.y, piece.type, lockTime);
 
     // TGM item: stamp every cell of the piece with its item id
@@ -1360,7 +1362,7 @@ export class GameEngine {
     const visibleTop = getVisibleTop(this.state.board);
     if (lockedCells.some(c => c.y < visibleTop)) {
       this.state.status = 'gameover';
-      this.state.endTime = Date.now();
+      this.state.endTime = this.clock();
       this.sounds.playSfx('game_over');
       return;
     }
@@ -1410,7 +1412,7 @@ export class GameEngine {
     // the level crosses 500 (or, in 'death', 1000) forces the run to end at
     // that checkpoint instead of continuing. See core/time-limit.ts.
     if (this.state.startTime !== null) {
-      const gametimeFrames = ((Date.now() - this.state.startTime) / 1000) * 60;
+      const gametimeFrames = ((this.clock() - this.state.startTime) / 1000) * 60;
       const torikan = checkTorikan({
         mode: this.state.mode,
         levelBefore: levelBeforeLock,
@@ -1423,7 +1425,7 @@ export class GameEngine {
         this.state.torikanExpired = true;
         this.state.torikanCheckpointLevel = torikan.checkpointLevel;
         this.state.status = 'complete';
-        this.state.endTime = Date.now();
+        this.state.endTime = this.clock();
         return;
       }
 
@@ -1435,7 +1437,7 @@ export class GameEngine {
         this.state.level = DEVIL_END_LEVEL;
         this.state.grade = devilFinalGrade(gametimeFrames, this.settings.rotationSystem);
         this.state.status = 'complete';
-        this.state.endTime = Date.now();
+        this.state.endTime = this.clock();
         return;
       }
     }
@@ -1468,7 +1470,7 @@ export class GameEngine {
         this.state.digLinesRemaining = Math.max(0, this.state.digLinesRemaining - lineCount);
         if (this.state.digLinesRemaining === 0) {
           this.state.status = 'complete';
-          this.state.endTime = Date.now();
+          this.state.endTime = this.clock();
         }
       }
 
@@ -1918,6 +1920,11 @@ export class GameEngine {
     return this.state.board;
   }
 
+  /** Game time in ms (pause-aware; see the clock constructor parameter). */
+  now(): number {
+    return this.clock();
+  }
+
   /**
    * Pause game
    */
@@ -1926,7 +1933,7 @@ export class GameEngine {
       this.state.status = 'paused';
       // Store pause time for credit roll timer preservation
       if (this.state.creditRollActive) {
-        this.pauseTime = Date.now();
+        this.pauseTime = this.clock();
       }
     }
   }
@@ -1939,7 +1946,7 @@ export class GameEngine {
       this.state.status = 'playing';
       // Adjust credit roll timer for pause duration (no penalty)
       if (this.state.creditRollActive && this.pauseTime) {
-        const pauseDuration = Date.now() - this.pauseTime;
+        const pauseDuration = this.clock() - this.pauseTime;
         this.state.creditRollTimeRemaining += pauseDuration;
         this.pauseTime = null;
       }

@@ -42,8 +42,11 @@ export class SectionManager {
   private startTime: number;
   private borderRank: number = 0; // border_rank in HeborisCE
 
-  constructor() {
-    this.startTime = Date.now();
+  constructor(
+    /** Game time (DoorInputManager.now): stands still under the Ctrl+K palette. */
+    private readonly clock: () => number = Date.now
+  ) {
+    this.startTime = this.clock();
     this.currentSection = this.createSection(0);
   }
 
@@ -53,7 +56,7 @@ export class SectionManager {
   private createSection(sectionNumber: number): SectionData {
     return {
       section: sectionNumber,
-      startTime: Date.now(),
+      startTime: this.clock(),
       endTime: null,
       duration: null,
       result: null,
@@ -70,7 +73,7 @@ export class SectionManager {
 
     // HeborisCE: Quality COOL check between level 80 and 98
     if (levelInSection >= 80 && levelInSection <= 98 && this.currentSection.result === null) {
-      const elapsedFrames = ((Date.now() - this.currentSection.startTime) / 1000) * 60;
+      const elapsedFrames = ((this.clock() - this.currentSection.startTime) / 1000) * 60;
       const avgFramesPerLevel = elapsedFrames / levelInSection;
       
       const targetFrames = BORDER_TIME_FRAMES[this.borderRank] || 13;
@@ -102,7 +105,7 @@ export class SectionManager {
    * Complete current section and check for REGRET
    */
   private completeSection(currentLevel: number): SectionResult {
-    const endTime = Date.now();
+    const endTime = this.clock();
     const duration = (endTime - this.currentSection.startTime) / 1000;
     const frames = duration * 60;
     const avgFramesPerLevel = frames / 100;
@@ -136,7 +139,7 @@ export class SectionManager {
    * Get current section time (seconds)
    */
   getCurrentSectionTime(): number {
-    return (Date.now() - this.currentSection.startTime) / 1000;
+    return (this.clock() - this.currentSection.startTime) / 1000;
   }
 
   /**
@@ -189,7 +192,7 @@ export class SectionManager {
    */
   reset(): void {
     this.sections = [];
-    this.startTime = Date.now();
+    this.startTime = this.clock();
     this.currentSection = this.createSection(0);
   }
 }
