@@ -246,3 +246,36 @@ describe('what the copied packages import, by name', () => {
   });
 });
 
+
+/**
+ * A stylesheet escapes the stage too, and vite does not fail when it does.
+ *
+ * The teletext editor's font is `url('../../frontend/public/fonts/...')` in
+ * the admin's index.css. In a stage without that file vite keeps the url as
+ * written, the built CSS asks for /frontend/public/fonts/TeletextUPR.woff2,
+ * the server answers 404, and the canvas draws every mosaic glyph in a
+ * fallback face: blocks with gaps, edges that wander. The build stays green,
+ * so only this test connects the url to the copy that has to satisfy it.
+ */
+it('copies every file a stylesheet reaches outside the app', () => {
+  const copies = stageCopies();
+  const escapes: string[] = [];
+
+  const walk = (dir: string) => {
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      const full = path.join(dir, entry.name);
+      if (entry.isDirectory()) { walk(full); continue; }
+      if (!entry.name.endsWith('.css')) continue;
+      for (const m of fs.readFileSync(full, 'utf8').matchAll(/url\(\s*['"]?(\.[^'")]+)['"]?\s*\)/g)) {
+        const target = path.relative(REPO, path.resolve(path.dirname(full), m[1])).split(path.sep).join('/');
+        if (!target.startsWith('web/config-app/')) escapes.push(target);
+      }
+    }
+  };
+  walk(CONFIG_APP);
+
+  expect(escapes).toContain('web/frontend/public/fonts/TeletextUPR.woff2');
+  const uncopied = escapes.filter(target =>
+    !copies.some(src => target === src || target.startsWith(`${src}/`)));
+  expect(uncopied).toEqual([]);
+});

@@ -91,6 +91,11 @@ COPY sdk/petscii ./sdk/petscii
 COPY web/backend/src/screens ./web/backend/src/screens
 COPY web/backend/src/services/config-services ./web/backend/src/services/config-services
 COPY web/backend/src/handlers/commands/w-settings-doors.ts ./web/backend/src/handlers/commands/w-settings-doors.ts
+# ...and the teletext font, which index.css reaches with a relative url so the
+# font has one home in the frontend. Missing here, vite keeps the url as
+# written, the server answers 404 and the teletext editor draws its mosaic in
+# a fallback face - with a green build.
+COPY web/frontend/public/fonts/TeletextUPR.woff2 ./web/frontend/public/fonts/TeletextUPR.woff2
 # ...and the terminal package, BUILT, from its own stage - source for the two
 # things the admin aliases into it (`@amiexpress/terminal/rip`, the RIP
 # renderer the caller's terminal draws with) and `dist` for the `file:` package
