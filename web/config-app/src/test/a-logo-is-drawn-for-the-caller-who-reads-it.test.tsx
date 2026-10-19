@@ -66,7 +66,7 @@ beforeEach(() => {
 describe('a logo is drawn for the caller who reads it', () => {
   it('offers a canvas per alphabet, and says which have been drawn', async () => {
     renderDialog();
-    await waitFor(() => expect(screen.getByRole('button', { name: /^Wide$/ })).toBeTruthy());
+    await waitFor(() => expect(screen.getByRole('button', { name: /^Amiga$/ })).toBeTruthy());
     // The tabs arrive with the listing: they are the drawings the door reads.
     await waitFor(() => expect(screen.getByRole('button', { name: /^C64$/ })).toBeTruthy());
     // The one nobody has drawn says so, rather than opening a blank canvas
@@ -86,10 +86,10 @@ describe('a logo is drawn for the caller who reads it', () => {
   it('offers to start a variant from the wide art, and only on a variant', async () => {
     renderDialog();
     await waitFor(() => screen.getByRole('button', { name: /^C64$/ }));
-    expect(screen.queryByRole('button', { name: /Start from the wide art/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: /Start from the Amiga art/ })).toBeNull();
     await userEvent.click(screen.getByRole('button', { name: /^C64$/ }));
     await waitFor(() =>
-      expect(screen.getByRole('button', { name: /Start from the wide art/ })).toBeTruthy(),
+      expect(screen.getByRole('button', { name: /Start from the Amiga art/ })).toBeTruthy(),
     );
   });
 });
@@ -112,7 +112,7 @@ describe('a tab is offered only for a drawing the door reads', () => {
       />,
       { wrapper },
     );
-    await waitFor(() => expect(screen.getByRole('button', { name: /^Wide$/ })).toBeTruthy());
+    await waitFor(() => expect(screen.getByRole('button', { name: /^Amiga$/ })).toBeTruthy());
     await waitFor(() => expect(screen.queryByRole('button', { name: /^C64/ })).toBeNull());
     expect(screen.queryByRole('button', { name: /^Teletext/ })).toBeNull();
   });

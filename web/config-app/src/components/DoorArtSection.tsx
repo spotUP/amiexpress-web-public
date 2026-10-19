@@ -1,4 +1,6 @@
-import { DoorArtList } from '../pages/DoorArtList';
+import { useState } from 'react';
+import { DoorArtList, type DoorArtTarget } from '../pages/DoorArtList';
+import { DoorArtEditor } from '../pages/DoorArtDialog';
 import { MenuLogosEditor } from './menus/MenuLogosEditor';
 import { useMenuConfig } from './menus/useMenuConfig';
 import { SkeletonRows } from './ui/states';
@@ -24,15 +26,20 @@ function MenuLogosOfDoor({ kind }: { kind: MenuKind }) {
  * and bulletins doors, that menu's logos.
  */
 export function DoorArtSection({ command, menuKind }: DoorArtSectionProps) {
+  /*
+    The slot list, THEN the editor for the picked slot, in the same tab
+    body. A dialog over the door dialog was a box in a box, both cramped
+    ("tab the door dialogs and make them bigger", sysop, 2026-10-19); the
+    editor's Cancel brings the list back.
+  */
+  const [open, setOpen] = useState<DoorArtTarget | null>(null);
+  if (open) return <DoorArtEditor {...open} embedded onClose={() => setOpen(null)} />;
   return (
-    <div className="border-t border-border pt-6 space-y-3">
-      <div>
-        <h3 className="text-lg text-accent mb-1">Door art</h3>
-        <p className="text-content-secondary text-sm">
-          The screens and logos this door draws. Edited here and in the Screen Designer.
-        </p>
-      </div>
-      <DoorArtList command={command} />
+    <div className="space-y-3">
+      <p className="text-content-secondary text-sm">
+        The screens and logos this door draws. Edited here and in the Screen Designer.
+      </p>
+      <DoorArtList command={command} onOpen={setOpen} />
       {menuKind && <MenuLogosOfDoor kind={menuKind} />}
     </div>
   );

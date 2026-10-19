@@ -11,10 +11,11 @@
 
 import { useEffect, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { Loader2, X } from 'lucide-react';
+import { ArrowLeft, Loader2, X } from 'lucide-react';
 import { apiClient } from '../api/client';
 import { useNotification } from '../contexts/NotificationContext';
 import { Modal } from '../components/ui/Modal';
+import { DialogTabs } from '../components/ui/Tabs';
 import { ScreenEditor } from '../components/ScreenEditor';
 import { TeletextScreenEditor } from '../components/TeletextScreenEditor';
 import { ArtUploadButton, ANSI_UPLOAD_ACCEPT } from '../components/ArtUploadButton';
@@ -28,7 +29,7 @@ import { screenToCanvas, screenToArt, canvasToScreen, base64ToLatin1, latin1ToBa
  */
 type Variant = 'wide' | 'c64' | 'ttx';
 
-const VARIANT_LABELS: Record<Variant, string> = { wide: 'Wide', c64: 'C64', ttx: 'Teletext' };
+const VARIANT_LABELS: Record<Variant, string> = { wide: 'Amiga', c64: 'C64', ttx: 'Teletext' };
 
 /** A narrow drawing is forty columns; the wide one keeps the door's DOC number. */
 const VARIANT_COLUMNS = 40;
@@ -78,9 +79,14 @@ export interface DoorArtDialogProps {
   onClose: () => void;
 }
 
-export function DoorArtDialog({
-  command, doorName, file, section, label, maxLines, maxLineLength, onClose,
-}: DoorArtDialogProps) {
+export interface DoorArtEditorProps extends DoorArtDialogProps {
+  /** Inside another dialog's Art tab: no tab strip and no dialog of its own. */
+  embedded?: boolean;
+}
+
+export function DoorArtEditor({
+  command, doorName, file, section, label, maxLines, maxLineLength, onClose, embedded = false,
+}: DoorArtEditorProps) {
   const queryClient = useQueryClient();
   const { showSuccess, showError } = useNotification();
   const [surface, setSurface] = useState<EditorSurface | null>(null);
@@ -224,7 +230,7 @@ export function DoorArtDialog({
       // it costs the door rows it expected to have for its own list.
       if (variant !== 'wide' && wideLines > 0 && lines.length > wideLines) {
         showSuccess(
-          `${label} saved - ${lines.length} rows against the wide art's ${wideLines}, ` +
+          `${label} saved - ${lines.length} rows against the Amiga art's ${wideLines}, ` +
           `so the door has ${lines.length - wideLines} fewer for its list`,
         );
       } else {
@@ -295,139 +301,183 @@ export function DoorArtDialog({
   };
 
   const editorOpen = !building && (variant === 'ttx' ? ttiContent !== null : surface !== null);
+  const columns = variant === 'wide' ? maxLineLength : VARIANT_COLUMNS;
 
-  return (
-    /*
-       A dialog announces itself as one. This was a `fixed inset-0` div with
-       no `role="dialog"`, no focus trap and an Escape handler of its own, so
-       a keyboard user could tab out of the canvas into the page behind it and
-       never get back (src/test/modal-semantics.test.tsx). The shared Modal
-       owns the shell, Escape and the backdrop; the header below stays, so the
-       accessible name comes from the Modal's own hidden title.
-    */
-    <Modal open title={`${doorName} - ${label}`} maxWidth="max-w-4xl" showHeader={false} onClose={onClose}>
-      <div className="p-4 space-y-3">
-        <div className="flex items-center justify-between">
-          <h3 className="text-lg font-semibold text-content-primary">
-            {doorName} — {label}
-            <span className="ml-2 font-mono text-xs text-content-secondary">{file} [{section}]</span>
-          </h3>
-          {/*
-            ONE WAY OUT. Every editor below carries its own Cancel; a header
-            Close beside it was two buttons for one job ("too many save and
-            write etc buttons in the editors", sysop, 2026-10-19). The header
-            keeps it only while no editor is mounted - loading, an error, no
-            art - so the dialog is never left without one.
-          */}
-          {!editorOpen && (
-            <button type="button" onClick={onClose} className="btn-small btn-secondary">
-              <X size={14} /> Close
-            </button>
-          )}
-        </div>
-        <div className="flex items-center gap-2" role="group" aria-label="Art variant">
-          {(['wide', ...offers] as Variant[]).map((v) => (
-            <button
-              key={v}
-              type="button"
-              onClick={() => setVariant(v)}
-              aria-pressed={variant === v}
-              className={
-                variant === v
-                  ? 'px-3 py-1 text-sm rounded bg-surface-2 text-content-primary'
-                  : 'px-3 py-1 text-sm rounded text-content-secondary hover:text-content-primary'
+  /*
+    THE ART TAB: which alphabet, then the editor - and nothing else. The
+    limits paragraph, the upload's caption and the file name used to sit
+    around the canvas all at once ("cramped and overloaded with stuff",
+    sysop, 2026-10-19); the facts about the slot are on the Settings tab.
+  */
+  const art = (
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Art alphabet">
+        {(['wide', ...offers] as Variant[]).map((v) => (
+          <button
+            key={v}
+            type="button"
+            onClick={() => setVariant(v)}
+            aria-pressed={variant === v}
+            className={
+              variant === v
+                ? 'px-3 py-1 text-sm rounded bg-surface-2 text-content-primary'
+                : 'px-3 py-1 text-sm rounded text-content-secondary hover:text-content-primary'
+            }
+          >
+            {VARIANT_LABELS[v]}{v !== 'wide' && !drawn[v] && !(v === 'ttx' && drawn.tti) ? ' (not drawn)' : ''}
+          </button>
+        ))}
+        {variant === 'c64' && wideContent && (
+          <button
+            type="button"
+            className="ml-auto px-3 py-1 text-sm text-content-secondary hover:text-content-primary"
+            onClick={async () => {
+              try {
+                setSurface(createSurface(await screenToCanvas(wideContent)));
+                setStatus('The Amiga art, to cut down. Nothing is saved until you save it.');
+              } catch {
+                setStatus('Could not copy the Amiga art onto the canvas.');
               }
-            >
-              {VARIANT_LABELS[v]}{v !== 'wide' && !drawn[v] && !(v === 'ttx' && drawn.tti) ? ' (not drawn)' : ''}
-            </button>
-          ))}
-          {variant === 'c64' && wideContent && (
-            <button
-              type="button"
-              className="ml-auto px-3 py-1 text-sm text-content-secondary hover:text-content-primary"
-              onClick={async () => {
-                try {
-                  setSurface(createSurface(await screenToCanvas(wideContent)));
-                  setStatus('The wide art, to cut down. Nothing is saved until you save it.');
-                } catch {
-                  setStatus('Could not copy the wide art onto the canvas.');
-                }
-              }}
-            >
-              Start from the wide art
-            </button>
-          )}
-        </div>
-        {status && <p className="text-sm text-content-primary">{status}</p>}
-        {building ? (
-          <p className="text-sm text-content-secondary flex items-center gap-2">
-            <Loader2 className="h-4 w-4 animate-spin" /> Building canvas...
-          </p>
-        ) : variant === 'ttx' ? (
-          ttiContent !== null && (
-            <>
-              {drawn.ttx && !drawn.tti && (
-                <p className="text-sm text-content-secondary" data-testid="door-art-ttx-ans-notice">
-                  This slot has an ANSI teletext drawing (.ttx.ans). The board shows that version
-                  to teletext callers until a native page is saved here.
-                </p>
-              )}
-              <TeletextScreenEditor
-                key={`${file}#${section}`}
-                content={ttiContent}
-                filePath={`${file}#${section}.tti`}
-                saving={saving}
-                onSave={saveTti}
-                onCancel={onClose}
-              />
-            </>
-          )
-        ) : surface ? (
+            }}
+          >
+            Start from the Amiga art
+          </button>
+        )}
+      </div>
+      {status && <p className="text-sm text-content-primary">{status}</p>}
+      {building ? (
+        <p className="text-sm text-content-secondary flex items-center gap-2">
+          <Loader2 className="h-4 w-4 animate-spin" /> Building canvas...
+        </p>
+      ) : variant === 'ttx' ? (
+        ttiContent !== null && (
           <>
-            <ScreenEditor
-              surface={surface}
-              mci={[]}
-              filePath={`${file}#${section}`}
-              onChange={setSurface}
-              onSave={async (screen: string) => { if (await save(screen) !== null) onClose(); }}
+            {drawn.ttx && !drawn.tti && (
+              <p className="text-sm text-content-secondary" data-testid="door-art-ttx-ans-notice">
+                This slot has an ANSI teletext drawing (.ttx.ans). The board shows that version
+                to teletext callers until a native page is saved here.
+              </p>
+            )}
+            <TeletextScreenEditor
+              key={`${file}#${section}`}
+              content={ttiContent}
+              filePath={`${file}#${section}.tti`}
+              saving={saving}
+              onSave={saveTti}
               onCancel={onClose}
             />
-            {/*
-              * Sysop, 2026-09-15: "i see no upload button in this dialog: REQ
-              * - Bulletin header art". The screen dialog had one and this did
-              * not, so a door's art could only be edited with the mouse -
-              * and most ANSI artists arrive with a file from PabloDraw.
-              *
-              * It feeds `save`, the same function the editor's own Save
-              * calls, so the DOC limits, the trailing-row trim and the
-              * server's refusals all apply exactly as they do to a drawing
-              * made here. ANSI only: a door's art block is ANSI inside its
-              * own config file, and a .rip in there would be bytes the door
-              * cannot print.
-              */}
-            <div className="flex items-center gap-3 text-sm">
-              <ArtUploadButton
-                accept={ANSI_UPLOAD_ACCEPT}
-                disabled={saving}
-                testId="door-art-upload"
-                onPick={upload}
-              />
-              <span className="text-content-secondary">
-                Replaces the {VARIANT_LABELS[variant].toLowerCase()} art with a drawing you bring.
-              </span>
-            </div>
-            <p className="text-xs text-content-secondary">
-              {lineCount} lines now; at most {maxLines} lines of{' '}
-              {variant === 'wide' ? maxLineLength : VARIANT_COLUMNS} columns{' '}
-              {variant === 'wide' ? "(the door's own limits)" : '(a 40-column screen)'}.
-              Saving rewrites spacing and line endings to canvas format and flattens bold.
-            </p>
           </>
-        ) : (
-          !status && <p className="text-sm text-content-secondary">No art to show.</p>
-        )}
-        {saving && <p className="text-sm text-content-secondary">Saving...</p>}
+        )
+      ) : surface ? (
+        <>
+          <ScreenEditor
+            surface={surface}
+            mci={[]}
+            filePath={`${file}#${section}`}
+            onChange={setSurface}
+            onSave={async (screen: string) => { if (await save(screen) !== null) onClose(); }}
+            onCancel={onClose}
+          />
+          {/*
+            * Sysop, 2026-09-15: "i see no upload button in this dialog: REQ
+            * - Bulletin header art". Most ANSI artists arrive with a file
+            * from PabloDraw. It feeds `save`, the same function the
+            * editor's own Save calls, so the DOC limits, the trailing-row
+            * trim and the server's refusals all apply exactly as they do to
+            * a drawing made here. ANSI only: a door's art block is ANSI
+            * inside its own config file.
+            */}
+          <ArtUploadButton
+            accept={ANSI_UPLOAD_ACCEPT}
+            disabled={saving}
+            testId="door-art-upload"
+            onPick={upload}
+          />
+        </>
+      ) : (
+        !status && <p className="text-sm text-content-secondary">No art to show.</p>
+      )}
+      {saving && <p className="text-sm text-content-secondary">Saving...</p>}
+    </div>
+  );
+
+  /** THE SETTINGS TAB: what this slot is and what a save does to it. */
+  const settings = (
+    <dl className="grid grid-cols-1 gap-x-6 gap-y-2 text-sm sm:grid-cols-[auto_1fr]" data-testid="door-art-settings">
+      <dt className="text-content-secondary">File</dt>
+      <dd className="font-mono text-content-primary break-all">{file} [{section}]</dd>
+      <dt className="text-content-secondary">Size limit</dt>
+      <dd className="text-content-primary">
+        At most {maxLines} lines of {columns} columns{' '}
+        {variant === 'wide' ? "(the door's own limits)" : '(a 40-column screen)'}
+      </dd>
+      <dt className="text-content-secondary">Now</dt>
+      <dd className="text-content-primary">{lineCount} lines</dd>
+      <dt className="text-content-secondary">Saving</dt>
+      <dd className="text-content-primary">
+        Rewrites spacing and line endings to canvas format and flattens bold.
+      </dd>
+    </dl>
+  );
+
+  /*
+    ONE WAY OUT. Every editor carries its own Cancel; a second Close beside
+    it was two buttons for one job ("too many save and write etc buttons in
+    the editors", sysop, 2026-10-19). This one shows only while no editor is
+    mounted - loading, an error, no art - so there is never none.
+  */
+  const leave = !editorOpen && (
+    <button type="button" onClick={onClose} className="btn-small btn-secondary">
+      {embedded ? <><ArrowLeft size={14} /> Back to the slot list</> : <><X size={14} /> Close</>}
+    </button>
+  );
+
+  if (embedded) {
+    // Inside the door dialog's Art tab: that dialog owns the tabs, so this
+    // is the editor for the picked slot and its name, nothing more.
+    return (
+      <div className="space-y-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h3 className="text-lg font-semibold text-content-primary">{label}</h3>
+          {leave}
+        </div>
+        {art}
+        <p className="text-xs text-content-secondary">
+          At most {maxLines} lines of {columns} columns.
+        </p>
       </div>
+    );
+  }
+
+  return (
+    <div className="p-4">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <h3 className="text-lg font-semibold text-content-primary">{doorName} — {label}</h3>
+        {leave}
+      </div>
+      <DialogTabs
+        tabs={[
+          { id: 'art', label: 'Art', keepMounted: true, render: () => art },
+          { id: 'settings', label: 'Settings', keepMounted: true, render: () => settings },
+        ]}
+      />
+    </div>
+  );
+}
+
+/**
+ * The door-art editor in a dialog of its own, sized near the viewport: the
+ * Screen Designer and Screen Health open a slot this way. The Doors page's
+ * dialog embeds `DoorArtEditor` in its Art tab instead.
+ *
+ * A dialog announces itself as one (src/test/modal-semantics.test.tsx); the
+ * Modal owns the shell, Escape and the backdrop, and its hidden title is the
+ * accessible name.
+ */
+export function DoorArtDialog(props: DoorArtDialogProps) {
+  return (
+    <Modal open title={`${props.doorName} - ${props.label}`} fill showHeader={false} onClose={props.onClose}>
+      <DoorArtEditor {...props} />
     </Modal>
   );
 }

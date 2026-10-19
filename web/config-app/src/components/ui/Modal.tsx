@@ -32,8 +32,17 @@ interface ModalProps {
    * dialog by name.
    */
   showHeader?: boolean;
+  /**
+   * Near the whole viewport: for the editors (door dialogs, art canvases)
+   * that were cramped in a 4xl box. Overrides `maxWidth`. A 1rem gutter each
+   * side, so at phone width the dialog never pushes the page sideways.
+   */
+  fill?: boolean;
   children: ReactNode;
 }
+
+/** The large-editor size: viewport less a 1rem gutter, capped for wide screens. */
+const FILL_SIZE = 'h-[calc(100vh-2rem)] max-h-[calc(100vh-2rem)] w-[calc(100vw-2rem)] max-w-[1600px]';
 
 export function Modal({
   open,
@@ -41,6 +50,7 @@ export function Modal({
   onClose,
   maxWidth = 'max-w-lg',
   showHeader = true,
+  fill = false,
   children,
 }: ModalProps) {
   return (
@@ -48,7 +58,7 @@ export function Modal({
       <DialogPrimitive.Portal>
         <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-black/50" />
         <DialogPrimitive.Content
-          className={`fixed left-1/2 top-1/2 z-50 max-h-[90vh] w-full ${maxWidth} -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-lg shadow-xl ${
+          className={`fixed left-1/2 top-1/2 z-50 ${fill ? FILL_SIZE : `max-h-[90vh] w-full ${maxWidth}`} -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-lg shadow-xl ${
             showHeader
               ? 'border border-border bg-surface-1 p-6'
               : 'border border-border bg-surface-1'

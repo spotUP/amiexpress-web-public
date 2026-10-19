@@ -26,7 +26,8 @@ interface DoorArtEntry {
   }>;
 }
 
-interface OpenArt {
+/** One slot, as the editor opens it. */
+export interface DoorArtTarget {
   command: string; doorName: string; file: string; section: string;
   label: string; maxLines: number; maxLineLength: number;
 }
@@ -36,9 +37,14 @@ export interface DoorArtListProps {
   query?: string;
   /** Shows only the door registered under this command (the Doors dialog). */
   command?: string;
+  /**
+   * Open a slot somewhere of the caller's choosing (the door dialog's Art
+   * tab). Without it the slot opens in a door-art dialog of its own.
+   */
+  onOpen?: (art: DoorArtTarget) => void;
 }
 
-export function DoorArtList({ query = '', command }: DoorArtListProps) {
+export function DoorArtList({ query = '', command, onOpen }: DoorArtListProps) {
   /**
    * Art blocks living inside door config files. Small and few (doors declare
    * them in their manifests), so loaded with the page.
@@ -52,7 +58,8 @@ export function DoorArtList({ query = '', command }: DoorArtListProps) {
    * Bulls.CFG) has no screen path, so the file dialog cannot open it. It
    * opens in the door-art dialog on the same canvas instead.
    */
-  const [openArt, setOpenArt] = useState<OpenArt | null>(null);
+  const [openArt, setOwnArt] = useState<DoorArtTarget | null>(null);
+  const setOpenArt = (art: DoorArtTarget) => (onOpen ? onOpen(art) : setOwnArt(art));
 
   const needle = query.trim().toLowerCase();
   const doors = (Array.isArray(doorArt) ? doorArt : []).filter(door =>
@@ -111,7 +118,7 @@ export function DoorArtList({ query = '', command }: DoorArtListProps) {
           label={openArt.label}
           maxLines={openArt.maxLines}
           maxLineLength={openArt.maxLineLength}
-          onClose={() => setOpenArt(null)}
+          onClose={() => setOwnArt(null)}
         />
       )}
     </div>

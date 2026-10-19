@@ -78,9 +78,10 @@ describe('door art in the door dialog', () => {
     const user = userEvent.setup();
     renderIn(<DoorsPage />);
     await user.click(await screen.findByLabelText('Edit B'));
+    await user.click(await screen.findByRole('tab', { name: 'Art' }));
 
     // sentinel: both parts ran, for this door
-    expect(await screen.findByText('Door art')).toBeTruthy();
+    expect(await screen.findByText(/The screens and logos this door draws/)).toBeTruthy();
     expect(await screen.findByText('Bulletins title')).toBeTruthy();
     expect(screen.queryByText('Wall header')).toBeNull();
     const row = (await screen.findByRole('cell', { name: 'cat.txt' })).closest('tr')!;
@@ -102,15 +103,36 @@ describe('door art in the door dialog', () => {
     ]), { timeout: 4000 });
   });
 
-  it('opens the editors from the Edit Door dialog without saving or closing it', async () => {
+  it('switches the shown concern with the tabs: Settings is the form, Art is the slot list', async () => {
     const user = userEvent.setup();
     renderIn(<DoorsPage />);
     await user.click(await screen.findByLabelText('Edit B'));
 
+    // Settings opens first: the registration form, no slot list.
+    expect(await screen.findByRole('textbox', { name: /Door Name/ })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Open in ANSI editor' })).toBeNull();
+
+    await user.click(screen.getByRole('tab', { name: 'Art' }));
+    expect(await screen.findByRole('button', { name: 'Open in ANSI editor' })).toBeTruthy();
+    expect(screen.queryByRole('textbox', { name: /Door Name/ })).toBeNull();
+
+    await user.click(screen.getByRole('tab', { name: 'Settings' }));
+    expect(screen.getByRole('textbox', { name: /Door Name/ })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Open in ANSI editor' })).toBeNull();
+  });
+
+  it('opens the editors from the Edit Door dialog without saving or closing it', async () => {
+    const user = userEvent.setup();
+    renderIn(<DoorsPage />);
+    await user.click(await screen.findByLabelText('Edit B'));
+    await user.click(await screen.findByRole('tab', { name: 'Art' }));
+
+    // The picked slot's editor takes the Art tab's body, in the same dialog.
     await user.click(await screen.findByRole('button', { name: 'Open in ANSI editor' }));
-    expect(await screen.findByRole('dialog', { name: 'Bulletins - Bulletins title' })).toBeTruthy();
-    expect(screen.getAllByText('Edit Door').length).toBeGreaterThan(0);
-    await user.keyboard('{Escape}');
+    expect(await screen.findByRole('group', { name: 'Art alphabet' })).toBeTruthy();
+    expect(screen.getAllByRole('dialog')).toHaveLength(1);
+    expect(screen.queryByRole('button', { name: 'Open in ANSI editor' })).toBeNull();
+    await user.click(await screen.findByRole('button', { name: /Back to the slot list/ }));
 
     await user.click(await screen.findByLabelText('Open cat.txt in the Screen Designer'));
     expect(await screen.findByRole('dialog', { name: 'cat.txt' })).toBeTruthy();
@@ -123,8 +145,9 @@ describe('door art in the door dialog', () => {
     const user = userEvent.setup();
     renderIn(<DoorsPage />);
     await user.click(await screen.findByLabelText('Edit the .info file for B'));
+    await user.click(await screen.findByRole('tab', { name: 'Art' }));
 
-    expect(await screen.findByText('Door art')).toBeTruthy();
+    expect(await screen.findByText(/The screens and logos this door draws/)).toBeTruthy();
     expect(await screen.findByText('Bulletins title')).toBeTruthy();
     expect(screen.queryByText('Wall header')).toBeNull();
     await waitFor(() => expect(listMenuLogos).toHaveBeenCalledWith('BULLETINS'));

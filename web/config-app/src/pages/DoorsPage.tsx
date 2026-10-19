@@ -1,5 +1,6 @@
 import { useMemo, useRef, useState } from 'react';
 import { Modal } from '../components/ui/Modal';
+import { DialogTabs } from '../components/ui/Tabs';
 import { DoorSettingsForm } from '../components/DoorSettingsForm';
 import { DoorArtSection } from '../components/DoorArtSection';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -824,6 +825,209 @@ export function DoorsPage() {
     },
   ];
 
+  /** The Add/Edit form: registration, the door's own settings, its flags. */
+  const doorForm = (
+    <form onSubmit={handleSubmit} className={editingDoor ? 'space-y-6' : 'p-6 space-y-6'}>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div>
+          <label htmlFor="door_name" className="label">Door Name *</label>
+          <input
+            id="door_name"
+            type="text"
+            value={formData.door_name}
+            onChange={(e) => editField({ ...formData, door_name: e.target.value })}
+            className="input-field w-full"
+            required
+          />
+        </div>
+
+        <div>
+          <label htmlFor="door_command" className="label">Command *</label>
+          <input
+            id="door_command"
+            type="text"
+            value={formData.door_command}
+            onChange={(e) => editField({ ...formData, door_command: e.target.value })}
+            className="input-field w-full"
+            required
+          />
+        </div>
+
+        <div>
+          <label htmlFor="door_type" className="label">Door Type *</label>
+          <select
+            id="door_type"
+            value={formData.door_type}
+            onChange={(e) => editField({ ...formData, door_type: e.target.value })}
+            className="input-field w-full"
+            required
+          >
+            {/* The values the BBS actually uses - see
+                web/backend/src/constants/door-types.ts. The old list
+                (68K/JS/TS/EXEC) matched nothing the server serves or
+                accepts, so an XIM door had no entry to display and
+                saving it changed its type. */}
+            <option value="XIM">XIM (Amiga 68K door)</option>
+            <option value="AIM">AIM (Amiga 68K door)</option>
+            <option value="SIM">SIM (Amiga 68K door)</option>
+            <option value="TIM">TIM (Amiga 68K door)</option>
+            <option value="IIM">IIM (Amiga 68K door)</option>
+            <option value="FIM">FIM (FAME door port)</option>
+            <option value="DD">DD (DayDream door)</option>
+            <option value="typescript">TypeScript</option>
+            <option value="SYSCMD">SYSCMD (system command)</option>
+            <option value="BBSCMD">BBSCMD (BBS command)</option>
+            <option value="INTERNAL">INTERNAL</option>
+          </select>
+        </div>
+
+        <div className="md:col-span-2">
+          <label htmlFor="door_path" className="label">Path *</label>
+          <input
+            id="door_path"
+            type="text"
+            value={formData.door_path}
+            onChange={(e) => editField({ ...formData, door_path: e.target.value })}
+            className="input-field w-full"
+            placeholder="BBS:Doors/MyDoor/MyDoor"
+            required
+          />
+          <p className="text-sm text-content-secondary mt-2">
+            Written to the door's LOCATION tooltype, which is how
+            AmiExpress finds the program to run. The form had no field
+            for it and DoorSchema requires it, so Create Door could
+            never succeed.
+          </p>
+        </div>
+
+        <div>
+          <label htmlFor="min_security_level" className="label">Min Security Level *</label>
+          <input
+            id="min_security_level"
+            type="number"
+            min="0"
+            max="255"
+            value={formData.min_security_level}
+            onChange={(e) => editField({ ...formData, min_security_level: parseInt(e.target.value, 10) || 0 })}
+            className="input-field w-full"
+            required
+          />
+        </div>
+
+        <div className="md:col-span-2">
+          <label className="flex items-center space-x-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={formData.enabled}
+              onChange={(e) => editField({ ...formData, enabled: e.target.checked })}
+              className="form-checkbox h-5 w-5 text-accent"
+            />
+            <span className="text-content-primary">Enabled</span>
+          </label>
+          <p className="text-sm text-content-secondary mt-2">
+            AmiExpress has no on/off switch for a command, so turning a
+            door off parks its access level out of reach and remembers
+            the old level, restoring it when you switch the door back
+            on. The parking level is 32767 rather than 255, because a
+            level-255 sysop can still run a door parked at 255.
+            DOORREPO does the same thing to the same door.
+          </p>
+        </div>
+      </div>
+
+      {/*
+        The door's OWN settings, above the buttons rather than below
+        them: the modal is capped at 90vh and scrolls, so a section
+        after the footer is off-screen for a door with a full form -
+        which is how the first attempt at this shipped and showed a
+        sysop nothing.
+
+        Everything above is the door's REGISTRATION - command, path,
+        access level, what AmiExpress reads from the .info file. What
+        the door itself can be told is a separate file it ships
+        (door.settings.json) which saves itself, so a door that
+        declares none sees no change here at all.
+      */}
+      {editingDoor?.has_settings && (
+        <div className="border-t border-border pt-6">
+          <h3 className="text-lg text-accent mb-1">Door settings</h3>
+          <p className="text-content-secondary text-sm">
+            What this door says it can be configured with. Saved to the door, not to its registration.
+          </p>
+          <DoorSettingsForm
+            command={editingDoor.door_command}
+          />
+        </div>
+      )}
+
+      {/*
+        THE WAY TO THE TOOLTYPES, from the dialog a sysop actually
+        opens. The .info editor has always existed - it is the second
+        icon on the row - and a sysop looking for a door flag opens
+        Edit, finds six fields, and concludes the admin cannot do it
+        ("i dont see a way to edit tooltypes for the doors in the
+        admin ui when i click edit on gwall", 2026-09-07). Twice this
+        year a door flag (C64_ADAPT, then C64_DROP_OLDEST) has been
+        hand-edited on the live volume for want of this line.
+
+        A pointer, not a second editor: the tooltype table below is
+        the one that writes the file, and two of them would be two
+        ways to disagree about it.
+      */}
+      {editingDoor && (
+        <div className="pt-6 border-t border-border">
+          {doorFlagSections()}
+          <p className="text-content-secondary text-sm">
+            Anything without a field of its own - the rest of{' '}
+            <code>{editingDoor.door_command}.info</code> - is in the raw
+            tooltype table.
+          </p>
+          <button
+            type="button"
+            onClick={async () => {
+              const door = editingDoor;
+              // Write the flags before the raw editor reads the file back.
+              await flushAutosaves();
+              closeDoorModal();
+              void handleEditInfo(door);
+            }}
+            className="btn-secondary mt-2 flex items-center space-x-1 text-sm"
+          >
+            <FileCode size={16} />
+            <span>Edit tooltypes (.info file)</span>
+          </button>
+        </div>
+      )}
+
+      <div className="flex items-center justify-end gap-4 pt-6 border-t border-border">
+        {editingDoor && (
+          <AutosaveStatus
+            saving={doorAutosave.saving || infoAutosave.saving}
+            saved={doorAutosave.saved || infoAutosave.saved}
+            error={doorAutosave.error ?? infoAutosave.error}
+          />
+        )}
+        <button
+          type="button"
+          onClick={closeDoorModal}
+          className="btn-secondary"
+        >
+          {editingDoor ? 'Close' : 'Cancel'}
+        </button>
+        {/* Only the Add dialog submits: a door that does not exist yet has nothing to autosave into. */}
+        {!editingDoor && (
+          <button
+            type="submit"
+            className="btn-primary"
+            disabled={createMutation.isPending}
+          >
+            {createMutation.isPending ? 'Saving...' : 'Create Door'}
+          </button>
+        )}
+      </div>
+    </form>
+  );
+
   return (
     <div>
       <div className="mb-4 flex flex-wrap justify-between items-center gap-3">
@@ -920,6 +1124,7 @@ export function DoorsPage() {
           title={editingDoor ? 'Edit Door' : 'Add Door'}
           onClose={closeDoorModal}
           maxWidth="max-w-5xl"
+          fill={Boolean(editingDoor)}
           showHeader={false}
         >
             <div className="sticky top-0 bg-surface-0 border-b border-border p-6 flex justify-between items-center">
@@ -934,216 +1139,29 @@ export function DoorsPage() {
               </button>
             </div>
 
-            <form onSubmit={handleSubmit} className="p-6 space-y-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div>
-                  <label htmlFor="door_name" className="label">Door Name *</label>
-                  <input
-                    id="door_name"
-                    type="text"
-                    value={formData.door_name}
-                    onChange={(e) => editField({ ...formData, door_name: e.target.value })}
-                    className="input-field w-full"
-                    required
-                  />
-                </div>
-
-                <div>
-                  <label htmlFor="door_command" className="label">Command *</label>
-                  <input
-                    id="door_command"
-                    type="text"
-                    value={formData.door_command}
-                    onChange={(e) => editField({ ...formData, door_command: e.target.value })}
-                    className="input-field w-full"
-                    required
-                  />
-                </div>
-
-                <div>
-                  <label htmlFor="door_type" className="label">Door Type *</label>
-                  <select
-                    id="door_type"
-                    value={formData.door_type}
-                    onChange={(e) => editField({ ...formData, door_type: e.target.value })}
-                    className="input-field w-full"
-                    required
-                  >
-                    {/* The values the BBS actually uses - see
-                        web/backend/src/constants/door-types.ts. The old list
-                        (68K/JS/TS/EXEC) matched nothing the server serves or
-                        accepts, so an XIM door had no entry to display and
-                        saving it changed its type. */}
-                    <option value="XIM">XIM (Amiga 68K door)</option>
-                    <option value="AIM">AIM (Amiga 68K door)</option>
-                    <option value="SIM">SIM (Amiga 68K door)</option>
-                    <option value="TIM">TIM (Amiga 68K door)</option>
-                    <option value="IIM">IIM (Amiga 68K door)</option>
-                    <option value="FIM">FIM (FAME door port)</option>
-                    <option value="DD">DD (DayDream door)</option>
-                    <option value="typescript">TypeScript</option>
-                    <option value="SYSCMD">SYSCMD (system command)</option>
-                    <option value="BBSCMD">BBSCMD (BBS command)</option>
-                    <option value="INTERNAL">INTERNAL</option>
-                  </select>
-                </div>
-
-                <div className="md:col-span-2">
-                  <label htmlFor="door_path" className="label">Path *</label>
-                  <input
-                    id="door_path"
-                    type="text"
-                    value={formData.door_path}
-                    onChange={(e) => editField({ ...formData, door_path: e.target.value })}
-                    className="input-field w-full"
-                    placeholder="BBS:Doors/MyDoor/MyDoor"
-                    required
-                  />
-                  <p className="text-sm text-content-secondary mt-2">
-                    Written to the door's LOCATION tooltype, which is how
-                    AmiExpress finds the program to run. The form had no field
-                    for it and DoorSchema requires it, so Create Door could
-                    never succeed.
-                  </p>
-                </div>
-
-                <div>
-                  <label htmlFor="min_security_level" className="label">Min Security Level *</label>
-                  <input
-                    id="min_security_level"
-                    type="number"
-                    min="0"
-                    max="255"
-                    value={formData.min_security_level}
-                    onChange={(e) => editField({ ...formData, min_security_level: parseInt(e.target.value, 10) || 0 })}
-                    className="input-field w-full"
-                    required
-                  />
-                </div>
-
-                <div className="md:col-span-2">
-                  <label className="flex items-center space-x-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={formData.enabled}
-                      onChange={(e) => editField({ ...formData, enabled: e.target.checked })}
-                      className="form-checkbox h-5 w-5 text-accent"
-                    />
-                    <span className="text-content-primary">Enabled</span>
-                  </label>
-                  <p className="text-sm text-content-secondary mt-2">
-                    AmiExpress has no on/off switch for a command, so turning a
-                    door off parks its access level out of reach and remembers
-                    the old level, restoring it when you switch the door back
-                    on. The parking level is 32767 rather than 255, because a
-                    level-255 sysop can still run a door parked at 255.
-                    DOORREPO does the same thing to the same door.
-                  </p>
-                </div>
-              </div>
-
-              {/*
-                The door's OWN settings, above the buttons rather than below
-                them: the modal is capped at 90vh and scrolls, so a section
-                after the footer is off-screen for a door with a full form -
-                which is how the first attempt at this shipped and showed a
-                sysop nothing.
-
-                Everything above is the door's REGISTRATION - command, path,
-                access level, what AmiExpress reads from the .info file. What
-                the door itself can be told is a separate file it ships
-                (door.settings.json) which saves itself, so a door that
-                declares none sees no change here at all.
-              */}
-              {editingDoor?.has_settings && (
-                <div className="border-t border-border pt-6">
-                  <h3 className="text-lg text-accent mb-1">Door settings</h3>
-                  <p className="text-content-secondary text-sm">
-                    What this door says it can be configured with. Saved to the door, not to its registration.
-                  </p>
-                  <DoorSettingsForm
-                    command={editingDoor.door_command}
-                  />
-                </div>
-              )}
-
-              {/*
-                THE WAY TO THE TOOLTYPES, from the dialog a sysop actually
-                opens. The .info editor has always existed - it is the second
-                icon on the row - and a sysop looking for a door flag opens
-                Edit, finds six fields, and concludes the admin cannot do it
-                ("i dont see a way to edit tooltypes for the doors in the
-                admin ui when i click edit on gwall", 2026-09-07). Twice this
-                year a door flag (C64_ADAPT, then C64_DROP_OLDEST) has been
-                hand-edited on the live volume for want of this line.
-
-                A pointer, not a second editor: the tooltype table below is
-                the one that writes the file, and two of them would be two
-                ways to disagree about it.
-              */}
-              {editingDoor && (
-                <div className="pt-6 border-t border-border">
-                  {doorFlagSections()}
-                  <p className="text-content-secondary text-sm">
-                    Anything without a field of its own - the rest of{' '}
-                    <code>{editingDoor.door_command}.info</code> - is in the raw
-                    tooltype table.
-                  </p>
-                  <button
-                    type="button"
-                    onClick={async () => {
-                      const door = editingDoor;
-                      // Write the flags before the raw editor reads the file back.
-                      await flushAutosaves();
-                      closeDoorModal();
-                      void handleEditInfo(door);
-                    }}
-                    className="btn-secondary mt-2 flex items-center space-x-1 text-sm"
-                  >
-                    <FileCode size={16} />
-                    <span>Edit tooltypes (.info file)</span>
-                  </button>
-                </div>
-              )}
-
-              <div className="flex items-center justify-end gap-4 pt-6 border-t border-border">
-                {editingDoor && (
-                  <AutosaveStatus
-                    saving={doorAutosave.saving || infoAutosave.saving}
-                    saved={doorAutosave.saved || infoAutosave.saved}
-                    error={doorAutosave.error ?? infoAutosave.error}
-                  />
-                )}
-                <button
-                  type="button"
-                  onClick={closeDoorModal}
-                  className="btn-secondary"
-                >
-                  {editingDoor ? 'Close' : 'Cancel'}
-                </button>
-                {/* Only the Add dialog submits: a door that does not exist yet has nothing to autosave into. */}
-                {!editingDoor && (
-                  <button
-                    type="submit"
-                    className="btn-primary"
-                    disabled={createMutation.isPending}
-                  >
-                    {createMutation.isPending ? 'Saving...' : 'Create Door'}
-                  </button>
-                )}
-              </div>
-            </form>
-
             {/*
-              Outside the form on purpose: the art saves on its own, and its
-              buttons and inputs inside the door form would submit it - the
-              dialog saved and closed and the editor never opened.
+              TWO TABS, one concern each ("tab the door dialogs and make them
+              bigger, they are cramped and overloaded", sysop, 2026-10-19):
+              Art - the slot list, then the picked slot's editor in the same
+              body - and Settings - registration, the door's own settings,
+              its flags. The art stays outside the form: its buttons inside
+              the door form would submit it. A door being added has no art
+              yet, so it gets the form alone.
             */}
-            {editingDoor && (
-              <div className="px-6 pb-6">
-                <DoorArtSection command={editingDoor.door_command} menuKind={editingDoor.menu_kind} />
+            {editingDoor ? (
+              <div className="p-6">
+                <DialogTabs
+                  defaultTab="settings"
+                  tabs={[
+                    {
+                      id: 'art', label: 'Art', keepMounted: true,
+                      render: () => <DoorArtSection command={editingDoor.door_command} menuKind={editingDoor.menu_kind} />,
+                    },
+                    { id: 'settings', label: 'Settings', keepMounted: true, render: () => doorForm },
+                  ]}
+                />
               </div>
-            )}
+            ) : doorForm}
         </Modal>
       )}
 
@@ -1154,6 +1172,7 @@ export function DoorsPage() {
           title="Edit .info File"
           onClose={closeInfoEditor}
           maxWidth="max-w-6xl"
+          fill
           showHeader={false}
         >
             <div className="sticky top-0 bg-surface-0 border-b border-border p-6 flex justify-between items-center">
@@ -1172,123 +1191,136 @@ export function DoorsPage() {
             </div>
 
             <div className="p-6">
-              {/*
-                What the DOOR says it can be configured with, when it says
-                anything - Doors/<door>/door.settings.json. Renders nothing for
-                a door that declares none, which is most of them. Above the
-                tooltypes because a door's own settings are what a sysop is
-                usually looking for; the tooltypes underneath are what
-                AmiExpress reads.
-              */}
-              <div className="mb-6 border-b border-border/40 pb-6">
-                <h3 className="text-lg text-accent mb-1">Door settings</h3>
-                <DoorSettingsForm command={editingInfoDoor.door_command} />
-              </div>
+              {/* Art and Settings, as in the Edit dialog: one concern per tab. */}
+              <DialogTabs
+                defaultTab="settings"
+                tabs={[
+                  {
+                    id: 'art', label: 'Art', keepMounted: true,
+                    render: () => <DoorArtSection command={editingInfoDoor.door_command} menuKind={editingInfoDoor.menu_kind} />,
+                  },
+                  {
+                    id: 'settings', label: 'Settings', keepMounted: true,
+                    render: () => (
+                      <>
+                  {/*
+                    What the DOOR says it can be configured with, when it says
+                    anything - Doors/<door>/door.settings.json. Renders nothing for
+                    a door that declares none, which is most of them. Above the
+                    tooltypes because a door's own settings are what a sysop is
+                    usually looking for; the tooltypes underneath are what
+                    AmiExpress reads.
+                  */}
+                  <div className="mb-6 border-b border-border/40 pb-6">
+                    <h3 className="text-lg text-accent mb-1">Door settings</h3>
+                    <DoorSettingsForm command={editingInfoDoor.door_command} />
+                  </div>
 
-              <div className="mb-6 border-b border-border/40 pb-6">
-                <DoorArtSection command={editingInfoDoor.door_command} menuKind={editingInfoDoor.menu_kind} />
-              </div>
+                  {/*
+                    AmiExpress's own per-command switches (express.e:4732-4804
+                    runCommand()) - SILENT, EXPERT_MODE, LOG_INPUTS, QUICKMODE,
+                    TRAPON, SCRIPTCHECK, PASS_PARAMETERS, MIMICVER. These read and
+                    write the SAME tooltype list as the raw table below; a sysop
+                    used to have to know the exact tooltype spelling to set any of
+                    them by hand.
+                  */}
+                  {doorFlagSections()}
 
-              {/*
-                AmiExpress's own per-command switches (express.e:4732-4804
-                runCommand()) - SILENT, EXPERT_MODE, LOG_INPUTS, QUICKMODE,
-                TRAPON, SCRIPTCHECK, PASS_PARAMETERS, MIMICVER. These read and
-                write the SAME tooltype list as the raw table below; a sysop
-                used to have to know the exact tooltype spelling to set any of
-                them by hand.
-              */}
-              {doorFlagSections()}
+                  <div className="mb-4 flex justify-between items-center">
+                    <p className="text-content-secondary text-sm">
+                      Edit tooltypes for this door. Changes are saved back to the .info file.
+                    </p>
+                    <button
+                      onClick={handleTooltypeAdd}
+                      className="btn-secondary text-sm flex items-center space-x-1"
+                    >
+                      <Plus size={16} />
+                      <span>Add Tooltype</span>
+                    </button>
+                  </div>
 
-              <div className="mb-4 flex justify-between items-center">
-                <p className="text-content-secondary text-sm">
-                  Edit tooltypes for this door. Changes are saved back to the .info file.
-                </p>
-                <button
-                  onClick={handleTooltypeAdd}
-                  className="btn-secondary text-sm flex items-center space-x-1"
-                >
-                  <Plus size={16} />
-                  <span>Add Tooltype</span>
-                </button>
-              </div>
-
-              <div className="border border-border rounded overflow-hidden">
-                <table className="w-full">
-                  <thead className="bg-border">
-                    <tr>
-                      <th className="text-left p-3 text-content-primary font-semibold w-12">Active</th>
-                      <th className="text-left p-3 text-content-primary font-semibold w-56">Key</th>
-                      <th className="text-left p-3 text-content-primary font-semibold">Value</th>
-                      <th className="text-left p-3 text-content-primary font-semibold w-20">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {tooltypes.map((tt, index) => (
-                      <tr
-                        key={index}
-                        className={`border-t border-border ${
-                          tt.commented ? 'opacity-50' : ''
-                        }`}
-                      >
-                        <td className="p-3">
-                          <button
-                            onClick={() => handleTooltypeToggle(index)}
-                            className={`p-1 rounded transition-colors ${
-                              tt.commented
-                                ? 'text-content-secondary hover:text-content-primary'
-                                : 'text-status-ok hover:text-status-ok'
+                  <div className="border border-border rounded overflow-hidden">
+                    <table className="w-full">
+                      <thead className="bg-border">
+                        <tr>
+                          <th className="text-left p-3 text-content-primary font-semibold w-12">Active</th>
+                          <th className="text-left p-3 text-content-primary font-semibold w-56">Key</th>
+                          <th className="text-left p-3 text-content-primary font-semibold">Value</th>
+                          <th className="text-left p-3 text-content-primary font-semibold w-20">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {tooltypes.map((tt, index) => (
+                          <tr
+                            key={index}
+                            className={`border-t border-border ${
+                              tt.commented ? 'opacity-50' : ''
                             }`}
-                            title={tt.commented ? 'Enable this tooltype' : 'Disable this tooltype'}
                           >
-                            {tt.commented ? <PowerOff size={20} /> : <Power size={20} />}
-                          </button>
-                        </td>
-                        <td className="p-3">
-                          <input
-                            type="text"
-                            value={tt.key}
-                            onChange={(e) => handleTooltypeUpdate(index, 'key', e.target.value)}
-                            className="input-field w-full font-mono text-sm"
-                            placeholder="KEY"
-                          />
-                        </td>
-                        <td className="p-3">
-                          <input
-                            type="text"
-                            value={tt.value}
-                            onChange={(e) => handleTooltypeUpdate(index, 'value', e.target.value)}
-                            className="input-field w-full font-mono text-sm"
-                            placeholder="value"
-                          />
-                        </td>
-                        <td className="p-3">
-                          <button
-                            onClick={() => handleTooltypeRemove(index)}
-                            className="text-accent hover:text-accent/90 transition-colors"
-                            title="Remove this tooltype"
-                          >
-                            <Trash2 size={16} />
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                    {tooltypes.length === 0 && (
-                      <tr>
-                        <td colSpan={4} className="p-6 text-center text-content-secondary">
-                          No tooltypes defined. Click "Add Tooltype" to create one.
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
+                            <td className="p-3">
+                              <button
+                                onClick={() => handleTooltypeToggle(index)}
+                                className={`p-1 rounded transition-colors ${
+                                  tt.commented
+                                    ? 'text-content-secondary hover:text-content-primary'
+                                    : 'text-status-ok hover:text-status-ok'
+                                }`}
+                                title={tt.commented ? 'Enable this tooltype' : 'Disable this tooltype'}
+                              >
+                                {tt.commented ? <PowerOff size={20} /> : <Power size={20} />}
+                              </button>
+                            </td>
+                            <td className="p-3">
+                              <input
+                                type="text"
+                                value={tt.key}
+                                onChange={(e) => handleTooltypeUpdate(index, 'key', e.target.value)}
+                                className="input-field w-full font-mono text-sm"
+                                placeholder="KEY"
+                              />
+                            </td>
+                            <td className="p-3">
+                              <input
+                                type="text"
+                                value={tt.value}
+                                onChange={(e) => handleTooltypeUpdate(index, 'value', e.target.value)}
+                                className="input-field w-full font-mono text-sm"
+                                placeholder="value"
+                              />
+                            </td>
+                            <td className="p-3">
+                              <button
+                                onClick={() => handleTooltypeRemove(index)}
+                                className="text-accent hover:text-accent/90 transition-colors"
+                                title="Remove this tooltype"
+                              >
+                                <Trash2 size={16} />
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                        {tooltypes.length === 0 && (
+                          <tr>
+                            <td colSpan={4} className="p-6 text-center text-content-secondary">
+                              No tooltypes defined. Click "Add Tooltype" to create one.
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
 
-              <div className="flex items-center justify-end gap-4 pt-6 border-t border-border mt-6">
-                <AutosaveStatus saving={infoAutosave.saving} saved={infoAutosave.saved} error={infoAutosave.error} />
-                <button onClick={closeInfoEditor} className="btn-secondary">
-                  Close
-                </button>
-              </div>
+                  <div className="flex items-center justify-end gap-4 pt-6 border-t border-border mt-6">
+                    <AutosaveStatus saving={infoAutosave.saving} saved={infoAutosave.saved} error={infoAutosave.error} />
+                    <button onClick={closeInfoEditor} className="btn-secondary">
+                      Close
+                    </button>
+                  </div>
+                      </>
+                    ),
+                  },
+                ]}
+              />
             </div>
         </Modal>
       )}

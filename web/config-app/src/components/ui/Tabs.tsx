@@ -13,7 +13,7 @@
  * its own `param`; a strip standing alone keeps `tab` and is unaffected.
  */
 
-import { useCallback } from 'react';
+import { useCallback, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import * as TabsPrimitive from '@radix-ui/react-tabs';
 import type { ReactNode } from 'react';
@@ -74,9 +74,37 @@ export function useTabParam(
 
 export function TabbedWorkspace({ tabs, defaultTab, aside, param }: TabbedWorkspaceProps) {
   const [active, setActive] = useTabParam(tabs, defaultTab, param);
+  return <TabStrip tabs={tabs} active={active} onChange={setActive} aside={aside} />;
+}
 
+interface DialogTabsProps {
+  tabs: TabDefinition[];
+  defaultTab?: string;
+  aside?: ReactNode;
+}
+
+/**
+ * The same strip for a dialog, holding its tab in component state.
+ *
+ * A dialog is not a page: its tab is gone the moment it closes, so writing it
+ * into the URL would leave a `?tab=` behind that names nothing, and the door
+ * dialogs open inside pages whose own strip already owns `tab`.
+ */
+export function DialogTabs({ tabs, defaultTab, aside }: DialogTabsProps) {
+  const [active, setActive] = useState(defaultTab ?? tabs[0]?.id ?? '');
+  return <TabStrip tabs={tabs} active={active} onChange={setActive} aside={aside} />;
+}
+
+interface TabStripProps {
+  tabs: TabDefinition[];
+  active: string;
+  onChange: (id: string) => void;
+  aside?: ReactNode;
+}
+
+function TabStrip({ tabs, active, onChange, aside }: TabStripProps) {
   return (
-    <TabsPrimitive.Root value={active} onValueChange={setActive}>
+    <TabsPrimitive.Root value={active} onValueChange={onChange}>
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3 border-b border-border">
         <TabsPrimitive.List className="flex flex-wrap gap-1">
           {tabs.map((tab) => (
@@ -98,6 +126,9 @@ export function TabbedWorkspace({ tabs, defaultTab, aside, param }: TabbedWorksp
             key={tab.id}
             value={tab.id}
             forceMount
+            // `hidden` as well as the class: a kept tab out of view is out of
+            // the accessibility tree too, not just painted over.
+            hidden={active !== tab.id}
             className="focus:outline-none data-[state=inactive]:hidden"
           >
             {tab.render()}
