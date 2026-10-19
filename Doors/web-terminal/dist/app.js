@@ -150,6 +150,10 @@ async function startWebTerminal(session) {
                 note(r.notice);
                 return;
             }
+            case 'animations':
+                await bbs.toggleAnimations?.();
+                refresh();
+                return;
             case 'data':
                 view = 'data';
                 chrome.setHints(DATA_HINTS);

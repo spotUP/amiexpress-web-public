@@ -1,5 +1,5 @@
 /**
- * The board's web-terminal settings - internal W rows 17, 18, 21 and 22
+ * The board's web-terminal settings - internal W rows 17, 18, 21, 22 and 23
  * (WEB_, no express.e counterpart) - once. The internal W menu and the
  * WEBTERM door (through BBSApi) both call these.
  */
@@ -43,6 +43,7 @@ export function webTerminalState(session: BBSSession): WebTerminalState {
     fontFixedNotice: petscii ? PETSCII_FONT_IS_FIXED : '',
     petsciiPalette: session.user?.petsciiPalette !== 'vic' ? 'C128 (VDC)' : 'C64 (VIC-II)',
     petsciiCharset: session.user?.petsciiCharset === 'swedish' ? 'SWEDISH' : 'STANDARD',
+    animations: session.user?.noAnimations === true ? 'OFF' : 'ON',
   };
 }
 
@@ -115,4 +116,25 @@ export async function togglePetsciiCharset(socket: SocketLike, session: BBSSessi
   // The atlas is rebuilt from the new set; the screen's machine is untouched.
   socket.emit('petscii-charset', { charset: next });
   return next;
+}
+
+export function animationsNotice(on: boolean): string {
+  return `Animations are now ${on ? 'ON' : 'OFF'}.`;
+}
+
+/**
+ * W row 23: board animations (slides, wipes, door effects) on or off. The
+ * column stores the NEGATIVE so every existing caller reads "on". Returns
+ * whether animations are on after the toggle.
+ */
+export async function toggleAnimations(_socket: SocketLike, session: BBSSession): Promise<boolean> {
+  const next = !(session.user?.noAnimations === true);   // true = animations now OFF
+  if (session.user) {
+    try {
+      await changeAccount(session, { noAnimations: next });
+    } catch (error) {
+      console.error('[W] could not save the animations setting:', error);
+    }
+  }
+  return !next;
 }

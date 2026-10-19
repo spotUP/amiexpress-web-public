@@ -25,7 +25,7 @@ async function open(width: number, height: number, erase: 'refuse' | 'accept' | 
     getTerminalSize: () => ({ width, height }), enableWideMode: () => {}, disableWideMode: () => {},
     getModemSpeed: () => 0, disableModemEmulation: () => {}, setModemSpeed: () => {},
     getTheme: () => themeById('uprough-neon'), connectionType: 'web', unicodeCapable: true, isPetsciiMode: () => width === 40,
-    webTerminalSettings: () => { touched.push('webTerminalSettings'); return { modemSpeed: 'MAX (No Throttle)', font: 'MicroKnight', fontFixedNotice: '', petsciiPalette: palette, petsciiCharset: 'STANDARD' }; },
+    webTerminalSettings: () => { touched.push('webTerminalSettings'); return { modemSpeed: 'MAX (No Throttle)', font: 'MicroKnight', fontFixedNotice: '', petsciiPalette: palette, petsciiCharset: 'STANDARD', animations: 'ON' }; },
     modemSpeedChoices: () => ['MAX (No Throttle)', '1200 bps', '2400 bps'],
     chooseModemSpeed: async (i: number) => { calls.push(`modem ${i}`); return true; },
     terminalFontChoices: () => [{ id: 'MicroKnight', label: 'MicroKnight' }, { id: 'mosoul', label: "mO'sOul" }],
@@ -54,7 +54,7 @@ async function open(width: number, height: number, erase: 'refuse' | 'accept' | 
   };
 }
 
-export async function eighty_columns_shows_the_six_rows_with_their_values(): Promise<void> {
+export async function eighty_columns_shows_the_seven_rows_with_their_values(): Promise<void> {
   const h = await open(80, 24);
   const rows = h.door.rows().map(strip);
   assert.ok(rows.some(r => r.includes('Modem emulation speed') && r.includes('MAX (No Throttle)')));
@@ -95,7 +95,7 @@ export async function a_toggle_at_forty_columns_repaints_under_four_hundred_byte
 }
 export async function delete_asks_three_times_checks_first_and_shows_the_boards_refusal(): Promise<void> {
   const h = await open(80, 24);
-  for (let i = 0; i < 5; i++) await h.key(DOWN);  // onto Delete my account
+  for (let i = 0; i < 6; i++) await h.key(DOWN);  // onto Delete my account
   await h.key('\r');
   await h.key('YES ERASE\r');
   await h.key('wrong\r');
@@ -106,7 +106,7 @@ export async function delete_asks_three_times_checks_first_and_shows_the_boards_
 }
 export async function a_password_is_never_painted_as_typed(): Promise<void> {
   const h = await open(80, 24);
-  for (let i = 0; i < 5; i++) await h.key(DOWN);
+  for (let i = 0; i < 6; i++) await h.key(DOWN);
   await h.key('\r');
   await h.key('YES ERASE\r');
   h.mark();
@@ -116,7 +116,7 @@ export async function a_password_is_never_painted_as_typed(): Promise<void> {
 }
 export async function a_successful_erasure_ends_the_door_without_touching_the_user_again(): Promise<void> {
   const h = await open(80, 24, 'accept');
-  for (let i = 0; i < 5; i++) await h.key(DOWN);
+  for (let i = 0; i < 6; i++) await h.key(DOWN);
   await h.key('\r');
   await h.key('YES ERASE\r');
   await h.key('pw\r');
@@ -137,7 +137,7 @@ const SIXTEEN = Array.from({ length: 16 }, (_, i) => ({ label: `Field number ${i
 
 export async function view_my_data_at_forty_columns_scrolls_to_the_last_field(): Promise<void> {
   const h = await open(40, 25, 'refuse', SIXTEEN);
-  for (let i = 0; i < 4; i++) await h.key(DOWN);  // onto View my data
+  for (let i = 0; i < 5; i++) await h.key(DOWN);  // onto View my data
   await h.key('\r');
   assert.ok(!h.door.visible().map(strip).some(r => r.includes('Field number 16')), 'sixteen stacked fields fit on one 25-row screen');
   await h.key(DOWN);
@@ -150,14 +150,14 @@ export async function view_my_data_at_forty_columns_scrolls_to_the_last_field():
 }
 export async function a_refused_second_erasure_shows_its_reason_and_ends(): Promise<void> {
   const h = await open(80, 24, 'check-only');
-  for (let i = 0; i < 5; i++) await h.key(DOWN);
+  for (let i = 0; i < 6; i++) await h.key(DOWN);
   await h.key('\r'); await h.key('YES ERASE\r'); await h.key('pw\r'); await h.key('Spot\r');
   await Promise.race([h.door.done, sleep(1000).then(() => { throw new Error('the door did not end'); })]);
   assert.ok(h.since().includes('Session moved on.'), 'the refusal reason never reached the caller');
 }
 export async function done_stays_pending_while_the_board_erases(): Promise<void> {
   const h = await open(80, 24, 'deferred');
-  for (let i = 0; i < 5; i++) await h.key(DOWN);
+  for (let i = 0; i < 6; i++) await h.key(DOWN);
   await h.key('\r'); await h.key('YES ERASE\r'); await h.key('pw\r'); await h.key('Spot\r');
   let ended = false;
   void h.door.done.then(() => { ended = true; });

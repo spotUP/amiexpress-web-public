@@ -88,6 +88,8 @@ export interface User {
   petsciiPalette?: string;
   /** 'standard' or 'swedish' - which character ROM the PETSCII screen draws. */
   petsciiCharset?: string;
+  /** True when the caller turned board animations off (W row 23). Stored negative so it defaults to on. Web extension. */
+  noAnimations?: boolean;
   themePreference?: string; // Door colour theme (web extension); '' or an unknown id = the board default
   /** The caller's own menu style; '' = the board's default for their width and level (web extension, column menustyle). */
   menuStyle?: '' | 'classic' | 'scroll' | 'coverflow';   // a row may still hold the retired 'pages': readMenuStyle reads it as scroll

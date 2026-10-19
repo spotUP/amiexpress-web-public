@@ -216,6 +216,15 @@ describe('UserRepository', () => {
       expect(user!.gdprConsentAt).toBe(ts);
       expect(user!.gdprNoticeVersion).toBe('2.0');
     });
+
+    it('stores animations off as the negative column and reads a new caller as on (W 23)', async () => {
+      const id = await repo.createUser(makeUserData());
+      expect((await repo.getUserById(id))!.noAnimations).toBe(false);
+      await repo.updateUser(id, { noAnimations: true }, { syncDisk: false });
+      expect((await repo.getUserById(id))!.noAnimations).toBe(true);
+      await repo.updateUser(id, { noAnimations: false }, { syncDisk: false });
+      expect((await repo.getUserById(id))!.noAnimations).toBe(false);
+    });
   });
 
   describe('getUsers', () => {

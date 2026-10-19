@@ -51,21 +51,22 @@ function driver(user: Record<string, unknown> = {}) {
     },
     on() { return socket; },
   };
-  // The row's own line, colours stripped.
-  const row22 = () => {
+  // A row's own line, colours stripped; the last one drawn.
+  const row = (n: number) => {
     flushOutput(socket);
     const plain = text.join('').replace(/\x1b\[[0-9;]*m/g, '');
-    return plain.split(/\r?\n/).find((l) => /\b22\]/.test(l)) ?? '';
+    return plain.split(/\r?\n/).filter((l) => new RegExp(`\\b${n}\\]`).test(l)).pop() ?? '';
   };
-  return { socket, session, events, row22 };
+  const row22 = () => row(22);
+  return { socket, session, events, row, row22 };
 }
 
 beforeEach(() => mockUpdateUser.mockClear());
 
 describe('W row 22', () => {
   it('leaves room for itself before the settings doors', () => {
-    // 21 is the palette, 22 is the character set, and the doors start after.
-    expect(FIRST_SETTINGS_DOOR_OPTION).toBe(23);
+    // 21 is the palette, 22 is the character set, 23 is animations, and the doors start after.
+    expect(FIRST_SETTINGS_DOOR_OPTION).toBe(24);
   });
 
   it('is shown with the value the caller has', () => {
@@ -133,5 +134,20 @@ describe('W row 22', () => {
     expect(map({ petsciicharset: undefined })).toBe('standard');
     expect(map({ petsciicharset: 'SWEDISH' })).toBe('standard');
     expect(map({})).toBe('standard');
+  });
+});
+
+describe('W row 23', () => {
+  it('shows animations and flips them through the real W menu, stored as the negative', async () => {
+    const d = driver();
+    handleWriteUserParamsCommand(d.socket, d.session);
+    expect(d.row(23)).toMatch(/ANIMATIONS\.*\s+ON/);
+    d.session.subState = LoggedOnSubState.W_OPTION_SELECT;
+    await handleWOptionSelectInput(d.socket, d.session, '23');
+    expect(mockUpdateUser).toHaveBeenLastCalledWith('u22', { noAnimations: true }, { syncDisk: false });
+    expect(d.session.user.noAnimations).toBe(true);
+    expect(d.row(23)).toMatch(/ANIMATIONS\.*\s+OFF/);
+    await handleWOptionSelectInput(d.socket, d.session, '23');
+    expect(mockUpdateUser).toHaveBeenLastCalledWith('u22', { noAnimations: false }, { syncDisk: false });
   });
 });

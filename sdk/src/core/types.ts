@@ -290,6 +290,8 @@ export interface BBSApi {
   togglePetsciiPalette?(): Promise<'vdc' | 'vic'>;
   /** Flip the PETSCII character set between standard and Swedish; the notice is the board's own sentence. Optional: an older backend has no such method. */
   togglePetsciiCharset?(): Promise<{ charset: 'standard' | 'swedish'; notice: string }>;
+  /** Turn board animations (slides, wipes, door effects) on or off; resolves true when they are now on. Optional: an older backend has no such method. */
+  toggleAnimations?(): Promise<boolean>;
   /** The caller's own record as W option 19 prints it. Optional: an older backend has no such method. */
   myData?(): Array<{ label: string; value: string }>;
   /** Run the board's three GDPR erasure checks (confirm, password, username) in order and, unless check is true, erase and drop the line. Optional: an older backend has no such method. */

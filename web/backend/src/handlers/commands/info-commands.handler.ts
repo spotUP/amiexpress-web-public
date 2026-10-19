@@ -39,6 +39,7 @@ import type { BBSSession } from '../../index';
 import { changeWPassword } from '../../services/user-settings/w-password';
 import {
   MODEM_OPTIONS, webTerminalState, applyModemSpeed, togglePetsciiPalette, togglePetsciiCharset, petsciiCharsetNotice,
+  toggleAnimations, animationsNotice,
 } from '../../services/user-settings/web-terminal-settings';
 
 // Dependencies injected from index.ts
@@ -422,6 +423,10 @@ function _paintWCommandMenu(socket: any, session: BBSSession): void {
   // its column tab.
   emitText(socket, wRow(' 22', 'PETSCII CHARACTER SET..', webTerminal.petsciiCharset));
 
+  // WEB_: board animations - slides, wipes and door effects. Off stops them
+  // everywhere except inside a game. No express.e counterpart.
+  emitText(socket, wRow(' 23', 'ANIMATIONS.............', webTerminal.animations));
+
   // WEB_: DOORS THAT REGISTER THEMSELVES AS SETTINGS. A door that exists to
   // change what the board does for this caller belongs in the list he already
   // opens to change such things, rather than behind a command name he has to
@@ -437,13 +442,13 @@ function _paintWCommandMenu(socket: any, session: BBSSession): void {
 }
 
 /** The first W option number a registered settings door can take. */
-export const FIRST_SETTINGS_DOOR_OPTION = 23;
+export const FIRST_SETTINGS_DOOR_OPTION = 24;
 
 /** The settings doors this caller may open, from the board's own door list. */
 export function settingsDoorEntries(session: BBSSession): SettingsDoorEntry[] {
   const { getDoors } = require('../door.handler');
-  // WEB_: this menu draws the web terminal settings itself (rows 17-22: modem speed, font, data,
-  // erasure, PETSCII colours and character set), so the WEBTERM door that is the same six
+  // WEB_: this menu draws the web terminal settings itself (rows 17-23: modem speed, font, data,
+  // erasure, PETSCII colours, character set and animations), so the WEBTERM door that is the same
   // settings in the W door is not offered a second time. No express.e counterpart.
   return settingsDoorsFor(getDoors(), session as never).filter((entry) => entry.command !== WEB_TERMINAL_DOOR);
 }
@@ -536,7 +541,7 @@ export async function handleWOptionSelectInput(socket: any, session: BBSSession,
   const option = parseInt(trimmed, 10) || 0;
 
   // 18 = last express.e/web-extension option, 19/20 = GDPR, 21 = the PETSCII
-  // palette, 22 = the PETSCII character set, and from
+  // palette, 22 = the PETSCII character set, 23 = animations, and from
   // FIRST_SETTINGS_DOOR_OPTION up are the doors that
   // registered themselves as settings.
   const settingsDoors = settingsDoorEntries(session);
@@ -760,6 +765,14 @@ export async function handleWOptionSelectInput(socket: any, session: BBSSession,
     case 22: { // WEB_ which character ROM his PETSCII screen draws
       emitText(socket, AnsiUtil.colorize(
         petsciiCharsetNotice(await togglePetsciiCharset(socket, session)) + '\r\n',
+        'yellow'));
+      _displayWCommandMenu(socket, session);
+      return;
+    }
+
+    case 23: { // WEB_ board animations on or off
+      emitText(socket, AnsiUtil.colorize(
+        animationsNotice(await toggleAnimations(socket, session)) + '\r\n',
         'yellow'));
       _displayWCommandMenu(socket, session);
       return;

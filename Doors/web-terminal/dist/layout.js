@@ -9,6 +9,7 @@ exports.ROWS = [
     { id: 'font', label: 'Terminal font', blurb: 'The typeface your terminal draws in' },
     { id: 'palette', label: 'PETSCII 80 colours', blurb: 'The sixteen colours of an 80-column PETSCII screen' },
     { id: 'charset', label: 'PETSCII character set', blurb: 'Standard, or the Swedish ROM' },
+    { id: 'animations', label: 'Animations', blurb: 'Slides, wipes and effects; games keep theirs' },
     { id: 'data', label: 'View my data', blurb: 'Everything this board keeps about you' },
     { id: 'erase', label: 'Delete my account', blurb: 'Erase your data from this board' },
 ];
@@ -20,6 +21,7 @@ function valueOf(id, s) {
         case 'font': return s.font;
         case 'palette': return s.petsciiPalette;
         case 'charset': return s.petsciiCharset;
+        case 'animations': return s.animations;
         default: return '';
     }
 }

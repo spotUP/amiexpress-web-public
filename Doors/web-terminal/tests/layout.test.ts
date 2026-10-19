@@ -2,10 +2,16 @@ import assert from 'node:assert';
 import type { WebTerminalState } from '@amiexpress/bbs-door-sdk/core/types';
 import { ROWS, rowLines, valueOf, dataLines } from '../layout';
 
-const state: WebTerminalState = { modemSpeed: '2400 bps', font: 'MicroKnight', fontFixedNotice: '', petsciiPalette: 'C128 (VDC)', petsciiCharset: 'STANDARD' };
+const state: WebTerminalState = { modemSpeed: '2400 bps', font: 'MicroKnight', fontFixedNotice: '', petsciiPalette: 'C128 (VDC)', petsciiCharset: 'STANDARD', animations: 'OFF' };
 
-export async function the_six_rows_are_the_internal_w_rows_17_to_22(): Promise<void> {
-  assert.deepStrictEqual(ROWS.map(r => r.id), ['modem', 'font', 'palette', 'charset', 'data', 'erase']);
+export async function the_seven_rows_are_the_internal_w_rows_17_to_23(): Promise<void> {
+  assert.deepStrictEqual(ROWS.map(r => r.id), ['modem', 'font', 'palette', 'charset', 'animations', 'data', 'erase']);
+}
+export async function the_animations_row_shows_the_board_value(): Promise<void> {
+  assert.strictEqual(valueOf('animations', state), 'OFF');
+  const [line] = rowLines('animations', state, 80);
+  assert.ok(line.includes('Animations') && line.includes('OFF'));
+  assert.ok(rowLines('animations', { ...state, animations: 'ON' }, 80)[0].includes('ON'));
 }
 export async function eighty_columns_is_one_line_label_then_value(): Promise<void> {
   const [line] = rowLines('modem', state, 80);

@@ -1,13 +1,14 @@
-/** WEBTERM's rows - internal W rows 17-22 - as text. Pure. */
+/** WEBTERM's rows - internal W rows 17-23 - as text. Pure. */
 import type { WebTerminalState } from '@amiexpress/bbs-door-sdk/core/types';
 
-export type RowId = 'modem' | 'font' | 'palette' | 'charset' | 'data' | 'erase';
+export type RowId = 'modem' | 'font' | 'palette' | 'charset' | 'animations' | 'data' | 'erase';
 
 export const ROWS: ReadonlyArray<{ id: RowId; label: string; blurb: string }> = [
   { id: 'modem', label: 'Modem emulation speed', blurb: "Slows the screen to a real modem's speed" },
   { id: 'font', label: 'Terminal font', blurb: 'The typeface your terminal draws in' },
   { id: 'palette', label: 'PETSCII 80 colours', blurb: 'The sixteen colours of an 80-column PETSCII screen' },
   { id: 'charset', label: 'PETSCII character set', blurb: 'Standard, or the Swedish ROM' },
+  { id: 'animations', label: 'Animations', blurb: 'Slides, wipes and effects; games keep theirs' },
   { id: 'data', label: 'View my data', blurb: 'Everything this board keeps about you' },
   { id: 'erase', label: 'Delete my account', blurb: 'Erase your data from this board' },
 ];
@@ -20,6 +21,7 @@ export function valueOf(id: RowId, s: WebTerminalState): string {
     case 'font': return s.font;
     case 'palette': return s.petsciiPalette;
     case 'charset': return s.petsciiCharset;
+    case 'animations': return s.animations;
     default: return '';
   }
 }

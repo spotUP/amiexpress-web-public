@@ -1,6 +1,6 @@
-/** WEBTERM's rows - internal W rows 17-22 - as text. Pure. */
+/** WEBTERM's rows - internal W rows 17-23 - as text. Pure. */
 import type { WebTerminalState } from '@amiexpress/bbs-door-sdk/core/types';
-export type RowId = 'modem' | 'font' | 'palette' | 'charset' | 'data' | 'erase';
+export type RowId = 'modem' | 'font' | 'palette' | 'charset' | 'animations' | 'data' | 'erase';
 export declare const ROWS: ReadonlyArray<{
     id: RowId;
     label: string;

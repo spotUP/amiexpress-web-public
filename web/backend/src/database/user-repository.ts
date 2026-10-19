@@ -356,6 +356,7 @@ console.error(`[Database] Failed to append BBS user to disk:`, error);
       // is the default (sdk/petscii/c64-palette.ts).
       petsciiPalette: user.petsciipalette === 'vic' ? 'vic' : 'vdc',
       petsciiCharset: user.petsciicharset === 'swedish' ? 'swedish' : 'standard',
+      noAnimations: Boolean(user.noanimations),                   // Animations off (W row 23); column stores the negative
       themePreference: user.themepreference || '',                // Door theme; '' = the board default (themeById resolves it)
       menuStyle: user.menustyle || '',                            // Menu style: '' = board default (plan 2026-10-17 S2)
       // SCREEN theme - which set of board art this caller wears. Empty is

@@ -5,7 +5,7 @@ jest.mock('../../src/utils/modem-emulator.util', () => ({ getModemEmulator: () =
 const buffer = { setFlushDelay: jest.fn() };
 jest.mock('../../src/utils/ansi-buffer.util', () => ({ getAnsiBuffer: () => buffer }));
 
-import { applyModemSpeed, MODEM_OPTIONS, togglePetsciiCharset, togglePetsciiPalette, webTerminalState } from '../../src/services/user-settings/web-terminal-settings';
+import { animationsNotice, applyModemSpeed, MODEM_OPTIONS, toggleAnimations, togglePetsciiCharset, togglePetsciiPalette, webTerminalState } from '../../src/services/user-settings/web-terminal-settings';
 
 const socket = () => ({ emit: jest.fn() });
 const caller = (over: Record<string, unknown> = {}): any => ({ modemBps: 0, user: { id: 7, baud: 0, petsciiPalette: 'vdc', petsciiCharset: 'standard', fontPreference: 'MicroKnight', ...over } });
@@ -47,4 +47,17 @@ test('a PETSCII screen shows the C64 set as its font and says why it cannot chan
   const st = webTerminalState(s);
   expect(st.font).toBe('C64 CHARACTER SET');
   expect(st.fontFixedNotice.length).toBeGreaterThan(0);
+});
+test('animations flip off and back on, stored as the negative (W 23)', async () => {
+  const s = caller(); const sock = socket();
+  expect(webTerminalState(s).animations).toBe('ON');
+  expect(await toggleAnimations(sock, s)).toBe(false);
+  expect(changeAccount).toHaveBeenLastCalledWith(s, { noAnimations: true });
+  expect(s.user.noAnimations).toBe(true);
+  expect(webTerminalState(s).animations).toBe('OFF');
+  expect(animationsNotice(false)).toBe('Animations are now OFF.');
+  expect(await toggleAnimations(sock, s)).toBe(true);
+  expect(changeAccount).toHaveBeenLastCalledWith(s, { noAnimations: false });
+  expect(webTerminalState(s).animations).toBe('ON');
+  expect(animationsNotice(true)).toBe('Animations are now ON.');
 });

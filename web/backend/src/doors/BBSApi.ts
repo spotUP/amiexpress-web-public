@@ -28,7 +28,8 @@ import { checkConfAccess } from '../handlers/message/message-scan.handler';
 import { changeAccount } from '../services/account.service';
 import {
   MODEM_OPTIONS, webTerminalState, applyModemSpeed, togglePetsciiPalette as applyPetsciiPalette,
-  togglePetsciiCharset as applyPetsciiCharset, petsciiCharsetNotice, type WebTerminalState,
+  togglePetsciiCharset as applyPetsciiCharset, petsciiCharsetNotice, toggleAnimations as applyAnimations,
+  type WebTerminalState,
 } from '../services/user-settings/web-terminal-settings';
 import { TERMINAL_FONTS } from '../constants/terminal-fonts';
 import { chooseTerminalFont as applyTerminalFont } from '../services/terminal-font.service';
@@ -667,6 +668,11 @@ console.log('[BBSApi] Mouse events disabled');
   async togglePetsciiCharset(): Promise<{ charset: 'standard' | 'swedish'; notice: string }> {
     const charset = await applyPetsciiCharset(this.socket, this.session);
     return { charset, notice: petsciiCharsetNotice(charset) };
+  }
+
+  /** W row 23 for the WEBTERM door: true when animations are now on. */
+  async toggleAnimations(): Promise<boolean> {
+    return applyAnimations(this.socket, this.session);
   }
 
   myData(): Array<{ label: string; value: string }> {

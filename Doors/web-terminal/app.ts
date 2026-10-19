@@ -127,6 +127,7 @@ export async function startWebTerminal(session: DoorSession): Promise<WebTermina
       }
       case 'palette': await bbs.togglePetsciiPalette(); refresh(); return;
       case 'charset': { const r = await bbs.togglePetsciiCharset(); refresh(); note(r.notice); return; }
+      case 'animations': await bbs.toggleAnimations?.(); refresh(); return;
       case 'data': view = 'data'; chrome.setHints(DATA_HINTS); setBody(dataLines(bbs.myData(), width)); note('Up and Down scroll. Esc returns to the list.'); return;
       case 'erase': {
         const confirm = await ask('Delete my account', 'This cannot be undone. Type YES ERASE to continue:');

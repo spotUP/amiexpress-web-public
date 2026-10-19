@@ -420,6 +420,14 @@ console.log('✓ Added fontpreference column');
 console.log('✓ Added petsciicharset column');
       }
 
+      if (!columnNames.includes('noanimations')) {
+        // WEB_: the caller turned board animations off (W row 23). Stores the
+        // NEGATIVE, because a stored boolean cannot default to true: every
+        // existing row reads 0 = animations on. Web-only, never in user.data.
+        this.db.exec('ALTER TABLE users ADD COLUMN noanimations INTEGER NOT NULL DEFAULT 0');
+        console.log('[DB] Added noanimations column to users');
+      }
+
       if (!columnNames.includes('petsciipalette')) {
         // Which sixteen colours this caller's PETSCII screen is painted with.
         // Only the 80-column screen has a choice - a C64 is a VIC-II - and a

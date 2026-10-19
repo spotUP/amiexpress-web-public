@@ -895,7 +895,7 @@ export interface StorageAPI {
   clear(): Promise<void>;
 }
 
-/** The board's web-terminal settings (W rows 17, 18, 21, 22), declared once here. */
+/** The board's web-terminal settings (W rows 17, 18, 21, 22, 23), declared once here. */
 export interface WebTerminalState {
   /** The modem speed label, 'MAX (No Throttle)' when off. */
   modemSpeed: string;
@@ -905,6 +905,8 @@ export interface WebTerminalState {
   fontFixedNotice: string;
   petsciiPalette: 'C128 (VDC)' | 'C64 (VIC-II)';
   petsciiCharset: 'STANDARD' | 'SWEDISH';
+  /** Board animations (slides, wipes, door effects); games keep theirs. */
+  animations: 'ON' | 'OFF';
 }
 
 /**
@@ -929,6 +931,8 @@ export interface BBSApi {
   togglePetsciiPalette?(): Promise<'vdc' | 'vic'>;
   /** Flip the PETSCII character set between standard and Swedish; the notice is the board's own sentence. Optional: an older backend has no such method. */
   togglePetsciiCharset?(): Promise<{ charset: 'standard' | 'swedish'; notice: string }>;
+  /** Turn board animations (slides, wipes, door effects) on or off; resolves true when they are now on. Optional: an older backend has no such method. */
+  toggleAnimations?(): Promise<boolean>;
   /** The caller's own record as W option 19 prints it. Optional: an older backend has no such method. */
   myData?(): Array<{ label: string; value: string }>;
   /** Run the board's three GDPR erasure checks (confirm, password, username) in order and, unless check is true, erase and drop the line. Optional: an older backend has no such method. */
