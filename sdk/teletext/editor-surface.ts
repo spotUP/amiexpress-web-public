@@ -373,11 +373,28 @@ export interface ColouredEdit {
 }
 
 /**
+ * Make cell `x` of `cells` a space by sliding the attributes from the start
+ * of its run up to `x` one cell left, onto the space before that run. Every code keeps its order
+ * and stays left of what it colours, so the row keeps its look; the run
+ * moves on ahead of a stroke instead of standing in it. `false` when there
+ * is no space to slide onto.
+ */
+function slideAttributesLeft(cells: Uint8Array, x: number, y: number): boolean {
+  let start = x;
+  while (start > 0 && cells[indexOf(start - 1, y)] < SPACE) start--;
+  if (start === 0 || cells[indexOf(start - 1, y)] !== SPACE) return false;
+  for (let col = start; col <= x; col++) cells[indexOf(col - 1, y)] = cells[indexOf(col, y)];
+  cells[indexOf(x, y)] = SPACE;
+  return true;
+}
+
+/**
  * Draw Blocks: set one sixel in the picked foreground on the picked
  * background, placing the graphics colour code (and the background codes)
  * left of the cell when the row does not already draw that cell so. A cell
- * holding an attribute is never drawn on; `fg` 0 (black) has no Level 1 code
- * and draws nothing.
+ * holding an attribute first slides its run left onto free spaces; with no
+ * room it is not drawn on. `fg` 0 (black) has no Level 1 code and draws
+ * nothing.
  */
 export function paintMosaic(
   surface: TeletextSurface,
@@ -389,8 +406,12 @@ export function paintMosaic(
   if (px < 0 || py < 0 || px >= SIXEL_COLS || py >= SIXEL_ROWS || fg === 0) return { surface, blocked: false };
   const x = px >> 1;
   const y = Math.floor(py / 3);
-  if (surface.cells[indexOf(x, y)] < SPACE) return { surface, blocked: false };
-  const next = inColour(surface, x, y, { fg, bg, graphics: true }, (cells) => {
+  let from = surface;
+  if (surface.cells[indexOf(x, y)] < SPACE) {
+    from = cloneSurface(surface);
+    if (!slideAttributesLeft(from.cells, x, y)) return { surface, blocked: false };
+  }
+  const next = inColour(from, x, y, { fg, bg, graphics: true }, (cells) => {
     const drawn = plotMosaic({ cells, meta: surface.meta }, px, py, true);
     cells.set(drawn.cells);
   });

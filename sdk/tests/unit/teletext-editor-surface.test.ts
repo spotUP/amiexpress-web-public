@@ -159,6 +159,28 @@ describe('teletext editor surface', () => {
       expect(at(typeCharColoured(typed.surface, 5, 0, 0x59, 1, 0).surface.cells, 4, 0)).toBe(0x58);
     });
 
+    it('a stroke drawn on leftwards pushes its colour code ahead instead of leaving a hole', () => {
+      // Started at cell 10, the code sits in cell 9. Drawing on over cells
+      // 9, 8, 7 used to skip 9 for good: a black column inside the shape.
+      let s = paintMosaic(blankSurface(), 20, 0, 7, 0).surface;
+      expect(at(s.cells, 9, 0)).toBe(0x17);
+      for (const px of [18, 16, 14]) {
+        const edit = paintMosaic(s, px, 0, 7, 0);
+        expect(edit.blocked).toBe(false);
+        s = edit.surface;
+      }
+      expect(row(s.cells, 0).slice(6, 11)).toEqual([0x17, 0x21, 0x21, 0x21, 0x21]);
+      // A background run (three codes) slides as one, in order.
+      let blue = paintMosaic(blankSurface(), 20, 0, 7, 4).surface;
+      expect(row(blue.cells, 0).slice(7, 11)).toEqual([0x14, 0x1d, 0x17, 0x21]);
+      blue = paintMosaic(blue, 18, 0, 7, 4).surface;
+      expect(row(blue.cells, 0).slice(6, 11)).toEqual([0x14, 0x1d, 0x17, 0x21, 0x21]);
+      expect(attributesAt(blue, 9, 0)).toEqual({ fg: 7, bg: 4, graphics: true });
+      // With no spaces to slide onto, the code cell stays as it is.
+      const edge = paintMosaic(blankSurface(), 2, 0, 7, 0).surface;
+      expect(paintMosaic(edge, 0, 0, 7, 0).surface).toBe(edge);
+    });
+
     it('eraseAt clears a sixel in a block and blanks a letter, never an attribute', () => {
       const drawn = paintMosaic(blankSurface(), 10, 3, 1, 0).surface;
       expect(at(eraseAt(drawn, 10, 3).cells, 5, 1)).toBe(0x20);
