@@ -6,6 +6,19 @@ export const CELL_WIDTH = 8;
 export const CELL_HEIGHT = 16;
 
 /**
+ * A cell's size in CSS pixels. The font is drawn at `height`: every face this
+ * admin draws declares a line box of exactly one em, so the cell height IS the
+ * font size - the same rule the caller's terminal sizes its rows by.
+ */
+export interface CellGeometry {
+  width: number;
+  height: number;
+}
+
+/** The ANSI screens' cell: VGA text mode. */
+export const VGA_CELL: CellGeometry = { width: CELL_WIDTH, height: CELL_HEIGHT };
+
+/**
  * What the canvas renderer actually draws, as a function.
  *
  * Separated from the component on purpose: a test environment has no 2D
@@ -65,7 +78,13 @@ export function paintScreen(
    * mosaic sextants.
    */
   fontFamily: string = '"TopazPlus_a1200", "Topaz_a1200", "Courier New", monospace',
+  /**
+   * The cell the art is laid out in. A native teletext page passes the
+   * caller's teletext cell (`TELETEXT_CELL`), which is wider than VGA's.
+   */
+  cell: CellGeometry = VGA_CELL,
 ): void {
+  const { width: CELL_W, height: CELL_H } = cell;
   const rows = canvas.length;
   const cols = rows > 0 ? canvas[0].length : 0;
 
@@ -76,7 +95,7 @@ export function paintScreen(
   }
 
   ctx.fillStyle = ansiColor(0);
-  ctx.fillRect(0, 0, cols * CELL_WIDTH, rows * CELL_HEIGHT);
+  ctx.fillRect(0, 0, cols * CELL_W, rows * CELL_H);
 
   // Topaz first: the board's screens were drawn on an Amiga, in this face, and
   // the editor should show the sysop what a caller sees. The rest of the stack
@@ -90,7 +109,7 @@ export function paintScreen(
    * ahead of both and is not shipped here at all, so the canvas drew Amiga art
    * in whatever the browser reached for.
    */
-  ctx.font = `${CELL_HEIGHT}px ${fontFamily}`;
+  ctx.font = `${CELL_H}px ${fontFamily}`;
   ctx.textBaseline = 'top';
 
   for (let y = 0; y < rows; y++) {
@@ -99,11 +118,11 @@ export function paintScreen(
       const cell = row[x];
       if (!cell) continue;
 
-      const left = x * CELL_WIDTH;
-      const top = y * CELL_HEIGHT;
+      const left = x * CELL_W;
+      const top = y * CELL_H;
 
       ctx.fillStyle = paletteColor(cell.bg, palette);
-      ctx.fillRect(left, top, CELL_WIDTH, CELL_HEIGHT);
+      ctx.fillRect(left, top, CELL_W, CELL_H);
 
       // A space carries its background and nothing else - drawing it costs a
       // glyph per cell on a screen that is mostly spaces.
@@ -120,10 +139,10 @@ export function paintScreen(
     ctx.strokeStyle = ansiColor(mark.broken ? 9 : 11);
     ctx.lineWidth = 1;
     ctx.strokeRect(
-      mark.x * CELL_WIDTH + 0.5,
-      mark.y * CELL_HEIGHT + 0.5,
-      mark.length * CELL_WIDTH - 1,
-      CELL_HEIGHT - 1,
+      mark.x * CELL_W + 0.5,
+      mark.y * CELL_H + 0.5,
+      mark.length * CELL_W - 1,
+      CELL_H - 1,
     );
   }
 
@@ -136,14 +155,14 @@ export function paintScreen(
    */
   for (const after of folds) {
     if (after <= 0 || after >= rows) continue;
-    const y = after * CELL_HEIGHT + 0.5;
+    const y = after * CELL_H + 0.5;
     ctx.save();
     ctx.setLineDash([6, 4]);
     ctx.strokeStyle = ansiColor(14);
     ctx.lineWidth = 1;
     ctx.beginPath();
     ctx.moveTo(0, y);
-    ctx.lineTo(cols * CELL_WIDTH, y);
+    ctx.lineTo(cols * CELL_W, y);
     ctx.stroke();
     ctx.restore();
   }
@@ -152,10 +171,10 @@ export function paintScreen(
     ctx.strokeStyle = ansiColor(15);
     ctx.lineWidth = 1;
     ctx.strokeRect(
-      cursor.x * CELL_WIDTH + 0.5,
-      cursor.y * CELL_HEIGHT + 0.5,
-      CELL_WIDTH - 1,
-      CELL_HEIGHT - 1,
+      cursor.x * CELL_W + 0.5,
+      cursor.y * CELL_H + 0.5,
+      CELL_W - 1,
+      CELL_H - 1,
     );
   }
 }
@@ -173,11 +192,12 @@ export function paintScreen(
  */
 export function canvasPixelSize(
   cols: number, rows: number, scale: number, devicePixelRatio: number,
+  cell: CellGeometry = VGA_CELL,
 ): { width: number; height: number; ratio: number } {
   const ratio = devicePixelRatio * scale;
   return {
-    width: Math.max(1, Math.round(cols * CELL_WIDTH * ratio)),
-    height: Math.max(1, Math.round(rows * CELL_HEIGHT * ratio)),
+    width: Math.max(1, Math.round(cols * cell.width * ratio)),
+    height: Math.max(1, Math.round(rows * cell.height * ratio)),
     ratio,
   };
 }

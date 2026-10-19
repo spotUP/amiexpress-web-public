@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Cell } from '@amiexpress/bbs-door-sdk/engines/ui/ansi-editor/types';
-import { CELL_HEIGHT, CELL_WIDTH, canvasPixelSize, paintScreen, type Highlight } from './ansi-canvas-paint';
+import {
+  VGA_CELL, canvasPixelSize, paintScreen, type CellGeometry, type Highlight,
+} from './ansi-canvas-paint';
 import type { PaletteMode } from '../utils/ansi-palette';
 
-export { CELL_HEIGHT, CELL_WIDTH } from './ansi-canvas-paint';
+export { CELL_HEIGHT, CELL_WIDTH, VGA_CELL, type CellGeometry } from './ansi-canvas-paint';
 
 /**
  * A screen's cells, drawn as a grid the sysop can point at.
@@ -86,6 +88,12 @@ export interface AnsiCanvasProps {
   palette?: PaletteMode;
   /** The face the art is drawn in (CSS font-family list); Topaz when omitted. */
   fontFamily?: string;
+  /**
+   * The cell the art is laid out in, before `scale`; VGA when omitted. A
+   * native teletext page passes the caller's teletext cell, so the canvas is
+   * the shape a caller sees and a click lands on the cell they would.
+   */
+  cell?: CellGeometry;
   className?: string;
 }
 
@@ -94,6 +102,7 @@ export function AnsiCanvas({
   palette = 'full',
   testId = 'ansi-canvas',
   fontFamily,
+  cell = VGA_CELL,
 }: AnsiCanvasProps) {
   const elementRef = useRef<HTMLCanvasElement>(null);
   const drawingRef = useRef(false);
@@ -141,21 +150,21 @@ export function AnsiCanvas({
      * drawn at that size rather than drawn big and squeezed.
      */
     const { width, height, ratio } = canvasPixelSize(
-      cols, rows, scale, window.devicePixelRatio || 1,
+      cols, rows, scale, window.devicePixelRatio || 1, cell,
     );
     element.width = width;
     element.height = height;
     ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
 
-    paintScreen(ctx, canvas, cursor, highlights, palette, folds, hidden, fontFamily);
-  }, [canvas, cols, rows, cursor, highlights, palette, scale, fontEpoch, folds, hidden, fontFamily]);
+    paintScreen(ctx, canvas, cursor, highlights, palette, folds, hidden, fontFamily, cell);
+  }, [canvas, cols, rows, cursor, highlights, palette, scale, fontEpoch, folds, hidden, fontFamily, cell]);
 
   const report = useCallback((event: React.PointerEvent, phase: 'down' | 'move' | 'up') => {
     if (!onCellPointer) return;
 
     const rect = event.currentTarget.getBoundingClientRect();
-    const cellX = (event.clientX - rect.left) / (CELL_WIDTH * scale);
-    const cellY = (event.clientY - rect.top) / (CELL_HEIGHT * scale);
+    const cellX = (event.clientX - rect.left) / (cell.width * scale);
+    const cellY = (event.clientY - rect.top) / (cell.height * scale);
     const x = Math.floor(cellX);
     const y = Math.floor(cellY);
     if (x < 0 || y < 0 || x >= cols || y >= rows) return;
@@ -167,7 +176,7 @@ export function AnsiCanvas({
       buttons: event.buttons,
       altKey: event.altKey,
     });
-  }, [cols, rows, onCellPointer, scale]);
+  }, [cols, rows, onCellPointer, scale, cell]);
 
   return (
     <canvas
@@ -177,8 +186,8 @@ export function AnsiCanvas({
       data-rows={rows}
       className={className}
       style={{
-        width: `${cols * CELL_WIDTH * scale}px`,
-        height: `${rows * CELL_HEIGHT * scale}px`,
+        width: `${cols * cell.width * scale}px`,
+        height: `${rows * cell.height * scale}px`,
       }}
       onPointerDown={(event) => {
         drawingRef.current = true;

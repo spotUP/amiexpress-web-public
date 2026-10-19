@@ -32,7 +32,7 @@ import {
 import { FRAME_COLS, frameToTti, ttiToFrame } from '@amiexpress/bbs-door-sdk/teletext/edittf-frame';
 import { AnsiCanvas, type CellPointerDetail } from './AnsiCanvas';
 import type { Highlight } from './ansi-canvas-paint';
-import { TELETEXT_DISPLAY_ROWS, TELETEXT_FONT_FAMILY, teletextCells } from './teletext-cells';
+import { TELETEXT_CELL, TELETEXT_DISPLAY_ROWS, TELETEXT_FONT_FAMILY, teletextCells } from './teletext-cells';
 import { base64ToLatin1, latin1ToBase64 } from '../pages/screen-bytes';
 
 export interface TeletextScreenEditorProps {
@@ -276,6 +276,7 @@ export function TeletextScreenEditor({
               canvas={cells}
               testId="teletext-canvas"
               fontFamily={TELETEXT_FONT_FAMILY}
+              cell={TELETEXT_CELL}
               cursor={!readOnly && tool === 'text' ? cursor : null}
               highlights={codeCells}
               onCellPointer={readOnly ? undefined : onCellPointer}

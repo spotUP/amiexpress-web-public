@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { apiClient } from '../api/client';
-import { AnsiCanvas } from './AnsiCanvas';
-import { TELETEXT_FONT_FAMILY, teletextCells } from './teletext-cells';
+import { AnsiCanvas, CELL_WIDTH } from './AnsiCanvas';
+import { TELETEXT_CELL, TELETEXT_FONT_FAMILY, teletextCells } from './teletext-cells';
 import { base64ToLatin1 } from '../pages/screen-bytes';
 
 /**
@@ -143,7 +143,7 @@ export interface GalleryItem {
  * canvas reads it - the TDAText face is a terminal concern, not a content
  * one. Native packet teletext (.tti) is drawn the way the board serves it:
  * renderNativeTti's rows on the same cell canvas, in TeletextUPR
- * (`TeletextThumbnail`). Forty columns, so twice the ANSI card's scale.
+ * (`TeletextThumbnail`), in the caller's teletext cell, as wide as an ANSI card.
  *
  * RIP has no thumbnail. Its picture needs the vendored RIPtermJS interpreter
  * and a canvas per card, and a gallery is hundreds of cards; naming the format
@@ -172,8 +172,14 @@ function Thumbnail({ content, format }: { content: string; format?: GalleryItem[
    * 2807 cells wide showing its own top-left corner, which reads as a blank
    * screen next to a theme's card that draws fine.
    */
-  return <ScreenArt content={content} scale={0.28} maxRows={25} maxCols={80} />;
+  return <ScreenArt content={content} scale={ANSI_CARD_SCALE} maxRows={25} maxCols={80} />;
 }
+
+/** An ANSI card: an 80-column VGA screen at this fraction of full size. */
+const ANSI_CARD_SCALE = 0.28;
+
+/** A .tti card drawn as wide as an ANSI card: forty teletext cells across. */
+const TELETEXT_THUMBNAIL_SCALE = (80 * CELL_WIDTH * ANSI_CARD_SCALE) / (40 * TELETEXT_CELL.width);
 
 /** A .tti card: the page rendered once per content, not once per paint. */
 function TeletextThumbnail({ content }: { content: string }) {
@@ -181,8 +187,9 @@ function TeletextThumbnail({ content }: { content: string }) {
   return (
     <AnsiCanvas
       canvas={cells}
-      scale={0.56}
+      scale={TELETEXT_THUMBNAIL_SCALE}
       fontFamily={TELETEXT_FONT_FAMILY}
+      cell={TELETEXT_CELL}
       testId="teletext-native-thumbnail"
     />
   );
