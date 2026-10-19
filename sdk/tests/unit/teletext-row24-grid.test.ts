@@ -35,6 +35,21 @@ describe('row 24 in the page grid', () => {
     expect(plain(lines[24]).trimEnd()).toBe('OWN TEXT');
   });
 
+  it('draws a double-height code on row 23 at normal height when no row 24 exists (Annex C.3 rule 1)', () => {
+    const subpage = subpageOf(['OL,22,PLAIN', `OL,23,${DOUBLE_HEIGHT}TALL`]);
+    const grid = subpageToGrid(subpage);
+    expect(grid[23].some(c => c.doubleHeight)).toBe(false);
+    const lines = renderSubpageLines(subpage, { mode: 'teletext' });
+    expect(lines).toHaveLength(24);
+    expect(lines.some(line => line.includes('\x1b#3') || line.includes(DH_BOTTOM))).toBe(false);
+  });
+
+  it('still doubles a legal row 22 into row 23', () => {
+    const grid = subpageToGrid(subpageOf([`OL,22,${DOUBLE_HEIGHT}TALL`]));
+    expect(grid[22][1].doubleHeight).toBe(true);
+    expect(grid[23][1].doubleHeightBottom).toBe(true);
+  });
+
   it('fills the Level 2.5 cell fields with Level 1 defaults', () => {
     const grid = subpageToGrid(subpageOf(['OL,1,\x1bAred']));
     const cell = grid[1][2];

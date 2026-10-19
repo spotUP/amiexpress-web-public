@@ -48,6 +48,7 @@ export function createDefaultRowState(): RowState {
     flash: false,
     conceal: false,
     escSwitch: false,
+    box: false,
   };
 }
 
@@ -83,9 +84,10 @@ export function applyControlCode(state: RowState, code: number): void {
         state.flash = false;
         break;
       case END_BOX:
+        state.box = false;
+        break;
       case START_BOX:
-        // Box control - at Level 1, these act as spacing codes with no
-        // further effect on the row state.
+        state.box = true;
         break;
       case NORMAL_HEIGHT:
         if (state.doubleHeight) state.heldMosaic = null;
@@ -162,7 +164,7 @@ function emitCell(
     charset: 'G0',
     underline: false,
     invert: false,
-    box: false,
+    box: state.box,
   };
 }
 
@@ -244,6 +246,48 @@ export function doubleHeightLowerRows(rows: readonly ArrayLike<number>[]): boole
 }
 
 /**
+ * First row on which a double-height code has no row below it to expand into.
+ *
+ * ETSI EN 300 706 Annex C.3 rule 1: the transmission "should inhibit the
+ * transmission of double height/double size attributes in rows 0, 23 and 24 ...
+ * If a decoder receives an illegal combination, it may choose, for example, to
+ * display a partial character, to reduce the size or to ignore the character
+ * completely." (s.9.3 Notes 1 and 7 say the same.) We take "reduce size": the row is
+ * drawn at normal height, so a 24-row page never ends in a top half with no
+ * bottom half, and row 24 (when present) is never its lower half.
+ */
+const FIRST_ROW_WITHOUT_ROOM_BELOW = 23;
+
+function withoutIllegalDoubleHeight(cells: Cell[], row: number): Cell[] {
+  if (row < FIRST_ROW_WITHOUT_ROOM_BELOW) return cells;
+  return cells.map(cell => (cell.doubleHeight ? { ...cell, doubleHeight: false } : cell));
+}
+
+export interface ProcessPageOptions {
+  /**
+   * The page has the Newsflash (C5) or Subtitle (C6) control bit set. EN 300
+   * 706 0/B: "Characters outside this area are not displayed". The spec shows
+   * the video picture there; a BBS has none, so the outside is black (the
+   * transparent colour is defined as black here).
+   */
+  boxed?: boolean;
+}
+
+/** A cell outside the box on a boxed page: nothing drawn, black, no attributes that paint. */
+function hideOutsideBox(cell: Cell): Cell {
+  if (cell.box) return cell;
+  return {
+    ...cell,
+    char: 0x20,
+    charsetMode: CharsetMode.TEXT,
+    fgColor: Color.BLACK,
+    bgColor: Color.BLACK,
+    flash: false,
+    conceal: false,
+  };
+}
+
+/**
  * Process a full 24x40 page through the state machine. A 25th input row is
  * row 24 (s.9.3.1, Level 1.5 and up) and is rendered as a 25th grid row.
  * Row 24 is never the lower half of a double-height row 23: s.9.3 allows no
@@ -254,7 +298,7 @@ export function doubleHeightLowerRows(rows: readonly ArrayLike<number>[]): boole
  * double-height cell it shows that cell's lower half; everywhere else it
  * shows a space in the background of the cell above, with no foreground.
  */
-export function processPage(pageData: Uint8Array[] | number[][]): PageGrid {
+export function processPage(pageData: Uint8Array[] | number[][], options: ProcessPageOptions = {}): PageGrid {
   const rowCount = pageData.length > ROWS ? ROWS + 1 : ROWS;
   const rows = pageData.slice(0, rowCount);
   const lower = doubleHeightLowerRows(rows.slice(0, ROWS));
@@ -265,10 +309,10 @@ export function processPage(pageData: Uint8Array[] | number[][]): PageGrid {
       ? grid[row - 1].map(cell =>
           cell.doubleHeight
             ? { ...cell, doubleHeightBottom: true }
-            : { ...emitCell(createDefaultRowState(), 0x20, CharsetMode.TEXT, MosaicType.CONTIGUOUS), bgColor: cell.bgColor },
+            : { ...emitCell(createDefaultRowState(), 0x20, CharsetMode.TEXT, MosaicType.CONTIGUOUS), bgColor: cell.bgColor, box: cell.box },
         )
-      : processRow(rows[row]);
+      : withoutIllegalDoubleHeight(processRow(rows[row]), row);
   }
 
-  return grid;
+  return options.boxed ? grid.map(row => row.map(hideOutsideBox)) : grid;
 }

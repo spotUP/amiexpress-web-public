@@ -44,6 +44,8 @@ export interface RowState {
   flash: boolean;
   conceal: boolean;
   escSwitch: boolean;
+  /** Inside a Start Box .. End Box area (0/B .. 0/A); off at the start of every row. */
+  box: boolean;
 }
 
 /**
@@ -79,7 +81,7 @@ export interface Cell {
   /** X/26 display attributes (G5); false at Level 1. */
   underline: boolean;
   invert: boolean;
-  /** Boxing (D4, G5); false until boxed pages are rendered. */
+  /** Inside a Start Box / End Box area (D4); X/26 boxing (G5) sets it too. Only a newsflash or subtitle page hides what is outside. */
   box: boolean;
 }
 

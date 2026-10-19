@@ -84,7 +84,8 @@ export function subpageToGrid(subpage: TeletextSubpage): PageGrid {
     raw[at] = Array.from(compileRow(row).bytes40);
   });
 
-  return processPage(raw);
+  const { newsflash, subtitle } = subpage.pageFlags;
+  return processPage(raw, { boxed: newsflash || subtitle });
 }
 
 /**
