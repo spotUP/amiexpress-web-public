@@ -30,6 +30,7 @@ import { getSession } from './session-manager';
 import { createConfigRouter } from '../api/config-routes';
 import { mountMagazineAdmin } from '../api/magazine-admin-routes';
 import { republishMagazine } from '../services/magazine';
+import { startMagazineVideoService } from '../services/magazine/video-service';
 import { createDoorArtRouter } from '../api/door-art-routes';
 import { createBatchRouter } from '../api/batch-routes';
 import { createImportRouter } from '../handlers/admin/import.handler';
@@ -291,6 +292,8 @@ export function registerHttpRoutes(app: Application, io: SocketIOServer): void {
   // ===== Menu doors API - Sysop-only (Menus/<KIND>.json and Screens/menus/<kind>/logos) =====
   const { createMenuConfigRouter, menuConfigBodyError } = require('../api/menu-config-routes');
   app.use('/api/config/menus', authenticateToken(db), requireSysop(), createMenuConfigRouter(boardRoot()), menuConfigBodyError);
+
+  startMagazineVideoService();
 
   // ===== Magazine API - Sysop-only (the front page of THE UNKNOWN FREQUENCY) =====
   mountMagazineAdmin(app, [authenticateToken(db), requireSysop()], {

@@ -50,6 +50,11 @@
       "require": "./dist/formats/magazine.js",
       "default": "./dist/formats/magazine.js"
     },
+    "./formats/magazine-video": {
+      "types": "./dist/formats/magazine-video.d.ts",
+      "require": "./dist/formats/magazine-video.js",
+      "default": "./dist/formats/magazine-video.js"
+    },
     "./formats/notify": {
       "types": "./dist/formats/notify.d.ts",
       "require": "./dist/formats/notify.js",
