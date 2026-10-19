@@ -2826,7 +2826,7 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
 
     // Teletext session mode (T answer at the graphics prompt). Stays on the
     // xterm surface - unlike PETSCII there is no canvas, only a face, a
-    // palette and a SIZE. Classic teletext is 40x25 at 12x10 cells; the
+    // palette and a SIZE. Teletext is 40 columns at 12x10 cells, 26 rows here (25 page rows and the door bar); the
     // terminal models 80x24, so the mode doubles the calibrated cell: 40
     // teletext columns fill the width exactly, double-height rows take
     // two, and the box scrolls (its CSS clips). The face applies uncached
@@ -2866,7 +2866,7 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
     socket.on('system:notice', showSystemNotice);
     socket.on('system-message', showSystemNotice);
 
-    socket.on('texttv-mode', (data: { enabled: boolean }) => {
+    socket.on('texttv-mode', (data: { enabled: boolean; cols?: number; rows?: number }) => {
       if (data?.enabled) {
         console.log('[Terminal] Teletext mode on - TDAText face at 2x, teletext palette');
         texttvModeRef.current = true;
@@ -2896,7 +2896,9 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
         // draws 40 columns for this session, so the terminal shows 40.
         // Direct resize, never the 'terminal-resize' socket event - that
         // means "mount the C64 canvas" to this component.
-        term.resize(40, 25);
+        // The row count is the SERVER's (TELETEXT_SESSION_ROWS in
+        // screen-width.util.ts rides on the event); 25 only for an old server.
+        term.resize(data.cols ?? 40, data.rows ?? 25);
         if (terminalRef.current && texttvPrevOverflowRef.current === null) {
           texttvPrevOverflowRef.current = terminalRef.current.style.overflow || '';
           terminalRef.current.style.overflow = 'auto';

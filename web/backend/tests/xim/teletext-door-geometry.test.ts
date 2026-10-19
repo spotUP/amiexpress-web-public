@@ -25,7 +25,7 @@ describe('the geometry a 68K door is launched with', () => {
     // The round trip is the point: what the door's own BB_SCRWIDTH reads off
     // the copy must be what the board wrapped at.
     expect(doorScreenWidth(copy, 80)).toBe(C64_COLUMNS);
-    expect(doorScreenHeight({ ...copy, screenHeight: 24 }, 24)).toBe(C64_ROWS);
+    expect(doorScreenHeight({ ...copy, screenHeight: 24 }, 24)).toBe(26);
   });
 
   it('still carries PETSCII, and still answers 80 for an ANSI caller', () => {

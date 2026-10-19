@@ -16,6 +16,7 @@ import {
 } from '../../utils/line-input.util';
 import { emitPrompt } from '../../utils/output.util';
 import { logonNamePromptText } from '../../utils/node-tooltypes.util';
+import { TELETEXT_SESSION_ROWS } from '../../amiga-emulation/xim/screen-width.util';
 
 /**
  * Get the appropriate output event name based on session terminal type
@@ -211,7 +212,7 @@ console.log(`[PETSCII] PETSCII mode enabled - setting terminal to ${session.pets
     // terminal swaps to the TDAText face at 2x with a teletext palette on
     // the `texttv-mode` event below (the ONLY wire signal - no
     // terminal-resize, which the frontend reads as "mount the C64 canvas").
-    // Geometry is the classic 40x25: screens (.ttx authored 40 wide),
+    // Geometry is 40 x TELETEXT_SESSION_ROWS (26, screen-width.util.ts): screens (.ttx authored 40 wide),
     // doors (BB_SCRWIDTH answers 40) and the narrow layouts all key off
     // screenWidth, the same 40-column path PETSCII sessions use - except
     // nothing is transduced, everything stays ANSI.
@@ -220,9 +221,9 @@ console.log(`[PETSCII] PETSCII mode enabled - setting terminal to ${session.pets
     session.ripMode = false;
     session.ansiEnabled = true;
     session.screenWidth = 40;
-    session.screenHeight = 25;
-console.log('[TEXTTV] Teletext mode enabled - 40x25, TDAText face, .ttx preferred');
-    socket.emit('texttv-mode', { enabled: true });
+    session.screenHeight = TELETEXT_SESSION_ROWS;
+console.log(`[TEXTTV] Teletext mode enabled - 40x${TELETEXT_SESSION_ROWS}, TDAText face, .ttx preferred`);
+    socket.emit('texttv-mode', { enabled: true, cols: 40, rows: TELETEXT_SESSION_ROWS });
   } else if (hasT) {
     // WEB_: answering T on a byte transport. Same shape as the R fallback
     // below: no teletext renderer there (the palette and face are browser

@@ -21,6 +21,15 @@ export const DEFAULT_DOOR_COLUMNS = 80;
 /** A C64 screen is 25 rows, the way it is 40 columns: by definition. */
 export const C64_ROWS = 25;
 
+/**
+ * The web teletext session is 26 rows (sysop, 2026-10-19): page rows 0-24 are
+ * all visible (24 is the 25th page row) and the door status bar sits on
+ * screen row 26. THE one place this is written; pre-login.ts sets the
+ * session from it, `texttv-mode` carries it to the browser, doorScreenHeight
+ * answers it. Telnet and SSH never get teletext mode.
+ */
+export const TELETEXT_SESSION_ROWS = 26;
+
 export interface ScreenWidthSource {
   petsciiMode?: boolean;
   /** WEB_: teletext sessions are 40x25 like a C64, but stay ANSI. */
@@ -127,8 +136,8 @@ export function doorScreenHeight(
   fallback: number,
 ): number {
   if (session?.petsciiMode === true) return C64_ROWS;
-  // Teletext is 25 rows by definition, same grid as the C64.
-  if (session?.texttvMode === true) return C64_ROWS;
+  // Teletext: page rows 0-24 plus the door status bar.
+  if (session?.texttvMode === true) return TELETEXT_SESSION_ROWS;
   const reported = session?.screenHeight;
   if (typeof reported === 'number' && Number.isInteger(reported) && reported >= 10 && reported <= 200) {
     return reported;

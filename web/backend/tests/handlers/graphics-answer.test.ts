@@ -111,7 +111,7 @@ describe('applyGraphicsAnswer (express.e:29538-29546)', () => {
     expect(events).not.toContain('rip-mode');
   });
 
-  test('T enables teletext mode at 40x25 and emits texttv-mode', () => {
+  test('T enables teletext mode at 40x26 and emits texttv-mode', () => {
     // WEB_: no express.e counterpart. The web terminal swaps to TDAText at
     // 2x with a teletext palette on the event; geometry is the classic
     // 40x25 grid, the same 40-column path PETSCII sessions use.
@@ -123,8 +123,8 @@ describe('applyGraphicsAnswer (express.e:29538-29546)', () => {
     expect(session.petsciiMode).toBe(false);
     expect(session.ripMode).toBe(false);
     expect(session.screenWidth).toBe(40);
-    expect(session.screenHeight).toBe(25);
-    expect(socket.emit).toHaveBeenCalledWith('texttv-mode', { enabled: true });
+    expect(session.screenHeight).toBe(26);
+    expect(socket.emit).toHaveBeenCalledWith('texttv-mode', { enabled: true, cols: 40, rows: 26 });
   });
 
   test('P beats T when both are answered', () => {

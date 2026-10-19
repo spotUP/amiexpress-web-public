@@ -13,14 +13,14 @@ import { isNarrow } from '../../src/utils/table-format.util';
 import { wrapForSession, wrapDoorTextForSession } from '../../src/utils/wrap-for-session.util';
 import { wipeEffectsEnabled } from '../../src/utils/screen-wipe.util';
 
-const T = { texttvMode: true, screenWidth: 40, screenHeight: 25 };
+const T = { texttvMode: true, screenWidth: 40, screenHeight: 26 };
 const ANSI = { texttvMode: false, petsciiMode: false, screenWidth: 80, screenHeight: 24 };
 const C64 = { petsciiMode: true, screenWidth: 40, screenHeight: 25, petsciiColumns: 40 as const };
 
 describe('teletext 40-column authorities', () => {
-  test('doors read 40x25, like a C64 but ANSI', () => {
+  test('doors read 40x26 (teletext) and 40x25 (C64)', () => {
     expect(doorScreenWidth(T as any, 80)).toBe(40);
-    expect(doorScreenHeight(T as any, 24)).toBe(25);
+    expect(doorScreenHeight(T as any, 24)).toBe(26);
     expect(doorScreenWidth(C64 as any, 80)).toBe(40);
     expect(doorScreenWidth(ANSI as any, 80)).toBe(80);
     expect(doorScreenWidth(null, 80)).toBe(80);
