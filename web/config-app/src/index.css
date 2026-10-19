@@ -26,10 +26,10 @@
  * tokens at all - "the admin page turned white now?".
  */
 /* The face a native .tti page is drawn in - the caller's teletext font,
-   with the mosaic sextants renderNativeTti emits. OFL, licence beside it. */
+   with the mosaic sextants renderNativeTti emits. OFL, licence beside it in web/frontend/public/fonts. */
 @font-face {
   font-family: 'TeletextUPR';
-  src: url('./fonts/TeletextUPR.woff2') format('woff2');
+  src: url('../../frontend/public/fonts/TeletextUPR.woff2') format('woff2');
   font-weight: normal;
   font-style: normal;
   font-display: block;
