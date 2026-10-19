@@ -140,6 +140,37 @@ export function mosaicHalfCodepoint(
   return bases[half] + pattern;
 }
 
+const SEPARATED_SEXTANT_FIRST = 0x1ce51;
+const SEPARATED_SEXTANT_LAST = 0x1ce8f;
+
+let sextantPatterns: Map<number, number> | null = null;
+
+/**
+ * The pattern a Unicode block-mosaic codepoint stands for (D3), plus whether
+ * it is the separated form. Contiguous: the U+1FB00 sextants and the three
+ * Block Elements that stand in for patterns 21, 42 and 63 - read back from
+ * mosaicCodepoint so there is one table. Separated: U+1CE51-1CE8F, pattern =
+ * cp - 0x1CE50. The server writes these in teletext mode; the filter turns
+ * them into the double-height halves on an ESC#3 / ESC#4 row.
+ */
+export function sextantCodepointPattern(cp: number): { pattern: number; separated: boolean } | null {
+  if (cp >= SEPARATED_SEXTANT_FIRST && cp <= SEPARATED_SEXTANT_LAST) {
+    return { pattern: cp - SEPARATED_SEXTANT_FIRST + 1, separated: true };
+  }
+  if (cp !== 0x258c && cp !== 0x2590 && cp !== 0x2588 && (cp < 0x1fb00 || cp > 0x1fb3b)) return null;
+  if (!sextantPatterns) {
+    sextantPatterns = new Map();
+    for (let pattern = 1; pattern < 64; pattern += 1) {
+      // The G1 byte that means this pattern (bit 0x40 of the code carries cell 6).
+      const byte = pattern & 0x20 ? 0x60 + (pattern & 0x1f) : 0x20 + pattern;
+      const mapped = mosaicCodepoint(byte);
+      if (mapped !== null) sextantPatterns.set(mapped, pattern);
+    }
+  }
+  const pattern = sextantPatterns.get(cp);
+  return pattern === undefined ? null : { pattern, separated: false };
+}
+
 /** The private-use codepoint drawing one half of `ch`, or null if there is none. */
 export function halfCodepoint(ch: string, half: LineHalf): number | null {
   if (half === 'normal') return null;
@@ -269,6 +300,15 @@ export function createDoubleHeightFilter(): DoubleHeightFilter {
       }
 
       if (half === 'normal' || ch < ' ') { out += ch; continue; }
+
+      // Mosaics the board sent as Unicode (teletext mode) draw their halves too.
+      const point = data.codePointAt(i) as number;
+      const sextant = sextantCodepointPattern(point);
+      if (sextant) {
+        out += String.fromCodePoint(mosaicHalfCodepoint(sextant.pattern, half, sextant.separated));
+        if (point > 0xffff) i += 1;
+        continue;
+      }
 
       const cp = halfCodepoint(ch, half);
       out += cp === null ? ch : String.fromCodePoint(cp);

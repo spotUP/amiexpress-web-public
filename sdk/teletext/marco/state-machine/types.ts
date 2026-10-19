@@ -41,6 +41,8 @@ export interface RowState {
   heldMosaic: number | null;
   heldMosaicType: MosaicType;
   doubleHeight: boolean;
+  /** 0x0E / 0x0F in force (set-after); the cell pairing in processRow resolves it. */
+  doubleWidth: boolean;
   flash: boolean;
   conceal: boolean;
   escSwitch: boolean;
@@ -74,7 +76,7 @@ export interface Cell {
   doubleHeightBottom: boolean;
   flash: boolean;
   conceal: boolean;
-  /** Level 1 always 'single' until double width (D1) and X/26 (G5) land. */
+  /** 'single' except under 0x0E/0x0F (D1): the left / right half of a double width cell. */
   width: CellWidth;
   /** Level 1 always 'G0' until G2/G3 characters (E4, G8) land. */
   charset: CellCharset;

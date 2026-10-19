@@ -14,7 +14,7 @@
  */
 
 import type { PageGrid } from '../state-machine/types';
-import { CharsetMode, type ClutIndex } from '../state-machine/types';
+import { CharsetMode, MosaicType, type ClutIndex } from '../state-machine/types';
 
 const ROWS = 24;
 const COLS = 40;
@@ -153,6 +153,65 @@ export interface AnsiRenderOptions {
    * Omitted means the page named none, and the primary G0 stands.
    */
   subset?: string;
+  /**
+   * Draw for a TeletextUPR font session (the 'teletext' render mode): separated
+   * mosaics as U+1CE51-1CE8F, double width and double size cells as the font
+   * contract's private-use half and quarter glyphs (dev/scripts/fonts/README.md).
+   * Off, every cell draws at normal width in the contiguous glyphs, which any
+   * font and any 8-colour terminal can show.
+   */
+  teletextFont?: boolean;
+}
+
+// Font contract (dev/scripts/fonts/README.md). index = cp - 0x20 (Latin-1) or the 6-bit pattern.
+const SEPARATED_SEXTANT_BASE = 0x1ce50; // + pattern, pattern 1..63
+const DW_LATIN1 = { left: 0xe500, right: 0xe600 } as const;
+const DW_MOSAIC = {
+  contiguous: { left: 0xe700, right: 0xe740 },
+  separated: { left: 0xe780, right: 0xe7c0 },
+} as const;
+const DS_LATIN1 = { tl: 0xe800, tr: 0xe900, bl: 0xea00, br: 0xeb00 } as const;
+const DS_MOSAIC = {
+  contiguous: { tl: 0xec00, tr: 0xec40, bl: 0xec80, br: 0xecc0 },
+  separated: { tl: 0xed00, tr: 0xed40, bl: 0xed80, br: 0xedc0 },
+} as const;
+
+/**
+ * The font-contract glyph for a cell of a teletext-font session, or null when
+ * the ordinary glyph is right. A right-hand half takes its character from the
+ * cell on its left (its own content is ignored, Annex C.3).
+ */
+function teletextFontGlyph(row: PageGrid[number], col: number, subset?: string): string | null {
+  const cell = row[col];
+  const separated = cell.mosaicType === MosaicType.SEPARATED;
+  const source = cell.width === 'double-right' ? row[col - 1] : cell;
+  const isMosaic =
+    source.charsetMode === CharsetMode.GRAPHICS &&
+    ((source.char >= 0x20 && source.char <= 0x3f) || (source.char >= 0x60 && source.char <= 0x7f));
+  const bits = isMosaic ? mosaicBits(source.char) : 0;
+
+  if (cell.width === 'single') {
+    if (!isMosaic || !separated) return null;
+    return bits === 0 ? ' ' : String.fromCodePoint(SEPARATED_SEXTANT_BASE + bits);
+  }
+
+  const right = cell.width === 'double-right';
+  const size = cell.doubleHeight || cell.doubleHeightBottom;
+  const bottom = cell.doubleHeightBottom;
+  if (isMosaic) {
+    if (bits === 0) return ' ';
+    const kind = source.mosaicType === MosaicType.SEPARATED ? 'separated' : 'contiguous';
+    if (!size) return String.fromCodePoint(DW_MOSAIC[kind][right ? 'right' : 'left'] + bits);
+    const quarter = (bottom ? 'b' : 't') + (right ? 'r' : 'l');
+    return String.fromCodePoint(DS_MOSAIC[kind][quarter as 'tl'] + bits);
+  }
+  const ch = g0Char(source.char, subset);
+  const cp = ch.codePointAt(0)!;
+  if (cp < 0x20 || cp > 0xff) return ch;
+  if (cp === 0x20) return ' ';
+  if (!size) return String.fromCodePoint(DW_LATIN1[right ? 'right' : 'left'] + cp - 0x20);
+  const quarter = (bottom ? 'b' : 't') + (right ? 'r' : 'l');
+  return String.fromCodePoint(DS_LATIN1[quarter as 'tl'] + cp - 0x20);
 }
 
 /**
@@ -186,6 +245,7 @@ export function renderToAnsi(grid: PageGrid, options: AnsiRenderOptions = {}): s
     reveal = false,
     truecolor = false,
     subset,
+    teletextFont = false,
   } = options;
 
   const lines: string[] = [];
@@ -227,6 +287,14 @@ export function renderToAnsi(grid: PageGrid, options: AnsiRenderOptions = {}): s
       if (hidden) {
         line += ' ';
         continue;
+      }
+
+      if (teletextFont) {
+        const glyph = teletextFontGlyph(grid[row], col, subset);
+        if (glyph !== null) {
+          line += glyph;
+          continue;
+        }
       }
 
       // Resolve character

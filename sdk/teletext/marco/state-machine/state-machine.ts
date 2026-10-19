@@ -17,6 +17,8 @@ import {
   START_BOX,
   NORMAL_HEIGHT,
   DOUBLE_HEIGHT,
+  DOUBLE_WIDTH,
+  DOUBLE_SIZE,
   MOSAIC_BLACK,
   CONCEAL,
   CONTIGUOUS_MOSAIC,
@@ -45,11 +47,22 @@ export function createDefaultRowState(): RowState {
     heldMosaic: null,
     heldMosaicType: MosaicType.CONTIGUOUS,
     doubleHeight: false,
+    doubleWidth: false,
     flash: false,
     conceal: false,
     escSwitch: false,
     box: false,
   };
+}
+
+/**
+ * 0x0C / 0x0D / 0x0E / 0x0F pick one of four sizes (Table 26); each replaces
+ * the others. The held mosaic resets on any change of size (entry 1/E).
+ */
+function setSize(state: RowState, height: boolean, width: boolean): void {
+  if (state.doubleHeight !== height || state.doubleWidth !== width) state.heldMosaic = null;
+  state.doubleHeight = height;
+  state.doubleWidth = width;
 }
 
 /**
@@ -90,12 +103,16 @@ export function applyControlCode(state: RowState, code: number): void {
         state.box = true;
         break;
       case NORMAL_HEIGHT:
-        if (state.doubleHeight) state.heldMosaic = null;
-        state.doubleHeight = false;
+        setSize(state, false, false);
         break;
       case DOUBLE_HEIGHT:
-        if (!state.doubleHeight) state.heldMosaic = null;
-        state.doubleHeight = true;
+        setSize(state, true, false);
+        break;
+      case DOUBLE_WIDTH:
+        setSize(state, false, true);
+        break;
+      case DOUBLE_SIZE:
+        setSize(state, true, true);
         break;
       case CONCEAL:
         state.conceal = true;
@@ -160,7 +177,9 @@ function emitCell(
     doubleHeightBottom: false, // set in post-processing
     flash: state.flash,
     conceal: state.conceal,
-    width: 'single',
+    // 'double-left' here means "a double width code is in force"; pairWideCells
+    // gives the next cell its right half and drops it at column 39.
+    width: state.doubleWidth ? 'double-left' : 'single',
     charset: 'G0',
     underline: false,
     invert: false,
@@ -224,6 +243,38 @@ export function processRow(rowData: ArrayLike<number>): Cell[] {
       cells[col] = emitCell(state, byte, state.charsetMode, state.mosaicType);
     }
   });
+  return pairWideCells(cells);
+}
+
+/**
+ * Annex C.3 (EN 300 706): a double width or double size character spans two
+ * cells. The left cell draws the left half of its character; the cell to its
+ * right draws the right half and its OWN content is ignored (it keeps it
+ * only so a 40-column ANSI fallback can still show it). A wide character in
+ * column 39 has no room for its right half: the decoder may "reduce the
+ * size", which we do - it becomes a single-width character (double size
+ * keeps its height, i.e. becomes double height).
+ */
+function pairWideCells(cells: Cell[]): Cell[] {
+  for (let col = 0; col < cells.length; col++) {
+    if (cells[col].width !== 'double-left') continue;
+    if (col === cells.length - 1) {
+      cells[col] = { ...cells[col], width: 'single' };
+      break;
+    }
+    const left = cells[col];
+    cells[col + 1] = {
+      ...cells[col + 1],
+      fgColor: left.fgColor,
+      bgColor: left.bgColor,
+      flash: left.flash,
+      conceal: left.conceal,
+      doubleHeight: left.doubleHeight,
+      box: left.box,
+      width: 'double-right',
+    };
+    col++;
+  }
   return cells;
 }
 
@@ -259,6 +310,7 @@ export function doubleHeightLowerRows(rows: readonly ArrayLike<number>[]): boole
 const FIRST_ROW_WITHOUT_ROOM_BELOW = 23;
 
 function withoutIllegalDoubleHeight(cells: Cell[], row: number): Cell[] {
+  // Double size in these rows reduces to double width: the height goes.
   if (row < FIRST_ROW_WITHOUT_ROOM_BELOW) return cells;
   return cells.map(cell => (cell.doubleHeight ? { ...cell, doubleHeight: false } : cell));
 }

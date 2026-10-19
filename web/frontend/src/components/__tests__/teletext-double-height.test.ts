@@ -108,10 +108,10 @@ describe('the double-height filter', () => {
 
   it('passes through what the font has no half for', () => {
     const filter = createDoubleHeightFilter();
-    // Mosaics (U+1FB00) and block elements are teletext graphics, not letters:
-    // they have no halves and must not become boxes.
-    const mosaic = '\u{1FB00}█';
-    expect(filter.write(`${ESC}#3${mosaic}`)).toBe(mosaic);
+    // A box-drawing glyph is not a letter and not a mosaic: no half, no box.
+    // (Sextants and block elements DO have halves since D3, tested below.)
+    const other = '\u2500\u2502';
+    expect(filter.write(`${ESC}#3${other}`)).toBe(other);
     expect(halfCodepoint('\u{1FB00}', 'top')).toBeNull();
   });
 
@@ -214,5 +214,27 @@ describe('the double-height filter', () => {
       expect(base).toBeGreaterThan(DH_BOTTOM_BASE + 0xdf);
       expect(base + 63).toBeLessThan(0xe500);
     }
+  });
+});
+
+describe('Unicode block mosaics under ESC#3 / ESC#4 (D3)', () => {
+  const run = (head: string, text: string) => createDoubleHeightFilter().write(head + text);
+  const cp = (s: string) => [...s].map((c) => c.codePointAt(0));
+
+  it('maps every sextant, block element and separated sextant to the DH halves', () => {
+    for (let pattern = 1; pattern < 64; pattern += 1) {
+      const byte = pattern & 0x20 ? 0x60 + (pattern & 0x1f) : 0x20 + pattern;
+      const contiguous = String.fromCodePoint(mosaicCodepoint(byte) as number);
+      const separated = String.fromCodePoint(0x1ce50 + pattern);
+      expect(cp(run(`${ESC}#3`, contiguous))).toEqual([MOSAIC_DH_BASE.contiguous.top + pattern]);
+      expect(cp(run(`${ESC}#4`, contiguous))).toEqual([MOSAIC_DH_BASE.contiguous.bottom + pattern]);
+      expect(cp(run(`${ESC}#3`, separated))).toEqual([MOSAIC_DH_BASE.separated.top + pattern]);
+      expect(cp(run(`${ESC}#4`, separated))).toEqual([MOSAIC_DH_BASE.separated.bottom + pattern]);
+    }
+  });
+
+  it('leaves them alone on a normal row, and passes a private-use quarter through', () => {
+    expect(cp(run('', '\u{1CE53}\u{1FB02}'))).toEqual([0x1ce53, 0x1fb02]);
+    expect(cp(run(`${ESC}#3`, '\ue828'))).toEqual([0xe828]);
   });
 });

@@ -110,6 +110,7 @@ export function renderSubpageLines(
     reveal: options.reveal ?? false,
     flashPhase: options.flashPhase ?? true,
     subset: options.subset ?? subpage.languageSubset,
+    teletextFont: mode === 'teletext',
   });
 
   const lines = ansi.split('\n');

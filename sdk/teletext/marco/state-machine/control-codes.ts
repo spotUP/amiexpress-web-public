@@ -27,8 +27,8 @@ export const START_BOX = 0x0B;
 // Size control
 export const NORMAL_HEIGHT = 0x0C;
 export const DOUBLE_HEIGHT = 0x0D;
-export const DOUBLE_WIDTH = 0x0E; // Level 2.5, set-after; not drawn by this renderer
-export const DOUBLE_SIZE  = 0x0F; // Level 2.5, set-after; not drawn by this renderer
+export const DOUBLE_WIDTH = 0x0E; // Level 2.5, set-after; see pairWideCells
+export const DOUBLE_SIZE  = 0x0F; // Level 2.5, set-after; see pairWideCells
 
 // Mosaic (graphics) foreground colors - set-after (spacing attributes)
 export const MOSAIC_BLACK   = 0x10; // Level 2.5 mosaic black; rendered as a colour code
