@@ -102,9 +102,11 @@ describe('uploading art into a door art block', () => {
     expect({ command, file, section }).toEqual({
       command: 'REQ', file: 'Bulletin_Header.txt', section: 'bulletinHeader',
     });
-    // Trailing blank rows are trimmed on the way out - the same rule the
-    // canvas save uses - so the newline the file ended with is gone.
-    expect(atob(base64 as string)).toBe('THE NEW LOGO');
+    // The upload goes through the canvas, as a drawing made here does, so
+    // the bytes are the canvas's: the text, with trailing blank rows trimmed.
+    const written = atob(base64 as string);
+    expect(written).toContain('THE NEW LOGO');
+    expect(written.split('\n').filter(row => row.trim() !== '')).toHaveLength(1);
   });
 
   it('does not close when the upload is refused', async () => {

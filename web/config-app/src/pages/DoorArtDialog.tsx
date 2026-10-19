@@ -11,7 +11,7 @@
 
 import { useEffect, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { Loader2 } from 'lucide-react';
+import { Loader2, X } from 'lucide-react';
 import { apiClient } from '../api/client';
 import { useNotification } from '../contexts/NotificationContext';
 import { Modal } from '../components/ui/Modal';
@@ -19,7 +19,7 @@ import { ScreenEditor } from '../components/ScreenEditor';
 import { TeletextScreenEditor } from '../components/TeletextScreenEditor';
 import { ArtUploadButton, ANSI_UPLOAD_ACCEPT } from '../components/ArtUploadButton';
 import { createSurface, type EditorSurface } from './screen-editor-state';
-import { screenToCanvas, base64ToLatin1, latin1ToBase64 } from './screen-bytes';
+import { screenToCanvas, screenToArt, canvasToScreen, base64ToLatin1, latin1ToBase64 } from './screen-bytes';
 
 /**
  * The three canvases. `wide` is the door's own art in its own file; the two
@@ -35,6 +35,37 @@ const VARIANT_COLUMNS = 40;
 
 /** Printable columns of a row: CSI sequences are zero-width. */
 const columnsOf = (line: string): number => line.replace(/\x1b\[[0-9;?]*[A-Za-z]/g, '').length;
+
+/**
+ * Canvas bytes as rows a door's limits can be measured against.
+ *
+ * The canvas writes every row the full canvas width and ends it in CRLF, so
+ * measured raw a one-word logo was "line 1 is 81 columns, at most 80": the
+ * CR counted as a column and the pad of spaces as art. This drops the CR and
+ * the trailing spaces that print nothing - spaces standing on a background
+ * colour are drawing and stay.
+ */
+function canvasRows(text: string): string[] {
+  let background = 0;
+  const follow = (codes: string) => {
+    for (const sgr of codes.matchAll(/\x1b\[([0-9;]*)m/g)) {
+      for (const code of (sgr[1] === '' ? '0' : sgr[1]).split(';').map(Number)) {
+        if (code === 0 || code === 49 || code === 40) background = 0;
+        else if ((code >= 41 && code <= 47) || (code >= 100 && code <= 107)) background = code;
+      }
+    }
+  };
+  return text.split('\n').map(raw => {
+    // The last row ends in the canvas's closing reset, after the pad.
+    const line = raw.replace(/\r$/, '');
+    const tail = /(?:\x1b\[[0-9;]*m)*$/.exec(line)?.[0] ?? '';
+    const body = line.slice(0, line.length - tail.length);
+    follow(body);
+    const kept = background === 0 ? body.replace(/ +$/, '') : body;
+    follow(tail);
+    return kept + tail;
+  });
+}
 
 export interface DoorArtDialogProps {
   command: string;
@@ -152,16 +183,27 @@ export function DoorArtDialog({
    *
    * @returns the saved bytes, or null if nothing was written.
    */
+  /**
+   * A refusal is said twice: in the dialog, and as a notification. The line
+   * in the dialog sits above the canvas, out of view of an artist who has
+   * just scrolled down to "Upload a drawing", and a refusal nobody sees reads
+   * as an upload that "doesn't seem to work".
+   */
+  const refuse = (reason: string) => {
+    setStatus(`Error: ${reason}`);
+    showError(`${label} not saved: ${reason}`);
+  };
+
   const save = async (base64: string): Promise<string | null> => {
     setSaving(true);
     setStatus(null);
     try {
       // The canvas is always 25 rows; the section is not. Trailing blank
       // rows would bloat the logo past its DOC limit and the door's eyes.
-      const lines = base64ToLatin1(base64).split('\n');
+      const lines = canvasRows(base64ToLatin1(base64));
       while (lines.length > 0 && lines[lines.length - 1].trim() === '') lines.pop();
       if (lines.length > maxLines) {
-        setStatus(`Error: ${lines.length} lines, at most ${maxLines} — trim the art first.`);
+        refuse(`${lines.length} lines, at most ${maxLines} — trim the art first.`);
         return null;
       }
       // A variant is drawn for a forty-column screen; the wide art keeps the
@@ -169,7 +211,7 @@ export function DoorArtDialog({
       const limit = variant === 'wide' ? maxLineLength : VARIANT_COLUMNS;
       const over = lines.findIndex(l => columnsOf(l) > limit);
       if (over !== -1) {
-        setStatus(`Error: line ${over + 1} is ${columnsOf(lines[over])} columns, at most ${limit}.`);
+        refuse(`line ${over + 1} is ${columnsOf(lines[over])} columns, at most ${limit}.`);
         return null;
       }
       const written = latin1ToBase64(lines.join('\n'));
@@ -225,8 +267,24 @@ export function DoorArtDialog({
    * An upload STAYS in the dialog and shows what landed - the whole point of
    * bringing a file in is to see it on the board's canvas before trusting it.
    */
-  const upload = async (base64: string) => {
-    const written = await save(base64);
+  const upload = async (base64: string, chosen: File) => {
+    /*
+     * Through the canvas, like a drawing made here. A file from PabloDraw or
+     * Moebius ends every row in CRLF and carries a SAUCE record after ^Z;
+     * handed to `save` raw, the CR and the record counted as printable
+     * columns and a full-width MAG logo was "line 1 is 81 columns, at most
+     * 80" (artist, 2026-10-19: "Upload A Drawing ... doesn't seem to work").
+     * The canvas decodes the escapes, the line endings and SAUCE exactly as
+     * the editor's own Save does, so both write the same bytes.
+     */
+    let art: Awaited<ReturnType<typeof screenToArt>>;
+    try {
+      art = await screenToArt(base64, undefined, chosen.name);
+    } catch {
+      refuse(`${chosen.name} cannot be read as ANSI art.`);
+      return;
+    }
+    const written = await save(canvasToScreen(art.canvas, undefined, art.amiga));
     if (written === null) return;
     setSurface(createSurface(await screenToCanvas(written)));
     setLineCount(base64ToLatin1(written).split('\n').length);
@@ -235,6 +293,8 @@ export function DoorArtDialog({
       setWideLines(base64ToLatin1(written).split('\n').length);
     }
   };
+
+  const editorOpen = !building && (variant === 'ttx' ? ttiContent !== null : surface !== null);
 
   return (
     /*
@@ -252,9 +312,18 @@ export function DoorArtDialog({
             {doorName} — {label}
             <span className="ml-2 font-mono text-xs text-content-secondary">{file} [{section}]</span>
           </h3>
-          <button onClick={onClose} className="px-3 py-1 text-content-secondary hover:text-content-primary text-sm">
-            Close (ESC)
-          </button>
+          {/*
+            ONE WAY OUT. Every editor below carries its own Cancel; a header
+            Close beside it was two buttons for one job ("too many save and
+            write etc buttons in the editors", sysop, 2026-10-19). The header
+            keeps it only while no editor is mounted - loading, an error, no
+            art - so the dialog is never left without one.
+          */}
+          {!editorOpen && (
+            <button type="button" onClick={onClose} className="btn-small btn-secondary">
+              <X size={14} /> Close
+            </button>
+          )}
         </div>
         <div className="flex items-center gap-2" role="group" aria-label="Art variant">
           {(['wide', ...offers] as Variant[]).map((v) => (
