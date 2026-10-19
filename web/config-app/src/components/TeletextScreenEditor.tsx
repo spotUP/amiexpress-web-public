@@ -24,7 +24,7 @@
  * Insert mode and Centre line (row-shuffling that would move colour codes).
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Redo2, Save, Undo2, X } from 'lucide-react';
+import { Redo2, Save, Undo2, X, Eraser } from 'lucide-react';
 import {
   blankSurface,
   clearSurface,
@@ -486,10 +486,10 @@ export function TeletextScreenEditor({
             </button>
             <button
               type="button"
-              className="px-2 py-1 border border-border text-sm text-content-secondary"
+              className="inline-flex items-center gap-1 px-2 py-1 border border-border text-sm"
               onClick={() => commit(clearSurface(surface))}
             >
-              Clear screen
+              <Eraser size={14} /> Clear screen
             </button>
           </>
         )}

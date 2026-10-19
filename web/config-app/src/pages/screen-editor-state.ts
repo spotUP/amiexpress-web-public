@@ -19,7 +19,7 @@
 
 import type { Cell, DrawingTool } from '@amiexpress/bbs-door-sdk/engines/ui/ansi-editor/types';
 import { EditorState } from '@amiexpress/bbs-door-sdk/engines/ui/ansi-editor/core/editor-state';
-import { cloneCanvas } from '@amiexpress/bbs-door-sdk/engines/ui/ansi-editor/core/canvas';
+import { cloneCanvas, clearCanvas } from '@amiexpress/bbs-door-sdk/engines/ui/ansi-editor/core/canvas';
 import type { SAUCERecord } from '@amiexpress/bbs-door-sdk/engines/ui/ansi-editor/core/file-ops';
 import {
   handleDrawEvent, paintCell, snapshotUndoState, undoDrawing, redoDrawing,
@@ -322,6 +322,24 @@ export function removeLine(surface: EditorSurface, y: number): EditorSurface {
   state.setCanvas(rows);
 
   return settle(surface, surface.pending);
+}
+
+/**
+ * Blank every cell, keeping the screen's size: the artist set how tall it is,
+ * and clearing is about the art, not the shape. One undo step puts it back.
+ */
+export function clearScreen(surface: EditorSurface): EditorSurface {
+  finishStroke(surface);
+  const state = apply(surface);
+  const canvas = state.getCanvas();
+  if (!canvas) return surface;
+
+  const rows = cloneCanvas(canvas);
+  snapshotUndoState(state);
+  clearCanvas(rows);
+  state.setCanvas(rows);
+
+  return settle(surface, null);
 }
 
 /**

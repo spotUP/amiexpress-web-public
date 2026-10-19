@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Undo2, Redo2, Save, X, Download, Upload } from 'lucide-react';
+import { Undo2, Redo2, Save, X, Download, Upload, Eraser } from 'lucide-react';
 import {
   PetsciiCanvas, PetsciiMachine, C64_PALETTE_COLODORE,
   type PetsciiHighlight, type PetsciiCellPointer,
@@ -441,10 +441,10 @@ export function PetsciiScreenEditor({
             </button>
             <button
               type="button"
-              className="px-2 py-1 border border-border text-sm text-content-secondary"
+              className="inline-flex items-center gap-1 px-2 py-1 border border-border text-sm"
               onClick={() => commit(clearSurface(surface))}
             >
-              Clear screen
+              <Eraser size={14} /> Clear screen
             </button>
           </>
         )}

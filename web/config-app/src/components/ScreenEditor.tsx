@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Undo2, Redo2, Save, X, Download, Upload, Eye, EyeOff } from 'lucide-react';
+import { Undo2, Redo2, Save, X, Download, Upload, Eye, EyeOff, Eraser } from 'lucide-react';
 import type { DrawingTool } from '@amiexpress/bbs-door-sdk/engines/ui/ansi-editor/types';
 import { useQuery } from '@tanstack/react-query';
 import { apiClient } from '../api/client';
@@ -13,7 +13,7 @@ import {
   pointerToCanvas, typeCharacter, typeText, insertCharacter, centreLine,
   undo, redo, type EditorSurface, selectionHighlightRuns,
   copySelectedRegion, pasteRegion, cutSelectedRegion, selectedRegionToText, pasteText,
-  type ClipboardRegion, insertLine, removeLine, withTool } from '../pages/screen-editor-state';
+  type ClipboardRegion, insertLine, removeLine, clearScreen, withTool } from '../pages/screen-editor-state';
 import { writeSystemText, readSystemText } from './system-clipboard';
 import { getSelection } from '@amiexpress/bbs-door-sdk/engines/ui/ansi-editor/tools/drawing-tools';
 import { findMciTokens, tokenAt, explainToken, type MciToken, type MciReferenceShape } from '../pages/mci-tokens';
@@ -916,6 +916,10 @@ export function ScreenEditor({
             <button type="button" className="btn-small btn-secondary"
               onClick={() => onChange?.(redo(surface))}>
               <Redo2 size={14} /> Redo
+            </button>
+            <button type="button" className="btn-small btn-secondary"
+              onClick={() => onChange?.(clearScreen(surface))}>
+              <Eraser size={14} /> Clear screen
             </button>
             <button type="button" className="btn-small btn-primary"
               disabled={saving}
