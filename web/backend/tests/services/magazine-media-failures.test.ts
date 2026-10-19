@@ -9,7 +9,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { PNG } from 'pngjs';
-import { createRobotsCache, type HttpResult } from '../../src/services/magazine/body-prefetch';
+import { createRobotsCache, prefetchBodies, type HttpResult } from '../../src/services/magazine/body-prefetch';
 import { STORY_MAX_PICTURES, MAX_IMAGE_BYTES } from '../../src/services/magazine/media-fetch';
 import { readSidecar, renderStoryMedia } from '../../src/services/magazine/media-render';
 import { writeAtomic } from '../../src/services/magazine';
@@ -110,5 +110,34 @@ describe('a failed picture is recorded once and never retried', () => {
     expect(http.mock.calls.length).toBe(httpCalls);
     expect(second.failed).toBe(0);
     expect(second.media!.filter((m) => m.failure)).toHaveLength(1);
+  });
+});
+
+describe('a story with text but no pictures rendered gets them from the next prefetch', () => {
+  it('renders the listed pictures once, keeps the text, and leaves a failed-only story alone', async () => {
+    get.mockResolvedValue(reply(png(200, 200), 'image/png'));
+    const dir = path.join(root, 'Magazine', 'stories');
+    fs.mkdirSync(dir, { recursive: true });
+    const base = { source: 'HN', headline: 'H', url: 'https://news.example.org/a', firstSeen: NOW.toISOString(), body: 'Body text stays.' };
+    fs.writeFileSync(path.join(dir, 'old.json'), JSON.stringify({ ...base, id: 'old', media: [img(1), img(2)] }));
+    fs.writeFileSync(path.join(dir, 'dead.json'), JSON.stringify({ ...base, id: 'dead', media: [{ ...img(3), failure: '404' }] }));
+    const http = jest.fn(async (): Promise<HttpResult> => robotsOk);
+    const deps = {
+      rootDir: () => root, now: () => NOW, log: () => {}, robots: createRobotsCache(),
+      gate: jest.fn(async () => {}), http, extract: () => null, convert: blankCells,
+    };
+
+    const first = await prefetchBodies(deps);
+    expect(first.pictured).toBe(1);
+    expect(readSidecar(path.join(dir, 'old.json'))!.pictures.map((p) => p.media)).toEqual([0, 1]);
+    expect(readSidecar(path.join(dir, 'dead.json'))).toBeNull();
+    const story = JSON.parse(fs.readFileSync(path.join(dir, 'old.json'), 'utf8'));
+    expect(story.body).toBe('Body text stays.');
+    expect(story.media).toHaveLength(2);
+    expect(get).toHaveBeenCalledTimes(2);
+
+    const second = await prefetchBodies(deps);
+    expect(second.pictured).toBe(0);
+    expect(get).toHaveBeenCalledTimes(2);
   });
 });

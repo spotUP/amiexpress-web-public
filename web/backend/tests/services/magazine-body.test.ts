@@ -244,7 +244,7 @@ describe('the body prefetch', () => {
     http.mockClear();
     const again = await prefetchBodies({ ...d, robots: createRobotsCache() });
     expect(http).not.toHaveBeenCalled();
-    expect(again).toEqual({ fetched: 0, failed: 0, deferred: 0 });
+    expect(again).toEqual({ fetched: 0, pictured: 0, failed: 0, deferred: 0 });
   });
 
   it('records a timeout as a failure too', async () => {

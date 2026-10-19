@@ -28,7 +28,7 @@ import axios from 'axios';
 import * as path from 'path';
 import { Readability } from '@mozilla/readability';
 import { parseHTML } from 'linkedom';
-import { MAGAZINE_DIR, MAGAZINE_STORIES_DIR, STORY_BODY_CAP, type Story, type StoryMedia } from '@amiexpress/bbs-door-sdk/formats/magazine';
+import { MAGAZINE_DIR, MAGAZINE_STORIES_DIR, STORY_BODY_CAP, sidecarPath, type Story, type StoryMedia } from '@amiexpress/bbs-door-sdk/formats/magazine';
 import * as fs from 'fs';
 import {
   FEED_BODY_MIN_CHARS,
@@ -271,6 +271,20 @@ export function needsBody(story: Story, nowMs: number): boolean {
   return Number.isFinite(seen) && nowMs - seen <= PREFETCH_MAX_AGE_DAYS * 24 * 3600 * 1000;
 }
 
+/**
+ * A story that has its text and lists pictures but has no sidecar: its text
+ * came before pictures were rendered at ingest, or the render was cut short.
+ * A picture with a `failure` never counts, so a story whose pictures all
+ * failed is not asked again.
+ */
+export function needsMedia(story: Story, root: string, nowMs: number): boolean {
+  if (!story.body || story.origin === 'authored') return false;
+  if (!story.media?.some((m) => !m.failure)) return false;
+  const seen = Date.parse(story.firstSeen);
+  if (!Number.isFinite(seen) || nowMs - seen > PREFETCH_MAX_AGE_DAYS * 24 * 3600 * 1000) return false;
+  return !fs.existsSync(sidecarPath(storyFile(root, story.id)));
+}
+
 /** The gap for a story's host: the board's gap, widened to the feed's own when it is the same host. */
 export function gapFor(story: Story): number {
   const src = NEWS_BULLETIN_SOURCES.find((s) => s.source === story.source && s.url);
@@ -299,8 +313,21 @@ function record(root: string, id: string, patch: Partial<Story>): boolean {
   return true;
 }
 
+/** Write a story's media list back, keeping everything else the ingest may have changed meanwhile. */
+function recordMedia(root: string, id: string, media: StoryMedia[]): void {
+  let current: Story;
+  try {
+    current = JSON.parse(fs.readFileSync(storyFile(root, id), 'utf8'));
+  } catch {
+    return;
+  }
+  writeAtomic(storyFile(root, id), JSON.stringify({ ...current, media }, null, 2));
+}
+
 export interface PrefetchSummary {
   fetched: number;
+  /** Stories that had their text already and got their pictures in this run. */
+  pictured: number;
   failed: number;
   deferred: number;
 }
@@ -314,7 +341,7 @@ export async function prefetchBodies(deps: PrefetchDeps): Promise<PrefetchSummar
     .filter((s) => needsBody(s, nowMs))
     .sort((a, b) => (a.firstSeen < b.firstSeen ? 1 : -1))
     .slice(0, PREFETCH_MAX_PER_RUN);
-  const out: PrefetchSummary = { fetched: 0, failed: 0, deferred: 0 };
+  const out: PrefetchSummary = { fetched: 0, pictured: 0, failed: 0, deferred: 0 };
 
   for (const story of stories) {
     const url = story.url as string;
@@ -361,6 +388,18 @@ export async function prefetchBodies(deps: PrefetchDeps): Promise<PrefetchSummar
       deps.log(`[magazine] body: ${story.source} ${body.length} characters`);
     }
   }
+
+  // Stories whose text came before their pictures were rendered get them now.
+  const unpictured = loadStories(path.join(root, MAGAZINE_DIR, MAGAZINE_STORIES_DIR), deps.log)
+    .filter((s) => needsMedia(s, root, nowMs))
+    .sort((a, b) => (a.firstSeen < b.firstSeen ? 1 : -1))
+    .slice(0, PREFETCH_MAX_PER_RUN);
+  for (const story of unpictured) {
+    const rendered = await renderStoryMedia(story, storyFile(root, story.id), deps, writeAtomic);
+    if (rendered.media) recordMedia(root, story.id, rendered.media);
+    if (rendered.rendered) out.pictured++;
+    deps.log(`[magazine] media: ${story.source} ${rendered.rendered} rendered, ${rendered.failed} dropped`);
+  }
   return out;
 }
 
@@ -377,7 +416,7 @@ export function startBodyPrefetch(base: Pick<PrefetchDeps, 'rootDir' | 'now' | '
   running = true;
   prefetchBodies(deps ?? defaultPrefetchDeps(base, robotsByProcess))
     .then((r) => {
-      if (r.fetched || r.failed) base.log(`[magazine] body prefetch: ${r.fetched} filled, ${r.failed} failed, ${r.deferred} deferred`);
+      if (r.fetched || r.pictured || r.failed) base.log(`[magazine] body prefetch: ${r.fetched} filled, ${r.pictured} pictured, ${r.failed} failed, ${r.deferred} deferred`);
       // A story that just got its text is an article now: give it its page.
       if (r.fetched) republishMagazine(base);
     })
