@@ -14,7 +14,7 @@
  */
 
 import type { PageGrid } from '../state-machine/types';
-import { CharsetMode, Color, type ClutIndex } from '../state-machine/types';
+import { CharsetMode, type ClutIndex } from '../state-machine/types';
 
 const ROWS = 24;
 const COLS = 40;
