@@ -113,6 +113,15 @@ describe('door art sections (Studio)', () => {
       expect(() => writeDoorArtSection(dir, 'Bulls.CFG', 'title', toB64(tooMany))).toThrow(/at most 20/);
       const tooWide = `x${'y'.repeat(200)}`;
       expect(() => writeDoorArtSection(dir, 'Bulls.CFG', 'title', toB64(tooWide))).toThrow(/at most 200/);
+      // Bulls.DOC's "200 Chars/Line" is the door's line buffer, not screen
+      // columns: escapes count. A 40-column line with a colour change per
+      // cell is 240 bytes and must be refused; 32 cells, 192 bytes, fit.
+      const colourCell = (i: number) => `\x1b[${31 + (i % 7)}m#`;
+      const overBudget = Array.from({ length: 40 }, (_, i) => colourCell(i)).join('');
+      expect(overBudget).toHaveLength(240);
+      expect(() => writeDoorArtSection(dir, 'Bulls.CFG', 'title', toB64(overBudget))).toThrow(/240 chars, at most 200/);
+      const inBudget = Array.from({ length: 32 }, (_, i) => colourCell(i)).join('');
+      expect(toLatin1(writeDoorArtSection(dir, 'Bulls.CFG', 'title', toB64(inBudget)).content)).toBe(inBudget);
       expect(() => writeDoorArtSection(dir, 'Bulls.CFG', 'nope', toB64('x'))).toThrow(/must declare it/);
       expect(() => writeDoorArtSection(dir, 'nope.CFG', 'title', toB64('x'))).toThrow(/must declare it/);
     } finally {
