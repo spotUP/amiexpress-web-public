@@ -159,6 +159,10 @@ export function resumeTokenToOffer(s: ResumeStorage, now: number = Date.now()): 
 export function takeResumeOffer(s: ResumeStorage, idConfirmed: boolean = true, now: number = Date.now()): ResumeOffer | undefined {
   const picked = pickOffer(s, now, idConfirmed);
   try { s.tab.setItem(OFFERED_KEY, picked ? picked.from : ''); } catch { /* nothing to forget later */ }
+  // Never the token itself: only whether one was offered, and why not.
+  console.log('[resume] connect offers ' + (picked ? 'this tab\'s token' : 'nothing') + ':', {
+    tabId: readTabId(s), idConfirmed, entriesFor: Object.keys(readAll(s)),
+  });
   return picked?.offer;
 }
 
@@ -237,6 +241,7 @@ export function guardTabId(
     if (m.type === 'who-holds') {
       if (m.nonce !== nonce && m.id === readTabId(s)) channel.postMessage({ type: 'held', id: m.id, nonce: m.nonce });
     } else if (m.nonce === nonce && m.id === asked && readTabId(s) === asked) {
+      console.log('[resume] another open tab holds tab id ' + asked + ': this tab is a copy and takes a new id');
       try { s.tab.setItem(TAB_ID_KEY, newId()); } catch { /* keeps the copied id */ }
       confirmed = true;
       settle();
@@ -244,7 +249,13 @@ export function guardTabId(
   });
   if (asked !== null) {
     channel.postMessage({ type: 'who-holds', id: asked, nonce });
-    schedule(() => { confirmed = true; settle(); }, opts.waitMs ?? TAB_ID_CHECK_MS);
+    schedule(() => {
+      if (!confirmed) console.log('[resume] no other tab holds tab id ' + asked + ': confirmed as this tab\'s own');
+      confirmed = true;
+      settle();
+    }, opts.waitMs ?? TAB_ID_CHECK_MS);
+  } else {
+    console.log('[resume] this tab has no id yet (no login in this tab): nothing to offer');
   }
   return { confirmed: () => confirmed, settled, close: () => channel.close() };
 }
