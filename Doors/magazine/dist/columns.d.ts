@@ -41,11 +41,19 @@ export interface SpreadHeights {
  * Newspaper flow: fill column 1 top to bottom, then column 2, then the next
  * spread. Rows are never reordered or dropped; a blank row that would land at
  * the top of a column is dropped, since the paragraph gap has done its job.
+ *
+ * A block (consecutive rows sharing one `blockOf` key, a picture) is never
+ * split: when it does not fit what is left of a column it starts the next
+ * one. A block taller than a whole column keeps its top rows and loses the
+ * rest; callers cap a picture's rows below the column height so this is a
+ * guard, not a layout.
  */
 export declare function flowColumns<T = string>(rows: readonly T[], cols: number, heights: SpreadHeights, options?: {
     /** A row that adds nothing at the top of a column (a paragraph gap). */
     isBlank?: (row: T) => boolean;
     /** A row that must not end a column: a heading stays with what it heads. */
     keepWithNext?: (row: T) => boolean;
+    /** Rows with the same non-undefined key, in a run, flow as one unsplittable block. */
+    blockOf?: (row: T) => unknown;
 }): Spread<T>[];
 //# sourceMappingURL=columns.d.ts.map

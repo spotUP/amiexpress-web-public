@@ -93,6 +93,12 @@ export interface SpreadHeights {
  * Newspaper flow: fill column 1 top to bottom, then column 2, then the next
  * spread. Rows are never reordered or dropped; a blank row that would land at
  * the top of a column is dropped, since the paragraph gap has done its job.
+ *
+ * A block (consecutive rows sharing one `blockOf` key, a picture) is never
+ * split: when it does not fit what is left of a column it starts the next
+ * one. A block taller than a whole column keeps its top rows and loses the
+ * rest; callers cap a picture's rows below the column height so this is a
+ * guard, not a layout.
  */
 export function flowColumns<T = string>(
   rows: readonly T[],
@@ -103,10 +109,21 @@ export function flowColumns<T = string>(
     isBlank?: (row: T) => boolean;
     /** A row that must not end a column: a heading stays with what it heads. */
     keepWithNext?: (row: T) => boolean;
+    /** Rows with the same non-undefined key, in a run, flow as one unsplittable block. */
+    blockOf?: (row: T) => unknown;
   } = {},
 ): Spread<T>[] {
   const isBlank = options.isBlank ?? ((row: T) => (row as unknown) === '');
   const keepWithNext = options.keepWithNext ?? (() => false);
+  const blockOf = options.blockOf ?? (() => undefined);
+  /** One past the last row of the block starting at `i`, or i + 1 for a plain row. */
+  const runEnd = (i: number): number => {
+    const key = blockOf(rows[i]);
+    if (key === undefined) return i + 1;
+    let j = i + 1;
+    while (j < rows.length && blockOf(rows[j]) === key) j++;
+    return j;
+  };
   const spreads: Spread<T>[] = [];
   let at = 0;
   let spreadNo = 0;
@@ -117,14 +134,30 @@ export function flowColumns<T = string>(
     const columns: T[][] = [];
     for (let c = 0; c < cols; c++) {
       while (at < rows.length && isBlank(rows[at])) at++;
-      let take = rows.slice(at, at + room);
+      let take: T[] = [];
+      let next = at;
+      while (next < rows.length && take.length < room) {
+        const end = runEnd(next);
+        const run = rows.slice(next, end);
+        if (take.length + run.length <= room) {
+          take.push(...run);
+          next = end;
+        } else if (take.length === 0) {
+          // Taller than a whole column: clip, never split across columns.
+          take = run.slice(0, room);
+          next = end;
+        } else {
+          break;
+        }
+      }
       // Only when something follows: a heading that is the very last row has
       // nothing to be kept with, and dropping it would lose it.
-      while (take.length > 1 && at + take.length < rows.length && keepWithNext(take[take.length - 1])) {
+      while (take.length > 1 && next < rows.length && blockOf(take[take.length - 1]) === undefined && keepWithNext(take[take.length - 1])) {
         take = take.slice(0, -1);
+        next--;
       }
       columns.push(take);
-      at += take.length;
+      at = next;
     }
     spreads.push({ columns });
     spreadNo++;

@@ -106,3 +106,36 @@ export async function aWordWiderThanTheColumnIsCutNotOverflowed(): Promise<void>
   assert.ok(rows.every((r) => r.length <= 20));
   assert.strictEqual(rows.join(''), 'x'.repeat(50));
 }
+
+/** A picture row: `p` names the picture, plain text rows have none. */
+const pic = (p: string, n: number): string => `${p}:${n}`;
+const blockOf = (row: string): string | undefined => (row.includes(':') ? row.split(':')[0] : undefined);
+
+export async function aPictureBlockIsNeverSplitAcrossColumns(): Promise<void> {
+  const rows = ['a', 'b', pic('x', 0), pic('x', 1), pic('x', 2), 'c'];
+  const spreads = flowColumns(rows, 2, { first: 4, rest: 4 }, { blockOf });
+  // Three picture rows do not fit the two left after a, b: the picture starts column two.
+  assert.deepStrictEqual(spreads[0].columns, [['a', 'b'], ['x:0', 'x:1', 'x:2', 'c']]);
+}
+
+export async function aPictureTallerThanAColumnIsClippedNotSplit(): Promise<void> {
+  const rows = [pic('x', 0), pic('x', 1), pic('x', 2), pic('x', 3), pic('x', 4), 'after'];
+  const spreads = flowColumns(rows, 2, { first: 3, rest: 3 }, { blockOf });
+  // The top rows survive, the first row is never dropped, and text resumes in the next column.
+  assert.deepStrictEqual(spreads[0].columns, [['x:0', 'x:1', 'x:2'], ['after']]);
+}
+
+export async function twoPicturesInARunStaySeparateBlocks(): Promise<void> {
+  const rows = [pic('x', 0), pic('x', 1), pic('y', 0), pic('y', 1)];
+  const spreads = flowColumns(rows, 2, { first: 3, rest: 3 }, { blockOf });
+  assert.deepStrictEqual(spreads[0].columns, [['x:0', 'x:1'], ['y:0', 'y:1']]);
+}
+
+export async function textFlowIsUnchangedWithoutBlocks(): Promise<void> {
+  const rows = Array.from({ length: 23 }, (_, i) => (i % 5 === 4 ? '' : `row ${i}`));
+  for (const cols of [1, 2, 3]) {
+    const plain = flowColumns(rows, cols, { first: 3, rest: 5 });
+    const withOption = flowColumns(rows, cols, { first: 3, rest: 5 }, { blockOf: () => undefined });
+    assert.deepStrictEqual(withOption, plain);
+  }
+}
