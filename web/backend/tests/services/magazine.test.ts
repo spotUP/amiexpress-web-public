@@ -26,6 +26,7 @@ import {
 import { classify, classifyFormat } from '../../src/services/magazine/classify';
 import { isWorthReading, storyId, normaliseHeadline, type Story } from '../../src/services/magazine/story-store';
 import { ARTICLE_MIN_BODY_CHARS } from '@amiexpress/bbs-door-sdk/formats/magazine';
+import { clipUrlHash } from '../../src/services/magazine/video-service';
 import { loadIndex, loadFront } from '../../../../Doors/magazine/library';
 import { composeStoryPage, wrap, toWidth, renderPage } from '../../src/services/magazine/compose';
 
@@ -378,6 +379,27 @@ describe('only articles get a page', () => {
     const gone = purgeNeverArticles(dir, NOW);
     expect(gone.sort()).toEqual(['oldfail', 'oldnourl', 'oldtea']);
     expect(storyFiles(dir)).toEqual(['newfail.json', 'newtea.json', 'oldart.json', 'oldhum.json']);
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('a purged story takes its sidecar and its video cache; a clip another story still uses stays (M13)', () => {
+    const old = new Date(NOW - 4 * DAY).toISOString();
+    const clip = (url: string) => ({ url, kind: 'video' as const, alt: '', site: 'x.org', anchor: 0 });
+    const dir = board([
+      { ...teaser('gone1'), firstSeen: old, media: [clip('https://x.org/a.mp4'), clip('https://x.org/shared.mp4')] },
+      { ...teaser('kept1'), media: [clip('https://x.org/shared.mp4')] },
+    ]);
+    const stories = path.join(dir, 'Magazine', 'stories');
+    const video = path.join(dir, 'Magazine', 'video');
+    fs.mkdirSync(video, { recursive: true });
+    const frames = (url: string, size: string) => path.join(video, `${clipUrlHash(url)}-v1-${size}.frames`);
+    for (const f of [frames('https://x.org/a.mp4', '80x24'), frames('https://x.org/a.mp4', '40x24'), frames('https://x.org/shared.mp4', '80x24')]) fs.writeFileSync(f, 'x');
+    fs.writeFileSync(path.join(stories, 'gone1.media.json'), '{}');
+    fs.writeFileSync(path.join(stories, 'kept1.media.json'), '{}');
+    expect(purgeNeverArticles(dir, NOW)).toEqual(['gone1']);
+    expect(fs.existsSync(path.join(stories, 'gone1.media.json'))).toBe(false);
+    expect(fs.existsSync(path.join(stories, 'kept1.media.json'))).toBe(true);
+    expect(fs.readdirSync(video)).toEqual([path.basename(frames('https://x.org/shared.mp4', '80x24'))]);
     fs.rmSync(dir, { recursive: true, force: true });
   });
 

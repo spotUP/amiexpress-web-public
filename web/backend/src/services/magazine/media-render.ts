@@ -73,7 +73,8 @@ export interface RenderOutcome {
  * Render every picture of `story`. Writes the sidecar through `write` and
  * returns the media list with failures recorded. A picture that already has a
  * `failure` is skipped (never retried); one the old sidecar holds for the
- * same URL is reused (M13, partial: the retention half is open).
+ * same URL is reused, so a republish never refetches (M13; the retention half
+ * is `removeStoryMedia` in index.ts).
  */
 export async function renderStoryMedia(
   story: Pick<Story, 'media'>,

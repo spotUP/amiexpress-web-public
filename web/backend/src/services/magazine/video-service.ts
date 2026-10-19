@@ -79,9 +79,23 @@ export interface VideoServiceDeps {
   keyframeInterval: number;
 }
 
+/** The cache key of a clip: its URL, not any story. */
+export function clipUrlHash(url: string): string {
+  return crypto.createHash('sha1').update(url).digest('hex').slice(0, 16);
+}
+
 function clipFile(dir: string, req: ClipRequest): string {
-  const h = crypto.createHash('sha1').update(req.url).digest('hex').slice(0, 16);
-  return path.join(dir, `${h}-v${VIDEO_FILE_VERSION}-${req.cols}x${req.rows}.frames`);
+  return path.join(dir, `${clipUrlHash(req.url)}-v${VIDEO_FILE_VERSION}-${req.cols}x${req.rows}.frames`);
+}
+
+/** Every cached size of one clip (any version), for retention. */
+export function clipFilesFor(dir: string, url: string): string[] {
+  const prefix = `${clipUrlHash(url)}-v`;
+  try {
+    return fs.readdirSync(dir).filter((n) => n.startsWith(prefix) && n.endsWith('.frames')).map((n) => path.join(dir, n));
+  } catch {
+    return [];
+  }
 }
 
 function record(type: number, body: Uint8Array): Buffer {

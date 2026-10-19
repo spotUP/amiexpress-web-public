@@ -34,6 +34,8 @@ import {
   type ComposedPage,
 } from './compose';
 import { stripFeedBoilerplate } from '../news-bulletins';
+import { clipFilesFor } from './video-service';
+import { sidecarPath } from '@amiexpress/bbs-door-sdk/formats/magazine';
 import { isSameStory, isWorthReading, storyId, type Desk, type Story } from './story-store';
 
 /** One item as a feed produced it, before the magazine has opinions about it. */
@@ -362,6 +364,26 @@ export function healSummaries(stories: Story[]): Story[] {
 }
 
 /**
+ * Retention (M13): a story that leaves the store takes its media with it - the
+ * sidecar beside its file and the cached video frames of its clips. The clip
+ * cache is keyed by URL, so a clip a remaining story still references is kept.
+ */
+function removeStoryMedia(root: string, dir: string, removed: Story[], remaining: Story[]): void {
+  const keep = new Set<string>();
+  for (const s of remaining) for (const m of s.media ?? []) if (m.kind !== 'image') keep.add(m.url);
+  const videoDir = path.join(root, MAGAZINE, 'video');
+  for (const story of removed) {
+    try { fs.unlinkSync(sidecarPath(path.join(dir, `${story.id}.json`))); } catch { /* none */ }
+    for (const m of story.media ?? []) {
+      if (m.kind === 'image' || keep.has(m.url)) continue;
+      for (const f of clipFilesFor(videoDir, m.url)) {
+        try { fs.unlinkSync(f); } catch { /* gone */ }
+      }
+    }
+  }
+}
+
+/**
  * Delete every story that has been in the store longer than
  * `NEVER_ARTICLE_MAX_AGE_DAYS` without becoming an article (`isArticle`) -
  * which covers a story whose prefetch failed (`bodyFailed`) and a teaser that
@@ -371,6 +393,7 @@ export function healSummaries(stories: Story[]): Story[] {
 export function purgeNeverArticles(root: string, nowMs: number, log: (l: string) => void = () => {}): string[] {
   const dir = path.join(root, MAGAZINE, MAGAZINE_STORIES_DIR);
   const gone: string[] = [];
+  const removed: Story[] = [];
   for (const story of loadStories(dir, log)) {
     if (isArticle(story)) continue;
     const seen = Date.parse(story.firstSeen);
@@ -378,8 +401,10 @@ export function purgeNeverArticles(root: string, nowMs: number, log: (l: string)
     try {
       fs.unlinkSync(path.join(dir, `${story.id}.json`));
       gone.push(story.id);
+      removed.push(story);
     } catch { /* already gone */ }
   }
+  removeStoryMedia(root, dir, removed, loadStories(dir, log));
   if (gone.length) writeTombstones(root, gone, nowMs);
   if (gone.length) log(`[magazine] purged ${gone.length} stories that never became articles in ${NEVER_ARTICLE_MAX_AGE_DAYS} days`);
   return gone;
