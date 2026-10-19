@@ -18,6 +18,7 @@ const TEST_MODULES = [
   './filler.test',
   './pictures.test',
   './viewer.test',
+  './art-boundary.test',
 ];
 
 (async () => {
