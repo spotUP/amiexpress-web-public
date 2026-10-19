@@ -23,8 +23,7 @@
  *
  * Attributes belong to the LINE, like DEC's do: the mode set by an escape
  * holds until the line ends or another escape replaces it, across as many
- * socket writes as it takes. Anything the font has no half for - the mosaics,
- * the block elements, anything above Latin-1 - is passed through untouched
+ * socket writes as it takes. Anything the font has no half for - the block elements, anything above Latin-1 - is passed through untouched
  * rather than mangled into a box.
  *
  * "The line ends" means the CURSOR LEAVES IT, and that is not always a
@@ -51,6 +50,33 @@ export const DH_BOTTOM_BASE = 0xe300;
 export const DH_FIRST_SOURCE = 0x20;
 export const DH_LAST_SOURCE = 0xff;
 
+/**
+ * FONT CONTRACT, levels plan D1-D3 (dev/scripts/fonts/build-teletext-font.py
+ * is the other place these are written). index = cp - 0x20 for a Latin-1
+ * printable, the 6-bit PATTERN for a mosaic (cell 1 = 1 ... cell 6 = 32).
+ * Only the double-height ranges are drawn by this filter today; the width and
+ * size ranges are recorded here so the wire form, when it exists, has one
+ * place to read them.
+ */
+export const MOSAIC_DH_BASE = {
+  contiguous: { top: 0xe400, bottom: 0xe440 },
+  separated: { top: 0xe480, bottom: 0xe4c0 },
+} as const;
+/** Double width: left / right half. Latin-1 by index, mosaics by pattern. */
+export const DW_BASE = { latin1: { left: 0xe500, right: 0xe600 } } as const;
+export const MOSAIC_DW_BASE = {
+  contiguous: { left: 0xe700, right: 0xe740 },
+  separated: { left: 0xe780, right: 0xe7c0 },
+} as const;
+/** Double size: the four quarters. */
+export const DS_BASE = {
+  latin1: { tl: 0xe800, tr: 0xe900, bl: 0xea00, br: 0xeb00 },
+} as const;
+export const MOSAIC_DS_BASE = {
+  contiguous: { tl: 0xec00, tr: 0xec40, bl: 0xec80, br: 0xecc0 },
+  separated: { tl: 0xed00, tr: 0xed40, bl: 0xed80, br: 0xedc0 },
+} as const;
+
 export type LineHalf = 'normal' | 'top' | 'bottom';
 
 /**
@@ -76,10 +102,8 @@ export type LineHalf = 'normal' | 'top' | 'bottom';
  * rather than an offset.
  */
 export function mosaicCodepoint(byte: number): number | null {
-  const isMosaic = (byte >= 0x20 && byte <= 0x3f) || (byte >= 0x60 && byte <= 0x7f);
-  if (!isMosaic) return null;
-
-  const pattern = (byte & 0x1f) | ((byte & 0x40) >> 1);
+  const pattern = mosaicPattern(byte);
+  if (pattern === null) return null;
   if (pattern === 0b000000) return 0x20;       // space
   if (pattern === 0b010101) return 0x258c;     // left half block
   if (pattern === 0b101010) return 0x2590;     // right half block
@@ -91,6 +115,29 @@ export function mosaicCodepoint(byte: number): number | null {
     if (taken < pattern) skipped += 1;
   }
   return 0x1fb00 + pattern - skipped;
+}
+
+/** The 6-bit cell pattern a G1 byte means (cell 1 = bit 0 ... cell 6 = bit 5), or null. */
+export function mosaicPattern(byte: number): number | null {
+  const isMosaic = (byte >= 0x20 && byte <= 0x3f) || (byte >= 0x60 && byte <= 0x7f);
+  if (!isMosaic) return null;
+  return (byte & 0x1f) | ((byte & 0x40) >> 1);
+}
+
+/**
+ * One half of a mosaic on a double-height row (D3). The 3-band grid is
+ * stretched over two cells, so the top cell shows band 1 and the upper half
+ * of band 2, the bottom cell the lower half of band 2 and band 3. A blank
+ * pattern is a space either way.
+ */
+export function mosaicHalfCodepoint(
+  pattern: number,
+  half: 'top' | 'bottom',
+  separated = false,
+): number {
+  if (pattern === 0) return 0x20;
+  const bases = separated ? MOSAIC_DH_BASE.separated : MOSAIC_DH_BASE.contiguous;
+  return bases[half] + pattern;
 }
 
 /** The private-use codepoint drawing one half of `ch`, or null if there is none. */
@@ -208,9 +255,15 @@ export function createDoubleHeightFilter(): DoubleHeightFilter {
       }
 
       if (mosaic) {
-        // Mosaic art is graphics, not letters: it has no half-height form,
-        // and a double-height row of it is not a thing teletext can express.
-        const cell = mosaicCodepoint(ch.charCodeAt(0));
+        // A double-height row of mosaic art draws the font's stretched
+        // halves (D3); a normal row draws the cell itself.
+        const code = ch.charCodeAt(0);
+        const pattern = mosaicPattern(code);
+        if (pattern !== null && half !== 'normal') {
+          out += String.fromCodePoint(mosaicHalfCodepoint(pattern, half));
+          continue;
+        }
+        const cell = mosaicCodepoint(code);
         out += cell === null ? ch : String.fromCodePoint(cell);
         continue;
       }

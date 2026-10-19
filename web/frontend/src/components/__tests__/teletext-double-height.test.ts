@@ -11,6 +11,9 @@ import {
   createDoubleHeightFilter,
   halfCodepoint,
   mosaicCodepoint,
+  mosaicPattern,
+  mosaicHalfCodepoint,
+  MOSAIC_DH_BASE,
   DH_TOP_BASE,
   DH_BOTTOM_BASE,
 } from '../../../../../packages/terminal/src/utils/teletext-double-height';
@@ -185,5 +188,31 @@ describe('the double-height filter', () => {
     // ESC#8 is DECALN, not ours; ESC(B is a charset. Both must survive.
     expect(filter.write(`${ESC}#8`)).toBe(`${ESC}#8`);
     expect(filter.write(`${ESC}#3A${ESC}(B`)).toBe(`${top('A')}${ESC}(B`);
+  });
+
+  it('halves mosaics on a double-height row (D3), through the filter', () => {
+    const SO = '\x0e';
+    const SI = '\x0f';
+    const filter = createDoubleHeightFilter();
+    // 0x21 = cell 1 only (pattern 1), 0x7f = all six (63), 0x20 = blank.
+    expect(filter.write(`${ESC}#3${SO}\x21\x7f\x20${SI}`))
+      .toBe(`${String.fromCodePoint(0xe400 + 1)}${String.fromCodePoint(0xe400 + 63)} `);
+    expect(filter.write(`${ESC}#4${SO}\x21\x7f${SI}`))
+      .toBe(`${String.fromCodePoint(0xe440 + 1)}${String.fromCodePoint(0xe440 + 63)}`);
+    // A normal row of the same bytes still draws the whole cell.
+    const normal = createDoubleHeightFilter();
+    expect(normal.write(`${SO}\x21${SI}`)).toBe('\u{1FB00}');
+  });
+
+  it('keeps the mosaic half ranges clear of Latin-1 halves and PETSCII', () => {
+    expect(mosaicPattern(0x21)).toBe(1);
+    expect(mosaicPattern(0x41)).toBeNull();
+    expect(mosaicHalfCodepoint(5, 'top', true)).toBe(MOSAIC_DH_BASE.separated.top + 5);
+    expect(mosaicHalfCodepoint(0, 'bottom')).toBe(0x20);
+    for (const base of [MOSAIC_DH_BASE.contiguous.top, MOSAIC_DH_BASE.contiguous.bottom,
+      MOSAIC_DH_BASE.separated.top, MOSAIC_DH_BASE.separated.bottom]) {
+      expect(base).toBeGreaterThan(DH_BOTTOM_BASE + 0xdf);
+      expect(base + 63).toBeLessThan(0xe500);
+    }
   });
 });
