@@ -5,7 +5,8 @@ import { useQuery } from '@tanstack/react-query';
 import { apiClient } from '../api/client';
 import { AnsiCanvas } from './AnsiCanvas';
 import { CELL_HEIGHT } from './ansi-canvas-paint';
-import { ANSI_COLOR_NAMES, ANSI_PALETTE, type PaletteMode } from '../utils/ansi-palette';
+import { type PaletteMode } from '../utils/ansi-palette';
+import { ColourSwatches } from './ColourSwatches';
 import { useBoardPalette } from '../hooks/useBoardPalette';
 import { canvasToScreen } from '../pages/screen-bytes';
 import {
@@ -399,15 +400,6 @@ export function ScreenEditor({
       : 'border-border text-content-secondary hover:bg-surface-3';
 
   /*
-   * A SWATCH CANNOT BE FILLED - the fill is the colour being chosen - so it
-   * takes an outline instead, in the neutral ink rather than the accent, so
-   * the mark reads against all sixteen.
-   */
-  const selectedSwatch = (on: boolean) =>
-    on
-      ? 'border-content-primary ring-1 ring-content-primary'
-      : 'border-border';
-  /*
    * EIGHT SWATCHES ON AN EIGHT-PEN BOARD.
    *
    * AmiExpress ran console.device, which has eight pens; sixteen needed
@@ -428,19 +420,13 @@ export function ScreenEditor({
    */
   const pens = palette === 'amiga' ? 8 : 16;
   const swatches = (which: 'fg' | 'bg') => (
-    <div className="flex flex-wrap gap-1">
-      {ANSI_PALETTE.slice(0, pens).map((color, index) => (
-        <button
-          key={`${which}-${index}`}
-          type="button"
-          aria-label={`${ANSI_COLOR_NAMES[index]} ${which === 'fg' ? 'foreground' : 'background'}`}
-          title={which === 'fg' ? `Ctrl+${index}` : `Alt+${index}`}
-          aria-pressed={(which === 'fg' ? surface.fg : surface.bg) === index}
-          className={`w-5 h-5 border ${selectedSwatch((which === 'fg' ? surface.fg : surface.bg) === index)}`}
-          style={{ backgroundColor: color }}
-          onClick={() => onChange?.({ ...surface, [which]: index })}
-        />
-      ))}
+    <ColourSwatches
+      count={pens}
+      role={which === 'fg' ? 'foreground' : 'background'}
+      selected={which === 'fg' ? surface.fg : surface.bg}
+      titleFor={index => (which === 'fg' ? `Ctrl+${index}` : `Alt+${index}`)}
+      onPick={index => onChange?.({ ...surface, [which]: index })}
+    >
       {pens === 8 && (
         /*
          * Said, not silently missing. An artist who knows there are sixteen
@@ -451,7 +437,7 @@ export function ScreenEditor({
           8 pens (Amiga)
         </span>
       )}
-    </div>
+    </ColourSwatches>
   );
 
   return (

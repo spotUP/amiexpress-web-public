@@ -242,3 +242,304 @@ export function stampRegion(
   }
   return next;
 }
+
+/*
+ * COLOUR AS AN ARTIST PICKS IT.
+ *
+ * The admin's .tti editor works like its ANSI editor: pick a foreground and a
+ * background, then draw blocks or type. Teletext has no per-cell colour, so
+ * the functions below place the spacing attributes themselves, in the free
+ * cells LEFT of the run (an attribute takes a cell, and a colour code is
+ * set-after). Everything stays pure, and one call is one undo step.
+ */
+
+/** The eight teletext colours, by index: the order of the colour codes and of ANSI 30-37. */
+export type TeletextColour = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7;
+
+export const TELETEXT_COLOUR_NAMES: readonly string[] = [
+  'Black', 'Red', 'Green', 'Yellow', 'Blue', 'Magenta', 'Cyan', 'White',
+];
+
+/** How a cell is drawn: what the row's attributes left of it add up to. */
+export interface TeletextAttributes {
+  fg: TeletextColour;
+  bg: TeletextColour;
+  graphics: boolean;
+}
+
+/** Shown when a colour change has nowhere to go. */
+export const COLOUR_NEEDS_ROOM = 'Colour change needs a free cell to the left';
+
+const BLACK_BACKGROUND = 0x1c;
+const NEW_BACKGROUND = 0x1d;
+
+/**
+ * The colour, background and mode cell `x` is drawn in. Colour codes are
+ * set-after (they reach x only from a column left of it); Black Background
+ * and New Background are set-at, and New Background takes the foreground in
+ * effect in its own cell - which, scanning left to right, is the current one.
+ * Level 2.5's black foregrounds (0x00, 0x10) are ignored, as a Level 1 set does.
+ */
+export function attributesAt(surface: TeletextSurface, x: number, y: number): TeletextAttributes {
+  const found: TeletextAttributes = { fg: 7, bg: 0, graphics: false };
+  if (!inside(Math.min(x, FRAME_COLS - 1), y)) return found;
+  for (let col = 0; col < Math.min(x, FRAME_COLS); col++) {
+    const code = surface.cells[indexOf(col, y)];
+    if (code >= 0x01 && code <= 0x07) { found.fg = code as TeletextColour; found.graphics = false; }
+    else if (code >= 0x11 && code <= 0x17) { found.fg = (code - 0x10) as TeletextColour; found.graphics = true; }
+    else if (code === BLACK_BACKGROUND) found.bg = 0;
+    else if (code === NEW_BACKGROUND) found.bg = found.fg;
+  }
+  return found;
+}
+
+/** A cell an attribute may take: a space or another attribute, never a letter or a block. */
+function freeCell(code: number): boolean {
+  return code <= 0x20;
+}
+
+/** A cell that shows something: not a space, not an attribute. */
+function contentCell(code: number): boolean {
+  return code > 0x20;
+}
+
+const colourCode = (colour: TeletextColour, graphics: boolean): number => (graphics ? 0x10 : 0x00) + colour;
+
+/**
+ * The attributes that turn `from` into `to`, in the order they go on the row.
+ * A background is a colour code for it then New Background, then the
+ * foreground's own code: three cells. Black needs only Black Background.
+ * Black foreground has no Level 1 code, so it is never asked for here.
+ */
+export function attributeRun(from: TeletextAttributes, to: TeletextAttributes): number[] {
+  const fgCode = colourCode(to.fg, to.graphics);
+  if (to.bg !== from.bg) {
+    if (to.bg === 0) {
+      return from.fg === to.fg && from.graphics === to.graphics ? [BLACK_BACKGROUND] : [BLACK_BACKGROUND, fgCode];
+    }
+    return [colourCode(to.bg, to.graphics), NEW_BACKGROUND, fgCode];
+  }
+  if (from.fg !== to.fg || from.graphics !== to.graphics) return [fgCode];
+  return [];
+}
+
+const sameAttributes = (a: TeletextAttributes, b: TeletextAttributes): boolean =>
+  a.fg === b.fg && a.bg === b.bg && a.graphics === b.graphics;
+
+/** Writes `run` into the cells ending just left of `x`, when they are all free. */
+function placeRun(cells: Uint8Array, x: number, y: number, run: number[], leftLimit: number): boolean {
+  const start = x - run.length;
+  if (start < leftLimit) return false;
+  for (let col = start; col < x; col++) if (!freeCell(cells[indexOf(col, y)])) return false;
+  run.forEach((code, i) => { cells[indexOf(start + i, y)] = code; });
+  return true;
+}
+
+/**
+ * Put the colours the artist picked in front of cell `x` of a copy of
+ * `surface`, run `draw` on it, then give the next thing on the row back the
+ * colour it had. `null` when the colour change has no free cells to go in.
+ *
+ * The restore goes in the free cells just before that next letter or block,
+ * not straight after `x`, so a stroke dragged on to the right is not walled
+ * in by its own restore code. With no free cells there, the restore is
+ * skipped and the rest of the row takes the new colour.
+ */
+function inColour(
+  surface: TeletextSurface,
+  x: number,
+  y: number,
+  to: TeletextAttributes,
+  draw: (cells: Uint8Array) => void,
+): TeletextSurface | null {
+  const next = cloneSurface(surface);
+  if (!placeRun(next.cells, x, y, attributeRun(attributesAt(surface, x, y), to), 0)) return null;
+  draw(next.cells);
+
+  let following = x + 1;
+  while (following < FRAME_COLS && !contentCell(next.cells[indexOf(following, y)])) following++;
+  if (following < FRAME_COLS) {
+    const was = attributesAt(surface, following, y);
+    const now = attributesAt(next, following, y);
+    if (!sameAttributes(was, now)) placeRun(next.cells, following, y, attributeRun(now, was), x + 1);
+  }
+  return next;
+}
+
+export interface ColouredEdit {
+  surface: TeletextSurface;
+  /** The colour change needed a free cell left of the run and had none; nothing was drawn. */
+  blocked: boolean;
+}
+
+/**
+ * Draw Blocks: set one sixel in the picked foreground on the picked
+ * background, placing the graphics colour code (and the background codes)
+ * left of the cell when the row does not already draw that cell so. A cell
+ * holding an attribute is never drawn on; `fg` 0 (black) has no Level 1 code
+ * and draws nothing.
+ */
+export function paintMosaic(
+  surface: TeletextSurface,
+  px: number,
+  py: number,
+  fg: TeletextColour,
+  bg: TeletextColour,
+): ColouredEdit {
+  if (px < 0 || py < 0 || px >= SIXEL_COLS || py >= SIXEL_ROWS || fg === 0) return { surface, blocked: false };
+  const x = px >> 1;
+  const y = Math.floor(py / 3);
+  if (surface.cells[indexOf(x, y)] < SPACE) return { surface, blocked: false };
+  const next = inColour(surface, x, y, { fg, bg, graphics: true }, (cells) => {
+    const drawn = plotMosaic({ cells, meta: surface.meta }, px, py, true);
+    cells.set(drawn.cells);
+  });
+  return next ? { surface: next, blocked: false } : { surface, blocked: true };
+}
+
+/**
+ * Text: type one character in the picked colours, placing the alpha colour
+ * code (and background codes) left of it when needed. The cursor moves on
+ * only when the character went down.
+ */
+export function typeCharColoured(
+  surface: TeletextSurface,
+  x: number,
+  y: number,
+  code: number,
+  fg: TeletextColour,
+  bg: TeletextColour,
+): ColouredEdit & { cursor: { x: number; y: number } } {
+  if (!inside(x, y) || fg === 0) return { surface, blocked: false, cursor: { x, y } };
+  const next = inColour(surface, x, y, { fg, bg, graphics: false }, (cells) => {
+    cells[indexOf(x, y)] = code & 0x7f;
+  });
+  if (!next) return { surface, blocked: true, cursor: { x, y } };
+  return { surface: next, blocked: false, cursor: typeChar(surface, x, y, code).cursor };
+}
+
+/**
+ * Erase: clear the sixel under the pointer in a block, or blank a letter.
+ * Attributes stay; they are changed through the named control codes.
+ */
+export function eraseAt(surface: TeletextSurface, px: number, py: number): TeletextSurface {
+  if (px < 0 || py < 0 || px >= SIXEL_COLS || py >= SIXEL_ROWS) return surface;
+  const x = px >> 1;
+  const y = Math.floor(py / 3);
+  if (graphicsAt(surface, x, y)) return plotMosaic(surface, px, py, false);
+  return contentCell(surface.cells[indexOf(x, y)]) ? put(surface, x, y, SPACE) : surface;
+}
+
+/*
+ * THE ANSI EDITOR'S SHAPE TOOLS, ON THE SIXEL GRID.
+ *
+ * Line, Box, Filled Box and Fill draw blocks exactly as Draw Blocks does -
+ * every sixel through `paintMosaic`, so the colour codes are placed the same
+ * way - on the 80x75 grid of sixels instead of the 40x25 grid of cells.
+ */
+
+/** A sixel on the 80x75 grid. */
+export interface Sixel {
+  px: number;
+  py: number;
+}
+
+/** The sixels of a straight line between two, both ends included (Bresenham). */
+export function sixelLine(a: Sixel, b: Sixel): Sixel[] {
+  const points: Sixel[] = [];
+  const dx = Math.abs(b.px - a.px);
+  const dy = -Math.abs(b.py - a.py);
+  const sx = a.px < b.px ? 1 : -1;
+  const sy = a.py < b.py ? 1 : -1;
+  let err = dx + dy;
+  let { px, py } = a;
+  for (;;) {
+    points.push({ px, py });
+    if (px === b.px && py === b.py) return points;
+    const e2 = 2 * err;
+    if (e2 >= dy) { err += dy; px += sx; }
+    if (e2 <= dx) { err += dx; py += sy; }
+  }
+}
+
+/** The sixels of the rectangle between two dragged corners: its edge, or all of it. */
+export function sixelBox(a: Sixel, b: Sixel, filled: boolean): Sixel[] {
+  const x0 = Math.min(a.px, b.px);
+  const x1 = Math.max(a.px, b.px);
+  const y0 = Math.min(a.py, b.py);
+  const y1 = Math.max(a.py, b.py);
+  const points: Sixel[] = [];
+  for (let py = y0; py <= y1; py++) {
+    for (let px = x0; px <= x1; px++) {
+      if (filled || py === y0 || py === y1 || px === x0 || px === x1) points.push({ px, py });
+    }
+  }
+  return points;
+}
+
+/**
+ * Draw every sixel in `points`, left to right within a row so a colour code
+ * lands before the blocks it colours. `blocked` when any sixel had no room
+ * for its colour change; the rest are still drawn.
+ */
+export function paintSixels(
+  surface: TeletextSurface,
+  points: readonly Sixel[],
+  fg: TeletextColour,
+  bg: TeletextColour,
+): ColouredEdit {
+  const ordered = [...points].sort((p, q) => p.py - q.py || p.px - q.px);
+  let next = surface;
+  let blocked = false;
+  for (const point of ordered) {
+    const edit = paintMosaic(next, point.px, point.py, fg, bg);
+    next = edit.surface;
+    blocked ||= edit.blocked;
+  }
+  return { surface: next, blocked };
+}
+
+/** Whether a sixel is lit on the page: its cell is a block in graphics mode with that bit set. */
+function sixelLit(surface: TeletextSurface, px: number, py: number): boolean {
+  const x = px >> 1;
+  const y = Math.floor(py / 3);
+  const code = surface.cells[indexOf(x, y)];
+  if (code <= 0x20) return code < 0x20; // an attribute cell walls a fill in; a space is empty
+  if ((code >= 0x40 && code <= 0x5f) || !graphicsAt(surface, x, y)) return true; // a letter
+  return (code & SIXEL_BITS[py % 3][px & 1]) !== 0;
+}
+
+/** Fill: every unlit sixel joined to the one clicked (up, down, left, right), drawn in the picked colours. */
+export function fillSixels(
+  surface: TeletextSurface,
+  start: Sixel,
+  fg: TeletextColour,
+  bg: TeletextColour,
+): ColouredEdit {
+  const { px, py } = start;
+  if (px < 0 || py < 0 || px >= SIXEL_COLS || py >= SIXEL_ROWS || sixelLit(surface, px, py)) {
+    return { surface, blocked: false };
+  }
+  const seen = new Uint8Array(SIXEL_COLS * SIXEL_ROWS);
+  const points: Sixel[] = [];
+  const queue: Sixel[] = [start];
+  seen[py * SIXEL_COLS + px] = 1;
+  while (queue.length > 0) {
+    const point = queue.pop() as Sixel;
+    points.push(point);
+    for (const [ox, oy] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
+      const nx = point.px + ox;
+      const ny = point.py + oy;
+      if (nx < 0 || ny < 0 || nx >= SIXEL_COLS || ny >= SIXEL_ROWS || seen[ny * SIXEL_COLS + nx]) continue;
+      seen[ny * SIXEL_COLS + nx] = 1;
+      if (!sixelLit(surface, nx, ny)) queue.push({ px: nx, py: ny });
+    }
+  }
+  return paintSixels(surface, points, fg, bg);
+}
+
+/** Pick: the colours of the cell under the pointer, as the artist would pick them. */
+export function pickColours(surface: TeletextSurface, x: number, y: number): { fg: TeletextColour; bg: TeletextColour } {
+  const { fg, bg } = attributesAt(surface, x, y);
+  return { fg, bg };
+}

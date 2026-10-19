@@ -35,6 +35,11 @@ function theCanvas(): HTMLCanvasElement {
   return canvas;
 }
 
+/** The named control codes are folded away for experts; open them. */
+function openControlCodes(): void {
+  fireEvent.click(screen.getByText(/Control Codes/));
+}
+
 describe('the teletext editor', () => {
   it('saves typed text, a control code and a plotted sixel as the .tti page', () => {
     const onSave = vi.fn();
@@ -49,12 +54,14 @@ describe('the teletext editor', () => {
     fireEvent.keyDown(page, { key: 'B' });
 
     // Red Graphics at the start of row 2.
+    openControlCodes();
     fireEvent.click(screen.getByRole('button', { name: 'Red Graphics' }));
     fireEvent.pointerDown(canvas, { clientX: W / 2, clientY: 2 * H + H / 2, buttons: 1 });
     fireEvent.pointerUp(canvas, { clientX: W / 2, clientY: 2 * H + H / 2 });
 
-    // Mosaic: the top-left sixel of cell (1, 2).
-    fireEvent.click(screen.getByRole('button', { name: 'Mosaic' }));
+    // Draw Blocks in the row's own red: the top-left sixel of cell (1, 2).
+    fireEvent.click(screen.getByRole('button', { name: 'Red foreground' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Draw Blocks' }));
     fireEvent.pointerDown(canvas, { clientX: W + 1, clientY: 2 * H + 1, buttons: 1 });
     fireEvent.pointerUp(canvas, { clientX: W + 1, clientY: 2 * H + 1 });
 
@@ -80,11 +87,13 @@ describe('the teletext editor', () => {
     expect(canvas.style.width).toBe('480px');
     expect(canvas.style.height).toBe('480px');
 
+    openControlCodes();
     fireEvent.click(screen.getByRole('button', { name: 'Red Graphics' }));
     fireEvent.pointerDown(canvas, { clientX: 1, clientY: 2 * H + 1, buttons: 1 });
     fireEvent.pointerUp(canvas, { clientX: 1, clientY: 2 * H + 1 });
 
-    fireEvent.click(screen.getByRole('button', { name: 'Mosaic' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Red foreground' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Draw Blocks' }));
     const x = W + W - 1;          // right half of cell 1
     const y = 2 * H + H - 1;      // bottom third of row 2
     fireEvent.pointerDown(canvas, { clientX: x, clientY: y, buttons: 1 });
@@ -94,5 +103,81 @@ describe('the teletext editor', () => {
 
     // Bottom-right sixel alone: 0x20 + 0x40.
     expect(base64ToLatin1(onSave.mock.calls[0][0] as string)).toBe('PN,10000\nOL,2,\x91`\n');
+  });
+
+  /*
+   * "I can't draw blocks." Draw Blocks on a row with no graphics code drew
+   * nothing: a sixel only shows in a cell a graphics colour code puts in
+   * graphics mode, and an artist starting on a blank row has none. The
+   * editor now places the code for the picked colour in the free cell to the
+   * left of the stroke, so the first click draws.
+   */
+  it('draws blocks on a blank row in the picked colour, as one undo step', () => {
+    const onSave = vi.fn();
+    render(<TeletextScreenEditor content="" onSave={onSave} />);
+    const canvas = theCanvas();
+
+    // Artists never see control codes unless they ask.
+    expect((screen.getByRole('checkbox', { name: 'Show codes' }) as HTMLInputElement).checked).toBe(false);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Red foreground' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Draw Blocks' }));
+    // Top-left sixel of cell (5, 3), dragged on into the top-left sixel of cell (6, 3).
+    fireEvent.pointerDown(canvas, { clientX: 5 * W + 1, clientY: 3 * H + 1, buttons: 1 });
+    fireEvent.pointerMove(canvas, { clientX: 6 * W + 1, clientY: 3 * H + 1, buttons: 1 });
+    fireEvent.pointerUp(canvas, { clientX: 6 * W + 1, clientY: 3 * H + 1 });
+    // The right button is the eraser, and the page keeps the browser menu off it.
+    expect(fireEvent.contextMenu(canvas)).toBe(false);
+
+    fireEvent.click(screen.getByRole('button', { name: /Save/ }));
+    // Red Graphics (0x11, saved as 0x91), then the two mosaic bytes.
+    expect(base64ToLatin1(onSave.mock.calls[0][0] as string)).toBe('PN,10000\nOL,3,    \x91!!\n');
+
+    fireEvent.click(screen.getByRole('button', { name: /Undo/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Save/ }));
+    expect(base64ToLatin1(onSave.mock.calls[1][0] as string)).toBe('PN,10000\n');
+  });
+
+  it('says why when a letter leaves no room for the colour code', () => {
+    const onSave = vi.fn();
+    render(<TeletextScreenEditor content={btoa('PN,10000\nOL,3,HELLO\n')} onSave={onSave} />);
+    const canvas = theCanvas();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Red foreground' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Draw Blocks' }));
+
+    // Cell (1, 3): its left neighbour is the H, so there is nowhere for the code.
+    fireEvent.pointerDown(canvas, { clientX: W + 1, clientY: 3 * H + 1, buttons: 1 });
+    fireEvent.pointerUp(canvas, { clientX: W + 1, clientY: 3 * H + 1 });
+    expect(screen.getByText('Colour change needs a free cell to the left')).toBeTruthy();
+
+    // Cell (6, 3): the space after HELLO takes Red Graphics.
+    fireEvent.pointerDown(canvas, { clientX: 6 * W + 1, clientY: 3 * H + 1, buttons: 1 });
+    fireEvent.pointerUp(canvas, { clientX: 6 * W + 1, clientY: 3 * H + 1 });
+    expect(screen.queryByText('Colour change needs a free cell to the left')).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: /Save/ }));
+    expect(base64ToLatin1(onSave.mock.calls[0][0] as string)).toBe('PN,10000\nOL,3,HELLO\x91!\n');
+  });
+
+  it('draws a line of blocks from press to release, on the ANSI editor\'s key', () => {
+    const onSave = vi.fn();
+    render(<TeletextScreenEditor content="" onSave={onSave} />);
+    const canvas = theCanvas();
+    const page = screen.getByTestId('teletext-editor-canvas');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Red foreground' }));
+    fireEvent.keyDown(page, { key: 'l', code: 'KeyL', altKey: true });
+    expect(screen.getByRole('button', { name: 'Line' }).getAttribute('aria-pressed')).toBe('true');
+
+    // Top-left sixels of cells (5, 3) to (7, 3): six sixels, three cells lit left half + right half.
+    fireEvent.pointerDown(canvas, { clientX: 5 * W + 1, clientY: 3 * H + 1, buttons: 1 });
+    fireEvent.pointerMove(canvas, { clientX: 6 * W + 1, clientY: 3 * H + 1, buttons: 1 });
+    fireEvent.pointerMove(canvas, { clientX: 7 * W + W - 1, clientY: 3 * H + 1, buttons: 1 });
+    fireEvent.pointerUp(canvas, { clientX: 7 * W + W - 1, clientY: 3 * H + 1 });
+
+    fireEvent.click(screen.getByRole('button', { name: /Save/ }));
+    // 0x20 + 1 + 2 = '#': the top row of both sixel columns in every cell.
+    expect(base64ToLatin1(onSave.mock.calls[0][0] as string)).toBe('PN,10000\nOL,3,    \x91###\n');
   });
 });

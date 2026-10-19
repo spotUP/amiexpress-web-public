@@ -14,6 +14,16 @@ import {
   liftRegion,
   stampRegion,
   TELETEXT_CODES,
+  attributesAt,
+  attributeRun,
+  paintMosaic,
+  typeCharColoured,
+  eraseAt,
+  sixelLine,
+  sixelBox,
+  paintSixels,
+  fillSixels,
+  pickColours,
 } from '../../teletext/editor-surface';
 import { frameToTti, FRAME_COLS } from '../../teletext/edittf-frame';
 import { renderNativeTti } from '../../teletext/render-native';
@@ -101,5 +111,88 @@ describe('teletext editor surface', () => {
     const stamped = stampRegion(blankSurface(), 39, 23, region);
     expect(at(stamped.cells, 39, 23)).toBe(0x41);
     expect(stamped.cells.filter((b) => b !== 0x20)).toHaveLength(1); // B clipped, not wrapped
+  });
+
+  describe('colours the artist picks', () => {
+    const row = (cells: Uint8Array, y: number): number[] => Array.from(cells.subarray(y * FRAME_COLS, (y + 1) * FRAME_COLS));
+
+    it('paintMosaic puts the graphics colour code left of a blank row and draws the sixel', () => {
+      const { surface, blocked } = paintMosaic(blankSurface(), 10, 3, 1, 0); // cell (5, 1), top-left
+      expect(blocked).toBe(false);
+      expect(at(surface.cells, 4, 1)).toBe(0x11);
+      expect(at(surface.cells, 5, 1)).toBe(0x21);
+      expect(frameToTti(surface.cells, surface.meta)).toBe('PN,10000\nOL,1,    \x91!\n');
+      // The next sixel in the same colour needs no second code.
+      const again = paintMosaic(surface, 12, 3, 1, 0).surface;
+      expect(row(again.cells, 1).slice(4, 7)).toEqual([0x11, 0x21, 0x21]);
+    });
+
+    it('a background costs New Background between two colour codes; black costs Black Background', () => {
+      const blue = paintMosaic(blankSurface(), 10, 0, 7, 4).surface;
+      expect(row(blue.cells, 0).slice(2, 6)).toEqual([0x14, 0x1d, 0x17, 0x21]);
+      expect(attributesAt(blue, 5, 0)).toEqual({ fg: 7, bg: 4, graphics: true });
+      expect(attributeRun({ fg: 7, bg: 4, graphics: true }, { fg: 7, bg: 0, graphics: true })).toEqual([0x1c]);
+      expect(attributeRun({ fg: 7, bg: 4, graphics: false }, { fg: 2, bg: 0, graphics: true })).toEqual([0x1c, 0x12]);
+    });
+
+    it('does not draw when the cell left of the run is a letter, or the run starts in column 0', () => {
+      const hello = typeChar(blankSurface(), 0, 0, 0x48).surface;
+      const left = paintMosaic(hello, 2, 0, 1, 0); // cell 1; its left is the H
+      expect(left.blocked).toBe(true);
+      expect(left.surface).toBe(hello);
+      expect(paintMosaic(blankSurface(), 0, 0, 1, 0).blocked).toBe(true);
+      expect(typeCharColoured(hello, 1, 0, 0x41, 2, 0).blocked).toBe(true);
+    });
+
+    it('gives the next thing on the row its own colour back', () => {
+      // "AB" in white at 10-11; red text typed at 4 must not turn them red.
+      let s = typeChar(blankSurface(), 10, 0, 0x41).surface;
+      s = typeChar(s, 11, 0, 0x42).surface;
+      const typed = typeCharColoured(s, 4, 0, 0x58, 1, 0);
+      expect(typed.blocked).toBe(false);
+      expect(typed.cursor).toEqual({ x: 5, y: 0 });
+      expect(at(typed.surface.cells, 3, 0)).toBe(0x01);
+      expect(at(typed.surface.cells, 4, 0)).toBe(0x58);
+      expect(at(typed.surface.cells, 9, 0)).toBe(0x07);
+      expect(attributesAt(typed.surface, 10, 0)).toEqual(attributesAt(s, 10, 0));
+      // Typing on in red needs no new code.
+      expect(at(typeCharColoured(typed.surface, 5, 0, 0x59, 1, 0).surface.cells, 4, 0)).toBe(0x58);
+    });
+
+    it('eraseAt clears a sixel in a block and blanks a letter, never an attribute', () => {
+      const drawn = paintMosaic(blankSurface(), 10, 3, 1, 0).surface;
+      expect(at(eraseAt(drawn, 10, 3).cells, 5, 1)).toBe(0x20);
+      expect(eraseAt(drawn, 8, 3)).toBe(drawn); // the 0x11 code cell
+      const hello = typeChar(blankSurface(), 0, 0, 0x48).surface;
+      expect(at(eraseAt(hello, 0, 0).cells, 0, 0)).toBe(0x20);
+    });
+  });
+
+  describe('the ANSI editor shape tools on the sixel grid', () => {
+    it('sixelLine runs end to end; sixelBox is an edge or a whole rectangle', () => {
+      expect(sixelLine({ px: 0, py: 0 }, { px: 3, py: 0 })).toHaveLength(4);
+      expect(sixelLine({ px: 0, py: 0 }, { px: 2, py: 2 })).toEqual([
+        { px: 0, py: 0 }, { px: 1, py: 1 }, { px: 2, py: 2 },
+      ]);
+      expect(sixelBox({ px: 4, py: 3 }, { px: 2, py: 5 }, false)).toHaveLength(8);
+      expect(sixelBox({ px: 4, py: 3 }, { px: 2, py: 5 }, true)).toHaveLength(9);
+    });
+
+    it('paintSixels draws a filled two-cell block in one colour behind one code', () => {
+      const { surface, blocked } = paintSixels(blankSurface(), sixelBox({ px: 4, py: 0 }, { px: 7, py: 2 }, true), 3, 0);
+      expect(blocked).toBe(false);
+      expect(Array.from(surface.cells.subarray(1, 4))).toEqual([0x13, 0x7f, 0x7f]);
+    });
+
+    it('fillSixels fills the empty sixels a box walls in, and pickColours reads them back', () => {
+      const box = paintSixels(blankSurface(), sixelBox({ px: 4, py: 3 }, { px: 9, py: 8 }, false), 7, 0).surface;
+      const filled = fillSixels(box, { px: 6, py: 5 }, 7, 0);
+      expect(filled.blocked).toBe(false);
+      // Cells (2..4, 1..2) are every sixel lit now.
+      for (let y = 1; y <= 2; y++) for (let x = 2; x <= 4; x++) expect(at(filled.surface.cells, x, y)).toBe(0x7f);
+      expect(at(filled.surface.cells, 5, 1)).toBe(0x20); // outside the wall
+      expect(pickColours(filled.surface, 3, 1)).toEqual({ fg: 7, bg: 0 });
+      expect(fillSixels(box, { px: 4, py: 3 }, 7, 0).surface).toBe(box); // a lit sixel
+    });
   });
 });
