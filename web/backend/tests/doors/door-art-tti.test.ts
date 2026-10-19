@@ -18,8 +18,15 @@ import request from 'supertest';
 import { renderNativeTti } from '@amiexpress/bbs-door-sdk/teletext/render-native';
 
 import { config } from '../../src/config';
-import { createEmpireNarrowShadow } from '../../src/amiga-emulation/api/file-shadow';
-import { getSectionBody, parseEmpireFile } from '../../src/doors/text-cfg/empire';
+import {
+  artKindFor,
+  artRowText,
+  artRows,
+  boardVariantDir,
+  loadArt,
+  shippedArtDir,
+  type ArtSources,
+} from '../../../../Doors/magazine/art';
 
 // The sentinel: the real renderer, counted. The module's exports are
 // non-configurable getters, so a spyOn cannot wrap them.
@@ -91,48 +98,51 @@ describe('the tti variant on the artist lane (MAG)', () => {
 
 /*
  * REACHABILITY. MAG is a TypeScript door that reads its own art
- * (Doors/magazine/art.ts) and never goes through the file shadow; the shadow
- * serves the Empire doors' config art. So the wire is proven on Bulls' title
- * logo: saved through the route, served by the shadow to a teletext caller.
+ * (Doors/magazine/art.ts) and never goes through the file shadow. So the
+ * wire is proven on MAG itself: the page saved through the route, read by
+ * the door's own loader with the sources the door builds at runtime - the
+ * variant folder found from the door's folder through the board root, the
+ * caller a teletext one. (The shadow's own .tti path is file-shadow.test.ts.)
  */
-describe('a saved .tti reaches a teletext caller in the door', () => {
-  const CFG = [
-    'DUAL_LISTING       NO                  ; Use 2 Listings [YES/NO]',
-    '[Init_END] ====================================================================',
-    '\x1b[36m     ________  WIDE LOGO',
-    '[Title_END] ==================================================================',
-  ].join('\n');
-  const MANIFEST = {
-    command: 'B',
-    cfgFile: 'Bulls.CFG',
-    cfgFormat: 'empire',
-    settings: [],
-    artSections: [
-      { file: 'Bulls.CFG', section: 'title', label: 'Title logo', maxLines: 20, maxLineLength: 200, commands: ['B'] },
-    ],
-  };
+describe('a saved .tti reaches a teletext caller in MAG', () => {
+  const MAG_TITLE = { file: 'art/mag_title.ans', section: 'setting:art_mag_title' };
+  let previousBbsDataDir: string | undefined;
 
-  it('PUT variant=tti, then the shadow serves the rendered rows, rendered once', async () => {
-    const doorDir = path.join(root, 'Doors', 'EmP_Tools');
-    fs.mkdirSync(doorDir, { recursive: true });
-    fs.writeFileSync(path.join(doorDir, 'Bulls.CFG'), Buffer.from(CFG, 'latin1'));
-    fs.writeFileSync(path.join(doorDir, 'door.settings.json'), JSON.stringify(MANIFEST));
-    const put = await request(app()).put('/api/door-art/B')
-      .send({ file: 'Bulls.CFG', section: 'title', variant: 'tti', content: b64(TTI) });
+  beforeEach(() => {
+    const door = path.join(root, 'Doors', 'magazine');
+    fs.mkdirSync(path.join(door, 'art'), { recursive: true });
+    fs.copyFileSync(path.join(REPO, 'Doors', 'magazine', 'door.settings.json'), path.join(door, 'door.settings.json'));
+    fs.copyFileSync(path.join(REPO, 'Doors', 'magazine', 'art', 'mag_title.ans'), path.join(door, 'art', 'mag_title.ans'));
+    // A board root is the folder that holds Commands/BBSCmd; the door finds it from BBS_DATA_DIR.
+    fs.mkdirSync(path.join(root, 'Commands', 'BBSCmd'), { recursive: true });
+    previousBbsDataDir = process.env.BBS_DATA_DIR;
+    process.env.BBS_DATA_DIR = root;
+  });
+  afterEach(() => {
+    if (previousBbsDataDir === undefined) delete process.env.BBS_DATA_DIR;
+    else process.env.BBS_DATA_DIR = previousBbsDataDir;
+  });
+
+  it('PUT variant=tti, then the door\'s loader serves the rendered rows, rendered once', async () => {
+    const put = await request(app()).put('/api/door-art/MAG').send({ ...MAG_TITLE, variant: 'tti', content: b64(TTI) });
     expect(put.status).toBe(200);
 
     // The save rendered once to check the page; count the caller's read only.
     const render = jest.mocked(renderNativeTti);
     render.mockClear();
-    const shadow = createEmpireNarrowShadow({
-      session: { petsciiMode: false, texttvMode: true, screenWidth: 40, doorCommand: 'B' },
-      doorDir,
-    });
-    const served = shadow('', path.join(doorDir, 'Bulls.CFG'), 1005);
+    const door = path.join(root, 'Doors', 'magazine');
+    const sources: ArtSources = {
+      shippedDir: shippedArtDir(door),
+      slots: {},
+      variantDir: boardVariantDir(door),
+      teletext: true,
+    };
+    const art = loadArt('mag_title', artKindFor(false, 40), sources);
 
     expect(render).toHaveBeenCalledTimes(1);
-    const title = getSectionBody(parseEmpireFile(served!.toString('latin1')), 'title')!;
-    expect(title.join('\n')).toContain('NATIVE LOGO');
-    expect(title.join('\n')).not.toContain('OL,');
+    expect(art?.file).toBe(path.join(root, 'Screens', 'doors', 'MAG', 'setting:art_mag_title.tti'));
+    const rows = artRows(art!, 25, 40).map(artRowText).join('\n');
+    expect(rows).toContain('NATIVE LOGO');
+    expect(rows).not.toContain('OL,');
   });
 });

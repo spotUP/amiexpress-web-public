@@ -102,6 +102,40 @@ export async function aTeletextCallerGetsHisOwnDrawingBeforeTheC64One(): Promise
   assert.deepStrictEqual(artRows(loadArt('sec_hack', 'seq', s.sources)!, 5, 40).map(artRowText), ['C64'], 'a C64 caller never reads the teletext drawing');
 }
 
+export async function aTeletextCallerGetsHisNativeTtiPageBeforeHisAnsiDrawing(): Promise<void> {
+  // The Studio's teletext editor saves <board>/Screens/doors/MAG/setting:art_<name>.tti: a packet page,
+  // rendered by the board's renderer. A mosaic (graphics white, two full cells) proves the UTF-8 path.
+  const s = sources();
+  const variants = tmp();
+  fs.writeFileSync(path.join(s.shipped, 'sec_hack.seq'), 'seq');
+  fs.writeFileSync(path.join(variants, 'setting:art_sec_hack.c64.ans'), 'C64\n');
+  fs.writeFileSync(path.join(variants, 'setting:art_sec_hack.ttx.ans'), 'TELETEXT\n');
+  s.sources.variantDir = variants;
+  s.sources.teletext = true;
+  const tti = ['DE,logo', 'PN,10000', 'SC,0000', 'PS,8000', 'OL,1,NATIVE \x97\x7f\x7f', ''].join('\r\n');
+  fs.writeFileSync(path.join(variants, 'setting:art_sec_hack.tti'), Buffer.from(tti, 'latin1'));
+  const got = loadArt('sec_hack', 'seq', s.sources)!;
+  assert.ok(got.file.endsWith('setting:art_sec_hack.tti'), 'the native page wins over the .ttx.ans');
+  const rows = artRows(got, 25, 40).map(artRowText);
+  const row = rows.find((r) => r.includes('NATIVE'));
+  assert.ok(row, `the rendered page carries its text: ${JSON.stringify(rows)}`);
+  assert.ok(!rows.join('').includes('OL,'), 'never the packet text raw');
+  assert.ok(/[\u2588\u{1FB00}-\u{1FB3B}]/u.test(row!), `the mosaic survives as a block glyph: ${JSON.stringify(row)}`);
+  assert.ok([...artRowText(row!)].length <= 40, 'a sextant is one cell');
+
+  // Not a page the board can render: the ANSI drawing, as before.
+  fs.writeFileSync(path.join(variants, 'setting:art_sec_hack.tti'), 'not packets\n');
+  assert.deepStrictEqual(artRows(loadArt('sec_hack', 'seq', s.sources)!, 5, 40).map(artRowText), ['TELETEXT']);
+  // Missing: the ANSI drawing.
+  fs.rmSync(path.join(variants, 'setting:art_sec_hack.tti'));
+  assert.deepStrictEqual(artRows(loadArt('sec_hack', 'seq', s.sources)!, 5, 40).map(artRowText), ['TELETEXT']);
+
+  // A C64 caller never reads the native page.
+  fs.writeFileSync(path.join(variants, 'setting:art_sec_hack.tti'), Buffer.from(tti, 'latin1'));
+  s.sources.teletext = false;
+  assert.deepStrictEqual(artRows(loadArt('sec_hack', 'seq', s.sources)!, 5, 40).map(artRowText), ['C64']);
+}
+
 export async function theManifestDeclaresEveryPieceAsAStudioSlotWhoseDefaultIsShipped(): Promise<void> {
   const door = path.join(__dirname, '..');
   const manifest = JSON.parse(fs.readFileSync(path.join(door, 'door.settings.json'), 'utf8')) as {

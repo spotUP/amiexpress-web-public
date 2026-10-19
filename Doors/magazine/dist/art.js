@@ -34,6 +34,7 @@ var __importStar = (this && this.__importStar) || (function () {
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.slotKey = exports.BANNER_MAX_ROWS_40 = exports.BANNER_MAX_ROWS = exports.SECTION_ART = exports.ART_NAMES = void 0;
+exports.boardVariantDir = boardVariantDir;
 exports.slotFiles = slotFiles;
 exports.shippedArtDir = shippedArtDir;
 exports.loadArt = loadArt;
@@ -87,6 +88,8 @@ exports.artRowText = artRowText;
 const fs = __importStar(require("fs"));
 const path = __importStar(require("path"));
 const petscii_1 = require("@amiexpress/bbs-door-sdk/petscii");
+const render_native_1 = require("@amiexpress/bbs-door-sdk/teletext/render-native");
+const settings_1 = require("@amiexpress/bbs-door-sdk/settings");
 /** Every piece of art the door asks for, by name. */
 exports.ART_NAMES = [
     'mag_title', 'mag_front', 'mag_contents', 'mag_goodbye', 'mag_article_end', 'mag_logo_small', 'mag_loading',
@@ -105,6 +108,10 @@ exports.SECTION_ART = {
 /** Banner ceilings: five rows on an ANSI screen, four on the C64's forty columns. */
 exports.BANNER_MAX_ROWS = 5;
 exports.BANNER_MAX_ROWS_40 = 4;
+/** `<board root>/Screens/doors/MAG`: where the Studio's C64 and Teletext tabs save, found from the door's folder. */
+function boardVariantDir(doorDir) {
+    return path.join((0, settings_1.resolveBbsRoot)(doorDir), 'Screens', 'doors', 'MAG');
+}
 /** The Studio's name for the slot that holds a piece: the setting key, as the section it is addressed by. */
 const slotKey = (name) => `art_${name}`;
 exports.slotKey = slotKey;
@@ -144,13 +151,34 @@ function readBytes(file) {
     }
 }
 /**
+ * The Studio's native teletext page for a slot, rendered by the board's one
+ * packet renderer, or null when it is absent or not a page the board can
+ * render - the caller then falls to the `.ttx.ans` drawing.
+ */
+function loadNativeTti(variantDir, name) {
+    const file = path.join(variantDir, `setting:${(0, exports.slotKey)(name)}.tti`);
+    const bytes = readBytes(file);
+    if (!bytes)
+        return null;
+    const rendered = (0, render_native_1.renderNativeTti)(bytes.toString('latin1'));
+    if (!rendered)
+        return null;
+    return { kind: 'ans', bytes: Buffer.from(rendered.ansi, 'utf8'), file, encoding: 'utf8' };
+}
+/**
  * One piece of art for one caller. A wide caller gets the slot's file, else
  * the default `.ans`. A 40-column caller gets the Studio's narrow drawing
  * (read as ANSI, so `kind` is `ans`) - a teletext caller his Teletext one
- * first, everyone the C64 one - else the shipped `.seq`. Null when none exists.
+ * first (his native `.tti` page, rendered, before his `.ttx.ans`), everyone
+ * the C64 one - else the shipped `.seq`. Null when none exists.
  */
 function loadArt(name, kind, sources) {
     if (kind === 'seq' && sources.variantDir) {
+        if (sources.teletext) {
+            const native = loadNativeTti(sources.variantDir, name);
+            if (native)
+                return native;
+        }
         const alphabets = sources.teletext ? ['ttx', 'c64'] : ['c64'];
         for (const alphabet of alphabets) {
             const file = path.join(sources.variantDir, `setting:${(0, exports.slotKey)(name)}.${alphabet}.ans`);
@@ -184,8 +212,8 @@ function escapeBraces(text) {
  * cursor move, a clear) dropped, rows clipped to `maxCols` visible cells.
  * Art moves nothing: it is drawn into a box the door has placed.
  */
-function ansiRows(bytes, maxRows, maxCols) {
-    const text = bytes.toString('latin1');
+function ansiRows(bytes, maxRows, maxCols, encoding = 'latin1') {
+    const text = bytes.toString(encoding);
     const eof = text.indexOf('\x1a');
     const body = (eof >= 0 ? text.slice(0, eof) : text).replace(/\r\n?/g, '\n').replace(/\n+$/, '');
     const rows = [];
@@ -207,8 +235,9 @@ function ansiRows(bytes, maxRows, maxCols) {
                 i += other ? other[0].length : 1;
                 continue;
             }
-            const ch = line[i];
-            i += 1;
+            // By code point: a sextant is one cell, two UTF-16 units.
+            const ch = String.fromCodePoint(line.codePointAt(i));
+            i += ch.length;
             if (ch < ' ' || (ch >= '\x7f' && ch < '\xa0'))
                 continue;
             if (cells >= maxCols)
@@ -266,7 +295,7 @@ function seqRows(bytes, maxRows, maxCols) {
     return rows.slice(0, maxRows);
 }
 function artRows(art, maxRows, maxCols) {
-    return art.kind === 'seq' ? seqRows(art.bytes, maxRows, maxCols) : ansiRows(art.bytes, maxRows, maxCols);
+    return art.kind === 'seq' ? seqRows(art.bytes, maxRows, maxCols) : ansiRows(art.bytes, maxRows, maxCols, art.encoding);
 }
 /**
  * Which kind this caller gets. A C64 reads PETSCII, and so does any screen of

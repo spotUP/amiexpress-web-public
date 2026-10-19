@@ -43,6 +43,8 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { BOARD_CHARSET_BANK, C64_PALETTE_COLODORE, PetsciiMachine, SCREENCODE_TO_UNICODE, type PetsciiMachineState } from '@amiexpress/bbs-door-sdk/petscii';
 import type { Desk } from '@amiexpress/bbs-door-sdk/formats/magazine';
+import { renderNativeTti } from '@amiexpress/bbs-door-sdk/teletext/render-native';
+import { resolveBbsRoot } from '@amiexpress/bbs-door-sdk/settings';
 
 /** Every piece of art the door asks for, by name. */
 export const ART_NAMES = [
@@ -74,6 +76,11 @@ export interface ArtSources {
   variantDir?: string | null;
   /** The caller answered T at the graphics prompt: his own Teletext drawing comes before the C64 one. */
   teletext?: boolean;
+}
+
+/** `<board root>/Screens/doors/MAG`: where the Studio's C64 and Teletext tabs save, found from the door's folder. */
+export function boardVariantDir(doorDir: string): string {
+  return path.join(resolveBbsRoot(doorDir), 'Screens', 'doors', 'MAG');
 }
 
 /** The Studio's name for the slot that holds a piece: the setting key, as the section it is addressed by. */
@@ -121,16 +128,41 @@ export interface LoadedArt {
   bytes: Buffer;
   /** Where it came from, for the tests and the log. */
   file: string;
+  /**
+   * How the bytes decode. Absent: latin1, as every Amiga ANSI file is. A
+   * rendered `.tti` is UTF-8: its mosaics are sextants (U+1FB00), which the
+   * teletext font draws and latin1 cannot hold.
+   */
+  encoding?: 'latin1' | 'utf8';
+}
+
+/**
+ * The Studio's native teletext page for a slot, rendered by the board's one
+ * packet renderer, or null when it is absent or not a page the board can
+ * render - the caller then falls to the `.ttx.ans` drawing.
+ */
+function loadNativeTti(variantDir: string, name: string): LoadedArt | null {
+  const file = path.join(variantDir, `setting:${slotKey(name)}.tti`);
+  const bytes = readBytes(file);
+  if (!bytes) return null;
+  const rendered = renderNativeTti(bytes.toString('latin1'));
+  if (!rendered) return null;
+  return { kind: 'ans', bytes: Buffer.from(rendered.ansi, 'utf8'), file, encoding: 'utf8' };
 }
 
 /**
  * One piece of art for one caller. A wide caller gets the slot's file, else
  * the default `.ans`. A 40-column caller gets the Studio's narrow drawing
  * (read as ANSI, so `kind` is `ans`) - a teletext caller his Teletext one
- * first, everyone the C64 one - else the shipped `.seq`. Null when none exists.
+ * first (his native `.tti` page, rendered, before his `.ttx.ans`), everyone
+ * the C64 one - else the shipped `.seq`. Null when none exists.
  */
 export function loadArt(name: string, kind: ArtKind, sources: ArtSources): LoadedArt | null {
   if (kind === 'seq' && sources.variantDir) {
+    if (sources.teletext) {
+      const native = loadNativeTti(sources.variantDir, name);
+      if (native) return native;
+    }
     const alphabets = sources.teletext ? ['ttx', 'c64'] : ['c64'];
     for (const alphabet of alphabets) {
       const file = path.join(sources.variantDir, `setting:${slotKey(name)}.${alphabet}.ans`);
@@ -165,8 +197,8 @@ function escapeBraces(text: string): string {
  * cursor move, a clear) dropped, rows clipped to `maxCols` visible cells.
  * Art moves nothing: it is drawn into a box the door has placed.
  */
-export function ansiRows(bytes: Buffer, maxRows: number, maxCols: number): string[] {
-  const text = bytes.toString('latin1');
+export function ansiRows(bytes: Buffer, maxRows: number, maxCols: number, encoding: 'latin1' | 'utf8' = 'latin1'): string[] {
+  const text = bytes.toString(encoding);
   const eof = text.indexOf('\x1a');
   const body = (eof >= 0 ? text.slice(0, eof) : text).replace(/\r\n?/g, '\n').replace(/\n+$/, '');
   const rows: string[] = [];
@@ -183,8 +215,9 @@ export function ansiRows(bytes: Buffer, maxRows: number, maxCols: number): strin
         i += other ? other[0].length : 1;
         continue;
       }
-      const ch = line[i];
-      i += 1;
+      // By code point: a sextant is one cell, two UTF-16 units.
+      const ch = String.fromCodePoint(line.codePointAt(i)!);
+      i += ch.length;
       if (ch < ' ' || (ch >= '\x7f' && ch < '\xa0')) continue;
       if (cells >= maxCols) continue;
       out += escapeBraces(ch);
@@ -242,7 +275,7 @@ export function seqRows(bytes: Buffer, maxRows: number, maxCols: number): string
 }
 
 export function artRows(art: LoadedArt, maxRows: number, maxCols: number): string[] {
-  return art.kind === 'seq' ? seqRows(art.bytes, maxRows, maxCols) : ansiRows(art.bytes, maxRows, maxCols);
+  return art.kind === 'seq' ? seqRows(art.bytes, maxRows, maxCols) : ansiRows(art.bytes, maxRows, maxCols, art.encoding);
 }
 
 /**

@@ -17,7 +17,7 @@
 import { createScreen, createBox } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
 import { DoorInputManager } from '@amiexpress/bbs-door-sdk/utils/door-input-manager';
 import * as path from 'path';
-import { readDoorSettings, resolveBbsRoot, resolveDoorRoot } from '@amiexpress/bbs-door-sdk/settings';
+import { readDoorSettings, resolveDoorRoot } from '@amiexpress/bbs-door-sdk/settings';
 import {
   themeById,
   themeStyles,
@@ -44,6 +44,7 @@ import {
   artKindFor,
   artRowText,
   artRows,
+  boardVariantDir,
   loadArt,
   slotFiles,
   shippedArtDir,
@@ -271,7 +272,7 @@ export async function startReader(session: DoorSession, options: ReaderOptions =
     // Where the Studio's C64 tab saves a drawing: <board root>/Screens/doors/MAG.
     variantDir: options.variantDir !== undefined
       ? options.variantDir
-      : ownArt ? null : path.join(resolveBbsRoot(__dirname), 'Screens', 'doors', 'MAG'),
+      : ownArt ? null : boardVariantDir(__dirname),
     // A caller who answered T: the session says so, as it does for GLC's logo.
     teletext: session.bbsSession?.texttvMode === true,
   };

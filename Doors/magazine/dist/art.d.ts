@@ -16,6 +16,8 @@ export interface ArtSources {
     /** The caller answered T at the graphics prompt: his own Teletext drawing comes before the C64 one. */
     teletext?: boolean;
 }
+/** `<board root>/Screens/doors/MAG`: where the Studio's C64 and Teletext tabs save, found from the door's folder. */
+export declare function boardVariantDir(doorDir: string): string;
 /** The Studio's name for the slot that holds a piece: the setting key, as the section it is addressed by. */
 export declare const slotKey: (name: string) => string;
 /**
@@ -34,12 +36,19 @@ export interface LoadedArt {
     bytes: Buffer;
     /** Where it came from, for the tests and the log. */
     file: string;
+    /**
+     * How the bytes decode. Absent: latin1, as every Amiga ANSI file is. A
+     * rendered `.tti` is UTF-8: its mosaics are sextants (U+1FB00), which the
+     * teletext font draws and latin1 cannot hold.
+     */
+    encoding?: 'latin1' | 'utf8';
 }
 /**
  * One piece of art for one caller. A wide caller gets the slot's file, else
  * the default `.ans`. A 40-column caller gets the Studio's narrow drawing
  * (read as ANSI, so `kind` is `ans`) - a teletext caller his Teletext one
- * first, everyone the C64 one - else the shipped `.seq`. Null when none exists.
+ * first (his native `.tti` page, rendered, before his `.ttx.ans`), everyone
+ * the C64 one - else the shipped `.seq`. Null when none exists.
  */
 export declare function loadArt(name: string, kind: ArtKind, sources: ArtSources): LoadedArt | null;
 /**
@@ -47,7 +56,7 @@ export declare function loadArt(name: string, kind: ArtKind, sources: ArtSources
  * cursor move, a clear) dropped, rows clipped to `maxCols` visible cells.
  * Art moves nothing: it is drawn into a box the door has placed.
  */
-export declare function ansiRows(bytes: Buffer, maxRows: number, maxCols: number): string[];
+export declare function ansiRows(bytes: Buffer, maxRows: number, maxCols: number, encoding?: 'latin1' | 'utf8'): string[];
 /**
  * A `.seq` to rows: the board's PETSCII machine reads it (bank one, as the
  * board's callers are), each cell becomes a glyph in a colour, reverse video
