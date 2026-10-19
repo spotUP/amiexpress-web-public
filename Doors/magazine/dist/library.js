@@ -44,6 +44,7 @@ exports.writeFront = writeFront;
 exports.editFront = editFront;
 exports.loadSnapshot = loadSnapshot;
 exports.loadStory = loadStory;
+exports.loadSidecar = loadSidecar;
 exports.paintSafe = paintSafe;
 exports.storiesPerDay = storiesPerDay;
 exports.searchStories = searchStories;
@@ -187,6 +188,13 @@ function loadStory(storyId, root = magazineRoot()) {
         source: typeof s.source === 'string' ? s.source : '',
         date: typeof s.date === 'string' ? s.date : '',
     };
+}
+/** The story's picture sidecar (`<id>.media.json`), or null when it has none or it is unreadable. */
+function loadSidecar(storyId, root = magazineRoot()) {
+    if (!STORY_ID.test(storyId))
+        return null;
+    const parsed = readJson((0, magazine_1.sidecarPath)(path.join(root, magazine_1.MAGAZINE_STORIES_DIR, `${storyId}.json`)));
+    return parsed && parsed.version === 1 && Array.isArray(parsed.pictures) ? parsed : null;
 }
 /**
  * Typographic characters feeds love, folded to what an Amiga and a C64 can

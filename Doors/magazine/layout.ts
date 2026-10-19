@@ -25,6 +25,7 @@ import {
 } from './columns';
 import { placeFiller, type FillerOptions } from './filler';
 import { paintSafe } from './library';
+import { creditLine, pictureRows, type ArticleMedia } from './pictures';
 
 // ---------------------------------------------------------------------------
 // Rows and roles
@@ -148,6 +149,8 @@ interface Cell {
   raw?: string;
   /** Which listing item this row belongs to (listings only). */
   item?: number;
+  /** Rows sharing one block number (a picture and its credit) are never split across columns. */
+  block?: number;
   /** Not the last row of its entry: a column or page break may not fall after it. */
   keep?: boolean;
 }
@@ -466,6 +469,8 @@ export interface Article {
   headlineRow: number;
   /** How many rows the headline takes. */
   headlineRows: number;
+  /** Per spread, the story's media indexes of the pictures set on it, in reading order. */
+  pictures: number[][];
 }
 
 /** `[ NEWS // HACK // 2026-10-13 ]` - a signal tag, not a label. */
@@ -491,6 +496,7 @@ export function buildArticle(
   layout: MagLayout,
   endMark: readonly EndMarkRow[] = [],
   fill?: FillerOptions,
+  media?: ArticleMedia,
 ): Article {
   const { geometry, panelHeight } = layout;
   const w = geometry.contentWidth;
@@ -506,8 +512,27 @@ export function buildArticle(
   // A story with full text is set from its body; the summary is the teaser the
   // body replaces, not a standfirst printed above it.
   const paragraphs = paintSafe(story.body || story.summary).split(/\n+/);
-  const body = setParagraphs(paragraphs, geometry.colWidth);
-  const cells: Cell[] = body.map((text) => ({ text, role: 'plain' }));
+  const cells: Cell[] = [];
+  const placePictures = (here: (anchor: number) => boolean): void => {
+    story.media?.forEach((m, index) => {
+      if (!here(m.anchor) || m.failure) return;
+      const rows = pictureRows(media?.sidecar ?? null, index, media?.petscii ?? false, geometry.colWidth);
+      if (!rows) return;
+      if (cells.length) cells.push({ text: '', role: 'plain' });
+      const block = index;
+      for (const r of rows) cells.push({ text: r.text, role: 'plain', raw: r.raw, block });
+      cells.push({ text: truncate(creditLine(m), geometry.colWidth), role: 'source', block });
+    });
+  };
+  // Each picture follows its anchor paragraph (0 = before the first); one anchored
+  // past the last paragraph closes the text.
+  const spoken = paragraphs.filter((p) => p.replace(/\s+/g, ' ').trim());
+  placePictures((a) => a <= 0);
+  spoken.forEach((p, n) => {
+    if (n > 0 && cells.length && cells[cells.length - 1].text !== '') cells.push({ text: '', role: 'plain' });
+    for (const text of setParagraphs([p], geometry.colWidth)) cells.push({ text, role: 'plain' });
+    placePictures((a) => a === n + 1 || (n === spoken.length - 1 && a > n + 1));
+  });
   // The site name only: the reader never prints an address.
   const source = paintSafe(sourceName(story.source)).trim();
   const trailer: Cell[] = [];
@@ -521,6 +546,7 @@ export function buildArticle(
   const restHeight = Math.max(1, panelHeight - 1);
   const flowed = flowColumns<Cell>(cells, geometry.cols, { first: firstHeight, rest: restHeight }, {
     isBlank: (c) => c.text === '',
+    blockOf: (c) => c.block,
   });
 
   const running = truncate(paintSafe(story.headline).toUpperCase(), w);
@@ -532,7 +558,15 @@ export function buildArticle(
     return [spanRow(geometry, running, 'dim'), ...composeSpread(geometry, withFiller(spread.columns, restHeight, geometry, n, fill), restHeight)]
       .slice(0, panelHeight);
   });
-  return { spreads, headlineRow: 1, headlineRows: headLines.length };
+  // Which pictures fall on which spread comes from the flow itself (the blocks), not from a second layout.
+  const pictures = flowed.map((spread) => {
+    const seen: number[] = [];
+    for (const column of spread.columns) {
+      for (const cell of column) if (cell.block !== undefined && !seen.includes(cell.block)) seen.push(cell.block);
+    }
+    return seen;
+  });
+  return { spreads, headlineRow: 1, headlineRows: headLines.length, pictures };
 }
 
 // ---------------------------------------------------------------------------

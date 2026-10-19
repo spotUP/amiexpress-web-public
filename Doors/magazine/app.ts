@@ -34,7 +34,7 @@ import {
   searchModal,
   sparklineText,
 } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
-import { DESK_LABEL, FRONT_PAGE, FRONT_PAGE_LABEL, MAGAZINE_TITLE, PAGE_FAMILIES, frontLead, frontMove, frontToggle, type Desk, type MagazineIndexEntry, type Story } from '@amiexpress/bbs-door-sdk/formats/magazine';
+import { DESK_LABEL, FRONT_PAGE, FRONT_PAGE_LABEL, MAGAZINE_TITLE, PAGE_FAMILIES, frontLead, frontMove, frontToggle, type Desk, type MagazineIndexEntry, type Story, type StoryMediaSidecar } from '@amiexpress/bbs-door-sdk/formats/magazine';
 import { createScrollText } from '@amiexpress/bbs-door-sdk';
 import { PageSearch, rangeSpace } from '@amiexpress/bbs-door-sdk/teletext/page-search';
 import {
@@ -49,11 +49,13 @@ import {
   type ArtSources,
 } from './art';
 import { loadFiller } from './filler';
+import { fullscreenRows, mediaCredit } from './pictures';
 import {
   editFront,
   isSysopCaller,
   loadSnapshot,
   loadTickerItems,
+  loadSidecar,
   loadStory,
   magazineRoot,
   paintSafe,
@@ -117,6 +119,7 @@ export const HINTS: readonly FooterHint[] = [
   { key: 'F', does: 'Front' },
   { key: 'S', does: 'Section' },
   { key: 'B', does: 'Bookmark' },
+  { key: 'V', does: 'View' },
   { key: '/', does: 'Search' },
   { key: '?', does: 'Help', keep: true },
   { key: 'Q', does: 'Quit', keep: true },
@@ -165,6 +168,8 @@ export const HELP_TEXT = [
   'B   bookmark or unbookmark a story',
   'K   your bookmarks',
   '/   search headlines and summaries',
+  'V   view the pictures on this page full screen',
+  '    (Left and Right step through them; Escape or Q returns)',
   '0-9 type a page number (100-999); Escape cancels',
   'Q   quit',
 ].join('\n');
@@ -199,6 +204,10 @@ export interface Reader {
   tickerRow(): string;
   /** The kind of view on screen. */
   viewKind(): View['kind'];
+  /** The viewer's rows as text (the last one is the status row), or null when it is closed. */
+  viewerRows(): string[] | null;
+  /** The reader's current spread. */
+  spreadNo(): number;
   /** What actually ran: sentinels for the tests that prove the effects are wired. */
   stats(): { glitches: number; tickerSteps: number; intervals: number; banners: number; titles: number; searchTicks: number; lands: number };
   /** The plain text of the row the page counter rolls in (the progress row), tags stripped. */
@@ -383,6 +392,10 @@ export async function startReader(session: DoorSession, options: ReaderOptions =
   let view: View = { kind: 'front' };
   let spreads: PanelRow[][] = [[]];
   let spreadNo = 0;
+  /** The open article's pictures per spread, and what the viewer needs to show them. */
+  let articlePictures: number[][] = [];
+  let articleStory: Story | null = null;
+  let articleSidecar: StoryMediaSidecar | null = null;
   let listIds: string[] = [];
   let spreadFirst: Array<string | null> = [];
   let listGrid: Array<Array<Array<number | null>>> = [];
@@ -507,7 +520,13 @@ export async function startReader(session: DoorSession, options: ReaderOptions =
         return;
       }
       const mark = artFor('mag_article_end', END_MARK_MAX_ROWS, layout.geometry.colWidth).map((raw) => ({ raw, text: artRowText(raw) }));
-      const article = buildArticle(story, layout, mark, { pieces: fillerPieces, key: story.id });
+      articleSidecar = story.media?.length ? loadSidecar(story.id, magazineRoot(__dirname)) : null;
+      const article = buildArticle(story, layout, mark, { pieces: fillerPieces, key: story.id }, {
+        sidecar: articleSidecar,
+        petscii: artKind === 'seq',
+      });
+      articleStory = story;
+      articlePictures = article.pictures;
       spreads = article.spreads;
       headline = { row: article.headlineRow, rows: article.headlineRows };
       spreadNo = 0;
@@ -934,6 +953,84 @@ export async function startReader(session: DoorSession, options: ReaderOptions =
     overlayTimer.unref?.();
   };
 
+  // ---- fullscreen viewer (D11) -----------------------------------------
+
+  /** The pictures of the page the caller was reading, and which one is on screen. */
+  let viewer: { items: number[]; at: number; box: any } | null = null;
+
+  /** The status row: credit, n/m, keys. One row, cut to the screen. */
+  const viewerStatus = (items: readonly number[], at: number): string => {
+    const media = articleStory?.media?.[items[at]];
+    const credit = media ? mediaCredit(media) : '';
+    return `${credit}  ${at + 1}/${items.length}  <- -> Esc`.slice(0, layout.width);
+  };
+
+  /**
+   * The rows of one viewer item. M10b seam: an image shows its fullscreen
+   * rendering; a video shows its poster (also a fullscreen rendering) and is
+   * where playback will start, so this is the one place a frame source plugs in.
+   */
+  const viewerItemRows = (mediaIndex: number): { lines: string[]; plain: string[] } => {
+    const full = fullscreenRows(articleSidecar, mediaIndex, artKind === 'seq');
+    const room = Math.max(0, height - 1);
+    const rows = (full?.rows ?? []).slice(0, room);
+    const lead = full ? ' '.repeat(Math.max(0, Math.floor((layout.width - full.cols) / 2))) : '';
+    return { lines: rows.map((r) => lead + r.raw), plain: rows.map((r) => lead + r.text) };
+  };
+
+  let viewerPlain: string[] = [];
+
+  const paintViewer = () => {
+    if (!viewer) return;
+    const item = viewerItemRows(viewer.items[viewer.at]);
+    const status = escapeTags(viewerStatus(viewer.items, viewer.at));
+    const blank = Math.max(0, height - 1 - item.lines.length);
+    viewer.box.setContent([...item.lines, ...Array(blank).fill(''), s.accentAlt(status)].join('\n'));
+    viewerPlain = [...item.plain, ...Array(blank).fill(''), viewerStatus(viewer.items, viewer.at)];
+    render();
+  };
+
+  /** V: open on the first picture of the current page. No picture here: nothing happens. */
+  const openViewer = () => {
+    if (view.kind !== 'article') return;
+    const items = (articlePictures[spreadNo] ?? []).filter((i) => fullscreenRows(articleSidecar, i, artKind === 'seq'));
+    if (items.length === 0) return;
+    clearGlitch();
+    const box = createBox({
+      parent: screen,
+      top: 0,
+      left: 0,
+      width: '100%',
+      height: '100%',
+      border: undefined,
+      focusable: false,
+      clickable: false,
+      mouse: false,
+      tags: true,
+      content: '',
+      style: { fg: t.ink, bg: t.ground },
+    } as never) as any;
+    box.setFront?.();
+    viewer = { items, at: 0, box };
+    paintViewer();
+  };
+
+  /** Left and Right step through the page's pictures and wrap. */
+  const stepViewer = (delta: number) => {
+    if (!viewer) return;
+    viewer.at = (viewer.at + delta + viewer.items.length) % viewer.items.length;
+    paintViewer();
+  };
+
+  /** Esc or Q: the same reader page comes back (the panel under the box was never touched). */
+  const closeViewer = () => {
+    if (!viewer) return;
+    try { viewer.box.destroy(); } catch { /* leaving anyway */ }
+    viewer = null;
+    viewerPlain = [];
+    paint();
+  };
+
   // ---- keys ------------------------------------------------------------
 
   /** The key as the page-number machine reads it: a digit, one of three named keys, or anything else. */
@@ -951,6 +1048,12 @@ export async function startReader(session: DoorSession, options: ReaderOptions =
     if (!stopped && overlay) { dropOverlay(); return; }
     const c = (ch ?? '').toLowerCase();
     if (stopped || modalOpen) return;
+    if (viewer) {
+      if (name === 'left') stepViewer(-1);
+      else if (name === 'right') stepViewer(1);
+      else if (name === 'escape' || c === 'q') closeViewer();
+      return;
+    }
     if (pageSearch.feed(searchKey(name, c))) return;
     setStatus('');
     switch (name) {
@@ -971,6 +1074,7 @@ export async function startReader(session: DoorSession, options: ReaderOptions =
       case 'k': go({ kind: 'bookmarks' }); return;
       case 's': cycleSection(); return;
       case 'b': toggleBookmark(); return;
+      case 'v': openViewer(); return;
       case 'p': toggleFront(); return;
       case 'u': reorderFront('up'); return;
       case 'd': reorderFront('down'); return;
@@ -1047,6 +1151,8 @@ export async function startReader(session: DoorSession, options: ReaderOptions =
     footerRow: () => chrome.footerContent().replace(/\{[^{}]*\}/g, ''),
     tickerRow: () => (tickerBox ? String(tickerBox.getContent()).replace(/\{[^{}]*\}/g, '') : ''),
     viewKind: () => view.kind,
+    viewerRows: () => (viewer ? [...viewerPlain] : null),
+    spreadNo: () => spreadNo,
     stats: () => ({ ...counters }),
     stop: () => finish(),
   };

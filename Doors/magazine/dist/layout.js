@@ -41,6 +41,7 @@ Object.defineProperty(exports, "sourceName", { enumerable: true, get: function (
 const columns_1 = require("./columns");
 const filler_1 = require("./filler");
 const library_1 = require("./library");
+const pictures_1 = require("./pictures");
 /** The plain text of a row: what a C64 caller would read. */
 function rowText(row) {
     return row.map((s) => s.text).join('');
@@ -357,7 +358,7 @@ function deskCode(desk) {
     return desk.toUpperCase();
 }
 const HEADLINE_MAX_ROWS = 3;
-function buildArticle(story, layout, endMark = [], fill) {
+function buildArticle(story, layout, endMark = [], fill, media) {
     const { geometry, panelHeight } = layout;
     const w = geometry.contentWidth;
     const kicker = spanRow(geometry, truncate(signalTag(story), w), 'tag');
@@ -370,8 +371,33 @@ function buildArticle(story, layout, endMark = [], fill) {
     // A story with full text is set from its body; the summary is the teaser the
     // body replaces, not a standfirst printed above it.
     const paragraphs = (0, library_1.paintSafe)(story.body || story.summary).split(/\n+/);
-    const body = (0, columns_1.setParagraphs)(paragraphs, geometry.colWidth);
-    const cells = body.map((text) => ({ text, role: 'plain' }));
+    const cells = [];
+    const placePictures = (here) => {
+        story.media?.forEach((m, index) => {
+            if (!here(m.anchor) || m.failure)
+                return;
+            const rows = (0, pictures_1.pictureRows)(media?.sidecar ?? null, index, media?.petscii ?? false, geometry.colWidth);
+            if (!rows)
+                return;
+            if (cells.length)
+                cells.push({ text: '', role: 'plain' });
+            const block = index;
+            for (const r of rows)
+                cells.push({ text: r.text, role: 'plain', raw: r.raw, block });
+            cells.push({ text: truncate((0, pictures_1.creditLine)(m), geometry.colWidth), role: 'source', block });
+        });
+    };
+    // Each picture follows its anchor paragraph (0 = before the first); one anchored
+    // past the last paragraph closes the text.
+    const spoken = paragraphs.filter((p) => p.replace(/\s+/g, ' ').trim());
+    placePictures((a) => a <= 0);
+    spoken.forEach((p, n) => {
+        if (n > 0 && cells.length && cells[cells.length - 1].text !== '')
+            cells.push({ text: '', role: 'plain' });
+        for (const text of (0, columns_1.setParagraphs)([p], geometry.colWidth))
+            cells.push({ text, role: 'plain' });
+        placePictures((a) => a === n + 1 || (n === spoken.length - 1 && a > n + 1));
+    });
     // The site name only: the reader never prints an address.
     const source = (0, library_1.paintSafe)((0, magazine_1.sourceName)(story.source)).trim();
     const trailer = [];
@@ -388,6 +414,7 @@ function buildArticle(story, layout, endMark = [], fill) {
     const restHeight = Math.max(1, panelHeight - 1);
     const flowed = (0, columns_1.flowColumns)(cells, geometry.cols, { first: firstHeight, rest: restHeight }, {
         isBlank: (c) => c.text === '',
+        blockOf: (c) => c.block,
     });
     const running = truncate((0, library_1.paintSafe)(story.headline).toUpperCase(), w);
     const spreads = flowed.map((spread, n) => {
@@ -398,7 +425,17 @@ function buildArticle(story, layout, endMark = [], fill) {
         return [spanRow(geometry, running, 'dim'), ...composeSpread(geometry, withFiller(spread.columns, restHeight, geometry, n, fill), restHeight)]
             .slice(0, panelHeight);
     });
-    return { spreads, headlineRow: 1, headlineRows: headLines.length };
+    // Which pictures fall on which spread comes from the flow itself (the blocks), not from a second layout.
+    const pictures = flowed.map((spread) => {
+        const seen = [];
+        for (const column of spread.columns) {
+            for (const cell of column)
+                if (cell.block !== undefined && !seen.includes(cell.block))
+                    seen.push(cell.block);
+        }
+        return seen;
+    });
+    return { spreads, headlineRow: 1, headlineRows: headLines.length, pictures };
 }
 // ---------------------------------------------------------------------------
 // Progress, ticker, desk signal

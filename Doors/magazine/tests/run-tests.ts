@@ -16,6 +16,8 @@ const TEST_MODULES = [
   './reader.test',
   './art.test',
   './filler.test',
+  './pictures.test',
+  './viewer.test',
 ];
 
 (async () => {

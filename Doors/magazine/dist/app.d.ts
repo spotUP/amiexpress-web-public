@@ -68,6 +68,10 @@ export interface Reader {
     tickerRow(): string;
     /** The kind of view on screen. */
     viewKind(): View['kind'];
+    /** The viewer's rows as text (the last one is the status row), or null when it is closed. */
+    viewerRows(): string[] | null;
+    /** The reader's current spread. */
+    spreadNo(): number;
     /** What actually ran: sentinels for the tests that prove the effects are wired. */
     stats(): {
         glitches: number;

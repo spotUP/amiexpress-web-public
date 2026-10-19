@@ -589,7 +589,7 @@ export async function theFooterFitsTheScreenAndEndsOnAWholeHintAtEveryTier(): Pr
       assert.ok(footer.length <= w, `${w}: footer is ${footer.length} wide: "${footer}"`);
       assert.ok(footer.includes('?: Help') && footer.includes('Q: Quit'), `${w}: Help and Quit stay: "${footer}"`);
       // Every hint is whole: each "K:" cap is followed by its full word.
-      const words = ['Page', 'Contents', 'Front', 'Section', 'Bookmark', 'Search', 'Help', 'Quit'];
+      const words = ['Page', 'Contents', 'Front', 'Section', 'Bookmark', 'View', 'Search', 'Help', 'Quit'];
       for (const m of footer.matchAll(/(\S+): (\S+)/g)) {
         assert.ok(words.includes(m[2]), `${w}: cut hint "${m[0]}" in "${footer}"`);
       }

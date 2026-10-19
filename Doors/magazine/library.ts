@@ -23,8 +23,10 @@ import {
   MAGAZINE_STORIES_DIR,
   isArticle,
   normalizeFront,
+  sidecarPath,
   type MagazineIndexEntry,
   type Story,
+  type StoryMediaSidecar,
 } from '@amiexpress/bbs-door-sdk/formats/magazine';
 import { writeFrontFile } from '@amiexpress/bbs-door-sdk/formats/magazine-front-file';
 
@@ -156,6 +158,13 @@ export function loadStory(storyId: string, root: string = magazineRoot()): Story
     source: typeof s.source === 'string' ? s.source : '',
     date: typeof s.date === 'string' ? s.date : '',
   };
+}
+
+/** The story's picture sidecar (`<id>.media.json`), or null when it has none or it is unreadable. */
+export function loadSidecar(storyId: string, root: string = magazineRoot()): StoryMediaSidecar | null {
+  if (!STORY_ID.test(storyId)) return null;
+  const parsed = readJson(sidecarPath(path.join(root, MAGAZINE_STORIES_DIR, `${storyId}.json`))) as Partial<StoryMediaSidecar> | null;
+  return parsed && parsed.version === 1 && Array.isArray(parsed.pictures) ? (parsed as StoryMediaSidecar) : null;
 }
 
 /**

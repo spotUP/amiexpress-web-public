@@ -31,6 +31,7 @@ const bbs_door_sdk_1 = require("@amiexpress/bbs-door-sdk");
 const page_search_1 = require("@amiexpress/bbs-door-sdk/teletext/page-search");
 const art_1 = require("./art");
 const filler_1 = require("./filler");
+const pictures_1 = require("./pictures");
 const library_1 = require("./library");
 const layout_1 = require("./layout");
 exports.READ_KEY = 'read-story-ids';
@@ -55,6 +56,7 @@ exports.HINTS = [
     { key: 'F', does: 'Front' },
     { key: 'S', does: 'Section' },
     { key: 'B', does: 'Bookmark' },
+    { key: 'V', does: 'View' },
     { key: '/', does: 'Search' },
     { key: '?', does: 'Help', keep: true },
     { key: 'Q', does: 'Quit', keep: true },
@@ -99,6 +101,8 @@ exports.HELP_TEXT = [
     'B   bookmark or unbookmark a story',
     'K   your bookmarks',
     '/   search headlines and summaries',
+    'V   view the pictures on this page full screen',
+    '    (Left and Right step through them; Escape or Q returns)',
     '0-9 type a page number (100-999); Escape cancels',
     'Q   quit',
 ].join('\n');
@@ -272,6 +276,10 @@ async function startReader(session, options = {}) {
     let view = { kind: 'front' };
     let spreads = [[]];
     let spreadNo = 0;
+    /** The open article's pictures per spread, and what the viewer needs to show them. */
+    let articlePictures = [];
+    let articleStory = null;
+    let articleSidecar = null;
     let listIds = [];
     let spreadFirst = [];
     let listGrid = [];
@@ -388,7 +396,13 @@ async function startReader(session, options = {}) {
                 return;
             }
             const mark = artFor('mag_article_end', END_MARK_MAX_ROWS, layout.geometry.colWidth).map((raw) => ({ raw, text: (0, art_1.artRowText)(raw) }));
-            const article = (0, layout_1.buildArticle)(story, layout, mark, { pieces: fillerPieces, key: story.id });
+            articleSidecar = story.media?.length ? (0, library_1.loadSidecar)(story.id, (0, library_1.magazineRoot)(__dirname)) : null;
+            const article = (0, layout_1.buildArticle)(story, layout, mark, { pieces: fillerPieces, key: story.id }, {
+                sidecar: articleSidecar,
+                petscii: artKind === 'seq',
+            });
+            articleStory = story;
+            articlePictures = article.pictures;
             spreads = article.spreads;
             headline = { row: article.headlineRow, rows: article.headlineRows };
             spreadNo = 0;
@@ -854,6 +868,83 @@ async function startReader(session, options = {}) {
         overlayTimer = setTimeout(() => finish(), GOODBYE_MS);
         overlayTimer.unref?.();
     };
+    // ---- fullscreen viewer (D11) -----------------------------------------
+    /** The pictures of the page the caller was reading, and which one is on screen. */
+    let viewer = null;
+    /** The status row: credit, n/m, keys. One row, cut to the screen. */
+    const viewerStatus = (items, at) => {
+        const media = articleStory?.media?.[items[at]];
+        const credit = media ? (0, pictures_1.mediaCredit)(media) : '';
+        return `${credit}  ${at + 1}/${items.length}  <- -> Esc`.slice(0, layout.width);
+    };
+    /**
+     * The rows of one viewer item. M10b seam: an image shows its fullscreen
+     * rendering; a video shows its poster (also a fullscreen rendering) and is
+     * where playback will start, so this is the one place a frame source plugs in.
+     */
+    const viewerItemRows = (mediaIndex) => {
+        const full = (0, pictures_1.fullscreenRows)(articleSidecar, mediaIndex, artKind === 'seq');
+        const room = Math.max(0, height - 1);
+        const rows = (full?.rows ?? []).slice(0, room);
+        const lead = full ? ' '.repeat(Math.max(0, Math.floor((layout.width - full.cols) / 2))) : '';
+        return { lines: rows.map((r) => lead + r.raw), plain: rows.map((r) => lead + r.text) };
+    };
+    let viewerPlain = [];
+    const paintViewer = () => {
+        if (!viewer)
+            return;
+        const item = viewerItemRows(viewer.items[viewer.at]);
+        const status = escapeTags(viewerStatus(viewer.items, viewer.at));
+        const blank = Math.max(0, height - 1 - item.lines.length);
+        viewer.box.setContent([...item.lines, ...Array(blank).fill(''), s.accentAlt(status)].join('\n'));
+        viewerPlain = [...item.plain, ...Array(blank).fill(''), viewerStatus(viewer.items, viewer.at)];
+        render();
+    };
+    /** V: open on the first picture of the current page. No picture here: nothing happens. */
+    const openViewer = () => {
+        if (view.kind !== 'article')
+            return;
+        const items = (articlePictures[spreadNo] ?? []).filter((i) => (0, pictures_1.fullscreenRows)(articleSidecar, i, artKind === 'seq'));
+        if (items.length === 0)
+            return;
+        clearGlitch();
+        const box = (0, blessed_helpers_1.createBox)({
+            parent: screen,
+            top: 0,
+            left: 0,
+            width: '100%',
+            height: '100%',
+            border: undefined,
+            focusable: false,
+            clickable: false,
+            mouse: false,
+            tags: true,
+            content: '',
+            style: { fg: t.ink, bg: t.ground },
+        });
+        box.setFront?.();
+        viewer = { items, at: 0, box };
+        paintViewer();
+    };
+    /** Left and Right step through the page's pictures and wrap. */
+    const stepViewer = (delta) => {
+        if (!viewer)
+            return;
+        viewer.at = (viewer.at + delta + viewer.items.length) % viewer.items.length;
+        paintViewer();
+    };
+    /** Esc or Q: the same reader page comes back (the panel under the box was never touched). */
+    const closeViewer = () => {
+        if (!viewer)
+            return;
+        try {
+            viewer.box.destroy();
+        }
+        catch { /* leaving anyway */ }
+        viewer = null;
+        viewerPlain = [];
+        paint();
+    };
     // ---- keys ------------------------------------------------------------
     /** The key as the page-number machine reads it: a digit, one of three named keys, or anything else. */
     const searchKey = (name, c) => {
@@ -880,6 +971,15 @@ async function startReader(session, options = {}) {
         const c = (ch ?? '').toLowerCase();
         if (stopped || modalOpen)
             return;
+        if (viewer) {
+            if (name === 'left')
+                stepViewer(-1);
+            else if (name === 'right')
+                stepViewer(1);
+            else if (name === 'escape' || c === 'q')
+                closeViewer();
+            return;
+        }
         if (pageSearch.feed(searchKey(name, c)))
             return;
         setStatus('');
@@ -943,6 +1043,9 @@ async function startReader(session, options = {}) {
                 return;
             case 'b':
                 toggleBookmark();
+                return;
+            case 'v':
+                openViewer();
                 return;
             case 'p':
                 toggleFront();
@@ -1044,6 +1147,8 @@ async function startReader(session, options = {}) {
         footerRow: () => chrome.footerContent().replace(/\{[^{}]*\}/g, ''),
         tickerRow: () => (tickerBox ? String(tickerBox.getContent()).replace(/\{[^{}]*\}/g, '') : ''),
         viewKind: () => view.kind,
+        viewerRows: () => (viewer ? [...viewerPlain] : null),
+        spreadNo: () => spreadNo,
         stats: () => ({ ...counters }),
         stop: () => finish(),
     };

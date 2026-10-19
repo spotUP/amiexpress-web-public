@@ -1,4 +1,4 @@
-import { type MagazineIndexEntry, type Story } from '@amiexpress/bbs-door-sdk/formats/magazine';
+import { type MagazineIndexEntry, type Story, type StoryMediaSidecar } from '@amiexpress/bbs-door-sdk/formats/magazine';
 /** `<bbsRoot>/Magazine`, found the way every other board path is found. */
 export declare function magazineRoot(startDir?: string): string;
 /** What the reader needs from one read of the magazine. */
@@ -57,6 +57,8 @@ export declare function editFront(edit: (ids: string[]) => string[], root?: stri
 export declare function loadSnapshot(root?: string): MagazineSnapshot;
 /** One story, or null when it is gone or unreadable. */
 export declare function loadStory(storyId: string, root?: string): Story | null;
+/** The story's picture sidecar (`<id>.media.json`), or null when it has none or it is unreadable. */
+export declare function loadSidecar(storyId: string, root?: string): StoryMediaSidecar | null;
 /**
  * Typographic characters feeds love, folded to what an Amiga and a C64 can
  * show, then anything left outside Latin-1 becomes `?`. The reader prints

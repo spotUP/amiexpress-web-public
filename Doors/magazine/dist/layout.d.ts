@@ -1,6 +1,7 @@
 import { sourceName, type Desk, type Story } from '@amiexpress/bbs-door-sdk/formats/magazine';
 import { type ColumnGeometry } from './columns';
 import { type FillerOptions } from './filler';
+import { type ArticleMedia } from './pictures';
 /** What a run of text MEANS; the app decides what that looks like in the theme. */
 export type Role = 'plain' | 'dim' | 'accent' | 'head' | 'rule' | 'tag' | 'source' | 'unread' | 'selected' | 'warn';
 export interface Seg {
@@ -111,6 +112,8 @@ export interface Article {
     headlineRow: number;
     /** How many rows the headline takes. */
     headlineRows: number;
+    /** Per spread, the story's media indexes of the pictures set on it, in reading order. */
+    pictures: number[][];
 }
 /** `[ NEWS // HACK // 2026-10-13 ]` - a signal tag, not a label. */
 export declare function signalTag(story: Pick<Story, 'format' | 'desk' | 'date'>): string;
@@ -119,7 +122,7 @@ export interface EndMarkRow {
     raw: string;
     text: string;
 }
-export declare function buildArticle(story: Story, layout: MagLayout, endMark?: readonly EndMarkRow[], fill?: FillerOptions): Article;
+export declare function buildArticle(story: Story, layout: MagLayout, endMark?: readonly EndMarkRow[], fill?: FillerOptions, media?: ArticleMedia): Article;
 /**
  * One row that fills as the reader moves through the spreads, with the
  * position written out at every width (`Page 2 of 5`). The bar alone is a
