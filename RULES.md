@@ -57,6 +57,7 @@ Phone testing is LIVE only — the sysop cannot reach localhost from a phone.
 | Build backend | `cd web/backend && npm run build` |
 | Backend dev | `cd web/backend && npm run dev` |
 | Type-check backend | `cd web/backend && npx tsc --noEmit` |
+| Media tools for MAG linked media (local) | `brew install ffmpeg yt-dlp` (the Docker image installs both; without them ingest still stores text and stills, and videos record `no-ffmpeg` / `no-yt-dlp`) |
 | Test backend | `cd web/backend && npm test` |
 | Build frontend | `cd web/frontend && npm run build` |
 | Frontend build-check | `cd web/frontend && npm run build:check` |

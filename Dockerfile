@@ -267,7 +267,9 @@ RUN apk add --no-cache \
     g++ \
     make \
     p7zip \
-    tzdata
+    tzdata \
+    ffmpeg \
+    yt-dlp
 
 # lrzsz binaries built in backend-builder (Alpine v3.23 dropped the package).
 # Copy the real binaries (lsz/lrz) and recreate the classic sz/rz symlinks

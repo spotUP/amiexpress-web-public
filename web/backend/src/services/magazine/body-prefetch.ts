@@ -221,9 +221,13 @@ export function defaultPrefetchDeps(base: Pick<PrefetchDeps, 'rootDir' | 'now' |
   return { ...base, http: fetchHttp, gate: passHostGate, extract: extractArticle, robots };
 }
 
-type Verdict = { kind: 'allowed' } | { kind: 'disallowed' } | { kind: 'unknown'; reason: string };
+export type Verdict = { kind: 'allowed' } | { kind: 'disallowed' } | { kind: 'unknown'; reason: string };
 
-async function robotsVerdict(url: string, deps: PrefetchDeps, gapMs: number): Promise<Verdict> {
+export async function robotsVerdict(
+  url: string,
+  deps: Pick<PrefetchDeps, 'now' | 'robots' | 'gate' | 'http'>,
+  gapMs: number,
+): Promise<Verdict> {
   const u = new URL(url);
   const nowMs = deps.now().getTime();
   let entry = deps.robots.get(u.host);
