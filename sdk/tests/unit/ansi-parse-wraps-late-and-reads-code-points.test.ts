@@ -25,3 +25,16 @@ describe('parseANSIToCanvas on a full-width row', () => {
     expect(canvas[1][0].char).toBe('E');
   });
 });
+
+describe('parseANSIToCanvas on DECDHL rows', () => {
+  it('consumes ESC#3 / ESC#4 so a double-height teletext row keeps its columns', () => {
+    // renderNativeTti marks double-height rows with DECDHL (one renderer
+    // with the teletext doors); the admin canvas must not print the escape.
+    const rendered = renderNativeTti('PN,10000\nOL,2,\x1bMBIG\n');
+    expect(rendered!.ansi).toContain('\x1b#3');
+    const canvas = createCanvas(40, 24);
+    parseANSIToCanvas(canvas, rendered!.ansi);
+    expect(canvas[2].map((cell) => cell.char).join('').trimEnd()).toBe(' BIG');
+    expect(canvas[3].map((cell) => cell.char).join('').trimEnd()).toBe(' BIG');
+  });
+});

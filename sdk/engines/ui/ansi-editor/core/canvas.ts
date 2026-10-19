@@ -621,6 +621,14 @@ export function parseANSIToCanvas(
     // two broken cells for one character.
     const char = String.fromCodePoint(ansiContent.codePointAt(i) ?? 0);
 
+    // VT100 line attributes (ESC # 3/4/5/6: DECDHL, DECSWL, DECDWL) are
+    // two-character escapes the cell canvas has no model for. Consume them
+    // so they never land in a cell as text; the row's characters follow.
+    if (char === '\x1b' && ansiContent[i + 1] === '#' && /[3-6]/.test(ansiContent[i + 2] ?? '')) {
+      i += 3;
+      continue;
+    }
+
     // Handle escape sequence
     if (char === '\x1b' && ansiContent[i + 1] === '[') {
       // Parse ANSI escape sequence
