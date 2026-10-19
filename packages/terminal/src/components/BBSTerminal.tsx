@@ -1937,19 +1937,13 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
     // the guard finds that out and gives it its own (session-resume.ts).
     const resumeStorage = browserResumeStorage();
     const tabIdGuard = resumeStorage ? guardTabId(resumeStorage, browserTabChannel()) : undefined;
-    // The first connect waits for the guard to settle: until then the tab's
-    // id may be another tab's, so it offers nothing (session-resume.ts).
-    const socket = io(finalBackendUrl, {
-      ...connectOptions(
-        isDevelopment,
-        () => (resumeStorage ? takeResumeOffer(resumeStorage, tabIdGuard?.confirmed() ?? true) : undefined),
-      ),
-      autoConnect: false,
-    });
-    let socketDisposed = false;
-    void (tabIdGuard ? tabIdGuard.settled : Promise.resolve()).then(() => {
-      if (!socketDisposed) socket.connect();
-    });
+    // Every connect's offer waits for the guard to settle: until then the
+    // tab's id may be another tab's (session-resume.ts, connectOptions).
+    const socket = io(finalBackendUrl, connectOptions(
+      isDevelopment,
+      () => (resumeStorage ? takeResumeOffer(resumeStorage, tabIdGuard?.confirmed() ?? true) : undefined),
+      tabIdGuard?.settled,
+    ));
     socketRef.current = socket;
     loginCredentials.current = createLoginCredentials((line) => socket.emit('command', line));
 
@@ -3551,7 +3545,6 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
         gamepadManagerRef.current.stop();
         gamepadManagerRef.current = null;
       }
-      socketDisposed = true;
       socket.disconnect();
       tabIdGuard?.close();
       socket.offAny(handleDoorMessageEvent);

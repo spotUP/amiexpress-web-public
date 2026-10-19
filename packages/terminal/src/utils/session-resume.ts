@@ -295,8 +295,18 @@ export interface ConnectOptions extends ReconnectPolicy {
  * socket.io-client options for the BBS socket. `auth` is a callback so it is
  * asked again on every reconnect and always carries the CURRENT token.
  * `handshake.auth.token` stays the admin/chat JWT; `resume` is its own key.
+ *
+ * The offer waits for `ready` (the tab-id guard settling). Gating only the
+ * first `connect()` was not enough: focus and pageshow call `connect()` too,
+ * and a handshake that beat the 300 ms check offered nothing, so a plain
+ * reload landed on a fresh logon (live, 2026-10-19). socket.io sends the
+ * CONNECT packet only when `cb` runs, so every connect path waits here.
  */
-export function connectOptions(isDevelopment: boolean, offer: () => ResumeOffer | undefined): ConnectOptions {
+export function connectOptions(
+  isDevelopment: boolean,
+  offer: () => ResumeOffer | undefined,
+  ready: Promise<void> = Promise.resolve(),
+): ConnectOptions {
   return {
     // WebSocket first, polling as socket.io's own fallback.
     transports: ['websocket', 'polling'],
@@ -306,8 +316,10 @@ export function connectOptions(isDevelopment: boolean, offer: () => ResumeOffer 
     // Retry until it works or the tab closes - see reconnect-policy.ts.
     ...reconnectPolicy(isDevelopment),
     auth: (cb) => {
-      const o = offer();
-      cb(o ? { ...o } : {});
+      void ready.then(() => {
+        const o = offer();
+        cb(o ? { ...o } : {});
+      });
     },
   };
 }

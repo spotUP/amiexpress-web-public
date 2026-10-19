@@ -208,22 +208,24 @@ describe('guardTabId (Duplicate Tab copies sessionStorage)', () => {
     expect(s.tab.getItem(TAB_ID_KEY)).toBe('tab-a');
   });
 
-  it('a reloaded tab connects only after the guard settles, and then offers its own token', async () => {
+  // Live 2026-10-19: focus/pageshow called connect() during the 300 ms check,
+  // the handshake offered nothing, and a plain reload got a fresh logon.
+  it('a reload whose connect starts before the tab-id check ends still offers its own token', async () => {
     const hub = channelHub();
     const s = mem();
     tabId(s, () => 'tab-a');
     saveResume(s, { token: T, userId: '7', nodeId: 3 }, 0);
     let fire: () => void = () => {};
     const g = guardTabId(s, hub(), { schedule: (fn) => { fire = fn; } });
-    // What BBSTerminal does: connect, and so build the offer, only when settled.
-    const offers: Array<ReturnType<typeof takeResumeOffer>> = [];
-    void g.settled.then(() => { offers.push(takeResumeOffer(s, g.confirmed(), 1000)); });
+    const opts = connectOptions(false, () => takeResumeOffer(s, g.confirmed(), 1000), g.settled);
+    const sent: Array<{ resume?: string }> = [];
+    opts.auth((d) => sent.push(d)); // the early connect
     await Promise.resolve();
-    expect(offers).toEqual([]);
+    expect(sent).toEqual([]);
     fire();
     await g.settled;
     await Promise.resolve();
-    expect(offers).toEqual([{ resume: T }]);
+    expect(sent).toEqual([{ resume: T }]);
   });
 
   it('without BroadcastChannel the id is taken as this tab\'s own', () => {
@@ -235,19 +237,20 @@ describe('guardTabId (Duplicate Tab copies sessionStorage)', () => {
 });
 
 describe('connectOptions', () => {
-  it('auth hands the CURRENT token on each connect', () => {
+  it('auth hands the CURRENT token on each connect', async () => {
     const s = mem();
     tabId(s, () => 'tab-a');
     let now = 0;
     const opts = connectOptions(false, () => takeResumeOffer(s, true, now));
     const seen: Array<{ resume?: string }> = [];
-    opts.auth((d) => seen.push(d));
+    const ask = async () => { opts.auth((d) => seen.push(d)); await Promise.resolve(); };
+    await ask();
     saveResume(s, { token: T, userId: '7', nodeId: 3 }, 0);
     now = 1000;
-    opts.auth((d) => seen.push(d));
+    await ask();
     saveResume(s, { token: U, userId: '7', nodeId: 3 }, 2000);
     now = 3000;
-    opts.auth((d) => seen.push(d));
+    await ask();
     expect(seen).toEqual([{}, { resume: T }, { resume: U }]);
     expect(opts.reconnectionAttempts).toBe(Infinity);
     expect(opts.transports).toEqual(['websocket', 'polling']);
