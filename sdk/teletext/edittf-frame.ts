@@ -21,6 +21,8 @@ import { compileRow } from './marco/compile/index';
 export const FRAME_ROWS = 25;
 export const FRAME_COLS = 40;
 export const FRAME_CELLS = FRAME_ROWS * FRAME_COLS;
+/** The page number a .tti gets when it was drawn from nothing. */
+export const DEFAULT_PN = 'PN,10000';
 
 /** What a .tti carries besides the first subpage's OL rows. */
 export interface TtiFrameMeta {
@@ -108,7 +110,13 @@ export function frameToTti(cells: Uint8Array, meta: TtiFrameMeta): string {
   if (cells.length !== FRAME_CELLS) {
     throw new Error(`frameToTti: expected ${FRAME_CELLS} cells, got ${cells.length}`);
   }
-  const lines = [...meta.head];
+  // A page with no PN record is not a page: looksNativeTti still matches it,
+  // but importTti yields no subpage, so renderNativeTti returns null and the
+  // door-art PUT refuses it. A surface drawn from nothing has an empty head,
+  // so give it the default page number rather than write an unrenderable file.
+  const lines = meta.head.some((line) => line.startsWith('PN,'))
+    ? [...meta.head]
+    : [DEFAULT_PN, ...meta.head];
   for (let r = 0; r < FRAME_ROWS; r++) {
     const row = Array.from(cells.subarray(r * FRAME_COLS, (r + 1) * FRAME_COLS), (b) => b & 0x7f);
     let end = row.length;

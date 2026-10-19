@@ -69,4 +69,13 @@ describe('edit.tf frame conversion', () => {
     expect(cells.filter((b, i) => b !== 0x20 && !(i >= 80 && i < 83) && !(i >= 960 && i < 962)).length).toBe(0);
     expect(frameToTti(cells, meta)).toBe('DE,t\nPN,10000\nSC,0000\nOL,2,\x81AB\nOL,24,\x82Z\n');
   });
+  it('writes a default PN when the head has none, so a blank-drawn page renders', () => {
+    const cells = new Uint8Array(FRAME_CELLS).fill(0x20);
+    cells.set([0x48, 0x49], 40);
+    const written = frameToTti(cells, { head: [], tail: [], eol: '\n' });
+    expect(written).toBe('PN,10000\nOL,1,HI\n');
+    expect(renderNativeTti(written)).not.toBeNull();
+    // A head that already names its page keeps it, untouched.
+    expect(frameToTti(cells, { head: ['PN,10500'], tail: [], eol: '\n' })).toBe('PN,10500\nOL,1,HI\n');
+  });
 });

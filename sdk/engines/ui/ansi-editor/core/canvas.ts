@@ -607,10 +607,19 @@ export function parseANSIToCanvas(
   let bold = false;
   let baseFg = 7;
   const applyFg = (): void => { fg = bold && baseFg < 8 ? baseFg + 8 : baseFg; };
+  // The wrap is DEFERRED, as a VT100 does it: a character in the last column
+  // leaves the cursor there with a wrap pending, and only the next printable
+  // character moves to the next row. Wrapping eagerly made a full-width row
+  // followed by its own newline cost two rows, so every 40-column teletext
+  // row came out double-spaced.
+  let wrapPending = false;
 
   let i = 0;
   while (i < ansiContent.length) {
-    const char = ansiContent[i];
+    // One cell per CODE POINT, not per UTF-16 unit: a teletext mosaic is a
+    // Unicode sextant above U+FFFF, and splitting its surrogate pair drew
+    // two broken cells for one character.
+    const char = String.fromCodePoint(ansiContent.codePointAt(i) ?? 0);
 
     // Handle escape sequence
     if (char === '\x1b' && ansiContent[i + 1] === '[') {
@@ -715,6 +724,7 @@ export function parseANSIToCanvas(
             break;
         }
 
+        if (cmd !== 'm') wrapPending = false;
         i = j + 1;
         continue;
       }
@@ -722,6 +732,7 @@ export function parseANSIToCanvas(
 
     // Handle newline
     if (char === '\n') {
+      wrapPending = false;
       x = 0;
       y++;
       i++;
@@ -730,6 +741,7 @@ export function parseANSIToCanvas(
 
     // Handle carriage return
     if (char === '\r') {
+      wrapPending = false;
       x = 0;
       i++;
       continue;
@@ -743,18 +755,18 @@ export function parseANSIToCanvas(
     }
 
     // Regular character - place in canvas
+    if (wrapPending) {
+      wrapPending = false;
+      x = 0;
+      y++;
+    }
     if (y >= 0 && y < height && x >= 0 && x < width) {
       canvas[y][x] = { char, fg, bg, blink };
-      x++;
-
-      // Auto-wrap at end of line
-      if (x >= width) {
-        x = 0;
-        y++;
-      }
+      if (x === width - 1) wrapPending = true;
+      else x++;
     }
 
-    i++;
+    i += char.length;
   }
 }
 
