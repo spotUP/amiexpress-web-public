@@ -161,6 +161,32 @@ describe('the teletext editor', () => {
     expect(base64ToLatin1(onSave.mock.calls[0][0] as string)).toBe('PN,10000\nOL,3,HELLO\x91!\n');
   });
 
+  it('keeps saying why a code cell refused a block while the drag runs on', () => {
+    const onSave = vi.fn();
+    // White Graphics in cell 1, blocks in 2-4, Red Graphics in cell 5 (it
+    // changes the colour, so it is needed), a red block in 6, spaces after.
+    render(<TeletextScreenEditor content={btoa('PN,10000\nOL,3, \x97!!!\x91!  \n')} onSave={onSave} />);
+    const canvas = theCanvas();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Red foreground' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Draw Blocks' }));
+    // Cell 5 holds the code and a block sits left of it: nowhere to move it.
+    fireEvent.pointerDown(canvas, { clientX: 5 * W + 1, clientY: 3 * H + 1, buttons: 1 });
+    fireEvent.pointerMove(canvas, { clientX: 6 * W + 1, clientY: 3 * H + 1, buttons: 1 });
+    // The rest of the drag draws fine and must not wipe the reason.
+    fireEvent.pointerMove(canvas, { clientX: 8 * W + 1, clientY: 3 * H + 1, buttons: 1 });
+    fireEvent.pointerUp(canvas, { clientX: 8 * W + 1, clientY: 3 * H + 1 });
+    expect(screen.getByText(/holds a colour code with no free cell to move to/)).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: /Save/ }));
+    expect(base64ToLatin1(onSave.mock.calls[0][0] as string)).toBe('PN,10000\nOL,3, \x97!!!\x91##!\n');
+
+    // The next stroke starts with a clean slate.
+    fireEvent.pointerDown(canvas, { clientX: 10 * W + 1, clientY: 3 * H + 1, buttons: 1 });
+    fireEvent.pointerUp(canvas, { clientX: 10 * W + 1, clientY: 3 * H + 1 });
+    expect(screen.queryByText(/holds a colour code/)).toBeNull();
+  });
+
   it('draws a line of blocks from press to release, on the ANSI editor\'s key', () => {
     const onSave = vi.fn();
     render(<TeletextScreenEditor content="" onSave={onSave} />);

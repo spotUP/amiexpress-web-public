@@ -270,6 +270,9 @@ export interface TeletextAttributes {
 /** Shown when a colour change has nowhere to go. */
 export const COLOUR_NEEDS_ROOM = 'Colour change needs a free cell to the left';
 
+/** Shown when a block lands on a code cell whose code has nowhere to move. */
+export const CODE_CELL_TAKEN = 'That cell holds a colour code with no free cell to move to. Turn on Show codes to see it';
+
 const BLACK_BACKGROUND = 0x1c;
 const NEW_BACKGROUND = 0x1d;
 
@@ -368,8 +371,8 @@ function inColour(
 
 export interface ColouredEdit {
   surface: TeletextSurface;
-  /** The colour change needed a free cell left of the run and had none; nothing was drawn. */
-  blocked: boolean;
+  /** Why nothing was drawn (a message for the artist), or null when the edit went down. */
+  blocked: string | null;
 }
 
 /** The codes `attributesAt` reads: the only ones that can be redundant. */
@@ -421,7 +424,7 @@ export function paintMosaic(
   fg: TeletextColour,
   bg: TeletextColour,
 ): ColouredEdit {
-  if (px < 0 || py < 0 || px >= SIXEL_COLS || py >= SIXEL_ROWS || fg === 0) return { surface, blocked: false };
+  if (px < 0 || py < 0 || px >= SIXEL_COLS || py >= SIXEL_ROWS || fg === 0) return { surface, blocked: null };
   const x = px >> 1;
   const y = Math.floor(py / 3);
   let from = surface;
@@ -430,14 +433,14 @@ export function paintMosaic(
     if (dropped) from = dropped;
     else {
       from = cloneSurface(surface);
-      if (!slideAttributesLeft(from.cells, x, y)) return { surface, blocked: false };
+      if (!slideAttributesLeft(from.cells, x, y)) return { surface, blocked: CODE_CELL_TAKEN };
     }
   }
   const next = inColour(from, x, y, { fg, bg, graphics: true }, (cells) => {
     const drawn = plotMosaic({ cells, meta: surface.meta }, px, py, true);
     cells.set(drawn.cells);
   });
-  return next ? { surface: next, blocked: false } : { surface, blocked: true };
+  return next ? { surface: next, blocked: null } : { surface, blocked: COLOUR_NEEDS_ROOM };
 }
 
 /**
@@ -453,12 +456,12 @@ export function typeCharColoured(
   fg: TeletextColour,
   bg: TeletextColour,
 ): ColouredEdit & { cursor: { x: number; y: number } } {
-  if (!inside(x, y) || fg === 0) return { surface, blocked: false, cursor: { x, y } };
+  if (!inside(x, y) || fg === 0) return { surface, blocked: null, cursor: { x, y } };
   const next = inColour(surface, x, y, { fg, bg, graphics: false }, (cells) => {
     cells[indexOf(x, y)] = code & 0x7f;
   });
-  if (!next) return { surface, blocked: true, cursor: { x, y } };
-  return { surface: next, blocked: false, cursor: typeChar(surface, x, y, code).cursor };
+  if (!next) return { surface, blocked: COLOUR_NEEDS_ROOM, cursor: { x, y } };
+  return { surface: next, blocked: null, cursor: typeChar(surface, x, y, code).cursor };
 }
 
 /**
@@ -522,8 +525,8 @@ export function sixelBox(a: Sixel, b: Sixel, filled: boolean): Sixel[] {
 
 /**
  * Draw every sixel in `points`, left to right within a row so a colour code
- * lands before the blocks it colours. `blocked` when any sixel had no room
- * for its colour change; the rest are still drawn.
+ * lands before the blocks it colours. `blocked` carries the first reason a
+ * sixel could not go down; the rest are still drawn.
  */
 export function paintSixels(
   surface: TeletextSurface,
@@ -533,11 +536,11 @@ export function paintSixels(
 ): ColouredEdit {
   const ordered = [...points].sort((p, q) => p.py - q.py || p.px - q.px);
   let next = surface;
-  let blocked = false;
+  let blocked: string | null = null;
   for (const point of ordered) {
     const edit = paintMosaic(next, point.px, point.py, fg, bg);
     next = edit.surface;
-    blocked ||= edit.blocked;
+    blocked ??= edit.blocked;
   }
   return { surface: next, blocked };
 }
@@ -561,7 +564,7 @@ export function fillSixels(
 ): ColouredEdit {
   const { px, py } = start;
   if (px < 0 || py < 0 || px >= SIXEL_COLS || py >= SIXEL_ROWS || sixelLit(surface, px, py)) {
-    return { surface, blocked: false };
+    return { surface, blocked: null };
   }
   const seen = new Uint8Array(SIXEL_COLS * SIXEL_ROWS);
   const points: Sixel[] = [];

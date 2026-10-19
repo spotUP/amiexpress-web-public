@@ -24,6 +24,8 @@ import {
   paintSixels,
   fillSixels,
   pickColours,
+  COLOUR_NEEDS_ROOM,
+  CODE_CELL_TAKEN,
 } from '../../teletext/editor-surface';
 import { frameToTti, FRAME_COLS } from '../../teletext/edittf-frame';
 import { renderNativeTti } from '../../teletext/render-native';
@@ -118,7 +120,7 @@ describe('teletext editor surface', () => {
 
     it('paintMosaic puts the graphics colour code left of a blank row and draws the sixel', () => {
       const { surface, blocked } = paintMosaic(blankSurface(), 10, 3, 1, 0); // cell (5, 1), top-left
-      expect(blocked).toBe(false);
+      expect(blocked).toBeNull();
       expect(at(surface.cells, 4, 1)).toBe(0x11);
       expect(at(surface.cells, 5, 1)).toBe(0x21);
       expect(frameToTti(surface.cells, surface.meta)).toBe('PN,10000\nOL,1,    \x91!\n');
@@ -138,10 +140,10 @@ describe('teletext editor surface', () => {
     it('does not draw when the cell left of the run is a letter, or the run starts in column 0', () => {
       const hello = typeChar(blankSurface(), 0, 0, 0x48).surface;
       const left = paintMosaic(hello, 2, 0, 1, 0); // cell 1; its left is the H
-      expect(left.blocked).toBe(true);
+      expect(left.blocked).toBe(COLOUR_NEEDS_ROOM);
       expect(left.surface).toBe(hello);
-      expect(paintMosaic(blankSurface(), 0, 0, 1, 0).blocked).toBe(true);
-      expect(typeCharColoured(hello, 1, 0, 0x41, 2, 0).blocked).toBe(true);
+      expect(paintMosaic(blankSurface(), 0, 0, 1, 0).blocked).toBe(COLOUR_NEEDS_ROOM);
+      expect(typeCharColoured(hello, 1, 0, 0x41, 2, 0).blocked).toBe(COLOUR_NEEDS_ROOM);
     });
 
     it('gives the next thing on the row its own colour back', () => {
@@ -149,7 +151,7 @@ describe('teletext editor surface', () => {
       let s = typeChar(blankSurface(), 10, 0, 0x41).surface;
       s = typeChar(s, 11, 0, 0x42).surface;
       const typed = typeCharColoured(s, 4, 0, 0x58, 1, 0);
-      expect(typed.blocked).toBe(false);
+      expect(typed.blocked).toBeNull();
       expect(typed.cursor).toEqual({ x: 5, y: 0 });
       expect(at(typed.surface.cells, 3, 0)).toBe(0x01);
       expect(at(typed.surface.cells, 4, 0)).toBe(0x58);
@@ -166,7 +168,7 @@ describe('teletext editor surface', () => {
       expect(at(s.cells, 9, 0)).toBe(0x17);
       for (const px of [18, 16, 14]) {
         const edit = paintMosaic(s, px, 0, 7, 0);
-        expect(edit.blocked).toBe(false);
+        expect(edit.blocked).toBeNull();
         s = edit.surface;
       }
       expect(row(s.cells, 0).slice(6, 11)).toEqual([0x17, 0x21, 0x21, 0x21, 0x21]);
@@ -178,7 +180,9 @@ describe('teletext editor surface', () => {
       expect(attributesAt(blue, 9, 0)).toEqual({ fg: 7, bg: 4, graphics: true });
       // With no spaces to slide onto, the code cell stays as it is.
       const edge = paintMosaic(blankSurface(), 2, 0, 7, 0).surface;
-      expect(paintMosaic(edge, 0, 0, 7, 0).surface).toBe(edge);
+      const stuck = paintMosaic(edge, 0, 0, 7, 0);
+      expect(stuck.surface).toBe(edge);
+      expect(stuck.blocked).toBe(CODE_CELL_TAKEN);
     });
 
     it('joining two blobs drawn apart fills the code cell left between them', () => {
@@ -189,13 +193,16 @@ describe('teletext editor surface', () => {
       for (const px of [4, 6, 8]) s = paintMosaic(s, px, 0, 7, 0).surface;
       expect(row(s.cells, 0).slice(1, 7)).toEqual([0x17, 0x21, 0x21, 0x21, 0x17, 0x21]);
       const joined = paintMosaic(s, 10, 0, 7, 0);
-      expect(joined.blocked).toBe(false);
+      expect(joined.blocked).toBeNull();
       expect(row(joined.surface.cells, 0).slice(1, 7)).toEqual([0x17, 0x21, 0x21, 0x21, 0x21, 0x21]);
       // A code that does change the colour after it is kept.
       let red = paintMosaic(blankSurface(), 12, 0, 1, 0).surface;
       for (const px of [4, 6, 8]) red = paintMosaic(red, px, 0, 7, 0).surface;
       expect(at(red.cells, 5, 0)).toBe(0x11);
-      expect(paintMosaic(red, 10, 0, 7, 0).surface).toBe(red);
+      // It cannot slide onto the block left of it, so the artist is told why.
+      const refused = paintMosaic(red, 10, 0, 7, 0);
+      expect(refused.surface).toBe(red);
+      expect(refused.blocked).toBe(CODE_CELL_TAKEN);
     });
 
     it('eraseAt clears a sixel in a block and blanks a letter, never an attribute', () => {
@@ -219,14 +226,14 @@ describe('teletext editor surface', () => {
 
     it('paintSixels draws a filled two-cell block in one colour behind one code', () => {
       const { surface, blocked } = paintSixels(blankSurface(), sixelBox({ px: 4, py: 0 }, { px: 7, py: 2 }, true), 3, 0);
-      expect(blocked).toBe(false);
+      expect(blocked).toBeNull();
       expect(Array.from(surface.cells.subarray(1, 4))).toEqual([0x13, 0x7f, 0x7f]);
     });
 
     it('fillSixels fills the empty sixels a box walls in, and pickColours reads them back', () => {
       const box = paintSixels(blankSurface(), sixelBox({ px: 4, py: 3 }, { px: 9, py: 8 }, false), 7, 0).surface;
       const filled = fillSixels(box, { px: 6, py: 5 }, 7, 0);
-      expect(filled.blocked).toBe(false);
+      expect(filled.blocked).toBeNull();
       // Cells (2..4, 1..2) are every sixel lit now.
       for (let y = 1; y <= 2; y++) for (let x = 2; x <= 4; x++) expect(at(filled.surface.cells, x, y)).toBe(0x7f);
       expect(at(filled.surface.cells, 5, 1)).toBe(0x20); // outside the wall

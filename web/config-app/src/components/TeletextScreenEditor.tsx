@@ -28,7 +28,6 @@ import { Redo2, Save, Undo2, X } from 'lucide-react';
 import {
   blankSurface,
   clearSurface,
-  COLOUR_NEEDS_ROOM,
   eraseAt,
   fillSixels,
   insertLine,
@@ -207,9 +206,13 @@ export function TeletextScreenEditor({
     setFuture([]);
   };
 
-  /** A coloured edit draws, or says why it could not. */
+  /**
+   * A coloured edit draws, or says why it could not. The reason stays up
+   * until the next stroke or key, so a drag that runs on past a refused cell
+   * does not wipe it before the artist can read it.
+   */
   const coloured = (edit: ColouredEdit): TeletextSurface => {
-    setHint(edit.blocked ? COLOUR_NEEDS_ROOM : null);
+    if (edit.blocked) setHint(edit.blocked);
     return edit.surface;
   };
 
@@ -250,7 +253,10 @@ export function TeletextScreenEditor({
       return;
     }
     const at = sixelAt(x, y, detail);
-    if (phase === 'down') strokeStart.current = { base: surface, from: at, current: surface, last: at };
+    if (phase === 'down') {
+      strokeStart.current = { base: surface, from: at, current: surface, last: at };
+      setHint(null);
+    }
     const start = strokeStart.current;
     if (!start) return;
     // A freehand stroke joins this sample to the last one: a fast hand moves
@@ -318,6 +324,7 @@ export function TeletextScreenEditor({
       at = back;
     } else if (event.key.length === 1 && event.key >= ' ' && event.key <= '~' && !event.ctrlKey && !event.metaKey && !event.altKey) {
       const typed = typeCharColoured(surface, x, y, event.key.charCodeAt(0), fg, bg);
+      setHint(null);
       next = coloured(typed);
       at = { x: typed.cursor.x, y: Math.min(LAST_ROW, typed.cursor.y) };
     } else {
