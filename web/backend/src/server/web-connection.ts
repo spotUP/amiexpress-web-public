@@ -52,12 +52,18 @@ export async function acceptWebConnection(
   // resume attaches the PARKED link to `raw`, and a second link over the same
   // raw would dispatch every event twice. A refusal is said first, then the
   // fresh path runs, so the browser never hangs (Decision 21).
-  // `claim`: the offer is not the tab's own token, so it may resume only a
-  // parked session, never take over a live one (Decision 7).
+  // A CLAIM (`claim: true`: another tab's entry, sent by a client built
+  // before 2026-10-19) never resumes: a new tab could take a parked session
+  // that way with no name and no password. It is not looked up and gets the
+  // fresh logon with no refusal event, so an old client neither prints
+  // "session ended" in a new tab nor deletes the other tab's entry. A name
+  // and password logon of that account asks resume-or-end (S9/S15).
   const auth = (raw.handshake as { auth?: { resume?: unknown; claim?: unknown } }).auth;
   const offered = auth?.resume;
-  if (offered !== undefined) {
-    const r = await resumeParked(raw, offered, { claim: auth?.claim === true });
+  if (offered !== undefined && auth?.claim === true) {
+    console.log("[RESUME] refused (claim-disabled): the offer was a claim of another tab's entry; fresh logon");
+  } else if (offered !== undefined) {
+    const r = await resumeParked(raw, offered);
     if (r.ok) return;
     raw.emit("session-restore-failed", { reason: r.reason });
   }

@@ -60,19 +60,16 @@ describe('session-resume storage', () => {
     expect(resumeTokenToOffer(b, 3000)).toBe(U);
   });
 
-  it('a tab that lost its id offers the newest entry older than 5 s, never a fresh one', () => {
+  it('a tab that lost its id never offers another tab\'s entry, at any age', () => {
     const local = new MemStorage();
     const a = mem(local);
     tabId(a, () => 'tab-a');
     saveResume(a, { token: T, userId: '7', nodeId: 3 }, 10_000);
     const lost = mem(local); // same localStorage, empty sessionStorage
     expect(resumeTokenToOffer(lost, 12_000)).toBeUndefined();
-    expect(resumeTokenToOffer(lost, 16_000)).toBe(T);
-    // After the resume succeeds the new tab takes the entry over.
-    tabId(lost, () => 'tab-new');
-    saveResume(lost, { token: U, userId: '7', nodeId: 3 }, 17_000);
-    expect(Object.keys(JSON.parse(local.getItem(RESUME_KEY) as string))).toEqual(['tab-new']);
-    expect(resumeTokenToOffer(lost, 18_000)).toBe(U);
+    expect(resumeTokenToOffer(lost, 16_000)).toBeUndefined();
+    expect(resumeTokenToOffer(lost, 10_000 + RESUME_KEEP_MS - 1)).toBeUndefined();
+    expect(resumeTokenToOffer(a, 16_000)).toBe(T);
   });
 
   it('a tab that has an id but no entry offers nothing', () => {
@@ -142,44 +139,43 @@ describe('saving the login-success payload', () => {
   });
 });
 
-describe('claims (Decision 7: a claim resumes only a parked session)', () => {
-  it('a tab offers its own token plainly, a tab without an id offers the newest as a claim', () => {
+// Decision 7's claim of another tab's entry was removed on 2026-10-19: a new
+// tab took a parked session with no name and no password. A parked session
+// is reached by a name and password logon, which asks resume-or-end (S9/S15).
+describe('the offer is only ever this tab\'s own entry', () => {
+  it('a tab offers its own token; a new tab, or another tab id, offers nothing', () => {
     const local = new MemStorage();
     const a = mem(local);
     tabId(a, () => 'tab-a');
     saveResume(a, { token: T, userId: '7', nodeId: 3 }, 0);
     expect(takeResumeOffer(a, true, 10_000)).toEqual({ resume: T });
-    const lost = mem(local);
-    expect(takeResumeOffer(lost, true, 10_000)).toEqual({ resume: T, claim: true });
+    const fresh = mem(local);
+    expect(takeResumeOffer(fresh, true, 10_000)).toBeUndefined();
+    const other = mem(local);
+    tabId(other, () => 'tab-b');
+    expect(takeResumeOffer(other, true, 10_000)).toBeUndefined();
+    expect(resumeTokenToOffer(a, 10_000)).toBe(T);
   });
 
-  it('a tab whose id is not yet confirmed as its own offers a claim', () => {
+  it('a tab whose id is not yet confirmed as its own offers nothing', () => {
     const s = mem();
     tabId(s, () => 'tab-a');
     saveResume(s, { token: T, userId: '7', nodeId: 3 }, 0);
-    expect(takeResumeOffer(s, false, 1000)).toEqual({ resume: T, claim: true });
+    expect(takeResumeOffer(s, false, 1000)).toBeUndefined();
+    expect(takeResumeOffer(s, true, 1000)).toEqual({ resume: T });
   });
 
-  it('a refused claim forgets the entry it claimed, so the next connect offers nothing', () => {
+  it('a refused own offer is forgotten, so the next connect offers nothing; another tab keeps its entry', () => {
     const local = new MemStorage();
     const a = mem(local);
     tabId(a, () => 'tab-a');
     saveResume(a, { token: T, userId: '7', nodeId: 3 }, 0);
-    const lost = mem(local);
-    expect(takeResumeOffer(lost, true, 10_000)).toEqual({ resume: T, claim: true });
-    forgetRefusedOffer(lost, { reason: 'ended' });
-    expect(takeResumeOffer(lost, true, 11_000)).toBeUndefined();
-    expect(local.getItem(RESUME_KEY)).toBeNull();
-  });
-
-  it('a claim refused as in use leaves the live tab\'s entry alone', () => {
-    const local = new MemStorage();
-    const a = mem(local);
-    tabId(a, () => 'tab-a');
-    saveResume(a, { token: T, userId: '7', nodeId: 3 }, 0);
-    const lost = mem(local);
-    takeResumeOffer(lost, true, 10_000);
-    forgetRefusedOffer(lost, { reason: 'in-use' });
+    const b = mem(local);
+    tabId(b, () => 'tab-b');
+    saveResume(b, { token: U, userId: '8', nodeId: 4 }, 0);
+    expect(takeResumeOffer(b, true, 10_000)).toEqual({ resume: U });
+    forgetRefusedOffer(b);
+    expect(takeResumeOffer(b, true, 11_000)).toBeUndefined();
     expect(resumeTokenToOffer(a, 11_000)).toBe(T);
   });
 });
@@ -232,7 +228,7 @@ describe('guardTabId (Duplicate Tab copies sessionStorage)', () => {
     expect(s.tab.getItem(TAB_ID_KEY)).toBe('tab-a');
   });
 
-  it('a reloaded tab connects only after the guard settles, and then offers a resume, not a claim', async () => {
+  it('a reloaded tab connects only after the guard settles, and then offers its own token', async () => {
     const hub = channelHub();
     const s = mem();
     tabId(s, () => 'tab-a');
@@ -248,7 +244,6 @@ describe('guardTabId (Duplicate Tab copies sessionStorage)', () => {
     await g.settled;
     await Promise.resolve();
     expect(offers).toEqual([{ resume: T }]);
-    expect(offers[0]).not.toHaveProperty('claim');
   });
 
   it('without BroadcastChannel the id is taken as this tab\'s own', () => {
@@ -285,6 +280,5 @@ describe('resumeFailedText', () => {
     expect(resumeFailedText({ reason: 'ended' })).toMatch(/has ended/);
     expect(resumeFailedText({ reason: 'expired' })).toMatch(/waited longer/);
     expect(resumeFailedText({ reason: 'account' })).toMatch(/this account/);
-    expect(resumeFailedText({ reason: 'in-use' })).toMatch(/still open in another window/);
   });
 });

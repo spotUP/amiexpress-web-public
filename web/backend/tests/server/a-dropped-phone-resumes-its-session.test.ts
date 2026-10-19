@@ -168,35 +168,32 @@ describe('a dropped phone resumes its session, through acceptWebConnection', () 
     expect(link.raw).toBe(b);
   });
 
-  /** A caller connected through the entry point and logged on, still connected. */
-  async function liveCaller() {
-    const a = browser('A');
-    await acceptWebConnection(io, a as never, connectDeps(3) as never);
-    const session: any = getSession('A');
-    opened.push(session);
-    Object.assign(session, { state: BBSState.LOGGEDON, user: { id: 7 }, currentConf: 1 });
-    const token = issueResumeTokenForLogin(session, '7')!;
-    return { a, session, token };
-  }
-
-  it('a claim never takes over a live session: refused as in use, the first tab keeps it, the claimer gets a fresh call', async () => {
-    const { a, session, token } = await liveCaller();
-    const b = browser('B', token, true);
-    await acceptWebConnection(io, b as never, connectDeps(4) as never);
-    expect(b.sent).toContainEqual(['session-restore-failed', [{ reason: 'in-use' }]]);
-    expect(eventNames(b)).not.toContain('session-restored');
-    expect(a.connected).toBe(true);
-    expect(session.webLink.ended).toBe(false);
-    expect(isParked(session)).toBe(false);
-    opened.push(getSession('B'));
-  });
-
-  it('a claim resumes a PARKED session', async () => {
+  // Decision 7's claim was removed on 2026-10-19: a new tab took a parked
+  // session with no name and no password. A claim is not looked up; the
+  // owner's own token still resumes.
+  it('a claim does not attach: the session stays parked and the claimer gets the fresh logon; the own token still resumes', async () => {
     const { session, token } = await droppedCaller();
     const b = browser('B', token, true);
-    await acceptWebConnection(io, b as never, connectDeps(4) as never);
-    expect(eventNames(b)).toContain('session-restored');
+    const deps = connectDeps(4);
+    await acceptWebConnection(io, b as never, deps as never);
+    opened.push(getSession('B'));
+
+    expect(eventNames(b)).not.toContain('session-restored');
+    expect(eventNames(b)).not.toContain('session-restore-failed');
+    expect(isParked(session)).toBe(true);
+    expect(sessions.get('3')).toBe(session);
+    expect(session.webLink.id).toBe('A');
+    expect(deps.nodeManager.assignSessionToNode).toHaveBeenCalledWith('B', 'B');
+    expect(runPreLoginConnect).toHaveBeenCalledTimes(2);           // A's, then B's fresh logon
+    expect((runPreLoginConnect as jest.Mock).mock.calls[1][1]).toBe(getSession('B'));
+    expect(getSession('B')).not.toBe(session);
+
+    // The claim spent nothing: the owner's tab offers the same token and resumes.
+    const c = browser('C', token);
+    await acceptWebConnection(io, c as never, connectDeps(5) as never);
+    expect(eventNames(c)).toContain('session-restored');
     expect(isParked(session)).toBe(false);
+    expect(getSession('C')).toBe(session);
   });
 
   it('an unknown token is refused first, then the fresh call runs; the parked session stays parked', async () => {

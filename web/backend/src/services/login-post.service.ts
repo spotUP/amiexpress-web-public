@@ -74,7 +74,7 @@ export interface PostAuthContext {
   /**
    * S15: the caller typed the account's password on this connection (not a
    * token). Only such a login may take over a session still open in
-   * another window; a token belongs to one window (S12 refuses `in-use`).
+   * another window; a token belongs to one window (claims are refused).
    */
   typedPassword?: boolean;
 }

@@ -1995,9 +1995,8 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
     // the guard finds that out and gives it its own (session-resume.ts).
     const resumeStorage = browserResumeStorage();
     const tabIdGuard = resumeStorage ? guardTabId(resumeStorage, browserTabChannel()) : undefined;
-    // The first connect waits for the guard to settle: until then the offer
-    // would be a claim, which the board refuses while the old socket of a
-    // reloaded tab is still attached.
+    // The first connect waits for the guard to settle: until then the tab's
+    // id may be another tab's, so it offers nothing (session-resume.ts).
     const socket = io(finalBackendUrl, {
       ...connectOptions(
         isDevelopment,
@@ -3216,9 +3215,8 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
     socket.on('session-restore-failed', (reason: unknown) => {
       console.log('[Session Persistence] Session restoration failed:', reason);
       writeTerm(`\r\n\x1b[33m[Session ended] ${resumeFailedText(reason)}\x1b[0m\r\n`);
-      // Forget the entry the refused offer came from (this tab's own, or the
-      // one a tab without an id claimed), so no reconnect offers it again.
-      if (resumeStorage) forgetRefusedOffer(resumeStorage, reason);
+      // Forget this tab's refused entry, so no reconnect offers it again.
+      if (resumeStorage) forgetRefusedOffer(resumeStorage);
       // The restore failed, so the backend is about to start a genuinely
       // fresh session (a new graphics prompt, or the token-login fallback
       // below) - not a continuation of whatever session (PETSCII or not)

@@ -88,8 +88,8 @@ jest.mock('../../src/server/database-helpers', () => ({
 }));
 
 import { acceptWebConnection } from '../../src/server/web-connection';
-import { endLiveSession, isParked, parkDecision, resumeParked } from '../../src/server/session-parking';
-import { _resetResumeTokensForTests, issueResumeToken } from '../../src/server/resume-tokens';
+import { endLiveSession, isParked, parkDecision } from '../../src/server/session-parking';
+import { _resetResumeTokensForTests } from '../../src/server/resume-tokens';
 import { disarmIdleTimeout } from '../../src/services/idle-timeout.service';
 import { sessions, getSession, setSession } from '../../src/server/session-manager';
 import { TelnetConnection } from '../../src/server/telnet-server';
@@ -243,14 +243,6 @@ it('a live session that ends while the question is up lets R log in as usual', a
   expect(await login).toEqual({ ok: false, terminated: 'already-on-another-node' });
   expect(getSession('B')).toBe(session);
   expect(live.webLink.ended).toBe(true);
-});
-
-it('a resume-token claim on a live session is still refused in-use', async () => {
-  const { live } = await liveWindow();
-  const token = issueResumeToken(live, '7', 3);
-  const c = browser('C');
-  expect(await resumeParked(c as never, token, { claim: true })).toEqual({ ok: false, reason: 'in-use' });
-  expect(getSession('A')).toBe(live);
 });
 
 it('an FTP-node holder still gets ONENODE, with no question', async () => {

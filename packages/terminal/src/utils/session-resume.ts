@@ -22,12 +22,13 @@ export interface ResumeStorage {
 }
 
 /**
- * What a connect offers the board. `claim`: the token is not this tab's own
- * (a tab that lost its id, or whose id is not yet known to be its alone), so
- * the board may resume only a PARKED session with it, never take over a live
- * one (Decision 7).
+ * What a connect offers the board: this tab's OWN token, and nothing else.
+ * There is no claim of another tab's entry (removed 2026-10-19): any open tab
+ * could take a parked session that way with no name and no password. A tab
+ * whose session is parked elsewhere logs on with name and password and gets
+ * the board's resume-or-end question (S9/S15).
  */
-export interface ResumeOffer { resume: string; claim?: true }
+export interface ResumeOffer { resume: string }
 
 /** localStorage: Record<tabId, ResumeEntry>. */
 export const RESUME_KEY = 'bbs_resume_v1';
@@ -44,12 +45,6 @@ export const TAB_CHANNEL_NAME = 'bbs_tab_id_v1';
 export const TAB_ID_CHECK_MS = 300;
 /** The longest default detach window plus a minute; only for pruning. */
 export const RESUME_KEEP_MS = 11 * 60_000;
-/**
- * A tab that lost its id may claim another entry only when that entry has
- * not been refreshed for this long: a live sibling tab refreshes its entry on
- * every login and resume, a parked one stops.
- */
-export const CLAIM_MIN_AGE_MS = 5_000;
 
 type Entries = Record<string, ResumeEntry>;
 
@@ -116,8 +111,8 @@ export function tabId(s: ResumeStorage, newId: () => string = randomId): string 
 
 /**
  * Keep the token the board just handed this tab. The same session saved under
- * another tab id (a tab that lost its id and claimed it) is taken over: one
- * session, one entry.
+ * another tab id (one this tab took over with a password logon, S15) is
+ * dropped: one session, one entry.
  */
 export function saveResume(s: ResumeStorage, e: Omit<ResumeEntry, 'savedAt'>, now: number = Date.now()): void {
   if (typeof e.nodeId !== 'number' || !Number.isFinite(e.nodeId)) {
@@ -137,26 +132,19 @@ export function saveResume(s: ResumeStorage, e: Omit<ResumeEntry, 'savedAt'>, no
 type Picked = { offer: ResumeOffer; from: string };
 
 /**
- * What to offer on this connect, and whose entry it is. A tab offers its own
- * entry; while its id is not yet confirmed as its alone (a duplicated tab
- * copies sessionStorage), that offer is a claim. A tab with no id (its
- * sessionStorage was lost) claims the newest entry, but only once that entry
- * has gone quiet - a fresh one belongs to a sibling tab that is still live.
+ * What to offer on this connect, and whose entry it is: this tab's OWN entry,
+ * and only once its id is confirmed as its alone (a duplicated tab copies
+ * sessionStorage, and until guardTabId has settled the id may be the first
+ * tab's). A tab with no id (a new tab, or one whose sessionStorage was lost)
+ * offers nothing and gets the board's welcome and name prompt; every entry in
+ * localStorage that is not under its own id belongs to another tab.
  */
 function pickOffer(s: ResumeStorage, now: number, idConfirmed: boolean): Picked | undefined {
-  const all = prune(readAll(s), now);
+  if (!idConfirmed) return undefined;
   const id = readTabId(s);
-  if (id) {
-    const own = all[id];
-    if (!own) return undefined;
-    return { offer: idConfirmed ? { resume: own.token } : { resume: own.token, claim: true }, from: id };
-  }
-  let newest: [string, ResumeEntry] | undefined;
-  for (const pair of Object.entries(all)) {
-    if (!newest || pair[1].savedAt > newest[1].savedAt) newest = pair;
-  }
-  if (!newest || now - newest[1].savedAt < CLAIM_MIN_AGE_MS) return undefined;
-  return { offer: { resume: newest[1].token, claim: true }, from: newest[0] };
+  if (!id) return undefined;
+  const own = prune(readAll(s), now)[id];
+  return own ? { offer: { resume: own.token }, from: id } : undefined;
 }
 
 /** The token this tab would offer now (no record kept). */
@@ -188,12 +176,11 @@ export function clearResume(s: ResumeStorage): void {
 }
 
 /**
- * The board refused the last offer: forget the entry it came from, so the
- * next reconnect does not offer the same dead token again. `in-use` is the
- * one refusal that leaves the entry: it belongs to a tab that is still live.
+ * The board refused the last offer: forget the entry it came from (always
+ * this tab's own), so the next reconnect does not offer the same dead token
+ * again.
  */
-export function forgetRefusedOffer(s: ResumeStorage, refusal: unknown): void {
-  if (refusalReason(refusal) === 'in-use') return;
+export function forgetRefusedOffer(s: ResumeStorage): void {
   let from: string | null = null;
   try { from = s.tab.getItem(OFFERED_KEY); } catch { /* nothing recorded */ }
   if (from) removeEntry(s, from);
@@ -227,8 +214,7 @@ function isTabIdMessage(v: unknown): v is TabIdMessage {
  * with the first one's id and the two would take the session from each other.
  * At startup a tab with an id asks the other tabs who holds it; an answer
  * means this tab is the copy, and it mints an id of its own. Until the wait
- * ends unanswered its offers are claims (the board then resumes only a parked
- * session). Every tab answers for its own id. Without BroadcastChannel the id
+ * ends unanswered the tab offers nothing. Every tab answers for its own id. Without BroadcastChannel the id
  * is taken as this tab's own, as before.
  */
 export function guardTabId(
@@ -323,7 +309,6 @@ function refusalReason(reason: unknown): unknown {
 
 export function resumeFailedText(reason: unknown): string {
   const r = refusalReason(reason);
-  if (r === 'in-use') return 'That session is still open in another window, so this window starts a new one.';
   if (r === 'expired') return 'Your previous session waited longer than the board allows. Please log in again.';
   if (r === 'account') return 'Your previous session could not be resumed for this account.';
   return 'Your previous session has ended (the board restarted or the call timed out). Please log in again.';
