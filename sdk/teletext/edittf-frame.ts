@@ -28,7 +28,13 @@ export const DEFAULT_PN = 'PN,10000';
 export interface TtiFrameMeta {
   /**
    * The first subpage's non-OL records (DE, PN, SC, PS, CT, FL, ...),
-   * raw lines verbatim, in file order.
+   * raw lines verbatim, in file order - plus its OL records past the frame
+   * (OL,25 and up), which are not screen rows: OL,25 is the hidden row 25
+   * and OL,26/27/28 are packets X/26 (enhancement triplets), X/27 (page
+   * links) and X/28 (page enhancement). MRG ttiformat v1.1 s.2.6 allows
+   * OL,1..27; vbit2 (filemonitor.cpp, MAXROW 29) stores OL,0..29 and
+   * transmits >= 26 as enhancement packets. They ride along byte-exact and
+   * are written after the frame rows.
    */
   head: string[];
   /**
@@ -77,8 +83,10 @@ export function ttiToFrame(text: string): TtiFrame {
     firstGroup.push(rec.raw);
     if (rec.command !== 'OL') {
       head.push(rec.raw);
-    } else if (parseInt(rec.parts[0] ?? '', 10) === 24) {
-      row24 = rec.parts[1] ?? '';
+    } else {
+      const olRow = parseInt(rec.parts[0] ?? '', 10);
+      if (olRow === 24) row24 = rec.parts[1] ?? '';
+      else if (olRow >= FRAME_ROWS) head.push(rec.raw);
     }
   }
 
@@ -101,7 +109,8 @@ export function ttiToFrame(text: string): TtiFrame {
 
 /**
  * Write a frame back to .tti: the kept records, then OL,0..24 (all-space
- * rows omitted, trailing spaces trimmed), then any later subpages.
+ * rows omitted, trailing spaces trimmed), then the kept OL,25+ records
+ * verbatim, then any later subpages.
  *
  * Control codes are written as single chars 0x80-0x9F (`encodeOLContent`),
  * so the result must be stored one byte per char (latin1), never UTF-8.
@@ -114,9 +123,11 @@ export function frameToTti(cells: Uint8Array, meta: TtiFrameMeta): string {
   // but importTti yields no subpage, so renderNativeTti returns null and the
   // door-art PUT refuses it. A surface drawn from nothing has an empty head,
   // so give it the default page number rather than write an unrenderable file.
-  const lines = meta.head.some((line) => line.startsWith('PN,'))
-    ? [...meta.head]
-    : [DEFAULT_PN, ...meta.head];
+  const records = meta.head.filter((line) => !isOlRecord(line));
+  const packets = meta.head.filter(isOlRecord);
+  const lines = records.some((line) => line.startsWith('PN,'))
+    ? records
+    : [DEFAULT_PN, ...records];
   for (let r = 0; r < FRAME_ROWS; r++) {
     const row = Array.from(cells.subarray(r * FRAME_COLS, (r + 1) * FRAME_COLS), (b) => b & 0x7f);
     let end = row.length;
@@ -124,7 +135,13 @@ export function frameToTti(cells: Uint8Array, meta: TtiFrameMeta): string {
     if (end === 0) continue;
     lines.push(`OL,${r},${encodeOLContent(row.slice(0, end))}`);
   }
+  lines.push(...packets);
   lines.push(...meta.tail);
   return lines.join(meta.eol) + meta.eol;
+}
+
+/** An OL record kept in `meta.head` (rows 25+; see TtiFrameMeta.head). */
+function isOlRecord(line: string): boolean {
+  return /^OL,/i.test(line);
 }
 
