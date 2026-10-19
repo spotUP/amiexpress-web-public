@@ -44,7 +44,7 @@ export interface PaintOptions {
 
 export class TeletextScreen {
   readonly rows: number;
-  /** How many of the page's 24 rows fit above the status bar. */
+  /** How many page rows (24, or 25 with row 24) fit above the status bar. */
   readonly pageRows: number;
   readonly mode: TeletextRenderMode;
 
@@ -61,7 +61,12 @@ export class TeletextScreen {
     // A teletext session is 25 rows, so all 24 page rows fit with a bar
     // below them. A 24-row ANSI session gives up row 24 - which on air was
     // the fastext colour bar anyway, and the status bar IS our fastext bar.
-    this.pageRows = Math.min(TELETEXT_ROWS, this.rows - 1);
+    //
+    // Row 24 (EN 300 706 s.9.3.1) is the 25th page row. It is painted only
+    // when the page carries it AND the session is tall enough to keep the
+    // status bar below it: on the 25-row web session the bar owns screen row
+    // 25, and a page's row 24 is never allowed to overwrite it.
+    this.pageRows = Math.min(TELETEXT_ROWS + 1, this.rows - 1);
   }
 
   /** Clear and hide the cursor, ready to paint. */
@@ -88,7 +93,7 @@ export class TeletextScreen {
     });
 
     let out = '';
-    for (let row = 0; row < this.pageRows; row++) {
+    for (let row = 0; row < Math.min(this.pageRows, lines.length); row++) {
       out += `\x1b[${row + 1};1H${lines[row]}\x1b[K`;
     }
     this.writeOut(out);

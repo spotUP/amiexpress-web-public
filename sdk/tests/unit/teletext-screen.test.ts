@@ -9,6 +9,7 @@
  */
 import { KeyStream, TeletextScreen, fit } from '../../teletext/screen';
 import { PageBuilder } from '../../teletext/compose';
+import { importTti } from '../../teletext/marco/tti/index';
 
 function recorder() {
   const keys: string[] = [];
@@ -120,6 +121,26 @@ describe('the screen', () => {
     // A 24-row session gives up the page's own fastext bar, which is what
     // our status bar replaces anyway.
     expect(screen(24).s.pageRows).toBe(23);
+  });
+
+  describe('row 24 (D5)', () => {
+    const withRow24 = () =>
+      importTti(['PN,10000', 'SC,0000', 'PS,8000', 'OL,1,TOP', 'OL,24,FASTEXT ROW'].join('\n')).pages[0].subpages[0];
+
+    it('is painted on a session with a row to spare below it', () => {
+      const { s, all } = screen(26);
+      s.paint(withRow24());
+      expect(all()).toContain('\x1b[25;1H');
+      expect(all()).toContain('FASTEXT ROW');
+    });
+
+    it('never overwrites the status bar on the 25-row web session', () => {
+      const { s, all } = screen(25);
+      s.paint(withRow24());
+      expect(all()).toContain('\x1b[24;1H');
+      expect(all()).not.toContain('\x1b[25;1H');
+      expect(all()).not.toContain('FASTEXT ROW');
+    });
   });
 
   it('paints a page in one write, positioned row by row', () => {
