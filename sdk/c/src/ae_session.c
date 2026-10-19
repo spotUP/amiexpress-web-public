@@ -8,6 +8,7 @@
  */
 
 #include "ae_session.h"
+#include "ui_profile.h"   /* ui_set_board_effects */
 
 #include <stdio.h>      /* sprintf - C89 has no snprintf */
 #include <stdlib.h>
@@ -27,6 +28,9 @@ int ae_open(ae_session *s, ae_transport_fn transport, void *context,
     s->cap = cap;
     s->node = node;
     s->carrier = 1;
+    /* Asked once per door run: a C door is one process, so the library's
+       effect gate holds this caller's answer for the whole run. */
+    ui_set_board_effects(ae_animations_allowed(s));
     return 0;
 }
 
@@ -408,6 +412,15 @@ int ae_display_mode(ae_session *s, char *out, int n)
         out[i] = '\0';
     }
     return -1;
+}
+
+int ae_animations_allowed(ae_session *s)
+{
+    char v[4];
+
+    if (ask(s, AE_FIELD_ANIMATIONS, v, sizeof v) > 0) return v[0] != '0';
+    /* A classic board never heard of it: animations are what it always had. */
+    return 1;
 }
 
 int ae_menu_command(ae_session *s, char *out, int n)

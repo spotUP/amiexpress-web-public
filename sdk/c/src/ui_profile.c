@@ -36,7 +36,15 @@ ui_profile ui_profile_for(int width)
     return p;
 }
 
+/* The board's answer (ae_open asks AE_FIELD_ANIMATIONS once per run). */
+static int board_effects = 1;
+
+void ui_set_board_effects(int on)
+{
+    board_effects = on ? 1 : 0;
+}
+
 int ui_effects_allowed(int width)
 {
-    return !ui_is_compact_width(width);
+    return board_effects && !ui_is_compact_width(width);
 }

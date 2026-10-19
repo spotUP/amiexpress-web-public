@@ -170,9 +170,9 @@ build/test_ae_dos: src/ae_dos.c src/ae_dos_native.c tests/test_ae_dos.c include/
 	@mkdir -p build
 	$(CC) $(HOST_CFLAGS) src/ae_dos.c src/ae_dos_native.c tests/test_ae_dos.c -o $@
 
-build/test_ae_session: src/ae_session.c tests/test_ae_session.c include/ae_session.h
+build/test_ae_session: src/ae_session.c src/ui_profile.c tests/test_ae_session.c include/ae_session.h include/ui_profile.h
 	@mkdir -p build
-	$(CC) $(HOST_CFLAGS) src/ae_session.c tests/test_ae_session.c -o $@
+	$(CC) $(HOST_CFLAGS) src/ae_session.c src/ui_profile.c tests/test_ae_session.c -o $@
 
 build/test_ae_chunk: src/ae_chunk.c tests/test_ae_chunk.c include/ae_chunk.h
 	@mkdir -p build

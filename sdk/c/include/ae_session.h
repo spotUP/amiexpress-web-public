@@ -199,7 +199,11 @@ typedef enum {
     AE_FIELD_SCREEN         = 10800, /* AEW_SCREEN */
 
     /* The menu doors' catalogue and actions (AEW_MENU); the client is a later task. */
-    AE_FIELD_MENU           = 10900  /* AEW_MENU */
+    AE_FIELD_MENU           = 10900, /* AEW_MENU */
+
+    /* May this door animate? '1' yes, '0' the caller turned animations off
+       (W row 23); a game door always reads '1'. Read-only. */
+    AE_FIELD_ANIMATIONS     = 11000  /* AEW_ANIMATIONS */
 } ae_field;
 
 /**
@@ -496,6 +500,16 @@ int ae_user_theme(ae_session *s, char *out, int n);
  * Returns 0 and fills `out` on success, -1 when the board said nothing.
  */
 int ae_display_mode(ae_session *s, char *out, int n);
+
+/**
+ * Whether the caller wants animations (W row 23). A game door always gets 1.
+ *
+ * ae_open asks once and hands the answer to ui_effects_allowed, so a door
+ * that gates its effects there needs no call of its own. A board that does
+ * not know the question answers nothing and this reports 1: animations are
+ * what a classic board always had.
+ */
+int ae_animations_allowed(ae_session *s);
 
 /**
  * The command name the caller typed to get here, or "" where the board does

@@ -11,7 +11,7 @@
  * things kept in agreement by hand.
  */
 
-import { describe, it, expect } from '@jest/globals';
+import { describe, it, expect, afterEach } from '@jest/globals';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -36,7 +36,13 @@ function cDefine(file: string, name: string): number {
   return Number(match![1]);
 }
 
+const BOARD_EFFECTS = Symbol.for('amiexpress.boardEffectsAllowed');
+
 describe('the C SDK', () => {
+  afterEach(() => {
+    delete (globalThis as unknown as Record<symbol, unknown>)[BOARD_EFFECTS];
+  });
+
   it('exists at all - the rest of this file is meaningless otherwise', () => {
     expect(fs.existsSync(path.join(cRoot, 'include', 'ui_profile.h'))).toBe(true);
     expect(fs.existsSync(path.join(cRoot, 'include', 'ae_session.h'))).toBe(true);
@@ -123,6 +129,8 @@ describe('the C SDK', () => {
       ['AE_FIELD_LAST_SCANNED', 'LAST_SCANNED'],
       // The palette's starting filter rides on the launch line.
       ['AE_FIELD_MAIN_LINE', 'BB_MAINLINE'],
+      // W row 23: the caller's animations-off choice, asked once by ae_open.
+      ['AE_FIELD_ANIMATIONS', 'AEW_ANIMATIONS'],
     ];
 
     for (const [cName, boardName] of pairs) {
@@ -139,6 +147,8 @@ describe('the C SDK', () => {
     expect(theme).toBeGreaterThan(1003);
     const setPointer = Number(header.match(/AE_FIELD_SETPOINTER\s*=\s*(\d+)/)![1]);
     expect(setPointer).toBeGreaterThan(1003);
+    const animations = Number(header.match(/AE_FIELD_ANIMATIONS\s*=\s*(\d+)/)![1]);
+    expect(animations).toBeGreaterThan(1003);
   });
 
   it('agrees about which widths are compact, across the boundary', () => {
@@ -156,5 +166,16 @@ describe('the C SDK', () => {
     const wide = getCompactProfile(80);
     expect(wide.borders).toBe(true);
     expect(wide.gap).toBe(DEFAULT_GAP);
+  });
+
+  it('lets the board turn effects off at any width, as ui_set_board_effects does', () => {
+    // The C twin is the board-effects case in sdk/c/tests/test_ui_profile.c.
+    const hooks = globalThis as unknown as Record<symbol, unknown>;
+    hooks[BOARD_EFFECTS] = () => false;
+    expect(effectsAllowed(80)).toBe(false);
+    expect(effectsAllowed(132)).toBe(false);
+    hooks[BOARD_EFFECTS] = () => true;
+    expect(effectsAllowed(80)).toBe(true);
+    expect(effectsAllowed(40)).toBe(false);
   });
 });

@@ -88,8 +88,14 @@ int ui_is_compact_width(int width);
  * A 40x25 screen has no spare cells for a glitch or a marquee, and running
  * them there leaves stray glyphs mid-row - measured on the PETSCII canvas,
  * 2026-09-02. Doors gate their effect setup on this.
+ *
+ * Also 0 at any width when the caller turned animations off (W row 23),
+ * which ae_open hands over through ui_set_board_effects.
  */
 int ui_effects_allowed(int width);
+
+/** The board's animations answer (ae_animations_allowed); 1 until set. */
+void ui_set_board_effects(int on);
 
 #ifdef __cplusplus
 }

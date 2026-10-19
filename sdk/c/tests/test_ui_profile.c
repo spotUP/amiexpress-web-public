@@ -72,6 +72,17 @@ static void only_an_ansi_terminal_erases_to_the_end_of_a_line(void)
     printf("  [OK] line erase is an ANSI-tier capability, not a C64 one\n");
 }
 
+static void a_board_that_turned_effects_off_wins_at_any_width(void)
+{
+    ui_set_board_effects(0);
+    assert(!ui_effects_allowed(80));
+    assert(!ui_effects_allowed(132));
+    ui_set_board_effects(1);
+    assert(ui_effects_allowed(80));
+    assert(!ui_effects_allowed(40));
+    printf("  [OK] the board's animations-off answer turns effects off at every width\n");
+}
+
 int main(void)
 {
     printf("ui_profile\n");
@@ -80,6 +91,7 @@ int main(void)
     eighty_columns_gets_the_lot();
     a_width_nobody_asked_about_still_answers();
     only_an_ansi_terminal_erases_to_the_end_of_a_line();
+    a_board_that_turned_effects_off_wins_at_any_width();
     printf("ui_profile: all passed\n");
     return 0;
 }

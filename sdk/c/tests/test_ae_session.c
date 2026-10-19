@@ -7,6 +7,7 @@
  */
 
 #include "../include/ae_session.h"
+#include "../include/ui_profile.h"
 
 #include <assert.h>
 #include <stdio.h>
@@ -63,6 +64,8 @@ typedef struct {
     /* DT_QUERYBIT answers: one bit per ACS index below 32, then two more. */
     int grants_sysop_read;
     int grants_priv_eall;
+    /* AEW_ANIMATIONS: 0 models a board that never heard of it. */
+    const char *animations;
 } fake_board;
 
 static int fake_transport(void *context, ae_field field, char *out, int cap)
@@ -91,6 +94,7 @@ static int fake_transport(void *context, ae_field field, char *out, int cap)
         case AE_FIELD_MSGBASE_CONF:  value = b->msgbase_conf; break;
         case AE_FIELD_THEME:         value = b->can_write ? b->theme : 0; break;
         case AE_FIELD_POSTMSG:       value = b->knows_postmsg ? b->post_answer : 0; break;
+        case AE_FIELD_ANIMATIONS:    value = b->animations; break;
         default: value = 0; break;
     }
 
@@ -277,7 +281,9 @@ static void a_dropped_carrier_stops_everything(void)
     char name[32];
     fake_board b = a_board();
 
-    b.fail_after = 1;                   /* the second round trip finds no line */
+    /* ae_open asks one question (AE_FIELD_ANIMATIONS), the name is the
+       second round trip, and the third finds no line. */
+    b.fail_after = 2;
     assert(ae_open(&s, fake_transport, &b, storage, (long)sizeof(storage), 1) == 0);
 
     assert(ae_user_name(&s, name, (int)sizeof(name)) == 5);
@@ -669,6 +675,29 @@ static void opening_ones_own_mail_asks_the_board_to_mark_it_received(void)
     printf("  [OK] RECV goes out on AEW_SETPOINTER\n");
 }
 
+static void a_caller_who_turned_animations_off_is_heard(void)
+{
+    fake_board b = a_board();
+    char buf[AE_SESSION_MIN_STORAGE];
+    ae_session s;
+
+    b.animations = "0";
+    assert(ae_open(&s, fake_transport, &b, buf, (long)sizeof(buf), 1) == 0);
+    assert(ae_animations_allowed(&s) == 0);
+    /* ae_open hands the answer to the effects gate, so 80 columns gets no effects. */
+    assert(!ui_effects_allowed(80));
+
+    b.animations = "1";
+    assert(ae_animations_allowed(&s) == 1);
+
+    /* A board that never heard of the field leaves animations on. */
+    b.animations = 0;
+    assert(ae_animations_allowed(&s) == 1);
+    assert(ae_open(&s, fake_transport, &b, buf, (long)sizeof(buf), 1) == 0);
+    assert(ui_effects_allowed(80));
+    printf("  [OK] a caller who turned animations off is heard; a classic board keeps them\n");
+}
+
 int main(void)
 {
     printf("ae_session\n");
@@ -697,6 +726,7 @@ int main(void)
     a_board_that_will_not_post_for_a_door_says_so();
     the_boards_acs_answers_who_reads_private_mail();
     opening_ones_own_mail_asks_the_board_to_mark_it_received();
+    a_caller_who_turned_animations_off_is_heard();
     printf("ae_session: all passed\n");
     return 0;
 }
