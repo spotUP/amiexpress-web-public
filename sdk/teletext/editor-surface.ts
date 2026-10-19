@@ -18,6 +18,8 @@
  * No React, no DOM, no canvas. The chrome lives in `web/config-app`.
  */
 import { FRAME_COLS, FRAME_ROWS, type TtiFrame } from './edittf-frame';
+import { doubleHeightLowerRows, rowStateAt } from './marco/state-machine/state-machine';
+import { CharsetMode } from './marco/state-machine/types';
 
 /** The page being edited. An edit.tf frame, for the reason in the header. */
 export type TeletextSurface = TtiFrame;
@@ -99,6 +101,10 @@ function inside(x: number, y: number): boolean {
 
 const indexOf = (x: number, y: number): number => y * FRAME_COLS + x;
 
+/** Row `y` of the page, as the renderer's state machine reads it. */
+const rowOf = (surface: TeletextSurface, y: number): Uint8Array =>
+  surface.cells.subarray(y * FRAME_COLS, (y + 1) * FRAME_COLS);
+
 /** One cell set to one 7-bit code. */
 function put(surface: TeletextSurface, x: number, y: number, code: number): TeletextSurface {
   if (!inside(x, y)) return surface;
@@ -137,18 +143,24 @@ export function setCode(surface: TeletextSurface, x: number, y: number, name: Te
  *
  * Every row starts in alphanumerics. A graphics colour code switches the
  * row to mosaics and an alpha colour code switches it back; both are
- * "set-after", so a code in column x affects x+1 on, never x itself. Hence
- * the scan stops LEFT of x.
+ * "set-after", so a code in column x affects x+1 on, never x itself. The
+ * answer is the renderer's own state machine (`rowStateAt`), so the editor
+ * and the board cannot disagree.
  */
 export function graphicsAt(surface: TeletextSurface, x: number, y: number): boolean {
   if (!inside(x, y)) return false;
-  let graphics = false;
-  for (let col = 0; col < x; col++) {
-    const code = surface.cells[indexOf(col, y)];
-    if (code >= 0x01 && code <= 0x07) graphics = false;
-    else if (code >= 0x11 && code <= 0x17) graphics = true;
-  }
-  return graphics;
+  return rowStateAt(rowOf(surface, y), x).charsetMode === CharsetMode.GRAPHICS;
+}
+
+/**
+ * Whether row `y` is the lower half of a double-height row above it. Such a
+ * row's own cells are never shown (ETSI EN 300 706 Table 26 entry 0/D): the
+ * board draws the lower halves of the row above there instead.
+ */
+export function isDoubleHeightLowerRow(surface: TeletextSurface, y: number): boolean {
+  if (y <= 0 || y >= FRAME_ROWS) return false;
+  const rows = Array.from({ length: y + 1 }, (_, row) => rowOf(surface, row));
+  return doubleHeightLowerRows(rows)[y];
 }
 
 /**
@@ -196,10 +208,16 @@ export function removeLine(surface: TeletextSurface, y: number): TeletextSurface
   return next;
 }
 
-/** Blank every cell. The records (`meta`) are the page's, not the art's, and stay. */
+/**
+ * Blank every cell. The records (`meta`) are the page's, not the art's, and
+ * stay, except X/26 enhancement packets (OL,26): those place characters on
+ * the page, so keeping them would draw over the cleared screen. Links (OL,27)
+ * and the page enhancement packet (OL,28) are page-level and stay.
+ */
 export function clearSurface(surface: TeletextSurface): TeletextSurface {
   const next = cloneSurface(surface);
   next.cells.fill(SPACE);
+  next.meta.head = next.meta.head.filter((line) => !/^OL,26,/i.test(line));
   return next;
 }
 
@@ -273,27 +291,29 @@ export const COLOUR_NEEDS_ROOM = 'Colour change needs a free cell to the left';
 /** Shown when a block lands on a code cell whose code has nowhere to move. */
 export const CODE_CELL_TAKEN = 'That cell holds a colour code with no free cell to move to. Turn on Show codes to see it';
 
+/** Shown when the artist draws or types on the lower half of a double-height row. */
+export const DOUBLE_HEIGHT_LOWER_ROW =
+  'The row above is double height, so this row shows its lower half and nothing drawn here appears';
+
 const BLACK_BACKGROUND = 0x1c;
 const NEW_BACKGROUND = 0x1d;
 
 /**
- * The colour, background and mode cell `x` is drawn in. Colour codes are
- * set-after (they reach x only from a column left of it); Black Background
- * and New Background are set-at, and New Background takes the foreground in
- * effect in its own cell - which, scanning left to right, is the current one.
- * Level 2.5's black foregrounds (0x00, 0x10) are ignored, as a Level 1 set does.
+ * The colour, background and mode a character at cell `x` is drawn in: every
+ * attribute left of `x` applied, read from the renderer's own state machine
+ * (`rowStateAt`). Whether a code is set-at or set-after only decides how its
+ * OWN cell looks, never a character's right of it, so this is the same for
+ * both. Level 2.5's black foregrounds (0x00, 0x10) are black colour codes
+ * here exactly as the renderer draws them.
  */
 export function attributesAt(surface: TeletextSurface, x: number, y: number): TeletextAttributes {
-  const found: TeletextAttributes = { fg: 7, bg: 0, graphics: false };
-  if (!inside(Math.min(x, FRAME_COLS - 1), y)) return found;
-  for (let col = 0; col < Math.min(x, FRAME_COLS); col++) {
-    const code = surface.cells[indexOf(col, y)];
-    if (code >= 0x01 && code <= 0x07) { found.fg = code as TeletextColour; found.graphics = false; }
-    else if (code >= 0x11 && code <= 0x17) { found.fg = (code - 0x10) as TeletextColour; found.graphics = true; }
-    else if (code === BLACK_BACKGROUND) found.bg = 0;
-    else if (code === NEW_BACKGROUND) found.bg = found.fg;
-  }
-  return found;
+  if (!inside(Math.min(x, FRAME_COLS - 1), y)) return { fg: 7, bg: 0, graphics: false };
+  const state = rowStateAt(rowOf(surface, y), x);
+  return {
+    fg: state.fgColor as TeletextColour,
+    bg: state.bgColor as TeletextColour,
+    graphics: state.charsetMode === CharsetMode.GRAPHICS,
+  };
 }
 
 /** A cell an attribute may take: a space or another attribute, never a letter or a block. */
@@ -377,7 +397,7 @@ export interface ColouredEdit {
 
 /** The codes `attributesAt` reads: the only ones that can be redundant. */
 const colourAttribute = (code: number): boolean =>
-  (code >= 0x01 && code <= 0x07) || (code >= 0x11 && code <= 0x17) || code === BLACK_BACKGROUND || code === NEW_BACKGROUND;
+  code <= 0x07 || (code >= 0x10 && code <= 0x17) || code === BLACK_BACKGROUND || code === NEW_BACKGROUND;
 
 /**
  * Make cell `x` of `surface` a space when the colour code in it changes
@@ -415,7 +435,8 @@ function slideAttributesLeft(cells: Uint8Array, x: number, y: number): boolean {
  * holding a colour code that changes nothing takes the sixel in its place;
  * any other attribute first slides its run left onto a free space, and with
  * no room it is not drawn on. `fg` 0 (black) has no Level 1 code and draws
- * nothing.
+ * nothing. The lower half of a double-height row is never drawn on: the board
+ * ignores that row's own cells.
  */
 export function paintMosaic(
   surface: TeletextSurface,
@@ -427,6 +448,7 @@ export function paintMosaic(
   if (px < 0 || py < 0 || px >= SIXEL_COLS || py >= SIXEL_ROWS || fg === 0) return { surface, blocked: null };
   const x = px >> 1;
   const y = Math.floor(py / 3);
+  if (isDoubleHeightLowerRow(surface, y)) return { surface, blocked: DOUBLE_HEIGHT_LOWER_ROW };
   let from = surface;
   if (surface.cells[indexOf(x, y)] < SPACE) {
     const dropped = dropRedundantCode(surface, x, y);
@@ -446,7 +468,8 @@ export function paintMosaic(
 /**
  * Text: type one character in the picked colours, placing the alpha colour
  * code (and background codes) left of it when needed. The cursor moves on
- * only when the character went down.
+ * only when the character went down; on the lower half of a double-height
+ * row it never does.
  */
 export function typeCharColoured(
   surface: TeletextSurface,
@@ -457,6 +480,7 @@ export function typeCharColoured(
   bg: TeletextColour,
 ): ColouredEdit & { cursor: { x: number; y: number } } {
   if (!inside(x, y) || fg === 0) return { surface, blocked: null, cursor: { x, y } };
+  if (isDoubleHeightLowerRow(surface, y)) return { surface, blocked: DOUBLE_HEIGHT_LOWER_ROW, cursor: { x, y } };
   const next = inColour(surface, x, y, { fg, bg, graphics: false }, (cells) => {
     cells[indexOf(x, y)] = code & 0x7f;
   });

@@ -26,6 +26,7 @@ import {
   NEW_BACKGROUND,
   HOLD_MOSAIC,
   RELEASE_MOSAIC,
+  isSetAtCode,
 } from './control-codes';
 
 const ROWS = 24;
@@ -51,36 +52,28 @@ export function createDefaultRowState(): RowState {
 }
 
 /**
- * Apply a "set-after" control code to the row state.
+ * Apply one spacing attribute to the row state. WHEN it applies - before or
+ * after its own cell is drawn - is `isSetAtCode`'s business, not this one's.
  *
- * Per ETSI EN 300 706 Section 12.2:
- * - Spacing attributes are "set-after": the control code position itself
- *   uses the OLD state, and the new attribute takes effect from the NEXT
- *   character position onward.
- * - However, Hold Mosaic and Release Mosaic are "set-at": they take
- *   effect at the current position.
- *
- * This function mutates the state for the NEXT position. The caller is
- * responsible for emitting the cell at the current position BEFORE calling
- * this for set-after codes, or AFTER calling this for set-at codes.
+ * The held mosaic is reset to SPACE only on a change of alphanumerics /
+ * mosaics MODE or a change of SIZE (Table 26 entry 1/E). A mosaic colour code
+ * while already in mosaics, or Normal Size while already normal size, keeps
+ * it: that is what lets Hold Mosaics change colour between blocks without a
+ * gap.
  */
-export function applySetAfterControlCode(state: RowState, code: number): void {
+export function applyControlCode(state: RowState, code: number): void {
   if (isAlphaColor(code)) {
-    // Alpha color: set foreground, switch to text mode, clear conceal
+    // 0x00 is Level 2.5 alpha black; kept as a colour code (the user's choice).
     state.fgColor = (code - ALPHA_BLACK) as Color;
+    if (state.charsetMode !== CharsetMode.TEXT) state.heldMosaic = null;
     state.charsetMode = CharsetMode.TEXT;
     state.conceal = false;
-    // ETSI EN 300 706 s.12.3: a change of alpha/mosaic mode clears the held
-    // mosaic. Without this a held cell kept painting the character from
-    // before the mode change - the page showed a mosaic where the spec says
-    // a space.
-    state.heldMosaic = null;
   } else if (isMosaicColor(code)) {
-    // Mosaic color: set foreground, switch to graphics mode
+    // 0x10 is Level 2.5 mosaic black; kept as a colour code.
     state.fgColor = (code - MOSAIC_BLACK) as Color;
+    if (state.charsetMode !== CharsetMode.GRAPHICS) state.heldMosaic = null;
     state.charsetMode = CharsetMode.GRAPHICS;
     state.conceal = false;
-    state.heldMosaic = null;
   } else {
     switch (code) {
       case FLASH:
@@ -91,13 +84,15 @@ export function applySetAfterControlCode(state: RowState, code: number): void {
         break;
       case END_BOX:
       case START_BOX:
-        // Box control — at Level 1, these act as spacing codes with no
+        // Box control - at Level 1, these act as spacing codes with no
         // further effect on the row state.
         break;
       case NORMAL_HEIGHT:
+        if (state.doubleHeight) state.heldMosaic = null;
         state.doubleHeight = false;
         break;
       case DOUBLE_HEIGHT:
+        if (!state.doubleHeight) state.heldMosaic = null;
         state.doubleHeight = true;
         break;
       case CONCEAL:
@@ -110,7 +105,7 @@ export function applySetAfterControlCode(state: RowState, code: number): void {
         state.mosaicType = MosaicType.SEPARATED;
         break;
       case ESC:
-        // Toggle between G0/G2 character sets — not fully modelled here
+        // Toggle between G0/G2 character sets - not fully modelled here
         // but we track the flag for completeness.
         state.escSwitch = !state.escSwitch;
         break;
@@ -118,15 +113,13 @@ export function applySetAfterControlCode(state: RowState, code: number): void {
         state.bgColor = Color.BLACK;
         break;
       case NEW_BACKGROUND:
-        // Set background to current foreground color.
+        // The foreground in effect at this cell becomes the background.
         state.bgColor = state.fgColor;
         break;
       case HOLD_MOSAIC:
-        // Set-at: takes effect immediately
         state.holdGraphics = true;
         break;
       case RELEASE_MOSAIC:
-        // Set-at: takes effect immediately (but see emission logic)
         state.holdGraphics = false;
         break;
     }
@@ -134,11 +127,10 @@ export function applySetAfterControlCode(state: RowState, code: number): void {
 }
 
 /**
- * Determine what character to display at a control code position.
- *
- * Per ETSI EN 300 706 Section 12.2:
- * - If Hold Mosaic is active AND we have a held character, display it.
- * - Otherwise display a space (0x20).
+ * What a spacing attribute's own cell shows (Table 26 intro): a SPACE, or in
+ * Hold Mosaics mode the held mosaic, in its original contiguous/separated
+ * form. The held mosaic is only ever set in mosaics mode and reset on leaving
+ * it, so a non-null one means the cell is in mosaics.
  */
 function controlCodeDisplayChar(state: RowState): { char: number; mode: CharsetMode; mosType: MosaicType } {
   if (state.holdGraphics && state.heldMosaic !== null) {
@@ -169,110 +161,104 @@ function emitCell(
   };
 }
 
+/** A mosaic character in mosaics mode: bit 6 set (0x20-0x3F, 0x60-0x7F). 0x40-0x5F blast through as text. */
+function isMosaicChar(byte: number): boolean {
+  return (byte >= 0x20 && byte <= 0x3F) || (byte >= 0x60 && byte <= 0x7F);
+}
+
+/**
+ * Walk one row, calling `visit` with the state each cell is drawn in. The one
+ * attribute walk: `processRow` draws from it and `rowStateAt` (the editor's
+ * view) reads it, so the two cannot disagree.
+ */
+function walkRow(rowData: ArrayLike<number>, columns: number, visit: (col: number, byte: number, state: RowState) => void): RowState {
+  const state = createDefaultRowState();
+  for (let col = 0; col < columns; col++) {
+    const byte = rowData[col] & 0x7F; // strip parity bit
+    if (isControlCode(byte)) {
+      const setAt = isSetAtCode(byte);
+      if (setAt) applyControlCode(state, byte);
+      visit(col, byte, state);
+      if (!setAt) applyControlCode(state, byte);
+    } else {
+      if (state.charsetMode === CharsetMode.GRAPHICS && isMosaicChar(byte)) {
+        state.heldMosaic = byte;
+        state.heldMosaicType = state.mosaicType;
+      }
+      visit(col, byte, state);
+    }
+  }
+  return state;
+}
+
+/**
+ * The row state a CHARACTER placed at column `x` would be drawn in: every
+ * attribute left of `x` applied. `x` may be 40 (the state after the row).
+ */
+export function rowStateAt(rowData: ArrayLike<number>, x: number): RowState {
+  return walkRow(rowData, Math.max(0, Math.min(x, COLS)), () => {});
+}
+
 /**
  * Process a single row of 40 bytes through the state machine.
  * Returns an array of 40 Cells.
  */
-export function processRow(rowData: Uint8Array | number[]): Cell[] {
-  const state = createDefaultRowState();
+export function processRow(rowData: ArrayLike<number>): Cell[] {
   const cells: Cell[] = new Array(COLS);
-
-  for (let col = 0; col < COLS; col++) {
-    const byte = rowData[col] & 0x7F; // strip parity bit
-
+  walkRow(rowData, COLS, (col, byte, state) => {
     if (isControlCode(byte)) {
-      // Per ETSI EN 300 706 Section 12.2, spacing attributes are
-      // "set-after". The character at the control code position is
-      // rendered using the state BEFORE the control code takes effect.
-      //
-      // Exception: Hold Mosaic (0x1E) is "set-at" — it takes effect
-      // at this position, so a held character can appear here.
-      // Release Mosaic (0x1F) is also "set-at" but the held character
-      // is still displayed at the Release position using the old hold
-      // state (the spec says release takes effect at the current position
-      // but the held mosaic is still shown).
-
-      if (byte === HOLD_MOSAIC) {
-        // Hold is set-at: activate before emitting
-        state.holdGraphics = true;
-        const display = controlCodeDisplayChar(state);
-        cells[col] = emitCell(state, display.char, display.mode, display.mosType);
-        // Don't call applySetAfterControlCode again for HOLD_MOSAIC
-        // since we already set it.
-      } else if (byte === RELEASE_MOSAIC) {
-        // Release is set-at but we emit the held character first,
-        // then release. The held char appears at this position.
-        const display = controlCodeDisplayChar(state);
-        cells[col] = emitCell(state, display.char, display.mode, display.mosType);
-        state.holdGraphics = false;
-      } else {
-        // Standard set-after: emit with OLD state, then apply.
-        //
-        // Except for the held mosaic. ETSI EN 300 706 s.12.3 makes a change
-        // of alpha/mosaic mode release the hold, and that release is SET-AT:
-        // the attribute's own position shows a space, not the mosaic from
-        // before the change. Emitting first with the old state painted the
-        // stale cell there.
-        if (isAlphaColor(byte) || isMosaicColor(byte)) state.heldMosaic = null;
-        const display = controlCodeDisplayChar(state);
-        cells[col] = emitCell(state, display.char, display.mode, display.mosType);
-        applySetAfterControlCode(state, byte);
-      }
+      const display = controlCodeDisplayChar(state);
+      cells[col] = emitCell(state, display.char, display.mode, display.mosType);
+    } else if (state.charsetMode === CharsetMode.GRAPHICS) {
+      cells[col] = isMosaicChar(byte)
+        ? emitCell(state, byte, CharsetMode.GRAPHICS, state.mosaicType)
+        : emitCell(state, byte, CharsetMode.TEXT, state.mosaicType); // blast-through
     } else {
-      // Printable character (0x20-0x7F)
-      if (state.charsetMode === CharsetMode.GRAPHICS && byte >= 0x20 && byte < 0x80) {
-        // In graphics mode, characters 0x20-0x3F and 0x60-0x7F are
-        // mosaic characters. 0x40-0x5F are still G0 alpha characters.
-        if ((byte >= 0x20 && byte <= 0x3F) || (byte >= 0x60 && byte <= 0x7F)) {
-          // Mosaic character — update held mosaic
-          state.heldMosaic = byte;
-          state.heldMosaicType = state.mosaicType;
-          cells[col] = emitCell(state, byte, CharsetMode.GRAPHICS, state.mosaicType);
-        } else {
-          // 0x40-0x5F: still alpha even in graphics mode
-          cells[col] = emitCell(state, byte, CharsetMode.TEXT, state.mosaicType);
-        }
-      } else {
-        cells[col] = emitCell(state, byte, state.charsetMode, state.mosaicType);
-      }
+      cells[col] = emitCell(state, byte, state.charsetMode, state.mosaicType);
     }
-  }
-
+  });
   return cells;
+}
+
+/** Whether any cell of a processed row is double height. */
+function hasDoubleHeight(cells: readonly Cell[]): boolean {
+  return cells.some(cell => cell.doubleHeight);
+}
+
+/**
+ * Which rows are the LOWER half of a double-height row above them. Such a
+ * row's own data is ignored (Table 26 entry 0/D), so its own Double Height
+ * never makes the row after it a lower row too.
+ */
+export function doubleHeightLowerRows(rows: readonly ArrayLike<number>[]): boolean[] {
+  const lower: boolean[] = new Array(rows.length).fill(false);
+  for (let row = 0; row < rows.length - 1; row++) {
+    if (!lower[row] && hasDoubleHeight(processRow(rows[row]))) lower[row + 1] = true;
+  }
+  return lower;
 }
 
 /**
  * Process a full 24x40 page through the state machine.
  *
- * Handles double-height by marking bottom rows. Per ETSI EN 300 706,
- * the row following a double-height row displays the bottom half of
- * the double-height characters. If the bottom row itself has no
- * double-height attribute set, it is blanked.
+ * ETSI EN 300 706 Table 26 entry 0/D: the row below a row with double height
+ * ignores every character and attribute transmitted for it. Under a
+ * double-height cell it shows that cell's lower half; everywhere else it
+ * shows a space in the background of the cell above, with no foreground.
  */
 export function processPage(pageData: Uint8Array[] | number[][]): PageGrid {
+  const rows = pageData.slice(0, ROWS);
+  const lower = doubleHeightLowerRows(rows);
   const grid: PageGrid = new Array(ROWS);
 
-  // First pass: process each row independently
   for (let row = 0; row < ROWS; row++) {
-    grid[row] = processRow(pageData[row]);
-  }
-
-  // Second pass: mark double-height bottom rows
-  for (let row = 0; row < ROWS - 1; row++) {
-    const hasDoubleHeight = grid[row].some(cell => cell.doubleHeight);
-    if (hasDoubleHeight) {
-      // The next row is the bottom half
-      for (let col = 0; col < COLS; col++) {
-        if (grid[row][col].doubleHeight) {
-          grid[row + 1][col] = {
-            ...grid[row][col],
-            doubleHeight: true,
-            doubleHeightBottom: true,
-          };
-        }
-      }
-      row++; // skip the bottom row so it doesn't cascade
-    }
+    grid[row] = lower[row]
+      ? grid[row - 1].map(cell =>
+          cell.doubleHeight
+            ? { ...cell, doubleHeightBottom: true }
+            : { ...emitCell(createDefaultRowState(), 0x20, CharsetMode.TEXT, MosaicType.CONTIGUOUS), bgColor: cell.bgColor },
+        )
+      : processRow(rows[row]);
   }
 
   return grid;

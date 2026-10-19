@@ -26,7 +26,9 @@ import {
   pickColours,
   COLOUR_NEEDS_ROOM,
   CODE_CELL_TAKEN,
+  DOUBLE_HEIGHT_LOWER_ROW,
 } from '../../teletext/editor-surface';
+import { processRow } from '../../teletext/marco/state-machine/state-machine';
 import { frameToTti, FRAME_COLS } from '../../teletext/edittf-frame';
 import { renderNativeTti } from '../../teletext/render-native';
 
@@ -103,6 +105,12 @@ describe('teletext editor surface', () => {
     const cleared = clearSurface(typed);
     expect(cleared.cells.every((b) => b === 0x20)).toBe(true);
     expect(cleared.meta.head).toEqual(['PN,10000']);
+  });
+
+  it('clearSurface drops X/26 enhancement packets, which would draw over the cleared page', () => {
+    const head = ['PN,10000', 'OL,26,@AB', 'OL,27,@CD', 'OL,28,@EF'];
+    const cleared = clearSurface({ ...blankSurface(), meta: { head, tail: [], eol: '\n' } });
+    expect(cleared.meta.head).toEqual(['PN,10000', 'OL,27,@CD', 'OL,28,@EF']);
   });
 
   it('liftRegion / stampRegion copy a rectangle and clip at the edge', () => {
@@ -239,6 +247,45 @@ describe('teletext editor surface', () => {
       expect(at(filled.surface.cells, 5, 1)).toBe(0x20); // outside the wall
       expect(pickColours(filled.surface, 3, 1)).toEqual({ fg: 7, bg: 0 });
       expect(fillSixels(box, { px: 4, py: 3 }, 7, 0).surface).toBe(box); // a lit sixel
+    });
+  });
+
+  describe('agrees with the renderer (ETSI EN 300 706 s.12.2)', () => {
+    const withRow = (y: number, bytes: number[]) => {
+      const s = blankSurface();
+      bytes.forEach((b, i) => { s.cells[y * FRAME_COLS + i] = b; });
+      return s;
+    };
+
+    it('reads Level 2.5 black colour codes 0x00 and 0x10 as black, like the renderer', () => {
+      const alpha = withRow(1, [0x01, 0x41, 0x00, 0x41]);
+      expect(attributesAt(alpha, 3, 1)).toEqual({ fg: 0, bg: 0, graphics: false });
+      const mosaic = withRow(1, [0x11, 0x3f, 0x10, 0x3f]);
+      expect(attributesAt(mosaic, 3, 1)).toEqual({ fg: 0, bg: 0, graphics: true });
+      const back = withRow(1, [0x11, 0x00, 0x41]);
+      expect(graphicsAt(back, 2, 1)).toBe(false);
+      expect(processRow(back.cells.subarray(FRAME_COLS, 2 * FRAME_COLS))[2].charsetMode).toBe(0);
+    });
+
+    it('matches the renderer\'s colours for every cell of a row', () => {
+      const s = withRow(1, [0x01, 0x1d, 0x41, 0x12, 0x00, 0x1d, 0x1c, 0x10, 0x3f, 0x04, 0x41]);
+      const cells = processRow(s.cells.subarray(FRAME_COLS, 2 * FRAME_COLS));
+      for (let x = 0; x < 12; x++) {
+        if (s.cells[FRAME_COLS + x] < 0x20) continue; // what a character there would get
+        const a = attributesAt(s, x, 1);
+        expect([x, a.fg, a.bg]).toEqual([x, cells[x].fgColor, cells[x].bgColor]);
+      }
+    });
+
+    it('refuses to draw or type on the row below a double-height row', () => {
+      const s = withRow(1, [0x0d, 0x41]);
+      const painted = paintMosaic(s, 10, 6, 1, 0); // cell (5, 2)
+      expect(painted).toEqual({ surface: s, blocked: DOUBLE_HEIGHT_LOWER_ROW });
+      const typed = typeCharColoured(s, 5, 2, 0x41, 7, 0);
+      expect(typed).toEqual({ surface: s, blocked: DOUBLE_HEIGHT_LOWER_ROW, cursor: { x: 5, y: 2 } });
+      // The row after the lower row is a row like any other.
+      expect(paintMosaic(s, 10, 9, 1, 0).blocked).toBeNull();
+      expect(typeCharColoured(s, 5, 3, 0x41, 7, 0).blocked).toBeNull();
     });
   });
 });
