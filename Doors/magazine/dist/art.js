@@ -33,7 +33,7 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.slotKey = exports.BANNER_MAX_ROWS_40 = exports.BANNER_MAX_ROWS = exports.SECTION_ART = exports.ART_NAMES = void 0;
+exports.slotKey = exports.SECTION_ART = exports.ART_NAMES = void 0;
 exports.boardVariantDir = boardVariantDir;
 exports.slotFiles = slotFiles;
 exports.shippedArtDir = shippedArtDir;
@@ -105,9 +105,6 @@ exports.SECTION_ART = {
     stream: 'sec_stream',
     general: 'sec_general',
 };
-/** Banner ceilings: five rows on an ANSI screen, four on the C64's forty columns. */
-exports.BANNER_MAX_ROWS = 5;
-exports.BANNER_MAX_ROWS_40 = 4;
 /** `<board root>/Screens/doors/MAG`: where the Studio's C64 and Teletext tabs save, found from the door's folder. */
 function boardVariantDir(doorDir) {
     return path.join((0, settings_1.resolveBbsRoot)(doorDir), 'Screens', 'doors', 'MAG');

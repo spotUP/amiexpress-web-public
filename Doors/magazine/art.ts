@@ -63,9 +63,6 @@ export const SECTION_ART: Record<Desk, string> = {
   general: 'sec_general',
 };
 
-/** Banner ceilings: five rows on an ANSI screen, four on the C64's forty columns. */
-export const BANNER_MAX_ROWS = 5;
-export const BANNER_MAX_ROWS_40 = 4;
 
 export interface ArtSources {
   /** `Doors/magazine/art`: where the Studio saves and the loader reads, filler included. Null when the caller wants no art. */

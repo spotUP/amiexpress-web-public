@@ -38,8 +38,6 @@ import { DESK_LABEL, FRONT_PAGE, FRONT_PAGE_LABEL, MAGAZINE_TITLE, PAGE_FAMILIES
 import { createScrollText } from '@amiexpress/bbs-door-sdk';
 import { PageSearch, rangeSpace } from '@amiexpress/bbs-door-sdk/teletext/page-search';
 import {
-  BANNER_MAX_ROWS,
-  BANNER_MAX_ROWS_40,
   SECTION_ART,
   artKindFor,
   artRowText,
@@ -284,7 +282,6 @@ export async function startReader(session: DoorSession, options: ReaderOptions =
     const art = loadArt(name, artKind, artSources);
     return art ? artRows(art, maxRows, artKind === 'seq' ? Math.min(maxCols, 40) : maxCols) : [];
   };
-  const bannerCap = artKind === 'seq' ? BANNER_MAX_ROWS_40 : BANNER_MAX_ROWS;
 
   const input = new DoorInputManager(session as any, screen, {
     enableGameMode: false,
@@ -588,7 +585,8 @@ export async function startReader(session: DoorSession, options: ReaderOptions =
   const applyBanner = (name: string) => {
     if (name === bannerKey) return;
     bannerKey = name;
-    const wanted = name ? artFor(name, bannerCap) : [];
+    // The banner is as tall as its art; buildLayout drops it when the panel could not keep MIN_PANEL_ROWS.
+    const wanted = name ? artFor(name, height) : [];
     const next = buildLayout(width, height, { ticker: showTicker, banner: wanted.length });
     layout = next;
     bannerLines = next.bannerRows > 0 ? wanted.slice(0, next.bannerRows) : [];

@@ -1205,6 +1205,23 @@ export async function aBannerTakesItsRowsFromThePanelAndEachViewHasItsOwn(): Pro
   } finally { await finish(h, b); }
 }
 
+export async function aSectionLogoTallerThanTheShippedBannerIsShownWhole(): Promise<void> {
+  // A sysop's desk logo of nine rows: the panel gives up nine rows, none of the logo is cut.
+  const b = board([]);
+  const logo = path.join(b.root, 'tall.ans');
+  fs.writeFileSync(logo, Array.from({ length: 9 }, (_, i) => `LOGO ROW ${i + 1}`).join('\r\n') + '\r\n');
+  const h = await open(80, 24, { shippedArt: SHIPPED_ART, slots: { sec_hack: logo } });
+  try {
+    h.reader.press('c', 'c');
+    h.reader.press('c', 'c');
+    h.reader.press('s', 's');
+    const bare = buildLayout(80, 24, { ticker: true });
+    assert.strictEqual(h.reader.layout.bannerRows, 9);
+    assert.strictEqual(h.reader.layout.panelHeight, bare.panelHeight - 9);
+    assert.ok(h.reader.bannerText().join('\n').includes('LOGO ROW 9'), 'the last row of the logo is on screen');
+  } finally { await finish(h, b); }
+}
+
 export async function theGeneralDeskBannerNamesTheMiscellaneousDeskNotTheFrontPage(): Promise<void> {
   const b = board([], [story('gggg0001', 'A stray signal', 'general', '2026-10-13')]);
   const h = await open(80, 24, { shippedArt: SHIPPED_ART });

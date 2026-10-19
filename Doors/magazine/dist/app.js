@@ -174,7 +174,6 @@ async function startReader(session, options = {}) {
         const art = (0, art_1.loadArt)(name, artKind, artSources);
         return art ? (0, art_1.artRows)(art, maxRows, artKind === 'seq' ? Math.min(maxCols, 40) : maxCols) : [];
     };
-    const bannerCap = artKind === 'seq' ? art_1.BANNER_MAX_ROWS_40 : art_1.BANNER_MAX_ROWS;
     const input = new door_input_manager_1.DoorInputManager(session, screen, {
         enableGameMode: false,
         enableGrabKeys: false,
@@ -474,7 +473,8 @@ async function startReader(session, options = {}) {
         if (name === bannerKey)
             return;
         bannerKey = name;
-        const wanted = name ? artFor(name, bannerCap) : [];
+        // The banner is as tall as its art; buildLayout drops it when the panel could not keep MIN_PANEL_ROWS.
+        const wanted = name ? artFor(name, height) : [];
         const next = (0, layout_1.buildLayout)(width, height, { ticker: showTicker, banner: wanted.length });
         layout = next;
         bannerLines = next.bannerRows > 0 ? wanted.slice(0, next.bannerRows) : [];
