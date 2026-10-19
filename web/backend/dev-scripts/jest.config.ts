@@ -60,6 +60,8 @@ module.exports = {
     '^@amiexpress/bbs-door-sdk/teletext/render-native$': '<rootDir>/../../sdk/teletext/render-native.ts',
     '^@amiexpress/bbs-door-sdk/teletext/tti-lexer$': '<rootDir>/../../sdk/teletext/tti-lexer.ts',
     '^@amiexpress/bbs-door-sdk/common/run-diff$': '<rootDir>/../../sdk/common/run-diff.ts',
+    '^@amiexpress/bbs-door-sdk/engines/graphics/motion-trail$': '<rootDir>/../../sdk/engines/graphics/motion-trail.ts',
+    '^@amiexpress/bbs-door-sdk/engines/ui/ansi/eight-pens$': '<rootDir>/../../sdk/engines/ui/ansi/eight-pens.ts',
     // The Amiga file formats a door and the board both read. Source, for the
     // same reason as the rest: a RED/GREEN cycle must not ride on sdk/dist.
     '^@amiexpress/bbs-door-sdk/formats/ctop-data$': '<rootDir>/../../sdk/formats/ctop-data.ts',

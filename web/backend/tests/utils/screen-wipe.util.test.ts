@@ -510,6 +510,50 @@ describe('screen-wipe.util', () => {
       expect(at(fwd, 'OLDPAGE')).toBe(-1);     // and the old page left to the left
     });
 
+    describe('cover flow motion blur (D6)', () => {
+      // Every incoming cell bold bright yellow, so a dimmed one is visible in its SGR.
+      const bright = Array.from({ length: 6 }, () => '\x1b[1;93m' + 'X'.repeat(80)).join('\r\n');
+      const old = Array.from({ length: 6 }, () => [...'o'.repeat(80)].map(char => ({ char, ansi: '\x1b[0;1;96m' })));
+      /** Row 0 of a frame as cells: each glyph with the SGR in force when it was written. */
+      const cells = (frame: string): { char: string; sgr: string }[] => {
+        const row = frame.split(/\x1b\[\d+;1H/)[1];
+        const out: { char: string; sgr: string }[] = [];
+        let sgr = '';
+        for (const part of row.split(/(\x1b\[[0-9;]*m)/)) {
+          if (part.startsWith('\x1b[')) sgr = part;
+          else for (const char of part) out.push({ char, sgr });
+        }
+        return out;
+      };
+      const params = (sgr: string): string[] => sgr.slice(2, -1).split(';');
+      const isMid = (c: { char: string; sgr: string }) => c.char === 'X' && !params(c.sgr).includes('1') && params(c.sgr).includes('33');
+      const isFaint = (c: { char: string; sgr: string }) => c.char === '\u00B7' && !params(c.sgr).includes('1') && params(c.sgr).includes('33');
+
+      it.each([
+        ['forward', true],
+        ['backward', false],
+      ])('%s: frame 1 smears the incoming edge, faint behind the motion, the last frame is clean', (_name, forward) => {
+        const frames = getRegionSlideFrames(bright, 80, { top: 1, rows: 6, forward }, old);
+        expect(frames).toHaveLength(4);
+        expect(frames.map(f => f.delay)).toEqual([40, 40, 40, 0]);
+        const first = cells(frames[0].content);
+        expect(first).toHaveLength(80);
+        const mid = first.map((c, x) => (isMid(c) ? x : -1)).filter(x => x >= 0);
+        const faint = first.map((c, x) => (isFaint(c) ? x : -1)).filter(x => x >= 0);
+        expect(mid.length).toBeGreaterThan(0);
+        expect(faint.length).toBeGreaterThan(0);
+        // Forward the page moves left, so the smear trails to the right of the mid band; backward, to the left.
+        if (forward) expect(Math.min(...faint)).toBeGreaterThan(Math.max(...mid));
+        else expect(Math.max(...faint)).toBeLessThan(Math.min(...mid));
+        // The old page is never smeared.
+        expect(first.filter(c => c.char === 'o').every(c => params(c.sgr).includes('96') && params(c.sgr).includes('1'))).toBe(true);
+        // Latin-1 only: the middle dot is one byte on the wire, as in the noise wipe.
+        expect([...frames[0].content].every(ch => ch.charCodeAt(0) < 256)).toBe(true);
+        const final = cells(frames[3].content);
+        expect(final.every(c => c.char === 'X' && params(c.sgr).includes('1') && params(c.sgr).includes('93'))).toBe(true);
+      });
+    });
+
     it('a whole-screen getWipeFrames with the push letter has no animation', () => {
       expect(getWipeFrames('P' as WipeType, screen)).toEqual([]);
     });

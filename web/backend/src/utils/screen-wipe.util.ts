@@ -34,6 +34,8 @@
  */
 
 import { renderRunDiff } from '@amiexpress/bbs-door-sdk/common/run-diff';
+import { buildTrail, trailIntensity, trailTier } from '@amiexpress/bbs-door-sdk/engines/graphics/motion-trail';
+import { foldSgrParameter } from '@amiexpress/bbs-door-sdk/engines/ui/ansi/eight-pens';
 
 import { WIPE_CODES, type WipeType } from '../screens/wipe-codes';
 import { animationsAllowed, type AnimationsSession } from '../services/user-settings/animations';
@@ -1402,6 +1404,42 @@ export interface WipeRegion {
 const REGION_SLIDE_STEPS = 4;
 const REGION_SLIDE_DELAY_MS = 40;
 
+/** The glyph a faint smear cell becomes: Latin-1 (Amiga ANSI, never CP437), as in NOISE_CHARS. */
+const SMEAR_CHAR = '\u00B7';
+
+/**
+ * A cell's attributes dimmed for a smear: bold dropped, bright colours folded
+ * onto the eight pens. Read and written through the grid's own SGR model, so
+ * an extended `38;5;n` / `38;2;r;g;b` colour passes through untouched.
+ */
+function dimSgr(ansi: string): string {
+  const attrs = defaultAttributes();
+  for (const m of ansi.matchAll(/\x1b\[([0-9;]*)m/g)) applySgr(m[1], attrs);
+  if (attrs.intensity === '1') attrs.intensity = '';
+  const fold = (colour: string): string => (/^\d+$/.test(colour) ? String(foldSgrParameter(Number(colour))) : colour);
+  attrs.fg = fold(attrs.fg);
+  attrs.bg = fold(attrs.bg);
+  return attributesToAnsi(attrs);
+}
+
+/**
+ * Cover flow motion blur (D6): the band of incoming cells the leading edge
+ * crossed since the last frame, from `prevEdge` to `curEdge`, faded with the
+ * SDK motion-trail model (brightest at the edge, faintest where it came
+ * from). Mid cells lose bold and bright colours; faint cells also turn into a
+ * middle dot. Spaces stay spaces. Cells are replaced, never mutated: the
+ * strips are shared by every frame, the final one included.
+ */
+function smearBand(row: Cell[], y: number, prevEdge: number, curEdge: number, columns: number): void {
+  for (const cell of buildTrail({ axis: 'horizontal', fixed: y, from: prevEdge, to: curEdge, now: 0, maxCells: columns })) {
+    if (cell.x < 0 || cell.x >= columns) continue;
+    const tier = trailTier(trailIntensity(cell, 0));
+    if (tier === null || tier === 'solid') continue;
+    const c = row[cell.x];
+    row[cell.x] = { char: tier === 'faint' && c.char !== ' ' ? SMEAR_CHAR : c.char, ansi: dimSgr(c.ansi) };
+  }
+}
+
 /**
  * The push wipe (`P`): the new rows push the old ones out sideways, both
  * crossing the full width in REGION_SLIDE_STEPS frames, the last one the
@@ -1438,12 +1476,20 @@ export function getRegionSlideFrames(
     strips.push(region.forward ? [...before, ...after] : [...after, ...before]);
   }
   const frames: WipeFrame[] = [];
+  // The incoming page's leading edge: the first of its columns on screen.
+  // Forward it enters from the right, backward from the left.
+  const edge = (moved: number): number => (region.forward ? columns - moved : moved - 1);
   for (let step = 1; step <= REGION_SLIDE_STEPS; step++) {
     const moved = Math.round((columns * step) / REGION_SLIDE_STEPS);
+    const movedPrev = Math.round((columns * (step - 1)) / REGION_SLIDE_STEPS);
     const offset = region.forward ? moved : columns - moved;
+    const last = step === REGION_SLIDE_STEPS;
     let out = '';
     for (let y = 0; y < region.rows; y++) {
-      out += `\x1b[${region.top + y};1H` + gridToAnsi([strips[y].slice(offset, offset + columns)]);
+      const row = strips[y].slice(offset, offset + columns);
+      // The final frame is the plain incoming page: never smeared.
+      if (!last) smearBand(row, y, edge(movedPrev), edge(moved), columns);
+      out += `\x1b[${region.top + y};1H` + gridToAnsi([row]);
     }
     frames.push({ content: out, delay: step === REGION_SLIDE_STEPS ? 0 : REGION_SLIDE_DELAY_MS });
   }
