@@ -17,6 +17,7 @@
  */
 import * as fs from 'fs';
 import * as path from 'path';
+import { encodeOLContent } from '../../sdk/teletext/marco/tti/ttiTranslations';
 
 function main(): void {
   const [input, page = '8FF', title] = process.argv.slice(2);
@@ -32,7 +33,9 @@ function main(): void {
   const re = /\x02\x01([\x01-\x18])\x04\x28(.{40})/gs;
   const rows: Array<[number, string]> = [];
   for (const m of data.toString('latin1').matchAll(re)) {
-    rows.push([m[1].charCodeAt(0), m[2]]);
+    // Controls go out in the MRG +0x80 form: raw, a 0x0A splits the record
+    // and 0x1B followed by 0x40-0x5F reads back as an escape.
+    rows.push([m[1].charCodeAt(0), encodeOLContent([...m[2]].map((c) => c.charCodeAt(0) & 0x7f))]);
   }
   if (rows.length === 0) {
     console.error('no row records found');
@@ -47,7 +50,7 @@ function main(): void {
     'PS,8000',
     ...rows.map(([r, body]) => `OL,${r - 1},${body}`),
   ];
-  process.stdout.write(out.join('\n') + '\n');
+  process.stdout.write(Buffer.from(out.join('\n') + '\n', 'latin1'));
 }
 
 main();
