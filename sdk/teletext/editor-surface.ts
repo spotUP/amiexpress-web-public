@@ -372,6 +372,23 @@ export interface ColouredEdit {
   blocked: boolean;
 }
 
+/** The codes `attributesAt` reads: the only ones that can be redundant. */
+const colourAttribute = (code: number): boolean =>
+  (code >= 0x01 && code <= 0x07) || (code >= 0x11 && code <= 0x17) || code === BLACK_BACKGROUND || code === NEW_BACKGROUND;
+
+/**
+ * Make cell `x` of `surface` a space when the colour code in it changes
+ * nothing: the row already draws everything right of it the same without it.
+ * Two blobs drawn apart and then joined leave such a code between them, and
+ * with content on both sides it has nowhere to slide.
+ */
+function dropRedundantCode(surface: TeletextSurface, x: number, y: number): TeletextSurface | null {
+  if (!colourAttribute(surface.cells[indexOf(x, y)])) return null;
+  const without = cloneSurface(surface);
+  without.cells[indexOf(x, y)] = SPACE;
+  return sameAttributes(attributesAt(without, x + 1, y), attributesAt(surface, x + 1, y)) ? without : null;
+}
+
 /**
  * Make cell `x` of `cells` a space by sliding the attributes from the start
  * of its run up to `x` one cell left, onto the space before that run. Every code keeps its order
@@ -392,8 +409,9 @@ function slideAttributesLeft(cells: Uint8Array, x: number, y: number): boolean {
  * Draw Blocks: set one sixel in the picked foreground on the picked
  * background, placing the graphics colour code (and the background codes)
  * left of the cell when the row does not already draw that cell so. A cell
- * holding an attribute first slides its run left onto free spaces; with no
- * room it is not drawn on. `fg` 0 (black) has no Level 1 code and draws
+ * holding a colour code that changes nothing takes the sixel in its place;
+ * any other attribute first slides its run left onto a free space, and with
+ * no room it is not drawn on. `fg` 0 (black) has no Level 1 code and draws
  * nothing.
  */
 export function paintMosaic(
@@ -408,8 +426,12 @@ export function paintMosaic(
   const y = Math.floor(py / 3);
   let from = surface;
   if (surface.cells[indexOf(x, y)] < SPACE) {
-    from = cloneSurface(surface);
-    if (!slideAttributesLeft(from.cells, x, y)) return { surface, blocked: false };
+    const dropped = dropRedundantCode(surface, x, y);
+    if (dropped) from = dropped;
+    else {
+      from = cloneSurface(surface);
+      if (!slideAttributesLeft(from.cells, x, y)) return { surface, blocked: false };
+    }
   }
   const next = inColour(from, x, y, { fg, bg, graphics: true }, (cells) => {
     const drawn = plotMosaic({ cells, meta: surface.meta }, px, py, true);

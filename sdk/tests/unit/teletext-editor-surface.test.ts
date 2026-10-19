@@ -181,6 +181,23 @@ describe('teletext editor surface', () => {
       expect(paintMosaic(edge, 0, 0, 7, 0).surface).toBe(edge);
     });
 
+    it('joining two blobs drawn apart fills the code cell left between them', () => {
+      // Blob B at cell 6 (code in 5), then blob A from cell 2 (code in 1)
+      // dragged right to cell 4. Cell 5's code now sits between two blocks
+      // and repeats what cell 1 already says: it gives way to the sixel.
+      let s = paintMosaic(blankSurface(), 12, 0, 7, 0).surface;
+      for (const px of [4, 6, 8]) s = paintMosaic(s, px, 0, 7, 0).surface;
+      expect(row(s.cells, 0).slice(1, 7)).toEqual([0x17, 0x21, 0x21, 0x21, 0x17, 0x21]);
+      const joined = paintMosaic(s, 10, 0, 7, 0);
+      expect(joined.blocked).toBe(false);
+      expect(row(joined.surface.cells, 0).slice(1, 7)).toEqual([0x17, 0x21, 0x21, 0x21, 0x21, 0x21]);
+      // A code that does change the colour after it is kept.
+      let red = paintMosaic(blankSurface(), 12, 0, 1, 0).surface;
+      for (const px of [4, 6, 8]) red = paintMosaic(red, px, 0, 7, 0).surface;
+      expect(at(red.cells, 5, 0)).toBe(0x11);
+      expect(paintMosaic(red, 10, 0, 7, 0).surface).toBe(red);
+    });
+
     it('eraseAt clears a sixel in a block and blanks a letter, never an attribute', () => {
       const drawn = paintMosaic(blankSurface(), 10, 3, 1, 0).surface;
       expect(at(eraseAt(drawn, 10, 3).cells, 5, 1)).toBe(0x20);
