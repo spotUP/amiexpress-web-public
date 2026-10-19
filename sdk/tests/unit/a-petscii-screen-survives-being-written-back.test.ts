@@ -112,11 +112,27 @@ describe('writing a PETSCII screen back out', () => {
     expect(lastOff).toBeGreaterThan(lastOn);
   });
 
-  it('says which charset bank the screen wants', () => {
+  // 0b52f8744 (sysop, 2026-10-04): the board puts every caller in the
+  // lowercase bank before any screen, so by default only a graphics-bank
+  // screen declares its bank; a lowercase one leaves the case to the caller.
+  it('leaves a lowercase-bank screen undeclared by default', () => {
     const machine = new PetsciiMachine();
     machine.feed(Uint8Array.from([0x0e, 65]));           // lowercase bank
     expect(machine.state.charsetBank).toBe(1);
-    const written = writeSeq(machine.state);
+    expect([...writeSeq(machine.state)]).not.toContain(0x0e);
+  });
+
+  it('declares the graphics bank by default', () => {
+    const machine = new PetsciiMachine();
+    machine.feed(Uint8Array.from([0x8e, 65]));           // graphics bank
+    expect(machine.state.charsetBank).toBe(0);
+    expect(writeSeq(machine.state)[0]).toBe(0x8e);
+  });
+
+  it('says which charset bank the screen wants when asked to', () => {
+    const machine = new PetsciiMachine();
+    machine.feed(Uint8Array.from([0x0e, 65]));           // lowercase bank
+    const written = writeSeq(machine.state, { declareCharset: true });
     expect(written[0]).toBe(0x0e);
     expect(render(written).charsetBank).toBe(1);
   });
@@ -200,7 +216,9 @@ describe('the background a screen was authored with', () => {
   });
 
   it('round-trips a background on a LOWERCASE-bank screen', () => {
-    const back = render(writeSeq(screenWithBackground(1, 6)));
+    // Declared explicitly: since 0b52f8744 a lowercase screen omits $0E by
+    // default, and the order only matters when the byte is written.
+    const back = render(writeSeq(screenWithBackground(1, 6), { declareCharset: true }));
     expect(back.charsetBank).toBe(1);
     expect(back.background).toBe(6);
   });
