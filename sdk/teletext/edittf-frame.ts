@@ -54,16 +54,6 @@ export interface TtiFrame {
 
 const SPACE = 0x20;
 
-/** One row through the board's own pipeline: OL payload -> 40 bytes. */
-function compileOlPayload(payload: string): Uint8Array {
-  // importTti keeps rows 0-23 only; row 24 (edit.tf's fastext row) is
-  // compiled by parsing its payload as a row-0 line, so it gets the very
-  // same decode/token/pad rules as every other row.
-  const subpage = importTti(`PN,10000\nOL,0,${payload}`).pages[0]?.subpages[0];
-  const row = subpage?.rows[0];
-  return row ? compileRow(row).bytes40 : new Uint8Array(FRAME_COLS).fill(SPACE);
-}
-
 /** Parse .tti text into an edit.tf frame (first subpage) plus its meta. */
 export function ttiToFrame(text: string): TtiFrame {
   const eol: TtiFrameMeta['eol'] = text.includes('\r\n') ? '\r\n' : '\n';
@@ -71,7 +61,6 @@ export function ttiToFrame(text: string): TtiFrame {
   const head: string[] = [];
   const tail: string[] = [];
   const firstGroup: string[] = [];
-  let row24: string | null = null;
   let pnSeen = 0;
 
   for (const rec of records) {
@@ -84,9 +73,9 @@ export function ttiToFrame(text: string): TtiFrame {
     if (rec.command !== 'OL') {
       head.push(rec.raw);
     } else {
+      // Rows 0-24 are the frame (importTti keeps row 24); OL,25+ ride along.
       const olRow = parseInt(rec.parts[0] ?? '', 10);
-      if (olRow === 24) row24 = rec.parts[1] ?? '';
-      else if (olRow >= FRAME_ROWS) head.push(rec.raw);
+      if (olRow >= FRAME_ROWS) head.push(rec.raw);
     }
   }
 
@@ -98,10 +87,6 @@ export function ttiToFrame(text: string): TtiFrame {
       const bytes = compileRow(row).bytes40;
       for (let c = 0; c < FRAME_COLS; c++) cells[row.index * FRAME_COLS + c] = bytes[c] & 0x7f;
     }
-  }
-  if (row24 !== null) {
-    const bytes = compileOlPayload(row24);
-    for (let c = 0; c < FRAME_COLS; c++) cells[24 * FRAME_COLS + c] = bytes[c] & 0x7f;
   }
 
   return { cells, meta: { head, tail, eol } };

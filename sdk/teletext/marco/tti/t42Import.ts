@@ -14,7 +14,13 @@
  */
 
 import { hammingDecode84, stripParity } from '../packet-decoder/hamming';
-import type { TeletextPage, TeletextToken } from '../model/types';
+import type { EnhancementPacket, TeletextPage, TeletextToken } from '../model/types';
+import {
+  isEnhancementPacketNumber,
+  LAST_DISPLAY_ROW,
+  packetFromT42Bytes,
+  storeEnhancementPacket,
+} from '../../enhancement';
 import { createEmptyPage, createEmptySubpage } from '../model/factories';
 import { exportPageToTti } from './ttiExporter';
 
@@ -286,6 +292,7 @@ interface PageAccumulator {
   subcode: number;
   rows: Map<number, Uint8Array>;
   fastext?: Uint8Array; // packet 27 raw data
+  enhancement: EnhancementPacket[]; // X/26, X/28, plus the magazine's M/29
 }
 
 /**
@@ -300,6 +307,7 @@ function assemblePages(lines: TeletextLine[]): PageAccumulator[] {
   // Persistent page buffers: key = "pageNumber:subcode"
   const buffers = new Map<string, PageAccumulator>();
   const active = new Map<number, string>(); // magazine → active buffer key
+  const magazinePackets = new Map<number, EnhancementPacket[]>(); // M/29 per magazine
 
   for (const line of lines) {
     if (line.packetNumber === 0) {
@@ -335,7 +343,7 @@ function assemblePages(lines: TeletextLine[]): PageAccumulator[] {
       // Get or create persistent buffer for this page/subcode
       let acc = buffers.get(key);
       if (!acc) {
-        acc = { magazine: line.magazine, pageNumber, subcode, rows: new Map() };
+        acc = { magazine: line.magazine, pageNumber, subcode, rows: new Map(), enhancement: [] };
         buffers.set(key, acc);
       }
 
@@ -353,7 +361,7 @@ function assemblePages(lines: TeletextLine[]): PageAccumulator[] {
       acc.rows.set(0, headerDisplay);
       active.set(line.magazine, key);
 
-    } else if (line.packetNumber >= 1 && line.packetNumber <= 23) {
+    } else if (line.packetNumber >= 1 && line.packetNumber <= LAST_DISPLAY_ROW) {
       // Display row — add to the active buffer for this magazine
       const key = active.get(line.magazine);
       if (key) {
@@ -371,8 +379,25 @@ function assemblePages(lines: TeletextLine[]): PageAccumulator[] {
           acc.fastext = line.data.slice();
         }
       }
+    } else if (line.packetNumber === 29) {
+      // M/29: magazine-level, applies to every page of the magazine.
+      const packet = packetFromT42Bytes(29, line.rawData);
+      if (packet) {
+        const list = magazinePackets.get(line.magazine) ?? [];
+        storeEnhancementPacket(list, packet);
+        magazinePackets.set(line.magazine, list);
+      }
+    } else if (isEnhancementPacketNumber(line.packetNumber)) {
+      // X/26, X/28: Hamming 24/18 triplets, decoded from the raw bytes.
+      const key = active.get(line.magazine);
+      const acc = key ? buffers.get(key) : undefined;
+      const packet = acc ? packetFromT42Bytes(line.packetNumber, line.rawData) : null;
+      if (acc && packet) storeEnhancementPacket(acc.enhancement, packet);
     }
-    // Packets 24-26, 28-31: other enhancement data — skip for now
+    // Packets 25, 30, 31: not page content.
+  }
+  for (const acc of buffers.values()) {
+    for (const packet of magazinePackets.get(acc.magazine) ?? []) storeEnhancementPacket(acc.enhancement, packet);
   }
 
   // Return all accumulated page buffers
@@ -474,13 +499,14 @@ export function importT42(buffer: Uint8Array): T42ImportResult {
 
     const subpage = createEmptySubpage(acc.subcode);
     for (const [rowNum, rowData] of acc.rows) {
-      if (rowNum >= 0 && rowNum < 24) {
+      if (rowNum >= 0 && rowNum <= LAST_DISPLAY_ROW) {
         subpage.rows[rowNum] = {
           index: rowNum,
           tokens: bytesToTokens(rowData),
         };
       }
     }
+    if (acc.enhancement.length > 0) subpage.enhancement = acc.enhancement.slice();
     page.subpages.push(subpage);
   }
 

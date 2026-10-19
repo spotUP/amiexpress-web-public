@@ -21,24 +21,24 @@
 import { hammingDecode84 } from './marco/packet-decoder/hamming';
 import { hammingDecode2418 } from './hamming2418';
 import { decodeOLContent } from './marco/tti/ttiTranslations';
+import type { EnhancementPacket, EnhancementPacketNumber, Triplet } from './marco/model/types';
 
-export type EnhancementPacketNumber = 26 | 28 | 29;
+export type { EnhancementPacket, EnhancementPacketNumber, Triplet };
 
 /** Triplets per packet. */
 export const TRIPLETS_PER_PACKET = 13;
 
-/** One decoded triplet. */
-export interface Triplet {
-  address: number;
-  mode: number;
-  data: number;
-}
+/** Row 24: the last display row a page carries (EN 300 706 s.9.3.1). */
+export const LAST_DISPLAY_ROW = 24;
 
-/** One packet: its designation code and 13 triplets (null = uncorrectable). */
-export interface EnhancementPacket {
-  packet: EnhancementPacketNumber;
-  designation: number;
-  triplets: Array<Triplet | null>;
+/**
+ * Add a packet to a subpage's list. A later packet with the same number and
+ * designation replaces the earlier one, as a decoder's page store does.
+ */
+export function storeEnhancementPacket(list: EnhancementPacket[], p: EnhancementPacket): void {
+  const at = list.findIndex((q) => q.packet === p.packet && q.designation === p.designation);
+  if (at >= 0) list[at] = p;
+  else list.push(p);
 }
 
 export function isEnhancementPacketNumber(n: number): n is EnhancementPacketNumber {

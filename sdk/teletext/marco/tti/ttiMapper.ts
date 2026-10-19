@@ -16,6 +16,12 @@ import type {
   PreservedTtiRecord,
 } from '../model/types';
 import {
+  isEnhancementPacketNumber,
+  LAST_DISPLAY_ROW,
+  packetFromTtiContent,
+  storeEnhancementPacket,
+} from '../../enhancement';
+import {
   createEmptyPage,
   createEmptySubpage,
 } from '../model/factories';
@@ -145,10 +151,14 @@ export function mapTtiGroupToSubpage(group: TtiPageGroup): {
     // OL line numbers: 0-based in some tools, 1-based in others
     // Row 0 = header row. OL lines typically use 0-23 or 1-24.
     const rowIndex = ol.lineNumber;
-    if (rowIndex >= 0 && rowIndex < 24) {
+    if (rowIndex >= 0 && rowIndex <= LAST_DISPLAY_ROW) {
       const bytes = decodeOLContent(ol.content);
       const tokens = olBytesToTokens(bytes);
       subpage.rows[rowIndex] = { index: rowIndex, tokens };
+    } else if (isEnhancementPacketNumber(rowIndex)) {
+      // OL,26 / OL,28 / OL,29: enhancement packets in vbit2's text form.
+      const packet = packetFromTtiContent(rowIndex, ol.content);
+      if (packet) storeEnhancementPacket((subpage.enhancement ??= []), packet);
     }
   }
 

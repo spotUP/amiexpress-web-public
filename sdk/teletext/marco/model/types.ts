@@ -132,11 +132,35 @@ export type EditorMetadata = {
 
 // ─── Subpage ────────────────────────────────────────────────────
 
+// ─── Enhancement packets (EN 300 706 s.9.4, s.9.5) ──────────────
+
+/** One 18-bit triplet split into its fields. */
+export type Triplet = {
+  address: number; // 0-39 column, 40-63 row
+  mode: number; // 0x00-0x1F
+  data: number; // 0x00-0x7F
+};
+
+export type EnhancementPacketNumber = 26 | 28 | 29;
+
+/** One X/26, X/28 or M/29 packet: designation code + 13 triplets (null = uncorrectable). */
+export type EnhancementPacket = {
+  packet: EnhancementPacketNumber;
+  designation: number;
+  triplets: Array<Triplet | null>;
+};
+
 export type TeletextSubpage = {
   subcode: number; // 0x0000-0x3F7F
+  /**
+   * Display rows 0-23, plus row 24 (the fastext/display row, EN 300 706
+   * s.9.3.1) only when the source carries one.
+   */
   rows: TeletextRow[];
   languageSubset: NationalSubset;
   pageFlags: PageControlFlags;
+  /** X/26, X/28 and M/29 packets as received, when the source carries any. */
+  enhancement?: EnhancementPacket[];
   editorMeta?: EditorMetadata;
 };
 
