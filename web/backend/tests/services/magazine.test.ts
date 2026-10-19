@@ -135,6 +135,18 @@ describe('page allocation (§12)', () => {
     expect(all.length).toBe(40);
     expect(Math.max(...all)).toBeGreaterThan(419);
   });
+
+  it('gives a full desk to the stories the newest tick saw when they share a date', () => {
+    const at = (n: number, seen: string): Story => ({ ...mk(n, 'general'), firstSeen: seen });
+    const old = Array.from({ length: 80 }, (_, i) => at(i, '2026-10-13T08:00:00.000Z'));
+    const fresh = Array.from({ length: 5 }, (_, i) => at(100 + i, '2026-10-13T22:00:00.000Z'));
+    // Fresh stories last, so input order alone would leave them without a page.
+    const pages = allocatePages([...old, ...fresh]);
+    for (const s of fresh) {
+      expect(pages.get(s.id)).toBeGreaterThanOrEqual(101);
+      expect(pages.get(s.id)).toBeLessThanOrEqual(119);
+    }
+  });
 });
 
 describe('composing for forty columns (§6)', () => {

@@ -227,7 +227,13 @@ export function allocatePages(stories: Story[]): Map<string, number> {
   const desks: Desk[] = ['general', 'hack', 'scene', 'music', 'graffiti', 'people', 'archive', 'stream'];
   for (const d of desks) nextByDesk.set(d, familyFor(d).first);
 
-  const ordered = stories.filter(isArticle).sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
+  // Newest first. `date` is day-granular, so stories of one day are ordered by
+  // the tick that first saw them (newest tick wins a full desk), then by id so
+  // the allocation is the same on every publish.
+  const newestFirst = (x: string, y: string): number => (x < y ? 1 : x > y ? -1 : 0);
+  const ordered = stories
+    .filter(isArticle)
+    .sort((a, b) => newestFirst(a.date, b.date) || newestFirst(a.firstSeen, b.firstSeen) || newestFirst(a.id, b.id));
   for (const story of ordered) {
     let desk = story.desk;
     let cursor = nextByDesk.get(desk) ?? familyFor(desk).first;
