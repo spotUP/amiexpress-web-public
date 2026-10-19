@@ -19,6 +19,7 @@ export * from './render-session';
 export * from './compose';
 export * from './screen';
 export * from './packet27';
+export * from './edittf-frame';
 
 /**
  * The page model itself. A door that composes or inspects a page needs
