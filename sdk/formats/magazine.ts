@@ -12,6 +12,8 @@
  */
 
 /** The magazine's name: the reader's masthead and the composer's masthead row. ONE constant. */
+import { BREAKPOINT_MD, BREAKPOINT_SM, getCompactProfile } from '../engines/ui/blessed/core/responsive-constants';
+
 export const MAGAZINE_TITLE = 'THE UNKNOWN FREQUENCY';
 
 /** Directory under the board root that holds the whole magazine. */
@@ -265,4 +267,125 @@ export interface MagazineIndexEntry {
   format: string;
   storyId: string;
   date: string;
+}
+
+// ---------------------------------------------------------------------------
+// Column geometry (moved from Doors/magazine/columns.ts, which re-exports it)
+// ---------------------------------------------------------------------------
+
+/** The widest a column of reading text is allowed to be. */
+export const MAX_MEASURE = 38;
+
+export function columnCount(width: number): 1 | 2 | 3 {
+  if (width >= BREAKPOINT_MD) return 3;
+  if (width >= BREAKPOINT_SM) return 2;
+  return 1;
+}
+
+export interface ColumnGeometry {
+  cols: 1 | 2 | 3;
+  /** Characters in one column. */
+  colWidth: number;
+  /** Characters between two columns (0 with one column). */
+  gutter: number;
+  /** Blank columns left of the first column: the set text is centred. */
+  margin: number;
+  /** Columns the whole set text occupies, margins excluded. */
+  contentWidth: number;
+}
+
+/**
+ * Where the columns sit on a screen this wide.
+ *
+ * The gutter is one rule character flanked by the profile's gap on each side,
+ * so the column rule between two columns is always a character and never the
+ * boundary of the text.
+ */
+export function columnGeometry(width: number): ColumnGeometry {
+  const profile = getCompactProfile(width);
+  const cols = columnCount(width);
+  const gutter = cols > 1 ? profile.gap * 2 + 1 : 0;
+  const usable = Math.max(1, width - profile.padding * 2);
+  const fitted = Math.floor((usable - gutter * (cols - 1)) / cols);
+  const colWidth = Math.max(1, Math.min(MAX_MEASURE, fitted));
+  const contentWidth = colWidth * cols + gutter * (cols - 1);
+  const margin = Math.max(0, Math.floor((width - contentWidth) / 2));
+  return { cols, colWidth, gutter, margin, contentWidth };
+}
+
+// ---------------------------------------------------------------------------
+// Picture sidecar (plan 2026-10-19-mag-linked-media-ascii, M7)
+// ---------------------------------------------------------------------------
+
+/** Rows stored for one picture at one size. */
+export type SidecarTerminal = 'ansi' | 'petscii';
+/** `column` is the inline still; `full` is the fullscreen viewer (D11). */
+export type SidecarPlacement = 'column' | 'full';
+
+/** The fullscreen sizes (D11): 80x24 on ANSI, 40x24 on the C64. */
+export const FULLSCREEN_COLS: Record<SidecarTerminal, number> = { ansi: 80, petscii: 40 };
+export const FULLSCREEN_ROWS = 24;
+/** Row caps of the column stills (Limits table). */
+export const COLUMN_ROW_CAP = { amiga: 10, wide: 12, petscii: 8 } as const;
+
+/** The key a rendering is stored under: `ansi-37-column`, `petscii-40-full`. */
+export function renderingKey(terminal: SidecarTerminal, cols: number, placement: SidecarPlacement): string {
+  return `${terminal}-${cols}-${placement}`;
+}
+
+export interface SidecarSize {
+  terminal: SidecarTerminal;
+  placement: SidecarPlacement;
+  cols: number;
+  /** The most rows the rendering may have. */
+  maxRows: number;
+  key: string;
+}
+
+/** Every size a picture is rendered at, taken from columnGeometry (never hardcoded widths). */
+export function sidecarSizes(): SidecarSize[] {
+  const mk = (terminal: SidecarTerminal, placement: SidecarPlacement, cols: number, maxRows: number): SidecarSize =>
+    ({ terminal, placement, cols, maxRows, key: renderingKey(terminal, cols, placement) });
+  return [
+    mk('ansi', 'column', columnGeometry(BREAKPOINT_SM).colWidth, COLUMN_ROW_CAP.amiga),
+    mk('ansi', 'column', MAX_MEASURE, COLUMN_ROW_CAP.wide),
+    mk('petscii', 'column', columnGeometry(40).colWidth, COLUMN_ROW_CAP.petscii),
+    mk('ansi', 'full', FULLSCREEN_COLS.ansi, FULLSCREEN_ROWS),
+    mk('petscii', 'full', FULLSCREEN_COLS.petscii, FULLSCREEN_ROWS),
+  ];
+}
+
+/**
+ * Rows for a picture of `width` x `height` pixels in `cols` columns: terminal
+ * cells are about twice as tall as wide, so rows = cols * (h / w) / 2, at
+ * least 1, at most `maxRows`.
+ */
+export function rowsForAspect(width: number, height: number, cols: number, maxRows: number): number {
+  if (width <= 0 || height <= 0) return 1;
+  return Math.max(1, Math.min(maxRows, Math.round((cols * height) / (width * 2))));
+}
+
+/** One stored rendering. ANSI: text rows. PETSCII: base64 of each .seq row's bytes. */
+export interface SidecarRendering {
+  cols: number;
+  rows: string[];
+}
+
+export interface SidecarPicture {
+  /** Index into the story's `media`. */
+  media: number;
+  /** The address it was fetched from (a republish does not refetch the same one). */
+  url: string;
+  renderings: Record<string, SidecarRendering>;
+}
+
+/** `<story id>.media.json`, beside `<story id>.json`. */
+export interface StoryMediaSidecar {
+  version: 1;
+  pictures: SidecarPicture[];
+}
+
+/** The sidecar's path from the story file's path. */
+export function sidecarPath(storyFilePath: string): string {
+  return storyFilePath.replace(/\.json$/, '') + '.media.json';
 }

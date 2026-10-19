@@ -263,3 +263,94 @@ export async function fetchImage(
     return 'decode';
   }
 }
+
+// ---------------------------------------------------------------------------
+// Poster (M6): a video or embed shows a picture in the page
+// ---------------------------------------------------------------------------
+
+/** One ffmpeg still from a clip's address. The clip is read by ffmpeg itself, over http(s) only. */
+function ffmpegFrameFromUrl(ffmpeg: string, url: string): Promise<ImageResult> {
+  return new Promise((resolve) => {
+    const child = spawn(ffmpeg, [
+      '-v', 'error', '-protocol_whitelist', 'http,https,tcp,tls,crypto',
+      '-user_agent', BOARD_USER_AGENT, '-ss', '1', '-i', url,
+      '-frames:v', '1', '-f', 'image2pipe', '-vcodec', 'png', 'pipe:1',
+    ], { stdio: ['ignore', 'pipe', 'ignore'] });
+    const out: Buffer[] = [];
+    let size = 0;
+    let settled = false;
+    const finish = (r: ImageResult): void => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      child.kill('SIGKILL');
+      resolve(r);
+    };
+    const timer = setTimeout(() => finish('timeout'), FFMPEG_STILL_TIMEOUT_MS);
+    child.on('error', () => finish('no-ffmpeg'));
+    child.stdout.on('data', (c: Buffer) => {
+      size += c.length;
+      if (size > MAX_FFMPEG_OUT_BYTES) return finish('oversize');
+      out.push(c);
+    });
+    child.on('close', () => {
+      const png = Buffer.concat(out);
+      finish(png.length ? decodePng(png) : 'decode');
+    });
+  });
+}
+
+/** The page address of a YouTube/Vimeo embed, and the oEmbed endpoint that answers for it. */
+export function oembedEndpoint(embedUrl: string): string | null {
+  let u: URL;
+  try { u = new URL(embedUrl); } catch { return null; }
+  const host = u.hostname.replace(/^www\./, '');
+  const id = u.pathname.split('/').filter(Boolean).pop() ?? '';
+  if (!id) return null;
+  if (host === 'youtube.com' || host === 'youtube-nocookie.com' || host === 'youtu.be') {
+    const watch = `https://www.youtube.com/watch?v=${id}`;
+    return `https://www.youtube.com/oembed?format=json&url=${encodeURIComponent(watch)}`;
+  }
+  if (host === 'player.vimeo.com' || host === 'vimeo.com') {
+    return `https://vimeo.com/api/oembed.json?url=${encodeURIComponent(`https://vimeo.com/${id}`)}`;
+  }
+  return null;
+}
+
+/**
+ * The picture a video or embed shows in the page. `<video poster>` goes
+ * through the image path; a clip without one gives one ffmpeg frame at 1 s;
+ * an embed gives its provider's oEmbed thumbnail (D9). Never throws.
+ */
+export async function fetchPoster(
+  media: Pick<StoryMedia, 'url' | 'kind' | 'poster'>,
+  budget: MediaBudget,
+  deps: MediaFetchDeps = { now: () => new Date(), robots: createRobotsCache(), gate: passHostGate, http: fetchHttp },
+): Promise<ImageResult> {
+  try {
+    if (media.kind === 'image') return await fetchImage(media, budget, deps);
+    if (media.kind === 'video' && media.poster) return await fetchImage({ url: media.poster }, budget, deps);
+    if (budgetSpent(budget)) return 'story-cap';
+    if (media.kind === 'video') {
+      if (!/^https?:\/\//i.test(media.url)) return '404';
+      const ffmpeg = (deps.tools ?? mediaTools()).ffmpeg;
+      if (!ffmpeg) return 'no-ffmpeg';
+      const verdict = await robotsVerdict(media.url, deps, ARTICLE_HOST_GAP_MS);
+      if (verdict.kind !== 'allowed') return 'robots';
+      await deps.gate(media.url, ARTICLE_HOST_GAP_MS);
+      const r = await ffmpegFrameFromUrl(ffmpeg, media.url);
+      if (typeof r !== 'string') budget.pictures++;
+      return r;
+    }
+    const endpoint = oembedEndpoint(media.url);
+    if (!endpoint) return '404';
+    await deps.gate(endpoint, ARTICLE_HOST_GAP_MS);
+    const res = await deps.http(endpoint, { timeoutMs: ARTICLE_FETCH_TIMEOUT_MS, userAgent: BOARD_USER_AGENT, accept: 'application/json' });
+    if (res.status !== 200 || res.body === null) return '404';
+    const thumb = (JSON.parse(res.body) as { thumbnail_url?: unknown }).thumbnail_url;
+    if (typeof thumb !== 'string') return '404';
+    return await fetchImage({ url: thumb }, budget, deps);
+  } catch {
+    return 'decode';
+  }
+}

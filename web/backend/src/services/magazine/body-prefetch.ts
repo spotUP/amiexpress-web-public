@@ -38,6 +38,8 @@ import {
   toBulletinWalk,
 } from '../news-bulletins';
 import { loadStories, republishMagazine, writeAtomic } from './index';
+import { renderStoryMedia } from './media-render';
+import type { frameToAnsiCells } from '@amiexpress/bbs-door-sdk/media/ascii';
 
 /** How long one request may take, robots.txt and the page alike. */
 export const ARTICLE_FETCH_TIMEOUT_MS = 15000;
@@ -171,6 +173,9 @@ export interface PrefetchDeps {
    */
   extract: (html: string, url: string) => string | ExtractedArticle | null;
   robots: RobotsCache;
+  /** Test seams for the picture renderer (M7): the SDK converter and the tool lookup. */
+  convert?: typeof frameToAnsiCells;
+  tools?: { ffmpeg: string | null; ytDlp: string | null };
 }
 
 export async function fetchHttp(
@@ -342,7 +347,15 @@ export async function prefetchBodies(deps: PrefetchDeps): Promise<PrefetchSummar
     const extracted = deps.extract(res.body, url);
     const article = typeof extracted === 'string' ? { body: extracted, media: [] } : extracted;
     if (!article?.body) { fail('no article text on the page'); continue; }
-    const { body, media } = article;
+    const { body } = article;
+    // Pictures are fetched, converted and stored at ingest (D1); a failure is
+    // recorded once on the media entry and the text is unchanged (D6).
+    let media = article.media;
+    if (media.length) {
+      const rendered = await renderStoryMedia({ media }, storyFile(root, story.id), deps, writeAtomic);
+      media = rendered.media ?? media;
+      deps.log(`[magazine] media: ${story.source} ${rendered.rendered} rendered, ${rendered.failed} dropped`);
+    }
     if (record(root, story.id, { body, ...(media.length ? { media } : {}) })) {
       out.fetched++;
       deps.log(`[magazine] body: ${story.source} ${body.length} characters`);

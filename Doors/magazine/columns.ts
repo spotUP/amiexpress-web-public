@@ -13,52 +13,11 @@
  * No width literal lives here: the thresholds are the SDK's own breakpoints
  * and the gutter comes from `getCompactProfile(width).gap`.
  */
-import {
-  BREAKPOINT_MD,
-  BREAKPOINT_SM,
-  getCompactProfile,
-} from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import { wrapLineToWidth } from '@amiexpress/bbs-door-sdk/petscii';
 
-/** The widest a column of reading text is allowed to be. */
-export const MAX_MEASURE = 38;
-
-export function columnCount(width: number): 1 | 2 | 3 {
-  if (width >= BREAKPOINT_MD) return 3;
-  if (width >= BREAKPOINT_SM) return 2;
-  return 1;
-}
-
-export interface ColumnGeometry {
-  cols: 1 | 2 | 3;
-  /** Characters in one column. */
-  colWidth: number;
-  /** Characters between two columns (0 with one column). */
-  gutter: number;
-  /** Blank columns left of the first column: the set text is centred. */
-  margin: number;
-  /** Columns the whole set text occupies, margins excluded. */
-  contentWidth: number;
-}
-
-/**
- * Where the columns sit on a screen this wide.
- *
- * The gutter is one rule character flanked by the profile's gap on each side,
- * so the column rule between two columns is always a character and never the
- * boundary of the text.
- */
-export function columnGeometry(width: number): ColumnGeometry {
-  const profile = getCompactProfile(width);
-  const cols = columnCount(width);
-  const gutter = cols > 1 ? profile.gap * 2 + 1 : 0;
-  const usable = Math.max(1, width - profile.padding * 2);
-  const fitted = Math.floor((usable - gutter * (cols - 1)) / cols);
-  const colWidth = Math.max(1, Math.min(MAX_MEASURE, fitted));
-  const contentWidth = colWidth * cols + gutter * (cols - 1);
-  const margin = Math.max(0, Math.floor((width - contentWidth) / 2));
-  return { cols, colWidth, gutter, margin, contentWidth };
-}
+// The geometry lives in the SDK: the backend renders picture sidecars at these same
+// widths at ingest, so the reader and the renderer share one definition.
+export { MAX_MEASURE, columnCount, columnGeometry, type ColumnGeometry } from '@amiexpress/bbs-door-sdk/formats/magazine';
 
 /** One page of set text: `cols` columns, each a list of rows. */
 export interface Spread<T = string> {

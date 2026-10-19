@@ -1,25 +1,4 @@
-/** The widest a column of reading text is allowed to be. */
-export declare const MAX_MEASURE = 38;
-export declare function columnCount(width: number): 1 | 2 | 3;
-export interface ColumnGeometry {
-    cols: 1 | 2 | 3;
-    /** Characters in one column. */
-    colWidth: number;
-    /** Characters between two columns (0 with one column). */
-    gutter: number;
-    /** Blank columns left of the first column: the set text is centred. */
-    margin: number;
-    /** Columns the whole set text occupies, margins excluded. */
-    contentWidth: number;
-}
-/**
- * Where the columns sit on a screen this wide.
- *
- * The gutter is one rule character flanked by the profile's gap on each side,
- * so the column rule between two columns is always a character and never the
- * boundary of the text.
- */
-export declare function columnGeometry(width: number): ColumnGeometry;
+export { MAX_MEASURE, columnCount, columnGeometry, type ColumnGeometry } from '@amiexpress/bbs-door-sdk/formats/magazine';
 /** One page of set text: `cols` columns, each a list of rows. */
 export interface Spread<T = string> {
     columns: T[][];

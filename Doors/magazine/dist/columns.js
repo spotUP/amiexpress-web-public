@@ -1,8 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.MAX_MEASURE = void 0;
-exports.columnCount = columnCount;
-exports.columnGeometry = columnGeometry;
+exports.columnGeometry = exports.columnCount = exports.MAX_MEASURE = void 0;
 exports.setParagraphs = setParagraphs;
 exports.flowColumns = flowColumns;
 /**
@@ -20,35 +18,13 @@ exports.flowColumns = flowColumns;
  * No width literal lives here: the thresholds are the SDK's own breakpoints
  * and the gutter comes from `getCompactProfile(width).gap`.
  */
-const blessed_1 = require("@amiexpress/bbs-door-sdk/engines/ui/blessed");
 const petscii_1 = require("@amiexpress/bbs-door-sdk/petscii");
-/** The widest a column of reading text is allowed to be. */
-exports.MAX_MEASURE = 38;
-function columnCount(width) {
-    if (width >= blessed_1.BREAKPOINT_MD)
-        return 3;
-    if (width >= blessed_1.BREAKPOINT_SM)
-        return 2;
-    return 1;
-}
-/**
- * Where the columns sit on a screen this wide.
- *
- * The gutter is one rule character flanked by the profile's gap on each side,
- * so the column rule between two columns is always a character and never the
- * boundary of the text.
- */
-function columnGeometry(width) {
-    const profile = (0, blessed_1.getCompactProfile)(width);
-    const cols = columnCount(width);
-    const gutter = cols > 1 ? profile.gap * 2 + 1 : 0;
-    const usable = Math.max(1, width - profile.padding * 2);
-    const fitted = Math.floor((usable - gutter * (cols - 1)) / cols);
-    const colWidth = Math.max(1, Math.min(exports.MAX_MEASURE, fitted));
-    const contentWidth = colWidth * cols + gutter * (cols - 1);
-    const margin = Math.max(0, Math.floor((width - contentWidth) / 2));
-    return { cols, colWidth, gutter, margin, contentWidth };
-}
+// The geometry lives in the SDK: the backend renders picture sidecars at these same
+// widths at ingest, so the reader and the renderer share one definition.
+var magazine_1 = require("@amiexpress/bbs-door-sdk/formats/magazine");
+Object.defineProperty(exports, "MAX_MEASURE", { enumerable: true, get: function () { return magazine_1.MAX_MEASURE; } });
+Object.defineProperty(exports, "columnCount", { enumerable: true, get: function () { return magazine_1.columnCount; } });
+Object.defineProperty(exports, "columnGeometry", { enumerable: true, get: function () { return magazine_1.columnGeometry; } });
 /**
  * Paragraphs to rows at one measure, a blank row between paragraphs.
  *
