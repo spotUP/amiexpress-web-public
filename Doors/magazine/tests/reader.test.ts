@@ -488,7 +488,9 @@ export async function atEightyTheTickerRunsAndTheHeadlineGlitchesOnceThenHoldsSt
 
 export async function aThemeWithoutGlitchesNeverGlitchesTheHeadline(): Promise<void> {
   const b = board([]);
-  const h = await open(80, 24, { theme: themeById('classic') });
+  // Every shipped theme glitches since d8613099e removed classic; the flag is
+  // still part of the Theme type, so the fixture turns it off explicitly.
+  const h = await open(80, 24, { theme: { ...themeById('uprough-neon'), glitches: false } });
   try {
     h.reader.press('c', 'c');
     h.reader.press('enter');
