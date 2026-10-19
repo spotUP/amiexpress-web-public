@@ -32,7 +32,13 @@ import {
   setSectionBody,
   serializeEmpireFile,
 } from '../../doors/text-cfg/empire';
-import { alphabetFor, readVariant, type ArtAlphabet } from '../../doors/door-art-variants';
+import {
+  alphabetFor,
+  readVariant,
+  renderTtiVariant,
+  type ArtAlphabet,
+  type ArtVariant,
+} from '../../doors/door-art-variants';
 import { config } from '../../config';
 
 /** Shadow bytes for this open, or null for the normal disk path. */
@@ -76,7 +82,7 @@ export interface EmpireNarrowShadowOptions {
   readVariantLines?: (
     command: string,
     section: string,
-    alphabet: ArtAlphabet,
+    variant: ArtVariant,
   ) => string[] | null;
 }
 
@@ -198,8 +204,19 @@ export function createEmpireNarrowShadow(opts: EmpireNarrowShadowOptions): FileS
   // door rather than the one drawing nobody made.
   const readVariantLines =
     opts.readVariantLines ??
-    ((command: string, section: string, alphabet: ArtAlphabet) =>
-      readVariant(opts.artRoot ?? path.join(config.get('dataDir'), 'Screens'), command, section, alphabet));
+    ((command: string, section: string, variant: ArtVariant) =>
+      readVariant(opts.artRoot ?? path.join(config.get('dataDir'), 'Screens'), command, section, variant));
+
+  // The drawing this caller reads for one section. A teletext caller's
+  // native page (`.tti`, rendered) wins over his ANSI one (`.ttx.ans`) - the
+  // order the screen handler gives a board screen.
+  const drawingFor = (command: string, section: string, alphabet: ArtAlphabet): string[] | null => {
+    if (alphabet === 'ttx') {
+      const native = renderTtiVariant(readVariantLines(command, section, 'tti'));
+      if (native) return native;
+    }
+    return readVariantLines(command, section, alphabet);
+  };
 
   return (amiPath: string, sysPath: string, _mode: number): Buffer | null => {
     try {
@@ -231,7 +248,7 @@ export function createEmpireNarrowShadow(opts: EmpireNarrowShadowOptions): FileS
         changed = true;
       }
       for (const art of artForFile) {
-        const lines = readVariantLines(command, art.section, alphabet as ArtAlphabet);
+        const lines = drawingFor(command, art.section, alphabet as ArtAlphabet);
         // An empty drawing is not a drawing: a saved-then-emptied variant
         // would otherwise blank the door's logo rather than restore it.
         if (!lines || lines.length === 0) continue;

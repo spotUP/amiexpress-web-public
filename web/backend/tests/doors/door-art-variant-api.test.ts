@@ -47,9 +47,9 @@ const b64 = (s: string) => Buffer.from(s, 'latin1').toString('base64');
 const un64 = (s: string) => Buffer.from(s, 'base64').toString('latin1');
 
 test('a section reports which variants have been drawn', () => {
-  expect(readDoorArtSections(doorDir, 'B', artRoot)[0].variants).toEqual({ c64: false, ttx: false });
+  expect(readDoorArtSections(doorDir, 'B', artRoot)[0].variants).toEqual({ c64: false, ttx: false, tti: false });
   writeDoorArtVariant(doorDir, artRoot, 'B', 'Bulls.CFG', 'title', 'c64', b64(' ART'));
-  expect(readDoorArtSections(doorDir, 'B', artRoot)[0].variants).toEqual({ c64: true, ttx: false });
+  expect(readDoorArtSections(doorDir, 'B', artRoot)[0].variants).toEqual({ c64: true, ttx: false, tti: false });
 });
 
 test('a variant round-trips byte for byte, high bytes and all', () => {

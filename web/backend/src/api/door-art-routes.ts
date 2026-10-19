@@ -36,6 +36,7 @@ import {
   writeDoorArtSection,
   writeDoorArtVariant,
 } from '../doors/door-settings.service';
+import { isArtVariant, ART_VARIANTS } from '../doors/door-art-variants';
 
 /** One registered door, as far as this router is concerned. */
 export interface ArtDoor {
@@ -212,7 +213,7 @@ console.error('Door art API error:', error);
       // how a section knows whether one has been made for it.
       const artRoot = path.join(config.get('dataDir'), 'Screens');
       const variant = req.query?.variant;
-      if (variant === 'c64' || variant === 'ttx') {
+      if (isArtVariant(variant)) {
         const { file, section } = req.query as { file?: string; section?: string };
         if (!file || !section) {
           return handleError(res, new Error('A variant read needs ?file= and ?section='));
@@ -242,8 +243,8 @@ console.error('Door art API error:', error);
       if (typeof file !== 'string' || typeof section !== 'string' || typeof content !== 'string') {
         return handleError(res, new Error('Expected { file, section, content } with string values'));
       }
-      if (variant !== undefined && variant !== 'c64' && variant !== 'ttx') {
-        return handleError(res, new Error("variant must be 'c64' or 'ttx' when given"));
+      if (variant !== undefined && !isArtVariant(variant)) {
+        return handleError(res, new Error(`variant must be one of ${ART_VARIANTS.join(', ')} when given`));
       }
       // A variant is the BOARD's file and is capped at the caller's forty
       // columns; the wide art is the door's own and keeps its DOC numbers.

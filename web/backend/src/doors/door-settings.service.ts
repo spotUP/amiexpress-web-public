@@ -1230,7 +1230,9 @@ import {
   readVariant,
   writeVariant,
   VARIANT_COLUMNS,
+  alphabetOfVariant,
   type ArtAlphabet,
+  type ArtVariant,
 } from './door-art-variants';
 import {
   resolveArtValue,
@@ -1276,7 +1278,7 @@ export interface DoorArtContent {
    * "not drawn yet" rather than open a blank canvas that looks the same as
    * a drawing somebody made and emptied.
    */
-  variants: { c64: boolean; ttx: boolean };
+  variants: { c64: boolean; ttx: boolean; tti: boolean };
   /** The narrow tabs the Studio offers: the drawings this door actually reads. */
   offers: ArtAlphabet[];
 }
@@ -1344,7 +1346,7 @@ export function readDoorArtSections(
   artRoot?: string,
 ): DoorArtContent[] {
   return listDoorArtSections(doorDir, command).map((entry) => {
-    const drawnFor = (section: string) => (alphabet: ArtAlphabet): boolean =>
+    const drawnFor = (section: string) => (alphabet: ArtVariant): boolean =>
       !!artRoot && !!command && readVariant(artRoot, command, section, alphabet) !== null;
 
     /**
@@ -1371,7 +1373,7 @@ export function readDoorArtSections(
         lines: entry.lines,
         maxLines: entry.maxLines,
         maxLineLength: entry.maxLineLength,
-        variants: { c64: drawn('c64'), ttx: drawn('ttx') },
+        variants: { c64: drawn('c64'), ttx: drawn('ttx'), tti: drawn('tti') },
         offers: entry.offers ?? [],
       };
     }
@@ -1381,7 +1383,7 @@ export function readDoorArtSections(
       ? quickNewBody(doorDir, entry.file, discovered)
       : getSectionBody(loadArtFile(doorDir, entry.file), entry.section);
     if (!body) throw new Error(`${entry.file} has no [${entry.section}] section`);
-    const drawn = (alphabet: ArtAlphabet): boolean =>
+    const drawn = (alphabet: ArtVariant): boolean =>
       !!artRoot && !!command && readVariant(artRoot, command, entry.section, alphabet) !== null;
     return {
       file: entry.file,
@@ -1391,7 +1393,7 @@ export function readDoorArtSections(
       lines: body.length,
       maxLines: entry.maxLines,
       maxLineLength: entry.maxLineLength,
-      variants: { c64: drawn('c64'), ttx: drawn('ttx') },
+      variants: { c64: drawn('c64'), ttx: drawn('ttx'), tti: drawn('tti') },
       offers: entry.offers ?? SECTION_OFFERS,
     };
   });
@@ -1667,9 +1669,12 @@ function artEntryFor(
   command: string,
   fileName: string,
   section: string,
-  alphabet: ArtAlphabet,
+  variant: ArtVariant,
 ): { file: string; label: string; maxLines: number } {
   const manifest = readArtManifest(doorDir, command);
+  // A `.tti` is the teletext caller's drawing: a door that reads a ttx
+  // drawing reads this one too, so the declaration asked about is the ttx one.
+  const alphabet = alphabetOfVariant(variant);
   /*
    * A setting's slot draws its narrow versions too - when its door reads them.
    * This lookup used to know only config sections, so every C64 or Teletext
@@ -1710,10 +1715,10 @@ export function readDoorArtVariant(
   command: string,
   fileName: string,
   section: string,
-  alphabet: ArtAlphabet,
+  variant: ArtVariant,
 ): DoorArtContent {
-  const entry = artEntryFor(doorDir, command, fileName, section, alphabet);
-  const lines = readVariant(artRoot, command, section, alphabet) ?? [];
+  const entry = artEntryFor(doorDir, command, fileName, section, variant);
+  const lines = readVariant(artRoot, command, section, variant) ?? [];
   return {
     file: entry.file,
     section,
@@ -1725,6 +1730,7 @@ export function readDoorArtVariant(
     variants: {
       c64: readVariant(artRoot, command, section, 'c64') !== null,
       ttx: readVariant(artRoot, command, section, 'ttx') !== null,
+      tti: readVariant(artRoot, command, section, 'tti') !== null,
     },
     offers: artSettingKey(section) !== null
       ? (readArtManifest(doorDir, command).artSettings.find((x) => x.key === artSettingKey(section))?.artVariants ?? [])
@@ -1739,16 +1745,18 @@ export function writeDoorArtVariant(
   command: string,
   fileName: string,
   section: string,
-  alphabet: ArtAlphabet,
+  variant: ArtVariant,
   contentBase64: string,
 ): DoorArtContent {
-  const entry = artEntryFor(doorDir, command, fileName, section, alphabet);
+  const entry = artEntryFor(doorDir, command, fileName, section, variant);
   const text = Buffer.from(contentBase64, 'base64').toString('latin1');
   const lines = text.split(/\r\n|\n/);
   if (lines.length > 0 && lines[lines.length - 1] === '') lines.pop();
-  if (lines.length > entry.maxLines) {
+  // A .tti's lines are packet records (DE, PN, OL...), not screen rows; the
+  // store checks it is a page the board renders instead.
+  if (variant !== 'tti' && lines.length > entry.maxLines) {
     throw new Error(`${entry.label}: ${lines.length} lines, at most ${entry.maxLines}`);
   }
-  writeVariant(artRoot, command, section, alphabet, lines);
-  return readDoorArtVariant(doorDir, artRoot, command, fileName, section, alphabet);
+  writeVariant(artRoot, command, section, variant, lines);
+  return readDoorArtVariant(doorDir, artRoot, command, fileName, section, variant);
 }

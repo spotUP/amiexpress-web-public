@@ -88,7 +88,7 @@ describe('door art on the artist lane', () => {
   it('hands over one door art section, and says which variants exist', async () => {
     const res = await request(app()).get('/api/door-art/B');
     expect(res.status).toBe(200);
-    expect(res.body.data[0].variants).toEqual({ c64: false, ttx: false });
+    expect(res.body.data[0].variants).toEqual({ c64: false, ttx: false, tti: false });
   });
 
   it('saves a narrow drawing without touching the door config', async () => {

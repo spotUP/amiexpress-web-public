@@ -14,6 +14,7 @@ import {
   sessionIsNarrow,
 } from '../../src/amiga-emulation/api/file-shadow';
 import { getSectionBody, parseEmpireFile } from '../../src/doors/text-cfg/empire';
+import { renderTtiVariant } from '../../src/doors/door-art-variants';
 
 const CFG = [
   'DUAL_LISTING       YES                 ; Use 2 Listings [YES/NO]',
@@ -407,6 +408,26 @@ describe('narrow art variants', () => {
       readFile: () => Buffer.from(ART_CFG, 'latin1'),
       readVariantLines: () => NARROW_ART,
     });
+    expect(servedSection(p('', '/doors/emp_tools/Bulls.CFG', 1005), 'title')).toEqual(NARROW_ART);
+  });
+
+  // A native teletext page: packet records, rendered to ANSI rows on the way out.
+  const TTI_PAGE = ['DE,door logo', 'PN,10000', 'SC,0000', 'PS,8000', 'OL,1,NATIVE LOGO'];
+
+  test('a teletext caller is served the rendered .tti page over the .ttx.ans drawing', () => {
+    const p = artProvider(TTX_SESSION, { 'B:title:tti': TTI_PAGE, 'B:title:ttx': ['TTX ART'] });
+    const served = servedSection(p('', '/doors/emp_tools/Bulls.CFG', 1005), 'title');
+    expect(served).toEqual(renderTtiVariant(TTI_PAGE));
+    expect(served!.join('\n')).toContain('NATIVE LOGO');
+  });
+
+  test('a .tti that is not a renderable page falls back to the .ttx.ans drawing', () => {
+    const p = artProvider(TTX_SESSION, { 'B:title:tti': ['not a packet page'], 'B:title:ttx': ['TTX ART'] });
+    expect(servedSection(p('', '/doors/emp_tools/Bulls.CFG', 1005), 'title')).toEqual(['TTX ART']);
+  });
+
+  test('a C64 caller never reads the teletext page', () => {
+    const p = artProvider(C64_SESSION, { 'B:title:tti': TTI_PAGE, 'B:title:c64': NARROW_ART });
     expect(servedSection(p('', '/doors/emp_tools/Bulls.CFG', 1005), 'title')).toEqual(NARROW_ART);
   });
 
