@@ -57,12 +57,12 @@ describe('painting a screen', () => {
 
   it('reads the bright half of the palette as bright, not as a second black', () => {
     const canvas = createCanvas(2, 1);
-    setCell(canvas, 0, 0, { char: '█', fg: 12, bg: 0 });
+    setCell(canvas, 0, 0, { char: 'B', fg: 12, bg: 0 });
 
     const { ctx, glyphs } = recordingContext();
     paintScreen(ctx, canvas);
 
-    expect(glyphs[0]).toMatchObject({ char: '█', fill: '#5555FF' });
+    expect(glyphs[0]).toMatchObject({ char: 'B', fill: '#5555FF' });
   });
 
   it('writes no glyph for a space, only its background', () => {
@@ -231,5 +231,44 @@ describe('codes folded away', () => {
     const cells = rects.filter(r => r.args[2] === CELL_WIDTH && r.args[3] === CELL_HEIGHT);
     expect(cells).toHaveLength(2);
     expect(cells.every(c => c.fill === ANSI_PALETTE[4])).toBe(true);
+  });
+});
+
+describe('painting a mosaic', () => {
+  /*
+   * Reported 2026-10-19 on the teletext editor: "i see gaps between the
+   * blocks". Each cell's sextant was a glyph of its own, its edge landed
+   * mid-pixel at a fractional device ratio, and the two antialiased halves
+   * blended into a grey line at every cell boundary.
+   */
+  it('tiles adjacent blocks edge to edge on whole device pixels', () => {
+    const cell = { width: 12, height: 20 };
+    const canvas = createCanvas(2, 1);
+    // A full block, then the left column of sixels (U+258C) and the
+    // top-right sixel alone (U+1FB01).
+    setCell(canvas, 0, 0, { char: '█', fg: 7, bg: 0 });
+    setCell(canvas, 1, 0, { char: '\u{1FB01}', fg: 7, bg: 0 });
+
+    const ratio = 1.1;
+    const { ctx, rects, glyphs } = recordingContext();
+    Object.assign(ctx, { getTransform: () => ({ a: ratio }) });
+    paintScreen(ctx, canvas, null, [], 'full', [], [], 'TeletextUPR', cell);
+
+    expect(glyphs).toEqual([]);
+    const blocks = rects.filter(r => r.fill === '#AAAAAA').map(r => r.args);
+    // Every edge falls on a device pixel.
+    for (const [x, y, w, h] of blocks) {
+      for (const edge of [x, y, x + w, y + h]) {
+        expect(Math.abs(edge * ratio - Math.round(edge * ratio))).toBeLessThan(1e-9);
+      }
+    }
+    // The full block is six sixels; the next cell's first one starts where
+    // the full block's right column ends.
+    expect(blocks).toHaveLength(7);
+    const fullRight = Math.max(...blocks.slice(0, 6).map(([x, , w]) => x + w));
+    const [nextX, nextY] = blocks[6];
+    expect(nextX).toBeCloseTo(Math.round(18 * ratio) / ratio, 9);
+    expect(nextY).toBe(0);
+    expect(fullRight).toBeCloseTo(Math.round(12 * ratio) / ratio, 9);
   });
 });

@@ -1,5 +1,6 @@
 import type { Cell } from '@amiexpress/bbs-door-sdk/engines/ui/ansi-editor/types';
 import { ansiColor, paletteColor, type PaletteMode } from '../utils/ansi-palette';
+import { sextantBits } from '@amiexpress/bbs-door-sdk/teletext/sextant';
 
 /** VGA text-mode cell, the shape every one of these screens was drawn in. */
 export const CELL_WIDTH = 8;
@@ -112,6 +113,16 @@ export function paintScreen(
   ctx.font = `${CELL_H}px ${fontFamily}`;
   ctx.textBaseline = 'top';
 
+  /*
+   * Cell edges rounded to the device pixel. A cell drawn on its own lands its
+   * edge mid-pixel whenever the cell size times the device ratio is not whole
+   * (a 12px teletext cell at 110% zoom, a 20px row split in thirds), and the
+   * two half-covered pixels either side blend over each other into a grey
+   * line: a seam at every block boundary. Snapped, neighbours share one edge.
+   */
+  const ratio = typeof ctx.getTransform === 'function' ? ctx.getTransform().a || 1 : 1;
+  const snap = (v: number) => Math.round(v * ratio) / ratio;
+
   for (let y = 0; y < rows; y++) {
     const row = canvas[y];
     for (let x = 0; x < row.length; x++) {
@@ -122,13 +133,18 @@ export function paintScreen(
       const top = y * CELL_H;
 
       ctx.fillStyle = paletteColor(cell.bg, palette);
-      ctx.fillRect(left, top, CELL_W, CELL_H);
+      fillSnapped(ctx, snap, left, top, left + CELL_W, top + CELL_H);
 
       // A space carries its background and nothing else - drawing it costs a
       // glyph per cell on a screen that is mostly spaces.
       if (cell.char && cell.char !== ' ' && !hiddenCells.has(`${y}:${x}`)) {
         ctx.fillStyle = paletteColor(cell.fg, palette);
-        ctx.fillText(cell.char, left, top);
+        const sixels = sextantBits(cell.char);
+        if (sixels === null) {
+          ctx.fillText(cell.char, left, top);
+        } else {
+          paintSixels(ctx, snap, sixels, left, top, CELL_W, CELL_H);
+        }
       }
     }
   }
@@ -190,6 +206,36 @@ export function paintScreen(
  *
  * Scaled here, the same thumbnail is 358x224 and 321 KB.
  */
+/** Fills the box between two snapped corners. */
+function fillSnapped(
+  ctx: CanvasRenderingContext2D, snap: (v: number) => number,
+  x0: number, y0: number, x1: number, y1: number,
+): void {
+  const left = snap(x0);
+  const top = snap(y0);
+  ctx.fillRect(left, top, snap(x1) - left, snap(y1) - top);
+}
+
+/**
+ * A mosaic glyph as the rects it stands for: two columns, three rows. Drawn
+ * as text, each cell's glyph edge is antialiased on its own and adjacent
+ * blocks never quite meet; as snapped rects they tile.
+ */
+function paintSixels(
+  ctx: CanvasRenderingContext2D, snap: (v: number) => number,
+  bits: number, left: number, top: number, width: number, height: number,
+): void {
+  const xs = [left, left + width / 2, left + width];
+  const ys = [top, top + height / 3, top + (height * 2) / 3, top + height];
+  for (let row = 0; row < 3; row++) {
+    for (let col = 0; col < 2; col++) {
+      if (bits & (1 << (row * 2 + col))) {
+        fillSnapped(ctx, snap, xs[col], ys[row], xs[col + 1], ys[row + 1]);
+      }
+    }
+  }
+}
+
 export function canvasPixelSize(
   cols: number, rows: number, scale: number, devicePixelRatio: number,
   cell: CellGeometry = VGA_CELL,

@@ -28,6 +28,7 @@ import type { PageGrid } from './marco/state-machine/types';
 import { compileRow } from './marco/compile/index';
 import { processPage } from './marco/state-machine/state-machine';
 import { renderToAnsi } from './marco/render-ansi/index';
+import { sextantBits } from './sextant';
 
 /** 24 display rows by 40 columns, as broadcast. */
 export const TELETEXT_ROWS = 24;
@@ -172,16 +173,3 @@ function popcount6(bits: number): number {
   return n;
 }
 
-/** The 6-bit pattern a sextant glyph draws, or null when it is not one. */
-function sextantBits(glyph: string): number | null {
-  const cp = glyph.codePointAt(0);
-  if (cp === undefined) return null;
-  if (cp === 0x258c) return 21; // left half block
-  if (cp === 0x2590) return 42; // right half block
-  if (cp === 0x2588) return 63; // full block
-  if (cp < 0x1fb00 || cp > 0x1fb3b) return null;
-  let bits = cp - 0x1fb00 + 1;
-  if (bits >= 21) bits++;
-  if (bits >= 42) bits++;
-  return bits < 64 ? bits : null;
-}
