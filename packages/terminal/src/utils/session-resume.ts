@@ -4,7 +4,9 @@
  *
  * The board hands a token to its own tab in `login-success` and again in
  * every `session-restored` (it rotates on each resume). The browser keeps it
- * per tab and offers it on EVERY connect through socket.io's `auth` callback,
+ * in that tab's sessionStorage, so no other tab can read it and closing the
+ * tab drops it (localStorage until 2026-10-19 kept it, readable by every tab,
+ * after the tab closed). The tab offers it on EVERY connect through socket.io's `auth` callback,
  * which socket.io-client evaluates afresh on each (re)connect, so the offer is
  * always the current token. The board alone decides whether it still opens
  * anything; the age kept here is housekeeping, never a validity check (the
@@ -17,8 +19,7 @@ import { reconnectPolicy, type ReconnectPolicy } from './reconnect-policy';
 
 export interface ResumeEntry { token: string; userId: string; nodeId: number; savedAt: number }
 export interface ResumeStorage {
-  local: Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>;
-  tab: Pick<Storage, 'getItem' | 'setItem'>;
+  tab: Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>;
 }
 
 /**
@@ -30,7 +31,12 @@ export interface ResumeStorage {
  */
 export interface ResumeOffer { resume: string }
 
-/** localStorage: Record<tabId, ResumeEntry>. */
+/**
+ * sessionStorage: Record<tabId, ResumeEntry>. Keyed by tab id although the
+ * storage is per tab: Duplicate Tab copies sessionStorage, and the copy, once
+ * guardTabId has given it an id of its own, finds no entry under that id.
+ * The same key in localStorage is a leftover from before 2026-10-19.
+ */
 export const RESUME_KEY = 'bbs_resume_v1';
 /** sessionStorage: which tab this is. */
 export const TAB_ID_KEY = 'bbs_tab_id';
@@ -59,7 +65,7 @@ function isEntry(v: unknown): v is ResumeEntry {
 
 function readAll(s: ResumeStorage): Entries {
   try {
-    const raw = s.local.getItem(RESUME_KEY);
+    const raw = s.tab.getItem(RESUME_KEY);
     if (!raw) return {};
     const parsed: unknown = JSON.parse(raw);
     if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) return {};
@@ -75,8 +81,8 @@ function readAll(s: ResumeStorage): Entries {
 
 function writeAll(s: ResumeStorage, all: Entries): void {
   try {
-    if (Object.keys(all).length === 0) s.local.removeItem(RESUME_KEY);
-    else s.local.setItem(RESUME_KEY, JSON.stringify(all));
+    if (Object.keys(all).length === 0) s.tab.removeItem(RESUME_KEY);
+    else s.tab.setItem(RESUME_KEY, JSON.stringify(all));
   } catch {
     // Storage full or blocked: the tab simply has nothing to offer.
   }
@@ -110,9 +116,9 @@ export function tabId(s: ResumeStorage, newId: () => string = randomId): string 
 }
 
 /**
- * Keep the token the board just handed this tab. The same session saved under
- * another tab id (one this tab took over with a password logon, S15) is
- * dropped: one session, one entry.
+ * Keep the token the board just handed this tab. Any entry under another id
+ * is the first tab's, copied by Duplicate Tab, and is dropped: one tab, one
+ * entry.
  */
 export function saveResume(s: ResumeStorage, e: Omit<ResumeEntry, 'savedAt'>, now: number = Date.now()): void {
   if (typeof e.nodeId !== 'number' || !Number.isFinite(e.nodeId)) {
@@ -120,13 +126,7 @@ export function saveResume(s: ResumeStorage, e: Omit<ResumeEntry, 'savedAt'>, no
     console.warn('[resume] not saving the resume token: the board sent no numeric nodeId (got ' + String(e.nodeId) + ')');
     return;
   }
-  const id = tabId(s);
-  const all = prune(readAll(s), now);
-  for (const [other, entry] of Object.entries(all)) {
-    if (other !== id && entry.userId === e.userId && entry.nodeId === e.nodeId) delete all[other];
-  }
-  all[id] = { token: e.token, userId: e.userId, nodeId: e.nodeId, savedAt: now };
-  writeAll(s, all);
+  writeAll(s, { [tabId(s)]: { token: e.token, userId: e.userId, nodeId: e.nodeId, savedAt: now } });
 }
 
 type Picked = { offer: ResumeOffer; from: string };
@@ -136,8 +136,8 @@ type Picked = { offer: ResumeOffer; from: string };
  * and only once its id is confirmed as its alone (a duplicated tab copies
  * sessionStorage, and until guardTabId has settled the id may be the first
  * tab's). A tab with no id (a new tab, or one whose sessionStorage was lost)
- * offers nothing and gets the board's welcome and name prompt; every entry in
- * localStorage that is not under its own id belongs to another tab.
+ * offers nothing and gets the board's welcome and name prompt; an entry not
+ * under its own id was copied from another tab.
  */
 function pickOffer(s: ResumeStorage, now: number, idConfirmed: boolean): Picked | undefined {
   if (!idConfirmed) return undefined;
@@ -259,11 +259,12 @@ export function browserTabChannel(): TabIdChannel | undefined {
   }
 }
 
-/** The browser's own storages, or undefined where there is no window. */
+/** This tab's sessionStorage, or undefined where there is no window. */
 export function browserResumeStorage(): ResumeStorage | undefined {
   if (typeof window === 'undefined') return undefined;
+  try { window.localStorage.removeItem(RESUME_KEY); } catch { /* the leftover stays, unread */ }
   try {
-    return { local: window.localStorage, tab: window.sessionStorage };
+    return { tab: window.sessionStorage };
   } catch {
     return undefined;
   }

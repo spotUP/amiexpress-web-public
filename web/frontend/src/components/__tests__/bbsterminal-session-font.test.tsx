@@ -111,7 +111,7 @@ import {
   FONT_CACHE_KEY,
   fontFamilyFor,
 } from '../../../../../packages/terminal/src/utils/session-font';
-import { RESUME_KEY, TAB_ID_KEY } from '../../../../../packages/terminal/src/utils/session-resume';
+import { RESUME_KEY, TAB_ID_KEY, TAB_ID_CHECK_MS } from '../../../../../packages/terminal/src/utils/session-resume';
 // The socket.io-client double, shared with the other BBSTerminal tests.
 import { FakeSocket } from './helpers/fake-socket';
 
@@ -232,7 +232,7 @@ describe('a reconnected session', () => {
   /** This tab's resume entry (session-resume.ts), as login-success leaves it. */
   function seedResumeEntry() {
     window.sessionStorage.setItem(TAB_ID_KEY, 'tab-a');
-    window.localStorage.setItem(RESUME_KEY, JSON.stringify({
+    window.sessionStorage.setItem(RESUME_KEY, JSON.stringify({
       'tab-a': { token: TOKEN, userId: '1', nodeId: 1, savedAt: Date.now() },
     }));
   }
@@ -243,11 +243,13 @@ describe('a reconnected session', () => {
     return data;
   }
 
-  afterEach(() => window.sessionStorage.clear());
+  afterEach(() => { window.sessionStorage.clear(); window.localStorage.clear(); });
 
   it('a reconnected session gets its font back', async () => {
     seedResumeEntry();
     mount();
+    // A tab with an id offers nothing until no other tab claims that id.
+    await act(async () => { await new Promise((r) => setTimeout(r, TAB_ID_CHECK_MS + 50)); });
 
     // The tab lost the socket; the reconnect offers the resume token.
     await act(async () => { socket.fire('disconnect', 'transport close'); });
@@ -268,8 +270,22 @@ describe('a reconnected session', () => {
     seedResumeEntry();
     mount();
     await act(async () => { socket.fire('disconnect', 'io server disconnect'); });
-    expect(window.localStorage.getItem(RESUME_KEY)).toBeNull();
+    expect(window.sessionStorage.getItem(RESUME_KEY)).toBeNull();
     expect(offered().resume).toBeUndefined();
+  });
+
+  // Until 2026-10-19 the token sat in localStorage, readable by every tab and
+  // kept after the tab closed. It is this tab's alone now.
+  it('login-success keeps the resume token in this tab\'s sessionStorage, never in localStorage', async () => {
+    window.localStorage.setItem(RESUME_KEY, '{"old-tab":{}}'); // a leftover from before
+    mount();
+    await act(async () => { socket.fire('connect'); });
+    await act(async () => {
+      socket.fire('login-success', { resumeToken: TOKEN, nodeId: 1, user: { id: 1, username: 'Sysop' } });
+    });
+    expect(window.sessionStorage.getItem(RESUME_KEY)).toContain(TOKEN);
+    expect(window.localStorage.getItem(RESUME_KEY)).toBeNull();
+    expect(Object.values(window.localStorage).join('')).not.toContain(TOKEN);
   });
 });
 

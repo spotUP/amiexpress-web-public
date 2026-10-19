@@ -34,8 +34,9 @@ class MemStorage {
   removeItem(k: string): void { this.m.delete(k); }
 }
 
-function mem(local: MemStorage = new MemStorage()): ResumeStorage & { localMem: MemStorage } {
-  return { local, tab: new MemStorage(), localMem: local };
+/** One tab's sessionStorage, the only place a resume entry lives. */
+function mem(): ResumeStorage & { tab: MemStorage } {
+  return { tab: new MemStorage() };
 }
 
 const T = 'T'.repeat(43);
@@ -49,9 +50,8 @@ describe('session-resume storage', () => {
   });
 
   it('each tab offers its own token', () => {
-    const local = new MemStorage();
-    const a = mem(local);
-    const b = mem(local);
+    const a = mem();
+    const b = mem();
     tabId(a, () => 'tab-a');
     tabId(b, () => 'tab-b');
     saveResume(a, { token: T, userId: '7', nodeId: 3 }, 1000);
@@ -60,32 +60,19 @@ describe('session-resume storage', () => {
     expect(resumeTokenToOffer(b, 3000)).toBe(U);
   });
 
-  it('a tab that lost its id never offers another tab\'s entry, at any age', () => {
-    const local = new MemStorage();
-    const a = mem(local);
-    tabId(a, () => 'tab-a');
-    saveResume(a, { token: T, userId: '7', nodeId: 3 }, 10_000);
-    const lost = mem(local); // same localStorage, empty sessionStorage
-    expect(resumeTokenToOffer(lost, 12_000)).toBeUndefined();
-    expect(resumeTokenToOffer(lost, 16_000)).toBeUndefined();
-    expect(resumeTokenToOffer(lost, 10_000 + RESUME_KEEP_MS - 1)).toBeUndefined();
-    expect(resumeTokenToOffer(a, 16_000)).toBe(T);
-  });
-
-  it('a tab that has an id but no entry offers nothing', () => {
-    const local = new MemStorage();
-    const a = mem(local);
-    tabId(a, () => 'tab-a');
-    saveResume(a, { token: T, userId: '7', nodeId: 3 }, 0);
-    const b = mem(local);
-    tabId(b, () => 'tab-b');
-    expect(resumeTokenToOffer(b, 60_000)).toBeUndefined();
+  it('an entry copied from another tab id is never offered, and the next save drops it', () => {
+    const s = mem();
+    s.tab.setItem(RESUME_KEY, JSON.stringify({ 'tab-a': { token: T, userId: '7', nodeId: 3, savedAt: 0 } }));
+    tabId(s, () => 'tab-b');
+    expect(resumeTokenToOffer(s, 1000)).toBeUndefined();
+    saveResume(s, { token: U, userId: '7', nodeId: 3 }, 2000);
+    expect(Object.keys(JSON.parse(s.tab.getItem(RESUME_KEY) as string))).toEqual(['tab-b']);
+    expect(resumeTokenToOffer(s, 3000)).toBe(U);
   });
 
   it('clearing a tab leaves the other tab alone', () => {
-    const local = new MemStorage();
-    const a = mem(local);
-    const b = mem(local);
+    const a = mem();
+    const b = mem();
     tabId(a, () => 'tab-a');
     tabId(b, () => 'tab-b');
     saveResume(a, { token: T, userId: '7', nodeId: 3 }, 0);
@@ -96,22 +83,17 @@ describe('session-resume storage', () => {
   });
 
   it('drops entries older than the keep time', () => {
-    const local = new MemStorage();
-    const a = mem(local);
-    const b = mem(local);
+    const a = mem();
     tabId(a, () => 'tab-a');
-    tabId(b, () => 'tab-b');
     saveResume(a, { token: T, userId: '7', nodeId: 3 }, 0);
     expect(resumeTokenToOffer(a, RESUME_KEEP_MS + 1)).toBeUndefined();
-    saveResume(b, { token: U, userId: '8', nodeId: 4 }, RESUME_KEEP_MS + 1);
-    expect(Object.keys(JSON.parse(local.getItem(RESUME_KEY) as string))).toEqual(['tab-b']);
   });
 
-  it('survives junk in localStorage', () => {
+  it('survives junk in sessionStorage', () => {
     for (const junk of ['{not json', '[]', 'null', '42', JSON.stringify({ x: { token: 5 } })]) {
       const s = mem();
       s.tab.setItem(TAB_ID_KEY, 'x');
-      s.local.setItem(RESUME_KEY, junk);
+      s.tab.setItem(RESUME_KEY, junk);
       expect(resumeTokenToOffer(s, 0)).toBeUndefined();
       expect(() => clearResume(s)).not.toThrow();
       saveResume(s, { token: T, userId: '7', nodeId: 3 }, 0);
@@ -134,7 +116,7 @@ describe('saving the login-success payload', () => {
     const data: { resumeToken: string; nodeId?: number } = { resumeToken: T };
     saveResume(s, { token: data.resumeToken, userId: '7', nodeId: Number(data.nodeId) }, 0);
     expect(warn).toHaveBeenCalledWith(expect.stringContaining('nodeId'));
-    expect(s.localMem.getItem(RESUME_KEY)).toBeNull();
+    expect(s.tab.getItem(RESUME_KEY)).toBeNull();
     warn.mockRestore();
   });
 });
@@ -144,14 +126,13 @@ describe('saving the login-success payload', () => {
 // is reached by a name and password logon, which asks resume-or-end (S9/S15).
 describe('the offer is only ever this tab\'s own entry', () => {
   it('a tab offers its own token; a new tab, or another tab id, offers nothing', () => {
-    const local = new MemStorage();
-    const a = mem(local);
+    const a = mem();
     tabId(a, () => 'tab-a');
     saveResume(a, { token: T, userId: '7', nodeId: 3 }, 0);
     expect(takeResumeOffer(a, true, 10_000)).toEqual({ resume: T });
-    const fresh = mem(local);
+    const fresh = mem();
     expect(takeResumeOffer(fresh, true, 10_000)).toBeUndefined();
-    const other = mem(local);
+    const other = mem();
     tabId(other, () => 'tab-b');
     expect(takeResumeOffer(other, true, 10_000)).toBeUndefined();
     expect(resumeTokenToOffer(a, 10_000)).toBe(T);
@@ -166,11 +147,10 @@ describe('the offer is only ever this tab\'s own entry', () => {
   });
 
   it('a refused own offer is forgotten, so the next connect offers nothing; another tab keeps its entry', () => {
-    const local = new MemStorage();
-    const a = mem(local);
+    const a = mem();
     tabId(a, () => 'tab-a');
     saveResume(a, { token: T, userId: '7', nodeId: 3 }, 0);
-    const b = mem(local);
+    const b = mem();
     tabId(b, () => 'tab-b');
     saveResume(b, { token: U, userId: '8', nodeId: 4 }, 0);
     expect(takeResumeOffer(b, true, 10_000)).toEqual({ resume: U });
@@ -201,13 +181,13 @@ describe('guardTabId (Duplicate Tab copies sessionStorage)', () => {
 
   it('a duplicated tab finds the first tab holds its id and mints its own', () => {
     const hub = channelHub();
-    const local = new MemStorage();
-    const first = mem(local);
+    const first = mem();
     tabId(first, () => 'tab-a');
     saveResume(first, { token: T, userId: '7', nodeId: 3 }, 0);
     guardTabId(first, hub(), { schedule: never });
-    const copy = mem(local);
+    const copy = mem();
     copy.tab.setItem(TAB_ID_KEY, 'tab-a'); // what Duplicate Tab copies
+    copy.tab.setItem(RESUME_KEY, first.tab.getItem(RESUME_KEY) as string); // the token too
     const g = guardTabId(copy, hub(), { schedule: never, newId: () => 'tab-b' });
     expect(copy.tab.getItem(TAB_ID_KEY)).toBe('tab-b');
     expect(first.tab.getItem(TAB_ID_KEY)).toBe('tab-a');
