@@ -13,6 +13,7 @@ export interface MenuCaller {
   isSysop: boolean;
   widthRefuses(door: object): boolean;  // doorRefusedForWidth for this caller
   stylePref: MenuStylePref;              // users.menustyle; '' = board default
+  animations: boolean;                   // animationsAllowed: W row 23 (a game door keeps them)
 }
 export interface MenuSource {
   kind: MenuKind;

@@ -31,6 +31,8 @@ import {
   togglePetsciiCharset as applyPetsciiCharset, petsciiCharsetNotice, toggleAnimations as applyAnimations,
   type WebTerminalState,
 } from '../services/user-settings/web-terminal-settings';
+import { animationsAllowed } from '../services/user-settings/animations';
+import { bindToDoorContext } from './door-effects-context';
 import { TERMINAL_FONTS } from '../constants/terminal-fonts';
 import { chooseTerminalFont as applyTerminalFont } from '../services/terminal-font.service';
 import {
@@ -511,7 +513,8 @@ export class BBSApi {
       };
 
       // Register handler in session
-      this.session.doorInputHandler = handler;
+      // Input fires in socket.io's context; carry the door's (effect gate).
+      this.session.doorInputHandler = bindToDoorContext(handler);
     });
   }
 
@@ -530,7 +533,8 @@ export class BBSApi {
         resolve(input.charAt(0)); // Return first character only
       };
 
-      this.session.doorInputHandler = handler;
+      // Input fires in socket.io's context; carry the door's (effect gate).
+      this.session.doorInputHandler = bindToDoorContext(handler);
     });
   }
 
@@ -673,6 +677,11 @@ console.log('[BBSApi] Mouse events disabled');
   /** W row 23 for the WEBTERM door: true when animations are now on. */
   async toggleAnimations(): Promise<boolean> {
     return applyAnimations(this.socket, this.session);
+  }
+
+  /** The board's one animations gate (W row 23, games exempt), read live. */
+  animationsAllowed(): boolean {
+    return animationsAllowed(this.session);
   }
 
   myData(): Array<{ label: string; value: string }> {
@@ -845,7 +854,8 @@ console.log('[BBSApi] Mouse events disabled');
         resolve(key);
       };
 
-      this.session.doorInputHandler = handler;
+      // Input fires in socket.io's context; carry the door's (effect gate).
+      this.session.doorInputHandler = bindToDoorContext(handler);
     });
   }
 

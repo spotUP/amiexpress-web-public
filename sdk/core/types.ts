@@ -933,6 +933,8 @@ export interface BBSApi {
   togglePetsciiCharset?(): Promise<{ charset: 'standard' | 'swedish'; notice: string }>;
   /** Turn board animations (slides, wipes, door effects) on or off; resolves true when they are now on. Optional: an older backend has no such method. */
   toggleAnimations?(): Promise<boolean>;
+  /** False when the caller turned animations off (W row 23) and the running door is not a game. Optional: an older backend has no such method. */
+  animationsAllowed?(): boolean;
   /** The caller's own record as W option 19 prints it. Optional: an older backend has no such method. */
   myData?(): Array<{ label: string; value: string }>;
   /** Run the board's three GDPR erasure checks (confirm, password, username) in order and, unless check is true, erase and drop the line. Optional: an older backend has no such method. */

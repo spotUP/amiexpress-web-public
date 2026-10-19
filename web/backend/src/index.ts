@@ -510,6 +510,8 @@ export interface BBSSession {
   currentDoorName?: string;
   /** The running door declared NO_PALETTE: Ctrl+K goes to it, not to the palette. */
   doorRefusesPalette?: boolean;
+  /** The running door is a game (package.json category): it keeps its animations when the caller turned them off. */
+  runningDoorIsGame?: boolean;
   keyRepeatManager?:
     | import("./services/KeyRepeatManager").KeyRepeatManager
     | null; // Backend key repeat for 68K doors

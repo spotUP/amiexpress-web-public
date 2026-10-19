@@ -13,9 +13,10 @@ export function catalogueStyle(style: MenuStyle, cls: WidthClass): CatalogueStyl
 }
 
 /** Whether a cover flow page turn slides for this caller. Decision D9: the slide is characters, so colour does not
-    matter, but 40 columns and PETSCII never slide. The catalogue's F line and the STYLE? answer both read this. */
+    matter, but 40 columns and PETSCII never slide, nor for a caller who turned animations off (W row 23).
+    The catalogue's F line and the STYLE? answer both read this. */
 export function coverflowSlides(caller: MenuCaller, config: MenuConfig): boolean {
-  return config.coverflow.slide && widthClassOf(caller.columns) !== 'c64' && caller.displayMode !== 'petscii';
+  return config.coverflow.slide && widthClassOf(caller.columns) !== 'c64' && caller.displayMode !== 'petscii' && caller.animations;
 }
 
 export function buildCatalogue(source: MenuSource, caller: MenuCaller, config: MenuConfig, parentKey?: string): Catalogue | { refusal: string } {

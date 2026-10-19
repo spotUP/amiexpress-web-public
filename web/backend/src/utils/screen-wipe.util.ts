@@ -36,6 +36,7 @@
 import { renderRunDiff } from '@amiexpress/bbs-door-sdk/common/run-diff';
 
 import { WIPE_CODES, type WipeType } from '../screens/wipe-codes';
+import { animationsAllowed, type AnimationsSession } from '../services/user-settings/animations';
 
 export { WIPE_CODES, type WipeType };
 
@@ -1559,10 +1560,14 @@ export function parseWipeMCI(content: string): { wipeType: WipeType | null; cont
  * PETSCII bytes with no ANSI to model, and the renderer never asks for one
  * (handlers/petscii-screen.render.ts).
  */
-export function wipeEffectsEnabled(session: { petsciiMode?: boolean; texttvMode?: boolean } | null | undefined): boolean {
+export function wipeEffectsEnabled(
+  session: ({ petsciiMode?: boolean; texttvMode?: boolean } & AnimationsSession) | null | undefined,
+): boolean {
   // Teletext has no wipe animations (and a wipe frame would smear a
   // double-height page on the TDAText face): strip like the PETSCII era
   // did, showing the screen itself.
   if (session?.texttvMode === true) return false;
+  // The caller turned animations off in W (a game door keeps them).
+  if (!animationsAllowed(session)) return false;
   return true;
 }

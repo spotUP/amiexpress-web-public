@@ -9,7 +9,7 @@ import type { MenuCaller } from '../../src/services/menu-catalogue/types';
 
 const caller = (over: Partial<MenuCaller> = {}): MenuCaller => ({
   secLevel: 10, conference: 2, node: 1, columns: 80, rows: 25, displayMode: 'ansi',
-  may: () => true, isSysop: false, widthRefuses: () => false, stylePref: '', ...over,
+  may: () => true, isSysop: false, widthRefuses: () => false, stylePref: '', animations: true, ...over,
 });
 const bulls = [1, 2, 3].map(n => ({ number: n, title: `Title ${n}`, base: `bull${n}` }));
 

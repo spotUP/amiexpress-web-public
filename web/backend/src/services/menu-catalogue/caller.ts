@@ -9,6 +9,7 @@ import { checkAcsPermission, findAcsLevel } from '../../utils/acs-access-loader'
 import { doorRefusedForWidth } from '../../utils/door-min-columns.util';
 import { responsiveDoorGeometry } from '../../amiga-emulation/xim/screen-width.util';
 import { displayModeOf } from '../../amiga-emulation/xim/display-mode.util';
+import { animationsAllowed } from '../user-settings/animations';
 
 /**
  * A gate key as written: `DOWNLOAD` (the ACSPermission key INTERNAL_COMMANDS uses) or
@@ -30,6 +31,7 @@ export function menuCallerFromSession(session: BBSSession): MenuCaller {
     isSysop: PermissionsUtil.isSysop(user),
     widthRefuses: (door: object) => doorRefusedForWidth(door as never, session as never),
     stylePref: readMenuStyle(user?.menuStyle) ?? '',   // a stored 'pages' (retired) reads as scroll
+    animations: animationsAllowed(session),
   };
 }
 
@@ -43,6 +45,7 @@ export function menuCallerForPreview(level: number, columns: number, conference:
     isSysop: level >= 255,
     widthRefuses: (door: object) => doorRefusedForWidth(door as never, fake),
     stylePref: '',
+    animations: true,   // the preview shows the board default
   };
 }
 

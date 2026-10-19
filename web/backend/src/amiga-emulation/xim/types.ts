@@ -371,6 +371,12 @@ export enum XIMCommand {
   AEW_SCREEN = 10800,
   /** This board's own: a menu door's catalogue and actions - xim/menu.ts. */
   AEW_MENU = 10900,
+  /**
+   * This board's own: may this door animate? Read-only; '1' animations
+   * allowed, '0' off (the caller's W row 23). A game door always reads '1'.
+   * services/user-settings/animations.ts decides.
+   */
+  AEW_ANIMATIONS = 11000,
 
   NETUPLOAD = 10001,
   NETDOWNLOAD = 10002,
@@ -431,6 +437,7 @@ export interface BBSSessionData {
   lineWrap?: number;
   petsciiMode?: boolean;  // C64 caller: BB_SCRWIDTH and lineWrap answer with screenWidth (xim/screen-width.util.ts)
   texttvMode?: boolean;   // Teletext caller: the same 40x25 grid on an ANSI terminal (xim/screen-width.util.ts)
+  runningDoorIsGame?: boolean; // executeDoor: the running door is a game, so AEW_ANIMATIONS answers '1'
   screenWidth?: number;   // Session terminal width (index.ts BBSSession.screenWidth); 40 for a C64
   pauseLines?: number;
   autoPauseEnabled?: boolean; // If true, XIM auto-pauses after pauseLines; if false (default), door handles pagination

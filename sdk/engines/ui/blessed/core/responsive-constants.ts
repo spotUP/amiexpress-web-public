@@ -242,7 +242,19 @@ export function isCompactWidth(width: number): boolean {
  * against an assumed 80-column line and the real screen is 40. At XXS the
  * honest answer is not to run them at all - a 40x25 screen has no spare
  * cells for decoration. Doors gate their effect setup on this.
+ *
+ * The board can also say no: a caller who turned animations off (W row 23)
+ * gets no effects at any width. The board installs a function under
+ * BOARD_EFFECTS on globalThis that answers for the caller whose door is
+ * running (an AsyncLocalStorage in the backend, so two callers' doors in one
+ * process never share an answer). A Symbol.for key on globalThis rather than a
+ * module variable, because a door may load its own copy of this module. In a
+ * browser door the hook is absent and the answer stays width-only.
  */
+const BOARD_EFFECTS = Symbol.for('amiexpress.boardEffectsAllowed');
+
 export function effectsAllowed(width: number): boolean {
+  const board = (globalThis as unknown as Record<symbol, unknown>)[BOARD_EFFECTS];
+  if (typeof board === 'function' && (board as () => unknown)() === false) return false;
   return !isCompactWidth(width);
 }

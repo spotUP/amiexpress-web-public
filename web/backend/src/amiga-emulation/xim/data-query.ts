@@ -12,6 +12,7 @@ import { DoorConstants } from '../DoorTypes';
 import { XIMMessage, XIMCommand, BBSSessionData, XIMState, ENVStatus } from './types';
 import { XIMMessageParser } from './messages';
 import { displayModeOf } from './display-mode.util';
+import { animationsAllowed } from '../../services/user-settings/animations';
 import { ExecLibrary } from '../api/ExecLibrary';
 import { editorStructFromDoor, editorStructToDoor, EditorState, EditorStringPool } from './editor-struct';
 import { setNewPassword } from '../../services/user-settings/w-password';
@@ -276,6 +277,22 @@ debugLog(`  [WRITE] AEW_THEME: asked "${asked}", stored "${resolved.id}"`);
 debugLog(`  [READ] AEW_DISPLAYMODE: "${mode}"`);
         break;
       }
+
+      /**
+       * This board's own command: may this door animate? Read-only like
+       * AEW_DISPLAYMODE - the caller chose it in W row 23, so a write is
+       * ignored. A game door always reads '1'.
+       */
+      case XIMCommand.AEW_ANIMATIONS:
+        if (isRead) {
+          const answer = animationsAllowed(this.bbsSession) ? '1' : '0';
+          this.messageParser.writeMessageString(msg.msgAddr, answer);
+          for (let i = answer.length + 1; i < 32; i++) {
+            this.emulator.writeMemory(stringAddr + i, 0);
+          }
+debugLog(`  [READ] AEW_ANIMATIONS: "${answer}"`);
+        }
+        break;
 
       case XIMCommand.DT_PHONENUMBER:
         if (isRead) {

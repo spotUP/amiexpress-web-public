@@ -32,7 +32,7 @@ describe('the BULLETINS catalogue over a real board', () => {
     const { bulletinsMenuSource } = require('../../src/services/menu-catalogue/sources/bulletins');
     const { buildCatalogue } = require('../../src/services/menu-catalogue/build');
     const { defaultMenuConfig } = require('../../src/screens/menu-config/menu-config');
-    const caller: any = { secLevel: 10, conference: 1, node: 1, columns: 80, rows: 25, displayMode: 'ansi', may: () => true, isSysop: false, widthRefuses: () => false, stylePref: '' };
+    const caller: any = { secLevel: 10, conference: 1, node: 1, columns: 80, rows: 25, displayMode: 'ansi', may: () => true, isSysop: false, widthRefuses: () => false, stylePref: '', animations: true };
     expect(buildCatalogue(bulletinsMenuSource, caller, defaultMenuConfig('BULLETINS'))).toEqual({ refusal: 'none' });
     put('bull3.txt', 'something');
     const built: any = buildCatalogue(bulletinsMenuSource, caller, defaultMenuConfig('BULLETINS'));

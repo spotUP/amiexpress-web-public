@@ -17,7 +17,7 @@ function built(...args: Parameters<typeof buildCatalogue>): Catalogue {
 const caller = (over: Partial<MenuCaller> = {}): MenuCaller => ({
   secLevel: 10, conference: 1, node: 1, columns: 80, rows: 25, displayMode: 'ansi',
   may: (k: string) => !['SYSOP_COMMANDS', 'REMOTE_SHELL', 'ACCOUNT_EDITING', 'LIST_NODES', 'EDIT_DIRS', 'EDIT_FILES'].includes(k),
-  isSysop: false, widthRefuses: () => false, stylePref: '', ...over,
+  isSysop: false, widthRefuses: () => false, stylePref: '', animations: true, ...over,
 });
 const door = (command: string, t: Record<string, string> = {}, extra: Record<string, unknown> = {}) =>
   ({ name: command, type: 'XIM', location: `Doors/${command}/x`, access: undefined, toolTypes: t, ...extra });
@@ -197,5 +197,9 @@ describe('style and slide lines', () => {
     expect(lines({}, { columns: 40 })).toContain('F 0');
     expect(lines({}, { columns: 80, displayMode: 'petscii' })).toContain('F 0');
     expect(lines({ coverflow: { slide: false } })).toContain('F 0');
+  });
+  test('slide is 0 for a caller who turned animations off (W row 23)', () => {
+    expect(lines({}, { animations: false })).toContain('F 0');
+    expect(lines({}, { animations: true })).toContain('F 1');
   });
 });

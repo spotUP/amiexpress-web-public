@@ -34,7 +34,8 @@ import { enableGameMode, disableGameMode } from '../server/socket-handlers';
 import { declaredKeyRepeatMode, emitKeyRepeatMode } from '../services/game-mode.service';
 import { displayMainMenu } from './command-handler/menu';
 import { emitDoorActivity } from '../services/bbs-event-emitter';
-import { doorCategoryAt } from '../doors/door-category';
+import { doorCategoryAt, isGameCategory } from '../doors/door-category';
+import { bindToDoorContext, runInDoorContext } from '../doors/door-effects-context';
 import { isListedDoor } from '../doors/unlisted-commands';
 import { getSystemTime, encodeAmigaDate } from '../utils/date-time.util';
 import { logDoorStart, logDoorExit, doorLogTypeNumber } from '../utils/node-logs.util';
@@ -399,15 +400,30 @@ console.log(`[DoorSocket][Video] User ${session.user?.username} stopped video st
   wrappedSocket.server = socket.server;
   // A getter, not a copy: after a resume the socket's id is the new one.
   Object.defineProperty(wrappedSocket, 'id', { get: () => socket.id, enumerable: true });
+  // Socket events fire in socket.io's context, not the door's. Each handler is
+  // bound to the context it was registered in (the door's, see
+  // runInDoorContext) so the SDK effect gate answers for this caller. The map
+  // lets off/removeListener find the bound twin of the handler the door holds.
+  const boundHandlers = new WeakMap<(...args: unknown[]) => void, (...args: unknown[]) => void>();
+  const bound = (handler: (...args: unknown[]) => void) => {
+    let b = boundHandlers.get(handler);
+    if (!b) {
+      b = bindToDoorContext(handler);
+      boundHandlers.set(handler, b);
+    }
+    return b;
+  };
+  const boundOrSelf = (handler: (...args: unknown[]) => void) => boundHandlers.get(handler) ?? handler;
   wrappedSocket.on = (event: string, handler: (...args: any[]) => void) => {
-    addLocalHandler(event, handler);
-    return socket.on(event, handler);
+    const b = bound(handler);
+    addLocalHandler(event, b);
+    return socket.on(event, b);
   };
   wrappedSocket.once = (event: string, handler: (...args: any[]) => void) => {
-    const wrappedHandler = (...args: any[]) => {
+    const wrappedHandler = bindToDoorContext((...args: unknown[]) => {
       removeLocalHandler(event, wrappedHandler);
       handler(...args);
-    };
+    });
     addLocalHandler(event, wrappedHandler);
     if (socket.once) {
       return socket.once(event, wrappedHandler);
@@ -415,12 +431,14 @@ console.log(`[DoorSocket][Video] User ${session.user?.username} stopped video st
     return socket.on(event, wrappedHandler);
   };
   wrappedSocket.removeListener = (event: string, handler: (...args: any[]) => void) => {
-    removeLocalHandler(event, handler);
-    return socket.removeListener?.(event, handler);
+    const b = boundOrSelf(handler);
+    removeLocalHandler(event, b);
+    return socket.removeListener?.(event, b);
   };
   wrappedSocket.off = (event: string, handler: (...args: any[]) => void) => {
-    removeLocalHandler(event, handler);
-    return socket.off?.(event, handler);
+    const b = boundOrSelf(handler);
+    removeLocalHandler(event, b);
+    return socket.off?.(event, b);
   };
   wrappedSocket.removeAllListeners = (event?: string) => {
     if (event) {
@@ -1595,6 +1613,11 @@ console.log('Executing door:', door.name);
   session.currentDoorName = door.command || door.id;
   // NO_PALETTE: Ctrl+K stays this door's key (socket-handlers / transport-session route on it).
   session.doorRefusesPalette = doorOptsOutOfPalette(door as any);
+  // A game door keeps its animations when the caller turned them off (W row 23).
+  // Saved and restored in the finally so a door that runs a door hands the
+  // outer door's answer back.
+  const wasGame = session.runningDoorIsGame;
+  session.runningDoorIsGame = isGameCategory(doorCategoryAt(door.path));
 
   const nodeId = session.nodeId || 0;
   let doorSession: DoorSession | null = null;
@@ -1934,6 +1957,7 @@ console.error('[executeDoor] Error during cleanup:', cleanupError);
     // Re-throw to ensure error is logged at process level
     throw error;
   } finally {
+    session.runningDoorIsGame = wasGame;
     // Release the management token on every exit path — success, the
     // interactive-prompt returns above, or the crash handled just above.
     // A door that throws must not leave a live token behind.
@@ -2418,13 +2442,16 @@ console.log(`[executeTypeScriptDoor] Hybrid RPC-only door — waiting for client
       const bridge = getClientDoorBridge();
       await bridge.waitForSessionEnd(hybridSessionId).catch(() => {/* session already gone */});
     } else {
-      await doorInstance.execute({
+      // The caller's session is the effect context for everything the door
+      // starts from here (timers inherit it), so the SDK effect gate answers
+      // for this caller and no other.
+      await runInDoorContext(session, () => doorInstance.execute({
         socket: wrappedSocket,
         bbsSession: session,
         user: session.user,
         bbs: bbsApi,
         params: door.parameters || []
-      });
+      }));
     }
     } finally {
       session.doorExecuting = false;

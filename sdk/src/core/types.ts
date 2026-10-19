@@ -290,6 +290,8 @@ export interface BBSApi {
   togglePetsciiPalette?(): Promise<'vdc' | 'vic'>;
   /** Flip the PETSCII character set between standard and Swedish; the notice is the board's own sentence. Optional: an older backend has no such method. */
   togglePetsciiCharset?(): Promise<{ charset: 'standard' | 'swedish'; notice: string }>;
+  /** False when the caller turned animations off (W row 23) and the running door is not a game. Optional: an older backend has no such method. */
+  animationsAllowed?(): boolean;
   /** Turn board animations (slides, wipes, door effects) on or off; resolves true when they are now on. Optional: an older backend has no such method. */
   toggleAnimations?(): Promise<boolean>;
   /** The caller's own record as W option 19 prints it. Optional: an older backend has no such method. */
