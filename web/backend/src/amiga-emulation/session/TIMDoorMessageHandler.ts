@@ -17,6 +17,7 @@ import * as amigafs from "../../utils/amigafs.js";
 import { getSystemTime } from '../../utils/date-time.util';
 import { debugLog } from '../../utils/debug-log';
 import { inputForTrace } from '../xim/secret-input';
+import { doorInputWait } from './door-cursor-gate';
 
 export class TIMDoorMessageHandler {
   private emulator: MoiraEmulator;
@@ -213,6 +214,7 @@ debugLog(`[TIMDoorHandler] Input queued: "${this.traceInput(data)}"`);
 
       // Set waiting state - input will be processed by queueInput()
       this.waitingForPause = true;
+      doorInputWait(this.socket);
 
       // Wait for pause response with a reasonable timeout
       // In a web environment, we can't truly block, but we signal that we're waiting
@@ -376,6 +378,7 @@ debugLog(`[TIMDoorHandler] PG_PM: Immediate input "${trimmed}"`);
         } else {
           // Wait for line input
           this.waitingForLineInput = true;
+          doorInputWait(this.socket);
           this.lineInputBuffer = '';
           this.lineInputMaxLen = msg.data || 80;
           this.pendingMsgAddr = msgAddr;
@@ -399,6 +402,7 @@ debugLog(`[TIMDoorHandler] PG_SC: Immediate input "${trimmed}"`);
         } else {
           // Wait for line input
           this.waitingForLineInput = true;
+          doorInputWait(this.socket);
           this.lineInputBuffer = '';
           this.lineInputMaxLen = msg.data || 80;
           this.pendingMsgAddr = msgAddr;
@@ -423,6 +427,7 @@ debugLog(`[TIMDoorHandler] PG_HK: Immediate key "${this.traceInput(char)}"`);
         } else {
           // Wait for single key
           this.waitingForHotkey = true;
+          doorInputWait(this.socket);
           this.pendingMsgAddr = msgAddr;
           await this.waitForHotkey();
         }

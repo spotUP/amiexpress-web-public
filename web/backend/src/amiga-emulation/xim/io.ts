@@ -34,6 +34,7 @@ import {
   handleCheckToDisplay as handleCheckToDisplayFn,
 } from './io-file-display';
 import { c64AdapterFor, type C64DoorFrameAdapter } from '../../server/c64-door-adapter';
+import { doorInputWait } from '../session/door-cursor-gate';
 
 /**
  * express.e:5193's pause prompt, byte for byte. Named because the adapted-frame
@@ -482,6 +483,7 @@ export class XIMIOHandler {
     }
 
     this.waitingForLineInput = true;
+    doorInputWait(this.socket);
     this.lineInputMessage = msg;
     this.lineInputBuffer = prefill;
     this.lineInputMaxLen = maxLen;
@@ -544,6 +546,7 @@ export class XIMIOHandler {
     }
 
     this.waitingForLineInput = true;
+    doorInputWait(this.socket);
     this.secureLineInput = true;
     this.lineInputMessage = msg;
     this.lineInputBuffer = '';
@@ -821,6 +824,7 @@ debugLog(
       `[XIMIOHandler] JH_PM: Waiting for user input (max ${maxLength} chars), pausing emulator`
     );
     this.waitingForLineInput = true;
+    doorInputWait(this.socket);
     this.lineInputMessage = msg;
     this.lineInputBuffer = '';
     this.lineInputMaxLen = maxLength;
@@ -1028,6 +1032,7 @@ debugLog(`[DEBUG JH_HK] msg.string[0-31] ASCII: "${msgStrAscii}"`);
     // CRITICAL: express.e uses a timeout (doorTimeout), we must too!
 debugLog('[XIMIOHandler] JH_HK: No input available, pausing emulator to wait');
     this.waitingForHotkey = true;
+    doorInputWait(this.socket);
     this.hotkeyMessage = msg;
 
     // Get doorTimeout from state (in seconds), default 30 seconds for screen commands, 300 for interactive
@@ -1315,6 +1320,7 @@ debugLog(`  [READ] Extended hotkey: ${this.keyForTrace(`'${char}' (code=${charCo
     // No input - PAUSE emulator and wait (implements blocking!)
 debugLog('  [WAITING] No input, pausing emulator');
     this.waitingForExtHotkey = true;
+    doorInputWait(this.socket);
     this.extHotkeyMessage = msg;
     this.emulator.pause();
   }
@@ -1614,6 +1620,7 @@ debugLog('[XIMIOHandler] PG_SM: Redirecting to Serial Output handler');
       debugLog('[XIMIOHandler] @READUSERKEYS triggered pause - setting waitingForPause=true');
       debugLog('[XIMIOHandler] @READUSERKEYS triggered pause');
       this.waitingForPause = true;
+      doorInputWait(this.socket);
       this.pauseReply = { msg: pendingMsg, data: 1 };
       this.pauseInputBuffer = '';
       this.directEmit('ansi-output', '(Pause)...Space To Resume: ');
@@ -1671,6 +1678,7 @@ debugLog('[XIMIOHandler] PG_SM: Redirecting to Serial Output handler');
   private beginAdaptedPause(adapter: C64DoorFrameAdapter, pendingMsg: XIMMessage): void {
     debugLog(`[XIMIOHandler] Adapted-frame pause (unseen=${adapter.unseenRows()}, page=${adapter.pageOffset()})`);
     this.waitingForPause = true;
+    doorInputWait(this.socket);
     this.adaptedPause = adapter;
     this.pauseReply = { msg: pendingMsg, data: 1 };
     this.pauseInputBuffer = '';
@@ -1733,6 +1741,7 @@ debugLog('[XIMIOHandler] PG_SM: Redirecting to Serial Output handler');
     if (this.state.lineCount >= this.state.pauseLines) {
 debugLog(`[XIMIOHandler] Pause triggered (lineCount=${this.state.lineCount})`);
       this.waitingForPause = true;
+      doorInputWait(this.socket);
       this.pauseReply = { msg: pendingMsg, data: 1 };
       this.pauseInputBuffer = '';
       

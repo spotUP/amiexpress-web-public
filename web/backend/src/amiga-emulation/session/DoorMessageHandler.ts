@@ -32,6 +32,7 @@ import { toAmigaTime, encodeAmigaDate } from '../../utils/date-time.util';
 import { calcSizeText } from '../../utils/byte-format.util';
 import { inputForTrace } from '../xim/secret-input';
 import { setEnvStat } from '../../utils/acs.util';
+import { doorInputWait } from './door-cursor-gate';
 
 // Telnet session state for TELNET_CONNECT command (express.e:3051-3302)
 interface TelnetSessionState {
@@ -263,6 +264,7 @@ debugLog(`[DoorMessageHandler] Sent reply to door at port 0x${replyPortAddr.toSt
       this.lineCount = 0;
       this.socket.emit("ansi-output", "(Pause)...More(y/n/ns)? ");
       this.waitingForPause = true;
+      doorInputWait(this.socket);
       const input = await this.waitForPauseResponse();
       this.waitingForPause = false;
       const trimmed = input.trim();

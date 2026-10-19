@@ -31,6 +31,7 @@ import type { BBSSession } from '../../index';
 import { convertAmigaTextForTerminal } from '../../utils/ansi-conversion.util';
 import { getConferenceToolFlags } from '../../utils/conference-tooltypes.util';
 import { setEnvStat } from '../../utils/acs.util';
+import { doorCursorToggle } from '../session/door-cursor-gate';
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const iconv = require('iconv-lite');
 
@@ -1906,8 +1907,11 @@ debugLog(`[XIMSystem] CHECK_REALNAME conf=${confNum} mb=${msgBaseNum} → ${resu
     const cursorOn = msg.data !== 0;
 debugLog(`[XIMSystem] CON_CURSOR: ${cursorOn ? 'ON' : 'OFF'}`);
 
-    // Emit cursor control to frontend
-    if (cursorOn) {
+    // Emit cursor control to frontend. With the door cursor gate installed
+    // the gate sends it and stops hiding/showing on the door's behalf.
+    if (doorCursorToggle(this.socket, cursorOn)) {
+      // sent by the gate
+    } else if (cursorOn) {
       this.socket.emit('ansi-output', '\x1b[?25h'); // Show cursor
     } else {
       this.socket.emit('ansi-output', '\x1b[?25l'); // Hide cursor

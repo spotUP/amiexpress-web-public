@@ -33,6 +33,7 @@ import { setEnvStat } from "../utils/acs.util";
 import { multicomManager } from "../nodes/MulticomManager";
 import { EnvStat } from "../constants/env-codes";
 import { c64AdapterFor, uninstallC64DoorAdapter } from "../server/c64-door-adapter";
+import { DoorCursorGate } from "./session/door-cursor-gate";
 
 /**
  * AmigaDoorSession - REFACTORED VERSION
@@ -155,6 +156,9 @@ export class AmigaDoorSession {
 
   // If we registered with DebugRegistry, this holds the nodeId used
   private registeredWithDebug: number | null = null;
+
+  /** Hides the cursor while the door draws, shows it while it waits (session/door-cursor-gate.ts). */
+  private cursorGate: DoorCursorGate | null = null;
 
   /** THROTTLE=YES in the door's .info: pace output at the user's modem speed. */
   private wantsModemThrottle = false;
@@ -446,6 +450,15 @@ debugLog(`[AmigaDoorSession] Overriding doorType with TYPE tooltype: ${typeToolt
       // Tooltypes are known now, so this is decided before the door emits
       // its first byte.
       this.suspendModemThrottle();
+
+      // Before the door's first byte, so its first paint is already hidden.
+      this.cursorGate = new DoorCursorGate(this.socket, () =>
+        this.sharedState.ximProtocol?.isWaitingForCaller() === true ||
+        this.sharedState.timHandler?.isWaitingForInput() === true ||
+        this.sharedState.dreamDoorLibrary?.isWaitingForInput?.() === true ||
+        this.messageHandler?.isWaitingForPause() === true
+      );
+      this.cursorGate.install();
 
       // Map ROM into emulator memory at 0xF80000-0xFFFFFF
       const romData = this.sharedState.kickstartRom.getRomData();
@@ -1206,6 +1219,10 @@ console.error(`[AmigaDoorSession] Error deleting port ${this.doorPortName}:`, er
     multicomManager.unregisterEmulator(sessionId);
 
 debugLog(`[AmigaDoorSession] Cleared node ${nodeId} and unregistered MULTICOM for session ${sessionId}`);
+
+    // The board's prompt needs its cursor back, whatever the door left.
+    this.cursorGate?.uninstall();
+    this.cursorGate = null;
 
     // Give the user their modem speed back before anything else can throw.
     this.restoreModemThrottle();
