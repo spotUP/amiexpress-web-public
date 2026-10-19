@@ -22,20 +22,20 @@
  * Extraction is @mozilla/readability (the algorithm behind Firefox reader
  * view; maintained by Mozilla, one runtime-dependency-free package) over
  * linkedom (a small DOM, a fraction of jsdom's weight). The text then goes
- * through `toBulletinParagraphs`, the one HTML-to-text path the summaries use.
+ * through `toBulletinWalk`, the one HTML-to-text path the summaries use.
  */
 import axios from 'axios';
 import * as path from 'path';
 import { Readability } from '@mozilla/readability';
 import { parseHTML } from 'linkedom';
-import { MAGAZINE_DIR, MAGAZINE_STORIES_DIR, STORY_BODY_CAP, type Story } from '@amiexpress/bbs-door-sdk/formats/magazine';
+import { MAGAZINE_DIR, MAGAZINE_STORIES_DIR, STORY_BODY_CAP, type Story, type StoryMedia } from '@amiexpress/bbs-door-sdk/formats/magazine';
 import * as fs from 'fs';
 import {
   FEED_BODY_MIN_CHARS,
   NEWS_BULLETIN_SOURCES,
   hostOf,
   passHostGate,
-  toBulletinParagraphs,
+  toBulletinWalk,
 } from '../news-bulletins';
 import { loadStories, republishMagazine, writeAtomic } from './index';
 
@@ -151,6 +151,12 @@ export interface HttpResult {
   error?: string;
 }
 
+/** An article's text and the media found beside it by the same walk. */
+export interface ExtractedArticle {
+  body: string;
+  media: StoryMedia[];
+}
+
 export interface PrefetchDeps {
   rootDir: () => string;
   now: () => Date;
@@ -159,8 +165,11 @@ export interface PrefetchDeps {
   http: (url: string, opts: { timeoutMs: number; userAgent: string; accept: string }) => Promise<HttpResult>;
   /** The news-bulletins host gate. */
   gate: (url: string, gapMs: number) => Promise<void>;
-  /** Main article text of a page as plain paragraphs, or null when there is none. */
-  extract: (html: string, url: string) => string | null;
+  /**
+   * Main article text of a page as plain paragraphs, or null when there is none.
+   * An `ExtractedArticle` also carries the page's media; a bare string has none.
+   */
+  extract: (html: string, url: string) => string | ExtractedArticle | null;
   robots: RobotsCache;
 }
 
@@ -191,20 +200,25 @@ export async function fetchHttp(
 }
 
 /** Readability over linkedom, then the shared cleaner. Null when the page has no article. */
-export function extractArticleText(html: string, _url: string): string | null {
+export function extractArticle(html: string, url: string): ExtractedArticle | null {
   try {
     const { document } = parseHTML(html);
     const article = new Readability(document as never, { charThreshold: 200 }).parse();
     if (!article?.content) return null;
-    const text = toBulletinParagraphs(article.content, STORY_BODY_CAP);
-    return text.length >= FEED_BODY_MIN_CHARS ? text : null;
+    const walk = toBulletinWalk(article.content, STORY_BODY_CAP, url);
+    return walk.text.length >= FEED_BODY_MIN_CHARS ? { body: walk.text, media: walk.media } : null;
   } catch {
     return null;
   }
 }
 
+/** The text-only face of `extractArticle`. */
+export function extractArticleText(html: string, url: string): string | null {
+  return extractArticle(html, url)?.body ?? null;
+}
+
 export function defaultPrefetchDeps(base: Pick<PrefetchDeps, 'rootDir' | 'now' | 'log'>, robots: RobotsCache): PrefetchDeps {
-  return { ...base, http: fetchHttp, gate: passHostGate, extract: extractArticleText, robots };
+  return { ...base, http: fetchHttp, gate: passHostGate, extract: extractArticle, robots };
 }
 
 type Verdict = { kind: 'allowed' } | { kind: 'disallowed' } | { kind: 'unknown'; reason: string };
@@ -321,9 +335,11 @@ export async function prefetchBodies(deps: PrefetchDeps): Promise<PrefetchSummar
       continue;
     }
     if (res.contentType && !/html|xml/i.test(res.contentType)) { fail(`not a web page (${res.contentType})`); continue; }
-    const body = deps.extract(res.body, url);
-    if (!body) { fail('no article text on the page'); continue; }
-    if (record(root, story.id, { body })) {
+    const extracted = deps.extract(res.body, url);
+    const article = typeof extracted === 'string' ? { body: extracted, media: [] } : extracted;
+    if (!article?.body) { fail('no article text on the page'); continue; }
+    const { body, media } = article;
+    if (record(root, story.id, { body, ...(media.length ? { media } : {}) })) {
       out.fetched++;
       deps.log(`[magazine] body: ${story.source} ${body.length} characters`);
     }

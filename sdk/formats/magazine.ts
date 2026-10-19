@@ -155,6 +155,34 @@ export const STORY_BODY_CAP = 20000;
  */
 export const ARTICLE_MIN_BODY_CHARS = 1200;
 
+/**
+ * `image` and `video` are files the board can fetch; `embed` is a YouTube or
+ * Vimeo `<iframe>` (a page, not a file: it needs a resolver before it plays).
+ */
+export type StoryMediaKind = 'image' | 'video' | 'embed';
+
+/**
+ * A picture or clip found in the story page, in the position it had in the
+ * text. Found by the ONE walk that also yields the body paragraphs
+ * (`toBulletinWalk`), so `anchor` cannot drift from the text. The converted
+ * rows are not here: they live in the story's sidecar.
+ */
+export interface StoryMedia {
+  /** Absolute address (relative ones are resolved against the article URL). */
+  url: string;
+  kind: StoryMediaKind;
+  /** The page's own alt text, plain; '' when it had none. */
+  alt: string;
+  /** The site credited under the picture: the article's host, without `www.`. */
+  site: string;
+  /** Index of the body paragraph it follows; 0 = before the first paragraph. */
+  anchor: number;
+  /** A video's poster image address, when the page gave one. */
+  poster?: string;
+  /** Why it was dropped (recorded once, never retried). Absent when it is usable. */
+  failure?: string;
+}
+
 export interface Story {
   /** Stable across runs: a hash of the normalised headline. */
   id: string;
@@ -187,6 +215,12 @@ export interface Story {
    * asking again; the story stays hidden and is purged after three days.
    */
   bodyFailed?: { at: string; reason: string };
+  /**
+   * Pictures and clips of the story page in document order, each anchored to
+   * the body paragraph it follows. Absent when the page had none, or on a story
+   * stored before the field existed.
+   */
+  media?: StoryMedia[];
 }
 
 /**

@@ -19,7 +19,7 @@ import axios from 'axios';
 import * as fs from 'fs';
 import * as path from 'path';
 import { parseString } from 'xml2js';
-import { STORY_BODY_CAP } from '@amiexpress/bbs-door-sdk/formats/magazine';
+import { STORY_BODY_CAP, type StoryMedia } from '@amiexpress/bbs-door-sdk/formats/magazine';
 import { renderedRows, GENERATED_SCREEN_ROWS } from '../screens/screen-rows';
 import { config } from '../config';
 
@@ -460,19 +460,108 @@ const BLOCK_TAGS = /<\/?(?:p|div|br|hr|h[1-6]|li|ul|ol|blockquote|pre|tr|table|s
 /** Elements whose content is never text a caller reads. */
 const NON_TEXT = /<(script|style|noscript|svg|iframe|form|button|nav)\b[\s\S]*?<\/\1>/gi;
 
+/** A tag that marks where a media element stood; it carries no text and no block meaning. */
+const MEDIA_MARK = /<xmedia n="(\d+)"><\/xmedia>/g;
+/** The elements the walk records, as one pass: picture/video as a unit, img and iframe alone. */
+const MEDIA_ELEMENT = /<(picture|video)\b[^>]*>[\s\S]*?<\/\1>|<img\b[^>]*>|<iframe\b[^>]*>/gi;
+const EMBED_HOST = /^(?:[a-z0-9-]+\.)*(?:youtube\.com|youtube-nocookie\.com|youtu\.be|vimeo\.com)$/i;
+
+function attrsOf(tag: string): Record<string, string> {
+  const out: Record<string, string> = {};
+  const open = tag.match(/^<[a-z]+\b([^>]*)>/i)?.[1] ?? '';
+  for (const m of open.matchAll(/([a-zA-Z_:][-\w:.]*)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'>]+))/g)) {
+    const v = m[2] ?? m[3] ?? m[4] ?? '';
+    out[m[1].toLowerCase()] = v
+      .replace(/&quot;/g, '"').replace(/&#39;|&apos;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
+  }
+  return out;
+}
+
+/** The first address of a srcset ("a.jpg 1x, b.jpg 2x"). */
+function firstSrcset(v: string | undefined): string | undefined {
+  return v?.split(',')[0]?.trim().split(/\s+/)[0] || undefined;
+}
+
+function absoluteUrl(raw: string | undefined, base: string): string | undefined {
+  if (!raw) return undefined;
+  try {
+    const u = new URL(raw.trim(), base);
+    return u.protocol === 'http:' || u.protocol === 'https:' ? u.href : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function imageSrc(a: Record<string, string>): string | undefined {
+  return a.src || a['data-src'] || firstSrcset(a.srcset) || firstSrcset(a['data-srcset']);
+}
+
+/** One media element as a StoryMedia (anchor still 0), or null when it names no usable address. */
+function mediaOf(tag: string, baseUrl: string, site: string): StoryMedia | null {
+  const a = attrsOf(tag);
+  const kind = /^<([a-z]+)/i.exec(tag)?.[1].toLowerCase();
+  const make = (url: string | undefined, k: StoryMedia['kind'], alt: string, poster?: string): StoryMedia | null =>
+    url ? { url, kind: k, alt, site, anchor: 0, ...(poster ? { poster } : {}) } : null;
+  if (kind === 'img') return make(absoluteUrl(imageSrc(a), baseUrl), 'image', a.alt ?? '');
+  if (kind === 'picture') {
+    const img = /<img\b[^>]*>/i.exec(tag)?.[0];
+    const ia = img ? attrsOf(img) : {};
+    const source = /<source\b[^>]*>/i.exec(tag)?.[0];
+    const sa = source ? attrsOf(source) : {};
+    return make(absoluteUrl(imageSrc(ia) ?? firstSrcset(sa.srcset), baseUrl), 'image', ia.alt ?? '');
+  }
+  if (kind === 'video') {
+    const source = /<source\b[^>]*>/i.exec(tag)?.[0];
+    const url = absoluteUrl(a.src || (source ? attrsOf(source).src : undefined), baseUrl);
+    return make(url, 'video', a['aria-label'] ?? a.title ?? '', absoluteUrl(a.poster, baseUrl));
+  }
+  if (kind === 'iframe') {
+    const url = absoluteUrl(a.src || a['data-src'], baseUrl);
+    return url && EMBED_HOST.test(new URL(url).hostname) ? make(url, 'embed', a.title ?? '') : null;
+  }
+  return null;
+}
+
+/** What one walk over a story's HTML found: its text and the media between the paragraphs. */
+export interface BulletinWalk {
+  /** Paragraphs joined by a blank line, cut at the cap (exactly `toBulletinParagraphs`). */
+  text: string;
+  /** In document order; `anchor` is the index of the kept paragraph it follows (0 = before the first). */
+  media: StoryMedia[];
+}
+
 /**
- * A story's full text as plain paragraphs, a blank line between them, cleaned
- * by the SAME cleaner the summaries use (`toBulletinText`, which ends in
- * `stripFeedBoilerplate`) so there is one HTML-to-text path. The result is cut
- * at the last paragraph break under `cap` (or the last space when one
- * paragraph is longer than the cap), so a reader never meets half a sentence.
+ * ONE walk over a story's HTML that returns the paragraphs AND the media found
+ * between them, so a picture's anchor is a position in the very list the text
+ * was cut from. The paragraphs are the old `toBulletinParagraphs` result byte
+ * for byte: media elements are only MARKED (a tag-shaped marker that the
+ * cleaner treats like any markup) before the same NON_TEXT strip and
+ * BLOCK_TAGS split. Iframes are recorded here, before NON_TEXT strips them
+ * from the text. Media after the cap cut are dropped with the text they
+ * belonged to. `baseUrl` resolves relative addresses.
  */
-export function toBulletinParagraphs(html: string, cap: number): string {
-  const paragraphs = html
-    .replace(NON_TEXT, ' ')
-    .split(BLOCK_TAGS)
-    .map((chunk) => toBulletinText(chunk).replace(/\s*\n\s*/g, ' ').trim())
-    .filter((p) => p.length > 0);
+export function toBulletinWalk(html: string, cap: number, baseUrl = ''): BulletinWalk {
+  const found: StoryMedia[] = [];
+  let site = '';
+  try { site = new URL(baseUrl).hostname.replace(/^www\./i, ''); } catch { /* relative-only page */ }
+  const marked = html.replace(MEDIA_ELEMENT, (tag) => {
+    const m = mediaOf(tag, baseUrl || 'http://invalid.invalid/', site);
+    if (!m) return tag;
+    found.push(m);
+    return `<xmedia n="${found.length - 1}"></xmedia>${tag}`;
+  });
+  const chunks = marked.replace(NON_TEXT, ' ').split(BLOCK_TAGS);
+  const clean = (chunk: string) => toBulletinText(chunk.replace(MEDIA_MARK, ' ')).replace(/\s*\n\s*/g, ' ').trim();
+  const paragraphs: string[] = [];
+  const anchors = new Map<number, number>(); // media index -> paragraphs before it (pre-cap)
+  for (const chunk of chunks) {
+    const p = clean(chunk);
+    for (const m of chunk.matchAll(MEDIA_MARK)) {
+      const before = clean(chunk.slice(0, m.index));
+      anchors.set(Number(m[1]), paragraphs.length + (before ? 1 : 0));
+    }
+    if (p.length > 0) paragraphs.push(p);
+  }
   const out: string[] = [];
   let used = 0;
   for (const p of paragraphs) {
@@ -488,7 +577,24 @@ export function toBulletinParagraphs(html: string, cap: number): string {
     out.push(p);
     used = next;
   }
-  return out.join('\n\n');
+  const media: StoryMedia[] = [];
+  found.forEach((m, i) => {
+    const anchor = anchors.get(i);
+    if (anchor !== undefined && anchor <= out.length) media.push({ ...m, anchor });
+  });
+  return { text: out.join('\n\n'), media };
+}
+
+/**
+ * A story's full text as plain paragraphs, a blank line between them, cleaned
+ * by the SAME cleaner the summaries use (`toBulletinText`, which ends in
+ * `stripFeedBoilerplate`) so there is one HTML-to-text path. The result is cut
+ * at the last paragraph break under `cap` (or the last space when one
+ * paragraph is longer than the cap), so a reader never meets half a sentence.
+ * The text-only face of `toBulletinWalk`.
+ */
+export function toBulletinParagraphs(html: string, cap: number): string {
+  return toBulletinWalk(html, cap).text;
 }
 
 function asArray<T>(v: T | T[] | undefined | null): T[] {

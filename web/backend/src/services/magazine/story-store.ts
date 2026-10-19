@@ -26,8 +26,8 @@
  * Story, StoryFormat and Desk live in the SDK (`formats/magazine`): the MAG
  * door reads the same files this store writes, so both import one declaration.
  */
-import { FRONT_PAGE, PAGE_FAMILIES, type Desk, type Story, type StoryFormat } from '@amiexpress/bbs-door-sdk/formats/magazine';
-export type { Desk, Story, StoryFormat };
+import { FRONT_PAGE, PAGE_FAMILIES, type Desk, type Story, type StoryFormat, type StoryMedia, type StoryMediaKind } from '@amiexpress/bbs-door-sdk/formats/magazine';
+export type { Desk, Story, StoryFormat, StoryMedia, StoryMediaKind };
 
 // The page families live in the SDK: the MAG reader needs the same first pages to
 // open a desk's index by number, and a second table would drift.
