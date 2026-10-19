@@ -25,7 +25,11 @@ import type { ArtistTheme } from './use-my-theme';
 import type { ScreenIndexShape } from './screen-index-view';
 
 /** The formats a slot's bytes can be in, as the file route reports them. */
-export type SlotFormat = 'ansi' | 'text' | 'petscii' | 'rip' | 'binary';
+/**
+ * `teletext-native` is a `.tti` packet page: the route reports it as such,
+ * and the teletext editor draws it from nothing like a PETSCII screen.
+ */
+export type SlotFormat = 'ansi' | 'text' | 'petscii' | 'rip' | 'teletext-native' | 'binary';
 
 /** What the file route returns for an open slot. Narrowed to what state needs. */
 export interface SlotFile {
@@ -85,7 +89,8 @@ export function formatOfPath(path: string): SlotFormat {
   const lower = path.toLowerCase();
   if (lower.endsWith('.seq')) return 'petscii';
   if (lower.endsWith('.rip')) return 'rip';
-  if (lower.endsWith('.tti') || lower.endsWith('.ttx')) return 'binary';
+  if (lower.endsWith('.tti')) return 'teletext-native';
+  if (lower.endsWith('.ttx')) return 'binary';
   return 'ansi';
 }
 
@@ -100,7 +105,7 @@ export function formatOfPath(path: string): SlotFormat {
  * refuses, because an empty screen file is never written.
  */
 function canBeDrawnFromNothing(format: SlotFormat): boolean {
-  return format === 'petscii' || format === 'ansi' || format === 'text';
+  return format === 'petscii' || format === 'teletext-native' || format === 'ansi' || format === 'text';
 }
 
 /** The file's own theme, or undefined for a board screen. */

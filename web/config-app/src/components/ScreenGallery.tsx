@@ -1,6 +1,9 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { apiClient } from '../api/client';
+import { AnsiCanvas } from './AnsiCanvas';
+import { TELETEXT_FONT_FAMILY, teletextCells } from './teletext-cells';
+import { base64ToLatin1 } from '../pages/screen-bytes';
 
 /**
  * Every screen file as a picture.
@@ -138,9 +141,9 @@ export interface GalleryItem {
  *
  * ANSI teletext (.ttx) is ANSI bytes like .txt, so the ordinary ScreenArt
  * canvas reads it - the TDAText face is a terminal concern, not a content
- * one. Native packet teletext (.tti) has no thumbnail yet: its picture
- * needs the packet renderer landing separately, and a gallery is hundreds
- * of cards; naming the format is honest, the RIP precedent.
+ * one. Native packet teletext (.tti) is drawn the way the board serves it:
+ * renderNativeTti's rows on the same cell canvas, in TeletextUPR
+ * (`TeletextThumbnail`). Forty columns, so twice the ANSI card's scale.
  *
  * RIP has no thumbnail. Its picture needs the vendored RIPtermJS interpreter
  * and a canvas per card, and a gallery is hundreds of cards; naming the format
@@ -151,14 +154,7 @@ function Thumbnail({ content, format }: { content: string; format?: GalleryItem[
     return <PetsciiScreenPreview content={content} className="h-full w-full" />;
   }
   if (format === 'teletext-native') {
-    return (
-      <div
-        data-testid="teletext-native-thumbnail"
-        className="flex h-full w-full items-center justify-center text-xs text-content-muted"
-      >
-        Native teletext - renderer lands separately
-      </div>
-    );
+    return <TeletextThumbnail content={content} />;
   }
   if (format === 'rip') {
     return (
@@ -177,6 +173,19 @@ function Thumbnail({ content, format }: { content: string; format?: GalleryItem[
    * screen next to a theme's card that draws fine.
    */
   return <ScreenArt content={content} scale={0.28} maxRows={25} maxCols={80} />;
+}
+
+/** A .tti card: the page rendered once per content, not once per paint. */
+function TeletextThumbnail({ content }: { content: string }) {
+  const cells = useMemo(() => teletextCells(base64ToLatin1(content)), [content]);
+  return (
+    <AnsiCanvas
+      canvas={cells}
+      scale={0.56}
+      fontFamily={TELETEXT_FONT_FAMILY}
+      testId="teletext-native-thumbnail"
+    />
+  );
 }
 
 interface ScreenGalleryProps {

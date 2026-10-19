@@ -14,8 +14,8 @@
  */
 
 import { hammingDecode84, stripParity } from '../packet-decoder/hamming';
-import type { TeletextPage, TeletextSubpage, TeletextToken, TeletextRow } from '../model/types';
-import { createEmptyPage, createEmptySubpage, createEmptyRow } from '../model/factories';
+import type { TeletextPage, TeletextToken } from '../model/types';
+import { createEmptyPage, createEmptySubpage } from '../model/factories';
 import { exportPageToTti } from './ttiExporter';
 
 // ─── Bit reversal ───────────────────────────────────────────────
@@ -380,76 +380,6 @@ function assemblePages(lines: TeletextLine[]): PageAccumulator[] {
 }
 
 // ─── VBI capture repair ─────────────────────────────────────────
-
-/**
- * Repair systematic bit errors from analogue VBI captures.
- *
- * Many T42 files from analogue captures have bit 4 corrupted on control
- * code bytes, turning Mosaic color codes (0x10-0x17) into Alpha color
- * codes (0x00-0x07). This makes mosaic graphics render as text.
- *
- * Heuristic: if an Alpha color code (0x00-0x07) is followed by characters
- * predominantly in the mosaic range (0x20-0x3F or 0x60-0x7F), flip bit 4
- * to make it a Mosaic color code. This is safe because:
- * - Real text rows rarely have 0x60-0x7F characters (backticks, lowercase)
- *   immediately after a color control code
- * - Real mosaic rows ALWAYS have 0x20-0x3F/0x60-0x7F after the mosaic code
- */
-function repairVbiData(bytes: Uint8Array): Uint8Array {
-  const repaired = new Uint8Array(bytes);
-
-  for (let i = 0; i < 39; i++) {
-    const b = repaired[i];
-
-    // Only consider Alpha color codes (0x00-0x07)
-    if (b > 0x07) continue;
-
-    // Look ahead at the next few non-control bytes
-    let mosaicCount = 0;
-    let textCount = 0;
-    for (let j = i + 1; j < Math.min(i + 10, 40); j++) {
-      const next = repaired[j];
-      if (next <= 0x1F) break; // another control code — stop looking
-      if ((next >= 0x21 && next <= 0x3F) || (next >= 0x60 && next <= 0x7F)) {
-        // 0x21-0x3F and 0x60-0x7F are mosaic range (excluding 0x20 space)
-        mosaicCount++;
-      } else if (next === 0x20 || (next >= 0x40 && next <= 0x5F)) {
-        textCount++; // uppercase letters — likely real text
-      }
-    }
-
-    // If mostly mosaic-range characters follow, this should be a Mosaic code
-    if (mosaicCount >= 2 && mosaicCount > textCount) {
-      repaired[i] = b | 0x10; // flip bit 4: Alpha → Mosaic
-    }
-  }
-
-  return repaired;
-}
-
-/**
- * Detect if a T42 file likely needs VBI repair.
- * Check ratio of alpha vs mosaic color codes — if alpha vastly outnumbers
- * mosaic, the file probably has the bit 4 corruption.
- */
-function needsVbiRepair(lines: TeletextLine[]): boolean {
-  let alphaCodes = 0;
-  let mosaicCodes = 0;
-  const sampleSize = Math.min(lines.length, 5000);
-
-  for (let i = 0; i < sampleSize; i++) {
-    for (const b of lines[i].data) {
-      if (b >= 0x00 && b <= 0x07) alphaCodes++;
-      if (b >= 0x10 && b <= 0x17) mosaicCodes++;
-    }
-  }
-
-  // In normal teletext, mosaic codes are common (30-50% of color codes).
-  // If < 10%, the file likely has the bit 4 corruption.
-  const total = alphaCodes + mosaicCodes;
-  if (total === 0) return false;
-  return mosaicCodes / total < 0.10;
-}
 
 // ─── Bytes to token stream ──────────────────────────────────────
 

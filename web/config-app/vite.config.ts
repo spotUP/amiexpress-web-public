@@ -40,6 +40,12 @@ export default defineConfig({
       // the same two reasons as the editor above - sdk/dist is gitignored,
       // and a stale dist hides a source edit.
       '@amiexpress/bbs-door-sdk/petscii': path.resolve(__dirname, '../../sdk/petscii'),
+      // The native .tti editor and its previews, from SOURCE: the board renders a
+      // teletext page with renderNativeTti, and the admin draws the same output,
+      // so there is one teletext renderer. Import the pure files by name
+      // (edittf-frame, editor-surface, render-native); the package index also
+      // reaches the fs-backed library and store.
+      '@amiexpress/bbs-door-sdk/teletext': path.resolve(__dirname, '../../sdk/teletext'),
       // The board's own MCI parser, from the backend source.
       //
       // A screen's ~CC_/~SS_/~SR_/~CL. codes are already parsed in exactly one

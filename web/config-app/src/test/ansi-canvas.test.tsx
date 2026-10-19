@@ -35,7 +35,7 @@ describe('the ANSI canvas', () => {
 
     fireEvent.pointerDown(screen.getByTestId('ansi-canvas'), { clientX: 0, clientY: 0 });
 
-    expect(onCellPointer).toHaveBeenCalledWith(0, 0, 'down');
+    expect(onCellPointer).toHaveBeenCalledWith(0, 0, 'down', expect.objectContaining({ button: 0 }));
   });
 
   it('turns a pointer position into the cell under it, not the pixel', () => {
@@ -50,9 +50,9 @@ describe('the ANSI canvas', () => {
     fireEvent.pointerMove(element, { clientX: CELL_WIDTH * 4, clientY: CELL_HEIGHT * 2 });
     fireEvent.pointerUp(element, { clientX: CELL_WIDTH * 4, clientY: CELL_HEIGHT * 2 });
 
-    expect(onCellPointer).toHaveBeenNthCalledWith(1, 3, 2, 'down');
-    expect(onCellPointer).toHaveBeenNthCalledWith(2, 4, 2, 'move');
-    expect(onCellPointer).toHaveBeenNthCalledWith(3, 4, 2, 'up');
+    expect(onCellPointer).toHaveBeenNthCalledWith(1, 3, 2, 'down', expect.objectContaining({ button: 0 }));
+    expect(onCellPointer).toHaveBeenNthCalledWith(2, 4, 2, 'move', expect.anything());
+    expect(onCellPointer).toHaveBeenNthCalledWith(3, 4, 2, 'up', expect.anything());
   });
 
   it('says nothing about a pointer outside the grid', () => {

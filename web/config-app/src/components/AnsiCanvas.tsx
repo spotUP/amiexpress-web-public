@@ -21,6 +21,23 @@ export { CELL_HEIGHT, CELL_WIDTH } from './ansi-canvas-paint';
  * context, so a paint loop written inline here would never be executed by any
  * test.
  */
+/**
+ * Where inside the cell the pointer is, and how it was pressed. A tool that
+ * works below cell size - the teletext editor's sixels, three rows of two in
+ * every cell - reads the fractions; the right button or Alt is how it erases.
+ */
+export interface CellPointerDetail {
+  /** 0 at the cell's left edge, approaching 1 at its right. */
+  fx: number;
+  /** 0 at the cell's top edge, approaching 1 at its bottom. */
+  fy: number;
+  /** The button that changed (pointer down/up); 2 is the right button. */
+  button: number;
+  /** The buttons held, as a bit mask; 2 is the right button. */
+  buttons: number;
+  altKey: boolean;
+}
+
 export interface AnsiCanvasProps {
   canvas: Cell[][];
   /**
@@ -45,7 +62,9 @@ export interface AnsiCanvasProps {
    * held down - a drag - because that is what the drawing tools consume; a
    * hover is not a stroke.
    */
-  onCellPointer?: (x: number, y: number, event: 'down' | 'move' | 'up') => void;
+  onCellPointer?: (
+    x: number, y: number, event: 'down' | 'move' | 'up', detail: CellPointerDetail,
+  ) => void;
   /** Runs of cells to ring - the MCI codes a screen runs. */
   highlights?: Highlight[];
   /**
@@ -65,6 +84,8 @@ export interface AnsiCanvasProps {
    * itself is untouched.
    */
   palette?: PaletteMode;
+  /** The face the art is drawn in (CSS font-family list); Topaz when omitted. */
+  fontFamily?: string;
   className?: string;
 }
 
@@ -72,6 +93,7 @@ export function AnsiCanvas({
   canvas, cursor, onCellPointer, highlights, folds, hidden, className, scale = 1,
   palette = 'full',
   testId = 'ansi-canvas',
+  fontFamily,
 }: AnsiCanvasProps) {
   const elementRef = useRef<HTMLCanvasElement>(null);
   const drawingRef = useRef(false);
@@ -125,18 +147,26 @@ export function AnsiCanvas({
     element.height = height;
     ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
 
-    paintScreen(ctx, canvas, cursor, highlights, palette, folds, hidden);
-  }, [canvas, cols, rows, cursor, highlights, palette, scale, fontEpoch, folds, hidden]);
+    paintScreen(ctx, canvas, cursor, highlights, palette, folds, hidden, fontFamily);
+  }, [canvas, cols, rows, cursor, highlights, palette, scale, fontEpoch, folds, hidden, fontFamily]);
 
   const report = useCallback((event: React.PointerEvent, phase: 'down' | 'move' | 'up') => {
     if (!onCellPointer) return;
 
     const rect = event.currentTarget.getBoundingClientRect();
-    const x = Math.floor((event.clientX - rect.left) / (CELL_WIDTH * scale));
-    const y = Math.floor((event.clientY - rect.top) / (CELL_HEIGHT * scale));
+    const cellX = (event.clientX - rect.left) / (CELL_WIDTH * scale);
+    const cellY = (event.clientY - rect.top) / (CELL_HEIGHT * scale);
+    const x = Math.floor(cellX);
+    const y = Math.floor(cellY);
     if (x < 0 || y < 0 || x >= cols || y >= rows) return;
 
-    onCellPointer(x, y, phase);
+    onCellPointer(x, y, phase, {
+      fx: cellX - x,
+      fy: cellY - y,
+      button: event.button,
+      buttons: event.buttons,
+      altKey: event.altKey,
+    });
   }, [cols, rows, onCellPointer, scale]);
 
   return (

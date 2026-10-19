@@ -956,7 +956,7 @@ class ApiClient {
    * door's own. Absent, the answer is empty content - an undrawn variant is
    * a blank canvas, not an error.
    */
-  async getDoorArtVariant(command: string, file: string, section: string, variant: 'c64' | 'ttx') {
+  async getDoorArtVariant(command: string, file: string, section: string, variant: 'c64' | 'ttx' | 'tti') {
     const q = new URLSearchParams({ file, section, variant }).toString();
     return this.request<ApiResponse>(`${API_BASE}/door-art/${encodeURIComponent(command)}?${q}`);
   }
@@ -966,7 +966,7 @@ class ApiClient {
     file: string,
     section: string,
     contentBase64: string,
-    variant?: 'c64' | 'ttx',
+    variant?: 'c64' | 'ttx' | 'tti',
   ) {
     return this.request<ApiResponse>(`${API_BASE}/door-art/${encodeURIComponent(command)}`, {
       method: 'PUT',

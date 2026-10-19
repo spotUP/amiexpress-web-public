@@ -51,23 +51,6 @@ export function createDefaultRowState(): RowState {
 }
 
 /**
- * Create an empty cell with default attributes.
- */
-function createEmptyCell(): Cell {
-  return {
-    char: 0x20, // space
-    fgColor: Color.WHITE,
-    bgColor: Color.BLACK,
-    charsetMode: CharsetMode.TEXT,
-    mosaicType: MosaicType.CONTIGUOUS,
-    doubleHeight: false,
-    doubleHeightBottom: false,
-    flash: false,
-    conceal: false,
-  };
-}
-
-/**
  * Apply a "set-after" control code to the row state.
  *
  * Per ETSI EN 300 706 Section 12.2:

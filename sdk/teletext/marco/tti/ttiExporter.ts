@@ -23,12 +23,10 @@ import type {
   TeletextSubpage,
   TeletextService,
   TeletextRow,
-  TeletextToken,
-  PreservedTtiRecord,
 } from '../model/types';
 import { encodeOLContent } from './ttiTranslations';
 import { encodePageFlags, encodeLanguageSubset } from './ttiMapper';
-import { normalizeRowTo40Columns, resolveRowToDisplayBytes } from '../model/factories';
+import { resolveRowToDisplayBytes } from '../model/factories';
 
 // ─── Row to OL bytes ────────────────────────────────────────────
 

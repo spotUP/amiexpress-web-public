@@ -16,6 +16,7 @@ import { apiClient } from '../api/client';
 import { useNotification } from '../contexts/NotificationContext';
 import { Modal } from '../components/ui/Modal';
 import { ScreenEditor } from '../components/ScreenEditor';
+import { TeletextScreenEditor } from '../components/TeletextScreenEditor';
 import { ArtUploadButton, ANSI_UPLOAD_ACCEPT } from '../components/ArtUploadButton';
 import { createSurface, type EditorSurface } from './screen-editor-state';
 import { screenToCanvas, base64ToLatin1, latin1ToBase64 } from './screen-bytes';
@@ -57,7 +58,13 @@ export function DoorArtDialog({
   const [saving, setSaving] = useState(false);
   const [lineCount, setLineCount] = useState(0);
   const [variant, setVariant] = useState<Variant>('wide');
-  const [drawn, setDrawn] = useState<{ c64: boolean; ttx: boolean }>({ c64: false, ttx: false });
+  const [drawn, setDrawn] = useState<{ c64: boolean; ttx: boolean; tti: boolean }>({ c64: false, ttx: false, tti: false });
+  /**
+   * The Teletext tab draws the NATIVE page (`<section>.tti`, variant `tti`),
+   * not an ANSI picture: the board serves a teletext caller the .tti first
+   * and the .ttx.ans only when no native page exists. Null until loaded.
+   */
+  const [ttiContent, setTtiContent] = useState<string | null>(null);
   /**
    * The narrow tabs this slot has: the drawings its door actually reads. A
    * tab whose drawing nothing reads was a save that changed nothing a caller
@@ -83,7 +90,7 @@ export function DoorArtDialog({
     apiClient.getDoorArt(command).then(async (res: any) => {
       const sections = (res?.data ?? res) as Array<{
         file: string; section: string; content: string;
-        variants?: { c64: boolean; ttx: boolean };
+        variants?: { c64: boolean; ttx: boolean; tti?: boolean };
         offers?: Array<'c64' | 'ttx'>;
       }>;
       const match = sections.find(s => s.file === file && s.section.toLowerCase() === section.toLowerCase());
@@ -93,11 +100,20 @@ export function DoorArtDialog({
         setBuilding(false);
         return;
       }
-      setDrawn(match.variants ?? { c64: false, ttx: false });
+      setDrawn({
+        c64: match.variants?.c64 ?? false,
+        ttx: match.variants?.ttx ?? false,
+        tti: match.variants?.tti ?? false,
+      });
       setOffers(match.offers ?? []);
       setWideContent(match.content);
       setWideLines(base64ToLatin1(match.content).split('\n').length);
       try {
+        if (variant === 'ttx') {
+          const one: any = await apiClient.getDoorArtVariant(command, file, section, 'tti');
+          if (live) setTtiContent((one?.data ?? one)?.content ?? '');
+          return;
+        }
         let content = match.content;
         if (variant !== 'wide') {
           const one: any = await apiClient.getDoorArtVariant(command, file, section, variant);
@@ -184,6 +200,28 @@ export function DoorArtDialog({
   };
 
   /**
+   * Write the native teletext page. No row trim and no column count: a .tti
+   * is packet records, one control code per byte, and the server refuses a
+   * page the board cannot render.
+   */
+  const saveTti = async (base64: string) => {
+    setSaving(true);
+    setStatus(null);
+    try {
+      await apiClient.saveDoorArt(command, file, section, base64, 'tti');
+      queryClient.invalidateQueries({ queryKey: ['door-art'] });
+      showSuccess(`${label} saved`);
+      onClose();
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'Save failed';
+      setStatus(`Error: ${msg}`);
+      showError(msg);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  /**
    * An upload STAYS in the dialog and shows what landed - the whole point of
    * bringing a file in is to see it on the board's canvas before trusting it.
    */
@@ -231,10 +269,10 @@ export function DoorArtDialog({
                   : 'px-3 py-1 text-sm rounded text-content-secondary hover:text-content-primary'
               }
             >
-              {VARIANT_LABELS[v]}{v !== 'wide' && !drawn[v] ? ' (not drawn)' : ''}
+              {VARIANT_LABELS[v]}{v !== 'wide' && !drawn[v] && !(v === 'ttx' && drawn.tti) ? ' (not drawn)' : ''}
             </button>
           ))}
-          {variant !== 'wide' && wideContent && (
+          {variant === 'c64' && wideContent && (
             <button
               type="button"
               className="ml-auto px-3 py-1 text-sm text-content-secondary hover:text-content-primary"
@@ -256,6 +294,25 @@ export function DoorArtDialog({
           <p className="text-sm text-content-secondary flex items-center gap-2">
             <Loader2 className="h-4 w-4 animate-spin" /> Building canvas...
           </p>
+        ) : variant === 'ttx' ? (
+          ttiContent !== null && (
+            <>
+              {drawn.ttx && !drawn.tti && (
+                <p className="text-sm text-content-secondary" data-testid="door-art-ttx-ans-notice">
+                  This slot has an ANSI teletext drawing (.ttx.ans). The board shows that version
+                  to teletext callers until a native page is saved here.
+                </p>
+              )}
+              <TeletextScreenEditor
+                key={`${file}#${section}`}
+                content={ttiContent}
+                filePath={`${file}#${section}.tti`}
+                saving={saving}
+                onSave={saveTti}
+                onCancel={onClose}
+              />
+            </>
+          )
         ) : surface ? (
           <>
             <ScreenEditor

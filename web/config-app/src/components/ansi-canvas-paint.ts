@@ -58,6 +58,13 @@ export function paintScreen(
    * changes; this is the view, not the data.
    */
   hidden: Highlight[] = [],
+  /**
+   * The face the ART is drawn in, as a CSS font-family list. Omitted, it is
+   * the board's Topaz. A native teletext page passes TeletextUPR, the face
+   * the caller's terminal uses for renderNativeTti output - Topaz has no
+   * mosaic sextants.
+   */
+  fontFamily: string = '"TopazPlus_a1200", "Topaz_a1200", "Courier New", monospace',
 ): void {
   const rows = canvas.length;
   const cols = rows > 0 ? canvas[0].length : 0;
@@ -83,7 +90,7 @@ export function paintScreen(
    * ahead of both and is not shipped here at all, so the canvas drew Amiga art
    * in whatever the browser reached for.
    */
-  ctx.font = `${CELL_HEIGHT}px "TopazPlus_a1200", "Topaz_a1200", "Courier New", monospace`;
+  ctx.font = `${CELL_HEIGHT}px ${fontFamily}`;
   ctx.textBaseline = 'top';
 
   for (let y = 0; y < rows; y++) {

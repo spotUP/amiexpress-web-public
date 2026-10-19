@@ -25,6 +25,16 @@
  * invalid, the browser dropped it, and the admin rendered with no design
  * tokens at all - "the admin page turned white now?".
  */
+/* The face a native .tti page is drawn in - the caller's teletext font,
+   with the mosaic sextants renderNativeTti emits. OFL, licence beside it. */
+@font-face {
+  font-family: 'TeletextUPR';
+  src: url('./fonts/TeletextUPR.woff2') format('woff2');
+  font-weight: normal;
+  font-style: normal;
+  font-display: block;
+}
+
 @font-face {
   font-family: 'PetMe64';
   src: url('./fonts/PetMe64.ttf') format('truetype');

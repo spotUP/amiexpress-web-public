@@ -8,7 +8,6 @@ import type { TtiPageGroup, TtiParseResult } from './ttiParser';
 import type {
   TeletextPage,
   TeletextSubpage,
-  TeletextRow,
   TeletextToken,
   TeletextService,
   PageControlFlags,
@@ -19,8 +18,6 @@ import type {
 import {
   createEmptyPage,
   createEmptySubpage,
-  createEmptyRow,
-  createDefaultPageFlags,
 } from '../model/factories';
 import { decodeOLContent } from './ttiTranslations';
 

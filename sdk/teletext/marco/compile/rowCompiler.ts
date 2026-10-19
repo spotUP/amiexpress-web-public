@@ -3,7 +3,7 @@
  * Per 04_PACKET_COMPILER.md Stage 1.
  */
 
-import type { TeletextRow, TeletextToken } from '../model/types';
+import type { TeletextRow } from '../model/types';
 import type { CompiledDisplayRow } from './types';
 import { DiagnosticCollector } from './diagnostics';
 

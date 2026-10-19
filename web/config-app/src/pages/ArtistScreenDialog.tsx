@@ -22,6 +22,7 @@ import { Modal } from '../components/ui/Modal';
 import { ScreenEditor } from '../components/ScreenEditor';
 import { RipScreenEditor } from '../components/RipScreenEditor';
 import { PetsciiScreenEditor } from '../components/PetsciiScreenEditor';
+import { TeletextScreenEditor } from '../components/TeletextScreenEditor';
 import { fanOutOptions, savingLabel } from './screen-write-plan';
 import { SkeletonRows } from '../components/ui/states';
 import { useNotification } from '../contexts/NotificationContext';
@@ -38,7 +39,7 @@ import { screenSlotState } from './screen-slot-state';
 
 interface ScreenFilePayload {
   content: string;
-  format: 'ansi' | 'text' | 'petscii' | 'rip' | 'binary';
+  format: 'ansi' | 'text' | 'petscii' | 'rip' | 'teletext-native' | 'binary';
   bytes: number;
   mci?: MciReferenceShape[];
   /** What the board thinks is wrong with these bytes, if anything. */
@@ -227,7 +228,7 @@ export function ArtistScreenDialog({ path, theme, index, onClose, onOpenPath, on
       return;
     }
 
-    if (!file || !mine || file.format === 'rip' || file.format === 'petscii') {
+    if (!file || !mine || file.format === 'rip' || file.format === 'petscii' || file.format === 'teletext-native') {
       setEditing(null);
       return;
     }
@@ -436,6 +437,9 @@ export function ArtistScreenDialog({ path, theme, index, onClose, onOpenPath, on
    */
   const [drawingBlankSeq, setDrawingBlankSeq] = useState(false);
   const isSeqPath = !!path && path.toLowerCase().endsWith('.seq');
+  /** The same offer for a native teletext page: a blank 40x25 frame. */
+  const [drawingBlankTti, setDrawingBlankTti] = useState(false);
+  const isTtiPath = !!path && path.toLowerCase().endsWith('.tti');
 
   /*
    * The same rule ScreenFilesPage now keeps: a drawing surface belongs to the
@@ -659,7 +663,7 @@ export function ArtistScreenDialog({ path, theme, index, onClose, onOpenPath, on
         even when the file belonged to another ARTIST. The state machine knows
         the difference; the paragraph never did.
       */}
-      {!isNew && !drawingBlankSeq && slotState.kind !== 'loading' && (
+      {!isNew && !drawingBlankSeq && !drawingBlankTti && slotState.kind !== 'loading' && (
         <div data-testid="screen-not-there">
           <ScreenSlotBanner
             state={slotState}
@@ -675,6 +679,7 @@ export function ArtistScreenDialog({ path, theme, index, onClose, onOpenPath, on
              */
             onDraw={mine ? () => {
               if (isSeqPath) { setDrawingBlankSeq(true); return; }
+              if (isTtiPath) { setDrawingBlankTti(true); return; }
               setUndrawable(null);
               setEditing(createSurface(blankCanvas()));
             } : undefined}
@@ -804,7 +809,24 @@ export function ArtistScreenDialog({ path, theme, index, onClose, onOpenPath, on
         </div>
       )}
 
-      {(file || isNew) && !drawingBlankSeq && (
+      {drawingBlankTti && path && (
+        <div className="mt-3">
+          <TeletextScreenEditor
+            /* Empty content IS the blank page; frameToTti gives it a page number. */
+            content=""
+            filePath={path}
+            onSave={async bytes => {
+              if (!(await confirmAuditWrite('This drawing'))) return;
+              writeBytes.mutate({ target: path, bytes });
+              setDrawingBlankTti(false);
+            }}
+            onCancel={() => setDrawingBlankTti(false)}
+            saving={writeBytes.isPending}
+          />
+        </div>
+      )}
+
+      {(file || isNew) && !drawingBlankSeq && !drawingBlankTti && (
         <div className="mt-3">
           {file?.format === 'rip' ? (
             <RipScreenEditor
@@ -823,6 +845,15 @@ export function ArtistScreenDialog({ path, theme, index, onClose, onOpenPath, on
               readOnly={!mine}
               /* "Upload a drawing" is in this dialog's own strip below. */
               hostOffersUpload
+              onSave={mine ? async bytes => { if (await confirmAuditWrite('This drawing')) save.mutate(bytes); } : undefined}
+              onCancel={onClose}
+              saving={save.isPending || writeBytes.isPending}
+            />
+          ) : file?.format === 'teletext-native' ? (
+            <TeletextScreenEditor
+              content={file.content}
+              filePath={path ?? undefined}
+              readOnly={!mine}
               onSave={mine ? async bytes => { if (await confirmAuditWrite('This drawing')) save.mutate(bytes); } : undefined}
               onCancel={onClose}
               saving={save.isPending || writeBytes.isPending}

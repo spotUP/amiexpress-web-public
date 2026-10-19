@@ -13,8 +13,8 @@
  * - 256-color or truecolor support (for exact palette matching)
  */
 
-import type { PageGrid, Cell } from '../state-machine/types';
-import { CharsetMode, Color, MosaicType } from '../state-machine/types';
+import type { PageGrid } from '../state-machine/types';
+import { CharsetMode, Color } from '../state-machine/types';
 
 const ROWS = 24;
 const COLS = 40;
@@ -185,7 +185,6 @@ export function renderToAnsi(grid: PageGrid, options: AnsiRenderOptions = {}): s
     flashPhase = true,
     reveal = false,
     truecolor = false,
-    separatedDim = false,
     subset,
   } = options;
 
