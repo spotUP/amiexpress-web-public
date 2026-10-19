@@ -55,7 +55,7 @@ const bbs_door_sdk_1 = require("@amiexpress/bbs-door-sdk");
 const video_grid_1 = require("./video-grid");
 const video_layout_1 = require("./video-layout");
 const stream_resize_1 = require("./stream-resize");
-const video_codec_1 = require("../video-codec");
+const ascii_1 = require("@amiexpress/bbs-door-sdk/media/ascii");
 const video_cells_1 = require("../video-cells");
 const door_theme_1 = require("../door-theme");
 /** Columns in the microphone meter - also its resolution in distinct values. */
@@ -1261,7 +1261,7 @@ class EnhancedVoiceChannel {
                     : null;
             if (!buffer)
                 return;
-            const decoded = (0, video_codec_1.decodeRichFrame)(buffer, this.cellBuffers.get(owner) ?? null);
+            const decoded = (0, ascii_1.decodeRichFrame)(buffer, this.cellBuffers.get(owner) ?? null);
             // A packet that cannot be applied is DROPPED, not drawn: a delta
             // whose base we never had would paint nonsense. The sender's next
             // keyframe repairs it within a few frames.

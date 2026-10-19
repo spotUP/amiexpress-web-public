@@ -55,6 +55,7 @@ module.exports = {
     // must agree on. Source, so a RED/GREEN cycle never rides on sdk/dist.
     '^@amiexpress/bbs-door-sdk/engines/ui/ansi-editor/core/cp437$':
       '<rootDir>/../../sdk/engines/ui/ansi-editor/core/cp437.ts',
+    '^@amiexpress/bbs-door-sdk/media/ascii$': '<rootDir>/../../sdk/media/ascii/index.ts',
     '^@amiexpress/bbs-door-sdk/petscii$': '<rootDir>/../../sdk/petscii/index.ts',
     '^@amiexpress/bbs-door-sdk/petscii/frame$': '<rootDir>/../../sdk/petscii/frame/index.ts',
     '^@amiexpress/bbs-door-sdk/teletext/render-native$': '<rootDir>/../../sdk/teletext/render-native.ts',

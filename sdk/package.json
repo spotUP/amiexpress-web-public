@@ -121,6 +121,12 @@
       "require": "./dist/engines/ui/ansi/eight-pens.js",
       "default": "./dist/engines/ui/ansi/eight-pens.js"
     },
+    "./media/ascii": {
+      "types": "./dist/media/ascii/index.d.ts",
+      "import": "./dist-esm/media/ascii/index.js",
+      "require": "./dist/media/ascii/index.js",
+      "default": "./dist/media/ascii/index.js"
+    },
     "./petscii": {
       "types": "./dist/petscii/index.d.ts",
       "import": "./dist-esm/petscii/index.js",

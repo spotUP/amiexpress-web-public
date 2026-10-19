@@ -18,7 +18,7 @@ import {
   isKeyframeDue,
   CODEC_VERSION,
   KEYFRAME_INTERVAL,
-} from '../../../../Doors/livechat/video-codec';
+} from '@amiexpress/bbs-door-sdk/media/ascii';
 import {
   cellsToTags,
   MODE_HALFBLOCK,

@@ -21,6 +21,7 @@
     "settings.ts",
     "catalog.ts",
     "petscii/**/*",
+    "media/ascii/**/*",
     "teletext/**/*",
     "beeb/**/*",
     "common/**/*",

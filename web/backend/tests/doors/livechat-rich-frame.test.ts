@@ -26,7 +26,7 @@ import {
   encodeRichFrame,
   decodeRichFrame,
   isRichPacket,
-} from '../../../../Doors/livechat/video-codec';
+} from '@amiexpress/bbs-door-sdk/media/ascii';
 
 const W = 12;
 const H = 6;

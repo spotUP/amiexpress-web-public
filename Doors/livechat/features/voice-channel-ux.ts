@@ -25,7 +25,7 @@ import type { DoorContext } from '@amiexpress/bbs-door-sdk';
 import { VideoGrid, type VideoParticipant } from './video-grid';
 import { capStreamCells } from './video-layout';
 import { needsReshape, reshapeStream } from './stream-resize';
-import { decodeRichFrame } from '../video-codec';
+import { decodeRichFrame } from '@amiexpress/bbs-door-sdk/media/ascii';
 import {
   richToTags, fitRichToTile, modeCode, DEFAULT_RENDER_MODE,
   type RichFrame, type RenderMode,

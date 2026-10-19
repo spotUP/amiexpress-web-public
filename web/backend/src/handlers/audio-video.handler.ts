@@ -8,7 +8,16 @@
 import type { Socket, Server as SocketIOServer } from 'socket.io';
 import { getSessionBySocketId } from '../server/session-manager';
 import type { BBSSession } from '../index';
-import { rgbToHsv } from '../utils/image-to-ascii.util';
+import {
+  AMIGA16_NAMES,
+  BAYER_4X4,
+  applyTemporalSmoothing as smoothLuma,
+  cellsToBlessedTags,
+  frameToAnsiCells,
+  getLuminance,
+  nearestPaletteIndex,
+  type TemporalState,
+} from '@amiexpress/bbs-door-sdk/media/ascii';
 import { renderShapeAscii } from '../utils/shape-ascii.util';
 
 /**
@@ -38,82 +47,24 @@ export type VideoMode =
  */
 export const DEFAULT_VIDEO_MODE: VideoMode = 'color';
 
-// Global cache for temporal smoothing (stabilizes flickering pixels)
+// Per-stream temporal smoothing state (stabilizes flickering pixels).
 // Keyed by the socket object, not socket.id: a web session's link keeps
 // its object across a resume while its id moves to the new raw socket
 // (session-parking.ts), so an id key would orphan the entry.
-const lumaCache = new WeakMap<object, Float32Array>();
-
-// 4x4 Bayer Threshold Matrix for ordered dithering
-const BAYER_4X4 = [
-  [0, 8, 2, 10],
-  [12, 4, 14, 6],
-  [3, 11, 1, 9],
-  [15, 7, 13, 5]
-].map(row => row.map(v => (v / 16) - 0.5)); // Normalized and centered around 0
-
-// ========== LAB COLOR SPACE CONVERSION (Global) ==========
-// CIE L*a*b* provides perceptually uniform color space
-const rgbToLab = (r: number, g: number, b: number): [number, number, number] => {
-  // 1. Gamma correction (sRGB -> linear RGB)
-  r = r / 255; g = g / 255; b = b / 255;
-  r = r > 0.04045 ? Math.pow((r + 0.055) / 1.055, 2.4) : r / 12.92;
-  g = g > 0.04045 ? Math.pow((g + 0.055) / 1.055, 2.4) : g / 12.92;
-  b = b > 0.04045 ? Math.pow((b + 0.055) / 1.055, 2.4) : b / 12.92;
-
-  // 2. RGB -> XYZ (D65 illuminant, sRGB primaries)
-  let x = r * 0.4124564 + g * 0.3575761 + b * 0.1804375;
-  let y = r * 0.2126729 + g * 0.7151522 + b * 0.0721750;
-  let z = r * 0.0193339 + g * 0.1191920 + b * 0.9503041;
-
-  // 3. Normalize by reference white (D65)
-  x = x / 0.95047; y = y / 1.00000; z = z / 1.08883;
-
-  // 4. XYZ -> LAB
-  const f = (t: number) => t > 0.008856 ? Math.pow(t, 1/3) : (7.787 * t) + (16/116);
-  x = f(x); y = f(y); z = f(z);
-
-  const L = (116 * y) - 16;
-  const A = 500 * (x - y);
-  const B = 200 * (y - z);
-
-  return [L, A, B];
+const temporalStates = new WeakMap<object, TemporalState>();
+const stateFor = (key: object): TemporalState => {
+  let st = temporalStates.get(key);
+  if (!st) { st = { luma: null }; temporalStates.set(key, st); }
+  return st;
 };
-
-// ========== COLOR PALETTE (Pre-computed globally for performance) ==========
-const PALETTE_RGB: { name: string; r: number; g: number; b: number }[] = [
-  // Dark colors (0-7)
-  { name: 'black', r: 0, g: 0, b: 0 },
-  { name: 'red', r: 170, g: 0, b: 0 },
-  { name: 'green', r: 0, g: 170, b: 0 },
-  { name: 'yellow', r: 170, g: 85, b: 0 },
-  { name: 'blue', r: 0, g: 0, b: 170 },
-  { name: 'magenta', r: 170, g: 0, b: 170 },
-  { name: 'cyan', r: 0, g: 170, b: 170 },
-  { name: 'white', r: 170, g: 170, b: 170 },
-  // Bright colors (8-15)
-  { name: 'lightblack', r: 85, g: 85, b: 85 },
-  { name: 'lightred', r: 255, g: 85, b: 85 },
-  { name: 'lightgreen', r: 85, g: 255, b: 85 },
-  { name: 'lightyellow', r: 255, g: 255, b: 85 },
-  { name: 'lightblue', r: 85, g: 85, b: 255 },
-  { name: 'lightmagenta', r: 255, g: 85, b: 255 },
-  { name: 'lightcyan', r: 85, g: 255, b: 255 },
-  { name: 'lightwhite', r: 255, g: 255, b: 255 },
-];
-
-// Pre-compute LAB values ONCE at module load (not per-frame!)
-// This saves ~800 operations per frame (16 colors × 50 ops each)
-const PALETTE_LAB = PALETTE_RGB.map(c => ({
-  name: c.name,
-  lab: rgbToLab(c.r, c.g, c.b)
-}));
+const rgbToBlessed = (r: number, g: number, b: number): string =>
+  AMIGA16_NAMES[nearestPaletteIndex(r, g, b, 'amiga16')];
 
 export function registerAudioVideoHandlers(socket: Socket, io: SocketIOServer, sessions: Map<string, BBSSession>): void {
   
   // Cleanup cache on disconnect
   socket.on('disconnect', () => {
-    lumaCache.delete(socket);
+    temporalStates.delete(socket);
   });
 
   // ========== AUDIO HANDLERS ==========
@@ -299,320 +250,6 @@ console.log(`[Audio][stutter] ${who}`, JSON.stringify(stats ?? {}));
     const { width, height, colored, mode = DEFAULT_VIDEO_MODE, data: buffer } = data;
     const pixels = new Uint8Array(buffer);
 
-    // ========== COLOR CONVERSION (using global pre-computed LAB palette) ==========
-    // CIEDE2000 color distance (simplified for performance)
-    // Full CIEDE2000 is very complex; this is the core delta-E formula
-    const rgbToBlessed = (r: number, g: number, b: number, isBackground: boolean = false): string => {
-      const [L1, A1, B1] = rgbToLab(r, g, b);
-
-      let minDist = Infinity;
-      let bestColor = 'white';
-
-      for (const color of PALETTE_LAB) {
-        const [L2, A2, B2] = color.lab;
-
-        // CIEDE2000 simplified (core formula)
-        // Weighting: L (lightness) matters most, then chroma, then hue
-        const dL = L1 - L2;
-        const dA = A1 - A2;
-        const dB = B1 - B2;
-
-        // Chroma components
-        const C1 = Math.sqrt(A1 * A1 + B1 * B1);
-        const C2 = Math.sqrt(A2 * A2 + B2 * B2);
-        const dC = C1 - C2;
-
-        // Hue component (simplified)
-        const dH = Math.sqrt(Math.max(0, dA * dA + dB * dB - dC * dC));
-
-        // Weighted distance (kL=1, kC=1, kH=1 for speed)
-        let dist = Math.sqrt(dL * dL + dC * dC + dH * dH);
-
-        // AGGRESSIVE COLOR PRESERVATION for backgrounds
-        if (isBackground && color.name === 'black' && (r > 10 || g > 10 || b > 10)) {
-          dist *= 12.0; // 12x penalty for black (stronger than before)
-        }
-
-        if (dist < minDist) {
-          minDist = dist;
-          bestColor = color.name;
-        }
-      }
-
-      return bestColor;
-    };
-
-    // Color transformation functions (IMPROVED for better contrast)
-    const dimColor = (r: number, g: number, b: number): [number, number, number] => {
-      // More aggressive dimming to allow true black for very dark areas
-      const luma = getLuminance(r, g, b);
-
-      // If very dark (luma < 30), allow true black background
-      if (luma < 30) {
-        return [0, 0, 0]; // Pure black for very dark areas
-      }
-
-      // Otherwise dim to 50% for background (more aggressive than 70%)
-      return [Math.floor(r * 0.5), Math.floor(g * 0.5), Math.floor(b * 0.5)];
-    };
-
-    const brightenColor = (r: number, g: number, b: number): [number, number, number] => {
-      // Less aggressive brightening to prevent washing out (was 1.4, now 1.2)
-      return [
-        Math.min(255, Math.floor(r * 1.2)),
-        Math.min(255, Math.floor(g * 1.2)),
-        Math.min(255, Math.floor(b * 1.2))
-      ];
-    };
-
-    // ========== EDGE DETECTION (Sobel Operator) ==========
-    const detectEdges = (lumaMap: Float32Array, w: number, h: number): Float32Array => {
-      const edges = new Float32Array(w * h);
-
-      // Sobel kernels for gradient detection
-      const sobelX = [[-1, 0, 1], [-2, 0, 2], [-1, 0, 1]];
-      const sobelY = [[-1, -2, -1], [0, 0, 0], [1, 2, 1]];
-
-      for (let y = 1; y < h - 1; y++) {
-        for (let x = 1; x < w - 1; x++) {
-          let gx = 0, gy = 0;
-
-          // Convolve with Sobel kernels
-          for (let ky = -1; ky <= 1; ky++) {
-            for (let kx = -1; kx <= 1; kx++) {
-              const idx = (y + ky) * w + (x + kx);
-              const luma = lumaMap[idx];
-              gx += luma * sobelX[ky + 1][kx + 1];
-              gy += luma * sobelY[ky + 1][kx + 1];
-            }
-          }
-
-          // Edge magnitude (gradient strength)
-          edges[y * w + x] = Math.sqrt(gx * gx + gy * gy);
-        }
-      }
-
-      return edges;
-    };
-
-    // ========== CLAHE (Contrast Limited Adaptive Histogram Equalization) ==========
-    const applyCLAHE = (
-      lumaMap: Float32Array,
-      w: number,
-      h: number,
-      tileSize: number = 8,
-      clipLimit: number = 2.5
-    ): Float32Array => {
-      const enhanced = new Float32Array(w * h);
-      const tilesX = Math.ceil(w / tileSize);
-      const tilesY = Math.ceil(h / tileSize);
-
-      // Build histogram for each tile
-      const cdfs: number[][][] = [];
-      for (let ty = 0; ty < tilesY; ty++) {
-        cdfs[ty] = [];
-        for (let tx = 0; tx < tilesX; tx++) {
-          const hist = new Array(256).fill(0);
-
-          // Accumulate histogram
-          let count = 0;
-          for (let y = ty * tileSize; y < Math.min((ty + 1) * tileSize, h); y++) {
-            for (let x = tx * tileSize; x < Math.min((tx + 1) * tileSize, w); x++) {
-              const bin = Math.floor(lumaMap[y * w + x] * 255);
-              hist[bin]++;
-              count++;
-            }
-          }
-
-          // Clip histogram to prevent over-enhancement
-          const clipVal = clipLimit * count / 256;
-          let clipped = 0;
-          for (let i = 0; i < 256; i++) {
-            if (hist[i] > clipVal) {
-              clipped += hist[i] - clipVal;
-              hist[i] = clipVal;
-            }
-          }
-
-          // Redistribute clipped pixels
-          const redistribution = clipped / 256;
-          for (let i = 0; i < 256; i++) {
-            hist[i] += redistribution;
-          }
-
-          // Build CDF
-          const cdf = new Array(256);
-          cdf[0] = hist[0];
-          for (let i = 1; i < 256; i++) {
-            cdf[i] = cdf[i - 1] + hist[i];
-          }
-
-          // Normalize CDF
-          for (let i = 0; i < 256; i++) {
-            cdf[i] = cdf[i] / count;
-          }
-
-          cdfs[ty][tx] = cdf;
-        }
-      }
-
-      // Apply equalization with bilinear interpolation
-      for (let y = 0; y < h; y++) {
-        for (let x = 0; x < w; x++) {
-          const idx = y * w + x;
-          const luma = lumaMap[idx];
-          const bin = Math.floor(luma * 255);
-
-          // Find tile coordinates (with sub-tile position for interpolation)
-          const tileX = x / tileSize;
-          const tileY = y / tileSize;
-          const tx = Math.min(tilesX - 1, Math.floor(tileX));
-          const ty = Math.min(tilesY - 1, Math.floor(tileY));
-          const fx = tileX - tx;
-          const fy = tileY - ty;
-
-          // Bilinear interpolation between 4 neighboring tiles
-          const tx1 = Math.min(tilesX - 1, tx + 1);
-          const ty1 = Math.min(tilesY - 1, ty + 1);
-
-          const v00 = cdfs[ty][tx][bin];
-          const v10 = cdfs[ty][tx1][bin];
-          const v01 = cdfs[ty1][tx][bin];
-          const v11 = cdfs[ty1][tx1][bin];
-
-          const v0 = v00 * (1 - fx) + v10 * fx;
-          const v1 = v01 * (1 - fx) + v11 * fx;
-
-          enhanced[idx] = v0 * (1 - fy) + v1 * fy;
-        }
-      }
-
-      return enhanced;
-    };
-
-    // ========== TEMPORAL SMOOTHING (Exponential Moving Average) ==========
-    const applyTemporalSmoothing = (
-      currentLuma: Float32Array,
-      socketKey: object,
-      alpha: number = 0.65 // 65% current, 35% previous (reduces flicker)
-    ): Float32Array => {
-      const cached = lumaCache.get(socketKey);
-
-      if (!cached || cached.length !== currentLuma.length) {
-        // First frame or size changed - just cache and return
-        lumaCache.set(socketKey, new Float32Array(currentLuma));
-        return currentLuma;
-      }
-
-      // Blend: smoothed = alpha * current + (1-alpha) * previous
-      const smoothed = new Float32Array(currentLuma.length);
-      for (let i = 0; i < currentLuma.length; i++) {
-        smoothed[i] = alpha * currentLuma[i] + (1 - alpha) * cached[i];
-      }
-
-      // Update cache
-      lumaCache.set(socketKey, new Float32Array(smoothed));
-
-      return smoothed;
-    };
-
-    // ========== UNSHARP MASKING (Extreme Sharpness) ==========
-    const applyUnsharpMask = (
-      lumaMap: Float32Array,
-      w: number,
-      h: number,
-      amount: number = 1.5, // Sharpening strength
-      radius: number = 1 // Blur radius for mask
-    ): Float32Array => {
-      const sharpened = new Float32Array(w * h);
-
-      // Simple 3x3 Gaussian blur for the mask
-      const kernel = [
-        [1, 2, 1],
-        [2, 4, 2],
-        [1, 2, 1]
-      ];
-      const kernelSum = 16;
-
-      for (let y = 0; y < h; y++) {
-        for (let x = 0; x < w; x++) {
-          const idx = y * w + x;
-
-          // Apply Gaussian blur
-          let blurred = 0;
-          for (let ky = -1; ky <= 1; ky++) {
-            for (let kx = -1; kx <= 1; kx++) {
-              const ny = Math.max(0, Math.min(h - 1, y + ky));
-              const nx = Math.max(0, Math.min(w - 1, x + kx));
-              blurred += lumaMap[ny * w + nx] * kernel[ky + 1][kx + 1];
-            }
-          }
-          blurred /= kernelSum;
-
-          // Unsharp mask: sharpened = original + amount * (original - blurred)
-          const original = lumaMap[idx];
-          sharpened[idx] = Math.max(0, Math.min(1, original + amount * (original - blurred)));
-        }
-      }
-
-      return sharpened;
-    };
-
-    // ========== LANCZOS RESAMPLING (High-Quality Downsampling) ==========
-    const lanczosKernel = (x: number, a: number = 3): number => {
-      if (x === 0) return 1;
-      if (Math.abs(x) >= a) return 0;
-      const piX = Math.PI * x;
-      return (a * Math.sin(piX) * Math.sin(piX / a)) / (piX * piX);
-    };
-
-    const lanczosDownsample = (
-      lumaMap: Float32Array,
-      srcW: number,
-      srcH: number,
-      dstW: number,
-      dstH: number
-    ): Float32Array => {
-      const downsampled = new Float32Array(dstW * dstH);
-      const scaleX = srcW / dstW;
-      const scaleY = srcH / dstH;
-      const a = 3; // Lanczos-3
-
-      for (let y = 0; y < dstH; y++) {
-        for (let x = 0; x < dstW; x++) {
-          const srcX = (x + 0.5) * scaleX;
-          const srcY = (y + 0.5) * scaleY;
-
-          let sum = 0;
-          let weightSum = 0;
-
-          // Sample a x a neighborhood
-          for (let j = Math.floor(srcY - a); j <= Math.ceil(srcY + a); j++) {
-            for (let i = Math.floor(srcX - a); i <= Math.ceil(srcX + a); i++) {
-              if (i >= 0 && i < srcW && j >= 0 && j < srcH) {
-                const weight = lanczosKernel((srcX - i) / scaleX, a) * lanczosKernel((srcY - j) / scaleY, a);
-                sum += lumaMap[j * srcW + i] * weight;
-                weightSum += weight;
-              }
-            }
-          }
-
-          downsampled[y * dstW + x] = weightSum > 0 ? sum / weightSum : 0;
-        }
-      }
-
-      return downsampled;
-    };
-
-
-    // ========== CHARACTER SETS ==========
-    // PERCEPTUALLY-CALIBRATED charset - ordered by actual visual weight (area coverage)
-    // Each character measured for luminance contribution, NOT ASCII order
-    // This prevents false edges and improves gradient smoothness
-    const CHARSET_CALIBRATED = ' .`\'-_,^":;~!>+<i|?/\\Il1)(}{[]tfjrxnuvcz*XYUJCLQ0OoZmwqpbdkhao#MW&8%N@$';
-    const charset = CHARSET_CALIBRATED;
-    const charCount = charset.length;
-
     // Get pixel RGB at position (with horizontal flip to un-mirror webcam)
     const getPixel = (x: number, y: number): [number, number, number] => {
       const flippedX = width - 1 - x;  // Mirror horizontally
@@ -623,13 +260,6 @@ console.log(`[Audio][stutter] ${who}`, JSON.stringify(stats ?? {}));
         const gray = pixels[idx];
         return [gray, gray, gray];
       }
-    };
-
-    // Calculate luminance with Gamma correction for midtone boost (face visibility)
-    const getLuminance = (r: number, g: number, b: number): number => {
-      const linear = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
-      // Gamma 1.5 boosts midtones significantly
-      return Math.pow(linear, 1.0 / 1.5) * 255;
     };
 
     let asciiFrame = '';
@@ -657,7 +287,7 @@ console.log(`[Audio][stutter] ${who}`, JSON.stringify(stats ?? {}));
       }
 
       // Apply temporal smoothing
-      const smoothedLuma = applyTemporalSmoothing(lumaMap, socket);
+      const smoothedLuma = smoothLuma(lumaMap, stateFor(socket));
 
       // Process in 2x4 blocks
       for (let y = 0; y < height; y += 4) {
@@ -747,7 +377,7 @@ console.log(`[Audio][stutter] ${who}`, JSON.stringify(stats ?? {}));
       }
 
       // Apply temporal smoothing to reduce flicker
-      const smoothedLuma = applyTemporalSmoothing(lumaMap, socket);
+      const smoothedLuma = smoothLuma(lumaMap, stateFor(socket));
 
       // Process in 2x2 blocks for 4x effective resolution
       for (let y = 0; y < height; y += 2) {
@@ -811,138 +441,16 @@ console.log(`[Audio][stutter] ${who}`, JSON.stringify(stats ?? {}));
         if (y + 2 < height) asciiFrame += '\n';
       }
     } else if (mode === 'hsv') {
-      // ========== HSV MODE (16-COLOR RETRO ASCII) ==========
-      // 1:1 port of ascii-view algorithm by [original author]
-      // Key insight: ASCII character controls perceived brightness, color is always full brightness
-      // Character from VALUE_CHARS encodes luminance, ANSI color encodes hue
-
-      // ASCII characters ordered by visual density (brightness) - from ascii-view
-      const VALUE_CHARS = ' .-=+*x#$&X@';
-      const N_VALUES = VALUE_CHARS.length;
-
-      // Edge detection characters based on Sobel angle
-      const getSobelAngleChar = (angle: number): string => {
-        if ((angle >= 22.5 && angle <= 67.5) || (angle >= -157.5 && angle <= -112.5))
-          return '\\';
-        else if ((angle >= 67.5 && angle <= 112.5) || (angle >= -112.5 && angle <= -67.5))
-          return '_';
-        else if ((angle >= 112.5 && angle <= 157.5) || (angle >= -67.5 && angle <= -22.5))
-          return '/';
-        else
-          return '|';
-      };
-
-      // Map quantized HSV to 16-color ANSI palette (retro mode)
-      // Smart color mapping with skin-tone detection for realistic faces
-      const getRetroColor = (hsv: { hue: number; saturation: number; value: number }): string => {
-        // Very low saturation = pure grayscale
-        if (hsv.saturation < 0.15) {
-          if (hsv.value < 0.2) return 'black';
-          if (hsv.value < 0.4) return 'lightblack';
-          if (hsv.value < 0.7) return 'white';
-          return 'lightwhite';
-        }
-
-        // Skin tone detection: hue 0-50° (red-orange-yellow range) with moderate saturation
-        const isSkinToneHue = hsv.hue <= 50 || hsv.hue >= 340; // Red-orange-yellow range
-        const isModerateSaturation = hsv.saturation >= 0.15 && hsv.saturation < 0.55;
-
-        if (isSkinToneHue && isModerateSaturation) {
-          // Skin tones: use warm colors based on brightness
-          if (hsv.value < 0.3) return 'red';           // Dark skin / shadows
-          if (hsv.value < 0.5) return 'yellow';        // Medium skin
-          if (hsv.value < 0.7) return 'lightyellow';   // Light skin
-          return 'lightwhite';                          // Highlights
-        }
-
-        // High saturation = vivid colors (clothing, objects, etc.)
-        const hueIndex = Math.round(hsv.hue / 60) % 6;
-        const HUE_COLORS_DARK = ['red', 'yellow', 'green', 'cyan', 'blue', 'magenta'];
-        const HUE_COLORS_LIGHT = ['lightred', 'lightyellow', 'lightgreen', 'lightcyan', 'lightblue', 'lightmagenta'];
-
-        return hsv.value >= 0.5 ? HUE_COLORS_LIGHT[hueIndex] : HUE_COLORS_DARK[hueIndex];
-      };
-
-      // Build grayscale map for edge detection
-      const grayscaleMap = new Float32Array(width * height);
-      for (let y = 0; y < height; y++) {
-        for (let x = 0; x < width; x++) {
-          const [r, g, b] = getPixel(x, y);
-          // Standard luminance formula (normalized 0-1)
-          grayscaleMap[y * width + x] = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
-        }
-      }
-
-      // Apply Sobel edge detection
-      const sobelX = new Float32Array(width * height);
-      const sobelY = new Float32Array(width * height);
-      const Gx = [[-1, 0, 1], [-2, 0, 2], [-1, 0, 1]];
-      const Gy = [[1, 2, 1], [0, 0, 0], [-1, -2, -1]];
-
-      for (let y = 1; y < height - 1; y++) {
-        for (let x = 1; x < width - 1; x++) {
-          let gx = 0, gy = 0;
-          for (let ky = -1; ky <= 1; ky++) {
-            for (let kx = -1; kx <= 1; kx++) {
-              const idx = (y + ky) * width + (x + kx);
-              const luma = grayscaleMap[idx];
-              gx += luma * Gx[ky + 1][kx + 1];
-              gy += luma * Gy[ky + 1][kx + 1];
-            }
-          }
-          sobelX[y * width + x] = gx;
-          sobelY[y * width + x] = gy;
-        }
-      }
-
-      // Edge threshold (from ascii-view: values < 4.0 enable edge detection)
-      const edgeThreshold = 1.5; // Moderate edge detection
-
-      // Process each pixel
-      for (let y = 0; y < height; y++) {
-        for (let x = 0; x < width; x++) {
-          const idx = y * width + x;
-          const [r, g, b] = getPixel(x, y);
-
-          // Convert to HSV
-          const hsv = rgbToHsv(r, g, b);
-
-          // Calculate grayscale from HSV value (value^2 for better contrast)
-          const grayscale = hsv.value * hsv.value;
-
-          // Select ASCII character based on grayscale
-          let charIndex = Math.floor(grayscale * N_VALUES);
-          if (charIndex >= N_VALUES) charIndex = N_VALUES - 1;
-          if (charIndex < 0) charIndex = 0;
-          let char = VALUE_CHARS[charIndex];
-
-          // Check for edge - replace char with edge character if strong edge detected
-          const sx = sobelX[idx];
-          const sy = sobelY[idx];
-          const sobelMagnitude2 = sx * sx + sy * sy;
-          if (sobelMagnitude2 >= edgeThreshold * edgeThreshold) {
-            const sobelAngle = Math.atan2(sy, sx) * (180 / Math.PI);
-            char = getSobelAngleChar(sobelAngle);
-          }
-
-          // Get retro color (quantized hue, binary saturation, always full brightness)
-          const colorName = getRetroColor(hsv);
-
-          if (colorName !== lastFg) {
-            if (lastFg) asciiFrame += '{/}';
-            asciiFrame += `{${colorName}-fg}`;
-            lastFg = colorName;
-          }
-
-          asciiFrame += char;
-        }
-
-        if (lastFg) {
-          asciiFrame += '{/}';
-          lastFg = '';
-        }
-        if (y < height - 1) asciiFrame += '\n';
-      }
+      // 16-colour retro ASCII: value-ramp characters, Sobel edge characters,
+      // hue colour per cell. The SDK converter owns the algorithm.
+      asciiFrame = cellsToBlessedTags(
+        frameToAnsiCells(
+          { data: pixels, width, height, channels: colored ? 3 : 1 },
+          width, height,
+          { palette: 'amiga16', mode: 'hsv', mirror: true },
+        ),
+        { background: false },
+      );
     } else if (mode === 'shape') {
       // ========== SHAPE-BASED MODE (Alex Harri Algorithm) ==========
       // Uses 6-dimensional shape vectors for character selection instead of brightness-only
@@ -966,111 +474,14 @@ console.log(`[Audio][stutter] ${who}`, JSON.stringify(stats ?? {}));
         useCache: true, // Enable quantization caching
       });
     } else {
-      // ========== ASCII CHARACTER MODE (WORLD-CLASS ENHANCED) ==========
-
-      // PASS 1: Build initial luminance map
-      const lumaMap = new Float32Array(width * height);
-      for (let i = 0; i < width * height; i++) {
-        const [r, g, b] = getPixel(i % width, Math.floor(i / width));
-        lumaMap[i] = getLuminance(r, g, b) / 255;
-      }
-
-      // PASS 2: Apply temporal smoothing to reduce flicker
-      const smoothedLuma = applyTemporalSmoothing(lumaMap, socket);
-
-      // PASS 2.5: Histogram-based contrast stretching for better black usage
-      // Find min/max luminance (ignore extreme outliers)
-      const sortedLuma = Array.from(smoothedLuma).sort((a, b) => a - b);
-      const minLuma = sortedLuma[Math.floor(sortedLuma.length * 0.02)]; // 2nd percentile
-      const maxLuma = sortedLuma[Math.floor(sortedLuma.length * 0.98)]; // 98th percentile
-      const lumaRange = maxLuma - minLuma;
-
-      // Stretch contrast to use full 0-1 range
-      const stretchedLuma = new Float32Array(width * height);
-      for (let i = 0; i < smoothedLuma.length; i++) {
-        if (lumaRange > 0) {
-          stretchedLuma[i] = Math.max(0, Math.min(1, (smoothedLuma[i] - minLuma) / lumaRange));
-        } else {
-          stretchedLuma[i] = smoothedLuma[i];
-        }
-      }
-
-      // PASS 3: Apply CLAHE for local contrast enhancement (REDUCED clip limit to preserve shadows)
-      // (Makes faces visible even in challenging lighting)
-      const contrastEnhanced = applyCLAHE(stretchedLuma, width, height, 8, 1.5); // Reduced from 2.5 to 1.5
-
-      // PASS 4: Apply unsharp masking for extreme sharpness
-      // (Amount=1.5 for strong sharpening without artifacts)
-      const sharpenedLuma = applyUnsharpMask(contrastEnhanced, width, height, 1.5);
-
-      // PASS 5: Detect edges for detail preservation
-      const edgeMap = detectEdges(sharpenedLuma, width, height);
-
-      // Find max edge strength for normalization
-      let maxEdge = 0;
-      for (let i = 0; i < edgeMap.length; i++) {
-        if (edgeMap[i] > maxEdge) maxEdge = edgeMap[i];
-      }
-
-      // PASS 6: Render with edge-aware character selection
-      for (let y = 0; y < height; y++) {
-        for (let x = 0; x < width; x++) {
-          const idx = y * width + x;
-          const [r, g, b] = getPixel(x, y);
-          let luma = sharpenedLuma[idx];
-
-          // Apply Bayer dithering for smooth gradients
-          const threshold = BAYER_4X4[y % 4][x % 4];
-          luma = Math.max(0, Math.min(1, luma + threshold * 0.06)); // 6% dither (reduced for sharper image)
-
-          // Edge-aware character boosting (ULTRA-AGGRESSIVE for maximum sharpness)
-          // At strong edges, bias heavily toward denser characters
-          const edgeStrength = maxEdge > 0 ? edgeMap[idx] / maxEdge : 0;
-          if (edgeStrength > 0.20) {
-            // Strong edge boost (makes eyes/nose/mouth ultra-sharp)
-            luma = Math.pow(luma, 0.70); // Darken VERY significantly for dense chars (was 0.80)
-          } else if (edgeStrength > 0.10) {
-            // Medium edge boost
-            luma = Math.pow(luma, 0.85); // (was 0.90)
-          }
-
-          // Additional gamma adjustment for more contrast
-          // Push mid-tones toward extremes for better character differentiation
-          luma = luma < 0.5 ? Math.pow(luma, 1.2) : Math.pow(luma, 0.8);
-
-          // Map to character index
-          const charIndex = Math.max(0, Math.min(charCount - 1, Math.floor(luma * (charCount - 1))));
-          const char = charset[charIndex];
-
-          // Color selection with LAB-based brightness adjustment
-          const [fr, fg, fb] = brightenColor(r, g, b);
-          const fgColor = rgbToBlessed(fr, fg, fb);
-
-          const [br, bg2, bb] = dimColor(r, g, b);
-          const bgColor = rgbToBlessed(br, bg2, bb, true);
-
-          // Optimize tag output (only emit when colors change)
-          if (fgColor !== lastFg || bgColor !== lastBg) {
-            if (lastFg || lastBg) asciiFrame += '{/}';
-            asciiFrame += `{${fgColor}-fg}{${bgColor}-bg}`;
-            lastFg = fgColor;
-            lastBg = bgColor;
-          }
-
-          asciiFrame += char;
-        }
-
-        // Close tags at line end
-        if (lastFg || lastBg) {
-          asciiFrame += '{/}';
-          lastFg = '';
-          lastBg = '';
-        }
-
-        if (y < height - 1) {
-          asciiFrame += '\n';
-        }
-      }
+      // Coloured ASCII: the SDK converter, with this socket's temporal state.
+      asciiFrame = cellsToBlessedTags(
+        frameToAnsiCells(
+          { data: pixels, width, height, channels: colored ? 3 : 1 },
+          width, height,
+          { palette: 'amiga16', mode: 'ascii', state: stateFor(socket), mirror: true, bgLevels: 16 },
+        ),
+      );
     }
 
     // DEBUG: Count lines in frame to diagnose scrolling

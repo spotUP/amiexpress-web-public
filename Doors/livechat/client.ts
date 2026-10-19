@@ -62,7 +62,7 @@ const RICH_PIXELS_PER_CHAR = { px: 2, py: 4 };
  * the source pixels are square.
  */
 const RICH_PIXEL_ASPECT = 1;
-import { encodeRichFrame, isKeyframeDue } from './video-codec';
+import { encodeRichFrame, isKeyframeDue } from '@amiexpress/bbs-door-sdk/media/ascii';
 
 
 /**

@@ -21,7 +21,34 @@
  * Pure: bytes in, bytes out.
  */
 
-import type { CellFrame, RichFrame } from './video-cells';
+/** One byte per cell, so a frame is width * height bytes. */
+export type CellFrame = Uint8Array;
+
+/**
+ * A frame that does not care how it will be drawn.
+ *
+ * Render mode used to be the SENDER's choice, because each mode had its own
+ * cell format: half-block packs two palette colours, braille packs eight
+ * mono dots, coloured ASCII packs a ramp step and a colour. None converts
+ * to another - braille has no colour, half-block has no 2x4 detail - so one
+ * broadcast could only ever be drawn one way, and cycling the mode changed
+ * what OTHER people saw of you rather than what you saw of them.
+ *
+ * Sending both planes makes the mode a local preference:
+ *
+ *   dots   - eight luminance samples in a 2x4 grid. Braille reads them
+ *            directly; the count of lit dots gives an ASCII ramp step.
+ *   colors - the top and bottom half's palette indices, four bits each.
+ *            Half-block reads them directly; coloured ASCII takes the top.
+ *
+ * Two bytes a cell instead of one. That would have been unthinkable when a
+ * frame was 21 KB of markup; at a hundred-odd bytes it costs nothing worth
+ * counting, and it buys everybody their own view.
+ */
+export interface RichFrame {
+  dots: Uint8Array;
+  colors: Uint8Array;
+}
 
 export const CODEC_VERSION = 1;
 
