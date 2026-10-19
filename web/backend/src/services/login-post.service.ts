@@ -349,23 +349,18 @@ export async function runPostAuthLogin(
   }
 
   /**
-   * THE BROWSER'S SESSION TOKEN.
+   * THE BROWSER'S LOGIN NOTICE.
    *
-   * A web caller who types his name and password used to get a freshly
-   * minted JWT with `login-success`, from the credential arm of the `login`
-   * socket handler. That arm is retired (TP-9b), and without this the only
-   * `login-success` carrying a token would be the one a caller who ALREADY
-   * had a token gets - so a first login would never store one and auto-login
-   * would quietly stop working after this task.
+   * `login-success` tells the terminal the caller is in, and hands it the
+   * resume token that reopens THIS session after a dropped socket
+   * (server/resume-tokens.ts). It carries no JWT any more: token login is
+   * retired (server/auth-socket-handlers.ts), so a browser has nothing to
+   * log in with but the board's own name and password prompt.
    *
-   * Telnet and SSH have no use for it: there is no browser to store it, and
-   * `login-success` is a frontend event.
+   * Telnet and SSH have no use for it: `login-success` is a frontend event.
    */
   if (isWeb) {
     try {
-      const accessToken = await db.generateAccessToken(user);
-      const refreshToken = await db.generateRefreshToken(user);
-      // Opens THIS session again after a dropped socket (server/resume-tokens.ts).
       const resumeToken = issueResumeTokenForLogin(session, String(user.id));
       emitter.emit("login-success", {
         user: {
@@ -376,11 +371,9 @@ export async function runPostAuthLogin(
           expert: user.expert,
           ansi: user.ansi,
         },
-        token: accessToken,
-        refreshToken,
         resumeToken,
-        // The browser stores this beside the token; an entry without a numeric
-        // node is dropped on read and no resume is ever offered.
+        // The browser stores this beside the resume token; an entry without a
+        // numeric node is dropped on read and no resume is ever offered.
         nodeId: session.nodeId,
         /*
          * THE THEME THIS CALLER WEARS, so the browser can remember it.
@@ -399,9 +392,9 @@ export async function runPostAuthLogin(
         }),
       });
     } catch (err) {
-      // A token is a convenience, not the login: the caller is authenticated
-      // either way and must not be thrown out because minting failed.
-      console.error("[LOGIN] could not mint a session token:", err);
+      // The notice is a convenience, not the login: the caller is
+      // authenticated either way and must not be thrown out because it failed.
+      console.error("[LOGIN] could not send login-success:", err);
     }
   }
 

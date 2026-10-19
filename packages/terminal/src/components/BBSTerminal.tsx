@@ -80,8 +80,6 @@ const RIP_HEIGHT = 350;
  */
 const PETSCII_SCROLLBACK_ROWS = XTERM_CONFIG.options.scrollback;
 
-const SHARED_AUTH_TOKEN_KEY = 'authToken';
-const BBS_AUTH_TOKEN_KEY = 'bbs_auth_token';
 const SESSION_STATE_KEY = 'bbs_session_state';
 
 interface BBSTerminalProps {
@@ -306,9 +304,8 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
    * forced change - and every keystroke leaves here as ordinary `command`
    * input, which is what the board already accepts for every other prompt.
    *
-   * What is LEFT to know is only whether this session is past login, and two
-   * things ask: `attemptTokenLogin` (do not auto-login over a live session)
-   * and the disconnect handler.
+   * What is LEFT to know is only whether this session is past login, and
+   * the disconnect handler asks it.
    *
    * The eight-value union that used to be here, its five line buffers and the
    * echo they did are gone. They were the second implementation of a machine
@@ -318,13 +315,6 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
    * same question in two ways.
    */
   const loginState = useRef<'server-driven' | 'loggedin'>('server-driven');
-  /**
-   * A token login is in flight. Not login STATE: it stops the storage-event
-   * listener from firing a second `login {token}` while the first is still
-   * unanswered, which is the one thing the retired 'logging-in' value was
-   * doing that still needs doing.
-   */
-  const tokenLoginPending = useRef<boolean>(false);
   /** The browser's password manager, typed into the server's login prompts. */
   const loginCredentials = useRef<LoginCredentials | null>(null);
   const doorActive = useRef<boolean>(false);
@@ -342,6 +332,10 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
    * translate. The browser knows anyway: `door-active` says so.
    */
   const [doorOwnsScreen, setDoorOwnsScreen] = useState(false);
+  /**
+   * A network drop is waiting for its reconnect. A reconnect that offers no
+   * resume token starts a fresh session, so the old canvas surface is reset.
+   */
   const reconnectPending = useRef<boolean>(false);
   // The board closed this socket itself (`io server disconnect`); the wake
   // events leave it closed until something connects it again.
@@ -682,33 +676,6 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
   // Sound effects are now handled by MediaHandler (see media-handler.ts)
   // MediaHandler uses Web Audio API directly for browser-compatible audio playback
 
-  const getStoredSharedToken = useCallback(() => {
-    if (typeof window === 'undefined') return null;
-
-    // sessionStorage is per TAB, so each tab keeps its own identity.
-    const own =
-      sessionStorage.getItem(SHARED_AUTH_TOKEN_KEY) ||
-      sessionStorage.getItem(BBS_AUTH_TOKEN_KEY);
-    if (own) return own;
-
-    // localStorage is shared by every tab and window of this origin, so
-    // falling back to it unconditionally meant logging in ANYWHERE logged
-    // you in EVERYWHERE - a fresh tab silently adopted the last user's
-    // token, making it impossible to be two different users at once (and
-    // surprising for anyone who opens the BBS in a second window).
-    //
-    // That cross-tab convenience is exactly what the existing "auto-login"
-    // preference describes, so it is now gated on it: opt in and new tabs
-    // resume your session, leave it off and every tab is independent.
-    const autoLoginEnabled = localStorage.getItem('bbs_auto_login_enabled') === 'true';
-    if (!autoLoginEnabled) return null;
-
-    return (
-      localStorage.getItem(SHARED_AUTH_TOKEN_KEY) ||
-      localStorage.getItem(BBS_AUTH_TOKEN_KEY)
-    );
-  }, []);
-
   const saveSessionState = useCallback((sessionData: any) => {
     if (typeof window === 'undefined') return;
     try {
@@ -749,52 +716,27 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
     const resumeStorage = browserResumeStorage();
     if (resumeStorage && !opts.keepResume) clearResume(resumeStorage);
     sessionStorage.removeItem(SESSION_STATE_KEY);
-    sessionStorage.removeItem(BBS_AUTH_TOKEN_KEY);
-    sessionStorage.removeItem(SHARED_AUTH_TOKEN_KEY);
     console.log('[Session Persistence] Session state cleared');
   }, []);
 
-  const attemptTokenLogin = useCallback(() => {
-    const socket = socketRef.current;
-    if (!socket) return false;
-    if (loginState.current === 'loggedin' || tokenLoginPending.current) {
-      return false;
-    }
-
-    // Every caller of this function (initial mount, the 'connect' handler's
-    // non-restore branch, and 'session-restore-failed') is, by definition,
-    // about to begin a FRESH session on this mounted component - either via
-    // the token-login branch below (which skips the graphics prompt
-    // outright) or by falling through to a brand new graphics-prompt/login
-    // flow. Either way a prior PETSCII session must not carry its canvas
-    // surface over; see clearPetsciiSession's declaration above.
-    clearPetsciiSession();
-
-    const token = getStoredSharedToken();
-    if (token) {
-      console.log('[AutoLogin] Reusing shared auth token');
-      socket.emit('login', { token });
-      tokenLoginPending.current = true;
-      return true;
-    }
-    return false;
-  }, [getStoredSharedToken, clearPetsciiSession]);
-
+  /**
+   * TOKEN LOGIN IS RETIRED: the board refuses the socket `login` event, and
+   * every fresh login is typed at the board's own name and password prompt.
+   * A dropped socket comes back through the resume token (connectOptions).
+   * The saved JWT and the cross-tab auto-login switch that older bundles
+   * left in this browser are credentials nothing reads any more, so they go.
+   * `authToken` stays: the admin pages and the chat terminal use it.
+   */
   useEffect(() => {
-    attemptTokenLogin();
-
-    const handleStorage = (event: StorageEvent) => {
-      if (
-        event.key === SHARED_AUTH_TOKEN_KEY ||
-        event.key === BBS_AUTH_TOKEN_KEY
-      ) {
-        attemptTokenLogin();
+    try {
+      for (const key of ['bbs_auth_token', 'bbs_auto_login_enabled', 'bbs_saved_username', 'bbs_saved_password']) {
+        localStorage.removeItem(key);
+        sessionStorage.removeItem(key);
       }
-    };
-
-    window.addEventListener('storage', handleStorage);
-    return () => window.removeEventListener('storage', handleStorage);
-  }, [attemptTokenLogin]);
+    } catch {
+      // Storage blocked (private mode): there is nothing to clear.
+    }
+  }, []);
 
   const cancelTransfer = () => {
     const socket = socketRef.current;
@@ -2139,12 +2081,12 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
       // `session-restored` or `session-restore-failed`, so nothing is asked
       // here. Do NOT flip loginState to 'logging-in' - a refused resume
       // runs the fresh welcome at once, and onData's logging-in guard would
-      // drop keys typed into it. A connect that offered no token falls back
-      // to the token login below.
+      // drop keys typed into it. A reconnect that offered no token meets a
+      // fresh session, so the old surface goes.
       const offeredResume = resumeStorage ? resumeTokenToOffer(resumeStorage) !== undefined : false;
       if (!offeredResume && reconnectPending.current) {
         reconnectPending.current = false;
-        attemptTokenLogin();
+        clearPetsciiSession();
       }
 
       // The reconnect re-login that stood here replayed a password the
@@ -2194,8 +2136,8 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
       // "Starting over" means the eventual reconnect either restores the
       // old session (a continuation, which legitimately keeps its surface)
       // or - if that fails, or there was nothing to restore - runs the
-      // fresh-session path (session-restore-failed / attemptTokenLogin,
-      // both of which also reset the surface). Resetting here too, right
+      // fresh-session path (session-restore-failed, or the connect handler
+      // for a reconnect that offered no token; both reset the surface). Resetting here too, right
       // where "starting over" is decided, means the canvas is never left
       // showing a dead session through whatever gap exists before that
       // eventual 'connect'/'session-restore-failed' fires.
@@ -2499,7 +2441,6 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
       // Check if this was a server-initiated forced disconnect (logoff)
       if (forcedDisconnectRef.current) {
         console.log('[DISCONNECT] Forced disconnect (logoff) - clearing session state and preventing reconnect');
-        localStorage.removeItem('bbs_auth_token');
         clearSessionState();
         reconnectPending.current = false;
         forcedDisconnectRef.current = false;  // Reset flag
@@ -2507,16 +2448,15 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
       } else if (reason === 'io client disconnect') {
         // User intentionally disconnected - clear everything
         console.log('[DISCONNECT] User-initiated disconnect - clearing session state');
-        localStorage.removeItem('bbs_auth_token');
         clearSessionState();
         reconnectPending.current = false;
       } else {
         // The board closed this socket itself: the session is gone, and
         // socket.io does not reconnect, so this tab's token opens nothing.
         // It is not a network drop: nothing is pending, and the wake events
-        // must not reconnect it into a token login against the session the
-        // board just moved elsewhere. Not the force-disconnect path either:
-        // that removes bbs_auth_token, which every tab shares.
+        // must not reconnect it into a fresh session while the old one has
+        // moved elsewhere. Not the force-disconnect path either: that is a
+        // logoff, and clears this tab's whole session state.
         const boardClosed = boardClosedTheSocket(reason);
         if (boardClosed && resumeStorage) clearResume(resumeStorage);
         closedByBoard.current = boardClosed;
@@ -2526,7 +2466,6 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
         }
         reconnectPending.current = !boardClosed;
         loginState.current = 'server-driven';
-        tokenLoginPending.current = false;
         // DO NOT clear session state - it will be used on reconnect
       }
       onDisconnect?.(reason);
@@ -3082,10 +3021,8 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
       }
     });
 
-    // The credential-replay auto-login that used to live here was dead:
-    // nothing called it. Auto-login runs through attemptTokenLogin (the
-    // saved JWT), and the saved username/password are only used to seed
-    // that token on a fresh registration.
+    // There is no auto-login. A fresh login is typed at the board's prompt,
+    // and a dropped socket comes back through the resume token.
 
     /**
      * The server's cue that its login prompt is on screen (it fires this from
@@ -3100,7 +3037,6 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
     socket.on('prompt-login', () => {
       loginCredentials.current!.onPromptLogin();
       loginState.current = 'server-driven';
-      tokenLoginPending.current = false;
     });
 
     // A theme picked during the call (THEMEC), remembered for the title the
@@ -3117,34 +3053,6 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
       loginCredentials.current!.onLoginSuccess();
       loginState.current = 'loggedin';
       reconnectPending.current = false;
-
-      if (data && data.token) {
-        // Write to sessionStorage so this tab always reconnects as this user,
-        // even if another tab logs in as someone else and overwrites localStorage.
-        sessionStorage.setItem(BBS_AUTH_TOKEN_KEY, data.token);
-        sessionStorage.setItem(SHARED_AUTH_TOKEN_KEY, data.token);
-
-        // Only publish the token to the shared (cross-tab) store when the
-        // user asked for auto-login. Writing it unconditionally is what let
-        // one login leak into every other tab and window; when the
-        // preference is off we actively clear any token a previous session
-        // left behind, so stale credentials cannot resurrect it.
-        const shareAcrossTabs = localStorage.getItem('bbs_auto_login_enabled') === 'true';
-        if (shareAcrossTabs) {
-          localStorage.setItem(BBS_AUTH_TOKEN_KEY, data.token);
-          localStorage.setItem(SHARED_AUTH_TOKEN_KEY, data.token);
-          window.dispatchEvent(
-            new StorageEvent('storage', {
-              key: SHARED_AUTH_TOKEN_KEY,
-              newValue: data.token,
-              oldValue: null,
-            })
-          );
-        } else {
-          localStorage.removeItem(BBS_AUTH_TOKEN_KEY);
-          localStorage.removeItem(SHARED_AUTH_TOKEN_KEY);
-        }
-      }
 
       /*
        * REMEMBER THE THEME FOR THE SCREENS BEFORE THE NEXT LOGIN.
@@ -3173,11 +3081,9 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
       /**
        * The "Quick Connect" credential save that stood here is gone with the
        * browser's login buffers (TP-9b), and it cost nothing: NOTHING read
-       * `bbs_saved_username` / `bbs_saved_password` back. Auto-login is the
-       * saved JWT (`attemptTokenLogin`), as the comment above the connect
-       * handler already recorded. What it did do was keep a base64 password
-       * in localStorage; the two `removeItem` calls in the failure path stay,
-       * so a browser that has one loses it on the next failed login.
+       * `bbs_saved_username` / `bbs_saved_password` back. What it did do was
+       * keep a base64 password in localStorage; the mount effect that clears
+       * the retired token keys removes those too.
        */
 
       socket.emit('get-font-preference');
@@ -3218,20 +3124,14 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
       // Forget this tab's refused entry, so no reconnect offers it again.
       if (resumeStorage) forgetRefusedOffer(resumeStorage);
       // The restore failed, so the backend is about to start a genuinely
-      // fresh session (a new graphics prompt, or the token-login fallback
-      // below) - not a continuation of whatever session (PETSCII or not)
-      // this component was previously showing. Reset the surface explicitly
-      // here, before that fresh sequence begins, rather than relying solely
-      // on attemptTokenLogin's own reset (it already does this too,
-      // belt-and-suspenders, since it also runs when there's no token to
-      // fall back on).
+      // fresh session (a new graphics prompt and the name and password
+      // prompt) - not a continuation of whatever session (PETSCII or not)
+      // this component was previously showing. Reset the surface here,
+      // before that fresh sequence begins.
       clearPetsciiSession();
       clearSessionState({ keepResume: true });
       reconnectPending.current = false;
-      // Fall back to token login
       loginState.current = 'server-driven';
-      tokenLoginPending.current = false;
-      attemptTokenLogin();
     });
 
     socket.on('login-failed', (data: string | { reason: string; retryFrom?: 'username' | 'password' }) => {
@@ -3241,20 +3141,12 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
 
       console.log('Login failed:', reason, 'retryFrom:', retryFrom);
       loginCredentials.current!.onLoginFailed();
-      localStorage.removeItem('bbs_auth_token');
       clearSessionState();
-      const autoLoginEnabled = localStorage.getItem('bbs_auto_login_enabled') === 'true';
-      if (autoLoginEnabled) {
-        localStorage.removeItem('bbs_saved_username');
-        localStorage.removeItem('bbs_saved_password');
-        writeTerm('\r\n\x1b[33m[Quick Connect] Saved credentials cleared due to login failure\x1b[0m\r\n');
-      }
 
       // Where the caller goes next is the SERVER's decision and it has
       // already sent the prompt; `retryFrom` is read only for the log.
       console.log('[Login] server is re-prompting from:', retryFrom);
       loginState.current = 'server-driven';
-      tokenLoginPending.current = false;
     });
 
     /**

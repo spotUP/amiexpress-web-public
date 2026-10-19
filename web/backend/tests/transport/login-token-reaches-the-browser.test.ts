@@ -1,23 +1,19 @@
 /**
- * A WEB caller's login gives him a session token, so his next visit is
- * automatic.
+ * A WEB caller's login gives the browser a RESUME token, and no JWT.
  *
- * WHY THIS EXISTS. The token used to be minted inside the `login` socket
- * handler's username/password arm, and TP-9b retired that arm - the browser
- * does not post credentials any more, it types at the server's prompt like
- * every other transport. The mint moved into `runPostAuthLogin`, the one
- * pipeline every successful login runs through, and NOTHING pinned it there:
- * the symptom of getting it wrong is not a failed login, it is a login that
- * works and then never auto-logs in again, which no login test would notice.
- *
- * The sysop reported exactly that on the live board, which is why the pin is
- * here now rather than in the commit that moved it.
+ * WHY THIS EXISTS. `login-success` used to carry a freshly minted JWT so the
+ * next visit could log in through the `login` socket event with no password.
+ * Token login is retired (server/auth-socket-handlers.ts refuses it), so a
+ * minted token would be a credential handed to the browser for nothing. The
+ * resume token stays: it reopens THIS session after a dropped socket, and the
+ * symptom of losing it is a reconnect that lands on a fresh login prompt,
+ * which no login test would notice.
  */
 process.env.SKIP_DB_INIT = '1';
 
 const generateAccessToken = jest.fn(async () => 'access-token');
 const generateRefreshToken = jest.fn(async () => 'refresh-token');
-// The first write after the mint: the row brought up to date from the record.
+// The first write after login-success: the row brought up to date from the record.
 const updateUser = jest.fn(async (..._args: unknown[]) => { throw new Stop('past the mint'); });
 
 /**
@@ -47,7 +43,7 @@ jest.mock('../../src/services/node-reservation.service', () => ({
   isReservationMatch: () => true,
 }));
 
-/** The pipeline runs a long way past the mint; stop it once the token is out. */
+/** The pipeline runs a long way past login-success; stop it once that is out. */
 class Stop extends Error {}
 // No record on disk: the login runs on the row (load-account.ts falls back).
 jest.mock('../../src/services/UserFileManager', () => ({
@@ -85,7 +81,7 @@ const USER = {
   expert: false, ansi: true, slotNumber: 3, calls: 1, callsToday: 1,
 };
 
-/** Run the pipeline far enough to see the mint, and no further. */
+/** Run the pipeline far enough to see login-success, and no further. */
 async function loginOn(connectionType?: 'web' | 'telnet', sess = session(connectionType)) {
   const { runPostAuthLogin } = require('../../src/services/login-post.service');
   const socket = emitter();
@@ -99,33 +95,32 @@ async function loginOn(connectionType?: 'web' | 'telnet', sess = session(connect
 
 beforeEach(() => jest.clearAllMocks());
 
-describe('the session token a web caller needs for auto-login', () => {
-  it('login-success carries a freshly minted token', async () => {
+describe('login-success hands the browser no JWT', () => {
+  it('login-success names the caller and carries no token or refresh token', async () => {
     const socket = await loginOn('web');
     const success = socket.emitted.find((e: any) => e.event === 'login-success');
     expect(success).toBeDefined();
-    expect(success.data).toMatchObject({
-      token: 'access-token',
-      refreshToken: 'refresh-token',
-      user: { id: 'u-1', username: 'sysop' },
-    });
+    expect(success.data).toMatchObject({ user: { id: 'u-1', username: 'sysop' } });
+    expect(success.data).not.toHaveProperty('token');
+    expect(success.data).not.toHaveProperty('refreshToken');
+    expect(generateAccessToken).not.toHaveBeenCalled();
+    expect(generateRefreshToken).not.toHaveBeenCalled();
   });
 
-  it('a telnet caller is not sent one - there is no browser to store it', async () => {
+  it('a telnet caller is not sent login-success - there is no browser', async () => {
     const socket = await loginOn('telnet');
     expect(socket.emitted.some((e: any) => e.event === 'login-success')).toBe(false);
-    expect(generateAccessToken).not.toHaveBeenCalled();
   });
 
   /**
    * `session-manager.ts` defaults an unset `connectionType` to 'web', but a
    * session built anywhere else may leave it undefined - and a browser that
-   * silently stops getting a token is the failure this file is about.
+   * silently stops getting login-success never leaves its login view.
    */
   it('a session with no connectionType at all is treated as a browser', async () => {
     const socket = await loginOn(undefined);
     const success = socket.emitted.find((e: any) => e.event === 'login-success');
-    expect(success?.data).toMatchObject({ token: 'access-token' });
+    expect(typeof success?.data?.resumeToken).toBe('string');
   });
 });
 

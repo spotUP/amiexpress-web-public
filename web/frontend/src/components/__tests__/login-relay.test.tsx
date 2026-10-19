@@ -176,7 +176,23 @@ describe('the browser relays login keystrokes instead of editing them', () => {
     // The ordering this task could have broken: the font preference is asked
     // for AFTER login-success, and session-font.ts is the single owner.
     expect(socket.didEmit('get-font-preference')).toBe(true);
-    expect(sessionStorage.getItem('bbs_auth_token')).toBe('jwt-token');
+    // Token login is retired: a token an old board still sends is not kept.
+    expect(sessionStorage.getItem('bbs_auth_token')).toBeNull();
+    expect(localStorage.getItem('bbs_auth_token')).toBeNull();
+  });
+
+  it('a JWT an older bundle saved does not log in, and is cleared', () => {
+    localStorage.setItem('bbs_auto_login_enabled', 'true');
+    localStorage.setItem('bbs_auth_token', 'old-jwt');
+    sessionStorage.setItem('bbs_auth_token', 'old-jwt');
+    mount();
+    act(() => { socket.fire('connect'); });
+    act(() => { socket.fire('session-restore-failed', 'expired'); });
+
+    expect(socket.emitted.filter((e) => e.event === 'login')).toEqual([]);
+    expect(localStorage.getItem('bbs_auth_token')).toBeNull();
+    expect(localStorage.getItem('bbs_auto_login_enabled')).toBeNull();
+    expect(sessionStorage.getItem('bbs_auth_token')).toBeNull();
   });
 
   it('the browser never posts credentials any more', () => {
@@ -186,12 +202,9 @@ describe('the browser relays login keystrokes instead of editing them', () => {
       for (const ch of 'sysop\rsecret\r') term().dataHandlers.forEach((cb: (data: string) => void) => cb(ch));
     });
 
-    // A `login` with a username and a password is the retired arm. The only
-    // `login` this client may send carries a TOKEN.
-    const logins = socket.emitted.filter((e) => e.event === 'login');
-    for (const login of logins) {
-      expect(Object.keys((login.args[0] ?? {}) as Record<string, unknown>)).toEqual(['token']);
-    }
+    // Both arms of the `login` event are retired: the password arm (TP-9b)
+    // and the token arm. Credentials leave only as typed `command` input.
+    expect(socket.emitted.filter((e) => e.event === 'login')).toEqual([]);
     // And none of the retired events exists any more.
     for (const retired of ['check-username', 'new-user-response', 'password-reset-input', 'forced-pwd-change-input']) {
       expect({ retired, sent: socket.emitted.some((e) => e.event === retired) })

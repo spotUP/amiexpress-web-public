@@ -13,10 +13,11 @@
  * way the browser offers it: through the `auth` callback, evaluated afresh on
  * every (re)connect, as `handshake.auth.resume`.
  *
- * The login is the real `login` event with a token (auth-socket-handlers ->
- * runPostAuthLogin); only `db` is wrapped in a Proxy (verifyAccessToken,
- * getUserById, token minting), so no account row is needed, and `src/index.ts`
- * is mocked away because it starts servers on import.
+ * The login is typed at the board's own name and password prompt, as a
+ * caller does (command.handler -> runPostAuthLogin); only `db` is wrapped in a
+ * Proxy (getUserById, getUserByUsername, authenticateUser), so no account row
+ * is needed, and `src/index.ts` is mocked away because it starts servers on
+ * import.
  *
  * DATABASE: the import chain (web-connection -> socket-handlers ->
  * command.handler -> login-connect.service -> SamiLogService) creates the
@@ -74,12 +75,11 @@ jest.mock('../../src/database', () => {
   const overrides: Record<string, unknown> = {
     getUserById: async (id: string) => (id === user.id ? { ...user }
       : id === typist.id ? { ...typist } : null),
-    getUserByUsername: async (name: string) => (name === typist.username ? { ...typist } : null),
+    getUserByUsername: async (name: string) => (name === typist.username ? { ...typist }
+      : name === user.username ? { ...user } : null),
     authenticateUser: async (name: string, password: string) =>
-      (name === typist.username && password === 's15 test password' ? { ...typist } : null),
-    verifyAccessToken: async () => ({ userId: user.id, username: user.username, secLevel: 20 }),
-    generateAccessToken: async () => 'access-s13',
-    generateRefreshToken: async () => 'refresh-s13',
+      (name === typist.username && password === 's15 test password' ? { ...typist }
+        : name === user.username && password === 's13 test password' ? { ...user } : null),
   };
   return {
     ...actual,
@@ -124,6 +124,7 @@ const S13_NODE = 9;
 let nextNode = S13_NODE;
 const S15_USER_ID = '5b0e7c1a-9132-4c2e-8f4a-0d1e2f3a4b5c';
 const S15_PASSWORD = 's15 test password';
+const S13_PASSWORD = 's13 test password';
 
 interface Restored { nodeId?: number; resumeToken?: string }
 interface LoginSuccess { resumeToken?: string }
@@ -150,7 +151,9 @@ async function until(what: string, ok: () => boolean, ms = 2000): Promise<void> 
  * the name and the password as a caller does. Each RETURN waits for the
  * board to answer the previous one.
  */
-async function typedPasswordLogin(client: ClientSocket, output: string[]): Promise<void> {
+async function typedPasswordLogin(
+  client: ClientSocket, output: string[], name = 'S15Caller', password = S15_PASSWORD,
+): Promise<void> {
   const id = client.id as string;
   await until('the pre-login graphics prompt', () =>
     getSession(id) !== undefined && output.join('').includes(ANSI_GRAPHICS_PROMPT), 15000);
@@ -164,9 +167,9 @@ async function typedPasswordLogin(client: ClientSocket, output: string[]): Promi
   }, 250);
   try { await until('the name prompt', () => named, 15000); } finally { clearInterval(enter); }
   const session = getSession(id) as unknown as { tempData?: { loginPhase?: string } };
-  client.emit('command', 'S15Caller\r');
+  client.emit('command', `${name}\r`);
   await until('the password prompt', () => session.tempData?.loginPhase === 'password', 5000);
-  client.emit('command', `${S15_PASSWORD}\r`);
+  client.emit('command', `${password}\r`);
 }
 
 function once<T>(client: ClientSocket, event: string, ms: number): Promise<T> {
@@ -192,6 +195,10 @@ describe('S13 - a real socket.io caller is restored to the same node through acc
     const dbDir = process.env.S13_DB_DIR as string;
     expect(fs.existsSync(path.join(dbDir, 's13.db'))).toBe(true);
     await db.init();
+    // Both logins are typed, and the typed-password path reads the board's
+    // database through the DI container, which src/index.ts (mocked away
+    // here) fills at boot.
+    setDatabase(db);
     userFileManager.writeUserFiles(s13User as never, s13User.slotNumber);
     userFileManager.writeUserFiles(s15User as never, s15User.slotNumber);
 
@@ -239,16 +246,12 @@ describe('S13 - a real socket.io caller is restored to the same node through acc
     let door: NodeJS.Timeout | undefined;
 
     try {
-      // 1. Connect, let the pre-login sequence finish, log in with a token.
+      // 1. Connect, let the pre-login sequence finish, log in at the board's
+      //    own name and password prompt (token login is retired).
       await once<void>(client, 'connect', 15000);
       const firstId = client.id as string;
-      // runPreLoginConnect sends the graphics prompt after the banner's delay.
-      await until('the pre-login graphics prompt', () => {
-        const s = getSession(firstId) as unknown as SessionView | undefined;
-        return s !== undefined && output.join('').includes(ANSI_GRAPHICS_PROMPT);
-      }, 15000);
-      const loggedIn = once<LoginSuccess>(client, 'login-success', 15000);
-      client.emit('login', { token: 'jwt-s13' });
+      const loggedIn = once<LoginSuccess>(client, 'login-success', 30000);
+      await typedPasswordLogin(client, output, 'S13Caller', S13_PASSWORD);
       const login = await loggedIn;
       expect(typeof login.resumeToken).toBe('string');
       offered = login.resumeToken;
@@ -343,9 +346,6 @@ describe('S13 - a real socket.io caller is restored to the same node through acc
    * parked.
    */
   it('S15: a password login in a second window takes over a window that never dropped', async () => {
-    // The typed-password path reads the board's database through the DI
-    // container, which src/index.ts (mocked away here) fills at boot.
-    setDatabase(db);
     const logLogoff = jest.spyOn(callersLogManager, 'logLogoff');
     const phone: ClientSocket = ioClient(`http://127.0.0.1:${port}`, { forceNew: true, reconnection: false, autoConnect: false });
     const desk: ClientSocket = ioClient(`http://127.0.0.1:${port}`, { forceNew: true, reconnection: false, autoConnect: false });
