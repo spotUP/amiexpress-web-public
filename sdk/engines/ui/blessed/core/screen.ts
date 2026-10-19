@@ -1358,7 +1358,9 @@ export class Screen extends Element {
           continue;
         }
 
-        // Regular character - write to buffer
+        // Regular character - one code point per cell, so an astral glyph
+        // (teletext sextant) is not split into two surrogate-half cells.
+        const ch = String.fromCodePoint(line.codePointAt(idx)!);
         // Guard: check both width bounds AND actual buffer cell existence
         if (x >= 0 && x < this.width && this.buffer[y] && this.buffer[y][x]) {
           // Check if current character attr has transparent bg (may have been changed by ANSI codes)
@@ -1371,19 +1373,19 @@ export class Screen extends Element {
             const existingAttr = this.buffer[y][x][0];
             // Two arguments = transparency mode (blends at 50% alpha by default)
             const blendedAttr = blend(currentAttr, existingAttr);
-            this.buffer[y][x] = [blendedAttr, line[idx]];
+            this.buffer[y][x] = [blendedAttr, ch];
           } else if (charHasTransparentBg) {
             // Transparent bg: preserve existing background, update fg and character
             const existingAttr = this.buffer[y][x][0];
             const existingBg = existingAttr & 0x1ff;
             const newAttr = (currentAttr & ~0x1ff) | existingBg;
-            this.buffer[y][x] = [newAttr, line[idx]];
+            this.buffer[y][x] = [newAttr, ch];
           } else {
-            this.buffer[y][x] = [currentAttr, line[idx]];
+            this.buffer[y][x] = [currentAttr, ch];
           }
         }
         x++;
-        idx++;
+        idx += ch.length;
       }
     }
   }
@@ -1586,7 +1588,7 @@ export class Screen extends Element {
         }
       } else {
         // No inline tags, use labelAttr (from labelStyle or default)
-        const labelText = ` ${rawLabel} `;
+        const labelText = [...` ${rawLabel} `];
         let x = pos.xi + 2;
         for (let i = 0; i < labelText.length && x < pos.xl - 1; i += 1, x += 1) {
           // Guard: check buffer existence
@@ -1627,7 +1629,7 @@ export class Screen extends Element {
     // Guard: check buffer row exists
     if (!this.buffer[pos.yi]) return;
 
-    const text = `[ ${label} ]`;
+    const text = [...`[ ${label} ]`];
     const maxWidth = Math.max(0, pos.xl - pos.xi - 2);
     const truncated = text.length > maxWidth ? text.slice(0, maxWidth) : text;
     const minStart = pos.xi + 3;
@@ -1689,9 +1691,10 @@ export class Screen extends Element {
         }
       }
 
-      // Regular character
-      result.push([currentAttr, text[i]]);
-      i++;
+      // Regular character, by code point (one cell each)
+      const ch = String.fromCodePoint(text.codePointAt(i)!);
+      result.push([currentAttr, ch]);
+      i += ch.length;
     }
 
     return result;

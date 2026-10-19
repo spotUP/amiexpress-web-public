@@ -9,7 +9,7 @@
 
 import { Element } from '../core/element';
 import { snapToReadable } from '../core/contrast';
-import { parseTags, textWidth, stripAnsi } from '../core/colors';
+import { parseTags, textWidth } from '../core/colors';
 import { wrapAnsiText as wrapAnsi } from '../core/wrap-text';
 import type { ListOptions, KeyEvent, MouseEvent } from '../core/types';
 import type { ResponsiveState } from '../core/responsive-mixin';
@@ -937,13 +937,13 @@ export class List extends Element {
     const lines: string[] = [];
 
     for (const line of text.split(/\r?\n/)) {
-      if (stripAnsi(line).length <= width) {
+      if (textWidth(line) <= width) {
         lines.push(line);
         continue;
       }
       // The engine's one wrapper. This was a near-verbatim copy of
       // Element._wrapContent, hard-breaking mid-word on every narrow row.
-      lines.push(...wrapAnsi(line, width, (t) => stripAnsi(t).length));
+      lines.push(...wrapAnsi(line, width, textWidth));
     }
 
     return lines;

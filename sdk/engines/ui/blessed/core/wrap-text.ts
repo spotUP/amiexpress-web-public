@@ -38,8 +38,9 @@ export function wrapAnsiText(
 
   const push = (text: string) => { lines.push(text); };
 
-  for (let i = 0; i < line.length; i++) {
-    const ch = line[i];
+  // By code point, matching `textWidth`: a UTF-16 walk counted an astral
+  // glyph as two cells and could fold a row between its surrogate halves.
+  for (const ch of line) {
 
     if (ch === ESC) {
       inAnsi = true;

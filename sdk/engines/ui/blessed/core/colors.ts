@@ -1013,9 +1013,17 @@ export function stripAnsi(text: string): string {
   return result;
 }
 
-// Text width accounting for ANSI codes
+/**
+ * Visible width of a line in terminal cells: one cell per code point, ANSI
+ * codes excluded. The screen buffer holds one code point per cell, so this
+ * is the engine's one width rule. Counting UTF-16 units (`.length`) made an
+ * astral glyph - a teletext sextant, U+1FB00.. - two cells wide: a 40-cell
+ * art row measured 45, wrapped, and left a phantom row (MAG door, 2026-10-19).
+ */
 export function textWidth(text: string): number {
-  return stripAnsi(text).length;
+  let cells = 0;
+  for (const _ of stripAnsi(text)) cells++;
+  return cells;
 }
 
 // Legacy aliases

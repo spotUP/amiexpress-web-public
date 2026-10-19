@@ -1089,7 +1089,7 @@ export class Element extends EventEmitter {
       const centeredLines = lines.map((line: string) => {
         // Strip tags to calculate actual text length
         const stripped = line.replace(/\{[^}]+\}/g, '');
-        const textLength = stripped.length;
+        const textLength = textWidth(stripped);
         const padding = Math.max(0, Math.floor((width - textLength) / 2));
         return ' '.repeat(padding) + line;
       });
@@ -1205,7 +1205,7 @@ export class Element extends EventEmitter {
    * Get text width without ANSI codes
    */
   private _textWidth(text: string): number {
-    return stripAnsi(text).length;
+    return textWidth(text);
   }
 
   /**
@@ -2995,8 +2995,9 @@ export class Element extends EventEmitter {
       let inAnsi = false;
       let ansiBuffer = '';
 
-      for (let i = 0; i < line.length && x < this.ileft + this.iwidth; i++) {
-        const ch = line[i];
+      // By code point: an astral glyph is one cell, not two surrogate halves.
+      for (const ch of line) {
+        if (x >= this.ileft + this.iwidth) break;
 
         // Handle ANSI escape sequences
         if (ch === ESC) {
@@ -3542,9 +3543,9 @@ export class Element extends EventEmitter {
     let col = 0;
     let width = 0;
 
-    for (let i = 0; i < plain.length; i++) {
+    for (const ch of plain) {
       if (width >= relX) break;
-      width += this.charWidth(plain[i]);
+      width += this.charWidth(ch);
       col++;
     }
 

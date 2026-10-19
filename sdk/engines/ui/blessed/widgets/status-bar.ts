@@ -10,6 +10,7 @@
  */
 
 import { Box } from './box';
+import { textWidth } from '../core/colors';
 import type { ElementOptions } from '../core/types';
 import { createScrollText, type ScrollMode, type ScrollText } from '../../text/scroll-text';
 
@@ -238,10 +239,10 @@ export class StatusBar extends Box {
 
     const sep = this._separator.length;
     const budget = width - 2;
-    const total = plain.reduce((sum, p) => sum + p.length, 0) + sep * (plain.length - 1);
+    const total = plain.reduce((sum, p) => sum + textWidth(p), 0) + sep * (plain.length - 1);
     if (total <= budget) return null;
 
-    const others = plain.slice(0, -1).reduce((sum, p) => sum + p.length, 0)
+    const others = plain.slice(0, -1).reduce((sum, p) => sum + textWidth(p), 0)
       + sep * Math.max(0, plain.length - 1);
     return budget - others;
   }
@@ -324,10 +325,10 @@ export class StatusBar extends Box {
 
     const sep = this._separator.length;
     const budget = width - 2;   // the leading and trailing space
-    const total = plain.reduce((sum, p) => sum + p.length, 0) + sep * (parts.length - 1);
+    const total = plain.reduce((sum, p) => sum + textWidth(p), 0) + sep * (parts.length - 1);
     if (total <= budget) return parts;
 
-    const others = plain.slice(0, -1).reduce((sum, p) => sum + p.length, 0)
+    const others = plain.slice(0, -1).reduce((sum, p) => sum + textWidth(p), 0)
       + sep * Math.max(0, parts.length - 1);
     const room = budget - others;
 
