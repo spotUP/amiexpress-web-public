@@ -7,7 +7,7 @@
  * assertion is the page text itself.
  */
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { act, render, screen, fireEvent } from '@testing-library/react';
 import { base64ToLatin1 } from '../pages/screen-bytes';
 import { TeletextScreenEditor } from '../components/TeletextScreenEditor';
 import { TELETEXT_CELL } from '../components/teletext-cells';
@@ -130,8 +130,9 @@ describe('the teletext editor', () => {
     expect(fireEvent.contextMenu(canvas)).toBe(false);
 
     fireEvent.click(screen.getByRole('button', { name: /Save/ }));
-    // Red Graphics (0x11, saved as 0x91), then the two mosaic bytes.
-    expect(base64ToLatin1(onSave.mock.calls[0][0] as string)).toBe('PN,10000\nOL,3,    \x91!!\n');
+    // Red Graphics (0x11, saved as 0x91), then the two mosaic bytes. The drag
+    // crosses cell 5's top-right sixel on its way, so cell 5 holds both.
+    expect(base64ToLatin1(onSave.mock.calls[0][0] as string)).toBe('PN,10000\nOL,3,    \x91#!\n');
 
     fireEvent.click(screen.getByRole('button', { name: /Undo/ }));
     fireEvent.click(screen.getByRole('button', { name: /Save/ }));
@@ -179,5 +180,34 @@ describe('the teletext editor', () => {
     fireEvent.click(screen.getByRole('button', { name: /Save/ }));
     // 0x20 + 1 + 2 = '#': the top row of both sixel columns in every cell.
     expect(base64ToLatin1(onSave.mock.calls[0][0] as string)).toBe('PN,10000\nOL,3,    \x91###\n');
+  });
+
+  /*
+   * A freehand stroke is one unbroken trail. The pointer reports every few
+   * sixels, not every sixel, and two moves can land before React renders
+   * once: the stroke painted each sample alone onto the page from the last
+   * render, so a quick hand left gaps and a later sample wiped an earlier
+   * one. Reported 2026-10-19: "if i draw fast i get gaps". Here one move
+   * jumps five cells, and two more land inside one render.
+   */
+  it('draws a freehand stroke without gaps, however few moves the pointer reports', () => {
+    const onSave = vi.fn();
+    render(<TeletextScreenEditor content="" onSave={onSave} />);
+    const canvas = theCanvas();
+    fireEvent.click(screen.getByRole('button', { name: 'Draw Blocks' }));
+
+    // The top sixel row of row 2, from cell 1 to cell 6 in one jump.
+    fireEvent.pointerDown(canvas, { clientX: W + 1, clientY: 2 * H + 1, buttons: 1 });
+    fireEvent.pointerMove(canvas, { clientX: 6 * W + W - 1, clientY: 2 * H + 1, buttons: 1 });
+    // Then on to cell 10 in two moves that arrive before a render.
+    act(() => {
+      fireEvent.pointerMove(canvas, { clientX: 8 * W + W - 1, clientY: 2 * H + 1, buttons: 1 });
+      fireEvent.pointerMove(canvas, { clientX: 10 * W + W - 1, clientY: 2 * H + 1, buttons: 1 });
+    });
+    fireEvent.pointerUp(canvas, { clientX: 10 * W + W - 1, clientY: 2 * H + 1 });
+    fireEvent.click(screen.getByRole('button', { name: /Save/ }));
+
+    // White Graphics, then ten cells with both top sixels lit.
+    expect(base64ToLatin1(onSave.mock.calls[0][0] as string)).toBe(`PN,10000\nOL,2,\x97${'#'.repeat(10)}\n`);
   });
 });

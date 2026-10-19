@@ -32,7 +32,6 @@ import {
   eraseAt,
   fillSixels,
   insertLine,
-  paintMosaic,
   paintSixels,
   pickColours,
   removeLine,
@@ -148,8 +147,20 @@ export function TeletextScreenEditor({
   const [cursor, setCursor] = useState({ x: 0, y: 0 });
   const [showCodes, setShowCodes] = useState(false);
   const typingArea = useRef<HTMLDivElement>(null);
-  /** The page as the stroke found it, and where the stroke started; null between strokes. */
-  const strokeStart = useRef<{ base: TeletextSurface; from: Sixel } | null>(null);
+  /**
+   * The stroke in progress, null between strokes: the page as the stroke
+   * found it and where it started, plus the page as the stroke has left it and
+   * the last sixel it reached. Pointer moves arrive faster than React renders,
+   * so a freehand stroke paints onto `current`, never onto the render's
+   * `surface` - which may still be the page from several moves ago, and
+   * painting onto it dropped the moves in between.
+   */
+  const strokeStart = useRef<{
+    base: TeletextSurface;
+    from: Sixel;
+    current: TeletextSurface;
+    last: Sixel;
+  } | null>(null);
 
   const cells = useMemo(
     () => teletextCells(frameToTti(surface.cells, surface.meta)),
@@ -179,14 +190,19 @@ export function TeletextScreenEditor({
    * A stroke's change: the page is always the stroke's base plus its work so
    * far, and undo returns to the base in one step.
    */
-  const strokeTo = (next: TeletextSurface) => {
-    if (strokeStart.current && next !== surface) setSurface(next);
+  const strokeTo = (next: TeletextSurface, at: Sixel) => {
+    const stroke = strokeStart.current;
+    if (!stroke) return;
+    stroke.last = at;
+    if (next === stroke.current) return;
+    stroke.current = next;
+    setSurface(next);
   };
 
   const endStroke = () => {
     const start = strokeStart.current;
     strokeStart.current = null;
-    if (!start || start.base === surface) return;
+    if (!start || start.base === start.current) return;
     setPast(stack => [...stack, start.base]);
     setFuture([]);
   };
@@ -234,19 +250,25 @@ export function TeletextScreenEditor({
       return;
     }
     const at = sixelAt(x, y, detail);
-    if (phase === 'down') strokeStart.current = { base: surface, from: at };
+    if (phase === 'down') strokeStart.current = { base: surface, from: at, current: surface, last: at };
     const start = strokeStart.current;
     if (!start) return;
+    // A freehand stroke joins this sample to the last one: a fast hand moves
+    // several sixels between two pointer events.
+    const trail = sixelLine(start.last, at);
     const erase = tool === 'erase' || detail.altKey || detail.button === 2 || (detail.buttons & 2) !== 0;
-    if (erase) { strokeTo(eraseAt(surface, at.px, at.py)); return; }
+    if (erase) {
+      strokeTo(trail.reduce((page, p) => eraseAt(page, p.px, p.py), start.current), at);
+      return;
+    }
     switch (tool) {
-      case 'blocks': strokeTo(coloured(paintMosaic(surface, at.px, at.py, fg, bg))); return;
-      case 'line': strokeTo(coloured(paintSixels(start.base, sixelLine(start.from, at), fg, bg))); return;
+      case 'blocks': strokeTo(coloured(paintSixels(start.current, trail, fg, bg)), at); return;
+      case 'line': strokeTo(coloured(paintSixels(start.base, sixelLine(start.from, at), fg, bg)), at); return;
       case 'box':
       case 'box-fill':
-        strokeTo(coloured(paintSixels(start.base, sixelBox(start.from, at, tool === 'box-fill'), fg, bg)));
+        strokeTo(coloured(paintSixels(start.base, sixelBox(start.from, at, tool === 'box-fill'), fg, bg)), at);
         return;
-      case 'fill': if (phase === 'down') strokeTo(coloured(fillSixels(surface, at, fg, bg))); return;
+      case 'fill': if (phase === 'down') strokeTo(coloured(fillSixels(start.current, at, fg, bg)), at); return;
       default: return;
     }
   };
