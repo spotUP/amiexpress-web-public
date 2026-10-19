@@ -22,7 +22,7 @@ export interface MagLayout {
     /** The 40-column tier: header and footer are one row each, no frames. */
     collapseChrome: boolean;
     headerRow: number;
-    /** Rows of art above the panel (0 for none); the panel below it is that much shorter. */
+    /** Rows of art above the panel (0 for none); the panel below it is that much shorter, plus BANNER_GAP_ROWS. */
     bannerRows: number;
     /** Null when the sysop turned the news wire off. Directly above the footer. */
     tickerRow: number | null;
@@ -33,6 +33,8 @@ export interface MagLayout {
 }
 /** A banner may not leave the panel shorter than this: a page of text still has to read. */
 export declare const MIN_PANEL_ROWS = 8;
+/** Blank rows between a banner and the panel, so the logo never touches the text under it. */
+export declare const BANNER_GAP_ROWS = 1;
 export declare function buildLayout(width: number, height: number, options?: {
     ticker?: boolean;
     banner?: number;

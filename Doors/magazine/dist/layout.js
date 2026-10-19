@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.SECTION_ORDER = exports.NEWS_SEPARATOR = exports.sourceName = exports.MIN_PANEL_ROWS = void 0;
+exports.SECTION_ORDER = exports.NEWS_SEPARATOR = exports.sourceName = exports.BANNER_GAP_ROWS = exports.MIN_PANEL_ROWS = void 0;
 exports.rowText = rowText;
 exports.buildLayout = buildLayout;
 exports.columnStep = columnStep;
@@ -66,6 +66,8 @@ function centre(text, width, fill = ' ') {
 }
 /** A banner may not leave the panel shorter than this: a page of text still has to read. */
 exports.MIN_PANEL_ROWS = 8;
+/** Blank rows between a banner and the panel, so the logo never touches the text under it. */
+exports.BANNER_GAP_ROWS = 1;
 function buildLayout(width, height, options = {}) {
     const w = Math.max(1, Math.floor(width) || 80);
     const h = Math.max(6, Math.floor(height) || 24);
@@ -77,8 +79,8 @@ function buildLayout(width, height, options = {}) {
     const withoutBanner = Math.max(1, progressRow - 1);
     // The banner takes its rows from the panel, and gives them back when the screen is too short to spare them.
     const wanted = Math.max(0, Math.floor(options.banner ?? 0));
-    const bannerRows = withoutBanner - wanted >= exports.MIN_PANEL_ROWS ? wanted : 0;
-    const panelTop = 1 + bannerRows;
+    const bannerRows = wanted > 0 && withoutBanner - wanted - exports.BANNER_GAP_ROWS >= exports.MIN_PANEL_ROWS ? wanted : 0;
+    const panelTop = 1 + bannerRows + (bannerRows > 0 ? exports.BANNER_GAP_ROWS : 0);
     return {
         width: w,
         height: h,

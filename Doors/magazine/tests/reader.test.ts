@@ -1190,8 +1190,8 @@ export async function aBannerTakesItsRowsFromThePanelAndEachViewHasItsOwn(): Pro
     h.reader.press('c', 'c');
     const bare = buildLayout(80, 24, { ticker: true });
     assert.strictEqual(h.reader.layout.bannerRows, 3);
-    assert.strictEqual(h.reader.layout.panelHeight, bare.panelHeight - 3, 'the panel is three rows shorter');
-    assert.strictEqual(h.reader.layout.panelTop, bare.panelTop + 3);
+    assert.strictEqual(h.reader.layout.panelHeight, bare.panelHeight - 4, 'the panel gives up the three art rows and one blank row');
+    assert.strictEqual(h.reader.layout.panelTop, bare.panelTop + 4, 'one blank row sits between the logo and the panel');
     assert.ok(noSpaces(h.reader.bannerText()).includes('FRONTPAGE'), 'the front page banner');
     assert.ok(h.reader.panelRows().length <= h.reader.layout.panelHeight);
     h.reader.press('c', 'c');
@@ -1206,7 +1206,7 @@ export async function aBannerTakesItsRowsFromThePanelAndEachViewHasItsOwn(): Pro
 }
 
 export async function aSectionLogoTallerThanTheShippedBannerIsShownWhole(): Promise<void> {
-  // A sysop's desk logo of nine rows: the panel gives up nine rows, none of the logo is cut.
+  // A sysop's desk logo of nine rows: the panel gives up nine rows and the blank row under them, none of the logo is cut.
   const b = board([]);
   const logo = path.join(b.root, 'tall.ans');
   fs.writeFileSync(logo, Array.from({ length: 9 }, (_, i) => `LOGO ROW ${i + 1}`).join('\r\n') + '\r\n');
@@ -1217,7 +1217,7 @@ export async function aSectionLogoTallerThanTheShippedBannerIsShownWhole(): Prom
     h.reader.press('s', 's');
     const bare = buildLayout(80, 24, { ticker: true });
     assert.strictEqual(h.reader.layout.bannerRows, 9);
-    assert.strictEqual(h.reader.layout.panelHeight, bare.panelHeight - 9);
+    assert.strictEqual(h.reader.layout.panelHeight, bare.panelHeight - 10);
     assert.ok(h.reader.bannerText().join('\n').includes('LOGO ROW 9'), 'the last row of the logo is on screen');
   } finally { await finish(h, b); }
 }

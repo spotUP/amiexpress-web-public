@@ -92,7 +92,7 @@ export interface MagLayout {
   /** The 40-column tier: header and footer are one row each, no frames. */
   collapseChrome: boolean;
   headerRow: number;
-  /** Rows of art above the panel (0 for none); the panel below it is that much shorter. */
+  /** Rows of art above the panel (0 for none); the panel below it is that much shorter, plus BANNER_GAP_ROWS. */
   bannerRows: number;
   /** Null when the sysop turned the news wire off. Directly above the footer. */
   tickerRow: number | null;
@@ -105,6 +105,9 @@ export interface MagLayout {
 /** A banner may not leave the panel shorter than this: a page of text still has to read. */
 export const MIN_PANEL_ROWS = 8;
 
+/** Blank rows between a banner and the panel, so the logo never touches the text under it. */
+export const BANNER_GAP_ROWS = 1;
+
 export function buildLayout(width: number, height: number, options: { ticker?: boolean; banner?: number } = {}): MagLayout {
   const w = Math.max(1, Math.floor(width) || 80);
   const h = Math.max(6, Math.floor(height) || 24);
@@ -116,8 +119,8 @@ export function buildLayout(width: number, height: number, options: { ticker?: b
   const withoutBanner = Math.max(1, progressRow - 1);
   // The banner takes its rows from the panel, and gives them back when the screen is too short to spare them.
   const wanted = Math.max(0, Math.floor(options.banner ?? 0));
-  const bannerRows = withoutBanner - wanted >= MIN_PANEL_ROWS ? wanted : 0;
-  const panelTop = 1 + bannerRows;
+  const bannerRows = wanted > 0 && withoutBanner - wanted - BANNER_GAP_ROWS >= MIN_PANEL_ROWS ? wanted : 0;
+  const panelTop = 1 + bannerRows + (bannerRows > 0 ? BANNER_GAP_ROWS : 0);
   return {
     width: w,
     height: h,
