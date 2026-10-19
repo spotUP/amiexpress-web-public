@@ -21,13 +21,15 @@
  * Every face this app ships a `@font-face` for, and every one of them is
  * drawn by a canvas: TopazPlus and Topaz by the ANSI screens
  * (`ansi-canvas-paint.ts`), PetMe64 by the PETSCII glyph atlas
- * (`packages/terminal/src/petscii/glyph-atlas.ts`). Pinned against
- * `index.css` by test, so a fourth face cannot be added and forgotten.
+ * (`packages/terminal/src/petscii/glyph-atlas.ts`), TeletextUPR by the native
+ * teletext editor (`TeletextScreenEditor.tsx`). Pinned against
+ * `index.css` by test, so a new face cannot be added and forgotten.
  */
 export const BOARD_FONT_FAMILIES = [
   'TopazPlus_a1200',
   'Topaz_a1200',
   'PetMe64',
+  'TeletextUPR',
 ] as const;
 
 /**

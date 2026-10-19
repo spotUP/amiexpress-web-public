@@ -36,6 +36,7 @@ describe('the board fonts', () => {
       '16px "TopazPlus_a1200"',
       '16px "Topaz_a1200"',
       '16px "PetMe64"',
+      '16px "TeletextUPR"',
     ]);
   });
 
@@ -43,7 +44,9 @@ describe('the board fonts', () => {
     // Read off the paint module rather than restated here: the defect was the
     // two lists disagreeing, so a copy of the name proves nothing.
     const src = readFileSync(join(SRC, 'components/ansi-canvas-paint.ts'), 'utf8');
-    const spec = /ctx\.font\s*=\s*`[^`]*`/.exec(src)?.[0] ?? '';
+    // The face is the paint function's default `fontFamily`, which ctx.font
+    // is built from.
+    const spec = /fontFamily: string = '[^']*'/.exec(src)?.[0] ?? '';
 
     expect(spec).toContain('TopazPlus_a1200');
     expect(BOARD_FONT_FAMILIES).toContain('TopazPlus_a1200');

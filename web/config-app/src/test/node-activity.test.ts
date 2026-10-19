@@ -22,7 +22,9 @@ const BACKEND_STATES = resolve(
 
 function everySubState(): string[] {
   const source = readFileSync(BACKEND_STATES, 'utf8');
-  return [...source.matchAll(/=\s*'([a-z_0-9]+)'/g)].map(m => m[1]);
+  // Enum members only: `NAME = 'value'` at the start of a line. A bare
+  // `= '...'` also matched `!== 'undefined'` in a helper below the enums.
+  return [...source.matchAll(/^\s+[A-Z_0-9]+\s*=\s*'([a-z_0-9]+)'/gm)].map(m => m[1]);
 }
 
 describe('what a node is doing', () => {

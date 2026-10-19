@@ -32,7 +32,9 @@ describe('the C64 font the PETSCII previews draw with', () => {
 
   it('is declared, from a path the build can rewrite', () => {
     const css = fs.readFileSync(path.join(appRoot, 'src', 'index.css'), 'utf8');
-    const face = css.slice(css.indexOf('@font-face'), css.indexOf('}', css.indexOf('@font-face')));
+    // The PetMe64 face, wherever it sits among the others.
+    const start = css.lastIndexOf('@font-face', css.indexOf("font-family: 'PetMe64'"));
+    const face = css.slice(start, css.indexOf('}', start));
 
     expect(face).toContain("font-family: 'PetMe64'");
     expect(face).toContain('./fonts/PetMe64.ttf');
