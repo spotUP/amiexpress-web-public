@@ -24,6 +24,7 @@
  * Pure: no fs, no network, no socket. Callers position the cursor and write.
  */
 import type { TeletextSubpage } from './marco/model/types';
+import { applyX26, resolvePageCharsets } from './level15';
 import type { PageGrid } from './marco/state-machine/types';
 import { compileRow } from './marco/compile/index';
 import { processPage } from './marco/state-machine/state-machine';
@@ -85,7 +86,9 @@ export function subpageToGrid(subpage: TeletextSubpage): PageGrid {
   });
 
   const { newsflash, subtitle } = subpage.pageFlags;
-  return processPage(raw, { boxed: newsflash || subtitle });
+  const grid = processPage(raw, { boxed: newsflash || subtitle });
+  applyX26(grid, subpage);
+  return grid;
 }
 
 /**
@@ -110,6 +113,7 @@ export function renderSubpageLines(
     reveal: options.reveal ?? false,
     flashPhase: options.flashPhase ?? true,
     subset: options.subset ?? subpage.languageSubset,
+    charsets: options.subset ? undefined : resolvePageCharsets(subpage),
     teletextFont: mode === 'teletext',
   });
 

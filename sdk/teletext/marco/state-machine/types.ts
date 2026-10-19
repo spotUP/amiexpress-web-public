@@ -85,6 +85,10 @@ export interface Cell {
   invert: boolean;
   /** Inside a Start Box / End Box area (D4); X/26 boxing (G5) sets it too. Only a newsflash or subtitle page hides what is outside. */
   box: boolean;
+  /** Under ESC (s.15.2): the row's second G0 set is in force for this cell (E2). */
+  secondG0?: boolean;
+  /** The resolved character an X/26 triplet put here (G2, or G0 with a diacritic, E3/E4); wins over `char`. */
+  text?: string;
 }
 
 /**

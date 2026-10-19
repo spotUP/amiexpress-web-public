@@ -14,7 +14,8 @@
  */
 
 import { hammingDecode84, stripParity } from '../packet-decoder/hamming';
-import type { EnhancementPacket, TeletextPage, TeletextToken } from '../model/types';
+import type { EnhancementPacket, NationalSubset, TeletextPage, TeletextToken } from '../model/types';
+import { SUBSET_BY_C_BITS } from '../render-ansi/charsets';
 import {
   isEnhancementPacketNumber,
   LAST_DISPLAY_ROW,
@@ -293,6 +294,18 @@ interface PageAccumulator {
   rows: Map<number, Uint8Array>;
   fastext?: Uint8Array; // packet 27 raw data
   enhancement: EnhancementPacket[]; // X/26, X/28, plus the magazine's M/29
+  languageSubset?: NationalSubset; // header C12-C14
+}
+
+/**
+ * Header byte 7 (Hamming 8/4: C11, C12, C13, C14 from bit 0) -> the page's
+ * national option sub-set (s.9.3.1, Table 32; C12 is the low bit of the
+ * index, as in ccextractor). Undefined when the byte does not decode.
+ */
+export function subsetFromHeaderByte(raw: number): NationalSubset | undefined {
+  const nibble = hammingDecode84(raw);
+  if (nibble < 0 || nibble > 0x0f) return undefined;
+  return SUBSET_BY_C_BITS[(nibble >> 1) & 0x07];
 }
 
 /**
@@ -343,7 +356,10 @@ function assemblePages(lines: TeletextLine[]): PageAccumulator[] {
       // Get or create persistent buffer for this page/subcode
       let acc = buffers.get(key);
       if (!acc) {
-        acc = { magazine: line.magazine, pageNumber, subcode, rows: new Map(), enhancement: [] };
+        acc = {
+          magazine: line.magazine, pageNumber, subcode, rows: new Map(), enhancement: [],
+          languageSubset: subsetFromHeaderByte(line.rawData[7]),
+        };
         buffers.set(key, acc);
       }
 
@@ -498,6 +514,7 @@ export function importT42(buffer: Uint8Array): T42ImportResult {
     }
 
     const subpage = createEmptySubpage(acc.subcode);
+    if (acc.languageSubset) subpage.languageSubset = acc.languageSubset;
     for (const [rowNum, rowData] of acc.rows) {
       if (rowNum >= 0 && rowNum <= LAST_DISPLAY_ROW) {
         subpage.rows[rowNum] = {

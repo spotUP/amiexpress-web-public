@@ -124,8 +124,8 @@ export function applyControlCode(state: RowState, code: number): void {
         state.mosaicType = MosaicType.SEPARATED;
         break;
       case ESC:
-        // Toggle between G0/G2 character sets - not fully modelled here
-        // but we track the flag for completeness.
+        // Switch between the default and the second G0 set (s.15.2, E2);
+        // set-after, so the switch takes effect from the next cell.
         state.escSwitch = !state.escSwitch;
         break;
       case BLACK_BACKGROUND:
@@ -181,6 +181,7 @@ function emitCell(
     // gives the next cell its right half and drops it at column 39.
     width: state.doubleWidth ? 'double-left' : 'single',
     charset: 'G0',
+    secondG0: state.escSwitch,
     underline: false,
     invert: false,
     box: state.box,

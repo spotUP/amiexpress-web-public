@@ -44,6 +44,7 @@ Usage:
 
 Needs fonttools and brotli.
 """
+import os
 import sys
 import unicodedata
 
@@ -105,6 +106,184 @@ NOTE = (
     "Latin-1 printable, for teletext double-height rows on terminals with no "
     "DECDHL. Renamed per OFL clause 3 (TDAText is a Reserved Font Name)."
 )
+
+
+
+# ─── Level 1.5 letters (levels plan E1-E4) ──────────────────────
+#
+# The national option sub-sets (Table 36), G2 (Table 38 / Annex) and the
+# X/26 diacritics (G2 column 4, s.12.3.1) reach letters TDAText never drew:
+# Polish, Turkish, Rumanian, Baltic, Croatian. Each is drawn here as its
+# base letter plus the mark, so the board shows the letter instead of
+# falling back to the bare base. A mark is lifted from a letter the face
+# already accents (the face's own pixels); the four with no donor letter are
+# drawn. A capital, or a lowercase letter with an ascender, is squashed by
+# one (doubled) pixel row to make room above it, exactly as the face's own
+# accented capitals are: their bodies start two rows lower than plain ones.
+
+MARK_DONORS = {  # mark: (lowercase donor, capital donor)
+    0x0300: (0x00E8, 0x00C8), 0x0301: (0x00E9, 0x00C9), 0x0302: (0x00EA, 0x00CA),
+    0x0303: (0x00F1, 0x00D1), 0x0308: (0x00EB, 0x00CB), 0x030A: (0x016F, 0x016E),
+    0x030B: (0x0171, 0x0170), 0x030C: (0x010D, 0x010C), 0x0327: (0x00E7, 0x00C7),
+}
+CAPITAL_MARK_ROWS = 4  # a squashed capital's body starts here; its mark is above
+DRAWN_MARKS = {  # mark: {row: pixels}, the same over a lowercase letter and a capital
+    0x0304: {2: '000111111000', 3: '000111111000'},
+    0x0306: {0: '001100001100', 1: '001100001100', 2: '000111111000', 3: '000111111000'},
+    0x0307: {2: '000001100000', 3: '000001100000'},
+    0x0328: {16: '000000110000', 17: '000000110000', 18: '000000011100', 19: '000000011100'},
+}
+BELOW_MARKS = (0x0327, 0x0328)
+SPACING_MARKS = {  # spacing accent: the combining mark it draws, on its own
+    0x00A8: 0x0308, 0x00AF: 0x0304, 0x00B8: 0x0327, 0x02C6: 0x0302, 0x02C7: 0x030C,
+    0x02D8: 0x0306, 0x02D9: 0x0307, 0x02DA: 0x030A, 0x02DB: 0x0328, 0x02DC: 0x0303,
+    0x02DD: 0x030B,
+}
+COMPOSED_RANGES = ((0x00C0, 0x017F), (0x01CD, 0x01DC), (0x1E00, 0x1EFF))
+
+
+def _or(a, b):
+    return [''.join('1' if '1' in (x, y) else '0' for x, y in zip(r, s)) for r, s in zip(a, b)]
+
+
+def _minus(a, b):
+    return [''.join('1' if x == '1' and y == '0' else '0' for x, y in zip(r, s)) for r, s in zip(a, b)]
+
+
+def _within(a, b):
+    return all(not (x == '1' and y == '0') for r, s in zip(a, b) for x, y in zip(r, s))
+
+
+def _squash(rows):
+    """Drop one doubled row pair from a straight run (else any pair), nearest the
+    middle, and add the two rows back on top: the body starts two rows lower."""
+    inked = [y for y, r in enumerate(rows) if '1' in r]
+    if not inked or inked[0] < 2:
+        return None
+    middle = (inked[0] + inked[-1]) / 2
+    pairs = [y for y in range(inked[0], inked[-1] - 2)
+             if rows[y] == rows[y + 1] == rows[y + 2] == rows[y + 3]]
+    if not pairs:   # a diagonal (N, Z): give up one pixel row of it instead
+        pairs = [y for y in range(inked[0], inked[-1], 2) if rows[y] == rows[y + 1]]
+    if not pairs:
+        return None
+    y = min(pairs, key=lambda k: abs(k - middle))
+    blank = '0' * len(rows[0])
+    return [blank, blank] + rows[:y] + rows[y + 2:]
+
+
+def _drawn(pattern, width, height):
+    pad = (width - 12) // 2
+    return [('0' * pad + pattern[y] + '0' * width)[:width] if y in pattern else '0' * width
+            for y in range(height)]
+
+
+def level15_glyphs(cmap_source, strike, metrics):
+    """Letters, spacing marks and the few symbols Level 1.5 needs, as rows."""
+    def rows_of(cp):
+        name = cmap_source.get(cp)
+        return bitmap_rows(strike, metrics, name) if name is not None and name in strike else None
+
+    def accent(mark, capital):
+        """The mark's pixels, over a squashed body when `capital`."""
+        if mark in DRAWN_MARKS:
+            return _drawn(DRAWN_MARKS[mark], metrics.width, metrics.height)
+        if mark not in MARK_DONORS:
+            return None
+        donor = MARK_DONORS[mark][1 if capital else 0]
+        d = rows_of(donor)
+        if d is None:
+            return None
+        if capital:
+            return d[:CAPITAL_MARK_ROWS] + ['0' * metrics.width] * (len(d) - CAPITAL_MARK_ROWS)
+        b = rows_of(ord(unicodedata.normalize('NFD', chr(donor))[0]))
+        return _minus(d, b) if b is not None and _within(b, d) else None
+
+    out = {}
+    for first, last in COMPOSED_RANGES:
+        for cp in range(first, last + 1):
+            if cp in cmap_source:
+                continue
+            nfd = unicodedata.normalize('NFD', chr(cp))
+            if len(nfd) != 2 or not nfd[0].isascii():
+                continue
+            base_cp, mark = ord(nfd[0]), ord(nfd[1])
+            base = rows_of(base_cp)
+            if base is None:
+                continue
+            if base_cp in (0x69, 0x6A) and mark not in BELOW_MARKS:
+                base = ['0' * metrics.width] * 6 + base[6:]   # dotless i / j under a mark
+            capital = mark not in BELOW_MARKS and any('1' in r for r in base[:6])
+            got = accent(mark, capital)
+            if got is None:
+                continue
+            body = _squash(base) if capital else base
+            if body is None or (capital and any('1' in r for r in body[:CAPITAL_MARK_ROWS])):
+                continue   # no straight run to give up; the base letter is shown instead
+            out[cp] = _or(body, got)
+
+    for cp, mark in SPACING_MARKS.items():
+        if cp in cmap_source:
+            continue
+        got = accent(mark, False)
+        if got is not None:
+            out[cp] = got
+
+    i_rows = rows_of(0x69)
+    if 0x0131 not in cmap_source and i_rows is not None:
+        out[0x0131] = ['0' * metrics.width] * 6 + i_rows[6:]
+    for cp, base_cp in ((0x0141, 0x4C), (0x0142, 0x6C)):   # L/l with a stroke
+        rows = rows_of(base_cp)
+        if cp in cmap_source or rows is None:
+            continue
+        inked = [y for y, r in enumerate(rows) if '1' in r]
+        mid = (inked[0] + inked[-1]) // 2
+        stem = rows[mid].index('1')
+        rows = list(rows)
+        for y in (mid - 1, mid):
+            r = list(rows[y])
+            for x in range(max(0, stem - 2), min(metrics.width, stem + 4)):
+                r[x] = '1'
+            rows[y] = ''.join(r)
+        out[cp] = rows
+    dash = rows_of(0x2014)
+    if 0x2015 not in cmap_source and dash is not None:
+        out[0x2015] = dash
+    for cp, closing in ((0x2018, 0x2019), (0x201C, 0x201D)):   # opening = closing turned
+        rows = rows_of(closing)
+        if cp in cmap_source or rows is None:
+            continue
+        inked = [y for y, r in enumerate(rows) if '1' in r]
+        top, bottom = inked[0], inked[-1]
+        turned = [r[::-1] for r in reversed(rows[top:bottom + 1])]
+        out[cp] = rows[:top] + turned + rows[bottom + 1:]
+    return out
+
+
+COVERAGE_TS = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                           '..', '..', '..', 'sdk', 'teletext', 'teletext-font-coverage.ts')
+
+
+def write_coverage(font):
+    """The code points outside the Private Use Area the font draws, for the sdk."""
+    cps = sorted(c for c in font.getBestCmap() if not 0xE000 <= c <= 0xF8FF)
+    ranges, start, prev = [], cps[0], cps[0]
+    for c in cps[1:]:
+        if c != prev + 1:
+            ranges.append((start, prev))
+            start = c
+        prev = c
+    ranges.append((start, prev))
+    lines = [
+        '// GENERATED by dev/scripts/fonts/build-teletext-font.py - do not edit.',
+        '// Every code point outside the Private Use Area that TeletextUPR draws.',
+        '// Teletext mode never emits a character outside this list (levels plan E1-E4).',
+        'export const TELETEXT_FONT_RANGES: ReadonlyArray<readonly [number, number]> = [',
+    ]
+    lines += [f'  [0x{a:04x}, 0x{b:04x}],' for a, b in ranges]
+    lines += ['];', '']
+    with open(COVERAGE_TS, 'w', encoding='utf-8') as fh:
+        fh.write('\n'.join(lines))
 
 
 def repair_aring(font):
@@ -351,6 +530,11 @@ def add_variants(font):
         name = cmap_source.get(codepoint)
         if name is not None and name in strike:
             latin[codepoint] = (name, bitmap_rows(strike, metrics, name))
+    for codepoint, rows in sorted(level15_glyphs(cmap_source, strike, metrics).items()):
+        name = f"l15.{codepoint:04X}"
+        add(codepoint, name, rows, advance)
+        if DH_FIRST_SOURCE <= codepoint <= DH_LAST_SOURCE:
+            latin[codepoint] = (name, rows)   # double height / width halves too
     for pattern in range(1, 63):
         cp = contiguous_codepoint(pattern)
         if 0x1FB00 <= cp <= 0x1FB3B:
@@ -476,6 +660,7 @@ def main():
     font.save(out_ttf)
     font.flavor = "woff2"
     font.save(out_woff2)
+    write_coverage(font)
     print(f"wrote {out_ttf} and {out_woff2} ({halves} derived glyphs)")
     return 0
 

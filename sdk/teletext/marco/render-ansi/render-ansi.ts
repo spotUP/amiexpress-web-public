@@ -14,6 +14,8 @@
  */
 
 import type { PageGrid } from '../state-machine/types';
+import type { Cell } from '../state-machine/types';
+import { designationForSubset, displayable, g0Char, nationalTable, type CharTarget } from './charsets';
 import { CharsetMode, MosaicType, type ClutIndex } from '../state-machine/types';
 
 const ROWS = 24;
@@ -82,61 +84,6 @@ function mosaicBits(charCode: number): number {
 }
 
 /**
- * The thirteen G0 positions a national option sub-set replaces
- * (ETSI EN 300 706 s.15.2, Table 36), in table order.
- */
-const NATIONAL_POSITIONS = [
-  0x23, 0x24, 0x40, 0x5b, 0x5c, 0x5d, 0x5e, 0x5f, 0x60, 0x7b, 0x7c, 0x7d, 0x7e,
-] as const;
-
-/**
- * What each sub-set puts in those thirteen positions.
- *
- * The page carries its sub-set, the TTI lexer decodes it, the validator
- * checks it and the packet builder writes it into the header - and the
- * renderer then ignored it and printed the raw 7-bit code. On a Swedish page
- * that is `{|}[\]` where `äöåÄÖÅ` belong, on a board whose whole teletext
- * feature is Swedish.
- *
- * Values transcribed from ccextractor's G0_LATIN_NATIONAL_SUBSETS
- * (src/lib_ccx/telxcc.c), a working decoder, rather than typed from memory.
- * Only the sub-sets this model declares are listed; `undefined` means the
- * page named none, and then the primary G0 stands as-is.
- */
-const NATIONAL_SUBSET_CHARS: Record<string, string> = {
-  // `english` is deliberately ABSENT. Its row exists in the standard (# -> £,
-  // { -> ¼ and so on), but index 0 is also what a page that declares no
-  // sub-set decodes to, and this board's own pages are written in plain
-  // ASCII - substituting there would turn every '#' into '£' on pages that
-  // never asked. A page that names a sub-set gets its letters; a page that
-  // names none keeps the primary G0.
-  french: '\u00e9\u00ef\u00e0\u00eb\u00ea\u00f9\u00ee\u0023\u00e8\u00e2\u00f4\u00fb\u00e7',
-  swedish_finnish: '\u0023\u00a4\u00c9\u00c4\u00d6\u00c5\u00dc\u005f\u00e9\u00e4\u00f6\u00e5\u00fc',
-  czech_slovak: '\u0023\u016f\u010d\u0165\u017e\u00fd\u00ed\u0159\u00e9\u00e1\u011b\u00fa\u0161',
-  german: '\u0023\u0024\u00a7\u00c4\u00d6\u00dc\u005e\u005f\u00b0\u00e4\u00f6\u00fc\u00df',
-  portuguese_spanish: '\u00e7\u0024\u00a1\u00e1\u00e9\u00ed\u00f3\u00fa\u00bf\u00fc\u00f1\u00e8\u00e0',
-  italian: '\u00a3\u0024\u00e9\u00b0\u00e7\u00bb\u005e\u0023\u00f9\u00e0\u00f2\u00e8\u00ec',
-};
-
-/**
- * Convert a G0 character code to the corresponding printable character.
- * Teletext G0 maps 0x20-0x7F to a Latin character set that is mostly ASCII,
- * with thirteen positions given over to the page's national option sub-set.
- */
-function g0Char(charCode: number, subset?: string): string {
-  if (charCode < 0x20 || charCode > 0x7e) {
-    // 0x7F = DEL, render as space
-    return ' ';
-  }
-  const table = subset ? NATIONAL_SUBSET_CHARS[subset] : undefined;
-  if (table) {
-    const at = NATIONAL_POSITIONS.indexOf(charCode as (typeof NATIONAL_POSITIONS)[number]);
-    if (at !== -1) return table[at];
-  }
-  return String.fromCharCode(charCode);
-}
-
-/**
  * Options for ANSI rendering.
  */
 export interface AnsiRenderOptions {
@@ -153,6 +100,11 @@ export interface AnsiRenderOptions {
    * Omitted means the page named none, and the primary G0 stands.
    */
   subset?: string;
+  /**
+   * The page's default and second G0 designations (Table 33), from X/28/0,
+   * M/29/0 or the header; wins over `subset`. ESC cells take `second`.
+   */
+  charsets?: { primary: number | null; second: number | null };
   /**
    * Draw for a TeletextUPR font session (the 'teletext' render mode): separated
    * mosaics as U+1CE51-1CE8F, double width and double size cells as the font
@@ -181,7 +133,7 @@ const DS_MOSAIC = {
  * the ordinary glyph is right. A right-hand half takes its character from the
  * cell on its left (its own content is ignored, Annex C.3).
  */
-function teletextFontGlyph(row: PageGrid[number], col: number, subset?: string): string | null {
+function teletextFontGlyph(row: PageGrid[number], col: number, text: (cell: Cell) => string): string | null {
   const cell = row[col];
   const separated = cell.mosaicType === MosaicType.SEPARATED;
   const source = cell.width === 'double-right' ? row[col - 1] : cell;
@@ -205,7 +157,7 @@ function teletextFontGlyph(row: PageGrid[number], col: number, subset?: string):
     const quarter = (bottom ? 'b' : 't') + (right ? 'r' : 'l');
     return String.fromCodePoint(DS_MOSAIC[kind][quarter as 'tl'] + bits);
   }
-  const ch = g0Char(source.char, subset);
+  const ch = text(source);
   const cp = ch.codePointAt(0)!;
   if (cp < 0x20 || cp > 0xff) return ch;
   if (cp === 0x20) return ' ';
@@ -245,8 +197,17 @@ export function renderToAnsi(grid: PageGrid, options: AnsiRenderOptions = {}): s
     reveal = false,
     truecolor = false,
     subset,
+    charsets,
     teletextFont = false,
   } = options;
+  const primary = charsets ? charsets.primary : designationForSubset(subset);
+  const second = charsets ? charsets.second : primary;
+  const target: CharTarget = teletextFont ? 'teletext' : 'latin1';
+  const text = (cell: Cell): string =>
+    displayable(
+      cell.text ?? g0Char(cell.char, nationalTable(cell.secondG0 ? second : primary)),
+      target,
+    );
 
   const lines: string[] = [];
 
@@ -290,7 +251,7 @@ export function renderToAnsi(grid: PageGrid, options: AnsiRenderOptions = {}): s
       }
 
       if (teletextFont) {
-        const glyph = teletextFontGlyph(grid[row], col, subset);
+        const glyph = teletextFontGlyph(grid[row], col, text);
         if (glyph !== null) {
           line += glyph;
           continue;
@@ -303,15 +264,15 @@ export function renderToAnsi(grid: PageGrid, options: AnsiRenderOptions = {}): s
           (cell.char >= 0x20 && cell.char <= 0x3F) ||
           (cell.char >= 0x60 && cell.char <= 0x7F);
 
-        if (isMosaic) {
+        if (isMosaic && cell.text === undefined) {
           const bits = mosaicBits(cell.char);
           line += SEXTANT_TABLE[bits];
         } else {
           // 0x40-0x5F in graphics mode: render as G0
-          line += g0Char(cell.char, subset);
+          line += text(cell);
         }
       } else {
-        line += g0Char(cell.char, subset);
+        line += text(cell);
       }
     }
 

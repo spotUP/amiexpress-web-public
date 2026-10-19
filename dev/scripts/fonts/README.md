@@ -88,3 +88,27 @@ TDAText draws U+1FB29 wrong (left half of its last two middle-band rows
 missing); the builder redraws it. The wire form for double width and size is
 not decided; only the codepoints are fixed here. Mirror constants:
 `packages/terminal/src/utils/teletext-double-height.ts`.
+
+## Font contract (levels plan E1-E4): Level 1.5 letters
+
+Level 1.5 pages put national sub-set letters, G2 characters and G0 letters
+with a G2 diacritic on screen (ETSI EN 300 706 s.12.3, s.15.2). TDAText draws
+Latin-1 and a few Latin Extended-A letters; `level15_glyphs` in the builder
+derives the rest from the font's own strikes:
+
+- Latin Extended-A U+0100-017F, U+01CD-01DC and the U+1E00-1EFF letters a
+  diacritic triplet can compose: base letter + an accent taken from a TDAText
+  donor letter (grave, acute, circumflex, tilde, diaeresis, ring, double
+  acute, caron, cedilla) or drawn (macron, breve, dot above, ogonek).
+  Capitals are squashed by one doubled row pair to make room.
+- Spacing accents U+00A8, 00AF, 00B8, 02C6, 02C7, 02D8-02DD (G2 column 4).
+- U+0131 dotless i, U+0141 / 0142 L with stroke, U+2015 (copy of 2014),
+  U+2018 / 201C (2019 / 201D turned).
+
+The builder writes the font's non-private cmap ranges to
+`sdk/teletext/teletext-font-coverage.ts` (generated, do not edit). The
+renderer's `displayable` (sdk/teletext/marco/render-ansi/charsets.ts) checks
+every character against it: a code point the font lacks becomes its base
+letter, else the nearest stand-in in `NEAREST`. Still not drawn (fall back):
+G2 U+00BA, 00DE, 00FE, 0126, 0127, 0138, 013F, 0140, 0149, 014A, 014B, 0152,
+0153, 0166, 0167, 2030, 215B-215E, and composites outside the ranges above.
