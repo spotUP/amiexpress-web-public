@@ -158,6 +158,11 @@ function emitCell(
     doubleHeightBottom: false, // set in post-processing
     flash: state.flash,
     conceal: state.conceal,
+    width: 'single',
+    charset: 'G0',
+    underline: false,
+    invert: false,
+    box: false,
   };
 }
 
@@ -239,7 +244,10 @@ export function doubleHeightLowerRows(rows: readonly ArrayLike<number>[]): boole
 }
 
 /**
- * Process a full 24x40 page through the state machine.
+ * Process a full 24x40 page through the state machine. A 25th input row is
+ * row 24 (s.9.3.1, Level 1.5 and up) and is rendered as a 25th grid row.
+ * Row 24 is never the lower half of a double-height row 23: s.9.3 allows no
+ * double height in rows 23 and 24.
  *
  * ETSI EN 300 706 Table 26 entry 0/D: the row below a row with double height
  * ignores every character and attribute transmitted for it. Under a
@@ -247,11 +255,12 @@ export function doubleHeightLowerRows(rows: readonly ArrayLike<number>[]): boole
  * shows a space in the background of the cell above, with no foreground.
  */
 export function processPage(pageData: Uint8Array[] | number[][]): PageGrid {
-  const rows = pageData.slice(0, ROWS);
-  const lower = doubleHeightLowerRows(rows);
-  const grid: PageGrid = new Array(ROWS);
+  const rowCount = pageData.length > ROWS ? ROWS + 1 : ROWS;
+  const rows = pageData.slice(0, rowCount);
+  const lower = doubleHeightLowerRows(rows.slice(0, ROWS));
+  const grid: PageGrid = new Array(rowCount);
 
-  for (let row = 0; row < ROWS; row++) {
+  for (let row = 0; row < rowCount; row++) {
     grid[row] = lower[row]
       ? grid[row - 1].map(cell =>
           cell.doubleHeight

@@ -49,19 +49,42 @@ export interface RowState {
 /**
  * A rendered cell in the 40x24 grid.
  */
+/**
+ * Colour Look-Up Table index, EN 300 706 s.12.4 Table 30: CLUT n entry e is
+ * index n*8+e, 0-31. Level 1 serial attributes reach CLUT 0 only (0-7, the
+ * Color enum), so a Level 1 page renders exactly as before.
+ */
+export type ClutIndex = number;
+
+/** Character width (s.12.2 0x0E/0x0F, X/26 display attributes). */
+export type CellWidth = 'single' | 'double-left' | 'double-right';
+
+/** Character set a cell draws from (s.15.6): G0 text, G2 supplementary, G3 smooth mosaics. */
+export type CellCharset = 'G0' | 'G2' | 'G3';
+
 export interface Cell {
   char: number;         // character code to render (7-bit)
-  fgColor: Color;
-  bgColor: Color;
+  fgColor: ClutIndex;
+  bgColor: ClutIndex;
   charsetMode: CharsetMode;
   mosaicType: MosaicType;
   doubleHeight: boolean;
   doubleHeightBottom: boolean;
   flash: boolean;
   conceal: boolean;
+  /** Level 1 always 'single' until double width (D1) and X/26 (G5) land. */
+  width: CellWidth;
+  /** Level 1 always 'G0' until G2/G3 characters (E4, G8) land. */
+  charset: CellCharset;
+  /** X/26 display attributes (G5); false at Level 1. */
+  underline: boolean;
+  invert: boolean;
+  /** Boxing (D4, G5); false until boxed pages are rendered. */
+  box: boolean;
 }
 
 /**
- * Full page of rendered cells: 24 rows x 40 columns.
+ * Full page of rendered cells: 24 rows x 40 columns, plus row 24 (the
+ * 25th row, s.9.3.1) when the page carries it.
  */
 export type PageGrid = Cell[][];

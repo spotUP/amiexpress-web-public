@@ -14,7 +14,7 @@
  */
 
 import type { PageGrid } from '../state-machine/types';
-import { CharsetMode, Color } from '../state-machine/types';
+import { CharsetMode, Color, type ClutIndex } from '../state-machine/types';
 
 const ROWS = 24;
 const COLS = 40;
@@ -190,10 +190,10 @@ export function renderToAnsi(grid: PageGrid, options: AnsiRenderOptions = {}): s
 
   const lines: string[] = [];
 
-  for (let row = 0; row < ROWS; row++) {
+  for (let row = 0; row < Math.max(ROWS, grid.length); row++) {
     let line = '';
-    let prevFg: Color | -1 = -1;
-    let prevBg: Color | -1 = -1;
+    let prevFg: ClutIndex | -1 = -1;
+    let prevBg: ClutIndex | -1 = -1;
 
     // Note: DECDHL (ESC#3/ESC#4) is not used — it doubles width too,
     // but teletext double-height is height-only. No terminal escape exists

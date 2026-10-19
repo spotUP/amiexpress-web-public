@@ -29,6 +29,7 @@ import { compileRow } from './marco/compile/index';
 import { processPage } from './marco/state-machine/state-machine';
 import { renderToAnsi } from './marco/render-ansi/index';
 import { sextantBits } from './sextant';
+import { LAST_DISPLAY_ROW } from './enhancement';
 
 /** 24 display rows by 40 columns, as broadcast. */
 export const TELETEXT_ROWS = 24;
@@ -58,7 +59,7 @@ export interface SessionRenderOptions {
 }
 
 /**
- * Resolve a subpage's tokens into the 24x40 cell grid.
+ * Resolve a subpage's tokens into the 24x40 cell grid (25 rows with row 24).
  *
  * Rows are placed by their declared index, not by array position: a t42
  * recovery hands over only the rows it actually captured, and a page that
@@ -71,12 +72,15 @@ export function subpageToGrid(subpage: TeletextSubpage): PageGrid {
   for (let i = 0; i < TELETEXT_ROWS; i++) raw.push(blank());
 
   const rows = subpage.rows ?? [];
+  // Row 24 (s.9.3.1) becomes a 25th grid row only when the page carries it,
+  // so a Level 1 page still renders exactly 24 rows.
+  if (rows.some(row => row.index === LAST_DISPLAY_ROW)) raw.push(blank());
   rows.forEach((row, position) => {
     const at =
-      Number.isInteger(row.index) && row.index >= 0 && row.index < TELETEXT_ROWS
+      Number.isInteger(row.index) && row.index >= 0 && row.index < raw.length
         ? row.index
         : position;
-    if (at < 0 || at >= TELETEXT_ROWS) return;
+    if (at < 0 || at >= raw.length) return;
     raw[at] = Array.from(compileRow(row).bytes40);
   });
 
