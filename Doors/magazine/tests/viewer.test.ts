@@ -133,3 +133,98 @@ export async function onAPetsciiScreenTheViewerShowsTheFortyColumnRendering(): P
     assert.ok(rows.length <= 25);
   } finally { h.close(); }
 }
+
+// ---- M10b: video playback --------------------------------------------------
+
+import * as zlib from 'node:zlib';
+import { encodeRichFrame, type RichFrame } from '@amiexpress/bbs-door-sdk/media/ascii';
+import { registerMagazineVideoService, type ClipRequest } from '@amiexpress/bbs-door-sdk/formats/magazine-video';
+
+const video = (anchor: number) => ({ url: `https://example.org/${anchor}.mp4`, kind: 'video' as const, alt: '', site: 'example.org', anchor });
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/** A finished clip file (brotli form) of `n` frames, frame k filled with the letter 'a'+k. */
+function clipFile(n: number): string {
+  const cols = 80, rows = FULLSCREEN_ROWS;
+  const rec = (type: number, body: Buffer) => { const h = Buffer.alloc(5); h.writeUInt32BE(body.length + 1); h[4] = type; return Buffer.concat([h, body]); };
+  const parts = [rec(0, Buffer.from(JSON.stringify({ v: 1, cols, rows, fps: 20 })))];
+  let prev: RichFrame | null = null;
+  for (let k = 0; k < n; k++) {
+    const frame: RichFrame = { dots: new Uint8Array(cols * rows).fill(97 + k), colors: new Uint8Array(cols * rows).fill(7) };
+    parts.push(rec(1, Buffer.from(encodeRichFrame(frame, cols, rows, prev))));
+    prev = frame;
+  }
+  parts.push(rec(2, Buffer.alloc(0)));
+  const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'mag-clip-')), 'clip.frames');
+  fs.writeFileSync(file, Buffer.concat([Buffer.from('MAGB'), zlib.brotliCompressSync(Buffer.concat(parts))]));
+  return file;
+}
+
+/** A conversion service that shares one job per clip, as the backend's does. */
+function mockService(file: string) {
+  const jobs = new Map<string, true>();
+  const calls: ClipRequest[] = [];
+  registerMagazineVideoService({
+    requestClip: (req) => { calls.push(req); jobs.set(req.url, true); return { path: file, done: Promise.resolve('complete' as const) }; },
+  });
+  return { jobs, calls };
+}
+
+export async function aVideoAutoPlaysInTheViewerSharedByTwoViewersThenRestsOnThePoster(): Promise<void> {
+  const svc = mockService(clipFile(4));
+  const st = story('bbbb0001', [video(0)]);
+  const a = await open(100, 30, st, sidecar(['P']));
+  const b = await open(100, 30, story('bbbb0001', [video(0)]), sidecar(['P']));
+  try {
+    a.reader.press('v', 'v');
+    b.reader.press('v', 'v');
+    assert.ok(a.reader.viewerRows()![0].includes('P'.repeat(80)), 'the poster is shown first');
+    const seen = new Set<string>();
+    for (let i = 0; i < 40; i++) {
+      await sleep(25);
+      const first = a.reader.viewerRows()![0];
+      const m = first.match(/([a-d])\1{79}/);
+      if (m) seen.add(m[1]);
+    }
+    assert.ok(seen.size >= 2, `frames reached the screen: ${[...seen]}`);
+    assert.ok(a.reader.viewerRows()![0].includes('P'.repeat(80)), 'rests on the poster after one play');
+    assert.strictEqual(svc.jobs.size, 1, 'one conversion job for two viewers');
+    assert.strictEqual(svc.calls.length, 2);
+    assert.strictEqual(svc.calls[0].cols, 80);
+    assert.strictEqual(svc.calls[0].palette, 'amiga16');
+    // Enter replays.
+    a.reader.press('enter');
+    await sleep(120);
+    assert.ok(/([a-d])\1{79}/.test(a.reader.viewerRows()![0]), 'Enter replays');
+  } finally { a.close(); b.close(); registerMagazineVideoService(null); }
+}
+
+export async function escapeMidPlayStopsOutputAndLeavesNoTimer(): Promise<void> {
+  mockService(clipFile(40));
+  const h = await open(100, 30, story('bbbb0002', [video(0)]), sidecar(['P']));
+  const before = (process as any)._getActiveHandles().length;
+  try {
+    h.reader.press('v', 'v');
+    await sleep(150);
+    assert.ok(/([a-z])\1{79}/.test(h.reader.viewerRows()![0]), 'playing');
+    h.reader.press('escape');
+    assert.strictEqual(h.reader.viewerRows(), null);
+    const rows = h.reader.panelRows();
+    await sleep(200);
+    assert.deepStrictEqual(h.reader.panelRows(), rows, 'nothing painted after Escape');
+    assert.strictEqual(h.reader.viewerRows(), null, 'viewer stays closed');
+  } finally { h.close(); registerMagazineVideoService(null); }
+  void before;
+}
+
+export async function withoutAServiceAVideoJustShowsItsPoster(): Promise<void> {
+  registerMagazineVideoService(null);
+  const h = await open(100, 30, story('bbbb0003', [video(0)]), sidecar(['P']));
+  try {
+    h.reader.press('v', 'v');
+    await sleep(100);
+    assert.ok(h.reader.viewerRows()![0].includes('P'.repeat(80)));
+    h.reader.press('enter');
+    assert.ok(h.reader.viewerRows()![0].includes('P'.repeat(80)));
+  } finally { h.close(); }
+}

@@ -7,6 +7,7 @@
  */
 import { FULLSCREEN_COLS, renderingKey, type StoryMedia, type StoryMediaSidecar } from '@amiexpress/bbs-door-sdk/formats/magazine';
 import { artRowText, ansiRows, seqRows } from './art';
+import { cellsToAnsiRows, cellsToPetsciiRows, type AnsiCellGrid } from '@amiexpress/bbs-door-sdk/media/ascii';
 
 /** The sidecar and the caller's terminal: what buildArticle needs to place pictures. */
 export interface ArticleMedia {
@@ -76,4 +77,17 @@ export function mediaCredit(media: StoryMedia): string {
 /** `>> IMG site  [V] view` / `>> VIDEO site  [V] play`, in the source trailer's style (D11). */
 export function creditLine(media: StoryMedia): string {
   return `>> ${mediaCredit(media)}  [V] ${media.kind !== 'image' ? 'play' : 'view'}`;
+}
+
+/**
+ * One decoded video frame as painted rows, the way the stored fullscreen
+ * rendering is painted (same emitters the ingest uses, same row readers), so a
+ * frame and the poster it rests on look alike. `pad` blanks lead each row.
+ */
+export function frameRows(cells: AnsiCellGrid, petscii: boolean, pad: number): PictureRow[] {
+  const cols = cells[0]?.length ?? 0;
+  const stored = petscii
+    ? cellsToPetsciiRows(cells).map((r) => Buffer.from(r).toString('base64'))
+    : cellsToAnsiRows(cells);
+  return paintRows(stored, cols, petscii, pad);
 }

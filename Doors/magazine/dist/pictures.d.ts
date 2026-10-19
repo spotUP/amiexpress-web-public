@@ -6,6 +6,7 @@
  * ANSI picture and a .seq picture reach the screen exactly as board art does.
  */
 import { type StoryMedia, type StoryMediaSidecar } from '@amiexpress/bbs-door-sdk/formats/magazine';
+import { type AnsiCellGrid } from '@amiexpress/bbs-door-sdk/media/ascii';
 /** The sidecar and the caller's terminal: what buildArticle needs to place pictures. */
 export interface ArticleMedia {
     sidecar: StoryMediaSidecar | null;
@@ -30,4 +31,10 @@ export declare function fullscreenRows(sidecar: StoryMediaSidecar | null, mediaI
 export declare function mediaCredit(media: StoryMedia): string;
 /** `>> IMG site  [V] view` / `>> VIDEO site  [V] play`, in the source trailer's style (D11). */
 export declare function creditLine(media: StoryMedia): string;
+/**
+ * One decoded video frame as painted rows, the way the stored fullscreen
+ * rendering is painted (same emitters the ingest uses, same row readers), so a
+ * frame and the poster it rests on look alike. `pad` blanks lead each row.
+ */
+export declare function frameRows(cells: AnsiCellGrid, petscii: boolean, pad: number): PictureRow[];
 //# sourceMappingURL=pictures.d.ts.map

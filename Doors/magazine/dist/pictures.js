@@ -4,6 +4,7 @@ exports.pictureRows = pictureRows;
 exports.fullscreenRows = fullscreenRows;
 exports.mediaCredit = mediaCredit;
 exports.creditLine = creditLine;
+exports.frameRows = frameRows;
 /**
  * A story's pictures as rows the reader sets in a column (plan
  * 2026-10-19-mag-linked-media-ascii, M9). The converted rows live in the
@@ -13,6 +14,7 @@ exports.creditLine = creditLine;
  */
 const magazine_1 = require("@amiexpress/bbs-door-sdk/formats/magazine");
 const art_1 = require("./art");
+const ascii_1 = require("@amiexpress/bbs-door-sdk/media/ascii");
 /** The rendering for `colWidth`: the exact width, else the widest narrower one. Null when none. */
 function pictureRows(sidecar, mediaIndex, petscii, colWidth) {
     const picture = sidecar?.pictures.find((p) => p.media === mediaIndex);
@@ -60,5 +62,17 @@ function mediaCredit(media) {
 /** `>> IMG site  [V] view` / `>> VIDEO site  [V] play`, in the source trailer's style (D11). */
 function creditLine(media) {
     return `>> ${mediaCredit(media)}  [V] ${media.kind !== 'image' ? 'play' : 'view'}`;
+}
+/**
+ * One decoded video frame as painted rows, the way the stored fullscreen
+ * rendering is painted (same emitters the ingest uses, same row readers), so a
+ * frame and the poster it rests on look alike. `pad` blanks lead each row.
+ */
+function frameRows(cells, petscii, pad) {
+    const cols = cells[0]?.length ?? 0;
+    const stored = petscii
+        ? (0, ascii_1.cellsToPetsciiRows)(cells).map((r) => Buffer.from(r).toString('base64'))
+        : (0, ascii_1.cellsToAnsiRows)(cells);
+    return paintRows(stored, cols, petscii, pad);
 }
 //# sourceMappingURL=pictures.js.map

@@ -32,6 +32,7 @@ const page_search_1 = require("@amiexpress/bbs-door-sdk/teletext/page-search");
 const art_1 = require("./art");
 const filler_1 = require("./filler");
 const pictures_1 = require("./pictures");
+const player_1 = require("./player");
 const library_1 = require("./library");
 const layout_1 = require("./layout");
 exports.READ_KEY = 'read-story-ids';
@@ -875,7 +876,8 @@ async function startReader(session, options = {}) {
     const viewerStatus = (items, at) => {
         const media = articleStory?.media?.[items[at]];
         const credit = media ? (0, pictures_1.mediaCredit)(media) : '';
-        return `${credit}  ${at + 1}/${items.length}  <- -> Esc`.slice(0, layout.width);
+        const replay = media && media.kind !== 'image' && !viewer?.player ? '  Enter' : '';
+        return `${credit}  ${at + 1}/${items.length}  <- -> Esc${replay}`.slice(0, layout.width);
     };
     /**
      * The rows of one viewer item. M10b seam: an image shows its fullscreen
@@ -893,7 +895,7 @@ async function startReader(session, options = {}) {
     const paintViewer = () => {
         if (!viewer)
             return;
-        const item = viewerItemRows(viewer.items[viewer.at]);
+        const item = viewer.frame ?? viewerItemRows(viewer.items[viewer.at]);
         const status = escapeTags(viewerStatus(viewer.items, viewer.at));
         const blank = Math.max(0, height - 1 - item.lines.length);
         viewer.box.setContent([...item.lines, ...Array(blank).fill(''), s.accentAlt(status)].join('\n'));
@@ -923,20 +925,66 @@ async function startReader(session, options = {}) {
             style: { fg: t.ink, bg: t.ground },
         });
         box.setFront?.();
-        viewer = { items, at: 0, box };
+        viewer = { items, at: 0, box, player: null, frame: null };
         paintViewer();
+        startPlayback();
+    };
+    /** A video auto-plays when shown (D8): live or from the cache, painting a frame only when it changed. */
+    const startPlayback = () => {
+        if (!viewer)
+            return;
+        const media = articleStory?.media?.[viewer.items[viewer.at]];
+        if (!media || media.kind === 'image')
+            return;
+        const pet = artKind === 'seq';
+        const terminal = pet ? 'petscii' : 'ansi';
+        const cols = magazine_1.FULLSCREEN_COLS[terminal];
+        const lead = Math.max(0, Math.floor((layout.width - cols) / 2));
+        const room = Math.max(0, height - 1);
+        const mine = viewer;
+        const player = (0, player_1.startPlayer)({ url: media.url, kind: media.kind === 'embed' ? 'embed' : 'video', cols, rows: magazine_1.FULLSCREEN_ROWS, palette: pet ? 'c64' : 'amiga16', fps: pet ? 5 : 10 }, {
+            onFrame: (cells) => {
+                if (viewer !== mine || mine.player !== player)
+                    return;
+                const rows = (0, pictures_1.frameRows)(cells, pet, lead).slice(0, room);
+                const next = { lines: rows.map((r) => r.raw), plain: rows.map((r) => r.text) };
+                if (mine.frame && mine.frame.lines.join('\n') === next.lines.join('\n'))
+                    return;
+                mine.frame = next;
+                paintViewer();
+            },
+            onEnd: () => {
+                if (viewer !== mine || mine.player !== player)
+                    return;
+                mine.player = null;
+                mine.frame = null;
+                paintViewer();
+            },
+        });
+        mine.player = player;
+    };
+    /** Stepping away, Esc and leaving the door all end playback and its timer. */
+    const stopPlayback = () => {
+        if (!viewer)
+            return;
+        viewer.player?.stop();
+        viewer.player = null;
+        viewer.frame = null;
     };
     /** Left and Right step through the page's pictures and wrap. */
     const stepViewer = (delta) => {
         if (!viewer)
             return;
+        stopPlayback();
         viewer.at = (viewer.at + delta + viewer.items.length) % viewer.items.length;
         paintViewer();
+        startPlayback();
     };
     /** Esc or Q: the same reader page comes back (the panel under the box was never touched). */
     const closeViewer = () => {
         if (!viewer)
             return;
+        stopPlayback();
         try {
             viewer.box.destroy();
         }
@@ -976,6 +1024,12 @@ async function startReader(session, options = {}) {
                 stepViewer(-1);
             else if (name === 'right')
                 stepViewer(1);
+            else if (name === 'enter' || name === 'return') {
+                if (!viewer.player) {
+                    startPlayback();
+                    paintViewer();
+                }
+            }
             else if (name === 'escape' || c === 'q')
                 closeViewer();
             return;
@@ -1103,6 +1157,7 @@ async function startReader(session, options = {}) {
             stopped = true;
             clearGlitch();
             clearOverlayTimer();
+            stopPlayback();
             pageSearch.dispose();
             if (tickerTimer)
                 clearInterval(tickerTimer);
