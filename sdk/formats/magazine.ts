@@ -376,8 +376,18 @@ export interface SidecarPicture {
   media: number;
   /** The address it was fetched from (a republish does not refetch the same one). */
   url: string;
+  /** SIDECAR_RENDER_REVISION it was rendered under; absent on the first renders. */
+  render?: number;
   renderings: Record<string, SidecarRendering>;
 }
+
+/**
+ * Bumped when the renderer changes what a picture looks like, so stored
+ * renderings are redone instead of reused. 2: pictures keep their aspect
+ * inside the box (letterboxed like the video), Topaz glyph shape match that
+ * dithers towards a cell's mean colour.
+ */
+export const SIDECAR_RENDER_REVISION = 2;
 
 /** `<story id>.media.json`, beside `<story id>.json`. */
 export interface StoryMediaSidecar {

@@ -28,7 +28,7 @@ import axios from 'axios';
 import * as path from 'path';
 import { Readability } from '@mozilla/readability';
 import { parseHTML } from 'linkedom';
-import { MAGAZINE_DIR, MAGAZINE_STORIES_DIR, STORY_BODY_CAP, sidecarPath, type Story, type StoryMedia } from '@amiexpress/bbs-door-sdk/formats/magazine';
+import { MAGAZINE_DIR, MAGAZINE_STORIES_DIR, SIDECAR_RENDER_REVISION, STORY_BODY_CAP, sidecarPath, type Story, type StoryMedia } from '@amiexpress/bbs-door-sdk/formats/magazine';
 import * as fs from 'fs';
 import {
   FEED_BODY_MIN_CHARS,
@@ -38,7 +38,7 @@ import {
   toBulletinWalk,
 } from '../news-bulletins';
 import { loadStories, republishMagazine, writeAtomic } from './index';
-import { renderStoryMedia } from './media-render';
+import { readSidecar, renderStoryMedia } from './media-render';
 import type { frameToAnsiCells } from '@amiexpress/bbs-door-sdk/media/ascii';
 
 /** How long one request may take, robots.txt and the page alike. */
@@ -278,7 +278,8 @@ export function needsBody(story: Story, nowMs: number): boolean {
  * A picture with a `failure` never counts, so a story whose pictures all
  * failed is not asked again. The exception is 'story-cap', left by the old
  * per-story picture cap: those pictures were never tried, so the story is
- * asked again even though it has a sidecar.
+ * asked again even though it has a sidecar. So is a sidecar whose pictures
+ * were rendered under an older SIDECAR_RENDER_REVISION.
  */
 export function needsMedia(story: Story, root: string, nowMs: number): boolean {
   if (!story.body || story.origin === 'authored') return false;
@@ -286,7 +287,11 @@ export function needsMedia(story: Story, root: string, nowMs: number): boolean {
   if (!capped && !story.media?.some((m) => !m.failure)) return false;
   const seen = Date.parse(story.firstSeen);
   if (!Number.isFinite(seen) || nowMs - seen > PREFETCH_MAX_AGE_DAYS * 24 * 3600 * 1000) return false;
-  return capped || !fs.existsSync(sidecarPath(storyFile(root, story.id)));
+  if (capped) return true;
+  const file = storyFile(root, story.id);
+  if (!fs.existsSync(sidecarPath(file))) return true;
+  // Pictures rendered under an older SIDECAR_RENDER_REVISION are redone.
+  return readSidecar(file)?.pictures.some((p) => p.render !== SIDECAR_RENDER_REVISION) ?? true;
 }
 
 /** The gap for a story's host: the board's gap, widened to the feed's own when it is the same host. */

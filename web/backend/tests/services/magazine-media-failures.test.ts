@@ -11,7 +11,9 @@ import * as path from 'path';
 import { PNG } from 'pngjs';
 import { createRobotsCache, needsMedia, prefetchBodies, type HttpResult } from '../../src/services/magazine/body-prefetch';
 import { MAX_IMAGE_BYTES } from '../../src/services/magazine/media-fetch';
-import { readSidecar, renderStoryMedia } from '../../src/services/magazine/media-render';
+import { letterbox, readSidecar, renderPicture, renderStoryMedia } from '../../src/services/magazine/media-render';
+import { SIDECAR_RENDER_REVISION, sidecarSizes } from '@amiexpress/bbs-door-sdk/formats/magazine';
+import { SUB_X, SUB_Y } from '@amiexpress/bbs-door-sdk/media/ascii';
 import { writeAtomic } from '../../src/services/magazine';
 
 // Conversion is not under test here; the real converter made the cap case take minutes.
@@ -206,5 +208,64 @@ describe('a video must play before its poster is shown', () => {
     expect(r.out.media![0].failure).toBeUndefined();
     expect(r.probe).toHaveBeenCalledWith(clip.url);
     expect(r.side!.pictures).toHaveLength(1);
+  });
+});
+
+describe('a picture keeps its shape in every box', () => {
+  const rgba = (w: number, h: number) => ({ width: w, height: h, data: new Uint8Array(w * h * 4).fill(200) });
+
+  it('pads a wide picture top and bottom with black, picture centred', () => {
+    const src = { data: new Uint8Array(40 * 10 * 3).fill(200), width: 40, height: 10, channels: 3 as const };
+    const out = letterbox(src, 4, 4); // box 4*SUB_X x 4*SUB_Y
+    expect(out.width / out.height).toBeCloseTo((4 * SUB_X) / (4 * SUB_Y), 1);
+    expect(out.data[0]).toBe(0);
+    const mid = (Math.floor(out.height / 2) * out.width + Math.floor(out.width / 2)) * 3;
+    expect(out.data[mid]).toBe(200);
+  });
+
+  it('the fullscreen poster of a 16:9 clip is not stretched to the 80x24 box (live report 2026-10-20)', () => {
+    const seen: { key: string; aspect: number; box: number }[] = [];
+    const sizes = sidecarSizes();
+    let i = 0;
+    renderPicture(rgba(320, 180) as never, ((s: { width: number; height: number }, cols: number, rows: number) => {
+      seen.push({ key: sizes[i++].key, aspect: s.width / s.height, box: (cols * SUB_X) / (rows * SUB_Y) });
+      return blankCells(s, cols, rows);
+    }) as never);
+    expect(seen.length).toBe(sizes.length);
+    for (const s of seen) expect(s.aspect).toBeCloseTo(s.box, 1);
+  });
+});
+
+describe('pictures rendered by an older converter are redone', () => {
+  const deps = () => ({
+    now: () => NOW, robots: createRobotsCache(), gate: jest.fn(async () => {}),
+    http: jest.fn(async (): Promise<HttpResult> => robotsOk), convert: blankCells,
+  });
+
+  it('refetches a picture whose sidecar entry has no or an old render revision, reuses a current one', async () => {
+    get.mockResolvedValue(reply(png(200, 200), 'image/png'));
+    const file = path.join(root, 'old.json');
+    const media = [img(1), img(2), img(3)];
+    fs.writeFileSync(path.join(root, 'old.media.json'), JSON.stringify({ version: 1, pictures: [
+      { media: 0, url: media[0].url, renderings: {} },
+      { media: 1, url: media[1].url, render: SIDECAR_RENDER_REVISION - 1, renderings: {} },
+      { media: 2, url: media[2].url, render: SIDECAR_RENDER_REVISION, renderings: {} },
+    ] }));
+    const out = await renderStoryMedia({ media }, file, deps(), writeAtomic);
+    expect(out.rendered).toBe(2);
+    expect(out.reused).toBe(1);
+    expect(readSidecar(file)!.pictures.map((p) => p.render)).toEqual([SIDECAR_RENDER_REVISION, SIDECAR_RENDER_REVISION, SIDECAR_RENDER_REVISION]);
+  });
+
+  it('the prefetch asks again for a story whose sidecar is from an older render revision', () => {
+    const dir = path.join(root, 'Magazine', 'stories');
+    fs.mkdirSync(dir, { recursive: true });
+    const story = { id: 'old', source: 'HN', headline: 'H', url: 'https://news.example.org/a', firstSeen: NOW.toISOString(), body: 'Body.', media: [img(1)] };
+    const write = (render?: number) => fs.writeFileSync(path.join(dir, 'old.media.json'),
+      JSON.stringify({ version: 1, pictures: [{ media: 0, url: img(1).url, ...(render === undefined ? {} : { render }), renderings: {} }] }));
+    write();
+    expect(needsMedia(story as never, root, NOW.getTime())).toBe(true);
+    write(SIDECAR_RENDER_REVISION);
+    expect(needsMedia(story as never, root, NOW.getTime())).toBe(false);
   });
 });

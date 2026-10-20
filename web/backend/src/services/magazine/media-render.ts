@@ -10,13 +10,14 @@
 import * as fs from 'fs';
 import {
   rowsForAspect,
+  SIDECAR_RENDER_REVISION,
   sidecarPath,
   sidecarSizes,
   type SidecarPicture,
   type Story,
   type StoryMediaSidecar,
 } from '@amiexpress/bbs-door-sdk/formats/magazine';
-import { cellsToAnsiRows, cellsToPetsciiRows, frameToAnsiCells } from '@amiexpress/bbs-door-sdk/media/ascii';
+import { cellsToAnsiRows, cellsToPetsciiRows, frameToAnsiCells, SUB_X, SUB_Y } from '@amiexpress/bbs-door-sdk/media/ascii';
 import { fetchPoster, type MediaFetchDeps, type Pixels } from './media-fetch';
 
 /** The converter, injectable so a test can count its calls. */
@@ -33,14 +34,41 @@ function rgbOf(p: Pixels): Uint8Array {
   return out;
 }
 
+type RgbSource = { data: Uint8Array; width: number; height: number; channels: 3 };
+
+/**
+ * The picture centred on black in a frame of the box's shape (cols x rows
+ * cells of SUB_X x SUB_Y), the way ffmpeg pads a clip. The converter fills
+ * whatever box it gets, so without this a fullscreen still, or a column
+ * picture whose rows hit the cap, was stretched to the box.
+ */
+export function letterbox(src: RgbSource, cols: number, rows: number): RgbSource {
+  const boxW = cols * SUB_X;
+  const boxH = rows * SUB_Y;
+  let width = src.width;
+  let height = Math.round((src.width * boxH) / boxW);
+  if (height < src.height) {
+    height = src.height;
+    width = Math.round((src.height * boxW) / boxH);
+  }
+  if (width === src.width && height === src.height) return src;
+  const data = new Uint8Array(width * height * 3);
+  const left = Math.floor((width - src.width) / 2);
+  const top = Math.floor((height - src.height) / 2);
+  for (let y = 0; y < src.height; y++) {
+    data.set(src.data.subarray(y * src.width * 3, (y + 1) * src.width * 3), ((top + y) * width + left) * 3);
+  }
+  return { data, width, height, channels: 3 };
+}
+
 /** Every size of one decoded picture. */
 export function renderPicture(p: Pixels, convert: typeof frameToAnsiCells = frameToAnsiCells): SidecarPicture['renderings'] {
-  const source = { data: rgbOf(p), width: p.width, height: p.height, channels: 3 as const };
+  const source: RgbSource = { data: rgbOf(p), width: p.width, height: p.height, channels: 3 };
   const out: SidecarPicture['renderings'] = {};
   for (const size of sidecarSizes()) {
     // A fullscreen rendering is a fixed size (D11); a column still follows the aspect.
     const rows = size.placement === 'full' ? size.maxRows : rowsForAspect(p.width, p.height, size.cols, size.maxRows);
-    const cells = convert(source, size.cols, rows, { palette: size.terminal === 'petscii' ? 'c64' : 'amiga16' });
+    const cells = convert(letterbox(source, size.cols, rows), size.cols, rows, { palette: size.terminal === 'petscii' ? 'c64' : 'amiga16' });
     out[size.key] = {
       cols: size.cols,
       rows: size.terminal === 'petscii'
@@ -75,7 +103,7 @@ export interface RenderOutcome {
  * `failure` is skipped (never retried), except 'story-cap': stories ingested
  * while a per-story picture cap existed carry it, and the picture itself was
  * never tried. One the old sidecar holds for the
- * same URL is reused, so a republish never refetches (M13; the retention half
+ * same URL under the current SIDECAR_RENDER_REVISION is reused, so a republish never refetches (M13; the retention half
  * is `removeStoryMedia` in index.ts).
  */
 export async function renderStoryMedia(
@@ -93,11 +121,11 @@ export async function renderStoryMedia(
   for (let i = 0; i < media.length; i++) {
     const m = media[i];
     if (m.failure) continue;
-    const kept = old?.pictures.find((p) => p.media === i && p.url === m.url);
+    const kept = old?.pictures.find((p) => p.media === i && p.url === m.url && p.render === SIDECAR_RENDER_REVISION);
     if (kept) { pictures.push(kept); out.reused++; continue; }
     const got = await fetchPoster(m, deps);
     if (typeof got === 'string') { m.failure = got; out.failed++; continue; }
-    pictures.push({ media: i, url: m.url, renderings: renderPicture(got.pixels, deps.convert) });
+    pictures.push({ media: i, url: m.url, render: SIDECAR_RENDER_REVISION, renderings: renderPicture(got.pixels, deps.convert) });
     out.rendered++;
   }
   if (pictures.length) {
