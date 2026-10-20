@@ -276,14 +276,17 @@ export function needsBody(story: Story, nowMs: number): boolean {
  * A story that has its text and lists pictures but has no sidecar: its text
  * came before pictures were rendered at ingest, or the render was cut short.
  * A picture with a `failure` never counts, so a story whose pictures all
- * failed is not asked again.
+ * failed is not asked again. The exception is 'story-cap', left by the old
+ * per-story picture cap: those pictures were never tried, so the story is
+ * asked again even though it has a sidecar.
  */
 export function needsMedia(story: Story, root: string, nowMs: number): boolean {
   if (!story.body || story.origin === 'authored') return false;
-  if (!story.media?.some((m) => !m.failure)) return false;
+  const capped = story.media?.some((m) => m.failure === 'story-cap') ?? false;
+  if (!capped && !story.media?.some((m) => !m.failure)) return false;
   const seen = Date.parse(story.firstSeen);
   if (!Number.isFinite(seen) || nowMs - seen > PREFETCH_MAX_AGE_DAYS * 24 * 3600 * 1000) return false;
-  return !fs.existsSync(sidecarPath(storyFile(root, story.id)));
+  return capped || !fs.existsSync(sidecarPath(storyFile(root, story.id)));
 }
 
 /** The gap for a story's host: the board's gap, widened to the feed's own when it is the same host. */

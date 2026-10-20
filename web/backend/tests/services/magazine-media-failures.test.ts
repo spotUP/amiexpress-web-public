@@ -9,7 +9,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { PNG } from 'pngjs';
-import { createRobotsCache, prefetchBodies, type HttpResult } from '../../src/services/magazine/body-prefetch';
+import { createRobotsCache, needsMedia, prefetchBodies, type HttpResult } from '../../src/services/magazine/body-prefetch';
 import { MAX_IMAGE_BYTES } from '../../src/services/magazine/media-fetch';
 import { readSidecar, renderStoryMedia } from '../../src/services/magazine/media-render';
 import { writeAtomic } from '../../src/services/magazine';
@@ -129,6 +129,17 @@ describe('a story keeps every picture it links', () => {
     const out = await renderStoryMedia({ media: [img(1), { ...img(2), failure: 'story-cap' }, { ...img(3), failure: '404' }] }, file, deps(), writeAtomic);
     expect(out.media!.map((m) => m.failure)).toEqual([undefined, undefined, '404']);
     expect(readSidecar(file)!.pictures.map((p) => p.media)).toEqual([0, 1]);
+  });
+
+  it('asks again for a story an older ingest capped, even though it has a sidecar (8946413e stayed at 3 of 18)', () => {
+    const dir = path.join(root, 'Magazine', 'stories');
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, 'capped.media.json'), JSON.stringify({ version: 1, pictures: [] }));
+    const story = { id: 'capped', source: 'HN', headline: 'H', url: 'https://news.example.org/a', firstSeen: NOW.toISOString(), body: 'Body.' };
+    const ok = { ...story, media: [img(1)] };
+    const capped = { ...story, media: [img(1), { ...img(2), failure: 'story-cap' as const }] };
+    expect(needsMedia(ok as never, root, NOW.getTime())).toBe(false);
+    expect(needsMedia(capped as never, root, NOW.getTime())).toBe(true);
   });
 });
 
