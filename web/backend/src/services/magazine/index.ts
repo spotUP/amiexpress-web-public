@@ -104,10 +104,14 @@ function writeTombstones(root: string, ids: string[], nowMs: number): void {
   writeAtomic(path.join(root, MAGAZINE, TOMBSTONE_FILE), JSON.stringify(all));
 }
 
-export function writeAtomic(target: string, contents: string): void {
+/**
+ * Write through a temp file and rename. JSON is UTF-8, because every reader
+ * parses it as UTF-8; only the Amiga page text (pNNN.txt) passes 'latin1'.
+ */
+export function writeAtomic(target: string, contents: string, encoding: BufferEncoding = 'utf8'): void {
   const tmp = `${target}.tmp-${process.pid}`;
   try {
-    fs.writeFileSync(tmp, contents, 'latin1');
+    fs.writeFileSync(tmp, contents, encoding);
     fs.renameSync(tmp, target);
   } catch (err) {
     try { fs.unlinkSync(tmp); } catch { /* the target is untouched */ }
@@ -290,7 +294,7 @@ export function publishMagazine(
       deskLabel,
       budget,
     );
-    writeAtomic(path.join(pagesDir, `p${String(page).padStart(3, '0')}.txt`), `${renderPage(composed)}\r\n`);
+    writeAtomic(path.join(pagesDir, `p${String(page).padStart(3, '0')}.txt`), `${renderPage(composed)}\r\n`, 'latin1');
     index.push({
       page,
       title: story.headline,
@@ -313,7 +317,7 @@ export function publishMagazine(
       `${familyFor(desk).label} - LATEST`,
       budget,
     );
-    writeAtomic(path.join(pagesDir, `p${String(familyFor(desk).first).padStart(3, '0')}.txt`), `${renderPage(composed)}\r\n`);
+    writeAtomic(path.join(pagesDir, `p${String(familyFor(desk).first).padStart(3, '0')}.txt`), `${renderPage(composed)}\r\n`, 'latin1');
   }
 
   // The front page proper: human-approved stories only.
@@ -331,7 +335,7 @@ export function publishMagazine(
     frontTitle,
     budget,
   );
-  writeAtomic(path.join(pagesDir, 'p100.txt'), `${renderPage(frontComposed)}\r\n`);
+  writeAtomic(path.join(pagesDir, 'p100.txt'), `${renderPage(frontComposed)}\r\n`, 'latin1');
 
   fs.writeFileSync(path.join(root, MAGAZINE, MAGAZINE_INDEX_FILE), JSON.stringify(index, null, 2), 'utf8');
   fs.writeFileSync(path.join(root, MAGAZINE, MAGAZINE_FRONTPAGE_FILE), JSON.stringify(approvedIds, null, 2), 'utf8');

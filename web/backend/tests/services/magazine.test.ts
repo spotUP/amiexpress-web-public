@@ -21,6 +21,7 @@ import {
   refreshMagazine,
   readApproved,
   writeApproved,
+  writeAtomic,
   type IncomingItem,
 } from '../../src/services/magazine';
 import { classify, classifyFormat } from '../../src/services/magazine/classify';
@@ -109,6 +110,22 @@ describe('classification (§3, §5)', () => {
     expect(classifyFormat({ headline: 'A talk with Skaven', summary: 'an interview' })).toBe('INTERVIEW');
     expect(classifyFormat({ headline: 'How the Amiga coprocessor bug happened', summary: 'technique' })).toBe('TECHNIQUE');
     expect(classifyFormat({ headline: 'Lost tracker disk recovered from a hard drive', summary: '' })).toBe('ARCHIVE');
+  });
+});
+
+describe('story files round-trip', () => {
+  it('keeps a story whose picture caption has an em dash', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mag-utf8-'));
+    const story = { id: 'e1', headline: 'Dash', media: [{ kind: 'image', url: 'u', alt: 'one \u2014 two' }] };
+    writeAtomic(path.join(dir, 'e1.json'), JSON.stringify(story, null, 2));
+    const loaded = loadStories(dir) as unknown as Array<typeof story>;
+    expect(loaded.map((s) => s.media[0].alt)).toEqual(['one \u2014 two']);
+  });
+
+  it('still writes Amiga page text as one byte per character', () => {
+    const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'mag-page-')), 'p101.txt');
+    writeAtomic(file, 'caf\u00e9', 'latin1');
+    expect([...fs.readFileSync(file)]).toEqual([0x63, 0x61, 0x66, 0xe9]);
   });
 });
 
