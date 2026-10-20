@@ -32,7 +32,6 @@ BULLETINS
 #34    r/reverseengineering
 #36    r/phreaking
 #37    r/SDR - software defined radio
-#38    r/radionerds
 #39    r/PirateRadio
 #40    r/ANSI - text art
 #41    r/modmusic - tracker files

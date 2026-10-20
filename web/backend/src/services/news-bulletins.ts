@@ -148,7 +148,6 @@ export const NEWS_BULLETIN_SOURCES: NewsBulletinSource[] = [
   { kind: 'rss', url: 'https://www.reddit.com/r/demoscene/.rss', file: 'bull53.txt', title: 'r/demoscene', source: 'reddit.com', hostGapMs: REDDIT_HOST_GAP_MS, intervalMs: REDDIT_INTERVAL_MS },
   { kind: 'rss', url: 'https://www.reddit.com/r/phreaking/.rss', file: 'bull36.txt', title: 'r/phreaking', source: 'reddit.com', hostGapMs: REDDIT_HOST_GAP_MS, intervalMs: REDDIT_INTERVAL_MS },
   { kind: 'rss', url: 'https://www.reddit.com/r/sdr/.rss', file: 'bull37.txt', title: 'r/SDR - software defined radio', source: 'reddit.com', hostGapMs: REDDIT_HOST_GAP_MS, intervalMs: REDDIT_INTERVAL_MS },
-  { kind: 'rss', url: 'https://www.reddit.com/r/radionerds/.rss', file: 'bull38.txt', title: 'r/radionerds', source: 'reddit.com', hostGapMs: REDDIT_HOST_GAP_MS, intervalMs: REDDIT_INTERVAL_MS },
   { kind: 'rss', url: 'https://www.reddit.com/r/pirateradio/.rss', file: 'bull39.txt', title: 'r/PirateRadio', source: 'reddit.com', hostGapMs: REDDIT_HOST_GAP_MS, intervalMs: REDDIT_INTERVAL_MS },
   { kind: 'rss', url: 'https://www.reddit.com/r/ansi/.rss', file: 'bull40.txt', title: 'r/ANSI - text art', source: 'reddit.com', hostGapMs: REDDIT_HOST_GAP_MS, intervalMs: REDDIT_INTERVAL_MS },
   { kind: 'rss', url: 'https://www.reddit.com/r/modmusic/.rss', file: 'bull41.txt', title: 'r/modmusic - tracker files', source: 'reddit.com', hostGapMs: REDDIT_HOST_GAP_MS, intervalMs: REDDIT_INTERVAL_MS },
