@@ -24,6 +24,7 @@ import {
   ARTICLE_HOST_GAP_MS,
   BOARD_USER_AGENT,
   createRobotsCache,
+  EXTRACT_REVISION,
   extractArticleText,
   parseRobots,
   prefetchBodies,
@@ -244,7 +245,7 @@ describe('the body prefetch', () => {
     http.mockClear();
     const again = await prefetchBodies({ ...d, robots: createRobotsCache() });
     expect(http).not.toHaveBeenCalled();
-    expect(again).toEqual({ fetched: 0, pictured: 0, failed: 0, deferred: 0 });
+    expect(again).toEqual({ fetched: 0, pictured: 0, failed: 0, deferred: 0, reextracted: 0 });
   });
 
   it('records a timeout as a failure too', async () => {
@@ -254,8 +255,8 @@ describe('the body prefetch', () => {
     expect(read('s1').bodyFailed!.reason).toMatch(/timeout/);
   });
 
-  it('never refetches a story that already has a body', async () => {
-    write(story('s1', 'https://example.org/a/1', { body: 'Already here. '.repeat(100).trim() }));
+  it('never refetches a story that already has a body read by the current extractor', async () => {
+    write(story('s1', 'https://example.org/a/1', { body: 'Already here. '.repeat(100).trim(), extracted: EXTRACT_REVISION }));
     const { d, http } = deps(() => html200());
     const out = await prefetchBodies(d);
     expect(http).not.toHaveBeenCalled();

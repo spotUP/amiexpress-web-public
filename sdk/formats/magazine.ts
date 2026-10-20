@@ -223,6 +223,13 @@ export interface Story {
    * stored before the field existed.
    */
   media?: StoryMedia[];
+  /**
+   * The article-extraction revision the story page was last read under.
+   * Absent on a story read before the field existed (revision 1). A story
+   * read under an older revision is read once more for the media the newer
+   * extractor finds; its body is kept.
+   */
+  extracted?: number;
 }
 
 /**
@@ -332,10 +339,12 @@ export const FULLSCREEN_ROWS = 24;
 /** Row caps of the column stills (Limits table). */
 export const COLUMN_ROW_CAP = { amiga: 10, wide: 12, petscii: 8 } as const;
 /**
- * Row cap of the span still: an 80x24 first spread with a one-line headline
- * holds it plus its credit and the gaps around it.
+ * Row cap of the span still: the tallest band an 80x24 article spread holds
+ * (20 panel rows less the running headline, the gap above and the credit).
+ * A 16:9 picture at the full 77 columns would need 22 rows, so it is set 57
+ * columns wide at this cap rather than falling back to a column still.
  */
-export const SPAN_ROW_CAP = 14;
+export const SPAN_ROW_CAP = 16;
 
 /** The key a rendering is stored under: `ansi-37-column`, `petscii-40-full`. */
 export function renderingKey(terminal: SidecarTerminal, cols: number, placement: SidecarPlacement): string {
@@ -408,9 +417,9 @@ export interface SidecarPicture {
  * renderings are redone instead of reused. 2: pictures keep their aspect
  * inside the box (letterboxed like the video), Topaz glyph shape match that
  * dithers towards a cell's mean colour. 3: the span still, set across both
- * columns at 80.
+ * columns at 80. 4: the span still is two rows taller (SPAN_ROW_CAP 16).
  */
-export const SIDECAR_RENDER_REVISION = 3;
+export const SIDECAR_RENDER_REVISION = 4;
 
 /** `<story id>.media.json`, beside `<story id>.json`. */
 export interface StoryMediaSidecar {

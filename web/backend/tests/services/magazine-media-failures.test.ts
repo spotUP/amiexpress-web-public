@@ -9,7 +9,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { PNG } from 'pngjs';
-import { createRobotsCache, needsMedia, prefetchBodies, type HttpResult } from '../../src/services/magazine/body-prefetch';
+import { createRobotsCache, EXTRACT_REVISION, needsMedia, needsReextract, prefetchBodies, type HttpResult } from '../../src/services/magazine/body-prefetch';
 import { MAX_IMAGE_BYTES } from '../../src/services/magazine/media-fetch';
 import { letterbox, readSidecar, renderPicture, renderStoryMedia } from '../../src/services/magazine/media-render';
 import { renderingKey, SIDECAR_RENDER_REVISION, sidecarSizes, SPAN_ROW_CAP, spanBox } from '@amiexpress/bbs-door-sdk/formats/magazine';
@@ -282,5 +282,51 @@ describe('pictures rendered by an older converter are redone', () => {
     expect(needsMedia(story as never, root, NOW.getTime())).toBe(true);
     write(SIDECAR_RENDER_REVISION);
     expect(needsMedia(story as never, root, NOW.getTime())).toBe(false);
+  });
+});
+
+describe('a story read by an older extractor is read once more for its pictures', () => {
+  it('re-reads a pictureless story once, renders what the page shows, keeps the text (1,657 live stories, 2026-10-20)', async () => {
+    get.mockResolvedValue(reply(png(200, 200), 'image/png'));
+    const dir = path.join(root, 'Magazine', 'stories');
+    fs.mkdirSync(dir, { recursive: true });
+    const base = { source: 'HN', headline: 'H', firstSeen: NOW.toISOString(), body: 'Body text stays.' };
+    fs.writeFileSync(path.join(dir, 'ghost.json'), JSON.stringify({ ...base, id: 'ghost', url: 'https://ghost.example.org/a' }));
+    fs.writeFileSync(path.join(dir, 'plain.json'), JSON.stringify({ ...base, id: 'plain', url: 'https://plain.example.org/b' }));
+    fs.writeFileSync(path.join(dir, 'fresh.json'), JSON.stringify({ ...base, id: 'fresh', url: 'https://fresh.example.org/c', extracted: EXTRACT_REVISION }));
+    const page: HttpResult = { status: 200, body: '<html></html>', contentType: 'text/html' };
+    const http = jest.fn(async (url: string): Promise<HttpResult> => (url.endsWith('/robots.txt') ? robotsOk : page));
+    const extract = jest.fn((_html: string, url: string) => ({ body: 'New text is ignored.', media: url.includes('ghost') ? [img(1), img(2)] : [] }));
+    const deps = {
+      rootDir: () => root, now: () => NOW, log: () => {}, robots: createRobotsCache(),
+      gate: jest.fn(async () => {}), http, extract, convert: blankCells,
+    };
+
+    const first = await prefetchBodies(deps);
+    expect(first.reextracted).toBe(2);
+    expect(extract.mock.calls.map((c) => c[1]).sort()).toEqual(['https://ghost.example.org/a', 'https://plain.example.org/b']);
+    const ghost = JSON.parse(fs.readFileSync(path.join(dir, 'ghost.json'), 'utf8'));
+    expect(ghost.body).toBe('Body text stays.');
+    expect(ghost.media).toHaveLength(2);
+    expect(ghost.extracted).toBe(EXTRACT_REVISION);
+    expect(readSidecar(path.join(dir, 'ghost.json'))!.pictures.map((p) => p.media)).toEqual([0, 1]);
+    expect(JSON.parse(fs.readFileSync(path.join(dir, 'plain.json'), 'utf8')).extracted).toBe(EXTRACT_REVISION);
+
+    const second = await prefetchBodies(deps);
+    expect(second.reextracted).toBe(0);
+    expect(extract).toHaveBeenCalledTimes(2);
+  });
+
+  it('leaves a story for a later run while its robots.txt is unreachable', async () => {
+    const dir = path.join(root, 'Magazine', 'stories');
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, 'wait.json'), JSON.stringify({ id: 'wait', source: 'HN', headline: 'H', url: 'https://down.example.org/a', firstSeen: NOW.toISOString(), body: 'Body.' }));
+    const deps = {
+      rootDir: () => root, now: () => NOW, log: () => {}, robots: createRobotsCache(),
+      gate: jest.fn(async () => {}), http: jest.fn(async (): Promise<HttpResult> => ({ status: 503, body: null })), extract: () => null, convert: blankCells,
+    };
+    const out = await prefetchBodies(deps);
+    expect(out.deferred).toBe(1);
+    expect(needsReextract(JSON.parse(fs.readFileSync(path.join(dir, 'wait.json'), 'utf8')), NOW.getTime())).toBe(true);
   });
 });

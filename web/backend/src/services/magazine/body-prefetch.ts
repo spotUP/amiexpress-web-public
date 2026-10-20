@@ -15,8 +15,9 @@
  *   - every request, robots.txt included, goes through the news-bulletins HOST
  *     GATE, so one page at a time per host and never faster than the gap
  *   - a story is asked about ONCE: a failure is written to the story
- *     (`bodyFailed`) and never retried, and a story that has a body is never
- *     fetched again
+ *     (`bodyFailed`) and never retried, and a story that has a body is
+ *     fetched again only once per `EXTRACT_REVISION`, when it has no pictures
+ *     and was read by an older extractor (its body is kept)
  *   - it runs after the bulletin tick has finished and is never awaited by it
  *
  * Extraction is @mozilla/readability (the algorithm behind Firefox reader
@@ -49,6 +50,18 @@ export const ARTICLE_HOST_GAP_MS = 5000;
 export const PREFETCH_MAX_PER_RUN = 12;
 /** Only stories first seen this recently are fetched; the archive is not back-filled. */
 export const PREFETCH_MAX_AGE_DAYS = 7;
+/**
+ * Bumped when `extractArticle` starts finding media it missed, so a story
+ * read before is read once more. 2: the lead picture, video posters and the
+ * byline-photo drop (Ghost articles came out with no pictures).
+ */
+export const EXTRACT_REVISION = 2;
+/**
+ * Stories re-read per run for a newer EXTRACT_REVISION. Larger than
+ * PREFETCH_MAX_PER_RUN: the tick is hourly and a week of stories (about
+ * 1,700 on 2026-10-20) must be re-read before they age out.
+ */
+export const REEXTRACT_MAX_PER_RUN = 120;
 /** A host's robots.txt is trusted this long. */
 export const ROBOTS_TTL_MS = 24 * 3600 * 1000;
 /** A failed robots.txt fetch is not asked again for this long. */
@@ -350,6 +363,19 @@ export function needsMedia(story: Story, root: string, nowMs: number): boolean {
   return readSidecar(file)?.pictures.some((p) => p.render !== SIDECAR_RENDER_REVISION) ?? true;
 }
 
+/**
+ * A story with its text and no pictures, read by an older extractor: the
+ * page is read once more for the media `EXTRACT_REVISION` finds. A story
+ * whose feed or page already gave it pictures is left alone.
+ */
+export function needsReextract(story: Story, nowMs: number): boolean {
+  if (!story.body || story.media?.length || !story.url || story.origin === 'authored') return false;
+  if ((story.extracted ?? 1) >= EXTRACT_REVISION) return false;
+  if (!/^https?:\/\//i.test(story.url)) return false;
+  const seen = Date.parse(story.firstSeen);
+  return Number.isFinite(seen) && nowMs - seen <= PREFETCH_MAX_AGE_DAYS * 24 * 3600 * 1000;
+}
+
 /** The gap for a story's host: the board's gap, widened to the feed's own when it is the same host. */
 export function gapFor(story: Story): number {
   const src = NEWS_BULLETIN_SOURCES.find((s) => s.source === story.source && s.url);
@@ -378,15 +404,45 @@ function record(root: string, id: string, patch: Partial<Story>): boolean {
   return true;
 }
 
-/** Write a story's media list back, keeping everything else the ingest may have changed meanwhile. */
-function recordMedia(root: string, id: string, media: StoryMedia[]): void {
+/** Write fields of a story that has its text, keeping everything else the ingest may have changed meanwhile. */
+function recordFields(root: string, id: string, patch: Pick<Story, 'media' | 'extracted'>): void {
   let current: Story;
   try {
     current = JSON.parse(fs.readFileSync(storyFile(root, id), 'utf8'));
   } catch {
     return;
   }
-  writeAtomic(storyFile(root, id), JSON.stringify({ ...current, media }, null, 2));
+  writeAtomic(storyFile(root, id), JSON.stringify({ ...current, ...patch }, null, 2));
+}
+
+type PageRead = { kind: 'deferred' } | { kind: 'failed'; reason: string } | { kind: 'ok'; article: ExtractedArticle };
+
+/** Ask robots.txt, then read the story page and extract its article. */
+async function readArticle(story: Story, deps: PrefetchDeps): Promise<PageRead> {
+  const url = story.url as string;
+  let verdict: Verdict;
+  try {
+    verdict = await robotsVerdict(url, deps, gapFor(story));
+  } catch (err) {
+    return { kind: 'failed', reason: `bad url (${(err as Error).message})` };
+  }
+  if (verdict.kind === 'unknown') return { kind: 'deferred' }; // asked again after the error TTL
+  if (verdict.kind === 'disallowed') return { kind: 'failed', reason: 'robots.txt disallows this path' };
+
+  await deps.gate(url, gapFor(story));
+  const res = await deps.http(url, {
+    timeoutMs: ARTICLE_FETCH_TIMEOUT_MS,
+    userAgent: BOARD_USER_AGENT,
+    accept: 'text/html, application/xhtml+xml',
+  });
+  if (res.status !== 200 || res.body === null) {
+    return { kind: 'failed', reason: res.error ? `fetch failed: ${res.error}` : `HTTP ${res.status}` };
+  }
+  if (res.contentType && !/html|xml/i.test(res.contentType)) return { kind: 'failed', reason: `not a web page (${res.contentType})` };
+  const extracted = deps.extract(res.body, url);
+  const article = typeof extracted === 'string' ? { body: extracted, media: [] } : extracted;
+  if (!article?.body) return { kind: 'failed', reason: 'no article text on the page' };
+  return { kind: 'ok', article };
 }
 
 export interface PrefetchSummary {
@@ -395,6 +451,8 @@ export interface PrefetchSummary {
   pictured: number;
   failed: number;
   deferred: number;
+  /** Stories re-read for a newer EXTRACT_REVISION in this run. */
+  reextracted: number;
 }
 
 /** Ask the story pages for the full text of new stories. See the file comment for the manners. */
@@ -406,39 +464,18 @@ export async function prefetchBodies(deps: PrefetchDeps): Promise<PrefetchSummar
     .filter((s) => needsBody(s, nowMs))
     .sort((a, b) => (a.firstSeen < b.firstSeen ? 1 : -1))
     .slice(0, PREFETCH_MAX_PER_RUN);
-  const out: PrefetchSummary = { fetched: 0, pictured: 0, failed: 0, deferred: 0 };
+  const out: PrefetchSummary = { fetched: 0, pictured: 0, failed: 0, deferred: 0, reextracted: 0 };
 
   for (const story of stories) {
-    const url = story.url as string;
-    const fail = (reason: string) => {
-      record(root, story.id, { bodyFailed: { at: nowIso, reason } });
+    const read = await readArticle(story, deps);
+    if (read.kind === 'deferred') { out.deferred++; continue; }
+    if (read.kind === 'failed') {
+      record(root, story.id, { bodyFailed: { at: nowIso, reason: read.reason } });
       out.failed++;
-      deps.log(`[magazine] body: ${story.source} no article text (${reason})`);
-    };
-    let verdict: Verdict;
-    try {
-      verdict = await robotsVerdict(url, deps, gapFor(story));
-    } catch (err) {
-      fail(`bad url (${(err as Error).message})`);
+      deps.log(`[magazine] body: ${story.source} no article text (${read.reason})`);
       continue;
     }
-    if (verdict.kind === 'unknown') { out.deferred++; continue; } // asked again after the error TTL
-    if (verdict.kind === 'disallowed') { fail('robots.txt disallows this path'); continue; }
-
-    await deps.gate(url, gapFor(story));
-    const res = await deps.http(url, {
-      timeoutMs: ARTICLE_FETCH_TIMEOUT_MS,
-      userAgent: BOARD_USER_AGENT,
-      accept: 'text/html, application/xhtml+xml',
-    });
-    if (res.status !== 200 || res.body === null) {
-      fail(res.error ? `fetch failed: ${res.error}` : `HTTP ${res.status}`);
-      continue;
-    }
-    if (res.contentType && !/html|xml/i.test(res.contentType)) { fail(`not a web page (${res.contentType})`); continue; }
-    const extracted = deps.extract(res.body, url);
-    const article = typeof extracted === 'string' ? { body: extracted, media: [] } : extracted;
-    if (!article?.body) { fail('no article text on the page'); continue; }
+    const { article } = read;
     const { body } = article;
     // Pictures are fetched, converted and stored at ingest (D1); a failure is
     // recorded once on the media entry and the text is unchanged (D6).
@@ -448,7 +485,7 @@ export async function prefetchBodies(deps: PrefetchDeps): Promise<PrefetchSummar
       media = rendered.media ?? media;
       deps.log(`[magazine] media: ${story.source} ${rendered.rendered} rendered, ${rendered.failed} dropped`);
     }
-    if (record(root, story.id, { body, ...(media.length ? { media } : {}) })) {
+    if (record(root, story.id, { body, extracted: EXTRACT_REVISION, ...(media.length ? { media } : {}) })) {
       out.fetched++;
       deps.log(`[magazine] body: ${story.source} ${body.length} characters`);
     }
@@ -461,9 +498,28 @@ export async function prefetchBodies(deps: PrefetchDeps): Promise<PrefetchSummar
     .slice(0, PREFETCH_MAX_PER_RUN);
   for (const story of unpictured) {
     const rendered = await renderStoryMedia(story, storyFile(root, story.id), deps, writeAtomic);
-    if (rendered.media) recordMedia(root, story.id, rendered.media);
+    if (rendered.media) recordFields(root, story.id, { media: rendered.media });
     if (rendered.rendered) out.pictured++;
     deps.log(`[magazine] media: ${story.source} ${rendered.rendered} rendered, ${rendered.failed} dropped`);
+  }
+
+  // Stories read by an older extractor are read once more for their pictures.
+  // The revision is recorded whatever the page says, so a story is re-read
+  // once; only an unreachable robots.txt leaves it for a later run.
+  const stale = loadStories(path.join(root, MAGAZINE_DIR, MAGAZINE_STORIES_DIR), deps.log)
+    .filter((s) => needsReextract(s, nowMs))
+    .sort((a, b) => (a.firstSeen < b.firstSeen ? 1 : -1))
+    .slice(0, REEXTRACT_MAX_PER_RUN);
+  for (const story of stale) {
+    const read = await readArticle(story, deps);
+    if (read.kind === 'deferred') { out.deferred++; continue; }
+    out.reextracted++;
+    const found = read.kind === 'ok' ? read.article.media : [];
+    if (!found.length) { recordFields(root, story.id, { extracted: EXTRACT_REVISION }); continue; }
+    const rendered = await renderStoryMedia({ media: found }, storyFile(root, story.id), deps, writeAtomic);
+    recordFields(root, story.id, { media: rendered.media ?? found, extracted: EXTRACT_REVISION });
+    if (rendered.rendered) out.pictured++;
+    deps.log(`[magazine] media: ${story.source} re-read, ${rendered.rendered} rendered, ${rendered.failed} dropped`);
   }
   return out;
 }
@@ -482,7 +538,7 @@ export function startBodyPrefetch(base: Pick<PrefetchDeps, 'rootDir' | 'now' | '
   running = true;
   prefetchBodies(deps ?? defaultPrefetchDeps(base, robotsByProcess))
     .then((r) => {
-      if (r.fetched || r.pictured || r.failed) base.log(`[magazine] body prefetch: ${r.fetched} filled, ${r.pictured} pictured, ${r.failed} failed, ${r.deferred} deferred`);
+      if (r.fetched || r.pictured || r.failed || r.reextracted) base.log(`[magazine] body prefetch: ${r.fetched} filled, ${r.pictured} pictured, ${r.reextracted} re-read, ${r.failed} failed, ${r.deferred} deferred`);
       // A story that just got its text is an article now: give it its page.
       if (r.fetched) republishMagazine(base);
     })

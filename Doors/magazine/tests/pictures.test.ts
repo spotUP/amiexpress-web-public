@@ -1,7 +1,7 @@
 /** M9: pictures set at their anchor in buildArticle, at the three widths. */
 import assert from 'node:assert';
 import type { Story, StoryMediaSidecar } from '@amiexpress/bbs-door-sdk/formats/magazine';
-import { renderingKey, sidecarSizes } from '@amiexpress/bbs-door-sdk/formats/magazine';
+import { renderingKey, sidecarSizes, SPAN_ROW_CAP } from '@amiexpress/bbs-door-sdk/formats/magazine';
 import { buildArticle, buildLayout, rowText } from '../layout';
 
 const STORY: Story = {
@@ -107,6 +107,15 @@ export async function aSpanPictureCrossesBothColumnsWithItsCreditUnderIt(): Prom
   for (const r of rows) assert.ok(r.length <= 80, `row fits the screen: ${r.length}`);
   const spread = article.pictures.findIndex((p) => p.includes(0));
   assert.ok(spread >= 0 && article.spreads[spread].map(rowText).some((r) => r.includes('SSSS')), 'Article.pictures names the band spread');
+}
+
+export async function aSpanPictureAtTheRowCapStillFitsAnEightyByTwentyFourSpread(): Promise<void> {
+  // The cap is the tallest band the article panel holds; one row more and the picture drops to a column still.
+  const layout = buildLayout(80, 24);
+  const w = layout.geometry.contentWidth;
+  const rows = buildArticle(LONG, layout, [], undefined, { sidecar: spanSidecar(w, SPAN_ROW_CAP), petscii: false }).spreads.flatMap((s) => s.map(rowText));
+  assert.strictEqual(rows.filter((r) => r.includes('SSSS')).length, SPAN_ROW_CAP, 'the band is set at the cap');
+  assert.ok(!rows.some((r) => r.includes('XXXX')), 'no column still in its place');
 }
 
 export async function aNarrowSpanPictureIsCentred(): Promise<void> {
