@@ -522,6 +522,28 @@ function mediaOf(tag: string, baseUrl: string, site: string): StoryMedia | null 
   return null;
 }
 
+/** A figure that holds a video; its img is the clip's still, not a picture of its own. */
+const VIDEO_FIGURE = /<figure\b[^>]*>(?:(?!<\/figure>)[\s\S])*?<video\b(?:(?!<\/figure>)[\s\S])*?<\/figure>/gi;
+
+/**
+ * Ghost (404 Media and others) sets a video card as a figure holding the
+ * video, whose poster is a data: placeholder, and an img of the still. The
+ * img becomes the video's poster when the video has no usable one, and is
+ * dropped either way, so the story does not list the still twice.
+ */
+function foldVideoPosters(html: string, baseUrl: string): string {
+  return html.replace(VIDEO_FIGURE, (figure) => {
+    const img = /<img\b[^>]*>/i.exec(figure)?.[0];
+    if (!img) return figure;
+    const still = absoluteUrl(imageSrc(attrsOf(img)), baseUrl);
+    return figure.replace(img, '').replace(/<video\b[^>]*>/i, (open) => {
+      if (!still || absoluteUrl(attrsOf(open).poster, baseUrl)) return open;
+      const bare = open.replace(/\sposter\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/i, '');
+      return bare.replace(/^<video\b/i, `<video poster="${still.replace(/&/g, '&amp;').replace(/"/g, '&quot;')}"`);
+    });
+  });
+}
+
 /** What one walk over a story's HTML found: its text and the media between the paragraphs. */
 export interface BulletinWalk {
   /** Paragraphs joined by a blank line, cut at the cap (exactly `toBulletinParagraphs`). */
@@ -544,8 +566,9 @@ export function toBulletinWalk(html: string, cap: number, baseUrl = ''): Bulleti
   const found: StoryMedia[] = [];
   let site = '';
   try { site = new URL(baseUrl).hostname.replace(/^www\./i, ''); } catch { /* relative-only page */ }
-  const marked = html.replace(MEDIA_ELEMENT, (tag) => {
-    const m = mediaOf(tag, baseUrl || 'http://invalid.invalid/', site);
+  const base = baseUrl || 'http://invalid.invalid/';
+  const marked = foldVideoPosters(html, base).replace(MEDIA_ELEMENT, (tag) => {
+    const m = mediaOf(tag, base, site);
     if (!m) return tag;
     found.push(m);
     return `<xmedia n="${found.length - 1}"></xmedia>${tag}`;

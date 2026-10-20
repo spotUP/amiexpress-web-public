@@ -20,6 +20,7 @@ import { loadStories, writeAtomic } from '../../src/services/magazine';
 import {
   createRobotsCache,
   defaultPrefetchDeps,
+  extractArticle,
   extractArticleText,
   prefetchBodies,
 } from '../../src/services/magazine/body-prefetch';
@@ -168,5 +169,59 @@ describe('the prefetch stores media on the story (round trip through the store)'
     const byId = new Map(loadStories(dir()).map((s) => [s.id, s]));
     expect(byId.get('a')!.media).toEqual(media);
     expect('media' in byId.get('b')!).toBe(false);
+  });
+});
+
+/**
+ * Story ce75ec55 (404 Media, 2026-10-20): the sysop saw a hero picture and a
+ * video on the page; the story listed the video, its still as a second
+ * picture, and the author's Gravatar, and no hero. Readability leaves the hero
+ * figure out, Ghost's video card holds its still as an img beside a video whose
+ * poster is a data: placeholder, and the "about the author" box survives.
+ */
+describe('a Ghost article lists the pictures a reader sees', () => {
+  const GHOST = 'https://www.404media.co/texas-data-center-permits/';
+  const CDN = 'https://www.404media.co/content/images';
+  const page = (ogImage: string) => `<html><head>
+<meta property="og:image" content="${ogImage}">
+<meta name="author" content="Matthew Gault">
+</head><body>
+<header><a href="/"><img src="${CDN}/logo.png" alt="404 Media"></a></header>
+<main><article class="post">
+<h1>It Ain't Right</h1>
+<p class="byline">By <a rel="author" href="/author/matthew/">Matthew Gault</a></p>
+<figure class="post-hero__image"><img srcset="${CDN}/size/w300/2026/10/Microsoft_OpenAI.jpg 300w, ${CDN}/size/w2000/2026/10/Microsoft_OpenAI.jpg 2000w" src="${CDN}/size/w2000/2026/10/Microsoft_OpenAI.jpg" alt="Data center"></figure>
+<div class="post-content">
+${Array.from({ length: 4 }, (_, i) => `<p>${PARA} a${i}.</p>`).join('\n')}
+<figure class="kg-card kg-video-card" data-kg-thumbnail="${CDN}/2026/10/Riley_thumb.jpg">
+<div class="kg-video-container"><video src="https://www.404media.co/content/media/2026/10/Riley.mp4" poster="data:image/gif;base64,R0lGODlhAQABAAAAACw=" width="1080" height="1920"></video>
+<img src="${CDN}/2026/10/Riley_thumb.jpg" class="kg-video-thumbnail"></div>
+</figure>
+${Array.from({ length: 6 }, (_, i) => `<p>${PARA} b${i}.</p>`).join('\n')}
+<div class="author-box"><p>About the author</p><p>Matthew is a writer covering the weird world of military and tech.</p><img alt="Matthew Gault" src="https://www.gravatar.com/avatar/abc?s=250"></div>
+</div>
+</article></main></body></html>`;
+
+  it('takes the hero, makes the still the video poster, and drops the author portrait', () => {
+    const got = extractArticle(page(`${CDN}/size/w1200/2026/10/Microsoft_OpenAI.jpg`), GHOST);
+    expect(got).not.toBeNull();
+    expect(got!.media.map((m) => [m.kind, m.url, m.anchor])).toEqual([
+      ['image', `${CDN}/size/w1200/2026/10/Microsoft_OpenAI.jpg`, 0],
+      ['video', 'https://www.404media.co/content/media/2026/10/Riley.mp4', 4],
+    ]);
+    expect(got!.media[0]).toMatchObject({ alt: 'Data center', site: '404media.co' });
+    expect(got!.media[1].poster).toBe(`${CDN}/2026/10/Riley_thumb.jpg`);
+  });
+
+  it('skips an og:image the page never shows (a social card)', () => {
+    const got = extractArticle(page(`${CDN}/2026/10/social-card.png`), GHOST);
+    expect(got!.media.map((m) => m.kind)).toEqual(['video']);
+  });
+
+  it('a video card keeps a real poster and still drops the duplicate still', () => {
+    const w = toBulletinWalk(
+      '<p>One.</p><figure><video src="/v.mp4" poster="/real.jpg"></video><img src="/still.jpg"></figure><p>Two.</p>',
+      STORY_BODY_CAP, URL_A);
+    expect(w.media).toEqual([expect.objectContaining({ kind: 'video', poster: 'https://www.example.org/real.jpg', anchor: 1 })]);
   });
 });

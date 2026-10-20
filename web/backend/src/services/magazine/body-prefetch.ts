@@ -205,14 +205,70 @@ export async function fetchHttp(
   }
 }
 
-/** Readability over linkedom, then the shared cleaner. Null when the page has no article. */
+/** The last path segment of an address, so Ghost's /size/w1200/ and /size/w2000/ copies of one file compare equal. */
+function fileOf(url: string): string {
+  try {
+    return decodeURIComponent(new URL(url).pathname.split('/').pop() ?? '').toLowerCase();
+  } catch {
+    return '';
+  }
+}
+
+type PageDocument = ReturnType<typeof parseHTML>['document'];
+
+/**
+ * The page's lead picture: its og:image (or twitter:image), but only when the
+ * page also shows that file in an img, so a social card that is only a logo
+ * is not taken. Readability keeps the article's body and leaves a hero
+ * figure above it out, so the lead picture is read from the whole page,
+ * before Readability changes the document.
+ */
+function leadPicture(document: PageDocument, url: string): StoryMedia | null {
+  const meta = document.querySelector('meta[property="og:image"], meta[name="og:image"]')
+    ?? document.querySelector('meta[name="twitter:image"], meta[property="twitter:image"]');
+  const raw = meta?.getAttribute('content')?.trim();
+  if (!raw) return null;
+  let lead: string;
+  try {
+    lead = new URL(raw, url).href;
+  } catch {
+    return null;
+  }
+  if (!/^https?:/i.test(lead)) return null;
+  const file = fileOf(lead);
+  if (!file) return null;
+  for (const img of document.querySelectorAll('img')) {
+    const sources = [img.getAttribute('src'), img.getAttribute('data-src'), img.getAttribute('srcset'), img.getAttribute('data-srcset')]
+      .filter((v): v is string => !!v)
+      .flatMap((v) => v.split(',').map((c) => c.trim().split(/\s+/)[0]));
+    if (sources.some((src) => { try { return fileOf(new URL(src, url).href) === file; } catch { return false; } })) {
+      const site = new URL(url).hostname.replace(/^www\./i, '');
+      return { url: lead, kind: 'image', alt: img.getAttribute('alt') ?? '', site, anchor: 0 };
+    }
+  }
+  return null;
+}
+
+/**
+ * Readability over linkedom, then the shared cleaner. Null when the page has
+ * no article. The page's lead picture goes first when the body does not
+ * already hold it, and the author's portrait (an image whose alt is the
+ * byline, from the article's "about the author" box) is dropped.
+ */
 export function extractArticle(html: string, url: string): ExtractedArticle | null {
   try {
     const { document } = parseHTML(html);
+    const lead = leadPicture(document, url);
     const article = new Readability(document as never, { charThreshold: 200 }).parse();
     if (!article?.content) return null;
     const walk = toBulletinWalk(article.content, STORY_BODY_CAP, url);
-    return walk.text.length >= FEED_BODY_MIN_CHARS ? { body: walk.text, media: walk.media } : null;
+    if (walk.text.length < FEED_BODY_MIN_CHARS) return null;
+    const byline = article.byline?.trim().toLowerCase();
+    const media = walk.media.filter((m) => !(m.kind === 'image' && byline && m.alt.trim().toLowerCase() === byline));
+    if (lead && !media.some((m) => fileOf(m.url) === fileOf(lead.url) || (m.poster && fileOf(m.poster) === fileOf(lead.url)))) {
+      media.unshift(lead);
+    }
+    return { body: walk.text, media };
   } catch {
     return null;
   }
