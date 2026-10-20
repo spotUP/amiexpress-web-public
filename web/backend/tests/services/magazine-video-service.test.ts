@@ -14,10 +14,11 @@ import {
   registerMagazineVideoService,
   type ClipRequest,
 } from '@amiexpress/bbs-door-sdk/formats/magazine-video';
+import { SUB_X, SUB_Y } from '@amiexpress/bbs-door-sdk/media/ascii';
 
 const COLS = 8;
 const ROWS = 4;
-const FRAME_BYTES = COLS * 2 * ROWS * 4 * 3;
+const FRAME_BYTES = COLS * SUB_X * ROWS * SUB_Y * 3;
 const REQ: ClipRequest = { url: 'https://example.com/a.mp4', kind: 'video', cols: COLS, rows: ROWS, palette: 'amiga16' };
 
 class FakeChild extends EventEmitter {
@@ -203,7 +204,7 @@ describe('a clip converts without holding the board', () => {
     // first one showed after 7 s. The production encoder runs in a worker thread.
     const cols = 80;
     const rows = 24;
-    const bytes = cols * 2 * rows * 4 * 3;
+    const bytes = cols * SUB_X * rows * SUB_Y * 3;
     kids = [];
     const svc = createVideoService({
       // the production encoder: no `encoder` override

@@ -7,10 +7,12 @@
 /** Per-stream memory for temporal smoothing. A still image passes none. */
 export interface TemporalState {
   luma: Float32Array | null;
+  /** The shape matcher's previous cells (glyph-match.ts), packed glyph/fg/bg. */
+  cells?: Int32Array | null;
 }
 
 export function createTemporalState(): TemporalState {
-  return { luma: null };
+  return { luma: null, cells: null };
 }
 
 /** 4x4 Bayer matrix for ordered dithering, centred on 0. */

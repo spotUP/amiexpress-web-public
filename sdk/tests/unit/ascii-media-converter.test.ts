@@ -104,6 +104,28 @@ describe('frameToAnsiCells', () => {
     expect(r - b).toBeGreaterThan(20);
   });
 
+  it('a cell split by a vertical edge picks a glyph lit on that side', () => {
+    // Regression (2026-10-20): the converter saw one mean colour per cell, so a
+    // cell white on the left and one white on the right got the same glyph and
+    // edges inside a cell vanished (a portrait clip showed no recognisable face).
+    const split = (whiteLeft: boolean) => {
+      const w = 8;
+      const h = 16;
+      const data = new Uint8Array(w * h * 3);
+      for (let y = 0; y < h; y++) {
+        for (let x = 0; x < w; x++) data.fill((x < w / 2) === whiteLeft ? 255 : 0, (y * w + x) * 3, (y * w + x) * 3 + 3);
+      }
+      return frameToAnsiCells({ data, width: w, height: h }, 1, 1, { palette: 'amiga16' })[0][0];
+    };
+    const left = split(true);
+    const right = split(false);
+    // No Topaz glyph lights exactly half a cell, so the colours are a
+    // compromise; the ink is white and the shapes differ.
+    expect(left.fg).toBe(15);
+    expect(right.fg).toBe(15);
+    expect(left.char).not.toBe(right.char);
+  });
+
   it('single-channel input works', () => {
     const gray = new Uint8Array(W * H).fill(128);
     const grid = frameToAnsiCells({ data: gray, width: W, height: H, channels: 1 }, 16, 8, { palette: 'amiga16' });

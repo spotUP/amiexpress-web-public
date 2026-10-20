@@ -31,6 +31,7 @@ import {
   type ClipRequest,
   type MagazineVideoService,
 } from '@amiexpress/bbs-door-sdk/formats/magazine-video';
+import { SUB_X, SUB_Y } from '@amiexpress/bbs-door-sdk/media/ascii';
 import { passHostGate } from '../news-bulletins';
 import { workerEncoder, type EncoderOptions, type FrameEncoder } from './video-encoder';
 import { boardRoot } from '../../utils/board-root.util';
@@ -53,12 +54,8 @@ export const FRAMES_PER_CHUNK = 10;
 const ENCODER_QUEUE_HIGH = 8;
 const ENCODER_QUEUE_LOW = 2;
 
-/** ffmpeg output is this many pixels per cell each way (rows are half-height cells). */
 const gunzip = promisify(zlib.gunzip);
 const brotliCompress = promisify(zlib.brotliCompress);
-
-const PX_X = 2;
-const PX_Y = 4;
 
 export interface VideoServiceDeps {
   dir: string;
@@ -202,8 +199,9 @@ export function createVideoService(overrides: Partial<VideoServiceDeps> = {}): M
         evict();
         fd = fs.openSync(file, 'w');
         const fps = deps.fpsFor(req.palette);
-        const w = req.cols * PX_X;
-        const h = req.rows * PX_Y;
+        // The size the glyph matcher reads, so no frame is resampled twice.
+        const w = req.cols * SUB_X;
+        const h = req.rows * SUB_Y;
         const info: ClipInfo = { v: VIDEO_FILE_VERSION, cols: req.cols, rows: req.rows, fps };
         let pending: Buffer[] = [record(REC_HEADER, Buffer.from(JSON.stringify(info)))];
         const flush = (): void => {

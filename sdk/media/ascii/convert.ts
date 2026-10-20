@@ -14,7 +14,6 @@ import {
   getLuminance,
   nearestPaletteIndex,
   rgbToHsv,
-  rgbToLab,
   type Hsv,
   type PaletteName,
 } from './color';
@@ -27,7 +26,7 @@ import {
   lanczosDownsample,
   type TemporalState,
 } from './dsp';
-import { nearestBlendCell } from './glyph-blend';
+import { SUB_X, SUB_Y, matchCells } from './glyph-match';
 
 export interface PixelSource {
   /** Row-major bytes: RGB triples (channels 3, the default) or grey (channels 1). */
@@ -145,6 +144,11 @@ export function frameToAnsiCells(
 ): AnsiCellGrid {
   const { palette, mode = 'ascii', state, mirror = false } = opts;
   const bgLimit = palette === 'c64' ? 1 : (opts.bgLevels ?? 8);
+  // ascii mode with a background: shape-matched against the Topaz glyphs,
+  // which needs the picture inside each cell, not one colour per cell.
+  if (mode === 'ascii' && bgLimit > 1) {
+    return matchCells(toRgbGrid(pixels, cols * SUB_X, rows * SUB_Y, mirror), cols, rows, palette, bgLimit, state);
+  }
   const rgb = toRgbGrid(pixels, cols, rows, mirror);
   const px = (x: number, y: number): [number, number, number] => {
     const o = (y * cols + x) * 3;
@@ -198,22 +202,6 @@ export function frameToAnsiCells(
         }
         const amiga = retroColorIndex(hsv);
         line.push({ char, fg: palette === 'c64' ? AMIGA_TO_C64[amiga] : amiga, bg: 0 });
-      }
-      grid.push(line);
-    }
-    return grid;
-  }
-
-  // ascii mode with a background: the cell's own colour is the target.
-  // Contrast conditioning (stretch, CLAHE, sharpening, dither) pushed skin to
-  // a lightness the palette has no warm blend for, and turned faces grey.
-  if (bgLimit > 1) {
-    for (let y = 0; y < rows; y++) {
-      const line: AnsiCell[] = [];
-      for (let x = 0; x < cols; x++) {
-        const [r, g, b] = px(x, y);
-        const [L, a, b2] = rgbToLab(r, g, b);
-        line.push(nearestBlendCell(L, a, b2, palette, bgLimit));
       }
       grid.push(line);
     }
