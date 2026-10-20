@@ -35,7 +35,7 @@ import {
 } from './compose';
 import { stripFeedBoilerplate } from '../news-bulletins';
 import { clipFilesFor } from './video-service';
-import { sidecarPath } from '@amiexpress/bbs-door-sdk/formats/magazine';
+import { isStoryFileName, sidecarPath } from '@amiexpress/bbs-door-sdk/formats/magazine';
 import { isSameStory, isWorthReading, storyId, type Desk, type Story } from './story-store';
 
 /** One item as a feed produced it, before the magazine has opinions about it. */
@@ -123,7 +123,7 @@ export function writeAtomic(target: string, contents: string, encoding: BufferEn
 export function loadStories(dir: string, log: (l: string) => void = () => {}): Story[] {
   let names: string[];
   try {
-    names = fs.readdirSync(dir).filter((n) => n.endsWith('.json'));
+    names = fs.readdirSync(dir).filter(isStoryFileName);
   } catch {
     return [];
   }

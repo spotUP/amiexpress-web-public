@@ -26,7 +26,7 @@ import {
 } from '../../src/services/magazine';
 import { classify, classifyFormat } from '../../src/services/magazine/classify';
 import { isWorthReading, storyId, normaliseHeadline, type Story } from '../../src/services/magazine/story-store';
-import { ARTICLE_MIN_BODY_CHARS } from '@amiexpress/bbs-door-sdk/formats/magazine';
+import { ARTICLE_MIN_BODY_CHARS, sidecarPath } from '@amiexpress/bbs-door-sdk/formats/magazine';
 import { clipUrlHash } from '../../src/services/magazine/video-service';
 import { loadIndex, loadFront } from '../../../../Doors/magazine/library';
 import { composeStoryPage, wrap, toWidth, renderPage } from '../../src/services/magazine/compose';
@@ -265,6 +265,20 @@ describe('one refresh pass', () => {
     refreshMagazine(depsFor(dir));
     const names = fs.readdirSync(path.join(dir, 'Magazine', 'stories'));
     expect(names).toHaveLength(2);
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('reads a story picture sidecar as no story, so a refresh beside one still composes', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mag-'));
+    fs.mkdirSync(path.join(dir, 'Magazine', 'incoming'), { recursive: true });
+    fs.writeFileSync(path.join(dir, 'Magazine', 'incoming', 'a.json'), JSON.stringify([item('Skaven ships a new Amiga intro')]));
+    refreshMagazine(depsFor(dir));
+    const storiesDir = path.join(dir, 'Magazine', 'stories');
+    const [storyFile] = fs.readdirSync(storiesDir);
+    fs.writeFileSync(sidecarPath(path.join(storiesDir, storyFile)), JSON.stringify({ version: 1, pictures: [] }));
+    fs.writeFileSync(path.join(dir, 'Magazine', 'incoming', 'b.json'), JSON.stringify([item('Phrack issue 74 goes online')]));
+    expect(refreshMagazine(depsFor(dir)).added).toBe(1);
+    expect(loadStories(storiesDir).map((s) => s.headline).sort()).toEqual(['Phrack issue 74 goes online', 'Skaven ships a new Amiga intro']);
     fs.rmSync(dir, { recursive: true, force: true });
   });
 });

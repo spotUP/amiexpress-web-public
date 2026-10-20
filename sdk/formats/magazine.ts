@@ -431,3 +431,8 @@ export interface StoryMediaSidecar {
 export function sidecarPath(storyFilePath: string): string {
   return storyFilePath.replace(/\.json$/, '') + '.media.json';
 }
+
+/** True for a story file in the stories directory, false for its picture sidecar sitting beside it. */
+export function isStoryFileName(name: string): boolean {
+  return name.endsWith('.json') && !name.endsWith('.media.json');
+}
