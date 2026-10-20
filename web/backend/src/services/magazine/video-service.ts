@@ -4,7 +4,7 @@
  * One job per (clip URL, size): ffmpeg decodes to raw RGB at a small fixed
  * size, each frame goes through the SDK converter (with temporal state), is
  * packed as a livechat codec packet and appended to
- * `<boardRoot()>/Magazine/video/<hash>-v1-<cols>x<rows>.frames`. The door
+ * `<boardRoot()>/Magazine/video/<hash>-v<VIDEO_FILE_VERSION>-<cols>x<rows>.frames`. The door
  * tails that file (sdk/formats/magazine-video.ts documents the layout). The
  * end marker is written last; a cut-off run (kill, error, timeout, length
  * cap) removes its partial file and is never marked complete. At most two

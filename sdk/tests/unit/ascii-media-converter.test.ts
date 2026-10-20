@@ -9,6 +9,8 @@ import {
   cellsToPetsciiRows,
   cellsToBlessedTags,
   isC64Safe,
+  paletteRgb,
+  TOPAZ_COVERAGE,
   encodeRichFrame,
   decodeRichFrame,
   type AnsiCellGrid,
@@ -73,6 +75,33 @@ describe('frameToAnsiCells', () => {
         expect(c.fg).toBeLessThanOrEqual(15);
       }
     }
+  });
+
+  it('a skin-tone face keeps a warm hue instead of turning grey (fg, bg and glyph are picked together)', () => {
+    // A flat skin patch on a dark-to-light ramp, so the contrast stretch has a range.
+    const data = new Uint8Array(W * H * 3);
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+      const i = (y * W + x) * 3;
+      const skin = x >= 8 && x < 24;
+      const v = Math.round((x / (W - 1)) * 255);
+      data[i] = skin ? 190 : v; data[i + 1] = skin ? 135 : v; data[i + 2] = skin ? 120 : v;
+    }
+    const grid = frameToAnsiCells({ data, width: W, height: H }, W, H, { palette: 'amiga16' });
+    const pal = paletteRgb('amiga16');
+    const lin = (v: number) => (v / 255) ** 2.2;
+    const coverage = new Map(TOPAZ_COVERAGE.map(([ch, lit]) => [ch, lit / 128]));
+    // What the eye sees per cell: glyph coverage of fg over bg, in linear light.
+    const seen = [0, 0, 0];
+    let n = 0;
+    for (let y = 4; y < H - 4; y++) for (let x = 10; x < 22; x++) {
+      const c = grid[y][x];
+      const cov = coverage.get(c.char) ?? 0.3;
+      for (let k = 0; k < 3; k++) seen[k] += cov * lin(pal[c.fg][k]) + (1 - cov) * lin(pal[c.bg][k]);
+      n++;
+    }
+    const [r, g, b] = seen.map((v) => 255 * (v / n) ** (1 / 2.2));
+    expect(r - g).toBeGreaterThan(20);
+    expect(r - b).toBeGreaterThan(20);
   });
 
   it('single-channel input works', () => {

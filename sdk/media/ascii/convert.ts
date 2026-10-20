@@ -14,6 +14,7 @@ import {
   getLuminance,
   nearestPaletteIndex,
   rgbToHsv,
+  rgbToLab,
   type Hsv,
   type PaletteName,
 } from './color';
@@ -26,6 +27,7 @@ import {
   lanczosDownsample,
   type TemporalState,
 } from './dsp';
+import { nearestBlendCell } from './glyph-blend';
 
 export interface PixelSource {
   /** Row-major bytes: RGB triples (channels 3, the default) or grey (channels 1). */
@@ -202,7 +204,22 @@ export function frameToAnsiCells(
     return grid;
   }
 
-  // ascii mode
+  // ascii mode with a background: the cell's own colour is the target.
+  // Contrast conditioning (stretch, CLAHE, sharpening, dither) pushed skin to
+  // a lightness the palette has no warm blend for, and turned faces grey.
+  if (bgLimit > 1) {
+    for (let y = 0; y < rows; y++) {
+      const line: AnsiCell[] = [];
+      for (let x = 0; x < cols; x++) {
+        const [r, g, b] = px(x, y);
+        const [L, a, b2] = rgbToLab(r, g, b);
+        line.push(nearestBlendCell(L, a, b2, palette, bgLimit));
+      }
+      grid.push(line);
+    }
+    return grid;
+  }
+
   const charset = rampFor(palette);
   const charCount = charset.length;
   const lumaMap = new Float32Array(cols * rows);
@@ -246,14 +263,7 @@ export function frameToAnsiCells(
         Math.min(255, Math.floor(b * 1.2)),
         palette,
       );
-      let bg = 0;
-      if (bgLimit > 1) {
-        // Very dark areas keep a true black background; the rest dims to half.
-        const dim: [number, number, number] =
-          getLuminance(r, g, b) < 30 ? [0, 0, 0] : [Math.floor(r * 0.5), Math.floor(g * 0.5), Math.floor(b * 0.5)];
-        bg = nearestPaletteIndex(dim[0], dim[1], dim[2], palette, true, bgLimit);
-      }
-      line.push({ char, fg, bg });
+      line.push({ char, fg, bg: 0 });
     }
     grid.push(line);
   }

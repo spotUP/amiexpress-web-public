@@ -29,7 +29,8 @@ import * as fs from 'fs';
 import * as zlib from 'zlib';
 import { decodeRichFrame, type AnsiCellGrid, type PaletteName, type RichFrame } from '../media/ascii';
 
-export const VIDEO_FILE_VERSION = 1;
+/** Part of the clip file name: bump it when the converter changes so cached clips re-render. 2: joint glyph/fg/bg colour pick. */
+export const VIDEO_FILE_VERSION = 2;
 export const BROTLI_MAGIC = Buffer.from('MAGB');
 export const REC_HEADER = 0;
 export const REC_FRAME = 1;
