@@ -171,7 +171,7 @@ export function mergeIncoming(
     }
     // §15: a story must add discovery, context or judgement. A headline that
     // is only the generic words is somebody else's press release, not ours.
-    if (!isWorthReading(headline)) {
+    if (!isWorthReading(headline, item.summary ?? '')) {
       rejected++;
       continue;
     }

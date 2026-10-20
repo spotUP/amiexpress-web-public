@@ -117,15 +117,21 @@ export function isSameStory(a: string, b: string): boolean {
  */
 const GENERIC = /\b(released|release|news|update|new|post|article|blog|story|report|announcement|read more|click here)\b/gi;
 
+/** The words of `text` that are left once the generic ones are gone. */
+function meaningfulWords(text: string): string[] {
+  return text.replace(GENERIC, ' ').replace(/[^a-z0-9 ]/gi, ' ').trim().split(/\s+/).filter(Boolean);
+}
+
 /**
- * Is this headline worth a caller's time?
+ * Is this story worth a caller's time?
  *
  * §15 draws the line: "A story does not need to be important in a mainstream
  * sense. It does need to be interesting to the audience this magazine exists to
  * serve." A headline that is only the generic words cannot be, whatever it is
- * about - it is what §5 calls reproducing the source's title.
+ * about - it is what §5 calls reproducing the source's title. A short real
+ * title ("New Pixel Art") is judged with its summary, which says what it is.
  */
-export function isWorthReading(headline: string): boolean {
-  const meaningful = headline.replace(GENERIC, ' ').replace(/[^a-z0-9 ]/gi, ' ').trim();
-  return meaningful.split(/\s+/).filter(Boolean).length >= 3;
+export function isWorthReading(headline: string, summary = ''): boolean {
+  const title = meaningfulWords(headline);
+  return title.length > 0 && title.length + meaningfulWords(summary).length >= 3;
 }

@@ -52,6 +52,16 @@ describe('the story store', () => {
     expect(isWorthReading('Click here')).toBe(false);
     expect(isWorthReading('Skaven releases Copper Lights for Amiga')).toBe(true);
   });
+
+  it('keeps a short real title when its summary says what it is about', () => {
+    // datagubbe.se "New Pixel Art": 'Pixel Art' alone is two words.
+    expect(isWorthReading('New Pixel Art', 'Some pixel art I made for the Amiga in Deluxe Paint')).toBe(true);
+    expect(isWorthReading('New Pixel Art')).toBe(false);
+    // A headline of only generic words stays out whatever the summary says.
+    expect(isWorthReading('Click here', 'Some pixel art I made for the Amiga in Deluxe Paint')).toBe(false);
+    expect(isWorthReading('New release', 'Read more')).toBe(false);
+    expect(mergeIncoming([], [item('New Pixel Art', 'Some pixel art I made for the Amiga in Deluxe Paint')], '2026-10-20T12:00:00Z').added).toBe(1);
+  });
 });
 
 describe('deduplication (§14 step 4)', () => {
