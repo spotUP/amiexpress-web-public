@@ -5,6 +5,7 @@ import * as os from 'os';
 import * as path from 'path';
 import type { ChildProcess } from 'child_process';
 import { createVideoService } from '../../src/services/magazine/video-service';
+import { createFrameCoder, type EncoderOptions, type FrameEncoder } from '../../src/services/magazine/video-encoder';
 import {
   getMagazineVideoService,
   newFrameCursor,
@@ -36,6 +37,12 @@ const tick = (): Promise<void> => new Promise((r) => setTimeout(r, 20));
 let dir: string;
 let kids: FakeChild[];
 
+/** Same conversion as the worker, run in this thread so a 20 ms tick sees the frames. */
+const inThread = (opts: EncoderOptions): FrameEncoder => {
+  const code = createFrameCoder(opts);
+  return { encode: async (px) => code(px), close: () => undefined };
+};
+
 function make(over = {}) {
   kids = [];
   return createVideoService({
@@ -43,6 +50,7 @@ function make(over = {}) {
     tools: () => ({ ffmpeg: '/bin/ffmpeg', ytDlp: null, ffprobe: null }),
     spawn: () => { const k = new FakeChild(); kids.push(k); return k as unknown as ChildProcess; },
     prepare: async () => ({ input: 'x', cleanup: () => undefined }),
+    encoder: inThread,
     ...over,
   });
 }
@@ -186,4 +194,38 @@ describe('magazine video service', () => {
     registerMagazineVideoService(null);
     expect(getMagazineVideoService()).toBeNull();
   });
+});
+
+describe('a clip converts without holding the board', () => {
+  it('ffmpeg delivering frames faster than real time leaves the event loop free', async () => {
+    // Regression (2026-10-20): each 80x24 frame took ~50 ms on the main thread, ffmpeg
+    // outran playback, and the loop stalled for seconds; the player skipped frames and the
+    // first one showed after 7 s. The production encoder runs in a worker thread.
+    const cols = 80;
+    const rows = 24;
+    const bytes = cols * 2 * rows * 4 * 3;
+    kids = [];
+    const svc = createVideoService({
+      // the production encoder: no `encoder` override
+      dir,
+      tools: () => ({ ffmpeg: '/bin/ffmpeg', ytDlp: null, ffprobe: null }),
+      spawn: () => { const k = new FakeChild(); kids.push(k); return k as unknown as ChildProcess; },
+      prepare: async () => ({ input: 'x', cleanup: () => undefined }),
+    });
+    const h = svc.requestClip({ ...REQ, cols, rows });
+    await tick();
+    let last = Date.now();
+    let worst = 0;
+    const probe = setInterval(() => { const now = Date.now(); worst = Math.max(worst, now - last); last = now; }, 5);
+    const px = Buffer.alloc(bytes);
+    for (let n = 0; n < 40; n++) {
+      for (let i = 0; i < bytes; i++) px[i] = (i * 13 + n * 29) & 0xff;
+      kids[0].stdout.write(Buffer.from(px));
+    }
+    kids[0].finish();
+    expect(await h.done).toBe('complete');
+    clearInterval(probe);
+    expect(readFrames(h.path).frames).toHaveLength(40);
+    expect(worst).toBeLessThan(150);
+  }, 30000);
 });

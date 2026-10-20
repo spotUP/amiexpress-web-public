@@ -15,15 +15,8 @@ import { spawn as nodeSpawn, type ChildProcess } from 'child_process';
 import * as crypto from 'crypto';
 import * as fs from 'fs';
 import * as path from 'path';
+import { promisify } from 'util';
 import * as zlib from 'zlib';
-import {
-  createTemporalState,
-  encodeRichFrame,
-  frameToAnsiCells,
-  isKeyframeDue,
-  type AnsiCellGrid,
-  type RichFrame,
-} from '@amiexpress/bbs-door-sdk/media/ascii';
 import {
   BROTLI_MAGIC,
   REC_END,
@@ -39,6 +32,7 @@ import {
   type MagazineVideoService,
 } from '@amiexpress/bbs-door-sdk/formats/magazine-video';
 import { passHostGate } from '../news-bulletins';
+import { workerEncoder, type EncoderOptions, type FrameEncoder } from './video-encoder';
 import { boardRoot } from '../../utils/board-root.util';
 import { CLIP_MAX_SECONDS, ffmpegUrlInputOptions, mediaTools, resolveEmbed, type MediaTools } from './media-fetch';
 import {
@@ -55,8 +49,14 @@ export { CLIP_MAX_SECONDS };
 /** Whole-run wall clock for one conversion. */
 export const JOB_TIMEOUT_MS = 15 * 60 * 1000;
 export const FRAMES_PER_CHUNK = 10;
+/** Frames queued in the encoder worker before ffmpeg's pipe is paused, and resumed. */
+const ENCODER_QUEUE_HIGH = 8;
+const ENCODER_QUEUE_LOW = 2;
 
 /** ffmpeg output is this many pixels per cell each way (rows are half-height cells). */
+const gunzip = promisify(zlib.gunzip);
+const brotliCompress = promisify(zlib.brotliCompress);
+
 const PX_X = 2;
 const PX_Y = 4;
 
@@ -73,6 +73,8 @@ export interface VideoServiceDeps {
   timeoutMs: number;
   /** Frames between keyframes; Infinity = only the first frame (the plan's cache tuning). */
   keyframeInterval: number;
+  /** Converts one run's frames off the event loop (a worker thread per run). */
+  encoder: (opts: EncoderOptions) => FrameEncoder;
 }
 
 /** The cache key of a clip: its URL, not any story. */
@@ -109,19 +111,6 @@ function chunk(records: Buffer[]): Buffer {
   return Buffer.concat([head, gz]);
 }
 
-function cellsToFrame(grid: AnsiCellGrid, cols: number, rows: number): RichFrame {
-  const dots = new Uint8Array(cols * rows);
-  const colors = new Uint8Array(cols * rows);
-  for (let y = 0; y < rows; y++) {
-    for (let x = 0; x < cols; x++) {
-      const c = grid[y][x];
-      dots[y * cols + x] = c.char.charCodeAt(0) & 0xff;
-      colors[y * cols + x] = (c.fg & 15) | ((c.bg & 15) << 4);
-    }
-  }
-  return { dots, colors };
-}
-
 /** True when the gzip-form file ends in an end marker (a finished clip not yet recompressed). */
 function isFinished(file: string): boolean {
   try { return readFrames(file).complete; } catch { return false; }
@@ -143,6 +132,7 @@ export function createVideoService(overrides: Partial<VideoServiceDeps> = {}): M
     maxFrames: (fps) => fps * CLIP_MAX_SECONDS,
     timeoutMs: JOB_TIMEOUT_MS,
     keyframeInterval: Infinity,
+    encoder: workerEncoder,
     ...overrides,
   };
   const jobs = new Map<string, ClipHandle>();
@@ -175,16 +165,17 @@ export function createVideoService(overrides: Partial<VideoServiceDeps> = {}): M
     }
   }
 
-  function recompress(file: string): void {
+  /** Async zlib: a 2 MB clip at brotli quality 11 is 4 s of work, kept off the event loop. */
+  async function recompress(file: string): Promise<void> {
     try {
       const members = fs.readFileSync(file);
       const parts: Buffer[] = [];
       for (let at = 0; at + 4 <= members.length;) {
         const n = members.readUInt32BE(at);
-        parts.push(zlib.gunzipSync(members.subarray(at + 4, at + 4 + n)));
+        parts.push(await gunzip(members.subarray(at + 4, at + 4 + n)));
         at += 4 + n;
       }
-      const br = zlib.brotliCompressSync(Buffer.concat(parts), {
+      const br = await brotliCompress(Buffer.concat(parts), {
         params: {
           [zlib.constants.BROTLI_PARAM_QUALITY]: zlib.constants.BROTLI_MAX_QUALITY,
           [zlib.constants.BROTLI_PARAM_LGWIN]: 24,
@@ -229,58 +220,66 @@ export function createVideoService(overrides: Partial<VideoServiceDeps> = {}): M
         const child = deps.spawn(tools.ffmpeg, args);
         const frameBytes = w * h * 3;
         const maxFrames = deps.maxFrames(fps);
-        const state = createTemporalState();
+        const encoder = deps.encoder({
+          width: w, height: h, cols: req.cols, rows: req.rows, palette: req.palette, keyframeInterval: deps.keyframeInterval,
+        });
         let buf: Buffer = Buffer.alloc(0);
-        let prev: RichFrame | null = null;
-        let sinceKey = 0;
+        let sent = 0;
+        let inFlight = 0;
         let count = 0;
+        let exitCode: number | null | undefined;
         let failure: ClipOutcome | null = null;
 
         const outcome = await new Promise<ClipOutcome>((resolve) => {
-          const stop = (why: ClipOutcome): void => {
+          const timer = setTimeout(() => stop('timeout'), deps.timeoutMs);
+          function stop(why: ClipOutcome): void {
             if (failure) return;
             failure = why;
+            child.stdout?.resume(); // a paused pipe would hold 'close' back forever
             try { child.kill('SIGKILL'); } catch { /* gone */ }
-          };
-          const timer = setTimeout(() => stop('timeout'), deps.timeoutMs);
-          child.stdout?.on('data', (d: Buffer) => {
-            if (failure) return;
-            buf = buf.length ? Buffer.concat([buf, d]) : d;
-            try {
-              while (buf.length >= frameBytes) {
-                if (count >= maxFrames) { stop('oversize'); return; }
-                const px = new Uint8Array(buf.subarray(0, frameBytes));
-                buf = buf.subarray(frameBytes);
-                const grid = frameToAnsiCells({ data: px, width: w, height: h }, req.cols, req.rows, {
-                  palette: req.palette, state,
-                });
-                const frame = cellsToFrame(grid, req.cols, req.rows);
-                const key = isKeyframeDue(sinceKey, deps.keyframeInterval);
-                const pkt = encodeRichFrame(frame, req.cols, req.rows, key ? null : prev);
-                sinceKey = key ? 1 : sinceKey + 1;
-                prev = frame;
-                count++;
-                pending.push(record(REC_FRAME, new Uint8Array(pkt)));
-                if (pending.length >= FRAMES_PER_CHUNK) flush();
-              }
-            } catch { stop('decode'); }
-          });
-          child.on('error', () => { clearTimeout(timer); resolve(failure ?? 'decode'); });
-          child.on('close', (code: number | null) => {
+          }
+          // Settles once ffmpeg has closed and the encoder has answered every frame sent to it.
+          function settle(): void {
+            if (exitCode === undefined || inFlight > 0) return;
             clearTimeout(timer);
             if (failure) return resolve(failure);
-            if (code !== 0 || count === 0) return resolve('decode');
+            if (exitCode !== 0 || count === 0) return resolve('decode');
             try {
               pending.push(record(REC_END, new Uint8Array(0)));
               flush();
               resolve('complete');
             } catch { resolve('decode'); }
+          }
+          child.stdout?.on('data', (d: Buffer) => {
+            if (failure) return;
+            buf = buf.length ? Buffer.concat([buf, d]) : d;
+            while (buf.length >= frameBytes) {
+              if (sent >= maxFrames) { stop('oversize'); return; }
+              const px = new Uint8Array(buf.subarray(0, frameBytes));
+              buf = buf.subarray(frameBytes);
+              sent++;
+              inFlight++;
+              encoder.encode(px).then((pkt) => {
+                if (failure) return;
+                count++;
+                pending.push(record(REC_FRAME, pkt));
+                if (pending.length >= FRAMES_PER_CHUNK) flush();
+              }, () => stop('decode')).finally(() => {
+                inFlight--;
+                // ffmpeg outruns the converter: hold its pipe while frames queue in the worker.
+                if (inFlight <= ENCODER_QUEUE_LOW) child.stdout?.resume();
+                settle();
+              });
+            }
+            if (inFlight >= ENCODER_QUEUE_HIGH) child.stdout?.pause();
           });
-        });
+          child.on('error', () => { if (!failure) failure = 'decode'; exitCode = null; settle(); });
+          child.on('close', (code: number | null) => { exitCode = code; settle(); });
+        }).finally(() => encoder.close());
         if (outcome === 'complete') {
           fs.closeSync(fd);
           fd = null;
-          recompress(file);
+          await recompress(file);
         }
         return outcome;
       } finally {
@@ -326,13 +325,18 @@ export function createVideoService(overrides: Partial<VideoServiceDeps> = {}): M
 /** Exported for the regression test. */
 export async function defaultPrepare(req: ClipRequest, tools: MediaTools): Promise<{ input: string; cleanup: () => void } | ClipOutcome> {
   if (!/^https?:\/\//i.test(req.url)) return '404';
+  // A robots.txt fetch for the clip's host already took this visit's slot at
+  // the host gate; gating again made the caller wait the full 5 s crawl gap
+  // before ffmpeg started (2026-10-20, 5.0 s of the 7.4 s to the first frame).
+  let claimedSlot = false;
   const robotsDeps: Pick<PrefetchDeps, 'now' | 'robots' | 'gate' | 'http'> = {
-    now: () => new Date(), robots: robotsByProcess, gate: passHostGate, http: fetchHttp,
+    now: () => new Date(), robots: robotsByProcess, http: fetchHttp,
+    gate: async (url, gapMs) => { claimedSlot = true; await passHostGate(url, gapMs); },
   };
   try {
     const verdict = await robotsVerdict(req.url, robotsDeps, ARTICLE_HOST_GAP_MS);
     if (verdict.kind !== 'allowed') return 'robots';
-    await passHostGate(req.url, ARTICLE_HOST_GAP_MS);
+    if (!claimedSlot) await passHostGate(req.url, ARTICLE_HOST_GAP_MS);
     if (req.kind === 'embed') {
       const direct = await resolveEmbed(tools.ytDlp as string, req.url);
       return direct ? { input: direct, cleanup: () => undefined } : '404';

@@ -12,6 +12,7 @@ import { PassThrough } from 'stream';
 import type { ChildProcess } from 'child_process';
 import { createVideoService, defaultPrepare } from '../../src/services/magazine/video-service';
 import { fetchHttp, robotsByProcess, ROBOTS_TTL_MS } from '../../src/services/magazine/body-prefetch';
+import { passHostGate } from '../../src/services/news-bulletins';
 
 jest.mock('axios');
 jest.mock('../../src/services/news-bulletins', () => ({ passHostGate: jest.fn(async () => {}) }));
@@ -63,5 +64,25 @@ describe('the first V on a page starts without a second robots.txt round', () =>
     const r = await defaultPrepare({ url: `https://${host}/a.mp4`, kind: 'video' } as never, tools);
     expect(r).toMatchObject({ input: `https://${host}/a.mp4` });
     expect(fetchHttp).not.toHaveBeenCalled();
+  });
+
+  it('a clip host with no cached robots verdict passes the host gate once, not twice', async () => {
+    // Regression (2026-10-20): the robots.txt fetch claimed the host's slot, then prepare
+    // gated the clip URL again on the same host and slept the full 5 s crawl gap.
+    const host = 'fresh-clips.example.net';
+    robotsByProcess.delete(host);
+    (passHostGate as jest.Mock).mockClear();
+    const r = await defaultPrepare({ url: `https://${host}/a.mp4`, kind: 'video' } as never, tools);
+    expect(r).toMatchObject({ input: `https://${host}/a.mp4` });
+    expect(fetchHttp).toHaveBeenCalled();
+    expect(passHostGate).toHaveBeenCalledTimes(1);
+  });
+
+  it('a clip host with a cached robots verdict still passes the host gate', async () => {
+    const host = 'cached-clips.example.net';
+    robotsByProcess.set(host, { kind: 'rules', rules: { allow: [], disallow: [] }, until: Date.now() + ROBOTS_TTL_MS });
+    (passHostGate as jest.Mock).mockClear();
+    await defaultPrepare({ url: `https://${host}/a.mp4`, kind: 'video' } as never, tools);
+    expect(passHostGate).toHaveBeenCalledTimes(1);
   });
 });
