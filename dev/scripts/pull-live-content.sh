@@ -59,6 +59,7 @@ INCLUDE_DIRS=(
   Screens Themes Bulletins Prompts HELP Languages
   Access Commands System Env Devs Storage
   Conf1 Conf2 Conf3 Conf4 Conf5
+  Magazine
 )
 
 # Per-node directories: art and per-node state. Enumerated live rather than
@@ -112,6 +113,8 @@ TAR_EXCLUDES+=(
   "--exclude=*/Backups" "--exclude=*.bak" "--exclude=*.log"
   "--exclude=*/tmp" "--exclude=*/Work"
 )
+# The MAG video clip cache: up to 500 MB, rebuilt on demand from the story.
+TAR_EXCLUDES+=("--exclude=Magazine/video")
 
 echo "[INFO] live   : $HOST ($CONTAINER:$REMOTE_ROOT)"
 echo "[INFO] local  : $DEST"
