@@ -9,9 +9,11 @@
  */
 import * as fs from 'fs';
 import {
+  renderingKey,
   rowsForAspect,
   SIDECAR_RENDER_REVISION,
   sidecarPath,
+  spanBox,
   sidecarSizes,
   type SidecarPicture,
   type Story,
@@ -66,11 +68,16 @@ export function renderPicture(p: Pixels, convert: typeof frameToAnsiCells = fram
   const source: RgbSource = { data: rgbOf(p), width: p.width, height: p.height, channels: 3 };
   const out: SidecarPicture['renderings'] = {};
   for (const size of sidecarSizes()) {
-    // A fullscreen rendering is a fixed size (D11); a column still follows the aspect.
-    const rows = size.placement === 'full' ? size.maxRows : rowsForAspect(p.width, p.height, size.cols, size.maxRows);
-    const cells = convert(letterbox(source, size.cols, rows), size.cols, rows, { palette: size.terminal === 'petscii' ? 'c64' : 'amiga16' });
-    out[size.key] = {
-      cols: size.cols,
+    // A fullscreen rendering is a fixed size (D11); a column still follows the
+    // aspect; a span still narrows for a tall picture.
+    const { cols, rows } = size.placement === 'full'
+      ? { cols: size.cols, rows: size.maxRows }
+      : size.placement === 'span'
+        ? spanBox(p.width, p.height, size.cols, size.maxRows)
+        : { cols: size.cols, rows: rowsForAspect(p.width, p.height, size.cols, size.maxRows) };
+    const cells = convert(letterbox(source, cols, rows), cols, rows, { palette: size.terminal === 'petscii' ? 'c64' : 'amiga16' });
+    out[renderingKey(size.terminal, cols, size.placement)] = {
+      cols,
       rows: size.terminal === 'petscii'
         ? cellsToPetsciiRows(cells).map((r) => Buffer.from(r).toString('base64'))
         : cellsToAnsiRows(cells),

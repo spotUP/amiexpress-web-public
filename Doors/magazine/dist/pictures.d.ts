@@ -20,6 +20,11 @@ export interface PictureRow {
 /** The rendering for `colWidth`: the exact width, else the widest narrower one. Null when none. */
 export declare function pictureRows(sidecar: StoryMediaSidecar | null, mediaIndex: number, petscii: boolean, colWidth: number): PictureRow[] | null;
 /**
+ * The still set across every column of a spread, centred in `contentWidth`.
+ * ANSI only: a C64 reads one column. Null when the sidecar predates it.
+ */
+export declare function spanRows(sidecar: StoryMediaSidecar | null, mediaIndex: number, contentWidth: number): PictureRow[] | null;
+/**
  * The fullscreen rendering the viewer shows (D11): 80x24 ANSI or 40x24 PETSCII,
  * always at the stored size (the viewer centres it). Null when the sidecar has none.
  */

@@ -12,7 +12,7 @@ import { PNG } from 'pngjs';
 import { createRobotsCache, needsMedia, prefetchBodies, type HttpResult } from '../../src/services/magazine/body-prefetch';
 import { MAX_IMAGE_BYTES } from '../../src/services/magazine/media-fetch';
 import { letterbox, readSidecar, renderPicture, renderStoryMedia } from '../../src/services/magazine/media-render';
-import { SIDECAR_RENDER_REVISION, sidecarSizes } from '@amiexpress/bbs-door-sdk/formats/magazine';
+import { renderingKey, SIDECAR_RENDER_REVISION, sidecarSizes, SPAN_ROW_CAP, spanBox } from '@amiexpress/bbs-door-sdk/formats/magazine';
 import { SUB_X, SUB_Y } from '@amiexpress/bbs-door-sdk/media/ascii';
 import { writeAtomic } from '../../src/services/magazine';
 
@@ -233,6 +233,21 @@ describe('a picture keeps its shape in every box', () => {
     }) as never);
     expect(seen.length).toBe(sizes.length);
     for (const s of seen) expect(s.aspect).toBeCloseTo(s.box, 1);
+  });
+
+  it('a span rendering crosses the content width for a wide picture and narrows for a tall one', () => {
+    const spanCols = sidecarSizes().find((s) => s.placement === 'span')!.cols;
+    const wide = renderPicture(rgba(400, 100) as never, blankCells as never);
+    expect(wide[renderingKey('ansi', spanCols, 'span')]?.rows.length).toBeLessThanOrEqual(SPAN_ROW_CAP);
+    // 16:9 at the row cap: wider than a column, narrower than the page.
+    const clip = spanBox(320, 180, spanCols, SPAN_ROW_CAP);
+    expect(clip.cols).toBeGreaterThan(sidecarSizes().find((s) => s.placement === 'column' && s.terminal === 'ansi')!.cols);
+    expect(renderPicture(rgba(320, 180) as never, blankCells as never)[renderingKey('ansi', clip.cols, 'span')]?.rows).toHaveLength(SPAN_ROW_CAP);
+    const tall = renderPicture(rgba(180, 320) as never, blankCells as never);
+    const box = spanBox(180, 320, spanCols, SPAN_ROW_CAP);
+    expect(box.cols).toBeLessThan(spanCols);
+    expect(tall[renderingKey('ansi', box.cols, 'span')]?.cols).toBe(box.cols);
+    expect(tall[renderingKey('ansi', spanCols, 'span')]).toBeUndefined();
   });
 });
 

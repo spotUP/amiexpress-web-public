@@ -78,3 +78,67 @@ export async function aStoryWithoutMediaOrSidecarRendersAsToday(): Promise<void>
     assert.deepStrictEqual(buildArticle(failed, layout, [], undefined, { sidecar: sidecar(), petscii }).spreads.map((s) => s.map(rowText)), today);
   }
 }
+
+/** The sidecar above plus a span rendering `cols` wide, `rows` tall, glyph `S`. */
+function spanSidecar(cols: number, rows: number): StoryMediaSidecar {
+  const s = sidecar();
+  const row = '\x1b[0;37;40m' + 'S'.repeat(cols) + '\x1b[0m';
+  s.pictures[0].renderings[renderingKey('ansi', cols, 'span')] = { cols, rows: Array(rows).fill(row) };
+  return s;
+}
+
+const LONG: Story = {
+  ...STORY,
+  body: Array.from({ length: 8 }, (_, i) => `Paragraph ${i + 1} of the story runs long enough to wrap over several column lines here.`).join('\n\n'),
+};
+
+export async function aSpanPictureCrossesBothColumnsWithItsCreditUnderIt(): Promise<void> {
+  // Sysop choice 2026-10-20: at two columns a picture spans the page.
+  const layout = buildLayout(80, 24);
+  const w = layout.geometry.contentWidth;
+  const article = buildArticle(LONG, layout, [], undefined, { sidecar: spanSidecar(w, 6), petscii: false });
+  const rows = article.spreads.flatMap((s) => s.map(rowText));
+  const band = rows.map((r, i) => [r, i] as const).filter(([r]) => r.includes('SSSS'));
+  assert.strictEqual(band.length, 6, 'one band of six rows');
+  for (const [r] of band) assert.strictEqual((r.match(/S/g) ?? []).length, w, 'band row is the full content width');
+  assert.ok(!rows.some((r) => r.includes('XXXX')), 'no column picture as well');
+  const last = band[band.length - 1][1];
+  assert.ok(rows[last + 1].includes('>> IMG example.org  [V] view'), 'credit directly under the band');
+  for (const r of rows) assert.ok(r.length <= 80, `row fits the screen: ${r.length}`);
+  const spread = article.pictures.findIndex((p) => p.includes(0));
+  assert.ok(spread >= 0 && article.spreads[spread].map(rowText).some((r) => r.includes('SSSS')), 'Article.pictures names the band spread');
+}
+
+export async function aNarrowSpanPictureIsCentred(): Promise<void> {
+  const layout = buildLayout(80, 24);
+  const w = layout.geometry.contentWidth;
+  const rows = buildArticle(LONG, layout, [], undefined, { sidecar: spanSidecar(31, 6), petscii: false }).spreads.flatMap((s) => s.map(rowText));
+  const r = rows.find((x) => x.includes('SSSS'))!;
+  const start = r.indexOf('S');
+  const pad = r.length - r.trimEnd().length;
+  assert.strictEqual((r.match(/S/g) ?? []).length, 31);
+  assert.ok(Math.abs(start - layout.geometry.margin - (w - 31) / 2) <= 1, `centred, starts at ${start}`);
+  assert.ok(pad >= 0);
+}
+
+export async function textBeforeTheBandIsBalancedAcrossColumns(): Promise<void> {
+  // The anchor paragraph sits before the band; its spread is not one full
+  // left column and an empty right one.
+  const layout = buildLayout(80, 24);
+  const article = buildArticle(LONG, layout, [], undefined, { sidecar: spanSidecar(layout.geometry.contentWidth, 6), petscii: false });
+  const rows = article.spreads.flatMap((s) => s.map(rowText));
+  const bandAt = rows.findIndex((r) => r.includes('SSSS'));
+  const colStart = layout.geometry.margin + layout.geometry.colWidth + layout.geometry.gutter;
+  const before = rows.slice(0, bandAt).filter((r) => r.includes('Paragraph') || r.includes('story'));
+  assert.ok(before.length > 0, 'text before the band');
+  assert.ok(before.some((r) => r.slice(colStart).trim().length > 0), 'right column holds part of the text before the band');
+}
+
+export async function oneColumnAndPetsciiKeepTheColumnPicture(): Promise<void> {
+  for (const [width, height, petscii] of [[40, 25, true], [40, 25, false]] as const) {
+    const layout = buildLayout(width, height);
+    const rows = buildArticle(LONG, layout, [], undefined, { sidecar: spanSidecar(77, 6), petscii }).spreads.flatMap((s) => s.map(rowText));
+    assert.ok(!rows.some((r) => r.includes('SSSS')), `${width}/${petscii}: no span band`);
+    assert.ok(rows.some((r) => r.includes(petscii ? 'aaaa' : 'XXXX')), `${width}/${petscii}: column picture`);
+  }
+}

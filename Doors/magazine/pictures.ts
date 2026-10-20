@@ -5,7 +5,7 @@
  * caller's column width into painted rows, reusing the art row readers so an
  * ANSI picture and a .seq picture reach the screen exactly as board art does.
  */
-import { FULLSCREEN_COLS, renderingKey, type StoryMedia, type StoryMediaSidecar } from '@amiexpress/bbs-door-sdk/formats/magazine';
+import { FULLSCREEN_COLS, renderingKey, type SidecarPlacement, type StoryMedia, type StoryMediaSidecar } from '@amiexpress/bbs-door-sdk/formats/magazine';
 import { artRowText, ansiRows, seqRows } from './art';
 import { cellsToAnsiRows, cellsToPetsciiRows, type AnsiCellGrid } from '@amiexpress/bbs-door-sdk/media/ascii';
 
@@ -21,6 +21,27 @@ export interface PictureRow {
   text: string;
 }
 
+/** The widest `placement` rendering no wider than `width`, centred in it. Null when none. */
+function placedRows(
+  sidecar: StoryMediaSidecar | null,
+  mediaIndex: number,
+  petscii: boolean,
+  placement: SidecarPlacement,
+  width: number,
+): PictureRow[] | null {
+  const picture = sidecar?.pictures.find((p) => p.media === mediaIndex);
+  if (!picture) return null;
+  const terminal = petscii ? 'petscii' : 'ansi';
+  let best: { cols: number; rows: string[] } | null = null;
+  for (const [key, rendering] of Object.entries(picture.renderings)) {
+    if (key === renderingKey(terminal, rendering.cols, placement) && rendering.cols <= width && rendering.rows.length > 0) {
+      if (!best || rendering.cols > best.cols) best = rendering;
+    }
+  }
+  if (!best) return null;
+  return paintRows(best.rows, best.cols, petscii, Math.floor((width - best.cols) / 2));
+}
+
 /** The rendering for `colWidth`: the exact width, else the widest narrower one. Null when none. */
 export function pictureRows(
   sidecar: StoryMediaSidecar | null,
@@ -28,17 +49,19 @@ export function pictureRows(
   petscii: boolean,
   colWidth: number,
 ): PictureRow[] | null {
-  const picture = sidecar?.pictures.find((p) => p.media === mediaIndex);
-  if (!picture) return null;
-  const terminal = petscii ? 'petscii' : 'ansi';
-  let best: { cols: number; rows: string[] } | null = null;
-  for (const [key, rendering] of Object.entries(picture.renderings)) {
-    if (key === renderingKey(terminal, rendering.cols, 'column') && rendering.cols <= colWidth && rendering.rows.length > 0) {
-      if (!best || rendering.cols > best.cols) best = rendering;
-    }
-  }
-  if (!best) return null;
-  return paintRows(best.rows, best.cols, petscii, Math.floor((colWidth - best.cols) / 2));
+  return placedRows(sidecar, mediaIndex, petscii, 'column', colWidth);
+}
+
+/**
+ * The still set across every column of a spread, centred in `contentWidth`.
+ * ANSI only: a C64 reads one column. Null when the sidecar predates it.
+ */
+export function spanRows(
+  sidecar: StoryMediaSidecar | null,
+  mediaIndex: number,
+  contentWidth: number,
+): PictureRow[] | null {
+  return placedRows(sidecar, mediaIndex, false, 'span', contentWidth);
 }
 
 /** Stored rows as painted rows of `cols` cells, each led by `pad` blanks. */

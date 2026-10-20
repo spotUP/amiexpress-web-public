@@ -109,13 +109,19 @@ describe('prefetch renders the story pictures into the sidecar', () => {
     expect(sidecar.pictures.map((p) => p.media)).toEqual([0, 1, 2, 3]);
 
     const sizes = sidecarSizes();
-    expect(sizes.map((s) => s.cols)).toEqual([columnGeometry(80).colWidth, MAX_MEASURE, columnGeometry(40).colWidth, 80, 40]);
+    expect(sizes.map((s) => s.cols)).toEqual([columnGeometry(80).colWidth, MAX_MEASURE, columnGeometry(40).colWidth, columnGeometry(80).contentWidth, 80, 40]);
     expect(convert).toHaveBeenCalledTimes(4 * sizes.length); // the SDK converter ran, once per picture per size
     for (const pic of sidecar.pictures) {
-      expect(Object.keys(pic.renderings).sort()).toEqual(sizes.map((s) => s.key).sort());
+      // A span rendering is keyed by its own width: a tall picture narrows.
+      const spanKey = Object.keys(pic.renderings).find((k) => k.endsWith('-span'))!;
+      const keyOf = (s: (typeof sizes)[number]): string => (s.placement === 'span' ? spanKey : s.key);
+      expect(Object.keys(pic.renderings).sort()).toEqual(sizes.map(keyOf).sort());
       for (const s of sizes) {
-        const r = pic.renderings[s.key];
-        expect(r.cols).toBe(s.cols);
+        const r = pic.renderings[keyOf(s)];
+        if (s.placement === 'span') {
+          expect(spanKey).toBe(renderingKey('ansi', r.cols, 'span'));
+          expect(r.cols).toBeLessThanOrEqual(s.cols);
+        } else expect(r.cols).toBe(s.cols);
         expect(r.rows.length).toBeGreaterThanOrEqual(1);
         expect(r.rows.length).toBeLessThanOrEqual(s.maxRows);
         if (s.placement === 'full') expect(r.rows).toHaveLength(24);

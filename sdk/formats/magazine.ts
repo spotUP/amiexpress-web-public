@@ -319,14 +319,23 @@ export function columnGeometry(width: number): ColumnGeometry {
 
 /** Rows stored for one picture at one size. */
 export type SidecarTerminal = 'ansi' | 'petscii';
-/** `column` is the inline still; `full` is the fullscreen viewer (D11). */
-export type SidecarPlacement = 'column' | 'full';
+/**
+ * `column` is the inline still; `span` is the still set across every column
+ * of an ANSI spread (one size, centred on wider screens); `full` is the
+ * fullscreen viewer (D11).
+ */
+export type SidecarPlacement = 'column' | 'span' | 'full';
 
 /** The fullscreen sizes (D11): 80x24 on ANSI, 40x24 on the C64. */
 export const FULLSCREEN_COLS: Record<SidecarTerminal, number> = { ansi: 80, petscii: 40 };
 export const FULLSCREEN_ROWS = 24;
 /** Row caps of the column stills (Limits table). */
 export const COLUMN_ROW_CAP = { amiga: 10, wide: 12, petscii: 8 } as const;
+/**
+ * Row cap of the span still: an 80x24 first spread with a one-line headline
+ * holds it plus its credit and the gaps around it.
+ */
+export const SPAN_ROW_CAP = 14;
 
 /** The key a rendering is stored under: `ansi-37-column`, `petscii-40-full`. */
 export function renderingKey(terminal: SidecarTerminal, cols: number, placement: SidecarPlacement): string {
@@ -350,6 +359,7 @@ export function sidecarSizes(): SidecarSize[] {
     mk('ansi', 'column', columnGeometry(BREAKPOINT_SM).colWidth, COLUMN_ROW_CAP.amiga),
     mk('ansi', 'column', MAX_MEASURE, COLUMN_ROW_CAP.wide),
     mk('petscii', 'column', columnGeometry(40).colWidth, COLUMN_ROW_CAP.petscii),
+    mk('ansi', 'span', columnGeometry(BREAKPOINT_SM).contentWidth, SPAN_ROW_CAP),
     mk('ansi', 'full', FULLSCREEN_COLS.ansi, FULLSCREEN_ROWS),
     mk('petscii', 'full', FULLSCREEN_COLS.petscii, FULLSCREEN_ROWS),
   ];
@@ -363,6 +373,18 @@ export function sidecarSizes(): SidecarSize[] {
 export function rowsForAspect(width: number, height: number, cols: number, maxRows: number): number {
   if (width <= 0 || height <= 0) return 1;
   return Math.max(1, Math.min(maxRows, Math.round((cols * height) / (width * 2))));
+}
+
+/**
+ * The box a span still is rendered in: the full `maxCols` when the picture is
+ * wide enough, else narrower so a tall picture keeps its shape at `maxRows`
+ * instead of standing in black side bars. Its key names the actual width.
+ */
+export function spanBox(width: number, height: number, maxCols: number, maxRows: number): { cols: number; rows: number } {
+  const cols = width > 0 && height > 0
+    ? Math.max(1, Math.min(maxCols, Math.round((maxRows * 2 * width) / height)))
+    : maxCols;
+  return { cols, rows: rowsForAspect(width, height, cols, maxRows) };
 }
 
 /** One stored rendering. ANSI: text rows. PETSCII: base64 of each .seq row's bytes. */
@@ -385,9 +407,10 @@ export interface SidecarPicture {
  * Bumped when the renderer changes what a picture looks like, so stored
  * renderings are redone instead of reused. 2: pictures keep their aspect
  * inside the box (letterboxed like the video), Topaz glyph shape match that
- * dithers towards a cell's mean colour.
+ * dithers towards a cell's mean colour. 3: the span still, set across both
+ * columns at 80.
  */
-export const SIDECAR_RENDER_REVISION = 2;
+export const SIDECAR_RENDER_REVISION = 3;
 
 /** `<story id>.media.json`, beside `<story id>.json`. */
 export interface StoryMediaSidecar {

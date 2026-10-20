@@ -1,6 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.pictureRows = pictureRows;
+exports.spanRows = spanRows;
 exports.fullscreenRows = fullscreenRows;
 exports.mediaCredit = mediaCredit;
 exports.creditLine = creditLine;
@@ -15,22 +16,33 @@ exports.frameRows = frameRows;
 const magazine_1 = require("@amiexpress/bbs-door-sdk/formats/magazine");
 const art_1 = require("./art");
 const ascii_1 = require("@amiexpress/bbs-door-sdk/media/ascii");
-/** The rendering for `colWidth`: the exact width, else the widest narrower one. Null when none. */
-function pictureRows(sidecar, mediaIndex, petscii, colWidth) {
+/** The widest `placement` rendering no wider than `width`, centred in it. Null when none. */
+function placedRows(sidecar, mediaIndex, petscii, placement, width) {
     const picture = sidecar?.pictures.find((p) => p.media === mediaIndex);
     if (!picture)
         return null;
     const terminal = petscii ? 'petscii' : 'ansi';
     let best = null;
     for (const [key, rendering] of Object.entries(picture.renderings)) {
-        if (key === (0, magazine_1.renderingKey)(terminal, rendering.cols, 'column') && rendering.cols <= colWidth && rendering.rows.length > 0) {
+        if (key === (0, magazine_1.renderingKey)(terminal, rendering.cols, placement) && rendering.cols <= width && rendering.rows.length > 0) {
             if (!best || rendering.cols > best.cols)
                 best = rendering;
         }
     }
     if (!best)
         return null;
-    return paintRows(best.rows, best.cols, petscii, Math.floor((colWidth - best.cols) / 2));
+    return paintRows(best.rows, best.cols, petscii, Math.floor((width - best.cols) / 2));
+}
+/** The rendering for `colWidth`: the exact width, else the widest narrower one. Null when none. */
+function pictureRows(sidecar, mediaIndex, petscii, colWidth) {
+    return placedRows(sidecar, mediaIndex, petscii, 'column', colWidth);
+}
+/**
+ * The still set across every column of a spread, centred in `contentWidth`.
+ * ANSI only: a C64 reads one column. Null when the sidecar predates it.
+ */
+function spanRows(sidecar, mediaIndex, contentWidth) {
+    return placedRows(sidecar, mediaIndex, false, 'span', contentWidth);
 }
 /** Stored rows as painted rows of `cols` cells, each led by `pad` blanks. */
 function paintRows(rows, cols, petscii, pad) {

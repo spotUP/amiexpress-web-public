@@ -151,6 +151,15 @@ function spanRow(geometry, text, role) {
     row.push(seg(padRight(text, geometry.contentWidth), role));
     return row;
 }
+/** A painted row that spans every column: a row of a picture band. */
+function spanArtRow(geometry, row) {
+    const out = [];
+    if (geometry.margin > 0)
+        out.push(seg(' '.repeat(geometry.margin)));
+    const fill = ' '.repeat(Math.max(0, geometry.contentWidth - row.text.length));
+    out.push({ text: padRight(row.text, geometry.contentWidth), role: 'plain', raw: row.raw + fill });
+    return out;
+}
 function blankRows(n) {
     return Array.from({ length: Math.max(0, n) }, () => []);
 }
@@ -371,11 +380,23 @@ function buildArticle(story, layout, endMark = [], fill, media) {
     // A story with full text is set from its body; the summary is the teaser the
     // body replaces, not a standfirst printed above it.
     const paragraphs = (0, library_1.paintSafe)(story.body || story.summary).split(/\n+/);
-    const cells = [];
+    const restHeight = Math.max(1, panelHeight - 1);
+    const sections = [];
+    let cells = [];
     const placePictures = (here) => {
         story.media?.forEach((m, index) => {
             if (!here(m.anchor) || m.failure)
                 return;
+            // Across the columns when there are several and the sidecar has the span
+            // still, and it fits a spread with the running headline and a gap above.
+            const span = geometry.cols > 1 && !media?.petscii ? (0, pictures_1.spanRows)(media?.sidecar ?? null, index, w) : null;
+            if (span && span.length + 2 <= restHeight - 1) {
+                sections.push({ kind: 'text', cells });
+                cells = [];
+                const rows = [...span.map((r) => spanArtRow(geometry, r)), spanRow(geometry, truncate((0, pictures_1.creditLine)(m), w), 'source')];
+                sections.push({ kind: 'band', rows, media: index });
+                return;
+            }
             const rows = (0, pictures_1.pictureRows)(media?.sidecar ?? null, index, media?.petscii ?? false, geometry.colWidth);
             if (!rows)
                 return;
@@ -403,38 +424,78 @@ function buildArticle(story, layout, endMark = [], fill, media) {
     const trailer = [];
     if (source)
         trailer.push({ text: truncate(`>> SRC ${source}`, geometry.colWidth), role: 'source' });
-    if (cells.length === 0)
+    if (cells.length === 0 && sections.length === 0)
         cells.push({ text: '(no summary)', role: 'dim' });
     if (trailer.length)
         cells.push({ text: '', role: 'plain' }, ...trailer);
     // The mark closes the text: it flows with it, after the last line.
     if (endMark.length)
         cells.push({ text: '', role: 'plain' }, ...endMark.map((m) => ({ text: m.text, role: 'plain', raw: m.raw })));
-    const firstHeight = Math.max(1, panelHeight - head.length);
-    const restHeight = Math.max(1, panelHeight - 1);
-    const flowed = (0, columns_1.flowColumns)(cells, geometry.cols, { first: firstHeight, rest: restHeight }, {
-        isBlank: (c) => c.text === '',
-        blockOf: (c) => c.block,
-    });
+    sections.push({ kind: 'text', cells });
+    const flowOptions = { isBlank: (c) => c.text === '', blockOf: (c) => c.block };
     const running = truncate((0, library_1.paintSafe)(story.headline).toUpperCase(), w);
-    const spreads = flowed.map((spread, n) => {
-        if (n === 0) {
-            const rows = [...head, ...composeSpread(geometry, withFiller(spread.columns, firstHeight, geometry, n, fill), firstHeight)];
-            return rows.slice(0, panelHeight);
-        }
-        return [spanRow(geometry, running, 'dim'), ...composeSpread(geometry, withFiller(spread.columns, restHeight, geometry, n, fill), restHeight)]
-            .slice(0, panelHeight);
-    });
-    // Which pictures fall on which spread comes from the flow itself (the blocks), not from a second layout.
-    const pictures = flowed.map((spread) => {
-        const seen = [];
-        for (const column of spread.columns) {
+    const spreads = [];
+    // Which pictures fall on which spread comes from the placement itself, not from a second layout.
+    const pictures = [];
+    let page = [...head];
+    let onPage = [];
+    let top = head.length;
+    const turn = () => {
+        spreads.push([...page, ...blankRows(panelHeight - page.length)].slice(0, panelHeight));
+        pictures.push(onPage);
+        page = [spanRow(geometry, running, 'dim')];
+        onPage = [];
+        top = page.length;
+    };
+    const note = (columns) => {
+        for (const column of columns) {
             for (const cell of column)
-                if (cell.block !== undefined && !seen.includes(cell.block))
-                    seen.push(cell.block);
+                if (cell.block !== undefined && !onPage.includes(cell.block))
+                    onPage.push(cell.block);
         }
-        return seen;
+    };
+    sections.forEach((section, s) => {
+        if (section.kind === 'band') {
+            const gap = page.length > top ? 1 : 0;
+            if (page.length + gap + section.rows.length > panelHeight)
+                turn();
+            else
+                page.push(...blankRows(gap));
+            page.push(...section.rows);
+            onPage.push(section.media);
+            return;
+        }
+        if (!section.cells.some((c) => c.text !== ''))
+            return;
+        if (page.length > top)
+            page.push(...blankRows(1));
+        if (panelHeight - page.length < 3 && page.length > top)
+            turn();
+        const room = panelHeight - page.length;
+        const flowed = (0, columns_1.flowColumns)(section.cells, geometry.cols, { first: room, rest: restHeight }, flowOptions);
+        const closes = s === sections.length - 1;
+        flowed.forEach((spread, n) => {
+            if (n > 0)
+                turn();
+            const height = n === 0 ? room : restHeight;
+            if (!closes && n === flowed.length - 1) {
+                // Text a band follows is balanced across the columns, so the band sits right under it.
+                const flat = spread.columns.flat();
+                for (let h = Math.max(1, Math.ceil(flat.length / geometry.cols)); h <= height; h++) {
+                    const balanced = (0, columns_1.flowColumns)(flat, geometry.cols, { first: h, rest: h }, flowOptions);
+                    if (balanced.length > 1)
+                        continue;
+                    const used = Math.max(...balanced[0].columns.map((c) => c.length));
+                    page.push(...composeSpread(geometry, balanced[0].columns, used));
+                    note(balanced[0].columns);
+                    return;
+                }
+            }
+            page.push(...composeSpread(geometry, withFiller(spread.columns, height, geometry, spreads.length, fill), height));
+            note(spread.columns);
+        });
     });
+    turn();
     return { spreads, headlineRow: 1, headlineRows: headLines.length, pictures };
 }
 // ---------------------------------------------------------------------------
