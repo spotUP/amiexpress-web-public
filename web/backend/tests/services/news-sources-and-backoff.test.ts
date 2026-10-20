@@ -56,7 +56,7 @@ describe('news sources', () => {
 
   it('every subreddit is slow: 60 s host gap, one ask per 3 hours', () => {
     const reddit = NEWS_BULLETIN_SOURCES.filter((s) => /reddit\.com/.test(s.url ?? ''));
-    expect(reddit).toHaveLength(12);
+    expect(reddit).toHaveLength(11);
     for (const s of reddit) {
       expect(s.hostGapMs).toBe(REDDIT_HOST_GAP_MS);
       expect(s.intervalMs).toBe(REDDIT_INTERVAL_MS);
