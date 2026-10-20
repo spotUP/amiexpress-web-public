@@ -32,9 +32,6 @@ import {
 export const MAX_IMAGE_BYTES = 3 * 1024 * 1024;
 export const MAX_IMAGE_PIXELS = 4_000_000;
 export const MIN_IMAGE_SIDE = 100;
-export const STORY_MAX_PICTURES = 8;
-export const STORY_MAX_BYTES = 12 * 1024 * 1024;
-export const STORY_MAX_WALL_MS = 90_000;
 /** ffmpeg gets this long for one still, then it is killed. */
 export const FFMPEG_STILL_TIMEOUT_MS = 15_000;
 /** Longest clip the page plays (the live converter stops at this many seconds). */
@@ -44,7 +41,7 @@ const MAX_FFMPEG_OUT_BYTES = 24 * 1024 * 1024;
 
 export type MediaFailure =
   | '404' | 'oversize' | 'bad-content-type' | 'robots' | 'decode' | 'timeout'
-  | 'too-small' | 'story-cap' | 'no-ffmpeg' | 'no-yt-dlp';
+  | 'too-small' | 'no-ffmpeg' | 'no-yt-dlp';
 
 export interface Pixels { data: Uint8Array; width: number; height: number }
 export type ImageResult = { pixels: Pixels } | MediaFailure;
@@ -81,26 +78,6 @@ export function resetMediaTools(): void {
 }
 
 // ---------------------------------------------------------------------------
-// Budget
-// ---------------------------------------------------------------------------
-
-/** One story's allowance, shared by every call for that story. */
-export interface MediaBudget {
-  pictures: number;
-  bytes: number;
-  startedAt: number;
-  now: () => number;
-}
-
-export function createMediaBudget(now: () => number = Date.now): MediaBudget {
-  return { pictures: 0, bytes: 0, startedAt: now(), now };
-}
-
-function budgetSpent(b: MediaBudget): boolean {
-  return b.pictures >= STORY_MAX_PICTURES || b.bytes >= STORY_MAX_BYTES || b.now() - b.startedAt >= STORY_MAX_WALL_MS;
-}
-
-// ---------------------------------------------------------------------------
 // Fetch
 // ---------------------------------------------------------------------------
 
@@ -109,6 +86,8 @@ export type MediaFetchDeps = Pick<PrefetchDeps, 'now' | 'robots' | 'gate' | 'htt
   tools?: MediaTools;
   /** Override the clip probe (tests): what the clip at `input` holds. */
   probe?: (input: string) => Promise<ClipProbe | MediaFailure>;
+  /** Override the embed resolver (tests): the direct stream URL yt-dlp would give. */
+  resolve?: (embedUrl: string) => Promise<string | null>;
 };
 
 type Download = { bytes: Buffer; contentType: string } | MediaFailure;
@@ -236,23 +215,19 @@ function decodeWithFfmpeg(ffmpeg: string, input: Buffer): Promise<ImageResult> {
 // ---------------------------------------------------------------------------
 
 /**
- * Fetch and decode one picture of a story. Never throws. `budget` is the
- * story's shared allowance; a picture past it is 'story-cap'.
+ * Fetch and decode one picture of a story. Never throws.
  */
 export async function fetchImage(
   media: Pick<StoryMedia, 'url'>,
-  budget: MediaBudget,
   deps: MediaFetchDeps = { now: () => new Date(), robots: createRobotsCache(), gate: passHostGate, http: fetchHttp },
 ): Promise<ImageResult> {
   try {
-    if (budgetSpent(budget)) return 'story-cap';
     if (!/^https?:\/\//i.test(media.url)) return '404';
     const verdict = await robotsVerdict(media.url, deps, ARTICLE_HOST_GAP_MS);
     if (verdict.kind !== 'allowed') return 'robots';
     await deps.gate(media.url, ARTICLE_HOST_GAP_MS);
     const got = await download(media.url);
     if (typeof got === 'string') return got;
-    budget.bytes += got.bytes.length;
     const format = sniff(got.bytes);
     let result: ImageResult;
     if (format === 'png') result = decodePng(got.bytes);
@@ -261,7 +236,6 @@ export async function fetchImage(
       const ffmpeg = (deps.tools ?? mediaTools()).ffmpeg;
       result = ffmpeg ? await decodeWithFfmpeg(ffmpeg, got.bytes) : 'no-ffmpeg';
     }
-    if (typeof result !== 'string') budget.pictures++;
     return result;
   } catch {
     return 'decode';
@@ -373,7 +347,7 @@ async function verifyClip(media: Pick<StoryMedia, 'url' | 'kind'>, deps: MediaFe
   await deps.gate(media.url, ARTICLE_HOST_GAP_MS);
   let input = media.url;
   if (media.kind === 'embed') {
-    const direct = await resolveEmbed(tools.ytDlp as string, media.url);
+    const direct = await (deps.resolve ?? ((u: string) => resolveEmbed(tools.ytDlp as string, u)))(media.url);
     if (!direct) return '404';
     input = direct;
   }
@@ -409,19 +383,16 @@ export function oembedEndpoint(embedUrl: string): string | null {
  */
 export async function fetchPoster(
   media: Pick<StoryMedia, 'url' | 'kind' | 'poster'>,
-  budget: MediaBudget,
   deps: MediaFetchDeps = { now: () => new Date(), robots: createRobotsCache(), gate: passHostGate, http: fetchHttp },
 ): Promise<ImageResult> {
   try {
-    if (media.kind === 'image') return await fetchImage(media, budget, deps);
+    if (media.kind === 'image') return await fetchImage(media, deps);
     const unplayable = await verifyClip(media, deps);
     if (unplayable) return unplayable;
-    if (media.kind === 'video' && media.poster) return await fetchImage({ url: media.poster }, budget, deps);
-    if (budgetSpent(budget)) return 'story-cap';
+    if (media.kind === 'video' && media.poster) return await fetchImage({ url: media.poster }, deps);
     if (media.kind === 'video') {
       const ffmpeg = (deps.tools ?? mediaTools()).ffmpeg as string;
       const r = await ffmpegFrameFromUrl(ffmpeg, media.url);
-      if (typeof r !== 'string') budget.pictures++;
       return r;
     }
     const endpoint = oembedEndpoint(media.url);
@@ -431,7 +402,7 @@ export async function fetchPoster(
     if (res.status !== 200 || res.body === null) return '404';
     const thumb = (JSON.parse(res.body) as { thumbnail_url?: unknown }).thumbnail_url;
     if (typeof thumb !== 'string') return '404';
-    return await fetchImage({ url: thumb }, budget, deps);
+    return await fetchImage({ url: thumb }, deps);
   } catch {
     return 'decode';
   }

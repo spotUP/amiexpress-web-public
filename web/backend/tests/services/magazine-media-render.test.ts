@@ -26,7 +26,7 @@ import {
 } from '@amiexpress/bbs-door-sdk/formats/magazine';
 import { frameToAnsiCells } from '@amiexpress/bbs-door-sdk/media/ascii';
 import { createRobotsCache, defaultPrefetchDeps, prefetchBodies, type HttpResult } from '../../src/services/magazine/body-prefetch';
-import { oembedEndpoint, fetchPoster, createMediaBudget } from '../../src/services/magazine/media-fetch';
+import { oembedEndpoint, fetchPoster } from '../../src/services/magazine/media-fetch';
 import { readSidecar, renderStoryMedia } from '../../src/services/magazine/media-render';
 import { writeAtomic } from '../../src/services/magazine';
 
@@ -92,6 +92,8 @@ describe('prefetch renders the story pictures into the sidecar', () => {
     const d = {
       ...defaultPrefetchDeps({ rootDir: () => root, now: () => NOW, log: () => {} }, createRobotsCache()),
       http, gate: jest.fn(async () => {}), convert,
+      tools: { ffmpeg: '/fake/ffmpeg', ytDlp: null, ffprobe: '/fake/ffprobe' },
+      probe: async () => ({ hasVideo: true, durationSec: 10 }),
     };
     const out = await prefetchBodies(d);
     expect(out.fetched).toBe(1);
@@ -123,8 +125,6 @@ describe('prefetch renders the story pictures into the sidecar', () => {
     // The tall picture hits the column cap; the wide one stays under it.
     expect(sidecar.pictures[1].renderings[renderingKey('ansi', MAX_MEASURE, 'column')].rows).toHaveLength(12);
     expect(sidecar.pictures[0].renderings[renderingKey('ansi', MAX_MEASURE, 'column')].rows.length).toBeLessThan(12);
-    // Measured for the plan's Storage paragraph.
-    fs.writeFileSync('/private/tmp/claude-501/-Users-spot-Code-AmiExpress-amiexpress-web/e5cf2cb1-c5fb-4f2b-9b1d-b6454ce161ba/scratchpad/m7-size.txt', String(fs.statSync(sidecarPath(storyPath)).size / 4));
   });
 });
 
@@ -163,13 +163,19 @@ describe('where the logic lives', () => {
     expect(oembedEndpoint('https://ads.example.net/frame')).toBeNull();
   });
 
-  it('an embed poster is the oEmbed thumbnail through the image path; a clip with no ffmpeg is no-ffmpeg', async () => {
+  it('a playable embed\'s poster is the oEmbed thumbnail through the image path; a clip with no ffmpeg is no-ffmpeg', async () => {
     get.mockResolvedValue(reply(png(160, 120), 'image/png'));
     const http = jest.fn(async (url: string): Promise<HttpResult> =>
       url.includes('oembed') ? { status: 200, body: JSON.stringify({ thumbnail_url: 'https://i.ytimg.com/vi/abc/hq.png' }) } : robotsOk);
-    const deps = { now: () => NOW, robots: createRobotsCache(), gate: jest.fn(async () => {}), http, tools: { ffmpeg: null, ytDlp: null, ffprobe: null } };
-    const r = await fetchPoster({ url: 'https://www.youtube.com/embed/abc', kind: 'embed' }, createMediaBudget(), deps);
+    const deps = {
+      now: () => NOW, robots: createRobotsCache(), gate: jest.fn(async () => {}), http,
+      tools: { ffmpeg: '/fake/ffmpeg', ytDlp: '/fake/yt-dlp', ffprobe: '/fake/ffprobe' },
+      resolve: async () => 'https://rr1.example.org/stream.mp4',
+      probe: async () => ({ hasVideo: true, durationSec: 30 }),
+    };
+    const r = await fetchPoster({ url: 'https://www.youtube.com/embed/abc', kind: 'embed' }, deps);
     expect(r).toEqual({ pixels: expect.objectContaining({ width: 160, height: 120 }) });
-    expect(await fetchPoster({ url: 'https://cdn.example.org/clip.mp4', kind: 'video' }, createMediaBudget(), deps)).toBe('no-ffmpeg');
+    const bare = { ...deps, tools: { ffmpeg: null, ytDlp: null, ffprobe: null } };
+    expect(await fetchPoster({ url: 'https://cdn.example.org/clip.mp4', kind: 'video' }, bare)).toBe('no-ffmpeg');
   });
 });

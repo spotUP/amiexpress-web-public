@@ -10,7 +10,7 @@ import * as os from 'os';
 import * as path from 'path';
 import { PNG } from 'pngjs';
 import { createRobotsCache, prefetchBodies, type HttpResult } from '../../src/services/magazine/body-prefetch';
-import { STORY_MAX_PICTURES, MAX_IMAGE_BYTES } from '../../src/services/magazine/media-fetch';
+import { MAX_IMAGE_BYTES } from '../../src/services/magazine/media-fetch';
 import { readSidecar, renderStoryMedia } from '../../src/services/magazine/media-render';
 import { writeAtomic } from '../../src/services/magazine';
 
@@ -74,10 +74,6 @@ const cases: Case[] = [
     });
     return { media: [{ ...img(1, 'video'), url: 'https://img.example.org/clip.mp4' }], tools: { ffmpeg: '/fake/ffmpeg', ytDlp: null, ffprobe: '/fake/ffprobe' }, probe: true, timers: true };
   } },
-  { name: 'per-story media cap', want: 'story-cap', setup: () => {
-    get.mockResolvedValue(reply(png(200, 200), 'image/png'));
-    return { media: Array.from({ length: STORY_MAX_PICTURES + 1 }, (_, i) => img(i + 1)) };
-  } },
 ];
 
 describe('a failed picture is recorded once and never retried', () => {
@@ -102,7 +98,6 @@ describe('a failed picture is recorded once and never retried', () => {
     expect(first.failed).toBe(1);
     const last = first.media![first.media!.length - 1];
     expect(last.failure).toBe(want);
-    if (want === 'story-cap') expect(readSidecar(file)!.pictures).toHaveLength(STORY_MAX_PICTURES);
 
     const fetches = get.mock.calls.length, spawns = spawn.mock.calls.length, httpCalls = http.mock.calls.length;
     const second = await renderStoryMedia({ media: first.media }, file, deps, writeAtomic);
@@ -111,6 +106,29 @@ describe('a failed picture is recorded once and never retried', () => {
     expect(http.mock.calls.length).toBe(httpCalls);
     expect(second.failed).toBe(0);
     expect(second.media!.filter((m) => m.failure)).toHaveLength(1);
+  });
+});
+
+describe('a story keeps every picture it links', () => {
+  const deps = () => ({
+    now: () => NOW, robots: createRobotsCache(), gate: jest.fn(async () => {}),
+    http: jest.fn(async (): Promise<HttpResult> => robotsOk), convert: blankCells,
+  });
+
+  it('renders all 18 pictures of an 18-picture story (story 8946413e lost 15 to the old cap)', async () => {
+    get.mockResolvedValue(reply(png(200, 200), 'image/png'));
+    const file = path.join(root, 'many.json');
+    const out = await renderStoryMedia({ media: Array.from({ length: 18 }, (_, i) => img(i + 1)) }, file, deps(), writeAtomic);
+    expect(out.failed).toBe(0);
+    expect(readSidecar(file)!.pictures).toHaveLength(18);
+  });
+
+  it('retries a picture an older ingest recorded as story-cap', async () => {
+    get.mockResolvedValue(reply(png(200, 200), 'image/png'));
+    const file = path.join(root, 'capped.json');
+    const out = await renderStoryMedia({ media: [img(1), { ...img(2), failure: 'story-cap' }, { ...img(3), failure: '404' }] }, file, deps(), writeAtomic);
+    expect(out.media!.map((m) => m.failure)).toEqual([undefined, undefined, '404']);
+    expect(readSidecar(file)!.pictures.map((p) => p.media)).toEqual([0, 1]);
   });
 });
 

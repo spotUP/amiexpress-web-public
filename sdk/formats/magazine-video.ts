@@ -39,7 +39,7 @@ export interface ClipInfo { v: number; cols: number; rows: number; fps: number }
 
 export type ClipFailure =
   | '404' | 'oversize' | 'bad-content-type' | 'robots' | 'decode' | 'timeout'
-  | 'too-small' | 'story-cap' | 'no-ffmpeg' | 'no-yt-dlp';
+  | 'too-small' | 'no-ffmpeg' | 'no-yt-dlp';
 export type ClipOutcome = 'complete' | ClipFailure;
 
 export interface ClipRequest {

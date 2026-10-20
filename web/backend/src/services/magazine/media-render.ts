@@ -17,7 +17,7 @@ import {
   type StoryMediaSidecar,
 } from '@amiexpress/bbs-door-sdk/formats/magazine';
 import { cellsToAnsiRows, cellsToPetsciiRows, frameToAnsiCells } from '@amiexpress/bbs-door-sdk/media/ascii';
-import { fetchPoster, createMediaBudget, type MediaFetchDeps, type Pixels } from './media-fetch';
+import { fetchPoster, type MediaFetchDeps, type Pixels } from './media-fetch';
 
 /** The converter, injectable so a test can count its calls. */
 export interface RenderDeps extends MediaFetchDeps {
@@ -72,7 +72,9 @@ export interface RenderOutcome {
 /**
  * Render every picture of `story`. Writes the sidecar through `write` and
  * returns the media list with failures recorded. A picture that already has a
- * `failure` is skipped (never retried); one the old sidecar holds for the
+ * `failure` is skipped (never retried), except 'story-cap': stories ingested
+ * while a per-story picture cap existed carry it, and the picture itself was
+ * never tried. One the old sidecar holds for the
  * same URL is reused, so a republish never refetches (M13; the retention half
  * is `removeStoryMedia` in index.ts).
  */
@@ -83,8 +85,8 @@ export async function renderStoryMedia(
   write: (target: string, contents: string) => void,
 ): Promise<RenderOutcome> {
   const media = (story.media ?? []).map((m) => ({ ...m }));
+  for (const m of media) if (m.failure === 'story-cap') delete m.failure;
   const old = readSidecar(storyFilePath);
-  const budget = createMediaBudget(() => deps.now().getTime());
   const pictures: SidecarPicture[] = [];
   const out: RenderOutcome = { media, rendered: 0, failed: 0, reused: 0 };
 
@@ -93,7 +95,7 @@ export async function renderStoryMedia(
     if (m.failure) continue;
     const kept = old?.pictures.find((p) => p.media === i && p.url === m.url);
     if (kept) { pictures.push(kept); out.reused++; continue; }
-    const got = await fetchPoster(m, budget, deps);
+    const got = await fetchPoster(m, deps);
     if (typeof got === 'string') { m.failure = got; out.failed++; continue; }
     pictures.push({ media: i, url: m.url, renderings: renderPicture(got.pixels, deps.convert) });
     out.rendered++;
