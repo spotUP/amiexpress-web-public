@@ -11,6 +11,7 @@ import {
   isC64Safe,
   paletteRgb,
   TOPAZ_COVERAGE,
+  glyphInk,
   encodeRichFrame,
   decodeRichFrame,
   type AnsiCellGrid,
@@ -102,6 +103,32 @@ describe('frameToAnsiCells', () => {
     const [r, g, b] = seen.map((v) => 255 * (v / n) ** (1 / 2.2));
     expect(r - g).toBeGreaterThan(20);
     expect(r - b).toBeGreaterThan(20);
+  });
+
+  it('a flat colour between palette colours is dithered towards it, not snapped to the nearest one', () => {
+    // Regression (2026-10-20): the matcher scored only per-sub-pixel error, and
+    // for a flat cell that is always least with one flat palette colour, so a
+    // face came out as one featureless yellow block. The eye averages a cell;
+    // its seen colour must land nearer the source than any flat colour does.
+    const lin = (v: number) => (v / 255) ** 2.2;
+    const pal = paletteRgb('amiga16');
+    const dist = (a: number[], b: number[]) => Math.hypot(...a.map((v, k) => v - b[k]));
+    for (const src of [[224, 172, 140], [120, 120, 120], [60, 90, 160]]) {
+      const w = 8 * 4;
+      const h = 16 * 4;
+      const data = new Uint8Array(w * h * 3);
+      for (let i = 0; i < w * h; i++) data.set(src, i * 3);
+      const grid = frameToAnsiCells({ data, width: w, height: h }, 4, 4, { palette: 'amiga16' });
+      const seen = [0, 0, 0];
+      for (const c of allCells(grid)) {
+        const cov = glyphInk(c.char);
+        for (let k = 0; k < 3; k++) seen[k] += (cov * lin(pal[c.fg][k]) + (1 - cov) * lin(pal[c.bg][k])) / 16;
+      }
+      const want = src.map(lin);
+      // Flat cells may use the 8 background colours only.
+      const flat = Math.min(...pal.slice(0, 8).map((p) => dist(p.map(lin), want)));
+      expect(dist(seen, want)).toBeLessThan(flat * 0.6);
+    }
   });
 
   it('a cell split by a vertical edge picks a glyph lit on that side', () => {

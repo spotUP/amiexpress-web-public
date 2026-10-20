@@ -121,6 +121,12 @@ function buildGlyphs(): Glyph[] {
 }
 
 const GLYPHS = buildGlyphs();
+
+/** Share of a Topaz glyph's cell that is lit, 0-1 (0 for a character outside ' '..'~'). */
+export function glyphInk(char: string): number {
+  const gl = GLYPHS.find((g) => g.char === char);
+  return gl ? gl.sumM / N : 0;
+}
 const BLANK = GLYPHS.findIndex((g) => g.sumM === 0);
 
 /** Glyphs spread over ink coverage, always searched: the flat-cell dithers. */
@@ -248,7 +254,18 @@ function freeColours(gl: Glyph, sx: Float32Array, mx: Float32Array, into: Float3
   }
 }
 
-/** Squared error of drawing glyph `gl` in fg over bg, from the cell's sums. */
+/**
+ * Weight of the cell's mean colour against its per-sub-pixel error. Squared
+ * error alone never prefers a dither: for a flat cell between two palette
+ * colours, one flat colour always scores least, so skin and gradients
+ * snapped to the nearest colour and a face came out as one yellow block
+ * (2026-10-20). The eye averages a cell, so the mean is scored as well; at 4
+ * a coverage dither wins wherever it brings the seen colour nearer, while
+ * edges still pick their shape from the per-sub-pixel term.
+ */
+export const MEAN_WEIGHT = 4;
+
+/** Error of drawing glyph `gl` in fg over bg, from the cell's sums. */
 function pairError(
   pal: Float32Array, gl: Glyph, fg: number, bg: number, sx: Float32Array, sXX: number, mx: Float32Array,
 ): number {
@@ -257,6 +274,8 @@ function pairError(
     const f = pal[fg * 3 + c];
     const b = pal[bg * 3 + c];
     e += -2 * f * mx[c] - 2 * b * (sx[c] - mx[c]) + f * f * gl.sumMM + 2 * f * b * gl.sumMU + b * b * gl.sumUU;
+    const d = sx[c] - f * gl.sumM - b * (N - gl.sumM);
+    e += (MEAN_WEIGHT * d * d) / N;
   }
   return e;
 }
@@ -300,9 +319,27 @@ export function matchCells(
   const grid: AnsiCell[][] = [];
   let bestE = Infinity;
   let best = 0;
-  const search = (g: number, sXX: number): void => {
+  const search = (g: number, sXX: number, everyPair: boolean): void => {
     const gl = GLYPHS[g];
     inkSums(gl, px, mx);
+    if (everyPair) {
+      // A dither mixes colours on either side of the cell's colour, and those
+      // are not the ones nearest to it: grey 120 is light grey over black.
+      // The mean term alone bounds the error from below, and most pairs miss
+      // the cell's colour by far, so they are dropped before the full sum.
+      const paper = N - gl.sumM;
+      for (let bg = 0; bg < bgLimit; bg++) {
+        for (let fg = gl.sumM === 0 ? 0 : fgCount - 1; fg >= 0; fg--) {
+          const d0 = sx[0] - pal[fg * 3] * gl.sumM - pal[bg * 3] * paper;
+          const d1 = sx[1] - pal[fg * 3 + 1] * gl.sumM - pal[bg * 3 + 1] * paper;
+          const d2 = sx[2] - pal[fg * 3 + 2] * gl.sumM - pal[bg * 3 + 2] * paper;
+          if ((MEAN_WEIGHT * (d0 * d0 + d1 * d1 + d2 * d2)) / N >= bestE) continue;
+          const e = pairError(pal, gl, fg, bg, sx, sXX, mx);
+          if (e < bestE) { bestE = e; best = packCell(g, fg, bg); }
+        }
+      }
+      return;
+    }
     // Candidates are the palette colours nearest the free least-squares fg and
     // bg. Plain lit and unlit means mislead when ink is fractional: the unlit
     // mean of a half-lit cell is grey, and black never made the shortlist.
@@ -363,8 +400,8 @@ export function matchCells(
       }
       bestE = Infinity;
       best = 0;
-      for (const g of shortG) if (g >= 0) search(g, sXX);
-      for (const g of RAMP) search(g, sXX);
+      for (const g of shortG) if (g >= 0) search(g, sXX, false);
+      for (const g of RAMP) search(g, sXX, true);
       const at = cy * cols + cx;
       if (prev) {
         const p = prev[at];
