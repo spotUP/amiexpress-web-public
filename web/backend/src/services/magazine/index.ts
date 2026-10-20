@@ -36,6 +36,7 @@ import {
 import { stripFeedBoilerplate } from '../news-bulletins';
 import { clipFilesFor } from './video-service';
 import { isStoryFileName, sidecarPath } from '@amiexpress/bbs-door-sdk/formats/magazine';
+import { writeFrontFile } from '@amiexpress/bbs-door-sdk/formats/magazine-front-file';
 import { isSameStory, isWorthReading, storyId, type Desk, type Story } from './story-store';
 
 /** One item as a feed produced it, before the magazine has opinions about it. */
@@ -337,8 +338,8 @@ export function publishMagazine(
   );
   writeAtomic(path.join(pagesDir, 'p100.txt'), `${renderPage(frontComposed)}\r\n`, 'latin1');
 
-  fs.writeFileSync(path.join(root, MAGAZINE, MAGAZINE_INDEX_FILE), JSON.stringify(index, null, 2), 'utf8');
-  fs.writeFileSync(path.join(root, MAGAZINE, MAGAZINE_FRONTPAGE_FILE), JSON.stringify(approvedIds, null, 2), 'utf8');
+  writeAtomic(path.join(root, MAGAZINE, MAGAZINE_INDEX_FILE), JSON.stringify(index, null, 2));
+  writeFrontFile(path.join(root, MAGAZINE), approvedIds);
 
   deps.log(`[magazine] published ${index.length} stories across ${new Set(index.map((e) => e.page)).size} pages`);
   return { index, familyPages };
@@ -356,8 +357,7 @@ export function readApproved(root: string): string[] {
 }
 
 export function writeApproved(root: string, ids: string[]): void {
-  fs.mkdirSync(path.join(root, MAGAZINE), { recursive: true });
-  writeAtomic(path.join(root, MAGAZINE, MAGAZINE_FRONTPAGE_FILE), JSON.stringify(ids, null, 2));
+  writeFrontFile(path.join(root, MAGAZINE), ids);
 }
 
 /**

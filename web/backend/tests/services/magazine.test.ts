@@ -212,6 +212,18 @@ describe('the front page is human-approved (§17)', () => {
     date: '2026-10-13', source: 's', firstSeen: 'now', seenCount: 1, origin: 'authored',
   });
 
+  it('replaces index.json and frontpage.json by rename, so a door reading them never sees half a file', () => {
+    // A read-only target refuses an in-place write (EACCES) but not a rename
+    // over it, so publishing beside one proves the swap.
+    const dir = board([mk('a1')], ['a1']);
+    publishMagazine([mk('a1')], readApproved(dir), depsFor(dir));
+    for (const f of ['index.json', 'frontpage.json']) fs.chmodSync(path.join(dir, 'Magazine', f), 0o444);
+    expect(() => publishMagazine([mk('a1')], readApproved(dir), depsFor(dir))).not.toThrow();
+    expect(JSON.parse(fs.readFileSync(path.join(dir, 'Magazine', 'frontpage.json'), 'utf8'))).toEqual(['a1']);
+    expect(fs.readdirSync(path.join(dir, 'Magazine')).filter((f) => f.includes('.tmp-'))).toEqual([]);
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
   it('says it is awaiting an editor when nothing is approved', () => {
     const dir = board([mk('a1'), mk('b2')]);
     publishMagazine([mk('a1'), mk('b2')], readApproved(dir), depsFor(dir));
