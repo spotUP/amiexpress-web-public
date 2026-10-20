@@ -22,8 +22,10 @@ import {
   readApproved,
   writeApproved,
   writeAtomic,
+  watchFrontPage,
   type IncomingItem,
 } from '../../src/services/magazine';
+import { writeFrontFile } from '@amiexpress/bbs-door-sdk/formats/magazine-front-file';
 import { classify, classifyFormat } from '../../src/services/magazine/classify';
 import { isWorthReading, storyId, normaliseHeadline, type Story } from '../../src/services/magazine/story-store';
 import { ARTICLE_MIN_BODY_CHARS, sidecarPath } from '@amiexpress/bbs-door-sdk/formats/magazine';
@@ -212,16 +214,39 @@ describe('the front page is human-approved (§17)', () => {
     date: '2026-10-13', source: 's', firstSeen: 'now', seenCount: 1, origin: 'authored',
   });
 
-  it('replaces index.json and frontpage.json by rename, so a door reading them never sees half a file', () => {
+  it('replaces index.json by rename, so a door reading it never sees half a file', () => {
     // A read-only target refuses an in-place write (EACCES) but not a rename
     // over it, so publishing beside one proves the swap.
     const dir = board([mk('a1')], ['a1']);
     publishMagazine([mk('a1')], readApproved(dir), depsFor(dir));
-    for (const f of ['index.json', 'frontpage.json']) fs.chmodSync(path.join(dir, 'Magazine', f), 0o444);
+    fs.chmodSync(path.join(dir, 'Magazine', 'index.json'), 0o444);
     expect(() => publishMagazine([mk('a1')], readApproved(dir), depsFor(dir))).not.toThrow();
-    expect(JSON.parse(fs.readFileSync(path.join(dir, 'Magazine', 'frontpage.json'), 'utf8'))).toEqual(['a1']);
     expect(fs.readdirSync(path.join(dir, 'Magazine')).filter((f) => f.includes('.tmp-'))).toEqual([]);
     fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('keeps a front page edit the editor saves while the magazine composes', () => {
+    // The compose read ['a1']; the door saved ['b2'] before it finished.
+    const dir = board([mk('a1'), mk('b2')], ['b2']);
+    publishMagazine([mk('a1'), mk('b2')], ['a1'], depsFor(dir));
+    expect(readApproved(dir)).toEqual(['b2']);
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('redraws page 100 when the door edits the front page, without waiting for the news tick', async () => {
+    const dir = board([mk('a1')]);
+    republishMagazine(depsFor(dir));
+    const p100 = () => fs.readFileSync(path.join(dir, 'Magazine', 'pages', 'p100.txt'), 'latin1');
+    expect(p100()).not.toContain('Story a1');
+    const watcher = watchFrontPage(depsFor(dir), 20);
+    try {
+      writeFrontFile(path.join(dir, 'Magazine'), ['a1']);
+      for (let i = 0; i < 100 && !p100().includes('Story a1'); i++) await new Promise((r) => setTimeout(r, 20));
+      expect(p100()).toContain('Story a1');
+    } finally {
+      watcher.close();
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
   });
 
   it('says it is awaiting an editor when nothing is approved', () => {

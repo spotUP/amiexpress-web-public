@@ -339,7 +339,10 @@ export function publishMagazine(
   writeAtomic(path.join(pagesDir, 'p100.txt'), `${renderPage(frontComposed)}\r\n`, 'latin1');
 
   writeAtomic(path.join(root, MAGAZINE, MAGAZINE_INDEX_FILE), JSON.stringify(index, null, 2));
-  writeFrontFile(path.join(root, MAGAZINE), approvedIds);
+  // frontpage.json is the editor's file and is only read here. Writing back
+  // the ids read at the start of the compose would undo an edit made by the
+  // door or the admin page while the compose ran.
+  composedFront.set(root, JSON.stringify(approvedIds));
 
   deps.log(`[magazine] published ${index.length} stories across ${new Set(index.map((e) => e.page)).size} pages`);
   return { index, familyPages };
@@ -358,6 +361,39 @@ export function readApproved(root: string): string[] {
 
 export function writeApproved(root: string, ids: string[]): void {
   writeFrontFile(path.join(root, MAGAZINE), ids);
+}
+
+/** Per board root: the approved ids the last compose drew page 100 from. */
+const composedFront = new Map<string, string>();
+
+/**
+ * Compose again whenever the editor's front page changes on disk. The door
+ * writes frontpage.json and cannot call the board, so without this page 100
+ * would show the old front page until the next news tick. A change that page
+ * 100 already shows (the admin page republishes itself) is skipped.
+ */
+export function watchFrontPage(deps: MagazineDeps, debounceMs = 500): fs.FSWatcher {
+  const dir = path.join(deps.rootDir(), MAGAZINE);
+  fs.mkdirSync(dir, { recursive: true });
+  let timer: NodeJS.Timeout | null = null;
+  const recompose = (): void => {
+    timer = null;
+    const root = deps.rootDir();
+    if (composedFront.get(root) === JSON.stringify(readApproved(root))) return;
+    try {
+      republishMagazine(deps);
+    } catch (err) {
+      deps.log(`[WARN] magazine: front page edit not composed (${(err as Error).message})`);
+    }
+  };
+  const watcher = fs.watch(dir, (_event, name) => {
+    if (String(name) !== MAGAZINE_FRONTPAGE_FILE) return;
+    if (timer) clearTimeout(timer);
+    timer = setTimeout(recompose, debounceMs);
+    timer.unref();
+  });
+  watcher.unref();
+  return watcher;
 }
 
 /**
