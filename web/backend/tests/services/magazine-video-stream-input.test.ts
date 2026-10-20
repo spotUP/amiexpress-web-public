@@ -11,6 +11,7 @@ import * as path from 'path';
 import { PassThrough } from 'stream';
 import type { ChildProcess } from 'child_process';
 import { createVideoService, defaultPrepare } from '../../src/services/magazine/video-service';
+import { fetchHttp, robotsByProcess, ROBOTS_TTL_MS } from '../../src/services/magazine/body-prefetch';
 
 jest.mock('axios');
 jest.mock('../../src/services/news-bulletins', () => ({ passHostGate: jest.fn(async () => {}) }));
@@ -49,5 +50,18 @@ describe('a video clip is streamed to ffmpeg, never downloaded', () => {
     expect(calls[0][calls[0].indexOf('-i') + 1]).toBe(URL_);
     expect(calls[0]).toContain('-user_agent');
     expect(calls[0].indexOf('-user_agent')).toBeLessThan(calls[0].indexOf('-i'));
+  });
+});
+
+describe('the first V on a page starts without a second robots.txt round', () => {
+  it('prepare reuses the robots verdict ingest already holds for the clip host', async () => {
+    // Regression: the converter kept its own empty robots cache, refetched robots.txt for a
+    // host ingest had just checked, and that fetch armed the 5 s host gate before ffmpeg ran.
+    const host = 'clips.example.net';
+    robotsByProcess.set(host, { kind: 'rules', rules: { allow: [], disallow: [] }, until: Date.now() + ROBOTS_TTL_MS });
+    (fetchHttp as jest.Mock).mockClear();
+    const r = await defaultPrepare({ url: `https://${host}/a.mp4`, kind: 'video' } as never, tools);
+    expect(r).toMatchObject({ input: `https://${host}/a.mp4` });
+    expect(fetchHttp).not.toHaveBeenCalled();
   });
 });

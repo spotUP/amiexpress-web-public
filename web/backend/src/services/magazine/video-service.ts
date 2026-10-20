@@ -43,8 +43,8 @@ import { boardRoot } from '../../utils/board-root.util';
 import { CLIP_MAX_SECONDS, ffmpegUrlInputOptions, mediaTools, resolveEmbed, type MediaTools } from './media-fetch';
 import {
   ARTICLE_HOST_GAP_MS,
-  createRobotsCache,
   fetchHttp,
+  robotsByProcess,
   robotsVerdict,
   type PrefetchDeps,
 } from './body-prefetch';
@@ -327,7 +327,7 @@ export function createVideoService(overrides: Partial<VideoServiceDeps> = {}): M
 export async function defaultPrepare(req: ClipRequest, tools: MediaTools): Promise<{ input: string; cleanup: () => void } | ClipOutcome> {
   if (!/^https?:\/\//i.test(req.url)) return '404';
   const robotsDeps: Pick<PrefetchDeps, 'now' | 'robots' | 'gate' | 'http'> = {
-    now: () => new Date(), robots: sharedRobots, gate: passHostGate, http: fetchHttp,
+    now: () => new Date(), robots: robotsByProcess, gate: passHostGate, http: fetchHttp,
   };
   try {
     const verdict = await robotsVerdict(req.url, robotsDeps, ARTICLE_HOST_GAP_MS);
@@ -342,8 +342,6 @@ export async function defaultPrepare(req: ClipRequest, tools: MediaTools): Promi
     return '404';
   }
 }
-
-const sharedRobots = createRobotsCache();
 
 /** Backend startup: make the service reachable by the MAG door (one per process). */
 export function startMagazineVideoService(): void {

@@ -405,7 +405,8 @@ export async function prefetchBodies(deps: PrefetchDeps): Promise<PrefetchSummar
 }
 
 let running = false;
-const robotsByProcess = createRobotsCache();
+/** The process's one robots cache: ingest and the live video converter ask the same verdicts. */
+export const robotsByProcess = createRobotsCache();
 
 /**
  * Start a prefetch run without waiting for it. One at a time: the next tick
