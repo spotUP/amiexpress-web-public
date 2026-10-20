@@ -169,31 +169,57 @@ export function lanczosDownsample(
   dstW: number,
   dstH: number,
 ): Float32Array {
-  const out = new Float32Array(dstW * dstH);
-  const scaleX = srcW / dstW;
-  const scaleY = srcH / dstH;
-  const a = 3;
-  const supX = a * Math.max(1, scaleX);
-  const supY = a * Math.max(1, scaleY);
-  const fx = Math.max(1, scaleX);
-  const fy = Math.max(1, scaleY);
-  for (let y = 0; y < dstH; y++) {
+  // The 2-D kernel is the product of two 1-D kernels, so the normalised sum
+  // is a row pass then a column pass with each axis's weights computed once.
+  // Summed per output pixel over the whole window it took about 4 s to shrink
+  // a 1200x800 picture to one sidecar size, on the board's main thread.
+  const tapsX = lanczosTaps(srcW, dstW);
+  const tapsY = lanczosTaps(srcH, dstH);
+  const rowsOut = new Float32Array(dstW * srcH);
+  for (let j = 0; j < srcH; j++) {
+    const row = j * srcW;
     for (let x = 0; x < dstW; x++) {
-      const srcX = (x + 0.5) * scaleX;
-      const srcY = (y + 0.5) * scaleY;
+      const { first, weights } = tapsX[x];
       let sum = 0;
-      let weightSum = 0;
-      for (let j = Math.max(0, Math.floor(srcY - supY)); j <= Math.min(srcH - 1, Math.ceil(srcY + supY)); j++) {
-        const wy = lanczosKernel((srcY - j - 0.5) / fy, a);
-        if (wy === 0) continue;
-        for (let i = Math.max(0, Math.floor(srcX - supX)); i <= Math.min(srcW - 1, Math.ceil(srcX + supX)); i++) {
-          const weight = lanczosKernel((srcX - i - 0.5) / fx, a) * wy;
-          sum += src[j * srcW + i] * weight;
-          weightSum += weight;
-        }
-      }
-      out[y * dstW + x] = weightSum !== 0 ? sum / weightSum : 0;
+      for (let k = 0; k < weights.length; k++) sum += src[row + first + k] * weights[k];
+      rowsOut[j * dstW + x] = sum;
+    }
+  }
+  const out = new Float32Array(dstW * dstH);
+  for (let y = 0; y < dstH; y++) {
+    const { first, weights } = tapsY[y];
+    for (let x = 0; x < dstW; x++) {
+      let sum = 0;
+      for (let k = 0; k < weights.length; k++) sum += rowsOut[(first + k) * dstW + x] * weights[k];
+      out[y * dstW + x] = sum;
     }
   }
   return out;
+}
+
+/**
+ * The source pixels and normalised Lanczos-3 weights for each destination
+ * pixel along one axis. All-zero weights stay zero, so that pixel comes out 0.
+ */
+function lanczosTaps(srcN: number, dstN: number): { first: number; weights: Float64Array }[] {
+  const a = 3;
+  const scale = srcN / dstN;
+  const f = Math.max(1, scale);
+  const sup = a * f;
+  const taps: { first: number; weights: Float64Array }[] = [];
+  for (let d = 0; d < dstN; d++) {
+    const centre = (d + 0.5) * scale;
+    const first = Math.max(0, Math.floor(centre - sup));
+    const last = Math.min(srcN - 1, Math.ceil(centre + sup));
+    const weights = new Float64Array(Math.max(0, last - first + 1));
+    let total = 0;
+    for (let i = first; i <= last; i++) {
+      const w = lanczosKernel((centre - i - 0.5) / f, a);
+      weights[i - first] = w;
+      total += w;
+    }
+    if (total !== 0) for (let k = 0; k < weights.length; k++) weights[k] /= total;
+    taps.push({ first, weights });
+  }
+  return taps;
 }
