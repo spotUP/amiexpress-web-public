@@ -43,7 +43,7 @@ let root: string;
 beforeEach(() => { get.mockReset(); spawn.mockReset(); root = fs.mkdtempSync(path.join(os.tmpdir(), 'mag-fail-')); });
 afterEach(() => { jest.useRealTimers(); fs.rmSync(root, { recursive: true, force: true }); });
 
-interface Case { name: string; want: string; setup: () => { media: ReturnType<typeof img>[]; http?: HttpResult; tools?: { ffmpeg: string | null; ytDlp: null }; timers?: boolean } }
+interface Case { name: string; want: string; setup: () => { media: ReturnType<typeof img>[]; http?: HttpResult; tools?: { ffmpeg: string | null; ytDlp: null, ffprobe: null }; timers?: boolean; probe?: boolean } }
 
 const cases: Case[] = [
   { name: 'HTTP 404', want: '404', setup: () => {
@@ -72,7 +72,7 @@ const cases: Case[] = [
       const child = Object.assign(new EventEmitter(), { stdout: new EventEmitter(), kill: jest.fn() });
       return child;
     });
-    return { media: [{ ...img(1, 'video'), url: 'https://img.example.org/clip.mp4' }], tools: { ffmpeg: '/fake/ffmpeg', ytDlp: null }, timers: true };
+    return { media: [{ ...img(1, 'video'), url: 'https://img.example.org/clip.mp4' }], tools: { ffmpeg: '/fake/ffmpeg', ytDlp: null, ffprobe: '/fake/ffprobe' }, probe: true, timers: true };
   } },
   { name: 'per-story media cap', want: 'story-cap', setup: () => {
     get.mockResolvedValue(reply(png(200, 200), 'image/png'));
@@ -88,6 +88,7 @@ describe('a failed picture is recorded once and never retried', () => {
     const deps = {
       now: () => NOW, robots: createRobotsCache(), gate: jest.fn(async () => {}), http,
       convert: blankCells, ...(s.tools ? { tools: s.tools } : {}),
+      ...(s.probe ? { probe: async () => ({ hasVideo: true, durationSec: 10 }) } : {}),
     };
     const story = { headline: 'H', body: 'Body text stays.', media: s.media };
     const file = path.join(root, 's1.json');
@@ -139,5 +140,42 @@ describe('a story with text but no pictures rendered gets them from the next pre
     const second = await prefetchBodies(deps);
     expect(second.pictured).toBe(0);
     expect(get).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('a video must play before its poster is shown', () => {
+  const tools = { ffmpeg: '/fake/ffmpeg', ytDlp: null, ffprobe: '/fake/ffprobe' };
+  const clip = { ...img(1, 'video'), url: 'https://img.example.org/clip.mp4', poster: 'https://img.example.org/poster.png' };
+  async function run(probe: unknown) {
+    get.mockResolvedValue(reply(png(200, 200), 'image/png'));
+    const deps = {
+      now: () => NOW, robots: createRobotsCache(), gate: jest.fn(async () => {}),
+      http: jest.fn(async (): Promise<HttpResult> => robotsOk), convert: blankCells, tools,
+      probe: jest.fn(async () => probe),
+    };
+    const file = path.join(root, 'v.json');
+    const out = await renderStoryMedia({ headline: 'H', body: 'B', media: [{ ...clip }] }, file, deps as never, writeAtomic);
+    return { out, side: readSidecar(file), probe: deps.probe };
+  }
+
+  it('too long: recorded oversize, no picture', async () => {
+    const r = await run({ hasVideo: true, durationSec: 181 });
+    expect(r.out.media![0].failure).toBe('oversize');
+    expect(r.side?.pictures ?? []).toHaveLength(0);
+  });
+  it('probe fails: recorded 404, no picture', async () => {
+    const r = await run('404');
+    expect(r.out.media![0].failure).toBe('404');
+    expect(r.side?.pictures ?? []).toHaveLength(0);
+  });
+  it('no video stream: recorded 404', async () => {
+    const r = await run({ hasVideo: false, durationSec: 10 });
+    expect(r.out.media![0].failure).toBe('404');
+  });
+  it('playable: keeps its poster picture', async () => {
+    const r = await run({ hasVideo: true, durationSec: 147 });
+    expect(r.out.media![0].failure).toBeUndefined();
+    expect(r.probe).toHaveBeenCalledWith(clip.url);
+    expect(r.side!.pictures).toHaveLength(1);
   });
 });

@@ -175,7 +175,8 @@ export interface PrefetchDeps {
   robots: RobotsCache;
   /** Test seams for the picture renderer (M7): the SDK converter and the tool lookup. */
   convert?: typeof frameToAnsiCells;
-  tools?: { ffmpeg: string | null; ytDlp: string | null };
+  tools?: import('./media-fetch').MediaTools;
+  probe?: import('./media-fetch').MediaFetchDeps['probe'];
 }
 
 export async function fetchHttp(

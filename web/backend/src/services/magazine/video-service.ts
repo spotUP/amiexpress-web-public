@@ -14,10 +14,8 @@
 import { spawn as nodeSpawn, type ChildProcess } from 'child_process';
 import * as crypto from 'crypto';
 import * as fs from 'fs';
-import * as os from 'os';
 import * as path from 'path';
 import * as zlib from 'zlib';
-import axios from 'axios';
 import {
   createTemporalState,
   encodeRichFrame,
@@ -42,10 +40,9 @@ import {
 } from '@amiexpress/bbs-door-sdk/formats/magazine-video';
 import { passHostGate } from '../news-bulletins';
 import { boardRoot } from '../../utils/board-root.util';
-import { mediaTools, type MediaTools } from './media-fetch';
+import { CLIP_MAX_SECONDS, ffmpegUrlInputOptions, mediaTools, resolveEmbed, type MediaTools } from './media-fetch';
 import {
   ARTICLE_HOST_GAP_MS,
-  BOARD_USER_AGENT,
   createRobotsCache,
   fetchHttp,
   robotsVerdict,
@@ -54,8 +51,7 @@ import {
 
 export const MAX_FFMPEG = 2;
 export const CACHE_CAP_BYTES = 500 * 1024 * 1024;
-export const CLIP_MAX_SECONDS = 180;
-export const CLIP_DOWNLOAD_CAP = 50 * 1024 * 1024;
+export { CLIP_MAX_SECONDS };
 /** Whole-run wall clock for one conversion. */
 export const JOB_TIMEOUT_MS = 15 * 60 * 1000;
 export const FRAMES_PER_CHUNK = 10;
@@ -225,7 +221,7 @@ export function createVideoService(overrides: Partial<VideoServiceDeps> = {}): M
           pending = [];
         };
         const args = [
-          '-v', 'error', '-i', src.input, '-an',
+          '-v', 'error', ...(/^https?:\/\//i.test(src.input) ? ffmpegUrlInputOptions() : []), '-i', src.input, '-an',
           '-vf', `fps=${fps},scale=${w}:${h}:force_original_aspect_ratio=decrease,pad=${w}:${h}:(ow-iw)/2:(oh-ih)/2`,
           '-f', 'rawvideo', '-pix_fmt', 'rgb24', 'pipe:1',
         ];
@@ -327,7 +323,8 @@ export function createVideoService(overrides: Partial<VideoServiceDeps> = {}): M
   };
 }
 
-async function defaultPrepare(req: ClipRequest, tools: MediaTools): Promise<{ input: string; cleanup: () => void } | ClipOutcome> {
+/** Exported for the regression test. */
+export async function defaultPrepare(req: ClipRequest, tools: MediaTools): Promise<{ input: string; cleanup: () => void } | ClipOutcome> {
   if (!/^https?:\/\//i.test(req.url)) return '404';
   const robotsDeps: Pick<PrefetchDeps, 'now' | 'robots' | 'gate' | 'http'> = {
     now: () => new Date(), robots: sharedRobots, gate: passHostGate, http: fetchHttp,
@@ -340,50 +337,13 @@ async function defaultPrepare(req: ClipRequest, tools: MediaTools): Promise<{ in
       const direct = await resolveEmbed(tools.ytDlp as string, req.url);
       return direct ? { input: direct, cleanup: () => undefined } : '404';
     }
-    const tmp = path.join(os.tmpdir(), `magvid-${crypto.randomBytes(8).toString('hex')}`);
-    const res = await axios.get(req.url, {
-      responseType: 'stream', timeout: 30_000, maxRedirects: 5, validateStatus: () => true,
-      headers: { 'User-Agent': BOARD_USER_AGENT, Accept: 'video/*' },
-    });
-    if (res.status < 200 || res.status >= 300) { res.data.destroy(); return '404'; }
-    const len = Number(res.headers?.['content-length'] ?? 0);
-    if (len > CLIP_DOWNLOAD_CAP) { res.data.destroy(); return 'oversize'; }
-    const cleanup = (): void => { try { fs.unlinkSync(tmp); } catch { /* none */ } };
-    const result = await new Promise<'ok' | ClipOutcome>((resolve) => {
-      const out = fs.createWriteStream(tmp);
-      let bytes = 0;
-      res.data.on('data', (d: Buffer) => {
-        bytes += d.length;
-        if (bytes > CLIP_DOWNLOAD_CAP) { res.data.destroy(); out.destroy(); resolve('oversize'); }
-      });
-      res.data.on('error', () => resolve('timeout'));
-      out.on('error', () => resolve('decode'));
-      out.on('finish', () => resolve('ok'));
-      res.data.pipe(out);
-    });
-    if (result !== 'ok') { cleanup(); return result; }
-    return { input: tmp, cleanup };
+    return { input: req.url, cleanup: () => undefined };
   } catch {
     return '404';
   }
 }
 
 const sharedRobots = createRobotsCache();
-
-function resolveEmbed(ytDlp: string, url: string): Promise<string | null> {
-  return new Promise((resolve) => {
-    const child = nodeSpawn(ytDlp, ['-g', '-f', 'best[height<=480]/best', '--no-playlist', url], { stdio: ['ignore', 'pipe', 'ignore'] });
-    let out = '';
-    const timer = setTimeout(() => child.kill('SIGKILL'), 30_000);
-    child.stdout?.on('data', (d: Buffer) => { out += d.toString('utf8'); });
-    child.on('error', () => { clearTimeout(timer); resolve(null); });
-    child.on('close', (code) => {
-      clearTimeout(timer);
-      const first = out.split('\n').map((l) => l.trim()).find((l) => /^https?:\/\//.test(l));
-      resolve(code === 0 && first ? first : null);
-    });
-  });
-}
 
 /** Backend startup: make the service reachable by the MAG door (one per process). */
 export function startMagazineVideoService(): void {

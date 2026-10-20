@@ -40,7 +40,7 @@ function make(over = {}) {
   kids = [];
   return createVideoService({
     dir,
-    tools: () => ({ ffmpeg: '/bin/ffmpeg', ytDlp: null }),
+    tools: () => ({ ffmpeg: '/bin/ffmpeg', ytDlp: null, ffprobe: null }),
     spawn: () => { const k = new FakeChild(); kids.push(k); return k as unknown as ChildProcess; },
     prepare: async () => ({ input: 'x', cleanup: () => undefined }),
     ...over,
@@ -131,7 +131,7 @@ describe('magazine video service', () => {
   });
 
   it('reports no-ffmpeg and no-yt-dlp without spawning', async () => {
-    const none = make({ tools: () => ({ ffmpeg: null, ytDlp: null }) });
+    const none = make({ tools: () => ({ ffmpeg: null, ytDlp: null, ffprobe: null }) });
     expect(await none.requestClip(REQ).done).toBe('no-ffmpeg');
     const noYt = make();
     expect(await noYt.requestClip({ ...REQ, kind: 'embed', url: 'https://youtu.be/x' }).done).toBe('no-yt-dlp');

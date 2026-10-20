@@ -37,6 +37,8 @@ export const STORY_MAX_BYTES = 12 * 1024 * 1024;
 export const STORY_MAX_WALL_MS = 90_000;
 /** ffmpeg gets this long for one still, then it is killed. */
 export const FFMPEG_STILL_TIMEOUT_MS = 15_000;
+/** Longest clip the page plays (the live converter stops at this many seconds). */
+export const CLIP_MAX_SECONDS = 180;
 /** The biggest PNG read back from ffmpeg (4 MP RGBA is 16 MB; PNG is smaller). */
 const MAX_FFMPEG_OUT_BYTES = 24 * 1024 * 1024;
 
@@ -51,7 +53,7 @@ export type ImageResult = { pixels: Pixels } | MediaFailure;
 // Tools
 // ---------------------------------------------------------------------------
 
-export interface MediaTools { ffmpeg: string | null; ytDlp: string | null }
+export interface MediaTools { ffmpeg: string | null; ytDlp: string | null; ffprobe: string | null }
 
 function onPath(name: string, envPath = process.env.PATH ?? ''): string | null {
   for (const dir of envPath.split(path.delimiter)) {
@@ -67,9 +69,9 @@ function onPath(name: string, envPath = process.env.PATH ?? ''): string | null {
 
 let toolsCache: MediaTools | null = null;
 
-/** ffmpeg and yt-dlp on PATH, looked up once. */
+/** ffmpeg, ffprobe and yt-dlp on PATH, looked up once. */
 export function mediaTools(): MediaTools {
-  toolsCache ??= { ffmpeg: onPath('ffmpeg'), ytDlp: onPath('yt-dlp') };
+  toolsCache ??= { ffmpeg: onPath('ffmpeg'), ytDlp: onPath('yt-dlp'), ffprobe: onPath('ffprobe') };
   return toolsCache;
 }
 
@@ -105,6 +107,8 @@ function budgetSpent(b: MediaBudget): boolean {
 export type MediaFetchDeps = Pick<PrefetchDeps, 'now' | 'robots' | 'gate' | 'http'> & {
   /** Override tool detection (tests). */
   tools?: MediaTools;
+  /** Override the clip probe (tests): what the clip at `input` holds. */
+  probe?: (input: string) => Promise<ClipProbe | MediaFailure>;
 };
 
 type Download = { bytes: Buffer; contentType: string } | MediaFailure;
@@ -272,8 +276,7 @@ export async function fetchImage(
 function ffmpegFrameFromUrl(ffmpeg: string, url: string): Promise<ImageResult> {
   return new Promise((resolve) => {
     const child = spawn(ffmpeg, [
-      '-v', 'error', '-protocol_whitelist', 'http,https,tcp,tls,crypto',
-      '-user_agent', BOARD_USER_AGENT, '-ss', '1', '-i', url,
+      '-v', 'error', ...ffmpegUrlInputOptions(), '-ss', '1', '-i', url,
       '-frames:v', '1', '-f', 'image2pipe', '-vcodec', 'png', 'pipe:1',
     ], { stdio: ['ignore', 'pipe', 'ignore'] });
     const out: Buffer[] = [];
@@ -298,6 +301,88 @@ function ffmpegFrameFromUrl(ffmpeg: string, url: string): Promise<ImageResult> {
       finish(png.length ? decodePng(png) : 'decode');
     });
   });
+}
+
+/** ffmpeg/ffprobe input options for reading a clip over http(s): one place for ingest and the live converter. */
+export function ffmpegUrlInputOptions(): string[] {
+  return ['-protocol_whitelist', 'http,https,tcp,tls,crypto', '-user_agent', BOARD_USER_AGENT];
+}
+
+/** What a clip holds, as far as playing it is concerned. */
+export interface ClipProbe { hasVideo: boolean; durationSec: number | null }
+
+/** ffprobe a clip address (or a resolved stream address). Time-limited like the still. Never throws. */
+export function ffprobeClip(ffprobe: string, input: string): Promise<ClipProbe | MediaFailure> {
+  return new Promise((resolve) => {
+    const child = spawn(ffprobe, [
+      '-v', 'error', ...ffmpegUrlInputOptions(),
+      '-show_entries', 'format=duration:stream=codec_type', '-of', 'json', input,
+    ], { stdio: ['ignore', 'pipe', 'ignore'] });
+    let out = '';
+    let settled = false;
+    const finish = (r: ClipProbe | MediaFailure): void => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      child.kill('SIGKILL');
+      resolve(r);
+    };
+    const timer = setTimeout(() => finish('timeout'), FFMPEG_STILL_TIMEOUT_MS);
+    child.on('error', () => finish('no-ffmpeg'));
+    child.stdout?.on('data', (c: Buffer) => { if (out.length < 65536) out += c.toString('utf8'); });
+    child.on('close', (code) => {
+      if (code !== 0) return finish('404');
+      try {
+        const j = JSON.parse(out) as { format?: { duration?: string }; streams?: Array<{ codec_type?: string }> };
+        const d = Number(j.format?.duration);
+        finish({ hasVideo: (j.streams ?? []).some((x) => x.codec_type === 'video'), durationSec: Number.isFinite(d) ? d : null });
+      } catch { finish('404'); }
+    });
+  });
+}
+
+/** The direct stream address of a YouTube/Vimeo page, from yt-dlp; null when it gives none. */
+export function resolveEmbed(ytDlp: string, url: string): Promise<string | null> {
+  return new Promise((resolve) => {
+    const child = spawn(ytDlp, ['-g', '-f', 'best[height<=480]/best', '--no-playlist', url], { stdio: ['ignore', 'pipe', 'ignore'] });
+    let out = '';
+    const timer = setTimeout(() => child.kill('SIGKILL'), 30_000);
+    child.stdout?.on('data', (d: Buffer) => { out += d.toString('utf8'); });
+    child.on('error', () => { clearTimeout(timer); resolve(null); });
+    child.on('close', (code) => {
+      clearTimeout(timer);
+      const first = out.split('\n').map((l) => l.trim()).find((l) => /^https?:\/\//.test(l));
+      resolve(code === 0 && first ? first : null);
+    });
+  });
+}
+
+/**
+ * The clip itself must play before its picture is shown: robots + host gate,
+ * then (embed) yt-dlp, then ffprobe says it has a video stream and is no longer
+ * than the live converter plays. null = playable, else the failure.
+ */
+async function verifyClip(media: Pick<StoryMedia, 'url' | 'kind'>, deps: MediaFetchDeps): Promise<MediaFailure | null> {
+  if (!/^https?:\/\//i.test(media.url)) return '404';
+  const tools = deps.tools ?? mediaTools();
+  if (!tools.ffmpeg) return 'no-ffmpeg';
+  if (!deps.probe && !tools.ffprobe) return 'no-ffmpeg';
+  if (media.kind === 'embed' && !tools.ytDlp) return 'no-yt-dlp';
+  const verdict = await robotsVerdict(media.url, deps, ARTICLE_HOST_GAP_MS);
+  if (verdict.kind !== 'allowed') return 'robots';
+  await deps.gate(media.url, ARTICLE_HOST_GAP_MS);
+  let input = media.url;
+  if (media.kind === 'embed') {
+    const direct = await resolveEmbed(tools.ytDlp as string, media.url);
+    if (!direct) return '404';
+    input = direct;
+  }
+  const probe = await (deps.probe ?? ((i: string) => ffprobeClip(tools.ffprobe as string, i)))(input);
+  if (typeof probe === 'string') return probe;
+  if (!probe.hasVideo) return '404';
+  if (probe.durationSec === null) return 'decode';
+  if (probe.durationSec > CLIP_MAX_SECONDS) return 'oversize';
+  return null;
 }
 
 /** The page address of a YouTube/Vimeo embed, and the oEmbed endpoint that answers for it. */
@@ -329,15 +414,12 @@ export async function fetchPoster(
 ): Promise<ImageResult> {
   try {
     if (media.kind === 'image') return await fetchImage(media, budget, deps);
+    const unplayable = await verifyClip(media, deps);
+    if (unplayable) return unplayable;
     if (media.kind === 'video' && media.poster) return await fetchImage({ url: media.poster }, budget, deps);
     if (budgetSpent(budget)) return 'story-cap';
     if (media.kind === 'video') {
-      if (!/^https?:\/\//i.test(media.url)) return '404';
-      const ffmpeg = (deps.tools ?? mediaTools()).ffmpeg;
-      if (!ffmpeg) return 'no-ffmpeg';
-      const verdict = await robotsVerdict(media.url, deps, ARTICLE_HOST_GAP_MS);
-      if (verdict.kind !== 'allowed') return 'robots';
-      await deps.gate(media.url, ARTICLE_HOST_GAP_MS);
+      const ffmpeg = (deps.tools ?? mediaTools()).ffmpeg as string;
       const r = await ffmpegFrameFromUrl(ffmpeg, media.url);
       if (typeof r !== 'string') budget.pictures++;
       return r;

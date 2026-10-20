@@ -167,7 +167,7 @@ describe('where the logic lives', () => {
     get.mockResolvedValue(reply(png(160, 120), 'image/png'));
     const http = jest.fn(async (url: string): Promise<HttpResult> =>
       url.includes('oembed') ? { status: 200, body: JSON.stringify({ thumbnail_url: 'https://i.ytimg.com/vi/abc/hq.png' }) } : robotsOk);
-    const deps = { now: () => NOW, robots: createRobotsCache(), gate: jest.fn(async () => {}), http, tools: { ffmpeg: null, ytDlp: null } };
+    const deps = { now: () => NOW, robots: createRobotsCache(), gate: jest.fn(async () => {}), http, tools: { ffmpeg: null, ytDlp: null, ffprobe: null } };
     const r = await fetchPoster({ url: 'https://www.youtube.com/embed/abc', kind: 'embed' }, createMediaBudget(), deps);
     expect(r).toEqual({ pixels: expect.objectContaining({ width: 160, height: 120 }) });
     expect(await fetchPoster({ url: 'https://cdn.example.org/clip.mp4', kind: 'video' }, createMediaBudget(), deps)).toBe('no-ffmpeg');

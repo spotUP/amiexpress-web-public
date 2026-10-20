@@ -117,7 +117,7 @@ describe('fetchImage', () => {
 
   it('reports no-ffmpeg for a format pngjs/jpeg-js cannot read when ffmpeg is missing', async () => {
     get.mockResolvedValue(reply(Buffer.from('RIFF....WEBPVP8 '), 'image/webp'));
-    const r = await fetchImage(item('https://img.example.org/p.webp'), createMediaBudget(), deps(robotsOk, { ffmpeg: null, ytDlp: null }));
+    const r = await fetchImage(item('https://img.example.org/p.webp'), createMediaBudget(), deps(robotsOk, { ffmpeg: null, ytDlp: null, ffprobe: null }));
     expect(r).toBe('no-ffmpeg');
   });
 
@@ -141,7 +141,7 @@ const hasFfmpeg = spawnSync('ffmpeg', ['-version']).status === 0;
     const make = spawnSync('ffmpeg', ['-v', 'error', '-f', 'lavfi', '-i', 'color=c=red:s=128x112', '-frames:v', '1', '-f', 'gif', 'pipe:1']);
     expect(make.status).toBe(0);
     get.mockResolvedValue(reply(make.stdout, 'image/gif'));
-    const r = await fetchImage(item('https://img.example.org/p.gif'), createMediaBudget(), deps(robotsOk, { ffmpeg: 'ffmpeg', ytDlp: null }));
+    const r = await fetchImage(item('https://img.example.org/p.gif'), createMediaBudget(), deps(robotsOk, { ffmpeg: 'ffmpeg', ytDlp: null, ffprobe: null }));
     expect(r).toEqual({ pixels: expect.objectContaining({ width: 128, height: 112 }) });
   });
 });
