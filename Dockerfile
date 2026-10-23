@@ -587,10 +587,11 @@ USER bbsuser
 
 # Expose ports
 # 3001: HTTP/WebSocket (BBS + Admin + SDK)
-# 2323: Telnet
-# 2222: SSH
-# 8080: SDK backend API
-EXPOSE 3001 2323 2222 8080 1541
+# 64128: Telnet (TELNET_PORT)
+# 31337: SSH (SSH_PORT)
+# 1541: FTP control (FTP_PORT)
+# The SDK preview (SDK_PREVIEW_PORT) is a dev tool and does not run in the image.
+EXPOSE 3001 64128 31337 1541
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \

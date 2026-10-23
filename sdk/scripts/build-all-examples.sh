@@ -102,10 +102,12 @@ cd "$SDK_DIR"
 echo -e "${BLUE}[START] Starting preview server...${NC}"
 echo ""
 
+PREVIEW_PORT="${SDK_PREVIEW_PORT:-8080}"
+
 # Kill existing server if running
-if lsof -Pi :8080 -sTCP:LISTEN -t >/dev/null 2>&1; then
-    echo -e "${YELLOW}[WARNING] Port 8080 in use, killing existing process...${NC}"
-    lsof -ti:8080 | xargs kill -9 2>/dev/null || true
+if lsof -Pi :$PREVIEW_PORT -sTCP:LISTEN -t >/dev/null 2>&1; then
+    echo -e "${YELLOW}[WARNING] Port $PREVIEW_PORT in use, killing existing process...${NC}"
+    lsof -ti:$PREVIEW_PORT | xargs kill -9 2>/dev/null || true
     sleep 1
 fi
 
@@ -113,14 +115,14 @@ fi
 (
     sleep 2
     if command -v open >/dev/null 2>&1; then
-        open http://localhost:8080
+        open http://localhost:$PREVIEW_PORT
     elif command -v xdg-open >/dev/null 2>&1; then
-        xdg-open http://localhost:8080
+        xdg-open http://localhost:$PREVIEW_PORT
     elif command -v start >/dev/null 2>&1; then
-        start http://localhost:8080
+        start http://localhost:$PREVIEW_PORT
     else
         echo -e "${YELLOW}Could not open browser automatically${NC}"
-        echo -e "Please visit: ${GREEN}http://localhost:8080${NC}"
+        echo -e "Please visit: ${GREEN}http://localhost:$PREVIEW_PORT${NC}"
     fi
 ) &
 

@@ -970,7 +970,7 @@ else
   echo ""
   printf "%b\n" "${BLUE}  [SDK]${RESET}    ${WHITE}http://localhost:3001/sdk/${RESET}"
   printf "%b\n" "           ${CYAN}Door Development Preview Tool${RESET}"
-  printf "%b\n" "           ${YELLOW}(Backend API on port 8080)${RESET}"
+  printf "%b\n" "           ${YELLOW}(Backend API on port ${SDK_PREVIEW_PORT:-8080})${RESET}"
   echo ""
 fi
 printf "%b\n" "${WHITE}  [API]${RESET}    ${WHITE}http://localhost:3001/api/${RESET}"
