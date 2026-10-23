@@ -2214,9 +2214,41 @@ console.warn(
     "rexxsyslib.library",
   ]);
 
+  /**
+   * Library names behind TaggedOpenLibrary's tag numbers (exec V39+ private
+   * LVO -810). Tag 0 and unknown tags open nothing. Order from the Kickstart
+   * 3.1 exec string table, as AROS exec TaggedOpenLibrary reproduces it.
+   */
+  static readonly TAGGED_LIBRARY_NAMES: readonly string[] = [
+    "",
+    "graphics.library",
+    "layers.library",
+    "intuition.library",
+    "dos.library",
+    "icon.library",
+    "expansion.library",
+    "utility.library",
+    "keymap.library",
+    "gadtools.library",
+    "workbench.library",
+  ];
+
+  /** TaggedOpenLibrary(tag): OpenLibrary(name for tag, 0). Returns base or 0. */
+  taggedOpenLibrary(tag: number): number {
+    const name = ExecLibrary.TAGGED_LIBRARY_NAMES[tag >>> 0];
+    if (!name) {
+      amigaGaps.record('exec', `TaggedOpenLibrary of unknown tag ${tag >>> 0}`, doorOf(this.emulator));
+      return 0;
+    }
+    return this.openLibraryByName(name, 0);
+  }
+
   openLibrary(nameAddr: number, version: number): number {
     // Read library name from memory
-    const name = this.emulator.readString(nameAddr);
+    return this.openLibraryByName(this.emulator.readString(nameAddr), version);
+  }
+
+  private openLibraryByName(name: string, version: number): number {
     const pc = this.emulator.getRegister(CPURegister.PC);
 debugLog(
       `[ExecLibrary][OpenLibrary] pc=0x${pc.toString(16)} "${name}" v${version}`

@@ -242,6 +242,17 @@ export const EXEC_VECTORS: LibraryVector[] = [
     handler: () => 0,
   },
   {
+    // -810 TaggedOpenLibrary (exec private, V39+; slot 135 in AROS exec).
+    // D0=tag. Opens a system library by number, version 0, and returns its
+    // base or 0. The Kickstart 3.x dos.library init opens utility.library
+    // this way and raises Alert 0x87000000 when it gets 0. Without this
+    // entry the exec jump table ended at -780, so the ROM's jsr -810(a6)
+    // ran into unmapped bytes and slid into the AddMemHandler stub.
+    offset: -810,
+    name: "TaggedOpenLibrary",
+    handler: (emu, lib: ExecLibrary) => lib.taggedOpenLibrary(emu.getRegister(0)),
+  },
+  {
     // -780 RemMemHandler (exec_lib.fd, NDK 3.1). A1=handler. Void. Pair
     // with AddMemHandler which we also no-op. Doors that allocate
     // memhandler for low-mem recovery skip the recovery path entirely.
@@ -388,7 +399,8 @@ export const EXEC_VECTORS: LibraryVector[] = [
     offset: -108, // LVO -108 (Alert)
     name: "Alert",
     handler: (emu, lib: ExecLibrary) => {
-      const code = emu.getRegister(0); // D0
+      // Alert(alertNum) takes the alert number in D7 (exec_lib.fd), not D0.
+      const code = emu.getRegister(7) >>> 0; // D7
 console.warn(
         `[ExecLibrary] Alert() called (code=0x${code.toString(16)})`
       );
