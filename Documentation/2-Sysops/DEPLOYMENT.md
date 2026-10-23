@@ -71,6 +71,13 @@ Configured in `/app/amiexpress/.env`:
 | `AMIGA_FILE_CACHE_MB` | 4 | Amiga file cache (MB) |
 | `CORS_ORIGINS` | - | Allowed origins for CORS |
 | `DEBUG` | false | Enable debug logging |
+| `JWT_SECRET`, `JWT_REFRESH_SECRET`, `SESSION_SECRET` | generated | Unset or `CHANGE_ME`: a random value is generated at first start and kept in `/app/data/.secrets` (mode 600). A value in `.env` wins. |
+| `BBS_TIMEZONE` | UTC | The board's time zone, e.g. `Europe/Stockholm` |
+| `FTP_PASSIVE_ADDRESS` | - | Public IP FTP passive mode advertises; without it PASV answers 425 |
+| `FTP_TLS_DIR`, `FTP_TLS_CERT`, `FTP_TLS_KEY`, `FTP_TLS_HOSTS` | - | FTPS. Empty = FTPS off. Host directory with certificates, and the `/certs/...` paths inside the container |
+| `DOOR_SERVER_URL` | - | Door server (e.g. `http://doorserver:3010`). Empty = none |
+
+A host that shares a Docker network with a door server adds it in an untracked `docker-compose.override.yml` (see the comment at the end of `docker-compose.yml`).
 
 ### Persistent Data
 

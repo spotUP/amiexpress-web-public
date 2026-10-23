@@ -638,3 +638,6 @@ Beeb/software/**
 
 # Menu door configs: the sysop's live data (Decision 31)
 /Menus/
+
+# Host-local compose additions (e.g. joining the doorserver network)
+/docker-compose.override.yml
