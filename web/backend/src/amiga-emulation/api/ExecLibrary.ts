@@ -12,7 +12,7 @@ import { MoiraEmulator, CPURegister } from "../cpu/MoiraEmulator";
 import * as fs from "fs";
 import * as amigafs from "../../utils/amigafs";
 import * as path from "path";
-import { debugLog } from "../../utils/debug-log";
+import { debugLog, isDebugEnabled } from "../../utils/debug-log";
 import { notifySysop } from "../../utils/sysop-alert.util";
 import { getSystemTime } from '../../utils/date-time.util';
 import * as memoryMap from "../memory-map";
@@ -3539,13 +3539,15 @@ debugLog(
 debugLog(`[ExecLibrary] FindSemaphore("${name}")`);
 
     // CRITICAL DEBUG: Log ALL calls to see what RTW is looking for
-    const fs = require('fs');
-    const allSemas = Array.from(this.publicSemaphores.keys()).join(', ');
-    fs.appendFileSync('/tmp/nodemgr-init-attempt.txt', `FindSemaphore("${name}") - total: ${this.publicSemaphores.size}\n`);
-    if (name.startsWith('AE')) {
-      const aeSemas = Array.from(this.publicSemaphores.keys()).filter(k => k.startsWith('AE')).join(', ');
-      console.log(`[ExecLibrary] FindSemaphore("${name}") - AE*: ${aeSemas || 'NONE'}`);
-      fs.appendFileSync('/tmp/nodemgr-init-attempt.txt', `  AE semaphores: ${aeSemas || 'NONE'}\n`);
+    // Trace only under DEBUG_68K: this runs on every FindSemaphore trap.
+    if (isDebugEnabled()) {
+      const fs = require('fs');
+      fs.appendFileSync('/tmp/nodemgr-init-attempt.txt', `FindSemaphore("${name}") - total: ${this.publicSemaphores.size}\n`);
+      if (name.startsWith('AE')) {
+        const aeSemas = Array.from(this.publicSemaphores.keys()).filter(k => k.startsWith('AE')).join(', ');
+        debugLog(`[ExecLibrary] FindSemaphore("${name}") - AE*: ${aeSemas || 'NONE'}`);
+        fs.appendFileSync('/tmp/nodemgr-init-attempt.txt', `  AE semaphores: ${aeSemas || 'NONE'}\n`);
+      }
     }
 
     // Search for semaphore in public registry

@@ -2010,7 +2010,7 @@ export function restoreFixedTerminal(socket: any, session: BBSSession): void {
 async function executeTypeScriptDoor(socket: any, session: BBSSession, door: Door, doorSession: DoorSession, hybridSessionId?: string | null): Promise<void> {
   const execId = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 console.log(`[executeTypeScriptDoor] ===== EXEC ID: ${execId} =====`);
-console.log(`[executeTypeScriptDoor] Starting TypeScript door: ${door.name}`);
+console.info(`[executeTypeScriptDoor] Starting TypeScript door: ${door.name}`);
 console.log(`[executeTypeScriptDoor] Door path: ${door.path}`);
 
   // Hide cursor immediately — before any door code runs or imports complete.
@@ -2656,7 +2656,7 @@ async function executeNativeGccDoor(
 ): Promise<void> {
   const { spawn } = require('child_process');
 
-console.log(`[executeNativeGccDoor] Starting GCC door: ${doorConfig.executablePath}`);
+console.info(`[executeNativeGccDoor] Starting GCC door: ${doorConfig.executablePath}`);
 
   // Enable game mode for GCC doors (they use different input handling)
   // Every launch route states the mode, so the one before it cannot leak
@@ -2701,7 +2701,7 @@ console.error(`[executeNativeGccDoor] Door stderr: ${error}`);
 
   // Handle process exit
   doorProcess.on('exit', (code: number) => {
-console.log(`[executeNativeGccDoor] Door exited with code ${code}`);
+console.info(`[executeNativeGccDoor] Door exited with code ${code}`);
 
     // Clean up
     disableGameMode(socket, session);
@@ -2735,7 +2735,7 @@ async function executeAmigaDoor(socket: any, session: BBSSession, door: any, doo
   const __doorT0 = Date.now();
   (session as any).__doorT0 = __doorT0;
 console.log(`[TIMING] executeAmigaDoor ENTRY door=${door.name} t=0ms`);
-console.log(`[executeAmigaDoor] Starting Amiga door: ${door.name} (${door.type})`);
+console.info(`[executeAmigaDoor] Starting Amiga door: ${door.name} (${door.type})`);
 console.log(`[executeAmigaDoor] Path: ${door.path}`);
   fs.appendFileSync('/tmp/bbs-debug.log', `[${new Date().toISOString()}] executeAmigaDoor START: door="${door.name}" type="${door.type}" path="${door.path}"\n`);
   disableShortcuts(session);

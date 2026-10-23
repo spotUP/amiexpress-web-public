@@ -12,6 +12,7 @@
  */
 import * as fs from 'fs';
 import * as path from 'path';
+import { isDebugEnabled } from './debug-log';
 import * as amigafs from './amigafs';
 import { boardRoot } from './board-root.util';
 import { InfoFileParser } from '../services/info-file-parser';
@@ -323,7 +324,7 @@ export function runAmigaProgram(doorPath: string, options: RunAmigaProgramOption
           console.warn(`[AmigaProgramRunner] Runner output:\n${trimmed}`);
         }
       }
-      if (trimmed) {
+      if (trimmed && isDebugEnabled()) {
         try {
           const logFile = path.join(appRootPath, 'logs', 'door-68k.log');
           fs.appendFileSync(logFile, `[BatchRunner] door=${doorPath} node=${nodeId} code=${code}\n${trimmed}\n`, { encoding: 'utf8' });

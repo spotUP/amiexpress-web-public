@@ -18,7 +18,7 @@ import { convertAmigaBytesToAscii } from "../utils/character-conversion";
 import { initializeENVFiles } from "../utils/env-initializer";
 import { amigaEnvArchiveDir, amigaEnvDir, amigaRamDir } from "../utils/env-paths";
 import { getSystemTime, dateTimeToDateStamp, dateStampToDateTime } from '../../utils/date-time.util';
-import { debugLog } from "../../utils/debug-log";
+import { debugLog, isDebugEnabled } from "../../utils/debug-log";
 import { narrowVariants } from "../../utils/narrow-art.util";
 import type { FileShadowProvider } from "./file-shadow";
 
@@ -485,7 +485,7 @@ debugLog(`[dos.library] Allocated FileHandle structs: stdin=0x${this.stdinBptr.t
     this.fileManager.setStdinBptr(this.stdinBptr);
     this.fileManager.setStdoutBptr(this.stdoutBptr);
 
-    try {
+    if (isDebugEnabled()) try {
       const assigns = this.pathManager.getAssigns();
       const logPath = path.resolve(__dirname, '../../../../../logs/door-68k.log');
       const lines = [`[PathManager] Assigns at init:`];
@@ -2077,7 +2077,7 @@ debugLog(`[dos.library] NextDosEntry(dlist=0x${dlistPtr.toString(16)}, flags=0x$
 
     // DEBUG: Log FGets call
     const fs = require('fs');
-    try {
+    if (isDebugEnabled()) try {
       fs.appendFileSync(FGETS_DEBUG_LOG,
         `[FGets] ${new Date().toISOString()} handle=0x${handle.toString(16)} bufPtr=0x${bufPtr.toString(16)} maxLen=${maxLen}\n`);
     } catch (e) { /* ignore */ }
@@ -2103,7 +2103,7 @@ debugLog(`[dos.library] NextDosEntry(dlist=0x${dlistPtr.toString(16)}, flags=0x$
     this.emulator.writeMemory(bufPtr + bytesRead, 0);
 
     // DEBUG: Log result
-    try {
+    if (isDebugEnabled()) try {
       const result = bytesRead === 0 ? 'EOF/empty' : `${bytesRead} bytes`;
       fs.appendFileSync(FGETS_DEBUG_LOG,
         `[FGets] Result: ${result}\n`);

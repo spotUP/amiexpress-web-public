@@ -1,6 +1,7 @@
 import * as fs from "fs";
 import * as amigafs from "../../utils/amigafs";
 import path from "path";
+import { debugLog } from "../../utils/debug-log";
 
 // Performance: Verbose 68K debugging is disabled by default
 // Set DEBUG_68K=1 to enable detailed execution tracing
@@ -253,11 +254,11 @@ export class MoiraEmulator {
     this.waitingForSignal = waiting;
     this.waitingForSignalMask = signalMask;
     if (waiting) {
-console.log(
+debugLog(
         `[MoiraEmulator] CPU now BLOCKED in Wait(0x${signalMask.toString(16)})`
       );
     } else {
-console.log(`[MoiraEmulator] CPU RESUMED from Wait()`);
+debugLog(`[MoiraEmulator] CPU RESUMED from Wait()`);
     }
   }
 
@@ -287,7 +288,7 @@ console.log(`[MoiraEmulator] CPU RESUMED from Wait()`);
   pause(resumeCallback?: () => void): void {
     this.paused = true;
     this.resumeCallback = resumeCallback || null;
-console.log("[MoiraEmulator] Emulator PAUSED (waiting for async input)");
+debugLog("[MoiraEmulator] Emulator PAUSED (waiting for async input)");
     if (this.pauseListener) {
       try {
         this.pauseListener();
@@ -301,7 +302,7 @@ console.log("[MoiraEmulator] Emulator PAUSED (waiting for async input)");
    * Resume emulator execution after pause
    */
   resume(): void {
-console.log("[MoiraEmulator] Emulator RESUMING from pause");
+debugLog("[MoiraEmulator] Emulator RESUMING from pause");
     this.paused = false;
     if (this.resumeCallback) {
       const callback = this.resumeCallback;
@@ -351,7 +352,7 @@ console.log("[MoiraEmulator] Emulator RESUMING from pause");
     this.module = await createMoiraModule();
     if (!this.module) throw new Error("Failed to load Moira module");
     this.cpu = new this.module.MoiraCPU(this.memorySize);
-console.log(`[MoiraEmulator] moira.js loaded from ${moiraPath}`);
+debugLog(`[MoiraEmulator] moira.js loaded from ${moiraPath}`);
     // Don't reset yet - wait until ROM is loaded
   }
 
@@ -367,9 +368,9 @@ console.log(`[MoiraEmulator] moira.js loaded from ${moiraPath}`);
     this.cpu.loadROM(vec);
     vec.delete();
 
-console.log(`[MoiraEmulator] ROM loaded (${romData.length} bytes)`);
-console.log(`[MoiraEmulator] ROM mapped to 0xF80000-0xFFFFFF`);
-console.log(`[MoiraEmulator] Exception vectors copied to 0x000000`);
+debugLog(`[MoiraEmulator] ROM loaded (${romData.length} bytes)`);
+debugLog(`[MoiraEmulator] ROM mapped to 0xF80000-0xFFFFFF`);
+debugLog(`[MoiraEmulator] Exception vectors copied to 0x000000`);
   }
 
   /**
@@ -379,14 +380,14 @@ console.log(`[MoiraEmulator] Exception vectors copied to 0x000000`);
   loadExtensionROM(extRomData: Uint8Array, baseAddress: number = 0xE00000): void {
     if (!this.cpu || !this.module) throw new Error("Emulator not initialized");
 
-console.log(`[MoiraEmulator] Loading extension ROM (${extRomData.length} bytes) at 0x${baseAddress.toString(16)}`);
+debugLog(`[MoiraEmulator] Loading extension ROM (${extRomData.length} bytes) at 0x${baseAddress.toString(16)}`);
 
     // Write extension ROM data directly to memory
     for (let i = 0; i < extRomData.length; i++) {
       this.writeMemory(baseAddress + i, extRomData[i]);
     }
 
-console.log(`[MoiraEmulator] Extension ROM loaded at 0x${baseAddress.toString(16)}-0x${(baseAddress + extRomData.length - 1).toString(16)}`);
+debugLog(`[MoiraEmulator] Extension ROM loaded at 0x${baseAddress.toString(16)}-0x${(baseAddress + extRomData.length - 1).toString(16)}`);
   }
 
   loadProgram(binary: Uint8Array, address: number = 0x1000): void {
@@ -410,7 +411,7 @@ console.log(`[MoiraEmulator] Extension ROM loaded at 0x${baseAddress.toString(16
     if (this.executeCallCount <= 5) {
       const pc = this.cpu.getRegister(16);
       const sp = this.cpu.getRegister(15);
-console.log(
+debugLog(
         `[MoiraEmulator] execute() call #${
           this.executeCallCount
         }: PC=0x${pc.toString(16)}, SP=0x${sp.toString(16)}, cycles=${cycles}`
@@ -473,14 +474,14 @@ console.error("[MoiraEmulator] Falling back to execute(20)");
     if (!this.cpu) throw new Error("Emulator not initialized");
     // DEBUG: Log D0 sets
     if (reg === 0 && value === 0x20000) {
-console.log(
+debugLog(
         `[MoiraEmulator.ts] setRegister(D0, 0x${value.toString(16)}) called`
       );
     }
     this.cpu.setRegister(reg, value);
     if (reg === 0 && value === 0x20000) {
       const verify = this.cpu.getRegister(0);
-console.log(
+debugLog(
         `[MoiraEmulator.ts] After setRegister, getRegister(D0) returns: 0x${verify.toString(
           16
         )}`
@@ -498,7 +499,7 @@ console.log(
 
     // DEBUG: Catch writes to debug marker address 0xDEB000-0xDEB003
     if (address >= 0xdeb000 && address <= 0xdeb003) {
-console.log(`[DEBUG-MARKER] Write to 0x${address.toString(16)} = 0x${value.toString(16).padStart(2, '0')}`);
+debugLog(`[DEBUG-MARKER] Write to 0x${address.toString(16)} = 0x${value.toString(16).padStart(2, '0')}`);
     }
 
     // ULTRATHINK: Detect writes to ROM region (0xF80000-0xFFFFFF)
@@ -520,7 +521,7 @@ console.trace();
       if (isCodeWrite) {
         // If writing to code near PC (within 64KB), refill prefetch queue
         if (Math.abs(address - pc) < 0x10000) {
-console.log(`[Self-Mod Code] Write to code at 0x${address.toString(16)}, PC=0x${pc.toString(16)} - refilling prefetch`);
+          if (DEBUG_68K) debugLog(`[Self-Mod Code] Write to code at 0x${address.toString(16)}, PC=0x${pc.toString(16)} - refilling prefetch`);
           this.cpu.setMemoryByte(address, value);
           this.refillPrefetch(); // Invalidate instruction cache
           return;
@@ -550,7 +551,7 @@ console.log(`[Self-Mod Code] Write to code at 0x${address.toString(16)}, PC=0x${
             /* ignore logging errors */
           }
         } else {
-console.log(msg.trimEnd());
+debugLog(msg.trimEnd());
         }
       }
     }
@@ -562,7 +563,7 @@ console.log(msg.trimEnd());
   registerCodeRegion(start: number, size: number): void {
     const end = start + size - 1;
     this.codeRegions.push({ start, end });
-console.log(`[Self-Mod Code] Registered CODE region: 0x${start.toString(16)}-0x${end.toString(16)} (${size} bytes)`);
+debugLog(`[Self-Mod Code] Registered CODE region: 0x${start.toString(16)}-0x${end.toString(16)} (${size} bytes)`);
   }
 
   /**
@@ -777,7 +778,7 @@ console.error(`!!! ROM WRITE DETECTED (bulk) !!! Range: 0x${address.toString(16)
     if (typeof (this.cpu as any).refillPrefetch === "function") {
       if (DEBUG_68K) {
         const pcBefore = this.cpu.getRegister(16);
-console.log(`[MOIRA] refillPrefetch() called at PC=0x${pcBefore.toString(16)}`);
+debugLog(`[MOIRA] refillPrefetch() called at PC=0x${pcBefore.toString(16)}`);
       }
       (this.cpu as any).refillPrefetch();
     } else {
@@ -792,7 +793,7 @@ console.warn(`[MOIRA] refillPrefetch() not available in WASM module!`);
 
   setLibraryTrapHandler(handler: (pc: number) => boolean): void {
     this.libraryTrapHandler = handler;
-console.log("[MoiraEmulator] Library trap handler registered");
+debugLog("[MoiraEmulator] Library trap handler registered");
   }
 
   /**
@@ -801,7 +802,7 @@ console.log("[MoiraEmulator] Library trap handler registered");
    */
   handleIllegal(pc: number): boolean {
     if (DEBUG_68K) {
-console.log(
+debugLog(
         `[MoiraEmulator] *** ILLEGAL instruction detected at PC=0x${pc.toString(
           16
         )} ***`
@@ -812,7 +813,7 @@ console.log(
       const handled = this.libraryTrapHandler(pc);
       if (handled) {
         if (DEBUG_68K) {
-console.log("[MoiraEmulator] ✅ Library trap handled by LibraryTraps");
+debugLog("[MoiraEmulator] ✅ Library trap handled by LibraryTraps");
         }
         this.refillPrefetch();
         return true;
@@ -822,14 +823,14 @@ console.log("[MoiraEmulator] ✅ Library trap handled by LibraryTraps");
     // Fallback: Simulate RTS with D0=0 for unhandled ILLEGAL
     // Always log unhandled ILLEGAL instructions as they may indicate missing trap handlers
     const a6 = this.getRegister(CPURegister.A6);
-    console.log(
+    console.warn(
       `[MoiraEmulator] *** UNHANDLED ILLEGAL at PC=0x${pc.toString(16)} A6=0x${a6.toString(16)} ***`
     );
-    console.log(
+    console.warn(
       `[MoiraEmulator]   If this is a library call, expected offset would be PC-A6=${(pc - a6).toString(10)} (0x${(pc - a6 >>> 0).toString(16)})`
     );
     if (DEBUG_68K) {
-      console.log("[MoiraEmulator] Simulating RTS (D0=0)");
+      debugLog("[MoiraEmulator] Simulating RTS (D0=0)");
     }
     this.setRegister(CPURegister.D0, 0);
 
@@ -849,26 +850,26 @@ console.log("[MoiraEmulator] ✅ Library trap handled by LibraryTraps");
    */
   private handleIllegalInstruction(): boolean {
     if (!this.libraryTrapHandler) {
-console.log(
+debugLog(
         "[MoiraEmulator] ILLEGAL instruction - no library trap handler"
       );
       return false;
     }
 
     const pc = this.getRegister(CPURegister.PC);
-console.log(
+if (DEBUG_68K) debugLog(
       `[MoiraEmulator] ILLEGAL instruction at PC=0x${pc.toString(16)}`
     );
 
     // Route to LibraryTraps
     const handled = this.libraryTrapHandler(pc);
     if (handled) {
-console.log("[MoiraEmulator] Library trap handled");
+      if (DEBUG_68K) debugLog("[MoiraEmulator] Library trap handled");
       return true;
     }
 
     // Default ILLEGAL handling - simulate RTS
-console.log("[MoiraEmulator] ILLEGAL - simulating RTS (D0=0)");
+    if (DEBUG_68K) debugLog("[MoiraEmulator] ILLEGAL - simulating RTS (D0=0)");
     this.setRegister(CPURegister.D0, 0);
 
     // Pop return address and continue
@@ -895,7 +896,7 @@ console.log("[MoiraEmulator] ILLEGAL - simulating RTS (D0=0)");
     }
     if (this.cpu.setOverclocking) {
       this.cpu.setOverclocking(factor);
-console.log(`[MoiraEmulator] Overclocking set to ${factor}x`);
+debugLog(`[MoiraEmulator] Overclocking set to ${factor}x`);
     } else {
 console.warn(
         "[MoiraEmulator] setOverclocking not available (rebuild WASM)"
@@ -925,7 +926,7 @@ console.warn(
     }
     if (this.cpu.setDebugMemoryAccess) {
       this.cpu.setDebugMemoryAccess(enabled);
-console.log(
+debugLog(
         `[MoiraEmulator] Debug memory access logging: ${enabled ? "ON" : "OFF"}`
       );
     }
@@ -940,7 +941,7 @@ console.log(
     }
     if (this.cpu.setDebugStackWrites) {
       this.cpu.setDebugStackWrites(enabled);
-console.log(
+debugLog(
         `[MoiraEmulator] Debug stack write logging: ${enabled ? "ON" : "OFF"}`
       );
     } else {
@@ -957,7 +958,7 @@ console.warn("[MoiraEmulator] setDebugStackWrites not available (rebuild WASM)")
     }
     if (this.cpu.setDebugExceptions) {
       this.cpu.setDebugExceptions(enabled);
-console.log(
+debugLog(
         `[MoiraEmulator] Debug exception logging: ${enabled ? "ON" : "OFF"}`
       );
     }
@@ -972,7 +973,7 @@ console.log(
     }
     if (this.cpu.setDebugAddressErrors) {
       this.cpu.setDebugAddressErrors(enabled);
-console.log(
+debugLog(
         `[MoiraEmulator] Debug address error logging: ${enabled ? "ON" : "OFF"}`
       );
     }
@@ -987,7 +988,7 @@ console.log(
     }
     if (this.cpu.setDebugWatchpoints) {
       this.cpu.setDebugWatchpoints(enabled);
-console.log(
+debugLog(
         `[MoiraEmulator] Debug watchpoint logging: ${enabled ? "ON" : "OFF"}`
       );
     }
@@ -1002,7 +1003,7 @@ console.log(
     }
     if (this.cpu.setWatchRange) {
       this.cpu.setWatchRange(start, end);
-console.log(
+debugLog(
         `[MoiraEmulator] Watch range set: 0x${start.toString(
           16
         )}-0x${end.toString(16)}`
@@ -1021,7 +1022,7 @@ console.warn("[MoiraEmulator] setWatchRange not available (rebuild WASM)");
     }
     if (this.cpu.enableCallTracking) {
       this.cpu.enableCallTracking(enabled);
-console.log(
+debugLog(
         `[MoiraEmulator] Call tracking: ${enabled ? "ON" : "OFF"}`
       );
     }

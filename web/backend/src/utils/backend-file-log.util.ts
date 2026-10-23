@@ -20,6 +20,7 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
+import { isLogGateNoop } from './log-level.util';
 
 const MAX_BYTES = 32 * 1024 * 1024; // 32 MB, then rotate to .1
 let logPath: string | null = null;
@@ -83,6 +84,9 @@ export function installBackendFileLog(dataDir: string): void {
   ];
 
   for (const [method, label] of levels) {
+    // A method the LOG_LEVEL gate silenced stays silent: its lines are never
+    // written to backend.log either.
+    if (isLogGateNoop(console[method])) continue;
     const original = console[method].bind(console);
     console[method] = (...args: unknown[]) => {
       original(...args); // stdout first: docker logs must not lose a line

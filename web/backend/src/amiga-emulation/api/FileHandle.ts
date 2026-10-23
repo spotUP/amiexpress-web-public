@@ -8,6 +8,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as amigafs from '../../utils/amigafs';
+import { debugLog, isDebugEnabled } from '../../utils/debug-log';
 import { getSystemTime } from '../../utils/date-time.util';
 
 // Debug log path - uses BBS_DATA_DIR env var or falls back to cwd
@@ -337,12 +338,12 @@ console.error('[FileHandle] Attempted write on memory-backed handle');
     }
 
     try {
-console.log(`[FileHandle] write ${data.length} bytes to ${this.sysPath}`);
+      debugLog(`[FileHandle] write ${data.length} bytes to ${this.sysPath}`);
       try {
         // Mirror to door log for debugging batch outputs (stable path to repo logs)
         const logPath = path.resolve(__dirname, '../../../../../logs/door-68k.log');
         const line = `[FileWrite] ${getSystemTime().toISOString()} ${this.amiPath} -> ${this.sysPath} bytes=${data.length}\n`;
-        require('fs').appendFileSync(logPath, line, { encoding: 'utf8' });
+        if (isDebugEnabled()) require('fs').appendFileSync(logPath, line, { encoding: 'utf8' });
       } catch {
         /* ignore */
       }

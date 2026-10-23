@@ -1,4 +1,5 @@
 import "reflect-metadata"; // Must be first import for tsyringe decorators
+import "./utils/install-log-gate"; // LOG_LEVEL gate: before any module logs at import time
 import { startEventLoopWatchdog } from "./server/event-loop-watchdog";
 // Type-only (erased at runtime, so it cannot displace reflect-metadata).
 import type { PetsciiRenderCtx, PetsciiSpan } from './handlers/petscii-screen.render';
@@ -1533,8 +1534,8 @@ console.log('[SETUP] SKIP_SERVER_START=1 - handlers wired, no listeners bound');
 
     // Start HTTP/Socket.IO server
     server.listen(port, host, () => {
-console.log(`[OK] HTTP/WebSocket Server running on ${host}:${port}`);
-console.log(`[WEB] BBS accessible at http://localhost:${port}/`);
+console.info(`[OK] HTTP/WebSocket Server running on ${host}:${port}`);
+console.info(`[WEB] BBS accessible at http://localhost:${port}/`);
       // Pay the index build now, while the board is empty, instead of making
       // the admin's first Screens click (and any caller logging in during it)
       // wait for it. Defers itself while anyone is connected.
@@ -1581,7 +1582,7 @@ console.error("[WS-Terminal] Failed to attach:", err);
       // Handle C64 terminal auto-detection (skip graphics prompt, show BBSTITLE directly)
       telnetServer.on("c64-detected", handleC64Detected);
       await telnetServer.start();
-console.log(`[OK] Telnet Server ready on port ${telnetPort}`);
+console.info(`[OK] Telnet Server ready on port ${telnetPort}`);
 console.log(`[TELNET] Connect: telnet localhost ${telnetPort}`);
     } catch (error) {
 console.error(`[WARNING] Failed to start Telnet server:`, error);
@@ -1608,7 +1609,7 @@ console.warn(`[WARNING] ${telnetPetsciiPortWarning}`);
         });
         telnetPetsciiServer.on("c64-detected", handleC64Detected);
         await telnetPetsciiServer.start();
-console.log(`[OK] PETSCII Telnet Server ready on port ${telnetPetsciiPort}`);
+console.info(`[OK] PETSCII Telnet Server ready on port ${telnetPetsciiPort}`);
 console.log(`[TELNET] PETSCII connect: telnet localhost ${telnetPetsciiPort}`);
       } catch (error) {
 console.error(`[WARNING] Failed to start PETSCII Telnet server:`, error);
@@ -1639,7 +1640,7 @@ console.warn(
         setupTelnetSSHHandler(connection, "ssh", transportDeps);
       });
       await sshServer.start();
-console.log(`[OK] SSH Server ready on port ${sshPort}`);
+console.info(`[OK] SSH Server ready on port ${sshPort}`);
 console.log(`[SSH] Connect: ssh -p ${sshPort} user@localhost`);
     } catch (error) {
 console.error(`[WARNING] Failed to start SSH server:`, error);
@@ -1661,7 +1662,7 @@ console.log("   BBS will continue without SSH support");
       const ftpServer = await startFtpServer(ftpConfig, boardFtpDeps((id: string) => io.of('/').sockets.has(id)));
       if (ftpServer) {
         const bound = ftpServer.address();
-console.log(`[OK] FTP Server ready on port ${bound?.port}`);
+console.info(`[OK] FTP Server ready on port ${bound?.port}`);
 console.log(`[FTP] Connect: ftp -p localhost ${bound?.port} (AUTH TLS required from off the box)`);
       }
     } catch (error) {
@@ -1670,7 +1671,7 @@ console.log("   BBS will continue without FTP support");
     }
 
 console.log("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-console.log("[READY] AmiExpress BBS is ready for connections!");
+console.info("[READY] AmiExpress BBS is ready for connections!");
 console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
   } catch (error) {
 console.error("[ERROR] Failed to start server:", error);

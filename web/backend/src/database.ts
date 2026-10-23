@@ -138,7 +138,7 @@ console.log('✓ Foreign keys enabled');
       const { OperatorChatRepository } = require('./database/operator-chat.repository');
       this.operatorChatRepo = new OperatorChatRepository(this.db);
 
-console.log('✅ Connected to SQLite database');
+console.info('✅ Connected to SQLite database');
     } catch (error) {
 console.error('❌ Failed to connect to SQLite database:');
 console.error('Error type:', error instanceof Error ? error.constructor.name : typeof error);
@@ -3426,7 +3426,7 @@ console.log('  ✓ Created sysop user');
 console.log(`  ✓ Created protocol: ${proto.protocol_name}`);
       }
 
-console.log('✓ Database initialization completed successfully');
+console.info('✓ Database initialization completed successfully');
     } catch (error) {
 console.error('✗ Database initialization failed:', error);
     }

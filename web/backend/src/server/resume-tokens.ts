@@ -137,6 +137,6 @@ export function issueResumeTokenForLogin(session: { nodeId?: number }, userId: s
     return undefined;
   }
   const token = issueResumeToken(session, userId, nodeId);
-  console.log(`[LOGIN] node ${nodeId}: resume token issued (fingerprint ${tokenFingerprint(token)})`);
+  console.info(`[LOGIN] node ${nodeId}: resume token issued (fingerprint ${tokenFingerprint(token)})`);
   return token;
 }

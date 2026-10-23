@@ -11,16 +11,18 @@ import * as fs from 'fs';
 import * as amigafs from '../utils/amigafs';
 import * as path from 'path';
 import { getSystemTime } from '../utils/date-time.util';
+import { debugLog, isDebugEnabled } from '../utils/debug-log';
 
 export class DoorLogger {
   private logPath: string;
   private doorName: string;
   private sessionId: string;
   private startTime: Date;
-  private enabled: boolean = true;
+  // 68K trace output runs only under DEBUG_68K; off, no file is created or written.
+  private enabled: boolean = isDebugEnabled();
 
   constructor(doorName: string, nodeId?: number | string) {
-console.log(`[DoorLogger] Creating logger for door: ${doorName} node: ${nodeId}`);
+    debugLog(`[DoorLogger] Creating logger for door: ${doorName} node: ${nodeId}`);
     this.doorName = doorName.replace(/[^a-zA-Z0-9_-]/g, '_');
     this.startTime = getSystemTime();
 
@@ -36,8 +38,8 @@ console.log(`[DoorLogger] Creating logger for door: ${doorName} node: ${nodeId}`
     // __dirname = .../web/backend/src/amiga-emulation
     const projectRoot = path.resolve(__dirname, '../../../..');
     const logsDir = process.env.XIM_LOG_DIR || path.join(projectRoot, 'logs');
-console.log(`[DoorLogger] __dirname: ${__dirname}, projectRoot: ${projectRoot}, logs dir: ${logsDir}`);
-    if (!amigafs.existsSync(logsDir)) {
+    debugLog(`[DoorLogger] __dirname: ${__dirname}, projectRoot: ${projectRoot}, logs dir: ${logsDir}`);
+    if (this.enabled && !amigafs.existsSync(logsDir)) {
       amigafs.mkdirSync(logsDir, { recursive: true });
     }
 

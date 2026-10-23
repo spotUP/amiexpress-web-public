@@ -182,7 +182,7 @@ console.log(`[Chat API] Successful login for: ${user.username} (rememberMe: ${!!
     const { username } = req.body;
 
     if (username) {
-console.log(`[Chat API] User logged out: ${username}`);
+console.info(`[Chat API] User logged out: ${username}`);
     }
 
     sendResponse(res, { loggedOut: true }, 'Logged out successfully');
