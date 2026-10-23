@@ -68,7 +68,9 @@ describe('Kickstart upload route', () => {
     const res = await request(app(user))
       .post('/api/upload/kickstart')
       .set('Authorization', 'Bearer t')
-      .attach('rom', syntheticKickstart({ execVersion: 40 }), 'k.rom');
+      // A tiny body: the guard answers before reading it, and a 512K body
+      // still being written when the 403 lands fails the test with EPIPE.
+      .attach('rom', Buffer.from('x'), 'k.rom');
     expect(res.status).toBe(403);
   });
 });

@@ -5,12 +5,15 @@ export function syntheticKickstart(opts: {
   size?: number;
   magic?: number;
   swapped?: boolean;
+  /** Reset entry point; a relocated (MapROM) build jumps outside 0xF80000. */
+  entry?: number;
 }): Buffer {
   const size = opts.size ?? 512 * 1024;
   const buf = Buffer.alloc(size);
   const base = 0xf80000;
   buf.writeUInt16BE(opts.magic ?? 0x1111, 0);
   buf.writeUInt16BE(0x4ef9, 2);
+  buf.writeUInt32BE(opts.entry ?? base + 0xd2, 4);
   const tagOff = 0x100;
   const tag = base + tagOff;
   buf.writeUInt16BE(0x4afc, tagOff);

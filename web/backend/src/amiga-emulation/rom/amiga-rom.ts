@@ -63,6 +63,13 @@ export function identifyKickstart(input: Buffer): KickstartIdentity {
     buf = swapped;
   }
   const image = buf;
+  const entry = image.readUInt32BE(4);
+  if (entry < ROM_BASE || entry >= ROM_BASE + KICKSTART_SIZE) {
+    return {
+      ok: false,
+      reason: `This ROM is relocated to run at 0x${entry.toString(16).toUpperCase()} (a MapROM or emulator build); install a standard Kickstart image, which runs at 0xF80000`,
+    };
+  }
   const mem: MemoryReader = {
     read16: (a) => image.readUInt16BE(a - ROM_BASE),
     read32: (a) => image.readUInt32BE(a - ROM_BASE),
@@ -93,8 +100,10 @@ export function identifyKickstart(input: Buffer): KickstartIdentity {
 export function romDirs(): string[] {
   const backendRoot = path.resolve(__dirname, '..', '..', '..');
   const repoRoot = path.resolve(backendRoot, '..', '..');
+  // ROM_DIR names THE ROM directory (Docker sets it to the persistent volume);
+  // the checkout-relative guesses only apply when it is unset.
+  if (process.env.ROM_DIR) return [path.resolve(process.env.ROM_DIR)];
   const dirs = [
-    ...(process.env.ROM_DIR ? [process.env.ROM_DIR] : []),
     path.join(boardRoot(), 'data', 'amiga-roms'),
     path.join(process.cwd(), 'data', 'amiga-roms'),
     path.join(backendRoot, 'data', 'amiga-roms'),

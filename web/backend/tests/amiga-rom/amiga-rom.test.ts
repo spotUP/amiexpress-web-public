@@ -43,6 +43,12 @@ describe('identifyKickstart', () => {
     if (!r.ok) expect(r.reason).toMatch(/exec 37/);
   });
 
+  it('rejects a ROM relocated away from 0xF80000', () => {
+    const r = identifyKickstart(syntheticKickstart({ execVersion: 40, entry: 0x2000d2 }));
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.reason).toMatch(/relocated to run at 0x2000D2/);
+  });
+
   it('rejects random data', () => {
     expect(identifyKickstart(Buffer.alloc(512 * 1024, 7)).ok).toBe(false);
   });
