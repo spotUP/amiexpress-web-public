@@ -32,6 +32,7 @@
       "@amiexpress/bbs-door-sdk/engines/ui/ansi-editor/*": [
         "../../sdk/engines/ui/ansi-editor/*"
       ],
+      "@amiexpress/bbs-door-sdk/petscii": ["../../sdk/petscii"],
       "@amiexpress/bbs-door-sdk/teletext/*": [
         "../../sdk/teletext/*"
       ],
