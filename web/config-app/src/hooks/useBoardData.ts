@@ -59,7 +59,7 @@ const DEGRADED_STATS_POLL_MS = 15_000;
  * not run at all. It is the SERVER's rule mirrored once, here, rather than in
  * every component that happens to mount one of these hooks.
  */
-export function useMayPollBoard(): boolean {
+function useMayPollBoard(): boolean {
   const { secLevel } = useAuth();
   return secLevel >= SYSOP_LEVEL;
 }
