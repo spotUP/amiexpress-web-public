@@ -134,6 +134,12 @@ web/frontend/public/fonts/backups/
 .out
 .storybook-out
 
+# Kickstart modules. Copyrighted Commodore code: never in the repo. The door
+# launch splits the sysop's installed Kickstart into these on demand
+# (LibraryManager.ensureRomLibrariesExtracted, cache under tmp/rom-modules/).
+/ROM/
+/System/ROM/
+
 # Temporary folders
 tmp/
 temp/
