@@ -85,26 +85,66 @@ if command -v tmux >/dev/null 2>&1 && tmux has-session -t amiexpress 2>/dev/null
   fi
 fi
 
-# Kill by port — only ports actually owned by AmiExpress-Web.
+# Kill by port - only processes of THIS checkout on its ports.
 # Under the unified-deploy flow the frontends are built once and served by
 # the backend from 3001; vite dev servers on 5173/5174/5175 are NOT spawned
 # by start-servers.sh. Don't touch those ports — they may belong to other
 # projects running on the dev machine.
-lsof -ti:3001 | xargs kill -9 2>/dev/null  # Backend (HTTP + WebSocket)
-lsof -ti:8080 | xargs kill -9 2>/dev/null  # SDK Preview backend
+# SDK preview port: one source, SDK_PREVIEW_PORT (default 8080).
+PREVIEW_PORT="${SDK_PREVIEW_PORT:-8080}"
+
+# Does this pid belong to THIS checkout? Its command line names the repo, or
+# its working directory is inside it (tsx/node started with a relative path
+# from web/backend shows only "src/index.ts" in args).
+pid_is_ours() {
+  local pid="$1" cwd
+  if ps -p "$pid" -o args= 2>/dev/null | grep -qF "$PROJECT_ROOT"; then
+    return 0
+  fi
+  cwd=$(lsof -a -p "$pid" -d cwd -Fn 2>/dev/null | sed -n 's/^n//p' | head -1)
+  case "$cwd" in
+    "$PROJECT_ROOT"|"$PROJECT_ROOT"/*) return 0 ;;
+  esac
+  return 1
+}
+
+# Pids listening on a port that belong to this checkout. A process from another
+# checkout or another project on the same port is never touched.
+project_pids_on_port() {
+  local pid
+  for pid in $(lsof -ti:"$1" 2>/dev/null); do
+    if pid_is_ours "$pid"; then echo "$pid"; fi
+  done
+}
+
+kill_project_port() {
+  local port="$1" label="$2" pids
+  pids=$(project_pids_on_port "$port")
+  if [ -n "$pids" ]; then
+    echo "-> Killing $label on port $port..."
+    echo "$pids" | xargs kill -9 2>/dev/null
+  fi
+  # Something else holds the port: say so, do not kill it.
+  if [ -n "$(lsof -ti:"$port" 2>/dev/null)" ] && [ -z "$(project_pids_on_port "$port")" ]; then
+    echo "[INFO] Port $port is held by a process outside $PROJECT_ROOT - left alone"
+  fi
+}
+
+kill_project_port 3001 "backend (HTTP + WebSocket)"
+kill_project_port "$PREVIEW_PORT" "SDK preview backend"
 # The Text-TV sidecar: a SEPARATE process the backend spawns (the TEXTTV door
 # must not fetch from the process running it). A SIGKILLed backend cannot kill
 # its own child, so the sidecar outlived every restart, kept port 3002, and
 # each new board burned its restart budget failing to bind (2026-09-13).
-lsof -ti:3002 | xargs kill -9 2>/dev/null  # Text-TV sidecar
+kill_project_port 3002 "Text-TV sidecar"
 
 # Wait for ports to be free
 sleep 2
 
 # Verify
-BACKEND=$(lsof -ti:3001 | wc -l | tr -d ' ')
-PREVIEW=$(lsof -ti:8080 | wc -l | tr -d ' ')
-SIDECAR=$(lsof -ti:3002 | wc -l | tr -d ' ')
+BACKEND=$(project_pids_on_port 3001 | wc -l | tr -d ' ')
+PREVIEW=$(project_pids_on_port "$PREVIEW_PORT" | wc -l | tr -d ' ')
+SIDECAR=$(project_pids_on_port 3002 | wc -l | tr -d ' ')
 
 if [ "$BACKEND" -eq 0 ] && [ "$PREVIEW" -eq 0 ] && [ "$SIDECAR" -eq 0 ]; then
   echo "[OK] All servers killed"
