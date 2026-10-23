@@ -78,9 +78,14 @@ describe('a door that runs a shell command reaches System()', () => {
   it.each(tables)('%s names nothing that is not a function of that library', (_lib, vectors, ndk) => {
     // amiga.lib's CreatePort sat at exec -114, Debug's slot, under a name the
     // NDK gives no exec function at all - so the check above could not see it.
+    // A private slot (execPrivate13 at -810) has no public name in NDK 3.1, so
+    // the real name of the private function there (TaggedOpenLibrary) is no
+    // stranger.
     const known = new Set(Object.values(ndk));
+    const isPrivateSlot = (name: string): boolean => /Private\d+$/.test(name);
     const strangers = vectors
-      .filter(v => v.name && !known.has(String(v.name)) && ndk[v.offset] !== undefined)
+      .filter(v => v.name && !known.has(String(v.name)) && ndk[v.offset] !== undefined &&
+        !isPrivateSlot(ndk[v.offset]))
       .map(v => `${v.name} at ${v.offset}, where the NDK has ${ndk[v.offset]}`);
     expect(strangers).toEqual([]);
   });
