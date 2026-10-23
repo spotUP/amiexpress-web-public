@@ -17,6 +17,10 @@
 #      (the original reason this check existed)
 
 door_dir="$1"
+# "dev" (second argument): a local checkout also needs devDependencies, because
+# the door's own `tsc` build runs there. The image installs --omit=dev and never
+# passes it.
+mode="$2"
 [ -n "$door_dir" ] || exit 1
 [ -f "$door_dir/package.json" ] || exit 1
 
@@ -40,13 +44,13 @@ missing=$(node -e '
   try {
     const dir = process.argv[1];
     const pkg = JSON.parse(fs.readFileSync(path.join(dir, "package.json"), "utf8"));
-    const deps = pkg.dependencies || {};
+    const deps = Object.assign({}, pkg.dependencies || {}, process.argv[2] === "dev" ? (pkg.devDependencies || {}) : {});
     const absent = Object.entries(deps)
       .filter(([, spec]) => typeof spec !== "string" || !spec.startsWith("file:"))
       .filter(([name]) => !fs.existsSync(path.join(dir, "node_modules", name)));
     process.stdout.write(absent.length > 0 ? "1" : "0");
   } catch (e) { process.stdout.write("0"); }
-' "$door_dir" 2>/dev/null)
+' "$door_dir" "$mode" 2>/dev/null)
 
 if [ "$missing" = "1" ]; then
   exit 0

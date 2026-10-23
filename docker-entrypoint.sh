@@ -1462,50 +1462,8 @@ ls -la "$BBS_DATA_DIR" 2>/dev/null | head -20 || echo "  (empty)"
 # 1. Create @amiexpress/bbs-door-sdk symlink pointing to /app/sdk
 # 2. Install dependencies for doors that have native modules (e.g., better-sqlite3)
 echo "[Entrypoint] Setting up TypeScript doors..."
-TS_DOORS_COUNT=0
-NATIVE_INSTALL_COUNT=0
-if [ -d "$BBS_DATA_DIR/Doors" ]; then
-    for door_dir in "$BBS_DATA_DIR/Doors"/*; do
-        if [ -d "$door_dir" ] && [ -f "$door_dir/package.json" ]; then
-            door_name=$(basename "$door_dir")
-            sdk_link_dir="$door_dir/node_modules/@amiexpress"
-            sdk_link="$sdk_link_dir/bbs-door-sdk"
-
-            # Does this door need its dependencies installed?
-            #
-            # This used to ask only whether package.json mentioned
-            # better-sqlite3, so every OTHER door got the SDK symlink and no
-            # node_modules at all - and node_modules is excluded from the
-            # Docker build, so nothing else supplied them. WHIP declares
-            # xml2js and died with "Cannot find module 'xml2js'" the first
-            # time somebody opened it; any door with a plain npm dependency
-            # was in the same state, unnoticed until run.
-            #
-            # The decision lives in a script so it can be tested - see
-            # web/backend/tests/scripts/door-needs-deps.test.ts.
-            if sh /app/web/backend/scripts/door-needs-deps.sh "$door_dir"; then
-                echo "[Entrypoint]   Installing dependencies for $door_name..."
-                (cd "$door_dir" && rm -rf node_modules && npm install --omit=dev 2>&1 | tail -5) || echo "[Entrypoint]   Warning: npm install failed for $door_name"
-                NATIVE_INSTALL_COUNT=$((NATIVE_INSTALL_COUNT + 1))
-                # Force recreate SDK symlink after npm install (npm creates wrong relative symlink from file:../../sdk)
-                mkdir -p "$sdk_link_dir"
-                rm -f "$sdk_link"
-                ln -s /app/sdk "$sdk_link"
-                echo "[Entrypoint]   Recreated SDK symlink for $door_name (after npm install)"
-            fi
-
-            # Create SDK symlink if missing (for doors without native modules)
-            if [ ! -L "$sdk_link" ]; then
-                mkdir -p "$sdk_link_dir"
-                ln -s /app/sdk "$sdk_link"
-                echo "[Entrypoint]   Created SDK symlink for $door_name"
-                TS_DOORS_COUNT=$((TS_DOORS_COUNT + 1))
-            fi
-        fi
-    done
-fi
-echo "[Entrypoint] SDK symlinks created for $TS_DOORS_COUNT TypeScript doors"
-echo "[Entrypoint] Native dependencies installed for $NATIVE_INSTALL_COUNT doors"
+# The logic lives in one script shared with dev/scripts/start-servers.sh.
+SETUP_TS_DOORS_TAG="[Entrypoint]" sh /app/web/backend/scripts/setup-ts-doors.sh "$BBS_DATA_DIR/Doors" /app/sdk
 
 # NOTE: Default sysop creation removed - first user to register becomes sysop (level 255)
 # The main application handles this automatically via new-user.handler.ts
