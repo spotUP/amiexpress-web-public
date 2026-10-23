@@ -94,6 +94,21 @@ interface MessagePort {
  * - FindTask
  * - AllocMem/FreeMem
  */
+/** Registers handed to code a trap jumps into. Unset fields keep their value. */
+export interface TrapJumpRegs {
+  d0: number;
+  a0?: number;
+  a6: number;
+}
+
+/** A jump an exec trap makes into 68K code instead of returning to its caller. */
+export interface PendingTrapJump {
+  pc: number;
+  name: string;
+  isInit: boolean;
+  regs: TrapJumpRegs;
+}
+
 export class ExecLibrary {
   private emulator: MoiraEmulator;
   private execBase: ExecBaseStructure;
@@ -148,6 +163,18 @@ export class ExecLibrary {
   private romResidentCache?: Map<string, number>;
   private pendingTrapJumpPc: number | null = null;
   private pendingTrapJumpName: string | null = null;
+  /** Registers the jumped-to code receives (the trap epilogue restores A6 and sets D0 first). */
+  private pendingTrapJumpRegs: TrapJumpRegs | null = null;
+  /** True when the pending jump runs a resident's rt_Init (InitResident), false for a library's Open vector. */
+  private pendingTrapJumpIsInit = false;
+  /**
+   * Libraries that 68K code added with AddLibrary (-396), by lowercase name.
+   * Real exec's OpenLibrary only searches this list (SysBase->LibList); it
+   * never runs a resident's init. A ROM dos.library init calls AddLibrary
+   * and then OpenLibrary("dos.library") on itself, so OpenLibrary must find
+   * the added library here instead of re-running the init.
+   */
+  private addedLibraries = new Map<string, number>();
   private pendingTrapReturnAddr: number | null = null;
   private pendingTrapSavedSp: number | null = null;
   private pendingOpenLibraryName: string | null = null;
@@ -860,6 +887,12 @@ debugLog(
   ): { success: boolean; address: number; isNative: boolean } {
 debugLog(`[ExecLibrary] Hybrid OpenLibrary("${name}", ${minVersion})`);
 
+    // A library 68K code already added (AddLibrary) is opened, never re-initialised.
+    const added = this.openAddedLibrary(name, minVersion, allowTrapJump);
+    if (added !== null) {
+      return { success: added !== 0, address: added, isNative: true };
+    }
+
     // Try ROM resident modules (e.g. Kickstart/AROS residents) first so InitResident runs
     if (this.useNativeLibraries) {
       const romLibrary = this.openLibraryFromRomResident(
@@ -1480,6 +1513,9 @@ debugLog(
   ): void {
     this.pendingTrapJumpPc = targetPc;
     this.pendingTrapJumpName = name;
+    this.pendingTrapJumpIsInit = true;
+    // InitResident calls rt_Init with D0=0, A0=segList, A6=SysBase.
+    this.pendingTrapJumpRegs = { d0: 0, a0: segList, a6: this.execBase.address };
     this.emulator.setRegister(0, 0);
     this.emulator.setRegister(8, segList); // A0
     this.emulator.setRegister(14, this.execBase.address); // A6
@@ -1490,15 +1526,62 @@ debugLog(
     );
   }
 
-  consumeTrapJump(): { pc: number; name: string } | null {
+  consumeTrapJump(): PendingTrapJump | null {
     const pc = this.pendingTrapJumpPc;
     const name = this.pendingTrapJumpName;
+    const regs = this.pendingTrapJumpRegs;
+    const isInit = this.pendingTrapJumpIsInit;
     this.pendingTrapJumpPc = null;
     this.pendingTrapJumpName = null;
-    if (pc === null || !name) {
+    this.pendingTrapJumpRegs = null;
+    this.pendingTrapJumpIsInit = false;
+    if (pc === null || !name || !regs) {
       return null;
     }
-    return { pc, name };
+    return { pc, name, isInit, regs };
+  }
+
+  /**
+   * AddLibrary(library) (-396, A1=library). Records the library so a later
+   * OpenLibrary of its name returns it (see addedLibraries). Sets
+   * LIBF_CHANGED as exec does before it sums the library.
+   */
+  addLibrary(libBase: number): void {
+    if (!libBase) return;
+    const namePtr = this.emulator.readMemory32(libBase + 10); // ln_Name
+    const name = namePtr ? this.emulator.readString(namePtr, 128) : "";
+    if (!name) {
+      amigaGaps.record('exec', 'AddLibrary of a library without ln_Name', doorOf(this.emulator));
+      return;
+    }
+    const flags = this.emulator.readMemory(libBase + 14); // lib_Flags
+    this.emulator.writeMemory(libBase + 14, flags | 0x02); // LIBF_CHANGED
+    this.addedLibraries.set(name.toLowerCase(), libBase);
+  }
+
+  /**
+   * OpenLibrary of a library added with AddLibrary: exec calls the
+   * library's own Open vector (LVO -6) with D0=version and A6=base and
+   * returns what it returns. From a trap that is a jump to base-6 with the
+   * caller's return address; a host-side caller has no 68K frame to return
+   * into, so it gets the base without the Open call.
+   */
+  private openAddedLibrary(
+    name: string,
+    minVersion: number,
+    allowTrapJump: boolean
+  ): number | null {
+    const libBase = this.addedLibraries.get(name.toLowerCase());
+    if (libBase === undefined) return null;
+    const version = this.emulator.readMemory16(libBase + 20); // lib_Version
+    if (version < minVersion) return 0;
+    if (allowTrapJump) {
+      this.pendingTrapJumpPc = libBase - 6;
+      this.pendingTrapJumpName = name;
+      this.pendingTrapJumpIsInit = false;
+      this.pendingTrapJumpRegs = { d0: minVersion >>> 0, a6: libBase };
+    }
+    return libBase;
   }
 
   hasPendingTrapJump(): boolean {
@@ -1545,6 +1628,8 @@ console.warn(
     this.pendingOpenLibraryName = null;
     this.pendingTrapJumpPc = null;
     this.pendingTrapJumpName = null;
+    this.pendingTrapJumpRegs = null;
+    this.pendingTrapJumpIsInit = false;
     return stubAddr;
   }
 

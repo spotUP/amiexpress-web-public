@@ -652,6 +652,17 @@ console.log("[ExecLibrary] Permit() - stub (no-op)");
     },
   },
   {
+    // -396 AddLibrary (exec_lib.fd). A1=library. Void. Records the library
+    // so OpenLibrary finds it: a ROM dos.library init adds itself and then
+    // opens itself by name.
+    offset: -396,
+    name: "AddLibrary",
+    handler: (emu, lib: ExecLibrary) => {
+      lib.addLibrary(emu.getRegister(9));
+      return emu.getRegister(0);
+    },
+  },
+  {
     offset: -408, // LVO -408 (OldOpenLibrary)
     name: "OldOpenLibrary",
     handler: (emu, lib: ExecLibrary) => {

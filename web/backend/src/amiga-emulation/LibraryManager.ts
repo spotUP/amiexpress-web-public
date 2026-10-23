@@ -883,8 +883,10 @@ debugLog(
       }
     );
 
-    // Ensure real dos.library is resident and vectors installed up front (generic)
-    const dosHybrid = this.execLibrary.openLibraryHybrid("dos.library", 37, true);
+    // Ensure real dos.library is resident and vectors installed up front (generic).
+    // No trap jump: this host-side open has no 68K caller to return into, so a
+    // scheduled ROM init would hijack the door's first exec call instead.
+    const dosHybrid = this.execLibrary.openLibraryHybrid("dos.library", 37, false);
     if (dosHybrid.success) {
       this.libraryTraps!.installDOSVectors();
 debugLog(

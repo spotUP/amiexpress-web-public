@@ -1855,7 +1855,13 @@ console.log(
     if (execJump) {
       const execJumpPc = execJump.pc;
       const spNow = this.emulator.getRegister(15);
-      this.execLibrary.setTrapReturnContext(returnAddr, spNow, execJump.name);
+      // Only an InitResident jump has a fallback when the init raises an Alert.
+      if (execJump.isInit) {
+        this.execLibrary.setTrapReturnContext(returnAddr, spNow, execJump.name);
+      }
+      this.emulator.setRegister(0, execJump.regs.d0 >>> 0);
+      if (execJump.regs.a0 !== undefined) this.emulator.setRegister(8, execJump.regs.a0 >>> 0);
+      this.emulator.setRegister(14, execJump.regs.a6 >>> 0);
       this.emulator.writeMemory32(spNow - 4, returnAddr);
       this.emulator.setRegister(15, spNow - 4);
       this.emulator.setRegister(16, execJumpPc);
