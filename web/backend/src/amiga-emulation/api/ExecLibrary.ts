@@ -159,6 +159,12 @@ export class ExecLibrary {
   private static readonly EXT_ROM_END = 0xe7ffff;
   private static readonly RTC_MATCHWORD = 0x4afc;
   private static readonly RTF_AUTOINIT = 1 << 7;
+  // Residents exec (or dos, for AFTERDOS) initialises itself during boot.
+  // A resident with none of these flags and no AUTOINIT table (Kickstart
+  // 3.1 and AROS dos.library) is started once by the boot strap: its rt_Init
+  // is a boot entry, not a library constructor, and the library is in
+  // LibList before any program runs, so OpenLibrary never initialises it.
+  private static readonly RTF_BOOT_INIT_MASK = 0x01 | 0x02 | 0x04; // COLDSTART | SINGLETASK | AFTERDOS
   private static readonly NT_LIBRARY = 9;
   private romResidentCache?: Map<string, number>;
   private pendingTrapJumpPc: number | null = null;
@@ -1274,6 +1280,15 @@ debugLog(`[ExecLibrary] Looking for ROM resident: ${name}`);
     const residentAddr = this.findRomResidentByName(name);
     if (!residentAddr) {
 debugLog(`[ExecLibrary]   ROM resident ${name} not found in ROM`);
+      return null;
+    }
+    const flags = this.emulator.readMemory(residentAddr + 10);
+    if (
+      (flags & (ExecLibrary.RTF_AUTOINIT | ExecLibrary.RTF_BOOT_INIT_MASK)) === 0
+    ) {
+debugLog(
+        `[ExecLibrary]   ROM resident ${name} rt_Flags=0x${flags.toString(16)}: boot-strap entry, not initialised on OpenLibrary`
+      );
       return null;
     }
     const version = this.emulator.readMemory(residentAddr + 11);
