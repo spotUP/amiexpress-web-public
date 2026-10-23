@@ -59,7 +59,7 @@ const DEGRADED_STATS_POLL_MS = 15_000;
  * not run at all. It is the SERVER's rule mirrored once, here, rather than in
  * every component that happens to mount one of these hooks.
  */
-function useMayPollBoard(): boolean {
+export function useMayPollBoard(): boolean {
   const { secLevel } = useAuth();
   return secLevel >= SYSOP_LEVEL;
 }
@@ -175,5 +175,17 @@ export function useHealthReport() {
       return response.data as BBSHealthReport;
     },
     staleTime: Infinity,
+  });
+}
+
+export const KICKSTART_KEY = ['kickstart'] as const;
+
+/** Which Kickstart the 68K emulator uses. Shared by the Health card and the admin banner. */
+export function useKickstartStatus() {
+  const enabled = useMayPollBoard();
+  return useQuery({
+    queryKey: KICKSTART_KEY,
+    queryFn: () => apiClient.getKickstartStatus(),
+    enabled,
   });
 }

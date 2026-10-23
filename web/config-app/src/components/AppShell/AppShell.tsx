@@ -8,6 +8,7 @@
 
 import { Outlet } from 'react-router-dom';
 import { Header } from './Header';
+import { KickstartBanner } from './KickstartBanner';
 import { Sidebar } from './Sidebar';
 import { PagingBeep } from '../PagingBeep';
 
@@ -18,6 +19,7 @@ export function AppShell() {
       <PagingBeep />
       <div className="flex min-w-0 flex-1 flex-col">
         <Header />
+        <KickstartBanner />
         <main className="flex-1 overflow-y-auto">
           <div className="mx-auto w-full max-w-[1600px] p-5">
             <Outlet />

@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { AlertCircle, CheckCircle, Info, RefreshCw, Wrench, XCircle } from 'lucide-react';
 import { apiClient } from '../api/client';
 import { useNotification } from '../contexts/NotificationContext';
+import { KICKSTART_KEY, useKickstartStatus } from '../hooks/useBoardData';
 
 interface HealthIssue {
   severity: 'error' | 'warning' | 'info';
@@ -34,15 +35,12 @@ interface BBSHealthReport {
 function KickstartCard() {
   const queryClient = useQueryClient();
   const { showSuccess, showError } = useNotification();
-  const { data: status } = useQuery({
-    queryKey: ['kickstart'],
-    queryFn: () => apiClient.getKickstartStatus(),
-  });
+  const { data: status } = useKickstartStatus();
   const upload = useMutation({
     mutationFn: (file: File) => apiClient.uploadKickstartRom(file),
     onSuccess: (result) => {
       showSuccess(`Installed ${result.installed ?? 'Kickstart ROM'}`);
-      queryClient.invalidateQueries({ queryKey: ['kickstart'] });
+      queryClient.invalidateQueries({ queryKey: KICKSTART_KEY });
       queryClient.invalidateQueries({ queryKey: ['health'] });
     },
     onError: (error: Error) => showError(error.message),
