@@ -98,9 +98,11 @@ export class LibraryManager {
   }
 
   /**
-   * Split the INSTALLED Kickstart into its resident modules and publish them
-   * on disk (ROM/, System/ROM/; both ignored by version control: Kickstart
-   * code never ships with the board). Works for any 3.x Kickstart: modules
+   * Split the INSTALLED Kickstart into its resident modules and publish the
+   * ones a program can open (libraries, devices, resources and the rest) into
+   * Libs/, Devs/ etc. Modules of no such kind stay in the cache only: nothing
+   * read the ROM/ and System/ROM/ copies they used to get, and Kickstart code
+   * never ships with the board. Works for any 3.x Kickstart: modules
    * are found by their RomTags (rom-modules.ts), not looked up in romtool's
    * split database, which knew none of this board's ROMs. The split itself
    * is cached under tmp/rom-modules/<sha1>/, so a new upload rebuilds and an
@@ -131,8 +133,6 @@ export class LibraryManager {
       const systemKeymapsDir = path.join(systemDevsDir, "Keymaps");
       const monitorsDir = path.join(devsDir, "Monitors");
       const systemMonitorsDir = path.join(systemDevsDir, "Monitors");
-      const romDir = path.join(projectRoot, "ROM");
-      const systemRomDir = path.join(systemDir, "ROM");
 
       const built = buildRomModules(romImage, ROM_BASE, path.join(projectRoot, "tmp", "rom-modules"));
       if (built.built) {
@@ -141,15 +141,11 @@ debugLog(`[LibraryManager] Split ${built.files.length} ROM modules into ${built.
       const outDir = built.dir;
 
       const entries = amigafs.readdirSync(outDir).filter((entry) => !entry.startsWith("."));
-      const copyTo = (src: string, targets: string[], replace = false): void => {
+      const copyTo = (src: string, targets: string[]): void => {
         for (const target of targets) {
           fs.mkdirSync(path.dirname(target), { recursive: true });
-          if (amigafs.existsSync(target)) {
-            // ROM/ mirrors the installed Kickstart: a file of the same name
-            // from an earlier ROM (index.txt above all) is brought up to date.
-            // Every other target keeps what the sysop put there.
-            if (!replace || fs.readFileSync(target).equals(fs.readFileSync(src))) continue;
-          }
+          // An existing file is what the sysop put there: keep it.
+          if (amigafs.existsSync(target)) continue;
           fs.copyFileSync(src, target);
 debugLog(`[LibraryManager] Extracted ${path.basename(target)} from ROM → ${target}`);
         }
@@ -166,7 +162,6 @@ debugLog(`[LibraryManager] Extracted ${path.basename(target)} from ROM → ${tar
       const prefsTargets = [prefsDir, systemPrefsDir];
       const keymapTargets = [keymapsDir, systemKeymapsDir];
       const monitorTargets = [monitorsDir, systemMonitorsDir];
-      const romTargets = [romDir, systemRomDir];
 
       entries.forEach((entry) => {
         const src = path.join(outDir, entry);
@@ -217,11 +212,7 @@ debugLog(`[LibraryManager] Extracted ${path.basename(target)} from ROM → ${tar
         }
         if (lower.endsWith(".locale") || lower.endsWith(".language")) {
           copyTo(src, localeTargets.map((dir) => path.join(dir, entry)));
-          return;
         }
-
-        // Fallback: keep everything else under ROM/ for completeness.
-        copyTo(src, romTargets.map((dir) => path.join(dir, entry)), true);
       });
     } catch (err) {
 console.warn("[LibraryManager] Failed to extract ROM libraries", err);
