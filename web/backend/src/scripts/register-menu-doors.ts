@@ -70,6 +70,7 @@ export const STEPS: Record<string, Step> = {
       MULTINODE: 'YES',
       STACK: '8192',
       DESCRIPTION: 'Search the menu (Ctrl-K)',
+      NO_PALETTE: 'YES',
     }, force);
     registerOnce(root, {
       door_command: 'MENUSETTINGS',
@@ -95,6 +96,7 @@ export const STEPS: Record<string, Step> = {
       MULTINODE: 'YES',
       STACK: '8192',
       DESCRIPTION: 'The main menu',
+      NO_PALETTE: 'YES',
     }, force);
   },
   // B is the bulletins door (M20). Unlike a new registration, B.info already exists on
