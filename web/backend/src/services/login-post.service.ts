@@ -39,6 +39,7 @@ import { triggerSamiLogRefresh } from "../services/SamiLogService";
 import { displayScreen, doPause } from "../handlers/screen.handler";
 import { runExecuteOn } from "./batch-scheduler";
 import { mailOnLogon } from "./mail-notification.service";
+import { kickstartStatus } from "../amiga-emulation/rom/amiga-rom";
 import { SysopDebugUtil, DebugSeverity } from "../utils/sysop-debug.util";
 import { sessionLogManager } from "./SessionLogManager";
 import { emitUserLogin } from "./bbs-event-emitter";
@@ -58,6 +59,10 @@ import {
 } from './logon-gates';
 import { config as appConfig } from '../config';
 import { reportPresence } from "../achievements/sites";
+
+/** Shown to a sysop at logon while no Kickstart ROM is installed. */
+export const NO_KICKSTART_SYSOP_NOTICE =
+  "[INFO] No Kickstart ROM is installed: 68K doors run on the AROS fallback. A Kickstart 3.x ROM can be uploaded on the admin Health page.";
 
 export interface PostAuthContext {
   /**
@@ -795,6 +800,13 @@ export async function runPostAuthLogin(
 
   // Log successful login (express.e:9493 callersLog).
   await callersLog(user.id, user.username, "Logged on");
+
+  // A board with no Kickstart installed runs 68K doors on the AROS fallback;
+  // the sysop (and only the sysop) is told where to upload one. Same resolver
+  // as the health check and the admin Kickstart card.
+  if (user.secLevel >= 255 && !kickstartStatus().found) {
+    emitter.emit("ansi-output", `\r\n${NO_KICKSTART_SYSOP_NOTICE}\r\n`);
+  }
 
   // EXECUTE_ON_LOGON (express.e:6715) and MAIL_ON_LOGON (6716-6720), called
   // at 29847-29849 - AFTER every gate. They ran before the lockout, deleted-
