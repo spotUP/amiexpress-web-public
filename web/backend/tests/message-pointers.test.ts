@@ -52,11 +52,19 @@ describe('Message pointers parity', () => {
   });
 
   test('updateScanPointer advances lastNewReadConf to mailStat high', async () => {
-    // use sysop defaults created in test setup
-    const user = await db.getUserByUsername('sysop');
-    expect(user).toBeTruthy();
+    // A fresh board seeds no sysop (security F4), so make the caller here.
+    const userId = await db.createUser({
+      username: `ptr_${Date.now()}`, passwordHash: 'x', realname: 'p', location: '', phone: '', email: 'a@b.c',
+      secLevel: 10, uploads: 0, downloads: 0, bytesUpload: 0, bytesDownload: 0, ratio: 0, ratioType: 0,
+      timeTotal: 0, timeLimit: 60, timeUsed: 0, chatLimit: 30, chatUsed: 0,
+      firstLogin: new Date(), lastLogin: new Date(), calls: 1, callsToday: 1, newUser: false, expert: 'N', ansi: true,
+      linesPerScreen: 23, computer: 'AMiGA 500', screenType: 'ANSI', protocol: 'ZMODEM', editor: 'FULL', zoomType: 'NONE',
+      availableForChat: true, quietNode: false, autoRejoin: 1, confAccess: 'XXX', areaName: '', uuCP: false,
+      topUploadCPS: 0, topDownloadCPS: 0, byteLimit: 0, userFlags: 0,
+    } as any);
+    const user = await db.getUserById(userId);
     if (!user) {
-      throw new Error('sysop user missing in test DB');
+      throw new Error('test user missing in test DB');
     }
     const confId = 1;
     const msgBaseId = 1;

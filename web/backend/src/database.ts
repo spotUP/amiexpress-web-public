@@ -3267,51 +3267,11 @@ console.log(`  ✓ Created message base: ${mb.name} in ${mb.conferenceName}`);
 console.log(`  ✓ Created file area: ${area.name}`);
       }
 
-      // Create sysop user
-      const hashedPassword = await this.hashPassword('sysop');
-      await this.createUser({
-        username: 'sysop',
-        passwordHash: hashedPassword,
-        realname: 'System Operator',
-        location: 'Server Room',
-        phone: '',
-        email: '',
-        secLevel: 255,
-        uploads: 0,
-        downloads: 0,
-        bytesUpload: 0,
-        bytesDownload: 0,
-        ratio: 0,
-        ratioType: 0,
-        timeTotal: 0,
-        timeLimit: 3600, // express.e:7684 default = 3600 seconds (60 minutes)
-        timeUsed: 0,
-        chatLimit: 0,
-        chatUsed: 0,
-        firstLogin: getSystemTime(),
-        calls: 0,
-        callsToday: 0,
-        newUser: false,
-        expert: 'N',
-        ansi: true,
-        linesPerScreen: 23,
-        computer: 'Server',
-        screenType: 'Amiga Ansi',
-        protocol: '/X Zmodem',
-        editor: 'Prompt',
-        zoomType: 'QWK',
-        availableForChat: true,
-        quietNode: false,
-        autoRejoin: 1,
-        confAccess: 'XXX',
-        areaName: 'Sysop',
-        uuCP: false,
-        topUploadCPS: 0,
-        topDownloadCPS: 0,
-        byteLimit: 0,
-        userFlags: 0
-      });
-console.log('  ✓ Created sysop user');
+      // No sysop user is seeded. A seeded sysop/sysop (level 255, known
+      // password, no forced change) is a default credential on every fresh
+      // board. The first caller to register becomes sysop instead: index.ts
+      // finds no level >= 200 user at startup and raises firstUserIsSysop, and
+      // new-user.handler.ts createAccountRecord gives that caller level 255.
 
       // Create default transfer protocols
       const protocols = [

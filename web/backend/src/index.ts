@@ -1,6 +1,7 @@
 import "reflect-metadata"; // Must be first import for tsyringe decorators
 import "./utils/install-log-gate"; // LOG_LEVEL gate: before any module logs at import time
 import { startEventLoopWatchdog } from "./server/event-loop-watchdog";
+import { initFirstUserIsSysopFlag } from "./utils/first-user-sysop.util";
 // Type-only (erased at runtime, so it cannot displace reflect-metadata).
 import type { PetsciiRenderCtx, PetsciiSpan } from './handlers/petscii-screen.render';
 import type { WidthGateFallThrough } from './utils/door-min-columns.util';
@@ -1469,28 +1470,7 @@ console.warn(
     }
 
     // Check for sysop-level user on fresh install
-    try {
-      const sysopUsers = await db.query(
-        "SELECT COUNT(*) as count FROM users WHERE seclevel >= 200"
-      );
-      const sysopCount = Number(sysopUsers.rows?.[0]?.count ?? 0);
-      if (sysopCount === 0) {
-console.log(
-          "[SETUP] No sysop-level users found - FIRST new user will automatically become sysop (level 255)"
-        );
-        // Set global flag that the new user handler will check
-        (global as any).firstUserIsSysop = true;
-      } else {
-console.log(`[SETUP] Found ${sysopCount} sysop-level user(s)`);
-        (global as any).firstUserIsSysop = false;
-      }
-    } catch (err: any) {
-console.warn(
-        "[SETUP] Failed to check for sysop users:",
-        err.message || err
-      );
-      (global as any).firstUserIsSysop = false;
-    }
+    await initFirstUserIsSysopFlag(db);
 
     /**
      * LISTENING IS OPTIONAL, AND ONLY A TEST TURNS IT OFF.

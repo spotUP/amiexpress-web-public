@@ -1465,8 +1465,11 @@ echo "[Entrypoint] Setting up TypeScript doors..."
 # The logic lives in one script shared with dev/scripts/start-servers.sh.
 SETUP_TS_DOORS_TAG="[Entrypoint]" sh /app/web/backend/scripts/setup-ts-doors.sh "$BBS_DATA_DIR/Doors" /app/sdk
 
-# NOTE: Default sysop creation removed - first user to register becomes sysop (level 255)
-# The main application handles this automatically via new-user.handler.ts
+# NOTE: There is no default sysop. Neither this script nor the database seeds
+# one (database.ts initializeDefaultData creates no users, and no user.data /
+# user.keys is shipped). On a board with no level >= 200 user, index.ts raises
+# firstUserIsSysop at startup and new-user.handler.ts gives the first caller to
+# register level 255.
 
 # Execute the main command (the Dockerfile CMD: node --import tsx src/index.ts)
 echo "[Entrypoint] Starting BBS server..."
