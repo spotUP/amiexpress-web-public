@@ -19,11 +19,31 @@ export interface MemoryReader {
   readString(addr: number, max: number): string;
 }
 
+/**
+ * A MemoryReader over a ROM image held in a Buffer that runs at `base`.
+ * Out-of-image reads throw (scanRomTags skips them); readString answers ''.
+ */
+export function bufferReader(image: Buffer, base: number): MemoryReader {
+  return {
+    read16: (a) => image.readUInt16BE(a - base),
+    read32: (a) => image.readUInt32BE(a - base),
+    readString: (a, max) => {
+      const off = a - base;
+      if (off < 0 || off >= image.length) return '';
+      let end = off;
+      while (end < image.length && end - off < max && image[end] !== 0) end++;
+      return image.subarray(off, end).toString('latin1');
+    },
+  };
+}
+
 export interface RomTagInfo {
   addr: number;
   name: string;
   /** rt_Version, the library version byte. */
   version: number;
+  /** rt_EndSkip, the address the scan resumes at (usually the module end). */
+  endSkip: number;
   /** rt_IdString, empty when absent. */
   idString: string;
 }
@@ -48,6 +68,7 @@ export function scanRomTags(
             addr,
             name,
             version: (mem.read16(addr + 10) & 0xff),
+            endSkip: mem.read32(addr + 6),
             idString: idPtr ? mem.readString(idPtr, 128) : '',
           };
           found.push(tag);

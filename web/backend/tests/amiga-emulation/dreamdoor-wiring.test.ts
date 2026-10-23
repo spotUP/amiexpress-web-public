@@ -74,8 +74,8 @@ describe('dreamdoor.library wiring', () => {
 
   it('opening dreamdoor.library installs its vectors and syncs them to MOIRA', async () => {
     const { emu, r16, moiraTraps } = memoryEmulator();
-    // A scratch board root: the launch path creates Node dirs and a romtool
-    // stamp under it, and none of that belongs in the checkout.
+    // A scratch board root: the launch path creates Node dirs and a Kickstart
+    // module cache under it, and none of that belongs in the checkout.
     const bbsRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'dreamdoor-wiring-'));
     const manager = new LibraryManager(
       emu as never,

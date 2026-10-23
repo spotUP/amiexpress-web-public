@@ -38,10 +38,10 @@ import { PathManager } from "./api/PathManager.js";
 import { BbsApiLibrary } from "./api/BbsApiLibrary.js";
 import { DoorLogger } from "./DoorLogger.js";
 import { KickstartRom } from "./KickstartRom.js";
-import { spawnSync } from "child_process";
 import { debugLog } from '../utils/debug-log';
 import { isSecretInput } from './xim/secret-input';
-import { resolveAmigaRom, MISSING_ROM_MESSAGE } from "./rom/amiga-rom";
+import { resolveAmigaRom, MISSING_ROM_MESSAGE, ROM_BASE } from "./rom/amiga-rom";
+import { buildRomModules } from "./rom/rom-modules";
 import { boardRoot } from '../utils/board-root.util';
 import { factsFromSession, BOARD_VERSION } from './utils/host-vars';
 
@@ -98,10 +98,15 @@ export class LibraryManager {
   }
 
   /**
-   * Ensure essential ROM libraries are available on disk by extracting them
-   * from a supported Kickstart image once. This is generic (no per-door hacks).
+   * Split the INSTALLED Kickstart into its resident modules and publish them
+   * on disk (ROM/, System/ROM/; both ignored by version control: Kickstart
+   * code never ships with the board). Works for any 3.x Kickstart: modules
+   * are found by their RomTags (rom-modules.ts), not looked up in romtool's
+   * split database, which knew none of this board's ROMs. The split itself
+   * is cached under tmp/rom-modules/<sha1>/, so a new upload rebuilds and an
+   * unchanged ROM is split once.
    */
-  private ensureRomLibrariesExtracted(romPath: string, projectRoot: string): void {
+  private ensureRomLibrariesExtracted(romImage: Buffer, projectRoot: string): void {
     try {
       const libsDir = path.join(projectRoot, "Libs");
       const systemDir = path.join(projectRoot, "System");
@@ -129,50 +134,22 @@ export class LibraryManager {
       const romDir = path.join(projectRoot, "ROM");
       const systemRomDir = path.join(systemDir, "ROM");
 
-      // romtool must be present to split modules
-      const which = spawnSync("which", ["romtool"], { encoding: "utf-8" });
-      if (which.status !== 0 || !which.stdout.trim()) {
-console.warn("[LibraryManager] romtool not found; cannot extract ROM libraries");
-        return;
+      const built = buildRomModules(romImage, ROM_BASE, path.join(projectRoot, "tmp", "rom-modules"));
+      if (built.built) {
+debugLog(`[LibraryManager] Split ${built.files.length} ROM modules into ${built.dir}`);
       }
+      const outDir = built.dir;
 
-      const outDir = path.join(projectRoot, "tmp", "rom-extract");
-      const stampPath = path.join(outDir, ".stamp");
-      fs.mkdirSync(outDir, { recursive: true });
-
-      const romStat = fs.statSync(romPath);
-      const stamp = `${romPath}|${romStat.size}|${romStat.mtimeMs}`;
-      const existingStamp = amigafs.existsSync(stampPath) ? fs.readFileSync(stampPath, "utf-8").trim() : "";
-      if (existingStamp !== stamp) {
-        const split = spawnSync("romtool", ["split", romPath, "-o", outDir, "--no-version-dir"], {
-          encoding: "utf-8",
-        });
-        // The stamp records THIS ROM WAS TRIED, not "it worked".
-        //
-        // It used to be written only on success, so a ROM romtool cannot split
-        // re-ran the whole attempt on EVERY door launch, for ever: a `which`,
-        // a subprocess, and the copy sweep below, per caller per door. Both
-        // ROMs on this board fail it - romtool answers "was not found in split
-        // database!" for the AROS image and for the Kickstart beside it - so
-        // the retry was the normal case, not the rare one.
-        //
-        // A failure is still reported, once per ROM rather than once per
-        // launch, and a romtool that learns the ROM later changes the stamp.
-        fs.writeFileSync(stampPath, stamp);
-        if (split.status !== 0) {
-console.warn(
-            `[LibraryManager] romtool cannot split this ROM; door libraries will come from stubs. ` +
-            `Not retried until the ROM changes. ${String(split.stderr || split.stdout || '').trim().slice(0, 200)}`
-          );
-          return;
-        }
-      }
-
-      const entries = amigafs.readdirSync(outDir);
-      const copyTo = (src: string, targets: string[]): void => {
+      const entries = amigafs.readdirSync(outDir).filter((entry) => !entry.startsWith("."));
+      const copyTo = (src: string, targets: string[], replace = false): void => {
         for (const target of targets) {
           fs.mkdirSync(path.dirname(target), { recursive: true });
-          if (amigafs.existsSync(target)) continue;
+          if (amigafs.existsSync(target)) {
+            // ROM/ mirrors the installed Kickstart: a file of the same name
+            // from an earlier ROM (index.txt above all) is brought up to date.
+            // Every other target keeps what the sysop put there.
+            if (!replace || fs.readFileSync(target).equals(fs.readFileSync(src))) continue;
+          }
           fs.copyFileSync(src, target);
 debugLog(`[LibraryManager] Extracted ${path.basename(target)} from ROM → ${target}`);
         }
@@ -244,7 +221,7 @@ debugLog(`[LibraryManager] Extracted ${path.basename(target)} from ROM → ${tar
         }
 
         // Fallback: keep everything else under ROM/ for completeness.
-        copyTo(src, romTargets.map((dir) => path.join(dir, entry)));
+        copyTo(src, romTargets.map((dir) => path.join(dir, entry)), true);
       });
     } catch (err) {
 console.warn("[LibraryManager] Failed to extract ROM libraries", err);
@@ -316,10 +293,7 @@ debugLog("[LibraryManager] Loading ROM...");
     if (romSource.kind === "none") {
       throw new Error(MISSING_ROM_MESSAGE);
     }
-    let romPath: string | null = null;
-
     if (romSource.kind === "kickstart") {
-      romPath = romSource.path;
       this.emulator.loadROM(new Uint8Array(romSource.data));
 debugLog("[LibraryManager] Kickstart ROM loaded - provides ROM routines");
     } else {
@@ -329,18 +303,6 @@ console.warn("[LibraryManager] Kickstart ROM not found; using AROS ROM fallback.
       const combined = Buffer.concat([arosRom, arosExt]);
       this.emulator.loadROM(new Uint8Array(combined));
 debugLog("[LibraryManager] AROS ROM loaded - provides ROM routines");
-
-      // Best-effort: allow romtool to try extracting libraries from AROS ROM.
-      const combinedPath = path.join(projectRoot, "tmp", "aros-combined.rom");
-      try {
-        fs.mkdirSync(path.dirname(combinedPath), { recursive: true });
-        if (!amigafs.existsSync(combinedPath)) {
-          fs.writeFileSync(combinedPath, combined);
-        }
-        romPath = combinedPath;
-      } catch (err) {
-console.warn("[LibraryManager] Failed to persist combined AROS ROM for extraction", err);
-      }
     }
 
 debugLog("[LibraryManager] Creating ExecBase structure...");
@@ -363,11 +325,11 @@ debugLog(
       `[LibraryManager] Native library loading: enabled (${romSource.kind === "kickstart" ? "Kickstart ROM" : "AROS ROM"})`
     );
 
-    // If a supported Kickstart is present, extract key libraries to disk once so
-    // doors can load real binaries instead of stubs. This is generic and runs
-    // only when files are missing.
-    if (romPath) {
-      this.ensureRomLibrariesExtracted(romPath, projectRoot);
+    // An installed Kickstart is split into its modules on disk (once per ROM).
+    // The AROS fallback has nothing to split: its modules are free software
+    // that runs straight from the mapped image.
+    if (romSource.kind === "kickstart") {
+      this.ensureRomLibrariesExtracted(romSource.data, projectRoot);
       mark("ROM libraries extracted");
     }
 

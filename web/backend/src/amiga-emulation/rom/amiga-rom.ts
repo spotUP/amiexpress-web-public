@@ -12,7 +12,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { boardRoot } from '../../utils/board-root.util';
-import { scanRomTags, type MemoryReader } from './rom-tags';
+import { scanRomTags, bufferReader } from './rom-tags';
 
 export const ROM_BASE = 0xf80000;
 export const KICKSTART_SIZE = 512 * 1024;
@@ -70,17 +70,7 @@ export function identifyKickstart(input: Buffer): KickstartIdentity {
       reason: `This ROM is relocated to run at 0x${entry.toString(16).toUpperCase()} (a MapROM or emulator build); install a standard Kickstart image, which runs at 0xF80000`,
     };
   }
-  const mem: MemoryReader = {
-    read16: (a) => image.readUInt16BE(a - ROM_BASE),
-    read32: (a) => image.readUInt32BE(a - ROM_BASE),
-    readString: (a, max) => {
-      const off = a - ROM_BASE;
-      if (off < 0 || off >= image.length) return '';
-      let end = off;
-      while (end < image.length && end - off < max && image[end] !== 0) end++;
-      return image.subarray(off, end).toString('latin1');
-    },
-  };
+  const mem = bufferReader(image, ROM_BASE);
   const exec = scanRomTags(mem, ROM_BASE, ROM_BASE + image.length).find((t) => t.name === 'exec.library');
   if (!exec) {
     return { ok: false, reason: 'Not a Kickstart image: no exec.library found in the ROM' };
