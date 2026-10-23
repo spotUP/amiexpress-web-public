@@ -227,6 +227,21 @@ backend/data/bbs/BBS/Node*/Screens/*
 !backend/data/bbs/BBS/Node*/Screens/*.TXT
 .vercel
 
+# Runtime output a board run rewrites (untracked so a first run leaves git status clean)
+# logs/ holds door-test reports, start-servers.out and XIM debug dumps; web/logs the dev server logs
+/logs/
+/web/logs/
+/web/backend/server.log
+/web/backend/debug-display-flow.log
+/debug.log
+# XIMLogger writes <bbsRoot>/logs/xim-debug.json (XIMLogger.ts:76), including per-door roots
+Doors/*/logs/
+Utils/samilog/logs/
+# Per-node runtime state: DoorDropFileManager.ts:184 (.download_today); *.stray-<ms> are the
+# rename-aside backups from routes-setup.ts:79, clean-playpen.util.ts:79, dir-file.util.ts:182
+Node*/.download_today
+Node*/*.stray-*
+
 # BBS data directories - external examples only
 reference-boardBBS/
 Example_BBS/
