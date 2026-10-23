@@ -1,4 +1,15 @@
 import type { ApiResponse, User } from '../types';
+
+export interface KickstartStatusResponse {
+  found: boolean;
+  usingAros: boolean;
+  label: string | null;
+  path: string | null;
+  rejected: { file: string; reason: string }[];
+  uploadDir: string;
+  message: string | null;
+  installed?: string;
+}
 import type { MagazineFrontData, MagazineStoryBody } from '../types/magazine';
 import type { LogoPosition, MenuConfig, MenuKind, WidthClass } from '@bbs/screens/menu-config/menu-config';
 import {
@@ -759,6 +770,16 @@ class ApiClient {
     const formData = new FormData();
     formData.append('door', file);
     return this.uploadForm<ApiResponse>(`${API_BASE}/upload/door`, formData);
+  }
+
+  async getKickstartStatus() {
+    return this.request<KickstartStatusResponse>(`${API_BASE}/config/kickstart`);
+  }
+
+  async uploadKickstartRom(file: File) {
+    const formData = new FormData();
+    formData.append('rom', file);
+    return this.uploadForm<KickstartStatusResponse>(`${API_BASE}/upload/kickstart`, formData);
   }
 
   async installDoorArchive(archive: { filename?: string; path?: string }) {

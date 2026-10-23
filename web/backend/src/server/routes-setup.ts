@@ -28,6 +28,7 @@ import { isPlainFileName } from '../utils/plain-file-name.util';
 import { redeemUploadTicket, redeemAreaDownloadTicket, type OnServed } from '../handlers/file/download-ticket';
 import { getSession } from './session-manager';
 import { createConfigRouter } from '../api/config-routes';
+import { createKickstartRouter } from '../api/kickstart-routes';
 import { mountMagazineAdmin } from '../api/magazine-admin-routes';
 import { republishMagazine, watchFrontPage } from '../services/magazine';
 import { startMagazineVideoService } from '../services/magazine/video-service';
@@ -203,6 +204,7 @@ export function registerHttpRoutes(app: Application, io: SocketIOServer): void {
 
   // ===== Configuration API - Sysop-only Routes =====
   const configRouter = createConfigRouter(db);
+  app.use(createKickstartRouter(db));
   app.use('/api/config', authenticateToken(db), requireSysop(), configRouter);
 
   // ===== Batch Editor API - Sysop-only =====

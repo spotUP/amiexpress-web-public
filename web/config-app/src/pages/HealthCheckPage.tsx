@@ -30,6 +30,63 @@ interface BBSHealthReport {
   categories: HealthCheckResult[];
 }
 
+/** Which Kickstart the 68K emulator uses, and where a sysop uploads one. */
+function KickstartCard() {
+  const queryClient = useQueryClient();
+  const { showSuccess, showError } = useNotification();
+  const { data: status } = useQuery({
+    queryKey: ['kickstart'],
+    queryFn: () => apiClient.getKickstartStatus(),
+  });
+  const upload = useMutation({
+    mutationFn: (file: File) => apiClient.uploadKickstartRom(file),
+    onSuccess: (result) => {
+      showSuccess(`Installed ${result.installed ?? 'Kickstart ROM'}`);
+      queryClient.invalidateQueries({ queryKey: ['kickstart'] });
+      queryClient.invalidateQueries({ queryKey: ['health'] });
+    },
+    onError: (error: Error) => showError(error.message),
+  });
+
+  return (
+    <div className="card mb-6">
+      <h2 className="text-xl font-semibold text-content-primary mb-2">Kickstart ROM</h2>
+      {status?.found ? (
+        <p className="text-sm text-content-secondary mb-3">
+          Using {status.label} from {status.path}
+        </p>
+      ) : (
+        <p className="text-sm text-status-warn mb-3">
+          {status?.message}
+          {status?.usingAros ? ' Running on the AROS fallback ROM meanwhile.' : ''}
+        </p>
+      )}
+      {status && status.rejected.length > 0 && (
+        <ul className="text-sm text-content-secondary mb-3">
+          {status.rejected.map((item) => (
+            <li key={item.file}>
+              {item.file}: {item.reason}
+            </li>
+          ))}
+        </ul>
+      )}
+      <label className="btn-secondary inline-flex items-center gap-2 cursor-pointer">
+        {upload.isPending ? 'Uploading...' : 'Upload Kickstart ROM'}
+        <input
+          type="file"
+          className="hidden"
+          disabled={upload.isPending}
+          onChange={(event) => {
+            const file = event.target.files?.[0];
+            event.target.value = '';
+            if (file) upload.mutate(file);
+          }}
+        />
+      </label>
+    </div>
+  );
+}
+
 export function HealthCheckPage() {
   const queryClient = useQueryClient();
   const { showSuccess, showError, confirm } = useNotification();
@@ -172,6 +229,7 @@ export function HealthCheckPage() {
 
   return (
     <div>
+      <KickstartCard />
 
       {report && (
         <>

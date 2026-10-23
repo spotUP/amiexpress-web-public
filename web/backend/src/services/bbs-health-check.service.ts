@@ -18,6 +18,7 @@ import { repairOneFile } from '../screens/screen-repair';
 import { InfoFileParser } from './info-file-parser';
 import { ConferenceSetupService } from './conference-setup.service';
 import { getSystemTime } from '../utils/date-time.util';
+import { kickstartStatus, MISSING_ROM_MESSAGE } from '../amiga-emulation/rom/amiga-rom';
 
 /**
  * What this issue's auto-fix actually DOES, named rather than described.
@@ -110,6 +111,7 @@ export class BBSHealthCheckService {
     categories.push(await this.checkDoors());
     categories.push(await this.checkProtocols());
     categories.push(await this.checkSystemDirectories());
+    categories.push(await this.checkKickstart());
 
     /*
      * `autoFixable` is DERIVED, here and nowhere else.
@@ -886,6 +888,34 @@ export class BBSHealthCheckService {
       checkedCount,
       errorCount: issues.filter(i => i.severity === 'error').length,
       warningCount: issues.filter(i => i.severity === 'warning').length,
+    };
+  }
+
+  /**
+   * The Kickstart ROM 68K doors run on. It cannot ship with the board
+   * (copyright), so a fresh board has none and the sysop has to be told.
+   */
+  private async checkKickstart(): Promise<HealthCheckResult> {
+    const issues: HealthIssue[] = [];
+    const status = kickstartStatus();
+    if (!status.found) {
+      issues.push({
+        severity: 'warning',
+        category: 'Kickstart ROM',
+        description: status.usingAros
+          ? `${MISSING_ROM_MESSAGE} Running on the AROS fallback ROM meanwhile.`
+          : MISSING_ROM_MESSAGE,
+        path: status.uploadDir,
+        fixAction: 'Upload a Kickstart ROM on the Health page (Kickstart ROM card)'
+      });
+    }
+    return {
+      category: 'Kickstart ROM',
+      passed: true,
+      issues,
+      checkedCount: 1,
+      errorCount: 0,
+      warningCount: issues.length
     };
   }
 

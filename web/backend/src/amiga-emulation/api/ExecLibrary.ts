@@ -19,6 +19,7 @@ import * as memoryMap from "../memory-map";
 import { amigaGaps, doorOf } from '../instrumentation/amiga-gaps';
 import { getLvoName } from '../constants/lvo-names.generated';
 import { EMULATED_ATTN_FLAGS } from '../cpu/emulated-cpu';
+import { scanRomTags } from '../rom/rom-tags';
 
 /**
  * ExecBase structure (616 bytes for V36+)
@@ -1271,42 +1272,24 @@ debugLog(
   private scanRomResidents(): Map<string, number> {
     const map = new Map<string, number>();
 
-    // Helper function to scan a ROM range
     const scanRange = (start: number, end: number, label: string) => {
 debugLog(
         `[ExecLibrary] Scanning ${label} for resident modules (0x${start.toString(16)} - 0x${end.toString(16)})...`
       );
-      let foundCount = 0;
-      for (let addr = start; addr + 24 <= end; addr += 2) {
-        try {
-          if (this.emulator.readMemory16(addr) !== ExecLibrary.RTC_MATCHWORD) {
-            continue;
-          }
-          const matchTag = this.emulator.readMemory32(addr + 2);
-          if (matchTag !== addr) {
-            continue;
-          }
-          const namePtr = this.emulator.readMemory32(addr + 14);
-          if (namePtr) {
-            const name = this.emulator.readString(namePtr, 128);
-            if (name) {
-debugLog(
-                `[ExecLibrary]   Found ROM resident: ${name} at 0x${addr.toString(16)}`
-              );
-              map.set(name.toLowerCase(), addr);
-              foundCount++;
-            }
-          }
-          const endSkip = this.emulator.readMemory32(addr + 6);
-          if (endSkip > addr && endSkip <= end) {
-            addr = (endSkip & ~1) - 2;
-          }
-        } catch (e) {
-          // Memory read error - skip this address
-          continue;
+      const tags = scanRomTags(
+        {
+          read16: (a) => this.emulator.readMemory16(a),
+          read32: (a) => this.emulator.readMemory32(a),
+          readString: (a, n) => this.emulator.readString(a, n),
+        },
+        start,
+        end,
+        (tag) => {
+debugLog(`[ExecLibrary]   Found ROM resident: ${tag.name} at 0x${tag.addr.toString(16)}`);
+          map.set(tag.name.toLowerCase(), tag.addr);
         }
-      }
-debugLog(`[ExecLibrary] ${label} scan: ${foundCount} modules found`);
+      );
+debugLog(`[ExecLibrary] ${label} scan: ${tags.length} modules found`);
     };
 
     // Scan main ROM (0xF80000-0xFFFFFF)

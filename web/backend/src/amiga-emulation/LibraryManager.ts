@@ -41,11 +41,9 @@ import { KickstartRom } from "./KickstartRom.js";
 import { spawnSync } from "child_process";
 import { debugLog } from '../utils/debug-log';
 import { isSecretInput } from './xim/secret-input';
+import { resolveAmigaRom, MISSING_ROM_MESSAGE } from "./rom/amiga-rom";
 import { boardRoot } from '../utils/board-root.util';
 import { factsFromSession, BOARD_VERSION } from './utils/host-vars';
-
-const DEFAULT_ROM =
-  "Kickstart v3.1 rev 40.63 (1993)(Commodore)(A500-A600-A2000).rom";
 
 export class LibraryManager {
   public execLibrary: ExecLibrary | null = null;
@@ -97,67 +95,6 @@ export class LibraryManager {
     const resolved = boardRoot();
     this.bbsRoot = resolved;
     return resolved;
-  }
-
-  private resolveRomSource(): { kind: "kickstart"; path: string } | { kind: "aros"; romPath: string; extPath: string } {
-    const romPref = (process.env.AEDOOR_ROM || "").toLowerCase();
-    const preferKickstart = romPref === "kickstart" || romPref === "";
-    const romName = process.env.AEDOOR_ROM_FILE || DEFAULT_ROM;
-    const kickCandidates = [
-      path.join(this.bbsRoot, "data", "amiga-roms", romName),
-      path.join(process.cwd(), "data", "amiga-roms", romName),
-      path.resolve(__dirname, "..", "..", "data", "amiga-roms", romName),
-      path.resolve(__dirname, "..", "..", "..", "data", "amiga-roms", romName),
-      path.resolve(__dirname, "..", "..", "..", "..", "data", "amiga-roms", romName),
-    ];
-
-    for (const candidate of kickCandidates) {
-      if (amigafs.existsSync(candidate)) {
-        if (preferKickstart) {
-          return { kind: "kickstart", path: candidate };
-        }
-      }
-    }
-
-    const arosDirs = [
-      path.join(this.bbsRoot, "data", "amiga-roms"),
-      path.join(process.cwd(), "data", "amiga-roms"),
-      path.resolve(__dirname, "..", "..", "data", "amiga-roms"),
-      path.resolve(__dirname, "..", "..", "..", "data", "amiga-roms"),
-      path.resolve(__dirname, "..", "..", "..", "..", "data", "amiga-roms"),
-    ];
-
-    for (const dir of arosDirs) {
-      const romPath = path.join(dir, "aros-rom.bin");
-      const extPath = path.join(dir, "aros-ext.bin");
-      if (amigafs.existsSync(romPath) && amigafs.existsSync(extPath)) {
-        if (!preferKickstart) {
-          return { kind: "aros", romPath, extPath };
-        }
-      }
-    }
-
-    if (preferKickstart) {
-      for (const dir of arosDirs) {
-        const romPath = path.join(dir, "aros-rom.bin");
-        const extPath = path.join(dir, "aros-ext.bin");
-        if (amigafs.existsSync(romPath) && amigafs.existsSync(extPath)) {
-          return { kind: "aros", romPath, extPath };
-        }
-      }
-    } else {
-      for (const candidate of kickCandidates) {
-        if (amigafs.existsSync(candidate)) {
-          return { kind: "kickstart", path: candidate };
-        }
-      }
-    }
-
-    throw new Error(
-      `ROM not found. Tried Kickstart: ${kickCandidates.join(", ")}; AROS: ${arosDirs
-        .map((dir) => `${dir}/aros-rom.bin + ${dir}/aros-ext.bin`)
-        .join(", ")}`
-    );
   }
 
   /**
@@ -375,14 +312,15 @@ console.warn("[LibraryManager] Failed to extract ROM libraries", err);
 debugLog(`[LibraryManager] BBS root resolved to ${projectRoot}`);
 debugLog("[LibraryManager] Loading ROM...");
 
-    const romSource = this.resolveRomSource();
+    const romSource = resolveAmigaRom();
+    if (romSource.kind === "none") {
+      throw new Error(MISSING_ROM_MESSAGE);
+    }
     let romPath: string | null = null;
 
-    const usingKickstart = romSource.kind === "kickstart";
-    if (usingKickstart) {
+    if (romSource.kind === "kickstart") {
       romPath = romSource.path;
-      const romData = fs.readFileSync(romPath);
-      this.emulator.loadROM(new Uint8Array(romData));
+      this.emulator.loadROM(new Uint8Array(romSource.data));
 debugLog("[LibraryManager] Kickstart ROM loaded - provides ROM routines");
     } else {
 console.warn("[LibraryManager] Kickstart ROM not found; using AROS ROM fallback.");
@@ -422,7 +360,7 @@ debugLog("[LibraryManager] Creating ExecBase structure...");
     this.execLibrary.setLibraryLoader(libraryLoader, true);
     mark("library loader ready");
 debugLog(
-      `[LibraryManager] Native library loading: enabled (${usingKickstart ? "Kickstart ROM" : "AROS ROM"})`
+      `[LibraryManager] Native library loading: enabled (${romSource.kind === "kickstart" ? "Kickstart ROM" : "AROS ROM"})`
     );
 
     // If a supported Kickstart is present, extract key libraries to disk once so
