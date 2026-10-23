@@ -962,11 +962,11 @@ if [ "$TELNET_ONLY" = true ]; then
 else
   printf "%b\n" "${GREEN}  [BBS]${RESET}    ${WHITE}http://localhost:3001/${RESET}"
   printf "%b\n" "           ${CYAN}Main BBS Terminal Interface${RESET}"
-  printf "%b\n" "           ${YELLOW}Login: sysop / sysop${RESET}"
+  printf "%b\n" "           ${YELLOW}Fresh board: the first user to register becomes sysop${RESET}"
   echo ""
   printf "%b\n" "${MAGENTA}  [ADMIN]${RESET}  ${WHITE}http://localhost:3001/admin/${RESET}"
   printf "%b\n" "           ${CYAN}Configuration Management Panel${RESET}"
-  printf "%b\n" "           ${YELLOW}Login: sysop / sysop${RESET}"
+  printf "%b\n" "           ${YELLOW}Fresh board: the first user to register becomes sysop${RESET}"
   echo ""
   printf "%b\n" "${BLUE}  [SDK]${RESET}    ${WHITE}http://localhost:3001/sdk/${RESET}"
   printf "%b\n" "           ${CYAN}Door Development Preview Tool${RESET}"
