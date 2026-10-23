@@ -241,6 +241,11 @@ Utils/samilog/logs/
 # rename-aside backups from routes-setup.ts:79, clean-playpen.util.ts:79, dir-file.util.ts:182
 Node*/.download_today
 Node*/*.stray-*
+# QWK packet build dirs, UAE filesystem metadata and uploads left in a node's Playpen
+Node*/QWK.*/
+Node*/NRAMS/__uae___*
+Node*/Playpen/*
+!Node*/Playpen/.gitkeep
 
 # BBS data directories - external examples only
 reference-boardBBS/
