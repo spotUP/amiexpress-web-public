@@ -40,6 +40,10 @@ echo "[Entrypoint] FORCE_REINIT_DOORS: $FORCE_REINIT_DOORS"
 # Create data directories if they don't exist
 mkdir -p "$BBS_DATA_DIR" "$DATABASE_DIR" "$ROM_DIR"
 
+# Token secrets: unset or placeholder (CHANGE_ME) becomes a random value kept on
+# the data volume; a value from the environment always wins.
+. /app/docker/ensure-secrets.sh
+
 # Create symlinks for consistent path structure (matches local dev environment)
 # This allows code to use /app/Doors instead of /app/data/bbs/Doors
 if [ ! -L "/app/Doors" ] && [ ! -d "/app/Doors" ]; then

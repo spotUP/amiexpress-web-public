@@ -576,6 +576,7 @@ RUN find /app/default-data \( \
 
 # Copy entrypoint script
 COPY docker-entrypoint.sh /app/docker-entrypoint.sh
+COPY docker/ensure-secrets.sh /app/docker/ensure-secrets.sh
 # Rebuilds a door's native addons when the image's Node ABI changes.
 COPY docker/rebuild-door-natives.sh /usr/local/bin/rebuild-door-natives.sh
 
