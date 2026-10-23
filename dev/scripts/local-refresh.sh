@@ -54,7 +54,7 @@ revision_of() {
 stop_stack() {
   ./dev/scripts/kill-servers.sh >/dev/null 2>&1
   local left
-  left="$(lsof -ti:3001 -ti:8080 -ti:3002 2>/dev/null | wc -l | tr -d ' ')"
+  left="$(lsof -ti:3001 -ti:${SDK_PREVIEW_PORT:-8080} -ti:3002 2>/dev/null | wc -l | tr -d ' ')"
   [ "$left" = "0" ] || fail "ports 3001/8080/3002 are still held after kill-servers.sh ($left pids)"
 }
 

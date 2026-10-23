@@ -164,7 +164,7 @@ export class ConfigManager {
            'http://localhost:5179', 'http://localhost:5180', 'http://localhost:5181',
            'http://localhost:5182', 'http://localhost:5183', 'http://localhost:5184',
            'http://localhost:3000', // SDK preview Vite dev server
-           'http://localhost:8080', // SDK preview production server
+           `http://localhost:${process.env.SDK_PREVIEW_PORT || 8080}`, // SDK preview production server
            'https://bbs.uprough.net',
            'https://uptown.uprough.net', // second BBS hostname (same site)
            'https://hippoplayer.se', // iframe embed

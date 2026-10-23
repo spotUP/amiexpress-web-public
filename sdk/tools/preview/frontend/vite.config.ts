@@ -2,8 +2,15 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import path from 'path'
 
+// One source for the SDK preview backend port: SDK_PREVIEW_PORT, default 8080.
+// Same variable server.js, the CLI, kill-servers.sh and the backend CORS list read.
+const previewPort = Number(process.env.SDK_PREVIEW_PORT) || 8080
+
 export default defineConfig({
   base: '/sdk/',
+  define: {
+    __SDK_PREVIEW_PORT__: JSON.stringify(previewPort),
+  },
   plugins: [react()],
   resolve: {
     // No aliases - let Vite resolve SDK through node_modules for proper CJS->ESM transformation
@@ -12,9 +19,9 @@ export default defineConfig({
   server: {
     port: 3000,
     proxy: {
-      '/api': 'http://localhost:8080',
+      '/api': `http://localhost:${previewPort}`,
       '/ws': {
-        target: 'http://localhost:8080',
+        target: `http://localhost:${previewPort}`,
         ws: true
       }
     }

@@ -34,7 +34,7 @@ import {
 } from './types';
 import { ChevronLeft, ChevronRight, Play, Keyboard, Wand2, Camera, Sparkles, Monitor, Code2, Columns, File, FileText, Copy, Trash2 } from 'lucide-react';
 import type { CommandItem } from './components/ui/CommandPalette';
-import { SDK_API_URL } from './utils/api-config';
+import { SDK_API_URL, SDK_PREVIEW_PORT } from './utils/api-config';
 
 // Lazy-load heavyweight/rarely-used components to keep initial bundle smaller
 const XTermTerminal = lazy(() =>
@@ -397,11 +397,11 @@ function App() {
   };
 
   // WebSocket connection
-  // SDK preview backend always runs on port 8080
+  // SDK preview backend runs on SDK_PREVIEW_PORT (default 8080)
   // Use env var VITE_SDK_PREVIEW_WS_URL to override
   const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
   const wsUrl = import.meta.env.VITE_SDK_PREVIEW_WS_URL ||
-                `${wsProtocol}//${window.location.hostname}:8080`;
+                `${wsProtocol}//${window.location.hostname}:${SDK_PREVIEW_PORT}`;
 
   const { status: wsStatus, send: wsSend, ws: wsRef } = useWebSocket({
     url: wsUrl,

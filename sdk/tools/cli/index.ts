@@ -114,7 +114,7 @@ program
 program
   .command('preview')
   .description('Start preview server for testing doors in browser')
-  .option('-p, --port <port>', 'Server port', '8080')
+  .option('-p, --port <port>', 'Server port', process.env.SDK_PREVIEW_PORT || '8080')
   .action((options) => {
     console.log(chalk.cyan.bold('\n[SDK] Starting preview server...\n'));
     console.log(chalk.gray('This will run: npm run preview\n'));

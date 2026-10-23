@@ -40,7 +40,7 @@ const execPromise = promisify(exec);
 // Configure multer for file uploads (store in memory)
 const upload = multer({ storage: multer.memoryStorage() });
 
-const PORT = process.env.PORT || 8080;
+const PORT = process.env.SDK_PREVIEW_PORT || process.env.PORT || 8080;
 const DEBUG_OUTPUT = process.env.DEBUG_OUTPUT === 'true' || false;
 
 // Door directories - prefer BBS doors/ over SDK examples/
