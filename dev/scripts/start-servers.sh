@@ -442,11 +442,10 @@ rm -rf "$REPO_ROOT/sdk/tools/preview/frontend/node_modules/.vite" 2>/dev/null ||
 printf "%b\n" "   ${GREEN}[OK] Vite cache cleared${RESET}"
 
 # 7. Clear ESM loader cache (Node.js internal cache)
-printf "%b\n" "   ${CYAN}[7/7] Clearing Node.js ESM loader cache...${RESET}"
-rm -rf "$HOME/.node_repl_history" 2>/dev/null || true
+printf "%b\n" "   ${CYAN}[7/7] Enabling development mode (runtime ESM cache-busting)...${RESET}"
 # Force NODE_ENV=development to ensure cache-busting is enabled (from door.handler.ts fix)
 export NODE_ENV=development
-printf "%b\n" "   ${GREEN}[OK] ESM loader cache cleared, development mode enabled${RESET}"
+printf "%b\n" "   ${GREEN}[OK] development mode enabled${RESET}"
 
 printf "%b\n" "${GREEN}${BOLD}→ ALL caches cleared! Fresh build guaranteed.${RESET}"
 echo ""
@@ -525,8 +524,27 @@ if [ -f "$REPO_ROOT/dev/scripts/clean-stale-js.sh" ]; then
   "$REPO_ROOT/dev/scripts/clean-stale-js.sh" > /dev/null 2>&1
 fi
 
+# Install order matters. web/backend depends on file:../../sdk, and the sdk's
+# `prepare` script runs tsc: with sdk/node_modules missing, the backend install
+# died with "tsc: not found" on a fresh clone. So root and sdk/ come first.
+# Root deps are needed by dev/scripts/watch-doors.ts (chokidar).
+check_and_install_deps "$REPO_ROOT" "Root"
+check_and_install_deps "$REPO_ROOT/sdk" "SDK"
+
 # Check backend dependencies
 check_and_install_deps "$REPO_ROOT/web/backend" "Backend"
+
+# TypeScript doors: dependencies + node_modules/@amiexpress/bbs-door-sdk link.
+# The same script docker-entrypoint.sh runs in the image. Before the door
+# builds below, which need both.
+# The board may run from data/live, which carries its own Doors/.
+DOORS_DIRS="$REPO_ROOT/Doors"
+[ "$BBS_CONTENT_DIR" != "$REPO_ROOT" ] && DOORS_DIRS="$DOORS_DIRS $BBS_CONTENT_DIR/Doors"
+for doors_dir in $DOORS_DIRS; do
+  [ -d "$doors_dir" ] || continue
+  printf "%b\n" "${CYAN}-> TypeScript Doors: dependencies and SDK link ($doors_dir)...${RESET}"
+  SETUP_TS_DOORS_TAG="   [INFO]" sh "$REPO_ROOT/web/backend/scripts/setup-ts-doors.sh" "$doors_dir" "$REPO_ROOT/sdk" dev
+done
 
 if [ "$TELNET_ONLY" = true ]; then
   printf "%b\n" "${YELLOW}→ Telnet-only: Skipping frontend/SDK dependencies and builds${RESET}"
@@ -537,20 +555,7 @@ else
   # Check config app dependencies
   check_and_install_deps "$REPO_ROOT/web/config-app" "Config App"
 
-  # Check SDK dependencies and build
-  if [ ! -d "$REPO_ROOT/sdk/node_modules" ]; then
-    printf "%b\n" "${CYAN}→ SDK: Installing dependencies (this may take a minute)...${RESET}"
-    (cd "$REPO_ROOT/sdk" && npm install --loglevel=error)
-    if [ $? -eq 0 ]; then
-      printf "%b\n" "   ${GREEN}[OK] SDK dependencies installed${RESET}"
-    else
-      printf "%b\n" "   ${RED}[ERROR] SDK dependency installation failed${RESET}"
-      printf "%b\n" "   ${WHITE}Try running: cd sdk && npm install${RESET}"
-      exit 1
-    fi
-  else
-    printf "%b\n" "   ${GREEN}[OK] SDK dependencies up to date${RESET}"
-  fi
+  # SDK dependencies were installed above (before the backend); build below.
 
   # Check if SDK needs rebuild (smart caching)
   SDK_NEEDS_BUILD=false

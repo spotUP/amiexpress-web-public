@@ -13,6 +13,7 @@ import { exec } from 'child_process';
 import { promisify } from 'util';
 import { getSystemTime } from '../utils/date-time.util';
 import { formatBytes } from '../utils/byte-format.util';
+import { LISTENER_DEFAULTS } from '../server/board-listeners';
 
 const execAsync = promisify(exec);
 const router = express.Router();
@@ -77,8 +78,8 @@ router.get('/deployment/system-info', auth, sysop, async (req: Request, res: Res
       ports: {
         backend: process.env.BACKEND_PORT || 3001,
         frontend: process.env.FRONTEND_PORT || 5173,
-        telnet: process.env.TELNET_PORT || 2323,
-        ssh: process.env.SSH_PORT || 2222,
+        telnet: process.env.TELNET_PORT || LISTENER_DEFAULTS.telnet,
+        ssh: process.env.SSH_PORT || LISTENER_DEFAULTS.ssh,
       }
     };
 
@@ -342,8 +343,8 @@ async function checkPorts() {
     details: {
       backend: process.env.BACKEND_PORT || 3001,
       frontend: process.env.FRONTEND_PORT || 5173,
-      telnet: process.env.TELNET_PORT || 2323,
-      ssh: process.env.SSH_PORT || 2222,
+      telnet: process.env.TELNET_PORT || LISTENER_DEFAULTS.telnet,
+      ssh: process.env.SSH_PORT || LISTENER_DEFAULTS.ssh,
     }
   };
 }
