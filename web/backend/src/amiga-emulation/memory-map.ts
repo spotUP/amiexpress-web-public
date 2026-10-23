@@ -140,6 +140,13 @@ export const EXCEPTION_HANDLERS_BASE = 0x200000;
 export const EXCEPTION_HANDLER_SIZE = 32;
 export const EXCEPTION_HANDLERS_END = EXCEPTION_HANDLERS_BASE + 64 * EXCEPTION_HANDLER_SIZE;
 export const RTS_STUB_ADDR = EXCEPTION_HANDLERS_END;
+/**
+ * exec's "MOVEA.L (SP)+,A6; RTS" stub, right after the RTS stub. A trap that
+ * jumps into a library's own code (OpenLibrary calling LIB_OPEN with A6=the
+ * library) returns through it so the caller gets its A6 back, as real exec's
+ * OpenLibrary saves and restores A6 around the Open call (api/trap-jump.ts).
+ */
+export const RESTORE_A6_STUB_ADDR = RTS_STUB_ADDR + 2;
 
 /**
  * The MULTICOM node table (express.e masterNode semaphore, myNode array,

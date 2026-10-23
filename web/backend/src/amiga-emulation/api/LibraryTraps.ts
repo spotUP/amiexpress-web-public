@@ -34,6 +34,7 @@ import { libraryCallLedger } from "../instrumentation/library-call-ledger";
 import { doorOf } from "../instrumentation/amiga-gaps";
 import { debugLog } from "../../utils/debug-log";
 import { CHILD_RETURN_TRAP_ADDR } from "../memory-map";
+import { enterTrapJump } from "./trap-jump";
 import * as fs from "fs";
 import * as amigafs from "../../utils/amigafs";
 import * as path from "path";
@@ -1859,13 +1860,7 @@ console.log(
       if (execJump.isInit) {
         this.execLibrary.setTrapReturnContext(returnAddr, spNow, execJump.name);
       }
-      this.emulator.setRegister(0, execJump.regs.d0 >>> 0);
-      if (execJump.regs.a0 !== undefined) this.emulator.setRegister(8, execJump.regs.a0 >>> 0);
-      this.emulator.setRegister(14, execJump.regs.a6 >>> 0);
-      this.emulator.writeMemory32(spNow - 4, returnAddr);
-      this.emulator.setRegister(15, spNow - 4);
-      this.emulator.setRegister(16, execJumpPc);
-      this.emulator.refillPrefetch();
+      enterTrapJump(this.emulator, execJumpPc, execJump.regs, returnAddr);
       if (DEBUG_LIBRARY_TRAPS) {
 console.log(
           `[LibraryTraps] ExecLibrary jump to 0x${execJumpPc.toString(
