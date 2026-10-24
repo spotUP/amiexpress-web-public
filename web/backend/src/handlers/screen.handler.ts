@@ -2258,7 +2258,7 @@ console.error(`[loadScreenFile]     (error: ${(error as Error).message})`);
                       screenDirType === ScreenDirType.CONF ? `${path.basename(conferenceDir(baseDir, conferenceId || session?.relConfNum || 1))}/Screens/` :
                       'Screens/';
 console.warn(`[loadScreenFile]  Screen file not found: ${screenName}`);
-console.warn(`[loadScreenFile]  Expected location: ${expectedDir}${getScreenFileName(screenName)}.TXT`);
+console.warn(`[loadScreenFile]  Expected location: ${path.join(expectedDir, `${getScreenFileName(screenName)}.TXT`)}`);
 console.warn(`[loadScreenFile]  Per express.e:6544-6640, ${screenName} screens should be in ${expectedDir}`);
 console.warn(`[loadScreenFile] Tried ${attemptNum} locations`);
 try {
