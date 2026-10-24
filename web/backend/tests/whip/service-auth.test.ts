@@ -53,4 +53,16 @@ describe('authenticateServiceToken', () => {
     expect(next).toBe(false);
     expect(r.code).toBe(401);
   });
+
+  it('refuses the placeholder token that .env.example ships', () => {
+    for (const placeholder of ['your_whip_service_token_here', 'CHANGE_ME']) {
+      process.env.WHIP_SERVICE_TOKEN = placeholder;
+      const r = res();
+      let next = false;
+      authenticateServiceToken(req(placeholder), r, () => { next = true; });
+      expect(next).toBe(false);
+      expect(r.code).toBe(401);
+      expect(r.body).toEqual({ error: 'Service auth not configured' });
+    }
+  });
 });

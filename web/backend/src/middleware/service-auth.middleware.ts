@@ -8,9 +8,16 @@
 
 import { timingSafeEqual } from 'crypto';
 import { Request, Response, NextFunction } from 'express';
+import { isPlaceholderSecret } from '../utils/jwt-secrets';
 
+/**
+ * The configured token, or '' when none is. A placeholder counts as none:
+ * the README copies .env.example to .env, and a token printed in the
+ * repository would otherwise open /api/whip/* to anyone who has read it.
+ */
 export function getServiceToken(): string {
-  return process.env.WHIP_SERVICE_TOKEN ?? '';
+  const token = process.env.WHIP_SERVICE_TOKEN ?? '';
+  return isPlaceholderSecret(token) ? '' : token;
 }
 
 function tokensEqual(a: string, b: string): boolean {
