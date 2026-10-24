@@ -399,7 +399,6 @@ check_deployment_readiness() {
     local scripts=(
         "dev/scripts/start-servers.sh"
         "dev/scripts/kill-servers.sh"
-        "dev/scripts/sysop-setup.sh"
         "dev/scripts/health-check.sh"
     )
 

@@ -120,7 +120,7 @@ check_environment() {
             test_warn "Database path not explicitly set" "Will use default: ./data"
         fi
     else
-        test_fail ".env.local not found" "Run: ./dev/scripts/sysop-setup.sh"
+        test_fail ".env.local not found" "Run: ./dev/scripts/start-servers.sh (it copies .env.example)"
     fi
 
     # Check Node.js version
@@ -175,7 +175,7 @@ check_database() {
             test_warn "Database is empty" "May need initialization"
         fi
     else
-        test_fail "Database file not found: $db_path" "Run: ./dev/scripts/sysop-setup.sh"
+        test_fail "Database file not found: $db_path" "Start the board once: ./dev/scripts/start-servers.sh"
     fi
 
     # Check database directory permissions
