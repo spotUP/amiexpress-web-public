@@ -27,6 +27,7 @@ import {
 } from "../utils/petscii-session-model";
 import { applyTransportEvent } from "./transport-adapter";
 import { encodeForWire } from "../utils/wire-encoding.util";
+import { flushPendingAnsi } from "../utils/ansi-buffer.util";
 import type { OutputAttributes } from "../utils/output-pacing";
 import { foldForWire } from "../utils/wrap-for-session.util";
 import { observeOutput } from "./session-observers";
@@ -131,6 +132,9 @@ export function buildConnectionEmitter(connection: TelnetConnection | SSHConnect
       // utils/output-pacing.ts) rides through untouched, as it does today, and
       // TP-5 reads it for the payload's source charset.
       const session = connection.session;
+      // Text emitText still holds goes out first (ansi-buffer.util.ts,
+      // flushPendingAnsi): a direct emit must not overtake it.
+      if (event === "ansi-output") flushPendingAnsi(emitter);
       // express.e's aePuts2 (1663-1690): a caller who turned ANSI colour off
       // with M is sent the text without its colour codes. This is the one
       // place every telnet/SSH/terminal string passes, so it is the one place

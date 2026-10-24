@@ -218,6 +218,26 @@ export function releaseAnsiBuffer(socket: object): boolean {
   return true;
 }
 
+/**
+ * Send what a connection's buffer still holds, before text that bypasses it.
+ *
+ * Two paths reach the wire: `emitText` (held up to 16 ms here) and a direct
+ * `socket.emit('ansi-output', ...)`, which 777 call sites use. A direct emit
+ * used to overtake the held text. A registration caller typed `Sandbox` at
+ * `Group:` and saw `Group: Sand` / `Phone Number: box` (sandbox board,
+ * 2026-10-24): the echo of `box` was still held when Enter printed the next
+ * prompt. The door exit and RETURNCOMMAND paths each grew their own
+ * `flushOutput` for the same race. Both innermost emit chokes
+ * (`server/connection-emitter.ts`, `server/socket-handlers.ts`) call this, so
+ * output reaches the caller in the order the board wrote it.
+ *
+ * It never creates a buffer, and `flush` empties the buffer before it emits,
+ * so the emit it makes passes back through the choke as a no-op here.
+ */
+export function flushPendingAnsi(socket: object): void {
+  bufferMap.get(socket)?.flush();
+}
+
 /** How many connections still hold a buffer. For tests and diagnostics. */
 export function ansiBufferCount(): number {
   return bufferMap.size;
