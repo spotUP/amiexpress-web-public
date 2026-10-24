@@ -160,7 +160,7 @@ export function renderAccessKeysAnsi(): string {
     for (const cell of row.cells) {
       const entry = ACCESS_KEYS[next++];
       const label = cell.ansiLabel ?? entry.label;
-      out += `\x1b[44;33m ${entry.key} \x1b[40;35m${cell.sep}}- \x1b[33m${label}${cell.pad}`;
+      out += `\x1b[44;33m ${entry.key} \x1b[49;35m${cell.sep}}- \x1b[33m${label}${cell.pad}`;
     }
     rows.push(out + row.tail);
   }
@@ -437,7 +437,7 @@ console.error('[parseMciCodes] Error getting message base name:', error);
     // background attribute: CCGMS sets the VIC background register with
     // $02 followed by a colour byte (petscii-machine.ts consumes exactly
     // the one byte after $02).
-    b0: () => (petscii ? bgPetscii(0) : '\x1b[40m'),
+    b0: () => (petscii ? bgPetscii(0) : '\x1b[49m'),
     b1: () => (petscii ? bgPetscii(1) : '\x1b[41m'),
     b2: () => (petscii ? bgPetscii(2) : '\x1b[42m'),
     b3: () => (petscii ? bgPetscii(3) : '\x1b[43m'),
@@ -447,7 +447,7 @@ console.error('[parseMciCodes] Error getting message base name:', error);
     b7: () => (petscii ? bgPetscii(7) : '\x1b[47m'),
     // z0-z7 = b0-b7 alias (express.e:5675 same dispatch line —
     // `StrCmp(cmd,'b0') OR StrCmp(cmd,'z0')`).
-    z0: () => (petscii ? bgPetscii(0) : '\x1b[40m'),
+    z0: () => (petscii ? bgPetscii(0) : '\x1b[49m'),
     z1: () => (petscii ? bgPetscii(1) : '\x1b[41m'),
     z2: () => (petscii ? bgPetscii(2) : '\x1b[42m'),
     z3: () => (petscii ? bgPetscii(3) : '\x1b[43m'),

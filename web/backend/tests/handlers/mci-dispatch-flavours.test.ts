@@ -69,13 +69,13 @@ function opts(flavour: MciFlavour, inlineMode = false): BuildMciDispatchOpts {
 
 /** The `~AK` literal this table replaced, kept here as the byte-exact oracle. */
 const RETIRED_ACCESS_KEYS_LITERAL = [
-  '         \x1b[44;33m F1 \x1b[40;35m  }- \x1b[33mSysop Login             \x1b[44;33m F2 \x1b[40;35m  }- \x1b[33mLocal Login',
-  '         \x1b[44;33m F3 \x1b[40;35m  }- \x1b[33mInstant Remote Logon    \x1b[44;33m F4 \x1b[40;35m  }- \x1b[33mReserve for a user',
-  '         \x1b[44;33m F5 \x1b[40;35m  }- \x1b[33mConference Maintenance  \x1b[44;33m F6 \x1b[40;35m  }- \x1b[33mAccount Editing',
-  '       \x1b[44;33m SH+F5 \x1b[40;35m }- \x1b[33mOpen Shell            \x1b[44;33m SH+F6 \x1b[40;35m }- \x1b[33mView Callerslog',
-  '         \x1b[44;33m F7 \x1b[40;35m  }- \x1b[33mChat Toggle             \x1b[44;33m F8 \x1b[40;35m  }- \x1b[33mReprogram modem',
-  '         \x1b[44;33m F9 \x1b[40;35m  }- \x1b[33mExit BBS               \x1b[44;33m F10 \x1b[40;35m  }- \x1b[33mExit BBS \x1b[33m(\x1b[37moff hook\x1b[33m)\x1b[0m',
-  '                                       \x1b[44;33m SH+F10 \x1b[40;35m }- \x1b[33mClear tooltype cache\x1b[0m',
+  '         \x1b[44;33m F1 \x1b[49;35m  }- \x1b[33mSysop Login             \x1b[44;33m F2 \x1b[49;35m  }- \x1b[33mLocal Login',
+  '         \x1b[44;33m F3 \x1b[49;35m  }- \x1b[33mInstant Remote Logon    \x1b[44;33m F4 \x1b[49;35m  }- \x1b[33mReserve for a user',
+  '         \x1b[44;33m F5 \x1b[49;35m  }- \x1b[33mConference Maintenance  \x1b[44;33m F6 \x1b[49;35m  }- \x1b[33mAccount Editing',
+  '       \x1b[44;33m SH+F5 \x1b[49;35m }- \x1b[33mOpen Shell            \x1b[44;33m SH+F6 \x1b[49;35m }- \x1b[33mView Callerslog',
+  '         \x1b[44;33m F7 \x1b[49;35m  }- \x1b[33mChat Toggle             \x1b[44;33m F8 \x1b[49;35m  }- \x1b[33mReprogram modem',
+  '         \x1b[44;33m F9 \x1b[49;35m  }- \x1b[33mExit BBS               \x1b[44;33m F10 \x1b[49;35m  }- \x1b[33mExit BBS \x1b[33m(\x1b[37moff hook\x1b[33m)\x1b[0m',
+  '                                       \x1b[44;33m SH+F10 \x1b[49;35m }- \x1b[33mClear tooltype cache\x1b[0m',
 ].join('\r\n');
 
 describe('buildMciDispatch — FULL-parity key sets', () => {

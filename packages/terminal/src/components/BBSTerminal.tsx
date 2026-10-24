@@ -1617,7 +1617,7 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
       }
 
       // Blink border between red and black backgrounds (like Amiga Guru Meditation)
-      const borderBg = phase % 2 === 0 ? '\x1b[41m' : '\x1b[40m'; // Red bg or black bg
+      const borderBg = phase % 2 === 0 ? '\x1b[41m' : '\x1b[49m'; // Red bg or default bg
       const textColor = '\x1b[31m'; // Text always red foreground
       const reset = '\x1b[0m';
       const frameWidth = 80;

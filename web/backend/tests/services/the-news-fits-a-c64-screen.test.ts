@@ -108,7 +108,7 @@ describe('a teletext page as ANSI', () => {
 
     const out = teletextToAnsi(html);
 
-    expect(out).toContain(`${ESC}[40m${ESC}[1;37m100 `);
+    expect(out).toContain(`${ESC}[49m${ESC}[1;37m100 `);
     expect(out).toContain(`${ESC}[1;33mSVT Text`);
   });
 

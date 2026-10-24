@@ -250,8 +250,9 @@ const TELETEXT_FG: Record<string, string> = {
   Bl: '30', R: '1;31', G: '1;32', Y: '1;33', B: '1;34', M: '1;35', C: '1;36', W: '1;37',
 };
 
+/** Teletext black is the bare page, so it maps to the terminal's default background (49), not a painted black. */
 const TELETEXT_BG: Record<string, string> = {
-  bgBl: '40', bgR: '41', bgG: '42', bgY: '43', bgB: '44', bgM: '45', bgC: '46', bgW: '47',
+  bgBl: '49', bgR: '41', bgG: '42', bgY: '43', bgB: '44', bgM: '45', bgC: '46', bgW: '47',
 };
 
 /** `&amp;` and friends, which the API sends and a terminal does not read. */

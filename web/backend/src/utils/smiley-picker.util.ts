@@ -121,7 +121,7 @@ export function renderPicker(state: SmileyPickerState): string {
       output += `\x1b[43m\x1b[30m[${shortName}]\x1b[0m\x1b[44m\x1b[37m `;
       visibleTabLen += 6;
     } else {
-      output += `\x1b[40m${shortName}\x1b[44m `;
+      output += `\x1b[49m${shortName}\x1b[44m `;
       visibleTabLen += 4;
     }
   }

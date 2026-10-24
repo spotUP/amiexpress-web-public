@@ -19,4 +19,4 @@ _/[37m  [94m[[96mE[94m][34m.....[95meNTER mESSAGE   [94m[[96mFR[94m][3
 %[37m   [94m[[96mJ[94m][34m...[95mjOIN cONFERENCE[37m   [94m[[96mZ[94m][34m........[95mziPPY sEARCH[37m   [94m[[96mN S U[94m][34m.....[95mnEW FiLERS   [34m|
 |[37m   [94m[[96mCF[94m][34m.......[95mcONF fLAGS[37m   [94m[[96mREQ[94m][34m.....[95mrEQUEST fiLES   [94m[[96mRZ[94m][34m.......[95mfAST uPLOAD[37m   [34m|
 |[37m   [94m[[96mTAB[94m][34m......[95mmENU sTYLE[37m                                                      [34m|
-+---[[92;44mUPTOWN MAIN MENU[34;40m]------------------------------- [94m[[96mG[94m][37m............[95mgOODbYE[37m [34m--+[0m
++---[[92;44mUPTOWN MAIN MENU[34;49m]------------------------------- [94m[[96mG[94m][37m............[95mgOODbYE[37m [34m--+[0m

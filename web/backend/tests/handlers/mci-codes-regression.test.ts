@@ -276,7 +276,7 @@ describe('parseMciCodes non-inline mode (socket=undefined) — wipe animation pa
 
   // Background color set (express.e:5675-5698, lowercase)
   it.each([
-    ['b0', '\x1b[40m'], ['b1', '\x1b[41m'], ['b2', '\x1b[42m'],
+    ['b0', '\x1b[49m'], ['b1', '\x1b[41m'], ['b2', '\x1b[42m'],
     ['b3', '\x1b[43m'], ['b4', '\x1b[44m'], ['b5', '\x1b[45m'],
     ['b6', '\x1b[46m'], ['b7', '\x1b[47m'],
   ])('~%s| → ANSI background color (express.e:5675)', async (code, ansi) => {
@@ -286,7 +286,7 @@ describe('parseMciCodes non-inline mode (socket=undefined) — wipe animation pa
 
   // ~z0-z7 are aliases for ~b0-b7 (express.e:5675 same dispatch line)
   it.each([
-    ['z0', '\x1b[40m'], ['z7', '\x1b[47m'],
+    ['z0', '\x1b[49m'], ['z7', '\x1b[47m'],
   ])('~%s| → ANSI background color alias (express.e:5675)', async (code, ansi) => {
     const { parsed } = await parse(`~${code}|text`);
     expect(parsed).toContain(ansi);
