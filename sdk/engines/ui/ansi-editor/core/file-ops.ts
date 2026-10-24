@@ -8,6 +8,7 @@ import {
   isAmigaText, isAmigaFont, latin1ByteToChar, cp437ByteToChar, encodeLatin1Art,
 } from './cp437';
 import type { Cell } from '../types';
+import { bgCode } from '../../../../core/ansi-background';
 import * as Canvas from './canvas';
 
 /**
@@ -470,7 +471,7 @@ export function saveANSFile(
         // Background color
         if (cell.bg !== currentBg) {
           if (cell.bg < 8 || !iceColors) {
-            codes.push(40 + (cell.bg % 8));
+            codes.push(bgCode(cell.bg % 8));
           } else {
             codes.push(100 + (cell.bg - 8));
           }

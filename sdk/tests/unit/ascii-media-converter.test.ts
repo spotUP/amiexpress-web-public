@@ -171,7 +171,7 @@ describe('emitters', () => {
   ];
 
   it('cellsToAnsiRows writes SGR only on colour change, bold for bright, and resets', () => {
-    expect(cellsToAnsiRows(grid)).toEqual(['\x1b[0;31;40mAB\x1b[0;1;31;44mC\x1b[0m']);
+    expect(cellsToAnsiRows(grid)).toEqual(['\x1b[0;31;49mAB\x1b[0;1;31;44mC\x1b[0m']);
   });
 
   it('cellsToPetsciiRows writes a colour byte on fg change then PETSCII bytes', () => {

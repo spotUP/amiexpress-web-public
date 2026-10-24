@@ -84,7 +84,7 @@ export function createDrawingCanvas(s: Screen, sock: any, st: any, cl: any, tb: 
       const sx = cp.xi + 1;
       const ey = cp.yl - 1;
       const ex = cp.xl - 1;
-      const bb = '\x1b[40m';
+      const bb = '\x1b[49m';
       const wf = '\x1b[37m';
       for (let y = sy; y < ey; y++) {
         bbs.write(`\x1b[${y + 1};${sx + 1}H${bb}${wf}${' '.repeat(ex - sx)}`);

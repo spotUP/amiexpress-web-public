@@ -10,6 +10,7 @@
  * This is compatible with neo-blessed's sattr() format.
  */
 
+import { bgParams } from '../../../core/ansi-background';
 import {
   A_NORMAL,
   A_BOLD,
@@ -191,13 +192,7 @@ export function attrToAnsi(attr: attr_t): string {
   const bg = extractBg(attr);
   if (bg !== 0x1ff) {
     // 0x1ff means default
-    if (bg < 8) {
-      codes.push(40 + bg); // Standard colors
-    } else if (bg < 16) {
-      codes.push(100 + (bg - 8)); // Bright colors
-    } else {
-      codes.push(48, 5, bg); // 256-color mode
-    }
+    codes.push(...bgParams(bg)); // black becomes 49, never 40
   }
 
   if (codes.length === 1 && codes[0] === 0) {

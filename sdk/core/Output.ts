@@ -6,6 +6,7 @@
 
 import type { Socket } from 'socket.io';
 import type { OutputAPI, AnsiColor, AnsiStyle } from './types';
+import { bgCode } from './ansi-background';
 
 export class Output implements OutputAPI {
   private socket: Socket;
@@ -70,7 +71,7 @@ export class Output implements OutputAPI {
   }
 
   async setBackground(color: AnsiColor): Promise<void> {
-    this.socket.emit('ansi-output', `\x1b[4${color}m`);
+    this.socket.emit('ansi-output', `\x1b[${bgCode(color)}m`);
   }
 
   async setStyle(style: AnsiStyle): Promise<void> {

@@ -2,6 +2,7 @@
  * Screen class - Root container and rendering manager
  */
 
+import { bgParams } from '../../../../core/ansi-background';
 import { Element } from './element';
 import { Program } from './program';
 import { cursor, screen as screenAnsi, attrs, blend, parseTags, stripAnsi, convert, match } from './colors';
@@ -901,21 +902,9 @@ export class Screen extends Element {
     if (flags & 16) out += '8;'; // invisible
 
     // Background color - ALWAYS explicitly set
-    // BBS terminals expect black background by default, but web terminals often default to white.
-    // We must ALWAYS emit an explicit background color, never rely on terminal default.
-    if (bg === 0x1ff) {
-      // Default/transparent bg -> use black (40) for BBS compatibility
-      out += '40;';
-    } else if (bg < 16) {
-      if (bg < 8) {
-        out += (bg + 40) + ';';  // Standard bg: 40-47
-      } else {
-        out += ((bg - 8) + 100) + ';';  // Bright bg: 100-107
-      }
-    } else {
-      // 256-color mode for bg
-      out += '48;5;' + bg + ';';
-    }
+    // Black never paints: macOS Terminal draws the default background transparent, so an
+    // explicit black (40) shows as a black block. Black and default both emit 49.
+    out += (bg === 0x1ff ? '49' : bgParams(bg).join(';')) + ';';
 
     // Foreground color - ALWAYS explicitly set
     // Use white (37) as default fg for visibility on black background
@@ -1017,7 +1006,7 @@ export class Screen extends Element {
     // CRITICAL FIX: Use bg=0 (black) instead of bg=0x1ff (transparent) for BBS consistency
     // Original neo-blessed uses 0x1ff which results in NO background ANSI code,
     // causing elements to use terminal's default background (not always black).
-    // BBS doors expect black background by default.
+    // Black is emitted as SGR 49 (see the background emitter), so this paints the terminal default.
     const dattr = ((0 << 18) | (0x1ff << 9)) | 0; // fg=0x1ff (default), bg=0 (black)
     // Use buffer dimensions, not screen dimensions, to avoid race condition during resize
     const bufHeight = this.buffer.length;

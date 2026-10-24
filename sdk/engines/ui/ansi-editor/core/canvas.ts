@@ -4,6 +4,7 @@
  */
 
 import type { Cell, Position } from '../types';
+import { bgCode } from '../../../../core/ansi-background';
 
 /**
  * Create a new empty canvas
@@ -545,7 +546,7 @@ export function canvasToANSI(canvas: Cell[][], useIceColors = false): string {
         // Handle background color
         if (cell.bg !== currentBg) {
           if (cell.bg < 8 || !useIceColors) {
-            codes.push(40 + (cell.bg % 8));
+            codes.push(bgCode(cell.bg % 8));
           } else {
             codes.push(100 + (cell.bg - 8)); // Bright background (iCE colors)
           }

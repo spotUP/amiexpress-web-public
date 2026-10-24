@@ -6,6 +6,7 @@
 import { vicColorToPetscii } from '../../petscii/ansi-to-petscii';
 import { asciiToPetsciiByte } from '../../petscii/ascii-to-petscii';
 import { AMIGA16_NAMES } from './color';
+import { bgCode } from '../../core/ansi-background';
 import type { AnsiCellGrid } from './convert';
 
 /**
@@ -19,7 +20,7 @@ export function cellsToAnsiRows(cells: AnsiCellGrid): string[] {
     let out = '';
     let last = '';
     for (const cell of row) {
-      const sgr = `\x1b[0;${cell.fg >= 8 ? '1;' : ''}${30 + (cell.fg & 7)};${40 + (cell.bg & 7)}m`;
+      const sgr = `\x1b[0;${cell.fg >= 8 ? '1;' : ''}${30 + (cell.fg & 7)};${bgCode(cell.bg & 7)}m`;
       if (sgr !== last) {
         out += sgr;
         last = sgr;

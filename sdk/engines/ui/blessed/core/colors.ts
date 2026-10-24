@@ -4,6 +4,7 @@
  * Copyright (c) 2013-2015, Christopher Jeffrey and contributors (MIT License).
  * https://github.com/chjj/blessed
  */
+import { bgParams } from '../../../../core/ansi-background';
 
 // ============================================================================
 // EXACT PORT OF NEO-BLESSED lib/colors.js
@@ -575,13 +576,7 @@ export function bg(color: string | number): string {
   const code = parseColor(color);
   if (code === -1) return '';
 
-  if (code < 8) {
-    return `${CSI}4${code}m`;
-  } else if (code < 16) {
-    return `${CSI}10${code - 8}m`;
-  } else {
-    return `${CSI}48;5;${code}m`;
-  }
+  return `${CSI}${bgParams(code).join(';')}m`;
 }
 
 // Text attributes

@@ -49,6 +49,7 @@ import {
   CutsceneScene,
 } from '../../core/types';
 import { visibleLength, stripAnsi } from '../../core/ansi-string-utils';
+import { bgCode as bgSgr } from '../../core/ansi-background';
 
 /** Particle for visual effects */
 interface Particle {
@@ -660,7 +661,7 @@ export class GraphicsEngine {
         }
         if (cell.bg !== lastBg) {
           // AnsiColor enum: 0-7 = normal colors, 8-15 = bright colors
-          const bgCode = cell.bg < 8 ? 40 + cell.bg : 100 + (cell.bg - 8);
+          const bgCode = bgSgr(cell.bg);
           output += `\x1b[${bgCode}m`;
           lastBg = cell.bg;
         }
