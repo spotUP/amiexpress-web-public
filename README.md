@@ -58,6 +58,13 @@ After cloning, turn on the repository's git hooks (the pre-push hook type-checks
 git config core.hooksPath dev/hooks
 ```
 
+The backend test type-check also reads door sources, so the doors it reaches need their own `node_modules`. Install the missing ones (and only those) with:
+
+```
+cd web/backend && npm ci
+dev/scripts/install-door-deps.sh            # --check only lists them
+```
+
 ```
 ./dev/scripts/start-servers.sh              # BBS, admin and SDK
 ./dev/scripts/start-servers.sh --debug      # with debug logging

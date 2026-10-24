@@ -134,6 +134,13 @@ if have_deps web/backend; then
   # jest does not type-check the tests, so nothing else stops them drifting
   # from the code: 79 errors had piled up unseen by 2026-10-12.
   step "backend test types" run_in web/backend npx tsc --noEmit -p tsconfig.tests.json
+  # The test program reads door sources, which resolve imports from each
+  # door's own node_modules. A fresh clone has none, and the errors that
+  # causes look like a broken commit. Name the doors that are missing.
+  case "$FAILED" in
+    *"backend test types"*)
+      "$REPO_ROOT/dev/scripts/install-door-deps.sh" --check 2>/dev/null | sed 's/^/[pre-push] /' ;;
+  esac
 else
   echo "[pre-push] backend types ... [SKIPPED] no node_modules in $CHECK_ROOT/web/backend"
   SKIPPED=yes
