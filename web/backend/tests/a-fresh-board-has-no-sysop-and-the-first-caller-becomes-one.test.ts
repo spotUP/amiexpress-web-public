@@ -77,7 +77,7 @@ import { BBSState, LoggedOnSubState } from '../src/constants/bbs-states';
 import { config } from '../src/config';
 import { setNewUserDependencies } from '../src/handlers/user/new-user.handler';
 import { initFirstUserIsSysopFlag, firstInstallPending } from '../src/utils/first-user-sysop.util';
-import { logonNamePromptText } from '../src/utils/node-tooltypes.util';
+import { logonNamePromptText, namePromptText } from '../src/utils/node-tooltypes.util';
 import { Database } from '../src/database';
 
 describe('a fresh database', () => {
@@ -220,6 +220,26 @@ describe('registration through the dispatcher', () => {
       } finally {
         jest.useRealTimers();
       }
+    });
+
+    test('after the setup code, the registration name prompt no longer tells the caller to log in for setup', async () => {
+      const code = await startFreshBoard();
+      const caller = makeCaller('Owner');
+      await type(caller, 'C');
+      await type(caller, code);
+      expect(caller.session.subState).toBe(LoggedOnSubState.NEW_USER_GDPR_CONSENT);
+      const before = caller.output().length;
+      // Privacy notice, then the pauses of the intro screens, up to "Enter your Name:".
+      await handleCommand(caller.socket as any, caller.session, 'Y');
+      for (let i = 0; i < 6 && caller.session.subState !== LoggedOnSubState.NEW_USER_NAME; i++) {
+        await handleCommand(caller.socket as any, caller.session, '\r');
+      }
+      expect(caller.session.subState).toBe(LoggedOnSubState.NEW_USER_NAME);
+      const registration = caller.output().slice(before);
+      expect(registration).toContain(namePromptText(1).trim());
+      expect(registration).not.toContain('no sysop yet');
+      // The logon prompt keeps the notice until the sysop account exists.
+      expect(logonNamePromptText(1)).toContain('This board has no sysop yet');
     });
 
     test('the code from the log lets the owner register, and that account is the sysop', async () => {

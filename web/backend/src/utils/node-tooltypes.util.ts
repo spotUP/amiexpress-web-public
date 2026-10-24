@@ -88,10 +88,18 @@ export function loginNamePrompt(nodeId: number): string {
  * answer's Enter, so the title sat one row too high and the prompt one row
  * too low.
  */
+export function namePromptText(nodeId: number): string {
+  return `\r\n${loginNamePrompt(nodeId)} `;
+}
+
+/**
+ * The name prompt at logon. WEB_: on a board with no sysop yet, it says how
+ * to create one, above the prompt and on every transport
+ * (first-user-sysop.util.ts). Only at logon: the new-user name loop asks
+ * after the setup code was accepted, so it uses namePromptText.
+ */
 export function logonNamePromptText(nodeId: number): string {
-  // WEB_: on a board with no sysop yet, say how to create one, above the
-  // prompt and on every transport (first-user-sysop.util.ts).
-  return `${firstInstallNotice()}\r\n${loginNamePrompt(nodeId)} `;
+  return `${firstInstallNotice()}${namePromptText(nodeId)}`;
 }
 
 /**
