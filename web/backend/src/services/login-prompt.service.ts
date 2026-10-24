@@ -27,6 +27,7 @@ import { db } from "../database";
 import { beginLogoff } from "../server/logoff";
 import { emitText, emitPrompt } from "../utils/output.util";
 import { YES_NO_PROMPT } from "../utils/await-input";
+import { claimSysopReset, sysopResetCodeMatches } from "../utils/first-user-sysop.util";
 import {
   loadPasswordPolicy,
   validateNewPassword,
@@ -287,6 +288,12 @@ export async function isPasswordResetAvailable(userEmail: string | null | undefi
  * the logon for that account, as express.e does (stat:=RESULT_SUCCESS,
  * 29196-29198), through the same runPostAuthLogin a correct password takes.
  *
+ * With `codeFromLog` (the sysop reset, first-user-sysop.util.ts), the
+ * email question is skipped: the caller is asked for the sysop reset code
+ * from the server log, then for the new password as above. WEB_: express.e
+ * has no such path; it lets a sysop who lost the password back in without
+ * mail.
+ *
  * Preconditions:
  *   session.passwordResetUsername = the username that failed login
  *   session.user must be undefined (we're pre-login)
@@ -302,20 +309,32 @@ export async function isPasswordResetAvailable(userEmail: string | null | undefi
 export async function promptPasswordReset(
   emitter: LoginEmitter,
   session: BBSSession,
+  options: { codeFromLog?: boolean } = {},
 ): Promise<PasswordResetResult> {
   const username = session.passwordResetUsername || "";
   if (!username) return { ok: false, reason: "no-email" };
+  const codeFromLog = options.codeFromLog === true;
 
   // express.e:29152-29155, plain text.
   emitText(emitter as any, "\r\nExcessive Password Failure\r\n");
-  emitPrompt(
-    emitter as any,
-    `\r\nDo you want to send a reset code to your email address ${YES_NO_PROMPT[1]}`,
-  );
-  session.passwordResetState = "await_confirm";
+  if (codeFromLog) {
+    emitText(
+      emitter as any,
+      "\r\nSysop password reset. Enter the reset code from the server log.\r\n\r\n",
+    );
+    emitPrompt(emitter as any, "Reset code: ");
+    session.passwordResetState = "await_code";
+  } else {
+    emitPrompt(
+      emitter as any,
+      `\r\nDo you want to send a reset code to your email address ${YES_NO_PROMPT[1]}`,
+    );
+    session.passwordResetState = "await_confirm";
+  }
 
   return new Promise<PasswordResetResult>((resolve) => {
-    let phase: "await_confirm" | "await_code" | "await_new_password" = "await_confirm";
+    let phase: "await_confirm" | "await_code" | "await_new_password" =
+      codeFromLog ? "await_code" : "await_confirm";
     let buf = "";
     let lastCharWasCR = false;
 
@@ -391,8 +410,12 @@ export async function promptPasswordReset(
 
     const processLine = async (line: string) => {
       if (phase === "await_code") {
-        // express.e:29176 StrCmp - exact, case and all.
-        if (line !== (session.passwordResetCode || "")) {
+        // express.e:29176 StrCmp - exact, case and all. The sysop reset
+        // code is typed off a log, so case and the dash do not matter.
+        const correct = codeFromLog
+          ? sysopResetCodeMatches(line) && claimSysopReset()
+          : line === (session.passwordResetCode || "");
+        if (!correct) {
           emitText(emitter as any, "\r\nThe reset code was not correct.\r\n");
           await pwfail("wrong-code");
           return;
@@ -417,7 +440,9 @@ export async function promptPasswordReset(
           return;
         }
         try {
-          await db.updateUserPassword(user.id, newPassword);
+          // The slot carries express.e:29828-29829 (pwdLastUpdated,
+          // forcePwdReset) to the user files, as promptForcedPwdChange does.
+          await db.updateUserPassword(user.id, newPassword, user.slotNumber ?? 0);
         } catch (err) {
           console.error("[promptPasswordReset] updateUserPassword failed:", err);
           // WEB_: no express.e counterpart - its setNewPassword cannot fail.
@@ -426,6 +451,7 @@ export async function promptPasswordReset(
         }
       }
 
+      if (codeFromLog) console.warn(`[SETUP] Sysop password reset used for ${username}.`);
       session.loginRetryCount = 0;
       teardown();
       resolve({ ok: true });

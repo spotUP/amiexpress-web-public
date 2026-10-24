@@ -1,7 +1,7 @@
 import "reflect-metadata"; // Must be first import for tsyringe decorators
 import "./utils/install-log-gate"; // LOG_LEVEL gate: before any module logs at import time
 import { startEventLoopWatchdog } from "./server/event-loop-watchdog";
-import { initFirstUserIsSysopFlag } from "./utils/first-user-sysop.util";
+import { initFirstUserIsSysopFlag, initSysopPasswordReset } from "./utils/first-user-sysop.util";
 // Type-only (erased at runtime, so it cannot displace reflect-metadata).
 import type { PetsciiRenderCtx, PetsciiSpan } from './handlers/petscii-screen.render';
 import type { WidthGateFallThrough } from './utils/door-min-columns.util';
@@ -1471,6 +1471,8 @@ console.warn(
 
     // Check for sysop-level user on fresh install
     await initFirstUserIsSysopFlag(db);
+    // SYSOP_PASSWORD_RESET=1: a one-time code for a lost sysop password
+    initSysopPasswordReset();
 
     /**
      * LISTENING IS OPTIONAL, AND ONLY A TEST TURNS IT OFF.

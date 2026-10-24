@@ -95,6 +95,7 @@ jest.mock('../../src/services/batch-scheduler', () => ({
 import { BBSState, LoggedOnSubState } from '../../src/constants/bbs-states';
 import { setDatabase } from '../../src/handlers/command-handler/dependency-injection';
 import { isPasswordResetAvailable, promptPasswordReset } from '../../src/services/login-prompt.service';
+import { initSysopPasswordReset, sysopResetPending } from '../../src/utils/first-user-sysop.util';
 import { handleCommand } from '../../src/handlers/command.handler';
 import { flushOutput } from '../../src/utils/output.util';
 
@@ -162,7 +163,7 @@ describe('telnet/SSH parity — multi-step pre-login flows', () => {
 
       session.loginInputHandler('n3wpass\r');
       await expect(flow).resolves.toEqual({ ok: true });
-      expect(updateUserPassword).toHaveBeenCalledWith('u-7', 'n3wpass');
+      expect(updateUserPassword).toHaveBeenCalledWith('u-7', 'n3wpass', 0);
 
       // express.e:29152-29181, byte for byte (the code and password are
       // echoed as typed - the password masked, a WEB_ choice).
@@ -276,6 +277,88 @@ describe('telnet/SSH parity — multi-step pre-login flows', () => {
       const line = (runPwfailAndLogoff.mock.calls[0] as any[])[0];
       expect(wireOf(line)).toMatch(/\r\nExcessive Password Failure\r\n$/);
       expect((runPwfailAndLogoff.mock.calls[0] as any[])[2]).toBe('');
+    });
+  });
+
+  describe('sysop password reset from the server log (SYSOP_PASSWORD_RESET)', () => {
+    /** Start the board with the setting and read the code off its log. */
+    const startWithTheResetSetting = (): string => {
+      const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+      initSysopPasswordReset({ SYSOP_PASSWORD_RESET: '1' } as NodeJS.ProcessEnv);
+      const printed = warn.mock.calls.map((c) => String(c[0])).join('\n');
+      warn.mockRestore();
+      const code = /Sysop password reset code: ([A-Z0-9]{4}-[A-Z0-9]{4})/.exec(printed)?.[1];
+      if (!code) throw new Error(`no reset code in the log: ${printed}`);
+      return code;
+    };
+
+    const outOfAttempts = (): any => ({
+      state: BBSState.LOGON,
+      connectionType: 'telnet',
+      nodeId: 1,
+      loginRetryCount: 2,
+      tempData: { loginPhase: 'password', loginUsername: 'spot', inputBuffer: 'wrong' },
+    });
+
+    afterEach(() => initSysopPasswordReset({} as NodeJS.ProcessEnv));
+
+    it('a sysop with no mail, out of password attempts, sets a new password with the logged code', async () => {
+      account = { ...account, email: null, secLevel: 255, slotNumber: 1 };
+      const code = startWithTheResetSetting();
+      const line = aTelnetLine();
+      const session = outOfAttempts();
+
+      void handleCommand(line, session, '\r');
+      await settle();
+      expect(session.passwordResetState).toBe('await_code');
+
+      session.loginInputHandler(`${code.toLowerCase()}\r`);   // case does not matter
+      await settle();
+      expect(session.passwordResetState).toBe('await_new_password');
+      session.loginInputHandler('n3wpass\r');
+      await settle();
+
+      expect(updateUserPassword).toHaveBeenCalledWith('u-7', 'n3wpass', 1);
+      expect(runPwfailAndLogoff).not.toHaveBeenCalled();
+      expect(wireOf(line)).toContain('Sysop password reset. Enter the reset code from the server log.');
+      // The code works once.
+      expect(sysopResetPending()).toBe(false);
+    });
+
+    it('a wrong code is PWFAIL and changes nothing', async () => {
+      account = { ...account, email: null, secLevel: 255 };
+      startWithTheResetSetting();
+      const session = outOfAttempts();
+
+      void handleCommand(aTelnetLine(), session, '\r');
+      await settle();
+      session.loginInputHandler('AAAA-AAAA\r');
+      await settle();
+
+      expect(runPwfailAndLogoff).toHaveBeenCalledTimes(1);
+      expect(updateUserPassword).not.toHaveBeenCalled();
+    });
+
+    it('an ordinary account is never offered the sysop reset', async () => {
+      account = { ...account, email: null, secLevel: 10 };
+      startWithTheResetSetting();
+      const session = outOfAttempts();
+
+      await handleCommand(aTelnetLine(), session, '\r');
+
+      expect(session.passwordResetState).toBeUndefined();
+      expect(runPwfailAndLogoff).toHaveBeenCalledTimes(1);
+      expect(sysopResetPending()).toBe(true);
+    });
+
+    it('without the setting, a sysop with no mail goes straight to PWFAIL', async () => {
+      account = { ...account, email: null, secLevel: 255 };
+      const session = outOfAttempts();
+
+      await handleCommand(aTelnetLine(), session, '\r');
+
+      expect(session.passwordResetState).toBeUndefined();
+      expect(runPwfailAndLogoff).toHaveBeenCalledTimes(1);
     });
   });
 

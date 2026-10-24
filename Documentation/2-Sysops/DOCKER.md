@@ -46,6 +46,9 @@ Connect at `http://localhost:3001` (or `telnet localhost 64128`), type the
 sysop name you want, answer `C` and enter the setup code. The steps are in
 [SYSOP_GUIDE.md](./SYSOP_GUIDE.md#create-the-sysop-account).
 
+Lost the sysop password later? Set `SYSOP_PASSWORD_RESET=1` in `.env`, restart
+and follow [Can't Login as Admin](./SYSOP_GUIDE.md#cant-login-as-admin).
+
 For 68K Amiga doors, upload a Kickstart 3.x ROM on the admin Health page
 (`http://localhost:3001/admin/health`). Without one, the doors run on AROS.
 

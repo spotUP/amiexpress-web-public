@@ -316,9 +316,23 @@ cat logs/frontend.log
 - No sysop account yet (setup never finished): the server log shows a
   `[SETUP] Setup code` line. Follow [Create the sysop account](#create-the-sysop-account).
   A restart prints a fresh code.
-- A sysop exists but its password is lost: there is no supported reset tool
-  yet. A database edit alone does not help: the board takes accounts and
-  access levels from its user files.
+- A sysop exists but its password is lost, and the account has no email
+  address (or the board sends no mail): use the one-time reset code.
+  1. Add `SYSOP_PASSWORD_RESET=1` to `.env` and restart the board
+     (`docker compose up -d`).
+  2. Read the code from the log:
+     `docker compose logs | grep "reset code"`
+     (`[SETUP] Sysop password reset code: ABCD-EFGH`).
+  3. Log in with the sysop name and type a wrong password three times.
+  4. At `Reset code:`, enter the code (case and the dash do not matter),
+     then type the new password twice.
+  5. Remove `SYSOP_PASSWORD_RESET` from `.env` and restart.
+
+  The code works once, and only for an account at level 200 or higher. A
+  wrong code disconnects the caller and changes nothing. A sysop with an
+  email address on a board that sends mail can use the emailed reset code
+  instead, without the setting. A database edit alone does not help: the
+  board takes accounts and access levels from its user files.
 
 ### Database Corruption
 

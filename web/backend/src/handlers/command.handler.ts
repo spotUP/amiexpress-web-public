@@ -218,6 +218,7 @@ import {
 import { loginNamePrompt, loginPasswordPrompt, logonNamePromptText } from '../utils/node-tooltypes.util';
 import { feedInputWaiter, readLineAhead } from '../utils/await-input';
 import { endUpload } from '../services/upload-end.service';
+import { isSysopLevel, sysopResetPending } from '../utils/first-user-sysop.util';
 
 // Re-export dependency injection for external modules (backward compatibility)
 
@@ -1995,9 +1996,12 @@ function endPasswordMask(socket: any, session: BBSSession): void {
               const existingUser = await getDatabase().getUserByUsername(username);
               const { isPasswordResetAvailable, promptPasswordReset } =
                 await import('../services/login-prompt.service');
-              if (await isPasswordResetAvailable(existingUser?.email)) {
+              // WEB_: SYSOP_PASSWORD_RESET - a sysop account takes the code
+              // from the server log instead of mail (first-user-sysop.util.ts).
+              const codeFromLog = sysopResetPending() && isSysopLevel(existingUser?.secLevel);
+              if (codeFromLog || await isPasswordResetAvailable(existingUser?.email)) {
                 session.passwordResetUsername = username;
-                const resetResult = await promptPasswordReset(socket, session);
+                const resetResult = await promptPasswordReset(socket, session, { codeFromLog });
                 if (resetResult.ok) {
                   // express.e:29196-29198 - a correct reset code is
                   // `stat:=RESULT_SUCCESS`, the password loop ends and the
