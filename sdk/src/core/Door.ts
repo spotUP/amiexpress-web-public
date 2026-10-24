@@ -188,7 +188,7 @@ export class Door {
     const video = new Video(socket);
 
     return {
-      user: user || { id: '0', username: 'Guest', accessLevel: 0, timesCalled: 0, uploads: 0, downloads: 0 },
+      user: user || { id: '0', username: 'Guest', secLevel: 0, timesCalled: 0, uploads: 0, downloads: 0 },
       nodeId,
       output,
       input,

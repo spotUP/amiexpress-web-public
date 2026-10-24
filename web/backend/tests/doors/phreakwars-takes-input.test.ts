@@ -83,7 +83,7 @@ function launch(userId: string, columns = 40): RunningDoor {
     user: {
       id: userId,
       username: `PW${userId}`,
-      accessLevel: 255,
+      secLevel: 255,
       timesCalled: 1,
       uploads: 0,
       downloads: 0,

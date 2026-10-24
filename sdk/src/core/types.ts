@@ -25,19 +25,12 @@ export interface OnlineNode {
   status: 'active' | 'detached';
 }
 
-export interface User {
-  id: string;
-  username: string;
-  realname?: string;
-  location?: string;
-  accessLevel: number;
-  timesCalled: number;
-  uploads: number;
-  downloads: number;
-  lastLogin?: Date;
-  /** User's configured lines per screen (default 23, max 25) */
-  linesPerScreen?: number;
-}
+// The caller, as the board hands it to a door. One definition, in
+// core/types: this legacy tree kept its own copy, which still said
+// `accessLevel` after the board's field became `secLevel` (db76a6eca), so a
+// ServerDoor handler typed with the core DoorContext no longer type-checked.
+import type { User } from '../../core/types';
+export type { User };
 
 // ===== ANSI Color Types =====
 

@@ -661,6 +661,8 @@ export interface User {
   uploads: number;
   downloads: number;
   lastLogin?: Date;
+  /** User's configured lines per screen (default 23, max 25) */
+  linesPerScreen?: number;
 }
 
 /**

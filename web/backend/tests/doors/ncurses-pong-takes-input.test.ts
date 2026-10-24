@@ -142,7 +142,7 @@ function launch(nodeId: number): RunningDoor {
     user: {
       id: String(nodeId),
       username: `PONG${nodeId}`,
-      accessLevel: 255,
+      secLevel: 255,
       timesCalled: 1,
       uploads: 0,
       downloads: 0,
