@@ -61,6 +61,27 @@ describe('shipped screens never set a black background', () => {
     expect(offenders).toEqual([]);
   });
 
+  // Third-party 68K doors carry their colours as string literals in the
+  // executable (zOOsTAtS, DreamStats, WarOLM...). They were patched in place,
+  // 40 to 49, which keeps every offset; this keeps a re-imported copy honest.
+  it('has no black background in any tracked Amiga door executable', () => {
+    const files = execFileSync('git', ['ls-files', '-z', 'Doors'], { cwd: REPO, maxBuffer: 64 * 1024 * 1024 })
+      .toString().split('\0').filter(Boolean);
+    const offenders: string[] = [];
+    let executables = 0;
+    for (const f of files) {
+      let data: Buffer;
+      try { data = fs.readFileSync(path.join(REPO, f)); } catch { continue; }
+      if (data.length < 4 || data.readUInt32BE(0) !== 0x3f3) continue; // HUNK_HEADER
+      executables++;
+      for (const m of data.toString('latin1').matchAll(SGR)) {
+        if (blackBackgrounds(m[1]) > 0) { offenders.push(`${f}: ESC[${m[1]}m`); break; }
+      }
+    }
+    expect(executables).toBeGreaterThan(20); // sentinel: the scan really ran
+    expect(offenders).toEqual([]);
+  });
+
   it('the detector flags the black forms and leaves foreground and reverse alone', () => {
     expect(blackBackgrounds('40')).toBe(1);
     expect(blackBackgrounds('1;37;40')).toBe(1);
