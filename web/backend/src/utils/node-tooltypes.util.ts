@@ -20,6 +20,7 @@ import * as path from 'path';
 
 import { config } from '../config';
 import { readTooltypeMap } from './info-file.util';
+import { firstInstallNotice } from './first-user-sysop.util';
 
 const cache = new Map<number, Map<string, string>>();
 
@@ -88,7 +89,9 @@ export function loginNamePrompt(nodeId: number): string {
  * too low.
  */
 export function logonNamePromptText(nodeId: number): string {
-  return `\r\n${loginNamePrompt(nodeId)} `;
+  // WEB_: on a board with no sysop yet, say how to create one, above the
+  // prompt and on every transport (first-user-sysop.util.ts).
+  return `${firstInstallNotice()}\r\n${loginNamePrompt(nodeId)} `;
 }
 
 /**

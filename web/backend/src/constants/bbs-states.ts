@@ -150,6 +150,7 @@ export enum LoggedOnSubState {
   OLM_NODE_INPUT = 'olm_node_input',        // Waiting for node number input
 
   // New User Registration - express.e:30003-30310 (doNewUser)
+  NEW_USER_SETUP_CODE = 'new_user_setup_code', // WEB_: first-install setup code, before anything else
   NEW_USER_GDPR_CONSENT = 'new_user_gdpr_consent', // WEB_: privacy notice accept/decline gate
   NEW_USER_NAME = 'new_user_name',          // Entering name with duplicate check
   NEW_USER_LOCATION = 'new_user_location',  // City, State

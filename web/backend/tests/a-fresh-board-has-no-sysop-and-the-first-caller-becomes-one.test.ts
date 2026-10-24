@@ -10,6 +10,11 @@
  *     gives the first caller 255 and the second the board default. The
  *     sentinel is the "[SETUP] First user created" log line, which only the
  *     first-user branch prints.
+ * And the setup-code gate, through the login prompt a caller really answers:
+ *  3. the code the startup check prints in the server log is the only way
+ *     into the first registration; a wrong code disconnects and creates
+ *     nothing, the right one goes on to the privacy notice and the account
+ *     made at the end is the sysop. The name prompt says so before login.
  */
 process.env.SKIP_DB_INIT = '1';
 
@@ -71,7 +76,8 @@ import * as path from 'path';
 import { BBSState, LoggedOnSubState } from '../src/constants/bbs-states';
 import { config } from '../src/config';
 import { setNewUserDependencies } from '../src/handlers/user/new-user.handler';
-import { initFirstUserIsSysopFlag } from '../src/utils/first-user-sysop.util';
+import { initFirstUserIsSysopFlag, firstInstallPending } from '../src/utils/first-user-sysop.util';
+import { logonNamePromptText } from '../src/utils/node-tooltypes.util';
 import { Database } from '../src/database';
 
 describe('a fresh database', () => {
@@ -151,7 +157,7 @@ describe('registration through the dispatcher', () => {
   });
 
   test('the first caller gets level 255, the second the board default', async () => {
-    const log = jest.spyOn(console, 'log').mockImplementation(() => undefined);
+    const log = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
     (global as any).firstUserIsSysop = true; // what initFirstUserIsSysopFlag sets on a board with no sysop
 
     await register('Alice');
@@ -164,5 +170,84 @@ describe('registration through the dispatcher', () => {
     expect(log.mock.calls.some((c) => String(c[0]).includes('First user created: Bob'))).toBe(false);
     expect(users.get('Bob').secLevel).not.toBe(255);
     expect(db.createUser).toHaveBeenCalledTimes(2);
+  });
+
+  describe('on a board with no sysop, through the login prompt', () => {
+    /** Starts the board the way index.ts does, and reads the code off the log. */
+    const startFreshBoard = async (): Promise<string> => {
+      const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+      (global as any).firstUserIsSysop = undefined;
+      await initFirstUserIsSysopFlag({ query: async () => ({ rows: [{ count: 0 }] }) });
+      const banner = warn.mock.calls.map((c) => String(c[0])).join('\n');
+      const code = /Setup code: ([A-Z0-9]{4}-[A-Z0-9]{4})/.exec(banner)?.[1];
+      expect(code).toBeDefined();
+      return code!;
+    };
+    /** A caller who typed an unknown name at the logon prompt and is asked to create it. */
+    const makeCaller = (username: string) => {
+      const socket = { id: 's', on() {}, emit: jest.fn(), disconnect: jest.fn() };
+      const session = {
+        state: BBSState.LOGON, nodeId: 1, inputBuffer: '',
+        tempData: { loginPhase: 'new-user-confirm', loginUsername: username },
+      } as any;
+      const output = () => socket.emit.mock.calls.filter((c) => c[0] === 'ansi-output').map((c) => String(c[1])).join('');
+      return { socket, session, output };
+    };
+    const type = async (caller: ReturnType<typeof makeCaller>, line: string) => {
+      for (const ch of line) await handleCommand(caller.socket as any, caller.session, ch);
+      await handleCommand(caller.socket as any, caller.session, '\r');
+    };
+
+    test('the name prompt says the board has no sysop yet, before anyone logs in', async () => {
+      await startFreshBoard();
+      expect(logonNamePromptText(1)).toContain('This board has no sysop yet');
+    });
+
+    test('a wrong setup code disconnects the caller and creates no account', async () => {
+      jest.useFakeTimers();
+      try {
+        await startFreshBoard();
+        const caller = makeCaller('Mallory');
+        await type(caller, 'C');
+        expect(caller.session.subState).toBe(LoggedOnSubState.NEW_USER_SETUP_CODE);
+        await type(caller, 'WRONG-CODE');
+        expect(caller.output()).toContain('Wrong setup code');
+        expect(caller.output()).not.toContain('Accept privacy notice');
+        jest.runAllTimers();
+        expect(caller.socket.disconnect).toHaveBeenCalled();
+        expect(db.createUser).not.toHaveBeenCalled();
+        expect(firstInstallPending()).toBe(true);
+      } finally {
+        jest.useRealTimers();
+      }
+    });
+
+    test('the code from the log lets the owner register, and that account is the sysop', async () => {
+      const code = await startFreshBoard();
+      const caller = makeCaller('Owner');
+      await type(caller, 'C');
+      expect(caller.output()).toContain('Setup code (from the server log)');
+      await type(caller, code.toLowerCase()); // typed by hand, case does not matter
+      expect(caller.output()).toContain('Setup code accepted');
+      expect(caller.session.subState).toBe(LoggedOnSubState.NEW_USER_GDPR_CONSENT);
+      expect(caller.session.newUserData.username).toBe('Owner');
+
+      // The prompts in between are the ordinary registration; answer them as
+      // filled in and confirm the account.
+      Object.assign(caller.session.newUserData, { location: 'Oslo', email: 'owner@example.com', password: 'hunter22', linesPerScreen: 24 });
+      caller.session.subState = LoggedOnSubState.NEW_USER_CONFIRM;
+      const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+      await handleCommand(caller.socket as any, caller.session, 'Y');
+      expect(warn.mock.calls.some((c) => String(c[0]).includes('[SETUP] First user created: Owner'))).toBe(true);
+      expect(users.get('Owner').secLevel).toBe(255);
+
+      // Set up: no prompt, no notice, and the code is spent.
+      expect(firstInstallPending()).toBe(false);
+      expect(logonNamePromptText(1)).not.toContain('no sysop yet');
+      const next = makeCaller('Visitor');
+      await type(next, 'C');
+      expect(next.session.subState).toBe(LoggedOnSubState.NEW_USER_GDPR_CONSENT);
+      expect(next.output()).not.toContain('Setup code');
+    });
   });
 });

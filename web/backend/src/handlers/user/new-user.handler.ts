@@ -35,6 +35,7 @@ import { checkIfNameAllowed } from '../../utils/name-allowed.util';
 import { newUserConferenceAccess, newUserPreset } from '../../utils/new-user-preset';
 import { UserFlag } from '../../constants/express-flags';
 import { nodeFlag, logonNamePromptText } from '../../utils/node-tooltypes.util';
+import { claimSysopPromotion, firstInstallPending, setupCodeMatches } from '../../utils/first-user-sysop.util';
 import { computerTypeChoices, computerTypeRows } from '../../utils/computer-types.util';
 
 // WEB_: GDPR privacy notice version (bump when Screens/PRIVACY.TXT changes
@@ -152,6 +153,52 @@ console.log(' [NEW USER] Starting registration for:', username);
   session.replayingDisplayInputs = false;
   session.menuPause = false;
 
+  // WEB_: a board with no sysop yet. Only the owner, who can read the server
+  // log, may create the first account, because that account becomes sysop
+  // (first-user-sysop.util.ts). Asked before NONEWUSERS: a fresh board must
+  // be able to make its sysop whatever the new-user screens say.
+  if (firstInstallPending()) {
+    session.newUserSetupUsername = username || '';
+    session.subState = LoggedOnSubState.NEW_USER_SETUP_CODE;
+    promptForSetupCode(socket, session);
+    return;
+  }
+
+  await beginNewUserRegistration(socket, session, username);
+}
+
+function promptForSetupCode(socket: Socket, session: any) {
+  socket.emit('ansi-output',
+    '\r\n\x1b[1;33m[SETUP] This board has no sysop yet.\x1b[0m\r\n' +
+    'The account you create now becomes the sysop.\r\n' +
+    '\r\n\x1b[1;37mSetup code (from the server log): \x1b[0m');
+  session.inputBuffer = '';
+}
+
+/**
+ * WEB_: the answer to the setup-code prompt. The right code continues into
+ * the ordinary registration; anything else disconnects, so the code cannot
+ * be guessed in one call.
+ */
+export async function handleSetupCodeInput(socket: Socket, session: any, input: string) {
+  const username = session.newUserSetupUsername || '';
+  session.newUserSetupUsername = undefined;
+  if (!firstInstallPending()) {
+    // Someone else finished setting up while this caller typed: an ordinary
+    // registration from here.
+    await beginNewUserRegistration(socket, session, username);
+    return;
+  }
+  if (!setupCodeMatches(input)) {
+    console.warn('[SETUP] Wrong setup code entered - caller disconnected');
+    await abortNewUser(socket, session, '\r\n\x1b[31mWrong setup code.\x1b[0m\r\n');
+    return;
+  }
+  socket.emit('ansi-output', '\r\n\x1b[32m[OK] Setup code accepted.\x1b[0m\r\n');
+  await beginNewUserRegistration(socket, session, username);
+}
+
+async function beginNewUserRegistration(socket: Socket, session: any, username: string) {
   // These screens are optional gates: their presence signals "block registration".
   // Missing is the common case, so suppress the "Screen not found" sysop alert.
   if (await showScreen(socket, session, screenConfig.NONEWUSERS, /* silent */ true)) {
@@ -1477,16 +1524,14 @@ async function createAccountRecord(socket: Socket, session: any): Promise<boolea
     const autoRejoin = defaults?.autoRejoin !== false ? 1 : 0;
 
     // Check if this is the first user (should become sysop)
-    const firstUserIsSysop = (global as any).firstUserIsSysop === true;
+    const firstUserIsSysop = claimSysopPromotion();
     let assignedSecLevel = data.autoValidated ? autoValidationSecLevel : (preset ? preset.secLevel : defaultSecLevel);
 
     if (firstUserIsSysop) {
       // Promoted silently: express.e makes the sysop's account without a
       // word (processSysopLogon, 29039-29041). Sysop decision 2026-10-05.
       assignedSecLevel = 255; // Auto-promote first user to sysop
-console.log(`[SETUP] First user created: ${data.username} - Auto-assigned sysop level 255`);
-      // Clear the flag so subsequent users get normal security level
-      (global as any).firstUserIsSysop = false;
+console.warn(`[SETUP] First user created: ${data.username} - Auto-assigned sysop level 255`);
     }
 
     // Create user in database
