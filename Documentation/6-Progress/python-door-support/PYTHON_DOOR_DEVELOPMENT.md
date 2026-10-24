@@ -476,8 +476,8 @@ with open(data_file, 'w') as f:
 
 ## Resources
 
-- [Example Python Door](../../../web/backend/doors/test-hello.py)
-- [DOOR.SYS Specification](DOOR_DEVELOPMENT.md#door-sys-format)
+- [Example Python Door](test-hello.py)
+- [DOOR.SYS Specification](../../4-Door-Developers/DOOR_DEVELOPMENT.md#door-sys-format)
 - [ANSI Escape Codes Reference](https://en.wikipedia.org/wiki/ANSI_escape_code)
 - [Python 3 Documentation](https://docs.python.org/3/)
 

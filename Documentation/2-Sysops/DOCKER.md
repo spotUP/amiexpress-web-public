@@ -29,27 +29,31 @@ See [Docker Analysis](#why-docker-for-amiexpress) for detailed benefits.
 
 ```bash
 # 1. Clone repository
-git clone https://github.com/your-org/amiexpress-web.git
+git clone https://github.com/spotUP/amiexpress-web.git
 cd amiexpress-web
 
-# 2. Place Kickstart ROM (for Amiga doors)
-# Copy your Kickstart v3.1 rev 40.63 ROM to:
-mkdir -p data/amiga-roms
-cp /path/to/kickstart-rom data/amiga-roms/
+# 2. Create the environment file (secrets are generated on first start)
+cp .env.example .env
 
 # 3. Start BBS
-docker-compose up -d
+docker compose up -d
+
+# 4. Read the one-time setup code for the sysop account
+docker compose logs | grep "Setup code"
 ```
 
-Access at `http://localhost:3001`
+Connect at `http://localhost:3001` (or `telnet localhost 64128`), type the
+sysop name you want, answer `C` and enter the setup code. The steps are in
+[SYSOP_GUIDE.md](./SYSOP_GUIDE.md#create-the-sysop-account).
 
-That's it! The BBS is running.
+For 68K Amiga doors, upload a Kickstart 3.x ROM on the admin Health page
+(`http://localhost:3001/admin/health`). Without one, the doors run on AROS.
 
 ## Configuration
 
 ### Environment Variables
 
-Create `.env.local` file in project root:
+Create `.env` file in project root:
 
 ```bash
 # Security (REQUIRED - change these!)
@@ -58,8 +62,8 @@ SESSION_SECRET=your-super-secret-session-key-here
 
 # Ports (optional)
 PORT=3001
-TELNET_PORT=2323
-SSH_PORT=2222
+TELNET_PORT=64128
+SSH_PORT=31337
 
 # Debug (optional)
 DEBUG=false
@@ -75,51 +79,34 @@ DATABASE_FILE=amiexpress.db
 openssl rand -base64 32
 
 # Or use this one-liner
-echo "JWT_SECRET=$(openssl rand -base64 32)" > .env.local
-echo "SESSION_SECRET=$(openssl rand -base64 32)" >> .env.local
+echo "JWT_SECRET=$(openssl rand -base64 32)" > .env
+echo "SESSION_SECRET=$(openssl rand -base64 32)" >> .env
 ```
 
 ### Volume Mounts
 
-Docker Compose mounts these directories:
-
-| Host Path | Container Path | Purpose |
-|-----------|---------------|---------|
-| `./db` | `/app/db` | SQLite database |
-| `./data` | `/app/data` | BBS data files |
-| `./logs` | `/app/logs` | Server logs |
-| `./Screens` | `/app/Screens` | ANSI screens |
-| `./Commands` | `/app/Commands` | BBS commands |
-| `./Bulletins` | `/app/Bulletins` | System bulletins |
-| `./Doors` | `/app/Doors` | Door programs |
-| `./Users` | `/app/Users` | User database |
-| `./Conf1-13` | `/app/Conf1-13` | Conference data |
-| `./data/amiga-roms` | `/app/data/amiga-roms` | Kickstart ROM (read-only) |
+Board data (database, files, door data, ROMs, generated secrets) lives in the
+named volume `bbs-data`, mounted at `/app/data` (see `docker-compose.yml`).
+The Kickstart ROM directory is `/app/data/amiga-roms` on that volume.
 
 ### Kickstart ROM Setup
 
-For 68K Amiga doors to work, you need a Kickstart ROM:
+68K Amiga doors run on AROS until a Kickstart ROM is installed. Upload a
+plain 512K Kickstart 3.x image (any filename) on the admin Health page
+(`/admin/health`, Kickstart card). To copy one in by hand instead:
 
 ```bash
-# 1. Create ROM directory
-mkdir -p data/amiga-roms
-
-# 2. Copy Kickstart v3.1 rev 40.63 (A500/A600/A2000)
-cp /path/to/kickstart.rom data/amiga-roms/
-
-# 3. Verify (should be 512KB)
-ls -lh data/amiga-roms/
-# -rw-r--r--  1 user  staff   512K Dec  9 10:00 Kickstart v3.1 rev 40.63 (1993)(Commodore)(A500-A600-A2000).rom
+docker compose cp kickstart.rom bbs:/app/data/amiga-roms/
 ```
 
 **Alternative: AROS**
 ```bash
 # Copy AROS ROM files
-cp aros-rom.bin data/amiga-roms/
-cp aros-ext.bin data/amiga-roms/
+docker compose cp aros-rom.bin bbs:/app/data/amiga-roms/
+docker compose cp aros-ext.bin bbs:/app/data/amiga-roms/
 
-# Force AROS in .env.local
-echo "AEDOOR_ROM=aros" >> .env.local
+# Force AROS in .env
+echo "AEDOOR_ROM=aros" >> .env
 ```
 
 ## Docker Commands
@@ -201,9 +188,9 @@ Multi-node setup uses port ranges:
 
 | Node | HTTP | Telnet | SSH |
 |------|------|--------|-----|
-| 1 | 3001 | 2323 | 2222 |
-| 2 | 3002 | 2324 | 2223 |
-| 3 | 3003 | 2325 | 2224 |
+| 1 | 3001 | 64128 | 31337 |
+| 2 | 3002 | 64129 | 31338 |
+| 3 | 3003 | 64130 | 31339 |
 | 4 | 3004 | 2326 | 2225 |
 
 ### Load Balancing (Optional)

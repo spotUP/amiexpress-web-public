@@ -577,7 +577,7 @@ See `Documentation/4-Door-Developers/SDK_V2_COMPREHENSIVE.md` for SDK documentat
 **AmiExpress-Web:**
 - Run on test server
 - Use for testing only
-- Telnet port: 2323 (different from Amiga)
+- Telnet port: 64128 (different from Amiga)
 
 **Testing Period:** 1-2 weeks recommended
 
@@ -619,12 +619,12 @@ See `Documentation/4-Door-Developers/SDK_V2_COMPREHENSIVE.md` for SDK documentat
 yourbbs.com → 192.168.1.100:23
 
 # New: AmiExpress-Web server
-yourbbs.com → your-new-server.com:2323
+yourbbs.com → your-new-server.com:64128
 ```
 
 **Port Forwarding:**
-- Forward port 2323 (telnet) to AmiExpress-Web
-- Forward port 2222 (SSH) to AmiExpress-Web
+- Forward port 64128 (telnet) to AmiExpress-Web
+- Forward port 31337 (SSH) to AmiExpress-Web
 - Forward port 80/443 (HTTP/HTTPS) to AmiExpress-Web
 
 ### User Communication
@@ -637,7 +637,7 @@ On [DATE], we will be migrating to a new BBS system!
 
 What's Changing:
 - New web-based access (https://yourbbs.com)
-- Telnet still available (telnet yourbbs.com 2323)
+- Telnet still available (telnet yourbbs.com 64128)
 - All user accounts and messages preserved
 - All doors migrated
 

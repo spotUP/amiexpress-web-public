@@ -447,4 +447,4 @@ See complete implementations:
 
 - [NETWORK_ENGINE_GUIDE.md](./NETWORK_ENGINE_GUIDE.md) - Multiplayer audio patterns
 - [NEO_BLESSED_GUIDE.md](./NEO_BLESSED_GUIDE.md) - UI feedback with sound
-- [TYPESCRIPT_DOOR_GUIDE.md](../Documentation/4-Door-Developers/TYPESCRIPT_DOOR_GUIDE.md) - Complete door development
+- [TYPESCRIPT_DOOR_GUIDE.md](../../Documentation/4-Door-Developers/TYPESCRIPT_DOOR_GUIDE.md) - Complete door development

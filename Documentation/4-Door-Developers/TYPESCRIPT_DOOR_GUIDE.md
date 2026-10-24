@@ -108,7 +108,7 @@ AmiExpress-Web supports **three types of doors**:
 - **Best for**: Games needing both server logic and rich client audio/graphics
 - **Example**: Arkanoid (audio + highscores), multiplayer games with sound
 
-**IMPORTANT**: This guide covers **Backend Doors** (`runtime: "server"`). For frontend or hybrid doors, see [CLIENT_DOOR_DEVELOPMENT.md](CLIENT_DOOR_DEVELOPMENT.md).
+**IMPORTANT**: This guide covers **Backend Doors** (`runtime: "server"`). For frontend or hybrid doors, see the client door notes in the SDK docs.
 
 ---
 
@@ -2550,7 +2550,7 @@ private quit(): void {
 ## See Also
 
 - [SDK v2.0 Comprehensive Guide](SDK_V2_COMPREHENSIVE.md) - Complete SDK v2.0 API reference
-- [SDK v2.0 Validation](SDK_V2_VALIDATION.md) - SDK v2.0 test results and examples
+- [SDK v2.0 Validation](archive/2025-12/SDK_V2_VALIDATION.md) - SDK v2.0 test results and examples
 - [Door Manager](DOOR_MANAGER.md) - BBS door management
 - [Examples](EXAMPLES.md) - More door examples
 

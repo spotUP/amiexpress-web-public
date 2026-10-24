@@ -1,36 +1,56 @@
-# AmiExpress-Web Installation Guide (Summary)
-**Summary:** Detailed deployment steps live in `archive/QUICK_START.md`, `archive/PRODUCTION_READINESS.md`, and `archive/DEPLOYMENT_SUMMARY.md`.
+# AmiExpress-Web Installation Guide
+
+Docker Compose is the supported way to install a board. This page lists what
+the host needs and the order of the steps. The step-by-step commands are in the
+repository [README](../../README.md#quick-start-with-docker-compose).
 
 ## 1. Prerequisites
-- **Host**: Linux/macOS/Windows server with Node 18+, npm 10+, SQLite3, and a static IP for sockets.
-- **Tools**: `git`, `node`, `npm`, `tsc`, and (optional) `npx tsx` for scripts such as door harnesses.
-- **Ports**: HTTP and WebSocket 3001, telnet 64128, SSH 31337, FTP 1541 plus passive 50101-50107 (see `docker-compose.yml` and `.env.example`).
-- **Storage**: Ensure persistent storage for `storage/`, `db/`, and `Doors/` to keep files and door logs.
-- **Amiga ROM (native 68k doors)**: Any plain 512K Kickstart 3.x image (for example 3.1 for A500/A1200/A4000); the filename does not matter. Upload it on the admin Health page (Kickstart card) or place it in `data/amiga-roms/` (Docker: `ROM_DIR=/app/data/amiga-roms` on the data volume). No Kickstart is shipped. Without one, 68K doors run on the AROS fallback (`aros-rom.bin` + `aros-ext.bin`).
 
-## 2. Bootstrap Steps
-1. Clone the repo (`git clone ...`) and `cd` into `/amiexpress-web`.
-2. Install dependencies: `npm install` in both `/web/backend` and `/web/frontend` if you are running both locally.
-3. Create `.env` from `.env.example` and set `PORT`, `DATABASE_URL`, `SOCKET_PORT`, and optional API tokens.
-4. Run `npm run build` in `web/backend` to compile TypeScript, and `npm run build` in `web/frontend` for React.
-5. Start servers via `npm run start:dev` for development or `node ./web/backend/dist/src/index.js` for production.
-6. Use `dev/scripts/start-servers.sh` and `kill-servers.sh` for reproducible multi-node startups (details in `archive/DEPLOYMENT_SCRIPTS.md`).
+- **Host**: Linux, macOS or Windows with Docker and the compose plugin.
+- **Disk**: about 10 GB free for the image build.
+- **Ports**: HTTP and WebSocket 3001, telnet 64128, SSH 31337, FTP 1541 plus
+  passive 50101-50107 (see `docker-compose.yml` and `.env.example`).
+- **Storage**: board data (database, files, doors' data, ROMs) lives in the
+  `bbs-data` volume, mounted at `/app/data`. Back it up
+  ([BACKUP_AND_RESTORE.md](./BACKUP_AND_RESTORE.md)).
 
-### Native 68k doors (Kickstart/AROS ROM handling)
-- Location: the upload on the admin Health page, or `data/amiga-roms/` (`ROM_DIR` overrides; Docker sets `/app/data/amiga-roms`). Keep one Kickstart there.
-- Accepted: a plain 512K Kickstart 3.x image under any filename. Encrypted Cloanto ROMs, 256K (1.x/2.x) and 1MB images are rejected. Every admin page shows a banner until one is installed, and a sysop sees a notice at logon.
-- Default preference: Kickstart is used if present. Set `AEDOOR_ROM=aros` to force AROS, or `AEDOOR_ROM_FILE` to name one exact file.
-- Library modules: on the first 68K door launch the backend splits the installed Kickstart by its RomTags into `tmp/rom-modules/<sha1>/`. No external tool (such as romtool) is needed.
-- AROS fallback files must be named `aros-rom.bin` and `aros-ext.bin`.
+## 2. Install
 
-## 3. After Installation
-- Confirm SQLite database migrations ran by checking `db/main.sqlite` and verifying the `users` table includes AmiExpress fields.
-- Upload `Screens/` and `Commands/` directories to match express.e EXACT format (names and contents) to keep the terminal matching.
-- Register nodes via `node web/backend/dist/scripts/run-amiga-door.js <door> <node>` for door testing.
+1. Clone the repository and `cd` into it.
+2. `cp .env.example .env`. The secrets are generated on first start when you
+   leave them unset. Set `BBS_TIMEZONE` and `CORS_ORIGINS` (your public URL)
+   if needed.
+3. `docker compose up -d`.
+4. Create the sysop account with the one-time setup code from the server log:
+   `docker compose logs | grep "Setup code"`. The steps are in
+   [SYSOP_GUIDE.md](./SYSOP_GUIDE.md#create-the-sysop-account).
+5. Log in to the admin at `http://localhost:3001/admin/` and set the BBS name
+   and the other board settings.
+6. Optional: install a Kickstart ROM for the 68K doors (next section).
 
-## 4. Production Readiness
-- Review `archive/PRODUCTION_READINESS.md` for high-level items: security hardening, TLS, rate limiting, firewall rules, and monitoring.
-- Use `archive/RAILWAY_DEPLOYMENT.md` or `archive/UNIFIED_DEPLOYMENT.md` for platform-specific instructions (Railway, Render, custom Docker, etc.).
-- Keep `.env` secrets safe (`SESSION_SECRET`, `REDIS_URL` if used) and rotate tokens as needed.
+Server deployment (firewall, TLS, the deploy scripts) is in
+[DEPLOYMENT.md](./DEPLOYMENT.md) and [deploy/README.md](../../deploy/README.md).
+Development without Docker is under "Local development" in the README.
 
-**Tip:** Backups and import/export (from `Documentation/1-Users/archive/IMPORT_USER_GUIDE.md`) should run before each release to preserve user data.
+## 3. Native 68K doors (Kickstart/AROS ROM handling)
+
+- No Kickstart is shipped. Without one, 68K doors run on the AROS fallback
+  (`aros-rom.bin` + `aros-ext.bin`).
+- Install: upload the ROM on the admin Health page (Kickstart card), or place
+  it in `data/amiga-roms/` (`ROM_DIR` overrides; Docker sets
+  `/app/data/amiga-roms`). Keep one Kickstart there.
+- Accepted: a plain 512K Kickstart 3.x image under any filename. Encrypted
+  Cloanto ROMs, 256K (1.x/2.x) and 1MB images are rejected. Every admin page
+  shows a banner until one is installed, and a sysop sees a notice at logon.
+- Default preference: Kickstart is used if present. Set `AEDOOR_ROM=aros` to
+  force AROS, or `AEDOOR_ROM_FILE` to name one exact file.
+- Library modules: on the first 68K door launch the backend splits the
+  installed Kickstart by its RomTags into `tmp/rom-modules/<sha1>/`. No
+  external tool (such as romtool) is needed.
+
+## 4. Production readiness
+
+- Put a reverse proxy with TLS in front of port 3001 and pass WebSocket
+  upgrade headers ([DOCKER.md](./DOCKER.md#2-reverse-proxy-recommended)).
+- Open only the ports you use in the firewall.
+- Keep `/app/data/.secrets` and your `.env` private.

@@ -309,7 +309,7 @@ sdk/
 - **AIEngine** - Pathfinding, behaviors
 - **NetworkEngine** - Multiplayer support
 - **PokerEngine** - Texas Hold'em game state engine (pokertools)
-- **VideoEngine** - Real-time ASCII video streaming (webcam, files, screen sharing) - See [Video Streaming Guide](./docs/VIDEO_STREAMING.md)
+- **VideoEngine** - Real-time ASCII video streaming (webcam, files, screen sharing)
 
 ## Available Components
 
@@ -375,7 +375,7 @@ door.onStart(async (ctx) => {
 - FPS monitoring and statistics
 - Auto-cleanup on door close
 
-See [Video Streaming Guide](./docs/VIDEO_STREAMING.md) for complete API reference and examples.
+There is no standalone video streaming guide yet.
 
 ## Real-Time Audio Streaming (NEW!)
 
@@ -460,4 +460,3 @@ See:
 - `sdk/docs/` for engine quick references and guides
 - `Documentation/4-Door-Developers/TYPESCRIPT_DOOR_GUIDE.md` for door patterns, input handling, and troubleshooting
 - `Documentation/4-Door-Developers/AUDIO_STREAMING.md` for real-time voice chat API and examples
-- `sdk/docs/VIDEO_STREAMING.md` for ASCII video streaming API and examples

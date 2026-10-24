@@ -11,15 +11,15 @@ AmiExpress-Web runs on a Hetzner Cloud VPS with automatic deployment via GitHub 
 | Provider | Hetzner Cloud |
 | Plan | CX22 (4GB RAM, 2 vCPU, 40GB SSD) |
 | Cost | ~€3.79/month |
-| Server IP | 203.0.113.10 |
+| Server IP | <server-ip> |
 | Auto-deploy | GitHub Actions on push to `main` |
 
 ### Access Points
 
-- **Web:** http://203.0.113.10:3001
-- **Telnet:** `telnet 203.0.113.10 2323`
-- **SSH (BBS):** `ssh -p 2222 user@203.0.113.10`
-- **Admin:** http://203.0.113.10:3001/admin
+- **Web:** http://<server-ip>:3001
+- **Telnet:** `telnet <server-ip> 64128`
+- **SSH (BBS):** `ssh -p 31337 user@<server-ip>`
+- **Admin:** http://<server-ip>:3001/admin
 
 ### How Deployment Works
 
@@ -37,7 +37,7 @@ AmiExpress-Web runs on a Hetzner Cloud VPS with automatic deployment via GitHub 
 
 **SSH into server:**
 ```bash
-ssh root@203.0.113.10
+ssh root@<server-ip>
 ```
 
 **Common commands:**
@@ -111,7 +111,7 @@ docker compose logs --tail=100
 - Consider upgrading to CX32 (8GB RAM)
 
 **Can't connect via Telnet:**
-- Check firewall allows port 2323
+- Check firewall allows port 64128
 - Verify container is running: `docker compose ps`
 
 ### Backup

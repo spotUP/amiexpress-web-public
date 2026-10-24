@@ -711,6 +711,6 @@ npm run xim:replay -- --door WHO --messages init.json
 ## See Also
 
 - [Door Development Guide](DOOR_DEVELOPMENT.md)
-- [68K Door Architecture](68K_DOOR_ARCHITECTURE.md)
-- [AEDoor Protocol](AEDOOR_PROTOCOL.md)
+- [68K Door Development](68K_DOOR_DEVELOPMENT.md)
+- [AEDoor API](AEDOOR_API.md)
 - [Door Watcher](../../dev/scripts/DOOR_WATCHER.md)

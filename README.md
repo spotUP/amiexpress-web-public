@@ -14,7 +14,7 @@ Requirements: Docker with the compose plugin, and about 10 GB of free disk for t
    cp .env.example .env
    ```
 
-2. Secrets. You do not need to set `JWT_SECRET`, `JWT_REFRESH_SECRET` or `SESSION_SECRET`. When they are unset or left at a placeholder (`CHANGE_ME`, `your_*_here`), the container generates strong values on first start and keeps them in `/app/data/.secrets` on the data volume (`docker/ensure-secrets.sh`). A value you set always wins. Optional settings in `.env`: `BBS_TIMEZONE` (default `UTC`, for example `Europe/Stockholm`), `ALLOWED_ORIGIN` (your public URL), and the FTP and AI keys described in `.env.example`.
+2. Secrets. You do not need to set `JWT_SECRET`, `JWT_REFRESH_SECRET` or `SESSION_SECRET`. When they are unset or left at a placeholder (`CHANGE_ME`, `your_*_here`), the container generates strong values on first start and keeps them in `/app/data/.secrets` on the data volume (`docker/ensure-secrets.sh`). A value you set always wins. Optional settings in `.env`: `BBS_TIMEZONE` (default `UTC`, for example `Europe/Stockholm`), `CORS_ORIGINS` (your public URL, comma separated), and the FTP and AI keys described in `.env.example`.
 
 3. Start the board:
 
@@ -23,7 +23,13 @@ Requirements: Docker with the compose plugin, and about 10 GB of free disk for t
    docker compose logs -f
    ```
 
-4. Register your sysop account first. No account is pre-seeded. The first account to register becomes sysop (level 255). Open http://localhost:3001 (or connect by telnet) and register before you expose any port publicly, otherwise the first stranger to register owns the board.
+4. Create your sysop account. No account is pre-seeded. While the board has no sysop, it prints a one-time setup code in the server log at every start:
+
+   ```
+   docker compose logs | grep "Setup code"
+   ```
+
+   Connect with the web terminal at http://localhost:3001, or `telnet localhost 64128`. The logon screen says the board has no sysop yet. Type the sysop name you want, answer `C` to create the account, and enter the setup code (case and the dash do not matter). Then finish the normal registration. That account gets level 255, and the setup code stops working. A wrong code disconnects the caller and creates nothing, so a stranger who reaches the board first cannot take it. A restart before setup makes a new code.
 
 5. Install a Kickstart ROM (next section), then open the admin at http://localhost:3001/admin/.
 

@@ -1,288 +1,207 @@
 # AmiExpress-Web Documentation
 
-## Quick Navigation
-
-Choose your role to find relevant documentation:
-
-- **[Users](#for-users)** - Using the BBS
-- **[Sysops](#for-sysops)** - Running the BBS
-- **[Developers](#for-developers)** - Contributing code
-- **[Door Developers](#for-door-developers)** - Creating doors
-- **[Reference](#quick-reference)** - Quick lookups
-- **[Reference Sources](#reference-sources)** - Archived reference source bundles
-
----
-
-## For Users
-
-**New to AmiExpress? Start here:**
-
-📖 **[User Guide](1-Users/USER_GUIDE.md)** - Complete guide to using the BBS (594 lines)
-- Getting started
-- Login & authentication
-- Reading and posting messages
-- File uploads/downloads
-- Conference management
-- Using doors
-- Chat and communication
-- Customization options
-- Keyboard shortcuts
-
-📥 **[Importing Data](1-Users/IMPORTING.md)** - Import from classic Amiga BBS (507 lines)
-
-🛡️ **[Privacy Notice](PRIVACY.md)** - What data the BBS collects, how long it's kept, how to export or erase your data (`W` -> 19 / 20)
-
----
-
-## For Sysops
-
-**Running an AmiExpress BBS:**
-
-### Getting Started
-🚀 **[Quick Start Guide](2-Sysops/QUICK_START.md)** - Get running fast (632 lines)
-📝 **[Installation Guide](2-Sysops/INSTALLATION.md)** - Set up your BBS
-🔧 **[Configuration Guide](2-Sysops/CONFIGURATION.md)** - Configure your system
-
-### Operations
-⚙️ **[Administration Guide](2-Sysops/ADMINISTRATION.md)** - Day-to-day management
-🌐 **[Deployment Guide](2-Sysops/DEPLOYMENT.md)** - Production deployment
-📜 **[Deployment Scripts](2-Sysops/DEPLOYMENT_SCRIPTS.md)** - Automation scripts (743 lines)
-🔗 **[Webhooks](2-Sysops/WEBHOOKS.md)** - Webhook configuration (501 lines)
-🔧 **[Troubleshooting Guide](2-Sysops/TROUBLESHOOTING.md)** - Common issues
-
----
-
-## For Developers
-
-**Contributing to AmiExpress-Web:**
-
-### Core Development
-🏗️ **[Getting Started](3-Developers/GETTING_STARTED.md)** - Development setup
-📐 **[Architecture](3-Developers/ARCHITECTURE.md)** - System design
-💾 **[Database](3-Developers/DATABASE.md)** - Database schema and rules
-🧪 **[Testing Guide](3-Developers/TESTING_GUIDE.md)** - Complete testing methodology (634 lines)
-
-### Implementation Guides
-🎯 **[AREXX Implementation](3-Developers/AREXX_IMPLEMENTATION.md)** - AREXX interpreter (629 lines)
-💬 **[Multi-Node Chat](3-Developers/MULTINODE_CHAT.md)** - Chat system architecture (692 lines)
-📥 **[Import/Export API](3-Developers/IMPORT_EXPORT_API.md)** - Data migration API (685 lines)
-📁 **[DOS File I/O](3-Developers/DOS_FILE_IO.md)** - AmigaOS file operations (495 lines)
-🔒 **[Security](3-Developers/SECURITY.md)** - Security patterns (567 lines)
-📖 **[AmigaGuide Support](3-Developers/AMIGAGUIDE.md)** - AmigaGuide format (516 lines)
-🌐 **[Telnet/SSH Servers](3-Developers/TELNET_SSH_SERVERS.md)** - Multi-protocol server implementation (296 lines)
-
-### APIs
-🔌 **[API Reference](3-Developers/API_REFERENCE.md)** - Backend API
-🤝 **[Contributing](3-Developers/CONTRIBUTING.md)** - Contribution guidelines
-
-### SDK Documentation
-📦 **SDK docs in [archive/sdk/](3-Developers/archive/sdk/)** - Door Development Kit guides
-
----
-
-## For Door Developers
-
-**Creating doors for AmiExpress:**
-
-### Door Development
-🚪 **[Door Development Guide](4-Door-Developers/DOOR_DEVELOPMENT.md)** - Complete door guide
-⚙️ **[Amiga Emulation](4-Door-Developers/AMIGA_EMULATION.md)** - Emulation details
-🎮 **[Gamepad API Guide](4-Door-Developers/GAMEPAD_API_GUIDE.md)** - USB gamepad/controller support
-📚 **[AEDoor API](4-Door-Developers/AEDOOR_API.md)** - AEDoor.library reference
-📚 **[DOS Library API](4-Door-Developers/DOS_LIBRARY_API.md)** - dos.library reference
-💡 **[Examples](4-Door-Developers/EXAMPLES.md)** - Example doors
-
-### Technical References
-🔬 **[Door Sources Analysis](4-Door-Developers/DOOR_SOURCES_ANALYSIS.md)** - Original door analysis (1069 lines)
-🔍 **[Door Research](4-Door-Developers/DOOR_RESEARCH.md)** - Research findings (905 lines)
-📥 **[Import/Export](4-Door-Developers/IMPORT_EXPORT.md)** - BBS data migration (780 lines)
-📋 **[Ported Doors Catalog](4-Door-Developers/PORTED_DOORS_CATALOG.md)** - Available doors (729 lines)
-🔧 **[Door Manager](4-Door-Developers/DOOR_MANAGER.md)** - Door management system (493 lines)
-⚙️ **[Config App Design](4-Door-Developers/CONFIG_APP.md)** - Web config interface (2264 lines)
-
----
-
-## Quick Reference
-
-**Fast lookups:**
-
-📋 **[Command Reference](5-Reference/COMMAND_REFERENCE.md)** - All BBS commands
-⌨️ **[Hotkeys](5-Reference/HOTKEYS.md)** - Keyboard shortcuts
-🎨 **[MCI Codes](5-Reference/MCI_CODES.md)** - MCI code reference
-📄 **[Screen Files](5-Reference/SCREEN_FILES.md)** - Screen file format
-📁 **[File Structure](5-Reference/FILE_STRUCTURE.md)** - Project organization
-📖 **[Main Menu Documentation](5-Reference/MAIN_MENU.md)** - Classic menu system (720 lines)
-🧾 **[Reference Sources](7-Reference Sources/README.md)** - External reference source bundles (petscii-bbs, UADE, etc.)
-
----
-
-## Progress & Status
-
-**For Claude and developers tracking progress:**
-
-📊 **[Current Status](6-Progress/CURRENT_STATUS.md)** - Implementation status (~95% complete)
-🚀 **[68K Door Completion Plan](6-Progress/68K_DOOR_COMPLETION_PLAN.md)** - Door emulation roadmap
-⚠️ **[Known Issues](6-Progress/KNOWN_ISSUES.md)** - Known bugs and workarounds
-
-**Session Logs:** [6-Progress/archive/](6-Progress/archive/) - Historical debug sessions, completed plans
-
----
-
-## Documentation Standards
-
-### File Organization
-
-```
-Documentation/
-├── 1-Users/          # End-user guides
-├── 2-Sysops/         # System operator guides
-├── 3-Developers/     # Developer guides
-├── 4-Door-Developers/# Door development guides
-├── 5-Reference/      # Quick reference materials
-├── 6-Progress/       # Status tracking + archived logs
-└── 7-Reference Sources/# Reference source archives and samples
-```
-
-### AI Documentation Map
-
-- **Summary files first**: Each numbered folder exposes a single summary doc (e.g., `1-Users/USER_GUIDE.md`, `2-Sysops/ADMINISTRATION.md`, `3-Developers/ARCHITECTURE.md`, `4-Door-Developers/DOOR_DEVELOPMENT.md`, `5-Reference/COMMAND_REFERENCE.md`, `6-Progress/CURRENT_STATUS.md`). These are your starting points for quick answers.
-- **Archives for depth**: When you need the full context, dive into the `archive/` subfolder inside that same directory (e.g., `Documentation/3-Developers/archive/sdk/README.md` or `Documentation/4-Door-Developers/archive/doors/README.md`).
-- **Reference sources**: All raw code references, door binaries, emulator trees, and archived manuals are under `Documentation/7-Reference Sources/`—don’t move or edit them; just reference for parity checks.
-- **Testing & automation**: The `Scripts/README.md` explains where every test harness now lives (`Scripts/dev/`, `Scripts/backend/`, `Scripts/backend-dev/`, `Scripts/emulation/`, `Scripts/legacy/`). Refer to that file before running or editing tests so you stay within the consolidated structure.
-
-### Writing Guidelines
-
-- **Clear headings** - Use descriptive section titles
-- **Examples** - Include code examples where relevant
-- **Cross-references** - Link to related documentation
-- **Keep updated** - Update docs when code changes
-- **One source of truth** - No duplicate content
-
----
-
-## Finding Information
-
-### Search by Topic
-
-**Account Management:**
-- Users: [User Guide - Customization](1-Users/USER_GUIDE.md#customization)
-- Sysops: [Administration Guide](2-Sysops/ADMINISTRATION.md)
-
-**Messages:**
-- Users: [User Guide - Reading Messages](1-Users/USER_GUIDE.md#reading-messages)
-- Users: [User Guide - Posting Messages](1-Users/USER_GUIDE.md#posting-messages)
-
-**Files:**
-- Users: [User Guide - File Operations](1-Users/USER_GUIDE.md#file-operations)
-
-**Conferences:**
-- Users: [User Guide - Conference Management](1-Users/USER_GUIDE.md#conference-management)
-
-**Doors:**
-- Users: [User Guide - Using Doors](1-Users/USER_GUIDE.md#using-doors)
-- Developers: [Door Development Guide](4-Door-Developers/DOOR_DEVELOPMENT.md)
-
-**Deployment:**
-- Sysops: [Deployment Guide](2-Sysops/DEPLOYMENT.md)
-- Developers: [Getting Started](3-Developers/GETTING_STARTED.md)
-
-**Database:**
-- Developers: [Database Guide](3-Developers/DATABASE.md)
-
-**Testing:**
-- Developers: [Testing Guide](3-Developers/TESTING.md)
-
-**APIs:**
-- Developers: [API Reference](3-Developers/API_REFERENCE.md)
-- Door Developers: [AEDoor API](4-Door-Developers/AEDOOR_API.md)
-- Door Developers: [DOS Library API](4-Door-Developers/DOS_LIBRARY_API.md)
-
----
-
-## Migration Notes
-
-This documentation structure was created on 2025-11-01 to consolidate 390+ scattered markdown files into ~30 comprehensive guides.
-
-### What Changed
-
-**Before:**
-- 390 files across multiple directories
-- Duplicate content
-- Unclear organization
-- Mix of current docs and old session logs
-
-**After:**
-- ~30 comprehensive guides
-- Organized by audience
-- Single source of truth
-- Session logs archived separately
-
-### Old Documentation
-
-Old documentation structure archived in:
-- `Documentation/archive/old-structure/dev-docs/`
-- `Documentation/archive/old-structure/Docs/`
-
-### Finding Old Files
-
-If you're looking for a specific old file, check the archive or use git history:
-```bash
-# Search git history for filename
-git log --all --full-history -- "**/FILENAME.md"
-
-# Search archive
-find Documentation/archive -name "FILENAME.md"
-```
-
----
-
-## Contributing to Documentation
-
-### Adding New Documentation
-
-1. Determine the audience (Users/Sysops/Developers/Door-Developers)
-2. Check if topic fits in existing guide
-3. If new guide needed:
-   - Add to appropriate directory
-   - Update this README
-   - Update MCP server configuration
-
-### Updating Documentation
-
-1. Find the guide to update
-2. Edit markdown file
-3. Update "Last Updated" date
-4. Test any code examples
-5. Commit with clear message
-
-### Documentation Review
-
-- Check for accuracy
-- Test all code examples
-- Verify links work
-- Check spelling/grammar
-- Ensure clarity
-
----
-
-## Support
-
-- **BBS Issues**: Check [Troubleshooting Guide](2-Sysops/TROUBLESHOOTING.md)
-- **Development Questions**: See [Contributing Guide](3-Developers/CONTRIBUTING.md)
-- **Door Development**: See [Door Development Guide](4-Door-Developers/DOOR_DEVELOPMENT.md)
-- **General Help**: Create an issue on GitHub
-
----
-
-**Last Updated**: 2025-12-28
-**Documentation Version**: 2.1 (Streamlined Structure)
-## Archive Pattern Update
-Each numbered directory now hosts an `archive/` subfolder that preserves the detailed legacy markdown files (root-level summaries remain front-and-center). Door/emulator/source archives live under `7-Reference Sources/` so readers can focus on summaries before stepping into the deep research notes.
-
-## Legacy Documents & Archives
-
-- `Documentation/AmiExpressDocs` moved to `Documentation/5-Reference/archive/AmiExpressDocs/` (legacy AmiExpress docs bundle).
-- `Documentation/amiga-emulation` now sits in `Documentation/4-Door-Developers/archive/amiga-emulation/` (emulation reports, debugging notes).
-- `Documentation/backend/amiexpress-docs` relocated to `Documentation/3-Developers/archive/backend-amiexpress-docs/` (backend-specific AmiExpress write-ups).
-- `Documentation/Amiga_SASC_v6_Manual_Volume1.html` lives under `Documentation/7-Reference Sources/Amiga_SASC/` for compiler reference.
-- `Screens/BBSTITLE.TXT` moved to `Documentation/5-Reference/archive/Screens/` alongside other screen-file artifacts.
+This index lists every current document, grouped by folder. Archived material lives in `archive/` folders and is not listed. Ports: telnet 64128, BBS SSH 31337, web 3001. Project rules are in `../RULES.md`; first-time setup is in `../README.md`.
+
+## For users (`1-Users/`)
+
+- [USER_GUIDE.md](1-Users/USER_GUIDE.md) - AmiExpress BBS User Guide
+- [WEB_INTERFACE_GUIDE.md](1-Users/WEB_INTERFACE_GUIDE.md) - AmiExpress-Web User Interface Guide
+
+## For sysops (`2-Sysops/`)
+
+- [ADMINISTRATION.md](2-Sysops/ADMINISTRATION.md) - System Administration Guide (Summary)
+- [AMIGA_MIGRATION_GUIDE.md](2-Sysops/AMIGA_MIGRATION_GUIDE.md) - Amiga BBS to AmiExpress-Web Migration Guide
+- [BACKUP_AND_RESTORE.md](2-Sysops/BACKUP_AND_RESTORE.md) - Backup and restore
+- [CI_CD.md](2-Sysops/CI_CD.md) - CI/CD Pipeline Documentation
+- [CONFIGURATION.md](2-Sysops/CONFIGURATION.md) - System Configuration Guide (Summary)
+- [DEPLOYMENT.md](2-Sysops/DEPLOYMENT.md) - Deployment Guide
+- [DOCKER.md](2-Sysops/DOCKER.md) - Docker Deployment Guide
+- [INFO_EDITOR.md](2-Sysops/INFO_EDITOR.md) - info-editor: .info File Tooltype Editor
+- [INSTALLATION.md](2-Sysops/INSTALLATION.md) - AmiExpress-Web Installation Guide (Summary)
+- [SYSOP_GUIDE.md](2-Sysops/SYSOP_GUIDE.md) - Sysop Quick Start Guide
+- [TROUBLESHOOTING.md](2-Sysops/TROUBLESHOOTING.md) - Troubleshooting Guide (Summary)
+- [WHIP_BOT.md](2-Sysops/WHIP_BOT.md) - WHIP Discord mirror bot  sysop setup
+
+## For developers (`3-Developers/`)
+
+- [68K_DEBUGGING_WORKFLOW.md](3-Developers/68K_DEBUGGING_WORKFLOW.md) - 68K Door Emulation Debugging Workflow
+- [68K_LIBRARY_STUB_AUDIT.md](3-Developers/68K_LIBRARY_STUB_AUDIT.md) - 68K library-call stub audit (living)
+- [AMIGA_EMULATION.md](3-Developers/AMIGA_EMULATION.md) - Amiga Emulation Guide (Summary)
+- [AMIGAGUIDE.md](3-Developers/AMIGAGUIDE.md) - AmigaGuide Support in Door Manager
+- [ANSI_BUFFERING_MIGRATION.md](3-Developers/ANSI_BUFFERING_MIGRATION.md) - ANSI Output Buffering Migration Guide
+- [API_REFERENCE.md](3-Developers/API_REFERENCE.md) - Backend API Reference (Summary)
+- [ARCHITECTURE.md](3-Developers/ARCHITECTURE.md) - Architecture Overview (Summary)
+- [AREXX_IMPLEMENTATION.md](3-Developers/AREXX_IMPLEMENTATION.md) - AREXX Implementation - Complete Summary
+- [ASCII_VIDEO_ENHANCEMENT.md](3-Developers/ASCII_VIDEO_ENHANCEMENT.md) - ASCII Video Enhancement Guide
+- [ASCII_VIDEO_WORLD_CLASS.md](3-Developers/ASCII_VIDEO_WORLD_CLASS.md) - World-Class ASCII Video Enhancement
+- [ASYNC_FILE_OPERATIONS.md](3-Developers/ASYNC_FILE_OPERATIONS.md) - Async File Operations Analysis
+- [BACKEND_ARCHITECTURE.md](3-Developers/BACKEND_ARCHITECTURE.md) - Backend Architecture
+- [CLAUDE_68K_DEBUGGING_PROTOCOL.md](3-Developers/CLAUDE_68K_DEBUGGING_PROTOCOL.md) - Claude's 68K Door Debugging Protocol
+- [CLEAN_ARCHITECTURE.md](3-Developers/CLEAN_ARCHITECTURE.md) - Clean Architecture Implementation
+- [CONTRIBUTING.md](3-Developers/CONTRIBUTING.md) - Contributing Guide (Summary)
+- [DATABASE.md](3-Developers/DATABASE.md) - Database Overview (Summary)
+- [DATABASE_PROFILING_GUIDE.md](3-Developers/DATABASE_PROFILING_GUIDE.md) - Database Profiling Guide
+- [DISK_SPACE_MANAGEMENT.md](3-Developers/DISK_SPACE_MANAGEMENT.md) - Disk Space Management
+- [DOOR_TESTING.md](3-Developers/DOOR_TESTING.md) - Door Testing  Tools & Workflows
+- [DOS_FILE_IO.md](3-Developers/DOS_FILE_IO.md) - AmigaOS dos.library File I/O Implementation Guide
+- [DOS_LVO_AUDIT_2026-01-29.md](3-Developers/DOS_LVO_AUDIT_2026-01-29.md) - Library LVO Audit Report
+- [FILE_CACHING_MIGRATION.md](3-Developers/FILE_CACHING_MIGRATION.md) - File Caching Migration Guide
+- [FILE_SIZE_GUIDELINES.md](3-Developers/FILE_SIZE_GUIDELINES.md) - File Size Guidelines
+- [GETTING_STARTED.md](3-Developers/GETTING_STARTED.md) - Developer Getting Started Guide (Summary)
+- [IMPORT_EXPORT_API.md](3-Developers/IMPORT_EXPORT_API.md) - Import/Export API Reference
+- [MCP_USAGE.md](3-Developers/MCP_USAGE.md) - MCP (Model Context Protocol) Usage Guide
+- [MESSAGE_BASE_LOADING.md](3-Developers/MESSAGE_BASE_LOADING.md) - Message Base Loading - Disk-Based Configuration
+- [MOBILE_OPTIMIZATION.md](3-Developers/MOBILE_OPTIMIZATION.md) - Mobile Responsiveness Review and Optimizations
+- [MOIRA_DEBUGGING.md](3-Developers/MOIRA_DEBUGGING.md) - Moira 68K Debugging Guide
+- [MOIRA_PERFORMANCE_AND_DEBUG_GUIDE.md](3-Developers/MOIRA_PERFORMANCE_AND_DEBUG_GUIDE.md) - MOIRA Performance Optimization and Debugging Guide
+- [MULTINODE_CHAT.md](3-Developers/MULTINODE_CHAT.md) - AmiExpress Multinode & Chat System - Design Document
+- [NEO_BLESSED_PORT_AUDIT_FULL.md](3-Developers/NEO_BLESSED_PORT_AUDIT_FULL.md) - Comprehensive Neo-Blessed Port Audit
+- [OPERATOR_CHAT_IMPLEMENTATION.md](3-Developers/OPERATOR_CHAT_IMPLEMENTATION.md) - Operator Chat Implementation - AmiExpress Source Mapping
+- [PERFORMANCE_OPTIMIZATION.md](3-Developers/PERFORMANCE_OPTIMIZATION.md) - Performance Optimization Review and Recommendations
+- [SECURITY.md](3-Developers/SECURITY.md) - SECURITY FIXES DOCUMENTATION
+- [TELNET_SSH_SERVERS.md](3-Developers/TELNET_SSH_SERVERS.md) - Telnet & SSH Servers - Ready for Testing
+- [TESTING.md](3-Developers/TESTING.md) - Testing Guide (Summary)
+- [UI_UX_REVIEW.md](3-Developers/UI_UX_REVIEW.md) - UI/UX Review and Refinement Recommendations
+- [XIM_CRITICAL_REQUIREMENTS.md](3-Developers/XIM_CRITICAL_REQUIREMENTS.md) - XIM Protocol - Critical Requirements (DO NOT BREAK)
+- [XIM_INJECTION_INTEGRATION_GUIDE.md](3-Developers/XIM_INJECTION_INTEGRATION_GUIDE.md) - XIM Message Injection - Integration Guide
+
+## For door developers (`4-Door-Developers/`)
+
+- [68K_DOOR_DEVELOPMENT.md](4-Door-Developers/68K_DOOR_DEVELOPMENT.md) - 68K Amiga Door Development Guide
+- [68K_DOOR_INSTALLATION.md](4-Door-Developers/68K_DOOR_INSTALLATION.md) - 68K Door Installation Guide
+- [AEDOOR_API.md](4-Door-Developers/AEDOOR_API.md) - AEDoor API Reference (Summary)
+- [ANSI_EDITOR_DOOR_GUIDE.md](4-Door-Developers/ANSI_EDITOR_DOOR_GUIDE.md) - ANSI Editor Door - Complete Guide
+- [AUDIO_API_REFERENCE.md](4-Door-Developers/AUDIO_API_REFERENCE.md) - Audio Streaming API Reference
+- [AUDIO_STREAMING.md](4-Door-Developers/AUDIO_STREAMING.md) - Audio Streaming Guide
+- [BBS_EVENT_EMISSION_GUIDE.md](4-Door-Developers/BBS_EVENT_EMISSION_GUIDE.md) - BBS Event Emission API - Door Developer Guide
+- [BLESSED_DOOR_FIXES_SUMMARY.md](4-Door-Developers/BLESSED_DOOR_FIXES_SUMMARY.md) - Blessed Door Panel Fixes Summary
+- [BLESSED_DOOR_PANEL_AUDIT.md](4-Door-Developers/BLESSED_DOOR_PANEL_AUDIT.md) - Blessed Door Panel Layout Audit
+- [C_DOOR_DEVELOPMENT.md](4-Door-Developers/C_DOOR_DEVELOPMENT.md) - AmiExpress C Door Development Guide
+- [CHATBOT-DATA-API.md](4-Door-Developers/CHATBOT-DATA-API.md) - CHATBOT-DATA-API  one read layer for every chatbot
+- [DOOR_DEVELOPMENT.md](4-Door-Developers/DOOR_DEVELOPMENT.md) - Door Development Guide
+- [DOOR_INPUT_MANAGER_GUIDE.md](4-Door-Developers/DOOR_INPUT_MANAGER_GUIDE.md) - Door Input Manager Guide
+- [DOOR_LOADER_GUIDE.md](4-Door-Developers/DOOR_LOADER_GUIDE.md) - DoorLoader Guide
+- [DOOR_MANAGER.md](4-Door-Developers/DOOR_MANAGER.md) - Door Manager - AmiExpress-Web
+- [DOS_LIBRARY_API.md](4-Door-Developers/DOS_LIBRARY_API.md) - dos.library API Reference (Summary)
+- [EXAMPLES.md](4-Door-Developers/EXAMPLES.md) - Door Examples (Summary)
+- [GAME_MODE_AND_MOUSE.md](4-Door-Developers/GAME_MODE_AND_MOUSE.md) - Game Mode and Mouse Events for TypeScript Doors
+- [GAMEPAD_API_GUIDE.md](4-Door-Developers/GAMEPAD_API_GUIDE.md) - Gamepad API Guide for Door Developers
+- [HOST_DETECTION.md](4-Door-Developers/HOST_DETECTION.md) - Knowing where your door is running
+- [IMPORT_EXPORT.md](4-Door-Developers/IMPORT_EXPORT.md) - Amiga AmiExpress BBS Import/Export Implementation Plan
+- [INPUT_CLEANUP_CHECKLIST.md](4-Door-Developers/INPUT_CLEANUP_CHECKLIST.md) - Input Cleanup Checklist for TypeScript Blessed Doors
+- [INPUT_HANDLING_GUIDE.md](4-Door-Developers/INPUT_HANDLING_GUIDE.md) - Door Input Handling Guide
+- [KEYBOARD_NAVIGATION.md](4-Door-Developers/KEYBOARD_NAVIGATION.md) - Neo-Blessed Keyboard Navigation Guide
+- [KEYBOARD_NAVIGATION_MIGRATION_GUIDE.md](4-Door-Developers/KEYBOARD_NAVIGATION_MIGRATION_GUIDE.md) - Keyboard Navigation Migration Guide
+- [MOUSE_INTEGRATION.md](4-Door-Developers/MOUSE_INTEGRATION.md) - Neo-Blessed Mouse Integration Guide
+- [NEO_BLESSED_BEST_PRACTICES.md](4-Door-Developers/NEO_BLESSED_BEST_PRACTICES.md) - Neo-Blessed Best Practices Guide
+- [NEO_BLESSED_COLOR_GUIDE.md](4-Door-Developers/NEO_BLESSED_COLOR_GUIDE.md) - Neo-Blessed Color System Guide
+- [NEO_BLESSED_QUICK_START.md](4-Door-Developers/NEO_BLESSED_QUICK_START.md) - Neo-Blessed Quick Start Guide
+- [PROPOSED_SETPOINTER.md](4-Door-Developers/PROPOSED_SETPOINTER.md) - Proposed: let a door advance the caller's message pointers
+- [PYTHON_DOOR_DEVELOPMENT.md](4-Door-Developers/PYTHON_DOOR_DEVELOPMENT.md) - Python Door Development Guide
+- [REAL_AMIGA_XIM_SEQUENCES.md](4-Door-Developers/REAL_AMIGA_XIM_SEQUENCES.md) - Real Amiga XIM Door Message Sequences
+- [RESPONSIVE_DOCKABLE_GUIDE.md](4-Door-Developers/RESPONSIVE_DOCKABLE_GUIDE.md) - Responsive & Dockable UI Guide
+- [SDK_BLESSED_HELPERS_REFERENCE.md](4-Door-Developers/SDK_BLESSED_HELPERS_REFERENCE.md) - SDK Blessed Helpers - Quick Reference
+- [SDK_V2_COMPREHENSIVE.md](4-Door-Developers/SDK_V2_COMPREHENSIVE.md) - SDK v2.0 - Comprehensive Feature Guide
+- [SHAPE_ASCII_VIDEO_GUIDE.md](4-Door-Developers/SHAPE_ASCII_VIDEO_GUIDE.md) - Shape-Based ASCII Video Rendering Guide
+- [TYPESCRIPT_DOOR_GUIDE.md](4-Door-Developers/TYPESCRIPT_DOOR_GUIDE.md) - TypeScript Door Development Guide
+- [TYPESCRIPT_DOOR_TROUBLESHOOTING.md](4-Door-Developers/TYPESCRIPT_DOOR_TROUBLESHOOTING.md) - TypeScript Door Troubleshooting Guide
+- [XIM_DEBUGGING_GUIDE.md](4-Door-Developers/XIM_DEBUGGING_GUIDE.md) - XIM 68K Door Debugging Guide
+
+## Production (`5-Production/`)
+
+- [DEPLOYMENT_CHECKLIST.md](5-Production/DEPLOYMENT_CHECKLIST.md) - Production Deployment Checklist
+
+## Quick reference (`5-Reference/`)
+
+- [COMMAND_REFERENCE.md](5-Reference/COMMAND_REFERENCE.md) - Command Reference (Summary)
+- [FILE_STRUCTURE.md](5-Reference/FILE_STRUCTURE.md) - Project File Structure (Summary)
+- [HOTKEYS.md](5-Reference/HOTKEYS.md) - Hotkeys Reference (Summary)
+- [MCI_CODES.md](5-Reference/MCI_CODES.md) - MCI Codes Reference (Summary)
+- [SCREEN_FILES.md](5-Reference/SCREEN_FILES.md) - Screen Files Reference (Summary)
+
+## Progress notes and audits (dated snapshots) (`6-Progress/`)
+
+- [68K_DOOR_STATUS.md](6-Progress/68K_DOOR_STATUS.md) - 68K Door Status Tracker
+- [68K_XIM_DOORS_HANDOFF_2026-01-08.md](6-Progress/68K_XIM_DOORS_HANDOFF_2026-01-08.md) - 68K XIM Doors Debug Session - January 8, 2026
+- [ANSI_BUFFERING_STATUS.md](6-Progress/ANSI_BUFFERING_STATUS.md) - ANSI Output Buffering Implementation Status
+- [ANSI_EDITOR_MOEBIUS_AUDIT.md](6-Progress/ANSI_EDITOR_MOEBIUS_AUDIT.md) - ANSI Editor Feature Audit - Moebius Comparison
+- [AQUASCAN_DEBUG_SESSION.md](6-Progress/AQUASCAN_DEBUG_SESSION.md) - AquaScan Debug Session - 2025-12-30
+- [AQUASCAN_NSU_DEBUG_SESSION.md](6-Progress/AQUASCAN_NSU_DEBUG_SESSION.md) - AquaScan N S U Debug Session
+- [ARCHIVE_FORMAT_SUPPORT_2026-01-04.md](6-Progress/ARCHIVE_FORMAT_SUPPORT_2026-01-04.md) - Archive Format Support Status
+- [ASCII_VIDEO_QUALITY_IMPROVEMENTS.md](6-Progress/ASCII_VIDEO_QUALITY_IMPROVEMENTS.md) - ASCII Video Quality Improvements
+- [BBSLINK_IMPLEMENTATION.md](6-Progress/BBSLINK_IMPLEMENTATION.md) - BBSLink Door Implementation
+- [BLESSED_SDK_LIVECHAT_HANDOFF.md](6-Progress/BLESSED_SDK_LIVECHAT_HANDOFF.md) - Blessed SDK & LiveChat Handoff Document
+- [BULLETIN_DISPLAY_FIX.md](6-Progress/BULLETIN_DISPLAY_FIX.md) - Bulletin Display Flow Fix
+- [BYTECOMMENT_DEBUG_SESSION.md](6-Progress/BYTECOMMENT_DEBUG_SESSION.md) - ByteComment Door Debug Session - 2026-01-23
+- [CODEBASE_REVIEW_2026_01_04.md](6-Progress/CODEBASE_REVIEW_2026_01_04.md) - Codebase Review for Similar XIM Issues - 2026-01-04
+- [COMPLETE_SESSION_SUMMARY_2026-01-04.md](6-Progress/COMPLETE_SESSION_SUMMARY_2026-01-04.md) - Complete Session Summary - UX Enhancements and Edge Cases
+- [CORRECTED_GAP_ANALYSIS_2026-01-04.md](6-Progress/CORRECTED_GAP_ANALYSIS_2026-01-04.md) - Corrected Gap Analysis - AmiExpress-Web vs Express.E
+- [CURRENT_STATUS.md](6-Progress/CURRENT_STATUS.md) - AmiExpress-Web Current Status
+- [DATABASE_PROFILING_STATUS.md](6-Progress/DATABASE_PROFILING_STATUS.md) - Database Profiling Implementation Status
+- [DISCORDANNOUNCE_AUDIT.md](6-Progress/DISCORDANNOUNCE_AUDIT.md) - DiscordAnnounce TypeScript Implementation Audit
+- [DOOR_INPUT_MANAGER_IMPLEMENTATION_2026-01-13.md](6-Progress/DOOR_INPUT_MANAGER_IMPLEMENTATION_2026-01-13.md) - DoorInputManager Implementation - 2026-01-13
+- [DOOR_PRELOADER_FIX.md](6-Progress/DOOR_PRELOADER_FIX.md) - Door Preloader Fix
+- [DRE_WALL_DEBUG_SESSION.md](6-Progress/DRE_WALL_DEBUG_SESSION.md) - dRE!Wall Door Debug Session - 2026-01-23
+- [dRE_WALL_HANDOFF.md](6-Progress/dRE_WALL_HANDOFF.md) - dRE!WAll  Debug Handoff (2026-04-20  third session)
+- [EDGE_CASE_FIXES_2026-01-04.md](6-Progress/EDGE_CASE_FIXES_2026-01-04.md) - Edge Case Fixes - Complete
+- [EXPRESS_E_PARITY_AUDIT.md](6-Progress/EXPRESS_E_PARITY_AUDIT.md) - AmiExpress express.e vs TypeScript Implementation - Comprehensive Parity Audit
+- [FILE_CACHING_STATUS.md](6-Progress/FILE_CACHING_STATUS.md) - File Caching Implementation Status
+- [GAP_ANALYSIS_2026-01-04.md](6-Progress/GAP_ANALYSIS_2026-01-04.md) - AmiExpress-Web Gap Analysis Progress
+- [GAP_RESOLUTION_COMPLETE_2026-01-04.md](6-Progress/GAP_RESOLUTION_COMPLETE_2026-01-04.md) - Gap Resolution Complete - All Remaining Work Addressed
+- [GLC_IMPLEMENTATION.md](6-Progress/GLC_IMPLEMENTATION.md) - Global Last Callers Implementation
+- [GLOBAL_LAST_CALLERS_AUDIT.md](6-Progress/GLOBAL_LAST_CALLERS_AUDIT.md) - Global Last Callers TypeScript Implementation Audit
+- [GLOBAL_WALL_AUDIT.md](6-Progress/GLOBAL_WALL_AUDIT.md) - Global Wall TypeScript Implementation Audit
+- [GRANDMASTER_ATTRACT_REFACTOR_2026-01-13.md](6-Progress/GRANDMASTER_ATTRACT_REFACTOR_2026-01-13.md) - Grandmaster Attract Mode Refactor - 2026-01-13
+- [GRANDMASTER_EFFECTS_AUDIT_2026-01-13.md](6-Progress/GRANDMASTER_EFFECTS_AUDIT_2026-01-13.md) - Grandmaster Visual Effects Audit & Fix - 2026-01-13
+- [GRANDMASTER_FOCUS_ISSUES_2026-01-13.md](6-Progress/GRANDMASTER_FOCUS_ISSUES_2026-01-13.md) - Grandmaster Focus and Key Handling Issues - 2026-01-13
+- [GRANDMASTER_INPUT_CLEANUP_FIX_2026-01-13.md](6-Progress/GRANDMASTER_INPUT_CLEANUP_FIX_2026-01-13.md) - Grandmaster Input Cleanup Fix - 2026-01-13
+- [GRANDMASTER_INPUT_FIX_2026-01-13.md](6-Progress/GRANDMASTER_INPUT_FIX_2026-01-13.md) - Grandmaster Input Fix - 2026-01-13
+- [GRANDMASTER_MENU_ESC_FIX_2026-01-13.md](6-Progress/GRANDMASTER_MENU_ESC_FIX_2026-01-13.md) - Grandmaster Menu ESC Key Lockup Fix - 2026-01-13
+- [GRANDMASTER_SCREEN_CLEANUP_2026-01-13.md](6-Progress/GRANDMASTER_SCREEN_CLEANUP_2026-01-13.md) - Grandmaster Screen Cleanup Fix - 2026-01-13
+- [GWALL_SYSOP_MODE_IMPLEMENTATION.md](6-Progress/GWALL_SYSOP_MODE_IMPLEMENTATION.md) - Global Wall Sysop Mode Implementation
+- [GWALL_WEB_ADMIN_IMPLEMENTATION.md](6-Progress/GWALL_WEB_ADMIN_IMPLEMENTATION.md) - Global Wall Web Admin Panel Implementation
+- [INTERACTIVE_DOORS_STATUS.md](6-Progress/INTERACTIVE_DOORS_STATUS.md) - Interactive Doors Porting Status
+- [INTERNAL_COMMANDS_VERIFICATION_2026-01-04.md](6-Progress/INTERNAL_COMMANDS_VERIFICATION_2026-01-04.md) - Internal Commands Verification - Express.e vs AmiExpress-Web
+- [JOINCNF_A4_ANALYSIS_2026-01-07.md](6-Progress/JOINCNF_A4_ANALYSIS_2026-01-07.md) - JoinCnf A4 Register Analysis - 2026-01-07
+- [JOINCNF_MISSING_RELOCATIONS_2026-01-07.md](6-Progress/JOINCNF_MISSING_RELOCATIONS_2026-01-07.md) - JoinCnf Missing Relocations Analysis - 2026-01-07
+- [JOINCNF_ROOT_CAUSE_2026-01-07.md](6-Progress/JOINCNF_ROOT_CAUSE_2026-01-07.md) - JoinCnf Root Cause - 2026-01-07
+- [JOINCNF_STUCK_LOOP_2026-01-07.md](6-Progress/JOINCNF_STUCK_LOOP_2026-01-07.md) - JoinCnf Door Stuck Loop Investigation - 2026-01-07
+- [KNOWN_ISSUES.md](6-Progress/KNOWN_ISSUES.md) - Known Issues (Summary)
+- [LIVECHAT_HYBRID_AUDIO_HANDOFF.md](6-Progress/LIVECHAT_HYBRID_AUDIO_HANDOFF.md) - LiveChat Hybrid Door Audio - Handoff
+- [MAIL_COMPOSER_IMPLEMENTATION.md](6-Progress/MAIL_COMPOSER_IMPLEMENTATION.md) - Implementation Prompt: Modern Mail Composer with ANSI Editor SDK
+- [MULTIRELAYHAT_AUDIT.md](6-Progress/MULTIRELAYHAT_AUDIT.md) - MultiRelayChat TypeScript Implementation Audit
+- [NEO_BLESSED_SHOWCASE_SHAPE_MODE_2026-01-21.md](6-Progress/NEO_BLESSED_SHOWCASE_SHAPE_MODE_2026-01-21.md) - Neo-Blessed Showcase - Shape Mode Integration
+- [NON_AUTHENTIC_HEADERS_REPORT.md](6-Progress/NON_AUTHENTIC_HEADERS_REPORT.md) - Non-Authentic Headers Report
+- [OPTIONAL_ENHANCEMENTS_2026-01-04.md](6-Progress/OPTIONAL_ENHANCEMENTS_2026-01-04.md) - Optional Enhancements - Beyond Express.e Parity
+- [python-door-support/](6-Progress/python-door-support/) - folder: PYTHON_DOOR_DEVELOPMENT.md, README.md
+- [QUICKNEW_CONFIG_IMPLEMENTATION.md](6-Progress/QUICKNEW_CONFIG_IMPLEMENTATION.md) - QuickNew Config File Compatibility Implementation
+- [QUICKNEW_TYPESCRIPT_AUDIT.md](6-Progress/QUICKNEW_TYPESCRIPT_AUDIT.md) - QuickNew TypeScript Implementation Audit
+- [QWK_IMPLEMENTATION_VERIFICATION_2026-01-04.md](6-Progress/QWK_IMPLEMENTATION_VERIFICATION_2026-01-04.md) - QWK/FTN Implementation Verification
+- [RTW_MULTICOM_FIX.md](6-Progress/RTW_MULTICOM_FIX.md) - RTW MULTICOM Fix - Based on axcommon.e Facts
+- [SAMILOG_TYPESCRIPT_AUDIT.md](6-Progress/SAMILOG_TYPESCRIPT_AUDIT.md) - SAmiLog TypeScript Implementation Audit Report
+- [SESSION_2026-01-04_FINAL_VERIFICATION.md](6-Progress/SESSION_2026-01-04_FINAL_VERIFICATION.md) - Session 2026-01-04 - Final Verification & Production Readiness
+- [SESSION_2026_01_01_AQUASCAN_OPERATOR_FIXES.md](6-Progress/SESSION_2026_01_01_AQUASCAN_OPERATOR_FIXES.md) - Session Summary - 2026-01-01: Operator Chat & AquaScan Fixes
+- [SESSION_2026_01_04_AQUASCAN_REGRESSION_FIX.md](6-Progress/SESSION_2026_01_04_AQUASCAN_REGRESSION_FIX.md) - Session 2026-01-04: AquaScan Regression Fix
+- [SESSION_2026_01_04_TASK_OWNERSHIP_REGRESSION.md](6-Progress/SESSION_2026_01_04_TASK_OWNERSHIP_REGRESSION.md) - Session 2026-01-04: AEDoorPort Task Ownership Regression
+- [SESSION_2026_01_04_XIM_REGRESSIONS_FIXED.md](6-Progress/SESSION_2026_01_04_XIM_REGRESSIONS_FIXED.md) - Session 2026-01-04: XIM Regressions Fixed (All Previous Fixes Restored)
+- [SHAPE_ASCII_AUDIT_2026-01-21.md](6-Progress/SHAPE_ASCII_AUDIT_2026-01-21.md) - Shape-Based ASCII Renderer - Audit Report
+- [SHAPE_ASCII_IMPLEMENTATION_2026-01-21.md](6-Progress/SHAPE_ASCII_IMPLEMENTATION_2026-01-21.md) - Shape-Based ASCII Video Implementation
+- [SHAPE_ASCII_IMPROVEMENT_2026-01-21.md](6-Progress/SHAPE_ASCII_IMPROVEMENT_2026-01-21.md) - Shape-Based ASCII Renderer - Ultra Improvement
+- [SIGNAL_BIT_FIX_2026-01-07.md](6-Progress/SIGNAL_BIT_FIX_2026-01-07.md) - Critical Signal Bit Mismatch Fix - 2026-01-07
+- [TELNET_CONNECT_AUDIT.md](6-Progress/TELNET_CONNECT_AUDIT.md) - Telnet Connect TypeScript Implementation Audit
+- [TELNET_FRONT_AUDIT.md](6-Progress/TELNET_FRONT_AUDIT.md) - telnet-front TypeScript Implementation Audit
+- [TYPESCRIPT_DOORS_AUDIT_SUMMARY.md](6-Progress/TYPESCRIPT_DOORS_AUDIT_SUMMARY.md) - TypeScript Doors Audit Summary
+- [UX_ENHANCEMENTS_COMPLETE_2026-01-04.md](6-Progress/UX_ENHANCEMENTS_COMPLETE_2026-01-04.md) - UX Enhancements and Edge Cases - Complete
+- [WAROLM_INVESTIGATION_2026-04-20.md](6-Progress/WAROLM_INVESTIGATION_2026-04-20.md) - WAROLM (`Olm`) Investigation  2026-04-20
+- [WHIP_DOOR_PROGRESS.md](6-Progress/WHIP_DOOR_PROGRESS.md) - WHIP Door Progress Report
+- [XIM_PROTOCOL_AUDIT_2026-01-06.md](6-Progress/XIM_PROTOCOL_AUDIT_2026-01-06.md) - XIM Protocol Comprehensive Audit - 2026-01-06
+
+## Top-level documents
+
+- [AMIEXPRESS_WEB_COMPLETE_GUIDE.md](AMIEXPRESS_WEB_COMPLETE_GUIDE.md) - AmiExpress-Web: Complete User and Developer Guide
+- [PRIVACY.md](PRIVACY.md) - Privacy notice
+- [research_ascii_camera_improvements_2026-01-21.md](research_ascii_camera_improvements_2026-01-21.md) - ASCII Camera Stream - Research & Improvement Analysis
+
+## Reference sources
+
+- [7-Reference%20Sources/README.md](7-Reference%20Sources/README.md) - Index of third-party and original source bundles (AmiExpress sources, NDK, vAmiga, amitools and others) used for parity work.

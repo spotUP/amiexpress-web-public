@@ -91,7 +91,7 @@ export default door;
 ### Running the Example
 
 ```bash
-cd sdk/doors/voice-chat
+cd Doors/voice-chat
 npm install
 npm run build
 
@@ -718,7 +718,7 @@ ctx.socket.on('audio-chunk', (data) => {
 
 ### Example 1: Simple Voice Chat
 
-See `sdk/doors/voice-chat/` for complete implementation.
+See `Doors/voice-chat/` for complete implementation.
 
 ### Example 2: Push-to-Talk
 
@@ -856,6 +856,6 @@ if (streams.length >= 10) {
 ## See Also
 
 - [Door Development Guide](./DOOR_DEVELOPMENT.md)
-- [Video Streaming Guide](./VIDEO_STREAMING.md)
+- Video Streaming Guide (not yet written)
 - [SDK API Reference](../../sdk/README.md)
-- [Voice Chat Example](../../sdk/doors/voice-chat/)
+- [Voice Chat Example](../../Doors/voice-chat/)

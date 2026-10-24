@@ -1,247 +1,73 @@
 # Sysop Quick Start Guide
 
-Get your AmiExpress BBS up and running in 10 minutes!
+Get your AmiExpress BBS up and running.
 
 ---
 
 ## Table of Contents
 
-1. [Prerequisites](#prerequisites)
-2. [Quick Setup (Local)](#quick-setup-local)
-3. [Quick Deploy (Production)](#quick-deploy-production)
-4. [First Login](#first-login)
-5. [Essential Configuration](#essential-configuration)
-6. [Import Existing BBS](#import-existing-bbs-optional)
-7. [Next Steps](#next-steps)
-8. [Troubleshooting](#troubleshooting)
+1. [Install](#install)
+2. [Create the sysop account](#create-the-sysop-account)
+3. [First Login](#first-login)
+4. [Essential Configuration](#essential-configuration)
+5. [Import Existing BBS](#import-existing-bbs-optional)
+6. [Next Steps](#next-steps)
+7. [Troubleshooting](#troubleshooting)
 
 ---
 
-## Prerequisites
+## Install
 
-Before you begin, ensure you have:
+Docker Compose is the supported way to run a board. The steps, the ports and
+the Kickstart ROM are in the repository [README](../../README.md#quick-start-with-docker-compose)
+and in [DOCKER.md](./DOCKER.md). Server deployment (firewall, TLS, the deploy
+scripts) is in [DEPLOYMENT.md](./DEPLOYMENT.md) and
+[deploy/README.md](../../deploy/README.md).
 
-- **Node.js 18+** - [Download here](https://nodejs.org/)
-- **npm** (comes with Node.js)
-- **Git** (optional, for version control)
-- **10 minutes** of your time
-
-**Quick check:**
-```bash
-node --version  # Should be v18 or higher
-npm --version   # Should be 9 or higher
-```
+For development without Docker, see "Local development" in the README.
 
 ---
 
-## Quick Setup (Local)
+## Create the sysop account
 
-### Option 1: Automated Setup Wizard (Recommended)
-
-Run the setup wizard - it handles everything automatically:
-
-```bash
-# Clone the repository (if you haven't already)
-git clone https://github.com/yourusername/amiexpress-web.git
-cd amiexpress-web
-
-# Run the setup wizard
-./dev/scripts/sysop-setup.sh
-```
-
-**The wizard will:**
-1. Collect your BBS information (name, sysop name, location)
-2. Create your admin account
-3. Generate secure credentials
-4. Install all dependencies
-5. Initialize the database
-6. Optionally generate SSH keys
-7. Start your BBS
-
-**That's it!** Your BBS will be running at `http://localhost:3001`
-
----
-
-### Option 2: Manual Setup
-
-If you prefer manual control:
-
-#### 1. Clone and Install
+A fresh board has no accounts. While it has no sysop, the board prints a
+one-time setup code in the server log at every start:
 
 ```bash
-git clone https://github.com/yourusername/amiexpress-web.git
-cd amiexpress-web
-
-# Install backend dependencies
-cd web/backend && npm install && cd ../..
-
-# Install frontend dependencies
-cd web/frontend && npm install && cd ../..
-
-# Install SDK (optional, for door development)
-cd sdk && npm install && cd ..
+docker compose logs | grep "Setup code"
+# [SETUP] Setup code: ABCD-EFGH
 ```
 
-#### 2. Configure Environment
+(Without Docker, the code is in the console of `./dev/scripts/start-servers.sh`.)
 
-```bash
-# Copy environment template
-cp .env.example .env.local
+1. Connect: web terminal at `http://localhost:3001/`, or `telnet localhost 64128`,
+   or SSH on port 31337. The logon screen says the board has no sysop yet.
+2. At the name prompt, type the sysop name you want.
+3. Answer `C` to create the account.
+4. Enter the setup code. Case and the dash do not matter.
+5. Finish the normal registration (privacy notice, location, email, password).
 
-# Edit configuration
-nano .env.local  # or use your preferred editor
-```
+That account gets security level 255 and the setup code stops working; the
+next caller to register is an ordinary user. A wrong code disconnects the
+caller and creates nothing, so a stranger who reaches the board first cannot
+take it. A restart before setup makes a new code.
 
-**Required settings in .env.local:**
-```bash
-# Generate JWT secret with: openssl rand -base64 32
-JWT_SECRET=your_generated_secret_here
-
-BBS_NAME=Your BBS Name
-SYSOP_NAME=Your Name
-BBS_LOCATION=Your City, State
-
-DATABASE_DIR=./data
-DATABASE_FILE=amiexpress.db
-```
-
-#### 3. Initialize Database
-
-```bash
-# Start servers (creates database automatically)
-./dev/scripts/start-servers.sh
-```
-
-#### 4. Create Admin Account
-
-Open your browser to `http://localhost:3001` and:
-1. Click "New User" or "Register"
-2. Create account with username: `sysop`
-3. Email the sysop to request admin elevation OR manually edit database
-
-**OR** use the database directly:
-```bash
-# Connect to SQLite database
-sqlite3 data/amiexpress.db
-
-# Update user to admin (security level 255)
-UPDATE users SET security_level = 255 WHERE username = 'sysop';
-```
-
----
-
-## Quick Deploy (Production)
-
-### Option 1: Railway.app (Easiest - Recommended)
-
-**One-click deploy:**
-
-[![Deploy on Railway](https://railway.app/button.svg)](https://railway.app/template/amiexpress)
-
-**Manual Railway deployment:**
-
-1. Go to [railway.app](https://railway.app)
-2. Sign in with GitHub
-3. Click "New Project" → "Deploy from GitHub"
-4. Select your AmiExpress repository
-5. Add volume: `/app/data` (1GB+)
-6. Set environment variables:
-   ```bash
-   JWT_SECRET=generate_with_openssl_rand_base64_32
-   BBS_NAME=Your BBS Name
-   SYSOP_NAME=Your Name
-   DATABASE_DIR=/app/data
-   NODE_ENV=production
-   ```
-7. Deploy and wait 3-5 minutes
-8. Access your BBS at the generated Railway URL
-
-**Cost**: $3-8/month for small-medium BBS
-
-**Full guide**: [RAILWAY_DEPLOYMENT.md](./RAILWAY_DEPLOYMENT.md)
-
----
-
-### Option 2: Render.com
-
-1. Push code to GitHub
-2. Connect GitHub to Render.com
-3. Create new Web Service
-4. Add persistent disk (7GB minimum)
-5. Set environment variables (same as Railway)
-6. Deploy
-
-**Cost**: $7+/month (requires paid disk)
-
-**Full guide**: [DEPLOYMENT.md](./DEPLOYMENT.md)
-
----
-
-### Option 3: Self-Hosted (VPS/Dedicated)
-
-**Requirements:**
-- Ubuntu 22.04+ or similar Linux
-- 1GB+ RAM
-- 10GB+ disk space
-- Node.js 18+
-- nginx (for reverse proxy)
-
-**Quick setup:**
-```bash
-# On your server
-git clone https://github.com/yourusername/amiexpress-web.git
-cd amiexpress-web
-
-# Run setup wizard
-./dev/scripts/sysop-setup.sh
-
-# Install PM2 for process management
-npm install -g pm2
-
-# Start with PM2
-pm2 start dev/scripts/start-servers.sh --name amiexpress
-pm2 save
-pm2 startup  # Follow instructions to start on boot
-```
-
-**Configure nginx reverse proxy:**
-```nginx
-server {
-    listen 80;
-    server_name yourbbs.com;
-
-    # All frontend paths and API served from port 3001
-    location / {
-        proxy_pass http://localhost:3001;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection 'upgrade';
-        proxy_set_header Host $host;
-        proxy_cache_bypass $http_upgrade;
-    }
-}
-```
+The BBS name and the other board settings are set in the admin afterwards.
+The time zone is the `BBS_TIMEZONE` setting in `.env` (restart to apply).
 
 ---
 
 ## First Login
 
-After setup, access your BBS:
+Log in with the sysop account you created:
 
-**Local:**
 - Web Terminal: `http://localhost:3001/`
 - Admin Panel: `http://localhost:3001/admin/`
 - SDK Preview: `http://localhost:3001/sdk/`
-- Telnet: `telnet localhost 2323`
-- SSH: `ssh -p 2222 sysop@localhost`
+- Telnet: `telnet localhost 64128`
+- SSH: `ssh -p 31337 <your sysop name>@localhost`
 
-**Production:**
-- Use your Railway/Render URL
-- Example: `https://your-project.railway.app`
-
-**Login credentials:**
-- Username: The admin username you created
-- Password: The password you set during setup
+On a public server, replace `localhost` with your host name.
 
 ---
 
@@ -365,7 +191,7 @@ Create an archive containing:
 8. Wait for completion (1-5 minutes)
 9. Verify imported data
 
-**Full guide**: [IMPORT_USER_GUIDE.md](../1-Users/IMPORT_USER_GUIDE.md)
+**Full guide**: [AMIGA_MIGRATION_GUIDE.md](./AMIGA_MIGRATION_GUIDE.md)
 
 ---
 
@@ -446,8 +272,8 @@ cp data/amiexpress.db backups/amiexpress-$(date +%Y%m%d).db
 ```
 
 **Cloud Backup** (Production):
-- Use Railway automatic backups
-- OR sync to S3/Dropbox/Google Drive
+- Back up the `bbs-data` volume (see [BACKUP_AND_RESTORE.md](./BACKUP_AND_RESTORE.md))
+- Sync the copies to S3, Dropbox or Google Drive
 - Keep 30 days of rolling backups
 
 ### Promote Your BBS
@@ -481,18 +307,18 @@ cat logs/frontend.log
 ```
 
 **Common issues:**
-- Port already in use → Change ports in .env.local
+- Port already in use: change the ports in `.env`
 - Database locked → Kill zombie processes: `./dev/scripts/kill-servers.sh`
 - Missing dependencies → Run: `cd web/backend && npm install`
 
 ### Can't Login as Admin
 
-**Reset admin password:**
-```bash
-sqlite3 data/amiexpress.db
-UPDATE users SET password_hash = '$2a$10$...' WHERE username = 'sysop';
-# Generate hash with: node -e "console.log(require('bcryptjs').hashSync('newpassword', 10))"
-```
+- No sysop account yet (setup never finished): the server log shows a
+  `[SETUP] Setup code` line. Follow [Create the sysop account](#create-the-sysop-account).
+  A restart prints a fresh code.
+- A sysop exists but its password is lost: there is no supported reset tool
+  yet. A database edit alone does not help: the board takes accounts and
+  access levels from its user files.
 
 ### Database Corruption
 
@@ -521,13 +347,11 @@ ls -la temp/
 
 **Check CORS settings:**
 ```bash
-# In web/backend/src/config.ts
-# Ensure your domain is in corsOrigins array
+# Set CORS_ORIGINS in .env to your public URL (comma separated)
 ```
 
-**Railway/Render:**
-- Verify RAILWAY_PUBLIC_DOMAIN or RENDER_URL is set
-- Check that WebSocket upgrade headers are allowed
+**Behind a reverse proxy:**
+- Check that WebSocket upgrade headers are passed through
 
 ### TypeScript Errors
 
@@ -568,12 +392,10 @@ This validates:
 **Documentation:**
 - User Guide: [USER_GUIDE.md](../1-Users/USER_GUIDE.md)
 - Deployment: [DEPLOYMENT.md](./DEPLOYMENT.md)
-- Railway: [RAILWAY_DEPLOYMENT.md](./RAILWAY_DEPLOYMENT.md)
 - Door Development: [DOOR_DEVELOPMENT.md](../4-Door-Developers/DOOR_DEVELOPMENT.md)
 - Architecture: [ARCHITECTURE.md](../3-Developers/ARCHITECTURE.md)
 
 **Scripts:**
-- Setup Wizard: `./dev/scripts/sysop-setup.sh`
 - Health Check: `./dev/scripts/health-check.sh`
 - Pre-Deploy Check: `./dev/scripts/pre-deploy-check.sh`
 - Kill Servers: `./dev/scripts/kill-servers.sh`
@@ -611,8 +433,8 @@ This validates:
 - Web Terminal: `http://localhost:3001/`
 - Admin Panel: `http://localhost:3001/admin/`
 - SDK Preview: `http://localhost:3001/sdk/`
-- Telnet: `telnet localhost 2323`
-- SSH: `ssh -p 2222 user@localhost`
+- Telnet: `telnet localhost 64128`
+- SSH: `ssh -p 31337 user@localhost`
 
 **Logs:**
 - Backend: `logs/backend.log`

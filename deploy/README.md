@@ -27,7 +27,7 @@ docker compose up -d
 
 ### 4. Access Your BBS
 - **Web:** http://YOUR_SERVER_IP:3001
-- **Telnet:** `telnet YOUR_SERVER_IP 2323`
+- **Telnet:** `telnet YOUR_SERVER_IP 64128`
 - **Admin:** http://YOUR_SERVER_IP:3001/admin
 
 ## Scripts
@@ -37,6 +37,18 @@ docker compose up -d
 | `hetzner-setup.sh` | Initial VPS setup (run once) |
 | `update.sh` | Pull latest code and rebuild |
 | `status.sh` | Check BBS health and status |
+| `deploy.sh` | The full deploy, run on the host: reset checkout, rebuild image, recreate container (refuses while callers are on) |
+| `watch-main.sh` | Deploys origin/main when it moves; driven by the deploy timer |
+| `install-deploy-timer.sh` | Installs the systemd timer that runs `watch-main.sh` every two minutes (run as root) |
+| `caller-guard.sh` | Counts real callers online so the deploy can refuse to end their sessions |
+| `door-drift.sh` | After the doors sync, proves the running door code matches the built image |
+| `changelog-bulletin.sh` | Writes the Board Changes bulletin (bull10) from the commits each deploy shipped |
+| `sync-to-server.sh` | Copies gitignored BBS config and data files to the live container (no overwrite without `--force`) |
+| `bbs-backup.sh` | One snapshot of everything the board cannot regenerate; run by `bbs-backup.timer` |
+| `bbs-backup-check.sh` | Hourly watchdog that catches a backup that never ran |
+| `bbs-backup-alert.sh` | Makes a failed or missing backup impossible to miss |
+| `install-bbs-backup.sh` | Installs the nightly backup, alert and watchdog on the live host (run as root) |
+| `systemd/` | Unit and timer files for the deploy timer and the backup jobs |
 
 ## Updating
 
@@ -215,12 +227,15 @@ Amiga clients, which do not implement HSTS.
 Required ports:
 - **22** - SSH (server admin)
 - **3001** - HTTP/WebSocket (or 80/443 with reverse proxy)
-- **2323** - Telnet
-- **2222** - SSH (BBS login)
+- **64128** - Telnet
+- **31337** - SSH (BBS login)
+- **1541** - FTP control
+- **50101-50107** - FTP passive data
 
 Configure in Hetzner Console → Firewalls, or use ufw:
 ```bash
-ufw allow 22,3001,2323,2222/tcp
+ufw allow 22,3001,64128,31337,1541/tcp
+ufw allow 50101:50107/tcp
 ufw enable
 ```
 
@@ -235,7 +250,7 @@ docker compose logs
 Increase `EMULATOR_MEMORY_MB` or upgrade to CX32 (8GB).
 
 ### Can't connect via Telnet
-Check firewall allows port 2323.
+Check firewall allows port 64128.
 
 ### Health check failing
 ```bash

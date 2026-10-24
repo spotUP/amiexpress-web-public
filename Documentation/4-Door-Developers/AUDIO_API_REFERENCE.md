@@ -758,5 +758,5 @@ ctx.socket.on('audio-stream-stopped', (data) => {
 ## See Also
 
 - [Audio Streaming Guide](./AUDIO_STREAMING.md) - Complete usage guide
-- [Voice Chat Example](../../sdk/doors/voice-chat/) - Working example
+- [Voice Chat Example](../../Doors/voice-chat/) - Working example
 - [Door Development Guide](./DOOR_DEVELOPMENT.md) - General door development

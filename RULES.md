@@ -24,7 +24,7 @@ door, and says which it is (global rule: "Ask for the test, and say WHERE").
 | LOCAL board | http://localhost:3001 | `./dev/scripts/start-servers.sh --bbs-only`; the frontend is a BUILT bundle, so rebuild `packages/terminal` + `web/frontend` first |
 | LOCAL admin | http://localhost:3001/admin/ | |
 | LOCAL SDK | http://localhost:3001/sdk/ | |
-| LOCAL telnet | `telnet localhost 64128` | Same port as live: `TELNET_PORT` defaults to 64128 (`web/backend/src/index.ts:1061`). The 2323 in `TelnetServer`'s constructor is a default nothing passes. SSH 2222 needs `SSH_HOST_KEY_PATH` |
+| LOCAL telnet | `telnet localhost 64128` | Same port as live: `TELNET_PORT` defaults to 64128 (`LISTENER_DEFAULTS.telnet` in `web/backend/src/index.ts`). The 2323 in `TelnetServer`'s constructor is a default nothing passes. SSH 31337 needs `SSH_HOST_KEY_PATH` |
 | LOCAL board (worktree mirror) | http://localhost:3001 | The fast-test board, so a small test does not need a live deploy. It runs from `~/Code/AmiExpress/aew-local` (branch `local/main-mirror`), a pure mirror of `origin/main` - never the shared checkout, which trails `origin/main` and holds other sessions' uncommitted work. **Never commit or edit in it**; land work from a feature worktree, then `cd ~/Code/AmiExpress/aew-local && dev/scripts/local-refresh.sh` (fast-forwards, rebuilds only the sdk / `packages/terminal` / `web/frontend` / `web/config-app` bundles whose sources changed since `.local-built-sha`, restarts the stack, prints PASS/FAIL). `--pull-live` re-pulls board content from live first; `--stop` stops the stack. The three-sha check it prints: `HEAD` == `origin/main` == the local `/health` revision (live `/health` trails until the deploy lands). Board content is `data/live` (a snapshot of live, `Doors` inside it points back at the mirror's `Doors/`); node_modules are symlinks into the shared checkout's. Scripted login: `BBS_USER=... BBS_PASSWORD=... python3 dev/scripts/bbs_telnet.py --host localhost`, with a throwaway account made in the LOCAL database only (`curl -X POST localhost:3001/auth/register -H 'Content-Type: application/json' -d '{"username":"...","realname":"...","location":"...","password":"..."}'`) |
 
 **The login contract - run it after every deploy that touches screens, themes,
@@ -63,7 +63,7 @@ Phone testing is LIVE only — the sysop cannot reach localhost from a phone.
 | Frontend build-check | `cd web/frontend && npm run build:check` |
 | Build SDK | `cd sdk && npm run build` |
 | Build a TS door | `cd Doors/{name} && npm run build` |
-| Test all commands | `npx ts-node -P dev/scripts/tsconfig.json dev/scripts/test-all-commands.ts` |
+| Test all commands (quick) | `./dev/scripts/test-all-commands-quick.sh` |
 | Test all 68K doors | `./dev/scripts/test-all-doors.sh` |
 | 68K debug (smart) | `npm run xim:debug -- DOORNAME` |
 | Check context usage | `./dev/scripts/check-context-usage.sh` |
@@ -341,7 +341,7 @@ import * as amigafs from '../utils/amigafs';
 amigafs.existsSync('/Doors/file');
 ```
 
-22 functions available. See `Documentation/3-Developers/AMIGAFS_MIGRATION.md`.
+22 functions available.
 
 ### 12. No Emojis — terminal / log / BBS output
 
@@ -464,9 +464,7 @@ Always develop directly in `Doors/`. Never in `web/backend/src/doors/` or `sdk/d
 
 Build commands and test commands are in the `## Commands` table at the top. Test scripts:
 
-- All commands: `npx ts-node -P dev/scripts/tsconfig.json dev/scripts/test-all-commands.ts`
 - Quick: `./dev/scripts/test-all-commands-quick.sh`
-- Interactive: `dev/scripts/test-command-interactive.ts`
 - Example doors: `./dev/scripts/test-example-doors.sh`
 - All 68K doors: `./dev/scripts/test-all-doors.sh` — see `Documentation/3-Developers/DOOR_TESTING.md`
 
@@ -543,7 +541,7 @@ If logs are missing or unwritable, fix path/permissions before debugging further
 References:
 - Disassembly notes: `Documentation/4-Door-Developers/Bulls_DISASM_NOTES.md`, `AEDoor_LIBRARY_NOTES.md`; full dumps in `Docs/`.
 - Door harness: `node web/backend/dist/scripts/run-amiga-door.js <door> <node>`.
-- Vamos / vAmiga: `Documentation/4-Door-Developers/AMIGA_EMULATION.md`.
+- Vamos / vAmiga: `Documentation/3-Developers/AMIGA_EMULATION.md`.
 - NDK autodocs: `mcp__amiexpress-docs__search_ndk_autodocs`.
 - Exec/DOS LVO semantics: `Documentation/4-Door-Developers/DOOR_DEVELOPMENT.md`.
 
@@ -697,7 +695,7 @@ Container name: `amiexpress-bbs`. Image default-data lives at
 
 ## Import/Export
 
-Imports users, messages, files, and config from a real Amiga BBS. Parses binary formats (BCD, packed). Tests: `dev/scripts/test-import-execution.ts`, `dev/scripts/test-user-parsing.ts`. See `Documentation/1-Users/IMPORT_USER_GUIDE.md`.
+Imports users, messages, files, and config from a real Amiga BBS. Parses binary formats (BCD, packed). Importer: `web/backend/src/scripts/import-from-amiga.ts`. See `Documentation/2-Sysops/AMIGA_MIGRATION_GUIDE.md`.
 
 ---
 
@@ -815,11 +813,11 @@ Historical preservation of BBS culture and retro Amiga 68K. Educational, defensi
 ## Documentation Index
 
 - `Documentation/README.md` — start here
-- `Documentation/1-Users/USER_GUIDE.md`, `Documentation/1-Users/IMPORT_USER_GUIDE.md`
+- `Documentation/1-Users/USER_GUIDE.md`, `Documentation/2-Sysops/AMIGA_MIGRATION_GUIDE.md`
 - `Documentation/2-Sysops/DEPLOYMENT.md`, `Documentation/2-Sysops/INFO_EDITOR.md`
 - `Documentation/3-Developers/ARCHITECTURE.md`, `TESTING.md`, `DATABASE.md`
-- `Documentation/3-Developers/MCP_USAGE.md`, `DOOR_TESTING.md`, `CLAUDE_68K_DEBUGGING_PROTOCOL.md`, `AMIGAFS_MIGRATION.md`
-- `Documentation/4-Door-Developers/DOOR_DEVELOPMENT.md`, `TYPESCRIPT_DOOR_GUIDE.md`, `XIM_DEBUGGING_GUIDE.md`, `NEO_BLESSED_COLOR_GUIDE.md`, `DOOR_INPUT_MANAGER_GUIDE.md`, `AMIGA_EMULATION.md`
+- `Documentation/3-Developers/MCP_USAGE.md`, `DOOR_TESTING.md`, `CLAUDE_68K_DEBUGGING_PROTOCOL.md`, `AMIGA_EMULATION.md`
+- `Documentation/4-Door-Developers/DOOR_DEVELOPMENT.md`, `TYPESCRIPT_DOOR_GUIDE.md`, `XIM_DEBUGGING_GUIDE.md`, `NEO_BLESSED_COLOR_GUIDE.md`, `DOOR_INPUT_MANAGER_GUIDE.md`
 - `Documentation/6-Progress/CURRENT_STATUS.md`
 
 Log timestamps are in UTC / server time. Verify "today" or "recent" by file mtime (`ls -la`), not calendar date.
