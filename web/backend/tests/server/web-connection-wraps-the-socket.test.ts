@@ -47,7 +47,7 @@ function fakeRaw(id: string): Socket {
 }
 
 const deps = {
-  nodeManager: { assignSessionToNode: jest.fn(async () => ({ nodeId: 3 })) },
+  nodeManager: { assignSessionToNode: jest.fn(async () => ({ nodeId: 3 } as never)) },
   chatState: { sessions: [], messages: [] } as never,
 };
 const fakeIo = { sockets: { sockets: new Map() } } as unknown as IOServer;

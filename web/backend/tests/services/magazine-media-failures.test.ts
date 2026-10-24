@@ -185,7 +185,7 @@ describe('a video must play before its poster is shown', () => {
       probe: jest.fn(async () => probe),
     };
     const file = path.join(root, 'v.json');
-    const out = await renderStoryMedia({ headline: 'H', body: 'B', media: [{ ...clip }] }, file, deps as never, writeAtomic);
+    const out = await renderStoryMedia({ media: [{ ...clip }] }, file, deps as never, writeAtomic);
     return { out, side: readSidecar(file), probe: deps.probe };
   }
 

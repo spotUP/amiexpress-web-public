@@ -102,6 +102,6 @@ describe('fitting cells to a tile', () => {
   it('survives an empty picture', () => {
     const scaled = fitCellsToTile(new Uint8Array(0), 0, 0, 6, 3);
     expect(scaled.length).toBe(18);
-    expect(scaled.every(v => v === 0)).toBe(true);
+    expect(scaled.every((v: number) => v === 0)).toBe(true);
   });
 });

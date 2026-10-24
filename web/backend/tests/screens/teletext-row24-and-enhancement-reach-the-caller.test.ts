@@ -72,7 +72,7 @@ test('row 24, DECDHL and the OL,26 packet of a native .tti board screen reach a 
 
     // Sentinel: the triplet parser ran on the page's OL,26 and decoded its triplets.
     const parsed = parse.mock.results.map((r) => r.value as enhancement.EnhancementPacket | null);
-    expect(parsed.some((p) => p?.packet === 26 && p.triplets.length === 13 && p.triplets[1].address === 5 && p.triplets[1].data === 2)).toBe(true);
+    expect(parsed.some((p) => p?.packet === 26 && p.triplets.length === 13 && p.triplets[1]?.address === 5 && p.triplets[1]?.data === 2)).toBe(true);
 
     expect(said).toContain('PICK A CONFERENCE');
     expect(said).toContain('ROW TWENTY FOUR');

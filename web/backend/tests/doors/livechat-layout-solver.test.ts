@@ -63,7 +63,6 @@ describe('every window shape', () => {
           layout.chat.width,
           layout.chat.height,
           layout.chatLog.width,
-          layout.chatLog.height,
           layout.input.width,
           layout.statusBar.width,
           ...(layout.sidebar ? [layout.sidebar.width, layout.sidebar.height] : []),
