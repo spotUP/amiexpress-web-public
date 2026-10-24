@@ -52,6 +52,7 @@ Phone testing is LIVE only — the sysop cannot reach localhost from a phone.
 | Start dev (BBS + admin + SDK) | `./dev/scripts/start-servers.sh` |
 | Start dev with debug logging | `./dev/scripts/start-servers.sh --debug` |
 | Start without watcher | `./dev/scripts/start-servers.sh --no-watch` |
+| Fresh-install sandbox (empty board, own ports) | `dev/scripts/sandbox-board.sh fresh` (prints the setup code), `start --reset` (prints the sysop password reset code), `stop`, `status`. Telnet `localhost 64228`, web http://localhost:3101. Board and database live in `$TMPDIR/aew-sandbox`, seeded from `git archive HEAD` the way the image seeds a new volume; it never touches data/live or the checkout's Doors/ |
 | Stop everything | `./dev/scripts/kill-servers.sh` |
 | Zombie verification (after stop) | `ps aux \| grep -E "(start-servers\|kill-servers\|watch-doors\|build-wasm\|tsx .*src/index.ts)" \| grep -v grep` (expect empty) |
 | Build backend | `cd web/backend && npm run build` |
