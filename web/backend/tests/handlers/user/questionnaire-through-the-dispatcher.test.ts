@@ -54,15 +54,30 @@ jest.mock('../../../src/services/UserDatabaseManager', () => ({
 }));
 jest.mock('../../../src/services/bbs-event-emitter', () => ({ emitUserLogin: jest.fn() }));
 jest.mock('../../../src/services/batch-scheduler', () => ({ runExecuteOn: jest.fn().mockResolvedValue(undefined) }));
-jest.mock('../../../src/services/mail-notification.service', () => ({ mailOnNewUser: jest.fn().mockResolvedValue(undefined) }));
+jest.mock('../../../src/services/mail-notification.service', () => ({
+  mailOnNewUser: jest.fn().mockResolvedValue(undefined),
+  mailOnLogon: jest.fn().mockResolvedValue(undefined),
+}));
 jest.mock('../../../src/services/webhook.service', () => ({
   webhookService: { sendWebhook: jest.fn().mockResolvedValue(undefined) }, WebhookTrigger: { NEW_USER: 'NEW_USER' },
 }));
-jest.mock('../../../src/utils/acs.util', () => ({ initializeSecurity: jest.fn() }));
+jest.mock('../../../src/utils/acs.util', () => ({
+  ...jest.requireActual('../../../src/utils/acs.util'), // the logon's setEnvStat
+  initializeSecurity: jest.fn(),
+}));
 jest.mock('../../../src/services/config.service', () => ({
   ConfigService: jest.fn().mockImplementation(() => ({ getSystemConfig: jest.fn().mockResolvedValue(null) })),
 }));
 jest.mock('../../../src/handlers/command-execution.handler', () => ({ runSysCommand: jest.fn().mockResolvedValue(-1) }));
+// runPostAuthLogin saves the logon's counters through the database module,
+// whose `db` is a Proxy over a store SKIP_DB_INIT leaves unopened (and which
+// jest.spyOn cannot wrap); beforeEach routes it to this file's fake.
+jest.mock('../../../src/database', () => ({ db: { updateUser: jest.fn(), getUserById: jest.fn() } }));
+// The real logon, counted: its exports are not configurable, so spyOn cannot wrap it.
+jest.mock('../../../src/services/login-post.service', () => ({
+  ...jest.requireActual('../../../src/services/login-post.service'),
+  runPostAuthLogin: jest.fn(),
+}));
 
 import * as fs from 'fs';
 import * as os from 'os';
@@ -70,9 +85,13 @@ import * as path from 'path';
 import { BBSState, LoggedOnSubState } from '../../../src/constants/bbs-states';
 import { config } from '../../../src/config';
 import { setNewUserDependencies } from '../../../src/handlers/user/new-user.handler';
+import { nodeFileManager } from '../../../src/services/NodeFileManager';
+import { db as realDb } from '../../../src/database';
+import * as loginPost from '../../../src/services/login-post.service';
 
 let root: string;
 let previousDataDir: string;
+let previousNodeRoot: string;
 let handleCommand: typeof import('../../../src/handlers/command.handler').handleCommand;
 
 const users = new Map<string, any>();
@@ -95,6 +114,8 @@ function makeSession() {
     newUserData: {
       username: 'newbie', location: 'Oslo', phone: '', email: 'newbie@example.com', password: 'hunter22',
       realname: '', linesPerScreen: 24, computer: 'Amiga', screenClear: true, questionnaire: undefined,
+      // Recorded by the consent step that runs before these questions.
+      gdprConsentAt: '2026-10-24T00:00:00.000Z', gdprNoticeVersion: '1.0', gdprConsentSource: 'registration',
     },
   } as any;
 }
@@ -120,8 +141,19 @@ beforeEach(() => {
   }
   users.clear();
   setNewUserDependencies({ db, sessions: new Map() });
+  // The logon writes node<n>.user through this singleton, whose root is fixed
+  // at import; point it at this board, not the checkout's data/bbs.
+  previousNodeRoot = (nodeFileManager as any).bbsRoot;
+  (nodeFileManager as any).bbsRoot = root;
+  (realDb.updateUser as jest.Mock).mockReset().mockResolvedValue(undefined);
+  // No clearMocks in the config: each test counts its own logons.
+  (loginPost.runPostAuthLogin as jest.Mock).mockClear().mockImplementation(
+    jest.requireActual('../../../src/services/login-post.service').runPostAuthLogin);
+  (realDb.getUserById as jest.Mock).mockImplementation(async (id: number) => db.getUserById(id));
 });
 afterEach(() => {
+  jest.restoreAllMocks();
+  (nodeFileManager as any).bbsRoot = previousNodeRoot;
   config.set('dataDir', previousDataDir);
   fs.rmSync(root, { recursive: true, force: true });
 });
@@ -142,9 +174,15 @@ test('a caller who confirms, then answers the questions by typing, gets through 
   // express.e:30391 aePuts('Is the above Correct? ') - no (Y/n) hint.
   expect(text(socket)).toMatch(/Is the above Correct\? $/);
 
-  await type(socket, session, 'Y');
+  // One key, no Enter (express.e:30395 readChar); any other key is read past.
+  await key(socket, session, 'X');
+  expect(session.subState).toBe(LoggedOnSubState.NEW_USER_SCRIPT_CONFIRM);
+  await key(socket, session, 'Y');
   expect(session.state).toBe(BBSState.LOGGEDON);
-  expect(session.subState).toBe(LoggedOnSubState.DISPLAY_BULL);
+  // This board has no JOINED screen, so no key is owed: the logon runs on
+  // through its (mocked, empty) bulletins to the menu without one (a blank
+  // screen waited for a key nothing asked for).
+  expect(session.subState).toBe(LoggedOnSubState.DISPLAY_MENU);
   expect(socket._emits.some((e: any) => e.event === 'login-success')).toBe(true);
   // express.e prints nothing between the questionnaire and the logon
   // (30096-30112): no "Creating your account..." and no "created" line.
@@ -214,7 +252,7 @@ test('a CENTRAL_ANSWERS node files the answers under the account\'s own slot', a
   await key(socket, session, 'Y');
   await type(socket, session, 'Spot Up');
   await type(socket, session, 'a friend');
-  await type(socket, session, 'Y');
+  await key(socket, session, 'Y');
   clearNodeTooltypeCache();
   const filed = path.join(root, 'Answers', '9');
   expect(fs.existsSync(filed)).toBe(true);
@@ -233,7 +271,7 @@ test('a freshly registered caller gets a resume token for THIS session, and it r
     await key(socket, session, 'Y');
     await type(socket, session, 'Spot Up');
     await type(socket, session, 'a friend');
-    await type(socket, session, 'Y');
+    await key(socket, session, 'Y');
   } finally { spies.forEach((sp) => sp.mockRestore()); }
 
   const success = socket._emits.find((e: any) => e.event === 'login-success');
@@ -246,4 +284,27 @@ test('a freshly registered caller gets a resume token for THIS session, and it r
   // The sink carried the fingerprint line, and the token itself is in none.
   expect(lines.some((l) => l.includes(tokenFingerprint(token)))).toBe(true);
   expect(lines.filter((l) => l.includes(token))).toEqual([]);
+});
+
+// express.e:29646-29715: newUserAccount and loadAccount both fall into the
+// same logon, whose checkUserOnLine writes node<n>.user. The port's new
+// caller skipped that logon (runPostAuthLogin), so the first 68K door to
+// open BBS:node1.user (zOOsTAT) got NOT FOUND and hung the node.
+test('a caller who just registered has a node file before the first door runs', async () => {
+  const logon = loginPost.runPostAuthLogin as jest.Mock;
+  const socket = makeSocket();
+  const session = makeSession();
+
+  await key(socket, session, 'Y');
+  await type(socket, session, 'Spot Up');
+  await type(socket, session, 'a friend');
+  await key(socket, session, 'Y');
+
+  expect(logon).toHaveBeenCalledTimes(1);
+  expect(fs.existsSync(path.join(root, 'node1.user'))).toBe(true);
+  // One call, counted once, by the logon (express.e:30113 -> 16045): the
+  // record starts at 0 so the CallersLog line carries the NEW marker.
+  expect(db.createUser.mock.calls[0][0]).toMatchObject({ calls: 0, callsToday: 0 });
+  expect(realDb.updateUser).toHaveBeenCalledTimes(1);
+  expect(realDb.updateUser).toHaveBeenCalledWith(7, expect.objectContaining({ calls: 1, callsToday: 1 }), expect.anything());
 });

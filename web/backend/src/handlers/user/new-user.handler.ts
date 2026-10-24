@@ -12,7 +12,6 @@
  * - Summary and confirmation
  */
 
-import { issueResumeTokenForLogin } from '../../server/resume-tokens';
 import { linesCountdown, LINES_PROMPT } from '../../utils/lines-test.util';
 import { Socket } from 'socket.io';
 import { autoLinesFor } from '../../utils/auto-lines.util';
@@ -25,7 +24,6 @@ import { boardRoot } from '../../utils/board-root.util';
 import { ConfigService } from '../../services/config.service';
 import { userFileManager } from '../../services/UserFileManager';
 import { userDatabaseManager } from '../../services/UserDatabaseManager';
-import { emitUserLogin } from '../../services/bbs-event-emitter';
 import { beginLogoff } from '../../server/logoff';
 import { runExecuteOn } from '../../services/batch-scheduler';
 import { mailOnNewUser } from '../../services/mail-notification.service';
@@ -1026,55 +1024,81 @@ async function continueRegistrationFlow(socket: Socket, session: any) {
 }
 
 /**
- * Into the board: JOINED and the pause that leads to the bulletins.
+ * Into the board: JOINED, its pause, and then the logon every caller runs.
  *
  * Split from account creation so the questionnaire - and any onboarding it
  * runs - happens with the account IN EXISTENCE and BEFORE the caller is
  * shown the board, which is express.e's order (30096-30112: the slot is
  * assigned, then doNewUserQuestions, then the logon carries on).
+ *
+ * express.e:29646-29665 - `IF newUser ... newUserAccount() ELSE loadAccount`,
+ * and then BOTH branches fall into the same logon (29666 on): checkUserOnLine
+ * (29715, which writes node<n>.user), the lockouts, LOGON, the bulletins.
+ * newUserAccount's last act is `IF displayScreen(SCREEN_JOINED) THEN
+ * doPause()` (30125), so JOINED and its key come BEFORE that common code.
+ *
+ * The port's common code is runPostAuthLogin. This used to re-implement the
+ * parts of it it remembered (LOGGEDON, the login notice, the login event)
+ * and skip the rest, so a brand-new caller had no node<n>.user: the first
+ * 68K door that read BBS:node1.user got NOT FOUND and hung.
  */
 async function enterBoard(socket: Socket, session: any): Promise<void> {
   delete session.newUserData;
-  const newUser = session.user;
   // Nothing printed here: express.e goes from the questionnaire straight on
-  // with the logon (30096-30112); there is no "account created" line.
-  // The questionnaire ran in its own sub-states, REGISTERING; the board
-  // starts here at the bulletins, which is where account creation used to
-  // leave the caller - and the browser learns it is logged on only now.
-  session.state = BBSState.LOGGEDON;
-  session.subState = LoggedOnSubState.DISPLAY_BULL;
-  const resumeToken = issueResumeTokenForLogin(session, String(newUser.id));
-  socket.emit('login-success', {
-    resumeToken,
-    user: {
-      id: newUser.id,
-      username: newUser.username,
-      realname: newUser.realname,
-      secLevel: newUser.secLevel,
-      expert: newUser.expert,
-      ansi: newUser.ansi
-    }
-  });
-
-  // Emit BBS event for LiveChat integration
+  // with the logon (30096-30112); there is no "account created" line. The
+  // caller stays REGISTERING through JOINED's pause; runPostAuthLogin makes
+  // the session LOGGEDON, as it does for every caller.
+  const logon = (): Promise<void> => logOnTheNewAccount(socket, session);
+  let shown = false;
   try {
-    emitUserLogin({
-      username: newUser.username,
-      nodeId: session.nodeId || 1,
-      location: newUser.location || 'Unknown',
-      timestamp: Date.now()
+    shown = await displayScreen(socket, session, 'JOINED', true, /* silent */ true);
+  } catch (error) {
+    console.error('[NEW USER] JOINED screen failed:', error);
+  }
+  // express.e:30125 - JOINED and its pause, or nothing. The key that ends
+  // the pause carries on with the logon, the way the JOIN and GUESTLOGON
+  // pauses carry on with registration (continueIntroFlow above).
+  if (shown) {
+    // A JOINED long enough to paginate already waits on its own pause; a
+    // second doPause would print "(Pause)" twice (as GUESTLOGON above).
+    if (session.paginatedScreen) session.paginatedScreen.onComplete = logon;
+    else doPause(socket, session, logon);
+    return;
+  }
+  await logon();
+}
+
+/**
+ * express.e:29666 on, for the account newUserAccount just made.
+ *
+ * Nothing is skipped for a new caller, because express.e skips nothing:
+ * - the call count and the CallersLog logon line: express.e writes them ONCE
+ *   for a new caller, in newUserAccount (displayUserToCallersLog(0), 30113),
+ *   and the `IF newUser=FALSE` at 29729 keeps the returning-caller copy from
+ *   running a second time. The port has no write at account creation (the
+ *   record starts at 0 calls, createAccountRecord), so runPostAuthLogin's
+ *   bump and logLogin are that one write, with the NEW marker (16038).
+ * - checkUserOnLine(1) (29715) runs for a new caller too. Here it does not
+ *   meet the caller itself: session.user is already this account, which
+ *   runPostAuthLogin reads as the same socket re-entering (entryUserId).
+ * - the password-age gate and the lockouts read the record as for anyone.
+ * - login-success (web's resume token) and the login event are sent there,
+ *   once; this file sent its own copies before.
+ */
+async function logOnTheNewAccount(socket: Socket, session: any): Promise<void> {
+  const user = session.user;
+  if (!user) return;
+  try {
+    // require(): login-post.service reaches back into the handlers.
+    const { runPostAuthLogin } = require('../../services/login-post.service');
+    await runPostAuthLogin(socket, session, user, {
+      // The record's timeLastOn is the moment it was made (initNewUser,
+      // express.e:30450); runPostAuthLogin prefers the disk's own value.
+      lastLoginBeforeUpdate: user.lastLogin ? new Date(user.lastLogin) : new Date(0),
     });
   } catch (error) {
-console.error('[BBSEvent] Error emitting new user login event:', error);
+    console.error('[NEW USER] logon failed:', error);
   }
-    try {
-      const { displayScreen, doPause } = require('../screen.handler');
-      const shown = await displayScreen(socket, session, 'JOINED', true, /* silent */ true);
-      // express.e:30125 - JOINED and its pause, or nothing.
-      if (shown && typeof doPause === 'function') doPause(socket, session);
-    } catch (error) {
-      console.error('[NEW USER] JOINED screen failed:', error);
-    }
 }
 
 /**
@@ -1207,8 +1231,11 @@ export async function handleQuestionnaireConfirmInput(socket: Socket, session: a
     return;
   }
 
-  const response = input.trim().toUpperCase();
-  if (response === 'N' || response === 'NO' || response === 'Q' || response === 'QUIT') {
+  // express.e:30395-30402 - ONE key (readChar): N or Q is no, Y is yes, and
+  // any other key is read past. The port took a typed line and treated
+  // everything but N as yes, so a Y without Enter sat on the prompt.
+  const response = input.trim().toUpperCase().charAt(0);
+  if (response === 'N' || response === 'Q') {
     socket.emit('ansi-output', 'No!\r\n\r\n');
     questionnaire.currentIndex = 0;
     questionnaire.answers = [];
@@ -1217,6 +1244,8 @@ export async function handleQuestionnaireConfirmInput(socket: Socket, session: a
     await advanceQuestionnaire(socket, session);
     return;
   }
+
+  if (response !== 'Y') return;
 
   socket.emit('ansi-output', 'Yes..\r\n\r\n');
   // The account was created before the questionnaire began (express.e's
@@ -1574,8 +1603,17 @@ console.warn(`[SETUP] First user created: ${data.username} - Auto-assigned sysop
       timeUsed: 0,
       chatLimit: defaultChatLimit,
       chatUsed: 0,
-      calls: 1, // First call
-      callsToday: 1,
+      // No call counted yet. express.e's new record starts at timesCalled 0
+      // (createNewAccount -> initNewUser, 30461/30433, a cleared record), and
+      // the one bump is displayUserToCallersLog(0) (30113 -> 16045), which
+      // also writes the CallersLog line with its "NEW" marker because
+      // timesCalled is still 0 (16038). The port's displayUserToCallersLog
+      // is runPostAuthLogin (calls+1, logLogin isNew), which enterBoard runs
+      // - so a 1 here counted the first call twice and lost the NEW marker.
+      // timesOnToday the same: the logon's day check (28506-28525) sees
+      // timeLastOn = now (initNewUser 30450) and adds today's one call.
+      calls: 0,
+      callsToday: 0,
       screenType,
       protocol,
       editor,

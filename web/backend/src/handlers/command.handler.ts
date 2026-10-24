@@ -2499,6 +2499,13 @@ console.log(' [REGISTRATION] Handling input for subState:', session.subState);
       await newUserHandler.handleConfirmInput(socket, session, data);
       return;
     }
+    // express.e:30391-30402 - the questionnaire's "Is the above Correct?"
+    // is read the same way: one key, no Enter.
+    if (session.subState === LoggedOnSubState.NEW_USER_SCRIPT_CONFIRM) {
+      const newUserHandler = require('./user/new-user.handler');
+      await newUserHandler.handleQuestionnaireConfirmInput(socket, session, data);
+      return;
+    }
 
     // Buffer characters until Enter is pressed
     if (data === '\r' || data === '\n') {
@@ -2549,9 +2556,6 @@ console.log(' [REGISTRATION] Handling input for subState:', session.subState);
           break;
         case LoggedOnSubState.NEW_USER_SCRIPT:
           await newUserHandler.handleQuestionnaireAnswer(socket, session, input);
-          break;
-        case LoggedOnSubState.NEW_USER_SCRIPT_CONFIRM:
-          await newUserHandler.handleQuestionnaireConfirmInput(socket, session, input);
           break;
       }
     } else if (data === '\x7f' || data === '\b') { // Backspace (express.e:2304-2320)

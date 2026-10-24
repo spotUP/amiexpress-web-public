@@ -51,6 +51,8 @@ jest.mock('../../../src/handlers/screen.handler', () => ({
 }));
 
 const runSysCommand = jest.fn().mockResolvedValue(-1); // no SCRIPT command on this board
+// The logon itself is login-post's; these tests stop at the hand-off to it.
+jest.mock('../../../src/services/login-post.service', () => ({ runPostAuthLogin: jest.fn() }));
 jest.mock('../../../src/handlers/command-execution.handler', () => ({
   runSysCommand: (...args: unknown[]) => runSysCommand(...args),
 }));
@@ -98,6 +100,7 @@ const write = (rel: string, body: string) => {
 };
 
 beforeEach(() => {
+  require('../../../src/services/login-post.service').runPostAuthLogin.mockClear();
   root = fs.mkdtempSync(path.join(os.tmpdir(), 'onboard-'));
   previousDataDir = config.get('dataDir');
   config.set('dataDir', root);
@@ -174,8 +177,8 @@ test('the SCRIPT sys-command, when the board has one, replaces the text question
 
   expect(runSysCommand).toHaveBeenCalledWith(socket, session, 'SCRIPT', '');
   expect(socket._emits.some(e => String(e.payload).includes('What is your handle:'))).toBe(false);
-  // Straight into the board.
-  expect(session.subState).toBe(LoggedOnSubState.DISPLAY_BULL);
+  // Straight into the board: the common logon (express.e:29666 on).
+  expect(require('../../../src/services/login-post.service').runPostAuthLogin).toHaveBeenCalledTimes(1);
   expect(session.newUserData).toBeUndefined();
 });
 
@@ -190,7 +193,7 @@ test('after the last answer is confirmed the caller enters the board, once', asy
   await handleQuestionnaireConfirmInput(socket as any, session, 'Y');
 
   expect(db.createUser).toHaveBeenCalledTimes(1);
-  expect(session.subState).toBe(LoggedOnSubState.DISPLAY_BULL);
+  expect(require('../../../src/services/login-post.service').runPostAuthLogin).toHaveBeenCalledTimes(1);
   expect(session.newUserData).toBeUndefined();
   expect(fs.existsSync(path.join(root, 'Node1', 'Answers')) || fs.existsSync(path.join(root, 'Node0', 'Answers'))).toBe(true);
 });
