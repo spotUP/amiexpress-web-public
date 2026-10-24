@@ -6,7 +6,7 @@ Read [PROJECT_SAFETY.md](PROJECT_SAFETY.md) and [Documentation/PRIVACY.md](Docum
 
 ## Quick start with Docker Compose
 
-Requirements: Docker with the compose plugin.
+Requirements: Docker with the compose plugin, and about 10 GB of free disk for the image build (a fresh-clone build had used about 7 GB before it was halfway done).
 
 1. Copy the example environment file:
 
