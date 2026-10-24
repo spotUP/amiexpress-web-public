@@ -117,6 +117,36 @@ static void a_bar_without_backgrounds_is_reverse_in_the_bar_colour(void)
     assert(strstr(since(&b, 0), "\033[27m") != 0);
 }
 
+/* macOS Terminal draws the default background transparent, so an explicit
+   black one shows as a black block. Black goes out as 49, both as a colour
+   number and as an exact RGB of 000000; other grounds are untouched. */
+static void a_black_background_is_the_terminal_default(void)
+{
+    static const unsigned long dark[2] = { 0x112233UL, 0x000000UL };
+    ansi_buf b = fresh();
+    long mark;
+
+    ansi_color(&b, ANSI_WHITE, ANSI_BLACK, 0);
+    assert(strstr(since(&b, 0), ";49m") != 0);
+    assert(strstr(since(&b, 0), "40") == 0);
+    mark = (long) b.len;
+    ansi_color(&b, ANSI_WHITE, ANSI_BLUE, 0);
+    assert(strcmp(since(&b, mark), "\033[44m") == 0);
+    mark = (long) b.len;
+    ansi_color(&b, ANSI_WHITE, ANSI_BLACK, 0);
+    assert(strcmp(since(&b, mark), "\033[49m") == 0);
+
+    ansi_set_palette(&b, dark, idx, 2);
+    ansi_reset(&b);
+    mark = (long) b.len;
+    ansi_color(&b, UI_TOKEN(0), UI_TOKEN(1), 0);
+    assert(strstr(since(&b, mark), "48;2;0;0;0") == 0);
+    assert(strstr(since(&b, mark), ";49m") != 0);
+    mark = (long) b.len;
+    ansi_color(&b, UI_TOKEN(0), UI_TOKEN(0), 0);
+    assert(strcmp(since(&b, mark), "\033[48;2;17;34;51m") == 0);
+}
+
 int main(void)
 {
     a_bar_without_backgrounds_is_reverse_in_the_bar_colour();
@@ -125,6 +155,7 @@ int main(void)
     an_unknown_cache_writes_the_whole_sgr();
     a_bold_change_keeps_the_background();
     a_dropped_background_resets();
+    a_black_background_is_the_terminal_default();
     printf("test_ansi_sgr: ok\n");
     return 0;
 }

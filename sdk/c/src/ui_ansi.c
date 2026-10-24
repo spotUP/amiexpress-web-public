@@ -158,6 +158,17 @@ static void put_rgb(ansi_buf *b, int lead, unsigned long rgb)
     put_int(b, (int) (rgb & 0xff));
 }
 
+/* A background, as one SGR parameter. Black goes out as 49, the terminal's
+   own default, never as 40 or 48;2;0;0;0: macOS Terminal draws the default
+   transparent, so an explicit black cell shows as a black block beside it.
+   The TypeScript SDK's bgCode makes the same choice. */
+static void put_bg(ansi_buf *b, int bg, long rgb)
+{
+    if (rgb == 0 || (rgb < 0 && bg == ANSI_BLACK)) put_int(b, 49);
+    else if (rgb > 0) put_rgb(b, 48, (unsigned long) rgb);
+    else put_int(b, 40 + bg);
+}
+
 void ansi_color(ansi_buf *b, int fg, int bg, int bold)
 {
     int pen;
@@ -237,8 +248,7 @@ void ansi_color(ansi_buf *b, int fg, int bg, int bold)
         }
         if (bg_moved) {
             if (fg_moved || lead) put_char(b, ';');
-            if (bg_rgb >= 0) put_rgb(b, 48, (unsigned long) bg_rgb);
-            else put_int(b, 40 + bg);
+            put_bg(b, bg, bg_rgb);
         }
         put_char(b, 'm');
         return;
@@ -294,8 +304,7 @@ void ansi_color(ansi_buf *b, int fg, int bg, int bold)
     /* Only where a cell can hold one. Asking on a C64 is what gets dropped. */
     if (b->cell_backgrounds && (bg_rgb >= 0 || bg >= 0)) {
         put_char(b, ';');
-        if (bg_rgb >= 0) put_rgb(b, 48, (unsigned long) bg_rgb);
-        else put_int(b, 40 + bg);
+        put_bg(b, bg, bg_rgb);
     }
     put_char(b, 'm');
 }
@@ -445,8 +454,7 @@ static void put_ground(ansi_buf *b, int bg)
     }
     if (bg >= ANSI_BRIGHT && bg < UI_TOKEN_BASE) bg -= ANSI_BRIGHT;
     put_str(b, "\033[");
-    if (rgb >= 0) put_rgb(b, 48, (unsigned long) rgb);
-    else put_int(b, 40 + bg);
+    put_bg(b, bg, rgb);
     put_char(b, 'm');
 }
 
