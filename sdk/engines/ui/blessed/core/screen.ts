@@ -2228,13 +2228,21 @@ export class Screen extends Element {
    * @param callback Optional callback triggered on toggle, receives (enabled: boolean)
    */
   enableMouseToggle(callback?: (enabled: boolean) => void): void {
-    let mouseEnabled = true;
+    // The toggle only releases and restores a capture the door made. A door
+    // that never asked for the mouse keeps it off, F12 or not.
+    let released = false;
     this.key(['f12', 'M-m'], () => {
-      mouseEnabled = !mouseEnabled;
-      if (mouseEnabled) {
-        this.enableMouse();
-      } else {
+      let mouseEnabled: boolean;
+      if (this.program.isMouseEnabled()) {
         this.disableMouse();
+        released = true;
+        mouseEnabled = false;
+      } else if (released) {
+        this.enableMouse();
+        released = false;
+        mouseEnabled = true;
+      } else {
+        return;
       }
       if (callback) {
         callback(mouseEnabled);

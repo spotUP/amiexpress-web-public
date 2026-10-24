@@ -1016,10 +1016,13 @@ export function createScreen(
     ...options
   });
 
-  // Enable mouse support by default for all doors using this helper
-  screen.enableMouse();
+  // Mouse reporting stays off here. Switching it on for every door wrote
+  // ?1003h (all-motion tracking) to callers of doors with no mouse handling,
+  // so hovering sent reports into the board. A door that wants the mouse
+  // opts in through DoorInputManager({ enableMouse: true }).
 
-  // Enable mouse toggle (F12/Alt+M) to allow users to disable if needed
+  // Mouse toggle (F12/Alt+M) lets a caller release a mouse door's capture
+  // for text selection.
   screen.enableMouseToggle();
 
   // REMOVED: Auto-join lobby room

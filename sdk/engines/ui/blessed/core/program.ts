@@ -1025,6 +1025,13 @@ export class Program extends EventEmitter {
   // ============================================================================
 
   /**
+   * Whether mouse reporting is on
+   */
+  isMouseEnabled(): boolean {
+    return this._mouseEnabled;
+  }
+
+  /**
    * Enable mouse reporting
    */
   enableMouse(): void {
