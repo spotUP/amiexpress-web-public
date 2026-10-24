@@ -52,6 +52,12 @@ You can also drop the file into the ROM directory on disk. The directory is chos
 
 ## Local development
 
+After cloning, turn on the repository's git hooks (the pre-push hook type-checks what you push):
+
+```
+git config core.hooksPath dev/hooks
+```
+
 ```
 ./dev/scripts/start-servers.sh              # BBS, admin and SDK
 ./dev/scripts/start-servers.sh --debug      # with debug logging
