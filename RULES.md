@@ -648,7 +648,23 @@ DB: `./data/amiexpress.db` (auto-created).
 - SSH (BBS, not host): `ssh -p 31337 <user>@bbs.uprough.net`
 - Admin: https://bbs.uprough.net/admin
 
-Deployment: auto via GitHub Actions on push to `main`. See `Documentation/2-Sysops/DEPLOYMENT.md`.
+Deployment: automatic on every move of `origin/main`. GitHub Actions has not run since
+2026-09-08. A systemd timer on the host (`amiexpress-deploy.timer`, every 2 minutes,
+files in `deploy/systemd/`) runs `deploy/watch-main.sh`. It deploys as soon as `origin/main`
+differs from the running board and no caller blocks it. Every deploy recreates the container,
+so the live site gives a 502 for about a minute.
+
+- **Every push to `main` is a deploy, a docs-only push too.** Fold plan/ledger ticks and doc
+  edits into the code commit, or push them together in one batch. A follow-up docs push restarts
+  the board a second time (2026-10-27: a plan tick pushed 3 minutes after the code deploy gave
+  the sysop a 502).
+- **A push needs no manual deploy.** Run `/app/amiexpress/deploy/deploy.sh` by hand only to
+  deploy sooner than the next tick or to force it. Then do not push again until it has landed.
+- Watch it on the host: `journalctl -u amiexpress-deploy.service --since '10 min ago'`
+  (`watch: deploying <sha>` line). Wait for a running deploy with
+  `flock /var/lock/amiexpress-deploy.lock true`.
+
+See `Documentation/2-Sysops/DEPLOYMENT.md`.
 
 **Standing authorization for Claude on the live host:** Claude is preauthorized
 to SSH into `bbs.uprough.net` and run inspection/diagnostic/repair operations
