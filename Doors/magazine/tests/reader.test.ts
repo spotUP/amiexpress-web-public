@@ -13,7 +13,6 @@ import * as path from 'node:path';
 import { themeById } from '@amiexpress/bbs-door-sdk/engines/ui/theme';
 import {
   MAGAZINE_DIR,
-  MAGAZINE_FRONTPAGE_FILE,
   MAGAZINE_INDEX_FILE,
   MAGAZINE_STORIES_DIR,
   ARTICLE_MIN_BODY_CHARS,
@@ -38,7 +37,7 @@ function story(id: string, headline: string, desk: Desk, date: string, summary =
 
 const STORIES: Story[] = [
   story('aaaa0001', 'Copper Lights lands for the Amiga', 'scene', '2026-10-13'),
-  story('aaaa0002', 'New exploit chain in a router firmware', 'hack', '2026-10-12'),
+  story('aaaa0002', 'New exploit chain in a router firmware', 'hack', '2026-10-14'),
   story('aaaa0003', 'Tracker music from a lost cassette', 'music', '2026-10-12'),
   story('aaaa0004', 'Second hacking story about fuzzing', 'hack', '2026-10-11'),
 ];
@@ -50,8 +49,8 @@ interface Board {
   restore: () => void;
 }
 
-/** A board root with a Magazine/ in it. `approved` is the editor's front page. */
-function board(approved: string[], stories: Story[] = STORIES): Board {
+/** A board root with a Magazine/ in it. `staleFront` goes into a frontpage.json that no code reads any more. */
+function board(staleFront: string[], stories: Story[] = STORIES): Board {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'mag-board-'));
   fs.mkdirSync(path.join(root, 'Commands', 'BBSCmd'), { recursive: true });
   const mag = path.join(root, MAGAZINE_DIR);
@@ -59,10 +58,10 @@ function board(approved: string[], stories: Story[] = STORIES): Board {
   // The page numbers the tests rely on: the two hack stories sit on 120 and 121.
   const pages: Record<string, number> = { aaaa0001: 201, aaaa0002: 120, aaaa0003: 401, aaaa0004: 121, ffff0001: 122, ffff0002: 123 };
   const index: MagazineIndexEntry[] = stories.map((st, i) => ({
-    page: pages[st.id] ?? 600 + i, title: st.headline, desk: st.desk, format: st.format, storyId: st.id, date: st.date,
+    page: pages[st.id] ?? 600 + i, title: st.headline, desk: st.desk, format: st.format, storyId: st.id, date: st.date, firstSeen: st.firstSeen,
   }));
   fs.writeFileSync(path.join(mag, MAGAZINE_INDEX_FILE), JSON.stringify(index));
-  fs.writeFileSync(path.join(mag, MAGAZINE_FRONTPAGE_FILE), JSON.stringify(approved));
+  fs.writeFileSync(path.join(mag, 'frontpage.json'), JSON.stringify(staleFront));
   for (const st of stories) fs.writeFileSync(path.join(mag, MAGAZINE_STORIES_DIR, `${st.id}.json`), JSON.stringify(st));
   const before = process.env.BBS_DATA_DIR;
   process.env.BBS_DATA_DIR = root;
@@ -134,33 +133,6 @@ async function finish(h: Harness, b: Board): Promise<void> {
 
 const text = (h: Harness) => h.reader.panelRows().join('\n');
 
-export async function frontPageWithNothingApprovedSaysAwaitingEditor(): Promise<void> {
-  const b = board([]);
-  const h = await open(80, 24);
-  try {
-    assert.strictEqual(h.reader.viewKind(), 'front');
-    assert.ok(text(h).includes('AWAITING EDITOR'));
-    for (const st of STORIES) assert.ok(!text(h).includes(st.headline), 'the reader never picks a front page itself');
-  } finally { await finish(h, b); }
-}
-
-export async function frontPageIsExactlyTheEditorsStoriesInTheEditorsOrder(): Promise<void> {
-  const b = board(['aaaa0003', 'aaaa0001']);
-  const h = await open(80, 24);
-  try {
-    const t = text(h);
-    assert.ok(!t.includes('AWAITING EDITOR'));
-    assert.ok(t.indexOf('Tracker music') >= 0 && t.indexOf('Tracker music') < t.indexOf('Copper Lights'));
-    assert.ok(!t.includes('router firmware'), 'an unapproved story is not on the front page');
-  } finally { await finish(h, b); }
-}
-
-export async function aFrontPageIdThatIsNotPublishedIsSkippedNotShownAsABrokenRow(): Promise<void> {
-  const b = board(['gone9999']);
-  const h = await open(80, 24);
-  try { assert.ok(text(h).includes('AWAITING EDITOR')); } finally { await finish(h, b); }
-}
-
 export async function contentsListsEverySectionWithPageNumbersAndEnterOpensTheStory(): Promise<void> {
   const b = board([]);
   const h = await open(80, 24);
@@ -172,7 +144,7 @@ export async function contentsListsEverySectionWithPageNumbersAndEnterOpensTheSt
     assert.ok(/New exploit chain.*120/.test(t), 'page number on the entry row');
     h.reader.press('enter');
     assert.strictEqual(h.reader.viewKind(), 'article');
-    assert.ok(text(h).includes('[ NEWS // HACK // 2026-10-12 ]'), 'the first listed story is the hack desk');
+    assert.ok(text(h).includes('[ NEWS // HACK // 2026-10-14 ]'), 'the first listed story is the hack desk');
     assert.ok(text(h).includes('NEW EXPLOIT CHAIN'), 'the headline is set in capitals');
     assert.deepStrictEqual(h.storage.get(READ_KEY), ['aaaa0002'], 'opening a story marks it read, by story id');
   } finally { await finish(h, b); }
@@ -405,7 +377,7 @@ export async function aMagazineThatDisappearsMidVisitDegradesToANoticeNotACrash(
     h.reader.press('c', 'c');
     assert.ok(text(h).includes('NO STORIES YET'));
     h.reader.press('f', 'f');
-    assert.ok(text(h).includes('AWAITING EDITOR'));
+    assert.ok(text(h).includes('NO STORIES YET'));
   } finally { await finish(h, b); }
 }
 
@@ -656,7 +628,7 @@ export async function theNewsWireIsTheRowAboveTheFooterAt80And132(): Promise<voi
         // The wire is on the glass at that row: the last write of its first frame addresses it.
         const painted = h.writes.join('');
         assert.ok(painted.includes(`\x1b[${l.tickerRow + 1};`), `${w}: bytes address row ${l.tickerRow + 1}`);
-        assert.ok(h.reader.tickerRow().includes('EXAMPLE.ORG // Copper Lights lands'), `${w}: newest first: "${h.reader.tickerRow()}"`);
+        assert.ok(h.reader.tickerRow().includes('EXAMPLE.ORG // New exploit chain in a router'), `${w}: newest first: "${h.reader.tickerRow()}"`);
       } finally { await finish(h, b); }
     });
   }
@@ -846,26 +818,6 @@ export async function aTeaserPageNumberGoesNowhereAndAnArticlePageOpens(): Promi
   } finally { await finish(h, b); }
 }
 
-export async function aNonArticleIdInFrontpageJsonIsSkippedAndTheFileIsNotRewritten(): Promise<void> {
-  const b = board(['ffff0001', 'aaaa0002'], MIXED);
-  const h = await open(80, 24);
-  try {
-    assert.strictEqual(h.reader.viewKind(), 'front');
-    const t = text(h);
-    assert.ok(!t.includes('A relay clock'), t);
-    assert.ok(t.includes('New exploit chain'), t);
-    assert.deepStrictEqual(frontOnDisk(b), ['ffff0001', 'aaaa0002'], 'a read leaves the sysop\'s file alone');
-  } finally { await finish(h, b); }
-}
-
-export async function aFrontPageOfOnlyTeasersSaysAwaitingEditor(): Promise<void> {
-  const b = board(['ffff0001'], FEED);
-  const h = await open(80, 24);
-  try {
-    assert.ok(text(h).includes('AWAITING EDITOR'), text(h));
-  } finally { await finish(h, b); }
-}
-
 export async function enterAlwaysOpensTheArticleViewAndNoWirePanelExists(): Promise<void> {
   for (const [w, hgt] of [[40, 25], [80, 24], [132, 40]] as const) {
     const b = board([], MIXED);
@@ -881,7 +833,7 @@ export async function enterAlwaysOpensTheArticleViewAndNoWirePanelExists(): Prom
 }
 
 export async function theTickerStillScrollsTeaserHeadlinesThatAreNotListed(): Promise<void> {
-  const newest = story('ffff0009', 'A relay clock from the junk drawer', 'hack', '2026-10-14', TEASER, 'feed');
+  const newest = story('ffff0009', 'A relay clock from the junk drawer', 'hack', '2026-10-15', TEASER, 'feed');
   const b = board([], [newest, STORIES[1]]);
   const h = await open(80, 24);
   try {
@@ -892,202 +844,38 @@ export async function theTickerStillScrollsTeaserHeadlinesThatAreNotListed(): Pr
   } finally { await finish(h, b); }
 }
 
-// ---------------------------------------------------------------------------
-// The sysop edits the front page from inside the door
-// ---------------------------------------------------------------------------
-
-const frontFile = (b: Board): string => path.join(b.root, MAGAZINE_DIR, MAGAZINE_FRONTPAGE_FILE);
-const frontOnDisk = (b: Board): string[] => JSON.parse(fs.readFileSync(frontFile(b), 'utf8'));
-
-/** Count every rename the door makes while `fn` runs: the front page's only way to reach the disk. */
-async function countingRenames<T>(fn: () => Promise<T>): Promise<{ result: T; renames: number }> {
-  const cjs = require('fs') as typeof fs; // the module object the door's own import reads through
-  const real = cjs.renameSync;
-  let renames = 0;
-  (cjs as any).renameSync = (...args: Parameters<typeof fs.renameSync>) => { renames += 1; return real(...args); };
-  try { return { result: await fn(), renames }; } finally { (cjs as any).renameSync = real; }
-}
-
-export async function aCallerBelowSysopHasNoEditingKeysAndWritesNothing(): Promise<void> {
-  for (const secLevel of [undefined, 0, 250]) {
-    const b = board(['aaaa0001', 'aaaa0002']);
-    const h = await open(80, 24, { secLevel });
-    try {
-      const before = fs.readFileSync(frontFile(b), 'utf8');
-      const { renames } = await countingRenames(async () => {
-        for (const k of ['p', 'u', 'd', 'l']) h.reader.press(k, k);
-        h.reader.press('c', 'c');
-        h.reader.press('p', 'p');
-        h.reader.press('enter');
-        h.reader.press('p', 'p');
-      });
-      assert.strictEqual(renames, 0, `secLevel ${secLevel}: the writer ran`);
-      assert.strictEqual(fs.readFileSync(frontFile(b), 'utf8'), before, `secLevel ${secLevel}: frontpage.json changed`);
-      assert.ok(!/front page|Make lead|Move up/i.test(h.reader.footerRow()), `secLevel ${secLevel}: footer shows "${h.reader.footerRow()}"`);
-    } finally { await finish(h, b); }
-  }
-}
-
-export async function aSysopTogglesAStoryOntoAndOffTheFrontPageFromTheListAndTheArticle(): Promise<void> {
-  const b = board([]);
-  const h = await open(80, 24, { secLevel: 255 });
+export async function theFrontPageIsTheNewestSixAndAllSectionsLeadsWithTheFreshestDesk(): Promise<void> {
+  const mk = (id: string, headline: string, desk: Desk, date: string, firstSeen: string): Story => ({ ...story(id, headline, desk, date), firstSeen });
+  const stories = [
+    mk('bbbb0001', 'Hack story from the nineteenth', 'hack', '2026-10-19', '2026-10-19T08:00:00Z'),
+    mk('bbbb0002', 'Music story seen early the same day', 'music', '2026-10-20', '2026-10-20T09:00:00Z'),
+    mk('bbbb0003', 'Scene story seen late the same day', 'scene', '2026-10-20', '2026-10-20T12:00:00Z'),
+    mk('bbbb0004', 'Hack story from the eighteenth', 'hack', '2026-10-18', '2026-10-18T08:00:00Z'),
+    mk('bbbb0005', 'Graffiti story from the seventeenth', 'graffiti', '2026-10-17', '2026-10-17T08:00:00Z'),
+    mk('bbbb0006', 'People story from the sixteenth', 'people', '2026-10-16', '2026-10-16T08:00:00Z'),
+    mk('bbbb0007', 'Archive story from the tenth', 'archive', '2026-10-10', '2026-10-10T08:00:00Z'),
+    mk('bbbb0008', 'Old stale pick of the editor', 'general', '2026-09-01', '2026-09-01T08:00:00Z'),
+  ];
+  // board() also writes a stale frontpage.json that names the old story: the door must not read it.
+  const b = board(['bbbb0008'], stories);
+  const h = await open(132, 40);
   try {
-    h.reader.press('c', 'c');
-    assert.ok(/P: Add to front page/.test(h.reader.footerRow()), h.reader.footerRow());
-    const first = await countingRenames(async () => h.reader.press('p', 'p'));
-    assert.strictEqual(first.renames, 1, 'the spy sees the sysop write (so 0 for a caller means something)');
-    assert.deepStrictEqual(frontOnDisk(b), ['aaaa0002']);
-    assert.ok(/P: Remove from front page/.test(h.reader.footerRow()), 'the label follows the state');
-    assert.ok(/\^ New exploit chain/.test(text(h)), `the row carries the front mark: ${text(h)}`);
-    h.reader.press('p', 'p');
-    assert.deepStrictEqual(frontOnDisk(b), []);
-    assert.ok(!/\^ New exploit/.test(text(h)));
-    // Inside an open article.
-    h.reader.press('enter');
-    assert.strictEqual(h.reader.viewKind(), 'article');
-    h.reader.press('p', 'p');
-    assert.deepStrictEqual(frontOnDisk(b), ['aaaa0002']);
-    h.reader.press('escape');
-    h.reader.press('f', 'f');
-    assert.ok(text(h).includes('New exploit chain'), 'the front view shows it at once');
-  } finally { await finish(h, b); }
-}
-
-export async function theFrontViewTagsTheLeadAndASysopMovesAndLeadsStories(): Promise<void> {
-  const b = board(['aaaa0001', 'aaaa0002', 'aaaa0003']);
-  const h = await open(80, 24, { secLevel: 255 });
-  try {
-    const lead = () => h.reader.panelRows().filter((r) => r.includes('LEAD'));
-    assert.strictEqual(lead().length, 1, 'exactly one LEAD tag');
-    assert.ok(lead()[0].includes('Copper Lights'), `the first story is the lead: ${lead()[0]}`);
-    h.reader.press('down');
-    h.reader.press('u', 'u');
-    assert.deepStrictEqual(frontOnDisk(b), ['aaaa0002', 'aaaa0001', 'aaaa0003']);
-    assert.ok(lead()[0].includes('New exploit'), 'moving to the top moves the tag');
-    h.reader.press('d', 'd');
-    assert.deepStrictEqual(frontOnDisk(b), ['aaaa0001', 'aaaa0002', 'aaaa0003']);
-    h.reader.press('down');
-    h.reader.press('l', 'l');
-    assert.deepStrictEqual(frontOnDisk(b), ['aaaa0003', 'aaaa0001', 'aaaa0002']);
-    assert.ok(lead()[0].includes('Tracker music'));
-    h.reader.press('u', 'u');
-    assert.deepStrictEqual(frontOnDisk(b), ['aaaa0003', 'aaaa0001', 'aaaa0002'], 'up from the lead is a no-op');
-    // Remove from the front view.
-    h.reader.press('p', 'p');
-    assert.deepStrictEqual(frontOnDisk(b), ['aaaa0001', 'aaaa0002']);
-    assert.ok(!text(h).includes('Tracker music'));
-  } finally { await finish(h, b); }
-}
-
-export async function everyoneSeesTheLeadTagOnTheFrontPage(): Promise<void> {
-  const b = board(['aaaa0003', 'aaaa0001']);
-  const h = await open(80, 24);
-  try {
+    assert.strictEqual(h.reader.viewKind(), 'front');
+    const t = text(h);
+    const order = ['Scene story seen late', 'Music story seen early', 'Hack story from the nineteenth', 'Hack story from the eighteenth', 'Graffiti story', 'People story'];
+    const at = order.map((x) => t.indexOf(x));
+    assert.ok(at.every((i) => i >= 0), `the newest six are all on the front page: ${at}`);
+    assert.deepStrictEqual([...at].sort((a, c) => a - c), at, 'newest first: date, then first seen');
+    assert.ok(!t.includes('Archive story') && !t.includes('Old stale pick'), 'older stories and the stale pick are off the front page');
     const tagged = h.reader.panelRows().filter((r) => r.includes('LEAD'));
     assert.strictEqual(tagged.length, 1);
-    assert.ok(tagged[0].includes('Tracker music'));
-  } finally { await finish(h, b); }
-}
-
-export async function theSysopFooterFitsAtFortyEightyAndOneThirtyTwo(): Promise<void> {
-  for (const [w, hgt] of [[40, 25], [80, 24], [132, 40]] as const) {
-    const b = board(['aaaa0001', 'aaaa0002']);
-    const h = await open(w, hgt, { secLevel: 255 });
-    try {
-      for (const view of ['f', 'c']) {
-        h.reader.press(view, view);
-        const f = h.reader.footerRow();
-        assert.ok(f.length <= w, `${w} ${view}: footer is ${f.length} wide: "${f}"`);
-        assert.ok(/P: /.test(f) && /Q: Quit/.test(f) && /\?: Help/.test(f), `${w} ${view}: P, help and quit survive: "${f}"`);
-        if (w === 132 && view === 'f') assert.ok(/Make lead/.test(f) && /Move up/.test(f) && /Move down/.test(f), f);
-      }
-    } finally { await finish(h, b); }
-  }
-}
-
-export async function aToggleAndAMoveRepaintOnlyTheRowsThatChanged(): Promise<void> {
-  const b = board(['aaaa0001', 'aaaa0002', 'aaaa0003']);
-  const h = await open(80, 24, { secLevel: 255 });
-  try {
-    h.reader.press('down');
-    h.mark();
-    h.reader.press('u', 'u');
-    const moveBytes = h.bytes();
-    const moveRows = h.rowsTouched();
+    assert.ok(tagged[0].includes('Scene story seen late'), 'the newest story is the lead');
     h.reader.press('c', 'c');
-    h.mark();
-    h.reader.press('p', 'p');
-    const toggleBytes = h.bytes();
-    const toggleRows = h.rowsTouched();
-    // eslint-disable-next-line no-console
-    console.log(`        repaint at 80: move ${moveBytes} bytes rows ${[...moveRows].join(',')}; toggle ${toggleBytes} bytes rows ${[...toggleRows].join(',')}`);
-    assert.ok(moveBytes > 0 && toggleBytes > 0);
-    assert.ok(moveBytes < 1200, `a move repainted ${moveBytes} bytes`);
-    assert.ok(toggleBytes < 800, `a toggle repainted ${toggleBytes} bytes`);
-    assert.ok(!toggleRows.has(1) || toggleRows.size < 8, 'a toggle does not repaint the screen');
+    assert.strictEqual(h.reader.viewKind(), 'contents');
+    const c = text(h);
+    const labels = ['SCENE & RETRO', 'MUSIC & RADIO', 'HACKING & PHREAKING', 'GRAFFITI & ART', 'PEOPLE', 'ARCHIVE'].map((l) => c.indexOf(l)).filter((i) => i >= 0);
+    assert.ok(c.indexOf('SCENE & RETRO') >= 0 && c.indexOf('SCENE & RETRO') === Math.min(...labels), 'the desk holding the newest story is the first heading');
   } finally { await finish(h, b); }
-}
-
-// The sysop's keys as a real caller sends them: raw bytes, not reader.press()
-export async function pressingPOnAContentsRowAddsTheStoryToTheFrontPage(): Promise<void> {
-  const b = board([]);
-  const h = await open(80, 24, { secLevel: 255 });
-  try {
-    h.raw('c');
-    assert.strictEqual(h.reader.viewKind(), 'contents', 'raw c reaches the screen handler');
-    assert.ok(/P: Add to front page/.test(h.reader.footerRow()), h.reader.footerRow());
-    h.raw('p');
-    assert.deepStrictEqual(frontOnDisk(b), ['aaaa0002'], 'raw p wrote the front page');
-    assert.ok(/P: Remove from front page/.test(h.reader.footerRow()), h.reader.footerRow());
-    h.raw('P');
-    assert.deepStrictEqual(frontOnDisk(b), [], 'a shifted P toggles it off again');
-  } finally { await finish(h, b); }
-}
-
-export async function pressingPInAnOpenArticleTogglesTheStoryFromRawBytes(): Promise<void> {
-  const b = board([]);
-  const h = await open(80, 24, { secLevel: 255 });
-  try {
-    h.raw('c');
-    h.raw('\r');
-    assert.strictEqual(h.reader.viewKind(), 'article');
-    h.raw('p');
-    assert.deepStrictEqual(frontOnDisk(b), ['aaaa0002']);
-  } finally { await finish(h, b); }
-}
-
-export async function uDAndLReorderTheFrontPageFromRawBytes(): Promise<void> {
-  const b = board(['aaaa0001', 'aaaa0002', 'aaaa0003']);
-  const h = await open(80, 24, { secLevel: 255 });
-  try {
-    h.raw('\x1b[B');
-    h.raw('u');
-    assert.deepStrictEqual(frontOnDisk(b), ['aaaa0002', 'aaaa0001', 'aaaa0003'], 'raw u moved the story up');
-    h.raw('d');
-    assert.deepStrictEqual(frontOnDisk(b), ['aaaa0001', 'aaaa0002', 'aaaa0003'], 'raw d moved it back down');
-    h.raw('\x1b[B');
-    h.raw('l');
-    assert.deepStrictEqual(frontOnDisk(b), ['aaaa0003', 'aaaa0001', 'aaaa0002'], 'raw l made the story the lead');
-  } finally { await finish(h, b); }
-}
-
-export async function pressingPWhileReadingAnArticleAddsTheStoryToTheFrontPage(): Promise<void> {
-  const stories = [withBody(FEED[0], ARTICLE_MIN_BODY_CHARS + 2400)];
-  for (const [w, hgt] of [[40, 25], [80, 24], [132, 40]] as const) {
-  const b = board([], stories);
-  const h = await open(w, hgt, { secLevel: 255 });
-  try {
-    h.raw('c');
-    h.raw('\r');
-    assert.strictEqual(h.reader.viewKind(), 'article');
-    h.raw('\x1b[B');
-    h.raw('p');
-    assert.deepStrictEqual(frontOnDisk(b), ['ffff0001'], 'raw p while reading wrote the front page');
-    assert.ok(/P: (Remove from front page|Front remove)/.test(h.reader.footerRow()), h.reader.footerRow());
-    h.raw('p');
-    assert.deepStrictEqual(frontOnDisk(b), [], 'and toggles it off again');
-  } finally { await finish(h, b); }
-  }
 }
 
 // ---- art on the screen ----------------------------------------------------

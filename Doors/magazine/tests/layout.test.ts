@@ -7,7 +7,6 @@ import type { Story } from '@amiexpress/bbs-door-sdk/formats/magazine';
 import {
   columnStep,
   buildArticle,
-  buildAwaitingEditor,
   buildLayout,
   buildListing,
   buildNotice,
@@ -180,16 +179,6 @@ export async function listingFindsTheSpreadOfTheSelectionAndTheFirstItemOfEachSp
   assert.strictEqual(last.selectedSpread, last.spreads.length - 1);
   assert.strictEqual(last.spreadFirst[0], 's0');
   for (const s of last.spreads) assert.strictEqual(s.length, l.panelHeight);
-}
-
-export async function emptyFrontPageSaysAwaitingEditor(): Promise<void> {
-  for (const [w, h] of WIDTHS) {
-    const l = buildLayout(w, h);
-    const rows = buildAwaitingEditor(l).map(rowText);
-    assert.strictEqual(rows.length, l.panelHeight);
-    assert.ok(rows.some((r) => r.includes('AWAITING EDITOR')), `${w}: AWAITING EDITOR is shown`);
-    for (const r of rows) assert.ok(r.length <= w);
-  }
 }
 
 export async function noticeCentresItsTitle(): Promise<void> {

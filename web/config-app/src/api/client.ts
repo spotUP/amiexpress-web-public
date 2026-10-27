@@ -10,7 +10,6 @@ export interface KickstartStatusResponse {
   message: string | null;
   installed?: string;
 }
-import type { MagazineFrontData, MagazineStoryBody } from '../types/magazine';
 import type { LogoPosition, MenuConfig, MenuKind, WidthClass } from '@bbs/screens/menu-config/menu-config';
 import {
   readAdminToken, writeAdminToken, readAdminRefreshToken, writeAdminRefreshToken,
@@ -1532,24 +1531,6 @@ class ApiClient {
   async deleteSprite(door: string, file: string) {
     return this.request<{ deleted: boolean }>(`${API_BASE}/sprite-manager/${encodeURIComponent(door)}/sprite/${encodeURIComponent(file)}`, {
       method: 'DELETE',
-    });
-  }
-
-  // Magazine: the front page of THE UNKNOWN FREQUENCY
-  async getMagazineFront() {
-    return this.request<{ success: boolean; data: MagazineFrontData }>(`${API_BASE}/config/magazine/stories/front`);
-  }
-
-  async getMagazineStory(id: string) {
-    return this.request<{ success: boolean; data: MagazineStoryBody }>(
-      `${API_BASE}/config/magazine/stories/${encodeURIComponent(id)}`
-    );
-  }
-
-  async saveMagazineFront(ids: string[]) {
-    return this.request<{ success: boolean; data: { front: string[] } }>(`${API_BASE}/config/magazine/front`, {
-      method: 'PUT',
-      body: JSON.stringify({ ids }),
     });
   }
 

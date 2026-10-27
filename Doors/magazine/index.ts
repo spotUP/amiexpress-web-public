@@ -2,10 +2,9 @@
  * MAG - the reader for THE UNKNOWN FREQUENCY.
  *
  * Reads the stories the board's magazine service publishes
- * (Magazine/index.json, Magazine/stories/<id>.json, Magazine/frontpage.json)
+ * (Magazine/index.json, Magazine/stories/<id>.json)
  * and sets them in newspaper columns: one column at 40, two at 80, three on
- * a wide terminal. Only the front page the editor approved is shown as the
- * front page; with nothing approved the reader says AWAITING EDITOR.
+ * a wide terminal. The front page is the newest stories.
  */
 import { CoreDoor as Door } from '@amiexpress/bbs-door-sdk';
 import { createApp } from './app';

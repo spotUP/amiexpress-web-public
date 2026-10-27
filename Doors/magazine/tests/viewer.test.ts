@@ -7,7 +7,6 @@ import { themeById } from '@amiexpress/bbs-door-sdk/engines/ui/theme';
 import {
   FULLSCREEN_ROWS,
   MAGAZINE_DIR,
-  MAGAZINE_FRONTPAGE_FILE,
   MAGAZINE_INDEX_FILE,
   MAGAZINE_STORIES_DIR,
   renderingKey,
@@ -52,7 +51,6 @@ async function open(width: number, height: number, st: Story, side: StoryMediaSi
   const mag = path.join(root, MAGAZINE_DIR);
   fs.mkdirSync(path.join(mag, MAGAZINE_STORIES_DIR), { recursive: true });
   fs.writeFileSync(path.join(mag, MAGAZINE_INDEX_FILE), JSON.stringify([{ page: 201, title: st.headline, desk: st.desk, format: st.format, storyId: st.id, date: st.date }]));
-  fs.writeFileSync(path.join(mag, MAGAZINE_FRONTPAGE_FILE), JSON.stringify([]));
   fs.writeFileSync(path.join(mag, MAGAZINE_STORIES_DIR, `${st.id}.json`), JSON.stringify(st));
   if (side) fs.writeFileSync(path.join(mag, MAGAZINE_STORIES_DIR, `${st.id}.media.json`), JSON.stringify(side));
   const before = process.env.BBS_DATA_DIR;

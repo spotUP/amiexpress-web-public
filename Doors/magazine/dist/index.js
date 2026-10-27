@@ -4,10 +4,9 @@ Object.defineProperty(exports, "__esModule", { value: true });
  * MAG - the reader for THE UNKNOWN FREQUENCY.
  *
  * Reads the stories the board's magazine service publishes
- * (Magazine/index.json, Magazine/stories/<id>.json, Magazine/frontpage.json)
+ * (Magazine/index.json, Magazine/stories/<id>.json)
  * and sets them in newspaper columns: one column at 40, two at 80, three on
- * a wide terminal. Only the front page the editor approved is shown as the
- * front page; with nothing approved the reader says AWAITING EDITOR.
+ * a wide terminal. The front page is the newest stories.
  */
 const bbs_door_sdk_1 = require("@amiexpress/bbs-door-sdk");
 const app_1 = require("./app");

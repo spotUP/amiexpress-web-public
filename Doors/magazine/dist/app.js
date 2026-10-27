@@ -1,7 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.helpText = exports.HELP_TEXT = exports.COMPACT_HINTS = exports.HINTS = exports.MAGAZINE_TITLE = exports.BOOKMARK_KEY = exports.READ_KEY = void 0;
-exports.sysopHints = sysopHints;
+exports.HELP_TEXT = exports.COMPACT_HINTS = exports.HINTS = exports.MAGAZINE_TITLE = exports.BOOKMARK_KEY = exports.READ_KEY = void 0;
 exports.startReader = startReader;
 exports.createApp = createApp;
 /**
@@ -68,27 +67,6 @@ exports.COMPACT_HINTS = [
     { key: '?', does: 'Help', keep: true },
     { key: 'Q', does: 'Quit', keep: true },
 ];
-/**
- * The sysop's keys, ahead of the reader's own. P is the one that is always
- * there (and survives the fit); the others drop first on a tight line.
- */
-function sysopHints(opts) {
-    const p = opts.compact
-        ? { key: 'P', does: opts.onFront ? 'Front remove' : 'Front add', keep: true }
-        : { key: 'P', does: opts.onFront ? 'Remove from front page' : 'Add to front page', keep: true };
-    const hints = [p];
-    if (opts.frontView) {
-        hints.push({ key: 'L', does: 'Make lead' }, { key: 'U', does: 'Move up' }, { key: 'D', does: 'Move down' });
-    }
-    return hints;
-}
-const SYSOP_HELP = [
-    'P   add the story to the front page, or remove it',
-    '    (a ^ marks a story already on it)',
-    'In the front page, the first story is the LEAD:',
-    'L   make the story the lead',
-    'U   move the story up       D   move it down',
-].join('\n');
 exports.HELP_TEXT = [
     'Page Up, Page Down, Space               turn the page',
     'Arrow keys in a story                   turn the page',
@@ -97,7 +75,7 @@ exports.HELP_TEXT = [
     'Enter                                   open the story',
     'Escape                                  back, then quit',
     'C   contents of every section',
-    'F   the front page (the editor\'s choice)',
+    'F   the front page (the newest stories)',
     'S   next section',
     'B   bookmark or unbookmark a story',
     'K   your bookmarks',
@@ -107,8 +85,6 @@ exports.HELP_TEXT = [
     '0-9 type a page number (100-999); Escape cancels',
     'Q   quit',
 ].join('\n');
-const helpText = (sysop) => (sysop ? `${exports.HELP_TEXT}\n\n${SYSOP_HELP}` : exports.HELP_TEXT);
-exports.helpText = helpText;
 function escapeTags(text) {
     return text.replace(/[{}]/g, (c) => (c === '{' ? '{open}' : '{close}'));
 }
@@ -124,7 +100,6 @@ async function startReader(session, options = {}) {
     const theme = bbs?.getTheme ? bbs.getTheme() : ((0, theme_1.themeById)('uprough-neon') ?? theme_1.UPROUGH_NEON);
     const t = theme.tokens;
     const s = (0, theme_1.themeStyles)(theme);
-    const sysop = (0, library_1.isSysopCaller)(session);
     let showTicker = true;
     try {
         const v = (0, settings_1.readDoorSettings)(__dirname);
@@ -273,7 +248,7 @@ async function startReader(session, options = {}) {
     };
     const paintRow = (r) => r.map(paintSeg).join('');
     // ---- state -----------------------------------------------------------
-    let snapshot = { index: [], front: [] };
+    let snapshot = { index: [] };
     let view = { kind: 'front' };
     let spreads = [[]];
     let spreadNo = 0;
@@ -290,11 +265,9 @@ async function startReader(session, options = {}) {
     let glitchTimer = null;
     let repairTimer = null;
     let modalOpen = false;
-    let hintsKey = '';
     const counters = { glitches: 0, tickerSteps: 0, intervals: 0, banners: 0, titles: 0, searchTicks: 0, lands: 0 };
     let stopped = false;
     let finish = () => { };
-    const onFront = { has: (id) => snapshot.front.includes(id) };
     const byId = (id) => snapshot.index.find((e) => e.storyId === id);
     // One read per story per visit to a view: a cursor move rebuilds the list.
     const storyCache = new Map();
@@ -304,6 +277,7 @@ async function startReader(session, options = {}) {
         return storyCache.get(id) ?? null;
     };
     const listingBlocks = (entries, headings) => {
+        const leadId = view.kind === 'front' ? (0, magazine_1.coverEntries)(snapshot.index)[0]?.storyId : undefined;
         const blocks = [];
         const item = (e) => {
             // Every listed story is an article (the snapshot holds nothing else): a
@@ -321,18 +295,14 @@ async function startReader(session, options = {}) {
                     title: e.title,
                     unread: !read.has(e.storyId),
                     bookmarked: bookmarks.has(e.storyId),
-                    lead: view.kind === 'front' && snapshot.front[0] === e.storyId,
-                    front: sysop && view.kind !== 'front' && onFront.has(e.storyId),
+                    lead: view.kind === 'front' && leadId === e.storyId,
                     article,
                 },
             };
         };
         if (!headings)
             return entries.map(item);
-        for (const desk of layout_1.SECTION_ORDER) {
-            const group = entries.filter((e) => e.desk === desk);
-            if (group.length === 0)
-                continue;
+        for (const { desk, entries: group } of (0, layout_1.deskGroups)(entries)) {
             blocks.push({ kind: 'heading', label: magazine_1.DESK_LABEL[desk] });
             blocks.push(...group.map(item));
         }
@@ -357,15 +327,15 @@ async function startReader(session, options = {}) {
     const build = () => {
         headline = null;
         if (view.kind === 'front') {
-            const entries = snapshot.front.map(byId).filter((e) => Boolean(e));
+            const entries = (0, magazine_1.coverEntries)(snapshot.index);
             if (entries.length === 0) {
                 listIds = [];
                 selected = null;
-                spreads = [(0, layout_1.buildAwaitingEditor)(layout)];
+                spreads = [(0, layout_1.buildNotice)(layout, 'NO STORIES YET', ['Nothing has been published.'])];
                 spreadNo = 0;
                 return;
             }
-            showListing([{ kind: 'heading', label: magazine_1.FRONT_PAGE_LABEL }, ...listingBlocks(entries, false)], 'FRONT PAGE - THE EDITOR\'S CHOICE', entries);
+            showListing([{ kind: 'heading', label: magazine_1.FRONT_PAGE_LABEL }, ...listingBlocks(entries, false)], 'FRONT PAGE - THE NEWEST STORIES', entries);
         }
         else if (view.kind === 'contents') {
             const entries = snapshot.index.filter((e) => view.kind === 'contents' && (!view.desk || e.desk === view.desk));
@@ -426,7 +396,6 @@ async function startReader(session, options = {}) {
         panelText = rows.map(paintRow).join('\n');
         panel.setContent(panelText);
         progressBox.setContent(paintRow((0, layout_1.buildProgress)(layout, spreadNo, spreads.length)));
-        updateHints();
         render();
         scheduleGlitch(rows);
     };
@@ -454,20 +423,6 @@ async function startReader(session, options = {}) {
                 }
             }, GLITCH_HOLD_MS);
         }, GLITCH_DELAY_MS);
-    };
-    /** The story a sysop key acts on: the open article, else the cursor. */
-    const subjectId = () => (view.kind === 'article' ? view.storyId : selected);
-    /** The sysop's hints follow the story in view; the footer is repainted only when they change. */
-    const updateHints = () => {
-        if (!sysop)
-            return;
-        const id = subjectId();
-        const key = `${id ? 1 : 0}|${id && onFront.has(id) ? 1 : 0}|${view.kind === 'front' ? 1 : 0}`;
-        if (key === hintsKey)
-            return;
-        hintsKey = key;
-        const base = layout.collapseChrome ? exports.COMPACT_HINTS : exports.HINTS;
-        chrome.setHints(id ? [...sysopHints({ compact: layout.collapseChrome, frontView: view.kind === 'front', onFront: onFront.has(id) }), ...base] : base);
     };
     const setStatus = (text) => chrome.setFooterSuffix(text ? `  ${text}` : '');
     /** The banner a view carries: the front page and contents have their own, a section its desk's. */
@@ -675,42 +630,6 @@ async function startReader(session, options = {}) {
         else
             render();
     };
-    // ---- the sysop's front page editor -----------------------------------
-    /** The front page changed on disk: show it. Only what differs is repainted (blessed diffs the cells). */
-    const frontChanged = (next, status) => {
-        snapshot = { ...snapshot, front: next };
-        setStatus(status);
-        if (view.kind === 'article') {
-            updateHints();
-            render();
-        }
-        else {
-            build();
-            paint();
-        }
-    };
-    /** P: on a story row or inside an article, add the story to the front page or take it off. */
-    const toggleFront = () => {
-        const id = subjectId();
-        if (!sysop || !id)
-            return;
-        const was = onFront.has(id);
-        // Leaving the front view's selection on a neighbour, not on a row that is about to go.
-        if (was && view.kind === 'front') {
-            const at = listIds.indexOf(id);
-            selected = listIds[at + 1] ?? listIds[at - 1] ?? null;
-        }
-        frontChanged((0, library_1.editFront)((ids) => (0, magazine_1.frontToggle)(ids, id), (0, library_1.magazineRoot)(__dirname)), was ? 'Removed from the front page' : 'Added to the front page');
-    };
-    /** U / D / L in the front page view: reorder, lead first. */
-    const reorderFront = (how) => {
-        if (!sysop || view.kind !== 'front' || !selected)
-            return;
-        const id = selected;
-        const root = (0, library_1.magazineRoot)(__dirname);
-        const next = (0, library_1.editFront)((ids) => (how === 'lead' ? (0, magazine_1.frontLead)(ids, id) : (0, magazine_1.frontMove)(ids, id, how === 'up' ? -1 : 1)), root);
-        frontChanged(next, how === 'lead' ? 'Now the lead' : how === 'up' ? 'Moved up' : 'Moved down');
-    };
     const resolvePage = (n) => {
         if (n === magazine_1.FRONT_PAGE)
             return { kind: 'front' };
@@ -777,7 +696,7 @@ async function startReader(session, options = {}) {
         const modal = (0, blessed_1.docModal)({
             parent: screen,
             title: `${magazine_1.MAGAZINE_TITLE} help`,
-            content: (0, exports.helpText)(sysop),
+            content: exports.HELP_TEXT,
             contentStyle: { fg: t.ink, bg: t.ground },
             footerStyle: { fg: t.ground, bg: t.accent },
             zIndex: 9990,
@@ -1100,18 +1019,6 @@ async function startReader(session, options = {}) {
                 return;
             case 'v':
                 openViewer();
-                return;
-            case 'p':
-                toggleFront();
-                return;
-            case 'u':
-                reorderFront('up');
-                return;
-            case 'd':
-                reorderFront('down');
-                return;
-            case 'l':
-                reorderFront('lead');
                 return;
             case '/':
                 openSearch();

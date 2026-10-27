@@ -7,17 +7,18 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import {
-  MAGAZINE_FRONTPAGE_FILE,
   MAGAZINE_INDEX_FILE,
   MAGAZINE_STORIES_DIR,
   ARTICLE_MIN_BODY_CHARS,
-  frontLead,
-  frontMove,
-  frontToggle,
+  COVER_SIZE,
+  coverEntries,
+  newestFirst,
+  type Desk,
   type MagazineIndexEntry,
   type Story,
 } from '@amiexpress/bbs-door-sdk/formats/magazine';
-import { editFront, isListed, loadTickerItems, isSysopCaller, writeFront, loadFront, loadIndex, loadSnapshot, loadStory, paintSafe, searchStories, storiesPerDay } from '../library';
+import { deskGroups } from '../layout';
+import { isListed, loadTickerItems, loadIndex, loadSnapshot, loadStory, paintSafe, searchStories, storiesPerDay } from '../library';
 
 function tmpMagazine(): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'mag-lib-'));
@@ -41,17 +42,14 @@ function putStories(root: string, ...stories: Story[]): void {
 export async function aMissingMagazineIsEmptyNotAnError(): Promise<void> {
   const root = path.join(tmpMagazine(), 'nope');
   assert.deepStrictEqual(loadIndex(root), []);
-  assert.deepStrictEqual(loadFront(root), []);
   assert.strictEqual(loadStory('deadbeef', root), null);
-  assert.deepStrictEqual(loadSnapshot(root), { index: [], front: [] });
+  assert.deepStrictEqual(loadSnapshot(root), { index: [] });
 }
 
 export async function aHalfWrittenFileIsTreatedAsMissing(): Promise<void> {
   const root = tmpMagazine();
   fs.writeFileSync(path.join(root, MAGAZINE_INDEX_FILE), '[{"page":101,');
-  fs.writeFileSync(path.join(root, MAGAZINE_FRONTPAGE_FILE), '{not json');
   assert.deepStrictEqual(loadIndex(root), []);
-  assert.deepStrictEqual(loadFront(root), []);
 }
 
 export async function indexEntriesWithoutTheShapeAreDroppedAndPagesSorted(): Promise<void> {
@@ -62,13 +60,6 @@ export async function indexEntriesWithoutTheShapeAreDroppedAndPagesSorted(): Pro
   );
   putStories(root, story('bbbb', 'B', ''), story('aaaa', 'A', ''));
   assert.deepStrictEqual(loadIndex(root).map((e) => e.page), [101, 120]);
-}
-
-export async function frontPageIsExactlyTheEditorsIdsInOrder(): Promise<void> {
-  const root = tmpMagazine();
-  fs.writeFileSync(path.join(root, MAGAZINE_FRONTPAGE_FILE), JSON.stringify(['b', 7, 'a']));
-  putStories(root, story('a', 'A', ''), story('b', 'B', ''));
-  assert.deepStrictEqual(loadFront(root), ['b', 'a']);
 }
 
 export async function aStoryIsReadByIdAndAnIdThatIsNotAFileNameIsRefused(): Promise<void> {
@@ -118,71 +109,34 @@ export async function storiesPerDayCountsTheNewestDaysOldestFirst(): Promise<voi
   assert.deepStrictEqual(storiesPerDay(entries, 2), [2, 1]);
 }
 
-function withIndex(ids: string[], front: unknown): string {
-  const root = tmpMagazine();
-  fs.writeFileSync(path.join(root, MAGAZINE_INDEX_FILE), JSON.stringify(ids.map((id, i) => entry(100 + i, id, `Story ${id}`))));
-  fs.writeFileSync(path.join(root, MAGAZINE_FRONTPAGE_FILE), JSON.stringify(front));
-  putStories(root, ...ids.map((id) => story(id, `Story ${id}`, '')));
-  return root;
-}
-const frontOf = (root: string): string[] => JSON.parse(fs.readFileSync(path.join(root, MAGAZINE_FRONTPAGE_FILE), 'utf8'));
-
-export async function onlyTheFullSysopMayEditTheFrontPage(): Promise<void> {
-  assert.strictEqual(isSysopCaller({ user: { secLevel: 255 } }), true);
-  assert.strictEqual(isSysopCaller({ user: { secLevel: 254 } }), false);
-  assert.strictEqual(isSysopCaller({ user: null }), false);
-  assert.strictEqual(isSysopCaller({}), false);
+export async function coverEntriesAreTheNewestSixByDateThenFirstSeenThenId(): Promise<void> {
+  const e = (id: string, date: string, firstSeen?: string): MagazineIndexEntry => ({ ...entry(100, id, id, date), firstSeen });
+  const index = [
+    e('old', '2026-10-01'), e('d1', '2026-10-13'), e('d2a', '2026-10-12', '2026-10-12T08'), e('d2b', '2026-10-12', '2026-10-12T09'),
+    e('tieA', '2026-10-11', '2026-10-11T08'), e('tieB', '2026-10-11', '2026-10-11T08'), e('nofs', '2026-10-11'), e('d0', '2026-10-09'),
+  ];
+  assert.deepStrictEqual(coverEntries(index).map((x) => x.storyId), ['d1', 'd2b', 'd2a', 'tieB', 'tieA', 'nofs']);
+  assert.strictEqual(COVER_SIZE, 6);
+  assert.deepStrictEqual(coverEntries([]), []);
+  assert.strictEqual(newestFirst({ date: 'a' }, { date: 'a' }), 0);
 }
 
-export async function frontEditsToggleMoveAndLeadAndKeepAPlainDeduplicatedArray(): Promise<void> {
-  assert.deepStrictEqual(frontToggle(['a', 'b'], 'c'), ['a', 'b', 'c']);
-  assert.deepStrictEqual(frontToggle(['a', 'b'], 'a'), ['b']);
-  assert.deepStrictEqual(frontMove(['a', 'b', 'c'], 'b', -1), ['b', 'a', 'c']);
-  assert.deepStrictEqual(frontMove(['a', 'b', 'c'], 'c', 1), ['a', 'b', 'c']);
-  assert.deepStrictEqual(frontLead(['a', 'b', 'c'], 'c'), ['c', 'a', 'b']);
-  assert.deepStrictEqual(frontLead(['a'], 'zz'), ['a']);
-}
-
-export async function writingTheFrontPageDropsUnknownIdsAndDuplicatesAndLeavesValidJson(): Promise<void> {
-  const root = withIndex(['a', 'b', 'c'], ['a', 'gone', 'b', 'a']);
-  const next = editFront((ids) => [...ids, 'c', 'b', 'also-gone'], root);
-  assert.deepStrictEqual(next, ['a', 'b', 'c']);
-  assert.deepStrictEqual(frontOf(root), ['a', 'b', 'c']);
-  assert.deepStrictEqual(fs.readdirSync(root).filter((f) => f.includes('.tmp')), [], 'no temp file left behind');
-}
-
-export async function aFailedWriteLeavesTheOldFrontPageWhole(): Promise<void> {
-  const root = withIndex(['a', 'b'], ['a']);
-  const cjs = require('fs') as typeof fs;
-  const real = cjs.renameSync;
-  (cjs as any).renameSync = () => { throw new Error('disk full'); };
-  try {
-    assert.throws(() => writeFront(['a', 'b'], root), /disk full/);
-  } finally { (cjs as any).renameSync = real; }
-  assert.deepStrictEqual(frontOf(root), ['a'], 'the old file is untouched');
-  assert.deepStrictEqual(fs.readdirSync(root).filter((f) => f.includes('.tmp')), []);
-}
-
-export async function theFrontPageIsReReadBeforeEveryWriteSoAnotherSysopsEditSurvives(): Promise<void> {
-  const root = withIndex(['a', 'b', 'c'], ['a']);
-  fs.writeFileSync(path.join(root, MAGAZINE_FRONTPAGE_FILE), JSON.stringify(['a', 'b']));
-  assert.deepStrictEqual(editFront((ids) => frontToggle(ids, 'c'), root), ['a', 'b', 'c']);
-}
-
-export async function anEditThatChangesNothingWritesNothing(): Promise<void> {
-  const root = withIndex(['a', 'b'], ['a', 'b']);
-  const cjs = require('fs') as typeof fs;
-  const real = cjs.renameSync;
-  let calls = 0;
-  (cjs as any).renameSync = (...args: Parameters<typeof fs.renameSync>) => { calls += 1; return real(...args); };
-  try { editFront((ids) => frontMove(ids, 'a', -1), root); } finally { (cjs as any).renameSync = real; }
-  assert.strictEqual(calls, 0);
+export async function deskGroupsAreOrderedByTheirFreshestStoryTiesKeepSectionOrder(): Promise<void> {
+  const e = (page: number, id: string, desk: Desk, date: string, firstSeen?: string): MagazineIndexEntry => ({ ...entry(page, id, id, date), desk, firstSeen });
+  const groups = deskGroups([
+    e(120, 'h1', 'hack', '2026-10-12'), e(121, 'h2', 'hack', '2026-10-12', '2026-10-12T05'),
+    e(201, 's1', 'scene', '2026-10-13'), e(301, 'g1', 'graffiti', '2026-10-12'), e(302, 'm1', 'music', '2026-10-12'),
+  ]);
+  assert.deepStrictEqual(groups.map((g) => g.desk), ['scene', 'hack', 'graffiti', 'music']);
+  assert.deepStrictEqual(groups[1].entries.map((x) => x.storyId), ['h2', 'h1'], 'inside a desk: newest first');
+  const samePage = deskGroups([e(130, 'b', 'hack', '2026-10-12'), e(125, 'a', 'hack', '2026-10-12')]);
+  assert.deepStrictEqual(samePage[0].entries.map((x) => x.storyId), ['a', 'b'], 'a full tie falls back to page ascending');
 }
 
 const TEASER_ONLY = (id: string, headline: string, date = '2026-10-13'): Story =>
   story(id, headline, 'A short teaser.', { origin: 'feed', date });
 
-export async function theIndexTheFrontPageAndSearchHideEveryStoryThatIsNotAnArticle(): Promise<void> {
+export async function theIndexAndSearchHideEveryStoryThatIsNotAnArticle(): Promise<void> {
   const root = tmpMagazine();
   putStories(
     root,
@@ -195,11 +149,7 @@ export async function theIndexTheFrontPageAndSearchHideEveryStoryThatIsNotAnArti
     path.join(root, MAGAZINE_INDEX_FILE),
     JSON.stringify(['art1', 'tea1', 'long', 'shrt', 'gone'].map((id, i) => entry(100 + i, id, `Relay ${id}`))),
   );
-  fs.writeFileSync(path.join(root, MAGAZINE_FRONTPAGE_FILE), JSON.stringify(['tea1', 'art1', 'gone', 'long']));
-  const before = fs.readFileSync(path.join(root, MAGAZINE_FRONTPAGE_FILE), 'utf8');
   assert.deepStrictEqual(loadIndex(root).map((e) => e.storyId), ['art1', 'long']);
-  assert.deepStrictEqual(loadFront(root), ['art1', 'long'], 'a non-article id is skipped on display');
-  assert.strictEqual(fs.readFileSync(path.join(root, MAGAZINE_FRONTPAGE_FILE), 'utf8'), before, 'and the sysop\'s file is not rewritten by a read');
   assert.deepStrictEqual(searchStories(loadIndex(root), 'relay').map((e) => e.storyId), ['art1', 'long']);
   assert.strictEqual(isListed('tea1', root), false);
   assert.strictEqual(isListed('shrt', root), false);

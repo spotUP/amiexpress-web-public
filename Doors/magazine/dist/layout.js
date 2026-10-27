@@ -8,7 +8,6 @@ exports.ageStamp = ageStamp;
 exports.buildListing = buildListing;
 exports.headerLine = headerLine;
 exports.buildNotice = buildNotice;
-exports.buildAwaitingEditor = buildAwaitingEditor;
 exports.signalTag = signalTag;
 exports.buildArticle = buildArticle;
 exports.buildProgress = buildProgress;
@@ -17,6 +16,7 @@ exports.newsRows = newsRows;
 exports.clipRow = clipRow;
 exports.staticNewsRow = staticNewsRow;
 exports.signalStrength = signalStrength;
+exports.deskGroups = deskGroups;
 exports.sectionLabel = sectionLabel;
 /**
  * The reader's screens as rows of text, pure.
@@ -213,7 +213,7 @@ function columnStep(columns, selectedIndex, delta) {
 const PAGE_DIGITS = 3;
 function itemCells(item, index, selected, colWidth) {
     const titleWidth = Math.max(1, colWidth - 1 - 1 - PAGE_DIGITS);
-    const prefix = `${item.lead ? 'LEAD ' : item.front ? '^ ' : ''}${item.bookmarked ? '* ' : ''}`;
+    const prefix = `${item.lead ? 'LEAD ' : ''}${item.bookmarked ? '* ' : ''}`;
     const lines = wrapTitle(prefix + (0, library_1.paintSafe)(item.title), titleWidth, 2);
     const role = selected ? 'selected' : item.unread ? 'unread' : 'plain';
     const mark = selected ? '>' : ' ';
@@ -349,14 +349,6 @@ function buildNotice(layout, title, detail) {
     put(top + 1, title, 'warn');
     detail.forEach((line, i) => put(top + 2 + i, line, 'dim'));
     return rows;
-}
-/** The front page when no human has approved anything yet. Never a guess. */
-function buildAwaitingEditor(layout) {
-    return buildNotice(layout, 'AWAITING EDITOR', [
-        'No story has been approved',
-        'for the front page.',
-        'Press C for the full contents.',
-    ]);
 }
 /** `[ NEWS // HACK // 2026-10-13 ]` - a signal tag, not a label. */
 function signalTag(story) {
@@ -560,6 +552,21 @@ function signalStrength(perDay, spark) {
 exports.SECTION_ORDER = [
     'hack', 'scene', 'graffiti', 'music', 'people', 'archive', 'stream', 'general',
 ];
+/**
+ * ALL SECTIONS order: the desks that hold a story, the desk with the freshest
+ * story first (ties keep SECTION_ORDER), and inside a desk the newest story
+ * first, then page ascending.
+ */
+function deskGroups(entries) {
+    const groups = exports.SECTION_ORDER
+        .map((desk) => ({
+        desk,
+        entries: entries.filter((e) => e.desk === desk).sort((a, b) => (0, magazine_1.newestFirst)(a, b) || a.page - b.page),
+    }))
+        .filter((g) => g.entries.length > 0);
+    // Array.prototype.sort is stable, so equal freshness keeps SECTION_ORDER.
+    return groups.sort((a, b) => (0, magazine_1.newestFirst)(a.entries[0], b.entries[0]));
+}
 function sectionLabel(desk) {
     return desk ? magazine_1.DESK_LABEL[desk] : 'ALL SECTIONS';
 }

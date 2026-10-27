@@ -19,18 +19,14 @@ import {
   republishMagazine,
   loadStories,
   refreshMagazine,
-  readApproved,
-  writeApproved,
   writeAtomic,
-  watchFrontPage,
   type IncomingItem,
 } from '../../src/services/magazine';
-import { writeFrontFile } from '@amiexpress/bbs-door-sdk/formats/magazine-front-file';
 import { classify, classifyFormat } from '../../src/services/magazine/classify';
 import { isWorthReading, storyId, normaliseHeadline, type Story } from '../../src/services/magazine/story-store';
 import { ARTICLE_MIN_BODY_CHARS, sidecarPath } from '@amiexpress/bbs-door-sdk/formats/magazine';
 import { clipUrlHash } from '../../src/services/magazine/video-service';
-import { loadIndex, loadFront } from '../../../../Doors/magazine/library';
+import { loadIndex } from '../../../../Doors/magazine/library';
 import { composeStoryPage, wrap, toWidth, renderPage } from '../../src/services/magazine/compose';
 
 function depsFor(dir: string) {
@@ -211,12 +207,11 @@ describe('composing for forty columns (§6)', () => {
   });
 });
 
-describe('the front page is human-approved (§17)', () => {
-  function board(stories: Story[], approved: string[] = []): string {
+describe('the front page is the newest stories, automatically', () => {
+  function board(stories: Story[]): string {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mag-'));
     fs.mkdirSync(path.join(dir, 'Magazine', 'stories'), { recursive: true });
     for (const s of stories) fs.writeFileSync(path.join(dir, 'Magazine', 'stories', `${s.id}.json`), JSON.stringify(s));
-    writeApproved(dir, approved);
     return dir;
   }
   const mk = (id: string): Story => ({
@@ -227,59 +222,37 @@ describe('the front page is human-approved (§17)', () => {
   it('replaces index.json by rename, so a door reading it never sees half a file', () => {
     // A read-only target refuses an in-place write (EACCES) but not a rename
     // over it, so publishing beside one proves the swap.
-    const dir = board([mk('a1')], ['a1']);
-    publishMagazine([mk('a1')], readApproved(dir), depsFor(dir));
+    const dir = board([mk('a1')]);
+    publishMagazine([mk('a1')], depsFor(dir));
     fs.chmodSync(path.join(dir, 'Magazine', 'index.json'), 0o444);
-    expect(() => publishMagazine([mk('a1')], readApproved(dir), depsFor(dir))).not.toThrow();
+    expect(() => publishMagazine([mk('a1')], depsFor(dir))).not.toThrow();
     expect(fs.readdirSync(path.join(dir, 'Magazine')).filter((f) => f.includes('.tmp-'))).toEqual([]);
     fs.rmSync(dir, { recursive: true, force: true });
   });
 
-  it('keeps a front page edit the editor saves while the magazine composes', () => {
-    // The compose read ['a1']; the door saved ['b2'] before it finished.
-    const dir = board([mk('a1'), mk('b2')], ['b2']);
-    publishMagazine([mk('a1'), mk('b2')], ['a1'], depsFor(dir));
-    expect(readApproved(dir)).toEqual(['b2']);
-    fs.rmSync(dir, { recursive: true, force: true });
-  });
-
-  it('redraws page 100 when the door edits the front page, without waiting for the news tick', async () => {
-    const dir = board([mk('a1')]);
-    republishMagazine(depsFor(dir));
-    const p100 = () => fs.readFileSync(path.join(dir, 'Magazine', 'pages', 'p100.txt'), 'latin1');
-    expect(p100()).not.toContain('Story a1');
-    const watcher = watchFrontPage(depsFor(dir), 20);
-    try {
-      writeFrontFile(path.join(dir, 'Magazine'), ['a1']);
-      for (let i = 0; i < 100 && !p100().includes('Story a1'); i++) await new Promise((r) => setTimeout(r, 20));
-      expect(p100()).toContain('Story a1');
-    } finally {
-      watcher.close();
-      fs.rmSync(dir, { recursive: true, force: true });
-    }
-  });
-
-  it('says it is awaiting an editor when nothing is approved', () => {
-    const dir = board([mk('a1'), mk('b2')]);
-    publishMagazine([mk('a1'), mk('b2')], readApproved(dir), depsFor(dir));
-    const front = fs.readFileSync(path.join(dir, 'Magazine', 'pages', 'p100.txt'), 'latin1');
-    expect(front).toContain('AWAITING EDITOR');
-    expect(front).not.toContain('Story a1');
-    fs.rmSync(dir, { recursive: true, force: true });
-  });
-
-  it('publishes exactly what was approved, and nothing else', () => {
-    const dir = board([mk('a1'), mk('b2')], ['a1']);
-    publishMagazine([mk('a1'), mk('b2')], readApproved(dir), depsFor(dir));
+  it('shows the newest stories on page 100 on its own, ignoring a stale frontpage.json, and index.json carries firstSeen', () => {
+    const dir = board([]);
+    // A leftover file from the retired editor must change nothing.
+    fs.writeFileSync(path.join(dir, 'Magazine', 'frontpage.json'), JSON.stringify(['old1']));
+    const stories = [
+      { ...mk('old1'), date: '2026-10-01', firstSeen: '2026-10-01T00:00:00Z' },
+      { ...mk('a1'), date: '2026-10-13', firstSeen: '2026-10-13T08:00:00Z' },
+      { ...mk('b2'), date: '2026-10-13', firstSeen: '2026-10-13T09:00:00Z' },
+    ];
+    publishMagazine(stories, depsFor(dir));
     const front = fs.readFileSync(path.join(dir, 'Magazine', 'pages', 'p100.txt'), 'latin1');
     expect(front).toContain('Story a1');
-    expect(front).not.toContain('Story b2');
+    expect(front).toContain('Story b2');
+    expect(front.indexOf('Story b2')).toBeLessThan(front.indexOf('Story a1'));
+    expect(front).not.toContain('AWAITING EDITOR');
+    const index = JSON.parse(fs.readFileSync(path.join(dir, 'Magazine', 'index.json'), 'utf8'));
+    expect(index.find((e: { storyId: string }) => e.storyId === 'b2').firstSeen).toBe('2026-10-13T09:00:00Z');
     fs.rmSync(dir, { recursive: true, force: true });
   });
 
-  it('still writes a story page for an unapproved story, on its desk', () => {
+  it('still writes a story page on its desk', () => {
     const dir = board([mk('a1')]);
-    publishMagazine([mk('a1')], readApproved(dir), depsFor(dir));
+    publishMagazine([mk('a1')], depsFor(dir));
     expect(fs.existsSync(path.join(dir, 'Magazine', 'pages', 'p100.txt'))).toBe(true);
     expect(fs.existsSync(path.join(dir, 'Magazine', 'pages', 'p101.txt'))).toBe(true);
     fs.rmSync(dir, { recursive: true, force: true });
@@ -415,11 +388,10 @@ describe('only articles get a page', () => {
   const shortBody = (id: string) => mkStory(id, { body: 'b'.repeat(ARTICLE_MIN_BODY_CHARS - 1) });
   const authored = (id: string) => mkStory(id, { origin: 'authored', url: undefined });
 
-  function board(stories: Story[], approved: string[] = []): string {
+  function board(stories: Story[]): string {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mag-art-'));
     fs.mkdirSync(path.join(dir, 'Magazine', 'stories'), { recursive: true });
     for (const s of stories) fs.writeFileSync(path.join(dir, 'Magazine', 'stories', `${s.id}.json`), JSON.stringify(s));
-    writeApproved(dir, approved);
     return dir;
   }
   const storyFiles = (dir: string) => fs.readdirSync(path.join(dir, 'Magazine', 'stories')).sort();
@@ -431,8 +403,8 @@ describe('only articles get a page', () => {
 
   it('writes pages and an index entry for articles only, and the reader lists exactly those', () => {
     const stories = [article('a1'), teaser('t1'), shortBody('s1'), authored('h1')];
-    const dir = board(stories, ['t1', 'a1']);
-    const layout = publishMagazine(stories, readApproved(dir), depsFor(dir));
+    const dir = board(stories);
+    const layout = publishMagazine(stories, depsFor(dir));
     expect(layout.index.map((e) => e.storyId).sort()).toEqual(['a1', 'h1']);
     // The pages on disk: one per article, none for the teasers.
     const pages = fs.readdirSync(path.join(dir, 'Magazine', 'pages'));
@@ -442,15 +414,13 @@ describe('only articles get a page', () => {
       expect(page).not.toContain('Story t1');
       expect(page).not.toContain('Story s1');
     }
-    // The front page page carries the article, not the approved teaser.
+    // The front page page carries the article, not the teaser.
     const front = fs.readFileSync(path.join(dir, 'Magazine', 'pages', 'p100.txt'), 'latin1');
     expect(front).toContain('Story a1');
     expect(front).not.toContain('Story t1');
     // The MAG reader (Doors/magazine/library) lists the same stories the writer paged.
     const root = path.join(dir, 'Magazine');
     expect(loadIndex(root).map((e) => e.storyId).sort()).toEqual(layout.index.map((e) => e.storyId).sort());
-    expect(loadFront(root)).toEqual(['a1']);
-    expect(readApproved(dir)).toEqual(['t1', 'a1']); // the sysop's file is untouched
     fs.rmSync(dir, { recursive: true, force: true });
   });
 

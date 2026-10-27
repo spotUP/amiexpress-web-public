@@ -12,7 +12,6 @@ import { themeById } from '@amiexpress/bbs-door-sdk/engines/ui/theme';
 import {
   FULLSCREEN_ROWS,
   MAGAZINE_DIR,
-  MAGAZINE_FRONTPAGE_FILE,
   MAGAZINE_INDEX_FILE,
   MAGAZINE_STORIES_DIR,
   renderingKey,
@@ -86,7 +85,6 @@ function board(withSidecar: boolean): { root: string; art: string; stories: stri
   fs.mkdirSync(stories, { recursive: true });
   fs.mkdirSync(art, { recursive: true });
   fs.writeFileSync(path.join(mag, MAGAZINE_INDEX_FILE), JSON.stringify([{ page: 201, title: story.headline, desk: story.desk, format: story.format, storyId: story.id, date: story.date }]));
-  fs.writeFileSync(path.join(mag, MAGAZINE_FRONTPAGE_FILE), JSON.stringify([]));
   fs.writeFileSync(path.join(stories, `${ID}.json`), JSON.stringify(story));
   if (withSidecar) fs.writeFileSync(path.join(stories, `${ID}.media.json`), JSON.stringify(sidecar('A')));
   return { root, art, stories };

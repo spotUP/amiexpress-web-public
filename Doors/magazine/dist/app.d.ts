@@ -3,10 +3,6 @@ import { MAGAZINE_TITLE, type Desk } from '@amiexpress/bbs-door-sdk/formats/maga
 import { type MagLayout } from './layout';
 interface DoorSession {
     bbs: any;
-    /** The board's user: `secLevel` decides who may edit the front page. */
-    user?: {
-        secLevel?: number;
-    } | null;
     bbsSession?: {
         doorCommand?: string;
         texttvMode?: boolean;
@@ -22,17 +18,7 @@ export { MAGAZINE_TITLE };
 export declare const HINTS: readonly FooterHint[];
 /** Forty columns: only what a caller cannot guess. */
 export declare const COMPACT_HINTS: readonly FooterHint[];
-/**
- * The sysop's keys, ahead of the reader's own. P is the one that is always
- * there (and survives the fit); the others drop first on a tight line.
- */
-export declare function sysopHints(opts: {
-    compact: boolean;
-    frontView: boolean;
-    onFront: boolean;
-}): FooterHint[];
 export declare const HELP_TEXT: string;
-export declare const helpText: (sysop: boolean) => string;
 type View = {
     kind: 'front';
 } | {

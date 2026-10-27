@@ -33,15 +33,10 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.SYSOP_SEC_LEVEL = void 0;
 exports.magazineRoot = magazineRoot;
 exports.isListed = isListed;
 exports.loadIndex = loadIndex;
-exports.loadFront = loadFront;
 exports.loadTickerItems = loadTickerItems;
-exports.isSysopCaller = isSysopCaller;
-exports.writeFront = writeFront;
-exports.editFront = editFront;
 exports.loadSnapshot = loadSnapshot;
 exports.loadStory = loadStory;
 exports.loadSidecar = loadSidecar;
@@ -52,7 +47,7 @@ exports.searchStories = searchStories;
  * The magazine on disk, as the reader sees it.
  *
  * The board's content layer (web/backend/src/services/magazine) writes
- * `Magazine/index.json`, `Magazine/frontpage.json` and one
+ * `Magazine/index.json` and one
  * `Magazine/stories/<id>.json` per story. This module only READS them, and
  * never the `pages/pNNN.txt` teletext output: those are 40-column pre-wrapped
  * text with the row roles baked into SGR, so a reader that re-flowed them
@@ -67,7 +62,6 @@ const fs = __importStar(require("fs"));
 const path = __importStar(require("path"));
 const settings_1 = require("@amiexpress/bbs-door-sdk/settings");
 const magazine_1 = require("@amiexpress/bbs-door-sdk/formats/magazine");
-const magazine_front_file_1 = require("@amiexpress/bbs-door-sdk/formats/magazine-front-file");
 /** `<bbsRoot>/Magazine`, found the way every other board path is found. */
 function magazineRoot(startDir = __dirname) {
     return path.join((0, settings_1.resolveBbsRoot)(startDir), magazine_1.MAGAZINE_DIR);
@@ -104,14 +98,6 @@ function loadIndex(root = magazineRoot()) {
     return parsed.filter(isIndexEntry).filter((e) => isListed(e.storyId, root)).sort((a, b) => a.page - b.page);
 }
 /**
- * `frontpage.json`: the editor's order, and only the editor's. An id whose story
- * is not an article is skipped on display; the sysop's file is never rewritten by a read.
- */
-function loadFront(root = magazineRoot()) {
-    const parsed = readJson(path.join(root, magazine_1.MAGAZINE_FRONTPAGE_FILE));
-    return Array.isArray(parsed) ? parsed.filter((x) => typeof x === 'string' && isListed(x, root)) : [];
-}
-/**
  * The ticker's material: the newest headlines of EVERY story in the store,
  * teasers included. A ticker scrolls past; it is not a list a caller opens, so
  * a headline with no article behind it is still news worth a glance.
@@ -136,39 +122,8 @@ function loadTickerItems(limit, root = magazineRoot()) {
         .slice(0, limit)
         .map((s) => ({ source: s.source, title: s.headline }));
 }
-/**
- * Who may edit the front page: the full sysop. The same tier and the same
- * field the other TS doors read off the door session (`session.user.secLevel`,
- * Doors/livechat/server.ts, Doors/door-manager/app.ts), and the backend's own
- * SYSOP_LEVEL (web/backend/src/server/socket-guard.ts).
- */
-exports.SYSOP_SEC_LEVEL = 255;
-function isSysopCaller(session) {
-    return (session.user?.secLevel ?? 0) >= exports.SYSOP_SEC_LEVEL;
-}
-/**
- * Write `frontpage.json`. The writer is the SDK's, shared with the board's
- * admin Magazine page: one atomic write, not a copy per caller.
- */
-function writeFront(ids, root = magazineRoot()) {
-    (0, magazine_front_file_1.writeFrontFile)(root, ids);
-}
-/**
- * One edit of the front page. The file is re-read first so two sysops only
- * overwrite each other's edit of the SAME moment, not a stale copy; ids no
- * longer in the index are dropped; nothing is written when nothing changed.
- * Returns the front page as it now stands.
- */
-function editFront(edit, root = magazineRoot()) {
-    const current = loadFront(root);
-    const known = loadIndex(root).map((e) => e.storyId);
-    const next = (0, magazine_1.normalizeFront)(edit((0, magazine_1.normalizeFront)(current, known)), known);
-    if (JSON.stringify(next) !== JSON.stringify(current))
-        writeFront(next, root);
-    return next;
-}
 function loadSnapshot(root = magazineRoot()) {
-    return { index: loadIndex(root), front: loadFront(root) };
+    return { index: loadIndex(root) };
 }
 /** A story id is a hex hash; anything else is not a file name we will build. */
 const STORY_ID = /^[A-Za-z0-9_-]{1,64}$/;

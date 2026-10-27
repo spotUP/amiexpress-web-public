@@ -68,7 +68,6 @@ module.exports = {
     '^@amiexpress/bbs-door-sdk/formats/ctop-data$': '<rootDir>/../../sdk/formats/ctop-data.ts',
     '^@amiexpress/bbs-door-sdk/formats/magazine$': '<rootDir>/../../sdk/formats/magazine.ts',
     '^@amiexpress/bbs-door-sdk/formats/magazine-video$': '<rootDir>/../../sdk/formats/magazine-video.ts',
-    '^@amiexpress/bbs-door-sdk/formats/magazine-front-file$': '<rootDir>/../../sdk/formats/magazine-front-file.ts',
     '^@amiexpress/bbs-door-sdk/formats/notify$': '<rootDir>/../../sdk/formats/notify.ts',
     '^@amiexpress/bbs-door-sdk/formats/estringf$': '<rootDir>/../../sdk/formats/estringf.ts',
     '^@amiexpress/bbs-door-sdk/utils/narrow-art$': '<rootDir>/../../sdk/utils/narrow-art.ts',

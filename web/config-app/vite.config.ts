@@ -52,10 +52,8 @@ export default defineConfig({
       // place, whose header says the patterns mirror the loader's; a second
       // copy in the admin would be a third parser to keep in step. The module
       // is pure - no fs, no path - so it bundles like any other source file.
-      // The magazine's front page edits (frontToggle, frontMove, frontLead,
-      // normalizeFront) and desk labels, from the SDK source: pure, no Node
-      // imports. The MAG door and the board's Magazine route run the same
-      // functions, so the three cannot disagree on how the list changes.
+      // The magazine's pure format helpers (desk labels, cover rule) from the
+      // SDK source: no Node imports.
       '@amiexpress/bbs-door-sdk/formats/magazine': path.resolve(__dirname, '../../sdk/formats/magazine'),
       // Which doors the W menu lists is ONE parse (declaresSettings): the admin's
       // "Listed under W" box reads the tooltype the way the board does. The module

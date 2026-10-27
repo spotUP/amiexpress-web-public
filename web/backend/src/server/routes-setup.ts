@@ -29,8 +29,6 @@ import { redeemUploadTicket, redeemAreaDownloadTicket, type OnServed } from '../
 import { getSession } from './session-manager';
 import { createConfigRouter } from '../api/config-routes';
 import { createKickstartRouter } from '../api/kickstart-routes';
-import { mountMagazineAdmin } from '../api/magazine-admin-routes';
-import { republishMagazine, watchFrontPage } from '../services/magazine';
 import { startMagazineVideoService } from '../services/magazine/video-service';
 import { createDoorArtRouter } from '../api/door-art-routes';
 import { createBatchRouter } from '../api/batch-routes';
@@ -296,15 +294,6 @@ export function registerHttpRoutes(app: Application, io: SocketIOServer): void {
   app.use('/api/config/menus', authenticateToken(db), requireSysop(), createMenuConfigRouter(boardRoot()), menuConfigBodyError);
 
   startMagazineVideoService();
-
-  // ===== Magazine API - Sysop-only (the front page of THE UNKNOWN FREQUENCY) =====
-  const magazineDeps = { rootDir: boardRoot, now: () => new Date(), log: (l: string) => console.log(l) };
-  mountMagazineAdmin(app, [authenticateToken(db), requireSysop()], {
-    boardRoot,
-    republish: () => republishMagazine(magazineDeps),
-  });
-  // The MAG door edits frontpage.json directly; page 100 follows it.
-  watchFrontPage(magazineDeps);
 
   // ===== Chat API - Public Routes (for web chat authentication) =====
   const chatRouter = createChatRouter(db);

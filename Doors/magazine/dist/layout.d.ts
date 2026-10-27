@@ -1,4 +1,4 @@
-import { sourceName, type Desk, type Story } from '@amiexpress/bbs-door-sdk/formats/magazine';
+import { sourceName, type Desk, type MagazineIndexEntry, type Story } from '@amiexpress/bbs-door-sdk/formats/magazine';
 import { type ColumnGeometry } from './columns';
 import { type FillerOptions } from './filler';
 import { type ArticleMedia } from './pictures';
@@ -52,8 +52,6 @@ export interface ListingItem {
     bookmarked: boolean;
     /** The lead of the front page: the first story on it, tagged LEAD. */
     lead?: boolean;
-    /** Shown to the sysop only, in the lists that are not the front page: this story is on it. */
-    front?: boolean;
     /** The source and age printed under the headline. */
     article?: ArticleLine;
 }
@@ -103,8 +101,6 @@ export declare function buildListing(blocks: readonly ListingBlock[], selectedSt
 export declare function headerLine(left: string, right: string, width: number): string;
 /** A centred notice that fills the panel: a title, then lines of detail. */
 export declare function buildNotice(layout: MagLayout, title: string, detail: readonly string[]): PanelRow[];
-/** The front page when no human has approved anything yet. Never a guess. */
-export declare function buildAwaitingEditor(layout: MagLayout): PanelRow[];
 export interface Article {
     /** Each spread is exactly `panelHeight` rows. */
     spreads: PanelRow[][];
@@ -147,5 +143,14 @@ export declare function staticNewsRow(items: readonly NewsItem[], n: number, wid
 export declare function signalStrength(perDay: readonly number[], spark: (n: number[]) => string): string;
 /** Section names for the section cycle, in reading order. */
 export declare const SECTION_ORDER: readonly Desk[];
+/**
+ * ALL SECTIONS order: the desks that hold a story, the desk with the freshest
+ * story first (ties keep SECTION_ORDER), and inside a desk the newest story
+ * first, then page ascending.
+ */
+export declare function deskGroups(entries: readonly MagazineIndexEntry[]): Array<{
+    desk: Desk;
+    entries: MagazineIndexEntry[];
+}>;
 export declare function sectionLabel(desk: Desk | null): string;
 //# sourceMappingURL=layout.d.ts.map

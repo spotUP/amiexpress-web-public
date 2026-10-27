@@ -16,7 +16,7 @@
  *   footer     the door chrome's hint line
  */
 import { effectsAllowed, getCompactProfile } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
-import { DESK_LABEL, sourceName, type Desk, type Story } from '@amiexpress/bbs-door-sdk/formats/magazine';
+import { DESK_LABEL, newestFirst, sourceName, type Desk, type MagazineIndexEntry, type Story } from '@amiexpress/bbs-door-sdk/formats/magazine';
 import {
   columnGeometry,
   flowColumns,
@@ -243,8 +243,6 @@ export interface ListingItem {
   bookmarked: boolean;
   /** The lead of the front page: the first story on it, tagged LEAD. */
   lead?: boolean;
-  /** Shown to the sysop only, in the lists that are not the front page: this story is on it. */
-  front?: boolean;
   /** The source and age printed under the headline. */
   article?: ArticleLine;
 }
@@ -316,7 +314,7 @@ const PAGE_DIGITS = 3;
 
 function itemCells(item: ListingItem, index: number, selected: boolean, colWidth: number): Cell[] {
   const titleWidth = Math.max(1, colWidth - 1 - 1 - PAGE_DIGITS);
-  const prefix = `${item.lead ? 'LEAD ' : item.front ? '^ ' : ''}${item.bookmarked ? '* ' : ''}`;
+  const prefix = `${item.lead ? 'LEAD ' : ''}${item.bookmarked ? '* ' : ''}`;
   const lines = wrapTitle(prefix + paintSafe(item.title), titleWidth, 2);
   const role: Role = selected ? 'selected' : item.unread ? 'unread' : 'plain';
   const mark = selected ? '>' : ' ';
@@ -456,15 +454,6 @@ export function buildNotice(layout: MagLayout, title: string, detail: readonly s
   put(top + 1, title, 'warn');
   detail.forEach((line, i) => put(top + 2 + i, line, 'dim'));
   return rows;
-}
-
-/** The front page when no human has approved anything yet. Never a guess. */
-export function buildAwaitingEditor(layout: MagLayout): PanelRow[] {
-  return buildNotice(layout, 'AWAITING EDITOR', [
-    'No story has been approved',
-    'for the front page.',
-    'Press C for the full contents.',
-  ]);
 }
 
 // ---------------------------------------------------------------------------
@@ -698,6 +687,22 @@ export function signalStrength(perDay: readonly number[], spark: (n: number[]) =
 export const SECTION_ORDER: readonly Desk[] = [
   'hack', 'scene', 'graffiti', 'music', 'people', 'archive', 'stream', 'general',
 ];
+
+/**
+ * ALL SECTIONS order: the desks that hold a story, the desk with the freshest
+ * story first (ties keep SECTION_ORDER), and inside a desk the newest story
+ * first, then page ascending.
+ */
+export function deskGroups(entries: readonly MagazineIndexEntry[]): Array<{ desk: Desk; entries: MagazineIndexEntry[] }> {
+  const groups = SECTION_ORDER
+    .map((desk) => ({
+      desk,
+      entries: entries.filter((e) => e.desk === desk).sort((a, b) => newestFirst(a, b) || a.page - b.page),
+    }))
+    .filter((g) => g.entries.length > 0);
+  // Array.prototype.sort is stable, so equal freshness keeps SECTION_ORDER.
+  return groups.sort((a, b) => newestFirst(a.entries[0], b.entries[0]));
+}
 
 export function sectionLabel(desk: Desk | null): string {
   return desk ? DESK_LABEL[desk] : 'ALL SECTIONS';

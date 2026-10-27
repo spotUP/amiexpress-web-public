@@ -6,8 +6,8 @@
  *   `incoming/`  what the feeds just produced, this tick. Disposable.
  *   `stories/`   every story the magazine has ever seen, deduplicated. The
  *                archive (§13: "previous stories remain useful"). Hand-editable.
- *   `frontpage.json`  the stories a HUMAN approved (§17 forbids a magazine
- *                that is an automated list, so selection is not ours to make).
+ *
+ * The front page (p100) is automatic: the newest stories (`coverEntries`).
  *
  * The composition step writes `pages/` as plain 40-column text plus an index,
  * and leaves the display transform to whoever owns the teletext engine. Every
@@ -17,10 +17,11 @@ import * as fs from 'fs';
 import * as path from 'path';
 import {
   MAGAZINE_DIR,
-  MAGAZINE_FRONTPAGE_FILE,
   MAGAZINE_INDEX_FILE,
   MAGAZINE_STORIES_DIR,
+  coverEntries,
   isArticle,
+  newestFirst,
   type MagazineIndexEntry,
 } from '@amiexpress/bbs-door-sdk/formats/magazine';
 import { GENERATED_SCREEN_ROWS } from '../../screens/screen-rows';
@@ -36,7 +37,6 @@ import {
 import { stripFeedBoilerplate } from '../news-bulletins';
 import { clipFilesFor } from './video-service';
 import { isStoryFileName, sidecarPath } from '@amiexpress/bbs-door-sdk/formats/magazine';
-import { writeFrontFile } from '@amiexpress/bbs-door-sdk/formats/magazine-front-file';
 import { isSameStory, isWorthReading, storyId, type Desk, type Story } from './story-store';
 
 /** One item as a feed produced it, before the magazine has opinions about it. */
@@ -235,10 +235,9 @@ export function allocatePages(stories: Story[]): Map<string, number> {
   // Newest first. `date` is day-granular, so stories of one day are ordered by
   // the tick that first saw them (newest tick wins a full desk), then by id so
   // the allocation is the same on every publish.
-  const newestFirst = (x: string, y: string): number => (x < y ? 1 : x > y ? -1 : 0);
   const ordered = stories
     .filter(isArticle)
-    .sort((a, b) => newestFirst(a.date, b.date) || newestFirst(a.firstSeen, b.firstSeen) || newestFirst(a.id, b.id));
+    .sort((a, b) => newestFirst(a, b) || (a.id < b.id ? 1 : a.id > b.id ? -1 : 0));
   for (const story of ordered) {
     let desk = story.desk;
     let cursor = nextByDesk.get(desk) ?? familyFor(desk).first;
@@ -262,21 +261,16 @@ export function allocatePages(stories: Story[]): Map<string, number> {
  * Compose every page and write them out.
  *
  * The front page is the ONLY page that is not simply every story: it carries
- * the stories a human approved, and when nothing has been approved it says so
- * rather than inventing an editorial opinion of its own.
+ * the newest COVER_SIZE stories, chosen automatically (`coverEntries`); the
+ * first is the lead.
  */
-export function publishMagazine(
-  stories: Story[],
-  approvedIds: string[],
-  deps: MagazineDeps,
-): MagazineLayout {
+export function publishMagazine(stories: Story[], deps: MagazineDeps): MagazineLayout {
   const root = deps.rootDir();
   const pagesDir = path.join(root, MAGAZINE, 'pages');
   fs.mkdirSync(pagesDir, { recursive: true });
 
   const pageOf = allocatePages(stories);
   const budget = Math.max(8, GENERATED_SCREEN_ROWS - 1);
-  const byId = new Map(stories.map((s) => [s.id, s]));
   const index: MagazineIndexEntry[] = [];
 
   for (const story of stories) {
@@ -303,6 +297,7 @@ export function publishMagazine(
       format: story.format,
       storyId: story.id,
       date: story.date,
+      firstSeen: story.firstSeen,
     });
   }
 
@@ -321,79 +316,20 @@ export function publishMagazine(
     writeAtomic(path.join(pagesDir, `p${String(familyFor(desk).first).padStart(3, '0')}.txt`), `${renderPage(composed)}\r\n`, 'latin1');
   }
 
-  // The front page proper: human-approved stories only.
-  const approved = approvedIds
-    .map((id) => byId.get(id))
-    .filter((s): s is Story => Boolean(s) && isArticle(s as Story))
-    .sort((a, b) => (a.date < b.date ? 1 : -1));
-  const frontTitle = approved.length
-    ? 'TODAY'
-    : 'AWAITING EDITOR';
+  // The front page proper: the newest stories, automatically.
+  const cover = coverEntries(index);
   const frontComposed = composeIndexPage(
-    approved.map((s) => ({ headline: s.headline, format: s.format })),
+    cover.map((e) => ({ headline: e.title, format: e.format })),
     100,
     'FRONT PAGE',
-    frontTitle,
+    'TODAY',
     budget,
   );
   writeAtomic(path.join(pagesDir, 'p100.txt'), `${renderPage(frontComposed)}\r\n`, 'latin1');
 
   writeAtomic(path.join(root, MAGAZINE, MAGAZINE_INDEX_FILE), JSON.stringify(index, null, 2));
-  // frontpage.json is the editor's file and is only read here. Writing back
-  // the ids read at the start of the compose would undo an edit made by the
-  // door or the admin page while the compose ran.
-  composedFront.set(root, JSON.stringify(approvedIds));
-
   deps.log(`[magazine] published ${index.length} stories across ${new Set(index.map((e) => e.page)).size} pages`);
   return { index, familyPages };
-}
-
-/** The ids a human approved, read from disk. Missing file means none. */
-export function readApproved(root: string): string[] {
-  try {
-    const raw = fs.readFileSync(path.join(root, MAGAZINE, MAGAZINE_FRONTPAGE_FILE), 'utf8');
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed.filter((x) => typeof x === 'string') : [];
-  } catch {
-    return [];
-  }
-}
-
-export function writeApproved(root: string, ids: string[]): void {
-  writeFrontFile(path.join(root, MAGAZINE), ids);
-}
-
-/** Per board root: the approved ids the last compose drew page 100 from. */
-const composedFront = new Map<string, string>();
-
-/**
- * Compose again whenever the editor's front page changes on disk. The door
- * writes frontpage.json and cannot call the board, so without this page 100
- * would show the old front page until the next news tick. A change that page
- * 100 already shows (the admin page republishes itself) is skipped.
- */
-export function watchFrontPage(deps: MagazineDeps, debounceMs = 500): fs.FSWatcher {
-  const dir = path.join(deps.rootDir(), MAGAZINE);
-  fs.mkdirSync(dir, { recursive: true });
-  let timer: NodeJS.Timeout | null = null;
-  const recompose = (): void => {
-    timer = null;
-    const root = deps.rootDir();
-    if (composedFront.get(root) === JSON.stringify(readApproved(root))) return;
-    try {
-      republishMagazine(deps);
-    } catch (err) {
-      deps.log(`[WARN] magazine: front page edit not composed (${(err as Error).message})`);
-    }
-  };
-  const watcher = fs.watch(dir, (_event, name) => {
-    if (String(name) !== MAGAZINE_FRONTPAGE_FILE) return;
-    if (timer) clearTimeout(timer);
-    timer = setTimeout(recompose, debounceMs);
-    timer.unref();
-  });
-  watcher.unref();
-  return watcher;
 }
 
 /**
@@ -465,7 +401,7 @@ export function republishMagazine(deps: MagazineDeps): MagazineLayout {
   const root = deps.rootDir();
   purgeNeverArticles(root, deps.now().getTime(), deps.log);
   const stories = loadStories(path.join(root, MAGAZINE, MAGAZINE_STORIES_DIR), deps.log);
-  return publishMagazine(stories, readApproved(root), deps);
+  return publishMagazine(stories, deps);
 }
 
 /**
@@ -500,7 +436,7 @@ export function refreshMagazine(deps: MagazineDeps): { added: number; duplicates
 
   // A story that has stayed a teaser for three days leaves the store before it is composed.
   const purged = new Set(purgeNeverArticles(root, deps.now().getTime(), deps.log));
-  const layout = publishMagazine(merged.stories.filter((s) => !purged.has(s.id)), readApproved(root), deps);
+  const layout = publishMagazine(merged.stories.filter((s) => !purged.has(s.id)), deps);
 
   // Clear the inbox: the stories own their copy now, and a stale item would be
   // re-merged (harmlessly) on every run forever.

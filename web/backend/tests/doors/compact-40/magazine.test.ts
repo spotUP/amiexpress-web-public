@@ -4,8 +4,8 @@
  *
  *  - V1  80x24 is pinned, 40x25 stays inside 40 columns with chrome of one row
  *        and no effect running, 132x40 sets three columns.
- *  - V2  the front page is the editor's frontpage.json and nothing else:
- *        empty -> AWAITING EDITOR, never a story picked by the reader.
+ *  - V2  the front page is the newest stories, computed by the reader from the
+ *        index; an empty magazine says NO STORIES YET.
  *  - V3  REACHABILITY, once: the shipped bundle (Doors/magazine/dist, driven
  *        through `door.execute()` exactly as executeTypeScriptDoor calls it) is
  *        run against a Magazine/ written by the board's OWN writer
@@ -39,14 +39,12 @@ import { executeDoor, getDoors, initializeDoors, setDoors, setHelpers } from '..
 import { doorDropFileManager } from '../../../src/services/DoorDropFileManager';
 import { loadCommandFromInfo } from '../../../src/utils/amiga-command-parser.util';
 import { readTooltypeMap } from '../../../src/utils/info-file.util';
-import { refreshMagazine, writeApproved } from '../../../src/services/magazine';
+import { refreshMagazine } from '../../../src/services/magazine';
 import { storyId } from '../../../src/services/magazine/story-store';
 import { config } from '../../../src/config';
 import { LoggedOnSubState } from '../../../src/constants/bbs-states';
-import { buildAwaitingEditor, buildArticle, buildLayout, buildListing, rowText } from '../../../../../Doors/magazine/layout';
+import { buildArticle, buildLayout, buildListing, rowText } from '../../../../../Doors/magazine/layout';
 import { columnCount, columnGeometry } from '../../../../../Doors/magazine/columns';
-import { COMPACT_HINTS, sysopHints } from '../../../../../Doors/magazine/app';
-import { footerHints } from '@amiexpress/bbs-door-sdk/engines/ui/theme';
 import type { Story } from '@amiexpress/bbs-door-sdk/formats/magazine';
 
 setHelpers({ callersLog: async () => undefined, getRecentCallerActivity: async () => [] });
@@ -89,7 +87,6 @@ describe('MAG across the three screens', () => {
     expect(l.panelHeight).toBe(21);
     const spreads = [
       ...buildArticle({ ...STORY, summary: STORY.summary.repeat(6) }, l).spreads,
-      buildAwaitingEditor(l),
     ];
     for (const spread of spreads) {
       expect(spread).toHaveLength(l.panelHeight);
@@ -102,18 +99,8 @@ describe('MAG across the three screens', () => {
     for (const row of listing.spreads[0]) expect(rowText(row).length).toBeLessThanOrEqual(40);
   });
 
-  it('40x25: the sysop front-page keys fit one footer row, P survives, and the LEAD tag fits row one', () => {
+  it('40x25: the LEAD tag fits row one', () => {
     const l = buildLayout(40, 25);
-    const plain = { key: (t: string) => t, dim: (t: string) => t };
-    for (const frontView of [false, true]) {
-      for (const onFront of [false, true]) {
-        const hints = [...sysopHints({ compact: true, frontView, onFront }), ...COMPACT_HINTS];
-        const line = footerHints(hints, plain, '', 40 - 1);
-        expect(line.length).toBeLessThanOrEqual(39);
-        expect(line).toMatch(/P: Front (add|remove)/);
-        expect(line).toContain('Q: Quit');
-      }
-    }
     const listing = buildListing(
       [{ kind: 'item', item: { storyId: 'x', page: 120, title: 'A long headline '.repeat(6), unread: true, bookmarked: true, lead: true } }],
       'FRONT PAGE', l, { left: 'FRONT PAGE', right: '' },
@@ -148,7 +135,7 @@ let root: string;
 const realConfigGet = config.get.bind(config);
 const saved = { data: process.env.BBS_DATA_DIR, bbs: process.env.BBS_ROOT };
 
-function writeMagazine(approve: boolean): string {
+function writeMagazine(): string {
   const deps = { rootDir: () => root, now: () => new Date('2026-10-13T12:00:00Z'), log: () => {} };
   const incoming = path.join(root, 'Magazine', 'incoming');
   fs.mkdirSync(incoming, { recursive: true });
@@ -164,7 +151,6 @@ function writeMagazine(approve: boolean): string {
       date: '2026-10-13',
     },
   ]));
-  if (approve) writeApproved(root, [storyId(HEADLINE)]);
   refreshMagazine(deps);
   return storyId(HEADLINE);
 }
@@ -246,41 +232,40 @@ const LET_IN = { key: ' ', wait: 300 };
 const LEAVE = { key: ' ', wait: 300 };
 
 describe('MAG: the shipped bundle reads the magazine the board wrote', () => {
-  it('opens a story from the board\'s own files, and the front page waits for the editor (V2 + V3)', () => {
-    writeMagazine(false);
+  it('opens a story from the board\'s own files, and the front page is the newest stories (V2 + V3)', () => {
+    writeMagazine();
     const run = drive({
       cols: 80, rows: 24, petscii: false,
       steps: [LET_IN, { key: 'c', wait: 300 }, { key: '\r', wait: 600 }, { key: 'q', wait: 300 }, LEAVE],
     });
     expect(run.errors).toEqual([]);
-    // V2: nothing approved, so the front page says so and prints no story.
+    // V2: the front page is the newest stories, with no editor pick.
     // The first thing a caller meets is the title art, which waits for a key;
     // the reader behind it is the frame these assertions are about.
     const contentsAt = run.captured.findIndex((c) => c.includes('CONTENTS'));
     expect(contentsAt).toBeGreaterThan(0);
     const frontFrames = run.captured.slice(0, contentsAt).join('');
-    expect(frontFrames.replace(/\x1b\[[0-9;?]*[A-Za-z]/g, '')).toContain('AWAITING EDITOR');
-    expect(frontFrames).not.toContain(HEADLINE.toUpperCase());
+    expect(frontFrames.replace(/\x1b\[[0-9;?]*[A-Za-z]/g, '')).toContain('FRONT PAGE');
     // V3: the token lives only in the story file, so seeing it on the wire
     // proves library.ts read Magazine/stories/<id>.json written by the board.
-    expect(run.text).toContain('CONTENTS - ALL SECTIONS');
+    // A cursor move may stand in for the space after the dash once escapes are stripped.
+    expect(run.text).toMatch(/CONTENTS\s*-\s*ALL SECTIONS/);
     expect(run.text).toContain('SKAVEN RELEASES COPPER LIGHTS');
     expect(run.text).toContain(TOKEN);
     expect(run.ended).toBe(true);
   });
 
-  it('shows the front page the editor approved', () => {
-    writeMagazine(true);
+  it('shows the newest stories on the front page', () => {
+    writeMagazine();
     const run = drive({ cols: 80, rows: 24, petscii: false, steps: [LET_IN, { key: 'q', wait: 300 }] });
     expect(run.errors).toEqual([]);
-    expect(run.text).not.toContain('AWAITING EDITOR');
     // The first story on the front page is the lead, tagged LEAD; the tag shortens the first title line.
     expect(run.text).toContain('LEAD Skaven releases Copper');
     expect(run.text).toContain('Lights for Amiga');
   });
 
   it('on a 40x25 PETSCII caller the headline is on the glass, in one column, with nothing unmappable', () => {
-    writeMagazine(true);
+    writeMagazine();
     const run = drive({
       cols: 40, rows: 25, petscii: true,
       steps: [LET_IN, { key: '\r', wait: 600 }],

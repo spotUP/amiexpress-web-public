@@ -347,8 +347,8 @@ export function buildAll(): Map<string, Buffer> {
   files.set('mag_logo_small.seq', seqLogoSmall());
   files.set('mag_article_end.ans', ansArticleEnd());
   files.set('mag_article_end.seq', seqArticleEnd());
-  files.set('mag_front.ans', ansBanner(FRONT_PAGE_LABEL, "the editor's choice, in the editor's order", C.cyan, C.cyanDim));
-  files.set('mag_front.seq', seqBanner(FRONT_PAGE_LABEL, "the editor's choice", PET.cyan, PET.lightGreen));
+  files.set('mag_front.ans', ansBanner(FRONT_PAGE_LABEL, 'the newest stories', C.cyan, C.cyanDim));
+  files.set('mag_front.seq', seqBanner(FRONT_PAGE_LABEL, 'the newest stories', PET.cyan, PET.lightGreen));
   files.set('mag_contents.ans', ansBanner('CONTENTS', 'every section, every page number', C.magenta, C.magentaDim));
   files.set('mag_contents.seq', seqBanner('CONTENTS', 'every section, every page', PET.purple, PET.cyan));
   for (const { desk, tagline, ink } of DESKS) {

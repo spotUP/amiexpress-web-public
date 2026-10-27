@@ -2,7 +2,7 @@
  * The magazine on disk, as the reader sees it.
  *
  * The board's content layer (web/backend/src/services/magazine) writes
- * `Magazine/index.json`, `Magazine/frontpage.json` and one
+ * `Magazine/index.json` and one
  * `Magazine/stories/<id>.json` per story. This module only READS them, and
  * never the `pages/pNNN.txt` teletext output: those are 40-column pre-wrapped
  * text with the row roles baked into SGR, so a reader that re-flowed them
@@ -18,17 +18,14 @@ import * as path from 'path';
 import { resolveBbsRoot } from '@amiexpress/bbs-door-sdk/settings';
 import {
   MAGAZINE_DIR,
-  MAGAZINE_FRONTPAGE_FILE,
   MAGAZINE_INDEX_FILE,
   MAGAZINE_STORIES_DIR,
   isArticle,
-  normalizeFront,
   sidecarPath,
   type MagazineIndexEntry,
   type Story,
   type StoryMediaSidecar,
 } from '@amiexpress/bbs-door-sdk/formats/magazine';
-import { writeFrontFile } from '@amiexpress/bbs-door-sdk/formats/magazine-front-file';
 
 /** `<bbsRoot>/Magazine`, found the way every other board path is found. */
 export function magazineRoot(startDir: string = __dirname): string {
@@ -39,8 +36,6 @@ export function magazineRoot(startDir: string = __dirname): string {
 export interface MagazineSnapshot {
   /** Every published story, in page order. */
   index: MagazineIndexEntry[];
-  /** Story ids a human approved for the front page, in the editor's order. */
-  front: string[];
 }
 
 function readJson(file: string): unknown {
@@ -76,15 +71,6 @@ export function loadIndex(root: string = magazineRoot()): MagazineIndexEntry[] {
 }
 
 /**
- * `frontpage.json`: the editor's order, and only the editor's. An id whose story
- * is not an article is skipped on display; the sysop's file is never rewritten by a read.
- */
-export function loadFront(root: string = magazineRoot()): string[] {
-  const parsed = readJson(path.join(root, MAGAZINE_FRONTPAGE_FILE));
-  return Array.isArray(parsed) ? parsed.filter((x): x is string => typeof x === 'string' && isListed(x, root)) : [];
-}
-
-/**
  * The ticker's material: the newest headlines of EVERY story in the store,
  * teasers included. A ticker scrolls past; it is not a list a caller opens, so
  * a headline with no article behind it is still news worth a glance.
@@ -104,42 +90,8 @@ export function loadTickerItems(limit: number, root: string = magazineRoot()): A
     .map((s) => ({ source: s.source, title: s.headline }));
 }
 
-/**
- * Who may edit the front page: the full sysop. The same tier and the same
- * field the other TS doors read off the door session (`session.user.secLevel`,
- * Doors/livechat/server.ts, Doors/door-manager/app.ts), and the backend's own
- * SYSOP_LEVEL (web/backend/src/server/socket-guard.ts).
- */
-export const SYSOP_SEC_LEVEL = 255;
-
-export function isSysopCaller(session: { user?: { secLevel?: number } | null }): boolean {
-  return (session.user?.secLevel ?? 0) >= SYSOP_SEC_LEVEL;
-}
-
-/**
- * Write `frontpage.json`. The writer is the SDK's, shared with the board's
- * admin Magazine page: one atomic write, not a copy per caller.
- */
-export function writeFront(ids: readonly string[], root: string = magazineRoot()): void {
-  writeFrontFile(root, ids);
-}
-
-/**
- * One edit of the front page. The file is re-read first so two sysops only
- * overwrite each other's edit of the SAME moment, not a stale copy; ids no
- * longer in the index are dropped; nothing is written when nothing changed.
- * Returns the front page as it now stands.
- */
-export function editFront(edit: (ids: string[]) => string[], root: string = magazineRoot()): string[] {
-  const current = loadFront(root);
-  const known = loadIndex(root).map((e) => e.storyId);
-  const next = normalizeFront(edit(normalizeFront(current, known)), known);
-  if (JSON.stringify(next) !== JSON.stringify(current)) writeFront(next, root);
-  return next;
-}
-
 export function loadSnapshot(root: string = magazineRoot()): MagazineSnapshot {
-  return { index: loadIndex(root), front: loadFront(root) };
+  return { index: loadIndex(root) };
 }
 
 /** A story id is a hex hash; anything else is not a file name we will build. */

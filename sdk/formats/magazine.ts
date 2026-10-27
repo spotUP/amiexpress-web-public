@@ -20,50 +20,8 @@ export const MAGAZINE_TITLE = 'THE UNKNOWN FREQUENCY';
 export const MAGAZINE_DIR = 'Magazine';
 /** The navigation index: one MagazineIndexEntry per published story. */
 export const MAGAZINE_INDEX_FILE = 'index.json';
-/** The ids a human approved for the front page, in order. A JSON array of strings. */
-export const MAGAZINE_FRONTPAGE_FILE = 'frontpage.json';
 /** Directory under MAGAZINE_DIR holding one `<storyId>.json` per story. */
 export const MAGAZINE_STORIES_DIR = 'stories';
-
-/**
- * The front page is an ordered list of story ids; the FIRST is the lead (the
- * front article). These pure edits are the ONE definition of how the list may
- * change, for whoever writes `frontpage.json` (the MAG door's sysop mode today).
- * Filesystem access stays with the caller.
- */
-
-/** Ids in order, de-duplicated, with any id not in `known` dropped. */
-export function normalizeFront(ids: readonly string[], known: Iterable<string>): string[] {
-  const exists = new Set(known);
-  const seen = new Set<string>();
-  const out: string[] = [];
-  for (const id of ids) {
-    if (typeof id !== 'string' || !exists.has(id) || seen.has(id)) continue;
-    seen.add(id);
-    out.push(id);
-  }
-  return out;
-}
-
-/** Add the story at the end of the front page, or take it off when it is already there. */
-export function frontToggle(ids: readonly string[], id: string): string[] {
-  return ids.includes(id) ? ids.filter((x) => x !== id) : [...ids, id];
-}
-
-/** Move a story one place towards the lead (`-1`) or away from it (`1`). Unchanged at the ends. */
-export function frontMove(ids: readonly string[], id: string, delta: -1 | 1): string[] {
-  const at = ids.indexOf(id);
-  const to = at + delta;
-  if (at < 0 || to < 0 || to >= ids.length) return [...ids];
-  const out = [...ids];
-  [out[at], out[to]] = [out[to], out[at]];
-  return out;
-}
-
-/** Make the story the lead: first on the front page, the rest keep their order. */
-export function frontLead(ids: readonly string[], id: string): string[] {
-  return ids.includes(id) ? [id, ...ids.filter((x) => x !== id)] : [...ids];
-}
 
 /**
  * The editorial formats. The page family a story lands in follows from its
@@ -274,6 +232,31 @@ export interface MagazineIndexEntry {
   format: string;
   storyId: string;
   date: string;
+  /** When the board first saw the story (ISO). Absent in index files written before it existed. */
+  firstSeen?: string;
+}
+
+/** How many stories the front page shows: the newest ones, the first is the lead. */
+export const COVER_SIZE = 6;
+
+/**
+ * THE ordering of the magazine: date descending, then first-seen descending
+ * (a missing firstSeen sorts as ''), 0 on a tie so callers add their own id
+ * tie-break. The board's page allocation and the door's front page both use it.
+ */
+export function newestFirst(a: { date: string; firstSeen?: string }, b: { date: string; firstSeen?: string }): number {
+  if (a.date !== b.date) return a.date < b.date ? 1 : -1;
+  const fa = a.firstSeen ?? '';
+  const fb = b.firstSeen ?? '';
+  if (fa !== fb) return fa < fb ? 1 : -1;
+  return 0;
+}
+
+/** The front page: the COVER_SIZE newest stories, newest first. The first entry is the lead. */
+export function coverEntries(index: readonly MagazineIndexEntry[]): MagazineIndexEntry[] {
+  return [...index]
+    .sort((a, b) => newestFirst(a, b) || (a.storyId < b.storyId ? 1 : a.storyId > b.storyId ? -1 : 0))
+    .slice(0, COVER_SIZE);
 }
 
 // ---------------------------------------------------------------------------

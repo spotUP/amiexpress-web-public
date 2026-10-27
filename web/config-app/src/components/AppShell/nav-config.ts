@@ -37,7 +37,6 @@ import {
   Zap,
   FileImage,
   ListOrdered,
-  BookOpen,
   Newspaper,
   Palette,
   LayoutGrid,
@@ -139,7 +138,6 @@ export const NAV_GROUPS: NavGroup[] = [
       { path: 'login-sequence', label: 'Login Sequence', icon: ListOrdered, minLevel: 255, description: 'What a caller is shown on the way in, step by step, and which parts of it to keep', keywords: ['Logon', 'Logon Screen', 'Startup', 'Login Flow', 'Bulletins', 'Bulls', 'Includes', 'Pause', 'Sequence', 'Screens'] },
       { path: 'menus', label: 'Main Menu and Bulletins', icon: LayoutGrid, minLevel: 255, description: 'The main menu and bulletins doors: sections, descriptions, levels, wipes (logos are on the Doors page)', keywords: ['Main Menu', 'Menu', 'Bulletins', 'Sections', 'Wipes', 'C64 Menu', 'Overflow', 'Scroll', 'Pages'] },
       { path: 'bulls', label: 'Bulls Menu', icon: Newspaper, minLevel: 255, description: 'Bulls.CFG: the bulletin menu of the 68K Bulls door' },
-      { path: 'magazine', label: 'Magazine', icon: BookOpen, minLevel: 255, description: 'THE UNKNOWN FREQUENCY: which articles are on the front page, and which one leads', keywords: ['Front page', 'Lead', 'Articles', 'Teletext', 'MAG', 'News', 'Unknown Frequency'] },
     ],
   },
   {
