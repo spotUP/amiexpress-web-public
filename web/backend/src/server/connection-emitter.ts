@@ -30,6 +30,7 @@ import { encodeForWire } from "../utils/wire-encoding.util";
 import { flushPendingAnsi } from "../utils/ansi-buffer.util";
 import type { OutputAttributes } from "../utils/output-pacing";
 import { foldForWire } from "../utils/wrap-for-session.util";
+import { foldDefaultBackgroundToBlack } from "../utils/true-colour-fold.util";
 import { observeOutput } from "./session-observers";
 import { AnsiUtil } from "../utils/ansi.util";
 
@@ -180,7 +181,12 @@ export function buildConnectionEmitter(connection: TelnetConnection | SSHConnect
             // for why this could not live in emitText (the MENU folded there
             // and BBSTITLE, which leaves through the MCI parser's inline mode,
             // did not).
-            connection.write(encodeForWire(session, foldForWire(data.replace(/\r?\n/g, "\r\n"), session), attrs));
+            // A caller whose terminal is not on the modern list (an Amiga
+            // client, or one that named no TTYPE) ignores SGR 49 and keeps the
+            // previous background, so it gets 40 - black is its default.
+            const lines = data.replace(/\r?\n/g, "\r\n");
+            const grounded = session?.unicodeCapable === true ? lines : foldDefaultBackgroundToBlack(lines);
+            connection.write(encodeForWire(session, foldForWire(grounded, session), attrs));
           } else {
             connection.write(data);
           }

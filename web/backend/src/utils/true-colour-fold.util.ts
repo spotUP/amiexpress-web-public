@@ -127,3 +127,46 @@ export function foldTrueColourToAnsi(text: string): string {
 export function hasTrueColour(text: string): boolean {
   return trueColourPattern().test(text);
 }
+
+/**
+ * An SGR - `ESC[` parameters `m`. Built per call for the same reason as
+ * `trueColourPattern`.
+ */
+const sgrPattern = () => /\x1b\[([0-9;]*)m/g;
+
+/**
+ * Every "default background" (SGR 49) in `text` spelled as black (SGR 40).
+ *
+ * The board's art and code write 49 instead of 40 so a modern terminal with a
+ * non-black background (macOS Terminal) shows its own background rather than
+ * black blocks (a4b68ddef, 2026-10). An Amiga telnet client does not know 49:
+ * it ignores it and keeps the previous background, so a blue logo row leaks
+ * its blue across every cell the art meant to clear (photo from a caller,
+ * 2026-10-30). On that screen the default background IS black, so 40 draws
+ * exactly what 49 meant.
+ *
+ * Only a standalone parameter 49 changes. The arguments of an extended colour
+ * (`38;5;n`, `48;5;n`, `38;2;r;g;b`, `48;2;r;g;b`) are skipped, so a palette
+ * index or a channel value of 49 is left alone.
+ */
+export function foldDefaultBackgroundToBlack(text: string): string {
+  if (!text.includes('49')) return text;
+
+  return text.replace(sgrPattern(), (whole, params: string) => {
+    const parts = params.split(';');
+    let changed = false;
+    for (let i = 0; i < parts.length; i++) {
+      const p = parts[i];
+      if (p === '38' || p === '48') {
+        const kind = parts[i + 1];
+        i += kind === '5' ? 2 : kind === '2' ? 4 : 0;
+        continue;
+      }
+      if (p === '49') {
+        parts[i] = '40';
+        changed = true;
+      }
+    }
+    return changed ? `\x1b[${parts.join(';')}m` : whole;
+  });
+}
