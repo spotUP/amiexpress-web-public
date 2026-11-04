@@ -1,0 +1,10 @@
+[0;1;36m  Ludwig van Beethoven[0m
+[1;37m  Für Elise[0;37m  (Bagatelle No. 25 in A minor, WoO 59, 1810)
+
+[33m  ANSI music test.[0;37m The tune below plays as BASIC PLAY music
+  (ESC[M ... 0x0E). A terminal that knows ANSI music plays it and shows
+  nothing of it; one that does not may show a stray line of letters.
+
+[32m  [INFO][0;37m Now playing...
+[MFT112 L16 MN O3 E D# E D# E O2 B O3 D C O2 A8 P16 C E A B8 P16 E G# B O3 C8 P16 O2 E O3 E D# E D# E O2 B O3 D C O2 A8 P16 C E A B8 P16 E O3 C O2 B A8 P16 B O3 C D E8. O2 G O3 F E D8. O2 F O3 E D C8. O2 E O3 D C O2 B8 P16 E O3 E P16 P16 E O4 E P16 P16 O3 D# E P16 P16 D# O3 E D# E D# E O2 B O3 D C O2 A8 P16 C E A B8 P16 E G# B O3 C8 P16 O2 E O3 E D# E D# E O2 B O3 D C O2 A8 P16 C E A B8 P16 E O3 C O2 B A8 
+[0m

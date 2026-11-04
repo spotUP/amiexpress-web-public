@@ -5,6 +5,7 @@
  */
 
 import { Socket } from 'socket.io-client';
+import { scheduleMusic, type MusicEvent } from './ansi-music';
 
 export interface AudioStreamOptions {
   codec?: 'opus' | 'pcm';
@@ -64,6 +65,35 @@ export class MediaHandler {
     return this.volume;
   }
 
+  /** The audio context, made on first use (browsers allow it after a gesture). */
+  private context(): AudioContext {
+    if (!this.audioContext) {
+      this.audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+    }
+    if (this.audioContext.state === 'suspended') void this.audioContext.resume();
+    return this.audioContext;
+  }
+
+  /** When the ANSI music queued so far ends, in context time. */
+  private musicEnd = 0;
+
+  /**
+   * Plays an ANSI music string (ansi-music.ts) after whatever music is
+   * already queued, as DCTelnet does. Silent while UI sounds are off.
+   */
+  public playMusic(events: MusicEvent[]): void {
+    if (!this.uiSoundsEnabled) return;
+    const ctx = this.context();
+    this.musicEnd = scheduleMusic(ctx, events, this.musicEnd, this.volume);
+  }
+
+  /** The terminal bell (BEL, 0x07): a short square-wave beep. */
+  public beep(): void {
+    if (!this.uiSoundsEnabled) return;
+    this.context();
+    this.playSynth('square', 880, 0.12, 0.15);
+  }
+
   private setupSocketHandlers() {
     // Listen for audio chunks from the server
     this.socket.on('audio:data', async (data: { userId: string | number, chunk: ArrayBuffer }) => {
@@ -84,9 +114,7 @@ export class MediaHandler {
       if (!this.uiSoundsEnabled) return;
 
       // Initialize audio context on first sound (required by browsers)
-      if (!this.audioContext) {
-        this.audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
-      }
+      this.context();
 
       switch (data.type) {
         case 'library':
@@ -153,12 +181,10 @@ export class MediaHandler {
 
       // Set up audio level analysis for VU meters
       // This uses AnalyserNode to get real-time audio levels from the raw stream
-      if (!this.audioContext) {
-        this.audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
-      }
+      const ctx = this.context();
 
-      const source = this.audioContext.createMediaStreamSource(this.mediaStream);
-      this.analyserNode = this.audioContext.createAnalyser();
+      const source = ctx.createMediaStreamSource(this.mediaStream);
+      this.analyserNode = ctx.createAnalyser();
       this.analyserNode.fftSize = 2048;
       this.analyserNode.smoothingTimeConstant = 0.3;
       source.connect(this.analyserNode);
@@ -337,23 +363,21 @@ export class MediaHandler {
    */
   private async playAudioChunk(userId: string, chunk: ArrayBuffer): Promise<void> {
     try {
-      if (!this.audioContext) {
-        this.audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
-      }
+      const ctx = this.context();
 
       // Decode the WebM/Opus chunk
       // Note: decodeAudioData might have trouble with partial WebM streams
       // In a production environment, a more robust Opus decoder would be used
-      const audioBuffer = await this.audioContext.decodeAudioData(chunk.slice(0));
+      const audioBuffer = await ctx.decodeAudioData(chunk.slice(0));
       
-      const source = this.audioContext.createBufferSource();
+      const source = ctx.createBufferSource();
       source.buffer = audioBuffer;
 
-      const gainNode = this.audioContext.createGain();
+      const gainNode = ctx.createGain();
       gainNode.gain.value = this.volume;
 
       source.connect(gainNode);
-      gainNode.connect(this.audioContext.destination);
+      gainNode.connect(ctx.destination);
 
       source.start();
 
@@ -384,13 +408,11 @@ export class MediaHandler {
    */
   private async calculateVolume(buffer: ArrayBuffer): Promise<void> {
     try {
-      if (!this.audioContext) {
-        this.audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
-      }
+      const ctx = this.context();
       
       // If we have a mediaStream, we should use an AnalyserNode for better performance
       // but since we already have the encoded buffer for sending, we decode a clone for UI
-      const audioBuffer = await this.audioContext.decodeAudioData(buffer.slice(0));
+      const audioBuffer = await ctx.decodeAudioData(buffer.slice(0));
       const pcmData = audioBuffer.getChannelData(0);
       
       let sum = 0;

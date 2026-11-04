@@ -42,3 +42,4 @@ BULLETINS
 #52    RTL-SDR - decoding closed signals
 #53    r/demoscene
 #54    Jason Scott - preserving old text
+#56    ANSI Music - Für Elise

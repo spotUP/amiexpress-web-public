@@ -40,6 +40,7 @@ import {
 } from '../utils/session-cookie';
 import { getZmodem } from '../utils/zmodem';
 import { MediaHandler } from '../utils/media-handler';
+import { AnsiMusicStream, type MusicEvent } from '../utils/ansi-music';
 import { ModemEmulator } from '../utils/modem-emulator';
 import { classifyKey, trackKeyId, repeatAlive, mayAutoRepeat, gameKeyDownPayload } from '../utils/key-overrides';
 import { createWireRecorder, recordTerminal, recordPetscii, exposeWireRecorder } from '../utils/wire-recorder';
@@ -71,6 +72,9 @@ import { scrollOffsetForWheel } from '../petscii/scrollback';
 import RIPRenderer, { shouldDismissRipClick, type RIPRendererRef } from '../rip/RIPRenderer';
 import { armRipLinger, type RipLinger } from '../rip/rip-linger';
 
+/** Private OSC that marks where an ANSI music string was: ESC]9998;music;<id>BEL. */
+const MUSIC_OSC = 9998;
+const MUSIC_OSC_TAG = 'music;';
 const RIP_WIDTH = 640;
 const RIP_HEIGHT = 350;
 
@@ -389,6 +393,11 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
   const zmodemRef = useRef<any | null>(null);
   const mediaHandlerRef = useRef<MediaHandler | null>(null);
   const sfxBufferRef = useRef<string>('');
+  // ANSI music (ansi-music.ts): the stream holds a string split across
+  // chunks; each finished string waits here under its OSC marker's id.
+  const musicStreamRef = useRef<AnsiMusicStream | null>(null);
+  const pendingMusicRef = useRef(new Map<number, MusicEvent[]>());
+  const nextMusicIdRef = useRef(0);
   const modemEmulatorRef = useRef<ModemEmulator | null>(null);
 
   // Full-canvas PETSCII session (petscii-full-canvas plan, Task 8). The
@@ -1140,6 +1149,20 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
     };
     // Initialize modem emulator for client-side speed throttling
     modemEmulatorRef.current = new ModemEmulator(term);
+
+    // ANSI music plays when xterm parses the string's marker, i.e. after the
+    // modem emulator has paced the text before it - the tune starts where
+    // the screen does, not when the bytes arrive. BEL beeps the same way.
+    // (`?.`: the xterm fakes in the frontend tests have no parser or bell.)
+    term.parser?.registerOscHandler(MUSIC_OSC, (payload) => {
+      const id = Number(payload.slice(MUSIC_OSC_TAG.length));
+      const events = pendingMusicRef.current.get(id);
+      if (!payload.startsWith(MUSIC_OSC_TAG) || !events) return false;
+      pendingMusicRef.current.delete(id);
+      mediaHandlerRef.current?.playMusic(events);
+      return true;
+    });
+    term.onBell?.(() => mediaHandlerRef.current?.beep());
 
     // Apply cached modem speed from cookie before the server responds,
     // so the pre-login banner and login prompt pace at the user's
@@ -2574,6 +2597,20 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
       }
 
       data = sfxPayload;
+
+      // ANSI music: on xterm each string becomes a marker the OSC handler
+      // plays once the paced text reaches it; the canvas and RIP surfaces
+      // have no such parser, so their music plays on arrival.
+      musicStreamRef.current ??= new AnsiMusicStream();
+      data = musicStreamRef.current.feed(data, (events) => {
+        if (surfaceRef.current === 'canvas' || ripModeRef.current) {
+          mediaHandlerRef.current?.playMusic(events);
+          return '';
+        }
+        const id = nextMusicIdRef.current++;
+        pendingMusicRef.current.set(id, events);
+        return `\x1b]${MUSIC_OSC};${MUSIC_OSC_TAG}${id}\x07`;
+      });
 
       // 2. RIP mode detection
       if (data.includes('\x1b[1!') || data.includes('\u001b[1!')) {
