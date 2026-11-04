@@ -19,6 +19,7 @@ import * as path from 'path';
 import * as amigafs from '../utils/amigafs';
 import { Socket } from 'socket.io';
 import { AnsiUtil } from '../utils/ansi.util';
+import { joinChatRoom, leaveChatRoom, sendChatRoomMessage, createChatRoom, listChatRooms, type JoinedRoom, type CreatedRoom, type NewRoomOptions } from './door-chat-rooms';
 import { EventEmitter } from 'events';
 import type { BBSSession } from '../index';
 import { LoggedOnSubState } from '../constants/bbs-states';
@@ -1590,146 +1591,36 @@ console.error('[BBSApi] Error posting message:', error);
    * Calls the handler directly instead of socket emit
    * Note: setGroupChatDependencies is called at server startup in index.ts
    */
-  async joinRoom(roomName: string, password?: string): Promise<{ success: boolean; roomId?: string; roomName?: string; memberCount?: number; members?: any[]; error?: string }> {
-    try {
-      const { handleRoomJoin } = require('../handlers/chat/group-chat.handler');
-
-      // Create a response collector
-      let response: any = null;
-      // Restore what was FOUND, not a bound copy of it: on a socket.io Socket
-      // `emit` lives on the PROTOTYPE, so assigning a bound copy back would pin
-      // a permanent own property onto the instance. Same rule as
-      // `c64-door-adapter.ts:333-344`.
-      const hadOwnEmit = Object.prototype.hasOwnProperty.call(this.socket, 'emit');
-      const found = this.socket.emit;
-      const downstream = found.bind(this.socket);
-
-      // Intercept the room:joined event
-      const interceptor = ((event: string, ...args: any[]) => {
-        if (event === 'room:joined') {
-          response = args[0];
-        }
-        return downstream(event, ...args);
-      }) as any;
-      this.socket.emit = interceptor;
-
-      try {
-        // Call handler directly
-        await handleRoomJoin(this.socket, this.session, { roomName, password });
-      } finally {
-        // In a `finally` so a throwing handler cannot leak the interceptor, and
-        // only while ours is still the live one, so a wrapper installed during
-        // the handler is not torn off.
-        if (this.socket.emit === interceptor) {
-          if (hadOwnEmit) this.socket.emit = found;
-          else delete (this.socket as any).emit;
-        }
-      }
-
-      if (response) {
-        return {
-          success: true,
-          roomId: response.roomId,
-          roomName: response.roomName,
-          memberCount: response.memberCount,
-          members: response.members
-        };
-      }
-
-      return { success: false, error: 'Failed to join room' };
-    } catch (error) {
-console.error('[BBSApi] Error joining room:', error);
-      return { success: false, error: (error as Error).message };
-    }
+  async joinRoom(roomName: string, password?: string): Promise<JoinedRoom> {
+    return joinChatRoom(this.socket, this.session, roomName, password);
   }
 
   /**
    * Leave the current chat room
    */
   async leaveRoom(): Promise<boolean> {
-    try {
-      const { handleRoomLeave } = require('../handlers/chat/group-chat.handler');
-      await handleRoomLeave(this.socket, this.session);
-      return true;
-    } catch (error) {
-console.error('[BBSApi] Error leaving room:', error);
-      return false;
-    }
+    return leaveChatRoom(this.socket, this.session);
   }
 
   /**
    * Send a message to the current chat room
    */
   async sendRoomMessage(message: string): Promise<boolean> {
-    try {
-      const { handleRoomMessage } = require('../handlers/chat/group-chat.handler');
-      await handleRoomMessage(this.socket, this.session, { message });
-      return true;
-    } catch (error) {
-console.error('[BBSApi] Error sending room message:', error);
-      return false;
-    }
+    return sendChatRoomMessage(this.socket, this.session, message);
   }
 
   /**
    * Create a new chat room
    */
-  async createRoom(roomName: string, options?: { topic?: string; isPublic?: boolean; password?: string; maxUsers?: number }): Promise<{ success: boolean; roomId?: string; error?: string }> {
-    try {
-      const { handleRoomCreate } = require('../handlers/chat/group-chat.handler');
-
-      let response: any = null;
-      // Restore what was FOUND - see the note in joinRoom above.
-      const hadOwnEmit = Object.prototype.hasOwnProperty.call(this.socket, 'emit');
-      const found = this.socket.emit;
-      const downstream = found.bind(this.socket);
-
-      const interceptor = ((event: string, ...args: any[]) => {
-        if (event === 'room:created') {
-          response = args[0];
-        }
-        return downstream(event, ...args);
-      }) as any;
-      this.socket.emit = interceptor;
-
-      try {
-        await handleRoomCreate(this.socket, this.session, {
-          roomName,
-          topic: options?.topic,
-          isPublic: options?.isPublic,
-          password: options?.password,
-          maxUsers: options?.maxUsers
-        });
-      } finally {
-        if (this.socket.emit === interceptor) {
-          if (hadOwnEmit) this.socket.emit = found;
-          else delete (this.socket as any).emit;
-        }
-      }
-
-      if (response) {
-        return { success: true, roomId: response.roomId };
-      }
-
-      return { success: false, error: 'Failed to create room' };
-    } catch (error) {
-console.error('[BBSApi] Error creating room:', error);
-      return { success: false, error: (error as Error).message };
-    }
+  async createRoom(roomName: string, options?: NewRoomOptions): Promise<CreatedRoom> {
+    return createChatRoom(this.socket, this.session, roomName, options);
   }
 
   /**
    * List available chat rooms
    */
   async listRooms(showPrivate?: boolean): Promise<any[]> {
-    try {
-      const { db } = require('../database');
-      const rooms = await db.listChatRooms(!showPrivate);
-      return rooms || [];
-    } catch (error) {
-console.error('[BBSApi] Error listing rooms:', error);
-      return [];
-    }
+    return listChatRooms(showPrivate);
   }
 
   /**
