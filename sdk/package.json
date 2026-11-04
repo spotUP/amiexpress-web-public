@@ -40,6 +40,11 @@
       "require": "./dist/utils/narrow-art.js",
       "default": "./dist/utils/narrow-art.js"
     },
+    "./utils/door-logo": {
+      "types": "./dist/utils/door-logo.d.ts",
+      "require": "./dist/utils/door-logo.js",
+      "default": "./dist/utils/door-logo.js"
+    },
     "./formats/estringf": {
       "types": "./dist/formats/estringf.d.ts",
       "require": "./dist/formats/estringf.js",
