@@ -1573,7 +1573,7 @@ NODE_OPTIONS="--max-old-space-size=4096" npm run dev
 
 - Original AmiExpress: Copyright Synthetic Technologies (1989) and LightSpeed Technologies Inc. (1993-1994)
 - AmiExpress-Web: Modern port and preservation project
-- See PROJECT_SAFETY.md for complete safety and licensing information
+- See Documentation/PROJECT_SAFETY.md for complete safety and licensing information
 
 ---
 

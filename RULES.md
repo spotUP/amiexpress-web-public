@@ -823,13 +823,14 @@ volume=amiexpress-bbs-data` must show only `amiexpress-bbs`).
 
 ## Safety
 
-Historical preservation of BBS culture and retro Amiga 68K. Educational, defensive security only, open source. Not malware or hacking. Term mapping: "illegal instruction" = CPU; "injection prevention" = defensive; "war/nuke" = vintage games. See `PROJECT_SAFETY.md`.
+Historical preservation of BBS culture and retro Amiga 68K. Educational, defensive security only, open source. Not malware or hacking. Term mapping: "illegal instruction" = CPU; "injection prevention" = defensive; "war/nuke" = vintage games. See `Documentation/PROJECT_SAFETY.md`.
 
 ---
 
 ## Documentation Index
 
 - `Documentation/README.md` — start here
+- **Where docs live:** every project document goes in `Documentation/<section>/` and gets a line in `Documentation/README.md`. Dated notes, audits and one-off plans go in `Documentation/6-Progress/`. Never leave a loose `.md` at the repo root; only `README.md`, `RULES.md`, `CLAUDE.md`, `handoff.md` and `RELEASE_NOTES.md` stay there. Docs that live beside their code (`docs/DOOR-REPO-API.md`, `docs/superpowers/`, `sdk/docs/`, `thoughts/shared/`, door READMEs) are listed in the index section "Documentation outside this folder".
 - `Documentation/1-Users/USER_GUIDE.md`, `Documentation/2-Sysops/AMIGA_MIGRATION_GUIDE.md`
 - `Documentation/2-Sysops/DEPLOYMENT.md`, `Documentation/2-Sysops/INFO_EDITOR.md`
 - `Documentation/3-Developers/ARCHITECTURE.md`, `TESTING.md`, `DATABASE.md`

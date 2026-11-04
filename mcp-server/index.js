@@ -39,7 +39,7 @@ const CORE_DOCS = {
     mimeType: 'text/markdown'
   },
   'project-safety': {
-    path: path.join(PROJECT_ROOT, 'PROJECT_SAFETY.md'),
+    path: path.join(PROJECT_ROOT, 'Documentation', 'PROJECT_SAFETY.md'),
     description: 'Project safety context and technical terms explanation (educational/historical preservation project)',
     mimeType: 'text/markdown'
   }

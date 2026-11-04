@@ -18,6 +18,7 @@ This index lists every current document, grouped by folder. Archived material li
 - [DOCKER.md](2-Sysops/DOCKER.md) - Docker Deployment Guide
 - [INFO_EDITOR.md](2-Sysops/INFO_EDITOR.md) - info-editor: .info File Tooltype Editor
 - [INSTALLATION.md](2-Sysops/INSTALLATION.md) - AmiExpress-Web Installation Guide (Summary)
+- [SSH_REMOTE_ACCESS.md](2-Sysops/SSH_REMOTE_ACCESS.md) - SSH Remote Access Guide
 - [SYSOP_GUIDE.md](2-Sysops/SYSOP_GUIDE.md) - Sysop Quick Start Guide
 - [TROUBLESHOOTING.md](2-Sysops/TROUBLESHOOTING.md) - Troubleshooting Guide (Summary)
 - [WHIP_BOT.md](2-Sysops/WHIP_BOT.md) - WHIP Discord mirror bot  sysop setup
@@ -118,18 +119,23 @@ This index lists every current document, grouped by folder. Archived material li
 - [HOTKEYS.md](5-Reference/HOTKEYS.md) - Hotkeys Reference (Summary)
 - [MCI_CODES.md](5-Reference/MCI_CODES.md) - MCI Codes Reference (Summary)
 - [SCREEN_FILES.md](5-Reference/SCREEN_FILES.md) - Screen Files Reference (Summary)
+- [SCREEN_WIPE_ANIMATIONS.md](5-Reference/SCREEN_WIPE_ANIMATIONS.md) - Screen Wipe Animations - MCI Commands
 
 ## Progress notes and audits (dated snapshots) (`6-Progress/`)
 
 - [68K_DOOR_STATUS.md](6-Progress/68K_DOOR_STATUS.md) - 68K Door Status Tracker
 - [68K_XIM_DOORS_HANDOFF_2026-01-08.md](6-Progress/68K_XIM_DOORS_HANDOFF_2026-01-08.md) - 68K XIM Doors Debug Session - January 8, 2026
+- [AMIGAFS_MIGRATION_STATUS.md](6-Progress/AMIGAFS_MIGRATION_STATUS.md) - AmigaFS Migration Status
 - [ANSI_BUFFERING_STATUS.md](6-Progress/ANSI_BUFFERING_STATUS.md) - ANSI Output Buffering Implementation Status
 - [ANSI_EDITOR_MOEBIUS_AUDIT.md](6-Progress/ANSI_EDITOR_MOEBIUS_AUDIT.md) - ANSI Editor Feature Audit - Moebius Comparison
 - [AQUASCAN_DEBUG_SESSION.md](6-Progress/AQUASCAN_DEBUG_SESSION.md) - AquaScan Debug Session - 2025-12-30
 - [AQUASCAN_NSU_DEBUG_SESSION.md](6-Progress/AQUASCAN_NSU_DEBUG_SESSION.md) - AquaScan N S U Debug Session
 - [ARCHIVE_FORMAT_SUPPORT_2026-01-04.md](6-Progress/ARCHIVE_FORMAT_SUPPORT_2026-01-04.md) - Archive Format Support Status
 - [ASCII_VIDEO_QUALITY_IMPROVEMENTS.md](6-Progress/ASCII_VIDEO_QUALITY_IMPROVEMENTS.md) - ASCII Video Quality Improvements
+- [AUDIT_REPORT_2026-01-04.md](6-Progress/AUDIT_REPORT_2026-01-04.md) - Audit Report: Gemini's Commits - 2026-01-04
+- [AUDIT_REPORT_AI_SYSTEM.md](6-Progress/AUDIT_REPORT_AI_SYSTEM.md) - AI System Audit Report
 - [BBSLINK_IMPLEMENTATION.md](6-Progress/BBSLINK_IMPLEMENTATION.md) - BBSLink Door Implementation
+- [BLESSED_SDK_AUDIT.md](6-Progress/BLESSED_SDK_AUDIT.md) - Blessed SDK Deep Audit - Critical Issues & Fixes
 - [BLESSED_SDK_LIVECHAT_HANDOFF.md](6-Progress/BLESSED_SDK_LIVECHAT_HANDOFF.md) - Blessed SDK & LiveChat Handoff Document
 - [BULLETIN_DISPLAY_FIX.md](6-Progress/BULLETIN_DISPLAY_FIX.md) - Bulletin Display Flow Fix
 - [BYTECOMMENT_DEBUG_SESSION.md](6-Progress/BYTECOMMENT_DEBUG_SESSION.md) - ByteComment Door Debug Session - 2026-01-23
@@ -139,13 +145,17 @@ This index lists every current document, grouped by folder. Archived material li
 - [CURRENT_STATUS.md](6-Progress/CURRENT_STATUS.md) - AmiExpress-Web Current Status
 - [DATABASE_PROFILING_STATUS.md](6-Progress/DATABASE_PROFILING_STATUS.md) - Database Profiling Implementation Status
 - [DISCORDANNOUNCE_AUDIT.md](6-Progress/DISCORDANNOUNCE_AUDIT.md) - DiscordAnnounce TypeScript Implementation Audit
+- [DOOR_FIX_TESTING_GUIDE.md](6-Progress/DOOR_FIX_TESTING_GUIDE.md) - 68K Door Regression Fix - Testing Guide
 - [DOOR_INPUT_MANAGER_IMPLEMENTATION_2026-01-13.md](6-Progress/DOOR_INPUT_MANAGER_IMPLEMENTATION_2026-01-13.md) - DoorInputManager Implementation - 2026-01-13
+- [DOOR_PORTABILITY_REVIEW.md](6-Progress/DOOR_PORTABILITY_REVIEW.md) - Door Portability and Installation System - Code Review
 - [DOOR_PRELOADER_FIX.md](6-Progress/DOOR_PRELOADER_FIX.md) - Door Preloader Fix
 - [DRE_WALL_DEBUG_SESSION.md](6-Progress/DRE_WALL_DEBUG_SESSION.md) - dRE!Wall Door Debug Session - 2026-01-23
 - [dRE_WALL_HANDOFF.md](6-Progress/dRE_WALL_HANDOFF.md) - dRE!WAll  Debug Handoff (2026-04-20  third session)
+- [DUPLICATE_FILE_HANDLING_FIX.md](6-Progress/DUPLICATE_FILE_HANDLING_FIX.md) - Duplicate File Handling Fix - 1:1 with AmiExpress
 - [EDGE_CASE_FIXES_2026-01-04.md](6-Progress/EDGE_CASE_FIXES_2026-01-04.md) - Edge Case Fixes - Complete
 - [EXPRESS_E_PARITY_AUDIT.md](6-Progress/EXPRESS_E_PARITY_AUDIT.md) - AmiExpress express.e vs TypeScript Implementation - Comprehensive Parity Audit
 - [FILE_CACHING_STATUS.md](6-Progress/FILE_CACHING_STATUS.md) - File Caching Implementation Status
+- [FLAGGED_FILES_PERSISTENCE_FIX.md](6-Progress/FLAGGED_FILES_PERSISTENCE_FIX.md) - Flagged Files Persistence Fix
 - [GAP_ANALYSIS_2026-01-04.md](6-Progress/GAP_ANALYSIS_2026-01-04.md) - AmiExpress-Web Gap Analysis Progress
 - [GAP_RESOLUTION_COMPLETE_2026-01-04.md](6-Progress/GAP_RESOLUTION_COMPLETE_2026-01-04.md) - Gap Resolution Complete - All Remaining Work Addressed
 - [GLC_IMPLEMENTATION.md](6-Progress/GLC_IMPLEMENTATION.md) - Global Last Callers Implementation
@@ -158,6 +168,7 @@ This index lists every current document, grouped by folder. Archived material li
 - [GRANDMASTER_INPUT_FIX_2026-01-13.md](6-Progress/GRANDMASTER_INPUT_FIX_2026-01-13.md) - Grandmaster Input Fix - 2026-01-13
 - [GRANDMASTER_MENU_ESC_FIX_2026-01-13.md](6-Progress/GRANDMASTER_MENU_ESC_FIX_2026-01-13.md) - Grandmaster Menu ESC Key Lockup Fix - 2026-01-13
 - [GRANDMASTER_SCREEN_CLEANUP_2026-01-13.md](6-Progress/GRANDMASTER_SCREEN_CLEANUP_2026-01-13.md) - Grandmaster Screen Cleanup Fix - 2026-01-13
+- [GRUMPY_BOT_ENHANCEMENTS.md](6-Progress/GRUMPY_BOT_ENHANCEMENTS.md) - Grumpy Bot Enhancements - Implementation Summary
 - [GWALL_SYSOP_MODE_IMPLEMENTATION.md](6-Progress/GWALL_SYSOP_MODE_IMPLEMENTATION.md) - Global Wall Sysop Mode Implementation
 - [GWALL_WEB_ADMIN_IMPLEMENTATION.md](6-Progress/GWALL_WEB_ADMIN_IMPLEMENTATION.md) - Global Wall Web Admin Panel Implementation
 - [INTERACTIVE_DOORS_STATUS.md](6-Progress/INTERACTIVE_DOORS_STATUS.md) - Interactive Doors Porting Status
@@ -173,10 +184,14 @@ This index lists every current document, grouped by folder. Archived material li
 - [NEO_BLESSED_SHOWCASE_SHAPE_MODE_2026-01-21.md](6-Progress/NEO_BLESSED_SHOWCASE_SHAPE_MODE_2026-01-21.md) - Neo-Blessed Showcase - Shape Mode Integration
 - [NON_AUTHENTIC_HEADERS_REPORT.md](6-Progress/NON_AUTHENTIC_HEADERS_REPORT.md) - Non-Authentic Headers Report
 - [OPTIONAL_ENHANCEMENTS_2026-01-04.md](6-Progress/OPTIONAL_ENHANCEMENTS_2026-01-04.md) - Optional Enhancements - Beyond Express.e Parity
+- [PLAN_SUPER_QIX.md](6-Progress/PLAN_SUPER_QIX.md) - Super Qix Arcade Game - Implementation Plan
+- [PLAN_ZOO_KEEPER.md](6-Progress/PLAN_ZOO_KEEPER.md) - Zoo Keeper Arcade Game - Implementation Plan
 - [python-door-support/](6-Progress/python-door-support/) - folder: PYTHON_DOOR_DEVELOPMENT.md, README.md
 - [QUICKNEW_CONFIG_IMPLEMENTATION.md](6-Progress/QUICKNEW_CONFIG_IMPLEMENTATION.md) - QuickNew Config File Compatibility Implementation
 - [QUICKNEW_TYPESCRIPT_AUDIT.md](6-Progress/QUICKNEW_TYPESCRIPT_AUDIT.md) - QuickNew TypeScript Implementation Audit
 - [QWK_IMPLEMENTATION_VERIFICATION_2026-01-04.md](6-Progress/QWK_IMPLEMENTATION_VERIFICATION_2026-01-04.md) - QWK/FTN Implementation Verification
+- [research_ascii_camera_improvements_2026-01-21.md](6-Progress/research_ascii_camera_improvements_2026-01-21.md) - ASCII Camera Stream - Research & Improvement Analysis
+- [RTW_FIX_IMPLEMENTATION.md](6-Progress/RTW_FIX_IMPLEMENTATION.md) - RTW Door Fix - A5-88 CommandsStructure Pointer
 - [RTW_MULTICOM_FIX.md](6-Progress/RTW_MULTICOM_FIX.md) - RTW MULTICOM Fix - Based on axcommon.e Facts
 - [SAMILOG_TYPESCRIPT_AUDIT.md](6-Progress/SAMILOG_TYPESCRIPT_AUDIT.md) - SAmiLog TypeScript Implementation Audit Report
 - [SESSION_2026-01-04_FINAL_VERIFICATION.md](6-Progress/SESSION_2026-01-04_FINAL_VERIFICATION.md) - Session 2026-01-04 - Final Verification & Production Readiness
@@ -190,18 +205,55 @@ This index lists every current document, grouped by folder. Archived material li
 - [SIGNAL_BIT_FIX_2026-01-07.md](6-Progress/SIGNAL_BIT_FIX_2026-01-07.md) - Critical Signal Bit Mismatch Fix - 2026-01-07
 - [TELNET_CONNECT_AUDIT.md](6-Progress/TELNET_CONNECT_AUDIT.md) - Telnet Connect TypeScript Implementation Audit
 - [TELNET_FRONT_AUDIT.md](6-Progress/TELNET_FRONT_AUDIT.md) - telnet-front TypeScript Implementation Audit
+- [TESTING_CHECKLIST.md](6-Progress/TESTING_CHECKLIST.md) - Complete Testing Checklist - Recent Implementations
 - [TYPESCRIPT_DOORS_AUDIT_SUMMARY.md](6-Progress/TYPESCRIPT_DOORS_AUDIT_SUMMARY.md) - TypeScript Doors Audit Summary
+- [UPLOAD_DIRECTORY_STRUCTURE_FIX.md](6-Progress/UPLOAD_DIRECTORY_STRUCTURE_FIX.md) - Upload Directory Structure Fix
 - [UX_ENHANCEMENTS_COMPLETE_2026-01-04.md](6-Progress/UX_ENHANCEMENTS_COMPLETE_2026-01-04.md) - UX Enhancements and Edge Cases - Complete
 - [WAROLM_INVESTIGATION_2026-04-20.md](6-Progress/WAROLM_INVESTIGATION_2026-04-20.md) - WAROLM (`Olm`) Investigation  2026-04-20
 - [WHIP_DOOR_PROGRESS.md](6-Progress/WHIP_DOOR_PROGRESS.md) - WHIP Door Progress Report
 - [XIM_PROTOCOL_AUDIT_2026-01-06.md](6-Progress/XIM_PROTOCOL_AUDIT_2026-01-06.md) - XIM Protocol Comprehensive Audit - 2026-01-06
 
+## SDK element and v2 reviews (`6-Progress/sdk-reviews/`)
+
+Dated reviews of the door SDK's Element class and the v2 API. The live SDK reference is `../sdk/docs/` and `4-Door-Developers/`.
+
+- [SDK_ELEMENT_ANALYSIS_SUMMARY.md](6-Progress/sdk-reviews/SDK_ELEMENT_ANALYSIS_SUMMARY.md) - Element Class 1:1 Parity Analysis - Executive Summary
+- [SDK_ELEMENT_IMPLEMENTATION_CHECKLIST.md](6-Progress/sdk-reviews/SDK_ELEMENT_IMPLEMENTATION_CHECKLIST.md) - Element Class Implementation Checklist
+- [SDK_ELEMENT_METHOD_CATALOG.md](6-Progress/sdk-reviews/SDK_ELEMENT_METHOD_CATALOG.md) - Element Class Method Catalog - Complete Reference
+- [SDK_ELEMENT_PARITY_ANALYSIS.md](6-Progress/sdk-reviews/SDK_ELEMENT_PARITY_ANALYSIS.md) - Element Class 1:1 Parity Analysis with neo-blessed
+- [SDK_ELEMENT_QUICK_REF.md](6-Progress/sdk-reviews/SDK_ELEMENT_QUICK_REF.md) - Element Class - Quick Reference Card
+- [SDK_REVIEW.md](6-Progress/sdk-reviews/SDK_REVIEW.md) - TypeScript Door SDK Critical Review
+- [SDK_V2_EXAMPLE.md](6-Progress/sdk-reviews/SDK_V2_EXAMPLE.md) - SDK v2.0 - Usage Examples
+- [SDK_V2_STATUS.md](6-Progress/sdk-reviews/SDK_V2_STATUS.md) - SDK v2.0 - Implementation Status
+
 ## Top-level documents
 
 - [AMIEXPRESS_WEB_COMPLETE_GUIDE.md](AMIEXPRESS_WEB_COMPLETE_GUIDE.md) - AmiExpress-Web: Complete User and Developer Guide
 - [PRIVACY.md](PRIVACY.md) - Privacy notice
-- [research_ascii_camera_improvements_2026-01-21.md](research_ascii_camera_improvements_2026-01-21.md) - ASCII Camera Stream - Research & Improvement Analysis
+- [PROJECT_SAFETY.md](PROJECT_SAFETY.md) - Project safety context (historical BBS preservation, defensive security only); the MCP server serves it to agents
 
 ## Reference sources
 
 - [7-Reference%20Sources/README.md](7-Reference%20Sources/README.md) - Index of third-party and original source bundles (AmiExpress sources, NDK, vAmiga, amitools and others) used for parity work.
+
+## Where documentation lives
+
+Every project document belongs in this folder, in the section that fits its reader. Do not leave a loose `.md` file at the repository root or in a package folder.
+
+- New guide or reference: `1-Users/` to `5-Reference/` by audience, then add a line to this index.
+- Dated status note, audit, debug session or one-off plan: `6-Progress/`, with the date in the file name.
+- Superseded material: an `archive/` folder. Archived files are not listed here. `archive/DEPLOYMENT_CHECKLIST_RENDER.md` is the old Render.com checklist.
+
+Only these files stay at the repository root: `README.md` (setup), `RULES.md` (project rules), `CLAUDE.md` (points at RULES.md), `handoff.md` (session handoff, max 10 KB) and `RELEASE_NOTES.md`.
+
+### Documentation outside this folder
+
+These live next to the code they describe on purpose. Do not move them.
+
+- `../docs/DOOR-REPO-API.md` - the door repository API contract. Code, C sources and a package script link to this path.
+- `../docs/superpowers/plans/`, `../docs/superpowers/specs/` - plans and specs written by the superpowers skills (their default path).
+- `../thoughts/shared/plans/`, `../thoughts/shared/research/`, `../thoughts/shared/handoffs/` - phased-workflow plans, research and handoffs. `../thoughts/<user>/` is personal and git-ignored.
+- `../sdk/docs/`, `../sdk/68k/`, `../sdk/engines/ui/blessed/` - door SDK reference, next to the SDK source.
+- `../Doors/<door>/README.md` and other files in a door folder - per-door notes.
+- `../dev/scripts/**/README.md` - how to run each dev tool.
+- `../mcp-server/README.md` - the MCP source and docs server.

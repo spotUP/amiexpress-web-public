@@ -10,7 +10,7 @@ This MCP (Model Context Protocol) server provides access to all AmiExpress-Web d
 ## What's New in v2.1
 
 - **Removed 20 Duplicate Archive Files**: Deleted exact copies that were promoted to active directories
-- **Added PROJECT_SAFETY.md**: Moved to project root for AI safety context
+- **Added PROJECT_SAFETY.md**: Lives at Documentation/PROJECT_SAFETY.md (AI safety context)
 - **Added TELNET_SSH_SERVERS.md**: Promoted to 3-Developers/ (296 lines)
 - **Fixed MCP Paths**: All resources now point to correct active file locations
 - **Removed Obsolete Stubs**: Cleaned up redirect-only files
