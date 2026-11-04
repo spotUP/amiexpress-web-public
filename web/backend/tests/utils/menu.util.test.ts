@@ -507,7 +507,7 @@ describe('menu.util', () => {
       expect(navDown.newIndex).toBe(1);
 
       // Render with new selection
-      const render2 = MenuUtil.renderMenu({ ...menuState, selectedIndex: 1 });
+      const render2 = MenuUtil.renderMenu({ ...menuState, selectedIndex: 1 }, {});
       expect(render2).toContain('Option 2');
 
       // Select current item
