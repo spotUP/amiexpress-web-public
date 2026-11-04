@@ -98,7 +98,7 @@ function isPoolMember(code: string, wanted: string): boolean {
  *
  * NOT the whole board root. Run against the repository this matched a stray
  * `68klog.txt` at the root and vendored reference material under
- * `Documentation/7-Reference Sources/reference-boardBBS/` - another BBS's screens,
+ * `~/Code/Reference/reference-boardBBS/` - another BBS's screens,
  * carrying the same sentinels, none of them this board's. The board resolves
  * screens out of these directories and nowhere else
  * (screen-resolution's searchLocations, and the entrypoint's own seeding

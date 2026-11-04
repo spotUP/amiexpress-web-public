@@ -15,7 +15,7 @@
      "mcpServers": {
        "amiexpress-docs": {
          "command": "node",
-         "args": ["~/Code/amiexpress-web/mcp-server/index.js"]
+         "args": ["~/Code/AmiExpress/amiexpress-web/mcp-server/index.js"]
        }
      }
    }
@@ -31,7 +31,7 @@
        },
        "amiexpress-docs": {
          "command": "node",
-         "args": ["~/Code/amiexpress-web/mcp-server/index.js"]
+         "args": ["~/Code/AmiExpress/amiexpress-web/mcp-server/index.js"]
        }
      }
    }
@@ -100,12 +100,12 @@ cat ~/Library/Application\ Support/Claude/claude_desktop_config.json
 
 **Verify the path is correct:**
 ```bash
-ls -la ~/Code/amiexpress-web/mcp-server/index.js
+ls -la ~/Code/AmiExpress/amiexpress-web/mcp-server/index.js
 ```
 
 **Check it's executable:**
 ```bash
-chmod +x ~/Code/amiexpress-web/mcp-server/index.js
+chmod +x ~/Code/AmiExpress/amiexpress-web/mcp-server/index.js
 ```
 
 **Restart Claude Desktop:**
@@ -120,7 +120,7 @@ chmod +x ~/Code/amiexpress-web/mcp-server/index.js
 
 **Test the server manually:**
 ```bash
-cd ~/Code/amiexpress-web/mcp-server
+cd ~/Code/AmiExpress/amiexpress-web/mcp-server
 node index.js
 # Should output: "AmiExpress Docs MCP Server running on stdio"
 # Press Ctrl+C to exit
@@ -128,8 +128,8 @@ node index.js
 
 **Verify files exist:**
 ```bash
-ls -la ~/Code/amiexpress-web/CLAUDE.md
-ls -la ~/Code/amiexpress-web/Docs/*.md
+ls -la ~/Code/AmiExpress/amiexpress-web/CLAUDE.md
+ls -la ~/Code/AmiExpress/amiexpress-web/Docs/*.md
 ```
 
 ### Search Returns No Results
@@ -179,7 +179,7 @@ To add a new documentation file to the MCP server:
 1. **Create the document:**
    ```bash
    # Example: Add a new SECURITY_RULES.md
-   touch ~/Code/amiexpress-web/Docs/SECURITY_RULES.md
+   touch ~/Code/AmiExpress/amiexpress-web/Docs/SECURITY_RULES.md
    ```
 
 2. **Edit `mcp-server/index.js`** and add to the `DOCS` object:

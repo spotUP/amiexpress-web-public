@@ -67,7 +67,7 @@ ROM boots and initializes system
 
 ### 1. Verify ROM File
 ```bash
-ls -lh ~/Code/amiexpress-web/web/backend/data/roms/kick40068.A1200.rom
+ls -lh ~/Code/AmiExpress/amiexpress-web/web/backend/data/roms/kick40068.A1200.rom
 ```
 
 ### 2. Start Backend

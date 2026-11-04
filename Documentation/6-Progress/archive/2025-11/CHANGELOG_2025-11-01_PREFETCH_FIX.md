@@ -425,7 +425,7 @@ A simple name mismatch ("AEDoorPort0" vs "AEDoorPort") blocked communication. Al
 
 Run the door test:
 ```bash
-cd ~/Code/amiexpress-web
+cd ~/Code/AmiExpress/amiexpress-web
 node test-getanswer-door.js
 ```
 

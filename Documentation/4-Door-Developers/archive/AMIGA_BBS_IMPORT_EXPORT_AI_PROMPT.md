@@ -13,7 +13,7 @@ TASK: Install and configure archive extraction utilities for Amiga BBS import/ex
 
 CONTEXT:
 - Project: AmiExpress-Web (TypeScript BBS)
-- Location: ~/Code/amiexpress-web
+- Location: ~/Code/AmiExpress/amiexpress-web
 - Reference data: ~/Downloads/BBS_COPY (reference-boardBBS)
 
 REQUIREMENTS:

@@ -2,7 +2,7 @@
 # AEDoor.library Reverse Engineering Script
 # Disassembles key functions to understand memory layout
 
-LIB="~/Code/amiexpress-web/Documentation/7-Reference Sources/reference-boardBBS/Node0/Libs/AEDoor.library"
+LIB="${AMIEXPRESS_REFERENCE:-~/Code/Reference}/reference-boardBBS/Node0/Libs/AEDoor.library"
 
 echo "=== AEDoor.library Function Analysis ==="
 echo ""

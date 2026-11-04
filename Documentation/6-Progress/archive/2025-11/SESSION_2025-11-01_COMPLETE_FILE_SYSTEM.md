@@ -136,7 +136,7 @@ callersLogManager.logDoorExit(nodeId, door.name);
 
 ## File Locations
 
-All files relative to project root (`~/Code/amiexpress-web/`):
+All files relative to project root (`~/Code/AmiExpress/amiexpress-web/`):
 
 ```
 amiexpress-web/

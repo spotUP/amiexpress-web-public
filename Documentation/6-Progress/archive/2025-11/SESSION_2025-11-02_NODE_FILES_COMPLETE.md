@@ -23,8 +23,8 @@ Successfully analyzed and verified the node user file system for WHO door compat
 
 ✅ **Path Resolution:**
 - PROGDIR: → Door's own directory
-- Doors: → ~/Code/amiexpress-web/Doors/
-- BBS: → ~/Code/amiexpress-web/
+- Doors: → ~/Code/AmiExpress/amiexpress-web/Doors/
+- BBS: → ~/Code/AmiExpress/amiexpress-web/
 - Relative/absolute paths supported
 
 ✅ **Utility Functions:**
@@ -39,13 +39,13 @@ Successfully analyzed and verified the node user file system for WHO door compat
 
 **File Locations:**
 ```
-~/Code/amiexpress-web/node0.user        (239 bytes)
-~/Code/amiexpress-web/node0.userkeys    (54 bytes)
-~/Code/amiexpress-web/node1.user        (239 bytes)
-~/Code/amiexpress-web/node1.userkeys    (54 bytes)
+~/Code/AmiExpress/amiexpress-web/node0.user        (239 bytes)
+~/Code/AmiExpress/amiexpress-web/node0.userkeys    (54 bytes)
+~/Code/AmiExpress/amiexpress-web/node1.user        (239 bytes)
+~/Code/AmiExpress/amiexpress-web/node1.userkeys    (54 bytes)
 ```
 
-**File Structures (from AmiExpress-Sources/axobjects.e):**
+**File Structures (from ~/Code/Reference/AmiExpress-Sources/axobjects.e):**
 
 **user struct (239 bytes total):**
 ```typescript
@@ -101,7 +101,7 @@ Offset  Size  Field
 ### 4. WHO Door Test Results
 
 **Test Configuration:**
-- Door: `~/Code/amiexpress-web/Doors/who/who`
+- Door: `~/Code/AmiExpress/amiexpress-web/Doors/who/who`
 - Node files created: node0.user, node0.userkeys, node1.user, node1.userkeys
 - Emulation: Full M68K with DOS.library
 
@@ -117,7 +117,7 @@ Offset  Size  Field
 
 **Evidence:**
 ```
-[AmigaDoorSession] Starting door: ~/Code/amiexpress-web/Doors/who/who
+[AmigaDoorSession] Starting door: ~/Code/AmiExpress/amiexpress-web/Doors/who/who
 Node files available:
   node0.user: YES
   node0.userkeys: YES
@@ -125,7 +125,7 @@ Node files available:
   node1.userkeys: YES
 
 [ExecLibrary] OpenLibrary("dos.library", 0)
-[dos.library] PROGDIR: device set to ~/Code/amiexpress-web/Doors/who
+[dos.library] PROGDIR: device set to ~/Code/AmiExpress/amiexpress-web/Doors/who
 ```
 
 **Door executed successfully** with proper file system access and library calls.
@@ -235,8 +235,8 @@ $ node -e "const size = 31 + 4 + 1 + (2 * 4) + (4 * 2) + 2; console.log(size);"
 ## Reference Files
 
 **Source Code:**
-- `AmiExpress-Sources/axobjects.e` - Structure definitions (lines 11-81)
-- `AmiExpress-Sources/express.e` - File management (lines 2897-2950)
+- `~/Code/Reference/AmiExpress-Sources/axobjects.e` - Structure definitions (lines 11-81)
+- `~/Code/Reference/AmiExpress-Sources/express.e` - File management (lines 2897-2950)
 
 **Implementation:**
 - `web/backend/src/services/NodeFileManager.ts` - Complete implementation

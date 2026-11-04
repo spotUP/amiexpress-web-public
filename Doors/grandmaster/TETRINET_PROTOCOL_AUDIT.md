@@ -4,7 +4,7 @@ Source references:
 - `~/Downloads/gtetrinet-0.7.11/src/client.h`
 - `~/Downloads/gtetrinet-0.7.11/src/client.c`
 - `~/Downloads/gtetrinet-0.7.11/src/tetrinet.c`
-- `~/Code/amiexpress-web/TetriNetProtocol.txt`
+- `~/Code/Reference/Reference Code/TetriNetProtocol.txt`
 - `~/Downloads/jetrix-0.2.3/lib/jetrix-0.2.3.pack` (TSpec listener/protocol via `unpack200`)
 
 ## Inbound (server -> client)

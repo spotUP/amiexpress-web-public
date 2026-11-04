@@ -14,4 +14,4 @@
 - If FR outputs duplicated lines or early breaks, enable `DEBUG_XIM_OUTPUT=1` and examine `logs/door-68k.log`; the new parser splits art vs data before pushing continuation text.
 - Upload issues that previously logged `Upload session invalid` now log the path and session token; check the new detailed logging in the door console output.
 
-**Need the actual archives of door binaries/art?** They live now under `Documentation/7-Reference Sources/Doors_with_Source/` and `vAmiga/`; these directories hold the raw files used for comparison.
+**Need the actual archives of door binaries/art?** They live now under `~/Code/Reference/Doors_with_Source/` and `vAmiga/`; these directories hold the raw files used for comparison.

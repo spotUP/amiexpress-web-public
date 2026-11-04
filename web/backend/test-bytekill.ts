@@ -2,11 +2,11 @@ import "reflect-metadata";
 import { AmigaDoorSession } from "./src/amiga-emulation/AmigaDoorSession.js";
 
 // Set required env
-process.env.BBS_DATA_DIR = "~/Code/amiexpress-web";
+process.env.BBS_DATA_DIR = "~/Code/AmiExpress/amiexpress-web";
 
 async function main() {
   const config: any = {
-    executablePath: "~/Code/amiexpress-web/doors/bytekiller/Bytekillhandler",
+    executablePath: "~/Code/AmiExpress/amiexpress-web/doors/bytekiller/Bytekillhandler",
     args: ["BBS:Node1/CallersLog"],
     doorType: "SIM",
     stack: 32768,

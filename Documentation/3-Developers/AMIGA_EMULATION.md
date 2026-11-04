@@ -1,5 +1,5 @@
 # Amiga Emulation Guide (Summary)
-**Extensive emulation references (68K logs, Bulls disassembly, UADE studies) now live under `archive/` and `Documentation/7-Reference Sources/`.**
+**Extensive emulation references (68K logs, Bulls disassembly, UADE studies) now live under `archive/` and `~/Code/Reference/`.**
 
 ## 1. Emulation Stack
 - The door harness emulates 68k traps by forwarding `JH_*` messages through `XIMProtocol.ts`, replicating express.e’s message loop and command formats.
@@ -12,8 +12,8 @@
 - Logging replicates the original: `Normal: Press <RETURN>` prompts, multi-screen pagination, and door banner retention.
 
 ## 3. Reference Artifacts
-- Archive directories such as `archive/68K_QUICK_REFERENCE.md`, `archive/AEDoor_LIBRARY_NOTES.md`, and `Documentation/7-Reference Sources/vAmiga/` hold the disassembly, door binaries, and emulator docs needed for accurate emulation.
-- The `Documentation/7-Reference Sources/Doors_with_Source/` collection preserves binaries showing how the original express.e doors behave, for quick 1:1 comparison.
+- Archive directories such as `archive/68K_QUICK_REFERENCE.md`, `archive/AEDoor_LIBRARY_NOTES.md`, and `~/Code/Reference/vAmiga/` hold the disassembly, door binaries, and emulator docs needed for accurate emulation.
+- The `~/Code/Reference/Doors_with_Source/` collection preserves binaries showing how the original express.e doors behave, for quick 1:1 comparison.
 
 ## 4. Current Focus
 - XIM doors (AquaScan, WHO) now run and log properly; SIM doors remain pending and have dedicated root-cause docs in the archive.

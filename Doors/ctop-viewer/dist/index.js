@@ -38,7 +38,7 @@ exports.metadata = void 0;
  * CTOP - Conference Top Uploaders, ported from Conftop-II.
  *
  * The Amiga door is `Doors/Conftop/ctop`, a 68K binary by REbEL/QTX whose
- * source is in `Documentation/7-Reference Sources/AmiExpressEDoorSources/
+ * source is in `~/Code/Reference/AmiExpressEDoorSources/
  * Conftop-II/ctop.e`. It was served to a C64 caller through the board's frame
  * adapter, which takes an eighty-column screen apart row by row - and a table
  * IS its columns, so what a C64 got was not a table. The sysop asked for the

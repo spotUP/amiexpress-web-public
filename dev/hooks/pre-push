@@ -23,7 +23,7 @@ set -uo pipefail
 #
 # `BASH_SOURCE` resolves to the shared checkout for every worktree, because
 # worktrees run hooks out of the shared `.git/hooks`. So this gate used to
-# type-check ~/Code/amiexpress-web whatever you were pushing from:
+# type-check ~/Code/AmiExpress/amiexpress-web whatever you were pushing from:
 # a clean worktree was refused because somebody else's uncommitted file in
 # the shared tree was red, and the push it was actually inspecting was never
 # looked at. Reported 2026-09-13 by a session whose worktree was green and

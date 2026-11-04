@@ -324,6 +324,6 @@ TELNET_PASSWORD=711         // Set password
 
 ## References
 
-- Original source: `Documentation/7-Reference Sources/AmiXDoors-master/telnetConnect/telnetdoor.e`
+- Original source: `~/Code/Reference/AmiXDoors-master/telnetConnect/telnetdoor.e`
 - TypeScript implementation: `Doors/telnet/index.ts`
-- Original config: `Documentation/7-Reference Sources/AmiXDoors-master/telnetConnect/telnetdoor.cfg`
+- Original config: `~/Code/Reference/AmiXDoors-master/telnetConnect/telnetdoor.cfg`

@@ -14,7 +14,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { AmigaDoorSession } from './src/amiga-emulation/AmigaDoorSession';
 
-const BBS_ROOT = '~/Code/amiexpress-web';
+const BBS_ROOT = '~/Code/AmiExpress/amiexpress-web';
 
 interface DoorConfig {
   command: string;

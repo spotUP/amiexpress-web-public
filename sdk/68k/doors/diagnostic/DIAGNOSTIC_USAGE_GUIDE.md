@@ -249,7 +249,7 @@ Edit the appropriate backend file:
 ### 2. Run Diagnostic
 
 ```bash
-cd ~/Code/amiexpress-web
+cd ~/Code/AmiExpress/amiexpress-web
 ./dev/scripts/start-servers.sh
 # Connect to BBS via telnet/web
 DIAGNOSTIC

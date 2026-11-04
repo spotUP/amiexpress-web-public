@@ -63,8 +63,8 @@ AMIGA_CFLAGS = +aos68k -c99 -I"$(VBCC)/targets/m68k-amigaos/include"
 
 # ---------------------------------------------------------------------
 # Vendored AmiTCP/Roadshow SDK (NDK3.2R4) used by `amiga` when NETINCLUDE
-# is not overridden. This repo vendors a full copy at
-# "Documentation/7-Reference Sources/NDK3.2R4/" - Task 4 chased down and
+# is not overridden. This repo vendors the needed subset at
+# "vendor/NDK3.2R4/" - Task 4 chased down and
 # proved that ae_net.c's real bsdsocket.library branch compiles with ZERO
 # warnings against it (see task-4-report.md's fix-round section for the
 # full transcript and the struct __timeval investigation that made this
@@ -78,8 +78,8 @@ AMIGA_CFLAGS = +aos68k -c99 -I"$(VBCC)/targets/m68k-amigaos/include"
 #      compiles clean. AMIGA_NDK_SHIM contains ONLY that one file, so
 #      putting it ahead of $(NDK) in the -I list makes the good copy win
 #      without needing to reorganize $(NDK) itself.
-#   2. SPACE-IN-PATH: "Documentation/7-Reference Sources/NDK3.2R4/..."
-#      contains a literal space, which trips an argv-splitting bug in
+#   2. SPACE-IN-PATH: the NDK used to live under a path with a
+#      literal space (VENDOR_NDK_ROOT can still be pointed at one), which trips an argv-splitting bug in
 #      vc's own wrapper script when passed directly as a -I argument
 #      (confirmed in task-4-report.md's fix-round section). Symlinking it
 #      to a space-free path under this directory sidesteps the bug
@@ -88,7 +88,7 @@ AMIGA_CFLAGS = +aos68k -c99 -I"$(VBCC)/targets/m68k-amigaos/include"
 # Both symlinks are (re)created on every `amiga` build (cheap; `ln -sf`/
 # `ln -sfn` are idempotent) so a stale link from a moved vendored tree
 # never lingers. Neither is committed - see .gitignore.
-VENDOR_NDK_ROOT = $(CURDIR)/../../Documentation/7-Reference Sources/NDK3.2R4
+VENDOR_NDK_ROOT = $(CURDIR)/../../vendor/NDK3.2R4
 AMIGA_NDK_SHIM = amiga-ndk-shim
 AMIGA_NETINCLUDE_VENDOR_LINK = amiga-netinclude-vendor
 

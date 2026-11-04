@@ -51,7 +51,7 @@ function filePart(name: string): string {
  * `\s[12]` is NOT "at least twelve": the E compiler emits it as
  * `%-12.12s` - left-justified, padded AND cut to exactly twelve. Read from
  * the string table of a real express binary
- * (Documentation/7-Reference Sources/reference-boardBBS/express:
+ * (~/Code/Reference/reference-boardBBS/express:
  * `\tUploading %-12.12s %-ld bytes`) and from that board's own CallersLog
  * (`\tUploading AYS1995.LHA  277169 bytes` - eleven characters, one pad).
  * It is the SDK's E `leftField`.

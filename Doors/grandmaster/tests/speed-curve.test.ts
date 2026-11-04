@@ -9,7 +9,7 @@
  * to are:14/arelinelock:6 at level 500 - a pair Heboris doesn't reach
  * until level 800 (speed.c:101,106, column index 6 of the 500+ tables).
  *
- * Reference: Documentation/7-Reference Sources/HeborisCE-1.1.0/src/game/speed.c
+ * Reference: ~/Code/Reference/HeborisCE-1.1.0/src/game/speed.c
  */
 
 import assert from 'assert';

@@ -8,7 +8,7 @@ RTW was displaying trash data:
 - Location: "*" (RTW's fallback when location is empty)
 
 ## Root Cause
-We were guessing at the multiPort/nodeInfo structure layout. After examining the ACTUAL structure definition in `Documentation/7-Reference Sources/AmiExpress-Sources/axcommon.e`, we discovered:
+We were guessing at the multiPort/nodeInfo structure layout. After examining the ACTUAL structure definition in `~/Code/Reference/AmiExpress-Sources/axcommon.e`, we discovered:
 
 ### What We Implemented (WRONG)
 ```
@@ -48,7 +48,7 @@ CONST MAX_NODES=32
 ```
 
 ## Fix Applied
-Modified `~/Code/amiexpress-web/web/backend/src/amiga-emulation/xim/bbs-info.ts` `handleMulticom()`:
+Modified `~/Code/AmiExpress/amiexpress-web/web/backend/src/amiga-emulation/xim/bbs-info.ts` `handleMulticom()`:
 
 1. **Changed nodeInfo size**: 12 bytes → 124 bytes
 2. **Changed MAX_NODES**: 19 → 32 (per axcommon.e)

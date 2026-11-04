@@ -2,7 +2,7 @@
 
 ## Session 2026-01-01 (cont 2)
 - **Hypothesis**: `AllocDosObject` uses swapped `DOS_EXALLCONTROL`/`DOS_FIB` constants, corrupting memory when AquaScan allocates ExAllControl/FIB.
-- **Tools**: `npm run xim:analyze -- --door N --verbose`, `npm run xim:flow -- --door N --last 200`, `npm run xim:validate -- --door N --verbose`, `Documentation/7-Reference Sources/NDK3.2R4/Include_H/dos/dos.h`.
+- **Tools**: `npm run xim:analyze -- --door N --verbose`, `npm run xim:flow -- --door N --last 200`, `npm run xim:validate -- --door N --verbose`, `~/Code/Reference/NDK3.2R4/Include_H/dos/dos.h`.
 - **Observations**: XIM flow shows each run stops after `EXPRESS_VERSION_REPLY` and restarts; no `DT_TIMELASTON`/`DT_LINELENGTH`/`DT_NAME`/`JH_SM`. NDK headers define `DOS_EXALLCONTROL=1`, `DOS_FIB=2`, but `DosLibrary.ts` had them reversed.
 - **Action**: Fixed constants in `web/backend/src/amiga-emulation/api/DosLibrary.ts` and updated `AllocDosObject` comment.
 - **Result**: Pending (rerun `N S U` and inspect XIM flow/logs).
@@ -10,7 +10,7 @@
 
 ## Session 2026-01-01 (cont)
 - **Hypothesis**: Reply handlers are overwriting msg.strptr/fillers; AquaScan expects them untouched (strptr only for JH_SMPTR), so the EXPRESS_VERSION reply corrupts state and the door restarts.
-- **Tools**: `npm run xim:analyze -- --door N --verbose`, `npm run xim:view -- --door N --last 200`, `Documentation/4-Door-Developers/Aquascan N.log`, `AmiExpress-Sources/express.e`.
+- **Tools**: `npm run xim:analyze -- --door N --verbose`, `npm run xim:view -- --door N --last 200`, `Documentation/4-Door-Developers/Aquascan N.log`, `~/Code/Reference/AmiExpress-Sources/express.e`.
 - **Observations**: Real Amiga log shows follow-up requests after EXPRESS_VERSION: BB_MAINLINE (131), DT_LINELENGTH (113), DT_TIMELASTON (122), DT_NAME (100), JH_WRITE (4), etc. Current XIM logs stop at EXPRESS_VERSION with repeated JH_REGISTER. express.e processXimMsg uses msg.strptr only for JH_SMPTR (line ~3412).
 - **Action**: Removed writeStringPointer in INTERPRET_MCI and SIG_LI; stopped auto-setting strptr during line input completion so we do not overwrite door-provided values.
 - **Result**: Pending (requires backend restart and rerun `N S U`).

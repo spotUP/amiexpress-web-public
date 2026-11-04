@@ -2,7 +2,7 @@
  * Where the .RIP files are: `RIPgraphics` under the BBS root.
  *
  * This was the absolute path of one developer's checkout -
- * ~/Code/amiexpress-web/RIPgraphics - which cannot exist on the
+ * ~/Code/AmiExpress/amiexpress-web/RIPgraphics - which cannot exist on the
  * board, a Linux container with no /Users at all. The graphics have been in
  * /app/data/bbs/RIPgraphics the whole time while the door told every user who
  * opened it "Directory not found".

@@ -36,7 +36,7 @@
 ### Option 1: Quick Test (Recommended)
 
 ```bash
-cd ~/Code/amiexpress-web
+cd ~/Code/AmiExpress/amiexpress-web
 
 # Backend should already be running, but if not:
 ./dev/scripts/start-backend.sh
@@ -58,7 +58,7 @@ node test-getanswer-door.js
 ### Option 2: Fresh Start
 
 ```bash
-cd ~/Code/amiexpress-web
+cd ~/Code/AmiExpress/amiexpress-web
 
 # Stop everything
 ./dev/scripts/stop-all.sh
@@ -170,7 +170,7 @@ cd web/backend/src/amiga-emulation/cpu
 ./build-wasm.sh
 
 # Restart backend
-cd ~/Code/amiexpress-web
+cd ~/Code/AmiExpress/amiexpress-web
 pkill -f "tsx.*index.ts"
 sleep 2
 ./dev/scripts/start-backend.sh

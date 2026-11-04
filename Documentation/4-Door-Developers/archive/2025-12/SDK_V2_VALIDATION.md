@@ -93,7 +93,7 @@ export default door;
 
 ## Test Door: Tic-Tac-Toe
 
-**Location**: `~/Code/amiexpress-web/doors/tic-tac-toe/`
+**Location**: `~/Code/AmiExpress/amiexpress-web/doors/tic-tac-toe/`
 
 **Command**: `TTT` or `TICTACTOE`
 

@@ -103,8 +103,8 @@ private resolvePath(amigaPath: string): string | null {
 
 **What's broken:**
 - Door tries: `Open("scores.dat", MODE_READWRITE)`
-- Resolves to: `~/Code/amiexpress-web/scores.dat` ❌
-- Should be: `~/Code/amiexpress-web/Doors/GetAnswer/scores.dat` ✅
+- Resolves to: `~/Code/AmiExpress/amiexpress-web/scores.dat` ❌
+- Should be: `~/Code/AmiExpress/amiexpress-web/Doors/GetAnswer/scores.dat` ✅
 
 **What's needed:**
 ```typescript
@@ -381,7 +381,7 @@ Open("BBS:user.data", MODE_OLDFILE)
 Read(handle, buffer, 232) // Read first user
 Close(handle)
 
-// Should read: ~/Code/amiexpress-web/user.data
+// Should read: ~/Code/AmiExpress/amiexpress-web/user.data
 ```
 
 ### Test Case 3: Door Uses Relative Paths
@@ -495,7 +495,7 @@ Open("PROGDIR:data/save.dat", MODE_NEWFILE)
 
 **To restart backend:**
 ```bash
-cd ~/Code/amiexpress-web/web/backend
+cd ~/Code/AmiExpress/amiexpress-web/web/backend
 npm run dev
 ```
 

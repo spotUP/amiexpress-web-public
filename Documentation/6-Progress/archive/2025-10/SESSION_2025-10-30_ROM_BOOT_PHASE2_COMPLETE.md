@@ -411,7 +411,7 @@ Door: Works properly! ✓
 ### Step 1: Verify ROM File Exists
 
 ```bash
-ls -lh ~/Code/amiexpress-web/web/backend/data/roms/kick40068.A1200.rom
+ls -lh ~/Code/AmiExpress/amiexpress-web/web/backend/data/roms/kick40068.A1200.rom
 ```
 
 **Expected:** 512KB Kickstart 3.1 ROM file
@@ -419,7 +419,7 @@ ls -lh ~/Code/amiexpress-web/web/backend/data/roms/kick40068.A1200.rom
 ### Step 2: Start Backend
 
 ```bash
-cd ~/Code/amiexpress-web
+cd ~/Code/AmiExpress/amiexpress-web
 ./dev/scripts/start-backend.sh
 ```
 

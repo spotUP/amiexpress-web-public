@@ -39,7 +39,7 @@ The Amiga Native Development Kit (NDK) provides essential headers for Amiga deve
 - `clib/` - C library prototypes
 - `pragmas/` - vbcc pragma files
 
-**Reference Location:** `Documentation/7-Reference Sources/NDK3.2R4/`
+**Reference Location:** `~/Code/Reference/NDK3.2R4/`
 - `Include_H/` - C headers (exec.h, dos.h, etc.)
 - `Include_I/` - Assembly includes (exec/types.i, etc.)
 

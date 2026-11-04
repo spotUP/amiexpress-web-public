@@ -32,7 +32,7 @@ Add to your `~/Library/Application Support/Claude/claude_desktop_config.json`:
   "mcpServers": {
     "amiexpress-docs": {
       "command": "node",
-      "args": ["~/Code/amiexpress-web/mcp-server/index.js"]
+      "args": ["~/Code/AmiExpress/amiexpress-web/mcp-server/index.js"]
     }
   }
 }
@@ -45,7 +45,7 @@ Or use npx:
   "mcpServers": {
     "amiexpress-docs": {
       "command": "npx",
-      "args": ["-y", "~/Code/amiexpress-web/mcp-server"]
+      "args": ["-y", "~/Code/AmiExpress/amiexpress-web/mcp-server"]
     }
   }
 }

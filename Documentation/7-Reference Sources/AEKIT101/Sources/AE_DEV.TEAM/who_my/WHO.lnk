@@ -1,8 +1,0 @@
-FROM LIB:c.o "who.o"
-TO "WHO"
-LIB XIM:amiconsasc.o LIB:scm.lib
-    LIB:sc.lib LIB:amiga.lib
-SMALLCODE
-SMALLDATA
-NOICONS
-

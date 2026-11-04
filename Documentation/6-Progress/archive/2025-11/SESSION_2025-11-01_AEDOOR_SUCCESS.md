@@ -86,7 +86,7 @@ Changed from `GetAnswer.030` (68030) to `GetAnswer` (68000) for proper emulation
 ```
 [launchAmigaDoor] Starting door: testrestrict
 [launchAmigaDoor] Location: Doors:TestRestrict
-[launchAmigaDoor] Resolved path: ~/Code/amiexpress-web/Doors/TestRestrict
+[launchAmigaDoor] Resolved path: ~/Code/AmiExpress/amiexpress-web/Doors/TestRestrict
 
 [LibraryTraps] Intercepted: CreateComm() at PC=0x2ffe2
 [AEDoorLibrary] CreateComm(node=196608, D0=0x30000)

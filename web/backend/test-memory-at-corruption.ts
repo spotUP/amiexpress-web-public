@@ -1,7 +1,7 @@
 import 'reflect-metadata';
 import { AmigaDoorSession } from './src/amiga-emulation/AmigaDoorSession';
 
-const BBS_ROOT = '~/Code/amiexpress-web';
+const BBS_ROOT = '~/Code/AmiExpress/amiexpress-web';
 
 async function test() {
   console.log('=== Memory Corruption Test ===');

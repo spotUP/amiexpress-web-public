@@ -476,7 +476,7 @@ async function generateReport() {
     log: testLog
   };
 
-  fs.writeFileSync('~/Code/amiexpress-web/test-results.json', JSON.stringify(report, null, 2));
+  fs.writeFileSync('~/Code/AmiExpress/amiexpress-web/test-results.json', JSON.stringify(report, null, 2));
   log('\n📄 Detailed report: test-results.json', 'info');
 }
 

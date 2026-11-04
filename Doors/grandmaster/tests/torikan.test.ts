@@ -8,7 +8,7 @@
  * checkpoint too slowly and the run is forced to end there instead of
  * continuing. src/game/gamestart.c:10961 checkEnding(), gates at
  * gamestart.c:11176-11220, cutoff constants at
- * "Documentation/7-Reference Sources/HeborisCE-1.1.0/src/game/init.c:172-183".
+ * "~/Code/Reference/HeborisCE-1.1.0/src/game/init.c:172-183".
  */
 
 import assert from 'assert';

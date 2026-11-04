@@ -252,7 +252,7 @@ Completed comprehensive audit of **8 TypeScript door/utility ports** from origin
 ### Source Code Locations
 
 **Original Amiga Sources**:
-- `Documentation/7-Reference Sources/AmiXDoors-master/`
+- `~/Code/Reference/AmiXDoors-master/`
 
 **TypeScript Implementations**:
 - `web/backend/src/services/` - SAmiLog, MRC, webhook

@@ -128,13 +128,13 @@ To verify this fix:
 
 ```bash
 # Test joincnf door
-BBS_DATA_DIR=~/Code/amiexpress-web timeout 15 \
+BBS_DATA_DIR=~/Code/AmiExpress/amiexpress-web timeout 15 \
   npx tsx web/backend/src/scripts/run-amiga-door.ts doors/emp_tools/joincnf 1
 
 # Should see complete XIM message sequence in logs/xim-debug.json
 
 # Test Bulls door
-BBS_DATA_DIR=~/Code/amiexpress-web timeout 5 \
+BBS_DATA_DIR=~/Code/AmiExpress/amiexpress-web timeout 5 \
   npx tsx web/backend/src/scripts/run-amiga-door.ts doors/emp_tools/Bulls 1
 
 # Should see ASCII art logo and menu
@@ -143,5 +143,5 @@ BBS_DATA_DIR=~/Code/amiexpress-web timeout 5 \
 ## References
 
 - Real Amiga log: `/Documentation/4-Door-Developers/joinconf_j_2_and_j.log`
-- AEDoor.library disassembly: `/Documentation/7-Reference Sources/disasm/aedoor.library.COMMENTED.asm`
+- AEDoor.library disassembly: `~/Code/Reference/disasm/aedoor.library.COMMENTED.asm`
 - exec.library MsgPort docs: NDK 3.2 autodocs

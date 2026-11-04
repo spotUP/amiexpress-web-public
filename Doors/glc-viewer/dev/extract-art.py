@@ -16,10 +16,10 @@ Usage:  python3 dev/extract-art.py > src/art.generated.ts
 import io, json, re, sys, os
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-E = os.path.normpath(os.path.join(
-    HERE, '..', '..', '..',
-    'Documentation/7-Reference Sources/AmiExpressEDoorSources/Global Last Callers/GLCViewer.e',
-))
+E = os.path.join(
+    os.environ.get('AMIEXPRESS_REFERENCE', '~/Code/Reference'),
+    'AmiExpressEDoorSources/Global Last Callers/GLCViewer.e',
+)
 
 LITERAL = re.compile(r"(?:transmit|StrAdd)\((?:tempStr,)?'(.*)'\)\s*$")
 STRINGF = re.compile(r"StringF\(writeStr,'(.*?)',(.+)\)\s*$")

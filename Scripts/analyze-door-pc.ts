@@ -1,6 +1,6 @@
 import * as fs from 'fs';
 
-const doorPath = '~/Code/amiexpress-web/Doors/who/who';
+const doorPath = '~/Code/AmiExpress/amiexpress-web/Doors/who/who';
 const buffer = fs.readFileSync(doorPath);
 
 // Skip hunk header, find CODE hunk (0x3e9 = 1001)

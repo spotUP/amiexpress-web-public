@@ -12,6 +12,6 @@
 
 ## 3. Reference Materials
 - If you need byte-level dos.* mapping, consult `archive/DOS_LIBRARY_API.md` (the previous long-form doc) and `archive/AMIEXPRESS_DOOR_SOURCES_ANALYSIS.md` which break down the actual binaries.
-- For file scanning or ASCII art concerns, use the `Documentation/7-Reference Sources/petscii-bbs-2.1/` exports and cross-check with `dir-file.util.ts` to see how the art detection works.
+- For file scanning or ASCII art concerns, use the `~/Code/Reference/petscii-bbs-2.1/` exports and cross-check with `dir-file.util.ts` to see how the art detection works.
 
 Keep these summaries in mind; the archive contains actual disassembly and binary references while this file explains how to read or extend the APIs.

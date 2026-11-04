@@ -5,13 +5,12 @@
  * does that job. Compared against the source itself, so a typo in a group
  * name fails too.
  */
-import * as fs from 'fs';
-import * as path from 'path';
 import { handleGreetingsCommand } from '../../src/handlers/commands/advanced-commands.handler';
 import { LoggedOnSubState } from '../../src/constants/bbs-states';
+import { readExpressE, testWithExpressE } from '../helpers/reference-sources';
 
 function expressGreets(): string {
-  const src = fs.readFileSync(path.join(__dirname, '../../../../AmiExpress-Sources/express.e'), 'latin1');
+  const src = readExpressE();
   const proc = src.slice(src.indexOf('PROC internalCommandGreets()'));
   const body = proc.slice(0, proc.indexOf('ENDPROC'));
   return [...body.matchAll(/aePuts\('([^']*)'\)/g)]
@@ -19,7 +18,7 @@ function expressGreets(): string {
     .join('');
 }
 
-test('GR prints express.e greets bytes and leaves the pause to the menu', () => {
+testWithExpressE('GR prints express.e greets bytes and leaves the pause to the menu', () => {
   const printed: string[] = [];
   const socket = { emit: (event: string, data: unknown) => { if (event === 'ansi-output') printed.push(String(data)); } };
   const session: any = { menuPause: false, subState: LoggedOnSubState.DISPLAY_MENU };

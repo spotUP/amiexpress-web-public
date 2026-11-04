@@ -2,7 +2,7 @@ import 'reflect-metadata';
 import * as path from 'path';
 import { AmigaDoorSession } from './src/amiga-emulation/AmigaDoorSession';
 
-const BBS_ROOT = '~/Code/amiexpress-web';
+const BBS_ROOT = '~/Code/AmiExpress/amiexpress-web';
 
 // Get door name from command line args
 const doorName = process.argv[2] || 'AEHELP';

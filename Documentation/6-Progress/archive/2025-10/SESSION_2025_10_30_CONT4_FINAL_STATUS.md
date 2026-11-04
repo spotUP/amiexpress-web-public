@@ -379,7 +379,7 @@ This 10-line addition will catch WaitPort calls during batch execution!
 
 ## Files Modified This Session
 
-### `~/Code/amiexpress-web/web/backend/src/amiga-emulation/AmigaDoorSession.ts`
+### `~/Code/AmiExpress/amiexpress-web/web/backend/src/amiga-emulation/AmigaDoorSession.ts`
 
 1. **Lines 40-44:** Added I/O loop detection fields
    - `lastPC`, `samePCCount`, `inIOLoop`, `skipNextExecute`

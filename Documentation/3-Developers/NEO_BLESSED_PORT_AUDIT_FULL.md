@@ -3,8 +3,8 @@
 **Date**: 2024-12-24
 **Last Updated**: 2024-12-24 (Phase 1, 2, 3, & 4 COMPLETE)
 **Status**: ~95% Complete (was ~60-70%)
-**Original Source**: `~/Code/amiexpress-web/Documentation/7-Reference Sources/neo-blessed-master`
-**Our Port**: `~/Code/amiexpress-web/sdk/engines/ui/blessed/`
+**Original Source**: `~/Code/Reference/neo-blessed-master`
+**Our Port**: `~/Code/AmiExpress/amiexpress-web/sdk/engines/ui/blessed/`
 
 ---
 

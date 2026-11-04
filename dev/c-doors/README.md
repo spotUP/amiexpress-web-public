@@ -357,8 +357,8 @@ Check door execution logs in `logs/door-68k-{DOORNAME}-{TIMESTAMP}.-N{NODE}.log`
 
 ## Resources
 
-- **Amiga NDK**: `Documentation/7-Reference Sources/NDK3.2R4/`
-- **AmiExpress Sources**: `AmiExpress-Sources/express.e`
+- **Amiga NDK**: `~/Code/Reference/NDK3.2R4/`
+- **AmiExpress Sources**: `~/Code/Reference/AmiExpress-Sources/express.e`
 - **MOIRA Emulator**: `web/backend/src/amiga-emulation/cpu/`
 - **vbcc Manual**: http://sun.hasenbraten.de/vbcc/docs/vbcc.pdf
 - **vasm Manual**: http://sun.hasenbraten.de/vasm/

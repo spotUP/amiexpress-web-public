@@ -21,7 +21,7 @@ what was missing was the binary, which is why the GWALL command did nothing
 for as long as anyone can remember.
 
 The binary came from
-`Documentation/7-Reference Sources/reference-boardBBS/Doors/Gwall/gwall` - the
+`~/Code/Reference/reference-boardBBS/Doors/Gwall/gwall` - the
 49088-byte build, chosen over the three older ones beside it because it is
 the only one carrying the full wall API (`PUT` and `DELETE` on
 `/GlobalWall/api/WallItems`, not just `GET`).

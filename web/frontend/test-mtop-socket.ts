@@ -45,7 +45,7 @@ socket.on('command-complete', () => {
 
   // Check bulletin file
   const fs = require('fs');
-  const bullPath = '~/Code/amiexpress-web/Bulletins/bull1.txt';
+  const bullPath = '~/Code/AmiExpress/amiexpress-web/Bulletins/bull1.txt';
   if (fs.existsSync(bullPath)) {
     console.log('\n=== bull1.txt contents ===');
     console.log(fs.readFileSync(bullPath, 'utf8'));

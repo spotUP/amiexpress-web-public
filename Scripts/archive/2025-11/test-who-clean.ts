@@ -22,7 +22,7 @@ mockSocket.emit = function(event, data) {
 // Create session
 const session = new AmigaDoorSession({
   socket: mockSocket,
-  doorPath: '~/Code/amiexpress-web/Doors/RTW',
+  doorPath: '~/Code/AmiExpress/amiexpress-web/Doors/RTW',
   bbsSession: {
     nodeId: 0,
     userId: 1,

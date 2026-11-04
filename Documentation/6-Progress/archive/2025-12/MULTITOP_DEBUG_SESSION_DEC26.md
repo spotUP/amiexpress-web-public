@@ -11,7 +11,7 @@ MultiTop (mtop) door was entering an infinite loop, causing stuck processes at 1
 - Load average: 8.19, 8.70, 10.04
 
 ### 2. Source Code Analysis
-Studied `/Documentation/7-Reference Sources/AmiExpressEDoorSources/MultiTop2/mtop.e`:
+Studied `~/Code/Reference/AmiExpressEDoorSources/MultiTop2/mtop.e`:
 - Entry point: `main()` at line 899
 - Parses args with `ReadArgs()` at line 941
 - Opens template design file at line 1007
@@ -84,7 +84,7 @@ Commented out all multitop lines in batch1-batch6 with semicolons:
 ## Related Files
 - **Door binary**: `/Doors/multitop/mtop`
 - **Door info**: `/Commands/BBSCmd/MTOP.info` (FIXED)
-- **E source**: `/Documentation/7-Reference Sources/AmiExpressEDoorSources/MultiTop2/mtop.e`
+- **E source**: `~/Code/Reference/AmiExpressEDoorSources/MultiTop2/mtop.e`
 - **Design files**: `/Doors/MultiTop/Designs/*.dsg`
 - **Batch files**: `/batch1` through `/batch6`
 - **Logs**: `/logs/door-68k-mtop-*.log`

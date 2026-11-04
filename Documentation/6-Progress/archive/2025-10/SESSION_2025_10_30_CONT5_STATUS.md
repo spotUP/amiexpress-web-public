@@ -280,7 +280,7 @@ The door completes this loop naturally in ~1000 iterations. No acceleration need
 - **Express.e message handling**: Lines 3370-3500 (processXimMsg)
 - **AEDoor.doc**: Full AEDoor.library API documentation
 - **example.e**: Working door source using AEDoor.library
-- **GetAnswer binary**: ~/Code/amiexpress-web/doors/GetAnswer/GetAnswer
+- **GetAnswer binary**: ~/Code/AmiExpress/amiexpress-web/doors/GetAnswer/GetAnswer
 
 ---
 

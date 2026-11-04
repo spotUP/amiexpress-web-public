@@ -269,7 +269,7 @@ npm run xim:trace -- --summary              # Summary only
   WHO (23 traces)
 
     F [12:45:01] Open
-       path: ~/Code/amiexpress-web/Conf1/Messages/MailStats
+       path: ~/Code/AmiExpress/amiexpress-web/Conf1/Messages/MailStats
 
     L [12:45:01] OpenLibrary
        library: dos.library

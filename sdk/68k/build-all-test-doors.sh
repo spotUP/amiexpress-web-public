@@ -18,7 +18,7 @@ echo ""
 # Check if we're in the right directory
 if [ ! -f "Makefile" ] || [ ! -d "doors" ]; then
     echo -e "${RED}[ERROR]${NC} Must run from sdk/68k directory"
-    echo "Usage: cd ~/Code/amiexpress-web/sdk/68k && ./build-all-test-doors.sh"
+    echo "Usage: cd ~/Code/AmiExpress/amiexpress-web/sdk/68k && ./build-all-test-doors.sh"
     exit 1
 fi
 
@@ -146,7 +146,7 @@ echo ""
 echo "[5/7] Verifying command files..."
 echo ""
 
-CMD_DIR="~/Code/amiexpress-web/Commands/BBSCmd"
+CMD_DIR="~/Code/AmiExpress/amiexpress-web/Commands/BBSCmd"
 CMD_OK=0
 CMD_MISSING=0
 
@@ -170,7 +170,7 @@ echo ""
 echo "[6/7] Verifying BBS door binaries..."
 echo ""
 
-DOORS_DIR="~/Code/amiexpress-web/Doors"
+DOORS_DIR="~/Code/AmiExpress/amiexpress-web/Doors"
 BIN_OK=0
 BIN_MISSING=0
 
@@ -230,7 +230,7 @@ if [ $FAILED -eq 0 ] && [ $INSTALL_FAILED -eq 0 ] && [ $CMD_MISSING -eq 0 ] && [
     echo "  CDEMO       - Interactive demo"
     echo ""
     echo "Next Steps:"
-    echo "  1. Start BBS: cd ~/Code/amiexpress-web && ./dev/scripts/start-servers.sh"
+    echo "  1. Start BBS: cd ~/Code/AmiExpress/amiexpress-web && ./dev/scripts/start-servers.sh"
     echo "  2. Connect:   telnet localhost 2323"
     echo "  3. Login and run: DIAGNOSTIC"
     echo "  4. Check output for [PASS]/[FAIL] markers"

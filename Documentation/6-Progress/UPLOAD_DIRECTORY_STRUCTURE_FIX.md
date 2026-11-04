@@ -23,9 +23,9 @@ test.lha     N   5000  01-21-26         Test file for AquaScan
 
 **Symptoms:**
 ```
-[Upload] Error moving file: ENOTDIR: not a directory, mkdir '~/Code/amiexpress-web/Conf1/Upload/'
-[DIR] Error writing DIR entry: EEXIST: file already exists, mkdir '~/Code/amiexpress-web/Conf1/Upload'
-[FILES.BBS] Error writing FILES.BBS entry: EEXIST: file already exists, mkdir '~/Code/amiexpress-web/Conf1/Upload'
+[Upload] Error moving file: ENOTDIR: not a directory, mkdir '~/Code/AmiExpress/amiexpress-web/Conf1/Upload/'
+[DIR] Error writing DIR entry: EEXIST: file already exists, mkdir '~/Code/AmiExpress/amiexpress-web/Conf1/Upload'
+[FILES.BBS] Error writing FILES.BBS entry: EEXIST: file already exists, mkdir '~/Code/AmiExpress/amiexpress-web/Conf1/Upload'
 ```
 
 **Impact:**
@@ -56,13 +56,13 @@ test.lha     N   5000  01-21-26         Test file for AquaScan
 ## Files Affected
 
 Before fixes:
-- `~/Code/amiexpress-web/Conf1/Upload` - 0-byte FILE (should be directory)
-- `~/Code/amiexpress-web/Conf1/PartUpload` - 0-byte FILE (should be directory)
-- `~/Code/amiexpress-web/Conf1/NDIRS` - contained "1" (should be "2")
-- `~/Code/amiexpress-web/Conf1.info` - NDIRS=1 tooltype (should be NDIRS=2)
-- `~/Code/amiexpress-web/Node1/Playpen/` - 16 uploaded files stuck here
-- `~/Code/amiexpress-web/Conf1/Dir2` - 7219 bytes with all uploads
-- `~/Code/amiexpress-web/Conf1/Upload/FILES.BBS` - missing
+- `~/Code/AmiExpress/amiexpress-web/Conf1/Upload` - 0-byte FILE (should be directory)
+- `~/Code/AmiExpress/amiexpress-web/Conf1/PartUpload` - 0-byte FILE (should be directory)
+- `~/Code/AmiExpress/amiexpress-web/Conf1/NDIRS` - contained "1" (should be "2")
+- `~/Code/AmiExpress/amiexpress-web/Conf1.info` - NDIRS=1 tooltype (should be NDIRS=2)
+- `~/Code/AmiExpress/amiexpress-web/Node1/Playpen/` - 16 uploaded files stuck here
+- `~/Code/AmiExpress/amiexpress-web/Conf1/Dir2` - 7219 bytes with all uploads
+- `~/Code/AmiExpress/amiexpress-web/Conf1/Upload/FILES.BBS` - missing
 
 ---
 
@@ -84,7 +84,7 @@ drwxr-xr-x@  2 spot staff  64 PartUpload   # DIRECTORY (correct!)
 
 **Commands:**
 ```bash
-cd ~/Code/amiexpress-web/Conf1
+cd ~/Code/AmiExpress/amiexpress-web/Conf1
 rm -f Upload PartUpload
 mkdir -p Upload PartUpload
 ```
@@ -101,7 +101,7 @@ mkdir -p Upload PartUpload
 
 **Command:**
 ```bash
-cd ~/Code/amiexpress-web
+cd ~/Code/AmiExpress/amiexpress-web
 for file in <list>; do
   mv "Node1/Playpen/$file" "Conf1/Upload/"
 done
@@ -126,7 +126,7 @@ cp Conf1/Dir2 Conf1/Upload/FILES.BBS
 
 ### Fix #4: Updated NDIRS configuration
 
-**File:** `~/Code/amiexpress-web/Conf1/NDIRS`
+**File:** `~/Code/AmiExpress/amiexpress-web/Conf1/NDIRS`
 
 **Before:**
 ```
@@ -147,7 +147,7 @@ echo "2" > Conf1/NDIRS
 
 ### Fix #5: Updated Conf1.info NDIRS tooltype
 
-**File:** `~/Code/amiexpress-web/Conf1.info`
+**File:** `~/Code/AmiExpress/amiexpress-web/Conf1.info`
 
 **Before:**
 ```
@@ -249,12 +249,12 @@ After fixes, user should test:
 
 ## Files Modified
 
-1. `~/Code/amiexpress-web/Conf1/Upload` - Created as directory
-2. `~/Code/amiexpress-web/Conf1/PartUpload` - Created as directory
-3. `~/Code/amiexpress-web/Conf1/NDIRS` - Updated to "2"
-4. `~/Code/amiexpress-web/Conf1.info` - Updated NDIRS tooltype to "2"
-5. `~/Code/amiexpress-web/Conf1/Upload/FILES.BBS` - Created
-6. `~/Code/amiexpress-web/Node1/Playpen/*.LHA` - Moved 16 files to Upload/
+1. `~/Code/AmiExpress/amiexpress-web/Conf1/Upload` - Created as directory
+2. `~/Code/AmiExpress/amiexpress-web/Conf1/PartUpload` - Created as directory
+3. `~/Code/AmiExpress/amiexpress-web/Conf1/NDIRS` - Updated to "2"
+4. `~/Code/AmiExpress/amiexpress-web/Conf1.info` - Updated NDIRS tooltype to "2"
+5. `~/Code/AmiExpress/amiexpress-web/Conf1/Upload/FILES.BBS` - Created
+6. `~/Code/AmiExpress/amiexpress-web/Node1/Playpen/*.LHA` - Moved 16 files to Upload/
 
 ## Date Completed
 

@@ -7,7 +7,7 @@
  * level and topped by GOD - a rank this door could not award at all, because
  * 'death' also had no ending. It ran past 1300 for ever.
  *
- * Reference: Documentation/7-Reference Sources/HeborisCE-1.1.0/src/game/gamestart.c
+ * Reference: ~/Code/Reference/HeborisCE-1.1.0/src/game/gamestart.c
  */
 
 import assert from 'assert';

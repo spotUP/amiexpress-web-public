@@ -260,7 +260,7 @@ await webhookService.sendWebhook(WebhookTrigger.USER_LOGOUT, {
 
 ## References
 
-- Original source: `Documentation/7-Reference Sources/AmiXDoors-master/DiscordAnnounce/dannounce.e`
+- Original source: `~/Code/Reference/AmiXDoors-master/DiscordAnnounce/dannounce.e`
 - TypeScript implementation: `web/backend/src/services/webhook.service.ts`
 - Admin interface: `web/backend/src/handlers/commands/webhook-commands.handler.ts`
 - Database repository: `web/backend/src/database/webhook-repository.ts`

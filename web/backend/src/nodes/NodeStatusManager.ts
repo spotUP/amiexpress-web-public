@@ -5,7 +5,7 @@
  * semaphore structure called "multiPort". This manager maintains that
  * structure and makes it available to doors via FindPort().
  *
- * Reference: AmiExpress-Sources/axcommon.e lines 584-605
+ * Reference: ~/Code/Reference/AmiExpress-Sources/axcommon.e lines 584-605
  */
 
 import { MoiraEmulator } from '../amiga-emulation/cpu/MoiraEmulator';

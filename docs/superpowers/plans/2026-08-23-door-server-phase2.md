@@ -337,7 +337,7 @@ Confirm `fs` and `path` are already imported in that file; if not, add them.
 - [ ] **Step 7: Verify the migration runs against a real BBS database copy**
 
 ```bash
-cp ~/Code/amiexpress-web/database.sqlite /tmp/bbs-migration-test.db
+cp ~/Code/AmiExpress/amiexpress-web/database.sqlite /tmp/bbs-migration-test.db
 cd web/backend && DATABASE_DIR=/tmp DATABASE_FILE=bbs-migration-test.db npx tsx -e "require('./src/database');" 2>&1 | tail -5
 sqlite3 /tmp/bbs-migration-test.db ".schema door_installs" | head -5
 rm -f /tmp/bbs-migration-test.db
@@ -545,7 +545,7 @@ Expected: PASS, 4 tests
 - [ ] **Step 5: Dry-run against a COPY of the real database**
 
 ```bash
-cp ~/Code/amiexpress-web/database.sqlite /tmp/backfill-test.db
+cp ~/Code/AmiExpress/amiexpress-web/database.sqlite /tmp/backfill-test.db
 npx tsx dev/scripts/backfill-door-installs.ts /tmp/backfill-test.db
 sqlite3 /tmp/backfill-test.db "SELECT COUNT(*) FROM door_installs;"
 sqlite3 /tmp/backfill-test.db "SELECT COUNT(*) FROM door_catalog WHERE installed = 1;"
@@ -1080,7 +1080,7 @@ Owner mode's curation screens (`deleteCatalogEntry`, `stripArchiveOnServer`, `up
 
 ```bash
 cd web/backend && npx jest --config dev-scripts/jest.config.ts --rootDir . tests/doors/doorman-records-install.test.ts
-cd ~/Code/amiexpress-web/Doors/door-manager && npm run build
+cd ~/Code/AmiExpress/amiexpress-web/Doors/door-manager && npm run build
 ```
 Expected: 3 tests pass, and `dist/app.js` is rebuilt - a source-only commit is invisible to the running BBS.
 
@@ -1107,8 +1107,8 @@ git commit -m "feat(doorman): record installs locally instead of faking catalog 
 
 ```bash
 cd ~/Code/amiexpress-doorserver
-npx tsx scripts/gen-contract-types.ts ~/Code/amiexpress-web/Doors/door-manager/repo-types.generated.ts
-head -8 ~/Code/amiexpress-web/Doors/door-manager/repo-types.generated.ts
+npx tsx scripts/gen-contract-types.ts ~/Code/AmiExpress/amiexpress-web/Doors/door-manager/repo-types.generated.ts
+head -8 ~/Code/AmiExpress/amiexpress-web/Doors/door-manager/repo-types.generated.ts
 ```
 Expected: the file begins with the GENERATED FILE banner and carries `CONTRACT_VERSION`.
 

@@ -16,7 +16,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 
-const SOURCE = path.join(__dirname, '..', '..', 'AmiExpress-Sources', 'express.e');
+const SOURCE = path.join(process.env.AMIEXPRESS_REFERENCE || '~/Code/Reference', 'AmiExpress-Sources', 'express.e');
 const OUT = path.join(
   __dirname, '..', '..', 'web', 'config-app', 'src', 'pages', 'screen-provenance.ts',
 );
@@ -67,7 +67,7 @@ function render(sites: Site[]): string {
   return `/**
  * Where express.e displays each screen. GENERATED - do not edit.
  *
- * Source: AmiExpress-Sources/express.e
+ * Source: ~/Code/Reference/AmiExpress-Sources/express.e
  * Regenerate: npx tsx dev/scripts/generate-screen-provenance.ts
  *
  * The admin says when a caller meets a screen; this is where that claim comes

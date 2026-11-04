@@ -188,7 +188,7 @@ All TypeScript type errors have been resolved.
 ### 1. Restart Backend Server
 
 ```bash
-cd ~/Code/amiexpress-web
+cd ~/Code/AmiExpress/amiexpress-web
 ./dev/scripts/kill-servers.sh
 ./dev/scripts/start-servers.sh
 ```

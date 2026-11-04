@@ -533,7 +533,7 @@ write8(0xF80000, 0xFF)
 
 ```bash
 # 1. Clean rebuild
-cd ~/Code/amiexpress-web/web/backend/src/amiga-emulation/cpu
+cd ~/Code/AmiExpress/amiexpress-web/web/backend/src/amiga-emulation/cpu
 rm -rf build
 mkdir -p build
 
@@ -711,7 +711,7 @@ Possible causes:
 
 ```bash
 # 1. Restart backend (WASM already built)
-cd ~/Code/amiexpress-web
+cd ~/Code/AmiExpress/amiexpress-web
 ./dev/scripts/start-backend.sh
 
 # 2. Test door

@@ -7,7 +7,7 @@ Binary: `Libs/AEDoor.library` (~1 KB, loaded by Bulls/WHO doors)
 - Raw disassembly: `Docs/aedoor_library_disasm.asm` (`r2 -q -c "e scr.color=false; aaa; pd 512"`).
 - Function inventory: `r2 -q -c "aaa; afl" Libs/AEDoor.library`.
 - Supporting sources:
-  - AmiExpress `express.e` references to `AEDoorPort` (`AmiExpress-Sources/express.e:4317`).
+  - AmiExpress `express.e` references to `AEDoorPort` (`~/Code/Reference/AmiExpress-Sources/express.e:4317`).
   - Exec/dos Autodocs (`Documentation/4-Door-Developers/DOOR_DEVELOPMENT.md:899-907`).
   - Tooling notes for vAmiga/Vamos/UADE in `Documentation/4-Door-Developers/AMIGA_EMULATION.md`.
 

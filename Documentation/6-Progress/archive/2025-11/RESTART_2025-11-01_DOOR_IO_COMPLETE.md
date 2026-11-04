@@ -115,7 +115,7 @@ if (this.dosLibrary) {
 Open("scores.dat", MODE_NEWFILE);
 
 // Resolved to:
-~/Code/amiexpress-web/scores.dat ❌
+~/Code/AmiExpress/amiexpress-web/scores.dat ❌
 
 // Problem: All doors write to BBS root!
 ```
@@ -126,7 +126,7 @@ Open("scores.dat", MODE_NEWFILE);
 Open("PROGDIR:scores.dat", MODE_NEWFILE);
 
 // Resolved to:
-~/Code/amiexpress-web/Doors/GetAnswer/scores.dat ✅
+~/Code/AmiExpress/amiexpress-web/Doors/GetAnswer/scores.dat ✅
 
 // Each door has its own directory!
 ```
@@ -235,7 +235,7 @@ Open("Doors:AquaWho/Tot.dat")
 **BBS:** - BBS system files
 ```c
 Open("BBS:user.data")
-→ ~/Code/amiexpress-web/user.data
+→ ~/Code/AmiExpress/amiexpress-web/user.data
 ```
 
 ### Lock-Based Directory Navigation
@@ -311,7 +311,7 @@ struct FileInfoBlock {
 
 ```bash
 # Start backend
-cd ~/Code/amiexpress-web/web/backend
+cd ~/Code/AmiExpress/amiexpress-web/web/backend
 npm run dev
 
 # In another terminal, watch logs:
@@ -330,14 +330,14 @@ tail -f /tmp/backend.log | grep -E "(dos.library|AmigaDoorSession)"
 After running AquaWho door:
 ```bash
 # Check if data files were created
-ls -la ~/Code/amiexpress-web/Doors/AquaWho/
+ls -la ~/Code/AmiExpress/amiexpress-web/Doors/AquaWho/
 
 # Look for NEW files created by door:
 # - Tot.dat (total statistics)
 # - 0.dat, 1.dat, etc. (per-node statistics)
 
 # Verify Tot.dat exists
-cat ~/Code/amiexpress-web/Doors/AquaWho/Tot.dat
+cat ~/Code/AmiExpress/amiexpress-web/Doors/AquaWho/Tot.dat
 
 # Check logs for PROGDIR: device usage
 grep "PROGDIR:" /tmp/backend.log
@@ -402,7 +402,7 @@ grep "Doors:AquaWho" /tmp/backend.log
 ### If Backend Won't Start
 ```bash
 # Check TypeScript compilation
-cd ~/Code/amiexpress-web/web/backend
+cd ~/Code/AmiExpress/amiexpress-web/web/backend
 npm run build
 
 # If errors, common issues:
@@ -417,8 +417,8 @@ npm run build
 grep "PROGDIR:" /tmp/backend.log
 
 # Should see:
-# [dos.library] PROGDIR: device set to ~/Code/amiexpress-web/Doors/GetAnswer
-# [dos.library] Current directory set to ~/Code/amiexpress-web/Doors/GetAnswer
+# [dos.library] PROGDIR: device set to ~/Code/AmiExpress/amiexpress-web/Doors/GetAnswer
+# [dos.library] Current directory set to ~/Code/AmiExpress/amiexpress-web/Doors/GetAnswer
 
 # If not found:
 # 1. Check AmigaDoorSession.ts lines 135-140
@@ -465,7 +465,7 @@ When you return:
 
 1. **Start backend and test:**
    ```bash
-   cd ~/Code/amiexpress-web/web/backend
+   cd ~/Code/AmiExpress/amiexpress-web/web/backend
    npm run dev
    ```
 
@@ -473,7 +473,7 @@ When you return:
 
 3. **Check door directory:**
    ```bash
-   ls -la ~/Code/amiexpress-web/Doors/AquaWho/
+   ls -la ~/Code/AmiExpress/amiexpress-web/Doors/AquaWho/
    # Should see Tot.dat and {node}.dat files created
    ```
 

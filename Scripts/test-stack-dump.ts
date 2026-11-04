@@ -6,7 +6,7 @@ async function testStackDump() {
   const session = new AmigaDoorSession({
     nodeId: 0,
     user: { id: 1, username: 'sysop', secLevel: 255 },
-    doorPath: '~/Code/amiexpress-web/Doors/GetAnswer/GetAnswer',
+    doorPath: '~/Code/AmiExpress/amiexpress-web/Doors/GetAnswer/GetAnswer',
     doorName: 'GetAnswer',
     maxIterations: 10000
   });

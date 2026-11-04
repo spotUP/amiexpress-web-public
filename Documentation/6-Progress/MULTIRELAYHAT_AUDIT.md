@@ -298,7 +298,7 @@ const intv = [1, 2, 5, 10, 30, 60, 120, 180, 240, 300];
 
 ## References
 
-- Original source: `Documentation/7-Reference Sources/AmiXDoors-master/MultiRelayChat/mrc_client.e`
-- Original config: `Documentation/7-Reference Sources/AmiXDoors-master/MultiRelayChat/mrc_client.cfg`
+- Original source: `~/Code/Reference/AmiXDoors-master/MultiRelayChat/mrc_client.e`
+- Original config: `~/Code/Reference/AmiXDoors-master/MultiRelayChat/mrc_client.cfg`
 - TypeScript implementation: `web/backend/src/services/mrc-client.ts`
-- Protocol documentation: `Documentation/7-Reference Sources/AmiXDoors-master/MultiRelayChat/readme.txt`
+- Protocol documentation: `~/Code/Reference/AmiXDoors-master/MultiRelayChat/readme.txt`

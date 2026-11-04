@@ -72,11 +72,8 @@ amiga-gcc
 elf2hunk
 lha
 vbcc.tar.gz
-ascii-patrol-master
-blessed-contrib-master
 HeborisCE-main
 TetriNET2-master
-AmiExpress-Sources
 
 # Database files (in volume)
 db/*.db

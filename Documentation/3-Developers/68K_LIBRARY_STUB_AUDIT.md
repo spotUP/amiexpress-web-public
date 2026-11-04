@@ -27,7 +27,7 @@ next?" so it is not re-derived every few weeks. Detailed working:
 
 ## Static coverage (2026-09-08)
 
-Stub = an LVO in `Documentation/7-Reference Sources/LVOs.i` with no real handler
+Stub = an LVO in `web/backend/src/amiga-emulation/constants/LVOs.i` with no real handler
 in `web/backend/src/amiga-emulation/api/library-vectors/*-vectors.ts`.
 
 | library | universe | real | stub | coverage |

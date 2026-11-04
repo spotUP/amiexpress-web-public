@@ -225,7 +225,7 @@ All documentation follows this structure:
 - **4-Door-Developers/** - Door development guides
 - **5-Reference/** - Quick reference materials
 - **6-Progress/** - Status tracking
-- **7-Reference Sources/** - External reference archives
+- **~/Code/Reference/** - External reference archives (outside the repo; override with `AMIEXPRESS_REFERENCE`)
 
 Important docs are now in active directories, historical session logs remain in `archive/` subdirectories.
 

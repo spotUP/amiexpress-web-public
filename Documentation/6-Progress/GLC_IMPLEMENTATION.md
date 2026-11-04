@@ -298,8 +298,8 @@ Possible improvements (not in scope for this implementation):
 
 ## Documentation References
 
-- Original Amiga E source: `/Documentation/7-Reference Sources/AmiExpressEDoorSources/Global Last Callers/GLCUpdater.e`
-- GLCViewer source: `/Documentation/7-Reference Sources/AmiExpressEDoorSources/Global Last Callers/GLCViewer.e`
+- Original Amiga E source: `~/Code/Reference/AmiExpressEDoorSources/Global Last Callers/GLCUpdater.e`
+- GLCViewer source: `~/Code/Reference/AmiExpressEDoorSources/Global Last Callers/GLCViewer.e`
 - GLCViewer TypeScript: `/Doors/glc-viewer/index.ts`
 - GLC README: `/Doors/glc/glc_readme.txt`
 - Global server: scenewall.bbs.io:1541

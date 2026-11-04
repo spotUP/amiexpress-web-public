@@ -390,7 +390,7 @@ STAT Message (0x1004e4):
 
 **Run AquaScan with trace**:
 ```bash
-BBS_DATA_DIR=~/Code/amiexpress-web \
+BBS_DATA_DIR=~/Code/AmiExpress/amiexpress-web \
 DOOR_TRACE_FIRST_PC_COUNT=500 \
 timeout 30 \
 npx tsx web/backend/src/scripts/run-amiga-door.ts doors/AquaScan/AquaScan.020 1

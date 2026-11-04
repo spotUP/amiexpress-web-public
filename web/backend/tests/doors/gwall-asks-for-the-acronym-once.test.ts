@@ -10,7 +10,7 @@
  *
  * WHY IT REGRESSED. GWall persists its acronym the standard AmigaOS way:
  * `saveSettings()` writes ENV:GWall.cfg AND ENVARC:GWall.cfg
- * (`Documentation/7-Reference Sources/AmiXDoors-master/Global Wall/gwall.e:1697`)
+ * (`~/Code/Reference/AmiXDoors-master/Global Wall/gwall.e:1697`)
  * and `readSettings()` reads ENV: back - because the Startup-Sequence copies
  * ENVARC: into ENV: at boot. We modelled only ENV:, and ENV: lives under
  * /tmp. The archive write had no assign at all, so it fell through
@@ -20,7 +20,7 @@
  * fix:
  *
  *   [PathManager] Volume fallback: "ENVARC:GWall.cfg"
- *       => "~/Code/amiexpress-web/gwall.cfg"
+ *       => "~/Code/AmiExpress/amiexpress-web/gwall.cfg"
  *
  * Wipe /tmp - every deploy does - and the acronym was gone.
  *
@@ -203,7 +203,7 @@ describeMaybe('GWall and the BBS acronym', () => {
    * `DEF timeout=10` (gwall.e:73) instead of the config's TIMEOUT=5.
    *
    * The repair: GWALL.cfg restored byte-for-byte from
-   * `Documentation/7-Reference Sources/AmiXDoors-master/Global Wall/GWALL.cfg`,
+   * `~/Code/Reference/AmiXDoors-master/Global Wall/GWALL.cfg`,
    * the acronym the stray held moved to the ENVARC: file the door reads back,
    * and the stray deleted.
    */

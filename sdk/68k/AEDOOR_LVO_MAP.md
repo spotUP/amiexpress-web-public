@@ -2,7 +2,7 @@
 
 ## Library Information
 
-- **Binary**: `/Documentation/7-Reference Sources/reference-boardBBS/Node0/Libs/AEDoor.library`
+- **Binary**: `~/Code/Reference/reference-boardBBS/Node0/Libs/AEDoor.library`
 - **Size**: 1128 bytes
 - **Version**: AEDoorLib 2.7 (18 May 1996)
 - **Architecture**: Amiga 68000
@@ -223,7 +223,7 @@ All AEDoor.library functions follow Amiga register calling convention:
 
 ## Related Documentation
 
-- **Full Disassembly**: `/Documentation/7-Reference Sources/disasm/aedoor_library_disasm.asm`
+- **Full Disassembly**: `~/Code/Reference/disasm/aedoor_library_disasm.asm`
 - **Library Notes**: `/Documentation/4-Door-Developers/archive/AEDoor_LIBRARY_NOTES.md`
 - **BBSInfo Fix**: `/sdk/68k/BBSINFO_FIX_FINAL.md`
 - **DoorInfo Structure**: BBSInfo at DoorInfo+0x46, max structure size 0x146 bytes

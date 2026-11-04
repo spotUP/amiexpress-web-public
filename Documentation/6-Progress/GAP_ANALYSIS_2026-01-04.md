@@ -192,7 +192,7 @@
 
 **Overall Parity: ~92-95%** (vs initial estimate of 60-70%)
 
-**See:** `~/Code/amiexpress-web/Documentation/6-Progress/CORRECTED_GAP_ANALYSIS_2026-01-04.md`
+**See:** `~/Code/AmiExpress/amiexpress-web/Documentation/6-Progress/CORRECTED_GAP_ANALYSIS_2026-01-04.md`
 
 ## Recommendations
 

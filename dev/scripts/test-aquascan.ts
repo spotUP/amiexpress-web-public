@@ -4,7 +4,7 @@
 import 'reflect-metadata';
 import { AmigaDoorSession } from '../../web/backend/src/amiga-emulation/AmigaDoorSession';
 
-const BBS_ROOT = '~/Code/amiexpress-web';
+const BBS_ROOT = '~/Code/AmiExpress/amiexpress-web';
 
 async function runTest() {
   console.log('=== AquaScan Door Test ===');

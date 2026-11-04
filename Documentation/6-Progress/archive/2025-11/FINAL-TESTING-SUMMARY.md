@@ -25,7 +25,7 @@
 
 ### Step 1: Start Server
 ```bash
-cd ~/Code/amiexpress-web
+cd ~/Code/AmiExpress/amiexpress-web
 cd web/backend
 npm install  # First time only
 npm start
@@ -35,7 +35,7 @@ npm start
 
 ### Step 2: Run Interactive Tests (New Terminal)
 ```bash
-cd ~/Code/amiexpress-web
+cd ~/Code/AmiExpress/amiexpress-web
 ./test-interactive.sh
 ```
 

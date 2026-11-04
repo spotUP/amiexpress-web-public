@@ -15,7 +15,7 @@ import * as path from 'path';
 import { execSync } from 'child_process';
 import { AmigaDoorSession } from '../../web/backend/src/amiga-emulation/AmigaDoorSession';
 
-const BBS_ROOT = '~/Code/amiexpress-web';
+const BBS_ROOT = '~/Code/AmiExpress/amiexpress-web';
 
 interface DoorConfig {
   command: string;

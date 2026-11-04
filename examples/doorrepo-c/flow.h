@@ -965,7 +965,7 @@ int flow_count_door_ads(const char *listing, const char *stage);
  * catalogued XIM and contains no executable at all - its program is
  * Account/AccEd.Rexx.
  *
- * express.e is the authority here (AmiExpress-Sources/express.e:4681-4697
+ * express.e is the authority here (~/Code/Reference/AmiExpress-Sources/express.e:4681-4697
  * for the type table):
  *   DOORTYPE_XIM runs the LOCATION file as a program (express.e:4278) -
  *     which a text script is not, so XIM is simply wrong for a .rexx and

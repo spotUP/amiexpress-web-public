@@ -184,7 +184,7 @@ private async playAudioChunk(userId, chunk): Promise<void> {
 
 **Command:**
 ```bash
-cd ~/Code/amiexpress-web/Doors/livechat
+cd ~/Code/AmiExpress/amiexpress-web/Doors/livechat
 npx tsc --noEmit  # Check TypeScript compilation
 npm run build      # Build client bundle
 ```

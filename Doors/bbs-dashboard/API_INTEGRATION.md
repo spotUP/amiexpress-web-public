@@ -169,7 +169,7 @@ class BBSApi {
 
 ### With Mock Data (Current)
 ```bash
-cd ~/Code/amiexpress-web/Doors/bbs-dashboard
+cd ~/Code/AmiExpress/amiexpress-web/Doors/bbs-dashboard
 npm run build
 # Dashboard will use fallback values and current user info
 ```

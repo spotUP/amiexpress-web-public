@@ -1,7 +1,7 @@
 /**
  * TGM Item System
  *
- * HeborisCE-1.1.0 reference: Documentation/7-Reference Sources/HeborisCE-1.1.0/src/game/gamestart.c
+ * HeborisCE-1.1.0 reference: ~/Code/Reference/HeborisCE-1.1.0/src/game/gamestart.c
  *
  * This is a from-scratch build against that reference (the door had no item
  * system at all before this file - "there are no visible pickups in

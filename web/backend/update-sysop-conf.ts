@@ -15,7 +15,7 @@ import { db } from "./src/database";
         "Updated sysop confAccess to: XXXXXXXXXXXXXX (14 conferences)"
       );
       console.log("\nNow delete user.data and restart servers to regenerate:");
-      console.log("  rm ~/Code/amiexpress-web/user.data");
+      console.log("  rm ~/Code/AmiExpress/amiexpress-web/user.data");
     } else {
       console.log("Sysop user not found");
     }

@@ -1,7 +1,7 @@
 /**
  * Global Last Callers Updater - a 1:1 port of GLCUpdater.e.
  *
- * Original: Documentation/7-Reference Sources/AmiExpressEDoorSources/
+ * Original: ~/Code/Reference/AmiExpressEDoorSources/
  *           Global Last Callers/GLCUpdater.e  (cited below as GLCUpdater.e:<line>)
  *
  * Run from a node's logoff batch:

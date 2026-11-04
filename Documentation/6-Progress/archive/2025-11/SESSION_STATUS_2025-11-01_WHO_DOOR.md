@@ -18,7 +18,7 @@ Get WHO door working by implementing the file-based data storage that doors expe
 - Documented in `WHO_DOOR_FILE_REQUIREMENTS.md`
 
 ### 2. ✅ Node File Manager (COMPLETED)
-**File:** `~/Code/amiexpress-web/web/backend/src/services/NodeFileManager.ts`
+**File:** `~/Code/AmiExpress/amiexpress-web/web/backend/src/services/NodeFileManager.ts`
 
 **Features:**
 - Reads/writes binary `node{n}.user` files (239 bytes)
@@ -40,7 +40,7 @@ Get WHO door working by implementing the file-based data storage that doors expe
 - "XXX" conference access ✅
 
 ### 3. ✅ Full DOS.library File I/O (COMPLETED)
-**File:** `~/Code/amiexpress-web/web/backend/src/amiga-emulation/api/DosLibrary.ts`
+**File:** `~/Code/AmiExpress/amiexpress-web/web/backend/src/amiga-emulation/api/DosLibrary.ts`
 
 **Implementation by Agent:**
 - **Open()** - Opens real files from disk (MODE_OLDFILE, MODE_NEWFILE, MODE_READWRITE)
@@ -177,30 +177,30 @@ Based on agent analysis, doors expect these files:
 ## Key Files Modified This Session
 
 ### Created:
-1. `~/Code/amiexpress-web/web/backend/src/services/NodeFileManager.ts` (530 lines)
+1. `~/Code/AmiExpress/amiexpress-web/web/backend/src/services/NodeFileManager.ts` (530 lines)
    - Full read/write for node user files
 
-2. `~/Code/amiexpress-web/web/backend/src/nodes/NodeStatusManager.ts` (258 lines)
+2. `~/Code/AmiExpress/amiexpress-web/web/backend/src/nodes/NodeStatusManager.ts` (258 lines)
    - In-memory semaphore structures (not enough for doors)
 
-3. `~/Code/amiexpress-web/Docs/WHO_DOOR_FILE_REQUIREMENTS.md`
+3. `~/Code/AmiExpress/amiexpress-web/Docs/WHO_DOOR_FILE_REQUIREMENTS.md`
    - Complete analysis and implementation plan
 
 4. DOS.library documentation (4 files, ~62KB total)
    - Complete file I/O reference
 
 ### Modified:
-1. `~/Code/amiexpress-web/web/backend/src/index.ts`
+1. `~/Code/AmiExpress/amiexpress-web/web/backend/src/index.ts`
    - Added NodeFileManager import (line 11)
    - Login writes node files (lines 840-849)
    - Logoff deletes node files (lines 1629-1637)
 
-2. `~/Code/amiexpress-web/web/backend/src/amiga-emulation/api/DosLibrary.ts`
+2. `~/Code/AmiExpress/amiexpress-web/web/backend/src/amiga-emulation/api/DosLibrary.ts`
    - Implemented full file I/O (agent work)
    - Open/Read/Write/Close/Seek functions
    - ~400 lines of new code
 
-3. `~/Code/amiexpress-web/web/backend/src/amiga-emulation/AmigaDoorSession.ts`
+3. `~/Code/AmiExpress/amiexpress-web/web/backend/src/amiga-emulation/AmigaDoorSession.ts`
    - Added NodeStatusManager import (line 10)
    - Initialize node status structures (lines 235-255)
    - DOS output callback (lines 226-232)
@@ -306,14 +306,14 @@ $ xxd node3.user | head -3
 ## Resources
 
 ### Documentation:
-- `~/Code/amiexpress-web/Docs/WHO_DOOR_FILE_REQUIREMENTS.md`
-- `~/Code/amiexpress-web/Docs/DOS_FILE_IO_IMPLEMENTATION.md`
-- `~/Code/amiexpress-web/Docs/DOOR_FILE_IO_USAGE.md`
+- `~/Code/AmiExpress/amiexpress-web/Docs/WHO_DOOR_FILE_REQUIREMENTS.md`
+- `~/Code/AmiExpress/amiexpress-web/Docs/DOS_FILE_IO_IMPLEMENTATION.md`
+- `~/Code/AmiExpress/amiexpress-web/Docs/DOOR_FILE_IO_USAGE.md`
 
 ### Source References:
-- `AmiExpress-Sources/express.e:2935-2950` - createNodeUserFiles()
-- `AmiExpress-Sources/axobjects.e:11-81` - user/userKeys structs
-- `AmiExpress-Sources/express.e:24204-24381` - who() PROC
+- `~/Code/Reference/AmiExpress-Sources/express.e:2935-2950` - createNodeUserFiles()
+- `~/Code/Reference/AmiExpress-Sources/axobjects.e:11-81` - user/userKeys structs
+- `~/Code/Reference/AmiExpress-Sources/express.e:24204-24381` - who() PROC
 
 ### Test Files:
 - `test-who.js` - WHO door test script

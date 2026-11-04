@@ -157,8 +157,8 @@ Only console files opened - no data files because NI/NO tools haven't run.
 - OR need to handle these tools' specific memory requirements
 
 **Files:**
-- NI tool: `~/Code/amiexpress-web/Doors/who/NI`
-- NO tool: `~/Code/amiexpress-web/Doors/who/No`
+- NI tool: `~/Code/AmiExpress/amiexpress-web/Doors/who/NI`
+- NO tool: `~/Code/AmiExpress/amiexpress-web/Doors/who/No`
 
 **Screen file integration added:**
 - `Node0/Screens/Logon.txt` has `~XC_DOORS:who/NI ~N||`

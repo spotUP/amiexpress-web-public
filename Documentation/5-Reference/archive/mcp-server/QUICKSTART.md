@@ -6,7 +6,7 @@ These steps work for any MCP-aware agent (Claude Desktop, other MCP clients, or 
 
 ### 1. Install dependencies (already done)
 ```bash
-cd ~/Code/amiexpress-web/mcp-server
+cd ~/Code/AmiExpress/amiexpress-web/mcp-server
 npm install
 ```
 
@@ -22,7 +22,7 @@ Add (or merge) this block:
   "mcpServers": {
     "amiexpress-docs": {
       "command": "node",
-      "args": ["~/Code/amiexpress-web/mcp-server/index.js"]
+      "args": ["~/Code/AmiExpress/amiexpress-web/mcp-server/index.js"]
     }
   }
 }

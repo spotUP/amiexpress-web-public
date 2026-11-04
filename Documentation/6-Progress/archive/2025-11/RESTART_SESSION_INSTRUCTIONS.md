@@ -90,7 +90,7 @@ amiexpress-web/
 #### 1. Test Login File Creation
 ```bash
 # Start backend if not running
-~/Code/amiexpress-web/dev/scripts/start-backend.sh
+~/Code/AmiExpress/amiexpress-web/dev/scripts/start-backend.sh
 
 # Login via browser to http://localhost:5173
 # User: sysop / Password: sysop
@@ -321,7 +321,7 @@ These are not needed for WHO door, implement later:
 
 ```bash
 # 1. Start backend
-~/Code/amiexpress-web/dev/scripts/start-backend.sh
+~/Code/AmiExpress/amiexpress-web/dev/scripts/start-backend.sh
 
 # 2. Open browser
 open http://localhost:5173

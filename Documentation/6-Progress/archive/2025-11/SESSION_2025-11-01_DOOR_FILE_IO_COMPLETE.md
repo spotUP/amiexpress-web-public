@@ -208,14 +208,14 @@ if (this.dosLibrary) {
 ```typescript
 // ALL relative paths went to BBS root
 resolvePath("scores.dat")
-  → "~/Code/amiexpress-web/scores.dat" ❌
+  → "~/Code/AmiExpress/amiexpress-web/scores.dat" ❌
 ```
 
 **Door Code Behavior:**
 ```c
 // Door tries to save scores:
 BPTR fh = Open("scores.dat", MODE_NEWFILE);
-// Opens: ~/Code/amiexpress-web/scores.dat ❌
+// Opens: ~/Code/AmiExpress/amiexpress-web/scores.dat ❌
 // All doors write to same BBS root!
 ```
 
@@ -236,16 +236,16 @@ BPTR fh = Open("scores.dat", MODE_NEWFILE);
 ```typescript
 // PROGDIR: resolves to door's directory
 resolvePath("PROGDIR:scores.dat")
-  → "~/Code/amiexpress-web/Doors/GetAnswer/scores.dat" ✅
+  → "~/Code/AmiExpress/amiexpress-web/Doors/GetAnswer/scores.dat" ✅
 
 // Relative paths resolve from current directory
-setDoorDirectory("~/Code/amiexpress-web/Doors/GetAnswer");
+setDoorDirectory("~/Code/AmiExpress/amiexpress-web/Doors/GetAnswer");
 resolvePath("scores.dat")
-  → "~/Code/amiexpress-web/Doors/GetAnswer/scores.dat" ✅
+  → "~/Code/AmiExpress/amiexpress-web/Doors/GetAnswer/scores.dat" ✅
 
 // BBS: device still works for system files
 resolvePath("BBS:user.data")
-  → "~/Code/amiexpress-web/user.data" ✅
+  → "~/Code/AmiExpress/amiexpress-web/user.data" ✅
 ```
 
 **Door Code Behavior:**
@@ -262,7 +262,7 @@ BPTR fh = Open("config.txt", MODE_OLDFILE);
 
 // Door reads BBS files:
 BPTR fh = Open("BBS:user.data", MODE_OLDFILE);
-// Opens: ~/Code/amiexpress-web/user.data ✅
+// Opens: ~/Code/AmiExpress/amiexpress-web/user.data ✅
 ```
 
 **Function Status:**
@@ -350,7 +350,7 @@ Close(fh);
 ```
 
 **Expected:**
-- Reads: `~/Code/amiexpress-web/user.data`
+- Reads: `~/Code/AmiExpress/amiexpress-web/user.data`
 - Gets first 232 bytes (one user record)
 
 ### Test Case 4: Door Creates Directory

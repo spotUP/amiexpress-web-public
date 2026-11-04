@@ -141,7 +141,7 @@ Already included in `ndk-includes/` - no separate installation needed!
 
 1. **Create door directory**:
    ```bash
-   cd ~/Code/amiexpress-web/sdk/68k
+   cd ~/Code/AmiExpress/amiexpress-web/sdk/68k
    mkdir doors/mydoor
    ```
 

@@ -14,7 +14,7 @@
  * - BBSLink.net account (free at http://www.bbslink.net/)
  * - syscode, authcode, schemecode from BBSLink
  *
- * Original: Documentation/7-Reference Sources/AmiExpressEDoorSources/BBSLink/bbslink.e
+ * Original: ~/Code/Reference/AmiExpressEDoorSources/BBSLink/bbslink.e
  */
 
 import { ServerDoor, DoorContext, honourDoorClose } from '@amiexpress/bbs-door-sdk';

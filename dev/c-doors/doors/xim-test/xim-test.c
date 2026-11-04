@@ -6,7 +6,7 @@
  * - JHMessage structure for XIM protocol
  * - NO AEDoor.library dependency
  *
- * Based on: Documentation/7-Reference Sources/AEKIT101/AE.Includes/AmiConSASc.c
+ * Based on: ~/Code/Reference/AEKIT101/AE.Includes/AmiConSASc.c
  */
 
 /* Amiga OS includes - using our local headers */

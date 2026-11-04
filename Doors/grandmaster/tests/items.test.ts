@@ -2,7 +2,7 @@
  * TGM item system - pure data/transform regression tests.
  *
  * core/items.ts is a from-scratch build against
- * Documentation/7-Reference Sources/HeborisCE-1.1.0/src/game/gamestart.c -
+ * ~/Code/Reference/HeborisCE-1.1.0/src/game/gamestart.c -
  * the door had no item system at all before this ("there are no visible
  * pickups in gmasters vs modes" was the sysop report that started it).
  * These tests drive the real selection algorithm and the real board

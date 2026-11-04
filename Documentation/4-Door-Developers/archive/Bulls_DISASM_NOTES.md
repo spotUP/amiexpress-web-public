@@ -47,7 +47,7 @@ These annotations should guide further emulator tweaks without re-reading the wh
 
 ### entry0 @ 0x24
 - Saves `d1-d6/a0-a6`, mirrors the classic `StackSwap()` preamble described in the Exec Autodocs (`Documentation/4-Door-Developers/DOOR_DEVELOPMENT.md:899` points to `node01FC.html`).
-- Clears `0x984` bytes at `A4` (door resident data) and seeds `0x6c6c`, `0x6c70`, `0x6c84`. These correlate with the `DoorInfo`/`DoorState` structs described in the original AmiExpress E sources (see `AmiExpress-Sources/express.e:24305` where the Bulls command copies menu state into similar offsets).
+- Clears `0x984` bytes at `A4` (door resident data) and seeds `0x6c6c`, `0x6c70`, `0x6c84`. These correlate with the `DoorInfo`/`DoorState` structs described in the original AmiExpress E sources (see `~/Code/Reference/AmiExpress-Sources/express.e:24305` where the Bulls command copies menu state into similar offsets).
 - Loads `ExecBase` from `4.w` into `A6` and builds a temporary stack/CLI frame just like the RKRM Exec example for CLI-launched processes.
 
 ### fcn.00001224 (A4 bootstrap + AEDoor handshake)
@@ -61,7 +61,7 @@ These annotations should guide further emulator tweaks without re-reading the wh
 
 ### fcn.000045d8 (UI layout and ANSI emitter)
 - Builds the multi-line bulletin header (look for ASCII art near `0x49xx`). Each branch writes characters into the in-memory screen buffer at `0x6cxx(a4)` before handing off to `dos.library` `Write` (captured as `jsr -0x48(a6)`).
-- Matches the strings from `AmiExpress-Sources/express.e:24305` ("READING BULLS", etc.).
+- Matches the strings from `~/Code/Reference/AmiExpress-Sources/express.e:24305` ("READING BULLS", etc.).
 
 ### AEDoor expectations
 - Bulls calls `jsr -0x60(a6)` (`OpenLibrary` with `AEDoor.library`) and later `jsr -0x7e(a6)` (`CloseLibrary`). It assumes the library exposes a `DoorInfo` descriptor near `A4+0x988`. Our emulator's `AEDoor.library` shim therefore has to provide at least the functions documented in `Documentation/4-Door-Developers/DOOR_DEVELOPMENT.md:899-907` (CreateMsgPort, AddPort, WaitPort, etc.).
@@ -71,8 +71,8 @@ These annotations should guide further emulator tweaks without re-reading the wh
 
 | Item | Reference |
 | --- | --- |
-| Bulls command registration | `AmiExpress-Sources/express.e:24305` |
-| Error codes (`ERR_NO_BULLS`) | `AmiExpress-Sources/express.e:8544` |
+| Bulls command registration | `~/Code/Reference/AmiExpress-Sources/express.e:24305` |
+| Error codes (`ERR_NO_BULLS`) | `~/Code/Reference/AmiExpress-Sources/express.e:8544` |
 | Exec messaging Autodocs | `Documentation/4-Door-Developers/DOOR_DEVELOPMENT.md:899-907` |
 | CLI requirements (`pr_CLI`, `cli_CommandName`) | `Documentation/6-Progress/archive/2025-10/SESSION_2025_10_30_ARGC_ARGV_FIX.md:269` |
 | Tooling for repro (vAmiga / Vamos / UADE) | `Documentation/4-Door-Developers/AMIGA_EMULATION.md:28` |
@@ -86,7 +86,7 @@ These annotations should guide further emulator tweaks without re-reading the wh
 - The disassembly + AEDoor library dump (see `Documentation/4-Door-Developers/AEDoor_LIBRARY_NOTES.md`) shows that Bulls expects `AEDoor.library` to fill a `DoorInfo` block (sig at offsets `0x0-0x24`) and push **two** messages once `CreateComm()` succeeds:
   1. `JH_INIT` / command `0` (we already send this).
   2. `JH_STAT` / command `1` carrying the per-node status buffer (length 0xE4) pointed to by `DoorInfo+0xe4`.
-- In the original AmiExpress E implementation (`AmiExpress-Sources/doors.e`, referenced indirectly around `express.e:24619`), Bulls reads that second message before touching the ANSI/UI routines. Because our emulator never fabricates it, Bulls immediately loops back into ROM waiting for it, which explains the constant `PC=0xf00080` returns even after we inject ports.
+- In the original AmiExpress E implementation (`~/Code/Reference/AmiExpress-Sources/doors.e`, referenced indirectly around `express.e:24619`), Bulls reads that second message before touching the ANSI/UI routines. Because our emulator never fabricates it, Bulls immediately loops back into ROM waiting for it, which explains the constant `PC=0xf00080` returns even after we inject ports.
 - **Action**: Extend the emulator's XIM handler so that after `sendStartupMessage()` it enqueues a synthetic `JH_STAT` message whose payload mirrors the structure described in the AEDoor disassembly (`DoorInfo+0x46` holds the server info, `DoorInfo+0xdc` the node slot). Without that, the Bulls main loop will continue to WaitPort forever.
 
 ## Next Steps

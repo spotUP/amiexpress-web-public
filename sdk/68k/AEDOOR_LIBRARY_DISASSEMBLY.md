@@ -10,7 +10,7 @@ The BBSInfo population fix writes data to memory at `doorInfoAddr + 0x46`, but t
 
 ## Library Information
 
-**File:** `~/Code/amiexpress-web/Documentation/7-Reference Sources/reference-boardBBS/Node0/Libs/AEDoor.library`
+**File:** `~/Code/Reference/reference-boardBBS/Node0/Libs/AEDoor.library`
 **Size:** 1128 bytes
 **Architecture:** Amiga 68000
 **Type:** Static library

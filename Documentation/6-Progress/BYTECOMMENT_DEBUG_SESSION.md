@@ -68,8 +68,8 @@ console.log(`[DEBUG JH_LI] MESSAGE_STRING_OFFSET=0x${DoorConstants.MESSAGE_STRIN
 
 ## Files Modified This Session
 
-- `~/Code/amiexpress-web/web/backend/src/amiga-emulation/xim/io.ts` - Added debug logging
-- `~/Code/amiexpress-web/web/backend/src/amiga-emulation/api/AEDoorLibrary.ts` - Added debug logging to getString, copyStr, getStr, prompt
+- `~/Code/AmiExpress/amiexpress-web/web/backend/src/amiga-emulation/xim/io.ts` - Added debug logging
+- `~/Code/AmiExpress/amiexpress-web/web/backend/src/amiga-emulation/api/AEDoorLibrary.ts` - Added debug logging to getString, copyStr, getStr, prompt
 
 ## Server Status
 
@@ -79,7 +79,7 @@ Backend server was started but may need restart to pick up the TypeScript change
 
 ```bash
 # Start servers
-cd ~/Code/amiexpress-web && ./dev/scripts/start-servers.sh
+cd ~/Code/AmiExpress/amiexpress-web && ./dev/scripts/start-servers.sh
 
 # Then in BBS:
 # 1. Login

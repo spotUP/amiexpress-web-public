@@ -349,7 +349,7 @@ G / 2 → Green   (\x1b[32m)
 
 ## References
 
-- Original source: `Documentation/7-Reference Sources/AmiXDoors-master/Global Wall/gwall.e`
-- Original config: `Documentation/7-Reference Sources/AmiXDoors-master/Global Wall/GWALL.cfg`
+- Original source: `~/Code/Reference/AmiXDoors-master/Global Wall/gwall.e`
+- Original config: `~/Code/Reference/AmiXDoors-master/Global Wall/GWALL.cfg`
 - TypeScript implementation: `Doors/Gwall/index.ts`
 - Server API: `scenewall.bbs.io:1541/GlobalWall/api/WallItems`

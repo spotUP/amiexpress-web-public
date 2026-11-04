@@ -9,7 +9,7 @@
  * - BBS:node0.userkeys (binary userKeys struct)
  * - BBS:Node0/CallersLog (text activity log)
  *
- * Reference: AmiExpress-Sources/axobjects.e lines 11-81
+ * Reference: ~/Code/Reference/AmiExpress-Sources/axobjects.e lines 11-81
  * express.e:2935-2950 (createNodeUserFiles)
  */
 

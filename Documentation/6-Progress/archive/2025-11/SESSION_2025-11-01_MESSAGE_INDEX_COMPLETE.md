@@ -372,7 +372,7 @@ Implement UserDatabaseManager for:
 - `/Docs/CRITICAL_MISSING_FILES.md` (analysis of what was missing)
 
 ### Real Data Reference:
-- `~/Code/amiexpress-web/reference-board` (real Amiga BBS data)
+- `~/Code/AmiExpress/amiexpress-web/reference-board` (real Amiga BBS data)
 
 ## Summary
 

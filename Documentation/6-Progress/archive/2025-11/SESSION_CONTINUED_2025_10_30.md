@@ -139,14 +139,14 @@ struct Message *reply = GetMsg(doorPort);
 
 ## Files Modified
 
-### `~/Code/amiexpress-web/web/backend/src/amiga-emulation/AmigaDoorSession.ts`
+### `~/Code/AmiExpress/amiexpress-web/web/backend/src/amiga-emulation/AmigaDoorSession.ts`
 
 **Lines 245-258:** Stack-relative RTS stub initialization (from previous session)
 **Lines 328-334:** Exit detection in single-step loop (from previous session)
 **Lines 412-418:** Exit detection in main loop (from previous session)
 **Lines 430-437:** NEW - Early termination for infinite loops (added this session)
 
-### `~/Code/amiexpress-web/test-getanswer-door.js`
+### `~/Code/AmiExpress/amiexpress-web/test-getanswer-door.js`
 
 **Lines 106-110:** ANSI prompt answer (from previous session)
 

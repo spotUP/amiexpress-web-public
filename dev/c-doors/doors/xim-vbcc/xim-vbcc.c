@@ -6,7 +6,7 @@
  * - JHMessage structure for XIM protocol
  * - Communication via AEDoorPort{n} message ports
  *
- * Based on: Documentation/7-Reference Sources/AEKIT101/AE.Includes/AmiConSASc.c
+ * Based on: ~/Code/Reference/AEKIT101/AE.Includes/AmiConSASc.c
  *
  * Build with: export VBCC=/opt/homebrew/opt/vbcc && vc +aos68k xim-vbcc.c -o xim-vbcc
  */

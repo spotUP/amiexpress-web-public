@@ -390,12 +390,12 @@ B=Beer, C=Clover, W=Watermelon, S=Sundae, T=Trophy, $=Money, N=Net
 - **P**: Pause
 
 ## Critical Files to Reference
-- `~/Code/amiexpress-web/Doors/arkanoid2/` - Hybrid door pattern (client + server)
-- `~/Code/amiexpress-web/Doors/card-lobby/` - Neo-blessed UI patterns
-- `~/Code/amiexpress-web/sdk/engines/audio/audio-engine.ts` - Tone.js AudioEngine
-- `~/Code/amiexpress-web/sdk/engines/audio/tracker-engine.ts` - TrackerEngine
-- `~/Code/amiexpress-web/Documentation/4-Door-Developers/TYPESCRIPT_DOOR_GUIDE.md`
-- `~/Code/amiexpress-web/Documentation/4-Door-Developers/NEO_BLESSED_BEST_PRACTICES.md`
+- `~/Code/AmiExpress/amiexpress-web/Doors/arkanoid2/` - Hybrid door pattern (client + server)
+- `~/Code/AmiExpress/amiexpress-web/Doors/card-lobby/` - Neo-blessed UI patterns
+- `~/Code/AmiExpress/amiexpress-web/sdk/engines/audio/audio-engine.ts` - Tone.js AudioEngine
+- `~/Code/AmiExpress/amiexpress-web/sdk/engines/audio/tracker-engine.ts` - TrackerEngine
+- `~/Code/AmiExpress/amiexpress-web/Documentation/4-Door-Developers/TYPESCRIPT_DOOR_GUIDE.md`
+- `~/Code/AmiExpress/amiexpress-web/Documentation/4-Door-Developers/NEO_BLESSED_BEST_PRACTICES.md`
 
 ## Files to Create
 

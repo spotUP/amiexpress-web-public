@@ -31,21 +31,21 @@
 ```c
 // Example: GetAnswer door
 Open("PROGDIR:config.txt")
-→ ~/Code/amiexpress-web/Doors/GetAnswer/config.txt
+→ ~/Code/AmiExpress/amiexpress-web/Doors/GetAnswer/config.txt
 ```
 
 **2. Doors: (Doors Directory Root)**
 ```c
 // Example: AquaWho door
 Open("Doors:AquaWho/Tot.dat")
-→ ~/Code/amiexpress-web/Doors/AquaWho/Tot.dat
+→ ~/Code/AmiExpress/amiexpress-web/Doors/AquaWho/Tot.dat
 ```
 
 **3. BBS: (BBS System Files)**
 ```c
 // All doors can access
 Open("BBS:user.data")
-→ ~/Code/amiexpress-web/user.data
+→ ~/Code/AmiExpress/amiexpress-web/user.data
 ```
 
 ---
@@ -66,7 +66,7 @@ Open("BBS:user.data")
 **How to verify:**
 ```bash
 # Start backend
-cd ~/Code/amiexpress-web/web/backend
+cd ~/Code/AmiExpress/amiexpress-web/web/backend
 npm run dev
 
 # Watch logs
@@ -200,7 +200,7 @@ grep "CurrentDir" /tmp/backend.log
 
 ```bash
 # Terminal 1: Start backend
-cd ~/Code/amiexpress-web/web/backend
+cd ~/Code/AmiExpress/amiexpress-web/web/backend
 npm run dev
 
 # Terminal 2: Watch logs
@@ -238,7 +238,7 @@ cat Doors/AquaWho/Tot.dat
 
 ### Backend Won't Start
 ```bash
-cd ~/Code/amiexpress-web/web/backend
+cd ~/Code/AmiExpress/amiexpress-web/web/backend
 npm run build
 
 # Check for TypeScript errors
@@ -269,7 +269,7 @@ grep "Resolving Amiga path" /tmp/backend.log
 # Should show correct device resolution:
 # - PROGDIR: -> /Doors/{DoorName}/
 # - Doors: -> /Doors/
-# - BBS: -> ~/Code/amiexpress-web/
+# - BBS: -> ~/Code/AmiExpress/amiexpress-web/
 
 # If wrong:
 # - Check DosLibrary.ts resolvePath() function

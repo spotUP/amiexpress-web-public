@@ -109,7 +109,7 @@ This tells the door "timeout reached, exit loop" but in a GOOD way (we've sent t
 
 ## Files Modified
 
-### `~/Code/amiexpress-web/web/backend/src/amiga-emulation/AmigaDoorSession.ts`
+### `~/Code/AmiExpress/amiexpress-web/web/backend/src/amiga-emulation/AmigaDoorSession.ts`
 
 **Lines 129-136**: Changed memory initialization
 ```typescript

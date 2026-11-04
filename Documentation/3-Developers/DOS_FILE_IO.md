@@ -216,7 +216,7 @@ interface FileHandle {
     obj: any;           // Node.js fs stream or emulated file
     name: string;       // "node0.txt"
     amiPath: string;    // "doors:who/node0.txt"
-    sysPath: string;    // "~/Code/amiexpress-web/doors/who/node0.txt"
+    sysPath: string;    // "~/Code/AmiExpress/amiexpress-web/doors/who/node0.txt"
     bAddr: number;      // BPTR (address / 4)
     needClose: boolean; // false for stdin/stdout
     autoFlush: boolean; // true for stdout
@@ -259,8 +259,8 @@ class PathManager {
 
     constructor() {
         // Initialize standard assigns
-        this.assigns.set("doors:", "~/Code/amiexpress-web/doors/");
-        this.assigns.set("SYS:", "~/Code/amiexpress-web/System/");
+        this.assigns.set("doors:", "~/Code/AmiExpress/amiexpress-web/doors/");
+        this.assigns.set("SYS:", "~/Code/AmiExpress/amiexpress-web/System/");
         this.assigns.set("RAM:", "/tmp/ram/");
         this.assigns.set("NIL:", "/dev/null");
     }

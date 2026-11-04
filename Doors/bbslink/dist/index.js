@@ -15,7 +15,7 @@
  * - BBSLink.net account (free at http://www.bbslink.net/)
  * - syscode, authcode, schemecode from BBSLink
  *
- * Original: Documentation/7-Reference Sources/AmiExpressEDoorSources/BBSLink/bbslink.e
+ * Original: ~/Code/Reference/AmiExpressEDoorSources/BBSLink/bbslink.e
  */
 var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
     if (k2 === undefined) k2 = k;

@@ -282,5 +282,5 @@ Use these logs to validate our emulator:
 ## References
 
 - Real Amiga logs: `Documentation/4-Door-Developers/`
-- XIM protocol docs: `Documentation/7-Reference Sources/XIM_PROTOCOL.md`
+- XIM protocol docs: `~/Code/Reference/XIM_PROTOCOL.md`
 - express.e source: Search for "JH_REGISTER", "JH_SM", etc.

@@ -26,7 +26,7 @@ class MockSocket extends EventEmitter {
 }
 
 async function testAquaScan() {
-  const bbs_root = '~/Code/amiexpress-web';
+  const bbs_root = '~/Code/AmiExpress/amiexpress-web';
   process.env.BBS_DATA_DIR = bbs_root;
 
   console.log('[Test] Starting AquaScan XIM door test');

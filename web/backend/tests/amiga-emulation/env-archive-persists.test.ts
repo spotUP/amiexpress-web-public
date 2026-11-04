@@ -23,7 +23,7 @@
  *
  * Captured before the fix:
  *   [PathManager] Volume fallback: "ENVARC:GWall.cfg"
- *       => "~/Code/amiexpress-web/gwall.cfg"
+ *       => "~/Code/AmiExpress/amiexpress-web/gwall.cfg"
  *
  * The end-to-end proof, driving the real 68K binary, is in
  * `tests/doors/gwall-asks-for-the-acronym-once.test.ts`. This file pins the

@@ -319,7 +319,7 @@ Documentation/
 
 ## References
 
-- express.e source: `Documentation/7-Reference Sources/AmiExpress-Sources/express.e`
+- express.e source: `~/Code/Reference/AmiExpress-Sources/express.e`
 - internalCommandO: Lines 25372-25405
 - sysopPaged: Lines 24191-24201
 - ccom: Lines 20336-20390

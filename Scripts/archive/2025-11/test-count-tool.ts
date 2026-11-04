@@ -20,7 +20,7 @@ mockSocket.emit = function(event, data) {
 
 // Create session for Count tool
 const session = new AmigaDoorSession(mockSocket, {
-  executablePath: '~/Code/amiexpress-web/Doors/who/Count',
+  executablePath: '~/Code/AmiExpress/amiexpress-web/Doors/who/Count',
   bbsSession: {
     nodeId: 0,
     userId: 1,

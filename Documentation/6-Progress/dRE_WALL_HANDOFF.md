@@ -150,6 +150,6 @@ Expected: TWO `CopyMem-100` events, WALL-LIST dump with 2 nodes, `Write BPTR=4 .
 ## Prior-session fixes still in place
 
 - `exec-vectors.ts`: CopyMem vector at LVO -624 + CopyMemQuick at LVO -630
-- `LibraryTraps.ts`: LVOs.i search path (Documentation/7-Reference Sources)
+- `LibraryTraps.ts`: LVOs.i search path (~/Code/Reference)
 - `telnet-server.ts`: localhost-only-in-production gate (so local repros can connect)
 - `web/backend/src/types/untyped-modules.d.ts`: zmodem.js/pako module declarations

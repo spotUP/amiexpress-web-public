@@ -10,7 +10,7 @@
  * door sees one merged environment in ENV:. A door that wants a setting to
  * PERSIST writes it to both and reads ENV: back - that is what `SetEnv` +
  * `Copy ENV:x ENVARC:` does from the shell, and it is exactly what GWall's
- * saveSettings() does (`Documentation/7-Reference Sources/AmiXDoors-master/
+ * saveSettings() does (`~/Code/Reference/AmiXDoors-master/
  * Global Wall/gwall.e:1697`).
  *
  * We supplied only the volatile half. ENVARC: was not an assign at all, so

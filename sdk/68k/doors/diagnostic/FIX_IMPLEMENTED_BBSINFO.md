@@ -85,7 +85,7 @@ cd web/backend && npx tsc --noEmit
 ### 1. Restart Backend Server
 
 ```bash
-cd ~/Code/amiexpress-web
+cd ~/Code/AmiExpress/amiexpress-web
 ./dev/scripts/kill-servers.sh
 ./dev/scripts/start-servers.sh
 ```

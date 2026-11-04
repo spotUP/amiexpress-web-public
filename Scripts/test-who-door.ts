@@ -36,10 +36,10 @@ const session = new AmigaDoorSession(mockSocket as any, {
 
 console.log('\n=== Starting WHO door execution ===\n');
 console.log('Node files available:');
-console.log('  node0.user:', require('fs').existsSync('~/Code/amiexpress-web/node0.user') ? 'YES' : 'NO');
-console.log('  node0.userkeys:', require('fs').existsSync('~/Code/amiexpress-web/node0.userkeys') ? 'YES' : 'NO');
-console.log('  node1.user:', require('fs').existsSync('~/Code/amiexpress-web/node1.user') ? 'YES' : 'NO');
-console.log('  node1.userkeys:', require('fs').existsSync('~/Code/amiexpress-web/node1.userkeys') ? 'YES' : 'NO');
+console.log('  node0.user:', require('fs').existsSync('~/Code/AmiExpress/amiexpress-web/node0.user') ? 'YES' : 'NO');
+console.log('  node0.userkeys:', require('fs').existsSync('~/Code/AmiExpress/amiexpress-web/node0.userkeys') ? 'YES' : 'NO');
+console.log('  node1.user:', require('fs').existsSync('~/Code/AmiExpress/amiexpress-web/node1.user') ? 'YES' : 'NO');
+console.log('  node1.userkeys:', require('fs').existsSync('~/Code/AmiExpress/amiexpress-web/node1.userkeys') ? 'YES' : 'NO');
 console.log('\n');
 
 session.start().then(() => {

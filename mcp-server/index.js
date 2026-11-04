@@ -15,6 +15,9 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const PROJECT_ROOT = path.resolve(__dirname, '..');
+// The original AmiExpress sources, NDK and other reference material live
+// outside the repo; AMIEXPRESS_REFERENCE points at another copy.
+const REFERENCE_ROOT = process.env.AMIEXPRESS_REFERENCE || '~/Code/Reference';
 
 // Core project files
 const CORE_DOCS = {
@@ -224,12 +227,12 @@ const DOOR_DOCS = {
     mimeType: 'text/markdown'
   },
   'aedoor-disasm': {
-    path: path.join(PROJECT_ROOT, 'Documentation', '7-Reference Sources', 'disasm', 'aedoor_library_disasm.asm'),
+    path: path.join(REFERENCE_ROOT, 'disasm', 'aedoor_library_disasm.asm'),
     description: 'AEDoor library disassembly',
     mimeType: 'text/plain'
   },
   'bulls-disasm': {
-    path: path.join(PROJECT_ROOT, 'Documentation', '7-Reference Sources', 'disasm', 'bulls_disasm.asm'),
+    path: path.join(REFERENCE_ROOT, 'disasm', 'bulls_disasm.asm'),
     description: 'Bulls door disassembly',
     mimeType: 'text/plain'
   },
@@ -385,77 +388,77 @@ const PROGRESS_DOCS = {
 // Reference sources (external references)
 const REFERENCE_SOURCES = {
   'reference-sources-index': {
-    path: path.join(PROJECT_ROOT, 'Documentation', '7-Reference Sources', 'README.md'),
+    path: path.join(REFERENCE_ROOT, 'README.md'),
     description: 'Index of reference source bundles and archives',
     mimeType: 'text/markdown'
   },
   'amiexpress-sources': {
-    path: path.join(PROJECT_ROOT, 'Documentation', '7-Reference Sources', 'AmiExpress-Sources', 'README.md'),
+    path: path.join(REFERENCE_ROOT, 'AmiExpress-Sources', 'README.md'),
     description: 'AmiExpress original sources documentation',
     mimeType: 'text/markdown'
   },
   'lvos': {
-    path: path.join(PROJECT_ROOT, 'Documentation', '7-Reference Sources', 'LVOs.i'),
+    path: path.join(PROJECT_ROOT, 'web', 'backend', 'src', 'amiga-emulation', 'constants', 'LVOs.i'),
     description: 'AmigaOS Library Vector Offsets (LVO) definitions',
     mimeType: 'text/plain'
   },
   'bulls-log': {
-    path: path.join(PROJECT_ROOT, 'Documentation', '7-Reference Sources', 'bulls.log'),
+    path: path.join(REFERENCE_ROOT, 'bulls.log'),
     description: 'Bulls door reference execution log',
     mimeType: 'text/plain'
   },
   'getanswer-notes': {
-    path: path.join(PROJECT_ROOT, 'Documentation', '7-Reference Sources', 'disasm', 'GetAnswer_notes.md'),
+    path: path.join(REFERENCE_ROOT, 'disasm', 'GetAnswer_notes.md'),
     description: 'GetAnswer door disassembly notes (48 lines)',
     mimeType: 'text/markdown'
   },
   'testing-guide': {
-    path: path.join(PROJECT_ROOT, 'Documentation', '7-Reference Sources', 'reference', 'TESTING_GUIDE.md'),
+    path: path.join(REFERENCE_ROOT, 'reference', 'TESTING_GUIDE.md'),
     description: 'Full BBS testing guide (archived)',
     mimeType: 'text/markdown'
   },
   'deployment-scripts': {
-    path: path.join(PROJECT_ROOT, 'Documentation', '7-Reference Sources', 'reference', 'DEPLOYMENT_SCRIPTS.md'),
+    path: path.join(REFERENCE_ROOT, 'reference', 'DEPLOYMENT_SCRIPTS.md'),
     description: 'Deployment scripts documentation (archived)',
     mimeType: 'text/markdown'
   },
   'webhooks': {
-    path: path.join(PROJECT_ROOT, 'Documentation', '7-Reference Sources', 'reference', 'WEBHOOKS.md'),
+    path: path.join(REFERENCE_ROOT, 'reference', 'WEBHOOKS.md'),
     description: 'Webhook configuration guide (archived)',
     mimeType: 'text/markdown'
   },
   'ported-doors-catalog': {
-    path: path.join(PROJECT_ROOT, 'Documentation', '7-Reference Sources', 'reference', 'PORTED_DOORS_CATALOG.md'),
+    path: path.join(REFERENCE_ROOT, 'reference', 'PORTED_DOORS_CATALOG.md'),
     description: 'Catalog of ported E doors (archived)',
     mimeType: 'text/markdown'
   },
   'main-menu': {
-    path: path.join(PROJECT_ROOT, 'Documentation', '7-Reference Sources', 'reference', 'MAIN_MENU.md'),
+    path: path.join(REFERENCE_ROOT, 'reference', 'MAIN_MENU.md'),
     description: 'AmiExpress main menu documentation (archived)',
     mimeType: 'text/markdown'
   },
   'milestones': {
-    path: path.join(PROJECT_ROOT, 'Documentation', '7-Reference Sources', 'reference', 'MILESTONES.md'),
+    path: path.join(REFERENCE_ROOT, 'reference', 'MILESTONES.md'),
     description: 'Major project milestones (archived)',
     mimeType: 'text/markdown'
   },
   'masterplan': {
-    path: path.join(PROJECT_ROOT, 'Documentation', '7-Reference Sources', 'reference', 'MASTERPLAN.md'),
+    path: path.join(REFERENCE_ROOT, 'reference', 'MASTERPLAN.md'),
     description: 'Overall project master plan (archived)',
     mimeType: 'text/markdown'
   },
   'implementation-roadmap': {
-    path: path.join(PROJECT_ROOT, 'Documentation', '7-Reference Sources', 'reference', 'IMPLEMENTATION_ROADMAP.md'),
+    path: path.join(REFERENCE_ROOT, 'reference', 'IMPLEMENTATION_ROADMAP.md'),
     description: 'Complete feature implementation roadmap (archived)',
     mimeType: 'text/markdown'
   },
   'door-sources-analysis': {
-    path: path.join(PROJECT_ROOT, 'Documentation', '7-Reference Sources', 'research', 'DOOR_SOURCES_ANALYSIS.md'),
+    path: path.join(REFERENCE_ROOT, 'research', 'DOOR_SOURCES_ANALYSIS.md'),
     description: 'AmiExpress door sources analysis (archived)',
     mimeType: 'text/markdown'
   },
   'door-research': {
-    path: path.join(PROJECT_ROOT, 'Documentation', '7-Reference Sources', 'research', 'DOOR_RESEARCH.md'),
+    path: path.join(REFERENCE_ROOT, 'research', 'DOOR_RESEARCH.md'),
     description: 'Amiga door research and findings (archived)',
     mimeType: 'text/markdown'
   }
@@ -464,28 +467,28 @@ const REFERENCE_SOURCES = {
 // AmiExpress source files (loaded on-demand only)
 const SOURCES = {
   'express-e': {
-    path: path.join(PROJECT_ROOT, 'Documentation', '7-Reference Sources', 'AmiExpress-Sources', 'express.e'),
+    path: path.join(REFERENCE_ROOT, 'AmiExpress-Sources', 'express.e'),
     description: 'Original AmiExpress BBS source code in E language (35,000+ lines) - PRIMARY REFERENCE',
     mimeType: 'text/plain',
     moduleMap: path.join(__dirname, 'express-modules.json')
   },
   'hydra-e': {
-    path: path.join(PROJECT_ROOT, 'Documentation', '7-Reference Sources', 'AmiExpress-Sources', 'hydra.e'),
+    path: path.join(REFERENCE_ROOT, 'AmiExpress-Sources', 'hydra.e'),
     description: 'Hydra protocol implementation in E language (file transfer)',
     mimeType: 'text/plain'
   },
   'acp-e': {
-    path: path.join(PROJECT_ROOT, 'Documentation', '7-Reference Sources', 'AmiExpress-Sources', 'ACP.e'),
+    path: path.join(REFERENCE_ROOT, 'AmiExpress-Sources', 'ACP.e'),
     description: 'AmiExpress Control Panel source code (configuration tool)',
     mimeType: 'text/plain'
   },
   'zmodem-e': {
-    path: path.join(PROJECT_ROOT, 'Documentation', '7-Reference Sources', 'AmiExpress-Sources', 'zmodem.e'),
+    path: path.join(REFERENCE_ROOT, 'AmiExpress-Sources', 'zmodem.e'),
     description: 'ZModem protocol implementation in E language (file transfer)',
     mimeType: 'text/plain'
   },
   'ftpd-e': {
-    path: path.join(PROJECT_ROOT, 'Documentation', '7-Reference Sources', 'AmiExpress-Sources', 'ftpd.e'),
+    path: path.join(REFERENCE_ROOT, 'AmiExpress-Sources', 'ftpd.e'),
     description: 'FTP daemon implementation in E language',
     mimeType: 'text/plain'
   }
@@ -901,9 +904,7 @@ class AmiExpressDocsServer {
   async handleSearchNDK(args) {
     const { query, library = null } = args;
     const autodocsDir = path.join(
-      PROJECT_ROOT,
-      'Documentation',
-      '7-Reference Sources',
+      REFERENCE_ROOT,
       'NDK3.2R4',
       'Autodocs'
     );

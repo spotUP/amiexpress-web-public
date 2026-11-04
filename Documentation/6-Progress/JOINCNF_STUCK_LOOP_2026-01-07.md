@@ -91,7 +91,7 @@ The joincnf door hangs after sending its initial 12 XIM messages. Investigation 
 ## Test Command
 
 ```bash
-BBS_DATA_DIR=~/Code/amiexpress-web timeout 8 \
+BBS_DATA_DIR=~/Code/AmiExpress/amiexpress-web timeout 8 \
   npx tsx web/backend/src/scripts/run-amiga-door.ts doors/emp_tools/joincnf 1
 ```
 

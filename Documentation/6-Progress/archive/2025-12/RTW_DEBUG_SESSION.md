@@ -35,7 +35,7 @@ Removed lines 410-415 - don't pre-create "AEDoorPort1" port
 4. Use port for communication (polling at 0x20d0+)
 
 **Solution**: Create "AEDoorPort1" dynamically when RTW opens AEDoor.library
-**File**: `~/Code/amiexpress-web/web/backend/src/amiga-emulation/api/ExecLibrary.ts`
+**File**: `~/Code/AmiExpress/amiexpress-web/web/backend/src/amiga-emulation/api/ExecLibrary.ts`
 **Lines**: 1749-1771
 **Implementation**: Added hook in `openLibrary()` to create `AEDoorPort{nodeId}` when "aedoor.library" is opened
 **Result**: Port doesn't exist during duplicate check, but appears when door needs it for IPC
@@ -43,14 +43,14 @@ Removed lines 410-415 - don't pre-create "AEDoorPort1" port
 ## Changes Made
 
 ### Change 1: Removed bare port creation (LibraryManager.ts line 411)
-**File**: `~/Code/amiexpress-web/web/backend/src/amiga-emulation/LibraryManager.ts`
+**File**: `~/Code/AmiExpress/amiexpress-web/web/backend/src/amiga-emulation/LibraryManager.ts`
 **Line**: 411
 **Before**: `this.execLibrary.createPublicPort(altBasePortName);`
 **After**: Commented out with explanation
 **Result**: Still failed - RTW searches for "AEDoorPort1" not bare "AEDoorPort"
 
 ### Change 2: Remove ALL alternate port pre-creation (lines 410-415)
-**File**: `~/Code/amiexpress-web/web/backend/src/amiga-emulation/LibraryManager.ts`
+**File**: `~/Code/AmiExpress/amiexpress-web/web/backend/src/amiga-emulation/LibraryManager.ts`
 **Lines**: 410-415
 **Before**:
 - Line 410: `this.execLibrary.createPublicPort(\`\${altBasePortName}\${amigaNodeId}\`);` → Created "AEDoorPort1"
@@ -62,7 +62,7 @@ Removed lines 410-415 - don't pre-create "AEDoorPort1" port
 **Status**: ✓ COMPLETED
 
 ### Change 3: Dynamic AEDoorPort creation on library open
-**File**: `~/Code/amiexpress-web/web/backend/src/amiga-emulation/api/ExecLibrary.ts`
+**File**: `~/Code/AmiExpress/amiexpress-web/web/backend/src/amiga-emulation/api/ExecLibrary.ts`
 **Lines**: 1749-1771 (inside `openLibrary()` method)
 **Implementation**:
 ```typescript
@@ -80,7 +80,7 @@ if (name.toLowerCase() === "aedoor.library") {
 **Status**: ✓ COMPLETED - Ready for testing
 
 ### Change 4: Remove BBS-initiated INIT/STAT messages (CRITICAL FIX)
-**File**: `~/Code/amiexpress-web/web/backend/src/amiga-emulation/session/DoorMessageHandler.ts`
+**File**: `~/Code/AmiExpress/amiexpress-web/web/backend/src/amiga-emulation/session/DoorMessageHandler.ts`
 **Lines**: 154-166 (in `sendStartupMessage()` method)
 **Problem**: BBS was sending INIT (0) and STAT (1) messages to door at startup
 **Real Amiga**: Door initiates with JH_REGISTER (cmd=1), BBS only responds
@@ -102,7 +102,7 @@ All real XIM doors follow this pattern:
 **Critical**: BBS never sends INIT/STAT - door initiates ALL communication.
 
 ### Change 5: Fix BBSInfo Node ID at Offset 0xf (CRITICAL FIX)
-**File**: `~/Code/amiexpress-web/web/backend/src/amiga-emulation/api/AEDoorLibrary.ts`
+**File**: `~/Code/AmiExpress/amiexpress-web/web/backend/src/amiga-emulation/api/AEDoorLibrary.ts`
 **Lines**: 300-304 (in `populateBBSInfo()` method)
 **Problem**: RTW was searching for "AEDoorPort1" when running on Node 3
 **Root Cause**: RTW reads node ID from BBSInfo+0xf (byte offset 15), but we weren't writing it

@@ -21,8 +21,9 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { spawn } from 'child_process';
 
-const EXPRESS_E_PATH = '~/Code/amiexpress-web/AmiExpress-Sources/express.e';
-const NDK_AUTODOCS_PATH = '~/Code/amiexpress-web/NDK3.2R4/Autodocs/AG';
+const REFERENCE_ROOT = process.env.AMIEXPRESS_REFERENCE || '~/Code/Reference';
+const EXPRESS_E_PATH = path.join(REFERENCE_ROOT, 'AmiExpress-Sources', 'express.e');
+const NDK_AUTODOCS_PATH = path.join(REFERENCE_ROOT, 'NDK3.2R4', 'Autodocs', 'AG');
 
 // ============================================================================
 // E Source Search

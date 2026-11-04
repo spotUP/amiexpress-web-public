@@ -121,7 +121,7 @@ read alongside the May audit and door-backlog state.
 
 ## 1. Documentation & References
 - The reshuffle now leaves exactly the reader-facing summaries in `Documentation/1-6` (User, Sysop, Developer, Door, Reference, Progress) while all other historic `.md` files live inside each directory's `archive/` subfolder.
-- Door binaries, emulator trees, and other reference sources now sit under `Documentation/7-Reference Sources/`, keeping textual docs lean while preserving verbatim artifacts.
+- Door binaries, emulator trees, and other reference sources now sit under `~/Code/Reference/`, keeping textual docs lean while preserving verbatim artifacts.
 - Each summary file (e.g., `1-Users/USER_GUIDE.md`, `3-Developers/ARCHITECTURE.md`, `4-Door-Developers/DOOR_DEVELOPMENT.md`, `5-Reference/COMMAND_REFERENCE.md`) synthesizes the key knowledge from the archived documents while pointing readers to deeper write-ups when needed.
 - **Note**: The archived `FEATURE_MATRIX.md` is outdated - most commands marked as "stubs" are now fully implemented.
 

@@ -830,7 +830,7 @@ Expected: FAIL - "Cannot find module '../src/checksums'"
 - [ ] **Step 3: Copy the module across**
 
 ```bash
-cp ~/Code/amiexpress-web/web/backend/src/doors/door-repo-checksums.ts \
+cp ~/Code/AmiExpress/amiexpress-web/web/backend/src/doors/door-repo-checksums.ts \
    ~/Code/amiexpress-doorserver/src/checksums.ts
 ```
 
@@ -870,7 +870,7 @@ git commit -m "feat: archive checksum cache ported from the BBS"
 - [ ] **Step 1: Port the module**
 
 ```bash
-cp ~/Code/amiexpress-web/web/backend/src/doors/door-repo-manifest.ts \
+cp ~/Code/AmiExpress/amiexpress-web/web/backend/src/doors/door-repo-manifest.ts \
    ~/Code/amiexpress-doorserver/src/manifest.ts
 ```
 
@@ -1136,7 +1136,7 @@ git commit -m "feat: manifest builder, list.txt renderer and published contract 
 - [ ] **Step 1: Port the router**
 
 ```bash
-cp ~/Code/amiexpress-web/web/backend/src/server/door-repo.routes.ts \
+cp ~/Code/AmiExpress/amiexpress-web/web/backend/src/server/door-repo.routes.ts \
    ~/Code/amiexpress-doorserver/src/routes.ts
 ```
 
@@ -1672,7 +1672,7 @@ describeOrSkip('parity with the BBS-hosted API', () => {
 - [ ] **Step 4: Run it against a copy of the live catalog**
 
 ```bash
-cp ~/Code/amiexpress-web/database.sqlite /tmp/parity-source.db
+cp ~/Code/AmiExpress/amiexpress-web/database.sqlite /tmp/parity-source.db
 PARITY_DB=/tmp/parity-source.db PARITY_ARCHIVES=~/Code/amiexpress_doors/Archives \
   npx jest --config jest.config.ts tests/parity.test.ts
 ```
@@ -1861,7 +1861,7 @@ Expected: PASS, 4 tests
 - [ ] **Step 5: Migrate a real copy and compare counts**
 
 ```bash
-cp ~/Code/amiexpress-web/database.sqlite /tmp/bbs-copy.db
+cp ~/Code/AmiExpress/amiexpress-web/database.sqlite /tmp/bbs-copy.db
 npx tsx scripts/migrate-from-bbs.ts /tmp/bbs-copy.db /tmp/doors.db
 sqlite3 /tmp/bbs-copy.db 'SELECT COUNT(*) FROM door_catalog; SELECT COUNT(*) FROM door_catalog_files;'
 sqlite3 /tmp/doors.db     'SELECT COUNT(*) FROM door_catalog; SELECT COUNT(*) FROM door_catalog_files;'
@@ -2040,8 +2040,8 @@ jobs:
 
 ```bash
 mkdir -p docs/superpowers/specs
-cp ~/Code/amiexpress-web/docs/DOOR-REPO-API.md docs/DOOR-REPO-API.md
-cp ~/Code/amiexpress-web/docs/superpowers/specs/2026-08-23-door-server-split-design.md docs/superpowers/specs/
+cp ~/Code/AmiExpress/amiexpress-web/docs/DOOR-REPO-API.md docs/DOOR-REPO-API.md
+cp ~/Code/AmiExpress/amiexpress-web/docs/superpowers/specs/2026-08-23-door-server-split-design.md docs/superpowers/specs/
 ```
 
 Add a line at the top of `docs/DOOR-REPO-API.md`: the API is served by this repo; amiexpress-web proxies `/api/door-repo/*` for compatibility. Leave the amiexpress-web copy in place until phase 2 replaces it with a pointer - deleting it now would strand the BBS's own docs.

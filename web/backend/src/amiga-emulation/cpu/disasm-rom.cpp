@@ -4,7 +4,7 @@
 #include <iomanip>
 
 int main() {
-    std::ifstream rom("~/Code/amiexpress-web/roms/kickstart-1.3.rom", std::ios::binary);
+    std::ifstream rom("~/Code/AmiExpress/amiexpress-web/roms/kickstart-1.3.rom", std::ios::binary);
     std::vector<uint8_t> data((std::istreambuf_iterator<char>(rom)), std::istreambuf_iterator<char>());
     
     // Address 0xf83632 - ROM base 0xf80000 = offset 0x3632

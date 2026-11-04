@@ -80,7 +80,7 @@ Created detailed documentation of all work:
 [BBSCMD] Executing: TESTRESTRICT
   Found command: TESTRESTRICT (XIM)
   Executing XIM door: Doors/TestRestrict
-[AmigaDoorSession] Starting door: ~/Code/amiexpress-web/Doors/TestRestrict
+[AmigaDoorSession] Starting door: ~/Code/AmiExpress/amiexpress-web/Doors/TestRestrict
 [AEDoorLibrary] Prompt(...) - Pausing emulator (waiting for user input)
 ```
 

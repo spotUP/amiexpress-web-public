@@ -33,7 +33,7 @@ This note distills the parts of UADE’s Amiga-side “score” plus the Unix ho
   * `OpenLibrary` registers every opened library in `dos_lib_base`/`uade_lib_base` structures and logs warnings if an unknown name appears (`openlibwarnmsg`).
 - Message port semantics:
   * `exec_open_library`/`exec_open_device` rely on working `FindPort/CreatePort/Wait/GetMsg/ReplyMsg` which the score expects to be functional before any `SystemTagList` call happens.
-  * `JH_*` command IDs (`AmiExpress-Sources/axcommon.e:72-195`) match XIM message types our `XIMProtocol` exposes (`JH_WRITE`, `JH_PM`, `DT_*`, `BB_*`, etc.).
+  * `JH_*` command IDs (`~/Code/Reference/AmiExpress-Sources/axcommon.e:72-195`) match XIM message types our `XIMProtocol` exposes (`JH_WRITE`, `JH_PM`, `DT_*`, `BB_*`, etc.).
 
 **Takeaway:** replicate the behaviors, not just the APIs. For example, our `DosLibrary` should log the same warnings when `CurrentDir()` is used and should stash the original Amiga path with each lock (so we can reapply relative paths, exactly like `dos_fixfilename`). Exec stubs (Supervisor, OpenDevice(timer/audio), WaitIO, GetMsg/PutMsg) must match the score’s expectations or Bulls bails out before entering the XIM loop.
 
@@ -46,13 +46,13 @@ This note distills the parts of UADE’s Amiga-side “score” plus the Unix ho
 
 ## 4. AmiExpress Door Launch Semantics (express.e)
 
-- `AmiExpress-Sources/express.e:4231-4370` (`runDoor`) shows the exact sequence when `/X` starts a door:
+- `~/Code/Reference/AmiExpress-Sources/express.e:4231-4370` (`runDoor`) shows the exact sequence when `/X` starts a door:
   1. Build the CLI string `"<door_binary> <node>"`.
   2. Select the port name: `AEDoorPort<Node>` for XIM, `DoorControl<Node>` for SIM/TIM/TIM doors.
   3. If the port doesn’t exist, `createPort()` is called before launching the process.
   4. `startProcess()` (express.e:3304-3334) wraps `SystemTagList` with tags for `SYS_INPUT`, `SYS_OUTPUT`, `SYS_ASYNCH`, `NP_STACKSIZE`, etc. When `doorTrap` is enabled, output is redirected to `Node#/StartProcess`.
   5. For XIM doors, the BBS loops forever waiting on `Wait(ximSig)` then `GetMsg(mp)` and dispatches each `jhMessage` via `processXimMsg()`.
-- The `jhMessage` structure lives in `AmiExpress-Sources/axcommon.e:543-557` (message node header + 200 byte string + data/command fields), and `MAX_CMD` is 1003 (`axcommon.e:364`).
+- The `jhMessage` structure lives in `~/Code/Reference/AmiExpress-Sources/axcommon.e:543-557` (message node header + 200 byte string + data/command fields), and `MAX_CMD` is 1003 (`axcommon.e:364`).
 
 **Takeaway:** our runtime must emulate two separate processes: the door (68k) and the host side message pump. Bulls will only enter its internal loop once it can `FindPort("AEDoorPort1")`, `CreatePort()` for a reply port, and receive signal bits back when the BBS replies. That means:
   * Exec’s port registry must match the semantics from express.e, including `mp.sigbit` bitmasks.

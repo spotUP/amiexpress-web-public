@@ -105,10 +105,10 @@ Fixed BBS root path resolution:
 
 **Verified Paths:**
 ```
-BBS root: ~/Code/amiexpress-web
-user.data: ~/Code/amiexpress-web/user.data
-user.keys: ~/Code/amiexpress-web/user.keys
-user.misc: ~/Code/amiexpress-web/user.misc
+BBS root: ~/Code/AmiExpress/amiexpress-web
+user.data: ~/Code/AmiExpress/amiexpress-web/user.data
+user.keys: ~/Code/AmiExpress/amiexpress-web/user.keys
+user.misc: ~/Code/AmiExpress/amiexpress-web/user.misc
 ```
 
 **Files Created:**

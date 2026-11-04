@@ -7,7 +7,7 @@ import * as path from 'path';
 import { BBSState } from '../constants/bbs-states';
 import { parseMciCodes } from '../handlers/screen.handler';
 
-const BBS_ROOT = '~/Code/amiexpress-web';
+const BBS_ROOT = '~/Code/AmiExpress/amiexpress-web';
 
 // Create a mock socket that logs emits
 function createMockSocket() {

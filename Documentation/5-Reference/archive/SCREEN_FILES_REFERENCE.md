@@ -194,8 +194,8 @@ To test screen files:
 
 ## References
 
-- **Source Analysis**: `AmiExpress-Sources/express.e` lines 6539-6655
-- **Screen Constants**: `AmiExpress-Sources/axenums.e` line 19
+- **Source Analysis**: `~/Code/Reference/AmiExpress-Sources/express.e` lines 6539-6655
+- **Screen Constants**: `~/Code/Reference/AmiExpress-Sources/axenums.e` line 19
 - **Implementation**: `backend/src/index.ts` (displayScreen equivalent)
 - **MCI Processing**: To be implemented in display functions
 

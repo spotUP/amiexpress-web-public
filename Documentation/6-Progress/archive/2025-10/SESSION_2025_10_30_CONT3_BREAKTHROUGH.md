@@ -251,7 +251,7 @@ if (this.iterationCount === 100) {
 
 ## Files Modified This Session
 
-### `~/Code/amiexpress-web/web/backend/src/amiga-emulation/AmigaDoorSession.ts`
+### `~/Code/AmiExpress/amiexpress-web/web/backend/src/amiga-emulation/AmigaDoorSession.ts`
 
 **Lines 374-376:** Added WHILE LOOP START logging
 ```typescript

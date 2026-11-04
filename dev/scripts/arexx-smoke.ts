@@ -4,7 +4,7 @@
  * host-port round trip in the singleton emulator.
  *
  * Usage from web/backend:
- *   AREXX_TRACE=1 SKIP_DB_INIT=1 BBS_DATA_DIR=~/Code/amiexpress-web \
+ *   AREXX_TRACE=1 SKIP_DB_INIT=1 BBS_DATA_DIR=~/Code/AmiExpress/amiexpress-web \
  *     npx tsx ../../dev/scripts/arexx-smoke.ts
  */
 

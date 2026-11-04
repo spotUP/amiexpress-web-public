@@ -157,7 +157,7 @@ Keys: [1]8x [2]4x+10 [3]4x+10 [4]1x [5]16c [6]geo   [F]ull [S]top
 ✅ **PASSED** - No compilation errors
 
 ```bash
-cd ~/Code/amiexpress-web/Doors/neo-blessed-showcase
+cd ~/Code/AmiExpress/amiexpress-web/Doors/neo-blessed-showcase
 npx tsc --noEmit
 # No errors
 ```

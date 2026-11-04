@@ -12,7 +12,7 @@ This session continued from the October 29th door testing work, where we had ver
 
 **Problem Discovered:**
 - Backend's `getAmigaDoorManager()` was using wrong default path: `process.cwd() + '../BBS'`
-- This resolved to `~/Code/amiexpress-web/web/BBS` (doesn't exist)
+- This resolved to `~/Code/AmiExpress/amiexpress-web/web/BBS` (doesn't exist)
 - Doors and Commands directories are at project root, not in web/BBS
 
 **Fix Applied:**
@@ -26,8 +26,8 @@ const root = bbsRoot || path.join(process.cwd(), '..', '..');
 ```
 
 **Result:**
-- Backend now correctly finds doors at `~/Code/amiexpress-web/Doors/`
-- Commands loaded successfully from `~/Code/amiexpress-web/Commands/BBSCmd/`
+- Backend now correctly finds doors at `~/Code/AmiExpress/amiexpress-web/Doors/`
+- Commands loaded successfully from `~/Code/AmiExpress/amiexpress-web/Commands/BBSCmd/`
 - FRONTEND command now maps to `Doors/AquaWho/AquaWho`
 
 ### 2. First Successful 68k Door Execution 🎉
@@ -206,11 +206,11 @@ Note: Door ran silently (no visible output yet) but was executing 68k code!
 ```
 [executeAmigaDoor] Starting Amiga door: FRONTEND (XIM)
 [executeAmigaDoor] Location: Doors/AquaWho/AquaWho
-[executeAmigaDoor] BBS root: ~/Code/amiexpress-web
-[executeAmigaDoor] Full door path: ~/Code/amiexpress-web/Doors/AquaWho/AquaWho
-[executeAmigaDoor] Starting 68k emulation for: ~/Code/amiexpress-web/Doors/AquaWho/AquaWho
+[executeAmigaDoor] BBS root: ~/Code/AmiExpress/amiexpress-web
+[executeAmigaDoor] Full door path: ~/Code/AmiExpress/amiexpress-web/Doors/AquaWho/AquaWho
+[executeAmigaDoor] Starting 68k emulation for: ~/Code/AmiExpress/amiexpress-web/Doors/AquaWho/AquaWho
 
-[AmigaDoorSession] Starting door: ~/Code/amiexpress-web/Doors/AquaWho/AquaWho
+[AmigaDoorSession] Starting door: ~/Code/AmiExpress/amiexpress-web/Doors/AquaWho/AquaWho
 [AmigaDoorSession] Binary size: 26596 bytes
 
 [HunkLoader] Found 2 segments

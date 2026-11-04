@@ -260,7 +260,7 @@ $ cd sdk/doors/neo-blessed-showcase && npm run build
 The following SDK documentation has been updated to reflect Phase 4 features:
 
 ### 1. NEO_BLESSED_GUIDE.md
-**Location**: `~/Code/amiexpress-web/sdk/docs/NEO_BLESSED_GUIDE.md`
+**Location**: `~/Code/AmiExpress/amiexpress-web/sdk/docs/NEO_BLESSED_GUIDE.md`
 
 **Additions**:
 - New section: "Advanced Terminal Control (Phase 4 Features)"
@@ -271,7 +271,7 @@ The following SDK documentation has been updated to reflect Phase 4 features:
 - Updated Best Practices (5 new points)
 
 ### 2. NEO_BLESSED_PORT_AUDIT_FULL.md
-**Location**: `~/Code/amiexpress-web/Documentation/3-Developers/NEO_BLESSED_PORT_AUDIT_FULL.md`
+**Location**: `~/Code/AmiExpress/amiexpress-web/Documentation/3-Developers/NEO_BLESSED_PORT_AUDIT_FULL.md`
 
 **Updates**:
 - Overall status: 85-90% → 95% Complete

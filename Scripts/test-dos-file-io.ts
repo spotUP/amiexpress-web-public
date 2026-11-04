@@ -7,7 +7,7 @@ const fs = require('fs');
 const path = require('path');
 
 // Create test file
-const testDir = '~/Code/amiexpress-web/web/backend/data/bbs/Node1';
+const testDir = '~/Code/AmiExpress/amiexpress-web/web/backend/data/bbs/Node1';
 const testFile = path.join(testDir, 'test-file-io.txt');
 
 // Ensure directory exists

@@ -128,6 +128,6 @@ Both versions output:
 
 ## References
 
-- Original 68K source: `Documentation/7-Reference Sources/AmiXDoors-master/QuickNew/QuickNew.asm`
+- Original 68K source: `~/Code/Reference/AmiXDoors-master/QuickNew/QuickNew.asm`
 - TypeScript implementation: `web/backend/src/utils/quicknew-generator.ts`
 - Batch integration: `web/backend/src/services/batch-scheduler.ts:229-244`

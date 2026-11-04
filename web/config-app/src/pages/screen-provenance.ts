@@ -1,7 +1,7 @@
 /**
  * Where express.e displays each screen. GENERATED - do not edit.
  *
- * Source: AmiExpress-Sources/express.e
+ * Source: ~/Code/Reference/AmiExpress-Sources/express.e
  * Regenerate: npx tsx dev/scripts/generate-screen-provenance.ts
  *
  * The admin says when a caller meets a screen; this is where that claim comes

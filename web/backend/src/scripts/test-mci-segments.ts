@@ -4,7 +4,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 
-const BBS_ROOT = '~/Code/amiexpress-web';
+const BBS_ROOT = '~/Code/AmiExpress/amiexpress-web';
 
 function testSegmentSplit() {
 console.log('=== MCI Segment Split Test ===\n');

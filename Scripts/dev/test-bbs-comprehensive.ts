@@ -309,7 +309,7 @@ function generateReport() {
 
   // Save to file
   const fs = require('fs');
-  const reportPath = '~/Code/amiexpress-web/test-report.json';
+  const reportPath = '~/Code/AmiExpress/amiexpress-web/test-report.json';
   fs.writeFileSync(reportPath, JSON.stringify(testResults, null, 2));
   log(`\n📄 Detailed report saved to: ${reportPath}`, 'success');
 }

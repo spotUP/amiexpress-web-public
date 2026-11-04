@@ -228,7 +228,7 @@ export class VoiceCapture extends EventEmitter {
 - [ ] **Step 2: Verify types compile**
 
 ```bash
-cd ~/Code/amiexpress-web/sdk && npx tsc --noEmit 2>&1 | head -20
+cd ~/Code/AmiExpress/amiexpress-web/sdk && npx tsc --noEmit 2>&1 | head -20
 ```
 Expected: no errors for `sdk/media/VoiceCapture.ts`.
 
@@ -280,14 +280,14 @@ export { VoiceCapture, type VoiceCaptureOptions } from '../media/VoiceCapture';
 - [ ] **Step 5: Typecheck SDK**
 
 ```bash
-cd ~/Code/amiexpress-web/sdk && npx tsc --noEmit 2>&1 | head -20
+cd ~/Code/AmiExpress/amiexpress-web/sdk && npx tsc --noEmit 2>&1 | head -20
 ```
 Expected: clean.
 
 - [ ] **Step 6: Commit**
 
 ```bash
-cd ~/Code/amiexpress-web
+cd ~/Code/AmiExpress/amiexpress-web
 git add sdk/media/VoiceCapture.ts sdk/media/index.ts sdk/client/index.ts
 git commit -m "feat(sdk): add VoiceCapture class for shared browser mic capture/playback"
 ```
@@ -385,7 +385,7 @@ Also remove the now-unused private fields: `mediaStream`, `mediaRecorder`, `anal
 - [ ] **Step 7: Build livechat**
 
 ```bash
-cd ~/Code/amiexpress-web/Doors/livechat && npx tsc --noEmit 2>&1 | head -20
+cd ~/Code/AmiExpress/amiexpress-web/Doors/livechat && npx tsc --noEmit 2>&1 | head -20
 npm run build 2>&1 | tail -5
 ```
 Expected: clean.
@@ -393,7 +393,7 @@ Expected: clean.
 - [ ] **Step 8: Commit**
 
 ```bash
-cd ~/Code/amiexpress-web
+cd ~/Code/AmiExpress/amiexpress-web
 git add Doors/livechat/client.ts
 git commit -m "refactor(livechat): use VoiceCapture SDK class for mic capture and playback"
 ```
@@ -455,7 +455,7 @@ In `cleanup()`, after `this.socketHandlers = [];`, add:
 - [ ] **Step 5: Build grandmaster**
 
 ```bash
-cd ~/Code/amiexpress-web/Doors/grandmaster && npx tsc --noEmit 2>&1 | head -20
+cd ~/Code/AmiExpress/amiexpress-web/Doors/grandmaster && npx tsc --noEmit 2>&1 | head -20
 npm run build 2>&1 | tail -5
 ```
 Expected: clean.
@@ -463,7 +463,7 @@ Expected: clean.
 - [ ] **Step 6: Commit**
 
 ```bash
-cd ~/Code/amiexpress-web
+cd ~/Code/AmiExpress/amiexpress-web
 git add Doors/grandmaster/client.ts
 git commit -m "feat(grandmaster): add VoiceCapture wiring in hybrid client"
 ```
@@ -608,7 +608,7 @@ Remove the old inline `inputHandler`/`inputManager` resume block that was there 
 - [ ] **Step 8: Typecheck grandmaster**
 
 ```bash
-cd ~/Code/amiexpress-web/Doors/grandmaster && npx tsc --noEmit 2>&1 | head -20
+cd ~/Code/AmiExpress/amiexpress-web/Doors/grandmaster && npx tsc --noEmit 2>&1 | head -20
 ```
 Expected: clean.
 
@@ -622,7 +622,7 @@ Expected: clean.
 - [ ] **Step 10: Commit**
 
 ```bash
-cd ~/Code/amiexpress-web
+cd ~/Code/AmiExpress/amiexpress-web
 git add Doors/grandmaster/app.ts
 git commit -m "feat(grandmaster): server-side voice relay via Socket.IO rooms"
 ```
@@ -784,7 +784,7 @@ Note: `this._voiceRoom` is not accessible in VersusScreen directly. Instead, pas
 - [ ] **Step 9: Typecheck and build**
 
 ```bash
-cd ~/Code/amiexpress-web/Doors/grandmaster && npx tsc --noEmit 2>&1 | head -20
+cd ~/Code/AmiExpress/amiexpress-web/Doors/grandmaster && npx tsc --noEmit 2>&1 | head -20
 npm run build 2>&1 | tail -5
 ```
 Expected: clean.
@@ -792,7 +792,7 @@ Expected: clean.
 - [ ] **Step 10: Commit**
 
 ```bash
-cd ~/Code/amiexpress-web
+cd ~/Code/AmiExpress/amiexpress-web
 git add Doors/grandmaster/ui/versus-screen.ts Doors/grandmaster/app.ts
 git commit -m "feat(grandmaster): voice speaking indicators and M-key mute in VS panel"
 ```
@@ -804,35 +804,35 @@ git commit -m "feat(grandmaster): voice speaking indicators and M-key mute in VS
 - [ ] **Step 1: Typecheck SDK**
 
 ```bash
-cd ~/Code/amiexpress-web/sdk && npx tsc --noEmit 2>&1
+cd ~/Code/AmiExpress/amiexpress-web/sdk && npx tsc --noEmit 2>&1
 ```
 Expected: clean.
 
 - [ ] **Step 2: Typecheck backend**
 
 ```bash
-cd ~/Code/amiexpress-web/web/backend && npx tsc --noEmit 2>&1 | grep -v node_modules | head -20
+cd ~/Code/AmiExpress/amiexpress-web/web/backend && npx tsc --noEmit 2>&1 | grep -v node_modules | head -20
 ```
 Expected: clean.
 
 - [ ] **Step 3: Full grandmaster build**
 
 ```bash
-cd ~/Code/amiexpress-web/Doors/grandmaster && npm run build 2>&1 | tail -5
+cd ~/Code/AmiExpress/amiexpress-web/Doors/grandmaster && npm run build 2>&1 | tail -5
 ```
 Expected: `dist/client.bundle.js` updated, no errors.
 
 - [ ] **Step 4: Livechat build**
 
 ```bash
-cd ~/Code/amiexpress-web/Doors/livechat && npm run build 2>&1 | tail -5
+cd ~/Code/AmiExpress/amiexpress-web/Doors/livechat && npm run build 2>&1 | tail -5
 ```
 Expected: clean.
 
 - [ ] **Step 5: Final commit**
 
 ```bash
-cd ~/Code/amiexpress-web
+cd ~/Code/AmiExpress/amiexpress-web
 git add -p  # stage any remaining changes
 git commit -m "feat: grandmaster voice chat — VoiceCapture SDK, relay, VS panel UI"
 ```

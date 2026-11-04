@@ -190,7 +190,7 @@ export class XIMSystemCommandsHandler {
     // at offset 0xdc) use a generic CheckMessage() that returns msg->Data for ALL
     // replies — they never read msg->Command after JH_REGISTER, so they end up
     // with userLineLen=0 and the door's own paginator triggers (Pause)... after
-    // every line. Reference: Documentation/7-Reference Sources/AEKIT101/Sources/
+    // every line. Reference: ~/Code/Reference/AEKIT101/Sources/
     // MISC/AEDoor.c line 171 (`ret = XIM_Msg->Data;`) — official Amiga Express
     // door kit. Mirror userLineLen into msg.data so both reader styles see the
     // right threshold. Additive: express.e-style doors that read command are

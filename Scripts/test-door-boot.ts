@@ -14,7 +14,7 @@ socket.on('connect', () => {
   // Launch GetAnswer door
   socket.emit('door:launch', {
     doorId: 'GetAnswer',
-    doorPath: '~/Code/amiexpress-web/doors/GetAnswer/GetAnswer'
+    doorPath: '~/Code/AmiExpress/amiexpress-web/doors/GetAnswer/GetAnswer'
   });
 });
 

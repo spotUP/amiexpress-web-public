@@ -31,19 +31,19 @@ if (amigaPath.toUpperCase().startsWith('DOORS:')) {
 **1. PROGDIR: - Door's Own Directory**
 ```c
 Open("PROGDIR:config.txt")
-→ ~/Code/amiexpress-web/Doors/{DoorName}/config.txt
+→ ~/Code/AmiExpress/amiexpress-web/Doors/{DoorName}/config.txt
 ```
 
 **2. Doors: - Doors Directory Root**
 ```c
 Open("Doors:AquaWho/Tot.dat")
-→ ~/Code/amiexpress-web/Doors/AquaWho/Tot.dat
+→ ~/Code/AmiExpress/amiexpress-web/Doors/AquaWho/Tot.dat
 ```
 
 **3. BBS: - BBS System Files**
 ```c
 Open("BBS:user.data")
-→ ~/Code/amiexpress-web/user.data
+→ ~/Code/AmiExpress/amiexpress-web/user.data
 ```
 
 ## Why This Matters

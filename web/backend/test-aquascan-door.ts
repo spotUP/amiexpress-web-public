@@ -9,7 +9,7 @@ import * as path from 'path';
 import * as fs from 'fs';
 import { DoorLoader } from './src/amiga-emulation/DoorLoader';
 
-const BBS_ROOT = '~/Code/amiexpress-web';
+const BBS_ROOT = '~/Code/AmiExpress/amiexpress-web';
 process.env.BBS_ROOT = BBS_ROOT;
 process.env.BBS_DATA_DIR = BBS_ROOT;
 

@@ -3,7 +3,7 @@
 /**
  * Build compact search indexes from amiga-reversing knowledge bases.
  * 
- * Source: Documentation/7-Reference Sources/amiga-reversing/
+ * Source: ~/Code/Reference/amiga-reversing/
  * Output: mcp-server/data/
  * 
  * Run: node mcp-server/build-indexes.js
@@ -21,7 +21,10 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const PROJECT_ROOT = path.resolve(__dirname, '..');
-const KB_DIR = path.join(PROJECT_ROOT, 'Documentation', '7-Reference Sources', 'amiga-reversing');
+// The original AmiExpress sources, NDK and other reference material live
+// outside the repo; AMIEXPRESS_REFERENCE points at another copy.
+const REFERENCE_ROOT = process.env.AMIEXPRESS_REFERENCE || '~/Code/Reference';
+const KB_DIR = path.join(REFERENCE_ROOT, 'amiga-reversing');
 const OUT_DIR = path.join(__dirname, 'data');
 
 const BASE_URL = 'https://raw.githubusercontent.com/rmtew/amiga-reversing/master/knowledge';

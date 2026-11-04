@@ -1,7 +1,7 @@
 # Element Class 1:1 Parity Analysis with neo-blessed
 
 **Date**: 2025-12-12
-**Current Implementation**: `~/Code/amiexpress-web/sdk/engines/ui/blessed/core/element.ts` (539 lines)
+**Current Implementation**: `~/Code/AmiExpress/amiexpress-web/sdk/engines/ui/blessed/core/element.ts` (539 lines)
 **Reference**: neo-blessed Element class (2570 lines) + Node class (282 lines)
 
 ## Summary
@@ -416,7 +416,7 @@ Our Element should inherit these from Node:
 
 - **neo-blessed Element**: `/Doors/bbslinkwall/node_modules/@amiexpress/bbs-door-sdk/node_modules/neo-blessed/lib/widgets/element.js` (2570 lines)
 - **neo-blessed Node**: `/Doors/bbslinkwall/node_modules/@amiexpress/bbs-door-sdk/node_modules/neo-blessed/lib/widgets/node.js` (282 lines)
-- **Our Element**: `~/Code/amiexpress-web/sdk/engines/ui/blessed/core/element.ts` (539 lines)
+- **Our Element**: `~/Code/AmiExpress/amiexpress-web/sdk/engines/ui/blessed/core/element.ts` (539 lines)
 
 ---
 

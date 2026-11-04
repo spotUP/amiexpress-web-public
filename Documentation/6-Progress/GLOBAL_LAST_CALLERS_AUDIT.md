@@ -171,7 +171,7 @@ export function generateLastCallersBulletin(limit = 20): string {
 
 ## References
 
-- Original GLCUpdater: `Documentation/7-Reference Sources/AmiXDoors-master/Global Last Callers/GLCUpdater.e`
-- Original GLCViewer: `Documentation/7-Reference Sources/AmiXDoors-master/Global Last Callers/GLCViewer.e`
+- Original GLCUpdater: `~/Code/Reference/AmiXDoors-master/Global Last Callers/GLCUpdater.e`
+- Original GLCViewer: `~/Code/Reference/AmiXDoors-master/Global Last Callers/GLCViewer.e`
 - TypeScript implementation: `web/backend/src/utils/lastcallers-generator.ts`
 - Batch integration: `batch-scheduler.ts` (GLCUpdater references in batch files)

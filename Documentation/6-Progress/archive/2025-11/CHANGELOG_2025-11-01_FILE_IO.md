@@ -12,7 +12,7 @@ Implemented COMPLETE file I/O support in DosLibrary.ts, enabling Amiga door prog
 
 ## Changes Made
 
-### File: `~/Code/amiexpress-web/web/backend/src/amiga-emulation/api/DosLibrary.ts`
+### File: `~/Code/AmiExpress/amiexpress-web/web/backend/src/amiga-emulation/api/DosLibrary.ts`
 
 #### Added Imports
 ```typescript
@@ -52,7 +52,7 @@ interface FileHandle {
 **Purpose:** Resolve Amiga paths to real filesystem paths
 
 **Features:**
-- Maps "BBS:" to `~/Code/amiexpress-web`
+- Maps "BBS:" to `~/Code/AmiExpress/amiexpress-web`
 - Handles relative paths (from BBS: base)
 - Handles absolute paths (starting with /)
 
@@ -210,7 +210,7 @@ All functions properly set error codes:
 ### Path Mapping
 
 **BBS: Logical Device:**
-- Maps to project root: `~/Code/amiexpress-web`
+- Maps to project root: `~/Code/AmiExpress/amiexpress-web`
 - Allows doors to access BBS data files
 - Example: `BBS:Node1/node1.user`
 
@@ -222,12 +222,12 @@ All functions properly set error codes:
 ## Testing
 
 ### Test File Created
-Location: `~/Code/amiexpress-web/web/backend/data/bbs/Node1/test-file-io.txt`
+Location: `~/Code/AmiExpress/amiexpress-web/web/backend/data/bbs/Node1/test-file-io.txt`
 Size: 49 bytes
 Purpose: Verify doors can open and read files
 
 ### Test Script
-File: `~/Code/amiexpress-web/test-dos-file-io.js`
+File: `~/Code/AmiExpress/amiexpress-web/test-dos-file-io.js`
 Purpose: Create test file for door testing
 
 ## Documentation Created

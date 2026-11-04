@@ -309,10 +309,10 @@ build/amiga/%.o: src/%.c $(AMIGA_HEADERS)
 # under Documentation/, through a shim directory the build creates. The
 # shim and netinclude go BEFORE $(AMIGA_CFLAGS) so they win over the
 # sys-include's copies. Same arrangement as examples/doorrepo-c/Makefile.
-# Both reach vc through symlinks under build/, never as paths: the vendored
-# NDK lives under "7-Reference Sources", and vc reads a -I with a space in
-# it as a second input file ("only one input file allowed").
-VENDOR_NDK_ROOT ?= $(CURDIR)/../../Documentation/7-Reference Sources/NDK3.2R4
+# Both reach vc through symlinks under build/, never as paths: vc reads a -I
+# with a space in it as a second input file ("only one input file allowed"),
+# and VENDOR_NDK_ROOT may be overridden with such a path.
+VENDOR_NDK_ROOT ?= $(CURDIR)/../../vendor/NDK3.2R4
 NET_SHIM = build/amiga/ndk-shim
 NET_INCLUDE = build/amiga/netinclude
 build/amiga/ae_net.o: src/ae_net.c include/ae_net.h

@@ -17,8 +17,8 @@
 import * as fs from 'fs';
 import * as path from 'path';
 
-const NDK_AUTODOCS_PATH = '~/Code/amiexpress-web/NDK3.2R4/Autodocs/AG';
-const OUTPUT_DIR = '~/Code/amiexpress-web/web/backend/src/amiga-emulation/api/specs';
+const NDK_AUTODOCS_PATH = '~/Code/AmiExpress/amiexpress-web/NDK3.2R4/Autodocs/AG';
+const OUTPUT_DIR = '~/Code/AmiExpress/amiexpress-web/web/backend/src/amiga-emulation/api/specs';
 
 // ============================================================================
 // Autodoc Parser

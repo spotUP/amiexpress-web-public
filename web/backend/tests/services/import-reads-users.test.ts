@@ -16,7 +16,7 @@
  * against a real board.
  *
  * The fixture is a genuine excerpt of the reference-boardBBS reference tree in this
- * repo (Documentation/7-Reference Sources/reference-boardBBS), copied byte for byte
+ * repo (~/Code/Reference/reference-boardBBS), copied byte for byte
  * rather than invented, because a fixture written from the same wrong
  * understanding as the code proves only that they agree. Its first record
  * annotates its own layout - `-------------30` after the name marks a 31-byte

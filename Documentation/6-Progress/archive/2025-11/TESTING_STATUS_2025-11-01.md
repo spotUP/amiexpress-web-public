@@ -149,14 +149,14 @@ cat Doors/AquaWho/Tot.dat | od -c | head
 
 ### Backend Logs Should Show
 ```
-[AmigaDoorSession] Set door directory: ~/Code/amiexpress-web/Doors/AquaWho
-[dos.library] PROGDIR: device set to ~/Code/amiexpress-web/Doors/AquaWho
-[dos.library] Current directory set to ~/Code/amiexpress-web/Doors/AquaWho
+[AmigaDoorSession] Set door directory: ~/Code/AmiExpress/amiexpress-web/Doors/AquaWho
+[dos.library] PROGDIR: device set to ~/Code/AmiExpress/amiexpress-web/Doors/AquaWho
+[dos.library] Current directory set to ~/Code/AmiExpress/amiexpress-web/Doors/AquaWho
 [dos.library] Resolving Amiga path: "Doors:AquaWho/Tot.dat"
-[dos.library] Doors: device -> ~/Code/amiexpress-web/Doors/AquaWho/Tot.dat
+[dos.library] Doors: device -> ~/Code/AmiExpress/amiexpress-web/Doors/AquaWho/Tot.dat
 [dos.library] Open("Doors:AquaWho/Tot.dat", mode=1006)
 [dos.library] Write: Writing 128 bytes at position 0
-[dos.library] Close: Wrote 128 bytes to ~/Code/amiexpress-web/Doors/AquaWho/Tot.dat
+[dos.library] Close: Wrote 128 bytes to ~/Code/AmiExpress/amiexpress-web/Doors/AquaWho/Tot.dat
 ```
 
 ### Filesystem Should Show

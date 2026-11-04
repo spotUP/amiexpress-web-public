@@ -48,7 +48,7 @@ RECEIVED: Door executable not found.
 Executing XIM door: Doors/AquaWho/AquaWho
 [executeAmigaDoor] Starting Amiga door: FRONTEND (XIM)
 [executeAmigaDoor] Location: Doors/AquaWho/AquaWho
-[executeAmigaDoor] Full door path: ~/Code/amiexpress-web/web/Doors/AquaWho/AquaWho
+[executeAmigaDoor] Full door path: ~/Code/AmiExpress/amiexpress-web/web/Doors/AquaWho/AquaWho
 [executeAmigaDoor] Door executable not found
 ```
 
@@ -86,7 +86,7 @@ Executing XIM door: Doors/AquaWho/AquaWho
 ### ⚠️ What Needs Work
 
 1. **Door Executable Missing**
-   - Path resolved: `~/Code/amiexpress-web/web/Doors/AquaWho/AquaWho`
+   - Path resolved: `~/Code/AmiExpress/amiexpress-web/web/Doors/AquaWho/AquaWho`
    - File does not exist (expected - this is amiexpress-web, not reference-boardBBS)
    - Next step: Copy actual door from reference-boardBBS or use test door
 

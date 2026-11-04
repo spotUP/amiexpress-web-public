@@ -67,7 +67,7 @@ server over a live socket, not a stub.
 The Amiga socket branch (`netio.c`'s `#elif defined(AMIGA)` section) needs
 three things no plain AmigaOS SDK install provides on its own: `sys/socket.h`,
 `netinet/in.h`, and `netdb.h`. **This repository vendors a complete copy of
-NDK3.2R4 at `Documentation/7-Reference Sources/NDK3.2R4/`, and the Makefile
+NDK3.2R4 at `~/Code/Reference/NDK3.2R4/`, and the Makefile
 points at it by default -- you do not need to supply your own AmiTCP/Roadshow
 SDK to build the real networking target.** If you have your own SDK and
 prefer to use it instead, override it:

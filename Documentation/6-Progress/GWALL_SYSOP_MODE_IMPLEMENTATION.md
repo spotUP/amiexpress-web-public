@@ -194,7 +194,7 @@ npx tsc --noEmit
 
 ## Files Modified
 
-1. `~/Code/amiexpress-web/Doors/Gwall/index.ts`
+1. `~/Code/AmiExpress/amiexpress-web/Doors/Gwall/index.ts`
    - Added 7 new functions (~300 lines)
    - Fixed 2 user field references
    - Replaced sysop mode stub with full implementation
@@ -206,7 +206,7 @@ npx tsc --noEmit
 
 ## References
 
-- Original source: `Documentation/7-Reference Sources/AmiExpressEDoorSources/Global Wall/gwall.e` (lines 464-900)
+- Original source: `~/Code/Reference/AmiExpressEDoorSources/Global Wall/gwall.e` (lines 464-900)
 - TypeScript implementation: `Doors/Gwall/index.ts`
 - Global Wall API: scenewall.bbs.io:1541
 

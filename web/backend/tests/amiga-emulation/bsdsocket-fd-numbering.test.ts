@@ -632,7 +632,7 @@ describe('bsdsocket.library errno values (regression)', () => {
    * true and the door reported the wrong failure (or none at all).
    *
    * Ground truth: the vendored Roadshow NDK header
-   * Documentation/7-Reference Sources/NDK3.2R4/SANA+RoadshowTCP-IP/netinclude/sys/errno.h
+   * ~/Code/Reference/NDK3.2R4/SANA+RoadshowTCP-IP/netinclude/sys/errno.h
    *   line  74: #define ENOENT        2
    *   line  99: #define EMFILE       24
    *   line 147: #define ETIMEDOUT    60

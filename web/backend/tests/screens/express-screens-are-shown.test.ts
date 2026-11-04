@@ -1,7 +1,7 @@
 /**
  * The screens express.e shows, shown.
  *
- * Audited 2026-09-07 against AmiExpress-Sources/express.e: it calls
+ * Audited 2026-09-07 against ~/Code/Reference/AmiExpress-Sources/express.e: it calls
  * `displayScreen` for 32 screens; this port displayed 14 of them. The rest are
  * routed - the loader knows where each lives - and nothing ever asks for them,
  * so the files sit on the board and no caller ever sees one. The sysop hit it

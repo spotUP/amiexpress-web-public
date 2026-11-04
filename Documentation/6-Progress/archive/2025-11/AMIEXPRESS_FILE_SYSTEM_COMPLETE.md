@@ -2,7 +2,7 @@
 
 **CRITICAL: This is a 1:1 port - ALL files must be implemented for 100% compatibility**
 
-Analyzed from: `~/Code/amiexpress-web/AmiExpress-Sources/express.e`
+Analyzed from: `~/Code/Reference/AmiExpress-Sources/express.e`
 
 ---
 
@@ -919,9 +919,9 @@ Displays error to user and logs to callerslog
 ## References
 
 **Source Files:**
-- `~/Code/amiexpress-web/AmiExpress-Sources/express.e` - Main program
-- `~/Code/amiexpress-web/AmiExpress-Sources/axobjects.e` - Data structures
-- `~/Code/amiexpress-web/AmiExpress-Sources/tooltypes.e` - Configuration system
+- `~/Code/Reference/AmiExpress-Sources/express.e` - Main program
+- `~/Code/Reference/AmiExpress-Sources/axobjects.e` - Data structures
+- `~/Code/Reference/AmiExpress-Sources/tooltypes.e` - Configuration system
 
 **Line References:**
 All line numbers refer to express.e unless otherwise noted.

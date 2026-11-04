@@ -110,7 +110,7 @@ Documentation/
     ├── research/                # 2 research notes (2,000 lines)
     ├── reference/               # 8 reference docs (4,000 lines)
     ├── AmiExpressDocs/          # Original Amiga docs (KEPT)
-    ├── AmiExpress-Sources/      # express.e source (KEPT)
+    ├── ~/Code/Reference/AmiExpress-Sources/      # express.e source (KEPT)
     └── [other reference sources]
 ```
 

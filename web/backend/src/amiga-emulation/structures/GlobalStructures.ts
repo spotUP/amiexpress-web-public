@@ -4,7 +4,7 @@
  * These structures match the Amiga E definitions in axcommon.e
  * and are used to share BBS configuration and state with 68K doors.
  *
- * Based on: AmiExpress-Sources/axcommon.e
+ * Based on: ~/Code/Reference/AmiExpress-Sources/axcommon.e
  */
 
 import { MoiraEmulator } from '../cpu/MoiraEmulator';

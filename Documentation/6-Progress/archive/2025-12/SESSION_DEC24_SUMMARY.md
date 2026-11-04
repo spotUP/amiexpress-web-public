@@ -90,7 +90,7 @@
 
 **Problem**:
 ```
-[SYSOP DEBUG] File read failed: ~/Code/amiexpress-web/Doors/DIAGNOSTIC
+[SYSOP DEBUG] File read failed: ~/Code/AmiExpress/amiexpress-web/Doors/DIAGNOSTIC
 Error: EISDIR: illegal operation on a directory, read
 ```
 

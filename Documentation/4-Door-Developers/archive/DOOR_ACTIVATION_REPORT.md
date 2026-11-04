@@ -117,7 +117,7 @@ Successfully activated **21 doors** with full functionality across both Doors/ d
 ## 🔧 SDK Status
 
 - **@amiexpress/bbs-door-sdk v2.0.0:** ✅ BUILT SUCCESSFULLY
-- **Location:** `~/Code/amiexpress-web/sdk`
+- **Location:** `~/Code/AmiExpress/amiexpress-web/sdk`
 - **Build Output:** TypeScript compiled to `/dist/`
 - **Status:** Ready for all door integrations
 - **Automated Testing:** ✅ install-and-test-all-doors.sh script working

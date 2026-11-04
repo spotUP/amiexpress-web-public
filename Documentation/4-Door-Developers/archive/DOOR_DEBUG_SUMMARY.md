@@ -104,7 +104,7 @@ private injectBullsReplyPort(): void {
 ```
 
 ### Bulls Door Location Confirmed
-- **Path**: `~/Code/amiexpress-web/doors/emp_tools/Bulls`
+- **Path**: `~/Code/AmiExpress/amiexpress-web/doors/emp_tools/Bulls`
 - **Size**: 21,828 bytes
 - **Type**: XIM door for AmiExpress 3.xx
 
@@ -175,7 +175,7 @@ private injectBullsReplyPort(): void {
 
 ### Run Bulls Door Test
 ```bash
-cd ~/Code/amiexpress-web
+cd ~/Code/AmiExpress/amiexpress-web
 node tmp/test-bulls-early-fix.js
 ```
 

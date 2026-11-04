@@ -286,7 +286,7 @@ See `sdk/68k/doors/cplistan/` for a complete working example featuring:
 - Door input uses `petscii` screen files routed through `Screens/` and the 33-space continuation block (matching `express.e`'s `buildDescriptionLines`).
 
 ## 3. Tools & Reference Sources
-- Use `Documentation/7-Reference Sources/Doors_with_Source/` for preserved door binaries, and `vAmiga` for emulator references—their README files describe how the AI harnessed them.
+- Use `~/Code/Reference/Doors_with_Source/` for preserved door binaries, and `vAmiga` for emulator references—their README files describe how the AI harnessed them.
 - The `Door Manager` logs door statuses, handles pause prompts, and adapts to per-user screen height so the FR pause now matches express.e's expected behavior.
 - Run `dev/scripts/test-all-doors.sh` to exercise each door; inspect `dev/scripts/door-test-results.txt` for `pass/fail/timeout` counts.
 

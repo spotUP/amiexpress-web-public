@@ -1,7 +1,7 @@
 /**
  * No absolute path from someone's laptop in code that runs on the board.
  *
- * The RIP browser opened '~/Code/amiexpress-web/RIPgraphics' - the
+ * The RIP browser opened '~/Code/AmiExpress/amiexpress-web/RIPgraphics' - the
  * board is a Linux container with no /Users at all, so every user got
  * "Directory not found" while the graphics sat on the volume. Three more were
  * fallbacks that only look harmless: the BBS: assign, and the two emulator

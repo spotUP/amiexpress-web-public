@@ -12,7 +12,7 @@ import { IconLibrary } from '../../web/backend/src/amiga-emulation/api/IconLibra
 import * as fs from 'fs';
 import * as path from 'path';
 
-const BBS_ROOT = '~/Code/amiexpress-web';
+const BBS_ROOT = '~/Code/AmiExpress/amiexpress-web';
 const DOOR_PATH = path.join(BBS_ROOT, 'doors/emp_tools/joincnf');
 
 async function main() {

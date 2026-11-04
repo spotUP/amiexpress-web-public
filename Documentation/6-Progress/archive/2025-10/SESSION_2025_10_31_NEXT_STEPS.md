@@ -150,7 +150,7 @@ sendInitResponse(): void {
 
 ### Check vAmiga Sources
 Per CRITICAL_RULES.md, always reference vAmiga for Amiga implementation details:
-- Location: `~/Code/amiexpress-web/Docs/vAmiga/`
+- Location: `~/Code/AmiExpress/amiexpress-web/Docs/vAmiga/`
 - May have message port examples
 - May have exec.library PutMsg/GetMsg reference code
 

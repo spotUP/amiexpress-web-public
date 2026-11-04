@@ -15,6 +15,9 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const PROJECT_ROOT = path.resolve(__dirname, '..');
+// The original AmiExpress sources, NDK and other reference material live
+// outside the repo; AMIEXPRESS_REFERENCE points at another copy.
+const REFERENCE_ROOT = process.env.AMIEXPRESS_REFERENCE || '~/Code/Reference';
 
 // Core project files
 const CORE_DOCS = {
@@ -202,32 +205,32 @@ const PROGRESS_DOCS = {
 // Reference materials (archived but accessible)
 const REFERENCE_MATERIALS = {
   'testing-guide': {
-    path: path.join(PROJECT_ROOT, 'Documentation', '7-Reference Sources', 'reference', 'TESTING_GUIDE.md'),
+    path: path.join(REFERENCE_ROOT, 'reference', 'TESTING_GUIDE.md'),
     description: 'Comprehensive testing methodology',
     mimeType: 'text/markdown'
   },
   'webhooks': {
-    path: path.join(PROJECT_ROOT, 'Documentation', '7-Reference Sources', 'reference', 'WEBHOOKS.md'),
+    path: path.join(REFERENCE_ROOT, 'reference', 'WEBHOOKS.md'),
     description: 'Webhook configuration reference',
     mimeType: 'text/markdown'
   },
   'deployment-scripts': {
-    path: path.join(PROJECT_ROOT, 'Documentation', '7-Reference Sources', 'reference', 'DEPLOYMENT_SCRIPTS.md'),
+    path: path.join(REFERENCE_ROOT, 'reference', 'DEPLOYMENT_SCRIPTS.md'),
     description: 'Deployment automation scripts',
     mimeType: 'text/markdown'
   },
   'main-menu': {
-    path: path.join(PROJECT_ROOT, 'Documentation', '7-Reference Sources', 'reference', 'MAIN_MENU.md'),
+    path: path.join(REFERENCE_ROOT, 'reference', 'MAIN_MENU.md'),
     description: 'Classic AmiExpress main menu documentation',
     mimeType: 'text/markdown'
   },
   'ported-doors': {
-    path: path.join(PROJECT_ROOT, 'Documentation', '7-Reference Sources', 'reference', 'PORTED_DOORS_CATALOG.md'),
+    path: path.join(REFERENCE_ROOT, 'reference', 'PORTED_DOORS_CATALOG.md'),
     description: 'Catalog of ported doors',
     mimeType: 'text/markdown'
   },
   'roadmap': {
-    path: path.join(PROJECT_ROOT, 'Documentation', '7-Reference Sources', 'reference', 'IMPLEMENTATION_ROADMAP.md'),
+    path: path.join(REFERENCE_ROOT, 'reference', 'IMPLEMENTATION_ROADMAP.md'),
     description: 'Implementation roadmap',
     mimeType: 'text/markdown'
   }
@@ -246,7 +249,7 @@ const ALL_DOCS = {
 };
 
 // Source code files (via MCP tools only)
-const EXPRESS_E_PATH = path.join(PROJECT_ROOT, 'Documentation', '7-Reference Sources', 'AmiExpress-Sources', 'Express.e');
+const EXPRESS_E_PATH = path.join(REFERENCE_ROOT, 'AmiExpress-Sources', 'express.e');
 
 // ... [REST OF THE ORIGINAL MCP SERVER CODE WITH TOOLS] ...
 // (I'll keep this abbreviated since we're focused on the resource changes)

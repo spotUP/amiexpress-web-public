@@ -79,7 +79,7 @@ If the MCP server doesn't appear:
 4. Check for errors mentioning "amiexpress-docs"
 
 Common issues:
-- Path incorrect: Verify `~/Code/amiexpress-web/mcp-server/index.js` exists
+- Path incorrect: Verify `~/Code/AmiExpress/amiexpress-web/mcp-server/index.js` exists
 - Permissions: Run `chmod +x ~/Code/amiexpress-web/mcp-server/index.js`
 - Config syntax: Check JSON is valid in config file
 
@@ -153,7 +153,7 @@ fi
 
 echo ""
 echo "2. Checking MCP server executable..."
-if [ -f ~/Code/amiexpress-web/mcp-server/index.js ]; then
+if [ -f ~/Code/AmiExpress/amiexpress-web/mcp-server/index.js ]; then
     echo "   ✓ MCP server exists"
 else
     echo "   ✗ MCP server missing"
@@ -173,7 +173,7 @@ DOCS=(
 )
 
 for doc in "${DOCS[@]}"; do
-    if [ -f ~/Code/amiexpress-web/$doc ]; then
+    if [ -f ~/Code/AmiExpress/amiexpress-web/$doc ]; then
         echo "   ✓ $doc"
     else
         echo "   ✗ $doc missing"
@@ -183,7 +183,7 @@ done
 
 echo ""
 echo "4. Testing MCP server startup..."
-timeout 2 node ~/Code/amiexpress-web/mcp-server/index.js 2>&1 | grep -q "running on stdio"
+timeout 2 node ~/Code/AmiExpress/amiexpress-web/mcp-server/index.js 2>&1 | grep -q "running on stdio"
 if [ $? -eq 0 ]; then
     echo "   ✓ MCP server starts successfully"
 else
@@ -230,7 +230,7 @@ cat ~/Library/Application\ Support/Claude/claude_desktop_config.json
 
 **Test server manually:**
 ```bash
-cd ~/Code/amiexpress-web/mcp-server
+cd ~/Code/AmiExpress/amiexpress-web/mcp-server
 node index.js
 # Should output: "AmiExpress Docs MCP Server running on stdio"
 # Press Ctrl+C to exit
@@ -238,8 +238,8 @@ node index.js
 
 **Verify file paths:**
 ```bash
-ls -la ~/Code/amiexpress-web/mcp-server/index.js
-ls -la ~/Code/amiexpress-web/Docs/*.md
+ls -la ~/Code/AmiExpress/amiexpress-web/mcp-server/index.js
+ls -la ~/Code/AmiExpress/amiexpress-web/Docs/*.md
 ```
 
 ### Search Not Working
@@ -261,7 +261,7 @@ ls -la ~/Code/amiexpress-web/Docs/*.md
   "mcpServers": {
     "amiexpress-docs": {
       "command": "node",
-      "args": ["~/Code/amiexpress-web/mcp-server/index.js"]
+      "args": ["~/Code/AmiExpress/amiexpress-web/mcp-server/index.js"]
     }
   }
 }
@@ -269,7 +269,7 @@ ls -la ~/Code/amiexpress-web/Docs/*.md
 
 **MCP server location:**
 ```
-~/Code/amiexpress-web/mcp-server/index.js
+~/Code/AmiExpress/amiexpress-web/mcp-server/index.js
 ```
 
 ## Support

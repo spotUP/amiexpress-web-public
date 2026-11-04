@@ -523,7 +523,7 @@ dialog.on('hide', () => {
 
 ## Complete Example
 
-See `~/Code/amiexpress-web/sdk/doors/keyboard-nav-example/` for a complete working example demonstrating all keyboard navigation features.
+See `~/Code/AmiExpress/amiexpress-web/sdk/doors/keyboard-nav-example/` for a complete working example demonstrating all keyboard navigation features.
 
 ## Further Reading
 

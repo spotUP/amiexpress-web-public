@@ -4,7 +4,7 @@
  *
  * Before this change PieceManager only knew SRS / ARS / NRS / BARS. Every
  * assertion below is traced to a specific line range in
- * `Documentation/7-Reference Sources/HeborisCE-1.1.0/src/script/{classic,ars,world}.c`
+ * `~/Code/Reference/HeborisCE-1.1.0/src/script/{classic,ars,world}.c`
  * (paths relative to the door's repo root), decoded by hand (see the
  * comments above CLASSIC_SHAPES / CLASSIC_ARS_KICKS / WORLD_KICKS /
  * SRS_X_KICKS in core/pieces.ts for the full derivation and citations).

@@ -195,7 +195,7 @@ Establish bidirectional message flow:
 
 ## Files Modified
 
-### `~/Code/amiexpress-web/web/backend/src/amiga-emulation/AmigaDoorSession.ts`
+### `~/Code/AmiExpress/amiexpress-web/web/backend/src/amiga-emulation/AmigaDoorSession.ts`
 
 **Added**:
 - Second delay loop detection at PC=0x1156
@@ -206,7 +206,7 @@ Establish bidirectional message flow:
 - Lines 40-45: Added `inSecondLoop: boolean = false` property
 - Lines 407-449: First and second delay loop detection code
 
-### `~/Code/amiexpress-web/test-getanswer-door.js`
+### `~/Code/AmiExpress/amiexpress-web/test-getanswer-door.js`
 
 **Modified** (previous session):
 - All sleep timeouts reduced by 50%

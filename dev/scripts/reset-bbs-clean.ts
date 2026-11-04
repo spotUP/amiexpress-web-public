@@ -11,12 +11,12 @@ import * as path from 'path';
 import { execSync } from 'child_process';
 import { toAmigaTime } from '../../web/backend/src/utils/date-time.util';
 
-const BBS_ROOT = '~/Code/amiexpress-web';
+const BBS_ROOT = '~/Code/AmiExpress/amiexpress-web';
 
 /**
  * User record sizes for AmiExpress matching mtop.e struct definitions
  * Based on mtop.e and 68K alignment rules (2-byte boundaries)
- * See Documentation/7-Reference Sources/AmiExpressEDoorSources/MultiTop2/mtop.e
+ * See ~/Code/Reference/AmiExpressEDoorSources/MultiTop2/mtop.e
  */
 const USER_RECORD_SIZE = 232;     // mtop userData struct
 const USERKEYS_RECORD_SIZE = 56;  // mtop userKeys struct

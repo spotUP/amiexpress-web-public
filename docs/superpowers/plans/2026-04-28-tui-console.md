@@ -49,11 +49,11 @@
 - [ ] **Step 1: Create the package directory and `package.json`**
 
 ```bash
-mkdir -p ~/Code/amiexpress-web/dev/console/src/components/tabs
-mkdir -p ~/Code/amiexpress-web/dev/console/src/components/shared
-mkdir -p ~/Code/amiexpress-web/dev/console/src/api
-mkdir -p ~/Code/amiexpress-web/dev/console/src/hooks
-mkdir -p ~/Code/amiexpress-web/dev/console/strip
+mkdir -p ~/Code/AmiExpress/amiexpress-web/dev/console/src/components/tabs
+mkdir -p ~/Code/AmiExpress/amiexpress-web/dev/console/src/components/shared
+mkdir -p ~/Code/AmiExpress/amiexpress-web/dev/console/src/api
+mkdir -p ~/Code/AmiExpress/amiexpress-web/dev/console/src/hooks
+mkdir -p ~/Code/AmiExpress/amiexpress-web/dev/console/strip
 ```
 
 Create `dev/console/package.json`:

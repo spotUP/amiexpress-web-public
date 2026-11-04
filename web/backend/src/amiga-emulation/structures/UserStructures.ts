@@ -4,7 +4,7 @@
  * These structures match the Amiga E definitions in axobjects.e
  * and are used to share user data with 68K doors via direct memory access.
  *
- * Based on: AmiExpress-Sources/axobjects.e
+ * Based on: ~/Code/Reference/AmiExpress-Sources/axobjects.e
  */
 
 import { MoiraEmulator } from '../cpu/MoiraEmulator';

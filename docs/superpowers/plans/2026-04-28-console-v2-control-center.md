@@ -40,7 +40,7 @@
 - [ ] **Step 1: Install ink-big-text**
 
 ```bash
-cd ~/Code/amiexpress-web/dev/console && npm install ink-big-text
+cd ~/Code/AmiExpress/amiexpress-web/dev/console && npm install ink-big-text
 ```
 
 Expected: ink-big-text added to node_modules with no errors.
@@ -145,7 +145,7 @@ export async function setQuietMode(enabled: boolean) {
 - [ ] **Step 4: Typecheck**
 
 ```bash
-cd ~/Code/amiexpress-web/dev/console && npx tsc --noEmit 2>&1 | grep "error TS"
+cd ~/Code/AmiExpress/amiexpress-web/dev/console && npx tsc --noEmit 2>&1 | grep "error TS"
 ```
 
 Expected: empty (no errors in the modified files).
@@ -153,7 +153,7 @@ Expected: empty (no errors in the modified files).
 - [ ] **Step 5: Commit**
 
 ```bash
-cd ~/Code/amiexpress-web
+cd ~/Code/AmiExpress/amiexpress-web
 git add dev/console/package.json dev/console/package-lock.json dev/console/src/api/types.ts dev/console/src/api/client.ts
 git commit -m "feat(console-v2): add ink-big-text, DoorInfo/ConferenceHealth types, 11 new API functions"
 ```
@@ -259,8 +259,8 @@ export function useDashboardStats(intervalMs = 10_000): DashboardData {
 - [ ] **Step 3: Create the utils directory and typecheck**
 
 ```bash
-mkdir -p ~/Code/amiexpress-web/dev/console/src/utils
-cd ~/Code/amiexpress-web/dev/console && npx tsc --noEmit 2>&1 | grep "error TS"
+mkdir -p ~/Code/AmiExpress/amiexpress-web/dev/console/src/utils
+cd ~/Code/AmiExpress/amiexpress-web/dev/console && npx tsc --noEmit 2>&1 | grep "error TS"
 ```
 
 Expected: empty.
@@ -268,7 +268,7 @@ Expected: empty.
 - [ ] **Step 4: Commit**
 
 ```bash
-cd ~/Code/amiexpress-web
+cd ~/Code/AmiExpress/amiexpress-web
 git add dev/console/src/hooks/useDashboardStats.ts dev/console/src/utils/sparkline.ts
 git commit -m "feat(console-v2): useDashboardStats hook and sparkline utility"
 ```
@@ -439,20 +439,20 @@ export function DashboardTab() {
 - [ ] **Step 2: Build**
 
 ```bash
-cd ~/Code/amiexpress-web/dev/console && npm run build 2>&1 | grep "error TS"
+cd ~/Code/AmiExpress/amiexpress-web/dev/console && npm run build 2>&1 | grep "error TS"
 ```
 
 Expected: empty. If `ink-big-text` has no type declarations, add a shim:
 ```bash
 # Only if you see "Cannot find module 'ink-big-text'"
 echo "declare module 'ink-big-text' { const BigText: any; export default BigText; }" \
-  > ~/Code/amiexpress-web/dev/console/src/ink-big-text.d.ts
+  > ~/Code/AmiExpress/amiexpress-web/dev/console/src/ink-big-text.d.ts
 ```
 
 - [ ] **Step 3: Commit**
 
 ```bash
-cd ~/Code/amiexpress-web
+cd ~/Code/AmiExpress/amiexpress-web
 git add dev/console/src/components/tabs/DashboardTab.tsx dev/console/src/ink-big-text.d.ts 2>/dev/null || true
 git add dev/console/src/components/tabs/DashboardTab.tsx
 git commit -m "feat(console-v2): animated Dashboard tab — live stats, sparkline, recent callers"
@@ -622,7 +622,7 @@ export function ConfsTab() {
 - [ ] **Step 2: Build**
 
 ```bash
-cd ~/Code/amiexpress-web/dev/console && npm run build 2>&1 | grep "error TS"
+cd ~/Code/AmiExpress/amiexpress-web/dev/console && npm run build 2>&1 | grep "error TS"
 ```
 
 Expected: empty.
@@ -630,7 +630,7 @@ Expected: empty.
 - [ ] **Step 3: Commit**
 
 ```bash
-cd ~/Code/amiexpress-web
+cd ~/Code/AmiExpress/amiexpress-web
 git add dev/console/src/components/tabs/ConfsTab.tsx
 git commit -m "feat(console-v2): Confs tab — toggle, health check, auto-fix"
 ```
@@ -742,7 +742,7 @@ export function DoorsTab() {
 - [ ] **Step 2: Build**
 
 ```bash
-cd ~/Code/amiexpress-web/dev/console && npm run build 2>&1 | grep "error TS"
+cd ~/Code/AmiExpress/amiexpress-web/dev/console && npm run build 2>&1 | grep "error TS"
 ```
 
 Expected: empty.
@@ -750,7 +750,7 @@ Expected: empty.
 - [ ] **Step 3: Commit**
 
 ```bash
-cd ~/Code/amiexpress-web
+cd ~/Code/AmiExpress/amiexpress-web
 git add dev/console/src/components/tabs/DoorsTab.tsx
 git commit -m "feat(console-v2): Doors tab — list and reload all doors"
 ```
@@ -926,7 +926,7 @@ export function SystemTab() {
 - [ ] **Step 2: Build**
 
 ```bash
-cd ~/Code/amiexpress-web/dev/console && npm run build 2>&1 | grep "error TS"
+cd ~/Code/AmiExpress/amiexpress-web/dev/console && npm run build 2>&1 | grep "error TS"
 ```
 
 Expected: empty.
@@ -934,7 +934,7 @@ Expected: empty.
 - [ ] **Step 3: Commit**
 
 ```bash
-cd ~/Code/amiexpress-web
+cd ~/Code/AmiExpress/amiexpress-web
 git add dev/console/src/components/tabs/SystemTab.tsx
 git commit -m "feat(console-v2): System tab — node controls, system config, quiet mode"
 ```
@@ -1093,7 +1093,7 @@ export function App({ username }: Props) {
 - [ ] **Step 4: Full build**
 
 ```bash
-cd ~/Code/amiexpress-web/dev/console && npm run build 2>&1 | grep "error TS"
+cd ~/Code/AmiExpress/amiexpress-web/dev/console && npm run build 2>&1 | grep "error TS"
 ```
 
 Expected: empty. Fix any TypeScript errors before committing.
@@ -1101,7 +1101,7 @@ Expected: empty. Fix any TypeScript errors before committing.
 - [ ] **Step 5: Commit**
 
 ```bash
-cd ~/Code/amiexpress-web
+cd ~/Code/AmiExpress/amiexpress-web
 git add dev/console/src/components/TabBar.tsx dev/console/src/components/Footer.tsx dev/console/src/App.tsx
 git commit -m "feat(console-v2): wire 8-tab layout — Dashboard, Doors, System added"
 ```
@@ -1116,7 +1116,7 @@ git commit -m "feat(console-v2): wire 8-tab layout — Dashboard, Doors, System 
 - [ ] **Step 1: Full rebuild including strip**
 
 ```bash
-cd ~/Code/amiexpress-web/dev/console && npm run build 2>&1 | grep -E "error TS|Error"
+cd ~/Code/AmiExpress/amiexpress-web/dev/console && npm run build 2>&1 | grep -E "error TS|Error"
 ls dist/src/index.js dist/strip/strip.js
 ```
 
@@ -1143,7 +1143,7 @@ Tab keys: 1=Dash 2=Nodes 3=Users 4=Confs 5=Callers 6=Logs 7=Doors 8=System
 - [ ] **Step 3: Commit handoff**
 
 ```bash
-cd ~/Code/amiexpress-web
+cd ~/Code/AmiExpress/amiexpress-web
 git add handoff.md
 git commit -m "docs: update handoff for console v2 control center"
 ```

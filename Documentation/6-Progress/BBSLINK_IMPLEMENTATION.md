@@ -303,8 +303,8 @@ Possible improvements (not in scope for this implementation):
 
 ## References
 
-- Original Amiga E source: `/Documentation/7-Reference Sources/AmiExpressEDoorSources/BBSLink/bbslink.e`
-- BBSLinkWall source: `/Documentation/7-Reference Sources/AmiExpressEDoorSources/BBSLink/bbslinkwall.e`
+- Original Amiga E source: `~/Code/Reference/AmiExpressEDoorSources/BBSLink/bbslink.e`
+- BBSLinkWall source: `~/Code/Reference/AmiExpressEDoorSources/BBSLink/bbslinkwall.e`
 - BBSLinkWall TypeScript: `/Doors/bbslinkwall/index.ts`
 - Telnet door pattern: `/Doors/telnet/index.ts`
 - BBSLink service: http://www.bbslink.net/

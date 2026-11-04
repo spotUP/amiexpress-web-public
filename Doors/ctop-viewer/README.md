@@ -2,7 +2,7 @@
 
 The conference upload table, ported from the Amiga door **Conftop-II** by
 REbEL/QTX (`Doors/Conftop/ctop`, source in
-`Documentation/7-Reference Sources/AmiExpressEDoorSources/Conftop-II/ctop.e`).
+`~/Code/Reference/AmiExpressEDoorSources/Conftop-II/ctop.e`).
 
 ## Why it was ported
 

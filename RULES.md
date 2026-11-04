@@ -544,6 +544,7 @@ References:
 - Door harness: `node web/backend/dist/scripts/run-amiga-door.js <door> <node>`.
 - Vamos / vAmiga: `Documentation/3-Developers/AMIGA_EMULATION.md`.
 - NDK autodocs: `mcp__amiexpress-docs__search_ndk_autodocs`.
+- Reference sources (express.e, AEDoor, NDK3.2R4 autodocs, AmiXDoors, amiga-reversing, disasm) live OUTSIDE the repo at `~/Code/Reference` (override: `AMIEXPRESS_REFERENCE`). Tests that read express.e skip when it is absent. C door builds use the vendored headers in `vendor/NDK3.2R4`.
 - Exec/DOS LVO semantics: `Documentation/4-Door-Developers/DOOR_DEVELOPMENT.md`.
 
 **No per-door hacks.** All emulation changes generic and 1:1 with AmiExpress / AEDoor / AmigaOS.
@@ -767,7 +768,7 @@ listed the work, the ledger recorded it done, and only the ledger was right.
 
 ### The shared checkout tracks origin/main. Always.
 
-`~/Code/amiexpress-web` is what localhost runs and what several
+`~/Code/AmiExpress/amiexpress-web` is what localhost runs and what several
 sessions read. It is a MIRROR of `origin/main`, never a place work
 accumulates.
 
@@ -784,7 +785,7 @@ The rules that keep it a mirror:
 1. **Never commit to `main` in the shared checkout.** Work is committed in
    your own worktree, cut from `origin/main`, and pushed from there.
 2. **Fast-forward the shared checkout after every push**, yours or anyone's:
-   `git -C ~/Code/amiexpress-web fetch origin && git -C ... merge --ff-only origin/main`.
+   `git -C ~/Code/AmiExpress/amiexpress-web fetch origin && git -C ... merge --ff-only origin/main`.
    If it refuses, the tree has drifted - fix that before anything else.
 3. **Before you start a task, check the drift** and say so on
    `thoughts/BOARD.md` if it is not zero:

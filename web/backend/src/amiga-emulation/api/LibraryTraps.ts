@@ -570,7 +570,7 @@ console.log(
    * which creates JMP instructions at negative offsets pointing to the actual
    * function code in the loaded library binary.
    *
-   * See: Documentation/7-Reference Sources/disasm/aedoor_library_disasm.asm
+   * See: ~/Code/Reference/disasm/aedoor_library_disasm.asm
    */
   installAEDoorVectors(): void {
     if (!this.aedoorLibrary) {

@@ -150,7 +150,7 @@ Lock(): void {
 ### Compilation Test
 
 ```bash
-cd ~/Code/amiexpress-web/web/backend
+cd ~/Code/AmiExpress/amiexpress-web/web/backend
 npx tsc --noEmit src/amiga-emulation/api/DosLibrary.ts
 # Result: ✅ No errors
 ```

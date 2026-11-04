@@ -116,7 +116,7 @@ With memory[0xac] = 0xa0000:
 
 ## Files Modified
 
-- `~/Code/amiexpress-web/web/backend/src/amiga-emulation/AmigaDoorSession.ts`
+- `~/Code/AmiExpress/amiexpress-web/web/backend/src/amiga-emulation/AmigaDoorSession.ts`
   - Lines 380-390: Added memory[0xac] initialization
   - Lines 389-461: Added A0 register monitoring (for investigation)
   - Lines 845, 1031: Added checkA0RegisterChange() calls

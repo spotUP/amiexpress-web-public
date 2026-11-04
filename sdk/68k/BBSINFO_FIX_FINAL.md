@@ -24,7 +24,7 @@ But the AEDoor.library binary expects:
 
 ### Disassembly Evidence
 
-From `/Documentation/7-Reference Sources/disasm/aedoor_library_disasm.asm`:
+From `~/Code/Reference/disasm/aedoor_library_disasm.asm`:
 
 **Library Initialization (lines 216-262):**
 ```asm
@@ -138,7 +138,7 @@ Backend logs should show:
 
 ## Documentation References
 
-- **Library Disassembly**: `/Documentation/7-Reference Sources/disasm/aedoor_library_disasm.asm`
+- **Library Disassembly**: `~/Code/Reference/disasm/aedoor_library_disasm.asm`
 - **Library Notes**: `/Documentation/4-Door-Developers/archive/AEDoor_LIBRARY_NOTES.md`
 - **DoorInfo Structure**: DoorInfo at offset 0x00, BBSInfo at DoorInfo + 0x46
 

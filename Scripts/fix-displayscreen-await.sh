@@ -1,7 +1,7 @@
 #!/bin/bash
 # Fix displayScreen calls to be awaited
 
-cd ~/Code/amiexpress-web/web/backend/src
+cd ~/Code/AmiExpress/amiexpress-web/web/backend/src
 
 # Find all TypeScript files with displayScreen calls
 find . -name "*.ts" -type f -exec grep -l "displayScreen(" {} \; | while read f; do

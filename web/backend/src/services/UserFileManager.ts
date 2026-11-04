@@ -164,7 +164,7 @@ export class UserFileManager {
 
   // Struct sizes (must match E structs exactly)
   // Correct struct sizes matching mtop.e and Amiga E alignment rules
-  // See Documentation/7-Reference Sources/AmiExpressEDoorSources/MultiTop2/mtop.e
+  // See ~/Code/Reference/AmiExpressEDoorSources/MultiTop2/mtop.e
   //
   // Public because the IMPORTER reads ANOTHER board's user files and has to
   // walk them the same way. It carried its own copy of these numbers and its

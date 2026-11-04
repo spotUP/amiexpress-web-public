@@ -1,7 +1,7 @@
 #!/bin/bash
 # Test individual dos.library functions against vamos
 
-DOOR_DIR="~/Code/amiexpress-web/Doors"
+DOOR_DIR="~/Code/AmiExpress/amiexpress-web/Doors"
 
 echo "=== Testing 68K Library Functions ==="
 echo ""

@@ -189,7 +189,7 @@ For each file:
 
 All converted files pass TypeScript type checking:
 ```bash
-cd ~/Code/amiexpress-web/web/backend
+cd ~/Code/AmiExpress/amiexpress-web/web/backend
 npx tsc --noEmit
 ```
 
@@ -206,7 +206,7 @@ Only pre-existing errors (unrelated to amigafs migration).
 
 Run the helper script to identify files that still need conversion:
 ```bash
-~/Code/amiexpress-web/web/backend/scripts/migrate-to-amigafs.sh
+~/Code/AmiExpress/amiexpress-web/web/backend/scripts/migrate-to-amigafs.sh
 ```
 
 ## Reference

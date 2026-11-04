@@ -129,19 +129,19 @@ Once we see FindPort/CreateMsgPort:
 
 ## Files Modified This Session
 
-1. `~/Code/amiexpress-web/web/backend/src/amiga-emulation/api/ExecLibrary.ts`
+1. `~/Code/AmiExpress/amiexpress-web/web/backend/src/amiga-emulation/api/ExecLibrary.ts`
    - Lines 596-840: 5 message port functions
 
-2. `~/Code/amiexpress-web/web/backend/src/amiga-emulation/api/LibraryTraps.ts`
+2. `~/Code/AmiExpress/amiexpress-web/web/backend/src/amiga-emulation/api/LibraryTraps.ts`
    - Lines 336-377: 5 message port vectors
 
-3. `~/Code/amiexpress-web/web/backend/src/handlers/command.handler.ts`
+3. `~/Code/AmiExpress/amiexpress-web/web/backend/src/handlers/command.handler.ts`
    - Lines 2601-2639: WH command for What door
 
-4. `~/Code/amiexpress-web/web/backend/src/amiga-emulation/AmigaDoorSession.ts`
+4. `~/Code/AmiExpress/amiexpress-web/web/backend/src/amiga-emulation/AmigaDoorSession.ts`
    - Lines 232-264: argc/argv setup (earlier)
 
-5. `~/Code/amiexpress-web/test-what-door.js`
+5. `~/Code/AmiExpress/amiexpress-web/test-what-door.js`
    - New test script for What door
 
 ## Metrics

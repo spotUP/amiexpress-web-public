@@ -7,10 +7,11 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { INTERNAL_COMMANDS, internalCommandRow, DEFAULT_SECTIONS } from '../../src/screens/menu-config/internal-commands';
 import { ACSPermission } from '../../src/constants/acs-permissions';
+import { readExpressE, testWithExpressE } from '../helpers/reference-sources';
 
 const REPO = path.resolve(__dirname, '../../../..');
 const HANDLER = fs.readFileSync(path.join(REPO, 'web/backend/src/handlers/command.handler.ts'), 'utf8');
-const EXPRESS = fs.readFileSync(path.join(REPO, 'AmiExpress-Sources/express.e'), 'latin1');
+const EXPRESS = readExpressE();
 
 /** Every case label of the internal dispatch switch, symbols included (`<`, `>>`, `^`, `?`). */
 function switchCases(): string[] {
@@ -45,7 +46,7 @@ test('every gate is a real ACSPermission key, SYSOP, or none', () => {
   }
 });
 
-test("every express.e row's gate is the FIRST checkSecurity that refuses outright in that procedure", () => {
+testWithExpressE("every express.e row's gate is the FIRST checkSecurity that refuses outright in that procedure", () => {
   // `checkSecurity(ACS_X)=FALSE ... THEN RETURN RESULT_NOT_ALLOWED`, in source order.
   const refusals = (body: string) =>
     [...body.matchAll(/checkSecurity\(ACS_(\w+)\)[\s)]*=FALSE[^\n]*THEN RETURN RESULT_NOT_ALLOWED/g)].map(m => m[1]);

@@ -223,7 +223,7 @@ function getStatus({ token, sessionId }) {
 function queryDatabase(query) {
   return new Promise((resolve, reject) => {
     const { spawn } = require('child_process');
-    const dbPath = '~/Code/amiexpress-web/data/amiexpress.db';
+    const dbPath = '~/Code/AmiExpress/amiexpress-web/data/amiexpress.db';
 
     const sqlite = spawn('sqlite3', [dbPath, query]);
     let output = '';

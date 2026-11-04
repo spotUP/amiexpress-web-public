@@ -168,5 +168,5 @@ The fixes made are solid and follow AmigaDOS specifications. They will help:
 ## References
 
 - AmigaDOS Specification: `NDK3.2R4/Autodocs/AG/dos`
-- AmiExpress Sources: `AmiExpress-Sources/express.e` (line 3325 for door launching)
+- AmiExpress Sources: `~/Code/Reference/AmiExpress-Sources/express.e` (line 3325 for door launching)
 - WHO Door Strings: Shows expected files "S:Count.dat", ports "AEServer.%d", "AEDoorPort%d"

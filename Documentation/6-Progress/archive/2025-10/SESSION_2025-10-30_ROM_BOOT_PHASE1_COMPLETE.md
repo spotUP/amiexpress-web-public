@@ -160,12 +160,12 @@ u16 readCustom16(u32 addr) const {
 ```bash
 $ ./build-wasm.sh
 Building Moira WASM...
-Source: ~/Code/amiexpress-web/web/backend/src/amiga-emulation/cpu/moira-source/Moira
-Output: ~/Code/amiexpress-web/web/backend/src/amiga-emulation/cpu/build
+Source: ~/Code/AmiExpress/amiexpress-web/web/backend/src/amiga-emulation/cpu/moira-source/Moira
+Output: ~/Code/AmiExpress/amiexpress-web/web/backend/src/amiga-emulation/cpu/build
 ✓ Build successful!
 Output files:
-  - ~/Code/amiexpress-web/web/backend/src/amiga-emulation/cpu/build/moira.js
-  - ~/Code/amiexpress-web/web/backend/src/amiga-emulation/cpu/build/moira.wasm
+  - ~/Code/AmiExpress/amiexpress-web/web/backend/src/amiga-emulation/cpu/build/moira.js
+  - ~/Code/AmiExpress/amiexpress-web/web/backend/src/amiga-emulation/cpu/build/moira.wasm
 ```
 
 **New C++ functions exposed to JavaScript:**

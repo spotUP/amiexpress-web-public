@@ -5,7 +5,7 @@
 Build your first 68K Amiga door in C:
 
 ```bash
-cd ~/Code/amiexpress-web/sdk/68k
+cd ~/Code/AmiExpress/amiexpress-web/sdk/68k
 
 # Build a door
 make door NAME=hello-vbcc

@@ -26,7 +26,7 @@
 ### Phase 2: AEDoor.library Investigation
 
 **Files Examined:**
-- `~/Code/amiexpress-web/Libs/AEDoor.library` (1.1KB, version 2.7)
+- `~/Code/AmiExpress/amiexpress-web/Libs/AEDoor.library` (1.1KB, version 2.7)
 - AEDoor SDK documentation and pragmas
 - Simple door example (`simple.c`)
 
@@ -285,7 +285,7 @@ Find a door that uses AEDoor.library (like simple.c example) and test with that 
 - **AEDoor Pragmas:** `Doors/archives/wot-ad14/SAS_C/Include/pragmas/aedoor_pragmas.h`
 - **Simple Door Example:** `Doors/archives/wot-ad14/SAS_C/Examples/Simple/simple.c`
 - **What Door Source:** `Doors/What/SOURCECODE/What.c`
-- **Express.e Door Handling:** `AmiExpress-Sources/express.e` lines 3379-3500
+- **Express.e Door Handling:** `~/Code/Reference/AmiExpress-Sources/express.e` lines 3379-3500
 
 ## Final Session Update
 

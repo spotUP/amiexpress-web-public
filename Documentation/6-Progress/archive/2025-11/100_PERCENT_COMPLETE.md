@@ -357,7 +357,7 @@ Total:                     4 comprehensive docs
 - **express.e:8677, 11809** - MailStats operations
 
 ### Real Data Reference:
-- `~/Code/amiexpress-web/reference-board` - Real Amiga BBS data
+- `~/Code/AmiExpress/amiexpress-web/reference-board` - Real Amiga BBS data
 
 ---
 

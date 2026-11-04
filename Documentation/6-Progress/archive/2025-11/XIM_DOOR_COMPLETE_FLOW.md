@@ -1,7 +1,7 @@
 # XIM Door Complete Implementation - From express.e Sources
 
 **Date:** 2025-10-31
-**Source:** AmiExpress-Sources/express.e lines 4231-4545, 3372-4230
+**Source:** ~/Code/Reference/AmiExpress-Sources/express.e lines 4231-4545, 3372-4230
 
 ## THE COMPLETE FLOW (From express.e)
 

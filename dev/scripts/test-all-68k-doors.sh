@@ -5,7 +5,7 @@
 # Don't use set -e so we can test all doors even after failures
 # set -e
 
-PROJECT_ROOT="~/Code/amiexpress-web"
+PROJECT_ROOT="~/Code/AmiExpress/amiexpress-web"
 cd "$PROJECT_ROOT"
 
 echo "[TEST] Comprehensive 68K Door Emulation Test"

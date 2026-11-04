@@ -10,7 +10,7 @@ const fs = require('fs');
 function testDoorsDevice() {
   console.log('\n=== Testing Doors: Device Path Resolution ===\n');
 
-  const BBS_BASE_PATH = '~/Code/amiexpress-web';
+  const BBS_BASE_PATH = '~/Code/AmiExpress/amiexpress-web';
 
   // Test 1: Doors:AquaWho/Tot.dat
   const test1 = 'Doors:AquaWho/Tot.dat';
@@ -44,7 +44,7 @@ function testDoorsDevice() {
 function testProgdirDevice() {
   console.log('\n\n=== Testing PROGDIR: Device Path Resolution ===\n');
 
-  const doorDirectory = '~/Code/amiexpress-web/Doors/AquaWho';
+  const doorDirectory = '~/Code/AmiExpress/amiexpress-web/Doors/AquaWho';
 
   // Test 1: PROGDIR:config.txt
   const test1 = 'PROGDIR:config.txt';
@@ -61,7 +61,7 @@ function testProgdirDevice() {
 function testBBSDevice() {
   console.log('\n\n=== Testing BBS: Device Path Resolution ===\n');
 
-  const BBS_BASE_PATH = '~/Code/amiexpress-web';
+  const BBS_BASE_PATH = '~/Code/AmiExpress/amiexpress-web';
 
   // Test 1: BBS:user.data
   const test1 = 'BBS:user.data';
@@ -88,7 +88,7 @@ function testBBSDevice() {
 function testFileCreation() {
   console.log('\n\n=== Testing File Creation ===\n');
 
-  const testFile = '~/Code/amiexpress-web/Doors/AquaWho/test-file-io.dat';
+  const testFile = '~/Code/AmiExpress/amiexpress-web/Doors/AquaWho/test-file-io.dat';
 
   try {
     // Write test file

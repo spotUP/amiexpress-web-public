@@ -19,6 +19,6 @@
 ## 4. Troubleshooting & Support
 - When the BBS complains `Couldn't Open DirFile!` or `Upload session invalid`, confirm that the conference directories (`Conf1/Conf2/...`) exist and that `Dir1` file is present; the code now auto-creates them if missing.
 - Validate door parsing issues (double line breaks, pauses) by reviewing the door logs and the `DEBUG_XIM_OUTPUT=1` harness flag.
-- For misaligned ASCII or missing screens, compare to original express.e screen files preserved in `Screens/` and `Documentation/7-Reference Sources/petscii-bbs-2.1/`.
+- For misaligned ASCII or missing screens, compare to original express.e screen files preserved in `Screens/` and `~/Code/Reference/petscii-bbs-2.1/`.
 
 **Sysops can find scripts, diagnostics, and advanced automation outlines in the archive folder; today’s summary keeps operations compact while referencing those resources.**

@@ -1,7 +1,7 @@
 /**
  * The RIP browser looks where the .RIP files are.
  *
- * `const RIP_DIR = '~/Code/amiexpress-web/RIPgraphics'` - one
+ * `const RIP_DIR = '~/Code/AmiExpress/amiexpress-web/RIPgraphics'` - one
  * developer's checkout, hardcoded. The board is a Linux container with no
  * /Users at all, so the door reported "Directory not found" to every user who
  * opened it while 400-odd .RIP files sat in /app/data/bbs/RIPgraphics.

@@ -20,7 +20,7 @@ mockSocket.emit = function(event, data) {
 
 // Create session for NI tool with node number as argument
 const session = new AmigaDoorSession(mockSocket, {
-  executablePath: '~/Code/amiexpress-web/Doors/who/NI',
+  executablePath: '~/Code/AmiExpress/amiexpress-web/Doors/who/NI',
   bbsSession: {
     nodeId: 0,
     userId: 1,

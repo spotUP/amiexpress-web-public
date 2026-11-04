@@ -99,7 +99,7 @@ Find a door that:
 - Has source code available for reference
 
 Example doors with source:
-- `~/Code/amiexpress-web/Docs/Doors_with_Source/AEDOORS/AmiExpress/Sources/example.e`
+- `~/Code/AmiExpress/amiexpress-web/Docs/Doors_with_Source/AEDOORS/AmiExpress/Sources/example.e`
 - Simple example that just writes text and gets input
 
 ### Option C: Implement Intuition.library Stubs
@@ -132,7 +132,7 @@ Understand what it's actually trying to do in those first 203 instructions.
 
 ## Files Modified This Session
 
-1. `~/Code/amiexpress-web/web/backend/src/amiga-emulation/AmigaDoorSession.ts`
+1. `~/Code/AmiExpress/amiexpress-web/web/backend/src/amiga-emulation/AmigaDoorSession.ts`
    - Lines 232-264: argc/argv implementation
    - Lines 247-255: Node ID from bbsSession with fallback to 0
 

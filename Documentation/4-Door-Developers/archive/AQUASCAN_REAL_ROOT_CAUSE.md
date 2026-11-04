@@ -24,7 +24,7 @@ AquaScan FR fails with "Nothing found!" because after examining "BBS:Conf1/Dir1"
 ### Log Evidence
 
 ```
-[dos.library] Lock("BBS:Conf1/Dir1") -> "~/Code/amiexpress-web/Conf1/DIR1" - ✅ EXISTS
+[dos.library] Lock("BBS:Conf1/Dir1") -> "~/Code/AmiExpress/amiexpress-web/Conf1/DIR1" - ✅ EXISTS
 [dos.library] Examine(lock=9, fib=0x200000)
 [dos.library] Examine: DIR1 (file, 1316 bytes)
 [dos.library]   fib_DirEntryType=-3, fib_EntryType=-3, fib_Size=1316, fib_Protection=15
@@ -38,7 +38,7 @@ string:  Nothing found!
 
 Checking Conf1/DIR1:
 ```bash
-$ head -5 ~/Code/amiexpress-web/Conf1/DIR1
+$ head -5 ~/Code/AmiExpress/amiexpress-web/Conf1/DIR1
 MTH-RTW2.LHA P  20K  05-Dec-25   ______  ______   .___ ____.  _______.
                                   \_    \/    _/___|   \    |__\____  |
 ```

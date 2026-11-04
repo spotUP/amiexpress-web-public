@@ -4,7 +4,7 @@
  * Audit H-ED flagged that these flags were used inline as magic
  * numbers across the codebase with no central reference. This module
  * is the single source of truth — if a value drifts out of sync with
- * AmiExpress-Sources/, fix it here once instead of chasing every
+ * ~/Code/Reference/AmiExpress-Sources/, fix it here once instead of chasing every
  * call site.
  *
  * Cross-reference (canonical source line numbers):

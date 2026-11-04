@@ -36,7 +36,7 @@ export type RotationSystem =
   | 'ARS'
   | 'NRS'
   | 'BARS'
-  // HeborisCE-authentic rotation rulesets (Documentation/7-Reference Sources/HeborisCE-1.1.0).
+  // HeborisCE-authentic rotation rulesets (~/Code/Reference/HeborisCE-1.1.0).
   // rots is 0-indexed HEBORIS/TI-ARS/TI-WORLD/ACE-SRS/ACE-ARS/ACE-ARS2/DS-WORLD/SRS-X/DRS
   // (src/script/config.c:1118-1126). These are NOT interchangeable rotation systems that
   // happen to share tables - each is gated on its own rots value and HeborisCE gives several

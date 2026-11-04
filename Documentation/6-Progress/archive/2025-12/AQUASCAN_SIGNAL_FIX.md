@@ -126,7 +126,7 @@ This fix enables **ALL 68K XIM doors** to work:
 
 ## Files Modified
 
-- `~/Code/amiexpress-web/web/backend/src/amiga-emulation/api/ExecLibrary.ts`
+- `~/Code/AmiExpress/amiexpress-web/web/backend/src/amiga-emulation/api/ExecLibrary.ts`
   - Line 95: Added `private bbsTask: Task;` property
   - Lines 188-210: Initialize BBS Handler Task
   - Line 3690: Modified `createMsgPort(ownerTask?: Task)`

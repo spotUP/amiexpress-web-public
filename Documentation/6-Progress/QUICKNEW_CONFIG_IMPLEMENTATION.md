@@ -95,7 +95,7 @@ Created `/tmp/test-quicknew-parser.ts` to verify config file parsing.
 
 **Test Results:**
 ```
-Config: ~/Code/amiexpress-web/doors/quicknew/QuickNew.Config1
+Config: ~/Code/AmiExpress/amiexpress-web/doors/quicknew/QuickNew.Config1
 [OK] Parsed 11 sections from config
 [OK] ANSI Reset: [0m
 [OK] Color Code: [35m
@@ -131,7 +131,7 @@ QuickNew is called in these batch files:
 
 ## Config Files Available
 
-Located in `~/Code/amiexpress-web/doors/quicknew/`:
+Located in `~/Code/AmiExpress/amiexpress-web/doors/quicknew/`:
 - `QuickNew.Config` (303 bytes)
 - `QuickNew.Config1` (3200 bytes) - Used by batch0/batch1
 - `QuickNew.Config1_` (870 bytes)
@@ -140,7 +140,7 @@ Located in `~/Code/amiexpress-web/doors/quicknew/`:
 
 ## Files Modified
 
-1. `~/Code/amiexpress-web/web/backend/src/utils/quicknew-generator.ts`
+1. `~/Code/AmiExpress/amiexpress-web/web/backend/src/utils/quicknew-generator.ts`
    - Added: `QuickNewConfig` interface
    - Added: `parseQuickNewConfigFile()` function (~50 lines)
    - Added: `generateQuickNewFromConfig()` function (~110 lines)
@@ -148,7 +148,7 @@ Located in `~/Code/amiexpress-web/doors/quicknew/`:
    - Fixed: `const yesterdayEnd` declaration
    - Total new code: ~180 lines
 
-2. `~/Code/amiexpress-web/web/backend/src/services/batch-scheduler.ts`
+2. `~/Code/AmiExpress/amiexpress-web/web/backend/src/services/batch-scheduler.ts`
    - Updated: Import to include `generateQuickNewFromConfig`
    - Replaced: QuickNew handling section (lines 231-262)
    - Changed: From 68K binary execution to TypeScript implementation
@@ -170,7 +170,7 @@ Located in `~/Code/amiexpress-web/doors/quicknew/`:
 
 - Original audit: `Documentation/6-Progress/QUICKNEW_TYPESCRIPT_AUDIT.md`
 - Summary: `Documentation/6-Progress/TYPESCRIPT_DOORS_AUDIT_SUMMARY.md`
-- Original source: `Documentation/7-Reference Sources/AmiXDoors-master/QuickNew/QuickNew.asm`
+- Original source: `~/Code/Reference/AmiXDoors-master/QuickNew/QuickNew.asm`
 - TypeScript implementation: `web/backend/src/utils/quicknew-generator.ts`
 - Config example: `doors/quicknew/QuickNew.Config1`
 

@@ -82,9 +82,9 @@ class MCPTester {
     // Test that source files exist
     const fs = await import('fs/promises');
     const sources = [
-      '../AmiExpress-Sources/express.e',
-      '../AmiExpress-Sources/hydra.e',
-      '../AmiExpress-Sources/ACP.e'
+      '~/Code/Reference/AmiExpress-Sources/express.e',
+      '~/Code/Reference/AmiExpress-Sources/hydra.e',
+      '~/Code/Reference/AmiExpress-Sources/ACP.e'
     ];
 
     let allExist = true;
@@ -108,7 +108,7 @@ class MCPTester {
     console.log('===========================');
 
     const fs = await import('fs/promises');
-    const autodocsPath = path.join(__dirname, '..', 'Docs', 'NDK3.2R4', 'Autodocs');
+    const autodocsPath = '~/Code/Reference/NDK3.2R4/Autodocs';
 
     try {
       const files = await fs.readdir(autodocsPath);

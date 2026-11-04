@@ -156,7 +156,7 @@ This is the **FIRST time a compiled 68000 Amiga door has successfully communicat
 
 ### Test Command
 ```bash
-cd ~/Code/amiexpress-web
+cd ~/Code/AmiExpress/amiexpress-web
 node test-getanswer-door.js
 ```
 

@@ -13,7 +13,7 @@ import { themeStyles, themeById, type Theme, type ThemeTokens, type ThemeStyles 
 let T: ThemeTokens = themeById('classic').tokens;
 let S: ThemeStyles = themeStyles(themeById('classic'));
 
-const RIP_DIR = '~/Code/amiexpress-web/RIPgraphics';
+const RIP_DIR = '~/Code/AmiExpress/amiexpress-web/RIPgraphics';
 
 export async function execute(session: any) {
   const host: any = session?.bbs;
