@@ -36,7 +36,7 @@ import {
   writeDoorArtSection,
   writeDoorArtVariant,
 } from '../doors/door-settings.service';
-import { isArtVariant, ART_VARIANTS } from '../doors/door-art-variants';
+import { isArtVariant, ART_VARIANTS, readVariant } from '../doors/door-art-variants';
 
 /** One registered door, as far as this router is concerned. */
 export interface ArtDoor {
@@ -128,6 +128,19 @@ console.error('Door art API error:', error);
    * absent, never errors: most doors have none.
    */
   router.get('/', async (req: Request, res: Response) => {
+    /*
+     * Which narrow drawings exist travels with the list, so the Screen
+     * Designer's cards can say "not drawn for this format" without asking
+     * every door for its bodies first.
+     */
+    const artRoot = path.join(config.get('dataDir'), 'Screens');
+    const listWithVariants = (doorDir: string, command: string) =>
+      listDoorArtSections(doorDir, command).map(section => ({
+        ...section,
+        variants: Object.fromEntries(ART_VARIANTS.map(variant =>
+          [variant, readVariant(artRoot, command, section.section, variant) !== null])),
+      }));
+
     try {
       const out: Array<Record<string, unknown>> = [];
       const seen = new Set<string>();
@@ -135,7 +148,7 @@ console.error('Door art API error:', error);
         try {
           const doorDir = doorDirectoryFor(config.get('dataDir'), door);
           if (!doorDir) continue;
-          const sections = listDoorArtSections(doorDir, door.command);
+          const sections = listWithVariants(doorDir, door.command);
           if (sections.length === 0) continue;
           seen.add(door.command.toUpperCase());
           out.push({
@@ -179,7 +192,7 @@ console.error('Door art API error:', error);
             // Bulls tools still name B, but B is the Bulletins door now, and
             // the card listed under B opened B's own directory and failed.
             if (seen.has(command) || registered.has(command)) continue;
-            const sections = listDoorArtSections(doorDir, command);
+            const sections = listWithVariants(doorDir, command);
             if (sections.length === 0) continue;
             seen.add(command);
             out.push({ command, name: entry.name, sections });

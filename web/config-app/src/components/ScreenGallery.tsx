@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { apiClient } from '../api/client';
 import { AnsiCanvas, CELL_WIDTH } from './AnsiCanvas';
@@ -124,6 +124,17 @@ export interface GalleryItem {
    * drawing commands in text. Absent means text or ANSI, the common case.
    */
   format?: 'ansi' | 'text' | 'petscii' | 'rip' | 'teletext' | 'teletext-native';
+  /**
+   * WHERE THE BYTES COME FROM, when they are not a screen file.
+   *
+   * A door's art slot is addressed by door, file and section, so it has no
+   * path for the file route to read. Absent, the card reads `path` as a screen
+   * file. The answer has the file route's shape: an object with `.content`.
+   */
+  source?: {
+    queryKey: readonly unknown[];
+    fetch: () => Promise<{ content?: string } | null>;
+  };
 }
 
 /**
@@ -202,6 +213,11 @@ interface ScreenGalleryProps {
   isLoading?: boolean;
   /** The theme this gallery is looking through, which the file route needs. */
   theme?: string;
+  /**
+   * Controls under a card. They sit outside the card's own <button>, because
+   * a control inside a button is invalid HTML.
+   */
+  renderBelow?: (item: GalleryItem) => ReactNode;
 }
 
 /** One card. Draws nothing until it is scrolled to. */
@@ -249,7 +265,7 @@ function GalleryCard(
   const { data: fetched, isFetching } = useQuery({
     // The theme is part of the KEY because it is part of the ANSWER: the same
     // path read through two themes has different readers.
-    queryKey: ['screen-file', item.path, theme ?? 'default'],
+    queryKey: item.source?.queryKey ?? ['screen-file', item.path, theme ?? 'default'],
     // A placeholder has no file behind it; asking would be a 404 per card.
     // A card whose screen has no drawing in the CHOSEN format has nothing to
     // show: fetching the fallback would cost a request to draw art that
@@ -264,6 +280,7 @@ function GalleryCard(
         // second read `undefined` and tried to decode it - which is why every
         // screen in the studio said "These bytes cannot be read as ANSI art".
         // One key, one shape.
+        if (item.source) return await item.source.fetch();
         const res = await apiClient.getScreenFile(item.path, theme);
         return (res.data ?? null) as { content?: string } | null;
       } catch {
@@ -464,7 +481,7 @@ function DriftDisclosure({ item }: { item: GalleryItem }) {
   );
 }
 
-export function ScreenGallery({ items, onOpen, isLoading = false, theme }: ScreenGalleryProps) {
+export function ScreenGallery({ items, onOpen, isLoading = false, theme, renderBelow }: ScreenGalleryProps) {
   // The index is one request for the whole board - 891 files with their
   // readers, their SAUCE and their problems - so the page has a real wait
   // before there is anything to draw.
@@ -501,6 +518,7 @@ export function ScreenGallery({ items, onOpen, isLoading = false, theme }: Scree
               invalid HTML, and React says so - the drift control was briefly
               nested and every query for it matched two elements. */}
           {(item.versions ?? 1) > 1 && <DriftDisclosure item={item} />}
+          {renderBelow?.(item)}
         </div>
       ))}
     </div>

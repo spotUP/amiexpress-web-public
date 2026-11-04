@@ -41,7 +41,13 @@ export interface DoorArtSlotProps {
 export const settingKeyOf = (section: string): string | null =>
   section.startsWith('setting:') ? section.slice('setting:'.length) : null;
 
-export function DoorArtSlot({ command, slot, onOpen }: DoorArtSlotProps) {
+/**
+ * "Choose another": which of the door's files this slot draws.
+ *
+ * Its own component because the Screen Designer's cards offer it too, and the
+ * saving rule has to be one rule.
+ */
+export function DoorArtChoice({ command, slot }: Pick<DoorArtSlotProps, 'command' | 'slot'>) {
   const queryClient = useQueryClient();
   const { showSuccess, showError } = useNotification();
   const [saving, setSaving] = useState(false);
@@ -64,6 +70,32 @@ export function DoorArtSlot({ command, slot, onOpen }: DoorArtSlotProps) {
     }
   };
 
+  if ((slot.choices?.length ?? 0) <= 1) return null;
+
+  return (
+    <label className="text-xs text-content-secondary flex items-center gap-1">
+      Choose another
+      <select
+        aria-label="Choose another"
+        disabled={saving}
+        value={slot.file}
+        onChange={(event) => void choose(event.target.value)}
+        className="bg-surface-2 border border-border rounded px-1 py-0.5 text-xs"
+      >
+        {/* The file the setting names may itself be gone; keep it listed
+            so the control has a value and the sysop can see what broke. */}
+        {slot.missing && <option value={slot.file}>{slot.file} (missing)</option>}
+        {slot.choices?.map((choice) => (
+          <option key={choice.file} value={choice.file}>
+            {choice.file} — {choice.lines} rows
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
+export function DoorArtSlot({ command, slot, onOpen }: DoorArtSlotProps) {
   return (
     <div className="flex flex-wrap items-center gap-2 pl-2">
       <span className="text-content-primary">{slot.label}</span>
@@ -84,27 +116,7 @@ export function DoorArtSlot({ command, slot, onOpen }: DoorArtSlotProps) {
         </button>
       )}
 
-      {(slot.choices?.length ?? 0) > 1 && (
-        <label className="text-xs text-content-secondary flex items-center gap-1">
-          Choose another
-          <select
-            aria-label="Choose another"
-            disabled={saving}
-            value={slot.file}
-            onChange={(event) => void choose(event.target.value)}
-            className="bg-surface-2 border border-border rounded px-1 py-0.5 text-xs"
-          >
-            {/* The file the setting names may itself be gone; keep it listed
-                so the control has a value and the sysop can see what broke. */}
-            {slot.missing && <option value={slot.file}>{slot.file} (missing)</option>}
-            {slot.choices?.map((choice) => (
-              <option key={choice.file} value={choice.file}>
-                {choice.file} — {choice.lines} rows
-              </option>
-            ))}
-          </select>
-        </label>
-      )}
+      <DoorArtChoice command={command} slot={slot} />
     </div>
   );
 }

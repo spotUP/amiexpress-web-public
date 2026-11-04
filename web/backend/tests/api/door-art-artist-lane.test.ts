@@ -85,6 +85,16 @@ describe('door art on the artist lane', () => {
     expect(res.body.data.map((d: { command: string }) => d.command)).toContain('B');
   });
 
+  it('says in the list which narrow drawings a slot has, so a card can answer without its body', async () => {
+    await request(app())
+      .put('/api/door-art/B')
+      .send({ file: 'Bulls.CFG', section: 'title', content: b64(' NARROW'), variant: 'c64' });
+
+    const res = await request(app()).get('/api/door-art');
+
+    expect(res.body.data[0].sections[0].variants).toEqual({ c64: true, ttx: false, tti: false });
+  });
+
   it('hands over one door art section, and says which variants exist', async () => {
     const res = await request(app()).get('/api/door-art/B');
     expect(res.status).toBe(200);

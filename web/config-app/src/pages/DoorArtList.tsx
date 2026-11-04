@@ -1,10 +1,10 @@
 /**
- * Every door's art, as one list that opens in the door-art dialog.
+ * One door's art, or every door's, as a list that opens in the door-art dialog.
  *
  * Door art is board-wide: the API (`/api/door-art`) is keyed by door command,
- * not by theme, and is mounted on the level-100 artist lane. This is the one
- * place that lists it, so Screen Health (sysop audit) and the Screen Designer
- * (where the people who draw it work) show the same rows by the same rules.
+ * not by theme, and is mounted on the level-100 artist lane. Screen Health and
+ * the Doors dialog read rows here. The Screen Designer shows the same slots as
+ * gallery cards, in DoorArtGallery.
  */
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
@@ -12,25 +12,9 @@ import { useQuery } from '@tanstack/react-query';
 import { apiClient } from '../api/client';
 import { DoorArtDialog } from './DoorArtDialog';
 import { DoorArtSlot, settingKeyOf } from './DoorArtSlot';
+import type { DoorArtEntry, DoorArtTarget } from './door-art-view';
 
-interface DoorArtEntry {
-  command: string;
-  name: string;
-  sections: Array<{
-    file: string; section: string; label: string; lines: number;
-    maxLines: number; maxLineLength: number;
-    // A slot backed by a whole FILE the door's setting names, rather than
-    // a section of its config: it can be missing, and it has alternates.
-    missing?: boolean;
-    choices?: Array<{ file: string; lines: number }>;
-  }>;
-}
-
-/** One slot, as the editor opens it. */
-export interface DoorArtTarget {
-  command: string; doorName: string; file: string; section: string;
-  label: string; maxLines: number; maxLineLength: number;
-}
+export type { DoorArtTarget };
 
 export interface DoorArtListProps {
   /** Narrows the list to doors, slots or files containing this text. */

@@ -16,10 +16,12 @@ import { useQuery } from '@tanstack/react-query';
 
 import { apiClient } from '../api/client';
 import { ScreenGallery } from '../components/ScreenGallery';
+import { TabbedWorkspace } from '../components/ui/Tabs';
 import { SkeletonRows } from '../components/ui/states';
 import { ArtistScreenDialog } from './ArtistScreenDialog';
-import { DoorArtList } from './DoorArtList';
+import { DoorArtGallery, useDoorArtCards } from './DoorArtGallery';
 import { ThemeStatusBar } from './ThemeStatusBar';
+import { isStillToDraw, matchesSearch } from './door-art-view';
 import { previewScreenOrder } from './screen-preview-view';
 import { buildGalleryItems, type ScreenIndexShape } from './screen-index-view';
 import { themeChecklist, themeProgress } from './theme-checklist';
@@ -142,11 +144,14 @@ export function ArtistStudioPage() {
 
   const shown = useMemo(() => {
     const all = todoOnly ? todoItems : [...items, ...todoItems];
-    const needle = search.trim().toLowerCase();
-    if (!needle) return all;
-    return all.filter(item =>
-      item.label.toLowerCase().includes(needle) || item.path.toLowerCase().includes(needle));
+    return all.filter(item => matchesSearch(item, search));
   }, [items, todoItems, todoOnly, search]);
+
+  const doorArt = useDoorArtCards(thumbnailFormat);
+  const shownDoorArt = useMemo(
+    () => doorArt.cards.filter(card => (!todoOnly || isStillToDraw(card)) && matchesSearch(card, search)),
+    [doorArt.cards, todoOnly, search],
+  );
 
   const artistsWithoutATheme = useMemo(() => {
     if (!sysop) return [];
@@ -208,6 +213,42 @@ export function ArtistStudioPage() {
     );
   }
 
+  /** One filter row for both tabs, so moving between them keeps the choices. */
+  const filters = (stillToDraw: number) => (
+    <div className="flex flex-wrap items-center justify-between gap-2">
+      <label className="flex items-center gap-2 text-sm text-content-secondary">
+        <input type="checkbox" checked={todoOnly} onChange={event => setTodoOnly(event.target.checked)} />
+        Only what is still to draw ({stillToDraw})
+      </label>
+      <label className="flex items-center gap-2 text-sm text-content-secondary">
+        Draw as
+        <select
+          aria-label="Draw thumbnails as"
+          className="input-field"
+          value={thumbnailFormat}
+          onChange={event => setThumbnailFormat(event.target.value)}
+        >
+          {/* Empty is what the board itself would serve - the file each
+              screen resolves to - and it is the default because it is what
+              the gallery did before there was a choice. */}
+          <option value="">What the screen resolves to</option>
+          <option value="ansi">ANSI</option>
+          <option value="petscii">PETSCII (.seq)</option>
+          <option value="rip">RIP</option>
+          <option value="teletext">Teletext (.ttx)</option>
+        </select>
+      </label>
+      <input
+        type="search"
+        aria-label="Search screens"
+        className="input-field w-56"
+        placeholder="Search"
+        value={search}
+        onChange={event => setSearch(event.target.value)}
+      />
+    </div>
+  );
+
   return (
     <div className="space-y-4">
       <ThemeStatusBar
@@ -219,79 +260,69 @@ export function ArtistStudioPage() {
         artistsWithoutATheme={artistsWithoutATheme}
       />
 
-      {/* The one number an artist wants, and where the work is. */}
-      <div className="space-y-2 border border-border p-3">
-        <div className="flex flex-wrap items-baseline justify-between gap-2">
-          <p className="text-content-primary">
-            {progress.drawn} of {progress.total} screens drawn
-          </p>
-          <p className="text-sm text-content-secondary">
-            {(['node', 'conf', 'board', 'files'] as const)
-              .map(scope => `${SCOPE_LABEL[scope]}: ${progress.byScope[scope].drawn}/${progress.byScope[scope].total}`)
-              .join('   ')}
-          </p>
-        </div>
-        <div className="h-2 w-full bg-surface-2" aria-hidden="true">
-          <div
-            className="h-full bg-accent"
-            style={{ width: `${progress.total ? Math.round((progress.drawn / progress.total) * 100) : 0}%` }}
-          />
-        </div>
-        <p className="text-sm text-content-secondary">
-          Anything you do not draw falls back to the board's own art, so a theme
-          works from the first screen onwards.
-        </p>
-      </div>
+      <TabbedWorkspace
+        param="art"
+        tabs={[
+          {
+            id: 'screens',
+            label: 'Screens',
+            render: () => (
+              <div className="space-y-4">
+          {/* The one number an artist wants, and where the work is. */}
+          <div className="space-y-2 border border-border p-3">
+            <div className="flex flex-wrap items-baseline justify-between gap-2">
+              <p className="text-content-primary">
+                {progress.drawn} of {progress.total} screens drawn
+              </p>
+              <p className="text-sm text-content-secondary">
+                {(['node', 'conf', 'board', 'files'] as const)
+                  .map(scope => `${SCOPE_LABEL[scope]}: ${progress.byScope[scope].drawn}/${progress.byScope[scope].total}`)
+                  .join('   ')}
+              </p>
+            </div>
+            <div className="h-2 w-full bg-surface-2" aria-hidden="true">
+              <div
+                className="h-full bg-accent"
+                style={{ width: `${progress.total ? Math.round((progress.drawn / progress.total) * 100) : 0}%` }}
+              />
+            </div>
+            <p className="text-sm text-content-secondary">
+              Anything you do not draw falls back to the board's own art, so a theme
+              works from the first screen onwards.
+            </p>
+          </div>
 
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <label className="flex items-center gap-2 text-sm text-content-secondary">
-          <input type="checkbox" checked={todoOnly} onChange={event => setTodoOnly(event.target.checked)} />
-          Only what is still to draw ({undrawn.length})
-        </label>
-        <label className="flex items-center gap-2 text-sm text-content-secondary">
-          Draw as
-          <select
-            aria-label="Draw thumbnails as"
-            className="input-field"
-            value={thumbnailFormat}
-            onChange={event => setThumbnailFormat(event.target.value)}
-          >
-            {/* Empty is what the board itself would serve - the file each
-                screen resolves to - and it is the default because it is what
-                the gallery did before there was a choice. */}
-            <option value="">What the screen resolves to</option>
-            <option value="ansi">ANSI</option>
-            <option value="petscii">PETSCII (.seq)</option>
-            <option value="rip">RIP</option>
-            <option value="teletext">Teletext (.ttx)</option>
-          </select>
-        </label>
-        <input
-          type="search"
-          aria-label="Search screens"
-          className="input-field w-56"
-          placeholder="Search"
-          value={search}
-          onChange={event => setSearch(event.target.value)}
-        />
-      </div>
+                {filters(undrawn.length)}
 
-      <ScreenGallery items={shown} isLoading={isLoading} onOpen={setOpenPath} theme={theme.slug} />
+                <ScreenGallery items={shown} isLoading={isLoading} onOpen={setOpenPath} theme={theme.slug} />
+              </div>
+            ),
+          },
+          {
+            /*
+              Door art is the board's, not a theme's: /api/door-art is keyed by
+              door command and sits on the level-100 artist lane, and an artist
+              is never served the `default` view, so it shows in every theme
+              view. Asked for, 2026-10-14: door art "needs to be reachable from
+              the ansi studio".
+            */
+            id: 'door-art',
+            label: 'Door art',
+            render: () => (
+              <div className="space-y-4">
+                <p className="text-sm text-content-secondary">
+                  Logos and screens that belong to a door. They are the board&apos;s, shared by
+                  every theme.
+                </p>
 
-      {/*
-        Door art is the board's, not a theme's: /api/door-art is keyed by door
-        command and sits on the level-100 artist lane, and an artist is never
-        served the `default` view, so it shows in every theme view. Asked for,
-        2026-10-14: door art "needs to be reachable from the ansi studio".
-      */}
-      <section aria-labelledby="door-art-heading" className="space-y-2">
-        <h2 id="door-art-heading" className="text-content-primary">Door art</h2>
-        <p className="text-sm text-content-secondary">
-          Logos and screens that belong to a door. They are the board&apos;s, shared by
-          every theme.
-        </p>
-        <DoorArtList query={search} />
-      </section>
+                {filters(doorArt.cards.filter(isStillToDraw).length)}
+
+                <DoorArtGallery cards={shownDoorArt} isLoading={doorArt.isLoading} />
+              </div>
+            ),
+          },
+        ]}
+      />
 
       <ArtistScreenDialog
         path={openPath}

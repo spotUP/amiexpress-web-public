@@ -4,9 +4,13 @@
  * "door art needs to be reachable from the ansi studio" (sysop, 2026-10-14).
  * The door-art list lived only inside the sysop's Screen Health page, which
  * the level-100 artists the door-art API serves never see.
+ *
+ * "can we add a tab for door art that lists them as the screens? it should
+ * work just like the screen view" (sysop, 2026-11-04): so a slot is a gallery
+ * card on a tab of its own.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
@@ -37,6 +41,10 @@ const envelope = (data: unknown) => Promise.resolve({
 const doorArtCalls = vi.fn();
 vi.stubGlobal('fetch', vi.fn((input: RequestInfo | URL) => {
   const url = String(input);
+  if (url.includes('/api/door-art/MT')) {
+    doorArtCalls(url);
+    return envelope([{ ...doorArt[0].sections[0], content: btoa('LOGO'), variants: {}, offers: [] }]);
+  }
   if (url.includes('/api/door-art')) { doorArtCalls(url); return envelope(doorArt); }
   if (url.includes('/validation')) return envelope({ blocking: [], advisory: [], publishable: true, coverage: { provided: 1, total: 44 } });
   if (url.includes('/api/themes')) return envelope({ defaultSlug: 'default', canCreate: true, themes: [theme] });
@@ -72,24 +80,28 @@ function wrapper({ children }: { children: ReactNode }) {
 describe('door art in the Screen Designer', () => {
   beforeEach(() => doorArtCalls.mockClear());
 
-  it('lists a door under a Door art heading and opens its slot in the door-art dialog', async () => {
+  it('lists a slot as a card on the Door art tab and opens it in the door-art dialog', async () => {
     render(<ArtistStudioPage />, { wrapper });
 
-    expect(await screen.findByRole('heading', { name: 'Door art' })).toBeTruthy();
-    expect(await screen.findByText('Title logo')).toBeTruthy();
-    expect(doorArtCalls).toHaveBeenCalled();
+    await userEvent.click(await screen.findByRole('tab', { name: 'Door art' }));
 
-    await userEvent.click(await screen.findByRole('button', { name: /open in ansi editor/i }));
+    const card = await screen.findByRole('button', { name: /MegaTop - Title logo/ });
+    // The card drew its own art: it asked for the door's sections, not a
+    // screen file, which is the seam a slot needs because it has no path.
+    await waitFor(() => expect(doorArtCalls).toHaveBeenCalledWith(expect.stringContaining('/api/door-art/MT')));
+
+    await userEvent.click(card);
 
     expect(await screen.findByRole('dialog', { name: 'MegaTop - Title logo' })).toBeTruthy();
   });
 
-  it('narrows the door list with the page search box', async () => {
+  it('narrows the cards with the page search box, as it does for screens', async () => {
     render(<ArtistStudioPage />, { wrapper });
-    await screen.findByText('Title logo');
+    await userEvent.click(await screen.findByRole('tab', { name: 'Door art' }));
+    await screen.findByRole('button', { name: /MegaTop - Title logo/ });
 
     await userEvent.type(screen.getByLabelText('Search screens'), 'zzz-nothing');
 
-    expect(screen.queryByText('Title logo')).toBeNull();
+    expect(screen.queryByRole('button', { name: /MegaTop - Title logo/ })).toBeNull();
   });
 });
