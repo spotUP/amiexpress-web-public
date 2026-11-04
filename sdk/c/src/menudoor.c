@@ -1362,7 +1362,9 @@ static menudoor_result run_params(struct menudoor *d, ae_session *session)
     while (*p == ' ') p++;
     while (*p && *p != ' ') p++;                          /* the command word: B, or whatever the sysop named it */
     while (*p == ' ') p++;
-    while (*p && *p != ' ' && n < TYPED_MAX) word[n++] = *p++;
+    /* The rest of the line, as if typed at the menu: "B 12 NS" types "12 NS" (the door reads its own flags). */
+    while (*p && n < TYPED_MAX) word[n++] = *p++;
+    while (n > 0 && word[n - 1] == ' ') n--;
     word[n] = '\0';
     if (!n || !d->spec->typed) return MENUDOOR_STAY;
     d->unframed = 1;

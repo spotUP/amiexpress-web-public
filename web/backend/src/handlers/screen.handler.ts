@@ -2689,7 +2689,7 @@ function screenOpensWithItsOwnClear(content: string): boolean {
  */
 const OPENING_FORM_FEED = /^((?:\x1b\[[0-9;?]*[A-Za-z])*)\x0c/;
 
-export async function displayScreen(socket: any, session: BBSSession, screenName: string, runCommands: boolean = true, silent: boolean = false, opts?: { fallbackWipe?: string }): Promise<boolean> {
+export async function displayScreen(socket: any, session: BBSSession, screenName: string, runCommands: boolean = true, silent: boolean = false, opts?: { fallbackWipe?: string; nonStop?: boolean }): Promise<boolean> {
   screenDebug(`[displayScreen] ========================================`);
   screenDebug(`[displayScreen] REQUESTED SCREEN: ${screenName}`);
   screenDebug(`[displayScreen] Conference ID: ${session.currentConf || 'none'}`);
@@ -3065,8 +3065,13 @@ console.log(`[NEWLINE-DEBUG] RAW CONTENT (${screenName}): ${content.length} byte
      * The list above is the board's own four; an artist's tall screen needs
      * no code change.
      */
+    /*
+     * `nonStop` is the caller saying it: `B 12 NS` (express.e:24626, :24643 set
+     * nonStopDisplayFlag from the NS parameter before displayFile).
+     */
     const neverPaginates = SCREENS_NEVER_PAGINATE.has(screenCatalogueName(screenName))
-      || /~NSF?(?![A-Za-z0-9_])/.test(contentForMci);
+      || /~NSF?(?![A-Za-z0-9_])/.test(contentForMci)
+      || opts?.nonStop === true;
     const needsPaging = !neverPaginates && !inlineOnlyCodes && artLines > callerLines;
     const mciSocket = (wipeCodePresent || needsPaging) ? undefined : socket;
     if (needsPaging && !wipeCodePresent) {

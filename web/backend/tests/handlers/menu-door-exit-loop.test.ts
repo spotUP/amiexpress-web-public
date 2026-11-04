@@ -79,9 +79,15 @@ test('an inner tail never drains: only the outermost does', async () => {
 test('a bulletin is shown through the board with the leave wipe, then B is reopened', async () => {
   const session: any = {};
   await exit.showBulletinThenReopen({}, session, { kind: 'BULLETINS', key: '3', command: 'B' });
-  expect(showBulletin).toHaveBeenCalledWith({}, session, 3, 'H');
+  expect(showBulletin).toHaveBeenCalledWith({}, session, 3, 'H', false);
   await pause.answered!();
   expect(launched[0]).toBe('B');
+});
+
+test('SHOW 12 NS (the caller typed B 12 NS) shows the bulletin non-stop', async () => {
+  const session: any = {};
+  await exit.showBulletinThenReopen({}, session, { kind: 'BULLETINS', key: '12', command: 'B', nonStop: true });
+  expect(showBulletin).toHaveBeenCalledWith({}, session, 12, 'H', true);
 });
 
 test('a bulletin with a pause reopens B only when the pause is answered', async () => {

@@ -13,15 +13,34 @@
 
 static menudoor_result show_entry(struct menudoor *d, int entry)
 {
-    ae_menu_show(menudoor_entry(d, entry)->key);
+    ae_menu_show(menudoor_entry(d, entry)->key, 0);
     return MENUDOOR_LEAVE;
 }
 
+/* NS anywhere after the number, any case (express.e:24626, :24643 paramsContains('NS')). */
+static int asks_nonstop(const char *p)
+{
+    while (*p) {
+        while (*p == ' ') p++;
+        if ((p[0] == 'N' || p[0] == 'n') && (p[1] == 'S' || p[1] == 's') && (p[2] == ' ' || p[2] == '\0')) return 1;
+        while (*p && *p != ' ') p++;
+    }
+    return 0;
+}
+
+/* "12" or "12 NS": the first word is the bulletin, the rest its flags. */
 static menudoor_result show_typed(struct menudoor *d, const char *line)
 {
-    int i;
+    char key[21];
+    int i, n = 0;
+    while (*line == ' ') line++;
+    while (line[n] && line[n] != ' ' && n < (int)sizeof key - 1) { key[n] = line[n]; n++; }
+    key[n] = '\0';
     for (i = 0; menudoor_entry(d, i) != 0; i++)
-        if (strcmp(menudoor_entry(d, i)->key, line) == 0) return show_entry(d, i);
+        if (strcmp(menudoor_entry(d, i)->key, key) == 0) {
+            ae_menu_show(key, asks_nonstop(line + n));
+            return MENUDOOR_LEAVE;
+        }
     /* WEB_: express.e:24652 says "Sorry there is no bulletin #n"; the door cannot know the number was meant for a
        level-variant file, so it says what it knows. */
     menudoor_status(d, "Sorry, there is no such bulletin.");

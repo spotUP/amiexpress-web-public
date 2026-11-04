@@ -6,7 +6,8 @@
 import type { MenuKind } from '../../screens/menu-config/menu-config';
 
 export interface MenuRun { text: string; runAs: 'typed' | 'syscmd' }
-export interface MenuShow { kind: MenuKind; key: string; command: string }
+/** nonStop: the caller asked for NS (`B 12 NS`): the bulletin shows with no More prompts. */
+export interface MenuShow { kind: MenuKind; key: string; command: string; nonStop?: boolean }
 
 /** classic: the door's Tab stored the classic style; the exit tail draws the board's own menu screen and names it. */
 export interface MenuExit { run?: MenuRun; show?: MenuShow; classic?: true }
@@ -261,7 +262,7 @@ export async function showBulletinThenReopen(socket: unknown, session: BBSSessio
   const { continueAfterScreen, doPause } = require('../screen.handler') as typeof import('../screen.handler');
   const wipe = readMenuConfig(boardRoot(), show.kind).config.wipes.leave;
   try {
-    await showBulletin(socket as never, session, Number(show.key), wipe);
+    await showBulletin(socket as never, session, Number(show.key), wipe, show.nonStop === true);
   } catch (err) {
     // The caller must not be left without a screen: B reopens even when the bulletin could not be shown.
     console.warn('[menu-door-exit] bulletin could not be shown:', err);

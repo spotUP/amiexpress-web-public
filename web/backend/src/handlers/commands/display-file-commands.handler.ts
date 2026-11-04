@@ -72,7 +72,7 @@ import type { BBSSession } from '../../index';
 import { reportBulletinRead } from '../../achievements/sites';
 
 // Dependencies injected from index.ts
-let _displayScreen: (socket: any, session: BBSSession, screenName: string, runCommands?: boolean, silent?: boolean, opts?: { fallbackWipe?: string }) => void | Promise<unknown>;
+let _displayScreen: (socket: any, session: BBSSession, screenName: string, runCommands?: boolean, silent?: boolean, opts?: { fallbackWipe?: string; nonStop?: boolean }) => void | Promise<unknown>;
 let _findSecurityScreen: (screenDirAndName: string, userSecLevel?: number, userScreenTypeExt?: string | null, ripMode?: boolean, defScreens?: boolean, petsciiMode?: boolean, texttvMode?: boolean) => string | null;
 let _confScreenDir: string;
 let _db: any;
@@ -366,7 +366,7 @@ function _showBulletinHelp(socket: any, session: BBSSession): void {
  * The bulletin itself, as express.e:24648-24653 shows it - no prompt after (the B door owns what follows).
  * `fallbackWipe` plays only when the file carries no ~W of its own (menu doors, plan M7 Decision 39).
  */
-export async function showBulletin(socket: any, session: BBSSession, bulletinNum: number, fallbackWipe: string): Promise<boolean> {
+export async function showBulletin(socket: any, session: BBSSession, bulletinNum: number, fallbackWipe: string, nonStop = false): Promise<boolean> {
   // express.e:24648 - StringF(str,'\sBulletins/Bull\d',confScreenDir,stat)
   // confScreenDir = Conf{N}/Screens/
   const bulletins = bulletinDir(session);
@@ -382,7 +382,7 @@ export async function showBulletin(socket: any, session: BBSSession, bulletinNum
     socket.emit('ansi-output', `\r\nSorry there is no bulletin #${bulletinNum}\r\n\r\n`);
     return false;
   }
-  await _displayScreen(socket, session, bulletinScreen, true, false, fallbackWipe ? { fallbackWipe } : undefined);
+  await _displayScreen(socket, session, bulletinScreen, true, false, { ...(fallbackWipe ? { fallbackWipe } : {}), ...(nonStop ? { nonStop } : {}) });
   // Achievements (SP2): every bulletin read is bull.read.all, once. Non-throwing.
   reportBulletinRead(session as any, bulletinNum, bulletins);
   return true;
@@ -393,7 +393,7 @@ export async function showBulletin(socket: any, session: BBSSession, bulletinNum
  */
 function _displayBulletin(socket: any, session: BBSSession, bulletinNum: number, nonStopDisplay: boolean): void {
   // The display runs on its own, as it always did; the prompt follows at once.
-  showBulletin(socket, session, bulletinNum, '').catch(err => console.warn('[bulletin] display failed:', err));
+  showBulletin(socket, session, bulletinNum, '', nonStopDisplay).catch(err => console.warn('[bulletin] display failed:', err));
 
   // express.e:24655 JUMP inputAgain — re-show prompt
   // express.e:24634: plain text prompt

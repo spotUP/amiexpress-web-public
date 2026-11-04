@@ -140,3 +140,27 @@ describe('Super-AmiLog on a screen it does not fit', () => {
     expect(count(wire, 'lAST cALLERS')).toBe(1);
   });
 });
+
+/**
+ * B 12 NS: the caller asked for no pauses (express.e:24626, :24643 set
+ * nonStopDisplayFlag from the NS parameter). The same 38-row file on a
+ * 20-row screen goes out whole, with no More prompt left waiting.
+ */
+describe('a bulletin shown non-stop', () => {
+  it('pages without NS and goes out whole with it', async () => {
+    const paged = socketDouble();
+    const pagedSession = ansi(20);
+    await displayScreen(paged.socket, pagedSession, 'BBS:Bulletins/bull6.txt', false);
+    expect(pagedSession.paginatedScreen?.kind).toBe('bbs');
+    expect(paged.out.join('')).not.toContain('Sysop Command');
+
+    const whole = socketDouble();
+    const wholeSession = ansi(20);
+    await displayScreen(whole.socket, wholeSession, 'BBS:Bulletins/bull6.txt', false, false, { nonStop: true });
+    require('../../src/utils/output.util').flushOutput(whole.socket);   // inline output is batched for 16 ms
+    expect(wholeSession.paginatedScreen).toBeUndefined();
+    const wire = whole.out.join('');
+    expect(count(wire, 'lAST cALLERS')).toBe(1);
+    expect(wire).toContain('Sysop Command');
+  });
+});

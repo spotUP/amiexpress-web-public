@@ -232,8 +232,9 @@ static void actions_send_exactly_their_verb(void)
     assert(ae_menu_run("J 5 secret") == 1 && strcmp(last_request, "RUN J 5 secret") == 0);
     assert(ae_menu_run("") == 0);
     assert(ae_menu_row(7) == 1 && strcmp(last_request, "ROW 7") == 0);
-    assert(ae_menu_show("3") == 1 && strcmp(last_request, "SHOW 3") == 0);
-    assert(ae_menu_show("9") == 0);
+    assert(ae_menu_show("3", 0) == 1 && strcmp(last_request, "SHOW 3") == 0);
+    assert(ae_menu_show("3", 1) == 1 && strcmp(last_request, "SHOW 3 NS") == 0);
+    assert(ae_menu_show("9", 0) == 0);
     assert(ae_menu_logo_draw("header", 2, 1, 3, 80) == 3 && strcmp(last_request, "LOGO header 2 1 3 80") == 0);
     assert(ae_menu_logo_draw("footer", 20, 1, 3, 80) == 0);
     assert(ae_menu_style_get(stored, eff) == 1 && strcmp(last_request, "STYLE?") == 0

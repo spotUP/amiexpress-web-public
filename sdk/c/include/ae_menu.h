@@ -79,8 +79,9 @@ int ae_menu_overflow(const char *mode, char *effective, int cap);
 int ae_menu_overflow_get(char *stored, int scap, char *effective, int ecap);
 /** 1 the board will run `line` once this door exits, 0 refused, AE_MENU_GONE. */
 int ae_menu_run(const char *line);
-/** 1 the board will show bulletin `key` once this door exits, 0 refused, AE_MENU_GONE. */
-int ae_menu_show(const char *key);
+/** 1 the board will show bulletin `key` once this door exits, 0 refused, AE_MENU_GONE. `nonstop` 1 shows it with no
+    More prompts (the caller typed NS: express.e:24626). */
+int ae_menu_show(const char *key, int nonstop);
 
 #ifdef __cplusplus
 }

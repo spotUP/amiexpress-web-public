@@ -140,9 +140,11 @@ export async function menuAnswer(request: string, ctx: MenuContext): Promise<str
       return 'OK';
     }
     case 'SHOW': {
-      const key = rest.trim();
+      // `SHOW <key>` or `SHOW <key> NS` (the caller typed `B 12 NS`).
+      const [key = '', ...flags] = rest.trim().split(/\s+/);
+      const nonStop = flags.some(f => f.toUpperCase() === 'NS');
       if (!cat || cat.kind !== 'BULLETINS' || !cat.sections.some(s => s.entries.some(e => e.key === key))) return 'NO';
-      armMenuShow(ctx.session, { kind: 'BULLETINS', key, command: MENU_KIND_COMMAND.BULLETINS });
+      armMenuShow(ctx.session, { kind: 'BULLETINS', key, command: MENU_KIND_COMMAND.BULLETINS, ...(nonStop ? { nonStop } : {}) });
       return 'OK';
     }
     case 'LOGO': {

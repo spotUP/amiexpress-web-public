@@ -111,15 +111,21 @@ int main(void)
     main_line = "B 12";                                     /* "B 12" at the prompt: bulletin 12, no menu first */
     drive("", 0, &rc);
     assert(rc == 0 && strstr(requests, "SHOW 12|") && !strstr(screen_text, "Top Uploaders"));
-    main_line = "  b   2 NS";                                  /* the first parameter only; a later NS is not a key */
+    main_line = "  b   2 NS";                               /* NS after the number: shown non-stop (express.e:24626) */
     drive("", 0, &rc);
-    assert(rc == 0 && strstr(requests, "SHOW 2|"));
+    assert(rc == 0 && strstr(requests, "SHOW 2 NS|"));
+    main_line = "B 12 ns";
+    drive("", 0, &rc);
+    assert(rc == 0 && strstr(requests, "SHOW 12 NS|"));
+    main_line = "B 12 X";                                   /* any other word is no NS */
+    drive("", 0, &rc);
+    assert(rc == 0 && strstr(requests, "SHOW 12|"));
     main_line = "B 9";                                      /* no such bulletin: the menu opens and says so */
     drive("q", 1, &rc);
     assert(rc == 0 && !strstr(requests, "SHOW") && strstr(screen_text, "Sorry, there is no such bulletin.")
            && strstr(screen_text, "Top Uploaders"));
     main_line = "B";
-    printf("  [OK] \"B 12\" shows bulletin 12 at once; \"B 9\" opens the menu saying there is none\n");
+    printf("  [OK] \"B 12\" shows bulletin 12 at once, \"B 12 NS\" non-stop; \"B 9\" opens the menu saying there is none\n");
 
     cat_answers = 0;                                        /* an old board that does not know AEW_MENU */
     drive("", 0, &rc);

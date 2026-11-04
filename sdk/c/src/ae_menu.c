@@ -314,10 +314,10 @@ int ae_menu_run(const char *line)
     return ok_or_not(request);
 }
 
-int ae_menu_show(const char *key)
+int ae_menu_show(const char *key, int nonstop)
 {
     char request[40];
     if (!key || !key[0]) return 0;
-    sprintf(request, "SHOW %.20s", key);
+    sprintf(request, nonstop ? "SHOW %.20s NS" : "SHOW %.20s", key);
     return ok_or_not(request);
 }
