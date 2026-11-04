@@ -5,6 +5,7 @@
 import { CoreDoor as Door } from "@amiexpress/bbs-door-sdk";
 import blessed from "@amiexpress/bbs-door-sdk/engines/ui/blessed";
 import { arcadeMenu, moveSelection, ArcadeSfx, createMenuGate } from "@amiexpress/bbs-door-sdk/engines/ui/arcade";
+import { sessionLogoRows } from "@amiexpress/bbs-door-sdk/utils/door-logo";
 import { DoorInputManager } from "@amiexpress/bbs-door-sdk/utils/blessed-helpers";
 import { DonkeyKongGame } from "./game/donkey-kong-game";
 import { createInitialGameData } from "./game/initial-data";
@@ -106,19 +107,30 @@ function renderMenu() {
     gameArea.setContent("");
     if (menuBox)
         menuBox.destroy();
+    // The logo is the artist's file when the Studio has one (slot `logo`),
+    // else the figlet below; a 40-column caller with no drawing gets a plain
+    // title and never the wide art.
     const menuContent = [
-        "{yellow-fg}",
-        " ____   ___  _   _ _  _________   __",
-        "|  _ \\ / _ \\| \\ | | |/ / ____\\ \\ / /",
-        "| | | | | | |  \\| |  /|  _|   \\ V / ",
-        "| |_| | |_| | |\\  | . \\| |___   | |  ",
-        "|____/ \\___/|_| \\_|_|\\_\\_____|  |_|  ",
-        "       _  _____ _   _  ____         ",
-        "      | |/ /_ _| \\ | |/ ___|        ",
-        "      |   / | ||  \\| | |  _         ",
-        "      |  <  | || |\\  | |_| |        ",
-        "      |_|\\_\\___|_| \\_|\\____|        ",
-        "{/}",
+        ...sessionLogoRows(doorContext, {
+            dirname: __dirname,
+            command: "DONKEYKONG",
+            title: "DONKEY KONG",
+            maxCols: 42,
+            original: [
+                "{yellow-fg}",
+                " ____   ___  _   _ _  _________   __",
+                "|  _ \\ / _ \\| \\ | | |/ / ____\\ \\ / /",
+                "| | | | | | |  \\| |  /|  _|   \\ V / ",
+                "| |_| | |_| | |\\  | . \\| |___   | |  ",
+                "|____/ \\___/|_| \\_|_|\\_\\_____|  |_|  ",
+                "       _  _____ _   _  ____         ",
+                "      | |/ /_ _| \\ | |/ ___|        ",
+                "      |   / | ||  \\| | |  _         ",
+                "      |  <  | || |\\  | |_| |        ",
+                "      |_|\\_\\___|_| \\_|\\____|        ",
+                "{/}",
+            ],
+        }),
         "",
         "{white-fg}Nintendo 1981{/}",
         "",

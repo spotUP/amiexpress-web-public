@@ -14,9 +14,9 @@
     "entry": "./index.ts"
   },
   "scripts": {
-    "build": "tsc && esbuild client.ts --bundle --outfile=dist/client.bundle.js --format=esm --platform=browser",
+    "build": "tsc && esbuild client.ts --bundle --outfile=dist/client.bundle.js --format=esm --platform=browser --external:fs --external:path --external:child_process",
     "build:server": "tsc",
-    "build:client": "esbuild client.ts --bundle --outfile=dist/client.bundle.js --format=esm --platform=browser",
+    "build:client": "esbuild client.ts --bundle --outfile=dist/client.bundle.js --format=esm --platform=browser --external:fs --external:path --external:child_process",
     "watch": "tsc --watch",
     "test": "tsx tests/run-tests.ts"
   },
