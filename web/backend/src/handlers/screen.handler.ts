@@ -2675,12 +2675,19 @@ export async function emitPetsciiScreen(
  * sysop's "blank screen", 2026-11-04). express.e has no automatic clear at
  * all, so the file's own clear winning is also the parity reading.
  *
- * Only `~f`. A form feed first is a hard `ESC[2J` on every transport, so
- * letting it stand in would lose the web terminal its scrollback.
+ * Only `~f`. A form feed first has its own handling (OPENING_FORM_FEED).
  */
 function screenOpensWithItsOwnClear(content: string): boolean {
   return content.startsWith('~f');
 }
+
+/**
+ * A form feed opening a screen file is the Amiga clear, also behind leading
+ * escape codes: the QuickNew door writes `ESC[?25l` and then the form feed, so
+ * reading byte 0 alone sent it raw, an ANSI terminal took it for a line feed,
+ * and the list drew over the logo before it (the sysop, 2026-11-04).
+ */
+const OPENING_FORM_FEED = /^((?:\x1b\[[0-9;?]*[A-Za-z])*)\x0c/;
 
 export async function displayScreen(socket: any, session: BBSSession, screenName: string, runCommands: boolean = true, silent: boolean = false, opts?: { fallbackWipe?: string }): Promise<boolean> {
   screenDebug(`[displayScreen] ========================================`);
@@ -2995,10 +3002,15 @@ console.log(`[NEWLINE-DEBUG] RAW CONTENT (${screenName}): ${content.length} byte
     // `~WX` never prints. An ANSI session is unaffected at any width.
     const hasEarlyWipeAnimation = wipeCodePresent && wipeEffectsEnabled(session);
     // Use content without wipe code for MCI processing
-    // If the file starts with a form feed (0x0C = Amiga "clear screen"), emit ESC[2J and strip it.
-    // xterm.js treats 0x0C as a newline; on Amiga console.device it clears the screen.
-    let contentForMci = (content.charCodeAt(0) === 0x0C)
-      ? (socket.emit('ansi-output', '\x1b[2J\x1b[H'), content.slice(1))
+    // The file's form feed is the Amiga clear: console.device clears on 0x0C,
+    // an ANSI terminal only moves down a line, so it never goes out raw. It
+    // becomes the caller's clear, unless shouldClear already sent that above.
+    const openingFormFeed = content.match(OPENING_FORM_FEED);
+    if (openingFormFeed && !shouldClear) {
+      socket.emit('ansi-output', clearScreenFor(session));
+    }
+    let contentForMci = openingFormFeed
+      ? openingFormFeed[1] + content.slice(openingFormFeed[0].length)
       : content;
     // When wipe is detected, disable inline mode so parsed contains full content for animation
     // (inline mode emits content directly and sets parsed='', breaking wipe animation)

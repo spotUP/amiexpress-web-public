@@ -62,8 +62,8 @@ describe('a screen on the wire', () => {
     invalidateScreenIndex();
   });
 
-  async function wireOf(screen: string, body: string, connectionType: 'web' | 'telnet') {
-    fs.writeFileSync(path.join(board, 'Screens', `${screen}.TXT`), body);
+  async function wireOf(screen: string, body: string, connectionType: 'web' | 'telnet', file = `${screen}.TXT`) {
+    fs.writeFileSync(path.join(board, 'Screens', file), body);
     const bytes: string[] = [];
     const socket: any = {
       id: `telnet-clear-${Math.random().toString(36).slice(2)}`,
@@ -115,5 +115,39 @@ describe('a screen on the wire', () => {
 
     expect(countOf(lead, SCROLL_CLEAR)).toBe(1);
     expect(lead).not.toContain(HARD_CLEAR);
+  });
+
+  /*
+   * "i can still see the up rough logo from the prior screen its not cleared"
+   * (the sysop, 2026-11-04). QuickNew's quicknew.txt opens with a cursor hide
+   * and THEN its Amiga form feed. Only a form feed at byte 0 was read as a
+   * clear, so this one went out raw, a terminal took it for a line feed, and
+   * the list drew over the logo, whose pause prompt stayed behind as a second
+   * "Space To Resume".
+   */
+  // The live logon20.txt reaches the file by this assign path.
+  const quickNewWire = (connectionType: 'web' | 'telnet') => wireOf(
+    'BBS:screens/quicknew.txt', '\x1b[?25l\x0c\r\nART\r\n', connectionType, 'quicknew.txt');
+
+  it('clears for a form feed behind the opening escape codes, as quicknew.txt has', async () => {
+    const wire = await quickNewWire('telnet');
+
+    expect(countOf(beforeArt(wire), HARD_CLEAR)).toBe(1);
+    expect(beforeArt(wire)).toContain('\x1b[?25l');
+    expect(wire).not.toContain('\x0c');
+  });
+
+  it('keeps a web caller history when the file clears itself with a form feed', async () => {
+    const lead = beforeArt(await quickNewWire('web'));
+
+    expect(countOf(lead, SCROLL_CLEAR)).toBe(1);
+    expect(lead).not.toContain(HARD_CLEAR);
+  });
+
+  it('does not stack the form feed on the clear a clearing screen already got', async () => {
+    const wire = await wireOf('BULL', '\x0c\r\nART\r\n', 'telnet');
+
+    expect(countOf(beforeArt(wire), HARD_CLEAR)).toBe(1);
+    expect(wire).not.toContain('\x0c');
   });
 });
