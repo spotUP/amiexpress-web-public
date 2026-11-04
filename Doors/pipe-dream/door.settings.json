@@ -1,0 +1,21 @@
+{
+  "command": "PIPEDREAM",
+  "name": "Pipe Dream",
+  "description": "Pipe Dream puzzle game",
+  "settings": [
+    {
+      "key": "logo",
+      "label": "Menu logo",
+      "type": "string",
+      "art": true,
+      "artVariants": [
+        "c64",
+        "ttx"
+      ],
+      "default": "art/logo.ans",
+      "artMaxLines": 7,
+      "artMaxLineLength": 54,
+      "help": "The drawing above the main menu. Leave it empty and the door draws its own logo. Draw a 40-column version and a C64 or teletext caller reads that; without one they get a plain title."
+    }
+  ]
+}

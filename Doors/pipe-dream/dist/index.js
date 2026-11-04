@@ -5,6 +5,7 @@
 import { CoreDoor as Door } from "@amiexpress/bbs-door-sdk";
 import blessed from "@amiexpress/bbs-door-sdk/engines/ui/blessed";
 import { arcadeMenu, moveSelection, ArcadeSfx, createMenuGate } from "@amiexpress/bbs-door-sdk/engines/ui/arcade";
+import { sessionLogoRows } from "@amiexpress/bbs-door-sdk/utils/door-logo";
 import { DoorInputManager } from "@amiexpress/bbs-door-sdk/utils/blessed-helpers";
 import { PipeDreamGame } from "./game/pipe-dream-game";
 import { createInitialGameData } from "./game/initial-data";
@@ -102,15 +103,26 @@ function renderMenu() {
     gameArea.setContent("");
     if (menuBox)
         menuBox.destroy();
+    // The logo is the artist's file when the Studio has one (slot `logo`),
+    // else the figlet below; a 40-column caller with no drawing gets a plain
+    // title and never the wide art.
     const menuContent = [
-        "{cyan-fg}",
-        "  ____  _            ____                          ",
-        " |  _ \\(_)_ __   ___|  _ \\ _ __ ___  __ _ _ __ ___ ",
-        " | |_) | | '_ \\ / _ \\ | | | '__/ _ \\/ _` | '_ ` _ \\",
-        " |  __/| | |_) |  __/ |_| | | |  __/ (_| | | | | | |",
-        " |_|   |_| .__/ \\___|____/|_|  \\___|\\__,_|_| |_| |_|",
-        "         |_|                                        ",
-        "{/}",
+        ...sessionLogoRows(doorContext, {
+            dirname: __dirname,
+            command: "PIPEDREAM",
+            title: "PIPE DREAM",
+            maxCols: 54,
+            original: [
+                "{cyan-fg}",
+                "  ____  _            ____                          ",
+                " |  _ \\(_)_ __   ___|  _ \\ _ __ ___  __ _ _ __ ___ ",
+                " | |_) | | '_ \\ / _ \\ | | | '__/ _ \\/ _` | '_ ` _ \\",
+                " |  __/| | |_) |  __/ |_| | | |  __/ (_| | | | | | |",
+                " |_|   |_| .__/ \\___|____/|_|  \\___|\\__,_|_| |_| |_|",
+                "         |_|                                        ",
+                "{/}",
+            ],
+        }),
         "",
         "{white-fg}LucasArts 1989{/}",
         "",
