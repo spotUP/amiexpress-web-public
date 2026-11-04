@@ -1358,7 +1358,7 @@ export function readDoorArtSections(
     const settingKey = artSettingKey(entry.section);
     const folderPiece = artFolderPiece(entry.section);
     if (settingKey !== null || folderPiece !== null) {
-      const body = entry.missing
+      const body = entry.missing || (settingKey !== null && !fs.existsSync(resolveArtValue(doorDir, entry.file)))
         ? ''
         : fs.readFileSync(
           folderPiece ? resolveArtFolderFile(doorDir, folderPiece.dir, folderPiece.name) : resolveArtValue(doorDir, entry.file),
@@ -1468,6 +1468,16 @@ function artFolderListings(doorDir: string, command?: string): DoorArtListing[] 
   );
 }
 
+/** Whether `value` is a legal art path inside the door (the check a write makes), without needing the file. */
+function isArtPathInsideDoor(doorDir: string, value: string): boolean {
+  try {
+    resolveArtValue(doorDir, value);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /** The slots a door's art SETTINGS contribute, with live line counts. */
 function artSettingListings(doorDir: string, command?: string): DoorArtListing[] {
   const manifest = readArtManifest(doorDir, command);
@@ -1480,7 +1490,15 @@ function artSettingListings(doorDir: string, command?: string): DoorArtListing[]
       lines = artFileLines(resolveArtValue(doorDir, value));
       missing = false;
     } catch {
-      /* the picker, not the editor */
+      /*
+       * The picker, not the editor - EXCEPT for a slot still on its shipped
+       * default. A logo nobody has drawn yet has no file: that is an EMPTY
+       * canvas the artist starts on, not a broken reference. Only a value
+       * that names something else which is gone is "missing".
+       */
+      if (typeof setting.default === 'string' && value === setting.default && isArtPathInsideDoor(doorDir, value)) {
+        missing = false;
+      }
     }
     return {
       file: value,
@@ -1581,6 +1599,8 @@ export function writeDoorArtSection(
     const declared = manifest.artSettings.find((x) => x.key === settingKey);
     if (!declared) throw new Error(`No art setting ${settingKey} — the manifest must declare it`);
     const full = resolveArtValue(doorDir, fileName);
+    // The first drawing of a slot nobody has drawn: its folder may not exist yet.
+    fs.mkdirSync(path.dirname(full), { recursive: true });
     fs.writeFileSync(full, Buffer.from(contentBase64, 'base64').toString('latin1'), 'latin1');
     const written = readDoorArtSections(doorDir, command).find((c) => c.section === section);
     if (!written) throw new Error(`${section} vanished between the write and the read`);
