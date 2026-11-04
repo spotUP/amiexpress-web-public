@@ -48,7 +48,7 @@ ANSI = re.compile(rb"\x1b\[[0-9;?]*[A-Za-z]|\x1b[78]")
 GRAPHICS = re.compile(r"\(A/R/P/P8/T/N\).*\?\s*$", re.S)
 USERNAME = re.compile(r"(user ?name|enter your name|name:|handle:)\s*$", re.I)
 PASSWORD = re.compile(r"password:?\s*$", re.I)
-PAUSE = re.compile(r"(space to resume:?|more\(y/n/ns\)\?|press (return|any key)[^\n]*)\s*$", re.I)
+PAUSE = re.compile(r"(space to resume:?|more\(y/n/ns\)\?|press (return|any key)[^\n]*|any key: continues[^\n]*)\s*$", re.I)
 MENU = re.compile(r"\]\s*Menu \(\d+ mins?\. left\):\s*$", re.I)
 YESNO = re.compile(r"\(y/n\)\??\s*$", re.I)
 
