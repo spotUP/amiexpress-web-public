@@ -7,6 +7,7 @@ import { CoreDoor as Door } from "@amiexpress/bbs-door-sdk";
 import blessed from "@amiexpress/bbs-door-sdk/engines/ui/blessed";
 import { honourDoorHold, type DoorHold } from "@amiexpress/bbs-door-sdk/utils/blessed-helpers";
 import { arcadeMenu, moveSelection, ArcadeSfx, createMenuGate} from "@amiexpress/bbs-door-sdk/engines/ui/arcade";
+import { sessionLogoRows } from "@amiexpress/bbs-door-sdk/utils/door-logo";
 import { PuzzleBobbleGame } from "./game/puzzle-bobble-game";
 import { createInitialGameData } from "./game/initial-data";
 import { rpcHandlers } from "./server";
@@ -110,19 +111,30 @@ function showMenu(): void {
 
   if (menuBox) menuBox.destroy();
 
+  // The logo is the artist's file when the Studio has one (slot `logo`),
+  // else the figlet below; a 40-column caller with no drawing gets a plain
+  // title and never the wide art.
   const menuContent = [
-    "{magenta-fg}",
-    "  ____               _      ",
-    " |  _ \\ _   _ _______| | ___ ",
-    " | |_) | | | |_  /_  / |/ _ \\",
-    " |  __/| |_| |/ / / /| |  __/",
-    " |_|    \\__,_/___/___|_|\\___|",
-    "  ____        _     _     _      ",
-    " | __ )  ___ | |__ | |__ | | ___ ",
-    " |  _ \\ / _ \\| '_ \\| '_ \\| |/ _ \\",
-    " | |_) | (_) | |_) | |_) | |  __/",
-    " |____/ \\___/|_.__/|_.__/|_|\\___|",
-    "{/}",
+    ...sessionLogoRows(doorContext, {
+      dirname: __dirname,
+      command: "PUZZLEBOBBLE",
+      title: "PUZZLE BOBBLE",
+      maxCols: 40,
+      original: [
+        "{magenta-fg}",
+        "  ____               _      ",
+        " |  _ \\ _   _ _______| | ___ ",
+        " | |_) | | | |_  /_  / |/ _ \\",
+        " |  __/| |_| |/ / / /| |  __/",
+        " |_|    \\__,_/___/___|_|\\___|",
+        "  ____        _     _     _      ",
+        " | __ )  ___ | |__ | |__ | | ___ ",
+        " |  _ \\ / _ \\| '_ \\| '_ \\| |/ _ \\",
+        " | |_) | (_) | |_) | |_) | |  __/",
+        " |____/ \\___/|_.__/|_.__/|_|\\___|",
+        "{/}",
+      ],
+    }),
     "",
     "{white-fg}Taito 1994 (Bust-A-Move){/}",
     "",
