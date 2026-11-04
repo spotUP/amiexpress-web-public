@@ -18,13 +18,13 @@ describe('menu.util', () => {
     };
 
     it('should render menu with title', () => {
-      const result = MenuUtil.renderMenu(basicMenuState);
+      const result = MenuUtil.renderMenu(basicMenuState, {});
 
       expect(result).toContain('Main Menu');
     });
 
     it('should render all menu items', () => {
-      const result = MenuUtil.renderMenu(basicMenuState);
+      const result = MenuUtil.renderMenu(basicMenuState, {});
 
       expect(result).toContain('Option 1');
       expect(result).toContain('Option 2');
@@ -32,7 +32,7 @@ describe('menu.util', () => {
     });
 
     it('should highlight selected item', () => {
-      const result = MenuUtil.renderMenu(basicMenuState);
+      const result = MenuUtil.renderMenu(basicMenuState, {});
 
       // Selected item should have reverse video (\x1b[7m)
       expect(result).toContain('\x1b[7m');
@@ -41,7 +41,7 @@ describe('menu.util', () => {
     });
 
     it('should render selected item with colors', () => {
-      const result = MenuUtil.renderMenu(basicMenuState);
+      const result = MenuUtil.renderMenu(basicMenuState, {});
 
       // Should contain cyan color (\x1b[36m)
       expect(result).toContain('\x1b[36m');
@@ -55,7 +55,7 @@ describe('menu.util', () => {
         selectedIndex: 1,
       };
 
-      const result = MenuUtil.renderMenu(stateWithSecondSelected);
+      const result = MenuUtil.renderMenu(stateWithSecondSelected, {});
 
       // Should still contain all items
       expect(result).toContain('Option 1');
@@ -73,7 +73,7 @@ describe('menu.util', () => {
         selectedIndex: 0,
       };
 
-      const result = MenuUtil.renderMenu(menuWithDescriptions);
+      const result = MenuUtil.renderMenu(menuWithDescriptions, {});
 
       expect(result).toContain('List all files');
       expect(result).toContain('Upload a file');
@@ -85,13 +85,13 @@ describe('menu.util', () => {
         footer: 'Press X for help',
       };
 
-      const result = MenuUtil.renderMenu(menuWithFooter);
+      const result = MenuUtil.renderMenu(menuWithFooter, {});
 
       expect(result).toContain('Press X for help');
     });
 
     it('should render default footer when not provided', () => {
-      const result = MenuUtil.renderMenu(basicMenuState);
+      const result = MenuUtil.renderMenu(basicMenuState, {});
 
       expect(result).toContain('↑↓ arrows');
       expect(result).toContain('ENTER');
@@ -99,16 +99,16 @@ describe('menu.util', () => {
     });
 
     it('should clear screen at start', () => {
-      const result = MenuUtil.renderMenu(basicMenuState);
+      const result = MenuUtil.renderMenu(basicMenuState, {});
 
-      // AnsiUtil.clearScreen() now scrolls 30 lines and homes the cursor
+      // A web caller's clear scrolls 30 lines and homes the cursor
       // (preserves xterm.js scrollback) instead of emitting ESC[2J.
       expect(result).toContain('\x1b[H');
       expect(result.indexOf('\x1b[H')).toBeLessThan(70); // appears near the start
     });
 
     it('should include separator lines', () => {
-      const result = MenuUtil.renderMenu(basicMenuState);
+      const result = MenuUtil.renderMenu(basicMenuState, {});
 
       // Should have unicode box drawing characters
       expect(result).toContain('━');
@@ -121,7 +121,7 @@ describe('menu.util', () => {
         selectedIndex: 0,
       };
 
-      const result = MenuUtil.renderMenu(emptyMenuState);
+      const result = MenuUtil.renderMenu(emptyMenuState, {});
 
       expect(result).toContain('Empty Menu');
       expect(result).toBeTruthy();
@@ -134,7 +134,7 @@ describe('menu.util', () => {
         selectedIndex: 0,
       };
 
-      const result = MenuUtil.renderMenu(singleItemMenu);
+      const result = MenuUtil.renderMenu(singleItemMenu, {});
 
       expect(result).toContain('Only Option');
       expect(result).toContain(' > ');
@@ -150,7 +150,7 @@ describe('menu.util', () => {
         selectedIndex: 10,
       };
 
-      const result = MenuUtil.renderMenu(longMenu);
+      const result = MenuUtil.renderMenu(longMenu, {});
 
       expect(result).toContain('Option 1');
       expect(result).toContain('Option 20');
@@ -158,7 +158,7 @@ describe('menu.util', () => {
     });
 
     it('should reset ANSI codes properly', () => {
-      const result = MenuUtil.renderMenu(basicMenuState);
+      const result = MenuUtil.renderMenu(basicMenuState, {});
 
       // Should contain reset codes
       expect(result).toContain('\x1b[0m');
@@ -175,7 +175,7 @@ describe('menu.util', () => {
         selectedIndex: 0,
       };
 
-      const result = MenuUtil.renderMenu(menuWithHotkeys);
+      const result = MenuUtil.renderMenu(menuWithHotkeys, {});
 
       expect(result).toContain('List');
       expect(result).toContain('Upload');
@@ -385,6 +385,7 @@ describe('menu.util', () => {
   describe('renderListSelection', () => {
     it('should render list with numbers', () => {
       const result = MenuUtil.renderListSelection(
+        {},
         'Select File',
         ['file1.txt', 'file2.txt', 'file3.txt'],
         0
@@ -397,6 +398,7 @@ describe('menu.util', () => {
 
     it('should render title', () => {
       const result = MenuUtil.renderListSelection(
+        {},
         'Choose Option',
         ['Option A', 'Option B'],
         0
@@ -407,6 +409,7 @@ describe('menu.util', () => {
 
     it('should highlight selected item', () => {
       const result = MenuUtil.renderListSelection(
+        {},
         'Select',
         ['Item 1', 'Item 2', 'Item 3'],
         1 // Select second item
@@ -419,6 +422,7 @@ describe('menu.util', () => {
 
     it('should render custom footer', () => {
       const result = MenuUtil.renderListSelection(
+        {},
         'Select',
         ['A', 'B'],
         0,
@@ -429,21 +433,21 @@ describe('menu.util', () => {
     });
 
     it('should handle empty list', () => {
-      const result = MenuUtil.renderListSelection('Empty', [], 0);
+      const result = MenuUtil.renderListSelection({}, 'Empty', [], 0);
 
       expect(result).toContain('Empty');
       expect(result).toBeTruthy();
     });
 
     it('should handle single item list', () => {
-      const result = MenuUtil.renderListSelection('Single', ['Only'], 0);
+      const result = MenuUtil.renderListSelection({}, 'Single', ['Only'], 0);
 
       expect(result).toContain('[1] Only');
     });
 
     it('should number items sequentially', () => {
       const items = Array.from({ length: 10 }, (_, i) => `Item ${i}`);
-      const result = MenuUtil.renderListSelection('Numbered', items, 0);
+      const result = MenuUtil.renderListSelection({}, 'Numbered', items, 0);
 
       for (let i = 1; i <= 10; i++) {
         expect(result).toContain(`[${i}]`);
@@ -452,13 +456,14 @@ describe('menu.util', () => {
 
     it('should handle long item labels', () => {
       const longLabel = 'A'.repeat(100);
-      const result = MenuUtil.renderListSelection('Long', [longLabel], 0);
+      const result = MenuUtil.renderListSelection({}, 'Long', [longLabel], 0);
 
       expect(result).toContain(longLabel);
     });
 
     it('should include selection marker for first item', () => {
       const result = MenuUtil.renderListSelection(
+        {},
         'Test',
         ['First', 'Second'],
         0
@@ -470,6 +475,7 @@ describe('menu.util', () => {
 
     it('should include selection marker for last item', () => {
       const result = MenuUtil.renderListSelection(
+        {},
         'Test',
         ['First', 'Second', 'Third'],
         2
@@ -493,7 +499,7 @@ describe('menu.util', () => {
       };
 
       // Render initial state
-      const render1 = MenuUtil.renderMenu(menuState);
+      const render1 = MenuUtil.renderMenu(menuState, {});
       expect(render1).toContain('Option 1');
 
       // Navigate down
@@ -535,7 +541,7 @@ describe('menu.util', () => {
       const items = ['File A', 'File B', 'File C'];
 
       // Render initial list
-      const render = MenuUtil.renderListSelection('Files', items, 0);
+      const render = MenuUtil.renderListSelection({}, 'Files', items, 0);
       expect(render).toContain('[1] File A');
 
       // Navigate and select
@@ -557,7 +563,7 @@ describe('menu.util', () => {
         selectedIndex: 0,
       };
 
-      const result = MenuUtil.renderMenu(menuState);
+      const result = MenuUtil.renderMenu(menuState, {});
 
       // Reverse video
       expect(result).toContain('\x1b[7m');
@@ -580,7 +586,7 @@ describe('menu.util', () => {
         selectedIndex: 0,
       };
 
-      const result = MenuUtil.renderMenu(menuState);
+      const result = MenuUtil.renderMenu(menuState, {});
 
       expect(result).toContain('\r\n');
     });

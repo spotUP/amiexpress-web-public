@@ -1,6 +1,6 @@
 import { Socket } from 'socket.io';
 import { db } from '../../database';
-import { AnsiUtil } from '../../utils/ansi.util';
+import { AnsiUtil, clearScreenFor } from '../../utils/ansi.util';
 import { ErrorHandler } from '../../utils/error-handling.util';
 import { PermissionsUtil } from '../../utils/permissions.util';
 import { LoggedOnSubState } from '../../constants/bbs-states';
@@ -51,7 +51,7 @@ export class WebhookCommandsHandler {
       selectedIndex: 0
     };
 
-    socket.emit('ansi-output', MenuUtil.renderMenu(menuState));
+    socket.emit('ansi-output', MenuUtil.renderMenu(menuState, session));
 
     // Set state to wait for menu input
     session.subState = LoggedOnSubState.FILE_DIR_SELECT;
@@ -92,7 +92,7 @@ export class WebhookCommandsHandler {
           items: menuData.items,
           selectedIndex: menuData.selectedIndex
         };
-        socket.emit('ansi-output', MenuUtil.renderMenu(menuState));
+        socket.emit('ansi-output', MenuUtil.renderMenu(menuState, session));
       }
     } else {
       // Just selection changed - redraw menu
@@ -101,7 +101,7 @@ export class WebhookCommandsHandler {
         items: menuData.items,
         selectedIndex: menuData.selectedIndex
       };
-      socket.emit('ansi-output', MenuUtil.renderMenu(menuState));
+      socket.emit('ansi-output', MenuUtil.renderMenu(menuState, session));
     }
   }
 
@@ -142,7 +142,7 @@ export class WebhookCommandsHandler {
   private static async listWebhooks(socket: any, session: any): Promise<void> {
     const webhooks = await db.getWebhooks();
 
-    socket.emit('ansi-output', AnsiUtil.clearScreen());
+    socket.emit('ansi-output', clearScreenFor(session));
     socket.emit('ansi-output', AnsiUtil.headerBox('WEBHOOKS'));
     socket.emit('ansi-output', '\r\n');
 
@@ -185,7 +185,7 @@ export class WebhookCommandsHandler {
       footer: 'Use ↑↓ arrows to navigate, ENTER to select, Q to quit'
     };
 
-    socket.emit('ansi-output', MenuUtil.renderMenu(menuState));
+    socket.emit('ansi-output', MenuUtil.renderMenu(menuState, session));
     session.subState = LoggedOnSubState.FILE_DIR_SELECT;
   }
 
@@ -221,7 +221,7 @@ export class WebhookCommandsHandler {
         selectedIndex: menuData.selectedIndex,
         footer: 'Use ↑↓ arrows to navigate, ENTER to select, Q to quit'
       };
-      socket.emit('ansi-output', MenuUtil.renderMenu(menuState));
+      socket.emit('ansi-output', MenuUtil.renderMenu(menuState, session));
     }
   }
 
@@ -242,7 +242,7 @@ export class WebhookCommandsHandler {
       return;
     }
 
-    socket.emit('ansi-output', AnsiUtil.clearScreen());
+    socket.emit('ansi-output', clearScreenFor(session));
     socket.emit('ansi-output', AnsiUtil.headerBox(`DOORS: ${webhook.name}`));
     socket.emit('ansi-output', '\r\n');
     socket.emit('ansi-output', 'Limit this webhook to specific doors so it only fires for those.\r\n');
@@ -267,7 +267,7 @@ export class WebhookCommandsHandler {
       await this.listWebhooks(socket, session);
       return;
     }
-    socket.emit('ansi-output', AnsiUtil.clearScreen());
+    socket.emit('ansi-output', clearScreenFor(session));
     socket.emit('ansi-output', AnsiUtil.headerBox(`TIERS: ${webhook.name}`));
     socket.emit('ansi-output', '\r\n');
     socket.emit('ansi-output', 'Limit achievement unlocks to these tiers: bronze, silver, gold, platinum.\r\n');
@@ -329,7 +329,7 @@ export class WebhookCommandsHandler {
       return;
     }
 
-    socket.emit('ansi-output', AnsiUtil.clearScreen());
+    socket.emit('ansi-output', clearScreenFor(session));
     socket.emit('ansi-output', AnsiUtil.headerBox(`WEBHOOK: ${webhook.name}`));
     socket.emit('ansi-output', '\r\n');
 
@@ -369,7 +369,7 @@ export class WebhookCommandsHandler {
       selectedIndex: 0
     };
 
-    socket.emit('ansi-output', MenuUtil.renderMenu(menuState));
+    socket.emit('ansi-output', MenuUtil.renderMenu(menuState, session));
     session.subState = LoggedOnSubState.FILE_DIR_SELECT;
   }
 
@@ -433,7 +433,7 @@ export class WebhookCommandsHandler {
         items: menuData.items,
         selectedIndex: menuData.selectedIndex
       };
-      socket.emit('ansi-output', MenuUtil.renderMenu(menuState));
+      socket.emit('ansi-output', MenuUtil.renderMenu(menuState, session));
     }
   }
 
@@ -472,7 +472,7 @@ export class WebhookCommandsHandler {
    * Show available triggers
    */
   private static async showTriggers(socket: any, session: any): Promise<void> {
-    socket.emit('ansi-output', AnsiUtil.clearScreen());
+    socket.emit('ansi-output', clearScreenFor(session));
     socket.emit('ansi-output', AnsiUtil.headerBox('AVAILABLE WEBHOOK TRIGGERS'));
     socket.emit('ansi-output', '\r\n');
 
@@ -495,7 +495,7 @@ export class WebhookCommandsHandler {
    * Prompt to add a new webhook (text input)
    */
   private static async addWebhookPrompt(socket: any, session: any): Promise<void> {
-    socket.emit('ansi-output', AnsiUtil.clearScreen());
+    socket.emit('ansi-output', clearScreenFor(session));
     socket.emit('ansi-output', AnsiUtil.headerBox('ADD WEBHOOK'));
     socket.emit('ansi-output', '\r\n');
 
@@ -564,7 +564,7 @@ export class WebhookCommandsHandler {
       items: menuItems,
       selectedIndex: 0
     };
-    socket.emit('ansi-output', MenuUtil.renderMenu(menuState));
+    socket.emit('ansi-output', MenuUtil.renderMenu(menuState, session));
     session.subState = LoggedOnSubState.FILE_DIR_SELECT;
   }
 
@@ -583,7 +583,7 @@ export class WebhookCommandsHandler {
       await this.handleWebhookCommand(socket, session);
     } else {
       const menuState: MenuState = { title: 'WEBHOOK TYPE', items: menuData.items, selectedIndex: menuData.selectedIndex };
-      socket.emit('ansi-output', MenuUtil.renderMenu(menuState));
+      socket.emit('ansi-output', MenuUtil.renderMenu(menuState, session));
     }
   }
 
@@ -623,7 +623,7 @@ export class WebhookCommandsHandler {
    */
   private static readonly TRIGGERS_MENU_MAX_VISIBLE = 12;
 
-  private static renderTriggersMenu(socket: any, selected: Set<string>, selectedIndex: number): void {
+  private static renderTriggersMenu(socket: any, session: any, selected: Set<string>, selectedIndex: number): void {
     const items = this.buildTriggerMenuItems(selected);
     const menuState: MenuState = {
       title: 'SELECT TRIGGERS',
@@ -632,7 +632,7 @@ export class WebhookCommandsHandler {
       footer: 'Use ↑↓ arrows to navigate, ENTER to toggle/select, Q to cancel',
       maxVisible: this.TRIGGERS_MENU_MAX_VISIBLE
     };
-    socket.emit('ansi-output', MenuUtil.renderMenu(menuState));
+    socket.emit('ansi-output', MenuUtil.renderMenu(menuState, session));
   }
 
   /**
@@ -649,7 +649,7 @@ export class WebhookCommandsHandler {
     session.tempData = {
       webhookAddTriggersSelect: { selectedIndex: 0, selected, name, url, type }
     };
-    this.renderTriggersMenu(socket, selected, 0);
+    this.renderTriggersMenu(socket, session, selected, 0);
     session.subState = LoggedOnSubState.FILE_DIR_SELECT;
   }
 
@@ -668,7 +668,7 @@ export class WebhookCommandsHandler {
       if (action === 'confirm') {
         if (menuData.selected.size === 0) {
           socket.emit('ansi-output', '\r\n' + AnsiUtil.errorLine('Select at least one trigger first.'));
-          this.renderTriggersMenu(socket, menuData.selected, menuData.selectedIndex);
+          this.renderTriggersMenu(socket, session, menuData.selected, menuData.selectedIndex);
           return;
         }
 
@@ -705,11 +705,11 @@ export class WebhookCommandsHandler {
           menuData.selected.add(triggerName);
         }
       }
-      this.renderTriggersMenu(socket, menuData.selected, menuData.selectedIndex);
+      this.renderTriggersMenu(socket, session, menuData.selected, menuData.selectedIndex);
     } else if (result.action === 'quit') {
       await this.handleWebhookCommand(socket, session);
     } else {
-      this.renderTriggersMenu(socket, menuData.selected, menuData.selectedIndex);
+      this.renderTriggersMenu(socket, session, menuData.selected, menuData.selectedIndex);
     }
   }
 

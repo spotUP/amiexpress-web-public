@@ -19,7 +19,7 @@
 
 import { Socket } from 'socket.io';
 import { LoggedOnSubState } from '../../constants/bbs-states';
-import { AnsiUtil } from '../../utils/ansi.util';
+import { AnsiUtil, clearScreenFor } from '../../utils/ansi.util';
 import { isNarrow, narrowClip, narrowRule } from '../../utils/table-format.util';
 import { ErrorHandler } from '../../utils/error-handling.util';
 import { ParamsUtil } from '../../utils/params.util';
@@ -137,7 +137,7 @@ console.error('Error in ROOM command:', error);
 async function showRoomMenu(socket: Socket, session: BBSSession) {
   let output = '';
 
-  output += AnsiUtil.clearScreen();
+  output += clearScreenFor(session);
   // WEB_: no express.e equivalent (no chat rooms). Web-only chat room help.
   output += AnsiUtil.headerBox('Chat Room Commands');
   output += AnsiUtil.line('');

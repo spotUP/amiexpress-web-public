@@ -8,13 +8,14 @@
  * `ESC[2J` erases the viewport and pushes NOTHING into the scrollback - that
  * is what the sequence means, in xterm.js and in every real terminal - so
  * every menu the board redrew threw the last screen away. Scrolling the old
- * screen off the top instead puts it in the history of every client, telnet
- * included, and needs nothing from the client at all.
+ * screen off the top instead puts it in the history, so the web terminal does
+ * that. Telnet and SSH stopped on 2026-11-04, when the scrolling showed up as a
+ * blank page before every screen: a-telnet-caller-gets-no-blank-screen.test.ts.
  *
  * A C64 is the exception: no scrollback to keep, a one-byte clear, and forty
  * columns where thirty scrolled rows would be thirty rows of nothing.
  */
-import { clearScreenFor, SCROLL_CLEAR_LINES, AnsiUtil } from '../../src/utils/ansi.util';
+import { clearScreenFor, SCROLL_CLEAR_LINES } from '../../src/utils/ansi.util';
 
 const HARD_CLEAR = '\x1b[2J';
 
@@ -33,10 +34,6 @@ describe('the clear an ANSI caller gets', () => {
 
   it('leaves the cursor at the top, where a clear leaves it', () => {
     expect(clearScreenFor({}).endsWith('\x1b[H')).toBe(true);
-  });
-
-  it('is the same clear AnsiUtil has always offered', () => {
-    expect(clearScreenFor({})).toBe(AnsiUtil.clearScreen());
   });
 });
 

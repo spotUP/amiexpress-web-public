@@ -1,4 +1,4 @@
-import { AnsiUtil } from './ansi.util';
+import { AnsiUtil, clearScreenFor, type ClearTarget } from './ansi.util';
 
 /**
  * Menu Utility
@@ -45,11 +45,11 @@ export class MenuUtil {
   /**
    * Render a menu with the current selection highlighted
    */
-  static renderMenu(state: MenuState): string {
+  static renderMenu(state: MenuState, caller: ClearTarget): string {
     let output = '';
 
     // Clear screen and show title
-    output += AnsiUtil.clearScreen();
+    output += clearScreenFor(caller);
     output += AnsiUtil.headerBox(state.title);
     output += '\r\n';
 
@@ -196,7 +196,7 @@ export class MenuUtil {
       selectedIndex: 0
     };
 
-    socket.emit('ansi-output', this.renderMenu(menuState));
+    socket.emit('ansi-output', this.renderMenu(menuState, session));
 
     // Return null for now - actual selection handled by session handler
     return null;
@@ -205,7 +205,7 @@ export class MenuUtil {
   /**
    * Render a numbered list with arrow selection
    */
-  static renderListSelection(title: string, items: string[], selectedIndex: number, footer?: string): string {
+  static renderListSelection(caller: ClearTarget, title: string, items: string[], selectedIndex: number, footer?: string): string {
     const menuItems: MenuItem[] = items.map((item, index) => ({
       label: `[${index + 1}] ${item}`,
       action: `select:${index}`
@@ -216,6 +216,6 @@ export class MenuUtil {
       items: menuItems,
       selectedIndex,
       footer
-    });
+    }, caller);
   }
 }

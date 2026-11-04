@@ -6,7 +6,7 @@
 
 import { LoggedOnSubState } from '../../constants/bbs-states';
 import { startPagination } from '../screen.handler';
-import { AnsiUtil } from '../../utils/ansi.util';
+import { clearScreenFor } from '../../utils/ansi.util';
 import { finalizeCommand } from '../../utils/command-response.util';
 import { config } from '../../config';
 import { emitText, emitPrompt, emitLine, flushOutput, eraseRestOfLine } from '../../utils/output.util';
@@ -171,7 +171,7 @@ export function displayUploadInterface(socket: any, session: BBSSession, params:
   // interface arrived on top of a half-read file listing; it is a deviation,
   // and is marked as one so nobody restores "parity" by deleting it or ports
   // it onward as something express does.
-  emitText(socket, AnsiUtil.clearScreen());
+  emitText(socket, clearScreenFor(session));
 
   // express.e:25646 internalCommandU -> uploadaFile()
   // express.e:18974 IF(maxDirs=0): the joined conference's NDIRS, which in a

@@ -10,24 +10,39 @@ import { ANSI, LINE_ENDING } from '../constants/ansi-codes';
  */
 export const SCROLL_CLEAR_LINES = 30;
 
+/** What decides a caller's clear. A BBSSession is one; so is `{}`, the web. */
+export interface ClearTarget {
+  petsciiMode?: boolean;
+  texttvMode?: boolean;
+  connectionType?: string;
+}
+
 /**
  * THE CLEAR A CALLER'S TERMINAL SHOULD GET.
  *
- * `ESC[2J` erases the viewport and pushes NOTHING into the scrollback - in
- * xterm.js and in every real terminal - so each menu repaint threw the last
- * screen away and a caller could scroll back "a few lines" at best (the
- * sysop, 2026-09-24, and callers on telnet before him). Scrolling the screen
- * off instead puts it in the history of every client, telnet included,
- * without asking the client for anything.
+ * `ESC[2J` erases the viewport and pushes NOTHING into the scrollback, in
+ * xterm.js and in most real terminals, so on the web terminal each menu repaint
+ * threw the last screen away and a caller could scroll back "a few lines" at
+ * best (the sysop, 2026-09-24). Scrolling the screen off instead puts it in the
+ * history, so THE WEB TERMINAL scrolls.
  *
- * A C64 IS THE EXCEPTION and keeps the hard clear. It has no scrollback to
+ * TELNET AND SSH GET THE REAL CLEAR. On a real terminal thirty newlines arrive
+ * as a page of empty lines going past before every screen: "when i connect to
+ * telnet, a blank screen is drawn before all screens" (the sysop, 2026-11-04,
+ * who chose this over keeping those callers' scrollback).
+ *
+ * A C64 keeps the hard clear on any transport. It has no scrollback to
  * preserve, its clear is one byte (`$93`, which the transducer makes of
  * `ESC[2J`), and thirty newlines at forty columns would be thirty rows of
  * scrolling for nothing. Teletext the same.
+ *
+ * No session, or no transport on it, means the web terminal: that is
+ * `connectionType`'s own default in session-manager.
  */
-export function clearScreenFor(session: { petsciiMode?: boolean; texttvMode?: boolean } | null | undefined): string {
-  const noScrollback = session?.petsciiMode === true || session?.texttvMode === true;
-  return noScrollback ? ANSI.CLEAR_SCREEN : ('\r\n'.repeat(SCROLL_CLEAR_LINES) + '\x1b[H');
+export function clearScreenFor(session: ClearTarget | null | undefined): string {
+  const scrolls = session?.petsciiMode !== true && session?.texttvMode !== true
+    && (session?.connectionType ?? 'web') === 'web';
+  return scrolls ? ('\r\n'.repeat(SCROLL_CLEAR_LINES) + '\x1b[H') : ANSI.CLEAR_SCREEN;
 }
 
 export class AnsiUtil {
@@ -110,22 +125,6 @@ export class AnsiUtil {
    */
   static info(text: string): string {
     return this.colorize(text, ANSI.BLUE);
-  }
-
-  /**
-   * Clear the screen while preserving xterm.js scrollback history.
-   *
-   * ESC[2J erases the visible viewport without pushing content to the
-   * scrollback buffer — previous output is permanently lost in xterm.js.
-   * Instead we scroll 30 lines (> one screen height) so all visible content
-   * moves into scrollback, then home the cursor. The screen appears blank
-   * from the top but users can scroll up to see prior output.
-   *
-   * For animated transitions (screen-wipe.util.ts) that intentionally want a
-   * hard clear use ANSI.CLEAR_SCREEN ('\x1b[2J\x1b[H') directly.
-   */
-  static clearScreen(): string {
-    return '\r\n'.repeat(SCROLL_CLEAR_LINES) + '\x1b[H';
   }
 
   /**

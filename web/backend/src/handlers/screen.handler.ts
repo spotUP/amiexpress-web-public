@@ -2668,6 +2668,20 @@ export async function emitPetsciiScreen(
  * @param screenName - Name of screen to display
  * @returns true if screen was displayed successfully, false otherwise
  */
+/**
+ * A screen whose first code is `~f` clears itself, with the same clear the
+ * board would send, so the board sending one first clears twice in a row: on
+ * the wire, thirty scrolled lines, a home, then thirty more (BULL.TXT, the
+ * sysop's "blank screen", 2026-11-04). express.e has no automatic clear at
+ * all, so the file's own clear winning is also the parity reading.
+ *
+ * Only `~f`. A form feed first is a hard `ESC[2J` on every transport, so
+ * letting it stand in would lose the web terminal its scrollback.
+ */
+function screenOpensWithItsOwnClear(content: string): boolean {
+  return content.startsWith('~f');
+}
+
 export async function displayScreen(socket: any, session: BBSSession, screenName: string, runCommands: boolean = true, silent: boolean = false, opts?: { fallbackWipe?: string }): Promise<boolean> {
   screenDebug(`[displayScreen] ========================================`);
   screenDebug(`[displayScreen] REQUESTED SCREEN: ${screenName}`);
@@ -2760,7 +2774,7 @@ export async function displayScreen(socket: any, session: BBSSession, screenName
         // otherwise the terminal is homed while the oracle still believes the
         // cursor is where the previous screen's art left it.
         emitPetsciiChunk(socket, session, { machine: petsciiMachineFor(session) }, PETSCII_CLS);
-      } else {
+      } else if (!screenOpensWithItsOwnClear(content)) {
         socket.emit('ansi-output', clearScreenFor(session));
       }
     }
@@ -3050,6 +3064,14 @@ console.log(`[NEWLINE-DEBUG] RAW CONTENT (${screenName}): ${content.length} byte
       contentForMci = earlyWipeResult.content; // Remove wipe code from content before MCI processing
       console.log(`[WIPE-EARLY] Detected wipe ${earlyWipeResult.wipeType} in ${screenName}, disabled inline mode`
         + (hasEarlyWipeAnimation ? '' : ' (effects off for this session)'));
+    }
+    // The clear skipped above trusted the screen's own `~f`. A tall or wiped
+    // screen renders outside the inline walker, where `~f` is always the hard
+    // ESC[2J: on the web terminal that erases the history the scrolling clear
+    // exists to keep. So here the caller's clear goes out and the `~f` goes.
+    if (shouldClear && mciSocket === undefined && screenOpensWithItsOwnClear(content)) {
+      socket.emit('ansi-output', clearScreenFor(session));
+      contentForMci = contentForMci.replace(/^~f\|?/, '');
     }
 
     // === MCI Guard: allowMCI check (express.e:6800-6806) ===

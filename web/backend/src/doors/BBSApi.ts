@@ -18,7 +18,7 @@ import { grantRomAccess } from '../server/beeb-rom-access';
 import * as path from 'path';
 import * as amigafs from '../utils/amigafs';
 import { Socket } from 'socket.io';
-import { AnsiUtil } from '../utils/ansi.util';
+import { clearScreenFor } from '../utils/ansi.util';
 import { joinChatRoom, leaveChatRoom, sendChatRoomMessage, createChatRoom, listChatRooms, type JoinedRoom, type CreatedRoom, type NewRoomOptions } from './door-chat-rooms';
 import { EventEmitter } from 'events';
 import type { BBSSession } from '../index';
@@ -193,7 +193,7 @@ export class BBSApi {
    * Clear screen
    */
   clearScreen(): void {
-    this.socket.emit('ansi-output', AnsiUtil.clearScreen());
+    this.socket.emit('ansi-output', clearScreenFor(this.session));
   }
 
   /**

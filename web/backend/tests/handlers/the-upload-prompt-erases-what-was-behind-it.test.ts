@@ -30,7 +30,7 @@ import * as path from 'path';
 
 import { eraseRestOfLine, clearTheScreen, flushOutput } from '../../src/utils/output.util';
 import { ANSI } from '../../src/constants/ansi-codes';
-import { AnsiUtil } from '../../src/utils/ansi.util';
+import { clearScreenFor } from '../../src/utils/ansi.util';
 import { LoggedOnSubState, BBSState } from '../../src/constants/bbs-states';
 import { config } from '../../src/config';
 
@@ -52,7 +52,7 @@ function aTerminal() {
 }
 
 /** Every way this board has of wiping what is on the caller's screen. */
-const CLEARS = [ANSI.CLEAR_SCREEN, AnsiUtil.clearScreen(), '\x0c'];
+const CLEARS = [ANSI.CLEAR_SCREEN, clearScreenFor({}), '\x0c'];
 const clearsIn = (text: string) => CLEARS.filter((c) => text.includes(c));
 
 /** A caller the board lets upload (express.e's per-user override string). */
@@ -145,7 +145,7 @@ describe('the upload path follows express.e, which never clears', () => {
 
     /*
      * KNOWN RED, marked `failing` so the suite stays honest: the interface
-     * still opens with `AnsiUtil.clearScreen()` (file.handler.ts, added
+     * still opens with `clearScreenFor(session)` (file.handler.ts, added
      * 2026-09-12 as a deliberate deviation). The source pin this replaced
      * looked for the spelling `clearTheScreen(socket)` and so never saw it.
      * It runs AFTER UPLOADMSG is drawn, so it scrolls the conference's upload

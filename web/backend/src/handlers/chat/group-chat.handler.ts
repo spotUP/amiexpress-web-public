@@ -17,7 +17,7 @@ import { getSessionBySocketId, getSocketIdByUserId } from '../../server/session-
 import { emitterForSession } from '../../server/session-emitter-registry';
 import { groupRoomMembers, emitToMembers } from '../../server/session-rooms';
 import { LoggedOnSubState } from '../../constants/bbs-states';
-import { AnsiUtil } from '../../utils/ansi.util';
+import { AnsiUtil, clearScreenFor } from '../../utils/ansi.util';
 import { ErrorHandler } from '../../utils/error-handling.util';
 import { getSystemTime } from '../../utils/date-time.util';
 import { doorOwnsTerminal } from '../../utils/door-owns-terminal';
@@ -416,7 +416,7 @@ console.log('ℹ️ User already in room, rejoining:', session.user?.username, r
 console.log('✅ User joined room:', session.user?.username, room.room_name);
 
     // Send room info to user
-    emitToTerminal(socket, session, AnsiUtil.clearScreen());
+    emitToTerminal(socket, session, clearScreenFor(session));
     emitToTerminal(socket, session, AnsiUtil.headerBox('Chat Room: ' + room.room_name));
 
     if (room.topic && room.topic.length > 0) {
