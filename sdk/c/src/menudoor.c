@@ -188,6 +188,7 @@ struct menudoor {
     int typed_len;
     int offwindow;                    /* the type-ahead match when it is below/above the window (named in the status row, not shown), else -1 */
     char notice[40];                  /* shown in the status row instead of the description, until the next key */
+    int unframed;                     /* 1 before the first frame: a notice is kept for that frame, not drawn */
     char status_drawn[100];           /* the status row as the caller sees it; "" until a frame has drawn it */
     int status_valid;                 /* 0 = the row is not on the glass (a fresh frame is about to draw it) */
     char pager_drawn[UI_PAGES_INDICATOR_MAX];             /* the "Page n of m" at the right of the status row; "" when none */
@@ -729,6 +730,7 @@ static void say(struct menudoor *d, const char *text)
 {
     strncpy(d->notice, text, sizeof d->notice - 1);
     d->notice[sizeof d->notice - 1] = '\0';
+    if (d->unframed) return;                           /* the first frame draws it */
     draw_status(d, 0);
     park_cursor(d);
     ui_screen_flush(&d->screen);
@@ -999,9 +1001,12 @@ static void move_key(struct menudoor *d, int key)
 static void page_or_move(struct menudoor *d, int key)
 {
     int step = 0;
-    /* The palette and Scroll are read by rows: Left/Right turn a screen of rows, as PageUp/PageDown, at every width and
-       however many columns the Scroll grid has (sysop 2026-10-17). Cover flow keeps Left/Right for its pages. */
-    if ((d->palette || !d->coverflow) && (key == UI_KEY_LEFT || key == UI_KEY_RIGHT)) key = key == UI_KEY_LEFT ? UI_KEY_PGUP : UI_KEY_PGDN;
+    /* The palette and Scroll: Left/Right step to the cell beside in a grid of several columns, and turn a screen of
+       rows (as PageUp/PageDown) only from the edge column - in a one-column list that is every row (sysop 2026-11-04,
+       replacing 2026-10-17's "page however many columns"). Cover flow keeps Left/Right for its pages. */
+    if ((d->palette || !d->coverflow) && (key == UI_KEY_LEFT || key == UI_KEY_RIGHT)
+        && ui_grid_at_edge(&cur(d)->grid, key))
+        key = key == UI_KEY_LEFT ? UI_KEY_PGUP : UI_KEY_PGDN;
     if (d->coverflow && d->depth == 0 && !d->palette)
         step = ui_pages_step(&d->pages, key, d->typed_len, ui_grid_at_edge(&cur(d)->grid, key));
     if (step) ui_pages_turn(&d->pages, step);
@@ -1344,6 +1349,28 @@ static void start_screen(struct menudoor *d, ae_session *session)
     d->pushback = -1;
 }
 
+/* The first word of the main line after the command word, run as a typed line (spec->params_are_typed). */
+static menudoor_result run_params(struct menudoor *d, ae_session *session)
+{
+    char line[128], word[TYPED_MAX + 1];
+    const char *p = line;
+    int n = 0;
+    menudoor_result r;
+
+    line[0] = '\0';
+    ae_main_line(session, line, (int)sizeof line);
+    while (*p == ' ') p++;
+    while (*p && *p != ' ') p++;                          /* the command word: B, or whatever the sysop named it */
+    while (*p == ' ') p++;
+    while (*p && *p != ' ' && n < TYPED_MAX) word[n++] = *p++;
+    word[n] = '\0';
+    if (!n || !d->spec->typed) return MENUDOOR_STAY;
+    d->unframed = 1;
+    r = d->spec->typed(d, word);
+    d->unframed = 0;
+    return r;
+}
+
 static int run_menu_started(struct menudoor *d, ae_session *session, const menudoor_spec *spec)
 {
     level *top;
@@ -1362,6 +1389,15 @@ static int run_menu_started(struct menudoor *d, ae_session *session, const menud
 
     start_screen(d, session);
     set_title(d, top->menu.title);
+    /* "B 10": the parameters act as a line typed at the menu, before any frame (express.e:24624-24627 shows bulletin
+       10 without the prompt). A hit leaves at once, so the caller never sees the menu flash; a miss keeps its notice
+       for the first frame. */
+    if (spec->params_are_typed && run_params(d, session) == MENUDOOR_LEAVE) {
+        ae_bs_mouse(0);
+        ui_screen_close(&d->screen);
+        ae_shutdown();
+        return 0;
+    }
     /* Cover flow (the style the board decided): one section per page. One section has nothing to flip: it scrolls. */
     if (top->menu.style != AE_MENU_STYLE_COVERFLOW || !start_coverflow(d))
         configure(d, top, top->menu.last_row);

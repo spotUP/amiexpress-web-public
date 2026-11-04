@@ -32,7 +32,8 @@ static const menudoor_spec MAIN_MENU = {
     "Arrows Move  Enter Run  Esc Prompt",             /* typing is the hint's: "Arrows and Enter, or type a command" */
     "Enter Run  Esc Prompt",
     0, run_entry, run_line,
-    "PALETTE"                                         /* Ctrl-K at a board prompt (plan P5) */
+    "PALETTE",                                        /* Ctrl-K at a board prompt (plan P5) */
+    0
 };
 
 int main(int argc, char **argv)

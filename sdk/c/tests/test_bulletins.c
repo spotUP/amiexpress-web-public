@@ -11,13 +11,24 @@
 #include <unistd.h>
 
 static int cat_answers = 1;
-int ae_field_read(int field, char *out, int cap) { (void)field; if (cap > 0) out[0] = '\0'; return 0; }
 int ae_field_write(int field, const char *value) { (void)field; (void)value; return 0; }
 int ae_query_bit(int acs) { (void)acs; return 1; }
 
 #define CAT_PATH "build/test_bulletins.cat"
 static char requests[2048];
 static char screen_text[65536];
+static const char *main_line = "B";               /* what the caller typed at the board's prompt */
+
+/* The session fields (BB_MAINLINE 131) arrive here, not through the menu exchange. */
+int ae_field_read(int field, char *out, int cap)
+{
+    const char *text = field == AE_FIELD_MAIN_LINE ? main_line : "";
+    int n = (int)strlen(text);
+    if (cap <= 0) return 0;
+    if (n > cap - 1) n = cap - 1;
+    memcpy(out, text, (size_t)n); out[n] = '\0';
+    return n;
+}
 
 static int answer(const char *text, char *out, int cap)
 {
@@ -96,6 +107,19 @@ int main(void)
     drive("x", 1, &rc);                                     /* a script that runs out of keys is a lost carrier: the door ends, not spins */
     assert(rc == 0);
     printf("  [OK] a key script with no leaving key ends the door at end of input\n");
+
+    main_line = "B 12";                                     /* "B 12" at the prompt: bulletin 12, no menu first */
+    drive("", 0, &rc);
+    assert(rc == 0 && strstr(requests, "SHOW 12|") && !strstr(screen_text, "Top Uploaders"));
+    main_line = "  b   2 NS";                                  /* the first parameter only; a later NS is not a key */
+    drive("", 0, &rc);
+    assert(rc == 0 && strstr(requests, "SHOW 2|"));
+    main_line = "B 9";                                      /* no such bulletin: the menu opens and says so */
+    drive("q", 1, &rc);
+    assert(rc == 0 && !strstr(requests, "SHOW") && strstr(screen_text, "Sorry, there is no such bulletin.")
+           && strstr(screen_text, "Top Uploaders"));
+    main_line = "B";
+    printf("  [OK] \"B 12\" shows bulletin 12 at once; \"B 9\" opens the menu saying there is none\n");
 
     cat_answers = 0;                                        /* an old board that does not know AEW_MENU */
     drive("", 0, &rc);

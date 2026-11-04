@@ -277,7 +277,7 @@ static menudoor_result on_typed(struct menudoor *d, const char *line)
 }
 
 static const menudoor_spec SPEC = { "MAIN", "MAIN MENU", "BULLS", "Arrows Move  Enter Run  Esc Prompt", "Enter Run  Esc Prompt",
-                                    0, on_activate, on_typed, 0 };
+                                    0, on_activate, on_typed, 0, 0 };
 
 static char screen_text[65536];
 
@@ -287,7 +287,7 @@ static int run_menu(void) { return menudoor_run(&SPEC, 1); }
 static int run_settings(void) { return menudoor_settings_run(1); }
 static int run_main(void) { return menudoor_main(&SPEC, "MENUSETTINGS", 1); }
 static const menudoor_spec PALETTE_SPEC = { "MAIN", "MAIN MENU", "BULLS", "Arrows Move  Enter Run  Esc Prompt", "Enter Run  Esc Prompt",
-                                            0, on_activate, on_typed, "PALETTE" };
+                                            0, on_activate, on_typed, "PALETTE", 0 };
 static int run_palette(void) { return menudoor_main(&PALETTE_SPEC, "MENUSETTINGS", 1); }
 
 static int drive(const char *keys, size_t key_len)

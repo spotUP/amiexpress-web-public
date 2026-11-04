@@ -285,10 +285,10 @@ int main(void)
     assert(rc == 0 && !strstr(screen_text, "Page "));
     printf("  [OK] scroll mode shows no page number\n");
 
-    /* Scroll: Left and Right page at every width, not only on a one-column grid (sysop 2026-10-17). Short labels
-       make the 80-column grid several columns wide; Right must land where PageDown lands, not on the cell beside. */
+    /* Scroll: in a grid of several columns Left and Right step to the cell beside; only from the edge column do they
+       turn a screen, as PageUp/PageDown (sysop 2026-11-04). Short labels make the 80-column grid several columns wide. */
     {
-        char paged[64], rightward[64];
+        char paged[64], rightward[64], up_paged[64], left_edge[64];
         int i;
         f = fopen(CAT_PATH, "wb");
         assert(f);
@@ -297,17 +297,23 @@ int main(void)
         fputs(".\n", f);
         fclose(f);
         invoked_name = "MENU";
+#define PICKED(buf) do { assert(rc == 0 && strstr(requests, "RUN K")); \
+        snprintf(buf, sizeof buf, "%s", strstr(requests, "RUN K")); *strchr(buf, '|') = '\0'; } while (0)
         drive("\x1b[6~\r", 5, &rc);
-        assert(rc == 0 && strstr(requests, "RUN K"));
-        snprintf(paged, sizeof paged, "%s", strstr(requests, "RUN K"));
-        *strchr(paged, '|') = '\0';
+        PICKED(paged);
         drive("\x1b[C\r", 4, &rc);
-        assert(rc == 0 && strstr(requests, "RUN K"));
-        snprintf(rightward, sizeof rightward, "%s", strstr(requests, "RUN K"));
-        *strchr(rightward, '|') = '\0';
-        assert(strcmp(paged, "RUN K0") != 0 && strcmp(paged, "RUN K1") != 0);   /* a screen, not a row or a cell */
-        assert(strcmp(rightward, paged) == 0);
-        printf("  [OK] a multi-column Scroll grid: Right pages like PageDown, it does not step to the cell beside\n");
+        PICKED(rightward);
+        assert(strcmp(paged, "RUN K0") != 0 && strcmp(paged, "RUN K1") != 0);   /* PageDown turns a screen */
+        assert(strcmp(rightward, "RUN K0") != 0 && strcmp(rightward, paged) != 0);  /* Right steps, it does not page */
+        printf("  [OK] a multi-column Scroll grid: Right steps to the cell beside, it does not page\n");
+        /* From the left edge column, Left turns a screen back exactly as PageUp does. */
+        drive("\x1b[6~\x1b[6~\x1b[5~\r", 13, &rc);
+        PICKED(up_paged);
+        drive("\x1b[6~\x1b[6~\x1b[D\r", 12, &rc);
+        PICKED(left_edge);
+        assert(strcmp(left_edge, up_paged) == 0);
+        printf("  [OK] Left from the edge column pages like PageUp\n");
+#undef PICKED
     }
 
     /* The legacy drill line (D 1, slide off) means cover flow: Enter runs the page's entry, Right turns to page 2. */

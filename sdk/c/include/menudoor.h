@@ -31,6 +31,7 @@ typedef struct menudoor_spec {
     menudoor_result (*activate)(struct menudoor *d, int entry);      /* Enter / click on an entry */
     menudoor_result (*typed)(struct menudoor *d, const char *line);  /* Enter on a typed line */
     const char *palette_name;                  /* the registration that opens the search palette (Ctrl-K), or 0 */
+    int params_are_typed;                      /* BULLETINS: "B 10" - the main line's first parameter acts as a typed line */
 } menudoor_spec;
 
 /** The door's main(): returns the exit code. */
