@@ -11,6 +11,7 @@ const TEST_MODULES = [
   './layout.test',
   './sprites.test',
   './sfx.test',
+  './logo-slot.test',
 ];
 
 (async () => {
