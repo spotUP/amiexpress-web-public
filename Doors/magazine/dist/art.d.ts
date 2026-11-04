@@ -1,7 +1,7 @@
 import { type PetsciiMachineState } from '@amiexpress/bbs-door-sdk/petscii';
 import type { Desk } from '@amiexpress/bbs-door-sdk/formats/magazine';
 /** Every piece of art the door asks for, by name. */
-export declare const ART_NAMES: readonly ["mag_title", "mag_front", "mag_contents", "mag_goodbye", "mag_article_end", "mag_logo_small", "mag_loading", "sec_hack", "sec_scene", "sec_graffiti", "sec_music", "sec_people", "sec_archive", "sec_stream", "sec_general"];
+export declare const ART_NAMES: readonly ["mag_front", "mag_contents", "mag_goodbye", "mag_article_end", "mag_logo_small", "mag_loading", "sec_hack", "sec_scene", "sec_graffiti", "sec_music", "sec_people", "sec_archive", "sec_stream", "sec_general"];
 export declare const SECTION_ART: Record<Desk, string>;
 export interface ArtSources {
     /** `Doors/magazine/art`: where the Studio saves and the loader reads, filler included. Null when the caller wants no art. */

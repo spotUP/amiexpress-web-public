@@ -64,7 +64,6 @@ export interface Reader {
         tickerSteps: number;
         intervals: number;
         banners: number;
-        titles: number;
         searchTicks: number;
         lands: number;
     };

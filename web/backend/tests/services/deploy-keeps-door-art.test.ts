@@ -177,7 +177,7 @@ describe('door art across a deploy', () => {
   });
 
   it('holds back every magazine art slot the Studio can edit, from the repo manifest', () => {
-    // The magazine ships 15 placeholder screens under art/ and the Studio
+    // The magazine ships 14 placeholder screens under art/ and the Studio
     // saves over them in place: the exclusion must name each one.
     const real = path.join(REPO, 'Doors', 'magazine', 'door.settings.json');
     const script = fs.readFileSync(ENTRYPOINT, 'utf8');
@@ -185,7 +185,7 @@ describe('door art across a deploy', () => {
     const awkEnd = script.indexOf("' \"$manifest\"", awkStart);
     const program = script.slice(awkStart, awkEnd).replace(/^\s*awk '/, '');
     const found = execFileSync('awk', [program, real], { encoding: 'utf8' }).split('\n').filter(Boolean).sort();
-    expect(found).toHaveLength(15);
+    expect(found).toHaveLength(14);
     for (const name of found) {
       expect(name).toMatch(/^art\/(mag|sec)_[a-z_]+\.ans$/);
       expect(fs.existsSync(path.join(REPO, 'Doors', 'magazine', name))).toBe(true);

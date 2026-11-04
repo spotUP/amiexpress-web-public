@@ -9,18 +9,6 @@
       "help": "A scrolling line of the newest headlines under the masthead. Wide screens only; 40-column callers never get it."
     },
     {
-      "key": "art_mag_title",
-      "label": "Title screen art",
-      "type": "string",
-      "art": true,
-      "artVariants": ["c64", "ttx"],
-      "group": "Art",
-      "default": "art/mag_title.ans",
-      "artMaxLines": 25,
-      "artMaxLineLength": 80,
-      "help": "The first screen, before the front page. Amiga ANSI. Amiga ANSI (Topaz, latin1), kept in art/ beside the door. The Commodore 64 drawing is the Studio's C64 tab; until one is drawn, C64 callers get the shipped PETSCII file."
-    },
-    {
       "key": "art_mag_front",
       "label": "Front page banner art",
       "type": "string",

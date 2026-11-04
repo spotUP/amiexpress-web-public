@@ -53,36 +53,6 @@ const centred = (width: number, runs: readonly Run[]): Run[] => [[C.reset, pad(M
 /** Letters spaced out: "FRONT PAGE" -> "F R O N T   P A G E". */
 const spaced = (s: string): string => s.split('').join(' ').replace(/ {3}/g, '   ');
 
-// A 3-row wordmark, 5 cells a letter. Only characters Topaz has in ISO-8859-1.
-const FONT: Record<string, [string, string, string]> = {
-  U: ['|   |', '|   |', ' \\_/ '],
-  N: ['|\\  |', '| \\ |', '|  \\|'],
-  K: ['| /  ', '|<   ', '| \\  '],
-  O: [' /¯\\ ', '|   |', ' \\_/ '],
-  W: ['|   |', '| | |', ' \\V/ '],
-  F: ['|¯¯¯ ', '|--  ', '|    '],
-  R: ['|¯¯\\ ', '|--/ ', '| \\  '],
-  E: ['|¯¯¯ ', '|--  ', '|___ '],
-  Q: [' /¯\\ ', '|   |', ' \\_\\ '],
-  C: [' /¯¯ ', '|    ', ' \\__ '],
-  Y: ['\\   /', ' \\ / ', '  |  '],
-  T: ['¯¯|¯¯', '  |  ', '  |  '],
-  H: ['|   |', '|---|', '|   |'],
-};
-
-function wordmark(word: string): [string, string, string] {
-  const rows: [string, string, string] = ['', '', ''];
-  for (const ch of word) {
-    const glyph = FONT[ch];
-    if (!glyph) throw new Error(`no wordmark glyph for ${ch}`);
-    for (let i = 0; i < 3; i++) rows[i] += `${glyph[i]} `;
-  }
-  // Every row of one word is as wide as the widest: a row trimmed on its own is a row that
-  // centres one cell to the left of the others.
-  const width = Math.max(...rows.map((r) => r.trimEnd().length));
-  return rows.map((r) => r.trimEnd().padEnd(width)) as [string, string, string];
-}
-
 const PLACEHOLDER_NOTE = 'PLACEHOLDER art';
 
 function ansBytes(rows: readonly string[], opts: { clear?: boolean } = {}): Buffer {
@@ -108,33 +78,6 @@ function ansBanner(label: string, tagline: string, ink: string, inkDim: string):
     paint([[C.reset, ' '], [C.greenDim, '¦ '], [C.green, tagline]]),
     paint([[C.magentaDim, '¯'.repeat(width)]]),
   ]);
-}
-
-function ansTitle(): Buffer {
-  const W = 80;
-  const the = centred(W, [[C.magenta, 'T  H  E']]);
-  const unknown = wordmark('UNKNOWN');
-  const frequency = wordmark('FREQUENCY');
-  return ansBytes([
-    paint([[C.grey, ' // incoming transmission ' + '·'.repeat(W - 27)]]),
-    '',
-    paint(the),
-    ...unknown.map((r) => paint(centred(W, [[C.cyan, r]]))),
-    '',
-    ...frequency.map((r) => paint(centred(W, [[C.magenta, r]]))),
-    '',
-    '',
-    paint(centred(W, [[C.green, 'S I G N A L   T E R M I N A L']])),
-    paint(centred(W, [[C.greenDim, 'news from the edge of the network']])),
-    '',
-    paint(centred(W, [[C.grey, '± ± ±  hack · scene · graffiti · music · people · archive  ± ± ±']])),
-    '',
-    paint(centred(W, [[C.yellow, `» ${PLACEHOLDER_NOTE} - redraw it in the ANSI Studio: Door screens, MAG «`]])),
-    '',
-    paint(centred(W, [[C.white, 'press any key to tune in']])),
-    '',
-    paint([[C.magentaDim, '¯'.repeat(W)]]),
-  ], { clear: true });
 }
 
 function ansGoodbye(): Buffer {
@@ -262,31 +205,6 @@ function seqBanner(label: string, tagline: string, band: number, ink: number): B
     .buffer();
 }
 
-function seqTitle(): Buffer {
-  return seq()
-    .centre(PET.darkGrey, '// incoming transmission')
-    .blank()
-    .centre(PET.purple, 't  h  e')
-    .band(PET.cyan, 'UNKNOWN').eol()
-    .band(PET.purple, 'FREQUENCY').eol()
-    .blank()
-    .blank()
-    .centre(PET.green, 's i g n a l   t e r m i n a l')
-    .centre(PET.lightGreen, 'news from the edge of the network')
-    .blank()
-    .centre(PET.lightGrey, 'hack scene graffiti music')
-    .centre(PET.lightGrey, 'people archive stream')
-    .blank()
-    .blank()
-    .centre(PET.yellow, 'placeholder art - sysop replaces')
-    .centre(PET.yellow, 'see art/mag title in the door')
-    .blank()
-    .centre(PET.white, 'press any key to tune in')
-    .blank()
-    .rule(PET.purple)
-    .buffer();
-}
-
 function seqGoodbye(): Buffer {
   return seq()
     .blank().blank().blank().blank()
@@ -337,8 +255,6 @@ const DESKS: Array<{ desk: Desk; tagline: string; ink: [string, string, number, 
 
 export function buildAll(): Map<string, Buffer> {
   const files = new Map<string, Buffer>();
-  files.set('mag_title.ans', ansTitle());
-  files.set('mag_title.seq', seqTitle());
   files.set('mag_goodbye.ans', ansGoodbye());
   files.set('mag_goodbye.seq', seqGoodbye());
   files.set('mag_loading.ans', ansLoading());

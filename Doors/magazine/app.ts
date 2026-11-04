@@ -101,8 +101,6 @@ const SIGNAL_DAYS = 8;
 /** The headline settles for this long before the one glitch lands. */
 const GLITCH_DELAY_MS = 450;
 const GLITCH_HOLD_MS = 160;
-/** The title screen waits this long for a key, then the reader opens by itself. */
-const TITLE_MS = 6000;
 /** The goodbye is a glimpse: a key or this long, then the call ends. */
 const GOODBYE_MS = 1500;
 /** The mark after an article is small. */
@@ -182,7 +180,7 @@ export interface Reader {
   /** The reader's current spread. */
   spreadNo(): number;
   /** What actually ran: sentinels for the tests that prove the effects are wired. */
-  stats(): { glitches: number; tickerSteps: number; intervals: number; banners: number; titles: number; searchTicks: number; lands: number };
+  stats(): { glitches: number; tickerSteps: number; intervals: number; banners: number; searchTicks: number; lands: number };
   /** The plain text of the row the page counter rolls in (the progress row), tags stripped. */
   counterRow(): string;
   stop(): void;
@@ -377,7 +375,7 @@ export async function startReader(session: DoorSession, options: ReaderOptions =
   let glitchTimer: ReturnType<typeof setTimeout> | null = null;
   let repairTimer: ReturnType<typeof setTimeout> | null = null;
   let modalOpen = false;
-  const counters = { glitches: 0, tickerSteps: 0, intervals: 0, banners: 0, titles: 0, searchTicks: 0, lands: 0 };
+  const counters = { glitches: 0, tickerSteps: 0, intervals: 0, banners: 0, searchTicks: 0, lands: 0 };
   let stopped = false;
   let finish: () => void = () => { /* replaced below */ };
 
@@ -814,9 +812,8 @@ export async function startReader(session: DoorSession, options: ReaderOptions =
     modal.display();
   };
 
-  // ---- full-screen art: the title on entry, the goodbye on Q ------------
+  // ---- full-screen art: the goodbye on Q ---------------------------------
 
-  let overlay: any = null;
   let overlayLines: string[] = [];
   let overlayTimer: ReturnType<typeof setTimeout> | null = null;
   let closing = false;
@@ -825,12 +822,12 @@ export async function startReader(session: DoorSession, options: ReaderOptions =
     if (overlayTimer) { clearTimeout(overlayTimer); overlayTimer = null; }
   };
 
-  /** Art over the whole screen, until `dropOverlay`. Returns false when there is no art. */
+  /** Art over the whole screen, until the door closes. Returns false when there is no art. */
   const raiseOverlay = (name: string): boolean => {
     const rows = artFor(name, height);
     if (rows.length === 0) return false;
     overlayLines = rows;
-    overlay = createBox({
+    const overlay = createBox({
       parent: screen,
       top: 0,
       left: 0,
@@ -847,15 +844,6 @@ export async function startReader(session: DoorSession, options: ReaderOptions =
     overlay.setFront?.();
     render();
     return true;
-  };
-
-  const dropOverlay = () => {
-    clearOverlayTimer();
-    if (!overlay) return;
-    try { overlay.destroy(); } catch { /* leaving anyway */ }
-    overlay = null;
-    overlayLines = [];
-    render();
   };
 
   /** Q: a glimpse of the goodbye art where there is some, then the call ends. */
@@ -1012,8 +1000,6 @@ export async function startReader(session: DoorSession, options: ReaderOptions =
 
   const dispatchKey = (name: string, ch?: string) => {
     if (!stopped && closing) { finish(); return; }
-    // The title waits for a key; that key only lets the reader in.
-    if (!stopped && overlay) { dropOverlay(); return; }
     const c = (ch ?? '').toLowerCase();
     if (stopped || modalOpen) return;
     if (viewer) {
@@ -1098,12 +1084,6 @@ export async function startReader(session: DoorSession, options: ReaderOptions =
   snapshot = loadSnapshot(magazineRoot(__dirname));
   startTicker();
   go({ kind: 'front' });
-  // The title: once, on entry, over the front page that is already drawn under it.
-  if (raiseOverlay('mag_title')) {
-    counters.titles += 1;
-    overlayTimer = setTimeout(dropOverlay, TITLE_MS);
-    overlayTimer.unref?.();
-  }
 
   return {
     screen,

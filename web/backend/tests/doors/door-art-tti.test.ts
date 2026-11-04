@@ -65,34 +65,34 @@ afterEach(() => {
 });
 
 describe('the tti variant on the artist lane (MAG)', () => {
-  const MAG_TITLE = { file: 'art/mag_title.ans', section: 'setting:art_mag_title' };
+  const MAG_FRONT = { file: 'art/mag_front.ans', section: 'setting:art_mag_front' };
 
   beforeEach(() => {
     const door = path.join(root, 'Doors', 'magazine');
     fs.mkdirSync(path.join(door, 'art'), { recursive: true });
     fs.copyFileSync(path.join(REPO, 'Doors', 'magazine', 'door.settings.json'), path.join(door, 'door.settings.json'));
-    fs.copyFileSync(path.join(REPO, 'Doors', 'magazine', 'art', 'mag_title.ans'), path.join(door, 'art', 'mag_title.ans'));
+    fs.copyFileSync(path.join(REPO, 'Doors', 'magazine', 'art', 'mag_front.ans'), path.join(door, 'art', 'mag_front.ans'));
   });
 
   it('round-trips a page into Screens/doors/MAG/<section>.tti', async () => {
-    const empty = await request(app()).get('/api/door-art/MAG').query({ ...MAG_TITLE, variant: 'tti' });
+    const empty = await request(app()).get('/api/door-art/MAG').query({ ...MAG_FRONT, variant: 'tti' });
     expect(empty.status).toBe(200);
     expect(empty.body.data.variants.tti).toBe(false);
 
-    const put = await request(app()).put('/api/door-art/MAG').send({ ...MAG_TITLE, variant: 'tti', content: b64(TTI) });
+    const put = await request(app()).put('/api/door-art/MAG').send({ ...MAG_FRONT, variant: 'tti', content: b64(TTI) });
     expect(put.status).toBe(200);
-    expect(fs.existsSync(path.join(root, 'Screens', 'doors', 'MAG', 'setting:art_mag_title.tti'))).toBe(true);
+    expect(fs.existsSync(path.join(root, 'Screens', 'doors', 'MAG', 'setting:art_mag_front.tti'))).toBe(true);
 
-    const read = await request(app()).get('/api/door-art/MAG').query({ ...MAG_TITLE, variant: 'tti' });
+    const read = await request(app()).get('/api/door-art/MAG').query({ ...MAG_FRONT, variant: 'tti' });
     expect(un64(read.body.data.content)).toBe(TTI.replace(/\r\n/g, '\n').replace(/\n$/, ''));
     expect(read.body.data.variants).toEqual({ c64: false, ttx: false, tti: true });
   });
 
   it('refuses text that is not a page the board can render', async () => {
     const put = await request(app()).put('/api/door-art/MAG')
-      .send({ ...MAG_TITLE, variant: 'tti', content: b64('\x1b[36mANSI, not packets\n') });
+      .send({ ...MAG_FRONT, variant: 'tti', content: b64('\x1b[36mANSI, not packets\n') });
     expect(put.status).not.toBe(200);
-    expect(fs.existsSync(path.join(root, 'Screens', 'doors', 'MAG', 'setting:art_mag_title.tti'))).toBe(false);
+    expect(fs.existsSync(path.join(root, 'Screens', 'doors', 'MAG', 'setting:art_mag_front.tti'))).toBe(false);
   });
 });
 
@@ -105,14 +105,14 @@ describe('the tti variant on the artist lane (MAG)', () => {
  * caller a teletext one. (The shadow's own .tti path is file-shadow.test.ts.)
  */
 describe('a saved .tti reaches a teletext caller in MAG', () => {
-  const MAG_TITLE = { file: 'art/mag_title.ans', section: 'setting:art_mag_title' };
+  const MAG_FRONT = { file: 'art/mag_front.ans', section: 'setting:art_mag_front' };
   let previousBbsDataDir: string | undefined;
 
   beforeEach(() => {
     const door = path.join(root, 'Doors', 'magazine');
     fs.mkdirSync(path.join(door, 'art'), { recursive: true });
     fs.copyFileSync(path.join(REPO, 'Doors', 'magazine', 'door.settings.json'), path.join(door, 'door.settings.json'));
-    fs.copyFileSync(path.join(REPO, 'Doors', 'magazine', 'art', 'mag_title.ans'), path.join(door, 'art', 'mag_title.ans'));
+    fs.copyFileSync(path.join(REPO, 'Doors', 'magazine', 'art', 'mag_front.ans'), path.join(door, 'art', 'mag_front.ans'));
     // A board root is the folder that holds Commands/BBSCmd; the door finds it from BBS_DATA_DIR.
     fs.mkdirSync(path.join(root, 'Commands', 'BBSCmd'), { recursive: true });
     previousBbsDataDir = process.env.BBS_DATA_DIR;
@@ -124,7 +124,7 @@ describe('a saved .tti reaches a teletext caller in MAG', () => {
   });
 
   it('PUT variant=tti, then the door\'s loader serves the rendered rows, rendered once', async () => {
-    const put = await request(app()).put('/api/door-art/MAG').send({ ...MAG_TITLE, variant: 'tti', content: b64(TTI) });
+    const put = await request(app()).put('/api/door-art/MAG').send({ ...MAG_FRONT, variant: 'tti', content: b64(TTI) });
     expect(put.status).toBe(200);
 
     // The save rendered once to check the page; count the caller's read only.
@@ -137,10 +137,10 @@ describe('a saved .tti reaches a teletext caller in MAG', () => {
       variantDir: boardVariantDir(door),
       teletext: true,
     };
-    const art = loadArt('mag_title', artKindFor(false, 40), sources);
+    const art = loadArt('mag_front', artKindFor(false, 40), sources);
 
     expect(render).toHaveBeenCalledTimes(1);
-    expect(art?.file).toBe(path.join(root, 'Screens', 'doors', 'MAG', 'setting:art_mag_title.tti'));
+    expect(art?.file).toBe(path.join(root, 'Screens', 'doors', 'MAG', 'setting:art_mag_front.tti'));
     const rows = artRows(art!, 25, 40).map(artRowText).join('\n');
     expect(rows).toContain('NATIVE LOGO');
     expect(rows).not.toContain('OL,');

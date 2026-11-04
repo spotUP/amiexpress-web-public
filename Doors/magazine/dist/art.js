@@ -45,7 +45,7 @@ exports.artRows = artRows;
 exports.artKindFor = artKindFor;
 exports.artRowText = artRowText;
 /**
- * The magazine's art: title screen, banners, the mark at the end of an article.
+ * The magazine's art: banners, the mark at the end of an article.
  *
  * Two kinds per piece, one for each kind of caller, read from ONE place - the
  * door's own `art/` folder - which is also the place the ANSI Studio writes:
@@ -92,7 +92,7 @@ const render_native_1 = require("@amiexpress/bbs-door-sdk/teletext/render-native
 const settings_1 = require("@amiexpress/bbs-door-sdk/settings");
 /** Every piece of art the door asks for, by name. */
 exports.ART_NAMES = [
-    'mag_title', 'mag_front', 'mag_contents', 'mag_goodbye', 'mag_article_end', 'mag_logo_small', 'mag_loading',
+    'mag_front', 'mag_contents', 'mag_goodbye', 'mag_article_end', 'mag_logo_small', 'mag_loading',
     'sec_hack', 'sec_scene', 'sec_graffiti', 'sec_music', 'sec_people', 'sec_archive', 'sec_stream', 'sec_general',
 ];
 exports.SECTION_ART = {

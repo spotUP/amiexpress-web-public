@@ -62,8 +62,8 @@ export async function aSlotPointedAtAnotherFileReadsThatFileAndFallsBackWhenItIs
 export async function slotFilesTakesOnlyANameOrADirAndANameInsideTheDoor(): Promise<void> {
   const door = path.join(os.tmpdir(), 'door');
   const got = slotFiles({
-    art_mag_title: 'art/alt_title.ans',
-    art_mag_front: '../../etc/passwd',
+    art_mag_front: 'art/alt_front.ans',
+    art_mag_loading: '../../etc/passwd',
     art_mag_contents: '/etc/passwd',
     art_mag_goodbye: 'a/b/c.ans',
     art_sec_hack: '.hidden',
@@ -71,7 +71,7 @@ export async function slotFilesTakesOnlyANameOrADirAndANameInsideTheDoor(): Prom
     art_sec_music: 42,
     unrelated: 'art/x.ans',
   }, door);
-  assert.deepStrictEqual(got, { mag_title: path.join(door, 'art/alt_title.ans'), sec_scene: path.join(door, 'plain.ans') });
+  assert.deepStrictEqual(got, { mag_front: path.join(door, 'art/alt_front.ans'), sec_scene: path.join(door, 'plain.ans') });
 }
 
 export async function theStudiosC64DrawingBeatsTheShippedSeqForAFortyColumnCaller(): Promise<void> {
@@ -163,11 +163,11 @@ export async function aPetsciiCallerGetsTheSeqAndEveryoneElseTheAns(): Promise<v
 
 export async function aMissingOrEmptyFileIsSkippedWithoutAnError(): Promise<void> {
   const s = sources();
-  assert.strictEqual(loadArt('mag_title', 'ans', s.sources), null, 'nowhere: no art');
-  assert.strictEqual(loadArt('mag_title', 'ans', { shippedDir: null }), null);
+  assert.strictEqual(loadArt('mag_front', 'ans', s.sources), null, 'nowhere: no art');
+  assert.strictEqual(loadArt('mag_front', 'ans', { shippedDir: null }), null);
   // An empty file is not art.
-  fs.writeFileSync(path.join(s.shipped, 'mag_title.ans'), '');
-  assert.strictEqual(loadArt('mag_title', 'ans', s.sources), null);
+  fs.writeFileSync(path.join(s.shipped, 'mag_front.ans'), '');
+  assert.strictEqual(loadArt('mag_front', 'ans', s.sources), null);
   // A directory with the file's name is not a file.
   fs.mkdirSync(path.join(s.shipped, 'mag_goodbye.ans'));
   assert.strictEqual(loadArt('mag_goodbye', 'ans', s.sources), null);
@@ -191,7 +191,7 @@ const BANNERS = ['mag_front', 'mag_contents', 'sec_hack', 'sec_scene', 'sec_graf
 const ALLOWED_HIGH = new Set([0xa4, 0xa6, 0xab, 0xac, 0xaf, 0xb0, 0xb1, 0xb2, 0xb3, 0xb4, 0xb7, 0xb8, 0xba, 0xbb, 0xd7, 0xf7]);
 
 export async function everyArtFileExistsInBothKinds(): Promise<void> {
-  assert.strictEqual(ART_NAMES.length, 15);
+  assert.strictEqual(ART_NAMES.length, 14);
   for (const name of ART_NAMES) {
     for (const ext of ['ans', 'seq']) assert.ok(fs.statSync(path.join(SHIPPED, `${name}.${ext}`)).size > 0, `${name}.${ext}`);
   }
@@ -292,28 +292,6 @@ export async function everySeqSurvivesTheBoardsTransducerCellForCell(): Promise<
   }
 }
 
-export async function theRowsOfEachWordInTheTitleShareTheirLeftColumn(): Promise<void> {
-  const text = fs.readFileSync(path.join(SHIPPED, 'mag_title.ans')).toString('latin1').replace(/\x1b\[[0-9;]*[A-Za-z]/g, '');
-  const rows = text.split(/\r\n/);
-  // A wordmark row is drawn with | or \; a word is a run of consecutive such rows (UNKNOWN, FREQUENCY).
-  const words: string[][] = [];
-  const isWordRow = (r: string | undefined): boolean => r !== undefined && r.trim().length < 70 && /[|\\]/.test(r); // the 80-cell waveform has a backslash too
-  rows.forEach((r, i) => {
-    if (!isWordRow(r)) return;
-    if (isWordRow(rows[i - 1])) words[words.length - 1].push(r);
-    else words.push([r]);
-  });
-  assert.strictEqual(words.length, 2, 'the title has two words');
-  for (const word of words) {
-    // The first letter's stem starts rows one and two; row three of a round letter (U) is indented by the glyph itself.
-    const lefts = word.map((r) => r.length - r.trimStart().length);
-    assert.strictEqual(lefts[0], lefts[1], `the rows of one word start at columns ${lefts.join(', ')}`);
-    assert.ok(lefts[2] - lefts[0] <= 1, `the last row starts at ${lefts[2]}, the first at ${lefts[0]}`);
-    // Padded to one width, so a row is never centred on its own length.
-    assert.strictEqual(new Set(word.map((r) => r.length)).size, 1, `row widths ${word.map((r) => r.length).join(', ')}`);
-  }
-}
-
 export async function noPlaceholderSendsTheSysopToAFolderTheDoorDoesNotRead(): Promise<void> {
   // Since c2cc9fe2f the Studio edits Doors/magazine/art in place and nothing reads <board>/Magazine/art.
   const generator = fs.readFileSync(path.join(__dirname, '..', 'tools', 'make-art.ts'), 'utf8');
@@ -337,7 +315,7 @@ export async function noGeneratedPieceCarriesTheCyanFrequencyWave(): Promise<voi
     assert.ok(!fs.readFileSync(path.join(SHIPPED, `${name}.seq`)).includes(wavePet), `${name}.seq carries the wave`);
     n += 1;
   }
-  assert.ok(n >= 15, `checked ${n} pieces`);
+  assert.ok(n >= 14, `checked ${n} pieces`);
   // And the generator itself no longer makes one.
   for (const [file, buf] of buildAll()) {
     assert.ok(!buf.toString('latin1').includes('/\xaf\\__/\xaf\xaf\\'), `generator still emits the wave in ${file}`);

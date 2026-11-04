@@ -20,7 +20,7 @@ import { config } from '../../src/config';
 const REPO = path.join(__dirname, '..', '..', '..', '..');
 const DOOR_SRC = path.join(REPO, 'Doors', 'magazine');
 const PIECES = [
-  'mag_title', 'mag_front', 'mag_contents', 'mag_goodbye', 'mag_article_end', 'mag_logo_small', 'mag_loading',
+  'mag_front', 'mag_contents', 'mag_goodbye', 'mag_article_end', 'mag_logo_small', 'mag_loading',
   'sec_hack', 'sec_scene', 'sec_graffiti', 'sec_music', 'sec_people', 'sec_archive', 'sec_stream', 'sec_general',
 ];
 
@@ -65,8 +65,8 @@ describe('the magazine screens in the ANSI Studio', () => {
   it('opens a piece as Amiga ANSI latin1 bytes', async () => {
     const res = await request(app()).get('/api/door-art/MAG');
     expect(res.status).toBe(200);
-    const title = res.body.data.find((s: { file: string }) => s.file === 'art/mag_title.ans');
-    expect(Buffer.from(title.content, 'base64').equals(fs.readFileSync(path.join(DOOR_SRC, 'art', 'mag_title.ans')))).toBe(true);
+    const front = res.body.data.find((s: { file: string }) => s.file === 'art/mag_front.ans');
+    expect(Buffer.from(front.content, 'base64').equals(fs.readFileSync(path.join(DOOR_SRC, 'art', 'mag_front.ans')))).toBe(true);
   });
 
   it('saves a piece into the file the door loader reads', async () => {
@@ -81,7 +81,7 @@ describe('the magazine screens in the ANSI Studio', () => {
 
   it('refuses a path outside the door folder', async () => {
     const res = await request(app()).put('/api/door-art/MAG')
-      .send({ file: '../settings.json', section: 'setting:art_mag_title', content: b64('x') });
+      .send({ file: '../settings.json', section: 'setting:art_mag_front', content: b64('x') });
     expect(res.status).toBe(400);
   });
 
@@ -105,7 +105,7 @@ describe('the magazine screens in the ANSI Studio', () => {
   });
 
   it('will not write a filler name the folder does not hold, or outside it', async () => {
-    for (const file of ['art/fill/new_piece.txt', 'art/fill/../mag_title.ans']) {
+    for (const file of ['art/fill/new_piece.txt', 'art/fill/../mag_front.ans']) {
       const res = await request(app()).put('/api/door-art/MAG')
         .send({ file, section: `folder:${file}`, content: b64('x') });
       expect(res.status).not.toBe(200);

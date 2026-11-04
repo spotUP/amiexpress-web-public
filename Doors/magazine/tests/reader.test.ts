@@ -900,40 +900,25 @@ function sysopArt(b: Board, file: string, content: string | Buffer): void {
 }
 const artOf = (b: Board): string => b.artDir ?? SHIPPED_ART;
 
-export async function theTitleIsShownOnceOnEntryAndTheFirstKeyOnlyLetsTheReaderIn(): Promise<void> {
+export async function theDoorOpensOnTheFrontPageAndTheFirstKeyIsACommand(): Promise<void> {
   const b = board(['aaaa0001']);
   const h = await open(80, 24, { shippedArt: SHIPPED_ART });
   try {
-    assert.strictEqual(h.reader.stats().titles, 1, 'the title is shown on entry');
-    assert.ok(h.reader.overlayText().join('\n').includes('PLACEHOLDER'), 'the shipped title, 80 columns, says placeholder');
-    assert.ok(h.reader.overlayText().join('').includes('«'), 'an ANSI session gets the Amiga ANSI drawing');
+    assert.deepStrictEqual(h.reader.overlayText(), [], 'no art stands between the caller and the front page');
+    assert.strictEqual(h.reader.viewKind(), 'front');
+    assert.ok(noSpaces(h.reader.bannerText()).includes('FRONTPAGE'), 'the front page is what is on screen');
     h.reader.press('c', 'c');
-    assert.deepStrictEqual(h.reader.overlayText(), [], 'a key dismisses it');
-    assert.strictEqual(h.reader.viewKind(), 'front', 'and is not also taken as a command');
-    h.reader.press('c', 'c');
-    assert.strictEqual(h.reader.viewKind(), 'contents');
-    h.reader.press('f', 'f');
-    h.reader.press('c', 'c');
-    assert.strictEqual(h.reader.stats().titles, 1, 'moving between views never shows it again');
+    assert.strictEqual(h.reader.viewKind(), 'contents', 'the first key is taken as a command');
   } finally { await finish(h, b); }
 }
 
-export async function theTitleGivesWayByItselfAfterAShortWait(): Promise<void> {
+export async function aGoodbyeSavedByTheStudioIsTheOneTheReaderShows(): Promise<void> {
   const b = board([]);
-  const h = await open(80, 24, { shippedArt: SHIPPED_ART });
-  try {
-    assert.ok(h.reader.overlayText().length > 0);
-    await new Promise((resolve) => setTimeout(resolve, 6200));
-    assert.deepStrictEqual(h.reader.overlayText(), [], 'the title times out');
-  } finally { await finish(h, b); }
-}
-
-export async function aTitleSavedByTheStudioIsTheOneTheReaderShows(): Promise<void> {
-  const b = board([]);
-  sysopArt(b, 'mag_title.ans', Buffer.from('\x1b[1;36mMY OWN TITLE \xaf\r\n', 'latin1'));
+  sysopArt(b, 'mag_goodbye.ans', Buffer.from('\x1b[1;36mMY OWN GOODBYE \xaf\r\n', 'latin1'));
   const h = await open(80, 24, { shippedArt: artOf(b) });
   try {
-    assert.deepStrictEqual(h.reader.overlayText(), ['MY OWN TITLE ¯'], 'the override is read as latin1, escapes kept out of the text');
+    h.reader.press('q', 'q');
+    assert.deepStrictEqual(h.reader.overlayText(), ['MY OWN GOODBYE ¯'], 'the override is read as latin1, escapes kept out of the text');
   } finally { await finish(h, b); }
 }
 
@@ -943,16 +928,18 @@ export async function aC64CallerSeesTheDrawingTheStudiosC64TabSavedAndAWideCalle
   const b = board([]);
   const variants = path.join(b.root, 'Screens', 'doors', 'MAG');
   fs.mkdirSync(variants, { recursive: true });
-  fs.writeFileSync(path.join(variants, 'setting:art_mag_title.c64.ans'), 'DRAWN ON THE C64 TAB\n');
+  fs.writeFileSync(path.join(variants, 'setting:art_mag_goodbye.c64.ans'), 'DRAWN ON THE C64 TAB\n');
   const other = path.join(b.root, 'picked.ans');
   fs.writeFileSync(other, 'PICKED IN THE STUDIO\r\n');
   try {
     const c64 = await open(40, 25, { shippedArt: SHIPPED_ART, petscii: true, variantDir: variants });
     try {
+      c64.reader.press('q', 'q');
       assert.deepStrictEqual(c64.reader.overlayText(), ['DRAWN ON THE C64 TAB'], 'a 40-column caller gets the C64 tab drawing over the shipped .seq');
     } finally { c64.reader.stop(); }
-    const wide = await open(80, 24, { shippedArt: SHIPPED_ART, slots: { mag_title: other }, variantDir: variants });
+    const wide = await open(80, 24, { shippedArt: SHIPPED_ART, slots: { mag_goodbye: other }, variantDir: variants });
     try {
+      wide.reader.press('q', 'q');
       assert.deepStrictEqual(wide.reader.overlayText(), ['PICKED IN THE STUDIO'], 'a wide caller gets the file the slot names');
     } finally { wide.reader.stop(); }
   } finally { b.restore(); fs.rmSync(b.root, { recursive: true, force: true }); }
@@ -963,9 +950,10 @@ export async function aC64CallerAndAFortyColumnCallerGetTheSeqNotTheAns(): Promi
     const b = board([]);
     const h = await open(w, hgt, { shippedArt: SHIPPED_ART, petscii });
     try {
+      h.reader.press('q', 'q');
       const t = h.reader.overlayText().join('\n');
-      assert.ok(t.includes('placeholder art'), `${w} petscii=${petscii}: the .seq title (small-letter placeholder note)`);
-      assert.ok(!t.includes('«') && /[\u2500-\u259f]/.test(t), 'PETSCII glyphs, not Amiga ones');
+      assert.ok(t.includes('placeholder art'), `${w} petscii=${petscii}: the .seq goodbye (small-letter placeholder note)`);
+      assert.ok(!t.includes('PLACEHOLDER'), 'not the Amiga drawing, whose note is in capitals');
       for (const r of h.reader.overlayText()) assert.ok(r.length <= 40, `${w}: row of ${r.length}`);
     } finally { await finish(h, b); }
   }
@@ -975,7 +963,6 @@ export async function aBannerTakesItsRowsFromThePanelAndEachViewHasItsOwn(): Pro
   const b = board([]);
   const h = await open(80, 24, { shippedArt: SHIPPED_ART });
   try {
-    h.reader.press('c', 'c');
     const bare = buildLayout(80, 24, { ticker: true });
     assert.strictEqual(h.reader.layout.bannerRows, 3);
     assert.strictEqual(h.reader.layout.panelHeight, bare.panelHeight - 4, 'the panel gives up the three art rows and one blank row');
@@ -1159,13 +1146,10 @@ function manyStories(n = 40): Story[] {
   ));
 }
 
-export async function arrowKeysMoveTheSelectionAfterTheTitleScreenIsDismissed(): Promise<void> {
+export async function arrowKeysMoveTheSelectionAndPageTheArticle(): Promise<void> {
   const b = board([]);
   const h = await open(80, 24, { shippedArt: SHIPPED_ART });
   try {
-    assert.ok(h.reader.overlayText().length > 0, 'the title is up');
-    h.raw(ARROW.down);
-    assert.deepStrictEqual(h.reader.overlayText(), [], 'the first key dismisses the title');
     h.raw('c');
     assert.strictEqual(h.reader.viewKind(), 'contents');
     assert.ok(/^New exploit/.test(cursorAt(h).title), cursorAt(h).title);
