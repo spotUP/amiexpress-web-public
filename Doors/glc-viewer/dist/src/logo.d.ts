@@ -1,7 +1,30 @@
-/** A forty-column caller reads the narrow drawing; everyone else the wide one. */
-export declare const NARROW_COLUMNS = 40;
-/** The section name the Studio files a setting's variants under. */
-export declare const artSettingSection: (key: string) => string;
+/**
+ * Which drawing goes above the title bar.
+ *
+ * The sysop, 2026-09-16: "i would love to take control of the logo". So the
+ * five lines are a FILE now - one per style, shipped in `art/` and declared
+ * as drawable slots in `door.settings.json`, which is what puts them in the
+ * ANSI Studio for the artists at level 100.
+ *
+ * Three places are tried, in this order:
+ *
+ *  (The reading itself now lives in the SDK's `utils/door-logo`, shared with the
+ * arcade doors; this file only maps a GLC style onto it and owns the compiled-in
+ * original.)
+ *
+ *  1. THE C64 VARIANT, for a caller on forty columns. The Studio stores those
+ *     outside the door - `Screens/doors/GLC/setting:logo3.c64.ans` - because
+ *     the drawing is the BOARD'S and has to survive a door re-install
+ *     (`web/backend/src/doors/door-art-variants.ts`). A door reads it the same
+ *     way the board writes it; nothing here reaches into the backend.
+ *  2. THE ART FILE the setting names, for everyone else.
+ *  3. THE ORIGINAL, compiled in from `GLCViewer.e`. A board that has never
+ *     opened the Studio, and a door folder with no `art/` at all, both draw
+ *     exactly what the 68K viewer drew - which is what keeps the parity test
+ *     meaningful after this file exists.
+ */
+import { NARROW_COLUMNS, artSettingSection } from '@amiexpress/bbs-door-sdk/utils/door-logo';
+export { NARROW_COLUMNS, artSettingSection };
 /** What the original ships for this style, and the last word if nothing else answers. */
 export declare function originalLogo(style: number): readonly string[];
 export interface LogoRequest {
@@ -23,6 +46,10 @@ export interface LogoRequest {
      */
     teletext?: boolean;
 }
-/** The five lines to draw above the title bar. */
+/**
+ * The five lines to draw above the title bar. A narrow caller with no
+ * drawing gets none (its title bar is the header); a wide caller with no
+ * artist file gets the compiled-in original.
+ */
 export declare function logoFor(request: LogoRequest): readonly string[];
 //# sourceMappingURL=logo.d.ts.map
