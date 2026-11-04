@@ -11,6 +11,7 @@ exports.rpcHandlers = void 0;
 const bbs_door_sdk_1 = require("@amiexpress/bbs-door-sdk");
 const blessed_1 = __importDefault(require("@amiexpress/bbs-door-sdk/engines/ui/blessed"));
 const arcade_1 = require("@amiexpress/bbs-door-sdk/engines/ui/arcade");
+const door_logo_1 = require("@amiexpress/bbs-door-sdk/utils/door-logo");
 const blessed_helpers_1 = require("@amiexpress/bbs-door-sdk/utils/blessed-helpers");
 const gamepad_input_manager_1 = require("@amiexpress/bbs-door-sdk/utils/gamepad-input-manager");
 const galaga_game_1 = require("./game/galaga-game");
@@ -114,15 +115,26 @@ function renderMenu() {
     gameArea.setContent("");
     if (menuBox)
         menuBox.destroy();
+    // The logo is the artist's file when the Studio has one (slot `logo`),
+    // else the figlet below; a 40-column caller with no drawing gets a plain
+    // title and never the wide art.
     const menuContent = [
-        "{cyan-fg}",
-        "   ____       _                   ",
-        "  / ___| __ _| | __ _  __ _  __ _ ",
-        " | |  _ / _` | |/ _` |/ _` |/ _` |",
-        " | |_| | (_| | | (_| | (_| | (_| |",
-        "  \\____|\\__,_|_|\\__,_|\\__, |\\__,_|",
-        "                      |___/       ",
-        "{/}",
+        ...(0, door_logo_1.sessionLogoRows)(doorContext, {
+            dirname: __dirname,
+            command: "GALAGA",
+            title: "GALAGA",
+            maxCols: 43,
+            original: [
+                "{cyan-fg}",
+                "   ____       _                   ",
+                "  / ___| __ _| | __ _  __ _  __ _ ",
+                " | |  _ / _` | |/ _` |/ _` |/ _` |",
+                " | |_| | (_| | | (_| | (_| | (_| |",
+                "  \\____|\\__,_|_|\\__,_|\\__, |\\__,_|",
+                "                      |___/       ",
+                "{/}",
+            ],
+        }),
         "",
         "{white-fg}Classic 1981 Namco Space Shooter{/}",
         "",

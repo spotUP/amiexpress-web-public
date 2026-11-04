@@ -6,6 +6,7 @@
 import { CoreDoor as Door } from "@amiexpress/bbs-door-sdk";
 import blessed from "@amiexpress/bbs-door-sdk/engines/ui/blessed";
 import { arcadeMenu, moveSelection, ArcadeSfx, createMenuGate} from "@amiexpress/bbs-door-sdk/engines/ui/arcade";
+import { sessionLogoRows } from "@amiexpress/bbs-door-sdk/utils/door-logo";
 import { DoorInputManager } from "@amiexpress/bbs-door-sdk/utils/blessed-helpers";
 import { GamepadInputManager } from "@amiexpress/bbs-door-sdk/utils/gamepad-input-manager";
 import { GamepadButton } from "@amiexpress/bbs-door-sdk/types/gamepad";
@@ -132,15 +133,26 @@ function renderMenu(): void {
 
   if (menuBox) menuBox.destroy();
 
+  // The logo is the artist's file when the Studio has one (slot `logo`),
+  // else the figlet below; a 40-column caller with no drawing gets a plain
+  // title and never the wide art.
   const menuContent = [
-    "{cyan-fg}",
-    "   ____       _                   ",
-    "  / ___| __ _| | __ _  __ _  __ _ ",
-    " | |  _ / _` | |/ _` |/ _` |/ _` |",
-    " | |_| | (_| | | (_| | (_| | (_| |",
-    "  \\____|\\__,_|_|\\__,_|\\__, |\\__,_|",
-    "                      |___/       ",
-    "{/}",
+    ...sessionLogoRows(doorContext, {
+      dirname: __dirname,
+      command: "GALAGA",
+      title: "GALAGA",
+      maxCols: 43,
+      original: [
+        "{cyan-fg}",
+        "   ____       _                   ",
+        "  / ___| __ _| | __ _  __ _  __ _ ",
+        " | |  _ / _` | |/ _` |/ _` |/ _` |",
+        " | |_| | (_| | | (_| | (_| | (_| |",
+        "  \\____|\\__,_|_|\\__,_|\\__, |\\__,_|",
+        "                      |___/       ",
+        "{/}",
+      ],
+    }),
     "",
     "{white-fg}Classic 1981 Namco Space Shooter{/}",
     "",
