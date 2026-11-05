@@ -52,7 +52,7 @@ export default {
          *
          * bbs-border, bbs-secondary, bbs-background, bbs-hover and bbs-error
          * were used 122 times without ever being defined - see
-         * src/test/tailwind-tokens.test.ts, which fails if that happens again.
+         * tests/tailwind-tokens.test.ts, which fails if that happens again.
          */
         'bbs-bg': token('surface-0'),
         'bbs-surface': token('surface-1'),

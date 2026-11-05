@@ -21,7 +21,6 @@ module.exports = {
   },
   rootDir: '.',
   testMatch: [
-    '<rootDir>/test/**/*.test.ts',
     '<rootDir>/tests/**/*.test.ts',
   ],
   testPathIgnorePatterns: [

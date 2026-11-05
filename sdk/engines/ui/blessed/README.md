@@ -531,7 +531,7 @@ import blessed from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 ## 🔗 Links
 
 - [API Documentation](./BLESSED_PORT_COMPLETE.md)
-- [Test Examples](../../../test/blessed-compatibility.test.ts)
+- [Test Examples](../../../tests/blessed-compatibility.test.ts)
 - [Original neo-blessed](https://github.com/chjj/blessed)
 
 ## 📄 License

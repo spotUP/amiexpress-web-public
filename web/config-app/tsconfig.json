@@ -44,6 +44,6 @@
       "@bbs/config-services/*": ["../backend/src/services/config-services/*"]
     }
   },
-  "include": ["src"],
+  "include": ["src", "tests"],
   "references": [{ "path": "./tsconfig.node.json" }]
 }

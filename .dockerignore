@@ -112,7 +112,5 @@ test-*.sh
 test-*.js
 test-*.ts
 test-results.json
-run-bbs-tests.sh
 ws-dual.mjs
-check_all_doors.sh
 logs

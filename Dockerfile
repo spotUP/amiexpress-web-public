@@ -515,12 +515,11 @@ COPY Zoom /app/default-data/Zoom
 COPY HELP /app/default-data/HELP
 COPY Utils /app/default-data/Utils
 
-# Copy AmigaOS system directories (C commands, Devs, L handlers, S startup, Scripts)
+# Copy AmigaOS system directories (C commands, Devs, L handlers, S startup)
 COPY C /app/default-data/C
 COPY Devs /app/default-data/Devs
 COPY L /app/default-data/L
 COPY S /app/default-data/S
-COPY Scripts /app/default-data/Scripts
 COPY System /app/default-data/System
 COPY AmiXnet /app/default-data/AmiXnet
 COPY Partdownload /app/default-data/Partdownload

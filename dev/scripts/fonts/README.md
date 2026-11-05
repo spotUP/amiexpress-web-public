@@ -49,7 +49,7 @@ notice and the original licence ship beside the font;
 The build is deterministic, so its output can be diffed against the file in the
 tree. Then run the guards, which read the SHIPPED font:
 
-    cd web/frontend && npx vitest run src/components/__tests__/teletext-font-swedish.test.ts
+    cd web/frontend && npx vitest run tests/components/teletext-font-swedish.test.ts
 
 Needs `fonttools` and `brotli` (`pip install fonttools brotli`).
 

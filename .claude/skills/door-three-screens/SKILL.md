@@ -239,7 +239,7 @@ Compare it side by side with THEME (C) / SUBS / NOTIFY.
     fields, defaulting to the DIM and INK tokens). A screen with no cell
     backgrounds gets a reverse-video space; a cursor move at the same offset
     does not rewrite the bar.
-  - Proof: `sdk/test/one-scrollbar.test.ts`, `sdk/c/tests/test_ui_list.c`,
+  - Proof: `sdk/tests/one-scrollbar.test.ts`, `sdk/c/tests/test_ui_list.c`,
     `sdk/tests/unit/the-scroll-bar-is-solid-blocks-on-a-c64.test.ts`.
 
 ## 5b. 40-column traps (each one shipped broken once)

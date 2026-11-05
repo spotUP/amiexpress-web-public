@@ -149,9 +149,9 @@ fi
 if have_deps web/config-app; then
   step "admin types"    run_in web/config-app npx tsc --noEmit
   step "admin design system" run_in web/config-app npx vitest run --reporter=basic \
-    src/test/design-system-usage.test.ts \
-    src/test/tailwind-tokens.test.ts \
-    src/test/modal-semantics.test.tsx
+    tests/design-system-usage.test.ts \
+    tests/tailwind-tokens.test.ts \
+    tests/modal-semantics.test.tsx
 else
   echo "[pre-push] admin checks ... [SKIPPED] no node_modules in $CHECK_ROOT/web/config-app"
   SKIPPED=yes

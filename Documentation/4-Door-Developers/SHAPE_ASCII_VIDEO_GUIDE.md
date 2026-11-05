@@ -243,7 +243,7 @@ Run the shape-based renderer test suite:
 
 ```bash
 cd web/backend
-npx tsx test-shape-ascii.ts
+npx tsx dev-scripts/test-shape-ascii.ts
 ```
 
 **Tests:**
@@ -417,7 +417,7 @@ renderer.clearCache();
 - **Research Document:** `Documentation/research_ascii_camera_improvements_2026-01-21.md`
 - **Implementation:** `web/backend/src/utils/shape-ascii.util.ts`
 - **Integration:** `web/backend/src/handlers/audio-video.handler.ts`
-- **Test Suite:** `web/backend/test-shape-ascii.ts`
+- **Test Suite:** `web/backend/dev-scripts/test-shape-ascii.ts`
 
 ---
 
