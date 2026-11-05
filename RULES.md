@@ -621,11 +621,28 @@ Key utils: `AnsiUtil`, `ErrorHandler`, `PermissionsUtil`, `FileDizUtil`, `AcsUti
 
 File size limit: 2000 lines — modularize when reached.
 
-Files:
-- Docs: `Documentation/` holds living guides (users, sysops, developers, door developers, reference), indexed in `Documentation/README.md`. Dated plans, research and handoffs go to `thoughts/shared/{plans,research,handoffs}/` with YAML frontmatter (date, topic, tags, status). Do not add progress, audit or session notes to `Documentation/`.
-- Scripts: `dev/scripts/`
-- Menu: `backend/Screens/MENU.TXT`
-- Bulletins: `backend/data/bbs/Conf01/Bulletins/`
+Where files live: see "Repository layout" below.
+
+---
+
+## Repository layout
+
+The repository root holds two kinds of entries and nothing else. The pre-push hook and `web/backend/tests/repo/root-allowlist.test.ts` fail on any other tracked root entry. Both read the list from `dev/scripts/check-root-allowlist.cjs`, which is the single source of truth: a new root entry goes there with its owner, and into this section, in the same commit.
+
+1. **The board tree.** This checkout is also the AmiExpress board, and express reads these at their Amiga names, so they never move or get renamed: `Node*/`, `Conf*/`, `Screens/`, `Bulletins/`, `HELP/`, `Prompts/`, `Languages/`, `Access/`, `Commands/`, `Doors/` (door payloads), `Storage/`, `System/`, `SysopStats/`, `FCheck/`, `Utils/`, `Protocols/`, `Themes/`, `Zoom/`, `Partdownload/`, `AmiXnet/`, `Libs/`, `C/`, `S/`, `L/`, `Devs/`, `Resources/`, `RIPgraphics/`, `Teletext/`, `Beeb/`, `history/`, `!ASCII-Art/`, every root `*.info`, `batch*`, `ACP`, `acp.dat`, `acpConnections.dat`, `Conf.DB`, `express`, `BBSHelp.txt`, `BBSHelp.txt.gr`, `cplistan1000.dat`, `SysLogs`, `SystemStats`, `debug`.
+2. **Project entries**, each with one job:
+   - Apps and packages: `web/` (backend, frontend, admin), `packages/` (shared npm packages), `sdk/` (door SDK), `bots/` (chat bridge bots), `examples/` (door examples).
+   - Dev tooling: `dev/` (`dev/scripts/` for every script, `dev/hooks/` for git hooks, `dev/mcp/` for the MCP servers), `tools/` (local `lha` for the door packer fallback), `configs/` (68K door corpus fixtures that `Daydream:Configs/` resolves to), `vendor/` (jsbeeb, NDK3.2R4), `data/` (Amiga ROMs), `vamos-config.yaml`.
+   - Deploy: `Dockerfile`, `docker/` (scripts inside the image), `docker-entrypoint.sh`, `docker-compose.yml`, `deploy/` (Hetzner host scripts).
+   - Docs and notes: `README.md`, `RULES.md`, `CLAUDE.md`, `handoff.md`, `Documentation/` (living guides, indexed in `Documentation/README.md`), `thoughts/` (dated plans, research and handoffs in `thoughts/shared/{plans,research,handoffs}/` with YAML frontmatter: date, topic, tags, status).
+   - Config: `package.json`, `package-lock.json`, `.claude/`, `.github/`, `.vscode/`, `.mcp.json`, `.nvmrc`, `.env.example`, `.gitignore`, `.gitattributes`, `.dockerignore`.
+
+Inside the project entries:
+
+- **Docs:** living guides only in `Documentation/<section>/`. No progress, audit or session notes there; those go to `thoughts/shared/`.
+- **Tests:** one `tests/` folder per package (`web/backend/tests/`, `web/frontend/tests/`, `web/config-app/tests/`, `sdk/tests/`, ...). Doors keep their own tests in their door folder. No `__tests__` folders under `src/`.
+- **Scripts:** repo-wide scripts in `dev/scripts/`; a package's own scripts stay in that package (`web/backend/dev-scripts/`). No scripts, run output or backups at the root.
+- **Plans:** `thoughts/shared/plans/` only (see "Plans" above).
 
 ---
 

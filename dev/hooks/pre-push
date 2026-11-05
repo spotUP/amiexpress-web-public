@@ -129,6 +129,10 @@ run_in() { (cd "$1" && shift && "$@"); }
 # was not checked so nobody reads silence as approval.
 have_deps() { [ -d "$1/node_modules" ]; }
 
+# Needs only node and git, so it runs in every tree. The list and its reason
+# live in the script (RULES.md "Repository layout").
+step "root allowlist" node dev/scripts/check-root-allowlist.cjs
+
 if have_deps web/backend; then
   step "backend types"  run_in web/backend    npx tsc --noEmit -p tsconfig.json
   # jest does not type-check the tests, so nothing else stops them drifting
