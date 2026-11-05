@@ -4,7 +4,7 @@
       "type": "stdio",
       "command": "node",
       "args": [
-        "mcp-server/index.js"
+        "dev/mcp/docs/index.js"
       ],
       "env": {}
     },
@@ -12,7 +12,7 @@
       "type": "stdio",
       "command": "node",
       "args": [
-        "mcp-server-debug/index.js"
+        "dev/mcp/debug/index.js"
       ],
       "env": {}
     }

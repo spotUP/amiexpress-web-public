@@ -791,14 +791,14 @@ rm -f "$LOCKFILE"
 echo $$ > "$LOCKFILE"
 
 # Build MCP search indexes if missing (compact Amiga knowledge base lookups)
-if [ ! -f "$REPO_ROOT/mcp-server/data/ndk-structs-index.json" ]; then
+if [ ! -f "$REPO_ROOT/dev/mcp/docs/data/ndk-structs-index.json" ]; then
   printf "%b\n" "${CYAN}-> Building MCP knowledge base indexes...${RESET}"
-  (cd "$REPO_ROOT" && node mcp-server/build-indexes.js 2>/dev/null) || true
+  (cd "$REPO_ROOT" && node dev/mcp/docs/build-indexes.js 2>/dev/null) || true
 fi
 
 # Regenerate LVO/struct maps if index is newer than generated files
 LVO_GEN="$REPO_ROOT/web/backend/src/amiga-emulation/constants/lvo-names.generated.ts"
-if [ ! -f "$LVO_GEN" ] || [ "$REPO_ROOT/mcp-server/data/ndk-structs-index.json" -nt "$LVO_GEN" ]; then
+if [ ! -f "$LVO_GEN" ] || [ "$REPO_ROOT/dev/mcp/docs/data/ndk-structs-index.json" -nt "$LVO_GEN" ]; then
   printf "%b\n" "${CYAN}-> Generating LVO/struct maps from NDK index...${RESET}"
   (cd "$REPO_ROOT" && node dev/scripts/generate-lvo-maps.js 2>/dev/null) || true
 fi

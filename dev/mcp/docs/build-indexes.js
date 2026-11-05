@@ -20,7 +20,7 @@ import { fileURLToPath } from 'url';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const PROJECT_ROOT = path.resolve(__dirname, '..');
+const PROJECT_ROOT = path.resolve(__dirname, '../../..');
 // The original AmiExpress sources, NDK and other reference material live
 // outside the repo; AMIEXPRESS_REFERENCE points at another copy.
 const REFERENCE_ROOT = process.env.AMIEXPRESS_REFERENCE || '~/Code/Reference';

@@ -199,7 +199,7 @@ Desktop.ini
 data/
 !data/amiga-roms/
 !web/backend/data/amiga-roms/
-!mcp-server/data/
+!dev/mcp/docs/data/
 tracker-data/
 backend/data/*
 !backend/data/bbs/

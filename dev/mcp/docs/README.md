@@ -263,13 +263,13 @@ The MCP server is a Node.js application using the Model Context Protocol SDK.
 
 **Test the server:**
 ```bash
-cd mcp-server
+cd dev/mcp/docs
 node test-mcp.js
 ```
 
 **Start the server:**
 ```bash
-cd mcp-server
+cd dev/mcp/docs
 node index.js
 ```
 

@@ -4,7 +4,7 @@ This project uses an MCP server to provide efficient access to documentation and
 
 ## Server
 
-- File: `mcp-server/index.js`
+- File: `dev/mcp/docs/index.js`
 - Name: `amiexpress-docs-mcp-server`
 - Version: 2.0
 - Resources: 50+ docs + 5 source files (~35,000 lines total)

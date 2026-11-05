@@ -378,7 +378,7 @@ if (isDoorRepoProxyEnabled()) {
 app.use('/api/door-admin', express.json({ limit: '16kb' }), doorAdminBodyError, doorAdminRouter);
 
 // Debug-MCP routes — dev-only, read-only introspection for the MCP sidecar.
-// See mcp-server-debug/ and web/backend/src/debug/debug-mcp.routes.ts.
+// See dev/mcp/debug/ and web/backend/src/debug/debug-mcp.routes.ts.
 if (process.env.NODE_ENV !== 'production') {
   try {
     const { createDebugMcpRouter } = require('../debug/debug-mcp.routes');

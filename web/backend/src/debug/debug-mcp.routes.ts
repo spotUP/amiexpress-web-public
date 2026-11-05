@@ -2,7 +2,7 @@
  * Debug-MCP HTTP router.
  *
  * Read-only introspection endpoints used by the sidecar MCP server
- * (mcp-server-debug/). Mounted only when NODE_ENV !== 'production'.
+ * (dev/mcp/debug/). Mounted only when NODE_ENV !== 'production'.
  * Everything here is best-effort: if we can't resolve state we return a
  * typed error body instead of throwing, so MCP tools get clean messages.
  *
