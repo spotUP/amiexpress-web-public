@@ -137,3 +137,20 @@ it("lists the last call of an express.e CallersLog in the bulletin", async () =>
   // Baud N Name Group/Location On-Time (Actions) H:MM Up-K Dn-K
   expect(row).toMatch(/^19\.2 1 regress +Test Account +17:37:02 \(---DU-\) 0:04 +12 +53$/);
 });
+
+describe('loading Super-AmiLog does not write the board', () => {
+  // Importing the service used to create Utils/samilog and seed the store
+  // at module load, so a board booted from a clean checkout wrote into the
+  // tracked tree before any caller arrived. The store is made on first use.
+  it('creates Utils/samilog on first use, not on import', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'samilog-import-'));
+    try {
+      const service = serviceFor(dir);
+      expect(fs.existsSync(path.join(dir, 'Utils', 'samilog'))).toBe(false);
+      service.generateBulletin(5, { noAnsi: true });
+      expect(fs.existsSync(path.join(dir, 'Utils', 'samilog', 'SAmiLog.Store'))).toBe(true);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});

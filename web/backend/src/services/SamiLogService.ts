@@ -430,6 +430,7 @@ function updateMiniCallersLog(entry: any, todayAmiga: number, isNewDay: boolean,
  */
 export async function clearStore(): Promise<void> {
   try {
+    ensureStoreExists();
     const storePath = getStorePath();
     const buffer = Buffer.alloc(STORE_SIZE_BYTES, 0);
     buffer.write(STORE_VERSION, 0, 'latin1');
@@ -678,8 +679,6 @@ function getDaysSinceAmigaEpoch(): number {
   const diffMs = Date.now() - AMIGA_EPOCH;
   return Math.floor(diffMs / (24 * 60 * 60 * 1000));
 }
-
-ensureStoreExists();
 
 /**
  * Triggered at startup/login to guarantee the storage file exists.
@@ -954,6 +953,7 @@ function getRandomLine(): string {
  */
 export function generateBulletin(limit: number = 20, options: OutputOptions = {}): string {
   try {
+    ensureStoreExists();
     const storePath = getStorePath();
     if (!fs.existsSync(storePath)) {
       return 'No callers logged yet.\n';
@@ -1191,6 +1191,7 @@ const TELETEXT_ROWS = 25;
  */
 export function generateTeletextBulletin(limit: number = 20): string {
   try {
+    ensureStoreExists();
     const storePath = getStorePath();
     if (!fs.existsSync(storePath)) return '~f\nNo callers logged yet.\n';
     const buffer = fs.readFileSync(storePath);
@@ -1266,6 +1267,7 @@ function formatDateAmiga(amigaDays: number): string {
  */
 export function generateWeeklyStats(options: OutputOptions = {}): string {
   try {
+    ensureStoreExists();
     const storePath = getStorePath();
     const buffer = fs.readFileSync(storePath);
     
@@ -1317,6 +1319,7 @@ export function generateWeeklyStats(options: OutputOptions = {}): string {
  */
 export function generateRecordStats(options: OutputOptions = {}): string {
   try {
+    ensureStoreExists();
     const storePath = getStorePath();
     const buffer = fs.readFileSync(storePath);
 
