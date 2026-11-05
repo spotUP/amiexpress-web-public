@@ -1,7 +1,0 @@
-# M3 report
-Status: DONE_WITH_CONCERNS. Landed ea35de6d0 (M2 extras) and 3cc2c2c1e (catalogue builder).
-Extras to M2 (own tests, revert-checked RED 2 of 2): cleanText strips C1 0x80-0x9f and keeps 0xF6; duplicate section ids dropped with a problem line; LABEL_MAX replaces literal 26 (no behaviour change, no test).
-M3: doorRefusedForWidth extracted and used by the launch gate (door.handler.ts); menu-catalogue/{types,registry,build,caller,catalogue-file,sources/main,sources/bulletins}; conferenceHasBulletins lifted into bulletin-list.ts and used by handleReadBulletinCommand and the BULLETINS gate.
-Tests: 17 new pass (menu-catalogue 11 incl. two shadow-door cases, menu-catalogue-bulletins 3 extra file, door-refused-for-width 2) plus width suites (153) green. RED: dropped hidden filter, door width check, bulletin mask, and the doorOpensForC64 clause -> 4 failed; restored -> pass. tsc backend and config-app: 0 errors.
-Deviations: caller.ts uses sessionColumns/doorScreenHeight (responsiveDoorGeometry is M5); preview may() uses only the 'ACS.<KEY>' form; extra file tests/services/menu-catalogue-bulletins.test.ts (mocks bulletin list and Bulls.CFG).
-Concern: tests/handlers/bulletins-found-where-the-board-keeps-them.test.ts fails 3 of 3 in this worktree, identically with the ORIGINAL handler (checked by restoring HEAD's file); pre-existing here, cause not investigated (likely worktree env).

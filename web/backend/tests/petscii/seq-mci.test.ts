@@ -396,17 +396,10 @@ describe('renderPetsciiScreen (Task 5)', () => {
   });
 
   it('a .seq that does NOT open with 0x7E round-trips byte for byte, and still feeds the oracle', async () => {
+    // A copy of the old Node1/Screens/BBSTITLE.SEQ, kept as a fixture after
+    // the unreachable per-node screen trees were deleted from the repo.
     const repoRoot = path.resolve(__dirname, '../../../..');
-    // The plan names `Node1/Screens/BBSTITLE.SEQ`; the unreachable per-node
-    // screen trees were moved under quarantine/ after the plan was written.
-    const artCandidates = [
-      path.join(repoRoot, 'Node1/Screens/BBSTITLE.SEQ'),
-      path.join(repoRoot, 'quarantine/unreachable-node-screens/Node1/Screens/BBSTITLE.SEQ'),
-    ];
-    const artPath = artCandidates.find((p) => fs.existsSync(p));
-    expect(artPath).toBeDefined();
-
-    const art = fs.readFileSync(artPath as string);
+    const art = fs.readFileSync(path.join(__dirname, '../fixtures/petscii/BBSTITLE.SEQ'));
     expect(art.length).toBe(864);
     expect(art[0]).toBe(0x1f);            // NOT 0x7E: art, never MCI
     expect(art.filter((b) => b === 0x0e).length).toBe(11);

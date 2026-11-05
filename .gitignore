@@ -643,3 +643,8 @@ Beeb/software/**
 
 # Host-local compose additions (e.g. joining the doorserver network)
 /docker-compose.override.yml
+
+# Local tool state (P3 of the 2026-11-05 repo cleanup)
+.pipx/
+.serena/
+.geminiignore
