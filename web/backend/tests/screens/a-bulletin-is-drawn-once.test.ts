@@ -18,6 +18,9 @@ import * as path from 'path';
 import { displayScreen } from '../../src/handlers/screen.handler';
 import { config } from '../../src/config';
 
+// The ~CC_ dispatcher; the NS test below gives it a body. Nothing else here runs a command.
+jest.mock('../../src/handlers/command.handler', () => ({ processCommand: jest.fn() }));
+
 /**
  * FROZEN at 38 rows as the board shipped it (a922a780f): the live file is
  * rewritten at every logoff and fitted to the screen since SamiLogService
@@ -162,5 +165,60 @@ describe('a bulletin shown non-stop', () => {
     const wire = whole.out.join('');
     expect(count(wire, 'lAST cALLERS')).toBe(1);
     expect(wire).toContain('Sysop Command');
+  });
+});
+
+/**
+ * `b 12 ns` STILL PAGED, live 2026-11-05. Bulletins/bull12.txt is `~CC_I`: the
+ * bulletin is one command, and what the command shows is a SEPARATE display.
+ * express.e's NS parameter sets nonStopDisplayFlag for the whole bulletin, so
+ * the command runs non-stop too - and the flag is put back afterwards.
+ */
+describe('B n NS covers the commands the bulletin runs', () => {
+  const tall = Array.from({ length: 60 }, (_, i) => `row ${i}`).join('\r\n') + '\r\n';
+  const stub = require('../../src/handlers/command.handler').processCommand as jest.Mock;
+  let seen: { text: boolean; flag: boolean } | undefined;
+
+  beforeEach(() => {
+    fs.writeFileSync(path.join(root, 'Bulletins', 'bull12.txt'), '~CC_I\n', 'latin1');
+    fs.writeFileSync(path.join(root, 'Bulletins', 'tall.txt'), tall, 'latin1');
+    seen = undefined;
+    stub.mockReset();
+    // The command shows a tall screen of its own, as SysInfo does.
+    stub.mockImplementation(async (s: any, session: any) => {
+      seen = { text: !!session.nonStopText, flag: !!session.tempData?.nonStopDisplayFlag };
+      await displayScreen(s, session, 'BBS:Bulletins/tall.txt', false);
+      return true;
+    });
+  });
+
+  const session = (): any => ({ ...ansi(24), tempData: {} });
+
+  it('shows no More prompt with NS, and the next tall screen pages again', async () => {
+    const { socket, out } = socketDouble();
+    const s = session();
+    await displayScreen(socket, s, 'BBS:Bulletins/bull12.txt', true, false, { nonStop: true });
+
+    expect(stub).toHaveBeenCalled();                 // the ~CC_ ran (sentinel)
+    expect(seen).toEqual({ text: true, flag: true }); // the command saw the NS flag
+    expect(s.paginatedScreen).toBeUndefined();
+    expect(out.join('')).toContain('row 59');
+    expect(s.nonStopText).toBe(false);
+    expect(s.tempData.nonStopDisplayFlag).toBe(false);
+
+    const next = socketDouble();
+    await displayScreen(next.socket, s, 'BBS:Bulletins/tall.txt', false);
+    expect(s.paginatedScreen).toBeDefined();         // paginates again
+    expect(next.out.join('')).not.toContain('row 59');
+  });
+
+  it('pages without NS', async () => {
+    const { socket } = socketDouble();
+    const s = session();
+    await displayScreen(socket, s, 'BBS:Bulletins/bull12.txt', true);
+
+    expect(stub).toHaveBeenCalled();
+    expect(seen).toEqual({ text: false, flag: false });
+    expect(s.paginatedScreen).toBeDefined();
   });
 });

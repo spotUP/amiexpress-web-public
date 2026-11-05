@@ -2689,7 +2689,34 @@ function screenOpensWithItsOwnClear(content: string): boolean {
  */
 const OPENING_FORM_FEED = /^((?:\x1b\[[0-9;?]*[A-Za-z])*)\x0c/;
 
+/**
+ * Sessions inside a `B 12 NS` display. express.e's NS parameter sets the one
+ * nonStopDisplayFlag for the whole displayFile, so every screen the bulletin's
+ * own `~CC_` / `~SS_` codes show nests inside the same non-stop scope.
+ */
+const nonStopScope = new WeakSet<object>();
+
 export async function displayScreen(socket: any, session: BBSSession, screenName: string, runCommands: boolean = true, silent: boolean = false, opts?: { fallbackWipe?: string; nonStop?: boolean }): Promise<boolean> {
+  if (opts?.nonStop !== true || nonStopScope.has(session)) {
+    return displayScreenBody(socket, session, screenName, runCommands, silent, opts);
+  }
+  // The flag a door (XIM BB_NONSTOPTEXT seed) and the pager read; put back
+  // after the bulletin, so the NEXT screen paginates again.
+  const { setNonStopMode } = require('../utils/flag-pause.util');
+  const wasFlag = !!session.tempData?.nonStopDisplayFlag;
+  const wasText = !!(session as unknown as { nonStopText?: boolean }).nonStopText;
+  nonStopScope.add(session);
+  setNonStopMode(session, true);
+  try {
+    return await displayScreenBody(socket, session, screenName, runCommands, silent, opts);
+  } finally {
+    nonStopScope.delete(session);
+    setNonStopMode(session, wasFlag);
+    (session as unknown as { nonStopText?: boolean }).nonStopText = wasText;
+  }
+}
+
+async function displayScreenBody(socket: any, session: BBSSession, screenName: string, runCommands: boolean = true, silent: boolean = false, opts?: { fallbackWipe?: string; nonStop?: boolean }): Promise<boolean> {
   screenDebug(`[displayScreen] ========================================`);
   screenDebug(`[displayScreen] REQUESTED SCREEN: ${screenName}`);
   screenDebug(`[displayScreen] Conference ID: ${session.currentConf || 'none'}`);
@@ -3071,7 +3098,8 @@ console.log(`[NEWLINE-DEBUG] RAW CONTENT (${screenName}): ${content.length} byte
      */
     const neverPaginates = SCREENS_NEVER_PAGINATE.has(screenCatalogueName(screenName))
       || /~NSF?(?![A-Za-z0-9_])/.test(contentForMci)
-      || opts?.nonStop === true;
+      || opts?.nonStop === true
+      || nonStopScope.has(session);
     const needsPaging = !neverPaginates && !inlineOnlyCodes && artLines > callerLines;
     const mciSocket = (wipeCodePresent || needsPaging) ? undefined : socket;
     if (needsPaging && !wipeCodePresent) {
