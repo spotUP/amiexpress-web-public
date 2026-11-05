@@ -155,10 +155,12 @@ COPY sdk ./sdk
 COPY --from=sdk-builder /app/sdk/dist ./sdk/dist
 COPY --from=sdk-builder /app/sdk/dist-esm ./sdk/dist-esm
 COPY --from=sdk-builder /app/sdk/node_modules ./sdk/node_modules
-COPY Doors ./Doors
+# Doors live in board/ in the repo; here they sit at /app/board/Doors so a
+# door's `file:../../../sdk` dependency resolves to /app/sdk, as in the repo.
+COPY board/Doors ./board/Doors
 # door-manager is built from source here. It is the only one: building every
 # door would need each door's own dependencies installed.
-WORKDIR /app/Doors/door-manager
+WORKDIR /app/board/Doors/door-manager
 # npm install reads package.json and triggers the SDK's build scripts via
 # the file: dependency even with --ignore-scripts. Bypass by installing
 # typescript globally (no package.json read), then symlinking the pre-built
@@ -182,7 +184,7 @@ WORKDIR /app
 # excluded directory is exactly the kind of subtlety that should not stand
 # between a door and the board.
 COPY docker/verify-door-entries.sh /usr/local/bin/verify-door-entries.sh
-RUN sh /usr/local/bin/verify-door-entries.sh /app/Doors
+RUN sh /usr/local/bin/verify-door-entries.sh /app/board/Doors
 
 # ============================================================================
 # Stage 7: Build Backend
@@ -363,9 +365,9 @@ RUN mkdir -p /app/logs /app/default-data
 # routes-setup.ts looks for it beside the code at /app/vendor.
 COPY vendor /app/vendor
 
-COPY Screens /app/default-data/Screens
-COPY Bulletins /app/default-data/Bulletins
-COPY Commands /app/default-data/Commands
+COPY board/Screens /app/default-data/Screens
+COPY board/Bulletins /app/default-data/Bulletins
+COPY board/Commands /app/default-data/Commands
 # The teletext services a caller browses, and the BBC Micro's folder.
 #
 # Board data reaches a live volume ONLY through this template directory:
@@ -376,10 +378,10 @@ COPY Commands /app/default-data/Commands
 # Beeb carries its README and the empty roms/software folders. It cannot
 # carry the ROMs: Acorn never permitted redistributing them, and the disc
 # images are whatever the board's owner has the right to run.
-COPY Teletext /app/default-data/Teletext
-COPY Beeb /app/default-data/Beeb
+COPY board/Teletext /app/default-data/Teletext
+COPY board/Beeb /app/default-data/Beeb
 # The sysop-editable layout templates - see the entrypoint's Prompts block.
-COPY Prompts /app/default-data/Prompts
+COPY board/Prompts /app/default-data/Prompts
 # The screen THEMES the board ships, and the registry that names them.
 # `Themes.info` was already synced by the entrypoint, so the board offered
 # `tango` in the picker and then had no art to serve for it: the tree itself
@@ -387,73 +389,73 @@ COPY Prompts /app/default-data/Prompts
 # whichever theme he chose (sysop, live, 2026-09-07). The entrypoint's own
 # Themes block (docker-entrypoint.sh) walks what the image has, so this COPY
 # is what it walks.
-COPY Themes /app/default-data/Themes
-COPY Conf1 /app/default-data/Conf1
-COPY Conf2 /app/default-data/Conf2
-COPY Conf3 /app/default-data/Conf3
-COPY Conf4 /app/default-data/Conf4
-COPY Conf5 /app/default-data/Conf5
-COPY Conf6 /app/default-data/Conf6
-COPY Conf7 /app/default-data/Conf7
-COPY Conf8 /app/default-data/Conf8
-COPY Conf9 /app/default-data/Conf9
-COPY Conf10 /app/default-data/Conf10
-COPY Conf11 /app/default-data/Conf11
-COPY Conf12 /app/default-data/Conf12
-COPY Conf13 /app/default-data/Conf13
-COPY Conf14 /app/default-data/Conf14
+COPY board/Themes /app/default-data/Themes
+COPY board/Conf1 /app/default-data/Conf1
+COPY board/Conf2 /app/default-data/Conf2
+COPY board/Conf3 /app/default-data/Conf3
+COPY board/Conf4 /app/default-data/Conf4
+COPY board/Conf5 /app/default-data/Conf5
+COPY board/Conf6 /app/default-data/Conf6
+COPY board/Conf7 /app/default-data/Conf7
+COPY board/Conf8 /app/default-data/Conf8
+COPY board/Conf9 /app/default-data/Conf9
+COPY board/Conf10 /app/default-data/Conf10
+COPY board/Conf11 /app/default-data/Conf11
+COPY board/Conf12 /app/default-data/Conf12
+COPY board/Conf13 /app/default-data/Conf13
+COPY board/Conf14 /app/default-data/Conf14
 # Node directories contain questionnaire scripts for new user signup
 # Note: If build fails with "not found", check .dockerignore - these must NOT be excluded
 # Copying Node0-Node40 (41 nodes total)
-COPY Node0 /app/default-data/Node0
-COPY Node1 /app/default-data/Node1
-COPY Node2 /app/default-data/Node2
-COPY Node3 /app/default-data/Node3
-COPY Node4 /app/default-data/Node4
-COPY Node5 /app/default-data/Node5
-COPY Node6 /app/default-data/Node6
-COPY Node7 /app/default-data/Node7
-COPY Node8 /app/default-data/Node8
-COPY Node9 /app/default-data/Node9
-COPY Node10 /app/default-data/Node10
-COPY Node11 /app/default-data/Node11
-COPY Node12 /app/default-data/Node12
-COPY Node13 /app/default-data/Node13
-COPY Node14 /app/default-data/Node14
-COPY Node15 /app/default-data/Node15
-COPY Node16 /app/default-data/Node16
-COPY Node17 /app/default-data/Node17
-COPY Node18 /app/default-data/Node18
-COPY Node19 /app/default-data/Node19
-COPY Node20 /app/default-data/Node20
-COPY Node21 /app/default-data/Node21
-COPY Node22 /app/default-data/Node22
-COPY Node23 /app/default-data/Node23
-COPY Node24 /app/default-data/Node24
-COPY Node25 /app/default-data/Node25
-COPY Node26 /app/default-data/Node26
-COPY Node27 /app/default-data/Node27
-COPY Node28 /app/default-data/Node28
-COPY Node29 /app/default-data/Node29
-COPY Node30 /app/default-data/Node30
-COPY Node31 /app/default-data/Node31
-COPY Node32 /app/default-data/Node32
-COPY Node33 /app/default-data/Node33
-COPY Node34 /app/default-data/Node34
-COPY Node35 /app/default-data/Node35
-COPY Node36 /app/default-data/Node36
-COPY Node37 /app/default-data/Node37
-COPY Node38 /app/default-data/Node38
-COPY Node39 /app/default-data/Node39
-COPY Node40 /app/default-data/Node40
+COPY board/Node0 /app/default-data/Node0
+COPY board/Node1 /app/default-data/Node1
+COPY board/Node2 /app/default-data/Node2
+COPY board/Node3 /app/default-data/Node3
+COPY board/Node4 /app/default-data/Node4
+COPY board/Node5 /app/default-data/Node5
+COPY board/Node6 /app/default-data/Node6
+COPY board/Node7 /app/default-data/Node7
+COPY board/Node8 /app/default-data/Node8
+COPY board/Node9 /app/default-data/Node9
+COPY board/Node10 /app/default-data/Node10
+COPY board/Node11 /app/default-data/Node11
+COPY board/Node12 /app/default-data/Node12
+COPY board/Node13 /app/default-data/Node13
+COPY board/Node14 /app/default-data/Node14
+COPY board/Node15 /app/default-data/Node15
+COPY board/Node16 /app/default-data/Node16
+COPY board/Node17 /app/default-data/Node17
+COPY board/Node18 /app/default-data/Node18
+COPY board/Node19 /app/default-data/Node19
+COPY board/Node20 /app/default-data/Node20
+COPY board/Node21 /app/default-data/Node21
+COPY board/Node22 /app/default-data/Node22
+COPY board/Node23 /app/default-data/Node23
+COPY board/Node24 /app/default-data/Node24
+COPY board/Node25 /app/default-data/Node25
+COPY board/Node26 /app/default-data/Node26
+COPY board/Node27 /app/default-data/Node27
+COPY board/Node28 /app/default-data/Node28
+COPY board/Node29 /app/default-data/Node29
+COPY board/Node30 /app/default-data/Node30
+COPY board/Node31 /app/default-data/Node31
+COPY board/Node32 /app/default-data/Node32
+COPY board/Node33 /app/default-data/Node33
+COPY board/Node34 /app/default-data/Node34
+COPY board/Node35 /app/default-data/Node35
+COPY board/Node36 /app/default-data/Node36
+COPY board/Node37 /app/default-data/Node37
+COPY board/Node38 /app/default-data/Node38
+COPY board/Node39 /app/default-data/Node39
+COPY board/Node40 /app/default-data/Node40
 
 # Copy Doors to default-data (will be copied to persistent disk by entrypoint)
 # BBS expects Doors at $BBS_DATA_DIR/Doors/ (e.g., /app/data/bbs/Doors/)
-COPY --from=doors-builder /app/Doors /app/default-data/Doors
+COPY --from=doors-builder /app/board/Doors /app/default-data/Doors
 
 # Copy Libs to default-data (will be copied to persistent disk by entrypoint)
 # BBS expects Libs at $BBS_DATA_DIR/Libs/ (e.g., /app/data/bbs/Libs/)
-COPY Libs /app/default-data/Libs
+COPY board/Libs /app/default-data/Libs
 
 # Copy AROS ROM files for 68K emulation (Kickstart not included - user must provide)
 # These go to /app/data/amiga-roms which is on persistent disk mount
@@ -466,7 +468,7 @@ COPY data/amiga-roms/aros-ext.bin /app/default-data/amiga-roms/aros-ext.bin
 # ConfConfig.info: NCONFS, NAME.n, LOCATION.n (conference list)
 # Conf*.info: Per-conference settings (NDIRS, DLPATH, ULPATH for file areas)
 # Note: bbsConfig.info is gitignored (user-specific) - synced via deploy/sync-to-server.sh
-COPY Conf.DB /app/default-data/
+COPY board/Conf.DB /app/default-data/
 
 # Every root-level .info file, by wildcard so a rename cannot break the build.
 # These are binary Amiga icon files carrying tooltypes, and the node icons
@@ -475,7 +477,7 @@ COPY Conf.DB /app/default-data/
 # yet cannot be written to. This COPY sat after the collapse from 742db4e07
 # until 2026-09-06, so the image shipped 41 screen copies and no tooltype.
 # tests/seed-shares-node-screens.test.ts pins the order.
-COPY *.info /app/default-data/
+COPY board/*.info /app/default-data/
 
 # The template ships ONE copy of each node screen, not forty-one.
 #
@@ -505,34 +507,34 @@ RUN /app/web/backend/node_modules/.bin/tsx \
         /app/web/backend/scripts/collapse-default-screens.ts /app/default-data
 
 # Copy BBS config directories (access levels, protocols, file checkers, etc.)
-COPY Access /app/default-data/Access
-COPY Languages /app/default-data/Languages
-COPY Protocols /app/default-data/Protocols
-COPY FCheck /app/default-data/FCheck
-COPY Storage /app/default-data/Storage
-COPY SysopStats /app/default-data/SysopStats
-COPY Zoom /app/default-data/Zoom
-COPY HELP /app/default-data/HELP
-COPY Utils /app/default-data/Utils
+COPY board/Access /app/default-data/Access
+COPY board/Languages /app/default-data/Languages
+COPY board/Protocols /app/default-data/Protocols
+COPY board/FCheck /app/default-data/FCheck
+COPY board/Storage /app/default-data/Storage
+COPY board/SysopStats /app/default-data/SysopStats
+COPY board/Zoom /app/default-data/Zoom
+COPY board/HELP /app/default-data/HELP
+COPY board/Utils /app/default-data/Utils
 
 # Copy AmigaOS system directories (C commands, Devs, L handlers, S startup)
-COPY C /app/default-data/C
-COPY Devs /app/default-data/Devs
-COPY L /app/default-data/L
-COPY S /app/default-data/S
-COPY System /app/default-data/System
-COPY AmiXnet /app/default-data/AmiXnet
-COPY Partdownload /app/default-data/Partdownload
+COPY board/C /app/default-data/C
+COPY board/Devs /app/default-data/Devs
+COPY board/L /app/default-data/L
+COPY board/S /app/default-data/S
+COPY board/System /app/default-data/System
+COPY board/AmiXnet /app/default-data/AmiXnet
+COPY board/Partdownload /app/default-data/Partdownload
 
 # Copy batch files (AmigaDOS maintenance scripts) and other root data files
-COPY batch0 batch1 batch2 batch3 batch4 batch5 batch6 batch000 /app/default-data/
-COPY acp.dat acpConnections.dat BBSHelp.txt SystemStats cplistan1000.dat /app/default-data/
+COPY board/batch0 board/batch1 board/batch2 board/batch3 board/batch4 board/batch5 board/batch6 board/batch000 /app/default-data/
+COPY board/acp.dat board/acpConnections.dat board/BBSHelp.txt board/SystemStats board/cplistan1000.dat /app/default-data/
 # The board's own help, for the AI co-sysop's retrieval (handlers/sysop-ai/corpus.ts):
 # the user and sysop guides are code, not board data, and live beside the
 # backend as they do in the repo (repoRoot/Documentation).
 COPY Documentation/1-Users/USER_GUIDE.md /app/Documentation/1-Users/USER_GUIDE.md
 COPY Documentation/2-Sysops/SYSOP_GUIDE.md /app/Documentation/2-Sysops/SYSOP_GUIDE.md
-COPY express /app/default-data/express
+COPY board/express /app/default-data/express
 
 # BOT MANIFESTS, which the admin's Bots page is built on.
 #

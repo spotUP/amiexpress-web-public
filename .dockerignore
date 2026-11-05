@@ -11,15 +11,13 @@
 
 # Dependencies (rebuilt in Docker)
 node_modules
-Doors/**/node_modules
-doors/**/node_modules
+board/Doors/**/node_modules
 npm-debug.log
 yarn-error.log
 
 # Build outputs (rebuilt in Docker, except Door dist/)
 dist
-!Doors/**/dist
-!doors/**/dist
+!board/Doors/**/dist
 build
 .next
 out
@@ -41,7 +39,7 @@ Documentation
 !Documentation/1-Users/USER_GUIDE.md
 !Documentation/2-Sysops/SYSOP_GUIDE.md
 thoughts
-history
+board/history
 tmp
 temp
 # Agent/session scratch (worktrees, scratchpads) - never part of an image.
@@ -81,12 +79,12 @@ db/*.sqlite
 database.sqlite
 
 # User data files (gitignored, synced separately)
-bbsConfig.info
-User.data
-User.keys
-user.misc
-*.user
-*.userkeys
+board/bbsConfig.info
+board/User.data
+board/User.keys
+board/user.misc
+board/*.user
+board/*.userkeys
 
 # Dev config files
 .eslintrc
@@ -103,7 +101,7 @@ ssh_host_rsa_key
 ssh_host_rsa_key.pub
 
 # Misc dev/debug files
-debug
+board/debug
 debug.log
 68klog.txt
 reference-board.log
