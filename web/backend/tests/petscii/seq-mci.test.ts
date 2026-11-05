@@ -525,8 +525,12 @@ describe('renderPetsciiScreen (Task 5)', () => {
     expect(y.machine.state.cursorX).toBe(1);
 
     // Out-of-range targets clamp to the machine's own geometry - no literal 40.
+    // petsciiMoveTo takes the cheapest walk (b593f50fa): from column 1 to the
+    // last column of row 0 that is one down and two lefts, the second left
+    // wrapping to the end of the row above, not 38 rights.
     const clamped = await render(seqBytes(GATE, '~x99|'), session);
-    expect(Array.from(clamped.out)).toEqual([0x20, ...new Array(38).fill(0x1d)]);
+    expect(Array.from(clamped.out)).toEqual([0x20, 0x11, 0x9d, 0x9d]);
+    expect(clamped.machine.state.cursorY).toBe(0);
     expect(clamped.machine.state.cursorX).toBe(clamped.machine.state.cols - 1);
   });
 
