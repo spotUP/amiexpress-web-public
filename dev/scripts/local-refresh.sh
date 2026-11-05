@@ -83,6 +83,11 @@ git merge --ff-only -q origin/main || fail "cannot fast-forward the mirror to or
 
 HEAD_SHA="$(git rev-parse HEAD)"
 
+# The node_modules links into the shared checkout. Nothing else makes them,
+# and a build below fails on a missing module without them.
+SHARED="$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)")"
+./dev/scripts/local-mirror-links.sh "$SHARED" "$ROOT" || fail "cannot link the mirror's node_modules into $SHARED"
+
 # --- rebuild only the bundles whose sources changed since the last build ----
 #
 # sdk -> terminal -> frontend and admin, because each builds against the one
