@@ -884,7 +884,7 @@ export function logoffBatchesAlreadyRan(session: { logoffBatchesRan?: boolean } 
 export async function runLogoffBatches(nodeId: number): Promise<void> {
   const baseDir = boardRoot();
   const bbsRoot = baseDir;
-  const appRoot = process.cwd(); // App root where batch files live
+  const appRoot = baseDir; // the board root, where batch files live
   const day = getSystemTime().getDay(); // 0-6, Sunday = 0
   const batchName = `batch${day}`;
   const batch000 = 'batch000';

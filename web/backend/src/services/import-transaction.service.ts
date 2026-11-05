@@ -32,6 +32,7 @@ import type {
 } from '../types/amiga-import';
 import type { User } from '../types';
 import { stripSecretsFromConfigFile } from './bbs-config-file.service';
+import { boardRoot } from '../utils/board-root.util';
 import { getSystemTime } from '../utils/date-time.util';
 import type { Conference } from '../database/types';
 
@@ -742,7 +743,7 @@ console.log('[ImportTransaction] No bulletins to import');
 
     // Get BBS root directory from config
     const config = require('../config').config;
-    const bbsRoot = config.get('bbsRoot') || process.cwd();
+    const bbsRoot = boardRoot();
     const bulletinsDir = path.join(bbsRoot, 'Bulletins');
 
     // Ensure bulletins directory exists

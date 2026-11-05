@@ -17,6 +17,7 @@ import {
 import { emitPrompt } from '../../utils/output.util';
 import { logonNamePromptText } from '../../utils/node-tooltypes.util';
 import { TELETEXT_SESSION_ROWS } from '../../amiga-emulation/xim/screen-width.util';
+import { boardRoot } from '../../utils/board-root.util';
 
 /**
  * Get the appropriate output event name based on session terminal type
@@ -36,7 +37,7 @@ export function getSystemPassword(): string {
     const { loadBBSConfig } = require('../../services/bbs-config-file.service');
     // BBS root: from env or calculated relative to this compiled file's location
     // web/backend/dist/handlers/command-handler/ → ../../../../.. = project root
-    const bbsRoot = process.env.BBS_DATA_DIR || path.resolve(__dirname, '../../../../../..');
+    const bbsRoot = boardRoot();
     const diskConfig = loadBBSConfig(bbsRoot);
     return (diskConfig.system_password || '').trim();
   } catch {

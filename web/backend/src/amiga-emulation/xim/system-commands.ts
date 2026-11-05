@@ -32,6 +32,7 @@ import { convertAmigaTextForTerminal } from '../../utils/ansi-conversion.util';
 import { getConferenceToolFlags } from '../../utils/conference-tooltypes.util';
 import { setEnvStat } from '../../utils/acs.util';
 import { doorCursorToggle } from '../session/door-cursor-gate';
+import { boardRoot } from '../../utils/board-root.util';
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const iconv = require('iconv-lite');
 
@@ -1105,8 +1106,7 @@ debugLog(
   private getPaths(): BBSPaths {
     return new BBSPaths(
       this.bbsSession?.bbsPath ||
-        process.env.BBS_DATA_DIR ||
-        path.resolve(process.cwd())
+        boardRoot()
     );
   }
 

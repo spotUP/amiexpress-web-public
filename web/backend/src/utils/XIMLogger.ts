@@ -24,6 +24,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { getSystemTime } from '../utils/date-time.util';
 
+import { boardRoot } from './board-root.util';
 export type XIMMessageType =
   | 'JH_INIT' | 'JH_STAT' | 'JH_TERMINATE' | 'JH_HK' | 'JH_SM'
   | 'JH_GNS' | 'JH_PROMPT' | 'JH_MORE' | 'JH_REQUEST' | 'JH_IGNORE';
@@ -72,7 +73,7 @@ export class XIMLogger {
     this.amigaEnabled = process.env.XIM_DEBUG_AMIGA === '1';
 
     // Use BBS_DATA_DIR or project root for log file path
-    const bbsRoot = process.env.BBS_DATA_DIR || path.resolve(__dirname, '../../../../..');
+    const bbsRoot = boardRoot();
     this.logFile = process.env.XIM_LOG_FILE || path.join(bbsRoot, 'logs', 'xim-debug.json');
     this.amigaLogFile = process.env.XIM_AMIGA_LOG || path.join(bbsRoot, 'logs', 'xim-amiga.log');
 

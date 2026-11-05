@@ -1,6 +1,7 @@
 import Database from 'better-sqlite3';
 import path from 'path';
 import fs from 'fs';
+import { boardRoot } from '../utils/board-root.util';
 
 const DB_PATH = path.join(
   process.env.DATABASE_DIR || path.join(__dirname, '..', '..', '..', '..'),
@@ -72,7 +73,7 @@ const DEV_ARCHIVES_ROOT_DEFAULT = '~/Code/amiexpress_doors/Archives';
 export function resolveArchiveRoot(): string {
   const envRoot = process.env.DOOR_ARCHIVES_ROOT;
   if (envRoot) return envRoot;
-  const bbsDataDir = process.env.BBS_DATA_DIR || '/app/data/bbs';
+  const bbsDataDir = boardRoot();
   const serverRoot = path.join(bbsDataDir, 'Archives');
   if (fs.existsSync(serverRoot)) return serverRoot;
   return DEV_ARCHIVES_ROOT_DEFAULT;

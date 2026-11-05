@@ -12,6 +12,7 @@ import { doorScreenWidth } from '../amiga-emulation/xim/screen-width.util';
 import { getTodaysCalls } from '../utils/time-tracking.util';
 import { calcSizeText } from '../utils/byte-format.util';
 import { holdDoorOutput } from './palette-over-door';
+import { boardRoot } from '../utils/board-root.util';
 
 /**
  * AREXX Variable Storage
@@ -1434,7 +1435,7 @@ console.error('BBSGETDISKSPACE error:', error);
       const path = await import('path');
 
       // Read doors from doors directory
-      const doorsPath = path.join(process.cwd(), 'Doors');
+      const doorsPath = path.join(boardRoot(), 'Doors');
       const entries = await fs.readdir(doorsPath, { withFileTypes: true });
 
       const doors = entries
@@ -2181,7 +2182,7 @@ console.error('BBSCREATEDROPFILE error:', error);
         const { config } = require('../config');
         bbsRoot = String(config.get('dataDir') || '');
       } catch { /* config unavailable in test contexts */ }
-      if (!bbsRoot) bbsRoot = process.env.BBS_DATA_DIR || process.cwd();
+      if (!bbsRoot) bbsRoot = boardRoot();
 
       // Use AREXXFileIO's resolver if we have one — same Amiga-assign
       // mapping as open()/exists() (doors: → bbsRoot/Doors/, etc).
@@ -2622,7 +2623,7 @@ export class AREXXInterpreter {
     // File I/O context — bbsRoot resolves Amiga assigns (BBS:/DOORS:
     // etc) to host paths. Default: dataDir from config (the BBS root)
     // — same place door dispatcher resolves door scripts.
-    let bbsRoot = process.env.BBS_DATA_DIR || process.cwd();
+    let bbsRoot = boardRoot();
     try {
       const { config } = require('../config');
       bbsRoot = String(config.get('dataDir')) || bbsRoot;

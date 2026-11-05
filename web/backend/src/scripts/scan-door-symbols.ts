@@ -11,6 +11,7 @@
 import * as fs from "fs";
 import * as path from "path";
 import { HunkLoader, HunkLoaderError } from "../amiga-emulation/loader/HunkLoader";
+import { boardRoot } from "../utils/board-root.util";
 
 interface Row {
   file: string;
@@ -51,7 +52,7 @@ function walk(dir: string, out: string[]): void {
 
 function main(): void {
   const repoRoot = path.resolve(__dirname, "../../../..");
-  const doorsDir = path.join(repoRoot, "Doors");
+  const doorsDir = path.join(boardRoot(), "Doors");
   if (!fs.existsSync(doorsDir)) {
     console.error(`[ERROR] Doors directory not found: ${doorsDir}`);
     process.exit(1);

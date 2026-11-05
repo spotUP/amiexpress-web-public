@@ -307,7 +307,7 @@ debugLog("[LibraryManager] Creating ExecBase structure...");
     const libraryLoader = new LibraryLoader(this.emulator, undefined, this.kickstartRom);
     // Prefer real Amiga libraries when present on disk (repo / BBS root paths).
     // addSearchPath() unshifts, so add in reverse priority order.
-    libraryLoader.addSearchPath(path.join(process.cwd(), "Libs"));
+    libraryLoader.addSearchPath(path.join(boardRoot(), "Libs"));
     libraryLoader.addSearchPath(path.join(projectRoot, "System", "Libs"));
     libraryLoader.addSearchPath(path.join(projectRoot, "Libs"));
     this.execLibrary.setLibraryLoader(libraryLoader, true);

@@ -20,6 +20,7 @@ import { amigaGaps, doorOf } from '../instrumentation/amiga-gaps';
 import { getLvoName } from '../constants/lvo-names.generated';
 import { EMULATED_ATTN_FLAGS } from '../cpu/emulated-cpu';
 import { scanRomTags } from '../rom/rom-tags';
+import { boardRoot } from '../../utils/board-root.util';
 
 /**
  * ExecBase structure (616 bytes for V36+)
@@ -327,7 +328,7 @@ debugLog(
       // BBS_DATA_DIR, or this checkout's root - not one developer's
       // absolute path, which on any other machine names a directory that
       // does not exist and sends the debug log nowhere.
-      const bbsRoot = process.env.BBS_DATA_DIR || path.resolve(__dirname, '../../../../..');
+      const bbsRoot = boardRoot();
       const logFile = path.join(bbsRoot, "logs", "backend.log");
       const line = `[ExecDebug] ${getSystemTime().toISOString()} ${message}\n`;
       fs.appendFileSync(logFile, line, { encoding: "utf8" });
@@ -2668,7 +2669,7 @@ debugLog(`[ExecLibrary] Using fallback manual loader`);
       } catch (err) {
         // config not available in some test contexts
       }
-      candidates.push(path.join(process.cwd(), "Libs", "AEDoor.library"));
+      candidates.push(path.join(boardRoot(), "Libs", "AEDoor.library"));
 
       const libPath = candidates.find((p) => amigafs.existsSync(p));
 

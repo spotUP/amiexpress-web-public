@@ -100,8 +100,8 @@ export class ConfigManager {
       // boardRoot() returns this and nothing else. BBS_DATA_DIR is the
       // container's board volume, BBS_ROOT what a host sets when it keeps the
       // board elsewhere, and the repo tree is dev (the checkout IS a board).
-      // (__dirname is web/backend/src, so ../../.. reaches the repo root)
-      dataDir: process.env.BBS_DATA_DIR || process.env.BBS_ROOT || path.resolve(__dirname, '../../..'),
+      // (__dirname is web/backend/src, so ../../../board is <repo>/board)
+      dataDir: process.env.BBS_DATA_DIR || process.env.BBS_ROOT || path.resolve(__dirname, '../../../board'),
 
       // Time Settings. The board's time ZONE is the process's TZ
       // (docker-compose.yml, BBS_TIMEZONE); a setting here was never read.

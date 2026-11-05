@@ -36,6 +36,7 @@ import { endRawTransfer } from '../../utils/raw-transfer-teardown.util';
 import { emitText } from '../../utils/output.util';
 import { endUpload, awaitUploadEnd, type UploadStat } from '../../services/upload-end.service';
 import { getTodaysCalls } from '../../utils/time-tracking.util';
+import { boardRoot } from '../../utils/board-root.util';
 
 interface Conference {
   id: number;
@@ -265,8 +266,7 @@ export async function fileReceivedUploads(
 export function startZmodemUpload(socket: any, session: BBSSession): void {
   const bbsRoot =
     (session as any).bbsPath ||
-    process.env.BBS_DATA_DIR ||
-    path.resolve(process.cwd());
+    boardRoot();
   const paths = new BBSPaths(bbsRoot);
   const playpen = paths.node(session.nodeId || 0).playpen();
 

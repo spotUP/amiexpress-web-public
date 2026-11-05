@@ -94,6 +94,7 @@ import { handlePageSysopCommand } from './command-handler/page-sysop-command';
 import { processBatchFile } from '../server/file-socket-handlers';
 import { config } from '../config';
 import { loadBBSConfig } from '../services/bbs-config-file.service';
+import { boardRoot } from '../utils/board-root.util';
 import {
   handleLiveChatCommand
 } from './chat/chat-commands.handler';
@@ -1513,7 +1514,7 @@ console.log(' Graphics mode set:', session.petsciiMode ? 'PETSCII' : session.tex
           const { loadBBSConfig } = require('../services/bbs-config-file.service');
           const path = require('path');
           const fsSync = require('fs');
-          const bbsRoot = process.env.BBS_DATA_DIR || path.resolve(__dirname, '../../..');
+          const bbsRoot = boardRoot();
           let diskCfg: any = {};
           try { diskCfg = loadBBSConfig(bbsRoot); } catch { /* non-fatal */ }
           const sysPass = (diskCfg.system_password || '').trim();
@@ -1599,7 +1600,7 @@ console.log(' Graphics mode set:', session.petsciiMode ? 'PETSCII' : session.tex
         // Read system password fresh on each attempt
         const { loadBBSConfig } = require('../services/bbs-config-file.service');
         const path = require('path');
-        const bbsRoot = process.env.BBS_DATA_DIR || path.resolve(__dirname, '../../..');
+        const bbsRoot = boardRoot();
         let diskCfg2: any = {};
         try { diskCfg2 = loadBBSConfig(bbsRoot); } catch { /* non-fatal */ }
         const sysPass2 = (diskCfg2.system_password || '').trim();
@@ -2756,7 +2757,7 @@ console.log('[handleCommand] Display flow branch, subState=', session.subState);
     // Apply filename capitalization if configured (express.e:19253)
     // Reads LVL_CAPITOLS_in_FILE from bbsConfig.info
     const { loadBBSConfig } = require('../services/bbs-config-file.service');
-    const bbsRoot = require('../config').config.get('bbsRoot') || process.cwd();
+    const bbsRoot = boardRoot();
     const bbsConfig = loadBBSConfig(bbsRoot);
     const capitalizeFilenames = bbsConfig.capitalize_filenames ?? false; // Default to false
     const finalFilename = capitalizeFilenames ? input.toUpperCase() : input;

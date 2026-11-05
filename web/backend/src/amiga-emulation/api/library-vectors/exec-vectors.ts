@@ -11,6 +11,7 @@ import * as fs from "fs";
 import * as path from "path";
 import { getSystemTime } from '../../../utils/date-time.util';
 import { DOOR_EXIT_TRAP_ADDR } from '../../memory-map';
+import { boardRoot } from '../../../utils/board-root.util';
 
 // PERFORMANCE: Debug logging disabled by default - synchronous file I/O is slow
 const TRAP_DEBUG_ENABLED = process.env.DEBUG_TRAP === '1';
@@ -27,7 +28,7 @@ function logTrap(message: string): void {
     // BBS_DATA_DIR, or this checkout's root - not one developer's
     // absolute path, which on any other machine names a directory that
     // does not exist and sends the debug log nowhere.
-    const bbsRoot = process.env.BBS_DATA_DIR || path.resolve(__dirname, '../../../../../..');
+    const bbsRoot = boardRoot();
     const logFile = path.join(bbsRoot, "logs", "backend.log");
     const line = `[TrapDebug] ${getSystemTime().toISOString()} ${message}\n`;
     fs.appendFileSync(logFile, line, { encoding: "utf8" });

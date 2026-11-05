@@ -127,7 +127,7 @@ export function corpusIndex(opts: CorpusOptions, confId: number | undefined): { 
   const userGuide = path.join(opts.repoRoot, 'Documentation', '1-Users', 'USER_GUIDE.md');
   const sysopGuide = path.join(opts.repoRoot, 'Documentation', '2-Sysops', 'SYSOP_GUIDE.md');
   const bbsHelp = path.join(opts.bbsRoot, 'BBSHelp.txt');
-  const menu = path.join(opts.repoRoot, 'Screens', 'MENU.TXT');
+  const menu = path.join(opts.bbsRoot, 'Screens', 'MENU.TXT');
   const bulls = bulletinFiles(opts.bbsRoot, confId);
   const key = sourceStamp([userGuide, sysopGuide, bbsHelp, menu, ...bulls]);
   if (index && index.key === key) return index;

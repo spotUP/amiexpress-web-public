@@ -25,7 +25,7 @@ import { SysopDebugUtil, DebugSeverity } from '../../utils/sysop-debug.util';
 import { ximLogger } from '../../utils/XIMLogger';
 
 // Debug log path - uses BBS_DATA_DIR env var or falls back to cwd
-const BB_DEBUG_LOG_PATH = path.join(process.env.BBS_DATA_DIR || process.cwd(), 'logs', 'bb-conflocal-debug.log');
+const BB_DEBUG_LOG_PATH = path.join(boardRoot(), 'logs', 'bb-conflocal-debug.log');
 import { debugLog, isDebugEnabled } from '../../utils/debug-log';
 import { doorScreenWidth, doorScreenHeight } from './screen-width.util';
 import { boardRoot } from '../../utils/board-root.util';

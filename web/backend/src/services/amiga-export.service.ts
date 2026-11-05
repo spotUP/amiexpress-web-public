@@ -10,6 +10,7 @@ import * as path from 'path';
 import type { Database } from '../database';
 import type { AmigaBBSArchive, AmigaUserData, AmigaConference, AmigaBBSConfig } from '../types/amiga-import';
 import { createLhaArchive, isLhaAvailable } from '../utils/lha-archiver.util';
+import { boardRoot } from '../utils/board-root.util';
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const AdmZip = require('adm-zip');
@@ -361,7 +362,7 @@ console.error(`Failed to get files from conference ${conf.id}:`, error);
     await fs.mkdir(bulletinsDir, { recursive: true });
 
     // Copy bulletin files from Conf1/Bulletins
-    const sourceBulletinsDir = path.join(process.cwd(), 'data', 'bbs', 'BBS', 'Conf1', 'Bulletins');
+    const sourceBulletinsDir = path.join(boardRoot(), 'Conf1', 'Bulletins');
 
     try {
       const files = await fs.readdir(sourceBulletinsDir);
@@ -391,7 +392,7 @@ console.error(`Failed to get files from conference ${conf.id}:`, error);
     await fs.mkdir(screensDir, { recursive: true });
 
     // Copy screen files from Screens
-    const sourceScreensDir = path.join(process.cwd(), 'data', 'bbs', 'BBS', 'Screens');
+    const sourceScreensDir = path.join(boardRoot(), 'Screens');
 
     try {
       const files = await fs.readdir(sourceScreensDir);

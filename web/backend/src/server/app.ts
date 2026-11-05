@@ -16,6 +16,7 @@ import { isParked } from './session-parking';
 import { ftpCallersOnline } from '../ftp/ftp-presence';
 import { batchQueueDepth } from '../services/batch-scheduler';
 import { BBSState } from '../constants/bbs-states';
+import { boardRoot } from '../utils/board-root.util';
 
 /**
  * Express Application Setup
@@ -382,7 +383,7 @@ app.use('/api/door-admin', express.json({ limit: '16kb' }), doorAdminBodyError, 
 if (process.env.NODE_ENV !== 'production') {
   try {
     const { createDebugMcpRouter } = require('../debug/debug-mcp.routes');
-    const bbsRoot = process.env.BBS_DATA_DIR || path.resolve(__dirname, '../../../..');
+    const bbsRoot = boardRoot();
     app.use('/debug/api', createDebugMcpRouter(bbsRoot));
     console.log('[debug-mcp] endpoints mounted at /debug/api (NODE_ENV=' + (process.env.NODE_ENV || 'unset') + ')');
   } catch (err) {

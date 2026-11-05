@@ -10,9 +10,10 @@ import * as path from 'path';
 import * as amigafs from '../../utils/amigafs';
 import { debugLog, isDebugEnabled } from '../../utils/debug-log';
 import { getSystemTime } from '../../utils/date-time.util';
+import { boardRoot } from '../../utils/board-root.util';
 
 // Debug log path - uses BBS_DATA_DIR env var or falls back to cwd
-const DEBUG_LOG_PATH = path.join(process.env.BBS_DATA_DIR || process.cwd(), 'logs', 'filehandle-debug.log');
+const DEBUG_LOG_PATH = path.join(boardRoot(), 'logs', 'filehandle-debug.log');
 
 // OFF unless explicitly switched on, like DEBUG_68K and XIM_DEBUG.
 //

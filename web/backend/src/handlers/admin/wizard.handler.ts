@@ -7,6 +7,7 @@
 import { Request, Response } from 'express';
 import * as path from 'path';
 import * as fs from 'fs';
+import { boardRoot } from '../../utils/board-root.util';
 
 interface EnhancementRequest {
   rawPrompt: string;
@@ -177,7 +178,7 @@ export async function generateGame(req: Request, res: Response) {
     // Go up to project root: src/handlers -> src -> backend -> web -> project root
     const projectRoot = path.resolve(__dirname, '../../../..');
     const sdkPath = path.join(projectRoot, 'sdk');
-    const doorsPath = path.join(projectRoot, 'doors');
+    const doorsPath = path.join(boardRoot(), 'Doors');
 
 console.log('[wizard.handler] Project root:', projectRoot);
 console.log('[wizard.handler] SDK path:', sdkPath);

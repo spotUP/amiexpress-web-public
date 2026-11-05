@@ -67,6 +67,7 @@ export type { DoorListEntry };
 // The door-facing shapes live in ./bbs-api-types (2026-09-28, file size);
 // re-exported so every existing import from here still resolves.
 import type { BBSUser, BBSConference, BBSNode, BBSSystemInfo, UiSound } from './bbs-api-types';
+import { boardRoot } from '../utils/board-root.util';
 export type { BBSUser, BBSConference, BBSNode, BBSSystemInfo, UiSound };
 
 /**
@@ -1710,7 +1711,7 @@ console.log(`[BBSApi.executeCommand] Queued command for after door exit: ${comma
    * where the BBS root is.
    */
   async getDoorList(): Promise<DoorListEntry[]> {
-    const bbsRoot = (this.session as any)?.dataDir || process.env.BBS_DATA_DIR || process.cwd();
+    const bbsRoot = (this.session as any)?.dataDir || boardRoot();
     return buildDoorList(bbsRoot);
   }
 

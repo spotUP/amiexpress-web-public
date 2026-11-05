@@ -21,6 +21,7 @@ import { report } from '../../achievements/reporter';
 import { endRawTransfer } from '../../utils/raw-transfer-teardown.util';
 import { joinedConf } from '../../utils/joined-conf.util';
 import type { InternalCommandResult } from '../../constants/command-results';
+import { boardRoot } from '../../utils/board-root.util';
 
 // Dependencies (injected)
 let _displayUploadInterface: any;
@@ -104,8 +105,7 @@ export async function handleZmodemUploadCommand(socket: any, session: BBSSession
   // Start ZMODEM receive directly into the node playpen (matches express.e uploadaFile -> fileReceive path).
   const bbsRoot =
     (session as any).bbsPath ||
-    process.env.BBS_DATA_DIR ||
-    path.resolve(process.cwd());
+    boardRoot();
   const paths = new BBSPaths(bbsRoot);
   const playpen = paths.node(session.nodeId || 0).playpen();
   try {

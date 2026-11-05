@@ -1,5 +1,6 @@
 import * as path from 'path';
 import { randomUUID } from 'crypto';
+import { boardRoot } from '../utils/board-root.util';
 
 /**
  * WhipService (WHIP mirror bot).
@@ -73,7 +74,7 @@ function doorDistDir(): string {
   // WHIP_DOOR_DIST_DIR is the test seam: points the service at a fixture
   // door tree instead of the board's.
   if (process.env.WHIP_DOOR_DIST_DIR) return process.env.WHIP_DOOR_DIST_DIR;
-  const bbsRoot = process.env.BBS_DATA_DIR || path.resolve(__dirname, '../../../..');
+  const bbsRoot = boardRoot();
   return path.join(bbsRoot, 'Doors', 'whip', 'dist');
 }
 

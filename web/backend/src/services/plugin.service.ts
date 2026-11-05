@@ -2,6 +2,7 @@ import { spawn } from 'child_process';
 import * as fs from 'fs';
 import * as http from 'http';
 import * as path from 'path';
+import { boardRoot } from '../utils/board-root.util';
 
 /**
  * Bot plugin registry + supervision (bot plugin Phase 1).
@@ -54,7 +55,7 @@ export interface ComposeRunResult {
 }
 
 function bbsRoot(): string {
-  return process.env.BBS_DATA_DIR || path.resolve(__dirname, '../../../..');
+  return boardRoot();
 }
 
 function botsDir(): string {

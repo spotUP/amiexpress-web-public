@@ -18,6 +18,7 @@ import * as path from 'path';
 import { userFileManager, type UserFileStruct, type UserKeysFileStruct } from './UserFileManager';
 import { User } from '../types';
 import { sessionRecords } from './load-account';
+import { boardRoot } from '../utils/board-root.util';
 
 /**
  * Manages node status files for door compatibility
@@ -196,5 +197,5 @@ console.log(`[NodeFileManager] Deleted node${nodeId}.userkeys`);
 }
 
 // Export singleton instance - use BBS_DATA_DIR env var for proper path resolution
-const bbsDataDir = process.env.BBS_DATA_DIR || './data/bbs';
+const bbsDataDir = boardRoot();
 export const nodeFileManager = new NodeFileManager(bbsDataDir);

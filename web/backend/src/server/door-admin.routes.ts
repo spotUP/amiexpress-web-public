@@ -25,6 +25,7 @@ import { isAllowed, resolveDoorDir, resolveDoorFile, walkDoorDir } from '../door
 import { deleteDoorAndRefresh } from '../doors/door-delete';
 import { reloadDoorRegistry } from '../doors/reload-door-registry';
 import { FIELD_CAPS, renderRows, sanitizeField } from './door-admin-text';
+import { boardRoot } from '../utils/board-root.util';
 
 export const doorAdminRouter = express.Router();
 
@@ -77,7 +78,7 @@ doorAdminRouter.use((req: Request, res: Response, next: NextFunction) => {
 
 /** Where this board's files live. The route has no session to ask. */
 function resolveBbsRoot(): string {
-  return process.env.BBS_DATA_DIR || process.cwd();
+  return boardRoot();
 }
 
 /**
@@ -459,7 +460,7 @@ doorAdminRouter.post('/installed', (req: Request, res: Response) => {
     return;
   }
 
-  const bbsRoot = process.env.BBS_DATA_DIR || process.cwd();
+  const bbsRoot = boardRoot();
   recordDoorInstall({
     bbsRoot,
     command: command.toUpperCase(),

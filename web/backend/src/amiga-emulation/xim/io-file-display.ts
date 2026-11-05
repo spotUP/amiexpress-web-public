@@ -19,6 +19,7 @@ import { foldScreenBlocks } from '../../screens/adapt-ansi-to-forty';
 import { c64AdapterFor } from '../../server/c64-door-adapter';
 import { C64_COLUMNS } from './screen-width.util';
 import { narrowVariants } from '../../utils/narrow-art.util';
+import { boardRoot } from '../../utils/board-root.util';
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const iconv = require('iconv-lite');
 
@@ -309,8 +310,7 @@ function getBbsRoot(self: any): string {
   return (
     (self.bbsSession as any)?.dataDir ||
     self.bbsSession?.bbsPath ||
-    process.env.BBS_DATA_DIR ||
-    path.resolve(process.cwd())
+    boardRoot()
   );
 }
 

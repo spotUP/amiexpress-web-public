@@ -11,6 +11,7 @@ import { DEFAULT_PAUSE_LINES } from '../../screens/screen-rows';
 import { XIMMessage } from './types';
 import { getSystemTime } from '../../utils/date-time.util';
 import { debugLog } from '../../utils/debug-log';
+import { boardRoot } from '../../utils/board-root.util';
 
 /**
  * Handle PG_UD (User Data)
@@ -93,7 +94,7 @@ debugLog(`[XIMIOHandler] PG_US: Request type ${msg.data}`);
       resultString = 'PGDOORS:';
       break;
     case 8: // BBS location path
-      resultString = bbsSession.bbsPath || process.env.BBS_DATA_DIR || process.cwd();
+      resultString = bbsSession.bbsPath || boardRoot();
       break;
     case 9: // Long date format
       const date = getSystemTime();

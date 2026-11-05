@@ -26,6 +26,7 @@ import { dirEntryRows, isNarrow } from '../../utils/table-format.util';
 import { sessionColumns } from '../../utils/door-min-columns.util';
 import { getFileViewLayout } from '../../services/file-layout.service';
 import { renderFileBlock, renderFileRow, type FileRecordFields } from '@amiexpress/bbs-door-sdk/petscii/frame';
+import { boardRoot } from '../../utils/board-root.util';
 
 /**
  * Display file list for a conference
@@ -811,7 +812,7 @@ console.log(`[NewFiles] Could not read ${dirInfo.path}: ${error.message}`);
 
     // express.e:340-350 - Read HOLD_ACCESS_LEVEL from bbsConfig.info if present, default to 201
     const { loadBBSConfig } = require('../../services/bbs-config-file.service');
-    const bbsRoot = require('../../config').config.get('bbsRoot') || process.cwd();
+    const bbsRoot = boardRoot();
     const bbsConfig = loadBBSConfig(bbsRoot);
     const holdAccessLevel = bbsConfig.hold_access_level ?? 201; // Default from express.e:346
 

@@ -23,7 +23,7 @@ import { narrowVariants } from "../../utils/narrow-art.util";
 import type { FileShadowProvider } from "./file-shadow";
 
 // Debug log path - uses BBS_DATA_DIR env var or falls back to cwd
-const FGETS_DEBUG_LOG = path.join(process.env.BBS_DATA_DIR || process.cwd(), 'logs', 'fgets-debug.log');
+const FGETS_DEBUG_LOG = path.join(boardRoot(), 'logs', 'fgets-debug.log');
 
 // Import modular DOS components
 import type { HostFacts } from '../utils/host-vars';
