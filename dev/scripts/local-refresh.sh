@@ -51,8 +51,18 @@ revision_of() {
   curl -s -m 8 "$1" 2>/dev/null | sed -n 's/.*"revision":"\([^"]*\)".*/\1/p'
 }
 
+# The shared checkout (the main worktree). Its node_modules back the mirror's.
+SHARED="$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)")"
+
 stop_stack() {
   ./dev/scripts/kill-servers.sh >/dev/null 2>&1
+  # A stack started from the shared checkout holds the same ports, and the
+  # mirror's kill-servers.sh leaves it alone (it only kills its own root).
+  # Localhost runs from the mirror, so that stack is an orphan: stop it with
+  # the shared checkout's own kill-servers.sh, which is scoped to that root.
+  if [ "$SHARED" != "$ROOT" ] && [ -x "$SHARED/dev/scripts/kill-servers.sh" ]; then
+    "$SHARED/dev/scripts/kill-servers.sh" >/dev/null 2>&1
+  fi
   local left
   left="$(lsof -ti:3001 -ti:${SDK_PREVIEW_PORT:-8080} -ti:3002 2>/dev/null | wc -l | tr -d ' ')"
   [ "$left" = "0" ] || fail "ports 3001/8080/3002 are still held after kill-servers.sh ($left pids)"
@@ -85,7 +95,6 @@ HEAD_SHA="$(git rev-parse HEAD)"
 
 # The node_modules links into the shared checkout. Nothing else makes them,
 # and a build below fails on a missing module without them.
-SHARED="$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)")"
 ./dev/scripts/local-mirror-links.sh "$SHARED" "$ROOT" || fail "cannot link the mirror's node_modules into $SHARED"
 
 # --- rebuild only the bundles whose sources changed since the last build ----
