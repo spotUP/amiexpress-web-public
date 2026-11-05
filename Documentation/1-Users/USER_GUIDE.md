@@ -12,7 +12,8 @@
 8. [Using Doors](#using-doors)
 9. [Chat & Communication](#chat--communication)
 10. [Customization](#customization)
-11. [Keyboard Shortcuts](#keyboard-shortcuts)
+11. [Commands and keys](#commands-and-keys)
+12. [Keyboard Shortcuts](#keyboard-shortcuts)
 
 ---
 
@@ -413,6 +414,40 @@ Display AmiExpress version, date, and registration info.
 ### Uptime (`UP`)
 
 Show when the node was last restarted.
+
+---
+
+## Commands and keys
+
+Every command below is answered by the board's command switch (`web/backend/src/handlers/command.handler.ts`). Type the command and press Enter.
+
+### Commands a caller types
+
+| Group | Commands |
+|-------|----------|
+| Messages | `R` read, `E` enter message (`EALL` to everyone), `MS` mail scan, `NM` node management, `CM` conference maintenance, `C` comment to sysop |
+| Files | `F` list, `N` new files, `FR` reverse list, `FI` info on one record of the last listing, `FM` file maintenance, `FS` file status, `D` download, `DS` download with status, `U` upload, `RZ` Zmodem upload, `V` view a text file, `Z` zippy text search, `A` flag files |
+| Conferences | `J` join conference, `JM` join message base, `CF` conference flags, `<` / `>` previous / next conference, `<<` / `>>` previous / next message base |
+| Chat | `O` page sysop, `OLM` online message, `WHO` who is online, `WHD` who is online (detailed), `Q` quiet node, `LIVECHAT`, `ROOM` |
+| Account and status | `W` user parameters, `S` your statistics, `T` time and date, `UP` node uptime, `VER` version, `VO` voting booth, `M` ANSI colour toggle, `X` expert mode toggle, `COLOURS` the sixteen colours of your PETSCII screen |
+| Session | `?` show the menu, `H` help, `B` bulletins, `GR` greetings, `RL` relogon, `G` goodbye |
+| Doors and help | `DOORS` door menu (arrow keys), `AG` AmigaGuide reader, `^` help files, `TTX`, `LINKDISCORD` (Discord link code) |
+| Sysop only | `0` remote shell, `1` account editing, `2` callers log, `3` edit directory files, `4` edit any file, `5` change directory, `US` sysop upload, `VS` sysop view, `WEBHOOK` |
+
+Add `NS` after a listing command (for example `B 12 NS`) to show it non-stop.
+
+### Navigation keys
+
+| Key | Where | Effect |
+|-----|-------|--------|
+| Up / Down | door menu, command history, AmigaGuide | move selection, recall previous commands, scroll |
+| Left / Right, Home, End | input lines | move the cursor |
+| Page Up / Page Down | AmigaGuide | scroll a page |
+| Space / Enter / Q | paged text | next page / next line / quit |
+| Ctrl-C | any operation | abort |
+| Ctrl-B | main prompt | clear command history |
+
+Function keys are sysop keys: F1 toggles chat, F7 toggles page availability (see Keyboard Shortcuts below).
 
 ---
 

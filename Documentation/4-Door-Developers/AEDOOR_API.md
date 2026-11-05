@@ -1,5 +1,5 @@
 # AEDoor API Reference (Summary)
-**In-depth AEDoor offsets and library notes now live in `archive/AEDoor_LIBRARY_NOTES.md` and the disassembly docs.**
+**In-depth AEDoor offsets and library notes now live in `AEDOOR_API.md` and the disassembly dumps.**
 
 ## 1. AEDoor Basics
 - AmiExpress doors talk to the BBS through `DoorInfo`, `INIT`, `STAT`, `DONE`, and `LOGOFF` messages; the structure offsets mirror express.e and are documented in the archived disassembly.
@@ -9,7 +9,7 @@
 ## 2. Current Coverage
 - JH calls (e.g., `JH_REGISTER`, `JH_SHUTDOWN`, `JH_WRITE`) implement the same flow as express.e, ensuring our QuickKey, output, and line input behavior are identical.
 - `TWA` (time waiting) and `STAT` commands now respond exactly as the old BBS did, so doors paging or waiting for input see the known values.
-- The door manager mirrors `DoorControl` structures (use `archive/Bulls_DISASM_NOTES.md` to match the original offsets).
+- The door manager mirrors `DoorControl` structures (match the original offsets against the disassembly dumps).
 
 ## 3. Troubleshooting AEDoor Flows
 - If a door exits silently, inspect the `/tmp/bulls.out` log to ensure it received the expected `JH_*` commands and that the reply port was valid.

@@ -1,5 +1,7 @@
 # Python Door Development Guide
 
+Last checked: 2026-11-05 (content may predate current code).
+
 ## Overview
 
 AmiExpress-Web BBS now supports **Python doors** alongside Amiga and TypeScript doors. Python doors are executed via the Python 3 interpreter with full BBS context access through environment variables and drop files.
