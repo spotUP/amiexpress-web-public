@@ -19,6 +19,10 @@ set -uo pipefail
 
 SHARED="${1:?usage: local-mirror-links.sh <shared-checkout> <mirror>}"
 MIRROR="${2:?usage: local-mirror-links.sh <shared-checkout> <mirror>}"
+# Every link target is absolute: a relative one ("./sdk", from a call with
+# ".") resolves against the link's own directory and points at nothing.
+SHARED="$(cd "$SHARED" && pwd)" || { echo "[ERROR] no such directory: $1" >&2; exit 1; }
+MIRROR="$(cd "$MIRROR" && pwd)" || { echo "[ERROR] no such directory: $2" >&2; exit 1; }
 
 # The package directories the mirror builds or runs, doors added below.
 DIRS=(

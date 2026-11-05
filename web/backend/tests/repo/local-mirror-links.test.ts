@@ -44,6 +44,13 @@ describe('local-mirror-links.sh', () => {
     expect(fs.readlinkSync(path.join(mirror, 'web/backend/node_modules/@amiexpress/other'))).toBe(path.join(shared, 'web/backend/node_modules/@amiexpress/other'));
   });
 
+  it('makes absolute links when called with relative paths', () => {
+    const { shared, mirror } = makeTrees();
+    execFileSync('bash', [SCRIPT, path.relative(mirror, shared), '.'], { cwd: mirror, encoding: 'utf8' });
+    expect(fs.readlinkSync(path.join(mirror, 'web/backend/node_modules/@amiexpress/bbs-door-sdk'))).toBe(fs.realpathSync(path.join(mirror, 'sdk')));
+    expect(fs.existsSync(path.join(mirror, 'sdk/node_modules/events'))).toBe(true);
+  });
+
   it('fills in a partly emptied node_modules and leaves existing entries alone', () => {
     const { shared, mirror } = makeTrees();
     fs.mkdirSync(path.join(mirror, 'web/backend/node_modules/express'), { recursive: true });
