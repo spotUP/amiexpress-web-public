@@ -203,11 +203,11 @@ Project-specific evidence chain (the global "no guessing" rule applies; this sec
 
 ### 5. TypeScript Doors Must Be Built — dist/ Is What Runs
 
-Doors in `Doors/` load `dist/index.js`, **not the TypeScript source**. Editing `.ts` files has **zero effect** until `npm run build` is run and the resulting `dist/` files are committed.
+Doors in `board/Doors/` load `dist/index.js`, **not the TypeScript source**. Editing `.ts` files has **zero effect** until `npm run build` is run and the resulting `dist/` files are committed.
 
 **Every change to a TypeScript door requires:**
-1. `cd Doors/{name} && npm run build` — rebuild dist/
-2. `git add Doors/{name}/dist/` — stage the compiled output
+1. `cd board/Doors/{name} && npm run build` — rebuild dist/
+2. `git add board/Doors/{name}/dist/` — stage the compiled output
 3. Commit both the `.ts` source and the `dist/` together
 
 **Enforcement:**
@@ -443,7 +443,7 @@ AmiExpress-Web: TypeScript port of the Amiga AmiExpress BBS. 68K emulation via M
 - `web/backend` — Node/TS server
 - `web/frontend` — React / xterm.js
 - `sdk` — Door Dev Kit
-- `Doors/` — all doors (68K via MOIRA + TypeScript via SDK)
+- `board/Doors/` — all doors (68K via MOIRA + TypeScript via SDK)
 
 Features: 68K emulation, AREXX (1905 lines, 40+ APIs), Import/Export, Telnet:2323, SSH:2222, WebSocket, QWK/REP, multi-node chat.
 
@@ -459,7 +459,7 @@ Use only the lifecycle scripts (`./dev/scripts/start-servers.sh` / `kill-servers
 
 ### New Doors
 
-Always develop directly in `Doors/`. Never in `web/backend/src/doors/` or `sdk/doors/`. For TypeScript doors, add `PRELOADER=YES` to the `.info` file for the animated load spinner. See `Documentation/4-Door-Developers/TYPESCRIPT_DOOR_GUIDE.md`.
+Always develop directly in `board/Doors/`. Never in `web/backend/src/doors/` or `sdk/doors/`. For TypeScript doors, add `PRELOADER=YES` to the `.info` file for the animated load spinner. See `Documentation/4-Door-Developers/TYPESCRIPT_DOOR_GUIDE.md`.
 
 ### Testing
 
