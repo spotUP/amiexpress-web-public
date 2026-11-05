@@ -197,6 +197,20 @@ describe('door settings', () => {
       expect(resolveBbsRoot(doorDist)).toBe(bbsRoot);
     });
 
+    it('finds the board under <repo>/board from a door outside it', () => {
+      const repo = fs.mkdtempSync(path.join(os.tmpdir(), 'repo-'));
+      try {
+        fs.mkdirSync(path.join(repo, 'board', 'Commands'), { recursive: true });
+        fs.writeFileSync(path.join(repo, 'board', 'Commands', 'BBSCmd'), '');
+        const tool = path.join(repo, 'sdk', 'tests');
+        fs.mkdirSync(tool, { recursive: true });
+
+        expect(resolveBbsRoot(tool)).toBe(path.join(repo, 'board'));
+      } finally {
+        fs.rmSync(repo, { recursive: true, force: true });
+      }
+    });
+
     it('takes BBS_DATA_DIR when the container sets it', () => {
       process.env.BBS_DATA_DIR = bbsRoot;
 

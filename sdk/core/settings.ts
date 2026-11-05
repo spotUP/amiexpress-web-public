@@ -87,6 +87,10 @@ export function resolveBbsRoot(startDir: string): string {
   let dir = path.resolve(startDir);
   for (let depth = 0; depth <= BBS_ROOT_SEARCH_DEPTH; depth++) {
     if (fs.existsSync(path.join(dir, 'Commands', 'BBSCmd'))) return dir;
+    // A checkout keeps its board under <repo>/board (P8): a door outside the
+    // board (SDK tests, tools) walks up to the repo root and finds it here.
+    const nested = path.join(dir, 'board');
+    if (fs.existsSync(path.join(nested, 'Commands', 'BBSCmd'))) return nested;
     const parent = path.dirname(dir);
     if (parent === dir) break;
     dir = parent;
