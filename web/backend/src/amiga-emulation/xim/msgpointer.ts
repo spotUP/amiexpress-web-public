@@ -55,7 +55,7 @@
  * Reply in `msg.data`: 1 stored, 0 refused or unknown.
  *
  * This is written up for the AmiExpress author as a proposed protocol
- * addition; see `Documentation/4-Door-Developers/PROPOSED_SETPOINTER.md`.
+ * addition; see `thoughts/shared/plans/2026-09-13-proposed-setpointer.md`.
  */
 import { loadMsgPointers, saveMsgPointers } from '../../utils/message-pointers.util';
 

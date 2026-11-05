@@ -128,7 +128,7 @@ export function startForgetMe(socket: any, session: BBSSession): void {
   emitText(socket, '\r\n');
   emitText(socket, AnsiUtil.colorize('WARNING: this action is irreversible.\r\n', 'red'));
   emitText(socket, 'Your profile, posts, and session logs will be scrubbed.\r\n');
-  emitText(socket, 'See Documentation/PRIVACY.md for details.\r\n');
+  emitText(socket, 'See Documentation/1-Users/PRIVACY.md for details.\r\n');
   emitText(socket, '\r\n');
   emitText(socket, AnsiUtil.colorize('Type ', 'white'));
   emitText(socket, AnsiUtil.colorize('YES ERASE', 'red'));

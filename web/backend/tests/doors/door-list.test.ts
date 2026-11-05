@@ -5,7 +5,7 @@
  * DoorRepo C door reads (GET /api/door-admin/installed) and every in-process
  * door build their list from the same code. The spec's rule is that two front
  * ends must never carry two rules
- * (docs/superpowers/specs/2026-08-30-doorrepo-parity-design.md:171), and there
+ * (thoughts/shared/plans/2026-08-30-doorrepo-parity-design.md:171), and there
  * are three callers now.
  *
  * Real directories on disk, not mocks: what these assertions are about is

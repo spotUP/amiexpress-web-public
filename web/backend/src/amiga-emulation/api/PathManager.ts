@@ -2,7 +2,7 @@
  * PathManager - Maps AmigaDOS logical paths to system filesystem paths
  *
  * Based on amitools/vamos/path/PathManager.py
- * See: Documentation/3-Developers/AMIGAOS_DOS_FILE_IO_IMPLEMENTATION_GUIDE.md
+ * See: Documentation/5-Reference/DOS_FILE_IO.md
  */
 
 import * as path from 'path';

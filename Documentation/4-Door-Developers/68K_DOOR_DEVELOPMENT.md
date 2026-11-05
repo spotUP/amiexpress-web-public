@@ -108,7 +108,7 @@ Restart the BBS and type `MYDOOR` at the prompt.
 
 For diagnosis + regression coverage of a new 68K door (probe LVOs/XIM
 ops, freeze a golden, mine cluster reps), see
-[../3-Developers/DOOR_TESTING.md](../3-Developers/DOOR_TESTING.md).
+[../3-Developers/DOOR_TESTING.md](DOOR_TESTING.md).
 
 ---
 
@@ -277,7 +277,7 @@ See `sdk/68k/doors/cplistan/` for a complete working example featuring:
 
 ## 1. Workflow
 - Door runs use the harness `node web/backend/dist/scripts/run-amiga-door.js <door> <node> <command>` and log to `logs/door-68k.log`, `/tmp/bulls.out`, and `/tmp/*.log`. Use `DEBUG_XIM_OUTPUT=1` for extra tracing.
-- The backend follows express.e's AEDoor/doorInfo expectations; consult `archive/Bulls_DISASM_NOTES.md` and `archive/AEDoor_LIBRARY_NOTES.md` for offsets.
+- The backend follows express.e's AEDoor/doorInfo expectations; consult `AEDOOR_API.md` for offsets.
 - When parsing Dir files, the system now honors art lines by storing them in the continuation block; art lines no longer truncate before ASCII logos.
 
 ## 2. Protocols & Parsers

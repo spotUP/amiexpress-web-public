@@ -125,6 +125,6 @@ export class CommandHandler {
 
 ## See Also
 
-- [CLEAN_ARCHITECTURE.md](../../../../../Documentation/3-Developers/CLEAN_ARCHITECTURE.md) - Full guide
-- [BACKEND_ARCHITECTURE.md](../../../../../Documentation/3-Developers/BACKEND_ARCHITECTURE.md) - Architecture overview
+- [CLEAN_ARCHITECTURE.md](../../../../../Documentation/3-Developers/ARCHITECTURE.md) - Full guide
+- [BACKEND_ARCHITECTURE.md](../../../../../Documentation/3-Developers/ARCHITECTURE.md) - Architecture overview
 - `services/use-cases/` - Business logic layer

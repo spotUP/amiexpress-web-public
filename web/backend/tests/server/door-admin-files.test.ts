@@ -4,7 +4,7 @@
  * Against a real temp BBS root with real files and a real symlink, per the
  * spec's testing rule: "The filesystem is not mocked - the two failures this
  * work exists to fix were both 'the disk disagreed with the record'"
- * (docs/superpowers/specs/2026-08-30-doorrepo-parity-design.md:205).
+ * (thoughts/shared/plans/2026-08-30-doorrepo-parity-design.md:205).
  *
  * The assertion that matters most is the symlink one. `path.relative`
  * containment compares strings, and a link inside a door pointing out of it

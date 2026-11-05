@@ -994,4 +994,4 @@ element.position.width = newWidth;
 
 - [KEYBOARD_NAVIGATION.md](./KEYBOARD_NAVIGATION.md) - Keyboard shortcuts for panels
 - [NEO_BLESSED_COLOR_GUIDE.md](./NEO_BLESSED_COLOR_GUIDE.md) - Styling panels
-- [GAME_MODE_AND_MOUSE.md](./GAME_MODE_AND_MOUSE.md) - Mouse interaction
+- [MOUSE_INTEGRATION.md](MOUSE_INTEGRATION.md) - Mouse interaction

@@ -4,7 +4,7 @@
  * C*Base's listing routine prints no format string of its own: it calls
  * numbered prompts out of a sysop-editable file built from MCI tab commands,
  * so a sysop re-columnises the whole listing by editing one line. This board
- * adopts that (docs/superpowers/specs/2026-09-03-c64-file-view-design.md,
+ * adopts that (thoughts/shared/plans/2026-09-03-c64-file-view-design.md,
  * "The layout is data"), expressed in the MCI it already has - `~t<nn>|` for
  * the columns and a scoped `~F_*` family for the record's fields.
  *

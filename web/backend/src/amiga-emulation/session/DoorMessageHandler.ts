@@ -303,7 +303,7 @@ debugLog("[DoorMessageHandler] checkForPause: waiting for user input");
   }
 
   // CRITICAL FIX: Real Amiga logs show doors initiate communication, NOT the BBS!
-  // See Documentation/4-Door-Developers/REAL_AMIGA_XIM_SEQUENCES.md
+  // See Documentation/5-Reference/REAL_AMIGA_XIM_SEQUENCES.md
   // - RTW sends JH_REGISTER (cmd=1) first with reply port "AEDoorRP.000"
   // - Bulls sends JH_REGISTER (cmd=1) first, then starts making requests
   // - AquaScan sends JH_REGISTER (cmd=1) first

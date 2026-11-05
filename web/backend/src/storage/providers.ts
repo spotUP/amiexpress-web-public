@@ -8,7 +8,7 @@
  * full 90 days. The admin picks a provider rather than typing all of it.
  *
  * Figures come from the design spec's free-tier and paid tables
- * (docs/superpowers/specs/2026-09-03-pooled-object-storage-design.md).
+ * (thoughts/shared/plans/2026-09-03-pooled-object-storage-design.md).
  *
  * Each provider also carries its `setup` guide - the sign-up link and the
  * console steps the admin's Add Drive wizard walks a sysop through. They are

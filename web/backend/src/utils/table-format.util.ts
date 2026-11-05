@@ -122,7 +122,7 @@ export function narrowFileLines(row: NarrowFileRow): string[] {
  * safety net it is documented to be, and never sees these rows.
  *
  * WHAT A NARROW CALLER GETS, and it is the sysop's own ruling from
- * `docs/superpowers/specs/2026-09-03-c64-file-view-design.md` (settled
+ * `thoughts/shared/plans/2026-09-03-c64-file-view-design.md` (settled
  * decisions 14 and 15 - "art wider than 40 loses its right edge, and that is
  * accepted"; "i guess we will have to live with them being cut off on the
  * right side"):

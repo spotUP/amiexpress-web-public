@@ -548,7 +548,7 @@ debugLog('[XIMProtocol] Discovered door reply port: 0x' + msg.replyPort.toString
     // and the synchronous AEDoor.library trap path (waitForReply → XIMProcessor
     // callback in DoorLifecycleManager) would deliver a stale reply before the
     // data-query handler had a chance to write msg.string. See dRE!WAll bug:
-    // Documentation/6-Progress/dRE_WALL_HANDOFF.md.
+    // thoughts/shared/handoffs/2026-04-20_dre_wall_handoff.md.
     if (process.env.NODE_ENV !== "production") {
       try {
         const rawNode = (this.bbsSession as any)?.nodeId ?? (this.bbsSession as any)?.nodeNumber;

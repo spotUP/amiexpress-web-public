@@ -575,7 +575,7 @@ export class ProtocolManager {
     // used to sit here answered `startTransfer('ftp', ...)` by waiting three
     // seconds and reporting success, which recorded transfers that never
     // happened. A real server is specified in
-    // docs/superpowers/specs/2026-09-07-ftp-server-design.md and will register
+    // thoughts/shared/plans/2026-09-07-ftp-server-design.md and will register
     // itself when it exists.
   }
 

@@ -968,7 +968,7 @@ console.log('[+] Added sha256 column to door_catalog');
 
       // door_installs — what THIS node installed. The catalog itself now
       // lives in the standalone door server (see
-      // docs/superpowers/specs/2026-08-23-door-server-split-design.md), which
+      // thoughts/shared/plans/2026-08-23-door-server-split-design.md), which
       // cannot know who installed what, so these rows stay local.
       {
         const installsDdl = fs.readFileSync(

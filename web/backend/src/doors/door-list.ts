@@ -2,7 +2,7 @@
  * The installed-door list, and the one place its display rules are applied.
  *
  * Extracted from BBSApi.getDoorList on 2026-08-31 for phase B of
- * `docs/superpowers/specs/2026-08-30-doorrepo-parity-design.md`. The logic was
+ * `thoughts/shared/plans/2026-08-30-doorrepo-parity-design.md`. The logic was
  * already session-free apart from where the BBS root came from; it lived on a
  * session-bound class only because its first caller had a session.
  *

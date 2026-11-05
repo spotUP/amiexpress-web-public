@@ -224,7 +224,7 @@ All AEDoor.library functions follow Amiga register calling convention:
 ## Related Documentation
 
 - **Full Disassembly**: `~/Code/Reference/disasm/aedoor_library_disasm.asm`
-- **Library Notes**: `/Documentation/4-Door-Developers/archive/AEDoor_LIBRARY_NOTES.md`
+- **Library Notes**: `/thoughts/shared/research/2025-11-25_aedoor_library_notes.md`
 - **BBSInfo Fix**: `/sdk/68k/BBSINFO_FIX_FINAL.md`
 - **DoorInfo Structure**: BBSInfo at DoorInfo+0x46, max structure size 0x146 bytes
 

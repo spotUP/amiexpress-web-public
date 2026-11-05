@@ -2,7 +2,7 @@
  * FileHandle - Represents an AmigaDOS file handle
  *
  * Based on amitools/vamos/lib/dos/FileHandle.py
- * See: Documentation/3-Developers/AMIGAOS_DOS_FILE_IO_IMPLEMENTATION_GUIDE.md
+ * See: Documentation/5-Reference/DOS_FILE_IO.md
  */
 
 import * as fs from 'fs';

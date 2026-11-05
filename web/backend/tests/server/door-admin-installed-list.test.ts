@@ -1,7 +1,7 @@
 /**
  * GET /api/door-admin/installed — the list the DoorRepo C door reads.
  *
- * Phase B of docs/superpowers/specs/2026-08-30-doorrepo-parity-design.md.
+ * Phase B of thoughts/shared/plans/2026-08-30-doorrepo-parity-design.md.
  *
  * Two things are being pinned here. First, that the route is gated exactly as
  * POST /installed already is: a valid launch token AND secLevel >= 250,

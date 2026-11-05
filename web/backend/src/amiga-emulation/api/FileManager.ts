@@ -2,7 +2,7 @@
  * FileManager - Manages AmigaDOS file handles and BPTR allocation
  *
  * Based on amitools/vamos/lib/dos/FileManager.py
- * See: Documentation/3-Developers/AMIGAOS_DOS_FILE_IO_IMPLEMENTATION_GUIDE.md
+ * See: Documentation/5-Reference/DOS_FILE_IO.md
  *
  * BPTR System:
  * - BPTR = Byte Pointer = memory_address / 4

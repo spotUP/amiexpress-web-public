@@ -242,7 +242,7 @@ debugLog(
     // Standard ReplyMsg() sends to mn_ReplyPort which causes door to miss replies
     // Must use PutMsg() back to the AEDoorPort where door is polling
     //
-    // Reference: Documentation/6-Progress/archive/2025-12/RTW_DEBUG_SESSION_DEC25.md lines 280-356
+    // Reference: thoughts/shared/research/2025-12-25_rtw_debug_session_dec25.md lines 280-356
     // express.e does call ReplyMsg BUT for NATIVE AEDoor protocol doors (different from XIM)
 
     // Log outgoing reply to XIM structured logger

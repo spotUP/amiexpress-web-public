@@ -351,7 +351,7 @@ find web/backend/src -name "*.ts" -not -path "*/node_modules/*" \
 
 ## Related Documentation
 
-- [BACKEND_ARCHITECTURE.md](./BACKEND_ARCHITECTURE.md) - Overall architecture
+- [BACKEND_ARCHITECTURE.md](ARCHITECTURE.md) - Overall architecture
 - [CONTRIBUTING.md](./CONTRIBUTING.md) - Contribution guidelines
 - [ARCHITECTURE.md](./ARCHITECTURE.md) - High-level architecture overview
 

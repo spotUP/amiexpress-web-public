@@ -139,7 +139,7 @@ Backend logs should show:
 ## Documentation References
 
 - **Library Disassembly**: `~/Code/Reference/disasm/aedoor_library_disasm.asm`
-- **Library Notes**: `/Documentation/4-Door-Developers/archive/AEDoor_LIBRARY_NOTES.md`
+- **Library Notes**: `/thoughts/shared/research/2025-11-25_aedoor_library_notes.md`
 - **DoorInfo Structure**: DoorInfo at offset 0x00, BBSInfo at DoorInfo + 0x46
 
 ## Key Insights

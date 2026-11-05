@@ -63,7 +63,7 @@ TypeScript doors are the recommended approach for new development:
 
 ### 🔴 CRITICAL: Input Handling
 
-**[INPUT_HANDLING_GUIDE.md](INPUT_HANDLING_GUIDE.md)** - Complete guide for keyboard and mouse input
+**[INPUT_HANDLING_GUIDE.md](DOOR_INPUT_MANAGER_GUIDE.md)** - Complete guide for keyboard and mouse input
 
 **READ THIS BEFORE IMPLEMENTING INPUT!** The most common mistake in door development is using the wrong `enableGrabKeys` setting:
 
@@ -133,8 +133,8 @@ doors:quicknew/quicknew doors:quicknew/quicknew.config1 7 >bbs:screens/quicknew.
 
 - **[DOOR_MANAGER.md](DOOR_MANAGER.md)** - BBS door management and installation
 - **[AEDOOR_API.md](AEDOOR_API.md)** - AEDoor library reference (68K)
-- **[DOS_LIBRARY_API.md](DOS_LIBRARY_API.md)** - AmigaDOS library reference (68K)
-- **[EXAMPLES.md](EXAMPLES.md)** - Door code examples
+- **[DOS_FILE_IO.md](../5-Reference/DOS_FILE_IO.md)** - AmigaDOS library reference (68K)
+- **EXAMPLES.md** - Door code examples
 
 ## Quick Comparison
 

@@ -2,7 +2,7 @@
  * Which screen themes this board has, who owns each, and which a caller may
  * wear.
  *
- * SP1 of docs/superpowers/specs/2026-09-06-screen-themes-design.md. This
+ * SP1 of thoughts/shared/plans/2026-09-06-screen-themes-design.md. This
  * module READS and WRITES the registry and nothing else consults it yet: the
  * resolver, the index, the preference and the admin surface are SP2-SP6. A
  * board that has this file and nothing else behaves exactly as it does today.

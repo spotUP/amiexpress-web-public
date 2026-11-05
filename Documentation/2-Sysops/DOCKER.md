@@ -498,7 +498,7 @@ healthcheck:
 ## See Also
 
 - [INSTALLATION.md](./INSTALLATION.md) - Manual installation (alternative)
-- [BACKEND_ARCHITECTURE.md](../3-Developers/BACKEND_ARCHITECTURE.md) - Architecture overview
+- [BACKEND_ARCHITECTURE.md](../3-Developers/ARCHITECTURE.md) - Architecture overview
 - [Docker Docs](https://docs.docker.com/) - Official Docker documentation
 - [Docker Compose Docs](https://docs.docker.com/compose/) - Compose reference
 

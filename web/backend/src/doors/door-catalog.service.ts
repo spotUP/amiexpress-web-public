@@ -378,7 +378,7 @@ export function stripArchiveOnServer(
   } catch {
     // A digest we cannot compute must be NULL rather than the old value:
     // publishing a stale digest for changed bytes is worse than publishing
-    // none, which clients already handle (see docs/DOOR-REPO-API.md).
+    // none, which clients already handle (see Documentation/4-Door-Developers/DOOR-REPO-API.md).
   }
 
   const wdb = new Database(DB_PATH);
@@ -430,7 +430,7 @@ export interface DeleteCatalogEntryResult {
  * file behind for the next re-index to RESURRECT - silently undoing a
  * deliberate, irreversible action. File-first inverts that into a visible
  * and harmless failure instead: a row whose archive is missing, which
- * /archive already answers with a 404 by design (see docs/DOOR-REPO-API.md,
+ * /archive already answers with a 404 by design (see Documentation/4-Door-Developers/DOOR-REPO-API.md,
  * "Digest freshness" and section 5).
  *
  * Deletion is UNIFORM and does not consult `installed`. A door installed on

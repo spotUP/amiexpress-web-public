@@ -345,7 +345,7 @@ export enum XIMCommand {
    * write), so a board that does not know the command replies with data
    * unchanged - 0 - and the door degrades silently instead of breaking.
    *
-   * Proposed upstream; see Documentation/4-Door-Developers/PROPOSED_SETPOINTER.md
+   * Proposed upstream; see thoughts/shared/plans/2026-09-13-proposed-setpointer.md
    * and xim/msgpointer.ts for the wire format.
    */
   AEW_SETPOINTER = 10300,

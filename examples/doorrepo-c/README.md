@@ -2,7 +2,7 @@
 
 A reference AmiExpress door, written in strict C89, that lets a sysop browse,
 search, and download door archives from the DoorRepo catalog
-(`docs/DOOR-REPO-API.md`) directly from the BBS. It is meant to be read and
+(`Documentation/4-Door-Developers/DOOR-REPO-API.md`) directly from the BBS. It is meant to be read and
 adapted: every module is small, unit-tested, and documented well enough that
 a builder with no prior exposure to this repository can either run it as-is
 or lift the parts they need (the `list.txt` parser, the streaming HTTP
@@ -340,7 +340,7 @@ needs to know the rules, not just that "it was reviewed":
 **Accepted, deliberate exposure:** ANSI escape sequences and other control
 bytes in a catalog row's `name`/`desc` fields are **not** stripped. Real
 DoorRepo catalog rows legitimately carry scene-release ANSI art in these
-fields (see `docs/DOOR-REPO-API.md`'s examples) -- stripping them would
+fields (see `Documentation/4-Door-Developers/DOOR-REPO-API.md`'s examples) -- stripping them would
 corrupt correct, intended display for the majority of real entries. This is
 a conscious trade-off, not an oversight.
 
@@ -454,7 +454,7 @@ the command name and the door says so.
 back to the catalog row's MD5 when no such header arrives. If the SHA-256
 matches while the catalog MD5 does not, the door says so - that means the
 catalog row was indexed from a different copy than the one being served (see
-"Digest freshness" in `docs/DOOR-REPO-API.md`) - and keeps the file, because
+"Digest freshness" in `Documentation/4-Door-Developers/DOOR-REPO-API.md`) - and keeps the file, because
 the digest that verified describes the bytes actually received.
 
 While `A` or `V` is open the cursor keys scroll THAT pane rather than moving
@@ -508,7 +508,7 @@ module beneath it needs no changes.
 
 The full HTTP API this door speaks -- every endpoint, every field, worked
 examples captured from the live server -- is documented in
-`docs/DOOR-REPO-API.md`. That document makes an explicit **append-only
+`Documentation/4-Door-Developers/DOOR-REPO-API.md`. That document makes an explicit **append-only
 promise**: `list.txt` and the JSON manifest will only ever grow new fields
 by appending them to the end of each row/object; existing fields never
 change position, meaning, or type; and the header line's format-version

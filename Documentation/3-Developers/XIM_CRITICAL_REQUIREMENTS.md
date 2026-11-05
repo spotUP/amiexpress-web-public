@@ -62,7 +62,7 @@ Per express.e lines 4316-4370 and XIM_INITIALIZATION_PROTOCOL.md:
 **Key Rule**: Door MUST send first. BBS only calls Wait() + GetMsg() + ReplyMsg().
 
 ### Reference
-- **XIM Protocol:** `Documentation/6-Progress/archive/2025-12/XIM_INITIALIZATION_PROTOCOL.md`
+- **XIM Protocol:** `thoughts/shared/research/2025-12-01_xim_initialization_protocol.md`
 - **RTW Fix:** `Documentation/6-Progress/archive/2025-12/RTW_DEBUG_SESSION.md` (Change 4)
 - **express.e:** Lines 4316-4370 (BBS XIM message loop - no PutMsg!)
 
@@ -250,7 +250,7 @@ When door sends message via PutMsg(AEDoorPort):
 4. **If port owned by Door task:** Signals door itself with bit 12, but door is waiting for bit 16+12, causing deadlock ✗
 
 ### Reference
-- **Full explanation:** `Documentation/6-Progress/archive/2025-12/AQUASCAN_SIGNAL_FIX.md`
+- **Full explanation:** `thoughts/shared/research/2025-12-27_aquascan_signal_fix.md`
 - **Memory layout:** ExecBase (0x80000), BBS Task (0x88000), Door Task (0x90000)
 
 ### Regression History

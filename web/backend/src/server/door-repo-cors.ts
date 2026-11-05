@@ -4,7 +4,7 @@
  * Requested by the AmiExpress author, who wants to fetch the catalog from a
  * browser and build searching on top of it. Nothing here exposes anything
  * new: every /api/door-repo endpoint is already public, read-only and
- * unauthenticated (docs/DOOR-REPO-API.md), and answers the same bytes to
+ * unauthenticated (Documentation/4-Door-Developers/DOOR-REPO-API.md), and answers the same bytes to
  * curl, to a 68K door and to anyone who types the URL. The only thing this
  * changes is whether a BROWSER is willing to let its own JavaScript read a
  * reply it already received.

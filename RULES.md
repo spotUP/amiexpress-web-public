@@ -258,7 +258,7 @@ Complete toolkit: `xim:debug` (primary), `xim:analyze`, `xim:diff`, `xim:record`
 Do NOT: guess, start with code reading, grep logs manually, ask the user what's happening.
 Do: use XIM tools first, observe actual message flow, identify the exact failure point.
 
-Logs (check AFTER XIM analysis): `logs/door-68k-{NAME}-{TIME}.-N{NODE}.log`, `logs/backend.log`, `logs/frontend.log`. Document sessions in `Documentation/6-Progress/{NAME}_DEBUG_SESSION.md` (hypothesis -> tool -> observations -> action -> result -> next).
+Logs (check AFTER XIM analysis): `logs/door-68k-{NAME}-{TIME}.-N{NODE}.log`, `logs/backend.log`, `logs/frontend.log`. Document sessions in `thoughts/shared/research/YYYY-MM-DD_{name}_debug_session.md` (hypothesis -> tool -> observations -> action -> result -> next).
 
 Full protocol: `Documentation/3-Developers/CLAUDE_68K_DEBUGGING_PROTOCOL.md`. User guide: `Documentation/4-Door-Developers/XIM_DEBUGGING_GUIDE.md`.
 
@@ -447,7 +447,7 @@ AmiExpress-Web: TypeScript port of the Amiga AmiExpress BBS. 68K emulation via M
 
 Features: 68K emulation, AREXX (1905 lines, 40+ APIs), Import/Export, Telnet:2323, SSH:2222, WebSocket, QWK/REP, multi-node chat.
 
-Status: 60–70% complete, not production, 2–3 months to ready. See `Documentation/6-Progress/CURRENT_STATUS.md`.
+Status: 60–70% complete, not production, 2–3 months to ready.
 
 ---
 
@@ -467,7 +467,7 @@ Build commands and test commands are in the `## Commands` table at the top. Test
 
 - Quick: `./dev/scripts/test-all-commands-quick.sh`
 - Example doors: `./dev/scripts/test-example-doors.sh`
-- All 68K doors: `./dev/scripts/test-all-doors.sh` — see `Documentation/3-Developers/DOOR_TESTING.md`
+- All 68K doors: `./dev/scripts/test-all-doors.sh` — see `Documentation/4-Door-Developers/DOOR_TESTING.md`
 
 Full testing protocol: `Documentation/3-Developers/TESTING.md`.
 
@@ -540,9 +540,9 @@ Always read the logs first:
 If logs are missing or unwritable, fix path/permissions before debugging further.
 
 References:
-- Disassembly notes: `Documentation/4-Door-Developers/Bulls_DISASM_NOTES.md`, `AEDoor_LIBRARY_NOTES.md`; full dumps in `Docs/`.
+- Disassembly notes: `Documentation/4-Door-Developers/AEDOOR_API.md`; full dumps in `Docs/`.
 - Door harness: `node web/backend/dist/scripts/run-amiga-door.js <door> <node>`.
-- Vamos / vAmiga: `Documentation/3-Developers/AMIGA_EMULATION.md`.
+- Vamos / vAmiga: `Documentation/3-Developers/MOIRA_DEBUGGING.md`.
 - NDK autodocs: `mcp__amiexpress-docs__search_ndk_autodocs`.
 - Reference sources (express.e, AEDoor, NDK3.2R4 autodocs, AmiXDoors, amiga-reversing, disasm) live OUTSIDE the repo at `~/Code/Reference` (override: `AMIEXPRESS_REFERENCE`). Tests that read express.e skip when it is absent. C door builds use the vendored headers in `vendor/NDK3.2R4`.
 - Exec/DOS LVO semantics: `Documentation/4-Door-Developers/DOOR_DEVELOPMENT.md`.
@@ -586,7 +586,7 @@ Full guide: `Documentation/3-Developers/MCP_USAGE.md`.
 
 - **info-editor** (`web/backend/src/scripts/info-editor.ts`) — edit Amiga `.info` tooltypes (list/get/set/delete/enable/disable/toggle/backup/restore). See `Documentation/2-Sysops/INFO_EDITOR.md`.
 - **check-context-usage** (`./dev/scripts/check-context-usage.sh`) — flags oversized source files.
-- **test-all-doors** (`./dev/scripts/test-all-doors.sh`) — automated 68K door test harness. See `Documentation/3-Developers/DOOR_TESTING.md`.
+- **test-all-doors** (`./dev/scripts/test-all-doors.sh`) — automated 68K door test harness. See `Documentation/4-Door-Developers/DOOR_TESTING.md`.
 
 ---
 
@@ -622,7 +622,7 @@ Key utils: `AnsiUtil`, `ErrorHandler`, `PermissionsUtil`, `FileDizUtil`, `AcsUti
 File size limit: 2000 lines — modularize when reached.
 
 Files:
-- Docs: `Documentation/`
+- Docs: `Documentation/` holds living guides (users, sysops, developers, door developers, reference), indexed in `Documentation/README.md`. Dated plans, research and handoffs go to `thoughts/shared/{plans,research,handoffs}/` with YAML frontmatter (date, topic, tags, status). Do not add progress, audit or session notes to `Documentation/`.
 - Scripts: `dev/scripts/`
 - Menu: `backend/Screens/MENU.TXT`
 - Bulletins: `backend/data/bbs/Conf01/Bulletins/`
@@ -831,13 +831,12 @@ Historical preservation of BBS culture and retro Amiga 68K. Educational, defensi
 ## Documentation Index
 
 - `Documentation/README.md` — start here
-- **Where docs live:** every project document goes in `Documentation/<section>/` and gets a line in `Documentation/README.md`. Dated notes, audits and one-off plans go in `Documentation/6-Progress/`. Never leave a loose `.md` at the repo root; only `README.md`, `RULES.md`, `CLAUDE.md`, `handoff.md` and `RELEASE_NOTES.md` stay there. Docs that live beside their code (`docs/DOOR-REPO-API.md`, `docs/superpowers/`, `sdk/docs/`, `thoughts/shared/`, door READMEs) are listed in the index section "Documentation outside this folder".
+- **Where docs live:** every project document goes in `Documentation/<section>/` and gets a line in `Documentation/README.md`. Dated notes, audits, one-off plans and handoffs go in `thoughts/shared/{plans,research,handoffs}/` with frontmatter. Never leave a loose `.md` at the repo root; only `README.md`, `RULES.md`, `CLAUDE.md`, `handoff.md` and `RELEASE_NOTES.md` stay there. Docs that live beside their code (`Documentation/4-Door-Developers/DOOR-REPO-API.md`, `sdk/docs/`, `thoughts/shared/`, door READMEs) are listed in the index section "Documentation outside this folder".
 - `Documentation/1-Users/USER_GUIDE.md`, `Documentation/2-Sysops/AMIGA_MIGRATION_GUIDE.md`
 - `Documentation/2-Sysops/DEPLOYMENT.md`, `Documentation/2-Sysops/INFO_EDITOR.md`
 - `Documentation/3-Developers/ARCHITECTURE.md`, `TESTING.md`, `DATABASE.md`
-- `Documentation/3-Developers/MCP_USAGE.md`, `DOOR_TESTING.md`, `CLAUDE_68K_DEBUGGING_PROTOCOL.md`, `AMIGA_EMULATION.md`
-- `Documentation/4-Door-Developers/DOOR_DEVELOPMENT.md`, `TYPESCRIPT_DOOR_GUIDE.md`, `XIM_DEBUGGING_GUIDE.md`, `NEO_BLESSED_COLOR_GUIDE.md`, `DOOR_INPUT_MANAGER_GUIDE.md`
-- `Documentation/6-Progress/CURRENT_STATUS.md`
+- `Documentation/3-Developers/MCP_USAGE.md`, `CLAUDE_68K_DEBUGGING_PROTOCOL.md`, `MOIRA_DEBUGGING.md`
+- `Documentation/4-Door-Developers/DOOR_DEVELOPMENT.md`, `DOOR_TESTING.md`, `TYPESCRIPT_DOOR_GUIDE.md`, `XIM_DEBUGGING_GUIDE.md`, `NEO_BLESSED_COLOR_GUIDE.md`, `DOOR_INPUT_MANAGER_GUIDE.md`
 
 Log timestamps are in UTC / server time. Verify "today" or "recent" by file mtime (`ls -la`), not calendar date.
 

@@ -2,7 +2,7 @@
 
 A TypeScript port of the AmiExpress BBS. Callers connect over a web terminal, telnet or SSH. Classic Amiga 68K doors run on a built-in 68K emulator, next to doors written in TypeScript. A web admin lets the sysop configure the board.
 
-Read [Documentation/PROJECT_SAFETY.md](Documentation/PROJECT_SAFETY.md) and [Documentation/PRIVACY.md](Documentation/PRIVACY.md) before running a public board.
+Read [Documentation/PROJECT_SAFETY.md](Documentation/PROJECT_SAFETY.md) and [Documentation/1-Users/PRIVACY.md](Documentation/1-Users/PRIVACY.md) before running a public board.
 
 ## Quick start with Docker Compose
 
@@ -91,9 +91,9 @@ Development ports (from `.env.example`): backend 3001, frontend 5173, telnet 641
 
 - [Documentation/README.md](Documentation/README.md): index of all documentation
 - [Documentation/2-Sysops/INSTALLATION.md](Documentation/2-Sysops/INSTALLATION.md) and [DOCKER.md](Documentation/2-Sysops/DOCKER.md): installation and Docker
-- [Documentation/2-Sysops/CONFIGURATION.md](Documentation/2-Sysops/CONFIGURATION.md) and [ADMINISTRATION.md](Documentation/2-Sysops/ADMINISTRATION.md): configuration and admin
-- [Documentation/2-Sysops/BACKUP_AND_RESTORE.md](Documentation/2-Sysops/BACKUP_AND_RESTORE.md) and [TROUBLESHOOTING.md](Documentation/2-Sysops/TROUBLESHOOTING.md)
+- [Documentation/2-Sysops/CONFIGURATION.md](Documentation/2-Sysops/CONFIGURATION.md) and [ADMINISTRATION.md](Documentation/2-Sysops/SYSOP_GUIDE.md): configuration and admin
+- [Documentation/2-Sysops/BACKUP_AND_RESTORE.md](Documentation/2-Sysops/BACKUP_AND_RESTORE.md) and [TROUBLESHOOTING.md](Documentation/2-Sysops/SYSOP_GUIDE.md)
 - [Documentation/2-Sysops/SSH_REMOTE_ACCESS.md](Documentation/2-Sysops/SSH_REMOTE_ACCESS.md): SSH access
 - [deploy/README.md](deploy/README.md): server deployment scripts
-- [docs/DOOR-REPO-API.md](docs/DOOR-REPO-API.md): door repository API
+- [Documentation/4-Door-Developers/DOOR-REPO-API.md](Documentation/4-Door-Developers/DOOR-REPO-API.md): door repository API
 - [RELEASE_NOTES.md](RELEASE_NOTES.md): release notes

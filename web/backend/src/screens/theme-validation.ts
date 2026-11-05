@@ -2,7 +2,7 @@
  * Can this theme be selected without breaking a caller?
  *
  * SP6's validator. A partial theme is allowed by design - decision 4 of
- * `docs/superpowers/specs/2026-09-06-screen-themes-design.md` - so validation
+ * `thoughts/shared/plans/2026-09-06-screen-themes-design.md` - so validation
  * is NOT "is every screen present". Every screen a theme does not carry falls
  * through to the board, and that is the feature. What validation asks instead
  * is whether the files the theme DOES carry can be served.

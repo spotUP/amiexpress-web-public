@@ -3,7 +3,7 @@
  * LAYOUT primitive rather than a cursor toy.
  *
  * It exists because the C64 file view puts its layout in a sysop-editable file
- * (docs/superpowers/specs/2026-09-03-c64-file-view-design.md, "The layout is
+ * (thoughts/shared/plans/2026-09-03-c64-file-view-design.md, "The layout is
  * data"), the way C*Base does: a listing row is a template of fields and tabs,
  * and re-columnising the whole listing is one edited line. C*Base's own is
  * `£t04` (ml1.o.asm:1464-1490); this is the same thing in the MCI this board

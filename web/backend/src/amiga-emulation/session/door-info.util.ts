@@ -3,7 +3,7 @@ import { getSystemTime } from '../../utils/date-time.util';
 
 /**
  * Populate DoorInfo and NodeStatus blocks similarly to AEDoor.library for XIM doors.
- * Offsets based on Documentation/4-Door-Developers/AEDoor_LIBRARY_NOTES.md
+ * Offsets based on Documentation/4-Door-Developers/AEDOOR_API.md
  */
 export function populateDoorInfoStructs(
   emulator: MoiraEmulator,

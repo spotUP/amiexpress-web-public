@@ -3,7 +3,7 @@
  *
  * The catalog, the archive corpus and the curation API moved to
  * github.com/spotUP/amiexpress-doorserver (design:
- * docs/superpowers/specs/2026-08-23-door-server-split-design.md). This BBS
+ * thoughts/shared/plans/2026-08-23-door-server-split-design.md). This BBS
  * keeps answering at the same URL so nothing already deployed breaks - the
  * DoorRepo C door ships with RepoHost=bbs.uprough.net baked into config on
  * other people's machines.

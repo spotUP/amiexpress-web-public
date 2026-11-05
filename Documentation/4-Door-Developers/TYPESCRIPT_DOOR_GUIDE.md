@@ -2550,9 +2550,9 @@ private quit(): void {
 ## See Also
 
 - [SDK v2.0 Comprehensive Guide](SDK_V2_COMPREHENSIVE.md) - Complete SDK v2.0 API reference
-- [SDK v2.0 Validation](archive/2025-12/SDK_V2_VALIDATION.md) - SDK v2.0 test results and examples
+- SDK v2.0 Validation - SDK v2.0 test results and examples
 - [Door Manager](DOOR_MANAGER.md) - BBS door management
-- [Examples](EXAMPLES.md) - More door examples
+- Examples - More door examples
 
 ---
 

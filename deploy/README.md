@@ -175,7 +175,7 @@ Caddy automatically handles SSL certificates via Let's Encrypt.
 
 Caddy's automatic HTTPS adds an implicit 308 redirect from `http://` to
 `https://` for any bare domain site block (see above). The Door Repo API
-(`docs/DOOR-REPO-API.md`) promises plain-HTTP access for classic AmigaDOS TCP
+(`Documentation/4-Door-Developers/DOOR-REPO-API.md`) promises plain-HTTP access for classic AmigaDOS TCP
 stacks that cannot do TLS, so `/api/door-repo/*` must be reachable over
 `http://` without a redirect while every other path keeps redirecting.
 Declaring an explicit `http://` site block for the host suppresses Caddy's

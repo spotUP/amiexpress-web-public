@@ -177,7 +177,7 @@ export { getRepoRevision } from '../server/repo-revision';
  *
  *   1. It changes on EVERY deploy, catalog or not, so every client threw away
  *      a good cached catalog and re-downloaded ~580 KB after unrelated code
- *      changes - the opposite of what docs/DOOR-REPO-API.md promises ("changes
+ *      changes - the opposite of what Documentation/4-Door-Developers/DOOR-REPO-API.md promises ("changes
  *      exactly when the deployed catalog changes").
  *   2. It is read from /app/.git-sha, written into the container image at
  *      build time, so a local development server has no such file and reports
@@ -322,7 +322,7 @@ export function buildManifest(opts?: { type?: string; q?: string }): DoorRepoMan
 // with a trailing CRLF after the last row.
 //
 // Fields 7-10 are an APPEND, added 2026-08-18. The format contract
-// (docs/DOOR-REPO-API.md section 3) states that appending trailing fields
+// (Documentation/4-Door-Developers/DOOR-REPO-API.md section 3) states that appending trailing fields
 // never bumps the header's version number, because a conforming client
 // reads the first six fields by position and ignores the rest — so the
 // header still says 1 and every already-deployed client keeps working

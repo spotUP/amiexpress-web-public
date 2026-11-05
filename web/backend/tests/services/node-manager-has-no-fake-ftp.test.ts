@@ -9,7 +9,7 @@
  * recorded a completed transfer of a file that was never sent.
  *
  * A real server is specified in
- * `docs/superpowers/specs/2026-09-07-ftp-server-design.md`. Until it exists,
+ * `thoughts/shared/plans/2026-09-07-ftp-server-design.md`. Until it exists,
  * asking for FTP has to FAIL - a refusal is recoverable, a fabricated success
  * is not.
  */

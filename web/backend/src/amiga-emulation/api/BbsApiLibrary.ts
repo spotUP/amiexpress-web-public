@@ -15,7 +15,7 @@
  *   - Dispatcher reads param block ptr from 4(sp)
  *   - Dispatcher returns success/failure in D0
  *
- * Based on WHO door analysis (Documentation/4-Door-Developers/WHO_BBS_API_ANALYSIS.md)
+ * Based on WHO door analysis
  */
 
 import type { AmigaDoorSession } from '../AmigaDoorSession';
