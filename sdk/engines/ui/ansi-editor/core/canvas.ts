@@ -4,6 +4,7 @@
  */
 
 import type { Cell, Position } from '../types';
+import { applySgrParams, createSgrState } from './sgr';
 import { bgCode } from '../../../../core/ansi-background';
 
 /**
@@ -607,7 +608,7 @@ export function parseANSIToCanvas(
   // fault, same fix as importAnsiFile in core/file-ops.ts.
   let bold = false;
   let baseFg = 7;
-  const applyFg = (): void => { fg = bold && baseFg < 8 ? baseFg + 8 : baseFg; };
+  const sgr = createSgrState();
   // The wrap is DEFERRED, as a VT100 does it: a character in the last column
   // leaves the cursor there with a wrap pending, and only the next printable
   // character moves to the next row. Wrapping eagerly made a full-width row
@@ -648,44 +649,9 @@ export function parseANSIToCanvas(
 
         switch (cmd) {
           case 'm': // SGR - Select Graphic Rendition (colors/styles)
-            for (const param of paramList) {
-              if (param === 0) {
-                // Reset
-                baseFg = 7;
-                bold = false;
-                applyFg();
-                bg = 0;
-                blink = false;
-              } else if (param === 1) {
-                // Bold brightens the colour named before OR after it.
-                bold = true;
-                applyFg();
-              } else if (param === 22) {
-                // Normal intensity
-                bold = false;
-                applyFg();
-              } else if (param === 5) {
-                // Blink
-                blink = true;
-              } else if (param === 25) {
-                // Blink off
-                blink = false;
-              } else if (param >= 30 && param <= 37) {
-                // Standard foreground colors
-                baseFg = param - 30;
-                applyFg();
-              } else if (param >= 40 && param <= 47) {
-                // Standard background colors
-                bg = param - 40;
-              } else if (param >= 90 && param <= 97) {
-                // Bright foreground colors
-                baseFg = param - 90 + 8;
-                applyFg();
-              } else if (param >= 100 && param <= 107) {
-                // Bright background colors (iCE)
-                bg = param - 100 + 8;
-              }
-            }
+            sgr.fg = fg; sgr.bg = bg; sgr.blink = blink; sgr.bold = bold; sgr.baseFg = baseFg;
+            applySgrParams(sgr, paramList);
+            ({ fg, bg, blink, bold, baseFg } = sgr);
             break;
 
           case 'H': // Cursor position

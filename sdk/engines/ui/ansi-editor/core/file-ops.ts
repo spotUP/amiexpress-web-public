@@ -10,6 +10,7 @@ import {
 import type { Cell } from '../types';
 import { bgCode } from '../../../../core/ansi-background';
 import * as Canvas from './canvas';
+import { applySgrParams, createSgrState } from './sgr';
 
 /**
  * SAUCE (Standard Architecture for Universal Comment Extensions) record
@@ -239,7 +240,7 @@ export async function loadANSFile(
   let bold = false;
   /** The colour the file asked for, before bold is applied to it. */
   let baseFg = 7;
-  const applyFg = (): void => { fg = bold && baseFg < 8 ? baseFg + 8 : baseFg; };
+  const sgr = createSgrState();
   // ESC[s / ESC[u save and restore
   let savedX = 0;
   let savedY = 0;
@@ -261,47 +262,9 @@ export async function loadANSFile(
       // Check for final character (m for SGR)
       if (i < content.length && content[i] === 0x6D) { // 'm'
         const codes = code.split(';').map(c => parseInt(c) || 0);
-        for (const c of codes) {
-          if (c === 0) {
-            // Reset
-            baseFg = 7;
-            bold = false;
-            applyFg();
-            bg = 0;
-            blink = false;
-          } else if (c === 1) {
-            // Bold: brightens whatever colour is named, before OR after it.
-            bold = true;
-            applyFg();
-          } else if (c === 22) {
-            // Normal intensity - the way out of bold.
-            bold = false;
-            applyFg();
-          } else if (c === 5) {
-            // Blink
-            blink = true;
-          } else if (c === 7) {
-            // Inverse (swap fg/bg)
-            [fg, bg] = [bg, fg];
-            baseFg = fg;
-          } else if (c >= 30 && c <= 37) {
-            // Foreground color - bold, if it is on, still applies to it.
-            baseFg = c - 30;
-            applyFg();
-          } else if (c >= 40 && c <= 47) {
-            // Background color
-            bg = c - 40;
-          } else if (c >= 90 && c <= 97) {
-            // Bright foreground color, named outright.
-            baseFg = c - 90 + 8;
-            applyFg();
-          } else if (c >= 100 && c <= 107) {
-            // Bright background color (iCE colors)
-            if (iceColors) {
-              bg = c - 100 + 8;
-            }
-          }
-        }
+        sgr.fg = fg; sgr.bg = bg; sgr.blink = blink; sgr.bold = bold; sgr.baseFg = baseFg;
+        applySgrParams(sgr, codes, { inverse: true, iceColors });
+        ({ fg, bg, blink, bold, baseFg } = sgr);
         i++;
       }
       else {

@@ -107,6 +107,12 @@ export function parseAnsiToHtml(text: string): string {
             } else if (param >= 30 && param <= 37) {
               // Foreground color
               currentColor.fg = ANSI_COLORS[param];
+            } else if (param === 39) {
+              // Default foreground
+              delete currentColor.fg;
+            } else if (param === 49) {
+              // Default background
+              delete currentColor.bg;
             } else if (param >= 40 && param <= 47) {
               // Background color
               currentColor.bg = ANSI_BG_COLORS[param];

@@ -6,6 +6,7 @@
 import type { Position, Selection, EditorState as IEditorState, EditorOperation, Cell, DrawingTool, BrushMode, EditorMode } from '../types';
 import { ANSIUtils } from './ansi-utils';
 import * as Canvas from './canvas';
+import { applySgrParams, createSgrState } from './sgr';
 
 /**
  * Editor state manager
@@ -996,8 +997,7 @@ export class EditorState {
     // Parse ANSI content and populate canvas
     // This is a simplified parser - full implementation would parse ANSI codes
     const lines = content.split('\n');
-    let currentFg = 7;
-    let currentBg = 0;
+    const sgr = createSgrState();
 
     for (let y = 0; y < Math.min(lines.length, height); y++) {
       let x = 0;
@@ -1012,17 +1012,7 @@ export class EditorState {
           const match = line.substring(i).match(/^\x1b\[([0-9;]+)m/);
           if (match) {
             const codes = match[1].split(';').map(Number);
-            for (const code of codes) {
-              if (code >= 30 && code <= 37) {
-                currentFg = code - 30;
-              } else if (code >= 90 && code <= 97) {
-                currentFg = code - 90 + 8;
-              } else if (code >= 40 && code <= 47) {
-                currentBg = code - 40;
-              } else if (code >= 100 && code <= 107) {
-                currentBg = code - 100 + 8;
-              }
-            }
+            applySgrParams(sgr, codes);
             i += match[0].length - 1;
             continue;
           }
@@ -1031,8 +1021,8 @@ export class EditorState {
         // Set cell
         Canvas.setCell(canvas, x, y, {
           char,
-          fg: currentFg,
-          bg: currentBg,
+          fg: sgr.fg,
+          bg: sgr.bg,
           blink: false
         });
         x++;
