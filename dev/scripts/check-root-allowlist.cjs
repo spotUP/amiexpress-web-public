@@ -1,20 +1,22 @@
 #!/usr/bin/env node
 /**
- * THE REPOSITORY ROOT HOLDS ONLY THE BOARD TREE AND A FIXED LIST OF PROJECT
- * ENTRIES.
+ * THE REPOSITORY ROOT HOLDS ONLY `board/` AND A FIXED LIST OF PROJECT ENTRIES.
  *
  * This repository is also the live AmiExpress board: express reads `Node*`,
- * `Conf*`, `Screens/`, the root `*.info` icons and friends from disk at their
- * Amiga names, so those entries live at the root and never move. Everything
- * else at the root is a project entry, and each one has an owner below.
+ * `Conf*`, `Screens/`, the `*.info` icons and friends from disk at their
+ * Amiga names. Those entries live together in `board/` (the volume the image
+ * seeds from), never at the root, and keep their names there. Everything else
+ * at the root is a project entry, and each one has an owner below.
  *
  * Before the 2026-11-05 cleanup the root had collected ad-hoc test scripts,
  * run output, backups, tool caches and dead deploy configs, and nobody could
  * tell board data from litter. This list is the gate that keeps it tidy: a
  * new root entry that is neither board data nor a listed project entry fails
  * the pre-push hook and `web/backend/tests/repo/root-allowlist.test.ts`, which
- * both use this file, so the two can never disagree.
+ * both use this file, so the two can never disagree. The contents of `board/`
+ * are checked against BOARD_ENTRIES / BOARD_PATTERNS the same way.
  *
+ * Adding a board entry on purpose: add it to BOARD_ENTRIES (or a pattern).
  * Adding a root entry on purpose: add it to PROJECT_ENTRIES with its owner and
  * update the "Repository layout" section of RULES.md. Anything else belongs in
  * `dev/`, `Documentation/`, `thoughts/` or the package it serves.
@@ -29,7 +31,8 @@ const { execFileSync } = require('child_process');
 
 /**
  * Board data the AmiExpress tree reads at these exact names (the hard
- * constraint list of thoughts/shared/plans/2026-11-05-repo-cleanup.md).
+ * constraint list of thoughts/shared/plans/2026-11-05-repo-cleanup.md). They
+ * live INSIDE board/, not at the root.
  */
 const BOARD_ENTRIES = new Set([
   '!ASCII-Art', 'ACP', 'Access', 'AmiXnet', 'BBSHelp.txt', 'BBSHelp.txt.gr',
@@ -51,6 +54,7 @@ const BOARD_PATTERNS = [
 
 /** Project entries, each with the owner a reader needs to find its rules. */
 const PROJECT_ENTRIES = {
+  'board': 'the AmiExpress board tree: Node*, Conf*, Screens, Doors and every entry listed in BOARD_ENTRIES',
   '.claude': 'Claude Code project settings and agent state',
   '.dockerignore': 'Docker build context filter',
   '.env.example': 'environment template for local setup',
@@ -86,15 +90,21 @@ const PROJECT_ENTRIES = {
   'web': 'backend, frontend and admin apps',
 };
 
+/** A root entry is allowed only if it is a listed project entry. */
 function isAllowed(name) {
+  return Object.prototype.hasOwnProperty.call(PROJECT_ENTRIES, name);
+}
+
+/** An entry of board/ is allowed if it is listed or matches a family pattern. */
+function isBoardAllowed(name) {
   if (BOARD_ENTRIES.has(name)) return true;
-  if (Object.prototype.hasOwnProperty.call(PROJECT_ENTRIES, name)) return true;
   return BOARD_PATTERNS.some((pattern) => pattern.test(name));
 }
 
-/** Root entries git tracks at `ref`. */
-function rootEntries(repoRoot, ref = 'HEAD') {
-  return execFileSync('git', ['ls-tree', '--name-only', '-z', ref], {
+/** Entries git tracks directly inside `dir` ('' is the root) at `ref`. */
+function treeEntries(repoRoot, ref = 'HEAD', dir = '') {
+  const spec = dir ? `${ref}:${dir}` : ref;
+  return execFileSync('git', ['ls-tree', '--name-only', '-z', spec], {
     cwd: repoRoot,
     encoding: 'utf8',
   })
@@ -102,29 +112,60 @@ function rootEntries(repoRoot, ref = 'HEAD') {
     .filter(Boolean);
 }
 
-/** The root entries that are neither board data nor a listed project entry. */
+/** Root entries git tracks at `ref`. */
+function rootEntries(repoRoot, ref = 'HEAD') {
+  return treeEntries(repoRoot, ref);
+}
+
+/** The entries of board/ at `ref`. */
+function boardEntries(repoRoot, ref = 'HEAD') {
+  return treeEntries(repoRoot, ref, 'board');
+}
+
+/** The root entries that are not a listed project entry (board data included). */
 function findStrays(entries) {
   return entries.filter((name) => !isAllowed(name)).sort();
+}
+
+/** The entries of board/ that are neither listed board data nor a family member. */
+function findBoardStrays(entries) {
+  return entries.filter((name) => !isBoardAllowed(name)).sort();
 }
 
 function describe(strays) {
   return [
     `Not allowed at the repository root: ${strays.join(', ')}`,
-    'Move it into dev/, Documentation/, thoughts/ or the package it serves.',
+    'Board data (Node*, Conf*, Screens, *.info, ...) belongs in board/.',
+    'Anything else: move it into dev/, Documentation/, thoughts/ or the package it serves.',
     'A new root entry on purpose: add it with its owner to PROJECT_ENTRIES in',
     'dev/scripts/check-root-allowlist.cjs and to "Repository layout" in RULES.md.',
   ].join('\n');
 }
 
-module.exports = { BOARD_ENTRIES, BOARD_PATTERNS, PROJECT_ENTRIES, isAllowed, rootEntries, findStrays, describe };
+function describeBoard(strays) {
+  return [
+    `Not allowed inside board/: ${strays.join(', ')}`,
+    'board/ holds only the entries of BOARD_ENTRIES / BOARD_PATTERNS in',
+    'dev/scripts/check-root-allowlist.cjs. A new board entry on purpose: add it there.',
+  ].join('\n');
+}
+
+module.exports = {
+  BOARD_ENTRIES, BOARD_PATTERNS, PROJECT_ENTRIES,
+  isAllowed, isBoardAllowed, rootEntries, boardEntries, findStrays, findBoardStrays, describe, describeBoard,
+};
 
 if (require.main === module) {
   const quiet = process.argv.includes('--quiet');
   const repoRoot = execFileSync('git', ['rev-parse', '--show-toplevel'], { encoding: 'utf8' }).trim();
   const strays = findStrays(rootEntries(repoRoot));
-  if (strays.length > 0) {
-    if (!quiet) console.error(describe(strays));
+  const boardStrays = findBoardStrays(boardEntries(repoRoot));
+  if (strays.length > 0 || boardStrays.length > 0) {
+    if (!quiet) {
+      if (strays.length > 0) console.error(describe(strays));
+      if (boardStrays.length > 0) console.error(describeBoard(boardStrays));
+    }
     process.exit(1);
   }
-  if (!quiet) console.log('[OK] repository root holds only board data and listed project entries');
+  if (!quiet) console.log('[OK] repository root holds only board/ and listed project entries; board/ holds only listed board data');
 }
