@@ -7,14 +7,14 @@
 # directory with a symlink.
 node_modules
 backend/node_modules
-Doors/*/node_modules
+board/Doors/*/node_modules
 
 # Build outputs
 dist/
 backend/dist/
 .vite/
 # But keep door dist folders - needed for Docker builds
-!Doors/*/dist/
+!board/Doors/*/dist/
 
 # TypeScript build artifacts in source directories
 web/backend/src/**/*.js
@@ -133,7 +133,7 @@ web/frontend/public/fonts/backups/
 # launch splits the sysop's installed Kickstart into these on demand
 # (LibraryManager.ensureRomLibrariesExtracted, cache under tmp/rom-modules/).
 /ROM/
-/System/ROM/
+/board/System/ROM/
 
 # Temporary folders
 tmp/
@@ -229,17 +229,17 @@ backend/data/bbs/BBS/Node*/Screens/*
 /web/backend/debug-display-flow.log
 /debug.log
 # XIMLogger writes <bbsRoot>/logs/xim-debug.json (XIMLogger.ts:76), including per-door roots
-Doors/*/logs/
-Utils/samilog/logs/
+board/Doors/*/logs/
+board/Utils/samilog/logs/
 # Per-node runtime state: DoorDropFileManager.ts:184 (.download_today); *.stray-<ms> are the
 # rename-aside backups from routes-setup.ts:79, clean-playpen.util.ts:79, dir-file.util.ts:182
-Node*/.download_today
-Node*/*.stray-*
+board/Node*/.download_today
+board/Node*/*.stray-*
 # QWK packet build dirs, UAE filesystem metadata and uploads left in a node's Playpen
-Node*/QWK.*/
-Node*/NRAMS/__uae___*
-Node*/Playpen/*
-!Node*/Playpen/.gitkeep
+board/Node*/QWK.*/
+board/Node*/NRAMS/__uae___*
+board/Node*/Playpen/*
+!board/Node*/Playpen/.gitkeep
 
 # BBS data directories - external examples only
 reference-boardBBS/
@@ -252,13 +252,13 @@ Example_BBS/
 # DORINFO*.DEF
 # Conf*/Files/*.dir
 # CallersLog
-Node*/CallersLog
-Node*/CALLERSLOG
-Node*/DOOR.SYS
-Node*/door.sys
-Node*/DORINFO*.DEF
-Node*/DORINFO*.def
-Node*/TempAns
+board/Node*/CallersLog
+board/Node*/CALLERSLOG
+board/Node*/DOOR.SYS
+board/Node*/door.sys
+board/Node*/DORINFO*.DEF
+board/Node*/DORINFO*.def
+board/Node*/TempAns
 
 # Runtime-generated files (context optimization)
 # Bulletins/bull*.txt - need defaults in Docker
@@ -274,17 +274,17 @@ temp_batch
 .!*!*
 
 # Large backup files (>50MB, excluded to avoid GitHub limit)
-Node*/CLogBackup
-Node*/DLogBackup
-Node*/Answers
+board/Node*/CLogBackup
+board/Node*/DLogBackup
+board/Node*/Answers
 # Lowercase, and AmiExpress's own rename artifacts. `Node*/Answers` matched
 # the tidy name and nothing else, so `Node2/answers` and a 183 KB
 # `Node2/.!99887!answers` - 52 caller e-mail addresses - were committed by the
 # bulk "restore Node0-40 for the Docker build" pass and sat in a PUBLIC repo.
 # git's ignore matching is case-sensitive; the board's filesystem is not.
-Node*/answers
-Node*/ANSWERS
-Node*/.!*
+board/Node*/answers
+board/Node*/ANSWERS
+board/Node*/.!*
 *.backup
 *.backup-*
 bbsConfig.info.pre-*
@@ -294,7 +294,7 @@ ConfConfig.info.backup*
 # Temporary door output files (still exclude)
 **/who/node*.txt
 doors/who/node*.txt
-Doors/who/node*.txt
+board/Doors/who/node*.txt
 
 # Local Emscripten cache
 web/backend/src/amiga-emulation/cpu/.emcache/
@@ -327,7 +327,7 @@ bbsConfig.info.pre-*
 # info-editor.ts auto-backups (.info.backup) — not anchored to a single dir
 **/*.info.backup
 # Node-level answers backups
-Node*/answers.bak*
+board/Node*/answers.bak*
 
 # C Door development - build artifacts
 dev/c-doors/doors/**/*.o
@@ -341,15 +341,15 @@ dev/c-doors/templates/*.o
 dev/c-doors/src/*.o
 
 # Installed door binaries (keep source only)
-Doors/SDKTEST/amiga68k
-Doors/SDKTEST/minimal
-Doors/SDKTEST/simpletest
-Doors/apitest/apitest
-Doors/apitest/*.o
-Doors/testdoor/testdoor
-Doors/testdoor/*.o
-Doors/AMIGAGCC/amiga-gcc-door
-Doors/AMIGAGCC/amiga-gcc-hunk
+board/Doors/SDKTEST/amiga68k
+board/Doors/SDKTEST/minimal
+board/Doors/SDKTEST/simpletest
+board/Doors/apitest/apitest
+board/Doors/apitest/*.o
+board/Doors/testdoor/testdoor
+board/Doors/testdoor/*.o
+board/Doors/AMIGAGCC/amiga-gcc-door
+board/Doors/AMIGAGCC/amiga-gcc-hunk
 
 # Compiler toolchains (too large, install locally)
 amiga-gcc/
@@ -382,25 +382,25 @@ user.data.pre-*
 Env/
 
 # BBS door password files
-Doors/Bossnuke/BossNuke.pw
-Commands/BBSCmd/nuke.info
+board/Doors/Bossnuke/BossNuke.pw
+board/Commands/BBSCmd/nuke.info
 
 # Reference source directories (large, for local research only)
 HeborisCE-main/
 TetriNET2-master/
 
 # Door runtime date/timestamp/per-DIR files
-Doors/AquaScan/AquaScan.Date.*
-Doors/AquaScan/AquaScan.Div.*
-Doors/AquaScan/AquaScan.config
-Doors/AquaScan/AquaScan.config.info
-Doors/Request/Request.data
-Doors/glc/glc.glcdata
+board/Doors/AquaScan/AquaScan.Date.*
+board/Doors/AquaScan/AquaScan.Div.*
+board/Doors/AquaScan/AquaScan.config
+board/Doors/AquaScan/AquaScan.config.info
+board/Doors/Request/Request.data
+board/Doors/glc/glc.glcdata
 # DOORSMENU runtime install (sysop-supplied; the source door lives in dev/c-doors/)
-Doors/DOORSMENU/
-Doors/DOORSMENU.info
+board/Doors/DOORSMENU/
+board/Doors/DOORSMENU.info
 # sami-log runtime store
-Utils/samilog/SAmiLog.Store
+board/Utils/samilog/SAmiLog.Store
 
 # GMaster audio lives ON THE SERVER, not in git: 29 MB of MP3 (18 tracks,
 # 83 effects, 10 voice clips) for one door is not worth carrying in a
@@ -420,53 +420,53 @@ Utils/samilog/SAmiLog.Store
 #
 # Without it every sound and track in that door 404s, which is what it did
 # from 2026-01-12 until 2026-08-31.
-Doors/grandmaster/assets/music/
-Doors/grandmaster/assets/sounds/
-Doors/grandmaster/assets/voices/
+board/Doors/grandmaster/assets/music/
+board/Doors/grandmaster/assets/sounds/
+board/Doors/grandmaster/assets/voices/
 
 # SDK build artifacts (compiled JS in dist-esm)
 sdk/dist-esm/**/*.js
 sdk/dist-esm/**/*.d.ts
 
 # Conference runtime files
-Conf*/Dir1
-Conf*/Dir1.test
-Conf*/DIR[0-9]
-Conf*/DIR[0-9][0-9]
-Conf*/NumULs
-Conf*/Files/*.dir
-Conf*/Upload/FILES.BBS
-Conf*/Upload/*.LHA
-Conf*/Upload/*.LZH
-Conf*/Upload/*.lha
-Conf*/Upload/*.lzh
-Conf*/Upload/*.zip
-Conf*/Upload/*.ZIP
-Conf*/Conftop.Data
+board/Conf*/Dir1
+board/Conf*/Dir1.test
+board/Conf*/DIR[0-9]
+board/Conf*/DIR[0-9][0-9]
+board/Conf*/NumULs
+board/Conf*/Files/*.dir
+board/Conf*/Upload/FILES.BBS
+board/Conf*/Upload/*.LHA
+board/Conf*/Upload/*.LZH
+board/Conf*/Upload/*.lha
+board/Conf*/Upload/*.lzh
+board/Conf*/Upload/*.zip
+board/Conf*/Upload/*.ZIP
+board/Conf*/Conftop.Data
 # Per-conference message base — runtime: HeaderFile/MailLock/MailStats are
 # regenerated by the BBS, numeric files are individual message bodies,
 # Messages/*.msg are extended-form messages.
-Conf*/MsgBase/HeaderFile
-Conf*/MsgBase/MailLock
-Conf*/MsgBase/MailStats
-Conf*/MsgBase/[0-9]*
-Conf*/Messages/*.msg
+board/Conf*/MsgBase/HeaderFile
+board/Conf*/MsgBase/MailLock
+board/Conf*/MsgBase/MailStats
+board/Conf*/MsgBase/[0-9]*
+board/Conf*/Messages/*.msg
 # Per-conference config DB — newSinceDate / read pointers update on every
 # session; tracked Conf.DB exists at root for the conference index.
-Conf*/Conf.DB
+board/Conf*/Conf.DB
 # Per-conference daily-stats bulletin (regenerated by daily maintenance)
-Conf*/Bulletins/conftop.txt
+board/Conf*/Bulletins/conftop.txt
 
 # Stats runtime files
 SysopStats/
 
 # Node work directories
-Node*/WorkDir/
+board/Node*/WorkDir/
 .watch-doors.pid
 
 # Re-include door dist folders (after all other dist patterns)
-!Doors/*/dist/
-!Doors/*/dist/**
+!board/Doors/*/dist/
+!board/Doors/*/dist/**
 
 # SDK blessed UI compiled output (source is .ts)
 sdk/engines/ui/blessed/**/*.js
@@ -487,11 +487,11 @@ sdk/core/**/*.d.ts.map
 !sdk/types/*.d.ts
 
 # TypeScript Door compiled output (source is .ts)
-Doors/**/*.js
-Doors/**/*.d.ts
-Doors/**/*.js.map
-Doors/**/*.d.ts.map
-!Doors/**/dist/**
+board/Doors/**/*.js
+board/Doors/**/*.d.ts
+board/Doors/**/*.js.map
+board/Doors/**/*.d.ts.map
+!board/Doors/**/dist/**
 
 # Large runtime log files
 logs/*.log
@@ -499,7 +499,7 @@ logs/**/*.log
 web/backend/logs/*.log
 
 # Node runtime logs
-Node*/DoorLog
+board/Node*/DoorLog
 
 # XIM debugging files
 logs/xim-debug.json
@@ -516,9 +516,9 @@ backups/
 
 # AmigaOS components — copyrighted Commodore/Hyperion property,
 # sysops supply their own from a legitimate AmigaOS install.
-System/RexxMast*
-System/rexxmast*
-System/Rexxc/
+board/System/RexxMast*
+board/System/rexxmast*
+board/System/Rexxc/
 # FS-UAE / WinUAE attribute sidecars dropped alongside Amiga binaries.
 **/*.uaem
 
@@ -533,14 +533,14 @@ dev/scripts/door-corpus/corpus-progress.json
 # DoorRepo's runtime working directory: the catalog cache and any archives a
 # sysop downloaded through the door. Regenerated on demand; the .keep marker
 # is tracked so the directory exists in a fresh checkout.
-Doors/DoorRepo/DoorRepo.log
-Doors/DoorRepo/downloads/*
-!Doors/DoorRepo/downloads/.keep
+board/Doors/DoorRepo/DoorRepo.log
+board/Doors/DoorRepo/downloads/*
+!board/Doors/DoorRepo/downloads/.keep
 # The per-launch bearer token the BBS mints and writes here every time a
 # sysop runs the door (door-launch-token.ts / config_read_token() in the C
 # door) - a live credential, never a fixture. Without this, the first
 # launch after a fresh checkout puts a real token in the worktree.
-Doors/DoorRepo/DoorRepo.token
+board/Doors/DoorRepo/DoorRepo.token
 
 # Python bytecode from dev/scripts helpers
 __pycache__/
@@ -550,7 +550,7 @@ __pycache__/
 # DECLARATION (Doors/<door>/door.settings.json) ships with the door; the
 # VALUES never do - the deploy syncs a door's directory without deleting,
 # so a file the image does not carry is what survives a deploy.
-Doors/*/settings.json
+board/Doors/*/settings.json
 
 # Test fixtures are real board bytes, and are kept.
 #
@@ -573,7 +573,7 @@ Doors/*/settings.json
 .claude/.deploy-status
 .claude/deploy-status.conf
 debug-*.log
-Doors/*.log
+board/Doors/*.log
 web/backend/logs/
 web/backend/Node*/CallersLog
 # SQLite side files beside a backup - the database is the artifact, not these.
@@ -585,15 +585,15 @@ web/backend/Node*/CallersLog
 # 536 such files were TRACKED anyway, because .gitignore does not apply to a
 # file already in the index. Untracked in the same commit as this block, so
 # `git status` can be clean on a machine that runs the board.
-Node*/CallersLog.back
-Node*/ErrorLog
-Node*/StartUpLog
-Node*/UDLog
-Node*/UDLog-
-Node*/Answers.old
-Doors/*/*.log
-Doors/*/logs/
-Doors/*/*/*.log
+board/Node*/CallersLog.back
+board/Node*/ErrorLog
+board/Node*/StartUpLog
+board/Node*/UDLog
+board/Node*/UDLog-
+board/Node*/Answers.old
+board/Doors/*/*.log
+board/Doors/*/logs/
+board/Doors/*/*/*.log
 
 # Caller data purged from history on 2026-09-08 (see
 # thoughts/shared/plans/2026-09-08-history-scrub.md). These files still exist
@@ -601,9 +601,9 @@ Doors/*/*/*.log
 # business again. Without these rules the next bulk `git add` puts back
 # exactly what the rewrite removed.
 backup-2025-12-27/
-AmiXnet/Doors/REALNAMES.db
-AmiXnet/Doors/RealNames
-AmiXnet/Doors/RealNames.db.txt
+board/AmiXnet/Doors/REALNAMES.db
+board/AmiXnet/Doors/RealNames
+board/AmiXnet/Doors/RealNames.db.txt
 database.sqlite
 **/MsgBase
 **/Messages/*.msg
@@ -611,17 +611,17 @@ user.keys
 User.keys
 user.misc
 User.misc
-Node*/DOOR.SYS
-Node*/DORINFO*.DEF
+board/Node*/DOOR.SYS
+board/Node*/DORINFO*.DEF
 
 # The global-requests door holds the board secret in its cfg beside the
 # binary; never commit it.
-Doors/REQUESTS/REQUESTS.cfg
+board/Doors/REQUESTS/REQUESTS.cfg
 # The achievements board key in plain text, same shape as REQUESTS.cfg above.
-Doors/ACHIEVEC/ACHIEVE.cfg
+board/Doors/ACHIEVEC/ACHIEVE.cfg
 
 # The last-callers page the door keeps for a slow scenewall; the board writes it, never the repo.
-Doors/glc-viewer/glc.lastgood.json
+board/Doors/glc-viewer/glc.lastgood.json
 
 # BBC Micro: the sysop's ROMs and software, never the repository's.
 #
@@ -629,11 +629,11 @@ Doors/glc-viewer/glc.lastgood.json
 # they asked archives to take them down - and the disc images are whatever
 # the board's owner has the right to run. The board loads both from here at
 # runtime; nothing in this folder but the documentation is ours to ship.
-Beeb/roms/**
-Beeb/software/**
-!Beeb/roms/.gitkeep
-!Beeb/roms/b/.gitkeep
-!Beeb/software/.gitkeep
+board/Beeb/roms/**
+board/Beeb/software/**
+!board/Beeb/roms/.gitkeep
+!board/Beeb/roms/b/.gitkeep
+!board/Beeb/software/.gitkeep
 
 # amiscan parts (virus database, unpackers), fetched by the updater
 /AmiScan/
