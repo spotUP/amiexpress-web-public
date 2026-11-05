@@ -6,9 +6,10 @@
 import * as path from 'path';
 import * as fs from 'fs';
 // Must run from web/backend directory
-import { DoorLoader } from './src/doors/DoorLoader';
+import { DoorLoader } from './src/Doors/DoorLoader';
+import { boardRoot } from '../../web/backend/src/utils/board-root.util';
 
-const BBS_ROOT = '~/Code/AmiExpress/amiexpress-web';
+const BBS_ROOT = boardRoot();
 process.env.BBS_ROOT = BBS_ROOT;
 process.env.BBS_DATA_DIR = BBS_ROOT;
 

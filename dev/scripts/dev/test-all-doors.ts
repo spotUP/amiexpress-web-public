@@ -18,6 +18,7 @@ import * as path from 'path';
 import { spawn } from 'child_process';
 import { sessionLogManager } from '../../../web/backend/src/services/SessionLogManager';
 import { parseInfoFile } from '../../../web/backend/src/utils/amiga-command-parser.util';
+import { boardRoot } from '../../../web/backend/src/utils/board-root.util';
 
 interface DoorTestResult {
   command: string;
@@ -226,7 +227,7 @@ class DoorTester {
       // Set up environment
       const env = {
         ...process.env,
-        BBS_DATA_DIR: process.cwd(),
+        BBS_DATA_DIR: boardRoot(),
         AEDOOR_STDOUT: `/tmp/${command.toLowerCase()}_test.out`,
         AEDOOR_ROM: 'kickstart'
       };

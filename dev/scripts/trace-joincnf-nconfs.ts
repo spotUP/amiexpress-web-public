@@ -11,8 +11,9 @@ import { HunkLoader } from '../../web/backend/src/amiga-emulation/loader/HunkLoa
 import { IconLibrary } from '../../web/backend/src/amiga-emulation/api/IconLibrary';
 import * as fs from 'fs';
 import * as path from 'path';
+import { boardRoot } from '../../web/backend/src/utils/board-root.util';
 
-const BBS_ROOT = '~/Code/AmiExpress/amiexpress-web';
+const BBS_ROOT = boardRoot();
 const DOOR_PATH = path.join(BBS_ROOT, 'doors/emp_tools/joincnf');
 
 async function main() {

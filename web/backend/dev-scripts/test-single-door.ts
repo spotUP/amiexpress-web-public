@@ -1,8 +1,9 @@
 import 'reflect-metadata';
 import * as path from 'path';
 import { AmigaDoorSession } from '../src/amiga-emulation/AmigaDoorSession';
+import { boardRoot } from '../src/utils/board-root.util';
 
-const BBS_ROOT = '~/Code/AmiExpress/amiexpress-web';
+const BBS_ROOT = boardRoot();
 const doorPath = '~/Code/AmiExpress/amiexpress-web/Doors/EmP_Tools/Bulls';
 
 async function main() {

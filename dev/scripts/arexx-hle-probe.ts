@@ -8,12 +8,13 @@
  */
 
 import * as path from 'path';
-process.env.BBS_DATA_DIR = process.env.BBS_DATA_DIR || path.resolve(__dirname, '../..');
+process.env.BBS_DATA_DIR = boardRoot();
 process.env.SKIP_DB_INIT = '1';
 
 import { config } from '../../web/backend/src/config';
 import { rexxMastService } from '../../web/backend/src/services/arexx/rexxmast-service';
 import { _resetNativeAREXXDetectionCache } from '../../web/backend/src/services/arexx/native-engine';
+import { boardRoot } from '../../web/backend/src/utils/board-root.util';
 
 function log(...args: any[]) { console.log('[probe]', ...args); }
 

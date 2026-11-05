@@ -14,8 +14,9 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { execSync } from 'child_process';
 import { AmigaDoorSession } from '../../web/backend/src/amiga-emulation/AmigaDoorSession';
+import { boardRoot } from '../../web/backend/src/utils/board-root.util';
 
-const BBS_ROOT = '~/Code/AmiExpress/amiexpress-web';
+const BBS_ROOT = boardRoot();
 
 interface DoorConfig {
   command: string;

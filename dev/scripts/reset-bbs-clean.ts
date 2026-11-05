@@ -10,8 +10,9 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { execSync } from 'child_process';
 import { toAmigaTime } from '../../web/backend/src/utils/date-time.util';
+import { boardRoot } from '../../web/backend/src/utils/board-root.util';
 
-const BBS_ROOT = '~/Code/AmiExpress/amiexpress-web';
+const BBS_ROOT = boardRoot();
 
 /**
  * User record sizes for AmiExpress matching mtop.e struct definitions

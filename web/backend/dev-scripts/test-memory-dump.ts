@@ -1,7 +1,8 @@
 import 'reflect-metadata';
 import { AmigaDoorSession } from '../src/amiga-emulation/AmigaDoorSession';
+import { boardRoot } from '../src/utils/board-root.util';
 
-const BBS_ROOT = '~/Code/AmiExpress/amiexpress-web';
+const BBS_ROOT = boardRoot();
 
 async function test() {
   console.log('=== Memory Dump Test ===');

@@ -6,8 +6,9 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { BBSState } from '../constants/bbs-states';
 import { parseMciCodes } from '../handlers/screen.handler';
+import { boardRoot } from '../utils/board-root.util';
 
-const BBS_ROOT = '~/Code/AmiExpress/amiexpress-web';
+const BBS_ROOT = boardRoot();
 
 // Create a mock socket that logs emits
 function createMockSocket() {

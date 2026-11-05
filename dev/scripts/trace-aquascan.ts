@@ -3,8 +3,9 @@
  */
 import 'reflect-metadata';
 import { AmigaDoorSession } from '../../web/backend/src/amiga-emulation/AmigaDoorSession';
+import { boardRoot } from '../../web/backend/src/utils/board-root.util';
 
-const BBS_ROOT = '~/Code/AmiExpress/amiexpress-web';
+const BBS_ROOT = boardRoot();
 
 async function runTrace() {
   console.log('=== AquaScan CPU Trace ===');
@@ -20,7 +21,7 @@ async function runTrace() {
     inDoorManager: true,
   };
 
-  const doorPath = `${BBS_ROOT}/doors/AquaScan/AquaScan.020`;
+  const doorPath = `${BBS_ROOT}/Doors/AquaScan/AquaScan.020`;
   const session = new AmigaDoorSession(doorPath, mockSession as any, {
     enableTrace: true,
     traceInterval: 1,

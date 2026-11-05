@@ -3,8 +3,9 @@
  */
 import * as fs from 'fs';
 import * as path from 'path';
+import { boardRoot } from '../utils/board-root.util';
 
-const BBS_ROOT = '~/Code/AmiExpress/amiexpress-web';
+const BBS_ROOT = boardRoot();
 
 function testSegmentSplit() {
 console.log('=== MCI Segment Split Test ===\n');

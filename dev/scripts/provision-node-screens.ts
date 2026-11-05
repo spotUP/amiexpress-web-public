@@ -20,6 +20,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { applyTooltypes, readTooltypeMap } from '../../web/backend/src/utils/info-file.util';
+import { boardRoot } from '../../web/backend/src/utils/board-root.util';
 
 /** The screens express.e reads from nodeScreenDir (express.e:6546-6634). */
 const NODE_SCREEN_STEMS = [
@@ -34,7 +35,7 @@ function arg(name: string, fallback: string): string {
 }
 
 const APPLY = process.argv.includes('--apply');
-const DATA_DIR = path.resolve(arg('data-dir', process.env.BBS_DATA_DIR || process.cwd()));
+const DATA_DIR = path.resolve(arg('data-dir', boardRoot()));
 const SHARED_REL = arg('shared', path.join('Screens', 'Node'));
 const SEED_FROM = arg('from', 'Node1');
 const MAX_NODE = parseInt(arg('max', '255'), 10);

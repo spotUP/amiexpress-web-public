@@ -13,8 +13,9 @@ import 'reflect-metadata';
 import * as fs from 'fs';
 import * as path from 'path';
 import { AmigaDoorSession } from '../src/amiga-emulation/AmigaDoorSession';
+import { boardRoot } from '../src/utils/board-root.util';
 
-const BBS_ROOT = '~/Code/AmiExpress/amiexpress-web';
+const BBS_ROOT = boardRoot();
 
 interface DoorConfig {
   command: string;

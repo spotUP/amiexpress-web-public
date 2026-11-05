@@ -21,7 +21,7 @@ const dataDirArg = process.argv.indexOf('--data-dir');
 const DATA_DIR = path.resolve(
   dataDirArg >= 0 && process.argv[dataDirArg + 1]
     ? process.argv[dataDirArg + 1]
-    : process.env.BBS_DATA_DIR || process.cwd(),
+    : boardRoot(),
 );
 process.env.BBS_DATA_DIR = DATA_DIR;
 
@@ -29,6 +29,7 @@ const handlerPath = path.resolve(__dirname, '../../web/backend/src/handlers/scre
 const resolutionPath = path.resolve(__dirname, '../../web/backend/src/screens/screen-resolution');
 const { loadScreenFile } = require(handlerPath);
 const { SCREEN_DIR_MAP, ScreenDirType } = require(resolutionPath);
+import { boardRoot } from '../../web/backend/src/utils/board-root.util';
 
 const SECLEVELS = [0, 10, 20, 100, 255];
 const entries = fs.readdirSync(DATA_DIR);

@@ -43,6 +43,7 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
+import { boardRoot } from '../../web/backend/src/utils/board-root.util';
 import {
   loadCommandFromInfo,
   commandLocationIsLive,
@@ -66,7 +67,7 @@ interface Unparsed {
 const AUDIT_NAME = '.orphan-prune-audit.txt';
 
 function parseArgs(argv: string[]): { base: string; apply: boolean } {
-  let base = process.env.BBS_DATA_DIR || path.resolve(__dirname, '../..');
+  let base = boardRoot();
   let apply = false;
 
   for (let i = 0; i < argv.length; i++) {

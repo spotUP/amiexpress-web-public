@@ -7,6 +7,7 @@ import 'reflect-metadata';
 import path from 'path';
 import { Socket } from 'socket.io';
 import { EventEmitter } from 'events';
+import { boardRoot } from '../src/utils/board-root.util';
 
 // Mock socket for testing
 class MockSocket extends EventEmitter {
@@ -26,7 +27,7 @@ class MockSocket extends EventEmitter {
 }
 
 async function testAquaScan() {
-  const bbs_root = '~/Code/AmiExpress/amiexpress-web';
+  const bbs_root = boardRoot();
   process.env.BBS_DATA_DIR = bbs_root;
 
   console.log('[Test] Starting AquaScan XIM door test');

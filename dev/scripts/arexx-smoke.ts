@@ -11,12 +11,13 @@
 import * as path from 'path';
 
 process.env.AREXX_TRACE = process.env.AREXX_TRACE || '1';
-process.env.BBS_DATA_DIR = process.env.BBS_DATA_DIR || path.resolve(__dirname, '../..');
+process.env.BBS_DATA_DIR = boardRoot();
 process.env.SKIP_DB_INIT = '1';
 
 import { config } from '../../web/backend/src/config.js';
 import { rexxMastService } from '../../web/backend/src/services/arexx/rexxmast-service.js';
 import { _resetNativeAREXXDetectionCache } from '../../web/backend/src/services/arexx/native-engine.js';
+import { boardRoot } from '../../web/backend/src/utils/board-root.util';
 
 async function main() {
   config.set('dataDir', process.env.BBS_DATA_DIR);
