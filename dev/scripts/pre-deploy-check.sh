@@ -382,8 +382,6 @@ check_deployment_readiness() {
 
     # Check for deployment configs
     local deploy_configs=(
-        "railway.json"
-        "nixpacks.toml"
         ".env.example"
     )
 

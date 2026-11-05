@@ -43,11 +43,6 @@ sdk/dist-esm/**/*.map
 .env.staging
 .sdk-preview.env
 
-# Vercel
-.vercel/
-
-# Render
-.render/
 
 # Logs
 # logs
@@ -225,7 +220,6 @@ backend/data/bbs/BBS/Conf*/Screens/*
 backend/data/bbs/BBS/Node*/Screens/*
 !backend/data/bbs/BBS/Conf*/Screens/*.TXT
 !backend/data/bbs/BBS/Node*/Screens/*.TXT
-.vercel
 
 # Runtime output a board run rewrites (untracked so a first run leaves git status clean)
 # logs/ holds door-test reports, start-servers.out and XIM debug dumps; web/logs the dev server logs

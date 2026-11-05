@@ -90,7 +90,7 @@ if [ -f "$ROM_DIR/aros-rom.bin" ] && [ -f "$ROM_DIR/aros-ext.bin" ]; then
     echo "[Entrypoint]   [OK] aros-ext.bin: $(ls -la "$ROM_DIR/aros-ext.bin" | awk '{print $5}') bytes"
 else
     echo "[Entrypoint]   [ERROR] AROS ROM files missing - 68K doors will NOT work!"
-    echo "[Entrypoint]   Set FORCE_REINIT_ROMS=1 in render.yaml to attempt re-copy"
+    echo "[Entrypoint]   Set FORCE_REINIT_ROMS=1 in the container environment to attempt re-copy"
 fi
 
 # Root-level .info / binary configuration files.

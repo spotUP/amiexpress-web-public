@@ -2,7 +2,7 @@
 
 **Last Updated**: 2025-12-09
 
-This guide covers deploying AmiExpress-Web using Docker for simplified installation and multi-node support.
+This guide covers deploying AmiExpress-Web using Docker for simplified installation. One container is one board; its nodes run in-process, so never start a second container on the same data volume.
 
 ## Why Docker?
 
@@ -22,7 +22,7 @@ See [Docker Analysis](#why-docker-for-amiexpress) for detailed benefits.
 
 - Docker 20.10+
 - Docker Compose 2.0+
-- 2GB RAM minimum (4GB recommended for multi-node)
+- 2GB RAM minimum
 - 10GB disk space
 
 ### Single-Node Deployment (3 Steps)
@@ -166,67 +166,6 @@ docker image prune -a
 
 # View disk usage
 docker system df
-```
-
-## Multi-Node Deployment
-
-For production BBS with multiple simultaneous users:
-
-### Scale to 4 Nodes
-
-```bash
-# Start with 4 nodes
-docker-compose -f docker-compose.multi-node.yml up -d --scale bbs=4
-
-# Scale up to 8 nodes (live)
-docker-compose -f docker-compose.multi-node.yml up -d --scale bbs=8
-
-# Scale down to 2 nodes
-docker-compose -f docker-compose.multi-node.yml up -d --scale bbs=2
-```
-
-### Port Mapping
-
-Multi-node setup uses port ranges:
-
-| Node | HTTP | Telnet | SSH |
-|------|------|--------|-----|
-| 1 | 3001 | 64128 | 31337 |
-| 2 | 3002 | 64129 | 31338 |
-| 3 | 3003 | 64130 | 31339 |
-| 4 | 3004 | 2326 | 2225 |
-
-### Load Balancing (Optional)
-
-For HTTP traffic, use nginx load balancer:
-
-```bash
-# Included in docker-compose.multi-node.yml
-docker-compose -f docker-compose.multi-node.yml up -d
-
-# Access via load balancer
-http://localhost:80
-```
-
-Configure `nginx.conf`:
-```nginx
-upstream bbs_backend {
-    least_conn;
-    server bbs_1:3001;
-    server bbs_2:3001;
-    server bbs_3:3001;
-    server bbs_4:3001;
-}
-
-server {
-    listen 80;
-    location / {
-        proxy_pass http://bbs_backend;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection "upgrade";
-    }
-}
 ```
 
 ## Production Deployment
@@ -484,7 +423,6 @@ healthcheck:
 |---------|--------|------------|
 | Simplified Install | HIGH | 2-4 hours per deployment |
 | Environment Consistency | CRITICAL | Eliminates 80% of "works on my machine" bugs |
-| Multi-Node Support | HIGH | Native scaling vs manual coordination |
 | Production Readiness | HIGH | Health checks, restarts, monitoring built-in |
 | Easy Rollback | MEDIUM | 30 seconds vs 30 minutes |
 | Development Parity | HIGH | Exact same environment dev → prod |

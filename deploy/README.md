@@ -126,18 +126,18 @@ curl -s -o /dev/null -w '%{http_code}\n' \
 Exactly one BBS in the network should run as the **owner** -- the box whose
 door catalog is curated and republished for everyone else. That box MUST set
 `DOOR_REPO_ROLE=owner` in **its own** `.env.local` (never in the committed
-`docker-compose.yml`/`docker-compose.multi-node.yml`, which leave the
+`docker-compose.yml`, which leaves the
 variable unset so a copied compose file does not silently make every
 deployment believe it owns the catalog).
 
-`docker-compose.yml` and `docker-compose.multi-node.yml` both pass
+`docker-compose.yml` passes
 `DOOR_REPO_ROLE` and `DOOR_REPO_URL` through to the container as bare
-entries in their `environment:` blocks (no `=value`). Bare entries forward
+entries in its `environment:` block (no `=value`). Bare entries forward
 the variable's value from the shell/`.env.local` when it is set, and are
 simply absent from the container when it is not -- so an unset variable
 falls through to the single built-in default defined in
 `Doors/door-manager/repoDataSource.ts` (`resolveDoorRepoMode`), rather than
-duplicating that URL into the compose files as a second source of truth. TS
+duplicating that URL into the compose file as a second source of truth. TS
 doors (including DOORMAN) run in-process in the backend and inherit this
 compose environment directly -- there is no separate per-door environment to
 configure.
