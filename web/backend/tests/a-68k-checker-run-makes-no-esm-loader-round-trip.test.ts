@@ -27,8 +27,8 @@ import { runAmigaProgram } from '../src/utils/amiga-program-runner.util';
 import { config } from '../src/config';
 
 const REPO_ROOT = path.resolve(__dirname, '..', '..', '..');
-const CHECKER = path.join(REPO_ROOT, 'Doors', 'multi-check', 'mULTI-cHECK');
-const LHA = path.join(REPO_ROOT, 'C', 'LhA');
+const CHECKER = path.join(REPO_ROOT, 'board', 'Doors', 'multi-check', 'mULTI-cHECK');
+const LHA = path.join(REPO_ROOT, 'board', 'C', 'LhA');
 const ARCHIVE = path.join(__dirname, 'fixtures', 'archives', 'checked.lha');
 const HOOK = path.join(__dirname, 'fixtures', 'esm-resolve-log', 'register.mjs');
 const BACKEND_SRC = path.join(REPO_ROOT, 'web', 'backend', 'src');

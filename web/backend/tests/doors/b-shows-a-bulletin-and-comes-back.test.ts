@@ -32,9 +32,9 @@ const BULLETIN_THREE = 'BULLETIN THREE TEXT: the harbour opens at dawn';
 
 installDispatchHarness(root => {
   fs.mkdirSync(path.join(root, 'Doors'), { recursive: true });
-  fs.symlinkSync(path.join(REPO, 'Doors', 'BULLETINS'), path.join(root, 'Doors', 'BULLETINS'));
+  fs.symlinkSync(path.join(REPO, 'board', 'Doors', 'BULLETINS'), path.join(root, 'Doors', 'BULLETINS'));
   fs.mkdirSync(path.join(root, 'Commands', 'BBSCmd'), { recursive: true });
-  for (const n of ['B.info', 'BULLS.info']) fs.copyFileSync(path.join(REPO, 'Commands', 'BBSCmd', n), path.join(root, 'Commands', 'BBSCmd', n));
+  for (const n of ['B.info', 'BULLS.info']) fs.copyFileSync(path.join(REPO, 'board', 'Commands', 'BBSCmd', n), path.join(root, 'Commands', 'BBSCmd', n));
   fs.cpSync(path.join(BOARD, 'Menus'), path.join(root, 'Menus'), { recursive: true });
   fs.cpSync(path.join(BOARD, 'Screens'), path.join(root, 'Screens'), { recursive: true });
   // The board's own bulletin directory (no conference one): BullHelp present, three bulletins with content.
@@ -106,7 +106,7 @@ describe('B through the board: the bulletins door shows a bulletin and returns t
       displayScreen: screens.displayScreen, findSecurityScreen: require('../../src/utils/screen-security.util').findSecurityScreen,
       confScreenDir: path.join(require('../../src/config').config.get('dataDir'), 'Screens'), db: {}, hasKeysFile: () => false,
     });
-    const bTypes = Object.fromEntries(readTooltypeMap(path.join(REPO, 'Commands', 'BBSCmd', 'B.info')));
+    const bTypes = Object.fromEntries(readTooltypeMap(path.join(REPO, 'board', 'Commands', 'BBSCmd', 'B.info')));
     await register({ ...doorOver('B', bTypes), type: 'XIM', location: bTypes.LOCATION });
     const user = { id: 'u1', username: 'Spot', realname: 'Johan', location: 'Old Town', slotNumber: 1, secLevel: 255,
       securityFlags: 'T'.repeat(128), userFlags: 0, editor: 'Prompt', zoomType: 0, availableForChat: true, protocol: 'zmodem', expert: 'N' };

@@ -11,7 +11,7 @@ import {
   removeParticipant,
   setSpeaking,
   channelDisplayName,
-} from '../../../../Doors/livechat/features/voice-roster';
+} from '../../../../board/Doors/livechat/features/voice-roster';
 
 describe('voice roster', () => {
   describe('seedRoster', () => {

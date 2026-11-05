@@ -26,7 +26,7 @@ import {
 } from './door-capture';
 
 const REPO = path.resolve(__dirname, '../../../../..');
-const DOOR = path.join(REPO, 'Doors', 'BULLETINS', 'bulletins');
+const DOOR = path.join(REPO, 'board', 'Doors', 'BULLETINS', 'bulletins');
 const BOARD = path.join(__dirname, 'fixtures', 'menu-board');
 const EIGHTY = path.join(__dirname, 'fixtures', 'bulletins-80.ans');
 

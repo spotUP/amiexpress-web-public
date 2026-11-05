@@ -124,8 +124,8 @@ describe('a 40-column caller has a screen for the board\'s ANSI ones', () => {
     fs.mkdirSync(path.join(root, 'Screens'), { recursive: true });
     // The board's own ONENODE - 80-column art, the screen the sysop was left
     // staring at - and the generated companion beside it.
-    fs.copyFileSync(path.join(REPO, 'Screens', 'ONENODE.TXT'), path.join(root, 'Screens', 'ONENODE.TXT'));
-    fs.copyFileSync(path.join(REPO, 'Screens', 'ONENODE.seq'), path.join(root, 'Screens', 'ONENODE.seq'));
+    fs.copyFileSync(path.join(REPO, 'board', 'Screens', 'ONENODE.TXT'), path.join(root, 'Screens', 'ONENODE.TXT'));
+    fs.copyFileSync(path.join(REPO, 'board', 'Screens', 'ONENODE.seq'), path.join(root, 'Screens', 'ONENODE.seq'));
     previousRoot = config.get('dataDir');
     (config as any).set?.('dataDir', root);
   });
@@ -194,8 +194,8 @@ describe('what the generator refuses to touch', () => {
     expect(isMachineWritten('Conf1/Menu.txt')).toBe(false);
     // And none of them has a companion on disk: a frozen .seq would be
     // resolved ahead of the file MultiTop rewrites at every logoff.
-    expect(fs.existsSync(path.join(REPO, 'Bulletins', 'bull1.seq'))).toBe(false);
-    expect(fs.existsSync(path.join(REPO, 'Screens', 'AchieveTop.seq'))).toBe(false);
+    expect(fs.existsSync(path.join(REPO, 'board', 'Bulletins', 'bull1.seq'))).toBe(false);
+    expect(fs.existsSync(path.join(REPO, 'board', 'Screens', 'AchieveTop.seq'))).toBe(false);
   });
 
   it('never overwrites a screen someone has drawn on', () => {

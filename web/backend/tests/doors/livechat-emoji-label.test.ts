@@ -10,8 +10,8 @@
  * to already know.
  */
 
-import { emojiLabel, GLYPH_COLUMN } from '../../../../Doors/livechat/utils/emoji-label';
-import { EMOJIS } from '../../../../Doors/livechat/utils/emojis';
+import { emojiLabel, GLYPH_COLUMN } from '../../../../board/Doors/livechat/utils/emoji-label';
+import { EMOJIS } from '../../../../board/Doors/livechat/utils/emojis';
 
 /** Width the picker actually gives a label - see emoji-picker.ts. */
 const ITEM_WIDTH = 52 - 14 - 2 - 1 - 2;
@@ -71,7 +71,7 @@ describe('fitting the list', () => {
 describe('picking an emoji', () => {
   const { readFileSync } = require('fs');
   const { join } = require('path');
-  const DOOR = join(__dirname, '..', '..', '..', '..', 'Doors', 'livechat');
+  const DOOR = join(__dirname, '..', '..', '..', '..', 'board', 'Doors', 'livechat');
   const shortcuts = readFileSync(join(DOOR, 'handlers', 'keyboard-shortcuts.ts'), 'utf8');
   const server = readFileSync(join(DOOR, 'server.ts'), 'utf8');
 

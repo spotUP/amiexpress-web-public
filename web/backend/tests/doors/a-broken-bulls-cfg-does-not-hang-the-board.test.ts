@@ -17,7 +17,7 @@ import * as os from 'os';
 import * as path from 'path';
 import { writeDoorSettings } from '../../src/doors/door-settings.service';
 
-const repoEmp = path.resolve(__dirname, '..', '..', '..', '..', 'Doors', 'emp_tools');
+const repoEmp = path.resolve(__dirname, '..', '..', '..', '..', 'board', 'Doors', 'emp_tools');
 
 /** A manifest that writes bulletin row 6 and conference mask row 6. */
 function stage(cfgBody: string): string {

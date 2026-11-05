@@ -18,10 +18,10 @@
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { loadConfig, applyConfigText, defaultConfig } from '../../../../Doors/bbslink/config';
+import { loadConfig, applyConfigText, defaultConfig } from '../../../../board/Doors/bbslink/config';
 
 const MANIFEST = fs.readFileSync(
-  path.join(__dirname, '../../../../Doors/bbslink/door.settings.json'),
+  path.join(__dirname, '../../../../board/Doors/bbslink/door.settings.json'),
   'utf8',
 );
 

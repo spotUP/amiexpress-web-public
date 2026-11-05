@@ -12,11 +12,11 @@
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { extractAndRegisterDoor } from '../../../../Doors/door-manager/install-core';
+import { extractAndRegisterDoor } from '../../../../board/Doors/door-manager/install-core';
 
 describe('DOORMAN install path', () => {
   const appSrc = fs.readFileSync(
-    path.join(__dirname, '..', '..', '..', '..', 'Doors', 'door-manager', 'app.ts'), 'utf-8');
+    path.join(__dirname, '..', '..', '..', '..', 'board', 'Doors', 'door-manager', 'app.ts'), 'utf-8');
 
   it('records the install in door_installs', () => {
     expect(appSrc).toMatch(/recordInstall/);

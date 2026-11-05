@@ -15,13 +15,13 @@
 import { execFileSync } from 'child_process';
 import * as path from 'path';
 
-import * as art from '../../../../Doors/glc-viewer/src/art.generated';
-import { formatE, leftField, rightField, transferField } from '../../../../Doors/glc-viewer/src/estringf';
-import { renderGlcScreen, type GlcScreen } from '../../../../Doors/glc-viewer/src/render';
+import * as art from '../../../../board/Doors/glc-viewer/src/art.generated';
+import { formatE, leftField, rightField, transferField } from '../../../../board/Doors/glc-viewer/src/estringf';
+import { renderGlcScreen, type GlcScreen } from '../../../../board/Doors/glc-viewer/src/render';
 
 /** Re-run the extractor and read what it says the art is, right now. */
 function artFromTheESource(): Record<string, unknown> {
-  const script = path.join(__dirname, '../../../../Doors/glc-viewer/dev/extract-art.py');
+  const script = path.join(__dirname, '../../../../board/Doors/glc-viewer/dev/extract-art.py');
   const ts = execFileSync('python3', [script], { encoding: 'utf8', maxBuffer: 4 << 20 });
   const values: Record<string, unknown> = {};
   // The generator emits `export const NAME = <json>;` and array forms; read

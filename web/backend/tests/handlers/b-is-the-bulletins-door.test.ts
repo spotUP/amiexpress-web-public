@@ -12,7 +12,7 @@ import { INTERNAL_COMMAND_NAMES } from '../../src/handlers/command-handler/inter
 import { STEPS } from '../../src/scripts/register-menu-doors';
 
 const repoRoot = path.resolve(__dirname, '../../../..');
-const bInfo = path.join(repoRoot, 'Commands', 'BBSCmd', 'B.info');
+const bInfo = path.join(repoRoot, 'board', 'Commands', 'BBSCmd', 'B.info');
 
 describe('the repo registers B as the bulletins door', () => {
   const tt = readTooltypeMap(bInfo);
@@ -34,13 +34,13 @@ describe('the repo registers B as the bulletins door', () => {
   });
 
   it('keeps Bulls registered as BULLS, adapted, for the fallback', () => {
-    const bulls = readTooltypeMap(path.join(repoRoot, 'Commands', 'BBSCmd', 'BULLS.info'));
+    const bulls = readTooltypeMap(path.join(repoRoot, 'board', 'Commands', 'BBSCmd', 'BULLS.info'));
     expect(bulls.get('LOCATION')).toMatch(/Bulls$/);
     expect(bulls.get('C64_ADAPT')).toBe('40');
   });
 
   it('the bulletins binary is committed, so B is the new door in the registry', () => {
-    expect(fs.existsSync(path.join(repoRoot, 'Doors', 'BULLETINS', 'bulletins'))).toBe(true);
+    expect(fs.existsSync(path.join(repoRoot, 'board', 'Doors', 'BULLETINS', 'bulletins'))).toBe(true);
     const log = jest.spyOn(console, 'log').mockImplementation(() => undefined);
     const b = scanCommandDirectory(repoRoot, CommandType.BBSCMD, undefined, 0).get('B');
     log.mockRestore();

@@ -249,12 +249,12 @@ describe('each arcade door moves on a character when the transport has no key ed
 
   for (const arcade of ARCADE_DOORS) {
     it(`${arcade.door} moves the player on its left character`, async () => {
-      const gameModule = await import(`../../../../Doors/${arcade.door}/${arcade.gameModule}`);
+      const gameModule = await import(`../../../../board/Doors/${arcade.door}/${arcade.gameModule}`);
       const gameClass = (gameModule as Record<string, { prototype: object }>)[arcade.gameClass];
       expect(gameClass).toBeDefined();
 
       const move = jest.spyOn(gameClass.prototype as never, arcade.method as never);
-      const doorModule = await import(`../../../../Doors/${arcade.door}/index`);
+      const doorModule = await import(`../../../../board/Doors/${arcade.door}/index`);
       const door = (doorModule as { default: { execute: (raw: unknown) => Promise<void> } }).default;
 
       const { socket, session, bbs } = hostFor('telnet', 90);

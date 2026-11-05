@@ -37,7 +37,7 @@ import * as path from 'path';
 import { readTooltypeMap } from '../../src/utils/info-file.util';
 
 const REPO_ROOT = path.resolve(__dirname, '..', '..', '..', '..');
-const COMMANDS_DIR = path.join(REPO_ROOT, 'Commands');
+const COMMANDS_DIR = path.join(REPO_ROOT, 'board', 'Commands');
 
 /** Every command directory AmigaCommandParser scans: BBSCmd, SysCmd, Conf<N>Cmd, Node<N>Cmd. */
 function commandDirs(): string[] {
@@ -128,7 +128,7 @@ describe('every BBS command registration answers to its own filename', () => {
   });
 
   it('no two tracked paths under Commands/ or Doors/ differ only in case', () => {
-    const tracked = execFileSync('git', ['ls-files', '--', 'Commands', 'Doors'], {
+    const tracked = execFileSync('git', ['ls-files', '--', 'board/Commands', 'board/Doors'], {
       cwd: REPO_ROOT,
       encoding: 'utf8',
       maxBuffer: 32 * 1024 * 1024,
@@ -163,7 +163,7 @@ describe('THEME (the C picker) specifically - the registration merge 1b773d8ff r
   it('points at an executable that exists', () => {
     const location = readTooltypeMap(themec).get('LOCATION');
     expect(location).toBe('Doors/THEMEC/themec');
-    expect(fs.existsSync(path.join(REPO_ROOT, location!))).toBe(true);
+    expect(fs.existsSync(path.join(REPO_ROOT, 'board', location!))).toBe(true);
   });
 
   it('leaves DOORREPO to DOORREPO.info', () => {

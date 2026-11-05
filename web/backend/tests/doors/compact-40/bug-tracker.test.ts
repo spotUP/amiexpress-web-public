@@ -24,7 +24,7 @@
  */
 const {
   CompactLayout, listOnScreen, BUG_TRACKER_HINTS, BUG_TRACKER_HINTS_COMPACT,
-} = require('../../../../../Doors/bug-tracker/layout');
+} = require('../../../../../board/Doors/bug-tracker/layout');
 
 const at = (width: number) => new CompactLayout(() => width);
 

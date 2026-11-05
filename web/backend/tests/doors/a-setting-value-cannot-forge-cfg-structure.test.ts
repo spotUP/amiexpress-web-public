@@ -14,7 +14,7 @@ import * as os from 'os';
 import * as path from 'path';
 import { writeDoorSettings, oneCfgLine } from '../../src/doors/door-settings.service';
 
-const repoEmp = path.resolve(__dirname, '..', '..', '..', '..', 'Doors', 'emp_tools');
+const repoEmp = path.resolve(__dirname, '..', '..', '..', '..', 'board', 'Doors', 'emp_tools');
 
 function stageEmpire(): string {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'forge-cfg-'));

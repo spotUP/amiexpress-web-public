@@ -103,8 +103,8 @@
  * stuck-flag bug for every click).
  */
 import { Screen, List, Textbox } from '../../../../sdk/engines/ui/blessed';
-import { KeyBinder } from '../../../../Doors/door-manager/ViewManager';
-import { ALL_TYPES, distinctTypes, cycleSystemFilter } from '../../../../Doors/door-manager/systemFilter';
+import { KeyBinder } from '../../../../board/Doors/door-manager/ViewManager';
+import { ALL_TYPES, distinctTypes, cycleSystemFilter } from '../../../../board/Doors/door-manager/systemFilter';
 
 // 'fixed-round2' = round 2's committed state (sync guards, no `handled`
 // signal). 'fixed-round3' = rounds 1-3 committed (sync guards + `handled`

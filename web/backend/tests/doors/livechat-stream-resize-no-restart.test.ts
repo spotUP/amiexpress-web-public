@@ -27,7 +27,7 @@
  * enough; the stop is what put the camera light out.
  */
 
-import { needsReshape, reshapeStream } from '../../../../Doors/livechat/features/stream-resize';
+import { needsReshape, reshapeStream } from '../../../../board/Doors/livechat/features/stream-resize';
 
 interface Call { method: string; args: any[] }
 

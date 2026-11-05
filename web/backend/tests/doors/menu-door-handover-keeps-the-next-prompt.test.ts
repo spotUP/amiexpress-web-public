@@ -31,9 +31,9 @@ const exit = jest.requireMock('../../src/handlers/commands/menu-door-exit');
 installDispatchHarness(root => {
   // The launch re-reads the command directories, which keeps MENU only while its door is on disk.
   fs.mkdirSync(path.join(root, 'Doors'), { recursive: true });
-  fs.symlinkSync(path.join(REPO, 'Doors', 'MAINMENU'), path.join(root, 'Doors', 'MAINMENU'));
+  fs.symlinkSync(path.join(REPO, 'board', 'Doors', 'MAINMENU'), path.join(root, 'Doors', 'MAINMENU'));
   fs.mkdirSync(path.join(root, 'Commands', 'BBSCmd'), { recursive: true });
-  fs.copyFileSync(path.join(REPO, 'Commands', 'BBSCmd', 'MENU.info'), path.join(root, 'Commands', 'BBSCmd', 'MENU.info'));
+  fs.copyFileSync(path.join(REPO, 'board', 'Commands', 'BBSCmd', 'MENU.info'), path.join(root, 'Commands', 'BBSCmd', 'MENU.info'));
   fs.cpSync(path.join(BOARD, 'Menus'), path.join(root, 'Menus'), { recursive: true });
   fs.cpSync(path.join(BOARD, 'Screens'), path.join(root, 'Screens'), { recursive: true });
 });
@@ -54,7 +54,7 @@ function caller(menuStyle: string): any {
 describe('the menu door handover leaves the next prompt to be drawn', () => {
   // Per test, as main-menu-door-is-the-menu does: the harness's own beforeEach resets the command cache.
   beforeEach(async () => {
-    const menuTypes = Object.fromEntries(readTooltypeMap(path.join(REPO, 'Commands', 'BBSCmd', 'MENU.info')));
+    const menuTypes = Object.fromEntries(readTooltypeMap(path.join(REPO, 'board', 'Commands', 'BBSCmd', 'MENU.info')));
     await register({ ...doorOver('MENU', menuTypes), type: 'XIM', location: menuTypes.LOCATION });
   });
   beforeEach(() => (exit.runMenuDoor as jest.Mock).mockClear());

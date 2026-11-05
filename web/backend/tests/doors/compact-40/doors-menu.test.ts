@@ -23,7 +23,7 @@
  */
 export {};
 
-const doorsMenu = require('../../../../../Doors/doors-menu/app');
+const doorsMenu = require('../../../../../board/Doors/doors-menu/app');
 const { buildCategoryRow, buildDoorRow, buildFooterContent } = doorsMenu;
 // The compiled modules the door actually loads (its package exports map
 // points at sdk/dist), so a spy here is the spy the door sees.

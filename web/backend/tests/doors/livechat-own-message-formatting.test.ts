@@ -14,9 +14,9 @@
 
 import { readFileSync } from 'fs';
 import { join } from 'path';
-import { parseContent } from '../../../../Doors/livechat/utils/markdown';
+import { parseContent } from '../../../../board/Doors/livechat/utils/markdown';
 
-const DOOR = join(__dirname, '..', '..', '..', '..', 'Doors', 'livechat');
+const DOOR = join(__dirname, '..', '..', '..', '..', 'board', 'Doors', 'livechat');
 const submit = readFileSync(join(DOOR, 'handlers', 'input-submit-handler.ts'), 'utf8');
 
 describe('the local echo', () => {

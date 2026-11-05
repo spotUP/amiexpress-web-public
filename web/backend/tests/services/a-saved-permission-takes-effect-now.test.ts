@@ -38,7 +38,7 @@ function boardWithLevel(level: number): string {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'acs-save-'));
   fs.mkdirSync(path.join(root, 'Access'), { recursive: true });
   fs.copyFileSync(
-    path.join(BOARD, 'Access', `ACS.${level}.info`),
+    path.join(BOARD, 'board', 'Access', `ACS.${level}.info`),
     acsLevelFilePath(root, level),
   );
   return root;

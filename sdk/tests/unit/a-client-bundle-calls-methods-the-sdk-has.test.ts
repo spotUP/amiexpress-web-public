@@ -26,7 +26,7 @@ jest.mock('tone', () => ({}));
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const { ClientDoor } = require('../../client');
 
-const DOORS_DIR = join(__dirname, '../../../Doors');
+const DOORS_DIR = join(__dirname, '../../../board/Doors');
 
 /** Every `door.<name>(` a bundle calls, with the line it is on. */
 function callsIn(source: string): { name: string; line: number }[] {

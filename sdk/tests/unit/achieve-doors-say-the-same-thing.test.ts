@@ -25,7 +25,7 @@ const C_DOOR = fs.readdirSync(C_DIR)
   .sort()
   .map((f) => fs.readFileSync(path.join(C_DIR, f), 'utf8'))
   .join('\n');
-const TS_DOOR = fs.readFileSync(path.join(REPO, 'Doors/achieve/app.ts'), 'utf8');
+const TS_DOOR = fs.readFileSync(path.join(REPO, 'board', 'Doors/achieve/app.ts'), 'utf8');
 
 /** The labels menuItems() writes, as `[wide, compact]` pairs. */
 function twinLabels(): Array<{ id: string; wide: string; compact: string }> {

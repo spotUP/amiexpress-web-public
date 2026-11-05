@@ -38,7 +38,7 @@ jest.mock('../../src/services/password-failures', () => ({
 }));
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
-const { verifyCredentials } = require('../../../../Doors/livechat/chat-only-login');
+const { verifyCredentials } = require('../../../../board/Doors/livechat/chat-only-login');
 
 describe('livechat door login', () => {
   const cwd = process.cwd();

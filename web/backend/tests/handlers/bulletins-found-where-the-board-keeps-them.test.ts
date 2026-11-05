@@ -29,7 +29,7 @@ import { resetAcsLoader } from '../../src/utils/acs-access-loader';
 function seedAccess(board: string): void {
   fs.mkdirSync(path.join(board, 'Access'), { recursive: true });
   fs.copyFileSync(
-    path.join(__dirname, '..', '..', '..', '..', 'Access', 'ACS.255.info'),
+    path.join(__dirname, '..', '..', '..', '..', 'board', 'Access', 'ACS.255.info'),
     path.join(board, 'Access', 'ACS.255.info'),
   );
 }

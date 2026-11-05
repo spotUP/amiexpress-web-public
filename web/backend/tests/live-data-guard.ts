@@ -68,8 +68,11 @@ const { testBoardDir, useRunDirAsTmp } = require('./temp-run-dir') as typeof imp
 /** `web/backend/tests` -> the checkout root that holds the live board. */
 export const REPO_ROOT = path.resolve(__dirname, '../../..');
 
+/** The live board inside the checkout (P8: every board entry moved under board/). */
+export const BOARD_DIR = path.join(REPO_ROOT, 'board');
+
 /**
- * First-segment names under REPO_ROOT that hold irreplaceable board state.
+ * First-segment names under BOARD_DIR that hold irreplaceable board state.
  *
  * Only the top segment is matched, so a test writing to
  * `web/backend/tests/fixtures/Conf1/...` is untouched - that is a fixture,
@@ -129,7 +132,7 @@ function resolveThroughLinks(target: string): string {
 
 export function isProtectedLivePath(target: string): boolean {
   const resolved = resolveThroughLinks(target);
-  const rel = path.relative(REPO_ROOT, resolved);
+  const rel = path.relative(BOARD_DIR, resolved);
   // Outside the checkout entirely (temp dirs, /var/folders, ...).
   if (rel === '' || rel.startsWith('..') || path.isAbsolute(rel)) return false;
   const first = rel.split(path.sep)[0];
@@ -140,7 +143,7 @@ export function isProtectedLivePath(target: string): boolean {
 function refuse(fnName: string, target: string): never {
   // The RESOLVED path, so a write that arrived through the temp board's
   // `Doors` symlink names the live directory it was about to land in.
-  const rel = path.relative(REPO_ROOT, resolveThroughLinks(target));
+  const rel = path.relative(BOARD_DIR, resolveThroughLinks(target));
   throw new Error(
     `[live-data-guard] fs.${fnName} refused: ${rel}\n` +
       `  That path is the sysop's LIVE board data in this checkout, not a fixture.\n` +
@@ -288,27 +291,27 @@ const SEEDED_FILES = ['Conf.DB'];
 const SYMLINKED_DIRS = ['Doors'];
 
 function seedBoard(root: string): void {
-  for (const name of fs.readdirSync(REPO_ROOT)) {
+  for (const name of fs.readdirSync(BOARD_DIR)) {
     if (!name.endsWith('.info')) continue;
-    const from = path.join(REPO_ROOT, name);
+    const from = path.join(BOARD_DIR, name);
     if (!fs.statSync(from).isFile()) continue;
     fs.copyFileSync(from, path.join(root, name));
   }
   for (const name of SEEDED_FILES) {
-    const from = path.join(REPO_ROOT, name);
+    const from = path.join(BOARD_DIR, name);
     if (fs.existsSync(from)) fs.copyFileSync(from, path.join(root, name));
   }
   for (const dir of SEEDED_DIRS) {
-    const from = path.join(REPO_ROOT, dir);
+    const from = path.join(BOARD_DIR, dir);
     if (fs.existsSync(from)) fs.cpSync(from, path.join(root, dir), { recursive: true });
   }
   // The node directories carry screens the resolver checks BEFORE `Screens/`
   // (`Node1/Logoff` is the first thing a logoff lookup asks for), so they have
   // to be here or half the screen suite resolves nothing. Their LOGS do not:
   // they are 55 of the 67 MB and no test reads them.
-  for (const name of fs.readdirSync(REPO_ROOT)) {
+  for (const name of fs.readdirSync(BOARD_DIR)) {
     if (!/^Node\d+$/.test(name)) continue;
-    const from = path.join(REPO_ROOT, name);
+    const from = path.join(BOARD_DIR, name);
     if (!fs.statSync(from).isDirectory()) continue;
     fs.cpSync(from, path.join(root, name), {
       recursive: true,
@@ -316,7 +319,7 @@ function seedBoard(root: string): void {
     });
   }
   for (const dir of SYMLINKED_DIRS) {
-    const from = path.join(REPO_ROOT, dir);
+    const from = path.join(BOARD_DIR, dir);
     if (fs.existsSync(from)) fs.symlinkSync(from, path.join(root, dir));
   }
 }

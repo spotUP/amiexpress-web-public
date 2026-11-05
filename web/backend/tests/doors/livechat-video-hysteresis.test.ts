@@ -14,13 +14,13 @@
  * picture that still tracks reality.
  */
 
-import { renderHalfblock, renderAscii, PALETTE } from '../../../../Doors/livechat/video-encoders';
+import { renderHalfblock, renderAscii, PALETTE } from '../../../../board/Doors/livechat/video-encoders';
 import {
   createColorMemory,
   fitColorMemory,
   pickColor,
   STICKINESS,
-} from '../../../../Doors/livechat/video-hysteresis';
+} from '../../../../board/Doors/livechat/video-hysteresis';
 
 const W = 40;
 const H = 12;

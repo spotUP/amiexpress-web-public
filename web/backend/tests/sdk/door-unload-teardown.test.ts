@@ -23,7 +23,7 @@ const terminal = readFileSync(
   join(ROOT, 'packages', 'terminal', 'src', 'components', 'BBSTerminal.tsx'),
   'utf8'
 );
-const livechat = readFileSync(join(ROOT, 'Doors', 'livechat', 'client.ts'), 'utf8');
+const livechat = readFileSync(join(ROOT, 'board', 'Doors', 'livechat', 'client.ts'), 'utf8');
 
 describe('the SDK side', () => {
   it('listens for the unload event', () => {

@@ -32,9 +32,9 @@ import { LoggedOnSubState } from '../../src/constants/bbs-states';
 
 installDispatchHarness(root => {
   fs.mkdirSync(path.join(root, 'Doors'), { recursive: true });
-  fs.symlinkSync(path.join(REPO, 'Doors', 'MAINMENU'), path.join(root, 'Doors', 'MAINMENU'));
+  fs.symlinkSync(path.join(REPO, 'board', 'Doors', 'MAINMENU'), path.join(root, 'Doors', 'MAINMENU'));
   fs.mkdirSync(path.join(root, 'Commands', 'BBSCmd'), { recursive: true });
-  fs.copyFileSync(path.join(REPO, 'Commands', 'BBSCmd', 'MENU.info'), path.join(root, 'Commands', 'BBSCmd', 'MENU.info'));
+  fs.copyFileSync(path.join(REPO, 'board', 'Commands', 'BBSCmd', 'MENU.info'), path.join(root, 'Commands', 'BBSCmd', 'MENU.info'));
   fs.cpSync(path.join(BOARD, 'Menus'), path.join(root, 'Menus'), { recursive: true });
   fs.cpSync(path.join(BOARD, 'Screens'), path.join(root, 'Screens'), { recursive: true });
 });
@@ -88,7 +88,7 @@ async function until(pred: () => boolean, ms: number, what: string): Promise<voi
 
 describe('Classic in the menu style Tab cycle, through the board', () => {
   test('prompt Tab leaves Classic for the Scroll door; door Tab past Cover flow lands on the classic MENU screen', async () => {
-    const menuTypes = Object.fromEntries(readTooltypeMap(path.join(REPO, 'Commands', 'BBSCmd', 'MENU.info')));
+    const menuTypes = Object.fromEntries(readTooltypeMap(path.join(REPO, 'board', 'Commands', 'BBSCmd', 'MENU.info')));
     await register({ ...doorOver('MENU', menuTypes), type: 'XIM', location: menuTypes.LOCATION });
     const user = { id: 'u1', username: 'Spot', realname: 'Johan', location: 'Old Town', slotNumber: 1, secLevel: 255,
       securityFlags: 'T'.repeat(128), userFlags: 0, editor: 'Prompt', zoomType: 0, availableForChat: true, protocol: 'zmodem',

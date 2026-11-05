@@ -63,10 +63,10 @@ import { appendCtopRecord } from '../src/utils/ctop-updater.util';
 import { removeUpload } from '../src/scripts/remove-upload';
 
 const REPO_ROOT = path.resolve(__dirname, '..', '..', '..');
-const CHECKER = path.join(REPO_ROOT, 'Doors', 'multi-check', 'mULTI-cHECK');
-const ADVERT = path.join(REPO_ROOT, 'Doors', 'multi-check', 'uprough.txt');
+const CHECKER = path.join(REPO_ROOT, 'board', 'Doors', 'multi-check', 'mULTI-cHECK');
+const ADVERT = path.join(REPO_ROOT, 'board', 'Doors', 'multi-check', 'uprough.txt');
 const ARCHIVE = path.join(__dirname, 'fixtures', 'archives', 'checked.lha');
-const LHA = path.join(REPO_ROOT, 'C', 'LhA');
+const LHA = path.join(REPO_ROOT, 'board', 'C', 'LhA');
 const runnable = [CHECKER, ADVERT, ARCHIVE, LHA].every((p) => fs.existsSync(p));
 const describeMaybe = runnable ? describe : describe.skip;
 
@@ -100,7 +100,7 @@ describeMaybe('remove-upload undoes an upload in every store it touched', () => 
     fs.copyFileSync(CHECKER, path.join(dataDir, 'Doors', 'multi-check', 'mULTI-cHECK'));
     fs.copyFileSync(ADVERT, path.join(dataDir, 'Doors', 'multi-check', 'uprough.txt'));
     fs.mkdirSync(path.join(dataDir, 'FCheck'));
-    fs.copyFileSync(path.join(REPO_ROOT, 'FCheck', 'LHA.info'), path.join(dataDir, 'FCheck', 'LHA.info'));
+    fs.copyFileSync(path.join(REPO_ROOT, 'board', 'FCheck', 'LHA.info'), path.join(dataDir, 'FCheck', 'LHA.info'));
     const playpen = path.join(dataDir, 'Node1', 'Playpen');
     fs.mkdirSync(playpen, { recursive: true });
     fs.copyFileSync(ARCHIVE, path.join(playpen, 'GOOD.LHA'));

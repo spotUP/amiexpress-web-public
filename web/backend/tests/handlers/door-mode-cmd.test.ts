@@ -3,7 +3,7 @@
 describe('modeCmd (door slash command)', () => {
   let modeCmd: any;
   beforeAll(() => {
-    modeCmd = require('../../../../Doors/livechat/commands/mode').modeCmd;
+    modeCmd = require('../../../../board/Doors/livechat/commands/mode').modeCmd;
   });
 
   it('rejects empty args', () => {

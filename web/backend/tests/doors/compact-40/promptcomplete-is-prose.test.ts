@@ -16,7 +16,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 const SOURCE = fs.readFileSync(
-  path.resolve(__dirname, '../../../../../Doors/prompt-complete/index.ts'),
+  path.resolve(__dirname, '../../../../../board/Doors/prompt-complete/index.ts'),
   'utf8',
 );
 

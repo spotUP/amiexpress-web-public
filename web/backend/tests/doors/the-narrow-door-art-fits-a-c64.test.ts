@@ -20,7 +20,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { VARIANT_COLUMNS } from '../../src/doors/door-art-variants';
 
-const ART = path.resolve(__dirname, '..', '..', '..', '..', 'Screens', 'doors');
+const ART = path.resolve(__dirname, '..', '..', '..', '..', 'board', 'Screens', 'doors');
 
 const VARIANTS = [
   ['B', 'c64'], ['B', 'ttx'], ['J', 'c64'], ['J', 'ttx'],

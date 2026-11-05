@@ -29,7 +29,7 @@ const display = jest.requireMock('../../src/handlers/commands/display-file-comma
 
 installDispatchHarness(root => {
   fs.mkdirSync(path.join(root, 'Commands', 'BBSCmd'), { recursive: true });
-  fs.copyFileSync(path.join(REPO, 'Commands', 'BBSCmd', 'MENU.info'), path.join(root, 'Commands', 'BBSCmd', 'MENU.info'));
+  fs.copyFileSync(path.join(REPO, 'board', 'Commands', 'BBSCmd', 'MENU.info'), path.join(root, 'Commands', 'BBSCmd', 'MENU.info'));
   fs.cpSync(path.join(BOARD, 'Menus'), path.join(root, 'Menus'), { recursive: true });
   fs.cpSync(path.join(BOARD, 'Screens'), path.join(root, 'Screens'), { recursive: true });
 });
@@ -55,7 +55,7 @@ async function until(pred: () => boolean, ms: number): Promise<boolean> {
 
 describe('Tab on an empty prompt shows the menu', () => {
   beforeAll(async () => {
-    const menuTypes = Object.fromEntries(readTooltypeMap(path.join(REPO, 'Commands', 'BBSCmd', 'MENU.info')));
+    const menuTypes = Object.fromEntries(readTooltypeMap(path.join(REPO, 'board', 'Commands', 'BBSCmd', 'MENU.info')));
     await register({ ...doorOver('MENU', menuTypes), type: 'XIM', location: menuTypes.LOCATION });
   });
   beforeEach(() => (display.handleQuestionMarkCommand as jest.Mock).mockClear());

@@ -174,7 +174,7 @@ describe('GL is the worked example', () => {
   const FIXTURE = path.resolve(
     __dirname, '../../../../sdk/tests/petscii/frame/fixtures/glc.ans',
   );
-  const INFO = path.resolve(__dirname, '../../../../Commands/BBSCmd/gl.info');
+  const INFO = path.resolve(__dirname, '../../../../board/Commands/BBSCmd/gl.info');
 
   /*
    * THE WORKED EXAMPLE MOVED, AND NO DOOR DECLARES THE WINDOW ANY MORE.

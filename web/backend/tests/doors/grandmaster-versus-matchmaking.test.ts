@@ -13,7 +13,7 @@
  */
 import * as path from 'path';
 
-const DOOR = path.resolve(__dirname, '../../../../Doors/grandmaster');
+const DOOR = path.resolve(__dirname, '../../../../board/Doors/grandmaster');
 
 /** The shape GrandmasterNetworkManager reads out of a door session. */
 function fakeSession(userId: number | string, username: string, node: number) {

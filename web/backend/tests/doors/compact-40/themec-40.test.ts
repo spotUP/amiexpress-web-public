@@ -35,7 +35,7 @@ import { AnsiToPetsciiTransducer } from '@amiexpress/bbs-door-sdk/petscii';
 import { CaptureSocket, beforeTeardown, screenCodeToChar, replay } from './door-capture';
 
 const REPO = path.resolve(__dirname, '../../../../..');
-const THEMEC = path.join(REPO, 'Doors', 'THEMEC', 'themec');
+const THEMEC = path.join(REPO, 'board', 'Doors', 'THEMEC', 'themec');
 const EIGHTY_BEFORE = path.join(__dirname, 'fixtures', 'themec-80-before.ans');
 
 /**
@@ -120,7 +120,7 @@ describe('THEME (the C picker, Doors/THEMEC/themec) opens on a 40-column caller'
   jest.setTimeout(120000);
 
   it('the shipped .info marks the door 40-ok, so the gate lets a C64 in', () => {
-    const info = fs.readFileSync(path.join(REPO, 'Commands', 'BBSCmd', 'THEME.info'), 'latin1');
+    const info = fs.readFileSync(path.join(REPO, 'board', 'Commands', 'BBSCmd', 'THEME.info'), 'latin1');
     expect(info).toContain('MIN_COLUMNS=40');
     // The mark it must NOT carry: C64_ADAPT would put the frame adapter on
     // the socket and crop a screen that is already forty columns wide.

@@ -15,12 +15,12 @@
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { loadConfig, applyConfigText, defaultConfig } from '../../../../Doors/bbslinkwall/config';
+import { loadConfig, applyConfigText, defaultConfig } from '../../../../board/Doors/bbslinkwall/config';
 
 const WALL_MANIFEST = fs.readFileSync(
-  path.join(__dirname, '../../../../Doors/bbslinkwall/door.settings.json'), 'utf8');
+  path.join(__dirname, '../../../../board/Doors/bbslinkwall/door.settings.json'), 'utf8');
 const BBSLINK_MANIFEST = fs.readFileSync(
-  path.join(__dirname, '../../../../Doors/bbslink/door.settings.json'), 'utf8');
+  path.join(__dirname, '../../../../board/Doors/bbslink/door.settings.json'), 'utf8');
 
 describe('the BBSLink wall configuration', () => {
   let doorsDir: string;

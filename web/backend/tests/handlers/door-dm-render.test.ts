@@ -3,7 +3,7 @@
 describe('formatDmLine', () => {
   let formatDmLine: (d: any) => string;
   beforeAll(() => {
-    formatDmLine = require('../../../../Doors/livechat/handlers/dm-render').formatDmLine;
+    formatDmLine = require('../../../../board/Doors/livechat/handlers/dm-render').formatDmLine;
   });
 
   it('renders 1:1 sent DM with magenta', () => {

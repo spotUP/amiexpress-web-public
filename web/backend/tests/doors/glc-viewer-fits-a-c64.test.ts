@@ -21,7 +21,7 @@ import {
   compactActions, ellipsis, narrowBody, narrowColumns, narrowFooter, narrowHeader,
   narrowListRows, narrowRow, narrowSkeletonRow,
   printableWidth, renderNarrowScreen,
-} from '../../../../Doors/glc-viewer/src/narrow';
+} from '../../../../board/Doors/glc-viewer/src/narrow';
 
 const CALL = {
   Username: 'Spot', Location: 'Sweden', Bbsname: 'uPtOWN',
@@ -110,14 +110,14 @@ describe('what the registration must say', () => {
     // refused, which is what the sysop hit. This is the door asserting the
     // thing the test above proves.
     const icon = fs.readFileSync(
-      path.join(__dirname, '../../../../Commands/BBSCmd/gl.info'), 'latin1',
+      path.join(__dirname, '../../../../board/Commands/BBSCmd/gl.info'), 'latin1',
     );
     expect(icon).toContain('MIN_COLUMNS=40');
   });
 
   it('does not claim C64_ADAPT, which would be a lie for a TS door', () => {
     const icon = fs.readFileSync(
-      path.join(__dirname, '../../../../Commands/BBSCmd/gl.info'), 'latin1',
+      path.join(__dirname, '../../../../board/Commands/BBSCmd/gl.info'), 'latin1',
     );
     // `ADAPTED_DOOR_TYPES` is XIM/DD/SIM/FIM - the adapter never sees this
     // door's output, so a claim to reach 40 THROUGH it would be false.
@@ -165,7 +165,7 @@ describe('what the second screenshot changed', () => {
 
 describe('the placeholder logo the door ships', () => {
   const placeholder = (style: number) => fs.readFileSync(
-    path.join(__dirname, '../../../../Doors/glc-viewer/art', `style${style}.c64.ans`), 'latin1',
+    path.join(__dirname, '../../../../board/Doors/glc-viewer/art', `style${style}.c64.ans`), 'latin1',
   );
 
   it('exists for every style, so a C64 screen is never bare', () => {

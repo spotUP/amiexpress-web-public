@@ -10,7 +10,7 @@
 import {
   videoPlaceholderMessage,
   emptyChannelNotice,
-} from '../../../../Doors/livechat/ui/video-tile';
+} from '../../../../board/Doors/livechat/ui/video-tile';
 
 describe('videoPlaceholderMessage', () => {
   it('tells you your own camera is starting, not that it is waiting for video', () => {

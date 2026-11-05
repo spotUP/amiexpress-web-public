@@ -63,12 +63,12 @@ const REPO_ROOT = path.resolve(__dirname, '..', '..', '..');
 // The board's OWN files, not copies: the FCheck icons, the checker and its
 // advert under Doors/multi-check, and the archivers under C/. The test proves
 // the configuration the live board ships, not a hand-typed stand-in for it.
-const CHECKER = path.join(REPO_ROOT, 'Doors', 'multi-check', 'mULTI-cHECK');
-const ADVERT = path.join(REPO_ROOT, 'Doors', 'multi-check', 'uprough.txt');
+const CHECKER = path.join(REPO_ROOT, 'board', 'Doors', 'multi-check', 'mULTI-cHECK');
+const ADVERT = path.join(REPO_ROOT, 'board', 'Doors', 'multi-check', 'uprough.txt');
 const ARCHIVE = path.join(__dirname, 'fixtures', 'archives', 'checked.lha');
 const ZIP_ARCHIVE = path.join(__dirname, 'fixtures', 'archives', 'checked.zip');
-const LHA = path.join(REPO_ROOT, 'C', 'LhA');
-const ZIP = path.join(REPO_ROOT, 'C', 'Zip');
+const LHA = path.join(REPO_ROOT, 'board', 'C', 'LhA');
+const ZIP = path.join(REPO_ROOT, 'board', 'C', 'Zip');
 const runnable = [CHECKER, ADVERT, ARCHIVE, ZIP_ARCHIVE, LHA, ZIP].every((p) => fs.existsSync(p));
 const describeMaybe = runnable ? describe : describe.skip;
 
@@ -99,7 +99,7 @@ describeMaybe('an upload is checked by a 68K CHECKER named on an Amiga path', ()
     fs.copyFileSync(ADVERT, path.join(dataDir, 'Doors', 'multi-check', 'uprough.txt'));
     fs.mkdirSync(path.join(dataDir, 'FCheck'));
     for (const ext of ['LHA', 'ZIP']) {
-      fs.copyFileSync(path.join(REPO_ROOT, 'FCheck', `${ext}.info`), path.join(dataDir, 'FCheck', `${ext}.info`));
+      fs.copyFileSync(path.join(REPO_ROOT, 'board', 'FCheck', `${ext}.info`), path.join(dataDir, 'FCheck', `${ext}.info`));
     }
     const playpen = path.join(dataDir, 'Node1', 'Playpen');
     fs.mkdirSync(playpen, { recursive: true });

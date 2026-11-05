@@ -43,7 +43,7 @@ describe('a tooltype key reads as FindToolType reads it', () => {
   }
 
   it('reads the LOCATION of a damaged icon whose length byte leaks in front of it', () => {
-    const map = readTooltypeMap(path.join(REPO, 'Doors/-mGs!-MGZListMan/MGZLISTMAN.info'));
+    const map = readTooltypeMap(path.join(REPO, 'board', 'Doors/-mGs!-MGZListMan/MGZLISTMAN.info'));
     expect(map.get('LOCATION')).toBe('DOORS:-mgs!-MgzListMan/MGZLISTMAN');
     expect(map.has('+LOCATION')).toBe(false);
   });

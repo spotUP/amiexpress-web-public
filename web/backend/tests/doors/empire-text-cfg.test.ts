@@ -27,8 +27,8 @@ import {
 } from '../../src/doors/text-cfg/empire';
 
 const repoRoot = path.resolve(__dirname, '..', '..', '..', '..');
-const bullsCfg = fs.readFileSync(path.join(repoRoot, 'Doors', 'emp_tools', 'Bulls.CFG'));
-const joinCfg = fs.readFileSync(path.join(repoRoot, 'Doors', 'emp_tools', 'joincnf.cfg'));
+const bullsCfg = fs.readFileSync(path.join(repoRoot, 'board', 'Doors', 'emp_tools', 'Bulls.CFG'));
+const joinCfg = fs.readFileSync(path.join(repoRoot, 'board', 'Doors', 'emp_tools', 'joincnf.cfg'));
 
 /*
  * The shipped Bulls.CFG is the live board's file and the sysop edits it, so

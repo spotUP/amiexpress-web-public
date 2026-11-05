@@ -19,8 +19,8 @@
  */
 import {
   whipPanes, sideFits, taskEditorLayout, projectEditorLayout, modalSize, buttonRow,
-} from '../../../../../Doors/whip/ui/layout';
-import { columnGeometry } from '../../../../../Doors/whip/ui/kanban-board';
+} from '../../../../../board/Doors/whip/ui/layout';
+import { columnGeometry } from '../../../../../board/Doors/whip/ui/kanban-board';
 
 /** The content pane of a WHIP screen at 80x24: menu bar 1, header 3, footer 3. */
 const EIGHTY_ROWS = 24 - (1 + 7);

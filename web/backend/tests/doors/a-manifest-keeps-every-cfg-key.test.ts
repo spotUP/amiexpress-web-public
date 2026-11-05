@@ -20,7 +20,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 
-const DOORS_ROOT = path.resolve(__dirname, '../../../../Doors');
+const DOORS_ROOT = path.resolve(__dirname, '../../../../board/Doors');
 
 interface Manifest {
   command: string;

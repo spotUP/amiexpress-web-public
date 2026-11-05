@@ -14,7 +14,7 @@
 
 export {};
 const { Screen } = require('../../../../../sdk/engines/ui/blessed');
-const { showMainMenu } = require('../../../../../Doors/whip/ui/main-menu');
+const { showMainMenu } = require('../../../../../board/Doors/whip/ui/main-menu');
 
 type Coords = { xi: number; xl: number; yi: number; yl: number };
 

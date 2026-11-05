@@ -93,7 +93,7 @@ describe('InfoFileParser reads what the format owner reads', () => {
     // The case that made this visible: NODESTART swallowed the rest of the
     // array, so a node imported with no DEF_SCREENS, no CALLERS_LOG and no
     // PRIORITY.
-    const file = path.join(REPO, 'Node0.info');
+    const file = path.join(REPO, 'board', 'Node0.info');
     if (!fs.existsSync(file)) return;
 
     const scraped = asMap(new InfoFileParser().parse(fs.readFileSync(file)).toolTypes);
@@ -107,7 +107,7 @@ describe('InfoFileParser reads what the format owner reads', () => {
   test('a commented-out tooltype is not set, the way FindToolType reads it', () => {
     // tooltypes.e:215-218 - `(KEY=value)` is disabled. A scraper cannot tell,
     // and would import a setting the sysop had switched off.
-    const buffer = fs.readFileSync(path.join(REPO, 'Node0.info'));
+    const buffer = fs.readFileSync(path.join(REPO, 'board', 'Node0.info'));
     const owner = tooltypeMap(parseInfoBuffer(buffer));
     const scraped = asMap(new InfoFileParser().parse(buffer).toolTypes);
 

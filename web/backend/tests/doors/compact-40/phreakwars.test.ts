@@ -27,8 +27,8 @@
  */
 export {};
 
-const ui = require('../../../../../Doors/phreakwars/lib/ui');
-const { createNewGameState } = require('../../../../../Doors/phreakwars/lib/player');
+const ui = require('../../../../../board/Doors/phreakwars/lib/ui');
+const { createNewGameState } = require('../../../../../board/Doors/phreakwars/lib/player');
 
 /** A socket that records payloads, and splits them into terminal rows. */
 function recordingSocket() {

@@ -20,7 +20,7 @@
  */
 const fs = require('fs');
 const grandmasterDepsInstalled = fs.existsSync(
-  require('path').join(__dirname, '../../../../../Doors/grandmaster/node_modules/better-sqlite3'),
+  require('path').join(__dirname, '../../../../../board/Doors/grandmaster/node_modules/better-sqlite3'),
 );
 const describeIfInstalled = grandmasterDepsInstalled ? describe : describe.skip;
 
@@ -28,11 +28,11 @@ const describeIfInstalled = grandmasterDepsInstalled ? describe : describe.skip;
    without this the module still loads, still reaches better-sqlite3, and the
    suite still dies before the skip can take effect. */
 const menu = grandmasterDepsInstalled
-  ? require('../../../../../Doors/grandmaster/ui/menu')
+  ? require('../../../../../board/Doors/grandmaster/ui/menu')
   : { MENU_ITEMS: [], MENU_SELECTIONS: [], menuRowsFor: () => ({ items: [], selections: [] }) };
 const { MENU_ITEMS, MENU_SELECTIONS, menuRowsFor } = menu;
 const { attractModeFor } = grandmasterDepsInstalled
-  ? require('../../../../../Doors/grandmaster/ui/attract-screen')
+  ? require('../../../../../board/Doors/grandmaster/ui/attract-screen')
   : { attractModeFor: () => null };
 
 describeIfInstalled('grandmaster menu at 40 columns', () => {

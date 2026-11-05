@@ -22,7 +22,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 
-const CFG = path.resolve(__dirname, '..', '..', '..', '..', 'Doors', 'emp_tools', 'Bulls.CFG');
+const CFG = path.resolve(__dirname, '..', '..', '..', '..', 'board', 'Doors', 'emp_tools', 'Bulls.CFG');
 
 /** Every `; Conference N` row, in the order the door reads them. */
 function maskRows(): Array<{ mask: string; labelled: number }> {

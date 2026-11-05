@@ -54,9 +54,9 @@ function copyIfPresent(from: string, to: string): void {
 export function makeBoardRoot(prefix = 'walk-board-'): string {
   const root = fs.mkdtempSync(path.join(testTmpDir(), prefix));
 
-  copyIfPresent(path.join(REPO, 'Screens'), path.join(root, 'Screens'));
-  copyIfPresent(path.join(REPO, 'Conf1'), path.join(root, 'Conf1'));
-  copyIfPresent(path.join(REPO, 'Commands'), path.join(root, 'Commands'));
+  copyIfPresent(path.join(REPO, 'board', 'Screens'), path.join(root, 'Screens'));
+  copyIfPresent(path.join(REPO, 'board', 'Conf1'), path.join(root, 'Conf1'));
+  copyIfPresent(path.join(REPO, 'board', 'Commands'), path.join(root, 'Commands'));
 
   for (const f of ['bbsConfig.info', 'ConfConfig.info']) {
     const src = path.join(REPO, f);
@@ -67,7 +67,7 @@ export function makeBoardRoot(prefix = 'walk-board-'): string {
   for (const n of [0, 1, 2, 3]) {
     fs.mkdirSync(path.join(root, `Node${n}`), { recursive: true });
     const icon = path.join(REPO, `Node${n}.info`);
-    const fallback = path.join(REPO, 'Node2.info');
+    const fallback = path.join(REPO, 'board', 'Node2.info');
     const from = fs.existsSync(icon) ? icon : fallback;
     if (fs.existsSync(from)) fs.copyFileSync(from, path.join(root, `Node${n}.info`));
   }

@@ -16,7 +16,7 @@
 import { readFileSync } from 'fs';
 import { join } from 'path';
 
-const DOOR = join(__dirname, '..', '..', '..', '..', 'Doors', 'livechat');
+const DOOR = join(__dirname, '..', '..', '..', '..', 'board', 'Doors', 'livechat');
 const client = readFileSync(join(DOOR, 'client.ts'), 'utf8');
 const voiceUx = readFileSync(join(DOOR, 'features', 'voice-channel-ux.ts'), 'utf8');
 

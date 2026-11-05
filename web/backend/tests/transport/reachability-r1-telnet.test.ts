@@ -45,7 +45,7 @@ jest.setTimeout(60000);
 const REPO_ROOT = path.resolve(__dirname, '..', '..', '..', '..');
 // BBSTITLE is a NODE screen; the board reads Node<n>/BBSTITLE.txt. The Screens/ copy went in
 // 5a3ec9bf7 (screens the board never reads).
-const SCREEN = path.join(REPO_ROOT, 'Node1', 'BBSTITLE.txt');
+const SCREEN = path.join(REPO_ROOT, 'board', 'Node1', 'BBSTITLE.txt');
 const STEP_01_SENTINEL = 'A/R/P/P8/T/N';
 
 const deps = (): TransportSessionDeps => ({

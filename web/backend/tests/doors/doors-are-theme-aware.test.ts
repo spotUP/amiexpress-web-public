@@ -27,7 +27,7 @@
 import { readFileSync, readdirSync, statSync, existsSync } from 'fs';
 import { join } from 'path';
 
-const DOORS = join(__dirname, '..', '..', '..', '..', 'Doors');
+const DOORS = join(__dirname, '..', '..', '..', '..', 'board', 'Doors');
 
 /** Non-game doors: chrome, not artwork. */
 const THEME_AWARE_DOORS = [

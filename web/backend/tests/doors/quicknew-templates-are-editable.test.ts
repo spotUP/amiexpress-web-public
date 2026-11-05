@@ -21,7 +21,7 @@ import {
 } from '../../src/doors/quicknew-config';
 
 const REPO = path.join(__dirname, '..', '..', '..', '..');
-const REAL = path.join(REPO, 'Doors', 'QuickNew', 'QuickNew.Config1');
+const REAL = path.join(REPO, 'board', 'Doors', 'QuickNew', 'QuickNew.Config1');
 
 /** The shape of the file, built the way the door reads it. */
 function aConfig(areas: Array<[string, string, string]>): string {

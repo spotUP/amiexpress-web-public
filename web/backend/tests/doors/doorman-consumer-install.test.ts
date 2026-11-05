@@ -39,7 +39,7 @@ import * as path from 'path';
 // this is what lets the owner-mode-parity test assert, on the real
 // production import binding, that consumer-only network calls never fire
 // for an owner-mode install.
-jest.mock('../../../../Doors/door-manager/repo-client', () => ({
+jest.mock('../../../../board/Doors/door-manager/repo-client', () => ({
   downloadArchive: jest.fn(),
   fetchManifest: jest.fn(),
   fetchDoorDetail: jest.fn(),
@@ -52,12 +52,12 @@ import {
   type InstallDeps,
   type ConsumerInstallDeps,
   type DoorInstallEntry,
-} from '../../../../Doors/door-manager/app';
-import { downloadArchive, fetchManifest } from '../../../../Doors/door-manager/repo-client';
-import type { DoorRepoManifest, ManifestDoor } from '../../../../Doors/door-manager/repo-types.generated';
-import type { RepoClientConfig, FetchManifestResult } from '../../../../Doors/door-manager/repo-client';
-import { mapManifestDoorToEntry } from '../../../../Doors/door-manager/repoDataSource';
-import type { LocalCatalogRow, LocalCatalogLookup, InstallLookup } from '../../../../Doors/door-manager/repoDataSource';
+} from '../../../../board/Doors/door-manager/app';
+import { downloadArchive, fetchManifest } from '../../../../board/Doors/door-manager/repo-client';
+import type { DoorRepoManifest, ManifestDoor } from '../../../../board/Doors/door-manager/repo-types.generated';
+import type { RepoClientConfig, FetchManifestResult } from '../../../../board/Doors/door-manager/repo-client';
+import { mapManifestDoorToEntry } from '../../../../board/Doors/door-manager/repoDataSource';
+import type { LocalCatalogRow, LocalCatalogLookup, InstallLookup } from '../../../../board/Doors/door-manager/repoDataSource';
 
 const mockDownloadArchive = downloadArchive as jest.MockedFunction<typeof downloadArchive>;
 const mockFetchManifest = fetchManifest as jest.MockedFunction<typeof fetchManifest>;

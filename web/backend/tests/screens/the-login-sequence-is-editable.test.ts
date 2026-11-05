@@ -43,7 +43,7 @@ function boardScreens(limit = 400): string[] {
       else if (/\.(txt|ttx)$/i.test(e.name) && fs.statSync(full).size < 200_000) out.push(full);
     }
   };
-  for (const r of roots) walk(path.join(REPO, r));
+  for (const r of roots) walk(path.join(REPO, 'board', r));
   return out;
 }
 

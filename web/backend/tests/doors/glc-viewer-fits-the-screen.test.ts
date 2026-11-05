@@ -15,9 +15,9 @@
 import * as fs from 'fs';
 import * as path from 'path';
 
-import { autoLines, WIDE_CHROME_ROWS } from '../../../../Doors/glc-viewer/src/sizing';
+import { autoLines, WIDE_CHROME_ROWS } from '../../../../board/Doors/glc-viewer/src/sizing';
 
-const DOOR = path.join(__dirname, '../../../../Doors/glc-viewer');
+const DOOR = path.join(__dirname, '../../../../board/Doors/glc-viewer');
 
 describe('LINES=AUTO', () => {
   it('is the caller\'s own screen less the chrome, as the original computes it', () => {

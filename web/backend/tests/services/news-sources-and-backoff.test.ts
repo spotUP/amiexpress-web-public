@@ -44,7 +44,7 @@ describe('news sources', () => {
   });
 
   it('BullHelp lists exactly the sources that exist', () => {
-    const help = fs.readFileSync(path.join(__dirname, '../../../../Bulletins/BullHelp.txt'), 'utf8');
+    const help = fs.readFileSync(path.join(__dirname, '../../../../board/Bulletins/BullHelp.txt'), 'utf8');
     const listed = [...help.matchAll(/^#(\d+)\s+(.+?)\s*$/gm)].map((m) => `${m[1]}`).filter((n) => parseInt(n, 10) >= 13);
     const have = NEWS_BULLETIN_SOURCES.map((s) => s.file.replace(/\D/g, '')).filter((n) => parseInt(n, 10) >= 13);
     expect(listed.sort()).toEqual(have.sort());

@@ -24,8 +24,8 @@ import {
   settings,
   dailyBonusCooldownMs,
   DEFAULT_SETTINGS,
-} from '../../../../Doors/card-lobby/lib/settings';
-import { initProfile, calculateEntryFee } from '../../../../Doors/card-lobby/lib/utils';
+} from '../../../../board/Doors/card-lobby/lib/settings';
+import { initProfile, calculateEntryFee } from '../../../../board/Doors/card-lobby/lib/utils';
 import {
   STARTING_CHIPS,
   DAILY_BONUS,
@@ -34,9 +34,9 @@ import {
   ENTRY_FEE_RATE,
   ACTIVITY_REWARD,
   WIN_REWARD,
-} from '../../../../Doors/card-lobby/lib/constants';
+} from '../../../../board/Doors/card-lobby/lib/constants';
 
-const DOOR_DIR = path.join(__dirname, '../../../../Doors/card-lobby');
+const DOOR_DIR = path.join(__dirname, '../../../../board/Doors/card-lobby');
 const manifest = JSON.parse(fs.readFileSync(path.join(DOOR_DIR, 'door.settings.json'), 'utf8'));
 
 describe('Card Lobby settings', () => {

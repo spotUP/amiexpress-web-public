@@ -19,8 +19,8 @@ import { config } from '../../src/config';
 const REPO = path.resolve(__dirname, '../../../..');
 const shipped = [
   'Screens/Conf/uploadmsg.txt',
-  ...fs.readdirSync(path.join(REPO, 'Themes/tango/Conf')).map((n) => `Themes/tango/Conf/${n}/UploadMsg.txt`),
-].filter((rel) => fs.existsSync(path.join(REPO, rel)));
+  ...fs.readdirSync(path.join(REPO, 'board', 'Themes/tango/Conf')).map((n) => `Themes/tango/Conf/${n}/UploadMsg.txt`),
+].filter((rel) => fs.existsSync(path.join(REPO, 'board', rel)));
 
 let root: string;
 let previousDataDir: string;
@@ -42,7 +42,7 @@ describe('every shipped upload screen', () => {
   });
 
   it.each(shipped)('%s holds the caller on its art, and shows no code as text', async (rel) => {
-    fs.copyFileSync(path.join(REPO, rel), path.join(root, 'Conf1', 'UploadMsg.txt'));
+    fs.copyFileSync(path.join(REPO, 'board', rel), path.join(root, 'Conf1', 'UploadMsg.txt'));
     const { displayScreen, continueAfterScreen } = require('../../src/handlers/screen.handler');
     const emits: Array<{ event: string; data: any }> = [];
     const socket = { id: `up-${Math.random()}`, emit: (event: string, data: any) => emits.push({ event, data }), on: () => {} } as any;

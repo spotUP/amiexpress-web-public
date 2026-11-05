@@ -94,7 +94,7 @@ setHelpers({
 });
 
 const REPO = path.resolve(__dirname, '../../../../..');
-const BBSCMD = path.join(REPO, 'Commands/BBSCmd');
+const BBSCMD = path.join(REPO, 'board', 'Commands/BBSCmd');
 const FIXTURES = path.join(REPO, 'sdk/tests/petscii/frame/fixtures');
 
 const NOTICE = 'NO UPLOADERS ARE AVAILABLE IN THIS CONFERENCE';

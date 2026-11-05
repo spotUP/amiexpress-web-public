@@ -47,7 +47,7 @@ describe('AppleDouble sidecars', () => {
     // reason and let this test pass on the unfiltered scan.
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     const { parseInfoFile, writeInfoFile } = require('../../src/utils/info-file.util');
-    const template = path.join(__dirname, '../../../../Commands/BBSCmd/DOORREPO.info');
+    const template = path.join(__dirname, '../../../../board/Commands/BBSCmd/DOORREPO.info');
 
     for (const name of ['REALDOOR.info', '._REALDOOR.info']) {
       const target = path.join(bbscmd, name);

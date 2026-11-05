@@ -11,7 +11,7 @@
  * border is drawn with 0xA1 and 0xF7. The BBS speaks ISO-8859-1/Amiga, so
  * those bytes are display characters, not noise.
  */
-import { sanitizeForTags } from '../../../../Doors/door-manager/ViewManager';
+import { sanitizeForTags } from '../../../../board/Doors/door-manager/ViewManager';
 
 describe('DOORMAN sanitizeForTags: Amiga charset', () => {
   it('keeps high-bit characters so art keeps its width', () => {

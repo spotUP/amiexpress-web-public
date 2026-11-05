@@ -24,7 +24,7 @@ function board(): string {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'samilog-records-'));
   const utils = path.join(dir, 'Utils', 'samilog');
   fs.mkdirSync(utils, { recursive: true });
-  fs.copyFileSync(path.join(REPO, 'S', 'SAmiLog.Store'), path.join(utils, 'SAmiLog.Store'));
+  fs.copyFileSync(path.join(REPO, 'board', 'S', 'SAmiLog.Store'), path.join(utils, 'SAmiLog.Store'));
   fs.mkdirSync(path.join(dir, 'Node1'));
   fs.copyFileSync(path.join(__dirname, '..', 'fixtures', 'amiga-board', 'Node1', 'CallersLog'), path.join(dir, 'Node1', 'CallersLog'));
   return dir;

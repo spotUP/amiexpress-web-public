@@ -40,13 +40,13 @@ function screenAt(width: number, height: number): any {
 
 describe('the composer on a C64', () => {
   it('is reachable at all - ae.info opens at forty columns', () => {
-    const info = readFileSync(join(REPO, 'Commands', 'BBSCmd', 'ae.info'), 'utf8');
+    const info = readFileSync(join(REPO, 'board', 'Commands', 'BBSCmd', 'ae.info'), 'utf8');
 
     expect(info).toMatch(/^MIN_COLUMNS=40$/m);
   });
 
   it('picks the editor by the terminal, not by a constant', () => {
-    const source = readFileSync(join(REPO, 'Doors', 'mail-composer', 'index.ts'), 'utf8');
+    const source = readFileSync(join(REPO, 'board', 'Doors', 'mail-composer', 'index.ts'), 'utf8');
 
     expect(source).toContain('isPetsciiMode');
     expect(source).toContain('new PetsciiEditor');
@@ -123,7 +123,7 @@ describe('the New Message dialog on a C64', () => {
   const { AnsiToPetsciiTransducer } = require('../../../../../sdk/petscii/ansi-to-petscii');
   const { PetsciiMachine } = require('../../../../../sdk/petscii/petscii-machine');
   const { SCREENCODE_TO_UNICODE } = require('../../../../../sdk/petscii/screencode-unicode');
-  const composer = require('../../../../../Doors/mail-composer/index').default;
+  const composer = require('../../../../../board/Doors/mail-composer/index').default;
 
   async function glassAt40(): Promise<{ text: string[]; filled: boolean[][] }> {
     const wire: string[] = [];
@@ -196,7 +196,7 @@ describe('what the composer hands the board', () => {
      * and the message was dropped: "topic is dino not recipiemt" (the sysop,
      * 2026-09-23).
      */
-    const source = readFileSync(join(REPO, 'Doors', 'mail-composer', 'index.ts'), 'utf8');
+    const source = readFileSync(join(REPO, 'board', 'Doors', 'mail-composer', 'index.ts'), 'utf8');
 
     expect(source).toContain('bbs.postMessage(message.subject, message.content, message.to)');
   });
@@ -204,7 +204,7 @@ describe('what the composer hands the board', () => {
 
 describe('the composer on an eighty-column board', () => {
   it('still builds the ANSI editor, and the send path is shared', () => {
-    const source = readFileSync(join(REPO, 'Doors', 'mail-composer', 'index.ts'), 'utf8');
+    const source = readFileSync(join(REPO, 'board', 'Doors', 'mail-composer', 'index.ts'), 'utf8');
 
     // One send/draft/discard branch, taking the content rather than reading
     // it - the ANSI body and the PETSCII one differ only in how they are got.

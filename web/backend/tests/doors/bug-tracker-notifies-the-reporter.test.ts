@@ -4,7 +4,7 @@
  * Doors/bug-tracker/door.settings.json). Never for the reporter's own
  * action, an internal sysop note, or an anonymous report.
  */
-const { notifyReporter } = require('../../../../Doors/bug-tracker/board-announce');
+const { notifyReporter } = require('../../../../board/Doors/bug-tracker/board-announce');
 
 const bug = (over: Record<string, unknown> = {}): any => ({
   id: 7, title: 'Crash on save', reporter: 'dino', status: 'fixed', updatedAt: 99, comments: [{ id: 4 }], ...over,

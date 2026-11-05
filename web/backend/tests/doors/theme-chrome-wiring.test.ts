@@ -18,7 +18,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 const REPO_ROOT = path.resolve(__dirname, '../../../..');
-const DOORS_DIR = path.join(REPO_ROOT, 'Doors');
+const DOORS_DIR = path.join(REPO_ROOT, 'board', 'Doors');
 
 /** The one call. A door that takes the theme has to reach this. */
 const ENTRY_POINT = 'attachDoorChrome';

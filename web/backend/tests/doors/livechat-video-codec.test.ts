@@ -24,7 +24,7 @@ import {
   MODE_HALFBLOCK,
   MODE_BRAILLE,
   MODE_ASCII,
-} from '../../../../Doors/livechat/video-cells';
+} from '../../../../board/Doors/livechat/video-cells';
 
 const W = 16;
 const H = 8;

@@ -17,7 +17,7 @@ import * as path from 'path';
 
 import { BUILT_IN_FILEVIEW_LAYOUT, compileFileLayout, sectionFault } from '../../src/services/file-layout.service';
 
-const SHIPPED = path.join(__dirname, '..', '..', '..', '..', 'Prompts', 'FILEVIEW.40');
+const SHIPPED = path.join(__dirname, '..', '..', '..', '..', 'board', 'Prompts', 'FILEVIEW.40');
 
 describe('the shipped layout file', () => {
   it('exists in the repo, so a deploy has something to seed', () => {

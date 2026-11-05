@@ -17,7 +17,7 @@
  * with it, unused at the gate today and correct the day either door learns
  * to draw its own content.
  */
-import { banner, screenColumns, widthNotice } from '../../../../../Doors/bbslinkwall/layout';
+import { banner, screenColumns, widthNotice } from '../../../../../board/Doors/bbslinkwall/layout';
 
 /** Printable columns, escapes removed. */
 const printable = (s: string): number => s.replace(/\x1b\[[0-9;?]*[A-Za-z]/g, '').length;

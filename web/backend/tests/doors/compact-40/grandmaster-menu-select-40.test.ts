@@ -56,7 +56,7 @@ import { AnsiToPetsciiTransducer, PetsciiMachine } from '@amiexpress/bbs-door-sd
  */
 const fs = require('fs');
 const grandmasterDepsInstalled = fs.existsSync(
-  require('path').join(__dirname, '../../../../../Doors/grandmaster/node_modules/better-sqlite3'),
+  require('path').join(__dirname, '../../../../../board/Doors/grandmaster/node_modules/better-sqlite3'),
 );
 const describeIfInstalled = grandmasterDepsInstalled ? describe : describe.skip;
 

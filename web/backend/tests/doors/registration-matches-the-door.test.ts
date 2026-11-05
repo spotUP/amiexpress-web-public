@@ -26,7 +26,7 @@ import * as path from 'path';
 import { parseInfoFile } from '../../src/utils/info-file.util';
 
 const ROOT = path.resolve(__dirname, '../../../..');
-const BBSCMD = path.join(ROOT, 'Commands/BBSCmd');
+const BBSCMD = path.join(ROOT, 'board', 'Commands/BBSCmd');
 
 interface Registration {
   file: string;
@@ -52,7 +52,7 @@ function registrations(): Registration[] {
       // is what a 68K registration carries - and a 68K LOCATION names the
       // BINARY, so the door is the first segment under Doors.
       const relative = location.replace(/^Doors:/i, 'Doors/').replace(/^Doors\//i, '');
-      const doorDir = path.join(ROOT, 'Doors', relative.split('/')[0]);
+      const doorDir = path.join(ROOT, 'board', 'Doors', relative.split('/')[0]);
 
       return [{ file: name, type: value('TYPE').toUpperCase(), location, doorDir }];
     });
@@ -225,7 +225,7 @@ describe('door registrations', () => {
 
     expect(ae).toBeDefined();
     expect(ae!.location).toBe('Doors/mail-composer');
-    expect(fs.existsSync(path.join(ROOT, 'Doors', 'mail-composer', 'index.ts'))).toBe(true);
-    expect(fs.existsSync(path.join(ROOT, 'Doors', 'mail-composer', 'dist', 'index.js'))).toBe(true);
+    expect(fs.existsSync(path.join(ROOT, 'board', 'Doors', 'mail-composer', 'index.ts'))).toBe(true);
+    expect(fs.existsSync(path.join(ROOT, 'board', 'Doors', 'mail-composer', 'dist', 'index.js'))).toBe(true);
   });
 });

@@ -1,4 +1,4 @@
-import { commandForArchive } from '../../../../Doors/door-manager/archive-command';
+import { commandForArchive } from '../../../../board/Doors/door-manager/archive-command';
 
 /**
  * DOORMAN used to ask the sysop to type a BBS command when installing a

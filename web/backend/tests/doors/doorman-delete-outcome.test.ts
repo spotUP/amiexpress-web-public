@@ -11,7 +11,7 @@
  * every step and the header flashes the outcome. A delete that failed, or one
  * that removed the files and left the door registered, does.
  */
-import { deleteOutcomeView } from '../../../../Doors/door-manager/delete-outcome';
+import { deleteOutcomeView } from '../../../../board/Doors/door-manager/delete-outcome';
 
 it('goes back to the selected door when the delete worked', () => {
   const view = deleteOutcomeView({ success: true, stillListed: false, command: 'HDRDROP' });
@@ -55,7 +55,7 @@ it('still says something when the failure had no message', () => {
  * registered as GWWALL with LOCATION=Doors/bbslinkwall, so the two names
  * differ.
  */
-import { deleteIdentifierFor } from '../../../../Doors/door-manager/delete-door-action';
+import { deleteIdentifierFor } from '../../../../board/Doors/door-manager/delete-door-action';
 
 it('asks for a TypeScript door by its directory, not its command', () => {
   const { id, isTS } = deleteIdentifierFor({

@@ -24,7 +24,7 @@ import {
 } from '@amiexpress/bbs-door-sdk/formats/ctop-data';
 import { applyTooltypes } from '../../../src/utils/info-file.util';
 
-import door from '../../../../../Doors/ctop-viewer/index';
+import door from '../../../../../board/Doors/ctop-viewer/index';
 
 const TODAY = toAmigaDays(new Date());
 

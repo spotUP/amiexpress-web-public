@@ -9,7 +9,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 
-import { REPO_ROOT, isProtectedLivePath } from '../live-data-guard';
+import { REPO_ROOT, BOARD_DIR, isProtectedLivePath } from '../live-data-guard';
 
 /**
  * Names nothing on the board uses, inside the directory that was actually
@@ -23,8 +23,8 @@ import { REPO_ROOT, isProtectedLivePath } from '../live-data-guard';
  * `tests/repo/tracked-fixtures.test.ts` exists to forbid. This file obeys its
  * own rule.
  */
-const LIVE_TARGET = path.join(REPO_ROOT, 'Conf1', 'MsgBase', '.live-data-guard-probe');
-const LIVE_PROBE_DIR = path.join(REPO_ROOT, 'Conf1', 'MsgBase', '.live-data-guard-probe-dir');
+const LIVE_TARGET = path.join(BOARD_DIR, 'Conf1', 'MsgBase', '.live-data-guard-probe');
+const LIVE_PROBE_DIR = path.join(BOARD_DIR, 'Conf1', 'MsgBase', '.live-data-guard-probe-dir');
 
 /**
  * A live board file that IS in every checkout: `Conf.DB` is the conference
@@ -35,7 +35,7 @@ const LIVE_PROBE_DIR = path.join(REPO_ROOT, 'Conf1', 'MsgBase', '.live-data-guar
  * private data. `Conf1/MsgBase/HeaderFile`, which these cases used to name, is
  * gitignored: it is on the sysop's disk and in no clone.
  */
-const LIVE_READABLE = path.join(REPO_ROOT, 'Conf.DB');
+const LIVE_READABLE = path.join(BOARD_DIR, 'Conf.DB');
 
 describe('live board write guard', () => {
   let temp: string;
@@ -84,7 +84,7 @@ describe('live board write guard', () => {
     it('refuses unlinkSync and rmSync on live board data', () => {
       expect(() => fs.unlinkSync(LIVE_READABLE)).toThrow(/live-data-guard/);
       expect(fs.statSync(LIVE_READABLE).size).toBeGreaterThan(0);
-      expect(() => fs.rmSync(path.join(REPO_ROOT, 'Conf1'), { recursive: true })).toThrow(
+      expect(() => fs.rmSync(path.join(BOARD_DIR, 'Conf1'), { recursive: true })).toThrow(
         /live-data-guard/,
       );
     });
@@ -137,7 +137,7 @@ describe('live board write guard', () => {
         'user.data',
         'Conf.DB',
       ]) {
-        expect(() => fs.writeFileSync(path.join(REPO_ROOT, rel), 'x')).toThrow(
+        expect(() => fs.writeFileSync(path.join(BOARD_DIR, rel), 'x')).toThrow(
           /live-data-guard/,
         );
       }
@@ -156,8 +156,8 @@ describe('live board write guard', () => {
       // Both targets are protected AND tracked, so this case says the same
       // thing in a clone as it says on the sysop's machine.
       expect(fs.readFileSync(LIVE_READABLE).length).toBeGreaterThan(0);
-      expect(fs.readdirSync(path.join(REPO_ROOT, 'Bulletins')).length).toBeGreaterThan(0);
-      expect(fs.readdirSync(path.join(REPO_ROOT, 'Screens')).length).toBeGreaterThan(0);
+      expect(fs.readdirSync(path.join(BOARD_DIR, 'Bulletins')).length).toBeGreaterThan(0);
+      expect(fs.readdirSync(path.join(BOARD_DIR, 'Screens')).length).toBeGreaterThan(0);
       // And the read side is not an allow-list of known files: nothing in the
       // guard's write path runs for a read at all, so a name it has no reason
       // to know reaches the real `fs` and gets the real answer.
@@ -180,7 +180,7 @@ describe('live board write guard', () => {
       // seed-shares-node-screens copies Node0.info out of the checkout into a
       // temp board. Guarding the SOURCE of a copy would break it for nothing.
       const dest = path.join(temp, 'Node0.info');
-      fs.copyFileSync(path.join(REPO_ROOT, 'Node0.info'), dest);
+      fs.copyFileSync(path.join(BOARD_DIR, 'Node0.info'), dest);
       expect(fs.statSync(dest).size).toBeGreaterThan(0);
     });
 
@@ -203,7 +203,7 @@ describe('live board write guard', () => {
       ['web/backend/src/config.ts', false],
       ['package.json', false],
     ])('%s -> protected=%s', (rel, expected) => {
-      expect(isProtectedLivePath(path.join(REPO_ROOT, rel as string))).toBe(expected);
+      expect(isProtectedLivePath(path.join(BOARD_DIR, rel as string))).toBe(expected);
     });
 
     it('never claims a path outside this checkout', () => {
@@ -224,7 +224,7 @@ describe('live board write guard', () => {
     it('config.get(dataDir) does not resolve to the live checkout root', () => {
       // eslint-disable-next-line @typescript-eslint/no-var-requires
       const { config } = require('../../src/config');
-      expect(path.resolve(config.get('dataDir'))).not.toBe(REPO_ROOT);
+      expect(path.resolve(config.get('dataDir'))).not.toBe(BOARD_DIR);
     });
 
     it('messageIndexManager does not resolve its MsgBase to the live board', () => {

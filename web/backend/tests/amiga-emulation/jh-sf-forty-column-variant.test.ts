@@ -185,7 +185,7 @@ describe('JH_SF picks the 40-column variant for an adapted caller', () => {
  */
 describe("the board's own 40-column door art", () => {
   const REPO = path.resolve(__dirname, '../../../..');
-  const WALL = path.join(REPO, 'Doors', 'dRE', 'dRE!WAll');
+  const WALL = path.join(REPO, 'board', 'Doors', 'dRE', 'dRE!WAll');
 
   /** Printable width: SGR sequences occupy no column. */
   const widthOf = (line: string) => line.replace(/\x1b\[[0-9;]*m/g, '').length;

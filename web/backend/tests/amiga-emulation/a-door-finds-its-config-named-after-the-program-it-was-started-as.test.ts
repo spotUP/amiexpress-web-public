@@ -59,7 +59,7 @@ function getProgramName(name: string): string {
   return stub.cstr(0x1000);
 }
 
-const termInfo = path.resolve(__dirname, "../../../../Commands/SysCmd/TERM.info");
+const termInfo = path.resolve(__dirname, "../../../../board/Commands/SysCmd/TERM.info");
 
 describe("a door finds its config named after the program it was started as", () => {
   (fs.existsSync(termInfo) ? test : test.skip)(

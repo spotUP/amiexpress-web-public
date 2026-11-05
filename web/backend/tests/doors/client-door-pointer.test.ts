@@ -45,7 +45,7 @@ setHelpers({
 const repoRoot = join(__dirname, '..', '..', '..', '..');
 
 function manifest(door: string): Record<string, unknown> {
-  return JSON.parse(readFileSync(join(repoRoot, 'Doors', door, 'package.json'), 'utf8'));
+  return JSON.parse(readFileSync(join(repoRoot, 'board', 'Doors', door, 'package.json'), 'utf8'));
 }
 
 describe('client door pointer capture', () => {

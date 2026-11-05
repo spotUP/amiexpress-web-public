@@ -35,7 +35,7 @@ let spy: jest.SpyInstance;
 
 function icon(conferenceDirName: string, tooltypes: Array<[string, string]>, remove: string[] = []): string {
   const file = path.join(root, `${conferenceDirName}.info`);
-  if (!fs.existsSync(file)) fs.copyFileSync(path.join(REPO, 'Conf1.info'), file);
+  if (!fs.existsSync(file)) fs.copyFileSync(path.join(REPO, 'board', 'Conf1.info'), file);
   applyTooltypes(file, tooltypes, { removeKeys: (key) => remove.includes(key) });
   return file;
 }

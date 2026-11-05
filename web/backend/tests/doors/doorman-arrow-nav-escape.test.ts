@@ -75,8 +75,8 @@
  * "popped once" from "popped twice, silently emptying the stack".
  */
 import { Screen, List } from '../../../../sdk/engines/ui/blessed';
-import { ViewManager, BaseView, KeyBinder } from '../../../../Doors/door-manager/ViewManager';
-import { ALL_TYPES, distinctTypes, cycleSystemFilter, filterByDoorType, formatSystemTag } from '../../../../Doors/door-manager/systemFilter';
+import { ViewManager, BaseView, KeyBinder } from '../../../../board/Doors/door-manager/ViewManager';
+import { ALL_TYPES, distinctTypes, cycleSystemFilter, filterByDoorType, formatSystemTag } from '../../../../board/Doors/door-manager/systemFilter';
 
 interface Entry { door_type: string; name: string }
 

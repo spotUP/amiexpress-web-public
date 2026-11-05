@@ -50,7 +50,7 @@ describe('edit.tf frame conversion', () => {
   });
 
   it('keeps a carousel\'s later subpages verbatim', () => {
-    const text = fs.readFileSync(path.join(REPO, 'Teletext/uprough-demo/pages/P102-0000.tti'), 'latin1');
+    const text = fs.readFileSync(path.join(REPO, 'board', 'Teletext/uprough-demo/pages/P102-0000.tti'), 'latin1');
     const { cells, meta } = ttiToFrame(text);
     expect(meta.tail[0]).toBe('PN,10201');
     const written = frameToTti(cells, meta);

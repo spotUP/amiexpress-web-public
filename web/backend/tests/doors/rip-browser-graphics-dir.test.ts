@@ -14,7 +14,7 @@
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { ripGraphicsDir } from '../../../../Doors/rip-browser/paths';
+import { ripGraphicsDir } from '../../../../board/Doors/rip-browser/paths';
 
 describe('the RIP browser graphics directory', () => {
   let bbsRoot: string;
@@ -52,7 +52,7 @@ describe('the RIP browser graphics directory', () => {
     expect(ripGraphicsDir(doorDist)).not.toContain('/Users/');
 
     const source = fs.readFileSync(
-      path.join(__dirname, '../../../../Doors/rip-browser/paths.ts'), 'utf8')
+      path.join(__dirname, '../../../../board/Doors/rip-browser/paths.ts'), 'utf8')
       .replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
     expect(source).not.toContain('/Users/');
   });

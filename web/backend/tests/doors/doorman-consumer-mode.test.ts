@@ -20,10 +20,10 @@ import {
   consumerCacheFilePath,
   type CatalogEntry,
   type LocalCatalogRow,
-} from '../../../../Doors/door-manager/repoDataSource';
-import { filterByDoorType, ALL_TYPES } from '../../../../Doors/door-manager/systemFilter';
-import type { ManifestDoor, DoorRepoManifest } from '../../../../Doors/door-manager/repo-types.generated';
-import type { RepoClientConfig, FetchManifestResult } from '../../../../Doors/door-manager/repo-client';
+} from '../../../../board/Doors/door-manager/repoDataSource';
+import { filterByDoorType, ALL_TYPES } from '../../../../board/Doors/door-manager/systemFilter';
+import type { ManifestDoor, DoorRepoManifest } from '../../../../board/Doors/door-manager/repo-types.generated';
+import type { RepoClientConfig, FetchManifestResult } from '../../../../board/Doors/door-manager/repo-client';
 
 // ─── Mode selection matrix ──────────────────────────────────────────────────
 

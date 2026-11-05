@@ -21,7 +21,7 @@ beforeEach(() => clearThemeRegistryCache());
 
 describe('the shipped theme', () => {
   it('is registered, live, and the board default', () => {
-    const registry = readThemeRegistry(REPO);
+    const registry = readThemeRegistry(path.join(REPO, 'board'));
     const tango = registry.themes.find(theme => theme.slug === 'tango');
 
     expect(tango).toBeDefined();
@@ -31,14 +31,14 @@ describe('the shipped theme', () => {
   });
 
   it('has no owner, because the board ships it - it is not one artist\'s sandbox', () => {
-    const tango = readThemeRegistry(REPO).themes.find(theme => theme.slug === 'tango');
+    const tango = readThemeRegistry(path.join(REPO, 'board')).themes.find(theme => theme.slug === 'tango');
     // An OWNER is an account the sandbox lets write. The shipped theme belongs
     // to the software, so only a sysop edits it.
     expect(tango!.owner).toBe('');
   });
 
   it('keeps its screens in the SCOPE directories the resolver reads', () => {
-    const root = path.join(REPO, 'Themes', 'tango');
+    const root = path.join(REPO, 'board', 'Themes', 'tango');
     for (const scope of ['Board', 'Node', 'Conf']) {
       expect(fs.existsSync(path.join(root, scope))).toBe(true);
     }
@@ -48,7 +48,7 @@ describe('the shipped theme', () => {
   });
 
   it('carries the screens the board serves, whole - not just the art', () => {
-    const menu = fs.readFileSync(path.join(REPO, 'Themes/tango/Conf/1/Menu.txt'), 'latin1');
+    const menu = fs.readFileSync(path.join(REPO, 'board', 'Themes/tango/Conf/1/Menu.txt'), 'latin1');
     // Colour codes sit BETWEEN the bracket and the letter, so `[E]` never
     // appears in the raw bytes - the same shape that hid a damaged MENU.TXT
     // from a check this morning. Read what a caller reads.
@@ -62,7 +62,7 @@ describe('the shipped theme', () => {
   });
 
   it('is latin1 with its escapes intact, not a UTF-8 round trip', () => {
-    const bull = fs.readFileSync(path.join(REPO, 'Themes/tango/Board/BULL.TXT'));
+    const bull = fs.readFileSync(path.join(REPO, 'board', 'Themes/tango/Board/BULL.TXT'));
     expect(bull.includes(0x1b)).toBe(true);   // real ANSI escapes
     expect(bull.includes(0xf8)).toBe(true);   // tGø's ø, one latin1 byte
     expect(bull.includes(Buffer.from('Ã¸', 'latin1'))).toBe(false); // the UTF-8 wreck
@@ -72,7 +72,7 @@ describe('the shipped theme', () => {
     // doors, operator, request and sysop name no screen express.e routes, so
     // they wait in the theme's Files/ mirror for a sysop who makes one.
     for (const name of ['doors', 'operator', 'request', 'sysop']) {
-      expect(fs.existsSync(path.join(REPO, 'Themes/tango/Files/Screens/tango', `${name}.ans`))).toBe(true);
+      expect(fs.existsSync(path.join(REPO, 'board', 'Themes/tango/Files/Screens/tango', `${name}.ans`))).toBe(true);
     }
   });
 });
@@ -111,8 +111,8 @@ describe('a caller on a board that ships it', () => {
     fs.writeFileSync(path.join(root, 'Screens', 'BULL.TXT'), 'the plain board bulletin\r\n', 'latin1');
 
     // The shipped theme, copied as the deploy would place it.
-    fs.cpSync(path.join(REPO, 'Themes', 'tango'), path.join(root, 'Themes', 'tango'), { recursive: true });
-    fs.copyFileSync(path.join(REPO, 'Themes.info'), path.join(root, 'Themes.info'));
+    fs.cpSync(path.join(REPO, 'board', 'Themes', 'tango'), path.join(root, 'Themes', 'tango'), { recursive: true });
+    fs.copyFileSync(path.join(REPO, 'board', 'Themes.info'), path.join(root, 'Themes.info'));
     clearThemeRegistryCache();
   });
 

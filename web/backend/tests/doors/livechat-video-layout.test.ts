@@ -25,7 +25,7 @@
 import {
   layoutSignature,
   pickSpeaker,
-} from '../../../../Doors/livechat/features/video-layout';
+} from '../../../../board/Doors/livechat/features/video-layout';
 
 const ME = 'me';
 const OTHER = 'other';
@@ -117,7 +117,7 @@ describe('who is on screen in speaker mode', () => {
 });
 
 describe('measuring the grid container', () => {
-  const { resolveBoxSize } = require('../../../../Doors/livechat/features/video-layout');
+  const { resolveBoxSize } = require('../../../../board/Doors/livechat/features/video-layout');
 
   /** A box built with a layout spec, as the video grid's container is. */
   const specBox = (coords: any) => ({
@@ -167,7 +167,7 @@ describe('what makes the grid rebuild', () => {
   const { readFileSync } = require('fs');
   const { join } = require('path');
   const grid = readFileSync(
-    join(__dirname, '..', '..', '..', '..', 'Doors', 'livechat', 'features', 'video-grid.ts'),
+    join(__dirname, '..', '..', '..', '..', 'board', 'Doors', 'livechat', 'features', 'video-grid.ts'),
     'utf8'
   );
 
@@ -189,7 +189,7 @@ describe('what makes the grid rebuild', () => {
 });
 
 describe('choosing the view mode', () => {
-  const { autoViewMode } = require('../../../../Doors/livechat/features/video-layout');
+  const { autoViewMode } = require('../../../../board/Doors/livechat/features/video-layout');
 
   it('fills the panel with one person when you are alone', () => {
     // A grid of one is just a smaller picture.
@@ -214,7 +214,7 @@ describe('choosing the view mode', () => {
 describe('telling the camera the tile changed', () => {
   const { readFileSync } = require('fs');
   const { join } = require('path');
-  const DOOR = join(__dirname, '..', '..', '..', '..', 'Doors', 'livechat');
+  const DOOR = join(__dirname, '..', '..', '..', '..', 'board', 'Doors', 'livechat');
   const grid = readFileSync(join(DOOR, 'features', 'video-grid.ts'), 'utf8');
   const voiceUx = readFileSync(join(DOOR, 'features', 'voice-channel-ux.ts'), 'utf8');
 
@@ -241,7 +241,7 @@ describe('telling the camera the tile changed', () => {
 });
 
 describe('arranging the tiles', () => {
-  const { bestColumns } = require('../../../../Doors/livechat/features/video-layout');
+  const { bestColumns } = require('../../../../board/Doors/livechat/features/video-layout');
 
   it('puts two people side by side in a wide panel', () => {
     // The reported case: a 63x18 chat panel. Maximising AREA picked one

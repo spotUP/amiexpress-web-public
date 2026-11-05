@@ -22,7 +22,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 
-const DOOR = path.resolve(__dirname, '..', '..', '..', '..', 'Doors', 'grandmaster');
+const DOOR = path.resolve(__dirname, '..', '..', '..', '..', 'board', 'Doors', 'grandmaster');
 
 const {
   buildBoard,

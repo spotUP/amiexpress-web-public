@@ -29,7 +29,7 @@ const {
   pathColumn,
   showsReason,
   fitToWidth,
-} = require('../../../../../Doors/ami-stripper/layout');
+} = require('../../../../../board/Doors/ami-stripper/layout');
 
 /** Printable length of one terminal row. */
 const printable = (s: string): number => s.replace(/\x1b\[[0-9;]*[A-Za-z]/g, '').length;

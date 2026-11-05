@@ -282,7 +282,7 @@ for (const [id, entry] of Object.entries(manifest)) {
         expect({ id, binary: entry.binary, exists: fs.existsSync(binary) })
           .toEqual({ id, binary: entry.binary, exists: true });
         for (const command of installedOf(entry)) {
-          const infoPath = path.join(repo, 'Commands/BBSCmd', `${command}.info`);
+          const infoPath = path.join(repo, 'board', 'Commands/BBSCmd', `${command}.info`);
           expect({ id, command, exists: fs.existsSync(infoPath) })
             .toEqual({ id, command, exists: true });
           // Read the tooltype out of the real bytes. The .info files on this
@@ -307,7 +307,7 @@ for (const [id, entry] of Object.entries(manifest)) {
     (entry.withdrawn ? it : it.skip)('has no C64_ADAPT left in the registration it withdrew', () => {
       const repo = path.resolve(__dirname, '../../../..');
       const command = (entry.withdrawn as { command: string }).command;
-      const infoPath = path.join(repo, 'Commands/BBSCmd', `${command}.info`);
+      const infoPath = path.join(repo, 'board', 'Commands/BBSCmd', `${command}.info`);
       expect({ id, command, exists: fs.existsSync(infoPath) }).toEqual({ id, command, exists: true });
       const infoBytes = fs.readFileSync(infoPath).toString('latin1');
       expect({ id, command, marked: /C64_ADAPT/.test(infoBytes) }).toEqual({ id, command, marked: false });

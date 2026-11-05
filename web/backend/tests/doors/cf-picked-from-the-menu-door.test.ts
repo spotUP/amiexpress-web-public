@@ -51,9 +51,9 @@ import { flushOutput } from '../../src/utils/output.util';
 
 installDispatchHarness(root => {
   fs.mkdirSync(path.join(root, 'Doors'), { recursive: true });
-  fs.symlinkSync(path.join(REPO, 'Doors', 'MAINMENU'), path.join(root, 'Doors', 'MAINMENU'));
+  fs.symlinkSync(path.join(REPO, 'board', 'Doors', 'MAINMENU'), path.join(root, 'Doors', 'MAINMENU'));
   fs.mkdirSync(path.join(root, 'Commands', 'BBSCmd'), { recursive: true });
-  fs.copyFileSync(path.join(REPO, 'Commands', 'BBSCmd', 'MENU.info'), path.join(root, 'Commands', 'BBSCmd', 'MENU.info'));
+  fs.copyFileSync(path.join(REPO, 'board', 'Commands', 'BBSCmd', 'MENU.info'), path.join(root, 'Commands', 'BBSCmd', 'MENU.info'));
   fs.cpSync(path.join(BOARD, 'Menus'), path.join(root, 'Menus'), { recursive: true });
   fs.cpSync(path.join(BOARD, 'Screens'), path.join(root, 'Screens'), { recursive: true });
   fs.writeFileSync(path.join(root, 'ConfConfig.info'), '');
@@ -95,7 +95,7 @@ describe('CF picked from the menu door', () => {
       conferences: [{ id: 1, name: 'Amiga Demoscene!' }, { id: 2, name: 'C64 Demoscene' }] as any,
       messageBases: [], messages: [], checkConfAccess: () => true,
     });
-    const menuTypes = Object.fromEntries(readTooltypeMap(path.join(REPO, 'Commands', 'BBSCmd', 'MENU.info')));
+    const menuTypes = Object.fromEntries(readTooltypeMap(path.join(REPO, 'board', 'Commands', 'BBSCmd', 'MENU.info')));
     await register({ ...doorOver('MENU', menuTypes), type: 'XIM', location: menuTypes.LOCATION });
     const user = { id: 'u1', username: 'Spot', realname: 'Johan', location: 'Old Town', slotNumber: 1, secLevel: 255,
       securityFlags: 'T'.repeat(128), userFlags: 0, editor: 'Prompt', zoomType: 0, availableForChat: true, protocol: 'zmodem', expert: 'N', menuStyle: 'scroll' };

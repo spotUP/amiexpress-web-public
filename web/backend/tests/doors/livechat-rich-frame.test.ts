@@ -21,7 +21,7 @@ import {
   MODE_ASCII,
   MODE_ASCII_COLOR,
   type RichFrame,
-} from '../../../../Doors/livechat/video-cells';
+} from '../../../../board/Doors/livechat/video-cells';
 import {
   encodeRichFrame,
   decodeRichFrame,

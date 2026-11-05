@@ -65,7 +65,7 @@ describe('the doors a teletext caller is here for', () => {
    * repeats the tooltype it is checking proves only that two files agree
    * with each other.
    */
-  const REGISTRATIONS = path.resolve(__dirname, '../../../../Commands/BBSCmd');
+  const REGISTRATIONS = path.resolve(__dirname, '../../../../board/Commands/BBSCmd');
   const TELETEXT_DOORS = ['TELETEXT', 'TTQUIZ', 'TTWORMS', 'BEEB', 'TEXTTV'];
 
   test.each(TELETEXT_DOORS)('%s opens for a 40-column teletext caller', command => {

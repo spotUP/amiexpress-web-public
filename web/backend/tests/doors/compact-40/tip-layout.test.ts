@@ -9,8 +9,8 @@
  * RED-proven 2026-09-11: hardcoding the frame to 62 re-fails the 40-col
  * fit; restoring the width rule greens it again.
  */
-import { buildTipFrame } from '../../../../../Doors/tip-of-day/layout';
-import type { Tip } from '../../../../../Doors/tip-of-day/tips';
+import { buildTipFrame } from '../../../../../board/Doors/tip-of-day/layout';
+import type { Tip } from '../../../../../board/Doors/tip-of-day/tips';
 
 export {};
 
@@ -78,7 +78,7 @@ describe('tip-of-the-day content boxes', () => {
     const fs = require('fs');
     const path = require('path');
     const src = fs.readFileSync(
-      path.join(__dirname, '../../../../../Doors/tip-of-day/app.ts'),
+      path.join(__dirname, '../../../../../board/Doors/tip-of-day/app.ts'),
       'utf8',
     );
     for (const anchor of ['content: frame.title', 'content: frame.body.join', 'content: frame.hint']) {

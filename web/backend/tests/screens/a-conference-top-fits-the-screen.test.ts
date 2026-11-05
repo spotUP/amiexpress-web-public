@@ -40,9 +40,9 @@ const REPO_ROOT = path.resolve(__dirname, '../../../..');
 /** Every conference icon that configures ConfTop, by conference directory. */
 function conftopIcons(): { name: string; file: string }[] {
   return fs
-    .readdirSync(REPO_ROOT)
+    .readdirSync(path.join(REPO_ROOT, 'board'))
     .filter(entry => /^Conf\d+$/.test(entry))
-    .map(name => ({ name, file: path.join(REPO_ROOT, name, 'Conftop.info') }))
+    .map(name => ({ name, file: path.join(REPO_ROOT, 'board', name, 'Conftop.info') }))
     .filter(({ file }) => fs.existsSync(file));
 }
 

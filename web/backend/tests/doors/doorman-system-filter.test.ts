@@ -12,7 +12,7 @@ import {
   cycleSystemFilter,
   filterByDoorType,
   formatSystemTag,
-} from '../../../../Doors/door-manager/systemFilter';
+} from '../../../../board/Doors/door-manager/systemFilter';
 
 interface Row { door_type: string; name: string }
 

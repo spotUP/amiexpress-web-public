@@ -4,7 +4,7 @@
  * binding was guarded). KeyBinder now supports a modal guard that suppresses
  * every bound hotkey while a text-input mode is active.
  */
-import { KeyBinder } from '../../../Doors/door-manager/ViewManager';
+import { KeyBinder } from '../../../board/Doors/door-manager/ViewManager';
 
 class ScreenStub {
   handlers = new Map<string, Array<(...a: unknown[]) => void>>();
@@ -59,7 +59,7 @@ describe('DOORMAN KeyBinder modal guard', () => {
 // tags:true blessed box — brace runs in ASCII art were parsed as tags and
 // the art rendered mangled. sanitizeForTags escapes braces and drops
 // non-printable/high-bit bytes.
-import { sanitizeForTags } from '../../../Doors/door-manager/ViewManager';
+import { sanitizeForTags } from '../../../board/Doors/door-manager/ViewManager';
 
 describe('DOORMAN sanitizeForTags', () => {
   it('escapes brace runs so blessed does not eat ASCII art', () => {
@@ -82,7 +82,7 @@ describe('DOORMAN sanitizeForTags', () => {
 // Regression: installed doors were invisible in the doors list until BBS
 // restart — the backend door registry is a boot-time cache and DOORMAN never
 // called reloadDoors(). refreshDoorRegistry discovers it via require.cache.
-import { refreshDoorRegistry } from '../../../Doors/door-manager/ViewManager';
+import { refreshDoorRegistry } from '../../../board/Doors/door-manager/ViewManager';
 
 describe('DOORMAN refreshDoorRegistry', () => {
   it('calls reloadDoors on the discovered door.handler module', async () => {
@@ -102,7 +102,7 @@ describe('DOORMAN refreshDoorRegistry', () => {
 // SOURCE app.ts (one level short of repo root) — installs wrote
 // Commands/BBSCmd into the wrong tree. resolveBbsRoot prefers env, then
 // walks up to the dir containing Commands/BBSCmd.
-import { resolveBbsRoot } from '../../../Doors/door-manager/ViewManager';
+import { resolveBbsRoot } from '../../../board/Doors/door-manager/ViewManager';
 
 describe('DOORMAN resolveBbsRoot', () => {
   const hasCmd = (root: string) => (p: string) => p === `${root}/Commands/BBSCmd`;

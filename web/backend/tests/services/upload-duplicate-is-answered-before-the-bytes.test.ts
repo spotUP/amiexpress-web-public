@@ -45,7 +45,7 @@ function boardWithConference(): string {
   fs.mkdirSync(path.join(root, `Conf${CONF}`, 'LcFiles'), { recursive: true });
 
   const icon = path.join(root, `Conf${CONF}.info`);
-  fs.copyFileSync(path.join(REPO, 'Conf1.info'), icon);
+  fs.copyFileSync(path.join(REPO, 'board', 'Conf1.info'), icon);
   writeInfoFile(updateTooltype(parseInfoFile(icon), 'DLPATH.1', `Conf${CONF}/Files`, false));
   writeInfoFile(updateTooltype(parseInfoFile(icon), 'ULPATH.1', `Conf${CONF}/Upload`, false));
   return root;
@@ -165,7 +165,7 @@ describe("the sysop's own list of names never to accept", () => {
     fs.writeFileSync(listPath, names.join('\n') + '\n', 'latin1');
 
     const icon = path.join(root, `Node${nodeId}.info`);
-    fs.copyFileSync(path.join(REPO, 'Conf1.info'), icon);
+    fs.copyFileSync(path.join(REPO, 'board', 'Conf1.info'), icon);
     writeInfoFile(updateTooltype(parseInfoFile(icon), 'FILESNOTALLOWED', listPath, false));
     clearNodeTooltypeCache();
   }
@@ -183,7 +183,7 @@ describe("the sysop's own list of names never to accept", () => {
     const { config } = require('../../src/config');
     config.set('dataDir', root);
     const icon = path.join(root, 'Node0.info');
-    fs.copyFileSync(path.join(REPO, 'Conf1.info'), icon);
+    fs.copyFileSync(path.join(REPO, 'board', 'Conf1.info'), icon);
     writeInfoFile(updateTooltype(parseInfoFile(icon), 'FILESNOTALLOWED', path.join(root, 'NO-SUCH-LIST'), false));
     clearNodeTooltypeCache();
 

@@ -34,7 +34,7 @@ function boardWithSysopAccess(): string {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'acs-eall-'));
   fs.mkdirSync(path.join(root, 'Access'), { recursive: true });
   fs.copyFileSync(
-    path.join(__dirname, '..', '..', '..', '..', 'Access', 'ACS.255.info'),
+    path.join(__dirname, '..', '..', '..', '..', 'board', 'Access', 'ACS.255.info'),
     path.join(root, 'Access', 'ACS.255.info'),
   );
   return root;

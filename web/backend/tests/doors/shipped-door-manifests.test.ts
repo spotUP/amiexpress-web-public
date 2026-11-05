@@ -14,7 +14,7 @@ import * as path from 'path';
 import { readDoorSettings } from '@amiexpress/bbs-door-sdk/settings';
 import { readDoorSettingsView } from '../../src/doors/door-settings.service';
 
-const DOORS_DIR = path.join(__dirname, '../../../../Doors');
+const DOORS_DIR = path.join(__dirname, '../../../../board/Doors');
 
 const doorsWithManifests = fs.readdirSync(DOORS_DIR)
   .filter(name => fs.existsSync(path.join(DOORS_DIR, name, 'door.settings.json')))

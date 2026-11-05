@@ -107,7 +107,7 @@ describe('a duplicate is a file on the board, not a row in the catalogue', () =>
   function conferenceFilesIn(dir: string): void {
     const { parseInfoFile, writeInfoFile, updateTooltype } = require('../../src/utils/info-file.util');
     const icon = path.join(root, 'Conf1.info');
-    fs.copyFileSync(path.join(REPO, 'Conf1.info'), icon);
+    fs.copyFileSync(path.join(REPO, 'board', 'Conf1.info'), icon);
     writeInfoFile(updateTooltype(parseInfoFile(icon), 'DLPATH.1', path.join(root, dir), false));
   }
 

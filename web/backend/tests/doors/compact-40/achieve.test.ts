@@ -5,7 +5,7 @@
 import { getCompactProfile } from '../../../../../sdk/engines/ui/blessed/core/responsive-constants';
 const {
   menuItems, profileLines, catalogLines, leaderboardLines, explain, footerHints, familiesOf, clip, accountAction,
-} = require('../../../../../Doors/achieve/app');
+} = require('../../../../../board/Doors/achieve/app');
 
 const compact = getCompactProfile(40);
 const wide = getCompactProfile(80);

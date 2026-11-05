@@ -22,7 +22,7 @@ import {
   serializeMuteList,
   deserializeMuteList,
   muteMessage,
-} from '../../../../Doors/livechat/core/mute-list';
+} from '../../../../board/Doors/livechat/core/mute-list';
 
 describe('the three levels differ', () => {
   it('mute hides room messages but not DMs', () => {

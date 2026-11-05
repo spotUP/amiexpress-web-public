@@ -10,7 +10,7 @@
  * in-channel marker, and the talking marker.
  */
 
-import { buildSidebarItems } from '../../../../Doors/livechat/handlers/sidebar-items-builder';
+import { buildSidebarItems } from '../../../../board/Doors/livechat/handlers/sidebar-items-builder';
 
 /** Minimal stand-ins for the collaborators the builder reads. */
 function makeInput(voiceChannels: any[], currentVoiceChannel: string | null) {

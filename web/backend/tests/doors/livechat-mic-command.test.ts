@@ -17,7 +17,7 @@ import {
   resolveMicChoice,
   micCmd,
   type MicDevice,
-} from '../../../../Doors/livechat/commands/mic';
+} from '../../../../board/Doors/livechat/commands/mic';
 
 const DEVICES: MicDevice[] = [
   { deviceId: 'default', label: 'BlackHole 2ch' },

@@ -46,7 +46,7 @@ setHelpers({
   getRecentCallerActivity: async () => [],
 });
 
-const BBSCMD = path.resolve(__dirname, '../../../../../Commands/BBSCmd');
+const BBSCMD = path.resolve(__dirname, '../../../../../board/Commands/BBSCmd');
 const LIVECHAT_INFO = path.join(BBSCMD, 'LIVECHAT.info');
 
 /** What index.ts launched before the extraction, field for field. */

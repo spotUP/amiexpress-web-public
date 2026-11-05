@@ -83,7 +83,7 @@ const PAUSE_PROMPT = '(Pause)...More(y/n/ns)? ';
 
 const REPO = path.resolve(__dirname, '../../../..');
 const FIXTURE = path.join(REPO, 'sdk/tests/petscii/frame/fixtures/gwall.ans');
-const GWALL_INFO = path.join(REPO, 'Commands/BBSCmd/GWALL.info');
+const GWALL_INFO = path.join(REPO, 'board', 'Commands/BBSCmd/GWALL.info');
 
 /** JH_SM - express.e:3406. */
 const JH_SM = 4;

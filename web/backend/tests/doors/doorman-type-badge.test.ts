@@ -11,7 +11,7 @@
  * letters, and the type's own first two characters for everything else. A
  * door type added next year shows what it is instead of `??`.
  */
-import { typeBadge } from '../../../../Doors/door-manager/type-badge';
+import { typeBadge } from '../../../../board/Doors/door-manager/type-badge';
 
 it('badges DayDream doors DD, not ??', () => {
   expect(typeBadge('DD')).toBe('DD');

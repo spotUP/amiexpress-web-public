@@ -175,7 +175,7 @@ describe('an art setting is a Studio slot', () => {
     // THE REACHABILITY GATE. Every case above builds its own door; this one
     // drives the folder the board actually ships, so a slot that works on a
     // fixture and not on the real manifest fails here.
-    const repoDoor = path.join(__dirname, '..', '..', '..', '..', 'Doors', 'REQUESTS');
+    const repoDoor = path.join(__dirname, '..', '..', '..', '..', 'board', 'Doors', 'REQUESTS');
 
     const slots = listDoorArtSections(repoDoor, 'REQ');
 
@@ -243,14 +243,14 @@ describe('a slot offers only the files that are its own', () => {
   });
 
   it('offers each magazine screen only itself, from the repo manifest', () => {
-    const repoDoor = path.join(__dirname, '..', '..', '..', '..', 'Doors', 'magazine');
+    const repoDoor = path.join(__dirname, '..', '..', '..', '..', 'board', 'Doors', 'magazine');
     const slots = listDoorArtSections(repoDoor, 'MAG').filter((s) => s.section.startsWith('setting:'));
     expect(slots).toHaveLength(15);
     for (const slot of slots) expect(slot.choices!.map((c) => c.file)).toEqual([slot.file]);
   });
 
   it('offers REQUESTS header its header alternates and its tail its tails, from the repo manifest', () => {
-    const repoDoor = path.join(__dirname, '..', '..', '..', '..', 'Doors', 'REQUESTS');
+    const repoDoor = path.join(__dirname, '..', '..', '..', '..', 'board', 'Doors', 'REQUESTS');
     const slots = listDoorArtSections(repoDoor, 'REQ');
     const header = slots.find((s) => s.section === 'setting:bulletinHeader')!;
     const tail = slots.find((s) => s.section === 'setting:bulletinTail')!;

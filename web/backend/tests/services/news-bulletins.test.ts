@@ -254,7 +254,7 @@ describe('the underground magazine', () => {
  * appended under it (sysop, 2026-10-06: "fix it").
  */
 describe('the shipped BullHelp.txt', () => {
-  const shipped = require('path').join(__dirname, '..', '..', '..', '..', 'Bulletins', 'BullHelp.txt');
+  const shipped = require('path').join(__dirname, '..', '..', '..', '..', 'board', 'Bulletins', 'BullHelp.txt');
 
   it('lists the board\'s bulletins, not the Card Lobby\'s', () => {
     const text = require('fs').readFileSync(shipped, 'latin1');
@@ -425,7 +425,7 @@ describe('a feed yields its newest items, whatever order it lists them in', () =
     expect(src).toMatchObject({ file: 'bull30.txt', url: 'https://www.datagubbe.se/atom.xml', title: 'datagubbe - old fogey computing' });
     expect(src.hostGapMs).toBeGreaterThanOrEqual(10000);
     expect(src.intervalMs).toBeGreaterThanOrEqual(6 * 60 * 60 * 1000);
-    const help = fs.readFileSync(path.join(__dirname, '..', '..', '..', '..', 'Bulletins', 'BullHelp.txt'), 'latin1');
+    const help = fs.readFileSync(path.join(__dirname, '..', '..', '..', '..', 'board', 'Bulletins', 'BullHelp.txt'), 'latin1');
     expect(help).toContain('#30    datagubbe - old fogey computing');
   });
 });

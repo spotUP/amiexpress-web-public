@@ -115,7 +115,7 @@ describe('a browser bundle carries what the door asked for', () => {
  * widget set.
  */
 describe('the bundles doors actually ship', () => {
-  const doorsDir = path.resolve(__dirname, '..', '..', 'Doors');
+  const doorsDir = path.resolve(__dirname, '..', '..', 'board', 'Doors');
 
   const bundles = (): Array<{ door: string; kb: number }> =>
     fs.readdirSync(doorsDir)

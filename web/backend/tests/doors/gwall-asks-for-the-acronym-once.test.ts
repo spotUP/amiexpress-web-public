@@ -48,8 +48,8 @@ const REPO_ROOT = path.resolve(__dirname, '..', '..', '..', '..');
 const BACKEND = path.resolve(__dirname, '..', '..');
 const HARNESS = path.join(BACKEND, 'src', 'scripts', 'run-amiga-door.ts');
 const TSX = path.join(BACKEND, 'node_modules', '.bin', 'tsx');
-const GWALL = path.join(REPO_ROOT, 'Doors', 'GWall', 'GWall');
-const GLCVIEWER = path.join(REPO_ROOT, 'Doors', 'glc', 'glcviewer');
+const GWALL = path.join(REPO_ROOT, 'board', 'Doors', 'GWall', 'GWall');
+const GLCVIEWER = path.join(REPO_ROOT, 'board', 'Doors', 'glc', 'glcviewer');
 
 /**
  * THE BOARD THIS SUITE RUNS AGAINST - not the sysop's.
@@ -116,13 +116,13 @@ const ARCHIVE_COPY = path.join(ARCHIVE, 'GWall.cfg');
  */
 const COMMITTED_ARCHIVE_COPY = path.join(
   REPO_ROOT,
-  'System',
+  'board', 'System',
   'Prefs',
   'Env-Archive',
   'GWall.cfg',
 );
 /** The door's own directory, and the server config that belongs in it. */
-const DOOR_DIR = path.join(REPO_ROOT, 'Doors', 'GWall');
+const DOOR_DIR = path.join(REPO_ROOT, 'board', 'Doors', 'GWall');
 const DOOR_CONFIG = path.join(DOOR_DIR, 'GWALL.cfg');
 /** What the archive write used to become. Must never come back. */
 const STRAY = path.join(BOARD, 'gwall.cfg');

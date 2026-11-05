@@ -18,7 +18,7 @@ import {
 } from '../../src/doors/door-settings.service';
 import { parseEmpireFile, getMaskRows } from '../../src/doors/text-cfg/empire';
 
-const repoEmp = path.resolve(__dirname, '..', '..', '..', '..', 'Doors', 'emp_tools');
+const repoEmp = path.resolve(__dirname, '..', '..', '..', '..', 'board', 'Doors', 'emp_tools');
 
 function stage(): string {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'empire-manifest-'));

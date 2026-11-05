@@ -147,7 +147,7 @@ describe('the two rules, on sources written to break them', () => {
     const source = [
       "import * as path from 'path';",
       "import { REPO_ROOT } from '../live-data-guard';",
-      "const header = path.join(REPO_ROOT, 'Conf1', 'MsgBase', 'HeaderFile');",
+      "const header = path.join(REPO_ROOT, 'board', 'Conf1', 'MsgBase', 'HeaderFile');",
       'const bytes = fs.readFileSync(header);',
     ].join('\n');
     // The root arrives through an IMPORT, which is how the guard suite names
@@ -160,7 +160,7 @@ describe('the two rules, on sources written to break them', () => {
       scan(source, loader)
         .references.map((r) => `${r.target} ${r.read}`)
         .sort(),
-    ).toEqual(['Conf1/MsgBase/HeaderFile true']);
+    ).toEqual(['board/Conf1/MsgBase/HeaderFile true']);
   });
 
   it('convicts a test that reads a bulletin the repo does not have', () => {
@@ -251,7 +251,7 @@ describe('the rules, applied to a tracked set', () => {
   const reference = {
     file: 'sample.test.ts',
     line: 1,
-    target: 'Conf.DB',
+    target: 'board/Conf.DB',
     read: true,
     glob: false,
     provisioned: false,
@@ -259,7 +259,7 @@ describe('the rules, applied to a tracked set', () => {
   };
 
   it('says nothing about a live path that git tracks', () => {
-    expect(offences([reference], REPO_ROOT, new Set(['Conf.DB']))).toEqual([]);
+    expect(offences([reference], REPO_ROOT, new Set(['board/Conf.DB']))).toEqual([]);
   });
 
   it('convicts the same path once git stops tracking it', () => {

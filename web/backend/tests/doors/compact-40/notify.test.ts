@@ -18,8 +18,8 @@ import 'reflect-metadata';
 import * as path from 'path';
 import { execFileSync } from 'child_process';
 import { readTooltypeMap } from '../../../src/utils/info-file.util';
-import * as layoutSuite from '../../../../../Doors/notify/tests/layout.test';
-import * as screenSuite from '../../../../../Doors/notify/tests/screen.test';
+import * as layoutSuite from '../../../../../board/Doors/notify/tests/layout.test';
+import * as screenSuite from '../../../../../board/Doors/notify/tests/screen.test';
 
 jest.setTimeout(120000);
 
@@ -56,7 +56,7 @@ describe('NOTIFY: the shipped bundle shows the caller\'s stored choice', () => {
 
 describe('NOTIFY.info', () => {
   it('is marked MIN_COLUMNS=40 and registered for Doors/notify at access level 1', () => {
-    const tt = Object.fromEntries(readTooltypeMap(path.join(REPO, 'Commands/BBSCmd/NOTIFY.info')));
+    const tt = Object.fromEntries(readTooltypeMap(path.join(REPO, 'board', 'Commands/BBSCmd/NOTIFY.info')));
     expect(tt.MIN_COLUMNS).toBe('40');
     expect(tt.BBSCMD).toBe('NOTIFY');
     expect(tt.LOCATION).toBe('Doors/notify');

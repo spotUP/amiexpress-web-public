@@ -87,7 +87,7 @@ const REPO_ROOT = path.resolve(__dirname, '..', '..', '..', '..');
 const BACKEND = path.resolve(__dirname, '..', '..');
 const HARNESS = path.join(BACKEND, 'src', 'scripts', 'run-amiga-door.ts');
 const TSX = path.join(BACKEND, 'node_modules', '.bin', 'tsx');
-const LHA = path.join(REPO_ROOT, 'C', 'LhA');
+const LHA = path.join(REPO_ROOT, 'board', 'C', 'LhA');
 const ARCHIVE = path.join(__dirname, '..', 'fixtures', 'archives', '187-KB1.lzh');
 const runnable = [HARNESS, TSX, LHA, ARCHIVE].every((p) => fs.existsSync(p));
 

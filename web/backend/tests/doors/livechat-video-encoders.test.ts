@@ -18,7 +18,7 @@ import {
   renderHalfblock,
   renderBraille,
   pixelsPerChar,
-} from '../../../../Doors/livechat/video-encoders';
+} from '../../../../board/Doors/livechat/video-encoders';
 
 /** Visible width, with blessed colour tags removed. */
 function visibleWidth(row: string): number {
@@ -114,7 +114,7 @@ describe('the capture size each mode asks for', () => {
 });
 
 describe('keeping the camera the right shape', () => {
-  const { fitPreservingAspect, pixelAspect } = require('../../../../Doors/livechat/video-encoders');
+  const { fitPreservingAspect, pixelAspect } = require('../../../../board/Doors/livechat/video-encoders');
 
   /** How the fitted picture LOOKS on screen, width over height. */
   function screenAspect(fit: any, aspect: number): number {

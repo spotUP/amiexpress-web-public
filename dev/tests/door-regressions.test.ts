@@ -40,7 +40,7 @@ export async function menuArrowHandlersDoNotResetTheSelection(): Promise<void> {
   const offenders: string[] = [];
 
   for (const door of MENU_DOORS) {
-    const file = path.join(REPO_ROOT, 'Doors', door, 'index.ts');
+    const file = path.join(REPO_ROOT, 'board', 'Doors', door, 'index.ts');
     assert.ok(fs.existsSync(file), `${door}: index.ts not found at ${file}`);
     const src = fs.readFileSync(file, 'utf-8');
 
@@ -120,7 +120,7 @@ export async function arcadeDoorsDriveMovementFromHeldKeys(): Promise<void> {
   const missingPoll: string[] = [];
 
   for (const door of MENU_DOORS) {
-    const file = path.join(REPO_ROOT, 'Doors', door, 'index.ts');
+    const file = path.join(REPO_ROOT, 'board', 'Doors', door, 'index.ts');
     const src = fs.readFileSync(file, 'utf-8');
 
     if (!/trackHeldKeys:\s*true/.test(src)) missingOptIn.push(door);
@@ -157,7 +157,7 @@ export async function arcadeDoorsDriveMovementFromHeldKeys(): Promise<void> {
  * regardless of what cwd the backend happens to run with.
  */
 export async function arkanoidHighscorePathIsNotCwdRelative(): Promise<void> {
-  const serverSrc = path.join(REPO_ROOT, 'Doors', 'arkanoid', 'server.ts');
+  const serverSrc = path.join(REPO_ROOT, 'board', 'Doors', 'arkanoid', 'server.ts');
   const src = fs.readFileSync(serverSrc, 'utf-8');
 
   // The literal defect: a cwd-derived highscore path.
@@ -177,7 +177,7 @@ export async function arkanoidHighscorePathIsNotCwdRelative(): Promise<void> {
     const mod = require(serverSrc);
     const resolved: string = mod.getHighscorePath();
 
-    const expected = path.join(REPO_ROOT, 'Doors', 'arkanoid', 'highscores.json');
+    const expected = path.join(REPO_ROOT, 'board', 'Doors', 'arkanoid', 'highscores.json');
     assert.strictEqual(
       resolved, expected,
       `arkanoid highscores resolve to ${resolved}, expected ${expected}`
@@ -254,7 +254,7 @@ export async function oneRowBoxesDoNotCarryAFrame(): Promise<void> {
   const factory = /\b(createBox|blessed\.box|createDockablePanel|createPanel)\s*\(\s*\{/g;
   const counts: Record<string, number> = {};
 
-  for (const file of doorSources(path.join(REPO_ROOT, 'Doors'))) {
+  for (const file of doorSources(path.join(REPO_ROOT, 'board', 'Doors'))) {
     const src = fs.readFileSync(file, 'utf-8');
     factory.lastIndex = 0;
     let m: RegExpExecArray | null;

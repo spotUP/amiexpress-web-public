@@ -100,7 +100,7 @@ describe('a settings door says which section it belongs in', () => {
  * (`~CC_ACHIEVE`, `~CC_COSYSOP`, `~CC_SCREENTHEME`, `~CC_THEME`).
  */
 describe("the board's shipped settings doors", () => {
-  const BBSCMD = path.resolve(__dirname, '../../../../Commands/BBSCmd');
+  const BBSCMD = path.resolve(__dirname, '../../../../board/Commands/BBSCmd');
 
   const toolTypesOf = (command: string): Record<string, string> => {
     const info = parseInfoFile(path.join(BBSCMD, `${command}.info`));

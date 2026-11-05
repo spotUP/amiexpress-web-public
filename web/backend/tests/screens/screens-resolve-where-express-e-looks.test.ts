@@ -47,14 +47,14 @@ const REPO = path.join(__dirname, '..', '..', '..', '..');
  * is not.
  */
 function nodeDirectories(): string[] {
-  const tracked = execSync('git ls-files -- "Node*"', { cwd: REPO, encoding: 'utf8' })
+  const tracked = execSync('git ls-files -- "board/Node*"', { cwd: REPO, encoding: 'utf8' })
     .split('\n')
-    .map(line => line.split('/')[0])
+    .map(line => line.split('/')[1] ?? '')
     .filter(name => /^Node\d+$/.test(name));
 
   return [...new Set(tracked)]
     .filter(name => {
-      const dir = path.join(REPO, name);
+      const dir = path.join(REPO, 'board', name);
       return fs.existsSync(dir) && fs.statSync(dir).isDirectory();
     })
     .sort();
@@ -82,7 +82,7 @@ describe('the await screen', () => {
   // search, no variants - straight out of nodeScreenDir.
   it('is in the node directory express.e reads, on every node', () => {
     const missing = nodes.filter(
-      node => !hasScreen(path.join(REPO, node), 'awaitscreen'),
+      node => !hasScreen(path.join(REPO, 'board', node), 'awaitscreen'),
     );
 
     expect(missing.join(', ')).toBe('');
@@ -92,8 +92,8 @@ describe('the await screen', () => {
   // so a copy left behind is not harmless - it is the thing that hid this.
   it('is not left only in the Screens subdirectory', () => {
     const strayOnly = nodes.filter(node => {
-      const inNodeDir = hasScreen(path.join(REPO, node), 'awaitscreen');
-      const inScreens = hasScreen(path.join(REPO, node, 'Screens'), 'awaitscreen');
+      const inNodeDir = hasScreen(path.join(REPO, 'board', node), 'awaitscreen');
+      const inScreens = hasScreen(path.join(REPO, 'board', node, 'Screens'), 'awaitscreen');
       return inScreens && !inNodeDir;
     });
 
@@ -114,7 +114,7 @@ describe('the title screen', () => {
   // matched ANY extension, so the .SEQ counted. Match what the loader takes.
   it('is in the node directory, in a type an ANSI caller can read', () => {
     const missing = nodes.filter(node => {
-      const entries = fs.readdirSync(path.join(REPO, node));
+      const entries = fs.readdirSync(path.join(REPO, 'board', node));
       return !entries.some(entry => /^BBSTITLE\d*\.(txt|TXT|TXT\.GR|IBM)$/i.test(entry));
     });
 
@@ -125,7 +125,7 @@ describe('the title screen', () => {
   // C64 caller still gets it and the .txt beside it does not shadow it.
   it('keeps the PETSCII sequence beside it', () => {
     const withSeq = nodes.filter(node =>
-      fs.readdirSync(path.join(REPO, node)).some(e => /^BBSTITLE\.SEQ$/i.test(e)),
+      fs.readdirSync(path.join(REPO, 'board', node)).some(e => /^BBSTITLE\.SEQ$/i.test(e)),
     );
 
     expect(withSeq.length).toBeGreaterThan(0);

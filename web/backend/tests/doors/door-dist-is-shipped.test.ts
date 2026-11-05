@@ -26,11 +26,11 @@ import { existsSync, readFileSync, readdirSync, statSync } from 'fs';
 import { join } from 'path';
 
 const REPO = join(__dirname, '..', '..', '..', '..');
-const DOORS = join(REPO, 'Doors');
+const DOORS = join(REPO, 'board', 'Doors');
 
 /** Every file git knows about, once. */
 const tracked = new Set(
-  execFileSync('git', ['ls-files', 'Doors'], { cwd: REPO, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 })
+  execFileSync('git', ['ls-files', 'board/Doors'], { cwd: REPO, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 })
     .split('\n')
     .filter(Boolean),
 );
@@ -71,7 +71,7 @@ describe('every TypeScript door ships its entry point', () => {
   it.each(entries.map((e) => [e.door, e.main]))(
     '%s has %s committed',
     (door, main) => {
-      expect(tracked.has(`Doors/${door}/${main}`)).toBe(true);
+      expect(tracked.has(`board/Doors/${door}/${main}`)).toBe(true);
     },
   );
 
@@ -80,7 +80,7 @@ describe('every TypeScript door ships its entry point', () => {
     // there in the working tree and absent from the commit, so it works
     // here and the board gets nothing.
     const local = entries.filter((e) => existsSync(join(DOORS, e.door, e.main)));
-    const uncommitted = local.filter((e) => !tracked.has(`Doors/${e.door}/${e.main}`));
+    const uncommitted = local.filter((e) => !tracked.has(`board/Doors/${e.door}/${e.main}`));
 
     expect(uncommitted.map((e) => `${e.door}/${e.main}`)).toEqual([]);
   });

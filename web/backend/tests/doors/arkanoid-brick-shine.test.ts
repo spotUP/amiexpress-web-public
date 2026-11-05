@@ -15,7 +15,7 @@ import {
   shineDuration,
   SHINE_ROW_STEP,
   SHINE_VISIBLE,
-} from '../../../../Doors/arkanoid/brick-shine';
+} from '../../../../board/Doors/arkanoid/brick-shine';
 
 const TOP = 5;
 const ROW_HEIGHT = 1;

@@ -17,8 +17,8 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 const repoRoot = path.resolve(__dirname, '../../../..');
-const rexxMastBin = path.join(repoRoot, 'System/RexxMast');
-const rexxSysLib = path.join(repoRoot, 'Libs/rexxsyslib.library');
+const rexxMastBin = path.join(repoRoot, 'board', 'System/RexxMast');
+const rexxSysLib = path.join(repoRoot, 'board', 'Libs/rexxsyslib.library');
 const kickRom = path.join(
   repoRoot,
   'data/amiga-roms',

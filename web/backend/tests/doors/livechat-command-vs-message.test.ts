@@ -17,8 +17,8 @@
  * wants to say.
  */
 
-import { looksLikeCommand } from '../../../../Doors/livechat/handlers/command';
-import { EMOJIS } from '../../../../Doors/livechat/utils/emojis';
+import { looksLikeCommand } from '../../../../board/Doors/livechat/handlers/command';
+import { EMOJIS } from '../../../../board/Doors/livechat/utils/emojis';
 
 describe('looksLikeCommand', () => {
   it('accepts a real command, with or without arguments', () => {

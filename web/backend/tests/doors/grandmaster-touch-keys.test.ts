@@ -18,7 +18,7 @@
 
 import { readFileSync } from 'fs';
 import { join } from 'path';
-import { keyToAction, DEFAULT_KEYS } from '../../../../Doors/grandmaster/input/config';
+import { keyToAction, DEFAULT_KEYS } from '../../../../board/Doors/grandmaster/input/config';
 
 const scheme = readFileSync(
   join(__dirname, '..', '..', '..', '..', 'web', 'frontend', 'src', 'components', 'mobile', 'gesture-scheme.ts'),

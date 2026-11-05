@@ -18,7 +18,7 @@ import {
   nodeColumns,
   panelRuleWidth,
   panelTextPlacement,
-} from '../../../../../Doors/bbs-dashboard/layout';
+} from '../../../../../board/Doors/bbs-dashboard/layout';
 
 describe('the three panels', () => {
   it('sit side by side on an eighty-column board, as they always have', () => {

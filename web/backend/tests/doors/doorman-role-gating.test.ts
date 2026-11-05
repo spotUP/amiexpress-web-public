@@ -20,15 +20,15 @@
  * doorman-arrow-nav-escape.test.ts), not a hand-rolled mirror of the logic.
  */
 import { Screen } from '../../../../sdk/engines/ui/blessed';
-import { KeyBinder } from '../../../../Doors/door-manager/ViewManager';
+import { KeyBinder } from '../../../../board/Doors/door-manager/ViewManager';
 import {
   clampSelection,
   repoViewCurationAllowed,
   repoViewFooterParts,
   registerRepoViewActionKeys,
   type RepoViewHotkeyHandlers,
-} from '../../../../Doors/door-manager/app';
-import type { DoorRepoMode } from '../../../../Doors/door-manager/repoDataSource';
+} from '../../../../board/Doors/door-manager/app';
+import type { DoorRepoMode } from '../../../../board/Doors/door-manager/repoDataSource';
 
 const OWNER: DoorRepoMode = { kind: 'owner' };
 const DISABLED: DoorRepoMode = { kind: 'disabled' };
@@ -243,7 +243,7 @@ describe('DOORMAN app: wrapText', () => {
   // Messages used to carry hard-coded line breaks at a guessed width, which
   // re-broke mid-word on a narrower pane: the live BBS showed "fi les" and
   // "thi s platform".
-  const { wrapText } = require('../../../../Doors/door-manager/app');
+  const { wrapText } = require('../../../../board/Doors/door-manager/app');
 
   it('breaks on spaces, never mid-word', () => {
     const out: string = wrapText('DOORMAN strips junk from an INSTALLED door', 20);

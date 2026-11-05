@@ -12,7 +12,7 @@
  * still a status line to show them on, and the view is only torn down once
  * the command is actually queued.
  */
-import { decideRun, runSelectedDoor } from '../../../Doors/door-manager/run-door';
+import { decideRun, runSelectedDoor } from '../../../board/Doors/door-manager/run-door';
 
 describe('decideRun', () => {
   it('accepts an ordinary door and hands back its command', () => {

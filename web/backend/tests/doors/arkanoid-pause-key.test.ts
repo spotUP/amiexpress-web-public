@@ -15,7 +15,7 @@ import { readFileSync } from 'fs';
 import { join } from 'path';
 
 const client = readFileSync(
-  join(__dirname, '..', '..', '..', '..', 'Doors', 'arkanoid', 'client.ts'),
+  join(__dirname, '..', '..', '..', '..', 'board', 'Doors', 'arkanoid', 'client.ts'),
   'utf8'
 );
 

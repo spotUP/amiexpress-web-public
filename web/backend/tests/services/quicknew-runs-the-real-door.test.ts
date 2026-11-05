@@ -31,19 +31,19 @@ describe('the QuickNew door on disk', () => {
   it('is shipped, because the batch line names it', () => {
     // The deletion that started all of this. If this fails, the board is back
     // to "Skipping missing program" and a screen full of zeroes.
-    const binary = path.join(REPO, 'Doors', 'QuickNew', 'QuickNew');
+    const binary = path.join(REPO, 'board', 'Doors', 'QuickNew', 'QuickNew');
     expect(fs.existsSync(binary)).toBe(true);
   });
 
   it('is the AmigaOS executable and not a placeholder', () => {
     // Hunk format: an AmigaOS loadseg()able binary starts 0x000003F3.
-    const binary = path.join(REPO, 'Doors', 'QuickNew', 'QuickNew');
+    const binary = path.join(REPO, 'board', 'Doors', 'QuickNew', 'QuickNew');
     const head = fs.readFileSync(binary).subarray(0, 4);
     expect([...head]).toEqual([0x00, 0x00, 0x03, 0xf3]);
   });
 
   it('keeps its config beside it, which is what the batch line passes', () => {
-    expect(fs.existsSync(path.join(REPO, 'Doors', 'QuickNew', 'QuickNew.Config1'))).toBe(true);
+    expect(fs.existsSync(path.join(REPO, 'board', 'Doors', 'QuickNew', 'QuickNew.Config1'))).toBe(true);
   });
 });
 
@@ -116,7 +116,7 @@ describe('what the batch says afterwards', () => {
  */
 import { readFileSync } from 'fs';
 
-const CONFIG = path.join(REPO, 'Doors', 'QuickNew', 'QuickNew.Config1');
+const CONFIG = path.join(REPO, 'board', 'Doors', 'QuickNew', 'QuickNew.Config1');
 const ANSI = /\x1b\[[0-9;]*[A-Za-z]/g;
 
 /** What the door will actually put on the wire, with placeholders filled. */
@@ -184,7 +184,7 @@ describe('what QuickNew will draw', () => {
  * in the commit message and BUILDING.md rather than pretending to run here.
  */
 describe('the door binary and its source agree', () => {
-  const DOOR = path.join(REPO, 'Doors', 'QuickNew');
+  const DOOR = path.join(REPO, 'board', 'Doors', 'QuickNew');
 
   it('ships the source next to the binary', () => {
     expect(fs.existsSync(path.join(DOOR, 'QuickNew.asm'))).toBe(true);

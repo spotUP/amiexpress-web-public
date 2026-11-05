@@ -32,7 +32,7 @@ process.env.SKIP_DB_INIT = '1';
 import { registerAudioVideoHandlers } from '../../src/handlers/audio-video.handler';
 import { setSession, deleteSession } from '../../src/server/session-manager';
 import { Video } from '../../../../sdk/media/Video';
-import { EnhancedVoiceChannel } from '../../../../Doors/livechat/features/voice-channel-ux';
+import { EnhancedVoiceChannel } from '../../../../board/Doors/livechat/features/voice-channel-ux';
 
 /** A socket that keeps its handlers and records what it sends to a room. */
 function fakeSocket(id: string) {

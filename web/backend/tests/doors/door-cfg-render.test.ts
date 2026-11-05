@@ -114,7 +114,7 @@ describe('door cfg rendering - the bridge to a 68K door', () => {
 
   it('the shipped REQUESTS manifest renders the keys the C door parses', () => {
     // Guards the real file: achieve.c-style loaders read exactly these names.
-    const shipped = path.join(__dirname, '..', '..', '..', '..', 'Doors', 'REQUESTS', MANIFEST_FILE);
+    const shipped = path.join(__dirname, '..', '..', '..', '..', 'board', 'Doors', 'REQUESTS', MANIFEST_FILE);
     const parsed = JSON.parse(fs.readFileSync(shipped, 'utf8'));
     const keys = parsed.settings.map((s: any) => s.cfgKey);
     expect(parsed.cfgFile).toBe('REQUESTS.cfg');

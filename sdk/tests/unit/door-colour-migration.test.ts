@@ -13,7 +13,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 
-const DOORS = path.resolve(__dirname, '../../../Doors');
+const DOORS = path.resolve(__dirname, '../../../board/Doors');
 
 /** Doors whose colours are CONTENT, and are meant to stay literal. */
 const EXEMPT: Record<string, string> = {

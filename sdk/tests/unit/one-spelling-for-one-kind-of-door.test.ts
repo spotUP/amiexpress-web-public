@@ -50,7 +50,7 @@ describe('one spelling for one kind of door', () => {
  */
 describe('the board catalogue, read from the real registry', () => {
   const boardRoot = path.resolve(__dirname, '../../..');
-  const hasRegistry = fs.existsSync(path.join(boardRoot, 'Commands/BBSCmd'));
+  const hasRegistry = fs.existsSync(path.join(boardRoot, 'board', 'Commands/BBSCmd'));
 
   (hasRegistry ? it : it.skip)('includes a door whose type is spelled the long way', () => {
     const entries = loadDoorCatalog(boardRoot, nodeCatalogIO(fs), { types: ['TS'] });

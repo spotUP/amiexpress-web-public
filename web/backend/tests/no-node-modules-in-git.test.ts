@@ -47,12 +47,12 @@ describe('node_modules and git', () => {
 
   it('is ignored without a trailing slash, so a symlink cannot slip through', () => {
     const ignored = execFileSync(
-      'git', ['check-ignore', '-v', 'web/backend/node_modules', 'Doors/grandmaster/node_modules'],
+      'git', ['check-ignore', '-v', 'web/backend/node_modules', 'board/Doors/grandmaster/node_modules'],
       { cwd: REPO, encoding: 'utf8' },
     );
 
     expect(ignored).toContain('web/backend/node_modules');
-    expect(ignored).toContain('Doors/grandmaster/node_modules');
+    expect(ignored).toContain('board/Doors/grandmaster/node_modules');
   });
 
   // The general form of the same bug: node_modules was the path that broke,

@@ -18,10 +18,10 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 
-import { logoFor, originalLogo, artSettingSection } from '../../../../Doors/glc-viewer/src/logo';
-import * as art from '../../../../Doors/glc-viewer/src/art.generated';
+import { logoFor, originalLogo, artSettingSection } from '../../../../board/Doors/glc-viewer/src/logo';
+import * as art from '../../../../board/Doors/glc-viewer/src/art.generated';
 
-const DOOR = path.join(__dirname, '../../../../Doors/glc-viewer');
+const DOOR = path.join(__dirname, '../../../../board/Doors/glc-viewer');
 
 /** A board whose Studio has stored a narrow drawing for one style. */
 function boardWithVariant(style: number, lines: string[]): string {

@@ -12,9 +12,9 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import { applySettings, DEFAULT_SETTINGS } from '../../../../Doors/bbs-dashboard/settings';
+import { applySettings, DEFAULT_SETTINGS } from '../../../../board/Doors/bbs-dashboard/settings';
 
-const DOOR_DIR = path.join(__dirname, '../../../../Doors/bbs-dashboard');
+const DOOR_DIR = path.join(__dirname, '../../../../board/Doors/bbs-dashboard');
 const manifest = JSON.parse(fs.readFileSync(path.join(DOOR_DIR, 'door.settings.json'), 'utf8'));
 
 describe('BBS dashboard settings', () => {

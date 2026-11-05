@@ -43,14 +43,14 @@ import { refreshMagazine } from '../../../src/services/magazine';
 import { storyId } from '../../../src/services/magazine/story-store';
 import { config } from '../../../src/config';
 import { LoggedOnSubState } from '../../../src/constants/bbs-states';
-import { buildArticle, buildLayout, buildListing, rowText } from '../../../../../Doors/magazine/layout';
-import { columnCount, columnGeometry } from '../../../../../Doors/magazine/columns';
+import { buildArticle, buildLayout, buildListing, rowText } from '../../../../../board/Doors/magazine/layout';
+import { columnCount, columnGeometry } from '../../../../../board/Doors/magazine/columns';
 import type { Story } from '@amiexpress/bbs-door-sdk/formats/magazine';
 
 setHelpers({ callersLog: async () => undefined, getRecentCallerActivity: async () => [] });
 
 const REPO = path.resolve(__dirname, '../../../../..');
-const MAG_INFO = path.join(REPO, 'Commands/BBSCmd/MAG.info');
+const MAG_INFO = path.join(REPO, 'board', 'Commands/BBSCmd/MAG.info');
 const DRIVER = path.join(__dirname, 'fixtures/drive-magazine.cjs');
 
 // ---------------------------------------------------------------------------
@@ -161,7 +161,7 @@ beforeAll(() => {
   process.env.BBS_ROOT = root;
   fs.mkdirSync(path.join(root, 'Commands', 'BBSCmd'), { recursive: true });
   fs.mkdirSync(path.join(root, 'Doors'), { recursive: true });
-  fs.symlinkSync(path.join(REPO, 'Doors/magazine'), path.join(root, 'Doors/magazine'));
+  fs.symlinkSync(path.join(REPO, 'board', 'Doors/magazine'), path.join(root, 'Doors/magazine'));
   fs.copyFileSync(MAG_INFO, path.join(root, 'Commands/BBSCmd/MAG.info'));
 });
 

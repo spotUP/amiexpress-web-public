@@ -18,7 +18,7 @@ import request from 'supertest';
 import { config } from '../../src/config';
 
 const REPO = path.join(__dirname, '..', '..', '..', '..');
-const DOOR_SRC = path.join(REPO, 'Doors', 'magazine');
+const DOOR_SRC = path.join(REPO, 'board', 'Doors', 'magazine');
 const PIECES = [
   'mag_front', 'mag_contents', 'mag_goodbye', 'mag_article_end', 'mag_logo_small', 'mag_loading',
   'sec_hack', 'sec_scene', 'sec_graffiti', 'sec_music', 'sec_people', 'sec_archive', 'sec_stream', 'sec_general',

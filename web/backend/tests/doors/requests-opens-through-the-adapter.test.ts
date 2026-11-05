@@ -22,7 +22,7 @@ import * as path from 'path';
 import { readTooltypeMap } from '../../src/utils/info-file.util';
 import { declaredMinColumns, resolveDoorAdaptColumns, ADAPTED_DOOR_TYPES } from '../../src/utils/door-min-columns.util';
 
-const REQ_INFO = path.join(__dirname, '..', '..', '..', '..', 'Commands', 'BBSCmd', 'REQ.info');
+const REQ_INFO = path.join(__dirname, '..', '..', '..', '..', 'board', 'Commands', 'BBSCmd', 'REQ.info');
 
 /** The registration shape the resolver reads, built from the icon on disk. */
 function registration() {

@@ -15,7 +15,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 const REPO = path.join(__dirname, '../../../..');
-const DOOR = path.join(REPO, 'Doors/glc-viewer');
+const DOOR = path.join(REPO, 'board', 'Doors/glc-viewer');
 
 const manifest = () => JSON.parse(fs.readFileSync(path.join(DOOR, 'door.settings.json'), 'utf8'));
 
@@ -52,7 +52,7 @@ describe('the command the board files art under', () => {
 
   it('is the one the board registered - or the Studio and the door disagree', () => {
     // `gl.info` is the registration; its LOCATION is what makes this door GL.
-    const icon = fs.readFileSync(path.join(REPO, 'Commands/BBSCmd/gl.info'), 'latin1');
+    const icon = fs.readFileSync(path.join(REPO, 'board', 'Commands/BBSCmd/gl.info'), 'latin1');
     expect(icon).toContain('LOCATION=Doors/glc-viewer');
     expect(icon).toContain('TYPE=TS');
   });
@@ -64,7 +64,7 @@ describe('the command the board files art under', () => {
      * reads. A door that named itself could not survive being registered
      * under a second name, which is exactly the shape of the bug this fixes.
      */
-    const { logoFor } = require('../../../../Doors/glc-viewer/src/logo');
+    const { logoFor } = require('../../../../board/Doors/glc-viewer/src/logo');
     const os = require('os');
 
     const board = fs.mkdtempSync(path.join(os.tmpdir(), 'glc-cmd-'));

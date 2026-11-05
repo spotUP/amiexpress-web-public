@@ -11,7 +11,7 @@ import { spawnSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 
-import { REPO_ROOT, isProtectedLivePath } from '../live-data-guard';
+import { BOARD_DIR, isProtectedLivePath } from '../live-data-guard';
 import { hostTmpDir, isStaleRunArtifact, sweepStaleRunDirs, testTmpDir } from '../temp-run-dir';
 
 const BACKEND_ROOT = path.resolve(__dirname, '../..');
@@ -106,7 +106,7 @@ describe('the scratch a test run leaves behind', () => {
 
   it('the guard still refuses a write to the live board', () => {
     // The relocation moved the seeded board; it must not have moved the wall.
-    const live = path.join(REPO_ROOT, 'Conf1', 'MsgBase', '.temp-run-dir-probe');
+    const live = path.join(BOARD_DIR, 'Conf1', 'MsgBase', '.temp-run-dir-probe');
     expect(() => fs.writeFileSync(live, 'Test body text\n')).toThrow(
       /live-data-guard.*refused: Conf1\/MsgBase\/\.temp-run-dir-probe/s,
     );

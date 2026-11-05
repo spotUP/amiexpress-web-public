@@ -6,7 +6,7 @@
  * report triggered a full screen render with video tiles in it.
  */
 
-import { meterTick, newMeterState, perceptualLevel } from '../../../../Doors/livechat/features/meter-throttle';
+import { meterTick, newMeterState, perceptualLevel } from '../../../../board/Doors/livechat/features/meter-throttle';
 
 const WIDTH = 12;
 const INTERVAL = 100;

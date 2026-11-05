@@ -159,7 +159,7 @@ describe('door art across a deploy', () => {
     // The staged manifest above is written by JSON.stringify; the real one is
     // hand-maintained. If the awk cannot read THAT file, the live board loses
     // its art and every test above still passes.
-    const real = path.join(REPO, 'Doors', 'REQUESTS', 'door.settings.json');
+    const real = path.join(REPO, 'board', 'Doors', 'REQUESTS', 'door.settings.json');
     const script = fs.readFileSync(ENTRYPOINT, 'utf8');
     const awkStart = script.indexOf("        awk 'BEGIN { RS = \"}\" }");
     const awkEnd = script.indexOf("' \"$manifest\"", awkStart);
@@ -172,14 +172,14 @@ describe('door art across a deploy', () => {
     expect(found).toEqual(['Bulletin_Header.txt', 'Bulletin_Tail.txt']);
     // And those files are really there to be protected.
     for (const name of found) {
-      expect(fs.existsSync(path.join(REPO, 'Doors', 'REQUESTS', name))).toBe(true);
+      expect(fs.existsSync(path.join(REPO, 'board', 'Doors', 'REQUESTS', name))).toBe(true);
     }
   });
 
   it('holds back every magazine art slot the Studio can edit, from the repo manifest', () => {
     // The magazine ships 14 placeholder screens under art/ and the Studio
     // saves over them in place: the exclusion must name each one.
-    const real = path.join(REPO, 'Doors', 'magazine', 'door.settings.json');
+    const real = path.join(REPO, 'board', 'Doors', 'magazine', 'door.settings.json');
     const script = fs.readFileSync(ENTRYPOINT, 'utf8');
     const awkStart = script.indexOf("        awk 'BEGIN { RS = \"}\" }");
     const awkEnd = script.indexOf("' \"$manifest\"", awkStart);
@@ -188,7 +188,7 @@ describe('door art across a deploy', () => {
     expect(found).toHaveLength(14);
     for (const name of found) {
       expect(name).toMatch(/^art\/(mag|sec)_[a-z_]+\.ans$/);
-      expect(fs.existsSync(path.join(REPO, 'Doors', 'magazine', name))).toBe(true);
+      expect(fs.existsSync(path.join(REPO, 'board', 'Doors', 'magazine', name))).toBe(true);
     }
   });
 

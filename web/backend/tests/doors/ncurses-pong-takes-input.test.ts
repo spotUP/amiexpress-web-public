@@ -27,7 +27,7 @@ import { createBBSApi } from '../../src/doors/BBSApi';
 // audio; stub it so the suite exercises the door, not the tracker.
 jest.mock('tone', () => ({}), { virtual: true });
 
-import door from '../../../../Doors/ncurses-pong/index';
+import door from '../../../../board/Doors/ncurses-pong/index';
 
 /** The ncurses layer's own screen size (`engines/ui/ncurses/constants.ts`). */
 const SCREEN_ROWS = 24;

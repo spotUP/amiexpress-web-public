@@ -34,7 +34,7 @@ function board(opts: { seededByEntrypoint: boolean }): string {
   for (const n of [1, 2, 3]) {
     fs.mkdirSync(path.join(dir, `Node${n}`), { recursive: true });
     fs.writeFileSync(path.join(dir, `Node${n}`, 'BBSTITLE.txt'), OLD_TITLE);
-    fs.copyFileSync(path.join(REPO, 'Node2.info'), path.join(dir, `Node${n}.info`));
+    fs.copyFileSync(path.join(REPO, 'board', 'Node2.info'), path.join(dir, `Node${n}.info`));
   }
   fs.mkdirSync(path.join(dir, 'Screens', 'Node'), { recursive: true });
   fs.writeFileSync(path.join(dir, 'Screens', 'Node', 'BBSTITLE.txt'), NEW_TITLE);

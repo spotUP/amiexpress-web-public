@@ -128,7 +128,7 @@ const REPO_ROOT = path.resolve(__dirname, '../../../..');
  * above say so - so the pin reads one of those and means the same thing
  * everywhere.
  */
-const BBSTITLE = path.join(REPO_ROOT, 'Node1', 'BBSTITLE.txt');
+const BBSTITLE = path.join(REPO_ROOT, 'board', 'Node1', 'BBSTITLE.txt');
 
 const tempDirs: string[] = [];
 

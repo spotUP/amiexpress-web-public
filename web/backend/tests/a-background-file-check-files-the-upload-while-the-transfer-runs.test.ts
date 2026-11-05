@@ -101,7 +101,7 @@ import * as runner from '../src/utils/amiga-program-runner.util';
 const REPO_ROOT = path.resolve(__dirname, '..', '..', '..');
 const CHECKER = path.join(__dirname, 'fixtures', 'multi-check', 'mULTI-cHECK');
 const ARCHIVE = path.join(__dirname, 'fixtures', 'archives', 'checked.lha');
-const LHA = path.join(REPO_ROOT, 'C', 'LhA');
+const LHA = path.join(REPO_ROOT, 'board', 'C', 'LhA');
 const runnable = [CHECKER, ARCHIVE, LHA].every((p) => fs.existsSync(p));
 const describeMaybe = runnable ? describe : describe.skip;
 

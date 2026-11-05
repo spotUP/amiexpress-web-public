@@ -95,7 +95,7 @@ import { RESULT_NOT_ALLOWED } from '../../src/constants/command-results';
 
 /** The tracked `Access/` directory. Read only, and only ever copied. */
 const BOARD_ROOT = path.resolve(__dirname, '../../../..');
-const TRACKED_ACCESS = path.join(BOARD_ROOT, 'Access');
+const TRACKED_ACCESS = path.join(BOARD_ROOT, 'board', 'Access');
 
 /** The two fixture accounts. Levels chosen to match tracked ACS level files. */
 const SYSOP_LEVEL = 255;
@@ -359,7 +359,7 @@ describe('checkSecurity answers from the ACS bytes and nowhere else', () => {
   // lookup must say the same. If these two ever disagree, checkSecurity has
   // started answering from the SQL mirror, a cache, or a default.
   it.each(trackedAcsLevels())('agrees with the raw bytes of ACS.%i.info', level => {
-    loadAcsAccessFiles(BOARD_ROOT);
+    loadAcsAccessFiles(path.join(BOARD_ROOT, 'board'));
     const bytes = readTooltypesFromBytes(path.join(TRACKED_ACCESS, `ACS.${level}.info`));
 
     expect(checkSecurity(makeUser(level), ACSPermission.OLM))

@@ -75,7 +75,7 @@ describe('a 40-column caller is not paged through ctop or the global wall', () =
 
   test('GWALL is the door that declares it, and the resolver reads it', () => {
     const info = readTooltypeMap(
-      path.resolve(__dirname, '../../../../Commands/BBSCmd/GWALL.info'),
+      path.resolve(__dirname, '../../../../board/Commands/BBSCmd/GWALL.info'),
     );
     expect(info.get('C64_DROP_OLDEST')).toBe('1');
     expect(doorDropsOldestAt40({ toolTypes: { C64_DROP_OLDEST: '1' } } as any)).toBe(true);

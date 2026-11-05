@@ -14,7 +14,7 @@ import {
   headerDialog,
   headerHints,
   noticeWidth,
-} from '../../../../../Doors/mail-composer/layout';
+} from '../../../../../board/Doors/mail-composer/layout';
 
 /** Printable columns of a hint row as the door joins it. */
 const hintWidth = (hints: Array<{ key: string; does: string }>): number =>

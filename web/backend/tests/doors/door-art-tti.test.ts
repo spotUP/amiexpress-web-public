@@ -26,7 +26,7 @@ import {
   loadArt,
   shippedArtDir,
   type ArtSources,
-} from '../../../../Doors/magazine/art';
+} from '../../../../board/Doors/magazine/art';
 
 // The sentinel: the real renderer, counted. The module's exports are
 // non-configurable getters, so a spyOn cannot wrap them.
@@ -70,8 +70,8 @@ describe('the tti variant on the artist lane (MAG)', () => {
   beforeEach(() => {
     const door = path.join(root, 'Doors', 'magazine');
     fs.mkdirSync(path.join(door, 'art'), { recursive: true });
-    fs.copyFileSync(path.join(REPO, 'Doors', 'magazine', 'door.settings.json'), path.join(door, 'door.settings.json'));
-    fs.copyFileSync(path.join(REPO, 'Doors', 'magazine', 'art', 'mag_front.ans'), path.join(door, 'art', 'mag_front.ans'));
+    fs.copyFileSync(path.join(REPO, 'board', 'Doors', 'magazine', 'door.settings.json'), path.join(door, 'door.settings.json'));
+    fs.copyFileSync(path.join(REPO, 'board', 'Doors', 'magazine', 'art', 'mag_front.ans'), path.join(door, 'art', 'mag_front.ans'));
   });
 
   it('round-trips a page into Screens/doors/MAG/<section>.tti', async () => {
@@ -111,8 +111,8 @@ describe('a saved .tti reaches a teletext caller in MAG', () => {
   beforeEach(() => {
     const door = path.join(root, 'Doors', 'magazine');
     fs.mkdirSync(path.join(door, 'art'), { recursive: true });
-    fs.copyFileSync(path.join(REPO, 'Doors', 'magazine', 'door.settings.json'), path.join(door, 'door.settings.json'));
-    fs.copyFileSync(path.join(REPO, 'Doors', 'magazine', 'art', 'mag_front.ans'), path.join(door, 'art', 'mag_front.ans'));
+    fs.copyFileSync(path.join(REPO, 'board', 'Doors', 'magazine', 'door.settings.json'), path.join(door, 'door.settings.json'));
+    fs.copyFileSync(path.join(REPO, 'board', 'Doors', 'magazine', 'art', 'mag_front.ans'), path.join(door, 'art', 'mag_front.ans'));
     // A board root is the folder that holds Commands/BBSCmd; the door finds it from BBS_DATA_DIR.
     fs.mkdirSync(path.join(root, 'Commands', 'BBSCmd'), { recursive: true });
     previousBbsDataDir = process.env.BBS_DATA_DIR;

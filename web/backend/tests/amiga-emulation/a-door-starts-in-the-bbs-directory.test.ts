@@ -21,7 +21,7 @@ const BACKEND = path.resolve(__dirname, '..', '..');
 const HARNESS = path.join(BACKEND, 'src', 'scripts', 'run-amiga-door.ts');
 const TSX = path.join(BACKEND, 'node_modules', '.bin', 'tsx');
 const ARCHIVE = path.join(__dirname, '..', 'fixtures', 'archives', 'checked.lha');
-const LHA = path.join(REPO_ROOT, 'C', 'LhA');
+const LHA = path.join(REPO_ROOT, 'board', 'C', 'LhA');
 
 const runnable = [HARNESS, TSX, ARCHIVE, LHA].every((p) => fs.existsSync(p));
 const describeMaybe = runnable ? describe : describe.skip;

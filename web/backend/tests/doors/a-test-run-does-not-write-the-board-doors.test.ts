@@ -37,8 +37,8 @@ describe('the boot-time door cfg render', () => {
     // The two files that were damaged. Read twice around a no-op: what is
     // pinned is that merely running backend tests does not touch them.
     const watched = [
-      path.join(REPO, 'Doors', 'GWall', 'GWALL.cfg'),
-      path.join(REPO, 'Doors', 'glc', 'GLCViewer.cfg'),
+      path.join(REPO, 'board', 'Doors', 'GWall', 'GWALL.cfg'),
+      path.join(REPO, 'board', 'Doors', 'glc', 'GLCViewer.cfg'),
     ].filter(file => fs.existsSync(file));
 
     for (const file of watched) {

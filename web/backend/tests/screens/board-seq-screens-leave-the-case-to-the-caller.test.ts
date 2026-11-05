@@ -42,10 +42,10 @@ function leadingLowerCase(bytes: Buffer): number {
 }
 
 function boardSeqScreens(): string[] {
-  const listed = execFileSync('git', ['ls-files', '-z', '--', 'Screens', 'Themes', 'Conf*', 'Node*'], {
+  const listed = execFileSync('git', ['ls-files', '-z', '--', 'board/Screens', 'board/Themes', 'board/Conf*', 'board/Node*'], {
     cwd: REPO, encoding: 'latin1', maxBuffer: 64 * 1024 * 1024,
   });
-  return listed.split('\0').filter(f => /\.seq$/i.test(f) && /^(Screens|Themes|Conf\d+|Node\d+)\//.test(f));
+  return listed.split('\0').filter(f => /\.seq$/i.test(f) && /^board\/(Screens|Themes|Conf\d+|Node\d+)\//.test(f));
 }
 
 describe('the board\'s C64 screens', () => {

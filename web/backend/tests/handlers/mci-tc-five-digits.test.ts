@@ -43,7 +43,7 @@ import {
 import { disposePetsciiSessionModel } from '../../src/utils/petscii-session-model';
 
 const REPO_ROOT = path.resolve(__dirname, '../../../..');
-const LOGOFF_003 = path.join(REPO_ROOT, 'Screens', 'logoff', '003.logoff.seq');
+const LOGOFF_003 = path.join(REPO_ROOT, 'board', 'Screens', 'logoff', '003.logoff.seq');
 const PETSCII_RETURN = 0x0d;
 const C64_COLUMNS = 40;
 

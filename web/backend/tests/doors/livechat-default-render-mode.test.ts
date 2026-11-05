@@ -29,7 +29,7 @@ import {
   MODE_ASCII_COLOR,
   MODE_HALFBLOCK,
   modeCode,
-} from '../../../../Doors/livechat/video-cells';
+} from '../../../../board/Doors/livechat/video-cells';
 import { DEFAULT_VIDEO_MODE } from '../../src/handlers/audio-video.handler';
 
 describe('the default video render mode', () => {

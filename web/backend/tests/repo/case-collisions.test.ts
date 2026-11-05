@@ -192,9 +192,9 @@ describe("a door's config keeps its own name", () => {
   // GWall is the case that cost data, so it gets pinned by name. Two DIFFERENT
   // files wanted the same lower-cased path: the server config the door reads
   // out of PROGDIR:, and the settings the door writes into ENV:/ENVARC:.
-  const SERVER_CONFIG = 'Doors/GWall/GWALL.cfg';
-  const ENV_SETTINGS = 'System/Prefs/Env-Archive/GWall.cfg';
-  const DOOR_BINARY = 'Doors/GWall/GWall';
+  const SERVER_CONFIG = 'board/Doors/GWall/GWALL.cfg';
+  const ENV_SETTINGS = 'board/System/Prefs/Env-Archive/GWall.cfg';
+  const DOOR_BINARY = 'board/Doors/GWall/GWall';
 
   const tracked = (): string[] => checker.trackedPaths(REPO_ROOT);
 
@@ -237,9 +237,9 @@ describe('you cannot see a collision by looking, so there is a way to ask', () =
   // probing by name proves nothing either way. That cost time on a hunt for a
   // duplicate registration that was never there.
   it('says which spelling really exists when the name is asked with the wrong case', () => {
-    const answer = checker.explain(REPO_ROOT, 'Commands/BBSCmd/OLM.info');
-    expect(answer).toContain('tracked by git (1): Commands/BBSCmd/Olm.info');
-    expect(answer).toContain('real directory entries (1): Commands/BBSCmd/Olm.info');
+    const answer = checker.explain(REPO_ROOT, 'board/Commands/BBSCmd/OLM.info');
+    expect(answer).toContain('tracked by git (1): board/Commands/BBSCmd/Olm.info');
+    expect(answer).toContain('real directory entries (1): board/Commands/BBSCmd/Olm.info');
     expect(answer).toContain('There is no');
     expect(answer).not.toContain('COLLISION:');
   });
@@ -248,9 +248,9 @@ describe('you cannot see a collision by looking, so there is a way to ask', () =
     // Both of these are true, and only one file is there. This assertion is
     // the reason the probe exists; if it ever goes red the disk stopped
     // folding case and half this file is moot.
-    expect(fs.existsSync(path.join(REPO_ROOT, 'Commands/BBSCmd/OLM.info'))).toBe(true);
-    expect(fs.existsSync(path.join(REPO_ROOT, 'Commands/BBSCmd/Olm.info'))).toBe(true);
-    expect(fs.readdirSync(path.join(REPO_ROOT, 'Commands/BBSCmd')).filter((e) => e.toLowerCase() === 'olm.info')).toEqual([
+    expect(fs.existsSync(path.join(REPO_ROOT, 'board', 'Commands/BBSCmd/OLM.info'))).toBe(true);
+    expect(fs.existsSync(path.join(REPO_ROOT, 'board', 'Commands/BBSCmd/Olm.info'))).toBe(true);
+    expect(fs.readdirSync(path.join(REPO_ROOT, 'board', 'Commands/BBSCmd')).filter((e) => e.toLowerCase() === 'olm.info')).toEqual([
       'Olm.info',
     ]);
   });
@@ -267,7 +267,7 @@ describe('you cannot see a collision by looking, so there is a way to ask', () =
     // test that pins a mark somebody deliberately removed fails for being
     // right. What this suite is about is the FILE, so it asserts the door's
     // own identity instead - the tooltypes that say which binary it runs.
-    const info = fs.readFileSync(path.join(REPO_ROOT, 'Commands/BBSCmd/Olm.info'), 'latin1');
+    const info = fs.readFileSync(path.join(REPO_ROOT, 'board', 'Commands/BBSCmd/Olm.info'), 'latin1');
     expect(info).toContain('TYPE=XIM');
     expect(info).toContain('WAROLM');
   });

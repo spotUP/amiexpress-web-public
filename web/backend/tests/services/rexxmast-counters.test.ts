@@ -18,8 +18,8 @@ import * as path from 'path';
 
 const repoRoot = path.resolve(__dirname, '../../../..');
 const haveBinaries =
-  fs.existsSync(path.join(repoRoot, 'System/RexxMast')) &&
-  fs.existsSync(path.join(repoRoot, 'Libs/rexxsyslib.library')) &&
+  fs.existsSync(path.join(repoRoot, 'board', 'System/RexxMast')) &&
+  fs.existsSync(path.join(repoRoot, 'board', 'Libs/rexxsyslib.library')) &&
   (fs.existsSync(
     path.join(
       repoRoot,

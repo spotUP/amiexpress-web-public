@@ -24,7 +24,7 @@ function board(): string {
   fs.mkdirSync(path.join(dir, 'Utils', 'samilog'), { recursive: true });
   fs.mkdirSync(path.join(dir, 'Bulletins'), { recursive: true });
   // The board's real store, so the callers are real records.
-  fs.copyFileSync(path.join(REPO, 'S', 'SAmiLog.Store'), path.join(dir, 'Utils', 'samilog', 'SAmiLog.Store'));
+  fs.copyFileSync(path.join(REPO, 'board', 'S', 'SAmiLog.Store'), path.join(dir, 'Utils', 'samilog', 'SAmiLog.Store'));
   return dir;
 }
 

@@ -37,7 +37,7 @@ import type { Socket } from 'socket.io';
 import { sessions } from '../../src/server/session-manager';
 import { listOnlineNodes } from '../../src/doors/who-is-online';
 import { BBSApi, createBBSApi } from '../../src/doors/BBSApi';
-import telnetFront from '../../../../Doors/telnet-front/index';
+import telnetFront from '../../../../board/Doors/telnet-front/index';
 
 function putSession(nodeId: number, user: unknown): void {
   sessions.set(String(nodeId), { nodeId, user } as never);

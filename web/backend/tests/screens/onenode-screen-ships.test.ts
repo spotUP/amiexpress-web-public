@@ -18,7 +18,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 const repoRoot = path.resolve(__dirname, '../../../..');
-const artPath = path.join(repoRoot, 'Screens', 'ONENODE.TXT');
+const artPath = path.join(repoRoot, 'board', 'Screens', 'ONENODE.TXT');
 
 const stripSgr = (line: string) => line.replace(/\x1b\[[0-9;]*m/g, '');
 

@@ -12,7 +12,7 @@ describe('LiveChat state DM context helpers', () => {
   let setChannel: any;
 
   beforeAll(() => {
-    const mod = require('../../../../Doors/livechat/core/state');
+    const mod = require('../../../../board/Doors/livechat/core/state');
     createInitialState = mod.createInitialState;
     setDmContext = mod.setDmContext;
     clearDmContext = mod.clearDmContext;

@@ -17,8 +17,8 @@ import {
   solveLayout,
   MIN_CHAT_WIDTH,
   type LayoutConstants,
-} from '../../../../../Doors/livechat/ui/layout-solver';
-import { commandPaletteItems } from '../../../../../Doors/livechat/ui/command-palette';
+} from '../../../../../board/Doors/livechat/ui/layout-solver';
+import { commandPaletteItems } from '../../../../../board/Doors/livechat/ui/command-palette';
 
 /** The door's own chrome, from server.ts. */
 const CHROME: LayoutConstants = {

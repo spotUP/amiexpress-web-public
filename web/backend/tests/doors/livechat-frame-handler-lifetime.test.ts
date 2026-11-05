@@ -19,7 +19,7 @@ import { readFileSync } from 'fs';
 import { join } from 'path';
 
 const voiceUx = readFileSync(
-  join(__dirname, '..', '..', '..', '..', 'Doors', 'livechat', 'features', 'voice-channel-ux.ts'),
+  join(__dirname, '..', '..', '..', '..', 'board', 'Doors', 'livechat', 'features', 'voice-channel-ux.ts'),
   'utf8'
 );
 

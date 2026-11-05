@@ -9,7 +9,7 @@
  *
  * The lookup now comes from one query.
  */
-import { buildLocalCatalogLookup } from '../../../../Doors/door-manager/doorman-services';
+import { buildLocalCatalogLookup } from '../../../../board/Doors/door-manager/doorman-services';
 
 const row = (archive: string, extra: Record<string, unknown> = {}) => ({
   id: `id-${archive}`, archive_name: archive, installed: 0, installed_as: null, install_dir: null,

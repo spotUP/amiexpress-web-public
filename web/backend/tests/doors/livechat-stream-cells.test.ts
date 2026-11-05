@@ -12,7 +12,7 @@
 import {
   capStreamCells,
   MAX_STREAM_CELLS,
-} from '../../../../Doors/livechat/features/video-layout';
+} from '../../../../board/Doors/livechat/features/video-layout';
 
 describe('capping the video resolution', () => {
   it('leaves a small tile alone', () => {

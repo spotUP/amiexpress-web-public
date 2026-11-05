@@ -15,8 +15,8 @@
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { doorPathFrom } from '../../../../Doors/door-manager/FileExplorerOverlay';
-import { resolveBbsRoot } from '../../../../Doors/door-manager/ViewManager';
+import { doorPathFrom } from '../../../../board/Doors/door-manager/FileExplorerOverlay';
+import { resolveBbsRoot } from '../../../../board/Doors/door-manager/ViewManager';
 
 describe("DOORMAN's file explorer", () => {
   let bbsRoot: string;
@@ -65,7 +65,7 @@ describe("DOORMAN's file explorer", () => {
  * fell back to plain text with no error anywhere.
  */
 describe('the AmigaGuide parser lookup', () => {
-  const { guideParserCandidates } = require('../../../../Doors/door-manager/FileExplorerOverlay');
+  const { guideParserCandidates } = require('../../../../board/Doors/door-manager/FileExplorerOverlay');
   const path = require('path');
 
   it('looks for the running backend first, which is the source tree', () => {

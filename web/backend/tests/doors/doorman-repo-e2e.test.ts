@@ -41,8 +41,8 @@ import * as crypto from 'crypto';
 import express, { Express } from 'express';
 import type { Server } from 'http';
 import type { AddressInfo } from 'net';
-import type { RepoClientConfig } from '../../../../Doors/door-manager/repo-client';
-import type { DoorRepoManifest } from '../../../../Doors/door-manager/repo-types.generated';
+import type { RepoClientConfig } from '../../../../board/Doors/door-manager/repo-client';
+import type { DoorRepoManifest } from '../../../../board/Doors/door-manager/repo-types.generated';
 
 describe('doorman repo-client E2E against the real proxy and a stub upstream', () => {
   let tmpDir: string;
@@ -57,8 +57,8 @@ describe('doorman repo-client E2E against the real proxy and a stub upstream', (
   // require() alongside the BBS app below so both sides of the flow come
   // from the SAME require pass (avoids any stale-module surprises from
   // resetModules() being called elsewhere in the suite run).
-  let fetchManifest: typeof import('../../../../Doors/door-manager/repo-client').fetchManifest;
-  let downloadArchive: typeof import('../../../../Doors/door-manager/repo-client').downloadArchive;
+  let fetchManifest: typeof import('../../../../board/Doors/door-manager/repo-client').fetchManifest;
+  let downloadArchive: typeof import('../../../../board/Doors/door-manager/repo-client').downloadArchive;
 
   beforeAll(async () => {
     jest.resetModules();
@@ -144,7 +144,7 @@ describe('doorman repo-client E2E against the real proxy and a stub upstream', (
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     const { app } = require('../../src/server/app') as { app: Express };
     // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const repoClient = require('../../../../Doors/door-manager/repo-client') as typeof import('../../../../Doors/door-manager/repo-client');
+    const repoClient = require('../../../../board/Doors/door-manager/repo-client') as typeof import('../../../../board/Doors/door-manager/repo-client');
     fetchManifest = repoClient.fetchManifest;
     downloadArchive = repoClient.downloadArchive;
 

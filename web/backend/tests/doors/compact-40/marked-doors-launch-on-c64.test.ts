@@ -77,7 +77,7 @@ setHelpers({
   getRecentCallerActivity: async () => [],
 });
 
-const BBSCMD = path.resolve(__dirname, '../../../../../Commands/BBSCmd');
+const BBSCMD = path.resolve(__dirname, '../../../../../board/Commands/BBSCmd');
 
 /**
  * Commands whose doors Task 6 adapted to 40 columns, in plan order.

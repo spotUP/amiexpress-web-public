@@ -40,7 +40,7 @@ function boardWith(headerRows: number): string {
   fs.mkdirSync(utils, { recursive: true });
   // The board's real store, so the entries are real records rather than a
   // guess at the binary layout.
-  fs.copyFileSync(path.join(REPO, 'S', 'SAmiLog.Store'), path.join(utils, 'SAmiLog.Store'));
+  fs.copyFileSync(path.join(REPO, 'board', 'S', 'SAmiLog.Store'), path.join(utils, 'SAmiLog.Store'));
   fs.writeFileSync(path.join(utils, 'samilog.header.txt'), logo(headerRows), 'latin1');
   /*
    * AND THE TAILER, because the board has one and it is two more rows.
@@ -53,7 +53,7 @@ function boardWith(headerRows: number): string {
    * for cannot fail the way the real one does.
    */
   fs.copyFileSync(
-    path.join(REPO, 'Utils', 'samilog', 'samilog.tailer.txt'),
+    path.join(REPO, 'board', 'Utils', 'samilog', 'samilog.tailer.txt'),
     path.join(utils, 'samilog.tailer.txt'),
   );
   return dir;
@@ -295,7 +295,7 @@ describe('the samilog logo', () => {
   // Keeps REPO_ROOT meaningful if the fixture above is ever swapped for the
   // board's own files.
   test('the board really does keep the logo in Utils/samilog', () => {
-    expect(fs.existsSync(path.join(REPO_ROOT, 'Utils', 'samilog', 'samilog.header.txt'))).toBe(true);
+    expect(fs.existsSync(path.join(REPO_ROOT, 'board', 'Utils', 'samilog', 'samilog.header.txt'))).toBe(true);
   });
 });
 

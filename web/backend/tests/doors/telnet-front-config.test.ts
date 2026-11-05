@@ -23,10 +23,10 @@ import {
   defaultConfig,
   firstExternalIPv4,
   MAX_NODES_CEILING,
-} from '../../../../Doors/telnet-front/config';
+} from '../../../../board/Doors/telnet-front/config';
 
 const MANIFEST = fs.readFileSync(
-  path.join(__dirname, '../../../../Doors/telnet-front/door.settings.json'), 'utf8');
+  path.join(__dirname, '../../../../board/Doors/telnet-front/door.settings.json'), 'utf8');
 
 describe('the telnet front-end configuration', () => {
   let doorDir: string;

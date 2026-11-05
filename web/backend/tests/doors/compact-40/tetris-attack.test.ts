@@ -31,17 +31,17 @@ import {
 const {
   panelsLayout,
   hudLines,
-} = require('../../../../../Doors/grandmaster/ui/panels/layout');
-const { menuRowsFor } = require('../../../../../Doors/grandmaster/ui/menu');
+} = require('../../../../../board/Doors/grandmaster/ui/panels/layout');
+const { menuRowsFor } = require('../../../../../board/Doors/grandmaster/ui/menu');
 const {
   chooserLayout,
   chooserLabels,
-} = require('../../../../../Doors/grandmaster/ui/panels/chooser');
+} = require('../../../../../board/Doors/grandmaster/ui/panels/chooser');
 const {
   versusLayout,
   versusCentreLines,
   dangerBarRows,
-} = require('../../../../../Doors/grandmaster/ui/panels/versus-layout');
+} = require('../../../../../board/Doors/grandmaster/ui/panels/versus-layout');
 const {
   AnsiToPetsciiTransducer,
 } = require('../../../../../sdk/petscii/ansi-to-petscii');
@@ -52,21 +52,21 @@ const {
 const {
   buildBoard,
   boardSize,
-} = require('../../../../../Doors/grandmaster/ui/panels/board-view');
-const { Stack } = require('../../../../../Doors/grandmaster/core/panels/stack');
+} = require('../../../../../board/Doors/grandmaster/ui/panels/board-view');
+const { Stack } = require('../../../../../board/Doors/grandmaster/core/panels/stack');
 const {
   GeneratorSource,
-} = require('../../../../../Doors/grandmaster/core/panels/generator-source');
+} = require('../../../../../board/Doors/grandmaster/core/panels/generator-source');
 const {
   getClassicEndless,
-} = require('../../../../../Doors/grandmaster/core/panels/level-data');
+} = require('../../../../../board/Doors/grandmaster/core/panels/level-data');
 const {
   loadSpriteSheet,
 } = require('../../../../../sdk/engines/graphics/cell-art');
 const path = require('path');
 
 const SHEET = loadSpriteSheet(
-  path.join(__dirname, '../../../../../Doors/grandmaster/sprites'),
+  path.join(__dirname, '../../../../../board/Doors/grandmaster/sprites'),
 );
 
 /**

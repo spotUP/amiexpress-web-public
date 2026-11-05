@@ -20,7 +20,7 @@ import {
   solveLayout,
   MIN_CHAT_WIDTH,
   MIN_SIDEBAR_WIDTH,
-} from '../../../../Doors/livechat/ui/layout-solver';
+} from '../../../../board/Doors/livechat/ui/layout-solver';
 
 const CONSTANTS = {
   menuHeight: 1,

@@ -11,7 +11,7 @@
  */
 import * as path from 'path';
 
-const DOOR = path.join(__dirname, '../../../../Doors/glc-viewer/index.ts');
+const DOOR = path.join(__dirname, '../../../../board/Doors/glc-viewer/index.ts');
 
 /** One page of the server's JSON, shaped as scenewall sends it. */
 const RESPONSE = JSON.stringify({
@@ -115,7 +115,7 @@ async function runTheDoor(
 
 describe('what a caller actually receives', () => {
   it('is the E source\'s logo, cursor jumps and all', async () => {
-    const art = require('../../../../Doors/glc-viewer/src/art.generated');
+    const art = require('../../../../board/Doors/glc-viewer/src/art.generated');
     const drawn = await runTheDoor();
 
     // The line the abandoned port flattened into spaces. If the door ever
@@ -146,8 +146,8 @@ describe('what a caller actually receives', () => {
 
 describe('the screen opens before the network answers', () => {
   it('draws the logo and the placeholder rows without waiting', async () => {
-    const art = require('../../../../Doors/glc-viewer/src/art.generated');
-    const { skeletonRow } = require('../../../../Doors/glc-viewer/src/skeleton');
+    const art = require('../../../../board/Doors/glc-viewer/src/art.generated');
+    const { skeletonRow } = require('../../../../board/Doors/glc-viewer/src/skeleton');
     const drawn = await runTheDoor();
 
     // The logo is on the wire, and so is the table's shape.
@@ -206,8 +206,8 @@ describe('LINES=AUTO on a C64', () => {
   };
 
   it('fills the rows under the logo, not the wide screen\'s leftovers', async () => {
-    const { narrowListRows } = require('../../../../Doors/glc-viewer/src/narrow');
-    const { autoLines } = require('../../../../Doors/glc-viewer/src/sizing');
+    const { narrowListRows } = require('../../../../board/Doors/glc-viewer/src/narrow');
+    const { autoLines } = require('../../../../board/Doors/glc-viewer/src/sizing');
 
     await runTheDoor({ screenWidth: 40, screenHeight: 22 });
 
@@ -218,7 +218,7 @@ describe('LINES=AUTO on a C64', () => {
   });
 
   it('still sums the wide screen on eighty columns', async () => {
-    const { autoLines } = require('../../../../Doors/glc-viewer/src/sizing');
+    const { autoLines } = require('../../../../board/Doors/glc-viewer/src/sizing');
     await runTheDoor({ screenWidth: 80, screenHeight: 24 });
     expect(askedCount()).toBe(autoLines(22));
   });
@@ -253,7 +253,7 @@ describe('the page has its final shape before the network answers', () => {
     (drawn.slice(0, firstRewind(drawn)).match(/\r\n/g) ?? []).length;
 
   it('draws the legend and the day totals under the placeholders, on eighty columns', async () => {
-    const art = require('../../../../Doors/glc-viewer/src/art.generated');
+    const art = require('../../../../board/Doors/glc-viewer/src/art.generated');
     const drawn = await runTheDoor({ screenWidth: 80, screenHeight: 25 });
     expect(drawn).toContain(art.LEGEND[0]);
     expect(drawn.indexOf(art.LEGEND[0])).toBeLessThan(firstRewind(drawn));
@@ -270,7 +270,7 @@ describe('the page has its final shape before the network answers', () => {
     // The page plus the board's blank line and `(Pause)...Space To Resume:`
     // must fit, or the logo scrolls off the top before the caller reads it
     // (the sysop's screenshot, 2026-09-25).
-    const { BOARD_PAUSE_ROWS } = require('../../../../Doors/glc-viewer/src/narrow');
+    const { BOARD_PAUSE_ROWS } = require('../../../../board/Doors/glc-viewer/src/narrow');
     const drawn = await runTheDoor({ screenWidth: 80, screenHeight: 24 });
     expect(heightOf(drawn) + BOARD_PAUSE_ROWS).toBeLessThanOrEqual(24);
   });
@@ -285,7 +285,7 @@ describe('the page has its final shape before the network answers', () => {
   });
 
   it('keeps the legend still while the numbers settle - it is not noise', async () => {
-    const art = require('../../../../Doors/glc-viewer/src/art.generated');
+    const art = require('../../../../board/Doors/glc-viewer/src/art.generated');
     const drawn = await runTheDoor({ screenWidth: 80, screenHeight: 25 });
     // Every paint of the legend's first row is the row itself.
     const legend: string = art.LEGEND[0];
@@ -307,14 +307,14 @@ describe('how tall the screen is', () => {
   it('is what the terminal reported, not the user\'s pause length', async () => {
     // Less the board's pause: 25 rows, 18 of chrome, 2 for the blank line and
     // the prompt the board draws under the page (2026-09-25).
-    const { autoLines } = require('../../../../Doors/glc-viewer/src/sizing');
+    const { autoLines } = require('../../../../board/Doors/glc-viewer/src/sizing');
     await runTheDoor({ screenWidth: 80, screenHeight: 25, user: { linesPerScreen: 0 } });
     expect(askedCount()).toBe(autoLines(23));
     expect(askedCount()).toBe(5);
   });
 
   it('falls back to the pause length when nothing reported a screen', async () => {
-    const { autoLines } = require('../../../../Doors/glc-viewer/src/sizing');
+    const { autoLines } = require('../../../../board/Doors/glc-viewer/src/sizing');
     await runTheDoor({ screenWidth: 80, user: { linesPerScreen: 40 } });
     expect(askedCount()).toBe(autoLines(40));
   });
@@ -405,7 +405,7 @@ describe('one cadence, either side of the answer', () => {
 
   it('is the one number both animations are built from', () => {
     const { SCRAMBLE_FRAME_MS, waitingScramble, settleOnto: settle } =
-      require('../../../../Doors/glc-viewer/src/settle-paint');
+      require('../../../../board/Doors/glc-viewer/src/settle-paint');
     expect(typeof SCRAMBLE_FRAME_MS).toBe('number');
 
     // The settling's default gap IS that number.

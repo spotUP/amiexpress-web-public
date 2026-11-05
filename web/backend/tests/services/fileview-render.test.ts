@@ -17,7 +17,7 @@ import {
   type FileRecordFields,
 } from '../../../../sdk/petscii/frame/file-record';
 
-const SHIPPED = path.join(__dirname, '..', '..', '..', '..', 'Prompts', 'FILEVIEW.40');
+const SHIPPED = path.join(__dirname, '..', '..', '..', '..', 'board', 'Prompts', 'FILEVIEW.40');
 const layout = compileFileLayout(fs.readFileSync(SHIPPED, 'utf8'));
 
 const FILE: FileRecordFields = {

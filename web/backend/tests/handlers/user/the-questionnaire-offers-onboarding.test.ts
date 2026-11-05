@@ -125,7 +125,7 @@ describe('the questionnaire the board ships', () => {
 
   it('names commands this board actually installs', () => {
     const missing = ONBOARDING.filter(
-      (cmd) => !fs.existsSync(path.join(BOARD, 'Commands', 'BBSCmd', `${cmd}.info`)),
+      (cmd) => !fs.existsSync(path.join(BOARD, 'board', 'Commands', 'BBSCmd', `${cmd}.info`)),
     );
     expect(missing).toEqual([]);
   });

@@ -16,7 +16,7 @@
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { loadConfig } from '../../../../Doors/telnet/config';
+import { loadConfig } from '../../../../board/Doors/telnet/config';
 
 const CFG = [
   '[Uprough]',

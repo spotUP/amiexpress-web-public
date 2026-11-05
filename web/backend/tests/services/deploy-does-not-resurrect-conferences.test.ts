@@ -124,7 +124,7 @@ describe("the board's own ConfConfig.info", () => {
   test('parses - the repository ships one, and it is the real format', () => {
     // Not a fixture: the file this repo deploys. If the patterns ever stop
     // reading it, they are wrong however green the synthetic cases are.
-    const real = path.join(__dirname, '..', '..', '..', '..', 'ConfConfig.info');
+    const real = path.join(__dirname, '..', '..', '..', '..', 'board', 'ConfConfig.info');
     if (!fs.existsSync(real)) return;
 
     fs.copyFileSync(real, path.join(root, 'volume', 'ConfConfig.info'));

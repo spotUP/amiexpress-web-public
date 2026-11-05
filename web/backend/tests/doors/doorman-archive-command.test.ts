@@ -4,8 +4,8 @@ import * as path from 'path';
 import {
   findArchiveCommand,
   isUsableCommand,
-} from '../../../../Doors/door-manager/archive-command';
-import { extractAndRegisterDoor } from '../../../../Doors/door-manager/install-core';
+} from '../../../../board/Doors/door-manager/archive-command';
+import { extractAndRegisterDoor } from '../../../../board/Doors/door-manager/install-core';
 
 /**
  * "When installing doors with doorman or doorrepo it should use the bbscmd

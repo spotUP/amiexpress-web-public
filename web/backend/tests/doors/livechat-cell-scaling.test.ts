@@ -14,7 +14,7 @@ import {
   fitCellsToTile,
   cellsToTags,
   MODE_HALFBLOCK,
-} from '../../../../Doors/livechat/video-cells';
+} from '../../../../board/Doors/livechat/video-cells';
 
 /** A picture with a distinct value per cell, so sampling errors show up. */
 function ramp(width: number, height: number): Uint8Array {

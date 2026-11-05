@@ -35,6 +35,7 @@ import { parseWipeMCI } from '../../src/utils/screen-wipe.util';
 import { readAmigaTextFileWithTransforms } from '../../src/utils/amiga-text-decode.util';
 
 const REPO_ROOT = path.resolve(__dirname, '../../../..');
+const BOARD_DIR = path.join(REPO_ROOT, 'board');
 
 /** The wipe codes `parseWipeMCI` maps to a wipe (screen-wipe.util.ts:1001). */
 const WIPE_CODE_RE = /^~W[MHVSCRBNTEX]\r?\n/i;
@@ -142,8 +143,9 @@ const SCREEN_ROOT_RE = /^(Screens|Bulletins|Conf\d+|Node\d+|Themes\/(?![^/]*\.re
  * dropped: `git ls-files` still lists a file deleted in the working tree.
  */
 function servableScreens(): string[] {
+  // Run from board/ so git lists board-relative paths (Screens/..., Node1/...).
   const listed = execFileSync('git', ['ls-files', '-z'], {
-    cwd: REPO_ROOT,
+    cwd: BOARD_DIR,
     encoding: 'buffer',
     maxBuffer: 64 * 1024 * 1024,
   })
@@ -154,7 +156,7 @@ function servableScreens(): string[] {
     .filter((rel) => SCREEN_ROOT_RE.test(rel))
     .filter((rel) => !rel.split('/').some((seg) => SKIP_DIR_RE.test(seg)))
     .filter((rel) => SERVABLE_RE.test(rel) && !SIBLING_RE.test(rel))
-    .filter((rel) => fs.existsSync(path.join(REPO_ROOT, rel)))
+    .filter((rel) => fs.existsSync(path.join(BOARD_DIR, rel)))
     .sort();
 }
 
@@ -169,7 +171,7 @@ let screens: Screen[];
 
 beforeAll(() => {
   screens = servableScreens().map((rel) => {
-    const text = readAmigaTextFileWithTransforms(path.join(REPO_ROOT, rel)).text;
+    const text = readAmigaTextFileWithTransforms(path.join(BOARD_DIR, rel)).text;
     return {
       rel,
       text,

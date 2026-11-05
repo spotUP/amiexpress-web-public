@@ -16,7 +16,7 @@ import {
   wrappedHeight,
   messageIndexAtRow,
   totalRows,
-} from '../../../../Doors/livechat/ui/chat-row-map';
+} from '../../../../board/Doors/livechat/ui/chat-row-map';
 
 const WIDTH = 20;
 

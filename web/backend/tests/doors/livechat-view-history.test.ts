@@ -1,8 +1,8 @@
 /**
  * View History filters a chatter's own messages out of the room's message list.
  */
-import { chatMessagesFrom } from '../../../../Doors/livechat/features/message-history';
-import type { Message } from '../../../../Doors/livechat/types';
+import { chatMessagesFrom } from '../../../../board/Doors/livechat/features/message-history';
+import type { Message } from '../../../../board/Doors/livechat/types';
 
 function msg(username: string, content: string, type: Message['type'] = 'message'): Message {
   return { id: Math.random().toString(36), channelId: 'c', userId: username, username, content, type, createdAt: new Date(), replyCount: 0 };

@@ -2,7 +2,7 @@ import * as path from 'path';
 import {
   isSafeToDelete,
   resolveDoorInstallDir,
-} from '../../../../Doors/door-manager/safe-install-dir';
+} from '../../../../board/Doors/door-manager/safe-install-dir';
 
 /**
  * DOORMAN emptied the live board on 2026-08-30.

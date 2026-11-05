@@ -16,9 +16,9 @@ import * as path from 'path';
 const REPO = path.resolve(__dirname, '..', '..', '..');
 const SGR = /\x1b\[([0-9;]*)m/g;
 const SERVED = [
-  /^Bulletins\//, /^Conf\d+\//, /^Node\d+\//, /^Screens\//, /^Themes\//,
-  /^Doors\/Kickboxing\/KB\.Trophy$/, /^Doors\/glc-viewer\/art\//,
-  /^Doors\/super-qix\/backgrounds\//,
+  /^board\/Bulletins\//, /^board\/Conf\d+\//, /^board\/Node\d+\//, /^board\/Screens\//, /^board\/Themes\//,
+  /^board\/Doors\/Kickboxing\/KB\.Trophy$/, /^board\/Doors\/glc-viewer\/art\//,
+  /^board\/Doors\/super-qix\/backgrounds\//,
 ];
 const SKIP_EXT = /\.(seq|ttx|info|lha|lzx|zip|bin)$/i;
 
@@ -65,7 +65,7 @@ describe('shipped screens never set a black background', () => {
   // executable (zOOsTAtS, DreamStats, WarOLM...). They were patched in place,
   // 40 to 49, which keeps every offset; this keeps a re-imported copy honest.
   it('has no black background in any tracked Amiga door executable', () => {
-    const files = execFileSync('git', ['ls-files', '-z', 'Doors'], { cwd: REPO, maxBuffer: 64 * 1024 * 1024 })
+    const files = execFileSync('git', ['ls-files', '-z', 'board/Doors'], { cwd: REPO, maxBuffer: 64 * 1024 * 1024 })
       .toString().split('\0').filter(Boolean);
     const offenders: string[] = [];
     let executables = 0;

@@ -14,7 +14,7 @@
  * `performDoorDelete` takes all its collaborators as dependencies, so these
  * cases drive the real function and read the index it hands back.
  */
-const { performDoorDelete } = require('../../../../Doors/door-manager/delete-door-action');
+const { performDoorDelete } = require('../../../../board/Doors/door-manager/delete-door-action');
 
 interface FakeDoor { id: string; command: string; name: string; type: string; enabled?: boolean }
 

@@ -73,7 +73,7 @@ describe('BBSTITLE declares iCE colours and the board honours it', () => {
   });
 
   it('what the board reads for a caller still declares iCE and carries no SGR 5', () => {
-    const shown = readAmigaTextFileWithTransforms(path.join(REPO_ROOT, 'Node1/BBSTITLE.txt'));
+    const shown = readAmigaTextFileWithTransforms(path.join(REPO_ROOT, 'board', 'Node1/BBSTITLE.txt'));
     expect(shown.iceColors).toBe(true);
     expect(shown.text.match(SGR_BLINK_RE) ?? []).toEqual([]);
   });

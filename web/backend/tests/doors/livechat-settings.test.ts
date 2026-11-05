@@ -14,9 +14,9 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import { applySettings, DEFAULT_SETTINGS } from '../../../../Doors/livechat/settings';
+import { applySettings, DEFAULT_SETTINGS } from '../../../../board/Doors/livechat/settings';
 
-const DOOR_DIR = path.join(__dirname, '../../../../Doors/livechat');
+const DOOR_DIR = path.join(__dirname, '../../../../board/Doors/livechat');
 const manifest = JSON.parse(fs.readFileSync(path.join(DOOR_DIR, 'door.settings.json'), 'utf8'));
 
 describe('LiveChat settings', () => {

@@ -18,7 +18,7 @@ import {
   UnknownDoorSettingError,
 } from '../../src/doors/door-settings.service';
 
-const repoEmp = path.resolve(__dirname, '..', '..', '..', '..', 'Doors', 'emp_tools');
+const repoEmp = path.resolve(__dirname, '..', '..', '..', '..', 'board', 'Doors', 'emp_tools');
 
 function stageManifest(extra: Record<string, unknown> = {}): string {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'scope-settings-'));

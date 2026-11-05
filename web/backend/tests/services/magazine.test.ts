@@ -26,7 +26,7 @@ import { classify, classifyFormat } from '../../src/services/magazine/classify';
 import { isWorthReading, storyId, normaliseHeadline, type Story } from '../../src/services/magazine/story-store';
 import { ARTICLE_MIN_BODY_CHARS, sidecarPath } from '@amiexpress/bbs-door-sdk/formats/magazine';
 import { clipUrlHash } from '../../src/services/magazine/video-service';
-import { loadIndex } from '../../../../Doors/magazine/library';
+import { loadIndex } from '../../../../board/Doors/magazine/library';
 import { composeStoryPage, wrap, toWidth, renderPage } from '../../src/services/magazine/compose';
 
 function depsFor(dir: string) {

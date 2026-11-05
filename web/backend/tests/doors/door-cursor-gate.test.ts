@@ -18,7 +18,7 @@ import {
 } from '../../src/amiga-emulation/session/door-cursor-gate';
 
 const REPO = path.resolve(__dirname, '../../../..');
-const GETANSWER = path.join(REPO, 'Doors', 'GetAnswer', 'GetAnswer');
+const GETANSWER = path.join(REPO, 'board', 'Doors', 'GetAnswer', 'GetAnswer');
 const PRINTABLE = /[\x21-\x7e]/;
 
 /** Index of the first printable character outside an escape sequence. */

@@ -18,8 +18,8 @@ import {
   pickColor,
   pickColorDithered,
   STICKINESS,
-} from '../../../../Doors/livechat/video-hysteresis';
-import { PALETTE } from '../../../../Doors/livechat/video-encoders';
+} from '../../../../board/Doors/livechat/video-hysteresis';
+import { PALETTE } from '../../../../board/Doors/livechat/video-encoders';
 
 /** Skin: almost exactly between `white` and `lightred`. */
 const SKIN = { r: 205, g: 158, b: 145 };

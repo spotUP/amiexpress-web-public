@@ -33,8 +33,8 @@ const { Screen } = require('../../../../../sdk/engines/ui/blessed');
 const chrome = require('../../../../../sdk/dist/engines/ui/theme/chrome');
 const { createScreen } = require('../../../../../sdk/utils/blessed-helpers');
 const { FrameReconstructor } = require('../../../../../sdk/petscii/frame/ansi-screen');
-const { DoormanLayout, accessCell } = require('../../../../../Doors/door-manager/doorman-layout');
-const { installedFooter } = require('../../../../../Doors/door-manager/installed-footer');
+const { DoormanLayout, accessCell } = require('../../../../../board/Doors/door-manager/doorman-layout');
+const { installedFooter } = require('../../../../../board/Doors/door-manager/installed-footer');
 
 type Coords = { xi: number; xl: number; yi: number; yl: number };
 
@@ -229,7 +229,7 @@ describe('DOORMAN layout on a 40x25 screen', () => {
   // invented: createApp builds its Screen through the helper, never directly.
   it('createApp builds its Screen through createScreen, not `new Screen`', () => {
     const app = fs.readFileSync(
-      path.resolve(__dirname, '../../../../../Doors/door-manager/app.ts'), 'utf8');
+      path.resolve(__dirname, '../../../../../board/Doors/door-manager/app.ts'), 'utf8');
     expect(app).toContain('createScreen(bbs, {');
     expect(app).not.toMatch(/=\s*new Screen\(/);
   });

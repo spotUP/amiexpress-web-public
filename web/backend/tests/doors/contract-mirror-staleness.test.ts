@@ -13,7 +13,7 @@ import * as path from 'path';
  */
 const SERVER_CONTRACT = process.env.DOORSERVER_CONTRACT
   ?? '~/Code/amiexpress-doorserver/contract/manifest-types.ts';
-const MIRROR = path.join(__dirname, '..', '..', '..', '..', 'Doors', 'door-manager', 'repo-types.generated.ts');
+const MIRROR = path.join(__dirname, '..', '..', '..', '..', 'board', 'Doors', 'door-manager', 'repo-types.generated.ts');
 
 const describeIfServer = fs.existsSync(SERVER_CONTRACT) ? describe : describe.skip;
 

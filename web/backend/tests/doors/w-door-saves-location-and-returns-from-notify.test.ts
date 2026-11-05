@@ -38,7 +38,7 @@ import { LoggedOnSubState } from '../../src/constants/bbs-states';
 installDispatchHarness(root => {
   // The door binary, where the registration says it is, on the board root.
   fs.mkdirSync(path.join(root, 'Doors'), { recursive: true });
-  fs.symlinkSync(path.join(REPO, 'Doors', 'USERSETTINGS'), path.join(root, 'Doors', 'USERSETTINGS'));
+  fs.symlinkSync(path.join(REPO, 'board', 'Doors', 'USERSETTINGS'), path.join(root, 'Doors', 'USERSETTINGS'));
 });
 
 // Module exports are not configurable here, so jest.spyOn cannot wrap them; a
@@ -89,7 +89,7 @@ function newSession(user: any): any {
 
 async function registerBoard(): Promise<void> {
   // The SHIPPED W registration, and NOTIFY declared under W.
-  const wTypes = Object.fromEntries(readTooltypeMap(path.join(REPO, 'Commands', 'BBSCmd', 'W.info')));
+  const wTypes = Object.fromEntries(readTooltypeMap(path.join(REPO, 'board', 'Commands', 'BBSCmd', 'W.info')));
   await register(
     { ...doorOver('W', wTypes), type: 'XIM', location: wTypes.LOCATION },
     doorOver('NOTIFY', { SETTINGS: 'YES', SETTINGS_LABEL: 'Notifications', SETTINGS_SECTION: 'Communication', MIN_COLUMNS: '40' }),

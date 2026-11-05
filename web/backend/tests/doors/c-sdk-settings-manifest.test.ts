@@ -92,7 +92,7 @@ describe('a C SDK door declares its own settings', () => {
   const compiler = haveCompiler();
 
   for (const door of C_SDK_DOORS) {
-    const manifestPath = path.join(REPO, 'Doors', door.doorsDir, 'door.settings.json');
+    const manifestPath = path.join(REPO, 'board', 'Doors', door.doorsDir, 'door.settings.json');
 
     it(`${door.doorsDir}: the shipped manifest is exactly what the declaration emits`, () => {
       if (!compiler) {

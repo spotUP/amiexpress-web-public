@@ -35,7 +35,7 @@ import type { Socket } from 'socket.io';
 jest.mock('tone', () => ({}), { virtual: true });
 
 import { createBBSApi } from '../../src/doors/BBSApi';
-import door from '../../../../Doors/phreakwars/server';
+import door from '../../../../board/Doors/phreakwars/server';
 
 interface RunningDoor {
   /** Everything the door has painted, in order. */

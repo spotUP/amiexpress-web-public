@@ -32,7 +32,7 @@ function boardWithConference(n: number, dlPath?: string): string {
   if (dlPath) {
     fs.mkdirSync(path.resolve(root, dlPath), { recursive: true });
     const icon = path.join(root, `Conf${n}.info`);
-    fs.copyFileSync(path.join(REPO, 'Conf1.info'), icon);
+    fs.copyFileSync(path.join(REPO, 'board', 'Conf1.info'), icon);
     writeInfoFile(updateTooltype(parseInfoFile(icon), `DLPATH.1`, dlPath, false));
   }
   return root;
@@ -70,7 +70,7 @@ describe('the FTP upload gate', () => {
     const root = boardRoot();
     fs.mkdirSync(path.resolve(root, dlPath), { recursive: true });
     const icon = path.join(root, `Conf${n}.info`);
-    fs.copyFileSync(path.join(REPO, 'Conf1.info'), icon);
+    fs.copyFileSync(path.join(REPO, 'board', 'Conf1.info'), icon);
     writeInfoFile(updateTooltype(parseInfoFile(icon), 'DLPATH.1', dlPath, false));
   }
 

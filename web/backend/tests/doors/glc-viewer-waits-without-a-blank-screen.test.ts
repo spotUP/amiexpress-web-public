@@ -16,10 +16,10 @@ import * as os from 'os';
 import * as path from 'path';
 
 import { bodyForThisCall, readCache, withDeadline, CACHE_FILE }
-  from '../../../../Doors/glc-viewer/src/fetch-deadline';
+  from '../../../../board/Doors/glc-viewer/src/fetch-deadline';
 import { rewind, skeletonRow, skeletonRows, overwrite }
-  from '../../../../Doors/glc-viewer/src/skeleton';
-import { ROW_TEMPLATE } from '../../../../Doors/glc-viewer/src/art.generated';
+  from '../../../../board/Doors/glc-viewer/src/skeleton';
+import { ROW_TEMPLATE } from '../../../../board/Doors/glc-viewer/src/art.generated';
 
 const laterThan = (ms: number, value: string) =>
   () => new Promise<string>((resolve) => setTimeout(() => resolve(value), ms));
@@ -128,10 +128,10 @@ describe('what a caller is given when the scenewall is slow', () => {
 });
 
 describe('the footer waits with the table', () => {
-  const { skeletonBody, skeletonFooter, skeletonRow, awaitsData } = require('../../../../Doors/glc-viewer/src/skeleton');
-  const { renderGlcFooter, renderGlcRows } = require('../../../../Doors/glc-viewer/src/render');
-  const { narrowSkeletonBody, narrowBody, NARROW_RULE } = require('../../../../Doors/glc-viewer/src/narrow');
-  const art = require('../../../../Doors/glc-viewer/src/art.generated');
+  const { skeletonBody, skeletonFooter, skeletonRow, awaitsData } = require('../../../../board/Doors/glc-viewer/src/skeleton');
+  const { renderGlcFooter, renderGlcRows } = require('../../../../board/Doors/glc-viewer/src/render');
+  const { narrowSkeletonBody, narrowBody, NARROW_RULE } = require('../../../../board/Doors/glc-viewer/src/narrow');
+  const art = require('../../../../board/Doors/glc-viewer/src/art.generated');
 
   const day = { statdate: '16-09-26', calls: '132', topcps: '99999', uploads: '1', downloads: '2' };
   const records = {

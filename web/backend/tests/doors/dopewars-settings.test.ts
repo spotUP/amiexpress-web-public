@@ -12,9 +12,9 @@
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { applySettings, configFieldsFrom, loadSettings, DEFAULT_SETTINGS } from '../../../../Doors/dopewars/src/settings';
+import { applySettings, configFieldsFrom, loadSettings, DEFAULT_SETTINGS } from '../../../../board/Doors/dopewars/src/settings';
 
-const DOOR_DIR = path.join(__dirname, '../../../../Doors/dopewars');
+const DOOR_DIR = path.join(__dirname, '../../../../board/Doors/dopewars');
 const manifest = JSON.parse(fs.readFileSync(path.join(DOOR_DIR, 'door.settings.json'), 'utf8'));
 
 describe('GANJA WARS settings', () => {

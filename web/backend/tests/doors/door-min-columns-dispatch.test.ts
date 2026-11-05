@@ -417,7 +417,7 @@ describe('a C64_ADAPT door reached through the real Enter dispatch', () => {
  * executeDoor returns, so a post-hoc check could never prove it.
  */
 describe('the marked doors open for a C64 from their real .info bytes', () => {
-  const BBSCMD = path.resolve(__dirname, '../../../../Commands/BBSCmd');
+  const BBSCMD = path.resolve(__dirname, '../../../../board/Commands/BBSCmd');
 
   /**
    * The real icon for a command, resolved the way the board's loader does.

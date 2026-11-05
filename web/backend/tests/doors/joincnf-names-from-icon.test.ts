@@ -27,7 +27,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 
-const CFG = path.resolve(__dirname, '../../../../Doors/emp_tools/joincnf.cfg');
+const CFG = path.resolve(__dirname, '../../../../board/Doors/emp_tools/joincnf.cfg');
 
 describe('Doors/emp_tools/joincnf.cfg', () => {
   const text = fs.readFileSync(CFG, 'latin1');

@@ -13,7 +13,7 @@
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { runStripRepack } from '../../../../Doors/ami-stripper/strip-repack';
+import { runStripRepack } from '../../../../board/Doors/ami-stripper/strip-repack';
 
 describe('AmiStripper door: runStripRepack temp-file lifecycle', () => {
   let dir: string;

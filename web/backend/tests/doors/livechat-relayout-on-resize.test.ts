@@ -21,7 +21,7 @@
 import { readFileSync } from 'fs';
 import { join } from 'path';
 
-const DOOR = join(__dirname, '..', '..', '..', '..', 'Doors', 'livechat');
+const DOOR = join(__dirname, '..', '..', '..', '..', 'board', 'Doors', 'livechat');
 const server = readFileSync(join(DOOR, 'server.ts'), 'utf8');
 const helpers = readFileSync(
   join(__dirname, '..', '..', '..', '..', 'sdk', 'utils', 'blessed-helpers.ts'),

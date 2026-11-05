@@ -93,7 +93,7 @@ describe('decompilePixels', () => {
     const { loadSpriteSheet } = require('../../engines/graphics/cell-art/load');
     const path = require('path');
     const sheet = loadSpriteSheet(
-      path.join(__dirname, '..', '..', '..', 'Doors', 'pengo', 'sprites')
+      path.join(__dirname, '..', '..', '..', 'board', 'Doors', 'pengo', 'sprites')
     );
     const frame = sheet['pengo'].animations['walk-right'].frames[0];
     const pixels = decompilePixels(frame);

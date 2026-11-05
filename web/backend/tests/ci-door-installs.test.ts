@@ -62,7 +62,7 @@ function doorsTheBackendReaches(): string[] {
 /** Of those, the ones that need an install to resolve the SDK. */
 function doorsNeedingInstall(): string[] {
   return doorsTheBackendReaches().filter((door) => {
-    const pkg = path.join(repoRoot, 'Doors', door, 'package.json');
+    const pkg = path.join(repoRoot, 'board', 'Doors', door, 'package.json');
     return fs.existsSync(pkg) && fs.readFileSync(pkg, 'utf8').includes('bbs-door-sdk');
   });
 }
@@ -106,8 +106,8 @@ function runTheWorkflowInstallStep(): NpmInstall[] {
 
 /** Every door on disk whose package.json depends on the SDK - the rule. */
 function doorsDependingOnTheSdk(): string[] {
-  return fs.readdirSync(path.join(repoRoot, 'Doors')).filter((door) => {
-    const pkg = path.join(repoRoot, 'Doors', door, 'package.json');
+  return fs.readdirSync(path.join(repoRoot, 'board', 'Doors')).filter((door) => {
+    const pkg = path.join(repoRoot, 'board', 'Doors', door, 'package.json');
     return fs.existsSync(pkg) && fs.readFileSync(pkg, 'utf8').includes('bbs-door-sdk');
   }).sort();
 }
@@ -142,9 +142,9 @@ describe('the backend-tests workflow', () => {
     // and wrong for one with a native module: better-sqlite3's binary is
     // fetched by an install script, and without it GRANDMASTER's own suites
     // fail on "Could not locate the bindings file".
-    const native = fs.readdirSync(path.join(repoRoot, 'Doors'))
+    const native = fs.readdirSync(path.join(repoRoot, 'board', 'Doors'))
       .filter((door) => {
-        const pkg = path.join(repoRoot, 'Doors', door, 'package.json');
+        const pkg = path.join(repoRoot, 'board', 'Doors', door, 'package.json');
         return fs.existsSync(pkg)
           && /"(better-sqlite3|node-pty|canvas|sharp|bcrypt)"/.test(fs.readFileSync(pkg, 'utf8'));
       });

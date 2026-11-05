@@ -30,7 +30,7 @@ import { readFileSync } from 'fs';
 import { join } from 'path';
 
 const client = readFileSync(
-  join(__dirname, '..', '..', '..', '..', 'Doors', 'livechat', 'client.ts'),
+  join(__dirname, '..', '..', '..', '..', 'board', 'Doors', 'livechat', 'client.ts'),
   'utf8'
 );
 

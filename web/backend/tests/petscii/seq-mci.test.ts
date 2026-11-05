@@ -426,7 +426,7 @@ describe('renderPetsciiScreen (Task 5)', () => {
      * asserted: not gated, no tilde byte to be mistaken for one, and the
      * bytes come back identical.
      */
-    const plain = fs.readFileSync(path.join(repoRoot, 'Node1/BBSTITLE.SEQ'));
+    const plain = fs.readFileSync(path.join(repoRoot, 'board', 'Node1/BBSTITLE.SEQ'));
     expect(plain.length).toBeGreaterThan(0);
     expect(plain[0]).not.toBe(0x7e);
     expect(plain.filter((b) => b === 0x7e).length).toBe(0);

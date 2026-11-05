@@ -16,7 +16,7 @@ import {
   PhysicsBrick,
   PhysicsPaddle,
   PlayfieldBounds,
-} from '../../../../Doors/arkanoid/ball-physics';
+} from '../../../../board/Doors/arkanoid/ball-physics';
 
 // The game's real playfield geometry (client.ts constants).
 const BOUNDS: PlayfieldBounds = { left: 2, right: 77, top: 3 };

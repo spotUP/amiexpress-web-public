@@ -1,4 +1,4 @@
-import { fetchDoorDetail } from '../../../../Doors/door-manager/repo-client';
+import { fetchDoorDetail } from '../../../../board/Doors/door-manager/repo-client';
 
 /**
  * A consumer BBS has no catalog of its own - it moved to the door server -

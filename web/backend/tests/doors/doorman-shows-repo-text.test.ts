@@ -7,8 +7,8 @@
  * installs stopped writing when they moved to `door_installs` - so a door
  * installed since (SENT, from MST-FD11.LHA) showed neither.
  */
-import { repoTextBlock } from '../../../../Doors/door-manager/repo-view-helpers';
-import { repoTextFor } from '../../../../Doors/door-manager/doorman-services';
+import { repoTextBlock } from '../../../../board/Doors/door-manager/repo-view-helpers';
+import { repoTextFor } from '../../../../board/Doors/door-manager/doorman-services';
 
 const plain = (s: string) => s.replace(/\{[^}]*\}/g, '');
 

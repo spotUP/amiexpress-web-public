@@ -287,7 +287,7 @@ describe('TP-6 - the browser-door transport gate', () => {
     // The board's own registration carries the tooltype: without it the gate is
     // unreachable in production and this whole task is dead code.
     const registration = fs.readFileSync(
-      path.resolve(__dirname, '../../../../Commands/BBSCmd/ARKANOID.info'),
+      path.resolve(__dirname, '../../../../board/Commands/BBSCmd/ARKANOID.info'),
       'latin1',
     );
     expect(registration).toContain('CLIENT_ONLY=YES');

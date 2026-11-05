@@ -16,7 +16,7 @@ import {
   visibleWidth,
   clipToWidth,
   fitFrameToTile,
-} from '../../../../Doors/livechat/ui/frame-fit';
+} from '../../../../board/Doors/livechat/ui/frame-fit';
 
 describe('measuring a row', () => {
   it('ignores colour tags', () => {
@@ -135,7 +135,7 @@ describe('the tile spends its space on the picture', () => {
   const { readFileSync } = require('fs');
   const { join } = require('path');
   const tile = readFileSync(
-    join(__dirname, '..', '..', '..', '..', 'Doors', 'livechat', 'ui', 'video-tile.ts'),
+    join(__dirname, '..', '..', '..', '..', 'board', 'Doors', 'livechat', 'ui', 'video-tile.ts'),
     'utf8'
   );
 

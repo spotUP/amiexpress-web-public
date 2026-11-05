@@ -16,7 +16,7 @@ import { DEFAULT_SETTINGS, doorEventDef } from '@amiexpress/bbs-door-sdk/formats
 import { getPrefs } from '../../src/notify/repository';
 import { waitForTestDb, putUser } from './helpers';
 
-const DOORS_DIR = path.resolve(__dirname, '../../../../Doors');
+const DOORS_DIR = path.resolve(__dirname, '../../../../board/Doors');
 
 let handle: any;
 beforeAll(async () => { handle = (await waitForTestDb()).db; }, 30000);

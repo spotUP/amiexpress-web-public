@@ -3,7 +3,7 @@
  * key): the board's own order, then low first, then high first, and back.
  * A disabled door carries the 32767 sentinel and lands last when ascending.
  */
-import { nextSortMode, sortInstalled, sortLabel, SORT_MODES } from '../../../../../Doors/door-manager/installed-sort';
+import { nextSortMode, sortInstalled, sortLabel, SORT_MODES } from '../../../../../board/Doors/door-manager/installed-sort';
 
 const doors = [
   { id: 'a', name: 'A', accessLevel: 50 },

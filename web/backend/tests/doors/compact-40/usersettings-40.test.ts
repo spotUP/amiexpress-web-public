@@ -43,7 +43,7 @@ jest.mock('../../../src/services/account.service', () => ({
 import { beforeTeardown, c64Rows, driveDoor, type Step } from './door-capture';
 
 const REPO = path.resolve(__dirname, '../../../../..');
-const DOOR = path.join(REPO, 'Doors', 'USERSETTINGS', 'usersettings');
+const DOOR = path.join(REPO, 'board', 'Doors', 'USERSETTINGS', 'usersettings');
 const EIGHTY = path.join(__dirname, 'fixtures', 'usersettings-80.ans');
 
 async function driveFull(cols: number, steps: Step[], rows = 25, caller?: Record<string, unknown>): Promise<{ ansi: string; user: any }> {

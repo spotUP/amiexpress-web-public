@@ -157,7 +157,7 @@ describe('the doors this board ships', () => {
   // sysop's own example and had no category at all until this landed.
   it('declares the arcade doors as games', () => {
     for (const door of ['frogger', 'pengo', 'galaga', 'joust', 'arkanoid', 'super-qix']) {
-      const manifest = path.join(REPO, 'Doors', door, 'package.json');
+      const manifest = path.join(REPO, 'board', 'Doors', door, 'package.json');
       if (!fs.existsSync(manifest)) continue;
 
       const category = JSON.parse(fs.readFileSync(manifest, 'utf8')).category;
@@ -167,7 +167,7 @@ describe('the doors this board ships', () => {
 
   it('does not call a tool a game', () => {
     for (const door of ['door-manager', 'ansi-editor', 'rip-browser', 'bbslinkwall']) {
-      const manifest = path.join(REPO, 'Doors', door, 'package.json');
+      const manifest = path.join(REPO, 'board', 'Doors', door, 'package.json');
       if (!fs.existsSync(manifest)) continue;
 
       const category = JSON.parse(fs.readFileSync(manifest, 'utf8')).category;

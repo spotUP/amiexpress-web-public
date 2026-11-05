@@ -51,13 +51,13 @@ function seedTemplate(opts: { dissenter?: number } = {}): string {
 
   // The icons the image actually copies: nodes 0 to 6 only.
   for (let n = 0; n <= 6; n++) {
-    fs.copyFileSync(path.join(REPO, 'Node2.info'), path.join(dir, `Node${n}.info`));
+    fs.copyFileSync(path.join(REPO, 'board', 'Node2.info'), path.join(dir, `Node${n}.info`));
   }
 
   // A screen's own Workbench icon, which on an Amiga sits beside it as
   // `<file>.info`. This board ships eight of them.
-  fs.copyFileSync(path.join(REPO, 'Node2.info'), path.join(dir, 'Node2', 'joined.txt.info'));
-  fs.copyFileSync(path.join(REPO, 'Node2.info'), path.join(dir, 'Node5', 'Logon.txt.info'));
+  fs.copyFileSync(path.join(REPO, 'board', 'Node2.info'), path.join(dir, 'Node2', 'joined.txt.info'));
+  fs.copyFileSync(path.join(REPO, 'board', 'Node2.info'), path.join(dir, 'Node5', 'Logon.txt.info'));
 
   return dir;
 }
@@ -183,11 +183,11 @@ describe('the image and the entrypoint still carry the shared shape', () => {
   });
 
   test('it runs after the node directories and icons are copied in', () => {
-    const copyNodeDirs = dockerfile.lastIndexOf('COPY Node40 /app/default-data/Node40');
+    const copyNodeDirs = dockerfile.lastIndexOf('COPY board/Node40 /app/default-data/Node40');
     // The icons arrive by wildcard since 742db4e07 (`COPY *.info`), not by
     // name. What matters is unchanged: whatever line carries Node<n>.info
     // into the image has to run before the collapse writes SCREENS onto it.
-    const copyNodeIcons = dockerfile.lastIndexOf('COPY *.info');
+    const copyNodeIcons = dockerfile.lastIndexOf('COPY board/*.info');
     const collapse = dockerfile.indexOf('collapse-default-screens.ts');
 
     expect(copyNodeDirs).toBeGreaterThan(-1);
@@ -197,7 +197,7 @@ describe('the image and the entrypoint still carry the shared shape', () => {
   });
 
   test('every node the image seeds a directory for can have its icon reach the volume', () => {
-    const seeded = [...dockerfile.matchAll(/^COPY Node(\d+) \/app\/default-data\/Node\d+/gm)]
+    const seeded = [...dockerfile.matchAll(/^COPY board\/Node(\d+) \/app\/default-data\/Node\d+/gm)]
       .map(m => Number(m[1]));
     expect(seeded.length).toBe(NODE_COUNT);
 
@@ -247,7 +247,7 @@ describe('a running board collapses its node screens without undoing the deploy'
       fs.writeFileSync(path.join(nodeDir, 'Logon.txt'), n === DISSENTER ? OWN_LOGON : LOGON);
       fs.writeFileSync(path.join(nodeDir, 'DOOR.SYS'), 'dropfile\n');
       // The icon a seeded board has: real, with the node's own settings on it.
-      fs.copyFileSync(path.join(REPO, 'Node2.info'), path.join(dir, `Node${n}.info`));
+      fs.copyFileSync(path.join(REPO, 'board', 'Node2.info'), path.join(dir, `Node${n}.info`));
     }
     // What the deploy just did: the shared directory holds the new generation.
     fs.mkdirSync(path.join(dir, 'Screens', 'Node'), { recursive: true });
@@ -380,7 +380,7 @@ describe('a shared copy with nothing in it never beats a node that has content',
       // One screen the dissenter differs about, so it keeps its directory and
       // the second arm - the refresh of a kept node - is exercised too.
       fs.writeFileSync(path.join(nodeDir, 'joined.txt'), n === DISSENTER ? Buffer.from('mine\n') : JOINED);
-      fs.copyFileSync(path.join(REPO, 'Node2.info'), path.join(dir, `Node${n}.info`));
+      fs.copyFileSync(path.join(REPO, 'board', 'Node2.info'), path.join(dir, `Node${n}.info`));
     }
     fs.mkdirSync(path.join(dir, 'Screens', 'Node'), { recursive: true });
     fs.writeFileSync(path.join(dir, 'Screens', 'Node', 'Logon.txt'), stub);

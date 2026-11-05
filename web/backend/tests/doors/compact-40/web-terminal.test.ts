@@ -15,8 +15,8 @@ import 'reflect-metadata';
 import * as path from 'path';
 import { execFileSync } from 'child_process';
 import { readTooltypeMap } from '../../../src/utils/info-file.util';
-import * as layoutSuite from '../../../../../Doors/web-terminal/tests/layout.test';
-import * as screenSuite from '../../../../../Doors/web-terminal/tests/screen.test';
+import * as layoutSuite from '../../../../../board/Doors/web-terminal/tests/layout.test';
+import * as screenSuite from '../../../../../board/Doors/web-terminal/tests/screen.test';
 
 jest.setTimeout(120000);
 
@@ -65,7 +65,7 @@ describe('WEBTERM: the shipped bundle shows the board\'s values and calls the bo
 
 describe('WEBTERM.info', () => {
   it('is marked for 40 columns and listed under W', () => {
-    const tt = readTooltypeMap(path.join(REPO, 'Commands/BBSCmd/WEBTERM.info'));
+    const tt = readTooltypeMap(path.join(REPO, 'board', 'Commands/BBSCmd/WEBTERM.info'));
     expect(tt.get('MIN_COLUMNS')).toBe('40');
     expect(tt.get('SETTINGS')).toBe('YES');
     expect(tt.get('SETTINGS_SECTION')).toBe('Web terminal');

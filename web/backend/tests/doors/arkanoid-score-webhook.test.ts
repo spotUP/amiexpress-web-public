@@ -32,7 +32,7 @@ afterAll(() => {
 jest.mock('fs');
 
 import * as fs from 'fs';
-import { saveHighscore } from '../../../../Doors/arkanoid/server';
+import { saveHighscore } from '../../../../board/Doors/arkanoid/server';
 
 const mockedFs = fs as jest.Mocked<typeof fs>;
 

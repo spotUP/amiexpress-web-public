@@ -24,8 +24,8 @@ import {
   NARROW_WIDTH,
   narrowListRows,
   renderNarrowScreen,
-} from '../../../../../Doors/ctop-viewer/src/narrow';
-import type { CtopScreen } from '../../../../../Doors/ctop-viewer/src/wide';
+} from '../../../../../board/Doors/ctop-viewer/src/narrow';
+import type { CtopScreen } from '../../../../../board/Doors/ctop-viewer/src/wide';
 
 /** The live Conf1 of 2026-09-22, as the board had it. */
 function liveHeader(): Buffer {

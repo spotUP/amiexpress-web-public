@@ -1,4 +1,4 @@
-import { GameScreen } from '../../../../Doors/grandmaster/ui/game-screen';
+import { GameScreen } from '../../../../board/Doors/grandmaster/ui/game-screen';
 
 /**
  * "In gmaster the zone mode shows no zone meter."

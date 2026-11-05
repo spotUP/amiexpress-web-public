@@ -31,7 +31,7 @@ import {
   menuItems,
   type CatalogResponse,
   type LeaderboardResponse,
-} from '../../../../Doors/achieve/app';
+} from '../../../../board/Doors/achieve/app';
 
 const FIXTURES = path.join(__dirname, '../../../../sdk/c/tests/fixtures');
 

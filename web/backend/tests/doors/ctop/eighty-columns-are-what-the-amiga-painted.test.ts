@@ -27,7 +27,7 @@ import { decodeCtopFile } from '@amiexpress/bbs-door-sdk/formats/ctop-data';
 import {
   renderWideScreen,
   type CtopScreen,
-} from '../../../../../Doors/ctop-viewer/src/wide';
+} from '../../../../../board/Doors/ctop-viewer/src/wide';
 
 const CAPTURE = fs.readFileSync(path.join(__dirname, 'ctop-68k-80col.capture'), 'latin1');
 

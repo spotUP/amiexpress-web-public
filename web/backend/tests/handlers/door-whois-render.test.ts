@@ -12,7 +12,7 @@ describe('whois-render', () => {
   let formatWhois: (user: any, name: string) => string;
 
   beforeAll(() => {
-    const m = require('../../../../Doors/livechat/handlers/whois-render');
+    const m = require('../../../../board/Doors/livechat/handlers/whois-render');
     findOnlineUser = m.findOnlineUser;
     formatWhois = m.formatWhois;
   });

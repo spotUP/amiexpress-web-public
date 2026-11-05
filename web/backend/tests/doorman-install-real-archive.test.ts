@@ -16,7 +16,7 @@
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { extractArchiveTo, findExtractedBinary } from '../../../Doors/door-manager/app';
+import { extractArchiveTo, findExtractedBinary } from '../../../board/Doors/door-manager/app';
 
 // Force the real archive-extractor module to be loaded (and thus visible to
 // extractArchiveTo's require.cache-based getExtractorFactory) before any

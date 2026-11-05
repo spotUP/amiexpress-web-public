@@ -22,7 +22,7 @@ import * as os from 'os';
 import * as path from 'path';
 import { readDoorSettingsView, writeDoorSettings } from '../../src/doors/door-settings.service';
 
-const EMP = path.resolve(__dirname, '..', '..', '..', '..', 'Doors', 'emp_tools');
+const EMP = path.resolve(__dirname, '..', '..', '..', '..', 'board', 'Doors', 'emp_tools');
 
 /** The board's own manifest and cfg, staged where a write cannot reach them. */
 function stageTheBoard(): string {

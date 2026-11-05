@@ -38,8 +38,8 @@ import {
   fetchManifest,
   downloadArchive,
   type RepoClientConfig,
-} from '../../../../Doors/door-manager/repo-client';
-import { resolveDoorRepoMode } from '../../../../Doors/door-manager/repoDataSource';
+} from '../../../../board/Doors/door-manager/repo-client';
+import { resolveDoorRepoMode } from '../../../../board/Doors/door-manager/repoDataSource';
 
 function sampleManifest(revision: string): DoorRepoManifest {
   return {

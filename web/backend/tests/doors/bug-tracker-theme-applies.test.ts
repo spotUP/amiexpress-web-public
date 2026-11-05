@@ -14,7 +14,7 @@
 
 import * as path from 'path';
 
-const DOOR = path.resolve(__dirname, '../../../../Doors/bug-tracker');
+const DOOR = path.resolve(__dirname, '../../../../board/Doors/bug-tracker');
 
 describe('BUGS survives a theme change', () => {
   it('applies a theme without a ReferenceError, and keeps its own THEME', () => {
@@ -40,7 +40,7 @@ describe('BUGS survives a theme change', () => {
     // identifier that the module neither declares nor imports.
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     const fs = require('fs');
-    const doorsDir = path.resolve(__dirname, '../../../../Doors');
+    const doorsDir = path.resolve(__dirname, '../../../../board/Doors');
     const offenders: string[] = [];
     for (const door of fs.readdirSync(doorsDir)) {
       for (const name of ['door-theme.ts', 'door-theme-bugs.ts']) {

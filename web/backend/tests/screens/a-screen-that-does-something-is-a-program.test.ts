@@ -91,12 +91,12 @@ describe('a screen that does something', () => {
     // A number, pinned: the predicate deciding differently is a decision, and
     // this is what makes it a visible one. Not an exact count - files come and
     // go - but the ORDER of magnitude, and that art outnumbers programs.
-    const tracked = execFileSync('git', ['ls-files', '-z'], { cwd: REPO, maxBuffer: 64 * 1024 * 1024 })
+    const tracked = execFileSync('git', ['ls-files', '-z'], { cwd: path.join(REPO, 'board'), maxBuffer: 64 * 1024 * 1024 })
       .toString('utf8').split('\0').filter(Boolean)
       .filter(p => SCREEN_EXTENSIONS.has(path.extname(p).toLowerCase()) && SERVED_PATH.test(p));
 
     const programs = tracked.filter(p => {
-      try { return screenIsProgram(fs.readFileSync(path.join(REPO, p))); } catch { return false; }
+      try { return screenIsProgram(fs.readFileSync(path.join(REPO, 'board', p))); } catch { return false; }
     });
 
     expect(tracked.length).toBeGreaterThan(400);

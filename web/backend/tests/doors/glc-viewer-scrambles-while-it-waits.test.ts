@@ -11,8 +11,8 @@
 import {
   SCRAMBLE_ALPHABET, nothingSettled, scrambleFrame, settleFrames, settleSome,
   stillMoving, visibleLength,
-} from '../../../../Doors/glc-viewer/src/scramble';
-import { settleOnto } from '../../../../Doors/glc-viewer/src/settle-paint';
+} from '../../../../board/Doors/glc-viewer/src/scramble';
+import { settleOnto } from '../../../../board/Doors/glc-viewer/src/settle-paint';
 
 /** A deterministic `random` so a frame can be asserted at all. */
 function sequence(values: number[]): () => number {

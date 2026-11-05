@@ -34,8 +34,8 @@ function fixtureBoard(): string {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'board-card-'));
   const cmdDir = path.join(root, 'Commands', 'BBSCmd');
   fs.mkdirSync(cmdDir, { recursive: true });
-  const templates = fs.readdirSync(path.join(REPO, 'Commands', 'BBSCmd')).filter((f) => f.endsWith('.info'));
-  const template = path.join(REPO, 'Commands', 'BBSCmd', templates[0]!);
+  const templates = fs.readdirSync(path.join(REPO, 'board', 'Commands', 'BBSCmd')).filter((f) => f.endsWith('.info'));
+  const template = path.join(REPO, 'board', 'Commands', 'BBSCmd', templates[0]!);
   for (const [name, access, type] of [['F', '10', 'BBS'], ['D', '10', 'BBS'], ['DEL', '255', 'BBS'], ['TA', '10', 'XIM']] as const) {
     const target = path.join(cmdDir, `${name}.info`);
     fs.copyFileSync(template, target);
@@ -143,7 +143,7 @@ describe('the card reaches the model', () => {
     // meanings are on the card the way they are live.
     const boardRoot = process.env.BBS_ROOT;
     if (boardRoot && !fs.existsSync(path.join(boardRoot, 'BBSHelp.txt'))) {
-      fs.copyFileSync(path.join(REPO, 'BBSHelp.txt'), path.join(boardRoot, 'BBSHelp.txt'));
+      fs.copyFileSync(path.join(REPO, 'board', 'BBSHelp.txt'), path.join(boardRoot, 'BBSHelp.txt'));
     }
 
     const H = require('../../../src/handlers/operator-chat.handler');

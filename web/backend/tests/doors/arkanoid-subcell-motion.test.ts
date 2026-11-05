@@ -11,7 +11,7 @@
  * covered by sdk/tests/unit/subcell.test.ts.
  */
 
-import { easePaddle, PADDLE_EASE, PADDLE_SNAP } from '../../../../Doors/arkanoid/paddle-motion';
+import { easePaddle, PADDLE_EASE, PADDLE_SNAP } from '../../../../board/Doors/arkanoid/paddle-motion';
 
 /** Run the glide until it settles, collecting every position it held. */
 function glide(from: number, to: number, maxFrames = 60): number[] {

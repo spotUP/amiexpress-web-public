@@ -20,7 +20,7 @@ import {
   buildDoorInfoContent,
   extractArchiveTo,
   findExtractedBinary,
-} from '../../../Doors/door-manager/app';
+} from '../../../board/Doors/door-manager/app';
 
 describe('DOORMAN: buildDoorInfoContent', () => {
   it('writes the catalog door_type into TYPE= instead of hardcoding XIM', () => {

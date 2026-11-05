@@ -20,7 +20,7 @@ import {
   toggleMute,
   hidesDirectMessages,
   hidesRoomMessages,
-} from '../../../../Doors/livechat/core/mute-list';
+} from '../../../../board/Doors/livechat/core/mute-list';
 
 describe('mute list with a missing username (live crash: chat:dm)', () => {
   it('does not throw when the payload carries no sender name', () => {

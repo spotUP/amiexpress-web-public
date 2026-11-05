@@ -62,7 +62,7 @@ test('every registration the menu step writes is committed to the repo', () => {
   const fresh = fs.mkdtempSync(path.join(os.tmpdir(), 'rmd-repo-'));
   try {
     STEPS.menu(fresh);
-    const repoCmds = path.resolve(__dirname, '../../../../Commands/BBSCmd');
+    const repoCmds = path.resolve(__dirname, '../../../../board/Commands/BBSCmd');
     const written = fs.readdirSync(path.join(fresh, 'Commands', 'BBSCmd'));
     expect(written).toEqual(expect.arrayContaining(['MENU.info', 'MENUSETTINGS.info', 'PALETTE.info']));
     for (const name of written) expect(fs.existsSync(path.join(repoCmds, name))).toBe(true);

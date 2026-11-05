@@ -25,7 +25,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 const REPO_ROOT = path.resolve(__dirname, '..', '..', '..', '..');
-const COMMANDS_DIR = path.join(REPO_ROOT, 'Commands');
+const COMMANDS_DIR = path.join(REPO_ROOT, 'board', 'Commands');
 
 /** Every command directory AmigaCommandParser scans: BBSCmd, SysCmd, Conf<N>Cmd, Node<N>Cmd. */
 function commandDirs(): string[] {

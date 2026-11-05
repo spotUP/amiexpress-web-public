@@ -15,10 +15,10 @@
 
 import { readFileSync, readdirSync } from 'fs';
 import { join } from 'path';
-import { PANEL_BORDER, PANEL_BORDER_FOCUS } from '../../../../Doors/livechat/ui/theme';
+import { PANEL_BORDER, PANEL_BORDER_FOCUS } from '../../../../board/Doors/livechat/ui/theme';
 import { themeById } from '../../../../sdk/engines/ui/theme';
 
-const DOOR = join(__dirname, '..', '..', '..', '..', 'Doors', 'livechat');
+const DOOR = join(__dirname, '..', '..', '..', '..', 'board', 'Doors', 'livechat');
 
 /** Every door source file, except the build output. */
 function sources(dir: string): string[] {

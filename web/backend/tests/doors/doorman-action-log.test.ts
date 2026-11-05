@@ -1,4 +1,4 @@
-import { ActionLog } from '../../../../Doors/door-manager/action-log';
+import { ActionLog } from '../../../../board/Doors/door-manager/action-log';
 
 /**
  * "Show a log in doorman and doorrepo in the right panel when deleting doors

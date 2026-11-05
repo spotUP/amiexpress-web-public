@@ -24,7 +24,7 @@
 import { readFileSync, readdirSync, statSync } from 'fs';
 import { join } from 'path';
 
-const DOOR = join(__dirname, '..', '..', '..', '..', 'Doors', 'card-lobby');
+const DOOR = join(__dirname, '..', '..', '..', '..', 'board', 'Doors', 'card-lobby');
 
 /** Comments do not call anything - run() carries a commented-out call. */
 function stripComments(source: string): string {

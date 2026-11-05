@@ -16,9 +16,9 @@ import {
   MENU_TRACK,
   HIGHSCORE_TRACK,
   LEVEL_TRACKS,
-} from '../../../../Doors/arkanoid/music-select';
+} from '../../../../board/Doors/arkanoid/music-select';
 
-const ASSETS_DIR = path.resolve(__dirname, '../../../../Doors/arkanoid/assets');
+const ASSETS_DIR = path.resolve(__dirname, '../../../../board/Doors/arkanoid/assets');
 
 describe('arkanoid music selection', () => {
   it('plays the menu track on the menu and on the help screen', () => {

@@ -12,7 +12,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 
-const BBSCMD = path.resolve(__dirname, '../../../../Commands/BBSCmd');
+const BBSCMD = path.resolve(__dirname, '../../../../board/Commands/BBSCmd');
 
 /** Icons that deliberately switch their own door off. Keep empty unless the sysop asks. */
 const ALLOWED_ACCESS_ZERO: string[] = [];

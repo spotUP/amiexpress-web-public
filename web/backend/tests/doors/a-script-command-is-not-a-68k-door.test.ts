@@ -132,7 +132,7 @@ describe('the board LOGOFF commands', () => {
   const REPO = path.join(__dirname, '..', '..', '..', '..');
 
   test('declare TYPE=SIM with a Batch file for a LOCATION', () => {
-    const icon = path.join(REPO, 'Commands', 'SysCmd', 'LOGOFF1.info');
+    const icon = path.join(REPO, 'board', 'Commands', 'SysCmd', 'LOGOFF1.info');
     if (!fs.existsSync(icon)) return; // a checkout without the board's data
 
     const text = fs.readFileSync(icon, 'latin1');

@@ -17,7 +17,7 @@ const {
   buildNote,
   buildFooterHints,
   choicesForWidth,
-} = require('../../../../../Doors/screen-theme-picker/app');
+} = require('../../../../../board/Doors/screen-theme-picker/app');
 
 /** Printable width, escape sequences removed. */
 const printable = (s: string): number => s.replace(/\x1b\[[0-9;]*[A-Za-z]/g, '').length;

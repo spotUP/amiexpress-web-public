@@ -15,12 +15,12 @@ import {
   mergeDoorDetailIntoEntry,
   type CatalogEntry,
   type DoorDetailFields,
-} from '../../../../Doors/door-manager/repoDataSource';
+} from '../../../../board/Doors/door-manager/repoDataSource';
 import {
   renderFileLines,
   formatSuggestedTooltypes,
   entryHasDoc,
-} from '../../../../Doors/door-manager/repo-view-helpers';
+} from '../../../../board/Doors/door-manager/repo-view-helpers';
 
 function makeEntry(overrides: Partial<CatalogEntry> = {}): CatalogEntry {
   return {

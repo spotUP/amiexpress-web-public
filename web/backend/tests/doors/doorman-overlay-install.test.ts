@@ -17,7 +17,7 @@
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { extractAndRegisterDoor } from '../../../../Doors/door-manager/install-core';
+import { extractAndRegisterDoor } from '../../../../board/Doors/door-manager/install-core';
 
 /** An Amiga icon's tooltypes as they sit on disk: u32 length, text, NUL. */
 const tooltype = (text: string) => {

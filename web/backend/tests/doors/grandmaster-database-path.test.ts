@@ -18,7 +18,7 @@
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { defaultDatabasePath } from '../../../../Doors/grandmaster/server/database/connection';
+import { defaultDatabasePath } from '../../../../board/Doors/grandmaster/server/database/connection';
 
 describe('the GRANDMASTER database path', () => {
   let doorDir: string;

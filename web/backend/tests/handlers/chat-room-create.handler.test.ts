@@ -122,7 +122,7 @@ describe('handleRoomCreate flags', () => {
 
   it('createCmd: --motd followed by --private keeps both flags intact', () => {
     // Door-side parsing test - pulls createCmd from chan-admin.ts to validate token splitting.
-    const { createCmd } = require('../../../../Doors/livechat/commands/chan-admin');
+    const { createCmd } = require('../../../../board/Doors/livechat/commands/chan-admin');
     const ctx: any = { currentChannel: '' };
     const result = createCmd.handler(ctx, ['#room', 'topic', '--motd', '"hi"', '--private']);
     expect(result.data.motd).toBe('hi');
@@ -130,7 +130,7 @@ describe('handleRoomCreate flags', () => {
   });
 
   it('createCmd: --motd captures multi-token text, strips surrounding quotes', () => {
-    const { createCmd } = require('../../../../Doors/livechat/commands/chan-admin');
+    const { createCmd } = require('../../../../board/Doors/livechat/commands/chan-admin');
     const ctx: any = { currentChannel: '' };
     const result = createCmd.handler(ctx, ['#room', '--motd', '"hello', 'world"']);
     expect(result.data.motd).toBe('hello world');

@@ -25,7 +25,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 
-const DOORS = path.resolve(__dirname, '../../../../Doors');
+const DOORS = path.resolve(__dirname, '../../../../board/Doors');
 
 /**
  * Uses of cwd that are deliberate, each with the reason it is not this bug.

@@ -27,7 +27,7 @@ import * as os from 'os';
 import * as path from 'path';
 
 const REPO = path.resolve(__dirname, '../../../../..');
-const SUBS = path.join(REPO, 'Doors', 'SUBS', 'subs');
+const SUBS = path.join(REPO, 'board', 'Doors', 'SUBS', 'subs');
 const EIGHTY = path.join(__dirname, 'fixtures', 'subs-80.ans');
 
 /* Before ANY backend import. See the header. */
@@ -164,7 +164,7 @@ describe('SUBS on all three screens', () => {
 
   it('the shipped .info files mark the door 40-ok, so the gate lets a C64 in', () => {
     for (const name of ['SUBS', 'SUBSCAN']) {
-      const info = fs.readFileSync(path.join(REPO, 'Commands', 'BBSCmd', `${name}.info`), 'latin1');
+      const info = fs.readFileSync(path.join(REPO, 'board', 'Commands', 'BBSCmd', `${name}.info`), 'latin1');
       expect(info).toContain('MIN_COLUMNS=40');
       expect(info).toContain('TYPE=XIM');
       // Both registrations point at the SAME binary: the mode is chosen by the

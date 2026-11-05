@@ -40,7 +40,7 @@ const DOORS: Array<[string, string]> = [
 ];
 
 function source(door: string, file: string): string {
-  return readFileSync(join(repoRoot, 'Doors', door, file), 'utf8');
+  return readFileSync(join(repoRoot, 'board', 'Doors', door, file), 'utf8');
 }
 
 describe('doors that offer 80x25 / responsive', () => {

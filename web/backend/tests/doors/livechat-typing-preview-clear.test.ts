@@ -20,10 +20,10 @@
 
 import { readFileSync } from 'fs';
 import { join } from 'path';
-import { processKeystroke } from '../../../../Doors/livechat/ui/typing-preview';
+import { processKeystroke } from '../../../../board/Doors/livechat/ui/typing-preview';
 
 const handlers = readFileSync(
-  join(__dirname, '..', '..', '..', '..', 'Doors', 'livechat', 'handlers', 'chat-socket-handlers.ts'),
+  join(__dirname, '..', '..', '..', '..', 'board', 'Doors', 'livechat', 'handlers', 'chat-socket-handlers.ts'),
   'utf8'
 );
 

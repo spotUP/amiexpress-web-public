@@ -352,8 +352,8 @@ describe('40-column sweep: the door gate', () => {
 
 describe('40-column sweep: the adapted doors', () => {
   it('tetris-attack: HUD lines and menu rows', () => {
-    const { panelsLayout, hudLines } = require('../../../Doors/grandmaster/ui/panels/layout');
-    const { menuRowsFor } = require('../../../Doors/grandmaster/ui/menu');
+    const { panelsLayout, hudLines } = require('../../../board/Doors/grandmaster/ui/panels/layout');
+    const { menuRowsFor } = require('../../../board/Doors/grandmaster/ui/menu');
     // The widest the HUD ever gets: capped score, top speed, longest clock,
     // the highest chain that still scores, and the STOP marker showing.
     const layout = panelsLayout(40, 25, 12, 13);
@@ -369,7 +369,7 @@ describe('40-column sweep: the adapted doors', () => {
       stripperRule,
       pathColumn,
       fitToWidth,
-    } = require('../../../Doors/ami-stripper/layout');
+    } = require('../../../board/Doors/ami-stripper/layout');
     const col = pathColumn(38, 40);
     fits([
       stripperHeader('12', 40),
@@ -380,7 +380,7 @@ describe('40-column sweep: the adapted doors', () => {
   });
 
   it('doors-menu: category rows, door rows, footer', () => {
-    const { buildCategoryRow, buildDoorRow, buildFooterContent } = require('../../../Doors/doors-menu/app');
+    const { buildCategoryRow, buildDoorRow, buildFooterContent } = require('../../../board/Doors/doors-menu/app');
     fits([
       buildCategoryRow(LONG, 999, true, PLAIN_STYLES, 40),
       buildCategoryRow(EMPTY, 0, false, PLAIN_STYLES, 40),
@@ -390,7 +390,7 @@ describe('40-column sweep: the adapted doors', () => {
   });
 
   it('tip-of-the-day: frame rows for a long tip at 40', () => {
-    const { buildTipFrame } = require('../../../Doors/tip-of-day/layout');
+    const { buildTipFrame } = require('../../../board/Doors/tip-of-day/layout');
     const tip = {
       id: 'door:WHIP', kind: 'door', title: LONG, body: `${LONG_WORDS} ${PROSE}`, command: 'WHIP',
     };
@@ -401,8 +401,8 @@ describe('40-column sweep: the adapted doors', () => {
   });
 
   it('magazine reader: article, contents and footer rows for a long story at 40', () => {
-    const { buildLayout, buildArticle, buildListing, rowText, staticNewsRow } = require('../../../Doors/magazine/layout');
-    const { HINTS, COMPACT_HINTS } = require('../../../Doors/magazine/app');
+    const { buildLayout, buildArticle, buildListing, rowText, staticNewsRow } = require('../../../board/Doors/magazine/layout');
+    const { HINTS, COMPACT_HINTS } = require('../../../board/Doors/magazine/app');
     const layout = buildLayout(40, 25);
     const story = {
       id: 'a1', headline: `${LONG} ${LONG_WORDS}`, summary: `${PROSE}\n\n${LONG_WORDS} ${PROSE}`,
@@ -423,7 +423,7 @@ describe('40-column sweep: the adapted doors', () => {
   });
 
   it('notifications: event rows, delivery rows and footer for every event at 40', () => {
-    const { columnPlan, buildEventRows, eventRowText, deliveryRows, headerText, COMPACT_HINTS } = require('../../../Doors/notify/layout');
+    const { columnPlan, buildEventRows, eventRowText, deliveryRows, headerText, COMPACT_HINTS } = require('../../../board/Doors/notify/layout');
     const { NOTIFY_EVENTS, DEFAULT_SETTINGS } = require('../../../sdk/formats/notify');
     const plan = columnPlan(40);
     const rows = buildEventRows(NOTIFY_EVENTS.map((e: any) => ({ ...e, label: `${e.label} ${LONG}` })), {}, { email: true, push: true, board: true });
@@ -435,7 +435,7 @@ describe('40-column sweep: the adapted doors', () => {
   it('screen-theme-picker: theme rows, note, footer hints', () => {
     const { getCompactProfile } = require('../../../sdk/engines/ui/blessed/core/responsive-constants');
     const { buildThemeItems, buildNote, buildFooterHints, choicesForWidth } =
-      require('../../../Doors/screen-theme-picker/app');
+      require('../../../board/Doors/screen-theme-picker/app');
     const compact = getCompactProfile(40);
     fits(buildThemeItems(
       choicesForWidth([{ slug: 'a', title: LONG, author: LONG, widths: [], status: 'draft' }], 40),
@@ -448,7 +448,7 @@ describe('40-column sweep: the adapted doors', () => {
   it('cosysop-persona: persona rows, note, saved note, footer hints', () => {
     const { getCompactProfile } = require('../../../sdk/engines/ui/blessed/core/responsive-constants');
     const { rosterFor, buildPersonaItems, buildNote, buildSavedNote, buildFooterHints } =
-      require('../../../Doors/cosysop-persona/app');
+      require('../../../board/Doors/cosysop-persona/app');
     const compact = getCompactProfile(40);
     const roster = rosterFor([
       { slug: 'kevin', handle: LONG, name: LONG, blurb: LONG },
@@ -465,7 +465,7 @@ describe('40-column sweep: the adapted doors', () => {
   });
 
   it('bug-tracker: bug title and chrome strips', () => {
-    const { CompactLayout } = require('../../../Doors/bug-tracker/layout');
+    const { CompactLayout } = require('../../../board/Doors/bug-tracker/layout');
     const layout = new CompactLayout(() => 40);
     fits([
       `#0001 [NEW] ${layout.bugTitle(LONG, 6)}[+99]`,
@@ -477,7 +477,7 @@ describe('40-column sweep: the adapted doors', () => {
 
   it('DOORMAN: an installed row on a real 40x25 screen', () => {
     const { Screen } = require('../../../sdk/engines/ui/blessed');
-    const { DoormanLayout } = require('../../../Doors/door-manager/doorman-layout');
+    const { DoormanLayout } = require('../../../board/Doors/door-manager/doorman-layout');
     const screen = new Screen({ width: 40, height: 25, responsive: true } as any);
     const layout = new DoormanLayout(screen, 1);
     try {
@@ -494,7 +494,7 @@ describe('40-column sweep: the adapted doors', () => {
   it('CTOP: the conference table, with adversarial names and gigabyte totals', () => {
     const {
       renderNarrowScreen,
-    } = require('../../../Doors/ctop-viewer/src/narrow');
+    } = require('../../../board/Doors/ctop-viewer/src/narrow');
     const {
       aggregateCtop, decodeCtopHeader,
     } = require('../../../sdk/formats/ctop-data');
@@ -522,7 +522,7 @@ describe('40-column sweep: the adapted doors', () => {
 
   it('WHIP: the menu and the stats on a real 40x25 screen', () => {
     const { Screen } = require('../../../sdk/engines/ui/blessed');
-    const { showMainMenu } = require('../../../Doors/whip/ui/main-menu');
+    const { showMainMenu } = require('../../../board/Doors/whip/ui/main-menu');
 
     const screen = new Screen({ width: 40, height: 25, responsive: true } as any);
     try {
@@ -553,7 +553,7 @@ describe('40-column sweep: the adapted doors', () => {
   });
 
   it('phreakwars: every emitted row goes through say()', () => {
-    const ui = require('../../../Doors/phreakwars/lib/ui');
+    const ui = require('../../../board/Doors/phreakwars/lib/ui');
     const rows: string[] = [];
     const socket = { emit: (_e: string, data: string) => rows.push(String(data)) };
     const gameState = { terminalWidth: 40 };

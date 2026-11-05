@@ -13,9 +13,9 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 
-import { doorRootFrom } from '../../../../Doors/glc-viewer/src/door-root';
+import { doorRootFrom } from '../../../../board/Doors/glc-viewer/src/door-root';
 
-const DOOR = path.join(__dirname, '../../../../Doors/glc-viewer');
+const DOOR = path.join(__dirname, '../../../../board/Doors/glc-viewer');
 
 describe('the door root', () => {
   it('is the same from the root, from src/, from dist/ and from dist/src/', () => {

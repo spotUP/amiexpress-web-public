@@ -48,7 +48,7 @@ import type { BBSSession } from '../../src/index';
 const REPO_ROOT = path.resolve(__dirname, '..', '..', '..', '..');
 const BACKEND_SRC = path.join(REPO_ROOT, 'web', 'backend', 'src');
 const SDK_DIR = path.join(REPO_ROOT, 'sdk');
-const DOORS_DIR = path.join(REPO_ROOT, 'Doors');
+const DOORS_DIR = path.join(REPO_ROOT, 'board', 'Doors');
 
 /**
  * THE PIN. 246 names, produced by greps A and B of the census documented at the
@@ -339,7 +339,7 @@ cd web/backend/src && { grep -rhoE "\.emit\(\s*['\"][a-zA-Z0-9:_-]+['\"]" --incl
 const GREP_B = String.raw`
 PAT="(^|[^A-Za-z0-9_.])(socket|emitter|sock)\.emit\(\s*['\"][a-zA-Z0-9:_-]+['\"]|\.(socket|emitter)\.emit\(\s*['\"][a-zA-Z0-9:_-]+['\"]"
 grep -rhoE "$PAT" --include="*.ts" sdk/engines sdk/utils sdk/types
-DOORFILES=$(for d in Doors/*/; do ls "$d"[a-z]*.ts 2>/dev/null; done)
+DOORFILES=$(for d in board/Doors/*/; do ls "$d"[a-z]*.ts 2>/dev/null; done)
 if [ -n "$DOORFILES" ]; then
   printf '%s\n' "$DOORFILES" | tr '\n' '\0' | xargs -0 grep -hoE "$PAT" 2>/dev/null || true
 fi

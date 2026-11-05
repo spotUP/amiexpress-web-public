@@ -18,7 +18,7 @@
 import { readFileSync, readdirSync, existsSync, statSync } from 'fs';
 import { join } from 'path';
 
-const DOORS_DIR = join(__dirname, '../../../Doors');
+const DOORS_DIR = join(__dirname, '../../../board/Doors');
 
 /** Every .ts file a door owns, its own tests and build output aside. */
 function sourcesOf(doorDir: string): string[] {

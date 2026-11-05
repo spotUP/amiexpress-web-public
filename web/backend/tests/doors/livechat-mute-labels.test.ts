@@ -13,7 +13,7 @@ import {
   toggleMute,
   muteMenuLabels,
   muteLevelForLabel,
-} from '../../../../Doors/livechat/core/mute-list';
+} from '../../../../board/Doors/livechat/core/mute-list';
 
 describe('mute menu labels', () => {
   it('offers the plain actions for somebody untouched', () => {

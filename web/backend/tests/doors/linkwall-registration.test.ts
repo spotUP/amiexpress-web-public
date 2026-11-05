@@ -51,7 +51,7 @@ describe('the BBSLink wall registration', () => {
   it('is still an Amiga icon, not a text stub', () => {
     // A hand-edited .info loses its DiskObject and GetDiskObject reads NIL -
     // which is how a rename destroyed a file checker's icon on 2026-08-31.
-    const head = fs.readFileSync(path.join(ROOT, 'Commands/BBSCmd/linkwall.info')).subarray(0, 2);
+    const head = fs.readFileSync(path.join(ROOT, 'board', 'Commands/BBSCmd/linkwall.info')).subarray(0, 2);
 
     expect(head.toString('hex')).toBe('e310');
   });

@@ -68,7 +68,7 @@ const wait = (ms: number) => new Promise((resolve) => realSetTimeout(resolve, ms
  */
 function liveWallCapture(style: 1 | 2 = 2, entry?: { message: string; author: string }): string {
   const capture = fs.readFileSync(path.join(REPO, 'sdk/tests/petscii/frame/fixtures/wall.ans')).toString('utf8');
-  const styleFile = fs.readFileSync(path.join(REPO, `Doors/dRE/dRE!WAll/dRE!WAll.StYlE.${style}`)).toString('latin1');
+  const styleFile = fs.readFileSync(path.join(REPO, `board`, `Doors/dRE/dRE!WAll/dRE!WAll.StYlE.${style}`)).toString('latin1');
   const rows = styleFile.split('\n').slice(0, 3);
   expect(rows).toHaveLength(3);
   const block = (top: number) => rows.map((r, i) => `\x1b[${top + i};0H${r}`).join('');
