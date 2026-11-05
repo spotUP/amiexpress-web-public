@@ -78,9 +78,10 @@ if [ -n "$SCRATCH" ] && git -C "$REPO_ROOT" worktree add --detach --no-checkout 
   # Only what the type-checks read. The board's own directories - Conf, Doors,
   # Node<n> - are thousands of files this never opens. The backend tests
   # import door and dev-script sources, so their .ts/.json come along; door
-  # binaries and art do not.
+  # binaries and art do not. The dev/ .cjs checks (root allowlist) run here
+  # too, so they come along.
   if git -C "$SCRATCH" sparse-checkout set --no-cone web sdk packages \
-       '/Doors/**/*.ts' '/Doors/**/*.json' '/dev/**/*.ts' '/dev/**/*.json' >/dev/null 2>&1 \
+       '/Doors/**/*.ts' '/Doors/**/*.json' '/dev/**/*.ts' '/dev/**/*.json' '/dev/**/*.cjs' >/dev/null 2>&1 \
      && git -C "$SCRATCH" checkout --quiet >/dev/null 2>&1; then
     # tsc needs the toolchain, and a fresh worktree has none. Borrowed, not
     # installed: an install here would cost minutes and a gigabyte.
