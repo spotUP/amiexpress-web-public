@@ -282,6 +282,18 @@ export const FORWARDING_EMIT_SITES: ReadonlyArray<VariableEmitSite & { readonly 
       expression: "super.emit(event",
       why: "The corpus runner's EventEmitter subclass. Not a session socket.",
     },
+    {
+      file: "web/backend/src/services/palette-over-door.ts",
+      line: 110,
+      expression: "real.emit(event",
+      why: "The palette's shadow socket passes every name it does not hold from the client straight to the real socket, where this table rules it.",
+    },
+    {
+      file: "web/backend/src/services/palette-over-door.ts",
+      line: 147,
+      expression: "socket.emit(event",
+      why: "Releasing a held door replays the output its gate held, in order, onto the same socket: the names the door's own emits already carried.",
+    },
   ]);
 
 /** The first pattern whose `test` matches, or undefined. */
