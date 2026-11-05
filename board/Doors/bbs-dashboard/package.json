@@ -19,7 +19,7 @@
   "author": "AmiExpress SDK",
   "license": "MIT",
   "dependencies": {
-    "@amiexpress/bbs-door-sdk": "file:../../sdk",
+    "@amiexpress/bbs-door-sdk": "file:../../../sdk",
     "neo-blessed": "^0.2.0"
   },
   "devDependencies": {

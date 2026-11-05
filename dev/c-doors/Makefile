@@ -123,10 +123,10 @@ install-door:
 	fi
 	@UPPER_NAME=$$(echo $(NAME) | tr '[:lower:]' '[:upper:]'); \
 	echo "[1/2] Installing $(NAME) to BBS..."; \
-	mkdir -p ../../Doors/$$UPPER_NAME; \
-	cp doors/$(NAME)/$(NAME) ../../Doors/$$UPPER_NAME/; \
+	mkdir -p ../../board/Doors/$$UPPER_NAME; \
+	cp doors/$(NAME)/$(NAME) ../../board/Doors/$$UPPER_NAME/; \
 	echo "[2/2] Verifying installation..."; \
-	file ../../Doors/$$UPPER_NAME/$(NAME); \
+	file ../../board/Doors/$$UPPER_NAME/$(NAME); \
 	echo ""; \
 	echo "[OK] Installed to Doors/$$UPPER_NAME/$(NAME)"; \
 	echo ""; \

@@ -14,8 +14,8 @@
     "resolveJsonModule": true,
     "allowSyntheticDefaultImports": true,
     "paths": {
-      "@amiexpress/bbs-door-sdk": ["../../sdk"],
-      "@amiexpress/bbs-door-sdk/*": ["../../sdk/*"]
+      "@amiexpress/bbs-door-sdk": ["../../../sdk"],
+      "@amiexpress/bbs-door-sdk/*": ["../../../sdk/*"]
     },
     "baseUrl": "."
   },

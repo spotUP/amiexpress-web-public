@@ -29,7 +29,7 @@
     "category": "Communication"
   },
   "dependencies": {
-    "@amiexpress/bbs-door-sdk": "file:../../sdk"
+    "@amiexpress/bbs-door-sdk": "file:../../../sdk"
   },
   "devDependencies": {
     "esbuild": "^0.19.0",

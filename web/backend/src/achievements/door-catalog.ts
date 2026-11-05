@@ -18,6 +18,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as crypto from 'crypto';
 import type { DoorAchievementsApi } from './door-api';
+import { boardRoot } from '../utils/board-root.util';
 import { apiRequest } from './client';
 import type { FetchLike } from './client';
 import type { AchievementsSettings } from './config';
@@ -40,9 +41,9 @@ export interface DoorManifest {
   achievements: DoorAchievementDef[];
 }
 
-/** Where the doors live, relative to the backend's own source tree. */
+/** Where the doors live: <board root>/Doors (DOORS_ROOT overrides). */
 export function doorsRoot(): string {
-  return process.env.DOORS_ROOT || path.resolve(__dirname, '..', '..', '..', '..', 'Doors');
+  return process.env.DOORS_ROOT || path.join(boardRoot(), 'Doors');
 }
 
 interface RawManifest {

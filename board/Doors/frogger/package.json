@@ -24,7 +24,7 @@
     "copy-sprites": "mkdir -p dist/sprites && cp sprites/*.sprite.json dist/sprites/"
   },
   "dependencies": {
-    "@amiexpress/bbs-door-sdk": "file:../../sdk"
+    "@amiexpress/bbs-door-sdk": "file:../../../sdk"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",

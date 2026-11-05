@@ -4,6 +4,6 @@ module.exports = {
   roots: ['<rootDir>/src/__tests__'],
   testMatch: ['**/*.test.ts'],
   moduleNameMapper: {
-    '^@amiexpress/bbs-door-sdk(.*)$': '<rootDir>/../../sdk/dist$1',
+    '^@amiexpress/bbs-door-sdk(.*)$': '<rootDir>/../../../sdk/dist$1',
   },
 };

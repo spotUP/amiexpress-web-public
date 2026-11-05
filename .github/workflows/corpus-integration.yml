@@ -18,7 +18,7 @@ on:
     branches: [main]
     paths:
       - 'dev/scripts/door-corpus/**'
-      - 'Doors/**'
+      - 'board/Doors/**'
       - 'web/backend/src/amiga-emulation/**'
       - 'web/backend/src/handlers/door**'
       - 'web/backend/src/scripts/corpus-integration-runner.ts'
@@ -27,7 +27,7 @@ on:
     branches: [main]
     paths:
       - 'dev/scripts/door-corpus/**'
-      - 'Doors/**'
+      - 'board/Doors/**'
       - 'web/backend/src/amiga-emulation/**'
       - 'web/backend/src/handlers/door**'
       - 'web/backend/src/scripts/corpus-integration-runner.ts'

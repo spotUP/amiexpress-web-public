@@ -16,7 +16,7 @@
     "test": "npx tsx tests/run-tests.ts"
   },
   "dependencies": {
-    "@amiexpress/bbs-door-sdk": "file:../../sdk"
+    "@amiexpress/bbs-door-sdk": "file:../../../sdk"
   },
   "devDependencies": {
     "typescript": "^5.4.0"

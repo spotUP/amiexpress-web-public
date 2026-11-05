@@ -91,7 +91,7 @@ jobs:
       # superset of the six names that used to be here.
       - name: Install door deps (every door that depends on the SDK)
         run: |
-          for pkg in Doors/*/package.json; do
+          for pkg in board/Doors/*/package.json; do
             grep -q "bbs-door-sdk" "$pkg" || continue
             door=$(dirname "$pkg")
             # --ignore-scripts everywhere except where a NATIVE module has to

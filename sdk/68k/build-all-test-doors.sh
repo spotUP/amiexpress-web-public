@@ -170,7 +170,7 @@ echo ""
 echo "[6/7] Verifying BBS door binaries..."
 echo ""
 
-DOORS_DIR="~/Code/AmiExpress/amiexpress-web/Doors"
+DOORS_DIR="~/Code/AmiExpress/amiexpress-web/board/Doors"
 BIN_OK=0
 BIN_MISSING=0
 

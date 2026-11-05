@@ -16,7 +16,7 @@
     "description": "Comprehensive bug tracking and issue management system"
   },
   "dependencies": {
-    "@amiexpress/bbs-door-sdk": "file:../../sdk"
+    "@amiexpress/bbs-door-sdk": "file:../../../sdk"
   },
   "devDependencies": {
     "esbuild": "^0.20.0"

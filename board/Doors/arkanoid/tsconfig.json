@@ -13,7 +13,7 @@
     "resolveJsonModule": true,
     "declaration": true,
     "declarationMap": true,
-    "typeRoots": ["../../sdk/types", "./node_modules/@types"]
+    "typeRoots": ["../../../sdk/types", "./node_modules/@types"]
   },
   "include": ["*.ts"],
   "exclude": ["node_modules", "dist"]

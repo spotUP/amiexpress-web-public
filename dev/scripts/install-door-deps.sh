@@ -34,7 +34,7 @@ fi
 
 DOORS=$(cd web/backend && npx tsc -p tsconfig.tests.json --listFilesOnly 2>/dev/null \
   | grep -v /node_modules/ \
-  | sed -n "s:^$REPO_ROOT/\(Doors/[^/]*\)/.*:\1:p" \
+  | sed -n "s:^$REPO_ROOT/\(board/Doors/[^/]*\)/.*:\1:p" \
   | sort -u)
 
 MISSING=

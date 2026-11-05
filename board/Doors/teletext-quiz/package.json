@@ -12,7 +12,7 @@
     "watch": "tsc --watch"
   },
   "dependencies": {
-    "@amiexpress/bbs-door-sdk": "file:../../sdk"
+    "@amiexpress/bbs-door-sdk": "file:../../../sdk"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",

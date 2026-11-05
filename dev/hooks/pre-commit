@@ -76,8 +76,8 @@ EXEMPT_FILES=(
 
     # Door entry points that were already over the cap before being touched;
     # splitting them is a real refactor, not something to fold into a bug fix.
-    "Doors/grandmaster/app.ts"                                    # Grandmaster door entry point (2700+ lines)
-    "Doors/livechat/server.ts"                                    # LiveChat door entry point (2700+ lines)
+    "board/Doors/grandmaster/app.ts"                                    # Grandmaster door entry point (2700+ lines)
+    "board/Doors/livechat/server.ts"                                    # LiveChat door entry point (2700+ lines)
 
     # Also already over the cap before being touched (2026-08-25, restored
     # panel geometry / new-user time limit). Same reasoning as above.
@@ -95,7 +95,7 @@ EXEMPT_FILES=(
     # The five chrome widgets at the top are what needed touching, and the
     # extraction the cap is really asking for is hours of mechanical work on a
     # door with no tests. Exempt on the same terms as the two above.
-    "Doors/neo-blessed-showcase/app.ts"                           # Widget showcase door (3,700+ lines)
+    "board/Doors/neo-blessed-showcase/app.ts"                           # Widget showcase door (3,700+ lines)
 )
 
 # Convert array to grep pattern
@@ -103,12 +103,12 @@ EXEMPT_PATTERN=$(printf "|%s" "${EXEMPT_FILES[@]}")
 EXEMPT_PATTERN=${EXEMPT_PATTERN:1}  # Remove leading |
 
 # ─── TypeScript doors: auto-rebuild dist/ ────────────────────────────────────
-# Doors in Doors/{name}/ run dist/index.js, not TypeScript source.
+# Doors in board/Doors/{name}/ run dist/index.js, not TypeScript source.
 # If any .ts source file in a door directory is staged but the corresponding
 # dist/ is stale (not staged), rebuild now and stage the result automatically.
 # This prevents the "deployed source change that never ran" class of bug.
 
-DOOR_TS_STAGED=$(git diff --cached --name-only --diff-filter=ACM | grep -E '^Doors/[^/]+/.*\.ts$' | grep -v '/dist/' | grep -v '/node_modules/')
+DOOR_TS_STAGED=$(git diff --cached --name-only --diff-filter=ACM | grep -E '^board/Doors/[^/]+/.*\.ts$' | grep -v '/dist/' | grep -v '/node_modules/')
 
 if [ -n "$DOOR_TS_STAGED" ]; then
     # Collect unique door directories that have staged .ts changes
@@ -118,7 +118,7 @@ if [ -n "$DOOR_TS_STAGED" ]; then
     # the door root (Doors/arkanoid/client.ts -> Doors), where it silently
     # found no package.json and skipped the rebuild. That shipped a stale
     # Arkanoid bundle while Grandmaster rebuilt fine.
-    DOOR_DIRS=$(echo "$DOOR_TS_STAGED" | cut -d/ -f1,2 | sort -u)
+    DOOR_DIRS=$(echo "$DOOR_TS_STAGED" | cut -d/ -f1,2,3 | sort -u)
     for DOOR_DIR in $DOOR_DIRS; do
         PKG="$DOOR_DIR/package.json"
         if [ ! -f "$PKG" ]; then continue; fi

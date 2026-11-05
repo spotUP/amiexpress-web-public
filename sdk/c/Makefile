@@ -436,8 +436,8 @@ settings:
 	  fi; \
 	  $(CC) -I include -o build/host/emit-$$src \
 	    tools/emit-door-settings.c src/ae_settings.c examples/$$src/settings.c -lm || exit 1; \
-	  if [ -d ../../Doors/$$dst ]; then \
-	    ./build/host/emit-$$src > ../../Doors/$$dst/door.settings.json || exit 1; \
+	  if [ -d ../../board/Doors/$$dst ]; then \
+	    ./build/host/emit-$$src > ../../board/Doors/$$dst/door.settings.json || exit 1; \
 	    echo "  settings -> Doors/$$dst/door.settings.json"; \
 	  else \
 	    ./build/host/emit-$$src > build/host/$$src.door.settings.json || exit 1; \

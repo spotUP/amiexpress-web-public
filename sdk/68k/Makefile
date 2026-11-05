@@ -70,8 +70,8 @@ install:
 	@$(MAKE) door NAME=$(NAME)
 	@UPPER_NAME=$$(echo $(NAME) | tr '[:lower:]' '[:upper:]'); \
 	echo "Installing $$UPPER_NAME to BBS..."; \
-	mkdir -p ../../Doors/$$UPPER_NAME; \
-	cp doors/$(NAME)/$(NAME) ../../Doors/$$UPPER_NAME/; \
+	mkdir -p ../../board/Doors/$$UPPER_NAME; \
+	cp doors/$(NAME)/$(NAME) ../../board/Doors/$$UPPER_NAME/; \
 	echo "[OK] Installed to Doors/$$UPPER_NAME/$(NAME)"; \
 	echo ""; \
 	echo "Next steps:"; \

@@ -24,7 +24,7 @@
     "start": "npx tsx server.ts"
   },
   "dependencies": {
-    "@amiexpress/bbs-door-sdk": "file:../../sdk"
+    "@amiexpress/bbs-door-sdk": "file:../../../sdk"
   },
   "devDependencies": {
     "esbuild": "^0.19.0",

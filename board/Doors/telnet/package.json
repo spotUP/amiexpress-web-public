@@ -12,7 +12,7 @@
   "buildable": true,
   "scripts": {
     "build": "tsc",
-    "preview": "cd ../.. && npm run preview telnet-connect"
+    "preview": "cd ../../.. && npm run preview telnet-connect"
   },
   "keywords": [
     "bbs",
@@ -24,7 +24,7 @@
     "reference"
   ],
   "dependencies": {
-    "@amiexpress/bbs-door-sdk": "file:../../sdk",
+    "@amiexpress/bbs-door-sdk": "file:../../../sdk",
     "socket.io": "^4.8.1"
   },
   "devDependencies": {

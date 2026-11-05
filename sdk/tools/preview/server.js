@@ -45,7 +45,7 @@ const DEBUG_OUTPUT = process.env.DEBUG_OUTPUT === 'true' || false;
 
 // Door directories - prefer BBS doors/ over SDK examples/
 const PROJECT_ROOT = path.resolve(__dirname, '../../..');
-const BBS_DOORS_DIR = path.join(PROJECT_ROOT, 'doors');
+const BBS_DOORS_DIR = path.join(PROJECT_ROOT, 'board', 'Doors');
 const SDK_EXAMPLES_DIR = path.join(__dirname, '../../examples');
 
 // Use BBS doors directory as primary source for TypeScript doors
@@ -81,7 +81,7 @@ async function installDoorToBBS(doorId) {
   try {
     const projectRoot = path.resolve(__dirname, '../../..');
     // Prefer live BBS doors/<doorId>; fall back to legacy sdk/examples if missing
-    const doorsBase = path.join(projectRoot, 'doors');
+    const doorsBase = path.join(projectRoot, 'board', 'Doors');
     const sdkExamplesBase = path.join(__dirname, '../../examples');
     const preferredDoorPath = path.join(doorsBase, doorId);
     const fallbackDoorPath = path.join(sdkExamplesBase, doorId);
@@ -112,7 +112,7 @@ async function installDoorToBBS(doorId) {
     ].filter(Boolean).join('\n');
 
     // Write .info file to Commands/BBSCmd/
-    const commandsDir = path.join(projectRoot, 'Commands/BBSCmd');
+    const commandsDir = path.join(projectRoot, 'board', 'Commands/BBSCmd');
     if (!fs.existsSync(commandsDir)) {
       fs.mkdirSync(commandsDir, { recursive: true });
     }
@@ -122,7 +122,7 @@ async function installDoorToBBS(doorId) {
     console.log(`✓ Created ${bbsCommand}.info`);
 
     // Ensure doors/ exists (door should already live there in dev)
-    const doorsDir = path.join(projectRoot, 'doors');
+    const doorsDir = path.join(projectRoot, 'board', 'Doors');
     if (!fs.existsSync(doorsDir)) {
       fs.mkdirSync(doorsDir, { recursive: true });
     }
@@ -3582,7 +3582,7 @@ function buildDoor(clientId, doorId) {
           // Auto-launch door in BBS terminal after successful build
           // Read bbsCommand from package.json (prefer live doors/<id>, fallback to examples)
           const projectRoot = path.resolve(__dirname, '../../..');
-          const doorsBase = path.join(projectRoot, 'doors');
+          const doorsBase = path.join(projectRoot, 'board', 'Doors');
           const sdkExamplesBase = path.join(__dirname, '../../examples');
           const preferredDoorPath = path.join(doorsBase, doorId);
           const fallbackDoorPath = path.join(sdkExamplesBase, doorId);

@@ -81,11 +81,11 @@ if [ -n "$SCRATCH" ] && git -C "$REPO_ROOT" worktree add --detach --no-checkout 
   # binaries and art do not. The dev/ .cjs checks (root allowlist) run here
   # too, so they come along.
   if git -C "$SCRATCH" sparse-checkout set --no-cone web sdk packages \
-       '/Doors/**/*.ts' '/Doors/**/*.json' '/dev/**/*.ts' '/dev/**/*.json' '/dev/**/*.cjs' >/dev/null 2>&1 \
+       '/board/Doors/**/*.ts' '/board/Doors/**/*.json' '/dev/**/*.ts' '/dev/**/*.json' '/dev/**/*.cjs' >/dev/null 2>&1 \
      && git -C "$SCRATCH" checkout --quiet >/dev/null 2>&1; then
     # tsc needs the toolchain, and a fresh worktree has none. Borrowed, not
     # installed: an install here would cost minutes and a gigabyte.
-    for dir in . web/backend web/config-app packages/terminal sdk $(cd "$REPO_ROOT" && ls -d Doors/*/node_modules 2>/dev/null | sed 's:/node_modules$::'); do
+    for dir in . web/backend web/config-app packages/terminal sdk $(cd "$REPO_ROOT" && ls -d board/Doors/*/node_modules 2>/dev/null | sed 's:/node_modules$::'); do
       if [ -d "$REPO_ROOT/$dir/node_modules" ] && [ ! -e "$SCRATCH/$dir/node_modules" ]; then
         mkdir -p "$SCRATCH/$dir" 2>/dev/null
         ln -s "$REPO_ROOT/$dir/node_modules" "$SCRATCH/$dir/node_modules" 2>/dev/null
