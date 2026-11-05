@@ -39,7 +39,7 @@ for arg in "$@"; do
   esac
 done
 
-cd "$PROJECT_DIR"
+cd "$PROJECT_DIR/board" || exit 1  # every source path below is board-relative
 
 echo "=============================================="
 echo "AmiExpress BBS - Sync to Server"

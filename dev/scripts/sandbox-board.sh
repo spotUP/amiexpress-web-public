@@ -50,10 +50,13 @@ usage() { sed -n '2,33p' "$0" | sed 's/^# \{0,1\}//'; }
 # The sources of every `COPY <src>... /app/default-data/...` line in the
 # Dockerfile, top-level paths only (data/amiga-roms/* lands in the ROM
 # directory, not the board, and doors here run on AROS from the checkout).
+# Board content lives under board/ in the repo; the sources are listed with or
+# without that prefix and archived from the board/ tree, so they land at the
+# root of the sandbox board as in the image.
 seed_paths() {
   awk '/^COPY / && !/--from=/ && $NF ~ /^\/app\/default-data/ {
          for (i = 2; i < NF; i++) print $i
-       }' "$ROOT/Dockerfile" | grep -v '/'
+       }' "$ROOT/Dockerfile" | sed 's#^board/##' | grep -v '/'
 }
 
 stop_sandbox() {
@@ -90,7 +93,7 @@ seed_sandbox() {
   echo "[INFO] seeding $SANDBOX_DIR/bbs from git HEAD $(git -C "$ROOT" rev-parse --short HEAD)"
   set -f
   # shellcheck disable=SC2086
-  git -C "$ROOT" archive --format=tar HEAD -- $paths | tar -x -C "$SANDBOX_DIR/bbs" \
+  git -C "$ROOT" archive --format=tar HEAD:board -- $paths | tar -x -C "$SANDBOX_DIR/bbs" \
     || fail "git archive of the seed paths failed"
   set +f
 
@@ -107,7 +110,7 @@ seed_sandbox() {
 # against the SDK, then the same entry check. A copy, never a link to the
 # checkout's Doors/: doors write their own files and must not write there.
 seed_doors() {
-  git -C "$ROOT" archive --format=tar HEAD -- Doors | tar -x -C "$SANDBOX_DIR/bbs" \
+  git -C "$ROOT" archive --format=tar HEAD:board -- Doors | tar -x -C "$SANDBOX_DIR/bbs" \
     || fail "git archive of Doors/ failed"
   [ -d "$ROOT/sdk/dist" ] || fail "sdk/dist is missing: build the SDK first (cd sdk && npm run build)"
   # Dependencies and the SDK link, by the script the image entrypoint runs

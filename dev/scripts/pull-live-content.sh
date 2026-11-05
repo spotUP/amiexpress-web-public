@@ -206,14 +206,14 @@ rm -rf "$DEST.previous"
 # A real directory is somebody's data: leave it alone and say so.
 if [ -L "$DEST/Doors" ]; then
   OLD_TARGET="$(readlink "$DEST/Doors")"
-  if [ "$OLD_TARGET" != "$REPO_ROOT/Doors" ]; then
-    ln -sfn "$REPO_ROOT/Doors" "$DEST/Doors"
-    echo "[INFO] Doors symlink repointed: $OLD_TARGET -> $REPO_ROOT/Doors"
+  if [ "$OLD_TARGET" != "$REPO_ROOT/board/Doors" ]; then
+    ln -sfn "$REPO_ROOT/board/Doors" "$DEST/Doors"
+    echo "[INFO] Doors symlink repointed: $OLD_TARGET -> $REPO_ROOT/board/Doors"
   fi
 elif [ -d "$DEST/Doors" ]; then
   echo "[WARN] $DEST/Doors is a real directory, not the checkout's Doors; left as it is" >&2
 elif [ ! -e "$DEST/Doors" ]; then
-  ln -s "$REPO_ROOT/Doors" "$DEST/Doors"
+  ln -s "$REPO_ROOT/board/Doors" "$DEST/Doors"
   echo "[INFO] Doors -> the checkout (symlink), so door work is not overwritten by a pull"
 fi
 

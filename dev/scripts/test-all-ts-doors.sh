@@ -7,7 +7,7 @@ set -e
 echo "=== TypeScript Door Validation ==="
 echo ""
 
-cd ~/Code/AmiExpress/amiexpress-web
+cd ~/Code/AmiExpress/amiexpress-web/board
 
 total=0
 passed=0

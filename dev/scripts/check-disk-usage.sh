@@ -39,10 +39,10 @@ find logs -type f -size +10M 2>/dev/null | while read file; do
 done
 
 # Check backup logs
-if [ -f "Node1/CLogBackup" ]; then
-  SIZE=$(du -sh Node1/CLogBackup 2>/dev/null | cut -f1)
+if [ -f "board/Node1/CLogBackup" ]; then
+  SIZE=$(du -sh board/Node1/CLogBackup 2>/dev/null | cut -f1)
   echo "[WARNING] CLogBackup exists - $SIZE"
-  echo "[ACTION] Consider removing: rm Node1/CLogBackup"
+  echo "[ACTION] Consider removing: rm board/Node1/CLogBackup"
 fi
 
 echo ""

@@ -327,7 +327,7 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 if [ -d "$REPO_ROOT/data/live" ]; then
   BBS_CONTENT_DIR="$REPO_ROOT/data/live"
 else
-  BBS_CONTENT_DIR="$REPO_ROOT"
+  BBS_CONTENT_DIR="$REPO_ROOT/board"
 fi
 export BBS_CONTENT_DIR
 
@@ -417,7 +417,7 @@ rm -rf "$REPO_ROOT/sdk/dist" 2>/dev/null || true
 rm -rf "$REPO_ROOT/sdk/tools/preview/frontend/dist" 2>/dev/null || true
 rm -rf "$REPO_ROOT/packages/terminal/dist" 2>/dev/null || true
 # Remove all door dist/ directories
-find "$REPO_ROOT/Doors" -type d -name "dist" -exec rm -rf {} + 2>/dev/null || true
+find "$REPO_ROOT/board/Doors" -type d -name "dist" -exec rm -rf {} + 2>/dev/null || true
 printf "%b\n" "   ${GREEN}[OK] All dist/ directories removed${RESET}"
 
 # 5. Clean stale .js files that can override .ts files
@@ -538,8 +538,8 @@ check_and_install_deps "$REPO_ROOT/web/backend" "Backend"
 # The same script docker-entrypoint.sh runs in the image. Before the door
 # builds below, which need both.
 # The board may run from data/live, which carries its own Doors/.
-DOORS_DIRS="$REPO_ROOT/Doors"
-[ "$BBS_CONTENT_DIR" != "$REPO_ROOT" ] && DOORS_DIRS="$DOORS_DIRS $BBS_CONTENT_DIR/Doors"
+DOORS_DIRS="$REPO_ROOT/board/Doors"
+[ "$BBS_CONTENT_DIR" != "$REPO_ROOT/board" ] && DOORS_DIRS="$DOORS_DIRS $BBS_CONTENT_DIR/Doors"
 for doors_dir in $DOORS_DIRS; do
   [ -d "$doors_dir" ] || continue
   printf "%b\n" "${CYAN}-> TypeScript Doors: dependencies and SDK link ($doors_dir)...${RESET}"
@@ -590,12 +590,12 @@ else
 
   # Build all TypeScript doors IN PARALLEL (CRITICAL - prevents stale code issues)
   # All production doors live in Doors/ - no more sdk/doors/
-  printf "%b\n" "${CYAN}-> TypeScript Doors: Building all doors in Doors/ (parallel)...${RESET}"
+  printf "%b\n" "${CYAN}-> TypeScript Doors: Building all doors in board/Doors/ (parallel)...${RESET}"
   DOOR_PIDS=""
   DOOR_NAMES=""
 
   # Build all TypeScript doors in Doors/ directory
-  for door_dir in "$REPO_ROOT/Doors"/*/ ; do
+  for door_dir in "$REPO_ROOT/board/Doors"/*/ ; do
     if [ -f "$door_dir/package.json" ]; then
       # Check if it's a TypeScript door (has tsconfig.json or *.ts files)
       if [ -f "$door_dir/tsconfig.json" ] || [ -n "$(find "$door_dir" -maxdepth 2 -name "*.ts" 2>/dev/null | head -1)" ]; then
