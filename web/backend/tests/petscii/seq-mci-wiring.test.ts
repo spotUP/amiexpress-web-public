@@ -256,10 +256,11 @@ describe('Task 6: displayScreen renders MCI into the petscii-bytes wire', () => 
     expect(emits.some((e) => e.event === 'petscii-bytes')).toBe(false);
     expect(emits.map((e) => e.event)).toEqual(['ansi-output']);
     // Captured from the tree BEFORE Task 6 touched emitPetsciiScreen: the
-    // frame-buffer path's cursor-hide / home framing, the file's own text with
+    // frame-buffer path's cursor-hide framing, the file's own text with
     // its `~N|` still literal (the .TXT does not open with `~`, so the ANSI
     // allowMCI gate keeps it verbatim - express.e:6800-6806), then the reset
-    // and cursor-show.
-    expect(emits[0].data).toBe('\x1b[?25l\x1b[HHI ~N| BYE\r\n\x1b[0m\x1b[?25h');
+    // and cursor-show. No move to home: a screen that does not clear prints
+    // at the cursor (express.e:6539; the h7 `d` overdraw, 2026-11-05).
+    expect(emits[0].data).toBe('\x1b[?25lHI ~N| BYE\r\n\x1b[0m\x1b[?25h');
   });
 });

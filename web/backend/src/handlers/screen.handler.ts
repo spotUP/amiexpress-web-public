@@ -3534,8 +3534,9 @@ console.error(`[displayScreen] Error stack:`, (error as Error).stack);
       // Pad with a final newline so the last rendered line scrolls offscreen for a cleaner edge
       const streamText = text + '\r\n';
       const buffer = Buffer.from(
-        // shouldClear already sent early — no double-clear here
-        HIDE_CURSOR + '\x1b[H' + streamText + '\x1b[0m' + SHOW_CURSOR,
+        // A screen prints at the cursor (express.e displayFile, express.e:6539).
+        // A clearing screen got its clear and home early; no move here.
+        HIDE_CURSOR + streamText + '\x1b[0m' + SHOW_CURSOR,
         'utf-8'
       );
       let offset = 0;
@@ -3695,9 +3696,10 @@ console.log(`[WIPE] Animation complete: ${wipeFrames.length} frames`);
         socket.emit(eventName, '\x1b[0m');
       } else {
         const frameBuffer =
-          // shouldClear already sent early (before MCI) so no double-clear needed here
+          // A screen prints at the cursor (express.e displayFile, express.e:6539).
+          // A clearing screen got its clear and home early (before MCI); a
+          // move to home here painted a non-clearing screen over the last one.
           HIDE_CURSOR +      // Hide cursor
-          '\x1b[H' +         // Move cursor to home (1,1)
           parsed +           // Screen content
           '\x1b[0m' +        // Reset colors (express.e:6845) - prevents color bleed to prompts
           SHOW_CURSOR;       // Show cursor
