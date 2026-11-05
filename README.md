@@ -96,4 +96,4 @@ Development ports (from `.env.example`): backend 3001, frontend 5173, telnet 641
 - [Documentation/2-Sysops/SSH_REMOTE_ACCESS.md](Documentation/2-Sysops/SSH_REMOTE_ACCESS.md): SSH access
 - [deploy/README.md](deploy/README.md): server deployment scripts
 - [Documentation/4-Door-Developers/DOOR-REPO-API.md](Documentation/4-Door-Developers/DOOR-REPO-API.md): door repository API
-- [RELEASE_NOTES.md](RELEASE_NOTES.md): release notes
+- [Documentation/5-Reference/RELEASE_NOTES.md](Documentation/5-Reference/RELEASE_NOTES.md): release notes

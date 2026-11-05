@@ -831,7 +831,7 @@ Historical preservation of BBS culture and retro Amiga 68K. Educational, defensi
 ## Documentation Index
 
 - `Documentation/README.md` — start here
-- **Where docs live:** every project document goes in `Documentation/<section>/` and gets a line in `Documentation/README.md`. Dated notes, audits, one-off plans and handoffs go in `thoughts/shared/{plans,research,handoffs}/` with frontmatter. Never leave a loose `.md` at the repo root; only `README.md`, `RULES.md`, `CLAUDE.md`, `handoff.md` and `RELEASE_NOTES.md` stay there. Docs that live beside their code (`Documentation/4-Door-Developers/DOOR-REPO-API.md`, `sdk/docs/`, `thoughts/shared/`, door READMEs) are listed in the index section "Documentation outside this folder".
+- **Where docs live:** every project document goes in `Documentation/<section>/` and gets a line in `Documentation/README.md`. Dated notes, audits, one-off plans and handoffs go in `thoughts/shared/{plans,research,handoffs}/` with frontmatter. Never leave a loose `.md` at the repo root; only `README.md`, `RULES.md`, `CLAUDE.md` and `handoff.md` stay there. Docs that live beside their code (`Documentation/4-Door-Developers/DOOR-REPO-API.md`, `sdk/docs/`, `thoughts/shared/`, door READMEs) are listed in the index section "Documentation outside this folder".
 - `Documentation/1-Users/USER_GUIDE.md`, `Documentation/2-Sysops/AMIGA_MIGRATION_GUIDE.md`
 - `Documentation/2-Sysops/DEPLOYMENT.md`, `Documentation/2-Sysops/INFO_EDITOR.md`
 - `Documentation/3-Developers/ARCHITECTURE.md`, `TESTING.md`, `DATABASE.md`

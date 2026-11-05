@@ -105,12 +105,9 @@ ssh_host_rsa_key.pub
 # Misc dev/debug files
 debug
 debug.log
-debug-chat-login.js
 68klog.txt
 reference-board.log
 test-*.sh
 test-*.js
 test-*.ts
-test-results.json
-ws-dual.mjs
 logs

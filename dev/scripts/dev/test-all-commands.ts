@@ -483,7 +483,7 @@ async function generateReport() {
     issues: testResults.issues
   };
 
-  fs.writeFileSync('~/Code/AmiExpress/amiexpress-web/test-results.json', JSON.stringify(report, null, 2));
+  fs.writeFileSync(require('path').join(require('os').tmpdir(), 'test-results.json'), JSON.stringify(report, null, 2));
   log('\n📄 Detailed report saved to: test-results.json', 'success');
 }
 

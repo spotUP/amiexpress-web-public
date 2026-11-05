@@ -84,6 +84,7 @@ Living guides, one line per document. Dated plans, research and handoffs live in
 - [FILE_STRUCTURE.md](5-Reference/FILE_STRUCTURE.md) - Project File Structure (Summary)
 - [HOTKEYS.md](5-Reference/HOTKEYS.md) - Hotkeys Reference (Summary)
 - [MCI_CODES.md](5-Reference/MCI_CODES.md) - MCI Codes Reference (Summary)
+- [RELEASE_NOTES.md](5-Reference/RELEASE_NOTES.md) - AmiExpress-Web Release Notes
 - [REAL_AMIGA_XIM_SEQUENCES.md](5-Reference/REAL_AMIGA_XIM_SEQUENCES.md) - Real Amiga XIM Door Message Sequences
 - [SCREEN_FILES.md](5-Reference/SCREEN_FILES.md) - Screen Files Reference (Summary)
 - [SCREEN_FILES_REFERENCE.md](5-Reference/SCREEN_FILES_REFERENCE.md) - BBS Screen Files Reference
