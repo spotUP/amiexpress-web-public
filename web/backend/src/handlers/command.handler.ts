@@ -2326,6 +2326,8 @@ console.log(' [COMMAND] User in OPERATOR_CHAT_ACTIVE state, real-time input');
     const db = getDatabase();
     const repository = db?.getOperatorChatRepository();
     const { callerTypedChar, callerBackspaced, callerPressedReturn, callerLineEntered, scheduleSendHint, cancelSendHint, chatAcceptsKeystroke } = require('./operator-chat.handler');
+    // chatNoticeForSession is not on the handler's re-export list; the line model is chat-stream's to tell.
+    const { chatNoticeForSession } = require('./operator-chat/chat-stream');
 
     // express.e chat() 6101-6223: the caller's keys go onto the ONE shared
     // line and back to their own terminal as pressed (6172), in the caller's
@@ -2382,7 +2384,7 @@ console.log(' [COMMAND] User in OPERATOR_CHAT_ACTIVE state, real-time input');
 
       if (input.toUpperCase() === '/HELP') {
         // WEB_: chat() 6101-6223 has no slash commands, so /HELP would be chat text. Explains the web-only return-twice send convention used by the bot sysop.
-        emitText(socket, '\x1b[36mType, press return twice to send. /quit or CTRL-C ends the chat.\x1b[0m\r\n');
+        emitText(socket, chatNoticeForSession(session, '\x1b[36mType, press return twice to send. /quit or CTRL-C ends the chat.\x1b[0m\r\n'));
         return;
       }
 

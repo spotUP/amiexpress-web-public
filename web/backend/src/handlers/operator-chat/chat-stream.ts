@@ -251,12 +251,31 @@ export function chatReturnBytes(chatSession: ChatSession): string {
  * moment the greeting went through the line model (2026-09-08) the model
  * believed the sysop was mid-turn, emitted no colour for the intro underneath,
  * and the intro arrived in whatever the reset had left - no colour at all.
- * Every SGR this chat sends comes from here, so the model cannot be lied to
- * again by the next line of board prose someone drops into the stream.
+ * Every SGR sent WHILE THE CHAT IS RUNNING goes through here or through
+ * `chatCharBytes`. Two raw emits are left, outside that window on purpose:
+ * `endChat` puts the terminal back with `\x1b[0m` after the chat is gone from
+ * the map, and a board's own StartChat screen is drawn BEFORE anybody has
+ * spoken, while `lastSender` is still null. Board prose that speaks in between
+ * (/HELP inside a live chat) comes through `chatNoticeForSession` below.
  */
 export function chatResetColourBytes(chatSession: ChatSession): string {
   chatLineOf(chatSession).lastSender = null;
   return '\x1b[0m';
+}
+
+/**
+ * A line of BOARD PROSE for a caller who may or may not be in a chat.
+ *
+ * /HELP inside a live chat raw-emitted `\x1b[36m...\x1b[0m` while the line
+ * model still said `lastSender: 'user'`; the caller's next key then took the
+ * "same sender, no SGR needed" branch and rendered in the terminal default
+ * instead of their colour. The reset goes first so the model learns nobody is
+ * mid-turn; `text` carries its own colour and puts the terminal back. Out of a
+ * chat there is no model to tell, and the prose is returned as it stands.
+ */
+export function chatNoticeForSession(session: BBSSession, text: string): string {
+  const cs = chatOfSession(session);
+  return (cs ? chatResetColourBytes(cs) : '') + text;
 }
 
 /** The chat the caller's session is in, or null. */
