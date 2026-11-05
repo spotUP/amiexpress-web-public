@@ -33,7 +33,7 @@ async function open(width: number): Promise<{
   screen: any; masthead: any; handle: any; writes: () => number;
 }> {
   const chrome = require(
-    join(__dirname, '../../../sdk/dist/engines/ui/theme/chrome.js')
+    join(__dirname, '../../../../sdk/dist/engines/ui/theme/chrome.js')
   );
   const real = chrome.attachDoorChrome;
   let masthead: any = null;

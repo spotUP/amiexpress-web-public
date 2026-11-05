@@ -34,7 +34,7 @@ async function open(themeId = 'uprough-neon'): Promise<{
   screen: any; footer: any; list: any;
 }> {
   const chrome = require(
-    join(__dirname, '../../../sdk/dist/engines/ui/theme/chrome.js')
+    join(__dirname, '../../../../sdk/dist/engines/ui/theme/chrome.js')
   );
   const real = chrome.attachDoorChrome;
   let footer: any = null;

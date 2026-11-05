@@ -68,7 +68,7 @@ async function open(width = 80): Promise<{
   // the module object the barrel's getter reads FROM, and the door's
   // compiled call lands on it.
   const chrome = require(
-    join(__dirname, '../../../sdk/dist/engines/ui/theme/chrome.js')
+    join(__dirname, '../../../../sdk/dist/engines/ui/theme/chrome.js')
   );
   const real = chrome.attachDoorChrome;
   let masthead: any = null;
