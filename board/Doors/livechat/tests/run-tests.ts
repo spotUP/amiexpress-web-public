@@ -9,7 +9,7 @@
 /* eslint-disable no-console */
 
 const TEST_MODULES = ['./opens.test', './one-row-bars.test', './theme-menu.test', './theme-chrome.test',
-  './overlays-close.test', './forty-columns.test', './join-notice.test'];
+  './overlays-close.test', './forty-columns.test', './join-notice.test', './voice-telnet.test'];
 
 // The door logs freely on startup; keep the report readable.
 const realLog = console.log;

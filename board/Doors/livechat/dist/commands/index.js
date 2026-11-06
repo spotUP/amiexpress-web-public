@@ -28,7 +28,7 @@ const reactions_1 = require("./reactions");
 const voice_1 = require("./voice");
 const mode_1 = require("./mode");
 /** Create command registry with all commands */
-function createCommandRegistry() {
+function createCommandRegistry(voice = true) {
     const r = new types_1.CommandRegistry();
     // Channel
     [channel_1.joinCmd, channel_1.leaveCmd, channel_1.createCmd, channel_1.topicCmd, channel_1.deleteCmd].forEach(c => r.register(c));
@@ -47,7 +47,8 @@ function createCommandRegistry() {
     // Reactions
     [reactions_1.reactCmd, reactions_1.unreactCmd, reactions_1.reactionsCmd, reactions_1.thumbsUpCmd, reactions_1.heartCmd].forEach(c => r.register(c));
     // Voice
-    [voice_1.voiceCmd, voice_1.deafenCmd, voice_1.undeafenCmd].forEach(c => r.register(c));
+    if (voice)
+        [voice_1.voiceCmd, voice_1.deafenCmd, voice_1.undeafenCmd].forEach(c => r.register(c));
     // Channel mode / MOTD / invites
     [mode_1.motdCmd, mode_1.inviteCmd, mode_1.uninviteCmd, mode_1.modeCmd].forEach(c => r.register(c));
     return r;

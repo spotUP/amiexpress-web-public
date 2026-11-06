@@ -63,6 +63,7 @@ const state_1 = require("./core/state");
 const formatter_1 = require("./core/formatter");
 const socket_typing_1 = require("./core/socket-typing");
 const initialization_1 = require("./core/initialization");
+const voice_availability_1 = require("./features/voice-availability");
 // Services
 const services_1 = require("./services");
 // UI components
@@ -165,6 +166,7 @@ async function createApp(session) {
     const screen = (0, screen_1.createScreen)(bbs);
     // Note: Optimized rendering is now enabled by default in the SDK
     const ctx = (0, initialization_1.initializeLiveChat)(session, screen);
+    const voiceEnabled = (0, voice_availability_1.voiceAvailable)(bbs);
     const { username, userId, nodeId, secLevel, state, registry, socketEmitter, presenceService, eventBus, audio, messageHandler, commandHandler, onlineUsers, cmdCtx } = ctx;
     let { currentRoomLabel } = ctx;
     // What the sysop set in the admin (Doors -> LIVECHAT -> Settings), read once
@@ -678,6 +680,7 @@ async function createApp(session) {
             expandedChannels,
             collapsedChannels,
             voiceChannelService: voiceChannel,
+            voiceEnabled,
         });
         channelItems = built.channelItems;
         // Debug: show what items we're setting and calculate expected width
@@ -1369,7 +1372,7 @@ async function createApp(session) {
         passwordSubmitBtn.emit('press');
     });
     // ========== HELP SCREEN ==========
-    const showHelp = (0, help_screen_1.createHelpScreen)(screen, inputBox);
+    const showHelp = (0, help_screen_1.createHelpScreen)(screen, inputBox, voiceEnabled);
     // Set the F1 handler function reference (defined earlier but set here)
     showHelpFn = showHelp;
     // Progress bar for file sharing
@@ -2180,6 +2183,8 @@ async function createApp(session) {
     const asyncSubmitHandler = (0, input_submit_handler_1.createSubmitHandler)(socket, state, registry, cmdCtx, userId, username, onlineUsers, presenceService, socketEmitter, inputHistory, inputBox, screen, chatLog, currentSearchOverlayRef, drawingChannels, currentRoomLabel, hideCommandSuggestions, commandActionHandler, showLoading, showUserList, addChatMessage, addSystemMessage, thread_handlers_1.replyToThread, pin_handlers_1.pinMessage, pin_handlers_1.unpinMessage, pin_handlers_1.getPinnedMessages, search_overlay_1.createSearchOverlay, search_handlers_1.searchMessages, cleanup, showSettingsOverlay, showHelpDialog, showDrawMenu, enterDrawingMode, updateStatusBar, updateUserTable, showFileSharing, updateTypingPreview, clearChat, 
     // tryJoinVoiceChannel - check if channel name matches a voice channel
     (channelName) => {
+        if (!voiceEnabled)
+            return false;
         const match = channelItems.find(c => c.type === 'voice' && c.name.toLowerCase() === channelName.toLowerCase());
         if (match) {
             const channelId = match.id.replace('voice-', '');
@@ -2333,7 +2338,7 @@ async function createApp(session) {
     screen.key(['r'], () => {
         if (screen.focused === inputBox)
             return;
-        if (!voiceChannel.isInVoiceChannel())
+        if (!voiceEnabled || !voiceChannel.isInVoiceChannel())
             return;
         voiceChannel.cycleRenderMode().catch(err => {
             console.log('[livechat] cycleRenderMode failed:', err?.message ?? err);
@@ -2432,6 +2437,8 @@ async function createApp(session) {
             addSystemMessage(`{${door_theme_1.T.accentAlt}-fg}Threads: use /threads or reply on any message to open the thread view.{/${door_theme_1.T.accentAlt}-fg}`);
         },
         onRenderMode: () => {
+            if (!voiceEnabled)
+                return;
             if (!voiceChannel.isInVoiceChannel()) {
                 addSystemMessage(`{${door_theme_1.T.accentAlt}-fg}Render mode applies to the webcam stream — join a voice channel first.{/${door_theme_1.T.accentAlt}-fg}`);
                 return;
@@ -2459,10 +2466,10 @@ async function createApp(session) {
         // repaint.
         onClearChat: clearChat,
         onAbout: () => {
-            addSystemMessage(`{${door_theme_1.T.accent}-fg}LiveChat v3.2.0 — AmiExpress multi-user chat. Real-time text, voice, video, drawing channels.{/${door_theme_1.T.accent}-fg}`);
+            addSystemMessage(`{${door_theme_1.T.accent}-fg}LiveChat v3.2.0 — AmiExpress multi-user chat. Real-time text, ${voiceEnabled ? 'voice, video, ' : ''}drawing channels.{/${door_theme_1.T.accent}-fg}`);
         },
         onShortcuts: () => {
-            addSystemMessage(`{${door_theme_1.T.accent}-fg}Shortcuts:{/${door_theme_1.T.accent}-fg} F1 help  F2 sidebar  F3 tab  F4 emoji  F5 format  F6 files  F7 pins  Tab focus  Ctrl+F search  Ctrl+S settings  Ctrl+Q quit  r render-mode (in voice)`);
+            addSystemMessage(`{${door_theme_1.T.accent}-fg}Shortcuts:{/${door_theme_1.T.accent}-fg} F1 help  F2 sidebar  F3 tab  F4 emoji  F5 format  F6 files  F7 pins  Tab focus  Ctrl+F search  Ctrl+S settings  Ctrl+Q quit${voiceEnabled ? '  r render-mode (in voice)' : ''}`);
         },
         onQuit: () => {
             showConfirm('Are you sure you want to quit LiveChat?', (confirmed) => {

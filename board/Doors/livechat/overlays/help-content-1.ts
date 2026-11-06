@@ -1,6 +1,18 @@
 import { T } from '../door-theme';
 /** Help content part 1: Shortcuts and Commands */
-export const HELP_PART_1 = `{bold}{${T.accent}-fg}=== LIVECHAT v3.0 - DESKTOP-LEVEL BBS CHAT ==={/${T.accent}-fg}{/bold}
+/** The voice section; left out of the help for callers who cannot use voice (telnet). */
+export const HELP_VOICE_SECTION = `{${T.accent}-fg}Voice Channels:{/${T.accent}-fg}
+  Click [V]         Join/leave voice channel
+  /voice join <ch>  Join voice channel
+  /voice leave      Leave voice channel
+  /voice mute       Mute microphone
+  /voice unmute     Unmute microphone
+  /deafen           Mute audio output
+  /undeafen         Unmute audio output
+
+`;
+
+export const helpPart1 = (voice: boolean): string => `{bold}{${T.accent}-fg}=== LIVECHAT v3.0 - DESKTOP-LEVEL BBS CHAT ==={/${T.accent}-fg}{/bold}
 
 {${T.accentAlt}-fg}A full-featured multi-user chat system with neo-blessed UI{/${T.accentAlt}-fg}
 
@@ -34,16 +46,7 @@ export const HELP_PART_1 = `{bold}{${T.accent}-fg}=== LIVECHAT v3.0 - DESKTOP-LE
   F5            Open format picker (with text selected)
   Right-click   Open format picker (with text selected)
 
-{${T.accent}-fg}Voice Channels:{/${T.accent}-fg}
-  Click [V]         Join/leave voice channel
-  /voice join <ch>  Join voice channel
-  /voice leave      Leave voice channel
-  /voice mute       Mute microphone
-  /voice unmute     Unmute microphone
-  /deafen           Mute audio output
-  /undeafen         Unmute audio output
-
-{bold}{${T.ok}-fg}--- COMMANDS ---{/${T.ok}-fg}{/bold}
+${voice ? HELP_VOICE_SECTION : ''}{bold}{${T.ok}-fg}--- COMMANDS ---{/${T.ok}-fg}{/bold}
 
 {${T.accent}-fg}Room Commands:{/${T.accent}-fg}
   /join <room>      Join a channel

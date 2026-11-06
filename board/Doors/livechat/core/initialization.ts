@@ -1,5 +1,6 @@
 import { createInitialState } from './state';
 import { createCommandRegistry } from '../commands';
+import { voiceAvailable } from '../features/voice-availability';
 import { createCommandContext } from './command-exec';
 import { SocketEmitter, PresenceService, ExtendedEventBus } from '../services';
 import { AudioService } from '../utils/audio';
@@ -14,7 +15,7 @@ export function initializeLiveChat(session: any, screen: any) {
   const secLevel = user?.secLevel || 10;
 
   const state = createInitialState();
-  const registry = createCommandRegistry();
+  const registry = createCommandRegistry(voiceAvailable(session.bbs));
   const initialRoomId = session.bbsSession?.currentRoomId as string | undefined;
   const initialRoomName = session.bbsSession?.currentRoomName as string | undefined;
   let currentRoomLabel = initialRoomName || '';

@@ -52,6 +52,7 @@ import { executeCommand } from './core/command-exec';
 import { getUserColor, formatMessage, formatSystemMessage, formatReactions } from './core/formatter';
 import { shouldShowEvent } from './core/socket-typing';
 import { initializeLiveChat } from './core/initialization';
+import { voiceAvailable } from './features/voice-availability';
 
 // Services
 import { events, formatBBSEvent, getEventMessage, SocketEmitter, PresenceService, ExtendedEventBus } from './services';
@@ -194,6 +195,7 @@ export async function createApp(session: DoorSession) {
   // Note: Optimized rendering is now enabled by default in the SDK
 
   const ctx = initializeLiveChat(session, screen);
+  const voiceEnabled = voiceAvailable(bbs);
   const { username, userId, nodeId, secLevel, state, registry, socketEmitter, presenceService,
     eventBus, audio, messageHandler, commandHandler, onlineUsers, cmdCtx } = ctx;
   let { currentRoomLabel } = ctx;
@@ -767,6 +769,7 @@ export async function createApp(session: DoorSession) {
       expandedChannels,
       collapsedChannels,
       voiceChannelService: voiceChannel,
+      voiceEnabled,
     });
     channelItems = built.channelItems as typeof channelItems;
 
@@ -1530,7 +1533,7 @@ export async function createApp(session: DoorSession) {
   });
 
   // ========== HELP SCREEN ==========
-  const showHelp = createHelpScreen(screen, inputBox);
+  const showHelp = createHelpScreen(screen, inputBox, voiceEnabled);
 
   // Set the F1 handler function reference (defined earlier but set here)
   showHelpFn = showHelp;
@@ -2548,6 +2551,7 @@ export async function createApp(session: DoorSession) {
     clearChat,
     // tryJoinVoiceChannel - check if channel name matches a voice channel
     (channelName: string): boolean => {
+      if (!voiceEnabled) return false;
       const match = channelItems.find(
         c => c.type === 'voice' && c.name.toLowerCase() === channelName.toLowerCase()
       );
@@ -2712,7 +2716,7 @@ export async function createApp(session: DoorSession) {
   // with people typing the letter 'r' elsewhere in the UI.
   screen.key(['r'], () => {
     if ((screen as any).focused === inputBox) return;
-    if (!voiceChannel.isInVoiceChannel()) return;
+    if (!voiceEnabled || !voiceChannel.isInVoiceChannel()) return;
     voiceChannel.cycleRenderMode().catch(err => {
       console.log('[livechat] cycleRenderMode failed:', err?.message ?? err);
     });
@@ -2815,6 +2819,7 @@ export async function createApp(session: DoorSession) {
       addSystemMessage(`{${T.accentAlt}-fg}Threads: use /threads or reply on any message to open the thread view.{/${T.accentAlt}-fg}`);
     },
     onRenderMode: () => {
+      if (!voiceEnabled) return;
       if (!voiceChannel.isInVoiceChannel()) {
         addSystemMessage(`{${T.accentAlt}-fg}Render mode applies to the webcam stream — join a voice channel first.{/${T.accentAlt}-fg}`);
         return;
@@ -2842,10 +2847,10 @@ export async function createApp(session: DoorSession) {
     // repaint.
     onClearChat: clearChat,
     onAbout: () => {
-      addSystemMessage(`{${T.accent}-fg}LiveChat v3.2.0 — AmiExpress multi-user chat. Real-time text, voice, video, drawing channels.{/${T.accent}-fg}`);
+      addSystemMessage(`{${T.accent}-fg}LiveChat v3.2.0 — AmiExpress multi-user chat. Real-time text, ${voiceEnabled ? 'voice, video, ' : ''}drawing channels.{/${T.accent}-fg}`);
     },
     onShortcuts: () => {
-      addSystemMessage(`{${T.accent}-fg}Shortcuts:{/${T.accent}-fg} F1 help  F2 sidebar  F3 tab  F4 emoji  F5 format  F6 files  F7 pins  Tab focus  Ctrl+F search  Ctrl+S settings  Ctrl+Q quit  r render-mode (in voice)`);
+      addSystemMessage(`{${T.accent}-fg}Shortcuts:{/${T.accent}-fg} F1 help  F2 sidebar  F3 tab  F4 emoji  F5 format  F6 files  F7 pins  Tab focus  Ctrl+F search  Ctrl+S settings  Ctrl+Q quit${voiceEnabled ? '  r render-mode (in voice)' : ''}`);
     },
     onQuit: () => {
       showConfirm('Are you sure you want to quit LiveChat?', (confirmed) => {

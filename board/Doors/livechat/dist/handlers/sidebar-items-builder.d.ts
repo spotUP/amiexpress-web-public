@@ -38,6 +38,8 @@ export interface BuilderInput {
     expandedChannels: Set<string>;
     collapsedChannels: Set<string>;
     voiceChannelService: any;
+    /** False for telnet callers: no VOICE CHANNELS section, no voice rows. */
+    voiceEnabled?: boolean;
 }
 export interface BuilderOutput {
     items: string[];

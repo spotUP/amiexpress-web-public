@@ -24,6 +24,8 @@ export interface BuilderInput {
   expandedChannels: Set<string>;
   collapsedChannels: Set<string>;
   voiceChannelService: any;
+  /** False for telnet callers: no VOICE CHANNELS section, no voice rows. */
+  voiceEnabled?: boolean;
 }
 
 export interface BuilderOutput {
@@ -42,6 +44,7 @@ export function buildSidebarItems(input: BuilderInput): BuilderOutput {
     expandedChannels,
     collapsedChannels,
     voiceChannelService,
+    voiceEnabled = true,
   } = input;
 
   const items: string[] = [];
@@ -106,6 +109,8 @@ export function buildSidebarItems(input: BuilderInput): BuilderOutput {
     items.push('');
     channelItems.push({ id: '', name: '', type: 'spacer' });
   }
+
+  if (!voiceEnabled) return { items, channelItems };
 
   // ---------- VOICE CHANNELS ----------
   items.push(`{${T.accent}-fg}{bold}VOICE CHANNELS{/bold}{/${T.accent}-fg}`);

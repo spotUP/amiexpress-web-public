@@ -3,7 +3,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.buildSidebarItems = buildSidebarItems;
 const door_theme_1 = require("../door-theme");
 function buildSidebarItems(input) {
-    const { channelsToShow, state, onlineUsers, presenceService, presenceIndicators, isCurrentChannel, expandedChannels, collapsedChannels, voiceChannelService, } = input;
+    const { channelsToShow, state, onlineUsers, presenceService, presenceIndicators, isCurrentChannel, expandedChannels, collapsedChannels, voiceChannelService, voiceEnabled = true, } = input;
     const items = [];
     const channelItems = [];
     // ---------- TEXT CHANNELS ----------
@@ -67,6 +67,8 @@ function buildSidebarItems(input) {
         items.push('');
         channelItems.push({ id: '', name: '', type: 'spacer' });
     }
+    if (!voiceEnabled)
+        return { items, channelItems };
     // ---------- VOICE CHANNELS ----------
     items.push(`{${door_theme_1.T.accent}-fg}{bold}VOICE CHANNELS{/bold}{/${door_theme_1.T.accent}-fg}`);
     channelItems.push({ id: '', name: '', type: 'header' });

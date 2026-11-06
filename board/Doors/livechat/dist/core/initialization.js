@@ -3,6 +3,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.initializeLiveChat = initializeLiveChat;
 const state_1 = require("./state");
 const commands_1 = require("../commands");
+const voice_availability_1 = require("../features/voice-availability");
 const command_exec_1 = require("./command-exec");
 const services_1 = require("../services");
 const audio_1 = require("../utils/audio");
@@ -15,7 +16,7 @@ function initializeLiveChat(session, screen) {
     const nodeId = session.bbsSession?.nodeId || 1;
     const secLevel = user?.secLevel || 10;
     const state = (0, state_1.createInitialState)();
-    const registry = (0, commands_1.createCommandRegistry)();
+    const registry = (0, commands_1.createCommandRegistry)((0, voice_availability_1.voiceAvailable)(session.bbs));
     const initialRoomId = session.bbsSession?.currentRoomId;
     const initialRoomName = session.bbsSession?.currentRoomName;
     let currentRoomLabel = initialRoomName || '';

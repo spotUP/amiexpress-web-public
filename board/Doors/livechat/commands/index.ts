@@ -12,7 +12,7 @@ import { voiceCmd, deafenCmd, undeafenCmd } from './voice';
 import { motdCmd, inviteCmd, uninviteCmd, modeCmd } from './mode';
 
 /** Create command registry with all commands */
-export function createCommandRegistry(): CommandRegistry {
+export function createCommandRegistry(voice = true): CommandRegistry {
   const r = new CommandRegistry();
   // Channel
   [joinCmd, leaveCmd, createCmd, topicCmd, deleteCmd].forEach(c => r.register(c));
@@ -31,7 +31,7 @@ export function createCommandRegistry(): CommandRegistry {
   // Reactions
   [reactCmd, unreactCmd, reactionsCmd, thumbsUpCmd, heartCmd].forEach(c => r.register(c));
   // Voice
-  [voiceCmd, deafenCmd, undeafenCmd].forEach(c => r.register(c));
+  if (voice) [voiceCmd, deafenCmd, undeafenCmd].forEach(c => r.register(c));
   // Channel mode / MOTD / invites
   [motdCmd, inviteCmd, uninviteCmd, modeCmd].forEach(c => r.register(c));
   return r;

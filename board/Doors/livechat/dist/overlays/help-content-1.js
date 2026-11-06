@@ -1,9 +1,20 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.HELP_PART_1 = void 0;
+exports.helpPart1 = exports.HELP_VOICE_SECTION = void 0;
 const door_theme_1 = require("../door-theme");
 /** Help content part 1: Shortcuts and Commands */
-exports.HELP_PART_1 = `{bold}{${door_theme_1.T.accent}-fg}=== LIVECHAT v3.0 - DESKTOP-LEVEL BBS CHAT ==={/${door_theme_1.T.accent}-fg}{/bold}
+/** The voice section; left out of the help for callers who cannot use voice (telnet). */
+exports.HELP_VOICE_SECTION = `{${door_theme_1.T.accent}-fg}Voice Channels:{/${door_theme_1.T.accent}-fg}
+  Click [V]         Join/leave voice channel
+  /voice join <ch>  Join voice channel
+  /voice leave      Leave voice channel
+  /voice mute       Mute microphone
+  /voice unmute     Unmute microphone
+  /deafen           Mute audio output
+  /undeafen         Unmute audio output
+
+`;
+const helpPart1 = (voice) => `{bold}{${door_theme_1.T.accent}-fg}=== LIVECHAT v3.0 - DESKTOP-LEVEL BBS CHAT ==={/${door_theme_1.T.accent}-fg}{/bold}
 
 {${door_theme_1.T.accentAlt}-fg}A full-featured multi-user chat system with neo-blessed UI{/${door_theme_1.T.accentAlt}-fg}
 
@@ -37,16 +48,7 @@ exports.HELP_PART_1 = `{bold}{${door_theme_1.T.accent}-fg}=== LIVECHAT v3.0 - DE
   F5            Open format picker (with text selected)
   Right-click   Open format picker (with text selected)
 
-{${door_theme_1.T.accent}-fg}Voice Channels:{/${door_theme_1.T.accent}-fg}
-  Click [V]         Join/leave voice channel
-  /voice join <ch>  Join voice channel
-  /voice leave      Leave voice channel
-  /voice mute       Mute microphone
-  /voice unmute     Unmute microphone
-  /deafen           Mute audio output
-  /undeafen         Unmute audio output
-
-{bold}{${door_theme_1.T.ok}-fg}--- COMMANDS ---{/${door_theme_1.T.ok}-fg}{/bold}
+${voice ? exports.HELP_VOICE_SECTION : ''}{bold}{${door_theme_1.T.ok}-fg}--- COMMANDS ---{/${door_theme_1.T.ok}-fg}{/bold}
 
 {${door_theme_1.T.accent}-fg}Room Commands:{/${door_theme_1.T.accent}-fg}
   /join <room>      Join a channel
@@ -75,3 +77,4 @@ exports.HELP_PART_1 = `{bold}{${door_theme_1.T.accent}-fg}=== LIVECHAT v3.0 - DE
   /emoji [search]   Open emoji picker or search
   /events [type]    Manage event notifications
   /help             Show this help`;
+exports.helpPart1 = helpPart1;
