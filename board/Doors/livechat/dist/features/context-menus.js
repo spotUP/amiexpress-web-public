@@ -3,6 +3,8 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.osc52Copy = osc52Copy;
+exports.stripBlessedTags = stripBlessedTags;
 exports.createContextMenus = createContextMenus;
 const mute_list_1 = require("../core/mute-list");
 const theme_1 = require("../ui/theme");
@@ -11,6 +13,18 @@ const door_theme_1 = require("../door-theme");
 const pin_handlers_1 = require("../handlers/pin-handlers");
 const reaction_handlers_1 = require("../handlers/reaction-handlers");
 const edit_handlers_1 = require("../handlers/edit-handlers");
+/**
+ * OSC 52 "set clipboard": ESC ] 52 ; c ; <base64 of UTF-8> BEL. The web
+ * terminal (BBSTerminal) turns it into navigator.clipboard.writeText; the
+ * door has no other way to reach the user's clipboard.
+ */
+function osc52Copy(text) {
+    return `\x1b]52;c;${Buffer.from(text, 'utf8').toString('base64')}\x07`;
+}
+/** Blessed tags ({bold}, {red-fg}, {/}) are markup, not message text. */
+function stripBlessedTags(text) {
+    return text.replace(/\{\/?[a-z0-9#,-]*\}/gi, '');
+}
 function createContextMenus(s, ib, sup, sdp, asm, sock, extras = {}) {
     const cm = blessed_1.default.list({ parent: s, top: 0, left: 0, width: 24, height: 6, border: { type: 'line' }, shadow: true, hidden: true, mouse: true, vi: true, keys: true, interactive: true, tags: true, zIndex: 9999, style: { fg: door_theme_1.T.ink, bg: door_theme_1.T.ground, border: { fg: theme_1.PANEL_BORDER }, selected: { fg: door_theme_1.T.ground, bg: door_theme_1.T.accent } } });
     // Set high z-index to ensure menu appears on top
@@ -204,7 +218,16 @@ function createContextMenus(s, ib, sup, sdp, asm, sock, extras = {}) {
                     }
                     break;
                 case 'Copy Text':
-                    asm('Copy to clipboard (not available in terminal)');
+                    {
+                        const raw = cmt ? extras.messageText?.(cmt) : undefined;
+                        if (!raw) {
+                            asm(`{${door_theme_1.T.accentAlt}-fg}Right-click on a message first.{/${door_theme_1.T.accentAlt}-fg}`);
+                        }
+                        else {
+                            s.program.write(osc52Copy(stripBlessedTags(raw)));
+                            asm('Copied to clipboard.');
+                        }
+                    }
                     break;
                 case 'Pin Message':
                     if (!cmt) {

@@ -24,7 +24,17 @@ export interface ContextMenuExtras {
     onTogglePinChannel?: (name: string) => boolean;
     /** Gives the channel an unread count again; false when the channel is unknown. */
     onMarkChannelUnread?: (name: string) => boolean;
+    /** The text of a message by id, for Copy Text. */
+    messageText?: (id: string) => string | undefined;
 }
+/**
+ * OSC 52 "set clipboard": ESC ] 52 ; c ; <base64 of UTF-8> BEL. The web
+ * terminal (BBSTerminal) turns it into navigator.clipboard.writeText; the
+ * door has no other way to reach the user's clipboard.
+ */
+export declare function osc52Copy(text: string): string;
+/** Blessed tags ({bold}, {red-fg}, {/}) are markup, not message text. */
+export declare function stripBlessedTags(text: string): string;
 export declare function createContextMenus(s: Screen, ib: any, sup: (u: string) => void, sdp: (u: string) => void, asm: (m: string) => void, sock: any, extras?: ContextMenuExtras): {
     contextMenu: import("@amiexpress/bbs-door-sdk/engines/ui/blessed").List;
     showContextMenu: (x: number, y: number, t: "user" | "chat" | "channel" | "video", tgt?: string) => void;

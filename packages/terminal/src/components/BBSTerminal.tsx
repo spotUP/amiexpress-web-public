@@ -16,6 +16,7 @@ import {
   takeResumeOffer,
 } from '../utils/session-resume';
 import { browserPushEnv, subscribeThisBrowser } from '../utils/push-subscribe';
+import { decodeOsc52 } from '../utils/osc52-clipboard';
 import { createLoginCredentials, type LoginCredentials } from '../utils/login-credentials';
 import '@xterm/xterm/css/xterm.css';
 import { XTERM_CONFIG } from '../utils/terminal-utils';
@@ -1163,6 +1164,15 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
       return true;
     });
     term.onBell?.(() => mediaHandlerRef.current?.beep());
+    // OSC 52: a door (LiveChat "Copy Text") asks for the clipboard. The
+    // browser may refuse (no user gesture, permissions); that is a warning,
+    // not an error, and the door has already told the user it copied.
+    term.parser?.registerOscHandler(52, (payload) => {
+      const text = decodeOsc52(payload);
+      if (text === null) return true;
+      navigator.clipboard?.writeText(text).catch((err) => console.warn('[BBSTerminal] OSC 52 clipboard write refused', err));
+      return true;
+    });
 
     // Apply cached modem speed from cookie before the server responds,
     // so the pre-login banner and login prompt pace at the user's

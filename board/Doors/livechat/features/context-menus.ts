@@ -29,6 +29,22 @@ export interface ContextMenuExtras {
   onTogglePinChannel?: (name: string) => boolean;
   /** Gives the channel an unread count again; false when the channel is unknown. */
   onMarkChannelUnread?: (name: string) => boolean;
+  /** The text of a message by id, for Copy Text. */
+  messageText?: (id: string) => string | undefined;
+}
+
+/**
+ * OSC 52 "set clipboard": ESC ] 52 ; c ; <base64 of UTF-8> BEL. The web
+ * terminal (BBSTerminal) turns it into navigator.clipboard.writeText; the
+ * door has no other way to reach the user's clipboard.
+ */
+export function osc52Copy(text: string): string {
+  return `\x1b]52;c;${Buffer.from(text, 'utf8').toString('base64')}\x07`;
+}
+
+/** Blessed tags ({bold}, {red-fg}, {/}) are markup, not message text. */
+export function stripBlessedTags(text: string): string {
+  return text.replace(/\{\/?[a-z0-9#,-]*\}/gi, '');
 }
 
 export function createContextMenus(s: Screen, ib: any, sup: (u: string) => void, sdp: (u: string) => void, asm: (m: string) => void, sock: any, extras: ContextMenuExtras = {}) {
@@ -211,7 +227,15 @@ export function createContextMenus(s: Screen, ib: any, sup: (u: string) => void,
           }
           break;
         case 'Copy Text':
-          asm('Copy to clipboard (not available in terminal)');
+          {
+            const raw = cmt ? extras.messageText?.(cmt) : undefined;
+            if (!raw) {
+              asm(`{${T.accentAlt}-fg}Right-click on a message first.{/${T.accentAlt}-fg}`);
+            } else {
+              (s as any).program.write(osc52Copy(stripBlessedTags(raw)));
+              asm('Copied to clipboard.');
+            }
+          }
           break;
         case 'Pin Message':
           if (!cmt) {

@@ -1414,6 +1414,8 @@ async function createApp(session) {
         showPromptDialog,
         messagesOf: (username) => (0, message_history_1.chatMessagesFrom)(state.messages, username),
         currentRoom: () => state.currentChannel,
+        // The rows as shown (every row of the message), tags stripped by Copy Text.
+        messageText: (id) => chatMessages.filter((_, i) => chatMessageIds[i] === id).join('\n') || undefined,
         isChannelPinned: (name) => (state.prefs.pinnedChannels ?? []).includes(name),
         onTogglePinChannel: (name) => { const now = (0, state_1.togglePinnedChannel)(state, name, (0, prefs_sync_1.prefsSender)(socket)); updateChannelList(); return now; },
         onMarkChannelUnread: (name) => { const ok = (0, state_1.markChannelUnread)(state, name); if (ok)

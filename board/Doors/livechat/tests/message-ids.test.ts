@@ -73,6 +73,29 @@ export async function slashUnpinAndThreadKeepTheStringId(): Promise<void> {
   fire('disconnect', 'transport close');
 }
 
+export async function copyTextWritesAnOsc52ClipboardSequence(): Promise<void> {
+  const { app, fire, settle } = await openDoor();
+  await typeLine(app, settle, 'hello {bold}world{/bold} caf\u00e9');
+  const chatLog = elements(app.screen).find(e => e.listeners('rightclick').length > 0);
+  chatLog.emit('rightclick', { x: 10, y: 3 });
+  const menu = elements(app.screen).find(e => e.zIndex === 9999 && typeof e.select === 'function');
+  const items: string[] = (menu.items ?? []).map((i: any) => String(i.content ?? i).replace(/\{[^}]*\}/g, ''));
+  const idx = items.indexOf('Copy Text');
+  assert.ok(idx >= 0, `menu must offer Copy Text, has: ${items.join('|')}`);
+  const written: string[] = [];
+  const program = app.screen.program;
+  const realWrite = program.write.bind(program);
+  program.write = (d: string) => { written.push(d); };
+  try { menu.emit('select', menu.items[idx], idx); } finally { program.write = realWrite; }
+  const osc = written.find(w => w.startsWith('\x1b]52;c;'));
+  assert.ok(osc, 'Copy Text must write an OSC 52 sequence');
+  assert.ok(osc!.endsWith('\x07'));
+  const text = Buffer.from(osc!.slice(7, -1), 'base64').toString('utf8');
+  assert.ok(text.includes('caf\u00e9'), `clipboard carries the message text: ${text}`);
+  assert.ok(!text.includes('{bold}'), 'blessed tags are stripped');
+  fire('disconnect', 'transport close');
+}
+
 export async function theContextMenuPinsTheMessageUnderThePointer(): Promise<void> {
   const { app, emits, fire, settle } = await openDoor();
   await typeLine(app, settle, 'hello world');
