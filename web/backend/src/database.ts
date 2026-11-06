@@ -43,6 +43,7 @@ import { ReactionRepository } from './database/reaction-repository';
 import { CustomEmojiRepository } from './database/custom-emoji-repository';
 import { ChatIgnoreRepository } from './database/chat-ignore-repository';
 import { ChatPrefsRepository } from './database/chat-prefs-repository';
+import { PinRepository } from './database/pin-repository';
 import { RoomOperatorRepository } from './database/room-operator-repository';
 import { MessageEditRepository } from './database/message-edit-repository';
 import { BulletinRepository } from './database/bulletin-repository';
@@ -1494,7 +1495,6 @@ console.error('Error running migrations:', error);
         )
       `);
 
-      // Full-text search virtual table for messages
       // LiveChat user prefs: server-side, per user, one JSON blob
       this.db.exec(`
         CREATE TABLE IF NOT EXISTS chat_prefs (
@@ -1504,6 +1504,7 @@ console.error('Error running migrations:', error);
         )
       `);
 
+      // Full-text search virtual table for messages
       this.db.exec(`
         CREATE VIRTUAL TABLE IF NOT EXISTS chat_messages_fts USING fts5(
           message,
@@ -3035,10 +3036,16 @@ console.error(`[Database] Failed to update disk misc for slot ${slotNumber}:`, e
     return new ChatIgnoreRepository(this.db);
   }
 
-  /** Reaction counts per message id, for the room:joined history replay. */
   chatPrefs(): ChatPrefsRepository {
     return new ChatPrefsRepository(this.db);
   }
+
+  /** Pinned messages. Built on the SQLite handle, not on this wrapper. */
+  pins(): PinRepository {
+    return new PinRepository(this.db);
+  }
+
+  /** Reaction counts per message id, for the room:joined history replay. */
   async getReactionCountsFor(messageIds: number[]) {
     return new ReactionRepository(this.db).getCountsFor(messageIds);
   }

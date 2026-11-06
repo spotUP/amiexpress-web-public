@@ -5,9 +5,10 @@ import type { Socket } from 'socket.io';
 import type { BBSSession } from '../index';
 import { onLevel, SYSOP_LEVEL } from './socket-guard';
 import { db } from '../database';
-import { PinRepository } from '../database/pin-repository';
 
-const pinRepo = () => new PinRepository(db);
+// The live log had "this.db.prepare is not a function" on every pin: the
+// repository was built on the Database wrapper instead of its SQLite handle.
+const pinRepo = () => db.pins();
 
 /** The door's ids are strings; the DB row id is a number. */
 const rowId = (raw: unknown) => Number(raw);
