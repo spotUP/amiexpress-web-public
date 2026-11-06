@@ -160,6 +160,12 @@ if [ "$PULL_LIVE" -eq 1 ]; then
   tail -3 "$LOGS/local-refresh-pull-live.log"
 fi
 
+# The board reads its doors through data/live/Doors, a link into this
+# checkout. A stale link (the pre-P8.9 Doors/) left every TypeScript door
+# without its code while /health stayed green, so check it on every refresh.
+./dev/scripts/local-doors-link.sh "${BBS_LIVE_SNAPSHOT:-$ROOT/data/live}" "$ROOT" \
+  || fail "data/live/Doors is not a link to $ROOT/board/Doors"
+
 # --- restart. A dev backend keeps running the code it was started with. ----
 #
 # --quick skips start-servers.sh's own dependency checks and builds (this

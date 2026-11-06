@@ -200,22 +200,8 @@ rm -rf "$DEST.previous"
 # A symlink keeps the board finding them where it expects while door work
 # stays where it belongs.
 #
-# The link is absolute, so moving the checkout leaves it dangling - and `-e`
-# is false for a dangling link, so an existence test never repairs it. Test
-# for the link itself (-L) and repoint it when its target is not this repo.
-# A real directory is somebody's data: leave it alone and say so.
-if [ -L "$DEST/Doors" ]; then
-  OLD_TARGET="$(readlink "$DEST/Doors")"
-  if [ "$OLD_TARGET" != "$REPO_ROOT/board/Doors" ]; then
-    ln -sfn "$REPO_ROOT/board/Doors" "$DEST/Doors"
-    echo "[INFO] Doors symlink repointed: $OLD_TARGET -> $REPO_ROOT/board/Doors"
-  fi
-elif [ -d "$DEST/Doors" ]; then
-  echo "[WARN] $DEST/Doors is a real directory, not the checkout's Doors; left as it is" >&2
-elif [ ! -e "$DEST/Doors" ]; then
-  ln -s "$REPO_ROOT/board/Doors" "$DEST/Doors"
-  echo "[INFO] Doors -> the checkout (symlink), so door work is not overwritten by a pull"
-fi
+# local-doors-link.sh keeps the link pointing at board/Doors.
+"$REPO_ROOT/dev/scripts/local-doors-link.sh" "$DEST" "$REPO_ROOT" || exit 1
 
 echo "[OK] snapshot is $(du -sh "$DEST" 2>/dev/null | cut -f1) at $DEST"
 echo "[OK] restart the dev stack to pick it up: ./dev/scripts/kill-servers.sh && ./dev/scripts/start-servers.sh --bbs-only"
