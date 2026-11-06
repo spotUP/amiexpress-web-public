@@ -8,7 +8,7 @@ import type { TypingBuffer } from '../ui/typing-preview';
  */
 export declare function channelsToShow(channels: Channel[], defaultChannel: string, pinned?: string[]): Channel[];
 /** Pin or unpin a channel in the user's prefs. Returns true when it is now pinned. */
-export declare function togglePinnedChannel(state: AppState, name: string): boolean;
+export declare function togglePinnedChannel(state: AppState, name: string, sendPrefs?: (prefs: EventPrefs) => void): boolean;
 /** Give a channel an unread count again so the sidebar shows it unread. */
 export declare function markChannelUnread(state: AppState, name: string): boolean;
 /**

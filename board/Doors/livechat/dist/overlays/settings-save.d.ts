@@ -3,6 +3,7 @@
  * Applies settings and updates state
  */
 import type { AppState } from '../core/state';
+import type { EventPrefs } from '../types';
 export declare function saveSettings(state: AppState, checkboxes: {
     showLogins: any;
     showFileActivity: any;
@@ -12,7 +13,7 @@ export declare function saveSettings(state: AppState, checkboxes: {
     muteSounds: any;
     timestamps: any;
     compact?: any;
-}, updateStatusBar: () => void): void;
+}, updateStatusBar: () => void, sendPrefs?: (prefs: EventPrefs) => void): void;
 /**
  * The same checkboxes, read back from the saved prefs with one overridden:
  * how a slash command (/sounds, /compact, /timestamps) goes through

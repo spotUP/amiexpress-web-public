@@ -75,17 +75,17 @@ function createSettingsOverlay(s, st, ps, se, uid, usb, hm) {
         style: { fg: door_theme_1.T.ink, bg: door_theme_1.T.bar, focus: { bg: door_theme_1.T.accent } },
     });
     btn.on('press', () => {
-        (0, settings_save_1.saveSettings)(st, { ...eCb, ...pCb }, usb);
+        (0, settings_save_1.saveSettings)(st, { ...eCb, ...pCb }, usb, (p) => se.prefsSet(p));
         hm(o);
     });
     // Handle close from X button or ESC key
     o.on('close', () => {
-        (0, settings_save_1.saveSettings)(st, { ...eCb, ...pCb }, usb);
+        (0, settings_save_1.saveSettings)(st, { ...eCb, ...pCb }, usb, (p) => se.prefsSet(p));
         hm(o);
     });
     // Add explicit escape key handler to ensure it works even when child elements are focused
     o.key(['escape'], () => {
-        (0, settings_save_1.saveSettings)(st, { ...eCb, ...pCb }, usb);
+        (0, settings_save_1.saveSettings)(st, { ...eCb, ...pCb }, usb, (p) => se.prefsSet(p));
         hm(o);
     });
     return o;

@@ -314,6 +314,16 @@ console.log("[CHAT DEBUG] room:list returning early - no session");
     });
   }
 
+  // ===== LIVECHAT PREFS (server-side; see handlers/chat/prefs.handler.ts) =====
+  for (const [event, action] of [["chat:prefs", "get"], ["chat:prefs-set", "set"]] as const) {
+    onCaller(socket, event, async (_caller: BBSSession, data?: { prefs?: unknown }) => {
+      const session = getSessionBySocketId(socket.id);
+      if (!session) return;
+      const { handleChatPrefs } = require("../handlers/chat/prefs.handler");
+      handleChatPrefs(socket, session, action, data);
+    });
+  }
+
   // ===== DIRECT MESSAGES =====
   onCaller(socket, "chat:dm", async (_caller: BBSSession, data: { to: string; message: string }) => {
     const session = getSessionBySocketId(socket.id);

@@ -16,6 +16,7 @@ import { findOnlineUser, formatWhois } from './whois-render';
 import { channelsToShow } from '../core/state';
 import { settings } from '../settings';
 import { saveSettings, prefsAsCheckboxes } from '../overlays/settings-save';
+import { prefsSender } from '../core/prefs-sync';
 
 export function createSubmitHandler(
   socket: Socket,
@@ -215,13 +216,13 @@ export function createSubmitHandler(
           const p = state.prefs;
           let note = '';
           if (r.data.kind === 'sounds') {
-            saveSettings(state, prefsAsCheckboxes(state, { muteSounds: !r.data.value }), updateStatusBar);
+            saveSettings(state, prefsAsCheckboxes(state, { muteSounds: !r.data.value }), updateStatusBar, prefsSender(socket));
             note = r.data.value ? 'Sounds enabled' : 'Sounds disabled';
           } else if (r.data.kind === 'compact') {
-            saveSettings(state, prefsAsCheckboxes(state, { compact: !p.compactMode }), updateStatusBar);
+            saveSettings(state, prefsAsCheckboxes(state, { compact: !p.compactMode }), updateStatusBar, prefsSender(socket));
             note = p.compactMode ? 'Compact mode on' : 'Compact mode off';
           } else if (r.data.kind === 'timestamps') {
-            saveSettings(state, prefsAsCheckboxes(state, { timestamps: !p.showTimestamps }), updateStatusBar);
+            saveSettings(state, prefsAsCheckboxes(state, { timestamps: !p.showTimestamps }), updateStatusBar, prefsSender(socket));
             note = p.showTimestamps ? 'Timestamps on' : 'Timestamps off';
           }
           if (note) addSystemMessage(note);

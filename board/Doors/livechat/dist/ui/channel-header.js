@@ -1,6 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.createChannelHeader = createChannelHeader;
+exports.chatPanelTitle = chatPanelTitle;
 exports.formatChannelHeader = formatChannelHeader;
 exports.updateChannelHeader = updateChannelHeader;
 exports.formatPinnedCount = formatPinnedCount;
@@ -21,13 +22,20 @@ function createChannelHeader(blessed, screen) {
         content: ''
     });
 }
+/**
+ * The chat panel's title: the channel name and its topic. This title is what
+ * the user reads as the channel header, and it showed only "#general" after
+ * /topic was set - the topic lived in state but no title ever included it.
+ */
+function chatPanelTitle(channelName, topic, suffix = '') {
+    return topic ? `${channelName} - ${topic}${suffix}` : `${channelName}${suffix}`;
+}
 /** Format channel header content */
 function formatChannelHeader(channel, userCount) {
     if (!channel)
         return ' No channel selected';
-    const topic = channel.topic ? ` - ${channel.topic}` : '';
     const prefix = channel.type === 'dm' ? '@' : '#';
-    return ` ${prefix}${channel.name}${topic} [${userCount} users]`;
+    return ` ${chatPanelTitle(prefix + channel.name, channel.topic)} [${userCount} users]`;
 }
 /** Update channel header */
 function updateChannelHeader(header, channel, userCount) {

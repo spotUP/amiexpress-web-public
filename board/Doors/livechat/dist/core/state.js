@@ -26,10 +26,11 @@ function channelsToShow(channels, defaultChannel, pinned = []) {
     return [...list.filter(isPinned), ...list.filter((c) => !isPinned(c))];
 }
 /** Pin or unpin a channel in the user's prefs. Returns true when it is now pinned. */
-function togglePinnedChannel(state, name) {
+function togglePinnedChannel(state, name, sendPrefs) {
     const cur = state.prefs.pinnedChannels ?? [];
     const now = !cur.includes(name);
     state.prefs.pinnedChannels = now ? [...cur, name] : cur.filter((n) => n !== name);
+    sendPrefs?.(state.prefs);
     return now;
 }
 /** Give a channel an unread count again so the sidebar shows it unread. */

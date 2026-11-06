@@ -52,6 +52,7 @@ import { executeCommand } from './core/command-exec';
 import { getUserColor, formatMessage, formatSystemMessage } from './core/formatter';
 import { seedReactionCounts, formatReactionCounts } from './features/reaction-store';
 import { shouldShowEvent } from './core/socket-typing';
+import { prefsSender } from './core/prefs-sync';
 import { initializeLiveChat } from './core/initialization';
 
 // Services
@@ -1628,7 +1629,7 @@ export async function createApp(session: DoorSession) {
       messagesOf: (username: string) => chatMessagesFrom(state.messages, username),
       currentRoom: () => state.currentChannel,
       isChannelPinned: (name) => (state.prefs.pinnedChannels ?? []).includes(name),
-      onTogglePinChannel: (name) => { const now = togglePinnedChannel(state, name); updateChannelList(); return now; },
+      onTogglePinChannel: (name) => { const now = togglePinnedChannel(state, name, prefsSender(socket)); updateChannelList(); return now; },
       onMarkChannelUnread: (name) => { const ok = markChannelUnread(state, name); if (ok) updateChannelList(); return ok; },
       onFocusTile: (uid) => {
         const vg = (voiceChannel as any).videoGrid;
@@ -2446,7 +2447,7 @@ export async function createApp(session: DoorSession) {
   });
 
   // ========== CHAT SOCKET HANDLERS ==========
-  setupChatHandlers(socket, state, userId, username, onlineUsers, presenceService, chatLog, updateUserTable, addSystemMessage, addChatMessage, addActivity, updateEventsFeed, audio, mentionsUser, getUserColor, formatMessage, processKeystroke, updateTypingPreview, screen, shouldShowEvent, getEventMessage, eventBus, addMessage, messageHandler, formatTime);
+  setupChatHandlers(socket, state, userId, username, onlineUsers, presenceService, chatLog, updateUserTable, addSystemMessage, addChatMessage, addActivity, updateEventsFeed, audio, mentionsUser, getUserColor, formatMessage, processKeystroke, updateTypingPreview, screen, shouldShowEvent, getEventMessage, eventBus, addMessage, messageHandler, formatTime, () => updateChannelList());
 
   // ========== SYSTEM NOTICES ==========
   // Deploy countdowns and similar. The server cannot paint these as ANSI while

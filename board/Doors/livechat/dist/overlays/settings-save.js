@@ -2,7 +2,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.saveSettings = saveSettings;
 exports.prefsAsCheckboxes = prefsAsCheckboxes;
-function saveSettings(state, checkboxes, updateStatusBar) {
+function saveSettings(state, checkboxes, updateStatusBar, sendPrefs) {
     state.prefs.showLogins = checkboxes.showLogins.isChecked();
     state.prefs.showFileActivity = checkboxes.showFileActivity.isChecked();
     state.prefs.showDoorActivity = checkboxes.showDoorActivity.isChecked();
@@ -19,6 +19,7 @@ function saveSettings(state, checkboxes, updateStatusBar) {
         state.prefs.showMessages ||
         state.prefs.showSystemAnnouncements);
     updateStatusBar();
+    sendPrefs?.(state.prefs);
 }
 /**
  * The same checkboxes, read back from the saved prefs with one overridden:

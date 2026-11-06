@@ -4,6 +4,9 @@ exports.SocketEmitter = void 0;
 /** Socket event emitter */
 class SocketEmitter {
     constructor(socket) { this.s = socket; }
+    prefsSet(prefs) {
+        this.s?.emit?.('chat:prefs-set', { prefs });
+    }
     keystroke(chId, uid, char) {
         this.s?.emit?.('chat:keystroke', { channelId: chId, userId: uid, char });
     }

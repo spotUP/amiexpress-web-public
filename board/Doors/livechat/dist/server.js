@@ -63,6 +63,7 @@ const state_1 = require("./core/state");
 const formatter_1 = require("./core/formatter");
 const reaction_store_1 = require("./features/reaction-store");
 const socket_typing_1 = require("./core/socket-typing");
+const prefs_sync_1 = require("./core/prefs-sync");
 const initialization_1 = require("./core/initialization");
 // Services
 const services_1 = require("./services");
@@ -77,6 +78,7 @@ const layout_solver_1 = require("./ui/layout-solver");
 const status_bar_1 = require("./ui/status-bar");
 const input_box_1 = require("./ui/input-box");
 const chat_log_1 = require("./ui/chat-log");
+const channel_header_1 = require("./ui/channel-header");
 const disconnection_modal_1 = require("./ui/disconnection-modal");
 // Overlays
 const help_screen_1 = require("./overlays/help-screen");
@@ -1251,9 +1253,11 @@ async function createApp(session) {
         const channelName = getChannelDisplayName(state.currentChannel) || 'Lobby';
         const inVoice = !!(voiceChannel && voiceChannel.isInVoiceChannel?.());
         const modeSuffix = inVoice ? ` [${currentRenderMode.toUpperCase()}]` : '';
-        const fullLabel = ` ${channelName}${modeSuffix} `;
+        const topic = state.channels.find((c) => c.id === state.currentChannel)?.topic;
+        const title = (0, channel_header_1.chatPanelTitle)(channelName, topic, modeSuffix);
+        const fullLabel = ` ${title} `;
         // Inner Log label (chatLog is borderless, label rarely visible).
-        (0, chat_log_1.updateChatHeader)(chatLog, channelName + modeSuffix);
+        (0, chat_log_1.updateChatHeader)(chatLog, title);
         // Outer DockablePanel label — this is what the user actually sees
         // across the top of the chat panel border.
         if (chatPanel && chatPanel.setLabel) {
@@ -1411,7 +1415,7 @@ async function createApp(session) {
         messagesOf: (username) => (0, message_history_1.chatMessagesFrom)(state.messages, username),
         currentRoom: () => state.currentChannel,
         isChannelPinned: (name) => (state.prefs.pinnedChannels ?? []).includes(name),
-        onTogglePinChannel: (name) => { const now = (0, state_1.togglePinnedChannel)(state, name); updateChannelList(); return now; },
+        onTogglePinChannel: (name) => { const now = (0, state_1.togglePinnedChannel)(state, name, (0, prefs_sync_1.prefsSender)(socket)); updateChannelList(); return now; },
         onMarkChannelUnread: (name) => { const ok = (0, state_1.markChannelUnread)(state, name); if (ok)
             updateChannelList(); return ok; },
         onFocusTile: (uid) => {
@@ -2160,6 +2164,7 @@ async function createApp(session) {
         const ch = state.channels.find((c) => c.id === d?.roomId || c.id === state.currentChannel);
         if (ch && d?.topic != null)
             ch.topic = d.topic;
+        updateChatHeader();
         addSystemMessage(`${d?.by ?? 'Someone'} set the topic: ${d?.topic ?? ''}`);
     });
     socket.on('room:op-changed', (d) => {
@@ -2171,7 +2176,7 @@ async function createApp(session) {
         addSystemMessage(`Channel #${d?.roomName ?? ''} was deleted`);
     });
     // ========== CHAT SOCKET HANDLERS ==========
-    (0, chat_socket_handlers_1.setupChatHandlers)(socket, state, userId, username, onlineUsers, presenceService, chatLog, updateUserTable, addSystemMessage, addChatMessage, addActivity, updateEventsFeed, audio, mentions_1.mentionsUser, formatter_1.getUserColor, formatter_1.formatMessage, typing_preview_1.processKeystroke, updateTypingPreview, screen, socket_typing_1.shouldShowEvent, services_1.getEventMessage, eventBus, state_1.addMessage, messageHandler, format_1.formatTime);
+    (0, chat_socket_handlers_1.setupChatHandlers)(socket, state, userId, username, onlineUsers, presenceService, chatLog, updateUserTable, addSystemMessage, addChatMessage, addActivity, updateEventsFeed, audio, mentions_1.mentionsUser, formatter_1.getUserColor, formatter_1.formatMessage, typing_preview_1.processKeystroke, updateTypingPreview, screen, socket_typing_1.shouldShowEvent, services_1.getEventMessage, eventBus, state_1.addMessage, messageHandler, format_1.formatTime, () => updateChannelList());
     // ========== SYSTEM NOTICES ==========
     // Deploy countdowns and similar. The server cannot paint these as ANSI while
     // this door owns the screen, so they arrive as structured events.

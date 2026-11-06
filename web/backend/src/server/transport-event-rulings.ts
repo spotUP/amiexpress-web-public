@@ -330,6 +330,15 @@ const NAMED_RULINGS: Readonly<Record<string, EventRuling>> = {
     "render a structured object; the ignore itself is enforced in the room " +
     "broadcast and DM delivery, so it holds on every transport.",
   },
+  "chat:prefs": {
+    kind: "web-only",
+    note:
+    "LiveChat's structured chat surface, emitted at " +
+    "handlers/chat/prefs.handler.ts (reply to chat:prefs and chat:prefs-set). " +
+    "Its consumer is the LiveChat door's SERVER half " +
+    "(Doors/livechat/handlers/chat-socket-handlers.ts), which merges it into " +
+    "the user's saved prefs. A byte terminal cannot render a structured object.",
+  },
   "chat:dm-error": {
     kind: "web-only",
     note:

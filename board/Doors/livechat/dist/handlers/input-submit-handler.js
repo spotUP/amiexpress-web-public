@@ -13,6 +13,7 @@ const whois_render_1 = require("./whois-render");
 const state_1 = require("../core/state");
 const settings_1 = require("../settings");
 const settings_save_1 = require("../overlays/settings-save");
+const prefs_sync_1 = require("../core/prefs-sync");
 function createSubmitHandler(socket, state, registry, cmdCtx, userId, username, onlineUsers, presenceService, socketEmitter, inputHistory, inputBox, screen, chatLog, currentSearchOverlayRef, drawingChannels, currentRoomLabel, hideCommandSuggestions, handleCommandActions, showLoading, showUserList, addChatMessage, addSystemMessage, replyToThread, pinMessage, unpinMessage, getPinnedMessages, createSearchOverlay, searchMessages, cleanup, showSettingsOverlay, showHelpDialog, showDrawMenu, enterDrawingMode, updateStatusBar, updateUserTable, showFileSharing, updateTypingPreview, clearChatLog, messagePicker, tryJoinVoiceChannel) {
     return async (value) => {
         try {
@@ -158,15 +159,15 @@ function createSubmitHandler(socket, state, registry, cmdCtx, userId, username, 
                     const p = state.prefs;
                     let note = '';
                     if (r.data.kind === 'sounds') {
-                        (0, settings_save_1.saveSettings)(state, (0, settings_save_1.prefsAsCheckboxes)(state, { muteSounds: !r.data.value }), updateStatusBar);
+                        (0, settings_save_1.saveSettings)(state, (0, settings_save_1.prefsAsCheckboxes)(state, { muteSounds: !r.data.value }), updateStatusBar, (0, prefs_sync_1.prefsSender)(socket));
                         note = r.data.value ? 'Sounds enabled' : 'Sounds disabled';
                     }
                     else if (r.data.kind === 'compact') {
-                        (0, settings_save_1.saveSettings)(state, (0, settings_save_1.prefsAsCheckboxes)(state, { compact: !p.compactMode }), updateStatusBar);
+                        (0, settings_save_1.saveSettings)(state, (0, settings_save_1.prefsAsCheckboxes)(state, { compact: !p.compactMode }), updateStatusBar, (0, prefs_sync_1.prefsSender)(socket));
                         note = p.compactMode ? 'Compact mode on' : 'Compact mode off';
                     }
                     else if (r.data.kind === 'timestamps') {
-                        (0, settings_save_1.saveSettings)(state, (0, settings_save_1.prefsAsCheckboxes)(state, { timestamps: !p.showTimestamps }), updateStatusBar);
+                        (0, settings_save_1.saveSettings)(state, (0, settings_save_1.prefsAsCheckboxes)(state, { timestamps: !p.showTimestamps }), updateStatusBar, (0, prefs_sync_1.prefsSender)(socket));
                         note = p.showTimestamps ? 'Timestamps on' : 'Timestamps off';
                     }
                     if (note)

@@ -9,6 +9,7 @@ import assert from 'assert';
 import { createApp } from '../server';
 import { channelsToShow } from '../core/state';
 import { saveSettings } from '../overlays/settings-save';
+import { prefsSender } from '../core/prefs-sync';
 
 const itemsOf = (e: any): string[] => (e.items ?? []).map((i: any) => strip(String(i.content ?? i)));
 const everything = (node: any): any[] => [node, ...((node.children ?? []).flatMap(everything))];
@@ -23,9 +24,10 @@ async function openDoor() {
     getModemSpeed: () => 0, disableModemEmulation: () => {}, setModemSpeed: () => {},
     connectionType: 'web', unicodeCapable: true,
   };
+  const emits: Array<{ event: string; payload: any }> = [];
   const socket: any = {
     on: (event: string, fn: (...a: any[]) => void) => { handlers.set(event, [...(handlers.get(event) ?? []), fn]); },
-    emit: () => {}, off: () => {}, removeAllListeners: () => {},
+    emit: (event: string, payload?: any) => { emits.push({ event, payload }); }, off: () => {}, removeAllListeners: () => {},
   };
   const session: any = {
     bbs, socket, params: [],
@@ -43,11 +45,11 @@ async function openDoor() {
     members: [{ user_id: 'u1', username: 'spot', is_online: true }],
   });
   await new Promise(resolve => setTimeout(resolve, 100));
-  return { app, fire };
+  return { app, fire, emits };
 }
 
 export async function channelPinAndMarkUnreadReachTheSidebar(): Promise<void> {
-  const { app, fire } = await openDoor();
+  const { app, fire, emits } = await openDoor();
   try {
     const nodes = everything(app.screen);
     const sidebar = nodes.find(e => (e.listeners?.('rightclick')?.length ?? 0) > 0 && itemsOf(e).some(r => r.includes('# lounge')));
@@ -69,7 +71,13 @@ export async function channelPinAndMarkUnreadReachTheSidebar(): Promise<void> {
 
     rightClick('lounge');
     assert.ok(menuLabels().includes('Pin Channel'), 'channel menu offers Pin Channel ' + JSON.stringify([menus.length, menus.map(itemsOf), rows()]));
+    // Prefs persist: the door asks for them on open, the pin is sent to the
+    // server with the FULL prefs, and a stored reply lands in state.prefs.
+    assert.ok(emits.some(e => e.event === 'chat:prefs'), 'the door asks for the stored prefs on open');
     menu.emit('select', 'Pin Channel', 0);
+    const pinSent = emits.filter(e => e.event === 'chat:prefs-set').pop();
+    assert.deepStrictEqual(pinSent?.payload.prefs.pinnedChannels, ['lounge'], 'pin toggle emits chat:prefs-set');
+    assert.strictEqual(typeof pinSent?.payload.prefs.compactMode, 'boolean', 'chat:prefs-set carries the full prefs');
     assert.deepStrictEqual(app.state.prefs.pinnedChannels, ['lounge'], 'the pin is kept in the prefs');
     assert.ok(rowOf('lounge') < rowOf('main'), 'pinned channel is the first channel row');
     assert.strictEqual(channelsToShow(app.state.channels, 'main', app.state.prefs.pinnedChannels)[0].name, 'lounge', 'channelsToShow lists the pinned channel first');
@@ -78,6 +86,18 @@ export async function channelPinAndMarkUnreadReachTheSidebar(): Promise<void> {
     const box = (v: boolean) => ({ isChecked: () => v });
     saveSettings(app.state, { showLogins: box(true), showFileActivity: box(true), showDoorActivity: box(true), showMessages: box(true), showAnnouncements: box(true), muteSounds: box(false), timestamps: box(true) }, () => {});
     assert.deepStrictEqual(app.state.prefs.pinnedChannels, ['lounge'], 'pin survives a settings save');
+    const before = emits.length;
+    saveSettings(app.state, { showLogins: box(true), showFileActivity: box(true), showDoorActivity: box(true), showMessages: box(true), showAnnouncements: box(true), muteSounds: box(false), timestamps: box(true), compact: box(true) }, () => {}, prefsSender({ emit: (event: string, payload?: unknown) => emits.push({ event, payload }) }));
+    assert.strictEqual(emits.length, before + 1, 'saveSettings emits once');
+    assert.strictEqual(emits[emits.length - 1].event, 'chat:prefs-set', 'saveSettings emits chat:prefs-set');
+    assert.strictEqual(emits[emits.length - 1].payload.prefs.compactMode, true, 'saveSettings sends the new compact mode');
+    fire('chat:prefs', { prefs: { pinnedChannels: ['main'], compactMode: false, showLogins: 'junk', bogus: 1 } });
+    assert.deepStrictEqual(app.state.prefs.pinnedChannels, ['main'], 'a chat:prefs reply lands in state.prefs');
+    assert.strictEqual(app.state.prefs.compactMode, false, 'stored boolean applied');
+    assert.strictEqual(app.state.prefs.showLogins, true, 'junk value ignored, default kept');
+    assert.ok(!('bogus' in app.state.prefs), 'unknown key ignored');
+    assert.ok(rowOf('main') < rowOf('lounge'), 'channel list redrawn with the stored pin');
+    fire('chat:prefs', { prefs: { pinnedChannels: ['lounge'] } });
 
     rightClick('lounge');
     assert.ok(menuLabels().includes('Unpin Channel'), 'a pinned channel offers Unpin Channel');

@@ -3,6 +3,7 @@ import type { Message, Channel } from '../types';
 export declare class SocketEmitter {
     private s;
     constructor(socket: any);
+    prefsSet(prefs: unknown): void;
     keystroke(chId: string, uid: number, char: string): void;
     keystrokeClear(chId: string, uid: number): void;
     keystrokeSubmit(chId: string, uid: number): void;

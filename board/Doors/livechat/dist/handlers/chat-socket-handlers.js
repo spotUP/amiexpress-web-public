@@ -2,11 +2,12 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.setupChatHandlers = setupChatHandlers;
 const mute_list_1 = require("../core/mute-list");
+const prefs_sync_1 = require("../core/prefs-sync");
 const dm_render_1 = require("./dm-render");
 const door_theme_1 = require("../door-theme");
 const emojis_1 = require("../utils/emojis");
 const reaction_store_1 = require("../features/reaction-store");
-function setupChatHandlers(sock, st, uid, un, ou, ps, cl, uut, asm, acm, aa, uef, aud, mu, guc, fm, pk, utp, s, sse, gem, eb, am, mh, ft) {
+function setupChatHandlers(sock, st, uid, un, ou, ps, cl, uut, asm, acm, aa, uef, aud, mu, guc, fm, pk, utp, s, sse, gem, eb, am, mh, ft, rcl) {
     // NOTE: We intentionally do NOT listen to 'ansi-output' - that's raw terminal output
     // for legacy doors. Neo-blessed doors should only use structured events like 'chat:message'.
     // If cross-chat with BBS terminal users is needed, the server should emit proper events.
@@ -111,6 +112,11 @@ function setupChatHandlers(sock, st, uid, un, ou, ps, cl, uut, asm, acm, aa, uef
     // the 'ignore' level; ask for it on open and take every reply.
     sock.on('chat:ignore-list', (d) => (0, mute_list_1.applyServerIgnores)(st.muteList, d?.users));
     sock.emit('chat:ignore-list');
+    // The user's saved prefs (DB, per user): merged over the defaults on open,
+    // then the channel list is redrawn because pins reorder it.
+    sock.on('chat:prefs', (d) => { if ((0, prefs_sync_1.applyServerPrefs)(st.prefs, d?.prefs))
+        rcl?.(); });
+    sock.emit('chat:prefs');
     // Board-wide custom emoji: loaded on open, replaced on every sysop change.
     sock.on('chat:emoji-list', (d) => (0, emojis_1.setCustomEmojis)(d?.emojis));
     sock.emit('chat:emoji:list');

@@ -259,6 +259,12 @@ console.error('[DoorSocket] room:list error:', err);
       else reactions.handleReactionsList(socket, session, data);
       return wrappedSocket;
     }
+    // LiveChat prefs: stored per user, same shape as /ignore.
+    if (event === 'chat:prefs' || event === 'chat:prefs-set') {
+      const { handleChatPrefs } = require('./chat/prefs.handler');
+      handleChatPrefs(socket, session, event === 'chat:prefs' ? 'get' : 'set', args[0] || {});
+      return wrappedSocket;
+    }
     if (event === 'chat:edit' || event === 'chat:delete') {
       const data = args[0] || {};
       const edits = require('../server/message-edit-socket-handlers');

@@ -16,10 +16,11 @@ export function channelsToShow(channels: Channel[], defaultChannel: string, pinn
 }
 
 /** Pin or unpin a channel in the user's prefs. Returns true when it is now pinned. */
-export function togglePinnedChannel(state: AppState, name: string): boolean {
+export function togglePinnedChannel(state: AppState, name: string, sendPrefs?: (prefs: EventPrefs) => void): boolean {
   const cur = state.prefs.pinnedChannels ?? [];
   const now = !cur.includes(name);
   state.prefs.pinnedChannels = now ? [...cur, name] : cur.filter((n) => n !== name);
+  sendPrefs?.(state.prefs);
   return now;
 }
 

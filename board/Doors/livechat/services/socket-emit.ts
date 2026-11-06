@@ -5,6 +5,9 @@ export class SocketEmitter {
   private s: any;
   constructor(socket: any) { this.s = socket; }
 
+  prefsSet(prefs: unknown): void {
+    this.s?.emit?.('chat:prefs-set', { prefs });
+  }
   keystroke(chId: string, uid: number, char: string): void {
     this.s?.emit?.('chat:keystroke', { channelId: chId, userId: uid, char });
   }

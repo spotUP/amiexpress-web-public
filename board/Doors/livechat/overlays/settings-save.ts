@@ -3,6 +3,7 @@
  * Applies settings and updates state
  */
 import type { AppState } from '../core/state';
+import type { EventPrefs } from '../types';
 
 export function saveSettings(
   state: AppState,
@@ -16,7 +17,8 @@ export function saveSettings(
     timestamps: any;
     compact?: any;
   },
-  updateStatusBar: () => void
+  updateStatusBar: () => void,
+  sendPrefs?: (prefs: EventPrefs) => void
 ): void {
   state.prefs.showLogins = checkboxes.showLogins.isChecked();
   state.prefs.showFileActivity = checkboxes.showFileActivity.isChecked();
@@ -35,6 +37,7 @@ export function saveSettings(
     state.prefs.showSystemAnnouncements
   );
   updateStatusBar();
+  sendPrefs?.(state.prefs);
 }
 
 /**

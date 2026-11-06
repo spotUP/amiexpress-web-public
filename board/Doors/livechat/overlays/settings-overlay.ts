@@ -88,19 +88,19 @@ export function createSettingsOverlay(
   });
 
   btn.on('press', () => {
-    saveSettings(st, { ...eCb, ...pCb }, usb);
+    saveSettings(st, { ...eCb, ...pCb }, usb, (p) => se.prefsSet(p));
     hm(o);
   });
 
   // Handle close from X button or ESC key
   o.on('close', () => {
-    saveSettings(st, { ...eCb, ...pCb }, usb);
+    saveSettings(st, { ...eCb, ...pCb }, usb, (p) => se.prefsSet(p));
     hm(o);
   });
 
   // Add explicit escape key handler to ensure it works even when child elements are focused
   o.key(['escape'], () => {
-    saveSettings(st, { ...eCb, ...pCb }, usb);
+    saveSettings(st, { ...eCb, ...pCb }, usb, (p) => se.prefsSet(p));
     hm(o);
   });
 
