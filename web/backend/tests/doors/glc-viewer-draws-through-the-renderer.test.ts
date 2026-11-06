@@ -151,7 +151,7 @@ describe('the screen opens before the network answers', () => {
     const drawn = await runTheDoor();
 
     // The logo is on the wire, and so is the table's shape.
-    expect(drawn).toContain(art.LOGO_STYLE_1_3[0].replace('\x1b[0;40;37m', '\x1b[0;40;37m'));
+    expect(drawn).toContain(art.LOGO_STYLE_1_3[0].replace('\x1b[0;40;37m', '\x1b[0;49;37m'));
     expect(drawn).toContain(skeletonRow());
 
     // ...and the real rows were written OVER them: the cursor walked back.
@@ -321,120 +321,45 @@ describe('how tall the screen is', () => {
 });
 
 /**
- * The sysop, 2026-09-16: "when it switches from scrambling to the revealing
- * scrambling it scrambles faster".
- *
- * It did: the waiting noise ran on a 125ms interval in the door and the
- * settling on `settleOnto`'s own 60ms default, so the reveal churned at
- * twice the speed and the join read as a glitch. Both come from
- * `SCRAMBLE_FRAME_MS` now. This watches the REAL clock through the door -
- * the gap between frames before the answer, against the gap after it.
+ * The sysop, 2026-11-06: the animation must go away as soon as the data
+ * arrives. The waiting noise covers the wait; the list is then written at
+ * once. This watches the REAL clock through the door.
  */
-describe('one cadence, either side of the answer', () => {
-  /** A frame is a burst of rows after a walk back; time them by the walk. */
-  const frameTimes = (): number[] =>
-    sent.filter((w) => w.payload.startsWith('\x1b[A')).map((w) => w.at);
-
-  const gaps = (times: readonly number[]): number[] => {
-    const out: number[] = [];
-    for (let i = 1; i < times.length; i++) out.push(times[i] - times[i - 1]);
-    return out;
-  };
-
-  const median = (values: readonly number[]): number => {
-    const sorted = [...values].sort((a, b) => a - b);
-    return sorted[Math.floor(sorted.length / 2)];
-  };
-
-  it('waits and reveals at the same speed, so the join is not a lurch', async () => {
-    /*
-     * A literal, not the door's own constant: a test that takes its clock
-     * from the code under test cannot see that code change its speed. Half
-     * a second is several waiting frames at any cadence worth shipping, and
-     * still a fast test.
-     */
-    const HOLD = 500;
-    const drawn = await runTheDoor({ screenWidth: 80, screenHeight: 25 }, HOLD);
-    expect(drawn).toContain('Spot');
-
-    /*
-     * The door's first write is the top of the screen, so the clock starts
-     * there: every frame before the hold expires is the WAIT, every frame
-     * after it is the SETTLING. Splitting on the answer's own arrival
-     * rather than on what a frame contains, because a settling frame is
-     * noise too - that is the whole point of it.
-     */
-    const start = sent[0].at;
-    const times = frameTimes();
-    const waiting = gaps(times.filter((t) => t - start < HOLD));
-    const settling = gaps(times.filter((t) => t - start > HOLD));
-    if (process.env.GLC_CADENCE_DEBUG) {
-      require('fs').writeFileSync(process.env.GLC_CADENCE_DEBUG, JSON.stringify({
-        frames: times.map((t) => t - start), waiting, settling,
-      }));
-    }
-
-    expect(waiting.length).toBeGreaterThanOrEqual(2);
-    expect(settling.length).toBeGreaterThanOrEqual(3);
-
-    // Same cadence, within the jitter a real timer gives a loaded machine.
-    const ratio = median(settling) / median(waiting);
-    expect(ratio).toBeGreaterThan(0.7);
-    expect(ratio).toBeLessThan(1.4);
-  });
-
-  /*
-   * "it can be snappier so we dont waste peoples time" (sysop, 2026-09-16).
-   * Ten frames at the shared cadence was a second and a quarter of watching
-   * a list that is already on screen. The reveal is the caller's time, so
-   * it is bounded here - by the clock, not by a frame count, because either
-   * knob can put it back.
-   */
-  it('reveals in well under a second - the caller is waiting on this', async () => {
+describe('the answer arriving ends the animation', () => {
+  it('writes the whole list within a few ms of the answer, no reveal frames', async () => {
     const HOLD = 500;
     await runTheDoor({ screenWidth: 80, screenHeight: 25 }, HOLD);
 
     const start = sent[0].at;
     const answered = start + HOLD;
     const last = sent[sent.length - 1].at;
-    const reveal = last - answered;
 
-    expect(reveal).toBeGreaterThan(0);
-    expect(reveal).toBeLessThan(800);
+    // Well below one frame (125 ms): a reveal frame would land at +125 or later.
+    expect(last - answered).toBeLessThan(100);
+    // Exactly one rewind after the answer: the final paint.
+    expect(sent.filter((w) => w.at >= answered && w.payload.startsWith('\x1b[A'))).toHaveLength(1);
   });
 
-  it('is the one number both animations are built from', () => {
-    const { SCRAMBLE_FRAME_MS, waitingScramble, settleOnto: settle } =
+  it('keeps the waiting noise on the shared cadence and stops it on demand', () => {
+    const { SCRAMBLE_FRAME_MS, waitingScramble } =
       require('../../../../board/Doors/glc-viewer/src/settle-paint');
     expect(typeof SCRAMBLE_FRAME_MS).toBe('number');
-
-    // The settling's default gap IS that number.
-    const slept: number[] = [];
-    const wire = { emit: () => {} };
-    return settle(wire, ['\x1b[36mSpot'], 1, {
-      animate: true, frames: 3, sleep: async (ms: number) => { slept.push(ms); },
-    }).then(() => {
-      expect(slept.length).toBeGreaterThan(0);
-      for (const ms of slept) expect(ms).toBe(SCRAMBLE_FRAME_MS);
-
-      // And the waiting's interval is too - it stops when it is told to.
-      jest.useFakeTimers();
-      try {
-        const frames: string[] = [];
-        const stop = waitingScramble(
-          { emit: (_e: string, p: string) => { frames.push(p); } },
-          ['\x1b[36m......'],
-          [false],
-        );
-        jest.advanceTimersByTime(SCRAMBLE_FRAME_MS * 3 - 1);
-        const afterThree = frames.length;
-        expect(afterThree).toBeGreaterThanOrEqual(4); // two rows per frame, two frames
-        stop();
-        jest.advanceTimersByTime(SCRAMBLE_FRAME_MS * 5);
-        expect(frames).toHaveLength(afterThree);
-      } finally {
-        jest.useRealTimers();
-      }
-    });
+    jest.useFakeTimers();
+    try {
+      const frames: string[] = [];
+      const stop = waitingScramble(
+        { emit: (_e: string, p: string) => { frames.push(p); } },
+        ['\x1b[36m......'],
+        [false],
+      );
+      jest.advanceTimersByTime(SCRAMBLE_FRAME_MS * 3 - 1);
+      const afterThree = frames.length;
+      expect(afterThree).toBeGreaterThanOrEqual(4); // two rows per frame, two frames
+      stop();
+      jest.advanceTimersByTime(SCRAMBLE_FRAME_MS * 5);
+      expect(frames).toHaveLength(afterThree);
+    } finally {
+      jest.useRealTimers();
+    }
   });
 });

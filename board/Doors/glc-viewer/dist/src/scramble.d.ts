@@ -42,21 +42,4 @@ export declare function visibleLength(line: string): number;
 export declare function scrambleFrame(line: string, settled: readonly boolean[], random: Random): string;
 /** Nothing settled yet, for a row of `length` printable characters. */
 export declare function nothingSettled(length: number): boolean[];
-/**
- * Settle `count` more characters, chosen at random from those still moving.
- *
- * Randomly rather than left to right: a wipe reads as a progress bar, and
- * this is meant to read as the value being FOUND. Returns a new mask; the old
- * one is left alone so a caller can keep the frames it has already sent.
- */
-export declare function settleSome(settled: readonly boolean[], count: number, random: Random): boolean[];
-/** Is there anything left moving? */
-export declare function stillMoving(settled: readonly boolean[]): boolean;
-/**
- * The whole settling of one row, frame by frame, ending on the row itself.
- *
- * `frames` is how many steps it takes; the last is always the real line,
- * because the mask is full by construction rather than by arithmetic.
- */
-export declare function settleFrames(line: string, frames: number, random: Random): string[];
 //# sourceMappingURL=scramble.d.ts.map

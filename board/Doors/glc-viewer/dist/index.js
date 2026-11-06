@@ -537,14 +537,6 @@ function drawHeader(socket, config, showLocation, callerColumns, command, telete
  */
 async function drawData(socket, base, data, placeholders) {
     const skeletonCount = placeholders.length;
-    /*
-     * A row of the settled body that is byte-identical to a placeholder row -
-     * a rule, a legend line - is already what it will be, and starts still.
-     * Read off the rows themselves rather than by index: the server may answer
-     * with fewer callers than were asked for, which slides the footer up.
-     */
-    const frozen = new Set(placeholders.filter((row) => !(0, skeleton_1.awaitsData)(row)));
-    const stillFor = (body) => body.map((row) => frozen.has(row));
     const screen = {
         ...base,
         calls: data.calls.map((call) => ({
@@ -574,9 +566,7 @@ async function drawData(socket, base, data, placeholders) {
             yesterday: screen.yesterday,
             records: screen.records,
         });
-        const painted = await (0, settle_paint_1.settleOnto)(socket, body, skeletonCount, {
-            animate: base.animate, still: stillFor(body),
-        });
+        const painted = (0, settle_paint_1.paintOnto)(socket, body, skeletonCount);
         // A placeholder the shorter list did not reach is cleared, not left.
         for (let i = painted; i < skeletonCount; i++) {
             socket.emit('ansi-output', (0, skeleton_1.overwrite)('') + '\r\n');
@@ -587,9 +577,7 @@ async function drawData(socket, base, data, placeholders) {
     // already hold their shape; the footer is not written after the table any
     // more, because nine rows arriving late is what scrolled the logo away.
     const body = [...(0, render_1.renderGlcRows)(screen), ...(0, render_1.renderGlcFooter)(screen)];
-    const painted = await (0, settle_paint_1.settleOnto)(socket, body, skeletonCount, {
-        animate: base.animate, still: stillFor(body),
-    });
+    const painted = (0, settle_paint_1.paintOnto)(socket, body, skeletonCount);
     // Any placeholder the real list did not reach is cleared rather than left
     // standing: the server can answer with fewer callers than were asked for.
     for (let i = painted; i < skeletonCount; i++) {

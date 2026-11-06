@@ -27,9 +27,6 @@ exports.SCRAMBLE_ALPHABET = void 0;
 exports.visibleLength = visibleLength;
 exports.scrambleFrame = scrambleFrame;
 exports.nothingSettled = nothingSettled;
-exports.settleSome = settleSome;
-exports.stillMoving = stillMoving;
-exports.settleFrames = settleFrames;
 /**
  * What noise is made of.
  *
@@ -89,49 +86,5 @@ function scrambleFrame(line, settled, random) {
 /** Nothing settled yet, for a row of `length` printable characters. */
 function nothingSettled(length) {
     return Array.from({ length }, () => false);
-}
-/**
- * Settle `count` more characters, chosen at random from those still moving.
- *
- * Randomly rather than left to right: a wipe reads as a progress bar, and
- * this is meant to read as the value being FOUND. Returns a new mask; the old
- * one is left alone so a caller can keep the frames it has already sent.
- */
-function settleSome(settled, count, random) {
-    const next = [...settled];
-    const moving = [];
-    for (let i = 0; i < next.length; i++)
-        if (!next[i])
-            moving.push(i);
-    for (let n = 0; n < count && moving.length > 0; n++) {
-        const pick = Math.floor(random() * moving.length) % moving.length;
-        next[moving[pick]] = true;
-        moving.splice(pick, 1);
-    }
-    return next;
-}
-/** Is there anything left moving? */
-function stillMoving(settled) {
-    return settled.some((done) => !done);
-}
-/**
- * The whole settling of one row, frame by frame, ending on the row itself.
- *
- * `frames` is how many steps it takes; the last is always the real line,
- * because the mask is full by construction rather than by arithmetic.
- */
-function settleFrames(line, frames, random) {
-    const length = visibleLength(line);
-    let settled = nothingSettled(length);
-    const perFrame = Math.max(1, Math.ceil(length / Math.max(1, frames)));
-    const out = [];
-    for (let frame = 0; frame < frames && stillMoving(settled); frame++) {
-        settled = settleSome(settled, perFrame, random);
-        out.push(scrambleFrame(line, settled, random));
-    }
-    // Whatever the arithmetic did, the caller ends up looking at the truth.
-    if (out.length === 0 || out[out.length - 1] !== line)
-        out.push(line);
-    return out;
 }
 //# sourceMappingURL=scramble.js.map

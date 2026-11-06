@@ -29,7 +29,7 @@ import {
 } from './src/narrow';
 import { autoLines } from './src/sizing';
 import { doorRootFrom } from './src/door-root';
-import { settleOnto, waitingScramble } from './src/settle-paint';
+import { paintOnto, waitingScramble } from './src/settle-paint';
 
 // Metadata
 export const metadata = {
@@ -619,14 +619,6 @@ async function drawData(
   placeholders: readonly string[],
 ): Promise<void> {
   const skeletonCount = placeholders.length;
-  /*
-   * A row of the settled body that is byte-identical to a placeholder row -
-   * a rule, a legend line - is already what it will be, and starts still.
-   * Read off the rows themselves rather than by index: the server may answer
-   * with fewer callers than were asked for, which slides the footer up.
-   */
-  const frozen = new Set(placeholders.filter((row) => !awaitsData(row)));
-  const stillFor = (body: readonly string[]): boolean[] => body.map((row) => frozen.has(row));
   const screen = {
     ...base,
     calls: data.calls.map((call) => ({
@@ -657,9 +649,7 @@ async function drawData(
       yesterday: screen.yesterday,
       records: screen.records,
     });
-    const painted = await settleOnto(socket, body, skeletonCount, {
-      animate: base.animate, still: stillFor(body),
-    });
+    const painted = paintOnto(socket, body, skeletonCount);
     // A placeholder the shorter list did not reach is cleared, not left.
     for (let i = painted; i < skeletonCount; i++) {
       socket.emit('ansi-output', overwrite('') + '\r\n');
@@ -671,9 +661,7 @@ async function drawData(
   // already hold their shape; the footer is not written after the table any
   // more, because nine rows arriving late is what scrolled the logo away.
   const body = [...renderGlcRows(screen), ...renderGlcFooter(screen)];
-  const painted = await settleOnto(socket, body, skeletonCount, {
-    animate: base.animate, still: stillFor(body),
-  });
+  const painted = paintOnto(socket, body, skeletonCount);
   // Any placeholder the real list did not reach is cleared rather than left
   // standing: the server can answer with fewer callers than were asked for.
   for (let i = painted; i < skeletonCount; i++) {
