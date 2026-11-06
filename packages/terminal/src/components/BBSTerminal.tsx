@@ -43,7 +43,7 @@ import { getZmodem } from '../utils/zmodem';
 import { MediaHandler } from '../utils/media-handler';
 import { AnsiMusicStream, type MusicEvent } from '../utils/ansi-music';
 import { ModemEmulator } from '../utils/modem-emulator';
-import { classifyKey, trackKeyId, repeatAlive, mayAutoRepeat, gameKeyDownPayload } from '../utils/key-overrides';
+import { browserOwnsChord, classifyKey, trackKeyId, repeatAlive, mayAutoRepeat, gameKeyDownPayload } from '../utils/key-overrides';
 import { createWireRecorder, recordTerminal, recordPetscii, exposeWireRecorder } from '../utils/wire-recorder';
 
 /**
@@ -1878,6 +1878,10 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
 
       // Game mode: send raw keydown events with custom key repeat
       if (gameMode.current && socketRef.current?.connected) {
+        // Cmd chords (paste, copy, reload) are the browser's: no key-down,
+        // no preventDefault, so the paste event still fires.
+        if (browserOwnsChord(ev)) return;
+
         // Browser auto-repeat is the heartbeat, not input: it proves the
         // key is still down (see repeatAlive), so stamp it and swallow it.
         if (ev.repeat) {
@@ -1895,6 +1899,8 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
     const handleGameKeyUp = (ev: KeyboardEvent) => {
       // Game mode: send raw keyup events and stop repeat
       if (gameMode.current && socketRef.current?.connected) {
+        // The press never reached the door (browserOwnsChord), so no release.
+        if (browserOwnsChord(ev) && !keyState.current[trackKeyId(ev)]) return;
         releaseGameKey(ev.key, ev.code);
         ev.preventDefault();
       }

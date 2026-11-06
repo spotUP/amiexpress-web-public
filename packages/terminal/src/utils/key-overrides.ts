@@ -233,6 +233,20 @@ export function classifyKey(ev: KeyLike, state: TerminalKeyState): TerminalKeyAc
 }
 
 
+/**
+ * Does the browser own this key, even in game mode?
+ *
+ * Game mode sends every key-down to the door and cancels the browser's
+ * default, so Cmd+V reached LiveChat as a plain `v` and the paste event never
+ * fired (sysop, 2026-11-06: "it just types a v"). Cmd chords are the
+ * browser's and the OS's (paste, copy, reload, close tab); the door never
+ * sees them. Ctrl chords stay game keys: doors read Ctrl+letter.
+ */
+export function browserOwnsChord(ev: KeyLike): boolean {
+  return Boolean(ev.metaKey);
+}
+
+
 /** Which auto-repeat the running door asked for. */
 export type KeyRepeatMode = 'game' | 'application';
 

@@ -22,6 +22,7 @@ export {
 export {
   keyOverride,
   classifyKey,
+  browserOwnsChord,
   mayAutoRepeat,
   type KeyLike,
   type KeyRepeatMode,
