@@ -13,13 +13,14 @@ process.env.SKIP_DB_INIT = '1';
 import { setInternodeChatDependencies, handleChatMessage } from '../../src/handlers/chat/internode-chat.handler';
 import { LoggedOnSubState } from '../../src/constants/bbs-states';
 import { roomMember, clearRoomMembers } from '../helpers/room-members';
+import type { Database } from '../../src/database';
 
 afterEach(() => clearRoomMembers());
 
 it('delivers a chat line to both ends, on byte transports', async () => {
   const chat = { id: 's1', status: 'active', initiatorId: 1, recipientId: 2 };
   setInternodeChatDependencies({
-    db: { getChatSession: async () => chat, saveChatMessage: async () => undefined },
+    db: { getChatSession: async () => chat, saveChatMessage: async () => undefined } as unknown as Database,
     sessions: new Map(),
     io: {},
   });

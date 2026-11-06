@@ -119,6 +119,7 @@ import express from 'express';
 import request from 'supertest';
 import { createNodeControlRouter } from '../../src/api/node-control-routes';
 import type { BBSSession } from '../../src/index';
+import type { Database } from '../../src/database';
 
 /**
  * The stub `net.Socket` every case is driven over. Only the members
@@ -465,7 +466,7 @@ describe('TP-10 - one registry, so a cross-session push finds a byte terminal', 
         }),
         createChatSession: async () => 'chat-46',
         getChatSession: async () => null,
-      },
+      } as unknown as Database,
       sessions: sessionMap,
       io: ioWith(),
     });
