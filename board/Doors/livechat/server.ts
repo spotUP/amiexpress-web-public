@@ -35,7 +35,7 @@ import blessed, {
 } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import { createBox, createList, createButton, createText, createLog, createDialogs, createModalManager } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
 import { isCompactWidth } from '@amiexpress/bbs-door-sdk';
-import { commandPaletteItems } from './ui/command-palette';
+import { commandPaletteItems, paletteEnterAction } from './ui/command-palette';
 import { colorize, Tags } from '@amiexpress/bbs-door-sdk/utils/blessed-helpers';
 import { DoorInputManager } from '@amiexpress/bbs-door-sdk/utils/door-input-manager';
 import { createTerminalModeSwitch, type TerminalModeSwitch } from '@amiexpress/bbs-door-sdk/utils/terminal-mode';
@@ -624,6 +624,26 @@ export async function createApp(session: DoorSession) {
     }
   }
 
+  /** Enter while the palette is open: run a fully typed command, else fill it in. */
+  function enterOnCommandSuggestions() {
+    const selected = (commandSuggestions as any).selected;
+    const name = currentGhostCompletion || filteredCommands[selected]?.name;
+    if (name && paletteEnterAction(inputBox.getValue(), name) === 'run') {
+      hideCommandSuggestions();
+      inputBox.focus();
+      inputBox.submit();
+      return;
+    }
+    if (currentGhostCompletion) {
+      inputBox.setValue(`/${currentGhostCompletion} `);
+      inputBox.focus();
+      hideCommandSuggestions();
+      screen.render();
+    } else {
+      selectCommandSuggestion();
+    }
+  }
+
   // Handle command suggestion navigation
   commandSuggestions.key(['up', 'k'], () => {
     (commandSuggestions as any).up(1);
@@ -636,7 +656,7 @@ export async function createApp(session: DoorSession) {
   });
 
   commandSuggestions.key(['enter'], () => {
-    selectCommandSuggestion();
+    enterOnCommandSuggestions();
   });
 
   commandSuggestions.key(['escape'], () => {
@@ -2740,15 +2760,7 @@ export async function createApp(session: DoorSession) {
     // Handle Enter key - submit message instead of inserting newline
     if (key.name === 'enter' || key.name === 'return') {
       if (commandSuggestionsVisible) {
-        // If ghost completion exists, accept it; otherwise select from dropdown
-        if (currentGhostCompletion) {
-          inputBox.setValue(`/${currentGhostCompletion} `);
-          inputBox.focus();
-          hideCommandSuggestions();
-          screen.render();
-        } else {
-          selectCommandSuggestion();
-        }
+        enterOnCommandSuggestions();
         return;
       }
       // For regular messages, explicitly trigger submit since Textarea defaults to newline

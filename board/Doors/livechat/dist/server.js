@@ -544,6 +544,26 @@ async function createApp(session) {
             screen.render();
         }
     }
+    /** Enter while the palette is open: run a fully typed command, else fill it in. */
+    function enterOnCommandSuggestions() {
+        const selected = commandSuggestions.selected;
+        const name = currentGhostCompletion || filteredCommands[selected]?.name;
+        if (name && (0, command_palette_1.paletteEnterAction)(inputBox.getValue(), name) === 'run') {
+            hideCommandSuggestions();
+            inputBox.focus();
+            inputBox.submit();
+            return;
+        }
+        if (currentGhostCompletion) {
+            inputBox.setValue(`/${currentGhostCompletion} `);
+            inputBox.focus();
+            hideCommandSuggestions();
+            screen.render();
+        }
+        else {
+            selectCommandSuggestion();
+        }
+    }
     // Handle command suggestion navigation
     commandSuggestions.key(['up', 'k'], () => {
         commandSuggestions.up(1);
@@ -554,7 +574,7 @@ async function createApp(session) {
         screen.render();
     });
     commandSuggestions.key(['enter'], () => {
-        selectCommandSuggestion();
+        enterOnCommandSuggestions();
     });
     commandSuggestions.key(['escape'], () => {
         hideCommandSuggestions();
@@ -2377,16 +2397,7 @@ async function createApp(session) {
         // Handle Enter key - submit message instead of inserting newline
         if (key.name === 'enter' || key.name === 'return') {
             if (commandSuggestionsVisible) {
-                // If ghost completion exists, accept it; otherwise select from dropdown
-                if (currentGhostCompletion) {
-                    inputBox.setValue(`/${currentGhostCompletion} `);
-                    inputBox.focus();
-                    hideCommandSuggestions();
-                    screen.render();
-                }
-                else {
-                    selectCommandSuggestion();
-                }
+                enterOnCommandSuggestions();
                 return;
             }
             // For regular messages, explicitly trigger submit since Textarea defaults to newline

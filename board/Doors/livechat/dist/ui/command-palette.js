@@ -1,6 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.commandPaletteItems = commandPaletteItems;
+exports.paletteEnterAction = paletteEnterAction;
 /**
  * THE SLASH-COMMAND PALETTE'S ROWS.
  *
@@ -48,4 +49,15 @@ function commandPaletteItems(commands, cols, dim) {
         const desc = (cmd.description || '').slice(0, descWidth);
         return `/${name} {${dim}-fg}${usage}{/${dim}-fg} ${desc}`;
     });
+}
+/**
+ * What Enter does while the palette is open.
+ *
+ * Enter on a half-typed name fills in the command (`/ed` becomes `/edit `).
+ * Enter on a name the caller has already typed in full RUNS it: filling
+ * `/edit` with `/edit ` changed nothing on screen, so the caller pressed
+ * Enter and saw no result (sysop, 2026-11-06).
+ */
+function paletteEnterAction(typed, commandName) {
+    return typed.trim().toLowerCase() === `/${commandName.toLowerCase()}` ? 'run' : 'fill';
 }

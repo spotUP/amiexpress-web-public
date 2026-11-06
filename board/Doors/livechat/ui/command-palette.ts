@@ -61,3 +61,15 @@ export function commandPaletteItems(
     return `/${name} {${dim}-fg}${usage}{/${dim}-fg} ${desc}`;
   });
 }
+
+/**
+ * What Enter does while the palette is open.
+ *
+ * Enter on a half-typed name fills in the command (`/ed` becomes `/edit `).
+ * Enter on a name the caller has already typed in full RUNS it: filling
+ * `/edit` with `/edit ` changed nothing on screen, so the caller pressed
+ * Enter and saw no result (sysop, 2026-11-06).
+ */
+export function paletteEnterAction(typed: string, commandName: string): 'run' | 'fill' {
+  return typed.trim().toLowerCase() === `/${commandName.toLowerCase()}` ? 'run' : 'fill';
+}
