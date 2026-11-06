@@ -2346,6 +2346,7 @@ export class Element extends EventEmitter {
       // this split, the old code emitted 'click' for every button, so
       // right-click never triggered context-menu handlers.
       const btn = (event as any).button;
+      const focusBeforeClick = this.screen?.getFocused?.() ?? null;
       if (btn === 'right') {
         this.emit('rightclick', event);
       } else if (btn === 'middle') {
@@ -2358,8 +2359,18 @@ export class Element extends EventEmitter {
       // propagation — that's blessed's original model; DOM-style bubbling
       // breaks dialog buttons because overlapping widgets in the z-stack
       // all fire click and the user's intended target is ambiguous.
+      //
+      // The claim comes AFTER the click handlers, so it must not undo them.
+      // A handler that moved focus elsewhere meant it: choosing Reply in
+      // LiveChat's message menu (a List) hides the menu and focuses the
+      // input box, and this claim then gave focus back to the hidden menu,
+      // so typing went nowhere (2026-11-06). A handler that hid this
+      // element leaves nothing to focus either.
       if (btn !== 'right' && btn !== 'middle' && this.clickable) {
-        this.focus();
+        const focusNow = this.screen?.getFocused?.() ?? null;
+        if (focusNow === focusBeforeClick && !this.hidden && this.visible) {
+          this.focus();
+        }
         return true;
       }
       // Right/middle click never claims focus (must not steal focus from

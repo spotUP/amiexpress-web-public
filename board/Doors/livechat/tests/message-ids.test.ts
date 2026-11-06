@@ -153,5 +153,8 @@ export async function theContextMenuReplyFillsTheMessageId(): Promise<void> {
   menu.emit('select', menu.items[idx], idx);
   const input = elements(app.screen).find(e => e.type === 'textarea' && e.listeners('submit').length > 0);
   assert.strictEqual(input.getValue(), '/reply 77 ');
+  // assert.ok, not strictEqual: a failing strictEqual inspects two blessed trees and runs out of memory.
+  const focused = app.screen.getFocused();
+  assert.ok(focused === input, `typing goes to the input after Reply, focused is ${focused?.type} (menu: ${focused === menu})`);
   fire('disconnect', 'transport close');
 }
