@@ -1635,6 +1635,7 @@ export async function createApp(session: DoorSession) {
       currentRoom: () => state.currentChannel,
       // The rows as shown (every row of the message), tags stripped by Copy Text.
       messageText: (id: string) => chatMessages.filter((_, i) => chatMessageIds[i] === id).join('\n') || undefined,
+      lookupMessage: (id: string) => lookupMessage(id),
       isChannelPinned: (name) => (state.prefs.pinnedChannels ?? []).includes(name),
       onTogglePinChannel: (name) => { const now = togglePinnedChannel(state, name, prefsSender(socket)); updateChannelList(); return now; },
       onMarkChannelUnread: (name) => { const ok = markChannelUnread(state, name); if (ok) updateChannelList(); return ok; },
@@ -2064,6 +2065,11 @@ export async function createApp(session: DoorSession) {
   const chatMessages: string[] = [];
   // Author and text by message id, for the lines state.messages does not hold (history, own echo).
   const messageIndex = new Map<string, ReplyParent>();
+  /** Author and text of a message by id: /reply, the reply echo and the menu's Quote all ask here. */
+  const lookupMessage = (id: string): ReplyParent | undefined => {
+    const m = state.messages.find((x: any) => String(x.id) === id);
+    return m ? { username: m.username, content: m.content } : messageIndex.get(id);
+  };
   /**
    * The message id behind each rendered line, where there is one.
    *
@@ -2639,10 +2645,7 @@ export async function createApp(session: DoorSession) {
   const sendRoomLine = (text: string, replyTo?: string) => sendRoomLineTo({
     socket, userId, username, addChatMessage, inputHistory, updateTypingPreview,
     rememberMessage: (id, from, content) => { messageIndex.set(id, { username: from, content }); },
-    lookupMessage: (id) => {
-      const m = state.messages.find((x: any) => String(x.id) === id);
-      return m ? { username: m.username, content: m.content } : messageIndex.get(id);
-    },
+    lookupMessage,
   }, text, replyTo);
 
   // Wrapper for handleCommandActions to match submit handler signature

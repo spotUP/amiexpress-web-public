@@ -1418,6 +1418,7 @@ async function createApp(session) {
         currentRoom: () => state.currentChannel,
         // The rows as shown (every row of the message), tags stripped by Copy Text.
         messageText: (id) => chatMessages.filter((_, i) => chatMessageIds[i] === id).join('\n') || undefined,
+        lookupMessage: (id) => lookupMessage(id),
         isChannelPinned: (name) => (state.prefs.pinnedChannels ?? []).includes(name),
         onTogglePinChannel: (name) => { const now = (0, state_1.togglePinnedChannel)(state, name, (0, prefs_sync_1.prefsSender)(socket)); updateChannelList(); return now; },
         onMarkChannelUnread: (name) => { const ok = (0, state_1.markChannelUnread)(state, name); if (ok)
@@ -1815,6 +1816,11 @@ async function createApp(session) {
     const chatMessages = [];
     // Author and text by message id, for the lines state.messages does not hold (history, own echo).
     const messageIndex = new Map();
+    /** Author and text of a message by id: /reply, the reply echo and the menu's Quote all ask here. */
+    const lookupMessage = (id) => {
+        const m = state.messages.find((x) => String(x.id) === id);
+        return m ? { username: m.username, content: m.content } : messageIndex.get(id);
+    };
     /**
      * The message id behind each rendered line, where there is one.
      *
@@ -2340,10 +2346,7 @@ async function createApp(session) {
     const sendRoomLine = (text, replyTo) => (0, send_room_line_1.sendRoomLine)({
         socket, userId, username, addChatMessage, inputHistory, updateTypingPreview,
         rememberMessage: (id, from, content) => { messageIndex.set(id, { username: from, content }); },
-        lookupMessage: (id) => {
-            const m = state.messages.find((x) => String(x.id) === id);
-            return m ? { username: m.username, content: m.content } : messageIndex.get(id);
-        },
+        lookupMessage,
     }, text, replyTo);
     // Wrapper for handleCommandActions to match submit handler signature
     const commandActionHandler = (r) => (0, command_execution_handlers_1.handleCommandActions)(r, socket, state, onlineUsers, currentSearchOverlayRef, search_overlay_1.createSearchOverlay, search_handlers_1.searchMessages, addSystemMessage, thread_handlers_1.replyToThread, pin_handlers_1.pinMessage, pin_handlers_1.unpinMessage, pin_handlers_1.getPinnedMessages, screen, inputBox, cleanup, showConfirm, // Pass showConfirm for quit confirmation

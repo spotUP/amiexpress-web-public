@@ -10,6 +10,7 @@ const mute_list_1 = require("../core/mute-list");
 const theme_1 = require("../ui/theme");
 const blessed_1 = __importDefault(require("@amiexpress/bbs-door-sdk/engines/ui/blessed"));
 const door_theme_1 = require("../door-theme");
+const reply_quote_1 = require("../core/reply-quote");
 const pin_handlers_1 = require("../handlers/pin-handlers");
 const reaction_handlers_1 = require("../handlers/reaction-handlers");
 const edit_handlers_1 = require("../handlers/edit-handlers");
@@ -197,9 +198,16 @@ function createContextMenus(s, ib, sup, sdp, asm, sock, extras = {}) {
                     s.render();
                     break;
                 case 'Quote':
-                    ib.setValue('> ');
-                    ib.focus();
-                    s.render();
+                    {
+                        const parent = cmt ? extras.lookupMessage?.(cmt) : undefined;
+                        if (!parent) {
+                            asm(`{${door_theme_1.T.accentAlt}-fg}Right-click on a message first.{/${door_theme_1.T.accentAlt}-fg}`);
+                            break;
+                        }
+                        ib.setValue((0, reply_quote_1.quoteInputText)(parent));
+                        ib.focus();
+                        s.render();
+                    }
                     break;
                 // The menu NOW knows which message is under the pointer - the
                 // right-click resolves the row to a message id (see ui/chat-row-map),

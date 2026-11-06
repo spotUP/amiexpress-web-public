@@ -1,5 +1,6 @@
 import { type MuteList } from '../core/mute-list';
 import type { Screen } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
+import { type ReplyParent } from '../core/reply-quote';
 import type { Message } from '../types';
 export interface ContextMenuExtras {
     isSysop?: boolean;
@@ -26,6 +27,8 @@ export interface ContextMenuExtras {
     onMarkChannelUnread?: (name: string) => boolean;
     /** The text of a message by id, for Copy Text. */
     messageText?: (id: string) => string | undefined;
+    /** Author and content of a message by id, for Quote (the same lookup /reply uses). */
+    lookupMessage?: (id: string) => ReplyParent | undefined;
 }
 /**
  * OSC 52 "set clipboard": ESC ] 52 ; c ; <base64 of UTF-8> BEL. The web

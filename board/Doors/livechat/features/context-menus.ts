@@ -3,6 +3,7 @@ import { PANEL_BORDER } from '../ui/theme';
 import blessed from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import type { Screen } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import { T } from '../door-theme';
+import { quoteInputText, type ReplyParent } from '../core/reply-quote';
 import type { Message } from '../types';
 import { pinMessage } from '../handlers/pin-handlers';
 import { reactToMessage } from '../handlers/reaction-handlers';
@@ -31,6 +32,8 @@ export interface ContextMenuExtras {
   onMarkChannelUnread?: (name: string) => boolean;
   /** The text of a message by id, for Copy Text. */
   messageText?: (id: string) => string | undefined;
+  /** Author and content of a message by id, for Quote (the same lookup /reply uses). */
+  lookupMessage?: (id: string) => ReplyParent | undefined;
 }
 
 /**
@@ -207,9 +210,16 @@ export function createContextMenus(s: Screen, ib: any, sup: (u: string) => void,
           s.render();
           break;
         case 'Quote':
-          ib.setValue('> ');
-          ib.focus();
-          s.render();
+          {
+            const parent = cmt ? extras.lookupMessage?.(cmt) : undefined;
+            if (!parent) {
+              asm(`{${T.accentAlt}-fg}Right-click on a message first.{/${T.accentAlt}-fg}`);
+              break;
+            }
+            ib.setValue(quoteInputText(parent));
+            ib.focus();
+            s.render();
+          }
           break;
         // The menu NOW knows which message is under the pointer - the
         // right-click resolves the row to a message id (see ui/chat-row-map),
