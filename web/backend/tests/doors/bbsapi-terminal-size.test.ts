@@ -58,16 +58,19 @@ describe('BBSApi.getTerminalSize', () => {
     });
   });
 
-  it('an ordinary ANSI session is unchanged at 80', () => {
-    expect(sizeFor({ screenWidth: 80, screenHeight: 24 })).toEqual({ width: 80, height: 24 });
+  it('an ordinary ANSI session on a fixed call is 80x25', () => {
+    // R1: every call starts 80x25, whatever the terminal reports.
+    expect(sizeFor({ screenWidth: 80, screenHeight: 24 })).toEqual({ width: 80, height: 25 });
+    expect(sizeFor({ screenWidth: 132, screenHeight: 43 })).toEqual({ width: 80, height: 25 });
   });
 
   it('a bare session still defaults to 80x25', () => {
     expect(sizeFor({})).toEqual({ width: 80, height: 25 });
   });
 
-  it('a wide ANSI terminal keeps its reported width', () => {
-    expect(sizeFor({ screenWidth: 132, screenHeight: 43 })).toEqual({ width: 132, height: 43 });
+  it('a wide ANSI terminal keeps its reported size once the call is wide', () => {
+    expect(sizeFor({ screenWidth: 132, screenHeight: 43, terminalWideChoice: true })).toEqual({ width: 132, height: 43 });
+    expect(sizeFor({ screenWidth: 132, screenHeight: 43, doorTerminalWide: true })).toEqual({ width: 132, height: 43 });
   });
 
   // BINDING RULE (a): a non-PETSCII caller NEVER narrows. socket-handlers.ts
@@ -76,9 +79,10 @@ describe('BBSApi.getTerminalSize', () => {
   // under 41 into the XXS single-column profile. Floored at 80, the same rule
   // sessionColumns() applies at the door gate.
   it('a NARROW ANSI terminal is floored at 80 - the gate and the canvas agree', () => {
-    expect(sizeFor({ screenWidth: 40, screenHeight: 25 })).toEqual({ width: 80, height: 25 });
-    expect(sizeFor({ screenWidth: 24, screenHeight: 20 })).toEqual({ width: 80, height: 20 });
-    expect(sizeFor({ screenWidth: 79, screenHeight: 24 })).toEqual({ width: 80, height: 24 });
+    const wide = { terminalWideChoice: true };
+    expect(sizeFor({ screenWidth: 40, screenHeight: 25, ...wide })).toEqual({ width: 80, height: 25 });
+    expect(sizeFor({ screenWidth: 24, screenHeight: 20, ...wide })).toEqual({ width: 80, height: 20 });
+    expect(sizeFor({ screenWidth: 79, screenHeight: 24, ...wide })).toEqual({ width: 80, height: 24 });
   });
 });
 

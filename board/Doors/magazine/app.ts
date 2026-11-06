@@ -180,7 +180,7 @@ export interface Reader {
   /** The reader's current spread. */
   spreadNo(): number;
   /** What actually ran: sentinels for the tests that prove the effects are wired. */
-  stats(): { glitches: number; tickerSteps: number; intervals: number; banners: number; searchTicks: number; lands: number };
+  stats(): { glitches: number; tickerSteps: number; intervals: number; banners: number; searchTicks: number; lands: number; relayouts: number };
   /** The plain text of the row the page counter rolls in (the progress row), tags stripped. */
   counterRow(): string;
   stop(): void;
@@ -232,8 +232,8 @@ export async function startReader(session: DoorSession, options: ReaderOptions =
   };
 
   const screen = createScreen(bbs, { title: MAGAZINE_TITLE }) as any;
-  const width = (screen.width as number) || 80;
-  const height = (screen.height as number) || 24;
+  let width = (screen.width as number) || 80;
+  let height = (screen.height as number) || 24;
   let layout = buildLayout(width, height, { ticker: showTicker });
   // Which alphabet this caller reads: the session knows (createScreen asks it too).
   const petscii = typeof bbs?.isPetsciiMode === 'function' && bbs.isPetsciiMode() === true;
@@ -325,7 +325,7 @@ export async function startReader(session: DoorSession, options: ReaderOptions =
   } as never) as any;
 
   const render = () => screen.render();
-  const chrome = attachDoorChrome(theme, {
+  const attachChrome = () => attachDoorChrome(theme, {
     width,
     title: layout.collapseChrome ? MAGAZINE_TITLE : `${MAGAZINE_TITLE} // SIGNAL TERMINAL`,
     masthead: mastheadRow,
@@ -336,6 +336,7 @@ export async function startReader(session: DoorSession, options: ReaderOptions =
     styles: s,
     render,
   } as never);
+  let chrome = attachChrome();
 
   // ---- painting --------------------------------------------------------
 
@@ -375,7 +376,7 @@ export async function startReader(session: DoorSession, options: ReaderOptions =
   let glitchTimer: ReturnType<typeof setTimeout> | null = null;
   let repairTimer: ReturnType<typeof setTimeout> | null = null;
   let modalOpen = false;
-  const counters = { glitches: 0, tickerSteps: 0, intervals: 0, banners: 0, searchTicks: 0, lands: 0 };
+  const counters = { glitches: 0, tickerSteps: 0, intervals: 0, banners: 0, searchTicks: 0, lands: 0, relayouts: 0 };
   let stopped = false;
   let finish: () => void = () => { /* replaced below */ };
 
@@ -1082,6 +1083,36 @@ export async function startReader(session: DoorSession, options: ReaderOptions =
   });
 
   snapshot = loadSnapshot(magazineRoot(__dirname));
+  /**
+   * The screen changed size (Alt+Enter, a browser resize, NAWS): the layout is
+   * built from width and height once, so rebuild it and re-enter the view the
+   * caller is on. Rows and the panel move, the masthead/footer chrome is
+   * re-attached for the new width, the ticker restarts at the new scroll
+   * width, and the banner is re-fitted (bannerKey cleared so applyBanner runs).
+   */
+  const relayout = () => {
+    if (stopped) return;
+    const w = (screen.width as number) || 80;
+    const h = (screen.height as number) || 24;
+    if (w === width && h === height) return;
+    width = w;
+    height = h;
+    layout = buildLayout(width, height, { ticker: showTicker });
+    counters.relayouts += 1;
+    mastheadRow.top = layout.headerRow;
+    if (tickerBox && layout.tickerRow !== null) tickerBox.top = layout.tickerRow;
+    progressBox.top = layout.progressRow;
+    panel.top = layout.panelTop;
+    panel.height = layout.panelHeight;
+    try { chrome.stop(); } catch { /* re-attached below */ }
+    chrome = attachChrome();
+    if (tickerTimer) { clearInterval(tickerTimer); tickerTimer = null; }
+    startTicker();
+    bannerKey = '';
+    go(view, true);
+  };
+  screen.on('resize', relayout);
+
   startTicker();
   go({ kind: 'front' });
 

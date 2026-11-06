@@ -1994,8 +1994,8 @@ console.error('[executeDoor] Error during cleanup:', cleanupError);
  * instead of trusting each door. Silent unless a door actually went wide.
  */
 export function restoreFixedTerminal(socket: any, session: BBSSession): void {
-  if (!(session as any)?.doorTerminalWide) return;
-  (session as any).doorTerminalWide = false;
+  if (!session?.doorTerminalWide) return;
+  session.doorTerminalWide = false;
   try {
     socket.emit('terminal-mode', 'fixed');
   } catch {

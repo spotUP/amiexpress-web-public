@@ -85,7 +85,7 @@ interface Harness {
   raw: (bytes: string) => void;
 }
 
-async function open(width: number, height: number, options: { theme?: ReturnType<typeof themeById>; secLevel?: number; petscii?: boolean; shippedArt?: string | null; slots?: Record<string, string>; variantDir?: string | null } = {}): Promise<Harness> {
+async function open(width: number, height: number, options: { theme?: ReturnType<typeof themeById>; secLevel?: number; petscii?: boolean; shippedArt?: string | null; slots?: Record<string, string>; variantDir?: string | null; wideSize?: { width: number; height: number } } = {}): Promise<Harness> {
   const writes: string[] = [];
   const storage = new Map<string, unknown>();
   const theme = options.theme ?? themeById('uprough-neon');
@@ -99,6 +99,21 @@ async function open(width: number, height: number, options: { theme?: ReturnType
     connectionType: 'web', unicodeCapable: true,
     isPetsciiMode: () => options.petscii === true,
   };
+  if (options.wideSize) {
+    // The board's half of Alt+Enter (R1), as BBSApi does it: the call's choice
+    // flips, getTerminalSize answers the new mode, and screen:resize fires.
+    const wideSize = options.wideSize;
+    const handlers = new Map<string, (payload: { cols: number; rows: number }) => void>();
+    let wideChoice = false;
+    bbs.on = (event: string, fn: (payload: { cols: number; rows: number }) => void) => { handlers.set(event, fn); };
+    bbs.getTerminalSize = () => (wideChoice ? wideSize : { width, height });
+    bbs.getTerminalModeChoice = () => wideChoice;
+    bbs.setTerminalModeChoice = (wide: boolean) => {
+      wideChoice = wide;
+      const now = bbs.getTerminalSize();
+      handlers.get('screen:resize')?.({ cols: now.width, rows: now.height });
+    };
+  }
   const socket: any = { on: () => {}, emit: () => {}, off: () => {}, removeAllListeners: () => {} };
   const session: any = {
     bbs, socket, params: [],
@@ -1304,4 +1319,24 @@ export async function noFillerAppearsWhenTheDoorShipsNoArt(): Promise<void> {
     none.reader.press('enter');
     assert.ok(!none.reader.panelRows().join('\n').includes('©Mt'), 'no shipped art, no filler');
   } finally { await finish(none, b); }
+}
+
+export async function altEnterRelaysOutTheReaderAtTheNewSizeAndBack(): Promise<void> {
+  // R1: MAG has no switch of its own; createScreen's board-wide Alt+Enter
+  // handler flips the call's choice and the reader rebuilds for the new size.
+  const b = board([]);
+  const h = await open(80, 24, { wideSize: { width: 132, height: 40 } });
+  try {
+    assert.strictEqual(h.reader.stats().relayouts, 0, 'no relayout before the key');
+    h.raw('\x1b\r');
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.strictEqual(h.reader.stats().relayouts, 1, 'Alt+Enter relaid the reader out');
+    assert.strictEqual(h.reader.screen.width, 132);
+    assert.strictEqual(h.reader.screen.height, 40);
+    h.raw('\x1b\r');
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.strictEqual(h.reader.stats().relayouts, 2, 'the second Alt+Enter went back');
+    assert.strictEqual(h.reader.screen.width, 80);
+    assert.strictEqual(h.reader.screen.height, 24);
+  } finally { await finish(h, b); }
 }

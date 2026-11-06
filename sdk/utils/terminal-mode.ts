@@ -29,7 +29,15 @@ export interface TerminalModeSwitchOptions {
   screen: any;
   /** What the door does when the size changes. May be async. */
   onRelayout: () => void | Promise<void>;
-  /** Where to start. Defaults to 'wide': a door asking for this wants it. */
+  /**
+   * Where to start. Default: the mode the caller chose for this CALL
+   * (bbs.getTerminalModeChoice, 80x25 until Alt+Enter is pressed in any
+   * door). 'wide' forces a wide start (a door that is only usable wide, e.g.
+   * the standalone chat page). 'fixed' is the board's default and so means
+   * "no preference": it follows the caller's choice like an omitted value,
+   * which is what lets the doors that spelled out start:'fixed' carry the
+   * choice from one door to the next.
+   */
   start?: TerminalMode;
   /**
    * Bind Alt+Enter to the toggle. Default true - the sysop's call, so that
@@ -54,12 +62,24 @@ export const TERMINAL_MODE_MENU_LABEL = '80x25 / Responsive  (Alt+Enter)';
 /** The one key, in every door that supports the switch. */
 export const TERMINAL_MODE_HOTKEY = 'M-enter';
 
+/** Screens whose Alt+Enter belongs to a createTerminalModeSwitch, not createScreen's default handler. */
+const screensWithOwnSwitch = new WeakSet<object>();
+
+/** True when a door's own terminal-mode switch handles Alt+Enter on this screen. */
+export function screenOwnsTerminalModeHotkey(screen: object): boolean {
+  return screensWithOwnSwitch.has(screen);
+}
+
 export function createTerminalModeSwitch(options: TerminalModeSwitchOptions): TerminalModeSwitch {
   const { bbs, screen, onRelayout } = options;
-  let mode: TerminalMode = options.start ?? 'wide';
+  const chosen: TerminalMode = bbs?.getTerminalModeChoice?.() === true ? 'wide' : 'fixed';
+  let mode: TerminalMode = options.start === 'wide' ? 'wide' : chosen;
   let disposed = false;
 
-  const askTerminal = (): void => {
+  const askTerminal = (persist: boolean): void => {
+    // A caller's toggle is remembered for the rest of the call, so the next
+    // door opens in the same mode. A door's own start is not a choice.
+    if (persist) bbs?.setTerminalModeChoice?.(mode === 'wide');
     if (mode === 'wide') bbs?.enableWideMode?.();
     else bbs?.disableWideMode?.();
   };
@@ -69,8 +89,10 @@ export function createTerminalModeSwitch(options: TerminalModeSwitchOptions): Te
     void onRelayout();
   };
 
-  askTerminal();
+  askTerminal(false);
   screen?.on?.('resize', relayout);
+  // Tells createScreen's default Alt+Enter handler that this door owns the key.
+  if (screen) screensWithOwnSwitch.add(screen);
 
   let hotkey: (() => boolean) | null = null;
   if (options.bindHotkey !== false) {
@@ -90,7 +112,7 @@ export function createTerminalModeSwitch(options: TerminalModeSwitchOptions): Te
     set(next: TerminalMode): void {
       if (next === mode) return;
       mode = next;
-      askTerminal();
+      askTerminal(true);
       relayout();
     },
 

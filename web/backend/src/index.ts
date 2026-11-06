@@ -282,6 +282,14 @@ export interface DoorHold { pause: () => void; resume: (opts?: { dropHeldOutput?
 
 export interface BBSSession {
   /**
+   * R1: the caller's Alt+Enter choice for THIS CALL - true = responsive doors
+   * get the full terminal, absent/false = 80x25. Never saved on the account;
+   * a new call is a new session, so every call starts 80x25.
+   */
+  terminalWideChoice?: boolean;
+  /** A door switched the terminal wide (setTerminalMode); the board puts fixed back on door exit. */
+  doorTerminalWide?: boolean;
+  /**
    * The screen theme this session has ALREADY been judged fit to wear.
    *
    * A real caller never carries this: `loadScreenFile` asks

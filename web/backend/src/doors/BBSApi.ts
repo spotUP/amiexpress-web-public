@@ -48,7 +48,7 @@ import { applyInstallMetadata, buildDoorList, DoorListEntry } from './door-list'
 import { deleteDoorAndRefresh } from './door-delete';
 import './ami-stripper.lib'; // ensure module is in require cache for DOORMAN
 
-import { doorScreenHeight, doorScreenWidth } from '../amiga-emulation/xim/screen-width.util';
+import { doorTerminalSize } from './door-terminal-size';
 import { wrapDoorTextForSession } from '../utils/wrap-for-session.util';
 import { puaToUnicode } from '@amiexpress/bbs-door-sdk/petscii';
 import { sessionWantsPetscii } from '../utils/petscii-session-model';
@@ -265,26 +265,29 @@ export class BBSApi {
    * doors are byte-for-byte unchanged.
    */
   getTerminalSize(): { width: number; height: number } {
-    const reported = this.session?.screenWidth;
-    // FLOORED AT 80 for every non-PETSCII caller, the same rule
-    // sessionColumns() applies at the door gate: `max(80, reported)`, never
-    // narrower. createScreen() turns a width under 41 into the XXS
-    // single-column profile (blessed-helpers.ts responsive/isCompactWidth),
-    // so handing it a phone's raw 40 gave an ANSI caller the C64 layout - an
-    // 80-column regression on a live path (socket-handlers.ts writes the
-    // reported cols unfiltered for every web socket). One width authority,
-    // not two.
-    const floored = Math.max(80, reported && reported > 0 ? reported : 80);
-    return {
-      width: doorScreenWidth(this.session, floored),
-      // Same rule for the other axis, through the SAME authority the 68K
-      // side reads (doorScreenHeight): a PETSCII text screen is 25 rows BY
-      // DEFINITION at both widths, so a stale 24 reported by a browser
-      // terminal before the caller answered `P` must not shrink a PETSCII
-      // door's canvas. Two answers to one question is how the width came to
-      // disagree with itself before it had an authority.
-      height: doorScreenHeight(this.session, this.session?.screenHeight || 25)
-    };
+    return doorTerminalSize(this.session);
+  }
+
+  /** The call's Alt+Enter choice: true = responsive, false = 80x25 (every call starts false). */
+  getTerminalModeChoice(): boolean {
+    return this.session?.terminalWideChoice === true;
+  }
+
+  /**
+   * Remember the caller's Alt+Enter choice for the rest of the CALL (never
+   * saved on the account) and tell the running door its new size. Telnet and
+   * SSH callers cannot resize their terminal, so no NAWS follows a toggle:
+   * the door hears the size it should now draw through screen:resize, the
+   * same event a real resize raises. Web callers get the real resize too.
+   */
+  setTerminalModeChoice(wide: boolean): void {
+    this.session.terminalWideChoice = wide;
+    this.announceTerminalSize();
+  }
+
+  private announceTerminalSize(): void {
+    const size = this.getTerminalSize();
+    this.emitInternal('screen:resize', { cols: size.width, rows: size.height });
   }
 
   /**
@@ -595,8 +598,9 @@ console.log('[BBSApi] Mouse events disabled');
     // exit even when the door never calls disableWideMode (crash, kick,
     // or a door that never learned the call) - stranded wide terminals at
     // the menu are that omission, live 2026-09-11.
-    (this.session as any).doorTerminalWide = mode === 'wide';
+    this.session.doorTerminalWide = mode === 'wide';
     this.socket.emit('terminal-mode', mode);
+    this.announceTerminalSize();
     console.log(`[BBSApi] Emitted terminal-mode event with mode=${mode}`);
   }
 

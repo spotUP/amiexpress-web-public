@@ -43,6 +43,7 @@ import type {
 } from '../engines/ui/blessed/core/types';
 import type { Screen } from '../engines/ui/blessed/core/screen';
 import { isCompactWidth } from '../engines/ui/blessed/core/responsive-constants';
+import { TERMINAL_MODE_HOTKEY, screenOwnsTerminalModeHotkey } from './terminal-mode';
 import type { Box } from '../engines/ui/blessed/widgets/box';
 import { DockablePanel } from '../engines/ui/blessed/widgets/dockable-panel';
 import type { DockablePanelOptions } from '../engines/ui/blessed/widgets/dockable-panel';
@@ -1040,7 +1041,8 @@ export function createScreen(
   // Listen for resize events from backend if bbs is provided
   if (bbs && typeof bbs.on === 'function') {
     console.log('[createScreen] Setting up screen:resize listener via bbs.on()');
-    bbs.on('screen:resize', (size: { cols: number; rows: number }) => {
+    bbs.on('screen:resize', (reported: { cols: number; rows: number }) => {
+      let size = reported;
       console.log(`[createScreen] Received screen:resize event: ${size.cols}x${size.rows}`);
       console.log(`[createScreen] Current screen size: ${screen.width}x${screen.height}`);
 
@@ -1050,6 +1052,11 @@ export function createScreen(
       // leaving buffers at the old size - resulting in a black screen.
 
       console.log(`[createScreen] screen.resize is: ${typeof screen.resize}`);
+      // The size the DOOR may use, not the one the terminal reports: a telnet
+      // caller's NAWS carries the real window even while the call is on
+      // 80x25 (R1), and only the board knows which mode the call is in.
+      const allowed = typeof bbs.getTerminalSize === 'function' ? bbs.getTerminalSize() : null;
+      if (allowed) size = { cols: allowed.width, rows: allowed.height };
       if (typeof screen.resize === 'function') {
         screen.resize(size.cols, size.rows);
         console.log(`[createScreen] After resize: ${screen.width}x${screen.height}`);
@@ -1059,6 +1066,22 @@ export function createScreen(
     });
   } else {
     console.log('[createScreen] No bbs.on() available - resize events will not be handled');
+  }
+
+  // Alt+Enter, board-wide (R1): the same key toggles 80x25 / responsive in
+  // every door, including the ones with no switch of their own (MAG). The
+  // toggle is the call's choice, remembered for the next door; the new size
+  // reaches this screen through the screen:resize listener above, which is
+  // also how a real resize arrives. A door with its own switch
+  // (createTerminalModeSwitch) marks the screen and keeps its own handler.
+  if (bbs && typeof bbs.setTerminalModeChoice === 'function' && typeof screen.key === 'function') {
+    screen.key([TERMINAL_MODE_HOTKEY], () => {
+      if (screenOwnsTerminalModeHotkey(screen)) return false;
+      const wide = bbs.getTerminalModeChoice?.() === true;
+      bbs.setTerminalModeChoice(!wide);
+      if (wide) bbs.disableWideMode?.(); else bbs.enableWideMode?.();
+      return true;
+    });
   }
 
   // Forward cursor-style events to frontend for mouse hover feedback

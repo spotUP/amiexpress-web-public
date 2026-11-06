@@ -120,8 +120,8 @@ async function startReader(session, options = {}) {
         storage.save(key, [...set].slice(-STORED_CAP)).catch(() => { });
     };
     const screen = (0, blessed_helpers_1.createScreen)(bbs, { title: magazine_1.MAGAZINE_TITLE });
-    const width = screen.width || 80;
-    const height = screen.height || 24;
+    let width = screen.width || 80;
+    let height = screen.height || 24;
     let layout = (0, layout_1.buildLayout)(width, height, { ticker: showTicker });
     // Which alphabet this caller reads: the session knows (createScreen asks it too).
     const petscii = typeof bbs?.isPetsciiMode === 'function' && bbs.isPetsciiMode() === true;
@@ -212,7 +212,7 @@ async function startReader(session, options = {}) {
         content: '',
     });
     const render = () => screen.render();
-    const chrome = (0, theme_1.attachDoorChrome)(theme, {
+    const attachChrome = () => (0, theme_1.attachDoorChrome)(theme, {
         width,
         title: layout.collapseChrome ? magazine_1.MAGAZINE_TITLE : `${magazine_1.MAGAZINE_TITLE} // SIGNAL TERMINAL`,
         masthead: mastheadRow,
@@ -223,6 +223,7 @@ async function startReader(session, options = {}) {
         styles: s,
         render,
     });
+    let chrome = attachChrome();
     // ---- painting --------------------------------------------------------
     const paintSeg = (seg) => {
         if (seg.raw !== undefined)
@@ -263,7 +264,7 @@ async function startReader(session, options = {}) {
     let glitchTimer = null;
     let repairTimer = null;
     let modalOpen = false;
-    const counters = { glitches: 0, tickerSteps: 0, intervals: 0, banners: 0, searchTicks: 0, lands: 0 };
+    const counters = { glitches: 0, tickerSteps: 0, intervals: 0, banners: 0, searchTicks: 0, lands: 0, relayouts: 0 };
     let stopped = false;
     let finish = () => { };
     const byId = (id) => snapshot.index.find((e) => e.storyId === id);
@@ -1068,6 +1069,44 @@ async function startReader(session, options = {}) {
         };
     });
     snapshot = (0, library_1.loadSnapshot)((0, library_1.magazineRoot)(__dirname));
+    /**
+     * The screen changed size (Alt+Enter, a browser resize, NAWS): the layout is
+     * built from width and height once, so rebuild it and re-enter the view the
+     * caller is on. Rows and the panel move, the masthead/footer chrome is
+     * re-attached for the new width, the ticker restarts at the new scroll
+     * width, and the banner is re-fitted (bannerKey cleared so applyBanner runs).
+     */
+    const relayout = () => {
+        if (stopped)
+            return;
+        const w = screen.width || 80;
+        const h = screen.height || 24;
+        if (w === width && h === height)
+            return;
+        width = w;
+        height = h;
+        layout = (0, layout_1.buildLayout)(width, height, { ticker: showTicker });
+        counters.relayouts += 1;
+        mastheadRow.top = layout.headerRow;
+        if (tickerBox && layout.tickerRow !== null)
+            tickerBox.top = layout.tickerRow;
+        progressBox.top = layout.progressRow;
+        panel.top = layout.panelTop;
+        panel.height = layout.panelHeight;
+        try {
+            chrome.stop();
+        }
+        catch { /* re-attached below */ }
+        chrome = attachChrome();
+        if (tickerTimer) {
+            clearInterval(tickerTimer);
+            tickerTimer = null;
+        }
+        startTicker();
+        bannerKey = '';
+        go(view, true);
+    };
+    screen.on('resize', relayout);
     startTicker();
     go({ kind: 'front' });
     return {

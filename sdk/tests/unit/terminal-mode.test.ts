@@ -9,10 +9,12 @@
 
 import { createTerminalModeSwitch, TERMINAL_MODE_MENU_LABEL } from '../../utils/terminal-mode';
 
-function harness() {
+function harness(start?: 'wide' | 'fixed', choice = false) {
   const calls: string[] = [];
   const listeners: Record<string, Array<() => void>> = {};
   const bbs = {
+    getTerminalModeChoice: () => choice,
+    setTerminalModeChoice: (w: boolean) => { choice = w; },
     enableWideMode: () => calls.push('wide'),
     disableWideMode: () => calls.push('fixed'),
   };
@@ -37,61 +39,77 @@ function harness() {
   };
   let relayouts = 0;
   const sw = createTerminalModeSwitch({
-    bbs, screen, onRelayout: () => { relayouts++; },
+    bbs, screen, start, onRelayout: () => { relayouts++; },
   });
-  return { sw, calls, screen, relayouts: () => relayouts };
+  return { sw, calls, screen, choice: () => choice, relayouts: () => relayouts };
 }
 
 describe('terminal mode switch', () => {
+  it('starts in the call choice (80x25 by default, wide after Alt+Enter in an earlier door)', () => {
+    expect(harness().sw.mode()).toBe('fixed');
+    expect(harness(undefined, true).sw.mode()).toBe('wide');
+    // 'fixed' spelled out by a door is "no preference": it follows the choice.
+    expect(harness('fixed', true).sw.mode()).toBe('wide');
+  });
+
+  it('remembers a toggle as the call choice, but not a door start', () => {
+    const h = harness('wide');
+    expect(h.choice()).toBe(false);
+    h.sw.toggle();
+    expect(h.choice()).toBe(false);
+    h.sw.toggle();
+    expect(h.choice()).toBe(true);
+  });
+
   it('asks the terminal to widen as soon as it exists', () => {
-    const h = harness();
+    const h = harness('wide');
     expect(h.calls).toEqual(['wide']);
     expect(h.sw.mode()).toBe('wide');
   });
 
   it('asks for 80 columns back when switched to fixed', () => {
-    const h = harness();
+    const h = harness('wide');
     h.sw.toggle();
     expect(h.sw.mode()).toBe('fixed');
     expect(h.calls).toEqual(['wide', 'fixed']);
   });
 
   it('re-lays out when the mode changes', () => {
-    const h = harness();
+    const h = harness('wide');
     h.sw.toggle();
     expect(h.relayouts()).toBe(1);
   });
 
   it('re-lays out when the terminal itself resizes', () => {
-    const h = harness();
+    const h = harness('wide');
     h.screen.emit('resize');
     h.screen.emit('resize');
     expect(h.relayouts()).toBe(2);
   });
 
   it('does nothing when set to the mode it is already in', () => {
-    const h = harness();
+    const h = harness('wide');
     h.sw.set('wide');
     expect(h.calls).toEqual(['wide']);
     expect(h.relayouts()).toBe(0);
   });
 
   it('restores fixed and stops listening when disposed', () => {
-    const h = harness();
+    const h = harness('wide');
     h.sw.dispose();
     expect(h.calls).toEqual(['wide', 'fixed']);
     expect(h.screen.listenerCount('resize')).toBe(0);
   });
 
   it('ignores a resize that arrives after disposal', () => {
-    const h = harness();
+    const h = harness('wide');
     h.sw.dispose();
     h.screen.emit('resize');
     expect(h.relayouts()).toBe(0);
   });
 
   it('toggles on Alt+Enter, the same key in every door', () => {
-    const h = harness();
+    const h = harness('wide');
     expect(h.screen.keyCount('M-enter')).toBe(1);
     h.screen.press('M-enter');
     expect(h.sw.mode()).toBe('fixed');
@@ -100,13 +118,13 @@ describe('terminal mode switch', () => {
   });
 
   it('gives the key back when disposed', () => {
-    const h = harness();
+    const h = harness('wide');
     h.sw.dispose();
     expect(h.screen.keyCount('M-enter')).toBe(0);
   });
 
   it('labels itself the same way in every door', () => {
-    const h = harness();
+    const h = harness('wide');
     expect(h.sw.menuItem().label).toBe(TERMINAL_MODE_MENU_LABEL);
     h.sw.menuItem().action();
     expect(h.sw.mode()).toBe('fixed');
