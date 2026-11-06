@@ -427,9 +427,9 @@ class GameEngine {
             : [];
     }
     /**
-     * Fill the bottom `rows` rows with garbage before the run starts
-     * (HeborisCE's mission_erase, mission.c:226-236). Each row gets its own
-     * hole, so the stack is dug rather than merely tall.
+     * Raise a GARBAGE mission's starting stack (mission.c:1407-1418) through
+     * the DS-RANDOM rise, whose hole moves 8 rows in 10 (core/garbage.ts) -
+     * so the stack is dug rather than merely tall.
      */
     seedGarbageRows(rows) {
         (0, garbage_1.seedGarbageRows)(this.state.board, rows);

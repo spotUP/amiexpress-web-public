@@ -255,6 +255,36 @@ export async function seededGarbageFillsTheBottomRowsWithHoles(): Promise<void> 
   assert.strictEqual(above.filter((c: any) => c.filled).length, 0, 'and nothing above them');
 }
 
+export async function garbageRisesDsRandomAndStopsAtEighteen(): Promise<void> {
+  // GARBAGE (21) raises its stack through the DS-RANDOM rise
+  // (gamestart.c:8464-8502): the hole is carried from row to row and moves
+  // only when a 0..9 roll is above 1. The rolls below pin each branch - a
+  // stay, a move whose first pick collides with the old column, a stay.
+  const { seedGarbageRows } = await import('../core/garbage');
+  const { createBoard } = await import('../core/board');
+  const board: any = createBoard(10, 24);
+  board.grid[23][0] = { filled: true, color: 'I', locked: true };
+  const rolls = [0.35, 0.15, 0.95, 0.35, 0.75, 0.05];
+  seedGarbageRows(board, 3, () => rolls.shift()!);
+
+  const holeOf = (y: number) => board.grid[y].findIndex((c: any) => !c.filled);
+  assert.deepStrictEqual([holeOf(21), holeOf(22), holeOf(23)], [3, 3, 7],
+    'oldest row on top: hole 3, kept on a roll of 1, then moved past 3 to 7');
+  assert.strictEqual(rolls.length, 0, 'every roll spent: the collision was re-picked');
+  assert.strictEqual(board.grid[20][0].color, 'I', 'the field already there is raised, not painted over');
+
+  // The reference clamps the count to 18 (mission.c:1415-1416); through the
+  // engine, the path app.ts takes when a mission starts.
+  const engine: any = new GameEngine('mission', settings, sounds);
+  engine.start();
+  engine.seedGarbageRows(25);
+  const grid = engine.getState().board.grid;
+  const height = engine.getState().board.height;
+  const garbage = grid.filter((row: any[]) => row.some((c: any) => c.filled)).length;
+  assert.strictEqual(garbage, 18, 'a pack asking for 25 rows gets 18');
+  assert.strictEqual(grid[height - 19].some((c: any) => c.filled), false);
+}
+
 export async function aClearIsRecordedAndTheBestTimeKept(): Promise<void> {
   const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'gm-missions-')), 'progress.json');
   const progress = new MissionProgress(file);

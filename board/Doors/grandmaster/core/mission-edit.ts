@@ -60,7 +60,7 @@ export const MISSION_FIELDS: readonly FieldSpec[] = [
     help: 'Seconds. 0 is no clock - except SURVIVE, which needs one.' },
   { field: 'startLevel', kind: 'number', label: 'Start level', min: 0, max: 999,
     help: 'Starting speed. 500 and up is near-20G.' },
-  { field: 'garbageRows', kind: 'number', label: 'Garbage rows', min: 0, max: 19,
+  { field: 'garbageRows', kind: 'number', label: 'Garbage rows', min: 0, max: 18,
     help: 'Rows of rubbish the field starts with.' },
   { field: 'big', kind: 'choice', label: 'BIG pieces',
     help: 'Every piece is double size.' },
