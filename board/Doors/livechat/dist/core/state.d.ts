@@ -6,7 +6,11 @@ import type { TypingBuffer } from '../ui/typing-preview';
  * otherwise the default channel plus random and help. The sidebar and
  * /rooms both read this, so they never disagree.
  */
-export declare function channelsToShow(channels: Channel[], defaultChannel: string): Channel[];
+export declare function channelsToShow(channels: Channel[], defaultChannel: string, pinned?: string[]): Channel[];
+/** Pin or unpin a channel in the user's prefs. Returns true when it is now pinned. */
+export declare function togglePinnedChannel(state: AppState, name: string): boolean;
+/** Give a channel an unread count again so the sidebar shows it unread. */
+export declare function markChannelUnread(state: AppState, name: string): boolean;
 /**
  * DM thread view as exposed to the door sidebar.
  * Mirrors the backend `dm-thread-list.handler.ts` payload.

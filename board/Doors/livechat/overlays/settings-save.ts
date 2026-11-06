@@ -14,6 +14,7 @@ export function saveSettings(
     showAnnouncements: any;
     muteSounds: any;
     timestamps: any;
+    compact?: any;
   },
   updateStatusBar: () => void
 ): void {
@@ -25,6 +26,7 @@ export function saveSettings(
   state.prefs.notificationSound = !checkboxes.muteSounds.isChecked();
   state.prefs.mentionSound = !checkboxes.muteSounds.isChecked();
   state.prefs.showTimestamps = checkboxes.timestamps.isChecked();
+  if (checkboxes.compact) state.prefs.compactMode = checkboxes.compact.isChecked();
   state.prefs.muteAllEvents = !(
     state.prefs.showLogins ||
     state.prefs.showFileActivity ||
@@ -33,4 +35,24 @@ export function saveSettings(
     state.prefs.showSystemAnnouncements
   );
   updateStatusBar();
+}
+
+/**
+ * The same checkboxes, read back from the saved prefs with one overridden:
+ * how a slash command (/sounds, /compact, /timestamps) goes through
+ * saveSettings instead of writing prefs a second way.
+ */
+export function prefsAsCheckboxes(state: AppState, override: Partial<Record<'muteSounds' | 'timestamps' | 'compact', boolean>> = {}) {
+  const p = state.prefs;
+  const box = (v: boolean) => ({ isChecked: () => v });
+  return {
+    showLogins: box(p.showLogins),
+    showFileActivity: box(p.showFileActivity),
+    showDoorActivity: box(p.showDoorActivity),
+    showMessages: box(p.showMessages),
+    showAnnouncements: box(p.showSystemAnnouncements),
+    muteSounds: box(override.muteSounds ?? !p.notificationSound),
+    timestamps: box(override.timestamps ?? p.showTimestamps),
+    compact: box(override.compact ?? p.compactMode),
+  };
 }

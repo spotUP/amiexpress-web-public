@@ -266,6 +266,16 @@ console.error('[DoorSocket] room:list error:', err);
       else edits.handleDelete(socket, session, data);
       return wrappedSocket;
     }
+    // Room topic, operators and channel deletion (D6): the handlers check
+    // operator / sysop; /op is the sysop's alone.
+    if (event === 'room:topic' || event === 'room:op' || event === 'admin:delete-channel') {
+      const data = args[0] || {};
+      const ops = require('../server/room-operator-socket-handlers');
+      if (event === 'room:topic') ops.handleSetTopic(socket, session, data);
+      else if (event === 'room:op') ops.handleOp(socket, session, data);
+      else ops.handleDeleteChannel(socket, session, data);
+      return wrappedSocket;
+    }
     // Custom emoji: add/remove are the sysop's (checked in the handler).
     if (event === 'chat:emoji:add' || event === 'chat:emoji:remove' || event === 'chat:emoji:list') {
       const data = args[0] || {};

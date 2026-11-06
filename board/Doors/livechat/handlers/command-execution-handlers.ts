@@ -70,8 +70,9 @@ export function handleCommandActions(
     return { handled: true };
   }
 
-  // Custom emoji: the backend checks the sysop level, stores, and broadcasts the list
-  if (r.action === 'customemoji' && r.data?.event) {
+  // Custom emoji, topic, operators, channel deletion: the backend checks the level,
+  // stores and broadcasts, or answers chat:error; nothing is claimed locally.
+  if ((r.action === 'customemoji' || r.action === 'roomadmin') && r.data?.event) {
     socket.emit(r.data.event, r.data.payload);
     return { handled: true };
   }

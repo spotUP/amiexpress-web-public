@@ -15,6 +15,7 @@ import { namesAtLevel, muteLevel, muteMessage, toggleMute } from '../core/mute-l
 import { findOnlineUser, formatWhois } from './whois-render';
 import { channelsToShow } from '../core/state';
 import { settings } from '../settings';
+import { saveSettings, prefsAsCheckboxes } from '../overlays/settings-save';
 
 export function createSubmitHandler(
   socket: Socket,
@@ -198,6 +199,34 @@ export function createSubmitHandler(
           addSystemMessage('You are now online');
         }
 
+        // /status, /sounds, /compact, /timestamps: presence goes through the
+        // presence service and chat:presence (as /away does); the three
+        // preferences go through saveSettings, the settings overlay's own path.
+        if (r.action === 'pref' && r.data?.kind === 'status') {
+          const status = r.data.status as string;
+          presenceService.setStatus(userId, status, r.data.message || undefined);
+          socket.emit('chat:presence', { status, custom: r.data.message || undefined });
+          const u = onlineUsers.get(String(userId));
+          if (u) u.status = status;
+          updateUserTable();
+          updateStatusBar();
+          addSystemMessage(`Status: ${status}${r.data.message ? ' - ' + r.data.message : ''}`);
+        } else if (r.action === 'pref') {
+          const p = state.prefs;
+          let note = '';
+          if (r.data.kind === 'sounds') {
+            saveSettings(state, prefsAsCheckboxes(state, { muteSounds: !r.data.value }), updateStatusBar);
+            note = r.data.value ? 'Sounds enabled' : 'Sounds disabled';
+          } else if (r.data.kind === 'compact') {
+            saveSettings(state, prefsAsCheckboxes(state, { compact: !p.compactMode }), updateStatusBar);
+            note = p.compactMode ? 'Compact mode on' : 'Compact mode off';
+          } else if (r.data.kind === 'timestamps') {
+            saveSettings(state, prefsAsCheckboxes(state, { timestamps: !p.showTimestamps }), updateStatusBar);
+            note = p.showTimestamps ? 'Timestamps on' : 'Timestamps off';
+          }
+          if (note) addSystemMessage(note);
+        }
+
         if (cmdName === 'motd') {
           if (r.data?.op === 'set') {
             socket.emit('room:motd', { motd: r.data.motd });
@@ -253,7 +282,7 @@ export function createSubmitHandler(
             showFileSharing();
             break;
           case 'rooms': {
-            const rooms = channelsToShow(state.channels, settings().defaultChannel);
+            const rooms = channelsToShow(state.channels, settings().defaultChannel, state.prefs.pinnedChannels);
             addSystemMessage(`Rooms: ${rooms.map(c => `#${c.name}${c.memberCount ? ` (${c.memberCount})` : ''}`).join(', ')}`);
             break;
           }

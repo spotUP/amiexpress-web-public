@@ -28,16 +28,19 @@ exports.unbanCmd = {
         return { handled: true, action: 'unban', data: { target } };
     }
 };
-/** /op - Give operator status */
+/** /op - Give operator status (sysop only; the backend checks too) */
 exports.opCmd = {
     name: 'op',
-    description: 'Give operator status',
-    usage: '/op @user',
-    minSecLevel: 100,
+    description: 'Give or take room operator status (sysop)',
+    usage: '/op @user  |  /op -@user  |  /deop @user',
+    minSecLevel: 255,
+    aliases: ['deop'],
     handler: (ctx, args) => {
-        const target = args[0]?.replace('@', '');
+        const raw = args[0] ?? '';
+        const revoke = ctx.invokedAs === 'deop' || raw.startsWith('-');
+        const target = raw.replace(/^-/, '').replace('@', '');
         if (!target)
-            return { handled: true, error: 'Usage: /op @user' };
-        return { handled: true, message: `${target} is now an operator`, data: { target, role: 'moderator' } };
+            return { handled: true, error: 'Usage: /op @user  |  /op -@user  |  /deop @user' };
+        return { handled: true, action: 'roomadmin', data: { event: 'room:op', payload: { username: target, op: !revoke } } };
     }
 };

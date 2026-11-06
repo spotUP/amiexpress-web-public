@@ -653,7 +653,7 @@ async function createApp(session) {
     }
     // Initialize channel list data
     function updateChannelList() {
-        const channelsToShow = (0, state_1.channelsToShow)(state.channels, doorSettings.defaultChannel);
+        const channelsToShow = (0, state_1.channelsToShow)(state.channels, doorSettings.defaultChannel, state.prefs.pinnedChannels);
         // Build sidebar rows via the pure builder. Keeps server.ts under
         // the 2000-line limit and lets the row layout be unit-tested.
         const built = (0, sidebar_items_builder_1.buildSidebarItems)({
@@ -1410,6 +1410,10 @@ async function createApp(session) {
         showPromptDialog,
         messagesOf: (username) => (0, message_history_1.chatMessagesFrom)(state.messages, username),
         currentRoom: () => state.currentChannel,
+        isChannelPinned: (name) => (state.prefs.pinnedChannels ?? []).includes(name),
+        onTogglePinChannel: (name) => { const now = (0, state_1.togglePinnedChannel)(state, name); updateChannelList(); return now; },
+        onMarkChannelUnread: (name) => { const ok = (0, state_1.markChannelUnread)(state, name); if (ok)
+            updateChannelList(); return ok; },
         onFocusTile: (uid) => {
             const vg = voiceChannel.videoGrid;
             if (!vg)
@@ -2150,6 +2154,21 @@ async function createApp(session) {
     socket.on('chat:deleted', (d) => {
         if (d?.messageId != null)
             removeMessage(String(d.messageId));
+    });
+    // Topic, operator and channel changes the backend stored and broadcast.
+    socket.on('room:topic', (d) => {
+        const ch = state.channels.find((c) => c.id === d?.roomId || c.id === state.currentChannel);
+        if (ch && d?.topic != null)
+            ch.topic = d.topic;
+        addSystemMessage(`${d?.by ?? 'Someone'} set the topic: ${d?.topic ?? ''}`);
+    });
+    socket.on('room:op-changed', (d) => {
+        addSystemMessage(`${d?.username ?? 'Someone'} is ${d?.op === false ? 'no longer' : 'now'} a room operator`);
+    });
+    socket.on('room:deleted', (d) => {
+        state.channels = state.channels.filter((c) => c.id !== d?.roomId && c.name !== d?.roomName);
+        updateChannelList();
+        addSystemMessage(`Channel #${d?.roomName ?? ''} was deleted`);
     });
     // ========== CHAT SOCKET HANDLERS ==========
     (0, chat_socket_handlers_1.setupChatHandlers)(socket, state, userId, username, onlineUsers, presenceService, chatLog, updateUserTable, addSystemMessage, addChatMessage, addActivity, updateEventsFeed, audio, mentions_1.mentionsUser, formatter_1.getUserColor, formatter_1.formatMessage, typing_preview_1.processKeystroke, updateTypingPreview, screen, socket_typing_1.shouldShowEvent, services_1.getEventMessage, eventBus, state_1.addMessage, messageHandler, format_1.formatTime);

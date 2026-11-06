@@ -32,4 +32,6 @@ export interface EventPrefs {
   showTimestamps: boolean;
   notificationSound: boolean;
   mentionSound: boolean;
+  /** Channel names the user pinned; they sort first in the channel list. */
+  pinnedChannels?: string[];
 }

@@ -262,7 +262,10 @@ const PINNED_EVENT_NAMES: ReadonlyArray<string> = [
   'room:list',
   'room:message:ack',
   'room:mode',
+  'room:deleted',
   'room:motd',
+  'room:op-changed',
+  'room:topic',
   'room:user-joined',
   'room:user-left',
   'screen-theme',
@@ -641,7 +644,10 @@ describe('TP-3 - the adapter: one ruling for every event name', () => {
     // grep A now reads), `chat:reactions:list` and `chat:ignore-list`, all
     // door-only replies (server/reaction-socket-handlers.ts,
     // handlers/chat/ignore.handler.ts).
-    expect(ruled.length).toBe(256);
+    // 259 as of 2026-11-06: LiveChat room topic, operators and channel
+    // deletion - `room:topic`, `room:op-changed`, `room:deleted`
+    // (server/room-operator-socket-handlers.ts), all door-only broadcasts.
+    expect(ruled.length).toBe(259);
 
     // (c) every ruling's note is non-empty - the point of the table is the
     // written reason, not the classification.
@@ -710,7 +716,7 @@ describe('TP-3 - the adapter: one ruling for every event name', () => {
       // 118 (2026-09-28): `retry-login` gone with RL's web branch.
       // 114 (2026-10-04): the five `transfer:*` names gone with the dead
       // socket channel that read and wrote any path a visitor named.
-      'web-only': 122, // 122 (2026-11-06): `chat:edited`, `chat:deleted`, `chat:emoji-list`, LiveChat door replies. 119 (2026-11-06): `chat:reaction`, `chat:reactions:list`, `chat:ignore-list`, LiveChat door replies. 116 (2026-11-06): `room:message:ack`, the sender's DB id for his line. Was 115 (2026-10-14): `notify:push-subscribe`, NOTIFY's Enable push.
+      'web-only': 125, // 125 (2026-11-06): `room:topic`, `room:op-changed`, `room:deleted`, LiveChat door broadcasts. 122 (2026-11-06): `chat:edited`, `chat:deleted`, `chat:emoji-list`, LiveChat door replies. 119 (2026-11-06): `chat:reaction`, `chat:reactions:list`, `chat:ignore-list`, LiveChat door replies. 116 (2026-11-06): `room:message:ack`, the sender's DB id for his line. Was 115 (2026-10-14): `notify:push-subscribe`, NOTIFY's Enable push.
       // 105 (2026-09-24): `terminal-type-settled`, the telnet connection's
       // own end-of-TTYPE signal to its session start.
       // 106 (2026-10-15): `disconnecting`, the session link's re-raise of socket.io's own event.

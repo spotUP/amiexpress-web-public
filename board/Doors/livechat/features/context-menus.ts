@@ -1,4 +1,4 @@
-import { toggleMute, muteLevel, muteMessage, muteMenuLabels, muteLevelForLabel, type MuteList } from '../core/mute-list';
+import { toggleMute, muteLevel, isServerEnforced, muteMessage, muteMenuLabels, muteLevelForLabel, type MuteList } from '../core/mute-list';
 import { PANEL_BORDER } from '../ui/theme';
 import blessed from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import type { Screen } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
@@ -24,6 +24,11 @@ export interface ContextMenuExtras {
   messagesOf?: (username: string) => Message[];
   /** The room a pin is written into. */
   currentRoom?: () => string;
+  /** Pinned channels sort first in the channel list (kept in the user's prefs). */
+  isChannelPinned?: (name: string) => boolean;
+  onTogglePinChannel?: (name: string) => boolean;
+  /** Gives the channel an unread count again; false when the channel is unknown. */
+  onMarkChannelUnread?: (name: string) => boolean;
 }
 
 export function createContextMenus(s: Screen, ib: any, sup: (u: string) => void, sdp: (u: string) => void, asm: (m: string) => void, sock: any, extras: ContextMenuExtras = {}) {
@@ -54,7 +59,7 @@ export function createContextMenus(s: Screen, ib: any, sup: (u: string) => void,
     } else if (t === 'chat') {
       its.push('Reply', 'Quote', 'React', '---', 'Copy Text', 'Pin Message', '---', 'Mark Unread', 'Edit', 'Delete');
     } else if (t === 'channel' && tgt) {
-      its.push('Join', 'Leave', 'Info', 'Expand/Collapse', '---', 'Pin Channel');
+      its.push('Join', 'Leave', 'Info', 'Expand/Collapse', '---', extras.isChannelPinned?.(tgt) ? 'Unpin Channel' : 'Pin Channel');
       if (extras.isSysop) {
         its.push('---', 'Clear History', `{${T.alert}-fg}Archive{/${T.alert}-fg}`, `{${T.alert}-fg}Delete Channel{/${T.alert}-fg}`);
       }
@@ -159,11 +164,11 @@ export function createContextMenus(s: Screen, ib: any, sup: (u: string) => void,
           if (!level) break;
           const before = muteLevel(extras.muteList, cmt);
           const now = toggleMute(extras.muteList, cmt, level);
-          // Ignore is enforced by the server (it stops delivering the
-          // ignored user's room lines and DMs), so moving into or out of
-          // that level must reach it, same as /ignore and /unignore.
-          if (now === 'ignore') sock.emit('chat:ignore', { user: cmt });
-          else if (before === 'ignore') sock.emit('chat:unignore', { user: cmt });
+          // Ignore and block are enforced by the server (it stops delivering
+          // that user's room lines and DMs), so moving into or out of those
+          // levels must reach it, same as /ignore and /unignore.
+          if (isServerEnforced(now) && !isServerEnforced(before)) sock.emit('chat:ignore', { user: cmt });
+          else if (isServerEnforced(before) && !isServerEnforced(now)) sock.emit('chat:unignore', { user: cmt });
           asm(muteMessage(cmt, now));
           break;
         }
@@ -217,8 +222,10 @@ export function createContextMenus(s: Screen, ib: any, sup: (u: string) => void,
           }
           break;
         case 'Mark Unread':
-          asm('Marked as unread');
-          // TODO: Mark channel as having unread messages
+          {
+            const room = extras.currentRoom ? extras.currentRoom() : '';
+            asm(room && extras.onMarkChannelUnread?.(room) ? `Marked ${room} as unread` : 'No channel to mark unread.');
+          }
           break;
         case 'Edit':
           // With a message under the pointer, edit that one; else your last.
@@ -249,9 +256,11 @@ export function createContextMenus(s: Screen, ib: any, sup: (u: string) => void,
           extras.onToggleChannelExpand?.(cmt);
           break;
         case 'Pin Channel':
-          asm(`{${T.accent}-fg}Pinned ${cmt}{/${T.accent}-fg}`);
-          // TODO: persist a local pinned-channels list in prefs
+        case 'Unpin Channel': {
+          const pinned = extras.onTogglePinChannel?.(cmt);
+          asm(`{${T.accent}-fg}${pinned ? 'Pinned' : 'Unpinned'} ${cmt}{/${T.accent}-fg}`);
           break;
+        }
         case 'Clear History':
           if (!extras.isSysop) { asm(`{${T.alert}-fg}Sysop only.{/${T.alert}-fg}`); break; }
           sock.emit('admin:clear-channel-history', { channel: cmt });

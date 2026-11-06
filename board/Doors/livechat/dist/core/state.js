@@ -1,6 +1,8 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.channelsToShow = channelsToShow;
+exports.togglePinnedChannel = togglePinnedChannel;
+exports.markChannelUnread = markChannelUnread;
 exports.createInitialState = createInitialState;
 exports.setChannel = setChannel;
 exports.setDmContext = setDmContext;
@@ -15,9 +17,30 @@ const mute_list_1 = require("./mute-list");
  * otherwise the default channel plus random and help. The sidebar and
  * /rooms both read this, so they never disagree.
  */
-function channelsToShow(channels, defaultChannel) {
-    if (channels.length > 0)
-        return channels;
+function channelsToShow(channels, defaultChannel, pinned = []) {
+    const list = channels.length > 0 ? channels : fallbackChannels(defaultChannel);
+    if (pinned.length === 0)
+        return list;
+    const isPinned = (c) => pinned.includes(c.name);
+    // Stable: pinned first, each group keeps the server's order.
+    return [...list.filter(isPinned), ...list.filter((c) => !isPinned(c))];
+}
+/** Pin or unpin a channel in the user's prefs. Returns true when it is now pinned. */
+function togglePinnedChannel(state, name) {
+    const cur = state.prefs.pinnedChannels ?? [];
+    const now = !cur.includes(name);
+    state.prefs.pinnedChannels = now ? [...cur, name] : cur.filter((n) => n !== name);
+    return now;
+}
+/** Give a channel an unread count again so the sidebar shows it unread. */
+function markChannelUnread(state, name) {
+    const ch = state.channels.find((c) => c.name === name || c.id === name);
+    if (!ch)
+        return false;
+    ch.unreadCount = Math.max(1, ch.unreadCount ?? 0);
+    return true;
+}
+function fallbackChannels(defaultChannel) {
     return [defaultChannel, 'random', 'help'].map((name) => ({
         id: name,
         name,

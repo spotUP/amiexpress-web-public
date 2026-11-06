@@ -50,11 +50,16 @@ export const backCmd: SlashCommand = {
 export const statusCmd: SlashCommand = {
   name: 'status',
   description: 'Set custom status',
-  usage: '/status [online|away|dnd] [message]',
+  usage: '/status [online|away|busy|dnd] [message]',
   handler: (ctx, args) => {
-    const status = args[0] || 'online';
+    const word = (args[0] || 'online').toLowerCase();
+    if (!['online', 'away', 'busy', 'dnd'].includes(word)) {
+      return { handled: true, error: 'Usage: /status [online|away|busy|dnd] [message]' };
+    }
+    // busy is do-not-disturb under another name; the door's presence model has no separate busy.
+    const status = word === 'busy' ? 'dnd' : word;
     const message = args.slice(1).join(' ');
-    return { handled: true, message: `Status: ${status}`, data: { status, message } };
+    return { handled: true, action: 'pref', data: { kind: 'status', status, message } };
   }
 };
 

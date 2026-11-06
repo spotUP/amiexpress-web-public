@@ -14,11 +14,11 @@ import { T } from '../door-theme';
  *   ignore  their DMs are refused too
  *   block   both, and the server is told (see the note below)
  *
- * IGNORE IS ENFORCED AT THE SERVER: /ignore, /unignore and the menu send
- * chat:ignore / chat:unignore, and the server stops delivering that user's
+ * IGNORE AND BLOCK ARE ENFORCED AT THE SERVER (isServerEnforced): /ignore,
+ * /unignore and the menu send chat:ignore / chat:unignore when a user moves
+ * into or out of those levels, and the server stops delivering that user's
  * room lines and DMs. The list here is loaded from chat:ignore-list on open.
- * Mute and block stay local: they hide lines here but the server still
- * delivers them.
+ * Mute alone stays local: it hides lines here but the server still delivers.
  *
  * Pure and separate from the socket handlers, so the filtering rules can be
  * tested without a chat running.
@@ -72,6 +72,15 @@ export function namesAtLevel(list: MuteList, level: MuteLevel): string[] {
 /** Should a room message from this user be hidden? Every level hides those. */
 export function hidesRoomMessages(list: MuteList, username: string): boolean {
   return muteLevel(list, username) !== null;
+}
+
+/**
+ * Does the server stop this level's lines and DMs? Ignore and block do, so
+ * crossing this line is what sends chat:ignore / chat:unignore. Block was
+ * left out once and was weaker at the server than ignore.
+ */
+export function isServerEnforced(level: MuteLevel | null): boolean {
+  return level === 'ignore' || level === 'block';
 }
 
 /** Should a direct message from this user be refused? Mute alone does not. */

@@ -296,6 +296,9 @@ console.error('[SOCKET HANDLER ERROR] Failed to load reaction-socket-handlers:',
   import('./message-edit-socket-handlers').then(({ setupMessageEditHandlers }) => setupMessageEditHandlers(socket, session)).catch((err) => {
 console.error('[SOCKET HANDLER ERROR] Failed to load message-edit-socket-handlers:', err);
   });
+  import('./room-operator-socket-handlers').then(({ setupRoomOperatorHandlers }) => setupRoomOperatorHandlers(socket, session)).catch((err) => {
+console.error('[SOCKET HANDLER ERROR] Failed to load room-operator-socket-handlers:', err);
+  });
   import('./search-socket-handlers').then(({ setupSearchHandlers }) => setupSearchHandlers(socket, session)).catch((err) => {
 console.error('[SOCKET HANDLER ERROR] Failed to load search-socket-handlers:', err);
   });

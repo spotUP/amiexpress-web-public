@@ -5,6 +5,7 @@ exports.toggleMute = toggleMute;
 exports.muteLevel = muteLevel;
 exports.namesAtLevel = namesAtLevel;
 exports.hidesRoomMessages = hidesRoomMessages;
+exports.isServerEnforced = isServerEnforced;
 exports.hidesDirectMessages = hidesDirectMessages;
 exports.applyServerIgnores = applyServerIgnores;
 exports.serializeMuteList = serializeMuteList;
@@ -51,6 +52,14 @@ function namesAtLevel(list, level) {
 /** Should a room message from this user be hidden? Every level hides those. */
 function hidesRoomMessages(list, username) {
     return muteLevel(list, username) !== null;
+}
+/**
+ * Does the server stop this level's lines and DMs? Ignore and block do, so
+ * crossing this line is what sends chat:ignore / chat:unignore. Block was
+ * left out once and was weaker at the server than ignore.
+ */
+function isServerEnforced(level) {
+    return level === 'ignore' || level === 'block';
 }
 /** Should a direct message from this user be refused? Mute alone does not. */
 function hidesDirectMessages(list, username) {

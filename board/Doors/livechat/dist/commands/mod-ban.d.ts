@@ -3,5 +3,5 @@ import type { SlashCommand } from './types';
 export declare const banCmd: SlashCommand;
 /** /unban - Unban user */
 export declare const unbanCmd: SlashCommand;
-/** /op - Give operator status */
+/** /op - Give operator status (sysop only; the backend checks too) */
 export declare const opCmd: SlashCommand;

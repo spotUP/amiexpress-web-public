@@ -31,6 +31,7 @@ export const topicCmd: SlashCommand = {
   handler: (ctx, args) => {
     const topic = args.join(' ');
     if (!topic) return { handled: true, error: 'Usage: /topic <new topic>' };
-    return { handled: true, message: `Topic: ${topic}`, data: { topic } };
+    // The backend checks operator / sysop and answers with room:topic (or chat:error).
+    return { handled: true, action: 'roomadmin', data: { event: 'room:topic', payload: { topic } } };
   }
 };

@@ -47,7 +47,7 @@ import { DoorLoader } from '@amiexpress/bbs-door-sdk/utils/DoorLoader';
 import { attachDoorChrome } from '@amiexpress/bbs-door-sdk/engines/ui/theme';
 
 // Core state and services
-import { addMessage, setChannel, setDmContext, clearDmContext, AppState, channelsToShow as visibleChannels } from './core/state';
+import { addMessage, setChannel, setDmContext, clearDmContext, AppState, channelsToShow as visibleChannels, togglePinnedChannel, markChannelUnread } from './core/state';
 import { executeCommand } from './core/command-exec';
 import { getUserColor, formatMessage, formatSystemMessage } from './core/formatter';
 import { seedReactionCounts, formatReactionCounts } from './features/reaction-store';
@@ -141,7 +141,7 @@ import { createEventsCommand } from './commands/events';
 
 // Types
 import { PRESENCE_INDICATORS } from './types';
-import type { PresenceStatus, BBSEvent, Message as ChatMessage } from './types';
+import type { PresenceStatus, BBSEvent, Message as ChatMessage, Channel } from './types';
 import type { SlashCommand } from './commands/types';
 import { T, S, CURRENT, applyTheme } from './door-theme';
 import { DEFAULT_RENDER_MODE, type RenderMode } from './video-cells';
@@ -740,7 +740,7 @@ export async function createApp(session: DoorSession) {
 
   // Initialize channel list data
   function updateChannelList() {
-    const channelsToShow = visibleChannels(state.channels, doorSettings.defaultChannel);
+    const channelsToShow = visibleChannels(state.channels, doorSettings.defaultChannel, state.prefs.pinnedChannels);
 
     // Build sidebar rows via the pure builder. Keeps server.ts under
     // the 2000-line limit and lets the row layout be unit-tested.
@@ -1627,6 +1627,9 @@ export async function createApp(session: DoorSession) {
       showPromptDialog,
       messagesOf: (username: string) => chatMessagesFrom(state.messages, username),
       currentRoom: () => state.currentChannel,
+      isChannelPinned: (name) => (state.prefs.pinnedChannels ?? []).includes(name),
+      onTogglePinChannel: (name) => { const now = togglePinnedChannel(state, name); updateChannelList(); return now; },
+      onMarkChannelUnread: (name) => { const ok = markChannelUnread(state, name); if (ok) updateChannelList(); return ok; },
       onFocusTile: (uid) => {
         const vg = (voiceChannel as any).videoGrid;
         if (!vg) return;
@@ -2425,6 +2428,21 @@ export async function createApp(session: DoorSession) {
   // The author, a room operator or the sysop removed a line.
   socket.on('chat:deleted', (d: { messageId?: string | number }) => {
     if (d?.messageId != null) removeMessage(String(d.messageId));
+  });
+
+  // Topic, operator and channel changes the backend stored and broadcast.
+  socket.on('room:topic', (d: { roomId?: string; topic?: string; by?: string }) => {
+    const ch = state.channels.find((c: Channel) => c.id === d?.roomId || c.id === state.currentChannel);
+    if (ch && d?.topic != null) ch.topic = d.topic;
+    addSystemMessage(`${d?.by ?? 'Someone'} set the topic: ${d?.topic ?? ''}`);
+  });
+  socket.on('room:op-changed', (d: { username?: string; op?: boolean }) => {
+    addSystemMessage(`${d?.username ?? 'Someone'} is ${d?.op === false ? 'no longer' : 'now'} a room operator`);
+  });
+  socket.on('room:deleted', (d: { roomId?: string; roomName?: string }) => {
+    state.channels = state.channels.filter((c: Channel) => c.id !== d?.roomId && c.name !== d?.roomName);
+    updateChannelList();
+    addSystemMessage(`Channel #${d?.roomName ?? ''} was deleted`);
   });
 
   // ========== CHAT SOCKET HANDLERS ==========

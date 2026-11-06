@@ -7,8 +7,31 @@ import type { TypingBuffer } from '../ui/typing-preview';
  * otherwise the default channel plus random and help. The sidebar and
  * /rooms both read this, so they never disagree.
  */
-export function channelsToShow(channels: Channel[], defaultChannel: string): Channel[] {
-  if (channels.length > 0) return channels;
+export function channelsToShow(channels: Channel[], defaultChannel: string, pinned: string[] = []): Channel[] {
+  const list = channels.length > 0 ? channels : fallbackChannels(defaultChannel);
+  if (pinned.length === 0) return list;
+  const isPinned = (c: Channel) => pinned.includes(c.name);
+  // Stable: pinned first, each group keeps the server's order.
+  return [...list.filter(isPinned), ...list.filter((c) => !isPinned(c))];
+}
+
+/** Pin or unpin a channel in the user's prefs. Returns true when it is now pinned. */
+export function togglePinnedChannel(state: AppState, name: string): boolean {
+  const cur = state.prefs.pinnedChannels ?? [];
+  const now = !cur.includes(name);
+  state.prefs.pinnedChannels = now ? [...cur, name] : cur.filter((n) => n !== name);
+  return now;
+}
+
+/** Give a channel an unread count again so the sidebar shows it unread. */
+export function markChannelUnread(state: AppState, name: string): boolean {
+  const ch = state.channels.find((c) => c.name === name || c.id === name);
+  if (!ch) return false;
+  ch.unreadCount = Math.max(1, ch.unreadCount ?? 0);
+  return true;
+}
+
+function fallbackChannels(defaultChannel: string): Channel[] {
   return [defaultChannel, 'random', 'help'].map((name) => ({
     id: name,
     name,

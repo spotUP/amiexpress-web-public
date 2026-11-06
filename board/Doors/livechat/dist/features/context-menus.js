@@ -38,7 +38,7 @@ function createContextMenus(s, ib, sup, sdp, asm, sock, extras = {}) {
             its.push('Reply', 'Quote', 'React', '---', 'Copy Text', 'Pin Message', '---', 'Mark Unread', 'Edit', 'Delete');
         }
         else if (t === 'channel' && tgt) {
-            its.push('Join', 'Leave', 'Info', 'Expand/Collapse', '---', 'Pin Channel');
+            its.push('Join', 'Leave', 'Info', 'Expand/Collapse', '---', extras.isChannelPinned?.(tgt) ? 'Unpin Channel' : 'Pin Channel');
             if (extras.isSysop) {
                 its.push('---', 'Clear History', `{${door_theme_1.T.alert}-fg}Archive{/${door_theme_1.T.alert}-fg}`, `{${door_theme_1.T.alert}-fg}Delete Channel{/${door_theme_1.T.alert}-fg}`);
             }
@@ -147,12 +147,12 @@ function createContextMenus(s, ib, sup, sdp, asm, sock, extras = {}) {
                         break;
                     const before = (0, mute_list_1.muteLevel)(extras.muteList, cmt);
                     const now = (0, mute_list_1.toggleMute)(extras.muteList, cmt, level);
-                    // Ignore is enforced by the server (it stops delivering the
-                    // ignored user's room lines and DMs), so moving into or out of
-                    // that level must reach it, same as /ignore and /unignore.
-                    if (now === 'ignore')
+                    // Ignore and block are enforced by the server (it stops delivering
+                    // that user's room lines and DMs), so moving into or out of those
+                    // levels must reach it, same as /ignore and /unignore.
+                    if ((0, mute_list_1.isServerEnforced)(now) && !(0, mute_list_1.isServerEnforced)(before))
                         sock.emit('chat:ignore', { user: cmt });
-                    else if (before === 'ignore')
+                    else if ((0, mute_list_1.isServerEnforced)(before) && !(0, mute_list_1.isServerEnforced)(now))
                         sock.emit('chat:unignore', { user: cmt });
                     asm((0, mute_list_1.muteMessage)(cmt, now));
                     break;
@@ -216,8 +216,10 @@ function createContextMenus(s, ib, sup, sdp, asm, sock, extras = {}) {
                     }
                     break;
                 case 'Mark Unread':
-                    asm('Marked as unread');
-                    // TODO: Mark channel as having unread messages
+                    {
+                        const room = extras.currentRoom ? extras.currentRoom() : '';
+                        asm(room && extras.onMarkChannelUnread?.(room) ? `Marked ${room} as unread` : 'No channel to mark unread.');
+                    }
                     break;
                 case 'Edit':
                     // With a message under the pointer, edit that one; else your last.
@@ -250,9 +252,11 @@ function createContextMenus(s, ib, sup, sdp, asm, sock, extras = {}) {
                     extras.onToggleChannelExpand?.(cmt);
                     break;
                 case 'Pin Channel':
-                    asm(`{${door_theme_1.T.accent}-fg}Pinned ${cmt}{/${door_theme_1.T.accent}-fg}`);
-                    // TODO: persist a local pinned-channels list in prefs
+                case 'Unpin Channel': {
+                    const pinned = extras.onTogglePinChannel?.(cmt);
+                    asm(`{${door_theme_1.T.accent}-fg}${pinned ? 'Pinned' : 'Unpinned'} ${cmt}{/${door_theme_1.T.accent}-fg}`);
                     break;
+                }
                 case 'Clear History':
                     if (!extras.isSysop) {
                         asm(`{${door_theme_1.T.alert}-fg}Sysop only.{/${door_theme_1.T.alert}-fg}`);

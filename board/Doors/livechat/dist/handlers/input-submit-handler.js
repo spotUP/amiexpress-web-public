@@ -12,6 +12,7 @@ const mute_list_1 = require("../core/mute-list");
 const whois_render_1 = require("./whois-render");
 const state_1 = require("../core/state");
 const settings_1 = require("../settings");
+const settings_save_1 = require("../overlays/settings-save");
 function createSubmitHandler(socket, state, registry, cmdCtx, userId, username, onlineUsers, presenceService, socketEmitter, inputHistory, inputBox, screen, chatLog, currentSearchOverlayRef, drawingChannels, currentRoomLabel, hideCommandSuggestions, handleCommandActions, showLoading, showUserList, addChatMessage, addSystemMessage, replyToThread, pinMessage, unpinMessage, getPinnedMessages, createSearchOverlay, searchMessages, cleanup, showSettingsOverlay, showHelpDialog, showDrawMenu, enterDrawingMode, updateStatusBar, updateUserTable, showFileSharing, updateTypingPreview, clearChatLog, messagePicker, tryJoinVoiceChannel) {
     return async (value) => {
         try {
@@ -139,6 +140,38 @@ function createSubmitHandler(socket, state, registry, cmdCtx, userId, username, 
                     updateStatusBar();
                     addSystemMessage('You are now online');
                 }
+                // /status, /sounds, /compact, /timestamps: presence goes through the
+                // presence service and chat:presence (as /away does); the three
+                // preferences go through saveSettings, the settings overlay's own path.
+                if (r.action === 'pref' && r.data?.kind === 'status') {
+                    const status = r.data.status;
+                    presenceService.setStatus(userId, status, r.data.message || undefined);
+                    socket.emit('chat:presence', { status, custom: r.data.message || undefined });
+                    const u = onlineUsers.get(String(userId));
+                    if (u)
+                        u.status = status;
+                    updateUserTable();
+                    updateStatusBar();
+                    addSystemMessage(`Status: ${status}${r.data.message ? ' - ' + r.data.message : ''}`);
+                }
+                else if (r.action === 'pref') {
+                    const p = state.prefs;
+                    let note = '';
+                    if (r.data.kind === 'sounds') {
+                        (0, settings_save_1.saveSettings)(state, (0, settings_save_1.prefsAsCheckboxes)(state, { muteSounds: !r.data.value }), updateStatusBar);
+                        note = r.data.value ? 'Sounds enabled' : 'Sounds disabled';
+                    }
+                    else if (r.data.kind === 'compact') {
+                        (0, settings_save_1.saveSettings)(state, (0, settings_save_1.prefsAsCheckboxes)(state, { compact: !p.compactMode }), updateStatusBar);
+                        note = p.compactMode ? 'Compact mode on' : 'Compact mode off';
+                    }
+                    else if (r.data.kind === 'timestamps') {
+                        (0, settings_save_1.saveSettings)(state, (0, settings_save_1.prefsAsCheckboxes)(state, { timestamps: !p.showTimestamps }), updateStatusBar);
+                        note = p.showTimestamps ? 'Timestamps on' : 'Timestamps off';
+                    }
+                    if (note)
+                        addSystemMessage(note);
+                }
                 if (cmdName === 'motd') {
                     if (r.data?.op === 'set') {
                         socket.emit('room:motd', { motd: r.data.motd });
@@ -196,7 +229,7 @@ function createSubmitHandler(socket, state, registry, cmdCtx, userId, username, 
                         showFileSharing();
                         break;
                     case 'rooms': {
-                        const rooms = (0, state_1.channelsToShow)(state.channels, (0, settings_1.settings)().defaultChannel);
+                        const rooms = (0, state_1.channelsToShow)(state.channels, (0, settings_1.settings)().defaultChannel, state.prefs.pinnedChannels);
                         addSystemMessage(`Rooms: ${rooms.map(c => `#${c.name}${c.memberCount ? ` (${c.memberCount})` : ''}`).join(', ')}`);
                         break;
                     }

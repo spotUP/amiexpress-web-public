@@ -174,6 +174,11 @@ export async function contextMenuIgnoreReachesTheServer(): Promise<void> {
     assert.deepStrictEqual(sent.pop(), { event: 'chat:unignore', payload: { user: 'dave' } }, 'moving from ignore to mute lifts the server ignore');
     pick('Mute User');
     assert.strictEqual(sent.length, 0, 'mute alone never touches the server');
+    pick('Block');
+    assert.strictEqual(muteList.get('dave'), 'block');
+    assert.deepStrictEqual(sent.pop(), { event: 'chat:ignore', payload: { user: 'dave' } }, 'Block is enforced at the server like ignore');
+    pick('Unblock');
+    assert.deepStrictEqual(sent.pop(), { event: 'chat:unignore', payload: { user: 'dave' } }, 'Unblock lifts the server ignore');
   } finally {
     fire('disconnect', 'transport close');
   }

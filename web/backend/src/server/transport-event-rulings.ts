@@ -637,6 +637,42 @@ const NAMED_RULINGS: Readonly<Record<string, EventRuling>> = {
     "A byte terminal cannot render a structured object; the edit or delete itself " +
     "is stored, so history shows it on every transport.",
   },
+  "room:topic": {
+    kind: "web-only",
+    note:
+    "LiveChat's structured chat surface, emitted at " +
+    "server/room-operator-socket-handlers.ts (emitToRoom in handleSetTopic). Its consumer is the LiveChat door's SERVER half " +
+    "(Doors/livechat/server.ts), which receives it " +
+    "through createDoorSocketWrapper's outgoing dispatch " +
+    "(handlers/door.handler.ts) BEFORE this chain runs - so the drop " +
+    "recorded here is of the structured payload only, never of the door's copy. " +
+    "A byte terminal cannot render a structured object; the change itself " +
+    "is stored, so the topic, operators and channel list are right on every transport.",
+  },
+  "room:op-changed": {
+    kind: "web-only",
+    note:
+    "LiveChat's structured chat surface, emitted at " +
+    "server/room-operator-socket-handlers.ts (emitToRoom in handleOp). Its consumer is the LiveChat door's SERVER half " +
+    "(Doors/livechat/server.ts), which receives it " +
+    "through createDoorSocketWrapper's outgoing dispatch " +
+    "(handlers/door.handler.ts) BEFORE this chain runs - so the drop " +
+    "recorded here is of the structured payload only, never of the door's copy. " +
+    "A byte terminal cannot render a structured object; the change itself " +
+    "is stored, so the topic, operators and channel list are right on every transport.",
+  },
+  "room:deleted": {
+    kind: "web-only",
+    note:
+    "LiveChat's structured chat surface, emitted at " +
+    "server/room-operator-socket-handlers.ts (emitToRoom in handleDeleteChannel). Its consumer is the LiveChat door's SERVER half " +
+    "(Doors/livechat/server.ts), which receives it " +
+    "through createDoorSocketWrapper's outgoing dispatch " +
+    "(handlers/door.handler.ts) BEFORE this chain runs - so the drop " +
+    "recorded here is of the structured payload only, never of the door's copy. " +
+    "A byte terminal cannot render a structured object; the change itself " +
+    "is stored, so the topic, operators and channel list are right on every transport.",
+  },
   "chat:request-sent": {
     kind: "web-only",
     note:

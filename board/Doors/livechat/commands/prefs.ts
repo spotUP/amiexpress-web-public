@@ -8,10 +8,10 @@ export const soundsCmd: SlashCommand = {
   handler: (ctx, args) => {
     const option = args[0]?.toLowerCase();
     if (option === 'on') {
-      return { handled: true, message: 'Sounds enabled', data: { notificationSound: true } };
+      return { handled: true, action: 'pref', data: { kind: 'sounds', value: true } };
     }
     if (option === 'off') {
-      return { handled: true, message: 'Sounds disabled', data: { notificationSound: false } };
+      return { handled: true, action: 'pref', data: { kind: 'sounds', value: false } };
     }
     return { handled: true, message: 'Usage: /sounds on|off' };
   }
@@ -23,7 +23,7 @@ export const compactCmd: SlashCommand = {
   description: 'Toggle compact mode',
   usage: '/compact',
   handler: () => {
-    return { handled: true, message: 'Compact mode toggled', data: { toggle: 'compactMode' } };
+    return { handled: true, action: 'pref', data: { kind: 'compact' } };
   }
 };
 
@@ -34,6 +34,6 @@ export const timestampsCmd: SlashCommand = {
   usage: '/timestamps',
   aliases: ['time'],
   handler: () => {
-    return { handled: true, message: 'Timestamps toggled', data: { toggle: 'showTimestamps' } };
+    return { handled: true, action: 'pref', data: { kind: 'timestamps' } };
   }
 };

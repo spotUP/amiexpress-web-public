@@ -37,11 +37,11 @@ exports.deleteCmd = {
     name: 'delete',
     description: 'Delete a channel',
     usage: '/delete #channel',
-    minSecLevel: 80,
     handler: (ctx, args) => {
         const name = args[0]?.replace('#', '');
         if (!name)
             return { handled: true, error: 'Usage: /delete #channel' };
-        return { handled: true, message: `Deleting #${name}...`, data: { channel: name } };
+        // Same event the Delete Channel context-menu item emits; the backend checks operator / sysop.
+        return { handled: true, action: 'roomadmin', data: { event: 'admin:delete-channel', payload: { channel: name } } };
     }
 };

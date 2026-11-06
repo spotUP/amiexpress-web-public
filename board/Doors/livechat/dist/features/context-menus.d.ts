@@ -19,6 +19,11 @@ export interface ContextMenuExtras {
     messagesOf?: (username: string) => Message[];
     /** The room a pin is written into. */
     currentRoom?: () => string;
+    /** Pinned channels sort first in the channel list (kept in the user's prefs). */
+    isChannelPinned?: (name: string) => boolean;
+    onTogglePinChannel?: (name: string) => boolean;
+    /** Gives the channel an unread count again; false when the channel is unknown. */
+    onMarkChannelUnread?: (name: string) => boolean;
 }
 export declare function createContextMenus(s: Screen, ib: any, sup: (u: string) => void, sdp: (u: string) => void, asm: (m: string) => void, sock: any, extras?: ContextMenuExtras): {
     contextMenu: import("@amiexpress/bbs-door-sdk/engines/ui/blessed").List;
