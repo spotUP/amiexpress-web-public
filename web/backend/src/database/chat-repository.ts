@@ -4,7 +4,24 @@
  */
 
 import * as crypto from 'crypto';
-import type { InternodeChatSession, InternodeChatMessage } from '../types';
+import type { InternodeChatSession, InternodeChatMessage, InternodeChatStatus } from '../types';
+
+/** chat_sessions row to InternodeChatSession. Every read of a session goes through here. */
+function toChatSession(row: any): InternodeChatSession {
+  return {
+    id: row.session_id,
+    initiatorId: String(row.initiator_id),
+    initiatorUsername: row.initiator_username,
+    initiatorSocket: row.initiator_socket,
+    recipientId: String(row.recipient_id),
+    recipientUsername: row.recipient_username,
+    recipientSocket: row.recipient_socket,
+    status: row.status as InternodeChatStatus,
+    startedAt: new Date(row.started_at * 1000),
+    endedAt: row.ended_at ? new Date(row.ended_at * 1000) : undefined,
+    messageCount: row.message_count ?? 0,
+  };
+}
 import { BaseRepository } from './BaseRepository';
 
 export class ChatRepository extends BaseRepository<any> {
@@ -75,17 +92,7 @@ export class ChatRepository extends BaseRepository<any> {
     const row = stmt.get(sessionId) as any;
     if (!row) return null;
 
-    return {
-      id: row.session_id,
-      nodeId: row.initiator_id || 0,
-      userId: row.initiator_username,
-      targetNodeId: row.recipient_id || 0,
-      targetUserId: row.recipient_username,
-      status: row.status as 'inviting' | 'active' | 'ended' | 'declined',
-      startTime: new Date(row.started_at * 1000),
-      endTime: row.ended_at ? new Date(row.ended_at * 1000) : undefined,
-      lastActivity: new Date(row.created_at * 1000)
-    };
+    return toChatSession(row);
   }
 
   async getChatSessionBySocketId(socketId: string): Promise<InternodeChatSession | null> {
@@ -98,17 +105,7 @@ export class ChatRepository extends BaseRepository<any> {
     const row = stmt.get(socketId, socketId) as any;
     if (!row) return null;
 
-    return {
-      id: row.session_id,
-      nodeId: row.initiator_id || 0,
-      userId: row.initiator_username,
-      targetNodeId: row.recipient_id || 0,
-      targetUserId: row.recipient_username,
-      status: row.status as 'inviting' | 'active' | 'ended' | 'declined',
-      startTime: new Date(row.started_at * 1000),
-      endTime: row.ended_at ? new Date(row.ended_at * 1000) : undefined,
-      lastActivity: new Date(row.created_at * 1000)
-    };
+    return toChatSession(row);
   }
 
   async getPendingChatInvitationForUser(userId: string): Promise<{ sessionId: string } | null> {
@@ -127,7 +124,7 @@ export class ChatRepository extends BaseRepository<any> {
 
   async updateChatSessionStatus(
     sessionId: string,
-    status: 'requesting' | 'active' | 'ended' | 'declined'
+    status: InternodeChatStatus
   ): Promise<void> {
 
     const stmt = this.prepare(`
@@ -153,17 +150,7 @@ export class ChatRepository extends BaseRepository<any> {
     const stmt = this.prepare('SELECT * FROM chat_sessions WHERE status = \'active\' ORDER BY started_at DESC');
     const rows = stmt.all() as any[];
 
-    return rows.map(row => ({
-      id: row.session_id,
-      nodeId: row.initiator_id || 0,
-      userId: row.initiator_username,
-      targetNodeId: row.recipient_id || 0,
-      targetUserId: row.recipient_username,
-      status: row.status as 'inviting' | 'active' | 'ended' | 'declined',
-      startTime: new Date(row.started_at * 1000),
-      endTime: row.ended_at ? new Date(row.ended_at * 1000) : undefined,
-      lastActivity: new Date(row.created_at * 1000)
-    }));
+    return rows.map(toChatSession);
   }
 
   async saveChatMessage(

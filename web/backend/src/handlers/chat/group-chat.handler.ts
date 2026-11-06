@@ -25,6 +25,7 @@ import { recipientIgnores } from './ignore.handler';
 import { liveMessageInRoom } from './message-in-room';
 
 import type { BBSSession } from '../../index';
+import type { Database } from '../../database';
 // Session type
 
 
@@ -67,12 +68,12 @@ function emitToTerminal(socket: Socket, session: BBSSession, data: string): void
 }
 
 // Dependencies (injected via setter)
-let db: any;
+let db: Database;
 let sessions: Map<string, BBSSession>;
 let io: any;
 
 export function setGroupChatDependencies(deps: {
-  db: any;
+  db: Database;
   sessions: Map<string, BBSSession>;
   io: any;
 }) {

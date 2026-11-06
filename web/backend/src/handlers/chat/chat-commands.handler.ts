@@ -11,10 +11,12 @@ import { LoggedOnSubState } from '../../constants/bbs-states';
 import { isNarrow, narrowRule } from '../../utils/table-format.util';
 
 import type { BBSSession } from '../../index';
+import type { Database } from '../../database';
+import { changeAccount } from '../../services/account.service';
 // Session type
 
 // Dependencies (injected)
-let db: any;
+let db: Database;
 let sessions: Map<string, BBSSession>;
 let io: any;
 let handleChatRequest: any;
@@ -22,7 +24,7 @@ let handleChatAcceptFn: any;
 let handleChatDeclineFn: any;
 
 export function setChatCommandsDependencies(deps: {
-  db: any;
+  db: Database;
   sessions: Map<string, BBSSession>;
   io: any;
   handleChatRequest: any;
@@ -286,16 +288,9 @@ async function toggleChatAvailability(socket: Socket, session: BBSSession) {
     // Toggle availability
     const newStatus = !session.user?.availableForChat;
 
-    // Update in database (use quoted identifier for camelCase column)
-    await db.query(
-      'UPDATE users SET "availableForChat" = $1 WHERE id = $2',
-      [newStatus, session.user!.id]
-    );
-
-    // Update session
-    if (session.user) {
-      session.user.availableForChat = newStatus;
-    }
+    // The caller's own account changes in memory and goes to disk at the next
+    // saveAccount, as W option 14 does (w-fields.ts).
+    await changeAccount(session, { availableForChat: newStatus });
 
     // Show confirmation
     let output = '\r\n';

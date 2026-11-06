@@ -11,6 +11,7 @@ import { LoggedOnSubState, BBSState } from '../../constants/bbs-states';
 import { getSystemTime } from '../../utils/date-time.util';
 
 import type { BBSSession } from '../../index';
+import type { Database } from '../../database';
 import {
   emitterForSession,
   emitterForUserId,
@@ -21,12 +22,12 @@ import { report } from '../../achievements/reporter';
 // Session type
 
 // Dependencies (injected)
-let db: any;
+let db: Database;
 let sessions: Map<string, BBSSession>;
 let io: any;
 
 export function setInternodeChatDependencies(deps: {
-  db: any;
+  db: Database;
   sessions: Map<string, BBSSession>;
   io: any;
 }) {

@@ -25,11 +25,12 @@ import { ErrorHandler } from '../../utils/error-handling.util';
 import { ParamsUtil } from '../../utils/params.util';
 
 import type { BBSSession } from '../../index';
+import type { Database } from '../../database';
 import { groupRoomMembers, emitToMembers } from '../../server/session-rooms';
 // Session type
 
 // Dependencies (injected via setter)
-let db: any;
+let db: Database;
 let sessions: Map<string, BBSSession>;
 let io: any;
 let handleRoomCreate: any;
@@ -40,7 +41,7 @@ let handleRoomKick: any;
 let handleRoomMute: any;
 
 export function setRoomCommandsDependencies(deps: {
-  db: any;
+  db: Database;
   sessions: Map<string, BBSSession>;
   io: any;
   handleRoomCreate: any;

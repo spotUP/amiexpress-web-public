@@ -132,17 +132,22 @@ export interface ChatState {
 }
 
 // Internode chat interfaces - for user-to-user chat across nodes
+/** One row of chat_sessions, in camelCase. The repository is the only place that builds it. */
 export interface InternodeChatSession {
-  id: string;
-  nodeId: number;
-  userId: string;
-  targetNodeId: number;
-  targetUserId: string;
-  startTime: Date;
-  endTime?: Date;
-  status: 'inviting' | 'active' | 'ended' | 'declined';
-  lastActivity: Date;
+  id: string; // chat_sessions.session_id
+  initiatorId: string;
+  initiatorUsername: string;
+  initiatorSocket: string;
+  recipientId: string;
+  recipientUsername: string;
+  recipientSocket: string;
+  status: InternodeChatStatus;
+  startedAt: Date;
+  endedAt?: Date;
+  messageCount: number;
 }
+
+export type InternodeChatStatus = 'requesting' | 'active' | 'ended' | 'declined' | 'timeout';
 
 export interface InternodeChatMessage {
   id: string;

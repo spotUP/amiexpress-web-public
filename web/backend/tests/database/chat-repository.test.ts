@@ -76,7 +76,25 @@ describe('ChatRepository', () => {
     it('getChatSession retrieves the session', async () => {
       const session = await repo.getChatSession(sessionId);
       expect(session).not.toBeNull();
-      expect(session!.id || session!.session_id).toBeTruthy();
+      expect(session!.id).toBe(sessionId);
+    });
+
+    // internode-chat.handler reads these names; the mapper once returned
+    // nodeId/userId/targetNodeId/targetUserId, so every read was undefined and
+    // a chat accept refused the right recipient.
+    it('getChatSession names both sides as the handler reads them', async () => {
+      const session = await repo.getChatSession(sessionId);
+      expect(session).toMatchObject({
+        initiatorId, initiatorUsername: 'InitUser', initiatorSocket: 'socket-init',
+        recipientId, recipientUsername: 'RecipUser', recipientSocket: 'socket-recip',
+        status: 'requesting', messageCount: 0,
+      });
+      expect(session!.startedAt).toBeInstanceOf(Date);
+    });
+
+    it('updateChatSessionStatus stores timeout', async () => {
+      await repo.updateChatSessionStatus(sessionId, 'timeout');
+      expect((await repo.getChatSession(sessionId))!.status).toBe('timeout');
     });
 
     it('getChatSession returns null for unknown id', async () => {

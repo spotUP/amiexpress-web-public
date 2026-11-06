@@ -21,17 +21,18 @@ import { changeAccount } from '../../services/account.service';
 import { displayMainMenu } from '../command-handler/menu';
 
 import type { BBSSession } from '../../index';
+import type { Database } from '../../database';
 
 // Dependencies injected from index.ts
 let _startSysopPage: (socket: any, session: BBSSession) => void;
-let _db: any;
+let _db: Database | undefined;
 
 /**
  * Set dependencies for preference/chat commands (called from index.ts)
  */
 export function setPreferenceChatCommandsDependencies(deps: {
   startSysopPage: typeof _startSysopPage;
-  db?: any;
+  db?: Database;
 }) {
   _startSysopPage = deps.startSysopPage;
   if (deps.db) _db = deps.db;

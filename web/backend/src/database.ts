@@ -3082,6 +3082,10 @@ console.error(`[Database] Failed to update disk misc for slot ${slotNumber}:`, e
     return this.chatRepo!.saveChatRoomMessage(...args);
   }
 
+  async updateThreadReplyCount(...args: Parameters<ChatRepository['updateThreadReplyCount']>) {
+    return this.chatRepo!.updateThreadReplyCount(...args);
+  }
+
   async getChatRoomHistory(...args: Parameters<ChatRepository['getChatRoomHistory']>) {
     return this.chatRepo!.getChatRoomHistory(...args);
   }
