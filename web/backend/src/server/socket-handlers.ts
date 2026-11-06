@@ -85,6 +85,8 @@ import { ensureDoorLogLine } from '../utils/door-logging.util';
  * because a whole screen at a time loses the context either side of the join.
  */
 const VIEWPORT_PAN_COLUMNS = 8;
+/** Largest paste a door gets, in characters (the terminal's DOOR_PASTE_MAX). */
+const DOOR_PASTE_MAX = 16384;
 
 /**
  * Convert special key names to their corresponding characters or escape sequences
@@ -638,6 +640,20 @@ console.log('[socket-handlers] keys:state received:', data);
         session.doorInputHandler(keyBytesFor(base, data.key, data.code, data.alt));
       }
     }
+  });
+
+  // Pasted text for a door in game mode. Its keys come as key-down, and the
+  // 'command' path swallows input for a game-mode door, so a paste reached
+  // nothing (sysop, 2026-11-06: "i still cant copy or paste"). The text goes
+  // to the door's input once, as typed text, never as key edges. Same cap as
+  // the terminal's DOOR_PASTE_MAX.
+  socket.on('door:paste', (text: unknown) => {
+    const session = getSession(socket.id);
+    if (!session || typeof text !== 'string' || text === '') return;
+    if (!session.inDoorManager || !session.doorInputHandler || isPaletteOpen(session)) return;
+    const chunk = text.slice(0, DOOR_PASTE_MAX);
+    traceDoorInput(session, 'door:paste', chunk);
+    session.doorInputHandler(chunk);
   });
 
   // Handle individual key-up events (game mode - for multi-key support)

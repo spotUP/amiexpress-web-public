@@ -43,6 +43,7 @@ import { getZmodem } from '../utils/zmodem';
 import { MediaHandler } from '../utils/media-handler';
 import { AnsiMusicStream, type MusicEvent } from '../utils/ansi-music';
 import { ModemEmulator } from '../utils/modem-emulator';
+import { doorPasteText } from '../utils/door-paste';
 import { browserOwnsChord, classifyKey, trackKeyId, repeatAlive, mayAutoRepeat, gameKeyDownPayload } from '../utils/key-overrides';
 import { createWireRecorder, recordTerminal, recordPetscii, exposeWireRecorder } from '../utils/wire-recorder';
 
@@ -1906,8 +1907,27 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
       }
     };
 
+    // Game mode: a paste is text, not keys. xterm hands a paste to onData,
+    // and sendInput drops onData in game mode (the keys go as key-down), so
+    // Cmd+V reached nothing (sysop, 2026-11-06: "i still cant copy or paste").
+    // Capture phase, ahead of xterm's own textarea listener, so the text goes
+    // once, on door:paste. A paste into some other text box on the page is
+    // left alone.
+    const handleGamePaste = (ev: ClipboardEvent) => {
+      if (!gameMode.current || !socketRef.current?.connected) return;
+      const target = ev.target as Node | null;
+      const container = terminalRef.current;
+      const editable = target instanceof HTMLElement && (target.isContentEditable || /^(INPUT|TEXTAREA)$/.test(target.tagName));
+      if (editable && !(container && container.contains(target))) return;
+      const text = doorPasteText(ev.clipboardData?.getData('text/plain'));
+      ev.preventDefault();
+      ev.stopPropagation();
+      if (text !== null) socketRef.current.emit('door:paste', text);
+    };
+
     window.addEventListener('keydown', handleGameKeyDown);
     window.addEventListener('keyup', handleGameKeyUp);
+    document.addEventListener('paste', handleGamePaste, true);
 
     // Clear all key state and repeat timers (used on blur/visibility loss)
     const clearAllKeyState = () => {
@@ -3619,6 +3639,7 @@ export const BBSTerminal = forwardRef<BBSTerminalRef, BBSTerminalProps>(({
       keyRepeatTimers.current = {};
       window.removeEventListener('keydown', handleGameKeyDown);
       window.removeEventListener('keyup', handleGameKeyUp);
+      document.removeEventListener('paste', handleGamePaste, true);
       window.removeEventListener('mousemove', gameWindowMouseMove);
       window.removeEventListener('blur', handleWindowBlur);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
