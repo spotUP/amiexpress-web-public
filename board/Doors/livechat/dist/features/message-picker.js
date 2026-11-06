@@ -93,6 +93,11 @@ function createMessagePicker(deps) {
         deps.onChange();
         return true;
     };
+    const startOrSayEmpty = (action) => {
+        if (!start(action))
+            deps.onNothingToPick?.();
+        return true;
+    };
     return {
         state,
         start,
@@ -106,11 +111,11 @@ function createMessagePicker(deps) {
             if (command === 'react') {
                 if (parts.length >= 2)
                     return false;
-                return start({ kind: 'command', command, args: parts.length ? parts : ['+1'] });
+                return startOrSayEmpty({ kind: 'command', command, args: parts.length ? parts : ['+1'] });
             }
             if (!COMMANDS_NEEDING_AN_ID.has(command) || parts.length > 0)
                 return false;
-            return start({ kind: 'command', command, args: [] });
+            return startOrSayEmpty({ kind: 'command', command, args: [] });
         },
         move: (dir) => {
             if (!state.active)

@@ -2146,6 +2146,10 @@ export async function createApp(session: DoorSession) {
    */
   const messagePicker = createMessagePicker({
     ids: () => chatMessageIds,
+    onNothingToPick: () => {
+      addSystemMessage('No messages to pick.');
+      screen.render();
+    },
     onChange: () => {
       inputBox.setLabel(messagePicker.state.active ? ' [PICK MESSAGE: Up/Down, Enter, Esc] ' : ' Message ');
       rebuildChatContent();

@@ -1893,6 +1893,10 @@ async function createApp(session) {
      */
     const messagePicker = (0, message_picker_1.createMessagePicker)({
         ids: () => chatMessageIds,
+        onNothingToPick: () => {
+            addSystemMessage('No messages to pick.');
+            screen.render();
+        },
         onChange: () => {
             inputBox.setLabel(messagePicker.state.active ? ' [PICK MESSAGE: Up/Down, Enter, Esc] ' : ' Message ');
             rebuildChatContent();

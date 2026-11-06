@@ -87,6 +87,12 @@ export interface MessagePickerDeps {
   onChange: () => void;
   /** Enter on a message. */
   onConfirm: (action: PickAction, messageId: string) => void;
+  /**
+   * A pick command (bare /edit, /love ...) in a room with no messages. The
+   * command is still the picker's: without this it fell through to the
+   * command table and printed a usage line asking for an id.
+   */
+  onNothingToPick?: () => void;
 }
 
 const COMMANDS_NEEDING_AN_ID = new Set(['love', 'thumbsup', 'heart', 'fire', '+1', '-1', 'pin', 'thread', 'reply', 'edit', 'deletemsg']);
@@ -110,6 +116,11 @@ export function createMessagePicker(deps: MessagePickerDeps) {
     return true;
   };
 
+  const startOrSayEmpty = (action: PickAction): true => {
+    if (!start(action)) deps.onNothingToPick?.();
+    return true;
+  };
+
   return {
     state,
     start,
@@ -122,10 +133,10 @@ export function createMessagePicker(deps: MessagePickerDeps) {
       const command = (parts.shift() ?? '').toLowerCase();
       if (command === 'react') {
         if (parts.length >= 2) return false;
-        return start({ kind: 'command', command, args: parts.length ? parts : ['+1'] });
+        return startOrSayEmpty({ kind: 'command', command, args: parts.length ? parts : ['+1'] });
       }
       if (!COMMANDS_NEEDING_AN_ID.has(command) || parts.length > 0) return false;
-      return start({ kind: 'command', command, args: [] });
+      return startOrSayEmpty({ kind: 'command', command, args: [] });
     },
     move: (dir: -1 | 1): void => {
       if (!state.active) return;

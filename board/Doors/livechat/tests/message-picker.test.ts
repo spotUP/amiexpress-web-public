@@ -145,4 +145,18 @@ export async function moveSkipsNullRowsAndJumpsWholeMessages(): Promise<void> {
   assert.strictEqual(calls[calls.length - 1], 'react:b');
   assert.ok(!picker.startFromCommand('/love 12'), 'an id given means no pick mode');
   assert.ok(!picker.startFromCommand('/hello'), 'other commands are untouched');
+
+  // Bare /edit in an empty room: the picker owns it and says so, instead of
+  // falling through to the command table's usage line (sysop, L11).
+  const said: string[] = [];
+  const empty = createMessagePicker({
+    ids: () => [null],
+    onChange: () => {},
+    onConfirm: () => {},
+    onNothingToPick: () => said.push('empty'),
+  });
+  assert.ok(empty.startFromCommand('/edit'), 'bare /edit in an empty room is handled');
+  assert.ok(!empty.state.active, 'no pick mode without messages');
+  assert.deepStrictEqual(said, ['empty'], 'caller is told there is nothing to pick');
+  assert.ok(!empty.startFromCommand('/edit 12 new'), 'an id given still goes to the command');
 }

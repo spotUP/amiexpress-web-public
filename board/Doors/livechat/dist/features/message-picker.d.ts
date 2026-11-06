@@ -46,6 +46,12 @@ export interface MessagePickerDeps {
     onChange: () => void;
     /** Enter on a message. */
     onConfirm: (action: PickAction, messageId: string) => void;
+    /**
+     * A pick command (bare /edit, /love ...) in a room with no messages. The
+     * command is still the picker's: without this it fell through to the
+     * command table and printed a usage line asking for an id.
+     */
+    onNothingToPick?: () => void;
 }
 export declare function createMessagePicker(deps: MessagePickerDeps): {
     state: PickerState;
