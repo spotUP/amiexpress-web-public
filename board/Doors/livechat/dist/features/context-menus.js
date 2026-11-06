@@ -10,6 +10,7 @@ const blessed_1 = __importDefault(require("@amiexpress/bbs-door-sdk/engines/ui/b
 const door_theme_1 = require("../door-theme");
 const pin_handlers_1 = require("../handlers/pin-handlers");
 const reaction_handlers_1 = require("../handlers/reaction-handlers");
+const edit_handlers_1 = require("../handlers/edit-handlers");
 function createContextMenus(s, ib, sup, sdp, asm, sock, extras = {}) {
     const cm = blessed_1.default.list({ parent: s, top: 0, left: 0, width: 24, height: 6, border: { type: 'line' }, shadow: true, hidden: true, mouse: true, vi: true, keys: true, interactive: true, tags: true, zIndex: 9999, style: { fg: door_theme_1.T.ink, bg: door_theme_1.T.ground, border: { fg: theme_1.PANEL_BORDER }, selected: { fg: door_theme_1.T.ground, bg: door_theme_1.T.accent } } });
     // Set high z-index to ensure menu appears on top
@@ -219,14 +220,18 @@ function createContextMenus(s, ib, sup, sdp, asm, sock, extras = {}) {
                     // TODO: Mark channel as having unread messages
                     break;
                 case 'Edit':
-                    ib.setValue('/edit ');
+                    // With a message under the pointer, edit that one; else your last.
+                    ib.setValue(cmt ? `/edit ${cmt} ` : '/edit ');
                     ib.focus();
                     s.render();
                     break;
                 case 'Delete':
-                    asm(cmt
-                        ? `{${door_theme_1.T.accentAlt}-fg}Deleting is not supported by the server yet.{/${door_theme_1.T.accentAlt}-fg}`
-                        : `{${door_theme_1.T.accentAlt}-fg}Right-click on a message first.{/${door_theme_1.T.accentAlt}-fg}`);
+                    if (!cmt) {
+                        asm(`{${door_theme_1.T.accentAlt}-fg}Right-click on a message first.{/${door_theme_1.T.accentAlt}-fg}`);
+                    }
+                    else {
+                        (0, edit_handlers_1.deleteMessage)(sock, extras.currentRoom ? extras.currentRoom() : '', cmt);
+                    }
                     break;
             }
         }

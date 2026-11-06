@@ -5,12 +5,42 @@
  */
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.EMOJIS = void 0;
+exports.setEmojiRenderMode = setEmojiRenderMode;
+exports.setCustomEmojis = setCustomEmojis;
+exports.getCustomEmojis = getCustomEmojis;
+exports.allEmojis = allEmojis;
 exports.getEmojisByCategory = getEmojisByCategory;
 exports.searchEmojis = searchEmojis;
 exports.getCategories = getCategories;
 exports.replaceEmojis = replaceEmojis;
 exports.getEmoji = getEmoji;
 exports.getAutocompleteSuggestions = getAutocompleteSuggestions;
+/**
+ * The one lookup: built-ins plus the board's custom emoji. Rendering is per
+ * caller - web shows `display`, a byte terminal shows `ascii` - and both are
+ * set once on open (setEmojiRenderMode) and on every chat:emoji-list.
+ */
+let custom = [];
+let webCaller = true;
+function setEmojiRenderMode(isWeb) { webCaller = isWeb; }
+function setCustomEmojis(list) {
+    custom = Array.isArray(list)
+        ? list.filter(e => e && typeof e.name === 'string' && typeof e.display === 'string' && typeof e.ascii === 'string')
+        : [];
+}
+function getCustomEmojis() { return custom; }
+/** Every emoji the caller can use, custom ones rendered for this caller. */
+function allEmojis() {
+    return [
+        ...exports.EMOJIS,
+        ...custom.map((c) => ({
+            code: `:${c.name}:`,
+            display: webCaller ? c.display : c.ascii,
+            keywords: ['custom'],
+            category: 'special',
+        })),
+    ];
+}
 exports.EMOJIS = [
     // Emotions (18)
     { code: ':smile:', display: ':-)', keywords: ['happy', 'grin'], category: 'emotions' },
@@ -71,12 +101,12 @@ exports.EMOJIS = [
 ];
 /** Get all emojis in a category */
 function getEmojisByCategory(category) {
-    return exports.EMOJIS.filter(e => e.category === category);
+    return allEmojis().filter(e => e.category === category);
 }
 /** Search emojis by keyword */
 function searchEmojis(query) {
     const lower = query.toLowerCase();
-    return exports.EMOJIS.filter(e => e.code.toLowerCase().includes(lower) ||
+    return allEmojis().filter(e => e.code.toLowerCase().includes(lower) ||
         e.keywords.some(k => k.toLowerCase().includes(lower)));
 }
 /** Get all categories */
@@ -86,7 +116,7 @@ function getCategories() {
 /** Replace :emoji: codes with display characters */
 function replaceEmojis(text) {
     let result = text;
-    for (const emoji of exports.EMOJIS) {
+    for (const emoji of allEmojis()) {
         result = result.replace(new RegExp(escapeRegex(emoji.code), 'g'), emoji.display);
     }
     return result;
@@ -97,12 +127,12 @@ function escapeRegex(str) {
 }
 /** Get emoji by code */
 function getEmoji(code) {
-    return exports.EMOJIS.find(e => e.code === code);
+    return allEmojis().find(e => e.code === code);
 }
 /** Get autocomplete suggestions */
 function getAutocompleteSuggestions(partial) {
     if (!partial.startsWith(':'))
         return [];
     const lower = partial.toLowerCase();
-    return exports.EMOJIS.filter(e => e.code.toLowerCase().startsWith(lower)).slice(0, 10);
+    return allEmojis().filter(e => e.code.toLowerCase().startsWith(lower)).slice(0, 10);
 }

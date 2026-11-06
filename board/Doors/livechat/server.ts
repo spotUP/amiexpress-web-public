@@ -53,7 +53,6 @@ import { getUserColor, formatMessage, formatSystemMessage } from './core/formatt
 import { seedReactionCounts, formatReactionCounts } from './features/reaction-store';
 import { shouldShowEvent } from './core/socket-typing';
 import { initializeLiveChat } from './core/initialization';
-import { voiceAvailable } from './features/voice-availability';
 
 // Services
 import { events, formatBBSEvent, getEventMessage, SocketEmitter, PresenceService, ExtendedEventBus } from './services';
@@ -71,6 +70,7 @@ import {
 } from './ui/menu-bar';
 import { PANEL_BORDER, PANEL_FOCUS_STYLE, refreshPanelChrome } from './ui/theme';
 import { messageIndexAtRow } from './ui/chat-row-map';
+import { replaceMessageRows, removeMessageRows } from './features/message-rows';
 import { solveLayout } from './ui/layout-solver';
 import { createStatusBar, updateStatusBar as updateStatusBarFn, STATUS_HEIGHT } from './ui/status-bar';
 import { createInputBox, createEmojiButton, INPUT_HEIGHT, EMOJI_BUTTON_WIDTH } from './ui/input-box';
@@ -120,7 +120,8 @@ import { formatTime } from './utils/format';
 import { AudioService } from './utils/audio';
 import { mentionsUser, highlightMentions } from './utils/mentions';
 import { parseContent } from './utils/markdown';
-import { replaceEmojis } from './utils/emojis';
+import { replaceEmojis, setEmojiRenderMode } from './utils/emojis';
+import { voiceAvailable } from './features/voice-availability';
 
 // Audio engine
 import { AudioEngine } from '@amiexpress/bbs-door-sdk/engines/audio/audio-engine';
@@ -174,6 +175,8 @@ export async function createApp(session: DoorSession) {
   // window was ("livechat has issues opening fullscreen responsive mode in
   // the bbs", 2026-09-01). Both are the same door and both want the room;
   // the switch below gives it to them, and Alt+Enter takes it back.
+  // :code: renders as web emoji for a browser caller, ASCII for telnet/SSH.
+  setEmojiRenderMode(voiceAvailable(session.bbs));
   const chatOnly = session.bbsSession?.tempData?.chatOnly;
   let terminalMode: TerminalModeSwitch | null = null;
 
@@ -1582,7 +1585,6 @@ export async function createApp(session: DoorSession) {
     onlineUsers,
     addSystemMessage,
     addChatMessage,
-    replaceEmojis,
     PRESENCE_INDICATORS
   );
 
@@ -2011,13 +2013,39 @@ export async function createApp(session: DoorSession) {
     screen.render();
   }
 
-  function addMessageFromUser(from: string, content: string, timestamp?: Date, messageId?: string) {
+  /** One chat line as painted: time, author, text, and "(edited)" once the text was changed. */
+  function messageLine(from: string, content: string, timestamp?: Date, edited?: boolean) {
     const time = formatTime(timestamp || new Date());
     const color = getUserColor(from);
-    const parsed = parseContent(content);
-    const highlighted = highlightMentions(parsed, username);
-    appendLineToLog(`{${T.dim}-fg}[${time}]{/${T.dim}-fg} <{${color}-fg}${from}{/${color}-fg}> ${highlighted}`, messageId);
+    const highlighted = highlightMentions(parseContent(content), username);
+    const mark = edited ? ` {${T.dim}-fg}(edited){/${T.dim}-fg}` : '';
+    return `{${T.dim}-fg}[${time}]{/${T.dim}-fg} <{${color}-fg}${from}{/${color}-fg}> ${highlighted}${mark}`;
+  }
+
+  function addMessageFromUser(from: string, content: string, timestamp?: Date, messageId?: string, edited?: boolean) {
+    appendLineToLog(messageLine(from, content, timestamp, edited), messageId);
     screen.render();
+  }
+
+  /**
+   * Row indexes shift when a message's rows are replaced or removed, and the
+   * animation manager addresses rows by index: register every animated row
+   * again from the new positions.
+   */
+  function reregisterAnimatedRows() {
+    animationManager.clear?.();
+    chatMessages.forEach((row, i) => { if (hasAnimationTags(row)) animationManager.registerLine(i, row); });
+    rebuildChatContent();
+    screen.render();
+  }
+
+  function replaceMessage(messageId: string, line: string) {
+    const rows = splitAnimatedLines(replaceEmojis(line));
+    if (replaceMessageRows(chatMessages, chatMessageIds, messageId, rows)) reregisterAnimatedRows();
+  }
+
+  function removeMessage(messageId: string) {
+    if (removeMessageRows(chatMessages, chatMessageIds, messageId)) reregisterAnimatedRows();
   }
 
   // Track logical chat messages separately
@@ -2118,6 +2146,12 @@ export async function createApp(session: DoorSession) {
         screen.render();
         return;
       }
+      if (action.command === 'edit') {
+        inputBox.setValue(`/edit ${messageId} `);
+        inputBox.focus();
+        screen.render();
+        return;
+      }
       void asyncSubmitHandler([`/${action.command}`, ...action.args, messageId].join(' '));
     },
   });
@@ -2138,6 +2172,9 @@ export async function createApp(session: DoorSession) {
   });
 
   function appendLineToLog(line: string, messageId?: string) {
+    // Every line is painted here, so :code: is rendered here, once, for THIS
+    // caller (web emoji or telnet ASCII); the wire and the DB keep the code.
+    line = replaceEmojis(line);
     // One entry per DISPLAY ROW, never per message.
     //
     // animationManager writes frames with chatLog.setLine(index, ...), which
@@ -2374,8 +2411,20 @@ export async function createApp(session: DoorSession) {
     addSystemMessage(`{${T.dim}-fg}--- ${history.length} earlier message${history.length === 1 ? '' : 's'} ---{/${T.dim}-fg}`);
     for (const m of history) {
       const when = m.createdAt ? new Date(m.createdAt) : undefined;
-      addMessageFromUser(m.username ?? 'unknown', m.content ?? '', when, m.id != null ? String(m.id) : undefined);
+      addMessageFromUser(m.username ?? 'unknown', m.content ?? '', when, m.id != null ? String(m.id) : undefined, Boolean(m.edited));
     }
+  });
+
+  // The author changed a line: every client repaints it in place, marked.
+  socket.on('chat:edited', (d: { messageId?: string | number; username?: string; content?: string; createdAt?: string | number }) => {
+    if (d?.messageId == null) return;
+    const when = d.createdAt ? new Date(d.createdAt) : undefined;
+    replaceMessage(String(d.messageId), messageLine(d.username ?? 'unknown', d.content ?? '', when, true));
+  });
+
+  // The author, a room operator or the sysop removed a line.
+  socket.on('chat:deleted', (d: { messageId?: string | number }) => {
+    if (d?.messageId != null) removeMessage(String(d.messageId));
   });
 
   // ========== CHAT SOCKET HANDLERS ==========
@@ -2571,7 +2620,8 @@ export async function createApp(session: DoorSession) {
     screen,
     inputBox,
     cleanup,
-    showConfirm  // Pass showConfirm for quit confirmation
+    showConfirm,  // Pass showConfirm for quit confirmation
+    () => inputHistory.lastId()
   );
 
   // Wrap async handler to satisfy blessed's sync event handler type requirement

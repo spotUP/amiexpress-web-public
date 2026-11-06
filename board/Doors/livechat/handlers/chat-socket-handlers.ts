@@ -1,6 +1,7 @@
 import { hidesRoomMessages, hidesDirectMessages, applyServerIgnores } from '../core/mute-list';
 import { formatDmLine } from './dm-render';
 import { T } from '../door-theme';
+import { setCustomEmojis } from '../utils/emojis';
 import { setReactionCounts, formatReactionCounts } from '../features/reaction-store';
 
 export function setupChatHandlers(sock: any, st: any, uid: number, un: string, ou: Map<any, any>, ps: any, cl: any, uut: () => void, asm: (m: string) => void, acm: (m: string, f?: boolean, id?: string) => void, aa: (a: string) => void, uef: (e: string) => void, aud: any, mu: (t: string, u: string) => boolean, guc: (u: string) => string, fm: (m: any, u: string, c: boolean) => string, pk: (b: Map<any, any>, uid: number, un: string, ch: string, c: string) => void, utp: () => void, s: any, sse: (e: any, st: any) => boolean, gem: (e: any) => { msg: string; c: string }, eb: any, am: (st: any, m: any) => void, mh: any, ft: (d: Date) => string) {
@@ -105,6 +106,10 @@ export function setupChatHandlers(sock: any, st: any, uid: number, un: string, o
   sock.on('chat:ignore-list', (d: any) => applyServerIgnores(st.muteList, d?.users));
   sock.emit('chat:ignore-list');
 
+  // Board-wide custom emoji: loaded on open, replaced on every sysop change.
+  sock.on('chat:emoji-list', (d: any) => setCustomEmojis(d?.emojis));
+  sock.emit('chat:emoji:list');
+
   sock.on('chat:dm', (d: any) => {
     if (!d) return;
 
@@ -156,13 +161,6 @@ export function setupChatHandlers(sock: any, st: any, uid: number, un: string, o
     } else {
       aud.onMessage(false);
     }
-    s.render();
-  });
-
-  sock.on('chat:edited', (d: any) => {
-    const t = ft(new Date(d.timestamp));
-    const c = guc(d.username);
-    acm(`{${T.dim}-fg}[${t}]{/${T.dim}-fg} <{${c}-fg}${d.username}{/${c}-fg}> ${d.newText} {${T.dim}-fg}(edited){/${T.dim}-fg}`);
     s.render();
   });
 }

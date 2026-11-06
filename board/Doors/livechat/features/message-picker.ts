@@ -89,7 +89,7 @@ export interface MessagePickerDeps {
   onConfirm: (action: PickAction, messageId: string) => void;
 }
 
-const COMMANDS_NEEDING_AN_ID = new Set(['love', 'thumbsup', 'heart', 'fire', '+1', '-1', 'pin', 'thread', 'reply']);
+const COMMANDS_NEEDING_AN_ID = new Set(['love', 'thumbsup', 'heart', 'fire', '+1', '-1', 'pin', 'thread', 'reply', 'edit', 'deletemsg']);
 
 export function createMessagePicker(deps: MessagePickerDeps) {
   const state: PickerState = { active: false, rowIndex: -1, action: { kind: 'menu' } };

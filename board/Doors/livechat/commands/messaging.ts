@@ -1,2 +1,2 @@
 export { msgCmd, meCmd } from './msg-dm';
-export { replyCmd, threadCmd, editCmd } from './msg-thread';
+export { replyCmd, threadCmd, editCmd, deleteMessageCmd } from './msg-thread';

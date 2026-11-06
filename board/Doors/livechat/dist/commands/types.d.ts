@@ -15,7 +15,7 @@ export interface CommandResult {
     handled: boolean;
     message?: string;
     error?: string;
-    action?: 'quit' | 'join' | 'leave' | 'switch' | 'thread' | 'react' | 'unreact' | 'reactions' | 'pin' | 'unpin' | 'showpinned' | 'search' | 'kick' | 'ban' | 'unban' | 'mute' | 'unmute';
+    action?: 'quit' | 'join' | 'leave' | 'switch' | 'thread' | 'react' | 'unreact' | 'reactions' | 'pin' | 'unpin' | 'showpinned' | 'search' | 'kick' | 'ban' | 'unban' | 'edit' | 'deletemsg' | 'mute' | 'unmute' | 'customemoji';
     data?: any;
 }
 /** Slash command definition */

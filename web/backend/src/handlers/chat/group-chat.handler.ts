@@ -13,7 +13,7 @@
 
 import { Socket } from 'socket.io';
 import { sanitizeChatMessage } from './sanitize-message';
-import { getSessionBySocketId, getSocketIdByUserId } from '../../server/session-manager';
+import { getSessionBySocketId, getSocketIdByUserId, sessions as liveSessions } from '../../server/session-manager';
 import { emitterForSession } from '../../server/session-emitter-registry';
 import { groupRoomMembers, emitToMembers } from '../../server/session-rooms';
 import { LoggedOnSubState } from '../../constants/bbs-states';
@@ -137,6 +137,15 @@ function broadcastAnsiToRoom(roomId: string, output: string, excludeSocketId?: s
  */
 export function emitToRoom(roomId: string, event: string, payload: unknown, excludeSocketId?: string): void {
   emitToMembers(groupRoomMembers(roomId), io, event, payload, { exceptEmitterId: excludeSocketId });
+}
+
+/**
+ * One event to every session a door drives (LiveChat's structured surface),
+ * in or out of a room: the board-wide custom emoji list reaches open doors
+ * through this.
+ */
+export function emitToEveryone(event: string, payload: unknown): void {
+  emitToMembers([...liveSessions.values()], io, event, payload, { skip: (member) => !doorOwnsTerminal(member) });
 }
 
 /**
@@ -503,6 +512,7 @@ console.log('📢 Broadcast room:user-joined:', session.user?.username, 'to room
         content: m.message,
         createdAt: m.created_at,
         reactions: reactionCounts[Number(m.id)] ?? {},
+        edited: Boolean(m.edited),
       })),
     };
 console.log('📤 [LiveChat DEBUG] Sending room:joined to', session.user?.username, ':', JSON.stringify(roomJoinedData));

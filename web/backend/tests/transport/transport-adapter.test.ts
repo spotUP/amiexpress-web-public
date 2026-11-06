@@ -81,10 +81,13 @@ const PINNED_EVENT_NAMES: ReadonlyArray<string> = [
   'chat:declined',
   'chat:dm',
   'chat:dm-error',
+  'chat:deleted',
+  'chat:edited',
   'chat:dm-history',
   'chat:dm-threads',
   'chat:dm-threads:list',
   'chat:ignore-list',
+  'chat:emoji-list',
   'chat:ended',
   'chat:error',
   'chat:invite',
@@ -630,12 +633,15 @@ describe('TP-3 - the adapter: one ruling for every event name', () => {
     // socket.io's own event to its listeners (server/session-link.ts).
     // 249 as of 2026-10-15: `message`, not-transport - the session link's `send` forwards
     // socket.io's stock message event (server/session-link.ts).
+    // 256 as of 2026-11-06: LiveChat message edit/delete (`chat:edited`,
+    // `chat:deleted`, server/message-edit-socket-handlers.ts) and the custom
+    // emoji list (`chat:emoji-list`, server/custom-emoji-socket-handlers.ts).
     // 253 as of 2026-11-06: LiveChat's stored reactions and server-side
     // ignore - `chat:reaction` (room broadcast through emitToRoom, which
     // grep A now reads), `chat:reactions:list` and `chat:ignore-list`, all
     // door-only replies (server/reaction-socket-handlers.ts,
     // handlers/chat/ignore.handler.ts).
-    expect(ruled.length).toBe(253);
+    expect(ruled.length).toBe(256);
 
     // (c) every ruling's note is non-empty - the point of the table is the
     // written reason, not the classification.
@@ -704,7 +710,7 @@ describe('TP-3 - the adapter: one ruling for every event name', () => {
       // 118 (2026-09-28): `retry-login` gone with RL's web branch.
       // 114 (2026-10-04): the five `transfer:*` names gone with the dead
       // socket channel that read and wrote any path a visitor named.
-      'web-only': 119, // 119 (2026-11-06): `chat:reaction`, `chat:reactions:list`, `chat:ignore-list`, LiveChat door replies. 116 (2026-11-06): `room:message:ack`, the sender's DB id for his line. Was 115 (2026-10-14): `notify:push-subscribe`, NOTIFY's Enable push.
+      'web-only': 122, // 122 (2026-11-06): `chat:edited`, `chat:deleted`, `chat:emoji-list`, LiveChat door replies. 119 (2026-11-06): `chat:reaction`, `chat:reactions:list`, `chat:ignore-list`, LiveChat door replies. 116 (2026-11-06): `room:message:ack`, the sender's DB id for his line. Was 115 (2026-10-14): `notify:push-subscribe`, NOTIFY's Enable push.
       // 105 (2026-09-24): `terminal-type-settled`, the telnet connection's
       // own end-of-TTYPE signal to its session start.
       // 106 (2026-10-15): `disconnecting`, the session link's re-raise of socket.io's own event.

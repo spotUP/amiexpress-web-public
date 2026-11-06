@@ -79,6 +79,8 @@ function createInputHistory(s, ib, picking = () => false) {
                 eid = to;
         },
         getEditingId: () => eid,
+        /** The id of the last line this user sent (a stored id once the server has acked it), or null. */
+        lastId: () => (h.length ? h[h.length - 1].id : null),
         reset: () => {
             hi = -1;
             si = '';

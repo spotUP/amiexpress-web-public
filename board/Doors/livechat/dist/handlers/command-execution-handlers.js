@@ -1,8 +1,9 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.handleCommandActions = handleCommandActions;
+const edit_handlers_1 = require("./edit-handlers");
 const reaction_handlers_1 = require("./reaction-handlers");
-function handleCommandActions(r, socket, state, onlineUsers, currentSearchOverlay, createSearchOverlay, searchMessages, addSystemMessage, replyToThread, pinMessage, unpinMessage, getPinnedMessages, screen, inputBox, cleanup, showConfirm) {
+function handleCommandActions(r, socket, state, onlineUsers, currentSearchOverlay, createSearchOverlay, searchMessages, addSystemMessage, replyToThread, pinMessage, unpinMessage, getPinnedMessages, screen, inputBox, cleanup, showConfirm, lastOwnMessageId) {
     // Quit - show confirmation dialog
     if (r.action === 'quit') {
         if (showConfirm) {
@@ -27,10 +28,30 @@ function handleCommandActions(r, socket, state, onlineUsers, currentSearchOverla
         replyToThread(socket, r.data.messageId, r.data.message);
         return { handled: true };
     }
+    // Edit / delete: an id, or else your own last message. Only a stored id
+    // (all digits) can be named; a line still waiting for its ack cannot.
+    if (r.action === 'edit' || r.action === 'deletemsg') {
+        const id = r.data?.messageId ?? lastOwnMessageId?.() ?? null;
+        if (id == null || !/^\d+$/.test(String(id))) {
+            addSystemMessage('No message to ' + (r.action === 'edit' ? 'edit' : 'delete') + ': name one with its id, or send a line first.');
+        }
+        else if (r.action === 'edit') {
+            (0, edit_handlers_1.editMessage)(socket, state.currentChannel, String(id), r.data.text);
+        }
+        else {
+            (0, edit_handlers_1.deleteMessage)(socket, state.currentChannel, String(id));
+        }
+        return { handled: true };
+    }
     // Reactions: stored by the backend, counts come back as chat:reaction
     if ((r.action === 'react' || r.action === 'unreact') && r.data?.messageId && r.data?.emoji) {
         const send = r.action === 'react' ? reaction_handlers_1.reactToMessage : reaction_handlers_1.unreactToMessage;
         send(socket, state.currentChannel, String(r.data.messageId), r.data.emoji);
+        return { handled: true };
+    }
+    // Custom emoji: the backend checks the sysop level, stores, and broadcasts the list
+    if (r.action === 'customemoji' && r.data?.event) {
+        socket.emit(r.data.event, r.data.payload);
         return { handled: true };
     }
     if (r.action === 'reactions' && r.data?.messageId) {

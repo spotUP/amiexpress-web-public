@@ -4,6 +4,7 @@ exports.setupChatHandlers = setupChatHandlers;
 const mute_list_1 = require("../core/mute-list");
 const dm_render_1 = require("./dm-render");
 const door_theme_1 = require("../door-theme");
+const emojis_1 = require("../utils/emojis");
 const reaction_store_1 = require("../features/reaction-store");
 function setupChatHandlers(sock, st, uid, un, ou, ps, cl, uut, asm, acm, aa, uef, aud, mu, guc, fm, pk, utp, s, sse, gem, eb, am, mh, ft) {
     // NOTE: We intentionally do NOT listen to 'ansi-output' - that's raw terminal output
@@ -110,6 +111,9 @@ function setupChatHandlers(sock, st, uid, un, ou, ps, cl, uut, asm, acm, aa, uef
     // the 'ignore' level; ask for it on open and take every reply.
     sock.on('chat:ignore-list', (d) => (0, mute_list_1.applyServerIgnores)(st.muteList, d?.users));
     sock.emit('chat:ignore-list');
+    // Board-wide custom emoji: loaded on open, replaced on every sysop change.
+    sock.on('chat:emoji-list', (d) => (0, emojis_1.setCustomEmojis)(d?.emojis));
+    sock.emit('chat:emoji:list');
     sock.on('chat:dm', (d) => {
         if (!d)
             return;
@@ -163,12 +167,6 @@ function setupChatHandlers(sock, st, uid, un, ou, ps, cl, uut, asm, acm, aa, uef
         else {
             aud.onMessage(false);
         }
-        s.render();
-    });
-    sock.on('chat:edited', (d) => {
-        const t = ft(new Date(d.timestamp));
-        const c = guc(d.username);
-        acm(`{${door_theme_1.T.dim}-fg}[${t}]{/${door_theme_1.T.dim}-fg} <{${c}-fg}${d.username}{/${c}-fg}> ${d.newText} {${door_theme_1.T.dim}-fg}(edited){/${door_theme_1.T.dim}-fg}`);
         s.render();
     });
 }

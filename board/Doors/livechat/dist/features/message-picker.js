@@ -75,7 +75,7 @@ function highlightLine(line, width, fg, bg) {
     const padded = plain.padEnd(rows * Math.max(1, width), ' ');
     return `{${fg}-fg}{${bg}-bg}${padded}{/${bg}-bg}{/${fg}-fg}`;
 }
-const COMMANDS_NEEDING_AN_ID = new Set(['love', 'thumbsup', 'heart', 'fire', '+1', '-1', 'pin', 'thread', 'reply']);
+const COMMANDS_NEEDING_AN_ID = new Set(['love', 'thumbsup', 'heart', 'fire', '+1', '-1', 'pin', 'thread', 'reply', 'edit', 'deletemsg']);
 function createMessagePicker(deps) {
     const state = { active: false, rowIndex: -1, action: { kind: 'menu' } };
     const stop = () => {

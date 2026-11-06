@@ -64,7 +64,6 @@ const formatter_1 = require("./core/formatter");
 const reaction_store_1 = require("./features/reaction-store");
 const socket_typing_1 = require("./core/socket-typing");
 const initialization_1 = require("./core/initialization");
-const voice_availability_1 = require("./features/voice-availability");
 // Services
 const services_1 = require("./services");
 // UI components
@@ -73,6 +72,7 @@ const screen_1 = require("./ui/screen");
 const menu_bar_1 = require("./ui/menu-bar");
 const theme_2 = require("./ui/theme");
 const chat_row_map_1 = require("./ui/chat-row-map");
+const message_rows_1 = require("./features/message-rows");
 const layout_solver_1 = require("./ui/layout-solver");
 const status_bar_1 = require("./ui/status-bar");
 const input_box_1 = require("./ui/input-box");
@@ -118,6 +118,7 @@ const format_1 = require("./utils/format");
 const mentions_1 = require("./utils/mentions");
 const markdown_1 = require("./utils/markdown");
 const emojis_1 = require("./utils/emojis");
+const voice_availability_1 = require("./features/voice-availability");
 // Emoji system
 const emoji_picker_1 = require("./ui/emoji-picker");
 const emoji_1 = require("./commands/emoji");
@@ -149,6 +150,8 @@ async function createApp(session) {
     // window was ("livechat has issues opening fullscreen responsive mode in
     // the bbs", 2026-09-01). Both are the same door and both want the room;
     // the switch below gives it to them, and Alt+Enter takes it back.
+    // :code: renders as web emoji for a browser caller, ASCII for telnet/SSH.
+    (0, emojis_1.setEmojiRenderMode)((0, voice_availability_1.voiceAvailable)(session.bbs));
     const chatOnly = session.bbsSession?.tempData?.chatOnly;
     let terminalMode = null;
     // Disable modem emulation for TUI apps - they need instant feedback
@@ -1389,7 +1392,7 @@ async function createApp(session) {
     // ========== SETTINGS OVERLAY ==========
     const settingsOverlay = (0, settings_overlay_1.createSettingsOverlay)(screen, state, presenceService, socketEmitter, userId, updateStatusBar, hideModal);
     // ========== CREATE DIALOG HELPERS ==========
-    const { showHelpDialog, showSettingsOverlay, showNewMessagePrompt, showRoomMenu, showUserList, showDMPrompt } = (0, dialog_helpers_1.createDialogHelpers)(showHelp, showModal, showPromptDialog, showMessageDialog, settingsOverlay, inputBox, screen, socket, state, onlineUsers, addSystemMessage, addChatMessage, emojis_1.replaceEmojis, types_1.PRESENCE_INDICATORS);
+    const { showHelpDialog, showSettingsOverlay, showNewMessagePrompt, showRoomMenu, showUserList, showDMPrompt } = (0, dialog_helpers_1.createDialogHelpers)(showHelp, showModal, showPromptDialog, showMessageDialog, settingsOverlay, inputBox, screen, socket, state, onlineUsers, addSystemMessage, addChatMessage, types_1.PRESENCE_INDICATORS);
     const { overlay: profileOverlay, showProfile: showUserProfile } = (0, profile_overlay_1.createProfileOverlay)(screen, inputBox, onlineUsers, username, state, formatter_1.getUserColor, getChannelDisplayName, showMessageDialog, showDMPrompt, showModal, hideModal);
     // ========== DRAWING CANVAS (for drawing channels) ==========
     const { drawingCanvas, drawingChannels, isDrawingChannel, enterDrawingMode, exitDrawingMode } = (0, drawing_canvas_1.createDrawingCanvas)(screen, socket, state, chatLog, typingBar, bbs, inputBox, getChannelDisplayName, updateChannelList, updateStatusBar, addSystemMessage, menu_bar_1.MENU_HEIGHT, SIDEBAR_WIDTH, status_bar_1.STATUS_HEIGHT, input_box_1.INPUT_HEIGHT);
@@ -1761,13 +1764,38 @@ async function createApp(session) {
         appendLineToLog(`{${door_theme_1.T.dim}-fg}*** ${msg} ***{/${door_theme_1.T.dim}-fg}`);
         screen.render();
     }
-    function addMessageFromUser(from, content, timestamp, messageId) {
+    /** One chat line as painted: time, author, text, and "(edited)" once the text was changed. */
+    function messageLine(from, content, timestamp, edited) {
         const time = (0, format_1.formatTime)(timestamp || new Date());
         const color = (0, formatter_1.getUserColor)(from);
-        const parsed = (0, markdown_1.parseContent)(content);
-        const highlighted = (0, mentions_1.highlightMentions)(parsed, username);
-        appendLineToLog(`{${door_theme_1.T.dim}-fg}[${time}]{/${door_theme_1.T.dim}-fg} <{${color}-fg}${from}{/${color}-fg}> ${highlighted}`, messageId);
+        const highlighted = (0, mentions_1.highlightMentions)((0, markdown_1.parseContent)(content), username);
+        const mark = edited ? ` {${door_theme_1.T.dim}-fg}(edited){/${door_theme_1.T.dim}-fg}` : '';
+        return `{${door_theme_1.T.dim}-fg}[${time}]{/${door_theme_1.T.dim}-fg} <{${color}-fg}${from}{/${color}-fg}> ${highlighted}${mark}`;
+    }
+    function addMessageFromUser(from, content, timestamp, messageId, edited) {
+        appendLineToLog(messageLine(from, content, timestamp, edited), messageId);
         screen.render();
+    }
+    /**
+     * Row indexes shift when a message's rows are replaced or removed, and the
+     * animation manager addresses rows by index: register every animated row
+     * again from the new positions.
+     */
+    function reregisterAnimatedRows() {
+        animationManager.clear?.();
+        chatMessages.forEach((row, i) => { if ((0, animations_1.hasAnimationTags)(row))
+            animationManager.registerLine(i, row); });
+        rebuildChatContent();
+        screen.render();
+    }
+    function replaceMessage(messageId, line) {
+        const rows = (0, animations_1.splitAnimatedLines)((0, emojis_1.replaceEmojis)(line));
+        if ((0, message_rows_1.replaceMessageRows)(chatMessages, chatMessageIds, messageId, rows))
+            reregisterAnimatedRows();
+    }
+    function removeMessage(messageId) {
+        if ((0, message_rows_1.removeMessageRows)(chatMessages, chatMessageIds, messageId))
+            reregisterAnimatedRows();
     }
     // Track logical chat messages separately
     const chatMessages = [];
@@ -1863,6 +1891,12 @@ async function createApp(session) {
                 screen.render();
                 return;
             }
+            if (action.command === 'edit') {
+                inputBox.setValue(`/edit ${messageId} `);
+                inputBox.focus();
+                screen.render();
+                return;
+            }
             void asyncSubmitHandler([`/${action.command}`, ...action.args, messageId].join(' '));
         },
     });
@@ -1888,6 +1922,9 @@ async function createApp(session) {
             messagePicker.cancel();
     });
     function appendLineToLog(line, messageId) {
+        // Every line is painted here, so :code: is rendered here, once, for THIS
+        // caller (web emoji or telnet ASCII); the wire and the DB keep the code.
+        line = (0, emojis_1.replaceEmojis)(line);
         // One entry per DISPLAY ROW, never per message.
         //
         // animationManager writes frames with chatLog.setLine(index, ...), which
@@ -2099,8 +2136,20 @@ async function createApp(session) {
         addSystemMessage(`{${door_theme_1.T.dim}-fg}--- ${history.length} earlier message${history.length === 1 ? '' : 's'} ---{/${door_theme_1.T.dim}-fg}`);
         for (const m of history) {
             const when = m.createdAt ? new Date(m.createdAt) : undefined;
-            addMessageFromUser(m.username ?? 'unknown', m.content ?? '', when, m.id != null ? String(m.id) : undefined);
+            addMessageFromUser(m.username ?? 'unknown', m.content ?? '', when, m.id != null ? String(m.id) : undefined, Boolean(m.edited));
         }
+    });
+    // The author changed a line: every client repaints it in place, marked.
+    socket.on('chat:edited', (d) => {
+        if (d?.messageId == null)
+            return;
+        const when = d.createdAt ? new Date(d.createdAt) : undefined;
+        replaceMessage(String(d.messageId), messageLine(d.username ?? 'unknown', d.content ?? '', when, true));
+    });
+    // The author, a room operator or the sysop removed a line.
+    socket.on('chat:deleted', (d) => {
+        if (d?.messageId != null)
+            removeMessage(String(d.messageId));
     });
     // ========== CHAT SOCKET HANDLERS ==========
     (0, chat_socket_handlers_1.setupChatHandlers)(socket, state, userId, username, onlineUsers, presenceService, chatLog, updateUserTable, addSystemMessage, addChatMessage, addActivity, updateEventsFeed, audio, mentions_1.mentionsUser, formatter_1.getUserColor, formatter_1.formatMessage, typing_preview_1.processKeystroke, updateTypingPreview, screen, socket_typing_1.shouldShowEvent, services_1.getEventMessage, eventBus, state_1.addMessage, messageHandler, format_1.formatTime);
@@ -2250,8 +2299,8 @@ async function createApp(session) {
     });
     // ========== INPUT HANDLING ==========
     // Wrapper for handleCommandActions to match submit handler signature
-    const commandActionHandler = (r) => (0, command_execution_handlers_1.handleCommandActions)(r, socket, state, onlineUsers, currentSearchOverlayRef, search_overlay_1.createSearchOverlay, search_handlers_1.searchMessages, addSystemMessage, thread_handlers_1.replyToThread, pin_handlers_1.pinMessage, pin_handlers_1.unpinMessage, pin_handlers_1.getPinnedMessages, screen, inputBox, cleanup, showConfirm // Pass showConfirm for quit confirmation
-    );
+    const commandActionHandler = (r) => (0, command_execution_handlers_1.handleCommandActions)(r, socket, state, onlineUsers, currentSearchOverlayRef, search_overlay_1.createSearchOverlay, search_handlers_1.searchMessages, addSystemMessage, thread_handlers_1.replyToThread, pin_handlers_1.pinMessage, pin_handlers_1.unpinMessage, pin_handlers_1.getPinnedMessages, screen, inputBox, cleanup, showConfirm, // Pass showConfirm for quit confirmation
+    () => inputHistory.lastId());
     // Wrap async handler to satisfy blessed's sync event handler type requirement
     const asyncSubmitHandler = (0, input_submit_handler_1.createSubmitHandler)(socket, state, registry, cmdCtx, userId, username, onlineUsers, presenceService, socketEmitter, inputHistory, inputBox, screen, chatLog, currentSearchOverlayRef, drawingChannels, currentRoomLabel, hideCommandSuggestions, commandActionHandler, showLoading, showUserList, addChatMessage, addSystemMessage, thread_handlers_1.replyToThread, pin_handlers_1.pinMessage, pin_handlers_1.unpinMessage, pin_handlers_1.getPinnedMessages, search_overlay_1.createSearchOverlay, search_handlers_1.searchMessages, cleanup, showSettingsOverlay, showHelpDialog, showDrawMenu, enterDrawingMode, updateStatusBar, updateUserTable, showFileSharing, updateTypingPreview, clearChat, messagePicker, 
     // tryJoinVoiceChannel - check if channel name matches a voice channel

@@ -10,6 +10,44 @@ export interface Emoji {
   category: 'emotions' | 'actions' | 'symbols' | 'special';
 }
 
+/** A sysop-added emoji as the backend stores it (name without colons). */
+export interface CustomEmoji {
+  name: string;
+  display: string; // what a web caller sees
+  ascii: string;   // what a telnet/SSH caller sees
+}
+
+/**
+ * The one lookup: built-ins plus the board's custom emoji. Rendering is per
+ * caller - web shows `display`, a byte terminal shows `ascii` - and both are
+ * set once on open (setEmojiRenderMode) and on every chat:emoji-list.
+ */
+let custom: CustomEmoji[] = [];
+let webCaller = true;
+
+export function setEmojiRenderMode(isWeb: boolean): void { webCaller = isWeb; }
+
+export function setCustomEmojis(list: CustomEmoji[]): void {
+  custom = Array.isArray(list)
+    ? list.filter(e => e && typeof e.name === 'string' && typeof e.display === 'string' && typeof e.ascii === 'string')
+    : [];
+}
+
+export function getCustomEmojis(): CustomEmoji[] { return custom; }
+
+/** Every emoji the caller can use, custom ones rendered for this caller. */
+export function allEmojis(): Emoji[] {
+  return [
+    ...EMOJIS,
+    ...custom.map((c): Emoji => ({
+      code: `:${c.name}:`,
+      display: webCaller ? c.display : c.ascii,
+      keywords: ['custom'],
+      category: 'special',
+    })),
+  ];
+}
+
 export const EMOJIS: Emoji[] = [
   // Emotions (18)
   { code: ':smile:', display: ':-)', keywords: ['happy', 'grin'], category: 'emotions' },
@@ -73,13 +111,13 @@ export const EMOJIS: Emoji[] = [
 
 /** Get all emojis in a category */
 export function getEmojisByCategory(category: Emoji['category']): Emoji[] {
-  return EMOJIS.filter(e => e.category === category);
+  return allEmojis().filter(e => e.category === category);
 }
 
 /** Search emojis by keyword */
 export function searchEmojis(query: string): Emoji[] {
   const lower = query.toLowerCase();
-  return EMOJIS.filter(e =>
+  return allEmojis().filter(e =>
     e.code.toLowerCase().includes(lower) ||
     e.keywords.some(k => k.toLowerCase().includes(lower))
   );
@@ -93,7 +131,7 @@ export function getCategories(): Emoji['category'][] {
 /** Replace :emoji: codes with display characters */
 export function replaceEmojis(text: string): string {
   let result = text;
-  for (const emoji of EMOJIS) {
+  for (const emoji of allEmojis()) {
     result = result.replace(new RegExp(escapeRegex(emoji.code), 'g'), emoji.display);
   }
   return result;
@@ -106,12 +144,12 @@ function escapeRegex(str: string): string {
 
 /** Get emoji by code */
 export function getEmoji(code: string): Emoji | undefined {
-  return EMOJIS.find(e => e.code === code);
+  return allEmojis().find(e => e.code === code);
 }
 
 /** Get autocomplete suggestions */
 export function getAutocompleteSuggestions(partial: string): Emoji[] {
   if (!partial.startsWith(':')) return [];
   const lower = partial.toLowerCase();
-  return EMOJIS.filter(e => e.code.toLowerCase().startsWith(lower)).slice(0, 10);
+  return allEmojis().filter(e => e.code.toLowerCase().startsWith(lower)).slice(0, 10);
 }

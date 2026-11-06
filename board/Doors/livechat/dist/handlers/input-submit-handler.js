@@ -1,9 +1,9 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.createSubmitHandler = createSubmitHandler;
+const edit_handlers_1 = require("./edit-handlers");
 const command_exec_1 = require("../core/command-exec");
 const command_1 = require("./command");
-const emojis_1 = require("../utils/emojis");
 const format_1 = require("../utils/format");
 const markdown_1 = require("../utils/markdown");
 const formatter_1 = require("../core/formatter");
@@ -98,7 +98,7 @@ function createSubmitHandler(socket, state, registry, cmdCtx, userId, username, 
                     showUserList();
                 }
                 if ((cmdName === 'msg' || cmdName === 'dm' || cmdName === 'pm') && r.data?.targets && r.data?.message) {
-                    const processedMsg = (0, emojis_1.replaceEmojis)(r.data.message);
+                    const processedMsg = r.data.message; // the :code: travels; each client renders it
                     if (r.data.targets.length === 1) {
                         socket.emit('chat:dm', { to: r.data.targets[0], message: processedMsg });
                     }
@@ -114,7 +114,7 @@ function createSubmitHandler(socket, state, registry, cmdCtx, userId, username, 
                     addSystemMessage((0, whois_render_1.formatWhois)((0, whois_render_1.findOnlineUser)(onlineUsers, r.data.username), r.data.username));
                 }
                 if (cmdName === 'me' && r.message?.startsWith('ACTION:')) {
-                    const processedMsg = (0, emojis_1.replaceEmojis)(r.message);
+                    const processedMsg = r.message; // the :code: travels; each client renders it
                     socket.emit('room:message', { message: processedMsg });
                     const action = processedMsg.replace('ACTION: ', '');
                     addChatMessage(`{${door_theme_1.T.accentAlt}-fg}* ${action}{/${door_theme_1.T.accentAlt}-fg}`, false);
@@ -238,15 +238,14 @@ function createSubmitHandler(socket, state, registry, cmdCtx, userId, username, 
                 const color = (0, formatter_1.getUserColor)(username);
                 if (isEditing && editId) {
                     // Editing an existing message
-                    const processedMsg = (0, emojis_1.replaceEmojis)(msg);
-                    socket.emit('chat:edit', { messageId: editId, newText: processedMsg });
-                    addSystemMessage(`(edited) ${msg}`);
+                    const processedMsg = msg; // the :code: travels; each client renders it
+                    (0, edit_handlers_1.editMessage)(socket, state.currentChannel, editId, processedMsg);
                 }
                 else if (state.currentDmThread) {
                     // DM context: route via chat:dm (1:1) or chat:group-dm (group).
                     // Backend echoes the canonical payload back via 'chat:dm' so
                     // we deliberately do NOT add a local chat-log line here.
-                    const processedMsg = (0, emojis_1.replaceEmojis)(msg);
+                    const processedMsg = msg; // the :code: travels; each client renders it
                     const thread = (state.dmThreads || []).find((t) => t.threadId === state.currentDmThread);
                     if (!thread) {
                         addSystemMessage(`{${door_theme_1.T.alert}-fg}DM thread not found in sidebar; refreshing...{/${door_theme_1.T.alert}-fg}`);
@@ -277,7 +276,7 @@ function createSubmitHandler(socket, state, registry, cmdCtx, userId, username, 
                 else {
                     // New message - generate ID and add to history
                     const messageId = `${userId}-${Date.now()}`;
-                    const processedMsg = (0, emojis_1.replaceEmojis)(msg);
+                    const processedMsg = msg; // the :code: travels; each client renders it
                     socket.emit('room:message', { message: processedMsg, messageId, clientId: messageId });
                     // Add local echo immediately (server skips echoing own messages back)
                     //

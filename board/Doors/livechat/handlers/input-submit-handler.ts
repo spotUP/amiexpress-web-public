@@ -2,10 +2,10 @@
  * Input box submit handler for LiveChat
  */
 import type { Socket } from 'socket.io-client';
+import { editMessage } from './edit-handlers';
 import type { CommandRegistry } from '../commands/types';
 import { executeCommand } from '../core/command-exec';
 import { looksLikeCommand } from './command';
-import { replaceEmojis } from '../utils/emojis';
 import { formatTime, escapeContent } from '../utils/format';
 import { parseContent } from '../utils/markdown';
 import { getUserColor } from '../core/formatter';
@@ -155,7 +155,7 @@ export function createSubmitHandler(
         }
 
         if ((cmdName === 'msg' || cmdName === 'dm' || cmdName === 'pm') && r.data?.targets && r.data?.message) {
-          const processedMsg = replaceEmojis(r.data.message);
+          const processedMsg = r.data.message; // the :code: travels; each client renders it
           if (r.data.targets.length === 1) {
             socket.emit('chat:dm', { to: r.data.targets[0], message: processedMsg });
           } else {
@@ -172,7 +172,7 @@ export function createSubmitHandler(
         }
 
         if (cmdName === 'me' && r.message?.startsWith('ACTION:')) {
-          const processedMsg = replaceEmojis(r.message);
+          const processedMsg = r.message; // the :code: travels; each client renders it
           socket.emit('room:message', { message: processedMsg });
           const action = processedMsg.replace('ACTION: ', '');
           addChatMessage(`{${T.accentAlt}-fg}* ${action}{/${T.accentAlt}-fg}`, false);
@@ -291,14 +291,13 @@ export function createSubmitHandler(
 
         if (isEditing && editId) {
           // Editing an existing message
-          const processedMsg = replaceEmojis(msg);
-          socket.emit('chat:edit', { messageId: editId, newText: processedMsg });
-          addSystemMessage(`(edited) ${msg}`);
+          const processedMsg = msg; // the :code: travels; each client renders it
+          editMessage(socket, state.currentChannel, editId, processedMsg);
         } else if (state.currentDmThread) {
           // DM context: route via chat:dm (1:1) or chat:group-dm (group).
           // Backend echoes the canonical payload back via 'chat:dm' so
           // we deliberately do NOT add a local chat-log line here.
-          const processedMsg = replaceEmojis(msg);
+          const processedMsg = msg; // the :code: travels; each client renders it
           const thread = (state.dmThreads || []).find((t: any) => t.threadId === state.currentDmThread);
           if (!thread) {
             addSystemMessage(`{${T.alert}-fg}DM thread not found in sidebar; refreshing...{/${T.alert}-fg}`);
@@ -324,7 +323,7 @@ export function createSubmitHandler(
         } else {
           // New message - generate ID and add to history
           const messageId = `${userId}-${Date.now()}`;
-          const processedMsg = replaceEmojis(msg);
+          const processedMsg = msg; // the :code: travels; each client renders it
           socket.emit('room:message', { message: processedMsg, messageId, clientId: messageId });
 
           // Add local echo immediately (server skips echoing own messages back)

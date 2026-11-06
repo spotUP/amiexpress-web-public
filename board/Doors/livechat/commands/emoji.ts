@@ -4,7 +4,8 @@
  */
 
 import type { SlashCommand } from './types';
-import { searchEmojis, getEmojisByCategory } from '../utils/emojis';
+import { searchEmojis, getEmojisByCategory, getCustomEmojis, EMOJIS } from '../utils/emojis';
+const SYSOP_LEVEL = 255; // the backend's socket-guard SYSOP_LEVEL; it enforces the same check
 import { insertEmojiIntoInput, type EmojiPicker } from '../ui/emoji-picker';
 import { T } from '../door-theme';
 
@@ -108,21 +109,48 @@ export function createEmojiListCommand(addSystemMessage: (msg: string) => void):
 }
 
 /**
- * /customemoji - Manage custom emojis (placeholder)
+ * /customemoji add <name> <display> <ascii> | remove <name> | list
+ * Board-wide emoji the sysop adds. Inserted as :name: like any other; a web
+ * caller sees <display>, a telnet or SSH caller sees <ascii>. The backend
+ * stores them and refuses a non-sysop add/remove; the list returns as
+ * chat:emoji-list and feeds the one lookup in utils/emojis.
  */
 export function createCustomEmojiCommand(addSystemMessage: (msg: string) => void): SlashCommand {
+  const usage = '/customemoji add <name> <display> <ascii> | remove <name> | list';
   return {
     name: 'customemoji',
-    description: 'Manage custom emojis (coming soon)',
-    usage: '/customemoji add|remove|list',
+    description: 'Add, remove or list the board\'s custom emoji (sysop adds)',
+    usage,
     handler: (ctx, args) => {
-      addSystemMessage('Custom emojis feature coming soon!');
-      addSystemMessage('');
-      addSystemMessage('Planned features:');
-      addSystemMessage('  /customemoji add :myface: (^_^) - Add custom emoji');
-      addSystemMessage('  /customemoji remove :myface: - Remove custom emoji');
-      addSystemMessage('  /customemoji list - List your custom emojis');
-
+      const sub = (args[0] || 'list').toLowerCase();
+      if (sub === 'list') {
+        const custom = getCustomEmojis();
+        if (custom.length === 0) addSystemMessage('No custom emoji yet.');
+        for (const c of custom) addSystemMessage(`  ${c.name}  web ${c.display}  telnet ${c.ascii}`);
+        return { handled: true };
+      }
+      if (sub !== 'add' && sub !== 'remove') {
+        addSystemMessage(`Usage: ${usage}`);
+        return { handled: true };
+      }
+      if (ctx.secLevel < SYSOP_LEVEL) {
+        addSystemMessage('Only the sysop can add or remove custom emoji.');
+        return { handled: true };
+      }
+      const name = (args[1] || '').replace(/^:|:$/g, '').toLowerCase();
+      if (sub === 'remove') {
+        if (!name) addSystemMessage('Usage: /customemoji remove <name>');
+        else return { handled: true, action: 'customemoji', data: { event: 'chat:emoji:remove', payload: { name } } };
+        return { handled: true };
+      }
+      const [display, ascii] = [args[2], args[3]];
+      if (!name || !display || !ascii) {
+        addSystemMessage('Usage: /customemoji add <name> <display> <ascii>');
+      } else if (EMOJIS.some(e => e.code === `:${name}:`)) {
+        addSystemMessage(`:${name}: is a built-in emoji.`);
+      } else {
+        return { handled: true, action: 'customemoji', data: { event: 'chat:emoji:add', payload: { name, display, ascii } } };
+      }
       return { handled: true };
     },
   };

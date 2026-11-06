@@ -577,6 +577,18 @@ const NAMED_RULINGS: Readonly<Record<string, EventRuling>> = {
     "render a structured object; the BBS-side chat a telnet caller CAN reach " +
     "travels as ansi-output and is TP-10's work, not this table's.",
   },
+  "chat:emoji-list": {
+    kind: "web-only",
+    note:
+    "LiveChat's board-wide custom emoji list, emitted at " +
+    "server/custom-emoji-socket-handlers.ts (the reply to chat:emoji:list and, " +
+    "through emitToEveryone, the broadcast after a sysop add or remove). Its " +
+    "consumer is the LiveChat door's SERVER half " +
+    "(Doors/livechat/handlers/chat-socket-handlers.ts), which receives it " +
+    "through createDoorSocketWrapper's outgoing dispatch. A byte terminal " +
+    "cannot render a structured object; a telnet caller sees the ASCII " +
+    "fallback because the door renders :code: on its own side.",
+  },
   "chat:reaction": {
     kind: "web-only",
     note:
@@ -600,6 +612,30 @@ const NAMED_RULINGS: Readonly<Record<string, EventRuling>> = {
     "recorded here is of the structured payload only, never of the door's copy. " +
     "A byte terminal cannot render a structured object; the BBS-side chat a " +
     "telnet caller CAN reach travels as ansi-output.",
+  },
+  "chat:edited": {
+    kind: "web-only",
+    note:
+    "LiveChat's structured chat surface, emitted at " +
+    "server/message-edit-socket-handlers.ts (emitToRoom in handleEdit). Its consumer is the LiveChat door's SERVER half " +
+    "(Doors/livechat/handlers/chat-socket-handlers.ts), which receives it " +
+    "through createDoorSocketWrapper's outgoing dispatch " +
+    "(handlers/door.handler.ts) BEFORE this chain runs - so the drop " +
+    "recorded here is of the structured payload only, never of the door's copy. " +
+    "A byte terminal cannot render a structured object; the edit or delete itself " +
+    "is stored, so history shows it on every transport.",
+  },
+  "chat:deleted": {
+    kind: "web-only",
+    note:
+    "LiveChat's structured chat surface, emitted at " +
+    "server/message-edit-socket-handlers.ts (emitToRoom in handleDelete). Its consumer is the LiveChat door's SERVER half " +
+    "(Doors/livechat/handlers/chat-socket-handlers.ts), which receives it " +
+    "through createDoorSocketWrapper's outgoing dispatch " +
+    "(handlers/door.handler.ts) BEFORE this chain runs - so the drop " +
+    "recorded here is of the structured payload only, never of the door's copy. " +
+    "A byte terminal cannot render a structured object; the edit or delete itself " +
+    "is stored, so history shows it on every transport.",
   },
   "chat:request-sent": {
     kind: "web-only",

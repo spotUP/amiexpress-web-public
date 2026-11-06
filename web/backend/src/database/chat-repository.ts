@@ -318,7 +318,7 @@ console.error('[ChatRepository] FTS index update failed:', e);
 
   async getChatRoomHistory(roomId: string, limit: number = 50): Promise<any[]> {
 
-    const stmt = this.prepare('SELECT * FROM chat_room_messages WHERE room_id = ? ORDER BY created_at DESC LIMIT ?');
+    const stmt = this.prepare('SELECT * FROM chat_room_messages WHERE room_id = ? AND COALESCE(deleted, 0) = 0 ORDER BY created_at DESC LIMIT ?');
     const rows = stmt.all(roomId, limit);
     return (rows as any[]).reverse();
   }

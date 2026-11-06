@@ -6,6 +6,7 @@ import { T } from '../door-theme';
 import type { Message } from '../types';
 import { pinMessage } from '../handlers/pin-handlers';
 import { reactToMessage } from '../handlers/reaction-handlers';
+import { deleteMessage } from '../handlers/edit-handlers';
 
 export interface ContextMenuExtras {
   isSysop?: boolean;
@@ -220,14 +221,17 @@ export function createContextMenus(s: Screen, ib: any, sup: (u: string) => void,
           // TODO: Mark channel as having unread messages
           break;
         case 'Edit':
-          ib.setValue('/edit ');
+          // With a message under the pointer, edit that one; else your last.
+          ib.setValue(cmt ? `/edit ${cmt} ` : '/edit ');
           ib.focus();
           s.render();
           break;
         case 'Delete':
-          asm(cmt
-            ? `{${T.accentAlt}-fg}Deleting is not supported by the server yet.{/${T.accentAlt}-fg}`
-            : `{${T.accentAlt}-fg}Right-click on a message first.{/${T.accentAlt}-fg}`);
+          if (!cmt) {
+            asm(`{${T.accentAlt}-fg}Right-click on a message first.{/${T.accentAlt}-fg}`);
+          } else {
+            deleteMessage(sock, extras.currentRoom ? extras.currentRoom() : '', cmt);
+          }
           break;
       }
     } else if (cmty === 'channel' && cmt) {

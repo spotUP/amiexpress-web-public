@@ -73,6 +73,8 @@ export function createInputHistory(s: Screen, ib: Textarea, picking: () => boole
       if (eid === from) eid = to;
     },
     getEditingId: () => eid,
+    /** The id of the last line this user sent (a stored id once the server has acked it), or null. */
+    lastId: (): string | null => (h.length ? h[h.length - 1].id : null),
     reset: () => {
       hi = -1;
       si = '';

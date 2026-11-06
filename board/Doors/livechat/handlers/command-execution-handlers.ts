@@ -3,6 +3,7 @@
  */
 import type { Socket } from 'socket.io-client';
 import type { CommandResult } from '../commands/types';
+import { editMessage, deleteMessage } from './edit-handlers';
 import { reactToMessage, unreactToMessage, listMessageReactions } from './reaction-handlers';
 
 export function handleCommandActions(
@@ -21,7 +22,8 @@ export function handleCommandActions(
   screen: any,
   inputBox: any,
   cleanup: () => void,
-  showConfirm?: (message: string, callback: (confirmed: boolean) => void) => void
+  showConfirm?: (message: string, callback: (confirmed: boolean) => void) => void,
+  lastOwnMessageId?: () => string | null
 ) {
   // Quit - show confirmation dialog
   if (r.action === 'quit') {
@@ -47,10 +49,30 @@ export function handleCommandActions(
     return { handled: true };
   }
 
+  // Edit / delete: an id, or else your own last message. Only a stored id
+  // (all digits) can be named; a line still waiting for its ack cannot.
+  if (r.action === 'edit' || r.action === 'deletemsg') {
+    const id = r.data?.messageId ?? lastOwnMessageId?.() ?? null;
+    if (id == null || !/^\d+$/.test(String(id))) {
+      addSystemMessage('No message to ' + (r.action === 'edit' ? 'edit' : 'delete') + ': name one with its id, or send a line first.');
+    } else if (r.action === 'edit') {
+      editMessage(socket, state.currentChannel, String(id), r.data.text);
+    } else {
+      deleteMessage(socket, state.currentChannel, String(id));
+    }
+    return { handled: true };
+  }
+
   // Reactions: stored by the backend, counts come back as chat:reaction
   if ((r.action === 'react' || r.action === 'unreact') && r.data?.messageId && r.data?.emoji) {
     const send = r.action === 'react' ? reactToMessage : unreactToMessage;
     send(socket, state.currentChannel, String(r.data.messageId), r.data.emoji);
+    return { handled: true };
+  }
+
+  // Custom emoji: the backend checks the sysop level, stores, and broadcasts the list
+  if (r.action === 'customemoji' && r.data?.event) {
+    socket.emit(r.data.event, r.data.payload);
     return { handled: true };
   }
 

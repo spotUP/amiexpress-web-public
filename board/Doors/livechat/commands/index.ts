@@ -1,7 +1,7 @@
 export * from './types';
 import { CommandRegistry } from './types';
 import { joinCmd, leaveCmd, createCmd, topicCmd, deleteCmd } from './channel';
-import { msgCmd, meCmd, replyCmd, threadCmd, editCmd } from './messaging';
+import { msgCmd, meCmd, replyCmd, threadCmd, editCmd, deleteMessageCmd } from './messaging';
 import { whoCmd, whoisCmd, awayCmd, backCmd, statusCmd, nickCmd } from './user';
 import { kickCmd, banCmd, unbanCmd, muteCmd, opCmd } from './moderation';
 import { helpCmd, quitCmd, clearCmd, searchCmd } from './utility';
@@ -19,7 +19,7 @@ export function createCommandRegistry(voice = true): CommandRegistry {
   // Channel
   [joinCmd, leaveCmd, createCmd, topicCmd, deleteCmd].forEach(c => r.register(c));
   // Messaging
-  [msgCmd, meCmd, replyCmd, threadCmd, editCmd].forEach(c => r.register(c));
+  [msgCmd, meCmd, replyCmd, threadCmd, editCmd, deleteMessageCmd].forEach(c => r.register(c));
   // User
   [whoCmd, whoisCmd, awayCmd, backCmd, statusCmd, nickCmd].forEach(c => r.register(c));
   // Moderation

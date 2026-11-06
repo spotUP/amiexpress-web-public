@@ -2,7 +2,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.createDialogHelpers = createDialogHelpers;
 const door_theme_1 = require("../door-theme");
-function createDialogHelpers(showHelp, showModal, showPromptDialog, showMessageDialog, settingsOverlay, inputBox, screen, socket, state, onlineUsers, addSystemMessage, addChatMessage, replaceEmojis, PRESENCE_INDICATORS) {
+function createDialogHelpers(showHelp, showModal, showPromptDialog, showMessageDialog, settingsOverlay, inputBox, screen, socket, state, onlineUsers, addSystemMessage, addChatMessage, PRESENCE_INDICATORS) {
     function showHelpDialog() {
         showHelp();
     }
@@ -41,9 +41,9 @@ function createDialogHelpers(showHelp, showModal, showPromptDialog, showMessageD
     function showDMPrompt(targetUser) {
         showPromptDialog(`Message to @${targetUser}:`, '', (err, value) => {
             if (!err && value) {
-                const processedMsg = replaceEmojis(value);
-                socket.emit('chat:dm', { to: targetUser, message: processedMsg });
-                addChatMessage(`{${door_theme_1.T.accentAlt}-fg}[DM to ${targetUser}]: ${processedMsg}{/${door_theme_1.T.accentAlt}-fg}`);
+                // Send the raw :code: (D1); appendLineToLog renders it per caller.
+                socket.emit('chat:dm', { to: targetUser, message: value });
+                addChatMessage(`{${door_theme_1.T.accentAlt}-fg}[DM to ${targetUser}]: ${value}{/${door_theme_1.T.accentAlt}-fg}`);
             }
             inputBox.focus();
             screen.render();

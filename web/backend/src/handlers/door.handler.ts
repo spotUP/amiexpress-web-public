@@ -259,6 +259,22 @@ console.error('[DoorSocket] room:list error:', err);
       else reactions.handleReactionsList(socket, session, data);
       return wrappedSocket;
     }
+    if (event === 'chat:edit' || event === 'chat:delete') {
+      const data = args[0] || {};
+      const edits = require('../server/message-edit-socket-handlers');
+      if (event === 'chat:edit') edits.handleEdit(socket, session, data);
+      else edits.handleDelete(socket, session, data);
+      return wrappedSocket;
+    }
+    // Custom emoji: add/remove are the sysop's (checked in the handler).
+    if (event === 'chat:emoji:add' || event === 'chat:emoji:remove' || event === 'chat:emoji:list') {
+      const data = args[0] || {};
+      const emoji = require('../server/custom-emoji-socket-handlers');
+      if (event === 'chat:emoji:add') emoji.handleEmojiAdd(socket, session, data);
+      else if (event === 'chat:emoji:remove') emoji.handleEmojiRemove(socket, session, data);
+      else emoji.handleEmojiList(socket);
+      return wrappedSocket;
+    }
     if (event === 'chat:pin:add' || event === 'chat:pin:remove' || event === 'chat:pin:list') {
       const data = args[0] || {};
       if (Number((session.user as { secLevel?: unknown } | undefined)?.secLevel ?? 0) < SYSOP_LEVEL) return wrappedSocket;

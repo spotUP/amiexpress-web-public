@@ -17,7 +17,6 @@ export function createDialogHelpers(
   onlineUsers: Map<string, any>,
   addSystemMessage: (msg: string) => void,
   addChatMessage: (msg: string) => void,
-  replaceEmojis: (text: string) => string,
   PRESENCE_INDICATORS: any
 ) {
   function showHelpDialog() {
@@ -62,9 +61,9 @@ export function createDialogHelpers(
   function showDMPrompt(targetUser: string) {
     showPromptDialog(`Message to @${targetUser}:`, '', (err, value) => {
       if (!err && value) {
-        const processedMsg = replaceEmojis(value);
-        socket.emit('chat:dm', { to: targetUser, message: processedMsg });
-        addChatMessage(`{${T.accentAlt}-fg}[DM to ${targetUser}]: ${processedMsg}{/${T.accentAlt}-fg}`);
+        // Send the raw :code: (D1); appendLineToLog renders it per caller.
+        socket.emit('chat:dm', { to: targetUser, message: value });
+        addChatMessage(`{${T.accentAlt}-fg}[DM to ${targetUser}]: ${value}{/${T.accentAlt}-fg}`);
       }
       inputBox.focus();
       screen.render();

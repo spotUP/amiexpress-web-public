@@ -35,7 +35,7 @@ function createCommandRegistry(voice = true) {
     // Channel
     [channel_1.joinCmd, channel_1.leaveCmd, channel_1.createCmd, channel_1.topicCmd, channel_1.deleteCmd].forEach(c => r.register(c));
     // Messaging
-    [messaging_1.msgCmd, messaging_1.meCmd, messaging_1.replyCmd, messaging_1.threadCmd, messaging_1.editCmd].forEach(c => r.register(c));
+    [messaging_1.msgCmd, messaging_1.meCmd, messaging_1.replyCmd, messaging_1.threadCmd, messaging_1.editCmd, messaging_1.deleteMessageCmd].forEach(c => r.register(c));
     // User
     [user_1.whoCmd, user_1.whoisCmd, user_1.awayCmd, user_1.backCmd, user_1.statusCmd, user_1.nickCmd].forEach(c => r.register(c));
     // Moderation
