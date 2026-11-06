@@ -18,12 +18,20 @@ export function createChannelHeader(blessed: any, screen: any) {
   });
 }
 
+/**
+ * The chat panel's title: the channel name and its topic. This title is what
+ * the user reads as the channel header, and it showed only "#general" after
+ * /topic was set - the topic lived in state but no title ever included it.
+ */
+export function chatPanelTitle(channelName: string, topic: string | undefined, suffix = ''): string {
+  return topic ? `${channelName} - ${topic}${suffix}` : `${channelName}${suffix}`;
+}
+
 /** Format channel header content */
 export function formatChannelHeader(channel: Channel | null, userCount: number): string {
   if (!channel) return ' No channel selected';
-  const topic = channel.topic ? ` - ${channel.topic}` : '';
   const prefix = channel.type === 'dm' ? '@' : '#';
-  return ` ${prefix}${channel.name}${topic} [${userCount} users]`;
+  return ` ${chatPanelTitle(prefix + channel.name, channel.topic)} [${userCount} users]`;
 }
 
 /** Update channel header */

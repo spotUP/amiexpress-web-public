@@ -33,6 +33,7 @@ async function openDoor(): Promise<{ app: any; emits: Emit[]; fire: (event: stri
   const fire = (event: string, ...args: unknown[]) => (handlers.get(event) ?? []).forEach(fn => fn(...args));
   const settle = () => new Promise(resolve => setTimeout(resolve, 100));
   const app: any = await createApp(session);
+  fire('room:list', { rooms: [{ room_id: 'r1', room_name: 'main', is_public: true, member_count: 1 }] });
   fire('room:joined', {
     roomId: 'r1', roomName: 'main', memberCount: 1,
     members: [{ user_id: 'u1', username: 'spot', is_online: true }],
@@ -90,6 +91,10 @@ export async function roomCommandsEmitAndSettingsCommandsChangePrefs(): Promise<
     fire('room:topic', { roomId: 'r1', topic: 'New topic', by: 'bob' });
     await settle();
     assert.ok(chatLineOf(app, 'set the topic: New topic'), 'the topic broadcast must reach the chat');
+    // L13: the chat panel's header label is what the user reads as the
+    // channel header; it showed only "#main" after a topic was set.
+    const labels = elements(app.screen).map((el: any) => String(el.getLabel?.() ?? ''));
+    assert.ok(labels.some(l => l.includes('main - New topic')), `the channel header must show the topic, got ${JSON.stringify(labels.filter(Boolean))}`);
   } finally {
     fire('disconnect', 'transport close');
   }

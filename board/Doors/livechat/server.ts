@@ -76,6 +76,7 @@ import { solveLayout } from './ui/layout-solver';
 import { createStatusBar, updateStatusBar as updateStatusBarFn, STATUS_HEIGHT } from './ui/status-bar';
 import { createInputBox, createEmojiButton, INPUT_HEIGHT, EMOJI_BUTTON_WIDTH } from './ui/input-box';
 import { createChatLog, updateChatHeader as updateChatHeaderFn, TYPING_HEIGHT } from './ui/chat-log';
+import { chatPanelTitle } from './ui/channel-header';
 import { createDisconnectionModal } from './ui/disconnection-modal';
 
 // Overlays
@@ -1390,9 +1391,11 @@ export async function createApp(session: DoorSession) {
     const channelName = getChannelDisplayName(state.currentChannel) || 'Lobby';
     const inVoice = !!(voiceChannel && (voiceChannel as any).isInVoiceChannel?.());
     const modeSuffix = inVoice ? ` [${currentRenderMode.toUpperCase()}]` : '';
-    const fullLabel = ` ${channelName}${modeSuffix} `;
+    const topic = state.channels.find((c: Channel) => c.id === state.currentChannel)?.topic;
+    const title = chatPanelTitle(channelName, topic, modeSuffix);
+    const fullLabel = ` ${title} `;
     // Inner Log label (chatLog is borderless, label rarely visible).
-    updateChatHeaderFn(chatLog, channelName + modeSuffix);
+    updateChatHeaderFn(chatLog, title);
     // Outer DockablePanel label — this is what the user actually sees
     // across the top of the chat panel border.
     if (chatPanel && (chatPanel as any).setLabel) {
@@ -2435,6 +2438,7 @@ export async function createApp(session: DoorSession) {
   socket.on('room:topic', (d: { roomId?: string; topic?: string; by?: string }) => {
     const ch = state.channels.find((c: Channel) => c.id === d?.roomId || c.id === state.currentChannel);
     if (ch && d?.topic != null) ch.topic = d.topic;
+    updateChatHeader();
     addSystemMessage(`${d?.by ?? 'Someone'} set the topic: ${d?.topic ?? ''}`);
   });
   socket.on('room:op-changed', (d: { username?: string; op?: boolean }) => {
