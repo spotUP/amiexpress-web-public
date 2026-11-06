@@ -67,9 +67,10 @@ export async function slashPinKeepsTheStringId(): Promise<void> {
 export async function slashUnpinAndThreadKeepTheStringId(): Promise<void> {
   const { app, emits, fire, settle } = await openDoor();
   await typeLine(app, settle, '/unpin 12-345');
-  await typeLine(app, settle, '/thread 12-345 hello');
+  await typeLine(app, settle, '/thread 12 hello');
   assert.strictEqual(emits.find(e => e.event === 'chat:pin:remove')?.payload.messageId, '12-345');
-  assert.strictEqual(emits.find(e => e.event === 'chat:thread:reply')?.payload.threadId, '12-345');
+  // /thread is a reply now: a room line with a parent, not a lost chat:thread:reply.
+  assert.strictEqual(emits.find(e => e.event === 'room:message')?.payload.replyTo, '12');
   fire('disconnect', 'transport close');
 }
 
@@ -113,5 +114,44 @@ export async function theContextMenuPinsTheMessageUnderThePointer(): Promise<voi
   assert.ok(pin, 'Pin Message must emit chat:pin:add');
   assert.ok(/^1-\d+$/.test(pin!.payload.messageId), `id stays the string: ${pin!.payload.messageId}`);
   assert.strictEqual(pin!.payload.roomId, 'r1');
+  fire('disconnect', 'transport close');
+}
+
+export async function slashReplyIsARoomLineWithAParent(): Promise<void> {
+  const { app, emits, fire, settle } = await openDoor();
+  fire('chat:message', { id: '12', channelId: 'r1', userId: '2', username: 'bob', content: 'original words', type: 'message', createdAt: new Date() });
+  await settle();
+  await typeLine(app, settle, '/reply 12 hello');
+  const sent = emits.find(e => e.event === 'room:message');
+  assert.ok(sent, '/reply must emit room:message');
+  assert.strictEqual(sent!.payload.replyTo, '12');
+  assert.strictEqual(sent!.payload.message, 'hello');
+  const log = elements(app.screen).map(e => (typeof e.getContent === 'function' ? e.getContent() : '')).join('\n');
+  assert.ok(log.includes('hello'), 'the reply text must be in the chat log');
+  assert.ok(log.includes('> bob: original words'), 'the quote row must be in the chat log');
+}
+
+export async function incomingReplyShowsItsQuote(): Promise<void> {
+  const { app, fire, settle } = await openDoor();
+  fire('chat:message', { id: '13', channelId: 'r1', userId: '2', username: 'bob', content: 'answer text', type: 'message', createdAt: new Date(), replyTo: { id: '12', username: 'spot', content: 'first words' } });
+  await settle();
+  const log = elements(app.screen).map(e => (typeof e.getContent === 'function' ? e.getContent() : '')).join('\n');
+  assert.ok(log.includes('> spot: first words') && log.includes('answer text'));
+}
+
+export async function theContextMenuReplyFillsTheMessageId(): Promise<void> {
+  const { app, emits, fire, settle } = await openDoor();
+  await typeLine(app, settle, 'hello world');
+  const clientId = emits.find(e => e.event === 'room:message')!.payload.clientId;
+  fire('room:message:ack', { clientId, id: '77' });
+  const chatLog = elements(app.screen).find(e => e.listeners('rightclick').length > 0);
+  chatLog.emit('rightclick', { x: 10, y: 3 });
+  const menu = elements(app.screen).find(e => e.zIndex === 9999 && typeof e.select === 'function');
+  const items: string[] = (menu.items ?? []).map((i: any) => String(i.content ?? i).replace(/\{[^}]*\}/g, ''));
+  const idx = items.indexOf('Reply');
+  assert.ok(idx >= 0, `menu must offer Reply, has: ${items.join('|')}`);
+  menu.emit('select', menu.items[idx], idx);
+  const input = elements(app.screen).find(e => e.type === 'textarea' && e.listeners('submit').length > 0);
+  assert.strictEqual(input.getValue(), '/reply 77 ');
   fire('disconnect', 'transport close');
 }

@@ -14,6 +14,7 @@ import type { BBSSession } from '../index';
 import { onCaller, SYSOP_LEVEL } from './socket-guard';
 import { db } from '../database';
 import { emitToRoom } from '../handlers/chat/group-chat.handler';
+import { liveMessageInRoom, parseMessageId, type StoredRoomMessage } from '../handlers/chat/message-in-room';
 
 export interface EditData {
   messageId: string | number;
@@ -26,19 +27,7 @@ export interface DeleteData {
 
 const MAX_MESSAGE_LENGTH = 500; // same cap as room:message
 
-function parseMessageId(raw: unknown): number | undefined {
-  const n = Number(raw);
-  return Number.isInteger(n) && n > 0 ? n : undefined;
-}
-
-interface StoredMessage {
-  id: number;
-  room_id: string;
-  sender_id: string | number;
-  sender_username: string;
-  created_at?: number | string;
-  deleted?: number | null;
-}
+type StoredMessage = StoredRoomMessage;
 
 /** The message, when it is live and in the room the caller stands in. */
 async function messageInCallersRoom(socket: Socket, session: BBSSession, raw: unknown): Promise<{ id: number; message: StoredMessage } | undefined> {
@@ -47,8 +36,8 @@ async function messageInCallersRoom(socket: Socket, session: BBSSession, raw: un
     socket.emit('chat:error', { error: 'Invalid message' });
     return undefined;
   }
-  const message = (await db.getMessageById(id)) as StoredMessage | undefined;
-  if (!message || message.deleted || String(message.room_id) !== String(session.currentRoomId)) {
+  const message = await liveMessageInRoom(db, id, session.currentRoomId);
+  if (!message) {
     socket.emit('chat:error', { error: 'Message not found in this room' });
     return undefined;
   }

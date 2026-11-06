@@ -1,5 +1,8 @@
 import type { SlashCommand } from './types';
-/** /reply - Reply to last message */
+/**
+ * /reply [msg-id] text - a room line that quotes another. Without an id it
+ * answers the newest stored message; the id is a stored id, so all digits.
+ */
 export declare const replyCmd: SlashCommand;
 /** /thread - Start a thread on a message */
 export declare const threadCmd: SlashCommand;

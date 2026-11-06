@@ -5,7 +5,6 @@ const edit_handlers_1 = require("./edit-handlers");
 const command_exec_1 = require("../core/command-exec");
 const command_1 = require("./command");
 const format_1 = require("../utils/format");
-const markdown_1 = require("../utils/markdown");
 const formatter_1 = require("../core/formatter");
 const door_theme_1 = require("../door-theme");
 const mute_list_1 = require("../core/mute-list");
@@ -14,7 +13,7 @@ const state_1 = require("../core/state");
 const settings_1 = require("../settings");
 const settings_save_1 = require("../overlays/settings-save");
 const prefs_sync_1 = require("../core/prefs-sync");
-function createSubmitHandler(socket, state, registry, cmdCtx, userId, username, onlineUsers, presenceService, socketEmitter, inputHistory, inputBox, screen, chatLog, currentSearchOverlayRef, drawingChannels, currentRoomLabel, hideCommandSuggestions, handleCommandActions, showLoading, showUserList, addChatMessage, addSystemMessage, replyToThread, pinMessage, unpinMessage, getPinnedMessages, createSearchOverlay, searchMessages, cleanup, showSettingsOverlay, showHelpDialog, showDrawMenu, enterDrawingMode, updateStatusBar, updateUserTable, showFileSharing, updateTypingPreview, clearChatLog, messagePicker, tryJoinVoiceChannel) {
+function createSubmitHandler(socket, state, registry, cmdCtx, userId, username, onlineUsers, presenceService, socketEmitter, inputHistory, inputBox, screen, chatLog, currentSearchOverlayRef, drawingChannels, currentRoomLabel, hideCommandSuggestions, handleCommandActions, showLoading, showUserList, addChatMessage, addSystemMessage, replyToThread, pinMessage, unpinMessage, getPinnedMessages, createSearchOverlay, searchMessages, cleanup, showSettingsOverlay, showHelpDialog, showDrawMenu, enterDrawingMode, updateStatusBar, updateUserTable, showFileSharing, updateTypingPreview, clearChatLog, messagePicker, tryJoinVoiceChannel, sendRoomLine) {
     return async (value) => {
         try {
             // Hide command suggestions on submit
@@ -308,27 +307,8 @@ function createSubmitHandler(socket, state, registry, cmdCtx, userId, username, 
                     screen.render();
                 }
                 else {
-                    // New message - generate ID and add to history
-                    const messageId = `${userId}-${Date.now()}`;
-                    const processedMsg = msg; // the :code: travels; each client renders it
-                    socket.emit('room:message', { message: processedMsg, messageId, clientId: messageId });
-                    // Add local echo immediately (server skips echoing own messages back)
-                    //
-                    // The CONTENT is parsed here, exactly as it is for a message from
-                    // anyone else - see core/formatter.formatMessage. Without this the
-                    // sender was the one person who never saw their own formatting:
-                    // "**this is bold** just prints **this is bold**", while everyone
-                    // else in the room saw it bold. The line is then passed with
-                    // applyMarkdown false because the tags around it are ours, not the
-                    // user's, and must not be parsed a second time.
-                    const time = (0, format_1.formatTime)(new Date());
-                    const color = (0, formatter_1.getUserColor)(username);
-                    const rendered = (0, markdown_1.parseContent)(processedMsg);
-                    addChatMessage(`{${door_theme_1.T.dim}-fg}[${time}]{/${door_theme_1.T.dim}-fg} <{${color}-fg}${username}{/${color}-fg}> ${rendered}`, false, messageId);
-                    // Clear typing preview
-                    updateTypingPreview();
-                    // Add to history with ID
-                    inputHistory.add(messageId, msg);
+                    // New message: the same path /reply uses.
+                    sendRoomLine?.(msg);
                 }
             }
             // Force complete clear including live preview content

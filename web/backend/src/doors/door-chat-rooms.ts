@@ -106,10 +106,10 @@ export async function leaveChatRoom(socket: Socket, session: BBSSession): Promis
   }
 }
 
-export async function sendChatRoomMessage(socket: Socket, session: BBSSession, message: string): Promise<boolean> {
+export async function sendChatRoomMessage(socket: Socket, session: BBSSession, message: string, options?: { clientId?: string; replyTo?: string | number }): Promise<boolean> {
   try {
     const { handleRoomMessage } = require('../handlers/chat/group-chat.handler');
-    await handleRoomMessage(socket, session, { message });
+    await handleRoomMessage(socket, session, { message, clientId: options?.clientId, replyTo: options?.replyTo });
     return true;
   } catch (error) {
     console.error('[BBSApi] Error sending room message:', error);

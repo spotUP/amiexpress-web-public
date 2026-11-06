@@ -115,6 +115,8 @@ const moderation_1 = require("./commands/moderation");
 const dialog_helpers_1 = require("./ui/dialog-helpers");
 const command_execution_handlers_1 = require("./handlers/command-execution-handlers");
 const input_submit_handler_1 = require("./handlers/input-submit-handler");
+const send_room_line_1 = require("./handlers/send-room-line");
+const reply_quote_1 = require("./core/reply-quote");
 // Utils
 const format_1 = require("./utils/format");
 const mentions_1 = require("./utils/mentions");
@@ -1784,6 +1786,8 @@ async function createApp(session) {
     }
     function addMessageFromUser(from, content, timestamp, messageId, edited) {
         appendLineToLog(messageLine(from, content, timestamp, edited), messageId);
+        if (messageId)
+            messageIndex.set(messageId, { username: from, content });
         screen.render();
     }
     /**
@@ -1809,6 +1813,8 @@ async function createApp(session) {
     }
     // Track logical chat messages separately
     const chatMessages = [];
+    // Author and text by message id, for the lines state.messages does not hold (history, own echo).
+    const messageIndex = new Map();
     /**
      * The message id behind each rendered line, where there is one.
      *
@@ -1896,7 +1902,7 @@ async function createApp(session) {
             }
             // /thread and /reply need text after the id: leave the box ready for it.
             if (action.command === 'thread' || action.command === 'reply') {
-                inputBox.setValue(`/thread ${messageId} `);
+                inputBox.setValue(`/${action.command} ${messageId} `);
                 inputBox.focus();
                 screen.render();
                 return;
@@ -2130,6 +2136,11 @@ async function createApp(session) {
                 chatMessageIds[i] = serverId;
         }
         inputHistory.rekey(d.clientId, serverId);
+        const mine = messageIndex.get(d.clientId);
+        if (mine) {
+            messageIndex.delete(d.clientId);
+            messageIndex.set(serverId, mine);
+        }
     });
     socket.on('room:joined', (d) => {
         // Paint the recent conversation.
@@ -2146,6 +2157,8 @@ async function createApp(session) {
         addSystemMessage(`{${door_theme_1.T.dim}-fg}--- ${history.length} earlier message${history.length === 1 ? '' : 's'} ---{/${door_theme_1.T.dim}-fg}`);
         for (const m of history) {
             const when = m.createdAt ? new Date(m.createdAt) : undefined;
+            if (m.replyTo)
+                appendLineToLog((0, reply_quote_1.formatReplyQuote)(m.replyTo), m.id != null ? String(m.id) : undefined);
             addMessageFromUser(m.username ?? 'unknown', m.content ?? '', when, m.id != null ? String(m.id) : undefined, Boolean(m.edited));
         }
     });
@@ -2324,9 +2337,17 @@ async function createApp(session) {
         addSystemMessage(`{${door_theme_1.T.ok}-fg}Reconnected to server!{/${door_theme_1.T.ok}-fg}`);
     });
     // ========== INPUT HANDLING ==========
+    const sendRoomLine = (text, replyTo) => (0, send_room_line_1.sendRoomLine)({
+        socket, userId, username, addChatMessage, inputHistory, updateTypingPreview,
+        rememberMessage: (id, from, content) => { messageIndex.set(id, { username: from, content }); },
+        lookupMessage: (id) => {
+            const m = state.messages.find((x) => String(x.id) === id);
+            return m ? { username: m.username, content: m.content } : messageIndex.get(id);
+        },
+    }, text, replyTo);
     // Wrapper for handleCommandActions to match submit handler signature
     const commandActionHandler = (r) => (0, command_execution_handlers_1.handleCommandActions)(r, socket, state, onlineUsers, currentSearchOverlayRef, search_overlay_1.createSearchOverlay, search_handlers_1.searchMessages, addSystemMessage, thread_handlers_1.replyToThread, pin_handlers_1.pinMessage, pin_handlers_1.unpinMessage, pin_handlers_1.getPinnedMessages, screen, inputBox, cleanup, showConfirm, // Pass showConfirm for quit confirmation
-    () => inputHistory.lastId());
+    () => inputHistory.lastId(), sendRoomLine, () => [...chatMessageIds].reverse().find(id => id != null && /^\d+$/.test(id)) ?? null);
     // Wrap async handler to satisfy blessed's sync event handler type requirement
     const asyncSubmitHandler = (0, input_submit_handler_1.createSubmitHandler)(socket, state, registry, cmdCtx, userId, username, onlineUsers, presenceService, socketEmitter, inputHistory, inputBox, screen, chatLog, currentSearchOverlayRef, drawingChannels, currentRoomLabel, hideCommandSuggestions, commandActionHandler, showLoading, showUserList, addChatMessage, addSystemMessage, thread_handlers_1.replyToThread, pin_handlers_1.pinMessage, pin_handlers_1.unpinMessage, pin_handlers_1.getPinnedMessages, search_overlay_1.createSearchOverlay, search_handlers_1.searchMessages, cleanup, showSettingsOverlay, showHelpDialog, showDrawMenu, enterDrawingMode, updateStatusBar, updateUserTable, showFileSharing, updateTypingPreview, clearChat, messagePicker, 
     // tryJoinVoiceChannel - check if channel name matches a voice channel
@@ -2342,7 +2363,7 @@ async function createApp(session) {
             return true;
         }
         return false;
-    });
+    }, sendRoomLine);
     inputBox.on('submit', (value) => { asyncSubmitHandler(value); });
     // Live typing indicator and command autocomplete
     inputBox.on('keypress', (ch, key) => {

@@ -202,7 +202,7 @@ export function createContextMenus(s: Screen, ib: any, sup: (u: string) => void,
     } else if (cmty === 'chat') {
       switch (si) {
         case 'Reply':
-          ib.setValue('/reply ');
+          ib.setValue(cmt ? '/reply ' + cmt + ' ' : '/reply ');
           ib.focus();
           s.render();
           break;

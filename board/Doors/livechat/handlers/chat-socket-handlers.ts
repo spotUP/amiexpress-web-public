@@ -1,4 +1,5 @@
 import { hidesRoomMessages, hidesDirectMessages, applyServerIgnores } from '../core/mute-list';
+import { formatReplyQuote } from '../core/reply-quote';
 import { applyServerPrefs } from '../core/prefs-sync';
 import { formatDmLine } from './dm-render';
 import { T } from '../door-theme';
@@ -160,6 +161,7 @@ export function setupChatHandlers(sock: any, st: any, uid: number, un: string, o
     const f = fm(m, un, st.prefs.compactMode);
     // The id travels with the line, so a right-click on it can name the
     // message - see chat-row-map.
+    if (m.replyTo) acm(formatReplyQuote(m.replyTo), false, m.id);
     acm(f, false, m.id);
     if (im) {
       aa(`{${T.accentAlt}-fg}@${m.username} mentioned you{/${T.accentAlt}-fg}`);

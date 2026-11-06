@@ -1,15 +1,19 @@
 import type { SlashCommand } from './types';
 
-/** /reply - Reply to last message */
+/**
+ * /reply [msg-id] text - a room line that quotes another. Without an id it
+ * answers the newest stored message; the id is a stored id, so all digits.
+ */
 export const replyCmd: SlashCommand = {
   name: 'reply',
-  description: 'Reply to last message',
-  usage: '/reply message',
+  description: 'Reply to a message (the newest by default)',
+  usage: '/reply [msg-id] message',
   aliases: ['r'],
   handler: (ctx, args) => {
-    const message = args.join(' ');
-    if (!message) return { handled: true, error: 'Usage: /reply message' };
-    return { handled: true, data: { message, type: 'reply' } };
+    const hasId = args.length >= 2 && /^\d+$/.test(args[0]);
+    const message = (hasId ? args.slice(1) : args).join(' ');
+    if (!message) return { handled: true, error: 'Usage: /reply [msg-id] message' };
+    return { handled: true, action: 'reply', data: { messageId: hasId ? args[0] : undefined, message } };
   }
 };
 
@@ -23,7 +27,7 @@ export const threadCmd: SlashCommand = {
     if (args.length < 2) return { handled: true, error: 'Usage: /thread <msg-id> message' };
     const messageId = args[0];
     const message = args.slice(1).join(' ');
-    return { handled: true, action: 'thread', data: { messageId, message } };
+    return { handled: true, action: 'reply', data: { messageId, message } };
   }
 };
 

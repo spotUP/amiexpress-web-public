@@ -1610,8 +1610,8 @@ console.error('[BBSApi] Error posting message:', error);
   /**
    * Send a message to the current chat room
    */
-  async sendRoomMessage(message: string): Promise<boolean> {
-    return sendChatRoomMessage(this.socket, this.session, message);
+  async sendRoomMessage(message: string, options?: { clientId?: string; replyTo?: string | number }): Promise<boolean> {
+    return sendChatRoomMessage(this.socket, this.session, message, options);
   }
 
   /**

@@ -212,7 +212,7 @@ console.error('[DoorSocket] room:leave error:', err);
     if (event === 'room:message') {
       const data = args[0] || {};
 console.log('[DoorSocket] Intercepting room:message:', data);
-      bbsApi.sendRoomMessage(data.message).catch((err: Error) => {
+      bbsApi.sendRoomMessage(data.message, { clientId: data.clientId, replyTo: data.replyTo }).catch((err: Error) => {
 console.error('[DoorSocket] room:message error:', err);
       });
       return wrappedSocket;
@@ -257,6 +257,14 @@ console.error('[DoorSocket] room:list error:', err);
       if (event === 'chat:react') reactions.handleReact(socket, session, data);
       else if (event === 'chat:unreact') reactions.handleUnreact(socket, session, data);
       else reactions.handleReactionsList(socket, session, data);
+      return wrappedSocket;
+    }
+    // Server-side ignore (D8). Without this route the door's ignore events
+    // fell through to socket.emit, reached the browser, and nothing was ignored.
+    if (event === 'chat:ignore' || event === 'chat:unignore' || event === 'chat:ignore-list') {
+      const { handleChatIgnore } = require('./chat/ignore.handler');
+      const action = event === 'chat:ignore' ? 'ignore' : event === 'chat:unignore' ? 'unignore' : 'list';
+      handleChatIgnore(socket, session, action, args[0] || {});
       return wrappedSocket;
     }
     // LiveChat prefs: stored per user, same shape as /ignore.

@@ -22,6 +22,7 @@ import { ErrorHandler } from '../../utils/error-handling.util';
 import { getSystemTime } from '../../utils/date-time.util';
 import { doorOwnsTerminal } from '../../utils/door-owns-terminal';
 import { recipientIgnores } from './ignore.handler';
+import { liveMessageInRoom } from './message-in-room';
 
 import type { BBSSession } from '../../index';
 // Session type
@@ -159,7 +160,11 @@ function broadcastRoomSystem(roomId: string, message: string, excludeSocketId?: 
 /**
  * Broadcast a chat message to all room members
  */
-function broadcastRoomMessage(roomId: string, senderUsername: string, message: string, excludeSocketId?: string, senderId?: number | string, savedId?: number) {
+function replyToSummary(parent: any) {
+  return { id: String(parent.id), username: parent.sender_username, content: String(parent.message ?? '').slice(0, 60) };
+}
+
+function broadcastRoomMessage(roomId: string, senderUsername: string, message: string, excludeSocketId?: string, senderId?: number | string, savedId?: number, parent?: any) {
 console.log('📡 [BROADCAST] Starting broadcast:', {
     roomId,
     senderUsername,
@@ -170,7 +175,8 @@ console.log('📡 [BROADCAST] Starting broadcast:', {
   });
 
   const timestamp = getSystemTime().toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit' });
-  const output = '[' + timestamp + '] ' + AnsiUtil.colorize(senderUsername, 'cyan') + ': ' + message + '\r\n';
+  const replyPrefix = parent ? '(re ' + parent.sender_username + ') ' : '';
+  const output = '[' + timestamp + '] ' + AnsiUtil.colorize(senderUsername, 'cyan') + ': ' + replyPrefix + message + '\r\n';
 
 console.log('📡 [BROADCAST] Emitting to room:', roomId);
 
@@ -190,6 +196,7 @@ console.log('📡 [BROADCAST] Emitting to room:', roomId);
     content: message,
     type: 'message',
     createdAt: getSystemTime(),
+    ...(parent ? { replyTo: replyToSummary(parent) } : {}),
   };
 
   // Server-side /ignore: an ignorer's session never receives the ignored sender's line.
@@ -498,6 +505,12 @@ console.log('📢 Broadcast room:user-joined:', session.user?.username, 'to room
 
     // Emit room joined event to this user (include members list for LiveChat)
     const reactionCounts = (await db.getReactionCountsFor?.(history.map((m: any) => Number(m.id)))) ?? {};
+    const byId = new Map<number, any>(history.map((m: any) => [Number(m.id), m]));
+    const parentOf = async (m: any) => {
+      if (!m.thread_id) return undefined;
+      return byId.get(Number(m.thread_id)) ?? (await db.getMessageById(Number(m.thread_id)));
+    };
+    const historyParents = await Promise.all(history.map(parentOf));
     const roomJoinedData = {
       roomId: room.room_id,
       roomName: room.room_name,
@@ -505,7 +518,7 @@ console.log('📢 Broadcast room:user-joined:', session.user?.username, 'to room
       topic: room.topic || null,
       motd: room.motd || null,
       members: withPresence(members, userIsOnline),
-      history: history.map((m: any) => ({
+      history: history.map((m: any, i: number) => ({
         id: m.id,
         userId: m.sender_id,
         username: m.sender_username,
@@ -513,6 +526,7 @@ console.log('📢 Broadcast room:user-joined:', session.user?.username, 'to room
         createdAt: m.created_at,
         reactions: reactionCounts[Number(m.id)] ?? {},
         edited: Boolean(m.edited),
+        ...(historyParents[i] ? { replyTo: replyToSummary(historyParents[i]) } : {}),
       })),
     };
 console.log('📤 [LiveChat DEBUG] Sending room:joined to', session.user?.username, ':', JSON.stringify(roomJoinedData));
@@ -592,7 +606,7 @@ console.error('❌ Error leaving room:', error);
  * Socket.io event: 'room:message'
  * Data: { message: string }
  */
-export async function handleRoomMessage(socket: Socket, session: BBSSession, data: { message: string; clientId?: string }) {
+export async function handleRoomMessage(socket: Socket, session: BBSSession, data: { message: string; clientId?: string; replyTo?: string | number }) {
   try {
     // Validate user is in a room
     if (!session.currentRoomId) {
@@ -626,17 +640,30 @@ export async function handleRoomMessage(socket: Socket, session: BBSSession, dat
       }
     }
 
+    // A reply is a room message with a parent in the same room.
+    let parent: any;
+    if (data.replyTo !== undefined && data.replyTo !== null && data.replyTo !== '') {
+      parent = /^\d+$/.test(String(data.replyTo)) ? await liveMessageInRoom(db, data.replyTo, session.currentRoomId) : undefined;
+      if (!parent) {
+        return sendRoomError(socket, 'Message not found in this room');
+      }
+    }
+
     // Save message to database
     const savedId = await db.saveChatRoomMessage({
       roomId: session.currentRoomId,
       senderId: session.user?.id,
       senderUsername: session.user?.username,
       message,
-      messageType: 'message'
+      messageType: 'message',
+      threadId: parent ? Number(parent.id) : undefined
     });
+    if (parent) {
+      await db.updateThreadReplyCount(Number(parent.id));
+    }
 
     // Broadcast message to all room members EXCEPT sender (they already see their own message)
-    broadcastRoomMessage(session.currentRoomId!, session.user?.username!, message, socket.id, parseInt(session.user?.id || '0', 10), savedId);
+    broadcastRoomMessage(session.currentRoomId!, session.user?.username!, message, socket.id, parseInt(session.user?.id || '0', 10), savedId, parent);
 
     // The sender is excluded from the broadcast; tell him the id his line got
     // so his local copy can be re-keyed to the DB row id.

@@ -2,6 +2,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.setupChatHandlers = setupChatHandlers;
 const mute_list_1 = require("../core/mute-list");
+const reply_quote_1 = require("../core/reply-quote");
 const prefs_sync_1 = require("../core/prefs-sync");
 const dm_render_1 = require("./dm-render");
 const door_theme_1 = require("../door-theme");
@@ -165,6 +166,8 @@ function setupChatHandlers(sock, st, uid, un, ou, ps, cl, uut, asm, acm, aa, uef
         const f = fm(m, un, st.prefs.compactMode);
         // The id travels with the line, so a right-click on it can name the
         // message - see chat-row-map.
+        if (m.replyTo)
+            acm((0, reply_quote_1.formatReplyQuote)(m.replyTo), false, m.id);
         acm(f, false, m.id);
         if (im) {
             aa(`{${door_theme_1.T.accentAlt}-fg}@${m.username} mentioned you{/${door_theme_1.T.accentAlt}-fg}`);

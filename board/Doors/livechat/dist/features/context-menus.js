@@ -192,7 +192,7 @@ function createContextMenus(s, ib, sup, sdp, asm, sock, extras = {}) {
         else if (cmty === 'chat') {
             switch (si) {
                 case 'Reply':
-                    ib.setValue('/reply ');
+                    ib.setValue(cmt ? '/reply ' + cmt + ' ' : '/reply ');
                     ib.focus();
                     s.render();
                     break;

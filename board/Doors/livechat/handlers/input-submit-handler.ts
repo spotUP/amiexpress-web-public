@@ -58,7 +58,8 @@ export function createSubmitHandler(
   updateTypingPreview: () => void,
   clearChatLog: () => void,
   messagePicker?: MessagePicker,
-  tryJoinVoiceChannel?: (channelName: string) => boolean
+  tryJoinVoiceChannel?: (channelName: string) => boolean,
+  sendRoomLine?: (text: string, replyTo?: string) => void
 ) {
   return async (value: string) => {
     try {
@@ -351,30 +352,8 @@ export function createSubmitHandler(
           inputBox.focus();
           screen.render();
         } else {
-          // New message - generate ID and add to history
-          const messageId = `${userId}-${Date.now()}`;
-          const processedMsg = msg; // the :code: travels; each client renders it
-          socket.emit('room:message', { message: processedMsg, messageId, clientId: messageId });
-
-          // Add local echo immediately (server skips echoing own messages back)
-          //
-          // The CONTENT is parsed here, exactly as it is for a message from
-          // anyone else - see core/formatter.formatMessage. Without this the
-          // sender was the one person who never saw their own formatting:
-          // "**this is bold** just prints **this is bold**", while everyone
-          // else in the room saw it bold. The line is then passed with
-          // applyMarkdown false because the tags around it are ours, not the
-          // user's, and must not be parsed a second time.
-          const time = formatTime(new Date());
-          const color = getUserColor(username);
-          const rendered = parseContent(processedMsg);
-          addChatMessage(`{${T.dim}-fg}[${time}]{/${T.dim}-fg} <{${color}-fg}${username}{/${color}-fg}> ${rendered}`, false, messageId);
-
-          // Clear typing preview
-          updateTypingPreview();
-
-          // Add to history with ID
-          inputHistory.add(messageId, msg);
+          // New message: the same path /reply uses.
+          sendRoomLine?.(msg);
         }
       }
 

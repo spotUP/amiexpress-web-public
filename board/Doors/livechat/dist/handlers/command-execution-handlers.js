@@ -3,7 +3,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.handleCommandActions = handleCommandActions;
 const edit_handlers_1 = require("./edit-handlers");
 const reaction_handlers_1 = require("./reaction-handlers");
-function handleCommandActions(r, socket, state, onlineUsers, currentSearchOverlay, createSearchOverlay, searchMessages, addSystemMessage, replyToThread, pinMessage, unpinMessage, getPinnedMessages, screen, inputBox, cleanup, showConfirm, lastOwnMessageId) {
+function handleCommandActions(r, socket, state, onlineUsers, currentSearchOverlay, createSearchOverlay, searchMessages, addSystemMessage, replyToThread, pinMessage, unpinMessage, getPinnedMessages, screen, inputBox, cleanup, showConfirm, lastOwnMessageId, sendRoomLine, lastRoomMessageId) {
     // Quit - show confirmation dialog
     if (r.action === 'quit') {
         if (showConfirm) {
@@ -23,9 +23,15 @@ function handleCommandActions(r, socket, state, onlineUsers, currentSearchOverla
         }
         return { handled: true };
     }
-    // Thread
-    if (r.action === 'thread' && r.data?.messageId && r.data?.message) {
-        replyToThread(socket, r.data.messageId, r.data.message);
+    // Reply: a room line with a parent. The id is the one named, else the newest stored one.
+    if (r.action === 'reply' && r.data?.message) {
+        const id = r.data.messageId ?? lastRoomMessageId?.() ?? null;
+        if (id == null || !/^\d+$/.test(String(id))) {
+            addSystemMessage('No message to reply to: name one with its id.');
+        }
+        else {
+            sendRoomLine?.(r.data.message, String(id));
+        }
         return { handled: true };
     }
     // Edit / delete: an id, or else your own last message. Only a stored id

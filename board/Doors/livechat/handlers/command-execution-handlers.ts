@@ -23,7 +23,9 @@ export function handleCommandActions(
   inputBox: any,
   cleanup: () => void,
   showConfirm?: (message: string, callback: (confirmed: boolean) => void) => void,
-  lastOwnMessageId?: () => string | null
+  lastOwnMessageId?: () => string | null,
+  sendRoomLine?: (text: string, replyTo?: string) => void,
+  lastRoomMessageId?: () => string | null
 ) {
   // Quit - show confirmation dialog
   if (r.action === 'quit') {
@@ -43,9 +45,14 @@ export function handleCommandActions(
     return { handled: true };
   }
 
-  // Thread
-  if (r.action === 'thread' && r.data?.messageId && r.data?.message) {
-    replyToThread(socket, r.data.messageId, r.data.message);
+  // Reply: a room line with a parent. The id is the one named, else the newest stored one.
+  if (r.action === 'reply' && r.data?.message) {
+    const id = r.data.messageId ?? lastRoomMessageId?.() ?? null;
+    if (id == null || !/^\d+$/.test(String(id))) {
+      addSystemMessage('No message to reply to: name one with its id.');
+    } else {
+      sendRoomLine?.(r.data.message, String(id));
+    }
     return { handled: true };
   }
 

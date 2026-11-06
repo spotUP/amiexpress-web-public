@@ -116,6 +116,8 @@ import { kickCmd, banCmd, unbanCmd, muteCmd, unmuteCmd } from './commands/modera
 import { createDialogHelpers } from './ui/dialog-helpers';
 import { handleCommandActions } from './handlers/command-execution-handlers';
 import { createSubmitHandler } from './handlers/input-submit-handler';
+import { sendRoomLine as sendRoomLineTo } from './handlers/send-room-line';
+import { formatReplyQuote, type ReplyParent } from './core/reply-quote';
 
 // Utils
 import { formatTime } from './utils/format';
@@ -2033,6 +2035,7 @@ export async function createApp(session: DoorSession) {
 
   function addMessageFromUser(from: string, content: string, timestamp?: Date, messageId?: string, edited?: boolean) {
     appendLineToLog(messageLine(from, content, timestamp, edited), messageId);
+    if (messageId) messageIndex.set(messageId, { username: from, content });
     screen.render();
   }
 
@@ -2059,6 +2062,8 @@ export async function createApp(session: DoorSession) {
 
   // Track logical chat messages separately
   const chatMessages: string[] = [];
+  // Author and text by message id, for the lines state.messages does not hold (history, own echo).
+  const messageIndex = new Map<string, ReplyParent>();
   /**
    * The message id behind each rendered line, where there is one.
    *
@@ -2150,7 +2155,7 @@ export async function createApp(session: DoorSession) {
       }
       // /thread and /reply need text after the id: leave the box ready for it.
       if (action.command === 'thread' || action.command === 'reply') {
-        inputBox.setValue(`/thread ${messageId} `);
+        inputBox.setValue(`/${action.command} ${messageId} `);
         inputBox.focus();
         screen.render();
         return;
@@ -2403,6 +2408,8 @@ export async function createApp(session: DoorSession) {
       if (chatMessageIds[i] === d.clientId) chatMessageIds[i] = serverId;
     }
     inputHistory.rekey(d.clientId, serverId);
+    const mine = messageIndex.get(d.clientId);
+    if (mine) { messageIndex.delete(d.clientId); messageIndex.set(serverId, mine); }
   });
 
   socket.on('room:joined', (d: any) => {
@@ -2420,6 +2427,7 @@ export async function createApp(session: DoorSession) {
     addSystemMessage(`{${T.dim}-fg}--- ${history.length} earlier message${history.length === 1 ? '' : 's'} ---{/${T.dim}-fg}`);
     for (const m of history) {
       const when = m.createdAt ? new Date(m.createdAt) : undefined;
+      if (m.replyTo) appendLineToLog(formatReplyQuote(m.replyTo), m.id != null ? String(m.id) : undefined);
       addMessageFromUser(m.username ?? 'unknown', m.content ?? '', when, m.id != null ? String(m.id) : undefined, Boolean(m.edited));
     }
   });
@@ -2628,6 +2636,15 @@ export async function createApp(session: DoorSession) {
 
   // ========== INPUT HANDLING ==========
 
+  const sendRoomLine = (text: string, replyTo?: string) => sendRoomLineTo({
+    socket, userId, username, addChatMessage, inputHistory, updateTypingPreview,
+    rememberMessage: (id, from, content) => { messageIndex.set(id, { username: from, content }); },
+    lookupMessage: (id) => {
+      const m = state.messages.find((x: any) => String(x.id) === id);
+      return m ? { username: m.username, content: m.content } : messageIndex.get(id);
+    },
+  }, text, replyTo);
+
   // Wrapper for handleCommandActions to match submit handler signature
   const commandActionHandler = (r: any) => handleCommandActions(
     r,
@@ -2646,7 +2663,9 @@ export async function createApp(session: DoorSession) {
     inputBox,
     cleanup,
     showConfirm,  // Pass showConfirm for quit confirmation
-    () => inputHistory.lastId()
+    () => inputHistory.lastId(),
+    sendRoomLine,
+    () => [...chatMessageIds].reverse().find(id => id != null && /^\d+$/.test(id)) ?? null
   );
 
   // Wrap async handler to satisfy blessed's sync event handler type requirement
@@ -2704,7 +2723,8 @@ export async function createApp(session: DoorSession) {
         return true;
       }
       return false;
-    }
+    },
+    sendRoomLine
   );
   inputBox.on('submit', (value: string) => { asyncSubmitHandler(value); });
 
