@@ -13,9 +13,11 @@
  *   ignore  their DMs are refused too
  *   block   both, and the server is told (see the note below)
  *
- * BLOCK IS NOT ENFORCED AT THE SERVER YET. There is no block API to call, so
- * this hides them from you but does not stop them sending. The menu says so
- * rather than promising protection this cannot deliver.
+ * IGNORE IS ENFORCED AT THE SERVER: /ignore, /unignore and the menu send
+ * chat:ignore / chat:unignore, and the server stops delivering that user's
+ * room lines and DMs. The list here is loaded from chat:ignore-list on open.
+ * Mute and block stay local: they hide lines here but the server still
+ * delivers them.
  *
  * Pure and separate from the socket handlers, so the filtering rules can be
  * tested without a chat running.
@@ -32,10 +34,17 @@ export declare function createMuteList(): MuteList;
  */
 export declare function toggleMute(list: MuteList, username: string, level: MuteLevel): MuteLevel | null;
 export declare function muteLevel(list: MuteList, username: string): MuteLevel | null;
+/** Everyone held at exactly this level, sorted - what a bare /ignore lists. */
+export declare function namesAtLevel(list: MuteList, level: MuteLevel): string[];
 /** Should a room message from this user be hidden? Every level hides those. */
 export declare function hidesRoomMessages(list: MuteList, username: string): boolean;
 /** Should a direct message from this user be refused? Mute alone does not. */
 export declare function hidesDirectMessages(list: MuteList, username: string): boolean;
+/**
+ * Make the 'ignore' level equal the server's ignore list (the DB is the truth:
+ * the backend enforces it). Mute and block entries are local and stay.
+ */
+export declare function applyServerIgnores(list: MuteList, names: unknown): void;
 /** The list as something that can be written to prefs and read back. */
 export declare function serializeMuteList(list: MuteList): Record<string, MuteLevel>;
 export declare function deserializeMuteList(saved: unknown): MuteList;

@@ -1,10 +1,11 @@
-import { toggleMute, muteMessage, muteMenuLabels, muteLevelForLabel, type MuteList } from '../core/mute-list';
+import { toggleMute, muteLevel, muteMessage, muteMenuLabels, muteLevelForLabel, type MuteList } from '../core/mute-list';
 import { PANEL_BORDER } from '../ui/theme';
 import blessed from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import type { Screen } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import { T } from '../door-theme';
 import type { Message } from '../types';
 import { pinMessage } from '../handlers/pin-handlers';
+import { reactToMessage } from '../handlers/reaction-handlers';
 
 export interface ContextMenuExtras {
   isSysop?: boolean;
@@ -155,7 +156,13 @@ export function createContextMenus(s: Screen, ib: any, sup: (u: string) => void,
           }
           const level = muteLevelForLabel(si);
           if (!level) break;
+          const before = muteLevel(extras.muteList, cmt);
           const now = toggleMute(extras.muteList, cmt, level);
+          // Ignore is enforced by the server (it stops delivering the
+          // ignored user's room lines and DMs), so moving into or out of
+          // that level must reach it, same as /ignore and /unignore.
+          if (now === 'ignore') sock.emit('chat:ignore', { user: cmt });
+          else if (before === 'ignore') sock.emit('chat:unignore', { user: cmt });
           asm(muteMessage(cmt, now));
           break;
         }
@@ -190,9 +197,12 @@ export function createContextMenus(s: Screen, ib: any, sup: (u: string) => void,
         // reporting success. Half a feature that claims to be whole is worse
         // than one that admits what it is.
         case 'React':
-          asm(cmt
-            ? `{${T.accentAlt}-fg}Reactions are not supported by the server yet.{/${T.accentAlt}-fg}`
-            : `{${T.accentAlt}-fg}Right-click on a message first.{/${T.accentAlt}-fg}`);
+          if (!cmt) {
+            asm(`{${T.accentAlt}-fg}Right-click on a message first.{/${T.accentAlt}-fg}`);
+          } else {
+            reactToMessage(sock, extras.currentRoom ? extras.currentRoom() : '', cmt, '+1');
+            asm('Reaction sent.');
+          }
           break;
         case 'Copy Text':
           asm('Copy to clipboard (not available in terminal)');

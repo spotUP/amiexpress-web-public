@@ -8,13 +8,16 @@ export const reactCmd: SlashCommand = {
   usage: '/react [emoji] [msg-id]',
   aliases: ['+1', '-1', 'heart', 'fire'],
   handler: (ctx, args) => {
-    const emoji = args[0] || '+1';
-    const msgId = args[1];
-    if (!REACTION_EMOJIS.includes(emoji as any)) {
+    // /heart, /fire, /+1 and /-1 are the emoji; /react takes it as an argument.
+    const viaAlias = ctx.invokedAs !== undefined && ctx.invokedAs !== 'react';
+    const emoji = viaAlias ? ctx.invokedAs! : (args[0] || '+1');
+    const msgId = viaAlias ? args[0] : args[1];
+    if (!(REACTION_EMOJIS as readonly string[]).includes(emoji)) {
       const valid = REACTION_EMOJIS.join(', ');
       return { handled: true, error: `Valid emojis: ${valid}` };
     }
-    return { handled: true, data: { type: 'react', emoji, msgId } };
+    if (!msgId) return { handled: true, error: 'Usage: /react [emoji] <msg-id>' };
+    return { handled: true, action: 'react', data: { type: 'react', emoji, messageId: msgId } };
   }
 };
 
@@ -26,7 +29,8 @@ export const unreactCmd: SlashCommand = {
   handler: (ctx, args) => {
     const emoji = args[0] || '+1';
     const msgId = args[1];
-    return { handled: true, data: { type: 'unreact', emoji, msgId } };
+    if (!msgId) return { handled: true, error: 'Usage: /unreact [emoji] <msg-id>' };
+    return { handled: true, action: 'unreact', data: { type: 'unreact', emoji, messageId: msgId } };
   }
 };
 
@@ -37,7 +41,8 @@ export const reactionsCmd: SlashCommand = {
   usage: '/reactions [msg-id]',
   handler: (ctx, args) => {
     const msgId = args[0];
-    return { handled: true, data: { type: 'list_reactions', msgId } };
+    if (!msgId) return { handled: true, error: 'Usage: /reactions <msg-id>' };
+    return { handled: true, action: 'reactions', data: { type: 'list_reactions', messageId: msgId } };
   }
 };
 
@@ -48,7 +53,8 @@ export const thumbsUpCmd: SlashCommand = {
   usage: '/thumbsup [msg-id]',
   aliases: ['like'],
   handler: (ctx, args) => {
-    return { handled: true, data: { type: 'react', emoji: '+1', msgId: args[0] } };
+    if (!args[0]) return { handled: true, error: 'Usage: /thumbsup <msg-id>' };
+    return { handled: true, action: 'react', data: { type: 'react', emoji: '+1', messageId: args[0] } };
   }
 };
 
@@ -57,6 +63,7 @@ export const heartCmd: SlashCommand = {
   description: 'React with heart',
   usage: '/love [msg-id]',
   handler: (ctx, args) => {
-    return { handled: true, data: { type: 'react', emoji: 'heart', msgId: args[0] } };
+    if (!args[0]) return { handled: true, error: 'Usage: /love <msg-id>' };
+    return { handled: true, action: 'react', data: { type: 'react', emoji: 'heart', messageId: args[0] } };
   }
 };

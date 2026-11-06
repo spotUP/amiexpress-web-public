@@ -9,7 +9,7 @@
  * because of the characters they start with".
  *
  * Deliberately strict about the first character after the slash: no command
- * begins with a digit or punctuation, and text very well might.
+ * begins with a digit or punctuation (except the +1 and -1 reactions), and text very well might.
  */
 export declare function looksLikeCommand(input: string): boolean;
 export interface CommandResult {

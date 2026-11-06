@@ -304,6 +304,16 @@ console.log("[CHAT DEBUG] room:list returning early - no session");
     await handleRoomMode({ io: ioServer, socket, session, data });
   });
 
+  // ===== IGNORE LIST (server-side; see handlers/chat/ignore.handler.ts) =====
+  for (const [event, action] of [["chat:ignore", "ignore"], ["chat:unignore", "unignore"], ["chat:ignore-list", "list"]] as const) {
+    onCaller(socket, event, async (_caller: BBSSession, data?: { user?: string }) => {
+      const session = getSessionBySocketId(socket.id);
+      if (!session) return;
+      const { handleChatIgnore } = require("../handlers/chat/ignore.handler");
+      handleChatIgnore(socket, session, action, data);
+    });
+  }
+
   // ===== DIRECT MESSAGES =====
   onCaller(socket, "chat:dm", async (_caller: BBSSession, data: { to: string; message: string }) => {
     const session = getSessionBySocketId(socket.id);

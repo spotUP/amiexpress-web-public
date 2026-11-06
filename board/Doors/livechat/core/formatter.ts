@@ -1,5 +1,4 @@
-import type { Message, DisplayMessage, ReactionGroup, EventPrefs } from '../types';
-import { EMOJI_DISPLAY } from '../types';
+import type { Message, DisplayMessage, EventPrefs } from '../types';
 import { formatTime } from '../utils/format';
 import { parseContent } from '../utils/markdown';
 import { highlightMentions } from '../utils/mentions';
@@ -18,15 +17,6 @@ export function formatMessage(msg: Message, currentUser: string, compact: boolea
   }
 
   return `${time}${name}: ${content}`;
-}
-
-/** Format reactions */
-export function formatReactions(reactions: ReactionGroup[]): string {
-  if (!reactions.length) return '';
-  return ' ' + reactions.map(r => {
-    const emoji = EMOJI_DISPLAY[r.emoji] || r.emoji;
-    return `{${T.accent}-fg}[${emoji}${r.count > 1 ? r.count : ''}]{/${T.accent}-fg}`;
-  }).join(' ');
 }
 
 /** Format system message */

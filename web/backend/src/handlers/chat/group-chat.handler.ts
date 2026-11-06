@@ -21,6 +21,7 @@ import { AnsiUtil, clearScreenFor } from '../../utils/ansi.util';
 import { ErrorHandler } from '../../utils/error-handling.util';
 import { getSystemTime } from '../../utils/date-time.util';
 import { doorOwnsTerminal } from '../../utils/door-owns-terminal';
+import { recipientIgnores } from './ignore.handler';
 
 import type { BBSSession } from '../../index';
 // Session type
@@ -116,7 +117,7 @@ function sendRoomError(socket: Socket, message: string): void {
  * lines painted across it. Those clients already receive the structured
  * chat:message event and render it themselves.
  */
-function broadcastAnsiToRoom(roomId: string, output: string, excludeSocketId?: string, leaving?: BBSSession): void {
+function broadcastAnsiToRoom(roomId: string, output: string, excludeSocketId?: string, leaving?: BBSSession, fromUsername?: string): void {
   // Members are the sessions standing in the room (server/session-rooms.ts),
   // reached through their own emitters - a telnet or SSH member was in no
   // socket.io room and heard nothing (web-vs-telnet audit item 3). A member
@@ -124,7 +125,7 @@ function broadcastAnsiToRoom(roomId: string, output: string, excludeSocketId?: s
   // chat:message itself, and raw ANSI over it doubled every line.
   emitToMembers(groupRoomMembers(roomId), io, 'ansi-output', output, {
     exceptEmitterId: excludeSocketId,
-    skip: (member) => member === leaving || doorOwnsTerminal(member),
+    skip: (member) => member === leaving || doorOwnsTerminal(member) || (fromUsername !== undefined && recipientIgnores(member, fromUsername)),
   });
 }
 
@@ -166,7 +167,7 @@ console.log('📡 [BROADCAST] Emitting to room:', roomId);
 
   // Raw ANSI for plain terminal clients only - a door renders the
   // structured chat:message event below itself.
-  broadcastAnsiToRoom(roomId, output, excludeSocketId);
+  broadcastAnsiToRoom(roomId, output, excludeSocketId, undefined, senderUsername);
 
   // Also emit structured chat:message event for advanced clients (LiveChat door)
   // This allows UI-based chat clients to parse and display messages properly
@@ -182,7 +183,11 @@ console.log('📡 [BROADCAST] Emitting to room:', roomId);
     createdAt: getSystemTime(),
   };
 
-  emitToMembers(groupRoomMembers(roomId), io, 'chat:message', structuredMessage, { exceptEmitterId: excludeSocketId });
+  // Server-side /ignore: an ignorer's session never receives the ignored sender's line.
+  emitToMembers(groupRoomMembers(roomId), io, 'chat:message', structuredMessage, {
+    exceptEmitterId: excludeSocketId,
+    skip: (member) => recipientIgnores(member, senderUsername),
+  });
 console.log('📡 [BROADCAST] Sent chat:message', excludeSocketId ? `(excluding ${excludeSocketId})` : 'to all in room');
 
 console.log('📡 [BROADCAST] Broadcast complete');
@@ -483,6 +488,7 @@ console.log('✅ User joined room:', session.user?.username, room.room_name);
 console.log('📢 Broadcast room:user-joined:', session.user?.username, 'to room:', room.room_id);
 
     // Emit room joined event to this user (include members list for LiveChat)
+    const reactionCounts = (await db.getReactionCountsFor?.(history.map((m: any) => Number(m.id)))) ?? {};
     const roomJoinedData = {
       roomId: room.room_id,
       roomName: room.room_name,
@@ -496,6 +502,7 @@ console.log('📢 Broadcast room:user-joined:', session.user?.username, 'to room
         username: m.sender_username,
         content: m.message,
         createdAt: m.created_at,
+        reactions: reactionCounts[Number(m.id)] ?? {},
       })),
     };
 console.log('📤 [LiveChat DEBUG] Sending room:joined to', session.user?.username, ':', JSON.stringify(roomJoinedData));

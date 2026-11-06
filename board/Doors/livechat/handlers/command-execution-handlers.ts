@@ -3,6 +3,7 @@
  */
 import type { Socket } from 'socket.io-client';
 import type { CommandResult } from '../commands/types';
+import { reactToMessage, unreactToMessage, listMessageReactions } from './reaction-handlers';
 
 export function handleCommandActions(
   r: CommandResult,
@@ -43,6 +44,18 @@ export function handleCommandActions(
   // Thread
   if (r.action === 'thread' && r.data?.messageId && r.data?.message) {
     replyToThread(socket, r.data.messageId, r.data.message);
+    return { handled: true };
+  }
+
+  // Reactions: stored by the backend, counts come back as chat:reaction
+  if ((r.action === 'react' || r.action === 'unreact') && r.data?.messageId && r.data?.emoji) {
+    const send = r.action === 'react' ? reactToMessage : unreactToMessage;
+    send(socket, state.currentChannel, String(r.data.messageId), r.data.emoji);
+    return { handled: true };
+  }
+
+  if (r.action === 'reactions' && r.data?.messageId) {
+    listMessageReactions(socket, state.currentChannel, String(r.data.messageId));
     return { handled: true };
   }
 

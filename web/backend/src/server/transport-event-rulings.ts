@@ -320,6 +320,16 @@ const NAMED_RULINGS: Readonly<Record<string, EventRuling>> = {
     "render a structured object; the BBS-side chat a telnet caller CAN reach " +
     "travels as ansi-output and is TP-10's work, not this table's.",
   },
+  "chat:ignore-list": {
+    kind: "web-only",
+    note:
+    "LiveChat's structured chat surface, emitted at " +
+    "handlers/chat/ignore.handler.ts (reply to chat:ignore, chat:unignore and " +
+    "chat:ignore-list). Its consumer is the LiveChat door's SERVER half " +
+    "(Doors/livechat/handlers/chat-socket-handlers.ts). A byte terminal cannot " +
+    "render a structured object; the ignore itself is enforced in the room " +
+    "broadcast and DM delivery, so it holds on every transport.",
+  },
   "chat:dm-error": {
     kind: "web-only",
     note:
@@ -566,6 +576,30 @@ const NAMED_RULINGS: Readonly<Record<string, EventRuling>> = {
     "and web/frontend/src/chat; measured, they do not). A byte terminal cannot " +
     "render a structured object; the BBS-side chat a telnet caller CAN reach " +
     "travels as ansi-output and is TP-10's work, not this table's.",
+  },
+  "chat:reaction": {
+    kind: "web-only",
+    note:
+    "LiveChat's structured chat surface, emitted at " +
+    "server/reaction-socket-handlers.ts (emitToRoom in change()). Its consumer is the LiveChat door's SERVER half " +
+    "(Doors/livechat/handlers/chat-socket-handlers.ts), which receives it " +
+    "through createDoorSocketWrapper's outgoing dispatch " +
+    "(handlers/door.handler.ts) BEFORE this chain runs - so the drop " +
+    "recorded here is of the structured payload only, never of the door's copy. " +
+    "A byte terminal cannot render a structured object; the BBS-side chat a " +
+    "telnet caller CAN reach travels as ansi-output.",
+  },
+  "chat:reactions:list": {
+    kind: "web-only",
+    note:
+    "LiveChat's structured chat surface, emitted at " +
+    "server/reaction-socket-handlers.ts:87. Its consumer is the LiveChat door's SERVER half " +
+    "(Doors/livechat/handlers/chat-socket-handlers.ts), which receives it " +
+    "through createDoorSocketWrapper's outgoing dispatch " +
+    "(handlers/door.handler.ts) BEFORE this chain runs - so the drop " +
+    "recorded here is of the structured payload only, never of the door's copy. " +
+    "A byte terminal cannot render a structured object; the BBS-side chat a " +
+    "telnet caller CAN reach travels as ansi-output.",
   },
   "chat:request-sent": {
     kind: "web-only",

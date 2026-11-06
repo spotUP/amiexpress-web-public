@@ -28,6 +28,7 @@ import { DebugLogger } from '../utils/debug-logger.util';
 import { emitText, emitPrompt, emitLine, flushOutput } from '../utils/output.util';
 import { resolveDoorMinColumns, declaredMinColumns, resolveDoorAdaptColumns, doorOpensForC64, doorRefusedForWidth, doorDropsOldestAt40, doorDropsLastAt40, doorViewportsAt40, doorMarkerColumns, doorShowsC64Mark, doorNeedsBrowser, type MinColumnsDoorShape, ADAPTED_DOOR_TYPES, DEFAULT_MIN_COLUMNS, sessionColumns, DOOR_NEEDS_80_NOTICE, noWidthEquivalentNotice, DOOR_NEEDS_BROWSER_NOTICE, DOOR_NEEDS_BROWSER_MARK } from '../utils/door-min-columns.util';
 import { transportCapabilities } from '../server/transport-adapter';
+import { SYSOP_LEVEL } from '../server/socket-guard';
 import { installC64DoorAdapter, uninstallC64DoorAdapter } from '../server/c64-door-adapter';
 import { isNarrow, NARROW_WIDTH, narrowClip } from '../utils/table-format.util';
 import { enableGameMode, disableGameMode } from '../server/socket-handlers';
@@ -243,6 +244,28 @@ console.log('[DoorSocket] Intercepting room:list');
 console.error('[DoorSocket] room:list error:', err);
         socket.emit('room:error', { error: err.message || 'Failed to list rooms' });
       });
+      return wrappedSocket;
+    }
+
+    // Reactions and pins. A door's emit goes server->CLIENT, so these never
+    // reached a socket.on listener (setupReactionHandlers / setupPinHandlers);
+    // route them to the handler functions the way room:message is routed.
+    // Pins stay the sysop's, as setupPinHandlers' onLevel has it.
+    if (event === 'chat:react' || event === 'chat:unreact' || event === 'chat:reactions:list') {
+      const data = args[0] || {};
+      const reactions = require('../server/reaction-socket-handlers');
+      if (event === 'chat:react') reactions.handleReact(socket, session, data);
+      else if (event === 'chat:unreact') reactions.handleUnreact(socket, session, data);
+      else reactions.handleReactionsList(socket, session, data);
+      return wrappedSocket;
+    }
+    if (event === 'chat:pin:add' || event === 'chat:pin:remove' || event === 'chat:pin:list') {
+      const data = args[0] || {};
+      if (Number((session.user as { secLevel?: unknown } | undefined)?.secLevel ?? 0) < SYSOP_LEVEL) return wrappedSocket;
+      const pins = require('../server/pin-socket-handlers');
+      if (event === 'chat:pin:add') pins.handlePinAdd(socket, session, data);
+      else if (event === 'chat:pin:remove') pins.handlePinRemove(socket, session, data);
+      else pins.handlePinList(socket, session, data);
       return wrappedSocket;
     }
 

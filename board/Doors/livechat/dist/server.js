@@ -61,6 +61,7 @@ const theme_1 = require("@amiexpress/bbs-door-sdk/engines/ui/theme");
 // Core state and services
 const state_1 = require("./core/state");
 const formatter_1 = require("./core/formatter");
+const reaction_store_1 = require("./features/reaction-store");
 const socket_typing_1 = require("./core/socket-typing");
 const initialization_1 = require("./core/initialization");
 const voice_availability_1 = require("./features/voice-availability");
@@ -85,6 +86,7 @@ const profile_overlay_1 = require("./overlays/profile-overlay");
 // Features
 const settings_1 = require("./settings");
 const input_history_1 = require("./features/input-history");
+const message_picker_1 = require("./features/message-picker");
 const file_sharing_1 = require("./features/file-sharing");
 const drawing_canvas_1 = require("./features/drawing-canvas");
 const context_menus_1 = require("./features/context-menus");
@@ -343,7 +345,8 @@ async function createApp(session) {
     emojiButton.on('mouseenter', () => {
         audio.playSound('hover');
     });
-    const inputHistory = (0, input_history_1.createInputHistory)(screen, inputBox);
+    // The picker is declared with the chat rows below; history only asks its flag.
+    const inputHistory = (0, input_history_1.createInputHistory)(screen, inputBox, () => messagePicker.state.active);
     // ========== CHANNEL LIST (Left Sidebar) ==========
     // ========== COMMAND AUTOCOMPLETE ==========
     const commandSuggestions = (0, blessed_helpers_1.createList)({
@@ -624,12 +627,6 @@ async function createApp(session) {
     channelList.on('mouseenter', () => {
         audio.playSound('hover');
     });
-    // Default channels to show when server hasn't responded
-    const defaultChannels = [
-        { id: doorSettings.defaultChannel, name: doorSettings.defaultChannel, type: 'public' },
-        { id: 'random', name: 'random', type: 'public' },
-        { id: 'help', name: 'help', type: 'public' },
-    ];
     // Track channel data for selection handling
     let channelItems = [];
     // Per-channel expand state.
@@ -653,16 +650,7 @@ async function createApp(session) {
     }
     // Initialize channel list data
     function updateChannelList() {
-        // Use state channels if available, otherwise show defaults
-        const channelsToShow = state.channels.length > 0 ? state.channels : defaultChannels.map(c => ({
-            ...c,
-            displayName: c.name,
-            topic: '',
-            createdBy: 'system',
-            createdAt: new Date(),
-            memberCount: 0,
-            unreadCount: 0,
-        }));
+        const channelsToShow = (0, state_1.channelsToShow)(state.channels, doorSettings.defaultChannel);
         // Build sidebar rows via the pure builder. Keeps server.ts under
         // the 2000-line limit and lets the row layout be unit-tested.
         const built = (0, sidebar_items_builder_1.buildSidebarItems)({
@@ -1773,12 +1761,12 @@ async function createApp(session) {
         appendLineToLog(`{${door_theme_1.T.dim}-fg}*** ${msg} ***{/${door_theme_1.T.dim}-fg}`);
         screen.render();
     }
-    function addMessageFromUser(from, content, timestamp) {
+    function addMessageFromUser(from, content, timestamp, messageId) {
         const time = (0, format_1.formatTime)(timestamp || new Date());
         const color = (0, formatter_1.getUserColor)(from);
         const parsed = (0, markdown_1.parseContent)(content);
         const highlighted = (0, mentions_1.highlightMentions)(parsed, username);
-        appendLineToLog(`{${door_theme_1.T.dim}-fg}[${time}]{/${door_theme_1.T.dim}-fg} <{${color}-fg}${from}{/${color}-fg}> ${highlighted}`);
+        appendLineToLog(`{${door_theme_1.T.dim}-fg}[${time}]{/${door_theme_1.T.dim}-fg} <{${color}-fg}${from}{/${color}-fg}> ${highlighted}`, messageId);
         screen.render();
     }
     // Track logical chat messages separately
@@ -1817,13 +1805,88 @@ async function createApp(session) {
         // the manager's most recent rendered frame for any animated indices.
         const renderedMessages = chatMessages.map((line, idx) => {
             const animFrame = animationManager.getRendered?.(idx);
-            return animFrame != null && animFrame !== '' ? animFrame : line;
+            const shown = animFrame != null && animFrame !== '' ? animFrame : line;
+            // Stored reaction counts go after the last row of their message, read
+            // from the reaction store at paint time so a chat:reaction repaints them.
+            const id = chatMessageIds[idx];
+            if (id == null || chatMessageIds[idx + 1] === id)
+                return shown;
+            const counts = (0, reaction_store_1.formatReactionCounts)(id);
+            return counts ? `${shown}{${door_theme_1.T.accent}-fg}${counts}{/${door_theme_1.T.accent}-fg}` : shown;
         });
+        // Pick mode: the selected message is an inverse bar in the theme's
+        // selection colours (the same pair the context menu's selected row uses).
+        const picked = messagePicker.state.active ? (0, message_picker_1.messageRows)(chatMessageIds, messagePicker.state.rowIndex) : null;
+        const logWidth = Math.max(1, Number(chatLog.width) || 80);
+        if (picked) {
+            for (let i = picked.first; i <= picked.last; i++) {
+                renderedMessages[i] = (0, message_picker_1.highlightLine)(chatMessages[i], logWidth, door_theme_1.T.ground, door_theme_1.T.accent);
+            }
+        }
         // CRITICAL: Use CRLF for separation to force margin return
         const fullContent = [...renderedMessages, ...previewLines].join('\r\n');
         chatLog.setContent(fullContent);
-        chatLog.setScrollPerc(100);
+        if (picked) {
+            // Scroll the selection into view (centred), instead of the bottom.
+            const span = (0, message_picker_1.wrappedSpan)(chatMessages, logWidth, picked.first, picked.last);
+            const viewHeight = Math.max(1, Number(chatLog.height) || 24);
+            chatLog.scrollTo(Math.max(0, span.top - Math.floor((viewHeight - span.height) / 2)));
+        }
+        else {
+            chatLog.setScrollPerc(100);
+        }
     }
+    /**
+     * Message pick mode (plan L3). Up on an empty input line, or a bare
+     * /love /react /thumbsup /pin /thread /reply, starts it; Enter re-dispatches
+     * the command with the picked id, or opens the message's context menu.
+     */
+    const messagePicker = (0, message_picker_1.createMessagePicker)({
+        ids: () => chatMessageIds,
+        onChange: () => {
+            inputBox.setLabel(messagePicker.state.active ? ' [PICK MESSAGE: Up/Down, Enter, Esc] ' : ' Message ');
+            rebuildChatContent();
+            screen.render();
+        },
+        onConfirm: (action, messageId) => {
+            if (action.kind === 'menu') {
+                const x = Number(chatLog.aleft) + 2 || 2;
+                const y = Number(chatLog.atop) + 2 || 2;
+                showContextMenu(x, y, 'chat', messageId);
+                screen.render();
+                return;
+            }
+            // /thread and /reply need text after the id: leave the box ready for it.
+            if (action.command === 'thread' || action.command === 'reply') {
+                inputBox.setValue(`/thread ${messageId} `);
+                inputBox.focus();
+                screen.render();
+                return;
+            }
+            void asyncSubmitHandler([`/${action.command}`, ...action.args, messageId].join(' '));
+        },
+    });
+    screen.key(['up'], () => {
+        if (messagePicker.state.active) {
+            messagePicker.move(-1);
+            return;
+        }
+        if (screen.getFocused() === inputBox && !(inputBox.getValue() || '')) {
+            messagePicker.start({ kind: 'menu' });
+        }
+    });
+    screen.key(['down'], () => messagePicker.move(1));
+    screen.key(['escape'], () => messagePicker.cancel());
+    // Typing anything else leaves pick mode; Enter and the arrows are the picker's.
+    inputBox.on('keypress', (ch, key) => {
+        if (!messagePicker.state.active)
+            return;
+        const name = key?.name;
+        if (name === 'up' || name === 'down' || name === 'enter' || name === 'return' || name === 'escape')
+            return;
+        if (ch && ch.length === 1 && ch >= ' ')
+            messagePicker.cancel();
+    });
     function appendLineToLog(line, messageId) {
         // One entry per DISPLAY ROW, never per message.
         //
@@ -2032,10 +2095,11 @@ async function createApp(session) {
         const history = Array.isArray(d?.history) ? d.history : [];
         if (history.length === 0)
             return;
+        (0, reaction_store_1.seedReactionCounts)(history);
         addSystemMessage(`{${door_theme_1.T.dim}-fg}--- ${history.length} earlier message${history.length === 1 ? '' : 's'} ---{/${door_theme_1.T.dim}-fg}`);
         for (const m of history) {
             const when = m.createdAt ? new Date(m.createdAt) : undefined;
-            addMessageFromUser(m.username ?? 'unknown', m.content ?? '', when);
+            addMessageFromUser(m.username ?? 'unknown', m.content ?? '', when, m.id != null ? String(m.id) : undefined);
         }
     });
     // ========== CHAT SOCKET HANDLERS ==========
@@ -2189,7 +2253,7 @@ async function createApp(session) {
     const commandActionHandler = (r) => (0, command_execution_handlers_1.handleCommandActions)(r, socket, state, onlineUsers, currentSearchOverlayRef, search_overlay_1.createSearchOverlay, search_handlers_1.searchMessages, addSystemMessage, thread_handlers_1.replyToThread, pin_handlers_1.pinMessage, pin_handlers_1.unpinMessage, pin_handlers_1.getPinnedMessages, screen, inputBox, cleanup, showConfirm // Pass showConfirm for quit confirmation
     );
     // Wrap async handler to satisfy blessed's sync event handler type requirement
-    const asyncSubmitHandler = (0, input_submit_handler_1.createSubmitHandler)(socket, state, registry, cmdCtx, userId, username, onlineUsers, presenceService, socketEmitter, inputHistory, inputBox, screen, chatLog, currentSearchOverlayRef, drawingChannels, currentRoomLabel, hideCommandSuggestions, commandActionHandler, showLoading, showUserList, addChatMessage, addSystemMessage, thread_handlers_1.replyToThread, pin_handlers_1.pinMessage, pin_handlers_1.unpinMessage, pin_handlers_1.getPinnedMessages, search_overlay_1.createSearchOverlay, search_handlers_1.searchMessages, cleanup, showSettingsOverlay, showHelpDialog, showDrawMenu, enterDrawingMode, updateStatusBar, updateUserTable, showFileSharing, updateTypingPreview, clearChat, 
+    const asyncSubmitHandler = (0, input_submit_handler_1.createSubmitHandler)(socket, state, registry, cmdCtx, userId, username, onlineUsers, presenceService, socketEmitter, inputHistory, inputBox, screen, chatLog, currentSearchOverlayRef, drawingChannels, currentRoomLabel, hideCommandSuggestions, commandActionHandler, showLoading, showUserList, addChatMessage, addSystemMessage, thread_handlers_1.replyToThread, pin_handlers_1.pinMessage, pin_handlers_1.unpinMessage, pin_handlers_1.getPinnedMessages, search_overlay_1.createSearchOverlay, search_handlers_1.searchMessages, cleanup, showSettingsOverlay, showHelpDialog, showDrawMenu, enterDrawingMode, updateStatusBar, updateUserTable, showFileSharing, updateTypingPreview, clearChat, messagePicker, 
     // tryJoinVoiceChannel - check if channel name matches a voice channel
     (channelName) => {
         if (!voiceEnabled)
@@ -2582,6 +2646,9 @@ async function createApp(session) {
     // ========== MAIN ==========
     return {
         state,
+        // The live registry (shared commands plus the ones registered above), so a
+        // test can count what /help promises against what actually dispatches.
+        registry,
         // The screen and the size switch are handed back so the door can be
         // DRIVEN by a test - toggled wide, resized, toggled back - rather than
         // only started. Nothing in the door reads them from here.

@@ -290,6 +290,9 @@ console.error('[SOCKET HANDLER ERROR] Failed to load thread-socket-handlers:', e
   import('./pin-socket-handlers').then(({ setupPinHandlers }) => setupPinHandlers(socket, session)).catch((err) => {
 console.error('[SOCKET HANDLER ERROR] Failed to load pin-socket-handlers:', err);
   });
+  import('./reaction-socket-handlers').then(({ setupReactionHandlers }) => setupReactionHandlers(socket, session)).catch((err) => {
+console.error('[SOCKET HANDLER ERROR] Failed to load reaction-socket-handlers:', err);
+  });
   import('./search-socket-handlers').then(({ setupSearchHandlers }) => setupSearchHandlers(socket, session)).catch((err) => {
 console.error('[SOCKET HANDLER ERROR] Failed to load search-socket-handlers:', err);
   });

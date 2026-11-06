@@ -4,6 +4,8 @@ export interface CommandContext {
     username: string;
     secLevel: number;
     currentChannel: string;
+    /** The name typed after the slash, so an alias can tell which one it was. */
+    invokedAs?: string;
     emit: (event: string, data: any) => void;
     systemMsg: (text: string) => void;
     errorMsg: (text: string) => void;
@@ -13,7 +15,7 @@ export interface CommandResult {
     handled: boolean;
     message?: string;
     error?: string;
-    action?: 'quit' | 'join' | 'leave' | 'switch' | 'thread' | 'pin' | 'unpin' | 'showpinned' | 'search' | 'kick' | 'ban' | 'unban' | 'mute' | 'unmute';
+    action?: 'quit' | 'join' | 'leave' | 'switch' | 'thread' | 'react' | 'unreact' | 'reactions' | 'pin' | 'unpin' | 'showpinned' | 'search' | 'kick' | 'ban' | 'unban' | 'mute' | 'unmute';
     data?: any;
 }
 /** Slash command definition */

@@ -8,12 +8,20 @@ const format_1 = require("../utils/format");
 const markdown_1 = require("../utils/markdown");
 const formatter_1 = require("../core/formatter");
 const door_theme_1 = require("../door-theme");
+const mute_list_1 = require("../core/mute-list");
 const whois_render_1 = require("./whois-render");
-function createSubmitHandler(socket, state, registry, cmdCtx, userId, username, onlineUsers, presenceService, socketEmitter, inputHistory, inputBox, screen, chatLog, currentSearchOverlayRef, drawingChannels, currentRoomLabel, hideCommandSuggestions, handleCommandActions, showLoading, showUserList, addChatMessage, addSystemMessage, replyToThread, pinMessage, unpinMessage, getPinnedMessages, createSearchOverlay, searchMessages, cleanup, showSettingsOverlay, showHelpDialog, showDrawMenu, enterDrawingMode, updateStatusBar, updateUserTable, showFileSharing, updateTypingPreview, clearChatLog, tryJoinVoiceChannel) {
+const state_1 = require("../core/state");
+const settings_1 = require("../settings");
+function createSubmitHandler(socket, state, registry, cmdCtx, userId, username, onlineUsers, presenceService, socketEmitter, inputHistory, inputBox, screen, chatLog, currentSearchOverlayRef, drawingChannels, currentRoomLabel, hideCommandSuggestions, handleCommandActions, showLoading, showUserList, addChatMessage, addSystemMessage, replyToThread, pinMessage, unpinMessage, getPinnedMessages, createSearchOverlay, searchMessages, cleanup, showSettingsOverlay, showHelpDialog, showDrawMenu, enterDrawingMode, updateStatusBar, updateUserTable, showFileSharing, updateTypingPreview, clearChatLog, messagePicker, tryJoinVoiceChannel) {
     return async (value) => {
         try {
             // Hide command suggestions on submit
             hideCommandSuggestions();
+            // Enter while a message is being picked confirms the pick.
+            if (messagePicker?.state.active) {
+                messagePicker.confirm();
+                return;
+            }
             const msg = value.trim();
             if (!msg) {
                 inputBox.clearValue();
@@ -37,6 +45,9 @@ function createSubmitHandler(socket, state, registry, cmdCtx, userId, username, 
                 updateTypingPreview(); // Sync typingPreviewLines with typingBuffers
             }
             if ((0, command_1.looksLikeCommand)(msg)) {
+                // /love, /pin ... with no id: pick the message with the arrow keys.
+                if (messagePicker?.startFromCommand(msg))
+                    return;
                 cmdCtx.currentChannel = state.currentChannel;
                 const r = await (0, command_exec_1.executeCommand)(msg, registry, cmdCtx);
                 const cmdName = msg.slice(1).split(' ')[0].toLowerCase();
@@ -155,36 +166,66 @@ function createSubmitHandler(socket, state, registry, cmdCtx, userId, username, 
                 if (cmdName === 'clear' || cmdName === 'cls') {
                     clearChatLog();
                 }
-                if (cmdName === 'settings') {
-                    showSettingsOverlay();
-                }
                 if (cmdName === 'help') {
                     showHelpDialog();
                 }
-                // Drawing commands - create/join a drawing channel
-                if (cmdName === 'draw' || cmdName === 'whiteboard' || cmdName === 'art') {
-                    const args = msg.split(' ').slice(1);
-                    if (args.length === 0) {
-                        // Show the drawing channel menu
-                        showDrawMenu();
+                // Door-UI commands (commands/ui.ts) name their effect in data.type,
+                // so aliases (/art, /share ...) take the same path as the command.
+                switch (r.data?.type) {
+                    case 'settings':
+                        showSettingsOverlay();
+                        break;
+                    case 'draw':
+                        if (!r.data.channel) {
+                            showDrawMenu();
+                        }
+                        else {
+                            // Create/join a specific drawing channel
+                            const fullName = `art:${String(r.data.channel).replace(/^art:/i, '')}`;
+                            drawingChannels.add(fullName);
+                            if (state.currentChannel)
+                                socket.emit('room:leave');
+                            socket.emit('room:join', { room: fullName });
+                            state.currentChannel = fullName;
+                            updateStatusBar();
+                            enterDrawingMode(fullName);
+                            addSystemMessage(`Joined drawing channel #${fullName}`);
+                        }
+                        break;
+                    case 'files':
+                        showFileSharing();
+                        break;
+                    case 'rooms': {
+                        const rooms = (0, state_1.channelsToShow)(state.channels, (0, settings_1.settings)().defaultChannel);
+                        addSystemMessage(`Rooms: ${rooms.map(c => `#${c.name}${c.memberCount ? ` (${c.memberCount})` : ''}`).join(', ')}`);
+                        break;
                     }
-                    else {
-                        // Create/join specific drawing channel
-                        let channelName = args[0].replace(/^art:/i, '');
-                        const fullName = `art:${channelName}`;
-                        drawingChannels.add(fullName);
-                        if (state.currentChannel)
-                            socket.emit('room:leave');
-                        socket.emit('room:join', { room: fullName });
-                        state.currentChannel = fullName;
-                        updateStatusBar();
-                        enterDrawingMode(fullName);
-                        addSystemMessage(`Joined drawing channel #${fullName}`);
+                    case 'ignore': {
+                        if (!r.data.user) {
+                            const names = (0, mute_list_1.namesAtLevel)(state.muteList, 'ignore');
+                            addSystemMessage(names.length === 0 ? 'You are not ignoring anyone.' : `Ignoring: ${names.join(', ')}`);
+                        }
+                        else if ((0, mute_list_1.muteLevel)(state.muteList, r.data.user) === 'ignore') {
+                            addSystemMessage(`Already ignoring ${r.data.user}.`);
+                        }
+                        else {
+                            // Sets the level (replacing a mute/block) and never toggles it off.
+                            state.muteList.delete(r.data.user.toLowerCase());
+                            addSystemMessage((0, mute_list_1.muteMessage)(r.data.user, (0, mute_list_1.toggleMute)(state.muteList, r.data.user, 'ignore')));
+                            socket.emit('chat:ignore', { user: r.data.user });
+                        }
+                        break;
                     }
-                }
-                // File sharing commands
-                if (cmdName === 'files' || cmdName === 'file' || cmdName === 'share') {
-                    showFileSharing();
+                    case 'unignore':
+                        if ((0, mute_list_1.muteLevel)(state.muteList, r.data.user) === 'ignore') {
+                            (0, mute_list_1.toggleMute)(state.muteList, r.data.user, 'ignore');
+                            socket.emit('chat:unignore', { user: r.data.user });
+                            addSystemMessage((0, mute_list_1.muteMessage)(r.data.user, null));
+                        }
+                        else {
+                            addSystemMessage(`You are not ignoring ${r.data.user}.`);
+                        }
+                        break;
                 }
                 if (r.error)
                     addSystemMessage(`Error: ${r.error}`);

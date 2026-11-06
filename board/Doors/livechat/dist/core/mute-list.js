@@ -3,8 +3,10 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.createMuteList = createMuteList;
 exports.toggleMute = toggleMute;
 exports.muteLevel = muteLevel;
+exports.namesAtLevel = namesAtLevel;
 exports.hidesRoomMessages = hidesRoomMessages;
 exports.hidesDirectMessages = hidesDirectMessages;
+exports.applyServerIgnores = applyServerIgnores;
 exports.serializeMuteList = serializeMuteList;
 exports.deserializeMuteList = deserializeMuteList;
 exports.muteMessage = muteMessage;
@@ -42,6 +44,10 @@ function toggleMute(list, username, level) {
 function muteLevel(list, username) {
     return list.get(key(username)) ?? null;
 }
+/** Everyone held at exactly this level, sorted - what a bare /ignore lists. */
+function namesAtLevel(list, level) {
+    return [...list].filter(([, l]) => l === level).map(([name]) => name).sort();
+}
 /** Should a room message from this user be hidden? Every level hides those. */
 function hidesRoomMessages(list, username) {
     return muteLevel(list, username) !== null;
@@ -50,6 +56,22 @@ function hidesRoomMessages(list, username) {
 function hidesDirectMessages(list, username) {
     const level = muteLevel(list, username);
     return level === 'ignore' || level === 'block';
+}
+/**
+ * Make the 'ignore' level equal the server's ignore list (the DB is the truth:
+ * the backend enforces it). Mute and block entries are local and stay.
+ */
+function applyServerIgnores(list, names) {
+    for (const [name, level] of [...list])
+        if (level === 'ignore')
+            list.delete(name);
+    if (!Array.isArray(names))
+        return;
+    for (const n of names) {
+        const k = typeof n === 'string' ? key(n) : '';
+        if (k)
+            list.set(k, 'ignore');
+    }
 }
 /** The list as something that can be written to prefs and read back. */
 function serializeMuteList(list) {

@@ -9,10 +9,11 @@
  * because of the characters they start with".
  *
  * Deliberately strict about the first character after the slash: no command
- * begins with a digit or punctuation, and text very well might.
+ * begins with a digit or punctuation (except the +1 and -1 reactions), and text very well might.
  */
 export function looksLikeCommand(input: string): boolean {
-  return /^\/[A-Za-z][A-Za-z0-9_-]*(\s|$)/.test(input);
+  // /+1 and /-1 are the thumbs reactions, so a sign followed by a digit starts a name too.
+  return /^\/([A-Za-z][A-Za-z0-9_-]*|[+-]1)(\s|$)/.test(input);
 }
 
 export interface CommandResult {

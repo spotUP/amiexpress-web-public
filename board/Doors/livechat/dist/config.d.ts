@@ -10,13 +10,6 @@ export interface DoorMetadata {
 }
 /** Door metadata */
 export declare const metadata: DoorMetadata;
-/** Default channel IDs */
-export declare const defaultChannels: {
-    general: string;
-    random: string;
-    help: string;
-    system: string;
-};
 /** UI dimensions */
 export declare const layout: {
     sidebarWidth: number;

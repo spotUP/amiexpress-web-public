@@ -13,10 +13,11 @@ exports.looksLikeCommand = looksLikeCommand;
  * because of the characters they start with".
  *
  * Deliberately strict about the first character after the slash: no command
- * begins with a digit or punctuation, and text very well might.
+ * begins with a digit or punctuation (except the +1 and -1 reactions), and text very well might.
  */
 function looksLikeCommand(input) {
-    return /^\/[A-Za-z][A-Za-z0-9_-]*(\s|$)/.test(input);
+    // /+1 and /-1 are the thumbs reactions, so a sign followed by a digit starts a name too.
+    return /^\/([A-Za-z][A-Za-z0-9_-]*|[+-]1)(\s|$)/.test(input);
 }
 /** Parse and execute slash commands */
 class CommandHandler {

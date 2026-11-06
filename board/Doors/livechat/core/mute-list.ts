@@ -14,9 +14,11 @@ import { T } from '../door-theme';
  *   ignore  their DMs are refused too
  *   block   both, and the server is told (see the note below)
  *
- * BLOCK IS NOT ENFORCED AT THE SERVER YET. There is no block API to call, so
- * this hides them from you but does not stop them sending. The menu says so
- * rather than promising protection this cannot deliver.
+ * IGNORE IS ENFORCED AT THE SERVER: /ignore, /unignore and the menu send
+ * chat:ignore / chat:unignore, and the server stops delivering that user's
+ * room lines and DMs. The list here is loaded from chat:ignore-list on open.
+ * Mute and block stay local: they hide lines here but the server still
+ * delivers them.
  *
  * Pure and separate from the socket handlers, so the filtering rules can be
  * tested without a chat running.
@@ -62,6 +64,11 @@ export function muteLevel(list: MuteList, username: string): MuteLevel | null {
   return list.get(key(username)) ?? null;
 }
 
+/** Everyone held at exactly this level, sorted - what a bare /ignore lists. */
+export function namesAtLevel(list: MuteList, level: MuteLevel): string[] {
+  return [...list].filter(([, l]) => l === level).map(([name]) => name).sort();
+}
+
 /** Should a room message from this user be hidden? Every level hides those. */
 export function hidesRoomMessages(list: MuteList, username: string): boolean {
   return muteLevel(list, username) !== null;
@@ -71,6 +78,19 @@ export function hidesRoomMessages(list: MuteList, username: string): boolean {
 export function hidesDirectMessages(list: MuteList, username: string): boolean {
   const level = muteLevel(list, username);
   return level === 'ignore' || level === 'block';
+}
+
+/**
+ * Make the 'ignore' level equal the server's ignore list (the DB is the truth:
+ * the backend enforces it). Mute and block entries are local and stay.
+ */
+export function applyServerIgnores(list: MuteList, names: unknown): void {
+  for (const [name, level] of [...list]) if (level === 'ignore') list.delete(name);
+  if (!Array.isArray(names)) return;
+  for (const n of names) {
+    const k = typeof n === 'string' ? key(n) : '';
+    if (k) list.set(k, 'ignore');
+  }
 }
 
 /** The list as something that can be written to prefs and read back. */

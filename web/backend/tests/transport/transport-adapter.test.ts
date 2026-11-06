@@ -84,6 +84,7 @@ const PINNED_EVENT_NAMES: ReadonlyArray<string> = [
   'chat:dm-history',
   'chat:dm-threads',
   'chat:dm-threads:list',
+  'chat:ignore-list',
   'chat:ended',
   'chat:error',
   'chat:invite',
@@ -98,6 +99,8 @@ const PINNED_EVENT_NAMES: ReadonlyArray<string> = [
   'chat:partner-disconnected',
   'chat:pin:list',
   'chat:pin:updated',
+  'chat:reaction',
+  'chat:reactions:list',
   'chat:request-sent',
   'chat:search:results',
   'chat:started',
@@ -321,11 +324,15 @@ const PINNED_EVENT_NAMES: ReadonlyArray<string> = [
  * have: the event-name argument of `emitToMembers` (server/session-rooms.ts).
  * Chat and room events leave through that forwarder since 2026-09-28, and a
  * name only it carried would otherwise be invisible here - the census would
- * stop seeing nine ruled names and never see a tenth, unruled one.
+ * stop seeing nine ruled names and never see a tenth, unruled one. The
+ * same holds for `emitToRoom` (handlers/chat/group-chat.handler.ts), a thin
+ * wrapper over emitToMembers whose event name is its SECOND argument: the
+ * stored-reaction broadcast `chat:reaction` leaves only through it.
  */
 const GREP_A = String.raw`
 cd web/backend/src && { grep -rhoE "\.emit\(\s*['\"][a-zA-Z0-9:_-]+['\"]" --include="*.ts" . ; \
-  grep -rhoE "emitToMembers\([^,]+, *[^,]+, *['\"][a-zA-Z0-9:_-]+['\"]" --include="*.ts" . ; } \
+  grep -rhoE "emitToMembers\([^,]+, *[^,]+, *['\"][a-zA-Z0-9:_-]+['\"]" --include="*.ts" . ; \
+  grep -rhoE "emitToRoom\([^,]+, *['\"][a-zA-Z0-9:_-]+['\"]" --include="*.ts" . ; } \
   | sed -E "s/.*['\"]([^'\"]+)['\"]/\1/" | sort -u
 `;
 
@@ -623,7 +630,12 @@ describe('TP-3 - the adapter: one ruling for every event name', () => {
     // socket.io's own event to its listeners (server/session-link.ts).
     // 249 as of 2026-10-15: `message`, not-transport - the session link's `send` forwards
     // socket.io's stock message event (server/session-link.ts).
-    expect(ruled.length).toBe(250);
+    // 253 as of 2026-11-06: LiveChat's stored reactions and server-side
+    // ignore - `chat:reaction` (room broadcast through emitToRoom, which
+    // grep A now reads), `chat:reactions:list` and `chat:ignore-list`, all
+    // door-only replies (server/reaction-socket-handlers.ts,
+    // handlers/chat/ignore.handler.ts).
+    expect(ruled.length).toBe(253);
 
     // (c) every ruling's note is non-empty - the point of the table is the
     // written reason, not the classification.
@@ -692,7 +704,7 @@ describe('TP-3 - the adapter: one ruling for every event name', () => {
       // 118 (2026-09-28): `retry-login` gone with RL's web branch.
       // 114 (2026-10-04): the five `transfer:*` names gone with the dead
       // socket channel that read and wrote any path a visitor named.
-      'web-only': 116, // 116 (2026-11-06): `room:message:ack`, the sender's DB id for his line. Was 115 (2026-10-14): `notify:push-subscribe`, NOTIFY's Enable push.
+      'web-only': 119, // 119 (2026-11-06): `chat:reaction`, `chat:reactions:list`, `chat:ignore-list`, LiveChat door replies. 116 (2026-11-06): `room:message:ack`, the sender's DB id for his line. Was 115 (2026-10-14): `notify:push-subscribe`, NOTIFY's Enable push.
       // 105 (2026-09-24): `terminal-type-settled`, the telnet connection's
       // own end-of-TTYPE signal to its session start.
       // 106 (2026-10-15): `disconnecting`, the session link's re-raise of socket.io's own event.

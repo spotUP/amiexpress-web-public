@@ -21,6 +21,7 @@ interface DoorSession {
 }
 export declare function createApp(session: DoorSession): Promise<{
     state: AppState;
+    registry: import("./commands/types").CommandRegistry;
     screen: import("@amiexpress/bbs-door-sdk/engines/ui/blessed").Screen;
     mastheadRow: import("@amiexpress/bbs-door-sdk/engines/ui/blessed").Box;
     menuBar: import("@amiexpress/bbs-door-sdk/engines/ui/blessed").MenuBar;

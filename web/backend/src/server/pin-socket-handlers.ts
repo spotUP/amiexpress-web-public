@@ -7,73 +7,69 @@ import { onLevel, SYSOP_LEVEL } from './socket-guard';
 import { db } from '../database';
 import { PinRepository } from '../database/pin-repository';
 
-export function setupPinHandlers(socket: Socket, session: any) {
-  const pinRepo = new PinRepository(db);
-  const userId = session.user?.id;
-  const username = session.user?.username;
+const pinRepo = () => new PinRepository(db);
 
-  if (!userId || !username) return;
+/** The door's ids are strings; the DB row id is a number. */
+const rowId = (raw: unknown) => Number(raw);
+
+export async function handlePinAdd(socket: Socket, session: BBSSession, data: { roomId: string; messageId: number | string }) {
+  const username = session.user?.username;
+  if (!username) return;
+  try {
+    const { roomId } = data;
+    const messageId = rowId(data.messageId);
+    const repo = pinRepo();
+    if (await repo.isPinned(roomId, messageId)) {
+      socket.emit('chat:error', { error: 'Message already pinned' });
+      return;
+    }
+    await repo.pinMessage(roomId, messageId, username);
+    const pinnedMessages = await repo.getPinnedMessages(roomId);
+    emitPinsUpdated(socket, roomId, pinnedMessages);
+  } catch (error) {
+    console.error('[Pin] Add error:', error);
+    socket.emit('chat:error', { error: 'Failed to pin message' });
+  }
+}
+
+export async function handlePinRemove(socket: Socket, _session: BBSSession, data: { roomId: string; messageId: number | string }) {
+  try {
+    const { roomId } = data;
+    const repo = pinRepo();
+    await repo.unpinMessage(roomId, rowId(data.messageId));
+    emitPinsUpdated(socket, roomId, await repo.getPinnedMessages(roomId));
+  } catch (error) {
+    console.error('[Pin] Remove error:', error);
+    socket.emit('chat:error', { error: 'Failed to unpin message' });
+  }
+}
+
+export async function handlePinList(socket: Socket, _session: BBSSession, data: { roomId: string }) {
+  try {
+    const { roomId } = data;
+    const pinnedMessages = await pinRepo().getPinnedMessages(roomId);
+    socket.emit('chat:pin:list', { roomId, pinnedMessages });
+  } catch (error) {
+    console.error('[Pin] List error:', error);
+    socket.emit('chat:error', { error: 'Failed to load pinned messages' });
+  }
+}
+
+function emitPinsUpdated(socket: Socket, roomId: string, pinnedMessages: unknown[]) {
+  // A door's wrapped socket (and a telnet connection) has no socket.to
+  if (typeof socket.to === 'function') socket.to(roomId).emit('chat:pin:updated', { roomId, pinnedMessages });
+  socket.emit('chat:pin:updated', { roomId, pinnedMessages });
+}
+
+export function setupPinHandlers(socket: Socket, session: any) {
+  if (!session.user?.id || !session.user?.username) return;
 
   // Pinning writes into any room by id, and listing reads any room's pins,
-  // private rooms included. No client sends these today (the livechat
-  // door's emits go to the browser), so they are the sysop's until one does
-  // and asks for a room-membership rule (open-surface audit, 2026-10-04).
-
-  // Pin a message
-  onLevel(socket, 'chat:pin:add', SYSOP_LEVEL, async (_caller: BBSSession, data: { roomId: string; messageId: number }) => {
-    try {
-      const { roomId, messageId } = data;
-
-      // Check if already pinned
-      const isPinned = await pinRepo.isPinned(roomId, messageId);
-      if (isPinned) {
-        socket.emit('chat:error', { error: 'Message already pinned' });
-        return;
-      }
-
-      // Add pin
-      await pinRepo.pinMessage(roomId, messageId, username);
-
-      // Get updated pinned messages
-      const pinnedMessages = await pinRepo.getPinnedMessages(roomId);
-
-      // Broadcast to room
-      socket.to(roomId).emit('chat:pin:updated', { roomId, pinnedMessages });
-      socket.emit('chat:pin:updated', { roomId, pinnedMessages });
-    } catch (error) {
-console.error('[Pin] Add error:', error);
-      socket.emit('chat:error', { error: 'Failed to pin message' });
-    }
-  });
-
-  // Unpin a message
-  onLevel(socket, 'chat:pin:remove', SYSOP_LEVEL, async (_caller: BBSSession, data: { roomId: string; messageId: number }) => {
-    try {
-      const { roomId, messageId } = data;
-
-      await pinRepo.unpinMessage(roomId, messageId);
-
-      // Get updated pinned messages
-      const pinnedMessages = await pinRepo.getPinnedMessages(roomId);
-
-      // Broadcast to room
-      socket.to(roomId).emit('chat:pin:updated', { roomId, pinnedMessages });
-      socket.emit('chat:pin:updated', { roomId, pinnedMessages });
-    } catch (error) {
-console.error('[Pin] Remove error:', error);
-      socket.emit('chat:error', { error: 'Failed to unpin message' });
-    }
-  });
-
-  // Get pinned messages
-  onLevel(socket, 'chat:pin:list', SYSOP_LEVEL, async (_caller: BBSSession, data: { roomId: string }) => {
-    try {
-      const { roomId } = data;
-      const pinnedMessages = await pinRepo.getPinnedMessages(roomId);
-      socket.emit('chat:pin:list', { roomId, pinnedMessages });
-    } catch (error) {
-console.error('[Pin] List error:', error);
-      socket.emit('chat:error', { error: 'Failed to load pinned messages' });
-    }
-  });
+  // private rooms included. These are the sysop's until a room-membership
+  // rule is asked for (open-surface audit, 2026-10-04). The livechat door's
+  // emits do not arrive here (they go to the browser); createDoorSocketWrapper
+  // routes them to the handle* functions above, with the same level check.
+  onLevel(socket, 'chat:pin:add', SYSOP_LEVEL, (caller: BBSSession, data: { roomId: string; messageId: number }) => handlePinAdd(socket, caller, data));
+  onLevel(socket, 'chat:pin:remove', SYSOP_LEVEL, (caller: BBSSession, data: { roomId: string; messageId: number }) => handlePinRemove(socket, caller, data));
+  onLevel(socket, 'chat:pin:list', SYSOP_LEVEL, (caller: BBSSession, data: { roomId: string }) => handlePinList(socket, caller, data));
 }

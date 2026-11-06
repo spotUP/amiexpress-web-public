@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.timing = exports.layout = exports.defaultChannels = exports.metadata = void 0;
+exports.timing = exports.layout = exports.metadata = void 0;
 /** Door metadata */
 exports.metadata = {
     name: 'LiveChat',
@@ -10,13 +10,6 @@ exports.metadata = {
     minSecurityLevel: 10,
     command: 'LIVECHAT',
     category: 'Communication'
-};
-/** Default channel IDs */
-exports.defaultChannels = {
-    general: 'general',
-    random: 'random',
-    help: 'help',
-    system: 'system'
 };
 /** UI dimensions */
 exports.layout = {

@@ -20,14 +20,6 @@ export const metadata: DoorMetadata = {
   category: 'Communication'
 };
 
-/** Default channel IDs */
-export const defaultChannels = {
-  general: 'general',
-  random: 'random',
-  help: 'help',
-  system: 'system'
-};
-
 /** UI dimensions */
 export const layout = {
   sidebarWidth: 16,

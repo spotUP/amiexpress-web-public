@@ -9,6 +9,7 @@ const theme_1 = require("../ui/theme");
 const blessed_1 = __importDefault(require("@amiexpress/bbs-door-sdk/engines/ui/blessed"));
 const door_theme_1 = require("../door-theme");
 const pin_handlers_1 = require("../handlers/pin-handlers");
+const reaction_handlers_1 = require("../handlers/reaction-handlers");
 function createContextMenus(s, ib, sup, sdp, asm, sock, extras = {}) {
     const cm = blessed_1.default.list({ parent: s, top: 0, left: 0, width: 24, height: 6, border: { type: 'line' }, shadow: true, hidden: true, mouse: true, vi: true, keys: true, interactive: true, tags: true, zIndex: 9999, style: { fg: door_theme_1.T.ink, bg: door_theme_1.T.ground, border: { fg: theme_1.PANEL_BORDER }, selected: { fg: door_theme_1.T.ground, bg: door_theme_1.T.accent } } });
     // Set high z-index to ensure menu appears on top
@@ -143,7 +144,15 @@ function createContextMenus(s, ib, sup, sdp, asm, sock, extras = {}) {
                     const level = (0, mute_list_1.muteLevelForLabel)(si);
                     if (!level)
                         break;
+                    const before = (0, mute_list_1.muteLevel)(extras.muteList, cmt);
                     const now = (0, mute_list_1.toggleMute)(extras.muteList, cmt, level);
+                    // Ignore is enforced by the server (it stops delivering the
+                    // ignored user's room lines and DMs), so moving into or out of
+                    // that level must reach it, same as /ignore and /unignore.
+                    if (now === 'ignore')
+                        sock.emit('chat:ignore', { user: cmt });
+                    else if (before === 'ignore')
+                        sock.emit('chat:unignore', { user: cmt });
                     asm((0, mute_list_1.muteMessage)(cmt, now));
                     break;
                 }
@@ -185,9 +194,13 @@ function createContextMenus(s, ib, sup, sdp, asm, sock, extras = {}) {
                 // reporting success. Half a feature that claims to be whole is worse
                 // than one that admits what it is.
                 case 'React':
-                    asm(cmt
-                        ? `{${door_theme_1.T.accentAlt}-fg}Reactions are not supported by the server yet.{/${door_theme_1.T.accentAlt}-fg}`
-                        : `{${door_theme_1.T.accentAlt}-fg}Right-click on a message first.{/${door_theme_1.T.accentAlt}-fg}`);
+                    if (!cmt) {
+                        asm(`{${door_theme_1.T.accentAlt}-fg}Right-click on a message first.{/${door_theme_1.T.accentAlt}-fg}`);
+                    }
+                    else {
+                        (0, reaction_handlers_1.reactToMessage)(sock, extras.currentRoom ? extras.currentRoom() : '', cmt, '+1');
+                        asm('Reaction sent.');
+                    }
                     break;
                 case 'Copy Text':
                     asm('Copy to clipboard (not available in terminal)');

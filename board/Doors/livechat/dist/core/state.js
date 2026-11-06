@@ -1,5 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.channelsToShow = channelsToShow;
 exports.createInitialState = createInitialState;
 exports.setChannel = setChannel;
 exports.setDmContext = setDmContext;
@@ -9,6 +10,26 @@ exports.clearInput = clearInput;
 exports.appendInput = appendInput;
 exports.backspaceInput = backspaceInput;
 const mute_list_1 = require("./mute-list");
+/**
+ * The channels the door lists: the server's list once it has answered,
+ * otherwise the default channel plus random and help. The sidebar and
+ * /rooms both read this, so they never disagree.
+ */
+function channelsToShow(channels, defaultChannel) {
+    if (channels.length > 0)
+        return channels;
+    return [defaultChannel, 'random', 'help'].map((name) => ({
+        id: name,
+        name,
+        displayName: name,
+        topic: '',
+        type: 'public',
+        createdBy: 'system',
+        createdAt: new Date(),
+        memberCount: 0,
+        unreadCount: 0,
+    }));
+}
 /** Create initial state */
 function createInitialState() {
     return {

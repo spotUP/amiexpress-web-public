@@ -28,7 +28,7 @@ async function executeCommand(input, registry, ctx) {
         return { handled: true, error: `Permission denied. Need level ${cmd.minSecLevel}` };
     }
     try {
-        return await cmd.handler(ctx, args);
+        return await cmd.handler({ ...ctx, invokedAs: cmdName }, args);
     }
     catch (err) {
         return { handled: true, error: err.message };

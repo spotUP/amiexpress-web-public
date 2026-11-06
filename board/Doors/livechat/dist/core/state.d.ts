@@ -2,6 +2,12 @@ import type { Channel, Message, ChannelMember, EventPrefs } from '../types';
 import { type MuteList } from './mute-list';
 import type { TypingBuffer } from '../ui/typing-preview';
 /**
+ * The channels the door lists: the server's list once it has answered,
+ * otherwise the default channel plus random and help. The sidebar and
+ * /rooms both read this, so they never disagree.
+ */
+export declare function channelsToShow(channels: Channel[], defaultChannel: string): Channel[];
+/**
  * DM thread view as exposed to the door sidebar.
  * Mirrors the backend `dm-thread-list.handler.ts` payload.
  */

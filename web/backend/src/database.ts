@@ -39,6 +39,8 @@ import { MessageRepository } from './database/message-repository';
 import { FileRepository } from './database/file-repository';
 import { SessionRepository } from './database/session-repository';
 import { ChatRepository } from './database/chat-repository';
+import { ReactionRepository } from './database/reaction-repository';
+import { ChatIgnoreRepository } from './database/chat-ignore-repository';
 import { BulletinRepository } from './database/bulletin-repository';
 import { WebhookRepository } from './database/webhook-repository';
 import { DiscordLinkRepository } from './database/discord-link.repository';
@@ -1436,6 +1438,29 @@ console.error('Error running migrations:', error);
           pinned_by TEXT NOT NULL,
           pinned_at INTEGER DEFAULT (strftime('%s', 'now')),
           UNIQUE(room_id, message_id)
+        )
+      `);
+
+      // Message reactions: stored with the message, one row per (message, user, emoji)
+      this.db.exec(`
+        CREATE TABLE IF NOT EXISTS chat_message_reactions (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          message_id INTEGER NOT NULL REFERENCES chat_room_messages(id) ON DELETE CASCADE,
+          username TEXT NOT NULL,
+          emoji TEXT NOT NULL,
+          created_at INTEGER DEFAULT (strftime('%s', 'now')),
+          UNIQUE(message_id, username, emoji)
+        )
+      `);
+
+      // Chat ignore list: server-side, per user, enforced before delivery
+      this.db.exec(`
+        CREATE TABLE IF NOT EXISTS chat_ignores (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          owner_id TEXT NOT NULL,
+          ignored_username TEXT NOT NULL,
+          created_at INTEGER DEFAULT (strftime('%s', 'now')),
+          UNIQUE(owner_id, ignored_username)
         )
       `);
 
@@ -2927,6 +2952,32 @@ console.error(`[Database] Failed to update disk misc for slot ${slotNumber}:`, e
 
   async deleteChatRoom(...args: Parameters<ChatRepository['deleteChatRoom']>) {
     return this.chatRepo!.deleteChatRoom(...args);
+  }
+
+  async getMessageById(...args: Parameters<ChatRepository['getMessageById']>) {
+    return this.chatRepo!.getMessageById(...args);
+  }
+
+  /** Chat ignore list (synchronous: the room broadcast checks it per member). */
+  chatIgnores(): ChatIgnoreRepository {
+    return new ChatIgnoreRepository(this.db);
+  }
+
+  /** Reaction counts per message id, for the room:joined history replay. */
+  async getReactionCountsFor(messageIds: number[]) {
+    return new ReactionRepository(this.db).getCountsFor(messageIds);
+  }
+
+  async addReaction(messageId: number, username: string, emoji: string) {
+    return new ReactionRepository(this.db).addReaction(messageId, username, emoji);
+  }
+
+  async removeReaction(messageId: number, username: string, emoji: string) {
+    return new ReactionRepository(this.db).removeReaction(messageId, username, emoji);
+  }
+
+  async getReactionCounts(messageId: number) {
+    return new ReactionRepository(this.db).getCounts(messageId);
   }
 
   async joinChatRoom(...args: Parameters<ChatRepository['joinChatRoom']>) {

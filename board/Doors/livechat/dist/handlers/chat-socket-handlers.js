@@ -4,6 +4,7 @@ exports.setupChatHandlers = setupChatHandlers;
 const mute_list_1 = require("../core/mute-list");
 const dm_render_1 = require("./dm-render");
 const door_theme_1 = require("../door-theme");
+const reaction_store_1 = require("../features/reaction-store");
 function setupChatHandlers(sock, st, uid, un, ou, ps, cl, uut, asm, acm, aa, uef, aud, mu, guc, fm, pk, utp, s, sse, gem, eb, am, mh, ft) {
     // NOTE: We intentionally do NOT listen to 'ansi-output' - that's raw terminal output
     // for legacy doors. Neo-blessed doors should only use structured events like 'chat:message'.
@@ -49,9 +50,19 @@ function setupChatHandlers(sock, st, uid, un, ou, ps, cl, uut, asm, acm, aa, uef
         }
     });
     sock.on('chat:reaction', (d) => {
-        acm(`{${door_theme_1.T.accent}-fg}[${d.username} reacted ${d.emoji}]{/${door_theme_1.T.accent}-fg}`, false);
+        if (d.messageId !== undefined)
+            (0, reaction_store_1.setReactionCounts)(d.messageId, d.counts);
+        acm(`{${door_theme_1.T.accent}-fg}[${d.username} ${d.action === 'remove' ? 'removed' : 'reacted'} ${d.emoji}]{/${door_theme_1.T.accent}-fg}`, false);
         aa(`${d.username}: ${d.emoji}`);
         aud.onReaction();
+    });
+    // Answer to /reactions <id>.
+    sock.on('chat:reactions:list', (d) => {
+        if (d?.messageId === undefined)
+            return;
+        (0, reaction_store_1.setReactionCounts)(d.messageId, d.counts);
+        const text = (0, reaction_store_1.formatReactionCounts)(d.messageId).trim();
+        asm(text ? `Reactions on ${d.messageId}: ${text}` : `No reactions on ${d.messageId}`);
     });
     sock.on('bbs:event', (e) => {
         // Skip Guest activity — pre-login users cycling through FRONTEND/etc
@@ -95,6 +106,10 @@ function setupChatHandlers(sock, st, uid, un, ou, ps, cl, uut, asm, acm, aa, uef
             return;
         asm(`{${door_theme_1.T.accentAlt}-fg}[${d.by || '?'}] set mode ${d.applied}{/${door_theme_1.T.accentAlt}-fg}`);
     });
+    // The server's ignore list (DB, enforced by the backend) is the truth for
+    // the 'ignore' level; ask for it on open and take every reply.
+    sock.on('chat:ignore-list', (d) => (0, mute_list_1.applyServerIgnores)(st.muteList, d?.users));
+    sock.emit('chat:ignore-list');
     sock.on('chat:dm', (d) => {
         if (!d)
             return;

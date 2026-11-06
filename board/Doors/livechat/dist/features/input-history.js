@@ -1,7 +1,8 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.createInputHistory = createInputHistory;
-function createInputHistory(s, ib) {
+/** `picking` is the message picker's flag: while it owns Up/Down, history stays out. */
+function createInputHistory(s, ib, picking = () => false) {
     const h = [];
     let hi = -1;
     let si = '';
@@ -16,6 +17,11 @@ function createInputHistory(s, ib) {
     s.key(['up'], () => {
         const f = s.getFocused();
         if (f !== ib)
+            return;
+        if (picking())
+            return;
+        // Up on an empty line enters message pick mode (message-picker.ts).
+        if (hi === -1 && !(ib.getValue() || ''))
             return;
         if (h.length === 0)
             return;
@@ -35,6 +41,8 @@ function createInputHistory(s, ib) {
     s.key(['down'], () => {
         const f = s.getFocused();
         if (f !== ib)
+            return;
+        if (picking())
             return;
         if (hi === -1)
             return;

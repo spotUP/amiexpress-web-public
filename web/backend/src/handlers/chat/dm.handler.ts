@@ -9,6 +9,7 @@ import type { Socket, Server as IOServer } from 'socket.io';
 import { sanitizeChatMessage } from './sanitize-message';
 import type { BBSSession } from '../../index';
 import { db } from '../../database';
+import { recipientIgnoresId } from './ignore.handler';
 import { getSystemTime } from '../../utils/date-time.util';
 
 /**
@@ -66,7 +67,10 @@ export async function handleChatDm(ctx: DmContext): Promise<void> {
     socket.emit('chat:dm', { ...payload, direction: 'sent' });
     // Multi-tab fanout: deliver to every recipient socket via the user:<id> room.
     if (recipient.userId) {
-      io.to('user:' + recipient.userId).emit('chat:dm', { ...payload, direction: 'received' });
+      // Server-side /ignore: the recipient who ignores the sender never hears the DM.
+      if (!recipientIgnoresId(recipient.userId, senderName)) {
+        io.to('user:' + recipient.userId).emit('chat:dm', { ...payload, direction: 'received' });
+      }
     }
 
     // Refresh sidebar DM thread lists for every participant (sender + recipient).
@@ -139,7 +143,7 @@ export async function handleChatGroupDm(ctx: GroupDmContext): Promise<void> {
     socket.emit('chat:dm', { ...payload, direction: 'sent' });
     // Multi-tab fanout: deliver to every recipient socket via user:<id> rooms.
     for (const r of resolved) {
-      if (r.userId) io.to('user:' + r.userId).emit('chat:dm', { ...payload, direction: 'received' });
+      if (r.userId && !recipientIgnoresId(r.userId, senderName)) io.to('user:' + r.userId).emit('chat:dm', { ...payload, direction: 'received' });
     }
 
     // Refresh sidebar DM thread lists for every participant.

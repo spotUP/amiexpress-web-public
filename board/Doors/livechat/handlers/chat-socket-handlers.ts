@@ -1,6 +1,7 @@
-import { hidesRoomMessages, hidesDirectMessages } from '../core/mute-list';
+import { hidesRoomMessages, hidesDirectMessages, applyServerIgnores } from '../core/mute-list';
 import { formatDmLine } from './dm-render';
 import { T } from '../door-theme';
+import { setReactionCounts, formatReactionCounts } from '../features/reaction-store';
 
 export function setupChatHandlers(sock: any, st: any, uid: number, un: string, ou: Map<any, any>, ps: any, cl: any, uut: () => void, asm: (m: string) => void, acm: (m: string, f?: boolean, id?: string) => void, aa: (a: string) => void, uef: (e: string) => void, aud: any, mu: (t: string, u: string) => boolean, guc: (u: string) => string, fm: (m: any, u: string, c: boolean) => string, pk: (b: Map<any, any>, uid: number, un: string, ch: string, c: string) => void, utp: () => void, s: any, sse: (e: any, st: any) => boolean, gem: (e: any) => { msg: string; c: string }, eb: any, am: (st: any, m: any) => void, mh: any, ft: (d: Date) => string) {
   // NOTE: We intentionally do NOT listen to 'ansi-output' - that's raw terminal output
@@ -45,9 +46,18 @@ export function setupChatHandlers(sock: any, st: any, uid: number, un: string, o
   });
 
   sock.on('chat:reaction', (d: any) => {
-    acm(`{${T.accent}-fg}[${d.username} reacted ${d.emoji}]{/${T.accent}-fg}`, false);
+    if (d.messageId !== undefined) setReactionCounts(d.messageId, d.counts);
+    acm(`{${T.accent}-fg}[${d.username} ${d.action === 'remove' ? 'removed' : 'reacted'} ${d.emoji}]{/${T.accent}-fg}`, false);
     aa(`${d.username}: ${d.emoji}`);
     aud.onReaction();
+  });
+
+  // Answer to /reactions <id>.
+  sock.on('chat:reactions:list', (d: any) => {
+    if (d?.messageId === undefined) return;
+    setReactionCounts(d.messageId, d.counts);
+    const text = formatReactionCounts(d.messageId).trim();
+    asm(text ? `Reactions on ${d.messageId}: ${text}` : `No reactions on ${d.messageId}`);
   });
 
   sock.on('bbs:event', (e: any) => {
@@ -89,6 +99,11 @@ export function setupChatHandlers(sock: any, st: any, uid: number, un: string, o
     if (!d || !d.applied) return;
     asm(`{${T.accentAlt}-fg}[${d.by || '?'}] set mode ${d.applied}{/${T.accentAlt}-fg}`);
   });
+
+  // The server's ignore list (DB, enforced by the backend) is the truth for
+  // the 'ignore' level; ask for it on open and take every reply.
+  sock.on('chat:ignore-list', (d: any) => applyServerIgnores(st.muteList, d?.users));
+  sock.emit('chat:ignore-list');
 
   sock.on('chat:dm', (d: any) => {
     if (!d) return;

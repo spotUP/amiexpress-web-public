@@ -10,6 +10,7 @@ import { soundsCmd, compactCmd, timestampsCmd } from './prefs';
 import { micCmd } from './mic';
 import { reactCmd, unreactCmd, reactionsCmd, thumbsUpCmd, heartCmd } from './reactions';
 import { voiceCmd, deafenCmd, undeafenCmd } from './voice';
+import { roomsCmd, ignoreCmd, unignoreCmd, drawCmd, filesCmd, settingsCmd } from './ui';
 import { motdCmd, inviteCmd, uninviteCmd, modeCmd } from './mode';
 
 /** Create command registry with all commands */
@@ -35,5 +36,7 @@ export function createCommandRegistry(voice = true): CommandRegistry {
   if (voice) [voiceCmd, deafenCmd, undeafenCmd].forEach(c => r.register(c));
   // Channel mode / MOTD / invites
   [motdCmd, inviteCmd, uninviteCmd, modeCmd].forEach(c => r.register(c));
+  // Door UI: rooms list, ignore list, drawing, file sharing, settings
+  [roomsCmd, ignoreCmd, unignoreCmd, drawCmd, filesCmd, settingsCmd].forEach(c => r.register(c));
   return r;
 }

@@ -1,12 +1,10 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.formatMessage = formatMessage;
-exports.formatReactions = formatReactions;
 exports.formatSystemMessage = formatSystemMessage;
 exports.getUserColor = getUserColor;
 exports.formatThread = formatThread;
 exports.formatPinned = formatPinned;
-const types_1 = require("../types");
 const format_1 = require("../utils/format");
 const markdown_1 = require("../utils/markdown");
 const mentions_1 = require("../utils/mentions");
@@ -22,15 +20,6 @@ function formatMessage(msg, currentUser, compact) {
         return `${time}{${door_theme_1.T.accentAlt}-fg}* ${msg.username} ${content}{/${door_theme_1.T.accentAlt}-fg}`;
     }
     return `${time}${name}: ${content}`;
-}
-/** Format reactions */
-function formatReactions(reactions) {
-    if (!reactions.length)
-        return '';
-    return ' ' + reactions.map(r => {
-        const emoji = types_1.EMOJI_DISPLAY[r.emoji] || r.emoji;
-        return `{${door_theme_1.T.accent}-fg}[${emoji}${r.count > 1 ? r.count : ''}]{/${door_theme_1.T.accent}-fg}`;
-    }).join(' ');
 }
 /** Format system message */
 function formatSystemMessage(text) {

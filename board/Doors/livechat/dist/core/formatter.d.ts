@@ -1,8 +1,6 @@
-import type { Message, ReactionGroup } from '../types';
+import type { Message } from '../types';
 /** Format a message for display */
 export declare function formatMessage(msg: Message, currentUser: string, compact: boolean): string;
-/** Format reactions */
-export declare function formatReactions(reactions: ReactionGroup[]): string;
 /** Format system message */
 export declare function formatSystemMessage(text: string): string;
 /** Get consistent color for username */

@@ -38,7 +38,7 @@ export async function executeCommand(
   }
 
   try {
-    return await cmd.handler(ctx, args);
+    return await cmd.handler({ ...ctx, invokedAs: cmdName }, args);
   } catch (err: any) {
     return { handled: true, error: err.message };
   }

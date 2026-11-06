@@ -47,9 +47,10 @@ import { DoorLoader } from '@amiexpress/bbs-door-sdk/utils/DoorLoader';
 import { attachDoorChrome } from '@amiexpress/bbs-door-sdk/engines/ui/theme';
 
 // Core state and services
-import { addMessage, setChannel, setDmContext, clearDmContext, AppState } from './core/state';
+import { addMessage, setChannel, setDmContext, clearDmContext, AppState, channelsToShow as visibleChannels } from './core/state';
 import { executeCommand } from './core/command-exec';
-import { getUserColor, formatMessage, formatSystemMessage, formatReactions } from './core/formatter';
+import { getUserColor, formatMessage, formatSystemMessage } from './core/formatter';
+import { seedReactionCounts, formatReactionCounts } from './features/reaction-store';
 import { shouldShowEvent } from './core/socket-typing';
 import { initializeLiveChat } from './core/initialization';
 import { voiceAvailable } from './features/voice-availability';
@@ -85,6 +86,7 @@ import { createProfileOverlay } from './overlays/profile-overlay';
 // Features
 import { loadSettings } from './settings';
 import { createInputHistory } from './features/input-history';
+import { createMessagePicker, messageRows, wrappedSpan, highlightLine } from './features/message-picker';
 import { createFileSharing } from './features/file-sharing';
 import { createDrawingCanvas } from './features/drawing-canvas';
 import { createContextMenus } from './features/context-menus';
@@ -401,7 +403,8 @@ export async function createApp(session: DoorSession) {
     audio.playSound('hover');
   });
 
-  const inputHistory = createInputHistory(screen, inputBox);
+  // The picker is declared with the chat rows below; history only asks its flag.
+  const inputHistory = createInputHistory(screen, inputBox, () => messagePicker.state.active);
 
   // ========== CHANNEL LIST (Left Sidebar) ==========
   // ========== COMMAND AUTOCOMPLETE ==========
@@ -712,13 +715,6 @@ export async function createApp(session: DoorSession) {
     audio.playSound('hover');
   });
 
-  // Default channels to show when server hasn't responded
-  const defaultChannels = [
-    { id: doorSettings.defaultChannel, name: doorSettings.defaultChannel, type: 'public' as const },
-    { id: 'random', name: 'random', type: 'public' as const },
-    { id: 'help', name: 'help', type: 'public' as const },
-  ];
-
   // Track channel data for selection handling
   let channelItems: Array<{ id: string; name: string; type: 'text' | 'voice' | 'header' | 'spacer' | 'user' | 'dm'; username?: string; isGroup?: boolean }> = [];
 
@@ -741,16 +737,7 @@ export async function createApp(session: DoorSession) {
 
   // Initialize channel list data
   function updateChannelList() {
-    // Use state channels if available, otherwise show defaults
-    const channelsToShow = state.channels.length > 0 ? state.channels : defaultChannels.map(c => ({
-      ...c,
-      displayName: c.name,
-      topic: '',
-      createdBy: 'system',
-      createdAt: new Date(),
-      memberCount: 0,
-      unreadCount: 0,
-    }));
+    const channelsToShow = visibleChannels(state.channels, doorSettings.defaultChannel);
 
     // Build sidebar rows via the pure builder. Keeps server.ts under
     // the 2000-line limit and lets the row layout be unit-tested.
@@ -2024,12 +2011,12 @@ export async function createApp(session: DoorSession) {
     screen.render();
   }
 
-  function addMessageFromUser(from: string, content: string, timestamp?: Date) {
+  function addMessageFromUser(from: string, content: string, timestamp?: Date, messageId?: string) {
     const time = formatTime(timestamp || new Date());
     const color = getUserColor(from);
     const parsed = parseContent(content);
     const highlighted = highlightMentions(parsed, username);
-    appendLineToLog(`{${T.dim}-fg}[${time}]{/${T.dim}-fg} <{${color}-fg}${from}{/${color}-fg}> ${highlighted}`);
+    appendLineToLog(`{${T.dim}-fg}[${time}]{/${T.dim}-fg} <{${color}-fg}${from}{/${color}-fg}> ${highlighted}`, messageId);
     screen.render();
   }
 
@@ -2071,15 +2058,84 @@ export async function createApp(session: DoorSession) {
     // the manager's most recent rendered frame for any animated indices.
     const renderedMessages = chatMessages.map((line, idx) => {
       const animFrame = (animationManager as any).getRendered?.(idx);
-      return animFrame != null && animFrame !== '' ? animFrame : line;
+      const shown = animFrame != null && animFrame !== '' ? animFrame : line;
+      // Stored reaction counts go after the last row of their message, read
+      // from the reaction store at paint time so a chat:reaction repaints them.
+      const id = chatMessageIds[idx];
+      if (id == null || chatMessageIds[idx + 1] === id) return shown;
+      const counts = formatReactionCounts(id);
+      return counts ? `${shown}{${T.accent}-fg}${counts}{/${T.accent}-fg}` : shown;
     });
+
+    // Pick mode: the selected message is an inverse bar in the theme's
+    // selection colours (the same pair the context menu's selected row uses).
+    const picked = messagePicker.state.active ? messageRows(chatMessageIds, messagePicker.state.rowIndex) : null;
+    const logWidth = Math.max(1, Number((chatLog as any).width) || 80);
+    if (picked) {
+      for (let i = picked.first; i <= picked.last; i++) {
+        renderedMessages[i] = highlightLine(chatMessages[i], logWidth, T.ground, T.accent);
+      }
+    }
 
     // CRITICAL: Use CRLF for separation to force margin return
     const fullContent = [...renderedMessages, ...previewLines].join('\r\n');
 
     chatLog.setContent(fullContent);
-    chatLog.setScrollPerc(100);
+    if (picked) {
+      // Scroll the selection into view (centred), instead of the bottom.
+      const span = wrappedSpan(chatMessages, logWidth, picked.first, picked.last);
+      const viewHeight = Math.max(1, Number((chatLog as any).height) || 24);
+      (chatLog as any).scrollTo(Math.max(0, span.top - Math.floor((viewHeight - span.height) / 2)));
+    } else {
+      chatLog.setScrollPerc(100);
+    }
   }
+
+  /**
+   * Message pick mode (plan L3). Up on an empty input line, or a bare
+   * /love /react /thumbsup /pin /thread /reply, starts it; Enter re-dispatches
+   * the command with the picked id, or opens the message's context menu.
+   */
+  const messagePicker = createMessagePicker({
+    ids: () => chatMessageIds,
+    onChange: () => {
+      inputBox.setLabel(messagePicker.state.active ? ' [PICK MESSAGE: Up/Down, Enter, Esc] ' : ' Message ');
+      rebuildChatContent();
+      screen.render();
+    },
+    onConfirm: (action, messageId) => {
+      if (action.kind === 'menu') {
+        const x = Number((chatLog as any).aleft) + 2 || 2;
+        const y = Number((chatLog as any).atop) + 2 || 2;
+        showContextMenu(x, y, 'chat', messageId);
+        screen.render();
+        return;
+      }
+      // /thread and /reply need text after the id: leave the box ready for it.
+      if (action.command === 'thread' || action.command === 'reply') {
+        inputBox.setValue(`/thread ${messageId} `);
+        inputBox.focus();
+        screen.render();
+        return;
+      }
+      void asyncSubmitHandler([`/${action.command}`, ...action.args, messageId].join(' '));
+    },
+  });
+  screen.key(['up'], () => {
+    if (messagePicker.state.active) { messagePicker.move(-1); return; }
+    if (screen.getFocused() === inputBox && !(inputBox.getValue() || '')) {
+      messagePicker.start({ kind: 'menu' });
+    }
+  });
+  screen.key(['down'], () => messagePicker.move(1));
+  screen.key(['escape'], () => messagePicker.cancel());
+  // Typing anything else leaves pick mode; Enter and the arrows are the picker's.
+  inputBox.on('keypress', (ch: string, key: any) => {
+    if (!messagePicker.state.active) return;
+    const name = key?.name;
+    if (name === 'up' || name === 'down' || name === 'enter' || name === 'return' || name === 'escape') return;
+    if (ch && ch.length === 1 && ch >= ' ') messagePicker.cancel();
+  });
 
   function appendLineToLog(line: string, messageId?: string) {
     // One entry per DISPLAY ROW, never per message.
@@ -2314,10 +2370,11 @@ export async function createApp(session: DoorSession) {
     const history = Array.isArray(d?.history) ? d.history : [];
     if (history.length === 0) return;
 
+    seedReactionCounts(history);
     addSystemMessage(`{${T.dim}-fg}--- ${history.length} earlier message${history.length === 1 ? '' : 's'} ---{/${T.dim}-fg}`);
     for (const m of history) {
       const when = m.createdAt ? new Date(m.createdAt) : undefined;
-      addMessageFromUser(m.username ?? 'unknown', m.content ?? '', when);
+      addMessageFromUser(m.username ?? 'unknown', m.content ?? '', when, m.id != null ? String(m.id) : undefined);
     }
   });
 
@@ -2557,6 +2614,7 @@ export async function createApp(session: DoorSession) {
     showFileSharing,
     updateTypingPreview,
     clearChat,
+    messagePicker,
     // tryJoinVoiceChannel - check if channel name matches a voice channel
     (channelName: string): boolean => {
       if (!voiceEnabled) return false;
@@ -2978,6 +3036,9 @@ export async function createApp(session: DoorSession) {
 
   return {
     state,
+    // The live registry (shared commands plus the ones registered above), so a
+    // test can count what /help promises against what actually dispatches.
+    registry,
     // The screen and the size switch are handed back so the door can be
     // DRIVEN by a test - toggled wide, resized, toggled back - rather than
     // only started. Nothing in the door reads them from here.

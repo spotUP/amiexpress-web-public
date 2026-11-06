@@ -27,6 +27,7 @@ const prefs_1 = require("./prefs");
 const mic_1 = require("./mic");
 const reactions_1 = require("./reactions");
 const voice_1 = require("./voice");
+const ui_1 = require("./ui");
 const mode_1 = require("./mode");
 /** Create command registry with all commands */
 function createCommandRegistry(voice = true) {
@@ -52,5 +53,7 @@ function createCommandRegistry(voice = true) {
         [voice_1.voiceCmd, voice_1.deafenCmd, voice_1.undeafenCmd].forEach(c => r.register(c));
     // Channel mode / MOTD / invites
     [mode_1.motdCmd, mode_1.inviteCmd, mode_1.uninviteCmd, mode_1.modeCmd].forEach(c => r.register(c));
+    // Door UI: rooms list, ignore list, drawing, file sharing, settings
+    [ui_1.roomsCmd, ui_1.ignoreCmd, ui_1.unignoreCmd, ui_1.drawCmd, ui_1.filesCmd, ui_1.settingsCmd].forEach(c => r.register(c));
     return r;
 }

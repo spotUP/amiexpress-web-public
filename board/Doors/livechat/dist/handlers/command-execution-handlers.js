@@ -1,6 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.handleCommandActions = handleCommandActions;
+const reaction_handlers_1 = require("./reaction-handlers");
 function handleCommandActions(r, socket, state, onlineUsers, currentSearchOverlay, createSearchOverlay, searchMessages, addSystemMessage, replyToThread, pinMessage, unpinMessage, getPinnedMessages, screen, inputBox, cleanup, showConfirm) {
     // Quit - show confirmation dialog
     if (r.action === 'quit') {
@@ -24,6 +25,16 @@ function handleCommandActions(r, socket, state, onlineUsers, currentSearchOverla
     // Thread
     if (r.action === 'thread' && r.data?.messageId && r.data?.message) {
         replyToThread(socket, r.data.messageId, r.data.message);
+        return { handled: true };
+    }
+    // Reactions: stored by the backend, counts come back as chat:reaction
+    if ((r.action === 'react' || r.action === 'unreact') && r.data?.messageId && r.data?.emoji) {
+        const send = r.action === 'react' ? reaction_handlers_1.reactToMessage : reaction_handlers_1.unreactToMessage;
+        send(socket, state.currentChannel, String(r.data.messageId), r.data.emoji);
+        return { handled: true };
+    }
+    if (r.action === 'reactions' && r.data?.messageId) {
+        (0, reaction_handlers_1.listMessageReactions)(socket, state.currentChannel, String(r.data.messageId));
         return { handled: true };
     }
     // Pin

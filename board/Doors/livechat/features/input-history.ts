@@ -5,7 +5,8 @@ interface HistoryEntry {
   text: string;
 }
 
-export function createInputHistory(s: Screen, ib: Textarea) {
+/** `picking` is the message picker's flag: while it owns Up/Down, history stays out. */
+export function createInputHistory(s: Screen, ib: Textarea, picking: () => boolean = () => false) {
   const h: HistoryEntry[] = [];
   let hi = -1;
   let si = '';
@@ -21,6 +22,9 @@ export function createInputHistory(s: Screen, ib: Textarea) {
   s.key(['up'], () => {
     const f = s.getFocused();
     if (f !== ib) return;
+    if (picking()) return;
+    // Up on an empty line enters message pick mode (message-picker.ts).
+    if (hi === -1 && !(ib.getValue() || '')) return;
     if (h.length === 0) return;
     if (hi === -1) si = ib.getValue() || '';
     if (hi < h.length - 1) {
@@ -38,6 +42,7 @@ export function createInputHistory(s: Screen, ib: Textarea) {
   s.key(['down'], () => {
     const f = s.getFocused();
     if (f !== ib) return;
+    if (picking()) return;
     if (hi === -1) return;
     hi--;
     if (hi === -1) {
