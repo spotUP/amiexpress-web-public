@@ -8,6 +8,7 @@ exports.createEmojiCommand = createEmojiCommand;
 exports.createEmojiListCommand = createEmojiListCommand;
 exports.createCustomEmojiCommand = createCustomEmojiCommand;
 const emojis_1 = require("../utils/emojis");
+const emoji_picker_1 = require("../ui/emoji-picker");
 const door_theme_1 = require("../door-theme");
 /**
  * /emoji [search] - Open emoji picker or search emojis
@@ -38,12 +39,7 @@ function createEmojiCommand(screen, emojiPicker, inputBox, addSystemMessage) {
             else {
                 // Open picker
                 if (!emojiPicker.isVisible()) {
-                    emojiPicker.show(screen, (emoji) => {
-                        const current = inputBox.getValue();
-                        inputBox.setValue(current + emoji.code + ' ');
-                        inputBox.focus();
-                        screen.render();
-                    }, () => {
+                    emojiPicker.show(screen, (emoji) => (0, emoji_picker_1.insertEmojiIntoInput)(inputBox, screen, emoji), () => {
                         inputBox.focus();
                         screen.render();
                     });

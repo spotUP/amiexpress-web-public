@@ -1,26 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.helpCmd = exports.pinsCmd = exports.pinCmd = void 0;
-/** /pin - Pin a message */
-exports.pinCmd = {
-    name: 'pin',
-    description: 'Pin a message',
-    usage: '/pin [message-id]',
-    minSecLevel: 80,
-    handler: (ctx, args) => {
-        const msgId = args[0];
-        return { handled: true, data: { type: 'pin', msgId } };
-    }
-};
-/** /pins - Show pinned messages */
-exports.pinsCmd = {
-    name: 'pins',
-    description: 'Show pinned messages',
-    usage: '/pins',
-    handler: (ctx) => {
-        return { handled: true, data: { type: 'list_pins', channel: ctx.currentChannel } };
-    }
-};
+exports.helpCmd = void 0;
 /** /help - Show available commands */
 const helpCmd = (registry) => ({
     name: 'help',

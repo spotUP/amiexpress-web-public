@@ -5,7 +5,7 @@
 
 import type { SlashCommand } from './types';
 import { searchEmojis, getEmojisByCategory } from '../utils/emojis';
-import type { EmojiPicker } from '../ui/emoji-picker';
+import { insertEmojiIntoInput, type EmojiPicker } from '../ui/emoji-picker';
 import { T } from '../door-theme';
 
 /**
@@ -43,12 +43,7 @@ export function createEmojiCommand(
         if (!emojiPicker.isVisible()) {
           emojiPicker.show(
             screen,
-            (emoji) => {
-              const current = inputBox.getValue();
-              inputBox.setValue(current + emoji.code + ' ');
-              inputBox.focus();
-              screen.render();
-            },
+            (emoji) => insertEmojiIntoInput(inputBox, screen, emoji),
             () => {
               inputBox.focus();
               screen.render();

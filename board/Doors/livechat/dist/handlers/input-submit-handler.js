@@ -237,7 +237,7 @@ function createSubmitHandler(socket, state, registry, cmdCtx, userId, username, 
                     // New message - generate ID and add to history
                     const messageId = `${userId}-${Date.now()}`;
                     const processedMsg = (0, emojis_1.replaceEmojis)(msg);
-                    socket.emit('room:message', { message: processedMsg, messageId });
+                    socket.emit('room:message', { message: processedMsg, messageId, clientId: messageId });
                     // Add local echo immediately (server skips echoing own messages back)
                     //
                     // The CONTENT is parsed here, exactly as it is for a message from

@@ -1454,6 +1454,17 @@ const NAMED_RULINGS: Readonly<Record<string, EventRuling>> = {
     "render a structured object; the BBS-side chat a telnet caller CAN reach " +
     "travels as ansi-output and is TP-10's work, not this table's.",
   },
+  "room:message:ack": {
+    kind: "web-only",
+    note:
+    "LiveChat's structured chat surface, emitted at " +
+    "handlers/chat/group-chat.handler.ts (handleRoomMessage) to the SENDER only: " +
+    "{ clientId, id } where id is the saved DB row id. Its consumer is the " +
+    "LiveChat door's SERVER half (Doors/livechat/server.ts), which receives it " +
+    "through createDoorSocketWrapper's outgoing dispatch " +
+    "(handlers/door.handler.ts:130-170) BEFORE this chain runs. A byte " +
+    "terminal cannot render a structured object.",
+  },
   "room:kicked": {
     kind: "web-only",
     note:

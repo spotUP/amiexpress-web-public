@@ -124,7 +124,7 @@ import { replaceEmojis } from './utils/emojis';
 import { AudioEngine } from '@amiexpress/bbs-door-sdk/engines/audio/audio-engine';
 
 // Emoji system
-import { EmojiPicker } from './ui/emoji-picker';
+import { EmojiPicker, insertEmojiIntoInput } from './ui/emoji-picker';
 import { createEmojiCommand, createEmojiListCommand, createCustomEmojiCommand } from './commands/emoji';
 
 // Format picker for text formatting
@@ -388,12 +388,7 @@ export async function createApp(session: DoorSession) {
     if (!emojiPicker.isVisible()) {
       emojiPicker.show(
         screen,
-        (emoji: any) => {
-          const currentText = inputBox.getValue();
-          inputBox.setValue(currentText + (emoji.display || emoji.code) + ' ');
-          inputBox.focus();
-          screen.render();
-        },
+        (emoji) => insertEmojiIntoInput(inputBox, screen, emoji),
         () => {
           inputBox.focus();
           screen.render();
@@ -1642,6 +1637,7 @@ export async function createApp(session: DoorSession) {
       bbs,
       showPromptDialog,
       messagesOf: (username: string) => chatMessagesFrom(state.messages, username),
+      currentRoom: () => state.currentChannel,
       onFocusTile: (uid) => {
         const vg = (voiceChannel as any).videoGrid;
         if (!vg) return;
@@ -2295,6 +2291,18 @@ export async function createApp(session: DoorSession) {
   // Clear typing preview lines when switching channels
   // setupRoomHandlers already clears state.typingBuffers via setChannel,
   // but typingPreviewLines is a separate Map that also needs clearing
+  // The server saved our line and names it: the local id we made up gives way
+  // to the DB row id every other client, and history, uses. One entry per
+  // display row in chatMessageIds, so every row of the message is re-keyed.
+  socket.on('room:message:ack', (d: { clientId?: string; id?: string | number }) => {
+    if (typeof d?.clientId !== 'string' || d.id === undefined || d.id === null) return;
+    const serverId = String(d.id);
+    for (let i = 0; i < chatMessageIds.length; i++) {
+      if (chatMessageIds[i] === d.clientId) chatMessageIds[i] = serverId;
+    }
+    inputHistory.rekey(d.clientId, serverId);
+  });
+
   socket.on('room:joined', (d: any) => {
     // Paint the recent conversation.
     //
@@ -2743,12 +2751,7 @@ export async function createApp(session: DoorSession) {
       if (!emojiPicker.isVisible()) {
         emojiPicker.show(
           screen,
-          (emoji: any) => {
-            const currentText = inputBox.getValue();
-            inputBox.setValue(currentText + (emoji.display || emoji.code) + ' ');
-            inputBox.focus();
-            screen.render();
-          },
+          (emoji) => insertEmojiIntoInput(inputBox, screen, emoji),
           () => {
             inputBox.focus();
             screen.render();

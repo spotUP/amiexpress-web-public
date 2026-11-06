@@ -254,6 +254,7 @@ const PINNED_EVENT_NAMES: ReadonlyArray<string> = [
   'room:leave',
   'room:left',
   'room:list',
+  'room:message:ack',
   'room:mode',
   'room:motd',
   'room:user-joined',
@@ -622,7 +623,7 @@ describe('TP-3 - the adapter: one ruling for every event name', () => {
     // socket.io's own event to its listeners (server/session-link.ts).
     // 249 as of 2026-10-15: `message`, not-transport - the session link's `send` forwards
     // socket.io's stock message event (server/session-link.ts).
-    expect(ruled.length).toBe(249);
+    expect(ruled.length).toBe(250);
 
     // (c) every ruling's note is non-empty - the point of the table is the
     // written reason, not the classification.
@@ -691,7 +692,7 @@ describe('TP-3 - the adapter: one ruling for every event name', () => {
       // 118 (2026-09-28): `retry-login` gone with RL's web branch.
       // 114 (2026-10-04): the five `transfer:*` names gone with the dead
       // socket channel that read and wrote any path a visitor named.
-      'web-only': 115, // 115 (2026-10-14): `notify:push-subscribe`, NOTIFY's Enable push.
+      'web-only': 116, // 116 (2026-11-06): `room:message:ack`, the sender's DB id for his line. Was 115 (2026-10-14): `notify:push-subscribe`, NOTIFY's Enable push.
       // 105 (2026-09-24): `terminal-type-settled`, the telnet connection's
       // own end-of-TTYPE signal to its session start.
       // 106 (2026-10-15): `disconnecting`, the session link's re-raise of socket.io's own event.

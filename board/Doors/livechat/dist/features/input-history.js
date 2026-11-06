@@ -62,6 +62,14 @@ function createInputHistory(s, ib) {
             si = '';
             eid = null;
         },
+        /** The server named a sent line: its entry (and an edit in progress) take the server id. */
+        rekey: (from, to) => {
+            for (const e of h)
+                if (e.id === from)
+                    e.id = to;
+            if (eid === from)
+                eid = to;
+        },
         getEditingId: () => eid,
         reset: () => {
             hi = -1;

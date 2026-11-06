@@ -1,27 +1,5 @@
 import type { SlashCommand, CommandRegistry } from './types';
 
-/** /pin - Pin a message */
-export const pinCmd: SlashCommand = {
-  name: 'pin',
-  description: 'Pin a message',
-  usage: '/pin [message-id]',
-  minSecLevel: 80,
-  handler: (ctx, args) => {
-    const msgId = args[0];
-    return { handled: true, data: { type: 'pin', msgId } };
-  }
-};
-
-/** /pins - Show pinned messages */
-export const pinsCmd: SlashCommand = {
-  name: 'pins',
-  description: 'Show pinned messages',
-  usage: '/pins',
-  handler: (ctx) => {
-    return { handled: true, data: { type: 'list_pins', channel: ctx.currentChannel } };
-  }
-};
-
 /** /help - Show available commands */
 export const helpCmd = (registry: CommandRegistry): SlashCommand => ({
   name: 'help',

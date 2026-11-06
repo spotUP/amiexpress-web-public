@@ -334,12 +334,7 @@ async function createApp(session) {
     emojiButton.on('press', () => {
         audio.playSound('click');
         if (!emojiPicker.isVisible()) {
-            emojiPicker.show(screen, (emoji) => {
-                const currentText = inputBox.getValue();
-                inputBox.setValue(currentText + (emoji.display || emoji.code) + ' ');
-                inputBox.focus();
-                screen.render();
-            }, () => {
+            emojiPicker.show(screen, (emoji) => (0, emoji_picker_1.insertEmojiIntoInput)(inputBox, screen, emoji), () => {
                 inputBox.focus();
                 screen.render();
             });
@@ -1423,6 +1418,7 @@ async function createApp(session) {
         bbs,
         showPromptDialog,
         messagesOf: (username) => (0, message_history_1.chatMessagesFrom)(state.messages, username),
+        currentRoom: () => state.currentChannel,
         onFocusTile: (uid) => {
             const vg = voiceChannel.videoGrid;
             if (!vg)
@@ -2012,6 +2008,19 @@ async function createApp(session) {
     // Clear typing preview lines when switching channels
     // setupRoomHandlers already clears state.typingBuffers via setChannel,
     // but typingPreviewLines is a separate Map that also needs clearing
+    // The server saved our line and names it: the local id we made up gives way
+    // to the DB row id every other client, and history, uses. One entry per
+    // display row in chatMessageIds, so every row of the message is re-keyed.
+    socket.on('room:message:ack', (d) => {
+        if (typeof d?.clientId !== 'string' || d.id === undefined || d.id === null)
+            return;
+        const serverId = String(d.id);
+        for (let i = 0; i < chatMessageIds.length; i++) {
+            if (chatMessageIds[i] === d.clientId)
+                chatMessageIds[i] = serverId;
+        }
+        inputHistory.rekey(d.clientId, serverId);
+    });
     socket.on('room:joined', (d) => {
         // Paint the recent conversation.
         //
@@ -2364,12 +2373,7 @@ async function createApp(session) {
         onEmoji: () => {
             // Show emoji picker (same as F4)
             if (!emojiPicker.isVisible()) {
-                emojiPicker.show(screen, (emoji) => {
-                    const currentText = inputBox.getValue();
-                    inputBox.setValue(currentText + (emoji.display || emoji.code) + ' ');
-                    inputBox.focus();
-                    screen.render();
-                }, () => {
+                emojiPicker.show(screen, (emoji) => (0, emoji_picker_1.insertEmojiIntoInput)(inputBox, screen, emoji), () => {
                     inputBox.focus();
                     screen.render();
                 });

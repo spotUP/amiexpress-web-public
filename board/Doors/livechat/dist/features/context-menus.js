@@ -8,6 +8,7 @@ const mute_list_1 = require("../core/mute-list");
 const theme_1 = require("../ui/theme");
 const blessed_1 = __importDefault(require("@amiexpress/bbs-door-sdk/engines/ui/blessed"));
 const door_theme_1 = require("../door-theme");
+const pin_handlers_1 = require("../handlers/pin-handlers");
 function createContextMenus(s, ib, sup, sdp, asm, sock, extras = {}) {
     const cm = blessed_1.default.list({ parent: s, top: 0, left: 0, width: 24, height: 6, border: { type: 'line' }, shadow: true, hidden: true, mouse: true, vi: true, keys: true, interactive: true, tags: true, zIndex: 9999, style: { fg: door_theme_1.T.ink, bg: door_theme_1.T.ground, border: { fg: theme_1.PANEL_BORDER }, selected: { fg: door_theme_1.T.ground, bg: door_theme_1.T.accent } } });
     // Set high z-index to ensure menu appears on top
@@ -192,9 +193,13 @@ function createContextMenus(s, ib, sup, sdp, asm, sock, extras = {}) {
                     asm('Copy to clipboard (not available in terminal)');
                     break;
                 case 'Pin Message':
-                    asm(cmt
-                        ? `{${door_theme_1.T.accentAlt}-fg}Pinning is not supported by the server yet.{/${door_theme_1.T.accentAlt}-fg}`
-                        : `{${door_theme_1.T.accentAlt}-fg}Right-click on a message first.{/${door_theme_1.T.accentAlt}-fg}`);
+                    if (!cmt) {
+                        asm(`{${door_theme_1.T.accentAlt}-fg}Right-click on a message first.{/${door_theme_1.T.accentAlt}-fg}`);
+                    }
+                    else {
+                        (0, pin_handlers_1.pinMessage)(sock, extras.currentRoom ? extras.currentRoom() : '', cmt);
+                        asm('Pin requested.');
+                    }
                     break;
                 case 'Mark Unread':
                     asm('Marked as unread');

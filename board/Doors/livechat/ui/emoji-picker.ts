@@ -11,6 +11,28 @@ import { T } from '../door-theme';
 
 export { Emoji };
 
+/** The slice of the message box the picker needs. */
+interface EmojiTarget {
+  getValue(): string;
+  setValue(value: string): void;
+  focus(): void;
+}
+
+/**
+ * Put one picked emoji into the message box: the `:code:` form, which the
+ * send path (replaceEmojis) renders - the one form every entry point shares
+ * (button, F4, menu, /emoji) - then hand focus back to the box.
+ */
+export function insertEmojiIntoInput(
+  inputBox: EmojiTarget,
+  screen: Pick<Screen, 'render'>,
+  emoji: Pick<Emoji, 'code'>,
+): void {
+  inputBox.setValue(inputBox.getValue() + emoji.code + ' ');
+  inputBox.focus();
+  screen.render();
+}
+
 const CATEGORY_MAP: Record<string, Emoji['category']> = {
   'Emotions': 'emotions',
   'Actions': 'actions',

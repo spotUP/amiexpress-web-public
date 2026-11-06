@@ -6,13 +6,13 @@ exports.pinCmd = {
     name: 'pin',
     description: 'Pin a message',
     usage: '/pin <msg-id>',
+    minSecLevel: 80,
     handler: (ctx, args) => {
         if (args.length !== 1)
             return { handled: true, error: 'Usage: /pin <msg-id>' };
-        const messageId = parseInt(args[0], 10);
-        if (isNaN(messageId))
-            return { handled: true, error: 'Invalid message ID' };
-        return { handled: true, data: { messageId, action: 'pin' } };
+        // Message ids are strings (`${userId}-${Date.now()}` or server ids): never parseInt them.
+        const messageId = args[0];
+        return { handled: true, action: 'pin', data: { messageId } };
     }
 };
 /** /unpin - Unpin a message by ID */
@@ -20,13 +20,13 @@ exports.unpinCmd = {
     name: 'unpin',
     description: 'Unpin a message',
     usage: '/unpin <msg-id>',
+    minSecLevel: 80,
     handler: (ctx, args) => {
         if (args.length !== 1)
             return { handled: true, error: 'Usage: /unpin <msg-id>' };
-        const messageId = parseInt(args[0], 10);
-        if (isNaN(messageId))
-            return { handled: true, error: 'Invalid message ID' };
-        return { handled: true, data: { messageId, action: 'unpin' } };
+        // Message ids are strings (`${userId}-${Date.now()}` or server ids): never parseInt them.
+        const messageId = args[0];
+        return { handled: true, action: 'unpin', data: { messageId } };
     }
 };
 /** /pinned - Show all pinned messages */

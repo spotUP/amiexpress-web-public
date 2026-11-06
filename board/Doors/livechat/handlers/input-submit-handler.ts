@@ -35,9 +35,9 @@ export function createSubmitHandler(
   showUserList: () => void,
   addChatMessage: (msg: string, applyMarkdown?: boolean, messageId?: string) => void,
   addSystemMessage: (msg: string) => void,
-  replyToThread: (socket: Socket, messageId: number, message: string) => void,
-  pinMessage: (socket: Socket, roomId: string, messageId: number) => void,
-  unpinMessage: (socket: Socket, roomId: string, messageId: number) => void,
+  replyToThread: (socket: Socket, messageId: string, message: string) => void,
+  pinMessage: (socket: Socket, roomId: string, messageId: string) => void,
+  unpinMessage: (socket: Socket, roomId: string, messageId: string) => void,
   getPinnedMessages: (socket: Socket, roomId: string) => void,
   createSearchOverlay: any,
   searchMessages: any,
@@ -287,7 +287,7 @@ export function createSubmitHandler(
           // New message - generate ID and add to history
           const messageId = `${userId}-${Date.now()}`;
           const processedMsg = replaceEmojis(msg);
-          socket.emit('room:message', { message: processedMsg, messageId });
+          socket.emit('room:message', { message: processedMsg, messageId, clientId: messageId });
 
           // Add local echo immediately (server skips echoing own messages back)
           //

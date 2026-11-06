@@ -17,6 +17,8 @@ export interface ContextMenuExtras {
     showPromptDialog?: (prompt: string, def: string, cb: (err: any, val?: string) => void) => void;
     /** This user's actual chat messages, for View History. */
     messagesOf?: (username: string) => Message[];
+    /** The room a pin is written into. */
+    currentRoom?: () => string;
 }
 export declare function createContextMenus(s: Screen, ib: any, sup: (u: string) => void, sdp: (u: string) => void, asm: (m: string) => void, sock: any, extras?: ContextMenuExtras): {
     contextMenu: import("@amiexpress/bbs-door-sdk/engines/ui/blessed").List;

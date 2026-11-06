@@ -12,11 +12,11 @@ export function setupPinListeners(
   socket.on('chat:pin:list', onPinList);
 }
 
-export function pinMessage(socket: Socket, roomId: string, messageId: number) {
+export function pinMessage(socket: Socket, roomId: string, messageId: string) {
   socket.emit('chat:pin:add', { roomId, messageId });
 }
 
-export function unpinMessage(socket: Socket, roomId: string, messageId: number) {
+export function unpinMessage(socket: Socket, roomId: string, messageId: string) {
   socket.emit('chat:pin:remove', { roomId, messageId });
 }
 

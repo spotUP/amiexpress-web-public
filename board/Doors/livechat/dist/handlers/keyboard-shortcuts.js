@@ -2,6 +2,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.setupKeyboardShortcuts = setupKeyboardShortcuts;
 const bbs_door_sdk_1 = require("@amiexpress/bbs-door-sdk");
+const emoji_picker_1 = require("../ui/emoji-picker");
 // Helper to invalidate coordinate cache after direct position modification
 function invalidateCache(element) {
     element._coordsCacheValid = false;
@@ -61,7 +62,7 @@ function setupKeyboardShortcuts(s, cl, dc, ib, sbt, chl, ul, ep, sh, ssb, asm, s
     s.key(['f2'], () => { sv = !sv; ucl(); asm(sv ? 'Sidebar shown' : 'Sidebar hidden (F2 to show)'); });
     s.key(['f3'], () => { const currentTab = sbt(); ssb(currentTab === 'channels' ? 'users' : 'channels'); asm(`Switched to ${currentTab === 'channels' ? 'users' : 'channels'} view`); });
     s.key(['f4', 'C-e'], () => { if (!ep.isVisible())
-        ep.show(s, (e) => { const c = ib.getValue(); ib.setValue(c + (e.display || e.code) + ' '); ib.focus(); s.render(); }, () => { ib.focus(); s.render(); }); });
+        ep.show(s, (e) => (0, emoji_picker_1.insertEmojiIntoInput)(ib, s, e), () => { ib.focus(); s.render(); }); });
     /**
      * The Tab cycle: where typing happens, the sidebar list, and the menu bar.
      *

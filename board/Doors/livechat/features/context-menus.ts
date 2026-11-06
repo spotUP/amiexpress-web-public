@@ -4,6 +4,7 @@ import blessed from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import type { Screen } from '@amiexpress/bbs-door-sdk/engines/ui/blessed';
 import { T } from '../door-theme';
 import type { Message } from '../types';
+import { pinMessage } from '../handlers/pin-handlers';
 
 export interface ContextMenuExtras {
   isSysop?: boolean;
@@ -19,6 +20,8 @@ export interface ContextMenuExtras {
   showPromptDialog?: (prompt: string, def: string, cb: (err: any, val?: string) => void) => void;
   /** This user's actual chat messages, for View History. */
   messagesOf?: (username: string) => Message[];
+  /** The room a pin is written into. */
+  currentRoom?: () => string;
 }
 
 export function createContextMenus(s: Screen, ib: any, sup: (u: string) => void, sdp: (u: string) => void, asm: (m: string) => void, sock: any, extras: ContextMenuExtras = {}) {
@@ -195,9 +198,12 @@ export function createContextMenus(s: Screen, ib: any, sup: (u: string) => void,
           asm('Copy to clipboard (not available in terminal)');
           break;
         case 'Pin Message':
-          asm(cmt
-            ? `{${T.accentAlt}-fg}Pinning is not supported by the server yet.{/${T.accentAlt}-fg}`
-            : `{${T.accentAlt}-fg}Right-click on a message first.{/${T.accentAlt}-fg}`);
+          if (!cmt) {
+            asm(`{${T.accentAlt}-fg}Right-click on a message first.{/${T.accentAlt}-fg}`);
+          } else {
+            pinMessage(sock, extras.currentRoom ? extras.currentRoom() : '', cmt);
+            asm('Pin requested.');
+          }
           break;
         case 'Mark Unread':
           asm('Marked as unread');

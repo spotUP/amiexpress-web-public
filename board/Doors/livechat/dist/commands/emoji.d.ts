@@ -3,7 +3,7 @@
  * /emoji, /emojis, /customemoji
  */
 import type { SlashCommand } from './types';
-import type { EmojiPicker } from '../ui/emoji-picker';
+import { type EmojiPicker } from '../ui/emoji-picker';
 /**
  * /emoji [search] - Open emoji picker or search emojis
  */

@@ -103,7 +103,7 @@ console.log(
 
   onCaller(socket,
     "chat:message",
-    async (_caller: BBSSession, data: { message?: string; content?: string; room?: string }) => {
+    async (_caller: BBSSession, data: { message?: string; content?: string; room?: string; clientId?: string }) => {
 console.log("📨 [SOCKET.IO] Received chat:message event from client");
 console.log("📨 [SOCKET.IO] Data:", data);
 console.log("📨 [SOCKET.IO] Socket ID:", socket.id);
@@ -125,6 +125,7 @@ console.log(
         } = require("../handlers/chat/group-chat.handler");
         const roomData = {
           message: data.content || data.message || "",
+          clientId: data.clientId,
         };
 console.log("📨 [SOCKET.IO] Routing to handleRoomMessage:", roomData);
         await handleRoomMessage(socket, session, roomData);
@@ -214,7 +215,7 @@ console.log("[CHAT DEBUG] Normalized room:join data:", normalizedData);
     await handleRoomLeave(socket, session);
   });
 
-  onCaller(socket, "room:message", async (_caller: BBSSession, data: { message: string }) => {
+  onCaller(socket, "room:message", async (_caller: BBSSession, data: { message: string; clientId?: string }) => {
 console.log("[CHAT DEBUG] room:message received:", data);
     const session = getSessionBySocketId(socket.id);
     if (!session) {

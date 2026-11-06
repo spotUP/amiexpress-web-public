@@ -14,15 +14,15 @@ export function setupThreadListeners(
   socket.on('chat:thread:messages', onThreadMessages);
 }
 
-export function createThread(socket: Socket, messageId: number, title?: string) {
+export function createThread(socket: Socket, messageId: string, title?: string) {
   socket.emit('chat:thread:create', { messageId, title });
 }
 
-export function replyToThread(socket: Socket, threadId: number, message: string) {
+export function replyToThread(socket: Socket, threadId: string, message: string) {
   socket.emit('chat:thread:reply', { threadId, message });
 }
 
-export function getThreadMessages(socket: Socket, threadId: number) {
+export function getThreadMessages(socket: Socket, threadId: string) {
   socket.emit('chat:thread:messages', { threadId });
 }
 

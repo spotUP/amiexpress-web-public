@@ -4,11 +4,22 @@
  */
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.EmojiPicker = void 0;
+exports.insertEmojiIntoInput = insertEmojiIntoInput;
 const blessed_1 = require("@amiexpress/bbs-door-sdk/engines/ui/blessed");
 const theme_1 = require("./theme");
 const emojis_1 = require("../utils/emojis");
 const emoji_label_1 = require("../utils/emoji-label");
 const door_theme_1 = require("../door-theme");
+/**
+ * Put one picked emoji into the message box: the `:code:` form, which the
+ * send path (replaceEmojis) renders - the one form every entry point shares
+ * (button, F4, menu, /emoji) - then hand focus back to the box.
+ */
+function insertEmojiIntoInput(inputBox, screen, emoji) {
+    inputBox.setValue(inputBox.getValue() + emoji.code + ' ');
+    inputBox.focus();
+    screen.render();
+}
 const CATEGORY_MAP = {
     'Emotions': 'emotions',
     'Actions': 'actions',

@@ -149,7 +149,7 @@ function broadcastRoomSystem(roomId: string, message: string, excludeSocketId?: 
 /**
  * Broadcast a chat message to all room members
  */
-function broadcastRoomMessage(roomId: string, senderUsername: string, message: string, excludeSocketId?: string, senderId?: number | string) {
+function broadcastRoomMessage(roomId: string, senderUsername: string, message: string, excludeSocketId?: string, senderId?: number | string, savedId?: number) {
 console.log('📡 [BROADCAST] Starting broadcast:', {
     roomId,
     senderUsername,
@@ -171,7 +171,9 @@ console.log('📡 [BROADCAST] Emitting to room:', roomId);
   // Also emit structured chat:message event for advanced clients (LiveChat door)
   // This allows UI-based chat clients to parse and display messages properly
   const structuredMessage = {
-    id: `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+    // The DB row id, as history (room:joined) reports it, so a live line and a
+    // replayed one share one id. Random only when the save returned none.
+    id: savedId !== undefined ? String(savedId) : `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
     channelId: roomId,
     userId: String(senderId || '0'),
     username: senderUsername,
@@ -573,7 +575,7 @@ console.error('❌ Error leaving room:', error);
  * Socket.io event: 'room:message'
  * Data: { message: string }
  */
-export async function handleRoomMessage(socket: Socket, session: BBSSession, data: { message: string }) {
+export async function handleRoomMessage(socket: Socket, session: BBSSession, data: { message: string; clientId?: string }) {
   try {
     // Validate user is in a room
     if (!session.currentRoomId) {
@@ -608,7 +610,7 @@ export async function handleRoomMessage(socket: Socket, session: BBSSession, dat
     }
 
     // Save message to database
-    await db.saveChatRoomMessage({
+    const savedId = await db.saveChatRoomMessage({
       roomId: session.currentRoomId,
       senderId: session.user?.id,
       senderUsername: session.user?.username,
@@ -617,7 +619,13 @@ export async function handleRoomMessage(socket: Socket, session: BBSSession, dat
     });
 
     // Broadcast message to all room members EXCEPT sender (they already see their own message)
-    broadcastRoomMessage(session.currentRoomId!, session.user?.username!, message, socket.id, parseInt(session.user?.id || '0', 10));
+    broadcastRoomMessage(session.currentRoomId!, session.user?.username!, message, socket.id, parseInt(session.user?.id || '0', 10), savedId);
+
+    // The sender is excluded from the broadcast; tell him the id his line got
+    // so his local copy can be re-keyed to the DB row id.
+    if (savedId !== undefined && typeof data.clientId === 'string') {
+      socket.emit('room:message:ack', { clientId: data.clientId, id: String(savedId) });
+    }
 
 console.log('💬 Room message:', session.user?.username, '→', session.currentRoomName, message.substring(0, 50));
 

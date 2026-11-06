@@ -22,6 +22,7 @@ const messaging_1 = require("./messaging");
 const user_1 = require("./user");
 const moderation_1 = require("./moderation");
 const utility_1 = require("./utility");
+const pin_1 = require("./pin");
 const prefs_1 = require("./prefs");
 const mic_1 = require("./mic");
 const reactions_1 = require("./reactions");
@@ -39,7 +40,7 @@ function createCommandRegistry(voice = true) {
     // Moderation
     [moderation_1.kickCmd, moderation_1.banCmd, moderation_1.unbanCmd, moderation_1.muteCmd, moderation_1.opCmd].forEach(c => r.register(c));
     // Utility
-    [utility_1.quitCmd, utility_1.clearCmd, utility_1.searchCmd, utility_1.pinCmd, utility_1.pinsCmd].forEach(c => r.register(c));
+    [utility_1.quitCmd, utility_1.clearCmd, utility_1.searchCmd, pin_1.pinCmd, pin_1.unpinCmd, pin_1.pinnedCmd].forEach(c => r.register(c));
     r.register((0, utility_1.helpCmd)(r));
     // Prefs
     [prefs_1.soundsCmd, prefs_1.compactCmd, prefs_1.timestampsCmd, mic_1.micCmd].forEach(c => r.register(c));
