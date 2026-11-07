@@ -503,10 +503,8 @@ debugLog(`  D0 (argLen): ${argLen} D2 (stackSize)=0x${this.stackSizeBytes.toStri
     const segListBptr = hunkFile.segments[0]?.bptr || 0;
     // Offsets based on dos/Process layout (Task+MsgPort already written): see amitools dos.py
     const prSegList = taskAddr + 0x80;
-    const prStackSize = taskAddr + 0x84;
     const prGlobVec = taskAddr + 0x88;
     const prTaskNum = taskAddr + 0x8c;
-    const prStackBase = taskAddr + 0x90;
     const prResult2 = taskAddr + 0x94;
     const prCurrentDir = taskAddr + 0x98;
     const prCIS = taskAddr + 0x9c;
@@ -536,11 +534,10 @@ debugLog(`  D0 (argLen): ${argLen} D2 (stackSize)=0x${this.stackSizeBytes.toStri
     const homeDirBptr = this.dos?.lockDirectory("PROGDIR:") ?? 0;
 
     write32(prSegList, segListBptr);
-    write32(prStackSize, this.stackSizeBytes);
+    // pr_StackSize and pr_StackBase: setupStack (execLibrary.writeTaskStack).
     // GlobVec: -1 = use library vectors
     write32(prGlobVec, 0xffffffff);
     write32(prTaskNum, nodeId);
-    write32(prStackBase, this.stackBaseAddr);
     write32(prResult2, 0);
     write32(prCurrentDir, currentDirBptr);
     write32(prHomeDir, homeDirBptr);
@@ -758,6 +755,10 @@ debugLog(`  A1 (end of CODE): 0x${codeEnd.toString(16)}`);
     this.emulator.writeMemory32(newSP, this.exitTrapAddress); // (SP)  = return addr
     this.emulator.writeMemory32(newSP + 4, this.stackSizeBytes); // 4(SP) = stack_size
     this.emulator.setRegister(15, newSP);
+    // The task struct's stack fields, with the SP the door starts on. vbcc
+    // startup sizes its stack as tc_SPUpper - tc_SPLower; left at 0 it
+    // StackSwaps onto a 4 KB AllocVec in the heap.
+    this.execLibrary.writeTaskStack(this.stackBaseAddr, this.stackSizeBytes, newSP);
 
 debugLog(
       `[DoorLoader] Simulated JSR: Pushed return address 0x${this.exitTrapAddress.toString(

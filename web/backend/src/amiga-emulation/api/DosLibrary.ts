@@ -5,6 +5,7 @@ import { boardRoot } from "../../utils/board-root.util";
 import type { CpuContext } from "./dos/cpu-context";
 import { isHunkExecutable, loadSegList, type LoadedSegList } from "../loader/load-seg";
 import { ALLOCMEM_HEAP_BASE, ALLOCMEM_HEAP_END, CHILD_RETURN_TRAP_ADDR } from "../memory-map";
+import { TASK_STACK_FIELDS, taskStackFieldValues } from "./task-stack";
 import { MoiraEmulator, CPURegister } from "../cpu/MoiraEmulator";
 import * as fs from "fs";
 import * as amigafs from "../../utils/amigafs";
@@ -117,8 +118,6 @@ const MEMF_PUBLIC_CLEAR = 0x10001;
  */
 const SHELL_COMMAND_STACK = 0x10000;
 const MIN_COMMAND_STACK = 0x1000;
-/** Task/Process stack fields: tc_SPLower, tc_SPUpper, pr_StackSize, pr_StackBase (BPTR to the top). */
-const TASK_STACK_FIELDS = [0x3a, 0x3e, 0x84, 0x90];
 /** Process fields (dos/dosextens.h): the current directory lock, the program's directory lock. */
 const PR_CURRENT_DIR = 0x98;
 const PR_HOME_DIR = 0xbc;
@@ -3611,7 +3610,7 @@ debugLog(`[dos.library] Door will now exit cleanly`);
       exec.setStackBounds(stack, stackSize);
       const top = (stack + stackSize) & ~3;
       if (task) {
-        const values = [stack, top, stackSize, top >>> 2];
+        const values = taskStackFieldValues(stack, stackSize);
         TASK_STACK_FIELDS.forEach((off, i) => this.emulator.writeMemory32(task + off, values[i] >>> 0));
       }
 

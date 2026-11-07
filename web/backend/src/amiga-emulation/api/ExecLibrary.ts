@@ -8,6 +8,7 @@
  * WITHOUT full hardware emulation or ROM boot.
  */
 
+import { TASK_STACK_FIELDS, TC_SPREG, taskStackFieldValues } from "./task-stack";
 import { MoiraEmulator, CPURegister } from "../cpu/MoiraEmulator";
 import * as fs from "fs";
 import * as amigafs from "../../utils/amigafs";
@@ -349,6 +350,20 @@ debugLog(
         16
       )} upper=0x${this.currentStackUpper.toString(16)}`
     );
+  }
+
+  /**
+   * Write the door process's stack into its Task/Process struct:
+   * tc_SPReg = sp, tc_SPLower/tc_SPUpper = the stack's bounds, pr_StackSize,
+   * pr_StackBase. Startup code sizes its stack from these; with zeros vbcc's
+   * startup StackSwaps onto a 4 KB AllocVec in the heap.
+   */
+  writeTaskStack(lower: number, size: number, sp: number): void {
+    const task = this.currentTask.address;
+    if (task === 0) return;
+    this.emulator.writeMemory32(task + TC_SPREG, sp >>> 0);
+    const values = taskStackFieldValues(lower, size);
+    TASK_STACK_FIELDS.forEach((off, i) => this.emulator.writeMemory32(task + off, values[i]));
   }
 
   getStackUpper(): number {
@@ -744,7 +759,7 @@ debugLog(
     this.emulator.writeMemory32(addr + 0x2e, 0); // tc_TrapData
     this.emulator.writeMemory32(addr + 0x32, 0); // tc_TrapCode
 
-    // Stack pointers
+    // Stack pointers: zero until DoorLoader places the stack (writeTaskStack)
     this.emulator.writeMemory32(addr + 0x36, 0); // tc_SPReg
     this.emulator.writeMemory32(addr + 0x3a, 0); // tc_SPLower
     this.emulator.writeMemory32(addr + 0x3e, 0); // tc_SPUpper
