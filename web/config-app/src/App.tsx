@@ -11,6 +11,7 @@ import { ActivityPage } from './pages/ActivityPage';
 import { SystemConfigPage } from './pages/SystemConfigPage';
 import { DoorsPage } from './pages/DoorsPage';
 import { AdminRolesPage } from './pages/AdminRolesPage';
+import { ChatRolesPage } from './pages/ChatRolesPage';
 import { SpriteManagerPage } from './pages/SpriteManagerPage';
 import { BullsInfoPage } from './pages/BullsInfoPage';
 import { MenusPage } from './pages/MenusPage';
@@ -154,6 +155,7 @@ function App() {
         <Route path="users" element={<LevelRoute><UsersPage /></LevelRoute>} />
         <Route path="security" element={<LevelRoute><SecurityPage /></LevelRoute>} />
         <Route path="admin-roles" element={<LevelRoute><AdminRolesPage /></LevelRoute>} />
+        <Route path="chat-roles" element={<LevelRoute><ChatRolesPage /></LevelRoute>} />
 
         {/* Content — screens editor accessible at 100+, rest sysop-only */}
         <Route path="conferences" element={<LevelRoute><ConferencesWorkspace /></LevelRoute>} />

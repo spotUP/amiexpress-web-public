@@ -11,6 +11,27 @@ export interface KickstartStatusResponse {
   installed?: string;
 }
 import type { LogoPosition, MenuConfig, MenuKind, WidthClass } from '@bbs/screens/menu-config/menu-config';
+
+export interface ChatRolePerms {
+  kick: boolean;
+  ban: boolean;
+  mute: boolean;
+  topic: boolean;
+  createPrivate: boolean;
+}
+export interface ChatRole {
+  id: string;
+  name: string;
+  colorHex: string;
+  colorAnsi: number;
+  position: number;
+  perms: ChatRolePerms;
+}
+export type ChatRoleInput = Omit<ChatRole, 'id'>;
+export interface ChatRoleAssignment {
+  handle: string;
+  roleId: string;
+}
 import {
   readAdminToken, writeAdminToken, readAdminRefreshToken, writeAdminRefreshToken,
 } from './auth-token';
@@ -1501,6 +1522,33 @@ class ApiClient {
     return this.request<{ perms: Record<string, number> }>(`${API_BASE}/admin-permissions`, {
       method: 'PUT',
       body: JSON.stringify({ perms }),
+    });
+  }
+
+  // Chat roles (proxied to the door server; the board key stays on the server)
+  async getChatRoles() {
+    return this.request<ChatRole[]>(`${API_BASE}/chat-roles`);
+  }
+
+  async saveChatRole(input: ChatRoleInput, id?: string) {
+    return this.request<ChatRole>(`${API_BASE}/chat-roles${id ? `/${encodeURIComponent(id)}` : ''}`, {
+      method: id ? 'PUT' : 'POST',
+      body: JSON.stringify(input),
+    });
+  }
+
+  async deleteChatRole(id: string) {
+    return this.request<void>(`${API_BASE}/chat-roles/${encodeURIComponent(id)}`, { method: 'DELETE' });
+  }
+
+  async getChatRoleAssignments() {
+    return this.request<ChatRoleAssignment[]>(`${API_BASE}/chat-roles/assignments`);
+  }
+
+  async setChatRoleAssignments(handle: string, roleIds: string[]) {
+    return this.request<void>(`${API_BASE}/chat-roles/assignments/${encodeURIComponent(handle)}`, {
+      method: 'PUT',
+      body: JSON.stringify({ roleIds }),
     });
   }
 

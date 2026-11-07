@@ -105,6 +105,7 @@ export const NAV_GROUPS: NavGroup[] = [
       { path: 'users', label: 'Users', icon: Users, minLevel: 255, description: 'Accounts, levels and flags' },
       { path: 'security', label: 'Access Levels', icon: Shield, minLevel: 255, description: 'Access/ACS.<level>.info permission sets' },
       { path: 'admin-roles', label: 'Admin Roles', icon: Shield, minLevel: 255, description: 'Configure which security levels can access admin sections' },
+      { path: 'chat-roles', label: 'Chat Roles', icon: Palette, minLevel: 255, description: 'Roles and colours your callers wear in livechat' },
     ],
   },
   {
