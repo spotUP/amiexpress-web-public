@@ -325,6 +325,28 @@ describe('S15 review: E against holders', () => {
     expect(live.webLink.ended).toBe(true);
   });
 
+  it('L19: two holders of one account - E asks about each in turn, and the login reaches LOGGEDON', async () => {
+    const { live } = await liveWindow();
+    const { held } = await Promise.resolve(telnetHolder(5));
+    const { b, session, login } = await passwordLogin('B', 4, { gdprConsentAt: new Date(0) });
+    (userAlreadyOnNode as jest.Mock).mockImplementation(() =>
+      (sessions.get('3') ? 3 : sessions.get('5') ? 5 : null));
+    (ftpCallersOnline as jest.Mock).mockReturnValue([]);
+    expect(text(b)).toContain('You are logged in on node 3');
+    session.loginInputHandler('e');
+    const until = Date.now() + 3000;
+    while (typeof session.loginInputHandler !== 'function' && Date.now() < until) {
+      await new Promise((r) => setTimeout(r, 5));
+    }
+    expect(text(b)).toContain('You are logged in on node 5');
+    session.loginInputHandler('e');
+    expect(await login).toEqual({ ok: true });
+    expect(sessions.get('3')).toBeUndefined();
+    expect(sessions.get('5')).toBeUndefined();
+    expect(live.webLink.ended).toBe(true);
+    expect(sessions.get('4')).toBe(session);
+  });
+
   it('two E answers for one holder both return as soon as it leaves', async () => {
     const { live } = await liveWindow();
     const started = Date.now();

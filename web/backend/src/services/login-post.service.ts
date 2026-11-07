@@ -260,11 +260,20 @@ export async function runPostAuthLogin(
     | undefined;
   {
     const userKey = String((user as any)?.id ?? '');
-    // S15: a typed password also offers a session still open in another
-    // window. R needs a web session on both sides; telnet/SSH get E or Q.
-    const parked = userKey === '' ? null
-      : parkedSessionOf(userKey) ?? (ctx.typedPassword ? liveSessionOf(userKey, session) : null);
-    if (parked) {
+    // L19: an account can hold more than one session (a web window AND a
+    // telnet line, or a parked one and a live one). Each is asked about in
+    // turn: ending only the first left the second for the already-on check
+    // below, which refused the caller who had just answered [E]nd. A holder
+    // already answered for (its line never dropped) is not asked again; the
+    // already-on check then refuses, as before.
+    const answered = new Set<BBSSession>();
+    for (;;) {
+      // S15: a typed password also offers a session still open in another
+      // window. R needs a web session on both sides; telnet/SSH get E or Q.
+      const parked = userKey === '' ? null
+        : parkedSessionOf(userKey) ?? (ctx.typedPassword ? liveSessionOf(userKey, session) : null);
+      if (!parked || answered.has(parked)) break;
+      answered.add(parked);
       const heldIsWeb = isParked(parked) || (!!parked.webLink && !parked.connectionEmitter);
       const choice = await askParkedChoice(emitter, session, parked, isWeb && heldIsWeb);
       if (choice === "quit") {
