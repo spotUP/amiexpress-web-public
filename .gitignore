@@ -617,6 +617,7 @@ board/Node*/DORINFO*.DEF
 # The global-requests door holds the board secret in its cfg beside the
 # binary; never commit it.
 board/Doors/REQUESTS/REQUESTS.cfg
+board/Doors/LIVECHAT68/LIVECHAT.cfg
 # The achievements board key in plain text, same shape as REQUESTS.cfg above.
 board/Doors/ACHIEVEC/ACHIEVE.cfg
 

@@ -1,0 +1,5 @@
+# LIVECHAT68 - copy to LIVECHAT.cfg beside the door and fill in. Never commit LIVECHAT.cfg.
+Host=doors.uprough.net
+Port=80
+BoardKey=<board-id>.<secret>
+Timeout=10

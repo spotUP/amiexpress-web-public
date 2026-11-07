@@ -1,0 +1,515 @@
+/*
+ * ae_chat - the livechat client. See ae_chat.h for what this is.
+ *
+ * Modelled on ae_request.c: fixed buffers that refuse to overflow, JSON
+ * written by hand (it shares ae_request's two writers so a string is escaped
+ * one way everywhere), json_lite only on the session reply.
+ */
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+#include "ae_chat.h"
+#include "ae_request.h"
+#include "json_lite.h"
+
+#define BODY_MAX 1024
+#define PATH_MAX_LEN 256
+
+static int blank(const char *s)
+{
+    return s == 0 || s[0] == '\0';
+}
+
+/* ------------------------------------------------------------------ config */
+
+static void rtrim(char *s)
+{
+    unsigned long len = (unsigned long)strlen(s);
+    while (len > 0 && (s[len - 1] == '\r' || s[len - 1] == '\n' ||
+                       s[len - 1] == ' ' || s[len - 1] == '\t')) {
+        s[--len] = '\0';
+    }
+}
+
+static void copy_field(char *dst, unsigned long cap, const char *src)
+{
+    strncpy(dst, src, cap - 1);
+    dst[cap - 1] = '\0';
+}
+
+int ae_chat_config_parse(ae_chat_config *cfg, const char *text)
+{
+    char line[256];
+    const char *p = text;
+
+    memset(cfg, 0, sizeof *cfg);
+    cfg->port = 80;
+    cfg->timeout_secs = AE_CHAT_DEFAULT_TIMEOUT;
+    if (text == 0) return 0;
+
+    while (*p != '\0') {
+        unsigned long n = 0;
+        char *eq;
+        char *value;
+
+        while (*p != '\0' && *p != '\n') {
+            if (n < sizeof line - 1) line[n++] = *p;
+            p++;
+        }
+        if (*p == '\n') p++;
+        line[n] = '\0';
+        rtrim(line);
+        if (line[0] == '#' || line[0] == ';' || line[0] == '\0') continue;
+        eq = strchr(line, '=');
+        if (eq == 0) continue;
+        *eq = '\0';
+        value = eq + 1;
+        while (*value == ' ' || *value == '\t') value++;
+
+        if (strcmp(line, "Host") == 0) {
+            copy_field(cfg->host, sizeof cfg->host, value);
+        } else if (strcmp(line, "Port") == 0) {
+            int port = atoi(value);
+            if (port > 0 && port < 65536) cfg->port = port;
+        } else if (strcmp(line, "BoardKey") == 0) {
+            copy_field(cfg->board_key, sizeof cfg->board_key, value);
+        } else if (strcmp(line, "Timeout") == 0) {
+            int secs = atoi(value);
+            if (secs > 0 && secs < 120) cfg->timeout_secs = secs;
+        }
+    }
+    return cfg->host[0] != '\0' && cfg->board_key[0] != '\0';
+}
+
+int ae_chat_config_load(ae_chat_config *cfg, const char *path)
+{
+    char text[1024];
+    unsigned long n;
+    FILE *f = fopen(path, "r");
+
+    if (f == 0) {
+        ae_chat_config_parse(cfg, "");
+        return 0;
+    }
+    n = (unsigned long)fread(text, 1, sizeof text - 1, f);
+    fclose(f);
+    text[n] = '\0';
+    return ae_chat_config_parse(cfg, text);
+}
+
+/* -------------------------------------------------------------- transport */
+
+static int collect(void *ctx, const unsigned char *buf, unsigned long len)
+{
+    ae_chat *c = (ae_chat *)ctx;
+    unsigned long room = (unsigned long)sizeof c->reply - 1 - c->reply_len;
+    unsigned long take = len < room ? len : room;
+
+    if (take > 0) {
+        memcpy(c->reply + c->reply_len, buf, take);
+        c->reply_len += take;
+        c->reply[c->reply_len] = '\0';
+    }
+    return 0; /* never abort: the status matters even when the body is long */
+}
+
+static int open_session(ae_chat *c);
+
+static int call_once(ae_chat *c, const char *method, const char *path,
+                     const char *body, unsigned long body_len)
+{
+    char auth[256];
+    char sidh[96];
+    const char *headers[3];
+    int nheaders = 0;
+    ae_http_target target;
+    ae_http_response response;
+    int rc;
+
+    c->reply_len = 0;
+    c->reply[0] = '\0';
+    c->cursor = 0;
+    c->status = 0;
+    c->error[0] = '\0';
+    c->retry_after = 0;
+    c->http_error = 0;
+
+    if ((unsigned long)strlen(c->cfg.board_key) + 32 >= sizeof auth) return AE_CHAT_ERR_TOO_LONG;
+    sprintf(auth, "Authorization: Board %s\r\n", c->cfg.board_key);
+    headers[nheaders++] = auth;
+    if (c->sid[0] != '\0') {
+        sprintf(sidh, "X-Chat-Session: %.64s\r\n", c->sid);
+        headers[nheaders++] = sidh;
+    }
+    if (body != 0) headers[nheaders++] = "Content-Type: application/json\r\n";
+
+    memset(&target, 0, sizeof target);
+    target.host = c->cfg.host;
+    target.port = c->cfg.port > 0 ? c->cfg.port : 80;
+    target.timeout_secs = c->cfg.timeout_secs > 0 ? c->cfg.timeout_secs : AE_CHAT_DEFAULT_TIMEOUT;
+    target.user_agent = "AmiExpress-LIVECHAT68/1.0";
+    memset(&response, 0, sizeof response);
+
+    c->calls++;
+    rc = ae_http_request(&target, method, path, body, body_len, headers, nheaders,
+                         &response, collect, c, 0);
+    if (rc != AE_HTTP_OK) {
+        c->http_error = rc;
+        return AE_CHAT_ERR_TRANSPORT;
+    }
+    c->status = response.status;
+    if (response.status < 200 || response.status > 299) {
+        int retry = 0;
+        json_extract_string(c->reply, "error", c->error, sizeof c->error);
+        if (json_extract_bool(c->reply, "retryAfter", &retry) == 0) c->retry_after = retry;
+        return AE_CHAT_ERR_STATUS;
+    }
+    return AE_CHAT_OK;
+}
+
+/* One call, and when the server says the session expired, one silent reopen
+ * and one retry. The poll every few seconds keeps a live session alive; this
+ * covers a caller who sat in a prompt past the 90 s limit. */
+static int call(ae_chat *c, const char *method, const char *path,
+                const char *body, unsigned long body_len)
+{
+    int rc = call_once(c, method, path, body, body_len);
+
+    if (rc == AE_CHAT_ERR_STATUS && strcmp(c->error, "session_expired") == 0 &&
+        !blank(c->handle)) {
+        if (open_session(c) == AE_CHAT_OK) {
+            rc = call_once(c, method, path, body, body_len);
+        } else {
+            rc = AE_CHAT_ERR_STATUS;
+        }
+    }
+    return rc;
+}
+
+/* ----------------------------------------------------------------- session */
+
+static int open_session(ae_chat *c)
+{
+    char body[BODY_MAX];
+    long at;
+    int rc;
+    int expires = 0;
+
+    c->sid[0] = '\0';
+    at = ae_req_put_raw(body, sizeof body, 0, "{\"handle\":");
+    if (at >= 0) at = ae_req_put_json_string(body, sizeof body, (unsigned long)at, c->handle);
+    if (at >= 0) at = ae_req_put_raw(body, sizeof body, (unsigned long)at,
+                                     c->sysop ? ",\"sysop\":true,\"client\":" : ",\"sysop\":false,\"client\":");
+    if (at >= 0) at = ae_req_put_json_string(body, sizeof body, (unsigned long)at, "livechat68/1.0");
+    if (at >= 0) at = ae_req_put_raw(body, sizeof body, (unsigned long)at, "}");
+    if (at < 0) return AE_CHAT_ERR_TOO_LONG;
+
+    rc = call_once(c, "POST", AE_CHAT_BASE "/sessions", body, (unsigned long)at);
+    if (rc != AE_CHAT_OK) return rc;
+    if (json_extract_string(c->reply, "sid", c->sid, sizeof c->sid) != 0 || c->sid[0] == '\0') {
+        c->sid[0] = '\0';
+        return AE_CHAT_ERR_BODY;
+    }
+    json_extract_string(c->reply, "user", c->user, sizeof c->user);
+    if (json_extract_bool(c->reply, "expiresIn", &expires) == 0) c->expires_in = expires;
+    return AE_CHAT_OK;
+}
+
+int ae_chat_open(ae_chat *c, const ae_chat_config *cfg, const char *handle, int sysop)
+{
+    if (c == 0 || cfg == 0 || blank(handle)) return AE_CHAT_ERR_ARGS;
+    if (blank(cfg->host) || blank(cfg->board_key)) return AE_CHAT_ERR_ARGS;
+    memset(c, 0, sizeof *c);
+    c->cfg = *cfg;
+    copy_field(c->handle, sizeof c->handle, handle);
+    c->sysop = sysop ? 1 : 0;
+    return open_session(c);
+}
+
+int ae_chat_close(ae_chat *c)
+{
+    int rc;
+    if (c == 0 || c->sid[0] == '\0') return AE_CHAT_ERR_ARGS;
+    rc = call_once(c, "DELETE", AE_CHAT_BASE "/sessions/current", 0, 0);
+    c->sid[0] = '\0';
+    return rc;
+}
+
+/* -------------------------------------------------------------------- rows */
+
+static int starts_with(const char *s, const char *prefix)
+{
+    return strncmp(s, prefix, strlen(prefix)) == 0;
+}
+
+/* Consume the ROOMS|/EVENTS| header if the reply opens with one. */
+static void skip_header(ae_chat *c, long *seq)
+{
+    const char *nl;
+
+    if (!starts_with(c->reply, "ROOMS|") && !starts_with(c->reply, "EVENTS|")) return;
+    if (seq != 0 && starts_with(c->reply, "EVENTS|")) {
+        const char *p = strchr(c->reply, '|');           /* after EVENTS */
+        p = p != 0 ? strchr(p + 1, '|') : 0;             /* after version */
+        if (p != 0) *seq = atol(p + 1);
+    }
+    nl = strchr(c->reply, '\n');
+    c->cursor = nl != 0 ? (unsigned long)(nl - c->reply) + 1 : c->reply_len;
+}
+
+int ae_chat_next_row(ae_chat *c, char **fields, int max)
+{
+    char *line;
+    char *p;
+    int n = 0;
+    int i;
+
+    while (c->cursor < c->reply_len) {
+        line = c->reply + c->cursor;
+        p = strchr(line, '\n');
+        if (p != 0) { *p = '\0'; c->cursor = (unsigned long)(p - c->reply) + 1; }
+        else c->cursor = c->reply_len;
+        rtrim(line);
+        if (line[0] == '\0') continue;
+
+        for (i = 0; i < max; i++) fields[i] = line + strlen(line); /* "" */
+        for (;;) {
+            char *bar = (n < max - 1) ? strchr(line, '|') : 0;
+            if (n < max) fields[n] = line;
+            n++;
+            if (bar == 0) break;
+            *bar = '\0';
+            line = bar + 1;
+        }
+        for (i = 0; i < max; i++) {
+            for (p = fields[i]; *p != '\0'; p++) if (*p == '!') *p = '|';
+        }
+        return n;
+    }
+    return 0;
+}
+
+/* ------------------------------------------------------------------ routes */
+
+/* path = prefix + escaped id + suffix. */
+static int make_path(char *out, unsigned long cap, const char *prefix,
+                     const char *id, const char *suffix)
+{
+    char esc[160];
+    unsigned long total;
+
+    if (blank(id)) return AE_CHAT_ERR_ARGS;
+    if (ae_req_url_escape(id, esc, sizeof esc) < 0) return AE_CHAT_ERR_TOO_LONG;
+    total = (unsigned long)(strlen(prefix) + strlen(esc) + strlen(suffix));
+    if (total + 1 > cap) return AE_CHAT_ERR_TOO_LONG;
+    sprintf(out, "%s%s%s", prefix, esc, suffix);
+    return AE_CHAT_OK;
+}
+
+int ae_chat_rooms(ae_chat *c)
+{
+    int rc = call(c, "GET", AE_CHAT_BASE "/rooms.txt", 0, 0);
+    if (rc == AE_CHAT_OK) skip_header(c, 0);
+    return rc;
+}
+
+int ae_chat_room_create(ae_chat *c, const char *name, const char *topic, const char *visibility)
+{
+    char body[BODY_MAX];
+    long at;
+
+    if (blank(name)) return AE_CHAT_ERR_ARGS;
+    at = ae_req_put_raw(body, sizeof body, 0, "{\"name\":");
+    if (at >= 0) at = ae_req_put_json_string(body, sizeof body, (unsigned long)at, name);
+    if (at >= 0 && !blank(topic)) {
+        at = ae_req_put_raw(body, sizeof body, (unsigned long)at, ",\"topic\":");
+        if (at >= 0) at = ae_req_put_json_string(body, sizeof body, (unsigned long)at, topic);
+    }
+    if (at >= 0) at = ae_req_put_raw(body, sizeof body, (unsigned long)at, ",\"visibility\":");
+    if (at >= 0) at = ae_req_put_json_string(body, sizeof body, (unsigned long)at,
+                                             blank(visibility) ? "public" : visibility);
+    if (at >= 0) at = ae_req_put_raw(body, sizeof body, (unsigned long)at, "}");
+    if (at < 0) return AE_CHAT_ERR_TOO_LONG;
+    return call(c, "POST", AE_CHAT_BASE "/rooms", body, (unsigned long)at);
+}
+
+int ae_chat_join(ae_chat *c, const char *room, char *name, int name_cap,
+                 char *topic, int topic_cap, int *members)
+{
+    char path[PATH_MAX_LEN];
+    int rc = make_path(path, sizeof path, AE_CHAT_BASE "/rooms/", room, "/join");
+    int n = 0;
+
+    if (rc != AE_CHAT_OK) return rc;
+    rc = call(c, "POST", path, "{}", 2);
+    if (rc != AE_CHAT_OK) return rc;
+    if (name != 0) json_extract_string(c->reply, "name", name, (unsigned long)name_cap);
+    if (topic != 0) json_extract_string(c->reply, "topic", topic, (unsigned long)topic_cap);
+    if (members != 0) *members = (json_extract_bool(c->reply, "members", &n) == 0) ? n : 0;
+    if (json_extract_bool(c->reply, "since", &n) == 0 && n > c->last_seq) c->last_seq = n;
+    return AE_CHAT_OK;
+}
+
+int ae_chat_leave(ae_chat *c, const char *room)
+{
+    char path[PATH_MAX_LEN];
+    int rc = make_path(path, sizeof path, AE_CHAT_BASE "/rooms/", room, "/leave");
+    if (rc != AE_CHAT_OK) return rc;
+    return call(c, "POST", path, "{}", 2);
+}
+
+static int history_at(ae_chat *c, const char *prefix, const char *id, long before, int limit)
+{
+    char path[PATH_MAX_LEN];
+    char suffix[64];
+    int rc;
+
+    if (limit < 1) limit = 20;
+    if (limit > 50) limit = 50;
+    if (before > 0) sprintf(suffix, "/history.txt?before=%ld&limit=%d", before, limit);
+    else sprintf(suffix, "/history.txt?limit=%d", limit);
+    rc = make_path(path, sizeof path, prefix, id, suffix);
+    if (rc != AE_CHAT_OK) return rc;
+    return call(c, "GET", path, 0, 0);
+}
+
+int ae_chat_history(ae_chat *c, const char *room, long before, int limit)
+{
+    return history_at(c, AE_CHAT_BASE "/rooms/", room, before, limit);
+}
+
+int ae_chat_dm_history(ae_chat *c, const char *thread_id, long before, int limit)
+{
+    return history_at(c, AE_CHAT_BASE "/dm/", thread_id, before, limit);
+}
+
+/* {"content":..,"clientId":..[,"replyTo":..][,"threadId":..]} */
+static int build_message(ae_chat *c, const char *text, const char *reply_to,
+                         const char *thread_id, char *body, unsigned long size)
+{
+    char client_id[48];
+    long at;
+
+    if (blank(text)) return AE_CHAT_ERR_ARGS;
+    c->send_counter++;
+    sprintf(client_id, "%.8s-%ld", c->sid, c->send_counter);
+    at = ae_req_put_raw(body, size, 0, "{\"content\":");
+    if (at >= 0) at = ae_req_put_json_string(body, size, (unsigned long)at, text);
+    if (at >= 0) at = ae_req_put_raw(body, size, (unsigned long)at, ",\"clientId\":");
+    if (at >= 0) at = ae_req_put_json_string(body, size, (unsigned long)at, client_id);
+    if (at >= 0 && !blank(reply_to)) {
+        at = ae_req_put_raw(body, size, (unsigned long)at, ",\"replyTo\":");
+        if (at >= 0) at = ae_req_put_json_string(body, size, (unsigned long)at, reply_to);
+    }
+    if (at >= 0 && !blank(thread_id)) {
+        at = ae_req_put_raw(body, size, (unsigned long)at, ",\"threadId\":");
+        if (at >= 0) at = ae_req_put_json_string(body, size, (unsigned long)at, thread_id);
+    }
+    if (at >= 0) at = ae_req_put_raw(body, size, (unsigned long)at, "}");
+    return at < 0 ? AE_CHAT_ERR_TOO_LONG : (int)at;
+}
+
+int ae_chat_send(ae_chat *c, const char *room, const char *text,
+                 const char *reply_to, const char *thread_id)
+{
+    char path[PATH_MAX_LEN];
+    char body[BODY_MAX + AE_CHAT_TEXT_MAX * 6];
+    int len = make_path(path, sizeof path, AE_CHAT_BASE "/rooms/", room, "/messages");
+
+    if (len != AE_CHAT_OK) return len;
+    len = build_message(c, text, reply_to, thread_id, body, sizeof body);
+    if (len < 0) return len;
+    return call(c, "POST", path, body, (unsigned long)len);
+}
+
+int ae_chat_poll(ae_chat *c, int wait)
+{
+    char path[96];
+    int rc;
+
+    if (wait < 0) wait = 0;
+    if (wait > 25) wait = 25;
+    sprintf(path, AE_CHAT_BASE "/events.txt?since=%ld&wait=%d", c->last_seq, wait);
+    rc = call(c, "GET", path, 0, 0);
+    if (rc == AE_CHAT_OK) skip_header(c, &c->last_seq);
+    return rc;
+}
+
+int ae_chat_react(ae_chat *c, const char *msg_id, const char *emoji, int *count)
+{
+    char path[PATH_MAX_LEN];
+    char body[128];
+    long at;
+    int rc = make_path(path, sizeof path, AE_CHAT_BASE "/messages/", msg_id, "/react");
+    int n = 0;
+
+    if (rc != AE_CHAT_OK) return rc;
+    if (blank(emoji)) return AE_CHAT_ERR_ARGS;
+    at = ae_req_put_raw(body, sizeof body, 0, "{\"emoji\":");
+    if (at >= 0) at = ae_req_put_json_string(body, sizeof body, (unsigned long)at, emoji);
+    if (at >= 0) at = ae_req_put_raw(body, sizeof body, (unsigned long)at, "}");
+    if (at < 0) return AE_CHAT_ERR_TOO_LONG;
+    rc = call(c, "POST", path, body, (unsigned long)at);
+    if (rc == AE_CHAT_OK && count != 0) *count = (json_extract_bool(c->reply, "count", &n) == 0) ? n : 0;
+    return rc;
+}
+
+int ae_chat_thread(ae_chat *c, const char *msg_id, const char *text)
+{
+    char path[PATH_MAX_LEN];
+    char body[BODY_MAX + AE_CHAT_TEXT_MAX * 6];
+    int len = make_path(path, sizeof path, AE_CHAT_BASE "/messages/", msg_id, "/thread");
+
+    if (len != AE_CHAT_OK) return len;
+    len = build_message(c, text, 0, 0, body, sizeof body);
+    if (len < 0) return len;
+    return call(c, "POST", path, body, (unsigned long)len);
+}
+
+int ae_chat_thread_list(ae_chat *c, const char *msg_id, int limit)
+{
+    char path[PATH_MAX_LEN];
+    char suffix[32];
+    int rc;
+
+    if (limit < 1) limit = 20;
+    sprintf(suffix, ".txt?limit=%d", limit);
+    rc = make_path(path, sizeof path, AE_CHAT_BASE "/threads/", msg_id, suffix);
+    if (rc != AE_CHAT_OK) return rc;
+    return call(c, "GET", path, 0, 0);
+}
+
+int ae_chat_dm(ae_chat *c, const char *peer, const char *text, char *thread_id, int cap)
+{
+    char path[PATH_MAX_LEN];
+    char body[BODY_MAX + AE_CHAT_TEXT_MAX * 6];
+    int len = make_path(path, sizeof path, AE_CHAT_BASE "/dm/", peer, "");
+
+    if (len != AE_CHAT_OK) return len;
+    len = build_message(c, text, 0, 0, body, sizeof body);
+    if (len < 0) return len;
+    len = call(c, "POST", path, body, (unsigned long)len);
+    if (len == AE_CHAT_OK && thread_id != 0) {
+        json_extract_string(c->reply, "threadId", thread_id, (unsigned long)cap);
+    }
+    return len;
+}
+
+int ae_chat_dm_list(ae_chat *c)
+{
+    return call(c, "GET", AE_CHAT_BASE "/dm.txt", 0, 0);
+}
+
+int ae_chat_who(ae_chat *c)
+{
+    return call(c, "GET", AE_CHAT_BASE "/who.txt", 0, 0);
+}
+
+int ae_chat_members(ae_chat *c, const char *room)
+{
+    char path[PATH_MAX_LEN];
+    int rc = make_path(path, sizeof path, AE_CHAT_BASE "/rooms/", room, "/members.txt");
+    if (rc != AE_CHAT_OK) return rc;
+    return call(c, "GET", path, 0, 0);
+}

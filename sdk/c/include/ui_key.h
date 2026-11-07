@@ -77,6 +77,8 @@ extern "C" {
  * UI_KEY_MOUSE and the door fetches the events with ae_bs_mouse_drain.
  */
 #define UI_KEY_MOUSE 1010
+/** ESC O P: F1 (VT100 PF1). A door that has a help screen binds it. */
+#define UI_KEY_F1    1011
 /* A raw 0x1E read is UI_KEY_MOUSE: Ctrl-^ collides with the wake byte while the board's mouse absorber is armed. */
 #define UI_MOUSE_WAKE 0x1E
 

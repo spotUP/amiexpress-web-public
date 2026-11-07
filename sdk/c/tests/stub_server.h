@@ -69,4 +69,30 @@ int stub_server_start_sequence(const unsigned char * const *responses,
                                 const unsigned long *response_lens,
                                 int count, int *out_pid);
 
+
+/* ---- /chat/v1 -------------------------------------------------------
+ * A routed, long-lived stub of the chat surface: one forked child that
+ * accepts connections until stub_chat_stop(), answers by method and path,
+ * and counts what the client did in a block of shared memory the test reads.
+ * Canned world: rooms "lobby" (public) and "secret" (private); lobby history
+ * is two messages by alice and bob; the FIRST events poll delivers a message
+ * from carol; a posted message is echoed to the next events poll, the way
+ * the real server's event log would. */
+typedef struct {
+    volatile int sessions, session_closes, rooms_listed, rooms_created, joins, leaves;
+    volatile int histories, messages, reacts, threads, dms, dm_lists, whos, events;
+    volatile int bad_auth;                 /* requests that lacked "Authorization: Board " */
+    volatile int bad_session;              /* post-open requests lacking X-Chat-Session */
+    volatile int expire_next;              /* test sets: next authenticated call answers session_expired once */
+    char last_message[512];                /* content of the latest POST /messages */
+    char last_react[64];
+    char last_dm_peer[64];
+    char last_dm_text[512];
+    char last_created[64];
+} stub_chat_stats;
+
+/* Starts the chat stub. Returns its port, or -1; *stats points at shared counters. */
+int stub_chat_start(stub_chat_stats **stats, int *out_pid);
+void stub_chat_stop(int pid);
+
 #endif /* AE_TEST_STUB_SERVER_H */

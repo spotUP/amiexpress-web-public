@@ -14,6 +14,8 @@
 #include <sys/time.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
+#include <sys/mman.h>
+#include <signal.h>
 #include "stub_server.h"
 
 /* How long stub_server_start_sequence()'s child waits for EACH connection
@@ -374,4 +376,177 @@ unsigned long stub_server_read_capture(int capture_fd, unsigned char *out, unsig
     }
     close(capture_fd);
     return total;
+}
+
+
+/* ---- /chat/v1 ------------------------------------------------------- */
+
+static int chat_read_request(int fd, char *req, int cap, char **body)
+{
+    int n = 0, have_head = 0, want = 0;
+    char *end = 0;
+    struct timeval tv;
+    tv.tv_sec = 2; tv.tv_usec = 0;
+    setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof tv);
+    for (;;) {
+        int got = (int)recv(fd, req + n, (size_t)(cap - 1 - n), 0);
+        if (got <= 0) break;
+        n += got;
+        req[n] = '\0';
+        if (!have_head && (end = strstr(req, "\r\n\r\n")) != 0) {
+            const char *cl = strstr(req, "Content-Length:");
+            have_head = 1;
+            want = (cl != 0 && cl < end) ? atoi(cl + 15) : 0;
+        }
+        if (have_head && n >= (int)(end - req) + 4 + want) break;
+    }
+    req[n] = '\0';
+    *body = end != 0 ? end + 4 : req + n;
+    return n;
+}
+
+static void chat_reply(int fd, int status, const char *type, const char *body)
+{
+    char head[256];
+    int len = (int)strlen(body);
+    int hl = sprintf(head, "HTTP/1.1 %d X\r\nContent-Type: %s\r\nContent-Length: %d\r\nConnection: close\r\n\r\n",
+                     status, type, len);
+    (void)!write(fd, head, (size_t)hl);
+    (void)!write(fd, body, (size_t)len);
+}
+
+static void chat_copy_json_field(char *dst, int cap, const char *body, const char *key)
+{
+    char pat[48];
+    const char *p;
+    int n = 0;
+    sprintf(pat, "\"%s\":\"", key);
+    dst[0] = '\0';
+    p = strstr(body, pat);
+    if (p == 0) return;
+    p += strlen(pat);
+    while (*p != '\0' && *p != '"' && n + 1 < cap) {
+        if (*p == '\\' && p[1] != '\0') p++;
+        dst[n++] = *p++;
+    }
+    dst[n] = '\0';
+}
+
+static void chat_serve(int fd, stub_chat_stats *st, int *state)
+{
+    char req[6144], method[8], path[256], text[1400];
+    char *body;
+    int is_post, is_get;
+    if (chat_read_request(fd, req, sizeof req, &body) <= 0) return;
+    if (sscanf(req, "%7s %255s", method, path) != 2) return;
+    is_post = strcmp(method, "POST") == 0;
+    is_get = strcmp(method, "GET") == 0;
+    if (strstr(req, "Authorization: Board ") == 0) st->bad_auth++;
+    if (!(is_post && strcmp(path, "/chat/v1/sessions") == 0) && strstr(req, "X-Chat-Session: ") == 0) st->bad_session++;
+
+    if (is_post && strcmp(path, "/chat/v1/sessions") == 0) {
+        st->sessions++;
+        chat_reply(fd, 200, "application/json", "{\"sid\":\"sid0123456789\",\"user\":\"Tester\",\"expiresIn\":90}");
+    } else if (st->expire_next && !(is_post && strncmp(path, "/chat/v1/sessions", 17) == 0)) {
+        st->expire_next = 0;
+        chat_reply(fd, 401, "application/json", "{\"error\":\"session_expired\",\"detail\":\"gone\"}");
+    } else if (strcmp(method, "DELETE") == 0) {
+        st->session_closes++;
+        chat_reply(fd, 204, "text/plain", "");
+    } else if (is_get && strcmp(path, "/chat/v1/rooms.txt") == 0) {
+        st->rooms_listed++;
+        chat_reply(fd, 200, "text/plain", "ROOMS|1|4|2\nlobby|Lobby|Hello all|public|3|boardA\nsecret|Secret||private|1|boardB\n");
+    } else if (is_post && strcmp(path, "/chat/v1/rooms") == 0) {
+        st->rooms_created++;
+        chat_copy_json_field(st->last_created, sizeof st->last_created, body, "name");
+        chat_reply(fd, 200, "application/json", "{\"id\":\"newroom\",\"name\":\"newroom\",\"visibility\":\"public\"}");
+    } else if (is_post && strstr(path, "/join") != 0) {
+        st->joins++;
+        if (strstr(path, "/rooms/nosuch/") != 0) { chat_reply(fd, 404, "application/json", "{\"error\":\"not_found\"}"); return; }
+        chat_reply(fd, 200, "application/json", "{\"id\":\"lobby\",\"name\":\"Lobby\",\"topic\":\"Hello all\",\"members\":3,\"ops\":1,\"since\":5}");
+    } else if (is_post && strstr(path, "/leave") != 0) {
+        st->leaves++;
+        chat_reply(fd, 204, "text/plain", "");
+    } else if (is_get && strstr(path, "/rooms/") != 0 && strstr(path, "/history.txt") != 0) {
+        st->histories++;
+        chat_reply(fd, 200, "text/plain",
+                   "1|m1|alice|1700000000||m1|9|hello there!bar\n2|m2|bob|1700000060|m1|m1|0|second line\n");
+    } else if (is_post && strstr(path, "/rooms/") != 0 && strstr(path, "/messages") != 0) {
+        st->messages++;
+        chat_copy_json_field(st->last_message, sizeof st->last_message, body, "content");
+        *state = 1;
+        chat_reply(fd, 200, "application/json", "{\"id\":\"m3\",\"seq\":6,\"at\":1700000100}");
+    } else if (is_post && strstr(path, "/react") != 0) {
+        st->reacts++;
+        chat_copy_json_field(st->last_react, sizeof st->last_react, body, "emoji");
+        chat_reply(fd, 200, "application/json", "{\"count\":2}");
+    } else if (is_post && strstr(path, "/thread") != 0) {
+        st->threads++;
+        chat_reply(fd, 200, "application/json", "{\"id\":\"t1\",\"seq\":9}");
+    } else if (is_post && strncmp(path, "/chat/v1/dm/", 12) == 0) {
+        st->dms++;
+        strncpy(st->last_dm_peer, path + 12, sizeof st->last_dm_peer - 1);
+        chat_copy_json_field(st->last_dm_text, sizeof st->last_dm_text, body, "content");
+        chat_reply(fd, 200, "application/json", "{\"id\":\"d1\",\"seq\":3,\"threadId\":\"th1\"}");
+    } else if (is_get && strstr(path, "/chat/v1/dm.txt") != 0) {
+        st->dm_lists++;
+        chat_reply(fd, 200, "text/plain", "th1|alice|1700000000|2\n");
+    } else if (is_get && strstr(path, "/chat/v1/dm/") != 0) {
+        chat_reply(fd, 200, "text/plain", "1|d0|alice|1700000000|||5|private hello\n");
+    } else if (is_get && strstr(path, "/chat/v1/who.txt") != 0) {
+        st->whos++;
+        chat_reply(fd, 200, "text/plain", "alice|lobby|0|9|12\nbob|lobby|1|0|3\n");
+    } else if (is_get && strstr(path, "/chat/v1/events.txt") != 0) {
+        st->events++;
+        {
+            int rows = 0;
+            char body_rows[1200];
+            body_rows[0] = '\0';
+            if (st->events == 1) {
+                strcat(body_rows, "7|message|lobby|carol|m9|1700000200|12|from idle poll\n");
+                rows++;
+            }
+            if (*state == 1) {
+                *state = 2;
+                sprintf(body_rows + strlen(body_rows), "8|message|lobby|Tester|m3|1700000300|0|%s\n", st->last_message);
+                rows++;
+            }
+            sprintf(text, "EVENTS|1|%d|%d\n%s", rows > 0 ? 8 : 7, rows, body_rows);
+        }
+        chat_reply(fd, 200, "text/plain", text);
+    } else {
+        chat_reply(fd, 404, "application/json", "{\"error\":\"not_found\"}");
+    }
+}
+
+int stub_chat_start(stub_chat_stats **stats, int *out_pid)
+{
+    int listen_fd, port;
+    pid_t pid;
+    stub_chat_stats *st = mmap(0, sizeof *st, PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1, 0);
+    if (st == MAP_FAILED) return -1;
+    memset(st, 0, sizeof *st);
+    listen_fd = make_listener(&port);
+    if (listen_fd < 0) return -1;
+    if (listen(listen_fd, 8) != 0) { close(listen_fd); return -1; }
+    pid = fork();
+    if (pid < 0) { close(listen_fd); return -1; }
+    if (pid == 0) {
+        int state = 0;
+        for (;;) {
+            int fd = accept(listen_fd, 0, 0);
+            if (fd < 0) continue;
+            chat_serve(fd, st, &state);
+            close(fd);
+        }
+    }
+    close(listen_fd);
+    *stats = st;
+    *out_pid = (int)pid;
+    return port;
+}
+
+void stub_chat_stop(int pid)
+{
+    if (pid > 0) { kill((pid_t)pid, SIGTERM); waitpid((pid_t)pid, 0, 0); }
 }

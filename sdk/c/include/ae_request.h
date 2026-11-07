@@ -105,6 +105,15 @@ long ae_req_build_post_body(ae_req_kind kind, const char *title,
                             char *buf, unsigned long size);
 
 /**
+ * Bounded JSON writers, shared with ae_chat so a body is escaped one way
+ * everywhere. ae_req_put_json_string appends `s` as a quoted, escaped JSON
+ * string to `buf` at offset `at`; ae_req_put_raw appends literal text. Both
+ * return the new length, or -1 when it would not fit `size`.
+ */
+long ae_req_put_json_string(char *buf, unsigned long size, unsigned long at, const char *s);
+long ae_req_put_raw(char *buf, unsigned long size, unsigned long at, const char *text);
+
+/**
  * The ae_http error from the last call that returned AE_REQ_ERR_TRANSPORT, for
  * a door that wants to say why.
  */

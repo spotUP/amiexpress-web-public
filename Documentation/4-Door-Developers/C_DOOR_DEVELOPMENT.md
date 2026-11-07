@@ -981,6 +981,14 @@ if (result == 1) {
 3. **Test API**: Use simple test doors to isolate issues
 4. **Compare**: Test same door with GCC vs vbcc to identify compiler differences
 
+## Livechat client
+
+`ae_chat` (`sdk/c/include/ae_chat.h`) is a client for the federated chat service at `/chat/v1` on the door server. It speaks plain HTTP through `ae_http`, authenticates every request with `Authorization: Board <key>` and keeps one `X-Chat-Session` per door run, reopening it silently when the server says `session_expired`. Rows come back as `|`-separated text; `ae_chat_next_row` splits them and turns the wire escape `!` back into `|`.
+
+The reference door is `sdk/c/examples/livechat/livechat.c` (command `LC`, binary `LIVECHAT68`). It has no clock, so it polls `/events.txt` by counting idle steps of `ae_delay_ticks`, and polls once after every send so the sender's own line arrives by the same path as everyone else's. Configuration is `LIVECHAT.cfg` beside the door (`Host`, `Port`, `BoardKey`, `Timeout`); an example is in `board/Doors/LIVECHAT68/LIVECHAT.cfg.example`.
+
+The endpoints, row formats, error codes and the polling recipe are defined in `CHAT-API.md` in the `amiexpress-doorserver` repository; read it before writing another client. Host test: `make -C sdk/c test` runs `tests/test_chat.c`, which drives the door's real `main` against a routed stub server.
+
 ## Advanced Topics
 
 ### Multinode Support

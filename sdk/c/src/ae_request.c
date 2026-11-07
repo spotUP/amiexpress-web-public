@@ -34,7 +34,7 @@ static int blank(const char *s)
 /* A JSON string body, escaped as the standard requires and no further - the
  * same escaper ae_achieve.c uses. Returns the byte count, or -1 if it would
  * not fit. */
-static long put_json_string(char *buf, unsigned long size, unsigned long at, const char *s)
+long ae_req_put_json_string(char *buf, unsigned long size, unsigned long at, const char *s)
 {
     unsigned long i = at;
     const unsigned char *p = (const unsigned char *)s;
@@ -78,7 +78,7 @@ static long put_json_string(char *buf, unsigned long size, unsigned long at, con
 }
 
 /* Literal text, bounds-checked the same way. */
-static long put_raw(char *buf, unsigned long size, unsigned long at, const char *text)
+long ae_req_put_raw(char *buf, unsigned long size, unsigned long at, const char *text)
 {
     unsigned long len = (unsigned long)strlen(text);
     if (at + len + 1 >= size) return -1;
@@ -101,27 +101,27 @@ long ae_req_build_post_body(ae_req_kind kind, const char *title,
     if (buf == 0 || size == 0) return -1;
     if (blank(title) || blank(handle)) return -1;
 
-    at = put_raw(buf, size, 0, "{\"kind\":");
+    at = ae_req_put_raw(buf, size, 0, "{\"kind\":");
     if (at < 0) return -1;
-    at = put_json_string(buf, size, (unsigned long)at, kind_word(kind));
+    at = ae_req_put_json_string(buf, size, (unsigned long)at, kind_word(kind));
     if (at < 0) return -1;
-    at = put_raw(buf, size, (unsigned long)at, ",\"title\":");
+    at = ae_req_put_raw(buf, size, (unsigned long)at, ",\"title\":");
     if (at < 0) return -1;
-    at = put_json_string(buf, size, (unsigned long)at, title);
+    at = ae_req_put_json_string(buf, size, (unsigned long)at, title);
     if (at < 0) return -1;
     /* notes is optional: left out entirely rather than sent as "" so the
      * server's default takes over cleanly. */
     if (!blank(notes)) {
-        at = put_raw(buf, size, (unsigned long)at, ",\"notes\":");
+        at = ae_req_put_raw(buf, size, (unsigned long)at, ",\"notes\":");
         if (at < 0) return -1;
-        at = put_json_string(buf, size, (unsigned long)at, notes);
+        at = ae_req_put_json_string(buf, size, (unsigned long)at, notes);
         if (at < 0) return -1;
     }
-    at = put_raw(buf, size, (unsigned long)at, ",\"handle\":");
+    at = ae_req_put_raw(buf, size, (unsigned long)at, ",\"handle\":");
     if (at < 0) return -1;
-    at = put_json_string(buf, size, (unsigned long)at, handle);
+    at = ae_req_put_json_string(buf, size, (unsigned long)at, handle);
     if (at < 0) return -1;
-    at = put_raw(buf, size, (unsigned long)at, "}");
+    at = ae_req_put_raw(buf, size, (unsigned long)at, "}");
     return at;
 }
 
@@ -131,17 +131,17 @@ static long build_action_body(const char *handle, const char *note, char *buf, u
     long at;
 
     if (blank(handle)) return -1;
-    at = put_raw(buf, size, 0, "{\"handle\":");
+    at = ae_req_put_raw(buf, size, 0, "{\"handle\":");
     if (at < 0) return -1;
-    at = put_json_string(buf, size, (unsigned long)at, handle);
+    at = ae_req_put_json_string(buf, size, (unsigned long)at, handle);
     if (at < 0) return -1;
     if (!blank(note)) {
-        at = put_raw(buf, size, (unsigned long)at, ",\"note\":");
+        at = ae_req_put_raw(buf, size, (unsigned long)at, ",\"note\":");
         if (at < 0) return -1;
-        at = put_json_string(buf, size, (unsigned long)at, note);
+        at = ae_req_put_json_string(buf, size, (unsigned long)at, note);
         if (at < 0) return -1;
     }
-    at = put_raw(buf, size, (unsigned long)at, "}");
+    at = ae_req_put_raw(buf, size, (unsigned long)at, "}");
     return at;
 }
 
