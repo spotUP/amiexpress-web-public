@@ -268,6 +268,10 @@ export function registerHttpRoutes(app: Application, io: SocketIOServer): void {
     adminPermsHandler.put(req as AuthRequest, res)
   );
 
+  // ===== Chat Roles API - Sysop-only proxy to the door server (board key stays here) =====
+  const { createChatRolesRouter } = require('./chat-roles.routes');
+  app.use('/api/chat-roles', authenticateToken(db), requireSysop(), createChatRolesRouter(() => db.getConfigRepository().getSystemConfig()));
+
   // ===== Sprite Manager API - Sysop-only =====
   app.get('/api/sprite-manager/doors', authenticateToken(db), requireSysop(), (req: Request, res: Response) =>
     spriteManagerHandler.listDoors(req, res)
