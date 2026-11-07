@@ -257,9 +257,9 @@ build/test_ae_achieve: src/ae_achieve.c src/ae_http.c src/ae_net.c src/json_lite
 	@mkdir -p build
 	$(CC) $(HOST_CFLAGS) -D_DEFAULT_SOURCE src/ae_achieve.c src/ae_http.c src/ae_net.c src/json_lite.c tests/stub_server.c tests/test_ae_achieve.c -o $@
 
-build/test_chat: examples/livechat/livechat.c tests/test_chat.c src/ae_chat.c src/ae_request.c src/ae_http.c src/ae_net.c src/json_lite.c tests/stub_server.c src/ae_dos.c src/ae_dos_native.c src/ae_transport_native.c src/ae_session.c src/ae_session_bbs.c src/ae_board_screen.c src/ui_ansi.c src/ui_chrome.c src/ui_key.c src/ui_list.c src/ui_profile.c src/ui_screen.c src/ae_host.c src/ui_theme.c include/ae_chat.h
+build/test_chat: examples/livechat/livechat.c tests/test_chat.c src/ae_chat.c src/ae_request.c src/ae_http.c src/ae_net.c src/json_lite.c tests/stub_server.c src/ae_dos.c src/ae_dos_native.c src/ae_transport_native.c src/ae_session.c src/ae_session_bbs.c src/ae_board_screen.c src/ui_ansi.c src/ui_chrome.c src/ui_key.c src/ui_input.c src/ui_list.c src/ui_profile.c src/ui_screen.c src/ae_host.c src/ui_theme.c include/ae_chat.h
 	@mkdir -p build
-	$(CC) $(HOST_CFLAGS) -D_DEFAULT_SOURCE -Isrc src/ae_chat.c src/ae_request.c src/ae_http.c src/ae_net.c src/json_lite.c tests/stub_server.c src/ae_dos.c src/ae_dos_native.c src/ae_transport_native.c src/ae_session.c src/ae_session_bbs.c src/ae_board_screen.c src/ui_ansi.c src/ui_chrome.c src/ui_key.c src/ui_list.c src/ui_profile.c src/ui_screen.c src/ae_host.c src/ui_theme.c tests/test_chat.c -o $@
+	$(CC) $(HOST_CFLAGS) -D_DEFAULT_SOURCE -Isrc src/ae_chat.c src/ae_request.c src/ae_http.c src/ae_net.c src/json_lite.c tests/stub_server.c src/ae_dos.c src/ae_dos_native.c src/ae_transport_native.c src/ae_session.c src/ae_session_bbs.c src/ae_board_screen.c src/ui_ansi.c src/ui_chrome.c src/ui_key.c src/ui_input.c src/ui_list.c src/ui_profile.c src/ui_screen.c src/ae_host.c src/ui_theme.c tests/test_chat.c -o $@
 
 build/test_ae_request: src/ae_request.c src/ae_http.c src/ae_net.c src/json_lite.c tests/stub_server.c tests/test_ae_request.c include/ae_request.h include/ae_http.h
 	@mkdir -p build

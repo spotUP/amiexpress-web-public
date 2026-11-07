@@ -211,6 +211,25 @@ static void test_door_idle_poll(void)
     printf("  [OK] door: idle polling shows a message nobody sent from here\n");
 }
 
+/* Regression (2026-11-07 mirror run): the rooms view had no way to make a room, so an empty list was a
+ * dead end; and /n joined by the typed NAME while the server joins by id, so a new room never opened. */
+static void test_door_new_room(void)
+{
+    int rc;
+    start_stub();
+    rc = drive(KEYS("n" "My Room\r" "/l\r" "q"), 0);
+    assert(rc == 0 && st->rooms_created == 1 && strcmp(st->last_created, "My Room") == 0);
+    assert(st->joins == 1 && strcmp(st->last_join, "newroom") == 0);    /* joined by the id the create reply gave */
+    assert(strstr(screen_text, "New public room: ") && strstr(screen_text, "N new room"));
+    stop_stub();
+    start_stub();
+    rc = drive(KEYS("\r" "/n Second Room\r" "/q\r"), 0);
+    assert(rc == 0 && st->rooms_created == 1 && strcmp(st->last_created, "Second Room") == 0);
+    assert(st->joins == 2 && strcmp(st->last_join, "newroom") == 0);
+    stop_stub();
+    printf("  [OK] door: N in the rooms view and /n in a room make a room and join it by its new id\n");
+}
+
 static void test_door_no_config(void)
 {
     int rc = drive(KEYS("x"), 0);
@@ -226,6 +245,7 @@ int main(void)
     test_door_keys();
     test_door_lists();
     test_door_idle_poll();
+    test_door_new_room();
     test_door_no_config();
     remove("build/test_chat_keys.bin"); remove("build/test_chat_screen.bin");
     puts("test_chat: OK");

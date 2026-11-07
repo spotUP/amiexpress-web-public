@@ -34,6 +34,7 @@
 #include "ae_session.h"
 #include "ui_ansi.h"
 #include "ui_chrome.h"
+#include "ui_input.h"
 #include "ui_key.h"
 #include "ui_list.h"
 #include "ui_screen.h"
@@ -382,7 +383,7 @@ static void draw_list_view(const char *title, const char *hint)
 {
     ansi_clear(&screen.buf);
     draw_masthead(title);
-    if (list_count == 0) say(3, UI_T_DIM, "Nothing here yet.");
+    if (list_count == 0) say(3, UI_T_DIM, view == VIEW_ROOMS ? "No rooms yet. Press N to make one." : "Nothing here yet.");
     else ui_list_draw(&list, &screen.buf);
     say(screen.rows - 2, UI_T_DIM, hint);
     draw_status();
@@ -410,7 +411,7 @@ static void draw_help(void)
 static void redraw(void)
 {
     switch (view) {
-    case VIEW_ROOMS: draw_list_view("LIVECHAT - ROOMS", "Enter join  D messages  W who  R refresh  ? help  Q quit"); break;
+    case VIEW_ROOMS: draw_list_view("LIVECHAT - ROOMS", "Enter join  N new room  D messages  W who  R refresh  ? help  Q quit"); break;
     case VIEW_DMS: draw_list_view("LIVECHAT - DIRECT MESSAGES", "Enter open  Esc back"); break;
     case VIEW_WHO: draw_list_view("LIVECHAT - WHO IS ON", "Esc back"); break;
     case VIEW_HELP: draw_help(); break;
@@ -540,6 +541,17 @@ static void arg_word(const char *text, char *out, size_t cap)
     out[n] = '\0';
 }
 
+/** Makes a room and walks into it. The server joins by id, so the id comes from the create reply;
+ *  joining by the typed name found no room (the bug the rooms-view N key exposed). */
+static void new_room(const char *name, const char *visibility)
+{
+    char id[sizeof room_id];
+    int rc = ae_chat_room_create(&chat, name, "", visibility, id, (int)sizeof id);
+    if (rc != AE_CHAT_OK) { status_for_error(rc); return; }
+    if (room_id[0] != '\0') ae_chat_leave(&chat, room_id);
+    enter_room(id);
+}
+
 /** Runs one "/..." line. Returns 1 when the door should end. */
 static int run_command(const char *line)
 {
@@ -560,12 +572,8 @@ static int run_command(const char *line)
         return 0;
     }
     if (strcmp(cmd, "n") == 0 || strcmp(cmd, "np") == 0) {
-        arg_word(rest, a, sizeof a);
-        if (a[0] == '\0') { set_status("Usage: /n name"); return 0; }
-        rc = ae_chat_room_create(&chat, a, "", cmd[1] == 'p' ? "private" : "public");
-        if (rc != AE_CHAT_OK) { status_for_error(rc); return 0; }
-        if (room_id[0] != '\0') ae_chat_leave(&chat, room_id);
-        enter_room(a);
+        if (*rest == '\0') { set_status("Usage: /n name"); return 0; }
+        new_room(rest, cmd[1] == 'p' ? "private" : "public");    /* the whole rest: a name may have spaces */
         return 0;
     }
     if (strcmp(cmd, "r") == 0 || strcmp(cmd, "t") == 0) {
@@ -634,6 +642,28 @@ static void door_idle(void *ctx)
 
 /* ---- keys --------------------------------------------------------------- */
 
+/** N in the rooms view: the only way to make a room when the list is empty (/n lives in the chat
+ *  view's input line). Returns -1 when the caller went away mid-prompt. */
+static int prompt_new_room(void)
+{
+    char name[48];
+    ui_input_style st;
+    int got;
+    ui_input_style_init(&st);
+    st.row = screen.rows - 3;                                /* above the hint row, never on the masthead */
+    st.left = 2;
+    st.cols = screen.cols - 4;
+    st.fg = UI_TOKEN(UI_T_INK);
+    st.bg = UI_TOKEN(UI_T_GROUND);
+    st.ink = UI_TOKEN(UI_T_ACCENT);
+    name[0] = '\0';
+    got = ui_input(&screen.buf, &keys, &pushback, &st, "New public room: ", name, (int)sizeof name);
+    if (got < 0) return -1;
+    if (got > 0) new_room(name, "public");
+    return 0;
+}
+
+
 static int key_list(int key, int *ended)
 {
     int moved = 1;
@@ -651,6 +681,7 @@ static int key_list(int key, int *ended)
     if (view == VIEW_ROOMS) {
         if (key == 'q' || key == 'Q') { *ended = 1; return 1; }
         if (key == 'r' || key == 'R') { load_rooms(); return 1; }
+        if (key == 'n' || key == 'N') { if (prompt_new_room() < 0) *ended = 1; return 1; }
         if (key == 'd' || key == 'D') { if (load_dms() == AE_CHAT_OK) view = VIEW_DMS; return 1; }
         if (key == 'w' || key == 'W') { if (load_who() == AE_CHAT_OK) view = VIEW_WHO; return 1; }
         if (key == UI_KEY_ENTER || key == '\r' || key == '\n') {

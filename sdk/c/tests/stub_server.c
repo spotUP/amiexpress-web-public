@@ -462,6 +462,14 @@ static void chat_serve(int fd, stub_chat_stats *st, int *state)
         chat_reply(fd, 200, "application/json", "{\"id\":\"newroom\",\"name\":\"newroom\",\"visibility\":\"public\"}");
     } else if (is_post && strstr(path, "/join") != 0) {
         st->joins++;
+        {
+            const char *from = path + 14;                      /* past "/chat/v1/rooms/" minus one */
+            const char *to = strstr(path, "/join");
+            int n = 0;
+            if (strncmp(path, "/chat/v1/rooms/", 15) == 0) from = path + 15;
+            while (from + n < to && n < (int)sizeof st->last_join - 1) { st->last_join[n] = from[n]; n++; }
+            st->last_join[n] = '\0';
+        }
         if (strstr(path, "/rooms/nosuch/") != 0) { chat_reply(fd, 404, "application/json", "{\"error\":\"not_found\"}"); return; }
         chat_reply(fd, 200, "application/json", "{\"id\":\"lobby\",\"name\":\"Lobby\",\"topic\":\"Hello all\",\"members\":3,\"ops\":1,\"since\":5}");
     } else if (is_post && strstr(path, "/leave") != 0) {

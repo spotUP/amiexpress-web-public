@@ -89,6 +89,7 @@ typedef struct {
     char last_dm_peer[64];
     char last_dm_text[512];
     char last_created[64];
+    char last_join[64];                    /* room id from the latest POST /rooms/<id>/join path */
 } stub_chat_stats;
 
 /* Starts the chat stub. Returns its port, or -1; *stats points at shared counters. */

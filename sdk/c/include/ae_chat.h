@@ -89,8 +89,10 @@ int ae_chat_close(ae_chat *c);
 /** GET rooms.txt. Rows: id, name, topic, visibility, members, owner. */
 int ae_chat_rooms(ae_chat *c);
 
-/** POST /rooms. `topic` may be NULL. `visibility` "public" or "private". */
-int ae_chat_room_create(ae_chat *c, const char *name, const char *topic, const char *visibility);
+/** POST /rooms. `topic` may be NULL. `visibility` "public" or "private". On success `id` (may be NULL)
+ *  gets the new room's id: rooms are joined by id, never by name. */
+int ae_chat_room_create(ae_chat *c, const char *name, const char *topic, const char *visibility,
+                        char *id, int id_cap);
 
 /** POST /rooms/:id/join. A "since" newer than c->last_seq moves last_seq up to it. On success `name`/`topic` (either may be NULL) get the room's, `members` its count. */
 int ae_chat_join(ae_chat *c, const char *room, char *name, int name_cap,

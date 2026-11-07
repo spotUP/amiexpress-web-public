@@ -314,10 +314,14 @@ int ae_chat_rooms(ae_chat *c)
     return rc;
 }
 
-int ae_chat_room_create(ae_chat *c, const char *name, const char *topic, const char *visibility)
+int ae_chat_room_create(ae_chat *c, const char *name, const char *topic, const char *visibility,
+                        char *id, int id_cap)
 {
     char body[BODY_MAX];
     long at;
+    int rc;
+
+    if (id != 0 && id_cap > 0) id[0] = '\0';
 
     if (blank(name)) return AE_CHAT_ERR_ARGS;
     at = ae_req_put_raw(body, sizeof body, 0, "{\"name\":");
@@ -331,7 +335,12 @@ int ae_chat_room_create(ae_chat *c, const char *name, const char *topic, const c
                                              blank(visibility) ? "public" : visibility);
     if (at >= 0) at = ae_req_put_raw(body, sizeof body, (unsigned long)at, "}");
     if (at < 0) return AE_CHAT_ERR_TOO_LONG;
-    return call(c, "POST", AE_CHAT_BASE "/rooms", body, (unsigned long)at);
+    rc = call(c, "POST", AE_CHAT_BASE "/rooms", body, (unsigned long)at);
+    if (rc == AE_CHAT_OK && id != 0 && id_cap > 0 &&
+        json_extract_string(c->reply, "id", id, (unsigned long)id_cap) != 0) {
+        return AE_CHAT_ERR_STATUS;                       /* a 200 without an id leaves nothing to join */
+    }
+    return rc;
 }
 
 int ae_chat_join(ae_chat *c, const char *room, char *name, int name_cap,
