@@ -13,7 +13,7 @@ import * as fsSync from 'fs';
 import { menuKindOfCommand } from '../screens/menu-config/menu-config';
 import { parseInfoFile, writeInfoFile } from '../utils/info-file.util';
 import { applyDoorFieldsToTooltypes, applyEnabledToTooltypes, findDoorInfoFile, doorDisplayName, isDoorEnabled, doorNormalAccessLevel, resolveRenamedInfoPath, DoorCommandRenameError } from '../services/config-services/door-info-file.service';
-import { doorDirectoryFor, hasAdminContent, readManifestFromDir, readDoorSettingsView, writeDoorSettings, UnknownDoorSettingError, readDoorArtSections, writeDoorArtSection, readDoorArtVariant, writeDoorArtVariant, listDoorArtSections, DoorSettingsPayloadSchema } from '../doors/door-settings.service';
+import { doorDirectoryFor, hasAdminContent, readManifestFromDir, readDoorSettingsView, writeDoorSettings, systemConfigResolver, UnknownDoorSettingError, readDoorArtSections, writeDoorArtSection, readDoorArtVariant, writeDoorArtVariant, listDoorArtSections, DoorSettingsPayloadSchema } from '../doors/door-settings.service';
 import { listAcsLevels, acsLevelFilePath, tooltypesToFlags, flagsToTooltypes, ambiguouslyDeniedFlags, acsLevelServing, saveAcsLevelFlags } from '../services/config-services/acs-level-file.service';
 import { ACS_PERMISSION_NAMES } from '../constants/acs-permissions';
 import { invalidateAcsIfAccessFile } from '../utils/acs-access-loader';
@@ -748,15 +748,9 @@ console.log(`[DoorsAPI] Sending ${frontendDoors.length} doors to frontend`);
       // from the board's own system config (REQUESTS' board key does). Without
       // passing it here, saving anything in the form would re-render the cfg
       // with that field blank and quietly unconfigure the door.
-      const resolveSystemValue = (key: string): string | undefined => {
-        try {
-          const cfg = (database as any)?.getConfigRepository?.()?.getSystemConfig?.();
-          const value = cfg ? (cfg as any)[key] : undefined;
-          return typeof value === 'string' && value.trim() !== '' ? value.trim() : undefined;
-        } catch {
-          return undefined;
-        }
-      };
+      const resolveSystemValue = systemConfigResolver(
+        () => (database as any)?.getConfigRepository?.()?.getSystemConfig?.(),
+      );
       writeDoorSettings(doorDir, incoming, resolveSystemValue, command);
       sendResponse(res, readDoorSettingsView(doorDir, command), `${command} settings saved`);
     } catch (error) {

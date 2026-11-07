@@ -1090,7 +1090,7 @@ const {
 setGroupChatDependencies({ db, sessions, io });
 const { setChatFederationDependencies, handleFederatedChatEvent } = require("./services/chat-federation/chat-session-bridge");
 const { setLegacyChatGate } = require("./server/socket-guard");
-setChatFederationDependencies({ getConfig: () => db.getConfigRepository().getSystemConfig(), io });
+setChatFederationDependencies({ getConfig: () => db.getConfigRepository().getSystemConfig(), io }); // config-source-ok: federation reads the board key, server url and livechat_federated, which live only in the database
 setLegacyChatGate(handleFederatedChatEvent);
 setRoomCommandsDependencies({
   db,

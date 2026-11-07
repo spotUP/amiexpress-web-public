@@ -674,24 +674,18 @@ export async function initializeData(io?: SocketIOServer) {
     // settings.json, so the admin form only reaches it once the cfg is
     // rendered. Do it after the doors are known, and never let it stop boot.
     try {
-      const { renderAllDoorCfgs } = require("../doors/door-settings.service");
+      const { renderAllDoorCfgs, systemConfigResolver } = require("../doors/door-settings.service");
       // Hand a door the board's own secrets. A setting may declare
       // fromSystemConfig, and REQUESTS' board key does: the board already
       // holds the achievements board key (encrypted at rest, decrypted on
       // read), so a sysop should not have to find it in one admin page and
       // paste it into another. The door's own value still wins if set.
-      const resolveSystemValue = (key: string): string | undefined => {
-        try {
-          // config-source-ok: the values a door may borrow this way are the
-          // board's secrets - the achievements board key - which live
-          // encrypted in the database and have no bbsConfig.info half.
-          const cfg = (db as any)?.getConfigRepository?.()?.getSystemConfig?.();
-          const value = cfg ? (cfg as any)[key] : undefined;
-          return typeof value === "string" && value.trim() !== "" ? value.trim() : undefined;
-        } catch {
-          return undefined;
-        }
-      };
+      // The values a door may borrow this way are the board's secrets - the
+      // achievements board key - which live encrypted in the database and
+      // have no bbsConfig.info half.
+      const resolveSystemValue = systemConfigResolver(
+        () => (db as any)?.getConfigRepository?.()?.getSystemConfig?.(), // config-source-ok: board secrets live in the database
+      );
       const doorsRoot = path.join(
         boardRoot(),
         "Doors",

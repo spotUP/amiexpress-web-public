@@ -18,11 +18,18 @@ import { config as appConfig } from '../../config';
 import { isSensitiveField, isDatabaseOnlyField, isMaskedValue, SENSITIVE_FIELDS } from '../../utils/secrets-encryption.util';
 import * as fs from 'fs';
 import * as path from 'path';
+import { renderDoorCfgsBorrowing, systemConfigResolver } from '../../doors/door-settings.service';
+import { boardRoot } from '../../utils/board-root.util';
 
 export class SystemConfigService {
   private configRepo: ConfigRepository;
 
-  constructor(private database: Database) {
+  /**
+   * `doorsRoot` is where the doors whose cfg borrows a system value live.
+   * Left out, it is the board's own Doors/ - except under test, where the
+   * board root is the checkout and a save must not rewrite tracked files.
+   */
+  constructor(private database: Database, private doorsRoot?: string) {
     this.configRepo = database.getConfigRepository();
   }
 
@@ -131,6 +138,12 @@ export class SystemConfigService {
       this.lastSaveWarning = saved.warning;
     }
 
+    // A door cfg that borrows a value from here (LIVECHAT68's, REQUESTS' and
+    // ACHIEVEC's BoardKey borrows achievements_board_key) was rendered at
+    // boot with the old value. Render it again now, or the door keeps the
+    // old key until the next restart.
+    this.renderBorrowingDoorCfgs(Object.keys(validated));
+
     // Get updated config (merged from disk + database)
     const newConfig = await this.getSystemConfig();
 
@@ -148,5 +161,17 @@ export class SystemConfigService {
     );
 
     return newConfig;
+  }
+
+  private renderBorrowingDoorCfgs(changedKeys: string[]): void {
+    let doorsRoot = this.doorsRoot;
+    if (doorsRoot === undefined) {
+      const underTest = process.env.JEST_WORKER_ID !== undefined || process.env.NODE_ENV === 'test';
+      if (underTest) return;
+      doorsRoot = path.join(boardRoot(), 'Doors');
+    }
+    const resolve = systemConfigResolver(() => this.configRepo.getSystemConfig());
+    const n = renderDoorCfgsBorrowing(doorsRoot, changedKeys, resolve);
+    if (n > 0) console.log(`[SystemConfig] re-rendered ${n} door cfg file(s) borrowing ${changedKeys.join(', ')}`);
   }
 }

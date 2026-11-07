@@ -697,6 +697,26 @@ export function writeDoorSettings(
 export type SystemValueResolver = (systemConfigKey: string) => string | undefined;
 
 /**
+ * The board's system config as a resolver: a non-blank string column, trimmed,
+ * or undefined. Boot, the door-settings save and the System Config save all
+ * hand doors the same values, so they all build the resolver here.
+ *
+ * `readSystemConfig` is called per lookup, so a resolver made before a save
+ * still sees the saved value.
+ */
+export function systemConfigResolver(readSystemConfig: () => unknown): SystemValueResolver {
+  return (key: string): string | undefined => {
+    try {
+      const cfg = readSystemConfig() as Record<string, unknown> | null | undefined;
+      const value = cfg ? cfg[key] : undefined;
+      return typeof value === 'string' && value.trim() !== '' ? value.trim() : undefined;
+    } catch {
+      return undefined; // a broken config read must not blank the cfg
+    }
+  };
+}
+
+/**
  * One line, whatever the sysop typed.
  *
  * Every one of these formats is line-oriented: a newline inside a value does
@@ -909,6 +929,49 @@ export function renderAllDoorCfgs(
     try {
       if (!fs.statSync(doorDir).isDirectory()) continue;
       if (renderDoorCfg(doorDir, resolveSystemValue)) rendered++;
+    } catch (err: any) {
+      console.error(`[doorSettings] cfg render failed for ${entry}: ${err?.message || err}`);
+    }
+  }
+  return rendered;
+}
+
+/**
+ * Re-render the cfg of every door that borrows one of `systemKeys` from the
+ * board's system config (a setting with `fromSystemConfig`).
+ *
+ * Boot is not enough for these. A door that borrows the achievements board key
+ * gets the key that was set when the board last started, so a sysop who
+ * rotates the key in System Config left LIVECHAT68, REQUESTS and ACHIEVEC
+ * holding the old one until the next restart, and every door-server call they
+ * made failed authentication (2026-11-07). The System Config save calls this
+ * with the keys it wrote.
+ *
+ * Never throws: a broken door must not fail the sysop's save.
+ */
+export function renderDoorCfgsBorrowing(
+  doorsRoot: string,
+  systemKeys: Iterable<string>,
+  resolveSystemValue: SystemValueResolver,
+): number {
+  const wanted = new Set(systemKeys);
+  if (wanted.size === 0) return 0;
+  let rendered = 0;
+  let entries: string[];
+  try {
+    entries = fs.readdirSync(doorsRoot);
+  } catch {
+    return 0;
+  }
+  for (const entry of entries) {
+    const doorDir = path.join(doorsRoot, entry);
+    try {
+      if (!fs.statSync(doorDir).isDirectory()) continue;
+      const manifest = readManifestFromDir(doorDir);
+      const borrows = manifest?.settings.some(
+        (s) => s.fromSystemConfig !== undefined && wanted.has(s.fromSystemConfig),
+      );
+      if (borrows && renderDoorCfg(doorDir, resolveSystemValue)) rendered++;
     } catch (err: any) {
       console.error(`[doorSettings] cfg render failed for ${entry}: ${err?.message || err}`);
     }
