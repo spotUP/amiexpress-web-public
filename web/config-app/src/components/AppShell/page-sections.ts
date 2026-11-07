@@ -162,6 +162,12 @@ export const SYSTEM_CONFIG_SECTIONS: PageSection[] = [
     keywords: ['badges', 'trophies'],
   },
   {
+    name: 'Federated Live Chat',
+    category: 'Networking',
+    fields: ['livechat_federated'],
+    keywords: ['livechat', 'chat rooms', 'door server', 'federation'],
+  },
+  {
     name: 'Email Notification Events',
     category: 'Networking',
     fields: [

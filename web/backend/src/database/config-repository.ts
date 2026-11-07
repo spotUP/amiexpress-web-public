@@ -1070,6 +1070,7 @@ export class ConfigRepository extends BaseRepository<any> {
       achievements_server_url: row.achievements_server_url || '',
       achievements_board_key: decryptSecret(row.achievements_board_key || ''),
       achievements_disabled: Boolean(row.achievements_disabled),
+      livechat_federated: Boolean(row.livechat_federated),
       // Mail Notifications (MAIL_ON_* flags)
       mail_on_upload: Boolean(row.mail_on_upload),
       mail_on_sysop_comment: Boolean(row.mail_on_sysop_comment),

@@ -181,6 +181,7 @@ export const SystemConfigSchema = z.object({
   achievements_server_url: z.string().max(500).optional(),
   achievements_board_key: z.string().max(200).optional(),
   achievements_disabled: z.boolean().optional(),
+  livechat_federated: z.boolean().optional(),
 
   // Mail notifications to the sysop. The form has offered these since it was
   // written; without them here zod stripped the keys before the writer saw

@@ -1522,6 +1522,25 @@ export function SystemConfigPage() {
         )}
 
         {/* Email Notification Events */}
+        {/* Federated Live Chat */}
+        {shouldShowSection('Federated Live Chat') && (
+        <div className="card p-5">
+          <h2 className="text-xl font-semibold text-content-primary mb-2">Federated Live Chat</h2>
+          <div className="flex items-center space-x-3">
+            <input
+              id="livechat_federated"
+              type="checkbox"
+              {...register('livechat_federated')}
+              className="w-4 h-4"
+            />
+            <label htmlFor="livechat_federated" className="text-sm text-content-primary">
+              Use the Door Server for Live Chat Rooms
+            </label>
+          </div>
+          <p className="text-xs text-content-secondary mt-1">Off keeps room chat on this board only. On shares rooms with every board on the Achievements server; it needs the board key above.</p>
+        </div>
+        )}
+
         {/* Achievements */}
         {shouldShowSection('Achievements') && (
         <div className="card">

@@ -412,6 +412,10 @@ export interface SystemConfig {
   achievements_board_key?: string;
   achievements_disabled?: boolean;
 
+  // Federated live chat: false (default) keeps room chat in-process; true
+  // routes it through the door server's /chat/v1 (services/chat-federation).
+  livechat_federated?: boolean;
+
   // Mail Notifications (MAIL_ON_* flags from express.e:6694-6739, 24197, 29155)
   mail_on_upload: boolean;         // Email sysop when user uploads a file
   mail_on_sysop_comment: boolean;  // Email sysop when user sends comment

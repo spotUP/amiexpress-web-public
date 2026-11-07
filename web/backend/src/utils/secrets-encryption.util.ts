@@ -139,6 +139,7 @@ const DATABASE_ONLY_FIELDS = new Set<string>([
   // database-resident and not secret; express.e has no tooltype for them.
   'achievements_server_url',
   'achievements_disabled',
+  'livechat_federated',
 ]);
 
 /**

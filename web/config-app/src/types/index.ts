@@ -97,6 +97,7 @@ export interface SystemConfig {
   achievements_server_url?: string;
   achievements_board_key?: string;
   achievements_disabled?: boolean;
+  livechat_federated?: boolean;
   smtp_ssl: boolean;
   smtp_from_email: string;
   sysop_email: string;

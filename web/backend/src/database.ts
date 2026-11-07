@@ -868,6 +868,13 @@ console.log(`[OK] Added ${col} column`);
 console.log('[OK] Added achievements_disabled column');
       }
 
+      // Federated live chat (off by default): chat goes through the door
+      // server's /chat/v1 instead of the in-process chat_room_* tables.
+      if (!systemConfigColumns.includes('livechat_federated')) {
+        this.db.exec('ALTER TABLE system_config ADD COLUMN livechat_federated INTEGER DEFAULT 0');
+console.log('[OK] Added livechat_federated column');
+      }
+
       if (!systemConfigColumns.includes('vapid_contact_email')) {
         this.db.exec('ALTER TABLE system_config ADD COLUMN vapid_contact_email TEXT DEFAULT \'\'');
 console.log('[+] Added vapid_contact_email column');
