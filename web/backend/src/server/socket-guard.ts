@@ -38,8 +38,19 @@ export function onCaller(socket: Socket, event: string, handler: CallerHandler):
   socket.on(event, (...args: any[]) => {
     const session = loggedOnCaller(socket);
     if (!session) return undefined;
+    // Federated livechat (services/chat-federation): when the board has the
+    // toggle on, the bridge consumes the room:* / chat:* events it owns.
+    if (legacyChatGate?.(socket, session, event, args[0])) return undefined;
     return handler(session, ...args);
   });
+}
+
+type LegacyChatGate = (socket: Socket, session: BBSSession, event: string, data: unknown) => boolean;
+let legacyChatGate: LegacyChatGate | null = null;
+
+/** Install the federated-chat gate (index.ts, once). Returns true to consume an event. */
+export function setLegacyChatGate(gate: LegacyChatGate | null): void {
+  legacyChatGate = gate;
 }
 
 /**

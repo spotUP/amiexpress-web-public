@@ -1042,6 +1042,10 @@ export async function releaseSessionResources(
     const { handleRoomDisconnect } = require('../handlers/chat/group-chat.handler');
     await handleRoomDisconnect(emitter, session);
   }
+
+  // Federated livechat: end this caller's door-server chat session.
+  const { closeFederatedChat } = require('../services/chat-federation/chat-session-bridge');
+  await closeFederatedChat(session);
 }
 
 /**

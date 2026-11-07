@@ -1088,6 +1088,10 @@ const {
 } = require("./handlers/chat/room-commands.handler");
 
 setGroupChatDependencies({ db, sessions, io });
+const { setChatFederationDependencies, handleFederatedChatEvent } = require("./services/chat-federation/chat-session-bridge");
+const { setLegacyChatGate } = require("./server/socket-guard");
+setChatFederationDependencies({ getConfig: () => db.getConfigRepository().getSystemConfig(), io });
+setLegacyChatGate(handleFederatedChatEvent);
 setRoomCommandsDependencies({
   db,
   sessions,

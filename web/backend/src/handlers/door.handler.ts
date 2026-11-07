@@ -6,6 +6,7 @@
  */
 
 import { normaliseDoorType, DOOR_TYPE_CODES } from '@amiexpress/bbs-door-sdk/catalog';
+import { handleFederatedChatEvent } from '../services/chat-federation/chat-session-bridge';
 import { spawn, fork } from 'child_process';
 import * as path from 'path';
 import { amigaDosScriptPath } from '../doors/amigados-script';
@@ -182,6 +183,9 @@ console.error('[DoorSocket] Local handler error for', event, err);
       wrappedSocket._onHonoursClose?.(Boolean(args[0]));
       return true;
     }
+
+    // Federated livechat: with the toggle on, the bridge owns these events.
+    if (handleFederatedChatEvent(socket, session, event, args[0])) return wrappedSocket;
 
     // Intercept room: and chat: events that need to be handled server-side
     if (event === 'room:join') {
