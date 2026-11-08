@@ -748,6 +748,20 @@ static void then_poll(int rc)
     if (rc == AE_CHAT_OK) do_poll(); else show_error(rc);
 }
 
+static ui_hist hist;            /* sent lines: Up / Down recall (TS features/input-history.ts) */
+
+/** A line to the room (TS sendRoomLine): history keeps it under its clientId, renamed to the server's
+ *  id once the send reply carries it (TS room:message:ack -> inputHistory.rekey). */
+static void send_room_line(const char *text, const char *reply_to)
+{
+    int rc = ae_chat_send(&chat, room_id, text, reply_to, 0);
+    if (chat.client_id[0] != '\0') {
+        ui_hist_add_id(&hist, chat.client_id, text);
+        if (chat.sent_id[0] != '\0') ui_hist_rekey(&hist, chat.client_id, chat.sent_id);
+    }
+    if (rc == AE_CHAT_OK) do_poll(); else show_error(rc);
+}
+
 static void edit_typed(const char *rest)
 {
     char a[16];
@@ -771,7 +785,6 @@ static void reply_typed(const char *rest, int thread)
     char a[16];
     const char *text = rest;
     lc_line *l;
-    int rc;
     arg_word(rest, a, sizeof a);
     if (thread && (a[0] == '\0' || *after_word(rest) == '\0')) { usage("/thread <msg-id> message"); return; }
     if (*rest == '\0') { usage("/reply [msg-id] message"); return; }
@@ -784,8 +797,7 @@ static void reply_typed(const char *rest, int thread)
         return;
     }
     if (room_id[0] == '\0') { system_line("Join a room first."); return; }
-    rc = ae_chat_send(&chat, room_id, text, l->id, 0);
-    if (rc == AE_CHAT_OK) do_poll(); else show_error(rc);
+    send_room_line(text, l->id);
 }
 
 static void delete_typed(const char *rest)
@@ -926,7 +938,6 @@ static const char *const cmd_help[][4] = {
     {"timestamps", "time", "Toggle timestamps", "/timestamps"},
 };
 
-static ui_hist hist;            /* sent lines: Up / Down recall (TS features/input-history.ts) */
 
 /** /help <command>: "/name - description" then the usage, or "Unknown: x". */
 static void help_for(const char *want)
@@ -1025,17 +1036,21 @@ static int run_command(const char *line)
 static int submit(void)
 {
     int rc, ended = 0;
+    char edit_id[UI_HIST_ID];
     if (M.input_len == 0) return 0;
-    ui_hist_add(&hist, M.input);
+    copy(edit_id, sizeof edit_id, ui_hist_editing(&hist) ? ui_hist_editing(&hist) : "");
+    ui_hist_reset(&hist);                       /* TS: getEditingId, then inputHistory.reset() */
+    M.editing = 0;
     if (M.input[0] == '/') {
         ended = run_command(M.input);
+    } else if (edit_id[0] != '\0') {
+        then_poll(ae_chat_edit(&chat, edit_id, M.input));
     } else if (dm_thread[0] != '\0') {
         char tid[32];
         rc = ae_chat_dm(&chat, dm_peer, M.input, tid, sizeof tid);
         if (rc == AE_CHAT_OK) do_poll(); else show_error(rc);
     } else if (room_id[0] != '\0') {
-        rc = ae_chat_send(&chat, room_id, M.input, 0, 0);
-        if (rc == AE_CHAT_OK) do_poll(); else show_error(rc);
+        send_room_line(M.input, 0);
     } else {
         system_line("Join a channel first: /join room");
     }
@@ -1322,6 +1337,18 @@ static int handle_key(int key)
     if (key == UI_KEY_PGUP) { M.scroll += 10; if (M.scroll > LC_LINES * 4) M.scroll = LC_LINES * 4; return 0; }
     if (key == UI_KEY_PGDN) { M.scroll -= 10; if (M.scroll < 0) M.scroll = 0; return 0; }
 
+    if (M.pick[0] != '\0') {                  /* the keyboard picker owns Up/Down/Enter/Esc (TS server.ts) */
+        if (key == UI_KEY_UP) { lc_pick_move(&M, -1); return 0; }
+        if (key == UI_KEY_DOWN) { lc_pick_move(&M, 1); return 0; }
+        if (key == UI_KEY_ESC) { lc_pick_stop(&M); return 0; }
+        if (is_enter(key)) {                    /* confirm: the chat menu a click on the message opens */
+            int idx = lc_pick_index(&M);
+            lc_pick_stop(&M);
+            if (idx >= 0) ctx_open(LC_CTX_CHAT, idx, 3, lc_sidebar_width(&M) + 2);
+            return 0;
+        }
+        if (is_text(key)) lc_pick_stop(&M);    /* a typed character cancels the pick and is still typed */
+    }
     if (M.focus == LC_FOCUS_MENU) {
         if (key == UI_KEY_LEFT) { M.menu = (M.menu + LC_MENUS - 1) % LC_MENUS; M.menu_sel = 0; }
         else if (key == UI_KEY_RIGHT) { M.menu = (M.menu + 1) % LC_MENUS; M.menu_sel = 0; }
@@ -1347,7 +1374,10 @@ static int handle_key(int key)
     }
     {
         int cap = LC_INPUT_MAX < AE_CHAT_TEXT_MAX + 1 ? LC_INPUT_MAX : AE_CHAT_TEXT_MAX + 1;
-        ui_line_key(M.input, cap, &M.input_len, &M.input_cur, key, &hist, 0);
+        if (!ui_line_key(M.input, cap, &M.input_len, &M.input_cur, key, &hist, 0)
+            && key == UI_KEY_UP && M.input_len == 0)
+            lc_pick_start(&M);                  /* Up on an empty input picks a message (TS start({kind:'menu'})) */
+        M.editing = ui_hist_editing(&hist) != 0;
     }
     return 0;
 }

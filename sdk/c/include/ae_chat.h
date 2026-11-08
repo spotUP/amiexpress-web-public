@@ -71,6 +71,8 @@ typedef struct {
     int expires_in;
     long last_seq;             /* the next `since` for ae_chat_poll */
     long send_counter;         /* makes clientId unique within the session */
+    char client_id[48];        /* the clientId of the last line sent ("" before any) */
+    char sent_id[48];          /* the server's id for it, from the send reply ("" until it answers) */
     int status;                /* HTTP status of the last call */
     char error[32];            /* the server's error code on a non-2xx */
     int retry_after;           /* seconds, when the server sent retryAfter */
@@ -106,7 +108,8 @@ int ae_chat_leave(ae_chat *c, const char *room);
  *  Rows: seq, id, user, at, replyTo, threadId, roleColor, text. */
 int ae_chat_history(ae_chat *c, const char *room, long before, int limit);
 
-/** POST a line to a room. `reply_to` / `thread_id` may be NULL. */
+/** POST a line to a room. `reply_to` / `thread_id` may be NULL. Sets c->client_id to the line's clientId,
+ *  and on success c->sent_id to the id the server stored it under (the TS room:message:ack). */
 int ae_chat_send(ae_chat *c, const char *room, const char *text,
                  const char *reply_to, const char *thread_id);
 

@@ -427,6 +427,42 @@ static void test_door_reply(void)
     printf("  [OK] door: /reply and /thread send replyTo, history and live replies show a quote row, menu Reply and Quote fill the input\n");
 }
 
+static int newest_message(void)
+{
+    int i;
+    for (i = M.nlines - 1; i >= 0; i--) if (M.lines[i].number != 0 && M.lines[i].id[0] != '\0') return i;
+    return -1;
+}
+
+/* TS Up/Down: Up on an empty input starts the message picker (Enter opens the chat menu a click
+ * opens, Esc cancels, a typed key cancels and is typed); Up over typed text recalls a sent line,
+ * [EDITING], and Enter edits it under the server id the send reply rekeyed it to. */
+static void test_door_picker_and_edit(void)
+{
+    int newest;
+    start_stub();
+    drive(KEYS("\r" "\x1b[A" "\r"), 0);
+    newest = newest_message();
+    assert(newest >= 0 && M.ctx.open && M.ctx_kind == LC_CTX_CHAT && M.ctx_target == newest && M.pick[0] == '\0');
+    drive(KEYS("\r" "\x1b[A" "\x1b[A"), 0);
+    assert(M.pick[0] != '\0' && strcmp(M.pick, M.lines[newest].id) != 0 && !M.ctx.open);
+    drive(KEYS("\r" "\x1b[A" "\x1b[A" "a"), 0);
+    assert(M.pick[0] == '\0' && strcmp(M.input, "a") == 0);                  /* typing cancels and is typed */
+    stop_stub();
+
+    start_stub();
+    drive(KEYS("\r" "hello world\r" "x" "\x1b[A" "!\r"), 0);
+    assert(st->messages == 1 && st->edits == 1 && M.editing == 0);
+    assert(strcmp(st->last_write_path, "/chat/v1/messages/m3") == 0);          /* the clientId rekeyed to m3 */
+    assert(strstr(st->last_write_body, "hello world!") != 0);
+    drive(KEYS("\r" "hello world\r" "x" "\x1b[A"), 0);
+    assert(M.editing == 1 && strcmp(M.input, "hello world") == 0);
+    drive(KEYS("\r" "hello world\r" "x" "\x1b[A" "\x1b[B"), 0);
+    assert(M.editing == 0 && strcmp(M.input, "x") == 0);                       /* back to the draft: no edit */
+    stop_stub();
+    printf("  [OK] door: Up on empty picks a message and Enter opens its menu; recalled lines edit under the server id\n");
+}
+
 /* B3: the input line is the SDK widget (cursor, Home, Delete, history ring), F3 and the status click switch the
  * sidebar tab, Ctrl+C asks to quit, and the TS aliases and local prefs run. */
 static void test_door_b3(void)
@@ -554,6 +590,7 @@ int main(void)
     test_door_reply();
     test_door_moderation();
     test_door_b3();
+    test_door_picker_and_edit();
     test_door_delete_and_kicked();
     test_door_no_config();
     remove("build/test_chat_keys.bin"); remove("build/test_chat_screen.bin");

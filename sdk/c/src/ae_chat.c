@@ -423,6 +423,7 @@ static int build_message(ae_chat *c, const char *text, const char *reply_to,
     if (blank(text)) return AE_CHAT_ERR_ARGS;
     c->send_counter++;
     sprintf(client_id, "%.8s-%ld", c->sid, c->send_counter);
+    strcpy(c->client_id, client_id);
     at = ae_req_put_raw(body, size, 0, "{\"content\":");
     if (at >= 0) at = ae_req_put_json_string(body, size, (unsigned long)at, text);
     if (at >= 0) at = ae_req_put_raw(body, size, (unsigned long)at, ",\"clientId\":");
@@ -447,9 +448,13 @@ int ae_chat_send(ae_chat *c, const char *room, const char *text,
     int len = make_path(path, sizeof path, AE_CHAT_BASE "/rooms/", room, "/messages");
 
     if (len != AE_CHAT_OK) return len;
+    c->client_id[0] = '\0';
+    c->sent_id[0] = '\0';
     len = build_message(c, text, reply_to, thread_id, body, sizeof body);
     if (len < 0) return len;
-    return call(c, "POST", path, body, (unsigned long)len);
+    len = call(c, "POST", path, body, (unsigned long)len);
+    if (len == AE_CHAT_OK && json_extract_string(c->reply, "id", c->sent_id, sizeof c->sent_id) != 0) c->sent_id[0] = '\0';
+    return len;
 }
 
 int ae_chat_poll(ae_chat *c, int wait)

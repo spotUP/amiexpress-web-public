@@ -105,6 +105,8 @@ typedef struct {
     ui_popup ctx;                  /* the right-click menu (TS features/context-menus.ts) */
     int ctx_kind;                  /* LC_CTX_* */
     int ctx_target;                /* side index (user, channel) or line index (chat) */
+    char pick[24];                 /* the keyboard picker's message id, "" when not picking (TS message-picker.ts) */
+    int editing;                   /* the input holds a recalled history line: Enter edits it (label [EDITING]) */
 } lc_model;
 
 enum { LC_CTX_NONE, LC_CTX_USER, LC_CTX_CHAT, LC_CTX_CHANNEL };
@@ -132,6 +134,13 @@ const char *lc_react_display(const char *emoji);
 void lc_react_suffix(const lc_line *l, char *out, int cap);
 /** The line as marked text (ui_cells markers) in the TS formats. */
 void lc_line_marked(const lc_line *l, char *out, int cap, int stamps);
+/** The keyboard message picker (TS message-picker.ts). Start selects the newest message and returns 0
+ *  when there is none; move steps one message (dir -1 older, +1 newer) and stays put at either end;
+ *  index is the picked line or -1; stop clears the pick and scrolls back to the newest. */
+int lc_pick_start(lc_model *m);
+void lc_pick_move(lc_model *m, int dir);
+int lc_pick_index(const lc_model *m);
+void lc_pick_stop(lc_model *m);
 /** Paints the whole frame into c's back buffer; `cursor_row`/`cursor_col` get where the caret goes. */
 void lc_draw(ui_cells *c, const lc_model *m, int *cursor_row, int *cursor_col);
 /** The region under 0-based row/col in the last drawn frame (LC_HIT_*). *index: the menu (MENU), the

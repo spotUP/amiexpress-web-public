@@ -267,6 +267,60 @@ static void draw_sidebar(ui_cells *c, const lc_model *m, int top, int h, int w)
 
 
 #define WRAP_MAX 24
+static int pickable(const lc_line *l) { return l->number != 0 && l->id[0] != '\0'; }
+
+int lc_pick_index(const lc_model *m)
+{
+    int i;
+    if (m->pick[0] == '\0') return -1;
+    for (i = 0; i < m->nlines; i++)
+        if (pickable(&m->lines[i]) && strcmp(m->lines[i].id, m->pick) == 0) return i;
+    return -1;
+}
+
+int lc_pick_start(lc_model *m)
+{
+    int i;
+    for (i = m->nlines - 1; i >= 0; i--)
+        if (pickable(&m->lines[i])) {
+            strncpy(m->pick, m->lines[i].id, sizeof m->pick - 1);
+            m->pick[sizeof m->pick - 1] = '\0';
+            return 1;
+        }
+    m->pick[0] = '\0';
+    return 0;
+}
+
+void lc_pick_move(lc_model *m, int dir)
+{
+    int i = lc_pick_index(m);
+    if (i < 0) return;
+    for (i += dir; i >= 0 && i < m->nlines; i += dir)
+        if (pickable(&m->lines[i])) {
+            strncpy(m->pick, m->lines[i].id, sizeof m->pick - 1);
+            m->pick[sizeof m->pick - 1] = '\0';
+            return;
+        }
+}
+
+void lc_pick_stop(lc_model *m)
+{
+    m->pick[0] = '\0';
+    m->scroll = 0;
+}
+
+/* The picked message's rows as the TS selection bar: ground ink on the accent. */
+static void tint_row(ui_cells *c, int row, int left, int width)
+{
+    ui_cell *p = &c->back[row * c->cols + left];
+    int k;
+    for (k = 0; k < width; k++, p++) {
+        p->fg = LC_BAR_INK;
+        p->bg = LC_ACCENT;
+        p->flags &= (unsigned char)~(UI_CELLS_BG_DEFAULT | UI_CELLS_BOLD);
+    }
+}
+
 #define CHAT_ROWS_MAX 128
 static ui_hit lc_hits;                              /* the last frame's click regions, topmost last */
 static int chat_row_line[CHAT_ROWS_MAX];            /* chat body row -> line index, -1 empty */
@@ -277,10 +331,11 @@ static void draw_chat(ui_cells *c, const lc_model *m, int top, int h, int left, 
     static int line_rows[LC_LINES];                 /* pass 1's wrapped row count per line */
     int starts[WRAP_MAX], ends[WRAP_MAX];
     int rows = h - 3, width = w - 4, total = 0, first, at = 0, i, k, n, body;
+    int picked = lc_pick_index(m), pick_at = 0;
 
     ui_cells_pen(c, LC_INK, UI_CELLS_DEFAULT, 0);
     ui_cells_fill(c, top + 1, left + 1, h - 2, w - 2, ' ');
-    ui_cells_box(c, top, left, h, w, LC_ACCENT, m->pane_label[0] != '\0' ? m->pane_label : "No channel", LC_INK);
+    ui_cells_box(c, top, left, h, w, picked >= 0 ? LC_BORDER_FOCUS : LC_ACCENT, m->pane_label[0] != '\0' ? m->pane_label : "No channel", LC_INK);
     if (c->cols > 40) {                             /* the TS pane drops its label bar at 40 columns */
         ui_cells_bar(c, top + 1, left + 1, w - 5, " Chat", LC_GREY, LC_LABEL_BG, 0);
         ui_cells_bar(c, top + 1, left + w - 4, 3, "", LC_LABEL_TAIL, LC_LABEL_BG, 0);
@@ -296,9 +351,12 @@ static void draw_chat(ui_cells *c, const lc_model *m, int top, int h, int left, 
     for (i = 0; i < m->nlines; i++) {
         lc_line_marked(&m->lines[i], marked, (int)sizeof marked, m->timestamps && !m->compact);
         line_rows[i] = ui_cells_wrap(marked, width, starts, ends, WRAP_MAX);
+        if (i == picked) pick_at = total;
         total += line_rows[i];
     }
-    first = total - m->scroll - rows;               /* the newest rows, filled from the top */
+    if (picked >= 0) first = pick_at + line_rows[picked] / 2 - rows / 2;   /* the picker centres its selection */
+    else first = total - m->scroll - rows;          /* the newest rows, filled from the top */
+    if (first > total - rows) first = total - rows;
     if (first < 0) first = 0;
     ui_cells_pen(c, LC_INK, UI_CELLS_DEFAULT, 0);
     for (i = 0; i < m->nlines && at < first + rows; i++) {
@@ -309,6 +367,7 @@ static void draw_chat(ui_cells *c, const lc_model *m, int top, int h, int left, 
             if (at < first || at >= first + rows) continue;
             if (at - first < CHAT_ROWS_MAX) chat_row_line[at - first] = i;
             ui_cells_marked(c, body + at - first, left + 1, marked, starts[k], ends[k], width);
+            if (i == picked) tint_row(c, body + at - first, left + 1, width);
         }
     }
     if (total > rows) {                             /* scrollbar: track 66, thumb 195, one column in from the border */
@@ -329,7 +388,8 @@ static void draw_input(ui_cells *c, const lc_model *m, int *cr, int *cc)
     int W = c->cols, row = c->rows - 4, iw = (W - 6 >= 24) ? W - 6 : W, room = iw - 3, from;
     ui_cells_pen(c, LC_INK, UI_CELLS_DEFAULT, 0);
     ui_cells_fill(c, row + 1, 1, 1, iw - 2, ' ');
-    ui_cells_box(c, row, 0, 3, iw, m->focus == LC_FOCUS_INPUT ? LC_BORDER_FOCUS : LC_ACCENT, "Message", LC_INK);
+    ui_cells_box(c, row, 0, 3, iw, m->focus == LC_FOCUS_INPUT ? LC_BORDER_FOCUS : LC_ACCENT,
+                 m->pick[0] != '\0' ? "[PICK MESSAGE: Up/Down, Enter, Esc]" : m->editing ? "[EDITING]" : "Message", LC_INK);
     from = m->input_cur > room ? m->input_cur - room : 0;
     ui_cells_text(c, row + 1, 1, m->input + from, room);
     *cr = row + 1;

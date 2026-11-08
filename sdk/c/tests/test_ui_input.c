@@ -406,6 +406,36 @@ static void the_line_core_edits_at_the_cursor_and_recalls_history(void)
     printf("  [OK] the line core edits at the cursor, deletes forward and recalls history with the draft\n");
 }
 
+/* TS input-history.ts: entries carry message ids; a recalled entry is the one being edited; the
+   clientId is renamed to the server id on the ack; Down past the newest drops the edit. */
+static void history_entries_carry_ids_for_editing_and_rekey(void)
+{
+    char buf[32] = "";
+    int len = 0, cur = 0;
+    ui_hist h;
+    ui_hist_init(&h);
+    assert(ui_hist_last_id(&h) == 0);
+    ui_hist_add_id(&h, "abcdefgh-1", "first");
+    ui_hist_add(&h, "no id");
+    ui_hist_add_id(&h, "abcdefgh-2", "second");
+    assert(strcmp(ui_hist_last_id(&h), "abcdefgh-2") == 0);
+    assert(ui_hist_editing(&h) == 0);
+    ui_line_key(buf, 32, &len, &cur, 'x', &h, 0);
+    ui_line_key(buf, 32, &len, &cur, UI_KEY_UP, &h, 0);
+    assert(strcmp(buf, "second") == 0 && strcmp(ui_hist_editing(&h), "abcdefgh-2") == 0);
+    ui_hist_rekey(&h, "abcdefgh-2", "m9");
+    assert(strcmp(ui_hist_editing(&h), "m9") == 0 && strcmp(ui_hist_last_id(&h), "m9") == 0);
+    ui_line_key(buf, 32, &len, &cur, UI_KEY_UP, &h, 0);
+    assert(strcmp(buf, "no id") == 0 && ui_hist_editing(&h) == 0);  /* an id-less entry is not an edit */
+    ui_line_key(buf, 32, &len, &cur, UI_KEY_UP, &h, 0);
+    assert(strcmp(ui_hist_editing(&h), "abcdefgh-1") == 0);
+    ui_line_key(buf, 32, &len, &cur, UI_KEY_DOWN, &h, 0);
+    ui_line_key(buf, 32, &len, &cur, UI_KEY_DOWN, &h, 0);
+    ui_line_key(buf, 32, &len, &cur, UI_KEY_DOWN, &h, 0);
+    assert(strcmp(buf, "x") == 0 && ui_hist_editing(&h) == 0);     /* back to the draft: no edit */
+    printf("  [OK] history entries carry ids: recall edits, the ack rekeys, the draft drops the edit\n");
+}
+
 int main(void)
 {
     printf("ui_input\n");
@@ -428,6 +458,7 @@ int main(void)
     confirm_answers_y_n_enter_and_escape();
     a_swedish_letter_is_kept();
     the_line_core_edits_at_the_cursor_and_recalls_history();
+    history_entries_carry_ids_for_editing_and_rekey();
     a_masked_prompt_never_echoes_the_text();
     a_masked_prompt_stays_masked_through_edits();
     the_latin1_bounds_are_exact();

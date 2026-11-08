@@ -155,17 +155,45 @@ void ui_hist_reset(ui_hist *h)
 
 void ui_hist_add(ui_hist *h, const char *text)
 {
+    ui_hist_add_id(h, 0, text);
+}
+
+void ui_hist_add_id(ui_hist *h, const char *id, const char *text)
+{
     if (!h || !text) return;
     if (text[0] != '\0') {
         if (h->n == UI_HIST_MAX) {
             memmove(h->line[0], h->line[1], sizeof(h->line[0]) * (UI_HIST_MAX - 1));
+            memmove(h->id[0], h->id[1], sizeof(h->id[0]) * (UI_HIST_MAX - 1));
             h->n--;
         }
         h->line[h->n][0] = '\0';
         strncat(h->line[h->n], text, UI_HIST_TEXT - 1);
+        h->id[h->n][0] = '\0';
+        if (id) strncat(h->id[h->n], id, UI_HIST_ID - 1);
         h->n++;
     }
     ui_hist_reset(h);
+}
+
+void ui_hist_rekey(ui_hist *h, const char *from, const char *to)
+{
+    int i;
+    if (!h || !from || !to || from[0] == '\0') return;
+    for (i = 0; i < h->n; i++) {
+        if (strcmp(h->id[i], from) == 0) { h->id[i][0] = '\0'; strncat(h->id[i], to, UI_HIST_ID - 1); }
+    }
+}
+
+const char *ui_hist_editing(const ui_hist *h)
+{
+    if (!h || h->at < 0 || h->at >= h->n) return 0;
+    return h->id[h->n - 1 - h->at][0] != '\0' ? h->id[h->n - 1 - h->at] : 0;
+}
+
+const char *ui_hist_last_id(const ui_hist *h)
+{
+    return h && h->n > 0 ? h->id[h->n - 1] : 0;
 }
 
 static void load(char *buf, int cap, int *len, int *cur, const char *text)

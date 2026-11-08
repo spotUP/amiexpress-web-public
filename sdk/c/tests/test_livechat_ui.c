@@ -175,9 +175,52 @@ static int active_panel_is_highlighted(void)
     return 0;
 }
 
+/* TS message-picker.ts: Up on an empty input picks the newest message, Up/Down step one message
+ * and stop at either end, local lines are skipped. While picking, the chat border is the focus
+ * colour, the picked rows are the accent bar, and the input label says how to drive the picker. */
+static int picker_selects_and_draws(void)
+{
+    static lc_model m;
+    ui_cells c;
+    int cr, cc, sw, r, k, ir, tinted = 0, fail = 0;
+    char label[48];
+    main_state(&m, 80, 25);
+    m.focus = LC_FOCUS_INPUT;
+    if (lc_pick_index(&m) != -1 || lc_pick_start(&m) != 0) { printf("picker: started with no messages\n"); return 1; }
+    for (k = 5; k <= 8; k++) { m.lines[k].number = k - 4; sprintf(m.lines[k].id, "m%d", k - 4); }
+    if (!lc_pick_start(&m) || lc_pick_index(&m) != 8) { printf("picker: start %d\n", lc_pick_index(&m)); fail = 1; }
+    lc_pick_move(&m, 1);
+    if (lc_pick_index(&m) != 8) { printf("picker: moved past the newest\n"); fail = 1; }
+    lc_pick_move(&m, -1); lc_pick_move(&m, -1); lc_pick_move(&m, -1); lc_pick_move(&m, -1);
+    if (lc_pick_index(&m) != 5) { printf("picker: oldest %d\n", lc_pick_index(&m)); fail = 1; }
+    lc_pick_move(&m, 1);
+    if (lc_pick_index(&m) != 6 || strcmp(m.pick, "m2") != 0) { printf("picker: move %d\n", lc_pick_index(&m)); fail = 1; }
+    if (ui_cells_open(&c, 80, 25) != 0) return 1;
+    lc_draw(&c, &m, &cr, &cc);
+    sw = lc_sidebar_width(&m);
+    if (c.back[1 * c.cols + sw].fg != LC_BORDER_FOCUS) { printf("picker: chat border %d\n", c.back[1 * c.cols + sw].fg); fail = 1; }
+    for (r = 2; r < c.rows - 4; r++) {
+        ui_cell *p = &c.back[r * c.cols + sw + 1];
+        if (p->fg == LC_BAR_INK && p->bg == LC_ACCENT) tinted++;
+    }
+    if (tinted != 2) { printf("picker: %d tinted rows, want the 2 rows of bob's wrapped line\n", tinted); fail = 1; }
+    ir = c.rows - 4;
+    for (k = 0; k < 40; k++) label[k] = (char)c.back[ir * c.cols + 3 + k].ch;
+    label[40] = '\0';
+    if (strstr(label, "[PICK MESSAGE: Up/Down, Enter, Esc]") == 0) { printf("picker: label '%s'\n", label); fail = 1; }
+    lc_pick_stop(&m);
+    m.editing = 1;
+    lc_draw(&c, &m, &cr, &cc);
+    if (c.back[1 * c.cols + sw].fg != LC_ACCENT) { printf("picker: border after stop %d\n", c.back[1 * c.cols + sw].fg); fail = 1; }
+    for (k = 0; k < 40; k++) label[k] = (char)c.back[ir * c.cols + 3 + k].ch;
+    if (strstr(label, "[EDITING]") == 0) { printf("editing: label '%s'\n", label); fail = 1; }
+    ui_cells_close(&c);
+    return fail;
+}
+
 int main(void)
 {
-    int r = react_suffix_matches_ts() | stamps_follow_the_pref() | active_panel_is_highlighted();
+    int r = react_suffix_matches_ts() | stamps_follow_the_pref() | active_panel_is_highlighted() | picker_selects_and_draws();
     int a = compare("tests/fixtures/lc68-ts-main-80x25.grid");
     int b = compare("tests/fixtures/lc68-ts-main-40x25.grid");
     int d = compare("tests/fixtures/lc68-ts-main-80x15.grid");

@@ -73,6 +73,7 @@ int ui_confirm(ansi_buf *b, const ui_key_source *src, int *pushback,
 /** Lines kept by a history, and the longest line one holds. */
 #define UI_HIST_MAX 100
 #define UI_HIST_TEXT 256
+#define UI_HIST_ID 48
 
 /** A ring of sent lines with draft recall: Up from a fresh line remembers it, Down past the newest brings it back. */
 typedef struct {
@@ -80,11 +81,20 @@ typedef struct {
     int n;                       /* lines held, oldest dropped past UI_HIST_MAX */
     int at;                      /* -1 not browsing, else how many back from the newest */
     char draft[UI_HIST_TEXT];    /* what was typed before the first Up */
+    char id[UI_HIST_MAX][UI_HIST_ID];   /* each line's message id, "" when it has none (TS input-history entries) */
 } ui_hist;
 
 void ui_hist_init(ui_hist *h);
 /** Remember a sent line (empty lines are not kept) and stop browsing. */
 void ui_hist_add(ui_hist *h, const char *text);
+/** ui_hist_add with the message id the line was sent as (TS input-history add(id, text)); `id` may be NULL. */
+void ui_hist_add_id(ui_hist *h, const char *id, const char *text);
+/** The server named a sent line: entries holding `from` (and an edit in progress) take `to` (TS rekey). */
+void ui_hist_rekey(ui_hist *h, const char *from, const char *to);
+/** The id of the recalled line while browsing (Enter then edits that message), else NULL (TS getEditingId). */
+const char *ui_hist_editing(const ui_hist *h);
+/** The id of the newest line, NULL when there is none (TS lastId). */
+const char *ui_hist_last_id(const ui_hist *h);
 /** Stop browsing (the line was sent or replaced by the caller). */
 void ui_hist_reset(ui_hist *h);
 
