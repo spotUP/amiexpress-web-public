@@ -84,13 +84,21 @@ void ui_cells_fill(ui_cells *c, int row, int col, int h, int w, int ch)
 {
     int r0 = row < 0 ? 0 : row, r1 = row + h > c->rows ? c->rows : row + h;
     int k0 = col < 0 ? 0 : col, k1 = col + w > c->cols ? c->cols : col + w;
-    int r, k;
-    ui_cell cell;
+    int stride = c->cols, n = k1 - k0;
+    ui_cell cell, *line;
     if (h <= 0 || w <= 0 || r0 >= r1 || k0 >= k1) return;
     set_cell(&cell, ch, c->fg, c->bg, c->bold);
-    for (r = r0; r < r1; r++) {
-        ui_cell *p = &c->back[(long)r * c->cols + k0];
-        for (k = k0; k < k1; k++) *p++ = cell;
+    line = &c->back[(long)r0 * stride + k0];             /* one multiply; the next row is a stride away */
+    for (; r0 < r1; r0++, line += stride) {
+        ui_cell *p = line;
+        int m = n;
+        for (; m >= 8; m -= 8, p += 8) {                 /* eight stores per loop test and pointer step */
+            p[0] = cell; p[1] = cell; p[2] = cell; p[3] = cell;
+            p[4] = cell; p[5] = cell; p[6] = cell; p[7] = cell;
+        }
+        if (m & 4) { p[0] = cell; p[1] = cell; p[2] = cell; p[3] = cell; p += 4; }
+        if (m & 2) { p[0] = cell; p[1] = cell; p += 2; }
+        if (m & 1) *p = cell;
     }
 }
 
@@ -165,6 +173,17 @@ int ui_cells_marked(ui_cells *c, int row, int col, const char *s, int from, int 
     set_cell(&pen, ' ', c->fg, c->bg, c->bold);
     for (i = 0; s[i] != '\0' && i < to; i++) {
         char ch = s[i];
+        if ((unsigned char)ch > (unsigned char)UI_CELLS_M_WIDE && i >= from && n < max) {   /* a run of plain characters: the hot path */
+            int room = line == 0 ? 0 : c->cols;
+            k = col + n;
+            do {
+                if ((unsigned)k < (unsigned)room) { line[k] = pen; line[k].ch = (unsigned char)ch; }
+                k++; n++; i++;
+                ch = s[i];
+            } while ((unsigned char)ch > (unsigned char)UI_CELLS_M_WIDE && i < to && n < max);
+            i--;                                               /* the for step moves on to the character that ended the run */
+            continue;
+        }
         if (ch == UI_CELLS_M_WIDE) {                                  /* two columns: the glyph, then its tail */
             if (s[i + 1] == '\0') continue;
             if (i++ < from) continue;
@@ -209,7 +228,15 @@ int ui_cells_wrap(const char *s, int width, int *starts, int *ends, int max)
     if (width < 1) width = 1;
     while (s[i] != '\0' && lines < max) {
         int cols = 0, j = i, brk = -1, brk_next = -1;
-        while (s[j] != '\0') {
+        for (;;) {
+            unsigned char ch = (unsigned char)s[j];
+            if (ch > (unsigned char)' ') {                /* an ordinary printable: only the width can end the row */
+                if (cols == width) break;
+                cols++;
+                j++;
+                continue;
+            }
+            if (ch == '\0') break;
             if (is_marker(s, j)) { j += (s[j] == UI_CELLS_M_FG && s[j + 1] != '\0') ? 2 : 1; continue; }
             if (s[j] == UI_CELLS_M_WIDE && s[j + 1] != '\0') {   /* a two-column glyph: never split */
                 if (cols + 2 > width && cols > 0) break;   /* alone on a too-narrow row it still goes */

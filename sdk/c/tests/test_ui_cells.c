@@ -19,6 +19,138 @@ static void flush_into(ui_cells *c, ansi_buf *b)
 
 static int cell_ch(ui_cells *c, int r, int k) { return c->back[r * c->cols + k].ch; }
 
+/* ---- reference copies of fill / marked / wrap as they were before the round-5 hot-path rewrite (the
+ * per-cell, per-character originals). The fuzz test below proves the fast versions write the same bytes. */
+static void ref_set_cell(ui_cell *p, int ch, int fg, int bg, int bold)
+{
+    p->ch = (unsigned char)ch;
+    p->fg = (unsigned char)(fg < 0 ? 7 : fg);
+    p->bg = (unsigned char)(bg < 0 ? 0 : bg);
+    p->flags = (unsigned char)((bold ? UI_CELLS_BOLD : 0) | (bg < 0 ? UI_CELLS_BG_DEFAULT : 0));
+}
+
+static void ref_fill(ui_cells *c, int row, int col, int h, int w, int ch)
+{
+    int r0 = row < 0 ? 0 : row, r1 = row + h > c->rows ? c->rows : row + h;
+    int k0 = col < 0 ? 0 : col, k1 = col + w > c->cols ? c->cols : col + w;
+    int r, k;
+    ui_cell cell;
+    if (h <= 0 || w <= 0 || r0 >= r1 || k0 >= k1) return;
+    ref_set_cell(&cell, ch, c->fg, c->bg, c->bold);
+    for (r = r0; r < r1; r++) {
+        ui_cell *p = &c->back[(long)r * c->cols + k0];
+        for (k = k0; k < k1; k++) *p++ = cell;
+    }
+}
+
+static int ref_marked(ui_cells *c, int row, int col, const char *s, int from, int to, int max)
+{
+    int base_fg = c->fg, base_bold = c->bold, i, n = 0, k;
+    ui_cell pen, *line = row < 0 || row >= c->rows ? 0 : &c->back[(long)row * c->cols];
+    ref_set_cell(&pen, ' ', c->fg, c->bg, c->bold);
+    for (i = 0; s[i] != '\0' && i < to; i++) {
+        char ch = s[i];
+        if (ch == UI_CELLS_M_WIDE) {
+            if (s[i + 1] == '\0') continue;
+            if (i++ < from) continue;
+            if (n + 2 > max) break;
+            k = col + n;
+            if (line != 0 && k >= 0 && k + 1 < c->cols) {
+                line[k] = pen; line[k].ch = (unsigned char)s[i]; line[k].flags |= UI_CELLS_WIDE;
+                line[k + 1] = pen; line[k + 1].flags |= UI_CELLS_WIDE_TAIL;
+            }
+            n += 2;
+            continue;
+        }
+        if ((unsigned char)ch <= (unsigned char)UI_CELLS_M_BASE) {
+            if (ch == UI_CELLS_M_FG && s[i + 1] != '\0') { c->fg = (unsigned char)s[++i]; ref_set_cell(&pen, ' ', c->fg, c->bg, c->bold); continue; }
+            if (ch == UI_CELLS_M_BOLD) { c->bold = 1; ref_set_cell(&pen, ' ', c->fg, c->bg, c->bold); continue; }
+            if (ch == UI_CELLS_M_PLAIN) { c->bold = 0; ref_set_cell(&pen, ' ', c->fg, c->bg, c->bold); continue; }
+            if (ch == UI_CELLS_M_BASE) { c->fg = base_fg; c->bold = base_bold; ref_set_cell(&pen, ' ', c->fg, c->bg, c->bold); continue; }
+        }
+        if (i < from) continue;
+        if (n >= max) break;
+        k = col + n;
+        if (line != 0 && k >= 0 && k < c->cols) { line[k] = pen; line[k].ch = (unsigned char)ch; }
+        n++;
+    }
+    c->fg = base_fg; c->bold = base_bold;
+    return n;
+}
+
+static int ref_is_marker(const char *s, int i)
+{
+    return (unsigned char)s[i] >= (unsigned char)UI_CELLS_M_FG && (unsigned char)s[i] <= (unsigned char)UI_CELLS_M_BASE;
+}
+
+static int ref_wrap(const char *s, int width, int *starts, int *ends, int max)
+{
+    int lines = 0, i = 0;
+    if (width < 1) width = 1;
+    while (s[i] != '\0' && lines < max) {
+        int cols = 0, j = i, brk = -1, brk_next = -1;
+        while (s[j] != '\0') {
+            if (ref_is_marker(s, j)) { j += (s[j] == UI_CELLS_M_FG && s[j + 1] != '\0') ? 2 : 1; continue; }
+            if (s[j] == UI_CELLS_M_WIDE && s[j + 1] != '\0') {
+                if (cols + 2 > width && cols > 0) break;
+                cols += 2;
+                j += 2;
+                continue;
+            }
+            if (s[j] == '\n') break;
+            if (s[j] == ' ') { brk = j; brk_next = j + 1; }
+            if (cols == width) break;
+            cols++;
+            j++;
+        }
+        if (s[j] == '\0') { starts[lines] = i; ends[lines] = j; lines++; break; }
+        if (s[j] == '\n') { starts[lines] = i; ends[lines] = j; lines++; i = j + 1; continue; }
+        if (s[j] == ' ') { brk = j; brk_next = j + 1; }
+        if (brk <= i) { brk = j; brk_next = j; }
+        starts[lines] = i; ends[lines] = brk; lines++;
+        i = brk_next;
+    }
+    if (lines == 0 && max > 0) { starts[0] = 0; ends[0] = 0; lines = 1; }
+    return lines;
+}
+
+static unsigned long rng_state = 12345;
+static int rnd(int n) { rng_state = rng_state * 1103515245UL + 12345UL; return (int)((rng_state >> 16) % (unsigned long)n); }
+
+/* Fuzz: random canvases, pens, clip rectangles and marked strings; fast and reference must leave the same
+ * back buffer, pen and return values. Exact bytes, not a sample. */
+static void fuzz_hot_paths(void)
+{
+    static const char alpha[] = {1, 2, 3, 4, 5, ' ', ' ', '\n', 'a', 'b', 'c', 'x', 'y', 'z', '1', 9, 31, 33, 'W', (char)200, (char)240};
+    int iter;
+    for (iter = 0; iter < 4000; iter++) {
+        ui_cells a, b;
+        char str[48];
+        int cols = 1 + rnd(40), rows = 1 + rnd(6), len = rnd(sizeof str - 1), i, h, w, row, col, from, to, max, na, nb;
+        int sa[16], ea[16], sb[16], eb[16];
+        for (i = 0; i < len; i++) str[i] = alpha[rnd((int)sizeof alpha)];
+        str[len] = '\0';
+        if (ui_cells_open(&a, cols, rows) != 0 || ui_cells_open(&b, cols, rows) != 0) { CHECK(0, "fuzz open"); return; }
+        memset(a.back, 0x5a, (size_t)cols * rows * sizeof(ui_cell));
+        memset(b.back, 0x5a, (size_t)cols * rows * sizeof(ui_cell));
+        a.fg = b.fg = rnd(3) == 0 ? -1 : rnd(256); a.bg = b.bg = rnd(3) == 0 ? -1 : rnd(256); a.bold = b.bold = rnd(2);
+        row = rnd(rows + 4) - 2; col = rnd(cols + 8) - 4; h = rnd(rows + 3) - 1; w = rnd(cols + 10) - 2;
+        ui_cells_fill(&a, row, col, h, w, 'f'); ref_fill(&b, row, col, h, w, 'f');
+        CHECK(memcmp(a.back, b.back, (size_t)cols * rows * sizeof(ui_cell)) == 0, "fuzz fill bytes");
+        row = rnd(rows + 4) - 2; col = rnd(cols + 8) - 4; from = rnd(len + 3); to = from + rnd(len + 3); max = rnd(cols + 6) - 1;
+        na = ui_cells_marked(&a, row, col, str, from, to, max); nb = ref_marked(&b, row, col, str, from, to, max);
+        CHECK(na == nb, "fuzz marked count");
+        CHECK(memcmp(a.back, b.back, (size_t)cols * rows * sizeof(ui_cell)) == 0, "fuzz marked bytes");
+        CHECK(a.fg == b.fg && a.bold == b.bold, "fuzz marked pen restored");
+        w = rnd(12) - 1; max = rnd(10) - 1;
+        na = max > 16 ? 16 : max; if (na < 0) na = 0;
+        na = ui_cells_wrap(str, w, sa, ea, na); nb = ref_wrap(str, w, sb, eb, max > 16 ? 16 : max < 0 ? 0 : max);
+        CHECK(na == nb && memcmp(sa, sb, sizeof(int) * (size_t)(na < 0 ? 0 : na)) == 0 && memcmp(ea, eb, sizeof(int) * (size_t)(na < 0 ? 0 : na)) == 0, "fuzz wrap");
+        ui_cells_close(&a); ui_cells_close(&b);
+        if (fails) return;
+    }
+}
+
 int main(void)
 {
     ui_cells c;
@@ -204,6 +336,7 @@ int main(void)
         CHECK(strstr(wire, "\360") == 0, "no table: no UTF-8 bytes");
         ui_cells_close(&c);
     }
+    fuzz_hot_paths();
     if (fails == 0) printf("test_ui_cells: all passed\n");
     return fails == 0 ? 0 : 1;
 }
