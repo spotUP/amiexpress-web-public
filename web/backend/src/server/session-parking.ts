@@ -378,9 +378,14 @@ export async function moveParkedTo(
   }
 }
 
-/** The account's parked session, if it has one (S9 asks before taking it). */
-export function parkedSessionOf(userId: string): BBSSession | null {
+/**
+ * The account's parked session, if it has one (S9 asks before taking it).
+ * `skip` holds sessions the caller was already asked about (L19), so a
+ * second parked session is found past the first.
+ */
+export function parkedSessionOf(userId: string, skip?: ReadonlySet<BBSSession>): BBSSession | null {
   for (const s of sessions.values()) {
+    if (skip?.has(s)) continue;
     if (isParked(s) && s.webLink && !s.webLink.ended && String((s.user as { id?: unknown } | undefined)?.id) === String(userId)) return s;
   }
   return null;
@@ -390,10 +395,14 @@ export function parkedSessionOf(userId: string): BBSSession | null {
  * S15: the account's session that is still attached on another node (web
  * with a connected socket, or a telnet/SSH line), other than `self`. A
  * password login is offered to take it over instead of meeting ONENODE.
+ *
+ * L19: `skip` holds the holders already asked about. One that did not leave
+ * (its line never closed) used to be found first again, and the caller
+ * stopped there - the account's other holders were never offered.
  */
-export function liveSessionOf(userId: string, self: BBSSession): BBSSession | null {
+export function liveSessionOf(userId: string, self: BBSSession, skip?: ReadonlySet<BBSSession>): BBSSession | null {
   for (const s of sessions.values()) {
-    if (s === self || isParked(s)) continue;
+    if (s === self || isParked(s) || skip?.has(s)) continue;
     if (String((s.user as { id?: unknown } | undefined)?.id) !== String(userId)) continue;
     const reachable = s.connectionEmitter
       ? true

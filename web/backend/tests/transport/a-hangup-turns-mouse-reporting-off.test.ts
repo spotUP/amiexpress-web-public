@@ -27,6 +27,8 @@ class StubNetSocket extends EventEmitter {
     this.log.push('end');
     this.writableEnded = true;
   }
+  // The hangup destroys the line after its flush bound (L19).
+  destroy(): void { this.destroyed = true; }
 }
 
 describe('a telnet hangup', () => {

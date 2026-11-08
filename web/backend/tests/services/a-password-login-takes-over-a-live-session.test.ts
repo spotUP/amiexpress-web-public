@@ -277,6 +277,38 @@ class ClosingNetSocket extends EventEmitter {
   ended = 0;
   write(): boolean { return true; }
   end(): void { this.ended += 1; this.writable = false; setImmediate(() => this.emit('close')); }
+  destroy(): void { this.destroyed = true; }
+}
+
+/**
+ * L19: a telnet holder on a REAL TCP socket whose peer keeps its half open
+ * after the board hangs up - as a dead phone or a client that never closes
+ * on EOF does. A real net.Socket says 'close' only when both halves are
+ * down, which the stub above hides.
+ */
+async function realTelnetHolder(nodeId: number) {
+  const net = require('net') as typeof import('net');
+  const server = net.createServer();
+  await new Promise<void>((r) => server.listen(0, '127.0.0.1', () => r()));
+  const accepted = new Promise<import('net').Socket>((r) => server.once('connection', r));
+  const peer = net.connect({ port: (server.address() as { port: number }).port, host: '127.0.0.1', allowHalfOpen: true });
+  peer.on('data', () => undefined);   // reads the hangup, never closes its own half
+  const socket = await accepted;
+  const connection = new TelnetConnection(socket, { nodeId });
+  const id = connection as unknown as { sessionId: string };
+  id.sessionId = `telnet-${nodeId}-real`;
+  const held: any = {
+    state: BBSState.LOGGEDON, subState: LoggedOnSubState.DISPLAY_MENU, user: { id: 7, username: 'phone', secLevel: 10 },
+    nodeId, currentConf: 1, connectionType: 'telnet', terminalType: 'ansi', screenWidth: 80, screenHeight: 24, tempData: {},
+  };
+  connection.session = held;
+  setSession(connection.sessionId, held);
+  setupTelnetSSHHandler(connection, 'telnet', {
+    io: { sockets: { sockets: new Map() } }, sessions,
+    nodeManager: { releaseSession: async () => undefined }, handleCommand: () => undefined,
+  } as never);
+  const done = () => { peer.destroy(); socket.destroy(); server.close(); };
+  return { held, socket, done };
 }
 function telnetHolder(nodeId: number) {
   const socket = new ClosingNetSocket();
@@ -345,6 +377,45 @@ describe('S15 review: E against holders', () => {
     expect(sessions.get('5')).toBeUndefined();
     expect(live.webLink.ended).toBe(true);
     expect(sessions.get('4')).toBe(session);
+  });
+
+  it('L19: E on a telnet holder whose caller never closes its half takes it off the board, so the next login is not asked about it', async () => {
+    const { held, socket, done } = await realTelnetHolder(5);
+    try {
+      expect(sessions.get('5')).toBe(held);
+      const { session, login } = await passwordLogin();
+      const started = Date.now();
+      session.loginInputHandler('e');
+      expect(await login).toEqual({ ok: false, terminated: 'already-on-another-node' });
+      // Woken by the finalize after the hangup, not by endLiveSession's 5 s bound.
+      expect(Date.now() - started).toBeLessThan(4000);
+      expect(socket.destroyed).toBe(true);
+      expect(sessions.get('5')).toBeUndefined();
+      // The next typed login meets no holder at all.
+      const next = await passwordLogin('C', 6);
+      expect(text(next.b)).not.toContain('You are logged in on node 5');
+      expect(await next.login).toEqual({ ok: false, terminated: 'already-on-another-node' });
+    } finally { done(); }
+  });
+
+  it('L19: a holder that does not leave on E does not hide the account\'s next holder - it is asked about too', async () => {
+    const { live } = await liveWindow();
+    live.webLink.disconnect = () => undefined; // node 3's transport never says disconnect
+    const { held } = await Promise.resolve(telnetHolder(5));
+    const { b, session, login } = await passwordLogin('B', 4);
+    expect(text(b)).toContain('You are logged in on node 3');
+    session.loginInputHandler('e');
+    // endLiveSession waits out its 5 s bound on node 3, then node 5 is asked.
+    const until = Date.now() + 8000;
+    while (!text(b).includes('You are logged in on node 5') && Date.now() < until) {
+      await new Promise((r) => setTimeout(r, 20));
+    }
+    expect(text(b)).toContain('You are logged in on node 5');
+    session.loginInputHandler('e');
+    expect(await login).toEqual({ ok: false, terminated: 'already-on-another-node' });
+    expect(sessions.get('3')).toBe(live);
+    expect(sessions.get('5')).toBeUndefined();
+    expect(held.sysopKicked).toBe(true);
   });
 
   it('two E answers for one holder both return as soon as it leaves', async () => {

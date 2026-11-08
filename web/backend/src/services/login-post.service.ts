@@ -264,15 +264,17 @@ export async function runPostAuthLogin(
     // telnet line, or a parked one and a live one). Each is asked about in
     // turn: ending only the first left the second for the already-on check
     // below, which refused the caller who had just answered [E]nd. A holder
-    // already answered for (its line never dropped) is not asked again; the
-    // already-on check then refuses, as before.
+    // already answered for (its line never dropped) is not asked again, but
+    // the holders after it still are: the lookups skip what was answered, so
+    // one stuck holder no longer hides the rest. The already-on check then
+    // refuses on whatever is still on, as before.
     const answered = new Set<BBSSession>();
     for (;;) {
       // S15: a typed password also offers a session still open in another
       // window. R needs a web session on both sides; telnet/SSH get E or Q.
       const parked = userKey === '' ? null
-        : parkedSessionOf(userKey) ?? (ctx.typedPassword ? liveSessionOf(userKey, session) : null);
-      if (!parked || answered.has(parked)) break;
+        : parkedSessionOf(userKey, answered) ?? (ctx.typedPassword ? liveSessionOf(userKey, session, answered) : null);
+      if (!parked) break;
       answered.add(parked);
       const heldIsWeb = isParked(parked) || (!!parked.webLink && !parked.connectionEmitter);
       const choice = await askParkedChoice(emitter, session, parked, isWeb && heldIsWeb);

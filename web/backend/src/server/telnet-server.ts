@@ -29,6 +29,13 @@ import type { WireCharset } from '../utils/wire-encoding.util';
 import { applyTerminalTypeReport } from '../amiga-emulation/xim/screen-width.util';
 
 // Telnet IAC (Interpret As Command) constants - express.e:2389-2508
+/**
+ * How long a board-side hangup waits for its last bytes (the mouse-off, a
+ * "session ended" line) to leave before the socket is destroyed anyway.
+ * Well under endLiveSession's 5 s wait, so a takeover never times out on it.
+ */
+export const HANGUP_FLUSH_MS = 1500;
+
 const IAC = 255;  // Interpret As Command
 const DONT = 254; // Don't perform option
 const DO = 253;   // Do perform option
@@ -733,7 +740,20 @@ console.log(`[Telnet] Node ${this.nodeId} charset REJECTED - none of [${offered.
     // the line already down and writes nothing (write() refuses an ended
     // socket), so there is exactly one reset per hangup.
     this.write(MOUSE_REPORTING_OFF);
-    if (this.canWrite()) this.socket.end();
+    if (!this.canWrite()) return;
+    // L19: the board hangs up, not the caller. end() alone is a half-close:
+    // the socket says 'close' - and the session's finalize runs - only when
+    // the PEER sends its FIN. A dead peer (a phone gone, a NAT that dropped
+    // the flow) or a client that keeps its half open never does, so the
+    // session stayed on its node for ever: a takeover's [E]nd waited out its
+    // bound and the next login was told "already logged in" about a line that
+    // was long gone. So the line is destroyed once the last bytes are handed
+    // to the kernel, and at the latest after HANGUP_FLUSH_MS when a dead
+    // peer's full send buffer never lets them go.
+    const socket = this.socket;
+    socket.end(() => socket.destroy());
+    const hangup = setTimeout(() => { if (!socket.destroyed) socket.destroy(); }, HANGUP_FLUSH_MS);
+    (hangup as { unref?: () => void }).unref?.();
   }
 
   /**
