@@ -295,7 +295,12 @@ static void draw_side_item(ui_cells *c, const lc_side *s, int row, int width, in
         if (s->joined) sprintf(buf, "%sv # %.38s", mark, s->label);
         else sprintf(buf, "%s\001\360> # %.38s", mark, s->label);
         break;
-    case LC_SIDE_USER: sprintf(buf, "%s  \001\360[*]\004 %.38s", mark, s->label); break;
+    case LC_SIDE_USER: {                   /* TS user-status marks: [*] online, [~] away, [-] do not disturb; [!] busy */
+        const char *dot = s->status == 'a' ? "[~]" : s->status == 'b' ? "[!]" : s->status == 'd' ? "[-]" : "[*]";
+        if (s->note[0] != '\0') sprintf(buf, "%s  \001\360%s\004 %.20s: %.14s", mark, dot, s->label, s->note);
+        else sprintf(buf, "%s  \001\360%s\004 %.38s", mark, dot, s->label);
+        break;
+    }
     case LC_SIDE_DM: sprintf(buf, "%s@ %.38s", mark, s->label); break;
     default: return;
     }

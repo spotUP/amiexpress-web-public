@@ -514,6 +514,54 @@ static void chat_serve(int fd, stub_chat_stats *st, int *state)
         st->last_react_msg[n] = '\0';
         st->unreacts++;
         chat_reply(fd, 200, "application/json", "{\"count\":0}");
+    } else if (strcmp(path, "/chat/v1/presence") == 0 && (strcmp(method, "PUT") == 0 || strcmp(method, "DELETE") == 0)) {
+        /* PUT /presence {status,text} sets, DELETE /presence clears; the presence event comes on the next poll. */
+        chat_note_write(st, path, body);
+        if (strcmp(method, "PUT") == 0) {
+            char status[16], note[80];
+            chat_copy_json_field(status, sizeof status, body, "status");
+            chat_copy_json_field(note, sizeof note, body, "text");
+            st->presences++;
+            if (strcmp(st->presence_user, "alice") == 0) {      /* who.txt follows, as the real server's does */
+                strcpy(st->alice_status, status);
+                strcpy(st->alice_text, note);
+            }
+            sprintf(st->pending_row, "presence|lobby|%s||1700000500|0|%s!%s", st->presence_user[0] ? st->presence_user : "Tester", status, note);
+        } else {
+            st->presence_clears++;
+            strcpy(st->pending_row, "presence|lobby|Tester||1700000500|0|online!");
+        }
+        chat_reply(fd, 200, "application/json", "{\"ok\":true}");
+    } else if (is_get && strncmp(path, "/chat/v1/users/", 15) == 0 && strstr(path, "/profile.txt") != 0) {
+        st->profiles++;
+        chat_note_write(st, path, "");
+        if (strncmp(path + 15, "alice", 5) == 0)
+            chat_reply(fd, 200, "text/plain", "PROFILE|1|9|1\r\nalice@boardA|alice|boardA|away|lunch|1700000000|1700000300|12|1|lobby,secret\r\n");
+        else
+            chat_reply(fd, 404, "application/json", "{\"error\":\"not_found\",\"detail\":\"no such user\"}");
+    } else if (is_get && strcmp(path, "/chat/v1/ignores.txt") == 0) {
+        char rows[300];
+        char *p2, list[sizeof st->ignore_list];
+        st->ignore_lists++;
+        strcpy(rows, "IGNORES|1|9|0\r\n");
+        strcpy(list, st->ignore_list);
+        for (p2 = strtok(list, ","); p2 != 0; p2 = strtok(0, ","))
+            sprintf(rows + strlen(rows), "%s@boardA|1700000100\r\n", p2);
+        chat_reply(fd, 200, "text/plain", rows);
+    } else if (is_post && strcmp(path, "/chat/v1/ignores") == 0) {
+        char who[40];
+        chat_note_write(st, path, body);
+        chat_copy_json_field(who, sizeof who, body, "user");
+        if (strchr(who, '@') != 0) *strchr(who, '@') = '\0';
+        if (st->ignore_list[0] != '\0') strcat(st->ignore_list, ",");
+        strcat(st->ignore_list, who);
+        st->ignore_adds++;
+        chat_reply(fd, 200, "application/json", "{\"ok\":true}");
+    } else if (strcmp(method, "DELETE") == 0 && strncmp(path, "/chat/v1/ignores/", 17) == 0) {
+        chat_note_write(st, path, "");
+        st->ignore_list[0] = '\0';
+        st->ignore_removes++;
+        chat_reply(fd, 200, "application/json", "{\"ok\":true}");
     } else if (strcmp(method, "DELETE") == 0) {
         st->session_closes++;
         chat_reply(fd, 204, "text/plain", "");
@@ -578,7 +626,12 @@ static void chat_serve(int fd, stub_chat_stats *st, int *state)
         chat_reply(fd, 200, "text/plain", "HISTORY|1|3|1\r\n1|d0|alice|1700000000|||5|private hello\r\n");
     } else if (is_get && strstr(path, "/chat/v1/who.txt") != 0) {
         st->whos++;
-        chat_reply(fd, 200, "text/plain", "WHO|1|9|2\r\nalice|lobby|0|9|12|away|lunch\r\nbob|lobby|1|0|3|online|\r\n");
+        {
+            char rows[200];
+            sprintf(rows, "WHO|1|9|2\r\nalice|lobby|0|9|12|%s|%s\r\nbob|lobby|1|0|3|online|\r\n",
+                    st->alice_status[0] ? st->alice_status : "away", st->alice_status[0] ? st->alice_text : "lunch");
+            chat_reply(fd, 200, "text/plain", rows);
+        }
     } else if (is_get && strncmp(path, "/chat/v1/messages/", 18) == 0 && strstr(path, "/reactions.txt") != 0) {
         st->reaction_lists++;
         {                                             /* the caller's last emoji, +1 before any react */

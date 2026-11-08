@@ -240,6 +240,73 @@ static lc_line *line_slot(int at)
     return &M.lines[at];
 }
 
+/* ---- ignore and mute: the server stores the ignore list; hiding the lines is this door's job. ---- */
+#define HIDE_MAX 24
+static char ignored[HIDE_MAX][32];      /* nicks (no @BOARD) the caller ignores: lines and DMs hidden */
+static int nignored;
+static char muted[HIDE_MAX][32];        /* nicks muted for this run only (TS mute-list): room lines hidden */
+static int nmuted;
+
+/** "alice@BOARD" -> "alice". */
+static void nick_of(char *out, size_t cap, const char *user)
+{
+    size_t n = 0;
+    if (*user == '@') user++;
+    for (; *user != '\0' && *user != '@' && n + 1 < cap; user++) out[n++] = *user;
+    out[n] = '\0';
+}
+
+static int same_nick(const char *a, const char *b)
+{
+    for (; *a != '\0' && *b != '\0'; a++, b++) {
+        int x = (unsigned char)*a, y = (unsigned char)*b;
+        if (x >= 'A' && x <= 'Z') x += 32;
+        if (y >= 'A' && y <= 'Z') y += 32;
+        if (x != y) return 0;
+    }
+    return *a == *b;
+}
+
+static int hide_find(char list[][32], int n, const char *nick)
+{
+    int i;
+    for (i = 0; i < n; i++) if (same_nick(list[i], nick)) return i;
+    return -1;
+}
+
+static void hide_add(char list[][32], int *n, const char *nick)
+{
+    if (hide_find(list, *n, nick) >= 0 || *n == HIDE_MAX) return;
+    nick_of(list[*n], 32, nick);
+    (*n)++;
+}
+
+static void hide_remove(char list[][32], int *n, const char *nick)
+{
+    int i = hide_find(list, *n, nick);
+    if (i < 0) return;
+    for (; i + 1 < *n; i++) memcpy(list[i], list[i + 1], 32);
+    (*n)--;
+}
+
+/** Lines from someone the caller ignores or muted are not shown (never the caller's own). */
+static int hidden_nick(const char *nick)
+{
+    char n[32];
+    nick_of(n, sizeof n, nick);
+    if (same_nick(n, handle)) return 0;
+    return hide_find(ignored, nignored, n) >= 0 || hide_find(muted, nmuted, n) >= 0;
+}
+
+/** Reads the server's ignore list (IGNORES rows user|at) into the local one. */
+static void load_ignores(void)
+{
+    char *f[AE_CHAT_ROW_FIELDS];
+    nignored = 0;
+    if (ae_chat_ignores(&chat) != AE_CHAT_OK) return;
+    while (ae_chat_next_row(&chat, f, AE_CHAT_ROW_FIELDS) >= 1) hide_add(ignored, &nignored, f[0]);
+}
+
 /** A message, inserted by seq among the messages; one already shown (same id) is not shown twice. */
 static lc_line *add_message(int kind, long seq, const char *id, const char *nick, const char *at, const char *text,
                             const char *reply_to)
@@ -249,6 +316,7 @@ static lc_line *add_message(int kind, long seq, const char *id, const char *nick
     char quote[sizeof l->quote];
     const lc_line *parent;
     if (id[0] != '\0' && line_by_id(id) != 0) return 0;
+    if (hidden_nick(nick)) return 0;
     quote[0] = '\0';                                /* TS draws the quote only when the parent is loaded */
     if (reply_to[0] != '\0' && (parent = line_by_id(reply_to)) != 0) quote_of(parent, quote, (int)sizeof quote);
     while (pos > 0 && (M.lines[pos - 1].kind == LC_HISTORY || M.lines[pos - 1].kind == LC_LIVE)
@@ -350,6 +418,22 @@ static void side_add(int kind, int joined, const char *label, const char *id)
     clean(s->id, sizeof s->id, id);
 }
 
+/** Presence word -> the sidebar's status letter. */
+static char status_char(const char *word)
+{
+    return strcmp(word, "away") == 0 ? 'a' : strcmp(word, "busy") == 0 ? 'b' : strcmp(word, "dnd") == 0 ? 'd' : 0;
+}
+
+static void side_add_user(const char *nick, const char *status, const char *text)
+{
+    lc_side *s;
+    side_add(LC_SIDE_USER, 0, nick, nick);
+    if (M.nside == 0 || M.side[M.nside - 1].kind != LC_SIDE_USER) return;
+    s = &M.side[M.nside - 1];
+    s->status = status_char(status);
+    clean(s->note, sizeof s->note, text);
+}
+
 static int side_selectable(int i)
 {
     return i >= 0 && i < M.nside && M.side[i].kind != LC_SIDE_HEAD && M.side[i].kind != LC_SIDE_BLANK;
@@ -369,11 +453,15 @@ static void switch_tab(int users)
 static void load_sidebar(void)
 {
     char *f[AE_CHAT_ROW_FIELDS];
-    char users[16][24];
+    char users[16][24], ustat[16][8], utext[16][28];
     int nusers = 0, i, j, keep = M.side_sel;
     if (room_id[0] != '\0' && ae_chat_who(&chat) == AE_CHAT_OK) {
         while (ae_chat_next_row(&chat, f, AE_CHAT_ROW_FIELDS) >= 2) {     /* user|room|sysop|roleColor|idle */
-            if (strcmp(f[1], room_id) == 0 && nusers < 16) clean(users[nusers++], sizeof users[0], f[0]);
+            if (strcmp(f[1], room_id) == 0 && nusers < 16) {
+                clean(ustat[nusers], sizeof ustat[0], f[5]);
+                clean(utext[nusers], sizeof utext[0], f[6]);
+                clean(users[nusers++], sizeof users[0], f[0]);
+            }
         }
     }
     M.nside = 0;
@@ -383,7 +471,7 @@ static void load_sidebar(void)
             while (ae_chat_next_row(&chat, f, AE_CHAT_ROW_FIELDS) >= 2) {
                 char nm[24];
                 clean(nm, sizeof nm, f[0]);
-                side_add(LC_SIDE_USER, 0, nm, nm);
+                side_add_user(nm, f[5], f[6]);
             }
         }
         M.side_sel = 0;
@@ -393,7 +481,7 @@ static void load_sidebar(void)
     for (i = 0; i < rooms_count; i++) {
         int here = strcmp(rooms_id[i], room_id) == 0;
         side_add(LC_SIDE_ROOM, here, rooms_name[i], rooms_id[i]);
-        if (here) for (j = 0; j < nusers; j++) side_add(LC_SIDE_USER, 0, users[j], users[j]);
+        if (here) for (j = 0; j < nusers; j++) side_add_user(users[j], ustat[j], utext[j]);
     }
     if (ae_chat_dm_list(&chat) == AE_CHAT_OK) {
         int first = 1;
@@ -473,6 +561,28 @@ static void load_reactions(const char *id)
     }
 }
 
+/** A presence event: `text` is "status|statusText". */
+static void side_presence(const char *user, const char *text)
+{
+    char nick[32], status[8], note[28];
+    const char *bar = strchr(text, '|');
+    size_t n = bar != 0 ? (size_t)(bar - text) : strlen(text);
+    int i;
+    if (n >= sizeof status) n = sizeof status - 1;
+    memcpy(status, text, n);
+    status[n] = '\0';
+    clean(note, sizeof note, bar != 0 ? bar + 1 : "");
+    nick_of(nick, sizeof nick, user);
+    for (i = 0; i < M.nside; i++) {
+        char id[32];
+        if (M.side[i].kind != LC_SIDE_USER) continue;
+        nick_of(id, sizeof id, M.side[i].id);
+        if (!same_nick(id, nick)) continue;
+        M.side[i].status = status_char(status);
+        copy(M.side[i].note, sizeof M.side[i].note, note);
+    }
+}
+
 /** Applies the rows of an events poll (seq|type|room|user|ref|at|color|text). */
 static void take_events(void)
 {
@@ -491,7 +601,7 @@ static void take_events(void)
             sprintf(want, "dm:%.30s", dm_thread);
             if (dm_thread[0] != '\0' && strcmp(room, want) == 0) {
                 add_message(LC_LIVE, seq, ref, user, f[5], f[7], "");
-            } else if (strcmp(user, handle) != 0) {
+            } else if (strcmp(user, handle) != 0 && !hidden_nick(user)) {
                 sprintf(line, "New direct message from %.24s", user);
                 system_line(line);
             }
@@ -510,6 +620,8 @@ static void take_events(void)
             sprintf(line, "%.24s %s", user, joined ? "joined" : "left");
             add_note(LC_ACTIVITY_LINE, line);
             if (strcmp(user, handle) != 0) side_user(user, joined);
+        } else if (strcmp(type, "presence") == 0) {
+            side_presence(user, f[7]);          /* TS chat:presence: the dot and the text change in the user list */
         } else if (strcmp(type, "edit") == 0) {
             lc_line *l = line_by_id(ref);       /* TS chat:edited: the rows of that id now read the new text */
             if (l != 0) { clean(l->text, sizeof l->text, f[7]); l->edited = 1; }
@@ -753,6 +865,197 @@ static void target_user(const char *arg, char *out, size_t cap, char *shown, siz
     else { copy(out, cap, arg); if (strlen(out) + strlen(suffix) < cap) strcat(out, suffix); }
 }
 
+/* ---- presence, whois, ignore (TS commands/user.ts, commands/ui.ts, whois-render.ts, profile-overlay.ts) ---- */
+
+/** One PROFILE row: user|nick|board|status|statusText|firstSeen|lastSeen|idleSeconds|online|sharedRooms. */
+typedef struct {
+    char nick[32], board[24], status[10], text[64], last[8], rooms[96];
+    int idle, online;
+} profile_info;
+
+/** Reads a user's profile. AE_CHAT_OK, or the error (not_found: the server never saw the user). */
+static int profile_fetch(const char *user, profile_info *p)
+{
+    char *f[AE_CHAT_ROW_FIELDS];
+    char full[64];
+    int rc;
+    target_user(user, full, sizeof full, 0, 0);
+    rc = ae_chat_profile(&chat, full);
+    if (rc != AE_CHAT_OK) return rc;
+    if (ae_chat_next_row(&chat, f, AE_CHAT_ROW_FIELDS) < 9) return AE_CHAT_ERR_ARGS;
+    clean(p->nick, sizeof p->nick, f[1]);
+    clean(p->board, sizeof p->board, f[2]);
+    clean(p->status, sizeof p->status, f[3]);
+    clean(p->text, sizeof p->text, f[4]);
+    hhmm_of(p->last, f[6]);
+    p->idle = atoi(f[7]);
+    p->online = atoi(f[8]);
+    clean(p->rooms, sizeof p->rooms, f[9]);
+    return AE_CHAT_OK;
+}
+
+/** Room ids of a profile's sharedRooms (comma separated) as the names this door knows them by. */
+static void room_names_of(const char *ids, char *out, size_t cap)
+{
+    char one[48];
+    size_t n = 0;
+    out[0] = '\0';
+    while (*ids != '\0') {
+        size_t k = 0;
+        int i;
+        const char *name;
+        while (*ids != '\0' && *ids != ',' && k + 1 < sizeof one) one[k++] = *ids++;
+        one[k] = '\0';
+        if (*ids == ',') ids++;
+        name = one;
+        for (i = 0; i < rooms_count; i++) if (strcmp(rooms_id[i], one) == 0) name = rooms_name[i];
+        if (n + strlen(name) + 3 >= cap) break;
+        if (n > 0) { out[n++] = ','; out[n++] = ' '; }
+        strcpy(out + n, name);
+        n += strlen(name);
+    }
+}
+
+/** /whois and the Whois menu entry: the profile as pane lines. */
+static void whois_typed(const char *arg)
+{
+    profile_info p;
+    char line[160], rooms[96], who[32];
+    int rc;
+    nick_of(who, sizeof who, arg);
+    if (who[0] == '\0') { usage("/whois @user"); return; }
+    rc = profile_fetch(arg, &p);
+    if (rc != AE_CHAT_OK) {
+        if (rc == AE_CHAT_ERR_TRANSPORT) { show_error(rc); return; }
+        sprintf(line, "User %.30s is not online.", who);       /* TS formatWhois, nobody found */
+        system_line(line);
+        return;
+    }
+    sprintf(line, "%.30s - %.20s%s%.60s", p.nick, p.status, p.text[0] != '\0' ? ": " : "", p.text);
+    system_line(line);
+    sprintf(line, "Board %.20s, %s, last seen %.5s, idle %ds", p.board, p.online ? "online" : "offline", p.last, p.idle);
+    system_line(line);
+    room_names_of(p.rooms, rooms, sizeof rooms);
+    if (rooms[0] != '\0') { sprintf(line, "Shared rooms: %.100s", rooms); system_line(line); }
+}
+
+/** The profile overlay (TS overlays/profile-overlay.ts): a box titled with the name. */
+static void profile_overlay(const char *arg)
+{
+    profile_info p;
+    char text[96], who[32];
+    int rc;
+    nick_of(who, sizeof who, arg);
+    rc = profile_fetch(arg, &p);
+    if (rc != AE_CHAT_OK) {
+        sprintf(text, "User %.40s not found.", who);               /* TS showProfile, nobody found */
+        message_modal("Profile", text);
+        return;
+    }
+    sprintf(text, "%.16s%s%.30s, %s, idle %ds", p.status, p.text[0] != '\0' ? ": " : "", p.text,
+            p.online ? "online" : "offline", p.idle);
+    message_modal(p.nick, text);
+}
+
+static void away_typed(const char *rest)
+{
+    char line[160];
+    const char *msg = *rest != '\0' ? rest : "Away";
+    int rc = ae_chat_presence(&chat, "away", msg);
+    if (rc != AE_CHAT_OK) { show_error(rc); return; }
+    sprintf(line, "You are now away: %.100s", msg);
+    system_line(line);
+    do_poll();
+}
+
+static void back_typed(void)
+{
+    int rc = ae_chat_presence_clear(&chat);
+    if (rc != AE_CHAT_OK) { show_error(rc); return; }
+    system_line("You are now online");
+    do_poll();
+}
+
+static void status_typed(const char *rest)
+{
+    char word[12], line[160];
+    const char *text;
+    int rc;
+    arg_word(rest, word, sizeof word);
+    if (word[0] == '\0') strcpy(word, "online");
+    if (strcmp(word, "online") != 0 && strcmp(word, "away") != 0 && strcmp(word, "busy") != 0 && strcmp(word, "dnd") != 0) {
+        usage("/status [online|away|busy|dnd] [message]");
+        return;
+    }
+    if (strcmp(word, "busy") == 0) strcpy(word, "dnd");       /* TS: busy is do-not-disturb under another name */
+    text = after_word(rest);
+    rc = ae_chat_presence(&chat, word, text);
+    if (rc != AE_CHAT_OK) { show_error(rc); return; }
+    sprintf(line, "Status set to %s%s%.100s", word, *text != '\0' ? ": " : "", text);
+    system_line(line);
+    do_poll();
+}
+
+/** Ignore (on) or lift an ignore (off) for `arg`; the lines say what the TS door says. */
+static void ignore_set(const char *arg, int on)
+{
+    char full[64], nick[32], line[128];
+    int rc;
+    nick_of(nick, sizeof nick, arg);
+    if (on && hide_find(ignored, nignored, nick) >= 0) { sprintf(line, "Already ignoring %.30s.", nick); system_line(line); return; }
+    if (!on && hide_find(ignored, nignored, nick) < 0) { sprintf(line, "You are not ignoring %.30s.", nick); system_line(line); return; }
+    target_user(arg, full, sizeof full, 0, 0);
+    rc = ae_chat_ignore(&chat, full, on);
+    if (rc != AE_CHAT_OK) { show_error(rc); return; }
+    if (on) {
+        hide_remove(muted, &nmuted, nick);                      /* the level is set, replacing a mute */
+        hide_add(ignored, &nignored, nick);
+        sprintf(line, "Ignoring %.30s - their messages and DMs are hidden.", nick);
+    } else {
+        hide_remove(ignored, &nignored, nick);
+        sprintf(line, "%.30s is no longer hidden.", nick);
+    }
+    system_line(line);
+}
+
+static void ignore_typed(const char *rest)
+{
+    char a[40], line[400];
+    int i;
+    arg_word(rest, a, sizeof a);
+    if (a[0] != '\0') { ignore_set(a, 1); return; }
+    load_ignores();
+    if (nignored == 0) { system_line("You are not ignoring anyone."); return; }
+    strcpy(line, "Ignoring: ");
+    for (i = 0; i < nignored && strlen(line) + 34 < sizeof line; i++) {
+        if (i > 0) strcat(line, ", ");
+        strcat(line, ignored[i]);
+    }
+    system_line(line);
+}
+
+static void unignore_typed(const char *rest)
+{
+    char a[40];
+    arg_word(rest, a, sizeof a);
+    if (a[0] == '\0') { usage("/unignore <user>"); return; }
+    ignore_set(a, 0);
+}
+
+/** The Mute User / Unmute User menu entry: hides the room lines for this run (TS core/mute-list.ts). */
+static void mute_toggle(const char *nick)
+{
+    char line[96];
+    if (hide_find(muted, nmuted, nick) >= 0) {
+        hide_remove(muted, &nmuted, nick);
+        sprintf(line, "%.30s is no longer hidden.", nick);
+    } else {
+        hide_add(muted, &nmuted, nick);
+        sprintf(line, "Muted %.30s - their room messages are hidden.", nick);
+    }
+    system_line(line);
+}
+
 /** The message a typed number names (the pane's numbers, as /react), or a line saying there is none. */
 static lc_line *typed_message(const char *a)
 {
@@ -932,12 +1235,16 @@ static const char *const cmd_help[][4] = {
     {"create", "", "Create a new channel. --private and --invite-only make it members-only.", "/create #name [topic] [--private] [--invite-only] [--motd \"text\"]"},
     {"deletemsg", "delmsg", "Delete a message (your last by default)", "/deletemsg [msg-id]"},
     {"edit", "", "Edit one of your messages (your last by default)", "/edit [msg-id] new text"},
+    {"away", "afk", "Set away status", "/away [message]"},
+    {"back", "", "Return from away", "/back"},
     {"help", "?,commands", "Show available commands", "/help [command]"},
+    {"ignore", "", "Ignore a user (no name: list who you ignore)", "/ignore [user]"},
     {"invite", "", "Invite a user to this invite-only channel (moderator only)", "/invite @user [#room]"},
     {"join", "", "Join a channel", "/join #channel"},
     {"kick", "", "Kick user from channel", "/kick @user [reason]"},
     {"leave", "part", "Leave current channel", "/leave"},
     {"love", "", "React with heart", "/love [msg-id]"},
+    {"nick", "", "Show your username", "/nick"},
     {"msg", "dm,pm", "Send a direct message (1:1 or group). /msg @a [@b ...] text", "/msg @user [@user2 ...] message"},
     {"mute", "", "Mute user in channel", "/mute @user [minutes]"},
     {"op", "", "Give or take room operator status (sysop)", "/op @user  |  /op -@user  |  /deop @user"},
@@ -946,13 +1253,16 @@ static const char *const cmd_help[][4] = {
     {"reactions", "", "Show reactions", "/reactions [msg-id]"},
     {"reply", "r", "Reply to a message (the newest by default)", "/reply [msg-id] message"},
     {"rooms", "channels", "List all rooms", "/rooms"},
+    {"status", "", "Set custom status", "/status [online|away|busy|dnd] [message]"},
     {"thread", "t", "Reply in thread", "/thread <msg-id> message"},
     {"thumbsup", "like", "React with thumbs up", "/thumbsup [msg-id]"},
     {"topic", "", "Set channel topic", "/topic <new topic>"},
+    {"unignore", "", "Stop ignoring a user", "/unignore <user>"},
     {"unban", "", "Unban user from channel", "/unban @user"},
     {"uninvite", "", "Revoke a pending invite", "/uninvite @user [#room]"},
     {"unmute", "", "Unmute user in channel", "/unmute @user"},
     {"unreact", "", "Remove reaction", "/unreact [emoji] [msg-id]"},
+    {"whois", "info", "Show user info", "/whois @user"},
     {"who", "users,list", "List users in channel", "/who"},
     {"compact", "", "Toggle compact mode", "/compact"},
     {"timestamps", "time", "Toggle timestamps", "/timestamps"},
@@ -1035,6 +1345,13 @@ static int run_command(const char *line)
         } else show_error(rc);
         return 0;
     }
+    if (is_cmd(cmd, "whois", "info")) { whois_typed(rest); return 0; }
+    if (is_cmd(cmd, "away", "afk")) { away_typed(rest); return 0; }
+    if (strcmp(cmd, "back") == 0) { back_typed(); return 0; }
+    if (strcmp(cmd, "status") == 0) { status_typed(rest); return 0; }
+    if (strcmp(cmd, "nick") == 0) { char t[64]; sprintf(t, "Your username: %.40s", handle); system_line(t); return 0; }
+    if (strcmp(cmd, "ignore") == 0) { ignore_typed(rest); return 0; }
+    if (strcmp(cmd, "unignore") == 0) { unignore_typed(rest); return 0; }
     if (strcmp(cmd, "edit") == 0) { edit_typed(rest); return 0; }
     if (is_cmd(cmd, "deletemsg", "delmsg")) { delete_typed(rest); return 0; }
     if (strcmp(cmd, "topic") == 0) {
@@ -1137,7 +1454,11 @@ static void ctx_open(int kind, int target, int row, int col)
     if (kind == LC_CTX_USER) {
         static const char *const u[] = { "View Profile", "Send Message", "Whois", "---", "Mention", "Add Note",
                                          "View History", "---", "Mute User", "Ignore", "Block" };
+        char who[32];
         for (n = 0; n < 11; n++) ctx_items[n] = u[n];
+        nick_of(who, sizeof who, M.side[target].label);          /* TS muteMenuLabels: the entries say the current state */
+        if (hide_find(muted, nmuted, who) >= 0) ctx_items[8] = "Unmute User";
+        if (hide_find(ignored, nignored, who) >= 0) ctx_items[9] = "Unignore";
         if (is_sysop) { ctx_items[n++] = "---"; alert = 3UL << n; ctx_items[n++] = "Kick User"; ctx_items[n++] = "Ban User"; }
     } else if (kind == LC_CTX_CHAT) {
         static const char *const c[] = { "Reply", "Quote", "React", "---", "Copy Text", "Pin Message", "---",
@@ -1190,7 +1511,12 @@ static void ctx_run(const char *it)
             if (rc != AE_CHAT_OK) { show_error(rc); return; }
             sprintf(buf, "%s requested for %.30s", kick ? "Kick" : "Ban", nick);
             system_line(buf);
-        } else not_yet(it);              /* Profile, Whois, Note, Mute, Ignore, Block (B4/B5) */
+        } else if (strcmp(it, "View Profile") == 0) profile_overlay(nick);
+        else if (strcmp(it, "Whois") == 0) whois_typed(nick);
+        else if (strcmp(it, "Mute User") == 0 || strcmp(it, "Unmute User") == 0) mute_toggle(nick);
+        else if (strcmp(it, "Ignore") == 0) ignore_set(nick, 1);
+        else if (strcmp(it, "Unignore") == 0) ignore_set(nick, 0);
+        else not_yet(it);                /* Add Note (no doorserver note route), Block (B5) */
     } else if (M.ctx_kind == LC_CTX_CHAT) {
         const lc_line *l = M.ctx_target >= 0 && M.ctx_target < M.nlines ? &M.lines[M.ctx_target] : 0;
         if (!l || l->number == 0) { system_line("Right-click on a message first."); return; }
@@ -1433,6 +1759,7 @@ int main(int argc, char **argv)
     /* A fresh run starts with nothing joined (a host test calls main more than once). */
     idle_ticks = 0; pushback = -1; msg_number = 0; help_shown = 0; rooms_count = 0; keep_lines = 0;
     room_id[0] = '\0'; room_name[0] = '\0'; room_topic[0] = '\0'; dm_thread[0] = '\0'; dm_peer[0] = '\0';
+    nignored = 0; nmuted = 0;
 
     if (ae_start(node) != 0) return 20;
     if (ae_open_bbs(&session, session_storage, (long)sizeof(session_storage), node) != 0) {
@@ -1481,6 +1808,7 @@ int main(int argc, char **argv)
     keys.idle = door_idle;
     ae_bs_mouse(1);                                     /* "MOUSE ON B": clicks with their button, as menudoor */
 
+    load_ignores();                                     /* the server keeps the list; hiding the lines is ours */
     /* As the TS door: list the rooms and walk into the first. */
     if (load_rooms() == AE_CHAT_OK) {
         sprintf(line, "Found %d room%s", rooms_count, rooms_count == 1 ? "" : "s");

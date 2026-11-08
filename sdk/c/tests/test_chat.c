@@ -31,7 +31,10 @@ int ae_field_read(int field, char *out, int cap)
 
 /* Scripted clicks: each MOUSE? answers the next step, worked out from the frame the door drew
  * (the test includes livechat.c, so it reads M and lc_hit). "" ends one wake's drain. */
-enum { MS_END, MS_RMB_MESSAGE, MS_CLICK_REACT, MS_CLICK_PICK, MS_CLICK_TOOLS, MS_CLICK_FILES, MS_CLICK_STATUS_USERS, MS_CLICK_STATUS_CHANNELS };
+enum { MS_END, MS_RMB_MESSAGE, MS_CLICK_REACT, MS_CLICK_PICK, MS_CLICK_TOOLS, MS_CLICK_FILES, MS_CLICK_STATUS_USERS, MS_CLICK_STATUS_CHANNELS,
+       MS_CLICK_USER, MS_CLICK_ITEM };
+static const char *ms_items[4];                           /* names the MS_CLICK_ITEM steps click, in order */
+static int ms_item_n;
 static const int *mouse_script;
 static int mouse_step, mouse_armed;
 
@@ -48,6 +51,19 @@ static int mouse_reply(char *out)
     }
     if (step == MS_CLICK_REACT) {                       /* item 2 of the open popup */
         for (idx = 0; idx < M.ctx.n && strcmp(M.ctx.items[idx], "React") != 0; idx++) {}
+        return sprintf(out, "P\t%d\t%d\t0", M.ctx.left + 5, M.ctx.top + 1 + idx + 1);
+    }
+    if (step == MS_CLICK_USER) {                        /* alice in the sidebar opens the user menu */
+        for (r = 0; r < 25; r++)
+            if (lc_hit(r, 3, &idx) == LC_HIT_SIDEBAR && M.side[idx].kind == LC_SIDE_USER && strcmp(M.side[idx].label, "alice") == 0)
+                return sprintf(out, "P\t4\t%d\t2", r + 1);
+        assert(!"alice not in the sidebar");
+    }
+    if (step == MS_CLICK_ITEM) {                        /* a named entry of the open menu */
+        const char *want = ms_items[ms_item_n++];
+        assert(M.ctx.n > 0);
+        for (idx = 0; idx < M.ctx.n && strcmp(M.ctx.items[idx], want) != 0; idx++) {}
+        assert(idx < M.ctx.n);
         return sprintf(out, "P\t%d\t%d\t0", M.ctx.left + 5, M.ctx.top + 1 + idx + 1);
     }
     if (step == MS_CLICK_PICK) {                        /* the reaction picker's first item, +1 */
@@ -601,6 +617,106 @@ static void test_door_no_config(void)
     printf("  [OK] door: no config says so and leaves\n");
 }
 
+/* B4 (C13-C17, D12, D15): presence commands and whois reach the server; the pane says what the TS door says. */
+static void test_door_b4_presence(void)
+{
+    start_stub();
+    drive(KEYS("\r" "/whois @alice\r" "/whois\r" "/whois @nobody\r" "/away lunch time\r" "/back\r"
+               "/status busy deep work\r" "/status bogus\r" "/nick\r"), 0);
+    assert(st->profiles == 2);                                              /* alice and nobody; bare /whois stays local */
+    assert(has_line(0, "alice - away: lunch") && has_line(0, "Shared rooms: Lobby, Secret"));      /* C13, D15 */
+    assert(has_line(0, "Error: Usage: /whois @user") && has_line(0, "User nobody is not online."));
+    assert(st->presences == 2 && st->presence_clears == 1);                 /* C14 away, C16 status; C15 back */
+    assert(has_line(0, "You are now away: lunch time") && has_line(0, "You are now online"));
+    assert(has_line(0, "Status set to dnd: deep work"));                    /* busy goes out as dnd */
+    assert(strstr(st->last_write_body, "\"status\":\"dnd\"") != 0 || strstr(st->last_write_path, "/presence") != 0);
+    assert(has_line(0, "Error: Usage: /status [online|away|busy|dnd] [message]"));
+    assert(has_line(0, "Your username: Tester"));                           /* C17 */
+    stop_stub();
+    printf("  [OK] door: /whois /away /back /status /nick reach the presence and profile routes\n");
+}
+
+/* D12: who.txt statuses mark the user list, and a presence event updates the mark and the text. */
+static void test_door_b4_marks(void)
+{
+    int i, a = -1, b = -1;
+    start_stub();
+    strcpy(st->presence_user, "alice");
+    drive(KEYS("\r" "/status busy gone fishing\r"), 0);
+    for (i = 0; i < M.nside; i++) {
+        if (M.side[i].kind != LC_SIDE_USER) continue;
+        if (strcmp(M.side[i].label, "alice") == 0) a = i;
+        if (strcmp(M.side[i].label, "bob") == 0) b = i;
+    }
+    assert(a >= 0 && b >= 0 && M.side[b].status == 0 && M.side[b].note[0] == '\0');
+    assert(M.side[a].status == 'd' && strcmp(M.side[a].note, "gone fishing") == 0);   /* the presence event, not the who.txt away/lunch */
+    stop_stub();
+    start_stub();
+    drive(KEYS("\r"), 0);
+    for (i = 0; i < M.nside; i++) if (M.side[i].kind == LC_SIDE_USER && strcmp(M.side[i].label, "alice") == 0) a = i;
+    assert(M.side[a].status == 'a' && strcmp(M.side[a].note, "lunch") == 0);           /* who.txt away|lunch */
+    stop_stub();
+    printf("  [OK] door: sidebar marks follow who.txt and presence events\n");
+}
+
+/* C48, C49: ignore lists, adds and lifts reach the server; an ignored user's lines are hidden. */
+static void test_door_b4_ignore(void)
+{
+    start_stub();
+    drive(KEYS("\r" "/ignore\r" "/ignore @carol\r" "/ignore carol\r" "/ignore\r" "/unignore\r" "/unignore dave\r" "/unignore carol\r"), 0);
+    assert(st->ignore_adds == 1 && st->ignore_removes == 1);
+    assert(has_line(0, "You are not ignoring anyone.") && has_line(0, "Ignoring carol - their messages and DMs are hidden."));
+    assert(has_line(0, "Already ignoring carol.") && has_line(0, "Ignoring: carol"));
+    assert(has_line(0, "Error: Usage: /unignore <user>") && has_line(0, "You are not ignoring dave."));
+    assert(has_line(0, "carol is no longer hidden."));
+    stop_stub();
+
+    start_stub();
+    strcpy(st->ignore_list, "carol");                                       /* the server already holds it: startup loads it */
+    poll_steps = 2; poll_step_ticks = IDLE_SLEEP_TICKS;
+    drive(KEYS("\r" "/q\r"), 1);
+    assert(st->ignore_lists >= 1 && st->events >= 1);                       /* the idle poll ran ... */
+    assert(!has_line("carol", "from idle poll"));                           /* carol's polled line is hidden */
+    stop_stub();
+
+    start_stub();
+    drive(KEYS("\r" "/q\r"), 1);
+    assert(st->events >= 1 && has_line("carol", "from idle poll"));         /* ... and shows her when not ignored */
+    poll_steps = POLL_STEPS_DEFAULT; poll_step_ticks = POLL_STEP_TICKS;
+    stop_stub();
+    printf("  [OK] door: /ignore and /unignore reach the server and hide the ignored user's lines\n");
+}
+
+/* M11, M13, M17: the user menu runs View Profile, Whois, Mute and Ignore, and the labels flip. */
+static void test_door_b4_user_menu(void)
+{
+    static const int script[] = { MS_CLICK_USER, MS_END, MS_CLICK_ITEM, MS_END,
+                                  MS_CLICK_USER, MS_END, MS_CLICK_ITEM, MS_END,
+                                  MS_CLICK_USER, MS_END, MS_CLICK_ITEM, MS_END,
+                                  MS_CLICK_USER, MS_END, MS_CLICK_ITEM, MS_END,
+                                  MS_CLICK_USER, MS_END, MS_CLICK_ITEM, MS_END };
+    start_stub();
+    ms_items[0] = "View Profile"; ms_items[1] = "Whois"; ms_items[2] = "Mute User"; ms_items[3] = "Unmute User";
+    ms_item_n = 0;
+    mouse_script = script; mouse_step = 0;
+    drive(KEYS("\r" "\x1e\x1e" "\r" "\x1e\x1e\x1e\x1e\x1e\x1e" " "), 0);
+    mouse_script = 0;
+    assert(st->profiles == 2);                                              /* M11 and M13 */
+    assert(has_line(0, "alice - away: lunch"));                             /* M13 */
+    assert(has_line(0, "Muted alice - their room messages are hidden.") && has_line(0, "alice is no longer hidden."));   /* M17 mute, unmute */
+    stop_stub();
+
+    start_stub();
+    ms_items[0] = "Ignore"; ms_items[1] = "Unignore"; ms_item_n = 0;
+    mouse_script = script; mouse_step = 0;
+    drive(KEYS("\r" "\x1e\x1e\x1e\x1e" " "), 0);
+    mouse_script = 0;
+    assert(st->ignore_adds == 1 && st->ignore_removes == 1);                /* M17 ignore, unignore */
+    assert(has_line(0, "Ignoring alice - their messages and DMs are hidden.") && has_line(0, "alice is no longer hidden."));
+    stop_stub();
+    printf("  [OK] door: user menu View Profile, Whois, Mute and Ignore act, labels flip\n");
+}
+
 int main(void)
 {
     ae_native_set_exchange(board, 0);
@@ -619,6 +735,10 @@ int main(void)
     test_door_picker_and_edit();
     test_door_react_without_event();
     test_door_delete_and_kicked();
+    test_door_b4_presence();
+    test_door_b4_marks();
+    test_door_b4_ignore();
+    test_door_b4_user_menu();
     test_door_no_config();
     remove("build/test_chat_keys.bin"); remove("build/test_chat_screen.bin");
     puts("test_chat: OK");

@@ -158,11 +158,27 @@ int ae_chat_dm(ae_chat *c, const char *peer, const char *text, char *thread_id, 
 /** GET dm.txt. Rows: threadId, peer, lastAt, unread. */
 int ae_chat_dm_list(ae_chat *c);
 
-/** GET who.txt. Rows: user, room, sysop, roleColor, idleSeconds. */
+/** GET who.txt. Rows: user, room, sysop, roleColor, idleSeconds, status, statusText. */
 int ae_chat_who(ae_chat *c);
 
-/** GET members.txt. Rows: user, sysop, op, roleColor, roleName. */
+/** GET members.txt. Rows: user, sysop, op, roleColor, roleName, status, statusText. */
 int ae_chat_members(ae_chat *c, const char *room);
+
+/** PUT /presence: status is online, away, busy or dnd; `text` (may be NULL) is the away message. */
+int ae_chat_presence(ae_chat *c, const char *status, const char *text);
+
+/** DELETE /presence: back to online with no text. */
+int ae_chat_presence_clear(ae_chat *c);
+
+/** GET /users/:user/profile.txt ("handle@BOARD"). One row: user, nick, board, status, statusText,
+ *  firstSeen, lastSeen, idleSeconds, online, sharedRooms. 404 not_found when the server never saw them. */
+int ae_chat_profile(ae_chat *c, const char *user);
+
+/** GET ignores.txt. Rows: user, at. */
+int ae_chat_ignores(ae_chat *c);
+
+/** add: POST /ignores {user}; else DELETE /ignores/:user. `user` is "handle@BOARD". */
+int ae_chat_ignore(ae_chat *c, const char *user, int add);
 
 /**
  * Next row of the last list reply, split on `|` with `!` turned back into

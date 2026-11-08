@@ -67,6 +67,8 @@ typedef struct {
     int joined;            /* rooms: the caller is in it */
     char label[40];
     char id[48];           /* room id, DM thread id, or user handle */
+    char status;           /* users: 0 online, 'a' away, 'b' busy, 'd' do not disturb */
+    char note[28];         /* users: the status text (the away message) */
 } lc_side;
 
 enum { LC_FOCUS_INPUT, LC_FOCUS_SIDEBAR, LC_FOCUS_MENU };

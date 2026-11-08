@@ -248,7 +248,7 @@ static int starts_with(const char *s, const char *prefix)
  * row wherever a caller asks for fewer than four fields (a DM list showed a thread "1"). */
 static int has_header(const char *reply)
 {
-    static const char *const names[] = { "ROOMS|", "EVENTS|", "HISTORY|", "DM|", "WHO|", "MEMBERS|", "REACTIONS|" };
+    static const char *const names[] = { "ROOMS|", "EVENTS|", "HISTORY|", "DM|", "WHO|", "MEMBERS|", "REACTIONS|", "PROFILE|", "IGNORES|" };
     unsigned i;
     for (i = 0; i < sizeof names / sizeof names[0]; i++) if (starts_with(reply, names[i])) return 1;
     return 0;
@@ -672,4 +672,58 @@ int ae_chat_members(ae_chat *c, const char *room)
     int rc = make_path(path, sizeof path, AE_CHAT_BASE "/rooms/", room, "/members.txt");
     if (rc != AE_CHAT_OK) return rc;
     return get_text(c, path);
+}
+
+int ae_chat_presence(ae_chat *c, const char *status, const char *text)
+{
+    static const char *const known[] = { "online", "away", "busy", "dnd" };
+    char body[BODY_MAX];
+    long at;
+    int i, ok = 0;
+
+    for (i = 0; i < 4; i++) if (status != 0 && strcmp(status, known[i]) == 0) ok = 1;
+    if (!ok) return AE_CHAT_ERR_ARGS;
+    at = put_field(body, sizeof body, ae_req_put_raw(body, sizeof body, 0, "{"), "status", status);
+    if (!blank(text) && at >= 0) at = put_field(body, sizeof body, at, "text", text);
+    if (at >= 0) at = ae_req_put_raw(body, sizeof body, (unsigned long)at, "}");
+    if (at < 0) return AE_CHAT_ERR_TOO_LONG;
+    return call(c, "PUT", AE_CHAT_BASE "/presence", body, (unsigned long)at);
+}
+
+int ae_chat_presence_clear(ae_chat *c)
+{
+    return call(c, "DELETE", AE_CHAT_BASE "/presence", 0, 0);
+}
+
+int ae_chat_profile(ae_chat *c, const char *user)
+{
+    char path[PATH_MAX_LEN];
+    int rc = make_path(path, sizeof path, AE_CHAT_BASE "/users/", user, "/profile.txt");
+
+    if (rc != AE_CHAT_OK) return rc;
+    return get_text(c, path);
+}
+
+int ae_chat_ignores(ae_chat *c)
+{
+    return get_text(c, AE_CHAT_BASE "/ignores.txt");
+}
+
+int ae_chat_ignore(ae_chat *c, const char *user, int add)
+{
+    char path[PATH_MAX_LEN];
+    char body[BODY_MAX];
+    long at;
+    int rc;
+
+    if (blank(user)) return AE_CHAT_ERR_ARGS;
+    if (!add) {
+        rc = make_path(path, sizeof path, AE_CHAT_BASE "/ignores/", user, "");
+        if (rc != AE_CHAT_OK) return rc;
+        return call(c, "DELETE", path, 0, 0);
+    }
+    at = put_field(body, sizeof body, ae_req_put_raw(body, sizeof body, 0, "{"), "user", user);
+    if (at >= 0) at = ae_req_put_raw(body, sizeof body, (unsigned long)at, "}");
+    if (at < 0) return AE_CHAT_ERR_TOO_LONG;
+    return call(c, "POST", AE_CHAT_BASE "/ignores", body, (unsigned long)at);
 }
