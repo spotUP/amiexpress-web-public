@@ -21,7 +21,7 @@ void ui_input_style_init(ui_input_style *style)
 
 /** Draw the prompt row and leave the cursor after the text. */
 static void paint(ansi_buf *b, const ui_input_style *st,
-                  const char *label, const char *text)
+                  const char *label, const char *text, int cur)
 {
     char line[256];
     unsigned long room = sizeof(line) - 2;
@@ -54,7 +54,7 @@ static void paint(ansi_buf *b, const ui_input_style *st,
      * the slower redraw made the excursion easy to watch.
      */
     ansi_text_raw(b, st->row, st->left + 1, line, st->cols - 1);
-    ansi_goto(b, st->row, st->left + 1 + (int) strlen(line));
+    ansi_goto(b, st->row, st->left + 1 + (int) (label ? strlen(label) + 1 : 0) + cur);
     ansi_cursor(b, 1);
 }
 
@@ -70,17 +70,18 @@ int ui_input(ansi_buf *b, const ui_key_source *src, int *pushback,
              char *buf, int maxlen)
 {
     ui_input_style fallback;
-    int len;
+    int len, cur;
 
     if (!b || !src || !pushback || !buf || maxlen <= 0) return -1;
     if (!style) { ui_input_style_init(&fallback); style = &fallback; }
 
     len = (int) strlen(buf);
+    cur = len;
 
     for (;;) {
         int key;
 
-        paint(b, style, label, buf);
+        paint(b, style, label, buf, cur);
         /* The prompt is in a buffer until something sends it. */
         if (src->flush) src->flush(src->ctx);
         key = ui_key_read(src, pushback);
@@ -97,20 +98,7 @@ int ui_input(ansi_buf *b, const ui_key_source *src, int *pushback,
            text a door is about to act on. */
         if (key == UI_KEY_ESC || key >= 1000) continue;
 
-        if (key == 8 || key == 127) {
-            if (len > 0) buf[--len] = '\0';
-        } else if (key == 21) {              /* CTRL-U clears the line */
-            len = 0;
-            buf[0] = '\0';
-        /* Latin-1's printable half too (0xA0-0xFF): a caller's own name is
-           typed with them, and the board stores them as they are. 0x80-0x9F
-           are C1 controls and stay out. */
-        } else if (((key >= 32 && key < 127) || (key >= 160 && key <= 255)) && len < maxlen - 1) {
-            char c = (char) key;
-            if (style->upper && c >= 'a' && c <= 'z') c = (char) (c - 'a' + 'A');
-            buf[len++] = c;
-            buf[len] = '\0';
-        }
+        ui_line_key(buf, maxlen, &len, &cur, key, 0, style->upper);
     }
 }
 
@@ -148,4 +136,86 @@ int ui_confirm(ansi_buf *b, const ui_key_source *src, int *pushback,
         if (key == UI_KEY_ENTER) { restore(b); return default_yes ? 1 : 0; }
         if (key == UI_KEY_ESC) { restore(b); return 0; }
     }
+}
+
+void ui_hist_init(ui_hist *h)
+{
+    if (!h) return;
+    h->n = 0;
+    h->at = -1;
+    h->draft[0] = '\0';
+}
+
+void ui_hist_reset(ui_hist *h)
+{
+    if (!h) return;
+    h->at = -1;
+    h->draft[0] = '\0';
+}
+
+void ui_hist_add(ui_hist *h, const char *text)
+{
+    if (!h || !text) return;
+    if (text[0] != '\0') {
+        if (h->n == UI_HIST_MAX) {
+            memmove(h->line[0], h->line[1], sizeof(h->line[0]) * (UI_HIST_MAX - 1));
+            h->n--;
+        }
+        h->line[h->n][0] = '\0';
+        strncat(h->line[h->n], text, UI_HIST_TEXT - 1);
+        h->n++;
+    }
+    ui_hist_reset(h);
+}
+
+static void load(char *buf, int cap, int *len, int *cur, const char *text)
+{
+    buf[0] = '\0';
+    strncat(buf, text, (size_t) (cap - 1));
+    *len = (int) strlen(buf);
+    *cur = *len;
+}
+
+int ui_line_key(char *buf, int cap, int *len, int *cur, int key, ui_hist *h, int upper)
+{
+    if (key == UI_KEY_LEFT) { if (*cur > 0) (*cur)--; return 1; }
+    if (key == UI_KEY_RIGHT) { if (*cur < *len) (*cur)++; return 1; }
+    if (key == UI_KEY_HOME) { *cur = 0; return 1; }
+    if (key == UI_KEY_END) { *cur = *len; return 1; }
+    if (key == UI_KEY_UP && h) {
+        /* An empty line that is not browsing is the caller's Up. */
+        if (h->at == -1 && *len == 0) return 0;
+        if (h->n == 0) return 1;
+        if (h->at == -1) { h->draft[0] = '\0'; strncat(h->draft, buf, UI_HIST_TEXT - 1); }
+        if (h->at < h->n - 1) { h->at++; load(buf, cap, len, cur, h->line[h->n - 1 - h->at]); }
+        return 1;
+    }
+    if (key == UI_KEY_DOWN && h) {
+        if (h->at == -1) return 0;
+        h->at--;
+        load(buf, cap, len, cur, h->at == -1 ? h->draft : h->line[h->n - 1 - h->at]);
+        return 1;
+    }
+    if (key == UI_KEY_DELETE) {
+        if (*cur < *len) { memmove(buf + *cur, buf + *cur + 1, (size_t) (*len - *cur)); (*len)--; }
+        return 1;
+    }
+    if (key >= 1000) return 0;               /* any other cursor key means nothing in a line */
+    if (key == 8 || key == 127) {
+        if (*cur > 0) { memmove(buf + *cur - 1, buf + *cur, (size_t) (*len - *cur + 1)); (*cur)--; (*len)--; }
+        return 1;
+    }
+    if (key == 21) { *len = 0; *cur = 0; buf[0] = '\0'; return 1; }       /* CTRL-U clears the line */
+    /* Latin-1's printable half too (0xA0-0xFF): a caller's own name is
+       typed with them, and the board stores them as they are. 0x80-0x9F
+       are C1 controls and stay out. */
+    if (((key >= 32 && key < 127) || (key >= 160 && key <= 255)) && *len < cap - 1) {
+        char c = (char) key;
+        if (upper && c >= 'a' && c <= 'z') c = (char) (c - 'a' + 'A');
+        memmove(buf + *cur + 1, buf + *cur, (size_t) (*len - *cur + 1));
+        buf[(*cur)++] = c;
+        (*len)++;
+        return 1;
+    }
+    return 0;
 }

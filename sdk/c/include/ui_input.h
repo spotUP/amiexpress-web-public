@@ -60,6 +60,43 @@ int ui_confirm(ansi_buf *b, const ui_key_source *src, int *pushback,
                const ui_input_style *style, const char *question,
                int default_yes);
 
+
+/*
+ * ui_line: the editing rules of ui_input, one key at a time, for a door that
+ * owns its own event loop and screen (livechat) and so cannot hand control to
+ * the blocking ui_input. The buffer, length and cursor are the caller's.
+ *
+ * Keys: printable insert at the cursor; Backspace and Delete; Left, Right,
+ * Home, End; CTRL-U clears. With a history, Up and Down walk it (below).
+ */
+
+/** Lines kept by a history, and the longest line one holds. */
+#define UI_HIST_MAX 100
+#define UI_HIST_TEXT 256
+
+/** A ring of sent lines with draft recall: Up from a fresh line remembers it, Down past the newest brings it back. */
+typedef struct {
+    char line[UI_HIST_MAX][UI_HIST_TEXT];
+    int n;                       /* lines held, oldest dropped past UI_HIST_MAX */
+    int at;                      /* -1 not browsing, else how many back from the newest */
+    char draft[UI_HIST_TEXT];    /* what was typed before the first Up */
+} ui_hist;
+
+void ui_hist_init(ui_hist *h);
+/** Remember a sent line (empty lines are not kept) and stop browsing. */
+void ui_hist_add(ui_hist *h, const char *text);
+/** Stop browsing (the line was sent or replaced by the caller). */
+void ui_hist_reset(ui_hist *h);
+
+/**
+ * Apply `key` to `buf` (capacity `cap`, current `*len` / `*cur`).
+ * Returns 1 when the key edited or moved, 0 when it is not the line's.
+ * Up on an empty line that is not browsing returns 0, so the caller can use it
+ * for something else (livechat's message picker). `h` may be NULL.
+ * `upper` folds typed letters to upper case.
+ */
+int ui_line_key(char *buf, int cap, int *len, int *cur, int key, ui_hist *h, int upper);
+
 #ifdef __cplusplus
 }
 #endif

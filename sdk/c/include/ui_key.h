@@ -85,6 +85,8 @@ extern "C" {
 #define UI_KEY_F4    1014
 /** ESC [ Z: Shift+Tab. */
 #define UI_KEY_BACKTAB 1015
+/** ESC [ 3 ~: the Delete key. */
+#define UI_KEY_DELETE 1016
 /* A raw 0x1E read is UI_KEY_MOUSE: Ctrl-^ collides with the wake byte while the board's mouse absorber is armed. */
 #define UI_MOUSE_WAKE 0x1E
 

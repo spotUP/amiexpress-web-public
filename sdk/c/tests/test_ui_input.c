@@ -377,6 +377,35 @@ static void the_latin1_bounds_are_exact(void)
     printf("  [OK] latin1 0xA0 and 0xFF are accepted, the C1 control 0x9F is not\n");
 }
 
+/* B3: the per-key line core - cursor, Home/End, Delete, and the Up/Down history ring with draft recall. */
+static void the_line_core_edits_at_the_cursor_and_recalls_history(void)
+{
+    char buf[32] = "";
+    int len = 0, cur = 0, i;
+    ui_hist h;
+    const char *typed = "abc";
+    ui_hist_init(&h);
+    for (i = 0; typed[i]; i++) ui_line_key(buf, 32, &len, &cur, typed[i], &h, 0);
+    ui_line_key(buf, 32, &len, &cur, UI_KEY_LEFT, &h, 0);
+    ui_line_key(buf, 32, &len, &cur, 'X', &h, 0);
+    assert(strcmp(buf, "abXc") == 0 && cur == 3);
+    ui_line_key(buf, 32, &len, &cur, UI_KEY_HOME, &h, 0);
+    ui_line_key(buf, 32, &len, &cur, UI_KEY_DELETE, &h, 0);
+    assert(strcmp(buf, "bXc") == 0 && cur == 0 && len == 3);
+    ui_line_key(buf, 32, &len, &cur, UI_KEY_END, &h, 0);
+    assert(cur == 3);
+    ui_hist_add(&h, "one");
+    ui_hist_add(&h, "two");
+    ui_line_key(buf, 32, &len, &cur, UI_KEY_UP, &h, 0);
+    assert(strcmp(buf, "two") == 0);
+    ui_line_key(buf, 32, &len, &cur, UI_KEY_UP, &h, 0);
+    assert(strcmp(buf, "one") == 0);
+    ui_line_key(buf, 32, &len, &cur, UI_KEY_DOWN, &h, 0);
+    ui_line_key(buf, 32, &len, &cur, UI_KEY_DOWN, &h, 0);
+    assert(strcmp(buf, "bXc") == 0 && cur == len);                 /* the draft comes back */
+    printf("  [OK] the line core edits at the cursor, deletes forward and recalls history with the draft\n");
+}
+
 int main(void)
 {
     printf("ui_input\n");
@@ -398,6 +427,7 @@ int main(void)
     a_caller_who_hangs_up_mid_edit_is_not_an_empty_answer();
     confirm_answers_y_n_enter_and_escape();
     a_swedish_letter_is_kept();
+    the_line_core_edits_at_the_cursor_and_recalls_history();
     a_masked_prompt_never_echoes_the_text();
     a_masked_prompt_stays_masked_through_edits();
     the_latin1_bounds_are_exact();

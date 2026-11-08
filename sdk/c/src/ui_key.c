@@ -66,12 +66,13 @@ int ui_decode_escape(const ui_key_source *src, int *pushback)
     case 'R': return UI_KEY_F3;
     case 'S': return UI_KEY_F4;
     case 'Z': return UI_KEY_BACKTAB;
-    case '5': case '6': case '1': case '4': {
+    case '5': case '6': case '1': case '4': case '3': {
         /* ESC [ n ~ : the tilde is part of the sequence. */
         int t = src->next(src->ctx);
         if (t < 0) {
             return t;
         }
+        if (c == '3') return UI_KEY_DELETE;
         if (c == '5') return UI_KEY_PGUP;
         if (c == '6') return UI_KEY_PGDN;
         if (c == '1') return UI_KEY_HOME;
