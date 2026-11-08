@@ -9,15 +9,20 @@ OUT=build/release
 STAGE="$OUT/stage/LiveChat68"
 rm -rf "$OUT/stage" "$OUT/LiveChat68.lha"
 mkdir -p "$STAGE"
-for f in LIVECHAT68 LIVECHAT68.info LIVECHAT.cfg.example; do
+for f in LIVECHAT68 LIVECHAT.cfg.example; do
   [ -f "$SRC/$f" ] || { echo "livechat-release: missing $SRC/$f" >&2; exit 1; }
   cp "$SRC/$f" "$STAGE/$f"
 done
-cat > "$STAGE/README.txt" <<'TXT'
-LiveChat68 - live chat door for AmiExpress.
-Copy LIVECHAT68 and LIVECHAT68.info into Doors:, copy LIVECHAT.cfg.example to LIVECHAT.cfg and fill in Host and BoardKey.
-(Full install notes to follow.)
-TXT
+# README comes from the door drawer; the release icon is generated (tools/make-lc-icon.ts).
+[ -f "$SRC/README.txt" ] || { echo "livechat-release: missing $SRC/README.txt" >&2; exit 1; }
+cp "$SRC/README.txt" "$STAGE/README.txt"
+[ -f tools/release/LC.info ] || { echo "livechat-release: missing tools/release/LC.info" >&2; exit 1; }
+cp tools/release/LC.info "$STAGE/LC.info"
+# make livechat-release passes the freshly built door here; otherwise the drawer's binary is used.
+if [ -n "${LIVECHAT_BIN:-}" ]; then
+  [ -f "$LIVECHAT_BIN" ] || { echo "livechat-release: missing $LIVECHAT_BIN" >&2; exit 1; }
+  cp "$LIVECHAT_BIN" "$STAGE/LIVECHAT68"
+fi
 # Safety: no cfg (it may hold a real key) may ever be staged. Case-insensitive.
 if find "$STAGE" -iname 'LIVECHAT.cfg' | grep -q .; then
   echo "livechat-release: LIVECHAT.cfg would be staged - refusing" >&2
