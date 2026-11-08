@@ -165,6 +165,10 @@ export function applyGraphicsAnswer(socket: any, session: BBSSession, answer: st
   // has, and answering P8 down a byte transport cannot change that.
   const wantsWide = hasP && /P\s*8/.test(answer) && session.connectionType === 'web';
   const hasQ = answer.includes('Q'); // Quick logon
+  // express.e:29072 ansiColour:=TRUE, then 29538 IF 'N' ansiColour:=FALSE. This is the flag
+  // aePuts2 reads (AnsiUtil.forCaller strips SGR at the output choke); ansiEnabled
+  // below is a separate, mostly-unread field and never reached the wire.
+  session.ansiMode = !hasN;
 
   if (hasP) {
     // PETSCII mode takes priority (40x25, .seq screens)

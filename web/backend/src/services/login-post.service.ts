@@ -487,7 +487,9 @@ export async function runPostAuthLogin(
   session.accountSavedAtLogoff = false;
   // express.e:29072 ansiColour:=TRUE - every call starts in colour. M and a
   // door's DT_ANSICOLOR switch this call only; the stored flag never seeds it.
-  session.ansiMode = true;
+  // The graphics prompt (applyGraphicsAnswer) already set it from the N answer
+  // - express.e sets TRUE at call start, BEFORE that prompt - so only default it.
+  session.ansiMode ??= true;
 
   // Modem emulation (user.baud=0 → full speed). Works on web and
   // telnet/SSH alike — the emitter wrapper has its own `emit` we wrap.
