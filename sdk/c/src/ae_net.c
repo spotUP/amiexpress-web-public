@@ -16,6 +16,11 @@
  *   3. neither defined          -> POSIX (getaddrinfo + BSD sockets).
  *      The native dev/test build; test_ae_ae_http.c exercises this one.
  *
+ * TLS (ae_net_open_tls) is in ae_net_tls.c (OpenSSL 3 natively, AmiSSL 5 on AMIGA),
+ * reached only through the ops table it registers (ae_net_internal.h); it is the
+ * one stated exemption to the "#ifdef AMIGA" rule above. Branch 1 answers
+ * "TLS not built".
+ *
  * Branches 2 and 3 are written to mirror each other function-for-function:
  * resolve host, open a non-blocking socket, connect with a wait-for-
  * writable timeout, switch back to blocking, then use a wait-for-readable
@@ -24,6 +29,7 @@
 
 #include <string.h>
 #include "ae_net.h"
+#include "ae_net_internal.h"
 
 static char g_last_error[128] = "";
 
@@ -42,6 +48,26 @@ const char *ae_net_last_error(void)
 {
     return g_last_error;
 }
+
+#if !defined(AE_NET_STUB)
+/* TLS lives in ae_net_tls.c, which this file never references: ae_net_open_tls()
+ * registers its ops here, so a door that does not use TLS does not link it.
+ * A descriptor the ops claim is an SSL session; every other one is a plain socket. */
+static const struct ae_net_tls_ops *g_tls = (const struct ae_net_tls_ops *) 0;
+
+void ae_net_register_tls(const struct ae_net_tls_ops *ops)
+{
+    g_tls = ops;
+}
+
+static int tls_is(int s)
+{
+    return g_tls != (const struct ae_net_tls_ops *) 0 && g_tls->is(s);
+}
+static long tls_write(int s, const void *buf, unsigned long len) { return g_tls->write(s, buf, len); }
+static long tls_read(int s, void *buf, unsigned long len) { return g_tls->read(s, buf, len); }
+static void tls_close(int s) { g_tls->close(s); }
+#endif
 
 #if defined(AE_NET_STUB)
 
@@ -78,6 +104,12 @@ long ae_net_read(int s, void *buf, unsigned long len)
 
 void ae_net_close(int s)
 {
+}
+
+int ae_net_open_tls(const char *host, int port, int timeout_secs)
+{
+    set_error("ae_net: TLS not built (AE_NET_STUB)");
+    return -1;
 }
 
 #elif defined(AMIGA)
@@ -293,9 +325,29 @@ int ae_net_open(const char *host, int port, int timeout_secs)
     return s;
 }
 
+/* Waits for the descriptor to become readable (for_write 0) or writable
+ * (1), bounded by the open's timeout. 1 ready, 0 timed out, -1 error. */
+static int wait_fd(int s, int for_write)
+{
+    struct timeval tv;
+    long mask = 1L << s;
+
+    tv.tv_sec = g_timeout_secs; tv.tv_usec = 0;
+    if (for_write) return (int) WaitSelect(s + 1, (APTR) 0, (APTR) &mask, (APTR) 0, &tv, (unsigned long *) 0);
+    return (int) WaitSelect(s + 1, (APTR) &mask, (APTR) 0, (APTR) 0, &tv, (unsigned long *) 0);
+}
+
+static void set_nonblocking(int s, int on)
+{
+    long v = on ? 1 : 0;
+    IoctlSocket(s, FIONBIO, (char *) &v);
+}
+
 long ae_net_write(int s, const void *buf, unsigned long len)
 {
-    long n = send(s, (APTR) buf, (long) len, 0);
+    long n;
+    if (tls_is(s)) return tls_write(s, buf, len);
+    n = send(s, (APTR) buf, (long) len, 0);
     if (n < 0) set_error("ae_net: send() failed");
     return n;
 }
@@ -304,12 +356,10 @@ long ae_net_write(int s, const void *buf, unsigned long len)
  * first, so a peer that stops sending mid-response cannot hang the door. */
 long ae_net_read(int s, void *buf, unsigned long len)
 {
-    struct timeval tv;
-    long rmask = 1L << s;
     long n;
 
-    tv.tv_sec = g_timeout_secs; tv.tv_usec = 0;
-    n = WaitSelect(s + 1, (APTR) &rmask, (APTR) 0, (APTR) 0, &tv, (unsigned long *) 0);
+    if (tls_is(s)) return tls_read(s, buf, len);
+    n = wait_fd(s, 0);
     if (n == 0) { set_error("ae_net: read timed out"); return -1; }
     if (n < 0) { set_error("ae_net: WaitSelect() failed"); return -1; }
 
@@ -320,7 +370,9 @@ long ae_net_read(int s, void *buf, unsigned long len)
 
 void ae_net_close(int s)
 {
-    if (s >= 0) CloseSocket(s);
+    if (s < 0) return;
+    if (tls_is(s)) tls_close(s);
+    CloseSocket(s);
 }
 
 #else
@@ -470,9 +522,35 @@ int ae_net_open(const char *host, int port, int timeout_secs)
     return s;
 }
 
+/* Same helpers as the Amiga branch's, over select()/fcntl(). */
+static int wait_fd(int s, int for_write)
+{
+    fd_set fds;
+    struct timeval tv;
+    int rv;
+
+    for (;;) {
+        FD_ZERO(&fds);
+        FD_SET(s, &fds);
+        tv.tv_sec = g_timeout_secs;
+        tv.tv_usec = 0;
+        if (for_write) rv = select(s + 1, (fd_set *) 0, &fds, (fd_set *) 0, &tv);
+        else           rv = select(s + 1, &fds, (fd_set *) 0, (fd_set *) 0, &tv);
+        if (rv < 0 && errno == EINTR) continue;
+        return rv;
+    }
+}
+
+static void set_nonblocking(int s, int on)
+{
+    int flags = fcntl(s, F_GETFL, 0);
+    fcntl(s, F_SETFL, on ? (flags | O_NONBLOCK) : (flags & ~O_NONBLOCK));
+}
+
 long ae_net_write(int s, const void *buf, unsigned long len)
 {
     ssize_t n;
+    if (tls_is(s)) return tls_write(s, buf, len);
     n = write(s, buf, (size_t) len);
     if (n < 0) {
         set_error("ae_net: write() failed");
@@ -482,22 +560,11 @@ long ae_net_write(int s, const void *buf, unsigned long len)
 
 long ae_net_read(int s, void *buf, unsigned long len)
 {
-    fd_set rfds;
-    struct timeval tv;
     int rv;
     ssize_t n;
 
-    for (;;) {
-        FD_ZERO(&rfds);
-        FD_SET(s, &rfds);
-        tv.tv_sec = g_timeout_secs;
-        tv.tv_usec = 0;
-        rv = select(s + 1, &rfds, (fd_set *) 0, (fd_set *) 0, &tv);
-        if (rv < 0 && errno == EINTR) {
-            continue;
-        }
-        break;
-    }
+    if (tls_is(s)) return tls_read(s, buf, len);
+    rv = wait_fd(s, 0);
     if (rv == 0) {
         set_error("ae_net: read timed out");
         return -1;
@@ -517,8 +584,16 @@ long ae_net_read(int s, void *buf, unsigned long len)
 void ae_net_close(int s)
 {
     if (s >= 0) {
+        if (tls_is(s)) tls_close(s);
         close(s);
     }
 }
 
+#endif
+
+#if !defined(AE_NET_STUB)
+/* What ae_net_tls.c borrows from the branch above (ae_net_internal.h). */
+void ae_net_set_error(const char *msg) { set_error(msg); }
+int ae_net_wait_fd(int s, int for_write) { return wait_fd(s, for_write); }
+void ae_net_set_nonblocking(int s, int on) { set_nonblocking(s, on); }
 #endif

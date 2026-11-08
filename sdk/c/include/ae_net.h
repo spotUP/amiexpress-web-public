@@ -23,6 +23,14 @@ extern "C" {
  * most timeout_secs; the same bound is used in front of every later read. */
 int ae_net_open(const char *host, int port, int timeout_secs);
 
+/* As ae_net_open(), then a TLS handshake: the certificate chain is checked
+ * against the system trust store (OpenSSL natively, AmiSSL 5 on the Amiga) and
+ * the certificate must name `host`. Returns a descriptor that ae_net_read,
+ * ae_net_write and ae_net_close treat as an encrypted connection, or -1 -
+ * ae_net_last_error() says why (certificate rejected, AmiSSL not installed...).
+ * There is no way to skip verification. */
+int ae_net_open_tls(const char *host, int port, int timeout_secs);
+
 /* Sends up to `len` bytes. Returns the count sent (which may be short),
  * or <= 0 on error. */
 long ae_net_write(int s, const void *buf, unsigned long len);

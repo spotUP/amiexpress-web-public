@@ -47,10 +47,17 @@ extern "C" {
 /** What PROGDIR:LIVECHAT.cfg holds. */
 typedef struct {
     char host[64];
-    int port;                  /* 80 unless set */
+    int port;                  /* 443 with tls, else 80, unless set */
     char board_key[128];       /* <board-id>.<secret> */
     int timeout_secs;          /* 10 unless set */
+    int tls;                   /* Tls=: 1 unless set to 0 */
+    int allow_plain_http;      /* AllowPlainHttp=: 0 unless set to 1; without it Tls=0 is refused */
 } ae_chat_config;
+
+/** NULL when the config may connect; else the one ASCII line saying why not
+ *  (plain HTTP without AllowPlainHttp=1). The board key is never sent in
+ *  clear text unless the sysop allowed it. */
+const char *ae_chat_config_refusal(const ae_chat_config *cfg);
 
 /**
  * Parse `Key=value` text (`#` and `;` comments; keys Host, Port, BoardKey,

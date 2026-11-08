@@ -129,7 +129,7 @@ static void start_stub(void)
     assert(stub_port > 0);
     f = fopen("build/test_chat.cfg", "w");
     assert(f);
-    fprintf(f, "# test\nHost=127.0.0.1\nPort=%d\nBoardKey=boardA.secret\nTimeout=5\n", stub_port);
+    fprintf(f, "# test\nHost=127.0.0.1\nPort=%d\nTls=0\nAllowPlainHttp=1\nBoardKey=boardA.secret\nTimeout=5\n", stub_port);
     fclose(f);
 }
 
@@ -197,7 +197,18 @@ static void test_config(void)
     assert(ae_chat_config_parse(&cfg, "# c\nHost=doors.uprough.net\nPort=8080\nBoardKey=a.b\n; x\nTimeout=7\n") == 1);
     assert(strcmp(cfg.host, "doors.uprough.net") == 0 && cfg.port == 8080 && strcmp(cfg.board_key, "a.b") == 0 && cfg.timeout_secs == 7);
     assert(ae_chat_config_parse(&cfg, "Host=x\n") == 0);
-    assert(cfg.port == 80 && cfg.timeout_secs == AE_CHAT_DEFAULT_TIMEOUT);
+    assert(cfg.port == 443 && cfg.tls == 1 && cfg.allow_plain_http == 0 && cfg.timeout_secs == AE_CHAT_DEFAULT_TIMEOUT);
+    assert(ae_chat_config_refusal(&cfg) == 0);
+    /* plain HTTP: refused unless the sysop allowed it; the port default follows the scheme */
+    assert(ae_chat_config_parse(&cfg, "Host=x\nBoardKey=a.b\nTls=0\n") == 1);
+    assert(cfg.port == 80 && ae_chat_config_refusal(&cfg) != 0);
+    assert(ae_chat_config_parse(&cfg, "Host=x\nBoardKey=a.b\nTls=0\nAllowPlainHttp=1\n") == 1);
+    assert(ae_chat_config_refusal(&cfg) == 0);
+    {
+        ae_chat refused;
+        assert(ae_chat_config_parse(&cfg, "Host=127.0.0.1\nBoardKey=a.b\nTls=0\n") == 1);
+        assert(ae_chat_open(&refused, &cfg, "h", 0) == AE_CHAT_ERR_ARGS);
+    }
     assert(ae_chat_config_load(&cfg, "build/no-such-file.cfg") == 0);
     printf("  [OK] config parser: keys, comments, defaults, missing file\n");
 }

@@ -255,16 +255,16 @@ static int parse_header_line(char *line, ae_http_response *resp,
     return 0;
 }
 
-/* Formats ":<port>" (or an empty string for port 80, the default HTTP
- * port that never needs a Host: suffix) into `out` (at least 12 bytes).
- * Avoids sprintf(): C89 has no snprintf. */
-static void format_port_suffix(char *out, int port)
+/* Formats ":<port>" (or an empty string for the scheme's default port: 443
+ * with TLS, 80 without, which never need a Host: suffix) into `out` (at least
+ * 12 bytes). Avoids sprintf(): C89 has no snprintf. */
+static void format_port_suffix(char *out, int port, int tls)
 {
     char tmp[12];
     int i = 0;
     unsigned int v;
 
-    if (port == 80) {
+    if (port == (tls ? 443 : 80)) {
         out[0] = '\0';
         return;
     }
@@ -345,7 +345,7 @@ static int write_all(int fd, const char *buf, unsigned long len)
  * non-NULL by the time this function is called - ae_http_request()
  * validates that before ever calling build_request(). */
 static int build_request(char *out, unsigned long outsize, const char *method,
-                         const char *host, int port, const char *user_agent,
+                         const char *host, int port, int tls, const char *user_agent,
                          const char *path_and_query,
                          int have_body, unsigned long body_len,
                          const char * const *extra_headers, int extra_header_count)
@@ -362,7 +362,7 @@ static int build_request(char *out, unsigned long outsize, const char *method,
     unsigned long lm, l2, l3, lh, lp, lport, lua;
     int i;
 
-    format_port_suffix(portbuf, port);
+    format_port_suffix(portbuf, port, tls);
 
     lm = (unsigned long) strlen(method);
     l2 = (unsigned long) (sizeof(p2) - 1);
@@ -466,14 +466,15 @@ int ae_http_request(const ae_http_target *target, const char *method,
     have_body = (body != (const char *) 0);
     user_agent = (target->user_agent != (const char *) 0) ? target->user_agent : AE_HTTP_USER_AGENT;
 
-    req_len = build_request(request, sizeof(request), method, target->host, target->port,
+    req_len = build_request(request, sizeof(request), method, target->host, target->port, target->tls,
                             user_agent, path_and_query,
                             have_body, body_len, extra_headers, extra_header_count);
     if (req_len < 0) {
         return AE_HTTP_ERR_REQUEST_TOO_LONG;
     }
 
-    fd = ae_net_open(target->host, target->port, target->timeout_secs);
+    fd = target->tls ? ae_net_open_tls(target->host, target->port, target->timeout_secs)
+                    : ae_net_open(target->host, target->port, target->timeout_secs);
     if (fd < 0) {
         return AE_HTTP_ERR_CONNECT;
     }

@@ -43,9 +43,10 @@ extern "C" {
 /* Where a request goes. The strings are borrowed for the call only. */
 typedef struct {
     const char *host;        /* "bbs.uprough.net"; never NULL */
-    int port;                /* 80 gets no ":port" suffix in the Host header */
+    int port;                /* 443 (tls) or 80 (plain) gets no ":port" suffix in the Host header */
     int timeout_secs;        /* bounds the connect and every read */
     const char *user_agent;  /* NULL -> AE_HTTP_USER_AGENT */
+    int tls;                 /* nonzero (last, so positional initialisers stay valid; 0 = plain): HTTPS through ae_net_open_tls(); the certificate is always verified */
 } ae_http_target;
 
 typedef struct {

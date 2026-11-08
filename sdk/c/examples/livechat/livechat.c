@@ -42,6 +42,8 @@
 #include "ae_board_screen.h"
 #include "ae_chat.h"
 #include "ae_host.h"
+#include "ae_http.h"
+#include "ae_net.h"
 #include "ae_session.h"
 #include "ui_ansi.h"
 #include "ui_cells.h"
@@ -1817,8 +1819,15 @@ int main(int argc, char **argv)
         finish();
         return 0;
     }
+    if (ae_chat_config_refusal(&cfg) != 0) {
+        early_message("Setup", ae_chat_config_refusal(&cfg));
+        finish();
+        return 0;
+    }
     if (ae_chat_open(&chat, &cfg, handle, (is_sysop = (user_level = ae_user_level(&session)) >= 255)) != AE_CHAT_OK) {
-        early_message("Error", "The chat server did not answer.");
+        /* A connect failure carries its reason (certificate rejected, AmiSSL missing...) */
+        early_message("Error", chat.http_error == AE_HTTP_ERR_CONNECT ? ae_net_last_error()
+                                                                      : "The chat server did not answer.");
         finish();
         return 0;
     }

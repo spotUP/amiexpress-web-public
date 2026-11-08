@@ -44,9 +44,12 @@ int ae_chat_config_parse(ae_chat_config *cfg, const char *text)
     const char *p = text;
 
     memset(cfg, 0, sizeof *cfg);
-    cfg->port = 80;
     cfg->timeout_secs = AE_CHAT_DEFAULT_TIMEOUT;
-    if (text == 0) return 0;
+    cfg->tls = 1;
+    if (text == 0) {
+        cfg->port = 443;
+        return 0;
+    }
 
     while (*p != '\0') {
         unsigned long n = 0;
@@ -77,9 +80,20 @@ int ae_chat_config_parse(ae_chat_config *cfg, const char *text)
         } else if (strcmp(line, "Timeout") == 0) {
             int secs = atoi(value);
             if (secs > 0 && secs < 120) cfg->timeout_secs = secs;
+        } else if (strcmp(line, "Tls") == 0) {
+            cfg->tls = atoi(value) != 0;
+        } else if (strcmp(line, "AllowPlainHttp") == 0) {
+            cfg->allow_plain_http = atoi(value) != 0;
         }
     }
+    if (cfg->port == 0) cfg->port = cfg->tls ? 443 : 80;
     return cfg->host[0] != '\0' && cfg->board_key[0] != '\0';
+}
+
+const char *ae_chat_config_refusal(const ae_chat_config *cfg)
+{
+    if (cfg->tls || cfg->allow_plain_http) return 0;
+    return "Plain HTTP refused: set Tls=1, or AllowPlainHttp=1 in LIVECHAT.cfg.";
 }
 
 int ae_chat_config_load(ae_chat_config *cfg, const char *path)
@@ -144,9 +158,12 @@ static int call_once(ae_chat *c, const char *method, const char *path,
     }
     if (body != 0) headers[nheaders++] = "Content-Type: application/json\r\n";
 
+    if (ae_chat_config_refusal(&c->cfg) != 0) return AE_CHAT_ERR_ARGS;
+
     memset(&target, 0, sizeof target);
     target.host = c->cfg.host;
-    target.port = c->cfg.port > 0 ? c->cfg.port : 80;
+    target.tls = c->cfg.tls;
+    target.port = c->cfg.port > 0 ? c->cfg.port : (c->cfg.tls ? 443 : 80);
     target.timeout_secs = c->cfg.timeout_secs > 0 ? c->cfg.timeout_secs : AE_CHAT_DEFAULT_TIMEOUT;
     target.user_agent = "AmiExpress-LIVECHAT68/1.0";
     memset(&response, 0, sizeof response);
@@ -220,6 +237,7 @@ int ae_chat_open(ae_chat *c, const ae_chat_config *cfg, const char *handle, int 
 {
     if (c == 0 || cfg == 0 || blank(handle)) return AE_CHAT_ERR_ARGS;
     if (blank(cfg->host) || blank(cfg->board_key)) return AE_CHAT_ERR_ARGS;
+    if (ae_chat_config_refusal(cfg) != 0) return AE_CHAT_ERR_ARGS;
     memset(c, 0, sizeof *c);
     c->cfg = *cfg;
     copy_field(c->handle, sizeof c->handle, handle);

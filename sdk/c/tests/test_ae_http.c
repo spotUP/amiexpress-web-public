@@ -116,6 +116,7 @@ static void cfg_for_port(ae_http_target *cfg, int port)
     cfg->port = port;
     cfg->timeout_secs = 3;
     cfg->user_agent = (const char *) 0; /* the SDK's own */
+    cfg->tls = 0;
 }
 
 TEST(get_200_with_content_length_delivers_exact_body)

@@ -8,17 +8,31 @@
       "label": "Door server host",
       "type": "string",
       "default": "doors.uprough.net",
-      "help": "Plain HTTP host serving /chat/v1. The 68K stack cannot do TLS, so this is http, not https."
+      "help": "Host serving /chat/v1. The door speaks HTTPS to it through AmiSSL 5 (amisslmaster.library) unless Use TLS is off."
     },
     {
       "key": "port",
       "cfgKey": "Port",
       "label": "Port",
       "type": "number",
-      "default": 80,
+      "default": 443,
       "min": 1,
       "max": 65535,
-      "help": "80 for the live door server."
+      "help": "443 for the live door server over TLS; 80 only with Use TLS off and Allow plain HTTP on."
+    },
+    {
+      "key": "tls",
+      "cfgKey": "Tls",
+      "label": "Use TLS",
+      "type": "boolean",
+      "default": true
+    },
+    {
+      "key": "allowPlainHttp",
+      "cfgKey": "AllowPlainHttp",
+      "label": "Allow plain HTTP",
+      "type": "boolean",
+      "default": false
     },
     {
       "key": "boardKey",

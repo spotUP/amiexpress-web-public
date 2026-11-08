@@ -8,9 +8,11 @@
 
 AE_SETTINGS_BEGIN(LC, "LIVECHAT.cfg")
   AE_SETTING_STR_HELP("host", "Door server host", "doors.uprough.net", "Host",
-    "Plain HTTP host serving /chat/v1. The 68K stack cannot do TLS, so this is http, not https.")
-  AE_SETTING_INT_RANGE("port", "Port", 80, 1, 65535, "Port",
-    "80 for the live door server.")
+    "Host serving /chat/v1. The door speaks HTTPS to it through AmiSSL 5 (amisslmaster.library) unless Use TLS is off.")
+  AE_SETTING_INT_RANGE("port", "Port", 443, 1, 65535, "Port",
+    "443 for the live door server over TLS; 80 only with Use TLS off and Allow plain HTTP on.")
+  AE_SETTING_BOOL("tls", "Use TLS", 1, "Tls")
+  AE_SETTING_BOOL("allowPlainHttp", "Allow plain HTTP", 0, "AllowPlainHttp")
   AE_SETTING_SECRET_SYS("boardKey", "Board key", "BoardKey", "achievements_board_key",
     "The board's key for the door server, in the form <board>.<secret>. Left blank, the door uses the board's own achievements board key from System Config - you do not need to paste it here.")
   AE_SETTING_STR_HELP("boardId", "Board id (optional)", "", "BoardId",
