@@ -45,6 +45,7 @@ import { DoorExitDetector, type CodeBoundsRef } from "./lifecycle/DoorExitDetect
 import { DeferredTermination } from "./lifecycle/DeferredTermination";
 import { TimMessagePoller } from "./lifecycle/TimMessagePoller";
 import { DoorTrapDispatcher } from "./lifecycle/DoorTrapDispatcher.js";
+import { PcProfiler } from "./lifecycle/pc-profiler.js";
 import { DoorPostMortemDebug } from "./lifecycle/DoorPostMortemDebug.js";
 import { getSystemTime } from '../../utils/date-time.util';
 import { debugLog } from "../../utils/debug-log";
@@ -74,6 +75,7 @@ export class DoorLifecycleManager {
   private timHandler: TIMDoorMessageHandler | null = null;
   private libraryManager: LibraryManager;
   private doorLoader: DoorLoader;
+  private readonly pcProfiler = PcProfiler.fromEnv(() => this.doorLoader.getSymbolResolver());
   private messageHandler: DoorMessageHandler | null = null;
   /**
    * Shared code-region bounds. Mutated on first DoorExitDetector.checkExitConditions
@@ -1049,12 +1051,13 @@ console.error(`[DoorLifecycleManager] CRITICAL: Memory[0x4] became ZERO at iter 
         // latency; the batch is just the inner ceiling. Env override lets operators
         // tune per deployment: single-user local = higher (5000-10000) = snappier
         // door input echo; shared production = keep 2000 for fairness.
-        const BATCH_SIZE = process.env.DEBUG_SINGLE_STEP
+        const BATCH_SIZE = process.env.DEBUG_SINGLE_STEP || this.pcProfiler
           ? 1
           : Number(process.env.AEDOOR_BATCH_SIZE ?? 2000);
         const pcBeforeBatch = this.emulator.getRegister(16);
         const batchStart = ENABLE_PROFILING ? Date.now() : 0;
         const result = this.emulator.executeUntilTrap(BATCH_SIZE);
+        if (result === 1) this.pcProfiler?.record(pcBeforeBatch >>> 0);
         if (ENABLE_PROFILING) profileBatchExec += Date.now() - batchStart;
         // The MULTICOM table is one shared block on the Amiga; pass on what
         // this door wrote into it (throttled inside).
