@@ -754,6 +754,19 @@ static void test_door_b4_presence(void)
     printf("  [OK] door: /whois /away /back /status /nick reach the presence and profile routes\n");
 }
 
+/* A8: a hub board_joined row (no room) prints one system line, the same text web chat shows. */
+static void test_door_board_joined(void)
+{
+    start_stub();
+    strcpy(st->pending_row, "board_joined||||1700000500|0|Night Owl BBS");
+    poll_steps = 2; poll_step_ticks = IDLE_SLEEP_TICKS;                     /* idle polling fetches the row before /q */
+    drive(KEYS("\r" "/q\r"), 1);
+    poll_steps = POLL_STEPS_DEFAULT; poll_step_ticks = POLL_STEP_TICKS;
+    assert(st->events >= 1 && has_line(0, "Night Owl BBS joined the federation"));
+    stop_stub();
+    printf("  [OK] door: a board_joined event says the board joined the federation\n");
+}
+
 /* D12: who.txt statuses mark the user list, and a presence event updates the mark and the text. */
 static void test_door_b4_marks(void)
 {
@@ -870,6 +883,7 @@ int main(void)
     test_door_react_without_event();
     test_door_delete_and_kicked();
     test_door_b4_presence();
+    test_door_board_joined();
     test_door_b4_marks();
     test_door_b4_ignore();
     test_door_b4_user_menu();

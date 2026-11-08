@@ -652,6 +652,10 @@ static void take_events(void)
             M.room[0] = '\0';
         } else if (strcmp(type, "muted") == 0 && strcmp(user, handle) == 0 && in_room) {
             system_line("You have been muted");
+        } else if (strcmp(type, "board_joined") == 0 && f[7][0] != '\0') {
+            /* hub board_joined (no room): a new board registered; web chat says the same (chat-session-bridge) */
+            sprintf(line, "%.80s joined the federation", f[7]);
+            system_line(line);
         }
     }
     for (i = 0; i < nreacted; i++) load_reactions(reacted[i]);
