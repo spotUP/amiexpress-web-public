@@ -175,6 +175,9 @@ static void test_client(void)
 
     assert(ae_chat_history(&c, "lobby", 0, 20) == AE_CHAT_OK);
     assert(ae_chat_next_row(&c, f, AE_CHAT_ROW_FIELDS) == 8 && strcmp(f[7], "hello there|bar") == 0);   /* '!' is a pipe */
+    /* A field the server appended later is dropped, not folded into the last field a narrower caller reads. */
+    assert(ae_chat_history(&c, "lobby", 0, 20) == AE_CHAT_OK);
+    assert(ae_chat_next_row(&c, f, 6) == 8 && strcmp(f[5], "m1") == 0);
 
     assert(ae_chat_send(&c, "lobby", "hi", 0, 0) == AE_CHAT_OK && strcmp(st->last_message, "hi") == 0);
     assert(ae_chat_poll(&c, 0) == AE_CHAT_OK);

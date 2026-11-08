@@ -285,7 +285,9 @@ int ae_chat_next_row(ae_chat *c, char **fields, int max)
 
         for (i = 0; i < max; i++) fields[i] = line + strlen(line); /* "" */
         for (;;) {
-            char *bar = (n < max - 1) ? strchr(line, '|') : 0;
+            /* Split every field, so one the server appended later is dropped
+             * here instead of folded into the last field this caller reads. */
+            char *bar = strchr(line, '|');
             if (n < max) fields[n] = line;
             n++;
             if (bar == 0) break;
