@@ -454,11 +454,14 @@ static void side_user(const char *user, int add)
 
 /** Replaces a message's reaction counts with the server's (reactions.txt rows emoji|count|mine): the
  *  TS door gets the full counts with every chat:reaction and keeps them per message the same way. */
+static char reactions_loaded[24];      /* the id load_reactions last read: react_on skips a second read */
+
 static void load_reactions(const char *id)
 {
     char *f[AE_CHAT_ROW_FIELDS];
     lc_line *l = line_by_id(id);
     if (l == 0 || ae_chat_reactions(&chat, id) != AE_CHAT_OK) return;
+    clean(reactions_loaded, sizeof reactions_loaded, id);
     l->nreact = 0;
     while (ae_chat_next_row(&chat, f, AE_CHAT_ROW_FIELDS) >= 3) {
         lc_react *r;
@@ -537,6 +540,22 @@ static void take_events(void)
 static void do_poll(void)
 {
     if (ae_chat_poll(&chat, 0) == AE_CHAT_OK) take_events();
+}
+
+/** Reacts and shows the result. The server keeps one row per user, emoji and message and sends a
+ *  react event only when it added one, so a repeat comes back OK with no event; the counts are read
+ *  back here when the poll did not already read them, else nothing on screen moves. */
+static int react_on(const char *msg_id, const char *emoji)
+{
+    char id[24];
+    int count = 0, rc;
+    clean(id, sizeof id, msg_id);            /* the poll may move M.lines under the caller's row */
+    rc = ae_chat_react(&chat, id, emoji, &count);
+    if (rc != AE_CHAT_OK) return rc;
+    reactions_loaded[0] = '\0';
+    do_poll();
+    if (strcmp(reactions_loaded, id) != 0) load_reactions(id);
+    return AE_CHAT_OK;
 }
 
 /* ---- rooms and DMs ------------------------------------------------------ */
@@ -891,7 +910,7 @@ static void react_typed(const char *cmd, const char *rest)
 {
     char a[24], b[16];
     lc_line *l;
-    int count = 0;
+    int count = 0, rc;
     arg_word(rest, a, sizeof a);
     if (strcmp(cmd, "unreact") == 0) {
         arg_word(after_word(rest), b, sizeof b);
@@ -902,7 +921,8 @@ static void react_typed(const char *cmd, const char *rest)
     }
     if (a[0] == '\0') { usage(strcmp(cmd, "love") == 0 ? "/love <msg-id>" : "/thumbsup <msg-id>"); return; }
     if ((l = typed_message(a)) == 0) return;
-    then_poll(ae_chat_react(&chat, l->id, strcmp(cmd, "love") == 0 ? "heart" : "+1", &count));
+    rc = react_on(l->id, strcmp(cmd, "love") == 0 ? "heart" : "+1");
+    if (rc != AE_CHAT_OK) show_error(rc);
 }
 
 /* TS /help <command>: name, aliases, description, usage - the registered text of the commands this door runs. */
@@ -993,15 +1013,14 @@ static int run_command(const char *line)
     if (is_cmd(cmd, "t", "thread")) { reply_typed(rest, 1); return 0; }
     if (strcmp(cmd, "react") == 0) {
         lc_line *l;
-        int count = 0;
         arg_word(rest, a, sizeof a);
         n = atoi(a);
         l = line_by_number(n);
         rest = after_word(rest);
         if (l == 0 || l->id[0] == '\0') { system_line("No such message number."); return 0; }
         if (*rest == '\0') { system_line("Usage: /react n emoji"); return 0; }
-        rc = ae_chat_react(&chat, l->id, rest, &count);
-        if (rc == AE_CHAT_OK) do_poll(); else show_error(rc);          /* the react event repaints the counts */
+        rc = react_on(l->id, rest);
+        if (rc != AE_CHAT_OK) show_error(rc);
         return 0;
     }
     if (is_cmd(cmd, "d", "dm") || strcmp(cmd, "msg") == 0) {
@@ -1174,8 +1193,7 @@ static void ctx_run(const char *it)
         const lc_line *l = M.ctx_target >= 0 && M.ctx_target < M.nlines ? &M.lines[M.ctx_target] : 0;
         if (!l || l->number == 0) { system_line("Right-click on a message first."); return; }
         if (strcmp(it, "React") == 0) {
-            int count = 0;
-            if (ae_chat_react(&chat, l->id, "+1", &count) == AE_CHAT_OK) do_poll();     /* the react event repaints the counts */
+            if (react_on(l->id, "+1") == AE_CHAT_OK) system_line("Reaction sent.");   /* TS context-menus.ts */
             else system_line("The reaction did not go through.");
         } else if (strcmp(it, "Reply") == 0) { sprintf(buf, "/reply %d ", l->number); input_set(buf); }
         else if (strcmp(it, "Quote") == 0) {                          /* TS quoteInputText */

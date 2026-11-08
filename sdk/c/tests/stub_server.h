@@ -87,6 +87,8 @@ typedef struct {
     char pending_row[300];                 /* an event row (no seq) a write queued; the next events poll carries it as seq 9 */
     volatile int bad_auth;                 /* requests that lacked "Authorization: Board " */
     volatile int bad_session;              /* post-open requests lacking X-Chat-Session */
+    volatile int react_known;              /* test sets: the caller already has this reaction, so a react
+                                              emits no event (the server's INSERT OR IGNORE) */
     volatile int expire_next;              /* test sets: next authenticated call answers session_expired once */
     char last_message[512];                /* content of the latest POST /messages */
     char last_reply_to[32];                /* its replyTo; the message event row carries it back */

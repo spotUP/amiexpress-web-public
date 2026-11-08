@@ -558,8 +558,11 @@ static void chat_serve(int fd, stub_chat_stats *st, int *state)
             while (path[18 + n] && path[18 + n] != '/' && n < (int)sizeof st->last_react_msg - 1) { st->last_react_msg[n] = path[18 + n]; n++; }
             st->last_react_msg[n] = '\0';
         }
-        sprintf(st->pending_row, "react|lobby|Tester|%s|1700000400|0|%s", st->last_react_msg, st->last_react);
-        chat_reply(fd, 200, "application/json", "{\"count\":2}");
+        if (st->react_known) chat_reply(fd, 200, "application/json", "{\"count\":1}");
+        else {
+            sprintf(st->pending_row, "react|lobby|Tester|%s|1700000400|0|%s", st->last_react_msg, st->last_react);
+            chat_reply(fd, 200, "application/json", "{\"count\":2}");
+        }
     } else if (is_post && strstr(path, "/thread") != 0) {
         st->threads++;
         chat_reply(fd, 200, "application/json", "{\"id\":\"t1\",\"seq\":9}");

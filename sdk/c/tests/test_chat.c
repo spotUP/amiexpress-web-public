@@ -434,6 +434,25 @@ static int newest_message(void)
     return -1;
 }
 
+/* Live bug 2026-11-08: React from the keyboard picker's chat menu showed nothing. The server keeps
+ * one reaction per user, emoji and message (INSERT OR IGNORE) and sends a react event only when a row
+ * was added, so a repeat +1 came back OK with no event: no note, no counts, no word. The door now
+ * says "Reaction sent." (TS context-menus.ts) and reads the counts back itself. */
+static void test_door_react_without_event(void)
+{
+    int idx;
+    start_stub();
+    st->react_known = 1;
+    drive(KEYS("\r" "\x1b[A" "\r" "\x1b[B" "\x1b[B" "\r"), 0);
+    assert(st->reacts == 1 && strcmp(st->last_react, "+1") == 0);
+    for (idx = 0; idx < M.nlines && strcmp(M.lines[idx].id, st->last_react_msg) != 0; idx++) {}
+    assert(idx < M.nlines && M.lines[idx].number != 0);                     /* a message row on screen */
+    assert(has_line(0, "Reaction sent."));
+    assert(st->reaction_lists == 1 && M.lines[idx].nreact == 1 && M.lines[idx].react[0].count == 1);
+    stop_stub();
+    printf("  [OK] door: React from the picker menu with no react event still confirms and shows the count\n");
+}
+
 /* TS Up/Down: Up on an empty input starts the message picker (Enter opens the chat menu a click
  * opens, Esc cancels, a typed key cancels and is typed); Up over typed text recalls a sent line,
  * [EDITING], and Enter edits it under the server id the send reply rekeyed it to. */
@@ -591,6 +610,7 @@ int main(void)
     test_door_moderation();
     test_door_b3();
     test_door_picker_and_edit();
+    test_door_react_without_event();
     test_door_delete_and_kicked();
     test_door_no_config();
     remove("build/test_chat_keys.bin"); remove("build/test_chat_screen.bin");
