@@ -387,6 +387,9 @@ static void tint_row(ui_cells *c, int row, int left, int width)
 static ui_hit lc_hits;                              /* the last frame's click regions, topmost last */
 static int chat_row_line[CHAT_ROWS_MAX];            /* chat body row -> line index, -1 empty */
 
+/* The scrollbar of the last drawn chat pane, for lc_scroll_at (R1a drag). bar_rows 0 = no scrollbar. */
+static int bar_body, bar_rows, bar_thumb, bar_span;
+
 static void draw_chat(ui_cells *c, const lc_model *m, int top, int h, int left, int w)
 {
     static char marked[LC_TEXT_MAX * 2 + 96];
@@ -457,6 +460,8 @@ static void draw_chat(ui_cells *c, const lc_model *m, int top, int h, int left, 
         ui_cells_pen(c, LC_SCROLL_THUMB, LC_SCROLL_THUMB, 0);
         ui_cells_fill(c, body + pos, left + w - 3, thumb, 1, ' ');
         ui_cells_pen(c, LC_INK, UI_CELLS_DEFAULT, 0);
+        bar_body = body; bar_rows = rows; bar_thumb = thumb; bar_span = total - rows;
+        ui_hit_add(&lc_hits, LC_HIT_SCROLLBAR, body, left + w - 3, rows, 1);   /* over the chat rect: last added wins */
     }
 }
 
@@ -538,6 +543,7 @@ void lc_draw(ui_cells *c, const lc_model *m, int *cursor_row, int *cursor_col)
     int k;
 
     ui_hit_reset(&lc_hits);
+    bar_rows = 0;                                   /* no scrollbar until draw_chat draws one */
     draw_menubar(c);
     for (k = 0; k < LC_MENUS; k++)
         ui_hit_add(&lc_hits, LC_HIT_MENU, 0, menu_col[k], 1, (int)strlen(lc_menu_label[k]));
@@ -564,6 +570,17 @@ void lc_draw(ui_cells *c, const lc_model *m, int *cursor_row, int *cursor_col)
     }
     if (m->help) draw_help(c, m);
     if (m->modal != LC_MODAL_NONE) draw_modal(c, m, cursor_row, cursor_col);
+}
+
+int lc_scroll_at(int row)
+{
+    int pos, track;
+    if (bar_rows <= 0) return -1;
+    track = bar_rows - bar_thumb;
+    pos = row - bar_body - bar_thumb / 2;
+    if (pos > track) pos = track;
+    if (pos < 0) pos = 0;
+    return track > 0 ? bar_span - (pos * bar_span + track / 2) / track : 0;   /* draw_chat's pos = first*track/span, inverted */
 }
 
 int lc_hit(int row, int col, int *index)

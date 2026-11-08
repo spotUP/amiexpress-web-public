@@ -92,6 +92,7 @@ static int help_shown;          /* times the help overlay opened (the host test 
 static int is_sysop;            /* the caller's level is 255: sysop items in the context menus */
 static int user_level;          /* the caller's level: the TS commands' minSecLevel gates */
 static int mouse_events;        /* mouse events dispatched (a test sentinel) */
+static int bar_drag;            /* left button went down on the chat scrollbar and is still held (R1a) */
 static int keep_lines;          /* join_room adds to the pane instead of starting it afresh */
 
 /* The room list from the last rooms.txt, for the sidebar and F3. */
@@ -1574,7 +1575,14 @@ static int handle_mouse(void)
             else { M.scroll += up ? 3 : -3; if (M.scroll < 0) M.scroll = 0; if (M.scroll > LC_LINES * 4) M.scroll = LC_LINES * 4; }
             continue;
         }
-        if (e->kind != 'P') continue;          /* act on the press; releases and motion carry nothing here */
+        if (bar_drag) {                         /* the thumb follows the pointer until the button comes up */
+            if (e->kind == 'R') bar_drag = 0;
+            else if (e->kind == 'M' && e->button != AE_MOUSE_NONE) { int sc = lc_scroll_at(row); if (sc >= 0) M.scroll = sc; }
+            else if (e->kind == 'M') bar_drag = 0;   /* a hover with no button: the release was lost */
+            if (e->kind != 'P') continue;
+            bar_drag = 0;
+        }
+        if (e->kind != 'P') continue;          /* act on the press; releases and other motion carry nothing here */
         hit = lc_hit(row, col, &idx);
         if (M.ctx.open) {
             int pick = ui_popup_click(&M.ctx, row, col);
@@ -1598,6 +1606,12 @@ static int handle_mouse(void)
         if (M.focus == LC_FOCUS_MENU) set_focus(LC_FOCUS_INPUT);
         if (hit == LC_HIT_STATUS) { M.sidebar_hidden = 0; switch_tab(idx >= 7); continue; }   /* TS mouse-handling: x < 7 channels, else users */
         if (hit == LC_HIT_INPUT) { set_focus(LC_FOCUS_INPUT); continue; }
+        if (hit == LC_HIT_SCROLLBAR) {          /* press jumps the thumb under the pointer; held, it drags */
+            int sc = lc_scroll_at(row);
+            if (sc >= 0) M.scroll = sc;
+            bar_drag = e->button == AE_MOUSE_LEFT;
+            continue;
+        }
         if (hit == LC_HIT_CHAT) { ctx_open(LC_CTX_CHAT, idx, row, col); continue; }
         if (hit == LC_HIT_SIDEBAR && side_selectable(idx)) {
             lc_side *s = &M.side[idx];

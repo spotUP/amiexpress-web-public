@@ -32,17 +32,46 @@ int ae_field_read(int field, char *out, int cap)
 /* Scripted clicks: each MOUSE? answers the next step, worked out from the frame the door drew
  * (the test includes livechat.c, so it reads M and lc_hit). "" ends one wake's drain. */
 enum { MS_END, MS_RMB_MESSAGE, MS_CLICK_REACT, MS_CLICK_PICK, MS_CLICK_TOOLS, MS_CLICK_FILES, MS_CLICK_STATUS_USERS, MS_CLICK_STATUS_CHANNELS,
-       MS_CLICK_USER, MS_CLICK_ITEM };
+       MS_CLICK_USER, MS_CLICK_ITEM, MS_FILL, MS_BAR_PRESS, MS_BAR_DRAG, MS_BAR_RELEASE, MS_BAR_HOVER, MS_CHECK };
 static const char *ms_items[4];                           /* names the MS_CLICK_ITEM steps click, in order */
 static int ms_item_n;
 static const int *mouse_script;
 static int mouse_step, mouse_armed;
+static int ms_bar_top_scroll, ms_bar_mid_scroll;
 
 static int mouse_reply(char *out)
 {
     int step = mouse_script ? mouse_script[mouse_step] : MS_END, r, c, idx;
     if (step == MS_END) { if (mouse_script) mouse_step++; return 0; }
     mouse_step++;
+    if (step == MS_FILL) {                              /* enough chat for a scrollbar; the next wake draws it */
+        for (r = 0; r < 60; r++) system_line("scrollback filler");
+        return 0;
+    }
+    if (step >= MS_BAR_PRESS && step <= MS_CHECK) {    /* the chat scrollbar column, its top and bottom rows */
+        static int bar_c = -1, bar_top, bar_bottom;
+        if (step == MS_BAR_PRESS) {
+            for (r = 0; r < 25 && bar_c < 0; r++)
+                for (c = 0; c < 80; c++) if (lc_hit(r, c, &idx) == LC_HIT_SCROLLBAR) { bar_c = c; bar_top = r; break; }
+            assert(bar_c >= 0 && M.scroll == 0);
+            for (bar_bottom = bar_top; lc_hit(bar_bottom + 1, bar_c, &idx) == LC_HIT_SCROLLBAR; bar_bottom++) {}
+            return sprintf(out, "P\t%d\t%d\t0", bar_c + 1, bar_top + 1);      /* track top: the oldest lines */
+        }
+        if (step == MS_BAR_DRAG) {
+            assert(M.scroll > 0 && M.ctx.open == 0);        /* the press scrolled back, no chat menu opened */
+            ms_bar_top_scroll = M.scroll;
+            return sprintf(out, "M\t%d\t%d\t0", bar_c + 1, (bar_top + bar_bottom) / 2 + 1);
+        }
+        if (step == MS_BAR_RELEASE) {
+            assert(M.scroll > 0 && M.scroll < ms_bar_top_scroll);   /* held motion moved the thumb to the middle */
+            ms_bar_mid_scroll = M.scroll;
+            return sprintf(out, "R\t%d\t%d\t0", bar_c + 1, bar_bottom + 1);
+        }
+        if (step == MS_BAR_HOVER) return sprintf(out, "M\t%d\t%d\t3", bar_c + 1, bar_bottom + 1);
+        assert(M.scroll == ms_bar_mid_scroll);              /* MS_CHECK: release and hover left it alone */
+        bar_c = -1;
+        return 0;
+    }
     if (step == MS_RMB_MESSAGE) {                       /* the first chat row that shows a message */
         for (r = 0; r < 25; r++)
             if (lc_hit(r, 30, &idx) == LC_HIT_CHAT && idx >= 0 && M.lines[idx].number > 0)
@@ -726,6 +755,21 @@ static void test_door_b4_user_menu(void)
     printf("  [OK] door: user menu View Profile, Whois, Mute and Ignore act, labels flip\n");
 }
 
+/* R1a (sysop 2026-11-08): dragging the chat scrollbar thumb scrolls the chat. A press on the track
+ * jumps there, held motion follows, release ends it; a bare hover afterwards does not scroll. */
+static void test_door_scrollbar_drag(void)
+{
+    static const int script[] = { MS_FILL, MS_BAR_PRESS, MS_END, MS_BAR_DRAG, MS_END,     /* FILL and CHECK end their own wake */
+                                  MS_BAR_RELEASE, MS_END, MS_BAR_HOVER, MS_END, MS_CHECK };
+    start_stub();
+    mouse_script = script; mouse_step = 0;
+    drive(KEYS("\x1e\x1e\x1e\x1e\x1e\x1e" " "), 0);
+    mouse_script = 0;
+    assert(mouse_step == 10);
+    stop_stub();
+    printf("  [OK] door: scrollbar press and drag scroll the chat, release ends the drag\n");
+}
+
 int main(void)
 {
     ae_native_set_exchange(board, 0);
@@ -738,6 +782,7 @@ int main(void)
     test_door_poll_under_mouse_motion();
     test_door_new_room();
     test_door_mouse();
+    test_door_scrollbar_drag();
     test_door_reply();
     test_door_moderation();
     test_door_b3();

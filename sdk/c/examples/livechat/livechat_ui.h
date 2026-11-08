@@ -117,7 +117,7 @@ enum { LC_CTX_NONE, LC_CTX_USER, LC_CTX_CHAT, LC_CTX_CHANNEL, LC_CTX_REACT };   
 
 /* What a click lands on, from the regions the last lc_draw laid out. */
 enum { LC_HIT_NONE, LC_HIT_MENU, LC_HIT_DROPDOWN, LC_HIT_SIDEBAR, LC_HIT_CHAT, LC_HIT_INPUT,
-       LC_HIT_STATUS, LC_HIT_POPUP, LC_HIT_YES, LC_HIT_NO, LC_HIT_OK, LC_HIT_MODAL };
+       LC_HIT_STATUS, LC_HIT_POPUP, LC_HIT_YES, LC_HIT_NO, LC_HIT_OK, LC_HIT_MODAL, LC_HIT_SCROLLBAR };
 
 #define LC_SCROLL_TRACK 66
 #define LC_SCROLL_THUMB 195
@@ -174,5 +174,8 @@ void lc_draw(ui_cells *c, const lc_model *m, int *cursor_row, int *cursor_col);
 /** The region under 0-based row/col in the last drawn frame (LC_HIT_*). *index: the menu (MENU), the
  *  item (DROPDOWN), the side item (SIDEBAR), the line index or -1 for an empty row (CHAT), the column (STATUS). */
 int lc_hit(int row, int col, int *index);
+/** The chat scroll offset (lc_model.scroll) that puts the scrollbar thumb's middle on 0-based screen
+ *  `row` in the last drawn frame, clamped to the track; -1 when the frame drew no scrollbar. */
+int lc_scroll_at(int row);
 
 #endif
