@@ -1097,7 +1097,7 @@ debugLog(`[XIMProtocol]   Wrote tooltype value="${tooltypeValue}", StringPtr not
         try {
           answer = await boardScreenAnswer(String(msg.string || ''), {
             session: this.bbsSession, socket: this.socket, state: this.state, mouse: this.mouse,
-            armMouse: (on: boolean) => { this.flushMouseCarry(); this.mouse = on ? new MouseAbsorber((keys) => this.ioHandler.queueInput(keys)) : null; },
+            armMouse: (on: boolean, buttons = false) => { this.flushMouseCarry(); this.mouse = on ? new MouseAbsorber((keys) => this.ioHandler.queueInput(keys), undefined, buttons) : null; },
             columns: () => responsiveDoorGeometry(this.bbsSession as never).cols,
           });
         } catch (err) {

@@ -19,6 +19,7 @@
 
 #define LC_INK        255   /* text */
 #define LC_ACCENT     204   /* borders, menu bar ground, section heads */
+#define LC_ALERT      196   /* sysop-only destructive menu items (TS alert colour) */
 #define LC_DIM        240   /* timestamps, system lines, rooms not joined */
 #define LC_ACTIVITY   221   /* activity lines, the emoji button face */
 #define LC_BAR_INK    0     /* menu bar labels */
@@ -80,7 +81,16 @@ typedef struct {
     char modal_text[96];
     char prompt[48];
     int prompt_len;
+    ui_popup ctx;                  /* the right-click menu (TS features/context-menus.ts) */
+    int ctx_kind;                  /* LC_CTX_* */
+    int ctx_target;                /* side index (user, channel) or line index (chat) */
 } lc_model;
+
+enum { LC_CTX_NONE, LC_CTX_USER, LC_CTX_CHAT, LC_CTX_CHANNEL };
+
+/* What a click lands on, from the regions the last lc_draw laid out. */
+enum { LC_HIT_NONE, LC_HIT_MENU, LC_HIT_DROPDOWN, LC_HIT_SIDEBAR, LC_HIT_CHAT, LC_HIT_INPUT,
+       LC_HIT_STATUS, LC_HIT_POPUP, LC_HIT_YES, LC_HIT_NO, LC_HIT_OK, LC_HIT_MODAL };
 
 #define LC_SCROLL_TRACK 66
 #define LC_SCROLL_THUMB 195
@@ -99,5 +109,8 @@ int lc_nick_color(const char *nick);
 void lc_line_marked(const lc_line *l, char *out, int cap);
 /** Paints the whole frame into c's back buffer; `cursor_row`/`cursor_col` get where the caret goes. */
 void lc_draw(ui_cells *c, const lc_model *m, int *cursor_row, int *cursor_col);
+/** The region under 0-based row/col in the last drawn frame (LC_HIT_*). *index: the menu (MENU), the
+ *  item (DROPDOWN), the side item (SIDEBAR), the line index or -1 for an empty row (CHAT), the column (STATUS). */
+int lc_hit(int row, int col, int *index);
 
 #endif

@@ -24,7 +24,7 @@ export interface BoardScreenContext {
   session: any; socket: any;
   state: { wipeCapture?: { kind: 'in' | 'out'; letter: string; text: string[]; region?: WipeRegion; old?: GridCell[][] } | null };
   mouse: MouseAbsorber | null;
-  armMouse(on: boolean): void;
+  armMouse(on: boolean, buttons?: boolean): void;
   columns(): number;
 }
 
@@ -114,7 +114,8 @@ export async function boardScreenAnswer(request: string, ctx: BoardScreenContext
       if (arg === 'ON') {
         const s = ctx.session || {};
         if (s.petsciiMode === true || s.texttvMode === true || s.ripMode === true) return 'NO';
-        emit(ctx, MOUSE_ON); ctx.armMouse(true); return 'OK';
+        // `MOUSE ON B`: the door also wants the button (left/middle/right) as a fourth MOUSE? field.
+        emit(ctx, MOUSE_ON); ctx.armMouse(true, letter.toUpperCase() === 'B'); return 'OK';
       }
       if (arg === 'OFF') { emit(ctx, MOUSE_REPORTING_OFF); ctx.armMouse(false); return 'OK'; }
       return '';
@@ -137,7 +138,8 @@ export async function boardScreenAnswer(request: string, ctx: BoardScreenContext
     }
     case 'MOUSE?': {
       const e = ctx.mouse?.next();
-      return e ? `${e.kind}\t${e.col}\t${e.row}` : '';
+      if (!e) return '';
+      return ctx.mouse?.reportButtons ? `${e.kind}\t${e.col}\t${e.row}\t${e.button}` : `${e.kind}\t${e.col}\t${e.row}`;
     }
     default:
       return '';

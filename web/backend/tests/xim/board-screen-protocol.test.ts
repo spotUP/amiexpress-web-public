@@ -79,3 +79,16 @@ test('through the real XIMProtocol: MOUSE OFF right after a lone ESC still deliv
     expect(queue).not.toHaveBeenCalled();
   } finally { jest.useRealTimers(); }
 });
+
+test('through the real XIMProtocol: MOUSE ON B adds the button (2 = right) as a fourth MOUSE? field; plain MOUSE ON keeps three fields', async () => {
+  const p = makeProtocol();
+  jest.spyOn(p.ioHandler, 'queueInput').mockImplementation(() => undefined);
+  await ask(p, 'MOUSE ON B');
+  p.queueInput('\x1b[<2;5;6M');
+  await ask(p, 'MOUSE?');
+  expect(p.sendReply).toHaveBeenLastCalledWith(expect.anything(), 'P\t5\t6\t2'.length);
+  await ask(p, 'MOUSE ON');   // an older door's arm: its strict three-field parser must still match
+  p.queueInput('\x1b[<2;5;6M');
+  await ask(p, 'MOUSE?');
+  expect(p.sendReply).toHaveBeenLastCalledWith(expect.anything(), 'P\t5\t6'.length);
+});

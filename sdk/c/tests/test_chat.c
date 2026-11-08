@@ -27,11 +27,41 @@ int ae_field_read(int field, char *out, int cap)
     return n;
 }
 
+/* Scripted clicks: each MOUSE? answers the next step, worked out from the frame the door drew
+ * (the test includes livechat.c, so it reads M and lc_hit). "" ends one wake's drain. */
+enum { MS_END, MS_RMB_MESSAGE, MS_CLICK_REACT, MS_CLICK_TOOLS, MS_CLICK_FILES };
+static const int *mouse_script;
+static int mouse_step, mouse_armed;
+
+static int mouse_reply(char *out)
+{
+    int step = mouse_script ? mouse_script[mouse_step] : MS_END, r, c, idx;
+    if (step == MS_END) { if (mouse_script) mouse_step++; return 0; }
+    mouse_step++;
+    if (step == MS_RMB_MESSAGE) {                       /* the first chat row that shows a message */
+        for (r = 0; r < 25; r++)
+            if (lc_hit(r, 30, &idx) == LC_HIT_CHAT && idx >= 0 && M.lines[idx].number > 0)
+                return sprintf(out, "P\t31\t%d\t2", r + 1);
+        return sprintf(out, "P\t31\t4\t2");
+    }
+    if (step == MS_CLICK_REACT) {                       /* item 2 of the open popup */
+        for (idx = 0; idx < M.ctx.n && strcmp(M.ctx.items[idx], "React") != 0; idx++) {}
+        return sprintf(out, "P\t%d\t%d\t0", M.ctx.left + 5, M.ctx.top + 1 + idx + 1);
+    }
+    if (step == MS_CLICK_TOOLS) return sprintf(out, "P\t17\t1\t0");
+    c = 16 + 1; r = 2 + 1 + 1;                          /* Tools dropdown: item 1 "Files (F6)" on row 3 */
+    return sprintf(out, "P\t%d\t%d\t0", c + 1, r);
+}
+
 static int board(void *ctx, int field, const char *request, char *out, int cap)
 {
     (void)ctx; (void)cap;
     out[0] = '\0';
-    if (field == AE_FIELD_SCREEN && strcmp(request, "SIZE") == 0) { strcpy(out, "80\t25"); return 4; }
+    if (field != AE_FIELD_SCREEN) return 0;
+    if (strcmp(request, "SIZE") == 0) { strcpy(out, "80\t25"); return 4; }
+    if (strcmp(request, "MOUSE ON B") == 0) { mouse_armed++; strcpy(out, "OK"); return 2; }
+    if (strcmp(request, "MOUSE OFF") == 0) { strcpy(out, "OK"); return 2; }
+    if (strcmp(request, "MOUSE?") == 0) return mouse_reply(out);
     return 0;
 }
 
@@ -252,6 +282,29 @@ static void test_door_new_room(void)
     printf("  [OK] door: /create with the name prompt and /n with a name make a room and join it by its new id\n");
 }
 
+/* Reachability: the real door entry, clicks through the board's MOUSE? field. A right click on a
+ * message opens the TS chat context menu, a click on React reacts on the server; a click on the
+ * Tools label opens its dropdown and a click on Files says it is not available yet. */
+static void test_door_mouse(void)
+{
+    static const int script[] = { MS_RMB_MESSAGE, MS_END, MS_CLICK_REACT, MS_END,
+                                  MS_CLICK_TOOLS, MS_END, MS_CLICK_FILES, MS_END };
+    int rc, before = mouse_events;
+    start_stub();
+    mouse_script = script; mouse_step = 0; mouse_armed = 0;
+    rc = drive(KEYS("\x1e" "\x1e" "\x1e" "\x1e" " " "/q\r"), 0);
+    mouse_script = 0;
+    assert(rc == 0 && mouse_armed == 1);
+    assert(mouse_events - before == 4 && mouse_step == 8);      /* every scripted event reached handle_mouse */
+    assert(st->reacts == 1 && strcmp(st->last_react, "+1") == 0);
+    assert(has_line("", "Reaction sent."));
+    /* the frame diff skips unchanged blanks, so words reach the wire one by one */
+    assert(strstr(screen_text, "|> Reply") && strstr(screen_text, "Unread"));      /* the popup reached the wire */
+    assert(strstr(screen_text, "(F6)") && strstr(screen_text, "available"));       /* the not-yet notice too */
+    stop_stub();
+    printf("  [OK] door: right click on a message reacts, the menu bar opens and says not yet\n");
+}
+
 static void test_door_no_config(void)
 {
     int rc = drive(KEYS("x"), 0);
@@ -269,6 +322,7 @@ int main(void)
     test_door_lists();
     test_door_idle_poll();
     test_door_new_room();
+    test_door_mouse();
     test_door_no_config();
     remove("build/test_chat_keys.bin"); remove("build/test_chat_screen.bin");
     puts("test_chat: OK");

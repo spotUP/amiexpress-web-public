@@ -10,7 +10,13 @@
  * (AEW_SCREEN MOUSE?).
  */
 export const MOUSE_WAKE = '\x1e';
-export interface MouseEvent { kind: 'P' | 'R' | 'M' | 'U' | 'D'; col: number; row: number }
+/**
+ * `button` is the SGR button number's low bits: 0 left, 1 middle, 2 right (3 on a
+ * motion report = no button held). It reaches the door only when the door armed
+ * with `MOUSE ON B`; a door armed with plain `MOUSE ON` gets the three-field reply
+ * its strict parser expects (sdk/c ae_bs_parse_mouse before 2026-11-08).
+ */
+export interface MouseEvent { kind: 'P' | 'R' | 'M' | 'U' | 'D'; col: number; row: number; button: number }
 const REPORT = /^\x1b\[<(\d+);(\d+);(\d+)([Mm])/;
 const PARTIAL = /^\x1b(\[(<(\d+(;(\d+(;\d*)?)?)?)?)?)?$/;
 const MAX_BUTTONS = 8;
@@ -32,7 +38,8 @@ export class MouseAbsorber {
   private woken = false;
 
   /** @param onSettle receives held bytes that turned out not to be a report. */
-  constructor(private readonly onSettle: (keys: string) => void = () => {}, private readonly settleMs = CARRY_SETTLE_MS) {}
+  /** @param reportButtons the door armed with `MOUSE ON B` and reads the four-field MOUSE? reply. */
+  constructor(private readonly onSettle: (keys: string) => void = () => {}, private readonly settleMs = CARRY_SETTLE_MS, readonly reportButtons = false) {}
 
   absorb(data: string): string {
     let s = this.carry + data;
@@ -86,13 +93,14 @@ export class MouseAbsorber {
   reset(): void { this.clearTimer(); this.carry = ''; this.events = []; this.woken = false; }
 
   private store(b: number, col: number, row: number, release: boolean): void {
-    if (b === 64 || b === 65) { this.push({ kind: b === 64 ? 'U' : 'D', col, row }); return; }
+    const button = b & 3;
+    if (b === 64 || b === 65) { this.push({ kind: b === 64 ? 'U' : 'D', col, row, button: 0 }); return; }
     if (b & 32) {
       const last = this.events[this.events.length - 1];
-      if (last && last.kind === 'M') { last.col = col; last.row = row; } else this.events.push({ kind: 'M', col, row });
+      if (last && last.kind === 'M') { last.col = col; last.row = row; last.button = button; } else this.events.push({ kind: 'M', col, row, button });
       return;
     }
-    this.push({ kind: release ? 'R' : 'P', col, row });
+    this.push({ kind: release ? 'R' : 'P', col, row, button });
   }
   private push(e: MouseEvent): void {
     if (this.events.filter((x) => x.kind !== 'M').length < MAX_BUTTONS) this.events.push(e);

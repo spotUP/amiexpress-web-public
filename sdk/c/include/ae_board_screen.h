@@ -11,7 +11,9 @@
  *   WIPE OUT <c>    -> as IN, for the reveal played in reverse
  *   WIPE END        -> "OK" (the held output has been played)
  *   MOUSE ON / OFF  -> "OK" | "NO" (not an ANSI caller)
- *   MOUSE?          -> "kind TAB col TAB row" (1-based), "" when none queued
+ *   MOUSE ON B      -> as MOUSE ON, and MOUSE? adds the button as a 4th field
+ *   MOUSE?          -> "kind TAB col TAB row" (1-based), "" when none queued;
+ *                      after MOUSE ON B: "kind TAB col TAB row TAB button"
  *   SAVE t l r c    -> "OK" (the board holds rows t..t+r-1, columns l..l+c-1,
  *                      1-based, plus the cursor and colours) | "NO" (off the
  *                      screen, or nothing drawn yet)
@@ -33,7 +35,14 @@ extern "C" {
 #define AE_BS_GONE (-1)
 
 /** kind: P press, R release, M move, U wheel up, D wheel down. col/row are 1-based. */
-typedef struct { char kind; int col; int row; } ae_mouse_event;
+/* Button of a press/release: SGR code & 3. A motion report with no button
+ * held carries AE_MOUSE_NONE; a wheel event and an old board (3-field reply)
+ * carry AE_MOUSE_LEFT. */
+#define AE_MOUSE_LEFT   0
+#define AE_MOUSE_MIDDLE 1
+#define AE_MOUSE_RIGHT  2
+#define AE_MOUSE_NONE   3
+typedef struct { char kind; int col; int row; int button; } ae_mouse_event;
 
 /** 1 answered, 0 silent board (outputs untouched), AE_BS_GONE. */
 int ae_bs_size(int *cols, int *rows);

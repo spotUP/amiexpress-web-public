@@ -38,6 +38,7 @@
 #include <time.h>
 
 #include "aedoor.h"
+#include "ae_board_screen.h"
 #include "ae_chat.h"
 #include "ae_host.h"
 #include "ae_session.h"
@@ -79,6 +80,8 @@ static char dm_thread[32];
 static char dm_peer[24];
 static int msg_number;
 static int help_shown;          /* times the help overlay opened (the host test reads it) */
+static int is_sysop;            /* the caller's level is 255: sysop items in the context menus */
+static int mouse_events;        /* mouse events dispatched (a test sentinel) */
 static int keep_lines;          /* join_room adds to the pane instead of starting it afresh */
 
 /* The room list from the last rooms.txt, for the sidebar and F3. */
@@ -686,6 +689,139 @@ static void cycle_focus(int step)
     set_focus(f);
 }
 
+/** An item whose wire this board does not have yet: say so instead of doing nothing. */
+static void not_yet(const char *item)
+{
+    char text[96];
+    sprintf(text, "%.40s is not yet available here.", item);
+    message_modal("Not available", text);
+}
+
+/* ---- Context menus: labels and order of the TS door's features/context-menus.ts. ---- */
+static const char *ctx_items[UI_POPUP_MAX];
+
+static void ctx_open(int kind, int target, int row, int col)
+{
+    int n = 0;
+    unsigned long alert = 0;
+    if (kind == LC_CTX_USER) {
+        static const char *const u[] = { "View Profile", "Send Message", "Whois", "---", "Mention", "Add Note",
+                                         "View History", "---", "Mute User", "Ignore", "Block" };
+        for (n = 0; n < 11; n++) ctx_items[n] = u[n];
+        if (is_sysop) { ctx_items[n++] = "---"; alert = 3UL << n; ctx_items[n++] = "Kick User"; ctx_items[n++] = "Ban User"; }
+    } else if (kind == LC_CTX_CHAT) {
+        static const char *const c[] = { "Reply", "Quote", "React", "---", "Copy Text", "Pin Message", "---",
+                                         "Mark Unread", "Edit", "Delete" };
+        for (n = 0; n < 10; n++) ctx_items[n] = c[n];
+    } else {
+        static const char *const r[] = { "Join", "Leave", "Info", "Expand/Collapse", "---", "Pin Channel" };
+        for (n = 0; n < 6; n++) ctx_items[n] = r[n];
+        if (is_sysop) { ctx_items[n++] = "---"; ctx_items[n++] = "Clear History"; ctx_items[n++] = "Archive";
+                        alert = 1UL << n; ctx_items[n++] = "Delete Channel"; }
+    }
+    M.ctx_kind = kind;
+    M.ctx_target = target;
+    M.menu = -1;
+    ui_popup_open(&M.ctx, ctx_items, n, alert, row, col, M.rows, M.cols);
+}
+
+static void input_set(const char *text)
+{
+    copy(M.input, sizeof M.input, text);
+    M.input_len = (int)strlen(M.input);
+    set_focus(LC_FOCUS_INPUT);
+}
+
+static void ctx_run(const char *it)
+{
+    char buf[LC_INPUT_MAX];
+    if (M.ctx_kind == LC_CTX_USER) {
+        const char *nick = M.side[M.ctx_target].label;
+        if (strcmp(it, "Send Message") == 0) { sprintf(buf, "/msg %.30s ", nick); input_set(buf); }
+        else if (strcmp(it, "Mention") == 0) { sprintf(buf, "@%.30s %.200s", nick, M.input); input_set(buf); }
+        else if (strcmp(it, "View History") == 0) {
+            int i, found = 0;
+            for (i = M.nlines - 1; i >= 0 && found < 15; i--) {
+                if (M.lines[i].number == 0 || strcmp(M.lines[i].nick, nick) != 0) continue;
+                sprintf(buf, "%.24s: %.180s", nick, M.lines[i].text);
+                system_line(buf);
+                found++;
+            }
+            if (!found) { sprintf(buf, "No recent messages from %.30s.", nick); system_line(buf); }
+        } else not_yet(it);              /* Profile, Whois, Note, Mute, Ignore, Block (B4/B5), Kick, Ban (B2) */
+    } else if (M.ctx_kind == LC_CTX_CHAT) {
+        const lc_line *l = M.ctx_target >= 0 && M.ctx_target < M.nlines ? &M.lines[M.ctx_target] : 0;
+        if (!l || l->number == 0) { system_line("Right-click on a message first."); return; }
+        if (strcmp(it, "React") == 0) {
+            int count = 0;
+            if (ae_chat_react(&chat, l->id, "+1", &count) == AE_CHAT_OK) system_line("Reaction sent.");
+            else system_line("The reaction did not go through.");
+        } else if (strcmp(it, "Quote") == 0) { sprintf(buf, "> %.24s: %.60s ", l->nick, l->text); input_set(buf); }
+        else not_yet(it);                /* Reply (B3), Copy Text (OSC 52), Pin, Mark Unread, Edit, Delete (B2) */
+    } else {
+        lc_side *r = &M.side[M.ctx_target];
+        if (strcmp(it, "Join") == 0) join_room(r->id);
+        else if (strcmp(it, "Leave") == 0) { if (strcmp(r->id, room_id) == 0) leave_room(); else system_line("You are not in that channel."); }
+        else if (strcmp(it, "Info") == 0) { sprintf(buf, "Channel: %.40s", r->label); system_line(buf); }
+        else not_yet(it);                /* Expand/Collapse, Pin, Clear History, Archive, Delete Channel */
+    }
+}
+
+static void side_move(int step);
+static void side_pick(void);
+static int menu_pick(int menu, int item);
+
+/** The mouse wake byte: drain the board's queue and act on each event as TS handlers/mouse-handling.ts. */
+static int handle_mouse(void)
+{
+    ae_mouse_event evs[16];
+    int n = ae_bs_mouse_drain(evs, 16), i;
+    for (i = 0; i < n; i++) {
+        ae_mouse_event *e = &evs[i];
+        int row = e->row - 1, col = e->col - 1, idx, hit;
+        mouse_events++;
+        if (e->kind == 'U' || e->kind == 'D') {
+            int up = e->kind == 'U';
+            if (lc_hit(row, col, &idx) == LC_HIT_SIDEBAR) side_move(up ? -2 : 2);
+            else { M.scroll += up ? 3 : -3; if (M.scroll < 0) M.scroll = 0; if (M.scroll > LC_LINES * 4) M.scroll = LC_LINES * 4; }
+            continue;
+        }
+        if (e->kind != 'P') continue;          /* act on the press; releases and motion carry nothing here */
+        hit = lc_hit(row, col, &idx);
+        if (M.ctx.open) {
+            int pick = ui_popup_click(&M.ctx, row, col);
+            if (pick >= 0) ctx_run(M.ctx.items[pick]);
+            if (pick != UI_POPUP_CLOSE || hit == LC_HIT_POPUP) continue;
+        }
+        if (M.modal == LC_MODAL_QUIT) {
+            if (hit == LC_HIT_YES) return 1;
+            if (hit == LC_HIT_NO) M.modal = LC_MODAL_NONE;
+            continue;
+        }
+        if (M.modal == LC_MODAL_MESSAGE) { if (hit == LC_HIT_OK || hit != LC_HIT_MODAL) M.modal = LC_MODAL_NONE; continue; }
+        if (M.modal != LC_MODAL_NONE || M.help) continue;
+        if (hit == LC_HIT_MENU && idx >= 0) { M.menu = idx; M.menu_sel = 0; M.focus = LC_FOCUS_MENU; continue; }
+        if (hit == LC_HIT_DROPDOWN && M.menu >= 0 && idx >= 0 && idx < lc_menu_count[M.menu]) {
+            int menu = M.menu;
+            M.menu = -1;
+            if (menu_pick(menu, idx)) return 1;
+            continue;
+        }
+        if (M.focus == LC_FOCUS_MENU) set_focus(LC_FOCUS_INPUT);
+        if (hit == LC_HIT_STATUS) { M.sidebar_hidden = 0; continue; }   /* the channels/users tab is B3 (K03) */
+        if (hit == LC_HIT_INPUT) { set_focus(LC_FOCUS_INPUT); continue; }
+        if (hit == LC_HIT_CHAT) { ctx_open(LC_CTX_CHAT, idx, row, col); continue; }
+        if (hit == LC_HIT_SIDEBAR && side_selectable(idx)) {
+            lc_side *s = &M.side[idx];
+            M.side_sel = idx;
+            if (s->kind == LC_SIDE_USER && strcmp(s->label, M.handle) != 0) ctx_open(LC_CTX_USER, idx, row, col);
+            else if (s->kind == LC_SIDE_ROOM) ctx_open(LC_CTX_CHANNEL, idx, row, col);
+            else if (e->button == AE_MOUSE_LEFT) side_pick();
+        }
+    }
+    return 0;
+}
+
 /** A menu entry. Returns 1 when the door should end. */
 static int menu_pick(int menu, int item)
 {
@@ -699,7 +835,7 @@ static int menu_pick(int menu, int item)
     else if (strcmp(it, "Clear Chat") == 0) lines_clear();
     else if (strcmp(it, "About") == 0) message_modal("LIVECHAT68", "Federated chat for AmiExpress boards");
     else if (strncmp(it, "Quit", 4) == 0) M.modal = LC_MODAL_QUIT;
-    /* the rest has no wire on this board: drawn, not acted on */
+    else not_yet(it);                       /* Emoji, Files, Pins, Search, Threads, Settings, Theme, Render, Grid */
     return 0;
 }
 
@@ -727,6 +863,12 @@ static void side_pick(void)
 /** One key. Returns 1 when the door should end. */
 static int handle_key(int key)
 {
+    if (key == UI_KEY_MOUSE) return handle_mouse();
+    if (M.ctx.open) {
+        int pick = ui_popup_key(&M.ctx, key);
+        if (pick >= 0) ctx_run(M.ctx.items[pick]);
+        return 0;
+    }
     if (M.help) {
         if (key == UI_KEY_DOWN && M.help_top < lc_help_lines - 1) M.help_top++;
         else if (key == UI_KEY_UP && M.help_top > 0) M.help_top--;
@@ -855,12 +997,13 @@ int main(int argc, char **argv)
         finish();
         return 0;
     }
-    if (ae_chat_open(&chat, &cfg, handle, ae_user_level(&session) >= 255) != AE_CHAT_OK) {
+    if (ae_chat_open(&chat, &cfg, handle, (is_sysop = ae_user_level(&session) >= 255)) != AE_CHAT_OK) {
         early_message("Error", "The chat server did not answer.");
         finish();
         return 0;
     }
     keys.idle = door_idle;
+    ae_bs_mouse(1);                                     /* "MOUSE ON B": clicks with their button, as menudoor */
 
     /* As the TS door: list the rooms and walk into the first. */
     if (load_rooms() == AE_CHAT_OK) {
@@ -889,6 +1032,7 @@ int main(int argc, char **argv)
         if (!ended) present();
     }
 
+    ae_bs_mouse(0);
     if (room_id[0] != '\0') ae_chat_leave(&chat, room_id);
     ae_chat_close(&chat);
     finish();

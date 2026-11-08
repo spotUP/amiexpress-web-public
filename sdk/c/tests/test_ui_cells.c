@@ -3,6 +3,7 @@
 #include <string.h>
 
 #include "ui_cells.h"
+#include "ui_key.h"
 
 static int fails = 0;
 #define CHECK(cond, msg) do { if (!(cond)) { printf("FAIL: %s (line %d)\n", msg, __LINE__); fails++; } } while (0)
@@ -81,6 +82,36 @@ int main(void)
     ui_cells_button(&c, 2, 0, 6, ":D", 7, 221);
     CHECK(cell_ch(&c, 3, 2) == ':' && c.back[3 * 20 + 2].fg == 221, "button text centred");
     CHECK(cell_ch(&c, 2, 0) == '.' && c.back[2 * 20].fg == 7, "button border");
+
+    /* Hit regions: the last added (drawn on top) wins, with the offset inside it. */
+    {
+        ui_hit h; int dr = -1, dc = -1;
+        ui_hit_reset(&h);
+        ui_hit_add(&h, 1, 0, 0, 6, 20);
+        ui_hit_add(&h, 2, 2, 4, 2, 5);
+        CHECK(ui_hit_at(&h, 3, 6, &dr, &dc) == 2 && dr == 1 && dc == 2, "topmost region wins");
+        CHECK(ui_hit_at(&h, 0, 0, 0, 0) == 1 && ui_hit_at(&h, 6, 0, 0, 0) == -1, "outside is -1");
+    }
+    /* Popup: clamped like context-menus.ts, separators skipped, click and keys pick. */
+    {
+        static const char *const pm[] = { "Reply", "---", "Delete" };
+        ui_popup p;
+        ui_popup_open(&p, pm, 3, 4UL, 5, 18, 25, 80);
+        CHECK(p.open && p.top == 5 && p.left == 18 && p.w == 24 && p.sel == 0, "popup opens at the click");
+        ui_popup_open(&p, pm, 3, 4UL, 24, 79, 25, 80);
+        CHECK(p.top == 25 - 7 && p.left == 80 - 26, "popup clamped to the screen");
+        CHECK(ui_popup_key(&p, UI_KEY_DOWN) == UI_POPUP_STAY && p.sel == 2, "down skips the separator");
+        CHECK(ui_popup_key(&p, UI_KEY_ENTER) == 2 && !p.open, "enter picks and closes");
+        ui_popup_open(&p, pm, 3, 4UL, 0, 0, 6, 20);
+        CHECK(ui_popup_click(&p, p.top + 2, 3) == UI_POPUP_STAY && p.open, "separator click stays");
+        ui_popup_draw(&c, &p, 7, 255, 204, 196);
+        CHECK(cell_ch(&c, p.top + 2, 2) == '-' && c.back[(p.top + 3) * 20 + 4].fg == 196, "separator and alert colour drawn");
+        CHECK(ui_popup_click(&p, p.top + 3, 4) == 2 && !p.open, "click picks the item");
+        ui_popup_open(&p, pm, 3, 0UL, 0, 0, 6, 20);
+        CHECK(ui_popup_key(&p, UI_KEY_ESC) == UI_POPUP_CLOSE && !p.open, "esc closes");
+        ui_popup_open(&p, pm, 3, 0UL, 0, 0, 6, 20);
+        CHECK(ui_popup_click(&p, 5, 0) == UI_POPUP_CLOSE && !p.open, "click outside closes");
+    }
 
     /* Invalidate resends everything. */
     ui_cells_invalidate(&c);

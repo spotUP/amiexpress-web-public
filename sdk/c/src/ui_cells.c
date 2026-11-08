@@ -3,6 +3,7 @@
 #include <string.h>
 
 #include "ui_cells.h"
+#include "ui_key.h"
 
 static void set_cell(ui_cell *p, int ch, int fg, int bg, int bold)
 {
@@ -268,4 +269,103 @@ void ui_cells_button(ui_cells *c, int top, int left, int w, const char *text, in
     if (at < 0) at = 0;
     ui_cells_text(c, top + 1, left + 1 + at, text, w - 2);
     c->fg = pfg;
+}
+
+void ui_hit_reset(ui_hit *h) { h->n = 0; }
+
+void ui_hit_add(ui_hit *h, int id, int top, int left, int rows, int cols)
+{
+    if (h->n >= UI_HIT_MAX || rows < 1 || cols < 1) return;
+    h->r[h->n].id = id; h->r[h->n].top = top; h->r[h->n].left = left;
+    h->r[h->n].rows = rows; h->r[h->n].cols = cols;
+    h->n++;
+}
+
+int ui_hit_at(const ui_hit *h, int row, int col, int *dr, int *dc)
+{
+    int i;
+    for (i = h->n - 1; i >= 0; i--) {
+        const ui_hit_rect *r = &h->r[i];
+        if (row < r->top || row >= r->top + r->rows || col < r->left || col >= r->left + r->cols) continue;
+        if (dr) *dr = row - r->top;
+        if (dc) *dc = col - r->left;
+        return r->id;
+    }
+    return -1;
+}
+
+static int popup_sep(const ui_popup *p, int i) { return strcmp(p->items[i], "---") == 0; }
+
+static void popup_step(ui_popup *p, int dir)
+{
+    int i, at = p->sel;
+    for (i = 0; i < p->n; i++) {
+        at = (at + dir + p->n) % p->n;
+        if (!popup_sep(p, at)) { p->sel = at; return; }
+    }
+}
+
+void ui_popup_open(ui_popup *p, const char *const *items, int n, unsigned long alert, int row, int col, int rows, int cols)
+{
+    int i;
+    if (n > UI_POPUP_MAX) n = UI_POPUP_MAX;
+    p->n = n; p->alert = alert; p->w = 24;
+    for (i = 0; i < n; i++) {
+        int l = (int)strlen(items[i]) + 4;
+        p->items[i] = items[i];
+        if (l > p->w) p->w = l;
+    }
+    p->top = row < rows - (n + 4) ? row : rows - (n + 4);
+    if (p->top < 0) p->top = 0;
+    p->left = col < cols - 26 ? col : cols - 26;
+    if (p->left < 0) p->left = 0;
+    p->sel = -1;
+    popup_step(p, 1);
+    p->open = n > 0 && p->sel >= 0;
+}
+
+int ui_popup_key(ui_popup *p, int key)
+{
+    if (!p->open) return UI_POPUP_CLOSE;
+    switch (key) {
+    case UI_KEY_UP: popup_step(p, -1); return UI_POPUP_STAY;
+    case UI_KEY_DOWN: popup_step(p, 1); return UI_POPUP_STAY;
+    case UI_KEY_ENTER: case '\r': case '\n': p->open = 0; return p->sel;
+    case UI_KEY_ESC: p->open = 0; return UI_POPUP_CLOSE;
+    default: return UI_POPUP_STAY;
+    }
+}
+
+int ui_popup_click(ui_popup *p, int row, int col)
+{
+    int i = row - p->top - 1;
+    if (!p->open) return UI_POPUP_CLOSE;
+    if (row < p->top || row >= p->top + p->n + 2 || col < p->left || col >= p->left + p->w) {
+        p->open = 0;
+        return UI_POPUP_CLOSE;
+    }
+    if (i < 0 || i >= p->n || col == p->left || col == p->left + p->w - 1 || popup_sep(p, i)) return UI_POPUP_STAY;
+    p->sel = i;
+    p->open = 0;
+    return i;
+}
+
+void ui_popup_draw(ui_cells *c, const ui_popup *p, int border_fg, int fg, int sel_fg, int alert_fg)
+{
+    int i, pen = c->fg;
+    if (!p->open) return;
+    ui_cells_fill(c, p->top + 1, p->left + 1, p->n, p->w - 2, ' ');
+    ui_cells_box(c, p->top, p->left, p->n + 2, p->w, border_fg, 0, 0);
+    for (i = 0; i < p->n; i++) {
+        int row = p->top + 1 + i, k;
+        if (popup_sep(p, i)) {
+            c->fg = border_fg;
+            for (k = 1; k < p->w - 1; k++) ui_cells_put(c, row, p->left + k, '-');
+            continue;
+        }
+        c->fg = i == p->sel ? sel_fg : (p->alert >> i) & 1UL ? alert_fg : fg;
+        ui_cells_text(c, row, p->left + 1, i == p->sel ? "> " : "  ", 2);
+        ui_cells_text(c, row, p->left + 3, p->items[i], p->w - 4);
+    }
+    c->fg = pen;
 }

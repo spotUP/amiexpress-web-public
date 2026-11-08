@@ -101,6 +101,39 @@ typedef void (*ui_cells_drain_fn)(void *ctx);
  *  style change. The bottom-right cell is never sent (it would scroll some terminals). */
 void ui_cells_flush(ui_cells *c, ansi_buf *out, ui_cells_drain_fn drain, void *ctx);
 
+/* ---- Hit-testing: rectangles with an id, the last one added wins (it is drawn on top). ---- */
+#define UI_HIT_MAX 32
+typedef struct { int id, top, left, rows, cols; } ui_hit_rect;
+typedef struct { ui_hit_rect r[UI_HIT_MAX]; int n; } ui_hit;
+void ui_hit_reset(ui_hit *h);
+/** Add a region (0-based canvas cells). Full list: the region is dropped. */
+void ui_hit_add(ui_hit *h, int id, int top, int left, int rows, int cols);
+/** The id of the topmost region holding row/col (0-based), -1 none; dr and dc (may be 0) get the offset inside it. */
+int ui_hit_at(const ui_hit *h, int row, int col, int *dr, int *dc);
+
+/* ---- Popup list (a context menu): opens at a click, clamped to the screen as the TS door's
+ *      context-menus.ts does, "---" items are separators the selection skips, bit i of `alert`
+ *      draws item i in the alert colour. ---- */
+#define UI_POPUP_MAX   24
+#define UI_POPUP_STAY  (-1)    /* key/hit used, popup stays open */
+#define UI_POPUP_CLOSE (-2)    /* dismissed: Esc, or a click outside */
+typedef struct {
+    const char *items[UI_POPUP_MAX];
+    int n, sel, top, left, w;
+    unsigned long alert;
+    int open;
+} ui_popup;
+/** Open at 0-based row/col on a rows x cols screen: top = max(0, min(row, rows - (n + 4))),
+ *  left = max(0, min(col, cols - 26)), 24 columns wide (wider when an item needs it). */
+void ui_popup_open(ui_popup *p, const char *const *items, int n, unsigned long alert, int row, int col, int rows, int cols);
+/** Up/Down move (skipping separators), Enter picks: returns the item index and closes; Esc
+ *  returns UI_POPUP_CLOSE and closes; any other key UI_POPUP_STAY. */
+int ui_popup_key(ui_popup *p, int key);
+/** A click at 0-based row/col: the item index (popup closes), UI_POPUP_STAY on the border or a
+ *  separator, UI_POPUP_CLOSE outside (popup closes). */
+int ui_popup_click(ui_popup *p, int row, int col);
+void ui_popup_draw(ui_cells *c, const ui_popup *p, int border_fg, int fg, int sel_fg, int alert_fg);
+
 #ifdef __cplusplus
 }
 #endif

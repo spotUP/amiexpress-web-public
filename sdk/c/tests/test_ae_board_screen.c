@@ -33,7 +33,7 @@ static int stand_in(void *ctx, int field, const char *request, char *out, int ca
     if (strcmp(request, "SIZE") == 0) return answer(size_answer, out, cap);
     if (strncmp(request, "WIPE IN ", 8) == 0 || strncmp(request, "WIPE OUT ", 9) == 0) return answer("OK", out, cap);
     if (strcmp(request, "WIPE END") == 0) return answer("OK", out, cap);
-    if (strcmp(request, "MOUSE ON") == 0) return answer("OK", out, cap);
+    if (strncmp(request, "MOUSE ON", 8) == 0) return answer("OK", out, cap);
     if (strcmp(request, "MOUSE?") == 0) {
         if (queued_mouse > 0) { queued_mouse--; return answer("M\t12\t7", out, cap); }
         return 0;
@@ -112,7 +112,7 @@ static void the_mouse_is_switched_on_and_events_come_one_by_one(void)
 {
     ae_mouse_event ev;
     silent = 0; queued_mouse = 1;
-    assert(ae_bs_mouse(1) == 1 && strcmp(last_request, "MOUSE ON") == 0);
+    assert(ae_bs_mouse(1) == 1 && strcmp(last_request, "MOUSE ON B") == 0);
     assert(ae_bs_mouse_next(&ev) == 1 && ev.kind == 'M' && ev.col == 12 && ev.row == 7);
     assert(ae_bs_mouse_next(&ev) == 0);
     silent = 1;
@@ -130,6 +130,12 @@ static void the_mouse_parser_is_strict(void)
     assert(ae_bs_parse_mouse("P\t5", &ev) == 0);
     assert(ev.kind == 0);
     assert(ae_bs_parse_mouse("U\t3\t4", &ev) == 1 && ev.kind == 'U' && ev.col == 3 && ev.row == 4);
+    assert(ev.button == AE_MOUSE_LEFT);                   /* old board: no button field */
+    assert(ae_bs_parse_mouse("P\t5\t6\t2", &ev) == 1 && ev.button == AE_MOUSE_RIGHT && ev.row == 6);
+    assert(ae_bs_parse_mouse("M\t5\t6\t3", &ev) == 1 && ev.button == AE_MOUSE_NONE);
+    assert(ae_bs_parse_mouse("P\t5\t6\t4", &ev) == 0);   /* no such button */
+    assert(ae_bs_parse_mouse("P\t5\t6\t2\t1", &ev) == 0); /* fifth field */
+    assert(ae_bs_parse_mouse("P\t5\t6\t", &ev) == 0);
     printf("  [OK] the mouse parser is strict\n");
 }
 

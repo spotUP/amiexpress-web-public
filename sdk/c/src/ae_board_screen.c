@@ -44,17 +44,21 @@ int ae_bs_parse_size(const char *reply, int *cols, int *rows)
 int ae_bs_parse_mouse(const char *reply, ae_mouse_event *ev)
 {
     const char *p;
-    int c, r;
+    const char *q;
+    int c, r, b = AE_MOUSE_LEFT;
     char k;
 
     if (!reply || !ev) return 0;
     k = reply[0];
     if (!(k == 'P' || k == 'R' || k == 'M' || k == 'U' || k == 'D') || reply[1] != '\t') return 0;
     if (!(p = number(reply + 2, 1, &c, 0))) return 0;
-    if (!number(p, 1, &r, 1)) return 0;
+    /* Row ends the reply (old board, plain MOUSE ON) or a TAB and the button follows. */
+    if (!(q = number(p, 1, &r, 1)) && !((q = number(p, 1, &r, 0)) && number(q, 0, &b, 1) && b <= AE_MOUSE_NONE))
+        return 0;
     ev->kind = k;
     ev->col = c;
     ev->row = r;
+    ev->button = b;
     return 1;
 }
 
@@ -126,7 +130,7 @@ int ae_bs_wipe_end(void)
 int ae_bs_mouse(int on)
 {
     char reply[AE_MAX_LINE + 1];
-    int n = ask(on ? "MOUSE ON" : "MOUSE OFF", reply, (int)sizeof(reply));
+    int n = ask(on ? "MOUSE ON B" : "MOUSE OFF", reply, (int)sizeof(reply));
 
     if (n < 0) return AE_BS_GONE;
     return strcmp(reply, "OK") == 0 ? 1 : 0;

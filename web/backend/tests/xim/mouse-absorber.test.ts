@@ -3,7 +3,7 @@ import { MouseAbsorber, MOUSE_WAKE } from '../../src/amiga-emulation/xim/mouse-a
 test('a report never reaches the key queue; one wake byte stands for it', () => {
   const m = new MouseAbsorber();
   expect(m.absorb('a\x1b[<0;10;5Mb')).toBe('a' + MOUSE_WAKE + 'b');
-  expect(m.next()).toEqual({ kind: 'P', col: 10, row: 5 });
+  expect(m.next()).toMatchObject({ kind: 'P', col: 10, row: 5 });
   expect(m.next()).toBeNull();
 });
 
@@ -11,7 +11,7 @@ test('a report split across chunks is held until it is whole, and keys around it
   const m = new MouseAbsorber();
   expect(m.absorb('x\x1b[<35;1')).toBe('x');
   expect(m.absorb('0;5My')).toBe(MOUSE_WAKE + 'y');
-  expect(m.next()).toEqual({ kind: 'M', col: 10, row: 5 });
+  expect(m.next()).toMatchObject({ kind: 'M', col: 10, row: 5 });
 });
 
 test('a flood of motion is one wake and the latest position', () => {
@@ -19,13 +19,13 @@ test('a flood of motion is one wake and the latest position', () => {
   let keys = '';
   for (let i = 1; i <= 200; i++) keys += m.absorb(`\x1b[<35;${i};3M`);
   expect(keys).toBe(MOUSE_WAKE);
-  expect(m.next()).toEqual({ kind: 'M', col: 200, row: 3 });
+  expect(m.next()).toMatchObject({ kind: 'M', col: 200, row: 3 });
 });
 
 test('presses and releases queue (up to 8) behind a motion, each with its own place', () => {
   const m = new MouseAbsorber();
   m.absorb('\x1b[<35;2;2M\x1b[<0;4;4M\x1b[<0;4;4m');
-  expect([m.next(), m.next(), m.next(), m.next()]).toEqual([
+  expect([m.next(), m.next(), m.next(), m.next()]).toMatchObject([
     { kind: 'M', col: 2, row: 2 }, { kind: 'P', col: 4, row: 4 }, { kind: 'R', col: 4, row: 4 }, null]);
 });
 
@@ -65,7 +65,7 @@ describe('a report split anywhere across chunks', () => {
       const m = new MouseAbsorber();
       const out = m.absorb(cut[0]) + m.absorb(cut[1]);
       expect(out).toBe('x' + MOUSE_WAKE);
-      expect(m.next()).toEqual({ kind: 'M', col: 10, row: 5 });
+      expect(m.next()).toMatchObject({ kind: 'M', col: 10, row: 5 });
       expect(m.next()).toBeNull();
     }
   });
@@ -75,7 +75,7 @@ describe('a report split anywhere across chunks', () => {
       const m = new MouseAbsorber();
       const out = m.absorb('a' + REPORT.slice(0, i)) + m.absorb(REPORT.slice(i) + 'b');
       expect(out).toBe('a' + MOUSE_WAKE + 'b');
-      expect(m.next()).toEqual({ kind: 'M', col: 10, row: 5 });
+      expect(m.next()).toMatchObject({ kind: 'M', col: 10, row: 5 });
       expect(m.next()).toBeNull();
     }
   });
@@ -138,11 +138,17 @@ describe('events arrive in order', () => {
   test('press then move is delivered press first', () => {
     const m = new MouseAbsorber();
     m.absorb('\x1b[<0;1;1M\x1b[<35;2;2M');
-    expect([m.next(), m.next(), m.next()]).toEqual([{ kind: 'P', col: 1, row: 1 }, { kind: 'M', col: 2, row: 2 }, null]);
+    expect([m.next(), m.next(), m.next()]).toMatchObject([{ kind: 'P', col: 1, row: 1 }, { kind: 'M', col: 2, row: 2 }, null]);
   });
   test('move, move, press is the latest move then the press', () => {
     const m = new MouseAbsorber();
     m.absorb('\x1b[<35;2;2M\x1b[<35;3;3M\x1b[<0;4;4M');
-    expect([m.next(), m.next(), m.next()]).toEqual([{ kind: 'M', col: 3, row: 3 }, { kind: 'P', col: 4, row: 4 }, null]);
+    expect([m.next(), m.next(), m.next()]).toMatchObject([{ kind: 'M', col: 3, row: 3 }, { kind: 'P', col: 4, row: 4 }, null]);
   });
+});
+
+test('the button survives: right press and release carry 2, middle 1, left 0, wheel 0', () => {
+  const m = new MouseAbsorber();
+  m.absorb('\x1b[<2;3;4M\x1b[<2;3;4m\x1b[<1;1;1M\x1b[<0;1;1M\x1b[<64;1;1M');
+  expect([m.next(), m.next(), m.next(), m.next(), m.next()].map((e) => `${e!.kind}${e!.button}`)).toEqual(['P2', 'R2', 'P1', 'P0', 'U0']);
 });

@@ -324,7 +324,7 @@ static void a_picked_entry_runs_through_the_whole_shell(void)
     assert(DRIVE("\x1b[F\x1b[A\r") == 0);
     assert(strstr(requests, "OPEN MAIN|") == requests);                      /* the very first thing asked */
     assert(strstr(requests, "WIPE IN X|") && strstr(requests, "LOGO header 1 1 3 80|"));
-    assert(strstr(requests, "MOUSE ON|"));
+    assert(strstr(requests, "MOUSE ON B|"));
     assert(activations == 1 && activated_entry == 1);                        /* the sentinel: the callback RAN */
     assert(strstr(requests, "RUN E|"));
     assert(strstr(requests, "ROW 1|"));                                      /* on leave: the picked entry */

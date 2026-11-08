@@ -211,7 +211,11 @@ static void draw_sidebar(ui_cells *c, const lc_model *m, int top, int h, int w)
         draw_side_item(c, &m->side[i], top + 1 + i, w - 2, i == m->side_sel);
 }
 
+
 #define WRAP_MAX 24
+#define CHAT_ROWS_MAX 128
+static ui_hit lc_hits;                              /* the last frame's click regions, topmost last */
+static int chat_row_line[CHAT_ROWS_MAX];            /* chat body row -> line index, -1 empty */
 
 static void draw_chat(ui_cells *c, const lc_model *m, int top, int h, int left, int w)
 {
@@ -231,6 +235,8 @@ static void draw_chat(ui_cells *c, const lc_model *m, int top, int h, int left, 
         rows++;
     }
     if (rows < 1 || width < 1) return;
+    ui_hit_add(&lc_hits, LC_HIT_CHAT, body, left + 1, rows, w - 2);
+    for (k = 0; k < CHAT_ROWS_MAX; k++) chat_row_line[k] = -1;
 
     for (i = 0; i < m->nlines; i++) {
         lc_line_marked(&m->lines[i], marked, (int)sizeof marked);
@@ -244,6 +250,7 @@ static void draw_chat(ui_cells *c, const lc_model *m, int top, int h, int left, 
         n = ui_cells_wrap(marked, width, starts, ends, WRAP_MAX);
         for (k = 0; k < n; k++, at++) {
             if (at < first || at >= first + rows) continue;
+            if (at - first < CHAT_ROWS_MAX) chat_row_line[at - first] = i;
             ui_cells_marked(c, body + at - first, left + 1, marked, starts[k], ends[k], width);
         }
     }
@@ -309,8 +316,13 @@ static void draw_modal(ui_cells *c, const lc_model *m, int *cr, int *cc)
     if (m->modal == LC_MODAL_QUIT) {
         ui_cells_button(c, top + 7, left + 12, 9, "[ Yes ]", LC_ACCENT, LC_INK);
         ui_cells_button(c, top + 7, left + 29, 8, "[ No ]", LC_ACCENT, LC_INK);
+        ui_hit_add(&lc_hits, LC_HIT_MODAL, top, left, 12, w);
+        ui_hit_add(&lc_hits, LC_HIT_YES, top + 7, left + 12, 3, 9);
+        ui_hit_add(&lc_hits, LC_HIT_NO, top + 7, left + 29, 3, 8);
     } else {
         ui_cells_button(c, top + 7, left + (w - 10) / 2, 10, "[ OK ]", LC_ACCENT, LC_INK);
+        ui_hit_add(&lc_hits, LC_HIT_MODAL, top, left, 12, w);
+        ui_hit_add(&lc_hits, LC_HIT_OK, top + 7, left + (w - 10) / 2, 3, 10);
     }
 }
 
@@ -318,9 +330,18 @@ void lc_draw(ui_cells *c, const lc_model *m, int *cursor_row, int *cursor_col)
 {
     int W = c->cols, H = c->rows, sw = lc_sidebar_width(m), h = H - 5;
     char status[160];
+    int k;
 
+    ui_hit_reset(&lc_hits);
     draw_menubar(c);
-    if (sw > 0) draw_sidebar(c, m, 1, h, sw);
+    for (k = 0; k < LC_MENUS; k++)
+        ui_hit_add(&lc_hits, LC_HIT_MENU, 0, menu_col[k], 1, (int)strlen(lc_menu_label[k]));
+    ui_hit_add(&lc_hits, LC_HIT_STATUS, H - 1, 0, 1, W);
+    ui_hit_add(&lc_hits, LC_HIT_INPUT, H - 4, 0, 3, W);
+    if (sw > 0) {
+        draw_sidebar(c, m, 1, h, sw);
+        ui_hit_add(&lc_hits, LC_HIT_SIDEBAR, 2, 1, h - 2, sw - 2);
+    }
     draw_chat(c, m, 1, h, sw, W - sw);
     draw_input(c, m, cursor_row, cursor_col);
     sprintf(status, "@%.30s | Node %d | #%.40s | [L] [*] | F1:Help F4:Emoji", m->handle, m->node, m->room);
@@ -328,9 +349,32 @@ void lc_draw(ui_cells *c, const lc_model *m, int *cursor_row, int *cursor_col)
 
     if (m->menu >= 0 && m->menu < LC_MENUS) {
         ui_cells_pen(c, LC_INK, UI_CELLS_DEFAULT, 0);
-        ui_cells_menu(c, 1, menu_col[m->menu] - 1, lc_menu_items[m->menu], lc_menu_count[m->menu],
-                      m->menu_sel, LC_ACCENT, LC_INK, LC_ACCENT);
+        int mw = ui_cells_menu(c, 1, menu_col[m->menu] - 1, lc_menu_items[m->menu], lc_menu_count[m->menu],
+                               m->menu_sel, LC_ACCENT, LC_INK, LC_ACCENT);
+        ui_hit_add(&lc_hits, LC_HIT_DROPDOWN, 2, menu_col[m->menu], lc_menu_count[m->menu], mw - 2);
+    }
+    if (m->ctx.open) {
+        ui_popup_draw(c, &m->ctx, LC_ACCENT, LC_INK, LC_ACCENT, LC_ALERT);
+        ui_hit_add(&lc_hits, LC_HIT_POPUP, m->ctx.top, m->ctx.left, m->ctx.n + 2, m->ctx.w);
     }
     if (m->help) draw_help(c, m);
     if (m->modal != LC_MODAL_NONE) draw_modal(c, m, cursor_row, cursor_col);
+}
+
+int lc_hit(int row, int col, int *index)
+{
+    int dr = 0, dc = 0, id = ui_hit_at(&lc_hits, row, col, &dr, &dc), k;
+    *index = -1;
+    switch (id) {
+    case LC_HIT_MENU:
+        for (k = 0; k < LC_MENUS; k++)
+            if (col >= menu_col[k] && col < menu_col[k] + (int)strlen(lc_menu_label[k])) *index = k;
+        break;
+    case LC_HIT_DROPDOWN: case LC_HIT_SIDEBAR: *index = dr; break;
+    case LC_HIT_CHAT: *index = dr < CHAT_ROWS_MAX ? chat_row_line[dr] : -1; break;
+    case LC_HIT_STATUS: *index = col; break;
+    case -1: return LC_HIT_NONE;
+    default: break;
+    }
+    return id;
 }
