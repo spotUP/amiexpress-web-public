@@ -728,6 +728,26 @@ export function oneCfgLine(value: string | number): string {
   return String(value).replace(/[\r\n]+/g, ' ');
 }
 
+/**
+ * RECORDED EXEMPTION: LIVECHAT68 on the WEB board speaks plain HTTP.
+ *
+ * The door's own defaults are Tls=1, Port=443 (a sysop on a real Amiga gets
+ * TLS). This board runs the door inside its 68K emulator, whose AmiSSL bridge
+ * (amiga-emulation/api/AmiSSLLibrary.ts) is untrusted, so here the door is
+ * pinned to plain HTTP on doors.uprough.net:80 and told that is intended. The
+ * pin outranks stored values and the manifest: a stale settings.json cannot
+ * put the web board back on TLS. Keyed by door directory, applied at render.
+ */
+export const WEB_BOARD_DOOR_OVERRIDES: Readonly<Record<string, Readonly<Record<string, string | number | boolean>>>> = {
+  LIVECHAT68: { tls: false, allowPlainHttp: true, port: 80 },
+};
+
+/** Doors parse cfg booleans with atoi(): "true" would read as 0. */
+function cfgValue(raw: unknown): string {
+  if (typeof raw === 'boolean') return raw ? '1' : '0';
+  return oneCfgLine(raw as string);
+}
+
 export function renderDoorCfg(
   doorDir: string,
   resolveSystemValue?: SystemValueResolver,
@@ -740,7 +760,10 @@ export function renderDoorCfg(
   // keeps a reboot from destroying Bulls.CFG.
   if (manifest.cfgFormat === 'empire') return null;
 
-  const values = readValuesFromDir(doorDir);
+  const values = {
+    ...readValuesFromDir(doorDir),
+    ...WEB_BOARD_DOOR_OVERRIDES[path.basename(doorDir)],
+  };
   const lines: string[] = [];
   const resolved: Record<string, string | number | boolean> = {};
   for (const setting of manifest.settings) {
@@ -762,7 +785,7 @@ export function renderDoorCfg(
     const raw = (ownIsEmpty ? (fromBoard ?? setting.default ?? '') : own) ?? '';
     resolved[setting.key] = raw as string | number | boolean;
     // One line per key, no quoting: that is the format these doors parse.
-    lines.push(`${setting.cfgKey}=${oneCfgLine(raw as string)}`);
+    lines.push(`${setting.cfgKey}=${cfgValue(raw)}`);
   }
 
   // REPAIR, not refuse.
