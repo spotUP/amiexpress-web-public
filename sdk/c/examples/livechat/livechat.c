@@ -82,6 +82,7 @@ static char dm_peer[24];
 static int msg_number;
 static int help_shown;          /* times the help overlay opened (the host test reads it) */
 static int is_sysop;            /* the caller's level is 255: sysop items in the context menus */
+static int user_level;          /* the caller's level: the TS commands' minSecLevel gates */
 static int mouse_events;        /* mouse events dispatched (a test sentinel) */
 static int keep_lines;          /* join_room adds to the pane instead of starting it afresh */
 
@@ -163,6 +164,29 @@ static lc_line *line_by_number(int number)
 {
     int i;
     for (i = 0; i < M.nlines; i++) if (M.lines[i].number == number && number > 0) return &M.lines[i];
+    return 0;
+}
+
+/** Takes the message `id` out of the pane (TS removeMessage: no line says so). */
+static void line_remove(const char *id)
+{
+    int i, j = 0;
+    for (i = 0; i < M.nlines; i++) {
+        if (M.lines[i].id[0] != '\0' && strcmp(M.lines[i].id, id) == 0) continue;
+        if (i != j) M.lines[j] = M.lines[i];
+        j++;
+    }
+    M.nlines = j;
+}
+
+/** The caller's newest message in the pane (TS lastOwnMessageId), or 0. */
+static lc_line *own_last(void)
+{
+    int i;
+    for (i = M.nlines - 1; i >= 0; i--) {
+        lc_line *l = &M.lines[i];
+        if (l->number > 0 && l->id[0] != '\0' && strcmp(l->nick, handle) == 0) return l;
+    }
     return 0;
 }
 
@@ -420,15 +444,28 @@ static void take_events(void)
             sprintf(line, "%.24s %s", user, joined ? "joined" : "left");
             add_note(LC_ACTIVITY_LINE, line);
             if (strcmp(user, handle) != 0) side_user(user, joined);
+        } else if (strcmp(type, "edit") == 0) {
+            lc_line *l = line_by_id(ref);       /* TS chat:edited: the rows of that id now read the new text */
+            if (l != 0) { clean(l->text, sizeof l->text, f[7]); l->edited = 1; }
+        } else if (strcmp(type, "delete") == 0) {
+            line_remove(ref);                   /* TS chat:deleted: gone, nothing printed */
         } else if (strcmp(type, "topic") == 0 && in_room) {
             clean(room_topic, sizeof room_topic, f[7]);
             sprintf(M.pane_label, "%.40s - %.50s", room_name, room_topic);
-            sprintf(line, "Topic: %.200s", room_topic);
+            sprintf(line, "%.24s set the topic: %.200s", user[0] != '\0' ? user : "Someone", room_topic);
             system_line(line);
-        } else if (strcmp(type, "kicked") == 0 && strcmp(user, handle) == 0 && in_room) {
-            system_line("You were removed from this room.");
+        } else if ((strcmp(type, "op") == 0 || strcmp(type, "deop") == 0) && in_room) {
+            sprintf(line, "%.24s is %s a room operator", user[0] != '\0' ? user : "Someone", type[0] == 'd' ? "no longer" : "now");
+            system_line(line);
+        } else if ((strcmp(type, "kicked") == 0 || strcmp(type, "banned") == 0) && strcmp(user, handle) == 0 && in_room) {
+            /* TS chat:kicked / chat:banned reach only the target; the server's kick is per room, so leave the room */
+            sprintf(line, "You have been %s%s%.120s", type[0] == 'k' ? "kicked" : "banned", f[7][0] != '\0' ? ": " : "", f[7]);
+            system_line(line);
+            system_line("Disconnecting...");
             room_id[0] = '\0';
             M.room[0] = '\0';
+        } else if (strcmp(type, "muted") == 0 && strcmp(user, handle) == 0 && in_room) {
+            system_line("You have been muted");
         }
     }
     for (i = 0; i < nreacted; i++) load_reactions(reacted[i]);
@@ -596,6 +633,180 @@ static void join_typed(const char *text)
     join_room(a);
 }
 
+/* ---- B2: message edit/delete, topic, moderation, invites, reactions (TS commands/) ---- */
+
+static int digits(const char *s)
+{
+    if (*s == '\0') return 0;
+    for (; *s != '\0'; s++) if (*s < '0' || *s > '9') return 0;
+    return 1;
+}
+
+/** TS commands return `Usage: ...` as an error: the door prints `Error: <text>`. */
+static void usage(const char *text)
+{
+    char t[120];
+    sprintf(t, "Error: Usage: %.100s", text);
+    system_line(t);
+}
+
+/** TS minSecLevel: below it the command answers `Permission denied. Need level N`. */
+static int need_level(int level)
+{
+    char t[64];
+    if (user_level >= level) return 1;
+    sprintf(t, "Error: Permission denied. Need level %d", level);
+    system_line(t);
+    return 0;
+}
+
+/** `@name` / `name` as the server names a user: handle@BOARD, our own board when none is given.
+ *  `shown` (may be NULL) gets the name without the `@` prefix, as the TS lines print it. */
+static void target_user(const char *arg, char *out, size_t cap, char *shown, size_t shown_cap)
+{
+    const char *suffix = strchr(chat.user, '@');
+    if (*arg == '@') arg++;
+    if (shown != 0) copy(shown, shown_cap, arg);
+    if (strchr(arg, '@') != 0 || suffix == 0) copy(out, cap, arg);
+    else { copy(out, cap, arg); if (strlen(out) + strlen(suffix) < cap) strcat(out, suffix); }
+}
+
+/** The message a typed number names (the pane's numbers, as /react), or a line saying there is none. */
+static lc_line *typed_message(const char *a)
+{
+    lc_line *l = line_by_number(atoi(a));
+    if (l == 0 || l->id[0] == '\0') { system_line("No such message number."); return 0; }
+    return l;
+}
+
+/** After a call that answers with an event: poll it in, or say why the server refused. */
+static void then_poll(int rc)
+{
+    if (rc == AE_CHAT_OK) do_poll(); else show_error(rc);
+}
+
+static void edit_typed(const char *rest)
+{
+    char a[16];
+    const char *text = rest;
+    lc_line *l;
+    arg_word(rest, a, sizeof a);
+    if (*rest == '\0') { usage("/edit [msg-id] new text"); return; }
+    if (digits(a) && *after_word(rest) != '\0') {          /* TS: an id only with two or more words */
+        if ((l = typed_message(a)) == 0) return;
+        text = after_word(rest);
+    } else if ((l = own_last()) == 0) {
+        system_line("No message to edit: name one with its id, or send a line first.");
+        return;
+    }
+    then_poll(ae_chat_edit(&chat, l->id, text));
+}
+
+static void delete_typed(const char *rest)
+{
+    char a[16];
+    lc_line *l;
+    arg_word(rest, a, sizeof a);
+    if (a[0] != '\0' && !digits(a)) { usage("/deletemsg [msg-id]"); return; }
+    if (a[0] != '\0') { if ((l = typed_message(a)) == 0) return; }
+    else if ((l = own_last()) == 0) {
+        system_line("No message to delete: name one with its id, or send a line first.");
+        return;
+    }
+    then_poll(ae_chat_delete(&chat, l->id));
+}
+
+/** /kick /ban /mute /unmute /unban /op /deop: TS mod-kick.ts and mod-ban.ts. */
+static void moderate_typed(const char *cmd, const char *rest)
+{
+    char a[48], user[64], shown[48], line[96];
+    const char *action = cmd, *use, *reason = "";
+    int level, minutes = 0, rc;
+    if (strcmp(cmd, "kick") == 0) { level = 80; use = "/kick @user [reason]"; }
+    else if (strcmp(cmd, "mute") == 0) { level = 80; use = "/mute @user [minutes]"; }
+    else if (strcmp(cmd, "unmute") == 0) { level = 80; use = "/unmute @user"; }
+    else if (strcmp(cmd, "ban") == 0) { level = 100; use = "/ban @user [reason]"; }
+    else if (strcmp(cmd, "unban") == 0) { level = 100; use = "/unban @user"; }
+    else { level = 255; use = "/op @user  |  /op -@user  |  /deop @user"; }
+    if (!need_level(level)) return;
+    arg_word(rest, a, sizeof a);
+    if (level == 255 && a[0] == '-') { action = "deop"; memmove(a, a + 1, strlen(a)); }
+    if (a[0] == '\0' || strcmp(a, "@") == 0) { usage(use); return; }
+    target_user(a, user, sizeof user, shown, sizeof shown);
+    rest = after_word(rest);
+    if (strcmp(cmd, "kick") == 0 || strcmp(cmd, "ban") == 0) reason = *rest != '\0' ? rest : "No reason given";
+    if (strcmp(cmd, "mute") == 0) minutes = *rest != '\0' ? atoi(rest) : 5;
+    rc = ae_chat_moderate(&chat, room_id, action, user, reason, minutes);
+    if (rc == AE_CHAT_ERR_STATUS && strcmp(chat.error, "not_found") == 0) {
+        sprintf(line, "User %.40s not found", shown);
+        system_line(line);
+    } else then_poll(rc);
+}
+
+/** /invite /uninvite @user [#room]: TS mode.ts; a #room is a room name, else the current room. */
+static void invite_typed(int add, const char *rest)
+{
+    char a[48], r[48], user[64], shown[48], line[96];
+    const char *room = room_id;
+    int i, rc;
+    arg_word(rest, a, sizeof a);
+    if (a[0] == '\0') { usage(add ? "/invite @user [#room]" : "/uninvite @user [#room]"); return; }
+    arg_word(after_word(rest), r, sizeof r);
+    if (r[0] == '#') memmove(r, r + 1, strlen(r));
+    for (i = 0; r[0] != '\0' && i < rooms_count; i++)
+        if (strcmp(rooms_name[i], r) == 0 || strcmp(rooms_id[i], r) == 0) { room = rooms_id[i]; break; }
+    target_user(a, user, sizeof user, shown, sizeof shown);
+    rc = ae_chat_invite(&chat, room, user, add);
+    if (rc == AE_CHAT_OK) {
+        if (add) sprintf(line, "Invited %.40s to the room", shown); else sprintf(line, "Revoked invite for %.40s", shown);
+        system_line(line);
+    } else if (rc == AE_CHAT_ERR_STATUS && strcmp(chat.error, "not_found") == 0) {
+        sprintf(line, "User %.40s not found", shown);
+        system_line(line);
+    } else show_error(rc);
+}
+
+/** /reactions n: TS 'chat:reactions:list' -> `Reactions on N: [disp n] ...` or `No reactions on N`. */
+static void reactions_typed(const char *rest)
+{
+    char a[16], line[LC_TEXT_MAX];
+    char *f[3];
+    lc_line *l;
+    int rc, any = 0;
+    arg_word(rest, a, sizeof a);
+    if (a[0] == '\0') { usage("/reactions <msg-id>"); return; }
+    if ((l = typed_message(a)) == 0) return;
+    rc = ae_chat_reactions(&chat, l->id);
+    if (rc != AE_CHAT_OK) { show_error(rc); return; }
+    sprintf(line, "Reactions on %.12s:", a);
+    while (ae_chat_next_row(&chat, f, 3) > 0) {       /* no chat call inside: the rows live in the reply buffer */
+        if (atoi(f[1]) <= 0 || strlen(line) + 32 >= sizeof line) continue;
+        sprintf(line + strlen(line), " [%.12s %d]", lc_react_display(f[0]), atoi(f[1]));
+        any = 1;
+    }
+    if (!any) sprintf(line, "No reactions on %.12s", a);
+    system_line(line);
+}
+
+/** /unreact [emoji] <n>, /thumbsup /like /love <n>. */
+static void react_typed(const char *cmd, const char *rest)
+{
+    char a[24], b[16];
+    lc_line *l;
+    int count = 0;
+    arg_word(rest, a, sizeof a);
+    if (strcmp(cmd, "unreact") == 0) {
+        arg_word(after_word(rest), b, sizeof b);
+        if (b[0] == '\0') { usage("/unreact [emoji] <msg-id>"); return; }
+        if ((l = typed_message(b)) == 0) return;
+        then_poll(ae_chat_unreact(&chat, l->id, a[0] != '\0' ? a : "+1", &count));
+        return;
+    }
+    if (a[0] == '\0') { usage(strcmp(cmd, "love") == 0 ? "/love <msg-id>" : "/thumbsup <msg-id>"); return; }
+    if ((l = typed_message(a)) == 0) return;
+    then_poll(ae_chat_react(&chat, l->id, strcmp(cmd, "love") == 0 ? "heart" : "+1", &count));
+}
+
 /** Runs one "/..." line. Returns 1 when the door should end. */
 static int run_command(const char *line)
 {
@@ -646,6 +857,18 @@ static int run_command(const char *line)
         } else show_error(rc);
         return 0;
     }
+    if (strcmp(cmd, "edit") == 0) { edit_typed(rest); return 0; }
+    if (is_cmd(cmd, "deletemsg", "delmsg")) { delete_typed(rest); return 0; }
+    if (strcmp(cmd, "topic") == 0) {
+        if (*rest == '\0') { usage("/topic <new topic>"); return 0; }
+        then_poll(ae_chat_topic(&chat, room_id, rest));
+        return 0;
+    }
+    if (is_cmd(cmd, "kick", "ban") || is_cmd(cmd, "mute", "unmute") || is_cmd(cmd, "unban", "op")
+        || strcmp(cmd, "deop") == 0) { moderate_typed(cmd, rest); return 0; }
+    if (is_cmd(cmd, "invite", "uninvite")) { invite_typed(cmd[0] == 'i', rest); return 0; }
+    if (strcmp(cmd, "reactions") == 0) { reactions_typed(rest); return 0; }
+    if (is_cmd(cmd, "unreact", "love") || is_cmd(cmd, "thumbsup", "like")) { react_typed(cmd, rest); return 0; }
     system_line("Unknown command. Type /help for help.");
     return 0;
 }
@@ -762,7 +985,16 @@ static void ctx_run(const char *it)
                 found++;
             }
             if (!found) { sprintf(buf, "No recent messages from %.30s.", nick); system_line(buf); }
-        } else not_yet(it);              /* Profile, Whois, Note, Mute, Ignore, Block (B4/B5), Kick, Ban (B2) */
+        } else if (strcmp(it, "Kick User") == 0 || strcmp(it, "Ban User") == 0) {
+            char user[64];
+            int kick = it[0] == 'K', rc;
+            if (!is_sysop) { system_line("Sysop only."); return; }
+            target_user(nick, user, sizeof user, 0, 0);          /* TS: no prompt, no reason */
+            rc = ae_chat_moderate(&chat, room_id, kick ? "kick" : "ban", user, "", 0);
+            if (rc != AE_CHAT_OK) { show_error(rc); return; }
+            sprintf(buf, "%s requested for %.30s", kick ? "Kick" : "Ban", nick);
+            system_line(buf);
+        } else not_yet(it);              /* Profile, Whois, Note, Mute, Ignore, Block (B4/B5) */
     } else if (M.ctx_kind == LC_CTX_CHAT) {
         const lc_line *l = M.ctx_target >= 0 && M.ctx_target < M.nlines ? &M.lines[M.ctx_target] : 0;
         if (!l || l->number == 0) { system_line("Right-click on a message first."); return; }
@@ -771,7 +1003,9 @@ static void ctx_run(const char *it)
             if (ae_chat_react(&chat, l->id, "+1", &count) == AE_CHAT_OK) do_poll();     /* the react event repaints the counts */
             else system_line("The reaction did not go through.");
         } else if (strcmp(it, "Quote") == 0) { sprintf(buf, "> %.24s: %.60s ", l->nick, l->text); input_set(buf); }
-        else not_yet(it);                /* Reply (B3), Copy Text (OSC 52), Pin, Mark Unread, Edit, Delete (B2) */
+        else if (strcmp(it, "Edit") == 0) { sprintf(buf, "/edit %d ", l->number); input_set(buf); }
+        else if (strcmp(it, "Delete") == 0) then_poll(ae_chat_delete(&chat, l->id));    /* TS: no confirm */
+        else not_yet(it);                /* Reply, Copy Text (OSC 52), Pin, Mark Unread */
     } else {
         lc_side *r = &M.side[M.ctx_target];
         if (strcmp(it, "Join") == 0) join_room(r->id);
@@ -1011,7 +1245,7 @@ int main(int argc, char **argv)
         finish();
         return 0;
     }
-    if (ae_chat_open(&chat, &cfg, handle, (is_sysop = ae_user_level(&session) >= 255)) != AE_CHAT_OK) {
+    if (ae_chat_open(&chat, &cfg, handle, (is_sysop = (user_level = ae_user_level(&session)) >= 255)) != AE_CHAT_OK) {
         early_message("Error", "The chat server did not answer.");
         finish();
         return 0;

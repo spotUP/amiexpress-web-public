@@ -17,9 +17,11 @@
 
 int ae_field_write(int field, const char *value) { (void)field; (void)value; return 0; }
 int ae_query_bit(int acs) { (void)acs; return 1; }
+static const char *user_level_text = "255";        /* the caller's level the board reports */
+
 int ae_field_read(int field, char *out, int cap)
 {
-    const char *text = field == AE_FIELD_USER_LEVEL ? "255" : "Tester";
+    const char *text = field == AE_FIELD_USER_LEVEL ? user_level_text : "Tester";
     int n = (int)strlen(text);
     if (cap <= 0) return 0;
     if (n > cap - 1) n = cap - 1;
@@ -362,6 +364,67 @@ static void test_door_mouse(void)
     printf("  [OK] door: right click on a message reacts and its row shows the count, the menu bar opens and says not yet\n");
 }
 
+static int line_count(const char *text)
+{
+    int i, n = 0;
+    for (i = 0; i < M.nlines; i++) if (strstr(M.lines[i].text, text) != 0) n++;
+    return n;
+}
+
+/* B2: the TS door's /edit /deletemsg /topic /kick /mute /op /invite /reactions and their events. */
+static void test_door_moderation(void)
+{
+    int rc, i, edited = 0;
+    start_stub();
+    rc = drive(KEYS("\r" "hello world\r" "/edit fixed text\r" "/edit\r" "/deletemsg x\r"
+                    "/topic New topic\r" "/kick @alice rude\r" "/mute alice\r" "/op -@bob\r"
+                    "/invite @dave #Lobby\r" "/reactions 1\r" "/unreact 1\r" "/edit 99 nope\r"), 0);
+    (void)rc;
+    stop_stub();
+    assert(st->edits == 1);
+    for (i = 0; i < M.nlines; i++)
+        if (strcmp(M.lines[i].id, "m3") == 0) { assert(strcmp(M.lines[i].text, "fixed text") == 0); edited = M.lines[i].edited; }
+    assert(edited);                                                         /* chat:edited replaced the row, marked */
+    assert(has_line(0, "Error: Usage: /edit [msg-id] new text"));
+    assert(has_line(0, "Error: Usage: /unreact [emoji] <msg-id>"));
+    assert(has_line(0, "Error: Usage: /deletemsg [msg-id]"));
+    assert(st->topics == 1 && has_line(0, "Tester set the topic: New topic"));
+    assert(strstr(M.pane_label, "New topic") != 0);                         /* the header follows the topic */
+    assert(st->moderations == 3);
+    assert(has_line(0, "bob is no longer a room operator"));                /* /op -@bob went out as deop */
+    assert(st->invites == 1 && has_line(0, "Invited dave to the room"));
+    assert(strstr(st->last_write_path, "/rooms/lobby/invites") != 0);       /* #Lobby resolved to its id */
+    assert(st->reaction_lists >= 1 && has_line(0, "Reactions on 1: ["));
+    assert(has_line(0, "No such message number."));
+    printf("  [OK] door: edit, topic, kick, mute, deop, invite and reactions reach the server and their events the pane\n");
+}
+
+/* B2: delete by default takes the caller's last line; a kick of the caller leaves the room; low levels are refused. */
+static void test_door_delete_and_kicked(void)
+{
+    int rc, i;
+    start_stub();
+    rc = drive(KEYS("\r" "hello world\r" "/deletemsg\r" "/kick Tester\r"), 0);
+    (void)rc;
+    assert(st->deletes == 1 && st->moderations == 1);                       /* the kick wrote last */
+    for (i = 0; i < M.nlines; i++) assert(strcmp(M.lines[i].id, "m3") != 0);      /* chat:deleted took the row out */
+    assert(line_count("hello world") == 0);
+    assert(has_line(0, "You have been kicked: No reason given") && has_line(0, "Disconnecting..."));
+    assert(M.room[0] == '\0');
+    stop_stub();
+
+    user_level_text = "10";
+    start_stub();
+    rc = drive(KEYS("\r" "/kick alice\r" "/ban alice\r" "/op bob\r" "/q\r"), 0);
+    user_level_text = "255";
+    assert(rc == 0 && st->moderations == 0);
+    assert(has_line(0, "Error: Permission denied. Need level 80"));
+    assert(has_line(0, "Error: Permission denied. Need level 100"));
+    assert(has_line(0, "Error: Permission denied. Need level 255"));
+    stop_stub();
+    printf("  [OK] door: delete takes the last own line, a kick of the caller leaves the room, low levels are refused\n");
+}
+
 static void test_door_no_config(void)
 {
     int rc = drive(KEYS("x"), 0);
@@ -381,6 +444,8 @@ int main(void)
     test_door_poll_under_mouse_motion();
     test_door_new_room();
     test_door_mouse();
+    test_door_moderation();
+    test_door_delete_and_kicked();
     test_door_no_config();
     remove("build/test_chat_keys.bin"); remove("build/test_chat_screen.bin");
     puts("test_chat: OK");

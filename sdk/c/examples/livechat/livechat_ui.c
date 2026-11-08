@@ -187,6 +187,9 @@ void lc_line_marked(const lc_line *l, char *out, int cap)
         sb_ch(&b, UI_CELLS_M_BASE); sb_str(&b, ": "); sb_markdown(&b, l->text);
         break;
     }
+    if ((l->kind == LC_HISTORY || l->kind == LC_LIVE) && l->edited) {   /* TS messageLine's mark */
+        sb_ch(&b, UI_CELLS_M_BASE); sb_fg(&b, LC_DIM); sb_str(&b, " (edited)");
+    }
     if (l->kind == LC_HISTORY || l->kind == LC_LIVE) {   /* TS server.ts renderedMessages: counts after the message */
         char suffix[LC_REACT_MAX * 20];
         lc_react_suffix(l, suffix, (int)sizeof suffix);
