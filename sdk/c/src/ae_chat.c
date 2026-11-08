@@ -243,12 +243,22 @@ static int starts_with(const char *s, const char *prefix)
     return strncmp(s, prefix, strlen(prefix)) == 0;
 }
 
-/* Consume the ROOMS|/EVENTS| header if the reply opens with one. */
+/* Consume the "NAME|version|revision|count" header every text route opens with (the door server's
+ * renderText: ROOMS, EVENTS, HISTORY, DM, WHO, MEMBERS, REACTIONS). Left in, a header reads as a data
+ * row wherever a caller asks for fewer than four fields (a DM list showed a thread "1"). */
+static int has_header(const char *reply)
+{
+    static const char *const names[] = { "ROOMS|", "EVENTS|", "HISTORY|", "DM|", "WHO|", "MEMBERS|", "REACTIONS|" };
+    unsigned i;
+    for (i = 0; i < sizeof names / sizeof names[0]; i++) if (starts_with(reply, names[i])) return 1;
+    return 0;
+}
+
 static void skip_header(ae_chat *c, long *seq)
 {
     const char *nl;
 
-    if (!starts_with(c->reply, "ROOMS|") && !starts_with(c->reply, "EVENTS|")) return;
+    if (!has_header(c->reply)) return;
     if (seq != 0 && starts_with(c->reply, "EVENTS|")) {
         const char *p = strchr(c->reply, '|');           /* after EVENTS */
         p = p != 0 ? strchr(p + 1, '|') : 0;             /* after version */
@@ -305,6 +315,14 @@ static int make_path(char *out, unsigned long cap, const char *prefix,
     if (total + 1 > cap) return AE_CHAT_ERR_TOO_LONG;
     sprintf(out, "%s%s%s", prefix, esc, suffix);
     return AE_CHAT_OK;
+}
+
+/* A GET of a text route: the reply's rows start after its header. */
+static int get_text(ae_chat *c, const char *path)
+{
+    int rc = call(c, "GET", path, 0, 0);
+    if (rc == AE_CHAT_OK) skip_header(c, 0);
+    return rc;
 }
 
 int ae_chat_rooms(ae_chat *c)
@@ -380,7 +398,7 @@ static int history_at(ae_chat *c, const char *prefix, const char *id, long befor
     else sprintf(suffix, "/history.txt?limit=%d", limit);
     rc = make_path(path, sizeof path, prefix, id, suffix);
     if (rc != AE_CHAT_OK) return rc;
-    return call(c, "GET", path, 0, 0);
+    return get_text(c, path);
 }
 
 int ae_chat_history(ae_chat *c, const char *room, long before, int limit)
@@ -486,7 +504,7 @@ int ae_chat_thread_list(ae_chat *c, const char *msg_id, int limit)
     sprintf(suffix, ".txt?limit=%d", limit);
     rc = make_path(path, sizeof path, AE_CHAT_BASE "/threads/", msg_id, suffix);
     if (rc != AE_CHAT_OK) return rc;
-    return call(c, "GET", path, 0, 0);
+    return get_text(c, path);
 }
 
 int ae_chat_dm(ae_chat *c, const char *peer, const char *text, char *thread_id, int cap)
@@ -507,12 +525,12 @@ int ae_chat_dm(ae_chat *c, const char *peer, const char *text, char *thread_id, 
 
 int ae_chat_dm_list(ae_chat *c)
 {
-    return call(c, "GET", AE_CHAT_BASE "/dm.txt", 0, 0);
+    return get_text(c, AE_CHAT_BASE "/dm.txt");
 }
 
 int ae_chat_who(ae_chat *c)
 {
-    return call(c, "GET", AE_CHAT_BASE "/who.txt", 0, 0);
+    return get_text(c, AE_CHAT_BASE "/who.txt");
 }
 
 int ae_chat_members(ae_chat *c, const char *room)
@@ -520,5 +538,5 @@ int ae_chat_members(ae_chat *c, const char *room)
     char path[PATH_MAX_LEN];
     int rc = make_path(path, sizeof path, AE_CHAT_BASE "/rooms/", room, "/members.txt");
     if (rc != AE_CHAT_OK) return rc;
-    return call(c, "GET", path, 0, 0);
+    return get_text(c, path);
 }

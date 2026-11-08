@@ -37,7 +37,7 @@ AMIGA_CFLAGS = +aos68k -c99 -DAMIGA -Iinclude -I"$(VBCC)/targets/m68k-amigaos/in
 # ae_dos_amiga is the dos.library backend - the same split as
 # ae_transport_amiga, whose host twin is likewise absent from this list because
 # the host is not what `lib` builds.
-MODULES = ae_host ae_out ae_box ae_session ui_profile ui_ansi ui_screen ui_list ui_chrome ui_key ui_input ui_editor ui_doc ui_grid ui_theme ui_settings json_lite ae_chunk ae_field_shape ae_transport_amiga ae_session_bbs ae_net ae_http ae_achieve ae_request ae_chat ae_msgbase ae_dos ae_dos_amiga ae_userfield ae_board_screen ae_menu ui_pages menudoor
+MODULES = ae_host ae_out ae_box ae_session ui_profile ui_ansi ui_screen ui_list ui_chrome ui_key ui_input ui_editor ui_doc ui_grid ui_cells ui_theme ui_settings json_lite ae_chunk ae_field_shape ae_transport_amiga ae_session_bbs ae_net ae_http ae_achieve ae_request ae_chat ae_msgbase ae_dos ae_dos_amiga ae_userfield ae_board_screen ae_menu ui_pages menudoor
 AMIGA_OBJS = $(patsubst %,build/amiga/%.o,$(MODULES))
 
 .PHONY: door-sources-compile all test amiga lib measure settings clean
@@ -52,7 +52,7 @@ all: test
 # for ever, so each runs under a 20 s ceiling where the host has timeout(1).
 DOOR_TEST_GUARD := $(shell command -v timeout 2>/dev/null || command -v gtimeout 2>/dev/null) $(if $(shell command -v timeout 2>/dev/null || command -v gtimeout 2>/dev/null),20,)
 
-test: door-sources-compile build/write-message build/test_ae_host build/test_ae_session build/test_ae_chunk build/test_ui_profile build/test_ui_list build/test_ui_chrome build/test_ui_screen build/test_ui_input build/test_ui_editor build/test_frame_budget build/test_ui_theme build/test_ui_settings build/test_ui_doc build/test_ui_grid build/test_ui_pages build/test_ae_http build/test_ae_achieve build/test_ae_request build/test_ae_msgbase build/test_ae_dos build/test_ae_field_shape build/test_texttv build/test_subs_scan build/test_achieve_rows build/test_requests_bulletin build/test_ae_userfield build/test_us_model build/test_theme_preview build/test_ansi_sgr build/test_ae_board_screen build/test_ae_board_screen_save build/test_ae_menu build/test_menudoor_model build/test_mainmenu build/test_bulletins build/test_chat
+test: door-sources-compile build/write-message build/test_ae_host build/test_ae_session build/test_ae_chunk build/test_ui_profile build/test_ui_list build/test_ui_chrome build/test_ui_screen build/test_ui_input build/test_ui_editor build/test_frame_budget build/test_ui_theme build/test_ui_settings build/test_ui_doc build/test_ui_grid build/test_ui_cells build/test_ui_pages build/test_ae_http build/test_ae_achieve build/test_ae_request build/test_ae_msgbase build/test_ae_dos build/test_ae_field_shape build/test_texttv build/test_subs_scan build/test_achieve_rows build/test_requests_bulletin build/test_ae_userfield build/test_us_model build/test_theme_preview build/test_ansi_sgr build/test_ae_board_screen build/test_ae_board_screen_save build/test_ae_menu build/test_menudoor_model build/test_mainmenu build/test_bulletins build/test_chat build/test_livechat_ui
 	./build/test_ae_host
 	./build/test_ae_session
 	./build/test_ae_chunk
@@ -89,6 +89,8 @@ test: door-sources-compile build/write-message build/test_ae_host build/test_ae_
 	$(DOOR_TEST_GUARD) ./build/test_mainmenu
 	$(DOOR_TEST_GUARD) ./build/test_bulletins
 	$(DOOR_TEST_GUARD) ./build/test_chat
+	./build/test_ui_cells
+	./build/test_livechat_ui
 
 # Every door's own .c, syntax-checked with the host compiler.
 #
@@ -107,6 +109,14 @@ door-sources-compile:
 build/test_ui_pages: src/ui_pages.c src/ui_profile.c tests/test_ui_pages.c include/ui_pages.h include/ui_profile.h
 	@mkdir -p build
 	$(CC) $(HOST_CFLAGS) src/ui_pages.c src/ui_profile.c tests/test_ui_pages.c -o $@
+
+build/test_livechat_ui: src/ui_cells.c src/ui_ansi.c examples/livechat/livechat_ui.c tests/test_livechat_ui.c include/ui_cells.h examples/livechat/livechat_ui.h
+	@mkdir -p build
+	$(CC) $(HOST_CFLAGS) -Iexamples/livechat src/ui_cells.c src/ui_ansi.c examples/livechat/livechat_ui.c tests/test_livechat_ui.c -o $@
+
+build/test_ui_cells: src/ui_cells.c tests/test_ui_cells.c include/ui_cells.h include/ui_ansi.h
+	@mkdir -p build
+	$(CC) $(HOST_CFLAGS) src/ui_cells.c tests/test_ui_cells.c -o $@
 
 build/test_ui_grid: src/ui_ansi.c src/ui_grid.c tests/test_ui_grid.c include/ui_grid.h include/ui_key.h
 	@mkdir -p build
@@ -257,9 +267,9 @@ build/test_ae_achieve: src/ae_achieve.c src/ae_http.c src/ae_net.c src/json_lite
 	@mkdir -p build
 	$(CC) $(HOST_CFLAGS) -D_DEFAULT_SOURCE src/ae_achieve.c src/ae_http.c src/ae_net.c src/json_lite.c tests/stub_server.c tests/test_ae_achieve.c -o $@
 
-build/test_chat: examples/livechat/livechat.c tests/test_chat.c src/ae_chat.c src/ae_request.c src/ae_http.c src/ae_net.c src/json_lite.c tests/stub_server.c src/ae_dos.c src/ae_dos_native.c src/ae_transport_native.c src/ae_session.c src/ae_session_bbs.c src/ae_board_screen.c src/ui_ansi.c src/ui_chrome.c src/ui_key.c src/ui_input.c src/ui_list.c src/ui_profile.c src/ui_screen.c src/ae_host.c src/ui_theme.c include/ae_chat.h
+build/test_chat: examples/livechat/livechat.c examples/livechat/livechat_ui.c examples/livechat/livechat_ui.h src/ui_cells.c tests/test_chat.c src/ae_chat.c src/ae_request.c src/ae_http.c src/ae_net.c src/json_lite.c tests/stub_server.c src/ae_dos.c src/ae_dos_native.c src/ae_transport_native.c src/ae_session.c src/ae_session_bbs.c src/ae_board_screen.c src/ui_ansi.c src/ui_chrome.c src/ui_key.c src/ui_input.c src/ui_list.c src/ui_profile.c src/ui_screen.c src/ae_host.c src/ui_theme.c include/ae_chat.h
 	@mkdir -p build
-	$(CC) $(HOST_CFLAGS) -D_DEFAULT_SOURCE -Isrc src/ae_chat.c src/ae_request.c src/ae_http.c src/ae_net.c src/json_lite.c tests/stub_server.c src/ae_dos.c src/ae_dos_native.c src/ae_transport_native.c src/ae_session.c src/ae_session_bbs.c src/ae_board_screen.c src/ui_ansi.c src/ui_chrome.c src/ui_key.c src/ui_input.c src/ui_list.c src/ui_profile.c src/ui_screen.c src/ae_host.c src/ui_theme.c tests/test_chat.c -o $@
+	$(CC) $(HOST_CFLAGS) -D_DEFAULT_SOURCE -Isrc -Iexamples/livechat src/ui_cells.c examples/livechat/livechat_ui.c src/ae_chat.c src/ae_request.c src/ae_http.c src/ae_net.c src/json_lite.c tests/stub_server.c src/ae_dos.c src/ae_dos_native.c src/ae_transport_native.c src/ae_session.c src/ae_session_bbs.c src/ae_board_screen.c src/ui_ansi.c src/ui_chrome.c src/ui_key.c src/ui_input.c src/ui_list.c src/ui_profile.c src/ui_screen.c src/ae_host.c src/ui_theme.c tests/test_chat.c -o $@
 
 build/test_ae_request: src/ae_request.c src/ae_http.c src/ae_net.c src/json_lite.c tests/stub_server.c tests/test_ae_request.c include/ae_request.h include/ae_http.h
 	@mkdir -p build
@@ -370,9 +380,9 @@ build/amiga/achieve: examples/achieve/achieve.c examples/achieve/achieve_rows.c 
 	$(VC) $(AMIGA_CFLAGS) -Iexamples/achieve examples/achieve/achieve.c examples/achieve/achieve_rows.c build/amiga/libae.lib -lauto -o $@
 
 # The live-chat door: a /chat/v1 client drawn with the ui kit.
-build/amiga/livechat: examples/livechat/livechat.c build/amiga/libae.lib
+build/amiga/livechat: examples/livechat/livechat.c examples/livechat/livechat_ui.c examples/livechat/livechat_ui.h build/amiga/libae.lib
 	@mkdir -p build/amiga
-	$(VC) $(AMIGA_CFLAGS) -Iexamples/livechat examples/livechat/livechat.c build/amiga/libae.lib -lauto -o $@
+	$(VC) $(AMIGA_CFLAGS) -Iexamples/livechat examples/livechat/livechat.c examples/livechat/livechat_ui.c build/amiga/libae.lib -lauto -o $@
 
 # The global-requests door: reads and writes through ae_request, drawn with
 # the same widgets. Links the WHOLE library; make measure proves only what it

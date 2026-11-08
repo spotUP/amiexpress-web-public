@@ -6,6 +6,12 @@
  * state of its own beyond the lines on screen, and everything it shows came
  * back from the server as `|`-separated Latin-1 rows.
  *
+ * THE SCREEN is the TS LIVECHAT door's, cell for cell (livechat_ui.c draws it
+ * from an lc_model). Every key changes the model, lc_draw paints the whole
+ * frame into the canvas' back buffer, and ui_cells_flush sends only the cells
+ * that differ from what the terminal already shows. A typed letter costs one
+ * or two cells on the wire, never a repaint.
+ *
  * WHO TALKS. The caller's handle is read from the session at startup and is
  * NEVER typed, so nobody speaks as somebody else.
  *
@@ -16,76 +22,54 @@
  * own line reaches the pane, so there is one display path, deduplicated by
  * message id.
  *
- * KEYS. Rooms: Up/Down, Enter joins, D direct messages, W who, R refresh,
- * Q quit. Chat: type and Enter to send, Esc back, PgUp/PgDn scroll,
- * "/?" or F1 help. Commands: /j /n /np /r /t /d /w /l /q.
+ * KEYS (as the TS door): Tab / Shift-Tab cycle input, sidebar and menu bar;
+ * Enter sends, joins the sidebar room or opens the DM; F1 help, F2 sidebar,
+ * F3 next channel; PgUp/PgDn scroll; Ctrl+C / Ctrl+Q quit. Commands are the
+ * TS ones (/join /leave /create /rooms /who /msg /react /thread /clear /help
+ * /quit) and the old short forms (/j /n /np /l /w /d /r /t /? /q).
  *
- * Role colour is a foreground only; the background is always a theme token.
- * ASCII tokens only, no emoji.
+ * Menu entries the TS door has but this wire does not (emoji picker, files,
+ * pins, search, themes) are drawn and do nothing: no fake data.
  */
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
 #include "aedoor.h"
 #include "ae_chat.h"
 #include "ae_host.h"
 #include "ae_session.h"
 #include "ui_ansi.h"
-#include "ui_chrome.h"
-#include "ui_input.h"
+#include "ui_cells.h"
 #include "ui_key.h"
-#include "ui_list.h"
 #include "ui_screen.h"
-#include "ui_theme.h"
+#include "livechat_ui.h"
 
 /* Where the key file sits; the host test points it at a file of its own. */
 #ifndef LIVECHAT_CFG_PATH
 #define LIVECHAT_CFG_PATH "PROGDIR:LIVECHAT.cfg"
 #endif
 
+/* Marks a parameter used. vbcc warns on a (void) cast ("statement has no effect"); this does not. */
+#define IGNORE(p) do { if ((p) != 0) { } } while (0)
+
 static char frame_buffer[16384];
 static char session_storage[AE_SESSION_MIN_STORAGE];
 static ui_screen screen;
 static ui_key_source keys;
-static const ui_theme *theme;
 static int pushback = -1;
+static ui_cells cells;
+static lc_model M;
 
 static ae_chat chat;
 static char handle[32];
 
 /* Idle steps (1/4 second each) between polls: 12 is three seconds. */
-/* Marks a parameter used. vbcc warns on a (void) cast ("statement has no effect"); this does not. */
-#define IGNORE(p) do { if ((p) != 0) { } } while (0)
-
 #define POLL_STEPS_DEFAULT 12
 static int poll_steps = POLL_STEPS_DEFAULT;
 static int idle_count;
-
-typedef enum { VIEW_ROOMS, VIEW_CHAT, VIEW_DMS, VIEW_WHO, VIEW_HELP } view_id;
-static view_id view = VIEW_ROOMS;
-static view_id help_from = VIEW_ROOMS;
-
-/* ---- the lines on screen ------------------------------------------------ */
-
-#define MSG_MAX 60
-#define TEXT_MAX 240
-typedef struct {
-    long seq;
-    int number;
-    char id[24];
-    char user[24];
-    int color;
-    int reacts;
-    int system;
-    char text[TEXT_MAX];
-} msg_line;
-
-static msg_line msgs[MSG_MAX];
-static int msg_count;
-static int msg_number;
-static int scroll_back;
 
 static char room_id[48];
 static char room_name[48];
@@ -93,50 +77,32 @@ static char room_topic[80];
 static int room_members;
 static char dm_thread[32];
 static char dm_peer[24];
-static int dm_unread;
+static int msg_number;
+static int help_shown;          /* times the help overlay opened (the host test reads it) */
+static int keep_lines;          /* join_room adds to the pane instead of starting it afresh */
 
-static char input[TEXT_MAX];
-static int input_len;
-static char status[80];
+/* The room list from the last rooms.txt, for the sidebar and F3. */
+#define ROOMS_MAX 24
+static char rooms_id[ROOMS_MAX][48];
+static char rooms_name[ROOMS_MAX][40];
+static int rooms_count;
 
-/* ---- list views --------------------------------------------------------- */
-
-#define LIST_MAX 60
-#define LABEL_MAX 80
-static char list_text[LIST_MAX][LABEL_MAX];
-static char list_id[LIST_MAX][48];
-static char list_peer[LIST_MAX][24];
-static int list_count;
-static ui_list list;
+enum { PROMPT_JOIN, PROMPT_CREATE };
+static int prompt_kind;
 
 static int door_key(void *ctx) { IGNORE(ctx); return ae_key(); }
 static int door_pending(void *ctx) { IGNORE(ctx); return ae_input_pending(); }
 static void door_settle(void *ctx) { IGNORE(ctx); ae_delay_ticks(1); }
 static void door_flush(void *ctx) { IGNORE(ctx); ui_screen_flush(&screen); }
+static void drain(void *ctx) { IGNORE(ctx); ui_screen_flush(&screen); }
 
-static void set_status(const char *text)
+static void copy(char *dst, size_t cap, const char *src)
 {
-    strncpy(status, text, sizeof status - 1);
-    status[sizeof status - 1] = '\0';
+    strncpy(dst, src, cap - 1);
+    dst[cap - 1] = '\0';
 }
 
-/** What the server's error code means to a caller. */
-static void status_for_error(int rc)
-{
-    if (rc == AE_CHAT_ERR_TRANSPORT) { set_status("Cannot reach the chat server."); return; }
-    if (strcmp(chat.error, "muted") == 0) set_status("You are muted in this room.");
-    else if (strcmp(chat.error, "banned") == 0) set_status("You are banned from this room.");
-    else if (strcmp(chat.error, "not_member") == 0) set_status("Join the room first.");
-    else if (strcmp(chat.error, "not_found") == 0) set_status("Not found.");
-    else if (strcmp(chat.error, "invite_required") == 0) set_status("That room is private.");
-    else if (strcmp(chat.error, "too_long") == 0) set_status("Message too long.");
-    else if (strcmp(chat.error, "rate_limited") == 0) set_status("Slow down a moment.");
-    else if (strcmp(chat.error, "forbidden") == 0) set_status("Not allowed.");
-    else if (strcmp(chat.error, "conflict") == 0) set_status("Already sent.");
-    else set_status("The chat server refused that.");
-}
-
-/** Text from the wire is Latin-1 for the screen: no control bytes, no ink marker. */
+/** Text from the wire is Latin-1 for the screen: no control bytes, so no canvas marker either. */
 static void clean(char *dst, size_t cap, const char *src)
 {
     size_t n = 0;
@@ -147,385 +113,443 @@ static void clean(char *dst, size_t cap, const char *src)
     dst[n] = '\0';
 }
 
-/* ---- message store ------------------------------------------------------ */
-
-static void msgs_clear(void)
+/** "hh:mm" in local time for an epoch the server sent, seconds or milliseconds. */
+static void hhmm_of(char *out, const char *epoch)
 {
-    msg_count = 0;
-    scroll_back = 0;
+    char digits[12];
+    time_t t;
+    struct tm *tm;
+    size_t n = strlen(epoch);
+    if (n > 10) n = 10;                       /* milliseconds: the first ten digits are the seconds */
+    memcpy(digits, epoch, n);
+    digits[n] = '\0';
+    t = (time_t)atol(digits);
+    tm = localtime(&t);
+    if (n == 0 || tm == 0) { strcpy(out, "--:--"); return; }
+    sprintf(out, "%02d:%02d", tm->tm_hour % 24, tm->tm_min % 60);
 }
 
-static msg_line *msg_by_id(const char *id)
+static void hhmm_now(char *out)
+{
+    time_t t = time(0);
+    struct tm *tm = localtime(&t);
+    if (tm == 0) { strcpy(out, "--:--"); return; }
+    sprintf(out, "%02d:%02d", tm->tm_hour % 24, tm->tm_min % 60);
+}
+
+/* ---- the pane's lines --------------------------------------------------- */
+
+static void lines_clear(void)
+{
+    M.nlines = 0;
+    M.scroll = 0;
+    msg_number = 0;
+}
+
+static lc_line *line_by_id(const char *id)
 {
     int i;
-    for (i = 0; i < msg_count; i++) {
-        if (msgs[i].id[0] != '\0' && strcmp(msgs[i].id, id) == 0) return &msgs[i];
+    for (i = 0; i < M.nlines; i++) {
+        if (M.lines[i].id[0] != '\0' && strcmp(M.lines[i].id, id) == 0) return &M.lines[i];
     }
     return 0;
 }
 
-/** Inserts by seq, oldest first; a message id already shown is not shown twice. */
-static msg_line *msg_add(long seq, const char *id, const char *user, int color, const char *text, int system)
-{
-    int at, i;
-    msg_line *m;
-    if (id[0] != '\0' && msg_by_id(id) != 0) return 0;
-    if (msg_count == MSG_MAX) {
-        for (i = 1; i < msg_count; i++) msgs[i - 1] = msgs[i];
-        msg_count--;
-    }
-    at = msg_count;
-    while (at > 0 && msgs[at - 1].seq > seq) at--;
-    for (i = msg_count; i > at; i--) msgs[i] = msgs[i - 1];
-    msg_count++;
-    m = &msgs[at];
-    memset(m, 0, sizeof *m);
-    m->seq = seq;
-    m->number = ++msg_number;
-    m->color = color;
-    m->system = system;
-    clean(m->id, sizeof m->id, id);
-    clean(m->user, sizeof m->user, user);
-    clean(m->text, sizeof m->text, text);
-    return m;
-}
-
-static msg_line *msg_by_number(int number)
+static lc_line *line_by_number(int number)
 {
     int i;
-    for (i = 0; i < msg_count; i++) if (msgs[i].number == number) return &msgs[i];
+    for (i = 0; i < M.nlines; i++) if (M.lines[i].number == number && number > 0) return &M.lines[i];
     return 0;
 }
 
-static void system_line(const char *text)
+/** Opens a slot at `at`, dropping the oldest line when the pane is full. */
+static lc_line *line_slot(int at)
 {
-    msg_add(chat.last_seq, "", "*", 0, text, 1);
-}
-
-/** Reads history rows (seq|id|user|at|replyTo|threadId|roleColor|text) into the pane. */
-static void take_history(void)
-{
-    char *f[AE_CHAT_ROW_FIELDS];
-    while (ae_chat_next_row(&chat, f, AE_CHAT_ROW_FIELDS) >= AE_CHAT_ROW_FIELDS) {
-        msg_add(atol(f[0]), f[1], f[2], atoi(f[6]), f[7], 0);
+    int i;
+    if (M.nlines == LC_LINES) {
+        for (i = 1; i < M.nlines; i++) M.lines[i - 1] = M.lines[i];
+        M.nlines--;
+        if (at > 0) at--;
     }
+    for (i = M.nlines; i > at; i--) M.lines[i] = M.lines[i - 1];
+    M.nlines++;
+    memset(&M.lines[at], 0, sizeof M.lines[at]);
+    return &M.lines[at];
 }
 
-/** Applies the rows of an events poll to the pane and the counters. */
-static int take_events(void)
+/** A message, inserted by seq among the messages; one already shown (same id) is not shown twice. */
+static lc_line *add_message(int kind, long seq, const char *id, const char *nick, const char *at, const char *text)
 {
-    char *f[AE_CHAT_ROW_FIELDS];
-    int changed = 0;
-    char line[TEXT_MAX];
-    while (ae_chat_next_row(&chat, f, AE_CHAT_ROW_FIELDS) >= AE_CHAT_ROW_FIELDS) {
-        long seq = atol(f[0]);
-        const char *type = f[1], *room = f[2], *user = f[3], *ref = f[4];
-        int in_room = view == VIEW_CHAT && dm_thread[0] == '\0' && strcmp(room, room_id) == 0;
-        if (strcmp(type, "message") == 0 && in_room) {
-            if (msg_add(seq, ref, user, atoi(f[6]), f[7], 0) != 0) changed = 1;
-        } else if (strcmp(type, "dm") == 0) {
-            char want[40];
-            sprintf(want, "dm:%.30s", dm_thread);
-            if (view == VIEW_CHAT && dm_thread[0] != '\0' && strcmp(room, want) == 0) {
-                if (msg_add(seq, ref, user, atoi(f[6]), f[7], 0) != 0) changed = 1;
-            } else if (strcmp(user, handle) != 0) {
-                dm_unread++;
-                changed = 1;
-            }
-        } else if (strcmp(type, "react") == 0 && in_room) {
-            msg_line *m = msg_by_id(ref);
-            if (m != 0) { m->reacts++; changed = 1; }
-        } else if ((strcmp(type, "joined") == 0 || strcmp(type, "left") == 0) && in_room) {
-            sprintf(line, "%.30s %s", user, type[0] == 'j' ? "joined" : "left");
-            msg_add(seq, "", "*", 0, line, 1);
-            changed = 1;
-        } else if (strcmp(type, "topic") == 0 && in_room) {
-            clean(room_topic, sizeof room_topic, f[7]);
-            changed = 1;
-        } else if (strcmp(type, "kicked") == 0 && strcmp(user, handle) == 0 && in_room) {
-            system_line("You were removed from this room.");
-            room_id[0] = '\0';
-            changed = 1;
-        }
-    }
-    return changed;
+    int pos = M.nlines;
+    lc_line *l;
+    if (id[0] != '\0' && line_by_id(id) != 0) return 0;
+    while (pos > 0 && (M.lines[pos - 1].kind == LC_HISTORY || M.lines[pos - 1].kind == LC_LIVE)
+           && M.lines[pos - 1].seq > seq) pos--;
+    l = line_slot(pos);
+    l->kind = kind;
+    l->seq = seq;
+    l->number = ++msg_number;
+    clean(l->id, sizeof l->id, id);
+    clean(l->nick, sizeof l->nick, nick);
+    clean(l->text, sizeof l->text, text);
+    hhmm_of(l->time, at);
+    M.scroll = 0;
+    return l;
 }
 
-/* ---- drawing ------------------------------------------------------------ */
-
-static void draw_masthead(const char *title)
+/** "*** text ***" in grey, or "[hh:mm] text" in yellow: lines of the door's own, at the bottom. */
+static void add_note(int kind, const char *text)
 {
-    ui_masthead_draw_tick(&screen.buf, 1, 1, screen.cols, title, theme->rail,
-                          UI_TOKEN(UI_T_BAR_INK), UI_TOKEN(UI_T_BAR), 0);
+    lc_line *l = line_slot(M.nlines);
+    l->kind = kind;
+    l->seq = chat.last_seq;
+    clean(l->text, sizeof l->text, text);
+    if (kind == LC_ACTIVITY_LINE) hhmm_now(l->time);
+    M.scroll = 0;
 }
 
-static void say(int row, int token, const char *text)
+static void system_line(const char *text) { add_note(LC_SYSTEM, text); }
+
+/* ---- modals ------------------------------------------------------------- */
+
+static void message_modal(const char *title, const char *text)
 {
-    ansi_color(&screen.buf, UI_TOKEN(token), UI_TOKEN(UI_T_GROUND), 0);
-    ansi_text(&screen.buf, row, 2, text, screen.cols - 2);
+    M.modal = LC_MODAL_MESSAGE;
+    copy(M.modal_title, sizeof M.modal_title, title);
+    copy(M.modal_text, sizeof M.modal_text, text);
 }
 
-static void draw_status(void)
+/** What the server's error code means to a caller, as the TS door's error modal. */
+static void show_error(int rc)
 {
-    char line[120];
-    ansi_color(&screen.buf, UI_TOKEN(UI_T_BAR_INK), UI_TOKEN(UI_T_BAR), 0);
-    ansi_fill(&screen.buf, screen.rows - 1, 1, screen.cols, UI_TOKEN(UI_T_BAR_INK), UI_TOKEN(UI_T_BAR));
-    if (view == VIEW_CHAT && dm_thread[0] != '\0') {
-        sprintf(line, " DM with %.20s  DM unread %d  %s", dm_peer, dm_unread, status);
-    } else if (view == VIEW_CHAT) {
-        sprintf(line, " #%.24s  %d here  DM unread %d  %s", room_name, room_members, dm_unread, status);
-    } else {
-        sprintf(line, " DM unread %d  %s", dm_unread, status);
-    }
-    ansi_text(&screen.buf, screen.rows - 1, 1, line, screen.cols);
+    const char *t;
+    if (rc == AE_CHAT_ERR_TRANSPORT) t = "Cannot reach the chat server.";
+    else if (strcmp(chat.error, "muted") == 0) t = "You are muted in this room.";
+    else if (strcmp(chat.error, "banned") == 0) t = "You are banned from this room.";
+    else if (strcmp(chat.error, "not_member") == 0) t = "Join the room first.";
+    else if (strcmp(chat.error, "not_found") == 0) t = "Not found.";
+    else if (strcmp(chat.error, "invite_required") == 0) t = "That room is private.";
+    else if (strcmp(chat.error, "too_long") == 0) t = "Message too long.";
+    else if (strcmp(chat.error, "rate_limited") == 0) t = "Slow down a moment.";
+    else if (strcmp(chat.error, "forbidden") == 0) t = "Not allowed.";
+    else if (strcmp(chat.error, "conflict") == 0) t = "Already sent.";
+    else t = "The chat server refused that.";
+    message_modal("Error", t);
 }
 
-static void draw_input(void)
+static void open_prompt(int kind, const char *question)
 {
-    char shown[TEXT_MAX + 4];
-    int avail = screen.cols - 4;
-    const char *tail = input;
-    if (input_len > avail) tail = input + (input_len - avail);
-    sprintf(shown, "> %s", tail);
-    ansi_color(&screen.buf, UI_TOKEN(UI_T_INK), UI_TOKEN(UI_T_GROUND), 0);
-    ansi_fill(&screen.buf, screen.rows, 1, screen.cols, UI_TOKEN(UI_T_INK), UI_TOKEN(UI_T_GROUND));
-    ansi_text(&screen.buf, screen.rows, 1, shown, screen.cols);
+    prompt_kind = kind;
+    M.modal = LC_MODAL_PROMPT;
+    copy(M.modal_title, sizeof M.modal_title, question);
+    M.prompt[0] = '\0';
+    M.prompt_len = 0;
 }
 
-/** Rows a message needs at this width, header included. */
-static int msg_header(const msg_line *m, char *out)
+static void open_help(void)
 {
-    if (m->system) return sprintf(out, "* ");
-    return sprintf(out, "%d %s: ", m->number, m->user);
+    M.help = 1;
+    M.help_top = 0;
+    help_shown++;
 }
 
-static void draw_msg_rows(const msg_line *m, int first_row, int nrows, int width)
-{
-    char head[64], full[TEXT_MAX + 80], reacts[16], chunk[160];
-    int hl, total, k;
-    hl = msg_header(m, head);
-    reacts[0] = '\0';
-    if (m->reacts > 0) sprintf(reacts, " [+%d]", m->reacts);
-    sprintf(full, "%s%s%s", head, m->text, reacts);
-    total = (int)strlen(full);
-    for (k = 0; k < nrows; k++) {
-        int start = k * width, len = total - start, hpart, col = 1;
-        if (len > width) len = width;
-        if (len < 0) len = 0;
-        memcpy(chunk, full + start, (size_t)len);
-        chunk[len] = '\0';
-        hpart = hl - start;
-        if (hpart < 0) hpart = 0;
-        if (hpart > len) hpart = len;
-        if (hpart > 0) {
-            char hbuf[160];
-            int fg = m->system ? UI_TOKEN(UI_T_DIM) : (m->color > 0 && m->color < 16 ? m->color : UI_TOKEN(UI_T_ACCENT));
-            memcpy(hbuf, chunk, (size_t)hpart);
-            hbuf[hpart] = '\0';
-            ansi_color(&screen.buf, fg, UI_TOKEN(UI_T_GROUND), 0);
-            ansi_text(&screen.buf, first_row + k, col, hbuf, hpart);
-            col += hpart;
-        }
-        if (len > hpart) {
-            ansi_color(&screen.buf, m->system ? UI_TOKEN(UI_T_DIM) : UI_TOKEN(UI_T_INK), UI_TOKEN(UI_T_GROUND), 0);
-            ansi_text(&screen.buf, first_row + k, col, chunk + hpart, len - hpart);
-        }
-    }
-}
+/* ---- the screen --------------------------------------------------------- */
 
-static void draw_chat(void)
+static void present(void)
 {
-    int pane_top = 3, pane_bottom = screen.rows - 2;
-    int row, i, width = screen.cols - 1, r;
-    char title[96];
-    ansi_clear(&screen.buf);
-    if (dm_thread[0] != '\0') sprintf(title, "LIVECHAT - DM with %.30s", dm_peer);
-    else sprintf(title, "LIVECHAT - #%.30s", room_name);
-    draw_masthead(title);
-    if (dm_thread[0] == '\0' && room_topic[0] != '\0') say(2, UI_T_DIM, room_topic);
-    row = pane_bottom;
-    for (i = msg_count - 1 - scroll_back; i >= 0 && row >= pane_top; i--) {
-        char head[64];
-        int hl = msg_header(&msgs[i], head);
-        int total = hl + (int)strlen(msgs[i].text) + (msgs[i].reacts > 0 ? 8 : 0);
-        int nrows = (total + width - 1) / width;
-        if (nrows < 1) nrows = 1;
-        r = row - nrows + 1;
-        if (r < pane_top) break;
-        draw_msg_rows(&msgs[i], r, nrows, width);
-        row = r - 1;
-    }
-    draw_status();
-    draw_input();
-}
-
-static const char *list_row(void *ctx, int i) { IGNORE(ctx); return list_text[i]; }
-
-static void list_setup(void)
-{
-    ui_list_init(&list);
-    list.top = 3;
-    list.left = 1;
-    list.width = screen.cols - 1;
-    list.height = screen.rows - 5;
-    list.count = list_count;
-    list.row = list_row;
-    list.context = 0;
-    list.borders = 0;
-    list.caret = ">>";
-    list.chrome = UI_TOKEN(UI_T_ACCENT);
-    list.ink = UI_TOKEN(UI_T_INK);
-    list.selected_fg = UI_TOKEN(UI_T_SELECTION_INK);
-    list.selected_bg = UI_TOKEN(UI_T_SELECTION_BG);
-}
-
-static void draw_list_view(const char *title, const char *hint)
-{
-    ansi_clear(&screen.buf);
-    draw_masthead(title);
-    if (list_count == 0) say(3, UI_T_DIM, view == VIEW_ROOMS ? "No rooms yet. Press N to make one." : "Nothing here yet.");
-    else ui_list_draw(&list, &screen.buf);
-    say(screen.rows - 2, UI_T_DIM, hint);
-    draw_status();
-}
-
-static void draw_help(void)
-{
-    ansi_clear(&screen.buf);
-    draw_masthead("LIVECHAT - HELP");
-    say(3, UI_T_INK, "Type a line and press Enter to say it.");
-    say(4, UI_T_INK, "/j room      join a room by its id");
-    say(5, UI_T_INK, "/n name      make a public room");
-    say(6, UI_T_INK, "/np name     make a private room");
-    say(7, UI_T_INK, "/r n emoji   react to message n");
-    say(8, UI_T_INK, "/t n text    reply in a thread to message n");
-    say(9, UI_T_INK, "/d user text send a direct message");
-    say(10, UI_T_INK, "/w           who is on");
-    say(11, UI_T_INK, "/l           back to the room list");
-    say(12, UI_T_INK, "/q           leave the door");
-    say(13, UI_T_INK, "PgUp and PgDn scroll. Esc goes back.");
-    say(15, UI_T_DIM, "Press any key.");
-    draw_status();
-}
-
-static void redraw(void)
-{
-    switch (view) {
-    case VIEW_ROOMS: draw_list_view("LIVECHAT - ROOMS", "Enter join  N new room  D messages  W who  R refresh  ? help  Q quit"); break;
-    case VIEW_DMS: draw_list_view("LIVECHAT - DIRECT MESSAGES", "Enter open  Esc back"); break;
-    case VIEW_WHO: draw_list_view("LIVECHAT - WHO IS ON", "Esc back"); break;
-    case VIEW_HELP: draw_help(); break;
-    case VIEW_CHAT: draw_chat(); break;
-    }
-    ui_screen_cursor(&screen, view == VIEW_CHAT);
+    int cr = 0, cc = 0;
+    int caret = M.focus == LC_FOCUS_INPUT && !M.help && M.menu < 0
+                && (M.modal == LC_MODAL_NONE || M.modal == LC_MODAL_PROMPT);
+    lc_draw(&cells, &M, &cr, &cc);
+    ui_cells_flush(&cells, &screen.buf, drain, 0);
+    ui_screen_cursor(&screen, caret);
+    if (caret) ansi_goto(&screen.buf, cr + 1, cc + 1);
     ui_screen_flush(&screen);
 }
 
-/* ---- loading the list views --------------------------------------------- */
+/* ---- the sidebar -------------------------------------------------------- */
 
-static void list_add(const char *text, const char *id, const char *peer)
+static void side_add(int kind, int joined, const char *label, const char *id)
 {
-    if (list_count >= LIST_MAX) return;
-    clean(list_text[list_count], LABEL_MAX, text);
-    clean(list_id[list_count], sizeof list_id[0], id);
-    clean(list_peer[list_count], sizeof list_peer[0], peer);
-    list_count++;
+    lc_side *s;
+    if (M.nside >= LC_SIDE_MAX) return;
+    s = &M.side[M.nside++];
+    memset(s, 0, sizeof *s);
+    s->kind = kind;
+    s->joined = joined;
+    clean(s->label, sizeof s->label, label);
+    clean(s->id, sizeof s->id, id);
+}
+
+static int side_selectable(int i)
+{
+    return i >= 0 && i < M.nside && M.side[i].kind != LC_SIDE_HEAD && M.side[i].kind != LC_SIDE_BLANK;
+}
+
+/** Rebuilds the sidebar as the TS door has it: channels, the current room's people under it, then DMs. */
+static void load_sidebar(void)
+{
+    char *f[AE_CHAT_ROW_FIELDS];
+    char users[16][24];
+    int nusers = 0, i, j, keep = M.side_sel;
+    if (room_id[0] != '\0' && ae_chat_who(&chat) == AE_CHAT_OK) {
+        while (ae_chat_next_row(&chat, f, AE_CHAT_ROW_FIELDS) >= 2) {     /* user|room|sysop|roleColor|idle */
+            if (strcmp(f[1], room_id) == 0 && nusers < 16) clean(users[nusers++], sizeof users[0], f[0]);
+        }
+    }
+    M.nside = 0;
+    side_add(LC_SIDE_HEAD, 0, "TEXT CHANNELS", "");
+    for (i = 0; i < rooms_count; i++) {
+        int here = strcmp(rooms_id[i], room_id) == 0;
+        side_add(LC_SIDE_ROOM, here, rooms_name[i], rooms_id[i]);
+        if (here) for (j = 0; j < nusers; j++) side_add(LC_SIDE_USER, 0, users[j], users[j]);
+    }
+    if (ae_chat_dm_list(&chat) == AE_CHAT_OK) {
+        int first = 1;
+        while (ae_chat_next_row(&chat, f, AE_CHAT_ROW_FIELDS) >= 2) {     /* threadId|peer|lastAt|unread */
+            if (first) { side_add(LC_SIDE_BLANK, 0, "", ""); side_add(LC_SIDE_HEAD, 0, "DIRECT MESSAGES", ""); first = 0; }
+            side_add(LC_SIDE_DM, 0, f[1], f[0]);
+        }
+    }
+    M.side_sel = keep;
+    if (!side_selectable(M.side_sel)) {
+        for (i = 0; i < M.nside; i++) if (M.side[i].kind == LC_SIDE_ROOM && M.side[i].joined) M.side_sel = i;
+        if (!side_selectable(M.side_sel)) M.side_sel = 1;
+    }
 }
 
 static int load_rooms(void)
 {
     char *f[AE_CHAT_ROW_FIELDS];
-    char line[LABEL_MAX + 40];
     int rc = ae_chat_rooms(&chat);
-    list_count = 0;
-    if (rc != AE_CHAT_OK) { status_for_error(rc); return rc; }
-    while (ae_chat_next_row(&chat, f, AE_CHAT_ROW_FIELDS) >= 5) {
-        /* id|name|topic|visibility|members|owner */
-        sprintf(line, "#%-16.16s %3d  %-7.7s %.30s", f[1], atoi(f[4]), f[3], f[2]);
-        list_add(line, f[0], "");
+    rooms_count = 0;
+    if (rc != AE_CHAT_OK) return rc;
+    while (ae_chat_next_row(&chat, f, AE_CHAT_ROW_FIELDS) >= 5) {     /* id|name|topic|visibility|members|owner */
+        if (rooms_count == ROOMS_MAX) continue;
+        clean(rooms_id[rooms_count], sizeof rooms_id[0], f[0]);
+        clean(rooms_name[rooms_count], sizeof rooms_name[0], f[1]);
+        rooms_count++;
     }
-    list_setup();
     return AE_CHAT_OK;
 }
 
-static int load_dms(void)
+/* ---- events ------------------------------------------------------------- */
+
+static void side_user(const char *user, int add)
+{
+    int i, j;
+    for (i = 0; i < M.nside; i++) {
+        if (M.side[i].kind == LC_SIDE_USER && strcmp(M.side[i].id, user) == 0) {
+            if (add) return;
+            for (j = i + 1; j < M.nside; j++) M.side[j - 1] = M.side[j];
+            M.nside--;
+            if (M.side_sel >= M.nside) M.side_sel = M.nside - 1;
+            return;
+        }
+    }
+    if (!add) return;
+    for (i = 0; i < M.nside; i++) {
+        if (M.side[i].kind == LC_SIDE_ROOM && M.side[i].joined && M.nside < LC_SIDE_MAX) {
+            for (j = M.nside; j > i + 1; j--) M.side[j] = M.side[j - 1];
+            M.nside++;
+            memset(&M.side[i + 1], 0, sizeof M.side[i + 1]);
+            M.side[i + 1].kind = LC_SIDE_USER;
+            clean(M.side[i + 1].label, sizeof M.side[i + 1].label, user);
+            clean(M.side[i + 1].id, sizeof M.side[i + 1].id, user);
+            return;
+        }
+    }
+}
+
+/** A reaction shows as " [+n]" after the text, as the old door did; the count is the server's events. */
+static void add_react(lc_line *l)
+{
+    int n = 0, len = (int)strlen(l->text);
+    char *p = strrchr(l->text, '[');
+    if (p != 0 && p > l->text && p[-1] == ' ' && p[1] == '+' && l->text[len - 1] == ']') {
+        n = atoi(p + 2);
+        p[-1] = '\0';
+    }
+    len = (int)strlen(l->text);
+    if (len < LC_TEXT_MAX - 12) sprintf(l->text + len, " [+%d]", n + 1);
+}
+
+/** Applies the rows of an events poll (seq|type|room|user|ref|at|color|text). */
+static void take_events(void)
 {
     char *f[AE_CHAT_ROW_FIELDS];
-    char line[LABEL_MAX + 40];
-    int rc = ae_chat_dm_list(&chat);
-    list_count = 0;
-    if (rc != AE_CHAT_OK) { status_for_error(rc); return rc; }
-    while (ae_chat_next_row(&chat, f, AE_CHAT_ROW_FIELDS) >= 4) {
-        /* threadId|peer|lastAt|unread */
-        sprintf(line, "%-20.20s unread %d", f[1], atoi(f[3]));
-        list_add(line, f[0], f[1]);
+    char line[LC_TEXT_MAX];
+    while (ae_chat_next_row(&chat, f, AE_CHAT_ROW_FIELDS) >= AE_CHAT_ROW_FIELDS) {
+        long seq = atol(f[0]);
+        const char *type = f[1], *room = f[2], *user = f[3], *ref = f[4];
+        int in_room = dm_thread[0] == '\0' && room_id[0] != '\0' && strcmp(room, room_id) == 0;
+        if (strcmp(type, "message") == 0 && in_room) {
+            add_message(LC_LIVE, seq, ref, user, f[5], f[7]);
+        } else if (strcmp(type, "dm") == 0) {
+            char want[40];
+            sprintf(want, "dm:%.30s", dm_thread);
+            if (dm_thread[0] != '\0' && strcmp(room, want) == 0) {
+                add_message(LC_LIVE, seq, ref, user, f[5], f[7]);
+            } else if (strcmp(user, handle) != 0) {
+                sprintf(line, "New direct message from %.24s", user);
+                system_line(line);
+            }
+        } else if (strcmp(type, "react") == 0 && in_room) {
+            lc_line *l = line_by_id(ref);
+            if (l != 0) add_react(l);
+        } else if ((strcmp(type, "joined") == 0 || strcmp(type, "left") == 0) && in_room) {
+            int joined = type[0] == 'j';
+            sprintf(line, "%.24s %s the room", user, joined ? "joined" : "left");
+            system_line(line);
+            sprintf(line, "%.24s %s", user, joined ? "joined" : "left");
+            add_note(LC_ACTIVITY_LINE, line);
+            if (strcmp(user, handle) != 0) side_user(user, joined);
+        } else if (strcmp(type, "topic") == 0 && in_room) {
+            clean(room_topic, sizeof room_topic, f[7]);
+            sprintf(M.pane_label, "%.40s - %.50s", room_name, room_topic);
+            sprintf(line, "Topic: %.200s", room_topic);
+            system_line(line);
+        } else if (strcmp(type, "kicked") == 0 && strcmp(user, handle) == 0 && in_room) {
+            system_line("You were removed from this room.");
+            room_id[0] = '\0';
+            M.room[0] = '\0';
+        }
     }
-    list_setup();
-    return AE_CHAT_OK;
 }
-
-static int load_who(void)
-{
-    char *f[AE_CHAT_ROW_FIELDS];
-    char line[LABEL_MAX + 40];
-    int rc = ae_chat_who(&chat);
-    list_count = 0;
-    if (rc != AE_CHAT_OK) { status_for_error(rc); return rc; }
-    while (ae_chat_next_row(&chat, f, AE_CHAT_ROW_FIELDS) >= 5) {
-        /* user|room|sysop|roleColor|idleSeconds */
-        sprintf(line, "%-20.20s in #%-14.14s idle %ds%s", f[0], f[1], atoi(f[4]), atoi(f[2]) ? "  sysop" : "");
-        list_add(line, f[0], f[0]);
-    }
-    list_setup();
-    return AE_CHAT_OK;
-}
-
-/* ---- actions ------------------------------------------------------------ */
 
 static void do_poll(void)
 {
-    if (ae_chat_poll(&chat, 0) == AE_CHAT_OK) {
-        if (take_events() && view == VIEW_CHAT) redraw();
-        else if (view != VIEW_CHAT) { draw_status(); ui_screen_flush(&screen); }
-    }
+    if (ae_chat_poll(&chat, 0) == AE_CHAT_OK) take_events();
 }
 
-static void enter_room(const char *id)
+/* ---- rooms and DMs ------------------------------------------------------ */
+
+/** Reads history rows (seq|id|user|at|replyTo|threadId|roleColor|text), after a "--- n earlier ---" marker. */
+static void take_history(void)
 {
-    int rc;
-    msgs_clear();
-    dm_thread[0] = '\0';
-    rc = ae_chat_join(&chat, id, room_name, sizeof room_name, room_topic, sizeof room_topic, &room_members);
-    if (rc != AE_CHAT_OK) { status_for_error(rc); return; }
+    char *f[AE_CHAT_ROW_FIELDS];
+    char note[48];
+    int marker = M.nlines, n = 0;
+    system_line("--- 0 earlier messages ---");
+    while (ae_chat_next_row(&chat, f, AE_CHAT_ROW_FIELDS) >= AE_CHAT_ROW_FIELDS) {
+        if (add_message(LC_HISTORY, atol(f[0]), f[1], f[2], f[3], f[7]) != 0) n++;
+    }
+    if (n == 0) {                                  /* nothing earlier: no marker */
+        int i;
+        for (i = marker + 1; i < M.nlines; i++) M.lines[i - 1] = M.lines[i];
+        M.nlines--;
+        return;
+    }
+    sprintf(note, "--- %d earlier message%s ---", n, n == 1 ? "" : "s");
+    copy(M.lines[marker].text, sizeof M.lines[marker].text, note);
+}
+
+/** Joins a room by id and shows it; the room left is the one before, once the new join worked. */
+static int join_room(const char *id)
+{
+    char name[48], topic[80], line[128], old[48];
+    int members = 0, rc;
+    copy(old, sizeof old, room_id);
+    rc = ae_chat_join(&chat, id, name, sizeof name, topic, sizeof topic, &members);
+    if (rc != AE_CHAT_OK) { show_error(rc); return rc; }
+    if (old[0] != '\0' && strcmp(old, id) != 0) ae_chat_leave(&chat, old);
     clean(room_id, sizeof room_id, id);
-    clean(room_name, sizeof room_name, room_name);
-    clean(room_topic, sizeof room_topic, room_topic);
+    clean(room_name, sizeof room_name, name);
+    clean(room_topic, sizeof room_topic, topic);
+    room_members = members;
+    dm_thread[0] = '\0';
+    copy(M.room, sizeof M.room, room_name);
+    if (room_topic[0] != '\0') sprintf(M.pane_label, "%.40s - %.50s", room_name, room_topic);
+    else copy(M.pane_label, sizeof M.pane_label, room_name);
+    if (!keep_lines) lines_clear();
+    sprintf(line, "Joined #%.40s (%d users)", room_name, room_members);
+    system_line(line);
+    sprintf(line, "Joined #%.40s", room_name);
+    add_note(LC_ACTIVITY_LINE, line);
     if (ae_chat_history(&chat, room_id, 0, 30) == AE_CHAT_OK) take_history();
-    set_status("");
-    view = VIEW_CHAT;
+    load_sidebar();
+    return AE_CHAT_OK;
+}
+
+static void leave_room(void)
+{
+    char line[80];
+    if (room_id[0] == '\0') { system_line("You are not in a channel."); return; }
+    ae_chat_leave(&chat, room_id);
+    sprintf(line, "Left #%.40s", room_name);
+    room_id[0] = '\0';
+    M.room[0] = '\0';
+    M.pane_label[0] = '\0';
+    lines_clear();
+    system_line(line);
+    load_sidebar();
 }
 
 static void open_dm(const char *thread, const char *peer)
 {
-    msgs_clear();
+    char line[64];
     clean(dm_thread, sizeof dm_thread, thread);
     clean(dm_peer, sizeof dm_peer, peer);
+    sprintf(M.pane_label, "@%.30s - Direct message", dm_peer);
+    lines_clear();
+    sprintf(line, "Direct messages with %.24s", dm_peer);
+    system_line(line);
     if (ae_chat_dm_history(&chat, dm_thread, 0, 30) == AE_CHAT_OK) take_history();
-    set_status("");
-    view = VIEW_CHAT;
 }
 
-static void to_rooms(void)
+static void next_channel(void)
 {
-    if (room_id[0] != '\0') ae_chat_leave(&chat, room_id);
-    room_id[0] = '\0';
-    dm_thread[0] = '\0';
-    msgs_clear();
-    load_rooms();
-    view = VIEW_ROOMS;
+    int i;
+    if (rooms_count == 0) return;
+    for (i = 0; i < rooms_count; i++) if (strcmp(rooms_id[i], room_id) == 0) break;
+    join_room(rooms_id[(i + 1) % rooms_count]);
 }
 
-/** Returns the rest of `text` after one word, or "" . */
+/** Makes a room and walks into it. The server joins by id, so the id comes from the create reply. */
+static void new_room(const char *name, const char *visibility)
+{
+    char id[sizeof room_id], line[80];
+    int rc = ae_chat_room_create(&chat, name, "", visibility, id, (int)sizeof id);
+    if (rc != AE_CHAT_OK) { show_error(rc); return; }
+    load_rooms();
+    if (join_room(id) == AE_CHAT_OK) {
+        sprintf(line, "Created #%.40s", room_name);
+        system_line(line);
+    }
+}
+
+static void list_rooms(void)
+{
+    char line[96];
+    int i, rc = load_rooms();
+    if (rc != AE_CHAT_OK) { show_error(rc); return; }
+    sprintf(line, "Found %d room%s", rooms_count, rooms_count == 1 ? "" : "s");
+    system_line(line);
+    for (i = 0; i < rooms_count; i++) {
+        sprintf(line, "#%.30s (%.40s)", rooms_name[i], rooms_id[i]);
+        system_line(line);
+    }
+    load_sidebar();
+}
+
+static void list_who(void)
+{
+    char *f[AE_CHAT_ROW_FIELDS];
+    char line[128];
+    int rc = ae_chat_who(&chat), n = 0;
+    if (rc != AE_CHAT_OK) { show_error(rc); return; }
+    system_line("Who is on");
+    while (ae_chat_next_row(&chat, f, AE_CHAT_ROW_FIELDS) >= 5) {
+        sprintf(line, "%.24s in #%.24s%s, idle %ds", f[0], f[1], atoi(f[2]) ? " (sysop)" : "", atoi(f[4]));
+        system_line(line);
+        n++;
+    }
+    if (n == 0) system_line("Nobody is on");
+}
+
+/* ---- commands ----------------------------------------------------------- */
+
+/** Returns the rest of `text` after one word, or "". */
 static const char *after_word(const char *text)
 {
     while (*text != '\0' && *text != ' ') text++;
@@ -541,92 +565,93 @@ static void arg_word(const char *text, char *out, size_t cap)
     out[n] = '\0';
 }
 
-/** Makes a room and walks into it. The server joins by id, so the id comes from the create reply;
- *  joining by the typed name found no room (the bug the rooms-view N key exposed). */
-static void new_room(const char *name, const char *visibility)
+static int is_cmd(const char *cmd, const char *a, const char *b)
 {
-    char id[sizeof room_id];
-    int rc = ae_chat_room_create(&chat, name, "", visibility, id, (int)sizeof id);
-    if (rc != AE_CHAT_OK) { status_for_error(rc); return; }
-    if (room_id[0] != '\0') ae_chat_leave(&chat, room_id);
-    enter_room(id);
+    return strcmp(cmd, a) == 0 || (b != 0 && strcmp(cmd, b) == 0);
+}
+
+static void join_typed(const char *text)
+{
+    char a[48];
+    arg_word(text, a, sizeof a);
+    if (a[0] == '#') memmove(a, a + 1, strlen(a));
+    if (a[0] == '\0') { system_line("Usage: /join room"); return; }
+    join_room(a);
 }
 
 /** Runs one "/..." line. Returns 1 when the door should end. */
 static int run_command(const char *line)
 {
-    char cmd[8], a[48];
+    char cmd[12], a[48];
     const char *rest = after_word(line + 1);
     int rc, n;
     arg_word(line + 1, cmd, sizeof cmd);
-    if (strcmp(cmd, "q") == 0) return 1;
-    if (strcmp(cmd, "?") == 0 || strcmp(cmd, "h") == 0) { help_from = view; view = VIEW_HELP; return 0; }
-    if (strcmp(cmd, "l") == 0) { to_rooms(); return 0; }
-    if (strcmp(cmd, "w") == 0) { if (load_who() == AE_CHAT_OK) view = VIEW_WHO; return 0; }
-    if (strcmp(cmd, "j") == 0) {
-        arg_word(rest, a, sizeof a);
-        if (a[0] == '#') memmove(a, a + 1, strlen(a));
-        if (a[0] == '\0') { set_status("Usage: /j room"); return 0; }
-        if (room_id[0] != '\0') ae_chat_leave(&chat, room_id);
-        enter_room(a);
-        return 0;
-    }
-    if (strcmp(cmd, "n") == 0 || strcmp(cmd, "np") == 0) {
-        if (*rest == '\0') { set_status("Usage: /n name"); return 0; }
+    if (is_cmd(cmd, "q", "quit")) return 1;
+    if (is_cmd(cmd, "?", "h") || strcmp(cmd, "help") == 0) { open_help(); return 0; }
+    if (is_cmd(cmd, "l", "rooms") || strcmp(cmd, "list") == 0) { list_rooms(); return 0; }
+    if (is_cmd(cmd, "w", "who")) { list_who(); return 0; }
+    if (is_cmd(cmd, "j", "join")) { join_typed(rest); return 0; }
+    if (is_cmd(cmd, "leave", "part")) { leave_room(); return 0; }
+    if (strcmp(cmd, "clear") == 0) { lines_clear(); return 0; }
+    if (is_cmd(cmd, "n", "np") || strcmp(cmd, "create") == 0) {
+        if (*rest == '\0') { open_prompt(PROMPT_CREATE, "New room name"); return 0; }
         new_room(rest, cmd[1] == 'p' ? "private" : "public");    /* the whole rest: a name may have spaces */
         return 0;
     }
-    if (strcmp(cmd, "r") == 0 || strcmp(cmd, "t") == 0) {
-        msg_line *m;
+    if (is_cmd(cmd, "r", "react") || is_cmd(cmd, "t", "thread")) {
+        lc_line *l;
+        int react = cmd[0] == 'r';
         arg_word(rest, a, sizeof a);
         n = atoi(a);
-        m = msg_by_number(n);
+        l = line_by_number(n);
         rest = after_word(rest);
-        if (m == 0 || m->system || m->id[0] == '\0') { set_status("No such message number."); return 0; }
-        if (*rest == '\0') { set_status(cmd[0] == 'r' ? "Usage: /r n emoji" : "Usage: /t n text"); return 0; }
-        if (cmd[0] == 'r') {
+        if (l == 0 || l->id[0] == '\0') { system_line("No such message number."); return 0; }
+        if (*rest == '\0') { system_line(react ? "Usage: /react n emoji" : "Usage: /thread n text"); return 0; }
+        if (react) {
             int count = 0;
-            rc = ae_chat_react(&chat, m->id, rest, &count);
-            if (rc == AE_CHAT_OK) { set_status("Reacted."); } else status_for_error(rc);
+            rc = ae_chat_react(&chat, l->id, rest, &count);
+            if (rc != AE_CHAT_OK) show_error(rc);
         } else {
-            rc = ae_chat_thread(&chat, m->id, rest);
-            if (rc == AE_CHAT_OK) set_status("Thread reply sent."); else status_for_error(rc);
+            rc = ae_chat_thread(&chat, l->id, rest);
+            if (rc == AE_CHAT_OK) system_line("Thread reply sent."); else show_error(rc);
         }
         return 0;
     }
-    if (strcmp(cmd, "d") == 0) {
+    if (is_cmd(cmd, "d", "dm") || strcmp(cmd, "msg") == 0) {
         char tid[32];
         arg_word(rest, a, sizeof a);
         rest = after_word(rest);
-        if (a[0] == '\0' || *rest == '\0') { set_status("Usage: /d user text"); return 0; }
+        if (a[0] == '\0' || *rest == '\0') { system_line("Usage: /msg user text"); return 0; }
         rc = ae_chat_dm(&chat, a, rest, tid, sizeof tid);
         if (rc == AE_CHAT_OK) {
             if (dm_thread[0] != '\0' && strcmp(a, dm_peer) == 0) do_poll();
-            set_status("Direct message sent.");
-        } else status_for_error(rc);
+            else { char note[64]; sprintf(note, "Direct message sent to %.24s", a); system_line(note); }
+        } else show_error(rc);
         return 0;
     }
-    set_status("Unknown command. Type /? for help.");
+    system_line("Unknown command. Type /help for help.");
     return 0;
 }
 
-/** Enter in the chat view. Returns 1 when the door should end. */
+/** Enter in the input box. Returns 1 when the door should end. */
 static int submit(void)
 {
     int rc, ended = 0;
-    if (input_len == 0) return 0;
-    if (input[0] == '/') {
-        ended = run_command(input);
+    if (M.input_len == 0) return 0;
+    if (M.input[0] == '/') {
+        ended = run_command(M.input);
     } else if (dm_thread[0] != '\0') {
         char tid[32];
-        rc = ae_chat_dm(&chat, dm_peer, input, tid, sizeof tid);
-        if (rc == AE_CHAT_OK) { set_status(""); do_poll(); } else status_for_error(rc);
+        rc = ae_chat_dm(&chat, dm_peer, M.input, tid, sizeof tid);
+        if (rc == AE_CHAT_OK) do_poll(); else show_error(rc);
     } else if (room_id[0] != '\0') {
-        rc = ae_chat_send(&chat, room_id, input, 0, 0);
-        if (rc == AE_CHAT_OK) { set_status(""); do_poll(); } else status_for_error(rc);
+        rc = ae_chat_send(&chat, room_id, M.input, 0, 0);
+        if (rc == AE_CHAT_OK) do_poll(); else show_error(rc);
+    } else {
+        system_line("Join a channel first: /join room");
     }
-    input[0] = '\0';
-    input_len = 0;
+    M.input[0] = '\0';
+    M.input_len = 0;
     return ended;
 }
 
@@ -637,164 +662,235 @@ static void door_idle(void *ctx)
     if (++idle_count >= poll_steps) {
         idle_count = 0;
         do_poll();
+        present();
     }
 }
 
 /* ---- keys --------------------------------------------------------------- */
 
-/** N in the rooms view: the only way to make a room when the list is empty (/n lives in the chat
- *  view's input line). Returns -1 when the caller went away mid-prompt. */
-static int prompt_new_room(void)
+static int is_enter(int key) { return key == UI_KEY_ENTER || key == '\r' || key == '\n'; }
+static int is_text(int key) { return (key >= 32 && key < 127) || (key >= 160 && key < 256); }
+
+static void set_focus(int focus)
 {
-    char name[48];
-    ui_input_style st;
-    int got;
-    ui_input_style_init(&st);
-    st.row = screen.rows - 3;                                /* above the hint row, never on the masthead */
-    st.left = 2;
-    st.cols = screen.cols - 4;
-    st.fg = UI_TOKEN(UI_T_INK);
-    st.bg = UI_TOKEN(UI_T_GROUND);
-    st.ink = UI_TOKEN(UI_T_ACCENT);
-    name[0] = '\0';
-    got = ui_input(&screen.buf, &keys, &pushback, &st, "New public room: ", name, (int)sizeof name);
-    if (got < 0) return -1;
-    if (got > 0) new_room(name, "public");
+    if (focus == LC_FOCUS_SIDEBAR && lc_sidebar_width(&M) == 0) focus = LC_FOCUS_MENU;
+    M.focus = focus;
+    if (focus == LC_FOCUS_MENU) { if (M.menu < 0) { M.menu = 0; M.menu_sel = 0; } }
+    else M.menu = -1;
+}
+
+static void cycle_focus(int step)
+{
+    int f = M.focus;
+    do { f = (f + step + 3) % 3; } while (f == LC_FOCUS_SIDEBAR && lc_sidebar_width(&M) == 0);
+    set_focus(f);
+}
+
+/** A menu entry. Returns 1 when the door should end. */
+static int menu_pick(int menu, int item)
+{
+    const char *it = lc_menu_items[menu][item];
+    set_focus(LC_FOCUS_INPUT);
+    if (strncmp(it, "Help (", 6) == 0 || strcmp(it, "Keyboard Shortcuts") == 0) open_help();
+    else if (strncmp(it, "Channel List", 12) == 0 || strcmp(it, "Toggle Sidebar") == 0) M.sidebar_hidden = !M.sidebar_hidden;
+    else if (strncmp(it, "Next Channel", 12) == 0) next_channel();
+    else if (strcmp(it, "Join Channel...") == 0) open_prompt(PROMPT_JOIN, "Channel to join");
+    else if (strcmp(it, "Leave Channel") == 0) leave_room();
+    else if (strcmp(it, "Clear Chat") == 0) lines_clear();
+    else if (strcmp(it, "About") == 0) message_modal("LIVECHAT68", "Federated chat for AmiExpress boards");
+    else if (strncmp(it, "Quit", 4) == 0) M.modal = LC_MODAL_QUIT;
+    /* the rest has no wire on this board: drawn, not acted on */
     return 0;
 }
 
-
-static int key_list(int key, int *ended)
+static void side_move(int step)
 {
-    int moved = 1;
-    switch (key) {
-    case UI_KEY_UP: ui_list_move(&list, -1); break;
-    case UI_KEY_DOWN: ui_list_move(&list, 1); break;
-    case UI_KEY_PGUP: ui_list_move(&list, -(list.height - 1)); break;
-    case UI_KEY_PGDN: ui_list_move(&list, list.height - 1); break;
-    case UI_KEY_HOME: ui_list_select(&list, 0); break;
-    case UI_KEY_END: ui_list_select(&list, list_count - 1); break;
-    default: moved = 0; break;
+    int i = M.side_sel + step;
+    while (i >= 0 && i < M.nside && !side_selectable(i)) i += step;
+    if (side_selectable(i)) M.side_sel = i;
+}
+
+static void side_pick(void)
+{
+    lc_side *s;
+    if (!side_selectable(M.side_sel)) return;
+    s = &M.side[M.side_sel];
+    if (s->kind == LC_SIDE_ROOM) { if (!s->joined || dm_thread[0] != '\0') join_room(s->id); }
+    else if (s->kind == LC_SIDE_DM) { open_dm(s->id, s->label); set_focus(LC_FOCUS_INPUT); }
+    else if (s->kind == LC_SIDE_USER) {
+        sprintf(M.input, "/msg %.30s ", s->label);
+        M.input_len = (int)strlen(M.input);
+        set_focus(LC_FOCUS_INPUT);
     }
-    if (moved) return 1;
-    if (key == UI_KEY_F1 || key == '?') { help_from = view; view = VIEW_HELP; return 1; }
-    if (view == VIEW_ROOMS) {
-        if (key == 'q' || key == 'Q') { *ended = 1; return 1; }
-        if (key == 'r' || key == 'R') { load_rooms(); return 1; }
-        if (key == 'n' || key == 'N') { if (prompt_new_room() < 0) *ended = 1; return 1; }
-        if (key == 'd' || key == 'D') { if (load_dms() == AE_CHAT_OK) view = VIEW_DMS; return 1; }
-        if (key == 'w' || key == 'W') { if (load_who() == AE_CHAT_OK) view = VIEW_WHO; return 1; }
-        if (key == UI_KEY_ENTER || key == '\r' || key == '\n') {
-            if (list_count > 0) enter_room(list_id[list.selected]);
-            return 1;
+}
+
+/** One key. Returns 1 when the door should end. */
+static int handle_key(int key)
+{
+    if (M.help) {
+        if (key == UI_KEY_DOWN && M.help_top < lc_help_lines - 1) M.help_top++;
+        else if (key == UI_KEY_UP && M.help_top > 0) M.help_top--;
+        else if (key == UI_KEY_PGDN) { M.help_top += 10; if (M.help_top > lc_help_lines - 1) M.help_top = lc_help_lines - 1; }
+        else if (key == UI_KEY_PGUP) { M.help_top -= 10; if (M.help_top < 0) M.help_top = 0; }
+        else M.help = 0;
+        return 0;
+    }
+    if (M.modal == LC_MODAL_MESSAGE) { M.modal = LC_MODAL_NONE; return 0; }
+    if (M.modal == LC_MODAL_QUIT) {
+        if (key == 'y' || key == 'Y' || is_enter(key)) return 1;
+        if (key == 'n' || key == 'N' || key == UI_KEY_ESC) M.modal = LC_MODAL_NONE;
+        return 0;
+    }
+    if (M.modal == LC_MODAL_PROMPT) {
+        if (key == UI_KEY_ESC) { M.modal = LC_MODAL_NONE; return 0; }
+        if (is_enter(key)) {
+            char text[sizeof M.prompt];
+            copy(text, sizeof text, M.prompt);
+            M.modal = LC_MODAL_NONE;
+            if (text[0] == '\0') return 0;
+            if (prompt_kind == PROMPT_JOIN) join_typed(text); else new_room(text, "public");
+            return 0;
         }
-        if (key == UI_KEY_ESC) { *ended = 1; return 1; }
-    } else if (view == VIEW_DMS) {
-        if (key == UI_KEY_ENTER || key == '\r' || key == '\n') {
-            if (list_count > 0) { dm_unread = 0; open_dm(list_id[list.selected], list_peer[list.selected]); }
-            return 1;
-        }
-        if (key == UI_KEY_ESC || key == 'q' || key == 'Q') { load_rooms(); view = VIEW_ROOMS; return 1; }
-    } else if (view == VIEW_WHO) {
-        if (key == UI_KEY_ESC || key == 'q' || key == 'Q') { load_rooms(); view = VIEW_ROOMS; return 1; }
+        if ((key == 8 || key == 127) && M.prompt_len > 0) { M.prompt[--M.prompt_len] = '\0'; return 0; }
+        if (is_text(key) && M.prompt_len + 1 < (int)sizeof M.prompt) { M.prompt[M.prompt_len++] = (char)key; M.prompt[M.prompt_len] = '\0'; }
+        return 0;
+    }
+    if (key == 3 || key == 17) { M.modal = LC_MODAL_QUIT; return 0; }
+    if (key == UI_KEY_F1) { open_help(); return 0; }
+    if (key == UI_KEY_F2) { M.sidebar_hidden = !M.sidebar_hidden; if (M.focus == LC_FOCUS_SIDEBAR) set_focus(LC_FOCUS_INPUT); return 0; }
+    if (key == UI_KEY_F3) { next_channel(); return 0; }
+    if (key == UI_KEY_F4) return 0;                          /* the emoji picker has no wire here */
+    if (key == 9) { cycle_focus(1); return 0; }
+    if (key == UI_KEY_BACKTAB) { cycle_focus(-1); return 0; }
+    if (key == UI_KEY_PGUP) { M.scroll += 10; if (M.scroll > LC_LINES * 4) M.scroll = LC_LINES * 4; return 0; }
+    if (key == UI_KEY_PGDN) { M.scroll -= 10; if (M.scroll < 0) M.scroll = 0; return 0; }
+
+    if (M.focus == LC_FOCUS_MENU) {
+        if (key == UI_KEY_LEFT) { M.menu = (M.menu + LC_MENUS - 1) % LC_MENUS; M.menu_sel = 0; }
+        else if (key == UI_KEY_RIGHT) { M.menu = (M.menu + 1) % LC_MENUS; M.menu_sel = 0; }
+        else if (key == UI_KEY_DOWN) M.menu_sel = (M.menu_sel + 1) % lc_menu_count[M.menu];
+        else if (key == UI_KEY_UP) M.menu_sel = (M.menu_sel + lc_menu_count[M.menu] - 1) % lc_menu_count[M.menu];
+        else if (is_enter(key)) return menu_pick(M.menu, M.menu_sel);
+        else if (key == UI_KEY_ESC) set_focus(LC_FOCUS_INPUT);
+        return 0;
+    }
+    if (M.focus == LC_FOCUS_SIDEBAR) {
+        if (key == UI_KEY_UP) side_move(-1);
+        else if (key == UI_KEY_DOWN) side_move(1);
+        else if (key == UI_KEY_HOME) { M.side_sel = 0; side_move(1); }
+        else if (key == UI_KEY_END) { M.side_sel = M.nside - 1; if (!side_selectable(M.side_sel)) side_move(-1); }
+        else if (is_enter(key)) side_pick();
+        else if (key == UI_KEY_ESC) set_focus(LC_FOCUS_INPUT);
+        return 0;
+    }
+    if (is_enter(key)) return submit();
+    if (key == UI_KEY_ESC) {
+        if (dm_thread[0] != '\0' && room_id[0] != '\0') join_room(room_id);   /* out of the DM, back to the room */
+        return 0;
+    }
+    if ((key == 8 || key == 127) && M.input_len > 0) { M.input[--M.input_len] = '\0'; return 0; }
+    if (is_text(key) && M.input_len + 1 < LC_INPUT_MAX && M.input_len < AE_CHAT_TEXT_MAX) {
+        M.input[M.input_len++] = (char)key;
+        M.input[M.input_len] = '\0';
     }
     return 0;
 }
 
-static int key_chat(int key, int *ended)
+/** A modal before the chat runs (no config, no server): shown, one key, gone. */
+static void early_message(const char *title, const char *text)
 {
-    if (key == UI_KEY_F1) { help_from = view; view = VIEW_HELP; return 1; }
-    if (key == UI_KEY_ESC) { to_rooms(); return 1; }
-    if (key == UI_KEY_PGUP) { if (scroll_back < msg_count - 1) scroll_back += 5; if (scroll_back > msg_count - 1) scroll_back = msg_count - 1; return 1; }
-    if (key == UI_KEY_PGDN) { scroll_back -= 5; if (scroll_back < 0) scroll_back = 0; return 1; }
-    if (key == UI_KEY_ENTER || key == '\r' || key == '\n') {
-        if (submit()) *ended = 1;
-        return 1;
-    }
-    if ((key == 8 || key == 127) && input_len > 0) { input[--input_len] = '\0'; return 1; }
-    if (((key >= 32 && key < 127) || (key >= 160 && key < 256)) && input_len + 1 < (int)sizeof input && input_len < AE_CHAT_TEXT_MAX) {
-        input[input_len++] = (char)key;
-        input[input_len] = '\0';
-        return 1;
-    }
-    return 0;
-}
-
-static void message_screen(const char *l1, const char *l2)
-{
-    ansi_clear(&screen.buf);
-    draw_masthead("LIVECHAT");
-    say(3, UI_T_INK, l1);
-    say(4, UI_T_INK, l2);
-    say(6, UI_T_DIM, "Press any key.");
-    ui_screen_flush(&screen);
+    message_modal(title, text);
+    present();
     ui_key_read(&keys, &pushback);
+}
+
+static void finish(void)
+{
+    ui_cells_close(&cells);
+    ui_screen_close(&screen);
+    ae_shutdown();
 }
 
 int main(int argc, char **argv)
 {
     ae_session session;
     ae_chat_config cfg;
-    char theme_id[32];
+    char line[96];
     int node = (argc > 1) ? atoi(argv[1]) : 1;
     int ended = 0;
 
-    /* A fresh run starts in the room list with nothing joined (a host test calls main more than once). */
-    view = VIEW_ROOMS; help_from = VIEW_ROOMS; idle_count = 0; pushback = -1;
-    msg_count = 0; msg_number = 0; scroll_back = 0;
-    room_id[0] = '\0'; dm_thread[0] = '\0'; input_len = 0; input[0] = '\0'; status[0] = '\0';
-    list_count = 0;
+    /* A fresh run starts with nothing joined (a host test calls main more than once). */
+    idle_count = 0; pushback = -1; msg_number = 0; help_shown = 0; rooms_count = 0; keep_lines = 0;
+    room_id[0] = '\0'; room_name[0] = '\0'; room_topic[0] = '\0'; dm_thread[0] = '\0'; dm_peer[0] = '\0';
 
     if (ae_start(node) != 0) return 20;
     if (ae_open_bbs(&session, session_storage, (long)sizeof(session_storage), node) != 0) {
         ae_shutdown();
         return 20;
     }
-    ui_screen_open(&screen, &session, frame_buffer, (long)sizeof(frame_buffer));
-    ae_user_theme(&session, theme_id, (int)sizeof(theme_id));
-    theme = ui_theme_by_id(theme_id);
-    ansi_set_palette(&screen.buf, theme->rgb, theme->idx, UI_TOKEN_COUNT);
+    ui_screen_open_responsive(&screen, &session, frame_buffer, (long)sizeof(frame_buffer));
     ae_user_name(&session, handle, (int)sizeof(handle));
     if (handle[0] == '\0') strcpy(handle, "Anon");
+    if (ui_cells_open(&cells, screen.cols, screen.rows) != 0) {
+        ui_screen_close(&screen);
+        ae_shutdown();
+        return 20;
+    }
+    lc_model_init(&M, screen.cols, screen.rows);
+    copy(M.handle, sizeof M.handle, handle);
+    M.node = node;
 
     keys.next = door_key;
     keys.pending = door_pending;
     keys.settle = door_settle;
-    keys.idle = door_idle;
+    keys.idle = 0;                                           /* no polling before there is a chat */
     keys.flush = door_flush;
     keys.ctx = 0;
 
+    ansi_clear(&screen.buf);
+    ui_cells_invalidate(&cells);
+
     if (!ae_chat_config_load(&cfg, LIVECHAT_CFG_PATH)) {
-        message_screen("This door has no LIVECHAT.cfg beside it.", "A sysop sets Host= and BoardKey= there.");
-        ui_screen_close(&screen);
-        ae_shutdown();
+        early_message("Setup", "This door has no LIVECHAT.cfg.");
+        finish();
         return 0;
     }
     if (ae_chat_open(&chat, &cfg, handle, ae_user_level(&session) >= 255) != AE_CHAT_OK) {
-        message_screen("The chat server did not answer.", "Try again in a moment.");
-        ui_screen_close(&screen);
-        ae_shutdown();
+        early_message("Error", "The chat server did not answer.");
+        finish();
         return 0;
     }
+    keys.idle = door_idle;
 
-    load_rooms();
-    list_setup();
-    redraw();
+    /* As the TS door: list the rooms and walk into the first. */
+    if (load_rooms() == AE_CHAT_OK) {
+        sprintf(line, "Found %d room%s", rooms_count, rooms_count == 1 ? "" : "s");
+        system_line(line);
+        if (rooms_count > 0) {
+            sprintf(line, "Auto-joining #%.40s...", rooms_name[0]);
+            system_line(line);
+            keep_lines = 1;                              /* the TS door keeps these two lines above the join */
+            join_room(rooms_id[0]);
+            keep_lines = 0;
+        } else {
+            system_line("No rooms yet. Type /create name to make one.");
+            load_sidebar();
+        }
+    } else {
+        system_line("Could not list the rooms.");
+    }
+    present();
+
     while (!ended) {
         int key = ui_key_read(&keys, &pushback);
-        int handled;
         if (key < 0) break;
-        if (view == VIEW_HELP) { view = help_from; redraw(); continue; }
-        handled = (view == VIEW_CHAT) ? key_chat(key, &ended) : key_list(key, &ended);
-        if (handled) {
-            idle_count = 0;
-            if (!ended) redraw();
-        }
+        idle_count = 0;
+        ended = handle_key(key);
+        if (!ended) present();
     }
 
     if (room_id[0] != '\0') ae_chat_leave(&chat, room_id);
     ae_chat_close(&chat);
-    ui_screen_close(&screen);
-    ae_shutdown();
+    finish();
     return 0;
 }

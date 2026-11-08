@@ -79,6 +79,12 @@ extern "C" {
 #define UI_KEY_MOUSE 1010
 /** ESC O P: F1 (VT100 PF1). A door that has a help screen binds it. */
 #define UI_KEY_F1    1011
+/** ESC O Q / R / S: F2, F3, F4 (VT100 PF2-PF4). */
+#define UI_KEY_F2    1012
+#define UI_KEY_F3    1013
+#define UI_KEY_F4    1014
+/** ESC [ Z: Shift+Tab. */
+#define UI_KEY_BACKTAB 1015
 /* A raw 0x1E read is UI_KEY_MOUSE: Ctrl-^ collides with the wake byte while the board's mouse absorber is armed. */
 #define UI_MOUSE_WAKE 0x1E
 

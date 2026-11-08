@@ -478,7 +478,7 @@ static void chat_serve(int fd, stub_chat_stats *st, int *state)
     } else if (is_get && strstr(path, "/rooms/") != 0 && strstr(path, "/history.txt") != 0) {
         st->histories++;
         chat_reply(fd, 200, "text/plain",
-                   "1|m1|alice|1700000000||m1|9|hello there!bar\n2|m2|bob|1700000060|m1|m1|0|second line\n");
+                   "HISTORY|1|6|2\r\n1|m1|alice|1700000000||m1|9|hello there!bar\r\n2|m2|bob|1700000060|m1|m1|0|second line\r\n");
     } else if (is_post && strstr(path, "/rooms/") != 0 && strstr(path, "/messages") != 0) {
         st->messages++;
         chat_copy_json_field(st->last_message, sizeof st->last_message, body, "content");
@@ -498,12 +498,12 @@ static void chat_serve(int fd, stub_chat_stats *st, int *state)
         chat_reply(fd, 200, "application/json", "{\"id\":\"d1\",\"seq\":3,\"threadId\":\"th1\"}");
     } else if (is_get && strstr(path, "/chat/v1/dm.txt") != 0) {
         st->dm_lists++;
-        chat_reply(fd, 200, "text/plain", "th1|alice|1700000000|2\n");
+        chat_reply(fd, 200, "text/plain", "DM|1|3|1\r\nth1|alice|1700000000|2\r\n");
     } else if (is_get && strstr(path, "/chat/v1/dm/") != 0) {
-        chat_reply(fd, 200, "text/plain", "1|d0|alice|1700000000|||5|private hello\n");
+        chat_reply(fd, 200, "text/plain", "HISTORY|1|3|1\r\n1|d0|alice|1700000000|||5|private hello\r\n");
     } else if (is_get && strstr(path, "/chat/v1/who.txt") != 0) {
         st->whos++;
-        chat_reply(fd, 200, "text/plain", "alice|lobby|0|9|12\nbob|lobby|1|0|3\n");
+        chat_reply(fd, 200, "text/plain", "WHO|1|9|2\r\nalice|lobby|0|9|12\r\nbob|lobby|1|0|3\r\n");
     } else if (is_get && strstr(path, "/chat/v1/events.txt") != 0) {
         st->events++;
         {

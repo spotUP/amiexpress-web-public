@@ -162,6 +162,25 @@ static void test_client(void)
     printf("  [OK] client: every call reaches its route, rows unescape, an expired session re-opens, auth on every request\n");
 }
 
+/* The door's pane and sidebar are its lc_model M (a static of livechat.c, still set after main returns):
+ * the screen is a cell diff, so the checks look at the model, not at the bytes sent. */
+static int has_line(const char *nick, const char *text)
+{
+    int i;
+    for (i = 0; i < M.nlines; i++) {
+        if (nick != 0 && strcmp(M.lines[i].nick, nick) != 0) continue;
+        if (strstr(M.lines[i].text, text) != 0) return 1;
+    }
+    return 0;
+}
+
+static int has_side(int kind, const char *label)
+{
+    int i;
+    for (i = 0; i < M.nside; i++) if (M.side[i].kind == kind && strcmp(M.side[i].label, label) == 0) return 1;
+    return 0;
+}
+
 static void test_door_keys(void)
 {
     int rc;
@@ -175,11 +194,13 @@ static void test_door_keys(void)
     assert(st->dms == 1 && strcmp(st->last_dm_peer, "bob") == 0 && strcmp(st->last_dm_text, "hi bob") == 0);
     assert(st->leaves == 1 && st->session_closes == 1);
     assert(st->bad_auth == 0 && st->bad_session == 0);
-    assert(strstr(screen_text, "LIVECHAT - #Lobby"));
-    assert(strstr(screen_text, "alice: ") && strstr(screen_text, "hello there|bar"));          /* history, '!' unescaped */
-    assert(strstr(screen_text, "Tester: "));                                                   /* own line arrived via the post-send poll */
-    assert(strstr(screen_text, "carol: ") && strstr(screen_text, "from idle poll"));
-    assert(strstr(screen_text, "react to message n") || strstr(screen_text, "/r n emoji"));    /* help screen */
+    assert(strncmp(M.pane_label, "Lobby", 5) == 0 && strcmp(M.room, "Lobby") == 0);    /* auto-joined the first room */
+    assert(has_line("alice", "hello there|bar"));                                      /* history, '!' unescaped */
+    assert(has_line("Tester", "hello world"));                                         /* own line arrived via the post-send poll */
+    assert(has_line("carol", "from idle poll"));
+    assert(help_shown >= 1);
+    assert(strcmp(M.lines[0].text, "Found 2 rooms") == 0 && strcmp(M.lines[1].text, "Auto-joining #Lobby...") == 0);
+    assert(strcmp(M.lines[2].text, "Joined #Lobby (3 users)") == 0 && M.lines[3].kind == LC_ACTIVITY_LINE);  /* the TS door's order */                                                           /* /? opened the help overlay */
     assert(!strstr(screen_text, "\x1b[40m"));                                                  /* never paints background 40 */
     stop_stub();
     printf("  [OK] door: join, send, react, thread, direct message, help and quit reach the server and the screen\n");
@@ -189,11 +210,12 @@ static void test_door_lists(void)
 {
     int rc;
     start_stub();
-    rc = drive(KEYS("w" "q" "d" "\r"), 0);
-    assert(rc == 0 && st->whos == 1 && st->dm_lists == 1);
-    assert(strstr(screen_text, "WHO IS ON") && strstr(screen_text, "bob") && strstr(screen_text, "sysop"));
-    assert(strstr(screen_text, "DIRECT MESSAGES") && strstr(screen_text, "alice"));
-    assert(strstr(screen_text, "private hello"));                                              /* Enter opened the DM thread */
+    /* Tab to the sidebar, End to its last entry (the DM with alice), Enter opens it, then /who. */
+    rc = drive(KEYS("\t" "\x1b[F" "\r" "/who\r" "/q\r"), 0);
+    assert(rc == 0 && st->whos == 2 && st->dm_lists == 1);       /* who: once for the sidebar's people at join, once for /who */
+    assert(has_side(LC_SIDE_USER, "alice") && has_side(LC_SIDE_USER, "bob") && has_side(LC_SIDE_DM, "alice"));
+    assert(has_line("alice", "private hello"));                                        /* Enter opened the DM thread */
+    assert(has_line(0, "bob in #lobby (sysop)"));
     stop_stub();
     printf("  [OK] door: who and direct-message lists load; Enter opens a DM thread\n");
 }
@@ -205,7 +227,7 @@ static void test_door_idle_poll(void)
     poll_steps = 2;
     rc = drive(KEYS("\r" "/q\r"), 1);                       /* a quiet second after joining: only idle polling can fetch carol */
     assert(rc == 0 && st->events >= 1 && st->messages == 0);
-    assert(strstr(screen_text, "carol: ") && strstr(screen_text, "from idle poll"));
+    assert(has_line("carol", "from idle poll"));
     poll_steps = POLL_STEPS_DEFAULT;
     stop_stub();
     printf("  [OK] door: idle polling shows a message nobody sent from here\n");
@@ -217,23 +239,24 @@ static void test_door_new_room(void)
 {
     int rc;
     start_stub();
-    rc = drive(KEYS("n" "My Room\r" "/l\r" "q"), 0);
+    rc = drive(KEYS("/create\r" "My Room\r" "/q\r"), 0);                /* no name: the prompt modal asks for it */
     assert(rc == 0 && st->rooms_created == 1 && strcmp(st->last_created, "My Room") == 0);
-    assert(st->joins == 1 && strcmp(st->last_join, "newroom") == 0);    /* joined by the id the create reply gave */
-    assert(strstr(screen_text, "New public room: ") && strstr(screen_text, "N new room"));
+    assert(st->joins == 2 && strcmp(st->last_join, "newroom") == 0);    /* auto-join, then the id the create reply gave */
+    assert(has_line(0, "Created #"));
     stop_stub();
     start_stub();
     rc = drive(KEYS("\r" "/n Second Room\r" "/q\r"), 0);
     assert(rc == 0 && st->rooms_created == 1 && strcmp(st->last_created, "Second Room") == 0);
     assert(st->joins == 2 && strcmp(st->last_join, "newroom") == 0);
     stop_stub();
-    printf("  [OK] door: N in the rooms view and /n in a room make a room and join it by its new id\n");
+    printf("  [OK] door: /create with the name prompt and /n with a name make a room and join it by its new id\n");
 }
 
 static void test_door_no_config(void)
 {
     int rc = drive(KEYS("x"), 0);
-    assert(rc == 0 && strstr(screen_text, "no LIVECHAT.cfg"));
+    assert(rc == 0 && M.modal == LC_MODAL_MESSAGE && strstr(M.modal_text, "no LIVECHAT.cfg"));
+    assert(strstr(screen_text, "no LIVECHAT.cfg"));                                    /* and it reached the wire */
     printf("  [OK] door: no config says so and leaves\n");
 }
 

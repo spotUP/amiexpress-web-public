@@ -1,0 +1,103 @@
+/*
+ * livechat_ui.h - the LIVECHAT68 screen, drawn from a model onto a ui_cells canvas.
+ *
+ * The layout is a copy of the TS LIVECHAT door (board/Doors/livechat, neo-blessed) as a telnet
+ * ANSI caller sees it, measured cell by cell from its captured output (tests/fixtures/
+ * lc68-ts-main-*.grid): menu bar, sidebar (gone at 40 columns), bordered chat pane with a label
+ * bar, bordered message input with the emoji button, status line, and the dropdown menus, the
+ * centred message modal and the help overlay on top.
+ *
+ * lc_draw paints the whole frame into the canvas' back buffer every time; ui_cells_flush then
+ * sends only the cells that changed, so a key costs a handful of cells, never a repaint.
+ *
+ * Colours are the TS door's xterm-256 numbers, named once here.
+ */
+#ifndef LIVECHAT_UI_H
+#define LIVECHAT_UI_H
+
+#include "ui_cells.h"
+
+#define LC_INK        255   /* text */
+#define LC_ACCENT     204   /* borders, menu bar ground, section heads */
+#define LC_DIM        240   /* timestamps, system lines, rooms not joined */
+#define LC_ACTIVITY   221   /* activity lines, the emoji button face */
+#define LC_BAR_INK    0     /* menu bar labels */
+#define LC_GREY       7     /* label bar text, masthead edges, emoji button border */
+#define LC_LABEL_BG   4     /* chat pane label bar ground */
+#define LC_LABEL_TAIL 3     /* the last three cells of the label bar */
+
+#define LC_LINES     80
+#define LC_TEXT_MAX  240
+
+enum { LC_SYSTEM, LC_ACTIVITY_LINE, LC_HISTORY, LC_LIVE };
+
+typedef struct {
+    int kind;
+    long seq;              /* server order; system lines take the last seq seen */
+    int number;            /* 1, 2, ... for messages (what /r and /t accept); 0 for others */
+    char id[24];           /* server message id, "" for local lines */
+    char time[6];          /* "hh:mm" */
+    char nick[24];
+    char text[LC_TEXT_MAX];
+} lc_line;
+
+enum { LC_SIDE_HEAD, LC_SIDE_ROOM, LC_SIDE_USER, LC_SIDE_DM, LC_SIDE_BLANK };
+
+#define LC_SIDE_MAX 48
+typedef struct {
+    int kind;
+    int joined;            /* rooms: the caller is in it */
+    char label[40];
+    char id[48];           /* room id, DM thread id, or user handle */
+} lc_side;
+
+enum { LC_FOCUS_INPUT, LC_FOCUS_SIDEBAR, LC_FOCUS_MENU };
+enum { LC_MODAL_NONE, LC_MODAL_MESSAGE, LC_MODAL_QUIT, LC_MODAL_PROMPT };
+
+#define LC_INPUT_MAX 256
+typedef struct {
+    int cols, rows;
+    char handle[32];
+    int node;
+    char room[48];                 /* the room name the status line shows, "" when in none */
+    char pane_label[96];           /* chat box label: "general - General chat" */
+    lc_line lines[LC_LINES];
+    int nlines;
+    int scroll;                    /* display rows back from the newest */
+    lc_side side[LC_SIDE_MAX];
+    int nside;
+    int side_sel;
+    int sidebar_hidden;            /* F2 */
+    char input[LC_INPUT_MAX];
+    int input_len;
+    int focus;
+    int menu;                      /* open dropdown 0..3, -1 none */
+    int menu_sel;
+    int help;                      /* help overlay shown */
+    int help_top;
+    int modal;
+    char modal_title[24];          /* "Error", or the prompt's question */
+    char modal_text[96];
+    char prompt[48];
+    int prompt_len;
+} lc_model;
+
+#define LC_SCROLL_TRACK 66
+#define LC_SCROLL_THUMB 195
+#define LC_MENUS 4
+extern const char *const lc_menu_label[LC_MENUS];
+extern const int lc_menu_count[LC_MENUS];
+extern const char *const *const lc_menu_items[LC_MENUS];
+extern const char *const lc_help_text[];
+extern const int lc_help_lines;
+
+void lc_model_init(lc_model *m, int cols, int rows);
+int lc_sidebar_width(const lc_model *m);
+int lc_text_rows(const lc_model *m);
+int lc_nick_color(const char *nick);
+/** The line as marked text (ui_cells markers) in the TS formats. */
+void lc_line_marked(const lc_line *l, char *out, int cap);
+/** Paints the whole frame into c's back buffer; `cursor_row`/`cursor_col` get where the caret goes. */
+void lc_draw(ui_cells *c, const lc_model *m, int *cursor_row, int *cursor_col);
+
+#endif

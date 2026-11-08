@@ -96,6 +96,21 @@ static void the_arrows_decode(void)
  * not move under them while this file's ESC cases passed (sysop,
  * 2026-09-06).
  */
+static void the_function_keys_and_backtab_decode(void)
+{
+    typist t; ui_key_source src; int pushback = -1;
+    t.keys = "\x1bOP\x1bOQ\x1bOR\x1bOS\x1b[Zx"; t.at = 0; t.overrun = 0;
+    src = source_for(&t);
+
+    assert(ui_key_read(&src, &pushback) == UI_KEY_F1);
+    assert(ui_key_read(&src, &pushback) == UI_KEY_F2);
+    assert(ui_key_read(&src, &pushback) == UI_KEY_F3);
+    assert(ui_key_read(&src, &pushback) == UI_KEY_F4);
+    assert(ui_key_read(&src, &pushback) == UI_KEY_BACKTAB);
+    assert(ui_key_read(&src, &pushback) == 'x');     /* nothing of a sequence leaks into the next key */
+    printf("  [OK] F1-F4 (ESC O P..S) and Shift-Tab (ESC [ Z) decode\n");
+}
+
 static void the_boards_own_arrow_codes_decode(void)
 {
     typist t; ui_key_source src; int pushback = -1;
@@ -368,6 +383,7 @@ int main(void)
     an_ordinary_key_is_itself();
     both_line_endings_mean_enter();
     the_arrows_decode();
+    the_function_keys_and_backtab_decode();
     the_boards_own_arrow_codes_decode();
     the_boards_own_page_and_home_codes_decode();
     an_ordinary_key_is_untouched();
