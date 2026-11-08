@@ -273,6 +273,8 @@ export const NodeConfigSchema = z.object({
   // the schema does not declare means a save silently drops it.
   show_password_fails: z.boolean().optional(),
   usernumber_login: z.boolean().optional(),
+  // FORCE_ANSI (express.e:29079): null/absent = key not written, '' = written bare.
+  force_ansi: z.string().regex(/^[NQRnqr]*$/, 'Letters N, Q and R only').nullable().optional(),
   telnet: z.boolean().optional(),
   ftp: z.boolean().optional(),
   disable_quick_logons: z.boolean().optional(),

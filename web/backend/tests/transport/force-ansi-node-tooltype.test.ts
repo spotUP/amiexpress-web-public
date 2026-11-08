@@ -11,6 +11,7 @@ const mockTooltypes = new Map<string, string>();
 jest.mock('../../src/utils/node-tooltypes.util', () => ({
   ...jest.requireActual('../../src/utils/node-tooltypes.util'),
   nodeTooltype: (_node: number, key: string) => mockTooltypes.get(key),
+  nodeFlag: (_node: number, key: string) => mockTooltypes.has(key) && (mockTooltypes.get(key) ?? '').trim() !== '0',
 }));
 jest.mock('../../src/handlers/screen.handler', () => ({
   displayScreen: jest.fn().mockResolvedValue(true),
@@ -68,12 +69,23 @@ describe('node tooltype FORCE_ANSI', () => {
     expect(c.session.ansiMode).toBe(true);
   });
 
-  it('Q sets quick logon; P and T in the value are not FORCE_ANSI flags', async () => {
+  // express.e:29085 `IF Q AND (sopt.qLogon<>0)`; ACP.e:2664 sets qLogon from the
+  // DISABLE_QUICK_LOGONS tooltype, default FALSE. So Q counts only with the key.
+  it('Q sets quick logon when DISABLE_QUICK_LOGONS is on the node; P and T are not FORCE_ANSI flags', async () => {
     mockTooltypes.set('FORCE_ANSI', 'QP');
+    mockTooltypes.set('DISABLE_QUICK_LOGONS', '');
     const c = caller('force-q', 'telnet');
     await runPreLoginConnect(c.socket as any, c.session, { socketId: 'force-q' });
     expect(c.session.quickFlag).toBe(true);
     expect(c.session.petsciiMode).toBe(false);
+  });
+
+  it('Q is ignored without DISABLE_QUICK_LOGONS (qLogon stays FALSE)', async () => {
+    mockTooltypes.set('FORCE_ANSI', 'QR');
+    const c = caller('force-q-off', 'telnet');
+    await runPreLoginConnect(c.socket as any, c.session, { socketId: 'force-q-off' });
+    expect(c.session.quickFlag).toBeFalsy();
+    expect(c.session.subState).not.toBe(LoggedOnSubState.ANSI_PROMPT);
   });
 
   it('absent: the graphics prompt is still shown', async () => {

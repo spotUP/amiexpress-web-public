@@ -15,7 +15,7 @@ import {
   recordPromptColumn, backspaceEcho, SAVE_CURSOR,
 } from '../../utils/line-input.util';
 import { emitPrompt } from '../../utils/output.util';
-import { logonNamePromptText, nodeTooltype } from '../../utils/node-tooltypes.util';
+import { logonNamePromptText, nodeFlag, nodeTooltype } from '../../utils/node-tooltypes.util';
 import { TELETEXT_SESSION_ROWS } from '../../amiga-emulation/xim/screen-width.util';
 import { boardRoot } from '../../utils/board-root.util';
 
@@ -194,7 +194,11 @@ export function applyGraphicsAnswer(socket: any, session: BBSSession, answer: st
   // caller's terminal IS the screen: 40 columns of PETSCII is what a C64
   // has, and answering P8 down a byte transport cannot change that.
   const wantsWide = hasP && /P\s*8/.test(answer) && session.connectionType === 'web';
-  const hasQ = answer.includes('Q'); // Quick logon
+  // express.e:29085 and 29545: IF Q AND (sopt.qLogon<>0). ACP.e:2664 sets qLogon
+  // from the node's DISABLE_QUICK_LOGONS tooltype (default FALSE, 2824), so the
+  // key's PRESENCE is what lets a Q answer through - the tooltype's name is the
+  // source's, its sense is the source's. nodeFlag treats a hand-written =0 as off.
+  const hasQ = answer.includes('Q') && nodeFlag(session.nodeId ?? 0, 'DISABLE_QUICK_LOGONS');
   // express.e:29072 ansiColour:=TRUE, then 29538 IF 'N' ansiColour:=FALSE. This is the flag
   // aePuts2 reads (AnsiUtil.forCaller strips SGR at the output choke); ansiEnabled
   // below is a separate, mostly-unread field and never reached the wire.

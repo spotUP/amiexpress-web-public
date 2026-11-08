@@ -491,6 +491,9 @@ export interface NodeConfig {
   show_password_fails?: boolean;
   /** USERNUMBER_LOGIN - a caller may type his slot number (express.e:29598). */
   usernumber_login?: boolean;
+  /** FORCE_ANSI - presence skips the graphics prompt; the value letters are N, Q, R
+   *  (express.e:29079). undefined/null = key absent, '' = present with no letters. */
+  force_ansi?: string | null;
 
   // Network Settings
   telnet: boolean;

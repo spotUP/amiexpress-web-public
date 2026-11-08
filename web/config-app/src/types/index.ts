@@ -192,6 +192,10 @@ export interface NodeConfig {
   show_password_fails?: boolean;
   /** USERNUMBER_LOGIN - a caller may log on by slot number (express.e:29598). */
   usernumber_login?: boolean;
+  /** FORCE_ANSI - null = key absent, '' = present with no letters, else N, Q, R (express.e:29079). */
+  force_ansi?: string | null;
+  /** DISABLE_QUICK_LOGONS - lets a Q answer through (ACP.e:2664, express.e:29545). */
+  disable_quick_logons?: boolean;
   telnet: boolean;
   ftp: boolean;
   sysop_chat_color: number;

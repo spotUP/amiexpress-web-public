@@ -13,6 +13,15 @@ jest.mock('../../src/index', () => {
   const states = require('../../src/constants/bbs-states');
   return { BBSState: states.BBSState, LoggedOnSubState: states.LoggedOnSubState, BBSSession: {} };
 });
+// express.e:29545 gates Q on sopt.qLogon, which ACP.e:2664 sets from the node's
+// DISABLE_QUICK_LOGONS tooltype. The icon is mocked here; the real reader is
+// covered in node-tooltypes.test.ts.
+let quickLogonsKey = true;
+jest.mock('../../src/utils/node-tooltypes.util', () => ({
+  ...jest.requireActual('../../src/utils/node-tooltypes.util'),
+  nodeFlag: (_node: number, key: string) => key === 'DISABLE_QUICK_LOGONS' && quickLogonsKey,
+}));
+beforeEach(() => { quickLogonsKey = true; });
 jest.mock('../../src/handlers/screen.handler', () => ({
   displayScreen: jest.fn().mockResolvedValue(true),
 }));
@@ -93,6 +102,14 @@ describe('applyGraphicsAnswer (express.e:29538-29546)', () => {
       const said = socket.emit.mock.calls.map((c: any[]) => String(c[1] ?? '')).join('');
       expect(said).toContain('RIP GRAPHICS NEED A WEB BROWSER - USING ANSI');
     }
+  });
+
+  test('Q is ignored when the node lacks DISABLE_QUICK_LOGONS (qLogon FALSE, express.e:29545)', () => {
+    quickLogonsKey = false;
+    const session = makeSession();
+    applyGraphicsAnswer(makeSocket(), session, 'Q');
+    expect(session.quickFlag).toBeFalsy();
+    expect(session.tempData.quickLogon).toBeUndefined();
   });
 
   test('RQ sets RIP and the quick-logon flag together', () => {

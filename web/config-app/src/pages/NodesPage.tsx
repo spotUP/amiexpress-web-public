@@ -282,6 +282,62 @@ export function NodesPage() {
         ),
     },
     {
+      key: 'force_ansi',
+      // FORCE_ANSI, express.e:29079 - the key's presence skips the graphics prompt;
+      // its letters (N colour off, Q quick logon, R RIP) answer it.
+      header: 'Force Graphics Mode',
+      render: (row) => {
+        const current = formData.force_ansi !== undefined ? formData.force_ansi : row.config?.force_ansi ?? null;
+        return editingNode === row.nodeNumber ? (
+          <div className="flex items-center space-x-2">
+            <label className="flex items-center space-x-2">
+              <input
+                type="checkbox"
+                checked={current !== null}
+                onChange={(e) => editField({ ...formData, force_ansi: e.target.checked ? '' : null })}
+                className="w-4 h-4"
+              />
+              <span className="text-sm text-content-primary">Skip prompt</span>
+            </label>
+            <input
+              type="text"
+              aria-label="Forced graphics letters"
+              placeholder="N, Q, R"
+              maxLength={3}
+              disabled={current === null}
+              value={current ?? ''}
+              onChange={(e) => editField({ ...formData, force_ansi: e.target.value.toUpperCase().replace(/[^NQR]/g, '') })}
+              className="input-field w-20"
+            />
+          </div>
+        ) : (
+          <span className="text-content-primary">
+            {row.config?.force_ansi == null ? 'Ask caller' : row.config.force_ansi === '' ? 'Skip prompt' : `Skip prompt (${row.config.force_ansi})`}
+          </span>
+        );
+      },
+    },
+    {
+      key: 'disable_quick_logons',
+      // DISABLE_QUICK_LOGONS, ACP.e:2664 sets sopt.qLogon from it and
+      // express.e:29545 honours a Q answer only when qLogon is set.
+      header: 'Disable Quick Logons',
+      render: (row) =>
+        editingNode === row.nodeNumber ? (
+          <label className="flex items-center space-x-2">
+            <input
+              type="checkbox"
+              checked={formData.disable_quick_logons ?? row.config?.disable_quick_logons ?? false}
+              onChange={(e) => editField({ ...formData, disable_quick_logons: e.target.checked })}
+              className="w-4 h-4"
+            />
+            <span className="text-sm text-content-primary">Set</span>
+          </label>
+        ) : (
+          <span className="text-content-primary">{row.config?.disable_quick_logons ? 'Set' : 'Not set'}</span>
+        ),
+    },
+    {
       key: 'capitol',
       header: 'Capitol Files',
       render: (row) =>

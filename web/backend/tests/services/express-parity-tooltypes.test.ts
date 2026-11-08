@@ -126,6 +126,27 @@ describe('a node enables telnet by the PRESENCE of TELNET', () => {
     expect(after.has('NO_TELNET')).toBe(false);
   });
 
+  // FORCE_ANSI (express.e:29079): presence is the setting, so the admin has to
+  // be able to write it with no letters, with letters, and remove it again.
+  it('FORCE_ANSI: writes the letters, writes a bare key for empty, removes it for null', async () => {
+    const file = path.join(root, 'Node1.info');
+    seed(file, { NODESTART: 'BBS:Express' });
+    const service = new NodeConfigService(mirror());
+
+    await service.updateNodeConfig(2, { node_number: 1, force_ansi: 'nq' } as never, CONTEXT);
+    expect(readTooltypeMap(file).get('FORCE_ANSI')).toBe('NQ');
+    expect((await service.getNodeConfig(2))!.force_ansi).toBe('NQ');
+
+    await service.updateNodeConfig(2, { node_number: 1, force_ansi: '' } as never, CONTEXT);
+    expect(readTooltypeMap(file).has('FORCE_ANSI')).toBe(true);
+    expect(readTooltypeMap(file).get('FORCE_ANSI')).toBe('');
+    expect((await service.getNodeConfig(2))!.force_ansi).toBe('');
+
+    await service.updateNodeConfig(2, { node_number: 1, force_ansi: null } as never, CONTEXT);
+    expect(readTooltypeMap(file).has('FORCE_ANSI')).toBe(false);
+    expect((await service.getNodeConfig(2))!.force_ansi).toBeNull();
+  });
+
   it('reads a node with TELNET as enabled, and one without as disabled', async () => {
     seed(path.join(root, 'Node0.info'), { NODESTART: 'BBS:Express', TELNET: '1' });
     seed(path.join(root, 'Node1.info'), { NODESTART: 'BBS:Express' });

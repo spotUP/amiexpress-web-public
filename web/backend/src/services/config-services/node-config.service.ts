@@ -58,6 +58,7 @@ export class NodeConfigService {
           log_host: toolTypes.has('LOG_HOST'),
           show_password_fails: toolTypes.has('SHOWPWFAIL'),
           usernumber_login: toolTypes.has('USERNUMBER_LOGIN'),
+          force_ansi: toolTypes.has('FORCE_ANSI') ? (toolTypes.get('FORCE_ANSI') ?? '') : null,
           telnet: toolTypes.has('TELNET'),  // ACP.e:2675 - presence enables it
           ftp: toolTypes.has('FTP'),
           disable_quick_logons: toolTypes.has('DISABLE_QUICK_LOGONS'),
@@ -118,6 +119,7 @@ console.error('[NodeConfigService] Error reading Node{N}.info files:', error);
         log_host: toolTypes.has('LOG_HOST'),
           show_password_fails: toolTypes.has('SHOWPWFAIL'),
           usernumber_login: toolTypes.has('USERNUMBER_LOGIN'),
+          force_ansi: toolTypes.has('FORCE_ANSI') ? (toolTypes.get('FORCE_ANSI') ?? '') : null,
         telnet: toolTypes.has('TELNET'),  // ACP.e:2675 - presence enables it
         ftp: toolTypes.has('FTP'),
         disable_quick_logons: toolTypes.has('DISABLE_QUICK_LOGONS'),
@@ -302,6 +304,8 @@ console.error(`[NodeConfigService] Failed to delete ${nodeInfoPath}:`, error);
         // NO_TELNET is not a tooltype AmiExpress has ever read; it is dropped
         // so a node written by the previous admin stops carrying it.
         'UD_LOG', 'TELNET', 'NO_TELNET', 'FTP', 'DISABLE_QUICK_LOGONS', 'VIEW_PASSWORD',
+        // Presence is the setting (express.e:29079), so it is owned too.
+        'FORCE_ANSI',
       ];
 
       const toolTypes = new Map<string, string>();
@@ -331,6 +335,10 @@ console.error(`[NodeConfigService] Failed to delete ${nodeInfoPath}:`, error);
       if (config.ftp) toolTypes.set('FTP', '1');
       if (config.disable_quick_logons) toolTypes.set('DISABLE_QUICK_LOGONS', '1');
       if (config.view_password) toolTypes.set('VIEW_PASSWORD', '1');
+      // Present-but-empty is a real state: the key alone skips the prompt.
+      if (config.force_ansi !== undefined && config.force_ansi !== null) {
+        toolTypes.set('FORCE_ANSI', config.force_ansi.toUpperCase());
+      }
 
       applyTooltypes(nodeInfoPath, toolTypes, {
         removeKeys: key => OWNED_FLAGS.includes(key),

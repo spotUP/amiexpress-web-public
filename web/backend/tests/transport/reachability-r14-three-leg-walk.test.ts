@@ -52,9 +52,17 @@ function stripTelnetNegotiation(raw: Buffer): Buffer {
   return Buffer.from(out);
 }
 
-/** Differences 1 and 2: the clock, and whichever node the caller was given. */
+/**
+ * Differences 1 and 2: the clock, and whichever node the caller was given.
+ * Difference 3: the kitty graphics query (753e94dfd). The board asks every
+ * non-C64 telnet/SSH caller that names its terminal whether it draws kitty
+ * pictures; the SSH leg's pty-req names one and this raw telnet leg does not,
+ * so the query is a transport-capability probe, not board content. Dropped
+ * here; kitty-graphics-entry.test.ts owns it.
+ */
 const stable = (t: string): string =>
-  t.replace(/Connection occured at [^.]+\./, 'Connection occured at <time>.')
+  t.replace(/\x1b_G[^\x1b]*\x1b\\(\r\x1b\[K)?/g, '')
+   .replace(/Connection occured at [^.]+\./, 'Connection occured at <time>.')
    .replace(/node \d+/g, 'node <n>')
    .replace(/Node \d+/g, 'Node <n>');
 

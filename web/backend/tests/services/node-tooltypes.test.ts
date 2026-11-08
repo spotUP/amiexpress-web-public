@@ -238,3 +238,27 @@ describe('the logon prompts', () => {
     expect(withIcon(['PASSWORD_PROMPT=Secret:']).loginPasswordPrompt(1)).toBe('Secret: ');
   });
 });
+
+
+describe('FORCE_ANSI with no value', () => {
+  let root: string;
+  afterEach(() => {
+    if (root) fs.rmSync(root, { recursive: true, force: true });
+    delete process.env.BBS_DATA_DIR;
+  });
+
+  // express.e:29079 readToolType succeeds on a key with no value, and the port
+  // keys the graphics prompt on presence. The icon here is a REAL .info written
+  // by applyTooltypes, never a text file.
+  it('a real Node1.info carrying FORCE_ANSI alone reads as present with an empty value', () => {
+    root = fs.mkdtempSync(path.join(os.tmpdir(), 'node-icon-real-'));
+    const { applyTooltypes } = require('../../src/utils/info-file.util');
+    applyTooltypes(path.join(root, 'Node1.info'), [['NODESTART', 'BBS:Express'], ['FORCE_ANSI', '']]);
+
+    const { nodeTooltype } = freshUtil(root);
+
+    expect(nodeTooltype(1, 'FORCE_ANSI')).toBe('');
+    expect(nodeTooltype(1, 'NODESTART')).toBe('BBS:Express');
+    expect(nodeTooltype(1, 'NOT_THERE')).toBeUndefined();
+  });
+});
