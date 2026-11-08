@@ -147,6 +147,40 @@ int main(void)
     }
 
     ui_cells_close(&c);
+
+    /* Two-column glyphs (UI_CELLS_M_WIDE + id): one UTF-8 send, two columns, never torn. */
+    {
+        static const char *const glyphs[1] = { "\360\237\221\215" };   /* U+1F44D */
+        const char *s = "a\005\001x3 bc";                                /* "a" thumbs "x3 bc" */
+        char *at;
+        CHECK(ui_cells_marked_cols(s) == 8, "a wide glyph counts two columns");
+        n = ui_cells_wrap("ab \005\001 3", 4, starts, ends, 8);         /* "ab" + glyph would be 5 */
+        CHECK(n == 2 && starts[1] == 3, "wrap moves a wide glyph whole to the next line");
+        n = ui_cells_wrap("a\005\001", 2, starts, ends, 8);
+        CHECK(n == 2 && ends[0] == 1, "a glyph that cannot share a line is not split");
+        CHECK(ui_cells_open(&c, 12, 2) == 0, "open wide");
+        ui_cells_wide_table(&c, glyphs, 1);
+        flush_into(&c, &b);
+        ui_cells_marked(&c, 0, 0, s, 0, (int)strlen(s), 12);
+        CHECK((c.back[1].flags & UI_CELLS_WIDE) && (c.back[2].flags & UI_CELLS_WIDE_TAIL), "head and tail cells");
+        flush_into(&c, &b);
+        at = strstr(wire, "\360\237\221\215");
+        CHECK(at != 0 && strstr(at + 1, "\360\237\221\215") == 0, "glyph sent once");
+        CHECK(at != 0 && strncmp(at + 4, "x3", 2) == 0, "cursor counted two columns: the text follows with no move");
+        flush_into(&c, &b);
+        CHECK(b.len == 0, "a second flush sends nothing");
+        /* The tail overwritten: the orphan head goes out as a blank, never half a glyph. */
+        ui_cells_marked(&c, 0, 2, "x", 0, 1, 1);
+        flush_into(&c, &b);
+        CHECK(strstr(wire, "\360") == 0 && strstr(wire, " x") != 0, "a broken pair is sent as a blank");
+        /* No table registered (latin1 caller): the marker is drawn as blanks, no high bytes. */
+        ui_cells_close(&c);
+        CHECK(ui_cells_open(&c, 12, 2) == 0, "open no table");
+        ui_cells_marked(&c, 0, 0, s, 0, (int)strlen(s), 12);
+        flush_into(&c, &b);
+        CHECK(strstr(wire, "\360") == 0, "no table: no UTF-8 bytes");
+        ui_cells_close(&c);
+    }
     if (fails == 0) printf("test_ui_cells: all passed\n");
     return fails == 0 ? 0 : 1;
 }

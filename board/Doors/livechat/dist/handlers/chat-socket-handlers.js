@@ -8,6 +8,7 @@ const dm_render_1 = require("./dm-render");
 const door_theme_1 = require("../door-theme");
 const emojis_1 = require("../utils/emojis");
 const reaction_store_1 = require("../features/reaction-store");
+const reaction_rows_1 = require("../features/reaction-rows");
 function setupChatHandlers(sock, st, uid, un, ou, ps, cl, uut, asm, acm, aa, uef, aud, mu, guc, fm, pk, utp, s, sse, gem, eb, am, mh, ft, rcl) {
     // NOTE: We intentionally do NOT listen to 'ansi-output' - that's raw terminal output
     // for legacy doors. Neo-blessed doors should only use structured events like 'chat:message'.
@@ -64,7 +65,7 @@ function setupChatHandlers(sock, st, uid, un, ou, ps, cl, uut, asm, acm, aa, uef
         if (d?.messageId === undefined)
             return;
         (0, reaction_store_1.setReactionCounts)(d.messageId, d.counts);
-        const text = (0, reaction_store_1.formatReactionCounts)(d.messageId).trim();
+        const text = (0, reaction_rows_1.formatReactionCounts)(d.messageId).trim();
         asm(text ? `Reactions on ${d.messageId}: ${text}` : `No reactions on ${d.messageId}`);
     });
     sock.on('bbs:event', (e) => {

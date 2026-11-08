@@ -423,6 +423,26 @@ int ae_animations_allowed(ae_session *s)
     return 1;
 }
 
+int ae_wire_charset(ae_session *s, char *out, int n)
+{
+    if (!out || n <= 0) return 0;
+    if (ask(s, AE_FIELD_CHARSET, out, n) > 0) return 0;
+    /* A classic board never heard of it: the Amiga's own charset. */
+    strncpy(out, "iso-8859-1", (size_t)(n - 1));
+    out[n - 1] = '\0';
+    return 0;
+}
+
+int ae_set_output_charset(ae_session *s, const char *charset)
+{
+    if (!s || !s->transport || !charset || !*charset || !s->carrier || !s->write) return 0;
+    if (s->write(s->context, AE_FIELD_CHARSET, charset) < 0) {
+        s->carrier = 0;
+        return 0;
+    }
+    return 1;
+}
+
 int ae_menu_command(ae_session *s, char *out, int n)
 {
     int got = ask(s, AE_FIELD_MENU_COMMAND, out, n);

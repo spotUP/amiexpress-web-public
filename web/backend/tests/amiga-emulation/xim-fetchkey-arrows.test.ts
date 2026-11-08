@@ -161,7 +161,6 @@ describe('Home, End, Page Up and Page Down reach an SDK door as one converted by
       reply: () => undefined,
     };
     const proto = XIMIOHandler.prototype as any;
-    ctx.parseInputTokens = proto.parseInputTokens;
     ctx.processHotkeyToken = proto.processHotkeyToken;
     proto.queueInput.call(ctx, typed);
     while (ctx.inputQueue.length > 0) proto.handleFetchKey.call(ctx, { msgAddr: 0x1000 });
@@ -213,7 +212,7 @@ describe('a classic door keeps getting nothing for those keys', () => {
       inputQueue: [] as string[], state: { carrierDropped: false }, bbsSession: session,
       waitingForPause: false, waitingForHotkey: false, hotkeyMessage: null, waitingForExtHotkey: false, extHotkeyMessage: null, waitingForLineInput: false,
       messageParser: { writeCommand: (_a: number, v: number) => { written.push(v); } }, reply: () => undefined,
-      parseInputTokens: proto.parseInputTokens, processHotkeyToken: proto.processHotkeyToken,
+      processHotkeyToken: proto.processHotkeyToken,
     };
     proto.queueInput.call(ctx, typed);
     while (ctx.inputQueue.length > 0) proto.handleFetchKey.call(ctx, { msgAddr: 0x1000 });

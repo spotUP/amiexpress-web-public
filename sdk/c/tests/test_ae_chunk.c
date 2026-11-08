@@ -37,8 +37,21 @@ static void an_escape_still_torn_by_the_budget_is_cut_before_it(void)
     printf("  [OK] a sequence the budget would tear is still cut before its ESC\n");
 }
 
+static void a_utf8_sequence_the_budget_would_tear_goes_whole_in_the_next_message(void)
+{
+    const char *thumbs = "ab\360\237\221\215 2";                  /* "ab", U+1F44D, " 2" */
+    assert(take(thumbs, 3) == 2);                                       /* lead byte only: back off */
+    assert(take(thumbs, 5) == 2);                                       /* three of four bytes: back off */
+    assert(take(thumbs, 6) == 6);                                       /* whole: send it */
+    assert(take("ab\342\235\244x", 4) == 2);                         /* three-byte heart, torn after two */
+    assert(take("ab\351cd", 3) == 2);                                  /* a lone lead byte moves on too: same bytes, next message */
+    assert(take("ab\351", 3) == 3);                                    /* the end of the text is never held back */
+    printf("  [OK] a UTF-8 sequence the budget would tear goes whole in the next message\n");
+}
+
 int main(void)
 {
+    a_utf8_sequence_the_budget_would_tear_goes_whole_in_the_next_message();
     a_two_byte_escape_that_ends_the_string_is_not_cut_off();
     an_escape_still_torn_by_the_budget_is_cut_before_it();
     puts("test_ae_chunk: OK");

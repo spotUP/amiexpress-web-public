@@ -40,6 +40,7 @@ export declare function osc52Copy(text: string): string;
 export declare function stripBlessedTags(text: string): string;
 export declare function createContextMenus(s: Screen, ib: any, sup: (u: string) => void, sdp: (u: string) => void, asm: (m: string) => void, sock: any, extras?: ContextMenuExtras): {
     contextMenu: import("@amiexpress/bbs-door-sdk/engines/ui/blessed").List;
+    reactionPicker: import("@amiexpress/bbs-door-sdk/engines/ui/blessed").List;
     showContextMenu: (x: number, y: number, t: "user" | "chat" | "channel" | "video", tgt?: string) => void;
     hideContextMenu: () => void;
 };

@@ -4,10 +4,9 @@
  * The backend stores reactions with the message and broadcasts the full
  * per-emoji counts of a message on every change (`chat:reaction`), and
  * attaches them to every history item of `room:joined`. This module is the
- * door's one copy of those counts; the renderer reads `formatReactionCounts`.
+ * door's one copy of those counts; features/reaction-rows lays them out under the message;
+ * `formatReactionCounts` is the one-line form for /reactions.
  */
-import { EMOJI_DISPLAY } from '../types/reaction.types';
-
 export type ReactionCounts = Record<string, number>;
 
 const counts = new Map<string, ReactionCounts>();
@@ -36,11 +35,4 @@ export function seedReactionCounts(history: ReadonlyArray<{ id?: string | number
 
 export function clearReactionCounts(): void {
   counts.clear();
-}
-
-/** ` [<3 2] [[+] 1]` style suffix for a message line; empty when none. */
-export function formatReactionCounts(messageId: string | number): string {
-  const entries = Object.entries(getReactionCounts(messageId));
-  if (entries.length === 0) return '';
-  return ' ' + entries.map(([emoji, n]) => `[${EMOJI_DISPLAY[emoji] ?? emoji} ${n}]`).join(' ');
 }

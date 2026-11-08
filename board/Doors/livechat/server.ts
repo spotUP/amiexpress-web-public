@@ -50,7 +50,8 @@ import { attachDoorChrome } from '@amiexpress/bbs-door-sdk/engines/ui/theme';
 import { addMessage, setChannel, setDmContext, clearDmContext, AppState, channelsToShow as visibleChannels, togglePinnedChannel, markChannelUnread } from './core/state';
 import { executeCommand } from './core/command-exec';
 import { getUserColor, formatMessage, formatSystemMessage } from './core/formatter';
-import { seedReactionCounts, formatReactionCounts } from './features/reaction-store';
+import { seedReactionCounts } from './features/reaction-store';
+import { setReactionGlyphMode, withReactionRows } from './features/reaction-rows';
 import { shouldShowEvent } from './core/socket-typing';
 import { prefsSender } from './core/prefs-sync';
 import { initializeLiveChat } from './core/initialization';
@@ -181,6 +182,8 @@ export async function createApp(session: DoorSession) {
   // the switch below gives it to them, and Alt+Enter takes it back.
   // :code: renders as web emoji for a browser caller, ASCII for telnet/SSH.
   setEmojiRenderMode(voiceAvailable(session.bbs));
+  // Reactions show real emoji only for a caller whose wire is UTF-8 (BBSApi.unicodeCapable).
+  setReactionGlyphMode((session.bbs as any)?.unicodeCapable === true);
   const chatOnly = session.bbsSession?.tempData?.chatOnly;
   let terminalMode: TerminalModeSwitch | null = null;
 
@@ -385,8 +388,12 @@ export async function createApp(session: DoorSession) {
 
   // Connect animation manager to chat log
   animationManager.connect({
-    getLineContent: (idx: number) => chatLog.getLine(idx),
-    setLineContent: (idx: number, content: string) => (chatLog as any).setLine?.(idx, content),
+    getLineContent: (idx: number) => chatLog.getLine(displayRows(Math.max(1, Number((chatLog as any).width) || 80)).at[idx] ?? idx),
+    // The animation manager counts message rows; reaction rows sit between them.
+    setLineContent: (idx: number, content: string) => {
+      const at = displayRows(Math.max(1, Number((chatLog as any).width) || 80)).at[idx] ?? idx;
+      (chatLog as any).setLine?.(at, content);
+    },
     render: () => screen.render(),
     getVisibleRange: () => (chatLog as any).getVisibleRange?.() || { start: 0, end: 100 },
   });
@@ -1884,8 +1891,9 @@ export async function createApp(session: DoorSession) {
       const logWidth = Math.max(1, Number((chatLog as any).width) || 80);
       const scrollRow = Number((chatLog as any).childBase) || 0;
       // y is relative to the panel; the log sits one row inside its border.
-      const index = messageIndexAtRow(chatMessages, logWidth, scrollRow, y - 1);
-      const messageId = index === null ? undefined : (chatMessageIds[index] ?? undefined);
+      const shown = displayRows(logWidth);
+      const index = messageIndexAtRow(shown.raw, logWidth, scrollRow, y - 1);
+      const messageId = index === null ? undefined : (shown.ids[index] ?? undefined);
 
       showContextMenu(x, y, 'chat', messageId);
     }
@@ -2100,6 +2108,11 @@ export async function createApp(session: DoorSession) {
    */
   const chatMessageIds: (string | null)[] = [];
 
+  /** The log as painted: message rows plus the reaction rows under each message. */
+  function displayRows(width: number, rendered: readonly string[] = chatMessages) {
+    return withReactionRows(chatMessages, rendered, chatMessageIds, width, T.accent);
+  }
+
   // Helper function to rebuild chat content from logical messages + previews
   function rebuildChatContent() {
     const previewLines = Array.from(state.typingBuffers.values()).map(buf => {
@@ -2127,31 +2140,29 @@ export async function createApp(session: DoorSession) {
     const renderedMessages = chatMessages.map((line, idx) => {
       const animFrame = (animationManager as any).getRendered?.(idx);
       const shown = animFrame != null && animFrame !== '' ? animFrame : line;
-      // Stored reaction counts go after the last row of their message, read
-      // from the reaction store at paint time so a chat:reaction repaints them.
-      const id = chatMessageIds[idx];
-      if (id == null || chatMessageIds[idx + 1] === id) return shown;
-      const counts = formatReactionCounts(id);
-      return counts ? `${shown}{${T.accent}-fg}${counts}{/${T.accent}-fg}` : shown;
+      return shown;
     });
+    // Stored reaction counts get their own rows after the last row of their
+    // message, read from the store at paint time so a chat:reaction repaints.
+    const logWidth = Math.max(1, Number((chatLog as any).width) || 80);
+    const display = displayRows(logWidth, renderedMessages);
 
     // Pick mode: the selected message is an inverse bar in the theme's
     // selection colours (the same pair the context menu's selected row uses).
-    const picked = messagePicker.state.active ? messageRows(chatMessageIds, messagePicker.state.rowIndex) : null;
-    const logWidth = Math.max(1, Number((chatLog as any).width) || 80);
+    const picked = messagePicker.state.active ? messageRows(display.ids, messagePicker.state.rowIndex) : null;
     if (picked) {
       for (let i = picked.first; i <= picked.last; i++) {
-        renderedMessages[i] = highlightLine(chatMessages[i], logWidth, T.ground, T.accent);
+        display.rendered[i] = highlightLine(display.raw[i], logWidth, T.ground, T.accent);
       }
     }
 
     // CRITICAL: Use CRLF for separation to force margin return
-    const fullContent = [...renderedMessages, ...previewLines].join('\r\n');
+    const fullContent = [...display.rendered, ...previewLines].join('\r\n');
 
     chatLog.setContent(fullContent);
     if (picked) {
       // Scroll the selection into view (centred), instead of the bottom.
-      const span = wrappedSpan(chatMessages, logWidth, picked.first, picked.last);
+      const span = wrappedSpan(display.raw, logWidth, picked.first, picked.last);
       const viewHeight = Math.max(1, Number((chatLog as any).height) || 24);
       (chatLog as any).scrollTo(Math.max(0, span.top - Math.floor((viewHeight - span.height) / 2)));
     } else {
@@ -2165,7 +2176,7 @@ export async function createApp(session: DoorSession) {
    * the command with the picked id, or opens the message's context menu.
    */
   const messagePicker = createMessagePicker({
-    ids: () => chatMessageIds,
+    ids: () => displayRows(Math.max(1, Number((chatLog as any).width) || 80)).ids,
     onNothingToPick: () => {
       addSystemMessage('No messages to pick.');
       screen.render();

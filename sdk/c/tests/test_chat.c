@@ -31,7 +31,7 @@ int ae_field_read(int field, char *out, int cap)
 
 /* Scripted clicks: each MOUSE? answers the next step, worked out from the frame the door drew
  * (the test includes livechat.c, so it reads M and lc_hit). "" ends one wake's drain. */
-enum { MS_END, MS_RMB_MESSAGE, MS_CLICK_REACT, MS_CLICK_TOOLS, MS_CLICK_FILES, MS_CLICK_STATUS_USERS, MS_CLICK_STATUS_CHANNELS };
+enum { MS_END, MS_RMB_MESSAGE, MS_CLICK_REACT, MS_CLICK_PICK, MS_CLICK_TOOLS, MS_CLICK_FILES, MS_CLICK_STATUS_USERS, MS_CLICK_STATUS_CHANNELS };
 static const int *mouse_script;
 static int mouse_step, mouse_armed;
 
@@ -49,6 +49,10 @@ static int mouse_reply(char *out)
     if (step == MS_CLICK_REACT) {                       /* item 2 of the open popup */
         for (idx = 0; idx < M.ctx.n && strcmp(M.ctx.items[idx], "React") != 0; idx++) {}
         return sprintf(out, "P\t%d\t%d\t0", M.ctx.left + 5, M.ctx.top + 1 + idx + 1);
+    }
+    if (step == MS_CLICK_PICK) {                        /* the reaction picker's first item, +1 */
+        assert(M.ctx_kind == LC_CTX_REACT && M.ctx.n == LC_REACT_KINDS);
+        return sprintf(out, "P\t%d\t%d\t0", M.ctx.left + 5, M.ctx.top + 1 + 0 + 1);
     }
     if (step == MS_CLICK_STATUS_USERS) return sprintf(out, "P\t10\t25\t0");        /* status row, x = 9 >= 7 */
     if (step == MS_CLICK_STATUS_CHANNELS) return sprintf(out, "P\t3\t25\t0");      /* x = 2 < 7 */
@@ -359,15 +363,15 @@ static void test_door_new_room(void)
  * Tools label opens its dropdown and a click on Files says it is not available yet. */
 static void test_door_mouse(void)
 {
-    static const int script[] = { MS_RMB_MESSAGE, MS_END, MS_CLICK_REACT, MS_END,
+    static const int script[] = { MS_RMB_MESSAGE, MS_END, MS_CLICK_REACT, MS_END, MS_CLICK_PICK, MS_END,
                                   MS_CLICK_TOOLS, MS_END, MS_CLICK_FILES, MS_END };
     int rc, before = mouse_events;
     start_stub();
     mouse_script = script; mouse_step = 0; mouse_armed = 0;
-    rc = drive(KEYS("\x1e" "\x1e" "\x1e" "\x1e" " " "/q\r"), 0);
+    rc = drive(KEYS("\x1e" "\x1e" "\x1e" "\x1e" "\x1e" " " "/q\r"), 0);
     mouse_script = 0;
     assert(rc == 0 && mouse_armed == 1);
-    assert(mouse_events - before == 4 && mouse_step == 8);      /* every scripted event reached handle_mouse */
+    assert(mouse_events - before == 5 && mouse_step == 10);      /* every scripted event reached handle_mouse */
     assert(st->reacts == 1 && strcmp(st->last_react, "+1") == 0);
     /* the react event redraws the row from the server's counts, as the TS chat:reaction handler does */
     assert(st->reaction_lists == 1);
@@ -382,7 +386,7 @@ static void test_door_mouse(void)
             }
         assert(found);
     }
-    assert(strstr(screen_text, "[[+]"));                                           /* the suffix reached the wire */
+    assert(strstr(screen_text, ":) 1"));                                           /* the reaction row reached the wire */
     /* the frame diff skips unchanged blanks, so words reach the wire one by one */
     assert(strstr(screen_text, "|> Reply") && strstr(screen_text, "Unread"));      /* the popup reached the wire */
     assert(strstr(screen_text, "(F6)") && strstr(screen_text, "available"));       /* the not-yet notice too */
@@ -443,12 +447,15 @@ static void test_door_react_without_event(void)
     int idx;
     start_stub();
     st->react_known = 1;
-    drive(KEYS("\r" "\x1b[A" "\r" "\x1b[B" "\x1b[B" "\r"), 0);
-    assert(st->reacts == 1 && strcmp(st->last_react, "+1") == 0);
+    /* Up picks the newest message, Enter opens its menu, Down Down Enter is React, Down Down Enter
+     * in the reaction picker is item 2, heart */
+    drive(KEYS("\r" "\x1b[A" "\r" "\x1b[B" "\x1b[B" "\r" "\x1b[B" "\x1b[B" "\r"), 0);
+    assert(st->reacts == 1 && strcmp(st->last_react, "heart") == 0);
     for (idx = 0; idx < M.nlines && strcmp(M.lines[idx].id, st->last_react_msg) != 0; idx++) {}
     assert(idx < M.nlines && M.lines[idx].number != 0);                     /* a message row on screen */
     assert(has_line(0, "Reaction sent."));
     assert(st->reaction_lists == 1 && M.lines[idx].nreact == 1 && M.lines[idx].react[0].count == 1);
+    assert(strcmp(M.lines[idx].react[0].emoji, "heart") == 0 && strstr(screen_text, "<3 1"));
     stop_stub();
     printf("  [OK] door: React from the picker menu with no react event still confirms and shows the count\n");
 }

@@ -1,3 +1,5 @@
+import type { WireCharset } from '../../utils/wire-encoding.util';
+
 /**
  * XIM Protocol Type Definitions
  *
@@ -378,6 +380,15 @@ export enum XIMCommand {
    */
   AEW_ANIMATIONS = 11000,
 
+  /**
+   * This board's own: the caller's wire charset, and the door's output
+   * charset. Read answers resolveWireCharset(session): 'utf-8',
+   * 'iso-8859-1' or 'cp437'. Writing 'utf-8' declares that this door's
+   * text bytes are UTF-8 from now on (XIMState.doorUtf8Output); any other
+   * value turns it off. A door that never writes it is byte-identical.
+   */
+  AEW_CHARSET = 11100,
+
   NETUPLOAD = 10001,
   NETDOWNLOAD = 10002,
 }
@@ -445,6 +456,8 @@ export interface BBSSessionData {
   carrierDropped?: boolean;
   timeoutSeconds?: number;
   connectionType?: 'web' | 'telnet' | 'ssh';
+  wireCharset?: WireCharset;  // AEW_CHARSET: resolveWireCharset (utils/wire-encoding.util.ts)
+  unicodeCapable?: boolean;
   transferRawSend?: (buf: Buffer) => void;
   transferRawActive?: boolean;
   transferRawSink?: (buf: Buffer) => void;
@@ -456,6 +469,8 @@ export interface BBSSessionData {
  * Shared XIM state passed across handlers
  */
 export interface XIMState {
+  /** AEW_CHARSET write 'utf-8': emitText decodes this door's bytes as UTF-8 (utils/door-utf8.util.ts). */
+  doorUtf8Output?: boolean;
   registered: boolean;
   shuttingDown: boolean;
   nonStopText: boolean;

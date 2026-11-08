@@ -13,6 +13,8 @@ const door_theme_1 = require("../door-theme");
 const reply_quote_1 = require("../core/reply-quote");
 const pin_handlers_1 = require("../handlers/pin-handlers");
 const reaction_handlers_1 = require("../handlers/reaction-handlers");
+const reaction_types_1 = require("../types/reaction.types");
+const reaction_rows_1 = require("./reaction-rows");
 const edit_handlers_1 = require("../handlers/edit-handlers");
 /**
  * OSC 52 "set clipboard": ESC ] 52 ; c ; <base64 of UTF-8> BEL. The web
@@ -31,6 +33,11 @@ function createContextMenus(s, ib, sup, sdp, asm, sock, extras = {}) {
     // Set high z-index to ensure menu appears on top
     cm.zi = 9999;
     cm.zIndex = 9999;
+    // The reaction picker: a second popup at the chat menu's place (spec 2026-11-08).
+    const rm = blessed_1.default.list({ parent: s, top: 0, left: 0, width: 24, height: reaction_types_1.REACTION_EMOJIS.length + 2, border: { type: 'line' }, shadow: true, hidden: true, mouse: true, vi: true, keys: true, interactive: true, tags: true, zIndex: 10000, style: { fg: door_theme_1.T.ink, bg: door_theme_1.T.ground, border: { fg: theme_1.PANEL_BORDER }, selected: { fg: door_theme_1.T.ground, bg: door_theme_1.T.accent } } });
+    // Above the chat menu it replaces.
+    rm.zi = 10000;
+    rm.zIndex = 10000;
     let cmt = '';
     let cmty = 'chat';
     function scm(x, y, t, tgt) {
@@ -79,6 +86,37 @@ function createContextMenus(s, ib, sup, sdp, asm, sock, extras = {}) {
         ib.focus();
         s.render();
     }
+    let reactTarget = '';
+    function openReactionPicker(x, y, messageId) {
+        reactTarget = messageId;
+        rm.setItems(reaction_types_1.REACTION_EMOJIS.map((_, i) => (0, reaction_rows_1.reactionPickerLabel)(i)));
+        rm.top = y;
+        rm.left = x;
+        rm.select(0);
+        rm.show();
+        rm.setFront();
+        rm.focus();
+        s.render();
+    }
+    function closeReactionPicker() {
+        rm.hide();
+        ib.focus();
+        s.render();
+    }
+    rm.on('select', (_it, idx) => {
+        const emoji = reaction_types_1.REACTION_EMOJIS[idx];
+        const target = reactTarget;
+        closeReactionPicker();
+        if (!emoji || !target)
+            return;
+        if (sock && sock.connected === false) {
+            asm('The reaction did not go through.');
+            return;
+        }
+        (0, reaction_handlers_1.reactToMessage)(sock, extras.currentRoom ? extras.currentRoom() : '', target, emoji);
+        asm('Reaction sent.');
+    });
+    rm.key(['escape'], closeReactionPicker);
     cm.on('select', (it, idx) => {
         const raw = typeof it === 'string' ? it : it.content || '';
         // Strip blessed color tags so we can compare plain labels (sysop items
@@ -221,8 +259,7 @@ function createContextMenus(s, ib, sup, sdp, asm, sock, extras = {}) {
                         asm(`{${door_theme_1.T.accentAlt}-fg}Right-click on a message first.{/${door_theme_1.T.accentAlt}-fg}`);
                     }
                     else {
-                        (0, reaction_handlers_1.reactToMessage)(sock, extras.currentRoom ? extras.currentRoom() : '', cmt, '+1');
-                        asm('Reaction sent.');
+                        openReactionPicker(cm.left, cm.top, cmt);
                     }
                     break;
                 case 'Copy Text':
@@ -337,6 +374,12 @@ function createContextMenus(s, ib, sup, sdp, asm, sock, extras = {}) {
     cm.key(['escape'], hcm);
     // Close context menu when clicking outside of it
     s.on('mouse', (data) => {
+        if (data.action === 'mousedown' && !rm.hidden) {
+            const l = rm.left || 0, t = rm.top || 0;
+            if (data.x < l || data.x >= l + (rm.width || 24) || data.y < t || data.y >= t + (rm.height || 10))
+                closeReactionPicker();
+            return;
+        }
         if (data.action === 'mousedown' && !cm.hidden) {
             // Get context menu bounds
             const menuLeft = cm.left || 0;
@@ -351,5 +394,5 @@ function createContextMenus(s, ib, sup, sdp, asm, sock, extras = {}) {
             }
         }
     });
-    return { contextMenu: cm, showContextMenu: scm, hideContextMenu: hcm };
+    return { contextMenu: cm, reactionPicker: rm, showContextMenu: scm, hideContextMenu: hcm };
 }

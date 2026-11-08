@@ -17,7 +17,10 @@
  * MARKED TEXT. ui_cells_marked and ui_cells_wrap take text with inline
  * style bytes: UI_CELLS_M_FG then one byte 1..255 sets the foreground,
  * UI_CELLS_M_BOLD and UI_CELLS_M_PLAIN switch bold, UI_CELLS_M_BASE returns
- * to the pen the call started with. Markers take no columns.
+ * to the pen the call started with. Markers take no columns, except
+ * UI_CELLS_M_WIDE then one byte id 1..255: a two-column glyph, entry id-1 of
+ * the table ui_cells_wide_table registered (an emoji, sent as its UTF-8
+ * bytes). Only a door that told the board it writes UTF-8 registers one.
  *
  * MEMORY. Two heap arrays of cols*rows cells (4 bytes each): 16000 bytes at
  * 80x25. Nothing large on the stack.
@@ -37,17 +40,20 @@ extern "C" {
 #define UI_CELLS_DEFAULT (-1)
 #define UI_CELLS_BOLD 1
 #define UI_CELLS_BG_DEFAULT 2
+#define UI_CELLS_WIDE 4        /* a two-column glyph: ch is its table id */
+#define UI_CELLS_WIDE_TAIL 8   /* the right half of the glyph to its left */
 
 #define UI_CELLS_M_FG    '\001'
 #define UI_CELLS_M_BOLD  '\002'
 #define UI_CELLS_M_PLAIN '\003'
 #define UI_CELLS_M_BASE  '\004'
+#define UI_CELLS_M_WIDE  '\005'
 
 typedef struct {
     unsigned char ch;
     unsigned char fg;
     unsigned char bg;
-    unsigned char flags;   /* UI_CELLS_BOLD, UI_CELLS_BG_DEFAULT */
+    unsigned char flags;   /* UI_CELLS_BOLD, UI_CELLS_BG_DEFAULT, UI_CELLS_WIDE, UI_CELLS_WIDE_TAIL */
 } ui_cell;
 
 typedef struct {
@@ -57,7 +63,13 @@ typedef struct {
     int full;              /* 1: the next flush resends every cell */
     int fg, bg, bold;      /* the pen */
     long sent;             /* cells sent by the last flush */
+    const char *const *wide; /* UI_CELLS_M_WIDE glyphs, id 1 = wide[0]; 0: none */
+    int nwide;
 } ui_cells;
+
+/** Registers the two-column glyphs UI_CELLS_M_WIDE refers to (after ui_cells_open). A glyph whose
+ *  pair was broken by a later write, or whose id has no entry, is sent as a blank. */
+void ui_cells_wide_table(ui_cells *c, const char *const *glyphs, int n);
 
 /** Allocates both buffers; every cell is a blank in fg 7 on the default background. Returns 0 or -1. */
 int ui_cells_open(ui_cells *c, int cols, int rows);

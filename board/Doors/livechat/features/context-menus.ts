@@ -7,6 +7,8 @@ import { quoteInputText, type ReplyParent } from '../core/reply-quote';
 import type { Message } from '../types';
 import { pinMessage } from '../handlers/pin-handlers';
 import { reactToMessage } from '../handlers/reaction-handlers';
+import { REACTION_EMOJIS } from '../types/reaction.types';
+import { reactionPickerLabel } from './reaction-rows';
 import { deleteMessage } from '../handlers/edit-handlers';
 
 export interface ContextMenuExtras {
@@ -57,6 +59,12 @@ export function createContextMenus(s: Screen, ib: any, sup: (u: string) => void,
   (cm as any).zi = 9999;
   (cm as any).zIndex = 9999;
 
+  // The reaction picker: a second popup at the chat menu's place (spec 2026-11-08).
+  const rm = blessed.list({ parent: s, top: 0, left: 0, width: 24, height: REACTION_EMOJIS.length + 2, border: { type: 'line' }, shadow: true, hidden: true, mouse: true, vi: true, keys: true, interactive: true, tags: true, zIndex: 10000, style: { fg: T.ink, bg: T.ground, border: { fg: PANEL_BORDER }, selected: { fg: T.ground, bg: T.accent } } } as any);
+  // Above the chat menu it replaces.
+  (rm as any).zi = 10000;
+  (rm as any).zIndex = 10000;
+
   let cmt = '';
   let cmty: 'user' | 'chat' | 'channel' | 'video' = 'chat';
 
@@ -105,6 +113,40 @@ export function createContextMenus(s: Screen, ib: any, sup: (u: string) => void,
     ib.focus();
     s.render();
   }
+
+  let reactTarget = '';
+
+  function openReactionPicker(x: number, y: number, messageId: string) {
+    reactTarget = messageId;
+    rm.setItems(REACTION_EMOJIS.map((_, i) => reactionPickerLabel(i)));
+    (rm as any).top = y;
+    (rm as any).left = x;
+    rm.select(0);
+    rm.show();
+    rm.setFront();
+    rm.focus();
+    s.render();
+  }
+
+  function closeReactionPicker() {
+    rm.hide();
+    ib.focus();
+    s.render();
+  }
+
+  rm.on('select', (_it: any, idx: number) => {
+    const emoji = REACTION_EMOJIS[idx];
+    const target = reactTarget;
+    closeReactionPicker();
+    if (!emoji || !target) return;
+    if (sock && sock.connected === false) {
+      asm('The reaction did not go through.');
+      return;
+    }
+    reactToMessage(sock, extras.currentRoom ? extras.currentRoom() : '', target, emoji);
+    asm('Reaction sent.');
+  });
+  rm.key(['escape'], closeReactionPicker);
 
   cm.on('select', (it: any, idx: number) => {
     const raw = typeof it === 'string' ? it : (it as any).content || '';
@@ -232,8 +274,7 @@ export function createContextMenus(s: Screen, ib: any, sup: (u: string) => void,
           if (!cmt) {
             asm(`{${T.accentAlt}-fg}Right-click on a message first.{/${T.accentAlt}-fg}`);
           } else {
-            reactToMessage(sock, extras.currentRoom ? extras.currentRoom() : '', cmt, '+1');
-            asm('Reaction sent.');
+            openReactionPicker((cm as any).left, (cm as any).top, cmt);
           }
           break;
         case 'Copy Text':
@@ -336,6 +377,11 @@ export function createContextMenus(s: Screen, ib: any, sup: (u: string) => void,
 
   // Close context menu when clicking outside of it
   s.on('mouse', (data: any) => {
+    if (data.action === 'mousedown' && !rm.hidden) {
+      const l = (rm as any).left || 0, t = (rm as any).top || 0;
+      if (data.x < l || data.x >= l + ((rm as any).width || 24) || data.y < t || data.y >= t + ((rm as any).height || 10)) closeReactionPicker();
+      return;
+    }
     if (data.action === 'mousedown' && !cm.hidden) {
       // Get context menu bounds
       const menuLeft = (cm as any).left || 0;
@@ -353,5 +399,5 @@ export function createContextMenus(s: Screen, ib: any, sup: (u: string) => void,
     }
   });
 
-  return { contextMenu: cm, showContextMenu: scm, hideContextMenu: hcm };
+  return { contextMenu: cm, reactionPicker: rm, showContextMenu: scm, hideContextMenu: hcm };
 }

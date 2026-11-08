@@ -36,8 +36,8 @@
 enum { LC_SYSTEM, LC_ACTIVITY_LINE, LC_HISTORY, LC_LIVE, LC_NOTE };
 
 /* A message's reaction counts, one per emoji, in the server's order (first reacted first). The
-   TS door keeps the same per-message map (features/reaction-store.ts) and paints it after the
-   message as " [<3 2] [[+] 1]" in the accent colour. */
+   TS door keeps the same per-message map (features/reaction-store.ts); this door paints it on its
+   own row under the message, "<3 2  :) 1" in the accent colour (lc_react_rows). */
 #define LC_REACT_MAX 8
 typedef struct {
     char emoji[12];        /* the server's name: "+1", "heart", ... */
@@ -109,7 +109,7 @@ typedef struct {
     int editing;                   /* the input holds a recalled history line: Enter edits it (label [EDITING]) */
 } lc_model;
 
-enum { LC_CTX_NONE, LC_CTX_USER, LC_CTX_CHAT, LC_CTX_CHANNEL };
+enum { LC_CTX_NONE, LC_CTX_USER, LC_CTX_CHAT, LC_CTX_CHANNEL, LC_CTX_REACT };   /* REACT: the chat menu's reaction picker */
 
 /* What a click lands on, from the regions the last lc_draw laid out. */
 enum { LC_HIT_NONE, LC_HIT_MENU, LC_HIT_DROPDOWN, LC_HIT_SIDEBAR, LC_HIT_CHAT, LC_HIT_INPUT,
@@ -128,12 +128,31 @@ void lc_model_init(lc_model *m, int cols, int rows);
 int lc_sidebar_width(const lc_model *m);
 int lc_text_rows(const lc_model *m);
 int lc_nick_color(const char *nick);
-/** How the TS door shows a reaction emoji (types/reaction.types.ts EMOJI_DISPLAY): "+1" is "[+]", heart "<3", ... */
+/** The reactions the React picker offers, in its order: the server's names (TS REACTION_EMOJIS). */
+#define LC_REACT_KINDS 8
+extern const char *const lc_react_names[LC_REACT_KINDS];
+/** A reaction's ASCII glyph, at most three columns (sysop 2026-11-08: one short face, not "[+]"):
+ *  "+1" ":)", "-1" ":/", heart "<3", fire "*", laugh ":D", wow ":O", sad ":(", angry ">(".
+ *  An unknown name is shown as itself. A latin1 / Amiga caller sees these everywhere; a UTF-8
+ *  caller sees them in the picker and the "Reactions on" line. */
 const char *lc_react_display(const char *emoji);
-/** The TS formatReactionCounts suffix, " [<3 2] [[+] 1]", or "" when the line has none. */
-void lc_react_suffix(const lc_line *l, char *out, int cap);
-/** The line as marked text (ui_cells markers) in the TS formats. */
-void lc_line_marked(const lc_line *l, char *out, int cap, int stamps);
+/** The UTF-8 emoji for reaction i, the TS door's EMOJI_UTF8 bytes: the ui_cells wide-glyph table
+ *  (UI_CELLS_M_WIDE id i+1) a UTF-8 caller's canvas registers. */
+extern const char *const lc_react_utf8[LC_REACT_KINDS];
+/** Emoji mode: on when the board answered AEW_CHARSET "utf-8" (the TS door's unicodeCapable test)
+ *  and the door declared UTF-8 output. lc_react_rows then writes known reactions as two-column
+ *  emoji; off (the default) it writes the ASCII glyphs. */
+void lc_react_emoji(int on);
+int lc_react_emoji_on(void);
+/** The picker label for reaction i (0..LC_REACT_KINDS-1): its glyph, then its name in words, ":)  Thumbs Up". */
+const char *lc_react_label(int i);
+/** The reaction row(s) under a message: "\n", `indent` spaces, then "glyph count" items two spaces
+ *  apart (in emoji mode a known glyph is UI_CELLS_M_WIDE + id, two columns); an item that would pass `width` columns (<= 0: no limit) starts a further row at the same
+ *  indent. "" when the line has no counts. */
+void lc_react_rows(const lc_line *l, int indent, int width, char *out, int cap);
+/** The line as marked text (ui_cells markers) in the TS formats; a message's reactions follow on
+ *  their own rows (lc_react_rows) indented to the message text, wrapped to `width` (<= 0: no limit). */
+void lc_line_marked(const lc_line *l, char *out, int cap, int stamps, int width);
 /** The keyboard message picker (TS message-picker.ts). Start selects the newest message and returns 0
  *  when there is none; move steps one message (dir -1 older, +1 newer) and stays put at either end;
  *  index is the picked line or -1; stop clears the pick and scrolls back to the newest. */

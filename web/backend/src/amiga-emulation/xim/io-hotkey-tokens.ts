@@ -74,3 +74,35 @@ export function processHotkeyToken(token: string, navKeys = false): string {
   }
   return token[0];
 }
+
+/**
+ * Parse input string into tokens, preserving ANSI escape sequences
+ * Returns array of tokens: single chars or complete escape sequences
+ */
+export function parseInputTokens(data: string): string[] {
+  const tokens: string[] = [];
+  let i = 0;
+
+  while (i < data.length) {
+    // Check for ANSI escape sequence: ESC [ ... <letter>
+    if (data[i] === '\x1b' && i + 1 < data.length && data[i + 1] === '[') {
+      // Find the end of the CSI sequence (terminated by letter A-Z or a-z)
+      let end = i + 2;
+      while (end < data.length && !/[A-Za-z~]/.test(data[end])) {
+        end++;
+      }
+      if (end < data.length) {
+        // Include the terminating character
+        const seq = data.slice(i, end + 1);
+        tokens.push(seq);
+        i = end + 1;
+        continue;
+      }
+    }
+    // Single character
+    tokens.push(data[i]);
+    i++;
+  }
+
+  return tokens;
+}

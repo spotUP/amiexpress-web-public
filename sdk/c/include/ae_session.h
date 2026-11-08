@@ -203,7 +203,12 @@ typedef enum {
 
     /* May this door animate? '1' yes, '0' the caller turned animations off
        (W row 23); a game door always reads '1'. Read-only. */
-    AE_FIELD_ANIMATIONS     = 11000  /* AEW_ANIMATIONS */
+    AE_FIELD_ANIMATIONS     = 11000, /* AEW_ANIMATIONS */
+
+    /* The caller's wire charset ("utf-8", "iso-8859-1", "cp437"). Writing
+       "utf-8" declares this door's text bytes UTF-8 for the rest of the run;
+       a door that never writes it is byte-identical to before. */
+    AE_FIELD_CHARSET        = 11100  /* AEW_CHARSET */
 } ae_field;
 
 /**
@@ -510,6 +515,21 @@ int ae_display_mode(ae_session *s, char *out, int n);
  * what a classic board always had.
  */
 int ae_animations_allowed(ae_session *s);
+
+/**
+ * The caller's wire charset: "utf-8", "iso-8859-1" or "cp437". A classic
+ * board that does not know the question answers nothing and this fills
+ * "iso-8859-1", the Amiga's own. Returns 0.
+ */
+int ae_wire_charset(ae_session *s, char *out, int n);
+
+/**
+ * Declares this door's text output charset. Only "utf-8" changes anything:
+ * the board then decodes the door's bytes as UTF-8 (a stray latin1 byte
+ * still passes as latin1). Call it only after ae_wire_charset said
+ * "utf-8". Returns 1 when sent, 0 when there is no board to tell.
+ */
+int ae_set_output_charset(ae_session *s, const char *charset);
 
 /**
  * The command name the caller typed to get here, or "" where the board does

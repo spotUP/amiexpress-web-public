@@ -1143,6 +1143,8 @@ static void ctx_open(int kind, int target, int row, int col)
         static const char *const c[] = { "Reply", "Quote", "React", "---", "Copy Text", "Pin Message", "---",
                                          "Mark Unread", "Edit", "Delete" };
         for (n = 0; n < 10; n++) ctx_items[n] = c[n];
+    } else if (kind == LC_CTX_REACT) {          /* sysop 2026-11-08: React picks one of the eight, not +1 */
+        for (n = 0; n < LC_REACT_KINDS; n++) ctx_items[n] = lc_react_label(n);
     } else {
         static const char *const r[] = { "Join", "Leave", "Info", "Expand/Collapse", "---", "Pin Channel" };
         for (n = 0; n < 6; n++) ctx_items[n] = r[n];
@@ -1192,10 +1194,8 @@ static void ctx_run(const char *it)
     } else if (M.ctx_kind == LC_CTX_CHAT) {
         const lc_line *l = M.ctx_target >= 0 && M.ctx_target < M.nlines ? &M.lines[M.ctx_target] : 0;
         if (!l || l->number == 0) { system_line("Right-click on a message first."); return; }
-        if (strcmp(it, "React") == 0) {
-            if (react_on(l->id, "+1") == AE_CHAT_OK) system_line("Reaction sent.");   /* TS context-menus.ts */
-            else system_line("The reaction did not go through.");
-        } else if (strcmp(it, "Reply") == 0) { sprintf(buf, "/reply %d ", l->number); input_set(buf); }
+        if (strcmp(it, "React") == 0) ctx_open(LC_CTX_REACT, M.ctx_target, M.ctx.top, M.ctx.left);   /* the picker, where the menu was */
+        else if (strcmp(it, "Reply") == 0) { sprintf(buf, "/reply %d ", l->number); input_set(buf); }
         else if (strcmp(it, "Quote") == 0) {                          /* TS quoteInputText */
             char q[sizeof l->quote];
             quote_of(l, q, (int)sizeof q);
@@ -1205,6 +1205,13 @@ static void ctx_run(const char *it)
         else if (strcmp(it, "Edit") == 0) { sprintf(buf, "/edit %d ", l->number); input_set(buf); }
         else if (strcmp(it, "Delete") == 0) then_poll(ae_chat_delete(&chat, l->id));    /* TS: no confirm */
         else not_yet(it);                /* Copy Text (OSC 52), Pin, Mark Unread */
+    } else if (M.ctx_kind == LC_CTX_REACT) {
+        const lc_line *l = M.ctx_target >= 0 && M.ctx_target < M.nlines ? &M.lines[M.ctx_target] : 0;
+        int i;
+        for (i = 0; i < LC_REACT_KINDS && strcmp(it, lc_react_label(i)) != 0; i++) {}
+        if (!l || l->number == 0 || i == LC_REACT_KINDS) return;
+        if (react_on(l->id, lc_react_names[i]) == AE_CHAT_OK) system_line("Reaction sent.");   /* TS context-menus.ts */
+        else system_line("The reaction did not go through.");
     } else {
         lc_side *r = &M.side[M.ctx_target];
         if (strcmp(it, "Join") == 0) join_room(r->id);
@@ -1439,6 +1446,13 @@ int main(int argc, char **argv)
         ui_screen_close(&screen);
         ae_shutdown();
         return 20;
+    }
+    {   /* A UTF-8 caller gets emoji reactions (the TS door's unicodeCapable test, via AEW_CHARSET);
+           everyone else, and a classic board, the ASCII faces. */
+        char charset[16];
+        ae_wire_charset(&session, charset, (int)sizeof charset);
+        lc_react_emoji(strcmp(charset, "utf-8") == 0 && ae_set_output_charset(&session, "utf-8"));
+        if (lc_react_emoji_on()) ui_cells_wide_table(&cells, lc_react_utf8, LC_REACT_KINDS);
     }
     lc_model_init(&M, screen.cols, screen.rows);
     copy(M.handle, sizeof M.handle, handle);

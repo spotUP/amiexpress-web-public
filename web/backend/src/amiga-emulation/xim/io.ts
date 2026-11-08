@@ -7,6 +7,7 @@
  * - Input queue management
  */
 
+import { decodeDoorUtf8 } from '../../utils/door-utf8.util';
 import * as amigafs from '../../utils/amigafs';
 import { logHotkeyFromTypeAhead, logHotkeyReply } from './hotkey-trace';
 import * as path from 'path';
@@ -24,7 +25,7 @@ import { debugLog } from '../../utils/debug-log';
 import { inputForTrace, isMenuDoorSession, isSdkDoorSession, isSecretInput } from './secret-input';
 import { handleUserData as handleUserDataFn, handleUserString as handleUserStringFn } from './user-info-handlers';
 import { handleMCI as handleMCIFn } from './mci-handler';
-import { processHotkeyToken as processHotkeyTokenFn } from './io-hotkey-tokens';
+import { processHotkeyToken as processHotkeyTokenFn, parseInputTokens } from './io-hotkey-tokens';
 import { processRawText } from './io-ansi-util';
 import { emitPreparedLines, type LineSink, type PreparedLines } from './io-emit-lines';
 import {
@@ -246,7 +247,7 @@ export class XIMIOHandler {
     }
 
     // Parse input into tokens, preserving ANSI escape sequences
-    const tokens = this.parseInputTokens(data);
+    const tokens = parseInputTokens(data);
     debugLog(`[XIMIOHandler] queueInput: data="${inputForTrace(this.bbsSession, data, (s) => s.replace(/\r/g, '\\r').replace(/\n/g, '\\n'))}" waitingForHotkey=${this.waitingForHotkey} waitingForPause=${this.waitingForPause} tokens=${tokens.length}`);
 
     for (const token of tokens) {
@@ -309,44 +310,6 @@ export class XIMIOHandler {
   }
 
   /**
-   * Parse input string into tokens, preserving ANSI escape sequences
-   * Returns array of tokens: single chars or complete escape sequences
-   */
-  private parseInputTokens(data: string): string[] {
-    const tokens: string[] = [];
-    let i = 0;
-
-    while (i < data.length) {
-      // Check for ANSI escape sequence: ESC [ ... <letter>
-      if (data[i] === '\x1b' && i + 1 < data.length && data[i + 1] === '[') {
-        // Find the end of the CSI sequence (terminated by letter A-Z or a-z)
-        let end = i + 2;
-        while (end < data.length && !/[A-Za-z~]/.test(data[end])) {
-          end++;
-        }
-        if (end < data.length) {
-          // Include the terminating character
-          const seq = data.slice(i, end + 1);
-          tokens.push(seq);
-          i = end + 1;
-          continue;
-        }
-      }
-      // Single character
-      tokens.push(data[i]);
-      i++;
-    }
-
-    return tokens;
-  }
-
-  /**
-   * Handle line input request (JH_LI)
-   * From E sources (express.e:3425)
-   *
-   * IMPORTANT: Pause emulator to wait for user input.
-   */
-  /**
    * One key at a JH_LI / SIG_LI line. Returns true when it ended the line.
    *
    * The rule is express.e lineInput's (2319-2343): a byte above 31 goes into
@@ -383,6 +346,7 @@ export class XIMIOHandler {
     return false;
   }
 
+  /** Handle line input request (JH_LI), express.e:3425. Pauses the emulator for input. */
   handleLineInput(msg: XIMMessage): void {
     // Mark that this door uses XIM input commands - prevents native input injection
     debugLog(`[XIMIOHandler] JH_LI (Line Input) received - setting usedXimInput=true`);
@@ -1552,6 +1516,8 @@ debugLog('[XIMIOHandler] PG_SM: Redirecting to Serial Output handler');
     pendingMsg?: XIMMessage,
     pauseSite: boolean = autoPause
   ): number {
+    // A door that wrote AEW_CHARSET 'utf-8' sends UTF-8 bytes; turn them into characters first.
+    if (this.state.doorUtf8Output) text = decodeDoorUtf8(text);
     // Convert raw Amiga output text to web-terminal-safe ANSI (see io-ansi-util.ts).
     const rawResult = processRawText(text, this.ansiBuffer, this.state.nonStopText, !!pendingMsg);
     this.ansiBuffer = rawResult.ansiBuffer;

@@ -109,26 +109,64 @@ static int compare(const char *path)
     return diff;
 }
 
-/* The reaction suffix, byte for byte what the TS door prints for the same counts
- * (board/Doors/livechat/tests/reactions.test.ts pins ' [<3 2] [*F* 1]' for {heart:2, fire:1}). */
-static int react_suffix_matches_ts(void)
+/* Reactions: one glyph and a count each, on their own rows under the message, indented to the
+ * message text column, wrapping at the pane width; no row at all when nothing has a count.
+ * (The TS door still prints the old ' [<3 2] [*F* 1]' suffix; the port spec is in the handoff.) */
+static int react_rows_under_the_message(void)
 {
+    static lc_model m;
     lc_line l;
-    char out[96];
+    char out[256];
+    ui_cells c;
+    int cr, cc, r, k, idx, fail = 0, found = -1, col = -1;
     memset(&l, 0, sizeof l);
     l.kind = LC_LIVE;
+    strcpy(l.time, "17:03"); strcpy(l.nick, "bob"); strcpy(l.text, "hi");
     strcpy(l.react[0].emoji, "heart"); l.react[0].count = 2;
     strcpy(l.react[1].emoji, "fire"); l.react[1].count = 1;
     l.nreact = 2;
-    lc_react_suffix(&l, out, sizeof out);
-    if (strcmp(out, " [<3 2] [*F* 1]") != 0) { printf("react suffix: '%s'\n", out); return 1; }
-    strcpy(l.react[0].emoji, "+1"); l.react[0].count = 1; l.nreact = 1;
-    lc_react_suffix(&l, out, sizeof out);
-    if (strcmp(out, " [[+] 1]") != 0) { printf("react suffix +1: '%s'\n", out); return 1; }
-    l.nreact = 0;
-    lc_react_suffix(&l, out, sizeof out);
-    if (out[0] != '\0') { printf("react suffix empty: '%s'\n", out); return 1; }
-    return 0;
+    lc_react_rows(&l, 13, 0, out, sizeof out);
+    if (strcmp(out, "\n             <3 2  * 1") != 0) { printf("react rows: '%s'\n", out); fail = 1; }
+    lc_react_rows(&l, 4, 10, out, sizeof out);                      /* "<3 2" fits, "  * 1" would pass 10 */
+    if (strcmp(out, "\n    <3 2\n    * 1") != 0) { printf("react wrap: '%s'\n", out); fail = 1; }
+    lc_react_emoji(1);                                              /* UTF-8 caller: marker + id, two columns */
+    lc_react_rows(&l, 4, 0, out, sizeof out);
+    if (strcmp(out, "\n    \005\003 2  \005\004 1") != 0) { printf("react emoji rows: '%s'\n", out); fail = 1; }
+    lc_react_rows(&l, 4, 9, out, sizeof out);                       /* "H 2" 4 cols + "  F 1" would pass 9 */
+    if (strcmp(out, "\n    \005\003 2\n    \005\004 1") != 0) { printf("react emoji wrap: '%s'\n", out); fail = 1; }
+    if (strcmp(lc_react_utf8[2], "\342\235\244\357\270\217") != 0 || strcmp(lc_react_label(2), "<3  Heart") != 0) {
+        printf("react emoji: heart bytes or label\n"); fail = 1;
+    }
+    lc_react_emoji(0);
+    l.react[0].count = 0; l.react[1].count = 0;
+    lc_react_rows(&l, 4, 80, out, sizeof out);
+    if (out[0] != '\0') { printf("react rows, zero counts: '%s'\n", out); fail = 1; }
+    lc_line_marked(&l, out, sizeof out, 1, 60);
+    if (strchr(out, '\n') != 0) { printf("react: a row with no counts\n"); fail = 1; }
+    if (strcmp(lc_react_label(0), ":)  Thumbs Up") != 0 || strcmp(lc_react_label(2), "<3  Heart") != 0
+        || strcmp(lc_react_display("angry"), ">(") != 0 || strcmp(lc_react_display("zzz"), "zzz") != 0) {
+        printf("react labels: '%s' '%s'\n", lc_react_label(0), lc_react_label(2)); fail = 1;
+    }
+    /* Drawn: alice's live line (index 7) gets a row; the cell under her text holds the glyph and a
+     * click on that row names her message. */
+    main_state(&m, 80, 25);
+    strcpy(m.lines[7].react[0].emoji, "+1"); m.lines[7].react[0].count = 3; m.lines[7].nreact = 1;
+    if (ui_cells_open(&c, 80, 25) != 0) return 1;
+    lc_draw(&c, &m, &cr, &cc);
+    for (r = 2; r < c.rows - 4 && found < 0; r++)
+        for (k = 0; k + 3 < c.cols; k++)
+            if (c.back[r * c.cols + k].ch == ':' && c.back[r * c.cols + k + 1].ch == ')'
+                && c.back[r * c.cols + k + 2].ch == ' ' && c.back[r * c.cols + k + 3].ch == '3') { found = r; col = k; break; }
+    if (found < 0) { printf("react: no ':) 3' row drawn\n"); fail = 1; }
+    else {
+        int textcol = -1;
+        for (k = 0; k + 1 < c.cols; k++)
+            if (c.back[(found - 1) * c.cols + k].ch == 'h' && c.back[(found - 1) * c.cols + k + 1].ch == 'i') { textcol = k; break; }
+        if (textcol != col) { printf("react: row at col %d, text at col %d\n", col, textcol); fail = 1; }
+        if (lc_hit(found, col, &idx) != LC_HIT_CHAT || idx != 7) { printf("react: click on the row -> line %d\n", idx); fail = 1; }
+    }
+    ui_cells_close(&c);
+    return fail;
 }
 
 /* B3: /timestamps and /compact decide whether the time column is drawn. */
@@ -139,8 +177,8 @@ static int stamps_follow_the_pref(void)
     memset(&l, 0, sizeof l);
     l.kind = LC_LIVE;
     strcpy(l.time, "17:03"); strcpy(l.nick, "bob"); strcpy(l.text, "hi");
-    lc_line_marked(&l, on, sizeof on, 1);
-    lc_line_marked(&l, off, sizeof off, 0);
+    lc_line_marked(&l, on, sizeof on, 1, 0);
+    lc_line_marked(&l, off, sizeof off, 0, 0);
     if (strstr(on, "17:03") == 0 || strstr(off, "17:03") != 0 || strstr(off, "hi") == 0) {
         printf("stamps: on='%s' off='%s'\n", on, off);
         return 1;
@@ -220,7 +258,7 @@ static int picker_selects_and_draws(void)
 
 int main(void)
 {
-    int r = react_suffix_matches_ts() | stamps_follow_the_pref() | active_panel_is_highlighted() | picker_selects_and_draws();
+    int r = react_rows_under_the_message() | stamps_follow_the_pref() | active_panel_is_highlighted() | picker_selects_and_draws();
     int a = compare("tests/fixtures/lc68-ts-main-80x25.grid");
     int b = compare("tests/fixtures/lc68-ts-main-40x25.grid");
     int d = compare("tests/fixtures/lc68-ts-main-80x15.grid");

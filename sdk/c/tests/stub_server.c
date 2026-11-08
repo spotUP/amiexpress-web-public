@@ -581,7 +581,11 @@ static void chat_serve(int fd, stub_chat_stats *st, int *state)
         chat_reply(fd, 200, "text/plain", "WHO|1|9|2\r\nalice|lobby|0|9|12\r\nbob|lobby|1|0|3\r\n");
     } else if (is_get && strncmp(path, "/chat/v1/messages/", 18) == 0 && strstr(path, "/reactions.txt") != 0) {
         st->reaction_lists++;
-        chat_reply(fd, 200, "text/plain", "REACTIONS|1|9|1\r\n+1|1|1\r\n");
+        {                                             /* the caller's last emoji, +1 before any react */
+            char rows[128];
+            sprintf(rows, "REACTIONS|1|9|1\r\n%s|1|1\r\n", st->last_react[0] ? st->last_react : "+1");
+            chat_reply(fd, 200, "text/plain", rows);
+        }
     } else if (is_get && strstr(path, "/chat/v1/events.txt") != 0) {
         st->events++;
         {

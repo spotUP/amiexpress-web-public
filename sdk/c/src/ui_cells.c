@@ -41,6 +41,13 @@ void ui_cells_close(ui_cells *c)
 
 void ui_cells_invalidate(ui_cells *c) { c->full = 1; }
 
+void ui_cells_wide_table(ui_cells *c, const char *const *glyphs, int n)
+{
+    c->wide = glyphs;
+    c->nwide = glyphs == 0 || n < 0 ? 0 : n;
+    c->full = 1;
+}
+
 void ui_cells_pen(ui_cells *c, int fg, int bg, int bold)
 {
     c->fg = fg; c->bg = bg; c->bold = bold;
@@ -143,6 +150,7 @@ int ui_cells_marked_cols(const char *s)
     for (; *s != '\0'; s++) {
         if (*s == UI_CELLS_M_FG) { if (s[1] != '\0') s++; continue; }
         if (*s == UI_CELLS_M_BOLD || *s == UI_CELLS_M_PLAIN || *s == UI_CELLS_M_BASE) continue;
+        if (*s == UI_CELLS_M_WIDE) { if (s[1] != '\0') { s++; n += 2; } continue; }
         n++;
     }
     return n;
@@ -155,6 +163,18 @@ int ui_cells_marked(ui_cells *c, int row, int col, const char *s, int from, int 
     set_cell(&pen, ' ', c->fg, c->bg, c->bold);
     for (i = 0; s[i] != '\0' && i < to; i++) {
         char ch = s[i];
+        if (ch == UI_CELLS_M_WIDE) {                                  /* two columns: the glyph, then its tail */
+            if (s[i + 1] == '\0') continue;
+            if (i++ < from) continue;
+            if (n + 2 > max) break;
+            k = col + n;
+            if (line != 0 && k >= 0 && k + 1 < c->cols) {
+                line[k] = pen; line[k].ch = (unsigned char)s[i]; line[k].flags |= UI_CELLS_WIDE;
+                line[k + 1] = pen; line[k + 1].flags |= UI_CELLS_WIDE_TAIL;
+            }
+            n += 2;
+            continue;
+        }
         if ((unsigned char)ch <= (unsigned char)UI_CELLS_M_BASE) {   /* a marker: 1..4 (is_marker) */
             if (ch == UI_CELLS_M_FG && s[i + 1] != '\0') { c->fg = (unsigned char)s[++i]; set_cell(&pen, ' ', c->fg, c->bg, c->bold); continue; }
             if (ch == UI_CELLS_M_BOLD) { c->bold = 1; set_cell(&pen, ' ', c->fg, c->bg, c->bold); continue; }
@@ -174,7 +194,8 @@ int ui_cells_marked(ui_cells *c, int row, int col, const char *s, int from, int 
 /* The four markers are the bytes 1..4, so one range test finds them (ui_cells_marked relies on
  * the same fact). The typedef fails to compile if the header ever moves them. */
 typedef char ui_cells_markers_are_1_to_4[(UI_CELLS_M_FG == 1 && UI_CELLS_M_BOLD == 2 &&
-                                          UI_CELLS_M_PLAIN == 3 && UI_CELLS_M_BASE == 4) ? 1 : -1];
+                                          UI_CELLS_M_PLAIN == 3 && UI_CELLS_M_BASE == 4 &&
+                                          UI_CELLS_M_WIDE == 5) ? 1 : -1];
 static int is_marker(const char *s, int i)
 {
     return (unsigned char)s[i] >= (unsigned char)UI_CELLS_M_FG && (unsigned char)s[i] <= (unsigned char)UI_CELLS_M_BASE;
@@ -188,6 +209,12 @@ int ui_cells_wrap(const char *s, int width, int *starts, int *ends, int max)
         int cols = 0, j = i, brk = -1, brk_next = -1;
         while (s[j] != '\0') {
             if (is_marker(s, j)) { j += (s[j] == UI_CELLS_M_FG && s[j + 1] != '\0') ? 2 : 1; continue; }
+            if (s[j] == UI_CELLS_M_WIDE && s[j + 1] != '\0') {   /* a two-column glyph: never split */
+                if (cols + 2 > width && cols > 0) break;   /* alone on a too-narrow row it still goes */
+                cols += 2;
+                j += 2;
+                continue;
+            }
             if (s[j] == '\n') break;                  /* a hard break: the row ends here */
             if (s[j] == ' ') { brk = j; brk_next = j + 1; }
             if (cols == width) break;
@@ -245,7 +272,9 @@ static void out_sgr(ansi_buf *b, const ui_cell *p)
 
 static int same_style(const ui_cell *a, const ui_cell *b)
 {
-    return a->fg == b->fg && a->bg == b->bg && a->flags == b->flags;
+    /* UI_CELLS_WIDE / _TAIL say what the cell holds, not how it is drawn. */
+    return a->fg == b->fg && a->bg == b->bg
+        && (a->flags & (UI_CELLS_BOLD | UI_CELLS_BG_DEFAULT)) == (b->flags & (UI_CELLS_BOLD | UI_CELLS_BG_DEFAULT));
 }
 
 /* A cell is four bytes; the flush compares it as one 32-bit word. memcpy keeps that legal for any
@@ -279,6 +308,8 @@ void ui_cells_flush(ui_cells *c, ansi_buf *out, ui_cells_drain_fn drain, void *c
     long i = 0, n = (long)c->cols * c->rows, last = n - 1;
     int cur_row = -1, cur_col = -1, have_style = 0, cols = c->cols, full = c->full;
     int next_row = 0, next_col = 0;     /* row and column of cell i, stepped rather than divided */
+    long done = -1;                     /* the last cell this flush sent */
+    const char *wide;
     ui_cell style;
     memset(&style, 0, sizeof style);
     c->sent = 0;
@@ -294,20 +325,45 @@ void ui_cells_flush(ui_cells *c, ansi_buf *out, ui_cells_drain_fn drain, void *c
                 if (next_col >= cols) { next_row += next_col / cols; next_col %= cols; }
             }
         }
+        /* Landed on the right half of a glyph: the glyph to its left is resent with it (whole, or as a
+         * blank when the pair is broken), or the terminal keeps half an emoji. */
+        if (i > 0 && i - 1 > done && (c->back[i - 1].flags & UI_CELLS_WIDE)) {
+            i--;
+            if (next_col == 0) { next_col = cols - 1; next_row--; } else next_col--;
+        }
         p = &c->back[i];
         row = next_row; col = next_col;
         if (++next_col == cols) { next_col = 0; next_row++; }
+        wide = 0;
+        if (p->flags & UI_CELLS_WIDE) {
+            /* Whole only with its tail beside it on the same row, short of the never-sent last cell. */
+            if (col + 1 < cols && i + 1 < last && (c->back[i + 1].flags & UI_CELLS_WIDE_TAIL)
+                && p->ch >= 1 && p->ch <= c->nwide && c->wide[p->ch - 1] != 0) wide = c->wide[p->ch - 1];
+        }
         if (drain != 0 && out->len > out->cap - 64) { drain(ctx); }
         if (row != cur_row || col != cur_col) {
             out_str(out, "\033["); out_int(out, row + 1); out_byte(out, ';'); out_int(out, col + 1); out_byte(out, 'H');
         }
         if (!have_style || !same_style(&style, p)) { out_sgr(out, p); style = *p; have_style = 1; }
-        out_byte(out, (char)p->ch);
-        c->front[i] = *p;
-        i++;
-        c->sent++;
-        cur_row = row;
-        cur_col = col + 1;
+        if (wide != 0) {
+            out_str(out, wide);
+            c->front[i] = *p;
+            c->front[i + 1] = c->back[i + 1];
+            i += 2;
+            if (++next_col == cols) { next_col = 0; next_row++; }
+            c->sent += 2;
+            cur_row = row;
+            cur_col = col + 2;
+        } else {
+            /* A broken glyph or tail is a blank: its byte is a table id, not a character. */
+            out_byte(out, (p->flags & (UI_CELLS_WIDE | UI_CELLS_WIDE_TAIL)) ? ' ' : (char)p->ch);
+            c->front[i] = *p;
+            i++;
+            c->sent++;
+            cur_row = row;
+            cur_col = col + 1;
+        }
+        done = i - 1;
         if (cur_col >= c->cols) cur_row = -1;
     }
     c->front[n - 1] = c->back[n - 1];

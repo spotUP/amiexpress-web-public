@@ -111,7 +111,8 @@ export function isDataQueryCommand(command: number): boolean {
     // The same route, and the same warning as above: a handler nothing
     // reaches is a handler that does not exist.
     command === XIMCommand.AEW_DISPLAYMODE ||
-    command === XIMCommand.AEW_ANIMATIONS;
+    command === XIMCommand.AEW_ANIMATIONS ||
+    command === XIMCommand.AEW_CHARSET;
   if (command === XIMCommand.RAWARROW || command === XIMCommand.SV_NEWMSG) {
 debugLog(
       `[XIMProtocol][DataCheckDebug] command=${command} inDQ=${inRange}`

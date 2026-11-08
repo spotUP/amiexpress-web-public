@@ -148,34 +148,81 @@ static void sb_markdown(sb *b, const char *s)
     }
 }
 
+const char *const lc_react_names[LC_REACT_KINDS] = { "+1", "-1", "heart", "fire", "laugh", "wow", "sad", "angry" };
+static const char *const react_glyphs[LC_REACT_KINDS] = { ":)", ":/", "<3", "*", ":D", ":O", ":(", ">(" };
+static const char *const react_words[LC_REACT_KINDS] = { "Thumbs Up", "Thumbs Down", "Heart", "Fire",
+                                                          "Laugh", "Wow", "Sad", "Angry" };
+
+/* The UTF-8 glyphs, the TS door's EMOJI_UTF8 byte for byte (heart with its U+FE0F). Two columns each. */
+const char *const lc_react_utf8[LC_REACT_KINDS] = {
+    "\360\237\221\215", "\360\237\221\216", "\342\235\244\357\270\217", "\360\237\224\245",
+    "\360\237\230\202", "\360\237\230\256", "\360\237\230\242", "\360\237\230\240"
+};
+static int react_emoji;
+
+void lc_react_emoji(int on) { react_emoji = on != 0; }
+int lc_react_emoji_on(void) { return react_emoji; }
+
 const char *lc_react_display(const char *emoji)
 {
-    static const char *const map[][2] = {
-        { "+1", "[+]" }, { "-1", "[-]" }, { "heart", "<3" }, { "fire", "*F*" },
-        { "laugh", ":D" }, { "wow", ":O" }, { "sad", ":(" }, { "angry", ">:(" }
-    };
     int i;
-    for (i = 0; i < (int)(sizeof map / sizeof map[0]); i++) if (strcmp(map[i][0], emoji) == 0) return map[i][1];
+    for (i = 0; i < LC_REACT_KINDS; i++) if (strcmp(lc_react_names[i], emoji) == 0) return react_glyphs[i];
     return emoji;
 }
 
-void lc_react_suffix(const lc_line *l, char *out, int cap)
+const char *lc_react_label(int i)
 {
-    int i, n = 0;
-    char one[40];
+    static char labels[LC_REACT_KINDS][24];
+    if (i < 0 || i >= LC_REACT_KINDS) return "";
+    sprintf(labels[i], "%-3s %s", react_glyphs[i], react_words[i]);
+    return labels[i];
+}
+
+void lc_react_rows(const lc_line *l, int indent, int width, char *out, int cap)
+{
+    int i, n = 0, col = 0, any = 0;
+    char one[24];
     out[0] = '\0';
+    if (indent < 0) indent = 0;
+    if (width > 0 && indent > width / 2) indent = width / 2;     /* a long nick: keep room for the counts */
     for (i = 0; i < l->nreact; i++) {
+        int len, gap, need;
+        int k, cols;
         if (l->react[i].count <= 0) continue;
-        sprintf(one, " [%.12s %d]", lc_react_display(l->react[i].emoji), l->react[i].count);
-        if (n + (int)strlen(one) + 1 > cap) break;
-        strcpy(out + n, one);
-        n += (int)strlen(one);
+        for (k = 0; k < LC_REACT_KINDS && strcmp(lc_react_names[k], l->react[i].emoji) != 0; k++) {}
+        if (react_emoji && k < LC_REACT_KINDS) {                 /* a two-column glyph: UI_CELLS_M_WIDE + id */
+            sprintf(one, "%c%c %d", UI_CELLS_M_WIDE, k + 1, l->react[i].count);
+            len = (int)strlen(one);
+            cols = len;                                          /* marker + id bytes = the glyph's two columns */
+        } else {
+            sprintf(one, "%.12s %d", lc_react_display(l->react[i].emoji), l->react[i].count);
+            len = (int)strlen(one);
+            cols = len;
+        }
+        gap = any && !(width > 0 && col + 2 + cols > width) ? 2 : 0;
+        need = gap == 0 ? 1 + indent + len : gap + len;          /* a new row: "\n" and the indent */
+        if (n + need + 1 > cap) break;
+        if (gap == 0) {
+            out[n++] = '\n';
+            memset(out + n, ' ', (size_t)indent);
+            n += indent;
+            col = indent;
+        } else {
+            out[n++] = ' '; out[n++] = ' ';
+            col += 2;
+        }
+        memcpy(out + n, one, (size_t)len);
+        n += len;
+        col += cols;
+        out[n] = '\0';
+        any = 1;
     }
 }
 
-void lc_line_marked(const lc_line *l, char *out, int cap, int stamps)
+void lc_line_marked(const lc_line *l, char *out, int cap, int stamps, int width)
 {
     sb b;
+    int indent = stamps ? 8 : 0;                     /* "[hh:mm] ": the message text column */
     b.p = out; b.n = 0; b.cap = cap;
     out[0] = '\0';
     if ((l->kind == LC_HISTORY || l->kind == LC_LIVE) && l->quote[0] != '\0') {   /* TS reply-quote: a dim row above */
@@ -208,10 +255,11 @@ void lc_line_marked(const lc_line *l, char *out, int cap, int stamps)
     if ((l->kind == LC_HISTORY || l->kind == LC_LIVE) && l->edited) {   /* TS messageLine's mark */
         sb_ch(&b, UI_CELLS_M_BASE); sb_fg(&b, LC_DIM); sb_str(&b, " (edited)");
     }
-    if (l->kind == LC_HISTORY || l->kind == LC_LIVE) {   /* TS server.ts renderedMessages: counts after the message */
-        char suffix[LC_REACT_MAX * 20];
-        lc_react_suffix(l, suffix, (int)sizeof suffix);
-        if (suffix[0] != '\0') { sb_ch(&b, UI_CELLS_M_BASE); sb_fg(&b, LC_ACCENT); sb_str(&b, suffix); }
+    if (l->kind == LC_HISTORY || l->kind == LC_LIVE) {   /* counts on their own rows under it (sysop 2026-11-08) */
+        char rows[LC_REACT_MAX * 40];
+        indent += (int)strlen(l->nick) + (l->kind == LC_HISTORY ? 3 : 2);   /* "<nick> " or "nick: " */
+        lc_react_rows(l, indent, width, rows, (int)sizeof rows);
+        if (rows[0] != '\0') { sb_ch(&b, UI_CELLS_M_BASE); sb_fg(&b, LC_ACCENT); sb_str(&b, rows); }
     }
 }
 
@@ -349,7 +397,7 @@ static void draw_chat(ui_cells *c, const lc_model *m, int top, int h, int left, 
     for (k = 0; k < CHAT_ROWS_MAX; k++) chat_row_line[k] = -1;
 
     for (i = 0; i < m->nlines; i++) {
-        lc_line_marked(&m->lines[i], marked, (int)sizeof marked, m->timestamps && !m->compact);
+        lc_line_marked(&m->lines[i], marked, (int)sizeof marked, m->timestamps && !m->compact, width);
         line_rows[i] = ui_cells_wrap(marked, width, starts, ends, WRAP_MAX);
         if (i == picked) pick_at = total;
         total += line_rows[i];
@@ -361,7 +409,7 @@ static void draw_chat(ui_cells *c, const lc_model *m, int top, int h, int left, 
     ui_cells_pen(c, LC_INK, UI_CELLS_DEFAULT, 0);
     for (i = 0; i < m->nlines && at < first + rows; i++) {
         if (at + line_rows[i] <= first) { at += line_rows[i]; continue; }   /* scrolled off the top: not rebuilt */
-        lc_line_marked(&m->lines[i], marked, (int)sizeof marked, m->timestamps && !m->compact);
+        lc_line_marked(&m->lines[i], marked, (int)sizeof marked, m->timestamps && !m->compact, width);
         n = ui_cells_wrap(marked, width, starts, ends, WRAP_MAX);
         for (k = 0; k < n; k++, at++) {
             if (at < first || at >= first + rows) continue;

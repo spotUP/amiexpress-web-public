@@ -13,6 +13,7 @@ import { XIMMessage, XIMCommand, BBSSessionData, XIMState, ENVStatus } from './t
 import { XIMMessageParser } from './messages';
 import { displayModeOf } from './display-mode.util';
 import { animationsAllowed } from '../../services/user-settings/animations';
+import { resolveWireCharset } from '../../utils/wire-encoding.util';
 import { ExecLibrary } from '../api/ExecLibrary';
 import { editorStructFromDoor, editorStructToDoor, EditorState, EditorStringPool } from './editor-struct';
 import { setNewPassword } from '../../services/user-settings/w-password';
@@ -291,6 +292,34 @@ debugLog(`  [READ] AEW_DISPLAYMODE: "${mode}"`);
             this.emulator.writeMemory(stringAddr + i, 0);
           }
 debugLog(`  [READ] AEW_ANIMATIONS: "${answer}"`);
+        }
+        break;
+
+      /**
+       * This board's own command: the caller's wire charset, and the door's
+       * output charset. Read answers the session's charset. Write 'utf-8'
+       * opts this door run into UTF-8 text (io.ts emitText decodes it);
+       * any other value opts out. Doors that never write it are unchanged.
+       */
+      case XIMCommand.AEW_CHARSET:
+        if (isRead) {
+          // Same test as the TS door (doors/BBSApi.ts unicodeCapable): web or a
+          // Unicode-capable terminal gets 'utf-8', so both LiveChat doors pick the
+          // same glyphs for the same caller. Otherwise the single-byte wire charset;
+          // the transport transcodes latin1 for a UTF-8 wire that is not
+          // Unicode-capable, so 'iso-8859-1' is the right answer there.
+          const unicode = this.bbsSession.connectionType === 'web' || this.bbsSession.unicodeCapable === true;
+          const wire = resolveWireCharset(this.bbsSession);
+          const charset = unicode ? 'utf-8' : (wire === 'utf-8' ? 'iso-8859-1' : wire);
+          this.messageParser.writeMessageString(msg.msgAddr, charset);
+          for (let i = charset.length + 1; i < 32; i++) {
+            this.emulator.writeMemory(stringAddr + i, 0);
+          }
+debugLog(`  [READ] AEW_CHARSET: "${charset}"`);
+        } else {
+          const wanted = this.messageParser.readString(stringAddr, 32).trim().toLowerCase();
+          this.state.doorUtf8Output = wanted === 'utf-8';
+debugLog(`  [WRITE] AEW_CHARSET: "${wanted}"`);
         }
         break;
 
