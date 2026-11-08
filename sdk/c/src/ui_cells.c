@@ -96,15 +96,17 @@ void ui_cells_fill(ui_cells *c, int row, int col, int h, int w, int ch)
 
 void ui_cells_box(ui_cells *c, int top, int left, int h, int w, int border_fg, const char *label, int label_fg)
 {
-    int fg = c->fg, bold = c->bold, r, k, at;
+    int fg = c->fg, bold = c->bold, at;
     if (h < 2 || w < 2) return;
     c->fg = border_fg; c->bold = 0;
+    /* The edges are runs: ui_cells_fill clips like ui_cells_put and builds the cell once. */
     ui_cells_put(c, top, left, '.');
-    for (k = 1; k < w - 1; k++) ui_cells_put(c, top, left + k, '-');
+    ui_cells_fill(c, top, left + 1, 1, w - 2, '-');
     ui_cells_put(c, top, left + w - 1, '.');
-    for (r = 1; r < h - 1; r++) { ui_cells_put(c, top + r, left, '|'); ui_cells_put(c, top + r, left + w - 1, '|'); }
+    ui_cells_fill(c, top + 1, left, h - 2, 1, '|');
+    ui_cells_fill(c, top + 1, left + w - 1, h - 2, 1, '|');
     ui_cells_put(c, top + h - 1, left, '`');
-    for (k = 1; k < w - 1; k++) ui_cells_put(c, top + h - 1, left + k, '-');
+    ui_cells_fill(c, top + h - 1, left + 1, 1, w - 2, '-');
     ui_cells_put(c, top + h - 1, left + w - 1, '\'');
     if (label != 0 && label[0] != '\0' && w > 6) {
         c->fg = label_fg;

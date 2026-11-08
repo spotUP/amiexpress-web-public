@@ -83,6 +83,7 @@ typedef struct {
     char pane_label[96];           /* chat box label: "general - General chat" */
     lc_line lines[LC_LINES];
     int nlines;
+    unsigned long lines_gen;       /* lc_lines_changed: draw_chat reuses its wrapped row counts while this holds still */
     int scroll;                    /* display rows back from the newest */
     lc_side side[LC_SIDE_MAX];
     int nside;
@@ -127,6 +128,11 @@ extern const char *const lc_help_text[];
 extern const int lc_help_lines;
 
 void lc_model_init(lc_model *m, int cols, int rows);
+/** Call after ANY change to m->lines or m->nlines (add, remove, edit, reaction): draw_chat caches each
+ *  line's wrapped row count against m->lines_gen and would otherwise draw stale rows. */
+void lc_lines_changed(lc_model *m);
+/** How many times draw_chat re-wrapped every line (pass 1); the cache test counts it. */
+extern unsigned long lc_chat_rewraps;
 int lc_sidebar_width(const lc_model *m);
 int lc_text_rows(const lc_model *m);
 int lc_nick_color(const char *nick);

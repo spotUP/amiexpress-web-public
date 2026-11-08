@@ -56,6 +56,29 @@ int main(void)
     CHECK(cell_ch(&c, 1, 0) == '|' && cell_ch(&c, 0, 1) == '-', "sides");
     CHECK(cell_ch(&c, 0, 3) == 'A' && c.back[3].fg == 255 && c.back[1].fg == 204, "label colour");
 
+    /* Every edge cell of a box is drawn with its fill and pen; interior stays untouched. */
+    {
+        int rr, kk, bad = 0;
+        ui_cells d;
+        CHECK(ui_cells_open(&d, 20, 20) == 0, "open 20x20");
+        ui_cells_pen(&d, 7, UI_CELLS_DEFAULT, 0);
+        ui_cells_fill(&d, 6, 0, 6, 20, 'z');
+        ui_cells_box(&d, 6, 2, 5, 9, 204, NULL, 255);
+        for (rr = 0; rr < 5; rr++)
+            for (kk = 0; kk < 9; kk++) {
+                int edge = rr == 0 || rr == 4 || kk == 0 || kk == 8;
+                int corner = (rr == 0 || rr == 4) && (kk == 0 || kk == 8);
+                int ch = cell_ch(&d, 6 + rr, 2 + kk);
+                if (!edge && ch != 'z') bad = 1;
+                if (edge && !corner && ch != ((rr == 0 || rr == 4) ? '-' : '|')) bad = 1;
+                if (edge && d.back[(6 + rr) * d.cols + 2 + kk].fg != 204) bad = 1;
+            }
+        CHECK(!bad, "box edges are runs, interior untouched");
+        ui_cells_box(&d, 10, 15, 4, 12, 204, NULL, 255);   /* hangs off the right and bottom: must clip, not overrun */
+        CHECK(cell_ch(&d, 10, 15) == '.' && cell_ch(&d, 10, 19) == '-', "clipped box top");
+        ui_cells_close(&d);
+    }
+
     /* Marked text keeps style across a wrap. */
     snprintf(marked, sizeof marked, "aa %c%cbbbb cc%c dd", UI_CELLS_M_FG, (char)221, UI_CELLS_M_BASE);
     CHECK(ui_cells_marked_cols(marked) == 13, "marked cols skip markers");

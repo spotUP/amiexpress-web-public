@@ -79,9 +79,16 @@ const char *const lc_help_text[] = {
 };
 const int lc_help_lines = (int)(sizeof lc_help_text / sizeof lc_help_text[0]);
 
+/* One clock for every model, so a fresh model never shares a generation with a cached one. */
+static unsigned long lines_clock;
+unsigned long lc_chat_rewraps;
+
+void lc_lines_changed(lc_model *m) { m->lines_gen = ++lines_clock; }
+
 void lc_model_init(lc_model *m, int cols, int rows)
 {
     memset(m, 0, sizeof *m);
+    lc_lines_changed(m);
     m->cols = cols;
     m->rows = rows;
     m->node = 1;
@@ -272,12 +279,13 @@ static void centre(ui_cells *c, int row, int left, int width, const char *text)
 
 static void draw_menubar(ui_cells *c)
 {
-    int w = c->cols, k;
+    int w = c->cols;
     ui_cells_bar(c, 0, 0, w, MENU_TEXT, LC_BAR_INK, LC_ACCENT, 0);
     if (w < 60) return;
     /* The filler and the masthead at the right; the gap 12 cells in is where the TS bar's scanner sat in the capture. */
     ui_cells_pen(c, LC_ACCENT, LC_ACCENT, 0);
-    for (k = MENU_TEXT_COLS; k <= w - 12; k++) ui_cells_put(c, 0, k, k == MENU_TEXT_COLS + 12 ? ' ' : '/');
+    ui_cells_fill(c, 0, MENU_TEXT_COLS, 1, w - 12 - MENU_TEXT_COLS + 1, '/');
+    if (MENU_TEXT_COLS + 12 <= w - 12) ui_cells_put(c, 0, MENU_TEXT_COLS + 12, ' ');   /* the scanner gap in the filler */
     ui_cells_pen(c, LC_GREY, LC_ACCENT, 0);
     ui_cells_put(c, 0, w - 11, ' ');
     ui_cells_put(c, 0, w - 1, ' ');
@@ -382,12 +390,14 @@ static void draw_chat(ui_cells *c, const lc_model *m, int top, int h, int left, 
 {
     static char marked[LC_TEXT_MAX * 2 + 96];
     static int line_rows[LC_LINES];                 /* pass 1's wrapped row count per line */
+    static unsigned long cache_gen;                 /* what line_rows was computed for: the model's lines_gen ... */
+    static int cache_n = -1, cache_width, cache_stamps, cache_emoji;   /* ... and the inputs that change a wrap */
+    int stamps = m->timestamps && !m->compact, emoji = lc_react_emoji_on(), used = 0;
     int starts[WRAP_MAX], ends[WRAP_MAX];
     int rows = h - 3, width = w - 4, total = 0, first, at = 0, i, k, n, body;
     int picked = lc_pick_index(m), pick_at = 0;
 
     ui_cells_pen(c, LC_INK, UI_CELLS_DEFAULT, 0);
-    ui_cells_fill(c, top + 1, left + 1, h - 2, w - 2, ' ');
     ui_cells_box(c, top, left, h, w, picked >= 0 ? LC_BORDER_FOCUS : LC_ACCENT, m->pane_label[0] != '\0' ? m->pane_label : "No channel", LC_INK);
     if (c->cols > 40) {                             /* the TS pane drops its label bar at 40 columns */
         ui_cells_bar(c, top + 1, left + 1, w - 5, " Chat", LC_GREY, LC_LABEL_BG, 0);
@@ -397,13 +407,22 @@ static void draw_chat(ui_cells *c, const lc_model *m, int top, int h, int left, 
         body = top + 1;
         rows++;
     }
-    if (rows < 1 || width < 1) return;
+    if (rows < 1 || width < 1) {
+        ui_cells_fill(c, body, left + 1, top + h - 1 - body, w - 2, ' ');
+        return;
+    }
     ui_hit_add(&lc_hits, LC_HIT_CHAT, body, left + 1, rows, w - 2);
     for (k = 0; k < CHAT_ROWS_MAX; k++) chat_row_line[k] = -1;
 
+    if (cache_gen != m->lines_gen || cache_n != m->nlines || cache_width != width || cache_stamps != stamps || cache_emoji != emoji) {
+        for (i = 0; i < m->nlines; i++) {           /* pass 1: only when a line, the width or the stamps changed */
+            lc_line_marked(&m->lines[i], marked, (int)sizeof marked, stamps, width);
+            line_rows[i] = ui_cells_wrap(marked, width, starts, ends, WRAP_MAX);
+        }
+        cache_gen = m->lines_gen; cache_n = m->nlines; cache_width = width; cache_stamps = stamps; cache_emoji = emoji;
+        lc_chat_rewraps++;
+    }
     for (i = 0; i < m->nlines; i++) {
-        lc_line_marked(&m->lines[i], marked, (int)sizeof marked, m->timestamps && !m->compact, width);
-        line_rows[i] = ui_cells_wrap(marked, width, starts, ends, WRAP_MAX);
         if (i == picked) pick_at = total;
         total += line_rows[i];
     }
@@ -414,24 +433,28 @@ static void draw_chat(ui_cells *c, const lc_model *m, int top, int h, int left, 
     ui_cells_pen(c, LC_INK, UI_CELLS_DEFAULT, 0);
     for (i = 0; i < m->nlines && at < first + rows; i++) {
         if (at + line_rows[i] <= first) { at += line_rows[i]; continue; }   /* scrolled off the top: not rebuilt */
-        lc_line_marked(&m->lines[i], marked, (int)sizeof marked, m->timestamps && !m->compact, width);
+        lc_line_marked(&m->lines[i], marked, (int)sizeof marked, stamps, width);
         n = ui_cells_wrap(marked, width, starts, ends, WRAP_MAX);
         for (k = 0; k < n; k++, at++) {
+            int r = at - first, cols;
             if (at < first || at >= first + rows) continue;
-            if (at - first < CHAT_ROWS_MAX) chat_row_line[at - first] = i;
-            ui_cells_marked(c, body + at - first, left + 1, marked, starts[k], ends[k], width);
-            if (i == picked) tint_row(c, body + at - first, left + 1, width);
+            if (r < CHAT_ROWS_MAX) chat_row_line[r] = i;
+            cols = ui_cells_marked(c, body + r, left + 1, marked, starts[k], ends[k], width);
+            ui_cells_fill(c, body + r, left + 1 + cols, 1, w - 2 - cols, ' ');   /* the rest of the row: text rows are not pre-cleared */
+            used = r + 1;
+            if (i == picked) tint_row(c, body + r, left + 1, width);
         }
     }
+    ui_cells_fill(c, body + used, left + 1, rows - used, w - 2, ' ');   /* rows with no line */
     if (total > rows) {                             /* scrollbar: track 66, thumb 195, one column in from the border */
         int thumb = rows * rows / total, pos;
         if (thumb < 1) thumb = 1;
         pos = (first * (rows - thumb)) / (total - rows);
-        for (k = 0; k < rows; k++) {
-            int col = (k >= pos && k < pos + thumb) ? LC_SCROLL_THUMB : LC_SCROLL_TRACK;
-            ui_cells_pen(c, col, col, 0);
-            ui_cells_put(c, body + k, left + w - 3, ' ');
-        }
+        ui_cells_pen(c, LC_SCROLL_TRACK, LC_SCROLL_TRACK, 0);
+        ui_cells_fill(c, body, left + w - 3, pos, 1, ' ');
+        ui_cells_fill(c, body + pos + thumb, left + w - 3, rows - pos - thumb, 1, ' ');
+        ui_cells_pen(c, LC_SCROLL_THUMB, LC_SCROLL_THUMB, 0);
+        ui_cells_fill(c, body + pos, left + w - 3, thumb, 1, ' ');
         ui_cells_pen(c, LC_INK, UI_CELLS_DEFAULT, 0);
     }
 }

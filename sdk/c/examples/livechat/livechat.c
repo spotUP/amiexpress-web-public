@@ -155,6 +155,7 @@ static void hhmm_now(char *out)
 static void lines_clear(void)
 {
     M.nlines = 0;
+    lc_lines_changed(&M);
     M.scroll = 0;
     msg_number = 0;
 }
@@ -185,6 +186,7 @@ static void line_remove(const char *id)
         j++;
     }
     M.nlines = j;
+    lc_lines_changed(&M);
 }
 
 /** The caller's newest message in the pane (TS lastOwnMessageId), or 0. */
@@ -229,6 +231,7 @@ static void quote_of(const lc_line *p, char *out, int cap)
 static lc_line *line_slot(int at)
 {
     int i;
+    lc_lines_changed(&M);                   /* every add and shift of the pane passes here; the caller fills the slot before the next draw */
     if (M.nlines == LC_LINES) {
         for (i = 1; i < M.nlines; i++) M.lines[i - 1] = M.lines[i];
         M.nlines--;
@@ -550,6 +553,7 @@ static void load_reactions(const char *id)
     lc_line *l = line_by_id(id);
     if (l == 0 || ae_chat_reactions(&chat, id) != AE_CHAT_OK) return;
     clean(reactions_loaded, sizeof reactions_loaded, id);
+    lc_lines_changed(&M);
     l->nreact = 0;
     while (ae_chat_next_row(&chat, f, AE_CHAT_ROW_FIELDS) >= 3) {
         lc_react *r;
@@ -624,7 +628,7 @@ static void take_events(void)
             side_presence(user, f[7]);          /* TS chat:presence: the dot and the text change in the user list */
         } else if (strcmp(type, "edit") == 0) {
             lc_line *l = line_by_id(ref);       /* TS chat:edited: the rows of that id now read the new text */
-            if (l != 0) { clean(l->text, sizeof l->text, f[7]); l->edited = 1; }
+            if (l != 0) { clean(l->text, sizeof l->text, f[7]); l->edited = 1; lc_lines_changed(&M); }
         } else if (strcmp(type, "delete") == 0) {
             line_remove(ref);                   /* TS chat:deleted: gone, nothing printed */
         } else if (strcmp(type, "topic") == 0 && in_room) {
@@ -686,10 +690,12 @@ static void take_history(void)
         int i;
         for (i = marker + 1; i < M.nlines; i++) M.lines[i - 1] = M.lines[i];
         M.nlines--;
+        lc_lines_changed(&M);
         return;
     }
     sprintf(note, "--- %d earlier message%s ---", n, n == 1 ? "" : "s");
     copy(M.lines[marker].text, sizeof M.lines[marker].text, note);
+    lc_lines_changed(&M);
 }
 
 /** Joins a room by id and shows it; the room left is the one before, once the new join worked. */

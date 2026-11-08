@@ -15,6 +15,7 @@ static void add_line(lc_model *m, int kind, const char *time, const char *nick, 
     strcpy(l->time, time);
     strcpy(l->nick, nick);
     strcpy(l->text, text);
+    lc_lines_changed(m);
 }
 
 static void add_side(lc_model *m, int kind, int joined, const char *label)
@@ -256,9 +257,47 @@ static int picker_selects_and_draws(void)
     return fail;
 }
 
+/* draw_chat reuses its wrapped row counts while the lines stay put (pass 1 wraps all of them), and
+ * it no longer clears the pane first: every interior cell must still be written by the row fills. */
+static int chat_cache_and_pane_fill(void)
+{
+    static lc_model a, b;
+    ui_cells ca, cb;
+    int cr, cc, fail = 0, r, k, sw;
+    unsigned long n0;
+    if (ui_cells_open(&ca, 80, 25) != 0 || ui_cells_open(&cb, 80, 25) != 0) return 1;
+    main_state(&a, 80, 25);
+    for (k = 0; k < 80 * 25; k++) ca.back[k].ch = 'X';              /* a stale canvas: nothing may survive in the pane */
+    lc_draw(&ca, &a, &cr, &cc);
+    sw = lc_sidebar_width(&a);
+    for (r = 2; r < 19; r++)
+        for (k = sw + 1; k < 78; k++)
+            if (ca.back[r * 80 + k].ch == 'X') { printf("pane fill: stale cell at row %d col %d\n", r, k); fail = 1; r = 99; break; }
+    n0 = lc_chat_rewraps;
+    lc_draw(&ca, &a, &cr, &cc);
+    lc_draw(&ca, &a, &cr, &cc);
+    if (lc_chat_rewraps != n0) { printf("cache: unchanged lines re-wrapped (%lu)\n", lc_chat_rewraps - n0); fail = 1; }
+    strcpy(a.lines[7].text, "an edited line that is now long enough to wrap onto a second row of the chat pane for sure");
+    lc_lines_changed(&a);
+    lc_draw(&ca, &a, &cr, &cc);
+    if (lc_chat_rewraps != n0 + 1) { printf("cache: a changed line was not re-wrapped (%lu)\n", lc_chat_rewraps - n0); fail = 1; }
+    main_state(&b, 80, 25);                                          /* the same edit on a model that never cached */
+    strcpy(b.lines[7].text, a.lines[7].text);
+    lc_lines_changed(&b);
+    lc_draw(&cb, &b, &cr, &cc);
+    if (memcmp(ca.back, cb.back, sizeof(ui_cell) * 80 * 25) != 0) { printf("cache: edited frame differs from a fresh draw\n"); fail = 1; }
+    lc_draw(&ca, &a, &cr, &cc);                                      /* the cache is one slot: b's draw replaced it */
+    n0 = lc_chat_rewraps;
+    a.timestamps = !a.timestamps;                                              /* a wrap input other than the lines */
+    lc_draw(&ca, &a, &cr, &cc);
+    if (lc_chat_rewraps != n0 + 1) { printf("cache: stamps toggle did not re-wrap\n"); fail = 1; }
+    ui_cells_close(&ca); ui_cells_close(&cb);
+    return fail;
+}
+
 int main(void)
 {
-    int r = react_rows_under_the_message() | stamps_follow_the_pref() | active_panel_is_highlighted() | picker_selects_and_draws();
+    int r = chat_cache_and_pane_fill() | react_rows_under_the_message() | stamps_follow_the_pref() | active_panel_is_highlighted() | picker_selects_and_draws();
     int a = compare("tests/fixtures/lc68-ts-main-80x25.grid");
     int b = compare("tests/fixtures/lc68-ts-main-40x25.grid");
     int d = compare("tests/fixtures/lc68-ts-main-80x15.grid");
