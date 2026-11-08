@@ -115,7 +115,17 @@ int lc_nick_color(const char *nick)
 typedef struct { char *p; int n, cap; } sb;
 
 static void sb_ch(sb *b, int ch) { if (b->n + 1 < b->cap) b->p[b->n++] = (char)ch; b->p[b->n] = '\0'; }
-static void sb_str(sb *b, const char *s) { while (*s != '\0') sb_ch(b, (unsigned char)*s++); }
+/* Appends len bytes of s, clipped to the buffer: one bounds check per run instead of one per byte. */
+static void sb_run(sb *b, const char *s, int len)
+{
+    int room = b->cap - 1 - b->n;
+    if (room < 0) room = 0;
+    if (len > room) len = room;
+    memcpy(b->p + b->n, s, (size_t)len);
+    b->n += len;
+    b->p[b->n] = '\0';
+}
+static void sb_str(sb *b, const char *s) { sb_run(b, s, (int)strlen(s)); }
 static void sb_fg(sb *b, int fg) { sb_ch(b, UI_CELLS_M_FG); sb_ch(b, fg); }
 
 /* "**x**" shows x in bold, the asterisks dropped; an unpaired "**" stays as typed. */
@@ -123,13 +133,18 @@ static void sb_markdown(sb *b, const char *s)
 {
     int bold = 0;
     while (*s != '\0') {
-        if (s[0] == '*' && s[1] == '*' && (bold || strstr(s + 2, "**") != 0)) {
+        const char *run = s;
+        while (*s != '\0' && *s != '*') s++;          /* plain text goes in as one run */
+        if (s > run) sb_run(b, run, (int)(s - run));
+        if (*s == '\0') break;
+        if (s[1] == '*' && (bold || strstr(s + 2, "**") != 0)) {
             sb_ch(b, bold ? UI_CELLS_M_PLAIN : UI_CELLS_M_BOLD);
             bold = !bold;
             s += 2;
             continue;
         }
-        sb_ch(b, (unsigned char)*s++);
+        sb_ch(b, '*');
+        s++;
     }
 }
 
@@ -259,6 +274,7 @@ static int chat_row_line[CHAT_ROWS_MAX];            /* chat body row -> line ind
 static void draw_chat(ui_cells *c, const lc_model *m, int top, int h, int left, int w)
 {
     static char marked[LC_TEXT_MAX * 2 + 96];
+    static int line_rows[LC_LINES];                 /* pass 1's wrapped row count per line */
     int starts[WRAP_MAX], ends[WRAP_MAX];
     int rows = h - 3, width = w - 4, total = 0, first, at = 0, i, k, n, body;
 
@@ -279,12 +295,14 @@ static void draw_chat(ui_cells *c, const lc_model *m, int top, int h, int left, 
 
     for (i = 0; i < m->nlines; i++) {
         lc_line_marked(&m->lines[i], marked, (int)sizeof marked, m->timestamps && !m->compact);
-        total += ui_cells_wrap(marked, width, starts, ends, WRAP_MAX);
+        line_rows[i] = ui_cells_wrap(marked, width, starts, ends, WRAP_MAX);
+        total += line_rows[i];
     }
     first = total - m->scroll - rows;               /* the newest rows, filled from the top */
     if (first < 0) first = 0;
     ui_cells_pen(c, LC_INK, UI_CELLS_DEFAULT, 0);
     for (i = 0; i < m->nlines && at < first + rows; i++) {
+        if (at + line_rows[i] <= first) { at += line_rows[i]; continue; }   /* scrolled off the top: not rebuilt */
         lc_line_marked(&m->lines[i], marked, (int)sizeof marked, m->timestamps && !m->compact);
         n = ui_cells_wrap(marked, width, starts, ends, WRAP_MAX);
         for (k = 0; k < n; k++, at++) {

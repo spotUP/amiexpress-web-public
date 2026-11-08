@@ -1,4 +1,5 @@
 /* ui_cells.c - see ui_cells.h. */
+#include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -51,18 +52,39 @@ void ui_cells_put(ui_cells *c, int row, int col, int ch)
     set_cell(&c->back[(long)row * c->cols + col], ch, c->fg, c->bg, c->bold);
 }
 
+/* The row's first cell, or 0 when the row is off the canvas. The run writers below build the pen's
+ * cell once and store it per column instead of calling ui_cells_put (and set_cell) per character:
+ * the same cells, without a call, a row bounds check and three pen conditionals per cell. */
+static ui_cell *row_at(ui_cells *c, int row)
+{
+    return row < 0 || row >= c->rows ? 0 : &c->back[(long)row * c->cols];
+}
+
 int ui_cells_text(ui_cells *c, int row, int col, const char *s, int max)
 {
-    int n = 0;
+    int n = 0, k;
+    ui_cell pen, *line = row_at(c, row);
     if (max < 0) max = c->cols - col;
-    while (s[n] != '\0' && n < max) { ui_cells_put(c, row, col + n, (unsigned char)s[n]); n++; }
+    set_cell(&pen, ' ', c->fg, c->bg, c->bold);
+    for (; s[n] != '\0' && n < max; n++) {
+        k = col + n;
+        if (line != 0 && k >= 0 && k < c->cols) { line[k] = pen; line[k].ch = (unsigned char)s[n]; }
+    }
     return n;
 }
 
 void ui_cells_fill(ui_cells *c, int row, int col, int h, int w, int ch)
 {
+    int r0 = row < 0 ? 0 : row, r1 = row + h > c->rows ? c->rows : row + h;
+    int k0 = col < 0 ? 0 : col, k1 = col + w > c->cols ? c->cols : col + w;
     int r, k;
-    for (r = 0; r < h; r++) for (k = 0; k < w; k++) ui_cells_put(c, row + r, col + k, ch);
+    ui_cell cell;
+    if (h <= 0 || w <= 0 || r0 >= r1 || k0 >= k1) return;
+    set_cell(&cell, ch, c->fg, c->bg, c->bold);
+    for (r = r0; r < r1; r++) {
+        ui_cell *p = &c->back[(long)r * c->cols + k0];
+        for (k = k0; k < k1; k++) *p++ = cell;
+    }
 }
 
 void ui_cells_box(ui_cells *c, int top, int left, int h, int w, int border_fg, const char *label, int label_fg)
@@ -128,25 +150,34 @@ int ui_cells_marked_cols(const char *s)
 
 int ui_cells_marked(ui_cells *c, int row, int col, const char *s, int from, int to, int max)
 {
-    int base_fg = c->fg, base_bold = c->bold, i, n = 0;
+    int base_fg = c->fg, base_bold = c->bold, i, n = 0, k;
+    ui_cell pen, *line = row_at(c, row);
+    set_cell(&pen, ' ', c->fg, c->bg, c->bold);
     for (i = 0; s[i] != '\0' && i < to; i++) {
         char ch = s[i];
-        if (ch == UI_CELLS_M_FG && s[i + 1] != '\0') { c->fg = (unsigned char)s[++i]; continue; }
-        if (ch == UI_CELLS_M_BOLD) { c->bold = 1; continue; }
-        if (ch == UI_CELLS_M_PLAIN) { c->bold = 0; continue; }
-        if (ch == UI_CELLS_M_BASE) { c->fg = base_fg; c->bold = base_bold; continue; }
+        if ((unsigned char)ch <= (unsigned char)UI_CELLS_M_BASE) {   /* a marker: 1..4 (is_marker) */
+            if (ch == UI_CELLS_M_FG && s[i + 1] != '\0') { c->fg = (unsigned char)s[++i]; set_cell(&pen, ' ', c->fg, c->bg, c->bold); continue; }
+            if (ch == UI_CELLS_M_BOLD) { c->bold = 1; set_cell(&pen, ' ', c->fg, c->bg, c->bold); continue; }
+            if (ch == UI_CELLS_M_PLAIN) { c->bold = 0; set_cell(&pen, ' ', c->fg, c->bg, c->bold); continue; }
+            if (ch == UI_CELLS_M_BASE) { c->fg = base_fg; c->bold = base_bold; set_cell(&pen, ' ', c->fg, c->bg, c->bold); continue; }
+        }
         if (i < from) continue;
         if (n >= max) break;
-        ui_cells_put(c, row, col + n, (unsigned char)ch);
+        k = col + n;
+        if (line != 0 && k >= 0 && k < c->cols) { line[k] = pen; line[k].ch = (unsigned char)ch; }
         n++;
     }
     c->fg = base_fg; c->bold = base_bold;
     return n;
 }
 
+/* The four markers are the bytes 1..4, so one range test finds them (ui_cells_marked relies on
+ * the same fact). The typedef fails to compile if the header ever moves them. */
+typedef char ui_cells_markers_are_1_to_4[(UI_CELLS_M_FG == 1 && UI_CELLS_M_BOLD == 2 &&
+                                          UI_CELLS_M_PLAIN == 3 && UI_CELLS_M_BASE == 4) ? 1 : -1];
 static int is_marker(const char *s, int i)
 {
-    return s[i] == UI_CELLS_M_BOLD || s[i] == UI_CELLS_M_PLAIN || s[i] == UI_CELLS_M_BASE || s[i] == UI_CELLS_M_FG;
+    return (unsigned char)s[i] >= (unsigned char)UI_CELLS_M_FG && (unsigned char)s[i] <= (unsigned char)UI_CELLS_M_BASE;
 }
 
 int ui_cells_wrap(const char *s, int width, int *starts, int *ends, int max)
@@ -217,17 +248,55 @@ static int same_style(const ui_cell *a, const ui_cell *b)
     return a->fg == b->fg && a->bg == b->bg && a->flags == b->flags;
 }
 
+/* A cell is four bytes; the flush compares it as one 32-bit word. memcpy keeps that legal for any
+ * alignment and byte order (equality does not care which byte is high). On the Amiga the arrays come
+ * from malloc and every cell is 4 bytes, so each cell is long-aligned and a direct long compare
+ * (one cmp.l, no call) is safe. Ports keep the memcpy form. */
+typedef char ui_cell_is_four_bytes[sizeof(ui_cell) == 4 ? 1 : -1];
+#ifdef AMIGA
+long ui_cells_first_diff(const ui_cell *a, const ui_cell *b, long n);   /* ui_cells_68k.s: cmpm.l/dbne */
+#else
+static int same_cell(const ui_cell *a, const ui_cell *b)
+{
+    uint32_t x, y;
+    memcpy(&x, a, sizeof x);
+    memcpy(&y, b, sizeof y);
+    return x == y;
+}
+/* Index of the first cell where a and b differ, or n when all n cells are equal. The flush calls
+ * this once per run of unchanged cells; a key that changed three cells skips the other 1997 in one
+ * call. The Amiga build replaces it with the assembly in ui_cells_68k.s; this C is the reference. */
+static long ui_cells_first_diff(const ui_cell *a, const ui_cell *b, long n)
+{
+    long i;
+    for (i = 0; i < n; i++) if (!same_cell(&a[i], &b[i])) break;
+    return i;
+}
+#endif
+
 void ui_cells_flush(ui_cells *c, ansi_buf *out, ui_cells_drain_fn drain, void *ctx)
 {
-    long i, n = (long)c->cols * c->rows;
-    int cur_row = -1, cur_col = -1, have_style = 0;
+    long i = 0, n = (long)c->cols * c->rows, last = n - 1;
+    int cur_row = -1, cur_col = -1, have_style = 0, cols = c->cols, full = c->full;
+    int next_row = 0, next_col = 0;     /* row and column of cell i, stepped rather than divided */
     ui_cell style;
     memset(&style, 0, sizeof style);
     c->sent = 0;
-    for (i = 0; i < n - 1; i++) {
-        ui_cell *p = &c->back[i];
-        int row = (int)(i / c->cols), col = (int)(i % c->cols);
-        if (!c->full && memcmp(p, &c->front[i], sizeof *p) == 0) continue;
+    while (i < last) {
+        ui_cell *p;
+        int row, col;
+        if (!full) {                    /* skip the run of unchanged cells in one compare loop */
+            long skip = ui_cells_first_diff(&c->back[i], &c->front[i], last - i);
+            if (skip > 0) {
+                i += skip;
+                if (i >= last) break;
+                next_col += (int)skip;  /* one division per run, not per cell */
+                if (next_col >= cols) { next_row += next_col / cols; next_col %= cols; }
+            }
+        }
+        p = &c->back[i];
+        row = next_row; col = next_col;
+        if (++next_col == cols) { next_col = 0; next_row++; }
         if (drain != 0 && out->len > out->cap - 64) { drain(ctx); }
         if (row != cur_row || col != cur_col) {
             out_str(out, "\033["); out_int(out, row + 1); out_byte(out, ';'); out_int(out, col + 1); out_byte(out, 'H');
@@ -235,6 +304,7 @@ void ui_cells_flush(ui_cells *c, ansi_buf *out, ui_cells_drain_fn drain, void *c
         if (!have_style || !same_style(&style, p)) { out_sgr(out, p); style = *p; have_style = 1; }
         out_byte(out, (char)p->ch);
         c->front[i] = *p;
+        i++;
         c->sent++;
         cur_row = row;
         cur_col = col + 1;

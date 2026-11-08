@@ -121,6 +121,30 @@ int main(void)
     ui_cells_invalidate(&c);
     flush_into(&c, &b);
     CHECK(c.sent == 20 * 6 - 1, "invalidate resends all");
+    ui_cells_close(&c);
+
+    /* The diff flush's exact bytes for a known change set on a 5x3 canvas: the last column of row 0
+     * (the column counter must wrap to the next row), two neighbours at the start of row 1 (no
+     * cursor move between them) and one cell in row 2 in a new colour. The flush steps row and
+     * column instead of dividing the index; a wrong step shows up here as a wrong ESC[r;cH. */
+    {
+        static const char want[] = "\033[1;5H\033[0;49;37mA" "\033[2;1HBC" "\033[3;3H\033[0;49;32mD";
+        CHECK(ui_cells_open(&c, 5, 3) == 0, "open 5x3");
+        flush_into(&c, &b);
+        ui_cells_pen(&c, 7, UI_CELLS_DEFAULT, 0);
+        ui_cells_put(&c, 0, 4, 'A');
+        ui_cells_text(&c, 1, 0, "BC", -1);
+        ui_cells_pen(&c, 2, UI_CELLS_DEFAULT, 0);
+        ui_cells_put(&c, 2, 2, 'D');
+        flush_into(&c, &b);
+        CHECK(strcmp(wire, want) == 0, "flush bytes for a known change set (row/col stepping)");
+        CHECK(c.sent == 4, "four cells sent");
+        flush_into(&c, &b);
+        CHECK(b.len == 0, "a second flush sends nothing");
+        ui_cells_fill(&c, -1, 3, 3, 9, '#');        /* clipped: rows -1..1 and columns 3..11 -> rows 0..1, columns 3..4 */
+        CHECK(cell_ch(&c, 0, 3) == '#' && cell_ch(&c, 1, 4) == '#' && cell_ch(&c, 2, 3) == ' ' && cell_ch(&c, 0, 2) == ' ',
+              "fill clips to the canvas");
+    }
 
     ui_cells_close(&c);
     if (fails == 0) printf("test_ui_cells: all passed\n");

@@ -39,6 +39,11 @@ AMIGA_CFLAGS = +aos68k -c99 -DAMIGA -Iinclude -I"$(VBCC)/targets/m68k-amigaos/in
 # the host is not what `lib` builds.
 MODULES = ae_host ae_out ae_box ae_session ui_profile ui_ansi ui_screen ui_list ui_chrome ui_key ui_input ui_editor ui_doc ui_grid ui_cells ui_theme ui_settings json_lite ae_chunk ae_field_shape ae_transport_amiga ae_session_bbs ae_net ae_http ae_achieve ae_request ae_chat ae_msgbase ae_dos ae_dos_amiga ae_userfield ae_board_screen ae_menu ui_pages menudoor
 AMIGA_OBJS = $(patsubst %,build/amiga/%.o,$(MODULES))
+# 68000 assembly hot paths (src/*.s): Amiga library only; the C in the matching src/*.c is the
+# reference every other port builds.
+AMIGA_ASM  = ui_cells_68k
+AMIGA_OBJS += $(patsubst %,build/amiga/%.o,$(AMIGA_ASM))
+VASM ?= vasmm68k_mot
 
 .PHONY: door-sources-compile all test amiga lib measure settings clean
 
@@ -318,6 +323,10 @@ AMIGA_HEADERS = $(wildcard include/*.h)
 build/amiga/%.o: src/%.c $(AMIGA_HEADERS)
 	@mkdir -p build/amiga
 	$(VC) $(AMIGA_CFLAGS) -c $< -o $@
+
+build/amiga/%.o: src/%.s
+	@mkdir -p build/amiga
+	$(VASM) -quiet -Fhunk -m68000 -o $@ $<
 
 # ae_net's bsdsocket branch needs the Roadshow netinclude headers and one
 # NDK header the gcc sys-include lacks. They come from the vendored NDK
