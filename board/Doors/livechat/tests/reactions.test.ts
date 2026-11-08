@@ -124,47 +124,41 @@ export async function storedReactionCountsShowOnTheirOwnRowUnderTheMessage(): Pr
     const old = logLines().find(l => l.includes('old news')) ?? '';
     assert.ok(!old.includes('3'.concat(']')) && !old.includes('<3'), `the message line itself has no counts: "${old}"`);
     const row = rowsAfter('old news')[0] ?? '';
-    // Glyph for this caller (unicodeCapable is true in this door): real emoji, then the count.
-    assert.ok(/^\s{10,}\S+ 3\s*$/.test(row) && row.includes(reactionGlyph('heart')), `reaction row under old news, indented: "${row}"`);
+    // Text smileys even for a UTF-8 web caller (unicodeCapable is true in this door), never emoji.
+    assert.ok(/^\s{10,}<3 3\s*$/.test(row), `reaction row under old news, indented, text face: "${row}"`);
     assert.ok(!(rowsAfter('nobody cared')[0] ?? '').includes(' 1'), 'a message without reactions has no row');
     assert.ok(logLines().findIndex(l => l.includes('nobody cared')) === logLines().findIndex(l => l.includes('old news')) + 2, 'the next message follows the reaction row');
 
     fire('chat:reaction', { messageId: 78, username: 'spot', emoji: '+1', action: 'add', counts: { '+1': 1 } });
     await settle();
     const live = rowsAfter('nobody cared')[0] ?? '';
-    assert.ok(live.includes(reactionGlyph('+1')) && /1\s*$/.test(live), `live reaction paints a row: "${live}"`);
+    assert.ok(/^\s+:\) 1\s*$/.test(live), `live reaction paints a text-face row: "${live}"`);
   } finally {
     clearReactionCounts();
     fire('disconnect', 'transport close');
   }
 }
 
-/** Glyphs: ASCII faces for byte callers, real emoji (2 columns each) for UTF-8 callers. */
-export async function glyphsFollowTheCallersCharset(): Promise<void> {
-  const ascii = ['+1', '-1', 'heart', 'fire', 'laugh', 'wow', 'sad', 'angry'].map(n => reactionGlyph(n, false));
-  assert.deepStrictEqual(ascii, [':)', ':/', '<3', '*', ':D', ':O', ':(', '>(']);
-  assert.strictEqual(reactionGlyph('+1', true), '\u{1F44D}');
-  assert.strictEqual(reactionGlyph('heart', true), '\u2764\uFE0F');
-  assert.strictEqual(reactionGlyph('mystery', true), 'mystery', 'an unknown name shows as the name');
-  assert.strictEqual(reactionPickerLabel(0, false), ':)  Thumbs Up');
-  assert.strictEqual(reactionPickerLabel(3, false), '*   Fire');
-  assert.strictEqual(reactionPickerLabel(7, false), '>(  Angry');
+/** Glyphs: text faces for every caller. */
+export async function glyphsAreTextFaces(): Promise<void> {
+  const faces = ['+1', '-1', 'heart', 'fire', 'laugh', 'wow', 'sad', 'angry'].map(n => reactionGlyph(n));
+  assert.deepStrictEqual(faces, [':)', ':/', '<3', '*', ':D', ':O', ':(', '>(']);
+  assert.strictEqual(reactionGlyph('mystery'), 'mystery', 'an unknown name shows as the name');
+  assert.strictEqual(reactionPickerLabel(0), ':)  Thumbs Up');
+  assert.strictEqual(reactionPickerLabel(3), '*   Fire');
+  assert.strictEqual(reactionPickerLabel(7), '>(  Angry');
 }
 
 /** Row layout and wrap: indent, two-space gaps, new row at the same indent, emoji count as 2 columns. */
 export async function reactionRowsIndentAndWrap(): Promise<void> {
-  assert.deepStrictEqual(reactionRowTexts({}, 8, 40, false), [], 'no row when nothing has a count');
-  assert.deepStrictEqual(reactionRowTexts({ heart: 0 }, 8, 40, false), [], 'a zero count is no reaction');
-  assert.deepStrictEqual(reactionRowTexts({ heart: 2, fire: 1 }, 8, 40, false), ['        <3 2  * 1']);
+  assert.deepStrictEqual(reactionRowTexts({}, 8, 40), [], 'no row when nothing has a count');
+  assert.deepStrictEqual(reactionRowTexts({ heart: 0 }, 8, 40), [], 'a zero count is no reaction');
+  assert.deepStrictEqual(reactionRowTexts({ heart: 2, fire: 1 }, 8, 40), ['        <3 2  * 1']);
   // Width 20, indent 8: "<3 2" ends at col 12, "  * 1" at 17, "  :D 10" would pass 20 -> new row at the same indent.
-  assert.deepStrictEqual(reactionRowTexts({ heart: 2, fire: 1, laugh: 10 }, 8, 20, false),
+  assert.deepStrictEqual(reactionRowTexts({ heart: 2, fire: 1, laugh: 10 }, 8, 20),
     ['        <3 2  * 1', '        :D 10']);
   // Indent is capped at half the width.
-  assert.deepStrictEqual(reactionRowTexts({ heart: 1 }, 30, 20, false), ['          <3 1']);
-  // Emoji are 2 columns: indent 4, three items of 4 columns each -> 4+4, +2+4 = 14, third at 20 > 18 wraps.
-  const rows = reactionRowTexts({ '+1': 1, fire: 2, laugh: 3 }, 4, 18, true);
-  assert.strictEqual(rows.length, 2, JSON.stringify(rows));
-  assert.ok(rows[1].startsWith('    ') && rows[1].includes('\u{1F602} 3'));
+  assert.deepStrictEqual(reactionRowTexts({ heart: 1 }, 30, 20), ['          <3 1']);
   // Indent comes off the painted first row: "[time] <nick> ".
   assert.strictEqual(textIndent('{x-fg}[12:30:45]{/x-fg} <{c-fg}bob{/c-fg}> hello'), 17);
 }
@@ -175,7 +169,7 @@ export async function reactionRowsAreCountedInTheDisplayList(): Promise<void> {
   seedReactionCounts([{ id: 5, reactions: { heart: 1 } }]);
   try {
     const raw = ['[t] <bob> one', '   two', '[t] <amy> three'];
-    const d = withReactionRows(raw, raw, ['5', '5', '6'], 40, 'cyan', false);
+    const d = withReactionRows(raw, raw, ['5', '5', '6'], 40, 'cyan');
     assert.strictEqual(d.raw.length, 4);
     assert.deepStrictEqual(d.ids, ['5', '5', '5', '6'], 'the reaction row carries its message id (click target)');
     assert.deepStrictEqual(d.at, [0, 1, 3], 'the row after it moves down by one');

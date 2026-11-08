@@ -157,8 +157,6 @@ async function createApp(session) {
     // the switch below gives it to them, and Alt+Enter takes it back.
     // :code: renders as web emoji for a browser caller, ASCII for telnet/SSH.
     (0, emojis_1.setEmojiRenderMode)((0, voice_availability_1.voiceAvailable)(session.bbs));
-    // Reactions show real emoji only for a caller whose wire is UTF-8 (BBSApi.unicodeCapable).
-    (0, reaction_rows_1.setReactionGlyphMode)(session.bbs?.unicodeCapable === true);
     const chatOnly = session.bbsSession?.tempData?.chatOnly;
     let terminalMode = null;
     // Disable modem emulation for TUI apps - they need instant feedback

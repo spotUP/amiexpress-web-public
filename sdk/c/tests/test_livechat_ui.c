@@ -130,15 +130,7 @@ static int react_rows_under_the_message(void)
     if (strcmp(out, "\n             <3 2  * 1") != 0) { printf("react rows: '%s'\n", out); fail = 1; }
     lc_react_rows(&l, 4, 10, out, sizeof out);                      /* "<3 2" fits, "  * 1" would pass 10 */
     if (strcmp(out, "\n    <3 2\n    * 1") != 0) { printf("react wrap: '%s'\n", out); fail = 1; }
-    lc_react_emoji(1);                                              /* UTF-8 caller: marker + id, two columns */
-    lc_react_rows(&l, 4, 0, out, sizeof out);
-    if (strcmp(out, "\n    \005\003 2  \005\004 1") != 0) { printf("react emoji rows: '%s'\n", out); fail = 1; }
-    lc_react_rows(&l, 4, 9, out, sizeof out);                       /* "H 2" 4 cols + "  F 1" would pass 9 */
-    if (strcmp(out, "\n    \005\003 2\n    \005\004 1") != 0) { printf("react emoji wrap: '%s'\n", out); fail = 1; }
-    if (strcmp(lc_react_utf8[2], "\342\235\244\357\270\217") != 0 || strcmp(lc_react_label(2), "<3  Heart") != 0) {
-        printf("react emoji: heart bytes or label\n"); fail = 1;
-    }
-    lc_react_emoji(0);
+    if (strcmp(lc_react_label(2), "<3  Heart") != 0) { printf("react label: '%s'\n", lc_react_label(2)); fail = 1; }
     l.react[0].count = 0; l.react[1].count = 0;
     lc_react_rows(&l, 4, 80, out, sizeof out);
     if (out[0] != '\0') { printf("react rows, zero counts: '%s'\n", out); fail = 1; }

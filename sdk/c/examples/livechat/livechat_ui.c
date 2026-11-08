@@ -161,16 +161,6 @@ static const char *const react_glyphs[LC_REACT_KINDS] = { ":)", ":/", "<3", "*",
 static const char *const react_words[LC_REACT_KINDS] = { "Thumbs Up", "Thumbs Down", "Heart", "Fire",
                                                           "Laugh", "Wow", "Sad", "Angry" };
 
-/* The UTF-8 glyphs, the TS door's EMOJI_UTF8 byte for byte (heart with its U+FE0F). Two columns each. */
-const char *const lc_react_utf8[LC_REACT_KINDS] = {
-    "\360\237\221\215", "\360\237\221\216", "\342\235\244\357\270\217", "\360\237\224\245",
-    "\360\237\230\202", "\360\237\230\256", "\360\237\230\242", "\360\237\230\240"
-};
-static int react_emoji;
-
-void lc_react_emoji(int on) { react_emoji = on != 0; }
-int lc_react_emoji_on(void) { return react_emoji; }
-
 const char *lc_react_display(const char *emoji)
 {
     int i;
@@ -194,19 +184,11 @@ void lc_react_rows(const lc_line *l, int indent, int width, char *out, int cap)
     if (indent < 0) indent = 0;
     if (width > 0 && indent > width / 2) indent = width / 2;     /* a long nick: keep room for the counts */
     for (i = 0; i < l->nreact; i++) {
-        int len, gap, need;
-        int k, cols;
+        int len, gap, need, cols;
         if (l->react[i].count <= 0) continue;
-        for (k = 0; k < LC_REACT_KINDS && strcmp(lc_react_names[k], l->react[i].emoji) != 0; k++) {}
-        if (react_emoji && k < LC_REACT_KINDS) {                 /* a two-column glyph: UI_CELLS_M_WIDE + id */
-            sprintf(one, "%c%c %d", UI_CELLS_M_WIDE, k + 1, l->react[i].count);
-            len = (int)strlen(one);
-            cols = len;                                          /* marker + id bytes = the glyph's two columns */
-        } else {
-            sprintf(one, "%.12s %d", lc_react_display(l->react[i].emoji), l->react[i].count);
-            len = (int)strlen(one);
-            cols = len;
-        }
+        sprintf(one, "%.12s %d", lc_react_display(l->react[i].emoji), l->react[i].count);
+        len = (int)strlen(one);
+        cols = len;
         gap = any && !(width > 0 && col + 2 + cols > width) ? 2 : 0;
         need = gap == 0 ? 1 + indent + len : gap + len;          /* a new row: "\n" and the indent */
         if (n + need + 1 > cap) break;
@@ -395,8 +377,8 @@ static void draw_chat(ui_cells *c, const lc_model *m, int top, int h, int left, 
     static char marked[LC_TEXT_MAX * 2 + 96];
     static int line_rows[LC_LINES];                 /* pass 1's wrapped row count per line */
     static unsigned long cache_gen;                 /* what line_rows was computed for: the model's lines_gen ... */
-    static int cache_n = -1, cache_width, cache_stamps, cache_emoji;   /* ... and the inputs that change a wrap */
-    int stamps = m->timestamps && !m->compact, emoji = lc_react_emoji_on(), used = 0;
+    static int cache_n = -1, cache_width, cache_stamps;   /* ... and the inputs that change a wrap */
+    int stamps = m->timestamps && !m->compact, used = 0;
     int starts[WRAP_MAX], ends[WRAP_MAX];
     int rows = h - 3, width = w - 4, total = 0, first, at = 0, i, k, n, body;
     int picked = lc_pick_index(m), pick_at = 0;
@@ -418,12 +400,12 @@ static void draw_chat(ui_cells *c, const lc_model *m, int top, int h, int left, 
     ui_hit_add(&lc_hits, LC_HIT_CHAT, body, left + 1, rows, w - 2);
     for (k = 0; k < CHAT_ROWS_MAX; k++) chat_row_line[k] = -1;
 
-    if (cache_gen != m->lines_gen || cache_n != m->nlines || cache_width != width || cache_stamps != stamps || cache_emoji != emoji) {
+    if (cache_gen != m->lines_gen || cache_n != m->nlines || cache_width != width || cache_stamps != stamps) {
         for (i = 0; i < m->nlines; i++) {           /* pass 1: only when a line, the width or the stamps changed */
             lc_line_marked(&m->lines[i], marked, (int)sizeof marked, stamps, width);
             line_rows[i] = ui_cells_wrap(marked, width, starts, ends, WRAP_MAX);
         }
-        cache_gen = m->lines_gen; cache_n = m->nlines; cache_width = width; cache_stamps = stamps; cache_emoji = emoji;
+        cache_gen = m->lines_gen; cache_n = m->nlines; cache_width = width; cache_stamps = stamps;
         lc_chat_rewraps++;
     }
     for (i = 0; i < m->nlines; i++) {

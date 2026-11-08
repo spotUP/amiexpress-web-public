@@ -142,21 +142,12 @@ int lc_nick_color(const char *nick);
 extern const char *const lc_react_names[LC_REACT_KINDS];
 /** A reaction's ASCII glyph, at most three columns (sysop 2026-11-08: one short face, not "[+]"):
  *  "+1" ":)", "-1" ":/", heart "<3", fire "*", laugh ":D", wow ":O", sad ":(", angry ">(".
- *  An unknown name is shown as itself. A latin1 / Amiga caller sees these everywhere; a UTF-8
- *  caller sees them in the picker and the "Reactions on" line. */
+ *  An unknown name is shown as itself. Every caller sees these text faces, never emoji. */
 const char *lc_react_display(const char *emoji);
-/** The UTF-8 emoji for reaction i, the TS door's EMOJI_UTF8 bytes: the ui_cells wide-glyph table
- *  (UI_CELLS_M_WIDE id i+1) a UTF-8 caller's canvas registers. */
-extern const char *const lc_react_utf8[LC_REACT_KINDS];
-/** Emoji mode: on when the board answered AEW_CHARSET "utf-8" (the TS door's unicodeCapable test)
- *  and the door declared UTF-8 output. lc_react_rows then writes known reactions as two-column
- *  emoji; off (the default) it writes the ASCII glyphs. */
-void lc_react_emoji(int on);
-int lc_react_emoji_on(void);
 /** The picker label for reaction i (0..LC_REACT_KINDS-1): its glyph, then its name in words, ":)  Thumbs Up". */
 const char *lc_react_label(int i);
 /** The reaction row(s) under a message: "\n", `indent` spaces, then "glyph count" items two spaces
- *  apart (in emoji mode a known glyph is UI_CELLS_M_WIDE + id, two columns); an item that would pass `width` columns (<= 0: no limit) starts a further row at the same
+ *  apart; an item that would pass `width` columns (<= 0: no limit) starts a further row at the same
  *  indent. "" when the line has no counts. */
 void lc_react_rows(const lc_line *l, int indent, int width, char *out, int cap);
 /** The line as marked text (ui_cells markers) in the TS formats; a message's reactions follow on

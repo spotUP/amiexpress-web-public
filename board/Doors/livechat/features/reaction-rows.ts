@@ -6,31 +6,23 @@
  * `glyph count` items two spaces apart, wrapping at the log width, indented to
  * the message text, capped at half the width, no row when nothing has a count.
  *
- * The glyph is real emoji for a caller whose wire is UTF-8
- * (bbs.unicodeCapable, set once on open) and the ASCII face otherwise.
+ * Every glyph is a text face for every caller: the sysop wants text smileys,
+ * never graphical emoji ("the smileys in the chat got graphical, they should
+ * be text smileys", 2026-11-08).
  */
-import { EMOJI_DISPLAY, EMOJI_UTF8, REACTION_EMOJIS, REACTION_WORDS } from '../types/reaction.types';
+import { EMOJI_DISPLAY, REACTION_EMOJIS, REACTION_WORDS } from '../types/reaction.types';
 import { getReactionCounts } from './reaction-store';
 
-let utf8Caller = false;
-
-export function setReactionGlyphMode(unicodeCapable: boolean): void { utf8Caller = unicodeCapable; }
-
 /** The glyph for a reaction name; an unknown name shows as itself. */
-export function reactionGlyph(name: string, utf8: boolean = utf8Caller): string {
-  return (utf8 ? EMOJI_UTF8[name] : undefined) ?? EMOJI_DISPLAY[name] ?? name;
-}
-
-/** Terminal columns of a glyph: every emoji is 2, an ASCII face is its length. */
-export function glyphWidth(glyph: string): number {
-  return Object.values(EMOJI_UTF8).includes(glyph) ? 2 : glyph.length;
+export function reactionGlyph(name: string): string {
+  return EMOJI_DISPLAY[name] ?? name;
 }
 
 /** Picker line: glyph padded to 3, a space, the word (`:)  Thumbs Up`). */
-export function reactionPickerLabel(i: number, utf8: boolean = utf8Caller): string {
+export function reactionPickerLabel(i: number): string {
   const name = REACTION_EMOJIS[i];
-  const g = reactionGlyph(name, utf8);
-  return g + ' '.repeat(Math.max(0, 3 - glyphWidth(g))) + ' ' + REACTION_WORDS[i];
+  const g = reactionGlyph(name);
+  return g + ' '.repeat(Math.max(0, 3 - g.length)) + ' ' + REACTION_WORDS[i];
 }
 
 /**
@@ -40,8 +32,7 @@ export function reactionPickerLabel(i: number, utf8: boolean = utf8Caller): stri
 export function reactionRowTexts(
   counts: Readonly<Record<string, number>>,
   indent: number,
-  width: number,
-  utf8: boolean = utf8Caller
+  width: number
 ): string[] {
   const pad = Math.max(0, Math.min(indent, Math.floor(width / 2)));
   const rows: string[] = [];
@@ -49,9 +40,9 @@ export function reactionRowTexts(
   let col = 0;
   for (const [name, n] of Object.entries(counts)) {
     if (!(n > 0)) continue;
-    const glyph = reactionGlyph(name, utf8);
+    const glyph = reactionGlyph(name);
     const item = `${glyph} ${n}`;
-    const len = glyphWidth(glyph) + 1 + String(n).length;
+    const len = glyph.length + 1 + String(n).length;
     if (row !== '' && col + 2 + len <= width) {
       row += '  ' + item;
       col += 2 + len;
@@ -91,8 +82,7 @@ export function withReactionRows(
   rendered: readonly string[],
   ids: readonly (string | null)[],
   width: number,
-  accent: string,
-  utf8: boolean = utf8Caller
+  accent: string
 ): DisplayRows {
   const out: DisplayRows = { raw: [], rendered: [], ids: [], at: [] };
   let first = 0;
@@ -104,7 +94,7 @@ export function withReactionRows(
     const id = ids[i];
     if (id == null) { first = i + 1; continue; }
     if (ids[i + 1] === id) continue;
-    for (const r of reactionRowTexts(getReactionCounts(id), textIndent(raw[first]), width, utf8)) {
+    for (const r of reactionRowTexts(getReactionCounts(id), textIndent(raw[first]), width)) {
       const tagged = `{${accent}-fg}${r}{/${accent}-fg}`;
       out.raw.push(tagged);
       out.rendered.push(tagged);

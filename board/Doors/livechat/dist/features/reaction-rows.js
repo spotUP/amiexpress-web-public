@@ -1,8 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.setReactionGlyphMode = setReactionGlyphMode;
 exports.reactionGlyph = reactionGlyph;
-exports.glyphWidth = glyphWidth;
 exports.reactionPickerLabel = reactionPickerLabel;
 exports.reactionRowTexts = reactionRowTexts;
 exports.textIndent = textIndent;
@@ -16,32 +14,27 @@ exports.formatReactionCounts = formatReactionCounts;
  * `glyph count` items two spaces apart, wrapping at the log width, indented to
  * the message text, capped at half the width, no row when nothing has a count.
  *
- * The glyph is real emoji for a caller whose wire is UTF-8
- * (bbs.unicodeCapable, set once on open) and the ASCII face otherwise.
+ * Every glyph is a text face for every caller: the sysop wants text smileys,
+ * never graphical emoji ("the smileys in the chat got graphical, they should
+ * be text smileys", 2026-11-08).
  */
 const reaction_types_1 = require("../types/reaction.types");
 const reaction_store_1 = require("./reaction-store");
-let utf8Caller = false;
-function setReactionGlyphMode(unicodeCapable) { utf8Caller = unicodeCapable; }
 /** The glyph for a reaction name; an unknown name shows as itself. */
-function reactionGlyph(name, utf8 = utf8Caller) {
-    return (utf8 ? reaction_types_1.EMOJI_UTF8[name] : undefined) ?? reaction_types_1.EMOJI_DISPLAY[name] ?? name;
-}
-/** Terminal columns of a glyph: every emoji is 2, an ASCII face is its length. */
-function glyphWidth(glyph) {
-    return Object.values(reaction_types_1.EMOJI_UTF8).includes(glyph) ? 2 : glyph.length;
+function reactionGlyph(name) {
+    return reaction_types_1.EMOJI_DISPLAY[name] ?? name;
 }
 /** Picker line: glyph padded to 3, a space, the word (`:)  Thumbs Up`). */
-function reactionPickerLabel(i, utf8 = utf8Caller) {
+function reactionPickerLabel(i) {
     const name = reaction_types_1.REACTION_EMOJIS[i];
-    const g = reactionGlyph(name, utf8);
-    return g + ' '.repeat(Math.max(0, 3 - glyphWidth(g))) + ' ' + reaction_types_1.REACTION_WORDS[i];
+    const g = reactionGlyph(name);
+    return g + ' '.repeat(Math.max(0, 3 - g.length)) + ' ' + reaction_types_1.REACTION_WORDS[i];
 }
 /**
  * The rows for one message: [] when no reaction has a count, else one string
  * per row, each already indented. Rows are plain text (no colour tags).
  */
-function reactionRowTexts(counts, indent, width, utf8 = utf8Caller) {
+function reactionRowTexts(counts, indent, width) {
     const pad = Math.max(0, Math.min(indent, Math.floor(width / 2)));
     const rows = [];
     let row = '';
@@ -49,9 +42,9 @@ function reactionRowTexts(counts, indent, width, utf8 = utf8Caller) {
     for (const [name, n] of Object.entries(counts)) {
         if (!(n > 0))
             continue;
-        const glyph = reactionGlyph(name, utf8);
+        const glyph = reactionGlyph(name);
         const item = `${glyph} ${n}`;
-        const len = glyphWidth(glyph) + 1 + String(n).length;
+        const len = glyph.length + 1 + String(n).length;
         if (row !== '' && col + 2 + len <= width) {
             row += '  ' + item;
             col += 2 + len;
@@ -79,7 +72,7 @@ function textIndent(firstRow) {
  * names its message, and every consumer that counts rows (scroll, the message
  * picker, right-click) reads this one list.
  */
-function withReactionRows(raw, rendered, ids, width, accent, utf8 = utf8Caller) {
+function withReactionRows(raw, rendered, ids, width, accent) {
     const out = { raw: [], rendered: [], ids: [], at: [] };
     let first = 0;
     for (let i = 0; i < raw.length; i++) {
@@ -94,7 +87,7 @@ function withReactionRows(raw, rendered, ids, width, accent, utf8 = utf8Caller) 
         }
         if (ids[i + 1] === id)
             continue;
-        for (const r of reactionRowTexts((0, reaction_store_1.getReactionCounts)(id), textIndent(raw[first]), width, utf8)) {
+        for (const r of reactionRowTexts((0, reaction_store_1.getReactionCounts)(id), textIndent(raw[first]), width)) {
             const tagged = `{${accent}-fg}${r}{/${accent}-fg}`;
             out.raw.push(tagged);
             out.rendered.push(tagged);

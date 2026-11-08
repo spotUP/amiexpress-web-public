@@ -51,7 +51,7 @@ import { addMessage, setChannel, setDmContext, clearDmContext, AppState, channel
 import { executeCommand } from './core/command-exec';
 import { getUserColor, formatMessage, formatSystemMessage } from './core/formatter';
 import { seedReactionCounts } from './features/reaction-store';
-import { setReactionGlyphMode, withReactionRows } from './features/reaction-rows';
+import { withReactionRows } from './features/reaction-rows';
 import { shouldShowEvent } from './core/socket-typing';
 import { prefsSender } from './core/prefs-sync';
 import { initializeLiveChat } from './core/initialization';
@@ -182,8 +182,6 @@ export async function createApp(session: DoorSession) {
   // the switch below gives it to them, and Alt+Enter takes it back.
   // :code: renders as web emoji for a browser caller, ASCII for telnet/SSH.
   setEmojiRenderMode(voiceAvailable(session.bbs));
-  // Reactions show real emoji only for a caller whose wire is UTF-8 (BBSApi.unicodeCapable).
-  setReactionGlyphMode((session.bbs as any)?.unicodeCapable === true);
   const chatOnly = session.bbsSession?.tempData?.chatOnly;
   let terminalMode: TerminalModeSwitch | null = null;
 

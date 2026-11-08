@@ -1798,13 +1798,6 @@ int main(int argc, char **argv)
         ae_shutdown();
         return 20;
     }
-    {   /* A UTF-8 caller gets emoji reactions (the TS door's unicodeCapable test, via AEW_CHARSET);
-           everyone else, and a classic board, the ASCII faces. */
-        char charset[16];
-        ae_wire_charset(&session, charset, (int)sizeof charset);
-        lc_react_emoji(strcmp(charset, "utf-8") == 0 && ae_set_output_charset(&session, "utf-8"));
-        if (lc_react_emoji_on()) ui_cells_wide_table(&cells, lc_react_utf8, LC_REACT_KINDS);
-    }
     lc_model_init(&M, screen.cols, screen.rows);
     copy(M.handle, sizeof M.handle, handle);
     M.node = node;
