@@ -115,6 +115,12 @@ int ae_chat_poll(ae_chat *c, int wait);
 /** POST /messages/:id/react. `count` (may be NULL) gets the new count. */
 int ae_chat_react(ae_chat *c, const char *msg_id, const char *emoji, int *count);
 
+/** DELETE /messages/:id/react/:emoji: takes the caller's reaction back. `count` (may be NULL) gets the new count. */
+int ae_chat_unreact(ae_chat *c, const char *msg_id, const char *emoji, int *count);
+
+/** GET /messages/:id/reactions.txt. Rows: emoji, count, mine (1 when the caller reacted with it). */
+int ae_chat_reactions(ae_chat *c, const char *msg_id);
+
 /** POST /messages/:id/thread. */
 int ae_chat_thread(ae_chat *c, const char *msg_id, const char *text);
 

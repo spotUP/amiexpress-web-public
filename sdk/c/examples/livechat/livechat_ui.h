@@ -30,7 +30,19 @@
 #define LC_LINES     80
 #define LC_TEXT_MAX  240
 
-enum { LC_SYSTEM, LC_ACTIVITY_LINE, LC_HISTORY, LC_LIVE };
+/* LC_NOTE: a line of the door's own in the accent colour, no time (TS addChatMessage(text, false)
+   with an accent tag, e.g. "[bob reacted heart]"). */
+enum { LC_SYSTEM, LC_ACTIVITY_LINE, LC_HISTORY, LC_LIVE, LC_NOTE };
+
+/* A message's reaction counts, one per emoji, in the server's order (first reacted first). The
+   TS door keeps the same per-message map (features/reaction-store.ts) and paints it after the
+   message as " [<3 2] [[+] 1]" in the accent colour. */
+#define LC_REACT_MAX 8
+typedef struct {
+    char emoji[12];        /* the server's name: "+1", "heart", ... */
+    int count;
+    int mine;              /* the caller is one of the count */
+} lc_react;
 
 typedef struct {
     int kind;
@@ -40,6 +52,8 @@ typedef struct {
     char time[6];          /* "hh:mm" */
     char nick[24];
     char text[LC_TEXT_MAX];
+    lc_react react[LC_REACT_MAX];
+    int nreact;
 } lc_line;
 
 enum { LC_SIDE_HEAD, LC_SIDE_ROOM, LC_SIDE_USER, LC_SIDE_DM, LC_SIDE_BLANK };
@@ -105,6 +119,10 @@ void lc_model_init(lc_model *m, int cols, int rows);
 int lc_sidebar_width(const lc_model *m);
 int lc_text_rows(const lc_model *m);
 int lc_nick_color(const char *nick);
+/** How the TS door shows a reaction emoji (types/reaction.types.ts EMOJI_DISPLAY): "+1" is "[+]", heart "<3", ... */
+const char *lc_react_display(const char *emoji);
+/** The TS formatReactionCounts suffix, " [<3 2] [[+] 1]", or "" when the line has none. */
+void lc_react_suffix(const lc_line *l, char *out, int cap);
 /** The line as marked text (ui_cells markers) in the TS formats. */
 void lc_line_marked(const lc_line *l, char *out, int cap);
 /** Paints the whole frame into c's back buffer; `cursor_row`/`cursor_col` get where the caret goes. */

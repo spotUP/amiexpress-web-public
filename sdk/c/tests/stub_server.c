@@ -450,6 +450,12 @@ static void chat_serve(int fd, stub_chat_stats *st, int *state)
     } else if (st->expire_next && !(is_post && strncmp(path, "/chat/v1/sessions", 17) == 0)) {
         st->expire_next = 0;
         chat_reply(fd, 401, "application/json", "{\"error\":\"session_expired\",\"detail\":\"gone\"}");
+    } else if (strcmp(method, "DELETE") == 0 && strncmp(path, "/chat/v1/messages/", 18) == 0) {
+        int n = 0;
+        while (path[18 + n] && path[18 + n] != '/' && n < (int)sizeof st->last_react_msg - 1) { st->last_react_msg[n] = path[18 + n]; n++; }
+        st->last_react_msg[n] = '\0';
+        st->unreacts++;
+        chat_reply(fd, 200, "application/json", "{\"count\":0}");
     } else if (strcmp(method, "DELETE") == 0) {
         st->session_closes++;
         chat_reply(fd, 204, "text/plain", "");
@@ -487,6 +493,12 @@ static void chat_serve(int fd, stub_chat_stats *st, int *state)
     } else if (is_post && strstr(path, "/react") != 0) {
         st->reacts++;
         chat_copy_json_field(st->last_react, sizeof st->last_react, body, "emoji");
+        if (strncmp(path, "/chat/v1/messages/", 18) == 0) {
+            int n = 0;
+            while (path[18 + n] && path[18 + n] != '/' && n < (int)sizeof st->last_react_msg - 1) { st->last_react_msg[n] = path[18 + n]; n++; }
+            st->last_react_msg[n] = '\0';
+        }
+        st->react_pending = 1;
         chat_reply(fd, 200, "application/json", "{\"count\":2}");
     } else if (is_post && strstr(path, "/thread") != 0) {
         st->threads++;
@@ -504,6 +516,9 @@ static void chat_serve(int fd, stub_chat_stats *st, int *state)
     } else if (is_get && strstr(path, "/chat/v1/who.txt") != 0) {
         st->whos++;
         chat_reply(fd, 200, "text/plain", "WHO|1|9|2\r\nalice|lobby|0|9|12\r\nbob|lobby|1|0|3\r\n");
+    } else if (is_get && strncmp(path, "/chat/v1/messages/", 18) == 0 && strstr(path, "/reactions.txt") != 0) {
+        st->reaction_lists++;
+        chat_reply(fd, 200, "text/plain", "REACTIONS|1|9|1\r\n+1|1|1\r\n");
     } else if (is_get && strstr(path, "/chat/v1/events.txt") != 0) {
         st->events++;
         {
@@ -519,7 +534,16 @@ static void chat_serve(int fd, stub_chat_stats *st, int *state)
                 sprintf(body_rows + strlen(body_rows), "8|message|lobby|Tester|m3|1700000300|0|%s\n", st->last_message);
                 rows++;
             }
-            sprintf(text, "EVENTS|1|%d|%d\n%s", rows > 0 ? 8 : 7, rows, body_rows);
+            {
+            int last = rows > 0 ? 8 : 7;
+            if (st->react_pending) {
+                st->react_pending = 0;
+                sprintf(body_rows + strlen(body_rows), "9|react|lobby|Tester|%s|1700000400|0|%s\n", st->last_react_msg, st->last_react);
+                rows++;
+                last = 9;
+            }
+            sprintf(text, "EVENTS|1|%d|%d\n%s", last, rows, body_rows);
+            }
         }
         chat_reply(fd, 200, "text/plain", text);
     } else {

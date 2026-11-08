@@ -77,15 +77,19 @@ int stub_server_start_sequence(const unsigned char * const *responses,
  * Canned world: rooms "lobby" (public) and "secret" (private); lobby history
  * is two messages by alice and bob; the FIRST events poll delivers a message
  * from carol; a posted message is echoed to the next events poll, the way
- * the real server's event log would. */
+ * the real server's event log would; so is a reaction (a react row, then
+ * reactions.txt answers +1 x1 mine). */
 typedef struct {
     volatile int sessions, session_closes, rooms_listed, rooms_created, joins, leaves;
     volatile int histories, messages, reacts, threads, dms, dm_lists, whos, events;
+    volatile int unreacts, reaction_lists;     /* DELETE /messages/:id/react/:emoji, GET reactions.txt */
+    volatile int react_pending;            /* a react was posted; the next events poll carries it */
     volatile int bad_auth;                 /* requests that lacked "Authorization: Board " */
     volatile int bad_session;              /* post-open requests lacking X-Chat-Session */
     volatile int expire_next;              /* test sets: next authenticated call answers session_expired once */
     char last_message[512];                /* content of the latest POST /messages */
     char last_react[64];
+    char last_react_msg[24];               /* message id of the latest react or unreact */
     char last_dm_peer[64];
     char last_dm_text[512];
     char last_created[64];

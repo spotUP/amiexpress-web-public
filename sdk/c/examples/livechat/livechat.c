@@ -16,8 +16,9 @@
  * NEVER typed, so nobody speaks as somebody else.
  *
  * HOW IT STAYS LIVE. There is no thread and no timer on a 68K door. The idle
- * hook of ui_key_read runs while no key is waiting: it sleeps a quarter of a
- * second, and every POLL_STEPS steps asks /events.txt with wait=0. A send is
+ * hook of ui_key_read runs while no key is waiting: it sleeps half a second,
+ * and every POLL_STEPS sleeps asks /events.txt with wait=0. Keys and mouse
+ * wakes do not reset that count, so moving the mouse never starves the poll. A send is
  * followed by one poll at once, and that poll is the only way the caller's
  * own line reaches the pane, so there is one display path, deduplicated by
  * message id.
@@ -364,17 +365,22 @@ static void side_user(const char *user, int add)
     }
 }
 
-/** A reaction shows as " [+n]" after the text, as the old door did; the count is the server's events. */
-static void add_react(lc_line *l)
+/** Replaces a message's reaction counts with the server's (reactions.txt rows emoji|count|mine): the
+ *  TS door gets the full counts with every chat:reaction and keeps them per message the same way. */
+static void load_reactions(const char *id)
 {
-    int n = 0, len = (int)strlen(l->text);
-    char *p = strrchr(l->text, '[');
-    if (p != 0 && p > l->text && p[-1] == ' ' && p[1] == '+' && l->text[len - 1] == ']') {
-        n = atoi(p + 2);
-        p[-1] = '\0';
+    char *f[AE_CHAT_ROW_FIELDS];
+    lc_line *l = line_by_id(id);
+    if (l == 0 || ae_chat_reactions(&chat, id) != AE_CHAT_OK) return;
+    l->nreact = 0;
+    while (ae_chat_next_row(&chat, f, AE_CHAT_ROW_FIELDS) >= 3) {
+        lc_react *r;
+        if (atoi(f[1]) <= 0 || l->nreact == LC_REACT_MAX) continue;
+        r = &l->react[l->nreact++];
+        clean(r->emoji, sizeof r->emoji, f[0]);
+        r->count = atoi(f[1]);
+        r->mine = atoi(f[2]) != 0;
     }
-    len = (int)strlen(l->text);
-    if (len < LC_TEXT_MAX - 12) sprintf(l->text + len, " [+%d]", n + 1);
 }
 
 /** Applies the rows of an events poll (seq|type|room|user|ref|at|color|text). */
@@ -382,6 +388,8 @@ static void take_events(void)
 {
     char *f[AE_CHAT_ROW_FIELDS];
     char line[LC_TEXT_MAX];
+    char reacted[8][24];       /* messages whose counts changed; fetched after the rows, which share the reply buffer */
+    int nreacted = 0, i;
     while (ae_chat_next_row(&chat, f, AE_CHAT_ROW_FIELDS) >= AE_CHAT_ROW_FIELDS) {
         long seq = atol(f[0]);
         const char *type = f[1], *room = f[2], *user = f[3], *ref = f[4];
@@ -397,9 +405,14 @@ static void take_events(void)
                 sprintf(line, "New direct message from %.24s", user);
                 system_line(line);
             }
-        } else if (strcmp(type, "react") == 0 && in_room) {
-            lc_line *l = line_by_id(ref);
-            if (l != 0) add_react(l);
+        } else if ((strcmp(type, "react") == 0 || strcmp(type, "unreact") == 0) && in_room) {
+            /* TS chat-socket-handlers chat:reaction: an accent chat line and an activity line */
+            sprintf(line, "[%.24s %s %.12s]", user, type[0] == 'u' ? "removed" : "reacted", f[7]);
+            add_note(LC_NOTE, line);
+            sprintf(line, "%.24s: %.12s", user, f[7]);
+            add_note(LC_ACTIVITY_LINE, line);
+            for (i = 0; i < nreacted && strcmp(reacted[i], ref) != 0; i++) {}
+            if (i == nreacted && nreacted < 8 && line_by_id(ref) != 0) clean(reacted[nreacted++], sizeof reacted[0], ref);
         } else if ((strcmp(type, "joined") == 0 || strcmp(type, "left") == 0) && in_room) {
             int joined = type[0] == 'j';
             sprintf(line, "%.24s %s the room", user, joined ? "joined" : "left");
@@ -418,6 +431,7 @@ static void take_events(void)
             M.room[0] = '\0';
         }
     }
+    for (i = 0; i < nreacted; i++) load_reactions(reacted[i]);
 }
 
 static void do_poll(void)
@@ -613,7 +627,7 @@ static int run_command(const char *line)
         if (react) {
             int count = 0;
             rc = ae_chat_react(&chat, l->id, rest, &count);
-            if (rc != AE_CHAT_OK) show_error(rc);
+            if (rc == AE_CHAT_OK) do_poll(); else show_error(rc);      /* the react event repaints the counts */
         } else {
             rc = ae_chat_thread(&chat, l->id, rest);
             if (rc == AE_CHAT_OK) system_line("Thread reply sent."); else show_error(rc);
@@ -754,7 +768,7 @@ static void ctx_run(const char *it)
         if (!l || l->number == 0) { system_line("Right-click on a message first."); return; }
         if (strcmp(it, "React") == 0) {
             int count = 0;
-            if (ae_chat_react(&chat, l->id, "+1", &count) == AE_CHAT_OK) system_line("Reaction sent.");
+            if (ae_chat_react(&chat, l->id, "+1", &count) == AE_CHAT_OK) do_poll();     /* the react event repaints the counts */
             else system_line("The reaction did not go through.");
         } else if (strcmp(it, "Quote") == 0) { sprintf(buf, "> %.24s: %.60s ", l->nick, l->text); input_set(buf); }
         else not_yet(it);                /* Reply (B3), Copy Text (OSC 52), Pin, Mark Unread, Edit, Delete (B2) */
@@ -1027,7 +1041,9 @@ int main(int argc, char **argv)
     while (!ended) {
         int key = ui_key_read(&keys, &pushback);
         if (key < 0) break;
-        idle_count = 0;
+        /* idle_count is NOT reset here: it counts the idle hook's sleeps, the door's only clock. The
+           board's any-motion mouse mode sends a wake byte on every hover move, and a reset per key
+           kept the event poll from ever running while the mouse moved (sysop test 2026-11-08). */
         ended = handle_key(key);
         if (!ended) present();
     }

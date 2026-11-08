@@ -132,6 +132,31 @@ static void sb_markdown(sb *b, const char *s)
     }
 }
 
+const char *lc_react_display(const char *emoji)
+{
+    static const char *const map[][2] = {
+        { "+1", "[+]" }, { "-1", "[-]" }, { "heart", "<3" }, { "fire", "*F*" },
+        { "laugh", ":D" }, { "wow", ":O" }, { "sad", ":(" }, { "angry", ">:(" }
+    };
+    int i;
+    for (i = 0; i < (int)(sizeof map / sizeof map[0]); i++) if (strcmp(map[i][0], emoji) == 0) return map[i][1];
+    return emoji;
+}
+
+void lc_react_suffix(const lc_line *l, char *out, int cap)
+{
+    int i, n = 0;
+    char one[40];
+    out[0] = '\0';
+    for (i = 0; i < l->nreact; i++) {
+        if (l->react[i].count <= 0) continue;
+        sprintf(one, " [%.12s %d]", lc_react_display(l->react[i].emoji), l->react[i].count);
+        if (n + (int)strlen(one) + 1 > cap) break;
+        strcpy(out + n, one);
+        n += (int)strlen(one);
+    }
+}
+
 void lc_line_marked(const lc_line *l, char *out, int cap)
 {
     sb b;
@@ -142,6 +167,9 @@ void lc_line_marked(const lc_line *l, char *out, int cap)
         sb_fg(&b, LC_DIM); sb_str(&b, "*** "); sb_str(&b, l->text);
         if (strncmp(l->text, "--- ", 4) == 0) sb_ch(&b, UI_CELLS_M_BASE);   /* the TS history marker ends its grey early */
         sb_str(&b, " ***");
+        break;
+    case LC_NOTE:
+        sb_fg(&b, LC_ACCENT); sb_str(&b, l->text);
         break;
     case LC_ACTIVITY_LINE:
         sb_fg(&b, LC_ACTIVITY); sb_ch(&b, '['); sb_str(&b, l->time); sb_str(&b, "] "); sb_str(&b, l->text);
@@ -158,6 +186,11 @@ void lc_line_marked(const lc_line *l, char *out, int cap)
         sb_fg(&b, lc_nick_color(l->nick)); sb_ch(&b, UI_CELLS_M_BOLD); sb_str(&b, l->nick);
         sb_ch(&b, UI_CELLS_M_BASE); sb_str(&b, ": "); sb_markdown(&b, l->text);
         break;
+    }
+    if (l->kind == LC_HISTORY || l->kind == LC_LIVE) {   /* TS server.ts renderedMessages: counts after the message */
+        char suffix[LC_REACT_MAX * 20];
+        lc_react_suffix(l, suffix, (int)sizeof suffix);
+        if (suffix[0] != '\0') { sb_ch(&b, UI_CELLS_M_BASE); sb_fg(&b, LC_ACCENT); sb_str(&b, suffix); }
     }
 }
 

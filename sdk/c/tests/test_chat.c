@@ -82,7 +82,8 @@ static void start_stub(void)
 
 static void stop_stub(void) { stub_chat_stop(stub_pid); remove("build/test_chat.cfg"); }
 
-/* Runs the door's main with `keys` on stdin (all at once, or via a slow feeder when `slow`). */
+/* Runs the door's main with `keys` on stdin (all at once, or via a slow feeder when `slow`: 1 pauses
+ * after each CR, more than 1 is a pause in microseconds after every byte). */
 static int drive(const char *keys, size_t n, int slow)
 {
     char *argv[] = { (char *)"livechat", (char *)"1", 0 };
@@ -105,7 +106,8 @@ static int drive(const char *keys, size_t n, int slow)
             close(fds[0]);
             for (i = 0; i < n; i++) {
                 (void)!write(fds[1], keys + i, 1);
-                if (keys[i] == '\r') usleep(400000);
+                if (slow > 1) usleep((useconds_t)slow);      /* slow > 1: microseconds after every byte */
+                else if (keys[i] == '\r') usleep(400000);
             }
             close(fds[1]);
             _exit(0);
@@ -176,6 +178,10 @@ static void test_client(void)
     assert(ae_chat_poll(&c, 0) == AE_CHAT_OK);
     assert(ae_chat_next_row(&c, f, AE_CHAT_ROW_FIELDS) == 8 && strcmp(f[3], "carol") == 0 && c.last_seq == 8);
     assert(ae_chat_react(&c, "m1", "+1", &count) == AE_CHAT_OK && count == 2 && strcmp(st->last_react, "+1") == 0);
+    assert(ae_chat_unreact(&c, "m1", "+1", &count) == AE_CHAT_OK && count == 0 && st->unreacts == 1);
+    assert(strcmp(st->last_react_msg, "m1") == 0 && st->session_closes == 0);       /* not taken for a session close */
+    assert(ae_chat_reactions(&c, "m1") == AE_CHAT_OK && st->reaction_lists == 1);
+    assert(ae_chat_next_row(&c, f, AE_CHAT_ROW_FIELDS) == 3 && strcmp(f[0], "+1") == 0 && strcmp(f[2], "1") == 0);
     assert(ae_chat_thread(&c, "m1", "reply") == AE_CHAT_OK && st->threads == 1);
     assert(ae_chat_dm(&c, "bob", "psst", tid, sizeof tid) == AE_CHAT_OK && strcmp(tid, "th1") == 0 && strcmp(st->last_dm_peer, "bob") == 0);
     assert(ae_chat_dm_list(&c) == AE_CHAT_OK && ae_chat_next_row(&c, f, AE_CHAT_ROW_FIELDS) >= 4 && strcmp(f[1], "alice") == 0);
@@ -263,6 +269,27 @@ static void test_door_idle_poll(void)
     printf("  [OK] door: idle polling shows a message nobody sent from here\n");
 }
 
+/* Regression (sysop live test 2026-11-08): with the board's any-motion mouse mode every hover sends
+ * a wake byte, and the main loop reset the idle count on each one, so the event poll never ran while
+ * the mouse moved: a reaction (or anyone's message) never showed. Wakes 60 ms apart leave room for at
+ * most two 40 ms idle steps between keys; the poll every 4 steps must still run. */
+static void test_door_poll_under_mouse_motion(void)
+{
+    static char keys[64];
+    int rc, n = 0, i;
+    start_stub();
+    poll_steps = 4;
+    keys[n++] = '\r';
+    for (i = 0; i < 30; i++) keys[n++] = '\x1e';
+    keys[n++] = '/'; keys[n++] = 'q'; keys[n++] = '\r';
+    rc = drive(keys, (size_t)n, 60000);
+    assert(rc == 0 && st->events >= 1);
+    assert(has_line("carol", "from idle poll"));
+    poll_steps = POLL_STEPS_DEFAULT;
+    stop_stub();
+    printf("  [OK] door: hover wakes do not starve the event poll\n");
+}
+
 /* Regression (2026-11-07 mirror run): the rooms view had no way to make a room, so an empty list was a
  * dead end; and /n joined by the typed NAME while the server joins by id, so a new room never opened. */
 static void test_door_new_room(void)
@@ -297,12 +324,25 @@ static void test_door_mouse(void)
     assert(rc == 0 && mouse_armed == 1);
     assert(mouse_events - before == 4 && mouse_step == 8);      /* every scripted event reached handle_mouse */
     assert(st->reacts == 1 && strcmp(st->last_react, "+1") == 0);
-    assert(has_line("", "Reaction sent."));
+    /* the react event redraws the row from the server's counts, as the TS chat:reaction handler does */
+    assert(st->reaction_lists == 1);
+    assert(has_line(0, "[Tester reacted +1]") && has_line(0, "Tester: +1"));
+    {
+        int i, found = 0;
+        for (i = 0; i < M.nlines; i++)
+            if (strcmp(M.lines[i].id, st->last_react_msg) == 0) {
+                assert(M.lines[i].nreact == 1 && strcmp(M.lines[i].react[0].emoji, "+1") == 0);
+                assert(M.lines[i].react[0].count == 1 && M.lines[i].react[0].mine == 1);
+                found = 1;
+            }
+        assert(found);
+    }
+    assert(strstr(screen_text, "[[+]"));                                           /* the suffix reached the wire */
     /* the frame diff skips unchanged blanks, so words reach the wire one by one */
     assert(strstr(screen_text, "|> Reply") && strstr(screen_text, "Unread"));      /* the popup reached the wire */
     assert(strstr(screen_text, "(F6)") && strstr(screen_text, "available"));       /* the not-yet notice too */
     stop_stub();
-    printf("  [OK] door: right click on a message reacts, the menu bar opens and says not yet\n");
+    printf("  [OK] door: right click on a message reacts and its row shows the count, the menu bar opens and says not yet\n");
 }
 
 static void test_door_no_config(void)
@@ -321,6 +361,7 @@ int main(void)
     test_door_keys();
     test_door_lists();
     test_door_idle_poll();
+    test_door_poll_under_mouse_motion();
     test_door_new_room();
     test_door_mouse();
     test_door_no_config();

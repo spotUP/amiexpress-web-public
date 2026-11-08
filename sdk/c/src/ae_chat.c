@@ -482,6 +482,31 @@ int ae_chat_react(ae_chat *c, const char *msg_id, const char *emoji, int *count)
     return rc;
 }
 
+int ae_chat_unreact(ae_chat *c, const char *msg_id, const char *emoji, int *count)
+{
+    char path[PATH_MAX_LEN];
+    char esc[64];
+    int rc = make_path(path, sizeof path, AE_CHAT_BASE "/messages/", msg_id, "/react/");
+    int n = 0;
+
+    if (rc != AE_CHAT_OK) return rc;
+    if (blank(emoji)) return AE_CHAT_ERR_ARGS;
+    if (ae_req_url_escape(emoji, esc, sizeof esc) < 0) return AE_CHAT_ERR_TOO_LONG;
+    if (strlen(path) + strlen(esc) + 1 > sizeof path) return AE_CHAT_ERR_TOO_LONG;
+    strcat(path, esc);
+    rc = call(c, "DELETE", path, 0, 0);
+    if (rc == AE_CHAT_OK && count != 0) *count = (json_extract_bool(c->reply, "count", &n) == 0) ? n : 0;
+    return rc;
+}
+
+int ae_chat_reactions(ae_chat *c, const char *msg_id)
+{
+    char path[PATH_MAX_LEN];
+    int rc = make_path(path, sizeof path, AE_CHAT_BASE "/messages/", msg_id, "/reactions.txt");
+    if (rc != AE_CHAT_OK) return rc;
+    return get_text(c, path);
+}
+
 int ae_chat_thread(ae_chat *c, const char *msg_id, const char *text)
 {
     char path[PATH_MAX_LEN];

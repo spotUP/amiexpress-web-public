@@ -108,12 +108,35 @@ static int compare(const char *path)
     return diff;
 }
 
+/* The reaction suffix, byte for byte what the TS door prints for the same counts
+ * (board/Doors/livechat/tests/reactions.test.ts pins ' [<3 2] [*F* 1]' for {heart:2, fire:1}). */
+static int react_suffix_matches_ts(void)
+{
+    lc_line l;
+    char out[96];
+    memset(&l, 0, sizeof l);
+    l.kind = LC_LIVE;
+    strcpy(l.react[0].emoji, "heart"); l.react[0].count = 2;
+    strcpy(l.react[1].emoji, "fire"); l.react[1].count = 1;
+    l.nreact = 2;
+    lc_react_suffix(&l, out, sizeof out);
+    if (strcmp(out, " [<3 2] [*F* 1]") != 0) { printf("react suffix: '%s'\n", out); return 1; }
+    strcpy(l.react[0].emoji, "+1"); l.react[0].count = 1; l.nreact = 1;
+    lc_react_suffix(&l, out, sizeof out);
+    if (strcmp(out, " [[+] 1]") != 0) { printf("react suffix +1: '%s'\n", out); return 1; }
+    l.nreact = 0;
+    lc_react_suffix(&l, out, sizeof out);
+    if (out[0] != '\0') { printf("react suffix empty: '%s'\n", out); return 1; }
+    return 0;
+}
+
 int main(void)
 {
+    int r = react_suffix_matches_ts();
     int a = compare("tests/fixtures/lc68-ts-main-80x25.grid");
     int b = compare("tests/fixtures/lc68-ts-main-40x25.grid");
     int d = compare("tests/fixtures/lc68-ts-main-80x15.grid");
-    if (a != 0 || b != 0 || d != 0) { printf("FAIL livechat_ui fixtures\n"); return 1; }
+    if (r != 0 || a != 0 || b != 0 || d != 0) { printf("FAIL livechat_ui fixtures\n"); return 1; }
     printf("PASS livechat_ui fixtures\n");
     return 0;
 }
