@@ -182,6 +182,23 @@ static void test_client(void)
     assert(strcmp(st->last_react_msg, "m1") == 0 && st->session_closes == 0);       /* not taken for a session close */
     assert(ae_chat_reactions(&c, "m1") == AE_CHAT_OK && st->reaction_lists == 1);
     assert(ae_chat_next_row(&c, f, AE_CHAT_ROW_FIELDS) == 3 && strcmp(f[0], "+1") == 0 && strcmp(f[2], "1") == 0);
+    assert(ae_chat_edit(&c, "m1", "fixed \"it\"") == AE_CHAT_OK && st->edits == 1);
+    assert(strcmp(st->last_write_path, "/chat/v1/messages/m1") == 0 && strcmp(st->last_write_body, "{\"content\":\"fixed \\\"it\\\"\"}") == 0);
+    assert(ae_chat_delete(&c, "m1") == AE_CHAT_OK && st->deletes == 1 && st->unreacts == 1 && st->session_closes == 0);
+    assert(ae_chat_topic(&c, "lobby", "New topic") == AE_CHAT_OK && st->topics == 1);
+    assert(strcmp(st->last_write_path, "/chat/v1/rooms/lobby/topic") == 0 && strcmp(st->last_write_body, "{\"topic\":\"New topic\"}") == 0);
+    assert(ae_chat_moderate(&c, "lobby", "kick", "bob@AE", "spam", 0) == AE_CHAT_OK && st->moderations == 1);
+    assert(strcmp(st->last_write_path, "/chat/v1/rooms/lobby/kick") == 0);
+    assert(strcmp(st->last_write_body, "{\"user\":\"bob@AE\",\"reason\":\"spam\"}") == 0);
+    assert(ae_chat_moderate(&c, "lobby", "mute", "bob@AE", 0, 15) == AE_CHAT_OK);
+    assert(strcmp(st->last_write_body, "{\"user\":\"bob@AE\",\"minutes\":15}") == 0);
+    assert(ae_chat_moderate(&c, "lobby", "deop", "bob@AE", "", 0) == AE_CHAT_OK && strcmp(st->last_write_path, "/chat/v1/rooms/lobby/deop") == 0);
+    assert(ae_chat_moderate(&c, "lobby", "nuke", "bob@AE", 0, 0) == AE_CHAT_ERR_ARGS && st->moderations == 3);
+    assert(ae_chat_invite(&c, "lobby", "bob@AE", 1) == AE_CHAT_OK && st->invites == 1);
+    assert(strcmp(st->last_write_body, "{\"user\":\"bob@AE\"}") == 0);
+    assert(ae_chat_invite(&c, "lobby", "bob@AE", 0) == AE_CHAT_OK && st->uninvites == 1);
+    assert(strcmp(st->last_write_path, "/chat/v1/rooms/lobby/invites/bob%40AE") == 0 || strcmp(st->last_write_path, "/chat/v1/rooms/lobby/invites/bob@AE") == 0);
+    st->pending_row[0] = '\0';
     assert(ae_chat_thread(&c, "m1", "reply") == AE_CHAT_OK && st->threads == 1);
     assert(ae_chat_dm(&c, "bob", "psst", tid, sizeof tid) == AE_CHAT_OK && strcmp(tid, "th1") == 0 && strcmp(st->last_dm_peer, "bob") == 0);
     assert(ae_chat_dm_list(&c) == AE_CHAT_OK && ae_chat_next_row(&c, f, AE_CHAT_ROW_FIELDS) >= 4 && strcmp(f[1], "alice") == 0);

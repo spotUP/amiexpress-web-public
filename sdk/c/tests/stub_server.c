@@ -432,6 +432,29 @@ static void chat_copy_json_field(char *dst, int cap, const char *body, const cha
     dst[n] = '\0';
 }
 
+/* Remembers a write call so a test can check what the door sent. */
+static void chat_note_write(stub_chat_stats *st, const char *path, const char *body)
+{
+    strncpy(st->last_write_path, path, sizeof st->last_write_path - 1);
+    st->last_write_path[sizeof st->last_write_path - 1] = '\0';
+    strncpy(st->last_write_body, body ? body : "", sizeof st->last_write_body - 1);
+    st->last_write_body[sizeof st->last_write_body - 1] = '\0';
+}
+
+/* The event type the doorserver emits for POST /rooms/:id/<action>, 0 when it is no moderation route. */
+static const char *chat_mod_event(const char *path)
+{
+    static const char *const map[][2] = {
+        { "/kick", "kicked" }, { "/ban", "banned" }, { "/unban", "unbanned" }, { "/mute", "muted" },
+        { "/unmute", "unmuted" }, { "/op", "op" }, { "/deop", "deop" }
+    };
+    const char *tail = strrchr(path, '/');
+    int i;
+    if (tail == 0) return 0;
+    for (i = 0; i < 7; i++) if (strcmp(tail, map[i][0]) == 0) return map[i][1];
+    return 0;
+}
+
 static void chat_serve(int fd, stub_chat_stats *st, int *state)
 {
     char req[6144], method[8], path[256], text[1400];
@@ -450,6 +473,41 @@ static void chat_serve(int fd, stub_chat_stats *st, int *state)
     } else if (st->expire_next && !(is_post && strncmp(path, "/chat/v1/sessions", 17) == 0)) {
         st->expire_next = 0;
         chat_reply(fd, 401, "application/json", "{\"error\":\"session_expired\",\"detail\":\"gone\"}");
+    } else if (strncmp(path, "/chat/v1/messages/", 18) == 0 && strchr(path + 18, '/') == 0
+               && (strcmp(method, "PUT") == 0 || strcmp(method, "DELETE") == 0)) {
+        /* PUT /messages/:id edits, DELETE /messages/:id deletes; the event comes on the next poll. */
+        char content[200];
+        chat_note_write(st, path, body);
+        chat_copy_json_field(content, sizeof content, body, "content");
+        if (method[0] == 'P') {
+            st->edits++;
+            sprintf(st->pending_row, "edit|lobby|Tester|%s|1700000500|0|%s", path + 18, content);
+        } else {
+            st->deletes++;
+            sprintf(st->pending_row, "delete|lobby|Tester|%s|1700000500|0|", path + 18);
+        }
+        chat_reply(fd, 200, "application/json", method[0] == 'P' ? "{\"id\":\"m1\"}" : "{\"ok\":true}");
+    } else if (strcmp(method, "PUT") == 0 && strstr(path, "/topic") != 0) {
+        char topic[200];
+        chat_note_write(st, path, body);
+        chat_copy_json_field(topic, sizeof topic, body, "topic");
+        st->topics++;
+        sprintf(st->pending_row, "topic|lobby|Tester||1700000500|0|%s", topic);
+        chat_reply(fd, 200, "application/json", "{\"ok\":true}");
+    } else if (strstr(path, "/invites") != 0 && strncmp(path, "/chat/v1/rooms/", 15) == 0) {
+        chat_note_write(st, path, body);
+        if (is_post) st->invites++; else st->uninvites++;
+        chat_reply(fd, is_post ? 201 : 200, "application/json", "{\"ok\":true}");
+    } else if (is_post && strncmp(path, "/chat/v1/rooms/", 15) == 0 && chat_mod_event(path) != 0) {
+        char user[64], reason[128];
+        chat_note_write(st, path, body);
+        chat_copy_json_field(user, sizeof user, body, "user");
+        chat_copy_json_field(reason, sizeof reason, body, "reason");
+        if (strchr(user, '@') != 0) *strchr(user, '@') = '\0';
+        st->moderations++;
+        if (strcmp(chat_mod_event(path), "unbanned") != 0)    /* the doorserver emits no unban event */
+            sprintf(st->pending_row, "%s|lobby|%s|Tester|1700000500|0|%s", chat_mod_event(path), user, reason);
+        chat_reply(fd, 200, "application/json", "{\"ok\":true}");
     } else if (strcmp(method, "DELETE") == 0 && strncmp(path, "/chat/v1/messages/", 18) == 0) {
         int n = 0;
         while (path[18 + n] && path[18 + n] != '/' && n < (int)sizeof st->last_react_msg - 1) { st->last_react_msg[n] = path[18 + n]; n++; }
@@ -498,7 +556,7 @@ static void chat_serve(int fd, stub_chat_stats *st, int *state)
             while (path[18 + n] && path[18 + n] != '/' && n < (int)sizeof st->last_react_msg - 1) { st->last_react_msg[n] = path[18 + n]; n++; }
             st->last_react_msg[n] = '\0';
         }
-        st->react_pending = 1;
+        sprintf(st->pending_row, "react|lobby|Tester|%s|1700000400|0|%s", st->last_react_msg, st->last_react);
         chat_reply(fd, 200, "application/json", "{\"count\":2}");
     } else if (is_post && strstr(path, "/thread") != 0) {
         st->threads++;
@@ -536,9 +594,9 @@ static void chat_serve(int fd, stub_chat_stats *st, int *state)
             }
             {
             int last = rows > 0 ? 8 : 7;
-            if (st->react_pending) {
-                st->react_pending = 0;
-                sprintf(body_rows + strlen(body_rows), "9|react|lobby|Tester|%s|1700000400|0|%s\n", st->last_react_msg, st->last_react);
+            if (st->pending_row[0] != '\0') {
+                sprintf(body_rows + strlen(body_rows), "9|%s\n", st->pending_row);
+                st->pending_row[0] = '\0';
                 rows++;
                 last = 9;
             }

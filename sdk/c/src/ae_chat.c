@@ -507,6 +507,107 @@ int ae_chat_reactions(ae_chat *c, const char *msg_id)
     return get_text(c, path);
 }
 
+/* `"key":"value"` appended at `at`, a comma first unless it is the first field. -1 when it does not fit. */
+static long put_field(char *body, unsigned long size, long at, const char *key, const char *value)
+{
+    char lead[40];
+
+    if (at < 0 || strlen(key) > 30) return -1;
+    sprintf(lead, "%s\"%s\":", at <= 1 ? "" : ",", key);
+    at = ae_req_put_raw(body, size, (unsigned long)at, lead);
+    if (at >= 0) at = ae_req_put_json_string(body, size, (unsigned long)at, value);
+    return at;
+}
+
+int ae_chat_edit(ae_chat *c, const char *msg_id, const char *text)
+{
+    char path[PATH_MAX_LEN];
+    char body[BODY_MAX + AE_CHAT_TEXT_MAX * 6];
+    long at;
+    int rc = make_path(path, sizeof path, AE_CHAT_BASE "/messages/", msg_id, "");
+
+    if (rc != AE_CHAT_OK) return rc;
+    if (blank(text)) return AE_CHAT_ERR_ARGS;
+    at = put_field(body, sizeof body, ae_req_put_raw(body, sizeof body, 0, "{"), "content", text);
+    if (at >= 0) at = ae_req_put_raw(body, sizeof body, (unsigned long)at, "}");
+    if (at < 0) return AE_CHAT_ERR_TOO_LONG;
+    return call(c, "PUT", path, body, (unsigned long)at);
+}
+
+int ae_chat_delete(ae_chat *c, const char *msg_id)
+{
+    char path[PATH_MAX_LEN];
+    int rc = make_path(path, sizeof path, AE_CHAT_BASE "/messages/", msg_id, "");
+
+    if (rc != AE_CHAT_OK) return rc;
+    return call(c, "DELETE", path, 0, 0);
+}
+
+int ae_chat_topic(ae_chat *c, const char *room, const char *topic)
+{
+    char path[PATH_MAX_LEN];
+    char body[BODY_MAX];
+    long at;
+    int rc = make_path(path, sizeof path, AE_CHAT_BASE "/rooms/", room, "/topic");
+
+    if (rc != AE_CHAT_OK) return rc;
+    at = put_field(body, sizeof body, ae_req_put_raw(body, sizeof body, 0, "{"), "topic", topic ? topic : "");
+    if (at >= 0) at = ae_req_put_raw(body, sizeof body, (unsigned long)at, "}");
+    if (at < 0) return AE_CHAT_ERR_TOO_LONG;
+    return call(c, "PUT", path, body, (unsigned long)at);
+}
+
+int ae_chat_moderate(ae_chat *c, const char *room, const char *action, const char *user,
+                     const char *reason, int minutes)
+{
+    static const char *const actions[] = { "kick", "ban", "unban", "mute", "unmute", "op", "deop" };
+    char suffix[16];
+    char path[PATH_MAX_LEN];
+    char body[BODY_MAX];
+    char num[16];
+    long at;
+    int rc, i, known = 0;
+
+    for (i = 0; i < (int)(sizeof actions / sizeof actions[0]); i++)
+        if (action != 0 && strcmp(action, actions[i]) == 0) known = 1;
+    if (!known || blank(user)) return AE_CHAT_ERR_ARGS;
+    sprintf(suffix, "/%s", action);
+    rc = make_path(path, sizeof path, AE_CHAT_BASE "/rooms/", room, suffix);
+    if (rc != AE_CHAT_OK) return rc;
+    at = put_field(body, sizeof body, ae_req_put_raw(body, sizeof body, 0, "{"), "user", user);
+    if (!blank(reason)) at = put_field(body, sizeof body, at, "reason", reason);
+    if (minutes > 0 && at >= 0) {
+        sprintf(num, ",\"minutes\":%d", minutes);
+        at = ae_req_put_raw(body, sizeof body, (unsigned long)at, num);
+    }
+    if (at >= 0) at = ae_req_put_raw(body, sizeof body, (unsigned long)at, "}");
+    if (at < 0) return AE_CHAT_ERR_TOO_LONG;
+    return call(c, "POST", path, body, (unsigned long)at);
+}
+
+int ae_chat_invite(ae_chat *c, const char *room, const char *user, int add)
+{
+    char path[PATH_MAX_LEN];
+    char body[BODY_MAX];
+    char esc[96];
+    long at;
+    int rc = make_path(path, sizeof path, AE_CHAT_BASE "/rooms/", room, "/invites");
+
+    if (rc != AE_CHAT_OK) return rc;
+    if (blank(user)) return AE_CHAT_ERR_ARGS;
+    if (!add) {
+        if (ae_req_url_escape(user, esc, sizeof esc) < 0) return AE_CHAT_ERR_TOO_LONG;
+        if (strlen(path) + strlen(esc) + 2 > sizeof path) return AE_CHAT_ERR_TOO_LONG;
+        strcat(path, "/");
+        strcat(path, esc);
+        return call(c, "DELETE", path, 0, 0);
+    }
+    at = put_field(body, sizeof body, ae_req_put_raw(body, sizeof body, 0, "{"), "user", user);
+    if (at >= 0) at = ae_req_put_raw(body, sizeof body, (unsigned long)at, "}");
+    if (at < 0) return AE_CHAT_ERR_TOO_LONG;
+    return call(c, "POST", path, body, (unsigned long)at);
+}
+
 int ae_chat_thread(ae_chat *c, const char *msg_id, const char *text)
 {
     char path[PATH_MAX_LEN];

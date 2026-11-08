@@ -121,6 +121,23 @@ int ae_chat_unreact(ae_chat *c, const char *msg_id, const char *emoji, int *coun
 /** GET /messages/:id/reactions.txt. Rows: emoji, count, mine (1 when the caller reacted with it). */
 int ae_chat_reactions(ae_chat *c, const char *msg_id);
 
+/** PUT /messages/:id {content}: replaces the text of the caller's own message. */
+int ae_chat_edit(ae_chat *c, const char *msg_id, const char *text);
+
+/** DELETE /messages/:id: the caller's own message, or anyone's for a room moderator. */
+int ae_chat_delete(ae_chat *c, const char *msg_id);
+
+/** PUT /rooms/:id/topic {topic}. An empty topic clears it. */
+int ae_chat_topic(ae_chat *c, const char *room, const char *topic);
+
+/** POST /rooms/:id/<action> {user, reason?, minutes?}. action: kick, ban, unban, mute, unmute, op, deop.
+ *  user is handle@BOARD. reason may be NULL or ""; minutes (mute only) 0 means until unmuted. */
+int ae_chat_moderate(ae_chat *c, const char *room, const char *action, const char *user,
+                     const char *reason, int minutes);
+
+/** add: POST /rooms/:id/invites {user}; else DELETE /rooms/:id/invites/:user. user is handle@BOARD. */
+int ae_chat_invite(ae_chat *c, const char *room, const char *user, int add);
+
 /** POST /messages/:id/thread. */
 int ae_chat_thread(ae_chat *c, const char *msg_id, const char *text);
 

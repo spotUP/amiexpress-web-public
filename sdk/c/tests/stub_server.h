@@ -83,13 +83,16 @@ typedef struct {
     volatile int sessions, session_closes, rooms_listed, rooms_created, joins, leaves;
     volatile int histories, messages, reacts, threads, dms, dm_lists, whos, events;
     volatile int unreacts, reaction_lists;     /* DELETE /messages/:id/react/:emoji, GET reactions.txt */
-    volatile int react_pending;            /* a react was posted; the next events poll carries it */
+    volatile int edits, deletes, topics, moderations, invites, uninvites;
+    char pending_row[300];                 /* an event row (no seq) a write queued; the next events poll carries it as seq 9 */
     volatile int bad_auth;                 /* requests that lacked "Authorization: Board " */
     volatile int bad_session;              /* post-open requests lacking X-Chat-Session */
     volatile int expire_next;              /* test sets: next authenticated call answers session_expired once */
     char last_message[512];                /* content of the latest POST /messages */
     char last_react[64];
     char last_react_msg[24];               /* message id of the latest react or unreact */
+    char last_write_path[128];             /* path of the latest edit, delete, topic, moderation or invite call */
+    char last_write_body[300];             /* its JSON body ("" for DELETE) */
     char last_dm_peer[64];
     char last_dm_text[512];
     char last_created[64];
