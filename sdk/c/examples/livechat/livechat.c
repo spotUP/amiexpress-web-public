@@ -69,10 +69,17 @@ static lc_model M;
 static ae_chat chat;
 static char handle[32];
 
-/* Idle steps (1/4 second each) between polls: 12 is three seconds. */
+/* The door sleeps IDLE_SLEEP_TICKS (1/50 s) per idle call, so a key waits at most that long before
+   the key loop sees it. It used to sleep 25 ticks (half a second) and every key paid for it. The
+   network poll cadence is kept in wall time: a "poll step" is POLL_STEP_TICKS (25 ticks, half a
+   second), and the door polls every poll_steps of them: 12 steps is six seconds. The door's only
+   clock is the ticks it has slept, so idle_ticks counts those. */
+#define IDLE_SLEEP_TICKS 2
+#define POLL_STEP_TICKS 25
 #define POLL_STEPS_DEFAULT 12
 static int poll_steps = POLL_STEPS_DEFAULT;
-static int idle_count;
+static int poll_step_ticks = POLL_STEP_TICKS;
+static int idle_ticks;
 
 static char room_id[48];
 static char room_name[48];
@@ -1038,12 +1045,21 @@ static int submit(void)
     return ended;
 }
 
+/* One idle step: sleep a moment, and say whether a network poll is due. Split from door_idle so the
+   sleep length and the poll cadence can be tested without a screen. */
+static int idle_step(void)
+{
+    ae_delay_ticks(IDLE_SLEEP_TICKS);
+    idle_ticks += IDLE_SLEEP_TICKS;
+    if (idle_ticks < poll_steps * poll_step_ticks) return 0;
+    idle_ticks = 0;
+    return 1;
+}
+
 static void door_idle(void *ctx)
 {
     IGNORE(ctx);
-    ae_delay_ticks(25);
-    if (++idle_count >= poll_steps) {
-        idle_count = 0;
+    if (idle_step()) {
         do_poll();
         present();
     }
@@ -1360,7 +1376,7 @@ int main(int argc, char **argv)
     int ended = 0;
 
     /* A fresh run starts with nothing joined (a host test calls main more than once). */
-    idle_count = 0; pushback = -1; msg_number = 0; help_shown = 0; rooms_count = 0; keep_lines = 0;
+    idle_ticks = 0; pushback = -1; msg_number = 0; help_shown = 0; rooms_count = 0; keep_lines = 0;
     room_id[0] = '\0'; room_name[0] = '\0'; room_topic[0] = '\0'; dm_thread[0] = '\0'; dm_peer[0] = '\0';
 
     if (ae_start(node) != 0) return 20;
@@ -1425,7 +1441,7 @@ int main(int argc, char **argv)
     while (!ended) {
         int key = ui_key_read(&keys, &pushback);
         if (key < 0) break;
-        /* idle_count is NOT reset here: it counts the idle hook's sleeps, the door's only clock. The
+        /* idle_ticks is NOT reset here: it counts the idle hook's sleeps, the door's only clock. The
            board's any-motion mouse mode sends a wake byte on every hover move, and a reset per key
            kept the event poll from ever running while the mouse moved (sysop test 2026-11-08). */
         ended = handle_key(key);

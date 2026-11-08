@@ -283,13 +283,35 @@ static void test_door_idle_poll(void)
 {
     int rc;
     start_stub();
-    poll_steps = 2;
+    poll_steps = 2; poll_step_ticks = IDLE_SLEEP_TICKS;      /* one idle call per step, as these tests were written */
     rc = drive(KEYS("\r" "/q\r"), 1);                       /* a quiet second after joining: only idle polling can fetch carol */
     assert(rc == 0 && st->events >= 1 && st->messages == 0);
     assert(has_line("carol", "from idle poll"));
-    poll_steps = POLL_STEPS_DEFAULT;
+    poll_steps = POLL_STEPS_DEFAULT; poll_step_ticks = POLL_STEP_TICKS;
     stop_stub();
     printf("  [OK] door: idle polling shows a message nobody sent from here\n");
+}
+
+/* Regression (sysop live test 2026-11-08, "keys lag"): door_idle slept 25 ticks (half a second) per
+ * call and a key typed meanwhile waited for the sleep to end. Every idle call must sleep at most two
+ * ticks, and the poll cadence must stay what it was in wall time: one poll per poll_steps * 25 ticks
+ * slept (6 s at the default 12 steps). A poll is an idle_step() that answers 1. */
+extern long ae_native_delay_calls, ae_native_delay_total;
+extern int ae_native_delay_max;
+static void test_door_idle_is_short_and_cadence_kept(void)
+{
+    int i, polls = 0;
+    poll_steps = POLL_STEPS_DEFAULT; poll_step_ticks = POLL_STEP_TICKS;
+    idle_ticks = 0;
+    ae_native_delay_calls = 0; ae_native_delay_total = 0; ae_native_delay_max = 0;
+    for (i = 0; i < 1000; i++) {
+        if (idle_step()) polls++;
+    }
+    assert(ae_native_delay_calls == 1000 && ae_native_delay_max >= 1 && ae_native_delay_max <= 2);
+    assert(polls == (int)(ae_native_delay_total / (POLL_STEPS_DEFAULT * 25)));      /* 6 s of sleeping per poll */
+    assert(ae_native_delay_total == 2000 && polls == 6);         /* 2000 ticks = 40 s of sleeping = six 6 s polls */
+    idle_ticks = 0;
+    printf("  [OK] door: idle sleeps at most two ticks and still polls every six seconds\n");
 }
 
 /* Regression (sysop live test 2026-11-08): with the board's any-motion mouse mode every hover sends
@@ -301,14 +323,14 @@ static void test_door_poll_under_mouse_motion(void)
     static char keys[64];
     int rc, n = 0, i;
     start_stub();
-    poll_steps = 4;
+    poll_steps = 4; poll_step_ticks = IDLE_SLEEP_TICKS;
     keys[n++] = '\r';
     for (i = 0; i < 30; i++) keys[n++] = '\x1e';
     keys[n++] = '/'; keys[n++] = 'q'; keys[n++] = '\r';
     rc = drive(keys, (size_t)n, 60000);
     assert(rc == 0 && st->events >= 1);
     assert(has_line("carol", "from idle poll"));
-    poll_steps = POLL_STEPS_DEFAULT;
+    poll_steps = POLL_STEPS_DEFAULT; poll_step_ticks = POLL_STEP_TICKS;
     stop_stub();
     printf("  [OK] door: hover wakes do not starve the event poll\n");
 }
@@ -525,6 +547,7 @@ int main(void)
     test_door_keys();
     test_door_lists();
     test_door_idle_poll();
+    test_door_idle_is_short_and_cadence_kept();
     test_door_poll_under_mouse_motion();
     test_door_new_room();
     test_door_mouse();

@@ -241,8 +241,14 @@ void ae_get(char *buf, int maxlen)
 /* No wait here: the pending check below carries its own short grace
  * period, and a scripted run always has its next byte (or its end) ready,
  * so a sleep would only slow the tests down. */
+long ae_native_delay_calls, ae_native_delay_total;     /* tests: how often and how long the door slept */
+int ae_native_delay_max;
+
 void ae_delay_ticks(int ticks)
 {
+    ae_native_delay_calls++;
+    ae_native_delay_total += ticks;
+    if (ticks > ae_native_delay_max) ae_native_delay_max = ticks;
     /* Nothing to wait for: this backend never reports pending input, so a
      * quiet-period wait here would only slow a scripted run down. */
     (void) ticks;
