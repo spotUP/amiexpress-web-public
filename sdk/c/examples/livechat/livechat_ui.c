@@ -162,6 +162,9 @@ void lc_line_marked(const lc_line *l, char *out, int cap)
     sb b;
     b.p = out; b.n = 0; b.cap = cap;
     out[0] = '\0';
+    if ((l->kind == LC_HISTORY || l->kind == LC_LIVE) && l->quote[0] != '\0') {   /* TS reply-quote: a dim row above */
+        sb_fg(&b, LC_DIM); sb_str(&b, "  > "); sb_str(&b, l->quote); sb_ch(&b, '\n'); sb_ch(&b, UI_CELLS_M_BASE);
+    }
     switch (l->kind) {
     case LC_SYSTEM:
         sb_fg(&b, LC_DIM); sb_str(&b, "*** "); sb_str(&b, l->text);

@@ -240,12 +240,11 @@ static void test_door_keys(void)
 {
     int rc;
     start_stub();
-    rc = drive(KEYS("\r" "hello world\r" "/r 2 +1\r" "/t 1 thread text\r" "/d bob hi bob\r" "/?\r" "x" "/q\r"), 0);
+    rc = drive(KEYS("\r" "hello world\r" "/react 2 +1\r" "/d bob hi bob\r" "/?\r" "x" "/q\r"), 0);
     assert(rc == 0);
     assert(st->sessions == 1 && st->rooms_listed >= 1 && st->joins == 1 && st->histories == 1);
     assert(st->messages == 1 && strcmp(st->last_message, "hello world") == 0);
     assert(st->reacts == 1 && strcmp(st->last_react, "+1") == 0);
-    assert(st->threads == 1);
     assert(st->dms == 1 && strcmp(st->last_dm_peer, "bob") == 0 && strcmp(st->last_dm_text, "hi bob") == 0);
     assert(st->leaves == 1 && st->session_closes == 1);
     assert(st->bad_auth == 0 && st->bad_session == 0);
@@ -258,7 +257,7 @@ static void test_door_keys(void)
     assert(strcmp(M.lines[2].text, "Joined #Lobby (3 users)") == 0 && M.lines[3].kind == LC_ACTIVITY_LINE);  /* the TS door's order */                                                           /* /? opened the help overlay */
     assert(!strstr(screen_text, "\x1b[40m"));                                                  /* never paints background 40 */
     stop_stub();
-    printf("  [OK] door: join, send, react, thread, direct message, help and quit reach the server and the screen\n");
+    printf("  [OK] door: join, send, react, direct message, help and quit reach the server and the screen\n");
 }
 
 static void test_door_lists(void)
@@ -371,6 +370,34 @@ static int line_count(const char *text)
     return n;
 }
 
+/* B2: /reply (alias r) and /thread (alias t) send a reply line; a loaded parent shows as a quote row. */
+static void test_door_reply(void)
+{
+    int i, bob = -1;
+    start_stub();
+    assert(drive(KEYS("\r" "/reply\r" "/thread 1\r" "/r 1 yes alice\r"), 0) == 0);
+    assert(st->messages == 1 && strcmp(st->last_message, "yes alice") == 0);
+    assert(strstr(st->last_write_body, "\"replyTo\":\"m1\"") != 0);            /* the line number named m1 */
+    assert(has_line(0, "Usage: /reply [msg-id] message") && has_line(0, "Usage: /thread <msg-id> message"));
+    for (i = 0; i < M.nlines; i++) if (strcmp(M.lines[i].id, "m2") == 0) bob = i;
+    assert(bob >= 0 && strcmp(M.lines[bob].quote, "alice: hello there|bar") == 0);   /* history replyTo m1 */
+    assert(strstr(screen_text, "> alice: hello there|bar") != 0);
+    M.ctx_kind = LC_CTX_CHAT; M.ctx_target = bob;
+    ctx_run("Reply");
+    assert(strcmp(M.input, "/reply 2 ") == 0);
+    ctx_run("Quote");
+    assert(strcmp(M.input, "> bob: second line ") == 0);
+    stop_stub();
+
+    start_stub();                                       /* no id: the newest message in the pane */
+    assert(drive(KEYS("\r" "/t 2 on two\r" "/reply to the last\r"), 0) == 0);
+    assert(st->messages == 2 && strcmp(st->last_message, "to the last") == 0);
+    assert(strstr(st->last_write_body, "\"replyTo\":\"m") != 0);
+    assert(st->threads == 0);
+    stop_stub();
+    printf("  [OK] door: /reply and /thread send replyTo, history replies show a quote row, menu Reply and Quote fill the input\n");
+}
+
 /* B2: the TS door's /edit /deletemsg /topic /kick /mute /op /invite /reactions and their events. */
 static void test_door_moderation(void)
 {
@@ -444,6 +471,7 @@ int main(void)
     test_door_poll_under_mouse_motion();
     test_door_new_room();
     test_door_mouse();
+    test_door_reply();
     test_door_moderation();
     test_door_delete_and_kicked();
     test_door_no_config();

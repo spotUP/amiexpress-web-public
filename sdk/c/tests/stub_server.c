@@ -545,6 +545,7 @@ static void chat_serve(int fd, stub_chat_stats *st, int *state)
                    "HISTORY|1|6|2\r\n1|m1|alice|1700000000||m1|9|hello there!bar\r\n2|m2|bob|1700000060|m1|m1|0|second line\r\n");
     } else if (is_post && strstr(path, "/rooms/") != 0 && strstr(path, "/messages") != 0) {
         st->messages++;
+        chat_note_write(st, path, body);
         chat_copy_json_field(st->last_message, sizeof st->last_message, body, "content");
         *state = 1;
         chat_reply(fd, 200, "application/json", "{\"id\":\"m3\",\"seq\":6,\"at\":1700000100}");

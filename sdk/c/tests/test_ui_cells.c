@@ -65,6 +65,10 @@ int main(void)
     CHECK(cell_ch(&c, 5, 0) == 'c' && c.back[5 * 20].fg == 221, "second line keeps marker colour");
     CHECK(cell_ch(&c, 5, 3) == 'd' && c.back[5 * 20 + 3].fg == 7, "base marker restores pen");
 
+    /* A newline ends the row there and is not drawn. */
+    n = ui_cells_wrap("ab\ncd ef", 20, starts, ends, 8);
+    CHECK(n == 2 && ends[0] - starts[0] == 2 && starts[1] == 3 && ends[1] - starts[1] == 5, "newline is a hard break");
+
     /* A word longer than the width is cut. */
     n = ui_cells_wrap("abcdefghij", 4, starts, ends, 8);
     CHECK(n == 3 && ends[0] - starts[0] == 4, "long word cut");

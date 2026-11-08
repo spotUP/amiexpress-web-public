@@ -157,12 +157,14 @@ int ui_cells_wrap(const char *s, int width, int *starts, int *ends, int max)
         int cols = 0, j = i, brk = -1, brk_next = -1;
         while (s[j] != '\0') {
             if (is_marker(s, j)) { j += (s[j] == UI_CELLS_M_FG && s[j + 1] != '\0') ? 2 : 1; continue; }
+            if (s[j] == '\n') break;                  /* a hard break: the row ends here */
             if (s[j] == ' ') { brk = j; brk_next = j + 1; }
             if (cols == width) break;
             cols++;
             j++;
         }
         if (s[j] == '\0') { starts[lines] = i; ends[lines] = j; lines++; break; }
+        if (s[j] == '\n') { starts[lines] = i; ends[lines] = j; lines++; i = j + 1; continue; }
         if (s[j] == ' ') { brk = j; brk_next = j + 1; }
         if (brk <= i) { brk = j; brk_next = j; }   /* one word wider than the line: cut it */
         starts[lines] = i; ends[lines] = brk; lines++;

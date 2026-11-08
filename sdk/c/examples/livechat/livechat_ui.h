@@ -55,6 +55,7 @@ typedef struct {
     lc_react react[LC_REACT_MAX];
     int nreact;
     int edited;            /* an edit event replaced the text: " (edited)" after it */
+    char quote[96];        /* "parent: snippet" of the message this replies to, "" when none is loaded */
 } lc_line;
 
 enum { LC_SIDE_HEAD, LC_SIDE_ROOM, LC_SIDE_USER, LC_SIDE_DM, LC_SIDE_BLANK };

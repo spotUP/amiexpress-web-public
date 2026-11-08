@@ -26,7 +26,7 @@
  * KEYS (as the TS door): Tab / Shift-Tab cycle input, sidebar and menu bar;
  * Enter sends, joins the sidebar room or opens the DM; F1 help, F2 sidebar,
  * F3 next channel; PgUp/PgDn scroll; Ctrl+C / Ctrl+Q quit. Commands are the
- * TS ones (/join /leave /create /rooms /who /msg /react /thread /clear /help
+ * TS ones (/join /leave /create /rooms /who /msg /reply /react /thread /clear /help
  * /quit) and the old short forms (/j /n /np /l /w /d /r /t /? /q).
  *
  * Menu entries the TS door has but this wire does not (emoji picker, files,
@@ -190,6 +190,33 @@ static lc_line *own_last(void)
     return 0;
 }
 
+/** The newest message in the pane (TS lastRoomMessageId), or 0. */
+static lc_line *room_last(void)
+{
+    int i;
+    for (i = M.nlines - 1; i >= 0; i--) {
+        if (M.lines[i].number > 0 && M.lines[i].id[0] != '\0') return &M.lines[i];
+    }
+    return 0;
+}
+
+/** "nick: snippet" as TS reply-quote builds it: whitespace collapsed, trimmed, 60 characters kept. */
+static void quote_of(const lc_line *p, char *out, int cap)
+{
+    char snip[61];
+    const char *s = p->text;
+    int n = 0, gap = 0;
+    while (*s == ' ') s++;
+    for (; *s != '\0' && n < 60; s++) {
+        if (*s == ' ' || *s == '\t') { gap = 1; continue; }
+        if (gap && n > 0) { snip[n++] = ' '; if (n == 60) break; }
+        gap = 0;
+        snip[n++] = *s;
+    }
+    snip[n] = '\0';
+    snprintf(out, (size_t)cap, "%.24s: %s", p->nick, snip);
+}
+
 /** Opens a slot at `at`, dropping the oldest line when the pane is full. */
 static lc_line *line_slot(int at)
 {
@@ -206,11 +233,16 @@ static lc_line *line_slot(int at)
 }
 
 /** A message, inserted by seq among the messages; one already shown (same id) is not shown twice. */
-static lc_line *add_message(int kind, long seq, const char *id, const char *nick, const char *at, const char *text)
+static lc_line *add_message(int kind, long seq, const char *id, const char *nick, const char *at, const char *text,
+                            const char *reply_to)
 {
     int pos = M.nlines;
     lc_line *l;
+    char quote[sizeof l->quote];
+    const lc_line *parent;
     if (id[0] != '\0' && line_by_id(id) != 0) return 0;
+    quote[0] = '\0';                                /* TS draws the quote only when the parent is loaded */
+    if (reply_to[0] != '\0' && (parent = line_by_id(reply_to)) != 0) quote_of(parent, quote, (int)sizeof quote);
     while (pos > 0 && (M.lines[pos - 1].kind == LC_HISTORY || M.lines[pos - 1].kind == LC_LIVE)
            && M.lines[pos - 1].seq > seq) pos--;
     l = line_slot(pos);
@@ -221,6 +253,7 @@ static lc_line *add_message(int kind, long seq, const char *id, const char *nick
     clean(l->nick, sizeof l->nick, nick);
     clean(l->text, sizeof l->text, text);
     hhmm_of(l->time, at);
+    copy(l->quote, sizeof l->quote, quote);
     M.scroll = 0;
     return l;
 }
@@ -419,12 +452,12 @@ static void take_events(void)
         const char *type = f[1], *room = f[2], *user = f[3], *ref = f[4];
         int in_room = dm_thread[0] == '\0' && room_id[0] != '\0' && strcmp(room, room_id) == 0;
         if (strcmp(type, "message") == 0 && in_room) {
-            add_message(LC_LIVE, seq, ref, user, f[5], f[7]);
+            add_message(LC_LIVE, seq, ref, user, f[5], f[7], "");
         } else if (strcmp(type, "dm") == 0) {
             char want[40];
             sprintf(want, "dm:%.30s", dm_thread);
             if (dm_thread[0] != '\0' && strcmp(room, want) == 0) {
-                add_message(LC_LIVE, seq, ref, user, f[5], f[7]);
+                add_message(LC_LIVE, seq, ref, user, f[5], f[7], "");
             } else if (strcmp(user, handle) != 0) {
                 sprintf(line, "New direct message from %.24s", user);
                 system_line(line);
@@ -486,7 +519,7 @@ static void take_history(void)
     int marker = M.nlines, n = 0;
     system_line("--- 0 earlier messages ---");
     while (ae_chat_next_row(&chat, f, AE_CHAT_ROW_FIELDS) >= AE_CHAT_ROW_FIELDS) {
-        if (add_message(LC_HISTORY, atol(f[0]), f[1], f[2], f[3], f[7]) != 0) n++;
+        if (add_message(LC_HISTORY, atol(f[0]), f[1], f[2], f[3], f[7], f[4]) != 0) n++;
     }
     if (n == 0) {                                  /* nothing earlier: no marker */
         int i;
@@ -702,6 +735,29 @@ static void edit_typed(const char *rest)
     then_poll(ae_chat_edit(&chat, l->id, text));
 }
 
+/** /reply [msg-id] text (alias r), /thread msg-id text (alias t): TS sends both as a reply line. */
+static void reply_typed(const char *rest, int thread)
+{
+    char a[16];
+    const char *text = rest;
+    lc_line *l;
+    int rc;
+    arg_word(rest, a, sizeof a);
+    if (thread && (a[0] == '\0' || *after_word(rest) == '\0')) { usage("/thread <msg-id> message"); return; }
+    if (*rest == '\0') { usage("/reply [msg-id] message"); return; }
+    if (digits(a) && *after_word(rest) != '\0') {          /* TS: an id only with two or more words */
+        if ((l = typed_message(a)) == 0) return;
+        text = after_word(rest);
+    } else if (thread) { usage("/thread <msg-id> message"); return; }
+    else if ((l = room_last()) == 0) {
+        system_line("No message to reply to: name one with its id.");
+        return;
+    }
+    if (room_id[0] == '\0') { system_line("Join a room first."); return; }
+    rc = ae_chat_send(&chat, room_id, text, l->id, 0);
+    if (rc == AE_CHAT_OK) do_poll(); else show_error(rc);
+}
+
 static void delete_typed(const char *rest)
 {
     char a[16];
@@ -826,23 +882,19 @@ static int run_command(const char *line)
         new_room(rest, cmd[1] == 'p' ? "private" : "public");    /* the whole rest: a name may have spaces */
         return 0;
     }
-    if (is_cmd(cmd, "r", "react") || is_cmd(cmd, "t", "thread")) {
+    if (is_cmd(cmd, "r", "reply")) { reply_typed(rest, 0); return 0; }
+    if (is_cmd(cmd, "t", "thread")) { reply_typed(rest, 1); return 0; }
+    if (strcmp(cmd, "react") == 0) {
         lc_line *l;
-        int react = cmd[0] == 'r';
+        int count = 0;
         arg_word(rest, a, sizeof a);
         n = atoi(a);
         l = line_by_number(n);
         rest = after_word(rest);
         if (l == 0 || l->id[0] == '\0') { system_line("No such message number."); return 0; }
-        if (*rest == '\0') { system_line(react ? "Usage: /react n emoji" : "Usage: /thread n text"); return 0; }
-        if (react) {
-            int count = 0;
-            rc = ae_chat_react(&chat, l->id, rest, &count);
-            if (rc == AE_CHAT_OK) do_poll(); else show_error(rc);      /* the react event repaints the counts */
-        } else {
-            rc = ae_chat_thread(&chat, l->id, rest);
-            if (rc == AE_CHAT_OK) system_line("Thread reply sent."); else show_error(rc);
-        }
+        if (*rest == '\0') { system_line("Usage: /react n emoji"); return 0; }
+        rc = ae_chat_react(&chat, l->id, rest, &count);
+        if (rc == AE_CHAT_OK) do_poll(); else show_error(rc);          /* the react event repaints the counts */
         return 0;
     }
     if (is_cmd(cmd, "d", "dm") || strcmp(cmd, "msg") == 0) {
@@ -1002,10 +1054,16 @@ static void ctx_run(const char *it)
             int count = 0;
             if (ae_chat_react(&chat, l->id, "+1", &count) == AE_CHAT_OK) do_poll();     /* the react event repaints the counts */
             else system_line("The reaction did not go through.");
-        } else if (strcmp(it, "Quote") == 0) { sprintf(buf, "> %.24s: %.60s ", l->nick, l->text); input_set(buf); }
+        } else if (strcmp(it, "Reply") == 0) { sprintf(buf, "/reply %d ", l->number); input_set(buf); }
+        else if (strcmp(it, "Quote") == 0) {                          /* TS quoteInputText */
+            char q[sizeof l->quote];
+            quote_of(l, q, (int)sizeof q);
+            sprintf(buf, "> %s ", q);
+            input_set(buf);
+        }
         else if (strcmp(it, "Edit") == 0) { sprintf(buf, "/edit %d ", l->number); input_set(buf); }
         else if (strcmp(it, "Delete") == 0) then_poll(ae_chat_delete(&chat, l->id));    /* TS: no confirm */
-        else not_yet(it);                /* Reply, Copy Text (OSC 52), Pin, Mark Unread */
+        else not_yet(it);                /* Copy Text (OSC 52), Pin, Mark Unread */
     } else {
         lc_side *r = &M.side[M.ctx_target];
         if (strcmp(it, "Join") == 0) join_room(r->id);
