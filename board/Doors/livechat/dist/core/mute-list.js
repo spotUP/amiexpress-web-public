@@ -2,6 +2,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.createMuteList = createMuteList;
 exports.toggleMute = toggleMute;
+exports.canonicalName = canonicalName;
 exports.muteLevel = muteLevel;
 exports.namesAtLevel = namesAtLevel;
 exports.hidesRoomMessages = hidesRoomMessages;
@@ -32,7 +33,7 @@ function key(username) {
  * someone already muted is the only obvious way back.
  */
 function toggleMute(list, username, level) {
-    const k = key(username);
+    const k = canonicalName(list, username);
     if (!k)
         return null;
     if (list.get(k) === level) {
@@ -42,8 +43,24 @@ function toggleMute(list, username, level) {
     list.set(k, level);
     return level;
 }
+/**
+ * Federated names are `handle@BOARD`; a user types the bare handle. Return
+ * the list's own spelling of the person: the exact key, else the one entry
+ * whose bare handle matches (either side may carry the `@BOARD` suffix),
+ * else the key as typed.
+ */
+function canonicalName(list, username) {
+    const k = key(username);
+    if (!k || list.has(k))
+        return k;
+    const bare = k.split('@')[0];
+    for (const name of list.keys())
+        if (name.split('@')[0] === bare && (name.includes('@') !== k.includes('@') || name === k))
+            return name;
+    return k;
+}
 function muteLevel(list, username) {
-    return list.get(key(username)) ?? null;
+    return list.get(canonicalName(list, username)) ?? null;
 }
 /** Everyone held at exactly this level, sorted - what a bare /ignore lists. */
 function namesAtLevel(list, level) {

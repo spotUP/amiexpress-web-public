@@ -6,6 +6,7 @@ const reply_quote_1 = require("../core/reply-quote");
 const prefs_sync_1 = require("../core/prefs-sync");
 const dm_render_1 = require("./dm-render");
 const door_theme_1 = require("../door-theme");
+const whois_render_1 = require("./whois-render");
 const emojis_1 = require("../utils/emojis");
 const reaction_store_1 = require("../features/reaction-store");
 const reaction_rows_1 = require("../features/reaction-rows");
@@ -37,8 +38,22 @@ function setupChatHandlers(sock, st, uid, un, ou, ps, cl, uut, asm, acm, aa, uef
         pk(st.typingBuffers, d.userId, d.username, 'CLEAR', '');
         utp();
     });
+    // Server profile (federation door server): answer to /whois and View Profile.
+    sock.on('chat:profile', (d) => {
+        if ((0, whois_render_1.offerProfile)(d))
+            return;
+        whois_render_1.whoisRequests.answer(String(d?.user ?? ''));
+        for (const line of (0, whois_render_1.profileLines)(d))
+            asm(line);
+    });
     sock.on('chat:presence', (d) => {
-        const u = ou.get(String(d.userId));
+        // A federated userId is the handle, which the roster may not key by:
+        // fall back to the name, and add a person who first shows up as a presence.
+        let u = ou.get(String(d.userId)) ?? (0, whois_render_1.findOnlineUser)(ou, String(d.username ?? ''));
+        if (!u && d.username && d.userId !== uid) {
+            u = { username: d.username, status: d.status, joinedAt: new Date() };
+            ou.set(String(d.userId), u);
+        }
         if (u) {
             u.status = d.status;
             ps.setStatus(d.userId, d.status, d.custom);

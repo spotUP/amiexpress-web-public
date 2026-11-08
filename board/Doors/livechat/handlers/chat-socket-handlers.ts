@@ -3,6 +3,7 @@ import { formatReplyQuote } from '../core/reply-quote';
 import { applyServerPrefs } from '../core/prefs-sync';
 import { formatDmLine } from './dm-render';
 import { T } from '../door-theme';
+import { findOnlineUser, profileLines, whoisRequests, offerProfile } from './whois-render';
 import { setCustomEmojis } from '../utils/emojis';
 import { setReactionCounts } from '../features/reaction-store';
 import { formatReactionCounts } from '../features/reaction-rows';
@@ -33,8 +34,21 @@ export function setupChatHandlers(sock: any, st: any, uid: number, un: string, o
     utp();
   });
 
+  // Server profile (federation door server): answer to /whois and View Profile.
+  sock.on('chat:profile', (d: any) => {
+    if (offerProfile(d)) return;
+    whoisRequests.answer(String(d?.user ?? ''));
+    for (const line of profileLines(d)) asm(line);
+  });
+
   sock.on('chat:presence', (d: any) => {
-    const u = ou.get(String(d.userId));
+    // A federated userId is the handle, which the roster may not key by:
+    // fall back to the name, and add a person who first shows up as a presence.
+    let u = ou.get(String(d.userId)) ?? findOnlineUser(ou, String(d.username ?? ''));
+    if (!u && d.username && d.userId !== uid) {
+      u = { username: d.username, status: d.status, joinedAt: new Date() };
+      ou.set(String(d.userId), u);
+    }
     if (u) {
       u.status = d.status;
       ps.setStatus(d.userId, d.status, d.custom);

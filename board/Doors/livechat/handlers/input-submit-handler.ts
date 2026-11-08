@@ -11,8 +11,8 @@ import { parseContent } from '../utils/markdown';
 import { getUserColor } from '../core/formatter';
 import { T } from '../door-theme';
 import type { MessagePicker } from '../features/message-picker';
-import { namesAtLevel, muteLevel, muteMessage, toggleMute } from '../core/mute-list';
-import { findOnlineUser, formatWhois } from './whois-render';
+import { namesAtLevel, muteLevel, muteMessage, toggleMute, canonicalName } from '../core/mute-list';
+import { findOnlineUser, formatWhois, whoisRequests } from './whois-render';
 import { channelsToShow } from '../core/state';
 import { settings } from '../settings';
 import { saveSettings, prefsAsCheckboxes } from '../overlays/settings-save';
@@ -171,7 +171,12 @@ export function createSubmitHandler(
         // { type: 'whois', username } and this is the only consumer. Keyed on
         // the data type, not cmdName, so the alias works too.
         if (r.data?.type === 'whois' && r.data?.username) {
-          addSystemMessage(formatWhois(findOnlineUser(onlineUsers, r.data.username), r.data.username));
+          // The federation door server owns the profile (chat:profile reply,
+          // rendered by chat-socket-handlers); a board without it never
+          // answers, so the local online-user line prints after a short wait.
+          const asked: string = r.data.username;
+          whoisRequests.ask(asked, () => addSystemMessage(formatWhois(findOnlineUser(onlineUsers, asked), asked)));
+          socket.emit('chat:whois', { username: asked });
         }
 
         if (cmdName === 'me' && r.message?.startsWith('ACTION:')) {
@@ -296,7 +301,7 @@ export function createSubmitHandler(
               addSystemMessage(`Already ignoring ${r.data.user}.`);
             } else {
               // Sets the level (replacing a mute/block) and never toggles it off.
-              state.muteList.delete(r.data.user.toLowerCase());
+              state.muteList.delete(canonicalName(state.muteList, r.data.user));
               addSystemMessage(muteMessage(r.data.user, toggleMute(state.muteList, r.data.user, 'ignore')));
               socket.emit('chat:ignore', { user: r.data.user });
             }

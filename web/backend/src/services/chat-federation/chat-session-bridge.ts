@@ -54,6 +54,11 @@ export const FEDERATED_EVENTS: ReadonlySet<string> = new Set([
   'chat:react',
   'chat:unreact',
   'chat:dm',
+  'chat:presence',
+  'chat:whois',
+  'chat:ignore',
+  'chat:unignore',
+  'chat:ignore-list',
 ]);
 
 export function isFederatedEnabled(): boolean {
@@ -152,6 +157,18 @@ function deliver(session: BBSSession, st: CallerState, rows: ChatTextReply['rows
         type: r.type === 'dm' ? 'dm' : 'message',
         roleColor: r.roleColor,
         createdAt: new Date(toMs(at)),
+      });
+      continue;
+    }
+    if (r.type === 'presence') {
+      // text is `status!statusText` (the wire form of a pipe is `!`)
+      if (r.user.toLowerCase() === own) continue;
+      const [status = 'online', ...rest] = splitSubFields(r.text);
+      emitter.emit('chat:presence', {
+        userId: r.user,
+        username: r.user,
+        status: status === 'busy' ? 'dnd' : status,
+        custom: rest.join('!') || undefined,
       });
       continue;
     }
@@ -256,6 +273,10 @@ interface Payload {
   targetUsername?: string;
   to?: string;
   clientId?: string;
+  status?: string;
+  custom?: string;
+  user?: string;
+  username?: string;
   isPublic?: boolean;
 }
 
@@ -354,10 +375,55 @@ async function dispatch(socket: { emit: (e: string, ...a: unknown[]) => unknown 
         st.counter += 1;
         await st.client.dm(sid, p.to ?? '', sanitizeChatMessage(p.message ?? p.content ?? ''), `${st.handle}-dm-${Date.now()}-${st.counter}`);
         return;
+      case 'chat:presence': {
+        const status = p.status;
+        if (status !== 'online' && status !== 'away' && status !== 'busy' && status !== 'dnd') return;
+        const text = (p.custom ?? '').trim();
+        if (status === 'online' && !text) await st.client.clearPresence(sid);
+        else await st.client.setPresence(sid, status, text || undefined);
+        return;
+      }
+      case 'chat:whois': {
+        const user = fullHandle(st, p.username ?? p.user ?? '');
+        try {
+          const row = (await st.client.profile(sid, user)).rows[0];
+          socket.emit('chat:profile', row ? { found: true, ...row } : { found: false, user });
+        } catch (err) {
+          if (err instanceof ChatApiError && err.code === 'not_found') socket.emit('chat:profile', { found: false, user });
+          else throw err;
+        }
+        return;
+      }
+      case 'chat:ignore':
+      case 'chat:unignore': {
+        const user = fullHandle(st, p.user ?? '');
+        if (user && user.toLowerCase() !== st.handle.toLowerCase()) {
+          if (event === 'chat:ignore') await st.client.ignore(sid, user);
+          else await st.client.unignore(sid, user);
+        }
+        await emitIgnoreList(socket, st, sid);
+        return;
+      }
+      case 'chat:ignore-list':
+        await emitIgnoreList(socket, st, sid);
+        return;
       default:
         return;
     }
   });
+}
+
+/** A bare name means someone on the caller's own board: `bob` becomes `bob@<this board>`. */
+function fullHandle(st: CallerState, name: string): string {
+  const n = name.trim().replace(/^@/, '');
+  if (!n || n.includes('@')) return n;
+  const board = st.handle.split('@')[1];
+  return board ? `${n}@${board}` : n;
+}
+
+async function emitIgnoreList(socket: { emit: (e: string, ...a: unknown[]) => unknown }, st: CallerState, sid: string): Promise<void> {
+  const rows = (await st.client.ignores(sid)).rows;
+  socket.emit('chat:ignore-list', { users: rows.map((r) => r.user) });
 }
 
 /**

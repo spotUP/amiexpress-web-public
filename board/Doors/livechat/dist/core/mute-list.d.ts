@@ -33,6 +33,13 @@ export declare function createMuteList(): MuteList;
  * someone already muted is the only obvious way back.
  */
 export declare function toggleMute(list: MuteList, username: string, level: MuteLevel): MuteLevel | null;
+/**
+ * Federated names are `handle@BOARD`; a user types the bare handle. Return
+ * the list's own spelling of the person: the exact key, else the one entry
+ * whose bare handle matches (either side may carry the `@BOARD` suffix),
+ * else the key as typed.
+ */
+export declare function canonicalName(list: MuteList, username: string): string;
 export declare function muteLevel(list: MuteList, username: string): MuteLevel | null;
 /** Everyone held at exactly this level, sorted - what a bare /ignore lists. */
 export declare function namesAtLevel(list: MuteList, level: MuteLevel): string[];

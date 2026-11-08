@@ -8,7 +8,8 @@ const blessed_1 = __importDefault(require("@amiexpress/bbs-door-sdk/engines/ui/b
 const theme_1 = require("../ui/theme");
 const door_theme_1 = require("../door-theme");
 const fit_width_1 = require("../ui/fit-width");
-function createProfileOverlay(s, ib, users, uname, st, getColor, getChan, showMsg, showDM, show, hide) {
+const whois_render_1 = require("../handlers/whois-render");
+function createProfileOverlay(s, ib, users, uname, st, getColor, getChan, showMsg, showDM, show, hide, askProfile) {
     let target = '';
     const o = blessed_1.default.box({ parent: s, top: 'center', left: 'center', width: (0, fit_width_1.fitWidth)(s, 48), height: 15, border: { type: 'line' }, hidden: true, mouse: true, keys: true, closable: true, draggable: true, trapFocus: true, style: { fg: door_theme_1.T.ink, bg: door_theme_1.T.ground, border: { fg: theme_1.PANEL_BORDER } }, zIndex: 9990 });
     o.enableResize();
@@ -16,6 +17,7 @@ function createProfileOverlay(s, ib, users, uname, st, getColor, getChan, showMs
     const nd = blessed_1.default.box({ parent: o, top: 3, left: 2, tags: true });
     const sts = blessed_1.default.box({ parent: o, top: 5, left: 2, tags: true });
     const ch = blessed_1.default.box({ parent: o, top: 7, left: 2, tags: true });
+    const ex = blessed_1.default.box({ parent: o, top: 9, left: 2, right: 2, height: 1, tags: true });
     const dm = blessed_1.default.button({ parent: o, bottom: 2, left: 5, width: 12, height: 1, content: 'Send DM', mouse: true, style: { fg: door_theme_1.T.ink, bg: door_theme_1.T.ok, focus: { bg: door_theme_1.T.accent } } });
     const cl = blessed_1.default.button({ parent: o, bottom: 2, right: 5, width: 10, height: 1, content: 'Close', mouse: true, style: { fg: door_theme_1.T.ink, bg: door_theme_1.T.bar, focus: { bg: door_theme_1.T.accent } } });
     function showProfile(u) {
@@ -35,6 +37,18 @@ function createProfileOverlay(s, ib, users, uname, st, getColor, getChan, showMs
         sts.setContent(f.status === 'idle' ? `{${door_theme_1.T.accentAlt}-fg}idle{/${door_theme_1.T.accentAlt}-fg}` : `{${door_theme_1.T.ok}-fg}active{/${door_theme_1.T.ok}-fg}`);
         ch.setContent(getChan(st.currentChannel) || 'Lobby');
         o.setLabel(` ${u} `);
+        ex.setContent('');
+        if (askProfile) {
+            // The chat server's profile (status text, last seen) fills the extra line.
+            (0, whois_render_1.setProfileSink)((p) => {
+                if (p.user.split('@')[0].toLowerCase() !== u.split('@')[0].toLowerCase())
+                    return false;
+                ex.setContent((0, whois_render_1.profileLines)(p)[0]);
+                s.render();
+                return true;
+            });
+            askProfile(u);
+        }
         show(o);
         dm.focus();
         s.render();
@@ -42,7 +56,7 @@ function createProfileOverlay(s, ib, users, uname, st, getColor, getChan, showMs
     dm.on('press', () => { hide(o); if (target && target !== uname)
         showDM(target); });
     cl.on('press', () => hide(o));
-    o.on('close', () => hide(o));
+    o.on('close', () => { (0, whois_render_1.setProfileSink)(null); hide(o); });
     // Add explicit escape key handler to ensure it works even when child elements are focused
     o.key(['escape'], () => hide(o));
     return { overlay: o, showProfile };

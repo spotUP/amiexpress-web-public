@@ -1426,7 +1426,7 @@ async function createApp(session) {
     const settingsOverlay = (0, settings_overlay_1.createSettingsOverlay)(screen, state, presenceService, socketEmitter, userId, updateStatusBar, hideModal);
     // ========== CREATE DIALOG HELPERS ==========
     const { showHelpDialog, showSettingsOverlay, showNewMessagePrompt, showRoomMenu, showUserList, showDMPrompt } = (0, dialog_helpers_1.createDialogHelpers)(showHelp, showModal, showPromptDialog, showMessageDialog, settingsOverlay, inputBox, screen, socket, state, onlineUsers, addSystemMessage, addChatMessage, types_1.PRESENCE_INDICATORS);
-    const { overlay: profileOverlay, showProfile: showUserProfile } = (0, profile_overlay_1.createProfileOverlay)(screen, inputBox, onlineUsers, username, state, formatter_1.getUserColor, getChannelDisplayName, showMessageDialog, showDMPrompt, showModal, hideModal);
+    const { overlay: profileOverlay, showProfile: showUserProfile } = (0, profile_overlay_1.createProfileOverlay)(screen, inputBox, onlineUsers, username, state, formatter_1.getUserColor, getChannelDisplayName, showMessageDialog, showDMPrompt, showModal, hideModal, (user) => socket.emit('chat:whois', { username: user }));
     // ========== DRAWING CANVAS (for drawing channels) ==========
     const { drawingCanvas, drawingChannels, isDrawingChannel, enterDrawingMode, exitDrawingMode } = (0, drawing_canvas_1.createDrawingCanvas)(screen, socket, state, chatLog, typingBar, bbs, inputBox, getChannelDisplayName, updateChannelList, updateStatusBar, addSystemMessage, menu_bar_1.MENU_HEIGHT, SIDEBAR_WIDTH, status_bar_1.STATUS_HEIGHT, input_box_1.INPUT_HEIGHT);
     // ========== FILE SHARING ==========

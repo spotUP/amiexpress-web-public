@@ -15,3 +15,34 @@ export declare function findOnlineUser(users: Map<string, any>, name: string): a
  * rendered inline because a command prints to the log, not a dialog.
  */
 export declare function formatWhois(user: any, name: string): string;
+/** One PROFILE row from the federation door server, as the bridge forwards it. */
+export interface ProfileReply {
+    found: boolean;
+    user: string;
+    nick?: string;
+    board?: string;
+    status?: string;
+    statusText?: string;
+    firstSeen?: string;
+    lastSeen?: string;
+    idleSeconds?: string;
+    online?: string;
+    sharedRooms?: string;
+}
+/** The /whois text for a server profile; the same facts the overlay's extra lines show. */
+export declare function profileLines(p: ProfileReply): string[];
+export declare function formatProfile(p: ProfileReply): string;
+/**
+ * /whois asks the server and waits for chat:profile. A board without the
+ * federation never answers, so each request carries a fallback that runs
+ * after `ms` unless the reply arrives first.
+ */
+export declare class WhoisRequests {
+    private pending;
+    ask(name: string, fallback: () => void, ms?: number): void;
+    /** The reply arrived: true when a request was waiting for it (fallback cancelled). */
+    answer(user: string): boolean;
+}
+export declare const whoisRequests: WhoisRequests;
+export declare function setProfileSink(sink: ((p: ProfileReply) => boolean) | null): void;
+export declare function offerProfile(p: ProfileReply): boolean;

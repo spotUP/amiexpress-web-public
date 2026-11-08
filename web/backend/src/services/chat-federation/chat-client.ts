@@ -269,6 +269,27 @@ export class ChatClient {
   who(sid: string): Promise<ChatTextReply> {
     return this.text('/who.txt', sid, 'WHO');
   }
+  /** /away, /status: online with no text is the same as clearing. */
+  setPresence(sid: string, status: 'online' | 'away' | 'busy' | 'dnd', text?: string) {
+    return this.json<{ status: string; statusText: string }>('PUT', '/presence', sid, { status, text });
+  }
+  /** /back. */
+  clearPresence(sid: string) {
+    return this.json<{ status: string; statusText: string }>('DELETE', '/presence', sid);
+  }
+  /** One PROFILE row for `handle@BOARD`; 404 not_found when the server never saw the user. */
+  profile(sid: string, user: string): Promise<ChatTextReply> {
+    return this.text(`/users/${encodeURIComponent(user)}/profile.txt`, sid, 'PROFILE');
+  }
+  ignores(sid: string): Promise<ChatTextReply> {
+    return this.text('/ignores.txt', sid, 'IGNORES');
+  }
+  async ignore(sid: string, user: string): Promise<void> {
+    await this.json('POST', '/ignores', sid, { user });
+  }
+  async unignore(sid: string, user: string): Promise<void> {
+    await this.json('DELETE', `/ignores/${encodeURIComponent(user)}`, sid);
+  }
   /** Long poll. Returns rows after `since`; `rev` is the next `since`. */
   events(sid: string, since: number, waitSeconds = 20): Promise<ChatTextReply> {
     return this.text(`/events.txt?since=${since}&wait=${waitSeconds}`, sid, 'EVENTS', (waitSeconds + 10) * 1000);

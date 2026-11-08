@@ -112,7 +112,12 @@ function createSubmitHandler(socket, state, registry, cmdCtx, userId, username, 
                 // { type: 'whois', username } and this is the only consumer. Keyed on
                 // the data type, not cmdName, so the alias works too.
                 if (r.data?.type === 'whois' && r.data?.username) {
-                    addSystemMessage((0, whois_render_1.formatWhois)((0, whois_render_1.findOnlineUser)(onlineUsers, r.data.username), r.data.username));
+                    // The federation door server owns the profile (chat:profile reply,
+                    // rendered by chat-socket-handlers); a board without it never
+                    // answers, so the local online-user line prints after a short wait.
+                    const asked = r.data.username;
+                    whois_render_1.whoisRequests.ask(asked, () => addSystemMessage((0, whois_render_1.formatWhois)((0, whois_render_1.findOnlineUser)(onlineUsers, asked), asked)));
+                    socket.emit('chat:whois', { username: asked });
                 }
                 if (cmdName === 'me' && r.message?.startsWith('ACTION:')) {
                     const processedMsg = r.message; // the :code: travels; each client renders it
@@ -243,7 +248,7 @@ function createSubmitHandler(socket, state, registry, cmdCtx, userId, username, 
                         }
                         else {
                             // Sets the level (replacing a mute/block) and never toggles it off.
-                            state.muteList.delete(r.data.user.toLowerCase());
+                            state.muteList.delete((0, mute_list_1.canonicalName)(state.muteList, r.data.user));
                             addSystemMessage((0, mute_list_1.muteMessage)(r.data.user, (0, mute_list_1.toggleMute)(state.muteList, r.data.user, 'ignore')));
                             socket.emit('chat:ignore', { user: r.data.user });
                         }

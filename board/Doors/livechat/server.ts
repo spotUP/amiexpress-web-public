@@ -1632,7 +1632,8 @@ export async function createApp(session: DoorSession) {
     showMessageDialog,
     showDMPrompt,
     showModal,
-    hideModal
+    hideModal,
+    (user: string) => socket.emit('chat:whois', { username: user }),
   );
 
   // ========== DRAWING CANVAS (for drawing channels) ==========

@@ -49,7 +49,7 @@ function key(username: string): string {
  * someone already muted is the only obvious way back.
  */
 export function toggleMute(list: MuteList, username: string, level: MuteLevel): MuteLevel | null {
-  const k = key(username);
+  const k = canonicalName(list, username);
   if (!k) return null;
 
   if (list.get(k) === level) {
@@ -60,8 +60,22 @@ export function toggleMute(list: MuteList, username: string, level: MuteLevel): 
   return level;
 }
 
+/**
+ * Federated names are `handle@BOARD`; a user types the bare handle. Return
+ * the list's own spelling of the person: the exact key, else the one entry
+ * whose bare handle matches (either side may carry the `@BOARD` suffix),
+ * else the key as typed.
+ */
+export function canonicalName(list: MuteList, username: string): string {
+  const k = key(username);
+  if (!k || list.has(k)) return k;
+  const bare = k.split('@')[0];
+  for (const name of list.keys()) if (name.split('@')[0] === bare && (name.includes('@') !== k.includes('@') || name === k)) return name;
+  return k;
+}
+
 export function muteLevel(list: MuteList, username: string): MuteLevel | null {
-  return list.get(key(username)) ?? null;
+  return list.get(canonicalName(list, username)) ?? null;
 }
 
 /** Everyone held at exactly this level, sorted - what a bare /ignore lists. */

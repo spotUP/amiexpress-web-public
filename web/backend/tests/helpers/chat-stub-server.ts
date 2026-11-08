@@ -28,6 +28,7 @@ export async function startChatStub(): Promise<ChatStub> {
   const calls: StubCall[] = [];
   const queue: string[] = [];
   let seq = 0;
+  const ignored: string[] = [];
   let waiting: Array<() => void> = [];
   const stub: ChatStub = {
     url: '',
@@ -69,6 +70,12 @@ export async function startChatStub(): Promise<ChatStub> {
         waiting.push(() => { clearTimeout(t); send(); });
         return;
       }
+      if (req.method === 'PUT' && p === '/presence') { res.writeHead(204); return void res.end(); }
+      if (req.method === 'DELETE' && p === '/presence') { res.writeHead(204); return void res.end(); }
+      if (req.method === 'GET' && /^\/users\/[^/]+\/profile\.txt$/.test(p)) return text('PROFILE|1|1|1\r\nbob@TEST|bob@TEST|TEST|online|Bob the builder|1|2|0|1|1\r\n');
+      if (req.method === 'GET' && p === '/ignores.txt') return text(`IGNORES|1|1|${ignored.length}\r\n${ignored.map((u) => `${u}|1\r\n`).join('')}`);
+      if (req.method === 'POST' && p === '/ignores') { const u = String(JSON.parse(Buffer.concat(chunks).toString() || '{}').user ?? ''); if (u && !ignored.includes(u)) ignored.push(u); res.writeHead(204); return void res.end(); }
+      if (req.method === 'DELETE' && p.startsWith('/ignores/')) { const u = decodeURIComponent(p.slice(9)); const i = ignored.indexOf(u); if (i >= 0) ignored.splice(i, 1); res.writeHead(204); return void res.end(); }
       if (req.method === 'GET' && p === '/roles') return json(200, stub.roles);
       if (req.method === 'GET' && p === '/roles/assignments') return json(200, [{ handle: 'bob@TEST', roleId: 'r1' }]);
       return json(404, { error: 'not_found' });
