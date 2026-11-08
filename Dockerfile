@@ -317,9 +317,14 @@ RUN echo "${GIT_SHA}" > /app/.git-sha && echo "[Docker] image built from $(cat /
 # Copy backend production dependencies
 COPY --from=backend-builder /app/web/backend/package*.json ./web/backend/
 WORKDIR /app/web/backend
-# Install production deps and rebuild native modules for Linux
+# Install production deps and rebuild native modules for Linux.
+# better-sqlite3 comes ONLY from its prebuilt release binary: `npm rebuild`
+# falls back to compiling it when the download fails, and the compiled addon
+# aborted the backend at boot on 2026-11-08 (docker/install-prebuilt-better-sqlite3.sh).
+COPY docker/install-prebuilt-better-sqlite3.sh /usr/local/bin/install-prebuilt-better-sqlite3.sh
 RUN npm ci --only=production --ignore-scripts && \
-    npm rebuild better-sqlite3 && \
+    sh /usr/local/bin/install-prebuilt-better-sqlite3.sh /app/web/backend && \
+    node -e "new (require('better-sqlite3'))(':memory:').prepare('select 1').get()" && \
     npm rebuild deasync && \
     npm cache clean --force
 
