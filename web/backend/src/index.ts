@@ -378,6 +378,15 @@ export interface BBSSession {
   /** Whether terminal supports Unicode (detected via TTYPE for telnet/SSH, always true for web) */
   unicodeCapable?: boolean;
   /**
+   * The caller's terminal answered the kitty graphics query (a=q) with OK.
+   * Set only by services/kitty-graphics.service.ts; never guessed from TTYPE.
+   */
+  kittyGraphics?: boolean;
+  /** The kitty graphics query went out to this caller (once per connection). */
+  kittyProbeSent?: boolean;
+  /** A kitty reply cut by a packet boundary, finished by the next input chunk. */
+  kittyReplyPending?: string;
+  /**
    * The charset this caller's socket is written in, when it was NEGOTIATED
    * rather than classified (telnet CHARSET, RFC 2066) or is known by
    * construction (`/ws/terminal`, whose text frames are UTF-8 by RFC 6455).

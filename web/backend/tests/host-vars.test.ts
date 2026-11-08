@@ -118,3 +118,16 @@ describe('ENV: files, for a door that reads them as files', () => {
     expect(written).toEqual([]);
   });
 });
+
+describe('the kitty capability', () => {
+  it('is offered only to a caller whose terminal answered the kitty query OK', () => {
+    const yes = factsFromSession({ connectionType: 'telnet', kittyGraphics: true }, '1');
+    expect(capabilitiesFor(yes)).toContain(AE_CAPABILITIES.kitty);
+
+    const unasked = factsFromSession({ connectionType: 'telnet' }, '1');
+    expect(capabilitiesFor(unasked)).not.toContain(AE_CAPABILITIES.kitty);
+
+    const plain = factsFromSession({ connectionType: 'telnet', kittyGraphics: true, ansiMode: false }, '1');
+    expect(capabilitiesFor(plain)).not.toContain(AE_CAPABILITIES.kitty);
+  });
+});

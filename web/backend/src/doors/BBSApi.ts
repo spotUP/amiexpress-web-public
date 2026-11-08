@@ -52,6 +52,7 @@ import { doorTerminalSize } from './door-terminal-size';
 import { wrapDoorTextForSession } from '../utils/wrap-for-session.util';
 import { puaToUnicode } from '@amiexpress/bbs-door-sdk/petscii';
 import { sessionWantsPetscii } from '../utils/petscii-session-model';
+import { sendKittyImage, sessionHasKittyGraphics, type KittyImage, type SendKittyImageOptions } from '../services/kitty-graphics.service';
 import { getBoardConfig } from '../services/bbs-config-file.service';
 import { config as appConfig } from '../config';
 import { listOnlineNodes, type OnlineNode } from './who-is-online';
@@ -313,6 +314,14 @@ export class BBSApi {
     }
     // For telnet/SSH, check detected capability (defaults to false if unknown)
     return (this.session as any)?.unicodeCapable === true;
+  }
+
+  /** The terminal answered the kitty graphics query OK (services/kitty-graphics.service.ts). */
+  get kittyGraphics(): boolean { return sessionHasKittyGraphics(this.session); }
+
+  /** Picture for a kitty caller, else `opts.fallback`; not via `write`, whose wrap breaks base64. */
+  sendImage(image: KittyImage, opts: SendKittyImageOptions = {}): boolean {
+    return sendKittyImage(this.session, image, opts, (apc) => { this.socket.emit('ansi-output', apc); }, (t) => { this.write(t); });
   }
 
   /**

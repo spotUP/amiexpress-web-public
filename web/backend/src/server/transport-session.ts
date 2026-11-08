@@ -47,6 +47,7 @@ const PAN_COLUMNS = 8;
 import { answerPause, classifyTerminalInput, commandPieces, commandFailed, dispatchInOrder, swallowTelnetLineFeed } from "./terminal-input";
 import { handleChatModeInput } from "../utils/chat-mode-input.util";
 import { classifyFirstKeypress } from "../utils/c64-detect.util";
+import { startKittyProbe, takeKittyReplies } from "../services/kitty-graphics.service";
 import { convertPetsciiInputToAscii } from "../utils/petscii.util";
 import {
   applyTerminalTypeReport,
@@ -319,6 +320,13 @@ console.log(
       input = decodeFromWire(connection.session, data);
     }
 
+    // The kitty graphics query's answer is the terminal talking to the
+    // board, not a keypress: no prompt, editor or door may see it.
+    if (connection.session?.kittyProbeSent) {
+      input = takeKittyReplies(connection.session, input);
+      if (input === "") return;
+    }
+
     // Telnet clients may send CR NUL sequences; strip NUL padding
     if (type === "telnet") {
       input = input.replace(/\0/g, "");
@@ -490,6 +498,10 @@ console.log('[TELNET] Door active but nothing listening - emitting door:input');
         // xim/screen-width.util.ts so it can be DRIVEN by a test - this file
         // boots a server on import (whole-run review, I13).
         applyTerminalTypeReport(connection.session, info);
+        // Ask the terminal whether it draws kitty graphics (UP-Term, dc
+        // telnet, kitty, WezTerm). The answer is taken out of the input
+        // stream below by takeKittyReplies; services/kitty-graphics.service.ts.
+        startKittyProbe(connection.session, info, (bytes) => connection.write(Buffer.from(bytes, "latin1")));
 console.log(
           `[${type.toUpperCase()}] Terminal detected: ${info.terminalType} (${
             info.isC64 ? "C64" : "Modern"

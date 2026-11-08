@@ -95,6 +95,9 @@ function wrapPassingArt(text: string, width: number): string {
     .join('\r\n');
 }
 
+/** The characters after ESC that open a control string ended by ST. */
+const STRING_INTRODUCERS = new Set(['_', 'P', ']', '^', 'X']);
+
 /**
  * The 80-column terminal's autowrap, done by the board.
  *
@@ -123,6 +126,14 @@ export function foldFrom(text: string, cols: number, startCol: number): { out: s
         j++;
         while (j < n && text.charCodeAt(j) >= 0x20 && text.charCodeAt(j) <= 0x3f) j++;
         if (j < n) j++;
+      } else if (j < n && STRING_INTRODUCERS.has(text[j])) {
+        // APC / DCS / OSC / PM / SOS: a string up to ST (`ESC \`, or BEL
+        // for OSC). Its body draws nothing - a kitty graphics APC carries
+        // kilobytes of base64 - so it costs no columns and is never folded.
+        // An unterminated string runs to the end of the chunk.
+        j++;
+        while (j < n && !(text[j] === '\x1b' && text[j + 1] === '\\') && text[j] !== '\x07') j++;
+        if (j < n) j += text[j] === '\x07' ? 1 : 2;
       } else if (j < n) {
         j++;
       }

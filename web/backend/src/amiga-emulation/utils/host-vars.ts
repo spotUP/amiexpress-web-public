@@ -37,6 +37,8 @@
 /** What this board answers to. A door tests `AE_HOST == AE_HOST_ID`. */
 export const AE_HOST_ID = 'amiexpress-web';
 
+import { sessionHasKittyGraphics } from '../../services/kitty-graphics.service';
+
 /** The variable names, in one place, so the door docs and the code agree. */
 export const AE_HOST_VAR = 'AE_HOST';
 export const AE_HOST_VERSION_VAR = 'AE_HOST_VERSION';
@@ -61,6 +63,11 @@ export const AE_CAPABILITIES = {
   wide: 'wide',
   /** Mouse reports reach the door. */
   mouse: 'mouse',
+  /**
+   * The caller's terminal draws kitty graphics pictures (it answered the
+   * board's kitty query with OK; services/kitty-graphics.service.ts).
+   */
+  kitty: 'kitty',
 } as const;
 
 /** How the caller is attached to the board. */
@@ -93,6 +100,8 @@ export interface HostFacts {
   client: AeClient;
   /** The board's own version string. */
   version: string;
+  /** The terminal answered the kitty graphics query with OK. */
+  kitty?: boolean;
 }
 
 /**
@@ -116,7 +125,9 @@ export function factsFromSession(session: unknown, version: string): HostFacts {
   const client: AeClient =
     s.terminalType === 'c64' || s.petsciiMode === true ? 'petscii' : 'ansi';
 
-  return { connection, client, version };
+  const kitty = sessionHasKittyGraphics(session as Parameters<typeof sessionHasKittyGraphics>[0]);
+
+  return { connection, client, version, kitty };
 }
 
 /**
@@ -136,6 +147,7 @@ export function capabilitiesFor(facts: HostFacts): string[] {
   if (facts.connection === 'web') {
     caps.push(AE_CAPABILITIES.wide, AE_CAPABILITIES.mouse);
   }
+  if (facts.kitty === true) caps.push(AE_CAPABILITIES.kitty);
   return caps;
 }
 

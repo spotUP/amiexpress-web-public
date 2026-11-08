@@ -248,3 +248,17 @@ describe('foldForWire keys on wireWidth, which the graphics prompt does not rese
     expect(Math.max(...rows.map((r) => r.length))).toBe(80);
   });
 });
+
+describe('foldAtColumn skips control strings (kitty graphics APC)', () => {
+  it('copies an APC whole and charges it no columns', () => {
+    const apc = `\x1b_Ga=T,f=100,m=0;${'A'.repeat(300)}\x1b\\`;
+    expect(foldAtColumn(`ab${apc}cd`, 4)).toBe(`ab${apc}cd`);
+    expect(foldAtColumn(`abcd${apc}e`, 4)).toBe(`abcd${apc}\r\ne`);
+  });
+
+  it('ends an OSC at BEL and a DCS at ST', () => {
+    const osc = `\x1b]0;${'t'.repeat(100)}\x07`;
+    const dcs = `\x1bP${'q'.repeat(100)}\x1b\\`;
+    expect(foldAtColumn(`${osc}${dcs}xy`, 2)).toBe(`${osc}${dcs}xy`);
+  });
+});
