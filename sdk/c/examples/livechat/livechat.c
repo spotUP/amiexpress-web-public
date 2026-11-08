@@ -565,11 +565,12 @@ static void load_reactions(const char *id)
     }
 }
 
-/** A presence event: `text` is "status|statusText". */
+/** A presence event: `text` is "status!statusText" on the wire (CHAT-API.md). The status word never holds a
+    '!', so the first one splits it; a '!' in the note stays a '!'. */
 static void side_presence(const char *user, const char *text)
 {
     char nick[32], status[8], note[28];
-    const char *bar = strchr(text, '|');
+    const char *bar = strchr(text, '!');
     size_t n = bar != 0 ? (size_t)(bar - text) : strlen(text);
     int i;
     if (n >= sizeof status) n = sizeof status - 1;

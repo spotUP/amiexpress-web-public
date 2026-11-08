@@ -196,7 +196,7 @@ static void test_client(void)
     assert(strcmp(c.error, "not_found") == 0);
 
     assert(ae_chat_history(&c, "lobby", 0, 20) == AE_CHAT_OK);
-    assert(ae_chat_next_row(&c, f, AE_CHAT_ROW_FIELDS) == 8 && strcmp(f[7], "hello there|bar") == 0);   /* '!' is a pipe */
+    assert(ae_chat_next_row(&c, f, AE_CHAT_ROW_FIELDS) == 8 && strcmp(f[7], "hello there!bar") == 0);   /* a typed '!' stays '!' */
     /* A field the server appended later is dropped, not folded into the last field a narrower caller reads. */
     assert(ae_chat_history(&c, "lobby", 0, 20) == AE_CHAT_OK);
     assert(ae_chat_next_row(&c, f, 6) == 8 && strcmp(f[5], "m1") == 0);
@@ -274,7 +274,7 @@ static void test_door_keys(void)
     assert(st->leaves == 1 && st->session_closes == 1);
     assert(st->bad_auth == 0 && st->bad_session == 0);
     assert(strncmp(M.pane_label, "Lobby", 5) == 0 && strcmp(M.room, "Lobby") == 0);    /* auto-joined the first room */
-    assert(has_line("alice", "hello there|bar"));                                      /* history, '!' unescaped */
+    assert(has_line("alice", "hello there!bar"));                                      /* history: "!" is never shown as "|" */
     assert(has_line("Tester", "hello world"));                                         /* own line arrived via the post-send poll */
     assert(has_line("carol", "from idle poll"));
     assert(help_shown >= 1);
@@ -427,10 +427,10 @@ static void test_door_reply(void)
     assert(strstr(st->last_write_body, "\"replyTo\":\"m1\"") != 0);            /* the line number named m1 */
     assert(has_line(0, "Usage: /reply [msg-id] message") && has_line(0, "Usage: /thread <msg-id> message"));
     for (i = 0; i < M.nlines; i++) if (strcmp(M.lines[i].id, "m2") == 0) bob = i;
-    assert(bob >= 0 && strcmp(M.lines[bob].quote, "alice: hello there|bar") == 0);   /* history replyTo m1 */
-    assert(strstr(screen_text, "> alice: hello there|bar") != 0);
+    assert(bob >= 0 && strcmp(M.lines[bob].quote, "alice: hello there!bar") == 0);   /* history replyTo m1 */
+    assert(strstr(screen_text, "> alice: hello there!bar") != 0);
     for (i = 0; i < M.nlines; i++) if (strcmp(M.lines[i].id, "m3") == 0) live = i;
-    assert(live >= 0 && strcmp(M.lines[live].quote, "alice: hello there|bar") == 0);  /* the live event's replyTo */
+    assert(live >= 0 && strcmp(M.lines[live].quote, "alice: hello there!bar") == 0);  /* the live event's replyTo */
     M.ctx_kind = LC_CTX_CHAT; M.ctx_target = bob;
     ctx_run("Reply");
     assert(strcmp(M.input, "/reply 2 ") == 0);

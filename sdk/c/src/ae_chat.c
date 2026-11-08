@@ -294,9 +294,9 @@ int ae_chat_next_row(ae_chat *c, char **fields, int max)
             *bar = '\0';
             line = bar + 1;
         }
-        for (i = 0; i < max; i++) {
-            for (p = fields[i]; *p != '\0'; p++) if (*p == '!') *p = '|';
-        }
+        /* No unescape: the server writes '|' as '!' and leaves '!' alone, so the
+         * wire cannot say which a '!' was. Mapping it back turned every "hi!"
+         * into "hi|" (CHAT-API.md: a pipe is shown as '!'; the TS door agrees). */
         return n;
     }
     return 0;
