@@ -478,3 +478,12 @@ settings:
 
 clean:
 	rm -rf build
+
+# LiveChat68.lha for outside sysops (needs host lha: brew install lha).
+# Stages into build/release/ (gitignored); refuses to pack a LIVECHAT.cfg.
+.PHONY: livechat-release test-livechat-release
+livechat-release:
+	tools/livechat-release.sh
+
+test-livechat-release:
+	tests/test_livechat_release.sh
