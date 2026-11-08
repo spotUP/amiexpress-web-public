@@ -71,12 +71,14 @@ export interface ChatTextReply {
 
 export const CHAT_TEXT_COLUMNS = {
   ROOMS: ['id', 'name', 'topic', 'visibility', 'members', 'owner'],
-  MEMBERS: ['user', 'sysop', 'op', 'roleColor', 'roleName'],
+  MEMBERS: ['user', 'sysop', 'op', 'roleColor', 'roleName', 'status', 'statusText'],
   HISTORY: ['seq', 'id', 'user', 'at', 'replyTo', 'threadId', 'roleColor', 'text'],
-  EVENTS: ['seq', 'type', 'room', 'user', 'ref', 'at', 'roleColor', 'text'],
+  EVENTS: ['seq', 'type', 'room', 'user', 'ref', 'at', 'roleColor', 'text', 'replyTo'],
   REACTIONS: ['emoji', 'count', 'mine'],
-  WHO: ['user', 'room', 'sysop', 'roleColor', 'idleSeconds'],
+  WHO: ['user', 'room', 'sysop', 'roleColor', 'idleSeconds', 'status', 'statusText'],
   DM: ['threadId', 'peer', 'lastAt', 'unread'],
+  PROFILE: ['user', 'nick', 'board', 'status', 'statusText', 'firstSeen', 'lastSeen', 'idleSeconds', 'online', 'sharedRooms'],
+  IGNORES: ['user', 'at'],
 } as const;
 
 export class ChatApiError extends Error {

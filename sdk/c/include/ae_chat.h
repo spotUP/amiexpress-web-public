@@ -41,7 +41,7 @@ extern "C" {
 #define AE_CHAT_REPLY_MAX 8192
 #define AE_CHAT_DEFAULT_TIMEOUT 10
 #define AE_CHAT_TEXT_MAX 500      /* the server's limit on one message */
-#define AE_CHAT_ROW_FIELDS 9      /* the widest row: events (history has 8) */
+#define AE_CHAT_ROW_FIELDS 10     /* the widest row: profile (events 9, history 8) */
 #define AE_CHAT_ROW_MIN 8         /* history and events rows carry at least this many: an older server sends events without replyTo */
 
 /** What PROGDIR:LIVECHAT.cfg holds. */
