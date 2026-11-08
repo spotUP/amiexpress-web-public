@@ -40,6 +40,7 @@ import { arexxEngine } from "./arexx.service";
 import { config } from "../config";
 import { getSystemTime } from "../utils/date-time.util";
 import { logonNamePromptText } from '../utils/node-tooltypes.util';
+import { skipGraphicsPromptIfForced } from "../handlers/command-handler/pre-login";
 
 export interface PreLoginConnectContext {
   /** Caller-provided socket id; used by AREXX login trigger. */
@@ -314,6 +315,8 @@ export async function runPreLoginConnect(
   // has already answered it: the PETSCII title and the login prompt instead.
   if (ctx.c64) {
     await showC64Title(emitter, session);
+  } else if (await skipGraphicsPromptIfForced(emitter, session)) {
+    // express.e:29079 / 29527: the node's FORCE_ANSI answered for the caller.
   } else {
     emitter.emit("ansi-output", recordPromptColumn(session as any, ANSI_GRAPHICS_PROMPT));
     emitter.emit("ansi-output", SAVE_CURSOR);

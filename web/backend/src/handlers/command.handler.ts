@@ -1001,6 +1001,62 @@ async function completeRealC64Connect(socket: any, session: BBSSession): Promise
 }
 
 /**
+ * Everything express.e does after the graphics step, whether the caller ANSWERED
+ * the prompt (29530-29546) or FORCE_ANSI answered it for the node (29079-29089):
+ * system password gate (29548), BBSTITLE (29552), the name prompt (29571).
+ */
+export async function continueAfterGraphicsAnswer(socket: any, session: BBSSession): Promise<void> {
+  session.tempData = session.tempData || {};
+  // express.e:29548-29550 — Not(STEALTH_MODE) path: doSystemPassword() before BBSTITLE.
+  // STEALTH_MODE is a per-node tooltype (Node{N}.info) that suppresses the
+  // system password gate for trusted nodes. Sysops use this on internal/LAN
+  // node configs where the system password is already vouched for at the
+  // network layer.
+  session.tempData.inputBuffer = ''; // Clear buffer
+  {
+    const { loadBBSConfig } = require('../services/bbs-config-file.service');
+    const path = require('path');
+    const fsSync = require('fs');
+    const bbsRoot = boardRoot();
+    let diskCfg: any = {};
+    try { diskCfg = loadBBSConfig(bbsRoot); } catch { /* non-fatal */ }
+    const sysPass = (diskCfg.system_password || '').trim();
+    // express.e:29548 IF (Not(checkToolTypeExists(TOOLTYPE_NODE,node,'STEALTH_MODE')))
+    // Read the per-node icon's tooltype set; presence of STEALTH_MODE bypasses the gate.
+    let stealthMode = false;
+    try {
+      const nodeId = session.nodeId || 0;
+      const nodeIconPath = path.join(bbsRoot, `Node${nodeId}.info`);
+      if (fsSync.existsSync(nodeIconPath)) {
+        const buf = fsSync.readFileSync(nodeIconPath);
+        // Cheap scan — STEALTH_MODE appears as ASCII in the tooltype block
+        if (buf.includes(Buffer.from('STEALTH_MODE'))) stealthMode = true;
+      }
+    } catch { /* tooltype probe failed — treat as not-stealth */ }
+    if (sysPass.length > 0 && !stealthMode) {
+      // System password configured — enter gate (express.e:29329-29356)
+      session.tempData.systemPasswordAttempts = 0;
+      session.subState = LoggedOnSubState.SYSTEM_PASSWORD_INPUT;
+      // doSystemPassword's aePuts('\b\n') (29331); the graphics
+      // answer's lineInput break (29530) already went out at Enter.
+      emitText(socket, '\r\n');
+      const { displayScreen: ds } = require('./screen.handler');
+      await ds(socket, session, 'PRIVATE'); // express.e:29336 — optional PRIVATE screen
+      emitText(socket, '>: ');              // express.e:29332 — default SYS_PWRD_PROMPT
+      socket.emit('mask-input', true);
+      return;
+    }
+  }
+
+  // No system password — display BBSTITLE then transition to login (express.e:29552)
+  const { displayScreen } = require('./screen.handler');
+  await displayScreen(socket, session, 'BBSTITLE');
+
+  // Straight to the name prompt, no key press (express.e:29552-29571)
+  promptForLogonName(socket, session);
+}
+
+/**
  * BBSTITLE is on screen; ask for the name. express.e:29552-29571:
  *
  *   displayScreen(SCREEN_BBSTITLE)
@@ -1395,6 +1451,10 @@ console.log('[C64] Real C64 terminal detected - auto-enabling PETSCII mode');
       // reference-board BBS layout: everything shown on connect, now just show ANSI prompt
       // express.e:29528 - ANSI prompt
 console.log(' Connection screen viewed, showing ANSI prompt');
+      {
+        const { skipGraphicsPromptIfForced } = require('./command-handler/pre-login');
+        if (await skipGraphicsPromptIfForced(socket, session)) return;
+      }
       session.subState = LoggedOnSubState.ANSI_PROMPT;
       session.tempData = { inputBuffer: '' }; // Initialize input buffer
       if (session.pendingScreenCommand) {
@@ -1504,53 +1564,7 @@ console.log(' Graphics prompt response:', answer || '(empty = ANSI)');
 
 console.log(' Graphics mode set:', session.petsciiMode ? 'PETSCII' : session.texttvMode ? 'TELETEXT' : session.ripMode ? 'RIP' : session.ansiEnabled ? 'ANSI' : 'None');
 
-        // express.e:29548-29550 — Not(STEALTH_MODE) path: doSystemPassword() before BBSTITLE.
-        // STEALTH_MODE is a per-node tooltype (Node{N}.info) that suppresses the
-        // system password gate for trusted nodes. Sysops use this on internal/LAN
-        // node configs where the system password is already vouched for at the
-        // network layer.
-        session.tempData.inputBuffer = ''; // Clear buffer
-        {
-          const { loadBBSConfig } = require('../services/bbs-config-file.service');
-          const path = require('path');
-          const fsSync = require('fs');
-          const bbsRoot = boardRoot();
-          let diskCfg: any = {};
-          try { diskCfg = loadBBSConfig(bbsRoot); } catch { /* non-fatal */ }
-          const sysPass = (diskCfg.system_password || '').trim();
-          // express.e:29548 IF (Not(checkToolTypeExists(TOOLTYPE_NODE,node,'STEALTH_MODE')))
-          // Read the per-node icon's tooltype set; presence of STEALTH_MODE bypasses the gate.
-          let stealthMode = false;
-          try {
-            const nodeId = session.nodeId || 0;
-            const nodeIconPath = path.join(bbsRoot, `Node${nodeId}.info`);
-            if (fsSync.existsSync(nodeIconPath)) {
-              const buf = fsSync.readFileSync(nodeIconPath);
-              // Cheap scan — STEALTH_MODE appears as ASCII in the tooltype block
-              if (buf.includes(Buffer.from('STEALTH_MODE'))) stealthMode = true;
-            }
-          } catch { /* tooltype probe failed — treat as not-stealth */ }
-          if (sysPass.length > 0 && !stealthMode) {
-            // System password configured — enter gate (express.e:29329-29356)
-            session.tempData.systemPasswordAttempts = 0;
-            session.subState = LoggedOnSubState.SYSTEM_PASSWORD_INPUT;
-            // doSystemPassword's aePuts('\b\n') (29331); the graphics
-            // answer's lineInput break (29530) already went out at Enter.
-            emitText(socket, '\r\n');
-            const { displayScreen: ds } = require('./screen.handler');
-            await ds(socket, session, 'PRIVATE'); // express.e:29336 — optional PRIVATE screen
-            emitText(socket, '>: ');              // express.e:29332 — default SYS_PWRD_PROMPT
-            socket.emit('mask-input', true);
-            return;
-          }
-        }
-
-        // No system password — display BBSTITLE then transition to login (express.e:29552)
-        const { displayScreen } = require('./screen.handler');
-        await displayScreen(socket, session, 'BBSTITLE');
-
-        // Straight to the name prompt, no key press (express.e:29552-29571)
-        promptForLogonName(socket, session);
+        await continueAfterGraphicsAnswer(socket, session);
         return;
       } else if (data === '\x7f' || data === '\b') {
         // Backspace, wrap-aware. This prompt is 78 columns on its last row,

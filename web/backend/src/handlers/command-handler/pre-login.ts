@@ -15,7 +15,7 @@ import {
   recordPromptColumn, backspaceEcho, SAVE_CURSOR,
 } from '../../utils/line-input.util';
 import { emitPrompt } from '../../utils/output.util';
-import { logonNamePromptText } from '../../utils/node-tooltypes.util';
+import { logonNamePromptText, nodeTooltype } from '../../utils/node-tooltypes.util';
 import { TELETEXT_SESSION_ROWS } from '../../amiga-emulation/xim/screen-width.util';
 import { boardRoot } from '../../utils/board-root.util';
 
@@ -104,6 +104,7 @@ console.log('[C64] Real C64 terminal detected - auto-enabling PETSCII mode');
     // WEB_: PETSCII option removed — not in express.e:29528. C64 terminals are detected
     // via telnet TTYPE negotiation (see c64 branch above) and never reach this prompt.
 console.log('[PRE-LOGIN] Connection screen viewed, showing ANSI prompt');
+    if (await skipGraphicsPromptIfForced(socket, session)) return true;
     session.subState = LoggedOnSubState.ANSI_PROMPT;
     session.tempData = { inputBuffer: '' }; // Initialize input buffer
     socket.emit('ansi-output', recordPromptColumn(
@@ -133,6 +134,35 @@ console.log('[PRE-LOGIN] Connection screen viewed, showing ANSI prompt');
   }
 
   return true; // In AWAIT state, always consume input
+}
+
+/**
+ * The node's FORCE_ANSI tooltype, express.e:29079-29089 and 29527. When the
+ * node's icon carries the key at all (any value, even none) the graphics
+ * prompt is not asked, for ANY connection type, and the flags come from the
+ * value: N (colour off), Q (quick logon), R (RIP). Returns those flags
+ * upper-cased and nothing else (P and T are this port's prompt letters, not
+ * FORCE_ANSI's), or null when the key is absent and the prompt must be asked.
+ */
+export function forcedGraphicsAnswer(session: BBSSession): string | null {
+  const value = nodeTooltype(session.nodeId ?? 0, 'FORCE_ANSI');
+  if (value === undefined) return null;
+  return value.toUpperCase().replace(/[^NQR]/g, '');
+}
+
+/**
+ * Apply FORCE_ANSI in place of the prompt and carry on the way an answered
+ * prompt does (system password, BBSTITLE, name prompt). False when the node has
+ * no FORCE_ANSI and the caller must show the prompt.
+ */
+export async function skipGraphicsPromptIfForced(socket: any, session: BBSSession): Promise<boolean> {
+  const forced = forcedGraphicsAnswer(session);
+  if (forced === null) return false;
+  console.log(`[GRAPHICS] FORCE_ANSI on node ${session.nodeId}: prompt skipped, flags "${forced}"`);
+  applyGraphicsAnswer(socket, session, forced);
+  const { continueAfterGraphicsAnswer } = require('../command.handler');
+  await continueAfterGraphicsAnswer(socket, session);
+  return true;
 }
 
 /**
