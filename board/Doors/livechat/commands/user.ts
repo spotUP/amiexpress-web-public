@@ -56,8 +56,7 @@ export const statusCmd: SlashCommand = {
     if (!['online', 'away', 'busy', 'dnd'].includes(word)) {
       return { handled: true, error: 'Usage: /status [online|away|busy|dnd] [message]' };
     }
-    // busy is do-not-disturb under another name; the door's presence model has no separate busy.
-    const status = word === 'busy' ? 'dnd' : word;
+    const status = word;
     const message = args.slice(1).join(' ');
     return { handled: true, action: 'pref', data: { kind: 'status', status, message } };
   }

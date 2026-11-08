@@ -5,6 +5,7 @@ exports.PRESENCE_COLORS = exports.PRESENCE_INDICATORS = void 0;
 exports.PRESENCE_INDICATORS = {
     online: '[*]',
     away: '[~]',
+    busy: '[!]',
     dnd: '[-]',
     invisible: '[ ]',
     offline: '[x]'
@@ -13,6 +14,7 @@ exports.PRESENCE_INDICATORS = {
 exports.PRESENCE_COLORS = {
     online: 'green',
     away: 'yellow',
+    busy: 'magenta',
     dnd: 'red',
     invisible: 'gray',
     offline: 'gray'

@@ -5,6 +5,7 @@ import { T } from '../door-theme';
 const STATUS_SYMBOLS: Record<PresenceStatus, string> = {
   online: '[*]',
   away: '[~]',
+  busy: '[!]',
   dnd: '[-]',
   invisible: '[.]',
   offline: '[ ]'
@@ -30,8 +31,9 @@ export function createUserStatus(blessed: any, screen: any) {
 export function formatUserStatus(counts: Record<PresenceStatus, number>): string {
   const online = counts.online || 0;
   const away = counts.away || 0;
+  const busy = counts.busy || 0;
   const dnd = counts.dnd || 0;
-  return ` {${T.ok}-fg}*${online}{/${T.ok}-fg} {${T.accentAlt}-fg}~${away}{/${T.accentAlt}-fg} {${T.alert}-fg}-${dnd}{/${T.alert}-fg}`;
+  return ` {${T.ok}-fg}*${online}{/${T.ok}-fg} {${T.accentAlt}-fg}~${away}{/${T.accentAlt}-fg} {${T.accentAlt}-fg}!${busy}{/${T.accentAlt}-fg} {${T.alert}-fg}-${dnd}{/${T.alert}-fg}`;
 }
 
 /** Update user status display */

@@ -993,7 +993,6 @@ static void status_typed(const char *rest)
         usage("/status [online|away|busy|dnd] [message]");
         return;
     }
-    if (strcmp(word, "busy") == 0) strcpy(word, "dnd");       /* TS: busy is do-not-disturb under another name */
     text = after_word(rest);
     rc = ae_chat_presence(&chat, word, text);
     if (rc != AE_CHAT_OK) { show_error(rc); return; }

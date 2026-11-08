@@ -628,8 +628,8 @@ static void test_door_b4_presence(void)
     assert(has_line(0, "Error: Usage: /whois @user") && has_line(0, "User nobody is not online."));
     assert(st->presences == 2 && st->presence_clears == 1);                 /* C14 away, C16 status; C15 back */
     assert(has_line(0, "You are now away: lunch time") && has_line(0, "You are now online"));
-    assert(has_line(0, "Status set to dnd: deep work"));                    /* busy goes out as dnd */
-    assert(strstr(st->last_write_body, "\"status\":\"dnd\"") != 0 || strstr(st->last_write_path, "/presence") != 0);
+    assert(has_line(0, "Status set to busy: deep work"));                   /* busy goes out as busy, not dnd */
+    assert(strstr(st->last_write_body, "\"status\":\"busy\"") != 0 && strstr(st->last_write_path, "/presence") != 0);
     assert(has_line(0, "Error: Usage: /status [online|away|busy|dnd] [message]"));
     assert(has_line(0, "Your username: Tester"));                           /* C17 */
     stop_stub();
@@ -649,7 +649,7 @@ static void test_door_b4_marks(void)
         if (strcmp(M.side[i].label, "bob") == 0) b = i;
     }
     assert(a >= 0 && b >= 0 && M.side[b].status == 0 && M.side[b].note[0] == '\0');
-    assert(M.side[a].status == 'd' && strcmp(M.side[a].note, "gone fishing") == 0);   /* the presence event, not the who.txt away/lunch */
+    assert(M.side[a].status == 'b' && strcmp(M.side[a].note, "gone fishing") == 0);   /* the presence event, not the who.txt away/lunch */
     stop_stub();
     start_stub();
     drive(KEYS("\r"), 0);

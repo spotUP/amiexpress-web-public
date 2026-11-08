@@ -1,5 +1,5 @@
 /** User status */
-export type UserStatus = 'online' | 'away' | 'dnd' | 'invisible' | 'offline';
+export type UserStatus = 'online' | 'away' | 'busy' | 'dnd' | 'invisible' | 'offline';
 /** Chat user */
 export interface ChatUser {
     id: string;

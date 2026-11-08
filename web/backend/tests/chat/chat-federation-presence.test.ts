@@ -77,6 +77,10 @@ describe('federated livechat presence, whois and ignore', () => {
     stub.push({ type: 'presence', room: 'room1', user: 'bob@TEST', text: 'away!at lunch' });
     await until(() => member.of('chat:presence').length === 1);
     expect(member.of('chat:presence')[0]).toMatchObject({ username: 'bob@TEST', status: 'away', custom: 'at lunch' });
+    // busy is its own status end to end: it is not folded into dnd on the way to the door.
+    stub.push({ type: 'presence', room: 'room1', user: 'bob@TEST', text: 'busy!deep work' });
+    await until(() => member.of('chat:presence').length === 2);
+    expect(member.of('chat:presence')[1]).toMatchObject({ username: 'bob@TEST', status: 'busy', custom: 'deep work' });
     expect(legacy).not.toHaveBeenCalled();
   });
 });

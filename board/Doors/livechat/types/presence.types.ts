@@ -1,5 +1,5 @@
 /** User presence status */
-export type PresenceStatus = 'online' | 'away' | 'dnd' | 'invisible' | 'offline';
+export type PresenceStatus = 'online' | 'away' | 'busy' | 'dnd' | 'invisible' | 'offline';
 
 /** User presence info */
 export interface UserPresence {
@@ -14,6 +14,7 @@ export interface UserPresence {
 export const PRESENCE_INDICATORS: Record<PresenceStatus, string> = {
   online: '[*]',
   away: '[~]',
+  busy: '[!]',
   dnd: '[-]',
   invisible: '[ ]',
   offline: '[x]'
@@ -23,6 +24,7 @@ export const PRESENCE_INDICATORS: Record<PresenceStatus, string> = {
 export const PRESENCE_COLORS: Record<PresenceStatus, string> = {
   online: 'green',
   away: 'yellow',
+  busy: 'magenta',
   dnd: 'red',
   invisible: 'gray',
   offline: 'gray'

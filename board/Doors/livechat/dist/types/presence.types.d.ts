@@ -1,5 +1,5 @@
 /** User presence status */
-export type PresenceStatus = 'online' | 'away' | 'dnd' | 'invisible' | 'offline';
+export type PresenceStatus = 'online' | 'away' | 'busy' | 'dnd' | 'invisible' | 'offline';
 /** User presence info */
 export interface UserPresence {
     userId: number;

@@ -60,7 +60,7 @@ export class PresenceService {
   /** Count by status */
   countByStatus(): Record<PresenceStatus, number> {
     const counts: Record<PresenceStatus, number> = {
-      online: 0, away: 0, dnd: 0, invisible: 0, offline: 0
+      online: 0, away: 0, busy: 0, dnd: 0, invisible: 0, offline: 0
     };
     for (const p of this.presence.values()) {
       counts[p.status]++;

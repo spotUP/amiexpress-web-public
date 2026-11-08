@@ -167,7 +167,7 @@ function deliver(session: BBSSession, st: CallerState, rows: ChatTextReply['rows
       emitter.emit('chat:presence', {
         userId: r.user,
         username: r.user,
-        status: status === 'busy' ? 'dnd' : status,
+        status,
         custom: rest.join('!') || undefined,
       });
       continue;

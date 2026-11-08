@@ -77,7 +77,7 @@ export async function roomCommandsEmitAndSettingsCommandsChangePrefs(): Promise<
     assert.deepStrictEqual(emits.filter(e => e.event === 'room:op').map(e => e.payload),
       [{ username: 'bob', op: true }, { username: 'bob', op: false }]);
     assert.deepStrictEqual(emits.find(e => e.event === 'admin:delete-channel')?.payload, { channel: 'random' });
-    assert.deepStrictEqual(emits.find(e => e.event === 'chat:presence')?.payload, { status: 'dnd', custom: 'gone fishing' });
+    assert.deepStrictEqual(emits.find(e => e.event === 'chat:presence')?.payload, { status: 'busy', custom: 'gone fishing' });
 
     // Settings commands change state.prefs through saveSettings.
     const before = app.state.prefs.notificationSound;
