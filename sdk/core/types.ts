@@ -914,7 +914,28 @@ export interface WebTerminalState {
 /**
  * BBS API (Advanced) - Optional BBS integration
  */
+/** A picture for BBSApi.sendImage: a PNG file's bytes, or raw RGB / RGBA pixels. */
+export type KittyImage =
+  | { readonly png: Uint8Array }
+  | { readonly pixels: Uint8Array; readonly width: number; readonly height: number; readonly bpp: 3 | 4 };
+
+/** Options for BBSApi.sendImage. */
+export interface SendKittyImageOptions {
+  /** Scale to this many cells wide; 0 or absent = natural size. */
+  readonly cols?: number;
+  /** Scale to this many cells high; 0 or absent = natural size. */
+  readonly rows?: number;
+  /** An image id, so a later delete can name it. */
+  readonly id?: number;
+  /** What a caller without kitty graphics reads instead (ANSI text). */
+  readonly fallback?: string;
+}
+
 export interface BBSApi {
+  /** True when the terminal answered the board's kitty graphics query OK. Optional: an older backend has no such getter (treat as false). */
+  readonly kittyGraphics?: boolean;
+  /** Show a picture to a kitty graphics caller; anyone else reads `opts.fallback` (ANSI text). True when the picture was sent. Optional: an older backend has no such method. */
+  sendImage?(image: KittyImage, opts?: SendKittyImageOptions): boolean;
   /** True when the caller reads PETSCII (a C64 alphabet), not ASCII. Optional: an older backend has no such method. */
   isPetsciiMode?(): boolean;
   /** False when the caller has ANSI colour off: the board strips every colour code, so each state needs a character marker. Optional: an older backend has no such method (treat as true). */
