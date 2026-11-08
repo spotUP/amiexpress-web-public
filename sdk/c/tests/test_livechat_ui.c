@@ -29,6 +29,7 @@ static void add_side(lc_model *m, int kind, int joined, const char *label)
 static void main_state(lc_model *m, int cols, int rows)
 {
     lc_model_init(m, cols, rows);
+    m->focus = -1;                 /* the TS grids were captured with no panel focused: every border idle */
     strcpy(m->handle, "Guest");
     strcpy(m->room, "general");
     strcpy(m->pane_label, "general - General chat");
@@ -147,9 +148,36 @@ static int stamps_follow_the_pref(void)
     return 0;
 }
 
+/* The focused panel's border is the bright one (TS PANEL_BORDER_FOCUS), the others stay accent,
+ * and moving focus moves it. Cells: sidebar top-left corner (row 1, col 0), input top-left. */
+static int focus_border(int focus, int *side, int *input)
+{
+    static lc_model m;
+    ui_cells c;
+    int ir, cr, cc;
+    main_state(&m, 80, 25);
+    m.focus = focus;
+    if (ui_cells_open(&c, 80, 25) != 0) return 1;
+    lc_draw(&c, &m, &cr, &cc);
+    ir = c.rows - 4;
+    *side = c.back[1 * c.cols + 0].fg;
+    *input = c.back[ir * c.cols + 0].fg;
+    ui_cells_close(&c);
+    return 0;
+}
+
+static int active_panel_is_highlighted(void)
+{
+    int s, i;
+    if (focus_border(LC_FOCUS_INPUT, &s, &i) || s != LC_ACCENT || i != LC_BORDER_FOCUS) { printf("focus input: side %d input %d\n", s, i); return 1; }
+    if (focus_border(LC_FOCUS_SIDEBAR, &s, &i) || s != LC_BORDER_FOCUS || i != LC_ACCENT) { printf("focus sidebar: side %d input %d\n", s, i); return 1; }
+    if (focus_border(LC_FOCUS_MENU, &s, &i) || s != LC_ACCENT || i != LC_ACCENT) { printf("focus menu: side %d input %d\n", s, i); return 1; }
+    return 0;
+}
+
 int main(void)
 {
-    int r = react_suffix_matches_ts() | stamps_follow_the_pref();
+    int r = react_suffix_matches_ts() | stamps_follow_the_pref() | active_panel_is_highlighted();
     int a = compare("tests/fixtures/lc68-ts-main-80x25.grid");
     int b = compare("tests/fixtures/lc68-ts-main-40x25.grid");
     int d = compare("tests/fixtures/lc68-ts-main-80x15.grid");

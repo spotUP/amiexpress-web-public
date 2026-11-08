@@ -19,6 +19,7 @@
 
 #define LC_INK        255   /* text */
 #define LC_ACCENT     204   /* borders, menu bar ground, section heads */
+#define LC_BORDER_FOCUS 255 /* the focused panel's border: TS PANEL_BORDER_FOCUS = theme ink (ui/theme.ts) */
 #define LC_ALERT      196   /* sysop-only destructive menu items (TS alert colour) */
 #define LC_DIM        240   /* timestamps, system lines, rooms not joined */
 #define LC_ACTIVITY   221   /* activity lines, the emoji button face */

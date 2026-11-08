@@ -260,7 +260,7 @@ static void draw_sidebar(ui_cells *c, const lc_model *m, int top, int h, int w)
     int i;
     ui_cells_pen(c, LC_INK, UI_CELLS_DEFAULT, 0);
     ui_cells_fill(c, top + 1, 1, h - 2, w - 2, ' ');
-    ui_cells_box(c, top, 0, h, w, LC_ACCENT, "Sidebar", LC_ACCENT);
+    ui_cells_box(c, top, 0, h, w, m->focus == LC_FOCUS_SIDEBAR ? LC_BORDER_FOCUS : LC_ACCENT, "Sidebar", LC_ACCENT);
     for (i = 0; i < m->nside && i < h - 2; i++)
         draw_side_item(c, &m->side[i], top + 1 + i, w - 2, i == m->side_sel);
 }
@@ -329,7 +329,7 @@ static void draw_input(ui_cells *c, const lc_model *m, int *cr, int *cc)
     int W = c->cols, row = c->rows - 4, iw = (W - 6 >= 24) ? W - 6 : W, room = iw - 3, from;
     ui_cells_pen(c, LC_INK, UI_CELLS_DEFAULT, 0);
     ui_cells_fill(c, row + 1, 1, 1, iw - 2, ' ');
-    ui_cells_box(c, row, 0, 3, iw, LC_ACCENT, "Message", LC_INK);
+    ui_cells_box(c, row, 0, 3, iw, m->focus == LC_FOCUS_INPUT ? LC_BORDER_FOCUS : LC_ACCENT, "Message", LC_INK);
     from = m->input_cur > room ? m->input_cur - room : 0;
     ui_cells_text(c, row + 1, 1, m->input + from, room);
     *cr = row + 1;
