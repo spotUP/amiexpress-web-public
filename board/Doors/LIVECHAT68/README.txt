@@ -11,8 +11,7 @@ makes outgoing connections; you do not open any port.
 
 REQUIREMENTS
 ------------
-* AmiExpress 5.x with XIM door support. The exact lowest version has not
-  been checked; any build that runs normal XIM doors should do.
+* AmiExpress 5.x with XIM door support.
 * A TCP/IP stack that provides bsdsocket.library, such as Roadshow or
   AmiTCP, running before the BBS starts.
 * AmiSSL 5 (amisslmaster.library) for HTTPS. This is the default and
