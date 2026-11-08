@@ -89,6 +89,7 @@ typedef struct {
     volatile int bad_session;              /* post-open requests lacking X-Chat-Session */
     volatile int expire_next;              /* test sets: next authenticated call answers session_expired once */
     char last_message[512];                /* content of the latest POST /messages */
+    char last_reply_to[32];                /* its replyTo; the message event row carries it back */
     char last_react[64];
     char last_react_msg[24];               /* message id of the latest react or unreact */
     char last_write_path[128];             /* path of the latest edit, delete, topic, moderation or invite call */

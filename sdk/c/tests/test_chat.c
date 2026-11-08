@@ -376,7 +376,7 @@ static int line_count(const char *text)
 /* B2: /reply (alias r) and /thread (alias t) send a reply line; a loaded parent shows as a quote row. */
 static void test_door_reply(void)
 {
-    int i, bob = -1;
+    int i, bob = -1, live = -1;
     start_stub();
     assert(drive(KEYS("\r" "/reply\r" "/thread 1\r" "/r 1 yes alice\r"), 0) == 0);
     assert(st->messages == 1 && strcmp(st->last_message, "yes alice") == 0);
@@ -385,6 +385,8 @@ static void test_door_reply(void)
     for (i = 0; i < M.nlines; i++) if (strcmp(M.lines[i].id, "m2") == 0) bob = i;
     assert(bob >= 0 && strcmp(M.lines[bob].quote, "alice: hello there|bar") == 0);   /* history replyTo m1 */
     assert(strstr(screen_text, "> alice: hello there|bar") != 0);
+    for (i = 0; i < M.nlines; i++) if (strcmp(M.lines[i].id, "m3") == 0) live = i;
+    assert(live >= 0 && strcmp(M.lines[live].quote, "alice: hello there|bar") == 0);  /* the live event's replyTo */
     M.ctx_kind = LC_CTX_CHAT; M.ctx_target = bob;
     ctx_run("Reply");
     assert(strcmp(M.input, "/reply 2 ") == 0);
@@ -398,7 +400,7 @@ static void test_door_reply(void)
     assert(strstr(st->last_write_body, "\"replyTo\":\"m") != 0);
     assert(st->threads == 0);
     stop_stub();
-    printf("  [OK] door: /reply and /thread send replyTo, history replies show a quote row, menu Reply and Quote fill the input\n");
+    printf("  [OK] door: /reply and /thread send replyTo, history and live replies show a quote row, menu Reply and Quote fill the input\n");
 }
 
 /* B2: the TS door's /edit /deletemsg /topic /kick /mute /op /invite /reactions and their events. */

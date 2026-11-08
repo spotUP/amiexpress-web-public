@@ -447,12 +447,12 @@ static void take_events(void)
     char line[LC_TEXT_MAX];
     char reacted[8][24];       /* messages whose counts changed; fetched after the rows, which share the reply buffer */
     int nreacted = 0, i;
-    while (ae_chat_next_row(&chat, f, AE_CHAT_ROW_FIELDS) >= AE_CHAT_ROW_FIELDS) {
+    while (ae_chat_next_row(&chat, f, AE_CHAT_ROW_FIELDS) >= AE_CHAT_ROW_MIN) {
         long seq = atol(f[0]);
         const char *type = f[1], *room = f[2], *user = f[3], *ref = f[4];
         int in_room = dm_thread[0] == '\0' && room_id[0] != '\0' && strcmp(room, room_id) == 0;
         if (strcmp(type, "message") == 0 && in_room) {
-            add_message(LC_LIVE, seq, ref, user, f[5], f[7], "");
+            add_message(LC_LIVE, seq, ref, user, f[5], f[7], f[8]);
         } else if (strcmp(type, "dm") == 0) {
             char want[40];
             sprintf(want, "dm:%.30s", dm_thread);
@@ -518,7 +518,7 @@ static void take_history(void)
     char note[48];
     int marker = M.nlines, n = 0;
     system_line("--- 0 earlier messages ---");
-    while (ae_chat_next_row(&chat, f, AE_CHAT_ROW_FIELDS) >= AE_CHAT_ROW_FIELDS) {
+    while (ae_chat_next_row(&chat, f, AE_CHAT_ROW_FIELDS) >= AE_CHAT_ROW_MIN) {
         if (add_message(LC_HISTORY, atol(f[0]), f[1], f[2], f[3], f[7], f[4]) != 0) n++;
     }
     if (n == 0) {                                  /* nothing earlier: no marker */

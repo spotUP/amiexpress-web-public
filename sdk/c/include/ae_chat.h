@@ -41,7 +41,8 @@ extern "C" {
 #define AE_CHAT_REPLY_MAX 8192
 #define AE_CHAT_DEFAULT_TIMEOUT 10
 #define AE_CHAT_TEXT_MAX 500      /* the server's limit on one message */
-#define AE_CHAT_ROW_FIELDS 8      /* the widest row: events and history */
+#define AE_CHAT_ROW_FIELDS 9      /* the widest row: events (history has 8) */
+#define AE_CHAT_ROW_MIN 8         /* history and events rows carry at least this many: an older server sends events without replyTo */
 
 /** What PROGDIR:LIVECHAT.cfg holds. */
 typedef struct {
@@ -109,7 +110,8 @@ int ae_chat_history(ae_chat *c, const char *room, long before, int limit);
 int ae_chat_send(ae_chat *c, const char *room, const char *text,
                  const char *reply_to, const char *thread_id);
 
-/** GET events.txt?since=c->last_seq&wait=`wait`. Rows: seq, type, room, user, ref, at, roleColor, text. */
+/** GET events.txt?since=c->last_seq&wait=`wait`. Rows: seq, type, room, user, ref, at, roleColor, text, replyTo
+ *  (replyTo set on message events that answer one; absent from an older server). */
 int ae_chat_poll(ae_chat *c, int wait);
 
 /** POST /messages/:id/react. `count` (may be NULL) gets the new count. */

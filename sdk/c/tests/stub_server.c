@@ -547,6 +547,7 @@ static void chat_serve(int fd, stub_chat_stats *st, int *state)
         st->messages++;
         chat_note_write(st, path, body);
         chat_copy_json_field(st->last_message, sizeof st->last_message, body, "content");
+        chat_copy_json_field(st->last_reply_to, sizeof st->last_reply_to, body, "replyTo");
         *state = 1;
         chat_reply(fd, 200, "application/json", "{\"id\":\"m3\",\"seq\":6,\"at\":1700000100}");
     } else if (is_post && strstr(path, "/react") != 0) {
@@ -590,7 +591,7 @@ static void chat_serve(int fd, stub_chat_stats *st, int *state)
             }
             if (*state == 1) {
                 *state = 2;
-                sprintf(body_rows + strlen(body_rows), "8|message|lobby|Tester|m3|1700000300|0|%s\n", st->last_message);
+                sprintf(body_rows + strlen(body_rows), "8|message|lobby|Tester|m3|1700000300|0|%s|%s\n", st->last_message, st->last_reply_to);
                 rows++;
             }
             {
