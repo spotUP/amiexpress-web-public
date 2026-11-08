@@ -202,6 +202,9 @@ function systemText(r: Record<string, string>): string | null {
       return `${r.user} is no longer an operator`;
     case 'motd':
       return r.text;
+    case 'board_joined':
+      // The hub sends the board's display name in text (CHAT-API.md event table).
+      return r.text ? `${r.text} joined the federation` : null;
     default:
       return null;
   }
