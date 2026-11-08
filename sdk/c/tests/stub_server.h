@@ -85,6 +85,8 @@ typedef struct {
     volatile int unreacts, reaction_lists;     /* DELETE /messages/:id/react/:emoji, GET reactions.txt */
     volatile int edits, deletes, topics, moderations, invites, uninvites;
     volatile int presences, presence_clears, profiles, ignore_lists, ignore_adds, ignore_removes;  /* B4 routes */
+    volatile int registers;                /* POST /achievements/v1/boards/register (A3) */
+    char last_register_body[300];          /* its JSON body; a name of "bad" is answered 400 */
     char presence_user[32];                /* test sets: whose presence the next presence write reports (default Tester) */
     char alice_status[16], alice_text[80];  /* the presence alice set (who.txt then reports it) */
     char ignore_list[128];                 /* comma separated nicks the stub holds as ignored (a test may preset it) */

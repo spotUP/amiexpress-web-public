@@ -660,10 +660,79 @@ static void test_door_delete_and_kicked(void)
 
 static void test_door_no_config(void)
 {
-    int rc = drive(KEYS("x"), 0);
+    int rc;
+    user_level_text = "10";                                  /* a non-sysop keeps the plain message */
+    rc = drive(KEYS("x"), 0);
+    user_level_text = "255";
     assert(rc == 0 && M.modal == LC_MODAL_MESSAGE && strstr(M.modal_text, "no LIVECHAT.cfg"));
     assert(strstr(screen_text, "no LIVECHAT.cfg"));                                    /* and it reached the wire */
     printf("  [OK] door: no config says so and leaves\n");
+}
+
+/* A3: cfg save/load keeps every key, including Tls and AllowPlainHttp. */
+static void test_config_save(void)
+{
+    ae_chat_config a, b;
+    ae_chat_config_parse(&a, "");
+    strcpy(a.host, "hub.example"); strcpy(a.board_key, "id.sec"); a.port = 8080; a.tls = 0;
+    a.allow_plain_http = 1; a.timeout_secs = 9;
+    assert(ae_chat_config_save(&a, "build/test_chat_save.cfg") == 0);
+    assert(ae_chat_config_load(&b, "build/test_chat_save.cfg") == 1);
+    assert(strcmp(b.host, "hub.example") == 0 && strcmp(b.board_key, "id.sec") == 0 && b.port == 8080);
+    assert(b.tls == 0 && b.allow_plain_http == 1 && b.timeout_secs == 9);
+    a.tls = 1; a.allow_plain_http = 0; a.port = 443;
+    assert(ae_chat_config_save(&a, "build/test_chat_save.cfg") == 0);
+    ae_chat_config_load(&b, "build/test_chat_save.cfg");
+    assert(b.tls == 1 && b.allow_plain_http == 0 && b.port == 443);
+    assert(ae_chat_config_save(&a, "build/no_such_dir/x.cfg") != 0);
+    remove("build/test_chat_save.cfg");
+    printf("  [OK] config: save then load round-trips every key\n");
+}
+
+/* A3: ae_chat_register parses "OK <id>.<secret>" and surfaces the hub's error line. */
+static void test_register(void)
+{
+    ae_chat_config cfg;
+    char key[64], err[160];
+    start_stub();
+    ae_chat_config_load(&cfg, "build/test_chat.cfg");
+    assert(ae_chat_register(&cfg, "My Board", "Sysop", "me@x.y", key, sizeof key, err, sizeof err) == AE_CHAT_OK);
+    assert(strcmp(key, "regd.sekrit") == 0 && st->registers == 1 && st->bad_auth == 0);
+    assert(strstr(st->last_register_body, "\"name\":\"My Board\"") && strstr(st->last_register_body, "\"contact\":\"me@x.y\""));
+    assert(ae_chat_register(&cfg, "bad", "Sysop", 0, key, sizeof key, err, sizeof err) == AE_CHAT_ERR_STATUS);
+    assert(strcmp(err, "name must be printable ASCII") == 0 && key[0] == '\0' && st->registers == 2);
+    assert(ae_chat_register(&cfg, "", "Sysop", 0, key, sizeof key, err, sizeof err) == AE_CHAT_ERR_ARGS);
+    stop_stub();
+    printf("  [OK] register: key parsed from OK reply, hub error line returned\n");
+}
+
+/* A3: the door's real main(), no cfg. A non-sysop gets the message; a sysop gets the wizard, which registers
+ * once, writes the cfg and goes straight into the chat (a session opens with the new key). */
+static void test_door_wizard(void)
+{
+    ae_chat_config cfg;
+    char keys[256], port[16];
+    int i, n;
+    start_stub();
+    remove("build/test_chat.cfg");
+    user_level_text = "10";
+    drive(KEYS("x"), 0);
+    assert(st->registers == 0 && strstr(screen_text, "no LIVECHAT.cfg") && !strstr(screen_text, "LiveChat68 setup"));
+    user_level_text = "255";
+    sprintf(port, "%d", stub_port);
+    n = sprintf(keys, "My Board\r\r\r");                              /* name, sysop (default), contact (none) */
+    for (i = 0; i < 17; i++) keys[n++] = 127;                          /* erase the default host */
+    n += sprintf(keys + n, "127.0.0.1\r");
+    for (i = 0; i < 3; i++) keys[n++] = 127;                           /* erase the default port */
+    n += sprintf(keys + n, "%s\rn", port);                             /* port, TLS no */
+    drive(keys, (size_t)n, 1);
+    assert(strstr(screen_text, "LiveChat68 setup"));
+    assert(st->registers == 1 && strstr(st->last_register_body, "\"name\":\"My Board\"") && strstr(st->last_register_body, "\"sysop\":\"Tester\""));
+    assert(ae_chat_config_load(&cfg, "build/test_chat.cfg") == 1);
+    assert(strcmp(cfg.board_key, "regd.sekrit") == 0 && cfg.tls == 0 && cfg.allow_plain_http == 1 && cfg.port == stub_port);
+    assert(st->sessions == 1);                                         /* straight into the chat, no re-run */
+    stop_stub();
+    printf("  [OK] door: sysop with no config runs the wizard, registers once, writes the cfg and enters the chat\n");
 }
 
 /* B4 (C13-C17, D12, D15): presence commands and whois reach the server; the pane says what the TS door says. */
@@ -805,6 +874,9 @@ int main(void)
     test_door_b4_ignore();
     test_door_b4_user_menu();
     test_door_no_config();
+    test_config_save();
+    test_register();
+    test_door_wizard();
     remove("build/test_chat_keys.bin"); remove("build/test_chat_screen.bin");
     puts("test_chat: OK");
     return 0;

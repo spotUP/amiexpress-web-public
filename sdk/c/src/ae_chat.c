@@ -112,6 +112,111 @@ int ae_chat_config_load(ae_chat_config *cfg, const char *path)
     return ae_chat_config_parse(cfg, text);
 }
 
+/* The one owner of the cfg format: every key the parser reads is written, so a
+ * file the wizard made loads back to the same ae_chat_config. */
+int ae_chat_config_save(const ae_chat_config *cfg, const char *path)
+{
+    FILE *f = fopen(path, "w");
+    int ok;
+
+    if (f == 0) return -1;
+    ok = fprintf(f, "# LiveChat68 settings. NEVER share this file: BoardKey identifies your board.\n"
+                    "Host=%s\nPort=%d\nBoardKey=%s\nTimeout=%d\nTls=%d\nAllowPlainHttp=%d\n",
+                 cfg->host, cfg->port, cfg->board_key,
+                 cfg->timeout_secs > 0 ? cfg->timeout_secs : AE_CHAT_DEFAULT_TIMEOUT,
+                 cfg->tls ? 1 : 0, cfg->allow_plain_http ? 1 : 0) > 0;
+    if (fclose(f) != 0) ok = 0;
+    return ok ? 0 : -1;
+}
+
+typedef struct {
+    char text[512];
+    unsigned long len;
+} register_reply;
+
+static int register_collect(void *ctx, const unsigned char *buf, unsigned long len)
+{
+    register_reply *r = (register_reply *)ctx;
+    unsigned long room = (unsigned long)sizeof r->text - 1 - r->len;
+    unsigned long take = len < room ? len : room;
+
+    if (take > 0) {
+        memcpy(r->text + r->len, buf, take);
+        r->len += take;
+        r->text[r->len] = '\0';
+    }
+    return 0;
+}
+
+static void register_error(char *err, int err_cap, const char *text)
+{
+    if (err != 0 && err_cap > 0) copy_field(err, (unsigned long)err_cap, text);
+}
+
+int ae_chat_register(const ae_chat_config *cfg, const char *name, const char *sysop,
+                     const char *contact, char *key_out, int key_cap, char *err, int err_cap)
+{
+    char body[BODY_MAX];
+    const char *headers[2];
+    register_reply reply;
+    ae_http_target target;
+    ae_http_response response;
+    long at;
+    int rc;
+
+    register_error(err, err_cap, "");
+    if (cfg == 0 || key_out == 0 || key_cap < 2 || blank(name) || blank(sysop)) return AE_CHAT_ERR_ARGS;
+    key_out[0] = '\0';
+    if (ae_chat_config_refusal(cfg) != 0) {
+        register_error(err, err_cap, ae_chat_config_refusal(cfg));
+        return AE_CHAT_ERR_ARGS;
+    }
+
+    at = ae_req_put_raw(body, sizeof body, 0, "{\"name\":");
+    if (at >= 0) at = ae_req_put_json_string(body, sizeof body, (unsigned long)at, name);
+    if (at >= 0) at = ae_req_put_raw(body, sizeof body, (unsigned long)at, ",\"sysop\":");
+    if (at >= 0) at = ae_req_put_json_string(body, sizeof body, (unsigned long)at, sysop);
+    if (at >= 0 && !blank(contact)) {
+        at = ae_req_put_raw(body, sizeof body, (unsigned long)at, ",\"contact\":");
+        if (at >= 0) at = ae_req_put_json_string(body, sizeof body, (unsigned long)at, contact);
+    }
+    if (at >= 0) at = ae_req_put_raw(body, sizeof body, (unsigned long)at, "}");
+    if (at < 0) return AE_CHAT_ERR_TOO_LONG;
+
+    headers[0] = "Accept: text/plain\r\n";
+    headers[1] = "Content-Type: application/json\r\n";
+    memset(&target, 0, sizeof target);
+    target.host = cfg->host;
+    target.tls = cfg->tls;
+    target.port = cfg->port > 0 ? cfg->port : (cfg->tls ? 443 : 80);
+    target.timeout_secs = cfg->timeout_secs > 0 ? cfg->timeout_secs : AE_CHAT_DEFAULT_TIMEOUT;
+    target.user_agent = "AmiExpress-LIVECHAT68/1.0";
+    memset(&response, 0, sizeof response);
+    memset(&reply, 0, sizeof reply);
+
+    rc = ae_http_request(&target, "POST", AE_CHAT_REGISTER_PATH, body, (unsigned long)at,
+                         headers, 2, &response, register_collect, &reply, 0);
+    if (rc != AE_HTTP_OK) return AE_CHAT_ERR_TRANSPORT;
+    if (response.status < 200 || response.status > 299) {
+        char detail[160];
+        detail[0] = '\0';
+        json_extract_string(reply.text, "detail", detail, sizeof detail);
+        if (detail[0] == '\0') json_extract_string(reply.text, "error", detail, sizeof detail);
+        register_error(err, err_cap, detail[0] != '\0' ? detail : "The chat server refused the registration.");
+        return AE_CHAT_ERR_STATUS;
+    }
+    if (strncmp(reply.text, "OK ", 3) != 0) return AE_CHAT_ERR_BODY;
+    {
+        const char *k = reply.text + 3;
+        unsigned long n = 0;
+        while (k[n] != '\0' && k[n] != '\r' && k[n] != '\n' && k[n] != ' ') n++;
+        if (n == 0 || strchr(k, '.') == 0 || n >= (unsigned long)key_cap) return AE_CHAT_ERR_BODY;
+        memcpy(key_out, k, n);
+        key_out[n] = '\0';
+    }
+    return AE_CHAT_OK;
+}
+
 /* -------------------------------------------------------------- transport */
 
 static int collect(void *ctx, const unsigned char *buf, unsigned long len)

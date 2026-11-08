@@ -1767,6 +1767,86 @@ static void early_message(const char *title, const char *text)
     ui_key_read(&keys, &pushback);
 }
 
+/** Row `row` of the wizard: label, then what the sysop answered. */
+static void wizard_say(int row, const char *label, const char *value)
+{
+    char line[120];
+    sprintf(line, "%-12s %.80s", label, value);
+    ansi_text(&screen.buf, row, 3, line, screen.cols - 4);
+}
+
+/** One wizard field. Returns the ui_input result: 1 entered, 0 empty, -1 caller gone. */
+static int wizard_field(ui_input_style *st, int row, const char *label, char *buf, int cap)
+{
+    int r;
+    st->row = row;
+    r = ui_input(&screen.buf, &keys, &pushback, st, label, buf, cap);
+    if (r >= 0) wizard_say(row, label, buf);
+    return r;
+}
+
+/**
+ * First-run setup for a sysop: ask for the board's name, ask the hub for a key (A2), write
+ * LIVECHAT.cfg (ae_chat_config_save owns the format). Returns 1 with `cfg` ready to connect,
+ * 0 when the sysop left, -1 when the caller went away. Nothing is written unless the hub answered.
+ */
+static int setup_wizard(ae_chat_config *cfg)
+{
+    ui_input_style st;
+    char name[48], sysop[48], contact[88], host[64], port[8], err[160], key[128];
+    int r, rc;
+
+    name[0] = '\0'; contact[0] = '\0'; port[0] = '\0';
+    copy(sysop, sizeof sysop, handle);
+    ae_chat_config_parse(cfg, "");
+    copy(host, sizeof host, "doors.uprough.net");
+    sprintf(port, "%d", 443);
+
+    ui_input_style_init(&st);
+    st.left = 3;
+    st.cols = screen.cols - 6;
+    for (;;) {
+        int tls;
+        ansi_clear(&screen.buf);
+        ansi_text(&screen.buf, 1, 3, "LiveChat68 setup", screen.cols - 4);
+        ansi_text(&screen.buf, 2, 3, "Your board has no key yet. Register it with the chat server.", screen.cols - 4);
+        ansi_text(&screen.buf, 3, 3, "Leave the board name empty to cancel.", screen.cols - 4);
+        r = wizard_field(&st, 5, "Board name", name, sizeof name);
+        if (r <= 0) return r;
+        if ((r = wizard_field(&st, 7, "Sysop name", sysop, sizeof sysop)) < 0) return r;
+        if (sysop[0] == '\0') copy(sysop, sizeof sysop, handle);
+        if ((r = wizard_field(&st, 9, "Contact", contact, sizeof contact)) < 0) return r;
+        if ((r = wizard_field(&st, 11, "Host", host, sizeof host)) < 0) return r;
+        if ((r = wizard_field(&st, 13, "Port", port, sizeof port)) < 0) return r;
+        st.row = 15;
+        tls = ui_confirm(&screen.buf, &keys, &pushback, &st, "Use TLS (HTTPS)?", 1);
+        if (tls < 0) return -1;
+
+        if (host[0] != '\0') copy(cfg->host, sizeof cfg->host, host);
+        cfg->port = atoi(port) > 0 && atoi(port) < 65536 ? atoi(port) : (tls ? 443 : 80);
+        cfg->tls = tls;
+        cfg->allow_plain_http = !tls;                      /* choosing plain HTTP here is the sysop's say-so */
+        ansi_text(&screen.buf, 17, 3, "Registering...", screen.cols - 4);
+        ui_screen_flush(&screen);
+        rc = ae_chat_register(cfg, name, sysop, contact, key, (int)sizeof key, err, (int)sizeof err);
+        if (rc == AE_CHAT_OK) {
+            copy(cfg->board_key, sizeof cfg->board_key, key);
+            if (ae_chat_config_save(cfg, LIVECHAT_CFG_PATH) != 0) {
+                early_message("Setup", "Could not write LIVECHAT.cfg. Is the Doors drawer writable?");
+                return 0;
+            }
+            return 1;
+        }
+        if (rc == AE_CHAT_ERR_TRANSPORT) copy(err, sizeof err, "Cannot reach the chat server.");
+        else if (err[0] == '\0') copy(err, sizeof err, "The chat server gave an unexpected answer.");
+        ansi_text(&screen.buf, 17, 3, "Registration failed:", screen.cols - 4);
+        ansi_text(&screen.buf, 18, 3, err, screen.cols - 4);
+        st.row = 20;
+        r = ui_confirm(&screen.buf, &keys, &pushback, &st, "Try again?", 1);
+        if (r <= 0) return r < 0 ? -1 : 0;
+    }
+}
+
 static void finish(void)
 {
     ui_cells_close(&cells);
@@ -1814,17 +1894,23 @@ int main(int argc, char **argv)
     ansi_clear(&screen.buf);
     ui_cells_invalidate(&cells);
 
+    user_level = ae_user_level(&session);
     if (!ae_chat_config_load(&cfg, LIVECHAT_CFG_PATH)) {
-        early_message("Setup", "This door has no LIVECHAT.cfg.");
-        finish();
-        return 0;
+        /* A sysop sets the door up here; anyone else is told to ask one. */
+        if (user_level < 255 || setup_wizard(&cfg) != 1) {
+            if (user_level < 255) early_message("Setup", "This door has no LIVECHAT.cfg.");
+            finish();
+            return 0;
+        }
+        ansi_clear(&screen.buf);
+        ui_cells_invalidate(&cells);
     }
     if (ae_chat_config_refusal(&cfg) != 0) {
         early_message("Setup", ae_chat_config_refusal(&cfg));
         finish();
         return 0;
     }
-    if (ae_chat_open(&chat, &cfg, handle, (is_sysop = (user_level = ae_user_level(&session)) >= 255)) != AE_CHAT_OK) {
+    if (ae_chat_open(&chat, &cfg, handle, (is_sysop = user_level >= 255)) != AE_CHAT_OK) {
         /* A connect failure carries its reason (certificate rejected, AmiSSL missing...) */
         early_message("Error", chat.http_error == AE_HTTP_ERR_CONNECT ? ae_net_last_error()
                                                                       : "The chat server did not answer.");

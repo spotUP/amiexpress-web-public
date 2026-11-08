@@ -464,6 +464,16 @@ static void chat_serve(int fd, stub_chat_stats *st, int *state)
     if (sscanf(req, "%7s %255s", method, path) != 2) return;
     is_post = strcmp(method, "POST") == 0;
     is_get = strcmp(method, "GET") == 0;
+    if (is_post && strcmp(path, "/achievements/v1/boards/register") == 0) {   /* unauthenticated, A2 */
+        st->registers++;
+        strncpy(st->last_register_body, body, sizeof st->last_register_body - 1);
+        if (strstr(req, "Accept: text/plain") == 0) st->bad_auth++;
+        if (strstr(body, "\"name\":\"bad\"") != 0)
+            chat_reply(fd, 400, "application/json", "{\"error\":\"bad_request\",\"detail\":\"name must be printable ASCII\"}");
+        else
+            chat_reply(fd, 201, "text/plain", "OK regd.sekrit\n");
+        return;
+    }
     if (strstr(req, "Authorization: Board ") == 0) st->bad_auth++;
     if (!(is_post && strcmp(path, "/chat/v1/sessions") == 0) && strstr(req, "X-Chat-Session: ") == 0) st->bad_session++;
 

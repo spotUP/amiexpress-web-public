@@ -48,12 +48,14 @@ LIVECHAT.cfg, or it has no BoardKey, the door shows a setup screen:
   Sysop name   your name (1-40 characters)
   Contact      optional, e-mail or handle (up to 80 characters)
 
-The host, port and TLS settings are shown with their normal values
-(doors.uprough.net, 443, TLS on); leave them as they are. The door
-asks the chat server for a board key at once, writes
-Doors:LIVECHAT68/LIVECHAT.cfg and goes straight into the chat. Callers
-who are not sysops see a "not set up yet" message until you have done
-this.
+Then Host, Port and "Use TLS (HTTPS)?" are asked, with their normal
+values already filled in (doors.uprough.net, 443, yes); press ENTER to
+keep them. Leave the board name empty to cancel. The door asks the chat
+server for a board key at once, writes Doors:LIVECHAT68/LIVECHAT.cfg
+and goes straight into the chat. If the server refuses, its reason is
+shown and you can try again; nothing is written until it accepts.
+Answering no to TLS also sets AllowPlainHttp=1. Callers who are not
+sysops see a "not set up yet" message until you have done this.
 
 NEVER SHARE LIVECHAT.cfg. It holds your board key, which identifies
 your board. Anyone with the key can speak as your board. Do not post

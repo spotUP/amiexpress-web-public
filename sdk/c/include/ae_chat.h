@@ -69,6 +69,18 @@ int ae_chat_config_parse(ae_chat_config *cfg, const char *text);
 /** Read a file and parse it. Returns 0 when the file cannot be opened. */
 int ae_chat_config_load(ae_chat_config *cfg, const char *path);
 
+/** Write every key (Host, Port, BoardKey, Timeout, Tls, AllowPlainHttp) so ae_chat_config_load reads
+ *  it back unchanged. Returns 0, or -1 when the file cannot be written. */
+int ae_chat_config_save(const ae_chat_config *cfg, const char *path);
+
+#define AE_CHAT_REGISTER_PATH "/achievements/v1/boards/register"
+
+/** POST AE_CHAT_REGISTER_PATH (no key needed) over the cfg's Host/Port/Tls. `contact` may be NULL.
+ *  On success `key_out` holds "<id>.<secret>". On AE_CHAT_ERR_STATUS `err` (may be NULL) holds the
+ *  hub's one-line reason; on a refused config the config's refusal line. */
+int ae_chat_register(const ae_chat_config *cfg, const char *name, const char *sysop,
+                     const char *contact, char *key_out, int key_cap, char *err, int err_cap);
+
 typedef struct {
     ae_chat_config cfg;
     char handle[32];           /* kept so an expired session can be reopened */
