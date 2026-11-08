@@ -44,7 +44,7 @@ const char *const lc_help_text[] = {
     "  F5               Format selected text (colors/effects)",
     "  F6               File sharing browser",
     "  Tab              Cycle focus between panels",
-    "  Ctrl+C/Q         Quit (with confirmation)",
+    "  Ctrl+Q           Quit (with confirmation)",
     "Text Formatting:",
     "  Shift+Arrow      Select text in input box",
     "  F5               Open format picker (with text selected)",
@@ -88,6 +88,7 @@ void lc_lines_changed(lc_model *m) { m->lines_gen = ++lines_clock; }
 void lc_model_init(lc_model *m, int cols, int rows)
 {
     memset(m, 0, sizeof *m);
+    m->input_anchor = -1;
     lc_lines_changed(m);
     m->cols = cols;
     m->rows = rows;
@@ -468,6 +469,17 @@ static void draw_input(ui_cells *c, const lc_model *m, int *cr, int *cc)
                  m->pick[0] != '\0' ? "[PICK MESSAGE: Up/Down, Enter, Esc]" : m->editing ? "[EDITING]" : "Message", LC_INK);
     from = m->input_cur > room ? m->input_cur - room : 0;
     ui_cells_text(c, row + 1, 1, m->input + from, room);
+    if (m->input_anchor >= 0 && m->input_anchor != m->input_cur) {   /* the Shift selection, inverse */
+        int a = m->input_anchor < m->input_cur ? m->input_anchor : m->input_cur;
+        int b = m->input_anchor < m->input_cur ? m->input_cur : m->input_anchor;
+        if (a < from) a = from;
+        if (b > from + room) b = from + room;
+        if (b > a) {
+            ui_cells_pen(c, LC_BAR_INK, LC_INK, 0);
+            ui_cells_text(c, row + 1, 1 + a - from, m->input + a, b - a);
+            ui_cells_pen(c, LC_INK, UI_CELLS_DEFAULT, 0);
+        }
+    }
     *cr = row + 1;
     *cc = 1 + m->input_cur - from;
     if (iw < W) ui_cells_button(c, row, iw, 6, ":D", LC_GREY, LC_ACTIVITY);

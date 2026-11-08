@@ -39,6 +39,8 @@ export function processHotkeyToken(token: string, navKeys = false): string {
   // these keys the same way: as a single byte, never as an escape sequence.
   // The spellings: xterm (ESC[H, ESC[F, ESC[5~, ESC[6~) and the VT220/linux
   // telnet forms (ESC[1~ Home, ESC[4~ End, ESC[7~ Home, ESC[8~ End).
+  // Delete (ESC[3~) and Shift+Left/Right/Home/End (xterm ESC[1;2x) carry text
+  // selection in an SDK line editor; like Home/End they reach SDK doors only.
   const arrowMap: { [key: string]: number } = {
     '\x1b[A': ArrowKeyCodes.UPARROW,    // 4
     '\x1b[B': ArrowKeyCodes.DOWNARROW,  // 5
@@ -52,6 +54,11 @@ export function processHotkeyToken(token: string, navKeys = false): string {
     '\x1b[8~': NavigationKeyCodes.END,
     '\x1b[5~': NavigationKeyCodes.PGUP,
     '\x1b[6~': NavigationKeyCodes.PGDN,
+    '\x1b[3~': NavigationKeyCodes.DELETE,
+    '\x1b[1;2D': NavigationKeyCodes.SHIFT_LEFT,
+    '\x1b[1;2C': NavigationKeyCodes.SHIFT_RIGHT,
+    '\x1b[1;2H': NavigationKeyCodes.SHIFT_HOME,
+    '\x1b[1;2F': NavigationKeyCodes.SHIFT_END,
   };
 
   const navCodes: number[] = Object.values(NavigationKeyCodes);
@@ -61,7 +68,7 @@ export function processHotkeyToken(token: string, navKeys = false): string {
     return String.fromCharCode(arrowCode);
   }
 
-  // Ignore unrecognized escape sequences (Insert, Delete, function keys, etc.)
+  // Ignore unrecognized escape sequences (Insert, function keys, etc.)
   // These would confuse 68K doors if we passed ESC or partial sequences
   if (token.length > 1 && token.startsWith('\x1b')) {
     debugLog(`[XIMIOHandler] Ignoring unrecognized escape sequence: ${JSON.stringify(token)}`);

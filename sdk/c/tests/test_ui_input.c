@@ -378,6 +378,70 @@ static void the_latin1_bounds_are_exact(void)
 }
 
 /* B3: the per-key line core - cursor, Home/End, Delete, and the Up/Down history ring with draft recall. */
+/* K19: the board's Delete and Shift+cursor bytes, and the xterm spellings a
+ * door driven straight from a terminal sees. ESC [ 1 ; 2 D used to decode as
+ * HOME (the ';' taken for the tilde) and leave "2D" behind as typing. */
+static void delete_and_shift_keys_decode(void)
+{
+    typist t; ui_key_source src; int pushback = -1;
+    t.keys = "\x80\x81\x82\x83\x84\x1b[1;2D\x1b[1;2C\x1b[1;2H\x1b[1;2F\x1b[1;5Cz";
+    t.at = 0; t.overrun = 0;
+    src = source_for(&t);
+    assert(ui_key_read(&src, &pushback) == UI_KEY_DELETE);
+    assert(ui_key_read(&src, &pushback) == UI_KEY_SHIFT_LEFT);
+    assert(ui_key_read(&src, &pushback) == UI_KEY_SHIFT_RIGHT);
+    assert(ui_key_read(&src, &pushback) == UI_KEY_SHIFT_HOME);
+    assert(ui_key_read(&src, &pushback) == UI_KEY_SHIFT_END);
+    assert(ui_key_read(&src, &pushback) == UI_KEY_SHIFT_LEFT);
+    assert(ui_key_read(&src, &pushback) == UI_KEY_SHIFT_RIGHT);
+    assert(ui_key_read(&src, &pushback) == UI_KEY_SHIFT_HOME);
+    assert(ui_key_read(&src, &pushback) == UI_KEY_SHIFT_END);
+    assert(ui_key_read(&src, &pushback) == UI_KEY_RIGHT);   /* Ctrl+Right: the plain key */
+    assert(ui_key_read(&src, &pushback) == 'z');            /* nothing of the tail leaks */
+    printf("  [OK] Delete and Shift+cursor keys decode\n");
+}
+
+static void sel(char *buf, int *len, int *cur, int *anchor, int key)
+{
+    ui_line_sel_key(buf, 32, len, cur, anchor, key, 0, 0);
+}
+
+static void a_selection_is_extended_replaced_and_deleted(void)
+{
+    char buf[32] = "";
+    int len = 0, cur = 0, anchor = -1, i;
+    const char *typed = "hello world";
+    for (i = 0; typed[i]; i++) sel(buf, &len, &cur, &anchor, typed[i]);
+    assert(anchor == -1);
+    /* Shift+Left x5 selects "world"; typing replaces it. */
+    for (i = 0; i < 5; i++) sel(buf, &len, &cur, &anchor, UI_KEY_SHIFT_LEFT);
+    assert(anchor == 11 && cur == 6);
+    sel(buf, &len, &cur, &anchor, 'X');
+    assert(strcmp(buf, "hello X") == 0 && cur == 7 && len == 7 && anchor == -1);
+    /* Shift+Home then Backspace removes all of it. */
+    sel(buf, &len, &cur, &anchor, UI_KEY_SHIFT_HOME);
+    assert(anchor == 7 && cur == 0);
+    sel(buf, &len, &cur, &anchor, 8);
+    assert(buf[0] == '\0' && len == 0 && cur == 0 && anchor == -1);
+    /* Shift+End then Delete; a plain arrow drops the selection. */
+    for (i = 0; typed[i]; i++) sel(buf, &len, &cur, &anchor, typed[i]);
+    sel(buf, &len, &cur, &anchor, UI_KEY_HOME);
+    sel(buf, &len, &cur, &anchor, UI_KEY_SHIFT_RIGHT);
+    sel(buf, &len, &cur, &anchor, UI_KEY_RIGHT);
+    assert(anchor == -1 && cur == 2);
+    sel(buf, &len, &cur, &anchor, UI_KEY_SHIFT_END);
+    sel(buf, &len, &cur, &anchor, UI_KEY_DELETE);
+    assert(strcmp(buf, "he") == 0 && cur == 2 && anchor == -1);
+    /* Selecting back to the anchor leaves no selection. */
+    sel(buf, &len, &cur, &anchor, UI_KEY_SHIFT_LEFT);
+    sel(buf, &len, &cur, &anchor, UI_KEY_SHIFT_RIGHT);
+    assert(anchor == -1);
+    /* Without an anchor the Shift keys are plain moves. */
+    ui_line_key(buf, 32, &len, &cur, UI_KEY_SHIFT_HOME, 0, 0);
+    assert(cur == 0 && strcmp(buf, "he") == 0);
+    printf("  [OK] a selection is extended, replaced and deleted\n");
+}
+
 static void the_line_core_edits_at_the_cursor_and_recalls_history(void)
 {
     char buf[32] = "";
@@ -462,6 +526,8 @@ int main(void)
     a_masked_prompt_never_echoes_the_text();
     a_masked_prompt_stays_masked_through_edits();
     the_latin1_bounds_are_exact();
+    delete_and_shift_keys_decode();
+    a_selection_is_extended_replaced_and_deleted();
     printf("ui_input: all passed\n");
     return 0;
 }

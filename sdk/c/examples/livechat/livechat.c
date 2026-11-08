@@ -25,7 +25,7 @@
  *
  * KEYS (as the TS door): Tab / Shift-Tab cycle input, sidebar and menu bar;
  * Enter sends, joins the sidebar room or opens the DM; F1 help, F2 sidebar,
- * F3 next channel; PgUp/PgDn scroll; Ctrl+C / Ctrl+Q quit. Commands are the
+ * F3 next channel; PgUp/PgDn scroll; Ctrl+Q quits (Ctrl+C is the board break key, K09). Commands are the
  * TS ones (/join /leave /create /rooms /who /msg /reply /react /thread /clear /help
  * /quit) and the old short forms (/j /n /np /l /w /d /r /t /? /q).
  *
@@ -1399,6 +1399,7 @@ static int submit(void)
     M.input[0] = '\0';
     M.input_len = 0;
     M.input_cur = 0;
+    M.input_anchor = -1;
     return ended;
 }
 
@@ -1489,6 +1490,7 @@ static void input_set(const char *text)
     copy(M.input, sizeof M.input, text);
     M.input_len = (int)strlen(M.input);
     M.input_cur = M.input_len;
+    M.input_anchor = -1;
     set_focus(LC_FOCUS_INPUT);
 }
 
@@ -1643,6 +1645,7 @@ static void side_pick(void)
         sprintf(M.input, "/msg %.30s ", s->label);
         M.input_len = (int)strlen(M.input);
         M.input_cur = M.input_len;
+        M.input_anchor = -1;
         set_focus(LC_FOCUS_INPUT);
     }
 }
@@ -1726,12 +1729,13 @@ static int handle_key(int key)
     }
     if (is_enter(key)) return submit();
     if (key == UI_KEY_ESC) {
+        if (M.input_anchor >= 0) { M.input_anchor = -1; return 0; }   /* Esc drops a selection first */
         if (dm_thread[0] != '\0' && room_id[0] != '\0') join_room(room_id);   /* out of the DM, back to the room */
         return 0;
     }
     {
         int cap = LC_INPUT_MAX < AE_CHAT_TEXT_MAX + 1 ? LC_INPUT_MAX : AE_CHAT_TEXT_MAX + 1;
-        if (!ui_line_key(M.input, cap, &M.input_len, &M.input_cur, key, &hist, 0)
+        if (!ui_line_sel_key(M.input, cap, &M.input_len, &M.input_cur, &M.input_anchor, key, &hist, 0)
             && key == UI_KEY_UP && M.input_len == 0)
             lc_pick_start(&M);                  /* Up on an empty input picks a message (TS start({kind:'menu'})) */
         M.editing = ui_hist_editing(&hist) != 0;

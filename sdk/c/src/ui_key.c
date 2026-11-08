@@ -72,6 +72,31 @@ int ui_decode_escape(const ui_key_source *src, int *pushback)
         if (t < 0) {
             return t;
         }
+        if (c == '1' && t == ';') {
+            /* ESC [ 1 ; mod X : a modified cursor key (xterm). Shift (mod 2)
+             * on Left/Right/Home/End selects; any other modifier or key is
+             * read whole and answered as the plain key, never as a stray
+             * HOME with the tail left behind as typing. */
+            int mod = src->next(src->ctx), fin;
+            if (mod < 0) return mod;
+            fin = src->next(src->ctx);
+            if (fin < 0) return fin;
+            if (mod == '2') {
+                if (fin == 'D') return UI_KEY_SHIFT_LEFT;
+                if (fin == 'C') return UI_KEY_SHIFT_RIGHT;
+                if (fin == 'H') return UI_KEY_SHIFT_HOME;
+                if (fin == 'F') return UI_KEY_SHIFT_END;
+            }
+            switch (fin) {
+            case 'A': return UI_KEY_UP;
+            case 'B': return UI_KEY_DOWN;
+            case 'C': return UI_KEY_RIGHT;
+            case 'D': return UI_KEY_LEFT;
+            case 'H': return UI_KEY_HOME;
+            case 'F': return UI_KEY_END;
+            default:  return 0;
+            }
+        }
         if (c == '3') return UI_KEY_DELETE;
         if (c == '5') return UI_KEY_PGUP;
         if (c == '6') return UI_KEY_PGDN;
@@ -131,6 +156,11 @@ int ui_key_read(const ui_key_source *src, int *pushback)
     if (c == AE_KEY_END)     return UI_KEY_END;
     if (c == AE_KEY_PGUP)    return UI_KEY_PGUP;
     if (c == AE_KEY_PGDN)    return UI_KEY_PGDN;
+    if (c == AE_KEY_DELETE)      return UI_KEY_DELETE;
+    if (c == AE_KEY_SHIFT_LEFT)  return UI_KEY_SHIFT_LEFT;
+    if (c == AE_KEY_SHIFT_RIGHT) return UI_KEY_SHIFT_RIGHT;
+    if (c == AE_KEY_SHIFT_HOME)  return UI_KEY_SHIFT_HOME;
+    if (c == AE_KEY_SHIFT_END)   return UI_KEY_SHIFT_END;
 
     if (c == UI_MOUSE_WAKE) return UI_KEY_MOUSE;
 

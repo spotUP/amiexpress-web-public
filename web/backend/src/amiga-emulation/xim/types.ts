@@ -522,14 +522,22 @@ export const ArrowKeyCodes = {
  * Page Down. express.e has no code for them (readChar converts only the
  * arrows, 7514-7528) so these are the board's own, chosen from the control
  * bytes nothing else uses: not BS/TAB/CR/ESC, not the arrows 2-5, not the
- * XON/XOFF pair, not the mouse wake byte 0x1E. The C SDK mirrors them as
- * AE_KEY_* in sdk/c/include/ui_key.h; change both together.
+ * XON/XOFF pair, not the mouse wake byte 0x1E. Delete and the Shift+cursor
+ * keys (text selection) need more codes than the control range has free, so
+ * they use C1 bytes 0x80-0x84: the Amiga font draws nothing there and a door
+ * line editor accepts printable text only from 32-126 and 160-255. The C SDK
+ * mirrors them as AE_KEY_* in sdk/c/include/ui_key.h; change both together.
  */
 export const NavigationKeyCodes = {
   HOME: 0x1c,
   END: 0x1d,
   PGUP: 0x1f,
   PGDN: 0x19,
+  DELETE: 0x80,
+  SHIFT_LEFT: 0x81,
+  SHIFT_RIGHT: 0x82,
+  SHIFT_HOME: 0x83,
+  SHIFT_END: 0x84,
 } as const;
 
 /**

@@ -204,8 +204,27 @@ static void load(char *buf, int cap, int *len, int *cur, const char *text)
     *cur = *len;
 }
 
+/* Latin-1's printable half too (0xA0-0xFF): a caller's own name is typed
+   with them, and the board stores them as they are. 0x80-0x9F are C1
+   controls (the board's Delete and Shift+cursor bytes live there) and stay out. */
+static int printable(int key)
+{
+    return (key >= 32 && key < 127) || (key >= 160 && key <= 255);
+}
+
+/* The plain move a Shift+cursor key makes; the key itself if it is none. */
+static int unshifted(int key)
+{
+    if (key == UI_KEY_SHIFT_LEFT) return UI_KEY_LEFT;
+    if (key == UI_KEY_SHIFT_RIGHT) return UI_KEY_RIGHT;
+    if (key == UI_KEY_SHIFT_HOME) return UI_KEY_HOME;
+    if (key == UI_KEY_SHIFT_END) return UI_KEY_END;
+    return key;
+}
+
 int ui_line_key(char *buf, int cap, int *len, int *cur, int key, ui_hist *h, int upper)
 {
+    key = unshifted(key);
     if (key == UI_KEY_LEFT) { if (*cur > 0) (*cur)--; return 1; }
     if (key == UI_KEY_RIGHT) { if (*cur < *len) (*cur)++; return 1; }
     if (key == UI_KEY_HOME) { *cur = 0; return 1; }
@@ -234,10 +253,7 @@ int ui_line_key(char *buf, int cap, int *len, int *cur, int key, ui_hist *h, int
         return 1;
     }
     if (key == 21) { *len = 0; *cur = 0; buf[0] = '\0'; return 1; }       /* CTRL-U clears the line */
-    /* Latin-1's printable half too (0xA0-0xFF): a caller's own name is
-       typed with them, and the board stores them as they are. 0x80-0x9F
-       are C1 controls and stay out. */
-    if (((key >= 32 && key < 127) || (key >= 160 && key <= 255)) && *len < cap - 1) {
+    if (printable(key) && *len < cap - 1) {
         char c = (char) key;
         if (upper && c >= 'a' && c <= 'z') c = (char) (c - 'a' + 'A');
         memmove(buf + *cur + 1, buf + *cur, (size_t) (*len - *cur + 1));
@@ -246,4 +262,29 @@ int ui_line_key(char *buf, int cap, int *len, int *cur, int key, ui_hist *h, int
         return 1;
     }
     return 0;
+}
+
+int ui_line_sel_key(char *buf, int cap, int *len, int *cur, int *anchor, int key, ui_hist *h, int upper)
+{
+    int r;
+    if (!anchor) return ui_line_key(buf, cap, len, cur, key, h, upper);
+    if (*anchor > *len) *anchor = -1;
+    if (unshifted(key) != key) {
+        if (*anchor < 0) *anchor = *cur;
+        r = ui_line_key(buf, cap, len, cur, key, h, upper);
+        if (*anchor == *cur) *anchor = -1;
+        return r;
+    }
+    if (*anchor >= 0 && *anchor != *cur
+        && (key == 8 || key == 127 || key == UI_KEY_DELETE || printable(key))) {
+        int a = *anchor < *cur ? *anchor : *cur, b = *anchor < *cur ? *cur : *anchor;
+        memmove(buf + a, buf + b, (size_t) (*len - b + 1));
+        *len -= b - a;
+        *cur = a;
+        *anchor = -1;
+        if (!printable(key)) return 1;
+    }
+    r = ui_line_key(buf, cap, len, cur, key, h, upper);
+    if (r) *anchor = -1;
+    return r;
 }

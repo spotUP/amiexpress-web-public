@@ -107,6 +107,16 @@ void ui_hist_reset(ui_hist *h);
  */
 int ui_line_key(char *buf, int cap, int *len, int *cur, int key, ui_hist *h, int upper);
 
+/**
+ * ui_line_key with a selection, the TS textbox's (sdk/engines/ui/blessed/
+ * widgets/textbox.ts): Shift+Left/Right/Home/End extend it from `*anchor`
+ * (-1 = no selection) to the caret; Backspace and Delete remove it; a typed
+ * character replaces it; any other key the line takes clears it. The
+ * selection is the text between `*anchor` and `*cur`. ui_line_key alone
+ * treats the Shift keys as plain moves.
+ */
+int ui_line_sel_key(char *buf, int cap, int *len, int *cur, int *anchor, int key, ui_hist *h, int upper);
+
 #ifdef __cplusplus
 }
 #endif

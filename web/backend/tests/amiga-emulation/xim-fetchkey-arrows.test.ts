@@ -194,6 +194,22 @@ describe('Home, End, Page Up and Page Down reach an SDK door as one converted by
     expect(typeAndFetch('a\x1b[6~\x1b[Bb')).toEqual([97, 0x19, 5, 98]);
   });
 
+  // K19: Delete and Shift+Left/Right/Home/End were dropped as unknown escape
+  // sequences, so the SDK line editor could never select or forward-delete.
+  test('Delete and Shift+Left/Right/Home/End arrive as one C1 byte each', () => {
+    const cases: Array<[string, number]> = [
+      ['\x1b[3~', 0x80],   // Delete
+      ['\x1b[1;2D', 0x81], // Shift+Left
+      ['\x1b[1;2C', 0x82], // Shift+Right
+      ['\x1b[1;2H', 0x83], // Shift+Home
+      ['\x1b[1;2F', 0x84], // Shift+End
+    ];
+    for (const [typed, code] of cases) {
+      expect(typeAndFetch(typed)).toEqual([code]);
+      expect(typeAndFetch(typed, {})).toEqual([0]);   // classic door: dropped as before
+    }
+  });
+
   test('an unrelated escape sequence is still ignored', () => {
     expect(typeAndFetch('\x1b[2~')).toEqual([0]);   // Insert
     expect(typeAndFetch('\x1b[15~')).toEqual([0]);  // F5

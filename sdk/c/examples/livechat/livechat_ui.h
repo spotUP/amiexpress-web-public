@@ -92,6 +92,7 @@ typedef struct {
     char input[LC_INPUT_MAX];
     int input_len;
     int input_cur;                 /* caret column in input, 0..input_len */
+    int input_anchor;              /* Shift-selection's fixed end, -1 = none (K19) */
     int side_tab;                  /* 0 channels, 1 users (F3, click on the status line) */
     int compact;                   /* /compact: message lines drop their time stamp */
     int timestamps;                /* /timestamps: off drops the stamp as well */

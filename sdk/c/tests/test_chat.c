@@ -516,6 +516,15 @@ static void test_door_b3(void)
     assert(strcmp(M.input, "bXc") == 0 && M.input_cur == 0);
     stop_stub();
 
+    start_stub();                                                             /* K19: Shift+Left selects, typing replaces */
+    drive(KEYS("\r" "hello" "\x81" "\x1b[1;2D" "X"), 0);                     /* board byte and xterm spelling */
+    assert(strcmp(M.input, "helX") == 0 && M.input_cur == 4 && M.input_anchor == -1);
+    drive(KEYS("\r" "hello" "\x83" "\x80"), 0);                               /* Shift+Home, Delete: all gone */
+    assert(M.input[0] == '\0' && M.input_anchor == -1);
+    drive(KEYS("\r" "hello" "\x81\x81"), 0);
+    assert(M.input_anchor == 5 && M.input_cur == 3);                           /* still selected when the keys stop */
+    stop_stub();
+
     start_stub();
     drive(KEYS("\r" "one\r" "two\r" "dra" "\x1b[A" "\x1b[A"), 0);            /* Up twice reaches the first sent line */
     assert(strcmp(M.input, "one") == 0);
@@ -552,7 +561,7 @@ static void test_door_b3(void)
     drive(KEYS("\r" "hi\r" "/cls\r"), 0);
     assert(line_count("hi") == 0);
     stop_stub();
-    printf("  [OK] door: input editing and history, F3 and status click tab, Ctrl+C quit, /exit /bye /cls /help <cmd> /compact /timestamps\n");
+    printf("  [OK] door: input editing, Shift selection and history, F3 and status click tab, Ctrl+C quit, /exit /bye /cls /help <cmd> /compact /timestamps\n");
 }
 
 /* B2: the TS door's /edit /deletemsg /topic /kick /mute /op /invite /reactions and their events. */

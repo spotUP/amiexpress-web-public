@@ -50,6 +50,16 @@ extern "C" {
 #define AE_KEY_PGUP 0x1f
 #define AE_KEY_PGDN 0x19
 
+/* Delete and the Shift+cursor keys (text selection in a line editor). The
+ * control range has no free bytes left, so the board uses C1 bytes 0x80-0x84:
+ * the Amiga font draws nothing there and ui_line_key accepts printable text
+ * only from 32-126 and 160-255. SDK doors only, like Home/End above. */
+#define AE_KEY_DELETE      0x80
+#define AE_KEY_SHIFT_LEFT  0x81
+#define AE_KEY_SHIFT_RIGHT 0x82
+#define AE_KEY_SHIFT_HOME  0x83
+#define AE_KEY_SHIFT_END   0x84
+
 #define UI_KEY_UP    1000
 #define UI_KEY_DOWN  1001
 #define UI_KEY_PGUP  1002
@@ -87,6 +97,11 @@ extern "C" {
 #define UI_KEY_BACKTAB 1015
 /** ESC [ 3 ~: the Delete key. */
 #define UI_KEY_DELETE 1016
+/** Shift+Left/Right/Home/End (xterm ESC [ 1 ; 2 D/C/H/F): extend a selection. */
+#define UI_KEY_SHIFT_LEFT  1017
+#define UI_KEY_SHIFT_RIGHT 1018
+#define UI_KEY_SHIFT_HOME  1019
+#define UI_KEY_SHIFT_END   1020
 /* A raw 0x1E read is UI_KEY_MOUSE: Ctrl-^ collides with the wake byte while the board's mouse absorber is armed. */
 #define UI_MOUSE_WAKE 0x1E
 
