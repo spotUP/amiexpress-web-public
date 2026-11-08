@@ -84,14 +84,26 @@ export function conferenceDir(bbsRoot: string, conferenceNumber: number): string
 
   if (!location) return caseResolved(fallback);
 
-  // LOCATION is an Amiga path - `BBS:Conf2/` - with a trailing slash that
-  // path.join would otherwise carry into the directory name.
-  const cleaned = location.replace(/[\\/]+$/, '');
+  return locationDir(bbsRoot, location) || caseResolved(fallback);
+}
+
+/**
+ * The host directory a LOCATION string names, for code that holds the string
+ * before ConfConfig.info does - conference creation writes the directory first
+ * and registers LOCATION.n after. Empty string for an empty or unresolvable
+ * LOCATION.
+ *
+ * LOCATION is an Amiga path - `BBS:Conf2/` - with a trailing slash that
+ * path.join would otherwise carry into the directory name, and a device prefix
+ * path.join would carry in as a literal `BBS:Conf2` directory.
+ */
+export function locationDir(bbsRoot: string, location: string): string {
+  const cleaned = location.trim().replace(/[\\/]+$/, '');
+  if (!cleaned) return '';
   const resolved = cleaned.includes(':')
     ? new BBSPaths(bbsRoot).resolveAmigaPath(cleaned)
     : path.resolve(bbsRoot, cleaned);
-
-  return caseResolved(resolved || fallback);
+  return resolved ? caseResolved(resolved) : '';
 }
 
 /**

@@ -34,7 +34,7 @@ import * as crypto from 'crypto';
 import * as fs from 'fs';
 import * as path from 'path';
 import { isScreenFile, resolveNodeScreenDir } from '../screens/screen-resolution';
-import { applyTooltypes, parseInfoFile } from '../utils/info-file.util';
+import { applyTooltypes, binaryIconTemplate } from '../utils/info-file.util';
 import { planScreenCollapse, type CollapsePlan, type CollapsibleScreen } from './screen-collapse';
 import { screenDrawsNothing } from '../screens/screen-blankness';
 
@@ -118,16 +118,7 @@ function listFiles(dir: string): string[] {
  * configuration while it tidied its screens.
  */
 function iconTemplate(templateDir: string): string | null {
-  for (let n = 0; n <= 255; n++) {
-    const candidate = path.join(templateDir, `Node${n}.info`);
-    if (!fs.existsSync(candidate)) continue;
-    try {
-      if (parseInfoFile(candidate).isBinary) return candidate;
-    } catch {
-      // A file this port cannot parse is not a template for 34 new ones.
-    }
-  }
-  return null;
+  return binaryIconTemplate(templateDir, 'Node');
 }
 
 /**

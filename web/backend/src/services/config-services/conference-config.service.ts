@@ -8,7 +8,9 @@ import { readTooltypeMap } from '../../utils/info-file.util';
 import type { ConfigRepository } from '../../database/config-repository';
 import { readConferenceFields } from './conference-info-file.service';
 import type { ConferenceConfig } from '../../database/types';
-import { ConferenceConfigSchema, type RequestContext } from '../config.schemas';
+import { ConferenceConfigSchema, ConferenceGrantSchema, type RequestContext } from '../config.schemas';
+import { grantConferenceAccess, type ConferenceGrant } from '../conference-access-expansion';
+import { userFileManager } from '../UserFileManager';
 import { ConferenceSetupService } from '../conference-setup.service';
 import { loadConfConfig } from '../conf-config.service';
 import { notifyConferencesChanged } from '../conference-change-bus';
@@ -217,6 +219,11 @@ console.log(`[ConferenceConfigService] Loaded ${configs.length} conferences`);
   ): Promise<ConferenceConfig> {
     const validated = ConferenceConfigSchema.parse(config) as Omit<ConferenceConfig, 'id' | 'created_at' | 'updated_at'>;
     const conferenceId = validated.conference_id;
+    // Parsed before anything touches disk: a bad choice must not leave a
+    // half-made conference behind.
+    const grant: ConferenceGrant = ConferenceGrantSchema.parse(
+      (config as { grant?: unknown }).grant ?? { kind: 'everyone' }
+    );
 
     const bbsRoot = appConfig.get('dataDir');
     const confConfig = loadConfConfig(bbsRoot);
@@ -297,6 +304,12 @@ console.log(`[ConferenceConfigService] Registered conference ${conferenceId} in 
     // conferences table, which is what the config row below points at.
     await this.refreshRunningBoard();
 
+    // After the refresh, because the refresh's expansion pads SHORT strings
+    // with X - this decides slot N for every account, long strings included,
+    // so "sysop only" is not undone by the padding and a stale '_' left by an
+    // earlier, larger board is not mistaken for a decision.
+    this.grantNewConference(conferenceId, grant);
+
     // Explicitly, not as a side effect of the refresh: that reaches the mirror
     // through the change bus, which only carries anything once the server has
     // booted and subscribed. The foreign key does not care why the row is
@@ -326,6 +339,25 @@ console.log(`[ConferenceConfigService] Registered conference ${conferenceId} in 
    * Best-effort, because a stale name must never fail a write that already
    * succeeded on disk.
    */
+  /**
+   * Grant the new conference per the create form's choice, on user.data with
+   * the SQL mirror and any online caller following. A failure is logged, not
+   * thrown: the conference exists, and the sysop can grant it per user.
+   */
+  private grantNewConference(conferenceId: number, grant: ConferenceGrant): void {
+    try {
+      const sqlite = (this.database as unknown as { db?: { prepare(sql: string): { run(...p: unknown[]): unknown } } }).db;
+      const result = grantConferenceAccess({ users: userFileManager, sqlite }, conferenceId, grant);
+      if (result.beyondDiskWidth) {
+console.warn(`[ConferenceConfigService] Conference ${conferenceId} is past the nine flags user.data holds; grant it through an access area`);
+      } else {
+console.log(`[ConferenceConfigService] Conference ${conferenceId} granted (${grant.kind}) to ${result.usersGranted} user(s), ${result.usersChanged} record(s) changed`);
+      }
+    } catch (error) {
+console.error(`[ConferenceConfigService] Conference ${conferenceId} created, access grant failed:`, error);
+    }
+  }
+
   private async refreshRunningBoard(): Promise<void> {
     try {
       await notifyConferencesChanged();

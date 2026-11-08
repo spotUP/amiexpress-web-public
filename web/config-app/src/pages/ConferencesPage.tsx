@@ -11,6 +11,17 @@ import { MoveExistingFiles } from '../components/storage/MoveExistingFiles';
 import { DataTable, type DataTableColumn } from '../components/ui/DataTable';
 import { pathRows, applyPathEdit, resetPathToDerived, rowsToFormFields } from './conference-path-rows';
 
+/**
+ * Who a new conference is granted to - sent once with the create, applied to
+ * every account's access string. Mirrors ConferenceGrantSchema on the backend.
+ */
+export type ConferenceGrantChoice =
+  | { kind: 'everyone' }
+  | { kind: 'sysop' }
+  | { kind: 'level'; minLevel: number };
+
+const DEFAULT_GRANT: ConferenceGrantChoice = { kind: 'everyone' };
+
 interface ConferenceFormData {
   conference_id: number;
   name: string;
@@ -59,6 +70,7 @@ export function ConferencesPage() {
   const { showSuccess, showError, confirm } = useNotification();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingConference, setEditingConference] = useState<ConferenceConfig | null>(null);
+  const [grant, setGrant] = useState<ConferenceGrantChoice>(DEFAULT_GRANT);
 
   /**
    * The drives the board actually has. A directory can only be pointed at a
@@ -156,7 +168,7 @@ export function ConferencesPage() {
   };
 
   const createMutation = useMutation({
-    mutationFn: (conference: ConferenceFormData) => apiClient.createConferenceConfig(conference),
+    mutationFn: (conference: ConferenceFormData) => apiClient.createConferenceConfig({ ...conference, grant }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['conferences'] });
       showSuccess('Conference created successfully');
@@ -200,6 +212,7 @@ export function ConferencesPage() {
   });
 
   const resetForm = () => {
+    setGrant(DEFAULT_GRANT);
     setFormData({
       conference_id: 1,
       name: '',
@@ -675,6 +688,45 @@ export function ConferencesPage() {
                     </div>
                   ))}
                 </div>
+
+                {!editingConference && (
+                  <div className="md:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label htmlFor="grant_kind" className="label">Who Gets Access</label>
+                      <select
+                        id="grant_kind"
+                        value={grant.kind}
+                        onChange={(e) => {
+                          const kind = e.target.value as ConferenceGrantChoice['kind'];
+                          setGrant(kind === 'level' ? { kind, minLevel: formData.min_access_level } : { kind });
+                        }}
+                        className="input-field w-full"
+                      >
+                        <option value="everyone">Everyone</option>
+                        <option value="sysop">Sysop only</option>
+                        <option value="level">By access level</option>
+                      </select>
+                      <p className="text-xs text-content-secondary mt-1">
+                        Set once, on every existing account, when the conference is created.
+                      </p>
+                    </div>
+                    {grant.kind === 'level' && (
+                      <div>
+                        <label htmlFor="grant_min_level" className="label">Lowest Access Level Granted</label>
+                        <input
+                          id="grant_min_level"
+                          type="number"
+                          min="0"
+                          max="255"
+                          value={grant.minLevel}
+                          onChange={(e) => setGrant({ kind: 'level', minLevel: parseInt(e.target.value, 10) || 0 })}
+                          className="input-field w-full"
+                          required
+                        />
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 <div>
                   <label htmlFor="min_access_level" className="label">Min Access Level *</label>

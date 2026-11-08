@@ -283,6 +283,17 @@ export const NodeConfigSchema = z.object({
   nrams: z.array(z.string()).optional()
 });
 
+/**
+ * Who a newly created conference is granted to - the create form's access
+ * choice. Not a column: it is applied once, to user.data, at create time.
+ * Absent means everyone, the form's default.
+ */
+export const ConferenceGrantSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('everyone') }),
+  z.object({ kind: z.literal('sysop') }),
+  z.object({ kind: z.literal('level'), minLevel: z.number().int().min(0).max(255) }),
+]);
+
 export const ConferenceConfigSchema = z.object({
   conference_id: z.number().int().min(1),
   // The name the API serves for every conference, and the admin's own list

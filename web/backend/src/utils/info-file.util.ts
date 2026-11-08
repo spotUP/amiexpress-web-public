@@ -880,6 +880,28 @@ export function parseOrCreateInfoFile(filePath: string): InfoFile {
 }
 
 /**
+ * A real binary sibling icon to copy when a new numbered one is created -
+ * `Node<n>.info`, `Conf<n>.info` - so the new file is an Amiga icon with an
+ * image rather than the plain-text `.info` this port can read and Workbench
+ * cannot. Null when the directory holds no binary sibling.
+ *
+ * A copy carries its source's tooltypes; the caller strips them (applyTooltypes
+ * `removeKeys: () => true`) so the new icon asserts only its own settings.
+ */
+export function binaryIconTemplate(dir: string, prefix: string): string | null {
+  for (let n = 0; n <= 255; n++) {
+    const candidate = path.join(dir, `${prefix}${n}.info`);
+    if (!fs.existsSync(candidate)) continue;
+    try {
+      if (parseInfoFile(candidate).isBinary) return candidate;
+    } catch {
+      // A file this port cannot parse is not a template.
+    }
+  }
+  return null;
+}
+
+/**
  * Read a .info file as the map its callers want: uppercase key to value.
  *
  * Mirrors `FindToolType` (tooltypes.e:215-218): a commented-out tooltype is

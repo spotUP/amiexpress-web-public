@@ -10,9 +10,9 @@
 
 import { deriveConferencePaths } from '../conferences/derive-conference-paths';
 import * as fs from 'fs';
-import { applyTooltypes, readTooltypeMap } from '../utils/info-file.util';
+import { applyTooltypes, binaryIconTemplate, readTooltypeMap } from '../utils/info-file.util';
 import * as path from 'path';
-import { conferenceDir } from '../conferences/conference-paths';
+import { conferenceDir, locationDir } from '../conferences/conference-paths';
 import { applyConferenceFields } from './config-services/conference-info-file.service';
 
 /**
@@ -192,7 +192,7 @@ export class ConferenceSetupService {
 
           // Check for DIR files (DIR1-DIR{ndirs})
           for (let i = 1; i <= ndirs; i++) {
-            const dirFilePath = path.join(this.bbsRoot, confLocation, `DIR${i}`);
+            const dirFilePath = path.join(confDirPath, `DIR${i}`);
             if (!fs.existsSync(dirFilePath)) {
               result.issues.push(`Missing ${confLocation}/DIR${i} file`);
               result.missingFiles.push(dirFilePath);
@@ -257,7 +257,10 @@ console.log(`[ConferenceSetup] Setting up Conf${conferenceId}: ${conferenceName}
     await this.createConferenceInfoFile(options);
 
     // 2. Create conference base directory
-    const confDirPath = path.join(this.bbsRoot, location);
+    // LOCATION is an Amiga path (`BBS:Conf6/`). path.join would mint a literal
+    // `BBS:Conf6` directory beside the conference the board actually reads.
+    const confDirPath = locationDir(this.bbsRoot, location);
+    if (!confDirPath) throw new Error(`Conference ${conferenceId}: LOCATION "${location}" does not resolve to a directory`);
     if (!fs.existsSync(confDirPath)) {
       fs.mkdirSync(confDirPath, { recursive: true });
 console.log(`[ConferenceSetup] Created ${location}/`);
@@ -362,7 +365,11 @@ console.log(`[ConferenceSetup] Conf${conferenceId}.info already exists, skipping
       }
     }
 
-    applyTooltypes(confInfoPath, toolTypeMap);
+    // A real icon like its siblings, not plain text: copy a binary Conf<n>.info
+    // and strip what it carried, so the new file asserts only its own settings.
+    const template = binaryIconTemplate(this.bbsRoot, 'Conf');
+    if (template) fs.copyFileSync(template, confInfoPath);
+    applyTooltypes(confInfoPath, toolTypeMap, template ? { removeKeys: () => true } : {});
 console.log(`[ConferenceSetup] Created Conf${conferenceId}.info with ${tooltypes.length} tooltypes`);
   }
 
