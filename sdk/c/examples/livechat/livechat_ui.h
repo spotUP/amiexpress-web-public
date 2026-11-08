@@ -87,6 +87,10 @@ typedef struct {
     int sidebar_hidden;            /* F2 */
     char input[LC_INPUT_MAX];
     int input_len;
+    int input_cur;                 /* caret column in input, 0..input_len */
+    int side_tab;                  /* 0 channels, 1 users (F3, click on the status line) */
+    int compact;                   /* /compact: message lines drop their time stamp */
+    int timestamps;                /* /timestamps: off drops the stamp as well */
     int focus;
     int menu;                      /* open dropdown 0..3, -1 none */
     int menu_sel;
@@ -126,7 +130,7 @@ const char *lc_react_display(const char *emoji);
 /** The TS formatReactionCounts suffix, " [<3 2] [[+] 1]", or "" when the line has none. */
 void lc_react_suffix(const lc_line *l, char *out, int cap);
 /** The line as marked text (ui_cells markers) in the TS formats. */
-void lc_line_marked(const lc_line *l, char *out, int cap);
+void lc_line_marked(const lc_line *l, char *out, int cap, int stamps);
 /** Paints the whole frame into c's back buffer; `cursor_row`/`cursor_col` get where the caret goes. */
 void lc_draw(ui_cells *c, const lc_model *m, int *cursor_row, int *cursor_col);
 /** The region under 0-based row/col in the last drawn frame (LC_HIT_*). *index: the menu (MENU), the

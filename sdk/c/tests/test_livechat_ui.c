@@ -130,9 +130,26 @@ static int react_suffix_matches_ts(void)
     return 0;
 }
 
+/* B3: /timestamps and /compact decide whether the time column is drawn. */
+static int stamps_follow_the_pref(void)
+{
+    lc_line l;
+    char on[256], off[256];
+    memset(&l, 0, sizeof l);
+    l.kind = LC_LIVE;
+    strcpy(l.time, "17:03"); strcpy(l.nick, "bob"); strcpy(l.text, "hi");
+    lc_line_marked(&l, on, sizeof on, 1);
+    lc_line_marked(&l, off, sizeof off, 0);
+    if (strstr(on, "17:03") == 0 || strstr(off, "17:03") != 0 || strstr(off, "hi") == 0) {
+        printf("stamps: on='%s' off='%s'\n", on, off);
+        return 1;
+    }
+    return 0;
+}
+
 int main(void)
 {
-    int r = react_suffix_matches_ts();
+    int r = react_suffix_matches_ts() | stamps_follow_the_pref();
     int a = compare("tests/fixtures/lc68-ts-main-80x25.grid");
     int b = compare("tests/fixtures/lc68-ts-main-40x25.grid");
     int d = compare("tests/fixtures/lc68-ts-main-80x15.grid");

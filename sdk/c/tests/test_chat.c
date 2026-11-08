@@ -31,7 +31,7 @@ int ae_field_read(int field, char *out, int cap)
 
 /* Scripted clicks: each MOUSE? answers the next step, worked out from the frame the door drew
  * (the test includes livechat.c, so it reads M and lc_hit). "" ends one wake's drain. */
-enum { MS_END, MS_RMB_MESSAGE, MS_CLICK_REACT, MS_CLICK_TOOLS, MS_CLICK_FILES };
+enum { MS_END, MS_RMB_MESSAGE, MS_CLICK_REACT, MS_CLICK_TOOLS, MS_CLICK_FILES, MS_CLICK_STATUS_USERS, MS_CLICK_STATUS_CHANNELS };
 static const int *mouse_script;
 static int mouse_step, mouse_armed;
 
@@ -50,6 +50,8 @@ static int mouse_reply(char *out)
         for (idx = 0; idx < M.ctx.n && strcmp(M.ctx.items[idx], "React") != 0; idx++) {}
         return sprintf(out, "P\t%d\t%d\t0", M.ctx.left + 5, M.ctx.top + 1 + idx + 1);
     }
+    if (step == MS_CLICK_STATUS_USERS) return sprintf(out, "P\t10\t25\t0");        /* status row, x = 9 >= 7 */
+    if (step == MS_CLICK_STATUS_CHANNELS) return sprintf(out, "P\t3\t25\t0");      /* x = 2 < 7 */
     if (step == MS_CLICK_TOOLS) return sprintf(out, "P\t17\t1\t0");
     c = 16 + 1; r = 2 + 1 + 1;                          /* Tools dropdown: item 1 "Files (F6)" on row 3 */
     return sprintf(out, "P\t%d\t%d\t0", c + 1, r);
@@ -403,6 +405,56 @@ static void test_door_reply(void)
     printf("  [OK] door: /reply and /thread send replyTo, history and live replies show a quote row, menu Reply and Quote fill the input\n");
 }
 
+/* B3: the input line is the SDK widget (cursor, Home, Delete, history ring), F3 and the status click switch the
+ * sidebar tab, Ctrl+C asks to quit, and the TS aliases and local prefs run. */
+static void test_door_b3(void)
+{
+    static const int script[] = { MS_CLICK_STATUS_USERS, MS_END, MS_CLICK_STATUS_CHANNELS, MS_END };
+    int rc;
+    start_stub();
+    drive(KEYS("\r" "abc" "\x1b[D" "X" "\x1b[H" "\x1b[3~"), 0);              /* abc, Left, X -> abXc; Home, Delete -> XXc? */
+    assert(strcmp(M.input, "bXc") == 0 && M.input_cur == 0);
+    stop_stub();
+
+    start_stub();
+    drive(KEYS("\r" "one\r" "two\r" "dra" "\x1b[A" "\x1b[A"), 0);            /* Up twice reaches the first sent line */
+    assert(strcmp(M.input, "one") == 0);
+    drive(KEYS("\r" "one\r" "two\r" "dra" "\x1b[A" "\x1b[A" "\x1b[B" "\x1b[B"), 0);
+    assert(strcmp(M.input, "dra") == 0);                                      /* Down past the newest restores the draft */
+    stop_stub();
+
+    start_stub();
+    drive(KEYS("\r" "\x1bOR"), 0);                                            /* F3: users tab */
+    assert(M.side_tab == 1 && M.nside > 0 && strcmp(M.side[0].label, "ONLINE USERS") == 0);
+    drive(KEYS("\r" "\x1bOR" "\x1bOR"), 0);
+    assert(M.side_tab == 0 && strcmp(M.side[0].label, "TEXT CHANNELS") == 0);
+    stop_stub();
+
+    start_stub();
+    mouse_script = script; mouse_step = 0;
+    rc = drive(KEYS("\x1e" "\x1e" " "), 0);
+    mouse_script = 0;
+    (void)rc;
+    assert(mouse_step == 4 && M.side_tab == 0);                               /* users click, then channels click */
+    stop_stub();
+
+    start_stub();
+    drive(KEYS("\r" "\x11" "hi"), 0);
+    assert(M.input[0] == '\0');                                              /* the open modal swallows typing */
+    drive(KEYS("\r" "\x11" "n" "hi"), 0);
+    assert(strcmp(M.input, "hi") == 0);                                       /* Ctrl+Q then No: back to the chat */
+    assert(drive(KEYS("\r" "/exit\r"), 0) == 0);
+    assert(drive(KEYS("\r" "/bye\r"), 0) == 0);
+    drive(KEYS("\r" "/help clear\r" "/commands nosuch\r" "/compact\r" "/timestamps\r"), 0);
+    assert(has_line(0, "/clear - Clear chat display") && has_line(0, "Unknown: nosuch"));
+    assert(M.compact == 1 && M.timestamps == 0);
+    assert(has_line(0, "Compact mode on") && has_line(0, "Timestamps off"));
+    drive(KEYS("\r" "hi\r" "/cls\r"), 0);
+    assert(line_count("hi") == 0);
+    stop_stub();
+    printf("  [OK] door: input editing and history, F3 and status click tab, Ctrl+C quit, /exit /bye /cls /help <cmd> /compact /timestamps\n");
+}
+
 /* B2: the TS door's /edit /deletemsg /topic /kick /mute /op /invite /reactions and their events. */
 static void test_door_moderation(void)
 {
@@ -478,6 +530,7 @@ int main(void)
     test_door_mouse();
     test_door_reply();
     test_door_moderation();
+    test_door_b3();
     test_door_delete_and_kicked();
     test_door_no_config();
     remove("build/test_chat_keys.bin"); remove("build/test_chat_screen.bin");

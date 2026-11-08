@@ -86,6 +86,7 @@ void lc_model_init(lc_model *m, int cols, int rows)
     m->rows = rows;
     m->node = 1;
     m->menu = -1;
+    m->timestamps = 1;
 }
 
 int lc_sidebar_width(const lc_model *m)
@@ -157,7 +158,7 @@ void lc_react_suffix(const lc_line *l, char *out, int cap)
     }
 }
 
-void lc_line_marked(const lc_line *l, char *out, int cap)
+void lc_line_marked(const lc_line *l, char *out, int cap, int stamps)
 {
     sb b;
     b.p = out; b.n = 0; b.cap = cap;
@@ -178,14 +179,13 @@ void lc_line_marked(const lc_line *l, char *out, int cap)
         sb_fg(&b, LC_ACTIVITY); sb_ch(&b, '['); sb_str(&b, l->time); sb_str(&b, "] "); sb_str(&b, l->text);
         break;
     case LC_HISTORY:                                  /* [hh:mm] <nick> text */
-        sb_fg(&b, LC_DIM); sb_ch(&b, '['); sb_str(&b, l->time); sb_ch(&b, ']');
-        sb_ch(&b, UI_CELLS_M_BASE); sb_str(&b, " <");
+        if (stamps) { sb_fg(&b, LC_DIM); sb_ch(&b, '['); sb_str(&b, l->time); sb_str(&b, "] "); sb_ch(&b, UI_CELLS_M_BASE); }
+        sb_str(&b, "<");
         sb_fg(&b, lc_nick_color(l->nick)); sb_str(&b, l->nick);
         sb_ch(&b, UI_CELLS_M_BASE); sb_str(&b, "> "); sb_markdown(&b, l->text);
         break;
     default:                                          /* [hh:mm] nick: text, nick bold */
-        sb_fg(&b, LC_DIM); sb_ch(&b, '['); sb_str(&b, l->time); sb_ch(&b, ']');
-        sb_ch(&b, UI_CELLS_M_BASE); sb_ch(&b, ' ');
+        if (stamps) { sb_fg(&b, LC_DIM); sb_ch(&b, '['); sb_str(&b, l->time); sb_str(&b, "] "); sb_ch(&b, UI_CELLS_M_BASE); }
         sb_fg(&b, lc_nick_color(l->nick)); sb_ch(&b, UI_CELLS_M_BOLD); sb_str(&b, l->nick);
         sb_ch(&b, UI_CELLS_M_BASE); sb_str(&b, ": "); sb_markdown(&b, l->text);
         break;
@@ -278,14 +278,14 @@ static void draw_chat(ui_cells *c, const lc_model *m, int top, int h, int left, 
     for (k = 0; k < CHAT_ROWS_MAX; k++) chat_row_line[k] = -1;
 
     for (i = 0; i < m->nlines; i++) {
-        lc_line_marked(&m->lines[i], marked, (int)sizeof marked);
+        lc_line_marked(&m->lines[i], marked, (int)sizeof marked, m->timestamps && !m->compact);
         total += ui_cells_wrap(marked, width, starts, ends, WRAP_MAX);
     }
     first = total - m->scroll - rows;               /* the newest rows, filled from the top */
     if (first < 0) first = 0;
     ui_cells_pen(c, LC_INK, UI_CELLS_DEFAULT, 0);
     for (i = 0; i < m->nlines && at < first + rows; i++) {
-        lc_line_marked(&m->lines[i], marked, (int)sizeof marked);
+        lc_line_marked(&m->lines[i], marked, (int)sizeof marked, m->timestamps && !m->compact);
         n = ui_cells_wrap(marked, width, starts, ends, WRAP_MAX);
         for (k = 0; k < n; k++, at++) {
             if (at < first || at >= first + rows) continue;
@@ -312,10 +312,10 @@ static void draw_input(ui_cells *c, const lc_model *m, int *cr, int *cc)
     ui_cells_pen(c, LC_INK, UI_CELLS_DEFAULT, 0);
     ui_cells_fill(c, row + 1, 1, 1, iw - 2, ' ');
     ui_cells_box(c, row, 0, 3, iw, LC_ACCENT, "Message", LC_INK);
-    from = m->input_len > room ? m->input_len - room : 0;
+    from = m->input_cur > room ? m->input_cur - room : 0;
     ui_cells_text(c, row + 1, 1, m->input + from, room);
     *cr = row + 1;
-    *cc = 1 + m->input_len - from;
+    *cc = 1 + m->input_cur - from;
     if (iw < W) ui_cells_button(c, row, iw, 6, ":D", LC_GREY, LC_ACTIVITY);
 }
 

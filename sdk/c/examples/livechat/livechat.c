@@ -45,6 +45,7 @@
 #include "ae_session.h"
 #include "ui_ansi.h"
 #include "ui_cells.h"
+#include "ui_input.h"
 #include "ui_key.h"
 #include "ui_screen.h"
 #include "livechat_ui.h"
@@ -347,6 +348,16 @@ static int side_selectable(int i)
     return i >= 0 && i < M.nside && M.side[i].kind != LC_SIDE_HEAD && M.side[i].kind != LC_SIDE_BLANK;
 }
 
+static void load_sidebar(void);
+
+/** F3 and a click on the status line: the sidebar shows the channels or the online users (TS switchSidebarTab). */
+static void switch_tab(int users)
+{
+    M.side_tab = users;
+    load_sidebar();
+    system_line(users ? "Switched to users view" : "Switched to channels view");
+}
+
 /** Rebuilds the sidebar as the TS door has it: channels, the current room's people under it, then DMs. */
 static void load_sidebar(void)
 {
@@ -359,6 +370,18 @@ static void load_sidebar(void)
         }
     }
     M.nside = 0;
+    if (M.side_tab) {                       /* TS users tab: everyone online, not just this room */
+        side_add(LC_SIDE_HEAD, 0, "ONLINE USERS", "");
+        if (ae_chat_who(&chat) == AE_CHAT_OK) {
+            while (ae_chat_next_row(&chat, f, AE_CHAT_ROW_FIELDS) >= 2) {
+                char nm[24];
+                clean(nm, sizeof nm, f[0]);
+                side_add(LC_SIDE_USER, 0, nm, nm);
+            }
+        }
+        M.side_sel = 0;
+        return;
+    }
     side_add(LC_SIDE_HEAD, 0, "TEXT CHANNELS", "");
     for (i = 0; i < rooms_count; i++) {
         int here = strcmp(rooms_id[i], room_id) == 0;
@@ -863,6 +886,66 @@ static void react_typed(const char *cmd, const char *rest)
     then_poll(ae_chat_react(&chat, l->id, strcmp(cmd, "love") == 0 ? "heart" : "+1", &count));
 }
 
+/* TS /help <command>: name, aliases, description, usage - the registered text of the commands this door runs. */
+static const char *const cmd_help[][4] = {
+    {"ban", "", "Ban user from channel", "/ban @user [reason]"},
+    {"clear", "cls", "Clear chat display", "/clear"},
+    {"create", "", "Create a new channel. --private and --invite-only make it members-only.", "/create #name [topic] [--private] [--invite-only] [--motd \"text\"]"},
+    {"deletemsg", "delmsg", "Delete a message (your last by default)", "/deletemsg [msg-id]"},
+    {"edit", "", "Edit one of your messages (your last by default)", "/edit [msg-id] new text"},
+    {"help", "?,commands", "Show available commands", "/help [command]"},
+    {"invite", "", "Invite a user to this invite-only channel (moderator only)", "/invite @user [#room]"},
+    {"join", "", "Join a channel", "/join #channel"},
+    {"kick", "", "Kick user from channel", "/kick @user [reason]"},
+    {"leave", "part", "Leave current channel", "/leave"},
+    {"love", "", "React with heart", "/love [msg-id]"},
+    {"msg", "dm,pm", "Send a direct message (1:1 or group). /msg @a [@b ...] text", "/msg @user [@user2 ...] message"},
+    {"mute", "", "Mute user in channel", "/mute @user [minutes]"},
+    {"op", "", "Give or take room operator status (sysop)", "/op @user  |  /op -@user  |  /deop @user"},
+    {"quit", "exit,bye,q", "Exit chat", "/quit"},
+    {"react", "+1,-1,heart,fire", "Add reaction to message", "/react [emoji] [msg-id]"},
+    {"reactions", "", "Show reactions", "/reactions [msg-id]"},
+    {"reply", "r", "Reply to a message (the newest by default)", "/reply [msg-id] message"},
+    {"rooms", "channels", "List all rooms", "/rooms"},
+    {"thread", "t", "Reply in thread", "/thread <msg-id> message"},
+    {"thumbsup", "like", "React with thumbs up", "/thumbsup [msg-id]"},
+    {"topic", "", "Set channel topic", "/topic <new topic>"},
+    {"unban", "", "Unban user from channel", "/unban @user"},
+    {"uninvite", "", "Revoke a pending invite", "/uninvite @user [#room]"},
+    {"unmute", "", "Unmute user in channel", "/unmute @user"},
+    {"unreact", "", "Remove reaction", "/unreact [emoji] [msg-id]"},
+    {"who", "users,list", "List users in channel", "/who"},
+    {"compact", "", "Toggle compact mode", "/compact"},
+    {"timestamps", "time", "Toggle timestamps", "/timestamps"},
+};
+
+static ui_hist hist;            /* sent lines: Up / Down recall (TS features/input-history.ts) */
+
+/** /help <command>: "/name - description" then the usage, or "Unknown: x". */
+static void help_for(const char *want)
+{
+    unsigned i;
+    char line[160], al[40];
+    const char *p;
+    for (i = 0; i < sizeof cmd_help / sizeof cmd_help[0]; i++) {
+        int hit = strcmp(cmd_help[i][0], want) == 0;
+        for (p = cmd_help[i][1]; !hit && *p != '\0'; ) {
+            int n = 0;
+            while (*p != '\0' && *p != ',' && n < (int)sizeof al - 1) al[n++] = *p++;
+            al[n] = '\0';
+            if (*p == ',') p++;
+            hit = strcmp(al, want) == 0;
+        }
+        if (!hit) continue;
+        sprintf(line, "/%s - %.100s", cmd_help[i][0], cmd_help[i][2]);
+        system_line(line);
+        system_line(cmd_help[i][3]);
+        return;
+    }
+    sprintf(line, "Unknown: %.60s", want);
+    system_line(line);
+}
+
 /** Runs one "/..." line. Returns 1 when the door should end. */
 static int run_command(const char *line)
 {
@@ -870,13 +953,19 @@ static int run_command(const char *line)
     const char *rest = after_word(line + 1);
     int rc, n;
     arg_word(line + 1, cmd, sizeof cmd);
-    if (is_cmd(cmd, "q", "quit")) return 1;
-    if (is_cmd(cmd, "?", "h") || strcmp(cmd, "help") == 0) { open_help(); return 0; }
+    if (is_cmd(cmd, "q", "quit") || is_cmd(cmd, "exit", "bye")) return 1;
+    if (is_cmd(cmd, "?", "h") || is_cmd(cmd, "help", "commands")) {
+        arg_word(rest, a, sizeof a);
+        if (a[0] != '\0') help_for(a[0] == '/' ? a + 1 : a); else open_help();
+        return 0;
+    }
+    if (strcmp(cmd, "compact") == 0) { M.compact = !M.compact; system_line(M.compact ? "Compact mode on" : "Compact mode off"); return 0; }
+    if (is_cmd(cmd, "timestamps", "time")) { M.timestamps = !M.timestamps; system_line(M.timestamps ? "Timestamps on" : "Timestamps off"); return 0; }
     if (is_cmd(cmd, "l", "rooms") || strcmp(cmd, "list") == 0) { list_rooms(); return 0; }
     if (is_cmd(cmd, "w", "who")) { list_who(); return 0; }
     if (is_cmd(cmd, "j", "join")) { join_typed(rest); return 0; }
     if (is_cmd(cmd, "leave", "part")) { leave_room(); return 0; }
-    if (strcmp(cmd, "clear") == 0) { lines_clear(); return 0; }
+    if (is_cmd(cmd, "clear", "cls")) { lines_clear(); return 0; }
     if (is_cmd(cmd, "n", "np") || strcmp(cmd, "create") == 0) {
         if (*rest == '\0') { open_prompt(PROMPT_CREATE, "New room name"); return 0; }
         new_room(rest, cmd[1] == 'p' ? "private" : "public");    /* the whole rest: a name may have spaces */
@@ -930,6 +1019,7 @@ static int submit(void)
 {
     int rc, ended = 0;
     if (M.input_len == 0) return 0;
+    ui_hist_add(&hist, M.input);
     if (M.input[0] == '/') {
         ended = run_command(M.input);
     } else if (dm_thread[0] != '\0') {
@@ -944,6 +1034,7 @@ static int submit(void)
     }
     M.input[0] = '\0';
     M.input_len = 0;
+    M.input_cur = 0;
     return ended;
 }
 
@@ -1018,6 +1109,7 @@ static void input_set(const char *text)
 {
     copy(M.input, sizeof M.input, text);
     M.input_len = (int)strlen(M.input);
+    M.input_cur = M.input_len;
     set_focus(LC_FOCUS_INPUT);
 }
 
@@ -1114,7 +1206,7 @@ static int handle_mouse(void)
             continue;
         }
         if (M.focus == LC_FOCUS_MENU) set_focus(LC_FOCUS_INPUT);
-        if (hit == LC_HIT_STATUS) { M.sidebar_hidden = 0; continue; }   /* the channels/users tab is B3 (K03) */
+        if (hit == LC_HIT_STATUS) { M.sidebar_hidden = 0; switch_tab(idx >= 7); continue; }   /* TS mouse-handling: x < 7 channels, else users */
         if (hit == LC_HIT_INPUT) { set_focus(LC_FOCUS_INPUT); continue; }
         if (hit == LC_HIT_CHAT) { ctx_open(LC_CTX_CHAT, idx, row, col); continue; }
         if (hit == LC_HIT_SIDEBAR && side_selectable(idx)) {
@@ -1162,6 +1254,7 @@ static void side_pick(void)
     else if (s->kind == LC_SIDE_USER) {
         sprintf(M.input, "/msg %.30s ", s->label);
         M.input_len = (int)strlen(M.input);
+        M.input_cur = M.input_len;
         set_focus(LC_FOCUS_INPUT);
     }
 }
@@ -1203,10 +1296,10 @@ static int handle_key(int key)
         if (is_text(key) && M.prompt_len + 1 < (int)sizeof M.prompt) { M.prompt[M.prompt_len++] = (char)key; M.prompt[M.prompt_len] = '\0'; }
         return 0;
     }
-    if (key == 3 || key == 17) { M.modal = LC_MODAL_QUIT; return 0; }
+    if (key == 17) { M.modal = LC_MODAL_QUIT; return 0; }
     if (key == UI_KEY_F1) { open_help(); return 0; }
     if (key == UI_KEY_F2) { M.sidebar_hidden = !M.sidebar_hidden; if (M.focus == LC_FOCUS_SIDEBAR) set_focus(LC_FOCUS_INPUT); return 0; }
-    if (key == UI_KEY_F3) { next_channel(); return 0; }
+    if (key == UI_KEY_F3) { switch_tab(!M.side_tab); return 0; }
     if (key == UI_KEY_F4) return 0;                          /* the emoji picker has no wire here */
     if (key == 9) { cycle_focus(1); return 0; }
     if (key == UI_KEY_BACKTAB) { cycle_focus(-1); return 0; }
@@ -1236,10 +1329,9 @@ static int handle_key(int key)
         if (dm_thread[0] != '\0' && room_id[0] != '\0') join_room(room_id);   /* out of the DM, back to the room */
         return 0;
     }
-    if ((key == 8 || key == 127) && M.input_len > 0) { M.input[--M.input_len] = '\0'; return 0; }
-    if (is_text(key) && M.input_len + 1 < LC_INPUT_MAX && M.input_len < AE_CHAT_TEXT_MAX) {
-        M.input[M.input_len++] = (char)key;
-        M.input[M.input_len] = '\0';
+    {
+        int cap = LC_INPUT_MAX < AE_CHAT_TEXT_MAX + 1 ? LC_INPUT_MAX : AE_CHAT_TEXT_MAX + 1;
+        ui_line_key(M.input, cap, &M.input_len, &M.input_cur, key, &hist, 0);
     }
     return 0;
 }
