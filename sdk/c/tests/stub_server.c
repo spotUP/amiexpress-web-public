@@ -703,6 +703,11 @@ static void chat_serve(int fd, stub_chat_stats *st, int *state)
     } else if (is_post && strstr(path, "/thread") != 0) {
         st->threads++;
         chat_reply(fd, 200, "application/json", "{\"id\":\"t1\",\"seq\":9}");
+    } else if (is_post && st->dm_unknown[0] != '\0'
+               && (strcmp(path, "/chat/v1/dm-group") == 0 || strncmp(path, "/chat/v1/dm/", 12) == 0)) {
+        char reply[160];
+        sprintf(reply, "{\"error\":\"not_found\",\"detail\":\"unknown user: %.100s\"}", st->dm_unknown);
+        chat_reply(fd, 404, "application/json", reply);
     } else if (is_post && strcmp(path, "/chat/v1/dm-group") == 0) {
         st->group_dms++;
         strncpy(st->last_group_body, body, sizeof st->last_group_body - 1);

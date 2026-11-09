@@ -1079,6 +1079,16 @@ static void test_door_dm_and_group_dm(void)
     drive(KEYS("\r" "/msg @bob @bob hey\r"), 0);
     assert(M.modal == LC_MODAL_MESSAGE && strcmp(M.modal_text, "Group DM needs 3+ unique participants (use /msg for 1:1)") == 0);
     stop_stub();
+    start_stub();                                    /* hub 404 not_found: the TS system line, not a modal */
+    strcpy(st->dm_unknown, "nobody@AMIX");
+    drive(KEYS("\r" "/msg @nobody hi\r"), 0);
+    assert(M.modal == LC_MODAL_NONE && has_line(0, "User nobody not found"));
+    stop_stub();
+    start_stub();
+    strcpy(st->dm_unknown, "ghost@AMIX, zed@AMIX");
+    drive(KEYS("\r" "/msg @bob @ghost @zed hey\r"), 0);
+    assert(M.modal == LC_MODAL_NONE && has_line(0, "User ghost@AMIX, zed@AMIX not found"));
+    stop_stub();
     printf("  [OK] door: /msg @a and /msg @a @b send DM and group DM, DM lines render as the TS door's\n");
 }
 
